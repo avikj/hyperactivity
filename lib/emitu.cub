@@ -444,3 +444,18 @@ unbox-fields n i = if %weq i n then lnil else (case %weq (%wsucc i) n of true �
 emit-prog-u defs =
   let sigs = sigs-of defs
   in cat6 s-runtime u-prdecl (box-fns (flat-types defs)) (protos-u sigs defs) (dispatch defs) (lapp (defs-u sigs defs) (if %weq (ret-ty sigs #0) tW then u-main-w else if is-pr (ret-ty sigs #0) then u-main-pr else u-main-p))
+-- the program as a library (B18's call boundary, the emit side): no main; definition 0 is exported
+-- (not static) as cubical_entry over the signature's C types, calling f_0. A C program or the
+-- machine (#native, src/lang.c) links it and calls cubical_entry
+u-entry = (lcons #99 (lcons #117 (lcons #98 (lcons #105 (lcons #99 (lcons #97 (lcons #108 (lcons #95 (lcons #101 (lcons #110 (lcons #116 (lcons #114 (lcons #121 (lcons #40 lnil))))))))))))))
+u-callf0 = (lcons #102 (lcons #95 (lcons #48 (lcons #40 lnil))))
+entry-args i n = if %weq i n then lnil else (case %weq (%wsucc i) n of true → var (%wsucc i) #0; false → cat3 (var (%wsucc i) #0) u-comma (entry-args (%wsucc i) n))
+entry-u sigs n =
+  let s = fromopt (sig-of sigs #0) (push-n tP n lnil , tP)
+  in cat7 (ty-decl (snd s)) u-entry (if %weq n #0 then u-void else params-u (fst s) #0 n) u-body u-callf0 (entry-args #0 n) (lapp u-rp u-end)
+def0-arity defs = case defs of lnil → #0; lcons d r → if %weq (fst d) #0 then fst (snd d) else def0-arity r
+emit-lib-u defs =
+  let sigs = sigs-of defs
+  in cat6 s-runtime u-prdecl (box-fns (flat-types defs)) (protos-u sigs defs) (dispatch defs) (lapp (defs-u sigs defs) (entry-u sigs (def0-arity defs)))
+-- the exported entry of a one-definition program over two words: uint64_t cubical_entry(uint64_t v0, uint64_t v1) { return f_0(v0, v1); }
+#same entry-u (sigs-of (lcons (#0 , (#2 , fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil)))) lnil)) #2 = (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #99 (lcons #117 (lcons #98 (lcons #105 (lcons #99 (lcons #97 (lcons #108 (lcons #95 (lcons #101 (lcons #110 (lcons #116 (lcons #114 (lcons #121 (lcons #40 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #118 (lcons #48 (lcons #44 (lcons #32 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #118 (lcons #49 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #102 (lcons #95 (lcons #48 (lcons #40 (lcons #118 (lcons #48 (lcons #44 (lcons #32 (lcons #118 (lcons #49 (lcons #41 (lcons #59 (lcons #32 (lcons #125 (lcons #10 lnil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
