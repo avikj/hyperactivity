@@ -246,3 +246,48 @@ sq-thm2 : (e : Val) → xeval e sq3 ≡ xeval e sq4
 sq-thm2 e = ring-eq e sq3 sq4 (λ i → norm sq3)
 #fail
 #check λ e → ring-eq e sq3 sq2 (λ i → norm sq3) : (e : Val) → xeval e sq3 ≡ xeval e sq2
+-- ---------------------------------------------------------------- the bridge from codes (unverified)
+-- a code of the fragment — applications of the globals plus and times, variables, Nat literals
+-- as constructor codes — read as an expression; a code outside the fragment reads as none. What
+-- it produces is decided by norm and the theorem is ring-eq about the typed expression, so the
+-- bridge is the unverified part (18.13: search is unverified, the checker verified)
+nat-of-code c =
+  case c of
+    ccon d k fs ds → (if %weq k #0 then some zero else (case fs of lcons n r → omap (λ m → suc m) (nat-of-code n); _ → none))
+    _ → none
+rg-glob c = case c of cglob g → some g; _ → none
+ex-of-code c =
+  case c of
+    cvar v → some (ev v)
+    cann t T → ex-of-code t
+    ccon d k fs ds → omap (λ n → ec n) (nat-of-code c)
+    capp f x →
+      (case f of
+         capp g a →
+           (case rg-glob g of
+              some gi →
+                if %weq gi (gidx-r (code plus)) then obind (ex-of-code a) (λ ea → omap (λ ex → eadd ea ex) (ex-of-code x))
+                else if %weq gi (gidx-r (code times)) then obind (ex-of-code a) (λ ea → omap (λ ex → emul ea ex) (ex-of-code x))
+                else none
+              none → none)
+         _ → none)
+    _ → none
+gidx-r c = case c of cglob n → n; _ → #0
+lam-body c = case c of clam b → b; _ → c
+-- the same expression as a code again: the globals applied
+code-of-ex x =
+  case x of
+    ec n → code-of-nat n
+    ev v → cvar v
+    eadd a b → capp (capp (code plus) (code-of-ex a)) (code-of-ex b)
+    emul a b → capp (capp (code times) (code-of-ex a)) (code-of-ex b)
+code-of-nat n = case n of zero → ccon #1 #0 lnil lnil; suc k → ccon #1 #1 (lcons (code-of-nat k) lnil) lnil
+-- (x + 1)·(x + 1) and x·x + 2·x + 1 written as source terms, quoted, read as expressions: the
+-- same normal form, so ring-eq applies to them; and a round trip through codes is the identity
+csq1 = lam-body (code (λ x → times (plus x 1) (plus x 1)))
+csq2 = lam-body (code (λ x → plus (plus (times x x) (times 2 x)) 1))
+#same ex-of-code csq1 = some sq1
+#same ex-of-code csq2 = some sq2
+#same omap norm (ex-of-code csq1) = omap norm (ex-of-code csq2)
+#same code-of-ex sq1 = csq1
+#same ex-of-code (lam-body (code (λ x → suc x))) = none

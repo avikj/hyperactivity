@@ -2,7 +2,7 @@
 -- (lib/lin.cub: enumeration and the directed Fourier–Motzkin search) produces multipliers; the
 -- verified checker over the typed fragment (lib/linproof.cub: cert-check with cert-sound) accepts
 -- them; the soundness theorem applied at an environment is a witness of the goal. Loaded after
--- lib/match.cub lib/lin.cub lib/check.cub lib/std.cub lib/linproof.cub.
+-- lib/match.cub lib/lin.cub lib/check.cub lib/std.cub lib/linproof.cub lib/eqproof.cub.
 -- ---------------------------------------------------------------- the bridge, untyped
 -- a code of the fragment read as the typed fragment, hypotheses and multipliers likewise (these
 -- are untyped, as the search is; what they produce is checked by the typed checker)
@@ -49,3 +49,14 @@ goal1 = cert-sound env1 hyp1t cert1 (lc-add (lc-var #0) (lc-lit #4)) (lc-var #2)
 #same wev env1 (lc-add (lc-var #0) (lc-lit #4)) = #5
 -- the witness really is a witness: a + d = b at the environment
 #same plusw (wev env1 (lc-add (lc-var #0) (lc-lit #4))) (fst goal1) = #20
+-- ---------------------------------------------------------------- equalities from codes
+-- hypotheses and a goal as codes (globals 0 = f, 1 = g, 2 = c; variable 0 schematic), read as
+-- terms, the trace searched for, checked by the verified checker
+ceqs = lcons (capp (cglob #0) (cvar #0) , capp (cglob #1) (cvar #0)) (lcons (capp (cglob #1) (cglob #2) , cglob #2) lnil)
+cgoal = capp (cglob #0) (capp (cglob #0) (cglob #2))
+eq-from-codes hs s t n =
+  obind (eqs-of-codes hs) (λ es → obind (tm-of-code s) (λ ts → obind (tm-of-code t) (λ tgt →
+    case find-trace n es ts tgt of notr → none; atrace tr → some (check-eq es tr ts tgt))))
+#same eq-from-codes ceqs cgoal (cglob #2) #4 = some true
+#same eq-from-codes ceqs cgoal (cglob #1) #4 = none
+#same eq-from-codes ceqs (clam cgoal) (cglob #2) #4 = none
