@@ -2554,6 +2554,20 @@ static Node *cn(Node *c) {
         }
         return r;
     }
+    if (!strcmp(h, "cprim") && c->n == 3) {
+        /* a primitive operation (the encoding of lang.c's to_code): the arithmetic and conversion
+         * operations read back as lib/prim.cub's checked primitives of the same arguments; the
+         * byte operations take proofs at the checked level and have no reading here */
+        static const char *PN[] = { "i64add", "i64sub", "i64mul", "i64eq", "i64lt", "u32add", "u32sub", "u32mul", "u32eq", "u32lt", "f64add", "f64sub", "f64mul", "f64div", "f64eq", "f64lt",
+            "i64", "i64toWord", "u32", "u32toWord", "f64", "f64ofi64", "i64off64" };
+        long k = cn_word(c->it[1]); if (k < 0) return NULL;
+        int cls = (int)(k >> 8), sb = (int)(k & 255); const char *name;
+        if (cls <= 2 && sb < 23 && global_lookup(PN[sb]) >= 0) name = PN[sb]; else return NULL;
+        Node *as[16]; int n = cn_list(c->it[2], as, 16); if (n < 0) return NULL;
+        Node *r = nlist(n + 1); r->it[0] = nsym(name);
+        for (int i = 0; i < n; i++) { R(r->it[i + 1] = cn(as[i])); }
+        return r;
+    }
     if (!strcmp(h, "cfree")) { Node *v = c->it[1]; return !v->list && !(v->s[0] == 'v' && isdigit((unsigned char)v->s[1])) && strcmp(v->s, "?") ? v : NULL; }
     if (!strcmp(h, "cglob")) { long k = cn_word(c->it[1]); return k >= 0 && k < nchecked && !CHKHIDE[k] ? nsym(CHECKED[k]) : NULL; }
     if (!strcmp(h, "clam") || !strcmp(h, "cdlam")) { b = cn_bound("q", c->it[1], &x); return b ? sym3("lam", x, b) : NULL; }
