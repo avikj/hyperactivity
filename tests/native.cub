@@ -1,0 +1,11 @@
+-- tests/native.cub — the call boundary, net → native (B18): a definition's compiled form (the
+-- unboxed C of lib/emitu.cub, built as a shared library) entered by #native; the definition then
+-- calls it on word arguments and computes on the net on any other. Loaded after the back end
+-- (lib/lower.cub, lib/specialize.cub, lib/emitu.cub).
+lam-body f = case f of flam b → b; _ → f
+plusw-fo = lam-body (lam-body (specialize (Word → Word → Word) lnil (code plusw)))
+#native plusw 2 = emit-lib-u (lcons (#0 , (#2 , plusw-fo)) lnil)
+#same plusw #3 #4 = #7
+#same plusw #1000000 #1000000 = #2000000
+-- not words: the net's own definition
+#same (λ (x : Word) → plusw x #0) = (λ (x : Word) → x)

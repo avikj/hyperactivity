@@ -8,6 +8,7 @@
 #include <ctype.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #include <limits.h>
 #include <stdarg.h>
 extern int dup(int); extern int dup2(int, int); extern int close(int); extern FILE *fdopen(int, const char *);
@@ -195,7 +196,7 @@ static bool node_eq(Node *a, Node *b) {
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
-    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%ptr-of", "%region-at", "%ffi",
+    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%ptr-of", "%region-at", "%ffi", "%native",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
 /* the keywords, in an open-addressed table (asked of every symbol the compiler walks) */
@@ -1951,6 +1952,11 @@ static Syn *compile(Node *t) {
             if (t->n < 3 || t->it[1]->list || t->it[1]->s[0] != '#') die("(%ffi k a...)", NULL);
             Syn *s = compile_n(S_PRIM, t, 2, t->n - 2); s->x = O_FFI; s->id = atoi(t->it[1]->s + 1); return s;
         }
+        if (!strcmp(h, "%native")) {
+            /* (%native k g a1 .. an): the compiled definition g (foreign entry k) called on words, g itself otherwise (B18) */
+            if (t->n < 4 || t->it[1]->list || t->it[1]->s[0] != '#' || t->it[2]->list || t->it[2]->s[0] != '#') die("(%native k g a...)", NULL);
+            Syn *s = compile_n(S_PRIM, t, 3, t->n - 3); s->x = O_NATIVE; s->id = atoi(t->it[1]->s + 1); s->slot = atoi(t->it[2]->s + 1); return s;
+        }
         if (!strcmp(h, "%welimP")) {
             /* (%welimP P w z s): the elimination of a word with its motive, which is for the
              * checker: the machine runs (%welim w z s) */
@@ -2773,6 +2779,7 @@ static void emit(const char *text) {
 }
 static char **watch_name; static Cell **watch_root; static size_t capwn, capwr; static int nwatch;
 static void load_file(const char *path, bool must);
+static const char *cache_dir(void);
 /* ---------------- signature entries, copattern definitions ---------------- */
 /* an entry of the checker's signature: its value's global, its type's global */
 static int sig_add(const char *name, long g, long tyg, bool hidden) {
@@ -3050,7 +3057,7 @@ static void toplevel(Node *f) {
     }
     /* a module whose checks are cached: its definitions are made, its judgments and tests not rerun */
     if (trusted && (!strcmp(h, "check") || !strcmp(h, "check-fail") || !strcmp(h, "checked-data-fail") || !strcmp(h, "checked-fail")
-        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe"))) return;
+        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "native"))) return;
     if (!strcmp(h, "def")) {
         if (f->n != 3) die("(def name term)", NULL);
         if (!chk_salt[0] && !f->it[1]->list && !strcmp(f->it[1]->s, "chk-def")) chk_salt_set();   /* the checker (%%chk-def) is defined here: its name (F34) */
@@ -3788,6 +3795,38 @@ static void toplevel(Node *f) {
         Node *dd = nlist(3); dd->it[0] = nsym("def"); dd->it[1] = nsym(nm); dd->it[2] = f->it[2];
         toplevel(dd);
         if (table_global(TB_REP, ck) < 0) table_set(TB_REP, ck, global_lookup(nm));
+    } else if (!strcmp(h, "native")) {
+        /* (native name n prog): the C program prog (a list of bytes printed by lib/emitu.cub's
+         * emit-lib-u: its definition 0 the function at arity n over words, exported as
+         * cubical_entry) compiled as a shared library and entered; name is then the compiled code
+         * on word arguments and itself on any other (B18, net → native). Words only: a value of a
+         * declared representation is not marshaled yet */
+        if (f->n != 4 || f->it[1]->list || f->it[2]->list || f->it[2]->s[0] != '#') die("(native name n prog)", NULL);
+        const char *nm = f->it[1]->s; int n = atoi(f->it[2]->s + 1);
+        long g = global_lookup(nm); if (g < 0) die("native: not a definition:", nm);
+        if (n < 0 || n > 6) die("native: at most six word arguments:", nm);
+        long steps = 0;
+        char *r = readback(f->it[3], &steps);
+        /* the program's bytes */
+        size_t cap = strlen(r), len = 0; char *c = malloc(cap + 512);
+        for (const char *q = r; (q = strchr(q, '#')); ) { q++; if (*q < '0' || *q > '9') continue; c[len++] = (char)atoi(q); }
+        c[len] = 0; free(r); r = c;
+        if (!strstr(r, "cubical_entry(")) die("native: the program exports no cubical_entry (print it with emit-lib-u):", nm);
+        char dir[512], cpath[600], so[600]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
+        mkdir(cache_dir(), 0755); mkdir(dir, 0755);
+        snprintf(cpath, sizeof cpath, "%s/%s.c", dir, nm); snprintf(so, sizeof so, "%s/%s.so", dir, nm);
+        FILE *cf = fopen(cpath, "w"); if (!cf) die("native: cannot write", cpath); fputs(r, cf); fclose(cf); free(r);
+        char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -o %s %s", so, cpath);
+        if (system(cmd) != 0) { printf("FAIL: native %s   (the C compiler rejected %s)\n", nm, cpath); failures++; return; }
+        char sym[700]; snprintf(sym, sizeof sym, "%s:cubical_entry", so);
+        unsigned char kind[8] = { 4, 4, 4, 4, 4, 4, 4, 4 };
+        int k = ffi_add(sym, n, kind, 4);
+        /* name is now (lam a1..an (%native k g a1..an)); references compiled before keep the definition */
+        char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
+        fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
+        fprintf(m, " (%%native #%d #%ld", k, g); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i); fprintf(m, ")))");
+        fclose(m); emit(buf); free(buf);
+        passes++; printf("ok: native %s   [%ld steps, %zu bytes of C]\n", nm, steps, len);
     } else if (!strcmp(h, "layout")) {
         /* #layout T [as R]: by the checker's layout function (lib/check.cub) */
         if (f->n < 2 || f->it[1]->list) die("(layout T [R])", NULL);
@@ -4019,7 +4058,53 @@ static void load_file(const char *path, bool must) {
 }
 static void prof_print(void);
 static void prof_signal(int sig) { (void)sig; fflush(stdout); prof_print(); _Exit(3); }
-int main(int argc, char **argv) {
+/* ---------------- the call boundary, native → net (B18) ----------------
+ * A C program linked with libcubical.a loads the libraries it needs with cubical_init, then calls
+ * cubical_call(name, args, n, &out): the definition applied to the word arguments, read to its normal
+ * form by the net (synchronous), the result a word in out. Returns 0, or -1 when the result is not
+ * a word (its text is then in cubical_last_text). Words only: representations are not marshaled yet */
+static char *last_text;
+const char *cubical_last_text(void) { return last_text ? last_text : ""; }
+int cubical_init(int nfiles, const char *const *files) {
+    static bool started;
+    if (!started) { net_start(0); { const char *b = __DATE__ " " __TIME__; key_mix(b, strlen(b)); } prof_enter("(top level)"); started = true; }
+    for (int i = 0; i < nfiles; i++) load_file(files[i], true);
+    return failures ? -1 : 0;
+}
+int cubical_call(const char *name, const uint64_t *args, int n, uint64_t *out) {
+    char *txt; size_t tl; FILE *m = open_memstream(&txt, &tl);
+    if (n) { fputc('(', m); fputs(name, m); for (int i = 0; i < n; i++) fprintf(m, " #%llu", (unsigned long long)args[i]); fputc(')', m); }
+    else fputs(name, m);
+    fclose(m);
+    const char *saved = src; src = txt;
+    Node *t = read_node();
+    src = saved;
+    char *r = readback(t, NULL);
+    free(txt);
+    free(last_text); last_text = r;
+    if (r[0] == '#' && r[1] >= '0' && r[1] <= '9') { *out = strtoull(r + 1, NULL, 10); return 0; }
+    if (!strcmp(r, "true")) { *out = 1; return 0; }
+    if (!strcmp(r, "false")) { *out = 0; return 0; }
+    return -1;
+}
+#ifdef CUBICAL_LIB
+int cubical_main(int argc, char **argv)
+#else
+int main(int argc, char **argv)
+#endif
+{
+    /* the parser and the printer recurse once per nesting level, and a program printed as a byte
+     * list is nested once per byte: the stack is raised to 1 GB (or the hard limit) and the
+     * machine started again under it, once */
+    struct rlimit rl;
+    if (!getenv("CUBICAL_STACKED") && getrlimit(RLIMIT_STACK, &rl) == 0) {
+        rlim_t want = (rlim_t)1 << 30;
+        if (rl.rlim_max != RLIM_INFINITY && rl.rlim_max < want) want = rl.rlim_max;
+        if (rl.rlim_cur != RLIM_INFINITY && rl.rlim_cur < want) {
+            rl.rlim_cur = want;
+            if (setrlimit(RLIMIT_STACK, &rl) == 0) { setenv("CUBICAL_STACKED", "1", 1); execv("/proc/self/exe", argv); }
+        }
+    }
     const char *w = getenv("CUBICAL_WORKERS");
     prof_on = getenv("CUBICAL_PROFILE") != NULL;
     if (prof_on) signal(SIGTERM, prof_signal);

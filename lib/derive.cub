@@ -66,8 +66,8 @@ compare-fields d ks ks2 n r n2 r2 j t =
                   else capp (capp (fromopt (derive-eq (snd k)) c-false) outer-f) inner-f)
           rest = compare-fields d kr ks2 n r n2 r2 (%wsucc j) (if %weq (fst k) #1 then %wsucc t else t)
       in (case kr of lnil → this; _ → c-and this rest)
-lapp : List Word → List Word → List Word
-lapp xs ys = case xs return (λ w → List Word) of nil → ys; cons x r → cons x (rec r)
+lappw : List Word → List Word → List Word
+lappw xs ys = case xs return (λ w → List Word) of nil → ys; cons x r → cons x (rec r)
 lapp-same : List Word → List Word → Bool
 lapp-same xs ys =
   case xs return (λ w → List Word → Bool) of
@@ -82,7 +82,7 @@ lapp-same xs ys =
 list-d = didx (code (List Word))
 c-nil = ccon list-d #0 lnil lnil
 c-cons h t = ccon list-d #1 (lcons h (lcons t lnil)) lnil
-c-app a b = capp (capp (code lapp) a) b
+c-app a b = capp (capp (code lappw) a) b
 derive-show d =
   case all-shapes d (nctors d) #0 of
     none → none

@@ -980,6 +980,28 @@ static Port face_cell(Dnf *f) { Cell *c = cell(V_FACE, 1); c->p = f; return P(c,
 /* a constructor applied to its fields and dimensions: c v r is its boundary
  * e(v, r) where the boundary's face holds at r (judgmentally), and otherwise
  * a constructor value. Built again after every substitution. */
+/* a foreign entry called on its arguments' bits (D27, B18): every argument and the result integers
+ * (or pointers), or every one a double */
+uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n) {
+    uint64_t r = 0;
+    if (e->ret != PT_F64) {
+        typedef uint64_t (*F1)(uint64_t); typedef uint64_t (*F2)(uint64_t, uint64_t); typedef uint64_t (*F3)(uint64_t, uint64_t, uint64_t);
+        typedef uint64_t (*F4)(uint64_t, uint64_t, uint64_t, uint64_t); typedef uint64_t (*F5)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t); typedef uint64_t (*F6)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
+        typedef uint64_t (*F0)(void);
+        switch (n) {
+        case 0: r = ((F0)e->fn)(); break;
+        case 1: r = ((F1)e->fn)(a[0]); break; case 2: r = ((F2)e->fn)(a[0], a[1]); break; case 3: r = ((F3)e->fn)(a[0], a[1], a[2]); break;
+        case 4: r = ((F4)e->fn)(a[0], a[1], a[2], a[3]); break; case 5: r = ((F5)e->fn)(a[0], a[1], a[2], a[3], a[4]); break; default: r = ((F6)e->fn)(a[0], a[1], a[2], a[3], a[4], a[5]); break;
+        }
+        if (e->ret == PT_U32) r = (uint32_t)r;
+    } else {
+        typedef double (*D1)(double); typedef double (*D2)(double, double); typedef double (*D3)(double, double, double); typedef double (*D4)(double, double, double, double);
+        double d[8], dr; for (int k = 0; k < n; k++) memcpy(&d[k], &a[k], 8);
+        switch (n) { case 1: dr = ((D1)e->fn)(d[0]); break; case 2: dr = ((D2)e->fn)(d[0], d[1]); break; case 3: dr = ((D3)e->fn)(d[0], d[1], d[2]); break; default: dr = ((D4)e->fn)(d[0], d[1], d[2], d[3]); break; }
+        memcpy(&r, &dr, 8);
+    }
+    return r;
+}
 Port con_build(int c, const Port *f, const Port *d) {
     ConInfo *k = &CON[c];
     int nf = k->nfields, nd = k->ndims, n = nf + nd;
@@ -1121,22 +1143,7 @@ static void rule_subst(Cell *o, Cell *v) {
         int n = k->nfields + k->ndims;
         Port *a = malloc((size_t)(n + 1) * sizeof(Port));
         for (int j = 0; j < n; j++) a[j] = sub(v->port[1 + j], s);
-        /* a path constructor whose dimensions (interval values already there) mention nothing the
-         * substitution replaces: its boundary's faces are what they were, none of them true (it
-         * is a constructor), so it is a constructor again without the boundary rebuilt (A8:
-         * surfc's reads spent half their steps rebuilding %bdy-squash4 under substitutions of
-         * other dimensions) */
-        bool same = k->bdy >= 0;
-        for (int j = 0; same && j < k->ndims; j++) {
-            Cell *dc = cell_at(v->port[1 + k->nfields + j]);
-            if (!dc || dc->kind != V_IV || !dc->p) { same = false; break; }
-            for (uint32_t q = 0; q < s->n; q++) if (dnf_mentions(dc->p, s->d[q])) { same = false; break; }
-        }
-        if (same) {
-            Cell *c = cell(V_CON, n + 1); c->a = v->a;
-            for (int j = 0; j < n; j++) link(a[j], P(c, 1 + j));
-            link(P(c, 0), out);
-        } else link(con_build((int)v->a, a, a + k->nfields), out);
+        link(con_build((int)v->a, a, a + k->nfields), out);
         free(a);
         break;
     }
@@ -1630,7 +1637,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_NTYPE] = "NTYPE",
     [O_CALL] = "CALL",
     [O_WSUCC] = "WSUCC",
-    [O_PTY] = "PTY", [O_BYTESTY] = "BYTESTY", [O_PVAL] = "PVAL", [O_PVAL2] = "PVAL2", [O_POP1] = "POP1", [O_POP2] = "POP2", [O_POP2B] = "POP2B", [O_BYTES] = "BYTES", [O_LOAD] = "LOAD", [O_LOADB] = "LOADB", [O_STORE] = "STORE", [O_STOREB] = "STOREB", [O_STOREC] = "STOREC", [O_BLEN] = "BLEN", [O_PTROF] = "PTROF", [O_REGAT] = "REGAT", [O_REGATA] = "REGATA", [O_FFI] = "FFI",
+    [O_PTY] = "PTY", [O_BYTESTY] = "BYTESTY", [O_PVAL] = "PVAL", [O_PVAL2] = "PVAL2", [O_POP1] = "POP1", [O_POP2] = "POP2", [O_POP2B] = "POP2B", [O_BYTES] = "BYTES", [O_LOAD] = "LOAD", [O_LOADB] = "LOADB", [O_STORE] = "STORE", [O_STOREB] = "STOREB", [O_STOREC] = "STOREC", [O_BLEN] = "BLEN", [O_PTROF] = "PTROF", [O_REGAT] = "REGAT", [O_REGATA] = "REGATA", [O_FFI] = "FFI", [O_NATIVE] = "NATIVE",
     [O_PIMULT] = "PIMULT", [O_PIM] = "PIM", [O_FMULT] = "FMULT", [O_FMULT2] = "FMULT2", [O_FMULT3] = "FMULT3", [O_LINEAR] = "LINEAR", [O_GUSAGE] = "GUSAGE", [O_GUSAGE2] = "GUSAGE2",
     [O_WEQ] = "WEQ",
     [O_WLT] = "WLT",
@@ -2547,27 +2554,39 @@ static void interact(Cell *o, Cell *v) {
             cell_free(o);
             return;
         }
-        uint64_t r = 0; int n = A->n; uint64_t *a = A->v;
-        bool dbl = e->ret == PT_F64;
-        if (!dbl) {
-            typedef uint64_t (*F1)(uint64_t); typedef uint64_t (*F2)(uint64_t, uint64_t); typedef uint64_t (*F3)(uint64_t, uint64_t, uint64_t);
-            typedef uint64_t (*F4)(uint64_t, uint64_t, uint64_t, uint64_t); typedef uint64_t (*F5)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t); typedef uint64_t (*F6)(uint64_t, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t);
-            switch (n) {
-            case 1: r = ((F1)e->fn)(a[0]); break; case 2: r = ((F2)e->fn)(a[0], a[1]); break; case 3: r = ((F3)e->fn)(a[0], a[1], a[2]); break;
-            case 4: r = ((F4)e->fn)(a[0], a[1], a[2], a[3]); break; case 5: r = ((F5)e->fn)(a[0], a[1], a[2], a[3], a[4]); break; default: r = ((F6)e->fn)(a[0], a[1], a[2], a[3], a[4], a[5]); break;
-            }
-            if (e->ret == PT_U32) r = (uint32_t)r;
-        } else {
-            typedef double (*D1)(double); typedef double (*D2)(double, double); typedef double (*D3)(double, double, double); typedef double (*D4)(double, double, double, double);
-            double d[8], dr; for (int k = 0; k < n; k++) memcpy(&d[k], &a[k], 8);
-            switch (n) { case 1: dr = ((D1)e->fn)(d[0]); break; case 2: dr = ((D2)e->fn)(d[0], d[1]); break; case 3: dr = ((D3)e->fn)(d[0], d[1], d[2]); break; default: dr = ((D4)e->fn)(d[0], d[1], d[2], d[3]); break; }
-            memcpy(&r, &dr, 8);
-        }
+        uint64_t r = ffi_invoke(e, A->v, A->n); int n = A->n;
         for (int k = 0; k < n; k++) if (A->keep[k] && rcl_dec(&A->keep[k]->rc) == 0) free(A->keep[k]);
         free(A);
         Port out;
         if (e->ret == 4) out = word_of(r);
         else { Cell *c = cell(V_PVAL, 1); c->x = e->ret; c->a = r; out = P(c, 0); }
+        link(out, o->port[1]);
+        cell_free(o);
+        return;
+    }
+    case O_NATIVE: {
+        /* a compiled definition called from the net (B18): the arguments read in turn and kept as
+         * values; all words, the compiled code is called with them; otherwise the definition itself
+         * is applied to them (the net computes what the native form does not cover) */
+        typedef struct { int n; Port v[8]; } NArgs;
+        NArgs *A = o->p; if (!A) A = calloc(1, sizeof(NArgs));
+        o->p = NULL;
+        A->v[A->n++] = P(v, 0);
+        if (o->n > 2) {
+            Cell *c = cell(O_NATIVE, o->n - 1); c->x = o->x; c->a = o->a; c->p = A;
+            for (int k = 1; k < o->n; k++) mv(o, k, P(c, k - 1));
+            cell_free(o);
+            return;
+        }
+        int n = A->n; bool words = n <= 8;
+        for (int k = 0; k < n && words; k++) { Cell *c = cell_at(A->v[k]); if (!c || c->kind != V_WORD || c->p) words = false; }
+        Port out;
+        if (words) {
+            uint64_t a[8];
+            for (int k = 0; k < n; k++) { Cell *c = cell_at(A->v[k]); a[k] = c->a; era(A->v[k]); }
+            out = word_of(ffi_invoke(&FFI[o->x], a, n));
+        } else out = apply_gid((long)o->a, A->v, n);
+        free(A);
         link(out, o->port[1]);
         cell_free(o);
         return;
@@ -3346,7 +3365,8 @@ static Port build(Syn *t, Frame *f) {
         return P(c, 1);
     case S_PRIM:
         c = cell((int)t->x, t->n + 1);
-        if (t->x == O_POP1 || t->x == O_POP2 || t->x == O_LOAD || t->x == O_STORE || t->x == O_FFI) c->x = (uint32_t)t->id;   /* the operation, the width, or the foreign entry */
+        if (t->x == O_POP1 || t->x == O_POP2 || t->x == O_LOAD || t->x == O_STORE || t->x == O_FFI || t->x == O_NATIVE) c->x = (uint32_t)t->id;   /* the operation, the width, or the foreign entry */
+        if (t->x == O_NATIVE) c->a = (uint64_t)t->slot;   /* the definition the native form stands for */
         for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(c, k));
         return P(c, t->n);
     case S_PLAM: {

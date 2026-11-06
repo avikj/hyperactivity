@@ -223,6 +223,8 @@ enum {
     O_REGAT,    /* (%region-at n a): 0=n 1=a 2=out, the n bytes at address a, copied (C20, trusted) */
     O_REGATA,   /* its second step: 0=a 1=out, a = n */
     O_FFI,      /* (%ffi k a1 .. an): x=the foreign table entry, 0..n-1=arguments, n=out; a=the arguments read so far, p=them (D27, trusted) */
+    O_NATIVE,   /* (%native k g a1 .. an): x=the foreign table entry of a compiled definition, a=the definition g itself; 0..n-1=arguments, n=out;
+                   p=the argument values read so far. All words: the compiled code is called; otherwise g is applied (B18) */
     O_WEQ, O_WLT, O_WADD, O_WMAX, O_WSUB,  /* 0=a 1=b 2=out: on words; first a, then b. Equality,
                  * order, max and truncated subtraction recurse on both (cancelling successors), addition
                  * on b; a word with a neutral part leaves the operation stuck (V_NWOP) */
@@ -428,6 +430,7 @@ Port global_copy(long g, Key *as); /* 0 when the global is an unsupplied input; 
 void global_park(long g, Cell *op, Cell *glob);
 /* foreign functions (D27): a C symbol at a primitive type; the arguments' kinds (PT_*, or 4 a word), its result's */
 typedef struct { const char *sym; void *fn; int n; unsigned char kind[8]; unsigned char ret; } Ffi;
+uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n);
 extern Ffi *FFI; extern int nffi;
 int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret);
 long global_lookup(const char *name);

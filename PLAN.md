@@ -2267,6 +2267,23 @@ mov, add/sub/imul, cmp/jcc, call/ret, load/store with offsets, SSE2 for floats).
 
 ### 18.8 B18 — The call boundary and the C ABI
 
+**Status (2026-11-06).** Both directions built for words. Net → native: `#native name n =
+prog` (`src/lang.c`, `src/syntax.c`) takes the bytes of `emit-lib-u defs` (`lib/emitu.cub`,
+`c7f3cfc9`: the unboxed program with definition 0 exported as `cubical_entry`), compiles them
+with `cc -shared` into the cache directory, opens the library as a foreign entry and
+redefines `name` as `λ a₁…aₙ → %native k g a₁…aₙ`; the `O_NATIVE` rule (`src/net.c`) reads the
+arguments in turn and calls the compiled code when all are words, else applies the
+definition `g` itself (so `λ x → plusw x #0` still reads `λ x → x` on the net).
+`tests/native.cub`: `plusw` entered (23.7k steps to specialize, lower and print; 3.3 KB of C),
+`plusw #3 #4`, `plusw #1000000 #1000000` native. Native → net: `src/libcubical.h`,
+`build/libcubical.a` (the sources with `-DCUBICAL_LIB`, `main` renamed), `cubical_init(files)`
+and `cubical_call(name, words, n, &out)` (the application read back by the net, a word or a
+Bool); `tests/native/main.c` calls `plusw` and `eqw`, in `make test`. Not built: marshaling
+of values of declared representations by their layouts (`tdata` walks, `Bytes` as pointer
+and length), `V_NATIVE` opaque results, exported prototypes per compiled definition, the
+`foreign` → `fprim` lowering; `#native` is per definition on demand, not a cache by key
+(item 17). The foreign side of D27 (`O_FFI`) is what `O_NATIVE` reuses (`ffi_invoke`).
+
 Revision 1. In `src/net.c` and `src/lang.c`.
 
 - **Net → native.** A cell `O_NATIVE` (`0..n-1` = arguments, `out`): when all arguments are
@@ -2545,11 +2562,12 @@ and memo on/off. `surfc` on the squash₄ cube: a read at any endpoint of either
 (`@ 0 @ 0`, `@ m @ 0`, `@ 0 @ m`) is 47–48 cells for about 196k steps — 4k steps per cell,
 the profile per `#show` (`CUBICAL_PROFILE=show`, added) showing `%comp-path` entered 3,287
 times and `%bdy-squash4` 3,095 times — and the read at both Ω² dimensions generic (the 6-cube)
-exceeds 5.4 GB and is killed. The constructor substitution rule now rebuilds a path
-constructor's boundary only when a substituted dimension occurs in the constructor's
-dimensions (the faces cannot have changed otherwise, and none was true), which removed a
-tenth of the boundary entries; the rest come from the composition tubes restricting the
-four cube dimensions. What remains for the acceptance below is the `%comp-path` count: the
+exceeds 5.4 GB and is killed. Skipping the boundary rebuild when no substituted dimension
+occurs in the constructor's dimensions removes a tenth of the entries (tried, withdrawn:
+reading the dimension values at substitution time made the step count depend on arrival
+order, and the suites must be identical across workers); the rest come from the
+composition tubes restricting the four cube dimensions. Done deterministically (an
+operation that waits for the dimension values) it would be worth that tenth. What remains for the acceptance below is the `%comp-path` count: the
 dependent 4-cube over sets (`fill4OverSets`) composes in path types at every level and each
 composition distributes to its endpoints as soon as it exists, the same pattern `%transH`
 removed for transports of compositions; the same treatment (a formal composition in a path

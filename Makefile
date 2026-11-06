@@ -14,6 +14,14 @@ build/cubical-asan: $(SRC) src/core.h src/syntax.c src/store.c src/sha256.c
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(SAN) -o $@ $(SRC) -lpthread -lm -ldl
 
+# the machine as a library (B18): a C program calls checked definitions (src/libcubical.h)
+build/libcubical.a: $(SRC) src/core.h src/syntax.c src/store.c src/sha256.c src/libcubical.h
+	@mkdir -p build/lib
+	for f in $(SRC); do $(CC) $(CFLAGS) -DCUBICAL_LIB -c -o build/lib/$$(basename $$f .c).o $$f || exit 1; done
+	ar rcs $@ build/lib/*.o
+build/native-main: tests/native/main.c build/libcubical.a
+	$(CC) $(CFLAGS) -o $@ tests/native/main.c build/libcubical.a -lpthread -lm -ldl
+
 # tests check: the module cache is off, except in the cache test (a fresh directory, run twice)
 test: export CUBICAL_NOCACHE = 1
 test: build/cubical build/cubical-asan
@@ -42,6 +50,14 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/guarded.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/prim.cub lib/stage.cub tests/prim.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/fiber.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/lin.cub lib/check.cub lib/std.cub lib/linproof.cub lib/eqproof.cub tests/cert.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub lib/session.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub lib/choreo.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub
+	sh tests/agda/check.sh
+	# the call boundary (B18): the net enters a definition's compiled C (#native), and a C program calls the net
+	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub lib/check.cub lib/std.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub lib/repr.cub tests/native.cub
+	$(MAKE) -s build/native-main && ./build/native-main
 	# the store (F34): a fresh one, run twice: the second run checks nothing, the answers agree, renaming changes no key
 	rm -rf build/store; for r in 1 2; do CUBICAL_STORE=build/store ./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/store.cub > build/store-$$r.out || exit 1; done; \
 	grep -q "ok: checks .*\[[0-9]* steps\]" build/store-2.out && { echo "store: the second run checked a definition"; grep "ok: checks .*steps" build/store-2.out | head; exit 1; }; \
