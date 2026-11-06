@@ -344,3 +344,13 @@ supervise-by {A} fuel s k =
 -- watch: run a child once and report its outcome, with no restart
 watch : {A : Type} → PKey → Proc {lzero} (SupS A) (Outcome A)
 watch {A} k = bind {lzero} {SupS A} {Word} {Outcome A} (cmd {lzero} {SupS A} (spawn k)) (λ h → cmd {lzero} {SupS A} (await h))
+-- ---------------------------------------------------------------- named worlds (D27, library half)
+-- a world a binary links against is named: a handler implementation under a name, with the
+-- model (the in-language world the implementation is specified against) beside it. A registry is
+-- a list of named worlds; a binary picks one by name. `world "name" = handler` (the surface form
+-- that lists the implementation under #trusted) is the machine side of this
+record Named (S : Sig) (St : Type) = { wid : Word ; model : World S St }
+Registry : Sig → Type → Type
+Registry S St = List (Named S St)
+find-world : {S : Sig} {St : Type} → Word → Registry S St → World S St → World S St
+find-world {S} {St} n r dflt = case r of nil → dflt; cons x xs → (case weq (wid x) n of true → model x; false → rec xs)

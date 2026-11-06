@@ -89,3 +89,9 @@ restart-all o n = case o of done a → give-up; stopped → lt3 n; failed r → 
 sup-killed2 : Outcome (Outcome Word) × SupSt Word ((Word → Word) × Nat)
 sup-killed2 = runp {SupS Word} {Outcome Word} {SupSt Word ((Word → Word) × Nat)} (supervise-by {Word} 5 (restart-all {Word}) #1) (sup-world {KVS} {Word} {(Word → Word) × Nat} reg1 flaky) ((empty-st , zero) , (nil , (cons #0 (cons #1 nil) , #0)))
 #same fst sup-killed2 = done (done #12)
+-- ---------------------------------------------------------------- named worlds (D27)
+kv-named : Named KVS (Word → Word)
+kv-named = (#1 , kv-world)
+registry1 : Registry KVS (Word → Word)
+registry1 = cons kv-named nil
+#same fst (runp {KVS} {Word} {Word → Word} (pr1 {lzero}) (find-world {KVS} {Word → Word} #1 registry1 kv-world) empty-st) = done #12
