@@ -1407,7 +1407,7 @@ construct column is a gap and becomes a ★ item.
 | Roc platforms | C | worlds as named handler implementations | |
 | Unison content addressing, no builds, distribution by hash | C | the store as the codebase; keys over wires | proofs between versions |
 | Nix/Dhall reproducibility, totality | C | content keys; totality | |
-| Bend/HVM GPU interaction nets | — | data point for the symbolic stage on GPUs | |
+| Bend/HVM GPU interaction nets | — | see 16.6 | |
 
 ### 16.6 Data, queries, hardware, sandboxes: SQL, Datalog/Prolog, TLA+, Chisel/Clash, CUDA, WebAssembly, Python/JS
 | feature | kind | construct | stronger because |
@@ -1423,6 +1423,44 @@ construct column is a gap and becomes a ★ item.
 
 No row is without an answer at this revision. The rows marked L are the library's table of
 contents; none adds a judgment form.
+
+### 16.6 The HVM/Bend lineage (HigherOrderCO): the nearest runtime, and the upper end to supersede
+
+The only other line of work that runs programs on interaction nets at scale. Its stages, as
+published: Formality and Kind (a proof language over an interaction-net runtime, equality by
+rewriting, self types); HVM1 (2022, interaction nets, the Kind back end); HVM2 (2024, symmetric
+interaction combinators, a CUDA evaluator, the runtime of Bend, near-linear scaling across
+thousands of GPU threads for programs without sequential bottlenecks, an interpreter at the
+core); HVM3 (2025, the "Interaction Calculus": affine λ with no scope boundaries, first-class
+duplications and first-class superpositions, functions compiled to C, SupGen/NeoGen using
+superpositions to run a program on an enumerated family of inputs at once for program
+synthesis); HVM4 and Bend2 (2025–26, as announced: compilation of Interaction Calculus
+functions including superpositions to machine code with no interpretive overhead, a native
+type system running on the nets so HVM can serve as a parallel proof verifier, Bend2 targeting
+GPUs, lazy HVM, JS/Python, and "a complete proof system like Lean and Kind"; a Bend→Metal
+compiler written in 2026). What the lineage proves: an interaction-net runtime reaches
+hardware parallelism without a scheduler, optimal β-sharing is implementable, and the same
+runtime can carry a type system. Row by row:
+
+| feature | kind | construct here | stronger because |
+|---|---|---|---|
+| interaction nets / combinators as the runtime; locality gives parallelism | C | the same (section 1): rules on two cells at principal ports, workers compared with the single thread on every suite | the rules are the theory's own (composition clauses as terms), not a generic combinator basis the language is encoded into |
+| optimal β-reduction by duplication nodes with labels (Lamping); affine λ, global substitution, no scope | C | wires as variables; sharing by content keys; retention by counted boxes | sharing is of *equal work* (one term is one pointer), not of λ-bodies by label bookkeeping; no label/oracle problem, no "dup of a dup" cases; ordinary λ, not affine |
+| superpositions as first-class values (a term in two states at once, collapsed by dups) | C | open-term normalization: the common work of a family of inputs is done with the variable free, then substituted (binding time); keys do the rest of the sharing | the "family" is a type, not a labelled pair; the shared result is a theorem about the family, not a coincidence of reduction order |
+| SupGen/NeoGen: enumerate programs in parallel through superpositions | L | navigation over the store's identities (F33); specialization with open variables; the certificate checkers | candidates are reached along identities and are correct by construction; search is unverified, acceptance is a verified term |
+| HVM2 on CUDA: thousands of threads | — | CPU workers today; GPUs are the symbolic stage's optional target (B16) | parity is the goal here, not a claim |
+| HVM3/HVM4: functions compiled to C / machine code, superpositions included | C | the first-order stage (B13–B16): a criterion names what is native and why; the net reads the rest | the boundary carries proofs (assumed facts, certificates, representations as equivalences); native code is the *same term* specialized, with its justifying path |
+| Kind's types: self types, equality by rewriting; HVM4's native type system on the net | C | the checker as a term on the net; cubical HoTT with univalence computing, HITs, Glue | paths compute: representations, specializations and replays are transports; no HVM-line system has univalence or higher inductive types computing |
+| Bend2's "complete proof system like Lean" (announced) | C | the standard library, the verified decision procedures, certificates, the store of theorems — built and in the suite | exists now, on the one runtime |
+| single-core speed of the interpreted combinator runtime (poor; parallelism compensates) | — | work proportional to the result (A8) plus the native stage for first-order regions | the hot path is C an engineer writes; the net is for what has no native form |
+| content-addressed program identity (not in HVM; in Unison) | C | the store (F34) | proofs between versions |
+| a Python-like surface (Bend) | L | a surface is a translation into the store's codes; none written yet (E29's translator from Agda is the first) | |
+
+The sentence to keep: the HVM line is the proof that this runtime shape scales; what it does
+not have — equality as a primitive that computes, a checker that is a term, proofs carried
+across the native boundary, sharing by content rather than by duplication labels — is
+exactly this project's content. Where it leads (GPUs, machine-code compilation of the whole
+calculus), parity is the acceptance and is in the queue, not claimed.
 
 ## 17. Changes in revisions 4 to 6, and retracted claims
 Revision 7.8 (handoff): the builder's `1c5282a` and `be7149d` recorded — B13 (`lib/stage.cub`),
