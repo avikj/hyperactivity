@@ -158,6 +158,7 @@ infer-u sigs env t =
     floop init body → loop-ty sigs env init body
     fassume f b → infer-u sigs env b
     fforce x → infer-u sigs env x
+    fupd u x c k v → infer-u sigs env x
     _ → tP
 join-ty a b = if %weq a b then a else tP
 alts-ty sigs env ft alts =
@@ -195,6 +196,7 @@ use-ty sigs d n t =
     fapply f args → first-some (if is-var d n f then some tP else use-ty sigs d n f) (use-list sigs d n args)
     fassume f b → use-ty sigs d n b
     fforce x → use-ty sigs d n x
+    fupd u x c k v → first-some (use-ty sigs d n x) (use-ty sigs d n v)
     _ → none
 is-var d n t = case t of fvar m → %weq m (%wadd d n); _ → false
 -- a variable that initializes loop state i is used as that state is used in the body (state i is
@@ -243,6 +245,7 @@ clos-in t acc =
     fapply f args → clos-list args (clos-in f acc)
     fassume f b → clos-in b acc
     fforce x → clos-in x acc
+    fupd u x c k v → clos-in v (clos-in x acc)
     _ → acc
 clos-list l acc = case l of lnil → acc; lcons x xs → clos-list xs (clos-in x acc)
 clos-alts alts acc = case alts of lnil → acc; lcons a r → clos-alts r (clos-in (snd (snd a)) acc)
@@ -297,7 +300,20 @@ emit-u sigs env d t =
     fapply f args → apply-u sigs env d (emit-at sigs env d tP f) args
     fassume fact b → cat5 u-assume (fact-u sigs env d fact) u-asmend (emit-u sigs env d b) u-bsend
     fforce x → emit-u sigs env d x
+    fupd u x c k v → upd-u sigs env d u x c k v
     _ → s-unsup
+-- an update (C21) at the base's type: a pair or a flat value by value is copied into a local and
+-- its field assigned (value semantics); a boxed V in place when unique (u = 1), else on a copy
+upd-u sigs env d u x c k v =
+  let nat = infer-u sigs env x
+  in if is-pr nat then cat7 u-bsx (ty-decl nat) u-upd (emit-u sigs env d x) (if %weq k #0 then u-upd-f0 else u-upd-f1) (emit-at sigs env d (pr-k nat k) v) u-upd-end
+     else if is-dt nat then cat7 u-bsx (ty-decl nat) u-upd (emit-u sigs env d x) (cat4 u-upd-uc (dec c) u-dot-f (dec k)) (cat3 u-assign (emit-at sigs env d tW v) lnil) u-upd-end
+     else cat7 (if %weq u #1 then s-upd-ip else s-upd-cp) (emit-at sigs env d tP x) (if %weq u #1 then s-upd-f else s-upd-fc) (dec k) s-upd-set (emit-at sigs env d tP v) s-upd-end
+u-upd = (lcons #117 (lcons #112 (lcons #32 (lcons #61 (lcons #32 lnil)))))
+u-upd-f0 = (lcons #59 (lcons #32 (lcons #117 (lcons #112 (lcons #46 (lcons #102 (lcons #48 (lcons #32 (lcons #61 (lcons #32 lnil))))))))))
+u-upd-f1 = (lcons #59 (lcons #32 (lcons #117 (lcons #112 (lcons #46 (lcons #102 (lcons #49 (lcons #32 (lcons #61 (lcons #32 lnil))))))))))
+u-upd-uc = (lcons #59 (lcons #32 (lcons #117 (lcons #112 (lcons #46 (lcons #117 (lcons #46 (lcons #99 lnil))))))))
+u-upd-end = (lcons #59 (lcons #32 (lcons #117 (lcons #112 (lcons #59 (lcons #32 (lcons #125 (lcons #41 lnil))))))))
 -- an assumed fact over typed variables
 fact-u sigs env d c =
   case c of
@@ -423,6 +439,7 @@ flat-in t acc =
     fapply f args → flat-list args (flat-in f acc)
     fassume f b → flat-in b acc
     fforce x → flat-in x acc
+    fupd u x c k v → flat-in v (flat-in x acc)
     _ → acc
 notb-u b = case b of true → false; false → true
 flat-list l acc = case l of lnil → acc; lcons x xs → flat-list xs (flat-in x acc)

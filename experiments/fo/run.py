@@ -85,6 +85,19 @@ defs = lcons (#0 , (#0 , fswitch (fcon pt-d #0 (lcons (flit #3) (lcons (flit #4)
  'num-spec': ("""lam-body f = case f of flam b → b; _ → f
 spec-num = specialize-r (Int64 → Word) lnil (code (λ x → wadd (i64toWord (i64off64 (f64mul (f64ofi64 x) (f64 #3)))) (if i64lt x (i64 #1) then #10 else #0)))
 defs = lcons (#0 , (#0 , fcall #1 (lcons (fi64 #7) lnil))) (lcons (#1 , (#1 , lam-body spec-num)) lnil)""", "21", "n27("),
+ # in-place update (C21): a loop over a fresh record (type 12 here, two word fields), its second
+ # field increased by the counter each iteration; the record is the loop's own, so the rebuild
+ # (a recursion on it returning its constructor with one field changed) is an update stored in
+ # place: no allocation in the loop. 10 + 3 + 2 + 1 = 16; the C stores into the state cell
+ 'inplace': ("""defs = case lift #1 (inplace loop-upd) of lifted t2 ds k → lcons (#0 , (#0 , fswitch t2 (lcons (#0 , (#2 , fvar #0)) lnil))) ds""", "16", "V *up = v0; up->f[1] = "),
+ # copy-on-write: the record is a parameter (the caller may hold it), so the update copies the
+ # cell first (a parameter whose only use is a switch is boxed in both printers). 5 + (6 + 1) = 12
+ 'cow': ("""data Pt4 = pt4 (x : Word) (y : Word)
+upd-y : Pt4 → Pt4
+upd-y p = case p of pt4 x y → pt4 x (%wadd y #1)
+lam-body f = case f of flam b → b; _ → f
+cow-main = fswitch (fcall #1 (lcons (fcon (didx (code Pt4)) #0 (lcons (flit #5) (lcons (flit #6) lnil))) lnil)) (lcons (#0 , (#2 , fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil)))) lnil)
+defs = case lift #2 (lam-body (specialize (Pt4 → Pt4) lnil (code (λ (p : Pt4) → upd-y p)))) of lifted t2 ds k → lcons (#0 , (#0 , cow-main)) (lcons (#1 , (#1 , t2)) ds)""", "12", "cpc("),
  'let-if': ("""defs = lcons (#0 , (#0 , flet (flit #3) (fif (fprim P-lt (lcons (fvar #0) (lcons (flit #5) lnil))) (fprim P-mul (lcons (fvar #0) (lcons (fvar #0) lnil))) (flit #0)))) lnil""", "9"),
 }
 UNBOXED = os.environ.get('UNBOXED') == '1'
@@ -106,6 +119,7 @@ def run(name, defs, expect, contains=None):
         cc = subprocess.run(['gcc', '-O2', '-w', '-o', exe, c], capture_output=True, text=True)
         if cc.returncode: print(name, 'FAIL: gcc'); print(cc.stderr[:800]); print(bs.decode()); return False
         got = subprocess.run([exe], capture_output=True, text=True).stdout.strip()
+        if isinstance(contains, tuple): contains = contains[1 if UNBOXED else 0]   # (boxed, unboxed)
         ok = got == expect and (contains is None or contains.encode() in bs)
         print(name, 'ok' if ok else f'FAIL: got {got}, expected {expect}' + ('' if contains is None or contains.encode() in bs else f'; {contains!r} not in the source'))
         if not ok: print(bs.decode())

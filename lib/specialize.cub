@@ -17,7 +17,7 @@ first-applicable rules c =
   case rules of
     lnil → none
     lcons r rest → (case rewrite-first r c of some c2 → some c2; none → first-applicable rest c)
-specialize T rules c = lower (rewrite-all #64 rules (normalize T c))
+specialize T rules c = inplace (lower (rewrite-all #64 rules (normalize T c)))
 -- the specialized form evaluated, as a word (for readings over word-valued programs)
 run-fo f = wof (eval-fo (λ g → flit #0) lnil f)
 -- ---------------------------------------------------------------- readings
@@ -65,6 +65,7 @@ fcalls t acc =
     fthunk a → fcalls a acc
     fforce x → fcalls x acc
     fassume f b → fcalls b acc
+    fupd u x c k v → fcalls v (fcalls x acc)
     _ → acc
 fcalls-list l acc = case l of lnil → acc; lcons x xs → fcalls-list xs (fcalls x acc)
 fcalls-alts alts acc = case alts of lnil → acc; lcons a r → fcalls-alts r (fcalls (snd (snd a)) acc)
@@ -80,12 +81,12 @@ program-defs fuel pending done =
        else (case unfold g of
                none → program-defs (%wsub fuel #1) rest (lcons g done)
                some cd →
-                 let t = lower cd
+                 let t = inplace (lower cd)
                  in lcons (g , (lam-arity t , strip-flams t)) (program-defs (%wsub fuel #1) (lapp2 rest (fcalls t lnil)) (lcons g done))))
 -- the program of a code: definition m is the code itself (its λs its arity), then what it calls;
 -- a global g is definition g + 1 in the program (0 is left for a main)
 program-at m fuel c =
-  let t = lower c
+  let t = inplace (lower c)
   in lcons (m , (lam-arity t , offset-calls (strip-flams t))) (offset-defs (program-defs fuel (fcalls t lnil) lnil))
 program-of fuel c = program-at #0 fuel c
 offset-defs defs = case defs of lnil → lnil; lcons d r → lcons (%wsucc (fst d) , (fst (snd d) , offset-calls (snd (snd d)))) (offset-defs r)
@@ -105,6 +106,7 @@ offset-calls t =
     fthunk a → fthunk (offset-calls a)
     fforce x → fforce (offset-calls x)
     fassume f b → fassume f (offset-calls b)
+    fupd u x c k v → fupd u (offset-calls x) c k (offset-calls v)
     _ → t
 offset-list l = case l of lnil → lnil; lcons x xs → lcons (offset-calls x) (offset-list xs)
 offset-alts alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , offset-calls (snd (snd a)))) (offset-alts r)
@@ -158,6 +160,6 @@ is-fo c = case fo-report c of lnil → true; _ → false
 -- (normalization unfolds every definition it reaches: quote renders a definition applied to a
 -- neutral by its body); fusion, representation choices and generality follow B13
 data Sched = sched (rewrites : Word)
-specialize-s sch T rules c = case sch of sched r → lower (rewrite-all r rules (normalize T c))
+specialize-s sch T rules c = case sch of sched r → inplace (lower (rewrite-all r rules (normalize T c)))
 -- the call of lenw under an unknown list normalizes to the recursion itself
-#same specialize-s (sched #64) (LW → Word) lnil (code (λ (l : LW) → lenw l)) = lower (fromopt (unfold (gidx (code lenw))) cword)
+#same specialize-s (sched #64) (LW → Word) lnil (code (λ (l : LW) → lenw l)) = inplace (lower (fromopt (unfold (gidx (code lenw))) cword))
