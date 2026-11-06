@@ -44,8 +44,39 @@ lower c =
     cwlit n → flit n
     cwsucc a → fprim P-add (lcons (lower a) (lcons (flit #1) lnil))
     cwop k a b → fprim (wop-prim k) (lcons (lower a) (lcons (lower b) lnil))
+    cprim k as → lower-prim k as
     cwelim w z s → lower-welim (lower w) (lower z) (lower s)
     _ → fnet #0 lnil
+-- A primitive operation's code (cprim k as, lib/code.cub prim-apply's numbering) in the first-order
+-- form, which holds words: the word-sized integer operations are the word ones, the conversions
+-- between words and fixed-width integers are the identity, the 8- and 4-byte loads and stores
+-- are the byte layer's; what the form has no primitive for yet (floats, 1- and 2-byte accesses)
+-- is a call into the net (fnet) until it gains them
+lower-prim k cs =
+  let as = lower-list cs
+  in if %wlt k #512
+       then (let sb = %wsub k #256 in if %wlt sb #20 then (case as of lcons a r → a; lnil → flit #0) else fnet k as)
+       else if %wlt k #768
+         then (let sb = %wsub k #512
+                   op = if %wlt sb #5 then sb else if %wlt sb #10 then %wsub sb #5 else #99
+               in if %weq op #0 then fprim P-add as else if %weq op #1 then fprim P-sub as else if %weq op #2 then fprim P-mul as
+                  else if %weq op #3 then fprim P-eq as else if %weq op #4 then fprim P-lt as else fnet k as)
+         else if %wlt k #1280 then lower-access k cs as
+         else if %wlt k #1536 then fprim P-blen as else fprim P-bytes as
+-- a load (class 3) or store (class 4) of w bytes at off in a buffer of n bytes: the access, under
+-- the fact the dropped proof established, off + w < n + 1, stated for the C compiler (fassume)
+-- when the quote carried the length (lib/check.cub bytes-len-code); the proof itself is gone.
+-- Numerals in the fact are Nat constructor trees here; lib/repr.cub reads them as words
+ltake-l n l = if %weq n #0 then lnil else (case l of lnil → lnil; lcons x r → lcons x (ltake-l (%wsub n #1) r))
+lower-access k cs as =
+  let st = if %wlt k #1024 then false else true
+      w = %wsub k (if st then #1024 else #768)
+      nargs = if st then #3 else #2
+      body = if %weq w #8 then fprim (if st then P-store64 else P-load64) (ltake-l nargs as)
+             else if %weq w #4 then fprim (if st then P-store32 else P-load32) (ltake-l nargs as) else fnet k (ltake-l nargs as)
+  in if %weq (lst-len cs) (%wsucc nargs)
+       then fassume (cwop #1 (cwop #2 (cl-at cs #1) (cwlit w)) (cwsucc (cl-at cs nargs))) body
+       else body
 -- an application spine: nested capps become one fapply; a global head becomes fcall
 lower-app f args =
   case f of

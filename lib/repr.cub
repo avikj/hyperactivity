@@ -37,6 +37,17 @@ fact-of-fo t =
     flit w → some (cwlit w)
     fprim p args → (if %weq p P-add then (case args of lcons a r → (case r of lcons b r2 → (case fact-of-fo a of some ca → (case fact-of-fo b of some cb → some (cwop #2 ca cb); none → none); none → none); _ → none); _ → none) else none)
     _ → none
+-- a Nat numeral in a code (a fact's offset or length) as the word it represents
+nat-code c =
+  case c of
+    ccon d k fs ds → (if %weq d nat-d then (if %weq k #0 then some #0 else (case fs of lcons x r → omap (λ n → %wsucc n) (nat-code x); lnil → none)) else none)
+    _ → none
+nat-lits c =
+  case c of
+    ccon d k fs ds → (case nat-code c of some n → cwlit n; none → c)
+    cwop o a b → cwop o (nat-lits a) (nat-lits b)
+    cwsucc a → cwsucc (nat-lits a)
+    _ → c
 with-bound w off n body =
   case fact-of-fo off of
     some co → (case fact-of-fo n of some cn → fassume (cwop #1 (cwop #2 co (cwlit w)) (cwsucc cn)) body; none → body)
@@ -74,7 +85,7 @@ consume-reps t =
     fapply f args → fapply (consume-reps f) (consume-list args)
     fthunk a → fthunk (consume-reps a)
     fforce a → fforce (consume-reps a)
-    fassume fact b → fassume fact (consume-reps b)
+    fassume fact b → fassume (if nat-rep then nat-lits fact else fact) (consume-reps b)
     _ → t
 consume-list l = case l of lnil → lnil; lcons x xs → lcons (consume-reps x) (consume-list xs)
 consume-ralts l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , consume-reps (snd (snd (snd a)))))) (consume-ralts r)
@@ -87,7 +98,7 @@ specialize-r T rules c = consume-reps (specialize T rules c)
 -- the conversions are gone, and each dropped proof is an assumed fact around its load. (sum-msgs itself, applied to the unknown buffer, is not unfolded by
 -- normalization and its call has no first-order form: a finding for B15, plan 18.6.)
 two-loads = code (λ b → plusw (i64toWord (load64 32 b 16 (8 , λ i → 32))) (i64toWord (load64 32 b 0 (24 , λ i → 32))))
-sum2 = specialize-r (Bytes 32 → Word) lnil two-loads
+sum2 = specialize-r (Bytes 32 → Word) (view-of (lcons (gidx (code plusw≡wadd)) lnil)) two-loads
 ld16 = fprim P-load64 (lcons (fvar #0) (lcons (flit #16) lnil))
 ld0 = fprim P-load64 (lcons (fvar #0) (lcons (flit #0) lnil))
 #same sum2 = flam (fprim P-add (lcons (fassume (cwop #1 (cwop #2 (cwlit #16) (cwlit #8)) (cwsucc (cwlit #32))) ld16) (lcons (fassume (cwop #1 (cwop #2 (cwlit #0) (cwlit #8)) (cwsucc (cwlit #32))) ld0) lnil)))

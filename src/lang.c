@@ -833,6 +833,24 @@ static Node *to_code(Node *t) {
     { static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub" };
       for (int q = 0; q < 5; q++) if (!strcmp(h, WO[q])) return capp3("cwop", word(q), to_code(t->it[1]), to_code(t->it[2])); }
     if (!strcmp(h, "%welimP") && t->n == 5) return capp3("cwelim", to_code(t->it[2]), to_code(t->it[3]), to_code(t->it[4]));
+    /* a primitive operation (B12): (cprim k args), k = class·256 + sub as lib/code.cub's prim-apply reads it */
+    {
+        static const char *PO1[] = { "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
+            "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64" };
+        long k = -1;
+        for (int q = 0; q < PO_N; q++) if (!strcmp(h, PO1[q])) { k = (q >= PO_I64OFW ? 1 : 2) * 256 + q; break; }
+        if (k < 0 && !strncmp(h, "%load", 5) && t->n == 3) k = 3 * 256 + atoi(h + 5) / 8;
+        if (k < 0 && !strncmp(h, "%store", 6) && t->n == 4) k = 4 * 256 + atoi(h + 6) / 8;
+        if (k < 0 && !strcmp(h, "%blen")) k = 5 * 256;
+        if (k < 0 && !strcmp(h, "%bytes")) k = 6 * 256;
+        if (k >= 0) {
+            Node **a = calloc((size_t)t->n, sizeof(Node *));
+            for (int q = 1; q < t->n; q++) a[q - 1] = to_code(t->it[q]);
+            Node *r = capp2("cprim", word(k), code_list(a, t->n - 1));
+            free(a);
+            return r;
+        }
+    }
     if (!strcmp(h, "lsuc")) return capp1("clsuc", to_code(t->it[1]));
     if (!strcmp(h, "lmax")) return capp2("clmax", to_code(t->it[1]), to_code(t->it[2]));
     if (!strcmp(h, "%pty")) return capp2("cpty", to_code(t->it[1]), K("clzero"));

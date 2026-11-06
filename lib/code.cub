@@ -78,6 +78,7 @@ data Code
   | ctick k
   | cclock0
   | ctick0
+  | cprim k as
 -- a value's head as data (%view, src/net.c): its parts are the value's own parts, values;
 -- data types, constructors and variables by words
 data View
@@ -144,6 +145,32 @@ dt-elim t = case t of dtab f c e s → e
 dt-case t = case t of dtab f c e s → s
 -- eval-g e c: the value of code c, e the values of its variables (a list); checked definitions
 -- and data types are read from the checker's tables (%gval, %dtab)
+-- A primitive operation (B12) by its number k = class·256 + sub, as %view names a stuck one (wprim k as)
+-- and a code names it (cprim k as): class 1 a unary operation, 2 a binary one (sub in the order of
+-- lib/prim.cub's %i64add ... %i64off64), 3 a load and 4 a store of sub bytes, 5 %blen, 6 %bytes.
+-- Applied to its evaluated arguments: the machine's operation, which computes on values and stays a
+-- neutral (wprim) on unknowns; so a code over the byte layer evaluates and quotes under unknowns
+prim-apply k as =
+  if %wlt k #512 then prim-1 (%wsub k #256) (cl-at as #0)
+  else if %wlt k #768 then prim-2 (%wsub k #512) (cl-at as #0) (cl-at as #1)
+  else if %wlt k #1024 then prim-ld (%wsub k #768) (cl-at as #0) (cl-at as #1)
+  else if %wlt k #1280 then prim-st (%wsub k #1024) (cl-at as #0) (cl-at as #1) (cl-at as #2)
+  else if %wlt k #1536 then %blen (cl-at as #0) else %bytes (cl-at as #0)
+prim-1 sb a =
+  if %weq sb #16 then %i64ofw a else if %weq sb #17 then %wofi64 a else if %weq sb #18 then %u32ofw a
+  else if %weq sb #19 then %wofu32 a else if %weq sb #20 then %f64ofw a else if %weq sb #21 then %f64ofi64 a
+  else %i64off64 a
+prim-2 sb a b =
+  if %weq sb #0 then %i64add a b else if %weq sb #1 then %i64sub a b else if %weq sb #2 then %i64mul a b
+  else if %weq sb #3 then %i64eq a b else if %weq sb #4 then %i64lt a b
+  else if %weq sb #5 then %u32add a b else if %weq sb #6 then %u32sub a b else if %weq sb #7 then %u32mul a b
+  else if %weq sb #8 then %u32eq a b else if %weq sb #9 then %u32lt a b
+  else if %weq sb #10 then %f64add a b else if %weq sb #11 then %f64sub a b else if %weq sb #12 then %f64mul a b
+  else if %weq sb #13 then %f64div a b else if %weq sb #14 then %f64eq a b else %f64lt a b
+prim-ld w b off =
+  if %weq w #1 then %load8 b off else if %weq w #2 then %load16 b off else if %weq w #4 then %load32 b off else %load64 b off
+prim-st w b off v =
+  if %weq w #1 then %store8 b off v else if %weq w #2 then %store16 b off v else if %weq w #4 then %store32 b off v else %store64 b off v
 eval-g e c =
   case c of
     cvar n → cl-at e n
@@ -209,6 +236,7 @@ eval-g e c =
            else if %weq k #1
                   then %wlt x y
                   else if %weq k #2 then %wadd x y else if %weq k #3 then %wmax x y else %wsub x y
+    cprim k as → prim-apply k (cl-map (eval-g e) as)
     cwelim w z s → %welim (eval-g e w) (eval-g e z) (eval-g e s)
     ctrans d psi ls x → 
       app-all (%dtrans d)

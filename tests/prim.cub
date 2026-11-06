@@ -135,3 +135,12 @@ a3 = tabulate 3 (λ i → i64 (fromNat (times i i)))
 #same index 3 a3 2 (le-refl 3) = i64 #4
 #same index 3 a3 1 (le-pred 1 3 (le-pred 2 3 (le-refl 3))) = i64 #1
 #same index 3 (update 3 a3 0 (le-pred 0 3 (le-pred 1 3 (le-pred 2 3 (le-refl 3)))) (i64 #9)) 0 (le-zero 3) = i64 #9
+
+-- a stuck primitive operation has a code (cprim): a definition over the byte layer quotes under an
+-- unknown buffer, so the specializer can read it, and evaluating the code back is the same value
+le8-16 : le 8 16
+le8-16 = (8 , λ i → 16)
+ld2 : (b : Bytes 16) → Int64
+ld2 b = i64add (load64 16 b 0 le8-16) (load64 16 b 8 (le-refl 16))
+#same (case quote-top (Bytes 16 → Int64) ld2 of some c → true; none → false) = true
+#same eval-g lnil (fromopt (quote-top (Bytes 16 → Int64) ld2) cword) (store64 16 (store64 16 (bytes 16) 0 le8-16 (i64 #5)) 8 (le-refl 16) (i64 #7)) = i64 #12

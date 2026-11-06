@@ -1916,10 +1916,40 @@ qneu bs E v (wwop k a b) =
 qneu bs E v (wwelim x z s) =
   obind (quote bs Word x)
     (λ cx → obind (qv-un bs z) (λ cz → omap (λ cs → (cwelim cx cz cs , opq)) (q-wstep bs s)))
--- a primitive operation stuck on a neutral has no code yet (its wrapper's arguments the checker
--- erased are not in it): not quotable, as it was not when it was unknown
-qneu bs E v (wprim k as) = none
+-- a primitive operation stuck on a neutral: the operation's code at its arguments' codes (each
+-- quoted as the value it is: a variable, a literal, a further operation), at the operation's result
+-- type (lib/code.cub prim-apply names the numbering)
+qneu bs E v (wprim k as) =
+  omap (λ cs → (cprim k (if prim-access k then (case bytes-len-code bs (lhead as) of some n → lsnoc cs n; none → cs) else cs) , prim-ty k))
+    (q-prim-args bs as)
 qneu bs E v _ = omap (λ c → (c , opq)) (qv-un bs v)
+-- a load or store (class 3 or 4) quotes with the length of its buffer as a last argument, read
+-- off the buffer's type, so that the lowering can state the access bound it assumes
+prim-access k = if %wlt k #768 then false else %wlt k #1280
+bytes-len-code bs b =
+  case %view b of
+    wvar l T → (case %view T of wpty k n → (if %weq k #4 then qv-un bs n else none); _ → none)
+    wbytes n → some (cwlit n)
+    wprim j cs → 
+      if %wlt j #1024 then none
+      else if %wlt j #1280 then (case cs of lcons b2 r → bytes-len-code bs b2; lnil → none)
+      else if %wlt j #1536 then none else (case cs of lcons n r → qv-un bs n; lnil → none)
+    _ → none
+q-prim-args bs as =
+  case as of
+    lnil → some lnil
+    lcons a r → obind (qv-un bs a) (λ ca → omap (lcons ca) (q-prim-args bs r))
+prim-ty k =
+  if %wlt k #512
+    then (let sb = %wsub k #256
+          in if %weq sb #16 then %pty #0 else if %weq sb #17 then Word else if %weq sb #18 then %pty #1
+             else if %weq sb #19 then Word else if %weq sb #20 then %pty #2 else if %weq sb #21 then %pty #2 else %pty #0)
+    else if %wlt k #768
+      then (let sb = %wsub k #512
+            in if %wlt sb #3 then %pty #0 else if %wlt sb #5 then Bool else if %wlt sb #8 then %pty #1
+               else if %wlt sb #10 then Bool else if %wlt sb #14 then %pty #2 else Bool)
+      else if %wlt k #1024 then (if %weq (%wsub k #768) #8 then %pty #0 else %pty #1)
+      else if %wlt k #1280 then opq else if %wlt k #1536 then Word else opq
 -- a stuck elimination: each branch at fresh fields (typed by the constructor's telescope at the
 -- scrutinee's parameters), a hypothesis per recursive field (at the motive at that field; without
 -- a motive, at the type E the elimination is quoted at), its dimensions
