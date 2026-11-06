@@ -1234,6 +1234,15 @@ static Node *atel_params(Node *dd, int d, int k) {
     return r;
 }
 
+/* occurrences of a parameter in a primitive's body (B11): c counts them, direct those that are an
+ * argument of a machine operation (a %-headed application); an inner binder of the same name hides it */
+static void prim_uses(Node *t, const char *x, int under, int *c, int *direct) {
+    if (!t) return;
+    if (!t->list) { if (t->s == x || !strcmp(t->s, x)) { (*c)++; if (under) (*direct)++; } return; }
+    if (t->n == 3 && (is(t->it[0], "lam") || is(t->it[0], "plam")) && !t->it[1]->list && !strcmp(t->it[1]->s, x)) return;
+    int head = t->n > 0 && !t->it[0]->list && t->it[0]->s[0] == '%';
+    for (int i = 0; i < t->n; i++) prim_uses(t->it[i], x, head && i > 0, c, direct);
+}
 static void toplevel(Node *f);
 static void x_rec_extra(Node *f);   /* syntax.c: a form added to a module's record */
 static Node *cn(Node *c); static int ncn;   /* syntax.c: a code as a surface term */
@@ -3206,6 +3215,17 @@ static void toplevel(Node *f) {
             g = global_lookup(nm);
         }
         int pk = sig_add(nm, g, tyg, false);
+        /* the parameters' usages (B11, 18.1): a primitive's body is not elaborated, so its usages are
+         * read off the body itself: a parameter absent from it is 0 (erased at every call: the
+         * lengths and bound proofs of the byte layer's accesses); one read once, as an argument of
+         * the machine's operation, is 1; anything else ω */
+        if (f->n == 4) {
+            const char *nms[64]; unsigned char us[64]; int np = 0;
+            Node *b = ds(f->it[3]);
+            for (; b->list && b->n == 3 && is(b->it[0], "lam") && np < 64; b = b->it[2]) nms[np++] = b->it[1]->s;
+            for (int i = 0; i < np; i++) { int c = 0, direct = 0; prim_uses(b, nms[i], 0, &c, &direct); us[i] = c == 0 ? 0 : (c == 1 && direct == 1) ? 1 : 2; }
+            usage_set(pk, np, nms, us);
+        }
         ckey_set(pk, key); deps_take(&CDEPS, &capcdeps, pk); store_put(nm, key, "", ktype, 0, NULL); free(ktype);
     } else if (!strcmp(h, "checked-data") || !strcmp(h, "checked-data-fail") || !strcmp(h, "check-data")) {
         bool expect = strcmp(h, "checked-data-fail") != 0;
