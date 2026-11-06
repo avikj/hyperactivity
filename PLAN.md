@@ -40,6 +40,66 @@ versioning and contracts are all *derived* here from the one theory (section 16'
 owner regards all of it as research scope and all of it as current scope: nothing
 implementable is deferred to "later".
 
+### What makes it the language, concretely
+
+Each of these is a property the system has now, with where it lives; together they are why
+the owner holds this to be the form every other language approximates.
+
+- **The machine runs itself.** The composition clauses — how transport and composition
+  compute at each type former — are terms (`lib/prelude.cub`), not C. The checker is a term
+  (`lib/check.cub`) running on the same net, reading values through `%view`, quoting them to
+  codes and evaluating codes back; it checks the standard library, the libraries that
+  extend it, and the programs that extend it in turn. There is no separate compiler, type
+  checker or build system written in another language to trust: `src/net.c` holds the
+  rewrite rules and nothing semantic beyond them. `#trusted` and `#safe f` list exactly what
+  is assumed, and for most definitions the answer is nothing.
+- **Programs about programs are ordinary programs.** The specializer, the first-order
+  lowering, the C printers, the matcher and navigator, the derivation of decidable
+  equality from the data table, the three verified decision procedures: every one is a
+  definition in the language over codes, with readings in the same test suite as any other
+  definition. A proof by reflection (`ring-eq`) is one evaluation of the normalizer; the
+  proof term is a constant path. Nothing in the pipeline is a pass of the implementation
+  that the language cannot see, quote, prove things about, or replace.
+- **One runtime, one notion of time.** There is no compile time versus run time; there is
+  the binding time of each value (now, a consumer's build, a known run-time moment, never),
+  and one back end substitutes what is known when it is known. A schedule — what to inline,
+  fuse, specialize, to what generality — is a value the specializer takes, not a pragma or
+  a flag.
+- **Equality is primitive and computes.** Paths, transport, composition, Glue and
+  univalence reduce on open terms. A representation of a type by a layout is an equivalence
+  and so a path; the layout is computed from it; compiling is transport along it. The laws of
+  an operation are paths, consumed by rewriting; what cannot be a path in the target (C,
+  C++) is erased or becomes an `[[assume]]`.
+- **Locality, so parallelism is free.** A rewrite step touches two cells at their principal
+  ports and consults nothing else; reading a held value locks nothing (wires are
+  variables). Workers cannot change a result; the test suite compares the single-threaded
+  run with 8 and 16 workers on every suite.
+- **Sharing by content, retention by reachability.** A producer is named by its body over
+  the keys of what it binds, so one term is one pointer and equal work reached by two routes
+  is done once while the first is retained; a shared value lives exactly while something
+  refers to it, by counted references, with no collector, no retention policy and no
+  reclamation protocol.
+- **The store is the codebase.** A checked definition's key is the hash of its elaborated
+  form with names outside; renaming changes no key, a changed proof changes its key and its
+  dependents'; a definition the current checker has accepted is never checked twice. Names,
+  files, versions and branches are views over keys, not primitives.
+- **Erasure is computed, not declared.** Multiplicities are read off a definition after it
+  checks; a proof passed to an access that ignores it is erased because its usage is zero,
+  not because someone wrote an annotation; the C that results carries the fact as an
+  `ASSUME` for the C compiler and nothing else.
+- **The boundary with the world is a type.** A process is a tree of commands over a
+  signature; a world is a handler; what the world may refuse is in the outcome type; a run
+  is reproduced from the responses alone (replay); supervision is a function on outcomes.
+  Foreign code, raw addresses and syscalls are trusted primitives that announce themselves.
+- **The hot path is the C an engineer writes.** Words, pairs and flat records are unboxed
+  by inference; loops have no allocation; a two-load decoder prints as
+  `uint64_t f(V *b) { return ld64(b, 16) + ld64(b, 0); }`. The same term also runs on the
+  net with open variables, where it is a proof.
+- **Nothing is a hole in meaning.** Every feature in section 16's ledger of frontier
+  languages is either a consequence of the theory, a library with no new judgment form, or
+  declared not worth having — and a row with no answer is a gap to close, not a limitation
+  to document.
+
 ### The conversations this document came out of
 
 The sections below are the outcomes; this is the reasoning that produced them, in the order
