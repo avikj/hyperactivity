@@ -25,26 +25,26 @@ t-prog c args = wof (eval-fo (table-of (lift-program #100000 (program-of #20 c))
 addw3 : Word → Word → Word
 addw3 a b = %wadd (%wadd a b) #3
 #same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → addw3 a b)) (t-args2 #10 #20) = addw3 #10 #20
-subw : Word → Word → Word
-subw a b = %wsub a b
-#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → subw a b)) (t-args2 #50 #8) = #42
+subw-fo : Word → Word → Word
+subw-fo a b = %wsub a b
+#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → subw-fo a b)) (t-args2 #50 #8) = #42
 -- Bool is a word (true 1, false 0): a comparison and a case on it is an if
-ltw : Word → Word → Word
-ltw a b = case %wlt a b of true → #1; false → #0
-#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → ltw a b)) (t-args2 #3 #4) = #1
-#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → ltw a b)) (t-args2 #4 #3) = #0
-maxw : Word → Word → Word
-maxw a b = if %wlt a b then b else a
-#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → maxw a b)) (t-args2 #3 #9) = #9
+ltw-fo : Word → Word → Word
+ltw-fo a b = case %wlt a b of true → #1; false → #0
+#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → ltw-fo a b)) (t-args2 #3 #4) = #1
+#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → ltw-fo a b)) (t-args2 #4 #3) = #0
+maxw-fo : Word → Word → Word
+maxw-fo a b = if %wlt a b then b else a
+#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → maxw-fo a b)) (t-args2 #3 #9) = #9
 -- a known computation is a literal after specialization: the form carries no work
 #same specialize Word lnil (code (addw3 #1 #2)) = flit #6
 
 -- ---------------------------------------------------------------- word elimination: loops
 -- factorial by word elimination, under an unknown argument a loop; on the net and natively
-mulw : Word → Word → Word
-mulw a b = %welimP (λ v → Word) b #0 (λ k h → %wadd h a)
+mulw-fo : Word → Word → Word
+mulw-fo a b = %welimP (λ v → Word) b #0 (λ k h → %wadd h a)
 factw : Word → Word
-factw n = snd (%welimP (λ v → Word × Word) n (#1 , #1) (λ k p → (%wsucc (fst p) , mulw (fst p) (snd p))))
+factw n = snd (%welimP (λ v → Word × Word) n (#1 , #1) (λ k p → (%wsucc (fst p) , mulw-fo (fst p) (snd p))))
 fact-fo = specialize (Word → Word) lnil (code (λ (n : Word) → factw n))
 #same t-run fact-fo (lcons (flit #6) lnil) = factw #6
 #same t-run fact-fo (lcons (flit #7) lnil) = #5040
