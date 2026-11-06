@@ -228,6 +228,70 @@ count-applicable r t =
        cwop o a b → %wadd (count-applicable r a) (count-applicable r b)
        _ → #0)
 count-list r l = case l of lnil → #0; lcons x xs → %wadd (count-applicable r x) (count-list r xs)
+-- ---------------------------------------------------------------- the terminating discipline (18.6 step 3)
+-- A rule is oriented when its right side is smaller than its left (node count) and no
+-- metavariable occurs more often on the right than on the left: then every instance of the right
+-- side is strictly smaller than the instance of the left it replaces (a metavariable's code of size
+-- s replaces a node of size 1 on each side, at most as often on the right), so rewriting along
+-- oriented rules terminates by the size of the term and needs no bound. A rule whose sides are of
+-- one size (commutativity shapes, associativity read either way) is unoriented and rejected
+-- (E-rule-unoriented); the specializer applies those only under its bound
+code-size c =
+  case c of
+    clam x → %wsucc (code-size x)
+    capp f a → %wsucc (%wadd (code-size f) (code-size a))
+    cpair a b → %wsucc (%wadd (code-size a) (code-size b))
+    cfst p → %wsucc (code-size p)
+    csnd p → %wsucc (code-size p)
+    clet a b → %wsucc (%wadd (code-size a) (code-size b))
+    ccon d k fs ds → %wsucc (%wadd (size-list fs) (size-list ds))
+    ccase d B x → %wsucc (%wadd (size-list B) (code-size x))
+    celim d P B x → %wsucc (%wadd (code-size P) (%wadd (size-list B) (code-size x)))
+    cforce x → %wsucc (code-size x)
+    cdata d ps → %wsucc (size-list ps)
+    cwsucc a → %wsucc (code-size a)
+    cwop o a b → %wsucc (%wadd (code-size a) (code-size b))
+    cwelim w z s → %wsucc (%wadd (code-size w) (%wadd (code-size z) (code-size s)))
+    cann a T → %wsucc (%wadd (code-size a) (code-size T))
+    cpi m A B → %wsucc (%wadd (code-size A) (code-size B))
+    csigma A B → %wsucc (%wadd (code-size A) (code-size B))
+    cprim k as → %wsucc (size-list as)
+    _ → #1
+size-list l = case l of lnil → #0; lcons x xs → %wadd (code-size x) (size-list xs)
+-- occurrences of metavariable m (cvar m at pattern depth 0, cvar (m + d) under d binders) in a code
+mv-count m d c =
+  case c of
+    cvar n → if %weq n (%wadd m d) then #1 else #0
+    clam x → mv-count m (%wsucc d) x
+    capp f a → %wadd (mv-count m d f) (mv-count m d a)
+    cpair a b → %wadd (mv-count m d a) (mv-count m d b)
+    cfst p → mv-count m d p
+    csnd p → mv-count m d p
+    clet a b → %wadd (mv-count m d a) (mv-count m (%wsucc d) b)
+    ccon dd k fs ds → %wadd (mv-list m d fs) (mv-list m d ds)
+    ccase dd B x → %wadd (mv-list m d B) (mv-count m d x)
+    celim dd P B x → %wadd (mv-count m d P) (%wadd (mv-list m d B) (mv-count m d x))
+    cforce x → mv-count m d x
+    cdata dd ps → mv-list m d ps
+    cwsucc a → mv-count m d a
+    cwop o a b → %wadd (mv-count m d a) (mv-count m d b)
+    cwelim w z s → %wadd (mv-count m d w) (%wadd (mv-count m d z) (mv-count m d s))
+    cann a T → %wadd (mv-count m d a) (mv-count m d T)
+    cpi mm A B → %wadd (mv-count m d A) (mv-count m (%wsucc d) B)
+    csigma A B → %wadd (mv-count m d A) (mv-count m (%wsucc d) B)
+    cprim k as → mv-list m d as
+    _ → #0
+mv-list m d l = case l of lnil → #0; lcons x xs → %wadd (mv-count m d x) (mv-list m d xs)
+oriented r = case r of rule k l rh → andb (%wlt (code-size rh) (code-size l)) (mv-ok k #0 l rh)
+mv-ok k m l rh = if %weq m k then true else andb (notb (%wlt (mv-count m #0 l) (mv-count m #0 rh))) (mv-ok k (%wsucc m) l rh)
+-- the rules split: (oriented , rejected)
+orient-rules rules = case rules of lnil → (lnil , lnil); lcons r rest → (let o = orient-rules rest in if oriented r then (lcons r (fst o) , snd o) else (fst o , lcons r (snd o)))
+-- rewriting along oriented rules until none applies: terminates by the size of the term
+rewrite-fix rules c = case first-applicable rules c of none → c; some c2 → rewrite-fix rules c2
+first-applicable rules c =
+  case rules of
+    lnil → none
+    lcons r rest → (case rewrite-first r c of some c2 → some c2; none → first-applicable rest c)
 -- ---------------------------------------------------------------- tests
 -- the rule  plus 0 ?x  →  ?x  (plus as the global 7; metavariable 0 is cvar 0 at depth k = 0)
 r-plus0 = rule #0 (capp (capp (cglob #7) (cwlit #0)) (cvar #0)) (cvar #0)
@@ -249,3 +313,13 @@ r-dbl = rule #0 (capp (capp (cglob #7) (cvar #0)) (cvar #0)) (capp (cglob #8) (c
 #same rewrite-root r-dbl (capp (capp (cglob #7) (cwlit #2)) (cwlit #3)) = none
 -- how many positions a rule applies at
 #same count-applicable r-plus0 (cpair (capp (capp (cglob #7) (cwlit #0)) (cwlit #1)) (capp (capp (cglob #7) (cwlit #0)) (cwlit #2))) = #2
+-- plus 0 ?x → ?x is oriented; plus ?x ?y → plus ?y ?x (commutativity) is not, nor is ?x → plus ?x 0
+#same oriented r-plus0 = true
+#same oriented (rule #0 (capp (capp (cglob #7) (cvar #0)) (cvar #1)) (capp (capp (cglob #7) (cvar #1)) (cvar #0))) = false
+#same oriented (rule #0 (cvar #0) (capp (capp (cglob #7) (cvar #0)) (cwlit #0))) = false
+-- a metavariable duplicated on the right is not oriented even when the right is smaller:
+-- plus (plus ?x ?x) 0 → plus ?x ?x is; plus ?x 0 → plus ?x ?x is not
+#same oriented (rule #0 (capp (capp (cglob #7) (capp (capp (cglob #7) (cvar #0)) (cvar #0))) (cwlit #0)) (capp (capp (cglob #7) (cvar #0)) (cvar #0))) = true
+#same oriented (rule #0 (capp (capp (cglob #7) (cvar #0)) (cwlit #0)) (capp (capp (cglob #7) (cvar #0)) (cvar #0))) = false
+-- rewriting to the fixpoint: 0 + (0 + 5) → 5
+#same rewrite-fix (lcons r-plus0 lnil) (capp (capp (cglob #7) (cwlit #0)) (capp (capp (cglob #7) (cwlit #0)) (cwlit #5))) = cwlit #5

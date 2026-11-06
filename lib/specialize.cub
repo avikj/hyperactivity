@@ -8,15 +8,17 @@
 -- The rewrite bound is the terminating discipline's crude form (a count); the ordered form
 -- (18.6) replaces it.
 normalize T c = fromopt (quote-top T (eval-g lnil c)) c
+-- rewriting under the terminating discipline (18.6 step 3, lib/match.cub): the oriented rules to
+-- the fixpoint, which terminates by the size of the term; the unoriented ones (commutativity
+-- shapes, the ones E-rule-unoriented rejects) at most n times, the schedule's bound
 rewrite-all n rules c =
+  let o = orient-rules rules
+  in rewrite-bounded n (snd o) (rewrite-fix (fst o) c)
+rewrite-bounded n rules c =
   if %weq n #0 then c
   else (case first-applicable rules c of
           none → c
-          some c2 → rewrite-all (%wsub n #1) rules c2)
-first-applicable rules c =
-  case rules of
-    lnil → none
-    lcons r rest → (case rewrite-first r c of some c2 → some c2; none → first-applicable rest c)
+          some c2 → rewrite-bounded (%wsub n #1) rules c2)
 specialize T rules c = inplace (lower (rewrite-all #64 rules (normalize T c)))
 -- the specialized form evaluated, as a word (for readings over word-valued programs)
 run-fo f = wof (eval-fo (λ g → flit #0) lnil f)

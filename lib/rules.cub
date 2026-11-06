@@ -35,6 +35,11 @@ view3 = view-of (lcons (gidx (code plus-comm)) (lcons (gidx (code plus-assoc)) l
 Tz = Nat → Nat
 zero-rule = fromopt (rule-of (gidx (code plus-zero))) (rule #0 cword cword)
 #same rewrite-all #4 (lcons zero-rule lnil) (normalize Tz (code (λ x → plus x zero))) = normalize Tz (code (λ x → x))
+-- the discipline: plus-zero (x + 0 → x) is oriented and applied to the fixpoint; plus-comm and
+-- plus-assoc keep the size and are rejected as unoriented, applied only under the bound
+#same oriented zero-rule = true
+#same oriented assoc-rule = false
+#same lst-len (snd (orient-rules view3)) = #2
 -- and through the specializer to the first-order form: the law is consumed before lowering, so
 -- what is lowered is the identity function (the C++ image's thesis, 10.1: laws are used by the
 -- specializer and erased, never emitted)
