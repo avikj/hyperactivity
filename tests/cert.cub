@@ -1,0 +1,51 @@
+-- tests/cert.cub — certificates end to end (plan 18.13, F32): the unverified search over codes
+-- (lib/lin.cub: enumeration and the directed Fourier–Motzkin search) produces multipliers; the
+-- verified checker over the typed fragment (lib/linproof.cub: cert-check with cert-sound) accepts
+-- them; the soundness theorem applied at an environment is a witness of the goal. Loaded after
+-- lib/match.cub lib/lin.cub lib/check.cub lib/std.cub lib/linproof.cub.
+-- ---------------------------------------------------------------- the bridge, untyped
+-- a code of the fragment read as the typed fragment, hypotheses and multipliers likewise (these
+-- are untyped, as the search is; what they produce is checked by the typed checker)
+to-lincode c =
+  case c of
+    cwlit n → lc-lit n
+    cvar v → lc-var v
+    cwsucc a → lc-suc (to-lincode a)
+    cwop o a b → lc-add (to-lincode a) (to-lincode b)
+    cann t T → to-lincode t
+    _ → lc-lit #0
+to-hyps hs = case hs of lnil → hnil; lcons h r → hcons (to-lincode (fst h)) (to-lincode (snd h)) (to-hyps r)
+to-mults l = case l of lnil → munil; lcons c r → mucons c (to-mults r)
+unwrap o = case o of some x → x; none → lnil
+-- the search's certificate for the decoder's obligation checks under the verified checker
+goal1a = cwop #2 (cvar #0) (cwlit #4)
+goal1b = cvar #2
+#same to-mults (unwrap (omega-cert hs1 goal1a goal1b)) = mucons #1 (mucons #1 munil)
+#same cert-check (to-hyps hs1) (to-mults (unwrap (omega-cert hs1 goal1a goal1b))) (to-lincode goal1a) (to-lincode goal1b) = true
+-- the chain of four and the multiplier above one, found directed, check verified
+#same cert-check (to-hyps hs2) (to-mults (unwrap (omega-cert hs2 (cwop #2 (cvar #0) (cwlit #2)) (cvar #4)))) (to-lincode (cwop #2 (cvar #0) (cwlit #2))) (to-lincode (cvar #4)) = true
+goal3a = cwop #2 (cwop #2 (cvar #0) (cvar #0)) (cwop #2 (cvar #0) (cvar #0))
+#same cert-check (to-hyps hs3) (to-mults (unwrap (omega-cert hs3 goal3a (cvar #2)))) (to-lincode goal3a) (to-lincode (cvar #2)) = true
+-- the Nat-specific step (a variable dropped from the left): found and checked
+#same cert-check (to-hyps hs4) (to-mults (unwrap (omega-cert hs4 (cvar #0) (cwlit #3)))) (to-lincode (cvar #0)) (to-lincode (cwlit #3)) = true
+-- what the search refutes has no certificate to check: the empty list is refused
+#same cert-check (to-hyps hs1) (to-mults (unwrap (omega-cert hs1 (cwop #2 (cvar #0) (cwlit #9)) goal1b))) (to-lincode (cwop #2 (cvar #0) (cwlit #9))) (to-lincode goal1b) = false
+-- the two searches agree where both reach
+#same find-cert #2 hs1 goal1a goal1b = omega-cert hs1 goal1a goal1b
+-- ---------------------------------------------------------------- the theorem applied
+-- at the environment off = 1, i = 2, n = 20 the hypotheses hold with witnesses 1 and 10; the
+-- certificate's soundness gives off + 4 ≤ n with its witness, which computes: 20 − 5 = 15
+env1 : Env
+env1 v = case weq v #0 of true → #1; false → (case weq v #1 of true → #2; false → #20)
+hyp1t : Hyps
+hyp1t = hcons (lc-var #0) (lc-var #1) (hcons (lc-add (lc-var #1) (lc-lit #8)) (lc-var #2) hnil)
+holds1 : Holds env1 hyp1t
+holds1 = ((#1 , λ i → #2) , ((#10 , λ i → #20) , unit))
+cert1 : Mults
+cert1 = mucons #1 (mucons #1 munil)
+goal1 : Lew (wev env1 (lc-add (lc-var #0) (lc-lit #4))) (wev env1 (lc-var #2))
+goal1 = cert-sound env1 hyp1t cert1 (lc-add (lc-var #0) (lc-lit #4)) (lc-var #2) holds1 (λ i → true)
+#same fst goal1 = #15
+#same wev env1 (lc-add (lc-var #0) (lc-lit #4)) = #5
+-- the witness really is a witness: a + d = b at the environment
+#same plusw (wev env1 (lc-add (lc-var #0) (lc-lit #4))) (fst goal1) = #20
