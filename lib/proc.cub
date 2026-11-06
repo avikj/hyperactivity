@@ -419,3 +419,77 @@ budget {S} {St} w c st =
   case fst st of
     zero → inr st
     suc n → (case w c (snd st) of inl r → inl (fst r , (n , snd r)); inr s2 → inr (fst st , s2))
+-- ---------------------------------------------------------------- the memory interface (D26, library half)
+-- the drivers' memory signature: load, store, compare-and-swap, fence, on word addresses; the
+-- model is named by the world that answers it. The sequentially consistent model is one memory
+-- answered in program order; release-acquire is a world whose state also holds what each
+-- location's writer has published (the drivers' side, src/drivers.c, is the machine's)
+data Mem = mload (a : Word) | mstore (a : Word) (v : Word) | mcas (a : Word) (old : Word) (new : Word) | mfence
+mem-resp : Mem → Type
+mem-resp c = case c of mload a → Word; mstore a v → Unit; mcas a o n → Bool; mfence → Unit
+MemS : Sig
+MemS = (Mem , mem-resp)
+Memory : Type
+Memory = Word → Word
+mem-write : Word → Word → Memory → Memory
+mem-write a v m = λ j → case weq j a of true → v; false → m j
+sc-world : World MemS Memory
+sc-world c m =
+  case c return (λ x → Sum (mem-resp x × Memory) Memory) of
+    mload a → inl (m a , m)
+    mstore a v → inl (unit , mem-write a v m)
+    mcas a o n → (case weq (m a) o of true → inl (true , mem-write a n m); false → inl (false , m))
+    mfence → inl (unit , m)
+-- a transaction's signature: loads and stores only (no I/O, no cas: what a transaction may do
+-- is its type, 7.3)
+data Tx = tload (a : Word) | tstore (a : Word) (v : Word)
+tx-resp : Tx → Type
+tx-resp c = case c of tload a → Word; tstore a v → Unit
+TxS : Sig
+TxS = (Tx , tx-resp)
+-- the log: the reads (address, value seen) and the writes (address, value), latest first
+TxLog : Type
+TxLog = List (Word × Word) × List (Word × Word)
+log-find : Word → List (Word × Word) → Sum Word Unit
+log-find a l = case l of nil → inr unit; cons e r → (case weq (fst e) a of true → inl (snd e); false → rec r)
+-- one transaction step against the log: a load reads the pending write if any, else memory,
+-- recording what it saw; a store is recorded, not performed
+tx-step : (c : Cmd TxS) → TxLog → Proc {lzero} MemS (tx-resp c × TxLog)
+tx-step c lg =
+  case c return (λ x → Proc {lzero} MemS (tx-resp x × TxLog)) of
+    tload a →
+      (case log-find a (snd lg) of
+         inl v → ret {lzero} {MemS} {Word × TxLog} (v , lg)
+         inr u → bind {lzero} {MemS} {Word} {Word × TxLog} (cmd {lzero} {MemS} (mload a)) (λ v → ret {lzero} {MemS} {Word × TxLog} (v , (cons (a , v) (fst lg) , snd lg))))
+    tstore a v → ret {lzero} {MemS} {Unit × TxLog} (unit , (fst lg , cons (a , v) (snd lg)))
+-- the transaction run against the log: its result and the log
+tx-run : {A : Type} → Proc {lsuc lzero} TxS A → TxLog → Proc {lzero} MemS (A × TxLog)
+tx-run {A} p lg =
+  p (TxLog → Proc {lzero} MemS (A × TxLog))
+    (λ a lg2 → ret {lzero} {MemS} {A × TxLog} (a , lg2))
+    (λ c k lg2 → bind {lzero} {MemS} {tx-resp c × TxLog} {A × TxLog} (tx-step c lg2) (λ r → k (fst r) (snd r)))
+    lg
+-- validation: every read still holds in memory
+tx-valid : List (Word × Word) → Proc {lzero} MemS Bool
+tx-valid rs =
+  case rs return (λ x → Proc {lzero} MemS Bool) of
+    nil → ret {lzero} {MemS} {Bool} true
+    cons e r → bind {lzero} {MemS} {Word} {Bool} (cmd {lzero} {MemS} (mload (fst e))) (λ v → case weq v (snd e) of true → rec r; false → ret {lzero} {MemS} {Bool} false)
+-- commit: the writes performed in order (earliest first)
+tx-commit : List (Word × Word) → Proc {lzero} MemS Unit
+tx-commit ws =
+  case ws return (λ x → Proc {lzero} MemS Unit) of
+    nil → ret {lzero} {MemS} {Unit} unit
+    cons e r → bind {lzero} {MemS} {Unit} {Unit} (rec r) (λ u → cmd {lzero} {MemS} (mstore (fst e) (snd e)))
+-- atomically: run, validate, commit; on a failed validation retry, up to the fuel; the outcome
+-- carries whether it committed (a library STM over load/store with a log and retry, 18.11 D26)
+atomically : {A : Type} → Nat → Proc {lsuc lzero} TxS A → Proc {lzero} MemS (Outcome A)
+atomically {A} fuel p =
+  case fuel return (λ f → Proc {lzero} MemS (Outcome A)) of
+    zero → ret {lzero} {MemS} {Outcome A} stopped
+    suc f →
+      bind {lzero} {MemS} {A × TxLog} {Outcome A} (tx-run {A} p (nil , nil)) (λ r →
+      bind {lzero} {MemS} {Bool} {Outcome A} (tx-valid (fst (snd r))) (λ ok →
+        case ok of
+          true → bind {lzero} {MemS} {Unit} {Outcome A} (tx-commit (snd (snd r))) (λ u → ret {lzero} {MemS} {Outcome A} (done (fst r)))
+          false → rec f))

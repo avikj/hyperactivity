@@ -139,3 +139,40 @@ glog = case grec of arrived r → rev-list (snd (snd r)) nil; pending → nil
 #same (case grun-for {KVS} {Word} {List Word} 4 (replaying {KVS} kv-dec) (λ κ → to-guarded {κ} {KVS} {Word} (pr1 {lzero})) glog of arrived r → fst r; pending → stopped) = done #12
 -- the monad law at the observation: gbind (gret a) f runs as f a
 #same grun-for {KVS} {Word} {Word → Word} 4 kv-world (λ κ → gbind {κ} {KVS} (gret #3) (λ a → to-guarded {κ} {KVS} {Word} (pr1 {lzero}))) empty-st = grun-for {KVS} {Word} {Word → Word} 4 kv-world (λ κ → to-guarded {κ} {KVS} {Word} (pr1 {lzero})) empty-st
+-- ---------------------------------------------------------------- memory and atomically (D26)
+-- a transaction: increment address 1
+incr : Proc {lsuc lzero} TxS Word
+incr = bind {lsuc lzero} {TxS} {Word} {Word} (cmd {lsuc lzero} {TxS} (tload #1)) (λ v → bind {lsuc lzero} {TxS} {Unit} {Word} (cmd {lsuc lzero} {TxS} (tstore #1 (%wsucc v))) (λ u → ret {lsuc lzero} {TxS} {Word} v))
+zero-mem : Memory
+zero-mem a = #0
+sc-run : Outcome (Outcome Word) × Memory
+sc-run = runp {MemS} {Outcome Word} {Memory} (atomically {Word} 3 incr) sc-world zero-mem
+#same fst sc-run = done (done #0)
+#same snd sc-run #1 = #1
+-- a load within a transaction reads its own pending write
+incr2 : Proc {lsuc lzero} TxS Word
+incr2 = bind {lsuc lzero} {TxS} {Word} {Word} incr (λ v → cmd {lsuc lzero} {TxS} (tload #1))
+#same fst (runp {MemS} {Outcome Word} {Memory} (atomically {Word} 3 incr2) sc-world zero-mem) = done (done #1)
+-- another writer: a world that, when its n-th load is answered, also writes 10 at address 1 (the
+-- interleaving a replay records, 7.3); the first attempt fails validation, the second commits
+after-load : Nat → Memory → Nat × Memory
+after-load n m = case n return (λ x → Nat × Memory) of zero → (zero , m); suc k → (case k return (λ x → Nat × Memory) of zero → (zero , mem-write #1 #10 m); suc j → (suc j , m))
+interfering : World MemS (Nat × Memory)
+interfering c st =
+  case c return (λ x → Sum (mem-resp x × (Nat × Memory)) (Nat × Memory)) of
+    mload a → inl (snd st a , after-load (fst st) (snd st))
+    mstore a v → inl (unit , (fst st , mem-write a v (snd st)))
+    mcas a o n → (case weq (snd st a) o of true → inl (true , (fst st , mem-write a n (snd st))); false → inl (false , st))
+    mfence → inl (unit , st)
+int-run : Outcome (Outcome Word) × (Nat × Memory)
+int-run = runp {MemS} {Outcome Word} {Nat × Memory} (atomically {Word} 3 incr) interfering (1 , zero-mem)
+#same fst int-run = done (done #10)
+#same snd (snd int-run) #1 = #11
+-- with fuel for one attempt only, the transaction is stopped and nothing is written by it
+int-once : Outcome (Outcome Word) × (Nat × Memory)
+int-once = runp {MemS} {Outcome Word} {Nat × Memory} (atomically {Word} 1 incr) interfering (1 , zero-mem)
+#same fst int-once = done stopped
+#same snd (snd int-once) #1 = #10
+-- compare-and-swap on the sequentially consistent memory
+#same fst (runp {MemS} {Bool} {Memory} (cmd {lzero} {MemS} (mcas #1 #0 #5)) sc-world zero-mem) = done true
+#same snd (runp {MemS} {Bool} {Memory} (cmd {lzero} {MemS} (mcas #1 #3 #5)) sc-world zero-mem) #1 = #0
