@@ -188,11 +188,35 @@ per checker that accepted it (the checker named by the hash of the library texts
 `#history name`, `#unbind name`, `#gc` (entries unreachable from the bound names, through the
 keys their code mentions, are removed).
 
+**Indexed families.** `data Vec (A : Type) : (n : Nat) → Type where vnil : Vec A zero; vcons :
+(n : Nat) → A → Vec A n → Vec A (suc n)` declares the family by fording (plan E28): the indices
+are the type's last parameters, each constructor carries an equality field per index at
+multiplicity 0 (`PathP (λ m → Nat) %ix0 (suc n)`, erased), an application without the equality
+fields gets `refl`, a pattern without them is padded, and a branch that writes them (`vcons n x
+xs e`) transports along `e` or refutes it (`vtail`'s `vnil` case by `snotz`). The recursion rule
+wants the index implicit (`{n : Nat} → Vec A n → …`). `tests/elab.cub`.
+
+**Running processes and calling native code.** `lib/world.cub` is the drivers' signature `W`
+(`time-now`, `write fd n b`, `read fd n`, `sleep ns`, `exit c` as processes of `lib/proc.cub`)
+and `to-step p` a process as a tree of steps; `#run (to-step p)` performs it against the
+operating system (plan D26, `src/drivers.c`), ending with `run: done a`. `#native f n = prog`
+compiles the bytes of `emit-lib-u` (the unboxed C of `lib/emitu.cub`) into a shared library and
+redefines `f` over it: on word arguments the compiled code answers, on any other `f` computes
+on the net (plan B18, `%native`). The other direction is `build/libcubical.a` with
+`src/libcubical.h`: a C program loads libraries with `cubical_init` and calls checked
+definitions on words with `cubical_call` (and the emitted C's boxed form, `cubical_call_boxed`);
+`tests/native/main.c`. `%gsteps n` is the steps checked definition `n` took to check, from the
+run or the store's `ok` line.
+
 **Commands.** `#check e : T`, `#same a = b` (equal readings, at a type when either side has one),
 `#show e`, `#observe n e` (a codata value unfolded n levels), `#usage f`, `#layout T [as R]`,
-`#trusted`, `#safe f`, `#fo e`, `#key d`, `#names K`, `#history d`, `#unbind d`, `#gc`, `#input x` and `#supply x = e` (§6), `#fail` before a declaration or command
+`#trusted`, `#safe f`, `#fo e`, `#key d`, `#names K`, `#history d`, `#unbind d`, `#gc`, `#run s`, `#native f n = prog`, `#input x` and `#supply x = e` (§6), `#fail` before a declaration or command
 (it must be rejected). `import "file.cub"` loads a module
-once. Results and failures print in the surface syntax. The core forms the language compiles to
+once. Results and failures print in the surface syntax, a failed check with its declaration's
+`file:line` and the term at fault. `--serve` after the files reads blocks of declarations from
+the standard input, each ended by a line `.`, and answers each as a file would be answered,
+ending the reply with `.` (a fatal error ends the request, not the machine; names are declared
+once). `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to
 (`(lam x b)`, `(elim P e ((c x) b))`, …) are still read from files of other extensions, and
 `--print FILE` prints such a file in the surface syntax.
 
