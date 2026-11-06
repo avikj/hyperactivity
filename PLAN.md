@@ -1,6 +1,6 @@
 # The system: direction, scope and build plan
 
-Revision 7.8, 2026-11-06. Repo avikj/math, `scoped-machine` at `dd301c8` (builder: B11 `0729899`, B12 `01c839c`, B13/F34/C20/E28-parts/F31-syntax/D27 `1c5282a`, stuck primitives as neutrals and C22 `be7149d`; the specs of section 18 were written against `9b94b43`). This document lives at `scoped-machine/PLAN.md` from this revision on; it is the single plan and status document — a fresh agent starts here.
+Revision 7.9, 2026-11-06. Repo avikj/math, `scoped-machine` at `50ffb680` (revision 7.8 was at `dd301c8`; the day's commits are listed in section 12's queue paragraph; the specs of section 18 were written against `9b94b43` and their status paragraphs say what was built). This document lives at `scoped-machine/PLAN.md` from this revision on; it is the single plan and status document — a fresh agent starts here.
 Each revision replaces the last. Section 17 records changes and retractions.
 
 ---
@@ -1108,7 +1108,29 @@ Dependency order. DONE is as of the revision's commit. ★ marks a core decision
 checker, the key, or the net's rules); other items are consequences to state or library to
 write.
 
-**The queue as of revision 7.8 (handoff).** Before anything: the `retire_boxes` race in
+**The queue as of revision 7.9 (2026-11-06, after the three-line build).** Of revision 7.8's
+queue below, everything landed: the `retire_boxes` race (`69b1372`), the stuck-primitive
+code `cprim` (`c8931ab`), primitive parameter usages (`df1c553`), 18.18 (`d5e47fb`), A8
+measured with `%transH` and the next step named (18.16's status), the specializer consuming
+usages, B13 and `Sched` (`36b9e30b`), recursive data in `emitu`, the acceptance programs and
+`tests/fo.cub` (`8b099b02`), choreographies (`6d098a67`). Also landed the same day: B18
+(both directions for words, `e9b9c983`, `680485ea`), B19 the C++ image (`ee5c04a2`), C21
+in-place update (`e27eda2c`), D24's guarded form (`5b9de865`), D26 (`43e8fb10`,
+`bf3ea4eb`), E28's redeclaration error, rebuilt scrutinees and fording (`e7632b1e`,
+`38c1fa89`), F31's remaining pieces (`896713ea`, `e1f33110`, `5b1b57f9`), F32's directed
+search and bridges (`89ec3e0e`, `d1e5f790`), item 29 (`fd188bf6`), `%gsteps` (`c20116d7`),
+`--serve` (`50ffb680`), the rewriting discipline (`bd21c486`). What remains, in order of
+value: (1) A8's next step, formal compositions in path types (18.16's status paragraph:
+`%comp-path` entered 3,287 times for a 47-cell read); (2) B18's marshaling of represented
+values (layout walks, `V_NATIVE`, the keyed boxed `cubical_call` Line B emits); (3) A4's
+bitmask formulas (18.19, designed); (4) E28's unification-based implicits, holes in
+composition lines, generalized variables, transports inserted by matching on indexed
+families; (5) item 30's retraction and positions in errors; (6) F32 over `Int` (needs `Int`
+arithmetic and its laws in `lib/std.cub` first); (7) a hardware memory model for Regions
+(D26's open half); (8) item 10's same-machine Agda comparison. The list of revision 7.8
+follows for the record.
+
+Before anything: the `retire_boxes` race in
 `src/net.c` (above). Then, machine side, in order of what they unblock: (1) a *code* for the new stuck-primitive neutrals (`V_NPRIM` is read by `%view`
 as `wprim k args` but `qneu` gives none), so that terms over the byte layer quote and
 specialize under unknowns — the one thing standing between `lib/repr.cub`'s direct lowering
@@ -1490,6 +1512,13 @@ exactly this project's content. Where it leads (GPUs, machine-code compilation o
 calculus), parity is the acceptance and is in the queue, not claimed.
 
 ## 17. Changes in revisions 4 to 6, and retracted claims
+Revision 7.9 (2026-11-06, the three-line build: a machine line and two library lines in
+parallel worktrees, 37 commits): 7.8's whole queue landed and the items listed in section
+12's queue paragraph; statuses written into 18.8, 18.12, 18.16 (with the A8 measurements and
+the boundary-skip withdrawn as nondeterministic), 18.19 added (A4 design), D26, items 3, 10,
+26, 30, 31, 34 of section 12. Retracted: nothing; one correction — `make test`'s long line
+was broken for an hour by a typed `lapp` shadowing the untyped one (fixed, and `names.py` now
+scopes its allow-list; redeclaring a checked name is an error since `e7632b1e`).
 Revision 7.8 (handoff): the builder's `1c5282a` and `be7149d` recorded — B13 (`lib/stage.cub`),
 F34 (keys and the store), C20's `#safe`, E28's instances/records/modules, `deriving eq`,
 D27's `foreign`, stuck primitive operations as neutrals, C22 arrays over the byte layer;
