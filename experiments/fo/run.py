@@ -9,7 +9,8 @@ PROGS = {
  # name: (definitions as .cub text building a Lst of (g , (arity , body)), expected output)
  'fact': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil)))
        (lcons (#1 , (#1 , fo-fact)) lnil)""", "120"),
- 'switch': ("""defs = lcons (#0 , (#0 , fswitch (fcon #7 #1 (lcons (flit #9) (lcons (flit #30) lnil)))
+ 'switch': ("""data Sw = sw0 | sw1 (a : Word) (b : Word)
+defs = lcons (#0 , (#0 , fswitch (fcon (didx (code Sw)) #1 (lcons (flit #9) (lcons (flit #30) lnil)))
                                  (lcons (#0 , (#0 , flit #0)) (lcons (#1 , (#2 , fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil)))) lnil)))) lnil""", "39"),
  # a code specialized by the machine (lib/specialize.cub), then printed and compiled: 2^n as a loop
  'specialized': ("""lam-body f = case f of flam b → b; _ → f
@@ -27,10 +28,10 @@ defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #7) lnil))) (lcons (#1 , (#1 , la
  # an assumed fact (a validity fact a certificate established, lib/lin.cub) printed as ASSUME:
  # the C compiler is told what the checker knows
  'assume': ("""defs = lcons (#0 , (#0 , flet (flit #3) (fassume (cwop #1 (cvar #0) (cwlit #10)) (fprim P-mul (lcons (fvar #0) (lcons (fvar #0) lnil)))))) lnil""", "9", "ASSUME((v0"),
- # C type declarations from B12's layouts (lib/emitt.cub): a tree's typedef compiles; its size is
- # the tag and the larger alternative, two pointers
+ # C type declarations from B12's layouts (lib/emitt.cub): a tree's typedef compiles, its recursive
+ # fields typed pointers to its own struct; its size is the tag and the larger alternative, two pointers
  'types': ("""data Tr = lf (w : Word) | nd (l : Tr) (r : Tr)
-prog = sizeof-prog (data-idx (code Tr))""", "24", "struct { void *f0; void *f1; } c1;"),
+prog = sizeof-prog (data-idx (code Tr))""", "24", "struct { struct T"),
  # the byte layer: a 32-byte buffer, 9 stored at 16 (64 bits) and 258 at 4 (32 bits), read back
  'bytes': ("""defs = lcons (#0 , (#0 , flet (fprim P-store32 (lcons (fprim P-store64 (lcons (fprim P-bytes (lcons (flit #32) lnil)) (lcons (flit #16) (lcons (flit #9) lnil)))) (lcons (flit #4) (lcons (flit #258) lnil))))
   (fprim P-add (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #16) lnil))) (lcons (fprim P-load32 (lcons (fvar #0) (lcons (flit #4) lnil))) lnil))))) lnil""", "267"),
@@ -85,11 +86,18 @@ defs = lcons (#0 , (#0 , fswitch (fcon pt-d #0 (lcons (flit #3) (lcons (flit #4)
  'num-spec': ("""lam-body f = case f of flam b → b; _ → f
 spec-num = specialize-r (Int64 → Word) lnil (code (λ x → wadd (i64toWord (i64off64 (f64mul (f64ofi64 x) (f64 #3)))) (if i64lt x (i64 #1) then #10 else #0)))
 defs = lcons (#0 , (#0 , fcall #1 (lcons (fi64 #7) lnil))) (lcons (#1 , (#1 , lam-body spec-num)) lnil)""", "21", "n27("),
- # in-place update (C21): a loop over a fresh record (type 12 here, two word fields), its second
- # field increased by the counter each iteration; the record is the loop's own, so the rebuild
- # (a recursion on it returning its constructor with one field changed) is an update stored in
- # place: no allocation in the loop. 10 + 3 + 2 + 1 = 16; the C stores into the state cell
- 'inplace': ("""defs = case lift #1 (inplace loop-upd) of lifted t2 ds k → lcons (#0 , (#0 , fswitch t2 (lcons (#0 , (#2 , fvar #0)) lnil))) ds""", "16", "V *up = v0; up->f[1] = "),
+ # in-place update (C21): a loop over a fresh record (two word fields), its second field increased
+ # by the counter each iteration; the record is the loop's own, so the rebuild (a recursion on it
+ # returning its constructor with one field changed) is an update stored in place: no allocation in
+ # the loop (boxed: a store into the state cell; unboxed: the flat struct by value, a field assigned).
+ # 10 + 3 + 2 + 1 = 16
+ 'inplace': ("""data Rc2 = rc2 (x : Word) (y : Word)
+rc-d = didx (code Rc2)
+loop-rc = floop (lcons (flit #3) (lcons (fcon rc-d #0 (lcons (flit #0) (lcons (flit #10) lnil))) lnil))
+  (fif (fprim P-lt (lcons (flit #0) (lcons (fvar #1) lnil)))
+     (fcon #0 #0 (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (frec rc-d (fvar #0) (lcons (#0 , (#2 , (lnil , fcon rc-d #0 (lcons (fvar #1) (lcons (fprim P-add (lcons (fvar #0) (lcons (fvar #3) lnil))) lnil))))) lnil)) lnil)))
+     (fcon #0 #1 (lcons (fvar #0) lnil)))
+defs = case lift #1 (inplace loop-rc) of lifted t2 ds k → lcons (#0 , (#0 , fswitch t2 (lcons (#0 , (#2 , fvar #0)) lnil))) ds""", "16", ("V *up = v0; up->f[1] = ", "up.u.c0.f1 = ")),
  # copy-on-write: the record is a parameter (the caller may hold it), so the update copies the
  # cell first (a parameter whose only use is a switch is boxed in both printers). 5 + (6 + 1) = 12
  'cow': ("""data Pt4 = pt4 (x : Word) (y : Word)

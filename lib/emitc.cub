@@ -127,9 +127,13 @@ emit d t =
     fapply f args → apply-c d (emit d f) args
     fassume fact b → cat5 s-assume (fact-c d fact) s-asmend (emit d b) s-bsend2
     fforce x → emit d x
-    fupd u x c k v → cat7 (if %weq u #1 then s-upd-ip else s-upd-cp) (emit d x) (if %weq u #1 then s-upd-f else s-upd-fc) (dec k) s-upd-set (emit d v) s-upd-end
+    fupd u dd x c k v → cat7 (if %weq u #1 then s-upd-ip else s-upd-cp) (emit d x) (if %weq u #1 then s-upd-f else s-upd-fc) (dec k) s-upd-set (emit d v) s-upd-end
     fnet k args → net-c (dec k) (lst-len args) (args-c d args)
+    frec dd x alts → if no-hyps alts then emit d (fswitch x (ralts-as-alts alts)) else s-unsup
     _ → s-unsup
+-- a recursion whose hypotheses lift has turned into calls is a switch
+no-hyps alts = case alts of lnil → true; lcons a r → (case fst (snd (snd a)) of lnil → no-hyps r; _ → false)
+ralts-as-alts alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , snd (snd (snd a)))) (ralts-as-alts r)
 -- a call into the net (B18): cubical_call(key, n, (V *[]){ a, b }), the arguments boxed; the
 -- machine's half (src/lang.c) builds the definition's application and reads the result back
 net-c key n as = cat7 s-net key s-comma (dec n) s-net-args (if %weq n #0 then (lcons #48 lnil) else as) s-net-end

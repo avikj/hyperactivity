@@ -28,7 +28,7 @@ data FO
   | frec (d : Word) (x : FO) (alts : Lst)    -- structural recursion on x : d; alts a Lst of (c , (n , (hyps , body))): the n
                                              -- fields pushed, then for each field index in hyps the recursion's result on
                                              -- that field (a suspension, read with fforce); lift turns it into a definition
-  | fupd (u : Word) (x : FO) (c : Word) (k : Word) (v : FO)   -- x (of constructor c) with field k replaced by v (C21): a
+  | fupd (u : Word) (d : Word) (x : FO) (c : Word) (k : Word) (v : FO)   -- x (of constructor c of type d) with field k replaced by v (C21): a
                                              -- fresh value in meaning; u = 1 says x is unique here and the printer stores
                                              -- into it in place, u = 0 that it copies first (copy-on-write); mark-uniq sets u
 -- values of first-order programs: words, constructor trees, closures, thunks
@@ -190,7 +190,7 @@ eval-fo G e t =
     frec d x alts → enter-rec G e d alts (eval-fo G e x)
     fnet k args → vnet k (eval-list G e args)
     fassume fact b → eval-fo G e b
-    fupd u x c k v → (case eval-fo G e x of vcon d c2 fs → vcon d c2 (lst-set fs k (eval-fo G e v)); _ → vw #0)
+    fupd u dd x c k v → (case eval-fo G e x of vcon d c2 fs → vcon d c2 (lst-set fs k (eval-fo G e v)); _ → vw #0)
     _ → vw #0
 lst-set l k v = case l of lnil → lnil; lcons x xs → if %weq k #0 then lcons v xs else lcons x (lst-set xs (%wsub k #1) v)
 eval-list G e l = case l of lnil → lnil; lcons x xs → lcons (eval-fo G e x) (eval-list G e xs)
@@ -273,7 +273,7 @@ shift-at d k t =
     fnet g args → fnet g (fshift-list d k args)
     fassume f b → fassume f (shift-at d k b)
     frec dd x alts → frec dd (shift-at d k x) alts
-    fupd u x c j v → fupd u (shift-at d k x) c j (shift-at d k v)
+    fupd u dd x c j v → fupd u dd (shift-at d k x) c j (shift-at d k v)
     _ → t
 fshift-list d k l = case l of lnil → lnil; lcons x xs → lcons (shift-at d k x) (fshift-list d k xs)
 -- an alternative's body sees its constructor's fields pushed; their count is not known here, so
@@ -311,7 +311,7 @@ fv d t acc =
     fnet g args → fv-list d args acc
     fassume f b → fv d b acc
     frec dd x alts → fv-ralts d alts (fv d x acc)
-    fupd u x c k v → fv d v (fv d x acc)
+    fupd u dd x c k v → fv d v (fv d x acc)
     _ → acc
 fv-ralts d alts acc = case alts of lnil → acc; lcons a r → fv-ralts d r (fv (%wadd d (%wadd (fst (snd a)) (lst-len2 (fst (snd (snd a)))))) (snd (snd (snd a))) acc)
 fv-list d l acc = case l of lnil → acc; lcons x xs → fv-list d xs (fv d x acc)
@@ -345,7 +345,7 @@ renumber d caps t =
     fnet g args → fnet g (renumber-list d caps args)
     fassume f b → fassume f (renumber d caps b)
     frec dd x alts → frec dd (renumber d caps x) (renumber-ralts d caps alts)
-    fupd u x c k v → fupd u (renumber d caps x) c k (renumber d caps v)
+    fupd u dd x c k v → fupd u dd (renumber d caps x) c k (renumber d caps v)
     _ → t
 renumber-ralts d caps alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , renumber (%wadd d (%wadd (fst (snd a)) (lst-len2 (fst (snd (snd a)))))) caps (snd (snd (snd a)))))) (renumber-ralts d caps r)
 renumber-list d caps l = case l of lnil → lnil; lcons x xs → lcons (renumber d caps x) (renumber-list d caps xs)
@@ -367,7 +367,7 @@ lift k t =
     fif c a b → (case lift k c of lifted c2 ds k2 → (case lift k2 a of lifted a2 ds2 k3 → (case lift k3 b of lifted b2 ds3 k4 → lifted (fif c2 a2 b2) (lapp2 ds (lapp2 ds2 ds3)) k4)))
     floop init body → (case lift-list k init of lifted2 is ds k2 → (case lift k2 body of lifted b2 ds2 k3 → lifted (floop is b2) (lapp2 ds ds2) k3))
     fapply f args → (case lift k f of lifted f2 ds k2 → (case lift-list k2 args of lifted2 as ds2 k3 → lifted (fapply f2 as) (lapp2 ds ds2) k3))
-    fupd u x c j v → (case lift k x of lifted x2 ds k2 → (case lift k2 v of lifted v2 ds2 k3 → lifted (fupd u x2 c j v2) (lapp2 ds ds2) k3))
+    fupd u dd x c j v → (case lift k x of lifted x2 ds k2 → (case lift k2 v of lifted v2 ds2 k3 → lifted (fupd u dd x2 c j v2) (lapp2 ds ds2) k3))
     frec dd x alts →
       (case lift k x of
          lifted x2 ds k2 →
@@ -375,17 +375,19 @@ lift k t =
               lifted2 alts2 ds2 k3 →
                 let caps = free-vars #0 (frec dd (flit #0) alts2)
                 in lifted (fcall k3 (lapp2 (caps-as-vars caps) (lcons x2 lnil)))
-                     (lapp2 ds (lapp2 ds2 (lcons (k3 , (%wsucc (lst-len2 caps) , renumber #1 caps (fswitch (fvar #0) (rec-alts k3 caps alts2)))) lnil)))
+                     (lapp2 ds (lapp2 ds2 (lcons (k3 , (%wsucc (lst-len2 caps) , renumber #1 caps (frec dd (fvar #0) (rec-alts k3 caps alts2)))) lnil)))
                      (%wsucc k3)))
     _ → lifted t lnil k
--- the switch of a lifted recursion: each alternative binds its hypotheses by let, each a call of
--- the definition on the field (the captured variables passed again), after the n fields; outer
--- variables are written for the depth they are read at (renumber maps them to the parameters);
--- the body's outer variables move up by one for the definition's own parameter
+-- the switch of a lifted recursion — a recursion form with no hypotheses left (the printers read
+-- it as a switch that knows its data type, so the scrutinee is typed): each alternative binds its
+-- hypotheses by let, each a call of the definition on the field (the captured variables passed
+-- again), after the n fields; outer variables are written for the depth they are read at
+-- (renumber maps them to the parameters); the body's outer variables move up by one for the
+-- definition's own parameter
 rec-alts g caps alts =
   case alts of
     lnil → lnil
-    lcons a r → lcons (fst a , (fst (snd a) , hyp-lets g caps (fst (snd a)) #0 (fst (snd (snd a))) (shift-at (%wadd (fst (snd a)) (lst-len2 (fst (snd (snd a))))) #1 (snd (snd (snd a)))))) (rec-alts g caps r)
+    lcons a r → lcons (fst a , (fst (snd a) , (lnil , hyp-lets g caps (fst (snd a)) #0 (fst (snd (snd a))) (shift-at (%wadd (fst (snd a)) (lst-len2 (fst (snd (snd a))))) #1 (snd (snd (snd a))))))) (rec-alts g caps r)
 hyp-lets g caps n t hyps body =
   case hyps of
     lnil → body
@@ -466,7 +468,7 @@ reuse-at flds dd t =
     fforce x → fforce (reuse-at flds dd x)
     fnet g args → fnet g (reuse-list flds dd args)
     fassume f b → fassume f (reuse-at flds dd b)
-    fupd u x c k v → fupd u (reuse-at flds dd x) c k (reuse-at flds dd v)
+    fupd u dd x c k v → fupd u dd (reuse-at flds dd x) c k (reuse-at flds dd v)
     _ → t
 reuse-list flds dd l = case l of lnil → lnil; lcons x xs → lcons (reuse-at flds dd x) (reuse-list flds dd xs)
 -- a switch's alternatives know no data type: only projections are read under them
@@ -510,8 +512,8 @@ fold-upd flds dd X d c fs i =
   case fs of
     lnil → X
     lcons f r → (case field-base flds dd d c i f of
-                   some y → if fo-eq X y then fold-upd flds dd X d c r (%wsucc i) else fold-upd flds dd (fupd #0 X c i f) d c r (%wsucc i)
-                   none → fold-upd flds dd (fupd #0 X c i f) d c r (%wsucc i))
+                   some y → if fo-eq X y then fold-upd flds dd X d c r (%wsucc i) else fold-upd flds dd (fupd #0 d X c i f) d c r (%wsucc i)
+                   none → fold-upd flds dd (fupd #0 d X c i f) d c r (%wsucc i))
 -- ---- uniqueness: safe v t classifies the uses of variable v in t: 0 none, 1 field reads only,
 -- 2 exactly one update of v as its base on some path, every other use a read sequenced before
 -- the store, 3 the value held (a bare use, which makes another holder) without an update, 4
@@ -521,7 +523,7 @@ safe v t =
   case t of
     fvar m → if %weq m v then #3 else #0
     fproj d c k x → (case x of fvar m → (if %weq m v then #1 else #0); _ → safe v x)
-    fupd u x c k w → (case x of
+    fupd u dd x c k w → (case x of
                         fvar m → (if %weq m v then (if %wlt (safe v w) #2 then #2 else #4) else safe v w)
                         _ → safe-seq (safe v x) (safe v w))
     fswitch x alts → safe-seq (safe-scrut v x) (safe-alts v alts)
@@ -558,7 +560,7 @@ safe-ralts v alts = case alts of lnil → #0; lcons a r → safe-branch (safe (%
 fresh t =
   case t of
     fcon d c fs → true
-    fupd u x c k v → true
+    fupd u dd x c k v → true
     flet a b → fresh b
     fif c a b → andf (fresh a) (fresh b)
     fswitch x alts → fresh-alts alts
@@ -571,7 +573,7 @@ fresh-ralts alts = case alts of lnil → true; lcons a r → andf (fresh (snd (s
 -- set u = 1 on the update whose base is variable v
 set-ip v t =
   case t of
-    fupd u x c k w → (case x of fvar m → (if %weq m v then fupd #1 x c k w else fupd u x c k (set-ip v w)); _ → fupd u (set-ip v x) c k (set-ip v w))
+    fupd u dd x c k w → (case x of fvar m → (if %weq m v then fupd #1 dd x c k w else fupd u dd x c k (set-ip v w)); _ → fupd u dd (set-ip v x) c k (set-ip v w))
     fswitch x alts → fswitch (set-ip v x) (set-ip-alts v alts)
     frec d x alts → frec d (set-ip v x) (set-ip-ralts v alts)
     fproj d c k x → fproj d c k (set-ip v x)
@@ -606,7 +608,7 @@ lst-nth-fo l n = case l of lnil → flit #0; lcons x xs → if %weq n #0 then x 
 -- used safely in the body likewise
 mark-uniq t =
   case t of
-    fupd u x c k v → fupd (if fresh x then #1 else u) (mark-uniq x) c k (mark-uniq v)
+    fupd u dd x c k v → fupd (if fresh x then #1 else u) dd (mark-uniq x) c k (mark-uniq v)
     flet a b → (let b2 = mark-uniq b in flet (mark-uniq a) (if andf (fresh a) (%weq (safe #0 b2) #2) then set-ip #0 b2 else b2))
     floop init body → floop (mark-list init) (mark-slots (lst-len2 init) init #0 (mark-uniq body))
     fswitch x alts → fswitch (mark-uniq x) (mark-alts alts)
@@ -635,25 +637,25 @@ mark-ralts alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst 
 inplace t = mark-uniq (reuse-cons t)
 -- ---- readings. A rebuild of a pair with its first field kept is an update of the pair
 pr-upd = fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (flit #9) lnil))
-#same reuse-cons pr-upd = fupd #0 (fvar #0) #0 #1 (flit #9)
+#same reuse-cons pr-upd = fupd #0 #0 (fvar #0) #0 #1 (flit #9)
 -- and evaluates to the pair with the field replaced
 #same eval-fo no-defs (lcons (vcon #0 #0 (lcons (vw #1) (lcons (vw #2) lnil))) lnil) (reuse-cons pr-upd) = vcon #0 #0 (lcons (vw #1) (lcons (vw #9) lnil))
 -- a let-bound pair updated once, its old field read in the new value: unique, so in place
 let-upd = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (fprim P-add (lcons (fproj #0 #0 #1 (fvar #0)) (lcons (flit #40) lnil))) lnil)))
-#same inplace let-upd = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fupd #1 (fvar #0) #0 #1 (fprim P-add (lcons (fproj #0 #0 #1 (fvar #0)) (lcons (flit #40) lnil))))
+#same inplace let-upd = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fupd #1 #0 (fvar #0) #0 #1 (fprim P-add (lcons (fproj #0 #0 #1 (fvar #0)) (lcons (flit #40) lnil))))
 #same eval-fo no-defs lnil (inplace let-upd) = vcon #0 #0 (lcons (vw #1) (lcons (vw #42) lnil))
 -- the same pair also read beside the update (unsequenced): a copy
 let-upd2 = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (flit #9) lnil))) lnil)))
-#same inplace let-upd2 = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fupd #0 (fvar #0) #0 #1 (fupd #0 (fvar #0) #0 #1 (flit #9)))
+#same inplace let-upd2 = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fupd #0 #0 (fvar #0) #0 #1 (fupd #0 #0 (fvar #0) #0 #1 (flit #9)))
 -- a parameter updated (the base is not fresh): a copy; a recursion's alternative rebuilding its
 -- constructor with one field changed is the update of the scrutinee
 rec-upd = frec #12 (fvar #0) (lcons (#0 , (#2 , (lnil , fcon #12 #0 (lcons (fvar #1) (lcons (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil))) lnil))))) lnil)
-#same inplace rec-upd = frec #12 (fvar #0) (lcons (#0 , (#2 , (lnil , fupd #0 (fvar #2) #0 #1 (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))))) lnil)
+#same inplace rec-upd = frec #12 (fvar #0) (lcons (#0 , (#2 , (lnil , fupd #0 #12 (fvar #2) #0 #1 (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))))) lnil)
 #same eval-fo no-defs (lcons (vcon #12 #0 (lcons (vw #5) (lcons (vw #6) lnil))) lnil) (inplace rec-upd) = vcon #12 #0 (lcons (vw #5) (lcons (vw #7) lnil))
 -- a loop over a fresh record, updated each iteration: in place
-loop-upd = floop (lcons (flit #3) (lcons (fcon #12 #0 (lcons (flit #0) (lcons (flit #10) lnil))) lnil))
+loop-upd = floop (lcons (flit #3) (lcons (fcon #7712 #0 (lcons (flit #0) (lcons (flit #10) lnil))) lnil))
   (fif (fprim P-lt (lcons (flit #0) (lcons (fvar #1) lnil)))
-     (fcon #0 #0 (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (frec #12 (fvar #0) (lcons (#0 , (#2 , (lnil , fcon #12 #0 (lcons (fvar #1) (lcons (fprim P-add (lcons (fvar #0) (lcons (fvar #3) lnil))) lnil))))) lnil)) lnil)))
+     (fcon #0 #0 (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (frec #7712 (fvar #0) (lcons (#0 , (#2 , (lnil , fcon #7712 #0 (lcons (fvar #1) (lcons (fprim P-add (lcons (fvar #0) (lcons (fvar #3) lnil))) lnil))))) lnil)) lnil)))
      (fcon #0 #1 (lcons (fvar #0) lnil)))
-#same (case inplace loop-upd of floop i b → (case b of fif c a e → (case a of fcon d k st → (case lst-nth-fo st #1 of frec dd x alts → (case alts of lcons al r → (case snd (snd (snd al)) of fupd u y c k v → u; _ → #9); _ → #9); _ → #9); _ → #9); _ → #9); _ → #9) = #1
-#same eval-fo no-defs lnil (inplace loop-upd) = vcon #12 #0 (lcons (vw #0) (lcons (vw #16) lnil))
+#same (case inplace loop-upd of floop i b → (case b of fif c a e → (case a of fcon d k st → (case lst-nth-fo st #1 of frec dd x alts → (case alts of lcons al r → (case snd (snd (snd al)) of fupd u dd y c k v → u; _ → #9); _ → #9); _ → #9); _ → #9); _ → #9); _ → #9) = #1
+#same eval-fo no-defs lnil (inplace loop-upd) = vcon #7712 #0 (lcons (vw #0) (lcons (vw #16) lnil))

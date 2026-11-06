@@ -67,7 +67,7 @@ fcalls t acc =
     fthunk a → fcalls a acc
     fforce x → fcalls x acc
     fassume f b → fcalls b acc
-    fupd u x c k v → fcalls v (fcalls x acc)
+    fupd u dd x c k v → fcalls v (fcalls x acc)
     _ → acc
 fcalls-list l acc = case l of lnil → acc; lcons x xs → fcalls-list xs (fcalls x acc)
 fcalls-alts alts acc = case alts of lnil → acc; lcons a r → fcalls-alts r (fcalls (snd (snd a)) acc)
@@ -108,7 +108,7 @@ offset-calls t =
     fthunk a → fthunk (offset-calls a)
     fforce x → fforce (offset-calls x)
     fassume f b → fassume f (offset-calls b)
-    fupd u x c k v → fupd u (offset-calls x) c k (offset-calls v)
+    fupd u dd x c k v → fupd u dd (offset-calls x) c k (offset-calls v)
     _ → t
 offset-list l = case l of lnil → lnil; lcons x xs → lcons (offset-calls x) (offset-list xs)
 offset-alts alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , offset-calls (snd (snd a)))) (offset-alts r)
