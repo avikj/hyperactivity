@@ -2538,6 +2538,26 @@ Revision 1. A design, since this is the open item; stated so it can be criticize
 
 ### 18.16 A8 — Proposal: formal transported compositions
 
+**Status (2026-11-06, after `ab7a78d`'s `%transH` and the boundary rule below).** Measured on
+`main`: `#show g8` 475,558 steps for 2,189 cells, 217 per cell (from 484 before `%transH`);
+the number 619,529 steps; the square driver unchanged; every suite identical across workers
+and memo on/off. `surfc` on the squash₄ cube: a read at any endpoint of either Ω² dimension
+(`@ 0 @ 0`, `@ m @ 0`, `@ 0 @ m`) is 47–48 cells for about 196k steps — 4k steps per cell,
+the profile per `#show` (`CUBICAL_PROFILE=show`, added) showing `%comp-path` entered 3,287
+times and `%bdy-squash4` 3,095 times — and the read at both Ω² dimensions generic (the 6-cube)
+exceeds 5.4 GB and is killed. The constructor substitution rule now rebuilds a path
+constructor's boundary only when a substituted dimension occurs in the constructor's
+dimensions (the faces cannot have changed otherwise, and none was true), which removed a
+tenth of the boundary entries; the rest come from the composition tubes restricting the
+four cube dimensions. What remains for the acceptance below is the `%comp-path` count: the
+dependent 4-cube over sets (`fill4OverSets`) composes in path types at every level and each
+composition distributes to its endpoints as soon as it exists, the same pattern `%transH`
+removed for transports of compositions; the same treatment (a formal composition in a path
+type, distributed when a reader demands a layer) is the next step, ~100 lines in `net.c`,
+and whether the fully generic 6-cube's normal form is itself small is not known (a read at
+one endpoint is), so the acceptance clause "finishes at generic dimensions" needs its
+result size measured first.
+
 Revision 1. A change to the generated composition clause and one value kind; the checker is
 untouched.
 

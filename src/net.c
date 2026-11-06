@@ -1121,7 +1121,22 @@ static void rule_subst(Cell *o, Cell *v) {
         int n = k->nfields + k->ndims;
         Port *a = malloc((size_t)(n + 1) * sizeof(Port));
         for (int j = 0; j < n; j++) a[j] = sub(v->port[1 + j], s);
-        link(con_build((int)v->a, a, a + k->nfields), out);
+        /* a path constructor whose dimensions (interval values already there) mention nothing the
+         * substitution replaces: its boundary's faces are what they were, none of them true (it
+         * is a constructor), so it is a constructor again without the boundary rebuilt (A8:
+         * surfc's reads spent half their steps rebuilding %bdy-squash4 under substitutions of
+         * other dimensions) */
+        bool same = k->bdy >= 0;
+        for (int j = 0; same && j < k->ndims; j++) {
+            Cell *dc = cell_at(v->port[1 + k->nfields + j]);
+            if (!dc || dc->kind != V_IV || !dc->p) { same = false; break; }
+            for (uint32_t q = 0; q < s->n; q++) if (dnf_mentions(dc->p, s->d[q])) { same = false; break; }
+        }
+        if (same) {
+            Cell *c = cell(V_CON, n + 1); c->a = v->a;
+            for (int j = 0; j < n; j++) link(a[j], P(c, 1 + j));
+            link(P(c, 0), out);
+        } else link(con_build((int)v->a, a, a + k->nfields), out);
         free(a);
         break;
     }

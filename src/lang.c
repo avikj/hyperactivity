@@ -3872,6 +3872,13 @@ static void toplevel(Node *f) {
         free(buf); free(b);
     } else if (!strcmp(h, "show")) {
         long steps, h0 = stat_hits, k0 = stat_keys;
+        /* CUBICAL_PROFILE=show: the profile counts only from the last #show on */
+        if (prof_on && getenv("CUBICAL_PROFILE") && !strcmp(getenv("CUBICAL_PROFILE"), "show")) {
+            extern long prof_odup[65536], prof_oera[65536], prof_rdup[256], prof_rera[256];
+            memset(prof_count, 0, (size_t)prof_n * sizeof(long)); memset(prof_dup, 0, (size_t)prof_n * sizeof(long));
+            memset(prof_dupk, 0, sizeof prof_dupk); memset(prof_erak, 0, sizeof prof_erak); memset(prof_con, 0, sizeof prof_con); memset(prof_glob, 0, sizeof prof_glob);
+            memset(prof_odup, 0, sizeof prof_odup); memset(prof_oera, 0, sizeof prof_oera); memset(prof_rdup, 0, sizeof prof_rdup); memset(prof_rera, 0, sizeof prof_rera);
+        }
         const char *tp = getenv("CUBICAL_TRACE");
         if (tp) { net_drain(); trace_out = fopen(tp, "a"); }
         Node *T = reading_type(f->it[1]);
