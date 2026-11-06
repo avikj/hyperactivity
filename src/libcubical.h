@@ -10,4 +10,10 @@ int cubical_init(int nfiles, const char *const *files);
 /* name applied to n words, read to a word in *out: 0; -1 when the normal form is not a word (its text: cubical_last_text) */
 int cubical_call(const char *name, const uint64_t *args, int n, uint64_t *out);
 const char *cubical_last_text(void);
+/* the boxed form of the emitted C (lib/emitc.cub's V: tag 0 a word in n; tag c+1 constructor c with n fields): checked
+ * definition k (its signature index) applied to boxed words, the result a boxed word, or NULL (a constructor argument
+ * or result: not marshaled yet). The emitted programs call it as cubical_call(key, n, (V *[]){…}): link them with
+ * -Dcubical_call=cubical_call_boxed, or define V *cubical_call(uint64_t, uint64_t, V **) over cubical_call_boxed */
+void *cubical_call_boxed(uint64_t k, uint64_t nargs, void **args);
+long cubical_index(const char *name);   /* a checked definition's signature index, or -1 */
 #endif

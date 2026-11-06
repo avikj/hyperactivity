@@ -4141,7 +4141,26 @@ static void serve(void) {
         memcpy(buf + len, line, l); len += l;
     }
 }
+/* the boxed form of lib/emitc.cub's programs (typedef struct V { uint64_t tag; uint64_t n; struct V *f[]; }):
+ * tag 0 a word in n; tag c+1 a constructor c with n fields. cubical_call(k, n, args): the checked
+ * definition k (its index in the checker's signature, as `gidx (code f)` gives it) applied to the
+ * arguments, read back by the net, the result boxed. Words both ways in this revision: a
+ * constructor argument or result needs its data type to be marshaled by its layout (B18, open),
+ * and is refused (NULL) */
+typedef struct CubV { uint64_t tag; uint64_t n; struct CubV *f[]; } CubV;
+CubV *cubical_call_v(uint64_t k, uint64_t nargs, CubV **args) {
+    if (nargs > 8 || (long)k >= nchecked) return NULL;
+    uint64_t a[8];
+    for (uint64_t i = 0; i < nargs; i++) { if (!args[i] || args[i]->tag != 0) return NULL; a[i] = args[i]->n; }
+    uint64_t out;
+    if (cubical_call(CHECKED[k], a, (int)nargs, &out)) return NULL;
+    CubV *r = malloc(sizeof(CubV)); r->tag = 0; r->n = out;
+    return r;
+}
+long cubical_index(const char *name) { return checked_index(name); }
 #ifdef CUBICAL_LIB
+/* the name the emitted C calls */
+void *cubical_call_boxed(uint64_t k, uint64_t nargs, void **args) { return cubical_call_v(k, nargs, (CubV **)args); }
 int cubical_main(int argc, char **argv)
 #else
 int main(int argc, char **argv)

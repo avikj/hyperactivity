@@ -1120,9 +1120,10 @@ in-place update (`e27eda2c`), D24's guarded form (`5b9de865`), D26 (`43e8fb10`,
 `38c1fa89`), F31's remaining pieces (`896713ea`, `e1f33110`, `5b1b57f9`), F32's directed
 search and bridges (`89ec3e0e`, `d1e5f790`), item 29 (`fd188bf6`), `%gsteps` (`c20116d7`),
 `--serve` (`50ffb680`), the rewriting discipline (`bd21c486`). What remains, in order of
-value: (1) A8's next step, formal compositions in path types (18.16's status paragraph:
-`%comp-path` entered 3,287 times for a 47-cell read); (2) B18's marshaling of represented
-values (layout walks, `V_NATIVE`, the keyed boxed `cubical_call` Line B emits); (3) A4's
+value: (1) A8's next step — not formal compositions in path types (tried, withdrawn, 18.16):
+sharing a composition across the dimensions the tube maps apply it at; (2) B18's marshaling
+of represented values (layout walks, `V_NATIVE`; the boxed `cubical_call` the emitted C
+calls exists for words, `cubical_call_boxed`/`cubical_index` in `src/libcubical.h`); (3) A4's
 bitmask formulas (18.19, designed); (4) E28's unification-based implicits, holes in
 composition lines, generalized variables, transports inserted by matching on indexed
 families; (5) item 30's retraction and positions in errors; (6) F32 over `Int` (needs `Int`
