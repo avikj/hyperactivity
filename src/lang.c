@@ -21,6 +21,11 @@ static jmp_buf *die_jb;
 static char die_msg[512];
 static void die(const char *m, const char *x) {
     if (die_jb) { snprintf(die_msg, sizeof die_msg, "%s%s%s", m, x ? " " : "", x ? x : ""); jmp_buf *j = die_jb; die_jb = NULL; longjmp(*j, 1); }
+    /* on stderr, and on stdout too when that is a different file (a run read through its stdout
+     * alone saw a silent exit: E28 finding iii) */
+    fflush(stdout);
+    struct stat so, se; bool same = fstat(1, &so) == 0 && fstat(2, &se) == 0 && so.st_dev == se.st_dev && so.st_ino == se.st_ino;
+    if (!same) { printf("error: %s%s%s\n", m, x ? " " : "", x ? x : ""); fflush(stdout); }
     fprintf(stderr, "error: %s%s%s\n", m, x ? " " : "", x ? x : ""); exit(1);
 }
 
@@ -2783,6 +2788,10 @@ static const char *cache_dir(void);
 /* ---------------- signature entries, copattern definitions ---------------- */
 /* an entry of the checker's signature: its value's global, its type's global */
 static int sig_add(const char *name, long g, long tyg, bool hidden) {
+    /* a checked name declared again rebinds the references of every module parsed after it,
+     * silently (E28): until modules give namespaces, it is an error, except under #fail
+     * (CUBICAL_REDECLARE=1 allows it, for experiments) */
+    if (!hidden && name[0] != '%' && checked_index(name) >= 0 && !getenv("CUBICAL_REDECLARE")) die("a checked definition is declared again (rename it; the earlier one is the library's):", name);
     table_set(TB_VAL, nchecked, g);
     table_set(TB_TY, nchecked, tyg);
     GROW(CHECKED, capchecked, (size_t)nchecked + 1);

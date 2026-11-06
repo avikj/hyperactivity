@@ -966,6 +966,12 @@ infer c =
     tann t T V → 
       case infer-sort T of yes s → let Tv = tval T in and-then (check t Tv) (yes Tv); r → r
     tdata d ps V → let de = %dent d in and-then (check-tele c (dtel de) ps) (yes (Type (dlvl de)))
+    -- a constructor of a data type without parameters infers that type (a scrutinee rebuilt from a
+    -- branch's fields, let k = C x… in …, is such an application)
+    tcon d c2 fs ds V →
+      (case fst (params-fresh (dtel (%dent d)) lnil) of
+         lnil → let D = mkdata d lnil in and-then (check c D) (yes D)
+         _ → err c E-noinfer opq opq)
     telim d P B x F V → 
       case infer x of
         yes T → 

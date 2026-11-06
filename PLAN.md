@@ -2457,6 +2457,15 @@ which of these it actually needed; the list is what Agda-level convenience means
   (`cons : (n : Nat) → A → Vec A n → (m ≡ suc n) → Vec A m`), with the equality at
   multiplicity 0 so it is erased; matching inserts the transports. ~300.
 - The interval-literal fix: `0`/`1` as interval arguments when the expected type is `I`. ~20.
+  DONE (already accepted on `main`, 2026-11-06: `p 0`, `p @ 1`, `p i0` all check).
+- **Status (2026-11-06).** Redeclaring a checked name is an error (`sig_add`,
+  `CUBICAL_REDECLARE=1` allows it); two test names renamed (`tlist`, `rt-arr`). Fatal errors
+  print on stdout as well when it is not stderr (iii, and the side agent's silent-exit
+  finding). A scrutinee rebuilt from a branch's fields (`case k of suc j → … k …`) infers:
+  a constructor of a parameterless data type infers its type (`infer` in `check.cub`); for
+  a parameterized one the rebuilt mention still needs an annotation. Not accepted, by
+  design: a Π over `I` in a signature (`I` is not a type; fillers are stated as `PathP`); a
+  pattern named like a constructor in scope (`ok` is `Res`'s) is that constructor.
 - Found while writing `lib/linproof.cub` and `lib/eqproof.cub` (2026-11-06): (i) the
   implicit endpoints of a composed path (`catw`, `congw`) are determined from a signature,
   not from a motive applied inside a `%welimP` step, and not through a hypothesis whose type

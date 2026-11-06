@@ -77,10 +77,10 @@ w1 : Word → Bool
 w1 a = %wlt a #3
 #same law-conv (Word → Bool) w1 = true
 -- a stuck transport in a data type
-tl : {A B : Type} → A ≡ B → List A → List B
-tl p l = transport (λ i → List (p i)) l
+tlist : {A B : Type} → A ≡ B → List A → List B
+tlist p l = transport (λ i → List (p i)) l
 #same law-conv ((A B : Type) → PathP (λ (i : I) → Type) A B → List A → List B)
-        (λ x0 x1 → tl {x0} {x1}) = true
+        (λ x0 x1 → tlist {x0} {x1}) = true
 -- quoting the value of a code gives the code again
 #same quote-top (PathP (λ (i : I) → Nat) zero zero → Nat)
         (qe (PathP (λ (i : I) → Nat) zero zero → Nat) f) = quote-top
@@ -95,11 +95,11 @@ tl p l = transport (λ i → List (p i)) l
                                                                          (Word → Word → Word) plusw
 #same quote-top ((A B : Type) → PathP (λ (i : I) → Type) A B → List A → List B)
         (qe ((A B : Type) → PathP (λ (i : I) → Type) A B → List A → List B)
-           (λ x0 x1 → tl {x0} {x1})) = quote-top
+           (λ x0 x1 → tlist {x0} {x1})) = quote-top
                                          ((A B : Type) →
                                           PathP (λ (i : I) → Type) A B → List A → List B)
-                                         (λ x0 x1 → tl {x0} {x1})
+                                         (λ x0 x1 → tlist {x0} {x1})
 -- a typed reading of a checked definition is its normal form at its type
 #show f
 #show hf
-#show λ x0 x1 → tl {x0} {x1}
+#show λ x0 x1 → tlist {x0} {x1}
