@@ -159,6 +159,7 @@ infer-u sigs env t =
     fassume f b → infer-u sigs env b
     fforce x → infer-u sigs env x
     fupd u x c k v → infer-u sigs env x
+    fnet k args → tP
     _ → tP
 join-ty a b = if %weq a b then a else tP
 alts-ty sigs env ft alts =
@@ -301,7 +302,9 @@ emit-u sigs env d t =
     fassume fact b → cat5 u-assume (fact-u sigs env d fact) u-asmend (emit-u sigs env d b) u-bsend
     fforce x → emit-u sigs env d x
     fupd u x c k v → upd-u sigs env d u x c k v
+    fnet k args → net-c (dec k) (lst-len args) (args-rest-u0 sigs env d args)
     _ → s-unsup
+args-rest-u0 sigs env d fs = case fs of lnil → lnil; lcons x xs → (case xs of lnil → emit-at sigs env d tP x; _ → cat3 (emit-at sigs env d tP x) u-comma (args-rest-u0 sigs env d xs))
 -- an update (C21) at the base's type: a pair or a flat value by value is copied into a local and
 -- its field assigned (value semantics); a boxed V in place when unique (u = 1), else on a copy
 upd-u sigs env d u x c k v =
@@ -464,15 +467,20 @@ emit-prog-u defs =
 -- the program as a library (B18's call boundary, the emit side): no main; definition 0 is exported
 -- (not static) as cubical_entry over the signature's C types, calling f_0. A C program or the
 -- machine (#native, src/lang.c) links it and calls cubical_entry
-u-entry = (lcons #99 (lcons #117 (lcons #98 (lcons #105 (lcons #99 (lcons #97 (lcons #108 (lcons #95 (lcons #101 (lcons #110 (lcons #116 (lcons #114 (lcons #121 (lcons #40 lnil))))))))))))))
-u-callf0 = (lcons #102 (lcons #95 (lcons #48 (lcons #40 lnil))))
 entry-args i n = if %weq i n then lnil else (case %weq (%wsucc i) n of true → var (%wsucc i) #0; false → cat3 (var (%wsucc i) #0) u-comma (entry-args (%wsucc i) n))
-entry-u sigs n =
-  let s = fromopt (sig-of sigs #0) (push-n tP n lnil , tP)
-  in cat7 (ty-decl (snd s)) u-entry (if %weq n #0 then u-void else params-u (fst s) #0 n) u-body u-callf0 (entry-args #0 n) (lapp u-rp u-end)
-def0-arity defs = case defs of lnil → #0; lcons d r → if %weq (fst d) #0 then fst (snd d) else def0-arity r
-emit-lib-u defs =
+entry-u sigs n = export-u sigs #0 n u-entry-name
+emit-lib-u defs = emit-lib-named-u defs (lcons (#0 , u-entry-name) lnil)
+u-entry-name = (lcons #99 (lcons #117 (lcons #98 (lcons #105 (lcons #99 (lcons #97 (lcons #108 (lcons #95 (lcons #101 (lcons #110 (lcons #116 (lcons #114 (lcons #121 lnil)))))))))))))
+-- the library with every definition in names (a Lst of (g , name bytes)) exported under its name:
+-- <ret> name(<typed params>) { return f_g(v0, ...); } — a compiled definition over declared
+-- representations called from C by the name the store gives it (B18's exported C functions)
+emit-lib-named-u defs names =
   let sigs = sigs-of defs
-  in cat6 s-runtime u-prdecl (box-fns (flat-types defs)) (protos-u sigs defs) (dispatch defs) (lapp (defs-u sigs defs) (entry-u sigs (def0-arity defs)))
+  in cat6 s-runtime u-prdecl (box-fns (flat-types defs)) (protos-u sigs defs) (dispatch defs) (lapp (defs-u sigs defs) (exports-u sigs defs names))
+exports-u sigs defs names = case names of lnil → lnil; lcons nm r → lapp (export-u sigs (fst nm) (def-arity defs (fst nm)) (snd nm)) (exports-u sigs defs r)
+export-u sigs g n name =
+  let s = fromopt (sig-of sigs g) (push-n tP n lnil , tP)
+  in cat7 (ty-decl (snd s)) (lapp name u-lp) (if %weq n #0 then u-void else params-u (fst s) #0 n) u-body (cat3 u-f (dec g) u-lp) (entry-args #0 n) (lapp u-rp u-end)
+def-arity defs g = case defs of lnil → #0; lcons d r → if %weq (fst d) g then fst (snd d) else def-arity r g
 -- the exported entry of a one-definition program over two words: uint64_t cubical_entry(uint64_t v0, uint64_t v1) { return f_0(v0, v1); }
 #same entry-u (sigs-of (lcons (#0 , (#2 , fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil)))) lnil)) #2 = (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #99 (lcons #117 (lcons #98 (lcons #105 (lcons #99 (lcons #97 (lcons #108 (lcons #95 (lcons #101 (lcons #110 (lcons #116 (lcons #114 (lcons #121 (lcons #40 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #118 (lcons #48 (lcons #44 (lcons #32 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #118 (lcons #49 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #102 (lcons #95 (lcons #48 (lcons #40 (lcons #118 (lcons #48 (lcons #44 (lcons #32 (lcons #118 (lcons #49 (lcons #41 (lcons #59 (lcons #32 (lcons #125 (lcons #10 lnil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
