@@ -42,7 +42,7 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/codata.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/autodiff.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/recursion.cub
-	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/check.cub lib/std.cub lib/lower.cub lib/derive.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/check.cub lib/std.cub lib/lower.cub lib/prim.cub lib/derive.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/instance.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/elab.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/linproof.cub lib/prim.cub lib/decode.cub

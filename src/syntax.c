@@ -743,8 +743,13 @@ typedef struct { Node **p; Node *rhs; } Row;
 static bool pat_wild(Node *p) { return !p->list && (!strcmp(p->s, "%hole") || !strcmp(p->s, "_")); }
 /* a pattern's constructor: (c p...), or a constructor without fields (a name of a constructor with
  * fields, alone, is a variable) */
+typedef struct { char *con; int nidx, nfields; char **fields; Node **idx; } Ford;   /* nfields: the ordinary fields; idx: the index expressions over them */
+static Ford *FORD; static size_t capford; static int nford;
+static bool ford_head;   /* an application's head being elaborated (not a bare constructor to pad) */
+static int data_nidx; static char *data_ixnames[16]; static Node *data_ixtypes[16];
+static Ford *ford_of(const char *con) { for (int i = nford - 1; i >= 0; i--) if (!strcmp(FORD[i].con, con)) return &FORD[i]; return NULL; }
 static int pat_con(Node *p) {
-    if (!p->list) { int c = con_lookup(p->s); return c >= 0 && CON[c].nfields + CON[c].ndims == 0 ? c : -1; }
+    if (!p->list) { int c = con_lookup(p->s); Ford *fd = c >= 0 ? ford_of(p->s) : NULL; return c >= 0 && CON[c].nfields + CON[c].ndims == (fd ? fd->nidx : 0) ? c : -1; }
     return p->it[0]->list ? -1 : con_lookup(p->it[0]->s);
 }
 static Node *pat_norm(Node *p) {
@@ -812,6 +817,8 @@ static Node *cc_match(Node **vars, int nv, Row *rows, int nr, const char *fname)
             for (int q = j + 1; q < nv; q++) x.p[q - 1 + nf] = rows[r].p[q];
             if (pc == c) {
                 int got = p->list ? p->n - 1 : 0;
+                Ford *fd = ford_of(CON[c].name);
+                if (fd && got == nf - fd->nidx) { Node *q2 = nlist(nf + 1); q2->it[0] = p->list ? p->it[0] : p; for (int q = 0; q < got; q++) q2->it[q + 1] = p->it[q + 1]; for (int q = got; q < nf; q++) q2->it[q + 1] = nsym("_"); p = q2; got = nf; }
                 if (got != nf) die("a pattern has the wrong number of fields for", CON[c].name);
                 for (int q = 0; q < nf; q++) x.p[j + q] = p->it[q + 1];
             } else {
@@ -956,6 +963,12 @@ static void def_untyped(const char *name, Node *body) {
  * its name). */
 /* a constructor given by its type: its fields the Π telescope's binders, and a path type at the end
  * (a ≡ b, PathP (λ i → T) a b, a ≡[ i ↦ T ] b) a dimension with that boundary */
+/* indexed families by fording (E28): `data D ps : (i : Idx) → Type where c : … → D ps e` declares
+ * D with the indices as its last parameters (%ix0 …) and gives each constructor an equality field
+ * per index, (%e0 :0 (%ix0 ≡ e)), at multiplicity 0 so it is erased. A constructor applied without
+ * its equality fields gets refl at the declared index expressions (over its field arguments); a
+ * pattern without them is padded with _. Matching does not insert transports: in a branch the
+ * equality is a field (e : m ≡ e') to transport along by hand */
 static Node *ctor_by_type(const char *c, Node *T, const char *D) {
     Node *items[128]; int n = 0;
     items[n++] = nsym(c);
@@ -980,6 +993,23 @@ static Node *ctor_by_type(const char *c, Node *T, const char *D) {
     } else {
         Node *h = T->list ? T->it[0] : T;
         if (h->list || strcmp(h->s, D)) die("a constructor's type ends in its data type or a path in it:", c);
+        if (data_nidx) {
+            /* the last data_nidx arguments of the result are the index expressions: an equality
+             * field each, and the constructor remembered for its applications and patterns */
+            int na = T->list ? T->n - 1 : 0;
+            if (na < data_nidx) die("an indexed constructor's type ends in the family at its indices:", c);
+            Ford f = { strdup(c), data_nidx, n - 1, calloc((size_t)n, sizeof(char *)), calloc((size_t)data_nidx, sizeof(Node *)) };
+            for (int q = 1; q < n; q++) f.fields[q - 1] = strdup(items[q]->it[0]->s);
+            for (int q = 0; q < data_nidx; q++) {
+                Node *e = T->it[na - data_nidx + q + 1];
+                f.idx[q] = e;
+                char nm[32]; snprintf(nm, sizeof nm, "%%e%d", nfld1++);
+                Node *en = nsym(nm); bnd_set_mult(en, 0);
+                /* PathP (λ m → Idx) %ixq e, as core (a data field's type takes no implicit arguments) */
+                items[n++] = lst(2, en, core(lst(4, nsym("PathP"), sym3("plam", nsym("%m"), data_ixtypes[q]), nsym(data_ixnames[q]), e)));
+            }
+            GROW(FORD, capford, (size_t)nford + 1); FORD[nford++] = f;
+        }
     }
     Node *r = nlist(n);
     for (int i = 0; i < n; i++) r->it[i] = items[i];
@@ -1037,11 +1067,27 @@ static Node *p_data(void) {
         if (t->k != X_ID) x_err("a parameter, found", t);
         ps[np++] = x_typed ? lst(2, nsym(t->s), nsym("U")) : nsym(t->s);
     }
-    Node *head = nsym(d->s);
-    if (np) { head = nlist(np + 1); head->it[0] = nsym(d->s); for (int i = 0; i < np; i++) head->it[i + 1] = ps[i]; }
     Node *cs[256]; int nc = 0;
     data_name_parsing = d->s;
-    if (at(":")) { NX(); Node *ty = p_expr(0); (void)ty; }
+    data_nidx = 0;
+    if (at(":")) {
+        /* data D ps : (i : Idx) → … → Type: the indices, as the last parameters %ix0 … (fording) */
+        NX(); Node *ty = p_expr(0);
+        while (ty->list && ty->n == 2 && is(ty->it[0], "%impPi")) ty = ty->it[1];
+        while (ty->list && ty->n == 4 && is(ty->it[0], "Pi")) {
+            if (data_nidx == 16 || np == 32) x_err("too many indices", P0());
+            char nm[32]; snprintf(nm, sizeof nm, "%%ix%d", data_nidx);
+            data_ixnames[data_nidx] = strdup(nm);
+            Node *dom = ty->it[2];
+            if (!ty->it[1]->list && ty->it[1]->s[0] != '%') dom = x_rename(dom, ty->it[1]->s, nm);
+            data_ixtypes[data_nidx] = core(dom);
+            ps[np++] = lst(2, nsym(nm), data_ixtypes[data_nidx]);
+            ty = x_rename(ty->it[3], ty->it[1]->s, nm);
+            data_nidx++;
+        }
+    }
+    Node *head = nsym(d->s);
+    if (np) { head = nlist(np + 1); head->it[0] = nsym(d->s); for (int i = 0; i < np; i++) head->it[i + 1] = ps[i]; }
     if (at("where")) {
         NX(); wantk(X_VO, "a block of constructors");
         while (P0()->k != X_VC) {
@@ -3194,7 +3240,22 @@ static Node *el_app(Node *t, Node *h, Node **args, int n) {
             orig[no] = args[i]; out[no++] = el(args[i]);
         }
     } else {
-        hd = el(h);
+        ford_head = true; hd = el(h); ford_head = false;
+        {
+            /* an indexed constructor without its equality fields: refl at the declared index
+             * expressions over the field arguments (fording) */
+            Ford *fd = !h->list && !e_find(h->s) && con_lookup(h->s) >= 0 ? ford_of(h->s) : NULL;
+            if (fd && n == fd->nfields) {
+                Node **a2 = calloc((size_t)n + (size_t)fd->nidx + 1, sizeof(Node *));
+                for (int i = 0; i < n; i++) a2[i] = args[i];
+                for (int q = 0; q < fd->nidx; q++) {
+                    Node *e = fd->idx[q];
+                    for (int i = 0; i < n; i++) e = subst_sym(e, fd->fields[i], args[i]);
+                    a2[n + q] = sym3("plam", xfresh("i"), e);
+                }
+                args = a2; n += fd->nidx;
+            }
+        }
         Node *fty[256]; bool fimp[256]; int nft = !h->list && !e_find(h->s) && con_lookup(h->s) >= 0 ? head_params(h, fty, fimp, 256) : 0;
         for (int i = 0; i < n && no < 500; i++) {
             if (args[i]->list && args[i]->n == 2 && is(args[i]->it[0], "%imp")) die("an implicit argument {..} applied to something without implicit arguments", NULL);
@@ -3244,6 +3305,18 @@ static Node *el_alts(Node *t, int from) {
         if (!a->list || a->n != 2) { r->it[i] = a; continue; }
         int save = nesc;
         Node *p = a->it[0];
+        {
+            /* an indexed constructor's pattern without its equality fields: padded (fording) */
+            const char *cn = p->list ? (p->it[0]->list ? NULL : p->it[0]->s) : p->s;
+            Ford *fd = cn ? ford_of(cn) : NULL;
+            int got = p->list ? p->n - 1 : 0;
+            if (fd && con_lookup(cn) >= 0 && got == CON[con_lookup(cn)].nfields - fd->nidx) {
+                Node *q2 = nlist(got + fd->nidx + 1); q2->it[0] = p->list ? p->it[0] : p;
+                for (int q = 0; q < got; q++) q2->it[q + 1] = p->it[q + 1];
+                for (int q = 0; q < fd->nidx; q++) q2->it[got + q + 1] = xfresh("e");
+                p = q2; a = lst(2, p, a->it[1]);
+            }
+        }
         if (p->list) {
             int c = con_lookup(p->it[0]->s);
             Node *fv[64]; for (int q = 1; q < p->n && q <= 64; q++) fv[q - 1] = p->it[q];
@@ -3288,6 +3361,7 @@ static Node *el(Node *t) {
         if (!strcmp(t->s, "%hole")) { bool p = false; Node *h = hole_or_sol(t, 0, &p); return p ? sym2("%spine", h) : h; }
         if (e_find(t->s)) return t;
         if (imask_of(t->s)) { app_expect = ex; return el_app(t, t, NULL, 0); }
+        if (!ford_head && con_lookup(t->s) >= 0 && ford_of(t->s)) { app_expect = ex; return el_app(t, t, NULL, 0); }   /* an indexed constructor without fields: its refl */
         return t;
     }
     if (t->n == 0) return t;
@@ -3739,7 +3813,10 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             for (int q = 0; q < j; q++) x.p[q] = rows[r].p[q];
             for (int q = j + 1; q < nv; q++) x.p[q - 1 + nf] = rows[r].p[q];
             if (pc == c) {
-                if ((p->list ? p->n - 1 : 0) != nf) die("a pattern has the wrong number of fields for", CON[c].name);
+                int got = p->list ? p->n - 1 : 0;
+                Ford *fd = ford_of(CON[c].name);
+                if (fd && got == nf - fd->nidx) { Node *q2 = nlist(nf + 1); q2->it[0] = p->list ? p->it[0] : p; for (int q = 0; q < got; q++) q2->it[q + 1] = p->it[q + 1]; for (int q = got; q < nf; q++) q2->it[q + 1] = nsym("_"); p = q2; got = nf; }
+                if (got != nf) die("a pattern has the wrong number of fields for", CON[c].name);
                 for (int q = 0; q < nf; q++) x.p[j + q] = p->it[q + 1];
             } else {
                 for (int q = 0; q < nf; q++) x.p[j + q] = nsym("_");

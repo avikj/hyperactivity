@@ -209,6 +209,7 @@ enum {
     O_FMULT, O_FMULT2, O_FMULT3,   /* (%fmult d c k): the multiplicity of field k of constructor c of checked data type d; words in turn */
     O_LINEAR,   /* 0=d (word) 1=out: is the checked data type d linear (a constructor with a field at 1)? a Bool */
     O_GSTEPS,   /* (%gsteps n): the steps checked definition n took to check (word; 0 unknown) */
+    O_DNIDX,    /* (%dnidx d): the number of index parameters (the last ones) of checked data type d (word) */
     O_GUSAGE, O_GUSAGE2,   /* (%gusage n k): the computed usage (word) of parameter k of checked definition n; 2 when unknown */
     O_PTY,      /* (%pty k): the primitive type of kind k (a word): 0=k 1=out */
     O_BYTESTY,  /* (%bytesty n): the type Bytes n: 0=n 1=out */
@@ -331,7 +332,8 @@ typedef struct { char *name; int data, index, nfields, ndims; long bdy, trans; i
  * rdim[k] dimensions deep, or under Π codomains and Σ components), nrec of them. rsh[k]: the shape of a
  * recursive field's type as a string, prefix form: D the data type, P<s> a path line into s, F<s> a function
  * into s, 1<s> a pair whose first component is s, 2<s> whose second is, B<s><t> both (18.17, 18.18) */
-typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; void *decl; int co, nflds; int *flds; } DataInfo;
+typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; void *decl; int co, nflds; int *flds; int nidx; } DataInfo;
+/* nidx: the last nidx parameters are indices (fording, E28): a constructor's recursive field may give them freely */
 /* decl: the (data ...) form. co: a codata type (no constructors): its fields flds (indices into FLD);
  * comp its composition, a copattern definition */
 typedef struct { char *name; int data, index; long fty; int mult; } FldInfo;

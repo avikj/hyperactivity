@@ -1638,7 +1638,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_CALL] = "CALL",
     [O_WSUCC] = "WSUCC",
     [O_PTY] = "PTY", [O_BYTESTY] = "BYTESTY", [O_PVAL] = "PVAL", [O_PVAL2] = "PVAL2", [O_POP1] = "POP1", [O_POP2] = "POP2", [O_POP2B] = "POP2B", [O_BYTES] = "BYTES", [O_LOAD] = "LOAD", [O_LOADB] = "LOADB", [O_STORE] = "STORE", [O_STOREB] = "STOREB", [O_STOREC] = "STOREC", [O_BLEN] = "BLEN", [O_PTROF] = "PTROF", [O_REGAT] = "REGAT", [O_REGATA] = "REGATA", [O_FFI] = "FFI", [O_NATIVE] = "NATIVE",
-    [O_PIMULT] = "PIMULT", [O_PIM] = "PIM", [O_FMULT] = "FMULT", [O_FMULT2] = "FMULT2", [O_FMULT3] = "FMULT3", [O_LINEAR] = "LINEAR", [O_GSTEPS] = "GSTEPS", [O_GUSAGE] = "GUSAGE", [O_GUSAGE2] = "GUSAGE2",
+    [O_PIMULT] = "PIMULT", [O_PIM] = "PIM", [O_FMULT] = "FMULT", [O_FMULT2] = "FMULT2", [O_FMULT3] = "FMULT3", [O_LINEAR] = "LINEAR", [O_GSTEPS] = "GSTEPS", [O_DNIDX] = "DNIDX", [O_GUSAGE] = "GUSAGE", [O_GUSAGE2] = "GUSAGE2",
     [O_WEQ] = "WEQ",
     [O_WLT] = "WLT",
     [O_WADD] = "WADD",
@@ -2660,6 +2660,13 @@ static void interact(Cell *o, Cell *v) {
     case O_GUSAGE2: {
         if (vk != V_WORD || v->p) { fprintf(stderr, "%%gusage: an index is a word\n"); exit(2); }
         link(word_of((uint64_t)global_usage((long)o->a, (long)v->a)), o->port[1]);
+        cell_free(o); cell_free(v);
+        return;
+    }
+    case O_DNIDX: {
+        if (vk != V_WORD || v->p) { fprintf(stderr, "%%dnidx: an index is a word\n"); exit(2); }
+        int D = checked_data((long)v->a);
+        link(word_of(D >= 0 ? (uint64_t)DATA[D].nidx : 0), o->port[1]);
         cell_free(o); cell_free(v);
         return;
     }

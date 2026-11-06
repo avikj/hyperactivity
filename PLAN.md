@@ -2477,7 +2477,17 @@ which of these it actually needed; the list is what Agda-level convenience means
 - Landed early by the builder under A10b: a written λ binder type informs the implicit
   arguments of the function it is passed to; an implicit function applied to a bound
   variable is solved as a pattern (`B x` against `T` gives `B := λ x → T`).
-- Indexed families by fording: `data Vec (A : Type) : Nat → Type where nil : Vec A zero ;
+- Indexed families by fording: DONE (2026-11-06, `src/syntax.c` `Ford`, `lib/check.cub`
+  `uniform-params`, `%dnidx`): `data Vec (A : Type) : (n : Nat) → Type where vnil : Vec A zero;
+  vcons : (n : Nat) → A → Vec A n → Vec A (suc n)` declares the indices as the last parameters
+  (`%ix0 …`), each constructor gets an equality field per index (`PathP (λ m → Idx) %ix0 e`, at
+  multiplicity 0), the strict-positivity uniformity check skips the indices, an application
+  without the equality fields gets `refl` at the declared index expressions, a pattern without
+  them is padded; written out, the field is transported along or refuted (`vtail` by `snotz`).
+  Not inserted: transports in matching (the branch sees `e : m ≡ e'`), and recursion on an
+  indexed parameter with an earlier explicit index changing (`vlen (n : Nat) …` with `vlen m xs`)
+  is outside the structural rule's earlier-parameters-fixed shape — write the index implicit.
+  `tests/elab.cub`. Spec as written: `data Vec (A : Type) : Nat → Type where nil : Vec A zero ;
   cons : …` elaborates to a parameterized type with an equality field per index
   (`cons : (n : Nat) → A → Vec A n → (m ≡ suc n) → Vec A m`), with the equality at
   multiplicity 0 so it is erased; matching inserts the transports. ~300.

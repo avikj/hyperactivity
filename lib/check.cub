@@ -1530,11 +1530,16 @@ var-name v = case %view v of wvar l T → some l; _ → none
 same-var a b =
   case var-name a of some l → (case var-name b of some m → %weq l m; none → false); none → false
 uniform-at ps pvs = lall2 (λ p x → case p of tv y T → same-var y x; _ → false) ps pvs
+-- the parameters that must be uniform in a recursive occurrence: all but the last %dnidx d, the
+-- indices of a family by fording (E28), which a recursive field gives freely
+uniform-params d ps = ltake-n (%wsub (llen-w ps) (%dnidx d)) ps
+llen-w l = case l of lnil → #0; lcons x xs → %wsucc (llen-w xs)
+ltake-n n l = if %weq n #0 then lnil else (case l of lnil → lnil; lcons x xs → lcons x (ltake-n (%wsub n #1) xs))
 positive d pvs A =
   orb (notb (cany (is-data-d d) A))
     (case A of
        tdata d2 ps V → 
-         andb (%weq d2 d) (andb (lall (λ q → notb (cany (is-data-d d) q)) ps) (uniform-at ps pvs))
+         andb (%weq d2 d) (andb (lall (λ q → notb (cany (is-data-d d) q)) ps) (uniform-at (uniform-params d ps) (uniform-params d pvs)))
        -- a later D (guarded recursion): a field, not a recursive one (no hypothesis is taken); a
        -- function whose domain does not mention D: positive iff its codomain is (18.18)
        tpi B nm b V →

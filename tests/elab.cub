@@ -44,3 +44,31 @@ module Pair {A : Type} (x : A) where
   thrice = cons x twice
 open Pair true
 #same thrice = cons true (cons true (cons true nil))
+
+-- ---------------------------------------------------------------- indexed families by fording (E28)
+-- data D ps : (i : Idx) → Type: the indices are the last parameters; each constructor gets an
+-- equality field per index at multiplicity 0; applications get refl, patterns are padded; the
+-- field is there to transport along or refute by
+data Vec (A : Type) : (n : Nat) → Type where
+  vnil : Vec A zero
+  vcons : (n : Nat) → A → Vec A n → Vec A (suc n)
+v2 : Vec Nat 2
+v2 = vcons 1 7 (vcons 0 9 vnil)
+vhead : (n : Nat) → Vec Nat (suc n) → Nat
+vhead n v = case v of vnil → 0; vcons m x xs → x
+#same vhead 1 v2 = 7
+vlen : {n : Nat} → Vec Nat n → Nat
+vlen vnil = 0
+vlen (vcons m x xs) = suc (vlen xs)
+#same vlen v2 = 2
+-- the equality field: in a branch the index m is related to the constructor's by e
+vhead2 : (m : Nat) → Vec Nat m → Nat
+vhead2 m v = case v of vnil e → 0; vcons k x xs e → x
+#same vhead2 2 v2 = 7
+vtail : {n : Nat} → Vec Nat (suc n) → Vec Nat n
+vtail {n} (vcons m x xs e) = transport (λ i → Vec Nat (predN (e (~ i)))) xs
+vtail {n} (vnil e) = Empty-rec (snotz {n} e)
+#same vlen (vtail v2) = 1
+#fail
+v3 : Vec Nat 2
+v3 = vcons 0 7 vnil
