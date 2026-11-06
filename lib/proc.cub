@@ -354,3 +354,68 @@ Registry : Sig → Type → Type
 Registry S St = List (Named S St)
 find-world : {S : Sig} {St : Type} → Word → Registry S St → World S St → World S St
 find-world {S} {St} n r dflt = case r of nil → dflt; cons x xs → (case weq (wid x) n of true → model x; false → rec xs)
+-- ---------------------------------------------------------------- the guarded form (18.18 landed)
+-- a process that may run forever: a result, a command with its continuation one tick later for
+-- each response, or a silent tick (what a handler's own steps become). Logical time is the ticks;
+-- every recursion below is a guarded fixed point, so every definition is total and a process is
+-- unfolded only as far as it is observed
+data GProc (κ : Clock) (S : Sig) (A : Type) =
+    gret (a : A)
+  | gcmd (c : Cmd S) (k : Resp S c → ▸ κ (GProc κ S A))
+  | gtau (t : ▸ κ (GProc κ S A))
+gissue : {S : Sig} → (c : Cmd S) → GProc κ S (Resp S c)
+gissue c = gcmd c (λ r → next (gret r))
+gbind : {S : Sig} → GProc κ S A → (A → GProc κ S B) → GProc κ S B
+gbind (gret a) f = f a
+gbind (gcmd c k) f = gcmd c (λ r → gbind (k r) f)
+gbind (gtau t) f = gtau (λ α → gbind (t α) f)
+gmapp : {S : Sig} → (A → B) → GProc κ S A → GProc κ S B
+gmapp f (gret a) = gret (f a)
+gmapp f (gcmd c k) = gcmd c (λ r → gmapp f (k r))
+gmapp f (gtau t) = gtau (λ α → gmapp f (t α))
+-- a terminating process (Church form) is a guarded one at every clock
+to-guarded : {S : Sig} {A : Type} → Proc {lzero} S A → GProc κ S A
+to-guarded {κ} {S} {A} p = p (GProc κ S A) (λ a → gret a) (λ c k → gcmd c (λ r → next (k r)))
+-- a process that never returns: issue c, then again with the response fed back to the next command
+gloop : {S : Sig} {X : Type} {A : Type} → (f : X → Cmd S) → ((x : X) → Resp S (f x) → X) → X → GProc κ S A
+gloop f g x = gcmd (f x) (λ r → gloop f g (g x r))
+-- ---------------------------------------------------------------- the delay type: a run's result
+-- running a guarded process against a world takes one tick per command; the result is a value
+-- in the delay type (now, or one tick later), observed with fuel through forceκ
+data GDelay (κ : Clock) (X : Type) = now (x : X) | later (d : ▸ κ (GDelay κ X))
+Delay : Type → Type
+Delay X = (κ : Clock) → GDelay κ X
+dforce : {X : Type} → Delay X → Delay X
+dforce {X} d = forceκ {lzero} {λ κ → GDelay κ X} (λ κ → case d κ of now x → next (now x); later t → t)
+-- the value within n ticks, if it arrives
+data Within (X : Type) = arrived (x : X) | pending
+drun : {X : Type} → Nat → Delay X → Within X
+drun zero d = (case d κ0 of now x → arrived x; later t → pending)
+drun (suc n) d = (case d κ0 of now x → arrived x; later t → drun n (dforce d))
+grun : {S : Sig} {A : Type} {St : Type} → World S St → GProc κ S A → St → GDelay κ (Outcome A × St)
+grun w (gret a) st = now (done a , st)
+grun w (gcmd c k) st = (case w c st of inl r → later (λ α → grun w (k (fst r) α) (snd r)); inr s2 → now (stopped , s2))
+grun w (gtau t) st = later (λ α → grun w (t α) st)
+-- run from every clock, then observe with fuel
+grun-for : {S : Sig} {A : Type} {St : Type} → Nat → World S St → ((κ : Clock) → GProc κ S A) → St → Within (Outcome A × St)
+grun-for {S} {A} {St} n w p st = drun n (λ κ → grun {κ} {S} {A} {St} w (p κ) st)
+-- ---------------------------------------------------------------- handlers, by guarded recursion
+-- each command of S as a terminating process of W (the Church form: a handler's step for one
+-- command ends); handling a guarded process is a guarded fixed point, the continuation resumed
+-- one tick later under a silent step
+ghandle : {S W : Sig} {A : Type} → Handler S W → GProc κ S A → GProc κ W A
+ghandle hd (gret a) = gret a
+ghandle hd (gcmd c k) = gbind (to-guarded (hd c)) (λ r → gtau (λ α → ghandle hd (k r α)))
+ghandle hd (gtau t) = gtau (λ α → ghandle hd (t α))
+-- signature inclusion: the lift is the handler that issues the included command
+glift : {S T : Sig} {A : Type} → Incl S T → GProc κ S A → GProc κ T A
+glift i (gret a) = gret a
+glift i (gcmd c k) = gcmd (fst i c) (λ r → λ α → glift i (k (snd i c r) α))
+glift i (gtau t) = gtau (λ α → glift i (t α))
+-- a budget: a world transformer refusing every command once n have been answered (a timeout as
+-- a world, which is how a process that runs forever is observed to a bound)
+budget : {S : Sig} {St : Type} → World S St → World S (Nat × St)
+budget {S} {St} w c st =
+  case fst st of
+    zero → inr st
+    suc n → (case w c (snd st) of inl r → inl (fst r , (n , snd r)); inr s2 → inr (fst st , s2))

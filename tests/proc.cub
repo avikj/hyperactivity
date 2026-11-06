@@ -95,3 +95,47 @@ kv-named = (#1 , kv-world)
 registry1 : Registry KVS (Word → Word)
 registry1 = cons kv-named nil
 #same fst (runp {KVS} {Word} {Word → Word} (pr1 {lzero}) (find-world {KVS} {Word → Word} #1 registry1 kv-world) empty-st) = done #12
+-- ---------------------------------------------------------------- the guarded form
+-- a terminating process is a guarded one; run against the key-value world it arrives within its
+-- four commands' ticks and not before
+#same grun-for {KVS} {Word} {Word → Word} 4 kv-world (λ κ → to-guarded {κ} {KVS} {Word} (pr1 {lzero})) empty-st = arrived (done #12 , (λ j → case weq j #2 of true → #7; false → (case weq j #1 of true → #5; false → #0)))
+gpr1-run : Within (Outcome Word × (Word → Word))
+gpr1-run = grun-for {KVS} {Word} {Word → Word} 4 kv-world (λ κ → to-guarded {κ} {KVS} {Word} (pr1 {lzero})) empty-st
+#same (case gpr1-run of arrived r → fst r; pending → stopped) = done #12
+#same grun-for {KVS} {Word} {Word → Word} 3 kv-world (λ κ → to-guarded {κ} {KVS} {Word} (pr1 {lzero})) empty-st = pending
+-- a refusal arrives at its tick: pr2's put at key 0 is the second command
+#same grun-for {KVS} {Word} {Word → Word} 9 kv-world (λ κ → to-guarded {κ} {KVS} {Word} (pr2 {lzero})) empty-st = arrived (stopped , (λ j → case weq j #1 of true → #5; false → #0))
+-- a process that runs forever: put the counter at key 1 and count; observed through a budget of
+-- five commands, it is stopped by the budget with the counter at 4 in the store
+counter : GProc κ KVS Unit
+counter = gloop {κ} {KVS} {Word} {Unit} (λ x → put #1 x) (λ x u → %wsucc x) #0
+counter-run : Within (Outcome Unit × (Nat × (Word → Word)))
+counter-run = grun-for {KVS} {Unit} {Nat × (Word → Word)} 20 (budget {KVS} {Word → Word} kv-world) (λ κ → counter {κ}) (5 , empty-st)
+#same (case counter-run of arrived r → fst r; pending → done unit) = stopped
+#same (case counter-run of arrived r → snd (snd r) #1; pending → #0) = #4
+-- without the budget it never arrives, at any fuel
+#same grun-for {KVS} {Unit} {Word → Word} 30 kv-world (λ κ → counter {κ}) empty-st = pending
+-- the world pushing events: a feed of three summed by a loop over recv
+summing : Word → GProc κ (PushS Word) Unit
+summing x = gloop {κ} {PushS Word} {Word} {Unit} (λ x → recv) (λ x e → %wadd x e) x
+-- the feed ends after three events: the loop is refused there (its sum is in no state; the tick
+-- count is what is observed)
+#same grun-for {PushS Word} {Unit} {List Word} 3 (feed-world {Word}) (λ κ → summing {κ} #0) (cons #3 (cons #4 (cons #5 nil))) = arrived (stopped , nil)
+#same grun-for {PushS Word} {Unit} {List Word} 2 (feed-world {Word}) (λ κ → summing {κ} #0) (cons #3 (cons #4 (cons #5 nil))) = pending
+-- handled through the logging handler: a silent tick per handled command, so pr1 arrives within
+-- 4 commands + 4 taus + 2 logs
+gpr1-logged : Within (Outcome Word × ((Word → Word) × Word))
+gpr1-logged = grun-for {KVLS} {Word} {(Word → Word) × Word} 10 kvl-world (λ κ → ghandle {κ} {KVS} {KVLS} {Word} logging (to-guarded {κ} {KVS} {Word} (pr1 {lzero}))) (empty-st , #0)
+#same (case gpr1-logged of arrived r → fst r; pending → stopped) = done #12
+#same (case gpr1-logged of arrived r → snd (snd r); pending → #0) = #2
+-- lifted along the inclusion: nothing logged
+#same (case grun-for {KVLS} {Word} {(Word → Word) × Word} 10 kvl-world (λ κ → glift {κ} {KVS} {KVLS} {Word} incl-kv (to-guarded {κ} {KVS} {Word} (pr1 {lzero}))) (empty-st , #0) of arrived r → snd (snd r); pending → #9) = #0
+-- replay of a guarded run: recorded under the key-value world, replayed from the record alone
+grec : Within (Outcome Word × ((Word → Word) × List Word))
+grec = grun-for {KVS} {Word} {(Word → Word) × List Word} 4 (recording {KVS} {Word → Word} kv-enc kv-world) (λ κ → to-guarded {κ} {KVS} {Word} (pr1 {lzero})) (empty-st , nil)
+glog : List Word
+glog = case grec of arrived r → rev-list (snd (snd r)) nil; pending → nil
+#same glog = cons #0 (cons #0 (cons #5 (cons #7 nil)))
+#same (case grun-for {KVS} {Word} {List Word} 4 (replaying {KVS} kv-dec) (λ κ → to-guarded {κ} {KVS} {Word} (pr1 {lzero})) glog of arrived r → fst r; pending → stopped) = done #12
+-- the monad law at the observation: gbind (gret a) f runs as f a
+#same grun-for {KVS} {Word} {Word → Word} 4 kv-world (λ κ → gbind {κ} {KVS} (gret #3) (λ a → to-guarded {κ} {KVS} {Word} (pr1 {lzero}))) empty-st = grun-for {KVS} {Word} {Word → Word} 4 kv-world (λ κ → to-guarded {κ} {KVS} {Word} (pr1 {lzero})) empty-st
