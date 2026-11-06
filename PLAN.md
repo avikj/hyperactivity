@@ -42,7 +42,11 @@ this a good language" but "what follows": what the hot path becomes, what a C++ 
 looks like from here, what every feature of every frontier language *is* once equality is
 primitive. Answers were expected at full strength and from these premises; answers built
 from what is common in languages ("here is how other systems do it") were called losing the
-plot. All of it is research scope and all of it is current scope.
+plot. The stated goal is to supersede the features of every frontier language — C++ first
+(every feature added or proposed in recent years was gone through), then Rust, Haskell,
+OCaml, Lean, Agda, Erlang, Zig, Mojo, Julia, and the rest — and the ledger in section 16 is
+the measure of that goal, not a survey. All of it is research scope and all of it is
+current scope.
 
 **What compilation is here (section 5).** The owner's starting objection: "I can define a
 native function f(x) in any language — what does *first-order* add?" The answer that held:
@@ -54,7 +58,11 @@ inductive types is the line between what has a native form and what is read by t
 Binding time is then one axis with four points (now; C++ build; run-known, i.e. a JIT;
 run) and a single back end: what is known at each stage is substituted at that stage. The
 checker's own decision reflects on values, so it is never first-order; it runs on the net.
-Codata is unfolded only on observation. Schedules — what to inline, fuse, specialize, and
+What falls outside the first-order fragment (open dimensions, higher inductive types,
+Kan operations on open terms, reflection) is *not* a limitation and must not be written up
+as one — the owner rejected a draft that listed four such "limits": they are the machine's
+own domain, read by the net at work proportional to the result, and the fragment is just
+the part that also has a native form. Codata is unfolded only on observation. Schedules — what to inline, fuse, specialize, and
 to what generality — are values the specializer takes, not pragmas.
 
 **Byte-level control (section 6).** The owner asked whether this gives C-level control of
@@ -87,7 +95,11 @@ fragment has its own semantics, so re-import and translation validation are the 
 Executors and senders/receivers are relevant: codata and processes map to senders
 (stdexec, becoming `std::execution`), handlers to schedulers, stopped outcomes to stop
 tokens. C++26 is not yet a usable target in compilers; C++20 plus stdexec is, with
-contracts under `__cpp_contracts`.
+contracts under `__cpp_contracts`. The system to be lifted is situated in the world —
+feeds, books, strategies, risk, deployment, the NIC — and the owner's demand was the
+*entire* trading system in this language with the world boundary explicit (section 10.2),
+not a kernel of it; "what about `std::thread`" and "what about arbitrary syscalls" were
+tests of whether that demand holds, and the answers above are what makes it hold.
 
 **What a law is, and what survives erasure.** A law is an identity about operations (a
 path), consumed by the specializer: it rewrites along it before erasure. The owner asked
@@ -98,7 +110,9 @@ was rejected outright. The resolution, in the owner's words, "compilation can al
 things": laws are used, not exported; what survives is `[[assume]]` where an instance of a
 proven law is a C++ expression, contracts at consumer boundaries, and optionally
 certificates (`static_assert` by exhaustion). The library now does exactly this
-(`run.py`'s `law` and `assume` cases).
+(`run.py`'s `law` and `assume` cases). The owner also asked whether anything provable
+remains provable in the lifted state: yes — the system lives in the theory with all its
+proofs; the C++ image is a projection of it, and nothing is proved *in* the image.
 
 **HoTT versus HOTT.** Whether the machine can run HoTT "as CCHM" was called a research
 question by the builder; the owner objected that CCHM supports HoTT, and the resolution is
@@ -127,8 +141,13 @@ fallback as "definitions are not unfolded under neutral arguments" — wrong, re
 in one document; will not read a draft that needs a critical read (do it yourself and
 proceed); wants the complete list of remaining changes with reasons before work continues;
 wants questions only when more work could not answer them; forbids subagents on this work;
-never "the final"; everything implementable is in scope now. Commits carry the attribution
-lines in the git log and are pushed at once; pull before every commit.
+never "the final"; everything implementable is in scope now. The working mode that was
+asked for and worked: continuous autonomous work for hours ("continue, don't stop"),
+pulling often, short messages with commit hashes as things land, no waiting on test runs;
+reports relayed from the other session are checked against the code before being acted on
+(one said the machine "can't run Agda"; it was wrong). Answer the question that was asked;
+an answer to a neighbouring question reads as no answer. Commits carry the attribution lines
+in the git log and are pushed at once; pull before every commit.
 
 ### The decisions, with their reasons (settled; reopen only with a new argument)
 
@@ -257,7 +276,11 @@ in the header.
    the store): what is being built and why in that form.
 3. Section 12 (the build list with statuses) and section 13 (the trusted surface).
 4. Section 18's status paragraphs (18.1, 18.2, 18.3, 18.5, 18.6, 18.7, 18.13, 18.14) and
-   18.12's elaborator findings; the full specs only for the item you take on.
+   18.12's elaborator findings; the full specs only for the item you take on. The specs of
+   section 18 are drafts written before the items were built and critically reviewed by
+   their author, not by the owner; where a status paragraph and the spec text differ, the
+   status paragraph (what was built, with its commit) is the truth and the spec is the
+   intention it was built against.
 5. `README.md` §9 and these files, in this order, each with its readings at the end:
    `lib/code.cub` (the Code type), `lib/fo.cub`, `lib/lower.cub`, `lib/specialize.cub`,
    `lib/repr.cub`, `lib/emitu.cub`, `lib/linproof.cub` (how proofs are written in this
@@ -273,7 +296,9 @@ Why does a stuck primitive operation without a code block specialization of anyt
 byte layer? Why is the checker's decision not first-order? What does "work proportional to
 result size" promise and not promise? Why is the inductive process type in Church form, and
 what exactly waits on 18.18? What does `tools/names.py` protect against, and why is it in
-`make test`? If any answer is missing, read the section that holds it.
+`make test`? Why are open dimensions and higher inductive types not limitations of the
+compiler? What is section 16's ledger for, and what does an unanswered row become? If any
+answer is missing, read the section that holds it.
 
 ---
 
