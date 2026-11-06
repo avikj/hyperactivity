@@ -753,6 +753,116 @@ is a circuit; Clash and Bluespec are the precedents).
 Precedents that validate the design: Low\*/KaRaMeL (HACL\* in Firefox and Linux), Lean 4 and
 Idris 2 to C.
 
+### 5.5 Compilation and the JIT, worked through
+
+The sections above are the compressed form; this is the same content rebuilt from the
+beginning with the examples that exist in the repository, because the questions "what does
+first-order mean", "what is a JIT here", and "how is this different from Julia, Zig, GHC
+rules, Halide, C++ templates" were each asked and answered at length, and the answers are
+part of the design.
+
+**One term, four moments it can be known.** Take `fibw : Word → Word` (fib by word
+elimination over a pair). Applied to `#30`, everything is known now: the net normalizes
+`fibw #30` to `#832040` and there is nothing to compile — normalization *is* the compiler
+at binding time "now". Applied to a variable `w`, the net still normalizes: it unfolds `fibw`
+to its body, the elimination on `w` is stuck on the unknown, and the normal form is the
+loop itself with `w` free (`cwelim w (0,1) (λ k p → (snd p, fst p + snd p))`). That normal
+form is *first-order* — it mentions no dimension, every type in it is fixed, its input and
+output are words — so it is handed to the back end, which lowers it to the first-order form
+(`lib/lower.cub`: a `floop`), and prints it as C (`lib/emitu.cub`): a `for` over a
+`uint64_t` and a struct of two words. The variable `w` has become a parameter: that is the
+binding time "never fixed". If instead the consumer is a C++ translation unit that knows
+`w` at *its* build, `w` is a template parameter and the consumer's compiler does the
+substitution: binding time "C++ build". And if `w` is known at a moment during the run — a
+message layout learned at startup, a table size read from a config — the specializer runs
+*then*, on the term with that value substituted, and the result is compiled and cached:
+binding time "run-known", which is the JIT. There is one term and one back end; the only
+decision per free variable is when it is known.
+
+**What "first-order" adds over "I can write a native f(x) in any language".** In any
+language a function is compiled once and covers every argument. Here too — but the class of
+terms a compiled definition covers is exactly the class whose answers are plain data: terms
+with no interval dimension, whose types are fixed at the boundary, whose inputs and outputs
+are path-free inductive data, with no composition or transport left over an unknown
+dimension and no reflection on the value. The criterion (B13, `lib/stage.cub`) decides
+membership and names the reason when a term is outside it (`dim`, `dep-type`, `higher`,
+`kan`, `reflect`, `mult`). What is outside is not rejected: it is read by the net, at work
+proportional to the result, where paths, higher inductive types and the universe compute.
+The owner's phrasing of the line is exact: ordinary inductive types versus higher inductive
+types. A proof is a term over paths; it normalizes on the net; what it *proves about* a
+first-order term is what the back end uses (a bound becomes an `ASSUME`), and the proof
+itself is erased by usage.
+
+**A path argument does not force the net.** `decode` takes `h : le (plus i 8) n` and passes
+`bound-i4 i n h` to `load32`. The bound is a certificate checked by evaluation
+(`lib/decode.cub`): `cert-check` evaluates to `true` and `cert-sound` turns that into the
+proof. At lowering, the proof's usage is zero (it reaches nothing that is read at run time),
+so it is dropped, and the fact it carried is printed as `ASSUME((i + 4) < (n + 1))` for the
+C compiler. A transport along a *known* equivalence likewise reduces during normalization
+(transport along `ua e` runs `e`); only a transport along an unknown dimension stays on the
+net. So "the term has proofs in it" is never the reason a term is not native.
+
+**The JIT is a specialization point, and its cache is the store.** When `v` becomes known
+at run time, the machine substitutes `v` into the term and normalizes; the result, if
+first-order, is compiled and stored under the key of the specialized term — the hash of its
+elaborated form, which includes `v`. The next time the same term is specialized on the same
+value, the key is already in the store and nothing is compiled. There is no speculation, no
+deoptimization and no invalidation: a key is the content, so it can never go stale, and a
+term that is not first-order after substitution simply keeps running on the net, which is
+always correct. This is the difference from a JVM or V8 JIT (profile, speculate, deoptimize)
+and from Julia (specialize per method on argument *types*, cached per signature, with no
+proofs between the specializations): here specialization is on known *values and types
+alike*, every specialization is an identity (the justifying path), and the cache is
+content-addressed.
+
+**What the specializer does, in order** (`lib/specialize.cub`, running on the net, itself a
+term): normalize the code at its type (evaluate, then quote the value back to a code —
+definitions unfold, known arguments reduce, unknown ones stay as variables); rewrite along
+the rules the schedule names — theorems of the store read as directions (`lib/rules.cub`:
+`plus-assoc`, `plus-zero`, map fusion), under a bound; consume the representations
+(`lib/repr.cub`: `plus` on a `Nat` represented by `Word` is the machine's add; a call of
+`load64 n b off pf` is the native load with the length and the proof gone and an `ASSUME`
+in their place; a closed `Nat` is the word it represents); lower to the first-order form;
+lift closures and recursions to definitions; print. The schedule (`Sched`, B13's stage
+types) is a value: how many rewrites, what to inline and fuse, how general to keep the
+result. Every candidate schedule yields a correct program, so tuning is search over
+schedules with nothing to verify afterwards. That is Halide's algorithm/schedule split with
+the schedule's correctness by construction rather than by the schedule language's design.
+
+**Rewriting along theorems, versus GHC RULES.** A GHC rule is a syntactic rewrite the
+compiler trusts. Here a rule is a checked theorem whose two sides are quoted from its type
+(`rule-of`); applying it is substitution along a path; the specializer can only ever produce
+a term equal to the one it was given. `plus x 0 → x` is consumed before lowering, so the
+loop that `plus` unfolds to never reaches C (`run.py`'s `law` case).
+
+**Zig `comptime`, C++ `constexpr`, templates.** All three substitute values known at compile
+time, and nothing else: they cannot specialize on a value known at run time, cannot act on
+a term with an unknown inside (Zig's comptime evaluator stops at the first unknown), and
+carry no laws. Here the same mechanism — normalization — runs at every binding time, with
+unknowns, and the laws it applies are theorems. The C++ image (section 10) is the choice to
+*stop* specializing at the point C++ can still express — so the exported header keeps a
+template where C++ would, and the consumer's compiler does the rest.
+
+**Strictness and codata.** A closed checked term of inductive type normalizes, so for it
+strict and lazy evaluation agree and strictness is a schedule choice. Codata (a process, a
+stream) has as its normal form its stuck call; native code unfolds it only when observed, to
+the depth observed; a native stage that forced codata would loop. That is why a process
+compiled against its world is a function of the store it reads (`run.py`'s `process`), and
+why the run-forever form of processes waits on the guarded (▸) types.
+
+**The call boundary and readback.** A closed application of a compiled definition to
+constructor-built arguments is a native call; the result comes back as cells, or as an
+opaque native cell read through the inverse of the representation's equivalence. Nothing
+crosses the boundary without a type on both sides.
+
+**Where this stands today.** The pipeline above runs end to end on seventeen programs
+(`experiments/fo/run.py`), with the boxed and the unboxed printer. Still machine-side: a
+code for stuck primitive operations (so a term over the byte layer can be quoted and
+specialized under an unknown input; `lib/repr.cub` lowers the source code directly until
+then), the specializer calling `first-order` before lowering and reading the schedule's
+stages, the JIT's specialization points and the store holding compiled code under keys.
+Each is in section 12's queue with its reason.
+
 ## 6. Representations
 
 Each is an equivalence between a type and its encoding; there is no other kind.
