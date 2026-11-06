@@ -66,6 +66,45 @@ compare-fields d ks ks2 n r n2 r2 j t =
                   else capp (capp (fromopt (derive-eq (snd k)) c-false) outer-f) inner-f)
           rest = compare-fields d kr ks2 n r n2 r2 (%wsucc j) (if %weq (fst k) #1 then %wsucc t else t)
       in (case kr of lnil → this; _ → c-and this rest)
+lapp : List Word → List Word → List Word
+lapp xs ys = case xs return (λ w → List Word) of nil → ys; cons x r → cons x (rec r)
+lapp-same : List Word → List Word → Bool
+lapp-same xs ys =
+  case xs return (λ w → List Word → Bool) of
+    nil → λ ys → (case ys return (λ w → Bool) of nil → true; cons y s → false)
+    cons x r → λ ys → (case ys return (λ w → Bool) of nil → false; cons y s → andB (weq x y) (rec r s))
+  ys
+-- ---------------------------------------------------------------- deriving show
+-- derive-show d: the code of a function D → List Word writing a value in preorder — each
+-- constructor's index, then its fields: a word as itself, a recursive field by the hypothesis the
+-- case provides (its own writing), a field of another data type by that type's derived writing.
+-- The same shapes as derive-eq, the same coverage (none for higher inductive types)
+list-d = didx (code (List Word))
+c-nil = ccon list-d #0 lnil lnil
+c-cons h t = ccon list-d #1 (lcons h (lcons t lnil)) lnil
+c-app a b = capp (capp (code lapp) a) b
+derive-show d =
+  case all-shapes d (nctors d) #0 of
+    none → none
+    some shapes → some (clam (ccase d (show-branches d shapes #0) (cvar #0)))
+show-branches d rest c =
+  case rest of
+    lnil → lnil
+    lcons ks more →
+      lcons (clams (%wadd (lst-count ks) (count-rec ks)) (c-cons (cwlit c) (show-fields d ks (lst-count ks) (count-rec ks) #0 #0)))
+            (show-branches d more (%wsucc c))
+-- in the branch: hyps 0.. (latest), then the fields, then x; field j is cvar (r + n - 1 - j), hyp t
+-- is cvar (r - 1 - t)
+show-fields d ks n r j t =
+  case ks of
+    lnil → c-nil
+    lcons k kr →
+      let f = cvar (%wadd r (%wsub (%wsub n #1) j))
+          h = cvar (%wsub (%wsub r #1) t)
+          this = (if %weq (fst k) #0 then c-cons f c-nil
+                  else if %weq (fst k) #1 then cforce h
+                  else capp (fromopt (derive-show (snd k)) c-nil) f)
+      in c-app this (show-fields d kr n r (%wsucc j) (if %weq (fst k) #1 then %wsucc t else t))
 -- ---------------------------------------------------------------- readings
 -- equality on Nat, derived and evaluated
 eqNat = eval-g lnil (fromopt (derive-eq (didx (code Nat))) c-false)
@@ -105,6 +144,16 @@ n1 = fcon (didx (code Nat)) #1 (lcons (fcon (didx (code Nat)) #0 lnil) lnil)
 -- and lifted: the recursion and the inner λs are definitions
 #same (case lift #1 eq-fo of lifted t2 ds k → eval-fo (table-of ds) lnil (fapply t2 (lcons n2 (lcons n2 lnil)))) = vw #1
 #same (case lift #1 eq-fo of lifted t2 ds k → eval-fo (table-of ds) lnil (fapply t2 (lcons n1 (lcons n2 lnil)))) = vw #0
+-- writing: Nat in unary, a tree in preorder with its words, a box through Nat's writing
+showNat = eval-g lnil (fromopt (derive-show (didx (code Nat))) c-nil)
+#same showNat (suc (suc zero)) = cons #1 (cons #1 (cons #0 nil))
+showTree = eval-g lnil (fromopt (derive-show (didx (code Tree))) c-nil)
+#same showTree (node (leaf #7) (node (leaf #8) (leaf #9))) = cons #1 (cons #0 (cons #7 (cons #1 (cons #0 (cons #8 (cons #0 (cons #9 nil)))))))
+showBox = eval-g lnil (fromopt (derive-show (didx (code Box))) c-nil)
+#same showBox (box (suc zero) false) = cons #0 (cons #1 (cons #0 (cons #1 nil)))
+#same derive-show (didx (code Circ)) = none
+-- a writing is injective where the equality says so: equal writings, equal by derived equality
+#same eqTree (node (leaf #1) (leaf #2)) (node (leaf #1) (leaf #2)) = lapp-same (showTree (node (leaf #1) (leaf #2))) (showTree (node (leaf #1) (leaf #2)))
 -- ---------------------------------------------------------------- deriving eq D [as name]: the derived code checked and
 -- defined at D → D → Bool (D·eq by default)
 deriving eq Nat

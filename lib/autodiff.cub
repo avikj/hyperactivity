@@ -147,3 +147,30 @@ p1 = kadd (kadd (kmul kx kx) (kmul three kx)) (kc (suc zero))
 #same snd (fwd (suc (suc zero)) p1) = pat (suc (suc zero)) (D p1)
 -- the remainder taylor computes for p1 at x = 2, h = 1: p(3) = 19 = 11 + 1·7 + 1·q, q = 1
 #same fst (taylor p1 (suc (suc zero)) (suc zero)) = suc zero
+-- ---------------------------------------------------------------- D over codes (F31: D : Code → Code)
+-- a code of the fragment — the variable 0 under one λ, plus, times, Nat literals — read as a
+-- polynomial through lib/ring.cub's bridge (an expression in the variable 0), differentiated by
+-- D, and written as a code again: the derivative of a program is a program, and taylor is the
+-- theorem about what it denotes. The bridge is unverified (18.13); D and taylor are checked
+pl-of-ex x =
+  case x of
+    ec n → some (kc n)
+    ev v → (if %weq v #0 then some kx else none)
+    eadd a b → obind (pl-of-ex a) (λ pa → omap (λ pb → kadd pa pb) (pl-of-ex b))
+    emul a b → obind (pl-of-ex a) (λ pa → omap (λ pb → kmul pa pb) (pl-of-ex b))
+ex-of-pl p =
+  case p of
+    kc n → ec n
+    kx → ev #0
+    kadd a b → eadd (ex-of-pl a) (ex-of-pl b)
+    kmul a b → emul (ex-of-pl a) (ex-of-pl b)
+-- D-code: the code of λ x → p (the body under one λ) to the code of λ x → p'
+D-code c = omap (λ p → clam (code-of-ex (ex-of-pl (D p)))) (obind (ex-of-code (lam-body c)) pl-of-ex)
+-- x·x + 3·x + 1 as a source term: its derivative's code evaluates to 2x + 3 (at 2: 7), and the
+-- derivative code is the code of what D says
+cp1 = code (λ x → plus (plus (times x x) (times 3 x)) 1)
+#same omap (λ d → eval-g lnil d 2) (D-code cp1) = some 7
+#same D-code cp1 = some (clam (code-of-ex (ex-of-pl (D p1))))
+-- outside the fragment (a second variable, a successor): none
+#same D-code (code (λ x → λ y → times x y)) = none
+#same D-code (code (λ x → suc x)) = none
