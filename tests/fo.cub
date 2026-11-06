@@ -1,0 +1,171 @@
+-- tests/fo.cub — the back end's suite (plan B14–B16, C21): codes quoted from checked definitions,
+-- lowered to the first-order form, evaluated by eval-fo, and compared with the machine's own
+-- readings (#same); the specializer's and the printers' shapes. Loaded last, after every
+-- back-end library, on the line
+--   ./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub
+--     lib/check.cub lib/std.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub
+--     lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub
+--     lib/repr.cub tests/fo.cub
+-- (the untyped libraries before lib/check.cub, as the elaborator requires).
+-- The principle of every reading below: a term runs on the net and on the first-order evaluator,
+-- and the two answers are one. The native run (gcc) of the same programs is experiments/fo/run.py.
+
+-- ---------------------------------------------------------------- helpers
+-- the word a first-order function answers on word arguments, with no definitions behind it
+t-run f args = wof (eval-fo no-defs lnil (fapply f args))
+t-w w = flit w
+t-args2 a b = lcons (flit a) (lcons (flit b) lnil)
+-- a code at a function type, specialized and run on words
+t-spec T c args = t-run (specialize T lnil c) args
+-- a whole program (the code and the definitions it calls, lowered from the store, lifted): the
+-- word definition 0 answers on the arguments
+t-prog c args = wof (eval-fo (table-of (lift-program #100000 (program-of #20 c))) lnil (fcall #0 args))
+
+-- ---------------------------------------------------------------- words: the arithmetic and the comparisons
+addw3 : Word → Word → Word
+addw3 a b = %wadd (%wadd a b) #3
+#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → addw3 a b)) (t-args2 #10 #20) = addw3 #10 #20
+subw : Word → Word → Word
+subw a b = %wsub a b
+#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → subw a b)) (t-args2 #50 #8) = #42
+-- Bool is a word (true 1, false 0): a comparison and a case on it is an if
+ltw : Word → Word → Word
+ltw a b = case %wlt a b of true → #1; false → #0
+#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → ltw a b)) (t-args2 #3 #4) = #1
+#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → ltw a b)) (t-args2 #4 #3) = #0
+maxw : Word → Word → Word
+maxw a b = if %wlt a b then b else a
+#same t-spec (Word → Word → Word) (code (λ (a : Word) (b : Word) → maxw a b)) (t-args2 #3 #9) = #9
+-- a known computation is a literal after specialization: the form carries no work
+#same specialize Word lnil (code (addw3 #1 #2)) = flit #6
+
+-- ---------------------------------------------------------------- word elimination: loops
+-- factorial by word elimination, under an unknown argument a loop; on the net and natively
+mulw : Word → Word → Word
+mulw a b = %welimP (λ v → Word) b #0 (λ k h → %wadd h a)
+factw : Word → Word
+factw n = snd (%welimP (λ v → Word × Word) n (#1 , #1) (λ k p → (%wsucc (fst p) , mulw (fst p) (snd p))))
+fact-fo = specialize (Word → Word) lnil (code (λ (n : Word) → factw n))
+#same t-run fact-fo (lcons (flit #6) lnil) = factw #6
+#same t-run fact-fo (lcons (flit #7) lnil) = #5040
+-- the shape is the projection of a loop over the state (n, i, acc) whose body continues or breaks
+#same (case fact-fo of flam b → (case b of fproj d c k l → (case l of floop i body → lst-len i; _ → #0); _ → #0); _ → #0) = #3
+-- fib over a pair: the same number as the net's reading (2,416 steps there, a for loop here)
+fibp2 : Word → Word × Word
+fibp2 n = %welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p)))
+fibw2 : Word → Word
+fibw2 n = fst (fibp2 n)
+fib-fo = specialize (Word → Word) lnil (code (λ (w : Word) → fibw2 w))
+#same t-run fib-fo (lcons (flit #30) lnil) = fibw2 #30
+#same t-run fib-fo (lcons (flit #90) lnil) = #2880067194370816120
+
+-- ---------------------------------------------------------------- pairs
+swapw : Word × Word → Word × Word
+swapw p = (snd p , fst p)
+#same eval-fo no-defs lnil (fapply (specialize (Word × Word → Word × Word) lnil (code (λ (p : Word × Word) → swapw p))) (lcons (fcon #0 #0 (t-args2 #1 #2)) lnil)) = vcon #0 #0 (lcons (vw #2) (lcons (vw #1) lnil))
+-- a pair type's first-order signature
+#same sig-ft (code (Word × Word → Word)) = (lcons (ftpair ftword ftword) lnil , ftword)
+
+-- ---------------------------------------------------------------- data: constructors, case, structural recursion
+data TL = tnil | tcons (x : Word) (xs : TL)
+tsum : TL → Word
+tsum l = case l of tnil → #0; tcons x xs → %wadd x (rec xs)
+tl3 : TL
+tl3 = tcons #5 (tcons #6 (tcons #7 tnil))
+-- the list as a first-order value, built by the lowering of its code
+tl3-fo = lower (fromopt (quote-top TL tl3) cword)
+#same t-prog (code (λ (l : TL) → tsum l)) (lcons tl3-fo lnil) = tsum tl3
+#same t-prog (code (λ (l : TL) → tsum l)) (lcons tl3-fo lnil) = #18
+-- a case returning a constructor's field, and the whole value when nothing changes (reuse: the
+-- rebuild of every field is the scrutinee itself, C21: under the two fields and one hypothesis of
+-- the cons alternative the scrutinee is variable 3)
+thead : TL → Word
+thead l = case l of tnil → #0; tcons x xs → x
+#same t-prog (code (λ (l : TL) → thead l)) (lcons tl3-fo lnil) = #5
+tsame : TL → TL
+tsame l = case l of tnil → tnil; tcons x xs → tcons x xs
+#same (case specialize (TL → TL) lnil (code (λ (l : TL) → tsame l)) of flam b → (case b of frec d x alts → (case alts of lcons a r → (case r of lcons a2 r2 → snd (snd (snd a2)); _ → flit #9); _ → flit #9); _ → flit #9); _ → flit #9) = fvar #3
+-- the derived equality (lib/derive.cub) lowered, lifted and run: Nat 2 = 2, Nat 2 ≠ 1
+deq-prog = case lift #10 eq-fo of lifted t2 ds k → (t2 , ds)
+#same wof (eval-fo (table-of (snd deq-prog)) lnil (fapply (fst deq-prog) (lcons n2 (lcons n2 lnil)))) = #1
+#same wof (eval-fo (table-of (snd deq-prog)) lnil (fapply (fst deq-prog) (lcons n2 (lcons n1 lnil)))) = #0
+
+-- ---------------------------------------------------------------- closures
+-- a λ returned and applied: lifted to a definition over its captured variable
+addk : Word → Word → Word
+addk k = λ x → %wadd x k
+ap-fo = case lift #1 (specialize (Word → Word → Word) lnil (code (λ (k : Word) (x : Word) → addk k x))) of lifted t ds n → (t , ds)
+#same wof (eval-fo (table-of (snd ap-fo)) lnil (fapply (fst ap-fo) (t-args2 #40 #2))) = #42
+
+-- ---------------------------------------------------------------- the numeric layer (B12 through B14)
+-- Int64 arithmetic wraps as the machine's: the form's own primitives answer the same bits
+i64-code = code (λ (x : Int64) → i64toWord (i64mul (i64add x (i64 #1)) (i64 #3)))
+i64-fo = specialize-r (Int64 → Word) lnil i64-code
+#same t-run i64-fo (lcons (fi64 #13) lnil) = i64toWord (i64mul (i64add (i64 #13) (i64 #1)) (i64 #3))
+#same t-run i64-fo (lcons (fi64 #13) lnil) = #42
+-- a signed comparison: -1 < 1 as Int64 (2^64-1 as the word), not as words
+i64lt-code = code (λ (x : Int64) → if i64lt x (i64 #1) then #1 else #0)
+#same t-run (specialize-r (Int64 → Word) lnil i64lt-code) (lcons (fi64 #18446744073709551615) lnil) = #1
+#same t-run (specialize-r (Int64 → Word) lnil i64lt-code) (lcons (fi64 #2) lnil) = #0
+-- Float64 (f64 w is the double of the word w): 7 → 7.0, times 3.0, back to Int64 (21); 1.0 / 2.0 < 1.0
+f64-code = code (λ (x : Int64) → i64toWord (i64off64 (f64mul (f64ofi64 x) (f64 #3))))
+#same t-run (specialize-r (Int64 → Word) lnil f64-code) (lcons (fi64 #7) lnil) = #21
+#same t-run (specialize-r (Int64 → Word) lnil f64-code) (lcons (fi64 #7) lnil) = i64toWord (i64off64 (f64mul (f64ofi64 (i64 #7)) (f64 #3)))
+half-code = code (if f64lt (f64div (f64 #1) (f64 #2)) (f64 #1) then #1 else #0)
+#same specialize-r Word lnil half-code = flit #1
+-- the stuck primitives quote (cprim) and lower to the form's primitives: a program over an unknown
+-- Int64 has no call into the net left in it
+#same fo-report (fromopt (quote-top (Int64 → Word) (eval-g lnil i64-code)) cword) = lnil
+#same fcalls (strip-flams i64-fo) lnil = lnil
+
+-- ---------------------------------------------------------------- the byte layer
+-- a store then a load at the same offset, from a typed code with its lengths and proofs: the
+-- proofs are dropped (usage 0), the fact assumed, and the value read back is the value stored
+st-ld-code = code (λ (b : Bytes 32) (v : Int64) → i64toWord (load64 32 (store64 32 b 8 (16 , λ i → 32) v) 8 (16 , λ i → 32)))
+st-ld-fo = specialize-r (Bytes 32 → Int64 → Word) lnil st-ld-code
+buf32 = fprim P-bytes (lcons (flit #32) lnil)
+#same t-run st-ld-fo (lcons buf32 (lcons (fi64 #77) lnil)) = #77
+-- the assumed fact of the dropped proof is in the form
+has-assume t = case t of fassume f b → true; flam b → has-assume b; fprim p as → has-assume-list as; _ → false
+has-assume-list l = case l of lnil → false; lcons x xs → (case has-assume x of true → true; false → has-assume-list xs)
+#same has-assume st-ld-fo = true
+-- the two-load decoder of lib/repr.cub agrees with the machine on a buffer built by the machine
+two-loads-v : Bytes 32 → Word
+two-loads-v b = plusw (i64toWord (load64 32 b 16 (8 , λ i → 32))) (i64toWord (load64 32 b 0 (24 , λ i → 32)))
+mbuf : Bytes 32
+mbuf = store64 32 (store64 32 (bytes 32) 0 (24 , λ i → 32) (i64 #5)) 16 (8 , λ i → 32) (i64 #9)
+#same t-run sum2 (lcons buf2 lnil) = two-loads-v mbuf
+
+-- ---------------------------------------------------------------- the specializer: laws consumed, rules
+-- plusw x 0 → x by the store's theorem: the lowered body is the identity
+zl-rule = fromopt (rule-of (gidx (code plusw-zero-l))) (rule #0 cword cword)
+#same specialize (Word → Word) (lcons zl-rule lnil) (clam (capp (capp (code plusw) (cwlit #0)) (cvar #0))) = flam (fvar #0)
+-- the schedule as a value: no rewrites leaves the recursion plusw unfolds to; the answers agree
+no-rw = specialize-s (sched #0) (Word → Word) (lcons zl-rule lnil) (clam (capp (capp (code plusw) (cwlit #0)) (cvar #0)))
+#same t-run no-rw (lcons (flit #9) lnil) = #9
+
+-- ---------------------------------------------------------------- in-place update (C21): meaning preserved
+-- the pass changes no answer: the readings of lib/fo.cub's samples with and without it
+#same eval-fo no-defs lnil (inplace let-upd) = eval-fo no-defs lnil let-upd
+#same eval-fo no-defs lnil (inplace let-upd2) = eval-fo no-defs lnil let-upd2
+#same eval-fo no-defs lnil (inplace loop-upd) = eval-fo no-defs lnil loop-upd
+-- a record rebuilt from a parameter: an update, copied (the base is shared); its answer
+data P2 = p2 (x : Word) (y : Word)
+bump : P2 → P2
+bump p = case p of p2 x y → p2 x (%wadd y #1)
+bump-fo = specialize (P2 → P2) lnil (code (λ (p : P2) → bump p))
+#same (case bump-fo of flam b → (case b of frec d x alts → (case alts of lcons a r → (case snd (snd (snd a)) of fupd u y c k v → u; _ → #9); _ → #9); _ → #9); _ → #9) = #0
+#same eval-fo no-defs lnil (fapply bump-fo (lcons (fcon (didx (code P2)) #0 (t-args2 #5 #6)) lnil)) = vcon (didx (code P2)) #0 (lcons (vw #5) (lcons (vw #7) lnil))
+
+-- ---------------------------------------------------------------- the printers: the shapes they print
+-- a word literal boxed and unboxed; a primitive as its operator
+#same emit #0 (flit #7) = (lcons #109 (lcons #107 (lcons #119 (lcons #40 (lcons #55 (lcons #41 lnil))))))
+#same emit-u lnil lnil #0 (fprim P-add (t-args2 #1 #2)) = (lcons #40 (lcons #49 (lcons #32 (lcons #43 (lcons #32 (lcons #50 (lcons #41 lnil)))))))
+-- a program's source begins with the runtime and ends with main; the unboxed fib is a for loop
+fib-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #30) lnil))) (lcons (#1 , (#1 , strip-flams fib-fo)) lnil)
+has-for l = case l of lnil → false; lcons a r → (case r of lcons b r2 → (case r2 of lcons c r3 → (case r3 of lcons d r4 → (if andb (%weq a #102) (andb (%weq b #111) (andb (%weq c #114) (%weq d #32))) then true else has-for r); _ → false); _ → false); _ → false)
+#same has-for (emit-prog-u fib-defs) = true
+-- the unboxed signature of fib's definition: a word in, a word out
+#same sig-of (sigs-of fib-defs) #1 = some (lcons tW lnil , tW)
+-- the library form exports definition 0 as cubical_entry over the same types
+#same lst-len (entry-u (sigs-of fib-defs) #0) = #47
