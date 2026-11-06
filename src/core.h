@@ -208,6 +208,7 @@ enum {
     O_PIM,      /* 0=m (word) 1=A 2=B 3=out: a Π type with its binder's multiplicity m */
     O_FMULT, O_FMULT2, O_FMULT3,   /* (%fmult d c k): the multiplicity of field k of constructor c of checked data type d; words in turn */
     O_LINEAR,   /* 0=d (word) 1=out: is the checked data type d linear (a constructor with a field at 1)? a Bool */
+    O_GSTEPS,   /* (%gsteps n): the steps checked definition n took to check (word; 0 unknown) */
     O_GUSAGE, O_GUSAGE2,   /* (%gusage n k): the computed usage (word) of parameter k of checked definition n; 2 when unknown */
     O_PTY,      /* (%pty k): the primitive type of kind k (a word): 0=k 1=out */
     O_BYTESTY,  /* (%bytesty n): the type Bytes n: 0=n 1=out */
@@ -352,6 +353,7 @@ extern long case_hcomp_global;
 #define LVL_TAG (1ull << 62)
 int data_checked_index(int d);
 int checked_data(long k);   /* the data type of checked index k, or -1 */
+long global_steps(long n);        /* the steps checked definition n took to check; 0 unknown */
 int global_usage(long n, long k);   /* the computed usage of parameter k of checked definition n (0, 1, 2); 2 unknown */     /* a data type's index in the checker's signature, or -1 */
 int con_index(const char *name);   /* a constructor by name, or -1 */
 enum { TB_VAL, TB_TY, TB_DTAB, TB_DENT, TB_TRANS, TB_REP, TB_N };   /* TB_TRANS: a data type's transport as a function; TB_REP: a checked data type's first representation (B12), a type */

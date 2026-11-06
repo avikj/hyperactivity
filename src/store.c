@@ -208,6 +208,20 @@ static bool store_checked(const char *key) {
     free(c);
     return hit;
 }
+/* the steps on the key's ok line for the current checker (the latest such line), 0 when none */
+static long store_steps(const char *key) {
+    if (!chk_salt[0]) return 0;
+    char *c = store_read(key, "check"); if (!c) return 0;
+    long steps = 0;
+    for (char *l = c; *l; ) {
+        char *e = strchr(l, '\n'); if (e) *e = 0;
+        char *sp = strrchr(l, ' ');
+        if (sp && !strcmp(sp + 1, chk_salt) && !strncmp(l, "ok ", 3)) steps = atol(l + 3);
+        l = e ? e + 1 : l + strlen(l);
+    }
+    free(c);
+    return steps;
+}
 /* the names log: name key time; read once, the latest key of each name kept */
 typedef struct { char *name; char *key; } NameBind;
 static NameBind *NB; static size_t capnb; static int nnb; static bool nb_read;

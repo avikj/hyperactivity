@@ -201,7 +201,7 @@ static bool node_eq(Node *a, Node *b) {
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
-    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%ptr-of", "%region-at", "%ffi", "%native",
+    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%ptr-of", "%region-at", "%ffi", "%native",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
 /* the keywords, in an open-addressed table (asked of every symbol the compiler walks) */
@@ -696,6 +696,14 @@ static void usage_set(int k, int n, const char **nm, const unsigned char *u) {
     for (int i = 0; i < n; i++) { GUSAGE[k].nm[i] = intern(nm[i]); GUSAGE[k].u[i] = u[i]; }
 }
 int global_usage(long n, long k) { return n >= 0 && (size_t)n < capgusage && k >= 0 && k < GUSAGE[n].n ? GUSAGE[n].u[k] : 2; }
+/* the steps the checker took to accept checked definition n (18.14's cost model, first form: recorded
+ * steps per key), from this run or from the store's ok line; 0 when unknown */
+static long *GSTEPS; static size_t capgsteps;
+static void gsteps_set(long k, long steps) {
+    if ((size_t)k >= capgsteps) { size_t c = capgsteps ? capgsteps : 256; while (c <= (size_t)k) c *= 2; GSTEPS = realloc(GSTEPS, c * sizeof(long)); memset(GSTEPS + capgsteps, 0, (c - capgsteps) * sizeof(long)); capgsteps = c; }
+    GSTEPS[k] = steps;
+}
+long global_steps(long n) { return n >= 0 && (size_t)n < capgsteps ? GSTEPS[n] : 0; }
 int checked_data(long k) { return k >= 0 && k < nchkdata ? CHKDATA[k] : -1; }
 /* the checker's tables: entry i of each is a global, so a lookup is a reference */
 static long *TABLE[TB_N]; static size_t TABCAP[TB_N]; static long TABN[TB_N];
@@ -1927,7 +1935,7 @@ static Syn *compile(Node *t) {
         static const struct { const char *name; int kind, n; } PR[] = { { "%view", O_VIEW, 1 }, { "%ieq", O_IEQ, 2 }, { "%feq", O_FEQL, 2 }, { "%clauses", O_CLAUSES, 1 }, { "%dnf", O_DNF, 1 }, { "%motive", O_MOTIVE, 1 },
             { "%restrict", O_RESTRICT, 2 }, { "%abs", O_ABS, 2 }, { "%branch", O_BRANCH, 3 }, { "%clos", O_CLOS, 2 }, { "%wsucc", O_WSUCC, 1 }, { "%weq", O_WEQ, 2 }, { "%wlt", O_WLT, 2 },
             { "%wadd", O_WADD, 2 }, { "%wmax", O_WMAX, 2 }, { "%wsub", O_WSUB, 2 }, { "%welim", O_WELIM, 3 },
-            { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 },
+            { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 }, { "%gsteps", O_GSTEPS, 1 },
             /* primitive types and values (B12) */
             { "%pty", O_PTY, 1 }, { "%bytesty", O_BYTESTY, 1 }, { "%pval", O_PVAL, 2 }, { "%bytes", O_BYTES, 1 }, { "%blen", O_BLEN, 1 }, { "%ptr-of", O_PTROF, 1 }, { "%region-at", O_REGAT, 2 }, { NULL, 0, 0 } };
         /* the primitive operations, (%i64add a b) ...: O_POP1/O_POP2 with the operation in x; the loads and
@@ -3178,6 +3186,7 @@ static void toplevel(Node *f) {
             Node *td = nlist(3); td->it[0] = nsym("def"); td->it[1] = nsym(ty); td->it[2] = nl2("%%sig-type", cT);
             toplevel(td);
             int ck = sig_add(f->it[1]->s, global_lookup(f->it[1]->s), global_lookup(ty), false);
+            gsteps_set(ck, stored ? store_steps(key) : steps);
             ckey_set(ck, key); deps_take(&CDEPS, &capcdeps, ck);
             /* the parameters' computed usages (B11): asked of the checker (or read from the store),
              * kept, and recorded with the module's forms so a cached load has them */

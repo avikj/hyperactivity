@@ -37,3 +37,7 @@ unfold : {A : Type} → (A → A) → A → Orbit A
 #unbind double
 -- an unbound name releases nothing another name reaches (double shares its key with twice)
 #gc
+-- the steps a definition took to check are kept with its key: read in-language (%gsteps, the cost
+-- model's recorded-steps table, 18.14) in both runs, the second from the store's ok line
+steps-of c = case c of cglob n → %gsteps n; _ → #0
+#same %wlt #0 (steps-of (code twice)) = true

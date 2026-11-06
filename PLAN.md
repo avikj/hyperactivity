@@ -1140,7 +1140,10 @@ port (A10b) is the checker at scale and gates E28.
 ### A. The rewriting runtime
 1. Concurrency: wires as variables, no locks, per-worker deques, in-flight termination. DONE.
 2. DONE at `9b94b43` (boxes are holder-counted and erased by the last holder; see core 5).
-3. Globals from compiled templates. Essential, small.
+3. DONE in the form the runtime has (`1010151e`, `e61e081a`; `global_copy` in `src/lang.c`):
+   a definition whose value is a closed λ, a constant constructor or a data type is built from
+   its compiled syntax at every reference (one cell, no copy); any other is copied lazily one
+   level at a time from the held value, named by the definition's key.
 4. Intervals, faces, substitutions in the cell. Essential. Partly DONE. **Bitmask formulas
    are a decision, not a remainder**: dimensions are 64-bit names never reused, and bitmasks
    want per-scope indices, so this changes how formulas name dimensions; worth doing (Dnf
@@ -1165,7 +1168,11 @@ port (A10b) is the checker at scale and gates E28.
 9. DONE (`15625ce`, `91c128b`): interned symbols, free names kept per node, one desugaring,
    kept arena chunks; the compiled-form cache beside the recorded forms. Cached library
    load 0.105 s; Brunerie end to end 0.35 s, computation about 0.25 s.
-10. Brunerie's original number at 1–16 workers, and Agda measured on the same machine (doable;
+10. Measured 2026-11-06 on a 2-core container (`CUBICAL_NOCACHE=1`, end to end): 2.6 s at 0
+    workers, 3.6 s at 1, 2 and 4 (no gain on two cores; the number's own computation is about
+    0.3 s of it, the rest library checking); 619,852 steps, −2 at every count. Agda is not
+    installed there (no package installs in that container), so the same-machine comparison
+    is still open. Brunerie's original number at 1–16 workers, and Agda measured on the same machine (doable;
     it is a measurement, on the builder's queue). Demonstration. **10b. DONE (`546bdb8`):**
     `experiments/brunerie/typed.cub`, a signature on every definition, 229 checks; −2 in
     3.16M steps (untyped 1.26M; std's path algebra and the generic set-eliminators are the
@@ -1270,8 +1277,11 @@ identity; linear values are introduced only in `primitive` definitions.
 34. ★ DONE (`1c5282a`, `src/store.c`): keys as the SHA-256 of the canonical elaborated form
     (names outside), the store under `CUBICAL_STORE` with one line per accepting checker, a
     definition accepted by the current checker not checked again, `#key`/`#names`/`#history`;
-    `lib/std.cub` against a filled store: 145 of 145 checks skipped. Open: retention by
-    reachability as a command, the runtime key per compiler version (B16).
+    `lib/std.cub` against a filled store: 145 of 145 checks skipped. Retention by reachability
+    is `#gc` (`store_gc_cmd`); the certificate's checker name hashes the running binary
+    (`dd301c8`), the runtime key per compiler version. `%gsteps n` (2026-11-06) reads the steps
+    a checked definition took, from the run or from the store's ok line: 18.14's cost model
+    table in-language (`lib/cost.cub` can consume it).
 
 ### G. Scale
 35. Distribution by keys over wires; the net on GPUs. Optional now.
