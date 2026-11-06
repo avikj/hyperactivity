@@ -4113,6 +4113,34 @@ int cubical_call(const char *name, const uint64_t *args, int n, uint64_t *out) {
     if (!strcmp(r, "false")) { *out = 0; return 0; }
     return -1;
 }
+/* --serve (item 30, the editor protocol's first form): after the files, requests from the standard
+ * input, each a block of surface declarations ended by a line holding a single '.', processed as a
+ * file would be (checks, readings and errors printed as usual); a fatal error ends the request, not
+ * the machine; each reply ends with a line holding '.'. A definition is declared once: an editor
+ * sends new declarations and readings, and restarts the machine to redefine (there is no retraction).
+ * Run with CUBICAL_WORKERS=0 unless the requests are independent of each other's errors */
+static void serve(void) {
+    static char *buf; static size_t cap;
+    size_t len = 0; char line[65536];
+    fflush(stdout);
+    for (;;) {
+        if (!fgets(line, sizeof line, stdin)) break;
+        if (!strcmp(line, ".\n") || !strcmp(line, ".")) {
+            if (len) {
+                buf[len] = 0;
+                jmp_buf jb; if (setjmp(jb) == 0) { die_jb = &jb; load_surface(buf, "<serve>", false); die_jb = NULL; }
+                else { die_jb = NULL; printf("error: %s\n", die_msg); }
+                net_drain();
+            }
+            len = 0;
+            puts("."); fflush(stdout);
+            continue;
+        }
+        size_t l = strlen(line);
+        if (len + l + 2 > cap) { cap = (len + l + 2) * 2; buf = realloc(buf, cap); }
+        memcpy(buf + len, line, l); len += l;
+    }
+}
 #ifdef CUBICAL_LIB
 int cubical_main(int argc, char **argv)
 #else
@@ -4148,8 +4176,10 @@ int main(int argc, char **argv)
          * back and compared, while f is loaded */
         if (!strcmp(argv[i], "--print") && i + 1 < argc) { convert_file(argv[++i], false); fflush(stdout); _Exit(0); }
         if (!strcmp(argv[i], "--roundtrip") && i + 1 < argc) { convert_file(argv[++i], true); continue; }
+        if (!strcmp(argv[i], "--serve")) continue;
         load_file(argv[i], true);
     }
+    for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--serve")) serve();
     /* steps performed so far: a reading only when the workload has normalized (show) */
     printf("%d passed, %d failed; %ld interaction steps performed; %ld memo hits, %ld shared keys; %ld cells live; %ld payloads live\n", passes, failures, stat_steps, stat_hits, stat_keys, stat_cells, stat_payloads);
     prof_print();

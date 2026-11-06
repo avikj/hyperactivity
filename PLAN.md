@@ -1144,14 +1144,16 @@ port (A10b) is the checker at scale and gates E28.
    a definition whose value is a closed λ, a constant constructor or a data type is built from
    its compiled syntax at every reference (one cell, no copy); any other is copied lazily one
    level at a time from the held value, named by the definition's key.
-4. Intervals, faces, substitutions in the cell. Essential. Partly DONE. **Bitmask formulas
+4. Intervals, faces, substitutions in the cell. Essential. Partly DONE; the bitmask design
+   is 18.19 (written 2026-11-06, not built). **Bitmask formulas
    are a decision, not a remainder**: dimensions are 64-bit names never reused, and bitmasks
    want per-scope indices, so this changes how formulas name dimensions; worth doing (Dnf
    allocations are the remaining payload traffic) and to be designed as such.
 5. DONE (`07053c5`): node arena marked and released per compile; cells and slots from
    per-thread slabs returned between readings.
 6. DONE (`e0f27ef`): records and case tables interned by structure so equal bodies have one
-   key. Indices at key time: still open, small.
+   key. "Indices at key time" is not specified further in this document; records are keyed
+   by their interned pointer (`K_LAM` over the record and its environment's keys, `synkey`).
 7. CLOSED, not landed (`937fc2e`): the skip saved 1.8% and made counts schedule-dependent;
    the schedule-independent form needs a dimension-free bit on every wire, a design change
    not worth 1.8%. Two key bugs found under it were fixed (interval/face keys follow their
@@ -1252,7 +1254,18 @@ identity; linear values are introduced only in `primitive` definitions.
 29. Translator from agda/cubical (Agda's `transp`/`hcomp` to CCHM `comp` by the standard
     interdefinability; Mathlib is not a source: its quotients, funext and propext are axioms).
     Essential for value.
-30. Incremental checking, editor protocol, errors, debugger by replay, step profiles. Essential.
+30. In parts (2026-11-06): incremental checking is the store (a definition accepted by the
+    current checker is not checked again, F34) and the module cache; the editor protocol's
+    first form is `--serve` (`src/lang.c`): after the files, blocks of surface declarations
+    from the standard input, each ended by a line `.`, processed as a file would be, a fatal
+    error ending the request and not the machine, each reply ended by `.`; there is no
+    retraction (a name is declared once; an editor restarts the machine to redefine). Errors
+    print on stdout as well as stderr with the term at fault (`explain`). Step profiles:
+    `CUBICAL_PROFILE=1` (whole run) and `=show` (per reading), `%gsteps` per definition.
+    A debugger by replay: a process's run is a value replayed by `lib/proc.cub` (D25's
+    recording); stepping the net itself is `CUBICAL_TRACE` (a trace file). Open: retraction,
+    positions in error messages (file:line for checked definitions; the surface parser has
+    them, the checker's verdict names the term), an LSP wrapping of `--serve`.
 
 ### F. Programs about programs
 31. DONE in parts: `deriving eq D` (`1c5282a`), `deriving show`/`derive-show` (`896713ea`),
@@ -2682,6 +2695,41 @@ checks with no primitive.
 **Acceptance.** The three recursors in the port check with their primitives removed;
 `tests/hit.cub` gains a `Trunc` eliminator into a set whose `isSet` argument is consumed in
 the `squash` branch; every suite unchanged across workers and memo on/off.
+
+### 18.19 A4 — Bitmask formulas: a design note (2026-11-06)
+
+Today a formula is a `Dnf` of clauses of literals `dim << 1 | polarity` over 64-bit dimension
+names never reused (`src/dnf.c`); meet, join, negation and substitution allocate; the
+profile shows Dnf allocation as the remaining payload traffic (A4's note). The bitmask form:
+
+- **Scopes.** A dimension scope is an ordered set of at most 64 live dimensions; a formula
+  in a scope is a set of clauses, each clause two 64-bit masks (the positive and the negative
+  literals by index). Meet of clauses is two ORs and a contradiction test (`pos & neg`), join
+  is a clause-set union with subsumption by mask inclusion, negation is De Morgan over the
+  masks, a face `r = ε` is one clause. No allocation for formulas of at most a few clauses
+  (inline arrays), and the DNF normal forms the machine compares (`dnf_equal`, keys `K_IV`)
+  become mask comparisons.
+- **Where the scope lives.** A frame's dimensions (its `plam`s and the fresh dimensions
+  of its `comp`s) are the natural scope: compiled records already carry slots for them
+  (`bind_dim`), so the index is the slot. A value crossing frames (a box shared by two
+  readers under different substitutions) needs a renaming at the boundary: the box records
+  its scope (the dimensions free in it, by index) and a reader supplies the map from the
+  box's indices to its own; a substitution `Subst` is then a map from indices to formulas in
+  the reader's scope, applied as a mask rewrite. Dimension names stay 64-bit and global
+  (keys, printing, determinism) — the index is a per-scope cache of the name, not a
+  replacement: `scope[i] = name`.
+- **Keys.** A formula's key (`K_IV`, `K_FACE`) must not depend on the scope's ordering, so
+  the key is computed from names (today's form), not masks: masks are the working form and
+  names the canonical one; the conversion is a table lookup per literal.
+- **What it costs.** `src/dnf.c` gains a mask representation beside the clause lists
+  (~250 lines) and the substitution/restriction rules in `src/net.c` use it where both
+  operands are in one scope (~150 lines); frames gain a scope table (~40 lines). The
+  acceptance is the profile: Dnf allocation leaves the top of the payload traffic, the
+  suites identical across workers and memo on/off (a per-scope index must not change any
+  step count: the rewrite rules see the same formulas).
+- **Not chosen.** Replacing names by indices outright (bitmasks as the only form): keys and
+  printing would then depend on binding order, and a formula shared by two scopes would need
+  two identities; the determinism claim (A1) rests on names.
 
 ### 18.18 E28b — Strict positivity under Π codomains and Σ components
 
