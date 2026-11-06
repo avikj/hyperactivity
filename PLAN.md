@@ -16,10 +16,23 @@ decision made quickly costs more than the reading.
 
 ### What this is
 
-A cubical type theory (CCHM) whose runtime is an interaction net, whose checker is a term on
-that same runtime, and whose claim is foundational: computation has one correct form —
-substitution along identities — and every existing language is an approximation to it made
-without equality as a primitive. The project is not "a dependently typed language with a
+Homotopy type theory, in its cubical form (CCHM: De Morgan connections, generalized
+composition, Glue, univalence as a theorem that computes), with an interaction net as its
+runtime, its checker a term on that same runtime, and a foundational claim: computation has
+one correct form — substitution along identities, which here are paths — and every existing
+language is an approximation to it made without equality as a primitive. Univalence is not
+a feature of the theory used somewhere; it is the mechanism by which everything in this
+document is derived. A representation of a type by a layout is an equivalence, hence by
+`ua` a path in the universe, and *compiling* is transporting a program along that path;
+converting between two layouts is transport along the composite; the proof that an
+optimization is safe is a path between two programs, and rewriting along a law is
+substitution along it; a replay is a path between two runs; a higher inductive type is data
+with path constructors, and a quotient's canonical form is its decoding equivalence into
+path-free data; the store names a term by its elaborated content, so two definitions that
+are the same term are one key, and the identities the store holds are the view navigation
+moves in. The net computes `comp`, `hcomp`, `transp` and Glue on open terms — that is what
+"normalizing a term with open dimensions" in section 0 refers to, and the A8 measure is the
+cost of exactly that. The project is not "a dependently typed language with a
 compiler"; it is the position that compilation, memory layout, concurrency, build systems,
 versioning and contracts are all *derived* here from the one theory (section 16's ledger of
 ~90 frontier-language features says, row by row, what each is a consequence of). Sections
@@ -297,8 +310,10 @@ byte layer? Why is the checker's decision not first-order? What does "work propo
 result size" promise and not promise? Why is the inductive process type in Church form, and
 what exactly waits on 18.18? What does `tools/names.py` protect against, and why is it in
 `make test`? Why are open dimensions and higher inductive types not limitations of the
-compiler? What is section 16's ledger for, and what does an unanswered row become? If any
-answer is missing, read the section that holds it.
+compiler? What is section 16's ledger for, and what does an unanswered row become? Where exactly
+does univalence compute in the path from a definition to the C that runs — name the
+equivalence, the path, and the transport? If any answer is missing, read the section that
+holds it.
 
 ---
 
@@ -564,6 +579,18 @@ Measured, open:
   decision procedures: `linproof`, `eqproof`, `ring`; processes: `proc.cub`.)
 
 ## 4. Semantics
+
+The theory is homotopy type theory with univalence computing, presented cubically after
+Cohen–Coquand–Huber–Mörtberg: an interval with De Morgan connections, path types as
+functions out of it, composition `comp` and its generalization, `Glue` giving univalence as
+a term, higher inductive types as data with path constructors, and universes closed under
+all of it. Nothing in the system is a postulate over this: the composition clauses at every
+type former are terms of `lib/prelude.cub`, and the checker that decides the theory is a
+term of `lib/check.cub` on the same net. Univalence is what makes the rest of this document
+possible rather than aspirational: a representation (section 6) is an equivalence and so a
+path, a specialization (section 5) is a transport, the identities the store holds (section
+11) are the paths navigation moves along (section 15), and the C++ image (section 10) is a
+projection of a system whose proofs are all paths in this theory.
 
 The net normalizes open terms: terms with free variables and free interval dimensions, giving
 a term with those unknowns still in it. This is what makes paths, higher inductive types, Glue
