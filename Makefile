@@ -6,16 +6,16 @@ SRC := src/dnf.c src/big.c src/net.c src/lang.c
 
 all: build/cubical
 
-build/cubical: $(SRC) src/core.h src/syntax.c src/store.c src/sha256.c
+build/cubical: $(SRC) src/core.h src/syntax.c src/store.c src/sha256.c src/drivers.c
 	@mkdir -p build
 	$(CC) $(CFLAGS) -o $@ $(SRC) -lpthread -lm -ldl
 
-build/cubical-asan: $(SRC) src/core.h src/syntax.c src/store.c src/sha256.c
+build/cubical-asan: $(SRC) src/core.h src/syntax.c src/store.c src/sha256.c src/drivers.c
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(SAN) -o $@ $(SRC) -lpthread -lm -ldl
 
 # the machine as a library (B18): a C program calls checked definitions (src/libcubical.h)
-build/libcubical.a: $(SRC) src/core.h src/syntax.c src/store.c src/sha256.c src/libcubical.h
+build/libcubical.a: $(SRC) src/core.h src/syntax.c src/store.c src/sha256.c src/drivers.c src/libcubical.h
 	@mkdir -p build/lib
 	for f in $(SRC); do $(CC) $(CFLAGS) -DCUBICAL_LIB -c -o build/lib/$$(basename $$f .c).o $$f || exit 1; done
 	ar rcs $@ build/lib/*.o
@@ -56,6 +56,8 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub
 	sh tests/agda/check.sh
 	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub lib/check.cub lib/std.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub lib/repr.cub tests/fo.cub
+	# the driver loop (D26): a process over W writes hello and ends with the count written
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/linproof.cub lib/prim.cub lib/proc.cub lib/world.cub tests/world.cub > build/world.out && grep -aq "^hello" build/world.out && grep -aq "run: done #8" build/world.out
 	# the call boundary (B18): the net enters a definition's compiled C (#native), and a C program calls the net
 	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub lib/check.cub lib/std.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub lib/repr.cub tests/native.cub
 	$(MAKE) -s build/native-main && ./build/native-main

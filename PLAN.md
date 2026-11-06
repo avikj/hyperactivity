@@ -1231,7 +1231,8 @@ identity; linear values are introduced only in `primitive` definitions.
     events, session types, choreographic projection (7.1, 7.3). Consequence plus library.
     Essential.
 25. Outcomes as values (consequence); supervisors and restart by key (library). Essential.
-26. Drivers; the memory interface with a named model and `atomically`. Essential.
+26. DONE for the loop and the library STM (2026-11-06, `lib/world.cub`, `src/drivers.c`,
+    `bf3ea4eb`); a hardware memory model (`load`/`store`/`cas`/`fence` on Regions) is open.
 27. Started (`1c5282a`): `foreign name "symbol" : T` as a trusted primitive over primitive
     types (a C function of the program or a shared library), listed by `#trusted`/`#safe`.
     Open: worlds as named handler implementations (`lib/proc.cub` has handlers as values).
@@ -1247,9 +1248,12 @@ identity; linear values are introduced only in `primitive` definitions.
 30. Incremental checking, editor protocol, errors, debugger by replay, step profiles. Essential.
 
 ### F. Programs about programs
-31. In progress: `deriving eq D` (`1c5282a`, over `lib/derive.cub`'s `derive-eq`), autodiff
-    with the Taylor theorem (`lib/autodiff.cub`), reflection by `ring-eq`. Open: a code for the
-    stuck-primitive neutrals (the queue's first item), `%view` over every value kind.
+31. DONE in parts: `deriving eq D` (`1c5282a`), `deriving show`/`derive-show` (`896713ea`),
+    autodiff with the Taylor theorem and `D-code` over codes (`896713ea`), reflection by
+    `ring-eq`; the stuck-primitive neutrals have a code (`cprim`, `c8931ab`); `%view` covers
+    every value kind the net has (stuck calls as `wcofix`/`wproj`, primitives as `wprim`,
+    words with the big case under `wwlit`); `wnative` waits on a `V_NATIVE` value (B18's
+    opaque results, not built). Open: `D-correct` stated over the fragment's codes.
 32. Certificate checkers as verified terms over codes; search unverified (in-language or SMT);
     unchecked solvers marked. Essential.
 33. Navigation over established identities. Precisely: the store holds identities; a view is
@@ -2419,7 +2423,18 @@ Revision 1. Library over existing codata, plus drivers in C.
   Handle → Cmd` with `Resp (await h) = Outcome A`; `supervise`/`watch` as in the plan's
   sketch; restart strategies as functions `Outcome A → Action`. External kills arrive as
   `failed external` from the driver. ~150 lines in `lib/proc.cub`.
-- **D26, drivers (`src/drivers.c`).** The driver signature `W`: `now`, `send fd bytes`,
+- **D26, status (2026-11-06).** Built as `lib/world.cub` and `src/drivers.c`: the signature
+  `W` (`w-now`, `w-write fd n b`, `w-read fd n`, `w-sleep ns`, `w-exit code`, responses by
+  `w-resp`), the commands as processes (`time-now`, `write`, `read`, `sleep`, `exit`), a
+  process as a tree of steps (`data Step S A = sdone a | scmd c (k : Resp S c → Step S A)`,
+  positive by 18.18; `to-step p = p (Step S A) sdone scmd`), and the loop `#run e`: the head
+  observed, the command's fields read (words, Nat numerals, byte strings), the system call
+  made, the response built as a value and the continuation applied, until `sdone` (printed
+  with the loop's own steps). `tests/world.cub` writes `hello` through it, in `make test`.
+  The memory interface is `lib/proc.cub`'s `MemS`/`atomically` (library STM, `bf3ea4eb`);
+  `mmap`, `poll` and hardware atomics on Regions are not offered yet (no memory model
+  chosen). Spec as written:
+  The driver signature `W`: `now`, `send fd bytes`,
   `recv fd` (blocking, or `poll` over a set), `mmap`, `load`/`store`/`cas`/`fence` on
   `Region`s with the model named `release-acquire` (SC at `fence seq_cst`; relaxed not
   offered until a model is chosen), `atomically` as a handler in `lib/proc.cub` over

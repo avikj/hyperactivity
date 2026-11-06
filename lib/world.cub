@@ -1,0 +1,39 @@
+-- lib/world.cub — the drivers' signature W (D26): the commands the machine's driver loop
+-- (src/drivers.c, #run) performs against the operating system, and a process as a tree of
+-- steps the loop walks. Loaded after lib/proc.cub (Sig, Proc, Cmd, Resp) and lib/prim.cub
+-- (Bytes). A process over any signature is run through a handler into W.
+--
+-- Commands: the time now (nanoseconds), a write of n bytes to a descriptor (the count
+-- written), a read of up to n bytes (the count read and the bytes, the buffer n long), a
+-- sleep, an exit. Memory commands (load, store, cas, fence on Regions) are lib/proc.cub's
+-- MemS, run through sc-world or atomically; a hardware memory model is not offered yet.
+data WCmd = w-now | w-write (fd : Word) (n : Nat) (b : Bytes n) | w-read (fd : Word) (n : Nat) | w-sleep (ns : Word) | w-exit (ec : Word)
+w-resp : WCmd → Type
+w-resp c = case c return (λ _ → Type) of
+  w-now → Word
+  w-write fd n b → Word
+  w-read fd n → Word × Bytes n
+  w-sleep ns → Unit
+  w-exit ec → Unit
+W : Sig
+W = (WCmd , w-resp)
+-- a process as a tree of steps: done with its answer, or a command with its continuation (a
+-- function field into the type, strictly positive by 18.18); the loop reads the head, performs
+-- the command, applies the continuation to the response, and reads again
+data Step (S : Sig) (A : Type) = sdone (a : A) | scmd (c : Cmd S) (k : Resp S c → Step S A)
+to-step : {S : Sig} {A : Type} → Proc S A → Step S A
+to-step {S} {A} p = p (Step S A) sdone scmd
+-- the commands as processes
+time-now : Proc W Word
+time-now = cmd {lzero} {W} w-now
+write : (fd : Word) → (n : Nat) → Bytes n → Proc W Word
+write fd n b = cmd {lzero} {W} (w-write fd n b)
+read : (fd : Word) → (n : Nat) → Proc W (Word × Bytes n)
+read fd n = cmd {lzero} {W} (w-read fd n)
+sleep : Word → Proc W Unit
+sleep ns = cmd {lzero} {W} (w-sleep ns)
+exit : Word → Proc W Unit
+exit c = cmd {lzero} {W} (w-exit c)
+-- readings: the step tree of a small process, and a handler into W from the key-value signature
+#same (case to-step (ret {lzero} {W} {Word} #3) of sdone a → a; scmd c k → #0) = #3
+#same (case to-step (bind {lzero} {W} {Word} {Word} time-now (λ t → ret {lzero} {W} {Word} #7)) of sdone a → #0; scmd c k → (case k #5 of sdone a → a; scmd c2 k2 → #1)) = #7

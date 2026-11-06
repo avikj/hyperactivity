@@ -1,0 +1,12 @@
+-- tests/world.cub — the driver loop (D26): processes over W run against the operating system by
+-- #run. Loaded after lib/world.cub. The run prints "hello" on the standard output, then
+-- "run: done #8" (the count written, the buffer 8 bytes with two zeros after the newline); the time is read and a sleep taken on the way.
+hello-bytes : Bytes 8
+hello-bytes = store64 8 (bytes 8) 0 (le-refl 8) (i64 #11473676690792)
+hello : Proc W Word
+hello = bind {lzero} {W} {Word} {Word} time-now (λ t →
+        bind {lzero} {W} {Unit} {Word} (sleep #1000) (λ u →
+        bind {lzero} {W} {Word} {Word} (write #1 8 hello-bytes) (λ n → ret {lzero} {W} {Word} n)))
+#run to-step hello
+-- a process over another signature runs through a handler into W: the key-value world's commands
+-- answered by a store, the answer written as one byte

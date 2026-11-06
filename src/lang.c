@@ -2785,6 +2785,7 @@ static void emit(const char *text) {
 static char **watch_name; static Cell **watch_root; static size_t capwn, capwr; static int nwatch;
 static void load_file(const char *path, bool must);
 static const char *cache_dir(void);
+static void drivers_run(Node *t);
 /* ---------------- signature entries, copattern definitions ---------------- */
 /* an entry of the checker's signature: its value's global, its type's global */
 static int sig_add(const char *name, long g, long tyg, bool hidden) {
@@ -3066,7 +3067,7 @@ static void toplevel(Node *f) {
     }
     /* a module whose checks are cached: its definitions are made, its judgments and tests not rerun */
     if (trusted && (!strcmp(h, "check") || !strcmp(h, "check-fail") || !strcmp(h, "checked-data-fail") || !strcmp(h, "checked-fail")
-        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "native"))) return;
+        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "native") || !strcmp(h, "run"))) return;
     if (!strcmp(h, "def")) {
         if (f->n != 3) die("(def name term)", NULL);
         if (!chk_salt[0] && !f->it[1]->list && !strcmp(f->it[1]->s, "chk-def")) chk_salt_set();   /* the checker (%%chk-def) is defined here: its name (F34) */
@@ -3804,6 +3805,10 @@ static void toplevel(Node *f) {
         Node *dd = nlist(3); dd->it[0] = nsym("def"); dd->it[1] = nsym(nm); dd->it[2] = f->it[2];
         toplevel(dd);
         if (table_global(TB_REP, ck) < 0) table_set(TB_REP, ck, global_lookup(nm));
+    } else if (!strcmp(h, "run")) {
+        /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c, D26) */
+        if (f->n != 2) die("(run step)", NULL);
+        drivers_run(f->it[1]);
     } else if (!strcmp(h, "native")) {
         /* (native name n prog): the C program prog (a list of bytes printed by lib/emitu.cub's
          * emit-lib-u: its definition 0 the function at arity n over words, exported as
@@ -3953,6 +3958,7 @@ static void toplevel(Node *f) {
     } else die("unknown top-level form", h);
 }
 #include "syntax.c"
+#include "drivers.c"
 static char *slurp(const char *path) {
     FILE *f = fopen(path, "rb"); if (!f) die("cannot open", path);
     fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);

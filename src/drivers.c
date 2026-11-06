@@ -1,0 +1,95 @@
+/* src/drivers.c — the driver loop (D26). Included by lang.c after the readers.
+ *
+ * (run e): e is a value of lib/world.cub's Step W A, a process as a tree of steps. The loop reads
+ * the head: sdone a prints a and stops; scmd c k reads the command c (a constructor of WCmd with
+ * word, Nat and byte-string fields), performs it against the operating system, builds the response
+ * as a value and applies the continuation k to it, then reads again. Reading a field is an
+ * observation of the net (synchronous: the process blocks on the command, as D26 says). The
+ * commands: w-now (nanoseconds since the epoch, a word), w-write fd n b (the count written),
+ * w-read fd n (the count read and a buffer of n bytes), w-sleep ns (unit), w-exit code. */
+#include <time.h>
+/* unistd.h's link(2) clashes with the net's link(): the two system calls are declared here */
+extern long read(int, void *, unsigned long);
+extern long write(int, const void *, unsigned long);
+static int drv_con(const char *name) { int c = con_lookup(name); if (c < 0) die("run: lib/world.cub is not loaded (missing constructor)", name); return c; }
+/* a word field read: the value must be a literal word */
+static uint64_t drv_word(Port p, const char *what) {
+    Cell *c = obs_val(p);
+    if (!c || c->kind != V_WORD || c->p) die("run: a word was expected for", what);
+    return c->a;
+}
+/* a Nat field read: successors counted down to zero (represented values are not expected here) */
+static uint64_t drv_nat(Port p, const char *what) {
+    uint64_t n = 0;
+    for (;;) {
+        Cell *c = obs_val(p);
+        if (!c) die("run: a natural number was expected for", what);
+        if (c->kind == V_WORD && !c->p) return n + c->a;
+        if (c->kind != V_CON) die("run: a natural number was expected for", what);
+        const char *nm = CON[c->a].name;
+        if (!strcmp(nm, "zero")) return n;
+        if (strcmp(nm, "suc") || c->n < 2) die("run: a natural number was expected for", what);
+        n++; p = c->port[1];
+    }
+}
+static Bytes *drv_bytes(Port p, const char *what) {
+    Cell *c = obs_val(p);
+    if (!c || c->kind != V_BYTES) die("run: a byte string was expected for", what);
+    return (Bytes *)c->p;
+}
+static Port drv_word_of(uint64_t n) { Cell *c = cell(V_WORD, 1); c->a = n; return P(c, 0); }
+static Port drv_bytes_of(Bytes *b) { Cell *c = cell(V_BYTES, 1); c->x = PT_BYTES; c->p = b; return P(c, 0); }
+static void drivers_run(Node *t) {
+    int c_sdone = drv_con("sdone"), c_scmd = drv_con("scmd"), c_unit = drv_con("unit");
+    int c_now = drv_con("w-now"), c_write = drv_con("w-write"), c_read = drv_con("w-read"), c_sleep = drv_con("w-sleep"), c_exit = drv_con("w-exit");
+    Port p = build_top(t);
+    long steps = 0, s0 = stat_steps;
+    for (;;) {
+        Cell *h = obs_val(p);
+        if (!h) die("run: the process did not reduce to a step", NULL);
+        if (h->kind != V_CON) die("run: a step (sdone a or scmd c k) was expected", NULL);
+        if ((int)h->a == c_sdone) {
+            char *r = read_port(h->port[1]);
+            net_drain();
+            printf("run: done %s   [%ld steps]\n", r, stat_steps - s0 + steps);
+            free(r);
+            return;
+        }
+        if ((int)h->a != c_scmd || h->n < 3) die("run: a step (sdone a or scmd c k) was expected", NULL);
+        Port k = h->port[2];
+        Cell *cm = obs_val(h->port[1]);
+        if (!cm || cm->kind != V_CON) { char m[64]; snprintf(m, sizeof m, "kind %d", cm ? cm->kind : -1); die("run: a command of W was expected, found", m); }
+        int c = (int)cm->a;
+        Port resp;
+        if (c == c_now) {
+            struct timespec ts; clock_gettime(CLOCK_REALTIME, &ts);
+            resp = drv_word_of((uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec);
+        } else if (c == c_write) {
+            uint64_t fd = drv_word(cm->port[1], "w-write's descriptor"), n = drv_nat(cm->port[2], "w-write's length");
+            Bytes *b = drv_bytes(cm->port[3], "w-write's bytes");
+            size_t len = b ? b->n : 0; if (n < len) len = (size_t)n;
+            fflush(stdout);
+            long w = len ? write((int)fd, b->b, len) : 0;
+            resp = drv_word_of(w < 0 ? 0 : (uint64_t)w);
+        } else if (c == c_read) {
+            uint64_t fd = drv_word(cm->port[1], "w-read's descriptor"), n = drv_nat(cm->port[2], "w-read's length");
+            Bytes *b = calloc(1, sizeof(Bytes) + (size_t)n); b->rc = 1; b->n = (size_t)n;
+            long r = n ? read((int)fd, b->b, (size_t)n) : 0;
+            Cell *pr = cell(V_PAIR, 3);
+            link(drv_word_of(r < 0 ? 0 : (uint64_t)r), P(pr, 1)); link(drv_bytes_of(b), P(pr, 2));
+            resp = P(pr, 0);
+        } else if (c == c_sleep) {
+            uint64_t ns = drv_word(cm->port[1], "w-sleep's nanoseconds");
+            struct timespec ts = { (time_t)(ns / 1000000000ull), (long)(ns % 1000000000ull) };
+            nanosleep(&ts, NULL);
+            resp = con_build(c_unit, NULL, NULL);
+        } else if (c == c_exit) {
+            uint64_t code = drv_word(cm->port[1], "w-exit's code");
+            fflush(stdout);
+            exit((int)code);
+        } else die("run: not a command of W:", CON[c].name);
+        Cell *ap = cell(O_APP, 3);
+        link(k, P(ap, 0)); link(resp, P(ap, 1));
+        p = P(ap, 2);
+    }
+}
