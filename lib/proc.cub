@@ -181,3 +181,119 @@ log1 = rev-list (snd (snd rec1)) nil
 #same fst (runp {KVS} {Word} {List Word} (pr1 {lzero}) (replaying {KVS} kv-dec) log1) = done #12
 -- a record cut short replays as a refusal where it ends
 #same fst (runp {KVS} {Word} {List Word} (pr1 {lzero}) (replaying {KVS} kv-dec) (cons #0 (cons #0 nil))) = stopped
+-- ---------------------------------------------------------------- signature inclusion (7.1)
+-- an inclusion of S in T: each command of S is a command of T, with T's response read back as
+-- S's. A process of S is lifted to T by transport along it: the handler that issues the included
+-- command and returns the response read back, which is handle at that handler
+Incl : Sig → Sig → Type
+Incl S T = (f : Cmd S → Cmd T) × ((c : Cmd S) → Resp T (f c) → Resp S c)
+incl-handler : {S T : Sig} → Incl S T → Handler S T
+incl-handler {S} {T} i c = bind {lzero} {T} {Resp T (fst i c)} {Resp S c} (cmd {lzero} {T} (fst i c)) (λ r → ret {lzero} {T} {Resp S c} (snd i c r))
+lift-proc : {S T : Sig} {A : Type} → Incl S T → Proc {lsuc lzero} S A → Proc {lzero} T A
+lift-proc {S} {T} {A} i p = handle {S} {T} {A} (incl-handler {S} {T} i) p
+-- ---------------------------------------------------------------- session types (7.3)
+-- a protocol decides which commands are allowed after the responses so far: a predicate on the
+-- trace (the commands issued with their responses, latest first) and the next command. (The
+-- codata form — allowed now, and the protocol after each response — is the same thing unfolded;
+-- the elaborator does not yet accept a codata type with its self-reference under a Π as a type
+-- in a body, so the protocol is the predicate.) A process follows a session when, run under the
+-- session's guard over any world, it is never refused; the guard is a world transformer that
+-- refuses what the session does not allow and extends the trace by the response
+Hist : Sig → Type
+Hist S = List ((c : Cmd S) × Resp S c)
+Session : Sig → Type
+Session S = Hist S → Cmd S → Bool
+session-guard : {S : Sig} {St : Type} → Session S → World S St → World S (Hist S × St)
+session-guard {S} {St} ses w c st =
+  case ses (fst st) c of
+    true → (case w c (snd st) of
+              inl r → inl (fst r , (cons (c , fst r) (fst st) , snd r))
+              inr s2 → inr (fst st , s2))
+    false → inr st
+IsDone : {A : Type} → Outcome A → Type
+IsDone o = case o of done a → Unit; stopped → Empty
+-- a process typed by a session: the process with the fact that it follows the session over the
+-- given world from the given state (the fact is decided by running it: its proof is unit)
+SProc : {St : Type} (S : Sig) (A : Type) → Session S → World S St → St → Type (lsuc lzero)
+SProc {St} S A ses w st = (p : Proc {lzero} S A) × IsDone {A} (fst (runp {S} {A} {Hist S × St} p (session-guard {S} {St} ses w) (nil , st)))
+-- ---------------------------------------------------------------- push events (7.1)
+-- the world pushes: a feed, an interrupt or a signal is a recv whose response is the next event.
+-- A pushing world answers recv from its queue of events and refuses when the queue is empty
+data Push (E : Type) = recv
+push-resp : {E : Type} → Push E → Type
+push-resp {E} c = E
+PushS : Type → Sig
+PushS E = (Push E , push-resp {E})
+feed-world : {E : Type} → World (PushS E) (List E)
+feed-world {E} c q = case q of nil → inr nil; cons e r → inl (e , r)
+-- ---------------------------------------------------------------- choreographies (7.3)
+-- a global protocol once, as first-order data over roles (words): a value sent from one role to
+-- another, a choice made by one role between two continuations, or the end. Each binary is the
+-- endpoint projection to its role: a process over the local signature (send, receive, pick a
+-- label, announce it, be offered one). Projection is defined for globals meeting the
+-- projectability condition, decided over the data: at a choice, every role other than the chooser
+-- is either told the choice (the chooser's first step towards it in both branches is a
+-- communication, so the offer that precedes it is meaningful) or behaves the same in both branches
+data Chor = cend | xfer (from : Word) (to : Word) (v : Word) (k : Chor) | choice (who : Word) (l : Chor) (r : Chor)
+data Loc = send (to : Word) (v : Word) | recvf (from : Word) | pick | tell (lbl : Word) | offer (from : Word)
+loc-resp : Loc → Type
+loc-resp c = case c of send t v → Unit; recvf f → Word; pick → Word; tell l → Unit; offer f → Word
+LocS : Sig
+LocS = (Loc , loc-resp)
+orB : Bool → Bool → Bool
+orB a b = if a then true else b
+app-w : List Word → List Word → List Word
+app-w xs ys = case xs of nil → ys; cons x r → cons x (rec r)
+-- the roles a global mentions, as a list (with repeats)
+chor-roles : Chor → List Word
+chor-roles g = case g of
+  cend → nil
+  xfer a b v k → cons a (cons b (rec k))
+  choice a l r → cons a (app-w (rec l) (rec r))
+-- the endpoint projection, unguarded: a role not involved in a step skips it; the chooser picks a
+-- label and announces it; another role is offered the label and follows the branch
+project-raw : Word → Chor → Proc {lzero} LocS Unit
+project-raw me g = case g of
+  cend → ret {lzero} {LocS} {Unit} unit
+  xfer a b v k →
+    (case weq me a of
+       true → bind {lzero} {LocS} {Unit} {Unit} (cmd {lzero} {LocS} (send b v)) (λ u → rec k)
+       false → (case weq me b of
+                  true → bind {lzero} {LocS} {Word} {Unit} (cmd {lzero} {LocS} (recvf a)) (λ w → rec k)
+                  false → rec k))
+  choice a l r →
+    (case weq me a of
+       true → bind {lzero} {LocS} {Word} {Unit} (cmd {lzero} {LocS} pick) (λ lbl →
+                bind {lzero} {LocS} {Unit} {Unit} (cmd {lzero} {LocS} (tell lbl)) (λ u →
+                  case weq lbl #0 of true → rec l; false → rec r))
+       false → bind {lzero} {LocS} {Word} {Unit} (cmd {lzero} {LocS} (offer a)) (λ lbl → case weq lbl #0 of true → rec l; false → rec r))
+-- the projectability condition
+drop-others : Word → Chor → Chor
+drop-others me g = case g of
+  cend → cend
+  xfer a b v k → (case orB (weq me a) (weq me b) of true → xfer a b v (rec k); false → rec k)
+  choice a l r → choice a (rec l) (rec r)
+first-from : Word → Word → Chor → Bool
+first-from me a g = case g of
+  cend → false
+  xfer x y v k → (case weq me y of true → weq x a; false → (case weq me x of true → false; false → rec k))
+  choice x l r → false
+chor-eq : Chor → Chor → Bool
+chor-eq g = case g return (λ x → Chor → Bool) of
+  cend → λ h → (case h of cend → true; xfer a b v k → false; choice a l r → false)
+  xfer a b v k → λ h → (case h of cend → false; xfer a2 b2 v2 k2 → andB (andB (weq a a2) (weq b b2)) (andB (weq v v2) (rec k k2)); choice a2 l r → false)
+  choice a l r → λ h → (case h of cend → false; xfer a2 b2 v2 k2 → false; choice a2 l2 r2 → andB (weq a a2) (andB (rec l l2) (rec r r2)))
+told-or-same : Word → Word → Chor → Chor → Bool
+told-or-same me a l r = orB (andB (first-from me a l) (first-from me a r)) (chor-eq (drop-others me l) (drop-others me r))
+all-roles : (Word → Bool) → List Word → Bool
+all-roles p rs = case rs of nil → true; cons x xs → andB (p x) (rec xs)
+projectable : Chor → Bool
+projectable g = case g of
+  cend → true
+  xfer a b v k → rec k
+  choice a l r → andB (andB (rec l) (rec r)) (all-roles (λ me → if weq me a then true else told-or-same me a l r) (chor-roles (choice a l r)))
+-- the projection, defined for projectable globals (the proof is by computation, unit)
+Projectable : Chor → Type
+Projectable g = case projectable g of true → Unit; false → Empty
+project : Word → (g : Chor) → Projectable g → Proc {lzero} LocS Unit
+project me g pf = project-raw me g

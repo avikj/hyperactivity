@@ -38,7 +38,7 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/instance.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/elab.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/linproof.cub lib/prim.cub lib/decode.cub
-	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub tests/proc.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/guarded.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/prim.cub lib/stage.cub tests/prim.cub
 	# the store (F34): a fresh one, run twice: the second run checks nothing, the answers agree, renaming changes no key
