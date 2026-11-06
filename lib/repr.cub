@@ -1,19 +1,12 @@
 -- lib/repr.cub — the back end consuming the representations (plan B12/B14: the table %rtab and
 -- the primitive definitions of lib/prim.cub). Loaded after lib/specialize.cub and lib/prim.cub.
--- consume-reps t: a first-order program after lower, with (1) calls of the byte primitives
--- (load64 n b off pf, …) replaced by the native primitives on the arguments that carry
--- information (the length n and the proof pf are at multiplicity 0 and are dropped), the
--- conversions i64/i64toWord/u32/u32toWord the identity (FO holds words), and (2) closed
--- constructor trees of a type represented by Word (%rtab) replaced by the word they represent.
-g-load64 = gidx (code load64)
-g-store64 = gidx (code store64)
-g-load32 = gidx (code load32)
-g-store32 = gidx (code store32)
-g-bytes = gidx (code bytes)
-g-i64 = gidx (code i64)
-g-i64toWord = gidx (code i64toWord)
-g-u32 = gidx (code u32)
-g-u32toWord = gidx (code u32toWord)
+-- consume-reps t: a first-order program after lower, with (1) calls of the word operations of
+-- lib/std.cub (plusw, wadd, …, and plus on Nat under its representation) replaced by the
+-- native primitives, (2) closed constructor trees of a type represented by Word (%rtab)
+-- replaced by the word they represent, and (3) Nat numerals in assumed facts read as words.
+-- The byte layer and the fixed-width and floating-point primitives no longer pass here: a stuck
+-- primitive quotes as cprim (lib/code.cub prim-apply) and lower.cub's lower-prim is their path.
+consume-call g as = case as of lnil → (case unfold g of some cd → (case cd of cwlit n → flit n; _ → fcall g as); none → fcall g as); _ → fcall g as
 -- the word operations of lib/std.cub are the native ones by definition (plusw≡wadd, ...), and
 -- plus on Nat is plusw by its representation's op line
 g-plusw = gidx (code plusw)
@@ -29,14 +22,6 @@ nat-lit t =
   case t of
     fcon d c fs → if %weq d nat-d then (if %weq c #0 then some #0 else (case fs of lcons x r → omap (λ n → %wsucc n) (nat-lit x); _ → none)) else none
     _ → none
--- the dropped proof becomes an assumed fact for the C compiler: off + w ≤ n, as a Bool word code
--- (off + w < n + 1) over the first-order variables, when off and n are in the word fragment
-fact-of-fo t =
-  case t of
-    fvar n → some (cvar n)
-    flit w → some (cwlit w)
-    fprim p args → (if %weq p P-add then (case args of lcons a r → (case r of lcons b r2 → (case fact-of-fo a of some ca → (case fact-of-fo b of some cb → some (cwop #2 ca cb); none → none); none → none); _ → none); _ → none) else none)
-    _ → none
 -- a Nat numeral in a code (a fact's offset or length) as the word it represents
 nat-code c =
   case c of
@@ -48,30 +33,17 @@ nat-lits c =
     cwop o a b → cwop o (nat-lits a) (nat-lits b)
     cwsucc a → cwsucc (nat-lits a)
     _ → c
-with-bound w off n body =
-  case fact-of-fo off of
-    some co → (case fact-of-fo n of some cn → fassume (cwop #1 (cwop #2 co (cwlit w)) (cwsucc cn)) body; none → body)
-    none → body
 consume-reps t =
   case t of
     fcall g args →
       let as = consume-list args
-      in if %weq g g-load64 then with-bound #8 (lst-nth as #2) (lst-nth as #0) (fprim P-load64 (lcons (lst-nth as #1) (lcons (lst-nth as #2) lnil)))
-         else if %weq g g-load32 then with-bound #4 (lst-nth as #2) (lst-nth as #0) (fprim P-load32 (lcons (lst-nth as #1) (lcons (lst-nth as #2) lnil)))
-         else if %weq g g-store64 then with-bound #8 (lst-nth as #2) (lst-nth as #0) (fprim P-store64 (lcons (lst-nth as #1) (lcons (lst-nth as #2) (lcons (lst-nth as #4) lnil))))
-         else if %weq g g-store32 then with-bound #4 (lst-nth as #2) (lst-nth as #0) (fprim P-store32 (lcons (lst-nth as #1) (lcons (lst-nth as #2) (lcons (lst-nth as #4) lnil))))
-         else if %weq g g-bytes then fprim P-bytes (lcons (lst-nth as #0) lnil)
-         else if %weq g g-i64 then lst-nth as #0
-         else if %weq g g-i64toWord then lst-nth as #0
-         else if %weq g g-u32 then lst-nth as #0
-         else if %weq g g-u32toWord then lst-nth as #0
-         else if %weq g g-plusw then fprim P-add as
+      in if %weq g g-plusw then fprim P-add as
          else if %weq g g-wadd then fprim P-add as
          else if %weq g g-wsub then fprim P-sub as
          else if %weq g g-weq then fprim P-eq as
          else if %weq g g-wlt then fprim P-lt as
          else if andb nat-rep (%weq g g-plus) then fprim P-add as
-         else (case as of lnil → (case unfold g of some cd → (case cd of cwlit n → flit n; _ → fcall g as); none → fcall g as); _ → fcall g as)
+         else consume-call g as
     fcon d c fs → (case (if nat-rep then nat-lit t else none) of some n → flit n; none → fcon d c (consume-list fs))
     fswitch x alts → fswitch (consume-reps x) (consume-alts alts)
     frec d x alts → frec d (consume-reps x) (consume-ralts alts)
@@ -101,9 +73,10 @@ two-loads = code (λ b → plusw (i64toWord (load64 32 b 16 (8 , λ i → 32))) 
 sum2 = specialize-r (Bytes 32 → Word) (view-of (lcons (gidx (code plusw≡wadd)) lnil)) two-loads
 ld16 = fprim P-load64 (lcons (fvar #0) (lcons (flit #16) lnil))
 ld0 = fprim P-load64 (lcons (fvar #0) (lcons (flit #0) lnil))
-#same sum2 = flam (fprim P-add (lcons (fassume (cwop #1 (cwop #2 (cwlit #16) (cwlit #8)) (cwsucc (cwlit #32))) ld16) (lcons (fassume (cwop #1 (cwop #2 (cwlit #0) (cwlit #8)) (cwsucc (cwlit #32))) ld0) lnil)))
+wof64 t = fprim P-wofi64 (lcons t lnil)
+#same sum2 = flam (fprim P-add (lcons (wof64 (fassume (cwop #1 (cwop #2 (cwlit #16) (cwlit #8)) (cwsucc (cwlit #32))) ld16)) (lcons (wof64 (fassume (cwop #1 (cwop #2 (cwlit #0) (cwlit #8)) (cwsucc (cwlit #32))) ld0)) lnil)))
 -- it runs natively on a buffer built by the same primitives
-buf2 = fprim P-store64 (lcons (fprim P-store64 (lcons (fprim P-bytes (lcons (flit #32) lnil)) (lcons (flit #0) (lcons (flit #5) lnil)))) (lcons (flit #16) (lcons (flit #9) lnil)))
+buf2 = fprim P-store64 (lcons (fprim P-store64 (lcons (fprim P-bytes (lcons (flit #32) lnil)) (lcons (flit #0) (lcons (fi64 #5) lnil)))) (lcons (flit #16) (lcons (fi64 #9) lnil)))
 #same eval-fo (λ g → flit #0) lnil (fapply sum2 (lcons buf2 lnil)) = vw #14
 -- the tagged message decoder of lib/decode.cub, lowered from its code: a switch on the loaded
 -- tag, loads at literal offsets, each under its assumed bound (a word constant of the store, one-w,
@@ -112,8 +85,8 @@ one-w : Word
 one-w = #1
 dm-code = code (λ (b : Bytes 32) → case weq (u32toWord (load32 32 b 0 (28 , λ i → 32))) one-w of true → i64toWord (load64 32 b 8 (16 , λ i → 32)); false → i64toWord (load64 32 b 16 (8 , λ i → 32)))
 dm-fo = specialize-r (Bytes 32 → Word) lnil dm-code
-mb1 = fprim P-store64 (lcons (fprim P-store32 (lcons (fprim P-bytes (lcons (flit #32) lnil)) (lcons (flit #0) (lcons (flit #1) lnil)))) (lcons (flit #8) (lcons (flit #500) lnil)))
-mb2 = fprim P-store64 (lcons (fprim P-store32 (lcons (fprim P-bytes (lcons (flit #32) lnil)) (lcons (flit #0) (lcons (flit #2) lnil)))) (lcons (flit #16) (lcons (flit #7) lnil)))
+mb1 = fprim P-store64 (lcons (fprim P-store32 (lcons (fprim P-bytes (lcons (flit #32) lnil)) (lcons (flit #0) (lcons (flit #1) lnil)))) (lcons (flit #8) (lcons (fi64 #500) lnil)))
+mb2 = fprim P-store64 (lcons (fprim P-store32 (lcons (fprim P-bytes (lcons (flit #32) lnil)) (lcons (flit #0) (lcons (flit #2) lnil)))) (lcons (flit #16) (lcons (fi64 #7) lnil)))
 #same eval-fo (λ g → flit #0) lnil (fapply dm-fo (lcons mb1 lnil)) = vw #500
 #same eval-fo (λ g → flit #0) lnil (fapply dm-fo (lcons mb2 lnil)) = vw #7
 -- ---------------------------------------------------------------- processes specialized (D24 with B15)

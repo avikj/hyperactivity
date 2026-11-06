@@ -8,6 +8,8 @@
 data FO
   = fvar (n : Word)                          -- de Bruijn index into the environment
   | flit (w : Word)                          -- a word
+  | fi64 (n : Word)                          -- an Int64 literal, by the word it converts from (two's complement)
+  | ff64 (w : Word)                          -- a Float64 literal by its bits (the quote of a Float64 value, cplit 2 w)
   | fcon (d : Word) (c : Word) (fs : Lst)    -- constructor c of data type d, its fields (a Lst of FO)
   | fswitch (x : FO) (alts : Lst)            -- case on x's tag: alts a Lst of (c , (n , body)), body over the n fields pushed
   | fproj (d : Word) (c : Word) (k : Word) (x : FO)   -- field k of constructor c of x
@@ -36,7 +38,11 @@ data FV
   | vnet (k : Word) (args : Lst)
   | vrec (d : Word) (alts : Lst) (x : FV) (env : Lst)   -- a suspended recursion on x (frec's hypothesis)
   | vbytes (b : Word)                        -- a machine byte string (B12's Bytes; the field's type is nominal: FO is untyped)
--- first-order types (the FT of the plan), for the printers; eval-fo does not consult them
+  | vi64 (x : Word)                          -- a machine Int64 (nominal, as vbytes)
+  | vf64 (x : Word)                          -- a machine Float64 (nominal)
+-- first-order types (the FT of the plan), for the printers; eval-fo does not consult them.
+-- A definition's signature is (params : Lst of FT , ret : FT), read off its elaborated type by
+-- lib/lower.cub's ft-of; ftany is what the printer infers for itself
 data FT
   = ftword
   | fti64
@@ -45,6 +51,8 @@ data FT
   | ftdata (d : Word) (ps : Lst) (rep : Word)
   | ftfun (args : Lst) (ret : FT)
   | ftlazy (t : FT)
+  | ftpair (a : FT) (b : FT)
+  | ftany
 -- ---------------------------------------------------------------- primitives
 -- the native primitives, by number; a printer maps each to its C operator or call
 P-add = #0
@@ -63,6 +71,50 @@ P-load32 = #10
 P-store32 = #11
 P-bytes = #12
 P-blen = #13
+-- fixed-width and floating-point arithmetic (B12's primitive types): Int64 as the machine's
+-- Int64 values (vi64), Float64 as its Float64 values (vf64); comparisons answer words
+P-i64add = #14
+P-i64sub = #15
+P-i64mul = #16
+P-i64eq = #17
+P-i64lt = #18
+P-f64add = #19
+P-f64sub = #20
+P-f64mul = #21
+P-f64div = #22
+P-f64eq = #23
+P-f64lt = #24
+P-i64ofw = #25
+P-wofi64 = #26
+P-f64ofi64 = #27
+P-i64off64 = #28
+P-f64ofw = #29
+iof v = case v of vi64 x → x; vw w → %i64ofw w; _ → %i64ofw #0
+fof v = case v of vf64 x → x; vw w → %f64ofw w; _ → %f64ofw #0
+bw b = case b of true → #1; false → #0
+prim-num p args =
+  case args of
+    lcons a r →
+      (case r of
+         lnil →
+           if %weq p P-i64ofw then vi64 (%i64ofw (wof a))
+           else if %weq p P-wofi64 then vw (%wofi64 (iof a))
+           else if %weq p P-f64ofi64 then vf64 (%f64ofi64 (iof a))
+           else if %weq p P-i64off64 then vi64 (%i64off64 (fof a))
+           else vf64 (%f64ofw (wof a))
+         lcons b r2 →
+           if %weq p P-i64add then vi64 (%i64add (iof a) (iof b))
+           else if %weq p P-i64sub then vi64 (%i64sub (iof a) (iof b))
+           else if %weq p P-i64mul then vi64 (%i64mul (iof a) (iof b))
+           else if %weq p P-i64eq then vw (bw (%i64eq (iof a) (iof b)))
+           else if %weq p P-i64lt then vw (bw (%i64lt (iof a) (iof b)))
+           else if %weq p P-f64add then vf64 (%f64add (fof a) (fof b))
+           else if %weq p P-f64sub then vf64 (%f64sub (fof a) (fof b))
+           else if %weq p P-f64mul then vf64 (%f64mul (fof a) (fof b))
+           else if %weq p P-f64div then vf64 (%f64div (fof a) (fof b))
+           else if %weq p P-f64eq then vw (bw (%f64eq (fof a) (fof b)))
+           else vw (bw (%f64lt (fof a) (fof b))))
+    lnil → vw #0
 bof v = case v of vbytes b → b; _ → %bytes #0
 prim-bytes p args =
   case args of
@@ -71,8 +123,8 @@ prim-bytes p args =
          lnil → (if %weq p P-bytes then vbytes (%bytes (wof a)) else vw (%blen (bof a)))
          lcons b r2 →
            (case r2 of
-              lnil → (if %weq p P-load64 then vw (%wofi64 (%load64 (bof a) (wof b))) else vw (%wofu32 (%load32 (bof a) (wof b))))
-              lcons c r3 → (if %weq p P-store64 then vbytes (%store64 (bof a) (wof b) (%i64ofw (wof c))) else vbytes (%store32 (bof a) (wof b) (%u32ofw (wof c))))))
+              lnil → (if %weq p P-load64 then vi64 (%load64 (bof a) (wof b)) else vw (%wofu32 (%load32 (bof a) (wof b))))
+              lcons c r3 → (if %weq p P-store64 then vbytes (%store64 (bof a) (wof b) (iof c)) else vbytes (%store32 (bof a) (wof b) (%u32ofw (wof c))))))
     lnil → vw #0
 prim-ap p a b =
   if %weq p P-add then %wadd a b
@@ -101,6 +153,8 @@ eval-fo G e t =
   case t of
     fvar n → lst-nth e n
     flit w → vw w
+    fi64 n → vi64 (%i64ofw n)
+    ff64 w → vf64 (%pval #2 w)
     fcon d c fs → vcon d c (eval-list G e fs)
     fswitch x alts →
       (case eval-fo G e x of
@@ -109,6 +163,7 @@ eval-fo G e t =
     fproj d c k x → (case eval-fo G e x of vcon d2 c2 fs → lst-nth fs k; _ → vw #0)
     fcall g args → eval-fo G (push-all (eval-list G e args) lnil) (G g)
     fprim p args →
+      if %wlt #13 p then prim-num p (eval-list G e args) else
       if %wlt #7 p then prim-bytes p (eval-list G e args) else
       (case eval-list G e args of
          lcons a r →
@@ -346,9 +401,14 @@ t-clo = flet (flit #10) (fapply (flam (fprim P-add (lcons (fvar #0) (lcons (fvar
 -- the lifted definition captures one variable: arity 2
 #same (case lift #1 t-clo of lifted t2 ds k → (case ds of lcons d r → fst (snd d); lnil → #0)) = #2
 -- the byte layer in the evaluator: a store then a load, 64 and 32 bits, and the length
-#same eval-fo (λ g → flit #0) lnil (fprim P-load64 (lcons (fprim P-store64 (lcons (fprim P-bytes (lcons (flit #16) lnil)) (lcons (flit #8) (lcons (flit #9) lnil)))) (lcons (flit #8) lnil))) = vw #9
+#same eval-fo (λ g → flit #0) lnil (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fprim P-store64 (lcons (fprim P-bytes (lcons (flit #16) lnil)) (lcons (flit #8) (lcons (flit #9) lnil)))) (lcons (flit #8) lnil))) lnil)) = vw #9
 #same eval-fo (λ g → flit #0) lnil (fprim P-load32 (lcons (fprim P-store32 (lcons (fprim P-bytes (lcons (flit #16) lnil)) (lcons (flit #4) (lcons (flit #258) lnil)))) (lcons (flit #4) lnil))) = vw #258
 #same eval-fo (λ g → flit #0) lnil (fprim P-blen (lcons (fprim P-bytes (lcons (flit #16) lnil)) lnil)) = vw #16
+-- the numeric layer: Int64 arithmetic wraps, Float64 divides; comparisons are words
+#same eval-fo no-defs lnil (fprim P-wofi64 (lcons (fprim P-i64add (lcons (fi64 #40) (lcons (fi64 #2) lnil))) lnil)) = vw #42
+#same eval-fo no-defs lnil (fprim P-i64lt (lcons (fi64 #1) (lcons (fi64 #2) lnil))) = vw #1
+#same eval-fo no-defs lnil (fprim P-f64lt (lcons (fprim P-f64div (lcons (ff64 #4607182418800017408) (lcons (ff64 #4611686018427387904) lnil))) (lcons (ff64 #4607182418800017408) lnil))) = vw #1
+#same eval-fo no-defs lnil (fprim P-wofi64 (lcons (fprim P-i64off64 (lcons (fprim P-f64mul (lcons (ff64 #4618441417868443648) (lcons (ff64 #4619567317775286272) lnil))) lnil)) lnil)) = vw #42
 -- structural recursion: the length of a list of data type 7 (nil = 0, cons x xs = 1), as frec
 -- with the hypothesis on the second field; evaluated directly, and lifted to a definition
 fo-len = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lcons #1 lnil , fprim P-add (lcons (fforce (fvar #0)) (lcons (flit #1) lnil))))) lnil))

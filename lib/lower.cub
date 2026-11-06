@@ -42,25 +42,30 @@ lower c =
     celim d P B x → if %weq d bool-idx then lower-bool B (lower x) else frec d (lower x) (lower-ralts d B #0)
     cforce t → fforce (lower t)
     cwlit n → flit n
+    cplit k b → if %weq k #0 then fi64 b else if %weq k #2 then ff64 b else if %weq k #1 then flit b else fnet #0 lnil
     cwsucc a → fprim P-add (lcons (lower a) (lcons (flit #1) lnil))
     cwop k a b → fprim (wop-prim k) (lcons (lower a) (lcons (lower b) lnil))
     cprim k as → lower-prim k as
     cwelim w z s → lower-welim (lower w) (lower z) (lower s)
     _ → fnet #0 lnil
 -- A primitive operation's code (cprim k as, lib/code.cub prim-apply's numbering) in the first-order
--- form, which holds words: the word-sized integer operations are the word ones, the conversions
--- between words and fixed-width integers are the identity, the 8- and 4-byte loads and stores
--- are the byte layer's; what the form has no primitive for yet (floats, 1- and 2-byte accesses)
--- is a call into the net (fnet) until it gains them
+-- form: the fixed-width integer and floating-point operations are the form's own primitives
+-- (P-i64add .. P-f64ofw, lib/fo.cub), the 32-bit ones the word ones (an unsigned 32-bit value is
+-- a word here; wrapping at 2^32 is not modelled), the 8- and 4-byte loads and stores the byte
+-- layer's; the 1- and 2-byte accesses are a call into the net (fnet) until the form gains them
 lower-prim k cs =
   let as = lower-list cs
   in if %wlt k #512
-       then (let sb = %wsub k #256 in if %wlt sb #20 then (case as of lcons a r → a; lnil → flit #0) else fnet k as)
+       then (let sb = %wsub k #256
+             in if %weq sb #16 then fprim P-i64ofw as else if %weq sb #17 then fprim P-wofi64 as
+                else if %weq sb #20 then fprim P-f64ofw as else if %weq sb #21 then fprim P-f64ofi64 as
+                else if %weq sb #22 then fprim P-i64off64 as
+                else if %wlt sb #20 then (case as of lcons a r → a; lnil → flit #0) else fnet k as)
        else if %wlt k #768
          then (let sb = %wsub k #512
-                   op = if %wlt sb #5 then sb else if %wlt sb #10 then %wsub sb #5 else #99
-               in if %weq op #0 then fprim P-add as else if %weq op #1 then fprim P-sub as else if %weq op #2 then fprim P-mul as
-                  else if %weq op #3 then fprim P-eq as else if %weq op #4 then fprim P-lt as else fnet k as)
+               in if %wlt sb #5 then fprim (%wadd P-i64add sb) as
+                  else if %wlt sb #10 then fprim (%wsub sb #5) as
+                  else if %wlt sb #16 then fprim (%wadd P-f64add (%wsub sb #10)) as else fnet k as)
          else if %wlt k #1280 then lower-access k cs as
          else if %wlt k #1536 then fprim P-blen as else fprim P-bytes as
 -- a load (class 3) or store (class 4) of w bytes at off in a buffer of n bytes: the access, under
@@ -119,6 +124,28 @@ step-call s =
   case s of
     flam s1 → (case s1 of flam b → shift-at #2 #1 b; _ → fapply (shift #3 s) (lcons (fvar #1) (lcons (fvar #0) lnil)))
     _ → fapply (shift #3 s) (lcons (fvar #1) (lcons (fvar #0) lnil))
+-- ---------------------------------------------------------------- types (B14: FT from the elaborated types)
+-- ft-of T: the first-order type of a type code: words (Word, UInt32, Bool, a type represented by
+-- Word), Int64, Float64, byte strings, pairs, data types (by index, with their parameters' codes),
+-- functions (a Π chain, its domains then its codomain; dependencies are not expressible in FT and
+-- are read as ftany); a type outside the fragment is ftany
+ft-of T =
+  case T of
+    cword → ftword
+    cpty k n → if %weq k #0 then fti64 else if %weq k #2 then ftf64 else if %weq k #4 then ftbytes (bytes-len n) else ftword
+    cdata d ps → if %weq d bool-idx then ftword else (case %rtab d of some R → ft-of-rep R; none → ftdata d ps #0)
+    csigma A B → ftpair (ft-of A) (ft-of B)
+    cpi m A B → ft-pi (lcons (ft-of A) lnil) B
+    cann t T2 → ft-of t
+    _ → ftany
+ft-pi args B = case B of cpi m A B2 → ft-pi (lsnoc args (ft-of A)) B2; _ → ftfun args (ft-of B)
+-- a represented type's value: its representation's type, quoted
+ft-of-rep R = ft-of (fromopt (quote-ty R) cword)
+bytes-len n = case n of cwlit w → w; _ → #0
+-- the signature of a Π type: its parameters' types and its result's
+sig-ft T = case ft-of T of ftfun args r → (args , r); t → (lnil , t)
+-- the signature of a checked definition, from its type in the store
+global-sig g = sig-ft (fromopt (quote-ty (%gty g)) cword)
 -- ---------------------------------------------------------------- readings
 didx c = case c of cdata d ps → d; _ → #0
 -- plus on words as code, lowered and evaluated
@@ -147,3 +174,7 @@ len-defs g = if %weq g (gidx (code zw)) then flit #0 else if %weq g (gidx (code 
 -- and lifted: the recursion is a definition of its own (numbered from 1000), called at the site
 with-defs ds g = case ds of lnil → len-defs g; lcons d r → if %weq (fst d) g then snd (snd d) else with-defs r g
 #same (case lift #1000 (lower c-len) of lifted t2 ds k → eval-fo (with-defs ds) lnil (fapply t2 (lcons lw3 lnil))) = vw #2
+-- the signatures read off types: lenw takes a list and returns a word; a pair type is a pair
+#same global-sig (gidx (code lenw)) = (lcons (ftdata (didx (code LW)) lnil #0) lnil , ftword)
+#same ft-of (code (Word × Word)) = ftpair ftword ftword
+#same sig-ft (code (Word → Word → Word)) = (lcons ftword (lcons ftword lnil) , ftword)

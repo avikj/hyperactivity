@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compile-and-run check for lib/emitc.cub: a first-order program is printed by the machine as a
 list of bytes, decoded here, compiled with gcc, run, and its output compared with eval-fo's."""
-import re, subprocess, sys, tempfile, os
+import re, subprocess, sys, tempfile, os, resource
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.path.dirname(HERE))
 CUB = os.path.join(ROOT, 'build', 'cubical')
 LIBS = [os.path.join(ROOT, 'lib', f) for f in ('prelude.cub', 'code.cub', 'fo.cub', 'match.cub', 'nav.cub', 'emitc.cub', 'check.cub', 'std.cub', 'lower.cub', 'specialize.cub', 'linproof.cub', 'prim.cub', 'decode.cub', 'rules.cub', 'derive.cub', 'proc.cub', 'emitt.cub', 'emitu.cub', 'repr.cub')]
@@ -76,6 +76,15 @@ defs = case lift #100 dm-fo of lifted t2 ds k → lcons (#0 , (#0 , fprim P-add 
  'record': ("""data Pt2 = pt2 (x : Word) (y : Word)
 pt-d = didx (code Pt2)
 defs = lcons (#0 , (#0 , fswitch (fcon pt-d #0 (lcons (flit #3) (lcons (flit #4) lnil))) (lcons (#0 , (#2 , fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil)))) lnil))) lnil""", "7"),
+ # the fixed-width and floating-point forms (B14): 7 as Int64 to Float64, times 3.0 (a Float64
+ # literal is its bits), back, as a word (21), plus ten times the signed comparison -1 < 1 (the word 2^64-1 read as Int64): 31
+ 'numeric': ("""defs = lcons (#0 , (#0 , fprim P-add (lcons (fprim P-wofi64 (lcons (fprim P-i64off64 (lcons (fprim P-f64mul (lcons (fprim P-f64ofi64 (lcons (fi64 #7) lnil)) (lcons (ff64 #4613937818241073152) lnil))) lnil)) lnil))
+  (lcons (fprim P-mul (lcons (flit #10) (lcons (fprim P-i64lt (lcons (fi64 #18446744073709551615) (lcons (fi64 #1) lnil))) lnil))) lnil)))) lnil""", "31"),
+ # the same from a typed code: lib/prim.cub's Int64 and Float64 primitives lowered to the numeric
+ # primitives by lib/repr.cub, the argument an Int64 literal
+ 'num-spec': ("""lam-body f = case f of flam b → b; _ → f
+spec-num = specialize-r (Int64 → Word) lnil (code (λ x → wadd (i64toWord (i64off64 (f64mul (f64ofi64 x) (f64 #3)))) (if i64lt x (i64 #1) then #10 else #0)))
+defs = lcons (#0 , (#0 , fcall #1 (lcons (fi64 #7) lnil))) (lcons (#1 , (#1 , lam-body spec-num)) lnil)""", "21", "n27("),
  'let-if': ("""defs = lcons (#0 , (#0 , flet (flit #3) (fif (fprim P-lt (lcons (fvar #0) (lcons (flit #5) lnil))) (fprim P-mul (lcons (fvar #0) (lcons (fvar #0) lnil))) (flit #0)))) lnil""", "9"),
 }
 UNBOXED = os.environ.get('UNBOXED') == '1'
@@ -84,7 +93,11 @@ def run(name, defs, expect, contains=None):
         cub = os.path.join(d, name + '.cub')
         if 'prog =' not in defs: defs += "\nprog = " + ("emit-prog-u defs" if UNBOXED else "emit-prog defs")
         open(cub, 'w').write(defs + "\n#show prog\n")
-        out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1')).stdout
+        # the printer of src/syntax.c (pr → pr_flat → pr_str → pr) spends a stack frame of a few KB per
+        # nesting level, and a program is a byte list nested once per byte: a 4000-byte program
+        # overflows the default 8 MB stack. Raised here until the printer iterates on the last argument.
+        out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'),
+                             preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))).stdout
         m = re.search(r'^prog\s*=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
         if not m: print(name, 'FAIL: no reading'); print(out[-500:]); return False
         bs = bytes(int(x) for x in re.findall(r'#(\d+)', m.group(1)))

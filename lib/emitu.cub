@@ -145,6 +145,8 @@ infer-u sigs env t =
   case t of
     fvar n → env-ty env n
     flit w → tW
+    fi64 n → tW
+    ff64 w → tW
     fcon d c fs → if %weq d #0 then (if %weq c #0 then (case fs of lcons a r → (case r of lcons b r2 → (case r2 of lnil → pr-ty (infer-u sigs env a) (infer-u sigs env b); _ → tP); _ → tP); _ → tP) else tP) else (if is-flat d then dt-ty d else tP)
     fswitch x alts → alts-ty sigs env (if is-dt (infer-u sigs env x) then tW else tP) alts
     frec d x alts → tP
@@ -178,12 +180,14 @@ use-ty sigs d n t =
   case t of
     fvar m → none
     flit w → none
+    fi64 n → none
+    ff64 w → none
     fcon dd c fs → use-list sigs d n fs
     fswitch x alts → first-some (if is-var d n x then some tP else use-ty sigs d n x) (use-alts sigs d n alts)
     frec dd x alts → first-some (if is-var d n x then some tP else use-ty sigs d n x) (use-ralts sigs d n alts)
     fproj dd c k x → if is-var d n x then some tP else use-ty sigs d n x
     fcall g args → use-args sigs d n g #0 args
-    fprim p args → if %wlt #7 p then use-bytes sigs d n p args else use-arith sigs d n args
+    fprim p args → if %wlt #13 p then use-arith sigs d n args else if %wlt #7 p then use-bytes sigs d n p args else use-arith sigs d n args
     flet a b → first-some (use-ty sigs d n a) (use-ty sigs (%wsucc d) n b)
     fif c a b → first-some (if is-var d n c then some tW else use-ty sigs d n c) (first-some (use-ty sigs d n a) (use-ty sigs d n b))
     floop init body → first-some (use-init sigs d n (lst-len init) init #0 body) (use-ty sigs (%wadd d (lst-len init)) n body)
@@ -272,6 +276,8 @@ emit-u sigs env d t =
   case t of
     fvar n → var d n
     flit w → dec w
+    fi64 n → dec n
+    ff64 w → dec w
     fcon dd c fs → (let nat = infer-u sigs env t in if is-pr nat then pair-at sigs env d nat t else if is-dt nat then dt-lit sigs env d dd c fs else cat7 u-mkc (dec c) u-comma (dec (lst-len fs)) (args-rest-u sigs env d fs) u-rp lnil)
     fswitch x alts →
       let rt = infer-u sigs env t
@@ -325,7 +331,15 @@ alts-u sigs env d rt alts =
 alt-u sigs env d rt c n body = cat6 u-case (dec c) u-colon (fields-u d n #0) (cat3 u-rr (emit-at sigs (push-n tP n env) (%wadd d n) rt body) u-semi) u-break
 fields-u d n i = if %weq i n then lnil else cat7 u-p (var (%wsucc (%wadd d i)) #0) u-assign u-x u-arrow (dec i) (lapp u-rb (lapp u-semi (fields-u d n (%wsucc i))))
 -- primitives: arithmetic on words; the byte layer
+num-u sigs env d p args =
+  case args of
+    lcons a r →
+      (case r of
+         lcons b r2 → cat6 (lcons #110 (dec p)) u-lp (emit-at sigs env d tW a) u-comma (emit-at sigs env d tW b) u-rp
+         lnil → cat4 (lcons #110 (dec p)) u-lp (emit-at sigs env d tW a) u-rp)
+    lnil → s-unsup
 prim-u sigs env d p args =
+  if %wlt #13 p then num-u sigs env d p args else
   if %wlt #7 p then bytes-u sigs env d p args else
   (case args of
      lcons a r →
