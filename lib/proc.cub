@@ -34,7 +34,10 @@ handle hd p = p (Proc {lzero} W A) (ret {lzero} {W} {A}) (λ c k → bind {lzero
 -- state after the refusal)
 World : Sig → Type → Type
 World S St = (c : Cmd S) → St → Sum (Resp S c × St) St
-data Outcome (A : Type) = done (a : A) | stopped
+-- why a process failed: killed from outside (the outcome then comes from the world, and whatever
+-- the process held is gone from the language's view), or a fault the world reports by code
+data Why = external | fault (errno : Word)
+data Outcome (A : Type) = done (a : A) | stopped | failed (why : Why)
 -- runp p w st: the process interpreted in the state monad over St with refusal
 runp : {S : Sig} {A : Type} {St : Type} → Proc S A → World S St → St → Outcome A × St
 runp p w st =
@@ -117,7 +120,7 @@ lt3 : Nat → Action
 lt3 n = case n of zero → restart; suc k → (case k of zero → restart; suc k2 → (case k2 of zero → restart; suc k3 → give-up))
 -- restart on stopped while fewer than three runs; never on done
 upto3 : {A : Type} → Strategy A
-upto3 o n = case o of done a → give-up; stopped → lt3 n
+upto3 o n = case o of done a → give-up; stopped → lt3 n; failed r → give-up
 lt2 : Nat → Bool
 lt2 n = case n of zero → true; suc k → (case k of zero → true; suc k2 → false)
 andb2 : Bool → Bool → Bool
@@ -211,7 +214,7 @@ session-guard {S} {St} ses w c st =
               inr s2 → inr (fst st , s2))
     false → inr st
 IsDone : {A : Type} → Outcome A → Type
-IsDone o = case o of done a → Unit; stopped → Empty
+IsDone o = case o of done a → Unit; stopped → Empty; failed r → Empty
 -- a process typed by a session: the process with the fact that it follows the session over the
 -- given world from the given state (the fact is decided by running it: its proof is unit)
 SProc : {St : Type} (S : Sig) (A : Type) → Session S → World S St → St → Type (lsuc lzero)
@@ -297,3 +300,47 @@ Projectable : Chor → Type
 Projectable g = case projectable g of true → Unit; false → Empty
 project : Word → (g : Chor) → Projectable g → Proc {lzero} LocS Unit
 project me g pf = project-raw me g
+-- ---------------------------------------------------------------- supervisors (D25)
+-- a supervisor's signature: spawn a process by its key (the response is a handle), await a
+-- handle (the response is the child's outcome). A supervisor world holds the registry of
+-- processes by key, the child world and its state, the outcomes of the handles spawned so far,
+-- and the handles killed from outside: awaiting one of those answers failed external — the
+-- outcome comes from the world, not from the process
+PKey : Type
+PKey = Word
+data Sup (A : Type) = spawn (k : PKey) | await (h : Word)
+sup-resp : {A : Type} → Sup A → Type
+sup-resp {A} c = case c of spawn k → Word; await h → Outcome A
+SupS : Type → Sig
+SupS A = (Sup A , sup-resp {A})
+-- the supervisor world: the registry of processes by key is its parameter; its state is the
+-- child world's state, the outcomes of the handles spawned so far, the handles killed from
+-- outside, and the next handle
+SupSt : Type → Type → Type
+SupSt A St = St × (List (Word × Outcome A) × (List Word × Word))
+lookup-out : {A : Type} → Word → List (Word × Outcome A) → Outcome A
+lookup-out h l = case l of nil → failed external; cons e r → (case weq (fst e) h of true → snd e; false → rec r)
+mem-w : Word → List Word → Bool
+mem-w h l = case l of nil → false; cons x r → (case weq x h of true → true; false → rec r)
+sup-world : {S : Sig} {A : Type} {St : Type} → (PKey → Proc {lzero} S A) → World S St → World (SupS A) (SupSt A St)
+sup-world {S} {A} {St} reg w c st =
+  case c return (λ x → Sum (sup-resp {A} x × SupSt A St) (SupSt A St)) of
+    spawn k →
+      (let r = runp {S} {A} {St} (reg k) w (fst st)
+       in inl (snd (snd (snd st)) , (snd r , (cons (snd (snd (snd st)) , fst r) (fst (snd st)) , (fst (snd (snd st)) , %wsucc (snd (snd (snd st))))))))
+    await h →
+      inl ((case mem-w h (fst (snd (snd st))) of true → failed external; false → lookup-out {A} h (fst (snd st))) , st)
+-- a supervisor as a process: spawn the key, await the handle; on an outcome the strategy answers
+-- restart for, spawn it again (restart is instantiating the known key), up to the fuel
+supervise-by : {A : Type} → Nat → Strategy A → PKey → Proc {lzero} (SupS A) (Outcome A)
+supervise-by {A} fuel s k =
+  (case fuel return (λ f → Nat → Proc {lzero} (SupS A) (Outcome A)) of
+     zero → λ n → ret {lzero} {SupS A} {Outcome A} stopped
+     suc f2 → λ n →
+       bind {lzero} {SupS A} {Word} {Outcome A} (cmd {lzero} {SupS A} (spawn k)) (λ h →
+       bind {lzero} {SupS A} {Outcome A} {Outcome A} (cmd {lzero} {SupS A} (await h)) (λ o →
+         case s o (suc n) of restart → rec f2 (suc n); give-up → ret {lzero} {SupS A} {Outcome A} o)))
+  zero
+-- watch: run a child once and report its outcome, with no restart
+watch : {A : Type} → PKey → Proc {lzero} (SupS A) (Outcome A)
+watch {A} k = bind {lzero} {SupS A} {Word} {Outcome A} (cmd {lzero} {SupS A} (spawn k)) (λ h → cmd {lzero} {SupS A} (await h))

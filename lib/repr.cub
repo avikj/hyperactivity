@@ -109,7 +109,7 @@ mb2 = fprim P-store64 (lcons (fprim P-store32 (lcons (fprim P-bytes (lcons (flit
 -- a process run against its world, with the initial state unknown, specializes by normalization: pr1 puts before it gets, so its run is the constant 12
 -- whatever the store; pr4 reads key 3 of the store, so its run is a function of the store
 out-w : Outcome Word → Word
-out-w o = case o of done a → a; stopped → #0
+out-w o = case o of done a → a; stopped → #0; failed r → #0
 run1 : (Word → Word) → Word
 run1 st = out-w (fst (runp {KVS} {Word} {Word → Word} (pr1 {lzero}) kv-world st))
 #same specialize ((Word → Word) → Word) lnil (code (λ (st : Word → Word) → run1 st)) = flam (flit #12)

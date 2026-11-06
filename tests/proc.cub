@@ -67,3 +67,25 @@ run1r : Outcome Unit × LocSt
 run1r = runp {LocS} {Unit} {LocSt} (project #1 g1 unit) loc-world (nil , cons #1 (cons #8 nil))
 #same fst run1r = done unit
 #same snd (snd run1r) = nil
+-- ---------------------------------------------------------------- supervisors (D25)
+-- a registry: key 7 is pr3 (put at 0 then get), anything else pr1
+reg1 : PKey → Proc {lzero} KVS Word
+reg1 k = case weq k #7 of true → pr3 {lzero}; false → pr1 {lzero}
+-- the supervisor process over the flaky world: the child is refused twice and done on the third
+-- spawn; three handles were spawned
+sup-run : Outcome (Outcome Word) × SupSt Word ((Word → Word) × Nat)
+sup-run = runp {SupS Word} {Outcome Word} {SupSt Word ((Word → Word) × Nat)} (supervise-by {Word} 5 (upto3 {Word}) #7) (sup-world {KVS} {Word} {(Word → Word) × Nat} reg1 flaky) ((empty-st , zero) , (nil , (nil , #0)))
+#same fst sup-run = done (done #9)
+#same snd (snd (snd (snd sup-run))) = #3
+-- a handle killed from outside: the await answers failed external, the strategy gives up on it
+sup-killed : Outcome (Outcome Word) × SupSt Word ((Word → Word) × Nat)
+sup-killed = runp {SupS Word} {Outcome Word} {SupSt Word ((Word → Word) × Nat)} (supervise-by {Word} 5 (upto3 {Word}) #7) (sup-world {KVS} {Word} {(Word → Word) × Nat} reg1 flaky) ((empty-st , zero) , (nil , (cons #0 nil , #0)))
+#same fst sup-killed = done (failed external)
+-- watch reports the child's outcome once: pr1 under the flaky world is done
+#same fst (runp {SupS Word} {Outcome Word} {SupSt Word ((Word → Word) × Nat)} (watch {Word} #1) (sup-world {KVS} {Word} {(Word → Word) × Nat} reg1 flaky) ((empty-st , zero) , (nil , (nil , #0)))) = done (done #12)
+-- a strategy restarting on external failure too, with the first two handles killed: done on the third
+restart-all : {A : Type} → Strategy A
+restart-all o n = case o of done a → give-up; stopped → lt3 n; failed r → lt3 n
+sup-killed2 : Outcome (Outcome Word) × SupSt Word ((Word → Word) × Nat)
+sup-killed2 = runp {SupS Word} {Outcome Word} {SupSt Word ((Word → Word) × Nat)} (supervise-by {Word} 5 (restart-all {Word}) #1) (sup-world {KVS} {Word} {(Word → Word) × Nat} reg1 flaky) ((empty-st , zero) , (nil , (cons #0 (cons #1 nil) , #0)))
+#same fst sup-killed2 = done (done #12)
