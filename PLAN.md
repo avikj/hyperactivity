@@ -1,6 +1,6 @@
 # The system: direction, scope and build plan
 
-Revision 7.8, 2026-11-06. Repo avikj/math, `scoped-machine` at `be7149d` (builder: B11 `0729899`, B12 `01c839c`, B13/F34/C20/E28-parts/F31-syntax/D27 `1c5282a`, stuck primitives as neutrals and C22 `be7149d`; the specs of section 18 were written against `9b94b43`). This document lives at `scoped-machine/PLAN.md` from this revision on; it is the single plan and status document — a fresh agent starts here.
+Revision 7.8, 2026-11-06. Repo avikj/math, `scoped-machine` at `dd301c8` (builder: B11 `0729899`, B12 `01c839c`, B13/F34/C20/E28-parts/F31-syntax/D27 `1c5282a`, stuck primitives as neutrals and C22 `be7149d`; the specs of section 18 were written against `9b94b43`). This document lives at `scoped-machine/PLAN.md` from this revision on; it is the single plan and status document — a fresh agent starts here.
 Each revision replaces the last. Section 17 records changes and retractions.
 
 ---
@@ -27,43 +27,110 @@ versioning and contracts are all *derived* here from the one theory (section 16'
 owner regards all of it as research scope and all of it as current scope: nothing
 implementable is deferred to "later".
 
-### Who works on it
+### The conversations this document came out of
 
-Two agents, both Claude, in separate sessions, on the same repo (`avikj/math`, directory
-`scoped-machine`), pulling often:
-- the **builder** changes the machine (`src/*.c`, `lib/check.cub`, `lib/prelude.cub`,
-  `lib/code.cub`) and lands the ★ items; its commits carry
-  `Claude-Session: …session_019CdfGcL8YbfbiCH37R9UoY`;
-- the **side agent** (the role this document was last written from) writes
-  dependency-free library code, specs, reviews the builder's commits against this plan, and
-  keeps this document current; commits with `…session_01WfrbRsdQ3rXCwxPvyw3a7e`.
-The owner relays messages between them. The builder's reports are to be taken with a grain of
-salt and checked against the code; so are this document's claims — every status line names a
-commit, and the test suite is the arbiter (`make test`).
+The sections below are the outcomes; this is the reasoning that produced them, in the order
+it was built up, so that a reader starts from the owner's premises rather than from the
+usual folklore about languages and proof assistants. Two Claude sessions worked the repo:
+one changing the machine (commits tagged `session_019CdfGcL8YbfbiCH37R9UoY`), one writing
+library code and this document (`session_01WfrbRsdQ3rXCwxPvyw3a7e`); the owner relayed
+between them. That is history, not a structure to preserve.
 
-### How the owner works, and what they will not accept
+**The owner's premise.** Computation has a correct form — substitution along identities —
+and the machine here is that form made literal. The question put repeatedly was never "is
+this a good language" but "what follows": what the hot path becomes, what a C++ codebase
+looks like from here, what every feature of every frontier language *is* once equality is
+primitive. Answers were expected at full strength and from these premises; answers built
+from what is common in languages ("here is how other systems do it") were called losing the
+plot. All of it is research scope and all of it is current scope.
 
-These are standing instructions, learned the hard way; each one has been violated once and
-corrected.
-- Everything is research; the plan stays full. Do not "cut the plan back", do not propose
-  reduced scope, do not plan in sprints. "Future work" means the trajectory after finishing.
-- No subagents: they start cold, fill gaps as they please, and their decisions are contagious.
-  Do the work in the main context.
-- Time estimates are derived (lines × token rate + machine time), never guessed; the owner
-  finds estimates habitually two to three orders of magnitude too high. Write the code
-  correctly and test once at the end; never serialize work on test rounds.
-- Never write "the final" anything. Nothing here is final.
-- One document: this one. No notes files, no second plan, no scratch documents committed.
-- The owner will not read a draft that needs a critical read: do the critical review
-  yourself and proceed. Drafts should say what is so, at full strength, with no hedging and
-  no slogans.
-- State the complete list of remaining changes, each with why it matters, before continuing
-  long work; otherwise scope drifts.
-- Do not ask questions that more work on your side would answer. Do not hand decisions back.
-- When a report from the other agent arrives, check it against the code before acting on it.
-- Commits: attribution lines as in the git log; push after every commit; pull before.
+**What compilation is here (section 5).** The owner's starting objection: "I can define a
+native function f(x) in any language — what does *first-order* add?" The answer that held:
+a compiled function is a precompiled reading of a *class* of terms, and the class is the one
+whose answers are plain data — no dimensions in the term, the types fixed at the boundary,
+data at the boundary path-free, no open Kan operation, no reflection on live values. The
+owner's own phrasing of the key: the line between ordinary inductive types and higher
+inductive types is the line between what has a native form and what is read by the net.
+Binding time is then one axis with four points (now; C++ build; run-known, i.e. a JIT;
+run) and a single back end: what is known at each stage is substituted at that stage. The
+checker's own decision reflects on values, so it is never first-order; it runs on the net.
+Codata is unfolded only on observation. Schedules — what to inline, fuse, specialize, and
+to what generality — are values the specializer takes, not pragmas.
 
-### The decisions already made, with their reasons (do not reopen these)
+**Byte-level control (section 6).** The owner asked whether this gives C-level control of
+memory, and then about reinterpret casts, the C++ stack, syscalls. The answer: control is
+not obtained by the language dropping abstraction but by representations — equivalences
+between a type and a layout, with their round-trip laws — and by validity facts at the
+boundary (a read at an offset is allowed by a proof, a certificate, or an assumption, and
+`safe` means no assumption, no oracle, no foreign call). A reinterpret cast is a typed read
+through a layout; the stack is a region with a discipline; a syscall is a command of a
+world or a `foreign` primitive, trusted and listed. `std::thread` and arbitrary syscalls
+are the high bar for lifting C++ code and are met by handlers over a memory interface
+(release-acquire or sequentially consistent; relaxed is not offered) and by `foreign`,
+never by pretending they are pure. Floats are exact IEEE values with their own laws, not
+approximations of reals.
+
+**Representations that do not mirror constructors.** `∥helix∥₂ ≃ ℤ`-style facts were the
+owner's example: a type's useful representation can be another type entirely, reached by
+an equivalence in the theory, and the layout follows the representation, not the
+constructors. This is why "representation choice is out of the key" and why `represent T
+by R` carries laws.
+
+**The C++ image (section 10).** The owner's background is low-latency market data at
+Citadel Securities, where with Gasper Azman they built a language generating template-only
+C++ parsers. The questions: can this emit C++ headers; what does "header-only" even mean
+(packaging forced by templates needing visible bodies, nothing deeper); how much of a large
+trading system could be lifted; and — the one that reshaped the section — "suppose we
+erase the cubical machine and keep an ideal C++ image": the image must preserve
+abstraction and factoring, with binding time as late as C++ can express, and the emitted
+fragment has its own semantics, so re-import and translation validation are the check.
+Executors and senders/receivers are relevant: codata and processes map to senders
+(stdexec, becoming `std::execution`), handlers to schedulers, stopped outcomes to stop
+tokens. C++26 is not yet a usable target in compilers; C++20 plus stdexec is, with
+contracts under `__cpp_contracts`.
+
+**What a law is, and what survives erasure.** A law is an identity about operations (a
+path), consumed by the specializer: it rewrites along it before erasure. The owner asked
+whether C++'s type system can express or check laws: concepts constrain syntax only; a
+concept cannot require that an operation satisfies an equation, with or without a proof,
+so laws cannot be carried into C++ as types. The first proposal — laws become comments —
+was rejected outright. The resolution, in the owner's words, "compilation can always erase
+things": laws are used, not exported; what survives is `[[assume]]` where an instance of a
+proven law is a C++ expression, contracts at consumer boundaries, and optionally
+certificates (`static_assert` by exhaustion). The library now does exactly this
+(`run.py`'s `law` and `assume` cases).
+
+**HoTT versus HOTT.** Whether the machine can run HoTT "as CCHM" was called a research
+question by the builder; the owner objected that CCHM supports HoTT, and the resolution is
+in section 4: CCHM with De Morgan connections is the prelude; univalence computes; HITs are
+data with path constructors. Higher observational type theory (no interval, `Id` by type
+recursion) is an alternative prelude, not the foundation here. The Brunerie number is a
+measurement of A8, never the point.
+
+**Measurement claims.** "Linear in nesting for every term" was claimed and retracted: a
+term open in k dimensions can have 2^k faces. The claim that stands is work proportional to
+the size of the result. Keys give sharing when the second route arrives while the first is
+retained; the schedule decides retention; no policy is added.
+
+**Critiques from the builder, and their disposition.** Accepted: A2 done, g8's transports
+are pairwise distinct (keys cannot share them), dynamic uniqueness is structural, strictness
+applies only to checked terms. Rejected: an LRU (no retention policy), "can't run Agda"
+(false), fixation on the Brunerie benchmark. Errors made in writing this document, all
+corrected in place: the linearity claim; laws as comments; floats as lossy; cutting the
+plan back after a critique (the plan stays full); a title "the final system"; time
+estimates an order of magnitude too high (the right method: lines × token rate plus
+machine time, tests once at the end); and, on 2026-11-06, a reading of the specializer's
+fallback as "definitions are not unfolded under neutral arguments" — wrong, retracted at
+`7be3368`; the real limit is that a stuck primitive operation has no code.
+
+**How the owner works.** From a phone, in long sessions; expects deliverables consolidated
+in one document; will not read a draft that needs a critical read (do it yourself and
+proceed); wants the complete list of remaining changes with reasons before work continues;
+wants questions only when more work could not answer them; forbids subagents on this work;
+never "the final"; everything implementable is in scope now. Commits carry the attribution
+lines in the git log and are pushed at once; pull before every commit.
+
+### The decisions, with their reasons (settled; reopen only with a new argument)
 
 - **Wires as variables** (`9b94b43`): reading a held value locks nothing; retention is
   structural (counted references, last holder erases). *No retention policy* (LRU or any
@@ -142,6 +209,30 @@ over Word and over Nat), `fromNat`/`toNat` (the Word ≃ Nat used to carry proof
    rejected until 18.18 lands.
 10. The store (`CUBICAL_STORE`, default `.cubical-store`) skips definitions the current
     checker already accepted; `CUBICAL_NOCACHE=1` turns it off, and the tests set it.
+
+### Known defects and cautions in the machine (from the builder's own review, 2026-11-06)
+
+- The store's certificate trusted a checker named by the library texts alone, so a change to
+  `net.c`'s rules with `check.cub` unchanged kept every certificate valid. Fixed at `dd301c8`:
+  the certificate's checker name also hashes the running binary; a rebuilt machine rechecks
+  the library once. The identity key is unchanged (build-independent, as F34 requires).
+- `retire_boxes` in `src/net.c`: a box freed in one thread while another still releases it;
+  reproduced on `19728ef`, predates the day's commits; makes the workers stage of `make test`
+  fail spuriously at about 2% per 16-worker run (a segfault, more likely under memory
+  pressure). Fix in `src/net.c` before reading a failing workers stage as a regression.
+- Unmerged, on the builder's branch (not on `main`): `elab` store entries holding hole
+  solutions as positional codes (`cglob 34`); a different load order would substitute a
+  stale solution — a spurious rejection, never a false acceptance. Store them in canonical
+  `G<key>` form, or fold the positional signature into the `elab` key, before merging.
+- Instance resolution reports a genuine type error against the last candidate tried;
+  module member substitution does not respect clause-pattern binders (a naming corner);
+  `ptr-of` pins the string forever by design; `foreign` accepts the two x86-64 call families
+  (all integer/pointer, all double) and refuses others at declaration; `V_NPRIM` adds only
+  equalities the machine already computed and has no code yet.
+- Never run two heavy checker processes at once in a small container: the 16-worker stage
+  of `make test` plus another run exhausts memory and kills one of them (seen 2026-11-06).
+- When working from a scratch copy of the repo, check that `lib` is not a symlink into the
+  repo before writing (two repo files were overwritten that way and restored).
 
 ### The state in one picture
 
@@ -795,8 +886,8 @@ Dependency order. DONE is as of the revision's commit. ★ marks a core decision
 checker, the key, or the net's rules); other items are consequences to state or library to
 write.
 
-**The queue as of revision 7.8 (handoff).** Machine side (builder), in order of what they
-unblock: (1) a *code* for the new stuck-primitive neutrals (`V_NPRIM` is read by `%view`
+**The queue as of revision 7.8 (handoff).** Before anything: the `retire_boxes` race in
+`src/net.c` (above). Then, machine side, in order of what they unblock: (1) a *code* for the new stuck-primitive neutrals (`V_NPRIM` is read by `%view`
 as `wprim k args` but `qneu` gives none), so that terms over the byte layer quote and
 specialize under unknowns — the one thing standing between `lib/repr.cub`'s direct lowering
 and the specializer proper (18.6); (2) 18.1's primitive parameter usages (erasure of bound
