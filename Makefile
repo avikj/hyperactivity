@@ -41,6 +41,7 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub tests/proc.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/guarded.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/prim.cub lib/stage.cub tests/prim.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/fiber.cub
 	# the store (F34): a fresh one, run twice: the second run checks nothing, the answers agree, renaming changes no key
 	rm -rf build/store; for r in 1 2; do CUBICAL_STORE=build/store ./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/store.cub > build/store-$$r.out || exit 1; done; \
 	grep -q "ok: checks .*\[[0-9]* steps\]" build/store-2.out && { echo "store: the second run checked a definition"; grep "ok: checks .*steps" build/store-2.out | head; exit 1; }; \

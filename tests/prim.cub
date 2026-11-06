@@ -144,3 +144,27 @@ ld2 : (b : Bytes 16) → Int64
 ld2 b = i64add (load64 16 b 0 le8-16) (load64 16 b 8 (le-refl 16))
 #same (case quote-top (Bytes 16 → Int64) ld2 of some c → true; none → false) = true
 #same eval-g lnil (fromopt (quote-top (Bytes 16 → Int64) ld2) cword) (store64 16 (store64 16 (bytes 16) 0 le8-16 (i64 #5)) 8 (le-refl 16) (i64 #7)) = i64 #12
+
+-- ---------------------------------------------------------------- arrays over Fin n and their laws (plan C22)
+sq : Fin 3 → Int64
+sq p = i64 (fromNat (times (fst p) (fst p)))
+f2 : Fin 3
+f2 = (2 , le-refl 3)
+f1 : Fin 3
+f1 = (1 , le-pred 2 3 (le-refl 3))
+#same aindex 3 (atab 3 sq) f2 = i64 #4
+#same aindex 3 (atab 3 sq) f1 = i64 #1
+-- the laws are checked terms; their readings compute: a read after a write elsewhere is the old value
+#same index 3 (update 3 a3 2 (le-refl 3) (i64 #9)) 1 (snd f1) = i64 #1
+#same index 3 (update 3 a3 1 (snd f1) (i64 #9)) 1 (snd f1) = i64 #9
+rt : (n : Nat) → (a : Array n) → atab n (aindex n a) ≡ a
+rt = λ n → tabulate-index n
+eqv : Equiv (Fin 3 → Int64) (Array 3)
+eqv = Fin→Array 3
+#same aindex 3 (fst eqv sq) f1 = i64 #1
+-- two dimensions, row-major: a 2×3 holding its own flat index, so row i column j holds 3i + j
+m23 : Array2 2 3
+m23 = atab 6 (λ p → i64 (fromNat (fst p)))
+#same index2 2 3 m23 1 2 (le-refl 2) (le-refl 3) = i64 #5
+#same index2 2 3 m23 0 1 (le-pred 1 2 (le-refl 2)) (snd f1) = i64 #1
+#same index2 2 3 (update2 2 3 m23 1 0 (le-refl 2) (le-zero 3) (i64 #7)) 1 0 (le-refl 2) (le-zero 3) = i64 #7

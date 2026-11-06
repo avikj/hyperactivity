@@ -1,0 +1,33 @@
+-- fiber.cub — a map factors through its fibers (plan C23): for f : A → B, A is equivalent to the
+-- total space of the fibers of f, (b : B) × fiber f b; to a is (f a , (a , refl)), from (b , (a , q))
+-- is a. The equivalence is the factoring A → Σ B (fiber f) → B of f through the first projection,
+-- the shape a world's state takes when it is keyed by what a map computes from it (a registry
+-- keyed by the handle it computes, an array keyed by the index it stores at). Over lib/std.cub
+
+total : {A B : Type} → (f : A → B) → A → (b : B) × fiber f b
+total f a = (f a , (a , λ i → f a))
+untotal : {A B : Type} → (f : A → B) → ((b : B) × fiber f b) → A
+untotal f p = fst (snd p)
+-- the first projection after total is f: the factoring
+total-fst : {A B : Type} → (f : A → B) → (a : A) → fst (total f a) ≡ f a
+total-fst f a = λ i → f a
+total-untotal : {A B : Type} → (f : A → B) → (p : (b : B) × fiber f b) → total f (untotal f p) ≡ p
+total-untotal f p = λ i → (snd (snd p) i , (fst (snd p) , λ j → snd (snd p) (i /\ j)))
+untotal-total : {A B : Type} → (f : A → B) → (a : A) → untotal f (total f a) ≡ a
+untotal-total f a = λ i → a
+fiberEquiv : {A B : Type} → (f : A → B) → Equiv A ((b : B) × fiber f b)
+fiberEquiv {A} {B} f = isoToEquiv {lzero} {A} {(b : B) × fiber f b} (total f) (untotal f) (total-untotal f) (untotal-total f)
+
+-- ---------------------------------------------------------------- the example: parity. Nat is the
+-- evens together with the odds, each the fiber of parity over its boolean
+parity : Nat → Bool
+parity n = case n return (λ x → Bool) of zero → true; suc k → not (rec k)
+Nat≃Parity : Equiv Nat ((b : Bool) × fiber parity b)
+Nat≃Parity = fiberEquiv parity
+-- 5 lands in the fiber over false, with itself as the witness
+#same fst (fst Nat≃Parity 5) = false
+#same fst (snd (fst Nat≃Parity 5)) = 5
+-- and back: a point of the fiber over true, 4 with its proof, returns to 4
+four-even : fiber parity true
+four-even = (4 , λ i → true)
+#same untotal parity (true , four-even) = 4
