@@ -31,3 +31,21 @@ Nat≃Parity = fiberEquiv parity
 four-even : fiber parity true
 four-even = (4 , λ i → true)
 #same untotal parity (true , four-even) = 4
+-- ---------------------------------------------------------------- state programs through the factoring (C23)
+-- a state of type A keyed by f : A → B is a point of the total space; a program that moves within
+-- a fiber (a function on the fiber over each key) is a function on A through the equivalence,
+-- and it leaves the key fixed: the projection after it is f. This is the shape of a world whose
+-- state is keyed by what a map computes (a registry by its handle, an array by its index): an
+-- update at a key is a program on that key's fiber, and the key's invariance is this theorem
+in-fiber : {A B : Type} → (f : A → B) → ((b : B) → fiber f b → fiber f b) → A → A
+in-fiber f g a = untotal f (f a , g (f a) (snd (total f a)))
+in-fiber-key : {A B : Type} → (f : A → B) → (g : (b : B) → fiber f b → fiber f b) → (a : A) → f (in-fiber f g a) ≡ f a
+in-fiber-key f g a = snd (g (f a) (snd (total f a)))
+-- the parity example: adding two moves within a parity fiber (the proof of parity is carried:
+-- parity (suc (suc n)) is not (not (parity n)) by computation, and not (not b) ≡ b by cases)
+not-not : (b : Bool) → not (not b) ≡ b
+not-not b = case b return (λ x → not (not x) ≡ x) of true → λ i → true; false → λ i → false
+plus2-fib : (b : Bool) → fiber parity b → fiber parity b
+plus2-fib b p = (suc (suc (fst p)) , concat (not-not (parity (fst p))) (snd p))
+#same in-fiber parity plus2-fib 5 = 7
+#same parity (in-fiber parity plus2-fib 5) = false

@@ -1,0 +1,76 @@
+-- lib/session.cub — session types over processes (plan 7.3, D24): a protocol as a guarded data
+-- type of the allowed next commands, with the protocol after each response one tick later
+-- (18.18 lets the continuation stand under a Π into a later type); a process is typed by a
+-- session when, run under the session's guard over any world, it is never refused. The guard is
+-- a world transformer that refuses what the session does not allow and advances the session by
+-- the response; the trace-predicate form of lib/proc.cub (Session S) is this one unfolded, and
+-- the two agree on every finite run (session-of-pred). Loaded after lib/proc.cub.
+-- ---------------------------------------------------------------- protocols
+data GSess (κ : Clock) (S : Sig) = gsess (allowed : Cmd S → Bool) (continue : (c : Cmd S) → Resp S c → ▸ κ (GSess κ S))
+sess-ok : {S : Sig} → GSess κ S → Cmd S → Bool
+sess-ok {κ} {S} s = case s return (λ x → Cmd S → Bool) of gsess al ct → al
+sess-after : {S : Sig} → GSess κ S → (c : Cmd S) → Resp S c → ▸ κ (GSess κ S)
+sess-after {κ} {S} s = case s return (λ x → (c : Cmd S) → Resp S c → ▸ κ (GSess κ S)) of gsess al ct → ct
+-- the protocol that allows everything, forever
+sess-any : {S : Sig} → GSess κ S
+sess-any = gsess (λ c → true) (λ c r → sess-any)
+-- the protocol that allows nothing more
+sess-end : {S : Sig} → GSess κ S
+sess-end = gsess (λ c → false) (λ c r → sess-end)
+-- one step: the commands allowed now, then the protocol chosen by the command and its response
+sess-step : {S : Sig} → (Cmd S → Bool) → ((c : Cmd S) → Resp S c → GSess κ S) → GSess κ S
+sess-step al k = gsess al (λ c r → next (k c r))
+-- a loop: the same step forever
+sess-loop : {S : Sig} → (Cmd S → Bool) → GSess κ S
+sess-loop al = gsess al (λ c r → sess-loop al)
+-- a protocol from a trace predicate (the form lib/proc.cub types with): the history is carried
+sess-of-pred : {S : Sig} → Session S → Hist S → GSess κ S
+sess-of-pred ses h = gsess (ses h) (λ c r → sess-of-pred ses (cons (c , r) h))
+-- ---------------------------------------------------------------- the guard
+-- a world under a protocol: a command the protocol does not allow is refused (the state is kept);
+-- an allowed one is answered by the world and the protocol advances by the response. The
+-- protocol is a total one (at every clock) so that it can be advanced now: forceκ gives the tick
+GSession : Sig → Type
+GSession S = (κ : Clock) → GSess κ S
+gs-advance : {S : Sig} → GSession S → (c : Cmd S) → Resp S c → GSession S
+gs-advance {S} s c r = forceκ {lzero} {λ κ → GSess κ S} (λ κ → sess-after {κ} {S} (s κ) c r)
+gsession-guard : {S : Sig} {St : Type} → World S St → World S (GSession S × St)
+gsession-guard {S} {St} w c st =
+  case sess-ok {κ0} {S} (fst st κ0) c of
+    true → (case w c (snd st) of
+              inl r → inl (fst r , (gs-advance {S} (fst st) c (fst r) , snd r))
+              inr s2 → inr (fst st , s2))
+    false → inr st
+-- a process typed by a protocol: it is never refused by the guard over the given world
+GSProc : {St : Type} (S : Sig) (A : Type) → GSession S → World S St → St → Type (lsuc lzero)
+GSProc {St} S A ses w st = (p : Proc {lzero} S A) × IsDone {A} (fst (runp {S} {A} {GSession S × St} p (gsession-guard {S} {St} w) (ses , st)))
+-- ---------------------------------------------------------------- readings over the key-value world
+-- writes before reads, as a protocol: puts and gets until a get is answered, then gets only
+kv-is-get : KV → Bool
+kv-is-get c = case c of get k → true; put k v → false
+writes-then-reads : GSess κ KVS
+writes-then-reads = gsess (λ c → true) (λ c r → case c return (λ x → GSess κ KVS) of get k → sess-loop kv-is-get; put k v → writes-then-reads)
+wtr : GSession KVS
+wtr κ = writes-then-reads {κ}
+#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} (pr1 {lzero}) (gsession-guard {KVS} {Word → Word} kv-world) (wtr , empty-st)) = done #12
+pr1-wtr : GSProc {Word → Word} KVS Word wtr kv-world empty-st
+pr1-wtr = (pr1 {lzero} , unit)
+-- a put after a get is refused by the guard
+late-put : Proc {lzero} KVS Word
+late-put = bind {lzero} {KVS} {Word} {Word} (cmd {lzero} {KVS} (get #1)) (λ a → bind {lzero} {KVS} {Unit} {Word} (cmd {lzero} {KVS} (put #1 #5)) (λ u → ret {lzero} {KVS} {Word} a))
+#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} late-put (gsession-guard {KVS} {Word → Word} kv-world) (wtr , empty-st)) = stopped
+-- the protocol from the trace predicate agrees: the same runs, the same verdicts
+no-get-yet : Hist KVS → Bool
+no-get-yet tr = case tr of nil → true; cons e r → (case fst e of get k → false; put k v → rec r)
+wtr-pred : Session KVS
+wtr-pred tr c = case c of get k → true; put k v → no-get-yet tr
+wtr2 : GSession KVS
+wtr2 κ = sess-of-pred {κ} {KVS} wtr-pred nil
+#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} late-put (gsession-guard {KVS} {Word → Word} kv-world) (wtr2 , empty-st)) = stopped
+#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} (pr1 {lzero}) (gsession-guard {KVS} {Word → Word} kv-world) (wtr2 , empty-st)) = done #12
+-- the ended protocol refuses the first command; the open one refuses nothing
+#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} (pr1 {lzero}) (gsession-guard {KVS} {Word → Word} kv-world) ((λ κ → sess-end {κ} {KVS}) , empty-st)) = stopped
+#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} late-put (gsession-guard {KVS} {Word → Word} kv-world) ((λ κ → sess-any {κ} {KVS}) , empty-st)) = done #0
+-- a guarded process under a protocol: the counter loop (puts forever) is allowed by writes-then-
+-- reads and stopped only by the budget
+#same (case grun-for {KVS} {Unit} {GSession KVS × (Nat × (Word → Word))} 20 (gsession-guard {KVS} {Nat × (Word → Word)} (budget {KVS} {Word → Word} kv-world)) (λ κ → gloop {κ} {KVS} {Word} {Unit} (λ x → put #1 x) (λ x u → %wsucc x) #0) (wtr , (5 , empty-st)) of arrived r → fst r; pending → done unit) = stopped

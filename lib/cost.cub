@@ -1,0 +1,71 @@
+-- lib/cost.cub — the cost model for navigation, first form (plan 18.14, "cost model (open
+-- thread)"): the score of a step is the recorded cost of its result — the machine's own step
+-- count for the key at the result's head, as the store records it beside each accepted
+-- definition (`ok <steps> <checker>`) — estimated by the result's size where no record exists.
+-- A cost model is a value (Code → Word); navigation parameterized by one (navigate-by) is
+-- lib/nav.cub's navigation with the score abstracted; nav.cub's choice is navigate-by size-cost.
+-- The table of recorded steps per key is data here; reading it from the store is a command of
+-- the machine (not yet: the table is given). Loaded after lib/nav.cub.
+-- ---------------------------------------------------------------- tables and models
+-- a table: a Lst of (global index , recorded steps)
+cost-lookup g tbl = case tbl of lnil → none; lcons e r → (if %weq (fst e) g then some (snd e) else cost-lookup g r)
+-- the head global of a code (an application's function, through annotations and lets)
+head-glob c =
+  case c of
+    cglob g → some g
+    capp f a → head-glob f
+    cann t T → head-glob t
+    clet t b → head-glob b
+    _ → none
+-- the size model: lib/nav.cub's first score
+size-cost c = code-size c
+-- the recorded model: the recorded steps of the head's key, plus the size of the rest (the
+-- arguments still cost their size to build), else the size alone
+table-cost tbl c =
+  case head-glob c of
+    none → code-size c
+    some g → (case cost-lookup g tbl of none → code-size c; some s → %wadd s (code-size c))
+-- a model refined by what a reading measured: an entry replaced or added
+cost-record g steps tbl =
+  case tbl of
+    lnil → lcons (g , steps) lnil
+    lcons e r → if %weq (fst e) g then lcons (g , steps) r else lcons e (cost-record g steps r)
+-- ---------------------------------------------------------------- choice and navigation by a model
+best-by cost steps =
+  case steps of
+    lnil → none
+    lcons s rest → some (best-by-from cost s rest)
+best-by-from cost s rest =
+  case rest of
+    lnil → s
+    lcons s2 r2 →
+      (case s of
+         stepv r t → (case s2 of stepv r2 t2 → if %wlt (cost t2) (cost t) then best-by-from cost s2 r2 else best-by-from cost s r2))
+choose-by cost goal steps =
+  case first-reaching goal steps of
+    some s → some s
+    none → best-by cost steps
+navigate-by cost n goal view t =
+  if %weq n #0 then navr t #0
+  else if reaches goal t then navr t #0
+  else (case choose-by cost goal (available view t) of
+          none → navr t #0
+          some s → (case s of stepv r t2 → (case navigate-by cost (%wsub n #1) goal view t2 of navr t3 k → navr t3 (%wsucc k))))
+-- ---------------------------------------------------------------- readings
+-- by size, navigate-by is navigate: nav.cub's readings again
+#same navigate-by size-cost #5 (cglob #20) view1 t1 = navigate #5 (cglob #20) view1 t1
+#same navigate-by size-cost #5 (cwlit #99) view1 t2 = navigate #5 (cwlit #99) view1 t2
+-- two rules from a term with the same-size results: f x → g x and f x → h x; by size the first in
+-- view is taken; with g recorded as costly, h's step is chosen
+r-g = rule #0 (capp (cglob #40) (cvar #0)) (capp (cglob #41) (cvar #0))
+r-h = rule #0 (capp (cglob #40) (cvar #0)) (capp (cglob #42) (cvar #0))
+view-gh = lcons r-g (lcons r-h lnil)
+t-f = capp (cglob #40) (cglob #9)
+#same navigate-by size-cost #1 (cwlit #99) view-gh t-f = navr (capp (cglob #41) (cglob #9)) #1
+tbl1 = cost-record #41 #1000 lnil
+#same navigate-by (table-cost tbl1) #1 (cwlit #99) view-gh t-f = navr (capp (cglob #42) (cglob #9)) #1
+-- the model is a value: a record for h too, larger, and g is chosen again
+#same navigate-by (table-cost (cost-record #42 #5000 tbl1)) #1 (cwlit #99) view-gh t-f = navr (capp (cglob #41) (cglob #9)) #1
+-- a recorded cost is read through annotations and applications to the head
+#same table-cost tbl1 (cann (capp (capp (cglob #41) (cglob #1)) (cglob #2)) cword) = #1005
+#same table-cost tbl1 (cglob #7) = #1
