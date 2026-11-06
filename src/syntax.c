@@ -3027,7 +3027,8 @@ static int head_params(Node *h, Node **ty, bool *imp, int cap) {
  * one, and its later parts can be given the inner ticks) */
 static const char *wtick[64]; static int nwtick;
 static bool guard_on; static int guard_q = -1;
-static bool tick_pos;   /* the term about to be elaborated stands at a later position */   /* a guarded fixed point being compiled; its clock parameter */
+static bool tick_pos;   /* the term about to be elaborated stands at a later position */
+static int fn_later_depth = -1;   /* a λ being elaborated whose body, this many λs down, stands at a later position (18.18) */   /* a guarded fixed point being compiled; its clock parameter */
 static Node *tick_lift(Node *e, Node *al) {
     if (!e->list || e->n == 0) return e;
     Node *h = e->it[0];
@@ -3190,6 +3191,13 @@ static Node *el_app(Node *t, Node *h, Node **args, int n) {
             if (args[i]->list && args[i]->n == 2 && is(args[i]->it[0], "%imp")) die("an implicit argument {..} applied to something without implicit arguments", NULL);
             Node *ai = args[i];
             if (i < nft && is_later(fty[i]) && wants_tick(ai)) ai = tick_wrap(ai);   /* a constructor's later field */
+            /* a constructor's field that is a function into a later type, given a λ: its body (under
+             * that many λs) stands at a later position (18.18) */
+            if (i < nft && fty[i] && ai->list && ai->n == 3 && !ai->it[0]->list && is(ai->it[0], "lam")) {
+                int d = 0; Node *T = fty[i];
+                while (T && T->list && T->n == 4 && !T->it[0]->list && is(T->it[0], "Pi") && !is_later(T)) { d++; T = T->it[3]; }
+                if (d > 0 && is_later(T)) fn_later_depth = d;
+            }
             if (i < nft && is_later(fty[i])) tick_pos = true;   /* (a tick λ written out there binds a tick) */
             orig[no] = ai; out[no++] = !ai->list && !strcmp(ai->s, "%hole") ? hole_or_sol(ai, 0, &pend) : el(ai);
             tick_pos = false;
@@ -3304,11 +3312,17 @@ static Node *el(Node *t) {
         /* a tick λ written out, with a guarded recursive call under it: the call is the fixed
          * point's later self at the (outermost) tick, as under an inserted one */
         Node *body = t->it[2];
+        /* a λ's body where a later value is due (a continuation into ▸ κ X, 18.18): given its tick */
+        int fl = fn_later_depth; fn_later_depth = -1;
+        bool body_tickpos = false;
+        if (!wt && !dim && ((exB && is_later(exB) && !mentions_unknown(exB)) || fl == 1) && wants_tick(body)) body = tick_wrap(body);
+        else if (!wt && !dim && fl == 1) body_tickpos = true;   /* (a tick λ written out there binds a tick) */
+        else if (!wt && !dim && fl > 1 && body->list && body->n == 3 && !body->it[0]->list && is(body->it[0], "lam")) fn_later_depth = fl - 1;
         if (!wt && !dim && nwtick < 64 && tickpos && has_gcall(body)) {
             wt = true; wtick[nwtick++] = t->it[1]->s;
             body = tick_body(t, t->it[1]);
         } else if (wt) wtick[nwtick++] = t->it[1]->s;
-        syn_expect = dim ? NULL : exB; Node *b = el(body); nesc = save;
+        syn_expect = dim ? NULL : exB; if (body_tickpos) tick_pos = true; Node *b = el(body); tick_pos = false; nesc = save;
         if (wt) nwtick--;
         Node *r = sym3(dim ? "plam" : "lam", t->it[1], b);
         return g >= 0 ? sym4("%guess", wordn(g), wordn(EG[g].kind), r) : r;
@@ -3388,7 +3402,7 @@ static bool rt_is_path(Node *R) {
  * a recursive field of a split is that split's induction hypothesis (rec x), applied to the later
  * parameters. */
 typedef struct { const char *v; Node *def; int gp; Node *ty; } CVar;   /* a variable rebuilt by a let, its type */
-typedef struct { const char *v; int gp; Node *E; Node **rf; int nrf; } Frame;   /* a split's IH */
+typedef struct { const char *v; int gp; Node *E; Node **rf; int nrf; const char **rs; } Frame;   /* a split's IH: the recursive fields and their shapes (ConInfo.rsh) */
 static CVar *cdefs; static int ncdefs, capcdefs;
 static Frame *frames; static int nframes, capframes;
 static Node *subst_sym(Node *t, const char *x, Node *e);
@@ -3446,6 +3460,46 @@ static bool cov_on, cov_armed; static jmp_buf cov_jb;
  * structural is a guarded fixed point: each call is (%gcall the arguments after the clock), made a
  * call of the fixed point's own later self where it stands under ▸ (a later position) */
 
+/* a recursive call on a field recursive under paths, Π codomains and Σ components (18.18): the
+ * argument matched against the field's shape, f (k x) as (rec k) x, f (p @ i) as (rec p) @ i, f (fst
+ * p) as (rec p) (or fst (rec p) when both components are recursive); NULL when it is not such a call */
+static const char *shape_end(const char *s) { int depth = 1; while (depth > 0) { char d = *s++; if (d == 'D') depth--; else if (d == 'B') depth++; } return s; }
+static Node *rec_by_shape_walk(const char **sp, Node **ops, int i, Node *h) {
+    char c = *(*sp)++;
+    Node *op = i >= 0 ? ops[i] : NULL;
+    switch (c) {
+    case 'D': return i < 0 ? h : NULL;
+    case 'P': if (!op || !is(op->it[0], "@")) return NULL; return rec_by_shape_walk(sp, ops, i - 1, sym3("@", h, op->it[2]));
+    case 'F': if (!op || (!op->it[0]->list && (is(op->it[0], "@") || is(op->it[0], "fst") || is(op->it[0], "snd")))) return NULL;
+        return rec_by_shape_walk(sp, ops, i - 1, lst(2, h, op->it[op->n - 1]));
+    case '1': case '2': if (!op || !is(op->it[0], c == '1' ? "fst" : "snd")) return NULL; return rec_by_shape_walk(sp, ops, i - 1, h);
+    case 'B': {
+        if (!op || !(is(op->it[0], "fst") || is(op->it[0], "snd"))) return NULL;
+        bool f1 = is(op->it[0], "fst");
+        const char *a = *sp, *b = shape_end(a);
+        *sp = shape_end(b);
+        const char *q = f1 ? a : b;
+        return rec_by_shape_walk(&q, ops, i - 1, sym2(f1 ? "fst" : "snd", h));
+    }
+    default: return NULL;
+    }
+}
+static Node *rec_by_shape(const char *sh, Node *want, Node *cand, Node *hyp) {
+    /* the argument's spine from the field outward: path applications, applications, projections */
+    Node *ops[64]; int nops = 0; Node *w = want;
+    while (nops < 64 && w->list) {
+        if (w->n == 3 && !w->it[0]->list && is(w->it[0], "@")) { ops[nops++] = w; w = w->it[1]; }
+        else if (w->n == 2 && !w->it[0]->list && (is(w->it[0], "fst") || is(w->it[0], "snd"))) { ops[nops++] = w; w = w->it[1]; }
+        else if (w->n >= 2 && !(!w->it[0]->list && e_head_kw(w->it[0]->s))) {
+            ops[nops++] = w;
+            if (w->n == 2) w = w->it[0];
+            else { Node *fn = nlist(w->n - 1); for (int k = 0; k < w->n - 1; k++) fn->it[k] = w->it[k]; w = fn; }
+        } else break;
+    }
+    if (!node_eq(cand, w)) return NULL;
+    const char *sp = sh;
+    return rec_by_shape_walk(&sp, ops, nops - 1, hyp);
+}
 static Deep *deep_of(const char *w) { for (int i = ndeeps - 1; i >= 0; i--) if (!strcmp(deeps[i].w, w)) return &deeps[i]; return NULL; }
 static Node *rec_xform(Node *e);
 static Node *rec_call(Node *e, Node **args, int n) {
@@ -3510,10 +3564,16 @@ static Node *rec_call(Node *e, Node **args, int n) {
         for (int r = 0; r < f->nrf; r++) {
             Node *cand = expand(subst_sym(f->E, f->v, f->rf[r]));
             bool whole = node_eq(cand, want);
-            if (!whole && !(ndm && node_eq(cand, head))) continue;
+            Node *call = lst(2, nsym("rec"), f->rf[r]);
+            if (!whole && !(ndm && node_eq(cand, head))) {
+                /* under Π codomains and Σ components (18.18): by the field's shape */
+                if (!f->rs[r]) continue;
+                Node *byshape = rec_by_shape(f->rs[r], want, cand, call);
+                if (!byshape) continue;
+                call = byshape; whole = true;
+            }
             /* the hypothesis at the later parameters */
             int nl = 0; for (int q = p + 1; q < tsig.np; q++) if (tsig.rev[q]) nl++;
-            Node *call = lst(2, nsym("rec"), f->rf[r]);
             if (!whole) for (int k = ndm - 1; k >= 0; k--) call = sym3("@", call, dims[k]);
             if (!nl) return call;
             Node *ap = nlist(nl + 1); ap->it[0] = call; int k = 1;
@@ -3713,8 +3773,8 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
                 if (!tuple) tuple = nsym("unit");
             }
         } else {
-            Frame fr = { v, gp, E, calloc((size_t)nf + 1, sizeof(Node *)), 0 };
-            for (int q = 0; q < CON[c].nfields; q++) if (CON[c].recmask >> q & 1) fr.rf[fr.nrf++] = fv[q];
+            Frame fr = { v, gp, E, calloc((size_t)nf + 1, sizeof(Node *)), 0, calloc((size_t)nf + 1, sizeof(char *)) };
+            for (int q = 0; q < CON[c].nfields; q++) if (CON[c].recmask >> q & 1) { fr.rs[fr.nrf] = CON[c].rsh[q]; fr.rf[fr.nrf++] = fv[q]; }
             GROW(frames, capframes, (size_t)nframes + 1); frames[nframes++] = fr;
         }
         Node *body = ccm_t(v2, nv2, r2, n2);

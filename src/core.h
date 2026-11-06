@@ -323,9 +323,11 @@ Cell *global_res(long g);          /* the cell holding a definition's value */
 
 /* data types (higher inductive types, Coquand–Huber–Mörtberg): declared by
  * (data ...); the net's rules are generic over these tables */
-typedef struct { char *name; int data, index, nfields, ndims; long bdy, trans; int nrec; uint64_t recmask; unsigned char rdim[64], fmult[64]; } ConInfo;
+typedef struct { char *name; int data, index, nfields, ndims; long bdy, trans; int nrec; uint64_t recmask; unsigned char rdim[64], fmult[64]; const char *rsh[64]; } ConInfo;
 /* bdy, trans: globals or -1; recmask: the recursive fields (of type the data type itself, or a path line into it,
- * rdim[k] dimensions deep), nrec of them */
+ * rdim[k] dimensions deep, or under Π codomains and Σ components), nrec of them. rsh[k]: the shape of a
+ * recursive field's type as a string, prefix form: D the data type, P<s> a path line into s, F<s> a function
+ * into s, 1<s> a pair whose first component is s, 2<s> whose second is, B<s><t> both (18.17, 18.18) */
 typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; void *decl; int co, nflds; int *flds; } DataInfo;
 /* decl: the (data ...) form. co: a codata type (no constructors): its fields flds (indices into FLD);
  * comp its composition, a copattern definition */

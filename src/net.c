@@ -949,6 +949,32 @@ static Port apply_global(const char *name, Port *args, int n) {
     if (g < 0) { fprintf(stderr, "missing library definition %s\n", name); exit(2); }
     return apply_gid(g, args, n);
 }
+/* the induction hypotheses of fields recursive under paths, Π codomains and Σ components (18.18),
+ * by the field's shape (ConInfo.rsh): the number of D leaves; whether the shape is a path line only
+ * (built directly by the case rule); the maker of the hypothesis from the field, a function value:
+ * at a leaf the elimination as a function (V_CASEF) over its own copies of the motive and the
+ * environment, above it the prelude's %ih-* on the makers below */
+static int ih_leaves(const char *s) { int n = 0; for (; *s; s++) if (*s == 'D') n++; return n; }
+static bool ih_pure_path(const char *s) { for (; *s; s++) if (*s != 'P' && *s != 'D') return false; return true; }
+static Port ih_maker(const char **sp, CaseTab *tb, int x, Port *mc, Port *ec, int stride, int ne, int *leaf) {
+    char c = *(*sp)++;
+    switch (c) {
+    case 'D': {
+        int mb = x ? 1 : 0;
+        Cell *f = cell(V_CASEF, ne + 1 + mb); f->x = x; f->p = tb;
+        if (mb) link(mc[*leaf], P(f, 1));
+        for (int e = 0; e < ne; e++) link(ec[e * stride + *leaf + 1], P(f, 1 + mb + e));
+        (*leaf)++;
+        return P(f, 0);
+    }
+    case 'P': { Port a[1] = { ih_maker(sp, tb, x, mc, ec, stride, ne, leaf) }; return apply_global("%ih-path", a, 1); }
+    case 'F': { Port a[1] = { ih_maker(sp, tb, x, mc, ec, stride, ne, leaf) }; return apply_global("%ih-pi", a, 1); }
+    case '1': { Port a[1] = { ih_maker(sp, tb, x, mc, ec, stride, ne, leaf) }; return apply_global("%ih-fst", a, 1); }
+    case '2': { Port a[1] = { ih_maker(sp, tb, x, mc, ec, stride, ne, leaf) }; return apply_global("%ih-snd", a, 1); }
+    case 'B': { Port a[2]; a[0] = ih_maker(sp, tb, x, mc, ec, stride, ne, leaf); a[1] = ih_maker(sp, tb, x, mc, ec, stride, ne, leaf); return apply_global("%ih-pair", a, 2); }
+    default: fprintf(stderr, "bad hypothesis shape\n"); exit(2);
+    }
+}
 static Port face_cell(Dnf *f) { Cell *c = cell(V_FACE, 1); c->p = f; return P(c, 0); }  /* takes f */
 
 /* a constructor applied to its fields and dimensions: c v r is its boundary
@@ -2238,19 +2264,32 @@ static void interact(Cell *o, Cell *v) {
             bool ih = nr && (tb->mask >> k & 1);
             int np = nf + (ih ? nr : 0) + nd;
             Port prm[np + 1], env[ne + 1];
+            /* the hypotheses' leaves: one elimination per D at the leaf of a field's shape (18.18) */
+            int nleaf = 0;
+            if (ih) for (int j = 0; j < nf; j++) if (ci->recmask >> j & 1) nleaf += ci->rsh[j] ? ih_leaves(ci->rsh[j]) : 1;
             if (!ih) {
                 for (int j = 0; j < nf + nd; j++) prm[j] = v->port[1 + j];
                 for (int e = 0; e < ne; e++) env[e] = o->port[e0 + e];
                 if (mb) era(o->port[1]);
             } else {
-                Port mc[nr + 1], ec[ne + 1][nr + 2];
-                if (mb) split(o->port[1], nr, mc);
-                for (int e = 0; e < ne; e++) { split(o->port[e0 + e], nr + 1, ec[e]); env[e] = ec[e][0]; }
-                int q = 0;
+                Port mc[nleaf + 1], ec[ne + 1][nleaf + 2];
+                if (mb) split(o->port[1], nleaf, mc);
+                for (int e = 0; e < ne; e++) { split(o->port[e0 + e], nleaf + 1, ec[e]); env[e] = ec[e][0]; }
+                int q = 0, leaf = 0;
                 for (int j = 0; j < nf; j++) {
                     if (ci->recmask >> j & 1) {
                         Port fa, fb; split2(v->port[1 + j], &fa, &fb);
                         prm[j] = fa;
+                        if (ci->rsh[j] && !ih_pure_path(ci->rsh[j])) {
+                            /* a function- or pair-shaped field: the hypothesis is the field passed through the
+                             * shape's maker, an elimination as a function at each leaf (18.18) */
+                            const char *sp = ci->rsh[j];
+                            Port hm = ih_maker(&sp, tb, o->x, mb ? mc : NULL, &ec[0][0], nleaf + 2, ne, &leaf);
+                            Cell *ap = cell(O_APP, 3); link(hm, P(ap, 0)); link(fb, P(ap, 1));
+                            prm[nf + q] = P(ap, 2);
+                            q++;
+                            continue;
+                        }
                         /* 1=field [2=motive] then the environment */
                         /* a path-typed field (rdim dimensions deep): the hypothesis is the line of
                          * the eliminations of its points, λ m ... → F (p @ m ...) (18.17) */
@@ -2258,18 +2297,18 @@ static void interact(Cell *o, Cell *v) {
                         for (int t = 0; t < rd; t++) { ds[t] = fresh_dim(); fb = papp_at(fb, iv_atom(ds[t])); }
                         Cell *h = cell(V_SUSP, ne + 2 + mb); h->x = o->x; h->p = tb;
                         link(fb, P(h, 1));
-                        if (mb) link(mc[q], P(h, 2));
-                        for (int e = 0; e < ne; e++) link(ec[e][q + 1], P(h, 2 + mb + e));
+                        if (mb) link(mc[leaf], P(h, 2));
+                        for (int e = 0; e < ne; e++) link(ec[e][leaf + 1], P(h, 2 + mb + e));
                         /* its key: the case term on the field (the motive is not part of the term) */
                         if (!rd) { Key **ck = malloc(((size_t)ne + 2) * sizeof(Key *)); ck[0] = key_of_port(fb);
-                          for (int e = 0; e < ne; e++) ck[1 + e] = key_of_port(ec[e][q + 1]);
+                          for (int e = 0; e < ne; e++) ck[1 + e] = key_of_port(ec[e][leaf + 1]);
                           h->key = key(K_CASE, 0, tb, ne + 1, ck);
                           for (int e = 0; e < ne + 1; e++) if (ck[e]) key_release(ck[e]);
                           free(ck); }
                         Port hp = P(h, 0);
                         for (int t = rd - 1; t >= 0; t--) { Cell *m = cell(O_MKPLAM, 2); m->a = ds[t]; link(hp, P(m, 0)); hp = P(m, 1); }
                         prm[nf + q] = hp;
-                        q++;
+                        q++; leaf++;
                     } else prm[j] = v->port[1 + j];
                 }
                 for (int j = 0; j < nd; j++) prm[nf + nr + j] = v->port[1 + nf + j];

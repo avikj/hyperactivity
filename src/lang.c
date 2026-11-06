@@ -223,6 +223,53 @@ static int rec_depth(Node *A, const char *D) {
     }
     return -1;
 }
+static bool mentions_name(Node *t, const char *x);
+/* the shape of a recursive field's type (ConInfo.rsh): D itself, a path line into one, a function
+ * (its domain not mentioning D, not a tick: a later D takes no hypothesis) into one, a pair with
+ * recursive components (18.18); false when the type is not recursive */
+static bool rec_shape(Node *A, const char *D, char *out, int *n) {
+    if (!A || *n > 240) return false;
+    if (!A->list) { if (strcmp(A->s, D)) return false; out[(*n)++] = 'D'; return true; }
+    if (A->n < 1 || A->it[0]->list) return false;
+    const char *h = A->it[0]->s;
+    if (!strcmp(h, D)) { out[(*n)++] = 'D'; return true; }
+    if (A->n == 4 && !strcmp(h, "PathP")) {
+        Node *L = A->it[1];
+        if (!(L->list && L->n == 3 && !L->it[0]->list && (!strcmp(L->it[0]->s, "plam") || !strcmp(L->it[0]->s, "lam")))) return false;
+        int save = *n; out[(*n)++] = 'P';
+        if (rec_shape(L->it[2], D, out, n)) return true;
+        *n = save; return false;
+    }
+    if (!strcmp(h, "Pi") || !strcmp(h, "Sigma")) {
+        Node *x = NULL, *dom = NULL, *cod = NULL;
+        if (A->n == 4) { x = A->it[1]; dom = A->it[2]; cod = A->it[3]; }
+        else if (A->n == 3 && A->it[1]->list && A->it[1]->n == 2 && !A->it[1]->it[0]->list) { x = A->it[1]->it[0]; dom = A->it[1]->it[1]; cod = A->it[2]; }
+        else if (A->n == 3 && A->it[1]->list && A->it[1]->n >= 1 && A->it[1]->it[0]->list) {
+            /* a telescope (Pi ((x A) (y B)) C): nested */
+            Node *tel = A->it[1], *r = A->it[2];
+            for (int q = tel->n - 1; q >= 0; q--) { Node *b = tel->it[q]; if (!b->list || b->n != 2) return false; Node *m = nlist(4); m->it[0] = A->it[0]; m->it[1] = b->it[0]; m->it[2] = b->it[1]; m->it[3] = r; r = m; }
+            return rec_shape(r, D, out, n);
+        } else if (A->n == 3 && A->it[2]->list && A->it[2]->n == 3 && !A->it[2]->it[0]->list && !strcmp(A->it[2]->it[0]->s, "lam")) { x = A->it[2]->it[1]; dom = A->it[1]; cod = A->it[2]->it[2]; }   /* desugared */
+        else return false;
+        (void)x;
+        if (!strcmp(h, "Pi")) {
+            if (dom->list && dom->n == 2 && !dom->it[0]->list && !strcmp(dom->it[0]->s, "Tick")) return false;
+            if (mentions_name(dom, D)) return false;
+            int save = *n; out[(*n)++] = 'F';
+            if (rec_shape(cod, D, out, n)) return true;
+            *n = save; return false;
+        }
+        char s1[256], s2[256]; int n1 = 0, n2 = 0;
+        bool r1 = rec_shape(dom, D, s1, &n1), r2 = rec_shape(cod, D, s2, &n2);
+        if (!r1 && !r2) return false;
+        if (*n + n1 + n2 + 1 > 250) return false;
+        out[(*n)++] = r1 && r2 ? 'B' : r1 ? '1' : '2';
+        if (r1) { memcpy(out + *n, s1, (size_t)n1); *n += n1; }
+        if (r2) { memcpy(out + *n, s2, (size_t)n2); *n += n2; }
+        return true;
+    }
+    return false;
+}
 
 /* data types: higher inductive types (Coquand–Huber–Mörtberg), declared by
  * (data ...) below; constructors are values, eliminated by %case */
@@ -3477,14 +3524,19 @@ static void toplevel(Node *f) {
             DATA[d].cons[ci] = ncon;
             /* a field of type D itself, or of a path line into D (at any dimension), is recursive:
              * its branch may take its induction hypothesis (18.17) */
-            uint64_t rm = 0; int nr = 0; unsigned char rd[64] = { 0 };
+            uint64_t rm = 0; int nr = 0; unsigned char rd[64] = { 0 }; const char *rsh[64] = { 0 };
+            if (x->nf > 64) die("more than 64 fields in", cd->it[0]->s);
             for (int k = 0; k < x->nf; k++) {
                 int depth = rec_depth(x->ft[k], D);
                 if (depth >= 0) { rm |= 1ull << k; nr++; rd[k] = (unsigned char)depth; }
+                char sh[256]; int sn = 0;
+                /* a field recursive under Π codomains or Σ components (18.18): its shape, and the
+                 * hypothesis the net builds from it */
+                if (rec_shape(x->ft[k], D, sh, &sn)) { sh[sn] = 0; rsh[k] = strdup(sh); if (depth < 0) { rm |= 1ull << k; nr++; } }
             }
-            if (x->nf > 64) die("more than 64 fields in", cd->it[0]->s);
             CON[ncon] = (ConInfo){ intern(cd->it[0]->s), d, ci, x->nf, x->nd, -1, -1, nr, rm };
             memcpy(CON[ncon].rdim, rd, sizeof rd);
+            memcpy(CON[ncon].rsh, rsh, sizeof rsh);
             for (int k = 0; k < x->nf; k++) CON[ncon].fmult[k] = (unsigned char)bnd_mult(x->fn[k]);   /* (B11) */
             ncon++;
         }

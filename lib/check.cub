@@ -221,7 +221,8 @@ params-fresh tel pvs =
     tz e → (pvs , e)
     _ → (pvs , lnil)
 is-data-d d c = case c of tdata d2 ps V → %weq d d2; _ → false
--- a recursive field: of the data type itself, or of a path line into it, at any dimension (18.17)
+-- a directly recursive field: of the data type itself, or of a path line into it, at any dimension
+-- (18.17): laid out and compiled as a reference to the type
 is-rec-ty d c =
   case c of
     tdata d2 ps V → %weq d d2
@@ -229,12 +230,51 @@ is-rec-ty d c =
     tguess k g t V → is-rec-ty d t
     _ → false
 is-rec-line d L = case L of tplam nm b V → is-rec-ty d (b (%dim nm)); tguess k g t V → is-rec-line d t; _ → false
--- the induction hypothesis of a recursive field f of type T, F the elimination, Pv the motive: for a
--- path line, the line of the hypotheses of its points, λ m → F (f @ m), over the motive at them
-hyp-val F f T = case %view T of wpath L a b → (let i = %dim in %abs i (hyp-val F (f @ i) (L @ i))); _ → F f
-hyp-ty Pv F f T =
-  case %view T of
-    wpath L a b → (let i = %dim in PathP (%abs i (hyp-ty Pv F (f @ i) (L @ i))) (hyp-val F (f @ 0) (L @ 0)) (hyp-val F (f @ 1) (L @ 1)))
+-- the shape of a recursive field's type (18.18), the machine's ConInfo.rsh: D itself, a path line
+-- into one, a function (its domain not mentioning D and not a tick: a later D takes no hypothesis)
+-- into one, a pair with recursive components; sh-none when the field is not recursive
+data Shape = sh-rec | sh-path s | sh-pi s | sh-fst s | sh-snd s | sh-pair s t | sh-none
+sh-under f s = case s of sh-none → sh-none; _ → f s
+rec-shape d c =
+  case c of
+    tdata d2 ps V → if %weq d d2 then sh-rec else sh-none
+    tpathp L a b V → rec-shape-line d L
+    tguess k g t V → rec-shape d t
+    tpi B nm b V →
+      (case B of
+         ttick k V2 → sh-none
+         _ → if cany (is-data-d d) B then sh-none else sh-under (λ s → sh-pi s) (rec-shape d (b (%var nm Uw) Uw)))
+    tsigma B nm b V →
+      (let s1 = rec-shape d B
+           s2 = rec-shape d (b (%var nm Uw) Uw)
+       in case s1 of
+            sh-none → sh-under (λ s → sh-snd s) s2
+            _ → (case s2 of sh-none → sh-fst s1; _ → sh-pair s1 s2))
+    _ → sh-none
+rec-shape-line d L = case L of tplam nm b V → sh-under (λ s → sh-path s) (rec-shape d (b (%dim nm))); tguess k g t V → rec-shape-line d t; _ → sh-none
+has-hyp d c = case rec-shape d c of sh-none → false; _ → true
+-- the induction hypothesis of a recursive field f of type T and shape s, F the elimination, Pv the
+-- motive: at D the elimination; for a path line, the line of the hypotheses of its points, λ m → F
+-- (f @ m), over the motive at them; for a function, the hypotheses of its values at every argument,
+-- λ x → F (k x) : (x : B) → P (k x); for a pair, those of its recursive components
+hyp-val F f T s =
+  case s of
+    sh-path s2 → (case %view T of wpath L a b → (let i = %dim in %abs i (hyp-val F (f @ i) (L @ i) s2)); _ → F f)
+    sh-pi s2 → (case %view T of wpi A B → (λ x → hyp-val F (f x) (B x) s2); _ → F f)
+    sh-fst s2 → (case %view T of wsigma A B → hyp-val F (fst f) A s2; _ → F f)
+    sh-snd s2 → (case %view T of wsigma A B → hyp-val F (snd f) (B (fst f)) s2; _ → F f)
+    sh-pair s1 s2 → (case %view T of wsigma A B → (hyp-val F (fst f) A s1 , hyp-val F (snd f) (B (fst f)) s2); _ → F f)
+    _ → F f
+hyp-ty Pv F f T s =
+  case s of
+    sh-path s2 →
+      (case %view T of
+         wpath L a b → (let i = %dim in PathP (%abs i (hyp-ty Pv F (f @ i) (L @ i) s2)) (hyp-val F (f @ 0) (L @ 0) s2) (hyp-val F (f @ 1) (L @ 1) s2))
+         _ → Pv f)
+    sh-pi s2 → (case %view T of wpi A B → ((x : A) → hyp-ty Pv F (f x) (B x) s2); _ → Pv f)
+    sh-fst s2 → (case %view T of wsigma A B → hyp-ty Pv F (fst f) A s2; _ → Pv f)
+    sh-snd s2 → (case %view T of wsigma A B → hyp-ty Pv F (snd f) (B (fst f)) s2; _ → Pv f)
+    sh-pair s1 s2 → (case %view T of wsigma A B → ((h : hyp-ty Pv F (fst f) A s1) × hyp-ty Pv F (snd f) (B (fst f)) s2); _ → Pv f)
     _ → Pv f
 -- D itself, D some ticks later (a guarded field), or a path in D (a truncation's argument, of any
 -- dimension): at level lzero in D's own level
@@ -496,7 +536,7 @@ elim-fields d f g c tel nr prm =
     tx A nm r → 
       let Av = tval A
           x = %var nm Av
-      in elim-fields d f g c (r x Av) (if is-rec-ty d A then %wsucc nr else nr) (lsnoc prm x)
+      in elim-fields d f g c (r x Av) (if has-hyp d A then %wsucc nr else nr) (lsnoc prm x)
     _ → elim-hyps f g c nr tel prm
 conv-elims d f g lnil c = true
 conv-elims d f g (lcons tel rest) c =
@@ -1004,7 +1044,7 @@ br-infer tel b =
         _ → none
     ty nm r → (case b of bi nm b1 → let i = %dim nm in br-infer (r i) (b1 i); _ → none)
     tz bdy → (case b of be t → infer t; _ → none)
-tel-rec d tel = case tel of tx A nm r → orb (is-rec-ty d A) (tel-rec d (r (%var Uw) Uw)); _ → false
+tel-rec d tel = case tel of tx A nm r → orb (has-hyp d A) (tel-rec d (r (%var Uw) Uw)); _ → false
 case-type d lnil Bs = none
 case-type d (lcons tel rest) Bs =
   case Bs of
@@ -1067,7 +1107,7 @@ branch-dims e d Pv F c tel b fs ds =
     _ → err e E-ctor opq opq
 branch-hyps e d Pv F c tel b fs (lcons f rest) =
   case b of
-    bx nm b1 → branch-hyps e d Pv F c tel (b1 (hyp-val F (fst f) (snd f)) (hyp-ty Pv F (fst f) (snd f))) fs rest
+    bx nm b1 → branch-hyps e d Pv F c tel (b1 (hyp-val F (fst f) (fst (snd f)) (snd (snd f))) (hyp-ty Pv F (fst f) (fst (snd f)) (snd (snd f)))) fs rest
     _ → err e E-ctor opq opq
 branch-hyps e d Pv F c tel b fs lnil = branch-dims e d Pv F c tel b fs lnil
 branch-fields e d Pv F c tel b fs rs =
@@ -1078,7 +1118,7 @@ branch-fields e d Pv F c tel b fs rs =
           let Av = tval A
               x = %var nm Av
           in branch-fields e d Pv F c (r x Av) (b1 x Av) (lsnoc fs x)
-               (if is-rec-ty d A then lsnoc rs (x , Av) else rs)
+               (case rec-shape d A of sh-none → rs; s → lsnoc rs (x , (Av , s)))
         _ → err e E-ctor opq opq
     _ → branch-hyps e d Pv F c tel b fs rs
 check-branch e d Pv F c tel b = branch-fields e d Pv F c tel b lnil lnil
@@ -1489,8 +1529,14 @@ positive d pvs A =
     (case A of
        tdata d2 ps V → 
          andb (%weq d2 d) (andb (lall (λ q → notb (cany (is-data-d d) q)) ps) (uniform-at ps pvs))
-       -- a later D (guarded recursion): a field, not a recursive one (no hypothesis is taken)
-       tpi B nm b V → (case B of ttick k V2 → positive d pvs (b (%var Uw) Uw); _ → false)
+       -- a later D (guarded recursion): a field, not a recursive one (no hypothesis is taken); a
+       -- function whose domain does not mention D: positive iff its codomain is (18.18)
+       tpi B nm b V →
+         (case B of
+            ttick k V2 → positive d pvs (b (%var Uw) Uw)
+            _ → andb (notb (cany (is-data-d d) B)) (positive d pvs (b (%var nm Uw) Uw)))
+       -- a pair: positive iff both components are (18.18)
+       tsigma B nm b V → andb (positive d pvs B) (positive d pvs (b (%var nm Uw) Uw))
        -- a path in D (a truncation's argument): a map from the interval into D, its line positive
        -- and its endpoints elements, D not among their types
        tpathp L x y V → 
@@ -1533,9 +1579,19 @@ field-levels d tel =
   case tel of
     tx A nm r → 
       let Av = tval A
-      in lcons (if later-rec d A then lzero else level-of (infer-level A))
-           (field-levels d (r (%var nm Av) Av))
+      in lcons (field-level d A) (field-levels d (r (%var nm Av) Av))
     _ → lnil
+-- the level of a field: D itself (or later, or a path in it) at lzero; under Π codomains and Σ
+-- components (18.18) the largest of the parts' (the entry's own level is being computed, so
+-- a field mentioning D is not inferred whole); otherwise inferred
+field-level d A =
+  if later-rec d A then lzero
+  else if notb (cany (is-data-d d) A) then level-of (infer-level A)
+  else (case A of
+          tpi B nm b V → let Bv = tval B in lmax (field-level d B) (field-level d (b (%var nm Bv) Bv))
+          tsigma B nm b V → let Bv = tval B in lmax (field-level d B) (field-level d (b (%var nm Bv) Bv))
+          tguess k g t V → field-level d t
+          _ → level-of (infer-level A))
 lfold-lmax lnil = lzero
 lfold-lmax (lcons x r) = lmax x (lfold-lmax r)
 data-level d tel = lfold-lmax (lconcatmap (field-levels d) (snd (params-fresh tel lnil)))
@@ -1960,12 +2016,12 @@ q-br bs E d f mo c tel prm recs =
           x = %var nm Av
       in omap clam
            (q-br (lcons (qv (var-level x)) bs) E d f mo c (r x Av) (lsnoc prm x)
-              (if is-rec-ty d A then lsnoc recs (x , Av) else recs))
+              (case rec-shape d A of sh-none → recs; s → lsnoc recs (x , s)))
     _ → q-hyps bs E d f mo c tel prm recs prm
 q-hyps bs E d f mo c tel prm lnil fs = q-dims bs E d f mo c tel prm fs lnil
 q-hyps bs E d f mo c tel prm (lcons y rest) fs =
-  -- (a path-typed field's hypothesis, a line over the motive, is a variable of unstated type)
-  let h = %var (case %view (snd y) of wpath L a b → Uw; _ → (case mo of some P → P (fst y); none → fromopt E Uw))
+  -- (a path-, function- or pair-typed field's hypothesis, over the motive, is a variable of unstated type)
+  let h = %var (case snd y of sh-rec → (case mo of some P → P (fst y); none → fromopt E Uw); _ → Uw)
   in omap clam (q-hyps (lcons (qh (var-level h)) bs) E d f mo c tel (lsnoc prm h) rest fs)
 q-dims bs E d f mo c tel prm fs ds =
   case tel of

@@ -26,6 +26,22 @@ iterate f a = a ∷ iterate f (f a)
 #same nth 6 (λ κ → evens-odds {κ}) = 6
 #same nth 3 (λ κ → iterate {κ} {Nat} (λ n → plus n n) 1) = 8
 #same hd (tl (tl (λ κ → nats {κ}))) = 2
+-- ---------------------------------------------------------------- continuations into a later type
+-- a process with dependent responses: its continuation is a function into a later process (18.18);
+-- bind and map by guarded recursion, the recursive call under the continuation's λ given its tick
+GResp : Bool → Type
+GResp b = if b then Nat else Bool
+data GProc (κ : Clock) (A : Type) = gdone (a : A) | gissue (c : Bool) (k : GResp c → ▸ κ (GProc κ A))
+gbind : GProc κ A → (A → GProc κ B) → GProc κ B
+gbind (gdone a) f = f a
+gbind (gissue c k) f = gissue c (λ r → gbind (k r) f)
+gmap : (A → B) → GProc κ A → GProc κ B
+gmap f (gdone a) = gdone (f a)
+gmap f (gissue c k) = gissue c (λ r → gmap f (k r))
+-- the tick λ written out
+gmap2 : (A → B) → GProc κ A → GProc κ B
+gmap2 f (gdone a) = gdone (f a)
+gmap2 f (gissue c k) = gissue c (λ r → λ α → gmap2 f (k r α))
 -- ---------------------------------------------------------------- the rules
 -- written directly: the fixed point and the ticks
 ones : Stream κ Nat

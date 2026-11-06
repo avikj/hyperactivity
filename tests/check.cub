@@ -83,6 +83,33 @@ add2-zero n =
                                                                                                        n
 #fail
 #check (λ m → case m of z2 → bt; s2 k → s2 (rec k)) : N2 → B
+-- fields recursive under Π codomains and Σ components (18.18): the hypothesis of a function-typed
+-- field is a function to the motive, (rec k) x; of a pair, at its recursive components (both: a
+-- pair of hypotheses); structural recursion writes f (k x), f (snd c x), f (fst p)
+data Tree = leaf | node (k : N2 → Tree)
+tsize : Tree → N2
+tsize t = case t of leaf → z2; node k → s2 (rec k z2)
+#same tsize (node (λ n → node (λ m → leaf))) = s2 (s2 z2)
+tsize2 : Tree → N2
+tsize2 leaf = z2
+tsize2 (node k) = s2 (tsize2 (k z2))
+#same tsize2 (node (λ n → case n of z2 → leaf; s2 m → node (λ q → leaf))) = s2 z2
+data Rose = rose (c : B × (B → Rose)) | rleaf
+rsize : Rose → N2
+rsize r = case r of rleaf → z2; rose c → s2 (rec c bt)
+#same rsize (rose (bt , λ b → rose (bf , λ c → rleaf))) = s2 (s2 z2)
+rsize2 : Rose → N2
+rsize2 rleaf = z2
+rsize2 (rose c) = s2 (rsize2 (snd c bt))
+#same rsize2 (rose (bt , λ b → rose (bf , λ c → rleaf))) = s2 (s2 z2)
+data Both = both (p : Both × (B → Both)) | bleaf
+bsize : Both → N2
+bsize r = case r of bleaf → z2; both p → s2 (add2 (fst (rec p)) (snd (rec p) bt))
+#same bsize (both (both (bleaf , λ b → bleaf) , λ b → both (bleaf , λ c → bleaf))) = s2 (s2 (s2 z2))
+bsize2 : Both → N2
+bsize2 bleaf = z2
+bsize2 (both p) = s2 (add2 (bsize2 (fst p)) (bsize2 (snd p bt)))
+#same bsize2 (both (both (bleaf , λ b → bleaf) , λ b → both (bleaf , λ c → bleaf))) = s2 (s2 (s2 z2))
 -- dependent elimination: the motive varies with the scrutinee
 bdep : (x : B) → case x return (λ y → Type) of bt → B; bf → N2
 bdep x = case x return (λ y → case y return (λ z → Type) of bt → B; bf → N2) of bt → bf; bf → z2
