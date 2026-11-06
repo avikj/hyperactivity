@@ -2653,14 +2653,23 @@ occurs in the constructor's dimensions removes a tenth of the entries (tried, wi
 reading the dimension values at substitution time made the step count depend on arrival
 order, and the suites must be identical across workers); the rest come from the
 composition tubes restricting the four cube dimensions. Done deterministically (an
-operation that waits for the dimension values) it would be worth that tenth. What remains for the acceptance below is the `%comp-path` count: the
-dependent 4-cube over sets (`fill4OverSets`) composes in path types at every level and each
-composition distributes to its endpoints as soon as it exists, the same pattern `%transH`
-removed for transports of compositions; the same treatment (a formal composition in a path
-type, distributed when a reader demands a layer) is the next step, ~100 lines in `net.c`,
-and whether the fully generic 6-cube's normal form is itself small is not known (a read at
-one endpoint is), so the acceptance clause "finishes at generic dimensions" needs its
-result size measured first.
+operation that waits for the dimension values) it would be worth that tenth. The `%comp-path` count (3,287 entries) is the dependent 4-cube over sets
+(`fill4OverSets`) composing in path types at every level. **Tried and withdrawn (2026-11-06):**
+a formal composition in a path type (`V_COMPP` holding the clause's five arguments; applied
+to a dimension, the fibre's composition at that dimension alone through a `%comp-path-at`
+clause, at an endpoint the side's line at 1 without the fibre; read otherwise, the clause's
+λ; substitution on the parts) measured worse on every reading: g8 475,558 → 489,833 steps,
+surfc's corner read 196k → 326k, the number 619,852 → 630,540. The profile says why: the
+applications are at generic dimensions, from the tube maps `λ w i → w @ i @ j` (5,493
+`%comp-path-at` entries against 3,287 λ entries before), and rebuilding the fibre's
+composition there costs more than substituting into the one λ body the readers share
+through its box; endpoint applications, where the formal form wins outright, are rare in
+these reads. So the next step is not this one. What would help is sharing the composition
+*across* the dimensions it is applied at (one body, the applications as substitutions of a
+held value: the λ form already does that) and cutting the tube maps' re-applications — a
+different mechanism, not designed. Whether the fully generic 6-cube's normal form is itself
+small is not known (a read at one endpoint is), so the acceptance clause "finishes at generic
+dimensions" needs its result size measured first.
 
 Revision 1. A change to the generated composition clause and one value kind; the checker is
 untouched.
