@@ -143,18 +143,18 @@ con-comb c1 k1 c2 k2 =
 fm-elim v cs = fm-go v cs lnil lnil lnil
 fm-go v cs keep ls rs =
   case cs of
-    lnil → lst-app keep (lst-app (cross ls rs) (cl-map (λ l → con-drop v (snd l)) ls))
+    lnil → lin-app keep (lin-app (cross ls rs) (cl-map (λ l → con-drop v (snd l)) ls))
     lcons c r →
       (let a = lin-coef v (fst (snd c))
            b = lin-coef v (snd (snd c))
        in if %weq a b then fm-go v r (lcons c keep) ls rs
           else if %wlt b a then fm-go v r keep (lcons (%wsub a b , c) ls) rs
           else fm-go v r keep ls (lcons (%wsub b a , c) rs))
-lst-app a b = case a of lnil → b; lcons x r → lcons x (lst-app r b)
+lin-app a b = case a of lnil → b; lcons x r → lcons x (lin-app r b)
 coef-drop v cs = case cs of lnil → lnil; lcons p r → if %weq (fst p) v then r else lcons p (coef-drop v r)
 lin-drop v f = case f of lin k cs → lin k (coef-drop v cs)
 con-drop v c = (fst c , (lin-drop v (fst (snd c)) , lin-drop v (snd (snd c))))
-cross ls rs = case ls of lnil → lnil; lcons l r → lst-app (cross-one l rs) (cross r rs)
+cross ls rs = case ls of lnil → lnil; lcons l r → lin-app (cross-one l rs) (cross r rs)
 cross-one l rs =
   case rs of
     lnil → lnil
@@ -215,13 +215,13 @@ hs1 = lcons (cvar #0 , cvar #1) (lcons (cwop #2 (cvar #1) (cwlit #8) , cvar #2) 
 #same omega-cert hs1 (cwop #2 (cvar #0) (cwlit #9)) (cvar #2) = none
 -- a problem enumeration would not reach: x ≤ y, y ≤ z, z ≤ w, w + 3 ≤ u (variables 0..4) gives
 -- x + 2 ≤ u with multipliers 1,1,1,1
-hs2 = lcons (cvar #0 , cvar #1) (lcons (cvar #1 , cvar #2) (lcons (cvar #2 , cvar #3) (lcons (cwop #2 (cvar #3) (cwlit #3) , cvar #4) lnil)))
-#same omega-cert hs2 (cwop #2 (cvar #0) (cwlit #2)) (cvar #4) = some (lcons #1 (lcons #1 (lcons #1 (lcons #1 lnil))))
+lhyp2 = lcons (cvar #0 , cvar #1) (lcons (cvar #1 , cvar #2) (lcons (cvar #2 , cvar #3) (lcons (cwop #2 (cvar #3) (cwlit #3) , cvar #4) lnil)))
+#same omega-cert lhyp2 (cwop #2 (cvar #0) (cwlit #2)) (cvar #4) = some (lcons #1 (lcons #1 (lcons #1 (lcons #1 lnil))))
 -- a multiplier above 1: 2x ≤ y and y + y ≤ z give 4x ≤ z (multipliers 2, 1)
-hs3 = lcons (cwop #2 (cvar #0) (cvar #0) , cvar #1) (lcons (cwop #2 (cvar #1) (cvar #1) , cvar #2) lnil)
-#same omega-cert hs3 (cwop #2 (cwop #2 (cvar #0) (cvar #0)) (cwop #2 (cvar #0) (cvar #0))) (cvar #2) = some (lcons #2 (lcons #1 lnil))
+lhyp3 = lcons (cwop #2 (cvar #0) (cvar #0) , cvar #1) (lcons (cwop #2 (cvar #1) (cvar #1) , cvar #2) lnil)
+#same omega-cert lhyp3 (cwop #2 (cwop #2 (cvar #0) (cvar #0)) (cwop #2 (cvar #0) (cvar #0))) (cvar #2) = some (lcons #2 (lcons #1 lnil))
 -- the step specific to Nat: x + y ≤ 3 gives x ≤ 3 (y ≥ 0 is free), which rational elimination
 -- alone would not find
-hs4 = lcons (cwop #2 (cvar #0) (cvar #1) , cwlit #3) lnil
-#same omega-cert hs4 (cvar #0) (cwlit #3) = some (lcons #1 lnil)
-#same omega-cert hs4 (cvar #0) (cwlit #2) = none
+lhyp4 = lcons (cwop #2 (cvar #0) (cvar #1) , cwlit #3) lnil
+#same omega-cert lhyp4 (cvar #0) (cwlit #3) = some (lcons #1 lnil)
+#same omega-cert lhyp4 (cvar #0) (cwlit #2) = none
