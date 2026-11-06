@@ -4,7 +4,7 @@ list of bytes, decoded here, compiled with gcc, run, and its output compared wit
 import re, subprocess, sys, tempfile, os, resource
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.path.dirname(HERE))
 CUB = os.path.join(ROOT, 'build', 'cubical')
-LIBS = [os.path.join(ROOT, 'lib', f) for f in ('prelude.cub', 'code.cub', 'fo.cub', 'match.cub', 'nav.cub', 'emitc.cub', 'check.cub', 'std.cub', 'lower.cub', 'specialize.cub', 'linproof.cub', 'prim.cub', 'decode.cub', 'rules.cub', 'derive.cub', 'proc.cub', 'emitt.cub', 'emitu.cub', 'repr.cub')]
+LIBS = [os.path.join(ROOT, 'lib', f) for f in ('prelude.cub', 'code.cub', 'fo.cub', 'match.cub', 'nav.cub', 'emitc.cub', 'check.cub', 'std.cub', 'lower.cub', 'specialize.cub', 'linproof.cub', 'prim.cub', 'decode.cub', 'rules.cub', 'derive.cub', 'proc.cub', 'emitt.cub', 'emitu.cub', 'repr.cub', 'image.cub', 'reimport.cub')]
 PROGS = {
  # name: (definitions as .cub text building a Lst of (g , (arity , body)), expected output)
  'fact': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil)))
@@ -101,6 +101,82 @@ defs = case lift #2 (lam-body (specialize (Pt4 → Pt4) lnil (code (λ (p : Pt4)
  'let-if': ("""defs = lcons (#0 , (#0 , flet (flit #3) (fif (fprim P-lt (lcons (fvar #0) (lcons (flit #5) lnil))) (fprim P-mul (lcons (fvar #0) (lcons (fvar #0) lnil))) (flit #0)))) lnil""", "9"),
 }
 UNBOXED = os.environ.get('UNBOXED') == '1'
+# ---------------------------------------------------------------- the C++ image (lib/image.cub, plan 10.1)
+# name: (definitions as .cub text, the names exported as {cub name: C++ name}, a C++ main using the
+# header as "image.hpp", expected output, and optionally the names whose re-import must equal the
+# source code (lib/reimport.cub; the default is every name; a definition with an erased parameter
+# re-imports only up to erasure and is listed as []). The header is compiled with g++ -std=c++20.
+def enc(s):
+    r = 'lnil'
+    for b in reversed(s.encode()): r = f'(lcons #{b} {r})'
+    return r
+IMAGES = {
+ # word functions and a function uniform in a type: a template the consumer instantiates
+ 'words': ("""add3i : Word → Word → Word
+add3i a b = %wadd (%wadd a b) #3
+twicei : (A : Type) → (A → A) → A → A
+twicei A f a = f (f a)
+maxi : Word → Word → Word
+maxi a b = if %wlt a b then b else a""", {'add3i': 'add3', 'twicei': 'twice', 'maxi': 'maxw'},
+  """#include "image.hpp"
+#include <cstdio>
+int main() { std::printf("%llu %llu %llu\\n", (unsigned long long) add3(1, 2), (unsigned long long) twice<uint64_t>([](uint64_t x) { return x * 10; }, 7), (unsigned long long) maxw(3, 9)); }""", "6 700 9"),
+ # a data type as structs and a variant; a structural recursion as fix over visit; a constructor
+ # built on the C++ side and on ours
+ 'list': ("""data TLi = tnili | tconsi (x : Word) (xs : TLi)
+tsumi : TLi → Word
+tsumi l = case l of tnili → #0; tconsi x xs → %wadd x (rec xs)
+mk3i : Word → TLi
+mk3i w = tconsi w (tconsi #20 (tconsi #300 tnili))""", {'tsumi': 'tsum', 'mk3i': 'mk3'},
+  """#include "image.hpp"
+#include <cstdio>
+int main() { std::printf("%llu\\n", (unsigned long long) tsum(mk3(1))); }""", "321"),
+ # the byte layer: a load at a literal offset from a buffer the consumer owns; the proof parameter
+ # is absent, the bound an assume in cub::load64
+ 'bytes': ("""ld8i : (b : Bytes 32) → le 16 32 → Word
+ld8i b h = i64toWord (load64 32 b 8 h)""", {'ld8i': 'ld8'},
+  """#include "image.hpp"
+#include <cstdio>
+int main() { cub::bytes<32> b{}; b[8] = 42; std::printf("%llu\\n", (unsigned long long) ld8(b)); }""", "42", []),
+ # word elimination over a pair: cub::welim with a lambda step; fib 90
+ 'fib': ("""fibpi : Word → Word × Word
+fibpi n = %welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p)))
+fibi : Word → Word
+fibi n = fst (fibpi n)""", {'fibi': 'fib'},
+  """#include "image.hpp"
+#include <cstdio>
+int main() { std::printf("%llu\\n", (unsigned long long) fib(90)); }""", "2880067194370816120"),
+}
+def run_image(name, defs, names, main, expect, validate=None):
+    with tempfile.TemporaryDirectory() as d:
+        cub = os.path.join(d, name + '.cub')
+        tbl = 'lnil'
+        for k, v in reversed(list(names.items())): tbl = f'(lcons (gidx (code {k}) , {enc(v)}) {tbl})'
+        gs = 'lnil'
+        for k in reversed(list(names.keys())): gs = f'(lcons (gidx (code {k})) {gs})'
+        checks = ''.join(f"#same omap (λ p → snd p) (lnth (reimport-header {tbl} (fst hdr)) #{i}) = omap erase-code (unfold (gidx (code {k})))\n"
+                         for i, k in enumerate(names) if validate is None or k in validate)
+        open(cub, 'w').write(defs + f"\nhdr = cxx-image {tbl} lnil {gs}\n#show fst hdr\n#show report-text {tbl} (snd hdr)\n" + checks)
+        out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'),
+                             preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))).stdout
+        m = re.search(r'^fst hdr\s*=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
+        if not m: print(name, 'FAIL: no reading'); print(out[-500:]); return False
+        bs = bytes(int(x) for x in re.findall(r'#(\d+)', m.group(1)))
+        r = re.search(r'^report-text.*?=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
+        rep = bytes(int(x) for x in re.findall(r'#(\d+)', r.group(1))).decode() if r else ''
+        open(os.path.join(d, 'image.hpp'), 'wb').write(bs)
+        cpp = os.path.join(d, 'main.cpp'); open(cpp, 'w').write(main)
+        exe = os.path.join(d, name)
+        cc = subprocess.run(['g++', '-std=c++20', '-O2', '-w', '-I', d, '-o', exe, cpp], capture_output=True, text=True)
+        if cc.returncode: print(name, 'FAIL: g++'); print(cc.stderr[:1200]); print(bs.decode()); print(rep); return False
+        got = subprocess.run([exe], capture_output=True, text=True).stdout.strip()
+        reimported = '\nFAIL' not in out
+        ok = got == expect and 'not exportable' not in rep and reimported
+        print(name, 'ok' if ok else f'FAIL: got {got}, expected {expect}' + ('' if reimported else '; the re-import differs from the source'))
+        if not ok: print(bs.decode()); print(rep); print(out[-1500:])
+        return ok
+IMAGE = os.environ.get('IMAGE') == '1'
+
 def run(name, defs, expect, contains=None):
     with tempfile.TemporaryDirectory() as d:
         cub = os.path.join(d, name + '.cub')
@@ -125,4 +201,5 @@ def run(name, defs, expect, contains=None):
         if not ok: print(bs.decode())
         return ok
 if __name__ == '__main__':
+    if IMAGE: sys.exit(0 if all(run_image(n, *IMAGES[n]) for n in IMAGES) else 1)
     sys.exit(0 if all(run(n, *PROGS[n]) for n in PROGS) else 1)
