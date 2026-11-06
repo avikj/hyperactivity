@@ -599,6 +599,28 @@ static Key *memo_drop(Shard *s, Entry *e) {
     s->MTn--; Key *k = key_release_locked(s, e->k); free(e);
     return k;
 }
+static void box_release(Box *b);
+/* Holding a box through its memo entry races with its last holder releasing it: the count reaches
+ * zero in one thread while another, under the shard lock, still sees the entry's box. The releaser
+ * claims the zero (rc 0 → -1) before touching the entry; an increment through the entry refuses a
+ * claimed box and detaches it from the entry itself, so no reference to a dying box is ever made */
+static bool box_try_hold(Box *b) {
+    if (net_solo) { if (b->rc < 0) return false; b->rc++; return true; }
+    long v = __atomic_load_n(&b->rc, __ATOMIC_RELAXED);
+    while (v >= 0) if (__atomic_compare_exchange_n(&b->rc, &v, v + 1, true, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) return true;
+    return false;
+}
+/* under the shard lock: the entry's box, held once more; or NULL when it is dying (and detached) */
+static Box *entry_hold_box(Entry *e) {
+    Box *b = e->box;
+    if (!b) return NULL;
+    if (box_try_hold(b)) return b;
+    Entry *was = net_solo ? b->e : __atomic_exchange_n(&b->e, NULL, __ATOMIC_ACQ_REL);
+    if (net_solo) b->e = NULL;
+    (void)was;
+    e->box = NULL; e->hold = false;
+    return NULL;
+}
 /* a producer cell with a key: pending on it */
 static void memo_register(Cell *c) {
     if (no_memo) return;
@@ -608,11 +630,10 @@ static void memo_register(Cell *c) {
     Shard *s = shard_of(k->h);
     klock(s);
     Entry *e = memo_find(s, k, true); e->pending++; c->e = e;
-    if (e->box && !e->hold) { rcl_inc(&e->box->rc); e->hold = true; }
+    if (e->box && !e->hold && entry_hold_box(e)) e->hold = true;
     kunlock(s);
     key_release(k);
 }
-static void box_release(Box *b);
 static void memo_leave(Cell *c) {   /* a pending producer consumed without producing (erased) or re-keyed */
     Entry *e = c->e; c->e = NULL;
     Shard *s = shard_of(e->k->h);
@@ -637,10 +658,9 @@ static Port memo_begin(Cell *c, Box **out, bool builder) {
     klock(s);
     e->pending--;
     if (key_trace) { fprintf(stderr, "fire %d %s pending=%ld box=%d ", c->kind, builder ? "builder" : "thunk", e->pending, e->box != NULL); key_print(stderr, e->k); fputc('\n', stderr); }
-    if (e->box) {
+    Box *b = entry_hold_box(e);   /* NULL: none, or dying (then detached: build anew) */
+    if (b) {
         /* the value, there or being built: read it */
-        Box *b = e->box;
-        rcl_inc(&b->rc);
         bool last = e->pending == 0 && e->hold;
         if (last) e->hold = false;
         kunlock(s);
@@ -659,7 +679,7 @@ static Port memo_begin(Cell *c, Box **out, bool builder) {
     }
     /* others wait for this value: it is held once and read by reference. Its root holds the wire
      * the value will be linked into (memo_end); a reader finding nothing there yet waits on it */
-    Box *b = malloc(sizeof(Box)); b->rc = 2; b->root = cell(O_ROOT, 1); b->key = key_retain(e->k); b->e = e;
+    b = malloc(sizeof(Box)); b->rc = 2; b->root = cell(O_ROOT, 1); b->key = key_retain(e->k); b->e = e;
     { Var *t = var_new(); t->key = key_retain(e->k); b->in = VARP(t); b->root->port[0] = VARP(t); }
     e->box = b; e->hold = true;
     kunlock(s);
@@ -686,12 +706,13 @@ void memo_dump(void) {
 }
 /* the box of a memo entry is gone: the entry no longer has a value */
 static void memo_box_gone(Box *b) {
-    Entry *e = b->e; b->e = NULL;
-    if (!e) return;
+    Entry *e = net_solo ? b->e : __atomic_exchange_n(&b->e, NULL, __ATOMIC_ACQ_REL);
+    if (net_solo) b->e = NULL;
+    if (!e) return;   /* already detached by a reader that found the box dying */
     Shard *s = shard_of(e->k->h);
     Key *gone = NULL;
     klock(s);
-    e->box = NULL; e->hold = false; if (e->pending == 0) gone = memo_drop(s, e);
+    if (e->box == b) { e->box = NULL; e->hold = false; if (e->pending == 0) gone = memo_drop(s, e); }
     kunlock(s);
     if (gone) key_destroy(gone);
 }
@@ -843,7 +864,11 @@ static void era(Port prov);
 static void memo_box_gone(Box *b);
 static void box_release(Box *b) {
     if (rcl_dec(&b->rc)) return;
-    if (b->e) memo_box_gone(b);
+    /* claim the zero: a reader that raced us through the memo entry has raised the count again
+     * and owns the box; only the claimant retires it */
+    if (net_solo) { if (b->rc != 0) return; b->rc = -1; }
+    else { long z = 0; if (!__atomic_compare_exchange_n(&b->rc, &z, -1, false, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED)) return; }
+    memo_box_gone(b);
     Local *l = local();
     if (l->ndead == l->capdead) { l->capdead = l->capdead ? l->capdead * 2 : 16; l->dead = realloc(l->dead, l->capdead * sizeof(Box *)); }
     l->dead[l->ndead++] = b;
