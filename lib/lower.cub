@@ -82,12 +82,53 @@ lower-access k cs as =
   in if %weq (lst-len cs) (%wsucc nargs)
        then fassume (cwop #1 (cwop #2 (cl-at cs #1) (cwlit w)) (cwsucc (cl-at cs nargs))) body
        else body
--- an application spine: nested capps become one fapply; a global head becomes fcall
+-- an application spine: nested capps become one fapply; a global head becomes fcall, with the
+-- arguments at its erased parameters (usage 0, B11: proofs, lengths only types mention) dropped
+-- — erasure by computed usage, the call and the definition (program-defs) agreeing on the
+-- positions
 lower-app f args =
   case f of
     capp g a → lower-app g (lcons (lower a) args)
-    cglob n → fcall n args
+    cglob n → fcall n (drop-erased (g-erased n) #0 args)
     _ → fapply (lower f) args
+-- the erased parameters of a checked definition: the indices of its type's Π binders at usage 0
+g-erased g = case quote-ty (%gty g) of some T → erased-of g #0 T; none → lnil
+erased-of g i T = case T of cpi m A B → (if %weq (%gusage g i) #0 then lcons i (erased-of g (%wsucc i) B) else erased-of g (%wsucc i) B); _ → lnil
+drop-erased es i args = case args of lnil → lnil; lcons a r → if lmem-l i es then drop-erased es (%wsucc i) r else lcons a (drop-erased es (%wsucc i) r)
+lmem-l x l = case l of lnil → false; lcons y r → if %weq x y then true else lmem-l x r
+-- a lowered definition with its erased λs removed: the binder at position k (from the outside) is
+-- dropped and the variables above it move down; a variable the erased binder bound occurs only in
+-- assumed facts (the usage pass admits nothing else), and such a fact is dropped with it
+erase-lams es k t =
+  case t of
+    flam b → if lmem-l k es then erase-lams es (%wsucc k) (funshift-at #0 b) else flam (erase-lams es (%wsucc k) b)
+    _ → t
+funshift-at d t =
+  case t of
+    fvar n → if %wlt d n then fvar (%wsub n #1) else t
+    fcon dd c fs → fcon dd c (funshift-list d fs)
+    fswitch x alts → fswitch (funshift-at d x) (funshift-alts d alts)
+    frec dd x alts → frec dd (funshift-at d x) (funshift-ralts d alts)
+    fproj dd c j x → fproj dd c j (funshift-at d x)
+    fcall g args → fcall g (funshift-list d args)
+    fprim p args → fprim p (funshift-list d args)
+    flet a b → flet (funshift-at d a) (funshift-at (%wsucc d) b)
+    fif c a b → fif (funshift-at d c) (funshift-at d a) (funshift-at d b)
+    floop init body → floop (funshift-list d init) (funshift-at (%wadd d (lst-count init)) body)
+    fclos g env → fclos g (funshift-list d env)
+    flam b → flam (funshift-at (%wsucc d) b)
+    fapply f args → fapply (funshift-at d f) (funshift-list d args)
+    fthunk a → fthunk (funshift-at d a)
+    fforce x → fforce (funshift-at d x)
+    fnet g args → fnet g (funshift-list d args)
+    fassume f b → if fact-mentions d f then funshift-at d b else fassume (funshift-fact d f) (funshift-at d b)
+    fupd u x c k v → fupd u (funshift-at d x) c k (funshift-at d v)
+    _ → t
+funshift-list d l = case l of lnil → lnil; lcons x xs → lcons (funshift-at d x) (funshift-list d xs)
+funshift-alts d alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , funshift-at (%wadd d (fst (snd a))) (snd (snd a)))) (funshift-alts d r)
+funshift-ralts d alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , funshift-at (%wadd d (%wadd (fst (snd a)) (lst-count (fst (snd (snd a)))))) (snd (snd (snd a)))))) (funshift-ralts d r)
+fact-mentions d c = case c of cvar n → %weq n d; cwop k a b → orb (fact-mentions d a) (fact-mentions d b); cwsucc a → fact-mentions d a; cann a T → fact-mentions d a; _ → false
+funshift-fact d c = case c of cvar n → (if %wlt d n then cvar (%wsub n #1) else c); cwop k a b → cwop k (funshift-fact d a) (funshift-fact d b); cwsucc a → cwsucc (funshift-fact d a); cann a T → funshift-fact d a; _ → c
 lower-list l = case l of lnil → lnil; lcons x xs → lcons (lower x) (lower-list xs)
 -- branches: the k-th code is a λ over the constructor's fields; its λs are stripped, the fields
 -- being pushed by fswitch in order
@@ -178,3 +219,10 @@ with-defs ds g = case ds of lnil → len-defs g; lcons d r → if %weq (fst d) g
 #same global-sig (gidx (code lenw)) = (lcons (ftdata (didx (code LW)) lnil #0) lnil , ftword)
 #same ft-of (code (Word × Word)) = ftpair ftword ftword
 #same sig-ft (code (Word → Word → Word)) = (lcons ftword (lcons ftword lnil) , ftword)
+-- erasure by usage: a definition taking a proof it never reads (usage 0) loses that parameter
+-- in the form, and so does every call of it
+useless : Word → Unit → Word
+useless w p = %wadd w #1
+#same g-erased (gidx (code useless)) = lcons #1 lnil
+#same lower (code (λ (w : Word) → useless w unit)) = flam (fcall (gidx (code useless)) (lcons (fvar #0) lnil))
+#same erase-lams (g-erased (gidx (code useless))) #0 (lower (fromopt (quote-top (%gty (gidx (code useless))) (%gval (gidx (code useless)))) cword)) = flam (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))

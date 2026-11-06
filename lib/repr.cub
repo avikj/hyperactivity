@@ -63,8 +63,15 @@ consume-reps t =
 consume-list l = case l of lnil → lnil; lcons x xs → lcons (consume-reps x) (consume-list xs)
 consume-ralts l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , consume-reps (snd (snd (snd a)))))) (consume-ralts r)
 consume-alts l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , consume-reps (snd (snd a)))) (consume-alts r)
--- specialize, then consume: the pipeline with representations
+-- specialize, then consume: the pipeline with representations; with a schedule, only the
+-- representations it names are consumed (every declared one when it names none)
 specialize-r T rules c = consume-reps (specialize T rules c)
+specialize-rs sch T rules c = consume-reps-of (sched-reps sch) (specialize-s sch T rules c)
+consume-reps-of reps t = case reps of lnil → consume-reps t; _ → (if lmem-l nat-d reps then consume-reps t else t)
+-- a schedule naming Nat consumes its representation: the numerals are words; one naming
+-- another type leaves the Nat constructor trees
+#same specialize-rs (sched #64 lnil (lcons nat-d lnil)) (Bool → Nat) lnil (code (λ (b : Bool) → if b then 5 else 7)) = flam (fif (fvar #0) (flit #5) (flit #7))
+#same (case specialize-rs (sched #64 lnil (lcons #0 lnil)) (Bool → Nat) lnil (code (λ (b : Bool) → if b then 5 else 7)) of flam b → (case b of fif c t e → (case t of fcon d k fs → true; _ → false); _ → false); _ → false) = true
 -- ---------------------------------------------------------------- readings
 -- two loads at literal offsets from an unknown buffer, as the decoder's loop computes them: the
 -- Nat lengths and offsets (constructor trees in the code) become words, the bound proofs are gone,

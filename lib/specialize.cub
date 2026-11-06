@@ -81,7 +81,7 @@ program-defs fuel pending done =
        else (case unfold g of
                none → program-defs (%wsub fuel #1) rest (lcons g done)
                some cd →
-                 let t = inplace (lower cd)
+                 let t = inplace (erase-lams (g-erased g) #0 (lower cd))
                  in lcons (g , (lam-arity t , strip-flams t)) (program-defs (%wsub fuel #1) (lapp2 rest (fcalls t lnil)) (lcons g done))))
 -- the program of a code: definition m is the code itself (its λs its arity), then what it calls;
 -- a global g is definition g + 1 in the program (0 is left for a main)
@@ -157,11 +157,28 @@ is-fo c = case fo-report c of lnil → true; _ → false
 #same is-fo (code (λ (l : LW) → lenw l)) = true
 #same fo-report (cplam (cvar #0)) = lcons (cplam (cvar #0)) lnil
 #same lst-len (fo-report (capp (cplam (cvar #0)) (ctrans #1 cftt lnil (cvar #0)))) = #2
--- ---------------------------------------------------------------- schedules as values (5.2)
--- what the specializer may do is a value: how many rewrites; the inline depth is the machine's
--- (normalization unfolds every definition it reaches: quote renders a definition applied to a
--- neutral by its body); fusion, representation choices and generality follow B13
-data Sched = sched (rewrites : Word)
-specialize-s sch T rules c = case sch of sched r → inplace (lower (rewrite-all r rules (normalize T c)))
+-- ---------------------------------------------------------------- schedules as values (5.2, 18.3 §6)
+-- what the specializer may do is a value: how many rewrites; the binding-time assignment
+-- (stages: a Lst of (binder index , Stage), read by the C++ image for its template parameters
+-- and by the criterion); the representations chosen (reps: a Lst of data type indices whose
+-- declared representation is consumed, lib/repr.cub; every declared one when empty). The inline
+-- depth is the machine's (normalization unfolds every definition it reaches: quote renders a
+-- definition applied to a neutral by its body); fusion and strictness follow.
+sched-rewrites s = case s of sched r st rp → r
+sched-stages s = case s of sched r st rp → st
+sched-reps s = case s of sched r st rp → rp
+sched-default = sched #64 lnil lnil
+-- the specializer with the criterion (B13, lib/stage.cub): the code normalized and rewritten is
+-- judged by first-order at its type; the verdict comes back with the form (a not-fo region is
+-- lowered all the same: its forms outside the fragment are calls into the net, fnet, and the
+-- verdict names the first of them and why)
+specialize-v sch T rules c =
+  let c2 = rewrite-all (sched-rewrites sch) rules (normalize T c)
+  in (first-order T c2 , inplace (lower c2))
+specialize-s sch T rules c = snd (specialize-v sch T rules c)
+-- readings: a word function is fo; a path is not (dim), and the form is a call into the net
+#same fst (specialize-v sched-default (Word → Word) lnil c3) = fo
+#same fst (specialize-v sched-default (Word ≡ Word) lnil (cplam cword)) = not-fo dim (cplam (cvar #0))
+#same snd (specialize-v sched-default (Word ≡ Word) lnil (cplam cword)) = fnet #0 lnil
 -- the call of lenw under an unknown list normalizes to the recursion itself
-#same specialize-s (sched #64) (LW → Word) lnil (code (λ (l : LW) → lenw l)) = inplace (lower (fromopt (unfold (gidx (code lenw))) cword))
+#same specialize-s sched-default (LW → Word) lnil (code (λ (l : LW) → lenw l)) = inplace (lower (fromopt (unfold (gidx (code lenw))) cword))
