@@ -2693,7 +2693,10 @@ static void out_str(const char *r) {
     out_term(rb_src(n));
 }
 /* q: the judgment that failed, run again to read its type slots at their universe */
+/* the position of the declaration being processed (file:line, set by the surface parser; item 30) */
+char decl_pos[512];
 static void explain(const char *r, Node *q) {
+    if (decl_pos[0]) printf("   in: %s\n", decl_pos);
     /* reason, then what its two values are */
     static const char *M[][3] = {
         /* 0 */ { "type mismatch", "expected", "actual" },

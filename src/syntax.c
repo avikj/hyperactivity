@@ -1135,8 +1135,10 @@ static void p_decls_block(void) {
     while (P0()->k != X_VC && P0()->k != X_EOF) { p_decl(); }
     if (P0()->k == X_VC) NX();
 }
+extern char decl_pos[512];
 static void p_decl(void) {
     Tok *t = P0();
+    snprintf(decl_pos, sizeof decl_pos, "%s:%d", x_file ? x_file : "?", t->line);
     bool fail = x_fail_next; x_fail_next = false;
     if (x_is(t, "#fail")) { NX(); x_fail_next = true; return; }
     if (x_is(t, "instance")) { NX(); pending_instance = true; x_fail_next = fail; p_decl(); pending_instance = false; return; }   /* the next definition is an instance (E28) */
