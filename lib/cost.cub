@@ -4,8 +4,9 @@
 -- definition (`ok <steps> <checker>`) — estimated by the result's size where no record exists.
 -- A cost model is a value (Code → Word); navigation parameterized by one (navigate-by) is
 -- lib/nav.cub's navigation with the score abstracted; nav.cub's choice is navigate-by size-cost.
--- The table of recorded steps per key is data here; reading it from the store is a command of
--- the machine (not yet: the table is given). Loaded after lib/nav.cub.
+-- The recorded steps are read through %gsteps (the steps checked definition n took, from this run
+-- or from the store's ok line); a table given as data stands in for them where a reading wants
+-- its own figures. Loaded after lib/nav.cub.
 -- ---------------------------------------------------------------- tables and models
 -- a table: a Lst of (global index , recorded steps)
 cost-lookup g tbl = case tbl of lnil → none; lcons e r → (if %weq (fst e) g then some (snd e) else cost-lookup g r)
@@ -25,6 +26,12 @@ table-cost tbl c =
   case head-glob c of
     none → code-size c
     some g → (case cost-lookup g tbl of none → code-size c; some s → %wadd s (code-size c))
+-- the store's model: the steps the machine recorded for the head's key (zero for a definition it
+-- never checked), plus the size
+store-cost c =
+  case head-glob c of
+    none → code-size c
+    some g → %wadd (%gsteps g) (code-size c)
 -- a model refined by what a reading measured: an entry replaced or added
 cost-record g steps tbl =
   case tbl of
@@ -69,3 +76,6 @@ tbl1 = cost-record #41 #1000 lnil
 -- a recorded cost is read through annotations and applications to the head
 #same table-cost tbl1 (cann (capp (capp (cglob #41) (cglob #1)) (cglob #2)) cword) = #1005
 #same table-cost tbl1 (cglob #7) = #1
+-- the store's model has the shape of the table's, with the machine's own figures
+#same store-cost (capp (cglob #3) (cglob #4)) = %wadd (%gsteps #3) #3
+#same navigate-by store-cost #5 (cglob #20) view1 t1 = navr (cglob #20) #2
