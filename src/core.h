@@ -445,7 +445,8 @@ Port global_copy(long g, Key *as); /* 0 when the global is an unsupplied input; 
 void global_park(long g, Cell *op, Cell *glob);
 /* foreign functions (D27): a C symbol at a primitive type; the arguments' kinds (PT_*, or 4 a word), its result's */
 typedef struct { const char *sym; void *fn; int n; unsigned char kind[8]; unsigned char ret; int rdata;
-    void *lib; void (*fin)(void *); unsigned char keep; } Ffi;   /* lib: the library's handle (dlopen); fin: its cubical_release, the finalizer of its handles; keep: a boxed result stays native */
+    void *lib; void (*fin)(void *); unsigned char keep;
+    void *tw; int rsd, rnf; } Ffi;   /* tw: the entry's trampoline (words in, words out) when a parameter or the result is a C struct by value (B18); rsd/rnf: the result's data type (machine index) and field count, -1 when not a struct */   /* lib: the library's handle (dlopen); fin: its cubical_release, the finalizer of its handles; keep: a boxed result stays native */
 /* a value kept native (V_NATIVE): refcounted; d -1 an opaque handle (ptr the C object, fin its
  * finalizer, lib the library that made it, k its foreign entry), else the boxed value (ptr a VB
  * the cell owns) of data type d (-2 a word, -3 bytes) */

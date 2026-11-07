@@ -244,13 +244,15 @@ to that library's `void *` parameters, printed `(%handle #k)`, compared by ident
 erased (`tests/native/handle.c`). The entries are trusted to treat a handle as read-only: the
 net shares a handle among its readers. A parameter or result whose type has a declared
 representation crosses as the representation (`Nat` as a `uint64_t`: converted by `to` before the
-call and `from` after it, the fallback the definition over the representations), and a `#native`
+call and `from` after it, the fallback the definition over the representations); a record of such
+fields crosses as its C struct by value (through a trampoline the machine appends), and a `#native`
 specialization is cached by key: its expression with each checked definition by its codebase key,
 the values written in it, the checker's version and the libraries before the file name it before
 it is computed, and a hit (`specialization cached by key, 0 steps`) runs neither the specializer
 nor the C compiler. The other direction is `build/libcubical.a` with
 `src/libcubical.h`: a C program loads libraries with `cubical_init` and calls checked
-definitions on words with `cubical_call_w` (and the emitted C's boxed form, `cubical_call`);
+definitions on words with `cubical_call_w` (and the emitted C's boxed form, `cubical_call`), on
+boxed data with `cubical_call_data`, and on records as C structs (`"struct D"`, `cubical_call_data_r`);
 `tests/native/main.c`. `%gsteps n` is the steps checked definition `n` took to check, from the
 run or the store's `ok` line.
 

@@ -694,6 +694,59 @@ int data_checked_index(int d) { return chk_index(d); }
 /* the trusted surface (B12): every postulate and every primitive declared, in order; #trusted lists it */
 /* the foreign table (D27) */
 Ffi *FFI; int nffi; static size_t capffi;
+/* B18, records by value: an emitted entry's parameter or result typed T<di> (lib/emitu.cub's flat
+ * data type by value: struct T<di> { uint64_t tag; union { struct { uint64_t f0; … } c0; } u; })
+ * with one constructor and word fields crosses as that C struct. nf of T<di> in the C text, or -1
+ * when it is not such a struct */
+static int struct_words(const char *text, int di) {
+    char pat[64]; snprintf(pat, sizeof pat, "struct T%d { uint64_t tag; union { struct {", di);
+    const char *p = strstr(text, pat); if (!p) return -1;
+    p += strlen(pat);
+    const char *end = strstr(p, "} c0; } u; };"); if (!end) return -1;
+    int nf = 0;
+    for (const char *q = p; q < end; ) {
+        while (*q == ' ') q++;
+        if (q >= end) break;
+        if (strncmp(q, "uint64_t f", 10)) return -1;
+        nf++; q = strchr(q, ';'); if (!q || q > end) return -1; q++;
+    }
+    return nf;
+}
+/* an entry's prototype read: the result's and each parameter's type text (up to its name) */
+static int proto_types(const char *text, const char *epat, char rt[64], char pt[8][64]) {
+    const char *e = NULL;
+    for (const char *q = text; (q = strstr(q, epat)); q++) {
+        if (q > text && (isalnum((unsigned char)q[-1]) || q[-1] == '_')) continue;
+        const char *close = strchr(q, ')'); if (!close) break;
+        const char *b = close + 1; while (*b == ' ' || *b == '\n' || *b == '\t') b++;
+        if (*b == '{') { e = q; break; }
+    }
+    if (!e) return -1;
+    const char *q = e; while (q > text && q[-1] != '\n') q--;
+    while (*q == ' ' || *q == '\t') q++;
+    if (!strncmp(q, "static ", 7)) q += 7;
+    size_t rl = (size_t)(e - q); while (rl && q[rl - 1] == ' ') rl--; if (rl > 63) rl = 63;
+    memcpy(rt, q, rl); rt[rl] = 0;
+    const char *a = e + strlen(epat); int n = 0;
+    while (*a && *a != ')' && n < 8) {
+        while (*a == ' ' || *a == ',') a++;
+        const char *s0 = a; while (*a && *a != ',' && *a != ')') a++;
+        const char *s1 = a; while (s1 > s0 && s1[-1] == ' ') s1--;
+        const char *nm = s1; while (nm > s0 && (isalnum((unsigned char)nm[-1]) || nm[-1] == '_')) nm--;
+        size_t tl = (size_t)(nm - s0); while (tl && s0[tl - 1] == ' ') tl--; if (tl > 63) tl = 63;
+        memcpy(pt[n], s0, tl); pt[n][tl] = 0;
+        if (tl == 4 && !strncmp(s0, "void", 4)) break;
+        n++;
+    }
+    return n;
+}
+/* a field's conversion at the boundary: a field of a type with a declared representation crosses as
+ * the representation (to before, from after); a word field as it is. The checked indices of to/from, or -1 */
+static long REP_TO_OF(int d, int j, bool to);
+/* name over records by value: (lam a… (case (rep a) ((C a_0 …) … (%native #k #fb fields…)))) with the
+ * result read back from the native's constructor of words; the fallback takes the same words */
+static void native_structs(const char *nm, long g, int n, int k, const int *sdi, const int *snf, int rsdi, int rsnf, int nexp);
+static int struct_di(const char *ty) { return ty[0] == 'T' && isdigit((unsigned char)ty[1]) && !strchr(ty, '*') ? atoi(ty + 1) : -1; }
 int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret) {
     /* "sym" in the running program (its C library, and the math library), or "lib.so:sym" in that
      * shared library, opened */
@@ -709,7 +762,7 @@ int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret
     }
     if (!fn) die("foreign: no such symbol in the running program or its libraries (write \"lib.so:sym\" for another):", sym);
     GROW(FFI, capffi, (size_t)nffi + 1);
-    FFI[nffi] = (Ffi){ strdup(sym), fn, n, { 0 }, ret, -1, lib_h, NULL, 0 };
+    FFI[nffi] = (Ffi){ strdup(sym), fn, n, { 0 }, ret, -1, lib_h, NULL, 0, NULL, -1, 0 };
     /* a library's handles are finalized by its cubical_release, when it has one */
     if (lib_h) FFI[nffi].fin = (void (*)(void *))dlsym(lib_h, "cubical_release");
     memcpy(FFI[nffi].kind, kind, (size_t)n);
@@ -3248,6 +3301,94 @@ static bool cc_rdef(long g) {
     G[g].body = b; G[g].nslots = ns; G[g].uses = u; G[g].nparams = np; G[g].strict = st; G[g].nary = nary;
     return true;
 }
+static long REP_TO_OF(int d, int j, bool to) {
+    int fd = data_field_type(d, 0, j);
+    int di = fd >= 0 ? chk_index(fd) : -1;
+    if (di < 0 || (size_t)di >= caprepto || REPTO[di] < 0) return -1;
+    return to ? REPTO[di] : REPFROM[di];
+}
+static void native_structs(const char *nm, long g, int n, int k, const int *sdi, const int *snf, int rsdi, int rsnf, int nexp) {
+    (void)nexp;
+    /* the parameters' and the result's representations, as in the word case */
+    int rin[8], rout = -1;
+    for (int i = 0; i < 8; i++) rin[i] = -1;
+    int ck0 = checked_index(nm);
+    if (ck0 >= 0 && (size_t)ck0 < capchkty && CHKTY[ck0]) {
+        Node *doms[8], *cod; int got = pi_parts(CHKTY[ck0], doms, n, &cod);
+        for (int i = 0; i < got; i++) rin[i] = type_rep(doms[i]);
+        if (got == n) rout = type_rep(cod);
+    }
+    int rd = rsdi >= 0 ? checked_data(rsdi) : -1;
+    /* the fallback over the expanded words: the definition applied to the records rebuilt (each
+     * field from its representation), its result's fields to theirs */
+    static int nfb; char fbn[64]; snprintf(fbn, sizeof fbn, "%%natsfb%d", nfb++);
+    char *fbuf; size_t fl; FILE *fm = open_memstream(&fbuf, &fl);
+    fprintf(fm, "(def %s (lam", fbn);
+    for (int i = 0; i < n; i++) { if (sdi[i] >= 0) for (int j = 0; j < snf[i]; j++) fprintf(fm, " %%r%d_%d", i, j); else fprintf(fm, " %%r%d", i); }
+    fprintf(fm, " ");
+    if (rd >= 0) fprintf(fm, "(case ");
+    if (rout >= 0) fprintf(fm, "(app %s ", CHECKED[REPTO[rout]]);
+    for (int i = n - 1; i >= 0; i--) fprintf(fm, "(app ");
+    fprintf(fm, "%s", nm);
+    for (int i = 0; i < n; i++) {
+        fprintf(fm, " ");
+        if (rin[i] >= 0) fprintf(fm, "(app %s ", CHECKED[REPFROM[rin[i]]]);
+        if (sdi[i] >= 0) {
+            int d = checked_data(sdi[i]); const char *cn = CON[DATA[d].cons[0]].name;
+            for (int j = 0; j < snf[i]; j++) fprintf(fm, "(app ");
+            fprintf(fm, "%s", cn);
+            for (int j = 0; j < snf[i]; j++) { long fr = REP_TO_OF(d, j, false); if (fr >= 0) fprintf(fm, " (app %s %%r%d_%d))", CHECKED[fr], i, j); else fprintf(fm, " %%r%d_%d)", i, j); }
+        } else fprintf(fm, "%%r%d", i);
+        if (rin[i] >= 0) fprintf(fm, ")");
+        fprintf(fm, ")");
+    }
+    if (rout >= 0) fprintf(fm, ")");
+    if (rd >= 0) {
+        const char *cn = CON[DATA[rd].cons[0]].name;
+        fprintf(fm, " ((%s", cn); for (int j = 0; j < rsnf; j++) fprintf(fm, " %%q%d", j); fprintf(fm, ") ");
+        for (int j = 0; j < rsnf; j++) fprintf(fm, "(app ");
+        fprintf(fm, "%s", cn);
+        for (int j = 0; j < rsnf; j++) { long t = REP_TO_OF(rd, j, true); if (t >= 0) fprintf(fm, " (app %s %%q%d))", CHECKED[t], j); else fprintf(fm, " %%q%d)", j); }
+        fprintf(fm, "))");
+    }
+    fprintf(fm, "))"); fclose(fm); emit(fbuf); free(fbuf);
+    long fb = global_lookup(fbn);
+    /* name: each record parameter opened into its fields (each to its representation), the native
+     * called on the words, its result's fields back from theirs */
+    char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
+    fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
+    fprintf(m, " ");
+    if (rout >= 0) fprintf(m, "(app %s ", CHECKED[REPFROM[rout]]);
+    if (rd >= 0) fprintf(m, "(case ");
+    int open = 0;
+    for (int i = 0; i < n; i++) if (sdi[i] >= 0) {
+        int d = checked_data(sdi[i]); const char *cn = CON[DATA[d].cons[0]].name;
+        fprintf(m, "(case ");
+        if (rin[i] >= 0) fprintf(m, "(app %s %%a%d)", CHECKED[REPTO[rin[i]]], i); else fprintf(m, "%%a%d", i);
+        fprintf(m, " ((%s", cn); for (int j = 0; j < snf[i]; j++) fprintf(m, " %%a%d_%d", i, j); fprintf(m, ") ");
+        open++;
+    }
+    fprintf(m, "(%%native #%d #%ld", k, fb);
+    for (int i = 0; i < n; i++) {
+        if (sdi[i] >= 0) { int d = checked_data(sdi[i]); for (int j = 0; j < snf[i]; j++) { long t = REP_TO_OF(d, j, true); if (t >= 0) fprintf(m, " (app %s %%a%d_%d)", CHECKED[t], i, j); else fprintf(m, " %%a%d_%d", i, j); } }
+        else if (rin[i] >= 0) fprintf(m, " (app %s %%a%d)", CHECKED[REPTO[rin[i]]], i);
+        else fprintf(m, " %%a%d", i);
+    }
+    fprintf(m, ")");
+    for (int q = 0; q < open; q++) fprintf(m, "))");
+    if (rd >= 0) {
+        const char *cn = CON[DATA[rd].cons[0]].name;
+        fprintf(m, " ((%s", cn); for (int j = 0; j < rsnf; j++) fprintf(m, " %%o%d", j); fprintf(m, ") ");
+        for (int j = 0; j < rsnf; j++) fprintf(m, "(app ");
+        fprintf(m, "%s", cn);
+        for (int j = 0; j < rsnf; j++) { long fr = REP_TO_OF(rd, j, false); if (fr >= 0) fprintf(m, " (app %s %%o%d))", CHECKED[fr], j); else fprintf(m, " %%o%d)", j); }
+        fprintf(m, "))");
+    }
+    if (rout >= 0) fprintf(m, ")");
+    fprintf(m, "))");
+    fclose(m); emit(buf); free(buf);
+    (void)g;
+}
 static void toplevel(Node *f) {
     if (!f->list || f->n == 0 || f->it[0]->list) die("top-level form expected", NULL);
     const char *h = f->it[0]->s;
@@ -4173,6 +4314,40 @@ static void toplevel(Node *f) {
     have_program:;
         char epat[300]; snprintf(epat, sizeof epat, "%s(", entry);
         if (!strstr(r, epat)) die(cfile ? "native: the file does not define the entry:" : "native: the program exports no cubical_entry (print it with emit-lib-u):", cfile ? entry : nm);
+        /* B18, records by value: a parameter or the result a C struct T<di> of words — the entry
+         * takes and returns it by value; the machine calls it through a trampoline appended to the
+         * program (words in, words out) and passes such a parameter as its fields, each a word */
+        int sdi[8], snf[8], rsdi = -1, rsnf = 0, nexp = 0; bool structs = false;
+        for (int i = 0; i < 8; i++) { sdi[i] = -1; snf[i] = 0; }
+        if (!cfile) {
+            char rt[64], pt[8][64]; int np = proto_types(r, epat, rt, pt);
+            if (np == n) {
+                for (int i = 0; i < n; i++) { int di = struct_di(pt[i]); if (di >= 0) { int w = struct_words(r, di); if (w > 0 && checked_data(di) >= 0) { sdi[i] = di; snf[i] = w; structs = true; } } }
+                { int di = struct_di(rt); if (di >= 0) { int w = struct_words(r, di); if (w > 0 && checked_data(di) >= 0) { rsdi = di; rsnf = w; structs = true; } } }
+                for (int i = 0; i < n; i++) nexp += sdi[i] >= 0 ? snf[i] : 1;
+                if (structs && (nexp > 8 || rsnf > 16)) die("native: a struct crossing with more than eight words of arguments or sixteen of result:", nm);
+            }
+            char twp[300]; snprintf(twp, sizeof twp, "void %s__tw(", entry);
+            if (structs && !strstr(r, twp)) {   /* (a specialization read back from the cache has it already) */
+                char *tb; size_t tl; FILE *tm = open_memstream(&tb, &tl);
+                fprintf(tm, "%s\nvoid %s__tw(const uint64_t *a, uint64_t *r) {", r, entry);
+                int o = 0;
+                for (int i = 0; i < n; i++) {
+                    if (sdi[i] >= 0) {
+                        fprintf(tm, " T%d p%d = (T%d){ .tag = 0, .u = { .c0 = {", sdi[i], i, sdi[i]);
+                        for (int j = 0; j < snf[i]; j++) fprintf(tm, "%s a[%d]", j ? "," : "", o + j);
+                        fprintf(tm, " } } };"); o += snf[i];
+                    } else { fprintf(tm, " %s p%d; memcpy(&p%d, &a[%d], sizeof p%d);", pt[i], i, i, o, i); o++; }
+                }
+                fprintf(tm, " %s x = %s(", rt, entry);
+                for (int i = 0; i < n; i++) fprintf(tm, "%sp%d", i ? ", " : "", i);
+                fprintf(tm, ");");
+                if (rsdi >= 0) for (int j = 0; j < rsnf; j++) fprintf(tm, " r[%d] = x.u.c0.f%d;", j, j);
+                else fprintf(tm, " memcpy(r, &x, sizeof x);");
+                fprintf(tm, " }\n");
+                fclose(tm); free(r); r = tb; len = tl;
+            }
+        }
         /* the library is named by the program's hash (item 17: a specialization cached by key): the
          * same C text is compiled once across runs */
         char dir[512], cpath[600], so[600], hx[65]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
@@ -4182,7 +4357,7 @@ static void toplevel(Node *f) {
         bool cached = access(so, 4) == 0;
         if (!cached) {
             FILE *cf = fopen(cpath, "w"); if (!cf) die("native: cannot write", cpath); fputs(r, cf); fclose(cf);
-            char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -o %s %s", so, cpath);
+            char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -Wl,-Bsymbolic -o %s %s", so, cpath);   /* -Bsymbolic: a library's calls of its own exports (the trampoline's of cubical_entry) stay in it, every library exporting the same names */
             if (system(cmd) != 0) { printf("FAIL: native %s   (the C compiler rejected %s)\n", nm, cpath); failures++; free(r); return; }
         }
         if (spath[0] && !spec_hit) { FILE *sf = fopen(spath, "w"); if (sf) { fprintf(sf, "%s\n", hx); fclose(sf); } }
@@ -4219,6 +4394,18 @@ static void toplevel(Node *f) {
             }
         }
         free(r);
+        if (structs) {
+            /* the call is of the expanded words through the trampoline */
+            unsigned char kw[8]; for (int i = 0; i < 8; i++) kw[i] = 4;
+            int k = ffi_add(sym, nexp, kw, 4);
+            char tws[760]; snprintf(tws, sizeof tws, "%s__tw", entry);
+            FFI[k].tw = dlsym(FFI[k].lib, tws);
+            if (!FFI[k].tw) die("native: the trampoline is missing from", so);
+            FFI[k].rsd = rsdi >= 0 ? checked_data(rsdi) : -1; FFI[k].rnf = rsnf;
+            native_structs(nm, g, n, k, sdi, snf, rsdi, rsnf, nexp);
+            passes++; printf("ok: native %s   [%s%ld steps, %zu bytes of C%s, records by value as C structs]\n", nm, spec_hit ? "specialization cached by key, " : "", steps, len, cached ? ", cached" : "");
+            return;
+        }
         int k = ffi_add(sym, n, kind, ret);
         FFI[k].rdata = rdata; FFI[k].keep = keep;
         /* B18, represented values by their layout: a parameter or result of a type with a declared
@@ -4589,10 +4776,47 @@ static VBox *box_deep(Port p) {
     }
     return NULL;
 }
-void *cubical_call_data(const char *name, uint64_t nargs, void **args, const char *const *types) {
+/* B18 from C, records by value: a type named "struct D" (D a data type of one constructor) crosses
+ * as the C struct of its fields, each a word (a field of a represented type as the representation):
+ * the argument points to the fields' words, a result is returned as a malloc'd array of them. The
+ * conversions are two definitions made on first use: %recin_D (lam f… (C (from f)…)) and %recout_D
+ * (lam x (case x ((C q…) (C (to q)…)))) */
+static long rec_conv(int d, bool in) {
+    char nmb[160]; snprintf(nmb, sizeof nmb, "%%rec%s_%s", in ? "in" : "out", DATA[d].name);
+    long g = global_lookup(nmb); if (g >= 0) return g;
+    int c = DATA[d].cons[0]; int nf = CON[c].nfields; const char *cn = CON[c].name;
+    char *b; size_t bl; FILE *m = open_memstream(&b, &bl);
+    if (in) { fprintf(m, "(def %s (lam", nmb); for (int j = 0; j < nf; j++) fprintf(m, " %%f%d", j); fprintf(m, " "); }
+    else { fprintf(m, "(def %s (lam %%x (case %%x ((%s", nmb, cn); for (int j = 0; j < nf; j++) fprintf(m, " %%q%d", j); fprintf(m, ") "); }
+    for (int j = 0; j < nf; j++) fprintf(m, "(app ");
+    fprintf(m, "%s", cn);
+    for (int j = 0; j < nf; j++) { long t = REP_TO_OF(d, j, !in); if (t >= 0) fprintf(m, " (app %s %%%c%d))", CHECKED[t], in ? 'f' : 'q', j); else fprintf(m, " %%%c%d)", in ? 'f' : 'q', j); }
+    fprintf(m, in ? "))" : "))))");
+    fclose(m); emit(b); free(b);
+    return global_lookup(nmb);
+}
+static int rec_type(const char *ty) {
+    if (strncmp(ty, "struct ", 7)) return -1;
+    int d = data_lookup(ty + 7);
+    if (d < 0 || DATA[d].ncons != 1 || CON[DATA[d].cons[0]].ndims || CON[DATA[d].cons[0]].nfields > 64) return -1;
+    for (int j = 0; j < CON[DATA[d].cons[0]].nfields; j++) { int fd = data_field_type(d, 0, j); if (fd != -2 && REP_TO_OF(d, j, true) < 0) return -1; }
+    return d;
+}
+void *cubical_call_data_r(const char *name, uint64_t nargs, void **args, const char *const *types, const char *rtype);
+void *cubical_call_data(const char *name, uint64_t nargs, void **args, const char *const *types) { return cubical_call_data_r(name, nargs, args, types, NULL); }
+void *cubical_call_data_r(const char *name, uint64_t nargs, void **args, const char *const *types, const char *rtype) {
     long g = global_lookup(name); if (g < 0 || nargs > 64) return NULL;
+    int rrd = -1;
+    if (rtype) { rrd = rec_type(rtype); if (rrd < 0) return NULL; }
     Port *ps = calloc(nargs + 1, sizeof(Port));
     for (uint64_t i = 0; i < nargs; i++) {
+        if (!strncmp(types[i], "struct ", 7)) {
+            int d = rec_type(types[i]); if (d < 0) { free(ps); return NULL; }
+            int nf = CON[DATA[d].cons[0]].nfields; const uint64_t *w = args[i];
+            Port fs[64]; for (int j = 0; j < nf; j++) { struct { uint64_t tag, n; } wb = { 0, w[j] }; fs[j] = unbox_value((VB *)&wb, -2); }
+            ps[i] = apply_gid(rec_conv(d, true), fs, nf);
+            continue;
+        }
         int d = !strcmp(types[i], "Word") ? -2 : !strcmp(types[i], "Bytes") ? -3 : data_lookup(types[i]);
         if (d == -1) { free(ps); return NULL; }
         /* a type with a declared representation crosses as it (B18 by layout): the C value is the
@@ -4614,6 +4838,17 @@ void *cubical_call_data(const char *name, uint64_t nargs, void **args, const cha
             int ro = got == (int)nargs ? type_rep(cod) : -1;
             if (ro >= 0) { long gt = table_global(TB_VAL, REPTO[ro]); r = apply_gid(gt, &r, 1); }
         }
+    }
+    if (rrd >= 0) {
+        /* the record's fields, each to its word, read out */
+        r = apply_gid(rec_conv(rrd, false), &r, 1);
+        VBox *v = box_deep(r);
+        net_drain();
+        int nf = CON[DATA[rrd].cons[0]].nfields;
+        if (!v || v->n != (uint64_t)nf) return NULL;
+        uint64_t *o = malloc(sizeof(uint64_t) * (nf ? nf : 1));
+        for (int j = 0; j < nf; j++) { VBox *f = v->f[j]; if (!f || f->tag != 0) { free(o); return NULL; } o[j] = f->n; }
+        return o;
     }
     VBox *v = box_deep(r);
     net_drain();

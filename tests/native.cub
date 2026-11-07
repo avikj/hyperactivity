@@ -104,3 +104,22 @@ add6 n = plus 6 n
 #same add5 10 = 15
 #same add5b 10 = 15
 #same add6 10 = 16
+
+-- B18, records by value: a record of word-represented fields (Pt, two Nat as Word) is emitted as the C struct
+-- struct T<di> { tag; union { struct { f0; f1; } c0; } u; } and the entry takes and returns it by value; the
+-- machine calls it through a trampoline appended to the program (the struct's fields as words in, the result's
+-- fields as words out), each field crossing as its representation (to before, from after)
+data Pt = pt (a : Nat) (b : Nat)
+
+swapPt : Pt → Pt
+swapPt p = case p of pt a b → pt (plus b 1) a
+
+sumPt : Pt → Nat → Nat
+sumPt p k = case p of pt a b → plus (plus a b) k
+
+#native swapPt 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (p : Pt) → swapPt p))))
+#native sumPt 2 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (p : Pt) (k : Nat) → sumPt p k))))
+#same swapPt (pt 3 40) = pt 41 3
+#same swapPt (pt 7 8) = pt 9 7
+#same sumPt (pt 3 40) 2 = 45
+#same sumPt (swapPt (pt 5 6)) 0 = 12

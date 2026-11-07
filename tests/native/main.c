@@ -7,8 +7,8 @@
 typedef struct V { uint64_t tag; uint64_t n; struct V *f[]; } V;
 static V *mkv(uint64_t tag, uint64_t n) { V *v = calloc(1, sizeof(V) + n * sizeof(V *)); v->tag = tag; v->n = n; return v; }
 int main(void) {
-    const char *libs[] = { "lib/prelude.cub", "lib/code.cub", "lib/check.cub", "lib/std.cub", "lib/prim.cub" };
-    if (cubical_init(5, libs)) { fprintf(stderr, "a library failed to check\n"); return 1; }
+    const char *libs[] = { "lib/prelude.cub", "lib/code.cub", "lib/check.cub", "lib/std.cub", "lib/prim.cub", "tests/native/rec.cub" };
+    if (cubical_init(6, libs)) { fprintf(stderr, "a library failed to check\n"); return 1; }
     uint64_t a[2] = { 40, 2 }, r;
     if (cubical_call_w("plusw", a, 2, &r) || r != 42) { fprintf(stderr, "plusw 40 2 = %llu (%s)\n", (unsigned long long)r, cubical_last_text()); return 1; }
     uint64_t b[2] = { 7, 7 };
@@ -33,6 +33,16 @@ int main(void) {
     const char *tn[2] = { "Nat", "Nat" }; void *na[2] = { &x, &y };
     V *pn = cubical_call_data("plus", 2, na, tn);
     if (!pn || pn->tag != 0 || pn->n != 42) { fprintf(stderr, "plus 40 2 on Nat as Word failed\n"); return 1; }
+    /* a record by value (tests/native/rec.cub's Pt, two Nat fields as words): the C struct in, the C
+     * struct out, and a struct argument beside a represented one */
+    struct Pt { uint64_t a, b; } p = { 3, 40 };
+    const char *tp[1] = { "struct Pt" }; void *pa[1] = { &p };
+    struct Pt *sw = cubical_call_data_r("swapPt", 1, pa, tp, "struct Pt");
+    if (!sw || sw->a != 41 || sw->b != 3) { fprintf(stderr, "swapPt (pt 3 40) as a struct failed\n"); return 1; }
+    const char *tps[2] = { "struct Pt", "Nat" }; V two = { 0, 2 }; void *psa[2] = { sw, &two };
+    V *sm = cubical_call_data("sumPt", 2, psa, tps);
+    if (!sm || sm->tag != 0 || sm->n != 46) { fprintf(stderr, "sumPt (pt 41 3) 2 failed\n"); return 1; }
+    printf("swapPt {3,40} = {%llu,%llu}; sumPt {41,3} 2 = %llu\n", (unsigned long long)sw->a, (unsigned long long)sw->b, (unsigned long long)sm->n);
     printf("plusw 40 2 = %llu; eqw 7 7 = %llu; boxed: definition %llu answers %llu; length [7,8] = %llu; plus 40 2 on Nat as Word = %llu\n", (unsigned long long)42, (unsigned long long)r, (unsigned long long)k, (unsigned long long)bv->n, (unsigned long long)n, (unsigned long long)pn->n);
     return 0;
 }
