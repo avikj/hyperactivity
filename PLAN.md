@@ -1176,13 +1176,11 @@ port (A10b) is the checker at scale and gates E28.
    a definition whose value is a closed λ, a constant constructor or a data type is built from
    its compiled syntax at every reference (one cell, no copy); any other is copied lazily one
    level at a time from the held value, named by the definition's key.
-4. Intervals, faces, substitutions in the cell. Essential. Partly DONE; the bitmask design
-   is 18.19, CLOSED by measurement 2026-11-06 (formulas average 1.3 clauses of 1.26 literals and
-   all formula work is under 1% of a run; `maxlev` and `lookup` in `lang.c` are the hotspots,
-   A9's). **Bitmask formulas
-   are a decision, not a remainder**: dimensions are 64-bit names never reused, and bitmasks
-   want per-scope indices, so this changes how formulas name dimensions; worth doing (Dnf
-   allocations are the remaining payload traffic) and to be designed as such.
+4. Intervals, faces, substitutions in the cell. DONE; the bitmask design (18.19) is CLOSED by
+   measurement 2026-11-06 (`a698b0e0`): formulas average 1.3 clauses of 1.26 literals and all
+   formula work is under 1% of a run, so per-scope bitmask indices (a change to how formulas
+   name dimensions) would buy under 1%; the hotspots were `maxlev` and `lookup` in `lang.c`,
+   fixed under A9.
 5. DONE (`07053c5`): node arena marked and released per compile; cells and slots from
    per-thread slabs returned between readings.
 6. DONE (`e0f27ef`): records and case tables interned by structure so equal bodies have one
@@ -2658,7 +2656,13 @@ which of these it actually needed; the list is what Agda-level convenience means
   fields out (`vmap f (vcons m x xs) = vcons m (f x) (vmap f xs)`) has its branch checked at the
   constructor's own index with refl for the equations and transported along them to the motive
   at v, the line `λ i → R[ix := e (~ i), v := c fs (λ j → e (~ i ∨ j))]` (`ccm_t`, skipped when
-  the goal does not depend on the index); naming the field keeps the old reading. Not done:
+  the goal does not depend on the index); naming the field keeps the old reading. Soundness
+  (found in review, 2026-11-06, `f6739ad7`): a recursion on a fording family whose motive is not
+  over the indices (an index argument that is not a variable, `Vec A (suc n)`, or a motive
+  written by hand) still typed a recursive field's hypothesis at the outer index, so `sbad
+  (vcons m x xs e) = sbad xs` checked at `Vec A (suc n)`; `hyp-motive` now gives such a
+  hypothesis the motive at f only where f's indices are the scrutinee's, and otherwise a fresh
+  abstract type (usable as nothing; `tests/elab.cub` `sbad`, `sbad2`). Not done:
   injectivity of constructor indices across two splits (`vzip` on two vectors of one length
   needs `suc m ≡ suc m'` → `m ≡ m'`, and absurd cases refuted from the equations, as Agda's
   unifier does); those are written with the fields named. (ii) FIXED
