@@ -224,8 +224,9 @@ run or the store's `ok` line.
 once. Results and failures print in the surface syntax, a failed check with its declaration's
 `file:line` and the term at fault. `--serve` after the files reads blocks of declarations from
 the standard input, each ended by a line `.`, and answers each as a file would be answered,
-ending the reply with `.` (a fatal error ends the request, not the machine; names are declared
-once). `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to
+ending the reply with `.` (a fatal error ends the request, not the machine). `#retract f` hides
+the checked definition `f` so the name can be declared again; what was checked against the old
+`f` keeps it (a global is referenced by its index), later declarations see the new one. `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to
 (`(lam x b)`, `(elim P e ((c x) b))`, …) are still read from files of other extensions, and
 `--print FILE` prints such a file in the surface syntax.
 

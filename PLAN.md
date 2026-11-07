@@ -1129,7 +1129,7 @@ is not built; (3) A4's
 bitmask formulas (18.19, designed); (4) E28: DONE 2026-11-06 for unification-based implicits through reducing hypothesis types,
 holes in composition lines, generalized variables, and the hypothesis at the field's own index
 for recursion on a fording family (`vmap`; 18.12); left: rewriting a branch's goal by the index
-equation (the branch sees `e : n ≡ suc m`); (5) item 30's retraction and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
+equation (the branch sees `e : n ≡ suc m`); (5) DONE: item 30's retraction (`#retract`) and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
 `Z2` reading with its laws, `lib/intproof.cub`, `lib/intlin.cub`); (7) DONE: the memory interface in `W` (`w-load`/`w-store`/`w-cas`/`w-fence`, acquire /
 release / acquire-release / sequentially consistent, on addresses from `ptr-of`;
 `tests/world.cub`); (8) item 10's same-machine Agda comparison; (9) DONE (`7a2c96c4`, `62c669fc`, `13ae6b9f`, `54be3050`): Line B's leftovers — `lib/emitx86.cub` (18.7's
@@ -1301,14 +1301,15 @@ identity; linear values are introduced only in `primitive` definitions.
     current checker is not checked again, F34) and the module cache; the editor protocol's
     first form is `--serve` (`src/lang.c`): after the files, blocks of surface declarations
     from the standard input, each ended by a line `.`, processed as a file would be, a fatal
-    error ending the request and not the machine, each reply ended by `.`; there is no
-    retraction (a name is declared once; an editor restarts the machine to redefine). Errors
+    error ending the request and not the machine, each reply ended by `.`; retraction is
+    `#retract f` (2026-11-06): the checked definition is hidden, the name is declared again,
+    dependents keep the definition they were checked against (`tests/serve/retract.in`). Errors
     print on stdout as well as stderr with the term at fault (`explain`). Step profiles:
     `CUBICAL_PROFILE=1` (whole run) and `=show` (per reading), `%gsteps` per definition.
     A debugger by replay: a process's run is a value replayed by `lib/proc.cub` (D25's
-    recording); stepping the net itself is `CUBICAL_TRACE` (a trace file). Open: retraction,
-    positions in error messages (file:line for checked definitions; the surface parser has
-    them, the checker's verdict names the term), an LSP wrapping of `--serve`.
+    recording); stepping the net itself is `CUBICAL_TRACE` (a trace file). Positions: a failed
+    check prints its declaration's `file:line` (`decl_pos`) and the term at fault. Open: an LSP
+    wrapping of `--serve`; retracting a data type.
 
 ### F. Programs about programs
 31. DONE in parts: `deriving eq D` (`1c5282a`), `deriving show`/`derive-show` (`896713ea`),

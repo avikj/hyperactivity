@@ -3304,6 +3304,15 @@ static void toplevel(Node *f) {
     } else if (!strcmp(h, "unbind")) {
         if (f->n != 2 || f->it[1]->list) die("(unbind name)", NULL);
         store_unbind_cmd(f->it[1]->s);
+    } else if (!strcmp(h, "retract")) {
+        /* #retract name (item 30, the editor protocol): the checked definition is hidden, so the
+         * name may be declared again; what was checked against it keeps the definition it saw (a
+         * global is referenced by its index, the name finds the newest) */
+        if (f->n != 2 || f->it[1]->list) die("(retract name)", NULL);
+        int ck = checked_index(f->it[1]->s);
+        if (ck < 0) { printf("retract %s: not a checked definition\n", f->it[1]->s); return; }
+        CHKHIDE[ck] = true;
+        printf("retracted %s\n", f->it[1]->s);
     } else if (!strcmp(h, "gc")) {
         store_gc_cmd();
     } else if (!strcmp(h, "safe")) {

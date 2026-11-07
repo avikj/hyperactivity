@@ -71,6 +71,9 @@ test: build/cubical build/cubical-asan
 	[ "$$(grep '^key twice = ' build/store-2.out | cut -d= -f2)" = "$$(grep '^key double = ' build/store-2.out | cut -d= -f2)" ] || { echo "store: renaming changed a key"; exit 1; }; \
 	[ "$$(grep '^key twice-zero = ' build/store-2.out | cut -d= -f2)" != "$$(grep "^key twice-zero' = " build/store-2.out | cut -d= -f2)" ] || { echo "store: a different proof kept its key"; exit 1; }; \
 	echo "store: the second run checked nothing; keys as expected"
+	# --serve: blocks ended by `.`, #retract hides a checked definition so the name is declared again (item 30)
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub --serve < tests/serve/retract.in > build/serve.out 2>&1; \
+	grep -q "^retracted twoN" build/serve.out && [ "$$(grep -c '^ok: ' build/serve.out)" -ge 5 ] && ! grep -q "^FAIL\|^error" build/serve.out || { echo "serve: retraction failed"; tail build/serve.out; exit 1; }; echo "serve: retraction ok"
 	# Brunerie's number (Ljungström's brunerie', an untyped port): -2, with one and with four workers
 	for w in 0 4; do CUBICAL_WORKERS=$$w ./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub \
 	  experiments/brunerie/brunerie.cub experiments/brunerie/run-brunerie.cub | grep -A1 -x brunerie | grep -q "= negsuc (suc zero) " \

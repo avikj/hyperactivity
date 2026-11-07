@@ -1414,7 +1414,7 @@ static void p_decl(void) {
     if (x_is(t, "#usage")) { NX(); Tok *n = NX(); x_top(sym2("usage", nsym(n->s))); decl_end(); return; }
     if (x_is(t, "#trusted")) { NX(); x_top(lst(1, nsym("trusted"))); decl_end(); return; }
     /* the store (F34): #key d, #names K, #history name, #unbind name, #gc */
-    if (x_is(t, "#key") || x_is(t, "#names") || x_is(t, "#history") || x_is(t, "#unbind") || x_is(t, "#safe")) { const char *c = NX()->s + 1; Tok *n = NX(); x_top(sym2(c, nsym(n->s))); decl_end(); return; }
+    if (x_is(t, "#key") || x_is(t, "#names") || x_is(t, "#history") || x_is(t, "#unbind") || x_is(t, "#safe") || x_is(t, "#retract")) { const char *c = NX()->s + 1; Tok *n = NX(); x_top(sym2(c, nsym(n->s))); decl_end(); return; }
     if (x_is(t, "#gc")) { NX(); x_top(lst(1, nsym("gc"))); decl_end(); return; }
     if (x_is(t, "#fo")) { NX(); x_top(sym2("fo", x_solve_expr(p_expr(0)))); decl_end(); return; }
     if (x_is(t, "#run")) { NX(); x_top(sym2("run", x_solve_expr(p_expr(0)))); decl_end(); return; }
