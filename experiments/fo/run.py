@@ -44,7 +44,7 @@ defs = lcons (#0 , (#0 , fcall #1 (lcons buf2 lnil))) (lcons (#1 , (#1 , lam-bod
  'rec': ("""len-main t2 = fapply t2 (lcons (fcon (didx (code LW)) #1 (lcons (flit #7) (lcons lw3 lnil))) lnil)
 len-base = lcons (gidx (code zw) , (#0 , flit #0)) (lcons (gidx (code sw) , (#1 , fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))) lnil)
 len-prog = case lift #10 (lower c-len) of lifted t2 ds k → lcons (#0 , (#0 , len-main t2)) (lapp2 len-base ds)
-prog = emit-prog len-prog""", "3", "V *v3 = f_10(v2); f_"),
+prog = emit-prog len-prog""", "3", "f_138(f_10(v2))"),
  # a derived program compiled: the equality on Nat read off the data table (lib/derive.cub),
  # lowered, lifted (the recursion a C function, the inner λ a closure through the dispatcher),
  # applied to 2 and 2 then to 2 and 1; Bool is a word in the form: 10*eq(2,2) + eq(2,1)
@@ -106,6 +106,25 @@ upd-y p = case p of pt4 x y → pt4 x (%wadd y #1)
 lam-body f = case f of flam b → b; _ → f
 cow-main = fswitch (fcall #1 (lcons (fcon (didx (code Pt4)) #0 (lcons (flit #5) (lcons (flit #6) lnil))) lnil)) (lcons (#0 , (#2 , fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil)))) lnil)
 defs = case lift #2 (lam-body (specialize (Pt4 → Pt4) lnil (code (λ (p : Pt4) → upd-y p)))) of lifted t2 ds k → lcons (#0 , (#0 , cow-main)) (lcons (#1 , (#1 , t2)) ds)""", "12", "cpc("),
+ # a sort through the whole pipeline: insertion sort on a list of words (structural recursion,
+ # a nested case, if on a word comparison) from the store, lowered with program-of, lifted, printed
+ # with typed pointers (unboxed) or boxed; the sorted list's head and the sum of its elements
+ 'sort': ("""data WL = wnil | wcons (x : Word) (xs : WL)
+wins : Word → WL → WL
+wins v l = case l of wnil → wcons v wnil; wcons x xs → if %wlt v x then wcons v (wcons x xs) else wcons x (rec xs)
+wsort : WL → WL
+wsort l = case l of wnil → wnil; wcons x xs → wins x (rec xs)
+wsum : WL → Word
+wsum l = case l of wnil → #0; wcons x xs → %wadd x (rec xs)
+whead : WL → Word
+whead l = case l of wnil → #0; wcons x xs → x
+sort-main : WL → Word
+sort-main l = %wadd (%wadd (whead (wsort l)) #1000) (wsum (wsort l))
+wl-d = didx (code WL)
+wl x r = fcon wl-d #1 (lcons (flit x) (lcons r lnil))
+wl4 = wl #5 (wl #3 (wl #9 (wl #1 (fcon wl-d #0 lnil))))
+prog-defs = lift-program #100000 (program-at #99999 #20 (code (λ (l : WL) → sort-main l)))
+defs = lcons (#0 , (#0 , fcall #99999 (lcons wl4 lnil))) prog-defs""", "1019", ("f_", "T")),
  'let-if': ("""defs = lcons (#0 , (#0 , flet (flit #3) (fif (fprim P-lt (lcons (fvar #0) (lcons (flit #5) lnil))) (fprim P-mul (lcons (fvar #0) (lcons (fvar #0) lnil))) (flit #0)))) lnil""", "9"),
 }
 UNBOXED = os.environ.get('UNBOXED') == '1'

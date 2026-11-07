@@ -76,15 +76,15 @@ tl3 = tcons #5 (tcons #6 (tcons #7 tnil))
 tl3-fo = lower (fromopt (quote-top TL tl3) cword)
 #same t-prog (code (λ (l : TL) → tsum l)) (lcons tl3-fo lnil) = tsum tl3
 #same t-prog (code (λ (l : TL) → tsum l)) (lcons tl3-fo lnil) = #18
--- a case returning a constructor's field, and the whole value when nothing changes (reuse: the
--- rebuild of every field is the scrutinee itself, C21: under the two fields and one hypothesis of
--- the cons alternative the scrutinee is variable 3)
+-- a case returning a constructor's field, and the whole value rebuilt field by field (the
+-- recursion has a hypothesis, so the rebuild is not read as the scrutinee: that variable names the
+-- whole list on every re-entry, C21)
 thead : TL → Word
 thead l = case l of tnil → #0; tcons x xs → x
 #same t-prog (code (λ (l : TL) → thead l)) (lcons tl3-fo lnil) = #5
 tsame : TL → TL
 tsame l = case l of tnil → tnil; tcons x xs → tcons x xs
-#same (case specialize (TL → TL) lnil (code (λ (l : TL) → tsame l)) of flam b → (case b of frec d x alts → (case alts of lcons a r → (case r of lcons a2 r2 → snd (snd (snd a2)); _ → flit #9); _ → flit #9); _ → flit #9); _ → flit #9) = fvar #3
+#same (case specialize (TL → TL) lnil (code (λ (l : TL) → tsame l)) of flam b → (case b of frec d x alts → (case alts of lcons a r → (case r of lcons a2 r2 → snd (snd (snd a2)); _ → flit #9); _ → flit #9); _ → flit #9); _ → flit #9) = fcon (didx (code TL)) #1 (lcons (fvar #2) (lcons (fvar #1) lnil))
 -- the derived equality (lib/derive.cub) lowered, lifted and run: Nat 2 = 2, Nat 2 ≠ 1
 deq-prog = case lift #10 eq-fo of lifted t2 ds k → (t2 , ds)
 #same wof (eval-fo (table-of (snd deq-prog)) lnil (fapply (fst deq-prog) (lcons n2 (lcons n2 lnil)))) = #1

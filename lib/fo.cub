@@ -387,7 +387,75 @@ lift k t =
 rec-alts g caps alts =
   case alts of
     lnil → lnil
-    lcons a r → lcons (fst a , (fst (snd a) , (lnil , hyp-lets g caps (fst (snd a)) #0 (fst (snd (snd a))) (shift-at (%wadd (fst (snd a)) (lst-len2 (fst (snd (snd a))))) #1 (snd (snd (snd a))))))) (rec-alts g caps r)
+    lcons a r → lcons (fst a , (fst (snd a) , (lnil , inline-hyps (lst-len2 (fst (snd (snd a)))) (hyp-lets g caps (fst (snd a)) #0 (fst (snd (snd a))) (shift-at (%wadd (fst (snd a)) (lst-len2 (fst (snd (snd a))))) #1 (snd (snd (snd a)))))))) (rec-alts g caps r)
+-- a hypothesis bound by let is computed before the alternative's body runs, whether the body
+-- reads it or not; one the body never reads is dropped, one it reads exactly once, outside any
+-- λ or loop (where it would be computed again), is put in place of its variable: the recursive
+-- call then happens where the source makes it (a head's recursion does not walk the list, an
+-- insertion stops where it inserts). The k innermost lets of t are the hypotheses
+inline-hyps k t =
+  if %weq k #0 then t
+  else (case t of
+          flet a b →
+            let b2 = inline-hyps (%wsub k #1) b
+                n = occ-count #0 b2
+            in if %weq n #0 then funshift0 #0 b2 else if %weq n #1 then fsubst #0 a b2 else flet a b2
+          _ → t)
+-- occurrences of variable v in t; one under a λ, a thunk or a loop body counts as many
+occ-count v t =
+  case t of
+    fvar n → if %weq n v then #1 else #0
+    fcon d c fs → occ-list v fs
+    fswitch x alts → %wadd (occ-count v x) (occ-alts v alts)
+    frec d x alts → %wadd (occ-count v x) (occ-ralts v alts)
+    fproj d c k x → occ-count v x
+    fcall g args → occ-list v args
+    fprim p args → occ-list v args
+    flet a b → %wadd (occ-count v a) (occ-count (%wsucc v) b)
+    fif c a b → %wadd (occ-count v c) (%wadd (occ-count v a) (occ-count v b))
+    floop init body → %wadd (occ-list v init) (occ-many (occ-count (%wadd v (lst-len2 init)) body))
+    fclos g env → occ-list v env
+    flam b → occ-many (occ-count (%wsucc v) b)
+    fapply f args → %wadd (occ-count v f) (occ-list v args)
+    fthunk a → occ-many (occ-count v a)
+    fforce x → occ-count v x
+    fnet g args → occ-list v args
+    fassume f b → %wadd (if fact-has v f then #2 else #0) (occ-count v b)
+    fupd u d x c k w → %wadd (occ-count v x) (occ-count v w)
+    _ → #0
+occ-many n = if %weq n #0 then #0 else #2
+occ-list v l = case l of lnil → #0; lcons x r → %wadd (occ-count v x) (occ-list v r)
+occ-alts v alts = case alts of lnil → #0; lcons a r → %wadd (occ-count (%wadd v (fst (snd a))) (snd (snd a))) (occ-alts v r)
+occ-ralts v alts = case alts of lnil → #0; lcons a r → %wadd (occ-count (%wadd v (%wadd (fst (snd a)) (lst-len2 (fst (snd (snd a)))))) (snd (snd (snd a)))) (occ-ralts v r)
+fact-has v c = case c of cvar n → %weq n v; cwop k a b → (case fact-has v a of true → true; false → fact-has v b); cwsucc a → fact-has v a; cann a T → fact-has v a; _ → false
+-- fsubst d e t: e (closed over the environment below binder d) in place of variable d in t, the
+-- variables above d moved down; funshift0 d t: the same with no occurrence of d
+fsubst d e t =
+  case t of
+    fvar n → if %weq n d then shift d e else if %wlt d n then fvar (%wsub n #1) else t
+    fcon dd c fs → fcon dd c (fsubst-list d e fs)
+    fswitch x alts → fswitch (fsubst d e x) (fsubst-alts d e alts)
+    frec dd x alts → frec dd (fsubst d e x) (fsubst-ralts d e alts)
+    fproj dd c j x → fproj dd c j (fsubst d e x)
+    fcall g args → fcall g (fsubst-list d e args)
+    fprim p args → fprim p (fsubst-list d e args)
+    flet a b → flet (fsubst d e a) (fsubst (%wsucc d) e b)
+    fif c a b → fif (fsubst d e c) (fsubst d e a) (fsubst d e b)
+    floop init body → floop (fsubst-list d e init) (fsubst (%wadd d (lst-len2 init)) e body)
+    fclos g env → fclos g (fsubst-list d e env)
+    flam b → flam (fsubst (%wsucc d) e b)
+    fapply f args → fapply (fsubst d e f) (fsubst-list d e args)
+    fthunk a → fthunk (fsubst d e a)
+    fforce x → fforce (fsubst d e x)
+    fnet g args → fnet g (fsubst-list d e args)
+    fassume f b → if fact-has d f then fsubst d e b else fassume (fact-down d f) (fsubst d e b)
+    fupd u dd x c k w → fupd u dd (fsubst d e x) c k (fsubst d e w)
+    _ → t
+fsubst-list d e l = case l of lnil → lnil; lcons x r → lcons (fsubst d e x) (fsubst-list d e r)
+fsubst-alts d e alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , fsubst (%wadd d (fst (snd a))) e (snd (snd a)))) (fsubst-alts d e r)
+fsubst-ralts d e alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , fsubst (%wadd d (%wadd (fst (snd a)) (lst-len2 (fst (snd (snd a)))))) e (snd (snd (snd a)))))) (fsubst-ralts d e r)
+fact-down d c = case c of cvar n → (if %wlt d n then cvar (%wsub n #1) else c); cwop k a b → cwop k (fact-down d a) (fact-down d b); cwsucc a → cwsucc (fact-down d a); cann a T → fact-down d a; _ → c
+funshift0 d t = fsubst d (flit #0) t
 hyp-lets g caps n t hyps body =
   case hyps of
     lnil → body
@@ -473,6 +541,10 @@ reuse-at flds dd t =
 reuse-list flds dd l = case l of lnil → lnil; lcons x xs → lcons (reuse-at flds dd x) (reuse-list flds dd xs)
 -- a switch's alternatives know no data type: only projections are read under them
 reuse-alts flds dd alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , reuse-at none #0 (snd (snd a)))) (reuse-alts flds dd r)
+-- under a recursion with hypotheses the alternatives are entered again on the fields, where the
+-- scrutinee variable still names the value the recursion started on, not the node at hand: the
+-- field variables are then no base. (A lifted recursion has no hypotheses: there they are.)
+no-hyps-r alts = case alts of lnil → true; lcons a r → (case fst (snd (snd a)) of lnil → no-hyps-r r; _ → false)
 reuse-ralts d x alts =
   case alts of
     lnil → lnil
@@ -480,7 +552,7 @@ reuse-ralts d x alts =
       let c = fst a
           n = fst (snd a)
           h = lst-len2 (fst (snd (snd a)))
-          flds = (case x of fvar m → some (d , (c , (n , (h , %wadd m (%wadd n h))))); _ → none)
+          flds = (case x of fvar m → (if no-hyps-r alts then some (d , (c , (n , (h , %wadd m (%wadd n h))))) else none); _ → none)
       in lcons (c , (n , (fst (snd (snd a)) , reuse-at flds #0 (snd (snd (snd a)))))) (reuse-ralts d x r)
 -- is field f field i of some base: the base, if so
 field-base flds dd d c i f =
@@ -648,7 +720,7 @@ let-upd = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fcon #0 #0
 let-upd2 = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (flit #9) lnil))) lnil)))
 #same inplace let-upd2 = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fupd #0 #0 (fvar #0) #0 #1 (fupd #0 #0 (fvar #0) #0 #1 (flit #9)))
 -- a parameter updated (the base is not fresh): a copy; a recursion's alternative rebuilding its
--- constructor with one field changed is the update of the scrutinee
+-- constructor with one field changed is the update of the scrutinee (no hypotheses here)
 rec-upd = frec #12 (fvar #0) (lcons (#0 , (#2 , (lnil , fcon #12 #0 (lcons (fvar #1) (lcons (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil))) lnil))))) lnil)
 #same inplace rec-upd = frec #12 (fvar #0) (lcons (#0 , (#2 , (lnil , fupd #0 #12 (fvar #2) #0 #1 (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))))) lnil)
 #same eval-fo no-defs (lcons (vcon #12 #0 (lcons (vw #5) (lcons (vw #6) lnil))) lnil) (inplace rec-upd) = vcon #12 #0 (lcons (vw #5) (lcons (vw #7) lnil))
@@ -659,3 +731,13 @@ loop-upd = floop (lcons (flit #3) (lcons (fcon #7712 #0 (lcons (flit #0) (lcons 
      (fcon #0 #1 (lcons (fvar #0) lnil)))
 #same (case inplace loop-upd of floop i b → (case b of fif c a e → (case a of fcon d k st → (case lst-nth-fo st #1 of frec dd x alts → (case alts of lcons al r → (case snd (snd (snd al)) of fupd u dd y c k v → u; _ → #9); _ → #9); _ → #9); _ → #9); _ → #9); _ → #9) = #1
 #same eval-fo no-defs lnil (inplace loop-upd) = vcon #7712 #0 (lcons (vw #0) (lcons (vw #16) lnil))
+-- with hypotheses the rebuild stays a constructor: the alternative runs again on the tail, where
+-- the scrutinee variable is the whole list. The identity on a list, rebuilt node by node
+rec-id = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , fcon #7 #0 lnil))) (lcons (#1 , (#2 , (lcons #1 lnil , fcon #7 #1 (lcons (fvar #2) (lcons (fforce (fvar #0)) lnil))))) lnil))
+#same inplace rec-id = rec-id
+#same eval-fo no-defs (lcons (eval-fo no-defs lnil l3) lnil) (inplace rec-id) = eval-fo no-defs lnil l3
+-- a lifted recursion computes a hypothesis where it is read: the head of a list does not walk
+-- it (the hypothesis is dropped), the length reads it once (the call is in place of the let)
+head-fo = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lcons #1 lnil , fvar #2))) lnil))
+#same (case lift #1 (flam head-fo) of lifted t2 ds k → (case ds of lcons d r → snd (snd d); lnil → flit #0)) = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lnil , fvar #1))) lnil))
+#same (case lift #1 (flam fo-len) of lifted t2 ds k → (case ds of lcons d r → snd (snd d); lnil → flit #0)) = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lnil , fprim P-add (lcons (fforce (fcall #1 (lcons (fvar #0) lnil))) (lcons (flit #1) lnil))))) lnil))
