@@ -225,7 +225,13 @@ result is a handle of type `Native` (`lib/prim.cub`), held by the net without be
 to that library's `void *` parameters, printed `(%handle #k)`, compared by identity through
 `%view` (`wnative id k`), and finalized by the library's `cubical_release` when its last copy is
 erased (`tests/native/handle.c`). The entries are trusted to treat a handle as read-only: the
-net shares a handle among its readers. The other direction is `build/libcubical.a` with
+net shares a handle among its readers. A parameter or result whose type has a declared
+representation crosses as the representation (`Nat` as a `uint64_t`: converted by `to` before the
+call and `from` after it, the fallback the definition over the representations), and a `#native`
+specialization is cached by key: its expression with each checked definition by its codebase key,
+the values written in it, the checker's version and the libraries before the file name it before
+it is computed, and a hit (`specialization cached by key, 0 steps`) runs neither the specializer
+nor the C compiler. The other direction is `build/libcubical.a` with
 `src/libcubical.h`: a C program loads libraries with `cubical_init` and calls checked
 definitions on words with `cubical_call_w` (and the emitted C's boxed form, `cubical_call`);
 `tests/native/main.c`. `%gsteps n` is the steps checked definition `n` took to check, from the
@@ -615,7 +621,12 @@ seventeen programs with gcc and runs them, with both printers):
   primitives on the arguments that carry information (the length and the bound proof dropped, the
   proof becoming an `ASSUME` around the access), the conversions vanish, the word operations and
   `plus` on represented `Nat` go native, closed `Nat` trees become words by `%rtab`. Two loads from
-  an unknown buffer, written with their proofs, compile and run.
+  an unknown buffer, written with their proofs, compile and run. `program-rep reps fuel c` is the
+  whole program with every declared representation consumed (B12 §6): definitions lowered from
+  their code as written (`%gcode n`), operations with an `op` line replaced by their natives,
+  constructors of a represented type through `to`, recursion on one through `from`, by the
+  representation's table `%rops d`; the printers lay a field of a type represented by `Word` out as
+  a word.
 - **`lib/derive.cub`**: `derive-eq d`, a decidable equality as a code read off the data table;
   evaluated, quoted back at its type, lowered and compiled (the derived equality on `Nat` prints
   10 for eq(2,2), eq(2,1)).

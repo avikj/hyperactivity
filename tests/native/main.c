@@ -1,13 +1,14 @@
 /* tests/native/main.c — a C program calls checked definitions through libcubical (B18): plusw on
- * words, and the derived equality on Nat (a Bool read as 1/0) */
+ * words, the derived equality on Nat (a Bool read as 1/0), and values of a represented type (Nat
+ * as Word, lib/prim.cub) crossing as the representation */
 #include <stdio.h>
 #include <stdlib.h>
 #include "../../src/libcubical.h"
 typedef struct V { uint64_t tag; uint64_t n; struct V *f[]; } V;
 static V *mkv(uint64_t tag, uint64_t n) { V *v = calloc(1, sizeof(V) + n * sizeof(V *)); v->tag = tag; v->n = n; return v; }
 int main(void) {
-    const char *libs[] = { "lib/prelude.cub", "lib/code.cub", "lib/check.cub", "lib/std.cub" };
-    if (cubical_init(4, libs)) { fprintf(stderr, "a library failed to check\n"); return 1; }
+    const char *libs[] = { "lib/prelude.cub", "lib/code.cub", "lib/check.cub", "lib/std.cub", "lib/prim.cub" };
+    if (cubical_init(5, libs)) { fprintf(stderr, "a library failed to check\n"); return 1; }
     uint64_t a[2] = { 40, 2 }, r;
     if (cubical_call_w("plusw", a, 2, &r) || r != 42) { fprintf(stderr, "plusw 40 2 = %llu (%s)\n", (unsigned long long)r, cubical_last_text()); return 1; }
     uint64_t b[2] = { 7, 7 };
@@ -25,8 +26,13 @@ int main(void) {
     const char *tys[1] = { "List" }; void *la[1] = { c7 };
     V *len = cubical_call_data("length", 1, la, tys);
     if (!len) { fprintf(stderr, "length through the boxed data call failed\n"); return 1; }
-    uint64_t n = 0; for (V *q = len; q && q->tag == 2; q = q->f[0]) n++;
+    uint64_t n = 0; for (V *q = len; q && q->tag == 2; q = q->f[0]) n++;   /* prelude's length is unchecked: its Nat is the tree */
     if (n != 2) { fprintf(stderr, "length [7,8] read as %llu\n", (unsigned long long)n); return 1; }
-    printf("plusw 40 2 = %llu; eqw 7 7 = %llu; boxed: definition %llu answers %llu; length [7,8] = %llu\n", (unsigned long long)42, (unsigned long long)r, (unsigned long long)k, (unsigned long long)bv->n, (unsigned long long)n);
+    /* a checked definition over Nat (std's plus), Nat represented by Word (lib/prim.cub): the arguments
+     * and the result cross as words, read in by from and out by to */
+    const char *tn[2] = { "Nat", "Nat" }; void *na[2] = { &x, &y };
+    V *pn = cubical_call_data("plus", 2, na, tn);
+    if (!pn || pn->tag != 0 || pn->n != 42) { fprintf(stderr, "plus 40 2 on Nat as Word failed\n"); return 1; }
+    printf("plusw 40 2 = %llu; eqw 7 7 = %llu; boxed: definition %llu answers %llu; length [7,8] = %llu; plus 40 2 on Nat as Word = %llu\n", (unsigned long long)42, (unsigned long long)r, (unsigned long long)k, (unsigned long long)bv->n, (unsigned long long)n, (unsigned long long)pn->n);
     return 0;
 }

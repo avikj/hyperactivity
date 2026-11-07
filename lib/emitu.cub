@@ -122,13 +122,13 @@ dt-ty d = %wadd #6 d
 -- switched through the pointer, updated in place when unique (C21); a field of a flat type is by
 -- value, of a pointer type a pointer, anything else a boxed V *
 is-ptr-dt d = if %weq d #0 then false else andb (notb-u (is-flat d)) (andb (has-layout d) (ptr-ctors d (nctors-t d) #0))
-ptr-ctors d n c = if %weq c n then true else andb (ptr-fields (cshape d c)) (ptr-ctors d n (%wsucc c))
+ptr-ctors d n c = if %weq c n then true else andb (ptr-fields (cshape-r d c)) (ptr-ctors d n (%wsucc c))
 ptr-fields ks = case ks of lnil → true; lcons k r → andb (%wlt (fst k) #3) (ptr-fields r)
 is-udata d = orb (is-flat d) (is-ptr-dt d)
--- the type of field k (lib/lower.cub's cshape kinds: 0 a word, 1 the type itself, 2 another data
+-- the type of field k (cshape-r kinds, lib/emitt.cub: 0 a word, 1 the type itself, 2 another data
 -- type, 3 anything else)
 fk-ty d k = if %weq (fst k) #0 then tW else if %weq (fst k) #1 then dt-ty d else (if is-udata (snd k) then dt-ty (snd k) else tP)
-ctor-tys d c = lmap (fk-ty d) (cshape d c)
+ctor-tys d c = lmap (fk-ty d) (cshape-r d c)
 fld-ty d c j = ty-at (ctor-tys d c) j
 push-tys tys env = case tys of lnil → env; lcons t r → push-tys r (lcons t env)
 -- the field types of constructor c of d (all W for a flat type), and their count
@@ -501,7 +501,7 @@ notb-u b = case b of true → false; false → true
 -- tree's typedef too); flat types first, since a pointer type may hold one by value
 add-dts d acc = if orb (%weq d #0) (lmem-w d acc) then acc else (if is-udata d then reach-dts d (lcons d acc) else acc)
 reach-dts d acc = reach-ctors d (nctors-t d) #0 acc
-reach-ctors d n c acc = if %weq c n then acc else reach-ctors d n (%wsucc c) (reach-fields (cshape d c) acc)
+reach-ctors d n c acc = if %weq c n then acc else reach-ctors d n (%wsucc c) (reach-fields (cshape-r d c) acc)
 reach-fields ks acc = case ks of lnil → acc; lcons k r → reach-fields r (if %weq (fst k) #2 then add-dts (snd k) acc else acc)
 flat-first ds = lapp (keep-if (λ d → is-flat d) ds) (keep-if (λ d → notb-u (is-flat d)) ds)
 keep-if p l = case l of lnil → lnil; lcons x r → (if p x then lcons x (keep-if p r) else keep-if p r)
@@ -525,7 +525,7 @@ u-punboxname = (lcons #32 (lcons #42 (lcons #117 (lcons #110 (lcons #98 (lcons #
 -- static V *box_d(T_d *x) { switch (x->tag) { case c: return mkc(c, n, mkw(x->u.cK.f0), box_d2(x->u.cK.f1), …); … } }
 pbox-fn d = cat7 u-boxfn (dec d) u-boxhead (dec d) u-pboxbody (pbox-alts d (nctors-t d) #0) u-abort
 u-pboxbody = (lcons #32 (lcons #42 (lcons #120 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #115 (lcons #119 (lcons #105 (lcons #116 (lcons #99 (lcons #104 (lcons #32 (lcons #40 (lcons #120 (lcons #45 (lcons #62 (lcons #116 (lcons #97 (lcons #103 (lcons #41 (lcons #32 (lcons #123 (lcons #32 lnil)))))))))))))))))))))))))
-pbox-alts d n c = if %weq c n then lnil else lapp (pbox-alt d c (cshape d c)) (pbox-alts d n (%wsucc c))
+pbox-alts d n c = if %weq c n then lnil else lapp (pbox-alt d c (cshape-r d c)) (pbox-alts d n (%wsucc c))
 pbox-alt d c ks = cat7 u-case2 (dec c) u-colon u-mkcc (dec c) u-comma (cat3 (dec (lst-len ks)) (pbox-fields d c ks #0) (lapp u-rp u-semi))
 pbox-fields d c ks i =
   case ks of
@@ -539,7 +539,7 @@ punbox-fn d = cat7 u-punboxfn (dec d) u-punboxname (dec d) (cat5 u-unboxpbody (d
 u-unboxpbody = (lcons #40 (lcons #86 (lcons #32 (lcons #42 (lcons #118 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #84 lnil))))))))))
 u-unboxpbody2 = (lcons #32 (lcons #42 (lcons #112 (lcons #32 (lcons #61 (lcons #32 (lcons #109 (lcons #97 (lcons #108 (lcons #108 (lcons #111 (lcons #99 (lcons #40 (lcons #115 (lcons #105 (lcons #122 (lcons #101 (lcons #111 (lcons #102 (lcons #40 (lcons #84 lnil)))))))))))))))))))))
 u-unboxpbody3 = (lcons #41 (lcons #41 (lcons #59 (lcons #32 (lcons #115 (lcons #119 (lcons #105 (lcons #116 (lcons #99 (lcons #104 (lcons #32 (lcons #40 (lcons #118 (lcons #45 (lcons #62 (lcons #116 (lcons #97 (lcons #103 (lcons #32 (lcons #45 (lcons #32 (lcons #49 (lcons #41 (lcons #32 (lcons #123 (lcons #32 lnil))))))))))))))))))))))))))
-punbox-alts d n c = if %weq c n then lnil else lapp (punbox-alt d c (cshape d c)) (punbox-alts d n (%wsucc c))
+punbox-alts d n c = if %weq c n then lnil else lapp (punbox-alt d c (cshape-r d c)) (punbox-alts d n (%wsucc c))
 punbox-alt d c ks = cat7 u-case2 (dec c) u-colon (cat3 u-pstar (dec d) (cat3 u-brace u-tagdecl (dec c))) (cat5 u-udecl (dec c) u-fdecl (punbox-fields d ks #0) (lapp u-cend (lcons #32 (lcons #125 u-semi)))) u-retp lnil
 u-pstar = (lcons #42 (lcons #112 (lcons #32 (lcons #61 (lcons #32 (lcons #40 (lcons #84 lnil)))))))
 u-retp = (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #112 (lcons #59 (lcons #32 lnil)))))))))))

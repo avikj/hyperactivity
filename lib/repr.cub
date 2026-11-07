@@ -113,3 +113,227 @@ spec4 = specialize ((Word → Word) → Word) lnil (code (λ (st : Word → Word
 #same spec4 = flam (fprim P-add (lcons (fapply (fvar #0) (lcons (flit #3) lnil)) (lcons (flit #1) lnil)))
 -- and run natively on a store given as a λ
 #same eval-fo (λ g → flit #0) lnil (fapply spec4 (lcons (flam (flit #40)) lnil)) = vw #41
+-- ---------------------------------------------------------------- representations consumed in general (B12 §6, B14)
+-- program-rep reps fuel c: the program of a code (lib/specialize.cub's program-of) with every value
+-- of a data type d in reps laid out as d's first representation R (%rtab d), by the table %rops d
+-- = some (to , (from , ops)): a call of an operation with an op line becomes its native
+-- counterpart; a constructor of d becomes its tb value (a closed constructor tree computed now,
+-- through to on the net and quoted at tb; an open one is to at run time, its fields of a
+-- represented type read back by their from); a recursion on a d value recurses on from of it, the
+-- fields of a represented type the body reads converted by to (one representation throughout the
+-- program, so a value of d is tb everywhere: in a variable, a field of another type, a result).
+-- The program's own to and from are left as written (they convert between the two forms). What
+-- has no op is correct and slow (B12 §6, W-slow-op): a case on a d value costs from.
+-- reps empty: every representation the program meets.
+rep-entry d = case %rops d of some t → some (alias-of #8 (fst t) , (alias-of #8 (fst (snd t)) , snd (snd t))); none → none
+rep-to e = fst e
+rep-from e = fst (snd e)
+rep-ops e = snd (snd e)
+-- the table for the representations chosen: (d , entry) for each d of reps with a declared one,
+-- or for every data type the code mentions when reps is empty (read off the program as lowered)
+rep-table reps ds = case reps of lnil → rep-table-of ds; _ → rep-table-of reps
+rep-table-of ds = case ds of lnil → lnil; lcons d r → (case rep-entry d of some e → lcons (d , e) (rep-table-of r); none → rep-table-of r)
+rep-lookup tb d = case tb of lnil → none; lcons x r → if %weq (fst x) d then some (snd x) else rep-lookup r d
+op-native ops g = case ops of lnil → none; lcons o r → if %weq (fst o) g then some (snd o) else op-native r g
+rep-op tb g = case tb of lnil → g; lcons x r → (case op-native (rep-ops (snd x)) g of some n → alias-of #8 n; none → rep-op r g)
+-- a native counterpart written as another definition's name (op plus : … = plusw): that definition
+alias-of k g = if %weq k #0 then g else (case %gcode g of some c → (case c of cglob h → alias-of (%wsub k #1) h; _ → g); none → g)
+-- the data types a lowered term constructs or recurses on
+fo-datas t acc =
+  case t of
+    fcon d c fs → fo-datas-list fs (if lmem-l d acc then acc else lcons d acc)
+    frec d x alts → fo-datas-ralts alts (fo-datas x (if lmem-l d acc then acc else lcons d acc))
+    fswitch x alts → fo-datas-alts alts (fo-datas x acc)
+    fproj d c k x → fo-datas x acc
+    fcall g args → fo-datas-list args acc
+    fprim p args → fo-datas-list args acc
+    flet a b → fo-datas b (fo-datas a acc)
+    fif c a b → fo-datas b (fo-datas a (fo-datas c acc))
+    floop init body → fo-datas body (fo-datas-list init acc)
+    fclos g env → fo-datas-list env acc
+    flam b → fo-datas b acc
+    fapply f args → fo-datas-list args (fo-datas f acc)
+    fthunk a → fo-datas a acc
+    fforce x → fo-datas x acc
+    fassume f b → fo-datas b acc
+    fupd u dd x c k v → fo-datas v (fo-datas x acc)
+    _ → acc
+fo-datas-list l acc = case l of lnil → acc; lcons x xs → fo-datas-list xs (fo-datas x acc)
+fo-datas-alts l acc = case l of lnil → acc; lcons a r → fo-datas-alts r (fo-datas (snd (snd a)) acc)
+fo-datas-ralts l acc = case l of lnil → acc; lcons a r → fo-datas-ralts r (fo-datas (snd (snd (snd a))) acc)
+-- a closed first-order constructor tree of d as a code (its fields by the constructor's shape: a
+-- word a literal, a field of a data type a tree of it); none when a leaf is not a literal
+tree-code d t =
+  case t of
+    fcon d2 c fs → if %weq d2 d then omap (λ cs → ccon d c cs lnil) (tree-fields d (cshape d c) fs) else none
+    _ → none
+tree-fields d ks fs =
+  case ks of
+    lnil → (case fs of lnil → some lnil; _ → none)
+    lcons k kr → (case fs of
+                    lnil → none
+                    lcons f fr → (case (if %weq (fst k) #0 then (case f of flit w → some (cwlit w); _ → none)
+                                        else if %weq (fst k) #1 then tree-code d f
+                                        else if %weq (fst k) #2 then tree-code (snd k) f else none) of
+                                    some c → omap (λ cs → lcons c cs) (tree-fields d kr fr)
+                                    none → none))
+-- its representation computed now: to applied on the net, quoted at tb; a word literal
+rep-lit d e t =
+  case %rtab d of
+    some RT → (case tree-code d t of
+                some c → (case quote-top RT (eval-g lnil (capp (cglob (rep-to e)) c)) of some q → (case q of cwlit w → some (flit w); _ → none); none → none)
+                none → none)
+    none → none
+-- the fields of a constructor of d built at run time, back in d's own form: a field of a
+-- represented type read back by its from (the field holds the representation, to wants the tree)
+raw-fields tb ks fs = case ks of lnil → fs; lcons k kr → (case fs of lnil → lnil; lcons f fr → lcons (raw-field tb k f) (raw-fields tb kr fr))
+raw-field tb k f = case field-rep tb k of some e → fcall (rep-from e) (lcons f lnil); none → f
+field-rep tb k = if %weq (fst k) #0 then none else if %weq (fst k) #3 then none else rep-lookup tb (snd k)
+-- the shape's kinds with the type itself named (kind 1 carries d)
+shape-of d c = lmap-k d (cshape d c)
+lmap-k d ks = case ks of lnil → lnil; lcons k r → lcons (if %weq (fst k) #1 then (#1 , d) else k) (lmap-k d r)
+rc tb t =
+  case t of
+    fcon d c fs →
+      let fs2 = rc-list tb fs
+      in (case rep-lookup tb d of
+            some e → (case rep-lit d e t of some l → l; none → fcall (rep-to e) (lcons (fcon d c (raw-fields tb (shape-of d c) fs2)) lnil))
+            none → fcon d c fs2)
+    frec d x alts →
+      (case rep-lookup tb d of
+         some e → frec d (fcall (rep-from e) (lcons (rc tb x) lnil)) (rc-ralts-rep tb d alts)
+         none → frec d (rc tb x) (rc-ralts tb alts))
+    fswitch x alts → fswitch (rc tb x) (rc-alts tb alts)
+    fproj d c k x → fproj d c k (rc tb x)
+    fcall g args → fcall (rep-op tb g) (rc-list tb args)
+    fprim p args → fprim p (rc-list tb args)
+    flet a b → flet (rc tb a) (rc tb b)
+    fif c a b → fif (rc tb c) (rc tb a) (rc tb b)
+    floop init body → floop (rc-list tb init) (rc tb body)
+    fclos g env → fclos g (rc-list tb env)
+    flam b → flam (rc tb b)
+    fapply f args → fapply (rc tb f) (rc-list tb args)
+    fthunk a → fthunk (rc tb a)
+    fforce a → fforce (rc tb a)
+    fassume fact b → fassume fact (rc tb b)
+    fupd u dd x c k v → fupd u dd (rc tb x) c k (rc tb v)
+    _ → t
+rc-list tb l = case l of lnil → lnil; lcons x xs → lcons (rc tb x) (rc-list tb xs)
+rc-alts tb l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , rc tb (snd (snd a)))) (rc-alts tb r)
+rc-ralts tb l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , rc tb (snd (snd (snd a)))))) (rc-ralts tb r)
+-- a recursion on a represented d: the branch's fields are those of from's tree; the ones of a
+-- represented type are read through its to (the hypotheses are the recursion's results, already
+-- in the program's form). Field j of n, under m hypotheses, is the body's variable m + n − 1 − j
+rc-ralts-rep tb d l =
+  case l of
+    lnil → lnil
+    lcons a r →
+      let c = fst a
+          n = fst (snd a)
+          hs = fst (snd (snd a))
+          m = lst-count hs
+      in lcons (c , (n , (hs , wrap-fields tb (shape-of d c) n m #0 (rc tb (snd (snd (snd a))))))) (rc-ralts-rep tb d r)
+wrap-fields tb ks n m j b = case ks of lnil → b; lcons k kr → wrap-fields tb kr n m (%wsucc j) (case field-rep tb k of some e → to-at (rep-to e) (%wsub (%wadd m n) (%wsucc j)) b; none → b)
+-- every occurrence of the variable at index k (from b's top) replaced by to of it
+to-at g k b = var-map g #0 k b
+var-map g d k t =
+  case t of
+    fvar m → if %weq m (%wadd d k) then fcall g (lcons t lnil) else t
+    fcon dd c fs → fcon dd c (var-map-list g d k fs)
+    fswitch x alts → fswitch (var-map g d k x) (var-map-alts g d k alts)
+    frec dd x alts → frec dd (var-map g d k x) (var-map-ralts g d k alts)
+    fproj dd c j x → fproj dd c j (var-map g d k x)
+    fcall h args → fcall h (var-map-list g d k args)
+    fprim p args → fprim p (var-map-list g d k args)
+    flet a b → flet (var-map g d k a) (var-map g (%wsucc d) k b)
+    fif c a b → fif (var-map g d k c) (var-map g d k a) (var-map g d k b)
+    floop init body → floop (var-map-list g d k init) (var-map g (%wadd d (lst-count init)) k body)
+    fclos h env → fclos h (var-map-list g d k env)
+    flam b → flam (var-map g (%wsucc d) k b)
+    fapply f args → fapply (var-map g d k f) (var-map-list g d k args)
+    fthunk a → fthunk (var-map g d k a)
+    fforce a → fforce (var-map g d k a)
+    fassume fact b → fassume fact (var-map g d k b)
+    fupd u dd x c j v → fupd u dd (var-map g d k x) c j (var-map g d k v)
+    _ → t
+var-map-list g d k l = case l of lnil → lnil; lcons x xs → lcons (var-map g d k x) (var-map-list g d k xs)
+var-map-alts g d k l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , var-map g (%wadd d (fst (snd a))) k (snd (snd a)))) (var-map-alts g d k r)
+var-map-ralts g d k l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , var-map g (%wadd d (%wadd (fst (snd a)) (lst-count (fst (snd (snd a)))))) k (snd (snd (snd a)))))) (var-map-ralts g d k r)
+-- the program: the code and every definition it calls, each lowered from its code as written
+-- (%gcode: the calls it makes stay calls, so an operation with an op line is still a call to
+-- replace — normalization would have unfolded it), each consumed; the conversions to and from
+-- and what they call are left as written (they convert between the two forms); the word
+-- operations of lib/std.cub become the native primitives (consume-call's table)
+def-code g = case %gcode g of some c → some c; none → unfold g
+word-native g args =
+  if isnil-l args then fcall g args
+  else if %weq g g-plusw then fprim P-add args
+  else if %weq g g-wadd then fprim P-add args
+  else if %weq g g-wsub then fprim P-sub args
+  else if %weq g g-weq then fprim P-eq args
+  else if %weq g g-wlt then fprim P-lt args
+  else fcall g args
+wn t =
+  case t of
+    fcall g args → word-native g (wn-list args)
+    fcon d c fs → fcon d c (wn-list fs)
+    fswitch x alts → fswitch (wn x) (wn-alts alts)
+    frec d x alts → frec d (wn x) (wn-ralts alts)
+    fproj d c k x → fproj d c k (wn x)
+    fprim p args → fprim p (wn-list args)
+    flet a b → flet (wn a) (wn b)
+    fif c a b → fif (wn c) (wn a) (wn b)
+    floop init body → floop (wn-list init) (wn body)
+    fclos g env → fclos g (wn-list env)
+    flam b → flam (wn b)
+    fapply f args → fapply (wn f) (wn-list args)
+    fthunk a → fthunk (wn a)
+    fforce a → fforce (wn a)
+    fassume fact b → fassume fact (wn b)
+    fupd u dd x c k v → fupd u dd (wn x) c k (wn v)
+    _ → t
+wn-list l = case l of lnil → lnil; lcons x xs → lcons (wn x) (wn-list xs)
+wn-alts l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , wn (snd (snd a)))) (wn-alts r)
+wn-ralts l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , wn (snd (snd (snd a)))))) (wn-ralts r)
+lower-def g = case def-code g of some cd → some (inplace (erase-lams (g-erased g) #0 (lower cd))); none → none
+-- the definitions reached from the globals todo, (g , (arity , body)), each body passed through
+-- f g t (the consumption, or none)
+defs-reach f fuel todo seen =
+  if %weq fuel #0 then lnil else
+  (case todo of
+     lnil → lnil
+     lcons g rest →
+       if lmem g seen then defs-reach f fuel rest seen
+       else (case lower-def g of
+               none → defs-reach f (%wsub fuel #1) rest (lcons g seen)
+               some t0 →
+                 let t = f g t0
+                 in lcons (g , (lam-arity t , strip-flams t)) (defs-reach f (%wsub fuel #1) (lapp2 rest (fcalls t lnil)) (lcons g seen))))
+def-names ds = case ds of lnil → lnil; lcons x r → lcons (fst x) (def-names r)
+datas-of-defs ds acc = case ds of lnil → acc; lcons x r → datas-of-defs r (fo-datas (snd (snd x)) acc)
+keep-t g t = t
+isnil-l l = case l of lnil → true; _ → false
+rep-convs tb = case tb of lnil → lnil; lcons x r → lcons (rep-to (snd x)) (lcons (rep-from (snd x)) (rep-convs r))
+program-rep reps fuel c = program-rep-at #0 reps fuel c
+program-rep-at m reps fuel c =
+  let t0 = inplace (lower c)
+      raw = defs-reach keep-t fuel (fcalls t0 lnil) lnil
+      tb = rep-table reps (datas-of-defs raw (fo-datas t0 lnil))
+      cv = def-names (defs-reach keep-t fuel (rep-convs tb) lnil)
+      cons = λ g t → if lmem-l g cv then t else wn (rc tb t)
+      t = wn (rc tb t0)
+  in lcons (m , (lam-arity t , offset-calls (strip-flams t))) (offset-defs (defs-reach cons fuel (fcalls t lnil) lnil))
+-- readings: a program over Nat with Nat laid out as Word — plus the native addition (its op line),
+-- a case on a Nat through from, a constructor through to, a Nat field of a list a word
+dbl-rp : Nat → Nat
+dbl-rp n = plus n n
+pred-rp : Nat → Nat
+pred-rp n = case n of zero → zero; suc k → k
+suml-r : List Nat → Nat
+suml-r l = case l of nil → 0; cons x xs → plus x (rec xs)
+run-rep c args = eval-fo (table-of (lift-program #100000 (program-rep lnil #20 c))) lnil (fcall #0 args)
+#same program-rep lnil #20 (code (λ (n : Nat) → dbl-rp n)) = lcons (#0 , (#1 , fcall (%wsucc (gidx (code dbl-rp))) (lcons (fvar #0) lnil))) (lcons (%wsucc (gidx (code dbl-rp)) , (#1 , fprim P-add (lcons (fvar #0) (lcons (fvar #0) lnil)))) lnil)
+#same run-rep (code (λ (n : Nat) → dbl-rp n)) (lcons (flit #21) lnil) = vw #42
+#same run-rep (code (λ (n : Nat) → pred-rp (dbl-rp n))) (lcons (flit #21) lnil) = vw #41
+#same run-rep (code (λ (n : Nat) → suml-r (cons n (cons 5 (cons (suc n) nil))))) (lcons (flit #3) lnil) = vw #12
+#same run-rep (code (λ (n : Nat) → plus 7 n)) (lcons (flit #3) lnil) = vw #10

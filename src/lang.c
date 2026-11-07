@@ -212,7 +212,7 @@ static bool node_eq(Node *a, Node *b) {
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "%delay", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
-    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%ptr-of", "%region-at", "%ffi", "%native",
+    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%ptr-of", "%region-at", "%ffi", "%native",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
 /* the keywords, in an open-addressed table (asked of every symbol the compiler walks) */
@@ -734,6 +734,75 @@ static long *GSTEPS; static size_t capgsteps;
 static void gsteps_set(long k, long steps) {
     if ((size_t)k >= capgsteps) { size_t c = capgsteps ? capgsteps : 256; while (c <= (size_t)k) c *= 2; GSTEPS = realloc(GSTEPS, c * sizeof(long)); memset(GSTEPS + capgsteps, 0, (c - capgsteps) * sizeof(long)); capgsteps = c; }
     GSTEPS[k] = steps;
+}
+/* the desugared term of each checked definition, kept (a copy outside the arena) for (%gcode n):
+ * its code as written, the globals it names kept as cglob — the back end's view of a definition
+ * before normalization unfolds the definitions it calls (an operation a representation replaces,
+ * B12 §6, is a call there) */
+static Node **CHKSRC; static size_t capchksrc;
+static Node *perm_copy(Node *t) {
+    Node *x = calloc(1, sizeof(Node)); x->list = t->list; x->s = t->s; x->n = t->n;
+    if (t->list) { x->it = calloc((size_t)t->n + 1, sizeof(Node *)); for (int i = 0; i < t->n; i++) x->it[i] = perm_copy(t->it[i]); }
+    return x;
+}
+static void chksrc_set(long ck, Node *dt) {
+    if (ck < 0) return;
+    GROW(CHKSRC, capchksrc, (size_t)ck + 1);
+    CHKSRC[ck] = perm_copy(dt);
+}
+/* and its type, desugared (B18's boundary reads a represented parameter or result off it) */
+static Node **CHKTY; static size_t capchkty;
+static void chkty_set(long ck, Node *dT) {
+    if (ck < 0) return;
+    GROW(CHKTY, capchkty, (size_t)ck + 1);
+    CHKTY[ck] = perm_copy(dT);
+}
+/* a data type's representation's conversions (repops), by checked data index: to and from as
+ * checked definition indices, -1 none */
+static long *REPTO, *REPFROM; static size_t caprepto, caprepfrom;
+static void rep_conv_set(int di, long to, long from) {
+    size_t o1 = caprepto, o2 = caprepfrom;
+    GROW(REPTO, caprepto, (size_t)di + 1); GROW(REPFROM, caprepfrom, (size_t)di + 1);
+    for (size_t i = o1; i < caprepto; i++) REPTO[i] = -1;
+    for (size_t i = o2; i < caprepfrom; i++) REPFROM[i] = -1;
+    REPTO[di] = to; REPFROM[di] = from;
+}
+/* the representation of a type term (its head a checked data type with a declared one): the data
+ * type's checked index, else -1 */
+static int chk_index(int d);
+static int type_rep(Node *A) {
+    while (A->list && A->n >= 2 && (is(A->it[0], "app") || is(A->it[0], "%raw"))) A = A->it[1];
+    if (A->list && A->n >= 1 && !A->it[0]->list && !is(A->it[0], "Pi")) A = A->it[0];
+    if (A->list) return -1;
+    int d = data_lookup(A->s), di = d >= 0 ? chk_index(d) : -1;
+    return di >= 0 && (size_t)di < caprepto && REPTO[di] >= 0 ? di : -1;
+}
+/* the domains of a desugared Π chain (up to n) and its codomain */
+static int pi_parts(Node *T, Node **doms, int n, Node **cod) {
+    int k = 0;
+    for (;;) {
+        if (k >= n || !T->list || !is(T->it[0], "Pi")) break;
+        if (T->n == 4) { doms[k++] = T->it[2]; T = T->it[3]; continue; }
+        /* desugared: (Pi A (lam x B)) */
+        if (T->n == 3 && T->it[2]->list && T->it[2]->n == 3 && is(T->it[2]->it[0], "lam")) { doms[k++] = T->it[1]; T = T->it[2]->it[2]; continue; }
+        break;
+    }
+    *cod = T; return k;
+}
+static Node *to_code(Node *t);
+static Port build_top(Node *t);
+static pthread_mutex_t gcode_mu = PTHREAD_MUTEX_INITIALIZER;
+Port gcode_build(long n) {
+    if (n < 0 || (size_t)n >= capchksrc || !CHKSRC[n]) return 0;
+    pthread_mutex_lock(&gcode_mu);
+    ArMark m = ar_mark();
+    int save = ncscope; ncscope = 0;
+    Node *c = to_code(CHKSRC[n]);
+    Port p = build_top(c);
+    ncscope = save;
+    ar_release(m);
+    pthread_mutex_unlock(&gcode_mu);
+    return p;
 }
 long global_steps(long n) { return n >= 0 && (size_t)n < capgsteps ? GSTEPS[n] : 0; }
 int checked_data(long k) { return k >= 0 && k < nchkdata ? CHKDATA[k] : -1; }
@@ -1355,6 +1424,7 @@ typedef struct {
     long unf;                        /* a copattern definition's body (a global), or -1 */
     int chk;                         /* its index in the checker's signature, or -1 */
     int tickar;                      /* a stuck call unfolding when its last parameter is ⋄: its parameters, else 0 */
+    int file;                        /* the serial of the file defining it (item 17's keys) */
 } Global;
 static Global *G; static long nG, capG;
 static char **fresh_names; static long nfresh, capfresh;
@@ -1396,10 +1466,11 @@ static long fresh_var(const char *pfx, long k) {
     fresh_names[nfresh] = strdup(b);
     return FRESH_BASE + nfresh++;
 }
+static int cur_file, file_serial;   /* the file being loaded (its serial), for item 17's keys */
 static long add_global(const char *name, int kind) {
     if (nG == capG) { capG = capG ? capG * 2 : 64; G = realloc(G, (size_t)capG * sizeof(Global)); }
     memset(&G[nG], 0, sizeof(Global));
-    G[nG].name = strdup(name); G[nG].kind = kind; G[nG].tyg = -1; G[nG].unf = -1; G[nG].chk = -1; G[nG].tickar = 0;
+    G[nG].name = strdup(name); G[nG].kind = kind; G[nG].tyg = -1; G[nG].unf = -1; G[nG].chk = -1; G[nG].tickar = 0; G[nG].file = cur_file;
     G[nG].res = cell(O_ROOT, 1);
     nG++;
     gh_put(name, nG - 1);
@@ -2011,7 +2082,7 @@ static Syn *compile(Node *t) {
         static const struct { const char *name; int kind, n; } PR[] = { { "%view", O_VIEW, 1 }, { "%ieq", O_IEQ, 2 }, { "%feq", O_FEQL, 2 }, { "%clauses", O_CLAUSES, 1 }, { "%dnf", O_DNF, 1 }, { "%motive", O_MOTIVE, 1 },
             { "%restrict", O_RESTRICT, 2 }, { "%abs", O_ABS, 2 }, { "%branch", O_BRANCH, 3 }, { "%clos", O_CLOS, 2 }, { "%wsucc", O_WSUCC, 1 }, { "%weq", O_WEQ, 2 }, { "%wlt", O_WLT, 2 },
             { "%wadd", O_WADD, 2 }, { "%wmax", O_WMAX, 2 }, { "%wsub", O_WSUB, 2 }, { "%welim", O_WELIM, 3 },
-            { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 }, { "%gsteps", O_GSTEPS, 1 }, { "%dnidx", O_DNIDX, 1 },
+            { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 }, { "%gsteps", O_GSTEPS, 1 }, { "%gcode", O_GCODE, 1 }, { "%dnidx", O_DNIDX, 1 },
             /* primitive types and values (B12) */
             { "%pty", O_PTY, 1 }, { "%bytesty", O_BYTESTY, 1 }, { "%pval", O_PVAL, 2 }, { "%bytes", O_BYTES, 1 }, { "%blen", O_BLEN, 1 }, { "%ptr-of", O_PTROF, 1 }, { "%region-at", O_REGAT, 2 }, { NULL, 0, 0 } };
         /* the primitive operations, (%i64add a b) ...: O_POP1/O_POP2 with the operation in x; the loads and
@@ -2072,7 +2143,7 @@ static Syn *compile(Node *t) {
             Syn *s = compile_n(S_PRIM, t, 1, PR[q].n); s->x = (uint32_t)PR[q].kind; return s;
         }
         if (IS(h, "%box")) { if (t->n != 2) die("(%box v)", NULL); Syn *s = syn(S_BOX, 1); s->k[0] = compile(t->it[1]); return s; }
-        static const char *TBN[TB_N] = { "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab" };
+        static const char *TBN[TB_N] = { "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops" };
         for (int q = 0; q < TB_N; q++) if (!strcmp(h, TBN[q])) {
             if (t->n != 2) die("wrong number of operands in", h);
             Syn *s = syn(S_GLOBTAB, 1); s->x = (uint32_t)q; s->k[0] = compile(t->it[1]); return s;
@@ -2903,6 +2974,31 @@ static int sig_add(const char *name, long g, long tyg, bool hidden) {
     return nchecked++;
 }
 #include "store.c"
+static Sha256 lib_before; static bool lib_before_on;
+/* the text a specialization is keyed by (item 17): the expression with each checked definition and
+ * data type named by its codebase key, everything else (literals, constructors, bound names) as
+ * written */
+static bool spec_cur;   /* the expression names an unchecked definition of the file being loaded */
+static void spec_key_term(FILE *o, Node *t) {
+    if (t->list) { fputc('(', o); for (int i = 0; i < t->n; i++) { if (i) fputc(' ', o); spec_key_term(o, t->it[i]); } fputc(')', o); return; }
+    int ck = checked_index(t->s);
+    if (ck >= 0) { fprintf(o, "@%s", ckey_of(ck)); return; }
+    int d = data_lookup(t->s), di = d >= 0 ? chk_index(d) : -1;
+    if (di >= 0) { fprintf(o, "@d%s", dkey_of(di)); return; }
+    long g = global_lookup(t->s);
+    if (g >= 0 && G[g].file == cur_file) spec_cur = true;
+    fputs(t->s, o);
+}
+/* an unchecked definition (a library printer, the specializer) has no key: the libraries loaded
+ * before the file stand for it (an unchecked definition of the file itself: the file's text too) */
+static void spec_key_text(FILE *o, Node *t) {
+    spec_cur = false;
+    spec_key_term(o, t);
+    unsigned char dg[32]; char hx[65];
+    Sha256 h = lib_before; if (!lib_before_on) sha256_init(&h);
+    sha256_final(&h, dg); sha256_hex(dg, hx); fprintf(o, " libs %s", hx);
+    if (spec_cur) { h = lib_hash; if (!lib_hash_on) sha256_init(&h); sha256_final(&h, dg); sha256_hex(dg, hx); fprintf(o, " file %s", hx); }
+}
 /* a copattern definition: λs and lines over a record (desugared) */
 static bool copattern_body(Node *b) {
     for (;;) {
@@ -3279,6 +3375,7 @@ static void toplevel(Node *f) {
             Node *td = nlist(3); td->it[0] = nsym("def"); td->it[1] = nsym(ty); td->it[2] = nl2("%%sig-type", cT);
             toplevel(td);
             int ck = sig_add(f->it[1]->s, global_lookup(f->it[1]->s), global_lookup(ty), false);
+            chksrc_set(ck, dt); chkty_set(ck, dT);
             gsteps_set(ck, stored ? store_steps(key) : steps);
             ckey_set(ck, key); deps_take(&CDEPS, &capcdeps, ck);
             /* the parameters' computed usages (B11): asked of the checker (or read from the store),
@@ -3981,6 +4078,30 @@ static void toplevel(Node *f) {
         Node *dd = nlist(3); dd->it[0] = nsym("def"); dd->it[1] = nsym(nm); dd->it[2] = f->it[2];
         toplevel(dd);
         if (table_global(TB_REP, ck) < 0) table_set(TB_REP, ck, global_lookup(nm));
+    } else if (!strcmp(h, "repops")) {
+        /* (repops T to from (op native) …): the representation's table for the back end (B12 §6,
+         * B14): the checked indices of to, from and each op's source operation and native
+         * counterpart, as data, (%rops d) = some (to , (from , ops)), the first representation's */
+        if (f->n < 4 || f->it[1]->list) die("(repops T to from (op native) ...)", NULL);
+        int d = data_lookup(f->it[1]->s);
+        int ck = d < 0 ? -1 : chk_index(d);
+        if (ck < 0) die("repops: not a checked data type:", f->it[1]->s);
+        if (table_global(TB_ROPS, ck) >= 0) return;
+        long gto = checked_index(f->it[2]->s), gfr = checked_index(f->it[3]->s);
+        if (gto < 0 || gfr < 0) die("repops: to/from not checked:", f->it[2]->s);
+        Node *ops = nsym("lnil");
+        for (int q = f->n - 1; q >= 4; q--) {
+            Node *o = f->it[q];
+            long a = o->list && o->n == 2 ? checked_index(o->it[0]->s) : -1, b = o->list && o->n == 2 ? checked_index(o->it[1]->s) : -1;
+            if (a < 0 || b < 0) continue;   /* an op whose source is not a checked definition: nothing to replace */
+            ops = nl3("lcons", nl3("pair", word(a), word(b)), ops);
+        }
+        static int nro;
+        char nm[64]; snprintf(nm, sizeof nm, "%%rops%d", nro++);
+        Node *dd = nlist(3); dd->it[0] = nsym("def"); dd->it[1] = nsym(nm); dd->it[2] = nl3("pair", word(gto), nl3("pair", word(gfr), ops));
+        toplevel(dd);
+        table_set(TB_ROPS, ck, global_lookup(nm));
+        rep_conv_set(ck, gto, gfr);
     } else if (!strcmp(h, "run")) {
         /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c, D26) */
         if (f->n != 2) die("(run step)", NULL);
@@ -3995,7 +4116,7 @@ static void toplevel(Node *f) {
          * written by hand: a `void *` result is an opaque handle of type Native, a `void *`
          * parameter takes the handles this library made; cubical_release, when the file defines
          * it, finalizes a handle when its last copy is erased) */
-        bool cfile = !strcmp(h, "native-c");
+        bool cfile = !strcmp(h, "native-c"), spec_hit = false;
         if ((cfile ? f->n < 5 || f->n > 6 : f->n < 4 || f->n > 5) || f->it[1]->list || f->it[2]->list || f->it[2]->s[0] != '#') die(cfile ? "(native-c name n file sym [keep])" : "(native name n prog [keep])", NULL);
         bool keep = f->n == (cfile ? 6 : 5) && !f->it[f->n - 1]->list && !strcmp(f->it[f->n - 1]->s, "keep");
         if (f->n == (cfile ? 6 : 5) && !keep) die("native: the last word is keep", NULL);
@@ -4003,6 +4124,35 @@ static void toplevel(Node *f) {
         long g = global_lookup(nm); if (g < 0) die("native: not a definition:", nm);
         if (n < 1 || n > 6) die("native: one to six arguments:", nm);
         long steps = 0; size_t len = 0; char *r; const char *entry = "cubical_entry";
+        /* item 17: the specialization is named before it is computed — by the program's expression
+         * with every checked definition and data type it names replaced by its codebase key (F34:
+         * the key covers what the definition depends on), the arity, the values written in it (the
+         * run-known values: literals and constructors are part of the expression) and the checker
+         * (cv) — so the same specialization of the same definitions at the same values, in this run
+         * or a later one, is read from the cache without running the specializer or the C compiler */
+        char sk[65] = "", spath[640] = "";
+        if (!cfile) {
+            char *kb; size_t kl; FILE *km = open_memstream(&kb, &kl);
+            fprintf(km, "spec %s %d %s ", chk_salt, n, keep ? "keep" : "");
+            spec_key_text(km, f->it[3]);
+            fclose(km); key_hash(kb, kl, sk); free(kb);
+            char sdir[512]; snprintf(sdir, sizeof sdir, "%s/native", cache_dir());
+            snprintf(spath, sizeof spath, "%s/spec-%s", sdir, sk);
+            FILE *sf = fopen(spath, "r");
+            if (sf) {
+                /* a hit: the spec entry names the library's hash; its C text is read back for the
+                 * prototype (no specialization, no compiler) */
+                char hx0[80] = ""; if (fscanf(sf, "%64s", hx0) != 1) hx0[0] = 0; fclose(sf);
+                char cp0[700]; snprintf(cp0, sizeof cp0, "%s/%s.c", sdir, hx0);
+                FILE *cf = hx0[0] ? fopen(cp0, "r") : NULL;
+                if (cf) {
+                    fseek(cf, 0, SEEK_END); long tl = ftell(cf); fseek(cf, 0, SEEK_SET);
+                    r = malloc((size_t)tl + 1); len = fread(r, 1, (size_t)tl, cf); r[len] = 0; fclose(cf);
+                    spec_hit = true;
+                    goto have_program;
+                }
+            }
+        }
         if (cfile) {
             /* the file's text, and the entry's name (strings: read without their quotes) */
             char path[600]; snprintf(path, sizeof path, "%s", f->it[3]->s); size_t pl = strlen(path);
@@ -4020,6 +4170,7 @@ static void toplevel(Node *f) {
             for (const char *q = r; (q = strchr(q, '#')); ) { q++; if (*q < '0' || *q > '9') continue; c[len++] = (char)atoi(q); }
             c[len] = 0; free(r); r = c;
         }
+    have_program:;
         char epat[300]; snprintf(epat, sizeof epat, "%s(", entry);
         if (!strstr(r, epat)) die(cfile ? "native: the file does not define the entry:" : "native: the program exports no cubical_entry (print it with emit-lib-u):", cfile ? entry : nm);
         /* the library is named by the program's hash (item 17: a specialization cached by key): the
@@ -4034,6 +4185,8 @@ static void toplevel(Node *f) {
             char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -o %s %s", so, cpath);
             if (system(cmd) != 0) { printf("FAIL: native %s   (the C compiler rejected %s)\n", nm, cpath); failures++; free(r); return; }
         }
+        if (spath[0] && !spec_hit) { FILE *sf = fopen(spath, "w"); if (sf) { fprintf(sf, "%s\n", hx); fclose(sf); } }
+        if (spec_hit && access(cpath, 4) != 0) { FILE *cf = fopen(cpath, "w"); if (cf) { fputs(r, cf); fclose(cf); } }
         char sym[700]; snprintf(sym, sizeof sym, "%s:%s", so, entry);
         /* the entry's prototype decides the marshaling: uint64_t a word (kind 4), V * a boxed value
          * (kind 6: bytes or a constructor, as the emitted runtime's V), void * a handle (kind 7) */
@@ -4068,12 +4221,46 @@ static void toplevel(Node *f) {
         free(r);
         int k = ffi_add(sym, n, kind, ret);
         FFI[k].rdata = rdata; FFI[k].keep = keep;
+        /* B18, represented values by their layout: a parameter or result of a type with a declared
+         * representation crosses as the representation (the compiled program computes over it,
+         * lib/repr.cub's program-rep): the argument is converted by to before the call, the result
+         * by from after it, and the definition the call falls back to is the one over the
+         * representations (to ∘ name ∘ from), so both paths agree */
+        int rin[8], rout = -1; bool anyrep = false;
+        for (int i = 0; i < 8; i++) rin[i] = -1;
+        {
+            int ck0 = checked_index(nm);
+            if (ck0 >= 0 && (size_t)ck0 < capchkty && CHKTY[ck0]) {
+                Node *doms[8], *cod; int got = pi_parts(CHKTY[ck0], doms, n, &cod);
+                for (int i = 0; i < got; i++) { rin[i] = type_rep(doms[i]); if (rin[i] >= 0) anyrep = true; }
+                if (got == n) { rout = type_rep(cod); if (rout >= 0) anyrep = true; }
+            }
+        }
+        long fb = g;
+        if (anyrep) {
+            static int nfb; char fbn[64]; snprintf(fbn, sizeof fbn, "%%natfb%d", nfb++);
+            char *fbuf; size_t fl; FILE *fm = open_memstream(&fbuf, &fl);
+            fprintf(fm, "(def %s (lam", fbn); for (int i = 0; i < n; i++) fprintf(fm, " %%r%d", i); fprintf(fm, " ");
+            if (rout >= 0) fprintf(fm, "(app %s ", CHECKED[REPTO[rout]]);
+            for (int i = n - 1; i >= 0; i--) fprintf(fm, "(app ");
+            fprintf(fm, "%s", nm);
+            for (int i = 0; i < n; i++) { if (rin[i] >= 0) fprintf(fm, " (app %s %%r%d))", CHECKED[REPFROM[rin[i]]], i); else fprintf(fm, " %%r%d)", i); }
+            if (rout >= 0) fprintf(fm, ")");
+            fprintf(fm, "))"); fclose(fm); emit(fbuf); free(fbuf);
+            fb = global_lookup(fbn);
+        }
         /* name is now (lam a1..an (%native k g a1..an)); references compiled before keep the definition */
         char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
         fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
-        fprintf(m, " (%%native #%d #%ld", k, g); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i); fprintf(m, ")))");
+        fprintf(m, " ");
+        if (rout >= 0) fprintf(m, "(app %s ", CHECKED[REPFROM[rout]]);
+        fprintf(m, "(%%native #%d #%ld", k, fb);
+        for (int i = 0; i < n; i++) { if (rin[i] >= 0) fprintf(m, " (app %s %%a%d)", CHECKED[REPTO[rin[i]]], i); else fprintf(m, " %%a%d", i); }
+        fprintf(m, ")"); if (rout >= 0) fprintf(m, ")");
+        fprintf(m, "))");
         fclose(m); emit(buf); free(buf);
-        passes++; printf("ok: native %s   [%ld steps, %zu bytes of C%s%s]\n", nm, steps, len, cached ? ", cached" : "", keep ? ", results kept native" : "");
+        int nrep = rout >= 0; for (int i = 0; i < n; i++) nrep += rin[i] >= 0;
+        passes++; printf("ok: native %s   [%s%ld steps, %zu bytes of C%s%s%s]\n", nm, spec_hit ? "specialization cached by key, " : "", steps, len, cached ? ", cached" : "", keep ? ", results kept native" : "", nrep ? ", represented values by their representation" : "");
     } else if (!strcmp(h, "layout")) {
         /* #layout T [as R]: by the checker's layout function (lib/check.cub) */
         if (f->n < 2 || f->it[1]->list) die("(layout T [R])", NULL);
@@ -4227,6 +4414,8 @@ static void load_file(const char *path, bool must) {
         char *dir = strdup(rp); char *sl = strrchr(dir, '/'); if (sl) *sl = 0;
         cur_dir = dir;
         load_surface(text, rp, true);
+        /* the libraries before this file (item 17's specialization keys): its own text mixed after */
+        lib_before = lib_hash; lib_before_on = lib_hash_on; cur_file = ++file_serial;
         key_mix(text, strlen(text)); lib_mix(text);
         char key[40]; snprintf(key, sizeof key, "%016llx%016llx", (unsigned long long)run_key[0], (unsigned long long)run_key[1]);
         char *marker = malloc(strlen(cache_dir()) + 48); sprintf(marker, "%s/%s", cache_dir(), key);
@@ -4406,10 +4595,26 @@ void *cubical_call_data(const char *name, uint64_t nargs, void **args, const cha
     for (uint64_t i = 0; i < nargs; i++) {
         int d = !strcmp(types[i], "Word") ? -2 : !strcmp(types[i], "Bytes") ? -3 : data_lookup(types[i]);
         if (d == -1) { free(ps); return NULL; }
-        ps[i] = unbox_value((VB *)args[i], d);
+        /* a type with a declared representation crosses as it (B18 by layout): the C value is the
+         * representation's (a word for Nat as Word), read into the net by from */
+        int di = d >= 0 ? chk_index(d) : -1;
+        if (di >= 0 && (size_t)di < caprepto && REPTO[di] >= 0) {
+            Port w = unbox_value((VB *)args[i], -2);
+            long gf = table_global(TB_VAL, REPFROM[di]);
+            ps[i] = apply_gid(gf, &w, 1);
+        } else ps[i] = unbox_value((VB *)args[i], d);
     }
     Port r = nargs ? apply_gid(g, ps, (int)nargs) : global_copy(g, NULL);
     free(ps);
+    /* a represented result: read out as the representation, by to */
+    {
+        int ck = checked_index(name);
+        if (ck >= 0 && (size_t)ck < capchkty && CHKTY[ck]) {
+            Node *doms[64], *cod; int got = pi_parts(CHKTY[ck], doms, (int)nargs, &cod);
+            int ro = got == (int)nargs ? type_rep(cod) : -1;
+            if (ro >= 0) { long gt = table_global(TB_VAL, REPTO[ro]); r = apply_gid(gt, &r, 1); }
+        }
+    }
     VBox *v = box_deep(r);
     net_drain();
     return v;

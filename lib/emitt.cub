@@ -19,17 +19,22 @@ t-ptr = (lcons #118 (lcons #111 (lcons #105 (lcons #100 (lcons #32 (lcons #42 (l
 t-sizeof = (lcons #105 (lcons #110 (lcons #116 (lcons #32 (lcons #109 (lcons #97 (lcons #105 (lcons #110 (lcons #40 (lcons #118 (lcons #111 (lcons #105 (lcons #100 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #112 (lcons #114 (lcons #105 (lcons #110 (lcons #116 (lcons #102 (lcons #40 (lcons #34 (lcons #37 (lcons #122 (lcons #117 (lcons #92 (lcons #110 (lcons #34 (lcons #44 (lcons #32 (lcons #115 (lcons #105 (lcons #122 (lcons #101 (lcons #111 (lcons #102 (lcons #40 (lcons #84 lnil)))))))))))))))))))))))))))))))))))))))))
 t-sizeend = (lcons #41 (lcons #41 (lcons #59 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #48 (lcons #59 (lcons #32 (lcons #125 (lcons #10 lnil))))))))))))))))
 t-inc = (lcons #35 (lcons #105 (lcons #110 (lcons #99 (lcons #108 (lcons #117 (lcons #100 (lcons #101 (lcons #32 (lcons #60 (lcons #115 (lcons #116 (lcons #100 (lcons #105 (lcons #110 (lcons #116 (lcons #46 (lcons #104 (lcons #62 (lcons #10 (lcons #35 (lcons #105 (lcons #110 (lcons #99 (lcons #108 (lcons #117 (lcons #100 (lcons #101 (lcons #32 (lcons #60 (lcons #115 (lcons #116 (lcons #100 (lcons #105 (lcons #111 (lcons #46 (lcons #104 (lcons #62 (lcons #10 (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #100 (lcons #101 (lcons #102 (lcons #32 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #86 (lcons #32 (lcons #86 (lcons #59 (lcons #10 lnil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
--- the typedef of data type d, by the kinds of its constructors' fields (lib/lower.cub's cshape):
+-- the typedef of data type d, by the kinds of its constructors' fields (lib/lower.cub's cshape, with word-represented fields words: cshape-r):
 -- a word uint64_t, a recursive field a pointer to the type's own struct (B16 milestone 2: typed
 -- pointers), a field of another data type that type's struct by value when it is flat and a
 -- pointer to it otherwise, anything else a boxed V *; a type with path constructors, or one
 -- represented by a word, prints nothing. type-fwd d is the forward declaration every type gets
 -- first, so that the structs may refer to each other in any order
+-- a constructor's field kinds as the printers lay them out (B12 layouts): a field of a data type
+-- represented by Word (its first representation, %rtab) is a word, as its layout says (lword)
+cshape-r d c = lmap word-rep-kind (cshape d c)
+word-rep-kind k = if %weq (fst k) #2 then (if word-rep (snd k) then (#0 , snd k) else k) else k
+word-rep d = case %rtab d of some R → (case quote-ty R of some q → (case q of cword → true; _ → false); none → false); none → false
 type-fwd d = if has-layout d then cat3 t-fwd (dec d) (lapp t-sp (lapp t-T (lapp (dec d) t-nl))) else lnil
 type-c d = if has-layout d then cat4 t-structT (dec d) (lapp t-open (alts-tk d (nctors-t d) #0)) (lapp t-end2 t-nl2) else lnil
 has-layout d = case layout d of lunion alts → true; _ → false
 nctors-t d = lst-count (snd (params-fresh (dtel (%dent d)) lnil))
-alts-tk d n c = if %weq c n then lnil else cat4 t-struct (fields-tk d (cshape d c) #0) t-structend (lapp (dec c) (lapp t-semi (alts-tk d n (%wsucc c))))
+alts-tk d n c = if %weq c n then lnil else cat4 t-struct (fields-tk d (cshape-r d c) #0) t-structend (lapp (dec c) (lapp t-semi (alts-tk d n (%wsucc c))))
 fields-tk d ks k =
   case ks of
     lnil → lnil
@@ -41,7 +46,7 @@ field-tk d kind d2 k =
   else cat3 t-vptr (dec k) t-semi
 -- a flat data type: every field of every constructor a word (its values are by value)
 flat-dt d = flat-ctors d (nctors-t d) #0
-flat-ctors d n c = if %weq c n then true else (if all-words (cshape d c) then flat-ctors d n (%wsucc c) else false)
+flat-ctors d n c = if %weq c n then true else (if all-words (cshape-r d c) then flat-ctors d n (%wsucc c) else false)
 all-words ks = case ks of lnil → true; lcons kd r → if %weq (fst kd) #0 then all-words r else false
 t-fwd = (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #100 (lcons #101 (lcons #102 (lcons #32 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #84 lnil))))))))))))))))
 t-sp = (lcons #32 lnil)

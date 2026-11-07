@@ -1853,7 +1853,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_CALL] = "CALL",
     [O_WSUCC] = "WSUCC",
     [O_PTY] = "PTY", [O_BYTESTY] = "BYTESTY", [O_PVAL] = "PVAL", [O_PVAL2] = "PVAL2", [O_POP1] = "POP1", [O_POP2] = "POP2", [O_POP2B] = "POP2B", [O_BYTES] = "BYTES", [O_LOAD] = "LOAD", [O_LOADB] = "LOADB", [O_STORE] = "STORE", [O_STOREB] = "STOREB", [O_STOREC] = "STOREC", [O_BLEN] = "BLEN", [O_PTROF] = "PTROF", [O_REGAT] = "REGAT", [O_REGATA] = "REGATA", [O_FFI] = "FFI", [O_NATIVE] = "NATIVE",
-    [O_PIMULT] = "PIMULT", [O_PIM] = "PIM", [O_FMULT] = "FMULT", [O_FMULT2] = "FMULT2", [O_FMULT3] = "FMULT3", [O_LINEAR] = "LINEAR", [O_GSTEPS] = "GSTEPS", [O_DNIDX] = "DNIDX", [O_GUSAGE] = "GUSAGE", [O_GUSAGE2] = "GUSAGE2",
+    [O_PIMULT] = "PIMULT", [O_PIM] = "PIM", [O_FMULT] = "FMULT", [O_FMULT2] = "FMULT2", [O_FMULT3] = "FMULT3", [O_LINEAR] = "LINEAR", [O_GSTEPS] = "GSTEPS", [O_GCODE] = "GCODE", [O_DNIDX] = "DNIDX", [O_GUSAGE] = "GUSAGE", [O_GUSAGE2] = "GUSAGE2",
     [O_WEQ] = "WEQ",
     [O_WLT] = "WLT",
     [O_WADD] = "WADD",
@@ -2930,6 +2930,16 @@ static void interact(Cell *o, Cell *v) {
         cell_free(o); cell_free(v);
         return;
     }
+    case O_GCODE: {
+        extern Port gcode_build(long n);
+        if (vk != V_WORD || v->p) { fprintf(stderr, "%%gcode: an index is a word\n"); exit(2); }
+        Port c = gcode_build((long)v->a);
+        need_cons();
+        if (!c) link(con_build(C_NONE, NULL, NULL), o->port[1]);
+        else { Port f[1] = { c }; link(con_build(C_SOME, f, NULL), o->port[1]); }
+        cell_free(o); cell_free(v);
+        return;
+    }
     case O_GUSAGE2: {
         if (vk != V_WORD || v->p) { fprintf(stderr, "%%gusage: an index is a word\n"); exit(2); }
         link(word_of((uint64_t)global_usage((long)o->a, (long)v->a)), o->port[1]);
@@ -3070,10 +3080,11 @@ static void interact(Cell *o, Cell *v) {
         if (vk != V_WORD || v->p) { fprintf(stderr, "%%gval/%%gty/%%dtab/%%dent: an index is a word\n"); exit(2); }
         o->a = v->a;
         long g = table_global((int)o->x, (long)o->a);
-        if (o->x == TB_REP) {
+        if (o->x == TB_REP || o->x == TB_ROPS) {
             /* (%rtab d): some R, the data type's first representation, or none */
             need_cons();
             if (g < 0) link(con_build(C_NONE, NULL, NULL), o->port[1]);
+            else if (o->x == TB_ROPS) { Port gv = global_copy(g, NULL); Port f[1] = { gv }; link(con_build(C_SOME, f, NULL), o->port[1]); }
             else { Cell *r = cell(V_GLOBAL, 1); r->a = (uint64_t)g; Port f[1] = { P(r, 0) }; link(con_build(C_SOME, f, NULL), o->port[1]); }
             cell_free(o); cell_free(v);
             return;

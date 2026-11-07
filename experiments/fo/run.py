@@ -59,6 +59,31 @@ prog = emit-prog deq-prog""", "10"),
  # main applies definition 0 to a three-element list
  'program': ("""prog-defs = lift-program #100000 (program-at #99999 #10 (code (λ (l : LW) → lenw l)))
 prog = emit-prog (lcons (#0 , (#0 , fcall #99999 (lcons (fcon (didx (code LW)) #1 (lcons (flit #7) (lcons lw3 lnil))) lnil))) prog-defs)""", "3"),
+ # representations consumed in general (B12 §6, lib/repr.cub's program-rep): a program over Nat
+ # (plus, a case on Nat, a list of Nats) with Nat laid out as Word — plus is the native addition by
+ # its op line, a Nat field of a list a word, a case on a Nat through from, a constructor through to;
+ # main applies it to 21: sumL [21, 5, 22] + predn (dbl 21) = 48 + 41
+ 'rep': ('''dblr : Nat → Nat
+dblr n = plus n n
+prednr : Nat → Nat
+prednr n = case n of zero → zero; suc k → k
+sumLr : List Nat → Nat
+sumLr l = case l of nil → 0; cons x xs → plus x (rec xs)
+rep-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Nat) → plus (sumLr (cons n (cons 5 (cons (suc n) nil)))) (prednr (dblr n)))))
+#same eval-fo (table-of rep-defs) lnil (fcall #99999 (lcons (flit #21) lnil)) = vw #89
+defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #21) lnil))) rep-defs''', "89"),
+ # a record with a represented field (B12 layouts): PtN's layout is a struct of two words (Nat as
+ # Word), so the unboxed printer passes it by value; a case on it reads the fields as words
+ 'rep-rec': ('''data PtN = ptn (a : Nat) (b : Word)
+dblr2 : Nat → Nat
+dblr2 n = plus n n
+ptn-sum : PtN → Nat
+ptn-sum p = case p of ptn a b → plus a (suc (fromWord b))
+  where fromWord : Word → Nat
+        fromWord w = %welimP (λ v → Nat) w zero (λ k r → suc r)
+rr-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Nat) → ptn-sum (ptn (dblr2 n) #3))))
+#same eval-fo (table-of rr-defs) lnil (fcall #99999 (lcons (flit #20) lnil)) = vw #44
+defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #20) lnil))) rr-defs''', "44", (None, "uint64_t f0; uint64_t f1; } c0;")),
  # a process run against its world (lib/proc.cub), specialized under an unknown store: the run
  # becomes a function of the store (st 3 + 1); compiled with a store that answers 40; prints 41
  'process': ("""proc-defs = case lift #100 spec4 of lifted t2 ds k → lcons (#0 , (#0 , fapply t2 (lcons (flam (flit #40)) lnil))) ds

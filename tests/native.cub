@@ -76,3 +76,31 @@ consk l = lwcons #1 l
 #same lenw (consk (consk (lwcons #7 lwnil))) = #3
 #same consk (consk (lwcons #7 lwnil)) = lwcons #1 (lwcons #1 (lwcons #7 lwnil))
 #same (case consk lwnil of lwnil → #0; lwcons x r → x) = #1
+-- represented values by their layout (B18): a definition over Nat compiled with Nat laid out as
+-- Word (lib/repr.cub's program-rep: plus the native addition by its op line, suc through to and
+-- from) takes and returns words in C; the call converts at the boundary by the representation's
+-- to (the argument) and from (the result), and falls back to the definition over the
+-- representation (to ∘ dbln ∘ from), so both paths agree
+dbln : Nat → Nat
+dbln n = plus n (suc n)
+#native dbln 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (n : Nat) → dbln n))))
+#same dbln 20 = 41
+#same dbln (suc (suc zero)) = 5
+#same plus (dbln 3) 1 = 8
+-- a specialization cached by key (item 17): the program is named before it is computed, by its
+-- expression with each checked definition by its codebase key, the values written in it (5, 6
+-- here: the run-known values) and the libraries the specializer and printer come from; the same
+-- specialization again, here or in a later run, is read from the cache without the specializer or
+-- the C compiler ("specialization cached by key, 0 steps"); another value is another key
+add5 : Nat → Nat
+add5 n = plus 5 n
+add5b : Nat → Nat
+add5b n = plus 5 n
+add6 : Nat → Nat
+add6 n = plus 6 n
+#native add5 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (n : Nat) → add5 n))))
+#native add5b 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (n : Nat) → add5 n))))
+#native add6 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (n : Nat) → add6 n))))
+#same add5 10 = 15
+#same add5b 10 = 15
+#same add6 10 = 16

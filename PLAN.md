@@ -1253,10 +1253,27 @@ identity; linear values are introduced only in `primitive` definitions.
     higher, kan, reflect, mult; `fo-normal` on the normal form; the stage/verdict/strictness
     types as data; `#fo`. Schedules as values: `lib/specialize.cub`'s `Sched` (the rewrite
     bound) and `lib/code.cub`'s stage types; the specializer does not yet call `first-order`.
-14. First-order intermediate form. Essential. In progress as a library: `lib/fo.cub` (the
+14. First-order intermediate form. Essential. Built as a library: `lib/fo.cub` (the
     form, its evaluator, closure conversion, structural recursion, the byte layer),
     `lib/lower.cub` (from codes, with the data table's shapes), `lib/repr.cub` (the
-    representations consumed); the types `FT` and B12's layouts not yet used for unboxing.
+    representations consumed). **Unboxing by representations and layouts (2026-11-07):**
+    `program-rep reps fuel c` (`lib/repr.cub`) consumes every declared representation in a whole
+    program (B12 §6): each definition lowered from its code as written (`%gcode n`, new: the
+    checked definition's desugared term kept and quoted on demand, so calls stay calls — the
+    normal form had unfolded `plus` into its recursion, and an op line had nothing to replace);
+    a call of an operation with an op line becomes its native counterpart (aliases chased:
+    `plus` → `plusw` → `P-add`); a constructor of a represented type its representation (a closed
+    tree computed now through `to` on the net, an open one `to` at run time with its represented
+    fields read back by `from`); a recursion on a represented value recurses on `from` of it, the
+    branch's represented fields read through `to`; `to`, `from` and what they call stay as written.
+    The table is `%rops d = some (to , (from , [(op , native)]))` (new, filled by `represent`'s op
+    lines through `(repops …)`). In the printers (`lib/emitt.cub`, `lib/emitu.cub`), a field of a
+    type represented by `Word` is a word (`cshape-r`, as its layout `lword` says): a record with a
+    `Nat` field is a struct of two words passed by value. `run.py` programs `rep` (plus as `v0 + v0`,
+    a list of Nats, a case through `from`: 89) and `rep-rec` (a record by value: 44) under every
+    printer; boxed/UNBOXED/IMAGE/X86 all ok. What has no op line is correct and slow (a case on a
+    `Nat` costs `from`, B12 §6's W-slow-op); `FT` signatures read off types (`global-sig`) are not
+    used by the printer, whose use-based inference already types words, pairs and data.
 15. **Status (2026-11-06):** built — `lib/specialize.cub` normalizes, rewrites along the store's theorems under the terminating discipline (`bd21c486`: oriented rules to the fixpoint, unoriented under the bound), erases by `%gusage`, runs `first-order` and honours `Sched` (`36b9e30b`). 18.5 step 7: the per-family statements `eval-fo (lower (code f)) ≡ f` are read by computation in `tests/fo.cub` (`62c669fc`; `#same`s, since a checked path may only mention checked definitions and the first-order libraries are untyped); the path assembled from the recorded rewrites, for an arbitrary term, is open. Spec as written: Specializer as a term, applying marked theorems under a terminating discipline.
     Essential. In progress: `lib/specialize.cub` (normalize, rewrite along rules to a bound,
     lower) with `lib/rules.cub` reading the marked theorems from the store; the ordered
@@ -1265,8 +1282,8 @@ identity; linear values are introduced only in `primitive` definitions.
     `lib/emitc.cub` prints the first-order form as C (boxed values, closures through a
     dispatcher, `ASSUME` for assumed facts), `experiments/fo/run.py` compiles and runs seven
     cases with gcc. WebAssembly, MLIR, circuits: optional.
-17. **Status (2026-11-06):** the mechanism is `#native f n = prog` (on demand, per definition, not cached by key) and `specialize-v` (`36b9e30b`); caching by key is open. Spec as written: Progressive specialization on run-time values, cached by key. Essential.
-18. **Status (2026-11-06):** both directions for words, byte strings and constructors (`e9b9c983`, `680485ea`, `e5bbd429`, 18.8's status); `V_NATIVE` opaque handles from hand-written C (`#native … from`, type `Native`, finalized by `cubical_release`) and boxed results kept native (`#native … keep`); represented values by layout are open. Spec as written: Call boundary; C ABI both directions. Essential.
+17. **Status (2026-11-07):** the mechanism is `#native f n = prog` and `specialize-v` (`36b9e30b`); **cached by key (2026-11-07):** a `#native` specialization is named before it is computed — by its expression with each checked definition and data type replaced by its codebase key (F34, which covers what it depends on), the values written in it (the run-known values), the arity, `keep`, the checker's version (`chk_salt`, the binary included) and the libraries loaded before the file (an unchecked definition — the specializer, the printer — has no key; an unchecked definition of the file itself adds the file's text) — and a hit (`.cubical-cache/native/spec-<key>`, naming the library's hash) skips the specializer and the C compiler: `ok: native add5b [specialization cached by key, 0 steps, …]`; a second run of `tests/native.cub` hits on every compiled entry; another value (`add6`) is another key. The spec's at-run-time re-entry (a `run-known` variable receiving a value inside a running program) is not built: the specialization point is the `#native` line, evaluated at load with the values written there. Spec as written: Progressive specialization on run-time values, cached by key. Essential.
+18. **Status (2026-11-06):** both directions for words, byte strings and constructors (`e9b9c983`, `680485ea`, `e5bbd429`, 18.8's status); `V_NATIVE` opaque handles from hand-written C (`#native … from`, type `Native`, finalized by `cubical_release`) and boxed results kept native (`#native … keep`); **represented values by their representation (2026-11-07):** a `#native` entry whose parameter or result has a type with a declared representation takes and returns the representation (the compiled program is `program-rep`'s: Nat as `uint64_t`); the call converts by `to` before and `from` after, and the definition it falls back to is the one over the representations (`to ∘ f ∘ from`, a generated `%natfb`), so both paths agree; from C, `cubical_call_data` with a type naming a represented data type takes the representation's value (a word for `Nat`) and reads a represented result out by `to` (`tests/native/main.c`: `plus 40 2` on Nat as words = 42). Marshaling by a general layout (a represented type whose representation is a struct) is not built: the representation's own C form crosses (a word, or the boxed `V` of a data representation). Spec as written: Call boundary; C ABI both directions. Essential.
 19. **Status (2026-11-06):** built, `ee5c04a2` (`lib/image.cub`, `lib/reimport.cub`; `IMAGE=1 run.py`: 4 headers through g++ -std=c++20, re-imported equal to the source up to erasure); parameterized data types exported as templates and read back (`13ae6b9f`: a type parameter a template parameter of the structs, a case a visit by template lambdas; a parameter at a value stays outside the fragment). Spec as written: The C++ image (10.1): a compositional translator over codes, one clause per source form
     (~30 forms), parameterized by the binding-time assignment; the fully specialized residue
     printer is its first milestone; the fragment's re-import for translation validation and

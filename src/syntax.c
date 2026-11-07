@@ -1384,6 +1384,7 @@ static void p_decl(void) {
         char pre[256]; snprintf(pre, sizeof pre, "%s·%s·", T, Rh->s);
         bool have[4] = { false, false, false, false }; static const char *LAWS[4] = { "to", "from", "to-from", "from-to" };
         const char *qto = NULL, *qfrom = NULL;
+        Node *ropl[64]; int nrop = 0;   /* (operation native) per op line: the back end's table (repops) */
         if (!x_typed) x_err("represent needs the checker (the laws are checked):", tn);
         int fail0 = failures, pass0 = passes;   /* under #fail: some definition of the block is rejected */
         if (x_is(P0(), "where")) {
@@ -1396,6 +1397,7 @@ static void p_decl(void) {
                 if (qto) { sig = x_rename(sig, "to", qto); body = x_rename(body, "to", qto); }
                 if (qfrom) { sig = x_rename(sig, "from", qfrom); body = x_rename(body, "from", qfrom); }
                 tsig.np = 0; x_checked(qn, sig, body, true, 0, 0);
+                if (op && nrop < 64) ropl[nrop++] = lst(2, nsym(fn->s), nsym(qn));
                 if (op) {
                     if (!x_is(P0(), "by")) x_err("an op needs its law, by ... = ...: in", fn);
                     NX(); Node *law = p_expr(0); want("="); Node *prf = p_expr(0);
@@ -1417,7 +1419,12 @@ static void p_decl(void) {
             failures = fail0; passes = pass0;
             if (rejected) passes++; else failures++;
             printf("%s: rejected represent %s by %s\n", rejected ? "ok" : "FAIL", T, Rh->s);
-        } else x_top(sym3("represent", nsym(T), core(R)));
+        } else {
+            x_top(sym3("represent", nsym(T), core(R)));
+            Node *ro = nlist(4 + nrop); ro->it[0] = nsym("repops"); ro->it[1] = nsym(T); ro->it[2] = nsym(qto); ro->it[3] = nsym(qfrom);
+            for (int q = 0; q < nrop; q++) ro->it[4 + q] = ropl[q];
+            x_top(ro);
+        }
         decl_end(); return;
     }
     if (x_is(t, "variable")) {
