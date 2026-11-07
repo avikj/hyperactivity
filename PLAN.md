@@ -1120,7 +1120,7 @@ in-place update (`e27eda2c`), D24's guarded form (`5b9de865`), D26 (`43e8fb10`,
 `38c1fa89`), F31's remaining pieces (`896713ea`, `e1f33110`, `5b1b57f9`), F32's directed
 search and bridges (`89ec3e0e`, `d1e5f790`), item 29 (`fd188bf6`), `%gsteps` (`c20116d7`),
 `--serve` (`50ffb680`), the rewriting discipline (`bd21c486`). What remains, in order of
-value: (1) A8's next step — undesigned and off the queue as of 2026-11-07 (18.16's status: the generic 6-cube passes a 2.5 GB cap; a fingerprint memo never fired); not formal compositions in path types (tried, withdrawn, 18.16):
+value: (1) A8's next step — off the queue as of 2026-11-07 (18.16's A8c status: sharing by key never applies, 0 of 311 compositions with keyed inputs; the watermark bound cut nothing, the rest unbuilt behind wires with no back pointer; the generic 6-cube past a 2.5 GB cap); not formal compositions in path types (tried, withdrawn, 18.16):
 sharing a composition across the dimensions the tube maps apply it at; (2) B18 DONE for words, byte strings and constructors both ways (`#native` over
 `emit-lib-boxed-u`: a constructor whose fields are values crosses as the boxed `V`, a boxed
 result is rebuilt by the entry's `box<d>`; `cubical_call_data(name, args, types)` from C;
@@ -1199,6 +1199,9 @@ port (A10b) is the checker at scale and gates E28.
    transported composition becomes a formal value `%transH` that reduces only when a
    substitution makes a face true (one side transported) or a reader demands one layer.
    Essential; this is the property, and the original Brunerie number is one measurement.
+   **Status (2026-11-07):** rounds one to four landed (18.16); the three remaining pieces were tried and
+   withdrawn with their numbers (18.16, A8c): what would cut further is keys for path λs and systems
+   (a new naming design) or back pointers from wires to producers, both outside the net as it is.
 9. DONE (`15625ce`, `91c128b`): interned symbols, free names kept per node, one desugaring,
    kept arena chunks; the compiled-form cache beside the recorded forms. Cached library
    load 0.105 s; Brunerie end to end 0.35 s, computation about 0.25 s. Further (2026-11-06,
@@ -3020,6 +3023,47 @@ measured ceiling for what sharing would save. **The bound for unbuilt values:** 
 irrelevant substitutions with no measured gain behind it. All three are recorded here as
 undesigned and are not on the queue: no other item depends on them, and the A8 rounds that landed
 (boxes' free-dimension sets, `O_CONW`, A8b, η-reduced tubes) keep every answer identical.
+
+**Status (2026-11-07, A8c: the three pieces tried to a decision).** Each was built, measured and
+withdrawn; none landed, so every count is as before (g8 305,036 steps / 2,189 cells, surfc's corner
+121,261 / 47, the number 443,066, the typed port 999,755; memo on, `CUBICAL_WORKERS=0`).
+**(1) Sharing compositions in path types by key.** Rule: at `O_COMPH` on `V_PATHP`, when the type
+line's three parts, the tube and the base all carry the machine's structural keys, name the
+composition by them and the bound dimension and reuse the held result. Census first (the only
+route: the profile's 3,420 `%comp-path` entries at the corner count entries into the clause's
+inner λs, about eleven per composition; the compositions themselves arrive only through
+`O_COMPH`, 311 at the corner, 284 in g8): **no composition had all five keyed — 0 of 311, 0 of
+284.** The type line was keyed 0 times in either, the tube 0 times; the endpoints 4 of 311 at the
+corner, the base 3. Why: the line and the tube are made at run time — `mkplam_of` (the line is the
+type's family abstracted over the composition's own dimension) and systems (`O_SYSCONS`/`V_SYS`)
+carry no key, `synkey` has no case for `S_PLAM` or the system forms, and everything the
+composition clauses build from those is unkeyed in turn. So the rule never applies, and no step
+can be saved by it. What would make it apply is a new design, not this rule: keys for path λs
+and systems that are invariant under renaming the bound dimension (a key-level renaming of the
+binder, with interval and face payloads substituted), propagated through `rule_mkplam`,
+`O_SYSCONS2`, `O_SYSMAP` and substitution — a change to the memo's naming of every value,
+with its own soundness argument.
+**(2) A bound for values still being built.** The audit of every operation that produces a value
+(the `O_*` list in `src/core.h`): a result's free dimensions are its inputs' (through a
+reference: the box's set under the reference's substitution), plus its payload's (the
+`owns_dnf` kinds, a substitution's values), minus a binder's own (`O_MKPLAM`, `O_FORALL`,
+`O_COMPH`, `O_ABS`), plus dimensions made by `fresh_dim` (`O_MKDIM`, binder renaming in
+substitution, path applications at fresh dimensions, compiled `S_PLAM`/`S_FORALL`). A global
+(`O_GLOB`, `O_CALL`, `V_GLOBAL`) is closed. The only dimensions not among the inputs are therefore
+fresh ones, all numbered from `dim_mark()` (the next `fresh_dim`) on, and no substitution made
+earlier names them. So the A8b give-ups (`O_MKDIM`, `O_GLOB`, a record or table that may reach
+`%dim`) became a watermark: the bound holds the inputs' set plus "every dimension from the mark
+on", and a reference's substitution keeps its entries at or above the mark. Measured at the
+corner (`CUBICAL_PROFILE=show`): the "may make a dimension" refusals went 204 → 0 and the tries
+exhausted 2,303 → 289, but cuts stayed at 2, drops at 1, and every step count above was
+unchanged. Why: the bounds that remain unknown stop at a part not there — a wire whose value has
+not arrived (2,595 variable ports, 1,045 unknown sets) — and the net keeps no pointer from a wire
+back to the operation that will produce its value (cells have no back pointers, by design), so a
+reader cannot bound what it cannot reach.
+**(3) The generic 6-cube, again.** Read in all six dimensions under a 2.5 GB resident cap (polled;
+`ulimit -v` breaks the arena): killed at the cap with main's binary and with (2)'s, 70–90 s in on
+the shared machine, the library's 118 checks done and the read not finished. Whether its normal
+form is small stays unmeasured.
 
 **Status (2026-11-07, the TSan race at `cell()`'s memset).** The intermittent report (`net.c:81`, about 1 run in 5 at 2–8 workers over the `make tsan` lines) was real, not a false positive, and came from round one's walk, not A8b: `box_fd` → `fd_cell` (from `rule_subst` on `V_REF` or `ref_read`, in a worker) read a held value's parts non-atomically while another reader claimed them (`claim`'s atomic store against the plain read, via `copy_top`/`lazy_copy`), consumed and freed them, and the main thread's `cell()` reused a freed cell (memset via `split`/`bind`, `con_build_bdy`). `fd_cell` also reads payloads that `payload_release` frees, so deferring cell reuse (a quiescent-state reclamation scheme was tried) does not make the walk safe. **Fix:** `box_fd` walks only when `net_solo`, as A8b already did; with workers a box's set is whatever a solo phase cached (immutable), else unknown, and the read is not cut. Round one's gains therefore hold only at `CUBICAL_WORKERS=0` (the default); with workers step counts are as before A8. TSan: baseline 3 hits in 16 runs; gated, 0 in 63 runs plus `make tsan` twice; memo-off output identical across 0, 1, 4 workers.
 
