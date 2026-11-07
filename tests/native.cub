@@ -29,3 +29,50 @@ consw l = lwcons #1 l
 cons-lib = emit-lib-boxed-u (lcons (#0 , (#1 , lam-body (lower (code (λ (l : LW) → lwcons #1 l))))) lnil)
 #native consw 1 = cons-lib
 #same consw (lwcons #7 lwnil) = lwcons #1 (lwcons #7 lwnil)
+-- opaque handles (B18, V_NATIVE): a C library written by hand (tests/native/handle.c), its
+-- functions entered by #native … from. A `void *` result is a handle of type Native: the net
+-- holds it without reading it, passes it to that library's entries, and runs the library's
+-- cubical_release once when the last copy is erased
+postulate
+  buf-new : Word → Native
+  buf-push : Native → Word → Native
+  buf-sum : Native → Word
+  buf-len : Native → Word
+  buf-live : Word → Word
+  buf-made : Word → Word
+#native buf-new 1 from "tests/native/handle.c" "buf_new"
+#native buf-push 2 from "tests/native/handle.c" "buf_push"
+#native buf-sum 1 from "tests/native/handle.c" "buf_sum"
+#native buf-len 1 from "tests/native/handle.c" "buf_len"
+#native buf-live 1 from "tests/native/handle.c" "buf_live"
+#native buf-made 1 from "tests/native/handle.c" "buf_made"
+#same buf-sum (buf-push (buf-push (buf-push (buf-new #0) #3) #4) #5) = #12
+#same buf-len (buf-push (buf-push (buf-new #0) #3) #4) = #2
+-- every handle of those readings is finalized when its reading is done: none alive, seven made
+#same buf-live #0 = #0
+#same buf-made #0 = #7
+-- a handle shared by two readers: one C object, read twice, finalized once
+#same (λ (b : Native) → plusw (buf-sum b) (buf-len b)) (buf-push (buf-new #0) #7) = #8
+#same buf-live #0 = #0
+-- a handle printed: the entry that made it (its address is not part of a reading); the printed
+-- copies are dropped by the reading
+#same buf-new #0 = buf-new #1
+#same buf-live #0 = #0
+-- identity: %view gives a handle's serial number, so two handles are equal when they are one object
+-- (untyped: %view is the checker's)
+same-handle a b = case %view a of wnative i k → (case %view b of wnative j k2 → %weq i j; _ → false); _ → false
+#same (λ (b : Native) → same-handle b b) (buf-new #0) = true
+#same same-handle (buf-new #0) (buf-new #1) = false
+#same buf-live #0 = #0
+-- a handle passed where a word is expected: not called natively (the entry takes words), the
+-- postulate stays stuck
+#same buf-live #2 = #0
+-- boxed results kept native (#native … keep): consw's result stays the emitted runtime's V, passed
+-- to lenw as it is (no cells built between the two compiled calls); read by the net, it is
+-- unboxed into cells
+consk : LW → LW
+consk l = lwcons #1 l
+#native consk 1 keep = cons-lib
+#same lenw (consk (consk (lwcons #7 lwnil))) = #3
+#same consk (consk (lwcons #7 lwnil)) = lwcons #1 (lwcons #1 (lwcons #7 lwnil))
+#same (case consk lwnil of lwnil → #0; lwcons x r → x) = #1

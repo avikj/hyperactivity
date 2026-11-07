@@ -1423,10 +1423,24 @@ static void p_decl(void) {
     if (x_is(t, "#native")) {
         /* #native name n = prog: name's compiled form (prog the C program's bytes, name's arity n over
          * words) entered; name then calls it on words (B18) */
+        /* #native name n [keep] = prog; #native name n from "file.c" "sym" [keep]: a C file written by
+         * hand, its function sym the entry (B18: void * results are handles of type Native) */
         NX(); Tok *n = NX(); if (n->k != X_ID) x_err("#native names a definition, found", n);
-        Tok *ar = NX(); want("=");
+        Tok *ar = NX();
         char w[32]; snprintf(w, sizeof w, "#%s", ar->s);
-        x_top(sym4("native", nsym(n->s), nsym(w), x_solve_expr(p_expr(0)))); decl_end(); return;
+        if (x_is(P0(), "from")) {
+            NX(); Tok *fl = NX(); if (fl->k != X_STR) x_err("#native … from: the C file, a string, found", fl);
+            Tok *sy = NX(); if (sy->k != X_STR) x_err("#native … from: the entry's name, a string, found", sy);
+            bool keep = x_is(P0(), "keep"); if (keep) NX();
+            Node *f = nlist(keep ? 6 : 5); f->it[0] = nsym("native-c"); f->it[1] = nsym(n->s); f->it[2] = nsym(w); f->it[3] = nsym(fl->s); f->it[4] = nsym(sy->s);
+            if (keep) f->it[5] = nsym("keep");
+            x_top(f); decl_end(); return;
+        }
+        bool keep = x_is(P0(), "keep"); if (keep) NX();
+        want("=");
+        if (keep) { Node *f = nlist(5); f->it[0] = nsym("native"); f->it[1] = nsym(n->s); f->it[2] = nsym(w); f->it[3] = x_solve_expr(p_expr(0)); f->it[4] = nsym("keep"); x_top(f); }
+        else x_top(sym4("native", nsym(n->s), nsym(w), x_solve_expr(p_expr(0))));
+        decl_end(); return;
     }
     if (x_is(t, "#layout")) {
         /* #layout T [as R]: the layout of a type by its first representation, or by the named one */

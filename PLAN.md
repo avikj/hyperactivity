@@ -1124,8 +1124,9 @@ value: (1) A8's next step — not formal compositions in path types (tried, with
 sharing a composition across the dimensions the tube maps apply it at; (2) B18 DONE for words, byte strings and constructors both ways (`#native` over
 `emit-lib-boxed-u`: a constructor whose fields are values crosses as the boxed `V`, a boxed
 result is rebuilt by the entry's `box<d>`; `cubical_call_data(name, args, types)` from C;
-libraries cached by the program's hash, item 17); `V_NATIVE` (opaque results kept native)
-is not built; (3) A4's
+libraries cached by the program's hash, item 17); `V_NATIVE` DONE 2026-11-06 (opaque handles
+of type `Native` from hand-written C, `#native … from`; boxed results kept native, `#native … keep`;
+18.8); (3) A4's
 bitmask formulas (18.19, designed); (4) E28: DONE 2026-11-06 for unification-based implicits through reducing hypothesis types,
 holes in composition lines, generalized variables, and the hypothesis at the field's own index
 for recursion on a fording family (`vmap`; 18.12); left: rewriting a branch's goal by the index
@@ -1258,7 +1259,7 @@ identity; linear values are introduced only in `primitive` definitions.
     dispatcher, `ASSUME` for assumed facts), `experiments/fo/run.py` compiles and runs seven
     cases with gcc. WebAssembly, MLIR, circuits: optional.
 17. **Status (2026-11-06):** the mechanism is `#native f n = prog` (on demand, per definition, not cached by key) and `specialize-v` (`36b9e30b`); caching by key is open. Spec as written: Progressive specialization on run-time values, cached by key. Essential.
-18. **Status (2026-11-06):** both directions for words (`e9b9c983`, `680485ea`, `e5bbd429`, 18.8's status); represented values by layout are open. Spec as written: Call boundary; C ABI both directions. Essential.
+18. **Status (2026-11-06):** both directions for words, byte strings and constructors (`e9b9c983`, `680485ea`, `e5bbd429`, 18.8's status); `V_NATIVE` opaque handles from hand-written C (`#native … from`, type `Native`, finalized by `cubical_release`) and boxed results kept native (`#native … keep`); represented values by layout are open. Spec as written: Call boundary; C ABI both directions. Essential.
 19. **Status (2026-11-06):** built, `ee5c04a2` (`lib/image.cub`, `lib/reimport.cub`; `IMAGE=1 run.py`: 4 headers through g++ -std=c++20, re-imported equal to the source up to erasure); parameterized data types exported as templates and read back (`13ae6b9f`: a type parameter a template parameter of the structs, a case a visit by template lambdas; a parameter at a value stays outside the fragment). Spec as written: The C++ image (10.1): a compositional translator over codes, one clause per source form
     (~30 forms), parameterized by the binding-time assignment; the fully specialized residue
     printer is its first milestone; the fragment's re-import for translation validation and
@@ -1327,8 +1328,8 @@ identity; linear values are introduced only in `primitive` definitions.
     autodiff with the Taylor theorem and `D-code` over codes (`896713ea`), reflection by
     `ring-eq`; the stuck-primitive neutrals have a code (`cprim`, `c8931ab`); `%view` covers
     every value kind the net has (stuck calls as `wcofix`/`wproj`, primitives as `wprim`,
-    words with the big case under `wwlit`); `wnative` waits on a `V_NATIVE` value (B18's
-    opaque results, not built). Open: `D-correct` stated over the fragment's codes.
+    words with the big case under `wwlit`); `wnative id k` views a `V_NATIVE` handle (B18,
+    2026-11-06). Open: `D-correct` stated over the fragment's codes.
 32. **Status (2026-11-06):** the two verified checkers (`lib/linproof.cub`, `lib/eqproof.cub`), the ring checker, the directed Farkas search (`89ec3e0e`) and the bridges from codes (`d1e5f790`) are built, and over `Int` too (`lib/intproof.cub`, `lib/intlin.cub`: the checker is the word checker over the coordinates of differences, its soundness transported); the elaborator calling `check-cert` on holes is open. Spec as written: Certificate checkers as verified terms over codes; search unverified (in-language or SMT);
     unchecked solvers marked. Essential.
 33. **Status (2026-11-06):** built as `lib/nav.cub` with `lib/cost.cub`'s models (size, recorded steps through `%gsteps`, `13f09662`). Spec as written: Navigation over established identities. Precisely: the store holds identities; a view is
@@ -2393,9 +2394,28 @@ over `Bytes 32`). Native → net: `src/libcubical.h`,
 and `cubical_call_w(name, words, n, &out)` (the application read back by the net, a word or a
 Bool); `tests/native/main.c` calls `plusw` and `eqw`, in `make test`. Not built: marshaling
 of values of declared representations by their layouts (`tdata` walks, `Bytes` as pointer
-and length), `V_NATIVE` opaque results, exported prototypes per compiled definition, the
+and length), exported prototypes per compiled definition, the
 `foreign` → `fprim` lowering; `#native` is per definition on demand, not a cache by key
 (item 17). The foreign side of D27 (`O_FFI`) is what `O_NATIVE` reuses (`ffi_invoke`).
+`V_NATIVE` (2026-11-06): a cell holding a refcounted `NObj`. (a) Opaque handles: `#native f n
+from "lib.c" "sym"` enters a hand-written C file's function (compiled once by the text's hash);
+a `void *` result is a handle of the primitive type `Native` (`%pty #5`, `lib/prim.cub`), a
+`void *` parameter takes only handles the same library made (another library's, or any other
+value, falls back to `f` on the net — for a postulate, stuck); the library's `cubical_release`,
+when it defines one, runs exactly once when the last copy is erased (the count reaches 0 once;
+arguments are erased after the call, so a handle passed as its last copy outlives the call).
+Nothing else reads a handle: an eliminator meeting one is stuck; a reading prints `(%handle #k)`
+(k the entry that made it, so readings are the same at any schedule) and drops its copy; `%view`
+gives `wnative id k` (`lib/code.cub`), id a serial number unique for the run, and the checker's
+conversion compares ids. The entries are trusted to treat a handle as read-only (the net shares
+it). (b) Boxed results kept native: `#native f n keep = prog` keeps a `V *` result as the
+emitted runtime's value (a copy the cell owns, freed by the data type's own walk), passed to the
+next compiled call as a copy with no cells built; any other reader unboxes it into cells
+(`native_unbox`). The schedule is the programmer's word `keep`, not an analysis. Tests:
+`tests/native.cub` (handles made, shared, finalized: `buf-live` 0 after every reading; `consk`
+kept and passed to `lenw`), TSan clean on the handle tests at 4 workers. Found on the way: a
+memo race (an entry freed by a reader that found its box dying while the box's releaser was
+about to read it, `entry_hold_box`/`memo_begin`), fixed.
 
 Revision 1. In `src/net.c` and `src/lang.c`.
 

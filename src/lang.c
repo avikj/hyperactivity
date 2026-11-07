@@ -692,11 +692,11 @@ Ffi *FFI; int nffi; static size_t capffi;
 int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret) {
     /* "sym" in the running program (its C library, and the math library), or "lib.so:sym" in that
      * shared library, opened */
-    void *fn = NULL; const char *colon = strchr(sym, ':');
+    void *fn = NULL, *lib_h = NULL; const char *colon = strchr(sym, ':');
     if (colon) {
         char *lib = strndup(sym, (size_t)(colon - sym)); void *h = dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
         if (!h) die("foreign: cannot open the library of", sym);
-        fn = dlsym(h, colon + 1); free(lib); sym = colon + 1;
+        fn = dlsym(h, colon + 1); free(lib); sym = colon + 1; lib_h = h;
     } else {
         static void *self, *libm; if (!self) self = dlopen(NULL, RTLD_LAZY);
         fn = self ? dlsym(self, sym) : NULL;
@@ -704,7 +704,9 @@ int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret
     }
     if (!fn) die("foreign: no such symbol in the running program or its libraries (write \"lib.so:sym\" for another):", sym);
     GROW(FFI, capffi, (size_t)nffi + 1);
-    FFI[nffi] = (Ffi){ strdup(sym), fn, n, { 0 }, ret, -1 };
+    FFI[nffi] = (Ffi){ strdup(sym), fn, n, { 0 }, ret, -1, lib_h, NULL, 0 };
+    /* a library's handles are finalized by its cubical_release, when it has one */
+    if (lib_h) FFI[nffi].fin = (void (*)(void *))dlsym(lib_h, "cubical_release");
     memcpy(FFI[nffi].kind, kind, (size_t)n);
     return nffi++;
 }
@@ -2325,7 +2327,7 @@ static void rb_one(FILE *o, Port prov) {
     case V_WTY: fputs("Word", o); return;
     case V_PTY:
         if (c->a == PT_BYTES) { fputs("(Bytes ", o); push_str(")"); push_field(c, 1); return; }
-        fputs(c->a == PT_I64 ? "Int64" : c->a == PT_U32 ? "UInt32" : c->a == PT_F64 ? "Float64" : "Float32", o); return;
+        fputs(c->a == PT_I64 ? "Int64" : c->a == PT_U32 ? "UInt32" : c->a == PT_F64 ? "Float64" : c->a == PT_NATIVE ? "Native" : "Float32", o); return;
     case V_PVAL: {
         /* a primitive value: #i64:n, #u32:n, #f64:x */
         if (c->x == PT_I64) fprintf(o, "#i64:%lld", (long long)(int64_t)c->a);
@@ -2365,6 +2367,15 @@ static void rb_one(FILE *o, Port prov) {
         return;
     }
     case V_WSUSP: { extern Port wsusp_force(Cell *c); push_port(wsusp_force(c)); return; }
+    case V_NATIVE: {
+        /* a value kept native: a boxed value read as its cells; a handle as the entry that made it
+         * (its identity, an address, is for %view: a reading is the same at any schedule) */
+        NObj *nb = c->p;
+        if (nb->d != -1) { push_port(native_unbox(c)); return; }
+        fprintf(o, "(%%handle #%d)", nb->k);
+        { extern void native_drop(Cell *c); native_drop(c); }
+        return;
+    }
     case V_REF: { extern Port ref_copy(Cell *c); push_port(ref_copy(c)); return; }
     case V_SUSP:
         /* an unforced induction hypothesis */
@@ -3151,7 +3162,7 @@ static void toplevel(Node *f) {
     }
     /* a module whose checks are cached: its definitions are made, its judgments and tests not rerun */
     if (trusted && (!strcmp(h, "check") || !strcmp(h, "check-fail") || !strcmp(h, "checked-data-fail") || !strcmp(h, "checked-fail")
-        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "native") || !strcmp(h, "run"))) return;
+        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "native") || !strcmp(h, "native-c") || !strcmp(h, "run"))) return;
     if (!strcmp(h, "def")) {
         if (f->n != 3) die("(def name term)", NULL);
         if (!chk_salt[0] && !f->it[1]->list && !strcmp(f->it[1]->s, "chk-def")) chk_salt_set();   /* the checker (%%chk-def) is defined here: its name (F34) */
@@ -3905,23 +3916,43 @@ static void toplevel(Node *f) {
         /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c, D26) */
         if (f->n != 2) die("(run step)", NULL);
         drivers_run(f->it[1]);
-    } else if (!strcmp(h, "native")) {
-        /* (native name n prog): the C program prog (a list of bytes printed by lib/emitu.cub's
-         * emit-lib-u: its definition 0 the function at arity n over words, exported as
-         * cubical_entry) compiled as a shared library and entered; name is then the compiled code
-         * on word arguments and itself on any other (B18, net → native). Words only: a value of a
-         * declared representation is not marshaled yet */
-        if (f->n != 4 || f->it[1]->list || f->it[2]->list || f->it[2]->s[0] != '#') die("(native name n prog)", NULL);
+    } else if (!strcmp(h, "native") || !strcmp(h, "native-c")) {
+        /* (native name n prog [keep]): the C program prog (a list of bytes printed by lib/emitu.cub's
+         * emit-lib-u: its definition 0 the function at arity n, exported as cubical_entry) compiled
+         * as a shared library and entered; name is then the compiled code on arguments it can take
+         * and itself on any other (B18, net → native). keep: a boxed result stays native (V_NATIVE)
+         * until something other than compiled code reads it.
+         * (native-c name n "file.c" "sym" [keep]): the C file's function sym entered so (a library
+         * written by hand: a `void *` result is an opaque handle of type Native, a `void *`
+         * parameter takes the handles this library made; cubical_release, when the file defines
+         * it, finalizes a handle when its last copy is erased) */
+        bool cfile = !strcmp(h, "native-c");
+        if ((cfile ? f->n < 5 || f->n > 6 : f->n < 4 || f->n > 5) || f->it[1]->list || f->it[2]->list || f->it[2]->s[0] != '#') die(cfile ? "(native-c name n file sym [keep])" : "(native name n prog [keep])", NULL);
+        bool keep = f->n == (cfile ? 6 : 5) && !f->it[f->n - 1]->list && !strcmp(f->it[f->n - 1]->s, "keep");
+        if (f->n == (cfile ? 6 : 5) && !keep) die("native: the last word is keep", NULL);
         const char *nm = f->it[1]->s; int n = atoi(f->it[2]->s + 1);
         long g = global_lookup(nm); if (g < 0) die("native: not a definition:", nm);
-        if (n < 0 || n > 6) die("native: at most six word arguments:", nm);
-        long steps = 0;
-        char *r = readback(f->it[3], &steps);
-        /* the program's bytes */
-        size_t cap = strlen(r), len = 0; char *c = malloc(cap + 512);
-        for (const char *q = r; (q = strchr(q, '#')); ) { q++; if (*q < '0' || *q > '9') continue; c[len++] = (char)atoi(q); }
-        c[len] = 0; free(r); r = c;
-        if (!strstr(r, "cubical_entry(")) die("native: the program exports no cubical_entry (print it with emit-lib-u):", nm);
+        if (n < 1 || n > 6) die("native: one to six arguments:", nm);
+        long steps = 0; size_t len = 0; char *r; const char *entry = "cubical_entry";
+        if (cfile) {
+            /* the file's text, and the entry's name (strings: read without their quotes) */
+            char path[600]; snprintf(path, sizeof path, "%s", f->it[3]->s); size_t pl = strlen(path);
+            if (pl >= 2 && path[0] == '"') { memmove(path, path + 1, pl - 2); path[pl - 2] = 0; }
+            static char esym[256]; snprintf(esym, sizeof esym, "%s", f->it[4]->s); size_t el = strlen(esym);
+            if (el >= 2 && esym[0] == '"') { memmove(esym, esym + 1, el - 2); esym[el - 2] = 0; }
+            entry = esym;
+            FILE *cf = fopen(path, "r"); if (!cf) die("native: cannot read", path);
+            fseek(cf, 0, SEEK_END); long tl = ftell(cf); fseek(cf, 0, SEEK_SET);
+            r = malloc((size_t)tl + 1); len = fread(r, 1, (size_t)tl, cf); r[len] = 0; fclose(cf);
+        } else {
+            r = readback(f->it[3], &steps);
+            /* the program's bytes */
+            size_t cap = strlen(r); char *c = malloc(cap + 512);
+            for (const char *q = r; (q = strchr(q, '#')); ) { q++; if (*q < '0' || *q > '9') continue; c[len++] = (char)atoi(q); }
+            c[len] = 0; free(r); r = c;
+        }
+        char epat[300]; snprintf(epat, sizeof epat, "%s(", entry);
+        if (!strstr(r, epat)) die(cfile ? "native: the file does not define the entry:" : "native: the program exports no cubical_entry (print it with emit-lib-u):", cfile ? entry : nm);
         /* the library is named by the program's hash (item 17: a specialization cached by key): the
          * same C text is compiled once across runs */
         char dir[512], cpath[600], so[600], hx[65]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
@@ -3934,34 +3965,46 @@ static void toplevel(Node *f) {
             char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -o %s %s", so, cpath);
             if (system(cmd) != 0) { printf("FAIL: native %s   (the C compiler rejected %s)\n", nm, cpath); failures++; free(r); return; }
         }
-        free(r);
-        char sym[700]; snprintf(sym, sizeof sym, "%s:cubical_entry", so);
-        /* the entry's prototype decides the marshaling: uint64_t a word (kind 4), V * a boxed byte
-         * string (kind 6: the net's Bytes boxed as the emitted runtime's V { tag 2, n, bytes }) */
+        char sym[700]; snprintf(sym, sizeof sym, "%s:%s", so, entry);
+        /* the entry's prototype decides the marshaling: uint64_t a word (kind 4), V * a boxed value
+         * (kind 6: bytes or a constructor, as the emitted runtime's V), void * a handle (kind 7) */
         unsigned char kind[8] = { 4, 4, 4, 4, 4, 4, 4, 4 }; unsigned char ret = 4; int rdata = -1;
         {
-            FILE *cf2 = fopen(cpath, "r"); char *txt = NULL; size_t tl = 0;   /* (the text is on disk whether cached or just written) */
-            if (cf2) { fseek(cf2, 0, SEEK_END); tl = (size_t)ftell(cf2); fseek(cf2, 0, SEEK_SET); txt = malloc(tl + 1); if (fread(txt, 1, tl, cf2) != tl) tl = 0; txt[tl] = 0; fclose(cf2); }
-            char *e = txt ? strstr(txt, "cubical_entry(") : NULL;
+            /* the definition, not a declaration: the occurrence followed by a body */
+            char *e = NULL;
+            for (char *q = r; (q = strstr(q, epat)); q++) {
+                if (q > r && (isalnum((unsigned char)q[-1]) || q[-1] == '_')) continue;
+                char *close = strchr(q, ')'); if (!close) break;
+                char *b = close + 1; while (*b == ' ' || *b == '\n' || *b == '\t') b++;
+                if (*b == '{') { e = q; break; }
+            }
             if (e) {
-                const char *q = e; while (q > txt && q[-1] != '\n') q--;
+                const char *q = e; while (q > r && q[-1] != '\n') q--;
+                while (*q == ' ' || *q == '\t') q++;
+                if (!strncmp(q, "static ", 7)) q += 7;
                 if (!strncmp(q, "V *", 3)) ret = 6;
-                char *args = e + strlen("cubical_entry("); int i = 0;
-                while (*args && *args != ')' && i < n) { while (*args == ' ' || *args == ',') args++; if (!strncmp(args, "V *", 3)) kind[i] = 6; i++; while (*args && *args != ',' && *args != ')') args++; }
+                else if (!strncmp(q, "void *", 6)) ret = 7;
+                char *args = e + strlen(epat); int i = 0;
+                while (*args && *args != ')' && i < n) {
+                    while (*args == ' ' || *args == ',') args++;
+                    if (!strncmp(args, "const ", 6)) args += 6;
+                    if (!strncmp(args, "V *", 3)) kind[i] = 6; else if (!strncmp(args, "void *", 6)) kind[i] = 7;
+                    i++; while (*args && *args != ',' && *args != ')') args++;
+                }
                 /* a boxed result of a data type: box<d>( in the entry's body names the data type (the checker's index) */
                 char *b = strstr(e, "return box");
                 if (b && ret == 6) { int di = atoi(b + strlen("return box")); rdata = checked_data(di); }
             }
-            free(txt);
         }
+        free(r);
         int k = ffi_add(sym, n, kind, ret);
-        FFI[k].rdata = rdata;
+        FFI[k].rdata = rdata; FFI[k].keep = keep;
         /* name is now (lam a1..an (%native k g a1..an)); references compiled before keep the definition */
         char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
         fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
         fprintf(m, " (%%native #%d #%ld", k, g); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i); fprintf(m, ")))");
         fclose(m); emit(buf); free(buf);
-        passes++; printf("ok: native %s   [%ld steps, %zu bytes of C%s]\n", nm, steps, len, cached ? ", cached" : "");
+        passes++; printf("ok: native %s   [%ld steps, %zu bytes of C%s%s]\n", nm, steps, len, cached ? ", cached" : "", keep ? ", results kept native" : "");
     } else if (!strcmp(h, "layout")) {
         /* #layout T [as R]: by the checker's layout function (lib/check.cub) */
         if (f->n < 2 || f->it[1]->list) die("(layout T [R])", NULL);

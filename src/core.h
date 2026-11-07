@@ -144,6 +144,11 @@ enum {
                  * elimination of a recursive field, computed when forced */
     V_REC,      /* a=codata type; 1..n=fields (held unbuilt): a copattern definition's body, met only by
                  * the projection that unfolded it (and by the checker, at its own definition) */
+    V_NATIVE,   /* p=NObj: a value kept native (B18). An opaque handle (d = -1), of the primitive type
+                 * Native: passed to the native entries of the library that made it, read otherwise only
+                 * as itself (%view: wnative), its finalizer run once when the last copy is erased. Or the
+                 * emitted runtime's boxed value of data type d (#native … keep): passed to compiled code
+                 * as it is, unboxed into cells when anything else reads it */
     V_END,
     /* operations: negative principal port; the last port is the result */
     O_APP,      /* 0=f 1=arg 2=out */
@@ -339,7 +344,7 @@ typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; v
  * comp its composition, a copattern definition */
 typedef struct { char *name; int data, index; long fty; int mult; } FldInfo;
 /* primitive types (B12) */
-enum { PT_I64, PT_U32, PT_F64, PT_F32, PT_BYTES, PT_N };
+enum { PT_I64, PT_U32, PT_F64, PT_F32, PT_BYTES, PT_NATIVE, PT_N };
 typedef struct { long rc; size_t n; unsigned char b[]; } Bytes;
 /* the primitive operations of O_POP1/O_POP2, by x */
 enum { PO_I64ADD, PO_I64SUB, PO_I64MUL, PO_I64EQ, PO_I64LT, PO_U32ADD, PO_U32SUB, PO_U32MUL, PO_U32EQ, PO_U32LT,
@@ -435,9 +440,15 @@ Port top_build(Syn *body, int nslots, const int *uses);
 Port global_copy(long g, Key *as); /* 0 when the global is an unsupplied input; as: the key the copy carries (the name of the cell that referred to it; NULL: the definition's) */
 void global_park(long g, Cell *op, Cell *glob);
 /* foreign functions (D27): a C symbol at a primitive type; the arguments' kinds (PT_*, or 4 a word), its result's */
-typedef struct { const char *sym; void *fn; int n; unsigned char kind[8]; unsigned char ret; int rdata; } Ffi;
+typedef struct { const char *sym; void *fn; int n; unsigned char kind[8]; unsigned char ret; int rdata;
+    void *lib; void (*fin)(void *); unsigned char keep; } Ffi;   /* lib: the library's handle (dlopen); fin: its cubical_release, the finalizer of its handles; keep: a boxed result stays native */
+/* a value kept native (V_NATIVE): refcounted; d -1 an opaque handle (ptr the C object, fin its
+ * finalizer, lib the library that made it, k its foreign entry), else the boxed value (ptr a VB
+ * the cell owns) of data type d (-2 a word, -3 bytes) */
+typedef struct { long rc; int d; int k; void *ptr; void (*fin)(void *); void *lib; uint64_t id; } NObj;   /* id: the handle's serial number, its identity (an address may be reused once a handle is finalized) */
+Port native_unbox(Cell *c);
 /* kind/ret: PT_* for primitive values, 4 a word, 6 a boxed value (the emitted runtime's V: tag 0 a word in n, tag 2 bytes,
- * tag c+1 constructor c with its fields; B18's #native); rdata: the data type (machine index) of a boxed result, or -1 */
+ * tag c+1 constructor c with its fields; B18's #native), 7 an opaque handle (void *, V_NATIVE); rdata: the data type (machine index) of a boxed result, or -1 */
 int data_field_type(int d, int c, int k);
 typedef struct VB VB; Port unbox_value(VB *v, int d);   /* a boxed value (B18) into cells: d -2 a word, -3 bytes, a data type's machine index, -1 unknown */   /* the data type of field k of constructor c of data type d: the machine index, -2 a word, -3 bytes, -1 other */
 uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n);

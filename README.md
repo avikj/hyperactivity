@@ -211,7 +211,14 @@ and `to-step p` a process as a tree of steps; `#run (to-step p)` performs it aga
 operating system (plan D26, `src/drivers.c`), ending with `run: done a`. `#native f n = prog`
 compiles the bytes of `emit-lib-u` (the unboxed C of `lib/emitu.cub`) into a shared library and
 redefines `f` over it: on word arguments the compiled code answers, on any other `f` computes
-on the net (plan B18, `%native`). The other direction is `build/libcubical.a` with
+on the net (plan B18, `%native`). `#native f n keep = prog` keeps a boxed result native (the
+emitted runtime's `V`, passed to the next compiled call as it is; unboxed into cells when the net
+reads it). `#native f n from "lib.c" "sym"` enters a hand-written C file's function: a `void *`
+result is a handle of type `Native` (`lib/prim.cub`), held by the net without being read, passed
+to that library's `void *` parameters, printed `(%handle #k)`, compared by identity through
+`%view` (`wnative id k`), and finalized by the library's `cubical_release` when its last copy is
+erased (`tests/native/handle.c`). The entries are trusted to treat a handle as read-only: the
+net shares a handle among its readers. The other direction is `build/libcubical.a` with
 `src/libcubical.h`: a C program loads libraries with `cubical_init` and calls checked
 definitions on words with `cubical_call_w` (and the emitted C's boxed form, `cubical_call`);
 `tests/native/main.c`. `%gsteps n` is the steps checked definition `n` took to check, from the
@@ -219,7 +226,7 @@ run or the store's `ok` line.
 
 **Commands.** `#check e : T`, `#same a = b` (equal readings, at a type when either side has one),
 `#show e`, `#observe n e` (a codata value unfolded n levels), `#usage f`, `#layout T [as R]`,
-`#trusted`, `#safe f`, `#fo e`, `#key d`, `#names K`, `#history d`, `#unbind d`, `#gc`, `#run s`, `#native f n = prog`, `#input x` and `#supply x = e` (§6), `#fail` before a declaration or command
+`#trusted`, `#safe f`, `#fo e`, `#key d`, `#names K`, `#history d`, `#unbind d`, `#gc`, `#run s`, `#native f n [keep] = prog`, `#native f n from "file.c" "sym"`, `#input x` and `#supply x = e` (§6), `#fail` before a declaration or command
 (it must be rejected). `import "file.cub"` loads a module
 once. Results and failures print in the surface syntax, a failed check with its declaration's
 `file:line` and the term at fault. `--serve` after the files reads blocks of declarations from
