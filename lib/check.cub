@@ -2038,12 +2038,35 @@ qv-un bs v =
          in obind (qv-un (lcons (qd i) bs) (u @ i)) (λ cu → omap (chcomp (cplam cu)) (qv-un bs a))
        wwlit n → some (cwlit v)
        wplit k b → some (cplit k b)
+       wbytes n → q-bytes v n
        wpty k n → (if %weq k #4 then omap (cpty k) (qv-un bs n) else some (cpty k n))
        wrec d fs → omap (crec d) (oseq (lmap (qv-un bs) fs))
        wclock0 → some cclock0
        wtick0 → some ctick0
        wother → none
        _ → if is-neu w then omap q-fst (qneu bs none v w) else qty bs v
+-- a byte string as a code (so that a term holding one quotes, and the specializer's normal form
+-- of a program over a fresh buffer exists): the fresh string of its length, then a store per
+-- nonzero 8-byte word (and a 4-byte store for a tail, overlapping the last word when needed),
+-- each with the buffer's length as the access codes carry it (lib/code.cub: class 6 %bytes, class 4
+-- the stores); a string shorter than 4 bytes quotes only when empty
+q-bytes v n =
+  if %weq n #0 then some (cprim #1536 (lcons (cwlit #0) lnil))
+  else if %wlt n #4 then none
+  else some (q-bytes-go v n #0 (cprim #1536 (lcons (cwlit n) lnil)))
+q-bytes-go v n off acc =
+  if %wlt n (%wadd off #8) then q-bytes-tail v n (%wsub n off) acc
+  else (let w = %load64 v off
+        in q-bytes-go v n (%wadd off #8)
+             (if %i64eq w (%i64ofw #0) then acc else (case %view w of wplit k b → cprim #1032 (lcons acc (lcons (cwlit off) (lcons (cplit k b) (lcons (cwlit n) lnil)))); _ → acc)))
+-- the r < 8 bytes past the last whole word (the string has at least 4 bytes): their 4-byte words
+-- at n - r and n - 4 (overlapping is harmless: the contents agree)
+q-bytes-tail v n r acc =
+  if %weq r #0 then acc
+  else q-st32 v n (%wsub n #4) (if %wlt r #5 then acc else q-st32 v n (%wsub n r) acc)
+q-st32 v n off acc =
+  let w = %load32 v off
+  in case %view w of wplit k b → cprim #1028 (lcons acc (lcons (cwlit off) (lcons (cplit k b) (lcons (cwlit n) lnil)))); _ → acc
 -- a neutral: its code and its type, computed along the spine from the head (opq when not known);
 -- E: the type it is quoted at, when known
 qn c T = some (c , T)

@@ -4,7 +4,7 @@ list of bytes, decoded here, compiled with gcc, run, and its output compared wit
 import re, subprocess, sys, tempfile, os, resource
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.path.dirname(HERE))
 CUB = os.path.join(ROOT, 'build', 'cubical')
-LIBS = [os.path.join(ROOT, 'lib', f) for f in ('prelude.cub', 'code.cub', 'fo.cub', 'match.cub', 'nav.cub', 'emitc.cub', 'check.cub', 'std.cub', 'stage.cub', 'lower.cub', 'specialize.cub', 'linproof.cub', 'prim.cub', 'decode.cub', 'rules.cub', 'derive.cub', 'proc.cub', 'emitt.cub', 'emitu.cub', 'repr.cub', 'image.cub', 'reimport.cub', 'emitx86.cub')]
+LIBS = [os.path.join(ROOT, 'lib', f) for f in ('prelude.cub', 'code.cub', 'fo.cub', 'match.cub', 'nav.cub', 'emitc.cub', 'check.cub', 'std.cub', 'stage.cub', 'lower.cub', 'specialize.cub', 'linproof.cub', 'prim.cub', 'decode.cub', 'rules.cub', 'derive.cub', 'proc.cub', 'emitt.cub', 'emitu.cub', 'repr.cub', 'image.cub', 'reimport.cub', 'emitx86.cub', 'region.cub')]
 PROGS = {
  # name: (definitions as .cub text building a Lst of (g , (arity , body)), expected output)
  'fact': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil)))
@@ -40,6 +40,20 @@ prog = sizeof-prog (data-idx (code Tr))""", "24", "struct { struct T"),
  # in place on the byte layer (C21, item 22): a loop filling an 8-word buffer that is its own
  # state stores into it without copying (st64i); 7 + 3 read back
  'inplace-bytes': ("defs = lcons (#0 , (#0 , inplace loop-buf)) lnil", "10", "st64i("),
+ # the Region threading idiom (C20, lib/region.cub): a program over a 16-byte region, two writes
+ # and a sum of reads, specialized to the first-order form; the region is a fresh buffer, so the
+ # stores on it are in place (st64i); 20 + 21
+ 'region': ('''p0 : Ptr 16
+p0 = (0 , (8 , λ i → 16))
+p8 : Ptr 16
+p8 = (8 , (0 , λ i → 16))
+two : Word → RM 16 Int64
+two w = rthen (wr p0 (i64 w)) (rthen (wr p8 (i64 (%wsucc w))) (rbind (rd p0) (λ a → rmap (λ b → i64add a b) (rd p8))))
+prog-two : Word → Word
+prog-two w = i64toWord (eval-fresh 16 (two w))
+lam-body f = case f of flam b → b; _ → f
+sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → prog-two w))
+defs = case lift #2 (lam-body (inplace sp)) of lifted t2 ds k → lcons (#0 , (#0 , fcall #1 (lcons (flit #20) lnil))) (lcons (#1 , (#1 , t2)) ds)''', "41", "st64i("),
  # a code over the byte layer (two loads from an unknown buffer, with their bound proofs and Nat
  # lengths) lowered with the representations consumed (lib/repr.cub), compiled, run on a buffer
  'loads': ("""lam-body f = case f of flam b → b; _ → f

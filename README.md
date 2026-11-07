@@ -185,6 +185,13 @@ first-order side a store into a buffer nobody else holds — fresh, or let-bound
 whose other uses are reads before it — is stored in place (`P-store64-ip`, printed `st64i`, no
 copy); into a parameter or beside an unsequenced read it copies (`lib/fo.cub`'s `mark-uniq`).
 
+**Regions as state.** `lib/region.cub` threads a region, `Bytes n`, through a program as
+state: `RM n A = Region n → Region n × A`, pointers as offsets with their proof (`Ptr n`),
+`rd`/`wr`/`rmodify` the byte layer's accesses, `run-fresh n m`, `enter-at a n m` for memory the
+program does not own; `rd-wr` and `rd-wr-disj` are its laws. The region is unique along the
+thread, so a specialized region program stores in place. A byte string quotes as a code (the
+fresh string, then a store per nonzero word).
+
 **Memory the program does not own.** `ptr-of n b` is the address of a byte string and
 `region-at a n` the `n` bytes at an address, copied in (plan C20; `%ptr-of`, `%region-at`,
 trusted). `#safe f` lists every trusted definition (postulate, primitive) that `f` reaches

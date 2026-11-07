@@ -1293,7 +1293,22 @@ identity; linear values are introduced only in `primitive` definitions.
 ### C. Memory and state
 20. DONE in parts: the byte layer (B12), validity facts as certificates (`lib/decode.cub`),
     `ptr-of`/`region-at` trusted and `#safe f` listing what a definition assumes
-    (`1c5282a`). Open: the Region threading idiom as a library.
+    (`1c5282a`). The Region threading idiom: DONE 2026-11-06, `lib/region.cub` — a region is
+    `Bytes n` threaded as state, `RM n A = Region n → Region n × A` with `rret`/`rbind`/`rthen`/
+    `rmap`, pointers as offsets with their proof (`Ptr n`, aliasing pointers are integers into
+    the region, 6.4), `rd`/`wr`/`rmodify` the byte layer's proved accesses, `run-fresh`/`run-on`,
+    `enter-at` (memory the program does not own, through `region-at`) and `raddr` (through
+    `ptr-of`); the monad laws by computation, `rd-wr` and `rd-wr-disj` from the byte layer's
+    laws; `tests/region.cub` (readings, laws at pointers, `#safe` listing `region-at` only for
+    the program that enters foreign memory). Compiled: `run.py`'s `region` specializes a program
+    over a fresh 16-byte region to the first-order form, its stores in place (`st64i`), under
+    both printers. Found on the way: a byte string had no code, so the specializer's normal
+    form of any term holding one fell back to the unnormalized code (`normalize`'s `fromopt`);
+    `lib/check.cub`'s `q-bytes` quotes it as the fresh string and a store per nonzero word. Also
+    found, not changed: `code t` in an untyped definition elaborates `t` without inserting
+    implicit arguments (an explicit argument lands in the implicit's place, silently), so a
+    program to specialize is written as a checked definition and quoted applied
+    (`code (λ w → prog w)`).
 21. **Status (2026-11-06):** built, `e27eda2c`, `02a4a615` (`fupd`, constructor reuse where the base is the node at hand, uniqueness by use, copy-on-write, in both printers). Spec as written: In-place update: whole values, through parts, copy-on-write, sending (6.4). Essential.
 22. Started (`be7149d`): `Array n = Bytes (times n 8)` with `index`/`update` at a proof,
     `tabulate`, and `index-update` proved from the byte layer's laws (trusted primitives
