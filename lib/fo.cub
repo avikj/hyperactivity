@@ -101,6 +101,10 @@ P-f64ofw = #29
 -- the same value as P-store64 / P-store32; the printers store in place instead of copying first
 P-store64-ip = #30
 P-store32-ip = #31
+-- a Float64's bits as an Int64 and back (item 22: Float64 elements stored by the byte layer); the
+-- printers' n32/n33 are the identity on the word of bits
+P-f64bits = #32
+P-f64ofbits = #33
 -- (as booleans by case: orf is defined below)
 store-ip p = if %weq p P-store64-ip then true else %weq p P-store32-ip
 store-any p = if store-ip p then true else (if %weq p P-store64 then true else %weq p P-store32)
@@ -120,6 +124,8 @@ prim-num p args =
            else if %weq p P-wofi64 then vw (%wofi64 (iof a))
            else if %weq p P-f64ofi64 then vf64 (%f64ofi64 (iof a))
            else if %weq p P-i64off64 then vi64 (%i64off64 (fof a))
+           else if %weq p P-f64bits then vi64 (%f64bits (fof a))
+           else if %weq p P-f64ofbits then vf64 (%f64ofbits (iof a))
            else vf64 (%f64ofw (wof a))
          lcons b r2 →
            if %weq p P-i64add then vi64 (%i64add (iof a) (iof b))

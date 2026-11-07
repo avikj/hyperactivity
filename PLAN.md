@@ -1325,8 +1325,23 @@ identity; linear values are introduced only in `primitive` definitions.
     holds), becomes `P-store64-ip`/`P-store32-ip`, printed `st64i`/`st32i` by both printers
     (no copy); a parameter or an unsequenced read keeps the copy (`st-par`, `st-beside`);
     `run.py`'s `inplace-bytes` fills an 8-word buffer in a loop with no copies. The element type
-    is `Int64` (the byte layer's word); `Fin n → A` for other `A` goes through their layouts,
-    which B18's open item (represented values by layout) covers.
+    is `Int64` (the byte layer's word). **Other element types (2026-11-07, fork B2):** `UInt32` on
+    the 4-byte layer — `Array32 n = Bytes (times n 4)`, the Int64 development at width 4
+    (`index32`, `update32`, `atab32`, `index-tabulate32`, `tabulate-index32`, `index-update-if32`,
+    `Fin→Array32`, `fin-set-by32`) over two more trusted laws (`load32-store32-disj`,
+    `array32-ext`); UInt32 is not equivalent to Int64 (8 bytes would hold values UInt32 cannot), so
+    it has its own layer. Any `A` with an equivalence to `Int64` on the 8-byte layer, proved once:
+    `indexV`/`updateV`/`atabV`/`aindexV` (from after index, update at to), `index-updateV`,
+    `index-update-neV`, `index-tabulateV`, `tabulate-indexV`, `Fin→ArrayV A to from ft tf n`,
+    `fin-set-byV`. `Float64` by its bits: new primitives `f64bits`/`f64ofbits` (the machine retags
+    the word; `P-f64bits`/`P-f64ofbits` in the first-order form, the printers' `n32`/`n33` the
+    identity) with their inverse laws trusted, so `Fin→ArrayF`, `index-updateF`, `fin-set-byF`; a
+    type represented by `Int64`, by its layout: `tests/prim.cub`'s `Cents` (`represent Cents by
+    Int64`), `Fin→ArrayV Cents centsTo centsFrom …`, read. In place: `updateF` is `store64` and
+    `update32` is `store32`, so `run.py`'s `farray` (st64i, 7.0·3.0 = 21) and `u32array` (st32i,
+    40 + 2) store without copies, boxed and unboxed. Not built: a represented type whose
+    representation is not `Int64` (a record, or `Word`: Nat by Word is not equivalent to Int64);
+    arrays of `Float32` (no 32-bit float bits primitive).
 23. DONE (`967e48e7`, `lib/fiber.cub`; used by `6d098a67`'s state programs): a map factors
     through its fibers, `fiberEquiv f : A ≃ (b : B) × fiber f b`, the projection the first
     component. State programs as `A ≃ Σ (b : B), fiber f b` then projection. Valuable.

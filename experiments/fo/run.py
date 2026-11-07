@@ -54,6 +54,23 @@ prog-two w = i64toWord (eval-fresh 16 (two w))
 lam-body f = case f of flam b → b; _ → f
 sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → prog-two w))
 defs = case lift #2 (lam-body (inplace sp)) of lifted t2 ds k → lcons (#0 , (#0 , fcall #1 (lcons (flit #20) lnil))) (lcons (#1 , (#1 , t2)) ds)''', "41", "st64i("),
+ # Fin n → A beyond Int64 (item 22): Float64 elements stored by their bits (updateF is store64 at
+ # f64bits, indexF f64ofbits after load64), specialized from the typed program; the buffer is fresh,
+ # so both stores are in place (st64i); 7.0 * 3.0 read back as a word
+ 'farray': ('''fa : Word → Word
+fa w = i64toWord (i64off64 (f64mul (indexF 4 (updateF 4 (updateF 4 (anew 4) 0 (3 , λ i → 4) (f64ofi64 (i64 w))) 1 (2 , λ i → 4) (f64 #3)) 0 (3 , λ i → 4))
+                                   (indexF 4 (updateF 4 (updateF 4 (anew 4) 0 (3 , λ i → 4) (f64ofi64 (i64 w))) 1 (2 , λ i → 4) (f64 #3)) 1 (2 , λ i → 4))))
+lam-body f = case f of flam b → b; _ → f
+sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → fa w))
+defs = case lift #2 (lam-body (inplace sp)) of lifted t2 ds k → lcons (#0 , (#0 , fcall #1 (lcons (flit #7) lnil))) (lcons (#1 , (#1 , t2)) ds)''', "21", "st64i("),
+ # UInt32 elements on the 4-byte layer: a loop-free fill of two of four elements, stored in place
+ # (st32i), summed: 40 + 2
+ 'u32array': ('''u32a : Word → Word
+u32a w = u32toWord (u32add (index32 4 (update32 4 (update32 4 (anew32 4) 3 (0 , λ i → 4) (u32 w)) 1 (2 , λ i → 4) (u32 #2)) 3 (0 , λ i → 4))
+                          (index32 4 (update32 4 (update32 4 (anew32 4) 3 (0 , λ i → 4) (u32 w)) 1 (2 , λ i → 4) (u32 #2)) 1 (2 , λ i → 4)))
+lam-body f = case f of flam b → b; _ → f
+sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → u32a w))
+defs = case lift #2 (lam-body (inplace sp)) of lifted t2 ds k → lcons (#0 , (#0 , fcall #1 (lcons (flit #40) lnil))) (lcons (#1 , (#1 , t2)) ds)''', "42", "st32i("),
  # a code over the byte layer (two loads from an unknown buffer, with their bound proofs and Nat
  # lengths) lowered with the representations consumed (lib/repr.cub), compiled, run on a buffer
  'loads': ("""lam-body f = case f of flam b → b; _ → f

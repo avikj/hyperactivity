@@ -257,3 +257,52 @@ m23 = atab 6 (λ p → i64 (fromNat (fst p)))
 #same index2 2 3 m23 1 2 (le-refl 2) (le-refl 3) = i64 #5
 #same index2 2 3 m23 0 1 (le-pred 1 2 (le-refl 2)) (snd f1) = i64 #1
 #same index2 2 3 (update2 2 3 m23 1 0 (le-refl 2) (le-zero 3) (i64 #7)) 1 0 (le-refl 2) (le-zero 3) = i64 #7
+-- Fin n → A beyond Int64 (item 22). UInt32 elements on the 4-byte layer: the laws checked as terms,
+-- read; a write at 2 and the old values elsewhere
+sq32 : Fin 3 → UInt32
+sq32 p = u32 (fromNat (times (fst p) 100))
+#same aindex32 3 (atab32 3 sq32) f2 = u32 #200
+#same index32 3 (update32 3 (atab32 3 sq32) 2 (le-refl 3) (u32 #7)) 2 (le-refl 3) = u32 #7
+#same index32 3 (update32 3 (atab32 3 sq32) 2 (le-refl 3) (u32 #7)) 1 (snd f1) = u32 #100
+by32 : atab32 3 (fin-set32 3 sq32 f2 (u32 #7)) ≡ update32 3 (atab32 3 sq32) 2 (le-refl 3) (u32 #7)
+by32 = fin-set-by32 3 sq32 2 (le-refl 3) (u32 #7)
+eqv32 : Equiv (Fin 3 → UInt32) (Array32 3)
+eqv32 = Fin→Array32 3
+#same aindex32 3 (fst eqv32 sq32) f1 = u32 #100
+-- Float64 elements by their bits on the Int64 layer: 0.0, 1.0, 2.0, a quarter written at 1
+sqF : Fin 3 → Float64
+sqF p = f64ofi64 (i64 (fromNat (fst p)))
+#same aindexF 3 (atabF 3 sqF) f2 = f64 #2
+#same indexF 3 (updateF 3 (atabF 3 sqF) 1 (snd f1) (f64div (f64 #1) (f64 #4))) 1 (snd f1) = f64div (f64 #1) (f64 #4)
+#same indexF 3 (updateF 3 (atabF 3 sqF) 1 (snd f1) (f64 #9)) 2 (le-refl 3) = f64 #2
+byF : atabF 3 (fin-setA Float64 3 sqF f1 (f64 #9)) ≡ updateF 3 (atabF 3 sqF) 1 (snd f1) (f64 #9)
+byF = fin-set-byF 3 sqF 1 (snd f1) (f64 #9)
+eqvF : Equiv (Fin 3 → Float64) (Array 3)
+eqvF = Fin→ArrayF 3
+#same aindexF 3 (fst eqvF sqF) f1 = f64 #1
+-- what is stored is the bits: read as an Int64, 1.0 is its IEEE 754 pattern
+#same i64toWord (index 3 (updateF 3 (anew 3) 0 (2 , λ i → 3) (f64 #1)) 0 (2 , λ i → 3)) = #4607182418800017408
+-- a type represented by Int64, by its layout: arrays of Cents through its representation's to and
+-- from and the representation's two laws
+data Cents = cents (c : Int64)
+centsTo : Cents → Int64
+centsTo x = case x of cents c → c
+centsFrom : Int64 → Cents
+centsFrom w = cents w
+cents-tf : (w : Int64) → centsTo (centsFrom w) ≡ w
+cents-tf w = λ i → w
+cents-ft : (x : Cents) → centsFrom (centsTo x) ≡ x
+cents-ft x = case x return (λ y → centsFrom (centsTo y) ≡ y) of cents c → λ i → cents c
+represent Cents by Int64 where
+  to : Cents → Int64 = centsTo
+  from : Int64 → Cents = centsFrom
+  to-from : (w : Int64) → to (from w) ≡ w = cents-tf
+  from-to : (x : Cents) → from (to x) ≡ x = cents-ft
+priceC : Fin 3 → Cents
+priceC p = cents (i64 (fromNat (times (fst p) 250)))
+eqvC : Equiv (Fin 3 → Cents) (Array 3)
+eqvC = Fin→ArrayV Cents centsTo centsFrom cents-ft cents-tf 3
+#same aindexV Cents centsFrom 3 (fst eqvC priceC) f2 = cents (i64 #500)
+#same indexV Cents centsFrom 3 (updateV Cents centsTo 3 (atabV Cents centsTo 3 priceC) 1 (snd f1) (cents (i64 #99))) 1 (snd f1) = cents (i64 #99)
+byC : atabV Cents centsTo 3 (fin-setA Cents 3 priceC f1 (cents (i64 #99))) ≡ updateV Cents centsTo 3 (atabV Cents centsTo 3 priceC) 1 (snd f1) (cents (i64 #99))
+byC = fin-set-byV Cents centsTo 3 priceC 1 (snd f1) (cents (i64 #99))
