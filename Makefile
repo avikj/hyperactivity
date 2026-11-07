@@ -32,6 +32,7 @@ test: build/cubical build/cubical-asan
 	python3 experiments/fo/run.py
 	UNBOXED=1 python3 experiments/fo/run.py
 	IMAGE=1 python3 experiments/fo/run.py
+	X86=1 python3 experiments/fo/run.py
 	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/lin.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/check.cub lib/std.cub lib/stage.cub lib/lower.cub lib/specialize.cub
@@ -56,7 +57,7 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub lib/choreo.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub
 	sh tests/agda/check.sh
-	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub lib/check.cub lib/std.cub lib/stage.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub lib/repr.cub lib/image.cub lib/reimport.cub tests/fo.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub lib/check.cub lib/std.cub lib/stage.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub lib/repr.cub lib/image.cub lib/reimport.cub lib/emitx86.cub tests/fo.cub
 	# the driver loop (D26): a process over W writes hello and ends with the count written
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/linproof.cub lib/prim.cub lib/proc.cub lib/world.cub tests/world.cub > build/world.out && grep -aq "^hello" build/world.out && grep -aq "run: done #8" build/world.out && grep -aq "run: done #0" build/world.out && grep -aq "^hello" /tmp/cubw.txt
 	# the call boundary (B18): the net enters a definition's compiled C (#native), and a C program calls the net

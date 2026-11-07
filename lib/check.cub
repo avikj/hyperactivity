@@ -267,17 +267,18 @@ hyp-val F f T s =
     sh-snd s2 → (case %view T of wsigma A B → hyp-val F (snd f) (B (fst f)) s2; _ → F f)
     sh-pair s1 s2 → (case %view T of wsigma A B → (hyp-val F (fst f) A s1 , hyp-val F (snd f) (B (fst f)) s2); _ → F f)
     _ → F f
-hyp-ty Pv F f T s =
+-- (Ph T f: the motive at a recursive field f of type T, hyp-motive)
+hyp-ty Ph F f T s =
   case s of
     sh-path s2 →
       (case %view T of
-         wpath L a b → (let i = %dim in PathP (%abs i (hyp-ty Pv F (f @ i) (L @ i) s2)) (hyp-val F (f @ 0) (L @ 0) s2) (hyp-val F (f @ 1) (L @ 1) s2))
-         _ → Pv f)
-    sh-pi s2 → (case %view T of wpi A B → ((x : A) → hyp-ty Pv F (f x) (B x) s2); _ → Pv f)
-    sh-fst s2 → (case %view T of wsigma A B → hyp-ty Pv F (fst f) A s2; _ → Pv f)
-    sh-snd s2 → (case %view T of wsigma A B → hyp-ty Pv F (snd f) (B (fst f)) s2; _ → Pv f)
-    sh-pair s1 s2 → (case %view T of wsigma A B → ((h : hyp-ty Pv F (fst f) A s1) × hyp-ty Pv F (snd f) (B (fst f)) s2); _ → Pv f)
-    _ → Pv f
+         wpath L a b → (let i = %dim in PathP (%abs i (hyp-ty Ph F (f @ i) (L @ i) s2)) (hyp-val F (f @ 0) (L @ 0) s2) (hyp-val F (f @ 1) (L @ 1) s2))
+         _ → Ph T f)
+    sh-pi s2 → (case %view T of wpi A B → ((x : A) → hyp-ty Ph F (f x) (B x) s2); _ → Ph T f)
+    sh-fst s2 → (case %view T of wsigma A B → hyp-ty Ph F (fst f) A s2; _ → Ph T f)
+    sh-snd s2 → (case %view T of wsigma A B → hyp-ty Ph F (snd f) (B (fst f)) s2; _ → Ph T f)
+    sh-pair s1 s2 → (case %view T of wsigma A B → ((h : hyp-ty Ph F (fst f) A s1) × hyp-ty Ph F (snd f) (B (fst f)) s2); _ → Ph T f)
+    _ → Ph T f
 -- D itself, D some ticks later (a guarded field), or a path in D (a truncation's argument, of any
 -- dimension): at level lzero in D's own level
 later-rec d c =
@@ -864,9 +865,16 @@ tube-ok i Wi L0 Li av =
 check-comp c A u a =
   case A of
     tguess k g t V → if %weq g #0 then redo k else check-comp c t u a
+    -- the line left to find, no type expected: the constant line at the base's type
+    thole k V → comp-hole-line c k a
+    tspine t V → (case t of thole k V2 → comp-hole-line c k a; _ → check-comp1 c A u a)
     _ → case u of
           tguess k g t V → if %weq g #0 then redo k else check-comp c A t a
           _ → check-comp1 c A u a
+comp-hole-line c k a =
+  case infer a of
+    yes Ta → (case const-line Ta of some cl → elab (lcons (k , some cl) lnil); none → err c E-implicit opq opq)
+    r → r
 check-comp1 c A u a =
   case A of
     tplam nX X LV → 
@@ -980,10 +988,10 @@ infer c =
           case %view T of
             wdata d2 ps → 
               if %weq d d2
-                then case motive-level (mkdata d ps) P of
+                then case motive-level-d d ps P of
                        yes s → 
                          let Pv = tval P
-                         in and-then (check-branches c d ps Pv F B) (yes (Pv (tval x)))
+                         in and-then (check-brs c d Pv (hyp-motive d ps P Pv) F (ctors-at d ps) B #0) (yes (Pv (tval x)))
                        r → r
                 else err x E-notdata T opq
             _ → err x E-notdata T opq
@@ -1096,12 +1104,47 @@ motive-level T P =
 -- each branch: binders for its fields, hypotheses (the eliminations of the recursive fields),
 -- dimensions, then a body of type P (c fields dims), on the boundary's faces equal to the
 -- elimination of the boundary
-check-brs e d Pv F lnil Bs c = chk (isnil Bs) (err e E-nbranch opq opq)
-check-brs e d Pv F (lcons tel rest) Bs c =
+-- the motive at a recursive field (Ph T f: the hypothesis's type, T the field's type): for an
+-- indexed type (fording, %dnidx d > 0) whose motive was written as a λ over the index variables
+-- applied to them, (λ ix… v → R) n…, the hypothesis is at the field's own index (R[n := m] for
+-- f : D ps m), as Agda's unification of the index at the split gives; otherwise the motive at f
+hyp-motive d ps P Pv =
+  let k = %dnidx d
+      nu = %wsub (llen-w ps) k
+  in if %weq k #0 then (λ T f → Pv f)
+     else (case ix-motive P k lnil of
+             some P2 → (λ T f → (case %view T of wdata d2 ps2 → app-all (tval P2) (lsnoc (ldrop-n nu ps2) f); _ → Pv f))
+             none → (λ T f → Pv f))
+-- the motive's level: a motive over the indices, (λ ix… v → R) n…, is checked as the λ, the
+-- indices bound at the index parameters' types and v at the type at them
+motive-level-d d ps P =
+  let k = %dnidx d
+  in if %weq k #0 then motive-level (mkdata d ps) P
+     else (case ix-motive P k lnil of
+             some P2 → (let nu = %wsub (llen-w ps) k in ix-sort d P2 (tel-inst (dtel (%dent d)) (ltake-n nu ps)) (ltake-n nu ps))
+             none → motive-level (mkdata d ps) P)
+ix-sort d P2 tel acc =
+  case P2 of
+    tlam nm b V →
+      (case tel of
+         tx A nm2 r → (let Av = tval A in let x = %var nm Av in ix-sort d (b x Av) (r x Av) (lsnoc acc x))
+         _ → (let D = mkdata d acc in let x = %var nm D in infer-sort (b x D)))
+    _ → err P2 E-motive opq opq
+-- (λ ix1 … ixk v → R) a1 … ak, k applications of a λ of depth k+1: the λ
+ix-motive P k args =
+  case P of
+    tapp f a V → ix-motive f k (lcons a args)
+    tguess g q t V → ix-motive t k args
+    tlam nm b V → if andb (%weq (llen-w args) k) (lam-depth P (%wsucc k)) then some P else none
+    _ → none
+lam-depth t n = if %weq n #0 then true else (case t of tlam nm b V → lam-depth (b (%var nm Uw) Uw) (%wsub n #1); _ → false)
+ldrop-n n l = if %weq n #0 then l else (case l of lnil → lnil; lcons x xs → ldrop-n (%wsub n #1) xs)
+check-brs e d Pv Ph F lnil Bs c = chk (isnil Bs) (err e E-nbranch opq opq)
+check-brs e d Pv Ph F (lcons tel rest) Bs c =
   case Bs of
     lnil → err e E-nbranch opq opq
-    lcons b br → and-then (check-branch e d Pv F c tel b) (check-brs e d Pv F rest br (%wsucc c))
-check-branches e d ps Pv F Bs = check-brs e d Pv F (ctors-at d ps) Bs #0
+    lcons b br → and-then (check-branch e d Pv Ph F c tel b) (check-brs e d Pv Ph F rest br (%wsucc c))
+check-branches e d ps Pv F Bs = check-brs e d Pv (λ T f → Pv f) F (ctors-at d ps) Bs #0
 branch-boundary Pv F t bs =
   case %view bs of
     wsys bl → 
@@ -1125,23 +1168,23 @@ branch-dims e d Pv F c tel b fs ds =
         be t → and-then (check t (Pv (mkcon d c fs ds))) (branch-boundary Pv F t (tval bdy))
         _ → err e E-ctor opq opq
     _ → err e E-ctor opq opq
-branch-hyps e d Pv F c tel b fs (lcons f rest) =
+branch-hyps e d Pv Ph F c tel b fs (lcons f rest) =
   case b of
-    bx nm b1 → branch-hyps e d Pv F c tel (b1 (hyp-val F (fst f) (fst (snd f)) (snd (snd f))) (hyp-ty Pv F (fst f) (fst (snd f)) (snd (snd f)))) fs rest
+    bx nm b1 → branch-hyps e d Pv Ph F c tel (b1 (hyp-val F (fst f) (fst (snd f)) (snd (snd f))) (hyp-ty Ph F (fst f) (fst (snd f)) (snd (snd f)))) fs rest
     _ → err e E-ctor opq opq
-branch-hyps e d Pv F c tel b fs lnil = branch-dims e d Pv F c tel b fs lnil
-branch-fields e d Pv F c tel b fs rs =
+branch-hyps e d Pv Ph F c tel b fs lnil = branch-dims e d Pv F c tel b fs lnil
+branch-fields e d Pv Ph F c tel b fs rs =
   case tel of
     tx A nm r → 
       case b of
         bx nm b1 → 
           let Av = tval A
               x = %var nm Av
-          in branch-fields e d Pv F c (r x Av) (b1 x Av) (lsnoc fs x)
+          in branch-fields e d Pv Ph F c (r x Av) (b1 x Av) (lsnoc fs x)
                (case rec-shape d A of sh-none → rs; s → lsnoc rs (x , (Av , s)))
         _ → err e E-ctor opq opq
-    _ → branch-hyps e d Pv F c tel b fs rs
-check-branch e d Pv F c tel b = branch-fields e d Pv F c tel b lnil lnil
+    _ → branch-hyps e d Pv Ph F c tel b fs rs
+check-branch e d Pv Ph F c tel b = branch-fields e d Pv Ph F c tel b lnil lnil
 -- a formal hcomp: a tube of lines in the type, agreeing with the cap at 0
 check-hcomp T u a =
   case u of
@@ -1252,10 +1295,19 @@ tick-sub α ctx c =
        trec d fs V → lany r fs
        ttick k V → r k
        _ → false
+-- a composition's line left to find (comp _ u a): the hole, when the line is one
+line-hole A = case A of thole k V → some k; tspine t V → (case t of thole k V2 → some k; _ → none); _ → none
+-- the constant line at a type, as code: λ i → T
+const-line T = let i = %dim in omap cplam (qty (lcons (qd i) lnil) T)
 check c T =
   case c of
     tguess k g t V → guess-check k g t T
     tspine t V → solve-spine t (some T)
+    -- comp _ u a against T: the line is the constant one at T (E28, holes in composition lines)
+    tcomp A u a V →
+      (case line-hole A of
+         some k → (case const-line T of some cl → elab (lcons (k , some cl) lnil); none → err c E-implicit opq opq)
+         none → (case infer c of yes T2 → chk (conv-ty T2 T) (err c E-mismatch T T2); r → r))
     tlam nm b V → 
       case %view T of
         wpi A B → 

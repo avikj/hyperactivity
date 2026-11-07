@@ -157,6 +157,7 @@ enum {
     O_COMP,     /* 0=u 1=A 2=a0 3=out */
     O_COMPA,    /* 0=A 1=u 2=a0 3=out */
     O_COMPH,    /* a=dim; 0=H 1=u 2=a0 3=out */
+    O_COMPW,    /* comp at Word: 0=u (the tube) 1=a0 2=the line 3=out; an empty tube is the base */
     O_MKPLAM,   /* a=dim; 0=body 1=out */
     O_MKGLUE,   /* 0=S 1=A 2=out */
     O_MKGLUEV,  /* 0=S 1=a 2=out */

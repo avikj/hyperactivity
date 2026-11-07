@@ -209,10 +209,13 @@ static RecInfo *rec_of(const char *s) { for (int i = nrecs - 1; i >= 0; i--) if 
 static Tok *NX(void) { Tok *t = &lt[xp]; if (t->k != X_EOF) xp++; return t; }
 static void x_err(const char *m, Tok *t) { x_die(t->line, t->col, m, t->k == X_VS ? "(at a new line)" : t->k == X_VC ? "(at the end of a block)" : t->k == X_VO ? "(at a new block)" : t->s); }
 static bool at(const char *s) { return x_is(P0(), s); }
+/* a generalized variable (E28): its name and declared type */
+typedef struct { const char *name; Node *type; } GVar;
+static GVar *GVAR; static int ngvar; static size_t capgvar;
 static void want(const char *s) { if (!at(s)) { char m[64]; snprintf(m, sizeof m, "expected %s, found", s); x_err(m, P0()); } NX(); }
 static void wantk(int k, const char *what) { if (P0()->k != k) { char m[64]; snprintf(m, sizeof m, "expected %s, found", what); x_err(m, P0()); } NX(); }
 static const char *RESERVED[] = { "=", ":", "→", "λ", "↦", "|", "of", "where", "let", "in", "if", "then", "else", "case", "return",
-    "data", "codata", "record", "mutual", "postulate", "import", "infix", "infixl", "infixr", "by", "calc", "∀", "decreasing", "using", "▸", "primitive", ":0", ":1", "represent", "instance", "module", "open", "deriving", "foreign", NULL };
+    "data", "codata", "record", "mutual", "postulate", "import", "infix", "infixl", "infixr", "by", "calc", "∀", "decreasing", "using", "▸", "primitive", ":0", ":1", "represent", "instance", "module", "open", "deriving", "foreign", "variable", NULL };
 static bool reserved(const char *s) { for (int i = 0; RESERVED[i]; i++) if (!strcmp(RESERVED[i], s)) return true; return false; }
 static int nfresh_x;
 static Node *xfresh(const char *p) { char b[32]; snprintf(b, sizeof b, "%%%s%d", p, nfresh_x++); return nsym(b); }
@@ -1377,6 +1380,18 @@ static void p_decl(void) {
             if (rejected) passes++; else failures++;
             printf("%s: rejected represent %s by %s\n", rejected ? "ok" : "FAIL", T, Rh->s);
         } else x_top(sym3("represent", nsym(T), core(R)));
+        decl_end(); return;
+    }
+    if (x_is(t, "variable")) {
+        /* generalized variables (E28): `variable x y : T`; a signature mentioning x free gets {x : T}
+         * (and the variables T mentions) as leading implicit parameters */
+        NX();
+        Node *ns[64]; int n = 0;
+        while (P0()->k == X_ID && !reserved(P0()->s)) { if (n == 64) x_err("too many names", P0()); ns[n++] = nsym(NX()->s); }
+        if (!n) x_err("variable names something, found", P0());
+        want(":");
+        Node *T = p_expr(0);
+        for (int i = 0; i < n; i++) { GROW(GVAR, capgvar, (size_t)ngvar + 1); GVAR[ngvar++] = (GVar){ ns[i]->s, T }; }
         decl_end(); return;
     }
     if (x_is(t, "postulate")) {
@@ -3345,6 +3360,16 @@ static Node *el_app(Node *t, Node *h, Node **args, int n) {
     return cur;
 }
 static Node **field_types(int c, Node *T, Node **fv);
+static bool bindable_free(const char *s);
+/* a motive (λ ix1 … ixk v → R) a1 … ak (k ≥ 1 applications of a λ of depth k + 1): the λ and k */
+static bool ix_motive(Node *P, Node **P2, int *k) {
+    int n = 0; Node *f = P;
+    while (f->list && f->n == 2 && f->it[0]->list) { f = f->it[0]; n++; }
+    if (!n || !f->list) return false;
+    Node *b = f;
+    for (int d = 0; d <= n; d++) { if (!(b->list && b->n == 3 && !b->it[0]->list && (is(b->it[0], "lam") || is(b->it[0], "%lam")))) return false; b = b->it[2]; }
+    *P2 = f; *k = n; return true;
+}
 static Node *el_alts(Node *t, int from) {
     Node *r = nlist(t->n); r->it[0] = t->it[0];
     Node *sty = syn_type(t->it[from - 1], 0);
@@ -3380,20 +3405,31 @@ static Node *el_alts(Node *t, int from) {
                     /* a path-typed field's hypothesis is a line over the motive: its type is the
                      * checker's to state */
                     if (CON[c].rdim[q - 1]) e_push(strdup(nm), false);
-                    else e_pusht(strdup(nm), subst_multi(lst(2, P, p->it[q]), &x, NULL, 0));
+                    else {
+                        /* an indexed type's motive, (λ ix… v → R) n…: at the field's own index */
+                        Node *P2 = NULL; int k = 0; Node *ap = lst(2, P, p->it[q]);
+                        if (ix_motive(P, &P2, &k) && fty && fty[q - 1] && fty[q - 1]->list && fty[q - 1]->n > k) {
+                            Node *ft = fty[q - 1]; ap = P2;
+                            for (int z = 0; z < k; z++) ap = lst(2, ap, ft->it[ft->n - k + z]);
+                            ap = lst(2, ap, p->it[q]);
+                        }
+                        e_pusht(strdup(nm), subst_multi(ap, &x, NULL, 0));
+                    }
                 }
             }
         }
         else e_push(p->s, false);
         if (from == 3) {
             Node *P = t->it[1];
-            if (P->list && P->n == 3 && !P->it[0]->list && (is(P->it[0], "lam") || is(P->it[0], "%lam")) && !P->it[1]->list) {
-                const char *w = P->it[1]->s; Node *cv = p;
+            Node *P2 = NULL; int k = 0;
+            bool lamP = P->list && P->n == 3 && !P->it[0]->list && (is(P->it[0], "lam") || is(P->it[0], "%lam")) && !P->it[1]->list;
+            if (lamP || ix_motive(P, &P2, &k)) {
+                Node *cv = p;
                 if (p->list) {
                     int c = con_lookup(p->it[0]->s);
                     if (c >= 0 && CON[c].nfields < p->n - 1) cv = NULL;   /* a path constructor: its boundary is not this */
                 }
-                if (cv) syn_expect = subst_multi(P->it[2], &w, &cv, 1);
+                if (cv) { const char *w = P->it[1]->s; syn_expect = lamP ? subst_multi(P->it[2], &w, &cv, 1) : subst_multi(lst(2, P, cv), NULL, NULL, 0); }
             }
         }
         r->it[i] = lst(2, p, el(a->it[1]));
@@ -3830,6 +3866,28 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         for (int q = nd - 1; q >= 0; q--) if (mentions_name(mot, cdefs[dep[q]].v)) mot = sym4("let", nsym(cdefs[dep[q]].v), typed_def(&cdefs[dep[q]]), mot);
         mot = sym3("%lam", nsym(v), mot);
     }
+    /* an indexed type (fording) whose index arguments are variables n…: the motive written as a λ
+     * over the indices applied to them, (λ ix… v → body[n := ix]) n…, so the checker types an
+     * induction hypothesis at the field's own index (E28: the index unified at the split) */
+    Node *motx = mot;
+    if (!cov && !dv && DATA[d].nidx > 0) {
+        Node *vt = ty_of(v); int np = DATA[d].nparams, k = DATA[d].nidx;
+        if (vt && vt->list && vt->n == np + 1 && !vt->it[0]->list && !strcmp(vt->it[0]->s, DATA[d].name)) {
+            const char *ixn[64]; Node *fresh[64]; bool ok = k <= 64;
+            for (int q = 0; ok && q < k; q++) {
+                Node *a = vt->it[1 + np - k + q];
+                if (a->list || !bindable_free(a->s) || !strcmp(a->s, v)) ok = false;
+                for (int z = 0; ok && z < q; z++) if (!strcmp(ixn[z], a->s)) ok = false;
+                if (ok) { ixn[q] = a->s; fresh[q] = xfresh("ix"); }
+            }
+            if (ok) {
+                Node *inner = sym3("%lam", nsym(v), subst_multi(mot->it[2], ixn, fresh, k));
+                for (int q = k - 1; q >= 0; q--) inner = sym3("%lam", fresh[q], inner);
+                motx = inner;
+                for (int q = 0; q < k; q++) motx = lst(2, motx, nsym(ixn[q]));
+            }
+        }
+    }
     /* the frame of this split: x_gp in terms of v */
     Node *E = expand(tsig.pn[gp]);
     Node **alts = calloc((size_t)N + 1, sizeof(Node *)); int na = 0;
@@ -3933,8 +3991,9 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     /* a motive not depending on v: a case */
     bool dep_mot = mentions_name(mot->it[2], v) || cov || dv;
     for (int q = gp + 1; q < tsig.np; q++) if (tsig.rev[q]) dep_mot = true;   /* applied to the reverted: inferred, so with its motive */
+    if (motx != mot) dep_mot = true;
     Node *el_ = nlist(na + (dep_mot ? 3 : 2)); int k0 = 0;
-    el_->it[k0++] = nsym(dep_mot ? "elim" : "case"); if (dep_mot) el_->it[k0++] = mot; el_->it[k0++] = nsym(v);
+    el_->it[k0++] = nsym(dep_mot ? "elim" : "case"); if (dep_mot) el_->it[k0++] = motx; el_->it[k0++] = nsym(v);
     for (int i = 0; i < na; i++) el_->it[k0++] = alts[i];
     if (cov) el_ = sym2("fst", el_);
     if (dv) el_ = lst(2, el_, dv->e);
@@ -3991,11 +4050,37 @@ static void free_in_sig(Node *t, Names *bound, Names *out, Names *lvl, bool unde
     }
     for (int i = 0; i < t->n; i++) free_in_sig(t->it[i], bound, out, lvl, false);
 }
+static GVar *gvar_of(const char *s) { for (int i = ngvar - 1; i >= 0; i--) if (!strcmp(GVAR[i].name, s)) return &GVAR[i]; return NULL; }
 static Node *autobind(Node *sig) {
     Names b = { 0 }, out = { 0 }, lvl = { 0 }, clk = { 0 };
     clk_names = &clk;
     free_in_sig(sig, &b, &out, &lvl, false);
     clk_names = NULL;
+    if (ngvar) {
+        /* the generalized variables among the free names, with those their types mention, in
+         * declaration order (a type mentions only earlier ones), each {x : T} before the rest */
+        bool need[256] = { 0 }; bool any = false;
+        for (int i = 0; i < out.n; i++) { GVar *g = gvar_of(out.v[i]); if (g) { need[g - GVAR] = true; any = true; } }
+        if (any) {
+            for (int q = ngvar - 1; q >= 0; q--) if (need[q]) {
+                Names tb = { 0 }, tout = { 0 }, tl = { 0 };
+                free_in_sig(GVAR[q].type, &tb, &tout, &tl, false);
+                for (int i = 0; i < tout.n; i++) { GVar *g = gvar_of(tout.v[i]); if (g && g - GVAR < q) need[g - GVAR] = true; }
+                free(tb.v); free(tout.v); free(tl.v);
+            }
+            for (int q = ngvar - 1; q >= 0; q--) if (need[q] && q < 256) sig = sym2("%impPi", sym4("Pi", nsym(GVAR[q].name), GVAR[q].type, sig));
+            /* the rest of the free names: those not generalized */
+            Names out2 = { 0 };
+            for (int i = 0; i < out.n; i++) if (!gvar_of(out.v[i])) names_add(&out2, out.v[i]);
+            free(out.v); out = out2;
+            /* and what the variables' types leave free (a type parameter of a variable's type) */
+            Names b2 = { 0 };
+            for (int q = 0; q < ngvar; q++) if (need[q]) free_in_sig(GVAR[q].type, &b2, &out, &lvl, false);
+            Names out3 = { 0 };
+            for (int i = 0; i < out.n; i++) if (!gvar_of(out.v[i])) names_add(&out3, out.v[i]);
+            free(out.v); out = out3; free(b2.v);
+        }
+    }
     for (int i = out.n - 1; i >= 0; i--) if (!names_has(&lvl, out.v[i]) && !names_has(&clk, out.v[i])) sig = sym2("%impPi", sym4("Pi", nsym(out.v[i]), nsym("U"), sig));
     /* clocks before the types (a type may be indexed by a clock) */
     for (int i = out.n - 1; i >= 0; i--) if (names_has(&clk, out.v[i]) && !names_has(&lvl, out.v[i])) sig = sym2("%impPi", sym4("Pi", nsym(out.v[i]), nsym("Clock"), sig));

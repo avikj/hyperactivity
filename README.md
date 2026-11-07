@@ -100,7 +100,12 @@ solved by the checker, which is itself a term (`lib/check.cub`): it checks the e
 with its holes and its guesses (a λ or an application of unknown kind, function or path) and
 answers with solutions or a request to redo; an undetermined level is `lzero`. A case written
 where a type is expected takes that type as its motive, so its stuck values read back with their
-type. `{_}` asks for a hole where an argument must be given positionally.
+type. `{_}` asks for a hole where an argument must be given positionally. An implicit is found
+through a hypothesis whose type only reduces to the needed form (`h : P n` inside a `%welimP`
+step, `h : motw b n` for a defined `motw`, a λ applied in a signature). `comp _ u a` takes the
+constant line at the type expected (or at `a`'s type). `variable n : Nat` declares a generalized
+variable: a signature mentioning `n` free gets `{n : Nat}` (and the variables its type mentions)
+as leading implicit parameters, in declaration order.
 
 **Multiplicities.** A Π binder or a constructor field may carry a multiplicity: `(x :0 A) → B`
 (erased: `x` is used only in positions the back end erases, which is every type), `(x :1 A) → B`
@@ -194,7 +199,11 @@ are the type's last parameters, each constructor carries an equality field per i
 multiplicity 0 (`PathP (λ m → Nat) %ix0 (suc n)`, erased), an application without the equality
 fields gets `refl`, a pattern without them is padded, and a branch that writes them (`vcons n x
 xs e`) transports along `e` or refutes it (`vtail`'s `vnil` case by `snotz`). The recursion rule
-wants the index implicit (`{n : Nat} → Vec A n → …`). `tests/elab.cub`.
+wants the index implicit (`{n : Nat} → Vec A n → …`). A recursion whose index argument is a
+variable has its induction hypothesis at the field's own index (`vmap f xs : Vec B m` for `xs :
+Vec A m`): the motive is written `(λ ix v → Vec B ix) n` and the checker reads it so (the index
+unified at the split, as Agda does), and the constructor is rebuilt with the equality field,
+`vcons m (f x) (vmap f xs) e`. `tests/elab.cub`.
 
 **Running processes and calling native code.** `lib/world.cub` is the drivers' signature `W`
 (`time-now`, `write fd n b`, `read fd n`, `sleep ns`, `exit c` as processes of `lib/proc.cub`)

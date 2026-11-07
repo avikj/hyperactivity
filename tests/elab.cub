@@ -95,3 +95,37 @@ step-e b n h = catw (plusw-suc-l n b) (congw (λ z → %wsucc z) h)
 step-l : (b n : Word) → (λ (v : Word) → plusw v b ≡ plusw b v) n → plusw (%wsucc n) b ≡ plusw b (%wsucc n)
 step-l b n h = catw (plusw-suc-l n b) (congw (λ z → %wsucc z) h)
 #same plusw-comm-e #3 #4 = plusw-comm-e #3 #4
+-- E28: a composition's line left to find is the constant line at the type expected (or at the
+-- base's type); a composition at Word with an empty tube is its base
+catw-h : {x y z : Word} → x ≡ y → y ≡ z → x ≡ z
+catw-h p q = λ i → comp _ (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
+#same catw-h {#1} {#1} {#1} (λ i → #1) (λ i → #1) @ 0 = #1
+snd-comp : Word
+snd-comp = snd (comp _ (λ i → []) (the (Word × Word) (#3 , #4)))
+#same snd-comp = #4
+-- E28: generalized variables — a signature mentioning a declared variable free gets it (and the
+-- variables its type mentions) as leading implicit parameters, in declaration order
+variable gn : Nat
+variable GA : Type
+variable gxs : List GA
+gplus-n0 : plus gn zero ≡ gn
+gplus-n0 = plus-zero gn
+gcons2 : List GA → List GA
+gcons2 zs = case zs of nil → nil; cons y r → cons y (cons y (rec r))
+gcons2-xs : gcons2 gxs ≡ gcons2 gxs
+gcons2-xs = λ i → gcons2 gxs
+#same gplus-n0 {suc zero} = plus-zero (suc zero)
+#same gcons2-xs {Nat} {cons zero nil} @ 1 = cons zero (cons zero nil)
+-- E28: the index unified at the split — a recursion returning an indexed type: the hypothesis is
+-- at the field's own index (vmap f xs : Vec B m), so the constructor is rebuilt with the equality
+-- field; the motive is (λ ix v → Vec B ix) n, as hyp-motive in check.cub reads it
+vmap : {A B : Type} {n : Nat} → (A → B) → Vec A n → Vec B n
+vmap f (vnil e) = vnil e
+vmap f (vcons m x xs e) = vcons m (f x) (vmap f xs) e
+#same vlen (vmap (λ x → suc x) v2) = 2
+#same vhead 1 (vmap (λ x → suc x) v2) = 8
+-- the hypothesis at the outer index would have let this through: a vector of length m as one of n
+#fail
+vbad : {A B : Type} {n : Nat} → (A → B) → Vec A n → Vec B n
+vbad f (vnil e) = vnil e
+vbad f (vcons m x xs e) = vbad f xs

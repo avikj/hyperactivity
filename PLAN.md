@@ -1126,12 +1126,10 @@ sharing a composition across the dimensions the tube maps apply it at; (2) B18 D
 result is rebuilt by the entry's `box<d>`; `cubical_call_data(name, args, types)` from C;
 libraries cached by the program's hash, item 17); `V_NATIVE` (opaque results kept native)
 is not built; (3) A4's
-bitmask formulas (18.19, designed); (4) E28's unification-based implicits, holes in
-composition lines, generalized variables, and dependent matching on indexed families (today a
-branch sees the equality field; a recursion returning an indexed type, `vmap : Vec A n → Vec B
-n`, needs the transport written, since the hypothesis is at the outer index — Agda's
-unification of the index at the split is the missing piece, not a motive over the index, which
-would ask the branch for every index); (5) item 30's retraction and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
+bitmask formulas (18.19, designed); (4) E28: DONE 2026-11-06 for unification-based implicits through reducing hypothesis types,
+holes in composition lines, generalized variables, and the hypothesis at the field's own index
+for recursion on a fording family (`vmap`; 18.12); left: rewriting a branch's goal by the index
+equation (the branch sees `e : n ≡ suc m`); (5) item 30's retraction and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
 `Z2` reading with its laws, `lib/intproof.cub`, `lib/intlin.cub`); (7) DONE: the memory interface in `W` (`w-load`/`w-store`/`w-cas`/`w-fence`, acquire /
 release / acquire-release / sequentially consistent, on addresses from `ptr-of`;
 `tests/world.cub`); (8) item 10's same-machine Agda comparison; (9) DONE (`7a2c96c4`, `62c669fc`, `13ae6b9f`, `54be3050`): Line B's leftovers — `lib/emitx86.cub` (18.7's
@@ -1290,10 +1288,12 @@ identity; linear values are introduced only in `primitive` definitions.
     Open: worlds as named handler implementations (`lib/proc.cub` has handlers as values).
 
 ### E. The language people and models write in
-28. In progress (`1c5282a`): instance arguments `{{e : C A}}` by instance search, records
-    by field name and update, parameterized modules with `open`. Open: holes in composition
-    lines, generalized variables, indexed families by fording, the interval-literal fix, the
-    findings listed under 18.12.
+28. In progress (`1c5282a`, 2026-11-06): instance arguments `{{e : C A}}` by instance search,
+    records by field name and update, parameterized modules with `open`, indexed families by
+    fording, the interval-literal fix, holes in composition lines, generalized variables,
+    implicits through reducing hypothesis types, the hypothesis at the field's own index for
+    recursion on a family (18.12). Open: the branch goal rewritten by the index equation; the
+    rest of 18.12's findings (ii)–(vi).
 29. **Status (2026-11-06):** built, `fd188bf6` (`tools/agda2cub.py`, `tests/agda/` checked by `make test`). Spec as written: Translator from agda/cubical (Agda's `transp`/`hcomp` to CCHM `comp` by the standard
     interdefinability; Mathlib is not a source: its quotients, funext and propext are axioms).
     Essential for value.
@@ -2605,7 +2605,18 @@ which of these it actually needed; the list is what Agda-level convenience means
   recursion is), a solution's own holes are filled by their solutions once found, and a λ at
   the head of an application is reduced in the surface syntax (the checker does not infer a
   λ's type). `tests/elab.cub` (`plusw-comm-e`, `step-e`, `step-l`); the explicit endpoints in
-  `linproof.cub`/`eqproof.cub`/`intproof.cub` stay as written. (ii) a λ-path in an argument position has its endpoints evaluated,
+  `linproof.cub`/`eqproof.cub`/`intproof.cub` stay as written. Also 2026-11-06: holes in
+  composition lines (`comp _ u a`: the constant line at the type expected, or at the base's type;
+  `check`'s `tcomp` case and `comp-hole-line`; a composition at `Word` with an empty tube is its
+  base, `O_COMPW`), generalized variables (`variable n : Nat`; `autobind` binds the variables a
+  signature mentions free, with those their types mention, in declaration order), and the index
+  unified at the split for recursion on a fording family (the clause compiler writes the motive
+  of a split on `v : D … n` with variable indices as `(λ ix… v → R[n := ix]) n…`; `hyp-motive` in
+  `check.cub` reads that shape and types a recursive field's hypothesis at the field's own index,
+  `vmap f xs : Vec B m`; before, the hypothesis was at the outer index, which let `vbad f (vcons
+  m x xs e) = vbad f xs` through at `Vec B n` — a soundness hole, now closed, `tests/elab.cub`).
+  Not done: substituting the index in the branch's expected type (Agda's unification makes `e`
+  refl and rewrites the goal); the branch sees `e : n ≡ suc m` and rebuilds with it. (ii) a λ-path in an argument position has its endpoints evaluated,
   so congruences are stated as lemmas; (iii) a forward reference, or a reference from a
   checked definition to an untyped one, is reported on stderr (`not a bound variable or
   checked definition`) while stdout continues, so a test line that only reads stdout sees a
