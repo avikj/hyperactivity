@@ -166,3 +166,13 @@ vsum-u (vcons m x xs) = plus x (vsum-u xs)
 vbad-u : {A B : Type} {n : Nat} → (A → B) → Vec A n → Vec B n
 vbad-u f vnil = vnil
 vbad-u f (vcons m x xs) = vbad-u f xs
+-- soundness: a recursion whose motive is not over the indices (an index that is not a variable,
+-- or a motive written by hand) gets no hypothesis at the outer index for a field at another one:
+-- the hypothesis is of an abstract type, so neither of these checks
+#fail
+sbad : {A : Type} {n : Nat} → Vec A (suc n) → Vec A (suc n)
+sbad (vnil e) = vnil e
+sbad (vcons m x xs e) = sbad xs
+#fail
+sbad2 : {A : Type} {n : Nat} → Vec A n → Vec A n
+sbad2 xs = case xs return (λ v → Vec A n) of vnil e → vnil e; vcons m x ys e → rec ys

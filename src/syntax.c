@@ -1393,7 +1393,10 @@ static void p_decl(void) {
         if (!n) x_err("variable names something, found", P0());
         want(":");
         Node *T = p_expr(0);
-        for (int i = 0; i < n; i++) { GROW(GVAR, capgvar, (size_t)ngvar + 1); GVAR[ngvar++] = (GVar){ ns[i]->s, T }; }
+        for (int i = 0; i < n; i++) {
+            if (ngvar >= 256) x_err("too many generalized variables (256)", P0());
+            GROW(GVAR, capgvar, (size_t)ngvar + 1); GVAR[ngvar++] = (GVar){ ns[i]->s, T };
+        }
         decl_end(); return;
     }
     if (x_is(t, "postulate")) {
@@ -3254,12 +3257,14 @@ static Node *the_clock(void) {
     }
     return k;
 }
+/* λ-head reductions made this definition, by application node: the rounds see the same nodes; reset
+ * with the hole tables at each definition (a node's address is reused once its arena is released) */
+static Node **BK, **BV; static int nbk, capbk;
 static Node *el_app(Node *t, Node *h, Node **args, int n) {
     /* a λ written at the head of an application (a motive applied in a signature): reduced here, where
      * the checker would not infer the λ's type (E28) */
     if (h->list && h->n == 3 && !h->it[0]->list && is(h->it[0], "lam") && !h->it[1]->list && n >= 1) {
         /* made once per application: the rounds see the same nodes (holes are keyed by them) */
-        static Node **BK, **BV; static int nbk, capbk;
         for (int i = 0; i < nbk; i++) if (BK[i] == t) return el(BV[i]);
         const char *x = h->it[1]->s; Node *b = subst_multi(h->it[2], &x, &args[0], 1);
         if (n > 1) { Node *r = nlist(n); r->it[0] = b; for (int i = 1; i < n; i++) r->it[i] = args[i]; b = r; }
@@ -4111,7 +4116,7 @@ static Node *autobind(Node *sig) {
                 for (int i = 0; i < tout.n; i++) { GVar *g = gvar_of(tout.v[i]); if (g && g - GVAR < q) need[g - GVAR] = true; }
                 free(tb.v); free(tout.v); free(tl.v);
             }
-            for (int q = ngvar - 1; q >= 0; q--) if (need[q] && q < 256) sig = sym2("%impPi", sym4("Pi", nsym(GVAR[q].name), GVAR[q].type, sig));
+            for (int q = ngvar - 1; q >= 0; q--) if (need[q]) sig = sym2("%impPi", sym4("Pi", nsym(GVAR[q].name), GVAR[q].type, sig));
             /* the rest of the free names: those not generalized */
             Names out2 = { 0 };
             for (int i = 0; i < out.n; i++) if (!gvar_of(out.v[i])) names_add(&out2, out.v[i]);
@@ -4396,7 +4401,7 @@ static Node *copattern_wrap(Node *b) {
 /* a checked definition (or, name NULL, a check): elaborated, checked, its holes and guesses
  * settled by the checker, until the checker's answer is final */
 static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint64_t mask, int mlen) {
-    neh = neg = 0;
+    neh = neg = 0; nbk = 0;
     /* its own calls (a copattern definition's) take implicit arguments as later uses do */
     if (name && mask) imask_set(name, mask, mlen);
     if (name && mask) imask_inst(name, sig);
@@ -4513,12 +4518,12 @@ static void x_record(const char *R, Node **ps, int np, Node **fn, Node **ft, int
         x_checked(fn[k]->s, pty, pb, expect, mask, np + 1);
     }
 }
-static void el_once(Node *sig, Node *body, Node **T, Node **t) { neh = neg = 0; nesc = 0; *T = core(el(sig)); nesc = 0; *t = core(el(body)); }
+static void el_once(Node *sig, Node *body, Node **T, Node **t) { neh = neg = 0; nbk = 0; nesc = 0; *T = core(el(sig)); nesc = 0; *t = core(el(body)); }
 /* foreign name "symbol" : T (D27): see p_decl */
 static void x_foreign(const char *nm, Tok *st, Node *sig, Tok *nt) {
     Node *sg = autobind(resolve_keep(sig)); tele(sg);
     if (tsig.np && tsig.imp[0]) x_err("a foreign function's type has no implicit arguments:", nt);
-    neh = neg = 0; nesc = 0;
+    neh = neg = 0; nbk = 0; nesc = 0;
     Node *T = strip_marks(core(el(sg)));
     unsigned char kind[8]; int n = 0; Node *xs[8]; int nx = 0;
     Node *x = T;
@@ -4559,7 +4564,7 @@ static void x_primitive(const char *nm, bool tick, Node *sig, Node *b, Tok *nt) 
     uint64_t mask = 0; for (int q = 0; q < tsig.np && q < 64; q++) if (tsig.imp[q]) mask |= 1ull << q;
     if (mask) imask_set(nm, mask, tsig.np);
     sig_set(nm, sg);
-    neh = neg = 0; nesc = 0;
+    neh = neg = 0; nbk = 0; nesc = 0;
     Node *T = core(el(sg));
     if (has_hole(T)) x_err("a primitive's type gives every argument (no implicit argument left to find), in", nt);
     T = strip_marks(T);
@@ -4584,7 +4589,7 @@ static bool has_unchecked(Node *t) {
 }
 static Node *x_solve_expr(Node *e) {
     if (!x_typed) return core(e);
-    neh = neg = 0;
+    neh = neg = 0; nbk = 0;
     Node *t = NULL;
     for (int round = 0; round < 400; round++) {
         nesc = 0; t = core(el(e));

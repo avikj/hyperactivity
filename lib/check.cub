@@ -1120,8 +1120,16 @@ hyp-motive d ps P Pv =
       nu = %wsub (llen-w ps) k
   in if %weq k #0 then (λ T f → Pv f)
      else (case ix-motive P k lnil of
-             some P2 → (λ T f → (case %view T of wdata d2 ps2 → app-all (tval P2) (lsnoc (ldrop-n nu ps2) f); _ → Pv f))
-             none → (λ T f → Pv f))
+             some P2 → (λ T f → (case %view T of wdata d2 ps2 → app-all (tval P2) (lsnoc (ldrop-n nu ps2) f); _ → hyp-opaque))
+             -- a motive not over the indices: the hypothesis is the motive at f only where f's
+             -- indices are the scrutinee's; elsewhere it is a value of an abstract type, usable as
+             -- nothing (typing it at the outer index let a vector of length m stand for one of n)
+             none → (λ T f → (case %view T of
+                                wdata d2 ps2 → if lall (λ q → uconv (fst q) (snd q)) (lzip (ldrop-n nu ps2) (ldrop-n nu ps)) then Pv f else hyp-opaque
+                                _ → hyp-opaque)))
+-- the type of a hypothesis that cannot be stated: a fresh type variable
+hyp-opaque = %var Uw
+lzip xs ys = case xs of lnil → lnil; lcons x xr → (case ys of lnil → lnil; lcons y yr → lcons (x , y) (lzip xr yr))
 -- the motive's level: a motive over the indices, (λ ix… v → R) n…, is checked as the λ, the
 -- indices bound at the index parameters' types and v at the type at them
 motive-level-d d ps P =
