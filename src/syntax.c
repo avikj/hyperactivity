@@ -2771,9 +2771,21 @@ static Node *subst_multi(Node *t, const char **ps, Node **vs, int n) {
     if (!t->list) { for (int i = 0; i < n; i++) if (vs[i] && !strcmp(ps[i], t->s)) return vs[i]; return t; }
     if (t->n == 0) return t;
     if (!t->it[0]->list && t->n >= 3 && (is(t->it[0], "lam") || is(t->it[0], "plam") || is(t->it[0], "forall") || is(t->it[0], "%lam") || is(t->it[0], "Pi") || is(t->it[0], "Sigma") || is(t->it[0], "let"))) {
-        /* a binder shadows */
+        /* a binder shadows; one that would capture a substituted value's free name is renamed */
         const char *x = t->it[1]->s; const char *ps2[256]; Node *vs2[256]; int m = 0;
         for (int i = 0; i < n && m < 256; i++) if (strcmp(ps[i], x)) { ps2[m] = ps[i]; vs2[m++] = vs[i]; }
+        bool capt = false;
+        for (int i = 0; i < m && !capt; i++) if (vs2[i] && mentions_name(vs2[i], x)) {
+            bool used = false;
+            for (int k = 2; k < t->n && !used; k++) if (mentions_name(t->it[k], ps2[i])) used = true;
+            if (used) capt = true;
+        }
+        if (capt) {
+            Node *y = xfresh(x); Node *t2 = nlist(t->n); t2->it[0] = t->it[0]; t2->it[1] = y;
+            bool pi0 = is(t->it[0], "Pi") || is(t->it[0], "Sigma") || is(t->it[0], "let");
+            for (int k = 2; k < t->n; k++) t2->it[k] = (pi0 && k == 2) ? t->it[k] : x_rename(t->it[k], x, y->s);
+            return subst_multi(t2, ps, vs, n);
+        }
         Node *r = nlist(t->n); r->it[0] = t->it[0]; r->it[1] = t->it[1];
         bool pi = is(t->it[0], "Pi") || is(t->it[0], "Sigma") || is(t->it[0], "let");
         for (int i = 2; i < t->n; i++) r->it[i] = (pi && i == 2) ? subst_multi(t->it[i], ps, vs, n) : subst_multi(t->it[i], ps2, vs2, m);
@@ -2789,6 +2801,14 @@ static Node *subst_multi(Node *t, const char **ps, Node **vs, int n) {
             Node *a = t->it[i];
             if (!a->list || a->n != 2) { r->it[i] = a; continue; }
             Node *pat = a->it[0];
+            if (pat->list) for (int q = 1; q < pat->n; q++) if (!pat->it[q]->list && !pat_wild(pat->it[q])) {
+                const char *x = pat->it[q]->s; bool capt = false;
+                for (int z = 0; z < n && !capt; z++) if (vs[z] && strcmp(ps[z], x) && mentions_name(vs[z], x) && mentions_name(a->it[1], ps[z])) capt = true;
+                if (capt) {
+                    Node *y = xfresh(x); Node *p2 = nlist(pat->n); for (int w = 0; w < pat->n; w++) p2->it[w] = pat->it[w];
+                    p2->it[q] = y; a = lst(2, p2, x_rename(a->it[1], x, y->s)); pat = p2;
+                }
+            }
             const char *ps2[256]; Node *vs2[256]; int m = 0;
             for (int z = 0; z < n && m < 256; z++) {
                 bool bound = false;

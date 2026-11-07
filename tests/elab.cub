@@ -201,3 +201,11 @@ vlookup (vcons m x xs) (fsuc k i) = vlookup xs i
 vzip-bad : {A B : Type} {n : Nat} → Vec A n → Vec B n → Vec (A × B) n
 vzip-bad vnil vnil = vnil
 vzip-bad (vcons m x xs) (vcons m2 y ys) = vcons m2 (x , y) (vzip-bad xs xs)
+-- the substitution below a rewritten split does not capture: n := suc m under the right side's own
+-- λ named m (subst_multi renames a binder that would capture a substituted value's name)
+vcons-of : {A : Type} {k : Nat} → Vec A k → A → Vec A (suc k)
+vcons-of ys y = vcons k y ys
+vcap : {A : Type} {n : Nat} → Vec A n → Nat → Vec A n
+vcap vnil = λ k → vnil
+vcap (vcons m x xs) = λ m → the (Vec A n) (vcons-of xs x)
+#same vlen (vcap v2 #3) = 2
