@@ -11,6 +11,8 @@
 /* unistd.h's link(2) clashes with the net's link(): the two system calls are declared here */
 extern long read(int, void *, unsigned long);
 extern long write(int, const void *, unsigned long);
+extern int open(const char *, int, ...);
+extern int close(int);
 static int drv_con(const char *name) { int c = con_lookup(name); if (c < 0) die("run: lib/world.cub is not loaded (missing constructor)", name); return c; }
 /* a word field read: the value must be a literal word */
 static uint64_t drv_word(Port p, const char *what) {
@@ -42,6 +44,7 @@ static Port drv_bytes_of(Bytes *b) { Cell *c = cell(V_BYTES, 1); c->x = PT_BYTES
 static void drivers_run(Node *t) {
     int c_sdone = drv_con("sdone"), c_scmd = drv_con("scmd"), c_unit = drv_con("unit");
     int c_now = drv_con("w-now"), c_write = drv_con("w-write"), c_read = drv_con("w-read"), c_sleep = drv_con("w-sleep"), c_exit = drv_con("w-exit");
+    int c_open = drv_con("w-open"), c_close = drv_con("w-close");
     Port p = build_top(t);
     long steps = 0, s0 = stat_steps;
     for (;;) {
@@ -87,6 +90,18 @@ static void drivers_run(Node *t) {
             uint64_t code = drv_word(cm->port[1], "w-exit's code");
             fflush(stdout);
             exit((int)code);
+        } else if (c == c_open) {
+            uint64_t n = drv_nat(cm->port[1], "w-open's length");
+            Bytes *b = drv_bytes(cm->port[2], "w-open's path");
+            uint64_t fl = drv_word(cm->port[3], "w-open's flags"), md = drv_word(cm->port[4], "w-open's mode");
+            size_t len = b ? b->n : 0; if (n < len) len = (size_t)n;
+            char *path = malloc(len + 1); memcpy(path, b ? (const char *)b->b : "", len); path[len] = 0;
+            int fd = open(path, (int)fl, (int)md);
+            free(path);
+            resp = drv_word_of((uint64_t)(int64_t)fd);
+        } else if (c == c_close) {
+            uint64_t fd = drv_word(cm->port[1], "w-close's descriptor");
+            resp = drv_word_of((uint64_t)(int64_t)close((int)fd));
         } else die("run: not a command of W:", CON[c].name);
         Cell *ap = cell(O_APP, 3);
         link(k, P(ap, 0)); link(resp, P(ap, 1));

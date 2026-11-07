@@ -8,6 +8,7 @@
 -- sleep, an exit. Memory commands (load, store, cas, fence on Regions) are lib/proc.cub's
 -- MemS, run through sc-world or atomically; a hardware memory model is not offered yet.
 data WCmd = w-now | w-write (fd : Word) (n : Nat) (b : Bytes n) | w-read (fd : Word) (n : Nat) | w-sleep (ns : Word) | w-exit (ec : Word)
+  | w-open (n : Nat) (path : Bytes n) (flags : Word) (mode : Word) | w-close (fd : Word)
 w-resp : WCmd → Type
 w-resp c = case c return (λ _ → Type) of
   w-now → Word
@@ -15,6 +16,8 @@ w-resp c = case c return (λ _ → Type) of
   w-read fd n → Word × Bytes n
   w-sleep ns → Unit
   w-exit ec → Unit
+  w-open n p f m → Word
+  w-close fd → Word
 W : Sig
 W = (WCmd , w-resp)
 -- a process as a tree of steps: done with its answer, or a command with its continuation (a
@@ -34,6 +37,12 @@ sleep : Word → Proc W Unit
 sleep ns = cmd {lzero} {W} (w-sleep ns)
 exit : Word → Proc W Unit
 exit c = cmd {lzero} {W} (w-exit c)
+-- a file opened by its path (a byte string holding the NUL-terminated name; flags and mode as open(2)
+-- takes them, O_RDONLY 0, O_WRONLY 1, O_CREAT 64, O_TRUNC 512), the descriptor or the word of -1
+open-file : (n : Nat) → Bytes n → Word → Word → Proc W Word
+open-file n p f m = cmd {lzero} {W} (w-open n p f m)
+close-file : Word → Proc W Word
+close-file fd = cmd {lzero} {W} (w-close fd)
 -- readings: the step tree of a small process, and a handler into W from the key-value signature
 #same (case to-step (ret {lzero} {W} {Word} #3) of sdone a → a; scmd c k → #0) = #3
 #same (case to-step (bind {lzero} {W} {Word} {Word} time-now (λ t → ret {lzero} {W} {Word} #7)) of sdone a → #0; scmd c k → (case k #5 of sdone a → a; scmd c2 k2 → #1)) = #7

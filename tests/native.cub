@@ -9,3 +9,9 @@ plusw-fo = lam-body (lam-body (specialize (Word → Word → Word) lnil (code pl
 #same plusw #1000000 #1000000 = #2000000
 -- not words: the net's own definition
 #same (λ (x : Word) → plusw x #0) = (λ (x : Word) → x)
+-- a byte string across the boundary: the two-load sum (lib/repr.cub's sum2, a checked definition
+-- over Bytes 32) entered native; the buffer is boxed as the emitted runtime's V on the way in
+sum2-def : Bytes 32 → Word
+sum2-def b = plusw (i64toWord (load64 32 b 16 (8 , λ i → 32))) (i64toWord (load64 32 b 0 (24 , λ i → 32)))
+#native sum2-def 1 = emit-lib-u (lcons (#0 , (#1 , lam-body sum2)) lnil)
+#same sum2-def (store64 32 (store64 32 (bytes 32) 0 (24 , λ i → 32) (i64 #5)) 16 (8 , λ i → 32) (i64 #9)) = #14

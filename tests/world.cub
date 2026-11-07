@@ -10,3 +10,13 @@ hello = bind {lzero} {W} {Word} {Word} time-now (λ t →
 #run to-step hello
 -- a process over another signature runs through a handler into W: the key-value world's commands
 -- answered by a store, the answer written as one byte
+-- a file written through the loop: opened (O_WRONLY|O_CREAT|O_TRUNC = 577, mode 420), hello
+-- written, closed; the run ends with the close's 0
+le8-16w : le 8 16
+le8-16w = (8 , λ i → 16)
+path-bytes : Bytes 16
+path-bytes = store64 16 (store64 16 (bytes 16) 0 le8-16w (i64 #7094685843392918575)) 8 (le-refl 16) (i64 #500237086327)
+to-file : Proc W Word
+to-file = bind {lzero} {W} {Word} {Word} (open-file 16 path-bytes #577 #420) (λ fd →
+          bind {lzero} {W} {Word} {Word} (write fd 8 hello-bytes) (λ n → close-file fd))
+#run to-step to-file

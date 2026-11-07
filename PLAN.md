@@ -1235,17 +1235,17 @@ identity; linear values are introduced only in `primitive` definitions.
     form, its evaluator, closure conversion, structural recursion, the byte layer),
     `lib/lower.cub` (from codes, with the data table's shapes), `lib/repr.cub` (the
     representations consumed); the types `FT` and B12's layouts not yet used for unboxing.
-15. Specializer as a term, applying marked theorems under a terminating discipline.
+15. **Status (2026-11-06):** built — `lib/specialize.cub` normalizes, rewrites along the store's theorems under the terminating discipline (`bd21c486`: oriented rules to the fixpoint, unoriented under the bound), erases by `%gusage`, runs `first-order` and honours `Sched` (`36b9e30b`). Open: 18.5 step 7's justifying path. Spec as written: Specializer as a term, applying marked theorems under a terminating discipline.
     Essential. In progress: `lib/specialize.cub` (normalize, rewrite along rules to a bound,
     lower) with `lib/rules.cub` reading the marked theorems from the store; the ordered
     discipline, usage (B11) and the criterion (B13) not yet applied.
-16. C back end (gcc/clang, CompCert); JIT. Essential. Milestone 1 as a library:
+16. **Status (2026-11-06):** milestones 1 and 2 built (`lib/emitc.cub`, `lib/emitu.cub` with recursive data as typed pointers `a8d9028c`, 22 harness programs under both printers); the JIT is `#native` through gcc (`e9b9c983`). Spec as written: C back end (gcc/clang, CompCert); JIT. Essential. Milestone 1 as a library:
     `lib/emitc.cub` prints the first-order form as C (boxed values, closures through a
     dispatcher, `ASSUME` for assumed facts), `experiments/fo/run.py` compiles and runs seven
     cases with gcc. WebAssembly, MLIR, circuits: optional.
-17. Progressive specialization on run-time values, cached by key. Essential.
-18. Call boundary; C ABI both directions. Essential.
-19. The C++ image (10.1): a compositional translator over codes, one clause per source form
+17. **Status (2026-11-06):** the mechanism is `#native f n = prog` (on demand, per definition, not cached by key) and `specialize-v` (`36b9e30b`); caching by key is open. Spec as written: Progressive specialization on run-time values, cached by key. Essential.
+18. **Status (2026-11-06):** both directions for words (`e9b9c983`, `680485ea`, `e5bbd429`, 18.8's status); represented values by layout are open. Spec as written: Call boundary; C ABI both directions. Essential.
+19. **Status (2026-11-06):** built, `ee5c04a2` (`lib/image.cub`, `lib/reimport.cub`; `IMAGE=1 run.py`: 4 headers through g++ -std=c++20, re-imported equal to the source up to erasure); parameterized data types not exported yet. Spec as written: The C++ image (10.1): a compositional translator over codes, one clause per source form
     (~30 forms), parameterized by the binding-time assignment; the fully specialized residue
     printer is its first milestone; the fragment's re-import for translation validation and
     for importing consumer code in the fragment. ~3,500 lines. Essential for adoption; the
@@ -1255,7 +1255,7 @@ identity; linear values are introduced only in `primitive` definitions.
 20. DONE in parts: the byte layer (B12), validity facts as certificates (`lib/decode.cub`),
     `ptr-of`/`region-at` trusted and `#safe f` listing what a definition assumes
     (`1c5282a`). Open: the Region threading idiom as a library.
-21. In-place update: whole values, through parts, copy-on-write, sending (6.4). Essential.
+21. **Status (2026-11-06):** built, `e27eda2c`, `02a4a615` (`fupd`, constructor reuse where the base is the node at hand, uniqueness by use, copy-on-write, in both printers). Spec as written: In-place update: whole values, through parts, copy-on-write, sending (6.4). Essential.
 22. Started (`be7149d`): `Array n = Bytes (times n 8)` with `index`/`update` at a proof,
     `tabulate`, and `index-update` proved from the byte layer's laws (trusted primitives
     `load64-store64`), possible since stuck primitive operations became neutrals. Open: `Fin n
@@ -1263,13 +1263,13 @@ identity; linear values are introduced only in `primitive` definitions.
 23. State programs as `A ≃ Σ (b : B), fiber f b` then projection. Valuable.
 
 ### D. The outside world
-24. The process library: interfaces, guarded trees, handlers, signature inclusion, push
+24. **Status (2026-11-06):** built as `lib/proc.cub` (Church form, handlers, worlds, replay), its guarded form `GProc` (`5b9de865`), `lib/session.cub`, `lib/choreo.cub` (`6d098a67`); projection as specialization against the role is open. Spec as written: The process library: interfaces, guarded trees, handlers, signature inclusion, push
     events, session types, choreographic projection (7.1, 7.3). Consequence plus library.
     Essential.
-25. Outcomes as values (consequence); supervisors and restart by key (library). Essential.
+25. **Status (2026-11-06):** built, `7a865cac` (`Outcome`, supervisors by key). Spec as written: Outcomes as values (consequence); supervisors and restart by key (library). Essential.
 26. DONE for the loop and the library STM (2026-11-06, `lib/world.cub`, `src/drivers.c`,
     `bf3ea4eb`); a hardware memory model (`load`/`store`/`cas`/`fence` on Regions) is open.
-27. Started (`1c5282a`): `foreign name "symbol" : T` as a trusted primitive over primitive
+27. **Status (2026-11-06):** `foreign` built; `world "name" = handler` is `lib/proc.cub`'s named worlds and registry (`96971cee`, library half; no surface syntax). Spec as written: Started (`1c5282a`): `foreign name "symbol" : T` as a trusted primitive over primitive
     types (a C function of the program or a shared library), listed by `#trusted`/`#safe`.
     Open: worlds as named handler implementations (`lib/proc.cub` has handlers as values).
 
@@ -1278,7 +1278,7 @@ identity; linear values are introduced only in `primitive` definitions.
     by field name and update, parameterized modules with `open`. Open: holes in composition
     lines, generalized variables, indexed families by fording, the interval-literal fix, the
     findings listed under 18.12.
-29. Translator from agda/cubical (Agda's `transp`/`hcomp` to CCHM `comp` by the standard
+29. **Status (2026-11-06):** built, `fd188bf6` (`tools/agda2cub.py`, `tests/agda/` checked by `make test`). Spec as written: Translator from agda/cubical (Agda's `transp`/`hcomp` to CCHM `comp` by the standard
     interdefinability; Mathlib is not a source: its quotients, funext and propext are axioms).
     Essential for value.
 30. In parts (2026-11-06): incremental checking is the store (a definition accepted by the
@@ -1301,9 +1301,9 @@ identity; linear values are introduced only in `primitive` definitions.
     every value kind the net has (stuck calls as `wcofix`/`wproj`, primitives as `wprim`,
     words with the big case under `wwlit`); `wnative` waits on a `V_NATIVE` value (B18's
     opaque results, not built). Open: `D-correct` stated over the fragment's codes.
-32. Certificate checkers as verified terms over codes; search unverified (in-language or SMT);
+32. **Status (2026-11-06):** the two verified checkers (`lib/linproof.cub`, `lib/eqproof.cub`), the ring checker, the directed Farkas search (`89ec3e0e`) and the bridges from codes (`d1e5f790`) are built; over `Int`, and the elaborator calling `check-cert` on holes, are open. Spec as written: Certificate checkers as verified terms over codes; search unverified (in-language or SMT);
     unchecked solvers marked. Essential.
-33. Navigation over established identities. Precisely: the store holds identities; a view is
+33. **Status (2026-11-06):** built as `lib/nav.cub` with `lib/cost.cub`'s models (size, recorded steps through `%gsteps`, `13f09662`). Spec as written: Navigation over established identities. Precisely: the store holds identities; a view is
     a subset a reasoner currently holds; from a view the available transports are computable
     (for each identity and term in view, whether it applies and what the term becomes);
     navigation computes that set and chooses by cost and purpose, never by validity, since
@@ -2336,7 +2336,9 @@ redefines `name` as `λ a₁…aₙ → %native k g a₁…aₙ`; the `O_NATIVE`
 arguments in turn and calls the compiled code when all are words, else applies the
 definition `g` itself (so `λ x → plusw x #0` still reads `λ x → x` on the net).
 `tests/native.cub`: `plusw` entered (23.7k steps to specialize, lower and print; 3.3 KB of C),
-`plusw #3 #4`, `plusw #1000000 #1000000` native. Native → net: `src/libcubical.h`,
+`plusw #3 #4`, `plusw #1000000 #1000000` native; a byte string crosses by the entry's prototype
+(`V *` parameters and results are the emitted runtime's boxed bytes, copied in and out; `sum2-def`
+over `Bytes 32`). Native → net: `src/libcubical.h`,
 `build/libcubical.a` (the sources with `-DCUBICAL_LIB`, `main` renamed), `cubical_init(files)`
 and `cubical_call_w(name, words, n, &out)` (the application read back by the net, a word or a
 Bool); `tests/native/main.c` calls `plusw` and `eqw`, in `make test`. Not built: marshaling
@@ -2487,7 +2489,8 @@ Revision 1. Library over existing codata, plus drivers in C.
   positive by 18.18; `to-step p = p (Step S A) sdone scmd`), and the loop `#run e`: the head
   observed, the command's fields read (words, Nat numerals, byte strings), the system call
   made, the response built as a value and the continuation applied, until `sdone` (printed
-  with the loop's own steps). `tests/world.cub` writes `hello` through it, in `make test`.
+  with the loop's own steps); `w-open n path flags mode` and `w-close fd` for files.
+  `tests/world.cub` writes `hello` to the standard output and to `/tmp/cubw.txt`, in `make test`.
   The memory interface is `lib/proc.cub`'s `MemS`/`atomically` (library STM, `bf3ea4eb`);
   `mmap`, `poll` and hardware atomics on Regions are not offered yet (no memory model
   chosen). Spec as written:

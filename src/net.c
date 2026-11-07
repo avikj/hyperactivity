@@ -2578,13 +2578,33 @@ static void interact(Cell *o, Cell *v) {
             cell_free(o);
             return;
         }
-        int n = A->n; bool words = n <= 8;
-        for (int k = 0; k < n && words; k++) { Cell *c = cell_at(A->v[k]); if (!c || c->kind != V_WORD || c->p) words = false; }
+        int n = A->n; bool words = n <= 8; Ffi *e = &FFI[o->x];
+        for (int k = 0; k < n && words; k++) {
+            Cell *c = cell_at(A->v[k]);
+            if (!c) { words = false; break; }
+            if (e->kind[k] == 6) { if (c->kind != V_BYTES) words = false; }
+            else if (c->kind != V_WORD || c->p) words = false;
+        }
         Port out;
         if (words) {
-            uint64_t a[8];
-            for (int k = 0; k < n; k++) { Cell *c = cell_at(A->v[k]); a[k] = c->a; era(A->v[k]); }
-            out = word_of(ffi_invoke(&FFI[o->x], a, n));
+            /* words by value; a byte string boxed as the emitted runtime's V { tag 2; n; bytes } (a copy:
+             * the compiled code may update it in place), a V * result unboxed into a fresh Bytes */
+            typedef struct { uint64_t tag, n; unsigned char b[]; } VB;
+            uint64_t a[8]; VB *boxed[8] = { 0 };
+            for (int k = 0; k < n; k++) {
+                Cell *c = cell_at(A->v[k]);
+                if (e->kind[k] == 6) { Bytes *b = c->p; size_t bn = b ? b->n : 0; VB *v = calloc(1, sizeof(VB) + bn); v->tag = 2; v->n = bn; if (bn) memcpy(v->b, b->b, bn); boxed[k] = v; a[k] = (uint64_t)(uintptr_t)v; }
+                else a[k] = c->a;
+                era(A->v[k]);
+            }
+            uint64_t r = ffi_invoke(e, a, n);
+            if (e->ret == 6) {
+                VB *v = (VB *)(uintptr_t)r;
+                size_t bn = v && v->tag == 2 ? (size_t)v->n : 0;
+                Bytes *b = calloc(1, sizeof(Bytes) + bn); b->rc = 1; b->n = bn; if (bn) memcpy(b->b, v->b, bn);
+                Cell *c = cell(V_BYTES, 1); c->x = PT_BYTES; c->p = b; out = P(c, 0);
+            } else out = word_of(r);
+            for (int k = 0; k < n; k++) free(boxed[k]);
         } else out = apply_gid((long)o->a, A->v, n);
         free(A);
         link(out, o->port[1]);

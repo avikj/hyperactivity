@@ -3847,8 +3847,22 @@ static void toplevel(Node *f) {
         char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -o %s %s", so, cpath);
         if (system(cmd) != 0) { printf("FAIL: native %s   (the C compiler rejected %s)\n", nm, cpath); failures++; return; }
         char sym[700]; snprintf(sym, sizeof sym, "%s:cubical_entry", so);
-        unsigned char kind[8] = { 4, 4, 4, 4, 4, 4, 4, 4 };
-        int k = ffi_add(sym, n, kind, 4);
+        /* the entry's prototype decides the marshaling: uint64_t a word (kind 4), V * a boxed byte
+         * string (kind 6: the net's Bytes boxed as the emitted runtime's V { tag 2, n, bytes }) */
+        unsigned char kind[8] = { 4, 4, 4, 4, 4, 4, 4, 4 }; unsigned char ret = 4;
+        {
+            FILE *cf2 = fopen(cpath, "r"); char *txt = NULL; size_t tl = 0;
+            if (cf2) { fseek(cf2, 0, SEEK_END); tl = (size_t)ftell(cf2); fseek(cf2, 0, SEEK_SET); txt = malloc(tl + 1); if (fread(txt, 1, tl, cf2) != tl) tl = 0; txt[tl] = 0; fclose(cf2); }
+            char *e = txt ? strstr(txt, "cubical_entry(") : NULL;
+            if (e) {
+                const char *q = e; while (q > txt && q[-1] != '\n') q--;
+                if (!strncmp(q, "V *", 3)) ret = 6;
+                char *args = e + strlen("cubical_entry("); int i = 0;
+                while (*args && *args != ')' && i < n) { while (*args == ' ' || *args == ',') args++; if (!strncmp(args, "V *", 3)) kind[i] = 6; i++; while (*args && *args != ',' && *args != ')') args++; }
+            }
+            free(txt);
+        }
+        int k = ffi_add(sym, n, kind, ret);
         /* name is now (lam a1..an (%native k g a1..an)); references compiled before keep the definition */
         char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
         fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
