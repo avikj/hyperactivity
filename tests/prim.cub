@@ -282,6 +282,25 @@ eqvF = Fin→ArrayF 3
 #same aindexF 3 (fst eqvF sqF) f1 = f64 #1
 -- what is stored is the bits: read as an Int64, 1.0 is its IEEE 754 pattern
 #same i64toWord (index 3 (updateF 3 (anew 3) 0 (2 , λ i → 3) (f64 #1)) 0 (2 , λ i → 3)) = #4607182418800017408
+-- Float32 elements by their bits on the 4-byte layer (f32bits / f32ofbits, the same development on
+-- Array32): 0.0, 1.0, 2.0 by their IEEE 754 single patterns, a quarter written at 1
+f32-1 : Float32
+f32-1 = f32ofbits (u32 #1065353216)
+#show f32-1
+#show f32ofbits (u32 #1048576000)
+#same f32bits (f32ofbits (u32 #1073741824)) = u32 #1073741824
+sqF32 : Fin 3 → Float32
+sqF32 p = f32ofbits (u32 (if eqb (fst p) 0 then #0 else if eqb (fst p) 1 then #1065353216 else #1073741824))
+#same aindexF32 3 (atabF32 3 sqF32) f2 = f32ofbits (u32 #1073741824)
+#same indexF32 3 (updateF32 3 (atabF32 3 sqF32) 1 (snd f1) (f32ofbits (u32 #1048576000))) 1 (snd f1) = f32ofbits (u32 #1048576000)
+#same indexF32 3 (updateF32 3 (atabF32 3 sqF32) 1 (snd f1) f32-1) 2 (le-refl 3) = f32ofbits (u32 #1073741824)
+byF32 : atabF32 3 (fin-setA Float32 3 sqF32 f1 f32-1) ≡ updateF32 3 (atabF32 3 sqF32) 1 (snd f1) f32-1
+byF32 = fin-set-byF32 3 sqF32 1 (snd f1) f32-1
+eqvF32 : Equiv (Fin 3 → Float32) (Array32 3)
+eqvF32 = Fin→ArrayF32 3
+#same aindexF32 3 (fst eqvF32 sqF32) f1 = f32-1
+-- stored as its 4 bytes: read as a UInt32, 1.0 is its single-precision pattern
+#same u32toWord (index32 3 (updateF32 3 (anew32 3) 0 (2 , λ i → 3) f32-1) 0 (2 , λ i → 3)) = #1065353216
 -- a type represented by Int64, by its layout: arrays of Cents through its representation's to and
 -- from and the representation's two laws
 data Cents = cents (c : Int64)

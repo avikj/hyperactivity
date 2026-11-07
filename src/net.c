@@ -2781,6 +2781,8 @@ static void interact(Cell *o, Cell *v) {
         case PO_I64OFF64: memcpy(&d, &a, 8); i = (int64_t)d; r = (uint64_t)i; k = PT_I64; break;
         case PO_F64BITS: r = a; k = PT_I64; break;      /* a Float64's bits as an Int64, and back (item 22: Float64 stored by the byte layer) */
         case PO_F64OFBITS: r = a; k = PT_F64; break;
+        case PO_F32BITS: r = (uint32_t)a; k = PT_U32; break;      /* a Float32's bits as a UInt32, and back (Float32 stored by the 4-byte layer) */
+        case PO_F32OFBITS: r = (uint32_t)a; k = PT_F32; break;
         default: fprintf(stderr, "primitive operation: not unary\n"); exit(2);
         }
         if (o->x == PO_WOFI64 || o->x == PO_WOFU32) link(word_of(r), o->port[1]);

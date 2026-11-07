@@ -1350,8 +1350,15 @@ identity; linear values are introduced only in `primitive` definitions.
     Int64`), `Fin→ArrayV Cents centsTo centsFrom …`, read. In place: `updateF` is `store64` and
     `update32` is `store32`, so `run.py`'s `farray` (st64i, 7.0·3.0 = 21) and `u32array` (st32i,
     40 + 2) store without copies, boxed and unboxed. Not built: a represented type whose
-    representation is not `Int64` (a record, or `Word`: Nat by Word is not equivalent to Int64);
-    arrays of `Float32` (no 32-bit float bits primitive).
+    representation is not `Int64` (a record, or `Word`: Nat by Word is not equivalent to Int64).
+    **Float32 (2026-11-07, fork B4):** new primitives `f32bits : Float32 → UInt32` /
+    `f32ofbits : UInt32 → Float32` (the machine retags the low 32 bits; a Float32 value is its
+    32 bits and prints as the single it is, `#f32:0.25`), their inverse laws trusted; the 8-byte
+    development copied onto the 4-byte layer for any `A ≃ UInt32` (`indexV32` … `Fin→ArrayV32`,
+    `fin-set-byV32`), so `Fin→ArrayF32`, `index-updateF32`, `fin-set-byF32` (`tests/prim.cub`).
+    In the first-order form a Float32 is the word of its bits, as a UInt32 is, so both primitives
+    lower to the identity and no printer changes; `run.py`'s `f32array` (st32i) boxed and unboxed.
+    Not built: Float32 arithmetic (no `f32add` …; a computation on singles goes through its bits).
 23. DONE (`967e48e7`, `lib/fiber.cub`; used by `6d098a67`'s state programs): a map factors
     through its fibers, `fiberEquiv f : A ≃ (b : B) × fiber f b`, the projection the first
     component. State programs as `A ≃ Σ (b : B), fiber f b` then projection. Valuable.

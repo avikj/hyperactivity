@@ -353,7 +353,7 @@ typedef struct { long rc; size_t n; unsigned char b[]; } Bytes;
 /* the primitive operations of O_POP1/O_POP2, by x */
 enum { PO_I64ADD, PO_I64SUB, PO_I64MUL, PO_I64EQ, PO_I64LT, PO_U32ADD, PO_U32SUB, PO_U32MUL, PO_U32EQ, PO_U32LT,
        PO_F64ADD, PO_F64SUB, PO_F64MUL, PO_F64DIV, PO_F64EQ, PO_F64LT,
-       PO_I64OFW, PO_WOFI64, PO_U32OFW, PO_WOFU32, PO_F64OFW, PO_F64OFI64, PO_I64OFF64, PO_F64BITS, PO_F64OFBITS, PO_N };   /* fty: λ params x. the field's type at x */
+       PO_I64OFW, PO_WOFI64, PO_U32OFW, PO_WOFU32, PO_F64OFW, PO_F64OFI64, PO_I64OFF64, PO_F64BITS, PO_F64OFBITS, PO_F32BITS, PO_F32OFBITS, PO_N };   /* fty: λ params x. the field's type at x */
 extern FldInfo *FLD;
 extern ConInfo *CON;
 extern DataInfo *DATA;

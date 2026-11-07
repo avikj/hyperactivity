@@ -71,6 +71,15 @@ u32a w = u32toWord (u32add (index32 4 (update32 4 (update32 4 (anew32 4) 3 (0 , 
 lam-body f = case f of flam b → b; _ → f
 sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → u32a w))
 defs = case lift #2 (lam-body (inplace sp)) of lifted t2 ds k → lcons (#0 , (#0 , fcall #1 (lcons (flit #40) lnil))) (lcons (#1 , (#1 , t2)) ds)''', "42", "st32i("),
+ # Float32 elements by their bits on the 4-byte layer (updateF32 / indexF32: f32bits and f32ofbits
+ # the identity on the word of bits in the first-order form): w's bits at 2 and 1.0's at 0, stored
+ # in place (st32i); read back as their patterns and summed: w + 1065353216
+ 'f32array': ('''f32a : Word → Word
+f32a w = u32toWord (u32add (f32bits (indexF32 4 (updateF32 4 (updateF32 4 (anew32 4) 2 (1 , λ i → 4) (f32ofbits (u32 w))) 0 (3 , λ i → 4) (f32ofbits (u32 #1065353216))) 2 (1 , λ i → 4)))
+                           (f32bits (indexF32 4 (updateF32 4 (updateF32 4 (anew32 4) 2 (1 , λ i → 4) (f32ofbits (u32 w))) 0 (3 , λ i → 4) (f32ofbits (u32 #1065353216))) 0 (3 , λ i → 4))))
+lam-body f = case f of flam b → b; _ → f
+sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → f32a w))
+defs = case lift #2 (lam-body (inplace sp)) of lifted t2 ds k → lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil))) (lcons (#1 , (#1 , t2)) ds)''', "1065353221", "st32i("),
  # signatures from the declared types (item 14, lib/emitu.cub's emit-prog-d): selw's second
  # parameter is only returned and keep5's only passed through, so by use they are boxed (V *, the
  # record boxed and unboxed around the call); from their checked types they are uint64_t and the

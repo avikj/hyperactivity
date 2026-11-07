@@ -46,6 +46,8 @@ primitive f64lt : Float64 → Float64 → Bool = λ a b → %f64lt a b
 -- a Float64's bits as an Int64 and back (item 22: how a Float64 is stored by the byte layer)
 primitive f64bits : Float64 → Int64 = λ a → %f64bits a
 primitive f64ofbits : Int64 → Float64 = λ a → %f64ofbits a
+primitive f32bits : Float32 → UInt32 = λ a → %f32bits a
+primitive f32ofbits : UInt32 → Float32 = λ a → %f32ofbits a
 
 -- ---------------------------------------------------------------- the byte layer: a string of n bytes,
 -- loads and stores at an offset with the proof that they fit (le (plus off w) n, from lib/std.cub);
@@ -74,6 +76,8 @@ primitive load64-store64 : (n : Nat) → (b : Bytes n) → (off : Nat) → (h : 
 -- the bits are the value, trusted: a Float64 and its bits correspond one to one
 primitive f64ofbits-bits : (x : Float64) → PathP (λ (i : I) → Float64) (f64ofbits (f64bits x)) x = λ x i → x
 primitive f64bits-ofbits : (y : Int64) → PathP (λ (i : I) → Int64) (f64bits (f64ofbits y)) y = λ y i → y
+primitive f32ofbits-bits : (x : Float32) → PathP (λ (i : I) → Float32) (f32ofbits (f32bits x)) x = λ x i → x
+primitive f32bits-ofbits : (y : UInt32) → PathP (λ (i : I) → UInt32) (f32bits (f32ofbits y)) y = λ y i → y
 
 -- ---------------------------------------------------------------- arrays of Int64 over the byte layer (plan C22):
 -- Array n is Bytes (times n 8); an index with its proof of fitting (le (suc i) n) is a load or
@@ -401,6 +405,62 @@ Fin→ArrayF n = Fin→ArrayV Float64 f64bits f64ofbits f64ofbits-bits f64bits-o
 fin-set-byF : (n : Nat) → (f : Fin n → Float64) → (i : Nat) → (h : le (suc i) n) → (v : Float64) →
   atabF n (fin-setA Float64 n f (i , h) v) ≡ updateF n (atabF n f) i h v
 fin-set-byF n f i h v = fin-set-byV Float64 f64bits n f i h v
+
+-- A stored by the UInt32 layer through an equivalence A ≃ UInt32: the same development on Array32
+indexV32 : (A : Type) → (UInt32 → A) → (n : Nat) → Array32 n → (i : Nat) → le (suc i) n → A
+indexV32 A from n a i h = from (index32 n a i h)
+updateV32 : (A : Type) → (A → UInt32) → (n : Nat) → Array32 n → (i : Nat) → le (suc i) n → A → Array32 n
+updateV32 A to n a i h v = update32 n a i h (to v)
+aindexV32 : (A : Type) → (UInt32 → A) → (n : Nat) → Array32 n → Fin n → A
+aindexV32 A from n a p = from (aindex32 n a p)
+atabV32 : (A : Type) → (A → UInt32) → (n : Nat) → (Fin n → A) → Array32 n
+atabV32 A to n f = atab32 n (λ p → to (f p))
+index-updateV32 : (A : Type) → (to : A → UInt32) → (from : UInt32 → A) → ((v : A) → from (to v) ≡ v) → (n : Nat) → (a : Array32 n) → (i : Nat) → (h : le (suc i) n) → (v : A) → indexV32 A from n (updateV32 A to n a i h v) i h ≡ v
+index-updateV32 A to from ft n a i h v =
+  concat {lzero} {A} {from (index32 n (update32 n a i h (to v)) i h)} {from (to v)} {v}
+    (cong {lzero} {lzero} {UInt32} {A} from {index32 n (update32 n a i h (to v)) i h} {to v} (index-update32 n a i h (to v))) (ft v)
+index-update-neV32 : (A : Type) → (to : A → UInt32) → (from : UInt32 → A) → (n : Nat) → (a : Array32 n) → (i j : Nat) → (hi : le (suc i) n) → (hj : le (suc j) n) → (v : A) → Sum (le (suc i) j) (le (suc j) i) → indexV32 A from n (updateV32 A to n a i hi v) j hj ≡ indexV32 A from n a j hj
+index-update-neV32 A to from n a i j hi hj v d =
+  cong {lzero} {lzero} {UInt32} {A} from {index32 n (update32 n a i hi (to v)) j hj} {index32 n a j hj} (index-update-ne32 n a i j hi hj (to v) d)
+index-tabulateV32 : (A : Type) → (to : A → UInt32) → (from : UInt32 → A) → ((v : A) → from (to v) ≡ v) → (n : Nat) → (f : Fin n → A) → (p : Fin n) → aindexV32 A from n (atabV32 A to n f) p ≡ f p
+index-tabulateV32 A to from ft n f p =
+  concat {lzero} {A} {from (aindex32 n (atab32 n (λ q → to (f q))) p)} {from (to (f p))} {f p}
+    (cong {lzero} {lzero} {UInt32} {A} from {aindex32 n (atab32 n (λ q → to (f q))) p} {to (f p)} (index-tabulate32 n (λ q → to (f q)) p)) (ft (f p))
+tabulate-indexV32 : (A : Type) → (to : A → UInt32) → (from : UInt32 → A) → ((w : UInt32) → to (from w) ≡ w) → (n : Nat) → (a : Array32 n) → atabV32 A to n (aindexV32 A from n a) ≡ a
+tabulate-indexV32 A to from tf n a = array32-ext n (atab32 n (λ q → to (from (aindex32 n a q)))) a
+  (λ i h → concat {lzero} {UInt32} {index32 n (atab32 n (λ q → to (from (aindex32 n a q)))) i h} {to (from (index32 n a i h))} {index32 n a i h}
+             (index-tabulate32 n (λ q → to (from (aindex32 n a q))) (i , h)) (tf (index32 n a i h)))
+Fin→ArrayV32 : (A : Type) → (to : A → UInt32) → (from : UInt32 → A) → ((v : A) → from (to v) ≡ v) → ((w : UInt32) → to (from w) ≡ w) → (n : Nat) → Equiv (Fin n → A) (Array32 n)
+Fin→ArrayV32 A to from ft tf n = isoToEquiv {lzero} {Fin n → A} {Array32 n} (atabV32 A to n) (aindexV32 A from n) (tabulate-indexV32 A to from tf n)
+  (λ f → funExt {lzero} {lzero} {Fin n} {A} {aindexV32 A from n (atabV32 A to n f)} {f} (index-tabulateV32 A to from ft n f))
+-- the functional update32 is update32 at to
+fin-set-byV32 : (A : Type) → (to : A → UInt32) → (n : Nat) → (f : Fin n → A) → (i : Nat) → (h : le (suc i) n) → (v : A) →
+  atabV32 A to n (fin-setA A n f (i , h) v) ≡ updateV32 A to n (atabV32 A to n f) i h v
+fin-set-byV32 A to n f i h v = array32-ext n (atab32 n (λ q → to (fin-setA A n f (i , h) v q))) (update32 n (atab32 n (λ q → to (f q))) i h (to v))
+  (λ j hj → concat {lzero} {UInt32} {index32 n (atab32 n (λ q → to (fin-setA A n f (i , h) v q))) j hj} {if eqb i j then to v else to (f (j , hj))} {index32 n (update32 n (atab32 n (λ q → to (f q))) i h (to v)) j hj}
+     (concat {lzero} {UInt32} {index32 n (atab32 n (λ q → to (fin-setA A n f (i , h) v q))) j hj} {to (if eqb i j then v else f (j , hj))} {if eqb i j then to v else to (f (j , hj))}
+        (index-tabulate32 n (λ q → to (fin-setA A n f (i , h) v q)) (j , hj))
+        (if-map A UInt32 to (eqb i j) v (f (j , hj))))
+     (sym {lzero} {UInt32} {index32 n (update32 n (atab32 n (λ q → to (f q))) i h (to v)) j hj} {if eqb i j then to v else to (f (j , hj))}
+        (concat {lzero} {UInt32} {index32 n (update32 n (atab32 n (λ q → to (f q))) i h (to v)) j hj} {if eqb i j then to v else index32 n (atab32 n (λ q → to (f q))) j hj} {if eqb i j then to v else to (f (j , hj))}
+           (index-update-if32 n (atab32 n (λ q → to (f q))) i j h hj (to v))
+           (λ k → if eqb i j then to v else index-tabulate32 n (λ q → to (f q)) (j , hj) k))))
+-- Float32 elements, by their bits on the 4-byte layer (Array32, store32: in place when unique)
+indexF32 : (n : Nat) → Array32 n → (i : Nat) → le (suc i) n → Float32
+indexF32 n a i h = indexV32 Float32 f32ofbits n a i h
+updateF32 : (n : Nat) → Array32 n → (i : Nat) → le (suc i) n → Float32 → Array32 n
+updateF32 n a i h v = updateV32 Float32 f32bits n a i h v
+atabF32 : (n : Nat) → (Fin n → Float32) → Array32 n
+atabF32 n f = atabV32 Float32 f32bits n f
+aindexF32 : (n : Nat) → Array32 n → Fin n → Float32
+aindexF32 n a p = aindexV32 Float32 f32ofbits n a p
+index-updateF32 : (n : Nat) → (a : Array32 n) → (i : Nat) → (h : le (suc i) n) → (v : Float32) → indexF32 n (updateF32 n a i h v) i h ≡ v
+index-updateF32 n a i h v = index-updateV32 Float32 f32bits f32ofbits f32ofbits-bits n a i h v
+Fin→ArrayF32 : (n : Nat) → Equiv (Fin n → Float32) (Array32 n)
+Fin→ArrayF32 n = Fin→ArrayV32 Float32 f32bits f32ofbits f32ofbits-bits f32bits-ofbits n
+fin-set-byF32 : (n : Nat) → (f : Fin n → Float32) → (i : Nat) → (h : le (suc i) n) → (v : Float32) →
+  atabF32 n (fin-setA Float32 n f (i , h) v) ≡ updateF32 n (atabF32 n f) i h v
+fin-set-byF32 n f i h v = fin-set-byV32 Float32 f32bits n f i h v
 
 -- Layouts (data Layout, lib/code.cub) are computed by the checker: #layout T, or #layout T as R.
 

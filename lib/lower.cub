@@ -55,7 +55,8 @@ lower c =
 -- A primitive operation's code (cprim k as, lib/code.cub prim-apply's numbering) in the first-order
 -- form: the fixed-width integer and floating-point operations are the form's own primitives
 -- (P-i64add .. P-f64ofw, lib/fo.cub), the 32-bit ones the word ones (an unsigned 32-bit value is
--- a word here; wrapping at 2^32 is not modelled), the 8- and 4-byte loads and stores the byte
+-- a word here; wrapping at 2^32 is not modelled; a Float32 is the word of its bits, so f32bits and
+-- f32ofbits are the identity), the 8- and 4-byte loads and stores the byte
 -- layer's; the 1- and 2-byte accesses are a call into the net (fnet) until the form gains them
 lower-prim k cs =
   let as = lower-list cs
@@ -65,6 +66,8 @@ lower-prim k cs =
                 else if %weq sb #20 then fprim P-f64ofw as else if %weq sb #21 then fprim P-f64ofi64 as
                 else if %weq sb #22 then fprim P-i64off64 as
                 else if %weq sb #23 then fprim P-f64bits as else if %weq sb #24 then fprim P-f64ofbits as
+                else if %weq sb #25 then (case as of lcons a r → a; lnil → flit #0)
+                else if %weq sb #26 then (case as of lcons a r → a; lnil → flit #0)
                 else if %wlt sb #20 then (case as of lcons a r → a; lnil → flit #0) else fnet k as)
        else if %wlt k #768
          then (let sb = %wsub k #512

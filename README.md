@@ -187,7 +187,9 @@ copy); into a parameter or beside an unsequenced read it copies (`lib/fo.cub`'s 
 Other element types: `UInt32` on the 4-byte layer (`Array32`, `index32`/`update32`, `Fin→Array32`,
 its two laws trusted like the 8-byte ones), and any `A` with an equivalence to `Int64` on the 8-byte
 layer (`indexV`/`updateV`/`Fin→ArrayV A to from ft tf n`): `Float64` by its bits (`f64bits`,
-`f64ofbits`, trusted inverse), a type represented by `Int64` by its representation's `to`/`from`.
+`f64ofbits`, trusted inverse), a type represented by `Int64` by its representation's `to`/`from`;
+the same on the 4-byte layer for any `A ≃ UInt32` (`Fin→ArrayV32`): `Float32` by its bits
+(`f32bits`, `f32ofbits`; `Fin→ArrayF32`).
 
 **Regions as state.** `lib/region.cub` threads a region, `Bytes n`, through a program as
 state: `RM n A = Region n → Region n × A`, pointers as offsets with their proof (`Ptr n`),
