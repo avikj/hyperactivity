@@ -183,9 +183,9 @@ specialize-s sch T rules c = snd (specialize-v sch T rules c)
 -- whose stage in the schedule is st-now take the environment's codes in order (env a Lst of
 -- codes); the residual is the result normalized at T (the type left after them) and rewritten.
 -- Against a role, a choreography's projection is this residual (lib/choreo.cub, item 24)
-stage-of i st = case st of lnil → st-run; lcons p r → (if %weq (fst p) i then snd p else stage-of i r)
+now-stage-of i st = case st of lnil → st-run; lcons p r → (if %weq (fst p) i then snd p else now-stage-of i r)
 -- (the leading binders only: the first that is not st-now ends them)
-now-count i st c = case c of clam b → (case stage-of i st of st-now → %wsucc (now-count (%wsucc i) st b); _ → #0); _ → #0
+now-count i st c = case c of clam b → (case now-stage-of i st of st-now → %wsucc (now-count (%wsucc i) st b); _ → #0); _ → #0
 apply-env n c env = if %weq n #0 then c else (case env of lnil → c; lcons v vs → apply-env (%wsub n #1) (capp c v) vs)
 apply-now i st c env = apply-env (now-count i st c) c env
 residual sch T rules c env = rewrite-all (sched-rewrites sch) rules (normalize T (apply-now #0 (sched-stages sch) c env))
