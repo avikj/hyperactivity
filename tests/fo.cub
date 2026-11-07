@@ -186,3 +186,13 @@ has-for l = case l of lnil → false; lcons a r → (case r of lcons b r2 → (c
 -- a delayed term lowers to the term (the first-order form is strict; fthunk is lift's)
 #same eval-fo no-defs lnil (lower (code (%wadd (delay #1) #2))) = vw #3
 #same eval-fo no-defs lnil (lower (code (force (delay (%wadd #4 #5))))) = vw #9
+
+-- which route specialize-proved takes on this file's programs (lib/foproof.cub): addk is in the word
+-- fragment (#1, spec-path); bump (a record of two words) and the store-then-load on a parameter string
+-- are in the data mirror (#2, dc-sound and fr-dc-path); fact and fib carry a pair through a word
+-- recursion, outside both mirrors, and take the untyped pipeline (#0)
+#same fst (specialize-proved (Word → Word → Word) lnil (code (λ (k : Word) (x : Word) → addk k x))) = #1
+#same fst (specialize-proved (P2 → P2) lnil (code (λ (p : P2) → bump p))) = #2
+#same fst (specialize-proved (Bytes 32 → Int64 → Word) lnil st-ld-code) = #2
+#same fst (specialize-proved (Word → Word) lnil (code (λ (n : Word) → factw n))) = #0
+#same fst (specialize-proved (Word → Word) lnil (code (λ (w : Word) → fibw2 w))) = #0

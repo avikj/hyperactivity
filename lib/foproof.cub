@@ -1052,6 +1052,310 @@ dnat w = %welimP (λ v → Nat) w zero (λ m h → suc h)
 -- (fswitch pushes the second field innermost, as dccase does). dccase sends any nonzero tag to b1
 -- and fswitch only tag 1 — the bridge is for programs whose constructors are tagged 0 or 1.
 fc-caps d = case d of zero → lnil; suc k → lcons (fvar (fromNat k)) (fc-caps k)
+-- ---------------------------------------------------------------- verified rewrites past the word fragment
+-- Rewrites over the converted mirror (FC: closures by table index, so a value holds no code and the
+-- order below is first order), applied bottom up to main, the closures' table and the globals'
+-- table alike. Their soundness is refinement at every fuel and environment: where the program before
+-- the rewrite has a value, the program after has the same one (it may have one at a fuel where the
+-- one before had none: x + 0 → x needs a unit less). Then for a data program read into the mirror,
+-- what the rewritten conversion computes refines what the source means (fr-dc-path).
+-- the order: nothing (tvbot) below everything; a word, a constructor value or a string only below
+-- itself; a closure below one of the same index whose environment is above its own, pointwise
+fr-le : TV → TV → Type
+fr-le tvbot v = Unit
+fr-le (tvw a) v = tvw a ≡ v
+fr-le (tvc k a b) v = tvc k a b ≡ v
+fr-le (tvb m) v = tvb m ≡ v
+fr-le (tvclo i ρ) (tvclo j σ) = (i ≡ j) × ((k : Nat) → fr-le (ρ k) (σ k))
+fr-le (tvclo i ρ) _ = Empty
+FrEnv : (Nat → TV) → (Nat → TV) → Type
+FrEnv ρ σ = (k : Nat) → fr-le (ρ k) (σ k)
+fr-refl : (v : TV) → fr-le v v
+fr-refl tvbot = unit
+fr-refl (tvw a) = λ j → tvw a
+fr-refl (tvc k a b) = λ j → tvc k a b
+fr-refl (tvb m) = λ j → tvb m
+fr-refl (tvclo i ρ) = ((λ j → i) , (λ k → fr-refl (ρ k)))
+fr-erefl : (ρ : Nat → TV) → FrEnv ρ ρ
+fr-erefl ρ k = fr-refl (ρ k)
+fr-trans : (x y z : TV) → fr-le x y → fr-le y z → fr-le x z
+fr-trans tvbot y z p q = unit
+fr-trans (tvw a) y z p q = subst {lzero} {lzero} {TV} {λ v → fr-le v z} {y} {tvw a} (sym p) q
+fr-trans (tvc k a b) y z p q = subst {lzero} {lzero} {TV} {λ v → fr-le v z} {y} {tvc k a b} (sym p) q
+fr-trans (tvb m) y z p q = subst {lzero} {lzero} {TV} {λ v → fr-le v z} {y} {tvb m} (sym p) q
+fr-trans (tvclo i ρ) (tvclo j σ) (tvclo l τ) p q = (catw (fst p) (fst q) , (λ k → fr-trans (ρ k) (σ k) (τ k) (snd p k) (snd q k)))
+fr-trans (tvclo i ρ) (tvclo j σ) _ p q = Empty-rec q
+fr-trans (tvclo i ρ) _ z p q = Empty-rec p
+-- a path on the left or on the right
+fr-lpath : (x y z : TV) → x ≡ y → fr-le y z → fr-le x z
+fr-lpath x y z e h = subst {lzero} {lzero} {TV} {λ v → fr-le v z} {y} {x} (sym e) h
+fr-ext : (ρ σ : Nat → TV) (x x' : TV) → FrEnv ρ σ → fr-le x x' → FrEnv (text ρ x) (text σ x')
+fr-ext ρ σ x x' he hx k = case k return (λ m → fr-le (text ρ x m) (text σ x' m)) of
+  zero → hx
+  suc m → he m
+fr-none : FrEnv tvnone tvnone
+fr-none k = unit
+-- each operation keeps the order
+fr-prim-le : (p : Word) (x x' y y' : TV) → fr-le x x' → fr-le y y' → fr-le (tv-prim p x y) (tv-prim p x' y')
+fr-prim-le p (tvw a) x' (tvw b) y' hx hy = λ j → tv-prim p (hx j) (hy j)
+fr-prim-le p _ x' _ y' hx hy = unit
+fr-con-le : (k : Word) (x x' y y' : TV) → fr-le x x' → fr-le y y' → fr-le (tv-con k x y) (tv-con k x' y')
+fr-con-le k (tvw a) x' (tvw b) y' hx hy = λ j → tv-con k (hx j) (hy j)
+fr-con-le k _ x' _ y' hx hy = unit
+fr-ld-le : (x x' y y' : TV) → fr-le x x' → fr-le y y' → fr-le (tv-ld x y) (tv-ld x' y')
+fr-ld-le (tvb m) x' (tvw o) y' hx hy = λ j → tv-ld (hx j) (hy j)
+fr-ld-le _ x' _ y' hx hy = unit
+fr-st-le : (x x' y y' z z' : TV) → fr-le x x' → fr-le y y' → fr-le z z' → fr-le (tv-st x y z) (tv-st x' y' z')
+fr-st-le (tvb m) x' (tvw o) y' (tvw v) z' hx hy hz = λ j → tv-st (hx j) (hy j) (hz j)
+fr-st-le _ x' _ y' _ z' hx hy hz = unit
+fr-sel-le : (ev ev' : FC → (Nat → TV) → TV) (ρ σ : Nat → TV) (s s' : TV) (b0 b1 b0' b1' : FC) → fr-le s s' → FrEnv ρ σ
+          → ((r1 s1 : Nat → TV) → FrEnv r1 s1 → fr-le (ev b0 r1) (ev' b0' s1))
+          → ((r1 s1 : Nat → TV) → FrEnv r1 s1 → fr-le (ev b1 r1) (ev' b1' s1))
+          → fr-le (tv-sel ev ρ s b0 b1) (tv-sel ev' σ s' b0' b1')
+fr-sel-le ev ev' ρ σ (tvc k p q) s' b0 b1 b0' b1' hs he h0 h1 =
+  subst {lzero} {lzero} {TV} {λ v → fr-le (tv-sel ev ρ (tvc k p q) b0 b1) (tv-sel ev' σ v b0' b1')} {tvc k p q} {s'} hs
+    (%welimP (λ v → fr-le (%welimP (λ u → TV) v (ev b0 (text (text ρ (tvw p)) (tvw q))) (λ m h → ev b1 (text (text ρ (tvw p)) (tvw q))))
+                          (%welimP (λ u → TV) v (ev' b0' (text (text σ (tvw p)) (tvw q))) (λ m h → ev' b1' (text (text σ (tvw p)) (tvw q))))) k
+       (h0 (text (text ρ (tvw p)) (tvw q)) (text (text σ (tvw p)) (tvw q)) (fr-ext (text ρ (tvw p)) (text σ (tvw p)) (tvw q) (tvw q) (fr-ext ρ σ (tvw p) (tvw p) he (λ j → tvw p)) (λ j → tvw q)))
+       (λ m h → h1 (text (text ρ (tvw p)) (tvw q)) (text (text σ (tvw p)) (tvw q)) (fr-ext (text ρ (tvw p)) (text σ (tvw p)) (tvw q) (tvw q) (fr-ext ρ σ (tvw p) (tvw p) he (λ j → tvw p)) (λ j → tvw q))))
+fr-sel-le ev ev' ρ σ _ s' b0 b1 b0' b1' hs he h0 h1 = unit
+fr-app-le : (T T' : Word → FC) (ev ev' : FC → (Nat → TV) → TV) (f f' a a' : TV) → fr-le f f' → fr-le a a'
+          → ((i : Word) (r1 s1 : Nat → TV) → FrEnv r1 s1 → fr-le (ev (T i) r1) (ev' (T' i) s1))
+          → fr-le (tv-app T ev f a) (tv-app T' ev' f' a')
+fr-app-le T T' ev ev' (tvclo i ρ1) (tvclo j σ1) a a' hf ha hb =
+  subst {lzero} {lzero} {Word} {λ w → fr-le (ev (T i) (text ρ1 a)) (ev' (T' w) (text σ1 a'))} {i} {j} (fst hf)
+    (hb i (text ρ1 a) (text σ1 a') (fr-ext ρ1 σ1 a a' (snd hf) ha))
+fr-app-le T T' ev ev' (tvclo i ρ1) _ a a' hf ha hb = Empty-rec hf
+fr-app-le T T' ev ev' _ f' a a' hf ha hb = unit
+-- more fuel and a larger environment give a larger value
+fr-addn : Nat → Nat → Nat
+fr-addn zero k = k
+fr-addn (suc n) k = suc (fr-addn n k)
+fr-addn-0 : (n : Nat) → fr-addn n zero ≡ n
+fr-addn-0 zero = λ j → zero
+fr-addn-0 (suc n) = λ j → suc (fr-addn-0 n j)
+fr-addn-1 : (n : Nat) → fr-addn n (suc zero) ≡ suc n
+fr-addn-1 zero = λ j → suc zero
+fr-addn-1 (suc n) = λ j → suc (fr-addn-1 n j)
+fr-mono : (T GT : Word → FC) (n k : Nat) (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n c ρ) (dtev T GT (fr-addn n k) c σ)
+fr-mono T GT zero k c ρ σ he = unit
+fr-mono T GT (suc n) k (fcl w) ρ σ he = λ j → tvw w
+fr-mono T GT (suc n) k (fcv m) ρ σ he = he m
+fr-mono T GT (suc n) k (fcp p a b) ρ σ he =
+  fr-prim-le p (dtev T GT n a ρ) (dtev T GT (fr-addn n k) a σ) (dtev T GT n b ρ) (dtev T GT (fr-addn n k) b σ) (fr-mono T GT n k a ρ σ he) (fr-mono T GT n k b ρ σ he)
+fr-mono T GT (suc n) k (fclet a b) ρ σ he =
+  fr-mono T GT n k b (text ρ (dtev T GT n a ρ)) (text σ (dtev T GT (fr-addn n k) a σ)) (fr-ext ρ σ (dtev T GT n a ρ) (dtev T GT (fr-addn n k) a σ) he (fr-mono T GT n k a ρ σ he))
+fr-mono T GT (suc n) k (fccon kk a b) ρ σ he =
+  fr-con-le kk (dtev T GT n a ρ) (dtev T GT (fr-addn n k) a σ) (dtev T GT n b ρ) (dtev T GT (fr-addn n k) b σ) (fr-mono T GT n k a ρ σ he) (fr-mono T GT n k b ρ σ he)
+fr-mono T GT (suc n) k (fcsw s b0 b1) ρ σ he =
+  fr-sel-le (λ c1 s1 → dtev T GT n c1 s1) (λ c1 s1 → dtev T GT (fr-addn n k) c1 s1) ρ σ (dtev T GT n s ρ) (dtev T GT (fr-addn n k) s σ) b0 b1 b0 b1
+    (fr-mono T GT n k s ρ σ he) he (λ r1 s1 h → fr-mono T GT n k b0 r1 s1 h) (λ r1 s1 h → fr-mono T GT n k b1 r1 s1 h)
+fr-mono T GT (suc n) k (fcclo i) ρ σ he = ((λ j → i) , he)
+fr-mono T GT (suc n) k (fcapp f a) ρ σ he =
+  fr-app-le T T (λ c1 s1 → dtev T GT n c1 s1) (λ c1 s1 → dtev T GT (fr-addn n k) c1 s1) (dtev T GT n f ρ) (dtev T GT (fr-addn n k) f σ) (dtev T GT n a ρ) (dtev T GT (fr-addn n k) a σ)
+    (fr-mono T GT n k f ρ σ he) (fr-mono T GT n k a ρ σ he) (λ i r1 s1 h → fr-mono T GT n k (T i) r1 s1 h)
+fr-mono T GT (suc n) k (fccall g a) ρ σ he =
+  fr-mono T GT n k (GT g) (text tvnone (dtev T GT n a ρ)) (text tvnone (dtev T GT (fr-addn n k) a σ)) (fr-ext tvnone tvnone (dtev T GT n a ρ) (dtev T GT (fr-addn n k) a σ) fr-none (fr-mono T GT n k a ρ σ he))
+fr-mono T GT (suc n) k (fcby kk) ρ σ he = λ j → tvb bzero
+fr-mono T GT (suc n) k (fcld b o) ρ σ he =
+  fr-ld-le (dtev T GT n b ρ) (dtev T GT (fr-addn n k) b σ) (dtev T GT n o ρ) (dtev T GT (fr-addn n k) o σ) (fr-mono T GT n k b ρ σ he) (fr-mono T GT n k o ρ σ he)
+fr-mono T GT (suc n) k (fcst b o v) ρ σ he =
+  fr-st-le (dtev T GT n b ρ) (dtev T GT (fr-addn n k) b σ) (dtev T GT n o ρ) (dtev T GT (fr-addn n k) o σ) (dtev T GT n v ρ) (dtev T GT (fr-addn n k) v σ)
+    (fr-mono T GT n k b ρ σ he) (fr-mono T GT n k o ρ σ he) (fr-mono T GT n k v ρ σ he)
+-- at the same fuel, and at one or two units more
+fr-same : (T GT : Word → FC) (n : Nat) (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n c ρ) (dtev T GT n c σ)
+fr-same T GT n c ρ σ he = subst {lzero} {lzero} {Nat} {λ m → fr-le (dtev T GT n c ρ) (dtev T GT m c σ)} {fr-addn n zero} {n} (fr-addn-0 n) (fr-mono T GT n zero c ρ σ he)
+fr-up1 : (T GT : Word → FC) (n : Nat) (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n c ρ) (dtev T GT (suc n) c σ)
+fr-up1 T GT n c ρ σ he = subst {lzero} {lzero} {Nat} {λ m → fr-le (dtev T GT n c ρ) (dtev T GT m c σ)} {fr-addn n (suc zero)} {suc n} (fr-addn-1 n) (fr-mono T GT n (suc zero) c ρ σ he)
+fr-up2 : (T GT : Word → FC) (n : Nat) (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n c ρ) (dtev T GT (suc (suc n)) c σ)
+fr-up2 T GT n c ρ σ he = fr-trans (dtev T GT n c ρ) (dtev T GT (suc n) c σ) (dtev T GT (suc (suc n)) c σ) (fr-up1 T GT n c ρ σ he) (fr-up1 T GT (suc n) c σ σ (fr-erefl σ))
+-- a rule: a function on forms, its result refining its argument for any tables
+FRule : Type
+FRule = (f : FC → FC) × ((T GT : Word → FC) (n : Nat) (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n c ρ) (dtev T GT n (f c) σ))
+fr-then : FRule → FRule → FRule
+fr-then r1 r2 = ((λ c → fst r2 (fst r1 c)) ,
+  (λ T GT n c ρ σ he → fr-trans (dtev T GT n c ρ) (dtev T GT n (fst r1 c) σ) (dtev T GT n (fst r2 (fst r1 c)) σ) (snd r1 T GT n c ρ σ he) (snd r2 T GT n (fst r1 c) σ σ (fr-erefl σ))))
+-- constants folded: a primitive on two literals is its value (addition and subtraction)
+fr-fp : Word → FC → FC → FC
+fr-fp p (fcl a) (fcl b) = fcl (fw-prim p a b)
+fr-fp p a b = fcp p a b
+fr-f : FC → FC
+fr-f (fcp p a b) = fr-fp p a b
+fr-f c = c
+fr-fp-ok : (T GT : Word → FC) (n : Nat) (p : Word) (a b : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n (fcp p a b) ρ) (dtev T GT n (fr-fp p a b) σ)
+fr-fp-ok T GT zero p a b ρ σ he = unit
+fr-fp-ok T GT (suc zero) p (fcl a) (fcl b) ρ σ he = unit
+fr-fp-ok T GT (suc (suc n)) p (fcl a) (fcl b) ρ σ he = λ j → tvw (fw-prim p a b)
+fr-fp-ok T GT (suc n) p a b ρ σ he = fr-same T GT (suc n) (fcp p a b) ρ σ he
+fr-f-ok : (T GT : Word → FC) (n : Nat) (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n c ρ) (dtev T GT n (fr-f c) σ)
+fr-f-ok T GT n (fcp p a b) ρ σ he = fr-fp-ok T GT n p a b ρ σ he
+fr-f-ok T GT n c ρ σ he = fr-same T GT n c ρ σ he
+fold-frule : FRule
+fold-frule = (fr-f , fr-f-ok)
+-- 0 + x = x and x + 0 = x (the store's plusw-zero-l, plusw-zero-r through wadd-zero-l, wadd-zero-r)
+fr-zl-v : (y y' : TV) → fr-le y y' → fr-le (tv-prim #0 (tvw #0) y) y'
+fr-zl-v (tvw b) y' h = dtr {tvw (wadd #0 b)} {tvw b} {y'} (λ j → tvw (wadd-zero-l b j)) h
+fr-zl-v _ y' h = unit
+fr-zr-v : (x x' : TV) → fr-le x x' → fr-le (tv-prim #0 x (tvw #0)) x'
+fr-zr-v (tvw a) x' h = dtr {tvw (wadd a #0)} {tvw a} {x'} (λ j → tvw (wadd-zero-r a j)) h
+fr-zr-v _ x' h = unit
+fr-zr : FC → FC → FC
+fr-zr a (fcl w) = %welimP (λ v → FC) w a (λ m h → fcp #0 a (fcl (%wsucc m)))
+fr-zr a b = fcp #0 a b
+fr-z0 : FC → FC → FC
+fr-z0 (fcl w) b = %welimP (λ v → FC) w b (λ m h → fr-zr (fcl (%wsucc m)) b)
+fr-z0 a b = fr-zr a b
+fr-zp : Word → FC → FC → FC
+fr-zp p a b = %welimP (λ v → FC) p (fr-z0 a b) (λ m h → fcp (%wsucc m) a b)
+fr-z : FC → FC
+fr-z (fcp p a b) = fr-zp p a b
+fr-z c = c
+-- x + 0 at fuel n refines x at fuel n (one unit of fuel spent on the addition)
+fr-zr0-ok : (T GT : Word → FC) (n : Nat) (a : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n (fcp #0 a (fcl #0)) ρ) (dtev T GT n a σ)
+fr-zr0-ok T GT zero a ρ σ he = unit
+fr-zr0-ok T GT (suc zero) a ρ σ he = unit
+fr-zr0-ok T GT (suc (suc n)) a ρ σ he = fr-zr-v (dtev T GT (suc n) a ρ) (dtev T GT (suc (suc n)) a σ) (fr-up1 T GT (suc n) a ρ σ he)
+fr-zl0-ok : (T GT : Word → FC) (n : Nat) (b : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n (fcp #0 (fcl #0) b) ρ) (dtev T GT n b σ)
+fr-zl0-ok T GT zero b ρ σ he = unit
+fr-zl0-ok T GT (suc zero) b ρ σ he = unit
+fr-zl0-ok T GT (suc (suc n)) b ρ σ he = fr-zl-v (dtev T GT (suc n) b ρ) (dtev T GT (suc (suc n)) b σ) (fr-up1 T GT (suc n) b ρ σ he)
+fr-zr-ok : (T GT : Word → FC) (n : Nat) (a b : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n (fcp #0 a b) ρ) (dtev T GT n (fr-zr a b) σ)
+fr-zr-ok T GT n a (fcl w) ρ σ he =
+  %welimP (λ v → fr-le (dtev T GT n (fcp #0 a (fcl v)) ρ) (dtev T GT n (fr-zr a (fcl v)) σ)) w
+    (fr-zr0-ok T GT n a ρ σ he)
+    (λ m h → fr-same T GT n (fcp #0 a (fcl (%wsucc m))) ρ σ he)
+fr-zr-ok T GT n a b ρ σ he = fr-same T GT n (fcp #0 a b) ρ σ he
+fr-z0-ok : (T GT : Word → FC) (n : Nat) (a b : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n (fcp #0 a b) ρ) (dtev T GT n (fr-z0 a b) σ)
+fr-z0-ok T GT n (fcl w) b ρ σ he =
+  %welimP (λ v → fr-le (dtev T GT n (fcp #0 (fcl v) b) ρ) (dtev T GT n (fr-z0 (fcl v) b) σ)) w
+    (fr-zl0-ok T GT n b ρ σ he)
+    (λ m h → fr-zr-ok T GT n (fcl (%wsucc m)) b ρ σ he)
+fr-z0-ok T GT n a b ρ σ he = fr-zr-ok T GT n a b ρ σ he
+fr-z-ok : (T GT : Word → FC) (n : Nat) (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n c ρ) (dtev T GT n (fr-z c) σ)
+fr-z-ok T GT n (fcp p a b) ρ σ he =
+  %welimP (λ v → fr-le (dtev T GT n (fcp v a b) ρ) (dtev T GT n (fr-zp v a b) σ)) p
+    (fr-z0-ok T GT n a b ρ σ he)
+    (λ m h → fr-same T GT n (fcp (%wsucc m) a b) ρ σ he)
+fr-z-ok T GT n c ρ σ he = fr-same T GT n c ρ σ he
+zero-frule : FRule
+zero-frule = (fr-z , fr-z-ok)
+-- the byte layer: a load from a store at the same literal offset is the stored word; at another
+-- literal offset, the load from the string before the store, itself forwarded the same way through
+-- the stores below it (lib/region.cub's rd-wr, rd-wr-disj, in the cell model)
+fr-pick : Bool → FC → FC → FC
+fr-pick true x y = x
+fr-pick false x y = y
+fr-l1 : FC → FC → FC
+fr-l1 (fcst b (fcl o) v) (fcl o2) = fr-pick (weq o2 o) v (fr-l1 b (fcl o2))
+fr-l1 s o2 = fcld s o2
+fr-l : FC → FC
+fr-l (fcld s o2) = fr-l1 s o2
+fr-l c = c
+fr-fwd-t : (o o2 : Word) (B V V2 : TV) → weq o2 o ≡ true → fr-le V V2 → fr-le (tv-ld (tv-st B (tvw o) V) (tvw o2)) V2
+fr-fwd-t o o2 (tvb m) (tvw x) V2 e h = dtr {tvw (bsel (weq o2 o) x (m o2))} {tvw x} {V2} (λ j → tvw (bsel (e j) x (m o2))) h
+fr-fwd-t o o2 _ _ V2 e h = unit
+fr-fwd-f : (o o2 : Word) (B V B2 : TV) → weq o2 o ≡ false → fr-le B B2 → fr-le (tv-ld (tv-st B (tvw o) V) (tvw o2)) (tv-ld B2 (tvw o2))
+fr-fwd-f o o2 (tvb m) (tvw x) B2 e h = dtr {tvw (bsel (weq o2 o) x (m o2))} {tvw (m o2)} {tv-ld B2 (tvw o2)} (λ j → tvw (bsel (e j) x (m o2))) (λ j → tv-ld (h j) (tvw o2))
+fr-fwd-f o o2 _ _ B2 e h = unit
+fr-fwd-ok : (T GT : Word → FC) (bv : Bool) (o o2 : Word) (b v : FC) → weq o2 o ≡ bv
+          → ((n1 : Nat) (r1 s1 : Nat → TV) → FrEnv r1 s1 → fr-le (dtev T GT n1 (fcld b (fcl o2)) r1) (dtev T GT n1 (fr-l1 b (fcl o2)) s1))
+          → (n : Nat) (ρ σ : Nat → TV) → FrEnv ρ σ
+          → fr-le (dtev T GT n (fcld (fcst b (fcl o) v) (fcl o2)) ρ) (dtev T GT n (fr-pick bv v (fr-l1 b (fcl o2))) σ)
+fr-fwd-ok T GT true o o2 b v e rec zero ρ σ he = unit
+fr-fwd-ok T GT true o o2 b v e rec (suc zero) ρ σ he = unit
+fr-fwd-ok T GT true o o2 b v e rec (suc (suc zero)) ρ σ he = unit
+fr-fwd-ok T GT true o o2 b v e rec (suc (suc (suc n))) ρ σ he =
+  fr-fwd-t o o2 (dtev T GT (suc n) b ρ) (dtev T GT (suc n) v ρ) (dtev T GT (suc (suc (suc n))) v σ) e (fr-up2 T GT (suc n) v ρ σ he)
+fr-fwd-ok T GT false o o2 b v e rec zero ρ σ he = unit
+fr-fwd-ok T GT false o o2 b v e rec (suc zero) ρ σ he = unit
+fr-fwd-ok T GT false o o2 b v e rec (suc (suc zero)) ρ σ he = unit
+fr-fwd-ok T GT false o o2 b v e rec (suc (suc (suc n))) ρ σ he =
+  fr-trans (dtev T GT (suc (suc (suc n))) (fcld (fcst b (fcl o) v) (fcl o2)) ρ) (dtev T GT (suc (suc (suc n))) (fcld b (fcl o2)) σ) (dtev T GT (suc (suc (suc n))) (fr-l1 b (fcl o2)) σ)
+    (fr-fwd-f o o2 (dtev T GT (suc n) b ρ) (dtev T GT (suc n) v ρ) (dtev T GT (suc (suc n)) b σ) e (fr-up1 T GT (suc n) b ρ σ he))
+    (rec (suc (suc (suc n))) σ σ (fr-erefl σ))
+fr-l1w-ok : (T GT : Word → FC) (s : FC) (o2 : Word) (n : Nat) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n (fcld s (fcl o2)) ρ) (dtev T GT n (fr-l1 s (fcl o2)) σ)
+fr-l1w-ok T GT (fcst b (fcl o) v) o2 n ρ σ he = fr-fwd-ok T GT (weq o2 o) o o2 b v (λ j → weq o2 o) (λ n1 r1 s1 h1 → fr-l1w-ok T GT b o2 n1 r1 s1 h1) n ρ σ he
+fr-l1w-ok T GT s o2 n ρ σ he = fr-same T GT n (fcld s (fcl o2)) ρ σ he
+fr-l1-ok : (T GT : Word → FC) (n : Nat) (s o2 : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n (fcld s o2) ρ) (dtev T GT n (fr-l1 s o2) σ)
+fr-l1-ok T GT n (fcst b (fcl o) v) (fcl o2) ρ σ he = fr-l1w-ok T GT (fcst b (fcl o) v) o2 n ρ σ he
+fr-l1-ok T GT n s o2 ρ σ he = fr-same T GT n (fcld s o2) ρ σ he
+fr-l-ok : (T GT : Word → FC) (n : Nat) (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n c ρ) (dtev T GT n (fr-l c) σ)
+fr-l-ok T GT n (fcld s o2) ρ σ he = fr-l1-ok T GT n s o2 ρ σ he
+fr-l-ok T GT n c ρ σ he = fr-same T GT n c ρ σ he
+load-frule : FRule
+load-frule = (fr-l , fr-l-ok)
+-- the rules of this file over the converted mirror: std-vrule's two (folding first, as there) and the
+-- byte layer's forwarding
+std-frule : FRule
+std-frule = fr-then (fr-then fold-frule zero-frule) load-frule
+-- applied bottom up: the children rewritten, then the rule at the node
+fr-kids : (FC → FC) → FC → FC
+fr-kids f (fcl w) = fcl w
+fr-kids f (fcv k) = fcv k
+fr-kids f (fcp p a b) = fcp p (f (fr-kids f a)) (f (fr-kids f b))
+fr-kids f (fclet a b) = fclet (f (fr-kids f a)) (f (fr-kids f b))
+fr-kids f (fccon k a b) = fccon k (f (fr-kids f a)) (f (fr-kids f b))
+fr-kids f (fcsw s b0 b1) = fcsw (f (fr-kids f s)) (f (fr-kids f b0)) (f (fr-kids f b1))
+fr-kids f (fcclo i) = fcclo i
+fr-kids f (fcapp g a) = fcapp (f (fr-kids f g)) (f (fr-kids f a))
+fr-kids f (fccall g a) = fccall g (f (fr-kids f a))
+fr-kids f (fcby k) = fcby k
+fr-kids f (fcld b o) = fcld (f (fr-kids f b)) (f (fr-kids f o))
+fr-kids f (fcst b o v) = fcst (f (fr-kids f b)) (f (fr-kids f o)) (f (fr-kids f v))
+fr-bu : (FC → FC) → FC → FC
+fr-bu f c = f (fr-kids f c)
+-- a table rewritten entry by entry
+fr-tab : (FC → FC) → (Word → FC) → Word → FC
+fr-tab f T i = fr-bu f (T i)
+-- one step of congruence: the node with its children rewritten (the tables too) refines the node,
+-- given that at one unit of fuel less every form's rewrite refines it
+FrIH : (FC → FC) → (Word → FC) → (Word → FC) → Nat → Type
+FrIH f T GT n = (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n c ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f c) σ)
+fr-cong : (f : FC → FC) (T GT : Word → FC) (n : Nat) → FrIH f T GT n → (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ
+        → fr-le (dtev T GT (suc n) c ρ) (dtev (fr-tab f T) (fr-tab f GT) (suc n) (fr-kids f c) σ)
+fr-cong f T GT n ih (fcl w) ρ σ he = λ j → tvw w
+fr-cong f T GT n ih (fcv k) ρ σ he = he k
+fr-cong f T GT n ih (fcp p a b) ρ σ he =
+  fr-prim-le p (dtev T GT n a ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f a) σ) (dtev T GT n b ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f b) σ) (ih a ρ σ he) (ih b ρ σ he)
+fr-cong f T GT n ih (fclet a b) ρ σ he =
+  ih b (text ρ (dtev T GT n a ρ)) (text σ (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f a) σ))
+     (fr-ext ρ σ (dtev T GT n a ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f a) σ) he (ih a ρ σ he))
+fr-cong f T GT n ih (fccon k a b) ρ σ he =
+  fr-con-le k (dtev T GT n a ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f a) σ) (dtev T GT n b ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f b) σ) (ih a ρ σ he) (ih b ρ σ he)
+fr-cong f T GT n ih (fcsw s b0 b1) ρ σ he =
+  fr-sel-le (λ c1 s1 → dtev T GT n c1 s1) (λ c1 s1 → dtev (fr-tab f T) (fr-tab f GT) n c1 s1) ρ σ (dtev T GT n s ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f s) σ)
+    b0 b1 (fr-bu f b0) (fr-bu f b1) (ih s ρ σ he) he (λ r1 s1 h → ih b0 r1 s1 h) (λ r1 s1 h → ih b1 r1 s1 h)
+fr-cong f T GT n ih (fcclo i) ρ σ he = ((λ j → i) , he)
+fr-cong f T GT n ih (fcapp g a) ρ σ he =
+  fr-app-le T (fr-tab f T) (λ c1 s1 → dtev T GT n c1 s1) (λ c1 s1 → dtev (fr-tab f T) (fr-tab f GT) n c1 s1)
+    (dtev T GT n g ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f g) σ) (dtev T GT n a ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f a) σ)
+    (ih g ρ σ he) (ih a ρ σ he) (λ i r1 s1 h → ih (T i) r1 s1 h)
+fr-cong f T GT n ih (fccall g a) ρ σ he =
+  ih (GT g) (text tvnone (dtev T GT n a ρ)) (text tvnone (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f a) σ))
+     (fr-ext tvnone tvnone (dtev T GT n a ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f a) σ) fr-none (ih a ρ σ he))
+fr-cong f T GT n ih (fcby k) ρ σ he = λ j → tvb bzero
+fr-cong f T GT n ih (fcld b o) ρ σ he =
+  fr-ld-le (dtev T GT n b ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f b) σ) (dtev T GT n o ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f o) σ) (ih b ρ σ he) (ih o ρ σ he)
+fr-cong f T GT n ih (fcst b o v) ρ σ he =
+  fr-st-le (dtev T GT n b ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f b) σ) (dtev T GT n o ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f o) σ)
+    (dtev T GT n v ρ) (dtev (fr-tab f T) (fr-tab f GT) n (fr-bu f v) σ) (ih b ρ σ he) (ih o ρ σ he) (ih v ρ σ he)
+-- sound by congruence: the bottom-up rewrite of any form, with both tables rewritten, refines it at
+-- every fuel (the rule at each node through its own soundness, at the rewritten tables)
+fr-bu-ok : (r : FRule) (T GT : Word → FC) (n : Nat) (c : FC) (ρ σ : Nat → TV) → FrEnv ρ σ → fr-le (dtev T GT n c ρ) (dtev (fr-tab (fst r) T) (fr-tab (fst r) GT) n (fr-bu (fst r) c) σ)
+fr-bu-ok r T GT zero c ρ σ he = unit
+fr-bu-ok r T GT (suc n) c ρ σ he =
+  fr-trans (dtev T GT (suc n) c ρ) (dtev (fr-tab (fst r) T) (fr-tab (fst r) GT) (suc n) (fr-kids (fst r) c) σ) (dtev (fr-tab (fst r) T) (fr-tab (fst r) GT) (suc n) (fr-bu (fst r) c) σ)
+    (fr-cong (fst r) T GT n (λ c1 r1 s1 h1 → fr-bu-ok r T GT n c1 r1 s1 h1) c ρ σ he)
+    (snd r (fr-tab (fst r) T) (fr-tab (fst r) GT) (suc n) (fr-kids (fst r) c) σ σ (fr-erefl σ))
+-- the data route's path: for a program read into the mirror with right tables (DGOK, DTok, decided
+-- per program by dtok-auto), the rewritten conversion refines the source at every fuel, for every
+-- good argument
+fr-dc-path : (r : FRule) (G : Word → DC) (T GT : Word → FC) → DGOK G T GT → (n : Nat) (c : DC) (x : DV) → DTok T c → dgood T x
+           → fr-le (derase (dsev G n c (dext dvnone x))) (dtev (fr-tab (fst r) T) (fr-tab (fst r) GT) n (fr-bu (fst r) (dconv c)) (denv (dext dvnone x)))
+fr-dc-path r G T GT go n c x tk gx =
+  fr-lpath (derase (dsev G n c (dext dvnone x))) (dtev T GT n (dconv c) (denv (dext dvnone x))) (dtev (fr-tab (fst r) T) (fr-tab (fst r) GT) n (fr-bu (fst r) (dconv c)) (denv (dext dvnone x)))
+    (snd (dc-sound G T GT go n c (dext dvnone x) tk (dge-ext T dvnone x (λ k → unit) gx)))
+    (fr-bu-ok r T GT n (dconv c) (denv (dext dvnone x)) (denv (dext dvnone x)) (fr-erefl (denv (dext dvnone x))))
 -- the lifted bodies' keys: dc-base + i (above any definition the bridge reads from the store, below the
 -- printers' closure tags, which add 1000000 to a key)
 dc-base = #500000
@@ -1082,7 +1386,7 @@ dc-lifts-k dd nk d c =
     dclet a b → lst-app (dc-lifts-k dd nk d a) (dc-lifts-k dd nk (suc d) b)
     dccon k a b → lst-app (dc-lifts-k dd nk d a) (dc-lifts-k dd nk d b)
     dccase s b0 b1 → lst-app (dc-lifts-k dd nk d s) (lst-app (dc-lifts-k dd nk (suc (suc d)) b0) (dc-lifts-k dd nk (suc (suc d)) b1))
-    dclam i b → lcons (%wadd dc-base i , (fromNat (suc d) , fc-to-fo-k dd nk (suc d) (dconv b))) (dc-lifts-k dd nk (suc d) b)
+    dclam i b → lcons (%wadd dc-base i , (fromNat (suc d) , fc-to-fo-k dd nk (suc d) (fr-bu (fst std-frule) (dconv b)))) (dc-lifts-k dd nk (suc d) b)
     dcapp f a → lst-app (dc-lifts-k dd nk d f) (dc-lifts-k dd nk d a)
     dccall g a → dc-lifts-k dd nk d a
     dcby n → lnil
@@ -1090,7 +1394,7 @@ dc-lifts-k dd nk d c =
     dcst b o v → lst-app (dc-lifts-k dd nk d b) (lst-app (dc-lifts-k dd nk d o) (dc-lifts-k dd nk d v))
 dc-lifts d c = dc-lifts-k #7 #2 d c
 -- a program, a Lst of (key , (arity , body)) with main #0 of arity 0, as first-order definitions
-dc-defs-k dd nk ds = case ds of lnil → lnil; lcons e r → lcons (fst e , (fst (snd e) , fc-to-fo-k dd nk (dnat (fst (snd e))) (dconv (snd (snd e))))) (lst-app (dc-lifts-k dd nk (dnat (fst (snd e))) (snd (snd e))) (dc-defs-k dd nk r))
+dc-defs-k dd nk ds = case ds of lnil → lnil; lcons e r → lcons (fst e , (fst (snd e) , fc-to-fo-k dd nk (dnat (fst (snd e))) (fr-bu (fst std-frule) (dconv (snd (snd e)))))) (lst-app (dc-lifts-k dd nk (dnat (fst (snd e))) (snd (snd e))) (dc-defs-k dd nk r))
 dc-defs ds = dc-defs-k #7 #2 ds
 dx-prog = lcons (#0 , (#0 , dx-main)) (lcons (#1 , (#1 , dx-body1)) (lcons (#2 , (#1 , dx-body2)) lnil))
 #same eval-fo (table-of (dc-defs dx-prog)) lnil (fc-to-fo zero (dconv dx-main)) = vw #15
@@ -1293,6 +1597,11 @@ pq-gok g = ((λ i → fcl #0) , unit)
 pq-path : (n : Nat) (x : DV) → dgood pq-T x → derase (dsev pq-G n pq-dc (dext dvnone x)) ≡ dtev pq-T pq-GT n (dconv pq-dc) (denv (dext dvnone x))
 pq-path n x gx = snd (dc-sound pq-G pq-T pq-GT pq-gok n pq-dc (dext dvnone x) (dtok-auto pq-T pq-dc (λ i → true)) (dge-ext pq-T dvnone x (λ k → unit) gx))
 #same dsev pq-G (dnat #10) pq-dc (dext dvnone (dvc #1 #9 #2)) = dvw #3
+-- and with the verified rewrites: the rewritten conversion (both tables rewritten, as dc-defs prints
+-- them) refines the source at every fuel, for every good argument (fr-dc-path at std-frule)
+pq-rpath : (n : Nat) (x : DV) → dgood pq-T x
+         → fr-le (derase (dsev pq-G n pq-dc (dext dvnone x))) (dtev (fr-tab (fst std-frule) pq-T) (fr-tab (fst std-frule) pq-GT) n (fr-bu (fst std-frule) (dconv pq-dc)) (denv (dext dvnone x)))
+pq-rpath n x gx = fr-dc-path std-frule pq-G pq-T pq-GT pq-gok n pq-dc x (dtok-auto pq-T pq-dc (λ i → true)) gx
 -- calls, read from a code as written (not normalized): main calls pq-sum on pq-mk x; the globals'
 -- values are quoted and read, the tables decided; at 4: pqb 14 4, 14 − 4
 dc-c4 = code (λ (x : Word) → pq-sum (pq-mk x))
@@ -1315,3 +1624,25 @@ by-g w = i64toWord (load64 16 (store64 16 (bytes 16) 0 (8 , λ i → 16) (i64 w)
 -- the word route is unchanged, and a case on Bool (lowered to an if, outside DC) stays untyped
 #same fst (specialize-proved (Word → Word) lnil sp-f1) = #1
 #same fst (specialize-proved (Bool → Word) lnil sp-f4) = #0
+-- the verified rewrites on the converted mirror: x + 0, a fold, and a load forwarded through two stores
+#same fr-bu (fst std-frule) (fcp #0 (fcv 0) (fcl #0)) = fcv 0
+#same fr-bu (fst std-frule) (fcp #0 (fcl #0) (fcp #1 (fcl #9) (fcl #4))) = fcl #5
+#same fr-bu (fst std-frule) (fcld (fcst (fcst (fcby #16) (fcl #0) (fcv 0)) (fcl #8) (fcv 1)) (fcl #0)) = fcv 0
+#same fr-bu (fst std-frule) (fcld (fcst (fcst (fcby #16) (fcl #0) (fcv 0)) (fcl #8) (fcv 1)) (fcl #8)) = fcv 1
+#same fr-bu (fst std-frule) (fcld (fcst (fcby #16) (fcl #0) (fcv 0)) (fcl #8)) = fcld (fcby #16) (fcl #8)
+#same fr-bu (fst std-frule) (fcapp (fcclo #3) (fcp #0 (fcl #0) (fcv 2))) = fcapp (fcclo #3) (fcv 2)
+-- a data program whose normal form adds 0 under a case: the rewrite removes it in main
+pq-z : PQ → Word
+pq-z p = case p of
+  pqa a b → %wadd a #0
+  pqb a b → %wadd #0 b
+pq-id : PQ → Word
+pq-id p = case p of
+  pqa a b → a
+  pqb a b → b
+dc-dflt = (#0 , (#0 , (dcl #0 , lnil)))
+#same fst (specialize-proved (PQ → Word) lnil (code (λ (p : PQ) → pq-z p))) = #2
+#same dc-prog-defs (fromopt (dc-prog (normalize (PQ → Word) (code (λ (p : PQ) → pq-z p)))) dc-dflt) = dc-prog-defs (fromopt (dc-prog (normalize (PQ → Word) (code (λ (p : PQ) → pq-id p)))) dc-dflt)
+-- the byte program's two loads forwarded through the stores: what is left is w + (w + 1), the
+-- program without the region
+#same fr-bu (fst std-frule) (dconv (fromopt (dc-of (under-lams (normalize (Word → Word) sp-b1))) (dcl #0))) = fcp #0 (fcv zero) (fcp #0 (fcv zero) (fcl #1))

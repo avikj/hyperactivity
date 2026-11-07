@@ -678,7 +678,10 @@ seventeen programs with gcc and runs them, with both printers):
   `specialize-proved` takes the word route (`spec-path`), else the data route: the normal form
   read into the mirror (`dc-prog`, globals quoted and read), its tables decided by `dtok-chk` (so
   `dc-sound` holds through `dtok-auto`), converted and taken to first-order definitions (`run.py`
-  `proved-spec`, `proved-region`), else the untyped specializer, tagging which.
+  `proved-spec`, `proved-region`), else the untyped specializer, tagging which. The data route's
+  rewrites are verified too: `FRule`s on the converted form (folding, `0 + x`, a load forwarded
+  through stores) sound as refinement at every fuel, applied bottom up under every construct and
+  through both tables (`fr-bu-ok`), composed with `dc-sound` in `fr-dc-path`.
 - **`lib/derive.cub`**: `derive-eq d`, a decidable equality as a code read off the data table;
   evaluated, quoted back at its type, lowered and compiled (the derived equality on `Nat` prints
   10 for eq(2,2), eq(2,1)).
