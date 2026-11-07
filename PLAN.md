@@ -2989,6 +2989,8 @@ round one's free-dimension walk running with workers. **What remains:** the entr
 (3,420 at the corner) — the composition's tube map re-applies `%@` per side and per entry; the
 cross-dimension sharing below is still the mechanism that would cut them.
 
+**Status (2026-11-07, the TSan race at `cell()`'s memset).** The intermittent report (`net.c:81`, about 1 run in 5 at 2–8 workers over the `make tsan` lines) was real, not a false positive, and came from round one's walk, not A8b: `box_fd` → `fd_cell` (from `rule_subst` on `V_REF` or `ref_read`, in a worker) read a held value's parts non-atomically while another reader claimed them (`claim`'s atomic store against the plain read, via `copy_top`/`lazy_copy`), consumed and freed them, and the main thread's `cell()` reused a freed cell (memset via `split`/`bind`, `con_build_bdy`). `fd_cell` also reads payloads that `payload_release` frees, so deferring cell reuse (a quiescent-state reclamation scheme was tried) does not make the walk safe. **Fix:** `box_fd` walks only when `net_solo`, as A8b already did; with workers a box's set is whatever a solo phase cached (immutable), else unknown, and the read is not cut. Round one's gains therefore hold only at `CUBICAL_WORKERS=0` (the default); with workers step counts are as before A8. TSan: baseline 3 hits in 16 runs; gated, 0 in 63 runs plus `make tsan` twice; memo-off output identical across 0, 1, 4 workers.
+
 **Status (2026-11-07, A8b: bounds through pending parts).** Round one's box sets (`box_fd`)
 were unknown while a box's parts were still being built (of g8's 20,664 substituted reads, 12,584
 past eight tries, 3,018 a part not arrived, 2,787 an unbuilt part). **Built:** (1) a compile-time

@@ -991,6 +991,9 @@ static bool fd_port(Port p, FdSet *x, int depth) {
 static FdInfo *box_fd(Box *b) {
     FdInfo *fi = net_solo ? b->fd : __atomic_load_n(&b->fd, __ATOMIC_ACQUIRE);
     if (fi && !fi->inexact) return fi;
+    /* The walk reads a held value's parts non-atomically; with workers another reader
+       may claim, free and reuse them under it (the TSan race at cell()'s memset). */
+    if (!net_solo) { if (!fi) fd_why = 1; return fi; }
     if (__atomic_load_n(&b->fdtries, __ATOMIC_RELAXED) >= 8) { if (!fi) fd_why = 5; return fi; }
     __atomic_fetch_add(&b->fdtries, 1, __ATOMIC_RELAXED);
     Port q = sload(&b->root->port[0]);
