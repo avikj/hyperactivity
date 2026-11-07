@@ -1288,9 +1288,8 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
 25. **Status (2026-11-06):** built, `7a865cac` (`Outcome`, supervisors by key). Spec as written: Outcomes as values (consequence); supervisors and restart by key (library). Essential.
 26. DONE for the loop and the library STM (2026-11-06, `lib/world.cub`, `src/drivers.c`,
     `bf3ea4eb`); a hardware memory model (`load`/`store`/`cas`/`fence` on Regions) is open.
-27. **Status (2026-11-06):** `foreign` built; `world "name" = handler` is `lib/proc.cub`'s named worlds and registry (`96971cee`, library half; no surface syntax). Spec as written: Started (`1c5282a`): `foreign name "symbol" : T` as a trusted primitive over primitive
+27. **Status (2026-11-06):** `foreign` built; `world "name" = handler` is `lib/proc.cub`'s named worlds and registry (`96971cee`) with its surface form (2026-11-06, `src/syntax.c`): `world "kv" = kv-world` checks `world-kv : Named S St = (id , kv-world)` and `world-kv-id : Word = id`, id the name's FNV-1a hash, the type from the handler's signature or an annotation (`world "n" : World S St = term`); `tests/proc.cub`. A handler is a checked term, so nothing joins `#trusted`; a world implemented by `foreign` functions is listed there through them. Spec as written: Started (`1c5282a`): `foreign name "symbol" : T` as a trusted primitive over primitive
     types (a C function of the program or a shared library), listed by `#trusted`/`#safe`.
-    Open: worlds as named handler implementations (`lib/proc.cub` has handlers as values).
 
 ### E. The language people and models write in
 28. In progress (`1c5282a`, 2026-11-06): instance arguments `{{e : C A}}` by instance search,

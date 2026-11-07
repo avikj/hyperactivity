@@ -1117,6 +1117,7 @@ static Node *p_data(void) {
     return r;
 }
 /* the end of a declaration */
+static Node *sig_of(const char *n);
 static void decl_end(void) {
     if (P0()->k == X_VS) { NX(); return; }
     if (P0()->k == X_EOF || P0()->k == X_VC) return;
@@ -1318,6 +1319,32 @@ static void p_decl(void) {
         Node *b = NULL;
         if (at("=")) { NX(); b = core(p_expr(0)); }
         x_primitive(nm, tick, sig, b, nt);
+        decl_end(); return;
+    }
+    if (x_is(t, "world") && P1()->k == X_STR) {
+        /* world "name" [: World S St] = handler (D27): a named world, lib/proc.cub's Named S St — the
+         * checked definitions world-name : Named S St = (id , handler) and world-name-id : Word = id,
+         * id the name's FNV-1a hash (a registry is a list of them; find-world picks one by id). The
+         * type is the handler's signature when the handler is a name, else the annotation */
+        NX(); Tok *st = NX();
+        Node *wt = NULL;
+        if (at(":")) { NX(); wt = p_expr(0); }
+        want("=");
+        Node *h = p_expr(0);
+        if (!wt && !h->list) wt = sig_of(h->s);
+        if (!wt) x_err("world: give the handler's type (world \"name\" : World S St = handler), at", st);
+        /* the arguments of World in wt, flattened from a curried or a spine application */
+        Node *args[8]; int na = 0; Node *w = wt;
+        while (w->list && w->n == 2 && na < 8) { args[na++] = w->it[1]; w = w->it[0]; }
+        if (w->list && w->n == 3 && !w->it[0]->list && !strcmp(w->it[0]->s, "World")) { args[na++] = w->it[2]; args[na++] = w->it[1]; w = w->it[0]; }
+        if (w->list || strcmp(w->s, "World") || na != 2) x_err("world: the handler's type is World S St, at", st);
+        uint32_t hsh = 2166136261u; for (const unsigned char *q = (const unsigned char *)st->s; *q; q++) { hsh ^= *q; hsh *= 16777619u; }
+        char idn[40]; snprintf(idn, sizeof idn, "#%u", hsh);
+        char nm[256], nmi[256]; snprintf(nm, sizeof nm, "world-%s", st->s); snprintf(nmi, sizeof nmi, "world-%s-id", st->s);
+        for (char *q = nm; *q; q++) if (!isalnum((unsigned char)*q) && *q != '-') *q = '-';
+        for (char *q = nmi; *q; q++) if (!isalnum((unsigned char)*q) && *q != '-') *q = '-';
+        tsig.np = 0; x_checked(strdup(nmi), nsym("Word"), nsym(idn), true, 0, 0);
+        tsig.np = 0; x_checked(strdup(nm), lst(3, nsym("Named"), args[1], args[0]), sym3("pair", nsym(idn), h), true, 0, 0);
         decl_end(); return;
     }
     if (x_is(t, "foreign")) {

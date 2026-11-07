@@ -95,6 +95,15 @@ kv-named = (#1 , kv-world)
 registry1 : Registry KVS (Word → Word)
 registry1 = cons kv-named nil
 #same fst (runp {KVS} {Word} {Word → Word} (pr1 {lzero}) (find-world {KVS} {Word → Word} #1 registry1 kv-world) empty-st) = done #12
+-- the surface form: world "name" = handler checks world-name : Named S St (the name's hash as its id,
+-- world-name-id) from the handler's signature, or from an annotation when the handler is a term
+world "kv" = kv-world
+world "kv-copy" : World KVS (Word → Word) = λ c st → kv-world c st
+registry2 : Registry KVS (Word → Word)
+registry2 = cons world-kv-copy (cons world-kv nil)
+#same fst (runp {KVS} {Word} {Word → Word} (pr1 {lzero}) (find-world {KVS} {Word → Word} world-kv-id registry2 kv-world) empty-st) = done #12
+#same weq world-kv-id world-kv-copy-id = false
+#same wid world-kv = world-kv-id
 -- ---------------------------------------------------------------- the guarded form
 -- a terminating process is a guarded one; run against the key-value world it arrives within its
 -- four commands' ticks and not before

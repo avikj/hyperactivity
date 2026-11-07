@@ -159,6 +159,11 @@ argument's type, or given as `{Nat}`).
 F31): its code is computed by `lib/derive.cub` (`derive-eq`, a term over the data table), read
 back and checked at `D → D → Bool` as `D·eq` (or the name given).
 
+**Named worlds.** `world "kv" = kv-world` (plan D27) checks `world-kv : Named S St` (lib/proc.cub:
+the handler under an id, the name's hash, also `world-kv-id : Word`), its type read from the
+handler's signature or given (`world "n" : World S St = term`); a registry is a list of them and
+`find-world` picks one by id.
+
 **Foreign functions.** `foreign name "symbol" : T` (plan D27) makes a C function of the running
 program (or of a shared library, `"lib.so:symbol"`) a primitive at `T`, a Π over arguments of
 primitive types (`Int64`, `UInt32`, `Float64`, `Word`, `Bytes n`, passed as an address; an
