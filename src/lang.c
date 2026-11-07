@@ -1480,6 +1480,102 @@ typedef struct {
     int file;                        /* the serial of the file defining it (item 17's keys) */
 } Global;
 static Global *G; static long nG, capG;
+/* A8: which compiled syntax may make a free dimension. Only %dim (O_MKDIM) gives a value a free
+ * dimension none of its inputs has (every other fresh dimension is bound where it is made), and
+ * the checker's tables (O_GLOB) hand out arbitrary values; so building a record, or unfolding a
+ * global, can mention only its inputs' dimensions unless its syntax reaches one of those, directly
+ * or through the globals it calls. Globals by strongly connected components (a cycle is tainted
+ * when one member is), cached once every callee is defined; records by their syntax. */
+static signed char *GMK; static long capGMK;   /* 0 unknown, 1 clean, 2 tainted */
+static bool syn_walk(const Syn *t, long *calls, int *nc, int cap) {
+    if (!t) return false;
+    if (t->tag == S_PRIM && t->x == O_MKDIM) return true;
+    if (t->tag == S_GLOBTAB) return true;
+    if ((t->tag == S_GLOBAL || t->tag == S_CALL) && *nc < cap) calls[(*nc)++] = t->id;
+    else if ((t->tag == S_GLOBAL || t->tag == S_CALL)) return true;   /* too many to follow: tainted */
+    if (t->rec && syn_walk(t->rec->body, calls, nc, cap)) return true;
+    if (t->tab) {
+        int N = t->tab->d >= 0 && t->tab->d < ndata ? DATA[t->tab->d].ncons : 0;
+        for (int i = 0; i < N; i++) if (t->tab->br && t->tab->br[i] && syn_walk(t->tab->br[i]->body, calls, nc, cap)) return true;
+        if (t->tab->motive && syn_walk(t->tab->motive->body, calls, nc, cap)) return true;
+    }
+    for (int i = 0; i < t->n; i++) if (t->k && syn_walk(t->k[i], calls, nc, cap)) return true;
+    return false;
+}
+/* Tarjan over globals */
+static long *TJ_idx, *TJ_low, *TJ_stk; static signed char *TJ_on; static long tj_cap, tj_n, tj_sp, tj_counter;
+static void tj_grow(long g) {
+    if (g < tj_cap) return;
+    long nc = tj_cap ? tj_cap : 1024; while (nc <= g) nc *= 2;
+    TJ_idx = realloc(TJ_idx, sizeof(long) * nc); TJ_low = realloc(TJ_low, sizeof(long) * nc); TJ_stk = realloc(TJ_stk, sizeof(long) * nc); TJ_on = realloc(TJ_on, nc);
+    for (long i = tj_cap; i < nc; i++) { TJ_idx[i] = -1; TJ_on[i] = 0; }
+    tj_cap = nc;
+}
+static bool tj_taint;   /* a component's members found tainted (or a callee undefined) */
+static void tj_visit(long g) {
+    tj_grow(g);
+    TJ_idx[g] = TJ_low[g] = tj_counter++; TJ_stk[tj_sp++] = g; TJ_on[g] = 1;
+    bool direct = false;
+    long *calls = NULL; int nc = 0;
+    if (g < 0 || g >= nG) direct = true;
+    else if (!G[g].body) direct = G[g].kind != G_AXIOM && G[g].kind != G_INPUT;   /* not yet defined: not known clean */
+    else {
+        calls = malloc(sizeof(long) * 4096);
+        direct = syn_walk(G[g].body, calls, &nc, 4096) || (G[g].nary && syn_walk(G[g].nary->body, calls, &nc, 4096));
+        if (G[g].kind == G_COFIX && G[g].unf >= 0 && nc < 4096) calls[nc++] = G[g].unf;
+    }
+    bool t = direct;
+    for (int i = 0; i < nc && !t; i++) {
+        long h = calls[i];
+        if (h < 0 || h >= nG) { t = true; break; }
+        if (h < capGMK && GMK[h]) { if (GMK[h] == 2) t = true; continue; }
+        tj_grow(h);
+        if (TJ_idx[h] < 0) { tj_visit(h); if (TJ_low[h] < TJ_low[g]) TJ_low[g] = TJ_low[h]; if (h < capGMK && GMK[h] == 2) t = true; }
+        else if (TJ_on[h]) { if (TJ_idx[h] < TJ_low[g]) TJ_low[g] = TJ_idx[h]; }
+    }
+    free(calls);
+    if (t) tj_taint = true;
+    if (TJ_low[g] == TJ_idx[g]) {
+        /* a component: all of it tainted when any member is (tj_taint over the component) */
+        long base = tj_sp; while (TJ_stk[base - 1] != g) base--; base--;
+        signed char v = tj_taint ? 2 : 1;
+        bool undefined = false;
+        for (long i = base; i < tj_sp; i++) { long m = TJ_stk[i]; if (m < nG && !G[m].body && G[m].kind != G_AXIOM && G[m].kind != G_INPUT) undefined = true; }
+        for (long i = base; i < tj_sp; i++) {
+            long m = TJ_stk[i]; TJ_on[m] = 0; TJ_idx[m] = -1;
+            if (m >= capGMK) { long nc2 = capGMK ? capGMK : 1024; while (nc2 <= m) nc2 *= 2; GMK = realloc(GMK, (size_t)nc2); memset(GMK + capGMK, 0, (size_t)(nc2 - capGMK)); capGMK = nc2; }
+            /* tainted is kept; clean only when nothing in it is still undefined */
+            GMK[m] = undefined ? (v == 2 ? 2 : 0) : v;
+        }
+        tj_sp = base; tj_taint = false;
+    }
+}
+int global_mkdim(long g) {
+    if (g < 0 || g >= nG) return 1;
+    if (g < capGMK && GMK[g]) return GMK[g] == 2;
+    tj_sp = 0; tj_taint = false;
+    tj_visit(g);
+    return g < capGMK && GMK[g] == 1 ? 0 : 1;
+}
+int record_mkdim(Record *r) {
+    if (!r) return 1;
+    int m = __atomic_load_n(&r->mk, __ATOMIC_RELAXED);
+    if (m) return m == 2;
+    long calls[4096]; int nc = 0;
+    bool t = syn_walk(r->body, calls, &nc, 4096);
+    for (int i = 0; i < nc && !t; i++) if (global_mkdim(calls[i])) t = true;
+    /* clean is cached only when every callee was decided clean (not merely undefined) */
+    bool all = true; for (int i = 0; i < nc; i++) if (!(calls[i] < capGMK && GMK[calls[i]] == 1)) all = false;
+    if (t) __atomic_store_n(&r->mk, 2, __ATOMIC_RELAXED); else if (all) __atomic_store_n(&r->mk, 1, __ATOMIC_RELAXED);
+    return t;
+}
+int casetab_mkdim(const CaseTab *tb) {
+    if (!tb) return 1;
+    int N = tb->d >= 0 && tb->d < ndata ? DATA[tb->d].ncons : 0;
+    for (int i = 0; i < N; i++) if (!tb->br || !tb->br[i] || record_mkdim(tb->br[i])) return 1;
+    if (tb->motive && record_mkdim(tb->motive)) return 1;
+    return 0;
+}
 static char **fresh_names; static long nfresh, capfresh;
 #define FRESH_BASE (1L << 40)
 
@@ -4920,7 +5016,7 @@ static void prof_print(void) {
           for (int q = 0; q < 4; q++) for (int k = 0; k < 256; k++) if (prof_pair[q][k]) fprintf(stderr, "kind %s·%s: %ld\n", pn[q], kind_name(k), prof_pair[q][k]); }
         { extern long prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep, prof_reads_sub_boxes;
           fprintf(stderr, "kind reads-subst-boxes: %ld\n", prof_reads_sub_boxes);
-          extern long prof_fd_cut, prof_fd_dropped, prof_fd_why[6]; fprintf(stderr, "kind fd-cut: %ld\nkind fd-dropped: %ld\nkind fd-unknown root/unbuilt/pending/budget/tries: %ld %ld %ld %ld %ld\n", prof_fd_cut, prof_fd_dropped, prof_fd_why[1], prof_fd_why[2], prof_fd_why[3], prof_fd_why[4], prof_fd_why[5]); fprintf(stderr, "kind reads-plain: %ld\nkind reads-plain-repeat: %ld\nkind reads-subst: %ld\nkind reads-subst-repeat: %ld\n", prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep); }
+          extern long prof_fd_cut, prof_fd_dropped, prof_fd_why[7], prof_fd_pending; { extern long prof_fd_var, prof_fd_prin[512]; fprintf(stderr, "kind fd-var: %ld\n", prof_fd_var); for (int k = 0; k < 512; k++) if (prof_fd_prin[k]) fprintf(stderr, "kind fd-prin %d: %ld\n", k, prof_fd_prin[k]); } fprintf(stderr, "kind fd-cut: %ld\nkind fd-dropped: %ld\nkind fd-unknown root/unbuilt/pending/budget/tries/taint: %ld %ld %ld %ld %ld %ld\nkind fd-pending-bounded: %ld\n", prof_fd_cut, prof_fd_dropped, prof_fd_why[1], prof_fd_why[2], prof_fd_why[3], prof_fd_why[4], prof_fd_why[5], prof_fd_why[6], prof_fd_pending); fprintf(stderr, "kind reads-plain: %ld\nkind reads-plain-repeat: %ld\nkind reads-subst: %ld\nkind reads-subst-repeat: %ld\n", prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep); }
         for (int k = 0; k < 64; k++) if (prof_dupk[k] || prof_erak[k]) fprintf(stderr, "value kind %3d: dup %ld era %ld\n", k, prof_dupk[k], prof_erak[k]);
         for (int i = 0; i < prof_n; i++) ix2[i] = i;
         for (int i = 0; i < prof_n; i++) for (int j = i + 1; j < prof_n; j++) if (prof_dup[ix2[j]] > prof_dup[ix2[i]]) { int t = ix2[i]; ix2[i] = ix2[j]; ix2[j] = t; }

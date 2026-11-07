@@ -885,21 +885,73 @@ static bool rr_seen(uint64_t h) {
  * set is known when a read happens depends on what has been built, so this runs only with the memo
  * (whose sharing depends on that already); without it every step is as before. Answers are the
  * same either way: the substitution is restricted to a superset of the value's free dimensions */
-typedef struct { Dim d[256]; int n; } FdSet;
+typedef struct { Dim d[256]; int n; bool taint, inexact; } FdSet;
 static void fd_add(FdSet *x, Dim d) { for (int i = 0; i < x->n; i++) if (x->d[i] == d) return; if (x->n < 256) x->d[x->n++] = d; else x->n = 257; }
 static void fd_dnf(FdSet *x, const Dnf *v) { if (v) for (uint32_t c = 0; c < v->n; c++) for (uint32_t q = 0; q < v->c[c]->n; q++) fd_add(x, (Dim)(v->c[c]->l[q] >> 1)); }
+static void fd_merge(FdSet *x, const FdSet *y) { for (int i = 0; i < y->n && x->n <= 256; i++) fd_add(x, y->d[i]); if (y->n > 256) x->n = 257; x->taint |= y->taint; x->inexact |= y->inexact; }
 static __thread long fd_budget;
-static __thread int fd_why;   /* why a set is unknown (profile): 1 root not there, 2 an unbuilt part, 3 a part not there, 4 budget, 5 tries */
-long prof_fd_why[6];
+static __thread int fd_why;   /* why a set is unknown (profile): 1 root not there, 2 an unbuilt part, 3 a part not there, 4 budget, 5 tries, 6 a pending part may make a dimension */
+long prof_fd_why[7], prof_fd_pending;
+static int a8b_off = -1;
+static inline bool a8b_on(void) { if (a8b_off < 0) a8b_off = getenv("CUBICAL_NOA8B") != NULL; return net_solo && !a8b_off; }
 static FdInfo *box_fd(Box *b);
 static bool fd_port(Port p, FdSet *x, int depth);
+/* may this value's record (or table, or global) make a dimension when built or applied? Asked only
+ * on one worker (the analysis' caches are not shared); elsewhere taken to (conservative) */
+static bool fd_taint_of(const Cell *v) {
+    if (!a8b_on()) return true;
+    switch (v->kind) {
+    case V_LAM: case V_THUNK: return record_mkdim((Record *)v->p);
+    case V_SUSP: case V_CASEF: return casetab_mkdim((const CaseTab *)v->p);
+    case V_GLOBAL: return global_mkdim((long)v->a);
+    case V_REC: case V_NATIVE: return true;
+    default: return false;
+    }
+}
+/* A8b: a pending operation's result mentions only its inputs' dimensions (and those its payload
+ * names), unless something it may run can make one: O_MKDIM itself, the checker's tables, a
+ * record, table or global among the inputs that reaches %dim (record_mkdim). Binders (O_MKPLAM,
+ * O_FORALL) remove their dimension. A bound, not the set: the value is still being built */
+static bool fd_pending(Cell *o, int arrive, FdSet *x, int depth) {
+    if (o->kind == O_MKDIM || o->kind == O_GLOB || o->kind == O_ERA) { fd_why = 6; return false; }
+    FdSet *y = malloc(sizeof *y); y->n = 0; y->taint = false; y->inexact = true;
+    bool ok = true;
+    if (o->kind == O_DUP) ok = arrive != 0 && fd_port(o->port[0], y, depth + 1);
+    else for (int k = 0; k < o->n && ok; k++) if (k != arrive) ok = fd_port(o->port[k], y, depth + 1);
+    if (ok) {
+        if (owns_dnf(o->kind)) fd_dnf(y, o->p);
+        if (o->kind == O_SUBST && o->p) { const Subst *s = o->p; for (uint32_t k = 0; k < s->n; k++) fd_dnf(y, s->v[k]); }
+        if (o->kind == O_CASE && casetab_mkdim((const CaseTab *)o->p)) y->taint = true;
+        if (o->kind == O_NATIVE && global_mkdim((long)o->a)) y->taint = true;
+        if (y->taint) { fd_why = 6; ok = false; }
+    }
+    if (ok && y->n <= 256) {
+        if (o->kind == O_MKPLAM || o->kind == O_FORALL) { Dim i = (Dim)o->a; for (int q = 0; q < y->n; q++) if (y->d[q] == i) { y->d[q] = y->d[--y->n]; break; } }
+        fd_merge(x, y);
+    } else ok = false;
+    free(y);
+    if (ok && prof_on) prof_fd_pending++;
+    return ok && x->n <= 256;
+}
 static bool fd_cell(Cell *v, FdSet *x, int depth) {
     if (--fd_budget < 0 || depth > 200 || x->n > 256) { fd_why = 4; return false; }
     if (!is_value(v->kind)) { fd_why = 3; return false; }
-    if (unbuilt(v->kind)) { fd_why = 2; return false; }
+    if (unbuilt(v->kind)) {
+        /* an unbuilt subterm: its environment's dimensions bound what building it gives (A8b) */
+        if (!a8b_on()) { fd_why = 2; return false; }
+        if (fd_taint_of(v)) { fd_why = 6; return false; }
+        x->inexact = true;
+        /* a thunk's pending substitution (applied when it is built) brings its values' dimensions */
+        if (v->kind == V_THUNK && v->a) { const Subst *s = (const Subst *)(uintptr_t)v->a; for (uint32_t k = 0; k < s->n; k++) fd_dnf(x, s->v[k]); }
+        for (int k = 1; k < v->n; k++) if (!fd_port(v->port[k], x, depth + 1)) return false;
+        return x->n <= 256;
+    }
+    if (fd_taint_of(v)) x->taint = true;
     if (v->kind == V_REF) {
         FdInfo *fi = v->p ? box_fd(v->p) : NULL;
         if (!fi) { if (!fd_why) fd_why = 1; return false; }
+        if (fi->taint) x->taint = true;
+        if (fi->inexact) x->inexact = true;
         Subst *s = (Subst *)(uintptr_t)v->a;
         for (uint32_t i = 0; i < fi->n; i++) {
             bool hit = false;
@@ -910,42 +962,55 @@ static bool fd_cell(Cell *v, FdSet *x, int depth) {
     }
     if (owns_dnf(v->kind)) fd_dnf(x, v->p);
     if (v->kind == V_PLAM) {
-        FdSet y = { .n = 0 };
-        for (int k = 1; k < v->n; k++) if (!fd_port(v->port[k], &y, depth + 1)) return false;
-        if (y.n > 256) return false;
-        for (int i = 0; i < y.n; i++) if (y.d[i] != (Dim)v->a) fd_add(x, y.d[i]);
-        return x->n <= 256;
+        FdSet *y = malloc(sizeof *y); y->n = 0; y->taint = false; y->inexact = false;
+        bool ok = true;
+        for (int k = 1; k < v->n && ok; k++) if (!fd_port(v->port[k], y, depth + 1)) ok = false;
+        if (ok && y->n <= 256) { for (int i = 0; i < y->n; i++) if (y->d[i] == (Dim)v->a) { y->d[i] = y->d[--y->n]; break; } fd_merge(x, y); }
+        else ok = false;
+        free(y);
+        return ok && x->n <= 256;
     }
     for (int k = 1; k < v->n; k++) if (!fd_port(v->port[k], x, depth + 1)) return false;
     return x->n <= 256;
 }
+long prof_fd_var, prof_fd_prin[512];
 static bool fd_port(Port p, FdSet *x, int depth) {
     Port q = peek(sload(&p));
-    if (!q || is_var(q)) { fd_why = 3; return false; }
+    if (!q || is_var(q)) { fd_why = 3; if (prof_on) prof_fd_var++; return false; }
     Cell *c = PC(q);
-    if (PI(q) != 0) { fd_why = 3; return false; }
+    if (PI(q) != 0 || !is_value(c->kind)) {
+        /* the result of an operation still pending, or its input */
+        if (!a8b_on() || PI(q) == 0) { fd_why = 3; if (prof_on && c->kind < 512) prof_fd_prin[c->kind]++; return false; }
+        if (--fd_budget < 0 || depth > 200) { fd_why = 4; return false; }
+        return fd_pending(c, PI(q), x, depth);
+    }
     return fd_cell(c, x, depth);
 }
-/* the box's set, or NULL while unknown (a part not yet built); tried a few times */
+/* the box's set, or NULL while unknown (a part not yet built); tried a few times. A bound from
+ * pending parts (inexact) is kept until a later try finds the exact set */
 static FdInfo *box_fd(Box *b) {
     FdInfo *fi = net_solo ? b->fd : __atomic_load_n(&b->fd, __ATOMIC_ACQUIRE);
-    if (fi) return fi;
-    if (__atomic_load_n(&b->fdtries, __ATOMIC_RELAXED) >= 8) { fd_why = 5; return NULL; }
+    if (fi && !fi->inexact) return fi;
+    if (__atomic_load_n(&b->fdtries, __ATOMIC_RELAXED) >= 8) { if (!fi) fd_why = 5; return fi; }
     __atomic_fetch_add(&b->fdtries, 1, __ATOMIC_RELAXED);
     Port q = sload(&b->root->port[0]);
-    if (!q || is_var(q)) { q = peek(q); if (!q || is_var(q)) { fd_why = 1; return NULL; } }
-    if (PI(q) != 0) { fd_why = 1; return NULL; }
-    FdSet *y = malloc(sizeof *y); y->n = 0;
+    if (!q || is_var(q)) { q = peek(q); if (!q || is_var(q)) { fd_why = 1; return fi; } }
+    if (PI(q) != 0 && !a8b_on()) { fd_why = 1; return fi; }
+    FdSet *y = malloc(sizeof *y); y->n = 0; y->taint = false; y->inexact = false;
     long saved = fd_budget; fd_budget = 4000;
-    bool ok = fd_cell(PC(q), y, 0);
+    bool ok = PI(q) != 0 ? fd_pending(PC(q), PI(q), y, 0) : fd_cell(PC(q), y, 0);
     fd_budget = saved;
     if (ok && y->n <= 256) {
-        fi = malloc(sizeof(FdInfo) + (size_t)y->n * sizeof(Dim)); fi->n = (uint32_t)y->n;
-        memcpy(fi->d, y->d, (size_t)y->n * sizeof(Dim));
-        FdInfo *none = NULL;
-        if (net_solo) b->fd = fi;
-        else if (!__atomic_compare_exchange_n(&b->fd, &none, fi, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) { free(fi); fi = none; }
-    } else fi = NULL;
+        FdInfo *nf = malloc(sizeof(FdInfo) + (size_t)y->n * sizeof(Dim)); nf->n = (uint32_t)y->n;
+        nf->taint = y->taint; nf->inexact = y->inexact;
+        memcpy(nf->d, y->d, (size_t)y->n * sizeof(Dim));
+        if (net_solo) { b->fd = nf; fi = nf; }   /* an earlier bound is not freed: a walk in progress may hold it */
+        else {
+            FdInfo *none = NULL;
+            if (!__atomic_compare_exchange_n(&b->fd, &none, nf, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) { free(nf); fi = none; }
+            else fi = nf;
+        }
+    }
     free(y);
     return fi;
 }
@@ -972,7 +1037,7 @@ static Port ref_read(Cell *r) {
         /* the substitution cut to the box's dimensions (A8): none left, a read of the box itself */
         fd_why = 0;
         FdInfo *fi = box_fd(b);
-        if (!fi && prof_on) prof_fd_why[fd_why < 6 ? fd_why : 0]++;
+        if (!fi && prof_on) prof_fd_why[fd_why < 7 ? fd_why : 0]++;
         if (fi) {
             Subst *t = subst_to_fd((Subst *)(uintptr_t)r->a, fi);
             if (!t) { if (prof_on) prof_fd_dropped++; return lazy_copy(b->key, b->root); }

@@ -2970,6 +2970,35 @@ Revision 1. A design, since this is the open item; stated so it can be criticize
 
 ### 18.16 A8 — Proposal: formal transported compositions
 
+**Status (2026-11-07, A8b: bounds through pending parts).** Round one's box sets (`box_fd`)
+were unknown while a box's parts were still being built (of g8's 20,664 substituted reads, 12,584
+past eight tries, 3,018 a part not arrived, 2,787 an unbuilt part). **Built:** (1) a compile-time
+taint, `record_mkdim`/`casetab_mkdim`/`global_mkdim` (`lang.c`): may running this record, case
+table or global reach `%dim` (`O_MKDIM`) or the checker's tables (`S_GLOBTAB`), directly or
+through calls; globals by Tarjan's components, a global without a body (other than an axiom or an
+input) or a native counted as tainted, a component cached clean only when every member is
+defined. (2) Bounds for pending values (`fd_pending`, `net.c`): what will arrive at an
+operation's port is built from what reaches its other ports (an `O_DUP` copy from its input
+only), plus the dimensions its payload names (`O_SUBST`'s values, a face's formula), minus the
+binder of `O_MKPLAM`/`O_FORALL`; `O_MKDIM`, `O_GLOB`, `O_ERA`, a tainted case table or native,
+fail. An unbuilt value (a thunk, a suspension) is bounded by its environment plus a thunk's
+pending substitution's values (missing that, `isPropPathP` in std failed with a wrong endpoint),
+unless its record is tainted. (3) Such a bound is kept on the box marked inexact and refined at
+later tries (up to eight); `rule_subst` and `ref_read` cut substitutions to it as to an exact set.
+The walk reads cells other workers rewrite, so it runs with one thread (`CUBICAL_WORKERS=0`, the
+default) and the memo on; with workers, or `CUBICAL_NOA8B=1`, everything is as before. Measured
+(steps of the read alone, memo on, `CUBICAL_WORKERS=0`): g8 329,076 → 319,371 (−2.9%), surfc's
+corner 130,291 → 127,503 (−2.1%), the number 470,557 → 457,431 (−2.8%), the typed port 1,077,444
+→ 1,056,716 (−1.9%); `tests/hit.cub` 4,804 → 4,687, `tests/fo.cub` 19,229,984 → 19,214,555.
+With workers the counts are unchanged. Every suite line of `make test` gives the same answers as
+without it; without the memo the outputs are identical across 0, 1, 4, 16 workers on the
+determinism list plus the squash and Brunerie lines, with it the answers are; TSan clean on the
+`make tsan` lines. **What remains:** g8 still meets 12,233 tries without a set; nearly all now
+fail at a dangling wire (`fd-var`, 7,963: a part whose producer has not yet been linked), none at
+an operation's principal port; the taint stops 204. The gain is small because the reads that
+matter are mostly cut already or wait on wires not yet made; the cost is in `%comp-path`'s volume
+(3,271 entries in the corner read), not in uncut substitutions.
+
 **Status (2026-11-07, a path constructor without its boundary).** `con_build` applied a path
 constructor's boundary clause (`%bdy-squash4` …) at every construction and every substitution,
 then checked its face; the rebuilt boundary was erased whenever no face held, the common case at

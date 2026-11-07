@@ -378,7 +378,7 @@ Port cofix_head(long g, long tyg);   /* the stuck head of copattern definition g
 /* a definition's body as one record taking all its parameters (NULL when it is not a λ) */
 struct Record *global_nary(long g);
 /* key: the name of what the box holds (a reference's identity). e: the memo entry whose value this is */
-typedef struct FdInfo { uint32_t n; Dim d[]; } FdInfo;   /* the free dimensions of a box's value, once known */
+typedef struct FdInfo { uint32_t n; unsigned taint : 1, inexact : 1; Dim d[]; } FdInfo;   /* taint: a record that may make a dimension is reachable; inexact: a bound from pending parts' inputs (A8b) */   /* the free dimensions of a box's value, once known */
 typedef struct Box { struct Cell *root; long rc; Key *key; struct Entry *e; Port in; FdInfo *fd; int fdtries; } Box;   /* in: the wire its value is built into (memo); fd, fdtries: box_fd */
 /* motive: the elimination's motive as a record over the same environment, or NULL. It is not a port:
  * only the two rules that read it (a formal hcomp met, and a stuck elimination typing its neutral)
@@ -429,7 +429,11 @@ typedef struct Record {
     int *uses;          /* occurrences of each slot in the body */
     Syn *body;
     int where;          /* the definition it was compiled in (CUBICAL_PROFILE) */
+    int mk;             /* A8: may building it make a dimension (reach %dim)? 0 unknown, 1 no, 2 yes (record_mkdim) */
 } Record;
+int record_mkdim(Record *r);        /* A8: 1 when building r (or anything it calls) may make a fresh free dimension */
+int casetab_mkdim(const struct CaseTab *t);
+int global_mkdim(long g);
 /* profile: applications of λs and forcings of thunks, by the definition they were compiled in */
 extern long *prof_count, *prof_dup; extern const char **prof_name; extern int prof_n, prof_on; extern long prof_dupk[64], prof_erak[64], prof_con[4096], prof_glob[65536];
 
