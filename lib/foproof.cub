@@ -330,3 +330,515 @@ envxy x y n = case n of zero → y; suc k → x
 #same fo-ev (lower-w ex2-c) (envxy #10 #3) = #78
 ex2-path : (x y : Word) → fo-ev (spec-w std-vrule ex2-c) (envxy x y) ≡ wc-ev ex2-c (envxy x y)
 ex2-path x y = spec-path std-vrule ex2-c (envxy x y)
+
+-- ---------------------------------------------------------------- data, closures and calls
+-- The fragment grows by data (constructors with word fields, a two-way case on the tag: lib/fo.cub's
+-- fcon and fswitch), closures (λ and application: the λ's body goes to a table and the closure
+-- keeps its environment, as lib/fo.cub's lift makes fclos over the definition table) and calls to
+-- other definitions (a table of one-argument bodies, fcall). Evaluation is by fuel: n steps of
+-- depth, every node one, a value dcvbot when they run out, so recursion through calls is total;
+-- the theorem holds at every fuel. A λ carries its table index (the bridge numbers them).
+data DC = dcl (w : Word) | dcv (n : Nat) | dcp (p : Word) (a : DC) (b : DC) | dclet (a : DC) (b : DC) | dccon (k : Word) (a : DC) (b : DC) | dccase (s : DC) (b0 : DC) (b1 : DC) | dclam (i : Word) (b : DC) | dcapp (f : DC) (a : DC) | dccall (g : Word) (a : DC)
+-- the source's values: a closure holds its body and environment
+data DV = dvw (w : Word) | dvc (k : Word) (a : Word) (b : Word) | dvclo (i : Word) (b : DC) (env : Nat → DV) | dvbot
+dext : (Nat → DV) → DV → Nat → DV
+dext ρ a n = case n of zero → a; suc k → ρ k
+dvnone : Nat → DV
+dvnone n = dvbot
+dv-prim : Word → DV → DV → DV
+dv-prim p (dvw a) (dvw b) = dvw (fw-prim p a b)
+dv-prim p _ _ = dvbot
+dv-con : Word → DV → DV → DV
+dv-con k (dvw a) (dvw b) = dvc k a b
+dv-con k _ _ = dvbot
+-- a case on the tag: 0 the first alternative, any other the second; the fields pushed (the second
+-- innermost)
+dv-sel : (DC → (Nat → DV) → DV) → (Nat → DV) → DV → DC → DC → DV
+dv-sel ev ρ (dvc k p q) b0 b1 = %welimP (λ v → DV) k (ev b0 (dext (dext ρ (dvw p)) (dvw q))) (λ m h → ev b1 (dext (dext ρ (dvw p)) (dvw q)))
+dv-sel ev ρ _ b0 b1 = dvbot
+dv-app : (DC → (Nat → DV) → DV) → DV → DV → DV
+dv-app ev (dvclo i b ρ) x = ev b (dext ρ x)
+dv-app ev _ x = dvbot
+-- the source's meaning, at fuel n, the definitions G
+dsev : (Word → DC) → Nat → DC → (Nat → DV) → DV
+dsev G zero c ρ = dvbot
+dsev G (suc n) (dcl w) ρ = dvw w
+dsev G (suc n) (dcv k) ρ = ρ k
+dsev G (suc n) (dcp p a b) ρ = dv-prim p (dsev G n a ρ) (dsev G n b ρ)
+dsev G (suc n) (dclet a b) ρ = dsev G n b (dext ρ (dsev G n a ρ))
+dsev G (suc n) (dccon k a b) ρ = dv-con k (dsev G n a ρ) (dsev G n b ρ)
+dsev G (suc n) (dccase s b0 b1) ρ = dv-sel (λ c σ → dsev G n c σ) ρ (dsev G n s ρ) b0 b1
+dsev G (suc n) (dclam i b) ρ = dvclo i b ρ
+dsev G (suc n) (dcapp f a) ρ = dv-app (λ c σ → dsev G n c σ) (dsev G n f ρ) (dsev G n a ρ)
+dsev G (suc n) (dccall g a) ρ = dsev G n (G g) (dext dvnone (dsev G n a ρ))
+-- the target: closures by table index over their captured environment
+data FC = fcl (w : Word) | fcv (n : Nat) | fcp (p : Word) (a : FC) (b : FC) | fclet (a : FC) (b : FC) | fccon (k : Word) (a : FC) (b : FC) | fcsw (s : FC) (b0 : FC) (b1 : FC) | fcclo (i : Word) | fcapp (f : FC) (a : FC) | fccall (g : Word) (a : FC)
+data TV = tvw (w : Word) | tvc (k : Word) (a : Word) (b : Word) | tvclo (i : Word) (env : Nat → TV) | tvbot
+text : (Nat → TV) → TV → Nat → TV
+text ρ a n = case n of zero → a; suc k → ρ k
+tvnone : Nat → TV
+tvnone n = tvbot
+tv-prim : Word → TV → TV → TV
+tv-prim p (tvw a) (tvw b) = tvw (fw-prim p a b)
+tv-prim p _ _ = tvbot
+tv-con : Word → TV → TV → TV
+tv-con k (tvw a) (tvw b) = tvc k a b
+tv-con k _ _ = tvbot
+tv-sel : (FC → (Nat → TV) → TV) → (Nat → TV) → TV → FC → FC → TV
+tv-sel ev ρ (tvc k p q) b0 b1 = %welimP (λ v → TV) k (ev b0 (text (text ρ (tvw p)) (tvw q))) (λ m h → ev b1 (text (text ρ (tvw p)) (tvw q)))
+tv-sel ev ρ _ b0 b1 = tvbot
+tv-app : (Word → FC) → (FC → (Nat → TV) → TV) → TV → TV → TV
+tv-app T ev (tvclo i ρ) x = ev (T i) (text ρ x)
+tv-app T ev _ x = tvbot
+-- the target's meaning: T the closures' table, GT the definitions'
+dtev : (Word → FC) → (Word → FC) → Nat → FC → (Nat → TV) → TV
+dtev T GT zero c ρ = tvbot
+dtev T GT (suc n) (fcl w) ρ = tvw w
+dtev T GT (suc n) (fcv k) ρ = ρ k
+dtev T GT (suc n) (fcp p a b) ρ = tv-prim p (dtev T GT n a ρ) (dtev T GT n b ρ)
+dtev T GT (suc n) (fclet a b) ρ = dtev T GT n b (text ρ (dtev T GT n a ρ))
+dtev T GT (suc n) (fccon k a b) ρ = tv-con k (dtev T GT n a ρ) (dtev T GT n b ρ)
+dtev T GT (suc n) (fcsw s b0 b1) ρ = tv-sel (λ c σ → dtev T GT n c σ) ρ (dtev T GT n s ρ) b0 b1
+dtev T GT (suc n) (fcclo i) ρ = tvclo i ρ
+dtev T GT (suc n) (fcapp f a) ρ = tv-app T (λ c σ → dtev T GT n c σ) (dtev T GT n f ρ) (dtev T GT n a ρ)
+dtev T GT (suc n) (fccall g a) ρ = dtev T GT n (GT g) (text tvnone (dtev T GT n a ρ))
+-- closure conversion: a λ becomes a reference to its table entry
+dconv : DC → FC
+dconv (dcl w) = fcl w
+dconv (dcv n) = fcv n
+dconv (dcp p a b) = fcp p (dconv a) (dconv b)
+dconv (dclet a b) = fclet (dconv a) (dconv b)
+dconv (dccon k a b) = fccon k (dconv a) (dconv b)
+dconv (dccase s b0 b1) = fcsw (dconv s) (dconv b0) (dconv b1)
+dconv (dclam i b) = fcclo i
+dconv (dcapp f a) = fcapp (dconv f) (dconv a)
+dconv (dccall g a) = fccall g (dconv a)
+-- what a value is in the target: a closure's body dropped for its index
+derase : DV → TV
+derase (dvw w) = tvw w
+derase (dvc k a b) = tvc k a b
+derase (dvclo i b ρ) = tvclo i (λ n → derase (ρ n))
+derase dvbot = tvbot
+-- ---------------------------------------------------------------- the theorem
+-- the table is right for a code: every λ i b in it has T i the conversion of b
+DTok : (Word → FC) → DC → Type
+DTok T (dcl w) = Unit
+DTok T (dcv n) = Unit
+DTok T (dcp p a b) = DTok T a × DTok T b
+DTok T (dclet a b) = DTok T a × DTok T b
+DTok T (dccon k a b) = DTok T a × DTok T b
+DTok T (dccase s b0 b1) = DTok T s × (DTok T b0 × DTok T b1)
+DTok T (dclam i b) = (T i ≡ dconv b) × DTok T b
+DTok T (dcapp f a) = DTok T f × DTok T a
+DTok T (dccall g a) = DTok T a
+-- and for a value: a closure's index names its body's conversion, all the way into its environment
+dgood : (Word → FC) → DV → Type
+dgood T (dvw w) = Unit
+dgood T (dvc k a b) = Unit
+dgood T (dvclo i b ρ) = ((T i ≡ dconv b) × DTok T b) × ((n : Nat) → dgood T (ρ n))
+dgood T dvbot = Unit
+DGEnv : (Word → FC) → (Nat → DV) → Type
+DGEnv T ρ = (k : Nat) → dgood T (ρ k)
+dge-ext : (T : Word → FC) (ρ : Nat → DV) (x : DV) → DGEnv T ρ → dgood T x → DGEnv T (dext ρ x)
+dge-ext T ρ x ge gx k = case k return (λ m → dgood T (dext ρ x m)) of zero → gx; suc m → ge m
+denv : (Nat → DV) → Nat → TV
+denv ρ k = derase (ρ k)
+denv-pt : (ρ : Nat → DV) (x : DV) (k : Nat) → denv (dext ρ x) k ≡ text (denv ρ) (derase x) k
+denv-pt ρ x zero = λ i → derase x
+denv-pt ρ x (suc m) = λ i → derase (ρ m)
+denv-ext : (ρ : Nat → DV) (x : DV) → denv (dext ρ x) ≡ text (denv ρ) (derase x)
+denv-ext ρ x = λ j k → denv-pt ρ x k j
+denv-pt2 : (ρ : Nat → DV) (x y : DV) (k : Nat) → denv (dext (dext ρ x) y) k ≡ text (text (denv ρ) (derase x)) (derase y) k
+denv-pt2 ρ x y zero = λ i → derase y
+denv-pt2 ρ x y (suc zero) = λ i → derase x
+denv-pt2 ρ x y (suc (suc m)) = λ i → derase (ρ m)
+denv-ext2 : (ρ : Nat → DV) (x y : DV) → denv (dext (dext ρ x) y) ≡ text (text (denv ρ) (derase x)) (derase y)
+denv-ext2 ρ x y = λ j k → denv-pt2 ρ x y k j
+dtr : {x y z : TV} → x ≡ y → y ≡ z → x ≡ z
+dtr p q = λ i → comp (λ j → TV) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
+dtry : {x z : TV} → (y : TV) → x ≡ y → y ≡ z → x ≡ z
+dtry y p q = dtr {_} {y} {_} p q
+-- the lemmas, one per operation on values
+dv-prim-ok : (T : Word → FC) (p : Word) (x y : DV) → dgood T (dv-prim p x y) × (derase (dv-prim p x y) ≡ tv-prim p (derase x) (derase y))
+dv-prim-ok T p (dvw a) (dvw b) = (unit , λ i → tvw (fw-prim p a b))
+dv-prim-ok T p _ _ = (unit , λ i → tvbot)
+dv-con-ok : (T : Word → FC) (k : Word) (x y : DV) → dgood T (dv-con k x y) × (derase (dv-con k x y) ≡ tv-con k (derase x) (derase y))
+dv-con-ok T k (dvw a) (dvw b) = (unit , λ i → tvc k a b)
+dv-con-ok T k _ _ = (unit , λ i → tvbot)
+-- an evaluator pair related at every code whose table is right, in every good environment
+DIH : (Word → FC) → (DC → (Nat → DV) → DV) → (FC → (Nat → TV) → TV) → Type
+DIH T ev evt = (c : DC) (σ : Nat → DV) → DTok T c → DGEnv T σ → dgood T (ev c σ) × (derase (ev c σ) ≡ evt (dconv c) (denv σ))
+dv-sel-ok : (T : Word → FC) (ev : DC → (Nat → DV) → DV) (evt : FC → (Nat → TV) → TV) → DIH T ev evt → (ρ : Nat → DV) (v : DV) → dgood T v →
+  (b0 b1 : DC) → DTok T b0 → DTok T b1 → DGEnv T ρ →
+  dgood T (dv-sel ev ρ v b0 b1) × (derase (dv-sel ev ρ v b0 b1) ≡ tv-sel evt (denv ρ) (derase v) (dconv b0) (dconv b1))
+dv-sel-ok T ev evt ih ρ (dvc k p q) gv b0 b1 t0 t1 ge =
+  %welimP (λ kk → dgood T (%welimP (λ v → DV) kk (ev b0 (dext (dext ρ (dvw p)) (dvw q))) (λ m h → ev b1 (dext (dext ρ (dvw p)) (dvw q))))
+               × (derase (%welimP (λ v → DV) kk (ev b0 (dext (dext ρ (dvw p)) (dvw q))) (λ m h → ev b1 (dext (dext ρ (dvw p)) (dvw q))))
+                  ≡ %welimP (λ v → TV) kk (evt (dconv b0) (text (text (denv ρ) (tvw p)) (tvw q))) (λ m h → evt (dconv b1) (text (text (denv ρ) (tvw p)) (tvw q)))))
+    k
+    (fst (ih b0 (dext (dext ρ (dvw p)) (dvw q)) t0 (dge-ext T (dext ρ (dvw p)) (dvw q) (dge-ext T ρ (dvw p) ge unit) unit)) ,
+     dtr (snd (ih b0 (dext (dext ρ (dvw p)) (dvw q)) t0 (dge-ext T (dext ρ (dvw p)) (dvw q) (dge-ext T ρ (dvw p) ge unit) unit)))
+         (λ j → evt (dconv b0) (denv-ext2 ρ (dvw p) (dvw q) j)))
+    (λ m h → (fst (ih b1 (dext (dext ρ (dvw p)) (dvw q)) t1 (dge-ext T (dext ρ (dvw p)) (dvw q) (dge-ext T ρ (dvw p) ge unit) unit)) ,
+              dtr (snd (ih b1 (dext (dext ρ (dvw p)) (dvw q)) t1 (dge-ext T (dext ρ (dvw p)) (dvw q) (dge-ext T ρ (dvw p) ge unit) unit)))
+                  (λ j → evt (dconv b1) (denv-ext2 ρ (dvw p) (dvw q) j))))
+dv-sel-ok T ev evt ih ρ _ gv b0 b1 t0 t1 ge = (unit , λ i → tvbot)
+dv-app-ok : (T : Word → FC) (ev : DC → (Nat → DV) → DV) (evt : FC → (Nat → TV) → TV) → DIH T ev evt → (v x : DV) → dgood T v → dgood T x →
+  dgood T (dv-app ev v x) × (derase (dv-app ev v x) ≡ tv-app T evt (derase v) (derase x))
+dv-app-ok T ev evt ih (dvclo i b ρ) x gv gx =
+  (fst (ih b (dext ρ x) (snd (fst gv)) (dge-ext T ρ x (snd gv) gx)) ,
+   dtr (snd (ih b (dext ρ x) (snd (fst gv)) (dge-ext T ρ x (snd gv) gx)))
+       (dtry (evt (T i) (denv (dext ρ x))) (λ j → evt (fst (fst gv) (~ j)) (denv (dext ρ x))) (λ j → evt (T i) (denv-ext ρ x j))))
+dv-app-ok T ev evt ih _ x gv gx = (unit , λ i → tvbot)
+-- the definitions' table is right: each a conversion, with its closures' table right
+DGOK : (Word → DC) → (Word → FC) → (Word → FC) → Type
+DGOK G T GT = (g : Word) → (GT g ≡ dconv (G g)) × DTok T (G g)
+DRes : (Word → DC) → (Word → FC) → (Word → FC) → Nat → DC → (Nat → DV) → Type
+DRes G T GT n c ρ = dgood T (dsev G n c ρ) × (derase (dsev G n c ρ) ≡ dtev T GT n (dconv c) (denv ρ))
+-- one step: what evaluation does given what it does one unit of fuel smaller (ih)
+DIHn : (Word → DC) → (Word → FC) → (Word → FC) → Nat → Type
+DIHn G T GT n = (c : DC) (σ : Nat → DV) → DTok T c → DGEnv T σ → DRes G T GT n c σ
+ds-prim : (G : Word → DC) (T GT : Word → FC) (n : Nat) → DIHn G T GT n → (p : Word) (a b : DC) (ρ : Nat → DV) → DTok T (dcp p a b) → DGEnv T ρ → DRes G T GT (suc n) (dcp p a b) ρ
+ds-prim G T GT n ih p a b ρ tk ge =
+  (fst (dv-prim-ok T p (dsev G n a ρ) (dsev G n b ρ)) ,
+   dtr (snd (dv-prim-ok T p (dsev G n a ρ) (dsev G n b ρ))) (λ j → tv-prim p (snd (ih a ρ (fst tk) ge) j) (snd (ih b ρ (snd tk) ge) j)))
+ds-con : (G : Word → DC) (T GT : Word → FC) (n : Nat) → DIHn G T GT n → (k : Word) (a b : DC) (ρ : Nat → DV) → DTok T (dccon k a b) → DGEnv T ρ → DRes G T GT (suc n) (dccon k a b) ρ
+ds-con G T GT n ih k a b ρ tk ge =
+  (fst (dv-con-ok T k (dsev G n a ρ) (dsev G n b ρ)) ,
+   dtr (snd (dv-con-ok T k (dsev G n a ρ) (dsev G n b ρ))) (λ j → tv-con k (snd (ih a ρ (fst tk) ge) j) (snd (ih b ρ (snd tk) ge) j)))
+ds-let : (G : Word → DC) (T GT : Word → FC) (n : Nat) → DIHn G T GT n → (a b : DC) (ρ : Nat → DV) → DTok T (dclet a b) → DGEnv T ρ → DRes G T GT (suc n) (dclet a b) ρ
+ds-let G T GT n ih a b ρ tk ge =
+  (fst (ih b (dext ρ (dsev G n a ρ)) (snd tk) (dge-ext T ρ (dsev G n a ρ) ge (fst (ih a ρ (fst tk) ge)))) ,
+   dtr (snd (ih b (dext ρ (dsev G n a ρ)) (snd tk) (dge-ext T ρ (dsev G n a ρ) ge (fst (ih a ρ (fst tk) ge)))))
+       (dtry (dtev T GT n (dconv b) (text (denv ρ) (derase (dsev G n a ρ)))) (λ j → dtev T GT n (dconv b) (denv-ext ρ (dsev G n a ρ) j))
+            (λ j → dtev T GT n (dconv b) (text (denv ρ) (snd (ih a ρ (fst tk) ge) j)))))
+ds-case : (G : Word → DC) (T GT : Word → FC) (n : Nat) → DIHn G T GT n → (s b0 b1 : DC) (ρ : Nat → DV) → DTok T (dccase s b0 b1) → DGEnv T ρ → DRes G T GT (suc n) (dccase s b0 b1) ρ
+ds-case G T GT n ih s b0 b1 ρ tk ge =
+  (fst (dv-sel-ok T (λ c σ → dsev G n c σ) (λ c σ → dtev T GT n c σ) ih ρ (dsev G n s ρ) (fst (ih s ρ (fst tk) ge)) b0 b1 (fst (snd tk)) (snd (snd tk)) ge) ,
+   dtr (snd (dv-sel-ok T (λ c σ → dsev G n c σ) (λ c σ → dtev T GT n c σ) ih ρ (dsev G n s ρ) (fst (ih s ρ (fst tk) ge)) b0 b1 (fst (snd tk)) (snd (snd tk)) ge))
+       (λ j → tv-sel (λ c σ → dtev T GT n c σ) (denv ρ) (snd (ih s ρ (fst tk) ge) j) (dconv b0) (dconv b1)))
+ds-app : (G : Word → DC) (T GT : Word → FC) (n : Nat) → DIHn G T GT n → (f a : DC) (ρ : Nat → DV) → DTok T (dcapp f a) → DGEnv T ρ → DRes G T GT (suc n) (dcapp f a) ρ
+ds-app G T GT n ih f a ρ tk ge =
+  (fst (dv-app-ok T (λ c σ → dsev G n c σ) (λ c σ → dtev T GT n c σ) ih (dsev G n f ρ) (dsev G n a ρ) (fst (ih f ρ (fst tk) ge)) (fst (ih a ρ (snd tk) ge))) ,
+   dtr (snd (dv-app-ok T (λ c σ → dsev G n c σ) (λ c σ → dtev T GT n c σ) ih (dsev G n f ρ) (dsev G n a ρ) (fst (ih f ρ (fst tk) ge)) (fst (ih a ρ (snd tk) ge))))
+       (λ j → tv-app T (λ c σ → dtev T GT n c σ) (snd (ih f ρ (fst tk) ge) j) (snd (ih a ρ (snd tk) ge) j)))
+ds-call : (G : Word → DC) (T GT : Word → FC) → DGOK G T GT → (n : Nat) → DIHn G T GT n → (g : Word) (a : DC) (ρ : Nat → DV) → DTok T (dccall g a) → DGEnv T ρ → DRes G T GT (suc n) (dccall g a) ρ
+ds-call G T GT go n ih g a ρ tk ge =
+  (fst (ih (G g) (dext dvnone (dsev G n a ρ)) (snd (go g)) (dge-ext T dvnone (dsev G n a ρ) (λ k → unit) (fst (ih a ρ tk ge)))) ,
+   dtr (snd (ih (G g) (dext dvnone (dsev G n a ρ)) (snd (go g)) (dge-ext T dvnone (dsev G n a ρ) (λ k → unit) (fst (ih a ρ tk ge)))))
+       (dtry (dtev T GT n (GT g) (denv (dext dvnone (dsev G n a ρ)))) (λ j → dtev T GT n (fst (go g) (~ j)) (denv (dext dvnone (dsev G n a ρ))))
+            (dtry (dtev T GT n (GT g) (text tvnone (derase (dsev G n a ρ)))) (λ j → dtev T GT n (GT g) (denv-ext dvnone (dsev G n a ρ) j))
+                 (λ j → dtev T GT n (GT g) (text tvnone (snd (ih a ρ tk ge) j))))))
+-- closure conversion computes what the code means, at every fuel and in every good environment
+dc-sound : (G : Word → DC) (T GT : Word → FC) → DGOK G T GT → (n : Nat) (c : DC) (ρ : Nat → DV) → DTok T c → DGEnv T ρ → DRes G T GT n c ρ
+dc-sound G T GT go zero c ρ tk ge = (unit , λ i → tvbot)
+dc-sound G T GT go (suc n) (dcl w) ρ tk ge = (unit , λ i → tvw w)
+dc-sound G T GT go (suc n) (dcv k) ρ tk ge = (ge k , λ i → derase (ρ k))
+dc-sound G T GT go (suc n) (dcp p a b) ρ tk ge = ds-prim G T GT n (λ c1 σ1 t1 g1 → dc-sound G T GT go n c1 σ1 t1 g1) p a b ρ tk ge
+dc-sound G T GT go (suc n) (dclet a b) ρ tk ge = ds-let G T GT n (λ c1 σ1 t1 g1 → dc-sound G T GT go n c1 σ1 t1 g1) a b ρ tk ge
+dc-sound G T GT go (suc n) (dccon k a b) ρ tk ge = ds-con G T GT n (λ c1 σ1 t1 g1 → dc-sound G T GT go n c1 σ1 t1 g1) k a b ρ tk ge
+dc-sound G T GT go (suc n) (dccase s b0 b1) ρ tk ge = ds-case G T GT n (λ c1 σ1 t1 g1 → dc-sound G T GT go n c1 σ1 t1 g1) s b0 b1 ρ tk ge
+dc-sound G T GT go (suc n) (dclam i b) ρ tk ge = ((tk , ge) , λ j → tvclo i (denv ρ))
+dc-sound G T GT go (suc n) (dcapp f a) ρ tk ge = ds-app G T GT n (λ c1 σ1 t1 g1 → dc-sound G T GT go n c1 σ1 t1 g1) f a ρ tk ge
+dc-sound G T GT go (suc n) (dccall g a) ρ tk ge = ds-call G T GT go n (λ c1 σ1 t1 g1 → dc-sound G T GT go n c1 σ1 t1 g1) g a ρ tk ge
+-- ---------------------------------------------------------------- deciding the table, for concrete programs
+neqb : Nat → Nat → Bool
+neqb zero zero = true
+neqb (suc m) (suc n) = neqb m n
+neqb _ _ = false
+neqb-sound : (m n : Nat) → neqb m n ≡ true → m ≡ n
+neqb-sound zero zero e = λ i → zero
+neqb-sound (suc m) (suc n) e = λ i → suc (neqb-sound m n e i)
+neqb-sound _ _ e = Empty-rec (false≢true e)
+fc-eq : FC → FC → Bool
+fc-eq (fcl x0) y = case y return (λ z → Bool) of
+    fcl y0 → weq x0 y0
+    fcv y0 → false
+    fcp y0 y1 y2 → false
+    fclet y0 y1 → false
+    fccon y0 y1 y2 → false
+    fcsw y0 y1 y2 → false
+    fcclo y0 → false
+    fcapp y0 y1 → false
+    fccall y0 y1 → false
+fc-eq (fcv x0) y = case y return (λ z → Bool) of
+    fcl y0 → false
+    fcv y0 → neqb x0 y0
+    fcp y0 y1 y2 → false
+    fclet y0 y1 → false
+    fccon y0 y1 y2 → false
+    fcsw y0 y1 y2 → false
+    fcclo y0 → false
+    fcapp y0 y1 → false
+    fccall y0 y1 → false
+fc-eq (fcp x0 x1 x2) y = case y return (λ z → Bool) of
+    fcl y0 → false
+    fcv y0 → false
+    fcp y0 y1 y2 → andbt (weq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2))
+    fclet y0 y1 → false
+    fccon y0 y1 y2 → false
+    fcsw y0 y1 y2 → false
+    fcclo y0 → false
+    fcapp y0 y1 → false
+    fccall y0 y1 → false
+fc-eq (fclet x0 x1) y = case y return (λ z → Bool) of
+    fcl y0 → false
+    fcv y0 → false
+    fcp y0 y1 y2 → false
+    fclet y0 y1 → andbt (fc-eq x0 y0) (fc-eq x1 y1)
+    fccon y0 y1 y2 → false
+    fcsw y0 y1 y2 → false
+    fcclo y0 → false
+    fcapp y0 y1 → false
+    fccall y0 y1 → false
+fc-eq (fccon x0 x1 x2) y = case y return (λ z → Bool) of
+    fcl y0 → false
+    fcv y0 → false
+    fcp y0 y1 y2 → false
+    fclet y0 y1 → false
+    fccon y0 y1 y2 → andbt (weq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2))
+    fcsw y0 y1 y2 → false
+    fcclo y0 → false
+    fcapp y0 y1 → false
+    fccall y0 y1 → false
+fc-eq (fcsw x0 x1 x2) y = case y return (λ z → Bool) of
+    fcl y0 → false
+    fcv y0 → false
+    fcp y0 y1 y2 → false
+    fclet y0 y1 → false
+    fccon y0 y1 y2 → false
+    fcsw y0 y1 y2 → andbt (fc-eq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2))
+    fcclo y0 → false
+    fcapp y0 y1 → false
+    fccall y0 y1 → false
+fc-eq (fcclo x0) y = case y return (λ z → Bool) of
+    fcl y0 → false
+    fcv y0 → false
+    fcp y0 y1 y2 → false
+    fclet y0 y1 → false
+    fccon y0 y1 y2 → false
+    fcsw y0 y1 y2 → false
+    fcclo y0 → weq x0 y0
+    fcapp y0 y1 → false
+    fccall y0 y1 → false
+fc-eq (fcapp x0 x1) y = case y return (λ z → Bool) of
+    fcl y0 → false
+    fcv y0 → false
+    fcp y0 y1 y2 → false
+    fclet y0 y1 → false
+    fccon y0 y1 y2 → false
+    fcsw y0 y1 y2 → false
+    fcclo y0 → false
+    fcapp y0 y1 → andbt (fc-eq x0 y0) (fc-eq x1 y1)
+    fccall y0 y1 → false
+fc-eq (fccall x0 x1) y = case y return (λ z → Bool) of
+    fcl y0 → false
+    fcv y0 → false
+    fcp y0 y1 y2 → false
+    fclet y0 y1 → false
+    fccon y0 y1 y2 → false
+    fcsw y0 y1 y2 → false
+    fcclo y0 → false
+    fcapp y0 y1 → false
+    fccall y0 y1 → andbt (weq x0 y0) (fc-eq x1 y1)
+fcs-fcl : (x0 : Word) →  (y : FC) → fc-eq (fcl x0) y ≡ true → (fcl x0) ≡ y
+fcs-fcl x0  y = case y return (λ z → fc-eq (fcl x0) z ≡ true → (fcl x0) ≡ z) of
+    fcl y0 → λ e i → fcl (weq-sound x0 y0 e i)
+    fcv y0 → λ e → Empty-rec (false≢true e)
+    fcp y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fclet y0 y1 → λ e → Empty-rec (false≢true e)
+    fccon y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcsw y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcclo y0 → λ e → Empty-rec (false≢true e)
+    fcapp y0 y1 → λ e → Empty-rec (false≢true e)
+    fccall y0 y1 → λ e → Empty-rec (false≢true e)
+fcs-fcv : (x0 : Nat) →  (y : FC) → fc-eq (fcv x0) y ≡ true → (fcv x0) ≡ y
+fcs-fcv x0  y = case y return (λ z → fc-eq (fcv x0) z ≡ true → (fcv x0) ≡ z) of
+    fcl y0 → λ e → Empty-rec (false≢true e)
+    fcv y0 → λ e i → fcv (neqb-sound x0 y0 e i)
+    fcp y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fclet y0 y1 → λ e → Empty-rec (false≢true e)
+    fccon y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcsw y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcclo y0 → λ e → Empty-rec (false≢true e)
+    fcapp y0 y1 → λ e → Empty-rec (false≢true e)
+    fccall y0 y1 → λ e → Empty-rec (false≢true e)
+fcs-fcp : (x0 : Word) (x1 : FC) (x2 : FC) → ((y : FC) → fc-eq x1 y ≡ true → x1 ≡ y) → ((y : FC) → fc-eq x2 y ≡ true → x2 ≡ y) → (y : FC) → fc-eq (fcp x0 x1 x2) y ≡ true → (fcp x0 x1 x2) ≡ y
+fcs-fcp x0 x1 x2 h1 h2 y = case y return (λ z → fc-eq (fcp x0 x1 x2) z ≡ true → (fcp x0 x1 x2) ≡ z) of
+    fcl y0 → λ e → Empty-rec (false≢true e)
+    fcv y0 → λ e → Empty-rec (false≢true e)
+    fcp y0 y1 y2 → λ e i → fcp (weq-sound x0 y0 (andbt-l (weq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2)) e) i) (h1 y1 (andbt-l (fc-eq x1 y1) (fc-eq x2 y2) (andbt-r (weq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2)) e)) i) (h2 y2 (andbt-r (fc-eq x1 y1) (fc-eq x2 y2) (andbt-r (weq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2)) e)) i)
+    fclet y0 y1 → λ e → Empty-rec (false≢true e)
+    fccon y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcsw y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcclo y0 → λ e → Empty-rec (false≢true e)
+    fcapp y0 y1 → λ e → Empty-rec (false≢true e)
+    fccall y0 y1 → λ e → Empty-rec (false≢true e)
+fcs-fclet : (x0 : FC) (x1 : FC) → ((y : FC) → fc-eq x0 y ≡ true → x0 ≡ y) → ((y : FC) → fc-eq x1 y ≡ true → x1 ≡ y) → (y : FC) → fc-eq (fclet x0 x1) y ≡ true → (fclet x0 x1) ≡ y
+fcs-fclet x0 x1 h0 h1 y = case y return (λ z → fc-eq (fclet x0 x1) z ≡ true → (fclet x0 x1) ≡ z) of
+    fcl y0 → λ e → Empty-rec (false≢true e)
+    fcv y0 → λ e → Empty-rec (false≢true e)
+    fcp y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fclet y0 y1 → λ e i → fclet (h0 y0 (andbt-l (fc-eq x0 y0) (fc-eq x1 y1) e) i) (h1 y1 (andbt-r (fc-eq x0 y0) (fc-eq x1 y1) e) i)
+    fccon y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcsw y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcclo y0 → λ e → Empty-rec (false≢true e)
+    fcapp y0 y1 → λ e → Empty-rec (false≢true e)
+    fccall y0 y1 → λ e → Empty-rec (false≢true e)
+fcs-fccon : (x0 : Word) (x1 : FC) (x2 : FC) → ((y : FC) → fc-eq x1 y ≡ true → x1 ≡ y) → ((y : FC) → fc-eq x2 y ≡ true → x2 ≡ y) → (y : FC) → fc-eq (fccon x0 x1 x2) y ≡ true → (fccon x0 x1 x2) ≡ y
+fcs-fccon x0 x1 x2 h1 h2 y = case y return (λ z → fc-eq (fccon x0 x1 x2) z ≡ true → (fccon x0 x1 x2) ≡ z) of
+    fcl y0 → λ e → Empty-rec (false≢true e)
+    fcv y0 → λ e → Empty-rec (false≢true e)
+    fcp y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fclet y0 y1 → λ e → Empty-rec (false≢true e)
+    fccon y0 y1 y2 → λ e i → fccon (weq-sound x0 y0 (andbt-l (weq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2)) e) i) (h1 y1 (andbt-l (fc-eq x1 y1) (fc-eq x2 y2) (andbt-r (weq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2)) e)) i) (h2 y2 (andbt-r (fc-eq x1 y1) (fc-eq x2 y2) (andbt-r (weq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2)) e)) i)
+    fcsw y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcclo y0 → λ e → Empty-rec (false≢true e)
+    fcapp y0 y1 → λ e → Empty-rec (false≢true e)
+    fccall y0 y1 → λ e → Empty-rec (false≢true e)
+fcs-fcsw : (x0 : FC) (x1 : FC) (x2 : FC) → ((y : FC) → fc-eq x0 y ≡ true → x0 ≡ y) → ((y : FC) → fc-eq x1 y ≡ true → x1 ≡ y) → ((y : FC) → fc-eq x2 y ≡ true → x2 ≡ y) → (y : FC) → fc-eq (fcsw x0 x1 x2) y ≡ true → (fcsw x0 x1 x2) ≡ y
+fcs-fcsw x0 x1 x2 h0 h1 h2 y = case y return (λ z → fc-eq (fcsw x0 x1 x2) z ≡ true → (fcsw x0 x1 x2) ≡ z) of
+    fcl y0 → λ e → Empty-rec (false≢true e)
+    fcv y0 → λ e → Empty-rec (false≢true e)
+    fcp y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fclet y0 y1 → λ e → Empty-rec (false≢true e)
+    fccon y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcsw y0 y1 y2 → λ e i → fcsw (h0 y0 (andbt-l (fc-eq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2)) e) i) (h1 y1 (andbt-l (fc-eq x1 y1) (fc-eq x2 y2) (andbt-r (fc-eq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2)) e)) i) (h2 y2 (andbt-r (fc-eq x1 y1) (fc-eq x2 y2) (andbt-r (fc-eq x0 y0) (andbt (fc-eq x1 y1) (fc-eq x2 y2)) e)) i)
+    fcclo y0 → λ e → Empty-rec (false≢true e)
+    fcapp y0 y1 → λ e → Empty-rec (false≢true e)
+    fccall y0 y1 → λ e → Empty-rec (false≢true e)
+fcs-fcclo : (x0 : Word) →  (y : FC) → fc-eq (fcclo x0) y ≡ true → (fcclo x0) ≡ y
+fcs-fcclo x0  y = case y return (λ z → fc-eq (fcclo x0) z ≡ true → (fcclo x0) ≡ z) of
+    fcl y0 → λ e → Empty-rec (false≢true e)
+    fcv y0 → λ e → Empty-rec (false≢true e)
+    fcp y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fclet y0 y1 → λ e → Empty-rec (false≢true e)
+    fccon y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcsw y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcclo y0 → λ e i → fcclo (weq-sound x0 y0 e i)
+    fcapp y0 y1 → λ e → Empty-rec (false≢true e)
+    fccall y0 y1 → λ e → Empty-rec (false≢true e)
+fcs-fcapp : (x0 : FC) (x1 : FC) → ((y : FC) → fc-eq x0 y ≡ true → x0 ≡ y) → ((y : FC) → fc-eq x1 y ≡ true → x1 ≡ y) → (y : FC) → fc-eq (fcapp x0 x1) y ≡ true → (fcapp x0 x1) ≡ y
+fcs-fcapp x0 x1 h0 h1 y = case y return (λ z → fc-eq (fcapp x0 x1) z ≡ true → (fcapp x0 x1) ≡ z) of
+    fcl y0 → λ e → Empty-rec (false≢true e)
+    fcv y0 → λ e → Empty-rec (false≢true e)
+    fcp y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fclet y0 y1 → λ e → Empty-rec (false≢true e)
+    fccon y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcsw y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcclo y0 → λ e → Empty-rec (false≢true e)
+    fcapp y0 y1 → λ e i → fcapp (h0 y0 (andbt-l (fc-eq x0 y0) (fc-eq x1 y1) e) i) (h1 y1 (andbt-r (fc-eq x0 y0) (fc-eq x1 y1) e) i)
+    fccall y0 y1 → λ e → Empty-rec (false≢true e)
+fcs-fccall : (x0 : Word) (x1 : FC) → ((y : FC) → fc-eq x1 y ≡ true → x1 ≡ y) → (y : FC) → fc-eq (fccall x0 x1) y ≡ true → (fccall x0 x1) ≡ y
+fcs-fccall x0 x1 h1 y = case y return (λ z → fc-eq (fccall x0 x1) z ≡ true → (fccall x0 x1) ≡ z) of
+    fcl y0 → λ e → Empty-rec (false≢true e)
+    fcv y0 → λ e → Empty-rec (false≢true e)
+    fcp y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fclet y0 y1 → λ e → Empty-rec (false≢true e)
+    fccon y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcsw y0 y1 y2 → λ e → Empty-rec (false≢true e)
+    fcclo y0 → λ e → Empty-rec (false≢true e)
+    fcapp y0 y1 → λ e → Empty-rec (false≢true e)
+    fccall y0 y1 → λ e i → fccall (weq-sound x0 y0 (andbt-l (weq x0 y0) (fc-eq x1 y1) e) i) (h1 y1 (andbt-r (weq x0 y0) (fc-eq x1 y1) e) i)
+fc-eq-sound : (x y : FC) → fc-eq x y ≡ true → x ≡ y
+fc-eq-sound (fcl x0) = fcs-fcl x0 
+fc-eq-sound (fcv x0) = fcs-fcv x0 
+fc-eq-sound (fcp x0 x1 x2) = fcs-fcp x0 x1 x2 (fc-eq-sound x1) (fc-eq-sound x2)
+fc-eq-sound (fclet x0 x1) = fcs-fclet x0 x1 (fc-eq-sound x0) (fc-eq-sound x1)
+fc-eq-sound (fccon x0 x1 x2) = fcs-fccon x0 x1 x2 (fc-eq-sound x1) (fc-eq-sound x2)
+fc-eq-sound (fcsw x0 x1 x2) = fcs-fcsw x0 x1 x2 (fc-eq-sound x0) (fc-eq-sound x1) (fc-eq-sound x2)
+fc-eq-sound (fcclo x0) = fcs-fcclo x0 
+fc-eq-sound (fcapp x0 x1) = fcs-fcapp x0 x1 (fc-eq-sound x0) (fc-eq-sound x1)
+fc-eq-sound (fccall x0 x1) = fcs-fccall x0 x1 (fc-eq-sound x1)
+dtok-chk : (Word → FC) → DC → Bool
+dtok-chk T (dcl w) = true
+dtok-chk T (dcv n) = true
+dtok-chk T (dcp p a b) = andbt (dtok-chk T a) (dtok-chk T b)
+dtok-chk T (dclet a b) = andbt (dtok-chk T a) (dtok-chk T b)
+dtok-chk T (dccon k a b) = andbt (dtok-chk T a) (dtok-chk T b)
+dtok-chk T (dccase s b0 b1) = andbt (dtok-chk T s) (andbt (dtok-chk T b0) (dtok-chk T b1))
+dtok-chk T (dclam i b) = andbt (fc-eq (T i) (dconv b)) (dtok-chk T b)
+dtok-chk T (dcapp f a) = andbt (dtok-chk T f) (dtok-chk T a)
+dtok-chk T (dccall g a) = dtok-chk T a
+dtok-auto : (T : Word → FC) (c : DC) → dtok-chk T c ≡ true → DTok T c
+dtok-auto T (dcl w) e = unit
+dtok-auto T (dcv n) e = unit
+dtok-auto T (dcp p a b) e = (dtok-auto T a (andbt-l (dtok-chk T a) (dtok-chk T b) e) , dtok-auto T b (andbt-r (dtok-chk T a) (dtok-chk T b) e))
+dtok-auto T (dclet a b) e = (dtok-auto T a (andbt-l (dtok-chk T a) (dtok-chk T b) e) , dtok-auto T b (andbt-r (dtok-chk T a) (dtok-chk T b) e))
+dtok-auto T (dccon k a b) e = (dtok-auto T a (andbt-l (dtok-chk T a) (dtok-chk T b) e) , dtok-auto T b (andbt-r (dtok-chk T a) (dtok-chk T b) e))
+dtok-auto T (dccase s b0 b1) e =
+  (dtok-auto T s (andbt-l (dtok-chk T s) (andbt (dtok-chk T b0) (dtok-chk T b1)) e) ,
+   (dtok-auto T b0 (andbt-l (dtok-chk T b0) (dtok-chk T b1) (andbt-r (dtok-chk T s) (andbt (dtok-chk T b0) (dtok-chk T b1)) e)) ,
+    dtok-auto T b1 (andbt-r (dtok-chk T b0) (dtok-chk T b1) (andbt-r (dtok-chk T s) (andbt (dtok-chk T b0) (dtok-chk T b1)) e))))
+dtok-auto T (dclam i b) e = (fc-eq-sound (T i) (dconv b) (andbt-l (fc-eq (T i) (dconv b)) (dtok-chk T b) e) , dtok-auto T b (andbt-r (fc-eq (T i) (dconv b)) (dtok-chk T b) e))
+dtok-auto T (dcapp f a) e = (dtok-auto T f (andbt-l (dtok-chk T f) (dtok-chk T a) e) , dtok-auto T a (andbt-r (dtok-chk T f) (dtok-chk T a) e))
+dtok-auto T (dccall g a) e = dtok-auto T a e
+-- ---------------------------------------------------------------- an example with data, a closure and a call
+-- def #1 x = let f = λ#0 y. y + x in case con 1 (f 3) (call #2 x) of 0 → 0 | 1 p q → p + q ;  def #2 x = x + x
+dx-body1 : DC
+dx-body1 = dclet (dclam #0 (dcp #0 (dcv 0) (dcv 1))) (dccase (dccon #1 (dcapp (dcv 0) (dcl #3)) (dccall #2 (dcv 1))) (dcl #0) (dcp #0 (dcv 1) (dcv 0)))
+dx-body2 : DC
+dx-body2 = dcp #0 (dcv 0) (dcv 0)
+dx-main : DC
+dx-main = dccall #1 (dcl #4)
+dx-G : Word → DC
+dx-G g = %welimP (λ v → DC) g (dcl #0) (λ m h → %welimP (λ v → DC) m dx-body1 (λ m2 h2 → %welimP (λ v → DC) m2 dx-body2 (λ m3 h3 → dcl #0)))
+-- the lifted table: λ#0's body converted
+dx-T : Word → FC
+dx-T i = %welimP (λ v → FC) i (fcp #0 (fcv 0) (fcv 1)) (λ m h → fcl #0)
+dx-GT : Word → FC
+dx-GT g = dconv (dx-G g)
+dx-gok : DGOK dx-G dx-T dx-GT
+dx-gok g = ((λ i → dx-GT g) ,
+  %welimP (λ v → DTok dx-T (dx-G v)) g unit
+    (λ m h → %welimP (λ v → DTok dx-T (dx-G (%wsucc v))) m (dtok-auto dx-T dx-body1 (λ i → true))
+      (λ m2 h2 → %welimP (λ v → DTok dx-T (dx-G (%wsucc (%wsucc v)))) m2 (dtok-auto dx-T dx-body2 (λ i → true)) (λ m3 h3 → unit))))
+-- the justifying path: the converted program means what the source does, at every fuel
+dx-path : (n : Nat) → derase (dsev dx-G n dx-main dvnone) ≡ dtev dx-T dx-GT n (dconv dx-main) tvnone
+dx-path n = snd (dc-sound dx-G dx-T dx-GT dx-gok n dx-main dvnone unit (λ k → unit))
+dnat : Word → Nat
+dnat w = %welimP (λ v → Nat) w zero (λ m h → suc h)
+-- readings: the source and its conversion run to the same value (4 + 3 = 7, 4 + 4 = 8, 7 + 8 = 15)
+#same dsev dx-G (dnat #30) dx-main dvnone = dvw #15
+#same dtev dx-T dx-GT (dnat #30) (dconv dx-main) tvnone = tvw #15
+#same dconv dx-body1 = fclet (fcclo #0) (fcsw (fccon #1 (fcapp (fcv 0) (fcl #3)) (fccall #2 (fcv 1))) (fcl #0) (fcp #0 (fcv 1) (fcv 0)))
+-- out of fuel both sides are ⊥, as the theorem says they must agree
+#same dsev dx-G (dnat #3) dx-main dvnone = dvbot
+#same dtev dx-T dx-GT (dnat #3) (dconv dx-main) tvnone = tvbot
+-- ---------------------------------------------------------------- the bridge to the first-order form
+-- (an untyped translation, like fw-to-fo; the readings below check it on the example). At depth d
+-- (the number of variables in scope): a closure reference captures every variable, x_{d-1} first, so
+-- that the lifted body (key #100 + i, arity d + 1) sees the argument then x_0 … x_{d-1}, as dext
+-- does; a call passes its one argument; a case has alternatives for tags 0 and 1 with two fields
+-- (fswitch pushes the second field innermost, as dccase does). dccase sends any nonzero tag to b1
+-- and fswitch only tag 1 — the bridge is for programs whose constructors are tagged 0 or 1.
+fc-caps d = case d of zero → lnil; suc k → lcons (fvar (fromNat k)) (fc-caps k)
+fc-to-fo d t =
+  case t of
+    fcl w → flit w
+    fcv n → fvar (fromNat n)
+    fcp p a b → fprim (if %weq p #0 then P-add else P-sub) (lcons (fc-to-fo d a) (lcons (fc-to-fo d b) lnil))
+    fclet a b → flet (fc-to-fo d a) (fc-to-fo (suc d) b)
+    fccon k a b → fcon #7 k (lcons (fc-to-fo d a) (lcons (fc-to-fo d b) lnil))
+    fcsw s b0 b1 → fswitch (fc-to-fo d s) (lcons (#0 , (#2 , fc-to-fo (suc (suc d)) b0)) (lcons (#1 , (#2 , fc-to-fo (suc (suc d)) b1)) lnil))
+    fcclo i → fclos (%wadd #100 i) (fc-caps d)
+    fcapp f a → fapply (fc-to-fo d f) (lcons (fc-to-fo d a) lnil)
+    fccall g a → fcall g (lcons (fc-to-fo d a) lnil)
+-- the lifted table, read off the source: each λ i b at depth d gives entry #100 + i
+dc-lifts d c =
+  case c of
+    dcl w → lnil
+    dcv n → lnil
+    dcp p a b → lst-app (dc-lifts d a) (dc-lifts d b)
+    dclet a b → lst-app (dc-lifts d a) (dc-lifts (suc d) b)
+    dccon k a b → lst-app (dc-lifts d a) (dc-lifts d b)
+    dccase s b0 b1 → lst-app (dc-lifts d s) (lst-app (dc-lifts (suc (suc d)) b0) (dc-lifts (suc (suc d)) b1))
+    dclam i b → lcons (%wadd #100 i , (fromNat (suc d) , fc-to-fo (suc d) (dconv b))) (dc-lifts (suc d) b)
+    dcapp f a → lst-app (dc-lifts d f) (dc-lifts d a)
+    dccall g a → dc-lifts d a
+-- a program, a Lst of (key , (arity , body)) with main #0 of arity 0, as first-order definitions
+dc-defs ds = case ds of lnil → lnil; lcons e r → lcons (fst e , (fst (snd e) , fc-to-fo (dnat (fst (snd e))) (dconv (snd (snd e))))) (lst-app (dc-lifts (dnat (fst (snd e))) (snd (snd e))) (dc-defs r))
+dx-prog = lcons (#0 , (#0 , dx-main)) (lcons (#1 , (#1 , dx-body1)) (lcons (#2 , (#1 , dx-body2)) lnil))
+#same eval-fo (table-of (dc-defs dx-prog)) lnil (fc-to-fo zero (dconv dx-main)) = vw #15
+#same eval-fo (table-of (dc-defs dx-prog)) (lcons (vw #10) lnil) (fc-to-fo (suc zero) (dconv dx-body1)) = vw #33
+#same dtev dx-T dx-GT (dnat #30) (dconv dx-body1) (text tvnone (tvw #10)) = tvw #33
