@@ -71,6 +71,34 @@ u32a w = u32toWord (u32add (index32 4 (update32 4 (update32 4 (anew32 4) 3 (0 , 
 lam-body f = case f of flam b → b; _ → f
 sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → u32a w))
 defs = case lift #2 (lam-body (inplace sp)) of lifted t2 ds k → lcons (#0 , (#0 , fcall #1 (lcons (flit #40) lnil))) (lcons (#1 , (#1 , t2)) ds)''', "42", "st32i("),
+ # signatures from the declared types (item 14, lib/emitu.cub's emit-prog-d): selw's second
+ # parameter is only returned and keep5's only passed through, so by use they are boxed (V *, the
+ # record boxed and unboxed around the call); from their checked types they are uint64_t and the
+ # flat record by value. The same program printed both ways; 3 + 1 + (5 + 10) = 19
+ 'sig-decl': ('''selw : Word → Word → Word
+selw a b = if %wlt a #10 then b else a
+useselw : Word → Word
+useselw w = %wadd (selw w #3) #1
+data Pt5 = pt5 (x : Word) (y : Word)
+keep5 : Pt5 → Pt5
+keep5 p = p
+sum5 : Pt5 → Word
+sum5 p = case keep5 p of pt5 x y → %wadd x y
+sd-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Word) → %wadd (useselw n) (sum5 (pt5 n #10)))))
+defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #5) lnil))) sd-defs
+prog = emit-prog-d #99999 defs''', "19", r"re:(?s)(?=.*uint64_t f_\d+\(uint64_t v0, uint64_t v1\) \{)(?=.*T\d+ f_\d+\(T\d+ v0\) \{ return v0; \})"),
+ 'sig-use': ('''selw2 : Word → Word → Word
+selw2 a b = if %wlt a #10 then b else a
+useselw2 : Word → Word
+useselw2 w = %wadd (selw2 w #3) #1
+data Pt6 = pt6 (x : Word) (y : Word)
+keep6 : Pt6 → Pt6
+keep6 p = p
+sum6 : Pt6 → Word
+sum6 p = case keep6 p of pt6 x y → %wadd x y
+su-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Word) → %wadd (useselw2 n) (sum6 (pt6 n #10)))))
+defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #5) lnil))) su-defs
+prog = emit-prog-u defs''', "19", r"re:(?s)(?=.*V \*f_\d+\(V \*v0\) \{ return v0; \})(?=.*box\d+\()"),
  # a code over the byte layer (two loads from an unknown buffer, with their bound proofs and Nat
  # lengths) lowered with the representations consumed (lib/repr.cub), compiled, run on a buffer
  'loads': ("""lam-body f = case f of flam b → b; _ → f
