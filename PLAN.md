@@ -2827,9 +2827,13 @@ which of these it actually needed; the list is what Agda-level convenience means
   (`vlookup (vcons …)` only: `Fin zero` is empty below `vnil`). A clause that names an equality
   field keeps the old reading. `subst_multi` treats case alternatives as binders (it had
   flattened `((suc u) u)` into an application). `tests/elab.cub` `vzip`, `vhead-u`, `vtl-u`,
-  `vlookup`. Not done: a solved field whose dependents depend on each other or on another
-  solved field (an error names it; write the field and transport by hand), and goals in a
-  universe the refutation's line does not reach are not a concern (the line is at G's level).
+  `vlookup`. The fields transported for a solved field form a dependent telescope in field
+  order (a field whose type mentions an earlier transported one is transported with it), and
+  several solved fields are peeled one transport at a time, innermost first, each line holding
+  the later solutions at their values (`tests/elab.cub` `getq`: `h : Tagged m i`; `both`: two
+  solved fields). Refused, with the remedy named: a goal that depends on a solved field or on a
+  field to transport. A transported value's equality fields are composite paths (CCHM transport
+  is not regular), so such values are equal to the hand-written ones as paths, not by `#same`.
   Two elaborator gaps found by fork C (2026-11-06), fixed: (a) an untyped definition is not
   elaborated, so `idw #3` with `idw : {A : Type} → A → A` bound `A := #3` and returned `λ x → x`
   silently (under `code t` too); an untyped definition applying a checked one to exactly its

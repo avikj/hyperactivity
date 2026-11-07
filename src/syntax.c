@@ -4421,27 +4421,38 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             if (bad) { nsg = sg0; plan_rw = false; body = ccm_t(v2, nv2, r2, n2); }
         }
         if (us.nsol && !us.clash) {
-            /* a solved field: the branch was built with it replaced by its value; the fields whose
-             * types mention it are transported along the path from the value to the field, the
-             * equation's argument at the field's position (λ i → proj (e i)) */
-            for (int w = us.nsol - 1; w >= 0; w--) {
+            /* solved fields: the branch was built with each replaced by its value; peel them one
+             * transport at a time, innermost first — wrap w takes the fields that depend on the
+             * w-th solved field (in field order, transitively: a dependent telescope) from their
+             * types with solutions w.. substituted to their types with only w+1.. substituted,
+             * along the path from the value to the field, the equation's argument at the field's
+             * position (λ i → proj (e i)) */
+            for (int w = 0; w < us.nsol; w++) {
                 USol *so = &us.sol[w]; const char *fk = fv[so->k]->s;
-                int Z[64], nz = 0; bool ok = !mentions_name(G, fk) && !mentions_name(G, v);
-                for (int z = 0; z < nfo && ok; z++) if (z != so->k && fty[z] && mentions_name(fty[z], fk)) {
-                    for (int w2 = 0; w2 < us.nsol; w2++) if (w2 != w && mentions_name(fty[z], fv[us.sol[w2].k]->s)) ok = false;
-                    if (mentions_name(G, fv[z]->s)) ok = false;
-                    if (nz < 64) Z[nz++] = z;
+                if (mentions_name(G, fk) || mentions_name(G, v)) die("index unification: the goal depends on a solved field (name the equality field and transport by hand) in", tfname);
+                bool inz[64] = { 0 }; int Z[64], nz = 0;
+                for (int z = 0; z < nfo && z < 64; z++) {
+                    if (z == so->k || !fty[z]) continue;
+                    bool dep = mentions_name(fty[z], fk);
+                    for (int a = 0; a < nz && !dep; a++) if (mentions_name(fty[z], fv[Z[a]]->s)) dep = true;
+                    if (dep) { if (mentions_name(G, fv[z]->s)) die("index unification: the goal depends on a field to transport (name the equality field) in", tfname); inz[z] = true; Z[nz++] = z; }
                 }
-                for (int a = 0; a < nz && ok; a++) for (int b2 = 0; b2 < nz; b2++) if (a != b2 && mentions_name(fty[Z[a]], fv[Z[b2]]->s)) ok = false;
-                if (!ok) die("index unification: a field's solution cannot be transported here (name the equality field and transport by hand) in", tfname);
+                (void)inz;
                 if (!nz) continue;
+                /* the substitutions: base = solutions w.. by their values; line = solution w by the
+                 * path, w+1.. by their values */
+                const char *bx[16], *lx[16]; Node *bv[16], *lvv[16]; int nb = 0, nl = 0;
                 Node *e = fv[nfo + so->q], *i = xfresh("i");
                 Node *pi = u_case(lst(2, e, i), so->path, so->depth, 0, -1, NULL, so->val, so->val);
+                for (int w2 = w; w2 < us.nsol; w2++) {
+                    bx[nb] = fv[us.sol[w2].k]->s; bv[nb++] = us.sol[w2].val;
+                    lx[nl] = fv[us.sol[w2].k]->s; lvv[nl++] = w2 == w ? pi : us.sol[w2].val;
+                }
                 Node *line = G, *base = body;
                 for (int a = nz - 1; a >= 0; a--) {
                     Node *zt = fty[Z[a]];
-                    line = sym4("Pi", fv[Z[a]], subst_sym(zt, fk, pi), line);
-                    base = lam_t(fv[Z[a]], sg_apply(zt), base);
+                    line = sym4("Pi", fv[Z[a]], subst_multi(zt, lx, lvv, nl), line);
+                    base = lam_t(fv[Z[a]], subst_multi(zt, bx, bv, nb), base);
                 }
                 Node *ap = nlist(nz + 1);
                 ap->it[0] = lst(4, nsym("comp"), sym3("lam", i, line), sym3("lam", xfresh("i"), lst(1, nsym("sys"))), base);

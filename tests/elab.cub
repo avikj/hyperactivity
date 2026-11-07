@@ -209,3 +209,18 @@ vcap : {A : Type} {n : Nat} → Vec A n → Nat → Vec A n
 vcap vnil = λ k → vnil
 vcap (vcons m x xs) = λ m → the (Vec A n) (vcons-of xs x)
 #same vlen (vcap v2 #3) = 2
+-- index unification: the fields a solved field's value is transported through form a dependent
+-- telescope (h's type mentions i, both mention m), and several fields are solved at one split
+data Tagged (m : Nat) (i : Fin m) = tagged
+data Q : (n : Nat) → Type where
+  qmk : (m : Nat) → (i : Fin m) → (h : Tagged m i) → Q (suc m)
+getq : {n : Nat} → Q (suc n) → (m2 : Nat) × ((i2 : Fin m2) × Tagged m2 i2)
+getq (qmk m i h) = (m , (i , h))
+data T2 : (a b : Nat) → Type where
+  t2 : (x y : Nat) → Vec Nat x → Vec Nat y → T2 (suc x) (suc y)
+both : {a b : Nat} → T2 (suc a) (suc b) → Vec Nat a × Vec Nat b
+both (t2 x y u w) = (u , w)
+#same fst (getq {1} (qmk 1 (fzero 0) tagged)) = 1
+-- (the transported vector's equality fields are composite paths — CCHM transport is not regular —
+-- so its contents are compared, not the vector itself)
+#same vhead-u (snd (both {0} {1} (t2 0 1 vnil (vcons 0 5 vnil)))) = 5
