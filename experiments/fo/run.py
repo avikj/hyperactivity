@@ -165,6 +165,12 @@ defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #30) lnil))) rb-defs""", "41"
  # definition; printed and run at x = 4: (4 + 5) + (a loop summing four 1s) = 13
  'proved': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '''"
 defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #4) lnil))) (lcons (#1 , (#1 , fw-to-fo (spec-w std-vrule ex-c))) lnil)''', "13"),
+ # the same past the word fragment (lib/foproof.cub's data, closures and calls): dx-prog — a closure
+ # λy. y + x, a constructor of (f 3, call #2 x), a case on it adding the fields, a call to x + x —
+ # closure-converted by the checked dconv (its path dx-path through dc-sound), then taken to the
+ # first-order form by dc-defs; at x = 4: (3 + 4) + (4 + 4) = 15
+ 'proved-data': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '''"
+defs = dc-defs dx-prog''', "15"),
  # a process run against its world (lib/proc.cub), specialized under an unknown store: the run
  # becomes a function of the store (st 3 + 1); compiled with a store that answers 40; prints 41
  'process': ("""proc-defs = case lift #100 spec4 of lifted t2 ds k → lcons (#0 , (#0 , fapply t2 (lcons (flam (flit #40)) lnil))) ds

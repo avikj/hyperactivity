@@ -35,7 +35,8 @@ u-switch = (lcons #59 (lcons #32 (lcons #115 (lcons #119 (lcons #105 (lcons #116
 u-case = (lcons #99 (lcons #97 (lcons #115 (lcons #101 (lcons #32 lnil)))))
 u-colon = (lcons #58 (lcons #32 lnil))
 u-rr = (lcons #114 (lcons #32 (lcons #61 (lcons #32 lnil))))
-u-break = (lcons #32 (lcons #98 (lcons #114 (lcons #101 (lcons #97 (lcons #107 (lcons #59 (lcons #32 lnil))))))))
+u-break = (lcons #32 (lcons #98 (lcons #114 (lcons #101 (lcons #97 (lcons #107 (lcons #59 (lcons #32 (lcons #125 (lcons #32 lnil))))))))))
+u-colonb = (lcons #58 (lcons #32 (lcons #123 (lcons #32 lnil))))
 u-default-w = (lcons #100 (lcons #101 (lcons #102 (lcons #97 (lcons #117 (lcons #108 (lcons #116 (lcons #58 (lcons #32 (lcons #114 (lcons #32 (lcons #61 (lcons #32 (lcons #48 (lcons #59 (lcons #32 (lcons #125 (lcons #32 lnil))))))))))))))))))
 u-default-p = (lcons #100 (lcons #101 (lcons #102 (lcons #97 (lcons #117 (lcons #108 (lcons #116 (lcons #58 (lcons #32 (lcons #114 (lcons #32 (lcons #61 (lcons #32 (lcons #109 (lcons #107 (lcons #119 (lcons #40 (lcons #48 (lcons #41 (lcons #59 (lcons #32 (lcons #125 (lcons #32 lnil)))))))))))))))))))))))
 u-x = (lcons #120 lnil)
@@ -390,7 +391,7 @@ alts-dt sigs env d rt dd fl alts =
     lcons a r → lapp (alt-dt sigs env d rt dd fl (fst a) (fst (snd a)) (snd (snd a))) (alts-dt sigs env d rt dd fl r)
 alt-dt sigs env d rt dd fl c n body =
   let tys = ctor-tys dd c
-  in cat6 u-case (dec c) u-colon (fields-dt d tys fl c n #0) (cat3 u-rr (emit-at sigs (push-tys tys env) (%wadd d n) rt body) u-semi) u-break
+  in cat6 u-case (dec c) u-colonb (fields-dt d tys fl c n #0) (cat3 u-rr (emit-at sigs (push-tys tys env) (%wadd d n) rt body) u-semi) u-break
 fields-dt d tys fl c n i = if %weq i n then lnil else cat7 (ty-decl (ty-at tys i)) (var (%wsucc (%wadd d i)) #0) u-assign (cat3 (if fl then u-xu else u-xpu) (dec c) u-dot-f) (dec i) u-semi (fields-dt d tys fl c n (%wsucc i))
 u-xpu = (lcons #120 (lcons #45 (lcons #62 (lcons #117 (lcons #46 (lcons #99 lnil))))))
 -- alternatives: fields bound as boxed locals, the body at the switch's type
@@ -398,7 +399,7 @@ alts-u sigs env d rt alts =
   case alts of
     lnil → lnil
     lcons a r → lapp (alt-u sigs env d rt (fst a) (fst (snd a)) (snd (snd a))) (alts-u sigs env d rt r)
-alt-u sigs env d rt c n body = cat6 u-case (dec c) u-colon (fields-u d n #0) (cat3 u-rr (emit-at sigs (push-n tP n env) (%wadd d n) rt body) u-semi) u-break
+alt-u sigs env d rt c n body = cat6 u-case (dec c) u-colonb (fields-u d n #0) (cat3 u-rr (emit-at sigs (push-n tP n env) (%wadd d n) rt body) u-semi) u-break
 fields-u d n i = if %weq i n then lnil else cat7 u-p (var (%wsucc (%wadd d i)) #0) u-assign u-x u-arrow (dec i) (lapp u-rb (lapp u-semi (fields-u d n (%wsucc i))))
 -- primitives: arithmetic on words; the byte layer
 num-u sigs env d p args =

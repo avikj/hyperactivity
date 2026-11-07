@@ -331,6 +331,40 @@ envxy x y n = case n of zero → y; suc k → x
 ex2-path : (x y : Word) → fo-ev (spec-w std-vrule ex2-c) (envxy x y) ≡ wc-ev ex2-c (envxy x y)
 ex2-path x y = spec-path std-vrule ex2-c (envxy x y)
 
+-- ---------------------------------------------------------------- the specializer through the verified pipeline
+-- specialize-proved T rules c: the normal form (lib/specialize.cub's normalize, the same step 2), its
+-- leading λs set aside; when the body is in the word fragment (wc-of) it is rewritten by the
+-- verified rules and lowered by lower-w — spec-w std-vrule, whose path spec-path is checked above —
+-- and comes back as the first-order form; otherwise the untyped pipeline (specialize: the store's
+-- rules, unverified rewriting, the untyped lower). The result says which: (#1 , f) verified,
+-- (#0 , f) untyped.
+lams-of b = case b of clam b2 → %wsucc (lams-of b2); _ → #0
+under-lams b = case b of clam b2 → under-lams b2; _ → b
+wrap-flams k f = if %weq k #0 then f else flam (wrap-flams (%wsub k #1) f)
+specialize-proved T rules c =
+  let n = normalize T c
+  in (case wc-of (under-lams n) of
+        some w → (#1 , wrap-flams (lams-of n) (fw-to-fo (spec-w std-vrule w)))
+        none → (#0 , specialize T rules c))
+-- readings: on the acceptance programs of the word fragment the verified pipeline is the one used,
+-- and its residual computes what the untyped specializer's does; outside the fragment (data) the
+-- untyped one is used
+sp-f1 = code (λ (x : Word) → %wadd (%wadd #0 (%wadd x (%wadd #2 #3))) (%welimP (λ v → Word) x #0 (λ k acc → %wsucc acc)))
+#same fst (specialize-proved (Word → Word) lnil sp-f1) = #1
+#same run-fo (fapply (snd (specialize-proved (Word → Word) lnil sp-f1)) (lcons (flit #4) lnil)) = run-fo (fapply (specialize (Word → Word) lnil sp-f1) (lcons (flit #4) lnil))
+#same run-fo (fapply (snd (specialize-proved (Word → Word) lnil sp-f1)) (lcons (flit #4) lnil)) = #13
+sp-f2 = code (λ (x : Word) (y : Word) → %welimP (λ v → Word) x y (λ k acc → %wadd acc (%wadd k y)))
+#same fst (specialize-proved (Word → Word → Word) lnil sp-f2) = #1
+#same run-fo (fapply (snd (specialize-proved (Word → Word → Word) lnil sp-f2)) (lcons (flit #10) (lcons (flit #3) lnil))) = run-fo (fapply (specialize (Word → Word → Word) lnil sp-f2) (lcons (flit #10) (lcons (flit #3) lnil)))
+-- through a checked definition of the store: plusw's normal form is a word recursion, in the fragment
+sp-f5 = code (λ (x : Word) → plusw x #3)
+#same fst (specialize-proved (Word → Word) lnil sp-f5) = #1
+#same run-fo (fapply (snd (specialize-proved (Word → Word) lnil sp-f5)) (lcons (flit #39) lnil)) = #42
+sp-f3 = code (%wadd #3 #4)
+#same specialize-proved Word lnil sp-f3 = (#1 , flit #7)
+sp-f4 = code (λ (b : Bool) → (case b return (λ w → Word) of true → #1; false → #0))
+#same fst (specialize-proved (Bool → Word) lnil sp-f4) = #0
+
 -- ---------------------------------------------------------------- data, closures and calls
 -- The fragment grows by data (constructors with word fields, a two-way case on the tag: lib/fo.cub's
 -- fcon and fswitch), closures (λ and application: the λ's body goes to a table and the closure
