@@ -1121,17 +1121,20 @@ in-place update (`e27eda2c`), D24's guarded form (`5b9de865`), D26 (`43e8fb10`,
 search and bridges (`89ec3e0e`, `d1e5f790`), item 29 (`fd188bf6`), `%gsteps` (`c20116d7`),
 `--serve` (`50ffb680`), the rewriting discipline (`bd21c486`). What remains, in order of
 value: (1) A8's next step — not formal compositions in path types (tried, withdrawn, 18.16):
-sharing a composition across the dimensions the tube maps apply it at; (2) B18's marshaling
-of represented values (layout walks, `V_NATIVE`; the boxed `cubical_call` the emitted C
-calls exists for words, with `cubical_call_w`/`cubical_index` in `src/libcubical.h`); (3) A4's
+sharing a composition across the dimensions the tube maps apply it at; (2) B18 DONE for words, byte strings and constructors both ways (`#native` over
+`emit-lib-boxed-u`: a constructor whose fields are values crosses as the boxed `V`, a boxed
+result is rebuilt by the entry's `box<d>`; `cubical_call_data(name, args, types)` from C;
+libraries cached by the program's hash, item 17); `V_NATIVE` (opaque results kept native)
+is not built; (3) A4's
 bitmask formulas (18.19, designed); (4) E28's unification-based implicits, holes in
 composition lines, generalized variables, and dependent matching on indexed families (today a
 branch sees the equality field; a recursion returning an indexed type, `vmap : Vec A n → Vec B
 n`, needs the transport written, since the hypothesis is at the outer index — Agda's
 unification of the index at the split is the missing piece, not a motive over the index, which
 would ask the branch for every index); (5) item 30's retraction and positions in errors; (6) F32 over `Int` (needs `Int`
-arithmetic and its laws in `lib/std.cub` first); (7) a hardware memory model for Regions
-(D26's open half); (8) item 10's same-machine Agda comparison; (9) Line B's leftovers: `lib/emitx86.cub` (18.7's
+arithmetic and its laws in `lib/std.cub` first); (7) DONE: the memory interface in `W` (`w-load`/`w-store`/`w-cas`/`w-fence`, acquire /
+release / acquire-release / sequentially consistent, on addresses from `ptr-of`;
+`tests/world.cub`); (8) item 10's same-machine Agda comparison; (9) Line B's leftovers: `lib/emitx86.cub` (18.7's
 encoder, ~700 lines, for the latency of re-specialization only since `#native` goes through
 gcc), 18.5 step 7's justifying path `eval-fo f ≡ t`, `fthunk` in the printers, parameterized
 data types in the C++ image. A trap for test writers: `#same f #1 = #8` parses `#1 = #8` as a

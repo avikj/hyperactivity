@@ -15,3 +15,17 @@ sum2-def : Bytes 32 → Word
 sum2-def b = plusw (i64toWord (load64 32 b 16 (8 , λ i → 32))) (i64toWord (load64 32 b 0 (24 , λ i → 32)))
 #native sum2-def 1 = emit-lib-u (lcons (#0 , (#1 , lam-body sum2)) lnil)
 #same sum2-def (store64 32 (store64 32 (bytes 32) 0 (24 , λ i → 32) (i64 #5)) 16 (8 , λ i → 32) (i64 #9)) = #14
+-- a constructor across the boundary: the length of a list (lib/lower.cub's LW), its recursion
+-- lifted to a C function, entered with the list boxed as the emitted runtime's V (tag c+1 with
+-- the fields boxed) and the result a word of NW rebuilt from the boxed result
+len-base = lcons (gidx (code zw) , (#0 , flit #0)) (lcons (gidx (code sw) , (#1 , fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))) lnil)
+len-lib = case lift #10 (lower c-len) of lifted t2 ds k → emit-lib-boxed-u (lcons (#0 , (#1 , fapply t2 (lcons (fvar #0) lnil))) (lapp2 len-base ds))
+#native lenw 1 = len-lib
+#same lenw (lwcons #7 (lwcons #8 (lwcons #9 lwnil))) = #3
+-- and a constructor coming back: a list extended natively, the result rebuilt from the boxed V
+-- (tag c+1 and the fields, by the result's data type named in the entry's box<d>)
+consw : LW → LW
+consw l = lwcons #1 l
+cons-lib = emit-lib-boxed-u (lcons (#0 , (#1 , lam-body (lower (code (λ (l : LW) → lwcons #1 l))))) lnil)
+#native consw 1 = cons-lib
+#same consw (lwcons #7 lwnil) = lwcons #1 (lwcons #7 lwnil)

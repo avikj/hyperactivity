@@ -577,5 +577,22 @@ export-u sigs g n name =
   let s = fromopt (sig-of sigs g) (push-n tP n lnil , tP)
   in cat7 (ty-decl (snd s)) (lapp name u-lp) (if %weq n #0 then u-void else params-u (fst s) #0 n) u-body (cat3 u-f (dec g) u-lp) (entry-args #0 n) (lapp u-rp u-end)
 def-arity defs g = case defs of lnil → #0; lcons d r → if %weq (fst d) g then fst (snd d) else def-arity r g
+-- the boxed export (B18, the machine's #native with data values): every data-typed parameter and
+-- result crosses as the boxed V (unbox<d> on the way in, box<d> on the way out), words as
+-- uint64_t; <ret> name(V *v0, uint64_t v1) { return box<d>(f_g(unbox<d2>(v0), v1)); }
+export-boxed-u sigs g n name =
+  let s = fromopt (sig-of sigs g) (push-n tP n lnil , tP)
+      rt = snd s
+  in cat7 (if is-dt rt then u-p else ty-decl rt) (lapp name u-lp) (if %weq n #0 then u-void else bparams-u (fst s) #0 n) u-body
+       (if is-dt rt then cat5 u-boxname-c (dec (dt-of rt)) u-lp (cat3 u-f (dec g) u-lp) (lapp (bentry-args (fst s) #0 n) u-rp) else cat3 u-f (dec g) (lapp u-lp (bentry-args (fst s) #0 n)))
+       (lapp u-rp u-end) lnil
+bparams-u tys i n = if %weq i n then lnil else (case %weq (%wsucc i) n of true → cat3 (if is-dt (ty-at tys i) then u-p else ty-decl (ty-at tys i)) (var (%wsucc i) #0) lnil; false → cat4 (if is-dt (ty-at tys i) then u-p else ty-decl (ty-at tys i)) (var (%wsucc i) #0) u-comma (bparams-u tys (%wsucc i) n))
+bentry-args tys i n =
+  if %weq i n then lnil
+  else (let a = (if is-dt (ty-at tys i) then cat4 u-unboxname-c (dec (dt-of (ty-at tys i))) u-lp (lapp (var (%wsucc i) #0) u-rp) else var (%wsucc i) #0)
+        in case %weq (%wsucc i) n of true → a; false → cat3 a u-comma (bentry-args tys (%wsucc i) n))
+emit-lib-boxed-u defs =
+  let sigs = sigs-of defs
+  in cat6 s-runtime u-prdecl (box-fns (flat-types defs)) (protos-u sigs defs) (dispatch (clos-defs defs)) (lapp (defs-u sigs defs) (export-boxed-u sigs #0 (def-arity defs #0) u-entry-name))
 -- the exported entry of a one-definition program over two words: uint64_t cubical_entry(uint64_t v0, uint64_t v1) { return f_0(v0, v1); }
 #same entry-u (sigs-of (lcons (#0 , (#2 , fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil)))) lnil)) #2 = (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #99 (lcons #117 (lcons #98 (lcons #105 (lcons #99 (lcons #97 (lcons #108 (lcons #95 (lcons #101 (lcons #110 (lcons #116 (lcons #114 (lcons #121 (lcons #40 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #118 (lcons #48 (lcons #44 (lcons #32 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #118 (lcons #49 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #102 (lcons #95 (lcons #48 (lcons #40 (lcons #118 (lcons #48 (lcons #44 (lcons #32 (lcons #118 (lcons #49 (lcons #41 (lcons #59 (lcons #32 (lcons #125 (lcons #10 lnil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))

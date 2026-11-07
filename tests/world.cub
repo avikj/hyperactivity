@@ -20,3 +20,15 @@ to-file : Proc W Word
 to-file = bind {lzero} {W} {Word} {Word} (open-file 16 path-bytes #577 #420) (λ fd →
           bind {lzero} {W} {Word} {Word} (write fd 8 hello-bytes) (λ n → close-file fd))
 #run to-step to-file
+-- the memory interface: a word stored at the address of pinned bytes (ptr-of), loaded, exchanged by
+-- cas (the value seen is the old one), loaded again after a fence: 42 then 7
+mem-cell : Word
+mem-cell = ptr-of 8 (bytes 8)
+mem-proc : Proc W Word
+mem-proc = bind {lzero} {W} {Unit} {Word} (store-at mem-cell #42) (λ u →
+           bind {lzero} {W} {Word} {Word} (load-at mem-cell) (λ a →
+           bind {lzero} {W} {Word} {Word} (cas-at mem-cell #42 #7) (λ seen →
+           bind {lzero} {W} {Unit} {Word} fence (λ u2 →
+           bind {lzero} {W} {Word} {Word} (load-at mem-cell) (λ b →
+           ret {lzero} {W} {Word} (plusw (plusw a seen) b))))))
+#run to-step mem-proc

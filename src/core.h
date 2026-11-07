@@ -433,7 +433,11 @@ Port top_build(Syn *body, int nslots, const int *uses);
 Port global_copy(long g, Key *as); /* 0 when the global is an unsupplied input; as: the key the copy carries (the name of the cell that referred to it; NULL: the definition's) */
 void global_park(long g, Cell *op, Cell *glob);
 /* foreign functions (D27): a C symbol at a primitive type; the arguments' kinds (PT_*, or 4 a word), its result's */
-typedef struct { const char *sym; void *fn; int n; unsigned char kind[8]; unsigned char ret; } Ffi;
+typedef struct { const char *sym; void *fn; int n; unsigned char kind[8]; unsigned char ret; int rdata; } Ffi;
+/* kind/ret: PT_* for primitive values, 4 a word, 6 a boxed value (the emitted runtime's V: tag 0 a word in n, tag 2 bytes,
+ * tag c+1 constructor c with its fields; B18's #native); rdata: the data type (machine index) of a boxed result, or -1 */
+int data_field_type(int d, int c, int k);
+typedef struct VB VB; Port unbox_value(VB *v, int d);   /* a boxed value (B18) into cells: d -2 a word, -3 bytes, a data type's machine index, -1 unknown */   /* the data type of field k of constructor c of data type d: the machine index, -2 a word, -3 bytes, -1 other */
 uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n);
 extern Ffi *FFI; extern int nffi;
 int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret);

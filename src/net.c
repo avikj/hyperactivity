@@ -980,6 +980,44 @@ static Port face_cell(Dnf *f) { Cell *c = cell(V_FACE, 1); c->p = f; return P(c,
 /* a constructor applied to its fields and dimensions: c v r is its boundary
  * e(v, r) where the boundary's face holds at r (judgmentally), and otherwise
  * a constructor value. Built again after every substitution. */
+/* the emitted runtime's boxed values (B18): tag 0 a word in n, tag 2 bytes (n of them after the header), tag c+1
+ * constructor c with n fields. A value of the net is boxable when it is a word, a byte string, or a constructor
+ * whose fields are such values already (a field not yet a value is not forced here: the call falls back to the
+ * definition on the net) */
+typedef struct VB { uint64_t tag, n; struct VB *f[]; } VB;
+Port unbox_value(VB *v, int d);
+static bool boxable(Cell *c) {
+    if (!c) return false;
+    if (c->kind == V_WORD) return !c->p;
+    if (c->kind == V_BYTES) return true;
+    if (c->kind == V_CON) { ConInfo *k = &CON[c->a]; if (k->ndims) return false; for (int j = 0; j < k->nfields; j++) if (!boxable(cell_at(c->port[1 + j]))) return false; return true; }
+    return false;
+}
+static VB *box_value(Cell *c) {
+    if (c->kind == V_WORD) { VB *v = calloc(1, sizeof(VB)); v->tag = 0; v->n = c->a; return v; }
+    if (c->kind == V_BYTES) { Bytes *b = c->p; size_t bn = b ? b->n : 0; VB *v = calloc(1, sizeof(VB) + bn); v->tag = 2; v->n = bn; if (bn) memcpy((unsigned char *)v->f, b->b, bn); return v; }
+    ConInfo *k = &CON[c->a];
+    VB *v = calloc(1, sizeof(VB) + (size_t)k->nfields * sizeof(VB *)); v->tag = (uint64_t)k->index + 1; v->n = (uint64_t)k->nfields;
+    for (int j = 0; j < k->nfields; j++) v->f[j] = box_value(cell_at(c->port[1 + j]));
+    return v;
+}
+static void free_boxed(VB *v) { if (!v) return; if (v->tag != 0 && v->tag != 2) for (uint64_t j = 0; j < v->n; j++) free_boxed(v->f[j]); free(v); }
+/* a boxed result into cells; d the data type (machine index) of a constructor, -1 when unknown (then a word) */
+Port unbox_value(VB *v, int d) {
+    /* d: -2 a word, -3 bytes, a data type's machine index for a constructor, -1 unknown (a word by
+     * tag 0, else bytes). The tags alone do not decide: constructor 1 and bytes share tag 2 */
+    if (!v) return word_of(0);
+    if (d == -2 || (d == -1 && v->tag == 0) || (d >= 0 && v->tag == 0)) return word_of(v->n);
+    if (d == -3 || d == -1) { size_t bn = (size_t)v->n; Bytes *b = calloc(1, sizeof(Bytes) + bn); b->rc = 1; b->n = bn; if (bn) memcpy(b->b, (unsigned char *)v->f, bn); Cell *c = cell(V_BYTES, 1); c->x = PT_BYTES; c->p = b; return P(c, 0); }
+    int ci = (int)v->tag - 1;
+    if (ci < 0 || ci >= DATA[d].ncons) return word_of(v->n);
+    int c = DATA[d].cons[ci]; int nf = CON[c].nfields;
+    Port *f = malloc((size_t)(nf + 1) * sizeof(Port));
+    for (int j = 0; j < nf; j++) { int fd = data_field_type(d, ci, j); f[j] = unbox_value(j < (int)v->n ? v->f[j] : NULL, fd); }
+    Port r = con_build(c, f, NULL);
+    free(f);
+    return r;
+}
 /* a foreign entry called on its arguments' bits (D27, B18): every argument and the result integers
  * (or pointers), or every one a double */
 uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n) {
@@ -2582,29 +2620,25 @@ static void interact(Cell *o, Cell *v) {
         for (int k = 0; k < n && words; k++) {
             Cell *c = cell_at(A->v[k]);
             if (!c) { words = false; break; }
-            if (e->kind[k] == 6) { if (c->kind != V_BYTES) words = false; }
+            if (e->kind[k] == 6) { if (!boxable(c)) words = false; }
             else if (c->kind != V_WORD || c->p) words = false;
         }
         Port out;
         if (words) {
-            /* words by value; a byte string boxed as the emitted runtime's V { tag 2; n; bytes } (a copy:
-             * the compiled code may update it in place), a V * result unboxed into a fresh Bytes */
-            typedef struct { uint64_t tag, n; unsigned char b[]; } VB;
+            /* words by value; a boxed argument (a byte string, or a constructor whose fields are values
+             * already) as the emitted runtime's V, copied (the compiled code may update it in place);
+             * a V * result unboxed into fresh cells (a constructor by the result's data type) */
             uint64_t a[8]; VB *boxed[8] = { 0 };
             for (int k = 0; k < n; k++) {
                 Cell *c = cell_at(A->v[k]);
-                if (e->kind[k] == 6) { Bytes *b = c->p; size_t bn = b ? b->n : 0; VB *v = calloc(1, sizeof(VB) + bn); v->tag = 2; v->n = bn; if (bn) memcpy(v->b, b->b, bn); boxed[k] = v; a[k] = (uint64_t)(uintptr_t)v; }
+                if (e->kind[k] == 6) { boxed[k] = box_value(c); a[k] = (uint64_t)(uintptr_t)boxed[k]; }
                 else a[k] = c->a;
                 era(A->v[k]);
             }
             uint64_t r = ffi_invoke(e, a, n);
-            if (e->ret == 6) {
-                VB *v = (VB *)(uintptr_t)r;
-                size_t bn = v && v->tag == 2 ? (size_t)v->n : 0;
-                Bytes *b = calloc(1, sizeof(Bytes) + bn); b->rc = 1; b->n = bn; if (bn) memcpy(b->b, v->b, bn);
-                Cell *c = cell(V_BYTES, 1); c->x = PT_BYTES; c->p = b; out = P(c, 0);
-            } else out = word_of(r);
-            for (int k = 0; k < n; k++) free(boxed[k]);
+            if (e->ret == 6) out = unbox_value((VB *)(uintptr_t)r, e->rdata);
+            else out = word_of(r);
+            for (int k = 0; k < n; k++) free_boxed(boxed[k]);
         } else out = apply_gid((long)o->a, A->v, n);
         free(A);
         link(out, o->port[1]);

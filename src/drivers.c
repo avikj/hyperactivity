@@ -45,6 +45,7 @@ static void drivers_run(Node *t) {
     int c_sdone = drv_con("sdone"), c_scmd = drv_con("scmd"), c_unit = drv_con("unit");
     int c_now = drv_con("w-now"), c_write = drv_con("w-write"), c_read = drv_con("w-read"), c_sleep = drv_con("w-sleep"), c_exit = drv_con("w-exit");
     int c_open = drv_con("w-open"), c_close = drv_con("w-close");
+    int c_load = drv_con("w-load"), c_store = drv_con("w-store"), c_cas = drv_con("w-cas"), c_fence = drv_con("w-fence");
     Port p = build_top(t);
     long steps = 0, s0 = stat_steps;
     for (;;) {
@@ -102,6 +103,21 @@ static void drivers_run(Node *t) {
         } else if (c == c_close) {
             uint64_t fd = drv_word(cm->port[1], "w-close's descriptor");
             resp = drv_word_of((uint64_t)(int64_t)close((int)fd));
+        } else if (c == c_load) {
+            uint64_t a = drv_word(cm->port[1], "w-load's address");
+            resp = drv_word_of(__atomic_load_n((uint64_t *)(uintptr_t)a, __ATOMIC_ACQUIRE));
+        } else if (c == c_store) {
+            uint64_t a = drv_word(cm->port[1], "w-store's address"), v = drv_word(cm->port[2], "w-store's value");
+            __atomic_store_n((uint64_t *)(uintptr_t)a, v, __ATOMIC_RELEASE);
+            resp = con_build(c_unit, NULL, NULL);
+        } else if (c == c_cas) {
+            uint64_t a = drv_word(cm->port[1], "w-cas's address"), old = drv_word(cm->port[2], "w-cas's old"), nw = drv_word(cm->port[3], "w-cas's new");
+            uint64_t seen = old;
+            __atomic_compare_exchange_n((uint64_t *)(uintptr_t)a, &seen, nw, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+            resp = drv_word_of(seen);
+        } else if (c == c_fence) {
+            __atomic_thread_fence(__ATOMIC_SEQ_CST);
+            resp = con_build(c_unit, NULL, NULL);
         } else die("run: not a command of W:", CON[c].name);
         Cell *ap = cell(O_APP, 3);
         link(k, P(ap, 0)); link(resp, P(ap, 1));

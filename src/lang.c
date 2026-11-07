@@ -8,6 +8,7 @@
 #include <ctype.h>
 #include <pthread.h>
 #include <sys/stat.h>
+extern int access(const char *, int);
 #include <sys/resource.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -309,6 +310,16 @@ static int con_lookup(const char *s) {
 }
 int con_index(const char *name) { return con_lookup(name); }
 static int data_lookup(const char *s) { for (int i = ndata - 1; i >= 0; i--) if (!strcmp(DATA[i].name, s)) return i; return -1; }
+int data_field_type(int d, int c, int k) {
+    Node *dd = DATA[d].decl; if (!dd || c < 0 || c >= DATA[d].ncons) return -1;
+    Node *cd = dd->it[2 + c]; if (!cd->list || k + 1 >= cd->n) return -1;
+    Node *f = cd->it[k + 1]; if (!f->list || f->n != 2) return -1;
+    Node *A = f->it[1]; Node *h = A->list && A->n ? A->it[0] : A;
+    if (h->list) return -1;
+    if (!strcmp(h->s, "Word")) return -2;
+    if (!strcmp(h->s, "Bytes")) return -3;
+    return data_lookup(h->s);
+}
 
 static Node *ds(Node *t);
 static Node *to_code(Node *t);
@@ -669,7 +680,7 @@ int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret
      * shared library, opened */
     void *fn = NULL; const char *colon = strchr(sym, ':');
     if (colon) {
-        char *lib = strndup(sym, (size_t)(colon - sym)); void *h = dlopen(lib, RTLD_LAZY | RTLD_GLOBAL);
+        char *lib = strndup(sym, (size_t)(colon - sym)); void *h = dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
         if (!h) die("foreign: cannot open the library of", sym);
         fn = dlsym(h, colon + 1); free(lib); sym = colon + 1;
     } else {
@@ -679,7 +690,7 @@ int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret
     }
     if (!fn) die("foreign: no such symbol in the running program or its libraries (write \"lib.so:sym\" for another):", sym);
     GROW(FFI, capffi, (size_t)nffi + 1);
-    FFI[nffi] = (Ffi){ strdup(sym), fn, n, { 0 }, ret };
+    FFI[nffi] = (Ffi){ strdup(sym), fn, n, { 0 }, ret, -1 };
     memcpy(FFI[nffi].kind, kind, (size_t)n);
     return nffi++;
 }
@@ -3840,18 +3851,25 @@ static void toplevel(Node *f) {
         for (const char *q = r; (q = strchr(q, '#')); ) { q++; if (*q < '0' || *q > '9') continue; c[len++] = (char)atoi(q); }
         c[len] = 0; free(r); r = c;
         if (!strstr(r, "cubical_entry(")) die("native: the program exports no cubical_entry (print it with emit-lib-u):", nm);
-        char dir[512], cpath[600], so[600]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
+        /* the library is named by the program's hash (item 17: a specialization cached by key): the
+         * same C text is compiled once across runs */
+        char dir[512], cpath[600], so[600], hx[65]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
+        key_hash(r, strlen(r), hx);
         mkdir(cache_dir(), 0755); mkdir(dir, 0755);
-        snprintf(cpath, sizeof cpath, "%s/%s.c", dir, nm); snprintf(so, sizeof so, "%s/%s.so", dir, nm);
-        FILE *cf = fopen(cpath, "w"); if (!cf) die("native: cannot write", cpath); fputs(r, cf); fclose(cf); free(r);
-        char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -o %s %s", so, cpath);
-        if (system(cmd) != 0) { printf("FAIL: native %s   (the C compiler rejected %s)\n", nm, cpath); failures++; return; }
+        snprintf(cpath, sizeof cpath, "%s/%s.c", dir, hx); snprintf(so, sizeof so, "%s/%s.so", dir, hx);
+        bool cached = access(so, 4) == 0;
+        if (!cached) {
+            FILE *cf = fopen(cpath, "w"); if (!cf) die("native: cannot write", cpath); fputs(r, cf); fclose(cf);
+            char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -o %s %s", so, cpath);
+            if (system(cmd) != 0) { printf("FAIL: native %s   (the C compiler rejected %s)\n", nm, cpath); failures++; free(r); return; }
+        }
+        free(r);
         char sym[700]; snprintf(sym, sizeof sym, "%s:cubical_entry", so);
         /* the entry's prototype decides the marshaling: uint64_t a word (kind 4), V * a boxed byte
          * string (kind 6: the net's Bytes boxed as the emitted runtime's V { tag 2, n, bytes }) */
-        unsigned char kind[8] = { 4, 4, 4, 4, 4, 4, 4, 4 }; unsigned char ret = 4;
+        unsigned char kind[8] = { 4, 4, 4, 4, 4, 4, 4, 4 }; unsigned char ret = 4; int rdata = -1;
         {
-            FILE *cf2 = fopen(cpath, "r"); char *txt = NULL; size_t tl = 0;
+            FILE *cf2 = fopen(cpath, "r"); char *txt = NULL; size_t tl = 0;   /* (the text is on disk whether cached or just written) */
             if (cf2) { fseek(cf2, 0, SEEK_END); tl = (size_t)ftell(cf2); fseek(cf2, 0, SEEK_SET); txt = malloc(tl + 1); if (fread(txt, 1, tl, cf2) != tl) tl = 0; txt[tl] = 0; fclose(cf2); }
             char *e = txt ? strstr(txt, "cubical_entry(") : NULL;
             if (e) {
@@ -3859,16 +3877,20 @@ static void toplevel(Node *f) {
                 if (!strncmp(q, "V *", 3)) ret = 6;
                 char *args = e + strlen("cubical_entry("); int i = 0;
                 while (*args && *args != ')' && i < n) { while (*args == ' ' || *args == ',') args++; if (!strncmp(args, "V *", 3)) kind[i] = 6; i++; while (*args && *args != ',' && *args != ')') args++; }
+                /* a boxed result of a data type: box<d>( in the entry's body names the data type (the checker's index) */
+                char *b = strstr(e, "return box");
+                if (b && ret == 6) { int di = atoi(b + strlen("return box")); rdata = checked_data(di); }
             }
             free(txt);
         }
         int k = ffi_add(sym, n, kind, ret);
+        FFI[k].rdata = rdata;
         /* name is now (lam a1..an (%native k g a1..an)); references compiled before keep the definition */
         char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
         fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
         fprintf(m, " (%%native #%d #%ld", k, g); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i); fprintf(m, ")))");
         fclose(m); emit(buf); free(buf);
-        passes++; printf("ok: native %s   [%ld steps, %zu bytes of C]\n", nm, steps, len);
+        passes++; printf("ok: native %s   [%ld steps, %zu bytes of C%s]\n", nm, steps, len, cached ? ", cached" : "");
     } else if (!strcmp(h, "layout")) {
         /* #layout T [as R]: by the checker's layout function (lib/check.cub) */
         if (f->n < 2 || f->it[1]->list) die("(layout T [R])", NULL);
@@ -4175,6 +4197,37 @@ CubV *cubical_call_v(uint64_t k, uint64_t nargs, CubV **args) {
     return r;
 }
 long cubical_index(const char *name) { return checked_index(name); }
+/* the general boxed call: name applied to boxed arguments whose types are named (Word, Bytes, or a
+ * data type's name), the result read to a value and boxed deeply (every field forced); NULL when a
+ * type is unknown or the result is not a word, a byte string or a constructor of such */
+typedef struct { uint64_t tag, n; void *f[]; } VBox;
+static VBox *box_deep(Port p) {
+    Cell *c = obs_val(p);
+    if (!c) return NULL;
+    if (c->kind == V_WORD && !c->p) { VBox *v = calloc(1, sizeof(VBox)); v->tag = 0; v->n = c->a; return v; }
+    if (c->kind == V_BYTES) { Bytes *b = c->p; size_t bn = b ? b->n : 0; VBox *v = calloc(1, sizeof(VBox) + bn); v->tag = 2; v->n = bn; if (bn) memcpy(v->f, b->b, bn); return v; }
+    if (c->kind == V_CON && !CON[c->a].ndims) {
+        int nf = CON[c->a].nfields;
+        VBox *v = calloc(1, sizeof(VBox) + (size_t)nf * sizeof(void *)); v->tag = (uint64_t)CON[c->a].index + 1; v->n = (uint64_t)nf;
+        for (int j = 0; j < nf; j++) { v->f[j] = box_deep(c->port[1 + j]); if (!v->f[j]) return NULL; }
+        return v;
+    }
+    return NULL;
+}
+void *cubical_call_data(const char *name, uint64_t nargs, void **args, const char *const *types) {
+    long g = global_lookup(name); if (g < 0 || nargs > 64) return NULL;
+    Port *ps = calloc(nargs + 1, sizeof(Port));
+    for (uint64_t i = 0; i < nargs; i++) {
+        int d = !strcmp(types[i], "Word") ? -2 : !strcmp(types[i], "Bytes") ? -3 : data_lookup(types[i]);
+        if (d == -1) { free(ps); return NULL; }
+        ps[i] = unbox_value((VB *)args[i], d);
+    }
+    Port r = nargs ? apply_gid(g, ps, (int)nargs) : global_copy(g, NULL);
+    free(ps);
+    VBox *v = box_deep(r);
+    net_drain();
+    return v;
+}
 #ifdef CUBICAL_LIB
 /* the name the emitted C calls (lib/emitc.cub's fnet: cubical_call(key, n, (V *[]){…})) */
 void *cubical_call(uint64_t k, uint64_t nargs, void **args) { return cubical_call_v(k, nargs, (CubV **)args); }

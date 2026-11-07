@@ -15,4 +15,8 @@ const char *cubical_last_text(void);
  * or result: not marshaled yet). This is the name the emitted programs call, cubical_call(key, n, (V *[]){…}) */
 void *cubical_call(uint64_t k, uint64_t nargs, void **args);
 long cubical_index(const char *name);   /* a checked definition's signature index, or -1 */
+/* the general boxed call: name applied to boxed arguments whose types are named ("Word", "Bytes", or a data type's
+ * name; a constructor is tag c+1 with its fields), the result read by the net and boxed with every field forced;
+ * NULL when a type is unknown or the result is not a word, bytes or a constructor of such */
+void *cubical_call_data(const char *name, uint64_t nargs, void **args, const char *const *types);
 #endif
