@@ -2901,6 +2901,36 @@ Revision 1. A design, since this is the open item; stated so it can be criticize
 
 ### 18.16 A8 — Proposal: formal transported compositions
 
+**Status (2026-11-07, a path constructor without its boundary).** `con_build` applied a path
+constructor's boundary clause (`%bdy-squash4` …) at every construction and every substitution,
+then checked its face; the rebuilt boundary was erased whenever no face held, the common case at
+generic dimensions (2,839 entries of `%bdy-squash4` in surfc's corner read). The boundary's faces
+are conjunctions of the constructor's dimensions' ends, so a face holds only when some dimension
+is 0 or 1. **Built:** `O_CONW` waits for the dimensions in turn (one step each, whatever the
+arrival order, so counts stay schedule-independent) and, while none is at an end, makes the
+constructor without building the boundary; a dimension at an end builds it as before
+(`CUBICAL_NOCONW=1` turns it off). Measured (steps of the read alone, memo on, one worker): g8
+458,888 → 329,076 (−28%; 150 steps per result cell, 2,189 cells); surfc's corner 170,648 →
+130,291 (−24%, 47 cells); the number 600,349 → 470,557 (−22%); the typed port 1,349,493 →
+1,077,444; `tests/hit.cub` 6,599 → 4,804. Normal forms identical; without the memo the outputs
+are identical across 0, 1, 4, 16 workers on the determinism list plus the squash and Brunerie
+lines, with it the answers are; every suite line passes with the same counts elsewhere.
+**Measured, not reached:** the read generic in all six dimensions runs past 182M steps (library
+included, ~4M) before a 2.5 GB cap stops it (`CUBICAL_PROGRESS=n`, added: steps and cells every n
+steps), while every read with a cube dimension at 0 or 1 is 5–6 cells in under 250 steps and a
+read at one Ω² endpoint is 47 cells; so the generic normal form's size is still unknown, and the
+reads that fix any one of the six dimensions are small. Why box sets stay unknown
+(`CUBICAL_PROFILE`'s `fd-unknown`, added), for g8's read: of 20,664 substituted reads, 12,584 hit
+a box past its eight tries, 3,018 a part not yet arrived, 2,787 an unbuilt part (a thunk or a
+hypothesis), 938 a root not yet arrived; the lazy reader reads boxes while their producers are
+still running. Bounding a pending value's dimensions by its producer's inputs is sound except
+where a fresh free dimension is made: the audit of `src/net.c` finds one rule, `O_MKDIM`
+(`%dim`, reflection); every other `fresh_dim` is bound at once (`rule_subst`'s capture-avoiding
+rename of a line, `S_PLAM`/`S_FORALL` builds, the hcomp side test `O_HCM2`/`O_HCM3` whose fresh
+dimension is erased with the side, a path-typed field's hypothesis, the printer's binders in
+`lang.c`). A bound through closures needs the dimension-making taint of every record and global
+a value can reach (check.cub's `%dim` is loaded in every checked run).
+
 **Status (2026-11-06, the sharing step).** Where the cost is (`CUBICAL_PROFILE`, steps by
 operator and by the value met, added): g8's 475,558 steps are a third `SUBST` (half of those a
 substitution composed onto a reference) and a fifth `ERA`; path applications themselves are 5%.

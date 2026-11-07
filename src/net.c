@@ -889,14 +889,17 @@ typedef struct { Dim d[256]; int n; } FdSet;
 static void fd_add(FdSet *x, Dim d) { for (int i = 0; i < x->n; i++) if (x->d[i] == d) return; if (x->n < 256) x->d[x->n++] = d; else x->n = 257; }
 static void fd_dnf(FdSet *x, const Dnf *v) { if (v) for (uint32_t c = 0; c < v->n; c++) for (uint32_t q = 0; q < v->c[c]->n; q++) fd_add(x, (Dim)(v->c[c]->l[q] >> 1)); }
 static __thread long fd_budget;
+static __thread int fd_why;   /* why a set is unknown (profile): 1 root not there, 2 an unbuilt part, 3 a part not there, 4 budget, 5 tries */
+long prof_fd_why[6];
 static FdInfo *box_fd(Box *b);
 static bool fd_port(Port p, FdSet *x, int depth);
 static bool fd_cell(Cell *v, FdSet *x, int depth) {
-    if (--fd_budget < 0 || depth > 200 || x->n > 256) return false;
-    if (!is_value(v->kind) || unbuilt(v->kind)) return false;
+    if (--fd_budget < 0 || depth > 200 || x->n > 256) { fd_why = 4; return false; }
+    if (!is_value(v->kind)) { fd_why = 3; return false; }
+    if (unbuilt(v->kind)) { fd_why = 2; return false; }
     if (v->kind == V_REF) {
         FdInfo *fi = v->p ? box_fd(v->p) : NULL;
-        if (!fi) return false;
+        if (!fi) { if (!fd_why) fd_why = 1; return false; }
         Subst *s = (Subst *)(uintptr_t)v->a;
         for (uint32_t i = 0; i < fi->n; i++) {
             bool hit = false;
@@ -918,19 +921,20 @@ static bool fd_cell(Cell *v, FdSet *x, int depth) {
 }
 static bool fd_port(Port p, FdSet *x, int depth) {
     Port q = peek(sload(&p));
-    if (!q || is_var(q)) return false;
+    if (!q || is_var(q)) { fd_why = 3; return false; }
     Cell *c = PC(q);
-    if (PI(q) != 0) return false;
+    if (PI(q) != 0) { fd_why = 3; return false; }
     return fd_cell(c, x, depth);
 }
 /* the box's set, or NULL while unknown (a part not yet built); tried a few times */
 static FdInfo *box_fd(Box *b) {
     FdInfo *fi = net_solo ? b->fd : __atomic_load_n(&b->fd, __ATOMIC_ACQUIRE);
-    if (fi || __atomic_load_n(&b->fdtries, __ATOMIC_RELAXED) >= 8) return fi;
+    if (fi) return fi;
+    if (__atomic_load_n(&b->fdtries, __ATOMIC_RELAXED) >= 8) { fd_why = 5; return NULL; }
     __atomic_fetch_add(&b->fdtries, 1, __ATOMIC_RELAXED);
     Port q = sload(&b->root->port[0]);
-    if (!q || is_var(q)) { q = peek(q); if (!q || is_var(q)) return NULL; }
-    if (PI(q) != 0) return NULL;
+    if (!q || is_var(q)) { q = peek(q); if (!q || is_var(q)) { fd_why = 1; return NULL; } }
+    if (PI(q) != 0) { fd_why = 1; return NULL; }
     FdSet *y = malloc(sizeof *y); y->n = 0;
     long saved = fd_budget; fd_budget = 4000;
     bool ok = fd_cell(PC(q), y, 0);
@@ -966,7 +970,9 @@ static Port ref_read(Cell *r) {
     }
     if (r->a && !no_memo && !getenv_a8_off()) {
         /* the substitution cut to the box's dimensions (A8): none left, a read of the box itself */
+        fd_why = 0;
         FdInfo *fi = box_fd(b);
+        if (!fi && prof_on) prof_fd_why[fd_why < 6 ? fd_why : 0]++;
         if (fi) {
             Subst *t = subst_to_fd((Subst *)(uintptr_t)r->a, fi);
             if (!t) { if (prof_on) prof_fd_dropped++; return lazy_copy(b->key, b->root); }
@@ -1203,7 +1209,26 @@ uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n) {
     }
     return r;
 }
+static Port con_build_bdy(int c, const Port *f, const Port *d);
+/* a path constructor (A8): its dimensions waited for in turn (O_CONW); its boundary's faces are
+ * conjunctions of its dimensions' ends, so while no dimension is 0 or 1 none holds and the
+ * constructor stands without its boundary being built; a dimension at an end builds it (as before).
+ * The waits are steps whatever the arrival order, so counts do not depend on the schedule */
+static inline bool a8_conw(void) { static int on = -1; if (on < 0) on = getenv("CUBICAL_NOCONW") == NULL; return on; }
 Port con_build(int c, const Port *f, const Port *d) {
+    ConInfo *k = &CON[c];
+    int nf = k->nfields, nd = k->ndims, n = nf + nd;
+    if (k->bdy >= 0 && nd > 0 && a8_conw()) {
+        /* 0=dimension 0, 1..nf=fields, nf+1..=the other dimensions in order, out */
+        Cell *w = cell(O_CONW, n + 1); w->a = (uint64_t)c; w->x = 0;
+        link(d[0], P(w, 0));
+        for (int j = 0; j < nf; j++) link(f[j], P(w, 1 + j));
+        for (int j = 1; j < nd; j++) link(d[j], P(w, nf + j));
+        return P(w, n);
+    }
+    return con_build_bdy(c, f, d);
+}
+static Port con_build_bdy(int c, const Port *f, const Port *d) {
     ConInfo *k = &CON[c];
     int nf = k->nfields, nd = k->ndims, n = nf + nd;
     if (k->bdy < 0) {
@@ -1827,7 +1852,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_SYSCONS2] = "SYSCONS2",
     [O_SYSMAP] = "SYSMAP",
     [O_TPART] = "TPART",
-    [O_CONCHK] = "CONCHK",
+    [O_CONCHK] = "CONCHK", [O_CONW] = "CONW",
     [O_HCOMP] = "HCOMP",
     [O_HCM1] = "HCM1",
     [O_HCM2] = "HCM2",
@@ -1913,7 +1938,11 @@ static void interact(Cell *o, Cell *v) {
         rule_dup(o, v);
         return;
     }
-    { Local *l = local(); l->steps++; l->kind[o->kind]++; }
+    { Local *l = local(); l->steps++; l->kind[o->kind]++;
+      /* CUBICAL_PROGRESS=n: every n steps of a thread, its steps and the cells it holds (A8's
+       * measurements of reads too large to finish) */
+      static long prog = -1; if (prog < 0) { const char *e = getenv("CUBICAL_PROGRESS"); prog = e ? atol(e) : 0; }
+      if (prog > 0 && l->steps % prog == 0) fprintf(stderr, "[progress] %ld steps, %ld cells\n", l->steps, (long)l->cells); }
     if (prof_on && (o->kind == O_SUBST || o->kind == O_ERA || o->kind == O_DUP || o->kind == O_PAPPP)) ADD(prof_pair[o->kind == O_SUBST ? 0 : o->kind == O_ERA ? 1 : o->kind == O_DUP ? 2 : 3][v->kind & 255], 1);
     if (trace_out) trace_step(o, v);
     if (prof_on) {
@@ -2345,6 +2374,32 @@ static void interact(Cell *o, Cell *v) {
             cell_free(o); cell_free(v);
         } else if (vk == V_SYS) distribute(o, v);
         else { link(unk(), o->port[1]); era(P(v, 0)); cell_free(o); }
+        return;
+    }
+    case O_CONW: {
+        /* a path constructor's dimension x arrived (con_build) */
+        int c = (int)o->a; ConInfo *k = &CON[c];
+        int nf = k->nfields, nd = k->ndims, x = (int)o->x;
+        Port out = o->port[nf + nd];
+        Port fl[256], dm[64];
+        if (nf > 256 || nd > 64) { fprintf(stderr, "CONW: a constructor too wide\n"); abort(); }
+        for (int j = 0; j < nf; j++) fl[j] = o->port[1 + j];
+        for (int j = 0; j < nd; j++) dm[j] = j < x ? o->port[nf + 1 + j] : j == x ? P(v, 0) : o->port[nf + j];
+        bool end = vk != V_IV || dnf_is_zero(v->p) || dnf_is_one(v->p);
+        if (end) link(con_build_bdy(c, fl, dm), out);
+        else if (x == nd - 1) {
+            Cell *cc = cell(V_CON, nf + nd + 1); cc->a = (uint64_t)c;
+            for (int j = 0; j < nf; j++) link(fl[j], P(cc, 1 + j));
+            for (int j = 0; j < nd; j++) link(dm[j], P(cc, 1 + nf + j));
+            link(P(cc, 0), out);
+        } else {
+            Cell *w = cell(O_CONW, nf + nd + 1); w->a = (uint64_t)c; w->x = (uint32_t)(x + 1);
+            link(dm[x + 1], P(w, 0));
+            for (int j = 0; j < nf; j++) link(fl[j], P(w, 1 + j));
+            for (int j = 0, q = 0; j < nd; j++) if (j != x + 1) link(dm[j], P(w, nf + 1 + q++));
+            link(P(w, nf + nd), out);
+        }
+        cell_free(o);
         return;
     }
     case O_CONCHK: {

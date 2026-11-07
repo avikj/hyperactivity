@@ -4680,7 +4680,7 @@ static void prof_print(void) {
           for (int q = 0; q < 4; q++) for (int k = 0; k < 256; k++) if (prof_pair[q][k]) fprintf(stderr, "kind %s·%s: %ld\n", pn[q], kind_name(k), prof_pair[q][k]); }
         { extern long prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep, prof_reads_sub_boxes;
           fprintf(stderr, "kind reads-subst-boxes: %ld\n", prof_reads_sub_boxes);
-          extern long prof_fd_cut, prof_fd_dropped; fprintf(stderr, "kind fd-cut: %ld\nkind fd-dropped: %ld\n", prof_fd_cut, prof_fd_dropped); fprintf(stderr, "kind reads-plain: %ld\nkind reads-plain-repeat: %ld\nkind reads-subst: %ld\nkind reads-subst-repeat: %ld\n", prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep); }
+          extern long prof_fd_cut, prof_fd_dropped, prof_fd_why[6]; fprintf(stderr, "kind fd-cut: %ld\nkind fd-dropped: %ld\nkind fd-unknown root/unbuilt/pending/budget/tries: %ld %ld %ld %ld %ld\n", prof_fd_cut, prof_fd_dropped, prof_fd_why[1], prof_fd_why[2], prof_fd_why[3], prof_fd_why[4], prof_fd_why[5]); fprintf(stderr, "kind reads-plain: %ld\nkind reads-plain-repeat: %ld\nkind reads-subst: %ld\nkind reads-subst-repeat: %ld\n", prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep); }
         for (int k = 0; k < 64; k++) if (prof_dupk[k] || prof_erak[k]) fprintf(stderr, "value kind %3d: dup %ld era %ld\n", k, prof_dupk[k], prof_erak[k]);
         for (int i = 0; i < prof_n; i++) ix2[i] = i;
         for (int i = 0; i < prof_n; i++) for (int j = i + 1; j < prof_n; j++) if (prof_dup[ix2[j]] > prof_dup[ix2[i]]) { int t = ix2[i]; ix2[i] = ix2[j]; ix2[j] = t; }

@@ -180,6 +180,8 @@ enum {
     O_SYSMAP,   /* 0=s 1=f 2=out */
     O_TPART,    /* a=k; 0=a type 1=out: the type's k-th component */
     O_CONCHK,   /* a=constructor; 0=its boundary's face 1=the boundary 2..=fields, dims; out */
+    O_CONW,     /* a=constructor, x=the dimension examined; 0=that dimension's value 1..nf=fields nf+1..=dims; out:
+                 * a path constructor waits for its dimensions (A8): none constant, no face of its boundary holds */
     O_HCOMP,    /* 0=tube 1=cap [2=F] out: a formal hcomp unless the tube is total; with F (a data type
                  * without path constructors) the composition goes into the fields, F u a, when the
                  * cap and every side of the tube are one constructor */
