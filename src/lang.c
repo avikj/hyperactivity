@@ -3318,6 +3318,11 @@ static void native_structs(const char *nm, long g, int n, int k, const int *sdi,
         for (int i = 0; i < got; i++) rin[i] = type_rep(doms[i]);
         if (got == n) rout = type_rep(cod);
     }
+    /* a record the program kept as itself (its representation not consumed by the back end: program-rep
+     * consumes representations by Word) crosses as its own struct, not by its representation */
+    for (int i = 0; i < n; i++) if (sdi[i] >= 0 && rin[i] == sdi[i]) rin[i] = -1;
+    if (rsdi >= 0 && rout == rsdi) rout = -1;
+    if (getenv("CUBICAL_SHOW_NATIVE")) for (int i = 0; i < n; i++) fprintf(stderr, "[native] %s parameter %d: struct %d, representation %d; result struct %d, representation %d\n", nm, i, sdi[i], rin[i], rsdi, rout);
     int rd = rsdi >= 0 ? checked_data(rsdi) : -1;
     /* the fallback over the expanded words: the definition applied to the records rebuilt (each
      * field from its representation), its result's fields to theirs */
