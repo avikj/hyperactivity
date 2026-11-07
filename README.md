@@ -672,7 +672,13 @@ seventeen programs with gcc and runs them, with both printers):
   theorems) applied with soundness by congruence, and `spec-path : fo-ev (spec-w r c) ρ ≡ wc-ev c ρ`
   for every code; `ex-path` is that path for a term. Bridges read real `Code` and `FO` into the
   mirror (the untyped `lower` agrees with the checked one on the readings) and the checked
-  pipeline's output back for the printers.
+  pipeline's output back for the printers. Past the word fragment, a mirror with data (two word
+  fields, a two-way case), closures, calls and the byte layer at 8 bytes (a fresh string, loads and
+  stores as cells), and checked closure conversion `dconv` with `dc-sound` at every fuel.
+  `specialize-proved` takes the word route (`spec-path`), else the data route: the normal form
+  read into the mirror (`dc-prog`, globals quoted and read), its tables decided by `dtok-chk` (so
+  `dc-sound` holds through `dtok-auto`), converted and taken to first-order definitions (`run.py`
+  `proved-spec`, `proved-region`), else the untyped specializer, tagging which.
 - **`lib/derive.cub`**: `derive-eq d`, a decidable equality as a code read off the data table;
   evaluated, quoted back at its type, lowered and compiled (the derived equality on `Nat` prints
   10 for eq(2,2), eq(2,1)).

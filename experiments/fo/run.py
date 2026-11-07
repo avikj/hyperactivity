@@ -171,6 +171,27 @@ defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #4) lnil))) (lcons (#1 , (#1 , fw
  # first-order form by dc-defs; at x = 4: (3 + 4) + (4 + 4) = 15
  'proved-data': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '''"
 defs = dc-defs dx-prog''', "15"),
+ # the specializer's data route (lib/foproof.cub specialize-proved): pq-app's normal form — a case on a
+ # PQ choosing a closure, applied to 5 — read into the checked mirror (dc-prog), its tables decided
+ # (dtok-chk, so dc-sound holds of it), closure-converted by dconv; at pqb 9 2: 5 − 2
+ 'proved-spec': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '''"
+sd = specialize-proved (PQ → Word) lnil (code (λ (p : PQ) → pq-app p))
+#same fst sd = #2
+defs = lcons (#0 , (#0 , fcall #1 (lcons (fcon (didx (code PQ)) #1 (lcons (flit #9) (lcons (flit #2) lnil))) lnil))) (dc-rekey #1 (snd sd))''', "3"),
+ # lib/region.cub's two through the same route: the byte layer in the mirror (a fresh string, stores
+ # and loads at multiples of 8 as cells); at 20: 20 + 21
+ 'proved-region': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '''"
+p0 : Ptr 16
+p0 = (0 , (8 , λ i → 16))
+p8 : Ptr 16
+p8 = (8 , (0 , λ i → 16))
+two : Word → RM 16 Int64
+two w = rthen (wr p0 (i64 w)) (rthen (wr p8 (i64 (%wsucc w))) (rbind (rd p0) (λ a → rmap (λ b → i64add a b) (rd p8))))
+prog-two : Word → Word
+prog-two w = i64toWord (eval-fresh 16 (two w))
+sr = specialize-proved (Word → Word) lnil (code (λ (w : Word) → prog-two w))
+#same fst sr = #2
+defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #20) lnil))) (dc-rekey #1 (snd sr))''', "41"),
  # a process run against its world (lib/proc.cub), specialized under an unknown store: the run
  # becomes a function of the store (st 3 + 1); compiled with a store that answers 40; prints 41
  'process': ("""proc-defs = case lift #100 spec4 of lifted t2 ds k → lcons (#0 , (#0 , fapply t2 (lcons (flam (flit #40)) lnil))) ds
