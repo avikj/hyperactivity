@@ -666,13 +666,13 @@ seventeen programs with gcc and runs them, with both printers):
   constructors of a represented type through `to`, recursion on one through `from`, by the
   representation's table `%rops d`; the printers lay a field of a type represented by `Word` out as
   a word.
-- **`lib/foproof.cub`**: the justifying path of compilation for the word fragment (18.5 step 7):
+- **`lib/foproof.cub`**, **`lib/foproofd.cub`**: the justifying path of compilation for the word fragment (18.5 step 7):
   the fragment's codes and first-order forms mirrored as checked data with checked evaluators and
   lowering, one lemma per form (`lower-sound`), verified rewrites (`VRule`, from the store's word
   theorems) applied with soundness by congruence, and `spec-path : fo-ev (spec-w r c) ρ ≡ wc-ev c ρ`
   for every code; `ex-path` is that path for a term. Bridges read real `Code` and `FO` into the
   mirror (the untyped `lower` agrees with the checked one on the readings) and the checked
-  pipeline's output back for the printers. Past the word fragment, a mirror with data (two word
+  pipeline's output back for the printers. Past the word fragment (`lib/foproofd.cub`), a mirror with data (two word
   fields, a two-way case), closures, calls and the byte layer at 8 bytes (a fresh string, loads and
   stores as cells), and checked closure conversion `dconv` with `dc-sound` at every fuel.
   `specialize-proved` takes the word route (`spec-path`), else the data route: the normal form

@@ -4863,6 +4863,28 @@ static Node *copattern_wrap(Node *b) {
 }
 /* a checked definition (or, name NULL, a check): elaborated, checked, its holes and guesses
  * settled by the checker, until the checker's answer is final */
+/* An elaboration's rounds make nodes nothing keeps once the definition is settled (each round's
+ * terms, the holes' guesses, the checker's verdicts read back): they are made inside an arena mark,
+ * the settled type and term copied out (el_copy), and the mark released, so the memory a large
+ * definition's elaboration takes is returned before the next one. The tables keyed by nodes made
+ * during the elaboration (hole tables, λ-head reductions, case motives, tick wraps, λ types) are cut
+ * back to what they held before it. */
+static Node *el_copy(Node *t) {
+    Node *x = calloc(1, sizeof(Node)); x->list = t->list; x->s = t->s; x->n = t->n; x->cmt = t->cmt;
+    if (t->list) { x->it = calloc((size_t)t->n + 1, sizeof(Node *)); for (int i = 0; i < t->n; i++) x->it[i] = el_copy(t->it[i]); }
+    return x;
+}
+typedef struct { ArMark m; int nlt, ncm, ntw; bool on; } ElMark;
+static ElMark el_mark(void) {
+    static int off = -1; if (off < 0) off = getenv("CUBICAL_NOELMARK") != NULL;
+    ElMark e = { ar_mark(), nlt_, ncm, ntw, !off }; return e;
+}
+static void el_release(ElMark e) {
+    neh = neg = 0; nbk = 0; nesc = 0;
+    if (!e.on) return;
+    nlt_ = e.nlt; ncm = e.ncm; ntw = e.ntw;
+    ar_release(e.m);
+}
 static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint64_t mask, int mlen) {
     neh = neg = 0; nbk = 0;
     /* its own calls (a copattern definition's) take implicit arguments as later uses do */
@@ -4882,6 +4904,7 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
         if (getenv("CUB_DBGCOMP")) { fprintf(stderr, "%s: %s\n", name, is_computing(name) ? "computing" : "rigid"); if (h->list && h->n && !h->it[0]->list) fprintf(stderr, "  head %s\n", h->it[0]->s); }
     }
     Node *T = NULL, *t = NULL;
+    ElMark em = el_mark();
     /* an elaboration that cannot go on (a recursive call needed now, ...): the definition rejected */
     jmp_buf ejb;
     jmp_buf *outer_jb = die_jb;   /* --serve's way out, restored after this check */
@@ -4891,6 +4914,7 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
         bool ok = !expect;
         if (ok) passes++; else failures++;
         printf("%s: %s %s\n   reason: %s\n", ok ? "ok" : "FAIL", expect ? "checks" : "rejected", name ? name : "(check)", die_msg);
+        el_release(em);
         return;
     }
     for (int round = 0; ; round++) {
@@ -4945,6 +4969,8 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
     /* settled: the elaboration's marks removed */
     if (!has_hole(T) && !has_hole(t)) { T = strip_marks(T); t = strip_marks(t); }
     if (getenv("CUBICAL_SHOW_ELAB")) { fprintf(stderr, "%s : ", name ? name : "(check)"); print_node(stderr, T); fprintf(stderr, "\n  = "); print_node(stderr, t); fprintf(stderr, "\n"); }
+    if (em.on) { T = el_copy(T); t = el_copy(t); }
+    el_release(em);
     if (name) x_top(lst(4, nsym(expect ? "checked" : "checked-fail"), nsym(name), T, t));
     else x_top(lst(3, nsym(expect ? "check" : "check-fail"), T, t));
     if (forced_result) { free((char *)forced_result); forced_result = NULL; }

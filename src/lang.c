@@ -1,3 +1,4 @@
+#include <malloc.h>
 #include <setjmp.h>
 #include <signal.h>
 #include <dlfcn.h>
@@ -31,7 +32,7 @@ static void die(const char *m, const char *x) {
 }
 
 /* ---------------- s-expressions ---------------- */
-typedef struct Node { int list; char *s; int n; struct Node **it; char *cmt; short hk; unsigned lvgen; struct Names *fv, *lv; } Node;   /* lv: the names it may refer to (lvs), valid while lvgen is the arena's generation */   /* hk: a symbol's binder/head class, once found (hk_of); fv: the free names of a desugared term, once found (free_vars). s: interned, one pointer per spelling */
+typedef struct Node { int list; char *s; int n; struct Node **it; char *cmt; short hk; unsigned lvgen, fvgen; struct Names *fv, *lv; } Node;   /* lv: the names it may refer to (lvs), valid while lvgen is the arena's generation */   /* hk: a symbol's binder/head class, once found (hk_of); fv: the free names of a desugared term, once found (free_vars). s: interned, one pointer per spelling */
 /* nodes are never freed: they come from a bump arena of zeroed chunks */
 /* The node arena: bump allocation in 1 MB chunks. Compiling a term makes nodes nothing keeps
  * (desugaring, generated binders; the compiled form is Syn and Records, which hold no node): a
@@ -64,10 +65,19 @@ static unsigned ar_gen = 1;   /* bumped at every release: a cache made inside a 
 static void ar_release(ArMark m) {
     ar_gen++;
     if (ar_cur) ar_cur->used = (size_t)(ar_p - ar_cur->data);
+    static int poison = -1;
+    if (poison < 0) { poison = getenv("CUBICAL_ARPOISON") != NULL; if (poison) mallopt(M_MMAP_THRESHOLD, 256 * 1024); }
     while (ar_cur != m.c) {
         Chunk *k = ar_cur; ar_cur = k->prev;
+        if (poison) { free(k); continue; }   /* mapped on its own (the threshold fixed): unmapped, a read of it faults */
         if (k->cap > (1u << 20)) free(k);   /* an oversized one-off */
         else { memset(k->data, 0, k->used); k->used = 0; k->prev = ar_spare; ar_spare = k; }
+    }
+    if (poison && ar_cur) {
+        /* the mark's own chunk: garbage from the mark on, and nothing after the mark reused */
+        if (ar_cur->data + ar_cur->used > m.p) memset(m.p, 0xA5, (size_t)(ar_cur->data + ar_cur->used - m.p));
+        ar_cur->used = ar_cur->cap; ar_p = ar_end = ar_cur->data + ar_cur->cap;
+        return;
     }
     ar_p = m.p; ar_end = ar_cur ? ar_cur->data + ar_cur->cap : NULL;
     if (ar_cur && ar_cur->data + ar_cur->used > ar_p) memset(ar_p, 0, (size_t)(ar_cur->data + ar_cur->used - ar_p));
@@ -352,7 +362,8 @@ static void names_add(Names *s, const char *x) { x = intern(x); for (int i = 0; 
  * (free_vars) */
 static unsigned mark_epoch;   /* one counter for every merge that marks names (fvs, lvs) */
 static Names *fvs(Node *t) {
-    if (t->fv) return t->fv;
+    if (t->fv && t->fvgen == ar_gen) return t->fv;   /* made in the arena: stale after a release */
+    t->fvgen = ar_gen;
     Names *r = ar_alloc(sizeof(Names));
     if (!t->list) {
         const char *x = t->s;

@@ -169,18 +169,18 @@ defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #4) lnil))) (lcons (#1 , (#1 , fw
  # λy. y + x, a constructor of (f 3, call #2 x), a case on it adding the fields, a call to x + x —
  # closure-converted by the checked dconv (its path dx-path through dc-sound), then taken to the
  # first-order form by dc-defs; at x = 4: (3 + 4) + (4 + 4) = 15
- 'proved-data': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '''"
+ 'proved-data': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
 defs = dc-defs dx-prog''', "15"),
  # the specializer's data route (lib/foproof.cub specialize-proved): pq-app's normal form — a case on a
  # PQ choosing a closure, applied to 5 — read into the checked mirror (dc-prog), its tables decided
  # (dtok-chk, so dc-sound holds of it), closure-converted by dconv; at pqb 9 2: 5 − 2
- 'proved-spec': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '''"
+ 'proved-spec': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
 sd = specialize-proved (PQ → Word) lnil (code (λ (p : PQ) → pq-app p))
 #same fst sd = #2
 defs = lcons (#0 , (#0 , fcall #1 (lcons (fcon (didx (code PQ)) #1 (lcons (flit #9) (lcons (flit #2) lnil))) lnil))) (dc-rekey #1 (snd sd))''', "3"),
  # lib/region.cub's two through the same route: the byte layer in the mirror (a fresh string, stores
  # and loads at multiples of 8 as cells); at 20: 20 + 21
- 'proved-region': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '''"
+ 'proved-region': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
 p0 : Ptr 16
 p0 = (0 , (8 , λ i → 16))
 p8 : Ptr 16

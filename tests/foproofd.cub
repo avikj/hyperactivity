@@ -1,0 +1,22 @@
+-- tests/foproofd.cub — which route lib/foproofd.cub's specialize-proved takes on tests/fo.cub's
+-- programs (copies under their own names: this line loads neither tests/fo.cub nor the printers):
+-- addk is in the word fragment (#1, spec-path); bump (a record of two words) and the store-then-load
+-- on a parameter string are in the data mirror (#2, dc-sound and fr-dc-path); fact and fib carry a
+-- pair through a word recursion and take the untyped pipeline (#0)
+mulw-pd : Word → Word → Word
+mulw-pd a b = %welimP (λ v → Word) b #0 (λ k h → %wadd h a)
+factw-pd : Word → Word
+factw-pd n = snd (%welimP (λ v → Word × Word) n (#1 , #1) (λ k p → (%wsucc (fst p) , mulw-pd (fst p) (snd p))))
+fibw-pd : Word → Word
+fibw-pd n = fst (%welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p))))
+addk-pd : Word → Word → Word
+addk-pd k = λ x → %wadd x k
+data P2pd = p2pd (x : Word) (y : Word)
+bump-pd : P2pd → P2pd
+bump-pd p = case p of p2pd x y → p2pd x (%wadd y #1)
+st-ld-pd = code (λ (b : Bytes 32) (v : Int64) → i64toWord (load64 32 (store64 32 b 8 (16 , λ i → 32) v) 8 (16 , λ i → 32)))
+#same fst (specialize-proved (Word → Word → Word) lnil (code (λ (k : Word) (x : Word) → addk-pd k x))) = #1
+#same fst (specialize-proved (P2pd → P2pd) lnil (code (λ (p : P2pd) → bump-pd p))) = #2
+#same fst (specialize-proved (Bytes 32 → Int64 → Word) lnil st-ld-pd) = #2
+#same fst (specialize-proved (Word → Word) lnil (code (λ (n : Word) → factw-pd n))) = #0
+#same fst (specialize-proved (Word → Word) lnil (code (λ (w : Word) → fibw-pd w))) = #0
