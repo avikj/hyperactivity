@@ -1134,10 +1134,10 @@ unification of the index at the split is the missing piece, not a motive over th
 would ask the branch for every index); (5) item 30's retraction and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
 `Z2` reading with its laws, `lib/intproof.cub`, `lib/intlin.cub`); (7) DONE: the memory interface in `W` (`w-load`/`w-store`/`w-cas`/`w-fence`, acquire /
 release / acquire-release / sequentially consistent, on addresses from `ptr-of`;
-`tests/world.cub`); (8) item 10's same-machine Agda comparison; (9) Line B's leftovers: `lib/emitx86.cub` (18.7's
-encoder, ~700 lines, for the latency of re-specialization only since `#native` goes through
-gcc), 18.5 step 7's justifying path `eval-fo f ≡ t`, `fthunk` in the printers, parameterized
-data types in the C++ image. A trap for test writers: `#same f #1 = #8` parses `#1 = #8` as a
+`tests/world.cub`); (8) item 10's same-machine Agda comparison; (9) DONE (`7a2c96c4`, `62c669fc`, `13ae6b9f`, `54be3050`): Line B's leftovers — `lib/emitx86.cub` (18.7's
+encoder for the word-only fragment, run from executable memory; `X86=1 run.py`), 18.5 step 7's
+statements read by computation per family (the assembled path for an arbitrary term stays open),
+`fthunk` in the printers, parameterized data types in the C++ image (templates, read back). A trap for test writers: `#same f #1 = #8` parses `#1 = #8` as a
 face (`src/syntax.c`'s system syntax); parenthesize the application. The list of revision 7.8
 follows for the record.
 
@@ -1251,17 +1251,17 @@ identity; linear values are introduced only in `primitive` definitions.
     form, its evaluator, closure conversion, structural recursion, the byte layer),
     `lib/lower.cub` (from codes, with the data table's shapes), `lib/repr.cub` (the
     representations consumed); the types `FT` and B12's layouts not yet used for unboxing.
-15. **Status (2026-11-06):** built — `lib/specialize.cub` normalizes, rewrites along the store's theorems under the terminating discipline (`bd21c486`: oriented rules to the fixpoint, unoriented under the bound), erases by `%gusage`, runs `first-order` and honours `Sched` (`36b9e30b`). Open: 18.5 step 7's justifying path. Spec as written: Specializer as a term, applying marked theorems under a terminating discipline.
+15. **Status (2026-11-06):** built — `lib/specialize.cub` normalizes, rewrites along the store's theorems under the terminating discipline (`bd21c486`: oriented rules to the fixpoint, unoriented under the bound), erases by `%gusage`, runs `first-order` and honours `Sched` (`36b9e30b`). 18.5 step 7: the per-family statements `eval-fo (lower (code f)) ≡ f` are read by computation in `tests/fo.cub` (`62c669fc`; `#same`s, since a checked path may only mention checked definitions and the first-order libraries are untyped); the path assembled from the recorded rewrites, for an arbitrary term, is open. Spec as written: Specializer as a term, applying marked theorems under a terminating discipline.
     Essential. In progress: `lib/specialize.cub` (normalize, rewrite along rules to a bound,
     lower) with `lib/rules.cub` reading the marked theorems from the store; the ordered
     discipline, usage (B11) and the criterion (B13) not yet applied.
-16. **Status (2026-11-06):** milestones 1 and 2 built (`lib/emitc.cub`, `lib/emitu.cub` with recursive data as typed pointers `a8d9028c`, 22 harness programs under both printers); the JIT is `#native` through gcc (`e9b9c983`). Spec as written: C back end (gcc/clang, CompCert); JIT. Essential. Milestone 1 as a library:
+16. **Status (2026-11-06):** milestones 1 and 2 built (`lib/emitc.cub`, `lib/emitu.cub` with recursive data as typed pointers `a8d9028c`, 22 harness programs under both printers); the JIT is `#native` through gcc (`e9b9c983`); `fthunk` in both printers as a thunk cell computed once by `force()` (`7a2c96c4`); 18.7's own encoder `lib/emitx86.cub` for the word-only fragment, run from executable memory by `experiments/fo/x86main.c` (`54be3050`, `X86=1 run.py`: six programs, fib 90 among them). Spec as written: C back end (gcc/clang, CompCert); JIT. Essential. Milestone 1 as a library:
     `lib/emitc.cub` prints the first-order form as C (boxed values, closures through a
     dispatcher, `ASSUME` for assumed facts), `experiments/fo/run.py` compiles and runs seven
     cases with gcc. WebAssembly, MLIR, circuits: optional.
 17. **Status (2026-11-06):** the mechanism is `#native f n = prog` (on demand, per definition, not cached by key) and `specialize-v` (`36b9e30b`); caching by key is open. Spec as written: Progressive specialization on run-time values, cached by key. Essential.
 18. **Status (2026-11-06):** both directions for words (`e9b9c983`, `680485ea`, `e5bbd429`, 18.8's status); represented values by layout are open. Spec as written: Call boundary; C ABI both directions. Essential.
-19. **Status (2026-11-06):** built, `ee5c04a2` (`lib/image.cub`, `lib/reimport.cub`; `IMAGE=1 run.py`: 4 headers through g++ -std=c++20, re-imported equal to the source up to erasure); parameterized data types not exported yet. Spec as written: The C++ image (10.1): a compositional translator over codes, one clause per source form
+19. **Status (2026-11-06):** built, `ee5c04a2` (`lib/image.cub`, `lib/reimport.cub`; `IMAGE=1 run.py`: 4 headers through g++ -std=c++20, re-imported equal to the source up to erasure); parameterized data types exported as templates and read back (`13ae6b9f`: a type parameter a template parameter of the structs, a case a visit by template lambdas; a parameter at a value stays outside the fragment). Spec as written: The C++ image (10.1): a compositional translator over codes, one clause per source form
     (~30 forms), parameterized by the binding-time assignment; the fully specialized residue
     printer is its first milestone; the fragment's re-import for translation validation and
     for importing consumer code in the fragment. ~3,500 lines. Essential for adoption; the
@@ -2164,9 +2164,13 @@ layer is `fprim` with `P-load64 … P-blen` on `vbytes` values rather than `fbyt
 `fi64`/`ff64` are not yet forms (FO holds words; the conversions are dropped at the
 boundary); `fcall` is by global index (+1 in a program), not by codebase key (F34); `FT` is
 declared and not yet attached to terms, so the printer boxes every value — the typed form
-and B12's layouts are the next step here. The justifying path `eval-fo f ≡ t` is not
-produced; the harness compares `eval-fo` with the net's reading instead (the acceptance as
-written). `lower` lives in `lib/lower.cub` (after the checker, for the shapes).
+and B12's layouts are the next step here. The justifying path `eval-fo f ≡ t` as an
+assembled proof term is not produced; its statements are read by computation, family by family
+(`tests/fo.cub`'s justifying-path section, `62c669fc`: words, loops, pairs, data, closures,
+thunks, the numeric and byte layers), as `#same`s — a `#check`ed path may mention checked
+definitions only, and the first-order libraries are untyped by design. `fthunk` lifts to a
+one-argument closure under `fthunk (fapply c [0])` (`7a2c96c4`). `lower` lives in
+`lib/lower.cub` (after the checker, for the shapes).
 
 #### Definition
 A data type in the language, `lib/fo.cub`:
@@ -2307,10 +2311,21 @@ and pointer-carrying types (lists, trees) remain boxed `V`: typed pointers to th
 structs, with the same layouts, are what is left of milestone 2. `experiments/fo/run.py` compiles fourteen programs with gcc at
 `-O2` and runs them (factorial, a switch, a specialized loop, a closure, a law consumed, an
 assumed fact, the typedefs, the byte layer, loads with proofs, a recursion, a derived
-equality, a whole program from the store, a process against its world). Not yet: typed
-(unboxed) emission from `FT` and the layouts, `fthunk`/`fnet`, the codebase keys in the
-file header, CompCert, the JIT, the acceptance programs at size (`fib 30`, the sort, the
-decoder from the boundary).
+equality, a whole program from the store, a process against its world). `fthunk` in both
+printers (`7a2c96c4`): a thunk is a closure cell tagged `2000000 + g` through the dispatcher
+(which switches on the tag modulo 1000000), `force()` applies it to 0 once, stores the value
+in its first field and retags it `3000000`, and leaves any other value alone (lifted recursion
+hypotheses are read through `fforce` too). The JIT's own encoder, `lib/emitx86.cub`
+(`54be3050`): the word-only fragment (fvar, flit, add/sub/mul/eq/lt, let, if, loops with their
+continue/break cells, calls up to six arguments, constructor cells of words in a bump arena with
+projections as loads) to one position-independent x86-64 blob — a stack machine over rbp
+slots, an entry stub setting r15 (the arena) and r14 (the blob's base, calls base-relative),
+the stack 16-aligned at calls, offsets from a measuring pass; `x86-ok` says whether a program
+is inside the fragment. `experiments/fo/x86main.c` copies a blob into executable memory and
+calls it; `X86=1 run.py` runs plus (by call and by the stub's arguments), factorial, plusw's
+specialized loop, fib 90 through pairs, a call inside a loop. Not yet: `fnet` natively, the
+codebase keys in the file header, CompCert, SSE2 floats and `fswitch` in the encoder, the
+acceptance programs at size (the sort, the decoder from the boundary).
 
 #### C
 `emit-c : FO × FT → CSource`, a term over `FO` producing a string (the fragment of C it
@@ -2393,6 +2408,18 @@ verdict on a code. `make test` unchanged.
 `foreign`), `src/syntax.c` ~40. About 440 lines.
 
 ### 18.9 B19 — The C++ image
+
+**Status (2026-11-06).** Built (`ee5c04a2`; `lib/image.cub`, `lib/reimport.cub`), `IMAGE=1 run.py`
+compiling five headers with g++ at `-std=c++20` and re-importing each definition equal to its
+source up to erasure. Parameterized data types (`13ae6b9f`): a type parameter is a template
+parameter of the structs (`template<class P0> struct D; … struct D_c1 { P0 f0;
+std::shared_ptr<D<P0>> f1; }; … std::variant<D_c0<P0>, …>`), the field types the constructor
+telescope's quoted codes over the parameters; `D<args>` as a type; a constructor at the expected
+type's arguments (`D<T>{D_c<T>{…}}`, reported when the type is unknown); a case on such a type a
+fix over `const auto &x` whose alternatives are template lambdas `[&]<class Q0>(const D_c<Q0> &k)`;
+the re-import reads all of it back (template struct declarations skipped, the scrutinee's type
+from the alternatives). A parameter at a value (an index) stays outside the fragment. Not yet:
+concepts from records, codata as classes, representations' classes, the module file.
 
 Revision 1. `image : Code × Sched → CxxSource + Report`, a term over codes. The schedule's
 `generality` is `specialized` (then `image` = `emit-c` over `specialize`'s `FO`, printed as
