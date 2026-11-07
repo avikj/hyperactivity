@@ -1411,7 +1411,19 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
     `D-correct-fwd`: forward mode agrees); the untyped copy `pcode-of-code`/`code-of-pcode`
     round-trips and `eval-g` agrees with `cev` on the readings (`Code` is untyped, declared
     before the checker, so the theorem quantifies over the mirror).
-32. **Status (2026-11-06):** the two verified checkers (`lib/linproof.cub`, `lib/eqproof.cub`), the ring checker, the directed Farkas search (`89ec3e0e`) and the bridges from codes (`d1e5f790`) are built, and over `Int` too (`lib/intproof.cub`, `lib/intlin.cub`: the checker is the word checker over the coordinates of differences, its soundness transported); the elaborator calling `check-cert` on holes is open. Spec as written: Certificate checkers as verified terms over codes; search unverified (in-language or SMT);
+32. **Status (2026-11-06):** the two verified checkers (`lib/linproof.cub`, `lib/eqproof.cub`), the ring checker, the directed Farkas search (`89ec3e0e`) and the bridges from codes (`d1e5f790`) are built, and over `Int` too (`lib/intproof.cub`, `lib/intlin.cub`: the checker is the word checker over the coordinates of differences, its soundness transported); the elaborator calling the search on holes is `by-lin`
+    (2026-11-06, `src/syntax.c` `by_lin`): at a hole of type `Lew a b`, the goal and the
+    hypotheses `h : Lew l r` in scope are read as linear codes over their atoms (`plusw`,
+    `%wsucc`, word literals; any other subterm an atom), `lib/lin.cub`'s `omega-cert` runs at
+    elaboration time (untrusted, through `readback`), and the hole becomes `cert-sound env hs ms a
+    b holds refl` at the atoms' environment, the verified checker's verdict decided by the
+    checker's own normalization (`tests/cert.cub`: the decoder's obligation, a chain of three
+    with doubling, a false goal refused). Over `Int` (`leZ a b`): the goal is definitionally the
+    word claim a₁ + b₂ ≤ b₁ + a₂ on `toZ2`'s coordinates, so the word path is used with each
+    `addZ`, `negZ` and literal met adding the equations that tie its coordinates to its parts'
+    (`toZ2-fromZ2-rel`, `toZ2-neg-fst2/snd2`, computation), each as two inequalities by
+    `eq-le`: `leZ-trans`, `leZ-add`, `leZ-neg` and `x ≤ y + (−3) → x + 3 ≤ y` are one-word proofs
+    (`tests/cert.cub`). DONE. Spec as written: Certificate checkers as verified terms over codes; search unverified (in-language or SMT);
     unchecked solvers marked. Essential.
 33. **Status (2026-11-06):** built as `lib/nav.cub` with `lib/cost.cub`'s models (size, recorded steps through `%gsteps`, `13f09662`). Spec as written: Navigation over established identities. Precisely: the store holds identities; a view is
     a subset a reasoner currently holds; from a view the available transports are computable

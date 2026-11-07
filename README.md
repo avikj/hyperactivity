@@ -610,6 +610,12 @@ evaluation.
   proves `a ≤ b` wherever the hypotheses hold. Multiples are repeated addition, so no multiplication
   law enters; the order check is an equality test on `f + (g − f)`, so the subtraction need not be
   verified.
+- **`by-lin`** fills a hole whose type is `Lew a b` (words) or `leZ a b` (integers): the goal and the
+  hypotheses of those types in scope are read as linear codes over their atoms, `lib/lin.cub`'s
+  search finds a certificate while elaborating (untrusted), and the hole becomes `cert-sound` at
+  the atoms' environment, which the checker verifies by normalization. Needs `lib/lin.cub` and
+  `lib/linproof.cub` (and `lib/intproof.cub` for integers). `leZ-add` is
+  `leZ-add a b c d h k = by-lin`.
 - **`lib/eqproof.cub`**: equality certificates over uninterpreted functions. A certificate is a
   trace of steps (position, hypothesis, direction, substitution); `eq-cert-sound`: a trace that
   checks proves `s = t` in every model where the schematic hypotheses hold at every valuation.

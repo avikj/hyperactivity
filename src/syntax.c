@@ -3527,12 +3527,131 @@ static Node *el_alts(Node *t, int from) {
     return r;
 }
 static bool rt_is_path(Node *R);
+/* ---- by-lin (F32, item 32): the elaborator calling the certificate search on a hole. The goal
+ * `Lew a b` and the hypotheses `h : Lew l r` in scope are read as linear codes over their atoms
+ * (plusw, %wsucc, word literals; any other subterm an atom), lib/lin.cub's omega-cert finds the
+ * multipliers at elaboration time (untrusted), and the hole becomes lib/linproof.cub's
+ * cert-sound at the environment of the atoms — the verified checker's run, `cert-check … ≡ true`,
+ * is refl, decided by the checker's own normalization. */
+static Node *LATOM[64]; static int nlatom;
+static int lin_atom(Node *t) {
+    for (int i = 0; i < nlatom; i++) if (node_eq(LATOM[i], t)) return i;
+    if (nlatom >= 64) die("by-lin: too many atoms in", tfname);
+    LATOM[nlatom] = t; return nlatom++;
+}
+static bool lin_lit(Node *t) { return !t->list && t->s[0] == '#' && isdigit((unsigned char)t->s[1]); }
+/* the search's code (cwop #2 / cwsucc / cwlit / cvar) and the checker's (lc-add / lc-suc / lc-lit / lc-var) */
+static Node *lin_code(Node *t, bool typed) {
+    if (lin_lit(t)) return lst(2, nsym(typed ? "lc-lit" : "cwlit"), t);
+    if (t->list && t->n == 3 && !t->it[0]->list && !strcmp(t->it[0]->s, "plusw") && !e_find("plusw")) {
+        Node *a = lin_code(t->it[1], typed), *b = lin_code(t->it[2], typed);
+        return typed ? lst(2, lst(2, nsym("lc-add"), a), b) : lst(2, lst(2, lst(2, nsym("cwop"), wordn(2)), a), b);
+    }
+    if (t->list && t->n == 2 && !t->it[0]->list && !strcmp(t->it[0]->s, "%wsucc")) return lst(2, nsym(typed ? "lc-suc" : "cwsucc"), lin_code(t->it[1], typed));
+    return lst(2, nsym(typed ? "lc-var" : "cvar"), wordn(lin_atom(t)));
+}
+/* the word core: goal ga ≤ gb from hypotheses hl ≤ hr with proofs hp */
+static Node *lin_core(Node *ex, Node *at, Node *ga, Node *gb, Node **hl, Node **hr, Node **hp, int nh) {
+    if (global_lookup("cert-sound") < 0 || global_lookup("omega-cert") < 0) die("by-lin needs lib/lin.cub and lib/linproof.cub loaded, in", tfname);
+    nlatom = 0;
+    Node *hs = nsym("lnil");
+    for (int z = nh - 1; z >= 0; z--) hs = lst(2, lst(2, nsym("lcons"), sym3("pair", lin_code(hl[z], false), lin_code(hr[z], false))), hs);
+    Node *call = lst(2, lst(2, lst(2, nsym("omega-cert"), hs), lin_code(ga, false)), lin_code(gb, false));
+    if (getenv("CUBICAL_SHOW_LIN")) { fprintf(stderr, "[by-lin] "); print_node(stderr, call); fputc('\n', stderr); for (int z = 0; z < nlatom; z++) { fprintf(stderr, "  atom %d: ", z); print_node(stderr, LATOM[z]); fputc('\n', stderr); } }
+    long steps = 0; char *res = readback(call, &steps);
+    const char *saved = src; src = res; Node *rn = read_node(); src = saved; free(res);
+    if (!rn || !rn->list || rn->n != 2 || !is(rn->it[0], "some")) die("by-lin: no certificate for the goal from the hypotheses in scope (the search refutes or does not reach it), in", tfname);
+    Node *ms = nsym("munil"); Node *cs[256]; int nc = 0;
+    for (Node *l = rn->it[1]; l->list && l->n == 3 && is(l->it[0], "lcons") && nc < 256; l = l->it[2]) cs[nc++] = l->it[1];
+    for (int z = nc - 1; z >= 0; z--) ms = lst(2, lst(2, nsym("mucons"), cs[z]), ms);
+    Node *ths = nsym("hnil");
+    for (int z = nh - 1; z >= 0; z--) ths = lst(2, lst(2, lst(2, nsym("hcons"), lin_code(hl[z], true)), lin_code(hr[z], true)), ths);
+    Node *ta = lin_code(ga, true), *tb = lin_code(gb, true);
+    Node *v = xfresh("v"), *envb = nlatom ? LATOM[nlatom - 1] : wordn(0);
+    for (int z = nlatom - 2; z >= 0; z--) envb = sym4("if", lst(3, nsym("weq"), v, wordn(z)), LATOM[z], envb);
+    Node *env = sym3("lam", v, envb);
+    Node *holds = nsym("unit");
+    for (int z = nh - 1; z >= 0; z--) holds = sym3("pair", hp[z], holds);
+    Node *pf = lst(8, nsym("cert-sound"), env, ths, ms, ta, tb, holds, sym3("lam", xfresh("i"), nsym("true")));
+    if (nbk == capbk) { capbk = capbk ? capbk * 2 : 64; BK = realloc(BK, sizeof *BK * (size_t)capbk); BV = realloc(BV, sizeof *BV * (size_t)capbk); }
+    BK[nbk] = at; BV[nbk++] = pf;
+    syn_expect = ex;
+    return el(pf);
+}
+/* the hypotheses in scope of a two-argument type former (Lew, leZ): innermost binding of each name */
+static int lin_hyps(const char *former, const char **hn, Node **hl, Node **hr, int max) {
+    int nh = 0;
+    for (int i = nesc - 1; i >= 0 && nh < max; i--) {
+        bool seen = false;
+        for (int z = i + 1; z < nesc; z++) if (!strcmp(esc[z].n, esc[i].n)) seen = true;
+        Node *T = esc[i].ty;
+        if (!seen && !esc[i].dim && T && T->list && T->n == 3 && !T->it[0]->list && !strcmp(T->it[0]->s, former)) { hn[nh] = esc[i].n; hl[nh] = T->it[1]; hr[nh++] = T->it[2]; }
+    }
+    return nh;
+}
+/* over Int: leZ a b is the word claim a₁ + b₂ ≤ b₁ + a₂ on toZ2's coordinates; each addZ, negZ and
+ * literal met adds the equations that tie its coordinates to its parts' (toZ2-fromZ2-rel,
+ * toZ2-neg-fst2/snd2, computation), each as two inequalities by eq-le */
+static Node *ZT[64]; static int nzt;
+static Node *zc(Node *t, int k) { return lst(2, nsym(k == 1 ? "fst" : "snd"), lst(2, nsym("toZ2"), t)); }
+static bool zhead(Node *t, const char *h, int n) { return t->list && t->n == n + 1 && !t->it[0]->list && !strcmp(t->it[0]->s, h) && !e_find(h); }
+/* a Nat numeral: 3, or (%num 3) as the parser writes it; -1 otherwise */
+static long z_num(Node *t) {
+    if (t->list && t->n == 2 && !t->it[0]->list && !strcmp(t->it[0]->s, "%num")) t = t->it[1];
+    return !t->list && isdigit((unsigned char)t->s[0]) ? atol(t->s) : -1;
+}
+static void z_walk(Node *t) {
+    for (int i = 0; i < nzt; i++) if (node_eq(ZT[i], t)) return;
+    bool lit = (zhead(t, "pos", 1) || zhead(t, "negsuc", 1)) && z_num(t->it[1]) >= 0;
+    if (zhead(t, "addZ", 2)) { z_walk(t->it[1]); z_walk(t->it[2]); }
+    else if (zhead(t, "negZ", 1)) z_walk(t->it[1]);
+    else if (!lit) return;
+    if (nzt >= 64) die("by-lin: too many integer subterms in", tfname);
+    ZT[nzt++] = t;
+}
+static Node *by_lin_int(Node *ex, Node *at, Node *ga, Node *gb) {
+    if (global_lookup("toZ2-fromZ2-rel") < 0 || global_lookup("eq-le") < 0 || global_lookup("toZ2-neg-fst2") < 0) die("by-lin over Int needs lib/intproof.cub loaded, in", tfname);
+    const char *hn[64]; Node *ul[64], *ur[64]; int nu = lin_hyps("leZ", hn, ul, ur, 64);
+    Node *hl[256], *hr[256], *hp[256]; int nh = 0;
+    for (int z = 0; z < nu; z++) { hl[nh] = lst(3, nsym("plusw"), zc(ul[z], 1), zc(ur[z], 2)); hr[nh] = lst(3, nsym("plusw"), zc(ur[z], 1), zc(ul[z], 2)); hp[nh++] = nsym(hn[z]); }
+    nzt = 0; z_walk(ga); z_walk(gb); for (int z = 0; z < nu; z++) { z_walk(ul[z]); z_walk(ur[z]); }
+#define EQ2(L, R, P) do { if (nh + 2 > 256) die("by-lin: too many hypotheses in", tfname); \
+        hl[nh] = (L); hr[nh] = (R); hp[nh++] = lst(4, nsym("eq-le"), (L), (R), (P)); \
+        hl[nh] = (R); hr[nh] = (L); hp[nh++] = lst(4, nsym("eq-le"), (R), (L), lst(2, nsym("symw"), (P))); } while (0)
+    for (int i = 0; i < nzt; i++) {
+        Node *t = ZT[i];
+        if (zhead(t, "addZ", 2)) {
+            Node *zp = lst(3, nsym("plusw"), zc(t->it[1], 1), zc(t->it[2], 1)), *zn = lst(3, nsym("plusw"), zc(t->it[1], 2), zc(t->it[2], 2));
+            EQ2(lst(3, nsym("plusw"), zc(t, 1), zn), lst(3, nsym("plusw"), zp, zc(t, 2)), lst(3, nsym("toZ2-fromZ2-rel"), zn, zp));
+        } else if (zhead(t, "negZ", 1)) {
+            EQ2(zc(t, 1), zc(t->it[1], 2), lst(2, nsym("toZ2-neg-fst2"), t->it[1]));
+            EQ2(zc(t, 2), zc(t->it[1], 1), lst(2, nsym("toZ2-neg-snd2"), t->it[1]));
+        } else {
+            long k = z_num(t->it[1]); bool neg = !strcmp(t->it[0]->s, "negsuc");
+            Node *k1 = wordn(neg ? 0 : k), *k2 = wordn(neg ? k + 1 : 0);
+            EQ2(zc(t, 1), k1, sym3("lam", xfresh("i"), k1));
+            EQ2(zc(t, 2), k2, sym3("lam", xfresh("i"), k2));
+        }
+    }
+#undef EQ2
+    return lin_core(ex, at, lst(3, nsym("plusw"), zc(ga, 1), zc(gb, 2)), lst(3, nsym("plusw"), zc(gb, 1), zc(ga, 2)), hl, hr, hp, nh);
+}
+static Node *by_lin(Node *ex, Node *at) {
+    /* made once per occurrence: the rounds see the same nodes (guesses are keyed by them) */
+    for (int i = 0; i < nbk; i++) if (BK[i] == at) { syn_expect = ex; return el(BV[i]); }
+    if (ex && ex->list && ex->n == 3 && !ex->it[0]->list && !strcmp(ex->it[0]->s, "leZ")) return by_lin_int(ex, at, ex->it[1], ex->it[2]);
+    if (!(ex && ex->list && ex->n == 3 && !ex->it[0]->list && !strcmp(ex->it[0]->s, "Lew"))) die("by-lin: the goal must be written Lew a b or leZ a b (the type expected here), in", tfname);
+    const char *hn[64]; Node *hl[64], *hr[64], *hp[64]; int nh = lin_hyps("Lew", hn, hl, hr, 64);
+    for (int z = 0; z < nh; z++) hp[z] = nsym(hn[z]);
+    return lin_core(ex, at, ex->it[1], ex->it[2], hl, hr, hp, nh);
+}
 static Node *el(Node *t) {
     Node *ex = syn_expect; syn_expect = NULL;
     bool tickpos = tick_pos || (ex && is_later(ex)); tick_pos = false;
     if (t->list && t->n > 0 && (t->it[0]->list || !e_head_kw(t->it[0]->s))) { app_expect = ex; return el_app(t, t->it[0], t->it + 1, t->n - 1); }
     if (!t->list) {
         if (!strcmp(t->s, "%hole")) { bool p = false; Node *h = hole_or_sol(t, 0, &p); return p ? sym2("%spine", h) : h; }
+        if (!strcmp(t->s, "by-lin") && !e_find(t->s) && global_lookup(t->s) < 0) return by_lin(ex, t);
         if (e_find(t->s)) return t;
         if (imask_of(t->s)) { app_expect = ex; return el_app(t, t, NULL, 0); }
         if (!ford_head && con_lookup(t->s) >= 0 && ford_of(t->s)) { app_expect = ex; return el_app(t, t, NULL, 0); }   /* an indexed constructor without fields: its refl */

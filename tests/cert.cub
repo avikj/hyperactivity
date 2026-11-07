@@ -90,3 +90,28 @@ igoal2 = int-cert-sound ienv2 ihs2 icert2 igoal-a igoal-b iholds2 (λ i → true
 #same plusw (plusw (fst (zev2 ienv2 igoal-a)) (snd (zev2 ienv2 igoal-b))) (fst igoal2) = plusw (fst (zev2 ienv2 igoal-b)) (snd (zev2 ienv2 igoal-a))
 -- the order laws proved by the checker compute: transitivity's witness is the sum of the witnesses
 #same fst (leZ-add (negsuc zero) (pos zero) (pos zero) (pos (suc zero)) (#1 , λ i → #1) (#1 , λ i → #1)) = #2
+-- ---------------------------------------------------------------- the elaborator calling the search
+-- by-lin (item 32): the goal Lew a b and the hypotheses Lew l r in scope read as codes over their
+-- atoms, omega-cert run at elaboration time (untrusted), the hole filled by cert-sound at the
+-- atoms' environment; the checker decides cert-check … ≡ true by normalization
+dec-ob : (off i n : Word) → Lew off i → Lew (plusw i #8) n → Lew (plusw off #4) n
+dec-ob off i n h1 h2 = by-lin
+lin-chain : (a b c d : Word) → Lew a b → Lew b c → Lew c d → Lew (plusw a a) (plusw d d)
+lin-chain a b c d p q r = by-lin
+#same fst (dec-ob #1 #2 #20 (#1 , λ k → #2) (#10 , λ k → #20)) = #15
+#fail
+dec-ob-wrong : (off i n : Word) → Lew off i → Lew (plusw i #8) n → Lew (plusw off #9) n
+dec-ob-wrong off i n h1 h2 = by-lin
+-- over Int: leZ a b is the word claim a₁ + b₂ ≤ b₁ + a₂ on toZ2's coordinates; each addZ, negZ and
+-- literal adds the equations tying its coordinates to its parts' (intproof's lemmas, by eq-le)
+lin-itrans : (a b c : Int) → leZ a b → leZ b c → leZ a c
+lin-itrans a b c h k = by-lin
+lin-iadd : (a b c d : Int) → leZ a b → leZ c d → leZ (addZ a c) (addZ b d)
+lin-iadd a b c d h k = by-lin
+lin-ineg : (a b : Int) → leZ a b → leZ (negZ b) (negZ a)
+lin-ineg a b h = by-lin
+lin-ilit : (x y : Int) → leZ x (addZ y (negsuc 2)) → leZ (addZ x (pos 3)) y
+lin-ilit x y h = by-lin
+#fail
+lin-ibad : (x y : Int) → leZ x (addZ y (negsuc 2)) → leZ (addZ x (pos 4)) y
+lin-ibad x y h = by-lin
