@@ -2974,6 +2974,21 @@ Revision 1. A design, since this is the open item; stated so it can be criticize
 
 ### 18.16 A8 — Proposal: formal transported compositions
 
+**Status (2026-11-07, A8 round four: the `%comp-path` volume).** `%comp-path` is the most
+entered definition (surfc's corner, `CUBICAL_PROFILE=show`: 3,420 entries, next `%bdy-squash4`
+1,021, `%comp-pi` 370). **Kept:** its two boundary tubes were the η-redexes `λ i → l @ i` and
+`λ i → r @ i`; they are now `l` and `r` (path η holds judgmentally in CCHM, so the composition
+is the same term). Measured (steps of the read alone, memo on, `CUBICAL_WORKERS=0`): g8 319,371
+→ 305,036 (−4.5%, 2,189 cells both), surfc's corner 127,513 → 121,271 (−4.9%), the number
+457,431 → 443,066 (−3.1%), the typed port 1,056,716 → 999,755 (−5.4%). The 30 suite lines of
+`make test` give identical answers; memo off, outputs identical across 0, 1, 4, 16 workers on the
+determinism list plus squash and Brunerie. **Found, not caused:** TSan at 4 workers on the g8 and
+surfc reads reports a race between `cell` (`net.c:81`, a write in split/bind) and `fd_cell`
+(`net.c:938`, read from `box_fd`, `net.c:1001`); the old prelude reports the same race, so it is
+round one's free-dimension walk running with workers. **What remains:** the entries themselves
+(3,420 at the corner) — the composition's tube map re-applies `%@` per side and per entry; the
+cross-dimension sharing below is still the mechanism that would cut them.
+
 **Status (2026-11-07, A8b: bounds through pending parts).** Round one's box sets (`box_fd`)
 were unknown while a box's parts were still being built (of g8's 20,664 substituted reads, 12,584
 past eight tries, 3,018 a part not arrived, 2,787 an unbuilt part). **Built:** (1) a compile-time
