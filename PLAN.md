@@ -1120,7 +1120,7 @@ in-place update (`e27eda2c`), D24's guarded form (`5b9de865`), D26 (`43e8fb10`,
 `38c1fa89`), F31's remaining pieces (`896713ea`, `e1f33110`, `5b1b57f9`), F32's directed
 search and bridges (`89ec3e0e`, `d1e5f790`), item 29 (`fd188bf6`), `%gsteps` (`c20116d7`),
 `--serve` (`50ffb680`), the rewriting discipline (`bd21c486`). What remains, in order of
-value: (1) A8's next step — not formal compositions in path types (tried, withdrawn, 18.16):
+value: (1) A8's next step — undesigned and off the queue as of 2026-11-07 (18.16's status: the generic 6-cube passes a 2.5 GB cap; a fingerprint memo never fired); not formal compositions in path types (tried, withdrawn, 18.16):
 sharing a composition across the dimensions the tube maps apply it at; (2) B18 DONE for words, byte strings and constructors both ways (`#native` over
 `emit-lib-boxed-u`: a constructor whose fields are values crosses as the boxed `V`, a boxed
 result is rebuilt by the entry's `box<d>`; `cubical_call_data(name, args, types)` from C;
@@ -3003,6 +3003,23 @@ surfc reads reports a race between `cell` (`net.c:81`, a write in split/bind) an
 round one's free-dimension walk running with workers. **What remains:** the entries themselves
 (3,420 at the corner) — the composition's tube map re-applies `%@` per side and per entry; the
 cross-dimension sharing below is still the mechanism that would cut them.
+
+**Status (2026-11-07, what is left of A8 and why it is not queued).** Three pieces remained: sharing a
+composition across the dimensions its tube maps apply it at, a free-dimension bound for values
+still being built (A8b's "not done"), and the 6-cube. **The 6-cube, measured:** the read generic in
+all six dimensions (`sq4 (squash4 … i j k l) @ a @ b`, Brunerie's library loaded,
+`CUBICAL_WORKERS=0`, memo on) passes 2.5 GB resident 34 s into the run (library load included) and
+is killed at the cap; a read at one Ω² endpoint stays 47 cells. So whether its normal form is small
+is still not known, and A8's acceptance clause "finishes at generic dimensions" is not met.
+**Cross-dimension sharing:** no design exists. A prototype (a memo at `O_COMPH` on `PathP`, keyed
+by a fingerprint of the inputs with dimensions canonical by first appearance) was tried and
+withdrawn: it never fired on g8 or surfc's corner (0 lookups), and the fingerprint census on g8
+found 284 compositions in path types of which 211 could not be fingerprinted (the inputs are
+still pending or under substitutions that move bound dimensions). Without an exact key there is no
+measured ceiling for what sharing would save. **The bound for unbuilt values:** a further cut of
+irrelevant substitutions with no measured gain behind it. All three are recorded here as
+undesigned and are not on the queue: no other item depends on them, and the A8 rounds that landed
+(boxes' free-dimension sets, `O_CONW`, A8b, η-reduced tubes) keep every answer identical.
 
 **Status (2026-11-07, the TSan race at `cell()`'s memset).** The intermittent report (`net.c:81`, about 1 run in 5 at 2–8 workers over the `make tsan` lines) was real, not a false positive, and came from round one's walk, not A8b: `box_fd` → `fd_cell` (from `rule_subst` on `V_REF` or `ref_read`, in a worker) read a held value's parts non-atomically while another reader claimed them (`claim`'s atomic store against the plain read, via `copy_top`/`lazy_copy`), consumed and freed them, and the main thread's `cell()` reused a freed cell (memset via `split`/`bind`, `con_build_bdy`). `fd_cell` also reads payloads that `payload_release` frees, so deferring cell reuse (a quiescent-state reclamation scheme was tried) does not make the walk safe. **Fix:** `box_fd` walks only when `net_solo`, as A8b already did; with workers a box's set is whatever a solo phase cached (immutable), else unknown, and the read is not cut. Round one's gains therefore hold only at `CUBICAL_WORKERS=0` (the default); with workers step counts are as before A8. TSan: baseline 3 hits in 16 runs; gated, 0 in 63 runs plus `make tsan` twice; memo-off output identical across 0, 1, 4 workers.
 
