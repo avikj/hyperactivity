@@ -47,7 +47,7 @@ defs = lcons (#0 , (#0 , fcall #1 (lcons buf2 lnil))) (lcons (#1 , (#1 , lam-bod
  'rec': ("""len-main t2 = fapply t2 (lcons (fcon (didx (code LW)) #1 (lcons (flit #7) (lcons lw3 lnil))) lnil)
 len-base = lcons (gidx (code zw) , (#0 , flit #0)) (lcons (gidx (code sw) , (#1 , fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))) lnil)
 len-prog = case lift #10 (lower c-len) of lifted t2 ds k → lcons (#0 , (#0 , len-main t2)) (lapp2 len-base ds)
-prog = emit-prog len-prog""", "3", "f_138(force(f_10(v2)))"),
+prog = emit-prog len-prog""", "3", r"re:f_\d+\(force\(f_\d+\(v2\)\)\)"),
  # a derived program compiled: the equality on Nat read off the data table (lib/derive.cub),
  # lowered, lifted (the recursion a C function, the inner λ a closure through the dispatcher),
  # applied to 2 and 2 then to 2 and 1; Bool is a word in the form: 10*eq(2,2) + eq(2,1)
@@ -239,8 +239,10 @@ def run(name, defs, expect, contains=None):
         if cc.returncode: print(name, 'FAIL: gcc'); print(cc.stderr[:800]); print(bs.decode()); return False
         got = subprocess.run([exe], capture_output=True, text=True).stdout.strip()
         if isinstance(contains, tuple): contains = contains[1 if UNBOXED else 0]   # (boxed, unboxed)
-        ok = got == expect and (contains is None or contains.encode() in bs)
-        print(name, 'ok' if ok else f'FAIL: got {got}, expected {expect}' + ('' if contains is None or contains.encode() in bs else f'; {contains!r} not in the source'))
+        # a 're:' expectation is a pattern (global indices shift as the libraries grow)
+        has = contains is None or (re.search(contains[3:].encode(), bs) is not None if contains.startswith('re:') else contains.encode() in bs)
+        ok = got == expect and has
+        print(name, 'ok' if ok else f'FAIL: got {got}, expected {expect}' + ('' if has else f'; {contains!r} not in the source'))
         if not ok: print(bs.decode())
         return ok
 if __name__ == '__main__':

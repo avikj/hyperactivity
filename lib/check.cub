@@ -178,6 +178,8 @@ ltail (lcons x r) = r
 ltail lnil = lnil
 -- a value that equals nothing
 data Opq = opq
+-- the binders a quotation runs under: a variable (by level), a hypothesis, a dimension
+data QB = qv l | qh l | qd i
 -- ---------------------------------------------------------------- intervals and faces
 check-iv r =
   case r of
@@ -1028,14 +1030,26 @@ infer c =
     twop k a b V → 
       and-then (check a Word) (and-then (check b Word) (yes (if %wlt k #2 then Bool else Word)))
     -- the elimination of a word: P #0 at zero, P n → P (n+1) at a successor
-    twelim P w z s V → 
+    twelim P w z s V →
       and-then (check w Word)
-        (case motive-level Word P of
-           yes l → 
-             let Pv = tval P
-             in and-then (check z (Pv #0))
-                  (and-then (check s ((n : Word) → Pv n → Pv (%wsucc n))) (yes (Pv (tval w))))
-           r → r)
+        (case P of
+           -- a motive left to find (a quoted word recursion has none): the constant one at the
+           -- zero case's type, the common non-dependent case
+           thole k V2 →
+             (case infer z of
+                yes Z →
+                  let x = %var Word
+                  in (case qty (lcons (qv (var-level x)) lnil) Z of
+                        some cz → elab (lcons (k , some (clam cz)) lnil)
+                        none → err c E-implicit opq opq)
+                r → r)
+           _ →
+             (case motive-level Word P of
+                yes l → 
+                  let Pv = tval P
+                  in and-then (check z (Pv #0))
+                       (and-then (check s ((n : Word) → Pv n → Pv (%wsucc n))) (yes (Pv (tval w))))
+                r → r))
     -- a line: its type is the path of its body's types between its ends
     tplam nm b V → 
       let i = %dim nm
@@ -1739,7 +1753,6 @@ chk-codef grp cT ct =
 -- indices over one list of the binders entered, innermost first; one of an outer context is
 -- (cfree x). An induction hypothesis is a suspended elimination, so its uses are forced (cforce),
 -- as (code t) writes them. A value with no code (of a data type that was not checked) gives none.
-data QB = qv l | qh l | qd i
 obind none k = none
 obind (some x) k = k x
 omap f none = none

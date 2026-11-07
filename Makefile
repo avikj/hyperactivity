@@ -51,7 +51,7 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/guarded.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/prim.cub lib/stage.cub tests/prim.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/fiber.cub
-	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/lin.cub lib/check.cub lib/std.cub lib/linproof.cub lib/eqproof.cub tests/cert.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/lin.cub lib/check.cub lib/std.cub lib/linproof.cub lib/intproof.cub lib/intlin.cub lib/eqproof.cub tests/cert.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub lib/session.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub lib/choreo.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub

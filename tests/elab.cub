@@ -72,3 +72,26 @@ vtail {n} (vnil e) = Empty-rec (snotz {n} e)
 #fail
 v3 : Vec Nat 2
 v3 = vcons 0 7 vnil
+
+-- E28: implicit arguments determined through a hypothesis whose type unfolds (a motive applied, a
+-- defined type), and a quoted word recursion's motive (none in its code) found as the constant one
+catw : {x y z : Word} → x ≡ y → y ≡ z → x ≡ z
+catw p q = λ i → comp (λ j → Word) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
+congw : (f : Word → Word) → {a b : Word} → a ≡ b → f a ≡ f b
+congw f p = λ i → f (p i)
+plusw-suc-l : (a b : Word) → plusw (%wsucc a) b ≡ %wsucc (plusw a b)
+plusw-suc-l a b = %welimP (λ v → plusw (%wsucc a) v ≡ %wsucc (plusw a v)) b (λ i → %wsucc a) (λ n h i → %wsucc (h i))
+plusw-zero-l : (b : Word) → plusw #0 b ≡ b
+plusw-zero-l b = %welimP (λ v → plusw #0 v ≡ v) b (λ i → #0) (λ n h i → %wsucc (h i))
+-- the step inside the induction: the composed path's endpoints from the hypothesis h : P n
+plusw-comm-e : (a b : Word) → plusw a b ≡ plusw b a
+plusw-comm-e a b = %welimP (λ v → plusw v b ≡ plusw b v) a (plusw-zero-l b) (λ n h → catw (plusw-suc-l n b) (congw (λ z → %wsucc z) h))
+-- a hypothesis of a defined type
+motw : Word → Word → Type
+motw b v = plusw v b ≡ plusw b v
+step-e : (b n : Word) → motw b n → motw b (%wsucc n)
+step-e b n h = catw (plusw-suc-l n b) (congw (λ z → %wsucc z) h)
+-- a λ applied in a signature
+step-l : (b n : Word) → (λ (v : Word) → plusw v b ≡ plusw b v) n → plusw (%wsucc n) b ≡ plusw b (%wsucc n)
+step-l b n h = catw (plusw-suc-l n b) (congw (λ z → %wsucc z) h)
+#same plusw-comm-e #3 #4 = plusw-comm-e #3 #4

@@ -230,6 +230,7 @@ static Node *subst_sym(Node *t, const char *x, Node *e);
 static Node *subst_multi(Node *t, const char **ps, Node **vs, int n);
 static Node *syn_type(Node *a, int depth);
 static Node *wordn(long n);
+static Node *hole_or_sol(Node *key, int idx, bool *pend);
 static Node *cn(Node *c);
 /* parameterized modules (E28): `module M (A : Type) (e : Eq A) where` a block of definitions; each
  * is a definition M·f abstracted over the parameters (implicit ones {..} implicit), its references
@@ -2610,7 +2611,12 @@ static Node *cn(Node *c) {
         long k = cn_word(c->it[1]); if (k < 0 || k > 4) return NULL;
         a = cn(c->it[2]); b = cn(c->it[3]); return a && b ? lst(3, nsym(WO[k]), a, b) : NULL;
     }
-    if (!strcmp(h, "cwelim") && c->n == 4) { a = cn(c->it[1]); b = cn(c->it[2]); d = cn(c->it[3]); return a && b && d ? lst(5, nsym("%welimP"), nsym("%hole"), a, b, d) : NULL; }
+    if (!strcmp(h, "cwelim") && c->n == 4) {
+        /* the motive is not in the code: a hole of the elaborator's, solved against the expected type */
+        a = cn(c->it[1]); b = cn(c->it[2]); d = cn(c->it[3]); if (!(a && b && d)) return NULL;
+        bool pend = false; Node *mot = hole_or_sol(c, 0, &pend);
+        return lst(5, nsym("%welimP"), mot, a, b, d);
+    }
     if (!strcmp(h, "csysc")) {
         /* a system: its branches in order */
         Node *bs[64]; int n = 0; Node *s = c;
@@ -2975,9 +2981,24 @@ static bool lit01(Node *a) { return a->list && a->n == 2 && is(a->it[0], "%num")
 static Node *el(Node *t);
 /* a syntactic solution, the same node every run (its own holes keyed by it) */
 static Node *syn_once(Node *key, int idx, Node *sol) { int k = e_hole(key, idx); if (!EH[k].syn) EH[k].syn = sol; return EH[k].syn; }
+/* a solution with the holes of its own (a quoted word recursion's motive) filled by theirs once found */
+static Node *sol_fill(Node *t) {
+    if (!t->list || t->n == 0) return t;
+    if (t->n == 2 && !t->it[0]->list && is(t->it[0], "%hole") && !t->it[1]->list && t->it[1]->s[0] == '#') {
+        long q = atol(t->it[1]->s + 1);
+        return q >= 0 && q < neh && EH[q].sol ? sol_fill(EH[q].sol) : t;
+    }
+    Node *r = NULL;
+    for (int i = 0; i < t->n; i++) {
+        Node *c = sol_fill(t->it[i]);
+        if (c != t->it[i] && !r) { r = nlist(t->n); for (int j = 0; j < i; j++) r->it[j] = t->it[j]; }
+        if (r) r->it[i] = c;
+    }
+    return r ? r : t;
+}
 static Node *hole_or_sol(Node *key, int idx, bool *pend) {
     int k = e_hole(key, idx);
-    if (EH[k].sol) return EH[k].sol;
+    if (EH[k].sol) return sol_fill(EH[k].sol);
     *pend = true;
     return sym2("%hole", wordn(k));
 }
@@ -3202,6 +3223,18 @@ static Node *the_clock(void) {
     return k;
 }
 static Node *el_app(Node *t, Node *h, Node **args, int n) {
+    /* a λ written at the head of an application (a motive applied in a signature): reduced here, where
+     * the checker would not infer the λ's type (E28) */
+    if (h->list && h->n == 3 && !h->it[0]->list && is(h->it[0], "lam") && !h->it[1]->list && n >= 1) {
+        /* made once per application: the rounds see the same nodes (holes are keyed by them) */
+        static Node **BK, **BV; static int nbk, capbk;
+        for (int i = 0; i < nbk; i++) if (BK[i] == t) return el(BV[i]);
+        const char *x = h->it[1]->s; Node *b = subst_multi(h->it[2], &x, &args[0], 1);
+        if (n > 1) { Node *r = nlist(n); r->it[0] = b; for (int i = 1; i < n; i++) r->it[i] = args[i]; b = r; }
+        if (nbk == capbk) { capbk = capbk ? capbk * 2 : 64; BK = realloc(BK, sizeof *BK * (size_t)capbk); BV = realloc(BV, sizeof *BV * (size_t)capbk); }
+        BK[nbk] = t; BV[nbk++] = b;
+        return el(b);
+    }
     if (!h->list && is(h, "%gcall")) {
         die("a recursive call needed now, not under ▸ (guarded recursion calls itself only where a later value is expected), in", tfname);
     }
@@ -4292,8 +4325,9 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
                 if (!pr_->list || pr_->n != 3 || !is(pr_->it[0], "pair")) continue;
                 long k = cn_word(pr_->it[1]);
                 Node *o = pr_->it[2];
-                if (k < 0 || k >= neh || EH[k].sol || !o->list || o->n != 2 || !is(o->it[0], "some")) continue;
+                if (k < 0 || k >= neh || EH[k].sol || !o->list || o->n != 2 || !is(o->it[0], "some")) { if (getenv("CUBICAL_SHOW_ELAB")) fprintf(stderr, "[elab] hole #%ld: %s\n", k, k < 0 || k >= neh ? "no such hole" : EH[k].sol ? "solved already" : "no solution"); continue; }
                 ncn = 0; Node *sol = cn(o->it[1]);
+                if (!sol && getenv("CUBICAL_SHOW_ELAB")) { fprintf(stderr, "[elab] hole #%ld: solution not readable: ", k); print_node(stderr, o->it[1]); fputc('\n', stderr); }
                 if (sol) { EH[k].sol = sol; again = true; }
             }
             if (!again) { if (getenv("CUBICAL_SHOW_ELAB")) fprintf(stderr, "[elab] no usable solution in %.2000s\n", r); free(r); r = strdup("(no opq #32 opq opq)"); }
@@ -4434,8 +4468,9 @@ static Node *x_solve_expr(Node *e) {
             for (int i = 0; i < nx; i++) {
                 Node *p = xs[i]; if (!p->list || p->n != 3) continue;
                 long k = cn_word(p->it[1]); Node *o = p->it[2];
-                if (k < 0 || k >= neh || EH[k].sol || !o->list || o->n != 2 || !is(o->it[0], "some")) continue;
-                ncn = 0; Node *sol = cn(o->it[1]); if (sol) { EH[k].sol = sol; again = true; }
+                if (k < 0 || k >= neh || EH[k].sol || !o->list || o->n != 2 || !is(o->it[0], "some")) { if (getenv("CUBICAL_SHOW_ELAB")) fprintf(stderr, "[elab] hole #%ld: %s\n", k, k < 0 || k >= neh ? "no such hole" : EH[k].sol ? "solved already" : "no solution"); continue; }
+                ncn = 0; Node *sol = cn(o->it[1]);
+                if (!sol && getenv("CUBICAL_SHOW_ELAB")) { fprintf(stderr, "[elab] hole #%ld: solution not readable: ", k); print_node(stderr, o->it[1]); fputc('\n', stderr); } if (sol) { EH[k].sol = sol; again = true; }
             }
         } else if (rn && rn->list && rn->n == 2 && is(rn->it[0], "redo")) {
             long k = cn_word(rn->it[1]); if (k >= 0 && k < neg) { EG[k].kind ^= 1; again = true; }

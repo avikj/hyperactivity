@@ -1204,7 +1204,15 @@ port (A10b) is the checker at scale and gates E28.
    Essential; this is the property, and the original Brunerie number is one measurement.
 9. DONE (`15625ce`, `91c128b`): interned symbols, free names kept per node, one desugaring,
    kept arena chunks; the compiled-form cache beside the recorded forms. Cached library
-   load 0.105 s; Brunerie end to end 0.35 s, computation about 0.25 s.
+   load 0.105 s; Brunerie end to end 0.35 s, computation about 0.25 s. Further (2026-11-06,
+   from A4's profile: `maxlev` 24%, `lookup` 9% of an uncached Brunerie run): `maxlev` reads a
+   per-node set of the names a term may refer to (`lvs`, cached while the arena generation it
+   was made in lasts) instead of walking the subterm at every node compiled; interned names
+   keep their hash and their latest binder in their header (`sym_hash`, `lookup_i`, valid
+   within a binder epoch — bumped at every pop); `compile`'s head dispatch compares interned
+   pointers. Uncached Brunerie end to end 3.4 s → 2.7 s (callgrind: 15.8G → 15.3G
+   instructions; what remains at the top is `compile`'s `strcmp` on `%%` constructor names and
+   `checked_index`, and the net itself).
 10. Measured 2026-11-06 on a 2-core container (`CUBICAL_NOCACHE=1`, end to end): 2.6 s at 0
     workers, 3.6 s at 1, 2 and 4 (no gain on two cores; the number's own computation is about
     0.3 s of it, the rest library checking); 619,852 steps, −2 at every count. Agda is not
@@ -2559,11 +2567,18 @@ which of these it actually needed; the list is what Agda-level convenience means
   a parameterized one the rebuilt mention still needs an annotation. Not accepted, by
   design: a Π over `I` in a signature (`I` is not a type; fillers are stated as `PathP`); a
   pattern named like a constructor in scope (`ok` is `Res`'s) is that constructor.
-- Found while writing `lib/linproof.cub` and `lib/eqproof.cub` (2026-11-06): (i) the
-  implicit endpoints of a composed path (`catw`, `congw`) are determined from a signature,
-  not from a motive applied inside a `%welimP` step, and not through a hypothesis whose type
-  only reduces to the needed form, so the step lemmas and the injectivity lemmas take their
-  endpoints explicitly; (ii) a λ-path in an argument position has its endpoints evaluated,
+- Found while writing `lib/linproof.cub` and `lib/eqproof.cub` (2026-11-06): (i) FIXED
+  (2026-11-06, `lib/check.cub` `infer` of `twelim`, `src/syntax.c` `sol_fill`, `el_app`): the
+  implicit endpoints of a composed path (`catw`, `congw`) are now determined through a
+  hypothesis whose type only reduces to the needed form (`h : P n` inside a `%welimP` step, `h :
+  motw b n` for a defined `motw`, a λ applied in a signature). The cause was not matching: the
+  solution's value was a stuck word recursion (`plusw b n`), whose code has no motive, so its
+  quotation carried a hole the next round could not fill; a hole motive of a `%welimP` is now
+  solved as the constant motive at the zero case's type (the non-dependent case every quoted
+  recursion is), a solution's own holes are filled by their solutions once found, and a λ at
+  the head of an application is reduced in the surface syntax (the checker does not infer a
+  λ's type). `tests/elab.cub` (`plusw-comm-e`, `step-e`, `step-l`); the explicit endpoints in
+  `linproof.cub`/`eqproof.cub`/`intproof.cub` stay as written. (ii) a λ-path in an argument position has its endpoints evaluated,
   so congruences are stated as lemmas; (iii) a forward reference, or a reference from a
   checked definition to an untyped one, is reported on stderr (`not a bound variable or
   checked definition`) while stdout continues, so a test line that only reads stdout sees a

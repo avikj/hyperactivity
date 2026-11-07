@@ -31,7 +31,7 @@ static void die(const char *m, const char *x) {
 }
 
 /* ---------------- s-expressions ---------------- */
-typedef struct Node { int list; char *s; int n; struct Node **it; char *cmt; short hk; struct Names *fv; } Node;   /* hk: a symbol's binder/head class, once found (hk_of); fv: the free names of a desugared term, once found (free_vars). s: interned, one pointer per spelling */
+typedef struct Node { int list; char *s; int n; struct Node **it; char *cmt; short hk; unsigned lvgen; struct Names *fv, *lv; } Node;   /* lv: the names it may refer to (lvs), valid while lvgen is the arena's generation */   /* hk: a symbol's binder/head class, once found (hk_of); fv: the free names of a desugared term, once found (free_vars). s: interned, one pointer per spelling */
 /* nodes are never freed: they come from a bump arena of zeroed chunks */
 /* The node arena: bump allocation in 1 MB chunks. Compiling a term makes nodes nothing keeps
  * (desugaring, generated binders; the compiled form is Syn and Records, which hold no node): a
@@ -60,7 +60,9 @@ static ArMark ar_mark(void) { return (ArMark){ ar_cur, ar_p }; }
 /* nodes are made from zeroed memory, so what was used since the mark is zeroed again: the mark's
  * chunk from the mark to where its use reached, and each later chunk over what it used; those
  * chunks are kept for the next allocations (a chunk a megabyte wide is not zeroed whole again) */
+static unsigned ar_gen = 1;   /* bumped at every release: a cache made inside a mark is stale after it */
 static void ar_release(ArMark m) {
+    ar_gen++;
     if (ar_cur) ar_cur->used = (size_t)(ar_p - ar_cur->data);
     while (ar_cur != m.c) {
         Chunk *k = ar_cur; ar_cur = k->prev;
@@ -83,13 +85,21 @@ static char *intern(const char *s) {
     }
     size_t q = kw_hash(s) & (symcap - 1);
     for (; SYMS[q]; q = (q + 1) & (symcap - 1)) if (SYMS[q] == s || (SYMS[q][0] == s[0] && !strcmp(SYMS[q], s))) return SYMS[q];
-    size_t l = strlen(s) + 1; unsigned *m = malloc(sizeof(unsigned) * 2 + l); m[0] = 0; m[1] = 0; char *r = (char *)(m + 2); memcpy(r, s, l);
+    size_t l = strlen(s) + 1; unsigned *m = malloc(sizeof(unsigned) * 4 + l); m[0] = m[1] = m[2] = m[3] = 0; char *r = (char *)(m + 4); memcpy(r, s, l);
     SYMS[q] = r; symn++;
     return r;
 }
+/* the hash of an interned name, kept in its header once computed (lookups from maxlev, which
+ * runs at every node compiled, hashed the name each time) */
+/* (the header of an interned name: [-4] its mark, [-3] its hash, [-2] its latest binder + 1) */
+static inline size_t sym_hash(const char *x) { unsigned *m = (unsigned *)x - 3; if (!*m) *m = (unsigned)kw_hash(x) | 1; return *m; }
+static inline unsigned sym_bind(const char *x) { return ((const unsigned *)x)[-2]; }
+static inline unsigned sym_bind_epoch(const char *x) { return ((const unsigned *)x)[-1]; }
+static unsigned bind_epoch = 1;   /* bumped whenever binders are popped: what a header remembers is from one epoch */
+static inline void sym_bind_set(const char *x, unsigned i) { ((unsigned *)x)[-2] = i; ((unsigned *)x)[-1] = bind_epoch; }
 /* a mark on an interned name (kept just before its characters): the merge of name sets */
-static inline unsigned sym_mark(const char *x) { return ((const unsigned *)x)[-2]; }
-static inline void sym_mark_set(const char *x, unsigned e) { ((unsigned *)x)[-2] = e; }
+static inline unsigned sym_mark(const char *x) { return ((const unsigned *)x)[-4]; }
+static inline void sym_mark_set(const char *x, unsigned e) { ((unsigned *)x)[-4] = e; }
 static Node *nsym(const char *s) { Node *x = ar_alloc(sizeof(Node)); x->s = intern(s); return x; }
 /* a string literal's interned pointer, by the literal's address (a literal's contents never
  * change, so the address identifies it); not for buffers */
@@ -338,6 +348,7 @@ static void names_add(Names *s, const char *x) { x = intern(x); for (int i = 0; 
  * sets: a term nested in several case branches is walked once, not once per enclosing case.
  * Names bound inside t are left out; which free names a binder outside t covers is the caller's
  * (free_vars) */
+static unsigned mark_epoch;   /* one counter for every merge that marks names (fvs, lvs) */
 static Names *fvs(Node *t) {
     if (t->fv) return t->fv;
     Names *r = ar_alloc(sizeof(Names));
@@ -364,7 +375,7 @@ static Names *fvs(Node *t) {
     for (int i = from; i < to; i++) cnt += fvs(t->it[i])->n;
     const char **v = cnt ? ar_alloc((size_t)cnt * sizeof(char *)) : NULL; int n = 0;
     if (cnt) {
-        static unsigned epoch; unsigned e = ++epoch;
+        unsigned e = ++mark_epoch;
         for (int i = from; i < to; i++) {
             const Names *f = fvs(t->it[i]);
             bool body = skip[1] && i == 3;
@@ -1434,15 +1445,32 @@ typedef struct {
 } Level;
 static Bind *binds; static size_t capbinds; static int nbinds;
 static Level *levels; static size_t caplevels; static int nlevels;
-static const char **shadow; static size_t capshadow; static int nshadow;
 
 static Syn *syn(int tag, int n) { Syn *s = calloc(1, sizeof(Syn)); s->tag = tag; s->n = n; s->k = calloc((size_t)n + 1, sizeof(Syn *)); return s; }
-static Bind *lookup(const char *name) { size_t h = kw_hash(name); for (int i = nbinds - 1; i >= 0; i--) if (binds[i].h == h && (binds[i].name == name || !strcmp(binds[i].name, name))) return &binds[i]; return NULL; }
+static Bind *lookup(const char *name) { size_t h = (unsigned)kw_hash(name) | 1; for (int i = nbinds - 1; i >= 0; i--) if (binds[i].h == h && (binds[i].name == name || !strcmp(binds[i].name, name))) return &binds[i]; return NULL; }
+/* the same for an interned name: its hash from its header */
+/* the same for an interned name: the binder its header remembers when that is still the latest
+ * (a binder pushed later updates it, binders are only ever popped from the top), else found and
+ * remembered */
+static Bind *lookup_i(const char *name) {
+    if (sym_bind_epoch(name) == bind_epoch) {
+        /* remembered in this epoch: binders were only pushed since, a push of this name updating it */
+        unsigned c = sym_bind(name);
+        if (getenv("CUB_CHKBIND")) { Bind *b = lookup(name); if (b != (c ? &binds[c - 1] : NULL)) { fprintf(stderr, "bind cache wrong for %s: cached %u (nbinds %d), scan %ld\n", name, c, nbinds, b ? b - binds : -1L); abort(); } }
+        return c ? &binds[c - 1] : NULL;
+    }
+    size_t h = sym_hash(name);
+    for (int i = nbinds - 1; i >= 0; i--) if (binds[i].h == h && (binds[i].name == name || !strcmp(binds[i].name, name))) { sym_bind_set(name, (unsigned)i + 1); return &binds[i]; }
+    sym_bind_set(name, 0);
+    return NULL;
+}
 static bool constant_sym(const char *s);
 static void push_bind(const char *name, int level, int slot) {
     if (constant_sym(name)) die("a constant cannot be bound:", name);
     if (keyword(name)) die("a keyword cannot be bound:", name);
-    GROW(binds, capbinds, (size_t)nbinds + 1); binds[nbinds++] = (Bind){ name, level, slot, kw_hash(name) }; }
+    name = intern(name);   /* (its header remembers this binder) */
+    GROW(binds, capbinds, (size_t)nbinds + 1); binds[nbinds++] = (Bind){ name, level, slot, (unsigned)kw_hash(name) | 1 };
+    sym_bind_set(name, (unsigned)nbinds); }
 static int new_slot(void) {
     Level *L = &levels[nlevels - 1];
     if (L->nslots == L->ucap) { L->ucap = L->ucap ? L->ucap * 2 : 8; L->uses = realloc(L->uses, (size_t)L->ucap * sizeof(int)); }
@@ -1464,29 +1492,54 @@ static bool constant_sym(const char *s) {
 /* (only whether it is below the current level matters: the walk stops at the first variable of
  * the current level or deeper) */
 static int ml_cut = 1 << 30;
-static int maxlev(Node *t) {
+/* the names a term may refer to through the binders in force (every symbol but the constants,
+ * those bound inside left out), found once per node (lv): maxlev is asked at every node compiled,
+ * so walking the subterm each time was quadratic in the term's depth (A9: 24% of a Brunerie
+ * run). A fresh variable, dimension or hole form anywhere inside is the mark %fresh. */
+static Names *lvs(Node *t) {
+    if (t->lv && t->lvgen == ar_gen) return t->lv;
+    Names *r = ar_alloc(sizeof(Names)); t->lvgen = ar_gen;
     if (!t->list) {
-        if (constant_sym(t->s)) return -1;
-        for (int i = nshadow - 1; i >= 0; i--) if (shadow[i] == t->s) return -1;   /* interned */
-        Bind *b = lookup(t->s);
-        return b ? b->level : -1;
+        if (!constant_sym(t->s)) { r->v = ar_alloc(sizeof(char *)); r->v[0] = t->s; r->n = r->cap = 1; }
+        return t->lv = r;
     }
     int hk = t->n ? hk_of(t->it[0]) : H_NONE;
-    int r = -1;
-    /* a fresh variable or dimension is made each time its level runs: never lifted */
-    if (hk == H_VAR || hk == H_DIM || hk == H_HOLE) return 1 << 30;
-    if (hk == H_LAM || hk == H_PLAM || hk == H_FORALL) {
-        GROW(shadow, capshadow, (size_t)nshadow + 1);
-        shadow[nshadow++] = t->it[1]->s; r = maxlev(t->it[2]); nshadow--; return r;
+    if (hk == H_VAR || hk == H_DIM || hk == H_HOLE) {
+        r->v = ar_alloc(sizeof(char *)); r->v[0] = intern("%fresh"); r->n = r->cap = 1;
+        return t->lv = r;
     }
-    if (hk == H_LET) {
-        r = maxlev(t->it[2]);
-        if (r >= ml_cut) return r;
-        GROW(shadow, capshadow, (size_t)nshadow + 1);
-        shadow[nshadow++] = t->it[1]->s; int r2 = maxlev(t->it[3]); nshadow--;
-        return r > r2 ? r : r2;
+    const char *skip = NULL, *skip_body = NULL; int from = 1, to = t->n;
+    if (hk == H_LAM || hk == H_PLAM || hk == H_FORALL) { skip = t->it[1]->s; from = 2; }
+    else if (hk == H_LET) { skip_body = t->it[1]->s; from = 2; }
+    int cnt = 0;
+    for (int i = from; i < to; i++) cnt += lvs(t->it[i])->n;
+    const char **v = cnt ? ar_alloc((size_t)cnt * sizeof(char *)) : NULL; int n = 0;
+    if (cnt) {
+        unsigned e = ++mark_epoch;
+        for (int i = from; i < to; i++) {
+            const Names *f = lvs(t->it[i]);
+            bool body = skip_body && i == 3;
+            for (int k = 0; k < f->n; k++) {
+                const char *x = f->v[k];
+                if (x == skip || (body && x == skip_body)) continue;
+                if (sym_mark(x) == e) continue;
+                sym_mark_set(x, e); v[n++] = x;
+            }
+        }
     }
-    for (int i = 1; i < t->n; i++) { int m = maxlev(t->it[i]); if (m > r) r = m; if (r >= ml_cut) return r; }
+    r->v = v; r->n = r->cap = n;
+    return t->lv = r;
+}
+static int maxlev(Node *t) {
+    const Names *f = lvs(t); int r = -1;
+    static const char *fresh; if (!fresh) fresh = intern("%fresh");
+    for (int k = 0; k < f->n; k++) {
+        const char *x = f->v[k];
+        /* a fresh variable or dimension is made each time its level runs: never lifted */
+        if (x == fresh) return 1 << 30;
+        Bind *b = lookup_i(x);
+        if (b && b->level > r) { r = b->level; if (r >= ml_cut) return r; }
+    }
     return r;
 }
 
@@ -1502,10 +1555,10 @@ static int lift(Node *t) {
     Bind *saved = malloc((size_t)(nsaved + 1) * sizeof(Bind));
     memcpy(saved, binds + sb, (size_t)nsaved * sizeof(Bind));
     Level savedL = *L;
-    nbinds = sb; nlevels = li;
+    nbinds = sb; nlevels = li; bind_epoch++;
     Syn *s = compile_lazy(t);
     levels[li] = savedL; nlevels = li + 1;
-    memcpy(binds + sb, saved, (size_t)nsaved * sizeof(Bind)); nbinds = nb;
+    memcpy(binds + sb, saved, (size_t)nsaved * sizeof(Bind)); nbinds = nb; bind_epoch++;
     free(saved);
     L = &levels[li];
     int slot = new_slot();
@@ -1614,7 +1667,7 @@ static Syn *compile_record(Node *param, Node *body, bool thunk) {
     levels[li] = (Level){ .is_thunk = thunk, .scope_start = nbinds };
     if (!thunk) push_bind(param->s, li, new_slot());
     Syn *b = compile(body);
-    nbinds = levels[li].scope_start;
+    nbinds = levels[li].scope_start; bind_epoch++;
     Level L = levels[li];
     nlevels--;
     Record *r = calloc(1, sizeof(Record));
@@ -1739,7 +1792,7 @@ static Syn *compile_bound(int tag, Node *name, Node *body) {
     int slot = new_slot();
     push_bind(name->s, nlevels - 1, slot);
     Syn *s = syn(tag, 1); s->slot = slot; s->k[0] = compile(body);
-    nbinds--;
+    nbinds--; bind_epoch++;
     return s;
 }
 static Syn *compile_n(int tag, Node *t, int from, int n) {
@@ -1783,7 +1836,7 @@ static Record *compile_branch(const Names *env, Node **pn, int np, Node *body) {
     for (int e = 0; e < env->n; e++) { es[e] = new_slot(); push_bind(env->v[e], li, es[e]); }
     for (int q = 0; q < np; q++) push_bind(pn[q]->s, li, q);
     Syn *b = compile(body);
-    nbinds = levels[li].scope_start;
+    nbinds = levels[li].scope_start; bind_epoch++;
     Level L = levels[li];
     nlevels--;
     if (L.nenv) die("internal: a case branch lifted a term", NULL);
@@ -1856,13 +1909,13 @@ static Syn *compile(Node *t) {
     }
     if (!t->list) {
         const char *s = t->s;
-        if (!strcmp(s, "0")) return syn(S_IV0, 0);
-        if (!strcmp(s, "1")) return syn(S_IV1, 0);
-        if (!strcmp(s, "tt")) return syn(S_FTT, 0);
-        if (!strcmp(s, "ff")) return syn(S_FFF, 0);
-        if (!strcmp(s, "U")) return syn(S_U, 0);
-        if (!strcmp(s, "Word")) return syn(S_WORDTY, 0);
-        Bind *b = lookup(s);
+        if (IS(s, "0")) return syn(S_IV0, 0);
+        if (IS(s, "1")) return syn(S_IV1, 0);
+        if (IS(s, "tt")) return syn(S_FTT, 0);
+        if (IS(s, "ff")) return syn(S_FFF, 0);
+        if (IS(s, "U")) return syn(S_U, 0);
+        if (IS(s, "Word")) return syn(S_WORDTY, 0);
+        Bind *b = lookup_i(s);
         if (b) {
             if (b->level != li) die("internal: unlifted outer variable", s);
             return var_syn(b->slot);
@@ -1879,23 +1932,23 @@ static Syn *compile(Node *t) {
         return r;
     }
     const char *h = t->it[0]->s;
-    if (!strcmp(h, "lam")) return compile_record(t->it[1], t->it[2], false);
-    if (!strcmp(h, "thunk")) return compile_record(NULL, t->it[1], true);
-    if (!strcmp(h, "force")) return compile_n(S_FORCE, t, 1, 1);
-    if (!strcmp(h, "the")) return compile(t->it[2]);
-    if (!strcmp(h, "%rebuilt")) { Syn *r = compile(t->it[1]); if (r->tag == S_CON) r->x = 1; return r; }
-    if (!strcmp(h, "%hole")) return compile(hole_value());
-    if (!strcmp(h, "%guess")) return compile(t->it[3]);
-    if (!strcmp(h, "%spine")) return compile(t->it[1]);   /* x: the scrutinee rebuilt: named by it */
-    if (!strcmp(h, "plam")) return compile_bound(S_PLAM, t->it[1], t->it[2]);
-    if (!strcmp(h, "forall")) return compile_bound(S_FORALL, t->it[1], t->it[2]);
-    if (!strcmp(h, "let")) {
+    if (IS(h, "lam")) return compile_record(t->it[1], t->it[2], false);
+    if (IS(h, "thunk")) return compile_record(NULL, t->it[1], true);
+    if (IS(h, "force")) return compile_n(S_FORCE, t, 1, 1);
+    if (IS(h, "the")) return compile(t->it[2]);
+    if (IS(h, "%rebuilt")) { Syn *r = compile(t->it[1]); if (r->tag == S_CON) r->x = 1; return r; }
+    if (IS(h, "%hole")) return compile(hole_value());
+    if (IS(h, "%guess")) return compile(t->it[3]);
+    if (IS(h, "%spine")) return compile(t->it[1]);   /* x: the scrutinee rebuilt: named by it */
+    if (IS(h, "plam")) return compile_bound(S_PLAM, t->it[1], t->it[2]);
+    if (IS(h, "forall")) return compile_bound(S_FORALL, t->it[1], t->it[2]);
+    if (IS(h, "let")) {
         Syn *v = compile_lazy(t->it[2]);
         Syn *s = compile_bound(S_LET, t->it[1], t->it[3]);
         s->k[1] = s->k[0]; s->k[0] = v; s->n = 2;
         return s;
     }
-    if (!strcmp(h, "app")) {
+    if (IS(h, "app")) {
         /* a constructor applied to all its fields and dimensions is the constructor */
         Node *hd = t; int na = 0;
         while (hd->list && hd->n == 3 && is(hd->it[0], "app")) { hd = hd->it[1]; na++; }
@@ -1931,12 +1984,12 @@ static Syn *compile(Node *t) {
         }
         { Syn *s = syn(S_APP, 2); s->k[0] = compile(t->it[1]); s->k[1] = compile_lazy(t->it[2]); return s; }
     }
-    if (!strcmp(h, "pair")) return compile_lazy_n(S_PAIR, t, 1, 2);
-    if (!strcmp(h, "fst")) return compile_n(S_FST, t, 1, 1);
-    if (!strcmp(h, "snd")) return compile_n(S_SND, t, 1, 1);
-    if (!strcmp(h, "Pi")) { Syn *s = compile_lazy_n(S_PI, t, 1, 2); Node *l = t->it[2]; s->x = (uint32_t)(l->list && l->n == 3 && !l->it[1]->list ? bnd_mult(l->it[1]) : 2); return s; }
-    if (!strcmp(h, "Sigma")) return compile_lazy_n(S_SIGMA, t, 1, 2);
-    if (!strcmp(h, "U")) {
+    if (IS(h, "pair")) return compile_lazy_n(S_PAIR, t, 1, 2);
+    if (IS(h, "fst")) return compile_n(S_FST, t, 1, 1);
+    if (IS(h, "snd")) return compile_n(S_SND, t, 1, 1);
+    if (IS(h, "Pi")) { Syn *s = compile_lazy_n(S_PI, t, 1, 2); Node *l = t->it[2]; s->x = (uint32_t)(l->list && l->n == 3 && !l->it[1]->list ? bnd_mult(l->it[1]) : 2); return s; }
+    if (IS(h, "Sigma")) return compile_lazy_n(S_SIGMA, t, 1, 2);
+    if (IS(h, "U")) {
         if (t->n == 1) return syn(S_U, 0);
         Node *l = t->it[1];
         if (!l->list && l->s[0] >= '0' && l->s[0] <= '9') { Node *z = nsym("lzero"); for (int q = atoi(l->s); q > 0; q--) z = nl3("app", nsym("lsuc"), z); l = z; }
@@ -1971,26 +2024,26 @@ static Syn *compile(Node *t) {
             Syn *s = compile_n(S_PRIM, t, 1, na); s->x = (uint32_t)PL[q].kind; s->id = PL[q].w;
             return s;
         }
-        if (!strcmp(h, "%ffi")) {
+        if (IS(h, "%ffi")) {
             /* (%ffi k a1 .. an): the foreign call of entry k (D27) */
             if (t->n < 3 || t->it[1]->list || t->it[1]->s[0] != '#') die("(%ffi k a...)", NULL);
             Syn *s = compile_n(S_PRIM, t, 2, t->n - 2); s->x = O_FFI; s->id = atoi(t->it[1]->s + 1); return s;
         }
-        if (!strcmp(h, "%native")) {
+        if (IS(h, "%native")) {
             /* (%native k g a1 .. an): the compiled definition g (foreign entry k) called on words, g itself otherwise (B18) */
             if (t->n < 4 || t->it[1]->list || t->it[1]->s[0] != '#' || t->it[2]->list || t->it[2]->s[0] != '#') die("(%native k g a...)", NULL);
             Syn *s = compile_n(S_PRIM, t, 3, t->n - 3); s->x = O_NATIVE; s->id = atoi(t->it[1]->s + 1); s->slot = atoi(t->it[2]->s + 1); return s;
         }
-        if (!strcmp(h, "%welimP")) {
+        if (IS(h, "%welimP")) {
             /* (%welimP P w z s): the elimination of a word with its motive, which is for the
              * checker: the machine runs (%welim w z s) */
             if (t->n != 5) die("(%welimP P w z s)", NULL);
             Syn *s = compile_n(S_PRIM, t, 2, 3); s->x = O_WELIM; return s;
         }
-        if (!strcmp(h, "%var") || !strcmp(h, "%dim")) {
+        if (IS(h, "%var") || IS(h, "%dim")) {
             /* (%var [n] T), (%dim [n]): a fresh variable of type T, a fresh dimension, named by the
              * word n (a source name) or unnamed; the first port triggers the cell */
-            bool v = !strcmp(h, "%var");
+            bool v = IS(h, "%var");
             int named = t->n - (v ? 2 : 1);
             if (named != 0 && named != 1) die(v ? "(%var [n] T)" : "(%dim [n])", NULL);
             Syn *s = syn(S_PRIM, v ? 2 : 1); s->x = v ? O_MKVAR : O_MKDIM;
@@ -2002,64 +2055,64 @@ static Syn *compile(Node *t) {
             if (t->n != PR[q].n + 1) die("wrong number of operands in", h);
             Syn *s = compile_n(S_PRIM, t, 1, PR[q].n); s->x = (uint32_t)PR[q].kind; return s;
         }
-        if (!strcmp(h, "%box")) { if (t->n != 2) die("(%box v)", NULL); Syn *s = syn(S_BOX, 1); s->k[0] = compile(t->it[1]); return s; }
+        if (IS(h, "%box")) { if (t->n != 2) die("(%box v)", NULL); Syn *s = syn(S_BOX, 1); s->k[0] = compile(t->it[1]); return s; }
         static const char *TBN[TB_N] = { "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab" };
         for (int q = 0; q < TB_N; q++) if (!strcmp(h, TBN[q])) {
             if (t->n != 2) die("wrong number of operands in", h);
             Syn *s = syn(S_GLOBTAB, 1); s->x = (uint32_t)q; s->k[0] = compile(t->it[1]); return s;
         }
     }
-    if (!strcmp(h, "PathP")) return compile_lazy_n(S_PATHP, t, 1, 3);
-    if (!strcmp(h, "@")) { Syn *s = compile_n(S_PAPP, t, 1, t->n - 1); s->x = t->n == 5; return s; }
-    if (!strcmp(h, "~")) return compile_n(S_NEG, t, 1, 1);
-    if (!strcmp(h, "/\\")) { Syn *s = compile_n(S_BIN, t, 1, 2); s->x = B_MEET; return s; }
-    if (!strcmp(h, "\\/")) { Syn *s = compile_n(S_BIN, t, 1, 2); s->x = B_JOIN; return s; }
-    if (!strcmp(h, "&")) { Syn *s = compile_n(S_BIN, t, 1, 2); s->x = B_FAND; return s; }
-    if (!strcmp(h, "|")) { Syn *s = compile_n(S_BIN, t, 1, 2); s->x = B_FOR; return s; }
-    if (!strcmp(h, "=")) {
+    if (IS(h, "PathP")) return compile_lazy_n(S_PATHP, t, 1, 3);
+    if (IS(h, "@")) { Syn *s = compile_n(S_PAPP, t, 1, t->n - 1); s->x = t->n == 5; return s; }
+    if (IS(h, "~")) return compile_n(S_NEG, t, 1, 1);
+    if (IS(h, "/\\")) { Syn *s = compile_n(S_BIN, t, 1, 2); s->x = B_MEET; return s; }
+    if (IS(h, "\\/")) { Syn *s = compile_n(S_BIN, t, 1, 2); s->x = B_JOIN; return s; }
+    if (IS(h, "&")) { Syn *s = compile_n(S_BIN, t, 1, 2); s->x = B_FAND; return s; }
+    if (IS(h, "|")) { Syn *s = compile_n(S_BIN, t, 1, 2); s->x = B_FOR; return s; }
+    if (IS(h, "=")) {
         Syn *s = compile_n(S_FEQ, t, 1, 1);
         if (is(t->it[2], "0")) s->x = 0; else if (is(t->it[2], "1")) s->x = 1; else die("(= r e) needs e = 0 or 1", NULL);
         return s;
     }
-    if (!strcmp(h, "faceof")) return compile_n(S_FACEOF, t, 1, 1);
-    if (!strcmp(h, "%fneg")) { arity(t, 1); return compile_n(S_FNEG, t, 1, 1); }
-    if (!strcmp(h, "sys0")) return syn(S_SYS0, 0);
-    if (!strcmp(h, "sys+")) return compile_n(S_SYSCONS, t, 1, 3);
-    if (!strcmp(h, "sysmap")) return compile_n(S_SYSMAP, t, 1, 2);
-    if (!strcmp(h, "comp")) return compile_n(S_COMP, t, 1, 3);
-    if (!strcmp(h, "Glue")) return compile_n(S_GLUE, t, 1, 2);
-    if (!strcmp(h, "%hcompU")) { arity(t, 2); Syn *s = compile_n(S_GLUE, t, 1, 2); s->x = 1; return s; }
-    if (!strcmp(h, "%unglueU")) { arity(t, 2); Syn *s = compile_n(S_UNGLUE, t, 1, 2); s->x = 1; return s; }
-    if (!strcmp(h, "glue")) {
+    if (IS(h, "faceof")) return compile_n(S_FACEOF, t, 1, 1);
+    if (IS(h, "%fneg")) { arity(t, 1); return compile_n(S_FNEG, t, 1, 1); }
+    if (IS(h, "sys0")) return syn(S_SYS0, 0);
+    if (IS(h, "sys+")) return compile_n(S_SYSCONS, t, 1, 3);
+    if (IS(h, "sysmap")) return compile_n(S_SYSMAP, t, 1, 2);
+    if (IS(h, "comp")) return compile_n(S_COMP, t, 1, 3);
+    if (IS(h, "Glue")) return compile_n(S_GLUE, t, 1, 2);
+    if (IS(h, "%hcompU")) { arity(t, 2); Syn *s = compile_n(S_GLUE, t, 1, 2); s->x = 1; return s; }
+    if (IS(h, "%unglueU")) { arity(t, 2); Syn *s = compile_n(S_UNGLUE, t, 1, 2); s->x = 1; return s; }
+    if (IS(h, "glue")) {
         /* the base is held unbuilt: where the system is total the glue value is its face's element
          * and the base is never read (in a composition the base is a further composition) */
         arity(t, 2); Syn *s = syn(S_GLUEV, 2); s->k[0] = compile(t->it[1]); s->k[1] = compile_lazy(t->it[2]); return s;
     }
-    if (!strcmp(h, "unglue")) return compile_n(S_UNGLUE, t, 1, 2);
-    if (!strcmp(h, "%data")) {
+    if (IS(h, "unglue")) return compile_n(S_UNGLUE, t, 1, 2);
+    if (IS(h, "%data")) {
         int d = data_lookup(t->it[1]->s);
         if (d < 0 || t->n - 2 != DATA[d].nparams) die("bad %data", t->it[1]->s);
         Syn *s = compile_n(S_DATA, t, 2, t->n - 2); s->id = d; return s;
     }
-    if (!strcmp(h, "%con")) {
+    if (IS(h, "%con")) {
         int c = con_lookup(t->it[1]->s);
         if (c < 0 || t->n - 2 != CON[c].nfields + CON[c].ndims) die("bad %con", t->it[1]->s);
         Syn *s = compile_n(S_CON, t, 2, t->n - 2); s->id = c; return s;
     }
-    if (!strcmp(h, "hcompD")) return compile_n(S_HCOMPD, t, 1, 2);
-    if (!strcmp(h, "%hcompF")) { arity(t, 3); return compile_n(S_HCOMPD, t, 1, 3); }
-    if (!strcmp(h, "%record")) {
+    if (IS(h, "hcompD")) return compile_n(S_HCOMPD, t, 1, 2);
+    if (IS(h, "%hcompF")) { arity(t, 3); return compile_n(S_HCOMPD, t, 1, 3); }
+    if (IS(h, "%record")) {
         /* a copattern: its fields held unbuilt, each built when its projection reads it */
         int d = data_lookup(t->it[1]->s);
         if (d < 0 || !DATA[d].co || t->n - 2 != DATA[d].nflds) die("bad %record", t->it[1]->s);
         Syn *s2 = compile_lazy_n(S_REC, t, 2, t->n - 2); s2->id = d; return s2;
     }
-    if (!strcmp(h, "%transD")) {
+    if (IS(h, "%transD")) {
         int d = data_lookup(t->it[1]->s);
         if (d < 0 || t->n - 2 != DATA[d].nparams + 2) die("bad %transD", t->it[1]->s);
         Syn *s = compile_n(S_TRANSD, t, 2, t->n - 2); s->id = d; return s;
     }
-    if (!strcmp(h, "%case")) {
+    if (IS(h, "%case")) {
         if (t->n != 4 && t->n != 5) die("bad %case", NULL);
         return compile_case(t);
     }
@@ -2070,7 +2123,7 @@ static Syn *compile(Node *t) {
 static bool top_lazy;    /* a definition's body: built when first used */
 /* a desugared term compiled at the top level (the caller holds the arena mark) */
 static Syn *compile_top_ds(Node *d, int *nslots, int **uses) {
-    nbinds = 0; nlevels = 1;
+    nbinds = 0; nlevels = 1; bind_epoch++;
     GROW(levels, caplevels, 1);
     levels[0] = (Level){ 0 };
     Syn *s = top_lazy ? compile_lazy(d) : compile(d);
@@ -3151,7 +3204,7 @@ static void toplevel(Node *f) {
             Node *pn[256];
             while (b->list && b->n == 3 && is(b->it[0], "lam") && np < 256) { pn[np++] = param_name(b->it[1]); b = b->it[2]; }
             if (np >= 1) {
-                nbinds = 0; nlevels = 1; GROW(levels, caplevels, 1); levels[0] = (Level){ 0 };
+                nbinds = 0; nlevels = 1; GROW(levels, caplevels, 1); levels[0] = (Level){ 0 }; bind_epoch++;
                 Names none = { 0 };
                 G[g].nary = compile_branch(&none, pn, np, b);
                 nlevels = 0;
