@@ -1094,7 +1094,7 @@ static Node *p_data_ctor(void) {
         if (n >= 120) x_err("too many fields", P0());
         if (P0()->k == X_LB) { bdy = p_system(); continue; }
         if (P0()->k == X_LP) {
-            Bnd bs[16]; int save = xp; int nb = p_binders(bs, 16, false);
+            Bnd bs[64]; int save = xp; int nb = p_binders(bs, 64, false);
             if (nb && bs[0].ty) {
                 for (int q = 0; q < nb; q++) {
                     if (bs[q].dim) { if (nd == 16) x_err("too many dimensions", P0()); dims[nd++] = bs[q].name; }

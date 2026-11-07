@@ -922,7 +922,8 @@ static bool fd_pending(Cell *o, int arrive, FdSet *x, int depth) {
         if (owns_dnf(o->kind)) fd_dnf(y, o->p);
         if (o->kind == O_SUBST && o->p) { const Subst *s = o->p; for (uint32_t k = 0; k < s->n; k++) fd_dnf(y, s->v[k]); }
         if (o->kind == O_CASE && casetab_mkdim((const CaseTab *)o->p)) y->taint = true;
-        if (o->kind == O_NATIVE && global_mkdim((long)o->a)) y->taint = true;
+        if ((o->kind == O_NATIVE || o->kind == O_NATREP) && global_mkdim((long)o->a)) y->taint = true;
+        if (o->kind == O_NATREP && global_mkdim((long)o->x)) y->taint = true;
         if (y->taint) { fd_why = 6; ok = false; }
     }
     if (ok && y->n <= 256) {
@@ -1191,15 +1192,36 @@ static Port face_cell(Dnf *f) { Cell *c = cell(V_FACE, 1); c->p = f; return P(c,
  * definition on the net) */
 typedef struct VB { uint64_t tag, n; struct VB *f[]; } VB;
 Port unbox_value(VB *v, int d);
+/* closed data (O_NATREP): a word, a primitive value, a byte string, a native value, or a constructor
+ * (no dimensions) of such all the way down, every part built (after O_DEEP); walked with a stack */
+static bool closed_data(Port p) {
+    size_t cap = 64, sp = 0; Port *st = malloc(cap * sizeof(Port)); st[sp++] = p; bool ok = true;
+    while (sp && ok) {
+        Cell *c = cell_at(st[--sp]);
+        if (!c) { ok = false; break; }
+        switch (c->kind) {
+        case V_WORD: case V_PVAL: case V_BYTES: case V_NATIVE: break;
+        case V_CON:
+            if (CON[c->a].ndims) { ok = false; break; }
+            for (int j = 0; j < CON[c->a].nfields; j++) { if (sp == cap) { cap *= 2; st = realloc(st, cap * sizeof(Port)); } st[sp++] = c->port[1 + j]; }
+            break;
+        default: ok = false;
+        }
+    }
+    free(st); return ok;
+}
+/* O_DEEP's accumulator: a constructor's fields forced in turn (c the constructor, got of nf done) */
+typedef struct { int c, nf, got; Port f[]; } DeepAcc;
 static bool boxable(Cell *c) {
     if (!c) return false;
     if (c->kind == V_WORD) return !c->p;
+    if (c->kind == V_PVAL) return true;   /* a primitive value: a word of its bits */
     if (c->kind == V_BYTES) return true;
     if (c->kind == V_CON) { ConInfo *k = &CON[c->a]; if (k->ndims) return false; for (int j = 0; j < k->nfields; j++) if (!boxable(cell_at(c->port[1 + j]))) return false; return true; }
     return false;
 }
 static VB *box_value(Cell *c) {
-    if (c->kind == V_WORD) { VB *v = calloc(1, sizeof(VB)); v->tag = 0; v->n = c->a; return v; }
+    if (c->kind == V_WORD || c->kind == V_PVAL) { VB *v = calloc(1, sizeof(VB)); v->tag = 0; v->n = c->a; return v; }
     if (c->kind == V_BYTES) { Bytes *b = c->p; size_t bn = b ? b->n : 0; VB *v = calloc(1, sizeof(VB) + bn); v->tag = 2; v->n = bn; if (bn) memcpy((unsigned char *)v->f, b->b, bn); return v; }
     ConInfo *k = &CON[c->a];
     VB *v = calloc(1, sizeof(VB) + (size_t)k->nfields * sizeof(VB *)); v->tag = (uint64_t)k->index + 1; v->n = (uint64_t)k->nfields;
@@ -1209,7 +1231,7 @@ static VB *box_value(Cell *c) {
 static void free_boxed(VB *v) { if (!v) return; if (v->tag != 0 && v->tag != 2) for (uint64_t j = 0; j < v->n; j++) free_boxed(v->f[j]); free(v); }
 /* a boxed value read as unbox_value reads it (d decides what tag 2 is: bytes or constructor 1),
  * copied (the compiled code may update its argument in place) or freed */
-static bool vb_words(const VB *v, int d) { return d == -2 || (d == -1 && v->tag == 0) || (d >= 0 && v->tag == 0); }
+static bool vb_words(const VB *v, int d) { return d == -2 || d <= -10 || (d == -1 && v->tag == 0) || (d >= 0 && v->tag == 0); }
 static bool vb_bytes(int d) { return d == -3 || d == -1; }
 static VB *copy_boxed(const VB *v, int d) {
     if (!v) return NULL;
@@ -1244,6 +1266,7 @@ Port unbox_value(VB *v, int d) {
     /* d: -2 a word, -3 bytes, a data type's machine index for a constructor, -1 unknown (a word by
      * tag 0, else bytes). The tags alone do not decide: constructor 1 and bytes share tag 2 */
     if (!v) return word_of(0);
+    if (d <= -10) { Cell *c = cell(V_PVAL, 1); c->x = (uint64_t)(-10 - d); c->a = v->n; return P(c, 0); }   /* a primitive field */
     if (d == -2 || (d == -1 && v->tag == 0) || (d >= 0 && v->tag == 0)) return word_of(v->n);
     if (d == -3 || d == -1) { size_t bn = (size_t)v->n; Bytes *b = calloc(1, sizeof(Bytes) + bn); b->rc = 1; b->n = bn; if (bn) memcpy(b->b, (unsigned char *)v->f, bn); Cell *c = cell(V_BYTES, 1); c->x = PT_BYTES; c->p = b; return P(c, 0); }
     int ci = (int)v->tag - 1;
@@ -1945,7 +1968,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_NTYPE] = "NTYPE",
     [O_CALL] = "CALL",
     [O_WSUCC] = "WSUCC",
-    [O_PTY] = "PTY", [O_BYTESTY] = "BYTESTY", [O_PVAL] = "PVAL", [O_PVAL2] = "PVAL2", [O_POP1] = "POP1", [O_POP2] = "POP2", [O_POP2B] = "POP2B", [O_BYTES] = "BYTES", [O_LOAD] = "LOAD", [O_LOADB] = "LOADB", [O_STORE] = "STORE", [O_STOREB] = "STOREB", [O_STOREC] = "STOREC", [O_BLEN] = "BLEN", [O_BEQ] = "BEQ", [O_BEQB] = "BEQB", [O_PTROF] = "PTROF", [O_REGAT] = "REGAT", [O_REGATA] = "REGATA", [O_FFI] = "FFI", [O_NATIVE] = "NATIVE",
+    [O_PTY] = "PTY", [O_BYTESTY] = "BYTESTY", [O_PVAL] = "PVAL", [O_PVAL2] = "PVAL2", [O_POP1] = "POP1", [O_POP2] = "POP2", [O_POP2B] = "POP2B", [O_BYTES] = "BYTES", [O_LOAD] = "LOAD", [O_LOADB] = "LOADB", [O_STORE] = "STORE", [O_STOREB] = "STOREB", [O_STOREC] = "STOREC", [O_BLEN] = "BLEN", [O_BEQ] = "BEQ", [O_BEQB] = "BEQB", [O_PTROF] = "PTROF", [O_REGAT] = "REGAT", [O_REGATA] = "REGATA", [O_FFI] = "FFI", [O_NATIVE] = "NATIVE", [O_DEEP] = "DEEP", [O_DEEPC] = "DEEPC", [O_NATREP] = "NATREP",
     [O_PIMULT] = "PIMULT", [O_PIM] = "PIM", [O_FMULT] = "FMULT", [O_FMULT2] = "FMULT2", [O_FMULT3] = "FMULT3", [O_LINEAR] = "LINEAR", [O_GSTEPS] = "GSTEPS", [O_GCODE] = "GCODE", [O_DNIDX] = "DNIDX", [O_GUSAGE] = "GUSAGE", [O_GUSAGE2] = "GUSAGE2",
     [O_WEQ] = "WEQ",
     [O_WLT] = "WLT",
@@ -2954,11 +2977,69 @@ static void interact(Cell *o, Cell *v) {
         cell_free(o);
         return;
     }
+    case O_DEEP: {
+        /* a constructor (no dimensions) with fields: its fields forced one after another; anything else
+         * is delivered as it is (a word, a primitive value, a byte string, a native value) */
+        if (vk != V_CON || CON[v->a].ndims || CON[v->a].nfields == 0) { link(P(v, 0), o->port[1]); cell_free(o); return; }
+        int nf = CON[v->a].nfields;
+        DeepAcc *D = calloc(1, sizeof(DeepAcc) + (size_t)nf * sizeof(Port)); D->c = (int)v->a; D->nf = nf;
+        Cell *dc = cell(O_DEEPC, nf + 1); dc->p = D;
+        Cell *d0 = cell(O_DEEP, 2); mv(v, 1, P(d0, 0)); link(P(d0, 1), P(dc, 0));
+        for (int j = 1; j < nf; j++) mv(v, 1 + j, P(dc, j));
+        mv(o, 1, P(dc, nf));
+        for (int j = nf + 1; j < v->n; j++) era(v->port[j]);
+        cell_free(o); cell_free(v);
+        return;
+    }
+    case O_DEEPC: {
+        DeepAcc *D = o->p; o->p = NULL;
+        D->f[D->got++] = P(v, 0);
+        if (D->got < D->nf) {
+            int rest = D->nf - D->got;   /* the fields still unforced: ports 1..rest, then out */
+            Cell *dc = cell(O_DEEPC, rest + 1); dc->p = D;
+            Cell *d0 = cell(O_DEEP, 2); mv(o, 1, P(d0, 0)); link(P(d0, 1), P(dc, 0));
+            for (int j = 2; j <= rest; j++) mv(o, j, P(dc, j - 1));
+            mv(o, rest + 1, P(dc, rest));
+            cell_free(o);
+            return;
+        }
+        Port r = con_build(D->c, D->f, NULL);
+        link(r, o->port[1]);
+        free(D); cell_free(o);
+        return;
+    }
+    case O_NATREP: {
+        typedef struct { int n; bool deep; Port v[NATIVE_MAXW]; } RArgs;
+        RArgs *A = o->p; if (!A) A = calloc(1, sizeof(RArgs));
+        o->p = NULL;
+        A->v[A->n++] = P(v, 0);
+        if (o->n > 2) {
+            Cell *c = cell(O_NATREP, o->n - 1); c->x = o->x; c->a = o->a; c->p = A;
+            for (int k = 1; k < o->n; k++) mv(o, k, P(c, k - 1));
+            cell_free(o);
+            return;
+        }
+        int n = A->n;
+        if (!A->deep) {
+            /* every argument read whole first, then decided */
+            Cell *c = cell(O_NATREP, n + 1); c->x = o->x; c->a = o->a;
+            RArgs *B = calloc(1, sizeof(RArgs)); B->deep = true; c->p = B;
+            for (int k = 0; k < n; k++) { Cell *d = cell(O_DEEP, 2); link(A->v[k], P(d, 0)); link(P(d, 1), P(c, k)); }
+            mv(o, 1, P(c, n));
+            free(A); cell_free(o);
+            return;
+        }
+        bool closed = true;
+        for (int k = 0; k < n && closed; k++) closed = closed_data(A->v[k]);
+        Port out = apply_gid(closed ? (long)o->x : (long)o->a, A->v, n);
+        free(A); link(out, o->port[1]); cell_free(o);
+        return;
+    }
     case O_NATIVE: {
         /* a compiled definition called from the net (B18): the arguments read in turn and kept as
          * values; all words, the compiled code is called with them; otherwise the definition itself
          * is applied to them (the net computes what the native form does not cover) */
-        typedef struct { int n; Port v[8]; } NArgs;
+        typedef struct { int n; bool deep; Port v[NATIVE_MAXW]; } NArgs;
         NArgs *A = o->p; if (!A) A = calloc(1, sizeof(NArgs));
         o->p = NULL;
         A->v[A->n++] = P(v, 0);
@@ -2968,14 +3049,28 @@ static void interact(Cell *o, Cell *v) {
             cell_free(o);
             return;
         }
-        int n = A->n; bool words = n <= 8; Ffi *e = &FFI[o->x];
+        int n = A->n; bool words = n <= NATIVE_MAXW; Ffi *e = &FFI[o->x]; int unbuilt = 0;
         for (int k = 0; k < n && words; k++) {
             Cell *c = cell_at(A->v[k]);
             if (!c) { words = false; break; }
             NObj *nb = c->kind == V_NATIVE ? c->p : NULL;
             if (e->kind[k] == 7) { if (!nb || nb->d != -1 || nb->lib != e->lib) words = false; }   /* a handle: of this library only */
-            else if (e->kind[k] == 6) { if (nb ? nb->d == -1 : !boxable(c)) words = false; }
+            else if (e->kind[k] == 6) { if (nb ? nb->d == -1 : !boxable(c)) { if (!nb && c->kind == V_CON && !A->deep) unbuilt++; else words = false; } }
             else if (c->kind != V_WORD || c->p) words = false;
+        }
+        if (words && unbuilt) {
+            /* a boxed argument (a constructor) with fields not yet values: each such argument read whole
+             * (O_DEEP) and the call made again, once; still not boxable then, the definition is applied */
+            Cell *c = cell(O_NATIVE, n + 1); c->x = o->x; c->a = o->a;
+            NArgs *B = calloc(1, sizeof(NArgs)); B->deep = true; c->p = B;
+            for (int k = 0; k < n; k++) {
+                Cell *ak = cell_at(A->v[k]);
+                if (e->kind[k] == 6 && ak && ak->kind == V_CON && !boxable(ak)) { Cell *d = cell(O_DEEP, 2); link(A->v[k], P(d, 0)); link(P(d, 1), P(c, k)); }
+                else link(A->v[k], P(c, k));
+            }
+            mv(o, 1, P(c, n));
+            free(A); cell_free(o);
+            return;
         }
         Port out;
         if (words) {
@@ -2985,7 +3080,7 @@ static void interact(Cell *o, Cell *v) {
              * result unboxed into fresh cells (a constructor by the result's data type), or kept
              * native (keep: a copy the cell owns); a void * result a handle. The arguments are erased
              * after the call (a handle's last copy finalized only then) */
-            uint64_t a[8]; VB *boxed[8] = { 0 }; int bd[8];
+            uint64_t a[NATIVE_MAXW]; VB *boxed[NATIVE_MAXW] = { 0 }; int bd[NATIVE_MAXW];
             for (int k = 0; k < n; k++) {
                 Cell *c = cell_at(A->v[k]); bd[k] = -1;
                 if (c->kind == V_NATIVE) {
@@ -3017,7 +3112,7 @@ static void interact(Cell *o, Cell *v) {
             }
             if (e->tw) {
                 /* records by value (B18): the trampoline takes the words and gives the result's */
-                uint64_t rb[32] = { 0 };
+                uint64_t rb[NATIVE_MAXW] = { 0 };
                 ((void (*)(const uint64_t *, uint64_t *))e->tw)(a, rb);
                 if (getenv("CUBICAL_SHOW_NATIVE")) fprintf(stderr, "[native] %s through its trampoline, %d words\n", e->sym, n);
                 if (e->rsd >= 0) {
@@ -3025,12 +3120,8 @@ static void interact(Cell *o, Cell *v) {
                     for (int k = 0; k < n; k++) { if (bd[k] >= 0) free_boxed_d(boxed[k], bd[k]); else free_boxed(boxed[k]); era(A->v[k]); }
                     free(A); link(out, o->port[1]); cell_free(o); return;
                 }
-                r = rb[0];
-                out = e->ret == 6 ? unbox_value((VB *)(uintptr_t)r, e->rdata) : word_of(r);
-                for (int k = 0; k < n; k++) { if (bd[k] >= 0) free_boxed_d(boxed[k], bd[k]); else free_boxed(boxed[k]); era(A->v[k]); }
-                free(A); link(out, o->port[1]); cell_free(o); return;
-            }
-            r = ffi_invoke(e, a, n);
+                r = rb[0];   /* another result: as a direct call's, below */
+            } else r = ffi_invoke(e, a, n);
             if (getenv("CUBICAL_SHOW_NATIVE")) fprintf(stderr, "[native] %s called, %d arguments\n", e->sym, n);
             if (e->ret == 7) {
                 static uint64_t serial;
@@ -3044,7 +3135,7 @@ static void interact(Cell *o, Cell *v) {
             else out = word_of(r);
             for (int k = 0; k < n; k++) { if (bd[k] >= 0) free_boxed_d(boxed[k], bd[k]); else free_boxed(boxed[k]); era(A->v[k]); }
         } else {
-            if (getenv("CUBICAL_SHOW_NATIVE")) { fprintf(stderr, "[native] %s falls back:", e->sym); for (int k = 0; k < n; k++) { Cell *c = cell_at(A->v[k]); fprintf(stderr, " %d", c ? (int)c->kind : -1); } fputc('\n', stderr); }
+            if (getenv("CUBICAL_SHOW_NATIVE")) { fprintf(stderr, "[native] %s falls back:", e->sym); for (int k = 0; k < n; k++) { Cell *c = cell_at(A->v[k]); fprintf(stderr, " %s", c ? kind_name((int)c->kind) : "none"); if (c && c->kind == V_CON) { fputc('(', stderr); for (int j = 1; j < c->n; j++) { Cell *f = cell_at(c->port[j]); fprintf(stderr, "%s%s", j > 1 ? " " : "", f ? kind_name((int)f->kind) : "unbuilt"); } fputc(')', stderr); } } fputc('\n', stderr); }
             out = apply_gid((long)o->a, A->v, n);
         }
         free(A);
@@ -3860,6 +3951,7 @@ static Port build(Syn *t, Frame *f) {
         c = cell((int)t->x, t->n + 1);
         if (t->x == O_POP1 || t->x == O_POP2 || t->x == O_LOAD || t->x == O_STORE || t->x == O_FFI || t->x == O_NATIVE) c->x = (uint32_t)t->id;   /* the operation, the width, or the foreign entry */
         if (t->x == O_NATIVE) c->a = (uint64_t)t->slot;   /* the definition the native form stands for */
+        if (t->x == O_NATREP) { c->x = (uint32_t)t->id; c->a = (uint64_t)t->slot; }   /* the converting call, the definition */
         for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(c, k));
         return P(c, t->n);
     case S_PLAM: {

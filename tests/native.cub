@@ -191,6 +191,48 @@ px-fbits p k = k
 #same px-mix (px (u32 #7) (f32ofbits (u32 #1069547520)) (f64 #3) (i64 #20)) = px (u32 #8) (f32ofbits (u32 #1069547520)) (f64 #6) (i64 #40)
 #same px-fbits (px (u32 #7) (f32ofbits (u32 #1069547520)) (f64 #3) (i64 #20)) #1 = #1069547521
 
+-- the same primitive fields in emitted programs: lib/emitt.cub's cprims give each field its C width, so
+-- Px is flat in the emitted program (struct T<Px> { …; uint32_t f0; float f1; double f2; int64_t f3; }),
+-- each field read into the program's word (a float by its bits) and written back from it, and the entry
+-- takes and returns the struct by value. pxmix-e is checked against its own fallback; the probes are
+-- the identity or 0 over an emitted program of another definition, so their answers come from the C
+-- (the UInt32 at 2³² − 1 wraps to 0 in its 32-bit field)
+pxmix-e : Px → Px
+pxmix-e p = case p of px a f d i → px (u32add a (u32 #1)) f (f64add d d) (i64add i i)
+#native pxmix-e 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (p : Px) → pxmix-e p))))
+#same pxmix-e (px (u32 #7) (f32ofbits (u32 #1069547520)) (f64 #3) (i64 #20)) = px (u32 #8) (f32ofbits (u32 #1069547520)) (f64 #6) (i64 #40)
+px-probe : Px → Px
+px-probe p = p
+#native px-probe 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (p : Px) → pxmix-e p))))
+#same px-probe (px (u32 #7) (f32ofbits (u32 #1069547520)) (f64 #3) (i64 #20)) = px (u32 #8) (f32ofbits (u32 #1069547520)) (f64 #6) (i64 #40)
+#same px-probe (px (u32 #4294967295) (f32ofbits (u32 #3212836864)) (f64 #0) (i64 #0)) = px (u32 #0) (f32ofbits (u32 #3212836864)) (f64 #0) (i64 #0)
+-- a sum of records with primitive fields (a tag and a union, each constructor its own widths)
+data Num = ni (i : Int64) | nf (d : Float64) | nu (u : UInt32) (g : Float32)
+nflip : Num → Num
+nflip n = case n of ni i → nf (f64 #2); nf d → nu (u32 #5) (f32ofbits (u32 #1069547520)); nu u g → ni (i64add (i64 (u32toWord u)) (i64 #1))
+#native nflip 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (n : Num) → nflip n))))
+#same nflip (nu (u32 #9) (f32ofbits (u32 #0))) = ni (i64 #10)
+nflip-probe : Num → Num
+nflip-probe n = n
+#native nflip-probe 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (n : Num) → nflip n))))
+#same nflip-probe (ni (i64 #3)) = nf (f64 #2)
+#same nflip-probe (nf (f64 #3)) = nu (u32 #5) (f32ofbits (u32 #1069547520))
+#same nflip-probe (nu (u32 #9) (f32ofbits (u32 #0))) = ni (i64 #10)
+-- a record holding such a record inline
+data Pxs = pxs (p : Px) (k : Word)
+pxk : Pxs → Word
+pxk s = case s of pxs p k → (case p of px a f d i → plusw (u32toWord a) (plusw (i64toWord i) k))
+pxk-probe : Pxs → Word
+pxk-probe s = #0
+#native pxk-probe 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (s : Pxs) → pxk s))))
+#same pxk-probe (pxs (px (u32 #7) (f32ofbits (u32 #0)) (f64 #3) (i64 #20)) #100) = #127
+-- a field the layout reads as bytes but the printers box (Bytes 8) keeps its record boxed
+data Bb = bb (b : Bytes 8) (w : Word)
+bbw : Bb → Word
+bbw x = case x of bb b w → w
+#native bbw 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (x : Bb) → bbw x))))
+#same bbw (bb (bytes 8) #5) = #5
+
 -- item 17's re-entry: #native f n at k = P specializes f on its first k arguments while the program runs.
 -- scaleat e b adds b e times; on the first call with e = 3 the net computes P 3 (the specializer
 -- unrolls the loop: ((0 + b) + b) + b), the machine compiles and enters it and keeps it under 3; later
@@ -223,3 +265,54 @@ useprobe x = probe x
 #same probe #1 = #101
 #same probe #2 = #102
 #same useprobe #5 = #5
+-- recursive data with a primitive field (a typed pointer whose struct holds a uint32_t): crosses boxed,
+-- each node's field read at its width; the probe answers 0 itself, so 2³² − 1 + 3 = 4294967298 is the C's
+data L32 = l32n | l32c (x : UInt32) (r : L32)
+l32-sum : L32 → Word
+l32-sum l32n = #0
+l32-sum (l32c x r) = plusw (u32toWord x) (l32-sum r)
+l32-probe : L32 → Word
+l32-probe l = #0
+#native l32-probe 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (l : L32) → l32-sum l))))
+#same l32-probe (l32c (u32 #4294967295) (l32c (u32 #3) l32n)) = #4294967298
+-- and coming back: pointer data as a result, boxed by the entry (return box<d>(…)) and rebuilt with
+-- each field at its type (a UInt32 field a UInt32 again); the probe is the identity
+l32-inc : L32 → L32
+l32-inc l32n = l32n
+l32-inc (l32c x r) = l32c (u32add x (u32 #1)) (l32-inc r)
+l32-incp : L32 → L32
+l32-incp l = l
+#native l32-incp 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (l : L32) → l32-inc l))))
+#same l32-incp (l32c (u32 #4294967295) (l32c (u32 #3) l32n)) = l32c (u32 #0) (l32c (u32 #4) l32n)
+-- a represented value under a binder: closed arguments take the compiled call (to, C, from), an
+-- argument with a neutral part the definition itself (%natrep), so an open term reads as the
+-- definition does — not as from (to …) of it
+dbl0 : Nat → Nat
+dbl0 n = plus n (suc n)
+#same (λ (n : Nat) → dbln n) = (λ (n : Nat) → dbl0 n)
+#same (λ (n : Nat) → dbln (suc (suc n))) = (λ (n : Nat) → dbl0 (suc (suc n)))
+#same (λ (n : Nat) → plus (dbln 3) n) = (λ (n : Nat) → plus 7 n)
+-- more than six parameters (item 18: the call goes through the entry's trampoline; at most
+-- NATIVE_MAXW = 32 words): ten words, and a six-word record with four more; the probes answer 0
+-- themselves
+sum10 : Word → Word → Word → Word → Word → Word → Word → Word → Word → Word → Word
+sum10 a b c d e f g h i j = plusw a (plusw (plusw b b) (plusw c (plusw d (plusw e (plusw f (plusw g (plusw h (plusw i (plusw j (plusw j j))))))))))
+sum10p : Word → Word → Word → Word → Word → Word → Word → Word → Word → Word → Word
+sum10p a b c d e f g h i j = #0
+#native sum10p 10 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (a b c d e f g h i j : Word) → sum10 a b c d e f g h i j))))
+#same sum10p #1 #2 #3 #4 #5 #6 #7 #8 #9 #10 = #77
+data R6 = r6 (a : Word) (b : Word) (c : Word) (d : Word) (e : Word) (f : Word)
+r6sum : R6 → Word → Word → Word → Word → Word
+r6sum r w x y z = case r of r6 a b c d e f → plusw a (plusw b (plusw c (plusw d (plusw e (plusw f (plusw w (plusw x (plusw y (plusw z z)))))))))
+r6p : R6 → Word → Word → Word → Word → Word
+r6p r w x y z = #0
+#native r6p 5 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (r : R6) (w x y z : Word) → r6sum r w x y z))))
+#same r6p (r6 #1 #2 #3 #4 #5 #6) #7 #8 #9 #10 = #65
+-- a record of twenty fields (more than the sixteen a record once had at most) by value
+data R20 = r20 (a0 : Word) (a1 : Word) (a2 : Word) (a3 : Word) (a4 : Word) (a5 : Word) (a6 : Word) (a7 : Word) (a8 : Word) (a9 : Word) (b0 : Word) (b1 : Word) (b2 : Word) (b3 : Word) (b4 : Word) (b5 : Word) (b6 : Word) (b7 : Word) (b8 : Word) (b9 : UInt32)
+r20last : R20 → Word
+r20last r = case r of r20 a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 b0 b1 b2 b3 b4 b5 b6 b7 b8 b9 → plusw a0 (plusw b8 (u32toWord b9))
+r20p : R20 → Word
+r20p r = #0
+#native r20p 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (r : R20) → r20last r))))
+#same r20p (r20 #1 #0 #0 #0 #0 #0 #0 #0 #0 #0 #0 #0 #0 #0 #0 #0 #0 #0 #20 (u32 #300)) = #321

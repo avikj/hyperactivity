@@ -264,6 +264,16 @@ enum {
     O_TICKAPP,  /* 0=an argument 1=a stuck call of a tick-unfolding definition, short of that argument
                  * 2=out: given the tick constant ⋄ the call unfolds (the body applied to its
                  * arguments and ⋄); given anything else it stays a stuck application */
+    O_DEEP,     /* 0=a value 1=out: the value with every constructor field below it a value too (B18: a
+                 * boxed argument of a compiled definition read whole before the call); a constructor's
+                 * fields forced in turn through O_DEEPC, anything else delivered as it is */
+    O_DEEPC,    /* a=the constructor, p=DeepAcc (the fields' values so far); 0=the next field's value,
+                 * 1..=the fields after it (unforced), last=out */
+    O_NATREP,   /* (%natrep cv g a1 .. an): x=cv, a=g; 0..n-1=arguments, n=out; p=the arguments read so far.
+                 * A compiled definition over represented values (B18): the arguments read whole (O_DEEP);
+                 * every one closed data (constructors of words, primitive values, byte strings, native
+                 * values all the way down) — cv, the converting call (from (native (to a…))); any neutral
+                 * part — g, the definition itself, so an open term reads as the definition does */
     K_END
 };
 enum { B_MEET, B_JOIN, B_FAND, B_FOR };
@@ -449,7 +459,10 @@ Port global_copy(long g, Key *as); /* 0 when the global is an unsupplied input; 
 void global_park(long g, Cell *op, Cell *glob);
 /* foreign functions (D27): a C symbol at a primitive type; the arguments' kinds (PT_*, or 4 a word), its result's */
 /* at: an entry specialized when the program runs (item 17, #native f n at k): its index in lang.c's table, -1 otherwise */
-typedef struct { const char *sym; void *fn; int n; unsigned char kind[8]; unsigned char ret; int rdata;
+/* the most argument words a compiled definition is called with (#native: its parameters, a record's
+ * slots counted one per word); above six the call goes through the entry's trampoline */
+#define NATIVE_MAXW 32
+typedef struct { const char *sym; void *fn; int n; unsigned char kind[NATIVE_MAXW]; unsigned char ret; int rdata;
     void *lib; void (*fin)(void *); unsigned char keep;
     void *tw; int rsd, rnf; int at; void *rrec; } Ffi;   /* tw: the entry's trampoline (slots in, slots out) when a parameter or the result is a C struct by value (B18); rsd/rnf: the result's data type (machine index) and slot count, -1 when not a struct; rrec: its record description (lang.c's CRec, read by crec_result) */   /* lib: the library's handle (dlopen); fin: its cubical_release, the finalizer of its handles; keep: a boxed result stays native */
 /* a value kept native (V_NATIVE): refcounted; d -1 an opaque handle (ptr the C object, fin its

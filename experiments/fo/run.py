@@ -155,6 +155,22 @@ ptn-sum p = case p of ptn a b → plus a (suc (fromWord b))
 rr-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Nat) → ptn-sum (ptn (dblr2 n) #3))))
 #same eval-fo (table-of rr-defs) lnil (fcall #99999 (lcons (flit #20) lnil)) = vw #44
 defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #20) lnil))) rr-defs''', "44", (None, "uint64_t f0; uint64_t f1; } c0;")),
+ # primitive fields at their C widths (item 18): a flat record of UInt32, Float32, Float64 and Int64 is
+ # struct { uint32_t; float; double; int64_t } by value, a list of UInt32 a typed pointer whose struct
+ # holds a uint32_t; each field read into the program's word (a float by its bits) and written back from
+ # it. At 5: (5 + 1 + (10 + 2 + 2)) + (100 + 5) = 125
+ 'prim-rec': ('''data PxR = pxr (a : UInt32) (f : Float32) (d : Float64) (i : Int64)
+data L32 = l32n | l32c (x : UInt32) (r : L32)
+pxr-bump : PxR → PxR
+pxr-bump p = case p of pxr a f d i → pxr a f (f64add d d) i
+pxr-sum : PxR → Word
+pxr-sum p = case p of pxr a f d i → plusw (u32toWord a) (plusw (u32toWord (f32bits f)) (i64toWord (i64add i (i64off64 d))))
+l32-sum : L32 → Word
+l32-sum l32n = #0
+l32-sum (l32c x r) = plusw (u32toWord x) (l32-sum r)
+pr-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Word) → plusw (pxr-sum (pxr-bump (pxr (u32 n) (f32ofbits (u32 #1)) (f64 #2) (i64 #10)))) (l32-sum (l32c (u32 #100) (l32c (u32 n) l32n))))))
+#same eval-fo (table-of pr-defs) lnil (fcall #99999 (lcons (flit #5) lnil)) = vw #125
+defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #5) lnil))) pr-defs''', "125", (None, "uint32_t f0; float f1; double f2; int64_t f3; } c0;")),
  # a type represented by a record (lib/repr.cub, represent RBox by RPt): bump through the
  # representation, a record of two words; at 30: (30 + 9) + 2 = 41 (before the fix, 30 + 9 + 0)
  'rep-box': ("""rb-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Nat) → rbox-sum (rbox-bump (rbox n 2)))))

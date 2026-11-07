@@ -27,35 +27,55 @@ t-inc = (lcons #35 (lcons #105 (lcons #110 (lcons #99 (lcons #108 (lcons #117 (l
 -- first, so that the structs may refer to each other in any order
 -- a constructor's field kinds as the printers lay them out (B12 layouts): a field of a data type
 -- represented by Word (its first representation, %rtab) is a word, as its layout says (lword)
-cshape-r d c = lmap word-rep-kind (cshape d c)
+-- and a field of a primitive type other than Bytes (Int64, UInt32, Float64, Float32) is a word in the
+-- first-order form, held in the struct at its C width (cprims; item 18: such records cross by value)
+cshape-r d c = prim-kinds (lmap word-rep-kind (cshape d c)) (cprims d c)
+prim-kinds ks ps = case ks of lnil → lnil; lcons k r → (case ps of lcons p pr → lcons (if %weq p #0 then k else (#0 , snd k)) (prim-kinds r pr); _ → ks)
+-- the primitive kind of each field of constructor c of d: wpty k's k + 1 (1 Int64, 2 UInt32, 3 Float64,
+-- 4 Float32), 0 for any other type; fprim-at d c k for field k
+cprims d c = tel-prims (fromopt (lnth (snd (params-fresh (dtel (%dent d)) lnil)) c) (tz (tsys lnil []))) lnil
+tel-prims tel acc = case tel of tx A nm r → (let Av = tval A in tel-prims (r (%var nm Av) Av) (lsnoc acc (prim-code Av))); _ → acc
+prim-code Av = case %view Av of wpty k n → (if %wlt k #4 then %wsucc k else #0); _ → #0
+fprim-at d c k = fromopt (lnth (cprims d c) k) #0
 word-rep-kind k = if %weq (fst k) #2 then (if word-rep (snd k) then (#0 , snd k) else k) else k
 word-rep d = case %rtab d of some R → (case quote-ty R of some q → (case q of cword → true; _ → false); none → false); none → false
 type-fwd d = if has-layout d then cat3 t-fwd (dec d) (lapp t-sp (lapp t-T (lapp (dec d) t-nl))) else lnil
 type-c d = if has-layout d then cat4 t-structT (dec d) (lapp t-open (alts-tk d (nctors-t d) #0)) (lapp t-end2 t-nl2) else lnil
 has-layout d = case layout d of lunion alts → true; _ → false
 nctors-t d = lst-count (snd (params-fresh (dtel (%dent d)) lnil))
-alts-tk d n c = if %weq c n then lnil else cat4 t-struct (fields-tk d (cshape-r d c) #0) t-structend (lapp (dec c) (lapp t-semi (alts-tk d n (%wsucc c))))
-fields-tk d ks k =
+alts-tk d n c = if %weq c n then lnil else cat4 t-struct (fields-tk d (cshape-r d c) (cprims d c) #0) t-structend (lapp (dec c) (lapp t-semi (alts-tk d n (%wsucc c))))
+fields-tk d ks ps k =
   case ks of
     lnil → lnil
-    lcons kd r → lapp (field-tk d (fst kd) (snd kd) k) (fields-tk d r (%wsucc k))
-field-tk d kind d2 k =
-  if %weq kind #0 then cat3 t-u64 (dec k) t-semi
+    lcons kd r → lapp (field-tk d (fst kd) (snd kd) (fromopt (lnth ps #0) #0) k) (fields-tk d r (ltail-t ps) (%wsucc k))
+ltail-t l = case l of lnil → lnil; lcons x r → r
+field-tk d kind d2 p k =
+  if %weq kind #0 then cat3 (prim-cty p) (dec k) t-semi
   else if %weq kind #1 then cat4 t-sptr (dec d) (lapp t-starf (dec k)) t-semi
   else if %weq kind #2 then (if flat-dt d2 then cat4 t-T (dec d2) (lapp t-sp (lapp t-fld (dec k))) t-semi else cat4 t-sptr (dec d2) (lapp t-starf (dec k)) t-semi)
   else cat3 t-vptr (dec k) t-semi
 -- a flat data type: by its layout, every field of every constructor a word or a flat record with a
 -- field (item 18: a nested record inline; a field-less type, Bool, stays a word or a pointer): its
 -- values are by value
-flat-dt d = flat-lay (layout d)
+flat-dt d = if flat-lay (layout d) then fields-flat d (nctors-t d) #0 else false
+-- every field a word (a primitive at its width included) or a flat record: a field the layout reads as
+-- bytes but the printers box (Bytes 8, Native) keeps the type boxed
+fields-flat d n c = if %weq c n then true else (if kinds-flat (cshape-r d c) then fields-flat d n (%wsucc c) else false)
+kinds-flat ks = case ks of lnil → true; lcons k r → (if %weq (fst k) #0 then kinds-flat r else if %weq (fst k) #2 then (if fields-flat (snd k) (nctors-t (snd k)) #0 then kinds-flat r else false) else false)
 flat-lay l = case l of lunion alts → flat-lalts alts; _ → false
 flat-lalts alts = case alts of lalt l r → andb (flat-lfields l) (flat-lalts r); _ → true
 flat-lfields l = case l of lstruct fs → flat-lfields fs; lfield nm fl al r → andb (flat-lfield fl) (flat-lfields r); _ → true
-flat-lfield fl = case fl of lword → true; lunion alts → andb (flat-lalts alts) (lay-has-field alts); _ → false
+flat-lfield fl = case fl of lword → true; lbytes n → true; lunion alts → andb (flat-lalts alts) (lay-has-field alts); _ → false
 lay-has-field alts = case alts of lalt l r → orb (lay-nonempty l) (lay-has-field r); _ → false
 lay-nonempty l = case l of lstruct fs → lay-nonempty fs; lfield nm fl al r → true; _ → false
 t-fwd = (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #100 (lcons #101 (lcons #102 (lcons #32 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #84 lnil))))))))))))))))
 t-sp = (lcons #32 lnil)
+-- a field's C type at its width: prim-cty p for cprims' kind p (0 a word)
+prim-cty p = if %weq p #1 then t-i64 else if %weq p #2 then t-u32 else if %weq p #3 then t-f64 else if %weq p #4 then t-f32 else t-u64
+t-i64 = (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #102 lnil)))))))))
+t-u32 = (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #51 (lcons #50 (lcons #95 (lcons #116 (lcons #32 (lcons #102 lnil))))))))))
+t-f64 = (lcons #100 (lcons #111 (lcons #117 (lcons #98 (lcons #108 (lcons #101 (lcons #32 (lcons #102 lnil))))))))
+t-f32 = (lcons #102 (lcons #108 (lcons #111 (lcons #97 (lcons #116 (lcons #32 (lcons #102 lnil)))))))
 t-T = (lcons #84 lnil)
 t-structT = (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #84 lnil))))))))
 t-open = (lcons #32 (lcons #123 (lcons #32 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #116 (lcons #97 (lcons #103 (lcons #59 (lcons #32 (lcons #117 (lcons #110 (lcons #105 (lcons #111 (lcons #110 (lcons #32 (lcons #123 (lcons #32 lnil)))))))))))))))))))))))))

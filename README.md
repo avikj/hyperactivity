@@ -241,7 +241,7 @@ and `to-step p` a process as a tree of steps; `#run (to-step p)` performs it aga
 operating system (plan D26, `src/drivers.c`), ending with `run: done a`. `#native f n = prog`
 compiles the bytes of `emit-lib-u` (the unboxed C of `lib/emitu.cub`) into a shared library and
 redefines `f` over it: on word arguments the compiled code answers, on any other `f` computes
-on the net (plan B18, `%native`). `#native f n keep = prog` keeps a boxed result native (the
+on the net (plan B18, `%native`; up to 32 parameters and argument words, above six through the entry's trampoline; over represented values an argument with a neutral part takes `f`'s own definition, so an open term reads as it does). `#native f n keep = prog` keeps a boxed result native (the
 emitted runtime's `V`, passed to the next compiled call as it is; unboxed into cells when the net
 reads it). `#native f n from "lib.c" "sym"` enters a hand-written C file's function: a `void *`
 result is a handle of type `Native` (`lib/prim.cub`), held by the net without being read, passed
@@ -267,7 +267,8 @@ boxed data with `cubical_call_data`, and on records as C structs (`"struct D"`, 
 constructor its fields; several a `uint64_t` tag and a union of one struct per constructor; a field
 that is itself a record inline; a word (or a type represented by `Word`) `uint64_t`, `UInt32`
 `uint32_t`, `Int64` `int64_t`, `Float32` `float`, `Float64` `double` (the emitted program's `T<di>`, or
-a hand-written file's `struct D`, `tests/native/rec.c`). `%gsteps n` is the steps checked definition `n` took to check, from the
+a hand-written file's `struct D`, `tests/native/rec.c`); in the emitted program each such field is held
+at its width and read into the program's word (a float by its bits). `%gsteps n` is the steps checked definition `n` took to check, from the
 run or the store's `ok` line.
 
 **Commands.** `#check e : T`, `#same a = b` (equal readings, at a type when either side has one),
@@ -696,7 +697,8 @@ seventeen programs with gcc and runs them, with both printers):
 - **`lib/emitu.cub`**: the C printer with words, pairs and flat data unboxed. Every local,
   parameter and return is typed by inference (a parameter by its uses, a return by its body, calls
   by their callees); a loop of `lower-welim`'s shape is a `for` over typed state; pairs are structs
-  by value; a data type whose layout is a union of structs of words is its typedef by value, with
+  by value; a data type whose layout is a union of structs of words (a field of `UInt32`, `Int64`,
+  `Float32` or `Float64` at its C width) is its typedef by value, with
   `box_d`/`unbox_d` generated where a boxed value meets an unboxed one. Two loads from a buffer
   print as `uint64_t f(V *b) { return ld64(b, 16) + ld64(b, 0); }` under their `ASSUME`s; `fib` by
   word elimination over a pair is a `for` over a `uint64_t` and a `Pr0` with no allocation.

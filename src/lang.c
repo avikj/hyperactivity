@@ -222,7 +222,7 @@ static bool node_eq(Node *a, Node *b) {
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "%delay", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
-    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native",
+    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
 /* the keywords, in an open-addressed table (asked of every symbol the compiler walks) */
@@ -340,6 +340,11 @@ int data_field_type(int d, int c, int k) {
     if (h->list) return -1;
     if (!strcmp(h->s, "Word")) return -2;
     if (!strcmp(h->s, "Bytes")) return -3;
+    /* a primitive field (B12): -10 - its PT_* (Int64, UInt32, Float64, Float32), boxed as a word of its bits */
+    if (!strcmp(h->s, "Int64")) return -10 - PT_I64;
+    if (!strcmp(h->s, "UInt32")) return -10 - PT_U32;
+    if (!strcmp(h->s, "Float64")) return -10 - PT_F64;
+    if (!strcmp(h->s, "Float32")) return -10 - PT_F32;
     return data_lookup(h->s);
 }
 
@@ -706,7 +711,7 @@ int data_checked_index(int d) { return chk_index(d); }
 /* the foreign table (D27) */
 Ffi *FFI; int nffi; static size_t capffi;
 /* an entry's prototype read: the result's and each parameter's type text (up to its name) */
-static int proto_types(const char *text, const char *epat, char rt[64], char pt[8][64]) {
+static int proto_types(const char *text, const char *epat, char rt[64], char pt[NATIVE_MAXW][64]) {
     const char *e = NULL;
     for (const char *q = text; (q = strstr(q, epat)); q++) {
         if (q > text && (isalnum((unsigned char)q[-1]) || q[-1] == '_')) continue;
@@ -721,7 +726,7 @@ static int proto_types(const char *text, const char *epat, char rt[64], char pt[
     size_t rl = (size_t)(e - q); while (rl && q[rl - 1] == ' ') rl--; if (rl > 63) rl = 63;
     memcpy(rt, q, rl); rt[rl] = 0;
     const char *a = e + strlen(epat); int n = 0;
-    while (*a && *a != ')' && n < 8) {
+    while (*a && *a != ')' && n < NATIVE_MAXW) {
         while (*a == ' ' || *a == ',') a++;
         const char *s0 = a; while (*a && *a != ',' && *a != ')') a++;
         const char *s1 = a; while (s1 > s0 && s1[-1] == ' ') s1--;
@@ -793,14 +798,14 @@ static Node *perm_copy(Node *t) {
 }
 static void chksrc_set(long ck, Node *dt) {
     if (ck < 0) return;
-    GROW(CHKSRC, capchksrc, (size_t)ck + 1);
+    { size_t o_ = capchksrc; GROW(CHKSRC, capchksrc, (size_t)ck + 1); if (capchksrc > o_) memset(CHKSRC + o_, 0, (capchksrc - o_) * sizeof *CHKSRC); }   /* (GROW leaves the new entries unset; a definition never given one reads NULL) */
     CHKSRC[ck] = perm_copy(dt);
 }
 /* and its type, desugared (B18's boundary reads a represented parameter or result off it) */
 static Node **CHKTY; static size_t capchkty;
 static void chkty_set(long ck, Node *dT) {
     if (ck < 0) return;
-    GROW(CHKTY, capchkty, (size_t)ck + 1);
+    { size_t o_ = capchkty; GROW(CHKTY, capchkty, (size_t)ck + 1); if (capchkty > o_) memset(CHKTY + o_, 0, (capchkty - o_) * sizeof *CHKTY); }   /* (GROW leaves the new entries unset; a definition never given one reads NULL) */
     CHKTY[ck] = perm_copy(dT);
 }
 /* a data type's representation's conversions (repops), by checked data index: to and from as
@@ -2259,6 +2264,11 @@ static Syn *compile(Node *t) {
             if (t->n < 4 || t->it[1]->list || t->it[1]->s[0] != '#' || t->it[2]->list || t->it[2]->s[0] != '#') die("(%native k g a...)", NULL);
             Syn *s = compile_n(S_PRIM, t, 3, t->n - 3); s->x = O_NATIVE; s->id = atoi(t->it[1]->s + 1); s->slot = atoi(t->it[2]->s + 1); return s;
         }
+        if (IS(h, "%natrep")) {
+            /* (%natrep cv g a1 .. an): cv on closed arguments, g on any with a neutral part (B18) */
+            if (t->n < 4 || t->it[1]->list || t->it[1]->s[0] != '#' || t->it[2]->list || t->it[2]->s[0] != '#') die("(%natrep cv g a...)", NULL);
+            Syn *s = compile_n(S_PRIM, t, 3, t->n - 3); s->x = O_NATREP; s->id = atoi(t->it[1]->s + 1); s->slot = atoi(t->it[2]->s + 1); return s;
+        }
         if (IS(h, "%welimP")) {
             /* (%welimP P w z s): the elimination of a word with its motive, which is for the
              * checker: the machine runs (%welim w z s) */
@@ -3409,11 +3419,9 @@ typedef struct { uint64_t tag, n; void *f[]; } VBox;
  * at its width and alignment (4 for UInt32 and Float32, 8 otherwise, a record its widest), the union
  * after the tag. */
 enum { CK_U64, CK_U32, CK_I64, CK_F32, CK_F64, CK_REC };
-#define CR_MAXC 16
-#define CR_MAXF 16
 typedef struct CRec CRec;
 typedef struct { int kind; long to, from; CRec *sub; size_t off; } CFld;   /* to/from: a represented field's conversions (checked indices), -1 */
-struct CRec { int d, ncons, words; int nf[CR_MAXC]; CFld f[CR_MAXC][CR_MAXF]; size_t size, align; };
+struct CRec { int d, ncons, words; int *nf; CFld **f; size_t size, align; };   /* nf, f: per constructor (no fixed bound: a record crosses while its slots fit NATIVE_MAXW) */
 static CRec **CRECS; static unsigned char *CRECST; static size_t capcrec, capcrecst;   /* per data type: 0 not yet, 1 being made, 2 made, 3 none */
 /* the head symbol of field k of constructor c of d, or NULL */
 static const char *field_head(int d, int c, int k) {
@@ -3446,12 +3454,13 @@ static CRec *crec_of(int d) {
     if (CRECST[d]) return NULL;   /* none, or recursive through its fields */
     CRECST[d] = 1;
     DataInfo *D = &DATA[d]; CRec *r = calloc(1, sizeof *r); r->d = d; r->ncons = D->ncons;
-    bool ok = D->nparams == 0 && D->ncons >= 1 && D->ncons <= CR_MAXC;
+    bool ok = D->nparams == 0 && D->ncons >= 1;
+    if (ok) { r->nf = calloc((size_t)D->ncons, sizeof(int)); r->f = calloc((size_t)D->ncons, sizeof(CFld *)); }
     size_t ualign = 1, usize = 0; int maxw = 0;
     for (int c = 0; ok && c < D->ncons; c++) {
         ConInfo *C = &CON[D->cons[c]];
-        if (C->ndims || C->nrec || C->nfields > CR_MAXF) { ok = false; break; }
-        r->nf[c] = C->nfields; int w = 0; size_t off = 0, al = 1;
+        if (C->ndims || C->nrec) { ok = false; break; }
+        r->nf[c] = C->nfields; r->f[c] = calloc((size_t)(C->nfields ? C->nfields : 1), sizeof(CFld)); int w = 0; size_t off = 0, al = 1;
         for (int j = 0; ok && j < C->nfields; j++) {
             CFld *f = &r->f[c][j]; f->to = f->from = -1;
             if (C->fmult[j] == 0) { ok = false; break; }
@@ -3482,7 +3491,8 @@ static CRec *crec_of(int d) {
         if (al > ualign) ualign = al;
         if (off > usize) usize = off;
     }
-    if (!ok) { CRECST[d] = 3; free(r); return NULL; }
+    if (ok && 1 + maxw > NATIVE_MAXW) ok = false;   /* more slots than a call carries: not by value */
+    if (!ok) { CRECST[d] = 3; if (r->f) for (int c = 0; c < r->ncons; c++) free(r->f[c]); free(r->f); free(r->nf); free(r); return NULL; }
     if (r->ncons == 1) { r->words = maxw; r->align = ualign; r->size = cr_round(usize, ualign); }
     else { r->words = 1 + maxw; r->align = ualign > 8 ? ualign : 8; r->size = cr_round(cr_round(8, ualign) + usize, r->align); }
     CRECS[d] = r; CRECST[d] = 2; return r;
@@ -3567,7 +3577,7 @@ static void cr_open(FILE *m, const CrPend *pend, int np, char **slot, int ns, Cr
         int b = cr_var; cr_var += r->nf[c];
         fprintf(m, " ((%s", CON[DATA[r->d].cons[c]].name); for (int j = 0; j < r->nf[c]; j++) fprintf(m, " %%cro%d", b + j); fputs(") ", m);
         char **s2 = malloc(sizeof(char *) * (size_t)ns); memcpy(s2, slot, sizeof(char *) * (size_t)ns);
-        CrPend *p2 = malloc(sizeof(CrPend) * (size_t)(np + CR_MAXF)); int n2 = 0;
+        CrPend *p2 = malloc(sizeof(CrPend) * (size_t)(np + r->nf[c] + 1)); int n2 = 0;
         for (int i = 1; i < np; i++) p2[n2++] = pend[i];
         int k = p->o;
         if (r->ncons > 1) { char t[16]; snprintf(t, sizeof t, "#%d", c); s2[k++] = strdup(t); }
@@ -3593,7 +3603,7 @@ static Port crec_build(const CRec *r, const uint64_t *rb, int o) {
         if (rb[o] >= (uint64_t)r->ncons) die("native: a struct result's tag names no constructor of", DATA[r->d].name);
         c = (int)rb[o]; k++;
     }
-    Port f[CR_MAXF];
+    Port f[NATIVE_MAXW];
     for (int j = 0; j < r->nf[c]; j++) {
         const CFld *fl = &r->f[c][j];
         if (fl->kind == CK_REC) { f[j] = crec_build(fl->sub, rb, k); k += fl->sub->words; }
@@ -3774,16 +3784,16 @@ static void cr_fin_native(FILE *m, char **s, int ns, void *ctx) {
     fputc(')', m);
 }
 static void native_structs(const char *nm, int n, int k, const CRec **sr, const CRec *rr, int nexp) {
-    int rin[8], rout = -1;
-    for (int i = 0; i < 8; i++) rin[i] = -1;
+    int rin[NATIVE_MAXW], rout = -1;
+    for (int i = 0; i < NATIVE_MAXW; i++) rin[i] = -1;
     int ck0 = checked_index(nm);
     if (ck0 >= 0 && (size_t)ck0 < capchkty && CHKTY[ck0]) {
-        Node *doms[8], *cod; int got = pi_parts(CHKTY[ck0], doms, n, &cod);
+        Node *doms[NATIVE_MAXW], *cod; int got = pi_parts(CHKTY[ck0], doms, n, &cod);
         for (int i = 0; i < got; i++) rin[i] = type_rep(doms[i]);
         if (got == n) rout = type_rep(cod);
     }
     /* the slots' names: %s<i>_<j> for a record parameter's, %r<i> for another's */
-    char **sl = malloc(sizeof(char *) * (size_t)(nexp ? nexp : 1)); int o = 0, off[8];
+    char **sl = malloc(sizeof(char *) * (size_t)(nexp ? nexp : 1)); int o = 0, off[NATIVE_MAXW];
     for (int i = 0; i < n; i++) {
         off[i] = o;
         if (sr[i]) for (int j = 0; j < sr[i]->words; j++) { char b[32]; snprintf(b, sizeof b, "%%s%d_%d", i, j); sl[o++] = strdup(b); }
@@ -3809,7 +3819,7 @@ static void native_structs(const char *nm, int n, int k, const CRec **sr, const 
     fprintf(fm, "))"); fclose(fm); emit(fbuf); free(fbuf); free(call);
     long fb = global_lookup(fbn);
     /* name: the records opened, the native called on the slots */
-    char **s0 = malloc(sizeof(char *) * (size_t)(nexp ? nexp : 1)); CrPend pend[8]; int np = 0;
+    char **s0 = malloc(sizeof(char *) * (size_t)(nexp ? nexp : 1)); CrPend pend[NATIVE_MAXW]; int np = 0;
     for (int i = 0; i < n; i++) {
         char b[64];
         if (rin[i] >= 0) snprintf(b, sizeof b, "(app %s %%a%d)", CHECKED[REPTO[rin[i]]], i); else snprintf(b, sizeof b, "%%a%d", i);
@@ -3927,7 +3937,7 @@ int native_at_build(int at, const char *c, size_t len, const uint64_t *a, uint64
     pthread_mutex_lock(&natat_mu);
     NatAt *t = &NATAT[at];
     char *txt = malloc(len + 1); memcpy(txt, c, len); txt[len] = 0;
-    char rt[64], pt[8][64]; int np = proto_types(txt, "cubical_entry(", rt, pt);
+    char rt[64], pt[NATIVE_MAXW][64]; int np = proto_types(txt, "cubical_entry(", rt, pt);
     bool ok = np == t->n - t->k && !strcmp(rt, "uint64_t");
     for (int i = 0; i < np && ok; i++) if (strcmp(pt[i], "uint64_t")) ok = false;
     if (!ok) { printf("FAIL: native %s at run: the program's entry is not over %d words\n", t->name, t->n - t->k); failures++; free(txt); pthread_mutex_unlock(&natat_mu); return -1; }
@@ -4868,7 +4878,7 @@ static void toplevel(Node *f) {
         if (f->n == (cfile ? 6 : 5) && !keep) die("native: the last word is keep", NULL);
         const char *nm = f->it[1]->s; int n = atoi(f->it[2]->s + 1);
         long g = global_lookup(nm); if (g < 0) die("native: not a definition:", nm);
-        if (n < 1 || n > 6) die("native: one to six arguments:", nm);
+        if (n < 1 || n > NATIVE_MAXW) die("native: one to thirty-two arguments:", nm);
         long steps = 0; size_t len = 0; char *r; const char *entry = "cubical_entry";
         /* item 17: the specialization is named before it is computed — by the program's expression
          * with every checked definition and data type it names replaced by its codebase key (F34:
@@ -4925,15 +4935,17 @@ static void toplevel(Node *f) {
          * in the emitted program (T<di>) or a C file (struct D, D the data type's name); the machine
          * calls it through a trampoline appended to the program (slots in, slots out) and passes such
          * a parameter as its slots */
-        const CRec *sr[8] = { 0 }, *rr = NULL; int nexp = 0; bool structs = false;
+        const CRec *sr[NATIVE_MAXW] = { 0 }, *rr = NULL; int nexp = 0; bool structs = false;
         {
-            char rt[64], pt[8][64], tg[64]; int np = proto_types(r, epat, rt, pt);
+            char rt[64], pt[NATIVE_MAXW][64], tg[64]; int np = proto_types(r, epat, rt, pt);
             if (np == n) {
                 for (int i = 0; i < n; i++) { int d = ctype_data(pt[i], tg); if (d >= 0 && (sr[i] = crec_of(d))) structs = true; }
                 { int d = ctype_data(rt, tg); if (d >= 0 && (rr = crec_of(d))) structs = true; }
                 for (int i = 0; i < n; i++) nexp += sr[i] ? crec_words(sr[i]) : 1;
-                if (structs && (nexp > 8 || (rr && crec_words(rr) > 32))) die("native: a struct crossing with more than eight words of arguments or thirty-two of result:", nm);
-            }
+                /* more than six parameters: through the trampoline too (a direct call covers at most six words) */
+                if (n > 6) structs = true;
+                if (structs && (nexp > NATIVE_MAXW || (rr && crec_words(rr) > NATIVE_MAXW))) die("native: a call with more than thirty-two words of arguments or of result:", nm);
+            } else if (n > 6) die("native: the entry's prototype is not readable, and more than six parameters need the trampoline:", nm);
             char twp[300]; snprintf(twp, sizeof twp, "void %s__tw(", entry);
             if (structs && !strstr(r, twp)) {   /* (a specialization read back from the cache has it already) */
                 char *tb; size_t tl; FILE *tm = open_memstream(&tb, &tl);
@@ -4973,7 +4985,7 @@ static void toplevel(Node *f) {
         char sym[700]; snprintf(sym, sizeof sym, "%s:%s", so, entry);
         /* the entry's prototype decides the marshaling: uint64_t a word (kind 4), V * a boxed value
          * (kind 6: bytes or a constructor, as the emitted runtime's V), void * a handle (kind 7) */
-        unsigned char kind[8] = { 4, 4, 4, 4, 4, 4, 4, 4 }; unsigned char ret = 4; int rdata = -1;
+        unsigned char kind[NATIVE_MAXW]; for (int i = 0; i < NATIVE_MAXW; i++) kind[i] = 4; unsigned char ret = 4; int rdata = -1;
         {
             /* the definition, not a declaration: the occurrence followed by a body */
             char *e = NULL;
@@ -5005,10 +5017,11 @@ static void toplevel(Node *f) {
         if (structs) {
             /* the call is of the slots through the trampoline */
             /* a record's slots are words; another parameter keeps its kind (a V * boxed, a void * a handle), as the result */
-            unsigned char kw[8]; for (int i = 0; i < 8; i++) kw[i] = 4;
+            unsigned char kw[NATIVE_MAXW]; for (int i = 0; i < NATIVE_MAXW; i++) kw[i] = 4;
             { int o = 0; for (int i = 0; i < n; i++) { if (sr[i]) o += crec_words(sr[i]); else kw[o++] = kind[i]; } }
             int k = ffi_add(sym, nexp, kw, rr ? 4 : ret);
             if (!rr) FFI[k].rdata = rdata;
+            FFI[k].keep = keep;
             char tws[760]; snprintf(tws, sizeof tws, "%s__tw", entry);
             FFI[k].tw = dlsym(FFI[k].lib, tws);
             if (!FFI[k].tw) die("native: the trampoline is missing from", so);
@@ -5024,12 +5037,12 @@ static void toplevel(Node *f) {
          * lib/repr.cub's program-rep): the argument is converted by to before the call, the result
          * by from after it, and the definition the call falls back to is the one over the
          * representations (to ∘ name ∘ from), so both paths agree */
-        int rin[8], rout = -1; bool anyrep = false;
-        for (int i = 0; i < 8; i++) rin[i] = -1;
+        int rin[NATIVE_MAXW], rout = -1; bool anyrep = false;
+        for (int i = 0; i < NATIVE_MAXW; i++) rin[i] = -1;
         {
             int ck0 = checked_index(nm);
             if (ck0 >= 0 && (size_t)ck0 < capchkty && CHKTY[ck0]) {
-                Node *doms[8], *cod; int got = pi_parts(CHKTY[ck0], doms, n, &cod);
+                Node *doms[NATIVE_MAXW], *cod; int got = pi_parts(CHKTY[ck0], doms, n, &cod);
                 for (int i = 0; i < got; i++) { rin[i] = type_rep(doms[i]); if (rin[i] >= 0) anyrep = true; }
                 if (got == n) { rout = type_rep(cod); if (rout >= 0) anyrep = true; }
             }
@@ -5047,9 +5060,14 @@ static void toplevel(Node *f) {
             fprintf(fm, "))"); fclose(fm); emit(fbuf); free(fbuf);
             fb = global_lookup(fbn);
         }
-        /* name is now (lam a1..an (%native k g a1..an)); references compiled before keep the definition */
+        /* name is now (lam a1..an (%native k g a1..an)); references compiled before keep the definition.
+         * Over represented values the converting call is its own definition (%natcv), and name is
+         * (lam a… (%natrep cv g a…)): closed arguments take the converting call, an argument with a
+         * neutral part (under a binder) the definition itself, so an open term reads as g does, not as
+         * from (to …) of it */
+        static int ncv; char cvn[64]; snprintf(cvn, sizeof cvn, "%%natcv%d", ncv++);
         char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
-        fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
+        fprintf(m, "(def %s (lam", anyrep ? cvn : nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
         fprintf(m, " ");
         if (rout >= 0) fprintf(m, "(app %s ", CHECKED[REPFROM[rout]]);
         fprintf(m, "(%%native #%d #%ld", k, fb);
@@ -5057,6 +5075,13 @@ static void toplevel(Node *f) {
         fprintf(m, ")"); if (rout >= 0) fprintf(m, ")");
         fprintf(m, "))");
         fclose(m); emit(buf); free(buf);
+        if (anyrep) {
+            long cv = global_lookup(cvn);
+            char *nb; size_t nl; FILE *nm2 = open_memstream(&nb, &nl);
+            fprintf(nm2, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(nm2, " %%a%d", i);
+            fprintf(nm2, " (%%natrep #%ld #%ld", cv, g); for (int i = 0; i < n; i++) fprintf(nm2, " %%a%d", i);
+            fprintf(nm2, ")))"); fclose(nm2); emit(nb); free(nb);
+        }
         int nrep = rout >= 0; for (int i = 0; i < n; i++) nrep += rin[i] >= 0;
         passes++; printf("ok: native %s   [%s%ld steps, %zu bytes of C%s%s%s]\n", nm, spec_hit ? "specialization cached by key, " : "", steps, len, cached ? ", cached" : "", keep ? ", results kept native" : "", nrep ? ", represented values by their representation" : "");
     } else if (!strcmp(h, "layout")) {
@@ -5377,7 +5402,7 @@ long cubical_index(const char *name) { return checked_index(name); }
 static VBox *box_deep(Port p) {
     Cell *c = obs_val(p);
     if (!c) return NULL;
-    if (c->kind == V_WORD && !c->p) { VBox *v = calloc(1, sizeof(VBox)); v->tag = 0; v->n = c->a; return v; }
+    if ((c->kind == V_WORD && !c->p) || c->kind == V_PVAL) { VBox *v = calloc(1, sizeof(VBox)); v->tag = 0; v->n = c->a; return v; }   /* a primitive value: a word of its bits */
     if (c->kind == V_BYTES) { Bytes *b = c->p; size_t bn = b ? b->n : 0; VBox *v = calloc(1, sizeof(VBox) + bn); v->tag = 2; v->n = bn; if (bn) memcpy(v->f, b->b, bn); return v; }
     if (c->kind == V_CON && !CON[c->a].ndims) {
         int nf = CON[c->a].nfields;
