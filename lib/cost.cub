@@ -79,3 +79,125 @@ tbl1 = cost-record #41 #1000 lnil
 -- the store's model has the shape of the table's, with the machine's own figures
 #same store-cost (capp (cglob #3) (cglob #4)) = %wadd (%gsteps #3) #3
 #same navigate-by store-cost #5 (cglob #20) view1 t1 = navr (cglob #20) #2
+-- ---------------------------------------------------------------- the cost model and the choice rule (18.14, §15)
+-- The decision (2026-11-06). A cost model is a value of three measures and their weights: the
+-- steps the machine recorded for the calls a term makes (through %gsteps, or a table), the term's
+-- size (what building it costs), and a latency estimate from a schedule (where each global runs:
+-- on the net, compiled, or across a foreign boundary). A purpose is a value: reach a term a
+-- predicate accepts (a goal), minimize the model's cost, or reach a goal at least cost. The
+-- choice rule is best-first: the frontier ordered by the model's cost of each reachable term, ties
+-- by the term's key (its canonical serialization, compared as a list of words), so the choice
+-- never depends on the order of the view; a visited set keeps the search from cycling; the
+-- budget bounds the expansions. Validity never enters: every term reached is equal to the start
+-- by the identities in view.
+-- weights by repeated addition (weights are small words)
+wtimes a n = if %weq n #0 then #0 else %wadd a (wtimes a (%wsub n #1))
+-- the globals a code mentions (with repetition: a call made twice costs twice)
+code-globs c acc =
+  case c of
+    cglob g → lcons g acc
+    capp f a → code-globs f (code-globs a acc)
+    clam b → code-globs b acc
+    cpair a b → code-globs a (code-globs b acc)
+    cfst p → code-globs p acc
+    csnd p → code-globs p acc
+    clet a b → code-globs a (code-globs b acc)
+    cann a T → code-globs a acc
+    _ → acc
+sum-tbl tbl gs = case gs of lnil → #0; lcons g r → %wadd (case cost-lookup g tbl of none → #0; some s → s) (sum-tbl tbl r)
+-- a schedule's latency estimate: each global placed pl-net (its recorded steps), compiled (one
+-- unit per call) or foreign (a fixed boundary cost)
+data Place = pl-net | pl-compiled | pl-foreign
+lat-of-sched pl =
+  case pl of
+    lnil → lnil
+    lcons e r → lcons (fst e , (case snd e of pl-net → %gsteps (fst e); pl-compiled → #1; pl-foreign → #1000)) (lat-of-sched r)
+-- the model: (weights for steps, size, latency) , the steps table, the latency table
+data CostModel = cmodel (ws : Word) (wz : Word) (wl : Word) (steps : Lst) (lat : Lst)
+cm-cost m c =
+  case m of
+    cmodel ws wz wl st lt →
+      %wadd (wtimes (sum-tbl st (code-globs c lnil)) ws)
+            (%wadd (wtimes (code-size c) wz) (wtimes (sum-tbl lt (code-globs c lnil)) wl))
+-- the store's figures as a steps table for the globals of a term
+store-steps c = store-steps-of (code-globs c lnil)
+store-steps-of gs = case gs of lnil → lnil; lcons g r → lcons (g , %gsteps g) (store-steps-of r)
+-- ---------------------------------------------------------------- keys: a term's canonical serialization
+code-ser c acc =
+  case c of
+    cvar n → lcons #1 (lcons n acc)
+    cglob n → lcons #2 (lcons n acc)
+    clam b → lcons #3 (code-ser b acc)
+    capp f a → lcons #4 (code-ser f (code-ser a acc))
+    cpair a b → lcons #5 (code-ser a (code-ser b acc))
+    cfst p → lcons #6 (code-ser p acc)
+    csnd p → lcons #7 (code-ser p acc)
+    cwlit n → lcons #8 (lcons n acc)
+    cann a T → lcons #9 (code-ser a (code-ser T acc))
+    clet a b → lcons #10 (code-ser a (code-ser b acc))
+    _ → lcons #11 acc
+-- lexicographic order on word lists (a shorter prefix first)
+key-lt a b =
+  case a of
+    lnil → (case b of lnil → false; _ → true)
+    lcons x r → (case b of lnil → false; lcons y s → if %wlt x y then true else if %weq x y then key-lt r s else false)
+-- ---------------------------------------------------------------- purposes
+data Purpose = reach-p (goal : Code → Bool) | minimize | reach-min (goal : Code → Bool)
+goal-pat g = λ t → reaches g t
+p-goal p t = case p of reach-p g → g t; minimize → false; reach-min g → g t
+-- ---------------------------------------------------------------- best-first search
+-- a node: (cost , key) , (term , depth)
+data SNode = snode (cost : Word) (key : Lst) (term : Code) (depth : Word)
+node-of m t d = snode (cm-cost m t) (code-ser t lnil) t d
+node-lt a b =
+  case a of snode ca ka ta da → (case b of snode cb kb tb db → if %wlt ca cb then true else if %weq ca cb then key-lt ka kb else false)
+insert-node n fr = case fr of lnil → lcons n lnil; lcons x r → if node-lt n x then lcons n fr else lcons x (insert-node n r)
+seen t vs = case vs of lnil → false; lcons u r → if code-same t u then true else seen t r
+expand m view d steps fr vs =
+  case steps of
+    lnil → fr
+    lcons s rest → (case s of stepv r t2 → if seen t2 vs then expand m view d rest fr vs else expand m view d rest (insert-node (node-of m t2 (%wsucc d)) fr) vs)
+-- the result: the term chosen, the number of steps to it, its cost, whether the goal was reached
+data Navp = navp (result : Code) (steps : Word) (cost : Word) (reached : Bool)
+nav-of n reached = case n of snode c k t d → navp t d c reached
+better a b = node-lt a b
+search m p view budget fr vs best =
+  case fr of
+    lnil → nav-of best false
+    lcons n rest →
+      (case n of
+         snode c k t d →
+           if p-goal p t then nav-of n true
+           else (let best2 = if better n best then n else best
+                 in if %weq budget #0 then nav-of best2 false
+                    else search m p view (%wsub budget #1) (expand m view d (available view t) rest (lcons t vs)) (lcons t vs) best2))
+-- navigate-best m p n view t: best-first under the model m toward the purpose p, at most n
+-- expansions. For minimize, the least-cost term reached; for a goal, the first goal term in cost
+-- order (none reached: the least-cost term, reached = false)
+navigate-best m p n view t = (let s = node-of m t #0 in search m p view n (lcons s lnil) lnil s)
+-- ---------------------------------------------------------------- readings of the choice rule
+-- f 9 → g 9 | h 9, g x → k x x (larger), k a b → c (smallest), h x → c2 x
+r-k = rule #0 (capp (cglob #41) (cvar #0)) (capp (capp (cglob #43) (cvar #0)) (cvar #0))
+r-c = rule #0 (capp (capp (cglob #43) (cvar #0)) (cvar #1)) (cglob #44)
+r-h2 = rule #0 (capp (cglob #42) (cvar #0)) (capp (cglob #45) (cvar #0))
+view-b = lcons r-g (lcons r-h (lcons r-k (lcons r-c (lcons r-h2 lnil))))
+m-size = cmodel #0 #1 #0 lnil lnil
+-- two purposes, one model: reaching "h ?" stops at h 9; minimizing goes through g to the constant
+#same navigate-best m-size (reach-p (goal-pat (capp (cglob #42) (cvar #0)))) #20 view-b t-f = navp (capp (cglob #42) (cglob #9)) #1 #3 true
+#same navigate-best m-size minimize #20 view-b t-f = navp (cglob #44) #3 #1 false
+-- two models, one purpose: the latency model places #44 across a foreign boundary, c2 compiled,
+-- and f and g on a slow path; minimizing then ends at h 9, where size alone ended at the constant
+m-lat = cmodel #0 #1 #1 lnil (lcons (#40 , #10) (lcons (#41 , #10) (lat-of-sched (lcons (#44 , pl-foreign) (lcons (#45 , pl-compiled) lnil)))))
+#same navigate-best m-lat minimize #20 view-b t-f = navp (capp (cglob #42) (cglob #9)) #1 #3 false
+#same cm-cost m-lat (cglob #44) = #1001
+-- with recorded steps weighing too (g costly), still h; a goal unreached returns the best seen
+m-steps = cmodel #1 #1 #0 (cost-record #41 #50 lnil) lnil
+#same navigate-best m-steps (reach-p (goal-pat (cwlit #99))) #20 view-b t-f = navp (cglob #44) #3 #1 false
+-- ties by key, not by the view's order: a goal accepting both g ? and h ?, reached at equal cost
+-- and depth, gives g 9 (the smaller key) in either order of the view
+goal-gh = λ t → orb (reaches (capp (cglob #41) (cvar #0)) t) (reaches (capp (cglob #42) (cvar #0)) t)
+view-gh2 = lcons r-h (lcons r-g lnil)
+#same navigate-best m-size (reach-p goal-gh) #5 view-gh t-f = navp (capp (cglob #41) (cglob #9)) #1 #3 true
+#same navigate-best m-size (reach-p goal-gh) #5 view-gh2 t-f = navp (capp (cglob #41) (cglob #9)) #1 #3 true
+-- the store's figures as a model: the steps table read from %gsteps
+#same cm-cost (cmodel #1 #0 #0 (store-steps t-f) lnil) t-f = %wadd (%gsteps #40) (%gsteps #9)

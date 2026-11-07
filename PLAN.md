@@ -1376,8 +1376,9 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
     participant can make an invalid step count, because establishment is normalization,
     local and needing no authority, and the store spreads by keys with no center. The query
     optimizer is the existing instance with fixed identities over relational algebra.
-    Essential for the substrate; the cost model and the concrete choice rule are open
-    (section 15).
+    Essential for the substrate. The cost model and the choice rule: DONE 2026-11-06
+    (`lib/cost.cub`: `cmodel` of recorded steps, size and a schedule's latency; purposes
+    `reach-p`/`minimize`/`reach-min`; best-first `navigate-best`, ties by key; 18.14).
 34. ★ DONE (`1c5282a`, `src/store.c`): keys as the SHA-256 of the canonical elaborated form
     (names outside), the store under `CUBICAL_STORE` with one line per accepting checker, a
     definition accepted by the current checker not checked again, `#key`/`#names`/`#history`;
@@ -1423,9 +1424,12 @@ cost, roughly the number of monomial insertions; the proof term is constant.
 - The memory model for relaxed atomics.
 - The configuration value's form (venues, parameters, role) and feedback of consumers'
   instantiations.
-- The cost model (latency claims, schedules, navigation).
-- Navigation (F33): what a step is, is settled; open are the cost model and how purpose is
-  represented in the choice.
+- The cost model (latency claims, schedules, navigation): navigation's form is decided
+  (18.14's status: weighted recorded steps, size and a schedule's latency per global; purpose
+  a predicate or an objective; best-first, ties by key); latency claims for whole programs
+  (end-to-end bounds from a schedule) remain open.
+- Navigation (F33): what a step is, the cost model and the choice rule are settled (18.14,
+  `lib/cost.cub`'s `navigate-best`).
 - Lévy-optimal sharing versus full laziness plus memo.
 - Cartesian cubical and higher observational type theory as alternative preludes.
 - Multiplicities over cubical paths: the usage rules through the composition clauses are to be
@@ -2774,8 +2778,22 @@ Revision 1.
 **Status (2026-11-06).** `lib/match.cub` (matching, instantiation, rewriting at the root,
 at the first position, counting positions), `lib/nav.cub` (views, available steps, choice by
 size with a goal pattern first, navigation to a bound), `lib/rules.cub` (the view from the
-store's identities, read off checked theorems' types; forward and backward). Open as stated
-in 15: the cost model beyond size, and purpose beyond a goal pattern.
+store's identities, read off checked theorems' types; forward and backward). The cost model
+and the choice rule, decided 2026-11-06 (`lib/cost.cub`): a model is a value `cmodel ws wz wl
+steps lat` — weighted recorded steps of the calls a term makes (`%gsteps`, `store-steps`, or a
+table refined by `cost-record`), the term's size, and a schedule's latency estimate (each
+global placed `pl-net` at its recorded steps, `pl-compiled` at one unit a call, `pl-foreign`
+at a fixed boundary cost; `lat-of-sched`); a purpose is a value `reach-p goal | minimize |
+reach-min goal` with the goal a predicate on codes (`goal-pat` makes one of a pattern); the
+choice rule is best-first, the frontier ordered by the model's cost of each reachable term with
+ties broken by the term's key (its canonical serialization `code-ser`, compared
+lexicographically), a visited set, a budget of expansions (`navigate-best`): for a goal the
+first goal term in cost order, for `minimize` the least-cost term reached. The readings show
+one view chosen differently under two purposes (reach `h ?` stops at `h 9`, minimize goes to
+the constant) and under two models (size ends at the constant, the latency model with the
+constant across a foreign boundary ends at `h 9`), and a tie decided by key in either order
+of the view. Open: purpose as a type to inhabit (goal types read by `rules.cub`), and costs
+measured by the specializer's residual rather than the source term.
 
 Revision 1. A design, since this is the open item; stated so it can be criticized.
 
