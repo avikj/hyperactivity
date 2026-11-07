@@ -1,6 +1,6 @@
 # The system: direction, scope and build plan
 
-Revision 7.9, 2026-11-06. Repo avikj/math, `scoped-machine` at `50ffb680` (revision 7.8 was at `dd301c8`; the day's commits are listed in section 12's queue paragraph; the specs of section 18 were written against `9b94b43` and their status paragraphs say what was built). This document lives at `scoped-machine/PLAN.md` from this revision on; it is the single plan and status document — a fresh agent starts here.
+Revision 7.9, 2026-11-06. Repo avikj/math, `scoped-machine` at `a774e2ee` (revision 7.8 was at `dd301c8`; the day's commits are listed in section 12's queue paragraph; the specs of section 18 were written against `9b94b43` and their status paragraphs say what was built). This document lives at `scoped-machine/PLAN.md` from this revision on; it is the single plan and status document — a fresh agent starts here.
 Each revision replaces the last. Section 17 records changes and retractions.
 
 ---
@@ -1125,8 +1125,11 @@ sharing a composition across the dimensions the tube maps apply it at; (2) B18's
 of represented values (layout walks, `V_NATIVE`; the boxed `cubical_call` the emitted C
 calls exists for words, with `cubical_call_w`/`cubical_index` in `src/libcubical.h`); (3) A4's
 bitmask formulas (18.19, designed); (4) E28's unification-based implicits, holes in
-composition lines, generalized variables, transports inserted by matching on indexed
-families; (5) item 30's retraction and positions in errors; (6) F32 over `Int` (needs `Int`
+composition lines, generalized variables, and dependent matching on indexed families (today a
+branch sees the equality field; a recursion returning an indexed type, `vmap : Vec A n → Vec B
+n`, needs the transport written, since the hypothesis is at the outer index — Agda's
+unification of the index at the split is the missing piece, not a motive over the index, which
+would ask the branch for every index); (5) item 30's retraction and positions in errors; (6) F32 over `Int` (needs `Int`
 arithmetic and its laws in `lib/std.cub` first); (7) a hardware memory model for Regions
 (D26's open half); (8) item 10's same-machine Agda comparison; (9) Line B's leftovers: `lib/emitx86.cub` (18.7's
 encoder, ~700 lines, for the latency of re-specialization only since `#native` goes through
