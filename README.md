@@ -701,6 +701,15 @@ seventeen programs with gcc and runs them, with both printers):
   print as `uint64_t f(V *b) { return ld64(b, 16) + ld64(b, 0); }` under their `ASSUME`s; `fib` by
   word elimination over a pair is a `for` over a `uint64_t` and a `Pr0` with no allocation.
   `run.py` runs every program with both printers (`UNBOXED=1`).
+- **`lib/image.cub`**, **`lib/reimport.cub`**: the C++ image (18.9) and its re-import for
+  translation validation. A checked definition becomes a C++20 function (a type parameter a
+  template parameter, a data type structs and a `std::variant`, a case a `std::visit`), read back
+  equal to its source; records of operations become concepts and instances, codata types classes
+  with lazily computed observations, represented types classes wrapping their representation, and
+  `cxx-module` writes the image as a module interface unit. `cxx-image-cfg` specializes the image
+  against a configuration (18.15): the platform's word width, byte order and alignment, and the
+  instantiations consumers recorded (`$CUB_CONFIG_OUT`) as explicit specializations.
+  `IMAGE=1 run.py` compiles twelve programs with g++ and runs them.
 
 ## Measurements
 

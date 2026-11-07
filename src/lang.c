@@ -3185,6 +3185,9 @@ static void checked_group(Node **fs, int n, bool expect) {
         long tyg = global_lookup(ty);
         gs[i] = cofix_declare(fs[i]->it[1]->s, tyg);
         ix[i] = sig_add(fs[i]->it[1]->s, gs[i], tyg, false);
+        /* the body as written (%gcode): the image translates a copattern definition from it, its
+         * value being its stuck head (18.9's codata as classes) */
+        chksrc_set(ix[i], ds(fs[i]->it[3])); chkty_set(ix[i], ds(fs[i]->it[2]));
     }
     for (int i = 0; i < n; i++) cofix_body(gs[i], fs[i]->it[3]);
     /* the group's keys (F34); a group the store holds as checked is not checked again */

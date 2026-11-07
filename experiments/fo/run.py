@@ -268,7 +268,8 @@ UNBOXED = os.environ.get('UNBOXED') == '1'
 # name: (definitions as .cub text, the names exported as {cub name: C++ name}, a C++ main using the
 # header as "image.hpp", expected output, and optionally the names whose re-import must equal the
 # source code (lib/reimport.cub; the default is every name; a definition with an erased parameter
-# re-imports only up to erasure and is listed as []). The header is compiled with g++ -std=c++20.
+# re-imports only up to erasure and is listed as []). The source is what the image translates
+# (def-src: a copattern definition's record as written, any other definition's value). The header is compiled with g++ -std=c++20.
 def enc(s):
     r = 'lnil'
     for b in reversed(s.encode()): r = f'(lcons #{b} {r})'
@@ -333,16 +334,132 @@ fibi n = fst (fibpi n)""", {'fibi': 'fib'},
 #include <cstdio>
 int main() { std::printf("%llu\\n", (unsigned long long) fib(90)); }""", "2880067194370816120"),
 }
-def run_image(name, defs, names, main, expect, validate=None):
+# records of operations as concepts (18.9): a Σ with an operation among its components taken as a
+# parameter is a template parameter constrained by a generated concept; a checked definition of such
+# a record (an instance) is a struct satisfying it and an object of it. The consumer folds with the
+# image's instance and with a struct of its own that satisfies the same concept
+IMAGES['concept'] = ("""fold3c : ((Word → Word → Word) × Word) → Word → Word → Word → Word
+fold3c m a b c = fst m a (fst m b (fst m c (snd m)))
+addmc : (Word → Word → Word) × Word
+addmc = (λ x y → %wadd x y , #0)""", {'fold3c': 'fold3', 'addmc': 'addm'},
+  """#include "image.hpp"
+#include <cstdio>
+struct mulm { cub::word f0(cub::word a, cub::word b) const { return a * b; } cub::word f1_ = 1; };
+static_assert(fold3_k0<mulm>);
+static_assert(!fold3_k0<int>);
+int main() { std::printf("%llu %llu\\n", (unsigned long long) fold3(addm, 1, 2, 3), (unsigned long long) fold3(mulm{}, 2, 3, 4)); }""", "6 24")
+# codata as classes (18.9): a codata type is a class with a lazily computed cell per field and its
+# observations as member functions; a copattern definition's record delays each field (computed at
+# the first observation, then kept). The stream from n observed three tails in: n + 3
+IMAGES['codata'] = ("""codata Swc where
+  shc : Word
+  snc : Swc
+fromc : Word → Swc
+(fromc n).shc = n
+(fromc n).snc = fromc (%wadd n #1)
+nth3c : Swc → Word
+nth3c s = shc (snc (snc (snc s)))
+tl1c : Swc → Swc
+tl1c s = snc s""", {'fromc': 'fromw', 'nth3c': 'nth3', 'tl1c': 'tl1'},
+  """#include "image.hpp"
+#include <cstdio>
+int main() { auto s = fromw(5); std::printf("%llu %llu\\n", (unsigned long long) nth3(s), (unsigned long long) nth3(tl1(s))); }""", "8 9")
+# representations' classes (18.9, B12): a type with a declared representation is a class wrapping
+# its representation (from, to, and of/data through its data form D<d>_v); its constructors and cases
+# go through the representation's own conversions, exported with it. The consumer builds and reads
+# values both through the image's definitions and through the class. bumpi's Int64 addition prints
+# as + and the re-import reads + as word addition, so it is checked by running, not read back
+IMAGES['repcls'] = ("""data CentsI = centsi (c : Int64)
+centsiTo : CentsI → Int64
+centsiTo x = case x of centsi c → c
+centsiFrom : Int64 → CentsI
+centsiFrom w = centsi w
+centsi-tf : (w : Int64) → centsiTo (centsiFrom w) ≡ w
+centsi-tf w = λ i → w
+centsi-ft : (x : CentsI) → centsiFrom (centsiTo x) ≡ x
+centsi-ft x = case x return (λ y → centsiFrom (centsiTo y) ≡ y) of centsi c → λ i → centsi c
+represent CentsI by Int64 where
+  to : CentsI → Int64 = centsiTo
+  from : Int64 → CentsI = centsiFrom
+  to-from : (w : Int64) → to (from w) ≡ w = centsi-tf
+  from-to : (x : CentsI) → from (to x) ≡ x = centsi-ft
+bumpi : CentsI → CentsI
+bumpi x = case x of centsi c → centsi (i64add c c)
+mki : Word → CentsI
+mki w = centsi (i64 w)
+geti : CentsI → Int64
+geti x = case x of centsi c → c""", {'bumpi': 'bumpi', 'mki': 'mki', 'geti': 'geti'},
+  """#include "image.hpp"
+#include <cstdio>
+using C = decltype(mki(0));
+static_assert(sizeof(C) == sizeof(std::int64_t));
+int main() { std::printf("%lld %lld %lld\\n", (long long) geti(bumpi(mki(21))), (long long) bumpi(mki(5)).to(), (long long) geti(C::from(-3))); }""", "42 10 -3", ['mki', 'geti'])
+# the module file (18.9): the same image as a C++20 module interface unit — the includes in the global
+# module fragment, the helpers and the image exported — compiled first (g++ -fmodules-ts); the
+# consumer imports it, and each definition is read back from the unit's text
+IMAGES['module'] = ("""data TLm = tnilm | tconsm (x : Word) (xs : TLm)
+tsumm : TLm → Word
+tsumm l = case l of tnilm → #0; tconsm x xs → %wadd x (rec xs)
+mk3m : Word → TLm
+mk3m w = tconsm w (tconsm #20 (tconsm #300 tnilm))
+twicem : (A : Type) → (A → A) → A → A
+twicem A f a = f (f a)""", {'tsumm': 'tsum', 'mk3m': 'mk3', 'twicem': 'twice'},
+  """import cubimg;
+#include <cstdio>
+int main() { std::printf("%llu %llu\\n", (unsigned long long) tsum(mk3(1)), (unsigned long long) twice<cub::word>([](cub::word x) { return x * 10; }, 7)); }""", "321 700",
+  None, {'img': 'cxx-module ' + enc('cubimg') + ' {tbl} lnil {gs}', 'module': 'cubimg'})
+# the image specialized against a configuration (18.15): its platform decides cub::word, the
+# alignment of every defining struct and the byte order of the byte layer. Here a 32-bit, big-endian
+# target with 16-byte alignment: the word is 4 bytes, the structs are aligned to 16, and a load reads
+# the most significant byte first (the byte set is the last of the eight, not the first as in 'bytes')
+IMAGES['platform'] = ("""ld8p : (b : Bytes 32) → le 16 32 → Word
+ld8p b h = i64toWord (load64 32 b 8 h)
+data TLpl = tnilpl | tconspl (x : Word) (xs : TLpl)
+tsumpl : TLpl → Word
+tsumpl l = case l of tnilpl → #0; tconspl x xs → %wadd x (rec xs)
+mk2pl : Word → TLpl
+mk2pl w = tconspl w (tconspl #20 tnilpl)""", {'ld8p': 'ld8', 'tsumpl': 'tsum', 'mk2pl': 'mk2'},
+  """#include "image.hpp"
+#include <cstdio>
+using L = decltype(mk2(0));
+static_assert(sizeof(cub::word) == 4 && alignof(L) == 16 && cub::big);
+int main() { cub::bytes<32> b{}; b[15] = 42; std::printf("%u %u\\n", (unsigned) ld8(b), (unsigned) tsum(mk2(1))); }""", "42 21",
+  ['tsumpl', 'mk2pl'], {'img': 'cxx-image-cfg (cons (config nil nil #0 (platform #32 big-e #16)) nil) {tbl} lnil {gs}',
+                        'check': lambda h: 'using word = std::uint32_t;' in h and 'align = 16;' in h and 'big = true;' in h})
+# consumers' instantiations (18.15): a template of the image registers each instantiation statically
+# (cub::note); at exit the run writes them as a configuration ($CUB_CONFIG_OUT), which is read back
+# as the next specialization's: lenq at the word becomes an explicit specialization in the second
+# image, compiled with the same consumer
+IMAGES['config'] = ("""data TLr (A : Type) = tnilr | tconsr (x : A) (xs : TLr A)
+lenr : (A : Type) → TLr A → Word
+lenr A l = case l of tnilr → #0; tconsr x xs → %wadd #1 (rec xs)
+mk3r : Word → TLr Word
+mk3r a = tconsr a (tconsr (%wadd a #1) (tconsr (%wadd a #2) tnilr))""", {'lenr': 'lenr', 'mk3r': 'mk3r'},
+  """#include "image.hpp"
+#include <cstdio>
+int main() { std::printf("%llu\\n", (unsigned long long) lenr<cub::word>(mk3r(5))); }""", "3",
+  None, {'roundtrip': ("""#include "image.hpp"
+#include <cstdio>
+int main() { std::printf("%llu\\n", (unsigned long long) lenr<cub::word>(mk3r(7))); }""", "3"),
+         'img2': 'cxx-image-cfg {cfg} {tbl} lnil {gs}',
+         'check2': lambda h: 'template<> cub::word lenr<cub::word>(' in h})
+def run_image(name, defs, names, main, expect, validate=None, opts=None):
+    # opts: 'img' the header's expression ({tbl}, {gs} filled; cxx-image by default); 'module' a
+    # module name: the image is that module interface unit, compiled first, main imports it;
+    # 'check' a function of the header text that must hold (a layout the platform decides);
+    # 'roundtrip' a second main whose run writes the instantiations ($CUB_CONFIG_OUT), read back
+    # as the configuration of a second image ('img2', {cfg} filled) that must compile with main
+    opts = opts or {}
     with tempfile.TemporaryDirectory() as d:
         cub = os.path.join(d, name + '.cub')
         tbl = 'lnil'
         for k, v in reversed(list(names.items())): tbl = f'(lcons (gidx (code {k}) , {enc(v)}) {tbl})'
         gs = 'lnil'
         for k in reversed(list(names.keys())): gs = f'(lcons (gidx (code {k})) {gs})'
-        checks = ''.join(f"#same omap (λ p → snd p) (lnth (reimport-header {tbl} (fst hdr)) #{i}) = omap erase-code (unfold (gidx (code {k})))\n"
+        checks = ''.join(f"#same omap (λ p → snd p) (lnth (reimport-header {tbl} (fst hdr)) #{i}) = omap erase-code (def-src (gidx (code {k})))\n"
                          for i, k in enumerate(names) if validate is None or k in validate)
-        open(cub, 'w').write(defs + f"\nhdr = cxx-image {tbl} lnil {gs}\n#show fst hdr\n#show report-text {tbl} (snd hdr)\n" + checks)
+        img = opts.get('img', 'cxx-image {tbl} lnil {gs}').replace('{tbl}', tbl).replace('{gs}', gs).replace('{cfg}', opts.get('cfg', 'nil'))
+        open(cub, 'w').write(defs + f"\nhdr = {img}\n#show fst hdr\n#show report-text {tbl} (snd hdr)\n" + checks)
         out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'),
                              preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))).stdout
         m = re.search(r'^fst hdr\s*=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
@@ -350,12 +467,28 @@ def run_image(name, defs, names, main, expect, validate=None):
         bs = bytes(int(x) for x in re.findall(r'#(\d+)', m.group(1)))
         r = re.search(r'^report-text.*?=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
         rep = bytes(int(x) for x in re.findall(r'#(\d+)', r.group(1))).decode() if r else ''
-        open(os.path.join(d, 'image.hpp'), 'wb').write(bs)
         cpp = os.path.join(d, 'main.cpp'); open(cpp, 'w').write(main)
         exe = os.path.join(d, name)
-        cc = subprocess.run(['g++', '-std=c++20', '-O2', '-w', '-I', d, '-o', exe, cpp], capture_output=True, text=True)
+        if 'check' in opts and not opts['check'](bs.decode()):
+            print(name, 'FAIL: the header does not hold the expected layout'); print(bs.decode()); return False
+        if 'module' in opts:
+            mi = os.path.join(d, opts['module'] + '.cppm'); open(mi, 'wb').write(bs)
+            cc = subprocess.run(['g++', '-std=c++20', '-fmodules-ts', '-O2', '-w', '-x', 'c++', '-c', mi, '-o', os.path.join(d, 'mod.o')], capture_output=True, text=True, cwd=d)
+            if not cc.returncode:
+                cc = subprocess.run(['g++', '-std=c++20', '-fmodules-ts', '-O2', '-w', '-o', exe, cpp, os.path.join(d, 'mod.o')], capture_output=True, text=True, cwd=d)
+        else:
+            open(os.path.join(d, 'image.hpp'), 'wb').write(bs)
+            cc = subprocess.run(['g++', '-std=c++20', '-O2', '-w', '-I', d, '-o', exe, cpp], capture_output=True, text=True)
         if cc.returncode: print(name, 'FAIL: g++'); print(cc.stderr[:1200]); print(bs.decode()); print(rep); return False
-        got = subprocess.run([exe], capture_output=True, text=True).stdout.strip()
+        cfgf = os.path.join(d, 'config.txt')
+        got = subprocess.run([exe], capture_output=True, text=True, env=dict(os.environ, CUB_CONFIG_OUT=cfgf)).stdout.strip()
+        if 'roundtrip' in opts and got == expect:
+            # the instantiations this run recorded, read back as the next specialization's configuration
+            cfg = open(cfgf).read().strip()
+            o2 = dict(opts); del o2['roundtrip']; o2['img'] = opts['img2']; o2['cfg'] = '(cons (' + cfg + ') nil)'
+            if 'check2' in opts: o2['check'] = opts['check2']
+            print(name, 'ok; recorded:', cfg)
+            return run_image(name + '-cfg', defs, names, opts['roundtrip'][0], opts['roundtrip'][1], validate, o2)
         reimported = '\nFAIL' not in out
         ok = got == expect and 'not exportable' not in rep and reimported
         print(name, 'ok' if ok else f'FAIL: got {got}, expected {expect}' + ('' if reimported else '; the re-import differs from the source'))
@@ -444,5 +577,5 @@ def run_x86(name, defs, args, expect):
         return ok
 if __name__ == '__main__':
     if X86: sys.exit(0 if all(run_x86(n, *X86_PROGS[n]) for n in X86_PROGS) else 1)
-    if IMAGE: sys.exit(0 if all(run_image(n, *IMAGES[n]) for n in IMAGES) else 1)
+    if IMAGE: sys.exit(0 if all(run_image(n, *IMAGES[n]) for n in IMAGES if not sys.argv[1:] or n in sys.argv[1:]) else 1)
     sys.exit(0 if all(run(n, *PROGS[n]) for n in PROGS) else 1)
