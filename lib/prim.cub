@@ -197,6 +197,28 @@ index-update-if n a i j hi hj v =
 -- type on the left, so a function type's representation is stated as a library equivalence)
 Fin→Array : (n : Nat) → Equiv (Fin n → Int64) (Array n)
 Fin→Array n = isoToEquiv {lzero} {Fin n → Int64} {Array n} (atab n) (aindex n) (tabulate-index n) (λ f → funExt {lzero} {lzero} {Fin n} {Int64} {aindex n (atab n f)} {f} (index-tabulate n f))
+-- the interface carried across the equivalence (item 22): a program written against Fin n → Int64
+-- uses application and the functional update fin-set; under atab they are index and update, so a
+-- program on functions is the program on arrays (the paths below are the representation's `by`
+-- laws), and the array program's update stores in place when the buffer is unique (C21, lib/fo.cub)
+fin-set : (n : Nat) → (Fin n → Int64) → Fin n → Int64 → Fin n → Int64
+fin-set n f p v = λ q → if eqb (fst p) (fst q) then v else f q
+-- application is index
+apply-by : (n : Nat) → (f : Fin n → Int64) → (p : Fin n) → aindex n (atab n f) p ≡ f p
+apply-by n f p = index-tabulate n f p
+-- the functional update is update
+fin-set-by : (n : Nat) → (f : Fin n → Int64) → (i : Nat) → (h : le (suc i) n) → (v : Int64) →
+  atab n (fin-set n f (i , h) v) ≡ update n (atab n f) i h v
+fin-set-by n f i h v = array-ext n (atab n (fin-set n f (i , h) v)) (update n (atab n f) i h v)
+  (λ j hj → concat {lzero} {Int64} {index n (atab n (fin-set n f (i , h) v)) j hj} {if eqb i j then v else f (j , hj)} {index n (update n (atab n f) i h v) j hj}
+     (index-tabulate n (fin-set n f (i , h) v) (j , hj))
+     (sym {lzero} {Int64} {index n (update n (atab n f) i h v) j hj} {if eqb i j then v else f (j , hj)}
+        (concat {lzero} {Int64} {index n (update n (atab n f) i h v) j hj} {if eqb i j then v else index n (atab n f) j hj} {if eqb i j then v else f (j , hj)}
+           (index-update-if n (atab n f) i j h hj v)
+           (λ k → if eqb i j then v else index-tabulate n f (j , hj) k))))
+-- tabulate is the identity on functions
+tabulate-by : (n : Nat) → (a : Array n) → atab n (aindex n a) ≡ a
+tabulate-by n a = tabulate-index n a
 -- two dimensions, row-major (mdspan's layout_right): row i column j at i*m + j
 Array2 : Nat → Nat → Type
 Array2 n m = Array (times n m)

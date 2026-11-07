@@ -235,6 +235,22 @@ rt-arr = λ n → tabulate-index n
 eqv : Equiv (Fin 3 → Int64) (Array 3)
 eqv = Fin→Array 3
 #same aindex 3 (fst eqv sq) f1 = i64 #1
+-- the interface across the equivalence (item 22): a program on Fin 3 → Int64 with the functional
+-- update; under atab it is the array program with update (fin-set-by), so writing sq at 2 := 9
+-- and reading back agree in both readings
+sq9 : Fin 3 → Int64
+sq9 = fin-set 3 sq f2 (i64 #9)
+#same sq9 f2 = i64 #9
+#same sq9 f1 = i64 #1
+#same aindex 3 (atab 3 sq9) f2 = i64 #9
+#same aindex 3 (update 3 (atab 3 sq) 2 (le-refl 3) (i64 #9)) f2 = i64 #9
+#same aindex 3 (update 3 (atab 3 sq) 2 (le-refl 3) (i64 #9)) f1 = aindex 3 (atab 3 sq9) f1
+by-9 : atab 3 sq9 ≡ update 3 (atab 3 sq) 2 (le-refl 3) (i64 #9)
+by-9 = fin-set-by 3 sq 2 (le-refl 3) (i64 #9)
+-- byte strings convert by contents (the path above compares two buffers built apart), and only so
+#fail
+by-bad : update 3 (atab 3 sq) 2 (le-refl 3) (i64 #9) ≡ update 3 (atab 3 sq) 2 (le-refl 3) (i64 #8)
+by-bad = λ i → update 3 (atab 3 sq) 2 (le-refl 3) (i64 #9)
 -- two dimensions, row-major: a 2×3 holding its own flat index, so row i column j holds 3i + j
 m23 : Array2 2 3
 m23 = atab 6 (λ p → i64 (fromNat (fst p)))

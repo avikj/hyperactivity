@@ -167,7 +167,7 @@ infer-u sigs env t =
     frec dd x alts → if no-hyps alts then alts-ty sigs env (if is-udata dd then dt-ty dd else tP) (ralts-as-alts alts) else tP
     fproj d c k x → (let tx = infer-u sigs env x in if is-pr tx then pr-k tx k else if is-dt tx then fld-ty (dt-of tx) c k else tP)
     fcall g args → ret-ty sigs g
-    fprim p args → if %weq p P-store64 then tP else if %weq p P-store32 then tP else if %weq p P-bytes then tP else tW
+    fprim p args → if store-any p then tP else if %weq p P-bytes then tP else tW
     flet a b → infer-u sigs (lcons (infer-u sigs env a) env) b
     fif c a b → join-ty (infer-u sigs env a) (infer-u sigs env b)
     floop init body → loop-ty sigs env init body
@@ -409,6 +409,7 @@ num-u sigs env d p args =
          lnil → cat4 (lcons #110 (dec p)) u-lp (emit-at sigs env d tW a) u-rp)
     lnil → s-unsup
 prim-u sigs env d p args =
+  if store-ip p then bytes-u sigs env d p args else
   if %wlt #13 p then num-u sigs env d p args else
   if %wlt #7 p then bytes-u sigs env d p args else
   (case args of
@@ -426,7 +427,7 @@ bytes-u sigs env d p args =
          lcons b r2 →
            (case r2 of
               lnil → cat5 (if %weq p P-load64 then u-ld64 else u-ld32) (emit-at sigs env d tP a) u-comma (emit-at sigs env d tW b) u-rp
-              lcons c r3 → cat7 (if %weq p P-store64 then u-st64 else u-st32) (emit-at sigs env d tP a) u-comma (emit-at sigs env d tW b) u-comma (emit-at sigs env d tW c) u-rp))
+              lcons c r3 → cat7 (if %weq p P-store64 then u-st64 else if %weq p P-store64-ip then s-st64i else if %weq p P-store32-ip then s-st32i else u-st32) (emit-at sigs env d tP a) u-comma (emit-at sigs env d tW b) u-comma (emit-at sigs env d tW c) u-rp))
     lnil → s-unsup
 -- a loop: typed state locals; the body's shape if c then continue (state) else break r prints as
 -- a for with reassignments; any other body falls back to the boxed protocol of lib/emitc.cub

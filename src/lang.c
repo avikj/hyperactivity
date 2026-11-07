@@ -212,7 +212,7 @@ static bool node_eq(Node *a, Node *b) {
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "%delay", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
-    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%ptr-of", "%region-at", "%ffi", "%native",
+    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
 /* the keywords, in an open-addressed table (asked of every symbol the compiler walks) */
@@ -2084,7 +2084,7 @@ static Syn *compile(Node *t) {
             { "%wadd", O_WADD, 2 }, { "%wmax", O_WMAX, 2 }, { "%wsub", O_WSUB, 2 }, { "%welim", O_WELIM, 3 },
             { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 }, { "%gsteps", O_GSTEPS, 1 }, { "%gcode", O_GCODE, 1 }, { "%dnidx", O_DNIDX, 1 },
             /* primitive types and values (B12) */
-            { "%pty", O_PTY, 1 }, { "%bytesty", O_BYTESTY, 1 }, { "%pval", O_PVAL, 2 }, { "%bytes", O_BYTES, 1 }, { "%blen", O_BLEN, 1 }, { "%ptr-of", O_PTROF, 1 }, { "%region-at", O_REGAT, 2 }, { NULL, 0, 0 } };
+            { "%pty", O_PTY, 1 }, { "%bytesty", O_BYTESTY, 1 }, { "%pval", O_PVAL, 2 }, { "%bytes", O_BYTES, 1 }, { "%blen", O_BLEN, 1 }, { "%beq", O_BEQ, 2 }, { "%ptr-of", O_PTROF, 1 }, { "%region-at", O_REGAT, 2 }, { NULL, 0, 0 } };
         /* the primitive operations, (%i64add a b) ...: O_POP1/O_POP2 with the operation in x; the loads and
          * stores by width */
         static const struct { const char *name; int op, n; } PO[] = {

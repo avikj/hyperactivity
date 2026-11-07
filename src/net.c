@@ -1852,7 +1852,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_NTYPE] = "NTYPE",
     [O_CALL] = "CALL",
     [O_WSUCC] = "WSUCC",
-    [O_PTY] = "PTY", [O_BYTESTY] = "BYTESTY", [O_PVAL] = "PVAL", [O_PVAL2] = "PVAL2", [O_POP1] = "POP1", [O_POP2] = "POP2", [O_POP2B] = "POP2B", [O_BYTES] = "BYTES", [O_LOAD] = "LOAD", [O_LOADB] = "LOADB", [O_STORE] = "STORE", [O_STOREB] = "STOREB", [O_STOREC] = "STOREC", [O_BLEN] = "BLEN", [O_PTROF] = "PTROF", [O_REGAT] = "REGAT", [O_REGATA] = "REGATA", [O_FFI] = "FFI", [O_NATIVE] = "NATIVE",
+    [O_PTY] = "PTY", [O_BYTESTY] = "BYTESTY", [O_PVAL] = "PVAL", [O_PVAL2] = "PVAL2", [O_POP1] = "POP1", [O_POP2] = "POP2", [O_POP2B] = "POP2B", [O_BYTES] = "BYTES", [O_LOAD] = "LOAD", [O_LOADB] = "LOADB", [O_STORE] = "STORE", [O_STOREB] = "STOREB", [O_STOREC] = "STOREC", [O_BLEN] = "BLEN", [O_BEQ] = "BEQ", [O_BEQB] = "BEQB", [O_PTROF] = "PTROF", [O_REGAT] = "REGAT", [O_REGATA] = "REGATA", [O_FFI] = "FFI", [O_NATIVE] = "NATIVE",
     [O_PIMULT] = "PIMULT", [O_PIM] = "PIM", [O_FMULT] = "FMULT", [O_FMULT2] = "FMULT2", [O_FMULT3] = "FMULT3", [O_LINEAR] = "LINEAR", [O_GSTEPS] = "GSTEPS", [O_GCODE] = "GCODE", [O_DNIDX] = "DNIDX", [O_GUSAGE] = "GUSAGE", [O_GUSAGE2] = "GUSAGE2",
     [O_WEQ] = "WEQ",
     [O_WLT] = "WLT",
@@ -2765,6 +2765,28 @@ static void interact(Cell *o, Cell *v) {
         Cell *c = cell(V_BYTES, 1); c->x = PT_BYTES; c->p = nb;
         link(P(c, 0), o->port[1]);
         cell_free(o); cell_free(v);
+        return;
+    }
+    case O_BEQ: case O_BEQB: {
+        /* byte strings compared by contents; anything not yet a byte string (a neutral) is not
+         * known equal, so false (conversion is conservative) */
+        need_bool();
+        if (o->kind == O_BEQ) {
+            if (vk != V_BYTES) { era(o->port[1]); era(P(v, 0)); link(con_build(B_FALSE, NULL, NULL), o->port[2]); cell_free(o); return; }
+            Cell *c = cell(O_BEQB, 2); c->p = v->p; v->p = NULL;
+            mv(o, 1, P(c, 0)); mv(o, 2, P(c, 1));
+            cell_free(o); cell_free(v);
+            return;
+        }
+        Bytes *a = o->p; o->p = NULL; bool eq = false;
+        if (vk == V_BYTES) {
+            Bytes *b = v->p; size_t na = a ? a->n : 0, nb = b ? b->n : 0;
+            eq = na == nb && (na == 0 || !memcmp(a->b, b->b, na));
+        }
+        if (a && rcl_dec(&a->rc) == 0) free(a);
+        era(P(v, 0));
+        link(con_build(eq ? B_TRUE : B_FALSE, NULL, NULL), o->port[1]);
+        cell_free(o);
         return;
     }
     case O_BLEN: {

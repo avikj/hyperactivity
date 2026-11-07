@@ -455,7 +455,7 @@ conv-fam A B B2 =
   case %clos B B2 of
     csame ps B3 B4 → if env-pairs ps then true else let x = %var A in conv-ty (B3 x) (B4 x)
     cdiff B3 B4 → let x = %var A in conv-ty (B3 x) (B4 x)
-uconv-head wu v wv =
+uconv-head u wu v wv =
   case wu of
     wpi A B → (case wv of wpi A2 B2 → if conv-ty A A2 then conv-fam A B B2 else false; _ → false)
     wsigma A B → 
@@ -503,7 +503,8 @@ uconv-head wu v wv =
     wwlit n → (case wv of wwlit m → %weq n m; _ → false)
     wpty k n → (case wv of wpty k2 n2 → (if %weq k k2 then (if %weq k #4 then uconv n n2 else true) else false); _ → false)
     wplit k b → (case wv of wplit k2 b2 → andb (%weq k k2) (%weq b b2); _ → false)
-    wbytes n → false
+    -- byte strings: by contents (a neutral one is not known equal)
+    wbytes n → (case wv of wbytes m → (if %weq n m then %beq u v else false); _ → false)
     -- two handles are the same value when they are the same C object
     wnative i k → (case wv of wnative j k2 → %weq i j; _ → false)
     wwplus k x → (case wv of wwplus j y → if %weq k j then uconv x y else false; _ → false)
@@ -516,7 +517,7 @@ uconv-ww u wu v wv =
     wlam g → let x = %var Uw in uconv (u x) (g x)
     wplam q → let i = %dim in uconv (u @ i) (q @ i)
     wpair a b → if uconv (fst u) a then uconv (snd u) b else false
-    _ → uconv-head wu v wv
+    _ → uconv-head u wu v wv
 uconv u v =
   case %view u of
     wsys bs → lall (λ b → let d = fst b in uconv (snd b) (%restrict d v)) bs

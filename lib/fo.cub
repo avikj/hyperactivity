@@ -97,6 +97,17 @@ P-wofi64 = #26
 P-f64ofi64 = #27
 P-i64off64 = #28
 P-f64ofw = #29
+-- a store into a buffer nobody else holds (C21's uniqueness on the byte layer, set by mark-uniq):
+-- the same value as P-store64 / P-store32; the printers store in place instead of copying first
+P-store64-ip = #30
+P-store32-ip = #31
+-- (as booleans by case: orf is defined below)
+store-ip p = if %weq p P-store64-ip then true else %weq p P-store32-ip
+store-any p = if store-ip p then true else (if %weq p P-store64 then true else %weq p P-store32)
+-- a read of a buffer (a load or its length): a read, not a hold
+load-p p = if %weq p P-load64 then true else (if %weq p P-load32 then true else %weq p P-blen)
+plain-p p = if %weq p P-store64-ip then P-store64 else if %weq p P-store32-ip then P-store32 else p
+ip-p p = if %weq p P-store64 then P-store64-ip else if %weq p P-store32 then P-store32-ip else p
 iof v = case v of vi64 x → x; vw w → %i64ofw w; _ → %i64ofw #0
 fof v = case v of vf64 x → x; vw w → %f64ofw w; _ → %f64ofw #0
 bw b = case b of true → #1; false → #0
@@ -171,6 +182,7 @@ eval-fo G e t =
     fproj d c k x → (case eval-fo G e x of vcon d2 c2 fs → lst-nth fs k; _ → vw #0)
     fcall g args → eval-fo G (push-all (eval-list G e args) lnil) (G g)
     fprim p args →
+      if store-ip p then prim-bytes (plain-p p) (eval-list G e args) else
       if %wlt #13 p then prim-num p (eval-list G e args) else
       if %wlt #7 p then prim-bytes p (eval-list G e args) else
       (case eval-list G e args of
@@ -619,7 +631,17 @@ safe v t =
     fif c a b → safe-seq (safe v c) (safe-branch (safe v a) (safe v b))
     fcon d c fs → safe-list v fs
     fcall g args → safe-list v args
-    fprim p args → safe-list v args
+    fprim p args → (if store-any p then (case args of
+                                            lcons x rest → (case x of
+                                                              fvar m → (if %weq m v then (if %wlt (safe-list v rest) #2 then #2 else #4) else safe-list v rest)
+                                                              _ → safe-list v args)
+                                            lnil → #0)
+                     else if load-p p then (case args of
+                                              lcons x rest → (case x of
+                                                                fvar m → (if %weq m v then safe-par #1 (safe-list v rest) else safe-list v rest)
+                                                                _ → safe-list v args)
+                                              lnil → #0)
+                     else safe-list v args)
     fclos g env → safe-list v env
     fnet g args → safe-list v args
     fapply f args → safe-par (safe v f) (safe-list v args)
@@ -653,7 +675,7 @@ fresh t =
     fswitch x alts → fresh-alts alts
     frec d x alts → fresh-ralts alts
     fassume f b → fresh b
-    fprim p args → orf (%weq p P-store64) (orf (%weq p P-store32) (%weq p P-bytes))
+    fprim p args → orf (store-any p) (%weq p P-bytes)
     _ → false
 fresh-alts alts = case alts of lnil → true; lcons a r → andf (fresh (snd (snd a))) (fresh-alts r)
 fresh-ralts alts = case alts of lnil → true; lcons a r → andf (fresh (snd (snd (snd a)))) (fresh-ralts r)
@@ -665,7 +687,12 @@ set-ip v t =
     frec d x alts → frec d (set-ip v x) (set-ip-ralts v alts)
     fproj d c k x → fproj d c k (set-ip v x)
     fcall g args → fcall g (set-ip-list v args)
-    fprim p args → fprim p (set-ip-list v args)
+    fprim p args → (if store-any p then (case args of
+                                            lcons x rest → (case x of
+                                                              fvar m → (if %weq m v then fprim (ip-p p) args else fprim p (set-ip-list v args))
+                                                              _ → fprim p (set-ip-list v args))
+                                            lnil → t)
+                     else fprim p (set-ip-list v args))
     flet a b → flet (set-ip v a) (set-ip (%wsucc v) b)
     fif c a b → fif (set-ip v c) (set-ip v a) (set-ip v b)
     fcon d c fs → fcon d c (set-ip-list v fs)
@@ -702,7 +729,9 @@ mark-uniq t =
     frec d x alts → frec d (mark-uniq x) (mark-ralts alts)
     fproj d c k x → fproj d c k (mark-uniq x)
     fcall g args → fcall g (mark-list args)
-    fprim p args → fprim p (mark-list args)
+    fprim p args → (case args of
+                      lcons x rest → fprim (if andf (store-any p) (fresh x) then ip-p p else p) (mark-list args)
+                      lnil → t)
     fif c a b → fif (mark-uniq c) (mark-uniq a) (mark-uniq b)
     fcon d c fs → fcon d c (mark-list fs)
     fclos g env → fclos g (mark-list env)
@@ -746,6 +775,27 @@ loop-upd = floop (lcons (flit #3) (lcons (fcon #7712 #0 (lcons (flit #0) (lcons 
      (fcon #0 #1 (lcons (fvar #0) lnil)))
 #same (case inplace loop-upd of floop i b → (case b of fif c a e → (case a of fcon d k st → (case lst-nth-fo st #1 of frec dd x alts → (case alts of lcons al r → (case snd (snd (snd al)) of fupd u dd y c k v → u; _ → #9); _ → #9); _ → #9); _ → #9); _ → #9); _ → #9) = #1
 #same eval-fo no-defs lnil (inplace loop-upd) = vcon #7712 #0 (lcons (vw #0) (lcons (vw #16) lnil))
+-- the byte layer (C21 on buffers, item 22's arrays): a store into a fresh buffer, or into a
+-- let-bound one whose other uses are reads before it, stores in place; into a parameter, or beside
+-- an unsequenced read, it copies
+st-fresh = fprim P-store64 (lcons (fprim P-bytes (lcons (flit #16) lnil)) (lcons (flit #8) (lcons (fi64 #9) lnil)))
+#same inplace st-fresh = fprim P-store64-ip (lcons (fprim P-bytes (lcons (flit #16) lnil)) (lcons (flit #8) (lcons (fi64 #9) lnil)))
+st-let = flet (fprim P-bytes (lcons (flit #16) lnil)) (fprim P-store64 (lcons (fvar #0) (lcons (flit #8) (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #0) lnil))) lnil))))
+#same inplace st-let = flet (fprim P-bytes (lcons (flit #16) lnil)) (fprim P-store64-ip (lcons (fvar #0) (lcons (flit #8) (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #0) lnil))) lnil))))
+st-par = fprim P-store64 (lcons (fvar #0) (lcons (flit #8) (lcons (fi64 #9) lnil)))
+#same inplace st-par = st-par
+st-beside = flet (fprim P-bytes (lcons (flit #16) lnil)) (fprim P-add (lcons (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fprim P-store64 (lcons (fvar #0) (lcons (flit #8) (lcons (fi64 #9) lnil)))) (lcons (flit #8) lnil))) lnil)) (lcons (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #8) lnil))) lnil)) lnil)))
+#same inplace st-beside = st-beside
+-- a loop filling an 8-word buffer, the buffer its own state: each iteration's store in place; the
+-- value is unchanged (slot k holds k; 7 + 3 read back)
+loop-buf = flet (floop (lcons (flit #8) (lcons (fprim P-bytes (lcons (flit #64) lnil)) lnil))
+    (fif (fprim P-lt (lcons (flit #0) (lcons (fvar #1) lnil)))
+       (fcon #0 #0 (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (fprim P-store64 (lcons (fvar #0) (lcons (fprim P-mul (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (flit #8) lnil))) (lcons (fprim P-i64ofw (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil))) lnil)) lnil)))) lnil)))
+       (fcon #0 #1 (lcons (fvar #0) lnil))))
+  (fprim P-add (lcons (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #56) lnil))) lnil)) (lcons (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #24) lnil))) lnil)) lnil)))
+#same (case inplace loop-buf of flet l b → (case l of floop i body → (case body of fif c a e → (case a of fcon d k st → (case lst-nth-fo st #1 of fprim p as → p; _ → #99); _ → #99); _ → #99); _ → #99); _ → #99) = P-store64-ip
+#same eval-fo no-defs lnil (inplace loop-buf) = vw #10
+#same eval-fo no-defs lnil loop-buf = vw #10
 -- with hypotheses the rebuild stays a constructor: the alternative runs again on the tail, where
 -- the scrutinee variable is the whole list. The identity on a list, rebuilt node by node
 rec-id = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , fcon #7 #0 lnil))) (lcons (#1 , (#2 , (lcons #1 lnil , fcon #7 #1 (lcons (fvar #2) (lcons (fforce (fvar #0)) lnil))))) lnil))

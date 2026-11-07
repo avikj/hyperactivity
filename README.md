@@ -178,6 +178,12 @@ every index, and `index-update` (a read after a write at the same index is the v
 is the byte layer's law `load64-store64` (trusted) unfolded. A primitive operation on a
 variable is a neutral the checker views (`wprim k args`) and compares argument by argument, so
 such laws follow by unfolding (an operation stuck on a variable used to be an unknown value).
+`Fin→Array n : Equiv (Fin n → Int64) (Array n)` is the interface (item 22): a program written
+against functions uses application and `fin-set n f p v`, and under `atab` they are `index` and
+`update` (`apply-by`, `fin-set-by`). Byte strings convert by their contents (`%beq`). On the
+first-order side a store into a buffer nobody else holds — fresh, or let-bound or loop state
+whose other uses are reads before it — is stored in place (`P-store64-ip`, printed `st64i`, no
+copy); into a parameter or beside an unsequenced read it copies (`lib/fo.cub`'s `mark-uniq`).
 
 **Memory the program does not own.** `ptr-of n b` is the address of a byte string and
 `region-at a n` the `n` bytes at an address, copied in (plan C20; `%ptr-of`, `%region-at`,

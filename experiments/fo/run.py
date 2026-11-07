@@ -37,6 +37,9 @@ prog = sizeof-prog (data-idx (code Tr))""", "24", "struct { struct T"),
  # the byte layer: a 32-byte buffer, 9 stored at 16 (64 bits) and 258 at 4 (32 bits), read back
  'bytes': ("""defs = lcons (#0 , (#0 , flet (fprim P-store32 (lcons (fprim P-store64 (lcons (fprim P-bytes (lcons (flit #32) lnil)) (lcons (flit #16) (lcons (flit #9) lnil)))) (lcons (flit #4) (lcons (flit #258) lnil))))
   (fprim P-add (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #16) lnil))) (lcons (fprim P-load32 (lcons (fvar #0) (lcons (flit #4) lnil))) lnil))))) lnil""", "267"),
+ # in place on the byte layer (C21, item 22): a loop filling an 8-word buffer that is its own
+ # state stores into it without copying (st64i); 7 + 3 read back
+ 'inplace-bytes': ("defs = lcons (#0 , (#0 , inplace loop-buf)) lnil", "10", "st64i("),
  # a code over the byte layer (two loads from an unknown buffer, with their bound proofs and Nat
  # lengths) lowered with the representations consumed (lib/repr.cub), compiled, run on a buffer
  'loads': ("""lam-body f = case f of flam b → b; _ → f

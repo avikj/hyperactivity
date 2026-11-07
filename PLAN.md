@@ -1297,8 +1297,21 @@ identity; linear values are introduced only in `primitive` definitions.
 21. **Status (2026-11-06):** built, `e27eda2c`, `02a4a615` (`fupd`, constructor reuse where the base is the node at hand, uniqueness by use, copy-on-write, in both printers). Spec as written: In-place update: whole values, through parts, copy-on-write, sending (6.4). Essential.
 22. Started (`be7149d`): `Array n = Bytes (times n 8)` with `index`/`update` at a proof,
     `tabulate`, and `index-update` proved from the byte layer's laws (trusted primitives
-    `load64-store64`), possible since stuck primitive operations became neutrals. Open: `Fin n
-    → A` as the interface by a representation equivalence; in place when unique (6.4).
+    `load64-store64`), possible since stuck primitive operations became neutrals. DONE
+    2026-11-06: `Fin n → Int64` as the interface — `Fin→Array` (`967e48e7`) with the operations
+    carried across it, `apply-by` (application is `index`) and `fin-set-by` (the functional
+    update `fin-set` is `update`) in `lib/prim.cub`, read in `tests/prim.cub` (`by-9`; `#fail`
+    `by-bad`); `represent` takes a data type on the left, so a function type's representation is
+    the library equivalence. Found on the way: byte strings never converted unless shared (the
+    checker's `wbytes` case was `false`), so no path between two buffers built apart could
+    check; now `%beq` compares contents (`O_BEQ`, false on a neutral). In place when unique:
+    `lib/fo.cub`'s uniqueness pass covers the byte layer — a store whose base is fresh, or a
+    let-bound / loop-state buffer whose other uses are reads before it (loads are reads, not
+    holds), becomes `P-store64-ip`/`P-store32-ip`, printed `st64i`/`st32i` by both printers
+    (no copy); a parameter or an unsequenced read keeps the copy (`st-par`, `st-beside`);
+    `run.py`'s `inplace-bytes` fills an 8-word buffer in a loop with no copies. The element type
+    is `Int64` (the byte layer's word); `Fin n → A` for other `A` goes through their layouts,
+    which B18's open item (represented values by layout) covers.
 23. DONE (`967e48e7`, `lib/fiber.cub`; used by `6d098a67`'s state programs): a map factors
     through its fibers, `fiberEquiv f : A ≃ (b : B) × fiber f b`, the projection the first
     component. State programs as `A ≃ Σ (b : B), fiber f b` then projection. Valuable.
