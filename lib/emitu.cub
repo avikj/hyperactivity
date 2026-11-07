@@ -173,6 +173,7 @@ infer-u sigs env t =
     floop init body → loop-ty sigs env init body
     fassume f b → infer-u sigs env b
     fforce x → infer-u sigs env x
+    fthunk a → tP
     fupd u dd x c k v → if is-udata dd then dt-ty dd else infer-u sigs env x
     fnet k args → tP
     _ → tP
@@ -215,6 +216,7 @@ use-ty sigs d n t =
     fapply f args → first-some (if is-var d n f then some tP else use-ty sigs d n f) (use-list sigs d n args)
     fassume f b → use-ty sigs d n b
     fforce x → use-ty sigs d n x
+    fthunk a → use-ty sigs d n a
     fupd u dd x c k v → first-some (if is-var d n x then some (if is-udata dd then dt-ty dd else tP) else use-ty sigs d n x) (use-ty sigs d n v)
     _ → none
 is-var d n t = case t of fvar m → %weq m (%wadd d n); _ → false
@@ -254,6 +256,7 @@ clos-targets defs = case defs of lnil → lnil; lcons d r → clos-in (snd (snd 
 clos-in t acc =
   case t of
     fclos g env → clos-list env (lcons g acc)
+    fthunk a → clos-in a acc
     fcon d c fs → clos-list fs acc
     fswitch x alts → clos-alts alts (clos-in x acc)
     frec d x alts → clos-ralts alts (clos-in x acc)
@@ -321,8 +324,10 @@ emit-u sigs env d t =
     fclos g cenv → cat7 u-clo (dec g) u-comma (dec (lst-len cenv)) (args-rest-u sigs env d cenv) u-rp lnil
     fapply f args → apply-u sigs env d (emit-at sigs env d tP f) args
     fassume fact b → cat5 u-assume (fact-u sigs env d fact) u-asmend (emit-u sigs env d b) u-bsend
-    fforce x → emit-u sigs env d x
+    -- force: a pointer (a thunk's closure, or a value held boxed) through force(), a word is itself
+    fforce x → if %weq (infer-u sigs env x) tP then cat3 s-forcec (emit-u sigs env d x) u-rp else emit-u sigs env d x
     fupd u dd x c k v → upd-u sigs env d u x c k v
+    fthunk a → (case a of fapply f args → (case f of fclos g cenv → thunk-c (dec g) (lst-len cenv) (args-rest-u sigs env d cenv); _ → s-unsup); _ → s-unsup)
     fnet k args → net-c (dec k) (lst-len args) (args-rest-u0 sigs env d args)
     _ → s-unsup
 args-rest-u0 sigs env d fs = case fs of lnil → lnil; lcons x xs → (case xs of lnil → emit-at sigs env d tP x; _ → cat3 (emit-at sigs env d tP x) u-comma (args-rest-u0 sigs env d xs))
@@ -488,6 +493,7 @@ flat-in t acc =
     fapply f args → flat-list args (flat-in f acc)
     fassume f b → flat-in b acc
     fforce x → flat-in x acc
+    fthunk a → flat-in a acc
     fupd u dd x c k v → flat-in v (flat-in x (add-dts dd acc))
     _ → acc
 notb-u b = case b of true → false; false → true

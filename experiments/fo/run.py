@@ -18,6 +18,8 @@ defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #6) lnil)))
        (lcons (#1 , (#1 , lam-body (specialize (Word → Word) lnil c5))) lnil)""", "64"),
  # a closure capturing a let-bound value, lifted to its own definition and applied through the dispatcher
  'closure': ("""defs = case lift #1 t-clo of lifted t2 ds k → lcons (#0 , (#0 , t2)) ds""", "15"),
+ # a thunk (fthunk/fforce): lifted to a closure of one ignored argument, forced by force() (its application to 0)
+ 'thunk': ("""defs = case lift #1 t-thunk of lifted t2 ds k → lcons (#0 , (#0 , t2)) ds""", "22"),
  # a law from the store (plusw-zero-l, a checked theorem) consumed by the specializer: the body
  # lowered and compiled is the identity, not the recursion plusw unfolds to
  'law': ("""lam-body f = case f of flam b → b; _ → f
@@ -40,11 +42,12 @@ prog = sizeof-prog (data-idx (code Tr))""", "24", "struct { struct T"),
  'loads': ("""lam-body f = case f of flam b → b; _ → f
 defs = lcons (#0 , (#0 , fcall #1 (lcons buf2 lnil))) (lcons (#1 , (#1 , lam-body sum2)) lnil)""", "14", "ASSUME(((16 + 8) < (32 + 1)));"),
  # structural recursion: the length of a list, written as a case with rec, lowered to a recursion
- # form, lifted to a C function that calls itself on the field, run on a three-element list
+ # form, lifted to a C function that calls itself on the field, run on a three-element list; the
+ # hypothesis is read as the direct recursive call (through force(), the identity on its value)
  'rec': ("""len-main t2 = fapply t2 (lcons (fcon (didx (code LW)) #1 (lcons (flit #7) (lcons lw3 lnil))) lnil)
 len-base = lcons (gidx (code zw) , (#0 , flit #0)) (lcons (gidx (code sw) , (#1 , fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))) lnil)
 len-prog = case lift #10 (lower c-len) of lifted t2 ds k → lcons (#0 , (#0 , len-main t2)) (lapp2 len-base ds)
-prog = emit-prog len-prog""", "3", "f_138(f_10(v2))"),
+prog = emit-prog len-prog""", "3", "f_138(force(f_10(v2)))"),
  # a derived program compiled: the equality on Nat read off the data table (lib/derive.cub),
  # lowered, lifted (the recursion a C function, the inner λ a closure through the dispatcher),
  # applied to 2 and 2 then to 2 and 1; Bool is a word in the form: 10*eq(2,2) + eq(2,1)

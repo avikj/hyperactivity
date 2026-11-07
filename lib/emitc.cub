@@ -52,7 +52,7 @@ s-xbind = (lcons #86 (lcons #32 (lcons #42 (lcons #120 (lcons #32 (lcons #61 (lc
 s-switchx = (lcons #59 (lcons #32 (lcons #115 (lcons #119 (lcons #105 (lcons #116 (lcons #99 (lcons #104 (lcons #32 (lcons #40 (lcons #120 (lcons #45 (lcons #62 (lcons #116 (lcons #97 (lcons #103 (lcons #32 (lcons #45 (lcons #32 (lcons #49 (lcons #41 (lcons #32 (lcons #123 (lcons #32 lnil))))))))))))))))))))))))
 s-clo = (lcons #109 (lcons #107 (lcons #99 (lcons #40 (lcons #57 (lcons #57 (lcons #57 (lcons #57 (lcons #57 (lcons #57 (lcons #32 (lcons #43 (lcons #32 lnil)))))))))))))
 s-apply = (lcons #97 (lcons #112 (lcons #112 (lcons #108 (lcons #121 (lcons #40 lnil))))))
-s-applyhead = (lcons #115 (lcons #116 (lcons #97 (lcons #116 (lcons #105 (lcons #99 (lcons #32 (lcons #86 (lcons #32 (lcons #42 (lcons #97 (lcons #112 (lcons #112 (lcons #108 (lcons #121 (lcons #40 (lcons #86 (lcons #32 (lcons #42 (lcons #102 (lcons #44 (lcons #32 (lcons #86 (lcons #32 (lcons #42 (lcons #97 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #115 (lcons #119 (lcons #105 (lcons #116 (lcons #99 (lcons #104 (lcons #32 (lcons #40 (lcons #102 (lcons #45 (lcons #62 (lcons #116 (lcons #97 (lcons #103 (lcons #32 (lcons #45 (lcons #32 (lcons #49 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #41 (lcons #32 (lcons #123 (lcons #32 lnil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+s-applyhead = (lcons #115 (lcons #116 (lcons #97 (lcons #116 (lcons #105 (lcons #99 (lcons #32 (lcons #86 (lcons #32 (lcons #42 (lcons #97 (lcons #112 (lcons #112 (lcons #108 (lcons #121 (lcons #40 (lcons #86 (lcons #32 (lcons #42 (lcons #102 (lcons #44 (lcons #32 (lcons #86 (lcons #32 (lcons #42 (lcons #97 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #115 (lcons #119 (lcons #105 (lcons #116 (lcons #99 (lcons #104 (lcons #32 (lcons #40 (lcons #40 (lcons #102 (lcons #45 (lcons #62 (lcons #116 (lcons #97 (lcons #103 (lcons #32 (lcons #45 (lcons #32 (lcons #49 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #41 (lcons #32 (lcons #37 (lcons #32 (lcons #49 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #41 (lcons #32 (lcons #123 (lcons #32 lnil))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 s-applyend = (lcons #100 (lcons #101 (lcons #102 (lcons #97 (lcons #117 (lcons #108 (lcons #116 (lcons #58 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #117 (lcons #110 (lcons #115 (lcons #117 (lcons #112 (lcons #112 (lcons #111 (lcons #114 (lcons #116 (lcons #101 (lcons #100 (lcons #40 (lcons #41 (lcons #59 (lcons #32 (lcons #125 (lcons #32 (lcons #125 (lcons #10 lnil)))))))))))))))))))))))))))))))))))
 s-casef = (lcons #99 (lcons #97 (lcons #115 (lcons #101 (lcons #32 lnil)))))
 s-retf = (lcons #58 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #102 (lcons #95 lnil)))))))))))
@@ -126,7 +126,8 @@ emit d t =
     fclos g env → cat7 s-clo (dec g) s-comma (dec (lst-len env)) (args-rest d env) s-close lnil
     fapply f args → apply-c d (emit d f) args
     fassume fact b → cat5 s-assume (fact-c d fact) s-asmend (emit d b) s-bsend2
-    fforce x → emit d x
+    fforce x → cat3 s-forcec (emit d x) s-close
+    fthunk a → (case a of fapply f args → (case f of fclos g env → thunk-c (dec g) (lst-len env) (args-rest d env); _ → s-unsup); _ → s-unsup)
     fupd u dd x c k v → cat7 (if %weq u #1 then s-upd-ip else s-upd-cp) (emit d x) (if %weq u #1 then s-upd-f else s-upd-fc) (dec k) s-upd-set (emit d v) s-upd-end
     fnet k args → net-c (dec k) (lst-len args) (args-c d args)
     frec dd x alts → if no-hyps alts then emit d (fswitch x (ralts-as-alts alts)) else s-unsup
@@ -219,7 +220,17 @@ emit-def g n body = cat6 s-fnhead (dec g) s-open (if %weq n #0 then s-void else 
 proto-c g n = cat6 s-fnhead (dec g) s-open (if %weq n #0 then s-void else params-c n #0) (lcons #41 lnil) (lapp s-semi (lcons #10 lnil))
 emit-prog defs = cat4 s-runtime (protos defs) (dispatch defs) (lapp (defs-c defs) s-main)
 -- the dispatcher: a closure of definition g with n − 1 captured values applied to one argument
-dispatch defs = cat3 s-applyhead (dispatch-cases defs) s-applyend
+dispatch defs = cat4 s-applyhead (dispatch-cases defs) s-applyend s-force
+-- force: a thunk (lift makes it a closure of one ignored argument) applied to 0; any other value
+-- is itself (a recursion's hypothesis is a value once lifted)
+s-forcec = (lcons #102 (lcons #111 (lcons #114 (lcons #99 (lcons #101 (lcons #40 lnil))))))
+s-force = (lcons #115 (lcons #116 (lcons #97 (lcons #116 (lcons #105 (lcons #99 (lcons #32 (lcons #86 (lcons #32 (lcons #42 (lcons #102 (lcons #111 (lcons #114 (lcons #99 (lcons #101 (lcons #40 (lcons #86 (lcons #32 (lcons #42 (lcons #118 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #105 (lcons #102 (lcons #32 (lcons #40 (lcons #118 (lcons #45 (lcons #62 (lcons #116 (lcons #97 (lcons #103 (lcons #32 (lcons #62 (lcons #61 (lcons #32 (lcons #51 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #41 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #118 (lcons #45 (lcons #62 (lcons #102 (lcons #91 (lcons #48 (lcons #93 (lcons #59 (lcons #32 (lcons #105 (lcons #102 (lcons #32 (lcons #40 (lcons #118 (lcons #45 (lcons #62 (lcons #116 (lcons #97 (lcons #103 (lcons #32 (lcons #60 (lcons #32 (lcons #50 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #41 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #118 (lcons #59 (lcons #32 (lcons #86 (lcons #32 (lcons #42 (lcons #114 (lcons #32 (lcons #61 (lcons #32 (lcons #97 (lcons #112 (lcons #112 (lcons #108 (lcons #121 (lcons #40 (lcons #118 (lcons #44 (lcons #32 (lcons #109 (lcons #107 (lcons #119 (lcons #40 (lcons #48 (lcons #41 (lcons #41 (lcons #59 (lcons #32 (lcons #118 (lcons #45 (lcons #62 (lcons #116 (lcons #97 (lcons #103 (lcons #32 (lcons #61 (lcons #32 (lcons #51 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #48 (lcons #59 (lcons #32 (lcons #118 (lcons #45 (lcons #62 (lcons #102 (lcons #91 (lcons #48 (lcons #93 (lcons #32 (lcons #61 (lcons #32 (lcons #114 (lcons #59 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #114 (lcons #59 (lcons #32 (lcons #125 (lcons #10 lnil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+-- a thunk: the closure lift made of it, tagged 2000000 + g (the dispatcher takes both tag ranges,
+-- force() only this one), computed once: force() stores the value in the first field and retags
+-- the cell 3000000 (a thunk without captures gets one field for it)
+thunk-c g n args = if %weq n #0 then cat3 s-thk g s-thk0 else cat7 s-thk g s-comma (dec n) args s-close lnil
+s-thk0 = (lcons #44 (lcons #32 (lcons #49 (lcons #44 (lcons #32 (lcons #109 (lcons #107 (lcons #119 (lcons #40 (lcons #48 (lcons #41 (lcons #41 lnil))))))))))))
+s-thk = (lcons #109 (lcons #107 (lcons #99 (lcons #40 (lcons #49 (lcons #57 (lcons #57 (lcons #57 (lcons #57 (lcons #57 (lcons #57 (lcons #32 (lcons #43 (lcons #32 lnil))))))))))))))
 dispatch-cases defs =
   case defs of
     lnil → lnil

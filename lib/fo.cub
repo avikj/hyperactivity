@@ -368,6 +368,15 @@ lift k t =
     floop init body → (case lift-list k init of lifted2 is ds k2 → (case lift k2 body of lifted b2 ds2 k3 → lifted (floop is b2) (lapp2 ds ds2) k3))
     fapply f args → (case lift k f of lifted f2 ds k2 → (case lift-list k2 args of lifted2 as ds2 k3 → lifted (fapply f2 as) (lapp2 ds ds2) k3))
     fupd u dd x c j v → (case lift k x of lifted x2 ds k2 → (case lift k2 v of lifted v2 ds2 k3 → lifted (fupd u dd x2 c j v2) (lapp2 ds ds2) k3))
+    -- a thunk is lifted to a closure over its free variables taking one ignored argument (the
+    -- printers have closures of one argument through the dispatcher), kept under fthunk as the
+    -- suspended application of that closure to 0: the evaluator forces it by evaluating the
+    -- application, and a printer builds a closure tagged as a thunk, which its force() applies.
+    -- Lifted recursion hypotheses are forced too and are values, which force leaves alone; a
+    -- thunk forced twice is computed twice (the first-order form shares by let, not by memoized
+    -- suspensions)
+    fthunk a → (case lift k (flam (shift-at #0 #1 a)) of lifted c ds k2 → lifted (fthunk (fapply c (lcons (flit #0) lnil))) ds k2)
+    fforce x → (case lift k x of lifted x2 ds k2 → lifted (fforce x2) ds k2)
     frec dd x alts →
       (case lift k x of
          lifted x2 ds k2 →
@@ -480,6 +489,12 @@ lapp2 l m = case l of lnil → m; lcons x xs → lcons x (lapp2 xs m)
 table-of defs g = case defs of lnil → flit #0; lcons d r → if %weq (fst d) g then snd (snd d) else table-of r g
 -- (λ x → x + c) with c captured, lifted and applied: 5 + 10
 t-clo = flet (flit #10) (fapply (flam (fprim P-add (lcons (fvar #0) (lcons (fvar #1) lnil)))) (lcons (flit #5) lnil))
+-- a thunk over a let-bound value, forced twice and the forcings added: 10 + 1 twice = 22, before
+-- and after lifting (the thunk a closure, force its application to 0)
+t-thunk = flet (flit #10) (flet (fthunk (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))) (fprim P-add (lcons (fforce (fvar #0)) (lcons (fforce (fvar #0)) lnil))))
+defs-table ds g = case ds of lnil → flit #0; lcons d r → if %weq (fst d) g then snd (snd d) else defs-table r g
+#same eval-fo lnil lnil t-thunk = vw #22
+#same (case lift #1 t-thunk of lifted t2 ds k → eval-fo (defs-table ds) lnil t2) = vw #22
 #same (case lift #1 t-clo of lifted t2 ds k → eval-fo (table-of ds) lnil t2) = vw #15
 #same (case lift #1 t-clo of lifted t2 ds k → k) = #2
 -- the lifted definition captures one variable: arity 2
