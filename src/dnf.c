@@ -22,8 +22,9 @@ long stat_payloads;
  * an endpoint face) live once, made on first use and never freed; retaining or releasing one does
  * nothing. These are most of the formulas a run makes. */
 #define IMMORTAL 0x40000000u
-static Clause *cl_new(uint32_t n) { Clause *c = malloc(sizeof(Clause) + n * sizeof(uint64_t)); c->rc = 1; c->n = n; LIVE(1); return c; }
-static Dnf *dnf_new(uint32_t n) { Dnf *d = malloc(sizeof(Dnf) + n * sizeof(Clause *)); d->rc = 1; d->n = n; LIVE(1); return d; }
+long stat_dnf_allocs, stat_cl_allocs, stat_cl_lits, stat_dnf_clauses;
+static Clause *cl_new(uint32_t n) { Clause *c = malloc(sizeof(Clause) + n * sizeof(uint64_t)); c->rc = 1; c->n = n; LIVE(1); cnt_add(&stat_cl_allocs, 1); cnt_add(&stat_cl_lits, n); return c; }
+static Dnf *dnf_new(uint32_t n) { Dnf *d = malloc(sizeof(Dnf) + n * sizeof(Clause *)); d->rc = 1; d->n = n; LIVE(1); cnt_add(&stat_dnf_allocs, 1); cnt_add(&stat_dnf_clauses, n); return d; }
 static inline bool imm(const uint32_t *rc) { return (net_solo ? *rc : __atomic_load_n(rc, __ATOMIC_RELAXED)) & IMMORTAL; }   /* the bit never changes once set */
 Clause *clause_retain(Clause *c) { if (!imm(&c->rc)) rc_inc(&c->rc); return c; }
 void clause_release(Clause *c) { if (c && !imm(&c->rc) && rc_dec(&c->rc) == 0) { free(c); LIVE(-1); } }

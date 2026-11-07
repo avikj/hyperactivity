@@ -4282,6 +4282,7 @@ static void prof_print(void) {
         for (int i = 0; i < prof_n; i++) ix[i] = i;
         for (int i = 0; i < prof_n; i++) for (int j = i + 1; j < prof_n; j++) if (prof_count[ix[j]] > prof_count[ix[i]]) { int t = ix[i]; ix[i] = ix[j]; ix[j] = t; }
         for (int i = 0; i < prof_n && i < 40; i++) fprintf(stderr, "%12ld  %s\n", prof_count[ix[i]], prof_name[ix[i]]);
+        { extern long stat_dnf_allocs, stat_cl_allocs, stat_cl_lits, stat_dnf_clauses; fprintf(stderr, "formulas: %ld Dnf allocations (%ld clauses), %ld Clause allocations (%ld literals); %ld payloads live\n", stat_dnf_allocs, stat_dnf_clauses, stat_cl_allocs, stat_cl_lits, stat_payloads); }
         stat_gather_kinds();
         for (int k = 0; k < K_END; k++) if (stat_kind[k]) fprintf(stderr, "kind %3d: %ld\n", k, stat_kind[k]);
         for (int k = 0; k < 64; k++) if (prof_dupk[k] || prof_erak[k]) fprintf(stderr, "value kind %3d: dup %ld era %ld\n", k, prof_dupk[k], prof_erak[k]);

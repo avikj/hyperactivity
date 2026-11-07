@@ -1178,7 +1178,9 @@ port (A10b) is the checker at scale and gates E28.
    its compiled syntax at every reference (one cell, no copy); any other is copied lazily one
    level at a time from the held value, named by the definition's key.
 4. Intervals, faces, substitutions in the cell. Essential. Partly DONE; the bitmask design
-   is 18.19 (written 2026-11-06, not built). **Bitmask formulas
+   is 18.19, CLOSED by measurement 2026-11-06 (formulas average 1.3 clauses of 1.26 literals and
+   all formula work is under 1% of a run; `maxlev` and `lookup` in `lang.c` are the hotspots,
+   A9's). **Bitmask formulas
    are a decision, not a remainder**: dimensions are 64-bit names never reused, and bitmasks
    want per-scope indices, so this changes how formulas name dimensions; worth doing (Dnf
    allocations are the remaining payload traffic) and to be designed as such.
@@ -2749,6 +2751,20 @@ checks with no primitive.
 the `squash` branch; every suite unchanged across workers and memo on/off.
 
 ### 18.19 A4 — Bitmask formulas: a design note (2026-11-06)
+
+**Status (2026-11-06, measured before building).** The design below was costed against the
+formulas the machine actually makes, with counters added to `src/dnf.c` (printed by
+`CUBICAL_PROFILE`): the Brunerie run (library and number, 3.9M steps) allocates 103,568 `Dnf`
+payloads holding 134,222 clauses and 40,317 `Clause` payloads holding 50,693 literals — 1.3
+clauses per formula, 1.26 literals per clause, one payload allocation per 27 steps; `g8` the
+same shape (92,922 / 31,439). Under `gprof` every formula function together is below 1% of the
+run (`dnf_release` 1.8M calls, `iv_subst` 654k, `dnf_meet` 87k, `dnf_join` 69k, none
+registering a sample); the top of the profile is the compiler's `maxlev` (24%, 2.4M calls)
+and the name `lookup` (9%), both load-time work of `src/lang.c` — A9's domain, not A4's. The
+mask form would remove at most 144k small allocations and shorten merges of 1–2 literals:
+below measurement. Closed by measurement, like item 7: not built, the design kept for the day
+a workload makes formulas large (deep cubes at generic dimensions, A8's family, are where to
+look). The counters stay.
 
 Today a formula is a `Dnf` of clauses of literals `dim << 1 | polarity` over 64-bit dimension
 names never reused (`src/dnf.c`); meet, join, negation and substitution allocate; the
