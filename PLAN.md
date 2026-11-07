@@ -1335,8 +1335,9 @@ identity; linear values are introduced only in `primitive` definitions.
 24. **Status (2026-11-06):** built as `lib/proc.cub` (Church form, handlers, worlds, replay), its guarded form `GProc` (`5b9de865`), `lib/session.cub`, `lib/choreo.cub` (`6d098a67`); projection as specialization against the role (2026-11-06,
 `tests/choreo-spec.cub`): the global program `λ m → project-raw m g` over a three-party
 choreography, specialized with the role a now value (`lib/specialize.cub`'s `residual`: 18.6 step
-1, the schedule's leading st-now binders applied to the environment's codes, then normalization
-and rewriting), leaves each role's local process as its residual, equal to the one written by
+1, the schedule's st-now binders applied to the environment's codes — wherever they stand: a now
+binder after run-time ones is specialized under their λs, `λ x → c x v`, 2026-11-07 — then
+normalization and rewriting), leaves each role's local process as its residual, equal to the one written by
 hand (roles 1, 2, 3; the residuals differ pairwise, run under a scripted world); left at run
 time, the role stays a λ. Spec as written: The process library: interfaces, guarded trees, handlers, signature inclusion, push
     events, session types, choreographic projection (7.1, 7.3). Consequence plus library.

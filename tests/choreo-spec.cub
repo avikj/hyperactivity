@@ -64,3 +64,13 @@ run3 = runp LocS Unit LocSt3 (eval-g lnil (res #3)) loc-world3 (nil , cons #0 (c
 -- role 2's residual: receives 5, picks 0, tells it, sends 7
 run2 = runp LocS Unit LocSt3 (eval-g lnil (res #2)) loc-world3 (nil , cons #5 nil)
 #same fst (snd run2) = cons #7 (cons #0 nil)
+-- a now binder after a run-time one (item 24's limit): specialized under the run-time λ
+sch-second = sched #0 (lcons (#1 , st-now) lnil) lnil
+add-xk = code (λ (x : Word) (k : Word) → plusw x k)
+#same residual sch-second (Word → Word) lnil add-xk (lcons (cwlit #3) lnil) = normalize (Word → Word) (code (λ (x : Word) → plusw x #3))
+-- two run-time binders around a now one, the now value used under both
+sch-mid = sched #0 (lcons (#1 , st-now) lnil) lnil
+mid3 = code (λ (x : Word) (k : Word) (y : Word) → plusw (plusw x k) y)
+#same residual sch-mid (Word → Word → Word) lnil mid3 (lcons (cwlit #4) lnil) = normalize (Word → Word → Word) (code (λ (x : Word) (y : Word) → plusw (plusw x #4) y))
+-- and the leading-binder reading is unchanged
+#same residual sch-role (Word → Word) lnil add-xk (lcons (cwlit #2) lnil) = normalize (Word → Word) (code (λ (k : Word) → plusw #2 k))
