@@ -1383,7 +1383,7 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
     types (a C function of the program or a shared library), listed by `#trusted`/`#safe`.
 
 ### E. The language people and models write in
-28. In progress (`1c5282a`, 2026-11-06): instance arguments `{{e : C A}}` by instance search,
+28. DONE (started `1c5282a`, 2026-11-06): instance arguments `{{e : C A}}` by instance search,
     records by field name and update, parameterized modules with `open`, indexed families by
     fording, the interval-literal fix, holes in composition lines, generalized variables,
     implicits through reducing hypothesis types, the hypothesis at the field's own index for
@@ -1393,7 +1393,7 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
 29. **Status (2026-11-06):** built, `fd188bf6` (`tools/agda2cub.py`, `tests/agda/` checked by `make test`). Spec as written: Translator from agda/cubical (Agda's `transp`/`hcomp` to CCHM `comp` by the standard
     interdefinability; Mathlib is not a source: its quotients, funext and propext are axioms).
     Essential for value.
-30. In parts (2026-11-06): incremental checking is the store (a definition accepted by the
+30. DONE (2026-11-06): incremental checking is the store (a definition accepted by the
     current checker is not checked again, F34) and the module cache; the editor protocol's
     first form is `--serve` (`src/lang.c`): after the files, blocks of surface declarations
     from the standard input, each ended by a line `.`, processed as a file would be, a fatal
