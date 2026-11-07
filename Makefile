@@ -74,6 +74,7 @@ test: build/cubical build/cubical-asan
 	# --serve: blocks ended by `.`, #retract hides a checked definition so the name is declared again (item 30)
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub --serve < tests/serve/retract.in > build/serve.out 2>&1; \
 	grep -q "^retracted twoN" build/serve.out && [ "$$(grep -c '^ok: ' build/serve.out)" -ge 5 ] && ! grep -q "^FAIL\|^error" build/serve.out || { echo "serve: retraction failed"; tail build/serve.out; exit 1; }; echo "serve: retraction ok"
+	python3 tests/lsp/test_lsp.py
 	# Brunerie's number (Ljungström's brunerie', an untyped port): -2, with one and with four workers
 	for w in 0 4; do CUBICAL_WORKERS=$$w ./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub \
 	  experiments/brunerie/brunerie.cub experiments/brunerie/run-brunerie.cub | grep -A1 -x brunerie | grep -q "= negsuc (suc zero) " \
