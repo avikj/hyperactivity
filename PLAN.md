@@ -1120,7 +1120,7 @@ in-place update (`e27eda2c`), D24's guarded form (`5b9de865`), D26 (`43e8fb10`,
 `38c1fa89`), F31's remaining pieces (`896713ea`, `e1f33110`, `5b1b57f9`), F32's directed
 search and bridges (`89ec3e0e`, `d1e5f790`), item 29 (`fd188bf6`), `%gsteps` (`c20116d7`),
 `--serve` (`50ffb680`), the rewriting discipline (`bd21c486`). What remains, in order of
-value: (1) A8's next step — off the queue as of 2026-11-07 (18.16's A8c status: sharing by key never applies, 0 of 311 compositions with keyed inputs; the watermark bound cut nothing, the rest unbuilt behind wires with no back pointer; the generic 6-cube past a 2.5 GB cap); not formal compositions in path types (tried, withdrawn, 18.16):
+value: (1) A8's next step — off the queue as of 2026-11-07 (18.16's A8d status: dimension-invariant keys built, no keyed composition repeats, keys alone +1–4% steps, withdrawn; A8c status: sharing by key never applies, 0 of 311 compositions with keyed inputs; the watermark bound cut nothing, the rest unbuilt behind wires with no back pointer; the generic 6-cube past a 2.5 GB cap); not formal compositions in path types (tried, withdrawn, 18.16):
 sharing a composition across the dimensions the tube maps apply it at; (2) B18 DONE for words, byte strings and constructors both ways (`#native` over
 `emit-lib-boxed-u`: a constructor whose fields are values crosses as the boxed `V`, a boxed
 result is rebuilt by the entry's `box<d>`; `cubical_call_data(name, args, types)` from C;
@@ -1200,8 +1200,10 @@ port (A10b) is the checker at scale and gates E28.
    substitution makes a face true (one side transported) or a reader demands one layer.
    Essential; this is the property, and the original Brunerie number is one measurement.
    **Status (2026-11-07):** rounds one to four landed (18.16); the three remaining pieces were tried and
-   withdrawn with their numbers (18.16, A8c): what would cut further is keys for path λs and systems
-   (a new naming design) or back pointers from wires to producers, both outside the net as it is.
+   withdrawn with their numbers (18.16, A8c); keys for path λs and systems were then built and
+   withdrawn (A8d: the compositions whose inputs can all be named never repeat — 39 of 312 at the
+   corner, 11 of 285 in g8, all distinct — and the keys alone cost 1–4% steps). What is left is back
+   pointers from wires to producers (for bounds on unbuilt values), outside the net as it is.
 9. DONE (`15625ce`, `91c128b`): interned symbols, free names kept per node, one desugaring,
    kept arena chunks; the compiled-form cache beside the recorded forms. Cached library
    load 0.105 s; Brunerie end to end 0.35 s, computation about 0.25 s. Further (2026-11-06,
@@ -3023,6 +3025,26 @@ measured ceiling for what sharing would save. **The bound for unbuilt values:** 
 irrelevant substitutions with no measured gain behind it. All three are recorded here as
 undesigned and are not on the queue: no other item depends on them, and the A8 rounds that landed
 (boxes' free-dimension sets, `O_CONW`, A8b, η-reduced tubes) keep every answer identical.
+
+**Status (2026-11-07, A8d: keys for path λs and systems, built and withdrawn).** The naming design
+A8c pointed to was built: path λs keyed independently of the bound dimension's name (`synkey`'s
+`S_PLAM` under a placeholder; a run-time `mkplam_of(v, i)` keyed `K_PLAM` over v's key with i
+renamed to a canonical marker, `KMARK + depth`, so λ i → P @ i and λ j → P @ j get one key; a key
+records the range of dimensions it mentions so a renaming skips subkeys without i), systems keyed
+from their faces and branches (`S_SYS0`, `S_SYSCONS`, `S_SYSMAP`, `S_FEQ`, `S_NEG`, `S_BIN`, the
+system rules passing the operation's key on), a substituted value keyed `K_SUB` over its
+provider's and the substitution's keys. Found on the way: a marker's literal sent `dnf_lit`'s dense
+table to 2^61 entries (the read never finished); big literals need their own table. **Census**
+(compositions at `O_COMPH` on `PathP`, which inputs carry a key, memo on, `CUBICAL_WORKERS=0`):
+corner 312, all five keyed 39, distinct 39; g8 285, all five 11, distinct 11; the number 285, 11,
+11; the typed port 1,533, 24, 24 (the tube keyed 147/312, 26/285, 26/285, 55/1,533: tubes made by
+`sysmap` over run-time values). No composition whose inputs are all keyed repeats, so sharing by
+key has nothing to share. **The keys alone** (the memo's existing sharing with more named values;
+memo hits rise, corner 2 → 725, g8 161 → 1,142) cost steps: g8 305,036 → 309,686 (+1.5%), corner
+121,261 → 125,782 (+3.7%), the number 443,066 → 447,999 (+1.1%), the typed port 999,755 →
+1,007,258 (+0.8%); answers identical (−2 both, corner 47 cells, g8 2,189). Withdrawn, the diff
+kept in the worktree (`build/c2/c2k-tried.patch`). This settles A8's naming route: the
+compositions met in these reads are distinct up to dimension renaming wherever they can be named.
 
 **Status (2026-11-07, A8c: the three pieces tried to a decision).** Each was built, measured and
 withdrawn; none landed, so every count is as before (g8 305,036 steps / 2,189 cells, surfc's corner
