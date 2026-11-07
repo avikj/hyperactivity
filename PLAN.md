@@ -2749,6 +2749,33 @@ Revision 1. A design, since this is the open item; stated so it can be criticize
 
 ### 18.16 A8 — Proposal: formal transported compositions
 
+**Status (2026-11-06, the sharing step).** Where the cost is (`CUBICAL_PROFILE`, steps by
+operator and by the value met, added): g8's 475,558 steps are a third `SUBST` (half of those a
+substitution composed onto a reference) and a fifth `ERA`; path applications themselves are 5%.
+A box is read under about 8 distinct substitutions in g8 (34,204 substituted reads of 4,321
+boxes) and 13 in surfc's corner read (12,947 of 956) — the composition body applied at many
+dimensions — and equal (box, substitution) pairs are only 8–12% of them, so the memo shared
+little. Of the substituted reads whose box value was built through, two thirds substitute only
+dimensions the value does not mention (g8 7,183 of 11,193; surfc 6,020 of 9,170), most of them
+closed values (5,110; 3,502). **Built:** a box keeps the free dimensions of its value once that
+value is built through (`box_fd`: a walk reading nested boxes' sets, a few tries, kept on the
+box), and a reference's pending substitution is cut to them (`rule_subst` on `V_REF`,
+`ref_read`): reads of a box at dimensions it does not mention become reads of the box itself,
+named by its key, and the memo shares them. Measured (steps of the read alone): g8 475,558 →
+458,888; surfc's corner 201,170 → 170,648 (−15%, 47 cells); the number 619,852 → 600,349; wall
+time unchanged within noise; answers identical. Whether the set is known when a read happens
+depends on what has been built, so it runs only with the memo (whose counts already depend on
+that): without it every step count is as before, and the determinism check holds (identical
+output across 0, 1, 4 workers without the memo, identical answers with it; TSan clean).
+`CUBICAL_NOA8=1` turns it off. **Not done:** a set for a value still being built — a pending
+operation's free dimensions are not always its inputs' (`O_MKDIM` makes a dimension), so a bound
+for unbuilt parts needs every rule audited; this is where the rest of the irrelevant
+substitutions are (the lazy reader reads a box before its parts are built). **The 6-cube:** a
+read generic in both Ω² dimensions, even on the 4-cube's diagonal (`@ i @ i`), still exceeds a
+2.5 GB cap (the machine is shared; 5.4 GB before), so whether its normal form is small stays
+unmeasured; a read at one Ω² endpoint is 47 cells; a cube dimension at 0 collapses the read to
+the boundary (5 cells).
+
 **Status (2026-11-06, after `ab7a78d`'s `%transH` and the boundary rule below).** Measured on
 `main`: `#show g8` 475,558 steps for 2,189 cells, 217 per cell (from 484 before `%transH`);
 the number 619,529 steps; the square driver unchanged; every suite identical across workers

@@ -4355,7 +4355,12 @@ static void prof_print(void) {
         for (int i = 0; i < prof_n && i < 40; i++) fprintf(stderr, "%12ld  %s\n", prof_count[ix[i]], prof_name[ix[i]]);
         { extern long stat_dnf_allocs, stat_cl_allocs, stat_cl_lits, stat_dnf_clauses; fprintf(stderr, "formulas: %ld Dnf allocations (%ld clauses), %ld Clause allocations (%ld literals); %ld payloads live\n", stat_dnf_allocs, stat_dnf_clauses, stat_cl_allocs, stat_cl_lits, stat_payloads); }
         stat_gather_kinds();
-        for (int k = 0; k < K_END; k++) if (stat_kind[k]) fprintf(stderr, "kind %3d: %ld\n", k, stat_kind[k]);
+        { extern const char *kind_name(int); for (int k = 0; k < K_END; k++) if (stat_kind[k]) fprintf(stderr, "kind %3d %s: %ld\n", k, kind_name(k), stat_kind[k]); }
+        { extern const char *kind_name(int); extern long prof_pair[4][256]; static const char *pn[4] = { "SUBST", "ERA", "DUP", "PAPPP" };
+          for (int q = 0; q < 4; q++) for (int k = 0; k < 256; k++) if (prof_pair[q][k]) fprintf(stderr, "kind %s·%s: %ld\n", pn[q], kind_name(k), prof_pair[q][k]); }
+        { extern long prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep, prof_reads_sub_boxes;
+          fprintf(stderr, "kind reads-subst-boxes: %ld\n", prof_reads_sub_boxes);
+          extern long prof_fd_cut, prof_fd_dropped; fprintf(stderr, "kind fd-cut: %ld\nkind fd-dropped: %ld\n", prof_fd_cut, prof_fd_dropped); fprintf(stderr, "kind reads-plain: %ld\nkind reads-plain-repeat: %ld\nkind reads-subst: %ld\nkind reads-subst-repeat: %ld\n", prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep); }
         for (int k = 0; k < 64; k++) if (prof_dupk[k] || prof_erak[k]) fprintf(stderr, "value kind %3d: dup %ld era %ld\n", k, prof_dupk[k], prof_erak[k]);
         for (int i = 0; i < prof_n; i++) ix2[i] = i;
         for (int i = 0; i < prof_n; i++) for (int j = i + 1; j < prof_n; j++) if (prof_dup[ix2[j]] > prof_dup[ix2[i]]) { int t = ix2[i]; ix2[i] = ix2[j]; ix2[j] = t; }

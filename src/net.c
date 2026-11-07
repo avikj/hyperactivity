@@ -400,6 +400,8 @@ static void key_print_d(FILE *o, const Key *k, int d) {
     fputc(')', o);
 }
 static bool key_trace;   /* CUBICAL_KEYS: the keys registered, fired and hit, on stderr */
+static int a8_off = -1;
+static inline bool getenv_a8_off(void) { if (a8_off < 0) a8_off = getenv("CUBICAL_NOA8") != NULL; return a8_off; }
 static bool no_memo;     /* CUBICAL_NOMEMO: no producer is pending on its key (every value computed where it is read) */
 static __thread Key *scrut_key;   /* set by a case rule for the branch it builds; taken by the branch's frame */
 static uint64_t mix(uint64_t h, uint64_t x) { h ^= x + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); return h * 0x100000001b3ull; }
@@ -679,7 +681,7 @@ static Port memo_begin(Cell *c, Box **out, bool builder) {
     }
     /* others wait for this value: it is held once and read by reference. Its root holds the wire
      * the value will be linked into (memo_end); a reader finding nothing there yet waits on it */
-    b = malloc(sizeof(Box)); b->rc = 2; b->root = cell(O_ROOT, 1); b->key = key_retain(e->k); b->e = e;
+    b = malloc(sizeof(Box)); b->rc = 2; b->root = cell(O_ROOT, 1); b->key = key_retain(e->k); b->e = e; b->fd = NULL; b->fdtries = 0;
     { Var *t = var_new(); t->key = key_retain(e->k); b->in = VARP(t); b->root->port[0] = VARP(t); }
     e->box = b; e->hold = true;
     kunlock(s);
@@ -720,11 +722,12 @@ static void memo_box_gone(Box *b) {
 /* profile: where each duplicator and eraser comes from (a record's definition, or a rule) */
 static __thread long dup_origin;
 long prof_odup[65536], prof_oera[65536], prof_rdup[256], prof_rera[256];
+long prof_pair[4][256];   /* CUBICAL_PROFILE: SUBST, ERA, DUP, PAPPP steps by the value kind met */
 /* a value held once: references copy the box; the last one erases the value */
 static void box_hold(Box *b);
 static Key *key_of_port(Port p);
 static Box *box_new(Port val) {
-    Box *b = malloc(sizeof(Box)); b->rc = 1; b->root = cell(O_ROOT, 1); b->e = NULL; b->in = 0;
+    Box *b = malloc(sizeof(Box)); b->rc = 1; b->root = cell(O_ROOT, 1); b->e = NULL; b->in = 0; b->fd = NULL; b->fdtries = 0;
     b->key = key_of_port(val);
     link(val, P(b->root, 0));
     return b;
@@ -791,7 +794,7 @@ static Port copy_top(Key *as, Cell *v) {
             break;
         }
         /* a part with parts: held once in a box, a reference on each side */
-        Box *b = malloc(sizeof(Box)); b->rc = 2; b->root = cell(O_ROOT, 1); b->e = NULL; b->in = 0;
+        Box *b = malloc(sizeof(Box)); b->rc = 2; b->root = cell(O_ROOT, 1); b->e = NULL; b->in = 0; b->fd = NULL; b->fdtries = 0;
         b->key = eff_key(qc);
         b->root->port[0] = r;
         Cell *r1 = ref_to(b), *r2 = ref_to(b);
@@ -845,8 +848,129 @@ Port word_port(WN k) { return word_wn(k); }
 /* With a pending substitution the copy of what the box holds is named by the box (the content,
  * which may have free dimensions the substitution closes); the reference's own key names the
  * substituted value, not the content */
+/* CUBICAL_PROFILE: box reads, and how many were of a (box, substitution) pair read before */
+long prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep, prof_reads_sub_boxes;
+static uint64_t *rr_tab; static size_t rr_cap, rr_n;
+static uint64_t subst_fp(const Subst *s) {
+    uint64_t h = 1469598103934665603ULL;
+    for (uint32_t k = 0; k < s->n; k++) {
+        uint64_t e = (uint64_t)s->d[k] * 0x9e3779b97f4a7c15ULL;
+        const Dnf *v = s->v[k]; uint64_t dv = 0;
+        if (v) for (uint32_t c = 0; c < v->n; c++) { uint64_t cl = 0x51ed27; for (uint32_t q = 0; q < v->c[c]->n; q++) cl += v->c[c]->l[q] * 0xff51afd7ed558ccdULL ^ (v->c[c]->l[q] >> 7); dv += cl * 0xc4ceb9fe1a85ec53ULL; }
+        h += e ^ (dv + 0x632be5ab);
+    }
+    return h;
+}
+static bool rr_seen(uint64_t h) {
+    if (!h) h = 1;
+    if (rr_n * 2 >= rr_cap) {
+        size_t nc = rr_cap ? rr_cap * 2 : 1 << 16; uint64_t *nt = calloc(nc, sizeof *nt);
+        for (size_t i = 0; i < rr_cap; i++) if (rr_tab[i]) { size_t j = rr_tab[i] & (nc - 1); while (nt[j]) j = (j + 1) & (nc - 1); nt[j] = rr_tab[i]; }
+        free(rr_tab); rr_tab = nt; rr_cap = nc;
+    }
+    size_t j = h & (rr_cap - 1);
+    while (rr_tab[j]) { if (rr_tab[j] == h) return true; j = (j + 1) & (rr_cap - 1); }
+    rr_tab[j] = h; rr_n++; return false;
+}
+/* A8: the free dimensions of a box's value, found once the value is built all through (a walk of
+ * the value, reading nested boxes' sets), and kept on the box. A substitution of other dimensions
+ * does not change the value, so a reference's pending substitution is cut down to the box's
+ * dimensions (rule_subst on V_REF, ref_read): reads of one box at the dimensions it does not
+ * mention are then reads of the box itself, named by its key, and the memo shares them. Whether the
+ * set is known when a read happens depends on what has been built, so this runs only with the memo
+ * (whose sharing depends on that already); without it every step is as before. Answers are the
+ * same either way: the substitution is restricted to a superset of the value's free dimensions */
+typedef struct { Dim d[256]; int n; } FdSet;
+static void fd_add(FdSet *x, Dim d) { for (int i = 0; i < x->n; i++) if (x->d[i] == d) return; if (x->n < 256) x->d[x->n++] = d; else x->n = 257; }
+static void fd_dnf(FdSet *x, const Dnf *v) { if (v) for (uint32_t c = 0; c < v->n; c++) for (uint32_t q = 0; q < v->c[c]->n; q++) fd_add(x, (Dim)(v->c[c]->l[q] >> 1)); }
+static __thread long fd_budget;
+static FdInfo *box_fd(Box *b);
+static bool fd_port(Port p, FdSet *x, int depth);
+static bool fd_cell(Cell *v, FdSet *x, int depth) {
+    if (--fd_budget < 0 || depth > 200 || x->n > 256) return false;
+    if (!is_value(v->kind) || unbuilt(v->kind)) return false;
+    if (v->kind == V_REF) {
+        FdInfo *fi = v->p ? box_fd(v->p) : NULL;
+        if (!fi) return false;
+        Subst *s = (Subst *)(uintptr_t)v->a;
+        for (uint32_t i = 0; i < fi->n; i++) {
+            bool hit = false;
+            if (s) for (uint32_t k = 0; k < s->n; k++) if (s->d[k] == fi->d[i]) { fd_dnf(x, s->v[k]); hit = true; break; }
+            if (!hit) fd_add(x, fi->d[i]);
+        }
+        return x->n <= 256;
+    }
+    if (owns_dnf(v->kind)) fd_dnf(x, v->p);
+    if (v->kind == V_PLAM) {
+        FdSet y = { .n = 0 };
+        for (int k = 1; k < v->n; k++) if (!fd_port(v->port[k], &y, depth + 1)) return false;
+        if (y.n > 256) return false;
+        for (int i = 0; i < y.n; i++) if (y.d[i] != (Dim)v->a) fd_add(x, y.d[i]);
+        return x->n <= 256;
+    }
+    for (int k = 1; k < v->n; k++) if (!fd_port(v->port[k], x, depth + 1)) return false;
+    return x->n <= 256;
+}
+static bool fd_port(Port p, FdSet *x, int depth) {
+    Port q = peek(sload(&p));
+    if (!q || is_var(q)) return false;
+    Cell *c = PC(q);
+    if (PI(q) != 0) return false;
+    return fd_cell(c, x, depth);
+}
+/* the box's set, or NULL while unknown (a part not yet built); tried a few times */
+static FdInfo *box_fd(Box *b) {
+    FdInfo *fi = net_solo ? b->fd : __atomic_load_n(&b->fd, __ATOMIC_ACQUIRE);
+    if (fi || __atomic_load_n(&b->fdtries, __ATOMIC_RELAXED) >= 8) return fi;
+    __atomic_fetch_add(&b->fdtries, 1, __ATOMIC_RELAXED);
+    Port q = sload(&b->root->port[0]);
+    if (!q || is_var(q)) { q = peek(q); if (!q || is_var(q)) return NULL; }
+    if (PI(q) != 0) return NULL;
+    FdSet *y = malloc(sizeof *y); y->n = 0;
+    long saved = fd_budget; fd_budget = 4000;
+    bool ok = fd_cell(PC(q), y, 0);
+    fd_budget = saved;
+    if (ok && y->n <= 256) {
+        fi = malloc(sizeof(FdInfo) + (size_t)y->n * sizeof(Dim)); fi->n = (uint32_t)y->n;
+        memcpy(fi->d, y->d, (size_t)y->n * sizeof(Dim));
+        FdInfo *none = NULL;
+        if (net_solo) b->fd = fi;
+        else if (!__atomic_compare_exchange_n(&b->fd, &none, fi, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) { free(fi); fi = none; }
+    } else fi = NULL;
+    free(y);
+    return fi;
+}
+/* s cut down to the dimensions of fi (NULL when none is left); borrows s, returns owned or NULL */
+static Subst *subst_to_fd(Subst *s, const FdInfo *fi) {
+    Subst *t = subst_retain(s);
+    for (uint32_t k = 0; k < s->n; k++) {
+        bool in = false;
+        for (uint32_t i = 0; i < fi->n && !in; i++) in = fi->d[i] == s->d[k];
+        if (!in) { Subst *t2 = subst_without(t, s->d[k]); subst_release(t); t = t2; }
+    }
+    if (!t->n) { subst_release(t); return NULL; }
+    return t;
+}
+long prof_fd_cut, prof_fd_dropped;
 static Port ref_read(Cell *r) {
     Box *b = r->p;
+    if (prof_on) {
+        uint64_t h = (uint64_t)(uintptr_t)b * 0x2545F4914F6CDD1DULL;
+        if (r->a) { if (!rr_seen((uint64_t)(uintptr_t)b * 0x9E3779B97F4A7C15ULL + 77)) prof_reads_sub_boxes++; h ^= subst_fp((Subst *)(uintptr_t)r->a); prof_reads_sub++; if (rr_seen(h)) prof_reads_sub_rep++; }
+        else { prof_reads++; if (rr_seen(h)) prof_reads_rep++; }
+    }
+    if (r->a && !no_memo && !getenv_a8_off()) {
+        /* the substitution cut to the box's dimensions (A8): none left, a read of the box itself */
+        FdInfo *fi = box_fd(b);
+        if (fi) {
+            Subst *t = subst_to_fd((Subst *)(uintptr_t)r->a, fi);
+            if (!t) { if (prof_on) prof_fd_dropped++; return lazy_copy(b->key, b->root); }
+            if (t->n < ((Subst *)(uintptr_t)r->a)->n && prof_on) prof_fd_cut++;
+            Port p = lazy_copy(b->key, b->root);
+            Port o = sub(p, t); subst_release(t);
+            return o;
+        }
+    }
     Port p = lazy_copy(r->a ? b->key : r->key, b->root);
     return r->a ? sub(p, (Subst *)(uintptr_t)r->a) : p;
 }
@@ -883,6 +1007,7 @@ static void retire_boxes(void) {
         if (p) era(p);
         cell_free(r);
         if (b->key) key_release(b->key);
+        free(b->fd);
         free(b);
     }
 }
@@ -1106,6 +1231,11 @@ static void rule_subst(Cell *o, Cell *v) {
         /* the reference (the unbuilt subterm) carries the substitution: nothing is copied */
         Subst *t = v->a ? subst_compose((Subst *)(uintptr_t)v->a, s) : subst_retain(s);
         if (v->a) subst_release((Subst *)(uintptr_t)v->a);
+        if (v->kind == V_REF && !no_memo && !getenv_a8_off()) {
+            /* only the box's own dimensions (A8, box_fd): the rest leave its value unchanged */
+            FdInfo *fi = box_fd(v->p);
+            if (fi) { Subst *t2 = subst_to_fd(t, fi); subst_release(t); t = t2; }
+        }
         v->a = (uint64_t)(uintptr_t)t;
         if (v->e) { memo_leave(v); memo_register(v); }
         link(P(v, 0), out); cell_free(o); return;
@@ -1719,6 +1849,7 @@ static void trace_step(Cell *o, Cell *v) {
     fputc('\n', trace_out);
 }
 /* ---------------- the rules ---------------- */
+const char *kind_name(int k) { return k >= 0 && k < K_END && KIND_NAME[k] ? KIND_NAME[k] : "?"; }
 static void interact(Cell *o, Cell *v) {
     if (o->kind == O_FWD) {
         /* a read waiting for its value (lazy_copy): not a step of its own. An unbuilt value is
@@ -1738,6 +1869,7 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     { Local *l = local(); l->steps++; l->kind[o->kind]++; }
+    if (prof_on && (o->kind == O_SUBST || o->kind == O_ERA || o->kind == O_DUP || o->kind == O_PAPPP)) ADD(prof_pair[o->kind == O_SUBST ? 0 : o->kind == O_ERA ? 1 : o->kind == O_DUP ? 2 : 3][v->kind & 255], 1);
     if (trace_out) trace_step(o, v);
     if (prof_on) {
         long a = (long)o->a;
