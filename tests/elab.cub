@@ -129,3 +129,9 @@ vmap f (vcons m x xs e) = vcons m (f x) (vmap f xs) e
 vbad : {A B : Type} {n : Nat} → (A → B) → Vec A n → Vec B n
 vbad f (vnil e) = vnil e
 vbad f (vcons m x xs e) = vbad f xs
+-- E28 finding (ii): a λ-path written in an argument position whose body applies a lemma at an
+-- open word: the lemma's stuck recursion at 0 is its type's left end (the motive travels with
+-- a %welimP, so a stuck word elimination's endpoints are read from it)
+lam-path-arg : (b : Word) → plusw (%wsucc #0) b ≡ %wsucc b
+lam-path-arg b = catw (plusw-suc-l #0 b) (λ i → %wsucc (plusw-zero-l b i))
+#same lam-path-arg #3 @ 1 = #4

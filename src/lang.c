@@ -2038,7 +2038,11 @@ static Syn *compile(Node *t) {
             /* (%welimP P w z s): the elimination of a word with its motive, which is for the
              * checker: the machine runs (%welim w z s) */
             if (t->n != 5) die("(%welimP P w z s)", NULL);
-            Syn *s = compile_n(S_PRIM, t, 2, 3); s->x = O_WELIM; return s;
+            /* the motive travels too (the last operand): a stuck elimination's type, for its
+             * endpoints (p 0 is the type's left end) */
+            Syn *s = syn(S_PRIM, 4); s->x = O_WELIM;
+            s->k[0] = compile(t->it[2]); s->k[1] = compile(t->it[3]); s->k[2] = compile(t->it[4]); s->k[3] = compile(t->it[1]);
+            return s;
         }
         if (IS(h, "%var") || IS(h, "%dim")) {
             /* (%var [n] T), (%dim [n]): a fresh variable of type T, a fresh dimension, named by the

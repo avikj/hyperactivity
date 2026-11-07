@@ -1293,7 +1293,7 @@ identity; linear values are introduced only in `primitive` definitions.
     fording, the interval-literal fix, holes in composition lines, generalized variables,
     implicits through reducing hypothesis types, the hypothesis at the field's own index for
     recursion on a family (18.12). Open: the branch goal rewritten by the index equation; the
-    rest of 18.12's findings (ii)–(vi).
+    findings (iv) and (vi) of 18.12 (mutual structural recursion; prenex levels), by design.
 29. **Status (2026-11-06):** built, `fd188bf6` (`tools/agda2cub.py`, `tests/agda/` checked by `make test`). Spec as written: Translator from agda/cubical (Agda's `transp`/`hcomp` to CCHM `comp` by the standard
     interdefinability; Mathlib is not a source: its quotients, funext and propext are axioms).
     Essential for value.
@@ -2617,7 +2617,15 @@ which of these it actually needed; the list is what Agda-level convenience means
   `vmap f xs : Vec B m`; before, the hypothesis was at the outer index, which let `vbad f (vcons
   m x xs e) = vbad f xs` through at `Vec B n` — a soundness hole, now closed, `tests/elab.cub`).
   Not done: substituting the index in the branch's expected type (Agda's unification makes `e`
-  refl and rewrites the goal); the branch sees `e : n ≡ suc m` and rebuilds with it. (ii) a λ-path in an argument position has its endpoints evaluated,
+  refl and rewrites the goal); the branch sees `e : n ≡ suc m` and rebuilds with it. (ii) FIXED
+  (2026-11-06): the motive of a `%welimP` now travels with the elimination (`O_WELIM`'s last
+  operand, `V_NWELIM`/`V_WSUSP` keep it), so a stuck word recursion of path type has a type at
+  the machine and `p 0` is its type's left end, as for any neutral path (`O_PAPPP`'s endpoint
+  rule, `O_NTYPE`); `catw (plusw-suc-l #0 b) (λ i → %wsucc (plusw-zero-l b i))` checks
+  (`tests/elab.cub` `lam-path-arg`). (iii) FIXED (fatal errors on stdout too). (v) FIXED (the
+  redeclaration error). (iv) and (vi) stand: mutual structural recursion is written with the
+  later function as an argument (a `mutual` group is for copattern definitions), and `Level` is
+  not a type, so level polymorphism is prenex, in signatures. Findings as recorded: (ii) a λ-path in an argument position has its endpoints evaluated,
   so congruences are stated as lemmas; (iii) a forward reference, or a reference from a
   checked definition to an untyped one, is reported on stderr (`not a bound variable or
   checked definition`) while stdout continues, so a test line that only reads stdout sees a

@@ -853,9 +853,10 @@ static Port ref_read(Cell *r) {
 Port ref_copy(Cell *c) { return ref_read(c); }
 /* a word's suspended elimination, computed (for readback) */
 Port wsusp_force(Cell *c) {
-    Cell *e = cell(O_WELIM, 4);
+    Cell *e = cell(O_WELIM, c->n);
     link(c->port[3], P(e, 0)); link(c->port[1], P(e, 1)); link(c->port[2], P(e, 2));
-    return P(e, 3);
+    if (c->n == 5) link(c->port[4], P(e, 3));
+    return P(e, c->n - 1);
 }
 static Port ref_of(Port val) { Cell *c = ref_to(box_new(val)); return P(c, 0); }
 static void era(Port prov);
@@ -1187,7 +1188,7 @@ static void rule_subst(Cell *o, Cell *v) {
     }
     case V_WPLUS: { Cell *a = cell(O_WADD, 3); link(sub(v->port[1], s), P(a, 0)); link(word_wn(cell_wn(v)), P(a, 1)); link(P(a, 2), out); break; }
     case V_NWOP: { Cell *a = cell((int)v->x, 3); link(sub(v->port[1], s), P(a, 0)); link(sub(v->port[2], s), P(a, 1)); link(P(a, 2), out); break; }
-    case V_NWELIM: { Cell *a = cell(O_WELIM, 4); for (int k = 1; k <= 3; k++) link(sub(v->port[k], s), P(a, k - 1)); link(P(a, 3), out); break; }
+    case V_NWELIM: { Cell *a = cell(O_WELIM, v->n); for (int k = 1; k < v->n; k++) link(sub(v->port[k], s), P(a, k - 1)); link(P(a, v->n - 1), out); break; }
     case V_NPRIM: {
         /* the operation again, on the substituted arguments */
         int cls = (int)(v->x >> 8), sb = (int)(v->x & 255), n = v->n - 1;
@@ -1420,7 +1421,7 @@ static void rule_view(Cell *o, Cell *v) {
     case V_WPLUS: r = mk(WC[W_WPLUS], word_wn(cell_wn(v)), v->port[1], 0, 0); break;
     case V_NWOP: r = mk(WC[W_WOP], word_of((uint64_t)(v->x - O_WEQ)), v->port[1], v->port[2], 0); break;
     case V_NPRIM: r = mk(WC[W_PRIM], word_of((uint64_t)v->x), list_of(&v->port[1], v->n - 1), 0, 0); break;
-    case V_NWELIM: r = mk(WC[W_WELIM], v->port[1], v->port[2], v->port[3], 0); break;
+    case V_NWELIM: if (v->n == 5) era(v->port[4]); r = mk(WC[W_WELIM], v->port[1], v->port[2], v->port[3], 0); break;
     case V_PI: r = mk(WC[W_PI], v->port[1], v->port[2], 0, 0); break;
     case V_SIGMA: r = mk(WC[W_SIGMA], v->port[1], v->port[2], 0, 0); break;
     case V_U: r = mk(WC[W_U], v->port[1], 0, 0, 0); break;
@@ -1530,10 +1531,11 @@ static Port case_of_susp(Cell *v) {
 }
 /* a word's hypothesis: the elimination of its word (1=z 2=s 3=w) */
 static Port welim_of_wsusp(Cell *v) {
-    Cell *e = cell(O_WELIM, 4);
+    Cell *e = cell(O_WELIM, v->n);
     link(v->port[3], P(e, 0)); link(v->port[1], P(e, 1)); link(v->port[2], P(e, 2));
+    if (v->n == 5) link(v->port[4], P(e, 3));
     cell_free(v);
-    return P(e, 3);
+    return P(e, v->n - 1);
 }
 /* words: a literal #k, k successors of a neutral (V_WPLUS), or a neutral. wsplit reads a word as
  * (k, base), base 0 for a literal; it returns the cell to free (the literal or V_WPLUS) */
@@ -1882,7 +1884,7 @@ static void interact(Cell *o, Cell *v) {
         } else if (vk == V_SYS) distribute(o, v);
         else {
             Dnf *r = o->p;
-            if (!o->x && is_neutral(vk) && (dnf_is_zero(r) || dnf_is_one(r))) {
+            if (!o->x && (is_neutral(vk) || (vk == V_NWELIM && v->n == 5)) && (dnf_is_zero(r) || dnf_is_one(r))) {
                 /* an endpoint of a neutral path, read from its type (computed from a copy of the
                  * spine): t 0 = u0 for t : Path A u0 u1 */
                 Port p1, p2; split2(P(v, 0), &p1, &p2);
@@ -2759,22 +2761,25 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     case O_WELIM: {
+        /* 0=w 1=z 2=s [3=P, the motive, kept so a stuck elimination's type is known: its endpoint
+         * at 0 or 1 when the motive is a path type] out */
+        bool hasP = o->n == 5; Port out = o->port[o->n - 1];
         WN k; Port b; Cell *fr = wsplit(v, &k, &b);
         if (fr) cell_free(fr);
-        if (wn_zero(&k) && !b) { link(o->port[1], o->port[3]); era(o->port[2]); }
+        if (wn_zero(&k) && !b) { link(o->port[1], out); era(o->port[2]); if (hasP) era(o->port[3]); }
         else if (wn_zero(&k)) {
             /* a neutral word: the elimination is stuck */
-            Cell *e = cell(V_NWELIM, 4);
-            link(b, P(e, 1)); mv(o, 1, P(e, 2)); mv(o, 2, P(e, 3)); link(P(e, 0), o->port[3]);
+            Cell *e = cell(V_NWELIM, o->n);
+            link(b, P(e, 1)); mv(o, 1, P(e, 2)); mv(o, 2, P(e, 3)); if (hasP) mv(o, 3, P(e, 4)); link(P(e, 0), out);
         } else {
             /* s (k-1 ⊕ b) h, h the elimination of k-1 ⊕ b, computed when used */
             WN one = wn_small(1), km = wn_sub(&k, &one);
             Port s1, s2, p1, p2;
             split2(o->port[2], &s1, &s2);
             split2(wplus(km, b), &p1, &p2);
-            Cell *h = cell(V_WSUSP, 4);
-            link(o->port[1], P(h, 1)); link(s2, P(h, 2)); link(p2, P(h, 3));
-            link(app2(app2(s1, p1), P(h, 0)), o->port[3]);
+            Cell *h = cell(V_WSUSP, o->n);
+            link(o->port[1], P(h, 1)); link(s2, P(h, 2)); link(p2, P(h, 3)); if (hasP) mv(o, 3, P(h, 4));
+            link(app2(app2(s1, p1), P(h, 0)), out);
         }
         wn_drop(&k);
         cell_free(o);
@@ -2915,6 +2920,11 @@ static void interact(Cell *o, Cell *v) {
         case V_NCASE:
             for (int k = 2 + (v->x ? 1 : 0); k < v->n; k++) era(v->port[k]);
             T = v->x ? app2(v->port[2], v->port[1]) : (era(v->port[1]), unk());
+            break;
+        case V_NWELIM:
+            /* a stuck word elimination with its motive: the motive at the word */
+            era(v->port[2]); era(v->port[3]);
+            T = v->n == 5 ? app2(v->port[4], v->port[1]) : (era(v->port[1]), unk());
             break;
         case V_NTRANS: {
             int np = v->n - 3;
