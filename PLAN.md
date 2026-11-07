@@ -1276,7 +1276,13 @@ identity; linear values are introduced only in `primitive` definitions.
 23. State programs as `A ≃ Σ (b : B), fiber f b` then projection. Valuable.
 
 ### D. The outside world
-24. **Status (2026-11-06):** built as `lib/proc.cub` (Church form, handlers, worlds, replay), its guarded form `GProc` (`5b9de865`), `lib/session.cub`, `lib/choreo.cub` (`6d098a67`); projection as specialization against the role is open. Spec as written: The process library: interfaces, guarded trees, handlers, signature inclusion, push
+24. **Status (2026-11-06):** built as `lib/proc.cub` (Church form, handlers, worlds, replay), its guarded form `GProc` (`5b9de865`), `lib/session.cub`, `lib/choreo.cub` (`6d098a67`); projection as specialization against the role (2026-11-06,
+`tests/choreo-spec.cub`): the global program `λ m → project-raw m g` over a three-party
+choreography, specialized with the role a now value (`lib/specialize.cub`'s `residual`: 18.6 step
+1, the schedule's leading st-now binders applied to the environment's codes, then normalization
+and rewriting), leaves each role's local process as its residual, equal to the one written by
+hand (roles 1, 2, 3; the residuals differ pairwise, run under a scripted world); left at run
+time, the role stays a λ. Spec as written: The process library: interfaces, guarded trees, handlers, signature inclusion, push
     events, session types, choreographic projection (7.1, 7.3). Consequence plus library.
     Essential.
 25. **Status (2026-11-06):** built, `7a865cac` (`Outcome`, supervisors by key). Spec as written: Outcomes as values (consequence); supervisors and restart by key (library). Essential.

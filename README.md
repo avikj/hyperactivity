@@ -552,6 +552,9 @@ each with its readings in `make test`:
   machine (`eval`, then `quote` at its type), rewritten along rules to a bound, lowered. A known
   computation becomes a literal, an open function a λ over a primitive, word elimination with an
   unknown bound a loop; the native evaluation agrees with the normal form, and `run.py` compiles one.
+  `residual sch T rules c env` substitutes the schedule's leading `st-now` binders from `env` first:
+  a choreography's projection to a role is the residual of `λ m → project-raw m g` with the role
+  now (`tests/choreo-spec.cub`).
 - **`lib/lin.cub`**, linear arithmetic. Normal forms for words built from literals, variables,
   addition and successor; equality by normal form; order over naturals by pointwise domination; a
   Farkas certificate (nonnegative multipliers of hypotheses `l ≤ r`) verified by `check-cert`, and a
