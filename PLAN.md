@@ -2833,7 +2833,9 @@ Revision 1.
   codes). ~500. DONE 2026-11-06 (item 31's status): over `PCode`, the typed mirror of the
   fragment's codes, the derivative in the Taylor form over `Nat`. Found on the way: `let t =
   taylor … in (fst t , … snd t …)` in a checked body exhausted memory where the same term with
-  the projections written out checks in 9k steps (`D-correct` is written so).
+  the projections written out checks in 9k steps (`D-correct` is written so). Rechecked after
+  `d42df94a` (`subst_multi` no longer flattens case alternatives nor substitutes under their
+  pattern variables): the `let` form checks in 7.7k steps; the blow-up does not reproduce.
 - **F32, status (2026-11-06).** Both verified checkers exist as typed terms, each with its
   soundness theorem checked by the machine: `lib/linproof.cub` (`cert-sound`: a Farkas
   certificate that checks proves `a ≤ b` wherever the hypotheses hold; order as a witnessed

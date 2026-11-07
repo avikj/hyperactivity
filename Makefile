@@ -51,17 +51,20 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub tests/proc.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/guarded.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/prim.cub lib/stage.cub tests/prim.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/prim.cub lib/region.cub tests/region.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/fiber.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/lin.cub lib/check.cub lib/std.cub lib/linproof.cub lib/intproof.cub lib/intlin.cub lib/eqproof.cub tests/cert.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub lib/session.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub lib/choreo.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/check.cub lib/std.cub lib/stage.cub lib/lower.cub lib/specialize.cub lib/proc.cub lib/choreo.cub tests/choreo-spec.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub
 	sh tests/agda/check.sh
-	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub lib/check.cub lib/std.cub lib/stage.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub lib/repr.cub lib/image.cub lib/reimport.cub lib/emitx86.cub tests/fo.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub lib/check.cub lib/std.cub lib/stage.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub lib/repr.cub lib/image.cub lib/reimport.cub lib/emitx86.cub lib/foproof.cub tests/fo.cub
 	# the driver loop (D26): a process over W writes hello and ends with the count written
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/linproof.cub lib/prim.cub lib/proc.cub lib/world.cub tests/world.cub > build/world.out && grep -aq "^hello" build/world.out && grep -aq "run: done #8" build/world.out && grep -aq "run: done #0" build/world.out && grep -aq "^hello" /tmp/cubw.txt
 	# the call boundary (B18): the net enters a definition's compiled C (#native), and a C program calls the net
 	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub lib/check.cub lib/std.cub lib/stage.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub lib/repr.cub tests/native.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub lib/check.cub lib/std.cub lib/stage.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub lib/repr.cub tests/native.cub 2>&1 | grep -q "specialization cached by key" || { echo "native: a second run did not hit the specialization cache"; exit 1; }
 	$(MAKE) -s build/native-main && ./build/native-main
 	# the store (F34): a fresh one, run twice: the second run checks nothing, the answers agree, renaming changes no key
 	rm -rf build/store; for r in 1 2; do CUBICAL_STORE=build/store ./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/store.cub > build/store-$$r.out || exit 1; done; \
@@ -75,6 +78,7 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub --serve < tests/serve/retract.in > build/serve.out 2>&1; \
 	grep -q "^retracted twoN" build/serve.out && [ "$$(grep -c '^ok: ' build/serve.out)" -ge 5 ] && ! grep -q "^FAIL\|^error" build/serve.out || { echo "serve: retraction failed"; tail build/serve.out; exit 1; }; echo "serve: retraction ok"
 	python3 tests/lsp/test_lsp.py
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub --serve < tests/serve/data.in > build/serve-data.out 2>&1; grep -q "^retracted data Col red green" build/serve-data.out && grep -q "^type: isRed : Col → Bool" build/serve-data.out && grep -q "^where: plus .*lib/std.cub:" build/serve-data.out && ! grep -q "^FAIL" build/serve-data.out || { echo "serve: data retraction failed"; exit 1; }
 	# Brunerie's number (Ljungström's brunerie', an untyped port): -2, with one and with four workers
 	for w in 0 4; do CUBICAL_WORKERS=$$w ./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub \
 	  experiments/brunerie/brunerie.cub experiments/brunerie/run-brunerie.cub | grep -A1 -x brunerie | grep -q "= negsuc (suc zero) " \
