@@ -192,16 +192,31 @@ field-rep tb k = if %weq (fst k) #0 then none else if %weq (fst k) #3 then none 
 -- the shape's kinds with the type itself named (kind 1 carries d)
 shape-of d c = lmap-k d (cshape d c)
 lmap-k d ks = case ks of lnil → lnil; lcons k r → lcons (if %weq (fst k) #1 then (#1 , d) else k) (lmap-k d r)
+-- a representation that is itself a data type (represent Box by Pt): its to and from are not left
+-- as written but consumed like the rest of the program with Box itself not represented (tb-del),
+-- so the Pt they make or take is in the program's own form (a Nat field a word) — a constructor
+-- of Box is to of the Box built from the program's fields, a case on a Box reads from of it, its
+-- fields already in the program's form. Run as written, to would move tree fields into a Pt whose
+-- fields the program reads as words (bump (rbox 1 2) answered rbox 10 0), and a C back end
+-- types one layout per data type, so tree and word fields cannot both sit in it
+rcv-data d = case %rtab d of some RT → (case %view RT of wdata dR ps → some dR; _ → none); none → none
+rcv-is d = case rcv-data d of some dR → true; none → false
+tb-del tb d = case tb of lnil → lnil; lcons x r → if %weq (fst x) d then r else lcons x (tb-del r d)
+-- the record representations' conversions, (g , d) for each
+rcv-convs tb = case tb of lnil → lnil; lcons x r → if rcv-is (fst x) then lcons (rep-to (snd x) , fst x) (lcons (rep-from (snd x) , fst x) (rcv-convs r)) else rcv-convs r
+rcv-conv-of g l = case l of lnil → none; lcons x r → if %weq (fst x) g then some (snd x) else rcv-conv-of g r
 rc tb t =
   case t of
     fcon d c fs →
       let fs2 = rc-list tb fs
       in (case rep-lookup tb d of
-            some e → (case rep-lit d e t of some l → l; none → fcall (rep-to e) (lcons (fcon d c (raw-fields tb (shape-of d c) fs2)) lnil))
+            some e → (if rcv-is d then fcall (rep-to e) (lcons (fcon d c fs2) lnil)
+                      else case rep-lit d e t of some l → l; none → fcall (rep-to e) (lcons (fcon d c (raw-fields tb (shape-of d c) fs2)) lnil))
             none → fcon d c fs2)
     frec d x alts →
       (case rep-lookup tb d of
-         some e → frec d (fcall (rep-from e) (lcons (rc tb x) lnil)) (rc-ralts-rep tb d alts)
+         some e → (if rcv-is d then frec d (fcall (rep-from e) (lcons (rc tb x) lnil)) (rc-ralts tb alts)
+                   else frec d (fcall (rep-from e) (lcons (rc tb x) lnil)) (rc-ralts-rep tb d alts))
          none → frec d (rc tb x) (rc-ralts tb alts))
     fswitch x alts → fswitch (rc tb x) (rc-alts tb alts)
     fproj d c k x → fproj d c k (rc tb x)
@@ -313,14 +328,15 @@ def-names ds = case ds of lnil → lnil; lcons x r → lcons (fst x) (def-names 
 datas-of-defs ds acc = case ds of lnil → acc; lcons x r → datas-of-defs r (fo-datas (snd (snd x)) acc)
 keep-t g t = t
 isnil-l l = case l of lnil → true; _ → false
-rep-convs tb = case tb of lnil → lnil; lcons x r → lcons (rep-to (snd x)) (lcons (rep-from (snd x)) (rep-convs r))
+rep-convs tb = case tb of lnil → lnil; lcons x r → if rcv-is (fst x) then rep-convs r else lcons (rep-to (snd x)) (lcons (rep-from (snd x)) (rep-convs r))
 program-rep reps fuel c = program-rep-at #0 reps fuel c
 program-rep-at m reps fuel c =
   let t0 = inplace (lower c)
       raw = defs-reach keep-t fuel (fcalls t0 lnil) lnil
       tb = rep-table reps (datas-of-defs raw (fo-datas t0 lnil))
       cv = def-names (defs-reach keep-t fuel (rep-convs tb) lnil)
-      cons = λ g t → if lmem-l g cv then t else wn (rc tb t)
+      rv = rcv-convs tb
+      cons = λ g t → if lmem-l g cv then t else (case rcv-conv-of g rv of some d → wn (rc (tb-del tb d) t); none → wn (rc tb t))
       t = wn (rc tb t0)
   in lcons (m , (lam-arity t , offset-calls (strip-flams t))) (offset-defs (defs-reach cons fuel (fcalls t lnil) lnil))
 -- readings: a program over Nat with Nat laid out as Word — plus the native addition (its op line),
@@ -337,3 +353,24 @@ run-rep c args = eval-fo (table-of (lift-program #100000 (program-rep lnil #20 c
 #same run-rep (code (λ (n : Nat) → pred-rp (dbl-rp n))) (lcons (flit #21) lnil) = vw #41
 #same run-rep (code (λ (n : Nat) → suml-r (cons n (cons 5 (cons (suc n) nil))))) (lcons (flit #3) lnil) = vw #12
 #same run-rep (code (λ (n : Nat) → plus 7 n)) (lcons (flit #3) lnil) = vw #10
+-- a type represented by a record (represent RBox by RPt): a constructor of RBox is to of the RPt
+-- built from words, its Nat fields read back through from (a Nat field of the record is a word); a
+-- case on an RBox reads from of it. Before the fix the fields were passed to RPt's from as if trees:
+-- bump (rbox 1 2) answered rbox 10 0, so the sum read 10, not 12
+data RPt = rpt (a : Nat) (b : Nat)
+data RBox = rbox (x : Nat) (y : Nat)
+rbox-to : RBox → RPt
+rbox-to b = case b of rbox x y → rpt x y
+rbox-from : RPt → RBox
+rbox-from p = case p of rpt a c → rbox a c
+represent RBox by RPt where
+  to : RBox → RPt = rbox-to
+  from : RPt → RBox = rbox-from
+  to-from : (p : RPt) → to (from p) ≡ p = λ p → case p return (λ q → rbox-to (rbox-from q) ≡ q) of rpt a c → (λ i → rpt a c)
+  from-to : (b : RBox) → from (to b) ≡ b = λ b → case b return (λ q → rbox-from (rbox-to q) ≡ q) of rbox x y → (λ i → rbox x y)
+rbox-bump : RBox → RBox
+rbox-bump b = case b of rbox x y → rbox (plus x 9) y
+rbox-sum : RBox → Nat
+rbox-sum b = case b of rbox x y → plus x y
+#same run-rep (code (λ (n : Nat) → rbox-sum (rbox-bump (rbox n 2)))) (lcons (flit #1) lnil) = vw #12
+#same run-rep (code (λ (n : Nat) → rbox-sum (rbox n 2))) (lcons (flit #1) lnil) = vw #3

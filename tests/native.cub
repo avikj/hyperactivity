@@ -142,3 +142,17 @@ use-scaleat w = %wadd (scaleat #3 w) (scaleat #3 (%wadd w #1))
 #same use-scaleat #10 = #63
 -- not words: the definition on the net
 #same (λ (x : Word) → scaleat #2 x) = (λ (x : Word) → %wadd (%wadd #0 x) x)
+-- the first reading after a plain #native is the compiled code's answer, not the definition's (a
+-- probe: the program is add100's, the definition the identity, so the answer tells which ran; a
+-- reading that neither called nor fell back would answer #1). A definition compiled before the
+-- #native (useprobe) keeps the definition it was compiled against
+probe100 : Word → Word
+probe100 x = plusw x #100
+probe : Word → Word
+probe x = x
+useprobe : Word → Word
+useprobe x = probe x
+#native probe 1 = emit-lib-u (lcons (#0 , (#1 , lam-body (specialize (Word → Word) lnil (code probe100)))) lnil)
+#same probe #1 = #101
+#same probe #2 = #102
+#same useprobe #5 = #5

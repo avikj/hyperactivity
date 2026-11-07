@@ -146,6 +146,11 @@ ptn-sum p = case p of ptn a b → plus a (suc (fromWord b))
 rr-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Nat) → ptn-sum (ptn (dblr2 n) #3))))
 #same eval-fo (table-of rr-defs) lnil (fcall #99999 (lcons (flit #20) lnil)) = vw #44
 defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #20) lnil))) rr-defs''', "44", (None, "uint64_t f0; uint64_t f1; } c0;")),
+ # a type represented by a record (lib/repr.cub, represent RBox by RPt): bump through the
+ # representation, a record of two words; at 30: (30 + 9) + 2 = 41 (before the fix, 30 + 9 + 0)
+ 'rep-box': ("""rb-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Nat) → rbox-sum (rbox-bump (rbox n 2)))))
+#same eval-fo (table-of rb-defs) lnil (fcall #99999 (lcons (flit #30) lnil)) = vw #41
+defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #30) lnil))) rb-defs""", "41"),
  # a compilation with its justifying path (lib/foproof.cub, 18.5 step 7): ex-c rewritten by the
  # verified rules and lowered by the checked pipeline (spec-w), whose path ex-path is a checked
  # definition; printed and run at x = 4: (4 + 5) + (a loop summing four 1s) = 13
