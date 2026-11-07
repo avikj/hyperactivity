@@ -1337,8 +1337,19 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
     the request, not the machine (`x_die` through `die`), and a fatal error after a checked
     definition in the same block no longer exits (the checker's and the printer's handlers
     restore `--serve`'s). `tests/lsp/test_lsp.py`: an error reported and cleared, a dependent
-    re-checked, data changed, a parse error at its line, hover, shutdown. Open: retracting a data
-    type (a restart today), incremental sync, completion and go-to-definition.
+    re-checked, data changed, a parse error at its line, hover, shutdown. Then (2026-11-06):
+    `#retract D` of a data, codata or record type (the type, its constructors and fields — a
+    record's projections — renamed out of reach and named in the reply; what was checked against
+    it holds it by index and stays as checked, a declaration of the name again is a new type), so
+    the LSP retracts data units like definitions instead of restarting; `#type e` (the type the
+    checker infers, `type: e : T`, surface syntax; the reason when there is none), `#scope` (the
+    names in scope on one line) and `#where name` (a checked definition's or data type's
+    declaration, `file:line`, kept per definition at check time); the LSP's hover is `#type` (the
+    written signature as fallback), completion from `#scope` and the document's names,
+    go-to-definition to the document's unit or the library's `#where`, incremental (range) sync in
+    UTF-16 units; verdicts under `--serve` print in surface syntax. `tests/lsp/test_lsp.py` (23
+    steps) and `tests/serve/data.in`. Open: a hover on a local variable (the machine knows only
+    top-level names; the fallback is the written signature).
 
 ### F. Programs about programs
 31. DONE in parts: `deriving eq D` (`1c5282a`), `deriving show`/`derive-show` (`896713ea`),

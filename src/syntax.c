@@ -207,6 +207,13 @@ static Tok *P2(void) { return &lt[xp + 2 < nlt ? xp + 2 : nlt - 1]; }
 typedef struct { char *name; int nf; char **fn; } RecInfo;
 static RecInfo *RECS; static size_t caprecs; static int nrecs;
 static RecInfo *rec_of(const char *s) { for (int i = nrecs - 1; i >= 0; i--) if (!strcmp(RECS[i].name, s)) return &RECS[i]; return NULL; }
+/* #retract of a record: its entry renamed out of reach; its field names (projections) returned */
+static int rec_retract(const char *name, char ***fn) {
+    RecInfo *R = rec_of(name);
+    if (!R) return 0;
+    char nb[512]; snprintf(nb, sizeof nb, "%%retracted:%s", R->name); R->name = strdup(nb);
+    *fn = R->fn; return R->nf;
+}
 
 static Tok *NX(void) { Tok *t = &lt[xp]; if (t->k != X_EOF) xp++; return t; }
 static void x_err(const char *m, Tok *t) { x_die(t->line, t->col, m, t->k == X_VS ? "(at a new line)" : t->k == X_VC ? "(at the end of a block)" : t->k == X_VO ? "(at a new block)" : t->s); }
@@ -753,6 +760,8 @@ typedef struct { char *con; int nidx, nfields; char **fields; Node **idx; } Ford
 static Ford *FORD; static size_t capford; static int nford;
 static bool ford_head;   /* an application's head being elaborated (not a bare constructor to pad) */
 static int data_nidx; static char *data_ixnames[16]; static Node *data_ixtypes[16];
+/* a retracted constructor's entry renamed with it (#retract of its data type) */
+static void ford_rename(const char *old, const char *nw) { for (int i = 0; i < nford; i++) if (!strcmp(FORD[i].con, old)) FORD[i].con = strdup(nw); }
 static Ford *ford_of(const char *con) { for (int i = nford - 1; i >= 0; i--) if (!strcmp(FORD[i].con, con)) return &FORD[i]; return NULL; }
 static int pat_con(Node *p) {
     if (!p->list) { int c = con_lookup(p->s); Ford *fd = c >= 0 ? ford_of(p->s) : NULL; return c >= 0 && CON[c].nfields + CON[c].ndims == (fd ? fd->nidx : 0) ? c : -1; }
@@ -1443,11 +1452,14 @@ static void p_decl(void) {
         decl_end(); return;
     }
     if (x_is(t, "#show")) { NX(); x_test("show", x_solve_expr(p_expr(0)), NULL); decl_end(); return; }
+    if (x_is(t, "#type")) { NX(); x_top(sym2("type", x_solve_expr(p_expr(0)))); decl_end(); return; }
     if (x_is(t, "#usage")) { NX(); Tok *n = NX(); x_top(sym2("usage", nsym(n->s))); decl_end(); return; }
     if (x_is(t, "#trusted")) { NX(); x_top(lst(1, nsym("trusted"))); decl_end(); return; }
     /* the store (F34): #key d, #names K, #history name, #unbind name, #gc */
     if (x_is(t, "#key") || x_is(t, "#names") || x_is(t, "#history") || x_is(t, "#unbind") || x_is(t, "#safe") || x_is(t, "#retract")) { const char *c = NX()->s + 1; Tok *n = NX(); x_top(sym2(c, nsym(n->s))); decl_end(); return; }
     if (x_is(t, "#gc")) { NX(); x_top(lst(1, nsym("gc"))); decl_end(); return; }
+    if (x_is(t, "#scope")) { NX(); x_top(lst(1, nsym("scope"))); decl_end(); return; }
+    if (x_is(t, "#where")) { NX(); Tok *n = NX(); x_top(sym2("where", nsym(n->s))); decl_end(); return; }
     if (x_is(t, "#fo")) { NX(); x_top(sym2("fo", x_solve_expr(p_expr(0)))); decl_end(); return; }
     if (x_is(t, "#run")) { NX(); x_top(sym2("run", x_solve_expr(p_expr(0)))); decl_end(); return; }
     if (x_is(t, "#native")) {

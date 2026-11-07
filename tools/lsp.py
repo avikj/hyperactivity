@@ -11,8 +11,12 @@ what depends on a changed definition is checked against the new one. A unit that
 retracted (data, codata, record, mutual, postulate, module, variable, infix, import, ...) among
 those after the first difference restarts the machine and sends the whole document.
 
-Hover shows the signature written in the document for the name under the cursor (the machine has
-no command that prints a type).
+Data, codata and record declarations are retracted like definitions (`#retract D` renames the type,
+its constructors and fields out of reach; what was checked against it keeps it). Hover shows the
+type the machine infers for the name under the cursor (`#type`), falling back to the signature
+written in the document; completion offers the names in scope (`#scope`, refreshed after each
+check, and the document's own); go-to-definition finds a name's unit in the document, or its
+library declaration (`#where`). Text changes are applied incrementally (ranges in UTF-16 units).
 
   python3 tools/lsp.py [--cubical build/cubical] [--root DIR] [LIB.cub ...]
 
@@ -24,9 +28,11 @@ import json, os, re, subprocess, sys, threading
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_LIBS = ["lib/prelude.cub", "lib/code.cub", "lib/check.cub", "lib/std.cub"]
 # heads whose effect #retract cannot undo: a change among them restarts the machine
-STRUCTURAL = {"data", "codata", "record", "mutual", "postulate", "module", "open", "variable",
+STRUCTURAL = {"mutual", "postulate", "module", "open", "variable",
               "infix", "infixl", "infixr", "import", "instance", "primitive", "represent",
-              "foreign", "#native", "#input", "#supply", "#layout", "#unbind", "#retract"}
+              "foreign", "#native", "#input", "#supply", "#layout", "#unbind", "#retract", "world"}
+# heads that declare a type by the name after them, retracted by that name
+TYPE_HEADS = {"data", "codata", "record"}
 
 
 def log(*a):
@@ -46,7 +52,9 @@ class Unit:
         self.head = toks[0] if toks else ""
         self.structural = self.head in STRUCTURAL
         self.name = None              # the definition it declares, for #retract
-        if toks and not self.head.startswith("#") and not self.structural and len(toks) >= 2:
+        if self.head in TYPE_HEADS and len(toks) >= 2:
+            self.name = toks[1]
+        elif toks and not self.head.startswith("#") and not self.structural and len(toks) >= 2:
             self.name = self.head
 
     def first_code_line(self):
@@ -58,6 +66,14 @@ class Unit:
 
     def defined_names(self):
         return [self.name] if self.name else []
+
+    def name_line(self):
+        """the document line of the unit's first code line (its signature or declaration)"""
+        for i, l in enumerate(self.lines):
+            s = l.strip()
+            if s and not s.startswith("--") and s != "#fail":
+                return self.start + i
+        return self.start
 
 
 def split_units(text):
@@ -91,7 +107,7 @@ def split_units(text):
             start = pstart
         pend, pstart = [], None
         j = i + 1
-        if not h.startswith("#") and h not in STRUCTURAL:
+        if not h.startswith("#") and h not in STRUCTURAL and h not in TYPE_HEADS:
             # a signature and its clauses (and clauses written without a signature)
             while j < len(chunks):
                 t = chunks[j][1][0].split()
@@ -205,6 +221,7 @@ class Doc:
         self.machine = None
         self.units = []               # units the machine has seen, in order
         self.diags = []               # per unit
+        self.scope = []               # the machine's names in scope after the last check
 
     def ensure_machine(self):
         if self.machine is None:
@@ -243,7 +260,75 @@ class Doc:
                 self.machine = None
                 self.units = []
                 break
+        self.refresh_scope()
         return self.flat()
+
+    def refresh_scope(self):
+        if self.machine is None:
+            return
+        out = self.machine.request("#scope") or []
+        for l in out:
+            if l.startswith("scope:"):
+                self.scope = l[6:].split()
+
+    def ask(self, line, prefix):
+        """one command to the machine, the rest of its line beginning with prefix"""
+        self.ensure_machine()
+        out = self.machine.request(line)
+        if out is None:
+            self.machine = None
+            self.units = []
+            return None
+        for l in out:
+            if l.startswith(prefix):
+                return l[len(prefix):].strip()
+        return None
+
+    def type_of(self, name):
+        r = self.ask("#type " + name, "type:")
+        if not r:
+            return None
+        # `name : T`; `?` when the machine infers none
+        t = r.split(" : ", 1)
+        return None if len(t) < 2 or t[1].strip() == "?" else t[0] + " : " + t[1]
+
+    def where(self, name):
+        r = self.ask("#where " + name, "where:")
+        if not r:
+            return None
+        t = r.split()
+        if len(t) < 2 or t[1] == "?" or t[1].startswith("<serve>"):
+            return None
+        f, _, ln = t[1].rpartition(":")
+        try:
+            return f, int(ln) - 1
+        except ValueError:
+            return None
+
+    def apply_change(self, ch):
+        """an incremental change (a range in UTF-16 units) or the whole text"""
+        if "range" not in ch:
+            return ch["text"]
+        lines = self.text.split("\n")
+        def off(pos):
+            ln, c = pos["line"], pos["character"]
+            if ln >= len(lines):
+                return len(self.text)
+            base = sum(len(l) + 1 for l in lines[:ln])
+            u, k = 0, 0
+            line = lines[ln]
+            while k < len(line) and u < c:
+                u += 2 if ord(line[k]) > 0xFFFF else 1
+                k += 1
+            return base + k
+        a, b = off(ch["range"]["start"]), off(ch["range"]["end"])
+        return self.text[:a] + ch["text"] + self.text[b:]
+
+    def unit_of(self, name):
+        for u in split_units(self.text):
+            if u.name == name:
+                return u
+        return None
 
     def flat(self):
         return [d for ds in self.diags for d in ds]
@@ -319,8 +404,9 @@ class Server:
 
     def handle(self, meth, pr):
         if meth == "initialize":
-            return {"capabilities": {"textDocumentSync": {"openClose": True, "change": 1},
-                                     "hoverProvider": True},
+            return {"capabilities": {"textDocumentSync": {"openClose": True, "change": 2},
+                                     "hoverProvider": True, "definitionProvider": True,
+                                     "completionProvider": {"triggerCharacters": []}},
                     "serverInfo": {"name": "cubical-lsp"}}
         if meth == "shutdown":
             self.shutdown = True
@@ -333,9 +419,11 @@ class Server:
         if meth == "textDocument/didChange":
             uri = pr["textDocument"]["uri"]
             d = self.docs.get(uri)
-            text = pr["contentChanges"][-1]["text"]
             if d is None:
-                d = self.docs[uri] = Doc(self, uri, text)
+                d = self.docs[uri] = Doc(self, uri, "")
+            text = d.text
+            for ch in pr["contentChanges"]:
+                d.text = text = d.apply_change(ch)
             self.publish(uri, d.update(text))
             return None
         if meth == "textDocument/didClose":
@@ -345,8 +433,9 @@ class Server:
                 d.close()
             self.publish(uri, [])
             return None
-        if meth == "textDocument/hover":
-            d = self.docs.get(pr["textDocument"]["uri"])
+        if meth in ("textDocument/hover", "textDocument/definition", "textDocument/completion"):
+            uri = pr["textDocument"]["uri"]
+            d = self.docs.get(uri)
             if not d:
                 return None
             ln, ch = pr["position"]["line"], pr["position"]["character"]
@@ -354,11 +443,31 @@ class Server:
             if ln >= len(lines):
                 return None
             l = lines[ln]
+            if meth == "textDocument/completion":
+                m = re.search(r"[^\s(){}\[\],;.]*$", l[:ch])
+                pre = m.group(0) if m else ""
+                names = sorted(set(d.scope) | {u.name for u in split_units(d.text) if u.name})
+                items = [{"label": n, "kind": 3} for n in names if n.startswith(pre)][:200]
+                return {"isIncomplete": len(items) == 200, "items": items}
+            word = None
             for m in re.finditer(r"[^\s(){}\[\],;]+", l):
                 if m.start() <= ch <= m.end():
-                    sig = d.signature_of(m.group(0))
-                    return {"contents": {"kind": "plaintext", "value": sig}} if sig else None
-            return None
+                    word = m.group(0)
+            if not word or not re.match(r"^[^#\d\\λ→:=|]", word):
+                return None
+            if meth == "textDocument/hover":
+                t = d.type_of(word) or d.signature_of(word)
+                return {"contents": {"kind": "plaintext", "value": t}} if t else None
+            u = d.unit_of(word)
+            if u is not None:
+                p = {"line": u.name_line(), "character": 0}
+                return {"uri": uri, "range": {"start": p, "end": p}}
+            w = d.where(word)
+            if w is None:
+                return None
+            f, wl = w
+            p = {"line": max(wl, 0), "character": 0}
+            return {"uri": "file://" + os.path.abspath(os.path.join(self.root, f)), "range": {"start": p, "end": p}}
         return None
 
 

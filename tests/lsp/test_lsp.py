@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """A scripted session against tools/lsp.py: a file with an error, the error fixed, a dependent
-re-checked against a changed definition, a data type changed (the machine restarted), a parse
-error kept to its line, hover, shutdown. Prints ok/FAIL per step; exit 1 on a failure.
+re-checked against a changed definition, a data type changed (retracted, not restarted), a parse
+error kept to its line, an incremental edit, hover (the machine's #type), completion (#scope),
+go-to-definition (the document's unit, a library's #where), shutdown. Prints ok/FAIL per step; exit 1 on a failure.
 
   python3 tests/lsp/test_lsp.py   (from scoped-machine/, after `make build/cubical`)
 """
@@ -14,9 +15,10 @@ fails = 0
 
 class Client:
     def __init__(self):
-        env = dict(os.environ, CUBICAL_WORKERS="0")
+        env = dict(os.environ, CUBICAL_WORKERS="0", CUB_LSP_LOG="1")
+        self.log = open("/tmp/lsp-test.log", "w")
         self.p = subprocess.Popen([sys.executable, os.path.join(ROOT, "tools", "lsp.py"), "--root", ROOT],
-                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env)
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log, env=env)
         self.n = 0
 
     def send(self, method, params, req=False):
@@ -102,15 +104,52 @@ check("dependent fixed", d == [], json.dumps(d))
 d = change(5, V5)
 check("data added", d == [], json.dumps(d))
 d = change(6, V6)
-check("data changed (restart)", d == [], json.dumps(d))
+check("data changed", d == [], json.dumps(d))
+c.log.flush()
+check("data changed without a restart", "restart" not in open("/tmp/lsp-test.log").read())
 d = change(7, V7)
 n = V7.split("\n").index("broken =")
 check("parse error at its line, machine alive", len(d) == 1 and d[0]["range"]["start"]["line"] in (n, n + 1), json.dumps(d))
 d = change(8, V6)
 check("parse error removed", d == [], json.dumps(d))
 
-h = c.request("textDocument/hover", {"textDocument": {"uri": URI}, "position": {"line": V6.split("\n").index("useN = plus twoN twoN"), "character": 13}})
-check("hover shows the signature", (h.get("result") or {}).get("contents", {}).get("value") == "twoN : Nat", json.dumps(h))
+# an incremental edit: col = green → col = blue, by its range
+L = V6.split("\n").index("col = green")
+c.send("textDocument/didChange", {"textDocument": {"uri": URI, "version": 9},
+       "contentChanges": [{"range": {"start": {"line": L, "character": 6}, "end": {"line": L, "character": 11}}, "text": "blue"}]})
+d = c.diags()
+check("incremental edit", d == [], json.dumps(d))
+c.send("textDocument/didChange", {"textDocument": {"uri": URI, "version": 10},
+       "contentChanges": [{"range": {"start": {"line": L, "character": 6}, "end": {"line": L, "character": 10}}, "text": "true"}]})
+d = c.diags()
+check("incremental edit with an error", len(d) == 1 and d[0]["range"]["start"]["line"] in (L, L - 1), json.dumps(d))
+c.send("textDocument/didChange", {"textDocument": {"uri": URI, "version": 11},
+       "contentChanges": [{"range": {"start": {"line": L, "character": 6}, "end": {"line": L, "character": 10}}, "text": "green"}]})
+check("incremental edit back", c.diags() == [])
+
+def hover(line, ch):
+    h = c.request("textDocument/hover", {"textDocument": {"uri": URI}, "position": {"line": line, "character": ch}})
+    return (h.get("result") or {}).get("contents", {}).get("value")
+U = V6.split("\n").index("useN = plus twoN twoN")
+check("hover: the type the machine infers", hover(U, 13) == "twoN : Nat", str(hover(U, 13)))
+check("hover: a library definition", hover(U, 8) == "plus : Nat → Nat → Nat", str(hover(U, 8)))
+check("hover: a data type's value", hover(V6.split("\n").index("col = green"), 1) == "col : Col", str(hover(V6.split("\n").index("col = green"), 1)))
+
+def complete(line, ch):
+    r = c.request("textDocument/completion", {"textDocument": {"uri": URI}, "position": {"line": line, "character": ch}})
+    return [i["label"] for i in (r.get("result") or {}).get("items", [])]
+cs = complete(U, 14)    # after "useN = plus tw"
+check("completion: the document's names", "twoN" in cs and "plus" not in cs, str(cs[:10]))
+cs = complete(U, 11)    # after "useN = plus"
+check("completion: the library's names", "plus" in cs and "plus-comm" in cs, str(cs[:10]))
+
+def definition(line, ch):
+    r = c.request("textDocument/definition", {"textDocument": {"uri": URI}, "position": {"line": line, "character": ch}})
+    return r.get("result")
+g = definition(U, 13)
+check("definition in the document", g and g["uri"] == URI and g["range"]["start"]["line"] == V6.split("\n").index("twoN : Nat"), json.dumps(g))
+g = definition(U, 8)
+check("definition in a library", g and g["uri"].endswith("/lib/std.cub") and g["range"]["start"]["line"] >= 0, json.dumps(g))
 
 c.send("textDocument/didClose", {"textDocument": {"uri": URI}})
 check("close clears", c.diags() == [])

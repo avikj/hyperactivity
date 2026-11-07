@@ -239,8 +239,12 @@ once. Results and failures print in the surface syntax, a failed check with its 
 `file:line` and the term at fault. `--serve` after the files reads blocks of declarations from
 the standard input, each ended by a line `.`, and answers each as a file would be answered,
 ending the reply with `.` (a fatal error ends the request, not the machine). `#retract f` hides
-the checked definition `f` so the name can be declared again; what was checked against the old
-`f` keeps it (a global is referenced by its index), later declarations see the new one.
+the checked definition `f` (or a data, codata or record type with its constructors, fields and
+projections) so the name can be declared again; what was checked against the old one keeps it (a
+global is referenced by its index), later declarations see the new one. `#type e` prints the type
+the checker infers for `e`, `#scope` the names in scope, `#where f` where `f` was declared.
+`tools/lsp.py` is a language server over `--serve`: diagnostics, re-checking by retraction, hover
+by `#type`, completion, go-to-definition, incremental sync.
 `tools/lsp.py` is a language server over `--serve` (diagnostics, re-checking what follows a
 changed declaration, hover with the written signature); an editor runs `python3 tools/lsp.py
 --root scoped-machine` as its server for `.cub` files. `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to

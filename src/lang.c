@@ -319,6 +319,8 @@ static int con_lookup(const char *s) {
     return -1;
 }
 int con_index(const char *name) { return con_lookup(name); }
+static void ford_rename(const char *old, const char *nw);
+static int rec_retract(const char *name, char ***fn);
 static int data_lookup(const char *s) { for (int i = ndata - 1; i >= 0; i--) if (!strcmp(DATA[i].name, s)) return i; return -1; }
 int data_field_type(int d, int c, int k) {
     Node *dd = DATA[d].decl; if (!dd || c < 0 || c >= DATA[d].ncons) return -1;
@@ -683,6 +685,9 @@ static int *CHKDATA; static size_t capchkdata; static int nchkdata;   /* checked
 /* hidden: an entry no source name refers to (a rejected definition, a codata type's generated
  * composition and record) */
 static bool *CHKHIDE; static size_t capchkhide;
+static char **CHKPOS; static size_t capchkpos;   /* where each checked definition was declared (file:line), for #where */
+extern char decl_pos[512];
+static char **DATAPOS; static size_t capdatapos;
 static int checked_index(const char *s) { for (int i = nchecked - 1; i >= 0; i--) if (!CHKHIDE[i] && (CHECKED[i] == s || !strcmp(CHECKED[i], s))) return i; return -1; }
 static int chk_index(int d) { for (int i = 0; i < nchkdata; i++) if (CHKDATA[i] == d) return i; return -1; }
 int data_checked_index(int d) { return chk_index(d); }
@@ -2893,6 +2898,7 @@ static int sig_add(const char *name, long g, long tyg, bool hidden) {
     GROW(CHECKED, capchecked, (size_t)nchecked + 1);
     GROW(CHKHIDE, capchkhide, (size_t)nchecked + 1);
     CHECKED[nchecked] = intern(name); CHKHIDE[nchecked] = hidden;
+    GROW(CHKPOS, capchkpos, (size_t)nchecked + 1); CHKPOS[nchecked] = decl_pos[0] ? strdup(decl_pos) : NULL;
     if (g >= 0) G[g].chk = nchecked;
     return nchecked++;
 }
@@ -3162,7 +3168,7 @@ static void toplevel(Node *f) {
     }
     /* a module whose checks are cached: its definitions are made, its judgments and tests not rerun */
     if (trusted && (!strcmp(h, "check") || !strcmp(h, "check-fail") || !strcmp(h, "checked-data-fail") || !strcmp(h, "checked-fail")
-        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "native") || !strcmp(h, "native-c") || !strcmp(h, "run"))) return;
+        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "native") || !strcmp(h, "native-c") || !strcmp(h, "run") || !strcmp(h, "type") || !strcmp(h, "scope") || !strcmp(h, "where"))) return;
     if (!strcmp(h, "def")) {
         if (f->n != 3) die("(def name term)", NULL);
         if (!chk_salt[0] && !f->it[1]->list && !strcmp(f->it[1]->s, "chk-def")) chk_salt_set();   /* the checker (%%chk-def) is defined here: its name (F34) */
@@ -3330,14 +3336,75 @@ static void toplevel(Node *f) {
          * global is referenced by its index, the name finds the newest) */
         if (f->n != 2 || f->it[1]->list) die("(retract name)", NULL);
         int ck = checked_index(f->it[1]->s);
-        if (ck < 0) { printf("retract %s: not a checked definition\n", f->it[1]->s); return; }
-        CHKHIDE[ck] = true;
-        printf("retracted %s\n", f->it[1]->s);
+        if (ck >= 0) {
+            CHKHIDE[ck] = true; printf("retracted %s", f->it[1]->s);
+            /* a record: its projections too, and its name for R { … } */
+            char **fn = NULL; int nf = rec_retract(f->it[1]->s, &fn);
+            for (int k = 0; k < nf; k++) { int cf = checked_index(fn[k]); if (cf >= 0) { CHKHIDE[cf] = true; printf(" .%s", fn[k]); } }
+            printf("\n");
+            return;
+        }
+        /* a data, codata or record type: its name, constructors and fields renamed out of reach
+         * (lookups are by name, the newest first; what was checked against it holds it by its
+         * index, so it stays as it was checked, and a declaration of the name again is a new type).
+         * The reply names what went */
+        int d = data_lookup(f->it[1]->s);
+        if (d < 0) { printf("retract %s: not a checked definition or a data type\n", f->it[1]->s); return; }
+        static int nretr;
+        char nb[512];
+        printf("retracted data %s", DATA[d].name);
+        snprintf(nb, sizeof nb, "%%retracted%d:%s", nretr, DATA[d].name); DATA[d].name = strdup(nb);
+        for (int k = 0; k < DATA[d].ncons; k++) {
+            int c = DATA[d].cons[k]; printf(" %s", CON[c].name);
+            snprintf(nb, sizeof nb, "%%retracted%d:%s", nretr, CON[c].name);
+            ford_rename(CON[c].name, nb);
+            CON[c].name = (char *)intern(nb);
+        }
+        for (int k = 0; k < DATA[d].nflds; k++) {
+            int fl = DATA[d].flds[k]; printf(" .%s", FLD[fl].name);
+            snprintf(nb, sizeof nb, "%%retracted%d:%s", nretr, FLD[fl].name); FLD[fl].name = strdup(nb);
+        }
+        conh_built = -1; nretr++;
+        printf("\n");
+    } else if (!strcmp(h, "scope")) {
+        /* #scope (item 30): the names a declaration may use, on one line `scope: a b …` — checked
+         * definitions not retracted, data types, their constructors (the newest of each name) */
+        printf("scope:");
+        for (int i = 0; i < nchecked; i++) if (!CHKHIDE[i] && CHECKED[i][0] != '%' && checked_index(CHECKED[i]) == i) printf(" %s", CHECKED[i]);
+        for (int d = 0; d < ndata; d++) if (DATA[d].name[0] != '%' && data_lookup(DATA[d].name) == d && checked_index(DATA[d].name) < 0) {
+            printf(" %s", DATA[d].name);
+            for (int k = 0; k < DATA[d].ncons; k++) { int c = DATA[d].cons[k]; if (CON[c].name[0] != '%' && con_lookup(CON[c].name) == c) printf(" %s", CON[c].name); }
+        }
+        printf("\n");
+    } else if (!strcmp(h, "where")) {
+        /* #where name (item 30): `where: name file:line` for a checked definition, a data type or a
+         * constructor (its data type's declaration); `where: name ?` when not known */
+        if (f->n != 2 || f->it[1]->list) die("(where name)", NULL);
+        const char *nm = f->it[1]->s, *pos = NULL;
+        int ck = checked_index(nm);
+        if (ck >= 0 && (size_t)ck < capchkpos) pos = CHKPOS[ck];
+        if (!pos) { int d = data_lookup(nm); if (d >= 0 && (size_t)d < capdatapos) pos = DATAPOS[d]; }
+        if (!pos) { int c = con_lookup(nm); if (c >= 0 && (size_t)CON[c].data < capdatapos) pos = DATAPOS[CON[c].data]; }
+        printf("where: %s %s\n", nm, pos ? pos : "?");
     } else if (!strcmp(h, "gc")) {
         store_gc_cmd();
     } else if (!strcmp(h, "safe")) {
         if (f->n != 2 || f->it[1]->list) die("(safe name)", NULL);
         store_safe_cmd(f->it[1]->s);
+    } else if (!strcmp(h, "type")) {
+        /* #type e (item 30): e's type as the checker infers it, one line `type: e : T` on stdout (the
+         * editor protocol's hover reads it); a term with no inferable type gets the reason */
+        if (f->n != 2) die("(type term)", NULL);
+        Node *ct = nl2("%raw", aclosed(ds(f->it[1])));
+        long st = 0; char *r = readback(nl2("%%infer-ok", ct), &st);
+        printf("type: "); out_term(f->it[1]);
+        if (strcmp(r, "ok")) { printf(" : ?\n"); explain(r, NULL); free(r); return; }
+        free(r);
+        net_drain();
+        char *ty = read_code(build_top(nl2("%%type-of", ct)));
+        net_drain();
+        printf(" : "); if (ty) out_str(ty); else printf("?"); printf("\n");
+        free(ty);
     } else if (!strcmp(h, "usage")) {
         /* #usage f: the parameters' computed usages */
         int ck = checked_index(f->it[1]->s);
@@ -3523,6 +3590,7 @@ static void toplevel(Node *f) {
         for (int k = 0; k < np; k++) pn[k] = param_name(hd->it[k + 1])->s;
         GROW(DATA, capdata, (size_t)ndata + 1);
         int d = ndata++;
+        GROW(DATAPOS, capdatapos, (size_t)ndata); DATAPOS[d] = decl_pos[0] ? strdup(decl_pos) : NULL;
         DATA[d] = (DataInfo){ strdup(D), np, 0, calloc(1, sizeof(int)), -1, -1, f, 1, nf, calloc((size_t)nf + 1, sizeof(int)) };
         Node **fn = calloc((size_t)nf + 1, sizeof(Node *)), **ft = calloc((size_t)nf + 1, sizeof(Node *));
         for (int k = 0; k < nf; k++) {
@@ -3615,6 +3683,7 @@ static void toplevel(Node *f) {
         for (int k = 0; k < np; k++) pn[k] = param_name(hd->it[k + 1])->s;
         GROW(DATA, capdata, (size_t)ndata + 1);
         int d = ndata++;
+        GROW(DATAPOS, capdatapos, (size_t)ndata); DATAPOS[d] = decl_pos[0] ? strdup(decl_pos) : NULL;
         DATA[d] = (DataInfo){ strdup(D), np, nc, calloc((size_t)nc + 1, sizeof(int)), -1, -1, f, 0, 0, NULL, 0 };
         /* the trailing parameters named %ix… are indices (an indexed family by fording, E28) */
         for (int k = np - 1; k >= 0 && !strncmp(pn[k], "%ix", 3); k--) DATA[d].nidx++;
@@ -4281,8 +4350,11 @@ static void serve(void) {
         if (!strcmp(line, ".\n") || !strcmp(line, ".")) {
             if (len) {
                 buf[len] = 0;
+                /* (verdicts in surface syntax, as for a file) */
+                bool saved_os = out_surface; out_surface = !getenv("CUBICAL_CORE_OUT");
                 jmp_buf jb; if (setjmp(jb) == 0) { die_jb = &jb; load_surface(buf, "<serve>", false); die_jb = NULL; }
                 else { die_jb = NULL; printf("error: %s\n", die_msg); }
+                out_surface = saved_os;
                 net_drain();
             }
             len = 0;
