@@ -123,3 +123,22 @@ sumPt p k = case p of pt a b → plus (plus a b) k
 #same swapPt (pt 7 8) = pt 9 7
 #same sumPt (pt 3 40) 2 = 45
 #same sumPt (swapPt (pt 5 6)) 0 = 12
+
+-- item 17's re-entry: #native f n at k = P specializes f on its first k arguments while the program runs.
+-- scaleat e b adds b e times; on the first call with e = 3 the net computes P 3 (the specializer
+-- unrolls the loop: ((0 + b) + b) + b), the machine compiles and enters it and keeps it under 3; later
+-- calls with 3 call it at once, e = 4 is another specialization, and a second run reads both from the
+-- specialization cache by key (`native at run: … [specialization cached by key]`). Calls inside a
+-- definition (use-scaleat) reach the same kept specialization
+scaleat : Word → Word → Word
+scaleat e b = %welimP (λ v → Word) e #0 (λ k r → %wadd r b)
+#native scaleat 2 at 1 = λ (e : Word) → emit-lib-u (lcons (#0 , (#1 , lam-body (specialize (Word → Word) lnil (clam (capp (capp (code scaleat) (cwlit e)) (cvar #0)))))) lnil)
+#same scaleat #3 #5 = #15
+#same scaleat #3 #7 = #21
+#same scaleat #4 #5 = #20
+#same scaleat #3 #100 = #300
+use-scaleat : Word → Word
+use-scaleat w = %wadd (scaleat #3 w) (scaleat #3 (%wadd w #1))
+#same use-scaleat #10 = #63
+-- not words: the definition on the net
+#same (λ (x : Word) → scaleat #2 x) = (λ (x : Word) → %wadd (%wadd #0 x) x)

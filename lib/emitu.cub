@@ -601,6 +601,10 @@ bentry-args tys i n =
 emit-lib-boxed-u defs =
   let sigs = sigs-of defs
   in cat6 s-runtime u-prdecl (box-fns (flat-types defs)) (protos-u sigs defs) (dispatch (clos-defs defs)) (lapp (defs-u sigs defs) (export-boxed-u sigs #0 (def-arity defs #0) u-entry-name))
+-- a program's bytes as a byte string (item 17's re-entry, #native f n at k: the net computes the C
+-- program at the values a running program supplies, and the machine compiles this byte string)
+bytes-of-list l = bl-fill (%bytes (lst-len l)) #0 l
+bl-fill b i l = case l of lnil → b; lcons x r → bl-fill (%store8 b i (%u32ofw x)) (%wsucc i) r
 -- ---------------------------------------------------------------- declared signatures (item 14)
 -- A definition of a program from the store (program-at / program-rep-at m: global g is definition
 -- g + 1; the entry m, definition 0 and the lifted closures from 100000 are not globals) is typed

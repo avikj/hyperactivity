@@ -253,7 +253,9 @@ fields crosses as its C struct by value (through a trampoline the machine append
 specialization is cached by key: its expression with each checked definition by its codebase key,
 the values written in it, the checker's version and the libraries before the file name it before
 it is computed, and a hit (`specialization cached by key, 0 steps`) runs neither the specializer
-nor the C compiler. The other direction is `build/libcubical.a` with
+nor the C compiler. `#native f n at k = P` specializes while the program runs: on the first call
+with each value of f's first k word arguments the net computes `P v…` (the residual's C), which is
+compiled, entered and kept under the values (and in the cache by key across runs). The other direction is `build/libcubical.a` with
 `src/libcubical.h`: a C program loads libraries with `cubical_init` and calls checked
 definitions on words with `cubical_call_w` (and the emitted C's boxed form, `cubical_call`), on
 boxed data with `cubical_call_data`, and on records as C structs (`"struct D"`, `cubical_call_data_r`);

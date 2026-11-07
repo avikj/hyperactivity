@@ -2991,6 +2991,25 @@ static void interact(Cell *o, Cell *v) {
                 else a[k] = c->a;
             }
             uint64_t r = 0;
+            if (e->at != -1) {
+                /* specialized while the program runs (item 17, lang.c's native_at_call): the lookup entry
+                 * calls a kept specialization, or hands the call to the builder, which passes the
+                 * program the net computed at the values (a byte string) to native_at_build */
+                extern int native_at_call(int at, const uint64_t *a, uint64_t *r);
+                extern int native_at_build(int at, const char *c, size_t len, const uint64_t *a, uint64_t *r);
+                extern long native_at_builder(int at);
+                int at = e->at;
+                if (at >= 0) {
+                    if (native_at_call(at, a, &r)) { out = word_of(r); for (int k = 0; k < n; k++) era(A->v[k]); }
+                    else out = apply_gid(native_at_builder(at), A->v, n);
+                } else {
+                    VB *pb = boxed[0];
+                    if (native_at_build(-2 - at, (const char *)pb->f, (size_t)pb->n, a + 1, &r) == 0) { out = word_of(r); for (int k = 0; k < n; k++) era(A->v[k]); }
+                    else out = apply_gid((long)o->a, A->v, n);
+                    free_boxed(pb);
+                }
+                free(A); link(out, o->port[1]); cell_free(o); return;
+            }
             if (e->tw) {
                 /* records by value (B18): the trampoline takes the words and gives the result's */
                 uint64_t rb[16] = { 0 };

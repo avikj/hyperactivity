@@ -762,7 +762,7 @@ int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret
     }
     if (!fn) die("foreign: no such symbol in the running program or its libraries (write \"lib.so:sym\" for another):", sym);
     GROW(FFI, capffi, (size_t)nffi + 1);
-    FFI[nffi] = (Ffi){ strdup(sym), fn, n, { 0 }, ret, -1, lib_h, NULL, 0, NULL, -1, 0 };
+    FFI[nffi] = (Ffi){ strdup(sym), fn, n, { 0 }, ret, -1, lib_h, NULL, 0, NULL, -1, 0, -1 };
     /* a library's handles are finalized by its cubical_release, when it has one */
     if (lib_h) FFI[nffi].fin = (void (*)(void *))dlsym(lib_h, "cubical_release");
     memcpy(FFI[nffi].kind, kind, (size_t)n);
@@ -3490,6 +3490,81 @@ static void native_structs(const char *nm, long g, int n, int k, const int *sdi,
     fclose(m); emit(buf); free(buf);
     (void)g;
 }
+/* item 17's re-entry: #native f n at k = P — f's first k arguments become known only while the program
+ * runs. f is (lam a… (%native #e #g a…)) over an entry e with no code yet; the first call whose first
+ * k arguments are words v1..vk computes P v1 … vk then (the C of the residual over the other n − k
+ * word arguments, emit-lib-u's), compiles it, enters it and keeps it under the values: a later call
+ * with the same values calls it at once, another value is another specialization, and across runs the
+ * specialization cache by key (P's key text with the values) skips the specializer and the compiler.
+ * A call whose arguments are not all words is f's own definition on the net */
+typedef struct { char *name, *prog, *key; int n, k, nc; uint64_t (*vals)[8]; int *ffi; long build; } NatAt;
+static NatAt *NATAT; static int nnatat; static size_t capnatat;
+uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n);
+/* the key of the specialization at the values: P's key text and the values */
+static void natat_key(NatAt *t, const uint64_t *a, char sk[65]) {
+    char *kb; size_t kl; FILE *km = open_memstream(&kb, &kl); fprintf(km, "%s at", t->key);
+    for (int i = 0; i < t->k; i++) fprintf(km, " #%llu", (unsigned long long)a[i]);
+    fclose(km); key_hash(kb, kl, sk); free(kb);
+}
+/* the library so entered and kept under the values */
+static int natat_enter(int at, const uint64_t *a, const char *so, bool spec_hit, size_t len) {
+    char sym[760]; snprintf(sym, sizeof sym, "%s:cubical_entry", so);
+    unsigned char kw[8]; for (int i = 0; i < 8; i++) kw[i] = 4;
+    NatAt *t = &NATAT[at];
+    int e = ffi_add(sym, t->n - t->k, kw, 4);
+    t->vals = realloc(t->vals, sizeof *t->vals * (size_t)(t->nc + 1)); t->ffi = realloc(t->ffi, sizeof(int) * (size_t)(t->nc + 1));
+    memcpy(t->vals[t->nc], a, sizeof(uint64_t) * (size_t)t->k); t->ffi[t->nc] = e;
+    printf("native at run: %s at", t->name); for (int i = 0; i < t->k; i++) printf(" #%llu", (unsigned long long)a[i]);
+    if (spec_hit) printf("   [specialization cached by key]\n"); else printf("   [specialized now, %zu bytes of C]\n", len);
+    return t->nc++;
+}
+/* a call with words a: 1 and *r when a specialization at a's first k is kept (in this run, or in the
+ * specialization cache by key from an earlier one), 0 when there is none yet (the call is then the
+ * builder's: the net computes P at the values and native_at_build compiles it) */
+int native_at_call(int at, const uint64_t *a, uint64_t *r) {
+    NatAt *t = &NATAT[at]; int hit = -1;
+    for (int i = 0; i < t->nc && hit < 0; i++) if (!memcmp(t->vals[i], a, sizeof(uint64_t) * (size_t)t->k)) hit = i;
+    if (hit < 0) {
+        char sk[65], dir[512], spath[640], hx[80] = "", so[700]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
+        natat_key(t, a, sk); snprintf(spath, sizeof spath, "%s/spec-%s", dir, sk);
+        FILE *sf = fopen(spath, "r"); if (!sf) return 0;
+        if (fscanf(sf, "%64s", hx) != 1) hx[0] = 0; fclose(sf);
+        snprintf(so, sizeof so, "%s/%s.so", dir, hx);
+        if (!hx[0] || access(so, 4) != 0) return 0;
+        hit = natat_enter(at, a, so, true, 0); t = &NATAT[at];
+    }
+    *r = ffi_invoke(&FFI[t->ffi[hit]], a + t->k, t->n - t->k);
+    return 1;
+}
+long native_at_builder(int at) { return NATAT[at].build; }
+/* the builder's call: c the C program the net computed (len bytes), a the n words: compiled (once per
+ * text, as #native's), entered, kept, called; -1 when the program is not over n − k words */
+int native_at_build(int at, const char *c, size_t len, const uint64_t *a, uint64_t *r) {
+    NatAt *t = &NATAT[at];
+    char *txt = malloc(len + 1); memcpy(txt, c, len); txt[len] = 0;
+    char rt[64], pt[8][64]; int np = proto_types(txt, "cubical_entry(", rt, pt);
+    bool ok = np == t->n - t->k && !strcmp(rt, "uint64_t");
+    for (int i = 0; i < np && ok; i++) if (strcmp(pt[i], "uint64_t")) ok = false;
+    if (!ok) { printf("FAIL: native %s at run: the program's entry is not over %d words\n", t->name, t->n - t->k); failures++; free(txt); return -1; }
+    char sk[65], dir[512], spath[640], hx[65], so[700], cpath[700]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
+    mkdir(cache_dir(), 0755); mkdir(dir, 0755);
+    key_hash(txt, strlen(txt), hx);
+    snprintf(cpath, sizeof cpath, "%s/%s.c", dir, hx); snprintf(so, sizeof so, "%s/%s.so", dir, hx);
+    if (access(so, 4) != 0) {
+        FILE *cf = fopen(cpath, "w"); if (!cf) { free(txt); return -1; } fputs(txt, cf); fclose(cf);
+        char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -Wl,-Bsymbolic -o %s %s", so, cpath);
+        if (system(cmd) != 0) { printf("FAIL: native %s at run   (the C compiler rejected %s)\n", t->name, cpath); failures++; free(txt); return -1; }
+    }
+    free(txt);
+    natat_key(t, a, sk); snprintf(spath, sizeof spath, "%s/spec-%s", dir, sk);
+    FILE *sf = fopen(spath, "w"); if (sf) { fprintf(sf, "%s\n", hx); fclose(sf); }
+    int hit = -1;
+    for (int i = 0; i < t->nc && hit < 0; i++) if (!memcmp(t->vals[i], a, sizeof(uint64_t) * (size_t)t->k)) hit = i;
+    if (hit < 0) hit = natat_enter(at, a, so, false, len);
+    t = &NATAT[at];
+    *r = ffi_invoke(&FFI[t->ffi[hit]], a + t->k, t->n - t->k);
+    return 0;
+}
 static void toplevel(Node *f) {
     if (!f->list || f->n == 0 || f->it[0]->list) die("top-level form expected", NULL);
     const char *h = f->it[0]->s;
@@ -3506,7 +3581,7 @@ static void toplevel(Node *f) {
     }
     /* a module whose checks are cached: its definitions are made, its judgments and tests not rerun */
     if (trusted && (!strcmp(h, "check") || !strcmp(h, "check-fail") || !strcmp(h, "checked-data-fail") || !strcmp(h, "checked-fail")
-        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "native") || !strcmp(h, "native-c") || !strcmp(h, "run") || !strcmp(h, "type") || !strcmp(h, "scope") || !strcmp(h, "where"))) return;
+        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "native") || !strcmp(h, "native-c") || !strcmp(h, "native-at") || !strcmp(h, "run") || !strcmp(h, "type") || !strcmp(h, "scope") || !strcmp(h, "where"))) return;
     if (!strcmp(h, "def")) {
         if (f->n != 3) die("(def name term)", NULL);
         if (!chk_salt[0] && !f->it[1]->list && !strcmp(f->it[1]->s, "chk-def")) chk_salt_set();   /* the checker (%%chk-def) is defined here: its name (F34) */
@@ -4348,6 +4423,47 @@ static void toplevel(Node *f) {
         /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c, D26) */
         if (f->n != 2) die("(run step)", NULL);
         drivers_run(f->it[1]);
+    } else if (!strcmp(h, "native-at")) {
+        /* (native-at name n k prog): item 17's re-entry (native_at_call) */
+        if (f->n != 5 || f->it[1]->list || f->it[2]->list || f->it[3]->list || f->it[2]->s[0] != '#' || f->it[3]->s[0] != '#') die("(native-at name n k prog)", NULL);
+        const char *nm = f->it[1]->s; int n = atoi(f->it[2]->s + 1), k = atoi(f->it[3]->s + 1);
+        long g = global_lookup(nm); if (g < 0) die("native: not a definition:", nm);
+        if (k < 1 || k >= n || n > 8 || n - k > 6) die("native … at k: one to six arguments after the first k, k at least one:", nm);
+        GROW(NATAT, capnatat, (size_t)nnatat + 1);
+        NatAt *t = &NATAT[nnatat]; memset(t, 0, sizeof *t);
+        t->name = strdup(nm); t->n = n; t->k = k;
+        { char *pb; size_t pl; FILE *pm = open_memstream(&pb, &pl); print_node(pm, f->it[4]); fclose(pm); t->prog = pb; }
+        { char *kb; size_t kl; FILE *km = open_memstream(&kb, &kl); fprintf(km, "spec-at %s %d %d ", chk_salt, n, k); spec_key_text(km, f->it[4]); fclose(km); t->key = kb; }
+        int at = nnatat++;
+        if (global_lookup("bytes-of-list") < 0) die("native … at: needs lib/emitu.cub's bytes-of-list", NULL);
+        /* two entries: the lookup (n words: a kept specialization called, else the builder) and the
+         * builder (the program as a byte string the net computed, then the n words) */
+        GROW(FFI, capffi, (size_t)nffi + 2);
+        FFI[nffi] = (Ffi){ strdup(nm), NULL, n, { 4, 4, 4, 4, 4, 4, 4, 4 }, 4, -1, NULL, NULL, 0, NULL, -1, 0, at };
+        int e = nffi++;
+        FFI[nffi] = (Ffi){ strdup(nm), NULL, n + 1, { 6, 4, 4, 4, 4, 4, 4, 4 }, 4, -1, NULL, NULL, 0, NULL, -1, 0, -2 - at };
+        int eb = nffi++;
+        static int nnb; char bn[64], bfn[64]; snprintf(bn, sizeof bn, "%%natbuild%d", nnb); snprintf(bfn, sizeof bfn, "%%natbfb%d", nnb++);
+        char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
+        /* the builder's fallback: the definition itself on the words (the program ignored) */
+        fprintf(m, "(def %%natorig%d %s)", nnb - 1, nm); fclose(m); emit(buf); free(buf);
+        m = open_memstream(&buf, &bl);
+        fprintf(m, "(def %s (lam %%p", bfn); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i); fprintf(m, " ");
+        for (int i = 0; i < n; i++) fprintf(m, "(app "); fprintf(m, "%%natorig%d", nnb - 1); for (int i = 0; i < n; i++) fprintf(m, " %%a%d)", i);
+        fprintf(m, "))"); fclose(m); emit(buf); free(buf);
+        long gbf = global_lookup(bfn);
+        m = open_memstream(&buf, &bl);
+        fprintf(m, "(def %s (lam", bn); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
+        fprintf(m, " (%%native #%d #%ld (app bytes-of-list ", eb, gbf);
+        for (int i = 0; i < k; i++) fprintf(m, "(app "); fputs(t->prog, m); for (int i = 0; i < k; i++) fprintf(m, " %%a%d)", i);
+        fprintf(m, ")"); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i); fprintf(m, ")))");
+        fclose(m); emit(buf); free(buf);
+        NATAT[at].build = global_lookup(bn);
+        m = open_memstream(&buf, &bl);
+        fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
+        fprintf(m, " (%%native #%d #%ld", e, g); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i); fprintf(m, ")))");
+        fclose(m); emit(buf); free(buf);
+        passes++; printf("ok: native %s at %d   [specialized while the program runs, on the first call with each value]\n", nm, k);
     } else if (!strcmp(h, "native") || !strcmp(h, "native-c")) {
         /* (native name n prog [keep]): the C program prog (a list of bytes printed by lib/emitu.cub's
          * emit-lib-u: its definition 0 the function at arity n, exported as cubical_entry) compiled

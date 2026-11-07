@@ -1537,6 +1537,13 @@ static void p_decl(void) {
             if (keep) f->it[5] = nsym("keep");
             x_top(f); decl_end(); return;
         }
+        if (x_is(P0(), "at")) {
+            /* #native name n at k = P: specialized while the program runs on its first k arguments (item 17) */
+            NX(); Tok *kt = NX(); char kw[32]; snprintf(kw, sizeof kw, "#%s", kt->s);
+            want("=");
+            Node *f = nlist(5); f->it[0] = nsym("native-at"); f->it[1] = nsym(n->s); f->it[2] = nsym(w); f->it[3] = nsym(kw); f->it[4] = x_solve_expr(p_expr(0));
+            x_top(f); decl_end(); return;
+        }
         bool keep = x_is(P0(), "keep"); if (keep) NX();
         want("=");
         if (keep) { Node *f = nlist(5); f->it[0] = nsym("native"); f->it[1] = nsym(n->s); f->it[2] = nsym(w); f->it[3] = x_solve_expr(p_expr(0)); f->it[4] = nsym("keep"); x_top(f); }
