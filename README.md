@@ -330,7 +330,9 @@ A shared subterm is held by a duplicating cell that copies lazily, one level at 
 read. A stored value lives once, and readers copy its top cell. A substitution of dimensions is
 recorded on the reference, not applied by copying. A subterm in a position that might not be read
 is held unbuilt until an operation meets it: `fst (a , b)` never computes `b`, even if `b`
-diverges. A λ's subterms that do not mention its variable are computed once, however often the λ is
+diverges. `delay e` holds `e` so wherever it stands: it has `e`'s type, an operation meeting it
+builds it, `force` of it is it, and its code is `cthunk` (the first-order and C++ back ends,
+being strict, compute it where it stands). A λ's subterms that do not mention its variable are computed once, however often the λ is
 applied. A case is one cell, and selecting a branch is one step.
 
 Equal terms reached by different routes are also computed once. Every cell that will produce a

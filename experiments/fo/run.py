@@ -181,6 +181,16 @@ mk3q a = tconsq a (tconsq (%wadd a #1) (tconsq (%wadd a #2) tnilq))""", {'sumq':
   """#include "image.hpp"
 #include <cstdio>
 int main() { auto l = mk3q(5); std::printf("%llu %llu\\n", (unsigned long long) sumq(l), (unsigned long long) lenq<uint64_t>(l)); }""", "18 3"),
+ # delayed terms in a checked definition (delay/force, cthunk in its code): the machine builds a
+ # delay where it is met, so the normal form the image translates has none; exported, run, and
+ # read back equal to the source's
+ 'delay': ("""thki : Word → Word → Word
+thki a b = %wadd (force (delay (%wadd a b))) (delay (%wadd b #1))
+thsel : Word → Word → Word
+thsel a b = if %wlt a b then force (delay (%wsub b a)) else delay (%wsub a b)""", {'thki': 'thk', 'thsel': 'thsel'},
+  """#include "image.hpp"
+#include <cstdio>
+int main() { std::printf("%llu %llu %llu\\n", (unsigned long long) thk(2, 3), (unsigned long long) thsel(3, 10), (unsigned long long) thsel(10, 4)); }""", "9 7 6"),
  # word elimination over a pair: cub::welim with a lambda step; fib 90
  'fib': ("""fibpi : Word → Word × Word
 fibpi n = %welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p)))

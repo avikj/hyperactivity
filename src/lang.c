@@ -210,7 +210,7 @@ static bool node_eq(Node *a, Node *b) {
 }
 
 /* ---------------- desugaring to the core forms ---------------- */
-static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
+static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "%delay", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
     "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%ptr-of", "%region-at", "%ffi", "%native",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
@@ -427,7 +427,10 @@ static Node *ds(Node *t) {
     Node *h = t->it[0];
     if (!h->list && keyword(h->s)) {
         const char *k = h->s;
-        if (IS(k, "delay")) { arity(t, 1); return nl2("thunk", ds(t->it[1])); }
+        /* delay e: e held unbuilt (the machine's demand, V_THUNK), transparent — an operation that
+         * meets it builds it, force of it is it; typed as e (tthunk). The suspensions the
+         * elaborator makes (a system's branches, a copattern's handler) are (thunk …) records */
+        if (IS(k, "delay")) { arity(t, 1); return nl2("%delay", ds(t->it[1])); }
         /* a term already desugared (an annotated code) */
         if (IS(k, "%raw")) { arity(t, 1); return t->it[1]; }
         if (IS(k, "force")) { arity(t, 1); return nl2("force", ds(t->it[1])); }
@@ -911,6 +914,7 @@ static Node *to_code(Node *t) {
     }
     if (!strcmp(h, "hcompD")) return capp2("chcomp", to_code(t->it[1]), to_code(t->it[2]));
     if (!strcmp(h, "force")) return capp1("cforce", to_code(t->it[1]));
+    if (!strcmp(h, "%delay")) return capp1("cthunk", to_code(t->it[1]));
     /* words and levels */
     if (!strcmp(h, "%wsucc")) return capp1("cwsucc", to_code(t->it[1]));
     { static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub" };
@@ -1223,7 +1227,7 @@ static NV ann(Node *t, Chain *C) {
         { "app", "tapp", 2 }, { "pair", "tpair", 2 }, { "fst", "tfst", 1 }, { "snd", "tsnd", 1 },
         { "PathP", "tpathp", 3 }, { "@", "tpapp", 2 }, { "~", "tneg", 1 }, { "/\\", "tmeet", 2 }, { "\\/", "tjoin", 2 },
         { "&", "tfand", 2 }, { "|", "tfor", 2 }, { "comp", "tcomp", 3 }, { "Glue", "tgluet", 2 }, { "glue", "tglue", 2 },
-        { "unglue", "tunglue", 2 }, { "%hcompU", "thcompu", 2 }, { "%unglueU", "tunglueu", 2 }, { "hcompD", "thcomp", 2 }, { "force", "tforce", 1 }, { NULL, NULL, 0 } };
+        { "unglue", "tunglue", 2 }, { "%hcompU", "thcompu", 2 }, { "%unglueU", "tunglueu", 2 }, { "hcompD", "thcomp", 2 }, { "force", "tforce", 1 }, { "%delay", "tthunk", 1 }, { NULL, NULL, 0 } };
     {
         static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", NULL };
         for (int q = 0; WO[q]; q++) if (!strcmp(h, WO[q])) {
@@ -1934,6 +1938,7 @@ static Syn *compile(Node *t) {
     const char *h = t->it[0]->s;
     if (IS(h, "lam")) return compile_record(t->it[1], t->it[2], false);
     if (IS(h, "thunk")) return compile_record(NULL, t->it[1], true);
+    if (IS(h, "%delay")) return compile_lazy(t->it[1]);
     if (IS(h, "force")) return compile_n(S_FORCE, t, 1, 1);
     if (IS(h, "the")) return compile(t->it[2]);
     if (IS(h, "%rebuilt")) { Syn *r = compile(t->it[1]); if (r->tag == S_CON) r->x = 1; return r; }
@@ -2638,7 +2643,7 @@ static void pcode(FILE *o, Port p) {
         static const struct { const char *c, *s; } F[] = {
             { "cpair", "pair" }, { "cfst", "fst" }, { "csnd", "snd" }, { "cpathp", "PathP" }, { "cpapp", "@" },
             { "cneg", "~" }, { "ccomp", "comp" }, { "cgluet", "Glue" }, { "cglue", "glue" }, { "cunglue", "unglue" }, { "chcompu", "%hcompU" }, { "cunglueu", "%unglueU" },
-            { "cann", "the" }, { "chcomp", "hcompD" }, { "cforce", "force" }, { "clsuc", "lsuc" }, { "clmax", "lmax" },
+            { "cann", "the" }, { "chcomp", "hcompD" }, { "cforce", "force" }, { "cthunk", "delay" }, { "clsuc", "lsuc" }, { "clmax", "lmax" },
             { "cwsucc", "%wsucc" }, { "cwelim", "%welim" },
             { "ci0", "0" }, { "ci1", "1" }, { "cftt", "tt" }, { "cfff", "ff" }, { "clevel", "Level" }, { "clzero", "lzero" },
             { "cword", "Word" }, { "cclock", "Clock" }, { "ctick", "Tick" }, { "cclock0", "κ0" }, { "ctick0", "⋄" }, { NULL, NULL } };

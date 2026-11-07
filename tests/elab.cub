@@ -135,3 +135,19 @@ vbad f (vcons m x xs e) = vbad f xs
 lam-path-arg : (b : Word) → plusw (%wsucc #0) b ≡ %wsucc b
 lam-path-arg b = catw (plusw-suc-l #0 b) (λ i → %wsucc (plusw-zero-l b i))
 #same lam-path-arg #3 @ 1 = #4
+-- delay e: e held unbuilt and transparent — typed as e, built by the operation that meets it,
+-- force of it is it; its code is cthunk (lib/code.cub), evaluated by eval-g as a delay
+dl-suc : Nat → Nat
+dl-suc n = force (delay (suc n))
+dl-fun : Nat → Nat
+dl-fun = force (delay (λ n → suc (suc n)))
+dl-bare : Word
+dl-bare = %wadd (delay #1) #2
+dl-arg : Word → Word → Word
+dl-arg a b = a
+#same dl-suc 1 = 2
+#same dl-fun 1 = 3
+#same dl-bare = #3
+#same dl-arg #7 (delay (dl-arg #1 #2)) = #7
+#same eval-g lnil (code (λ (n : Nat) → delay (suc n))) zero = suc zero
+#same eval-g lnil (code (λ (w : Word) → %wadd (delay w) (force (delay #1)))) #4 = #5

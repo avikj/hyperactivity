@@ -59,6 +59,7 @@ data Code
   | chcomp u a
   | cdlam b
   | cforce t
+  | cthunk t
   | clevel
   | clzero
   | clsuc l
@@ -219,6 +220,7 @@ eval-g e c =
     chcomp u a → hcompD (eval-g e u) (eval-g e a)
     cdlam b → λ i → eval-g (lcons i e) b
     cforce t → force (eval-g e t)
+    cthunk t → delay (eval-g e t)
     clevel → Level
     clzero → lzero
     clsuc l → lsuc (eval-g e l)

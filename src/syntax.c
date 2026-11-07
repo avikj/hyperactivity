@@ -2648,7 +2648,7 @@ static Node *cn(Node *c) {
         { "capp", "", 2 }, { "cpair", "pair", 2 }, { "cfst", "fst", 1 }, { "csnd", "snd", 1 }, { "cpathp", "PathP", 3 },
         { "cpapp", "@", 2 }, { "cneg", "~", 1 }, { "cmeet", "/\\", 2 }, { "cjoin", "\\/", 2 }, { "cfand", "&", 2 }, { "cfor", "|", 2 },
         { "ccomp", "comp", 3 }, { "cgluet", "Glue", 2 }, { "cglue", "glue", 2 }, { "cunglue", "unglue", 2 }, { "chcomp", "hcompD", 2 },
-        { "cforce", "force", 1 }, { "clsuc", "lsuc", 1 }, { "clmax", "lmax", 2 }, { "cann", "the", 2 }, { NULL, NULL, 0 } };
+        { "cforce", "force", 1 }, { "cthunk", "delay", 1 }, { "clsuc", "lsuc", 1 }, { "clmax", "lmax", 2 }, { "cann", "the", 2 }, { NULL, NULL, 0 } };
     for (int q = 0; F[q].c; q++) if (!strcmp(h, F[q].c)) {
         if (c->n != F[q].n + 1) return NULL;
         Node *r = nlist(F[q].n + (F[q].t[0] ? 1 : 0)); int k = 0;

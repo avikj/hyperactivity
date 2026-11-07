@@ -234,6 +234,9 @@ cxx-expr env want c =
     ccase d B x → if %weq d bool-idx then bool-case env want B x else case-expr env want d none B x
     celim d P B x → if %weq d bool-idx then bool-case env want B x else case-expr env want d (some P) B x
     cforce t → (case t of cvar n → (let b = env-at env n in if %weq (fst b) #5 then xs (snd b) else xno (lapp x-r-form (lcons #102 (lcons #111 (lcons #114 (lcons #99 (lcons #101 lnil))))))); _ → xno (lapp x-r-form (lcons #102 (lcons #111 (lcons #114 (lcons #99 (lcons #101 lnil)))))))
+    -- a delayed term: the term (C++ is strict; a checked definition's normal form, which the image
+    -- translates, has none — the machine builds a delay where it is met)
+    cthunk t → cxx-expr env want t
     cdata d ps → cxx-type env c
     cword → cxx-type env c
     cpty k n → cxx-type env c
@@ -496,6 +499,7 @@ datas-in c acc =
     cwelim w z s → datas-in s (datas-in z (datas-in w acc))
     cprim k as → datas-list as acc
     cforce t → datas-in t acc
+    cthunk t → datas-in t acc
     _ → acc
 datas-list l acc = case l of lnil → acc; lcons x r → datas-list r (datas-in x acc)
 add-d d acc = if %weq d bool-idx then acc else if lmem-w d acc then acc else lapp acc (lcons d lnil)

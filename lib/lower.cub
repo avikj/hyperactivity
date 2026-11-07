@@ -41,6 +41,10 @@ lower c =
     ccase d B x → if %weq d bool-idx then lower-bool B (lower x) else frec d (lower x) (lower-ralts d B #0)
     celim d P B x → if %weq d bool-idx then lower-bool B (lower x) else frec d (lower x) (lower-ralts d B #0)
     cforce t → fforce (lower t)
+    -- a delayed term is transparent (it has its term's type, and every operation meeting it builds
+    -- it): the first-order form is strict, so it is the term, evaluated where it stands (a checked
+    -- term terminates, so the value is the same); fthunk is for the suspensions lift makes
+    cthunk t → lower t
     cwlit n → flit n
     cplit k b → if %weq k #0 then fi64 b else if %weq k #2 then ff64 b else if %weq k #1 then flit b else fnet #0 lnil
     cwsucc a → fprim P-add (lcons (lower a) (lcons (flit #1) lnil))

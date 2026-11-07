@@ -55,6 +55,7 @@ data Tm
   | tcase d B x F V
   | thcomp u a V
   | tforce t V
+  | tthunk t V
   | tlevel
   | tlzero
   | tlsuc l V
@@ -125,6 +126,7 @@ tval c =
     tcase d B x F V → V
     thcomp u a V → V
     tforce t V → V
+    tthunk t V → V
     tlevel → Level
     tlzero → lzero
     tlsuc l V → V
@@ -703,6 +705,7 @@ tsrc c =
     tlet t nm b V → clet (tsrc t) (tsrc (b (%var nm Uw) Uw))
     tann t T V → cann (tsrc t) (tsrc T)
     tforce t V → cforce (tsrc t)
+    tthunk t V → cthunk (tsrc t)
     tlevel → clevel
     tlzero → clzero
     tlsuc l V → clsuc (tsrc l)
@@ -1020,6 +1023,8 @@ infer c =
             _ → err x E-notdata X opq
         r → r
     tforce t V → infer t
+    -- a delayed term has the type of the term (a thunk is transparent to typing, as force is)
+    tthunk t V → infer t
     trec d fs V → no opq E-literal opq opq
     -- a field of a value of a codata type: its type at the type's parameters and the value's fields
     tproj d k x V → 
@@ -1258,6 +1263,7 @@ tick-sub α ctx c =
        tfst a V → r a
        tsnd a V → r a
        tforce a V → r a
+       tthunk a V → r a
        tneg a V → r a
        teq0 a V → r a
        teq1 a V → r a
@@ -1303,6 +1309,9 @@ check c T =
   case c of
     tguess k g t V → guess-check k g t T
     tspine t V → solve-spine t (some T)
+    -- a delayed term checks as the term (delay (λ x → b) against A → B)
+    tthunk t V → check t T
+    tforce t V → check t T
     -- comp _ u a against T: the line is the constant one at T (E28, holes in composition lines)
     tcomp A u a V →
       (case line-hole A of
@@ -1471,6 +1480,7 @@ usage xs c =
     telim d P B e F V → v+ (usage xs e) (vjoin-br xs B)
     tcase d B e F V → v+ (usage xs e) (vjoin-br xs B)
     tforce t V → usage xs t
+    tthunk t V → usage xs t
     twsucc a V → usage xs a
     twop k a b V → v+ (usage xs a) (usage xs b)
     twelim P w z s V → v+ (usage xs w) (v+ (usage xs z) (usage xs s))
@@ -1555,6 +1565,7 @@ cany p c =
        tfst a V → cany p a
        tsnd a V → cany p a
        tforce a V → cany p a
+       tthunk a V → cany p a
        tneg a V → cany p a
        teq0 a V → cany p a
        teq1 a V → cany p a

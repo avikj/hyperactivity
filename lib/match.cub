@@ -30,6 +30,7 @@ shift-code d k c =
     ccase dd B x → ccase dd (shift-list d k B) (shift-code d k x)
     celim dd P B x → celim dd (shift-code d k P) (shift-list d k B) (shift-code d k x)
     cforce x → cforce (shift-code d k x)
+    cthunk x → cthunk (shift-code d k x)
     cdata dd ps → cdata dd (shift-list d k ps)
     cwsucc a → cwsucc (shift-code d k a)
     cwop o a b → cwop o (shift-code d k a) (shift-code d k b)
@@ -56,6 +57,7 @@ code-same a b =
     ccase d B x → (case b of ccase d2 B2 y → andb (%weq d d2) (andb (list-same B B2) (code-same x y)); _ → false)
     celim d P B x → (case b of celim d2 P2 B2 y → andb (%weq d d2) (andb (code-same P P2) (andb (list-same B B2) (code-same x y))); _ → false)
     cforce x → (case b of cforce y → code-same x y; _ → false)
+    cthunk x → (case b of cthunk y → code-same x y; _ → false)
     cdata d ps → (case b of cdata d2 ps2 → andb (%weq d d2) (list-same ps ps2); _ → false)
     cwlit n → (case b of cwlit m → %weq n m; _ → false)
     cwsucc x → (case b of cwsucc y → code-same x y; _ → false)
@@ -94,6 +96,7 @@ match k b p t s =
     celim d P B x → (case t of celim d2 P2 B2 y → if %weq d d2 then (case match k b P P2 s of some s2 → (case match-list k b B B2 s2 of some s3 → match k b x y s3; none → none); none → none) else none; _ → none)
     ccase d B x → (case t of ccase d2 B2 y → if %weq d d2 then (case match-list k b B B2 s of some s2 → match k b x y s2; none → none) else none; _ → none)
     cforce x → (case t of cforce y → match k b x y s; _ → none)
+    cthunk x → (case t of cthunk y → match k b x y s; _ → none)
     cdata d ps → (case t of cdata d2 ps2 → if %weq d d2 then match-list k b ps ps2 s else none; _ → none)
     cwlit n → (case t of cwlit m → if %weq n m then some s else none; _ → none)
     cwelim w z st → (case t of cwelim w2 z2 st2 → (case match k b w w2 s of some s2 → (case match k b z z2 s2 of some s3 → match k b st st2 s3; none → none); none → none); _ → none)
@@ -120,6 +123,7 @@ mentions-lt d b t =
     ccase dd B x → orb (mentions-any d b B) (mentions-lt d b x)
     celim dd P B x → orb (mentions-lt d b P) (orb (mentions-any d b B) (mentions-lt d b x))
     cforce x → mentions-lt d b x
+    cthunk x → mentions-lt d b x
     cdata dd ps → mentions-any d b ps
     cwsucc x → mentions-lt d b x
     cwop o x y → orb (mentions-lt d b x) (mentions-lt d b y)
@@ -144,6 +148,7 @@ unshift-at d b c =
     ccase dd B x → ccase dd (unshift-list d b B) (unshift-at d b x)
     celim dd P B x → celim dd (unshift-at d b P) (unshift-list d b B) (unshift-at d b x)
     cforce x → cforce (unshift-at d b x)
+    cthunk x → cthunk (unshift-at d b x)
     cdata dd ps → cdata dd (unshift-list d b ps)
     cwsucc x → cwsucc (unshift-at d b x)
     cwop o x y → cwop o (unshift-at d b x) (unshift-at d b y)
@@ -169,6 +174,7 @@ inst k b s p =
     ccase d B x → ccase d (inst-list k b s B) (inst k b s x)
     celim d P B x → celim d (inst k b s P) (inst-list k b s B) (inst k b s x)
     cforce x → cforce (inst k b s x)
+    cthunk x → cthunk (inst k b s x)
     cdata d ps → cdata d (inst-list k b s ps)
     cwsucc x → cwsucc (inst k b s x)
     cwop o x y → cwop o (inst k b s x) (inst k b s y)
@@ -201,6 +207,7 @@ rewrite-first r t =
          ccase d B x → (case rewrite-first r x of some x2 → some (ccase d B x2); none → omap (λ B2 → ccase d B2 x) (rewrite-first-list r B))
          celim d P B x → (case rewrite-first r x of some x2 → some (celim d P B x2); none → (case rewrite-first-list r B of some B2 → some (celim d P B2 x); none → omap (λ P2 → celim d P2 B x) (rewrite-first r P)))
          cforce x → omap cforce (rewrite-first r x)
+         cthunk x → omap cthunk (rewrite-first r x)
          cdata d ps → omap (cdata d) (rewrite-first-list r ps)
          cwsucc a → omap cwsucc (rewrite-first r a)
          cwelim w z st → (case rewrite-first r w of some w2 → some (cwelim w2 z st); none → (case rewrite-first r z of some z2 → some (cwelim w z2 st); none → omap (cwelim w z) (rewrite-first r st)))
@@ -248,6 +255,7 @@ code-size c =
     ccase d B x → %wsucc (%wadd (size-list B) (code-size x))
     celim d P B x → %wsucc (%wadd (code-size P) (%wadd (size-list B) (code-size x)))
     cforce x → %wsucc (code-size x)
+    cthunk x → %wsucc (code-size x)
     cdata d ps → %wsucc (size-list ps)
     cwsucc a → %wsucc (code-size a)
     cwop o a b → %wsucc (%wadd (code-size a) (code-size b))
@@ -272,6 +280,7 @@ mv-count m d c =
     ccase dd B x → %wadd (mv-list m d B) (mv-count m d x)
     celim dd P B x → %wadd (mv-count m d P) (%wadd (mv-list m d B) (mv-count m d x))
     cforce x → mv-count m d x
+    cthunk x → mv-count m d x
     cdata dd ps → mv-list m d ps
     cwsucc a → mv-count m d a
     cwop o a b → %wadd (mv-count m d a) (mv-count m d b)

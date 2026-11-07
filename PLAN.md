@@ -2182,7 +2182,14 @@ assembled proof term is not produced; its statements are read by computation, fa
 thunks, the numeric and byte layers), as `#same`s — a `#check`ed path may mention checked
 definitions only, and the first-order libraries are untyped by design. `fthunk` lifts to a
 one-argument closure under `fthunk (fapply c [0])` (`7a2c96c4`). `lower` lives in
-`lib/lower.cub` (after the checker, for the shapes).
+`lib/lower.cub` (after the checker, for the shapes). Delayed terms (2026-11-06): Code has
+`cthunk t` (`code (delay e)` works, `eval-g` reads it as a delay); in a checked term `delay e`
+is typed as `e` (`tthunk`) and is transparent at the machine — `e` held unbuilt (`V_THUNK`),
+built by the operation that meets it, `force` of it is it — where before a checked `delay` was
+refused (`ann` had no form) and a bare one met by `%wadd` did not compute. `lower` maps
+`cthunk t` to `lower t` (the first-order form is strict and a checked term terminates; `fthunk`
+stays for lift's suspensions); the image translates normal forms, which hold no delay, and
+exports a definition written with them (`IMAGE=1 run.py` program `delay`, read back equal).
 
 #### Definition
 A data type in the language, `lib/fo.cub`:
