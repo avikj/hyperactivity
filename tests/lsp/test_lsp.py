@@ -134,6 +134,16 @@ U = V6.split("\n").index("useN = plus twoN twoN")
 check("hover: the type the machine infers", hover(U, 13) == "twoN : Nat", str(hover(U, 13)))
 check("hover: a library definition", hover(U, 8) == "plus : Nat → Nat → Nat", str(hover(U, 8)))
 check("hover: a data type's value", hover(V6.split("\n").index("col = green"), 1) == "col : Col", str(hover(V6.split("\n").index("col = green"), 1)))
+# locals: a clause's pattern variable and an implicit parameter, typed from the signature
+V12 = V6.rstrip("\n") + "\ndbl : {z : Nat} → Nat → Bool → Nat\ndbl k b = plus k z\n"
+d = change(12, V12)
+check("a definition with locals", d == [], json.dumps(d))
+K = V12.split("\n").index("dbl k b = plus k z")
+check("hover: a pattern variable", hover(K, 15) == "k : Nat", str(hover(K, 15)))
+check("hover: a later pattern variable", hover(K, 6) == "b : Bool", str(hover(K, 6)))
+check("hover: an implicit parameter", hover(K, 17) == "z : Nat", str(hover(K, 17)))
+d = change(13, V6)
+check("locals removed", d == [], json.dumps(d))
 
 def complete(line, ch):
     r = c.request("textDocument/completion", {"textDocument": {"uri": URI}, "position": {"line": line, "character": ch}})

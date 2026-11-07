@@ -52,6 +52,7 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/guarded.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/prim.cub lib/stage.cub tests/prim.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/prim.cub lib/region.cub tests/region.cub
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/errors/untyped-imp.cub > build/untyped-imp.out 2>&1; grep -q "^ok: fine" build/untyped-imp.out && grep -q "applies idw to its explicit arguments only" build/untyped-imp.out || { echo "untyped implicit misuse not refused"; exit 1; }
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/fiber.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/lin.cub lib/check.cub lib/std.cub lib/linproof.cub lib/intproof.cub lib/intlin.cub lib/eqproof.cub tests/cert.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub lib/session.cub

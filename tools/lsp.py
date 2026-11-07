@@ -76,6 +76,60 @@ class Unit:
         return self.start
 
 
+def split_top(s, sep):
+    """s split at sep where no bracket is open"""
+    out, depth, cur, i = [], 0, "", 0
+    while i < len(s):
+        c = s[i]
+        if c in "({[":
+            depth += 1
+        elif c in ")}]":
+            depth -= 1
+        if depth == 0 and s.startswith(sep, i):
+            out.append(cur); cur = ""; i += len(sep); continue
+        cur += c; i += 1
+    out.append(cur)
+    return out
+
+
+def telescope(sig):
+    """a signature's binders in order: (name or None, implicit, type)"""
+    parts = split_top(sig, "→")
+    res = []
+    for seg in parts[:-1]:
+        seg = seg.strip()
+        # several binder groups in one segment: (a : A) {b : B} (c d : C)
+        groups = re.findall(r"(\{\{?|\()([^(){}]*?)(\}\}?|\))", seg) if seg[:1] in "({" else []
+        if groups and seg.replace(" ", "") == "".join(o + g + c for o, g, c in groups).replace(" ", ""):
+            for o, g, c in groups:
+                if ":" in g:
+                    names, ty = g.split(":", 1)
+                    for n in names.split():
+                        res.append((n, o.startswith("{"), ty.strip()))
+                else:
+                    res.append((None, o.startswith("{"), g.strip()))
+        else:
+            res.append((None, False, seg))
+    return res
+
+
+def patterns(lhs):
+    """a clause's argument patterns: atoms, (…) and {…} groups"""
+    out, depth, cur = [], 0, ""
+    for c in lhs.strip() + " ":
+        if c in "({":
+            depth += 1
+        elif c in ")}":
+            depth -= 1
+        if c == " " and depth == 0:
+            if cur:
+                out.append(cur)
+            cur = ""
+        else:
+            cur += c
+    return out
+
+
 def split_units(text):
     lines = text.split("\n")
     if lines and lines[-1] == "":
@@ -340,6 +394,60 @@ class Doc:
                 return l.strip()
         return None
 
+    def local_type(self, line, word):
+        """a local of the definition the line is in: a parameter's type from the signature, the
+        clause's patterns matched to its binders by position (implicit binders by name, or by a
+        {x} pattern); None when the word is not such a local"""
+        unit = None
+        for u in split_units(self.text):
+            if u.start <= line < u.start + len(u.lines):
+                unit = u
+        if unit is None or not unit.name:
+            return None
+        sig = None
+        body = unit.text.split("\n")
+        for i, l in enumerate(body):
+            t = l.split()
+            if len(t) >= 2 and t[0] == unit.name and t[1] == ":":
+                # a signature may continue on indented lines
+                sig = l.split(":", 1)[1]
+                for l2 in body[i + 1:]:
+                    if l2[:1] in (" ", "\t") and l2.strip():
+                        sig += " " + l2.strip()
+                    else:
+                        break
+                break
+        if sig is None:
+            return None
+        binders = telescope(sig)
+        for b in binders:
+            if b[0] == word:
+                return word + " : " + b[2]
+        # the clause holding the line: its patterns by position
+        clause = self.text.split("\n")[line]
+        k = line
+        while k > unit.start and not clause.startswith(unit.name + " "):
+            k -= 1
+            clause = self.text.split("\n")[k]
+        if not clause.startswith(unit.name + " ") or "=" not in clause:
+            return None
+        lhs = clause[len(unit.name):].split("=", 1)[0]
+        pats = patterns(lhs)
+        explicit = [b for b in binders if not b[1]]
+        implicit = [b for b in binders if b[1]]
+        ei = ii = 0
+        for p in pats:
+            if p.startswith("{"):
+                inner = p[1:-1].strip()
+                if ii < len(implicit) and inner == word:
+                    return word + " : " + implicit[ii][2]
+                ii += 1
+                continue
+            if ei < len(explicit) and p == word:
+                return word + " : " + explicit[ei][2]
+            ei += 1
+        return None
+
     def close(self):
         if self.machine:
             self.machine.close()
@@ -456,7 +564,7 @@ class Server:
             if not word or not re.match(r"^[^#\d\\λ→:=|]", word):
                 return None
             if meth == "textDocument/hover":
-                t = d.type_of(word) or d.signature_of(word)
+                t = d.local_type(ln, word) or d.type_of(word) or d.signature_of(word)
                 return {"contents": {"kind": "plaintext", "value": t}} if t else None
             u = d.unit_of(word)
             if u is not None:

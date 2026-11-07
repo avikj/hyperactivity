@@ -1395,8 +1395,12 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
     written signature as fallback), completion from `#scope` and the document's names,
     go-to-definition to the document's unit or the library's `#where`, incremental (range) sync in
     UTF-16 units; verdicts under `--serve` print in surface syntax. `tests/lsp/test_lsp.py` (23
-    steps) and `tests/serve/data.in`. Open: a hover on a local variable (the machine knows only
-    top-level names; the fallback is the written signature).
+    steps) and `tests/serve/data.in`. A hover on a local variable (2026-11-06): a clause's pattern
+    variable or an implicit parameter is typed from the definition's own signature, the patterns
+    matched to its binders by position (`{x}` patterns and binder names for the implicit ones),
+    in `tools/lsp.py` (`local_type`, `telescope`); a variable bound inside the right side (a λ, a
+    `let`, a nested pattern's field) shows nothing, as the machine keeps no positions below a
+    declaration. DONE.
 
 ### F. Programs about programs
 31. DONE in parts: `deriving eq D` (`1c5282a`), `deriving show`/`derive-show` (`896713ea`),
