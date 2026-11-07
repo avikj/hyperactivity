@@ -1,0 +1,230 @@
+-- lib/emitx86.cub — the first-order form to x86-64 machine code (plan 18.7's JIT, the latency
+-- path: the C printers are for peak performance, this one for a specialization that must run
+-- now). Loaded after lib/emitc.cub (its byte-list helpers). emit-x86 defs: the bytes of one
+-- position-independent blob for the lifted definitions defs (a Lst of (g , (arity , body))):
+-- an entry stub, then one function per definition, System V on words.
+--
+-- The fragment: the word-only programs (plus, fib, the loops): fvar, flit, fprim (add, sub,
+-- mul, eq, lt), flet, fif, floop with its continue/break constructors, fcall of a definition
+-- (at most six arguments), fassume (dropped), and constructor cells of words (fcon, fproj) in
+-- a bump arena — the pairs fib's loop carries. Everything else prints ud2 (x86-ok defs says
+-- whether a program is inside the fragment).
+--
+-- Code shape (no register allocation; a stack machine): every expression leaves its value in
+-- rax; a binary primitive pushes its first operand; a let pushes; a loop pushes its state. The
+-- slots below rbp are numbered from 0 (the arguments first, pushed from rdi, rsi, rdx, rcx, r8,
+-- r9), and the environment maps de Bruijn variables to slots. r15 is the arena pointer (a cell
+-- is its tag then its fields, eight bytes each), r14 the blob's base (calls are base-relative:
+-- mov eax, offset; add rax, r14; call rax), both set by the entry stub, which the consumer calls
+-- as entry(arena, arg0, …): rdi the arena, the arguments shifted down. The stack is 16-aligned at
+-- every call (the push depth is known at every point).
+
+-- ---------------------------------------------------------------- bytes
+xb1 a = lcons a lnil
+xb2 a b = lcons a (lcons b lnil)
+xb3 a b c = lcons a (lcons b (lcons c lnil))
+-- a word's low n bytes, little-endian (a negative displacement is given as its 32-bit two's
+-- complement, neg32: word subtraction saturates at 0, so it is taken from 2^32)
+le-bytes w n = if %weq n #0 then lnil else (let qr = divmod256 w in lcons (snd qr) (le-bytes (fst qr) (%wsub n #1)))
+-- quotient and remainder by 256, by the doubling chain (there is no division primitive)
+divmod256 w = dm-fold (dbl-chain #256 #1 w lnil) w #0
+dbl-chain d p w acc = if %wlt w d then acc else (let d2 = %wadd d d in if %wlt d2 d then lcons (d , p) acc else dbl-chain d2 (%wadd p p) w (lcons (d , p) acc))
+dm-fold chain r q = case chain of lnil → (q , r); lcons dp rest → if %wlt r (fst dp) then dm-fold rest r q else dm-fold rest (%wsub r (fst dp)) (%wadd q (snd dp))
+imm32 w = le-bytes w #4
+imm64 w = le-bytes w #8
+neg32 w = %wsub #4294967296 w
+-- ---------------------------------------------------------------- instructions
+i-push-rbp = xb1 #85
+i-mov-rbp-rsp = xb3 #72 #137 #229
+i-mov-rsp-rbp = xb3 #72 #137 #236
+i-pop-rbp = xb1 #93
+i-ret = xb1 #195
+i-ud2 = xb2 #15 #11
+i-push-rax = xb1 #80
+i-pop-rax = xb1 #88
+i-pop-rcx = xb1 #89
+i-mov-rcx-rax = xb3 #72 #137 #193
+i-add-rax-rcx = xb3 #72 #1 #200
+i-sub-rax-rcx = xb3 #72 #41 #200
+i-imul-rax-rcx = cat4 (xb1 #72) (xb1 #15) (xb1 #175) (xb1 #193)
+i-cmp-rax-rcx = xb3 #72 #57 #200
+i-sete-al = xb3 #15 #148 #192
+i-setb-al = xb3 #15 #146 #192
+i-movzx-eax-al = xb3 #15 #182 #192
+i-test-rax = xb3 #72 #133 #192
+i-mov-rax-imm64 w = lapp (xb2 #72 #184) (imm64 w)
+i-mov-eax-imm32 w = lcons #184 (imm32 w)
+i-je rel = lapp (xb2 #15 #132) (imm32 rel)
+i-jmp rel = lcons #233 (imm32 rel)
+i-add-rsp n = lapp (xb3 #72 #129 #196) (imm32 n)
+i-sub-rsp n = lapp (xb3 #72 #129 #236) (imm32 n)
+-- slot s: [rbp - 8(s+1)]
+slot-disp s = neg32 (%wadd (wmul8x s) #8)
+wmul8x w = let w2 = %wadd w w in let w4 = %wadd w2 w2 in %wadd w4 w4
+i-load-slot s = lapp (xb3 #72 #139 #133) (imm32 (slot-disp s))
+i-store-slot-rcx s = lapp (xb3 #72 #137 #141) (imm32 (slot-disp s))
+-- arena cells: rax a cell's address
+i-mov-rax-r15 = xb3 #76 #137 #248
+i-store-tag c = lapp (xb3 #72 #199 #0) (imm32 c)
+i-store-field-rcx k = lapp (xb3 #72 #137 #136) (imm32 (wmul8x (%wsucc k)))
+i-load-field k = lapp (xb3 #72 #139 #128) (imm32 (wmul8x (%wsucc k)))
+i-add-r15 n = lapp (xb3 #73 #129 #199) (imm32 n)
+-- calls through the base register
+i-add-rax-r14 = xb3 #76 #1 #240
+i-call-rax = xb2 #255 #208
+-- the argument registers rdi rsi rdx rcx r8 r9: push and pop
+i-push-arg i = if %weq i #0 then xb1 #87 else if %weq i #1 then xb1 #86 else if %weq i #2 then xb1 #82 else if %weq i #3 then xb1 #81 else if %weq i #4 then xb2 #65 #80 else xb2 #65 #81
+i-pop-arg i = if %weq i #0 then xb1 #95 else if %weq i #1 then xb1 #94 else if %weq i #2 then xb1 #90 else if %weq i #3 then xb1 #89 else if %weq i #4 then xb2 #65 #88 else xb2 #65 #89
+-- ---------------------------------------------------------------- the entry stub (49 bytes)
+-- push rbp; mov rbp, rsp; push r15; push r14; lea r14, [rip - 15]; mov r15, rdi; the arguments
+-- down one register; mov eax, offset of definition 0; add rax, r14; call rax; pop r14; pop r15;
+-- pop rbp; ret
+stub-x86 off0 =
+  cat5 (cat4 i-push-rbp i-mov-rbp-rsp (xb2 #65 #87) (xb2 #65 #86))
+       (lapp (xb3 #76 #141 #53) (imm32 (neg32 #15)))
+       (cat6 (xb3 #73 #137 #255) (xb3 #72 #137 #247) (xb3 #72 #137 #214) (xb3 #72 #137 #202) (xb3 #76 #137 #193) (xb3 #77 #137 #200))
+       (cat3 (i-mov-eax-imm32 off0) i-add-rax-r14 i-call-rax)
+       (cat4 (xb2 #65 #94) (xb2 #65 #95) i-pop-rbp i-ret)
+stub-len = #49
+-- ---------------------------------------------------------------- expressions
+-- cx tbl env d t: the bytes leaving t's value in rax; env the slots of the variables (innermost
+-- first), d the number of slots pushed; tbl the definitions' offsets (g , offset)
+cx tbl env d t =
+  case t of
+    fvar n → i-load-slot (slot-of env n)
+    flit w → i-mov-rax-imm64 w
+    fprim p args → prim-x86 tbl env d p args
+    flet a b → cat3 (cx tbl env d a) i-push-rax (lapp (cx tbl (lcons d env) (%wsucc d) b) (i-add-rsp #8))
+    fif c a b →
+      let ca = cx tbl env d a
+          cb = cx tbl env d b
+      in cat5 (cx tbl env d c) i-test-rax (i-je (%wadd (lst-len ca) #5)) ca (lapp (i-jmp (lst-len cb)) cb)
+    fcall g args → call-x86 tbl env d g args
+    fassume fact b → cx tbl env d b
+    fcon dd c fs → con-x86 tbl env d c fs
+    fproj dd c k x → lapp (cx tbl env d x) (i-load-field k)
+    floop init body → loop-x86 tbl env d init body
+    _ → i-ud2
+slot-of env n = case env of lnil → #0; lcons s r → if %weq n #0 then s else slot-of r (%wsub n #1)
+-- a binary primitive: the first operand pushed, the second into rcx, the first back into rax
+prim-x86 tbl env d p args =
+  case args of
+    lcons a r →
+      (case r of
+         lcons b r2 → cat5 (cx tbl env d a) i-push-rax (cx tbl env (%wsucc d) b) (lapp i-mov-rcx-rax i-pop-rax) (op-x86 p)
+         lnil → i-ud2)
+    lnil → i-ud2
+op-x86 p =
+  if %weq p P-add then i-add-rax-rcx
+  else if %weq p P-sub then i-sub-rax-rcx
+  else if %weq p P-mul then i-imul-rax-rcx
+  else if %weq p P-eq then cat3 i-cmp-rax-rcx i-sete-al i-movzx-eax-al
+  else if %weq p P-lt then cat3 i-cmp-rax-rcx i-setb-al i-movzx-eax-al
+  else i-ud2
+-- the arguments pushed in order, popped into their registers (the last first), the stack aligned
+-- at the call (an odd depth pads one slot), the call through the base register
+call-x86 tbl env d g args =
+  let n = lst-len args
+      pad = odd (%wadd d n)
+  in cat5 (push-args tbl env d args) (pop-args n)
+          (if pad then i-sub-rsp #8 else lnil)
+          (cat3 (i-mov-eax-imm32 (tbl-off tbl g)) i-add-rax-r14 i-call-rax)
+          (if pad then i-add-rsp #8 else lnil)
+push-args tbl env d args = case args of lnil → lnil; lcons a r → cat3 (cx tbl env d a) i-push-rax (push-args tbl env (%wsucc d) r)
+pop-args n = if %weq n #0 then lnil else lapp (i-pop-arg (%wsub n #1)) (pop-args (%wsub n #1))
+odd w = %weq (snd (divmod2 w)) #1
+divmod2 w = dm-fold (dbl-chain #2 #1 w lnil) w #0
+tbl-off tbl g = case tbl of lnil → #0; lcons e r → if %weq (fst e) g then snd e else tbl-off r g
+-- a cell: the fields pushed, then rax the arena pointer, the tag stored, the fields popped into
+-- place (the last first), the arena bumped past the cell
+con-x86 tbl env d c fs =
+  let n = lst-len fs
+  in cat5 (push-args tbl env d fs) i-mov-rax-r15 (i-store-tag c) (pop-fields n) (i-add-r15 (wmul8x (%wsucc n)))
+pop-fields n = if %weq n #0 then lnil else cat3 i-pop-rcx (i-store-field-rcx (%wsub n #1)) (pop-fields (%wsub n #1))
+-- a loop: the state pushed (its slots d … d+k-1, the last the innermost variable), the body in
+-- loop mode (every path continues or breaks), the state dropped after the end label
+loop-x86 tbl env d init body =
+  let k = lst-len init
+      base = %wadd d k
+      env2 = lapp (slots-down base k) env
+      b1 = lx tbl env2 base base #0 #0 body
+      b2 = lx tbl env2 base base #0 (lst-len b1) body
+  in cat3 (push-args tbl env d init) b2 (i-add-rsp (wmul8x k))
+slots-down base k = if %weq k #0 then lnil else lcons (%wsub base #1) (slots-down (%wsub base #1) (%wsub k #1))
+-- lx tbl env d base off total t: the loop body t; base the depth at the loop's head (its k state
+-- slots are base-k … base-1), off the bytes emitted since the head, total the body's length (0 on
+-- the first pass, which only measures); a continue stores the new state and jumps back, a break
+-- leaves its value in rax and jumps to the end; both drop the lets pushed since the head first
+lx tbl env d base off total t =
+  case t of
+    fif c a b →
+      let cc = cx tbl env d c
+          off1 = %wadd off (%wadd (lst-len cc) #9)
+          ca = lx tbl env d base off1 total a
+          cb = lx tbl env d base (%wadd off1 (%wadd (lst-len ca) #5)) total b
+      in cat5 cc i-test-rax (i-je (%wadd (lst-len ca) #5)) ca (lapp (i-jmp (lst-len cb)) cb)
+    flet a b → (let ca = cx tbl env d a in cat3 ca i-push-rax (lx tbl (lcons d env) (%wsucc d) base (%wadd off (%wadd (lst-len ca) #1)) total b))
+    fassume fact b → lx tbl env d base off total b
+    fcon dd c fs →
+      if %weq c #0 then
+        (let ps = push-args tbl env d fs
+             k = lst-len fs
+             st = cat3 ps (pop-state base k) (drop-lets d base)
+         in lapp st (i-jmp (neg32 (%wadd off (%wadd (lst-len st) #5)))))
+      else
+        (let r = (case fs of lcons x rest → cx tbl env d x; lnil → i-ud2)
+             st = lapp r (drop-lets d base)
+         in lapp st (i-jmp (%wsub total (%wadd off (%wadd (lst-len st) #5)))))
+    _ → i-ud2
+pop-state base k = if %weq k #0 then lnil else cat3 i-pop-rcx (i-store-slot-rcx (%wsub base #1)) (pop-state (%wsub base #1) (%wsub k #1))
+drop-lets d base = if %weq d base then lnil else i-add-rsp (wmul8x (%wsub d base))
+-- ---------------------------------------------------------------- definitions and the blob
+-- a definition: prologue, the arguments into their slots, the body, epilogue
+fn-x86 tbl arity body = cat5 i-push-rbp i-mov-rbp-rsp (push-params arity #0) (cx tbl (slots-down arity arity) arity body) (cat3 i-mov-rsp-rbp i-pop-rbp i-ret)
+push-params n i = if %weq i n then lnil else lapp (i-push-arg i) (push-params n (%wsucc i))
+-- the offsets: the stub first, then the definitions in order; the lengths do not depend on the
+-- offsets (every call and jump is a fixed-width encoding), so one pass with a zero table measures
+layout-x86 defs tbl off = case defs of lnil → lnil; lcons dd r → lcons (fst dd , off) (layout-x86 r tbl (%wadd off (lst-len (fn-x86 tbl (fst (snd dd)) (snd (snd dd))))))
+fns-x86 tbl defs = case defs of lnil → lnil; lcons dd r → lapp (fn-x86 tbl (fst (snd dd)) (snd (snd dd))) (fns-x86 tbl r)
+emit-x86 defs = let tbl = layout-x86 defs lnil stub-len in lapp (stub-x86 (tbl-off tbl #0)) (fns-x86 tbl defs)
+-- ---------------------------------------------------------------- the fragment
+andx a b = case a of true → b; false → false
+-- x86-ok defs: every definition inside the fragment (at most six arguments)
+x86-ok defs = case defs of lnil → true; lcons dd r → andx (andx (%wlt (fst (snd dd)) #7) (ok-x (snd (snd dd)))) (x86-ok r)
+ok-x t =
+  case t of
+    fvar n → true
+    flit w → true
+    fprim p args → andx (%wlt p #5) (andx (%weq (lst-len args) #2) (ok-list args))
+    flet a b → andx (ok-x a) (ok-x b)
+    fif c a b → andx (ok-x c) (andx (ok-x a) (ok-x b))
+    fcall g args → andx (%wlt (lst-len args) #7) (ok-list args)
+    fassume fact b → ok-x b
+    fcon dd c fs → ok-list fs
+    fproj dd c k x → ok-x x
+    floop init body → andx (ok-list init) (ok-loop body)
+    _ → false
+ok-list l = case l of lnil → true; lcons x r → andx (ok-x x) (ok-list r)
+ok-loop t =
+  case t of
+    fif c a b → andx (ok-x c) (andx (ok-loop a) (ok-loop b))
+    flet a b → andx (ok-x a) (ok-loop b)
+    fassume fact b → ok-loop b
+    fcon dd c fs → if %weq c #0 then ok-list fs else andx (%weq (lst-len fs) #1) (ok-list fs)
+    _ → false
+-- ---------------------------------------------------------------- readings
+-- the stub's length is what the layout-x86 assumes
+#same lst-len (stub-x86 #0) = stub-len
+-- the byte helpers: little-endian, two's complement
+#same imm32 #258 = (lcons #2 (lcons #1 (lcons #0 (lcons #0 lnil))))
+#same imm32 (neg32 #15) = (lcons #241 (lcons #255 (lcons #255 (lcons #255 lnil))))
+#same imm64 #2880067194370816120 = le-bytes #2880067194370816120 #8
+-- plus on words: the two arguments loaded from their slots and added
+#same x86-ok (lcons (#0 , (#2 , fo-plus)) lnil) = true
+-- (prologue 4, two pushes 2, load 7 push 1 load 7 mov 3 pop 1 add 3, epilogue 5)
+#same lst-len (fn-x86 lnil #2 fo-plus) = #33
+-- factorial as a loop is inside the fragment; a closure is not
+#same x86-ok (lcons (#0 , (#1 , fo-fact)) lnil) = true
+#same x86-ok (lcons (#0 , (#0 , fclos #1 lnil)) lnil) = false
+-- a conditional's else branch is reached over the then branch: je skips it and its jmp
+#same lst-len (cx lnil lnil #0 (fif (flit #1) (flit #2) (flit #3))) = %wadd #10 (%wadd #3 (%wadd #6 (%wadd #10 (%wadd #5 #10))))

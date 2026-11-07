@@ -4,7 +4,7 @@ list of bytes, decoded here, compiled with gcc, run, and its output compared wit
 import re, subprocess, sys, tempfile, os, resource
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.path.dirname(HERE))
 CUB = os.path.join(ROOT, 'build', 'cubical')
-LIBS = [os.path.join(ROOT, 'lib', f) for f in ('prelude.cub', 'code.cub', 'fo.cub', 'match.cub', 'nav.cub', 'emitc.cub', 'check.cub', 'std.cub', 'stage.cub', 'lower.cub', 'specialize.cub', 'linproof.cub', 'prim.cub', 'decode.cub', 'rules.cub', 'derive.cub', 'proc.cub', 'emitt.cub', 'emitu.cub', 'repr.cub', 'image.cub', 'reimport.cub')]
+LIBS = [os.path.join(ROOT, 'lib', f) for f in ('prelude.cub', 'code.cub', 'fo.cub', 'match.cub', 'nav.cub', 'emitc.cub', 'check.cub', 'std.cub', 'stage.cub', 'lower.cub', 'specialize.cub', 'linproof.cub', 'prim.cub', 'decode.cub', 'rules.cub', 'derive.cub', 'proc.cub', 'emitt.cub', 'emitu.cub', 'repr.cub', 'image.cub', 'reimport.cub', 'emitx86.cub')]
 PROGS = {
  # name: (definitions as .cub text building a Lst of (g , (arity , body)), expected output)
  'fact': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil)))
@@ -43,7 +43,7 @@ prog = sizeof-prog (data-idx (code Tr))""", "24", "struct { struct T"),
 defs = lcons (#0 , (#0 , fcall #1 (lcons buf2 lnil))) (lcons (#1 , (#1 , lam-body sum2)) lnil)""", "14", "ASSUME(((16 + 8) < (32 + 1)));"),
  # structural recursion: the length of a list, written as a case with rec, lowered to a recursion
  # form, lifted to a C function that calls itself on the field, run on a three-element list; the
- # hypothesis is read as the direct recursive call (through force(), the identity on its value)
+ # hypothesis is read as the direct recursive call (through force(), the identity on its value);
  'rec': ("""len-main t2 = fapply t2 (lcons (fcon (didx (code LW)) #1 (lcons (flit #7) (lcons lw3 lnil))) lnil)
 len-base = lcons (gidx (code zw) , (#0 , flit #0)) (lcons (gidx (code sw) , (#1 , fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))) lnil)
 len-prog = case lift #10 (lower c-len) of lifted t2 ds k → lcons (#0 , (#0 , len-main t2)) (lapp2 len-base ds)
@@ -245,6 +245,58 @@ def run(name, defs, expect, contains=None):
         print(name, 'ok' if ok else f'FAIL: got {got}, expected {expect}' + ('' if has else f'; {contains!r} not in the source'))
         if not ok: print(bs.decode())
         return ok
+# ---------------------------------------------------------------- X86=1: the JIT path (plan 18.7)
+# lib/emitx86.cub emits one position-independent blob per program (an entry stub and one function per
+# definition); experiments/fo/x86main.c copies it into executable memory and calls it with the words
+# on its command line. Each entry: the definitions (defs), the arguments, the expected word.
+X86 = os.environ.get('X86') == '1'
+X86_PROGS = {
+ # plus on words: the two arguments added
+ 'plusw': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #40) (lcons (flit #2) lnil)))) (lcons (#1 , (#2 , fo-plus)) lnil)""", [], "42"),
+ # the arguments come from the command line through the stub (rdi the arena, then the words)
+ 'plusw-args': ("""defs = lcons (#0 , (#2 , fo-plus)) lnil""", [1000, 234], "1234"),
+ # factorial as a loop over (n, acc): continue while n > 0
+ 'fact': ("""defs = lcons (#0 , (#1 , fo-fact)) lnil""", [10], "3628800"),
+ # plusw from the store: the specialized loop (plusw unfolds to a recursion on its first argument)
+ 'plusw-spec': ("""lam-body3 f = case f of flam b → lam-body3 b; _ → f
+defs = lcons (#0 , (#2 , lam-body3 (specialize (Word → Word → Word) lnil (code (λ (a : Word) (b : Word) → plusw a b))))) lnil""", [30, 12], "42"),
+ # fib 90 through a pair in the loop's state: constructor cells in the arena, projections as loads
+ 'fib': ("""fibp : Word → Word × Word
+fibp n = %welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p)))
+fibw : Word → Word
+fibw n = fst (fibp n)
+lam-body4 f = case f of flam b → b; _ → f
+defs = lcons (#0 , (#1 , lam-body4 (specialize (Word → Word) lnil (code (λ w → fibw w))))) lnil""", [90], "2880067194370816120"),
+ # a call inside a loop body: fib by the specialized definition, summed over a counter
+ 'call-in-loop': ("""fibp2 : Word → Word × Word
+fibp2 n = %welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p)))
+fibw2 : Word → Word
+fibw2 n = fst (fibp2 n)
+lam-body5 f = case f of flam b → b; _ → f
+sum-fib = floop (lcons (flit #0) (lcons (flit #0) lnil)) (fif (fprim P-lt (lcons (fvar #1) (lcons (flit #10) lnil))) (fcon #0 #0 (lcons (fprim P-add (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (fprim P-add (lcons (fvar #0) (lcons (fcall #1 (lcons (fvar #1) lnil)) lnil))) lnil))) (fcon #0 #1 (lcons (fvar #0) lnil)))
+defs = lcons (#0 , (#0 , sum-fib)) (lcons (#1 , (#1 , lam-body5 (specialize (Word → Word) lnil (code (λ w → fibw2 w))))) lnil)""", [], "88"),
+}
+def run_x86(name, defs, args, expect):
+    with tempfile.TemporaryDirectory() as d:
+        cub = os.path.join(d, name + '.cub')
+        open(cub, 'w').write(defs + "\n#show x86-ok defs\nprog = emit-x86 defs\n#show prog\n")
+        out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'),
+                             preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))).stdout
+        okm = re.search(r'^x86-ok defs\s*=\s*(\w+)', out, re.M)
+        m = re.search(r'^prog\s*=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
+        if not m or not okm: print(name, 'FAIL: no reading'); print(out[-500:]); return False
+        if okm.group(1) != 'true': print(name, 'FAIL: outside the x86 fragment'); return False
+        bs = bytes(int(x) for x in re.findall(r'#(\d+)', m.group(1)))
+        blob = os.path.join(d, name + '.bin'); open(blob, 'wb').write(bs)
+        exe = os.path.join(d, 'x86main')
+        cc = subprocess.run(['gcc', '-O2', '-w', '-o', exe, os.path.join(ROOT, 'experiments', 'fo', 'x86main.c')], capture_output=True, text=True)
+        if cc.returncode: print(name, 'FAIL: gcc'); print(cc.stderr[:800]); return False
+        r = subprocess.run([exe, blob] + [str(a) for a in args], capture_output=True, text=True)
+        got = r.stdout.strip()
+        ok = got == expect and r.returncode == 0
+        print(name, 'ok' if ok else f'FAIL: got {got!r} (exit {r.returncode}), expected {expect}; {len(bs)} bytes')
+        return ok
 if __name__ == '__main__':
+    if X86: sys.exit(0 if all(run_x86(n, *X86_PROGS[n]) for n in X86_PROGS) else 1)
     if IMAGE: sys.exit(0 if all(run_image(n, *IMAGES[n]) for n in IMAGES) else 1)
     sys.exit(0 if all(run(n, *PROGS[n]) for n in PROGS) else 1)
