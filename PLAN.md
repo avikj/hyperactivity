@@ -1129,8 +1129,8 @@ of type `Native` from hand-written C, `#native … from`; boxed results kept nat
 18.8); (3) A4's
 bitmask formulas (18.19, designed); (4) E28: DONE 2026-11-06 for unification-based implicits through reducing hypothesis types,
 holes in composition lines, generalized variables, and the hypothesis at the field's own index
-for recursion on a fording family (`vmap`; 18.12); and the goal rewritten by the index equation
-(2026-11-06); left: index injectivity across two splits; (5) DONE: item 30's retraction (`#retract`) and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
+for recursion on a fording family (`vmap`; 18.12); the goal rewritten by the index equation and index
+unification at splits with absurd cases (2026-11-06); (5) DONE: item 30's retraction (`#retract`) and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
 `Z2` reading with its laws, `lib/intproof.cub`, `lib/intlin.cub`); (7) DONE: the memory interface in `W` (`w-load`/`w-store`/`w-cas`/`w-fence`, acquire /
 release / acquire-release / sequentially consistent, on addresses from `ptr-of`;
 `tests/world.cub`); (8) item 10's same-machine Agda comparison; (9) DONE (`7a2c96c4`, `62c669fc`, `13ae6b9f`, `54be3050`): Line B's leftovers — `lib/emitx86.cub` (18.7's
@@ -1340,8 +1340,9 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
     records by field name and update, parameterized modules with `open`, indexed families by
     fording, the interval-literal fix, holes in composition lines, generalized variables,
     implicits through reducing hypothesis types, the hypothesis at the field's own index for
-    recursion on a family (18.12). Open: the branch goal rewritten by the index equation; the
-    findings (iv) and (vi) of 18.12 (mutual structural recursion; prenex levels), by design.
+    recursion on a family, the goal rewritten by the index equation, index unification with
+    absurd cases left out (18.12). DONE; findings (iv) and (vi) of 18.12 (mutual structural
+    recursion; prenex levels) stand by design.
 29. **Status (2026-11-06):** built, `fd188bf6` (`tools/agda2cub.py`, `tests/agda/` checked by `make test`). Spec as written: Translator from agda/cubical (Agda's `transp`/`hcomp` to CCHM `comp` by the standard
     interdefinability; Mathlib is not a source: its quotients, funext and propext are axioms).
     Essential for value.
@@ -2751,10 +2752,25 @@ which of these it actually needed; the list is what Agda-level convenience means
   written by hand) still typed a recursive field's hypothesis at the outer index, so `sbad
   (vcons m x xs e) = sbad xs` checked at `Vec A (suc n)`; `hyp-motive` now gives such a
   hypothesis the motive at f only where f's indices are the scrutinee's, and otherwise a fresh
-  abstract type (usable as nothing; `tests/elab.cub` `sbad`, `sbad2`). Not done:
-  injectivity of constructor indices across two splits (`vzip` on two vectors of one length
-  needs `suc m ≡ suc m'` → `m ≡ m'`, and absurd cases refuted from the equations, as Agda's
-  unifier does); those are written with the fields named. (ii) FIXED
+  abstract type (usable as nothing; `tests/elab.cub` `sbad`, `sbad2`). Index unification at a split (2026-11-06, as Agda's): when a
+  split's scrutinee has indices that are not all variables, its index arguments are unified with
+  each constructor's index expressions over the fields (`u_walk` in `ccm_t`): a constructor
+  clash makes the branch absurd — the identity on the goal G transported along the equation
+  through `case (e i) of <the scrutinee's constructor> → G → G; … → G` — so the clause may be
+  left out (`vhead (vcons m x xs) = x`, `vzip`'s mixed cases); the same constructor recurses
+  on the arguments; a field met by a term it does not occur in is solved, the branch built with
+  it replaced and the fields whose types mention it transported along the equation's argument
+  at its position (`vzip (vcons m x xs) (vcons m2 y ys) = vcons m (x , y) (vzip xs ys)`: `ys`
+  becomes a `Vec B m`). The goal rewriting by a variable index now carries a substitution
+  (`SGX`/`sg_apply`) to the reverted later parameters' types, the goal and the right sides, so
+  the second vector of `vzip` is at the constructor's index below the first split. A missing
+  clause is covered when a later variable's type admits no constructor under the substitution
+  (`vlookup (vcons …)` only: `Fin zero` is empty below `vnil`). A clause that names an equality
+  field keeps the old reading. `subst_multi` treats case alternatives as binders (it had
+  flattened `((suc u) u)` into an application). `tests/elab.cub` `vzip`, `vhead-u`, `vtl-u`,
+  `vlookup`. Not done: a solved field whose dependents depend on each other or on another
+  solved field (an error names it; write the field and transport by hand), and goals in a
+  universe the refutation's line does not reach are not a concern (the line is at G's level). (ii) FIXED
   (2026-11-06): the motive of a `%welimP` now travels with the elimination (`O_WELIM`'s last
   operand, `V_NWELIM`/`V_WSUSP` keep it), so a stuck word recursion of path type has a type at
   the machine and `p 0` is its type's left end, as for any neutral path (`O_PAPPP`'s endpoint

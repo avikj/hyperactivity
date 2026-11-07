@@ -176,3 +176,28 @@ sbad (vcons m x xs e) = sbad xs
 #fail
 sbad2 : {A : Type} {n : Nat} → Vec A n → Vec A n
 sbad2 xs = case xs return (λ v → Vec A n) of vnil e → vnil e; vcons m x ys e → rec ys
+-- E28: index unification at a split (as Agda's): a clash makes a case absurd (vhead has no vnil
+-- clause, vzip no mixed ones), the same constructor gives injectivity and a field met by a term is
+-- solved (vzip's second vector is at the first's length), and a missing clause is covered when a
+-- later argument's type admits no constructor (vlookup's vnil: Fin zero is empty)
+vzip : {A B : Type} {n : Nat} → Vec A n → Vec B n → Vec (A × B) n
+vzip vnil vnil = vnil
+vzip (vcons m x xs) (vcons m2 y ys) = vcons m (x , y) (vzip xs ys)
+vhead-u : {A : Type} {n : Nat} → Vec A (suc n) → A
+vhead-u (vcons m x xs) = x
+vtl-u : {A : Type} {n : Nat} → Vec A (suc n) → Vec A n
+vtl-u (vcons m x xs) = xs
+data Fin : (n : Nat) → Type where
+  fzero : (n : Nat) → Fin (suc n)
+  fsuc : (n : Nat) → Fin n → Fin (suc n)
+vlookup : {A : Type} {n : Nat} → Vec A n → Fin n → A
+vlookup (vcons m x xs) (fzero k) = x
+vlookup (vcons m x xs) (fsuc k i) = vlookup xs i
+#same vhead-u (vtl-u v2) = 9
+#same vhead-u (vzip v2 v2) = (7 , 7)
+#same vlookup v2 (fsuc 1 (fzero 0)) = 9
+-- the unification does not make a wrong clause right: xs is not a Vec B m
+#fail
+vzip-bad : {A B : Type} {n : Nat} → Vec A n → Vec B n → Vec (A × B) n
+vzip-bad vnil vnil = vnil
+vzip-bad (vcons m x xs) (vcons m2 y ys) = vcons m2 (x , y) (vzip-bad xs xs)

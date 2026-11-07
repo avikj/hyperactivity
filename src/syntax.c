@@ -2779,6 +2779,27 @@ static Node *subst_multi(Node *t, const char **ps, Node **vs, int n) {
         for (int i = 2; i < t->n; i++) r->it[i] = (pi && i == 2) ? subst_multi(t->it[i], ps, vs, n) : subst_multi(t->it[i], ps2, vs2, m);
         return r;
     }
+    if (!t->it[0]->list && (is(t->it[0], "case") || is(t->it[0], "elim"))) {
+        /* alternatives (pattern body): the pattern's variables bind in the body, and an
+         * alternative is not an application */
+        int first = is(t->it[0], "elim") ? 3 : 2;
+        Node *r = nlist(t->n); r->it[0] = t->it[0];
+        for (int i = 1; i < first && i < t->n; i++) r->it[i] = subst_multi(t->it[i], ps, vs, n);
+        for (int i = first; i < t->n; i++) {
+            Node *a = t->it[i];
+            if (!a->list || a->n != 2) { r->it[i] = a; continue; }
+            Node *pat = a->it[0];
+            const char *ps2[256]; Node *vs2[256]; int m = 0;
+            for (int z = 0; z < n && m < 256; z++) {
+                bool bound = false;
+                if (pat->list) { for (int q = 1; q < pat->n; q++) if (!pat->it[q]->list && !strcmp(pat->it[q]->s, ps[z])) bound = true; }
+                else if (!strcmp(pat->s, ps[z])) bound = true;
+                if (!bound) { ps2[m] = ps[z]; vs2[m++] = vs[z]; }
+            }
+            r->it[i] = lst(2, pat, subst_multi(a->it[1], ps2, vs2, m));
+        }
+        return r;
+    }
     Node *r = nlist(t->n);
     for (int i = 0; i < t->n; i++) r->it[i] = subst_multi(t->it[i], ps, vs, n);
     /* ((f a) b) as (f a b) */
@@ -3643,7 +3664,14 @@ static CVar *cdefs; static int ncdefs, capcdefs;
 static Frame *frames; static int nframes, capframes;
 static Node *subst_sym(Node *t, const char *x, Node *e);
 static Node *subst_multi(Node *t, const char **ps, Node **vs, int n);
-static Node *ty_of(const char *v) { for (int i = ncdefs - 1; i >= 0; i--) if (!strcmp(cdefs[i].v, v)) return cdefs[i].ty; for (int i = 0; i < tsig.np; i++) if (!strcmp(tsig.pn[i]->s, v)) return tsig.pty[i]; return NULL; }
+/* the substitution a split's index unification has made (E28): an outer index variable by the
+ * constructor's index expression (the goal rewritten), a field by the value unification found for
+ * it; applied to the types and goals built below the split and to the clauses' right sides */
+static const char *SGX[64]; static Node *SGV[64]; static int nsg;
+static Node *sg_apply(Node *t) { return t && nsg ? subst_multi(t, SGX, SGV, nsg) : t; }
+static void sg_push(const char *x, Node *v) { if (nsg >= 64) die("internal: too many index substitutions in", tfname); Node *w = sg_apply(v); SGX[nsg] = x; SGV[nsg++] = w; }
+static Node *ty_of_raw(const char *v) { for (int i = ncdefs - 1; i >= 0; i--) if (!strcmp(cdefs[i].v, v)) return cdefs[i].ty; for (int i = 0; i < tsig.np; i++) if (!strcmp(tsig.pn[i]->s, v)) return tsig.pty[i]; return NULL; }
+static Node *ty_of(const char *v) { return sg_apply(ty_of_raw(v)); }
 /* the types of constructor c's fields, the variable it splits being of type T (D at its parameters):
  * the declaration's field types, its parameters and earlier fields replaced */
 static Node **field_types(int c, Node *T, Node **fv) {
@@ -3845,8 +3873,8 @@ static Node *rec_xform(Node *e) {
 /* the later parameters (after p) as Π types around R; as λs; as arguments */
 /* the later parameters a split reverts: those the recursive calls change, or whose types depend on an
  * earlier parameter */
-static Node *later_pi(int p) { Node *r = tsig.R; for (int q = tsig.np - 1; q > p; q--) if (tsig.rev[q]) r = sym4("Pi", tsig.pn[q], tsig.pty[q], r); return r; }
-static Node *later_lam(int p, Node *b) { for (int q = tsig.np - 1; q > p; q--) if (tsig.rev[q]) b = lam_t(tsig.pn[q], tsig.pty[q], b); return b; }
+static Node *later_pi(int p) { Node *r = tsig.R; for (int q = tsig.np - 1; q > p; q--) if (tsig.rev[q]) r = sym4("Pi", tsig.pn[q], tsig.pty[q], r); return sg_apply(r); }
+static Node *later_lam(int p, Node *b) { for (int q = tsig.np - 1; q > p; q--) if (tsig.rev[q]) b = lam_t(tsig.pn[q], sg_apply(tsig.pty[q]), b); return b; }
 static Node *later_app(int p, Node *f) {
     int nl = 0; for (int q = p + 1; q < tsig.np; q++) if (tsig.rev[q]) nl++;
     if (!nl) return f;
@@ -3857,6 +3885,71 @@ static Node *later_app(int p, Node *f) {
 static bool mentions_any(Node *t, const char *v) { return mentions_name(t, v); }
 /* a rebuilt variable's value, annotated with its type when it is known */
 static Node *typed_def(CVar *c) { return c->ty ? sym3("the", c->ty, c->def) : c->def; }
+/* index unification at a split (E28, as Agda's): the scrutinee's index arguments against a
+ * constructor's index expressions over its fields — a clash makes the branch absurd, the same
+ * constructor recurses on the arguments, a field met by a term it does not occur in is solved */
+typedef struct { int con, arg; } UStep;
+typedef struct { int q, depth, ca; UStep path[16]; } UClash;
+typedef struct { int k, q, depth; Node *val; UStep path[16]; } USol;
+typedef struct { bool clash, stuck; UClash cl; int nsol; USol sol[16]; } UState;
+/* a constructor application (a numeral of a type with zero and suc read as one), its arguments */
+static int u_con(Node *t, Node **args, int *na) {
+    *na = 0;
+    if (!t->list) {
+        if (isdigit((unsigned char)t->s[0])) {
+            long k = atol(t->s); int z = con_lookup("zero"), sc = con_lookup("suc");
+            if (z < 0 || sc < 0) return -1;
+            if (k == 0) return z;
+            char b[32]; snprintf(b, sizeof b, "%ld", k - 1); args[0] = nsym(b); *na = 1; return sc;
+        }
+        if (e_find(t->s)) return -1;
+        int c = con_lookup(t->s); return c >= 0 && CON[c].nfields == 0 ? c : -1;
+    }
+    if (t->n == 0 || t->it[0]->list || e_find(t->it[0]->s)) return -1;
+    int c = con_lookup(t->it[0]->s);
+    if (c < 0 || CON[c].nfields != t->n - 1 || t->n - 1 > 16) return -1;
+    for (int i = 1; i < t->n; i++) args[i - 1] = t->it[i];
+    *na = t->n - 1; return c;
+}
+static void u_walk(Node *a, Node *b, int q, UStep *path, int depth, Node **fv, int nfo, UState *st) {
+    if (st->clash || st->stuck) return;
+    if (node_eq(a, b)) return;
+    if (!b->list) for (int z = 0; z < nfo; z++) if (!strcmp(fv[z]->s, b->s)) {
+        for (int w = 0; w < st->nsol; w++) if (st->sol[w].k == z) { if (!node_eq(st->sol[w].val, a)) st->stuck = true; return; }
+        if (mentions_name(a, b->s) || st->nsol >= 16 || depth == 0) { st->stuck = true; return; }
+        USol *so = &st->sol[st->nsol++]; so->k = z; so->q = q; so->depth = depth; so->val = a;
+        for (int i = 0; i < depth; i++) so->path[i] = path[i];
+        return;
+    }
+    Node *aa[16], *ba[16]; int na, nb;
+    int ca = u_con(a, aa, &na), cb = u_con(b, ba, &nb);
+    if (ca < 0 || cb < 0) { st->stuck = true; return; }
+    if (ca != cb) {
+        st->clash = true; st->cl.q = q; st->cl.depth = depth; st->cl.ca = ca;
+        for (int i = 0; i < depth; i++) st->cl.path[i] = path[i];
+        return;
+    }
+    if (depth >= 15) { st->stuck = true; return; }
+    for (int i = 0; i < na; i++) { path[depth] = (UStep){ ca, i }; u_walk(aa[i], ba[i], q, path, depth + 1, fv, nfo, st); }
+}
+/* case x of … along a position: at the end of path the constructor `last` gives yes, any other
+ * no; above it, the constructor on the path recurses into its argument and any other gives no */
+static Node *u_case(Node *x, UStep *path, int depth, int at, int last, Node *yes, Node *no, Node *dflt_inner) {
+    int target = at < depth ? path[at].con : last;
+    int dd = CON[target].data;
+    Node *cs = nlist(2 + DATA[dd].ncons); cs->it[0] = nsym("case"); cs->it[1] = x;
+    for (int ci = 0; ci < DATA[dd].ncons; ci++) {
+        int c2 = DATA[dd].cons[ci], nf = CON[c2].nfields;
+        Node *pat = nlist(nf + 1); pat->it[0] = nsym(CON[c2].name);
+        for (int q = 0; q < nf; q++) pat->it[q + 1] = xfresh("u");
+        Node *b;
+        if (c2 != target) b = no;
+        else if (at < depth) b = (at + 1 == depth && dflt_inner) ? pat->it[path[at].arg + 1] : u_case(pat->it[path[at].arg + 1], path, depth, at + 1, last, yes, no, dflt_inner);
+        else b = yes;
+        cs->it[2 + ci] = lst(2, nf ? pat : lst(1, nsym(CON[c2].name)), b);
+    }
+    return cs;
+}
 static Node *ccm_t(Node **vars, int nv, Row *rows, int nr);
 static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     if (!nr) die("the clauses do not cover every case of", tfname);
@@ -3874,7 +3967,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     if (j < 0) {
         Node *e = rows[0].rhs;
         for (int q = 0; q < nv; q++) if (!pat_wild(rows[0].p[q]) && strcmp(rows[0].p[q]->s, vars[q]->s)) e = x_rename(e, rows[0].p[q]->s, vars[q]->s);
-        return rec_xform(e);
+        return rec_xform(sg_apply(e));
     }
     const char *v = vars[j]->s;
     int gp = gp_of(v);
@@ -3937,7 +4030,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     /* an indexed type (fording) whose index arguments are variables n…: the motive written as a λ
      * over the indices applied to them, (λ ix… v → body[n := ix]) n…, so the checker types an
      * induction hypothesis at the field's own index (E28: the index unified at the split) */
-    Node *motx = mot, *ixlam = NULL; int ixk = 0;
+    Node *motx = mot, *ixlam = NULL; int ixk = 0; const char *ixv[64];
     if (!cov && !dv && DATA[d].nidx > 0) {
         Node *vt = ty_of(v); int np = DATA[d].nparams, k = DATA[d].nidx;
         if (vt && vt->list && vt->n == np + 1 && !vt->it[0]->list && !strcmp(vt->it[0]->s, DATA[d].name)) {
@@ -3952,6 +4045,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
                 Node *inner = sym3("%lam", nsym(v), subst_multi(mot->it[2], ixn, fresh, k));
                 for (int q = k - 1; q >= 0; q--) inner = sym3("%lam", fresh[q], inner);
                 motx = inner; ixlam = inner; ixk = k;
+                for (int q = 0; q < k; q++) ixv[q] = ixn[q];
                 for (int q = 0; q < k; q++) motx = lst(2, motx, nsym(ixn[q]));
             }
         }
@@ -4004,7 +4098,26 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             }
             r2[n2++] = x;
         }
-        if (!n2) die("the clauses do not cover every case of", tfname);
+        /* index unification when the scrutinee's indices are not all variables */
+        UState us = { 0 };
+        Ford *fu = !cov && !dv && !ixlam && DATA[d].nidx > 0 ? ford_of(CON[c].name) : NULL;
+        int nfo = fu ? nf - fu->nidx : 0;
+        if (fu && !eq_named && !CON[c].ndims) {
+            Node *vt = ty_of(v); int np = DATA[d].nparams, k = DATA[d].nidx;
+            if (vt && vt->list && vt->n == np + 1 && !vt->it[0]->list && !strcmp(vt->it[0]->s, DATA[d].name) && fu->nfields == nfo) {
+                const char *fx[64]; Node *fvv[64]; int nfx = 0;
+                for (int z = 0; z < nfo && z < 64; z++) { fx[nfx] = fu->fields[z]; fvv[nfx++] = fv[z]; }
+                for (int q = 0; q < k; q++) {
+                    UStep path[16];
+                    u_walk(vt->it[1 + np - k + q], subst_multi(fu->idx[q], fx, fvv, nfx), q, path, 0, fv, nfo, &us);
+                }
+                /* a solved field matched by more than a variable is left as it was */
+                for (int w = 0; w < us.nsol && !us.stuck; w++)
+                    for (int r = 0; r < n2; r++) { Node *pp = r2[r].p[j + us.sol[w].k]; if (!pat_wild(pp) && pat_con(pp) >= 0) us.stuck = true; }
+            } else us.stuck = true;
+        } else us.stuck = true;
+        if (us.stuck) { us.clash = false; us.nsol = 0; }
+
         /* v rebuilt, and what was rebuilt from it */
         Node *cv = nsym(CON[c].name);
         if (nf) { cv = nlist(nf + 1); cv->it[0] = nsym(CON[c].name); for (int q = 0; q < nf; q++) cv->it[q + 1] = fv[q]; }
@@ -4043,11 +4156,98 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             for (int q = 0; q < CON[c].nfields; q++) if (CON[c].recmask >> q & 1) { fr.rs[fr.nrf] = CON[c].rsh[q]; fr.rf[fr.nrf++] = fv[q]; }
             GROW(frames, capframes, (size_t)nframes + 1); frames[nframes++] = fr;
         }
-        Node *body = ccm_t(v2, nv2, r2, n2);
+        /* the goal rewritten by a variable index: below the split the index is the constructor's */
+        Ford *fdr0 = ixlam ? ford_of(CON[c].name) : NULL;
+        bool plan_rw = fdr0 && fdr0->nidx == ixk && !eq_named && nd == 0 && !CON[c].ndims && fdr0->nfields == nf - ixk;
+        int sg0 = nsg;
+        if (plan_rw) {
+            const char *fx[64]; Node *fvv[64]; int nfx = 0;
+            for (int z = 0; z < nf - ixk && z < 64; z++) { fx[nfx] = fdr0->fields[z]; fvv[nfx++] = fv[z]; }
+            for (int q = 0; q < ixk; q++) sg_push(ixv[q], subst_multi(fdr0->idx[q], fx, fvv, nfx));
+        }
+        for (int w = 0; w < us.nsol; w++) sg_push(fv[us.sol[w].k]->s, us.sol[w].val);
+        Node *body;
+        Node *G = sg_apply(tsig.R);
+        if (us.clash) {
+            /* absurd: transport the identity on G along the equation into G, through a type that is
+             * G → G at the scrutinee's constructor and G at the clashing one */
+            Node *e = fv[nfo + us.cl.q], *i = xfresh("i"), *g = xfresh("g");
+            Node *disc = u_case(lst(2, e, i), us.cl.path, us.cl.depth, 0, us.cl.ca, sym4("Pi", xfresh("_"), G, G), G, NULL);
+            body = lst(4, nsym("comp"), sym3("lam", i, disc), sym3("lam", xfresh("i"), lst(1, nsym("sys"))), sym3("lam", g, g));
+        } else if (!n2) {
+            /* no clause for this constructor: covered when a later variable's type, under the
+             * substitution so far, admits no constructor (each clashes); split it, every branch
+             * absurd (as Agda's coverage checker splits on) */
+            int col = -1, dq = -1;
+            for (int q = 0; q < nv2 && col < 0; q++) {
+                Node *qt = ty_of(v2[q]->s);
+                Node *hd = qt ? (qt->list ? qt->it[0] : qt) : NULL;
+                int dq2 = hd && !hd->list ? data_lookup(hd->s) : -1;
+                if (dq2 < 0 || DATA[dq2].nidx == 0 || !qt->list || qt->n != DATA[dq2].nparams + 1) continue;
+                bool all = DATA[dq2].ncons > 0;
+                for (int ci2 = 0; ci2 < DATA[dq2].ncons && all; ci2++) {
+                    int c3 = DATA[dq2].cons[ci2]; Ford *f3 = ford_of(CON[c3].name);
+                    if (!f3) { all = false; break; }
+                    UState u3 = { 0 }; Node *fv3[64]; const char *fx[64]; int no3 = f3->nfields;
+                    if (no3 > 64) { all = false; break; }
+                    for (int z = 0; z < no3; z++) { fv3[z] = xfresh("f"); fx[z] = f3->fields[z]; }
+                    int np3 = DATA[dq2].nparams, k3 = DATA[dq2].nidx;
+                    for (int q3 = 0; q3 < k3 && !u3.clash && !u3.stuck; q3++) { UStep path[16]; u_walk(qt->it[1 + np3 - k3 + q3], subst_multi(f3->idx[q3], fx, fv3, no3), q3, path, 0, fv3, no3, &u3); }
+                    if (!u3.clash) all = false;
+                }
+                if (all) { col = q; dq = dq2; }
+            }
+            if (col < 0) die("the clauses do not cover every case of", tfname);
+            Row *sr = calloc((size_t)DATA[dq].ncons + 1, sizeof(Row));
+            for (int ci2 = 0; ci2 < DATA[dq].ncons; ci2++) {
+                int c3 = DATA[dq].cons[ci2], nf3 = CON[c3].nfields + CON[c3].ndims;
+                sr[ci2].p = calloc((size_t)nv2 + 1, sizeof(Node *));
+                for (int q = 0; q < nv2; q++) sr[ci2].p[q] = nsym("_");
+                Node *pp = nsym(CON[c3].name);
+                if (nf3) { pp = nlist(nf3 + 1); pp->it[0] = nsym(CON[c3].name); for (int z = 0; z < nf3; z++) pp->it[z + 1] = nsym("_"); }
+                sr[ci2].p[col] = pp; sr[ci2].rhs = nsym("%unreachable");
+            }
+            body = ccm_t(v2, nv2, sr, DATA[dq].ncons);
+        } else body = ccm_t(v2, nv2, r2, n2);
+        if (plan_rw) {
+            bool bad = mentions_name(body, v);
+            for (int q = nf - ixk; q < nf; q++) if (mentions_name(body, fv[q]->s)) bad = true;
+            if (bad) { nsg = sg0; plan_rw = false; body = ccm_t(v2, nv2, r2, n2); }
+        }
+        if (us.nsol && !us.clash) {
+            /* a solved field: the branch was built with it replaced by its value; the fields whose
+             * types mention it are transported along the path from the value to the field, the
+             * equation's argument at the field's position (λ i → proj (e i)) */
+            for (int w = us.nsol - 1; w >= 0; w--) {
+                USol *so = &us.sol[w]; const char *fk = fv[so->k]->s;
+                int Z[64], nz = 0; bool ok = !mentions_name(G, fk) && !mentions_name(G, v);
+                for (int z = 0; z < nfo && ok; z++) if (z != so->k && fty[z] && mentions_name(fty[z], fk)) {
+                    for (int w2 = 0; w2 < us.nsol; w2++) if (w2 != w && mentions_name(fty[z], fv[us.sol[w2].k]->s)) ok = false;
+                    if (mentions_name(G, fv[z]->s)) ok = false;
+                    if (nz < 64) Z[nz++] = z;
+                }
+                for (int a = 0; a < nz && ok; a++) for (int b2 = 0; b2 < nz; b2++) if (a != b2 && mentions_name(fty[Z[a]], fv[Z[b2]]->s)) ok = false;
+                if (!ok) die("index unification: a field's solution cannot be transported here (name the equality field and transport by hand) in", tfname);
+                if (!nz) continue;
+                Node *e = fv[nfo + so->q], *i = xfresh("i");
+                Node *pi = u_case(lst(2, e, i), so->path, so->depth, 0, -1, NULL, so->val, so->val);
+                Node *line = G, *base = body;
+                for (int a = nz - 1; a >= 0; a--) {
+                    Node *zt = fty[Z[a]];
+                    line = sym4("Pi", fv[Z[a]], subst_sym(zt, fk, pi), line);
+                    base = lam_t(fv[Z[a]], sg_apply(zt), base);
+                }
+                Node *ap = nlist(nz + 1);
+                ap->it[0] = lst(4, nsym("comp"), sym3("lam", i, line), sym3("lam", xfresh("i"), lst(1, nsym("sys"))), base);
+                for (int a = 0; a < nz; a++) ap->it[a + 1] = fv[Z[a]];
+                body = ap;
+            }
+        }
         nframes = save_frames; ndeeps = save_deeps;
         /* the field entries are scoping only */
         ncdefs = save_defs;
         body = later_lam(gp, body);
+        nsg = sg0;
         if (cov) body = sym3("pair", body, tuple);
         if (dv) {
             const char *vv = dv->v;
@@ -4062,7 +4262,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         Ford *fdr = ixlam ? ford_of(CON[c].name) : NULL;
         bool mentions_eq = false, rewrote = false;
         if (fdr) for (int q = nf - ixk; q < nf; q++) if (mentions_name(body, fv[q]->s)) mentions_eq = true;
-        if (fdr && fdr->nidx == ixk && !eq_named && !mentions_eq && !mentions_name(body, v) && nd == 0 && !CON[c].ndims) {
+        if (plan_rw && fdr && fdr->nidx == ixk && !eq_named && !mentions_eq && !mentions_name(body, v) && nd == 0 && !CON[c].ndims) {
             Node *i = xfresh("i"), *jd = xfresh("j");
             Node *cvl = nlist(nf + 1); cvl->it[0] = nsym(CON[c].name);
             for (int q = 0; q < nf - ixk; q++) cvl->it[q + 1] = fv[q];

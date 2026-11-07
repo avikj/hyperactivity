@@ -216,7 +216,11 @@ Vec A m`): the motive is written `(λ ix v → Vec B ix) n` and the checker read
 unified at the split, as Agda does). Leaving the equality field out of the pattern rewrites the
 goal by it: `vmap f (vcons m x xs) = vcons m (f x) (vmap f xs)` is checked at `Vec B (suc m)`
 and transported along the equation; naming it (`vcons m x xs e`) leaves it to the branch.
-`tests/elab.cub`.
+Indices are unified at a split as Agda does: a case whose indices clash may be left out
+(`vhead (vcons m x xs) = x` on `Vec A (suc n)`), a field determined by the indices is solved
+(`vzip (vcons m x xs) (vcons m2 y ys) = vcons m (x , y) (vzip xs ys)` with `ys : Vec B m`), and
+a missing clause is covered when a later argument's type is empty (`vlookup` needs no `vnil`
+clause: `Fin zero` has no constructor). `tests/elab.cub`.
 
 **Running processes and calling native code.** `lib/world.cub` is the drivers' signature `W`
 (`time-now`, `write fd n b`, `read fd n`, `sleep ns`, `exit c` as processes of `lib/proc.cub`)
