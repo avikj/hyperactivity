@@ -1,0 +1,30 @@
+-- lib/intlin.cub — the search side of linear arithmetic over Int (plan 18.13, F32). The
+-- verified checker (lib/intproof.cub: int-cert-check with int-cert-sound) translates an
+-- integer claim to a word claim over doubled variables; the search for its multipliers is the
+-- same translation followed by lib/lin.cub's directed Fourier–Motzkin search (omega-cert) or its
+-- enumeration (find-cert) over the untyped codes of the fragment. Nothing here is trusted: what
+-- the search produces goes through int-cert-check, whose soundness is the theorem. Loaded after
+-- lib/intproof.cub; untyped, as lib/lin.cub is.
+-- a typed word code read as a code of the fragment (addition is cwop #2)
+lc-to-code c =
+  case c of
+    lc-lit n → cwlit n
+    lc-var v → cvar v
+    lc-add a b → cwop #2 (lc-to-code a) (lc-to-code b)
+    lc-suc a → cwsucc (lc-to-code a)
+hyps-to-lst hs = case hs of hnil → lnil; hcons l r rest → lcons (lc-to-code l , lc-to-code r) (hyps-to-lst rest)
+lst-to-mults l = case l of lnil → munil; lcons c r → mucons c (lst-to-mults r)
+-- the searches over integer claims: hypotheses hs (IHyps), goal a ≤ b (IntCode); some multipliers or none
+int-omega-cert hs a b = omega-cert (hyps-to-lst (int-hyps hs)) (lc-to-code (igoal-l a b)) (lc-to-code (igoal-r a b))
+int-find-cert m hs a b = find-cert m (hyps-to-lst (int-hyps hs)) (lc-to-code (igoal-l a b)) (lc-to-code (igoal-r a b))
+-- the search's result as the checker's multipliers (an empty list where the search refutes)
+int-cert-of o = case o of some l → lst-to-mults l; none → munil
+-- ---------------------------------------------------------------- readings
+-- transitivity: found and checked
+ihs-tr = ihcons (ic-var #0) (ic-var #1) (ihcons (ic-var #1) (ic-var #2) ihnil)
+#same int-omega-cert ihs-tr (ic-var #0) (ic-var #2) = some (lcons #1 (lcons #1 lnil))
+#same int-cert-check ihs-tr (int-cert-of (int-omega-cert ihs-tr (ic-var #0) (ic-var #2))) (ic-var #0) (ic-var #2) = true
+-- negation reverses: from x ≤ y, −y ≤ −x
+#same int-cert-check (ihcons (ic-var #0) (ic-var #1) ihnil) (int-cert-of (int-omega-cert (ihcons (ic-var #0) (ic-var #1) ihnil) (ic-neg (ic-var #1)) (ic-neg (ic-var #0)))) (ic-neg (ic-var #1)) (ic-neg (ic-var #0)) = true
+-- what does not follow is refused: x ≤ y does not give y ≤ x
+#same int-omega-cert (ihcons (ic-var #0) (ic-var #1) ihnil) (ic-var #1) (ic-var #0) = none

@@ -1131,8 +1131,8 @@ composition lines, generalized variables, and dependent matching on indexed fami
 branch sees the equality field; a recursion returning an indexed type, `vmap : Vec A n → Vec B
 n`, needs the transport written, since the hypothesis is at the outer index — Agda's
 unification of the index at the split is the missing piece, not a motive over the index, which
-would ask the branch for every index); (5) item 30's retraction and positions in errors; (6) F32 over `Int` (needs `Int`
-arithmetic and its laws in `lib/std.cub` first); (7) DONE: the memory interface in `W` (`w-load`/`w-store`/`w-cas`/`w-fence`, acquire /
+would ask the branch for every index); (5) item 30's retraction and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
+`Z2` reading with its laws, `lib/intproof.cub`, `lib/intlin.cub`); (7) DONE: the memory interface in `W` (`w-load`/`w-store`/`w-cas`/`w-fence`, acquire /
 release / acquire-release / sequentially consistent, on addresses from `ptr-of`;
 `tests/world.cub`); (8) item 10's same-machine Agda comparison; (9) Line B's leftovers: `lib/emitx86.cub` (18.7's
 encoder, ~700 lines, for the latency of re-specialization only since `#native` goes through
@@ -1309,7 +1309,7 @@ identity; linear values are introduced only in `primitive` definitions.
     every value kind the net has (stuck calls as `wcofix`/`wproj`, primitives as `wprim`,
     words with the big case under `wwlit`); `wnative` waits on a `V_NATIVE` value (B18's
     opaque results, not built). Open: `D-correct` stated over the fragment's codes.
-32. **Status (2026-11-06):** the two verified checkers (`lib/linproof.cub`, `lib/eqproof.cub`), the ring checker, the directed Farkas search (`89ec3e0e`) and the bridges from codes (`d1e5f790`) are built; over `Int`, and the elaborator calling `check-cert` on holes, are open. Spec as written: Certificate checkers as verified terms over codes; search unverified (in-language or SMT);
+32. **Status (2026-11-06):** the two verified checkers (`lib/linproof.cub`, `lib/eqproof.cub`), the ring checker, the directed Farkas search (`89ec3e0e`) and the bridges from codes (`d1e5f790`) are built, and over `Int` too (`lib/intproof.cub`, `lib/intlin.cub`: the checker is the word checker over the coordinates of differences, its soundness transported); the elaborator calling `check-cert` on holes is open. Spec as written: Certificate checkers as verified terms over codes; search unverified (in-language or SMT);
     unchecked solvers marked. Essential.
 33. **Status (2026-11-06):** built as `lib/nav.cub` with `lib/cost.cub`'s models (size, recorded steps through `%gsteps`, `13f09662`). Spec as written: Navigation over established identities. Precisely: the store holds identities; a view is
     a subset a reasoner currently holds; from a view the available transports are computable
@@ -2598,7 +2598,19 @@ Revision 1.
   depth-first matching) produce what the checkers check. Left: the bridge from `Code` to
   the typed fragments (`linearize`, and a `Code → Tm` reading of applications of globals)
   with its soundness against the evaluator, and the elaborator calling the checkers on
-  holes (needs E28's hole solving).
+  holes (needs E28's hole solving). Over `Int` (built): `lib/std.cub` reads an integer as a
+  difference of words (`Z2 = Word × Word`, `toZ2`/`fromZ2` with `fromZ2-toZ2`, `addZ`, `subZ`,
+  `negZ`, order `leZ` as a witnessed inequality of cross sums); `lib/intproof.cub` proves the
+  commutative-monoid laws (`addZ-comm`, `addZ-zero-l/r`, `addZ-neg`, `addZ-assoc` through
+  `toZ2-fromZ2-rel`, the normal form's coordinates standing for the same difference) and
+  builds the checker: an `IntCode` (literals, variables, sums, negations) becomes the pair of
+  word codes of its coordinates over doubled variables (`tc`, variable `v` to `2v`/`2v+1`,
+  `repr` the faithfulness), a claim `a ≤ b` the word claim `a⁺ + b⁻ ≤ b⁺ + a⁻`, and
+  `int-cert-sound` is `cert-sound` transported along the translation. The order laws
+  (`leZ-refl`, `leZ-trans`, `leZ-neg`, `leZ-add`) are proved by the checkers themselves at
+  environments of the integers in question. `lib/intlin.cub` is the search side (the same
+  translation then `omega-cert`/`find-cert`); `tests/cert.cub` runs it end to end with the
+  theorem applied at an environment.
 - **F32.** `Cert` data type for linear arithmetic over `Nat`/`Int` (Farkas-style
   certificates: a nonnegative combination of hypotheses yielding the goal) and for
   equalities with uninterpreted functions (a sequence of rewrites); `check-cert : (hs : List

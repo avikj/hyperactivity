@@ -535,3 +535,44 @@ tl {A} s = forceκ {lzero} {λ κ → Stream κ A} (λ κ → stail (s κ))
 nth : {A : Type} → Nat → Str A → A
 nth zero s = hd s
 nth (suc n) s = nth n (tl s)
+-- ---------------------------------------------------------------- integers as differences of words
+-- An integer is a pair of words (p , q) standing for p − q (Z2); Int is its normal form: toZ2 and
+-- fromZ2 are inverse up to the relation p + q' = p' + q, and fromZ2 forgets a common summand
+-- (fromZ2-shift). Addition and negation are the coordinatewise operations; their laws are the
+-- words' (plusw-comm, plusw-assoc) transported through fromZ2. Order: p + q' ≤ p' + q (Lew is
+-- lib/linproof.cub's; here as a Σ over a witness, the same type). The laws that need the words'
+-- commutativity and associativity (plusw-comm, plusw-assoc are lib/linproof.cub's) are in
+-- lib/intproof.cub.
+Z2 : Type
+Z2 = Word × Word
+toZ2 : Int → Z2
+toZ2 z = case z of pos n → (fromNat n , #0); negsuc n → (#0 , fromNat (suc n))
+-- (p , q) ↦ p − q, by recursion on q, then p: fromZ2 (suc p , suc q) = fromZ2 (p , q) definitionally
+fromZ2-go : Word → Word → Int
+fromZ2-go q = %welimP (λ v → Word → Int) q (λ p → pos (toNat p)) (λ q2 h p → %welimP (λ v → Int) p (negsuc (toNat q2)) (λ p2 h2 → h p2))
+fromZ2 : Z2 → Int
+fromZ2 z = fromZ2-go (snd z) (fst z)
+addZ2 : Z2 → Z2 → Z2
+addZ2 a b = (plusw (fst a) (fst b) , plusw (snd a) (snd b))
+negZ2 : Z2 → Z2
+negZ2 a = (snd a , fst a)
+addZ : Int → Int → Int
+addZ a b = fromZ2 (addZ2 (toZ2 a) (toZ2 b))
+subZ : Int → Int → Int
+subZ a b = fromZ2 (addZ2 (toZ2 a) (negZ2 (toZ2 b)))
+zeroZ : Int
+zeroZ = pos zero
+-- order on Z2 and on Int: p + q' ≤ p' + q, a witness d with (p + q') + d = p' + q
+LeZ2 : Z2 → Z2 → Type
+LeZ2 a b = (d : Word) × plusw (plusw (fst a) (snd b)) d ≡ plusw (fst b) (snd a)
+leZ : Int → Int → Type
+leZ a b = LeZ2 (toZ2 a) (toZ2 b)
+-- fromZ2 forgets a common summand: fromZ2 (p + d , q + d) = fromZ2 (p , q)
+fromZ2-shift : (p q d : Word) → fromZ2 (plusw p d , plusw q d) ≡ fromZ2 (p , q)
+fromZ2-shift p q d = %welimP (λ v → fromZ2 (plusw p v , plusw q v) ≡ fromZ2 (p , q)) d (λ i → fromZ2 (p , q)) (λ n h → h)
+-- the normal form is a retraction: fromZ2 (toZ2 z) = z
+fromZ2-toZ2 : (z : Int) → fromZ2 (toZ2 z) ≡ z
+fromZ2-toZ2 z =
+  case z return (λ w → fromZ2 (toZ2 w) ≡ w) of
+    pos n → λ i → pos (toNat-fromNat n i)
+    negsuc n → λ i → negsuc (toNat-fromNat n i)

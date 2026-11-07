@@ -60,3 +60,33 @@ eq-from-codes hs s t n =
 #same eq-from-codes ceqs cgoal (cglob #2) #4 = some true
 #same eq-from-codes ceqs cgoal (cglob #1) #4 = none
 #same eq-from-codes ceqs (clam cgoal) (cglob #2) #4 = none
+-- ---------------------------------------------------------------- integers (lib/intproof.cub, lib/intlin.cub)
+-- the obligation x + 3 ≤ z from x ≤ y − 2 and y ≤ z − 1 over Int: the search finds the
+-- multipliers (1, 1), the verified checker accepts them, and the theorem applied at
+-- x = −5, y = −3, z = 0 gives the claim with its witness: (x + 3) + d = z as differences, d = 2
+ihs2 : IHyps
+ihs2 = ihcons (ic-var #0) (ic-add (ic-var #1) (ic-lit (negsuc (suc zero)))) (ihcons (ic-var #1) (ic-add (ic-var #2) (ic-lit (negsuc zero))) ihnil)
+igoal-a : IntCode
+igoal-a = ic-add (ic-var #0) (ic-lit (pos (suc (suc (suc zero)))))
+igoal-b : IntCode
+igoal-b = ic-var #2
+#same int-omega-cert ihs2 igoal-a igoal-b = some (lcons #1 (lcons #1 lnil))
+#same int-cert-check ihs2 (int-cert-of (int-omega-cert ihs2 igoal-a igoal-b)) igoal-a igoal-b = true
+#same int-find-cert #2 ihs2 igoal-a igoal-b = int-omega-cert ihs2 igoal-a igoal-b
+-- the claim refuted by the search (x + 4 ≤ z) has no certificate to check
+#same int-cert-check ihs2 (int-cert-of (int-omega-cert ihs2 (ic-add (ic-var #0) (ic-lit (pos (suc (suc (suc (suc zero))))))) igoal-b)) (ic-add (ic-var #0) (ic-lit (pos (suc (suc (suc (suc zero))))))) igoal-b = false
+ienv2 : IEnv
+ienv2 = ienv (cons (negsuc (suc (suc (suc (suc zero))))) (cons (negsuc (suc (suc zero))) (cons (pos zero) nil)))
+icert2 : Mults
+icert2 = mucons #1 (mucons #1 munil)
+-- the hypotheses hold at the environment: −5 ≤ −5 and −3 ≤ −1, as differences (witnesses 0 and 2)
+iholds2 : IHolds ienv2 ihs2
+iholds2 = ((#0 , λ i → #5) , ((#2 , λ i → #3) , unit))
+igoal2 : LeZ2 (zev2 ienv2 igoal-a) (zev2 ienv2 igoal-b)
+igoal2 = int-cert-sound ienv2 ihs2 icert2 igoal-a igoal-b iholds2 (λ i → true)
+#same fst igoal2 = #2
+#same fromZ2 (zev2 ienv2 igoal-a) = negsuc (suc zero)
+-- the witness really is one: (x + 3)⁺ + z⁻ + d = z⁺ + (x + 3)⁻ at the environment
+#same plusw (plusw (fst (zev2 ienv2 igoal-a)) (snd (zev2 ienv2 igoal-b))) (fst igoal2) = plusw (fst (zev2 ienv2 igoal-b)) (snd (zev2 ienv2 igoal-a))
+-- the order laws proved by the checker compute: transitivity's witness is the sum of the witnesses
+#same fst (leZ-add (negsuc zero) (pos zero) (pos zero) (pos (suc zero)) (#1 , λ i → #1) (#1 , λ i → #1)) = #2
