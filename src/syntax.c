@@ -967,7 +967,59 @@ static void declare_forward(Node *body) {
         }
     free(b.v); free(out.v);
 }
+/* an untyped definition is not elaborated, so a checked definition with leading implicit
+ * parameters applied in it positionally takes the first explicit argument as the implicit one
+ * (idw #3 binding A := #3): refused, with the remedy named */
+static const char *imp_misuse(Node *t, Names *bound) {
+    if (!t->list) return NULL;   /* a bare name: passed on, its arguments given wherever it is applied */
+    if (t->n == 0) return NULL;
+    Node *h = t->it[0];
+    if (!h->list) {
+        const char *k = h->s;
+        if ((!strcmp(k, "lam") || !strcmp(k, "plam") || !strcmp(k, "%lam") || !strcmp(k, "forall")) && t->n == 3 && !t->it[1]->list) {
+            int save = bound->n; names_add(bound, t->it[1]->s); const char *r = imp_misuse(t->it[2], bound); bound->n = save; return r;
+        }
+        if ((!strcmp(k, "Pi") || !strcmp(k, "Sigma") || !strcmp(k, "let")) && t->n == 4 && !t->it[1]->list) {
+            const char *r = imp_misuse(t->it[2], bound); if (r) return r;
+            int save = bound->n; names_add(bound, t->it[1]->s); r = imp_misuse(t->it[3], bound); bound->n = save; return r;
+        }
+        if (!strcmp(k, "case") || !strcmp(k, "elim")) {
+            int from = !strcmp(k, "elim") ? 3 : 2;
+            for (int i = 1; i < from && i < t->n; i++) { const char *r = imp_misuse(t->it[i], bound); if (r) return r; }
+            for (int i = from; i < t->n; i++) {
+                Node *a = t->it[i]; if (!a->list || a->n != 2) continue;
+                int save = bound->n;
+                if (a->it[0]->list) for (int q = 1; q < a->it[0]->n; q++) { if (!a->it[0]->it[q]->list) names_add(bound, a->it[0]->it[q]->s); }
+                else names_add(bound, a->it[0]->s);
+                const char *r = imp_misuse(a->it[1], bound); bound->n = save; if (r) return r;
+            }
+            return NULL;
+        }
+        if (!strcmp(k, "%imp") || !strcmp(k, "quote")) return NULL;
+        if (!names_has(bound, k) && con_lookup(k) >= 0) { for (int i = 1; i < t->n; i++) { const char *r = imp_misuse(t->it[i], bound); if (r) return r; } return NULL; }
+        IMask *m = !names_has(bound, k) ? imask_of(k) : NULL;
+        if (m && (m->m & 1) && global_lookup(k) >= 0) {
+            /* applied as a typed definition would be: exactly its explicit arguments (an untyped
+             * definition passes every parameter in order, the implicit ones too) */
+            int nimp = 0; for (int b = 0; b < m->len && b < 64; b++) if (m->m >> b & 1) nimp++;
+            int nexp = m->len - nimp, na = t->n - 1;
+            bool braces = t->n >= 2 && t->it[1]->list && t->it[1]->n == 2 && !t->it[1]->it[0]->list && !strcmp(t->it[1]->it[0]->s, "%imp");
+            if (!braces && na == nexp && na < m->len) return k;
+            for (int i = 1; i < t->n; i++) { const char *r = imp_misuse(t->it[i], bound); if (r) return r; }
+            return NULL;
+        }
+    }
+    for (int i = 0; i < t->n; i++) { const char *r = imp_misuse(t->it[i], bound); if (r) return r; }
+    return NULL;
+}
 static void def_untyped(const char *name, Node *body) {
+    if (x_typed) {
+        Names b = { 0 }; const char *bad = imp_misuse(body, &b); free(b.v);
+        if (bad) {
+            char m[512]; snprintf(m, sizeof m, "%s: an untyped definition applies %s to its explicit arguments only, so the first would stand for an implicit parameter: give the implicit ones too (in order, or in braces: %s {…} …) or write the definition's signature, in", name, bad, bad);
+            die(m, name);
+        }
+    }
     body = core(body);
     declare_forward(body);
     for (int k = 0; k < nxlater; k++) if (xlater[k] && !strcmp(xlater[k], name)) { xlater[k] = NULL; break; }
@@ -2637,6 +2689,14 @@ static Node *cn(Node *c) {
             r->it[k++] = lst(2, pat, body);
         }
         return r;
+    }
+    if (!strcmp(h, "cpty") && c->n == 3) {
+        /* a primitive type: lib/prim.cub's name for it (Bytes at its size) where loaded */
+        long k = cn_word(c->it[1]);
+        static const char *TN[] = { "Int64", "UInt32", "Float64", "Float32", "Bytes", "Native" };
+        if (k < 0 || k > 5) return NULL;
+        if (k == 4) { Node *n = cn(c->it[2]); if (!n) return NULL; return global_lookup("Bytes") >= 0 ? lst(2, nsym("Bytes"), n) : lst(2, nsym("%bytesty"), n); }
+        return global_lookup(TN[k]) >= 0 ? nsym(TN[k]) : lst(2, nsym("%pty"), wordn(k));
     }
     if (!strcmp(h, "cprim") && c->n == 3) {
         /* a primitive operation (the encoding of lang.c's to_code): the arithmetic and conversion

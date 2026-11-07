@@ -2800,7 +2800,15 @@ which of these it actually needed; the list is what Agda-level convenience means
   flattened `((suc u) u)` into an application). `tests/elab.cub` `vzip`, `vhead-u`, `vtl-u`,
   `vlookup`. Not done: a solved field whose dependents depend on each other or on another
   solved field (an error names it; write the field and transport by hand), and goals in a
-  universe the refutation's line does not reach are not a concern (the line is at G's level). (ii) FIXED
+  universe the refutation's line does not reach are not a concern (the line is at G's level).
+  Two elaborator gaps found by fork C (2026-11-06), fixed: (a) an untyped definition is not
+  elaborated, so `idw #3` with `idw : {A : Type} → A → A` bound `A := #3` and returned `λ x → x`
+  silently (under `code t` too); an untyped definition applying a checked one to exactly its
+  explicit arguments, fewer than all its parameters, is now refused with the remedy named (every
+  parameter in order, as `ua lzero Bool Bool e`, is fine; `tests/errors/untyped-imp.cub`); (b) a
+  hole whose solution is a primitive type's code (`cpty`, e.g. `Bytes n × Int64`) was not read
+  back by `cn`, so `rd q r ≡ rd q r` did not infer `≡`'s type; `cn` reads `cpty` as
+  `lib/prim.cub`'s names (`tests/region.cub` `rd-same`, `rd-disj-stated`). (ii) FIXED
   (2026-11-06): the motive of a `%welimP` now travels with the elimination (`O_WELIM`'s last
   operand, `V_NWELIM`/`V_WSUSP` keep it), so a stuck word recursion of path type has a type at
   the machine and `p 0` is its type's left end, as for any neutral path (`O_PAPPP`'s endpoint
