@@ -29,6 +29,8 @@ static const char *x_canon(const char *s) {
 static bool x_delim(int c) { return c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' || c == ',' || c == ';' || c == '"'; }
 static bool x_identstart(unsigned char c) { return isalpha(c) || c == '_' || c >= 0x80 || c == '%'; }
 static void x_die(int line, int col, const char *m, const char *x) {
+    /* under --serve, the request ends and the machine stays (the parse error as `file:line:col:`) */
+    if (die_jb) { char p[600]; snprintf(p, sizeof p, "%s:%d:%d: %s", x_file ? x_file : "?", line, col, m); die(p, x); }
     fprintf(stderr, "%s:%d:%d: %s%s%s\n", x_file ? x_file : "?", line, col, m, x ? " " : "", x ? x : "");
     exit(1);
 }
@@ -1610,15 +1612,16 @@ static Node *flat_apps(Node *t) {
 static char *surface_str(Node *t) {
     bool pt = pr_typed, pk = pr_keepimp, pn = pr_nodrop;
     pr_typed = true; pr_keepimp = true;
-    jmp_buf jb; char *s;
+    jmp_buf jb; char *s; jmp_buf *outer = die_jb;   /* (--serve's, restored after) */
     if (setjmp(jb)) {
+        die_jb = outer;
         /* a form the printer does not write: as read */
         if (getenv("CUB_DBGPR")) { fprintf(stderr, "[surface] could not print: "); print_node(stderr, t); fputc('\n', stderr); }
         size_t len; FILE *o = open_memstream(&s, &len); print_node(o, t); fclose(o);
     } else {
         die_jb = &jb;
         s = pr_flat(flat_apps(t), 0);
-        die_jb = NULL;
+        die_jb = outer;
     }
     pr_typed = pt; pr_keepimp = pk; pr_nodrop = pn;
     return s;
@@ -4373,7 +4376,9 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
     Node *T = NULL, *t = NULL;
     /* an elaboration that cannot go on (a recursive call needed now, ...): the definition rejected */
     jmp_buf ejb;
+    jmp_buf *outer_jb = die_jb;   /* --serve's way out, restored after this check */
     if (setjmp(ejb)) {
+        die_jb = outer_jb;
         nesc = 0; nwtick = 0; syn_expect = app_expect = NULL;
         bool ok = !expect;
         if (ok) passes++; else failures++;
@@ -4384,7 +4389,7 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
         die_jb = &ejb;
         nesc = 0; T = core(el(sig));
         nesc = 0; syn_expect = sig; t = core(el(body)); syn_expect = NULL;
-        die_jb = NULL;
+        die_jb = outer_jb;
         if (trusted) break;
         if (getenv("CUBICAL_SHOW_ELAB") && !round) { fprintf(stderr, "[elab] %s : ", name ? name : "(check)"); print_node(stderr, T); fprintf(stderr, "\n  = "); print_node(stderr, t); fprintf(stderr, "\n"); }
         Node *dT = ds(T), *dt = ds(t);

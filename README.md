@@ -226,7 +226,10 @@ once. Results and failures print in the surface syntax, a failed check with its 
 the standard input, each ended by a line `.`, and answers each as a file would be answered,
 ending the reply with `.` (a fatal error ends the request, not the machine). `#retract f` hides
 the checked definition `f` so the name can be declared again; what was checked against the old
-`f` keeps it (a global is referenced by its index), later declarations see the new one. `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to
+`f` keeps it (a global is referenced by its index), later declarations see the new one.
+`tools/lsp.py` is a language server over `--serve` (diagnostics, re-checking what follows a
+changed declaration, hover with the written signature); an editor runs `python3 tools/lsp.py
+--root scoped-machine` as its server for `.cub` files. `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to
 (`(lam x b)`, `(elim P e ((c x) b))`, …) are still read from files of other extensions, and
 `--print FILE` prints such a file in the surface syntax.
 

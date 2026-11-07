@@ -1308,8 +1308,19 @@ identity; linear values are introduced only in `primitive` definitions.
     `CUBICAL_PROFILE=1` (whole run) and `=show` (per reading), `%gsteps` per definition.
     A debugger by replay: a process's run is a value replayed by `lib/proc.cub` (D25's
     recording); stepping the net itself is `CUBICAL_TRACE` (a trace file). Positions: a failed
-    check prints its declaration's `file:line` (`decl_pos`) and the term at fault. Open: an LSP
-    wrapping of `--serve`; retracting a data type.
+    check prints its declaration's `file:line` (`decl_pos`) and the term at fault. An LSP
+    server (2026-11-06, `tools/lsp.py`, Python stdlib): JSON-RPC over stdio, full-document sync,
+    diagnostics from the verdicts, one `--serve` per open document; the document is split into
+    top-level units sent one block each (a verdict's `<serve>:N` is line N of its unit), and on
+    a change the units after the first that differs are retracted (`#retract`) and sent again
+    in order, so dependents are checked against the new definition; a data type, `variable`,
+    `mutual`, `module`, … among them restarts the machine. Hover shows the signature written in
+    the document (the machine prints no types on request). Parse errors under `--serve` now end
+    the request, not the machine (`x_die` through `die`), and a fatal error after a checked
+    definition in the same block no longer exits (the checker's and the printer's handlers
+    restore `--serve`'s). `tests/lsp/test_lsp.py`: an error reported and cleared, a dependent
+    re-checked, data changed, a parse error at its line, hover, shutdown. Open: retracting a data
+    type (a restart today), incremental sync, completion and go-to-definition.
 
 ### F. Programs about programs
 31. DONE in parts: `deriving eq D` (`1c5282a`), `deriving show`/`derive-show` (`896713ea`),
