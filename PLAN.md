@@ -2931,7 +2931,21 @@ where a fresh free dimension is made: the audit of `src/net.c` finds one rule, `
 rename of a line, `S_PLAM`/`S_FORALL` builds, the hcomp side test `O_HCM2`/`O_HCM3` whose fresh
 dimension is erased with the side, a path-typed field's hypothesis, the printer's binders in
 `lang.c`). A bound through closures needs the dimension-making taint of every record and global
-a value can reach (check.cub's `%dim` is loaded in every checked run).
+a value can reach (check.cub's `%dim` is loaded in every checked run). **Tried and withdrawn
+(2026-11-07):** (a) bounding a keyed box's dimensions by those its key names (a keyed value is a
+function of what its key names, %dim's dimensions kept apart by a bit per dimension): sound, but
+g8 329,076 → 327,117 and surfc 130,291 → 130,085 — most boxes the reads meet are unkeyed parts
+(`copy_top`'s), not memo results; (b) the `%comp-path` body held unbuilt (`delay`) so an
+endpoint read never builds the generic fibre: g8 +1%, surfc +2.6% — endpoint applications are
+not where the cost is (as with `V_COMPP`); (c) a tube side mapped under its own binder
+(`%linemap w g`: `λ k → g B k` for `w = λ k → B`, no renaming of `B`): unsound — a line's
+binder can be free elsewhere among the clause's operands (`O_COMPH` re-wraps a family's parts
+under the family's own dimension, and `rule_subst` keeps a λ's binder when the substitution's
+range does not mention it, so copies share binders): `equivEq` in std failed with a captured
+dimension, surfc's normal form changed (50 cells), g8 failed. The six-dimension read stopped at
+45 s (`CUBICAL_PROFILE` prints on SIGTERM): 1.79M `%comp-path` entries, 591K `%bdy-squash4` (the
+boundary at an end), SUBST 31.7M, ERA 17.9M — the corner read's mix at the same density per step,
+so no single runaway clause; its normal form's size stays unknown.
 
 **Status (2026-11-06, the sharing step).** Where the cost is (`CUBICAL_PROFILE`, steps by
 operator and by the value met, added): g8's 475,558 steps are a third `SUBST` (half of those a
