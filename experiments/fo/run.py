@@ -87,6 +87,11 @@ ptn-sum p = case p of ptn a b → plus a (suc (fromWord b))
 rr-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Nat) → ptn-sum (ptn (dblr2 n) #3))))
 #same eval-fo (table-of rr-defs) lnil (fcall #99999 (lcons (flit #20) lnil)) = vw #44
 defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #20) lnil))) rr-defs''', "44", (None, "uint64_t f0; uint64_t f1; } c0;")),
+ # a compilation with its justifying path (lib/foproof.cub, 18.5 step 7): ex-c rewritten by the
+ # verified rules and lowered by the checked pipeline (spec-w), whose path ex-path is a checked
+ # definition; printed and run at x = 4: (4 + 5) + (a loop summing four 1s) = 13
+ 'proved': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #4) lnil))) (lcons (#1 , (#1 , fw-to-fo (spec-w std-vrule ex-c))) lnil)''', "13"),
  # a process run against its world (lib/proc.cub), specialized under an unknown store: the run
  # becomes a function of the store (st 3 + 1); compiled with a store that answers 40; prints 41
  'process': ("""proc-defs = case lift #100 spec4 of lifted t2 ds k → lcons (#0 , (#0 , fapply t2 (lcons (flam (flit #40)) lnil))) ds
@@ -291,6 +296,9 @@ X86 = os.environ.get('X86') == '1'
 X86_PROGS = {
  # plus on words: the two arguments added
  'plusw': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #40) (lcons (flit #2) lnil)))) (lcons (#1 , (#2 , fo-plus)) lnil)""", [], "42"),
+ # the verified compilation of lib/foproof.cub (spec-w std-vrule ex-c, its path ex-path) on x = 4
+ 'proved': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + """"
+defs = lcons (#0 , (#1 , fw-to-fo (spec-w std-vrule ex-c))) lnil""", [4], "13"),
  # the arguments come from the command line through the stub (rdi the arena, then the words)
  'plusw-args': ("""defs = lcons (#0 , (#2 , fo-plus)) lnil""", [1000, 234], "1234"),
  # factorial as a loop over (n, acc): continue while n > 0

@@ -1,0 +1,332 @@
+-- lib/foproof.cub — the justifying path of compilation (plan 18.5 step 7, B15): for every term of the
+-- word fragment, a checked path from what the compiled form computes to what the term computes,
+-- assembled from the rewrites applied (each a verified rewrite: a function on codes with its
+-- soundness, built from the store's theorems) and one lemma per first-order form, proved once.
+-- The first-order libraries (lib/fo.cub, lib/lower.cub, lib/specialize.cub) are untyped, so a checked
+-- path cannot mention them; this file mirrors their word fragment as checked data — WC for the codes
+-- (lib/code.cub's cwlit, cvar, cwop add/sub, cwsucc, clet, cwelim), FW for the forms lower makes of
+-- them (lib/fo.cub's flit, fvar, fprim P-add/P-sub, flet, and the counting floop of lower-welim) —
+-- with checked evaluators (wc-ev: the code's meaning, as eval-g gives it; fo-ev: the form's, as
+-- eval-fo runs it, the loop counting up) and the checked lowering lower-w. The bridges at the end
+-- (wc-of, fw-of: untyped) read a Code and an FO into the mirror, and the readings show the untyped
+-- lower and specializer agree with lower-w and the rewrites, and eval-fo with fo-ev, term by term.
+-- Loaded after lib/linproof.cub (the word lemmas) and lib/repr.cub (the back end).
+-- ---------------------------------------------------------------- the fragment as checked data
+-- environments: the de Bruijn variables' values (variable 0 the innermost)
+Envw : Type
+Envw = Nat → Word
+extw : Envw → Word → Envw
+extw ρ a n = case n of zero → a; suc k → ρ k
+data WC = wcl (w : Word) | wcv (n : Nat) | wca (a : WC) (b : WC) | wcs (a : WC) (b : WC) | wcsucc (a : WC) | wclet (a : WC) (b : WC) | wcrec (w : WC) (z : WC) (s : WC)
+-- the meaning of a code: a word recursion rec 0 = z, rec (k+1) = s k (rec k), s's body over acc
+-- (variable 0) and k (variable 1)
+wc-ev : WC → Envw → Word
+wc-ev (wcl w) ρ = w
+wc-ev (wcv n) ρ = ρ n
+wc-ev (wca a b) ρ = wadd (wc-ev a ρ) (wc-ev b ρ)
+wc-ev (wcs a b) ρ = wsub (wc-ev a ρ) (wc-ev b ρ)
+wc-ev (wcsucc a) ρ = %wsucc (wc-ev a ρ)
+wc-ev (wclet a b) ρ = wc-ev b (extw ρ (wc-ev a ρ))
+wc-ev (wcrec w z s) ρ = %welimP (λ v → Word) (wc-ev w ρ) (wc-ev z ρ) (λ k acc → wc-ev s (extw (extw ρ k) acc))
+-- the first-order forms of the fragment: fwp 0 addition, 1 subtraction (P-add, P-sub); fwloop the
+-- loop lower-welim makes, state (w, i, acc) from (w, 0, z), continuing while i < w with
+-- acc := s i acc
+data FW = fwl (w : Word) | fwv (n : Nat) | fwp (p : Word) (a : FW) (b : FW) | fwlet (a : FW) (b : FW) | fwloop (w : FW) (z : FW) (s : FW)
+fw-prim : Word → Word → Word → Word
+fw-prim p a b = if %weq p #0 then wadd a b else wsub a b
+-- the loop run n more times from i with acc: a counting iteration (the first-order form's meaning)
+fw-go : (Word → Word → Word) → Word → Word → Word → Word
+fw-go st n = %welimP (λ v → Word → Word → Word) n (λ i acc → acc) (λ k h i acc → h (%wsucc i) (st i acc))
+fo-ev : FW → Envw → Word
+fo-ev (fwl w) ρ = w
+fo-ev (fwv n) ρ = ρ n
+fo-ev (fwp p a b) ρ = fw-prim p (fo-ev a ρ) (fo-ev b ρ)
+fo-ev (fwlet a b) ρ = fo-ev b (extw ρ (fo-ev a ρ))
+fo-ev (fwloop w z s) ρ = fw-go (λ i acc → fo-ev s (extw (extw ρ i) acc)) (fo-ev w ρ) #0 (fo-ev z ρ)
+-- the lowering (lib/lower.cub's lower on the fragment: a successor is an addition of 1)
+lower-w : WC → FW
+lower-w (wcl w) = fwl w
+lower-w (wcv n) = fwv n
+lower-w (wca a b) = fwp #0 (lower-w a) (lower-w b)
+lower-w (wcs a b) = fwp #1 (lower-w a) (lower-w b)
+lower-w (wcsucc a) = fwp #0 (lower-w a) (fwl #1)
+lower-w (wclet a b) = fwlet (lower-w a) (lower-w b)
+lower-w (wcrec w z s) = fwloop (lower-w w) (lower-w z) (lower-w s)
+-- ---------------------------------------------------------------- the lemmas, one per form
+-- x + 1 = suc x (the successor's lowering)
+wadd-one : (x : Word) → wadd x #1 ≡ %wsucc x
+wadd-one x = catw {wadd x #1} {plusw x #1} {%wsucc x} (λ i → plusw≡wadd x #1 (~ i)) (λ i → %wsucc x)
+-- the counting loop is the recursion: run n more times from i at rec i, it is rec (i + n)
+fw-go-rec : (z : Word) (st : Word → Word → Word) (n i : Word) → fw-go st n i (%welimP (λ v → Word) i z st) ≡ %welimP (λ v → Word) (plusw i n) z st
+fw-go-rec z st n = %welimP (λ v → (i : Word) → fw-go st v i (%welimP (λ u → Word) i z st) ≡ %welimP (λ u → Word) (plusw i v) z st) n
+  (λ i → λ j → %welimP (λ u → Word) i z st)
+  (λ k h i → catw {fw-go st k (%wsucc i) (st i (%welimP (λ u → Word) i z st))} {%welimP (λ u → Word) (plusw (%wsucc i) k) z st} {%welimP (λ u → Word) (plusw i (%wsucc k)) z st}
+                (h (%wsucc i)) (λ j → %welimP (λ u → Word) (plusw-suc-l i k j) z st))
+fw-go-0 : (z : Word) (st : Word → Word → Word) (n : Word) → fw-go st n #0 z ≡ %welimP (λ v → Word) n z st
+fw-go-0 z st n = catw {fw-go st n #0 z} {%welimP (λ v → Word) (plusw #0 n) z st} {%welimP (λ v → Word) n z st} (fw-go-rec z st n #0) (λ j → %welimP (λ u → Word) (plusw-zero-l n j) z st)
+-- a step agreeing at every (k , acc) gives the same loop
+fw-go-ext : (st st2 : Word → Word → Word) → ((k a : Word) → st k a ≡ st2 k a) → (n i a : Word) → fw-go st n i a ≡ fw-go st2 n i a
+fw-go-ext st st2 e n = %welimP (λ v → (i a : Word) → fw-go st v i a ≡ fw-go st2 v i a) n (λ i a j → a)
+  (λ k h i a → λ j → h (%wsucc i) (e i a j) j)
+-- the lowering computes what the code means, in every environment
+lower-sound : (c : WC) → (ρ : Envw) → fo-ev (lower-w c) ρ ≡ wc-ev c ρ
+lower-sound (wcl w) ρ = λ j → w
+lower-sound (wcv n) ρ = λ j → ρ n
+lower-sound (wca a b) ρ = λ j → wadd (lower-sound a ρ j) (lower-sound b ρ j)
+lower-sound (wcs a b) ρ = λ j → wsub (lower-sound a ρ j) (lower-sound b ρ j)
+lower-sound (wcsucc a) ρ = catw {wadd (fo-ev (lower-w a) ρ) #1} {wadd (wc-ev a ρ) #1} {%wsucc (wc-ev a ρ)} (λ j → wadd (lower-sound a ρ j) #1) (wadd-one (wc-ev a ρ))
+lower-sound (wclet a b) ρ = catw {fo-ev (lower-w b) (extw ρ (fo-ev (lower-w a) ρ))} {wc-ev b (extw ρ (fo-ev (lower-w a) ρ))} {wc-ev b (extw ρ (wc-ev a ρ))}
+  (lower-sound b (extw ρ (fo-ev (lower-w a) ρ))) (λ j → wc-ev b (extw ρ (lower-sound a ρ j)))
+lower-sound (wcrec w z s) ρ =
+  catw {fw-go (λ i acc → fo-ev (lower-w s) (extw (extw ρ i) acc)) (fo-ev (lower-w w) ρ) #0 (fo-ev (lower-w z) ρ)}
+       {fw-go (λ i acc → wc-ev s (extw (extw ρ i) acc)) (wc-ev w ρ) #0 (wc-ev z ρ)}
+       {%welimP (λ v → Word) (wc-ev w ρ) (wc-ev z ρ) (λ k acc → wc-ev s (extw (extw ρ k) acc))}
+    (catw {fw-go (λ i acc → fo-ev (lower-w s) (extw (extw ρ i) acc)) (fo-ev (lower-w w) ρ) #0 (fo-ev (lower-w z) ρ)}
+          {fw-go (λ i acc → wc-ev s (extw (extw ρ i) acc)) (fo-ev (lower-w w) ρ) #0 (fo-ev (lower-w z) ρ)}
+          {fw-go (λ i acc → wc-ev s (extw (extw ρ i) acc)) (wc-ev w ρ) #0 (wc-ev z ρ)}
+       (fw-go-ext (λ i acc → fo-ev (lower-w s) (extw (extw ρ i) acc)) (λ i acc → wc-ev s (extw (extw ρ i) acc)) (λ k a → lower-sound s (extw (extw ρ k) a)) (fo-ev (lower-w w) ρ) #0 (fo-ev (lower-w z) ρ))
+       (λ j → fw-go (λ i acc → wc-ev s (extw (extw ρ i) acc)) (lower-sound w ρ j) #0 (lower-sound z ρ j)))
+    (fw-go-0 (wc-ev z ρ) (λ k acc → wc-ev s (extw (extw ρ k) acc)) (wc-ev w ρ))
+-- ---------------------------------------------------------------- verified rewrites
+-- a rewrite of codes with its soundness: the meaning kept in every environment
+VRule : Type
+VRule = (rw : WC → WC) × ((c : WC) → (ρ : Envw) → wc-ev (rw c) ρ ≡ wc-ev c ρ)
+-- applied bottom up: the children rewritten, then the rule at the node
+rw-bu : (WC → WC) → WC → WC
+rw-bu f (wcl w) = f (wcl w)
+rw-bu f (wcv n) = f (wcv n)
+rw-bu f (wca a b) = f (wca (rw-bu f a) (rw-bu f b))
+rw-bu f (wcs a b) = f (wcs (rw-bu f a) (rw-bu f b))
+rw-bu f (wcsucc a) = f (wcsucc (rw-bu f a))
+rw-bu f (wclet a b) = f (wclet (rw-bu f a) (rw-bu f b))
+rw-bu f (wcrec w z s) = f (wcrec (rw-bu f w) (rw-bu f z) (rw-bu f s))
+-- sound by congruence: the meaning of every form is a function of its children's meanings
+rw-bu-sound : (r : VRule) → (c : WC) → (ρ : Envw) → wc-ev (rw-bu (fst r) c) ρ ≡ wc-ev c ρ
+rw-bu-sound r (wcl w) ρ = snd r (wcl w) ρ
+rw-bu-sound r (wcv n) ρ = snd r (wcv n) ρ
+rw-bu-sound r (wca a b) ρ = catw (snd r (wca (rw-bu (fst r) a) (rw-bu (fst r) b)) ρ) (λ j → wadd (rw-bu-sound r a ρ j) (rw-bu-sound r b ρ j))
+rw-bu-sound r (wcs a b) ρ = catw (snd r (wcs (rw-bu (fst r) a) (rw-bu (fst r) b)) ρ) (λ j → wsub (rw-bu-sound r a ρ j) (rw-bu-sound r b ρ j))
+rw-bu-sound r (wcsucc a) ρ = catw (snd r (wcsucc (rw-bu (fst r) a)) ρ) (λ j → %wsucc (rw-bu-sound r a ρ j))
+rw-bu-sound r (wclet a b) ρ =
+  catw (snd r (wclet (rw-bu (fst r) a) (rw-bu (fst r) b)) ρ)
+    (catw {wc-ev (rw-bu (fst r) b) (extw ρ (wc-ev (rw-bu (fst r) a) ρ))} {wc-ev b (extw ρ (wc-ev (rw-bu (fst r) a) ρ))} {wc-ev b (extw ρ (wc-ev a ρ))}
+       (rw-bu-sound r b (extw ρ (wc-ev (rw-bu (fst r) a) ρ))) (λ j → wc-ev b (extw ρ (rw-bu-sound r a ρ j))))
+rw-bu-sound r (wcrec w z s) ρ =
+  catw (snd r (wcrec (rw-bu (fst r) w) (rw-bu (fst r) z) (rw-bu (fst r) s)) ρ)
+    (λ j → %welimP (λ v → Word) (rw-bu-sound r w ρ j) (rw-bu-sound r z ρ j) (λ k acc → rw-bu-sound r s (extw (extw ρ k) acc) j))
+-- two rules, one after the other
+vr-then : VRule → VRule → VRule
+vr-then r1 r2 = ((λ c → fst r2 (fst r1 c)) , (λ c ρ → catw (snd r2 (fst r1 c) ρ) (snd r1 c ρ)))
+vr-id : VRule
+vr-id = ((λ c → c) , (λ c ρ → λ j → wc-ev c ρ))
+-- 0 + x = x and x + 0 = x, from the store's theorems (plusw-zero-l, plusw-zero-r, plusw≡wadd);
+-- a literal's zeroness decided by the word itself (a successor literal rebuilds the node)
+wadd-zero-l : (x : Word) → wadd #0 x ≡ x
+wadd-zero-l x = catw {wadd #0 x} {plusw #0 x} {x} (λ j → plusw≡wadd #0 x (~ j)) (plusw-zero-l x)
+wadd-zero-r : (x : Word) → wadd x #0 ≡ x
+wadd-zero-r x = catw {wadd x #0} {plusw x #0} {x} (λ j → plusw≡wadd x #0 (~ j)) (plusw-zero-r x)
+rz-lit-l : Word → WC → WC
+rz-lit-l w b = %welimP (λ v → WC) w b (λ k h → wca (wcl (%wsucc k)) b)
+rz-lit-l-ok : (w : Word) (b : WC) (ρ : Envw) → wc-ev (rz-lit-l w b) ρ ≡ wc-ev (wca (wcl w) b) ρ
+rz-lit-l-ok w b ρ = %welimP (λ v → wc-ev (rz-lit-l v b) ρ ≡ wc-ev (wca (wcl v) b) ρ) w (λ j → wadd-zero-l (wc-ev b ρ) (~ j)) (λ k h → λ j → wadd (%wsucc k) (wc-ev b ρ))
+rz-lit-r : WC → Word → WC
+rz-lit-r a w = %welimP (λ v → WC) w a (λ k h → wca a (wcl (%wsucc k)))
+rz-lit-r-ok : (a : WC) (w : Word) (ρ : Envw) → wc-ev (rz-lit-r a w) ρ ≡ wc-ev (wca a (wcl w)) ρ
+rz-lit-r-ok a w ρ = %welimP (λ v → wc-ev (rz-lit-r a v) ρ ≡ wc-ev (wca a (wcl v)) ρ) w (λ j → wadd-zero-r (wc-ev a ρ) (~ j)) (λ k h → λ j → wadd (wc-ev a ρ) (%wsucc k))
+-- the rule at a node: an addition with a literal operand checked for zero (the left one first)
+rz-r : WC → WC → WC
+rz-r a (wcl w) = rz-lit-r a w
+rz-r a (wcv n) = wca a (wcv n)
+rz-r a (wca x y) = wca a (wca x y)
+rz-r a (wcs x y) = wca a (wcs x y)
+rz-r a (wcsucc x) = wca a (wcsucc x)
+rz-r a (wclet x y) = wca a (wclet x y)
+rz-r a (wcrec x y z) = wca a (wcrec x y z)
+rz-r-ok : (a b : WC) → (ρ : Envw) → wc-ev (rz-r a b) ρ ≡ wc-ev (wca a b) ρ
+rz-r-ok a (wcl w) ρ = rz-lit-r-ok a w ρ
+rz-r-ok a (wcv n) ρ = λ j → wc-ev (wca a (wcv n)) ρ
+rz-r-ok a (wca x y) ρ = λ j → wc-ev (wca a (wca x y)) ρ
+rz-r-ok a (wcs x y) ρ = λ j → wc-ev (wca a (wcs x y)) ρ
+rz-r-ok a (wcsucc x) ρ = λ j → wc-ev (wca a (wcsucc x)) ρ
+rz-r-ok a (wclet x y) ρ = λ j → wc-ev (wca a (wclet x y)) ρ
+rz-r-ok a (wcrec x y z) ρ = λ j → wc-ev (wca a (wcrec x y z)) ρ
+rz-add : WC → WC → WC
+rz-add (wcl w) b = rz-lit-l w b
+rz-add (wcv n) b = rz-r (wcv n) b
+rz-add (wca x y) b = rz-r (wca x y) b
+rz-add (wcs x y) b = rz-r (wcs x y) b
+rz-add (wcsucc x) b = rz-r (wcsucc x) b
+rz-add (wclet x y) b = rz-r (wclet x y) b
+rz-add (wcrec x y z) b = rz-r (wcrec x y z) b
+rz-add-ok : (a b : WC) → (ρ : Envw) → wc-ev (rz-add a b) ρ ≡ wc-ev (wca a b) ρ
+rz-add-ok (wcl w) b ρ = rz-lit-l-ok w b ρ
+rz-add-ok (wcv n) b ρ = rz-r-ok (wcv n) b ρ
+rz-add-ok (wca x y) b ρ = rz-r-ok (wca x y) b ρ
+rz-add-ok (wcs x y) b ρ = rz-r-ok (wcs x y) b ρ
+rz-add-ok (wcsucc x) b ρ = rz-r-ok (wcsucc x) b ρ
+rz-add-ok (wclet x y) b ρ = rz-r-ok (wclet x y) b ρ
+rz-add-ok (wcrec x y z) b ρ = rz-r-ok (wcrec x y z) b ρ
+rz-at : WC → WC
+rz-at (wcl w) = wcl w
+rz-at (wcv n) = wcv n
+rz-at (wca a b) = rz-add a b
+rz-at (wcs a b) = wcs a b
+rz-at (wcsucc a) = wcsucc a
+rz-at (wclet a b) = wclet a b
+rz-at (wcrec w z s) = wcrec w z s
+rz-at-ok : (c : WC) → (ρ : Envw) → wc-ev (rz-at c) ρ ≡ wc-ev c ρ
+rz-at-ok (wcl w) ρ = λ j → w
+rz-at-ok (wcv n) ρ = λ j → ρ n
+rz-at-ok (wca a b) ρ = rz-add-ok a b ρ
+rz-at-ok (wcs a b) ρ = λ j → wc-ev (wcs a b) ρ
+rz-at-ok (wcsucc a) ρ = λ j → wc-ev (wcsucc a) ρ
+rz-at-ok (wclet a b) ρ = λ j → wc-ev (wclet a b) ρ
+rz-at-ok (wcrec w z s) ρ = λ j → wc-ev (wcrec w z s) ρ
+zero-vrule : VRule
+zero-vrule = (rz-at , rz-at-ok)
+-- constants folded: an addition of two literals is their sum (refl: the meaning is the sum)
+cf-lit : Word → WC → WC
+cf-lit w (wcl v) = wcl (wadd w v)
+cf-lit w (wcv n) = wca (wcl w) (wcv n)
+cf-lit w (wca x y) = wca (wcl w) (wca x y)
+cf-lit w (wcs x y) = wca (wcl w) (wcs x y)
+cf-lit w (wcsucc x) = wca (wcl w) (wcsucc x)
+cf-lit w (wclet x y) = wca (wcl w) (wclet x y)
+cf-lit w (wcrec x y z) = wca (wcl w) (wcrec x y z)
+cf-add : WC → WC → WC
+cf-add (wcl w) b = cf-lit w b
+cf-add (wcv n) b = wca (wcv n) b
+cf-add (wca x y) b = wca (wca x y) b
+cf-add (wcs x y) b = wca (wcs x y) b
+cf-add (wcsucc x) b = wca (wcsucc x) b
+cf-add (wclet x y) b = wca (wclet x y) b
+cf-add (wcrec x y z) b = wca (wcrec x y z) b
+cf-at : WC → WC
+cf-at (wcl w) = wcl w
+cf-at (wcv n) = wcv n
+cf-at (wca a b) = cf-add a b
+cf-at (wcs a b) = wcs a b
+cf-at (wcsucc a) = wcsucc a
+cf-at (wclet a b) = wclet a b
+cf-at (wcrec w z s) = wcrec w z s
+cf-lit-ok : (w : Word) (b : WC) → (ρ : Envw) → wc-ev (cf-lit w b) ρ ≡ wc-ev (wca (wcl w) b) ρ
+cf-lit-ok w (wcl v) ρ = λ j → wadd w v
+cf-lit-ok w (wcv n) ρ = λ j → wc-ev (wca (wcl w) (wcv n)) ρ
+cf-lit-ok w (wca x y) ρ = λ j → wc-ev (wca (wcl w) (wca x y)) ρ
+cf-lit-ok w (wcs x y) ρ = λ j → wc-ev (wca (wcl w) (wcs x y)) ρ
+cf-lit-ok w (wcsucc x) ρ = λ j → wc-ev (wca (wcl w) (wcsucc x)) ρ
+cf-lit-ok w (wclet x y) ρ = λ j → wc-ev (wca (wcl w) (wclet x y)) ρ
+cf-lit-ok w (wcrec x y z) ρ = λ j → wc-ev (wca (wcl w) (wcrec x y z)) ρ
+cf-add-ok : (a b : WC) → (ρ : Envw) → wc-ev (cf-add a b) ρ ≡ wc-ev (wca a b) ρ
+cf-add-ok (wcl w) b ρ = cf-lit-ok w b ρ
+cf-add-ok (wcv n) b ρ = λ j → wc-ev (wca (wcv n) b) ρ
+cf-add-ok (wca x y) b ρ = λ j → wc-ev (wca (wca x y) b) ρ
+cf-add-ok (wcs x y) b ρ = λ j → wc-ev (wca (wcs x y) b) ρ
+cf-add-ok (wcsucc x) b ρ = λ j → wc-ev (wca (wcsucc x) b) ρ
+cf-add-ok (wclet x y) b ρ = λ j → wc-ev (wca (wclet x y) b) ρ
+cf-add-ok (wcrec x y z) b ρ = λ j → wc-ev (wca (wcrec x y z) b) ρ
+cf-at-ok : (c : WC) → (ρ : Envw) → wc-ev (cf-at c) ρ ≡ wc-ev c ρ
+cf-at-ok (wcl w) ρ = λ j → w
+cf-at-ok (wcv n) ρ = λ j → ρ n
+cf-at-ok (wca a b) ρ = cf-add-ok a b ρ
+cf-at-ok (wcs a b) ρ = λ j → wc-ev (wcs a b) ρ
+cf-at-ok (wcsucc a) ρ = λ j → wc-ev (wcsucc a) ρ
+cf-at-ok (wclet a b) ρ = λ j → wc-ev (wclet a b) ρ
+cf-at-ok (wcrec w z s) ρ = λ j → wc-ev (wcrec w z s) ρ
+fold-vrule : VRule
+fold-vrule = (cf-at , cf-at-ok)
+-- ---------------------------------------------------------------- the justifying path
+-- the compilation of a code of the fragment under a rule: rewritten bottom up, lowered; and its
+-- path: what the compiled form computes is what the code means, in every environment — the
+-- rewrites' soundness (assembled by congruence from the rules' own paths) after the lowering's
+spec-w : VRule → WC → FW
+spec-w r c = lower-w (rw-bu (fst r) c)
+spec-path : (r : VRule) → (c : WC) → (ρ : Envw) → fo-ev (spec-w r c) ρ ≡ wc-ev c ρ
+spec-path r c ρ = catw {fo-ev (lower-w (rw-bu (fst r) c)) ρ} {wc-ev (rw-bu (fst r) c) ρ} {wc-ev c ρ} (lower-sound (rw-bu (fst r) c) ρ) (rw-bu-sound r c ρ)
+-- the rules of this file, together
+std-vrule : VRule
+std-vrule = vr-then fold-vrule zero-vrule
+-- a term and its compilation: f x = (0 + (x + (2 + 3))) + rec, with a word recursion summing x
+-- copies of 1 (the loop); its code in the fragment (variable 0 is x)
+ex-c : WC
+ex-c = wca (wca (wcl #0) (wca (wcv zero) (wca (wcl #2) (wcl #3)))) (wcrec (wcv zero) (wcl #0) (wcsucc (wcv zero)))
+ex-f : Word → Word
+ex-f x = wadd (wadd #0 (wadd x (wadd #2 #3))) (%welimP (λ v → Word) x #0 (λ k acc → %wsucc acc))
+envx : Word → Envw
+envx x n = x
+-- the code means the term (by computation), so the path ends at the term itself
+ex-means : (x : Word) → wc-ev ex-c (envx x) ≡ ex-f x
+ex-means x = λ j → ex-f x
+ex-path : (x : Word) → fo-ev (spec-w std-vrule ex-c) (envx x) ≡ ex-f x
+ex-path x = catw (spec-path std-vrule ex-c (envx x)) (ex-means x)
+-- the rules fired: the zero vanished, 2 + 3 became 5
+#same spec-w std-vrule ex-c = fwp #0 (fwp #0 (fwv zero) (fwl #5)) (fwloop (fwv zero) (fwl #0) (fwp #0 (fwv zero) (fwl #1)))
+#same fo-ev (spec-w std-vrule ex-c) (envx #4) = #13
+-- ---------------------------------------------------------------- bridges to the untyped libraries
+-- a Code of the fragment read into WC (variables by their word index); none outside it
+wc-of c =
+  case c of
+    cwlit w → some (wcl w)
+    cvar n → some (wcv (toNat n))
+    cwop k a b → (if %weq k #2 then wc-two wca a b else if %weq k #4 then wc-two wcs a b else none)
+    cwsucc a → omap wcsucc (wc-of a)
+    clet t b → wc-two wclet t b
+    cwelim w z s → (case s of clam s1 → (case s1 of clam b → (case wc-of w of some w2 → (case wc-of z of some z2 → omap (λ b2 → wcrec w2 z2 b2) (wc-of b); none → none); none → none); _ → none); _ → none)
+    _ → none
+wc-two f a b = case wc-of a of some a2 → omap (λ b2 → f a2 b2) (wc-of b); none → none
+-- a first-order form of the fragment read into FW: lower-welim's loop recognized by its shape, the
+-- step's variables above the loop's three slots moved back down by one
+fw-of t = fw-at #0 t
+fw-at d t =
+  case t of
+    flit w → some (fwl w)
+    fvar n → (if %weq d #0 then some (fwv (toNat n)) else fw-var d n)
+    fprim p args → (case args of lcons a r → (case r of lcons b r2 → (case r2 of lnil → (if %weq p P-add then fw-two d #0 a b else if %weq p P-sub then fw-two d #1 a b else none); _ → none); _ → none); _ → none)
+    flet a b → (case fw-at d a of some a2 → omap (λ b2 → fwlet a2 b2) (fw-at (fw-in d) b); none → none)
+    floop init body → fw-loop d init body
+    _ → none
+-- inside a loop's step (d > 0: the binders since the step, plus 1), a variable below d + 1 is the
+-- step's own (acc, i, its lets), d + 1 the loop's bound w (none: a step does not read it), above it
+-- an outer one at index − 1 (step-call's shift-at 2 1 inverted)
+fw-var d n = if %wlt n (%wadd d #1) then some (fwv (toNat n)) else if %weq n (%wadd d #1) then none else some (fwv (toNat (%wsub n #1)))
+fw-in d = if %weq d #0 then #0 else %wadd d #1
+fw-two d p a b = case fw-at d a of some a2 → omap (λ b2 → fwp p a2 b2) (fw-at d b); none → none
+fw-loop d init body =
+  case init of
+    lcons w r → (case r of lcons z0 r2 → (case r2 of lcons z r3 → (case z0 of flit k → (if %weq k #0 then fw-body d w z body else none); _ → none); _ → none); _ → none)
+    _ → none
+fw-body d w z body =
+  case body of
+    fif c a b → (case a of fcon dd k fs → (case fs of lcons x r → (case r of lcons y r2 → (case r2 of lcons st r3 → (case fw-at d w of some w2 → (case fw-at d z of some z2 → omap (λ s2 → fwloop w2 z2 s2) (fw-at #1 st); none → none); none → none); _ → none); _ → none); _ → none); _ → none)
+    _ → none
+-- and back: the checked pipeline's output as the form the printers take
+fw-to-fo t = fw-to-at #0 t
+fw-to-at d t =
+  case t of
+    fwl w → flit w
+    fwv n → fvar (fw-shift d (fromNat n))
+    fwp p a b → fprim (if %weq p #0 then P-add else P-sub) (lcons (fw-to-at d a) (lcons (fw-to-at d b) lnil))
+    fwlet a b → flet (fw-to-at d a) (fw-to-at (fw-in d) b)
+    fwloop w z s → lower-welim (fw-to-at d w) (fw-to-at d z) (flam (flam (fw-to-at #0 s)))
+fw-shift d n = n
+-- readings: the term of ex-f as a code (written, not normalized) is ex-c in the mirror; the untyped
+-- lower agrees with lower-w on it, and eval-fo with fo-ev; the checked pipeline's output (the rules
+-- fired), back as a first-order form, runs to the same value
+ex-code = case code (λ (x : Word) → %wadd (%wadd #0 (%wadd x (%wadd #2 #3))) (%welimP (λ v → Word) x #0 (λ k acc → %wsucc acc))) of clam b → b; _ → cwlit #0
+#same wc-of ex-code = some ex-c
+#same fw-of (lower ex-code) = some (lower-w ex-c)
+#same eval-fo no-defs (lcons (vw #4) lnil) (lower ex-code) = vw (fo-ev (lower-w ex-c) (envx #4))
+#same eval-fo no-defs (lcons (vw #4) lnil) (fw-to-fo (spec-w std-vrule ex-c)) = vw #13
+#same fw-of (fw-to-fo (spec-w std-vrule ex-c)) = some (spec-w std-vrule ex-c)
+-- a step reading its counter and an outer variable: λ x y → the recursion on x from y adding k + y
+ex2-code = case code (λ (x : Word) (y : Word) → %welimP (λ v → Word) x y (λ k acc → %wadd acc (%wadd k y))) of clam b → (case b of clam b2 → b2; _ → cwlit #0); _ → cwlit #0
+ex2-c : WC
+ex2-c = wcrec (wcv (suc zero)) (wcv zero) (wca (wcv zero) (wca (wcv (suc zero)) (wcv (suc (suc zero)))))
+#same wc-of ex2-code = some ex2-c
+#same fw-of (lower ex2-code) = some (lower-w ex2-c)
+envxy : Word → Word → Envw
+envxy x y n = case n of zero → y; suc k → x
+#same eval-fo no-defs (lcons (vw #3) (lcons (vw #10) lnil)) (lower ex2-code) = vw (fo-ev (lower-w ex2-c) (envxy #10 #3))
+#same fo-ev (lower-w ex2-c) (envxy #10 #3) = #78
+ex2-path : (x y : Word) → fo-ev (spec-w std-vrule ex2-c) (envxy x y) ≡ wc-ev ex2-c (envxy x y)
+ex2-path x y = spec-path std-vrule ex2-c (envxy x y)

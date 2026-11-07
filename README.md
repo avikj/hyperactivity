@@ -637,6 +637,13 @@ seventeen programs with gcc and runs them, with both printers):
   constructors of a represented type through `to`, recursion on one through `from`, by the
   representation's table `%rops d`; the printers lay a field of a type represented by `Word` out as
   a word.
+- **`lib/foproof.cub`**: the justifying path of compilation for the word fragment (18.5 step 7):
+  the fragment's codes and first-order forms mirrored as checked data with checked evaluators and
+  lowering, one lemma per form (`lower-sound`), verified rewrites (`VRule`, from the store's word
+  theorems) applied with soundness by congruence, and `spec-path : fo-ev (spec-w r c) ρ ≡ wc-ev c ρ`
+  for every code; `ex-path` is that path for a term. Bridges read real `Code` and `FO` into the
+  mirror (the untyped `lower` agrees with the checked one on the readings) and the checked
+  pipeline's output back for the printers.
 - **`lib/derive.cub`**: `derive-eq d`, a decidable equality as a code read off the data table;
   evaluated, quoted back at its type, lowered and compiled (the derived equality on `Nat` prints
   10 for eq(2,2), eq(2,1)).
