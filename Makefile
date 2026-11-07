@@ -53,6 +53,9 @@ test: build/cubical build/cubical-asan
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/prim.cub lib/stage.cub tests/prim.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/prim.cub lib/region.cub tests/region.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/errors/untyped-imp.cub > build/untyped-imp.out 2>&1; grep -q "^ok: fine" build/untyped-imp.out && grep -q "applies idw to its explicit arguments only" build/untyped-imp.out || { echo "untyped implicit misuse not refused"; exit 1; }
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/errors/untyped-imp-code.cub > build/untyped-imp-code.out 2>&1; grep -q "^error: wrong: an untyped definition applies idw to its explicit arguments only" build/untyped-imp-code.out || { echo "untyped implicit misuse under code not refused"; exit 1; }
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/errors/ctor-name.cub > build/ctor-name.out 2>&1; grep -q "^ok: checks fine" build/ctor-name.out && grep -q "reuse a constructor's name.*: mkb" build/ctor-name.out || { echo "a definition named as a constructor not refused"; exit 1; }
+	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/errors/ctor-name-u.cub > build/ctor-name-u.out 2>&1; grep -q "reuse a constructor's name.*: mky" build/ctor-name-u.out || { echo "an untyped definition named as a constructor not refused"; exit 1; }
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/fiber.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/lin.cub lib/check.cub lib/std.cub lib/linproof.cub lib/intproof.cub lib/intlin.cub lib/eqproof.cub tests/cert.cub
 	./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub lib/proc.cub lib/session.cub

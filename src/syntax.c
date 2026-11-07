@@ -970,6 +970,7 @@ static void declare_forward(Node *body) {
 /* an untyped definition is not elaborated, so a checked definition with leading implicit
  * parameters applied in it positionally takes the first explicit argument as the implicit one
  * (idw #3 binding A := #3): refused, with the remedy named */
+static void no_ctor_name(const char *name);
 static const char *imp_misuse(Node *t, Names *bound) {
     if (!t->list) return NULL;   /* a bare name: passed on, its arguments given wherever it is applied */
     if (t->n == 0) return NULL;
@@ -1013,6 +1014,7 @@ static const char *imp_misuse(Node *t, Names *bound) {
     return NULL;
 }
 static void def_untyped(const char *name, Node *body) {
+    no_ctor_name(name);
     if (x_typed) {
         Names b = { 0 }; const char *bad = imp_misuse(body, &b); free(b.v);
         if (bad) {
@@ -1359,6 +1361,7 @@ static void p_decl(void) {
             Node *body = ls[0].field ? copattern_wrap(copattern_clauses(l->s, ls, rs, n, true)) : clauses_typed(l->s, ls, rs, n);
             Node *T, *bt; el_once(sg, body, &T, &bt);
             if (ng == 64) x_err("too many definitions in a mutual block", P0());
+            no_ctor_name(l->s);
             gs[ng++] = lst(4, nsym("checked"), l, T, bt);
         }
         NX();
@@ -4885,7 +4888,13 @@ static void el_release(ElMark e) {
     nlt_ = e.nlt; ncm = e.ncm; ntw = e.ntw;
     ar_release(e.m);
 }
+/* a definition named as a loaded constructor would be read as the constructor everywhere (the
+ * constructor wins name lookup), so its body would never be used: refused */
+static void no_ctor_name(const char *name) {
+    if (name && con_lookup(name) >= 0) die("a definition may not reuse a constructor's name (the constructor would be read instead):", name);
+}
 static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint64_t mask, int mlen) {
+    no_ctor_name(name);
     neh = neg = 0; nbk = 0;
     /* its own calls (a copattern definition's) take implicit arguments as later uses do */
     if (name && mask) imask_set(name, mask, mlen);

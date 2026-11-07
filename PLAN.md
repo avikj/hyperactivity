@@ -1135,7 +1135,7 @@ unification at splits with absurd cases (2026-11-06); (5) DONE: item 30's retrac
 release / acquire-release / sequentially consistent, on addresses from `ptr-of`;
 `tests/world.cub`); (8) item 10's same-machine Agda comparison; (9) DONE (`7a2c96c4`, `62c669fc`, `13ae6b9f`, `54be3050`): Line B's leftovers — `lib/emitx86.cub` (18.7's
 encoder for the word-only fragment, run from executable memory; `X86=1 run.py`), 18.5 step 7's
-statements read by computation per family (the assembled path for an arbitrary term stays open),
+statements read by computation per family (the assembled path for an arbitrary term of the word fragment since built, `lib/foproof.cub`, item 15),
 `fthunk` in the printers, parameterized data types in the C++ image (templates, read back). A trap for test writers: `#same f #1 = #8` parses `#1 = #8` as a
 face (`src/syntax.c`'s system syntax); parenthesize the application. The list of revision 7.8
 follows for the record.
@@ -1238,9 +1238,10 @@ port (A10b) is the checker at scale and gates E28.
     difference). With 18.17 landed (`c186b81`) no primitive is left: `rec2/3/4` and `surfc` are checked
     definitions, −2 in 1,349,493 steps. Four elaborator gaps closed on the way (λ binder
     types kept and used; λ arguments inferred against a known domain; `B x` against `T` solved
-    as a pattern; errors show the term's own shape). Noted, not changed: a definition named as a
-    loaded constructor is read as the constructor; a primitive without computation used as a
-    value stops the checker instead of standing as a neutral.
+    as a pattern; errors show the term's own shape). Two notes from then, settled 2026-11-07: a
+    definition named as a loaded constructor, which was read as the constructor, is refused,
+    typed or untyped (`tests/errors/ctor-name.cub`, `ctor-name-u.cub`); a primitive without
+    computation used as a value stands as a neutral, applied or not (`tests/elab.cub`'s `frob0`).
 
 ### B. Compilation by transport
 Specifications for the ★ items are section 18 of this document, each at revision 2 after a
@@ -1269,7 +1270,7 @@ identity; linear values are introduced only in `primitive` definitions.
 13. ★ DONE (`1c5282a`, `lib/stage.cub`): `first-order T c` with the reasons dim, dep-type,
     higher, kan, reflect, mult; `fo-normal` on the normal form; the stage/verdict/strictness
     types as data; `#fo`. Schedules as values: `lib/specialize.cub`'s `Sched` (the rewrite
-    bound) and `lib/code.cub`'s stage types; the specializer does not yet call `first-order`.
+    bound) and `lib/code.cub`'s stage types; the specializer calls `first-order` (item 15).
 14. First-order intermediate form. Essential. Built as a library: `lib/fo.cub` (the
     form, its evaluator, closure conversion, structural recursion, the byte layer),
     `lib/lower.cub` (from codes, with the data table's shapes), `lib/repr.cub` (the
@@ -1331,10 +1332,11 @@ identity; linear values are introduced only in `primitive` definitions.
     both printers. Found on the way: a byte string had no code, so the specializer's normal
     form of any term holding one fell back to the unnormalized code (`normalize`'s `fromopt`);
     `lib/check.cub`'s `q-bytes` quotes it as the fresh string and a store per nonzero word. Also
-    found, not changed: `code t` in an untyped definition elaborates `t` without inserting
-    implicit arguments (an explicit argument lands in the implicit's place, silently), so a
-    program to specialize is written as a checked definition and quoted applied
-    (`code (λ w → prog w)`).
+    found: `code t` in an untyped definition elaborates `t` without inserting implicit
+    arguments (an explicit argument landed in the implicit's place, silently); since 2026-11-07
+    it is refused with the remedy named, as any untyped application of a checked definition to
+    its explicit arguments only is (`tests/errors/untyped-imp-code.cub`), so a program to
+    specialize is written as a checked definition and quoted applied (`code (λ w → prog w)`).
 21. **Status (2026-11-06):** built, `e27eda2c`, `02a4a615` (`fupd`, constructor reuse where the base is the node at hand, uniqueness by use, copy-on-write, in both printers). Spec as written: In-place update: whole values, through parts, copy-on-write, sending (6.4). Essential.
 22. Started (`be7149d`): `Array n = Bytes (times n 8)` with `index`/`update` at a proof,
     `tabulate`, and `index-update` proved from the byte layer's laws (trusted primitives
