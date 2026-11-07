@@ -72,8 +72,8 @@ natOrd =
 lew : Word → Word → Bool
 lew a =
   %welimP (λ v → Word → Bool) a (λ b → true) (λ n h b → %welimP (λ v → Bool) b false (λ m g → h m))
-lew-refl : (a : Word) → isTrue (lew a a)
-lew-refl a = %welimP (λ v → isTrue (lew v v)) a unit (λ n h → h)
+lew-refl-s : (a : Word) → isTrue (lew a a)
+lew-refl-s a = %welimP (λ v → isTrue (lew v v)) a unit (λ n h → h)
 lew-total : {x y : Word} → lew x y ≡ false → isTrue (lew y x)
 lew-total =
   %welimP (λ v → (y : Word) → lew v y ≡ false → isTrue (lew y v)) x
@@ -108,7 +108,7 @@ lew-antisym =
          (λ a b → Empty-rec {_} {%wsucc m1 ≡ #0} a) (λ n1 g a b i → %wsucc (h n1 a b i))) n
 lew-order : TotalOrder lew
 lew-order =
-  (lew-refl , λ x0 x1 → lew-total {x0} {x1} , λ x0 x1 x2 → lew-trans {x0} {x1} {x2}
+  (lew-refl-s , λ x0 x1 → lew-total {x0} {x1} , λ x0 x1 x2 → lew-trans {x0} {x1} {x2}
   , λ x0 x1 → lew-antisym {x0} {x1})
 -- ... and the comparator that runs: one machine comparison, whatever the size of the words; its laws
 -- are lew's, transported along the path between the two comparators

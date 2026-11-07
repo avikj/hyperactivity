@@ -204,7 +204,7 @@ compiles the bytes of `emit-lib-u` (the unboxed C of `lib/emitu.cub`) into a sha
 redefines `f` over it: on word arguments the compiled code answers, on any other `f` computes
 on the net (plan B18, `%native`). The other direction is `build/libcubical.a` with
 `src/libcubical.h`: a C program loads libraries with `cubical_init` and calls checked
-definitions on words with `cubical_call` (and the emitted C's boxed form, `cubical_call_boxed`);
+definitions on words with `cubical_call_w` (and the emitted C's boxed form, `cubical_call`);
 `tests/native/main.c`. `%gsteps n` is the steps checked definition `n` took to check, from the
 run or the store's `ok` line.
 

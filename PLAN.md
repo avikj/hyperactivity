@@ -1123,12 +1123,16 @@ search and bridges (`89ec3e0e`, `d1e5f790`), item 29 (`fd188bf6`), `%gsteps` (`c
 value: (1) A8's next step — not formal compositions in path types (tried, withdrawn, 18.16):
 sharing a composition across the dimensions the tube maps apply it at; (2) B18's marshaling
 of represented values (layout walks, `V_NATIVE`; the boxed `cubical_call` the emitted C
-calls exists for words, `cubical_call_boxed`/`cubical_index` in `src/libcubical.h`); (3) A4's
+calls exists for words, with `cubical_call_w`/`cubical_index` in `src/libcubical.h`); (3) A4's
 bitmask formulas (18.19, designed); (4) E28's unification-based implicits, holes in
 composition lines, generalized variables, transports inserted by matching on indexed
 families; (5) item 30's retraction and positions in errors; (6) F32 over `Int` (needs `Int`
 arithmetic and its laws in `lib/std.cub` first); (7) a hardware memory model for Regions
-(D26's open half); (8) item 10's same-machine Agda comparison. The list of revision 7.8
+(D26's open half); (8) item 10's same-machine Agda comparison; (9) Line B's leftovers: `lib/emitx86.cub` (18.7's
+encoder, ~700 lines, for the latency of re-specialization only since `#native` goes through
+gcc), 18.5 step 7's justifying path `eval-fo f ≡ t`, `fthunk` in the printers, parameterized
+data types in the C++ image. A trap for test writers: `#same f #1 = #8` parses `#1 = #8` as a
+face (`src/syntax.c`'s system syntax); parenthesize the application. The list of revision 7.8
 follows for the record.
 
 Before anything: the `retire_boxes` race in
@@ -2334,7 +2338,7 @@ definition `g` itself (so `λ x → plusw x #0` still reads `λ x → x` on the 
 `tests/native.cub`: `plusw` entered (23.7k steps to specialize, lower and print; 3.3 KB of C),
 `plusw #3 #4`, `plusw #1000000 #1000000` native. Native → net: `src/libcubical.h`,
 `build/libcubical.a` (the sources with `-DCUBICAL_LIB`, `main` renamed), `cubical_init(files)`
-and `cubical_call(name, words, n, &out)` (the application read back by the net, a word or a
+and `cubical_call_w(name, words, n, &out)` (the application read back by the net, a word or a
 Bool); `tests/native/main.c` calls `plusw` and `eqw`, in `make test`. Not built: marshaling
 of values of declared representations by their layouts (`tdata` walks, `Bytes` as pointer
 and length), `V_NATIVE` opaque results, exported prototypes per compiled definition, the

@@ -4089,7 +4089,7 @@ static void prof_print(void);
 static void prof_signal(int sig) { (void)sig; fflush(stdout); prof_print(); _Exit(3); }
 /* ---------------- the call boundary, native → net (B18) ----------------
  * A C program linked with libcubical.a loads the libraries it needs with cubical_init, then calls
- * cubical_call(name, args, n, &out): the definition applied to the word arguments, read to its normal
+ * cubical_call_w(name, args, n, &out): the definition applied to the word arguments, read to its normal
  * form by the net (synchronous), the result a word in out. Returns 0, or -1 when the result is not
  * a word (its text is then in cubical_last_text). Words only: representations are not marshaled yet */
 static char *last_text;
@@ -4100,7 +4100,7 @@ int cubical_init(int nfiles, const char *const *files) {
     for (int i = 0; i < nfiles; i++) load_file(files[i], true);
     return failures ? -1 : 0;
 }
-int cubical_call(const char *name, const uint64_t *args, int n, uint64_t *out) {
+int cubical_call_w(const char *name, const uint64_t *args, int n, uint64_t *out) {
     char *txt; size_t tl; FILE *m = open_memstream(&txt, &tl);
     if (n) { fputc('(', m); fputs(name, m); for (int i = 0; i < n; i++) fprintf(m, " #%llu", (unsigned long long)args[i]); fputc(')', m); }
     else fputs(name, m);
@@ -4156,14 +4156,14 @@ CubV *cubical_call_v(uint64_t k, uint64_t nargs, CubV **args) {
     uint64_t a[8];
     for (uint64_t i = 0; i < nargs; i++) { if (!args[i] || args[i]->tag != 0) return NULL; a[i] = args[i]->n; }
     uint64_t out;
-    if (cubical_call(CHECKED[k], a, (int)nargs, &out)) return NULL;
+    if (cubical_call_w(CHECKED[k], a, (int)nargs, &out)) return NULL;
     CubV *r = malloc(sizeof(CubV)); r->tag = 0; r->n = out;
     return r;
 }
 long cubical_index(const char *name) { return checked_index(name); }
 #ifdef CUBICAL_LIB
-/* the name the emitted C calls */
-void *cubical_call_boxed(uint64_t k, uint64_t nargs, void **args) { return cubical_call_v(k, nargs, (CubV **)args); }
+/* the name the emitted C calls (lib/emitc.cub's fnet: cubical_call(key, n, (V *[]){…})) */
+void *cubical_call(uint64_t k, uint64_t nargs, void **args) { return cubical_call_v(k, nargs, (CubV **)args); }
 int cubical_main(int argc, char **argv)
 #else
 int main(int argc, char **argv)
