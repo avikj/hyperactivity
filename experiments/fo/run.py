@@ -168,6 +168,19 @@ ld8i b h = i64toWord (load64 32 b 8 h)""", {'ld8i': 'ld8'},
   """#include "image.hpp"
 #include <cstdio>
 int main() { cub::bytes<32> b{}; b[8] = 42; std::printf("%llu\\n", (unsigned long long) ld8(b)); }""", "42", []),
+ # a parameterized data type: the type parameter a template parameter of the structs, a function
+ # over it a template, a case on it a visit by template lambdas; the sum and the length of a list
+ # the consumer builds through the image, each definition read back equal to its source
+ 'params': ("""data TLq (A : Type) = tnilq | tconsq (x : A) (xs : TLq A)
+sumq : TLq Word → Word
+sumq l = case l of tnilq → #0; tconsq x xs → %wadd x (rec xs)
+lenq : (A : Type) → TLq A → Word
+lenq A l = case l of tnilq → #0; tconsq x xs → %wadd #1 (rec xs)
+mk3q : Word → TLq Word
+mk3q a = tconsq a (tconsq (%wadd a #1) (tconsq (%wadd a #2) tnilq))""", {'sumq': 'sumq', 'lenq': 'lenq', 'mk3q': 'mk3q'},
+  """#include "image.hpp"
+#include <cstdio>
+int main() { auto l = mk3q(5); std::printf("%llu %llu\\n", (unsigned long long) sumq(l), (unsigned long long) lenq<uint64_t>(l)); }""", "18 3"),
  # word elimination over a pair: cub::welim with a lambda step; fib 90
  'fib': ("""fibpi : Word → Word × Word
 fibpi n = %welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p)))

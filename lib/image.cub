@@ -137,6 +137,9 @@ x-r-params = (lcons #97 (lcons #32 (lcons #100 (lcons #97 (lcons #116 (lcons #97
 x-r-hit = (lcons #97 (lcons #32 (lcons #100 (lcons #97 (lcons #116 (lcons #97 (lcons #32 (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #32 (lcons #119 (lcons #105 (lcons #116 (lcons #104 (lcons #32 (lcons #112 (lcons #97 (lcons #116 (lcons #104 (lcons #32 (lcons #99 (lcons #111 (lcons #110 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #111 (lcons #114 (lcons #115 lnil))))))))))))))))))))))))))))))))))
 x-r-ftype = (lcons #97 (lcons #32 (lcons #102 (lcons #105 (lcons #101 (lcons #108 (lcons #100 (lcons #32 (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #32 (lcons #111 (lcons #117 (lcons #116 (lcons #115 (lcons #105 (lcons #100 (lcons #101 (lcons #32 (lcons #116 (lcons #104 (lcons #101 (lcons #32 (lcons #102 (lcons #114 (lcons #97 (lcons #103 (lcons #109 (lcons #101 (lcons #110 (lcons #116 lnil)))))))))))))))))))))))))))))))))
 x-r-clos = (lcons #97 (lcons #32 (lcons #102 (lcons #117 (lcons #110 (lcons #99 (lcons #116 (lcons #105 (lcons #111 (lcons #110 (lcons #32 (lcons #118 (lcons #97 (lcons #108 (lcons #117 (lcons #101 (lcons #32 (lcons #119 (lcons #104 (lcons #101 (lcons #114 (lcons #101 (lcons #32 (lcons #97 (lcons #32 (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #32 (lcons #105 (lcons #115 (lcons #32 (lcons #110 (lcons #101 (lcons #101 (lcons #100 (lcons #101 (lcons #100 lnil)))))))))))))))))))))))))))))))))))))))
+x-r-con-ty = (lcons #97 (lcons #32 (lcons #99 (lcons #111 (lcons #110 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #111 (lcons #114 (lcons #32 (lcons #111 (lcons #102 (lcons #32 (lcons #97 (lcons #32 (lcons #112 (lcons #97 (lcons #114 (lcons #97 (lcons #109 (lcons #101 (lcons #116 (lcons #101 (lcons #114 (lcons #105 (lcons #122 (lcons #101 (lcons #100 (lcons #32 (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #32 (lcons #97 (lcons #116 (lcons #32 (lcons #97 (lcons #110 (lcons #32 (lcons #117 (lcons #110 (lcons #107 (lcons #110 (lcons #111 (lcons #119 (lcons #110 (lcons #32 (lcons #116 (lcons #121 (lcons #112 (lcons #101 lnil))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+x-lam-amp = (lcons #91 (lcons #38 (lcons #93 lnil)))
+x-lam-const = (lcons #40 (lcons #99 (lcons #111 (lcons #110 (lcons #115 (lcons #116 (lcons #32 lnil)))))))
 x-r-dep = (lcons #97 (lcons #32 (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #32 (lcons #100 (lcons #101 (lcons #112 (lcons #101 (lcons #110 (lcons #100 (lcons #105 (lcons #110 (lcons #103 (lcons #32 (lcons #111 (lcons #110 (lcons #32 (lcons #97 (lcons #32 (lcons #114 (lcons #117 (lcons #110 (lcons #45 (lcons #116 (lcons #105 (lcons #109 (lcons #101 (lcons #32 (lcons #118 (lcons #97 (lcons #108 (lcons #117 (lcons #101 lnil))))))))))))))))))))))))))))))))))))
 -- ---------------------------------------------------------------- names
 x-gname names g = case names of lnil → lapp x-g (dec g); lcons nm r → if %weq (fst nm) g then snd nm else x-gname r g
@@ -171,7 +174,7 @@ cxx-type env c =
     cword → xs x-u64
     cpty k n → (if %weq k #0 then xs x-i64 else if %weq k #2 then xs x-f64 else if %weq k #1 then xs x-u32
                 else if %weq k #4 then xcat3 (xs x-bytes) (word-code n) (xs x-gt) else xno (lapp x-r-form (lcons #112 lnil)))
-    cdata d ps → if %weq d bool-idx then xs x-bool else (case %rtab d of some R → cxx-type env (fromopt (quote-ty R) cword); none → (case ps of lnil → xs (x-dname d); _ → xno x-r-params))
+    cdata d ps → if %weq d bool-idx then xs x-bool else (case %rtab d of some R → cxx-type env (fromopt (quote-ty R) cword); none → (case ps of lnil → xs (x-dname d); _ → if %weq (d-arity d) (lst-len ps) then xcat3 (xs (lapp (x-dname d) x-lt)) (join-x (tys-x env ps)) (xs x-gt) else xno x-r-params))
     csigma A B → if x-mentions #0 B then xno x-r-dep else xcat5 (xs x-pair) (cxx-type env A) (xs x-comma) (cxx-type (push-b b-erased env) B) (xs x-gt)
     cpi m A B → xs x-auto
     cvar n → (let b = env-at env n in if %weq (fst b) #1 then xs (snd b) else xno x-r-dep)
@@ -227,7 +230,7 @@ cxx-expr env want c =
     cplit k b → if %weq k #0 then xs (cat4 x-i64c x-ulit (dec b) (lapp x-rp x-rp)) else if %weq k #2 then xs (cat4 x-f64bits x-ulit (dec b) (lapp x-rp x-rp)) else if %weq k #1 then xs (cat4 x-u32c x-ulit (dec b) (lapp x-rp x-rp)) else xno (lapp x-r-form (lcons #112 lnil))
     cprim k as → prim-expr env k as
     cwelim w z s → xcat7 (xs x-welim) (cxx-expr env none w) (xs x-comma) (cxx-expr env none z) (xs x-comma) (cxx-expr env none s) (xs x-rp)
-    ccon d k fs ds → (case ds of lnil → (if %weq d bool-idx then xs (if %weq k #0 then x-true else x-false) else (case (if nat-rep then nat-code c else none) of some n → xs (cat3 x-ulit (dec n) x-rp); none → con-expr env d k fs)); _ → xno x-r-dim)
+    ccon d k fs ds → (case ds of lnil → (if %weq d bool-idx then xs (if %weq k #0 then x-true else x-false) else (case (if nat-rep then nat-code c else none) of some n → xs (cat3 x-ulit (dec n) x-rp); none → con-expr env want d k fs)); _ → xno x-r-dim)
     ccase d B x → if %weq d bool-idx then bool-case env want B x else case-expr env want d none B x
     celim d P B x → if %weq d bool-idx then bool-case env want B x else case-expr env want d (some P) B x
     cforce t → (case t of cvar n → (let b = env-at env n in if %weq (fst b) #5 then xs (snd b) else xno (lapp x-r-form (lcons #102 (lcons #111 (lcons #114 (lcons #99 (lcons #101 lnil))))))); _ → xno (lapp x-r-form (lcons #102 (lcons #111 (lcons #114 (lcons #99 (lcons #101 lnil)))))))
@@ -282,9 +285,40 @@ is-type-code env c =
 type-args env args = case args of lnil → lnil; lcons a r → if is-type-code env a then lcons (cxx-type env a) (type-args env r) else type-args env r
 term-args env args = case args of lnil → lnil; lcons a r → if is-type-code env a then term-args env r else lcons (cxx-expr env none a) (term-args env r)
 -- a constructor: D{D_c{fields}}, a recursive field wrapped in make_shared
-con-expr env d k fs =
+con-expr env want d k fs =
   let ks = cshape d k
-  in xcat5 (xs (x-dname d)) (xs x-lb) (xcat3 (xs (x-cname d k)) (xs x-lb) (fields-expr env d ks fs)) (xs x-rb) (xs x-rb)
+      n = d-arity d
+  in if %weq n #0 then xcat5 (xs (x-dname d)) (xs x-lb) (xcat3 (xs (x-cname d k)) (xs x-lb) (fields-expr env d ks fs)) (xs x-rb) (xs x-rb)
+     else con-expr-p env want d k fs n
+-- a constructor of a parameterized type: D<args>{D_c<args>{fields}}, the arguments those of the
+-- expected type (a constructor alone does not say them); each field expected at its type
+-- instantiated, a recursive one wrapped in make_shared
+con-expr-p env want d k fs n =
+  case want of
+    some T → (case T of
+                cdata d2 ps → (let ta = xcat3 (xs x-lt) (join-x (tys-x env ps)) (xs x-gt)
+                               in xcat5 (xcat2 (xs (x-dname d)) ta) (xs x-lb) (xcat3 (xcat2 (xs (x-cname d k)) ta) (xs x-lb) (fields-p env d n ps ta (ctor-tycodes-of d k) fs #0)) (xs x-rb) (xs x-rb))
+                _ → xno x-r-con-ty)
+    none → xno x-r-con-ty
+fields-p env d n ps ta tys fs j =
+  case fs of
+    lnil → xs lnil
+    lcons f r →
+      let tc = (case tys of lcons t tr → t; lnil → none)
+          e = (if is-rec-code d tc then xcat5 (xs (cat3 x-make-shared (x-dname d) lnil)) ta (xs (lapp x-gt x-lp)) (cxx-expr env (some (cdata d ps)) f) (xs x-rp) else cxx-expr env (inst-ty n ps j tc) f)
+      in (case r of lnil → e; _ → xcat3 e (xs x-comma) (fields-p env d n ps ta (ltail-x tys) r (%wsucc j)))
+is-rec-code d tc = case tc of some c → (case c of cdata d2 ps → %weq d d2; _ → false); none → false
+-- a field's type code (over the parameters, then the preceding fields) at the type arguments:
+-- the i-th parameter is variable n-1-i past the j preceding fields
+inst-ty n ps j tc = case tc of some c → inst-c n ps j c; none → none
+inst-c n ps j c =
+  case c of
+    cvar k → if %wlt k j then none else lnth ps (%wsub (%wsub n #1) (%wsub k j))
+    cdata d2 ps2 → omap (cdata d2) (inst-codes n ps j ps2)
+    cword → some c
+    cpty k m → some c
+    _ → none
+inst-codes n ps j cs = case cs of lnil → some lnil; lcons c r → (case inst-c n ps j c of some c2 → omap (lcons c2) (inst-codes n ps j r); none → none)
 fields-expr env d ks fs =
   case fs of
     lnil → xs lnil
@@ -298,7 +332,8 @@ ltail-x l = case l of lnil → lnil; lcons x r → r
 -- hypotheses the recursive call self; the result type from the motive or the expected type
 case-expr env want d P B x =
   let rt = (case P of some m → (case m of clam T → cxx-type (push-b b-erased env) T; _ → xno x-r-dep); none → (case want of some T → cxx-type env T; none → xs x-auto))
-  in xcat7 (xs x-fix) (xs (x-dname d)) (xcat3 (xs x-fix-end) rt (xs (lapp x-sp (lapp x-lb (lapp x-sp x-ret))))) (xcat4 (xs x-visit) (alts-expr env rt d B #0) (xs x-visit-end) (xs (lapp x-x x-dot-v))) (xs (lapp x-rp x-fix-close)) (xcat3 (xs x-lp) (cxx-expr env none x) (xs x-rp)) (xs lnil)
+      n = d-arity d
+  in xcat7 (xs x-fix) (xs (if %weq n #0 then x-dname d else x-auto)) (xcat3 (xs x-fix-end) rt (xs (lapp x-sp (lapp x-lb (lapp x-sp x-ret))))) (xcat4 (xs x-visit) (alts-expr env rt d B #0) (xs x-visit-end) (xs (lapp x-x x-dot-v))) (xs (lapp x-rp x-fix-close)) (xcat3 (xs x-lp) (cxx-expr env none x) (xs x-rp)) (xs lnil)
 alts-expr env rt d B c =
   case B of
     lnil → xs lnil
@@ -308,7 +343,8 @@ alts-expr env rt d B c =
           n = lst-count ks
           env2 = push-hyps hs (push-fields d c ks #0 env)
           body = strip-n (%wadd n (lst-count hs)) b
-          alt = xcat7 (xs x-case) (xs (x-cname d c)) (xs x-case-arg) (xs x-lamr) (ret-cast rt (cxx-expr env2 none body)) (xs x-lamend) (xs lnil)
+          n = d-arity d
+          alt = xcat7 (xs (if %weq n #0 then x-case else cat3 x-lam-amp (tpl-params-q n) x-lam-const)) (xs (if %weq n #0 then x-cname d c else lapp (x-cname d c) (targs-text-q n))) (xs x-case-arg) (xs x-lamr) (ret-cast rt (cxx-expr env2 none body)) (xs x-lamend) (xs lnil)
       in (case r of lnil → alt; _ → xcat3 alt (xs x-comma) (alts-expr env rt d r (%wsucc c)))
 -- every alternative returns the one result type: a static_cast where it is known
 ret-cast rt e = if %weq (fst rt) #0 then (let t = snd rt in if lst-eq t x-auto then e else xcat5 (xs (lcons #115 (lcons #116 (lcons #97 (lcons #116 (lcons #105 (lcons #99 (lcons #95 (lcons #99 (lcons #97 (lcons #115 (lcons #116 (lcons #60 lnil))))))))))))) (xs t) (xs (lcons #62 (lcons #40 lnil))) e (xs x-rp)) else rt
@@ -379,9 +415,56 @@ image-def names stages g =
 image-data d =
   if lany-x tel-has-dims (ctors-at d lnil) then xno x-r-hit
   else (case %dent d of
-          dent tel l → (case tel of tz e → xcat3 (xs (cat3 x-struct (x-dname d) x-fwd)) (ctor-structs d (nctors d) #0) (xcat3 (xs (cat3 x-struct (x-dname d) (lapp x-sp (lapp x-lb (lapp x-sp x-variant))))) (join-x (ctor-names d (nctors d) #0)) (xs x-vdecl)); _ → xno x-r-params)
+          dent tel l → (case tel of tz e → xcat3 (xs (cat3 x-struct (x-dname d) x-fwd)) (ctor-structs d (nctors d) #0) (xcat3 (xs (cat3 x-struct (x-dname d) (lapp x-sp (lapp x-lb (lapp x-sp x-variant))))) (join-x (ctor-names d (nctors d) #0)) (xs x-vdecl)); _ → image-data-p d tel)
           _ → xno x-r-params)
 lany-x p l = case l of lnil → false; lcons x r → (case p x of true → true; false → lany-x p r)
+-- ---- parameterized data types (18.9): a type parameter is a template parameter of the structs
+-- template<class P0> struct D; template<class P0> struct D_c1 { P0 f0; std::shared_ptr<D<P0>> f1; };
+-- template<class P0> struct D { std::variant<D_c0<P0>, D_c1<P0>> v; };
+-- A parameter at a value (an index, a length) is outside the fragment.
+image-data-p d tel =
+  case d-params tel lnil #0 of
+    none → xno x-r-params
+    some p →
+      (let n = fst p
+           bs = fst (snd p)
+           tels = snd (snd p)
+           hd = tpl-head n
+       in xcat3 (xs (cat4 hd x-struct (x-dname d) x-fwd)) (ctor-structs-p d n bs tels #0)
+                (xcat3 (xs (cat4 hd x-struct (x-dname d) (lapp x-sp (lapp x-lb (lapp x-sp x-variant))))) (join-x (ctor-names-p d n (lst-len tels) #0)) (xs x-vdecl)))
+-- the parameters of a data type's telescope: some (count , the quoting binders , the constructor
+-- telescopes) when every parameter is a type; none otherwise
+d-params tel bs n =
+  case tel of
+    tx A nm r → (let Av = tval A in (case %view Av of wu l → (let x = %var nm Av in d-params (r x Av) (lcons (qv (var-level x)) bs) (%wsucc n)); _ → none))
+    tz e → some (n , (bs , e))
+    _ → none
+d-arity d = case %dent d of dent tel l → (case d-params tel lnil #0 of some p → fst p; none → #0); _ → #0
+-- the field types of a constructor telescope as codes over the parameters (then the preceding fields)
+ctor-tycodes bs tel = case tel of tx A nm r → (let Av = tval A in let x = %var nm Av in lcons (qty bs Av) (ctor-tycodes (lcons (qv (var-level x)) bs) (r x Av))); _ → lnil
+ctor-tycodes-of d k = case %dent d of dent tel l → (case d-params tel lnil #0 of some p → ctor-tycodes (fst (snd p)) (fromopt (lnth (snd (snd p)) k) (tz (tsys lnil []))); none → lnil); _ → lnil
+ctor-names-p d n m c = if %weq c m then lnil else lcons (xs (lapp (x-cname d c) (targs-text n))) (ctor-names-p d n m (%wsucc c))
+ctor-structs-p d n bs tels c =
+  case tels of
+    lnil → xs lnil
+    lcons tel r → xcat2 (xcat3 (xs (cat4 (tpl-head n) x-struct (x-cname d c) (lapp x-sp x-lb))) (ctor-fields-p d n (penv n) (ctor-tycodes bs tel) #0) (xs (lapp x-sp (lapp x-rb (lapp x-semi x-nl))))) (ctor-structs-p d n bs r (%wsucc c))
+ctor-fields-p d n env tys j = case tys of lnil → xs lnil; lcons t r → xcat3 (xcat3 (xs x-sp) (fty-x env d n t) (xs (lapp x-sp (x-fname j)))) (xs x-semi) (ctor-fields-p d n (push-b b-erased env) r (%wsucc j))
+fty-x env d n t = if is-rec-code d t then xs (cat3 x-shared (lapp (x-dname d) (targs-text n)) x-gt) else (case t of some tc → cxx-type env tc; none → xno x-r-ftype)
+-- the environment of the parameters as template type parameters P0 … (P0 outermost)
+penv n = penv-at (env-of lnil) n #0
+penv-at env n i = if %weq i n then env else penv-at (push-b (b-type (x-pname i)) env) n (%wsucc i)
+-- template<class P0, class P1> ␣ and <P0, P1>
+tpl-head n = cat3 x-template (join-b (pnames n #0 true)) (lapp x-gt x-sp)
+tpl-params-q n = cat3 x-lt (join-b (qnames n #0 true)) x-gt
+targs-text n = cat3 x-lt (join-b (pnames n #0 false)) x-gt
+targs-text-q n = cat3 x-lt (join-b (qnames n #0 false)) x-gt
+pnames n i cl = if %weq i n then lnil else lcons (if cl then lapp x-class (x-pname i) else x-pname i) (pnames n (%wsucc i) cl)
+-- a case's alternatives are template lambdas over the scrutinee's arguments Q0 … (a name of their
+-- own: a template lambda inside a template function may not redeclare its parameters)
+qnames n i cl = if %weq i n then lnil else lcons (if cl then lapp x-class (x-qname i) else x-qname i) (qnames n (%wsucc i) cl)
+x-qname i = lapp (lcons #81 lnil) (dec i)
+join-b l = case l of lnil → lnil; lcons a r → (case r of lnil → a; _ → cat3 a x-comma (join-b r))
+tys-x env ps = case ps of lnil → lnil; lcons a r → lcons (cxx-type env a) (tys-x env r)
 ctor-names d n c = if %weq c n then lnil else lcons (xs (x-cname d c)) (ctor-names d n (%wsucc c))
 ctor-structs d n c = if %weq c n then xs lnil else xcat2 (xcat3 (xs (cat3 x-struct (x-cname d c) (lapp x-sp x-lb))) (ctor-fields d (cshape d c) #0) (xs (lapp x-sp (lapp x-rb (lapp x-semi x-nl))))) (ctor-structs d n (%wsucc c))
 ctor-fields d ks j =
@@ -457,3 +540,23 @@ tsumx l = case l of tnilx → #0; tconsx x xs → %wadd x (rec xs)
 #same snd (image-def lnil lnil (gidx (code tsumx))) = x-exported
 -- a path-typed definition is not exportable, with the reason
 #same snd (image-def lnil lnil (gidx (code plusw-zero-l))) = lapp x-not-exportable (lapp x-r-form x-r-dim)
+
+-- a parameterized data type: one template parameter per type parameter, the recursive field a
+-- shared_ptr to the type at its own parameters; a function over it at a type argument is a plain
+-- function, one uniform in the parameter a template; a constructor at the expected type's arguments
+data TLp (A : Type) = tnilp | tconsp (x : A) (xs : TLp A)
+sump : TLp Word → Word
+sump l = case l of tnilp → #0; tconsp x xs → %wadd x (rec xs)
+lenp : (A : Type) → TLp A → Word
+lenp A l = case l of tnilp → #0; tconsp x xs → %wadd #1 (rec xs)
+mk3p : Word → TLp Word
+mk3p a = tconsp a (tconsp (%wadd a #1) (tconsp (%wadd a #2) tnilp))
+#same fromx (image-data (didx (code (TLp Word)))) = cat5 (lcons #116 (lcons #101 (lcons #109 (lcons #112 (lcons #108 (lcons #97 (lcons #116 (lcons #101 (lcons #60 (lcons #99 (lcons #108 (lcons #97 (lcons #115 (lcons #115 (lcons #32 (lcons #80 (lcons #48 (lcons #62 (lcons #32 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #68 lnil))))))))))))))))))))))))))) (dec (didx (code (TLp Word)))) (lcons #59 (lcons #10 (lcons #116 (lcons #101 (lcons #109 (lcons #112 (lcons #108 (lcons #97 (lcons #116 (lcons #101 (lcons #60 (lcons #99 (lcons #108 (lcons #97 (lcons #115 (lcons #115 (lcons #32 (lcons #80 (lcons #48 (lcons #62 (lcons #32 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #68 lnil))))))))))))))))))))))))))))) (dec (didx (code (TLp Word)))) (cat5 (lcons #95 (lcons #99 (lcons #48 (lcons #32 (lcons #123 (lcons #32 (lcons #125 (lcons #59 (lcons #10 (lcons #116 (lcons #101 (lcons #109 (lcons #112 (lcons #108 (lcons #97 (lcons #116 (lcons #101 (lcons #60 (lcons #99 (lcons #108 (lcons #97 (lcons #115 (lcons #115 (lcons #32 (lcons #80 (lcons #48 (lcons #62 (lcons #32 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #68 lnil)))))))))))))))))))))))))))))))))))) (dec (didx (code (TLp Word)))) (lcons #95 (lcons #99 (lcons #49 (lcons #32 (lcons #123 (lcons #32 (lcons #80 (lcons #48 (lcons #32 (lcons #102 (lcons #48 (lcons #59 (lcons #32 (lcons #115 (lcons #116 (lcons #100 (lcons #58 (lcons #58 (lcons #115 (lcons #104 (lcons #97 (lcons #114 (lcons #101 (lcons #100 (lcons #95 (lcons #112 (lcons #116 (lcons #114 (lcons #60 (lcons #68 lnil)))))))))))))))))))))))))))))) (dec (didx (code (TLp Word)))) (cat5 (lcons #60 (lcons #80 (lcons #48 (lcons #62 (lcons #62 (lcons #32 (lcons #102 (lcons #49 (lcons #59 (lcons #32 (lcons #125 (lcons #59 (lcons #10 (lcons #116 (lcons #101 (lcons #109 (lcons #112 (lcons #108 (lcons #97 (lcons #116 (lcons #101 (lcons #60 (lcons #99 (lcons #108 (lcons #97 (lcons #115 (lcons #115 (lcons #32 (lcons #80 (lcons #48 (lcons #62 (lcons #32 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #68 lnil)))))))))))))))))))))))))))))))))))))))) (dec (didx (code (TLp Word)))) (lcons #32 (lcons #123 (lcons #32 (lcons #115 (lcons #116 (lcons #100 (lcons #58 (lcons #58 (lcons #118 (lcons #97 (lcons #114 (lcons #105 (lcons #97 (lcons #110 (lcons #116 (lcons #60 (lcons #68 lnil))))))))))))))))) (dec (didx (code (TLp Word)))) (cat3 (lcons #95 (lcons #99 (lcons #48 (lcons #60 (lcons #80 (lcons #48 (lcons #62 (lcons #44 (lcons #32 (lcons #68 lnil)))))))))) (dec (didx (code (TLp Word)))) (lcons #95 (lcons #99 (lcons #49 (lcons #60 (lcons #80 (lcons #48 (lcons #62 (lcons #62 (lcons #32 (lcons #118 (lcons #59 (lcons #32 (lcons #125 (lcons #59 (lcons #10 lnil))))))))))))))))))
+#same snd (image-def lnil lnil (gidx (code sump))) = x-exported
+#same snd (image-def lnil lnil (gidx (code lenp))) = x-exported
+#same snd (image-def lnil lnil (gidx (code mk3p))) = x-exported
+lst-prefix p l = case p of lnil → true; lcons x r → (case l of lcons y s → andb (%weq x y) (lst-prefix r s); lnil → false)
+lst-has p l = if lst-prefix p l then true else (case l of lnil → false; lcons y s → lst-has p s)
+-- the parameter of lenp is a template parameter, and the case's alternatives template lambdas
+#same lst-prefix (lcons #116 (lcons #101 (lcons #109 (lcons #112 (lcons #108 (lcons #97 (lcons #116 (lcons #101 (lcons #60 (lcons #99 (lcons #108 (lcons #97 (lcons #115 (lcons #115 (lcons #32 (lcons #80 (lcons #48 (lcons #62 (lcons #10 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #103 lnil))))))))))))))))))))))))))))) (fst (image-def lnil lnil (gidx (code lenp)))) = true
+#same lst-has (lcons #91 (lcons #38 (lcons #93 (lcons #60 (lcons #99 (lcons #108 (lcons #97 (lcons #115 (lcons #115 (lcons #32 (lcons #81 (lcons #48 (lcons #62 (lcons #40 (lcons #99 (lcons #111 (lcons #110 (lcons #115 (lcons #116 (lcons #32 (lcons #68 lnil))))))))))))))))))))) (fst (image-def lnil lnil (gidx (code lenp)))) = true

@@ -81,7 +81,7 @@ p-type env ts =
          else if lst-eq nm (lcons #99 (lcons #117 (lcons #98 (lcons #58 (lcons #58 (lcons #98 (lcons #121 (lcons #116 (lcons #101 (lcons #115 lnil)))))))))) then obind (p-punct r (lcons #60 lnil)) (λ r2 → obind (p-num r2) (λ nr2 → omap (λ r3 → (cpty #4 (cwlit (fst nr2)) , r3)) (p-punct (snd nr2) (lcons #62 lnil))))
          else if lst-eq nm (lcons #115 (lcons #116 (lcons #100 (lcons #58 (lcons #58 (lcons #112 (lcons #97 (lcons #105 (lcons #114 lnil))))))))) then obind (p-punct r (lcons #60 lnil)) (λ r2 → obind (p-type env r2) (λ ar → obind (p-punct (snd ar) (lcons #44 lnil)) (λ r3 → obind (p-type env r3) (λ br → omap (λ r4 → (csigma (fst ar) (fst br) , r4)) (p-punct (snd br) (lcons #62 lnil))))))
          else (case dname-of nm of
-                 some d → some (cdata d lnil , r)
+                 some d → if is-tok r #2 (lcons #60 lnil) then omap (λ tr → (cdata d (fst tr) , snd tr)) (p-targs env (ltail-r r) lnil) else some (cdata d lnil , r)
                  none → (case env-index env nm #0 of some i → some (cvar i , r); none → none))
 -- ---- expressions
 p-expr names env ts = obind (p-primary names env ts) (λ er → p-postfix names env (fst er) (snd er))
@@ -116,11 +116,13 @@ p-paren names env ts =
                  (if %weq (tok-kind t) #2 then
                     (case op-code (tok-text t) of
                        some k →
-                         if andb (%weq k #2) (is-tok r2 #1 (lcons #1 lnil)) then (if is-tok (ltail-r r2) #2 (lcons #41 lnil) then some (cwsucc a , ltail-r (ltail-r r2)) else bin-rest names env k a r2)
+                         if andb (%weq k #2) (is-num r2 #1) then (if is-tok (ltail-r r2) #2 (lcons #41 lnil) then some (cwsucc a , ltail-r (ltail-r r2)) else bin-rest names env k a r2)
                          else bin-rest names env k a r2
                        none → none)
                   else none)
                lnil → none))
+-- a number token with the value n (its text is the word, not a list)
+is-num ts n = case ts of lcons t r → (if %weq (tok-kind t) #1 then %weq (tok-text t) n else false); lnil → false
 bin-rest names env k a ts = obind (p-expr names env ts) (λ br → omap (λ r → (cwop k a (fst br) , r)) (p-punct (snd br) (lcons #41 lnil)))
 -- the word operators: == 0, < 1, + 2, - 4 (code.cub's cwop)
 op-code txt = if lst-eq txt (lcons #61 (lcons #61 lnil)) then some #0 else if lst-eq txt (lcons #60 lnil) then some #1 else if lst-eq txt (lcons #43 lnil) then some #2 else if lst-eq txt (lcons #45 lnil) then some #4 else none
@@ -152,12 +154,12 @@ p-named names env nm r =
   else if lst-eq nm (lcons #99 (lcons #117 (lcons #98 (lcons #58 (lcons #58 (lcons #115 (lcons #116 (lcons #111 (lcons #114 (lcons #101 (lcons #54 (lcons #52 lnil)))))))))))) then p-access names env #1032 r
   else if lst-eq nm (lcons #99 (lcons #117 (lcons #98 (lcons #58 (lcons #58 (lcons #115 (lcons #116 (lcons #111 (lcons #114 (lcons #101 (lcons #51 (lcons #50 lnil)))))))))))) then p-access names env #1028 r
   else if lst-eq nm (lcons #99 (lcons #117 (lcons #98 (lcons #58 (lcons #58 (lcons #98 (lcons #108 (lcons #101 (lcons #110 lnil))))))))) then p-access names env #1280 r
-  else if lst-eq nm (lcons #115 (lcons #116 (lcons #100 (lcons #58 (lcons #58 (lcons #109 (lcons #97 (lcons #107 (lcons #101 (lcons #95 (lcons #115 (lcons #104 (lcons #97 (lcons #114 (lcons #101 (lcons #100 lnil)))))))))))))))) then obind (p-punct r (lcons #60 lnil)) (λ r2 → obind (p-ident r2) (λ dr → obind (p-punct (snd dr) (lcons #62 lnil)) (λ r3 → obind (p-punct r3 (lcons #40 lnil)) (λ r4 → obind (p-expr names env r4) (λ er → omap (λ r5 → (fst er , r5)) (p-punct (snd er) (lcons #41 lnil)))))))
+  else if lst-eq nm (lcons #115 (lcons #116 (lcons #100 (lcons #58 (lcons #58 (lcons #109 (lcons #97 (lcons #107 (lcons #101 (lcons #95 (lcons #115 (lcons #104 (lcons #97 (lcons #114 (lcons #101 (lcons #100 lnil)))))))))))))))) then obind (p-punct r (lcons #60 lnil)) (λ r2 → obind (p-type env r2) (λ dr → obind (p-punct (snd dr) (lcons #62 lnil)) (λ r3 → obind (p-punct r3 (lcons #40 lnil)) (λ r4 → obind (p-expr names env r4) (λ er → omap (λ r5 → (fst er , r5)) (p-punct (snd er) (lcons #41 lnil)))))))
   else (case cname-of nm of
-          some dc → p-con names env (fst dc) (snd dc) r
+          some dc → p-con names env (fst dc) (snd dc) (skip-targs r)
           none →
             (case dname-of nm of
-               some d → (case p-punct r (lcons #123 lnil) of some r2 → (case p-ident r2 of some cr → (case cname-of (fst cr) of some dc → obind (p-con names env (fst dc) (snd dc) (snd cr)) (λ er → omap (λ r3 → (fst er , r3)) (p-punct (snd er) (lcons #125 lnil))); none → none); none → none); none → none)
+               some d → (case p-punct (skip-targs r) (lcons #123 lnil) of some r2 → (case p-ident r2 of some cr → (case cname-of (fst cr) of some dc → obind (p-con names env (fst dc) (snd dc) (skip-targs (snd cr))) (λ er → omap (λ r3 → (fst er , r3)) (p-punct (snd er) (lcons #125 lnil))); none → none); none → none); none → none)
                none →
                  (case env-index env nm #0 of
                     some i → some (cvar i , r)
@@ -199,27 +201,31 @@ p-lambda names env ts =
 p-fix names env r =
   obind (p-punct r (lcons #40 lnil)) (λ r1 → obind (p-punct r1 (lcons #91 lnil)) (λ r2 → obind (p-punct r2 (lcons #38 lnil)) (λ r3 → obind (p-punct r3 (lcons #93 lnil)) (λ r4 → obind (p-punct r4 (lcons #40 lnil)) (λ r5 →
   obind (p-tok r5 #0 (lcons #97 (lcons #117 (lcons #116 (lcons #111 lnil))))) (λ r6 → obind (p-punct r6 (lcons #38 lnil)) (λ r7 → obind (p-tok r7 #0 (lcons #115 (lcons #101 (lcons #108 (lcons #102 lnil))))) (λ r8 → obind (p-punct r8 (lcons #44 lnil)) (λ r9 → obind (p-tok r9 #0 (lcons #99 (lcons #111 (lcons #110 (lcons #115 (lcons #116 lnil)))))) (λ r10 →
-  obind (p-ident r10) (λ dr → obind (p-punct (snd dr) (lcons #38 lnil)) (λ r11 → obind (p-tok r11 #0 (lcons #120 lnil)) (λ r12 → obind (p-punct r12 (lcons #41 lnil)) (λ r13 → obind (p-punct r13 (lcons #45 (lcons #62 lnil))) (λ r14 →
+  obind (p-ident r10) (λ dr0 → obind (p-punct (snd dr0) (lcons #38 lnil)) (λ r11 → obind (p-tok r11 #0 (lcons #120 lnil)) (λ r12 → obind (p-punct r12 (lcons #41 lnil)) (λ r13 → obind (p-punct r13 (lcons #45 (lcons #62 lnil))) (λ r14 →
   obind (p-type env r14) (λ tr → obind (p-punct (snd tr) (lcons #123 lnil)) (λ r15 → obind (p-tok r15 #0 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 lnil))))))) (λ r16 → obind (p-tok r16 #0 (lcons #115 (lcons #116 (lcons #100 (lcons #58 (lcons #58 (lcons #118 (lcons #105 (lcons #115 (lcons #105 (lcons #116 lnil))))))))))) (λ r17 → obind (p-punct r17 (lcons #40 lnil)) (λ r18 →
-  obind (p-tok r18 #0 (lcons #99 (lcons #117 (lcons #98 (lcons #58 (lcons #58 (lcons #111 (lcons #118 (lcons #101 (lcons #114 (lcons #108 (lcons #111 (lcons #97 (lcons #100 (lcons #101 (lcons #100 lnil)))))))))))))))) (λ r19 → obind (p-punct r19 (lcons #123 lnil)) (λ r20 → obind (dname-of (fst dr)) (λ d →
-  obind (p-alts names env d #0 r20) (λ ar → obind (p-punct (snd ar) (lcons #44 lnil)) (λ r21 → obind (p-tok r21 #0 (lcons #120 lnil)) (λ r22 → obind (p-punct r22 (lcons #46 lnil)) (λ r23 → obind (p-tok r23 #0 (lcons #118 lnil)) (λ r24 →
+  obind (p-tok r18 #0 (lcons #99 (lcons #117 (lcons #98 (lcons #58 (lcons #58 (lcons #111 (lcons #118 (lcons #101 (lcons #114 (lcons #108 (lcons #111 (lcons #97 (lcons #100 (lcons #101 (lcons #100 lnil)))))))))))))))) (λ r19 → obind (p-punct r19 (lcons #123 lnil)) (λ r20 →
+  obind (p-alts names env #0 r20) (λ ar → obind (case dname-of (fst dr0) of some d0 → some d0; none → fst ar) (λ d → obind (p-punct (snd (snd ar)) (lcons #44 lnil)) (λ r21 → obind (p-tok r21 #0 (lcons #120 lnil)) (λ r22 → obind (p-punct r22 (lcons #46 lnil)) (λ r23 → obind (p-tok r23 #0 (lcons #118 lnil)) (λ r24 →
   obind (p-punct r24 (lcons #41 lnil)) (λ r25 → obind (p-punct r25 (lcons #59 lnil)) (λ r26 → obind (p-punct r26 (lcons #125 lnil)) (λ r27 → obind (p-punct r27 (lcons #41 lnil)) (λ r28 → obind (p-punct r28 (lcons #40 lnil)) (λ r29 →
-  obind (p-expr names env r29) (λ xr → omap (λ r30 → (celim d (clam (fst tr)) (fst ar) (fst xr) , r30)) (p-punct (snd xr) (lcons #41 lnil))))))))))))))))))))))))))))))))))))
+  obind (p-expr names env r29) (λ xr → omap (λ r30 → (celim d (clam (fst tr)) (fst (snd ar)) (fst xr) , r30)) (p-punct (snd xr) (lcons #41 lnil))))))))))))))))))))))))))))))))))))
 -- the alternatives, in constructor order: [&](const D_c &k) { return [static_cast<T>(] e [)]; }
 -- each a λ over the fields then the hypotheses, as the source's branch
-p-alts names env d c ts =
-  if is-tok ts #2 (lcons #125 lnil) then some (lnil , ltail-r ts)
+-- (the type , (the alternatives , rest)); the type none when there is no alternative
+p-alts names env c ts =
+  if is-tok ts #2 (lcons #125 lnil) then some (none , (lnil , ltail-r ts))
   else
-    obind (p-punct ts (lcons #91 lnil)) (λ r1 → obind (p-punct r1 (lcons #38 lnil)) (λ r2 → obind (p-punct r2 (lcons #93 lnil)) (λ r3 → obind (p-punct r3 (lcons #40 lnil)) (λ r4 → obind (p-tok r4 #0 (lcons #99 (lcons #111 (lcons #110 (lcons #115 (lcons #116 lnil)))))) (λ r5 →
-    obind (p-ident r5) (λ cr → obind (p-punct (snd cr) (lcons #38 lnil)) (λ r6 → obind (p-tok r6 #0 (lcons #107 lnil)) (λ r7 → obind (p-punct r7 (lcons #41 lnil)) (λ r8 → obind (p-punct r8 (lcons #123 lnil)) (λ r9 → obind (p-tok r9 #0 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 lnil))))))) (λ r10 →
+    obind (p-punct ts (lcons #91 lnil)) (λ r1 → obind (p-punct r1 (lcons #38 lnil)) (λ r2 → obind (p-punct r2 (lcons #93 lnil)) (λ r3 → obind (p-punct (skip-targs r3) (lcons #40 lnil)) (λ r4 → obind (p-tok r4 #0 (lcons #99 (lcons #111 (lcons #110 (lcons #115 (lcons #116 lnil)))))) (λ r5 →
+    obind (p-ident r5) (λ cr → obind (cname-of (fst cr)) (λ dc → let d = fst dc in obind (p-punct (skip-targs (snd cr)) (lcons #38 lnil)) (λ r6 → obind (p-tok r6 #0 (lcons #107 lnil)) (λ r7 → obind (p-punct r7 (lcons #41 lnil)) (λ r8 → obind (p-punct r8 (lcons #123 lnil)) (λ r9 → obind (p-tok r9 #0 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 lnil))))))) (λ r10 →
     let ks = cshape d c
         hs = rec-fields ks #0
         env2 = push-hyp-names hs (push-field-names ks #0 env)
         n = %wadd (lst-count ks) (lst-count hs)
     in obind (p-alt-body names env2 r10) (λ er → obind (p-punct (snd er) (lcons #59 lnil)) (λ r11 → obind (p-punct r11 (lcons #125 lnil)) (λ r12 →
        let body = clams-n n (fst er)
-       in if is-tok r12 #2 (lcons #44 lnil) then omap (λ rr → (lcons body (fst rr) , snd rr)) (p-alts names env d (%wsucc c) (ltail-r r12))
-          else omap (λ rr → (lcons body (fst rr) , snd rr)) (p-alts names env d (%wsucc c) r12)))))))))))))))
+       in if is-tok r12 #2 (lcons #44 lnil) then omap (λ rr → (some d , (lcons body (fst (snd rr)) , snd (snd rr)))) (p-alts names env (%wsucc c) (ltail-r r12))
+          else omap (λ rr → (some d , (lcons body (fst (snd rr)) , snd (snd rr)))) (p-alts names env (%wsucc c) r12))))))))))))))))
+-- <…> skipped to the matching >, when present (template arguments, a lambda's template parameters)
+skip-targs ts = if is-tok ts #2 (lcons #60 lnil) then skip-angle (ltail-r ts) #1 else ts
+skip-angle ts n = if %weq n #0 then ts else (case ts of lnil → lnil; lcons t r → if is-tok ts #2 (lcons #60 lnil) then skip-angle r (%wsucc n) else if is-tok ts #2 (lcons #62 lnil) then skip-angle r (%wsub n #1) else skip-angle r n)
 -- the static_cast an alternative's result carries is the result type's, not a conversion
 p-alt-body names env ts =
   if is-tok ts #0 (lcons #115 (lcons #116 (lcons #97 (lcons #116 (lcons #105 (lcons #99 (lcons #95 (lcons #99 (lcons #97 (lcons #115 (lcons #116 lnil))))))))))) then obind (p-punct (ltail-r ts) (lcons #60 lnil)) (λ r1 → obind (p-type env r1) (λ tr → obind (p-punct (snd tr) (lcons #62 lnil)) (λ r2 → obind (p-punct r2 (lcons #40 lnil)) (λ r3 → obind (p-expr names env r3) (λ er → omap (λ r4 → (fst er , r4)) (p-punct (snd er) (lcons #41 lnil)))))))
@@ -256,6 +262,7 @@ header-defs names ts =
     lcons t r →
       if is-tok ts #0 (lcons #110 (lcons #97 (lcons #109 (lcons #101 (lcons #115 (lcons #112 (lcons #97 (lcons #99 (lcons #101 lnil))))))))) then header-defs names (skip-block (skip-to-brace r))
       else if is-tok ts #0 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 lnil)))))) then header-defs names (skip-struct r)
+      else if andb (is-tok ts #0 (lcons #116 (lcons #101 (lcons #109 (lcons #112 (lcons #108 (lcons #97 (lcons #116 (lcons #101 lnil))))))))) (is-tok (skip-targs r) #0 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 lnil))))))) then header-defs names (skip-struct (ltail-r (skip-targs r)))
       else (case p-def names ts of
               some dr → lcons (fst dr) (header-defs names (snd dr))
               none → lnil)
@@ -314,3 +321,10 @@ hdr-x = cxx-image lnil lnil (lcons (gidx (code add3x)) (lcons (gidx (code tsumx)
 -- count is the run-time parameters')
 lam-count c = case c of clam b → %wsucc (lam-count b); _ → #0
 #same omap lam-count (reimport-def lnil (fst (image-def lnil lnil (gidx (code ld8x))))) = some #1
+-- a parameterized data type's definitions read back: the template parameter a λ, the constructors
+-- without their type arguments (a code's constructor has none), the case with its motive
+#same reimport-def lnil (fst (image-def lnil lnil (gidx (code sump)))) = unfold (gidx (code sump))
+#same reimport-def lnil (fst (image-def lnil lnil (gidx (code lenp)))) = unfold (gidx (code lenp))
+#same reimport-def lnil (fst (image-def lnil lnil (gidx (code mk3p)))) = unfold (gidx (code mk3p))
+hdr-p = cxx-image lnil lnil (lcons (gidx (code sump)) (lcons (gidx (code lenp)) (lcons (gidx (code mk3p)) lnil)))
+#same lst-len (reimport-header lnil (fst hdr-p)) = #3
