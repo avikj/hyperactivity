@@ -174,3 +174,115 @@ cp1 = code (λ x → plus (plus (times x x) (times 3 x)) 1)
 -- outside the fragment (a second variable, a successor): none
 #same D-code (code (λ x → λ y → times x y)) = none
 #same D-code (code (λ x → suc x)) = none
+-- ---------------------------------------------------------------- D-correct over the fragment's codes (F31)
+-- The fragment's codes as a typed mirror: one constructor per shape of Code the fragment has —
+-- the λ's variable (cvar #0), a numeral's zero and successor (ccon of Nat), and the globals plus
+-- and times applied to two codes (capp (capp (cglob g) a) b). Code itself is untyped (it is
+-- declared before the checker), so a checked theorem quantifies over this mirror; the copy
+-- between the two (pcode-of-code, code-of-pcode, below) is constructor for constructor, and the
+-- readings check that it round-trips and that eval-g agrees with cev.
+data PCode = qx | qzero | qsuc (k : PCode) | qplus (a : PCode) (b : PCode) | qtimes (a : PCode) (b : PCode)
+-- what eval-g computes for the fragment, under the λ applied to x
+cev : Nat → PCode → Nat
+cev x c =
+  case c return (λ w → Nat) of
+    qx → x
+    qzero → zero
+    qsuc k → suc (rec k)
+    qplus a b → plus (rec a) (rec b)
+    qtimes a b → times (rec a) (rec b)
+-- the derivative on codes: a code to a code, the product rule writing plus and times again
+dpc : PCode → PCode
+dpc c =
+  case c return (λ w → PCode) of
+    qx → qsuc qzero
+    qzero → qzero
+    qsuc k → rec k
+    qplus a b → qplus (rec a) (rec b)
+    qtimes a b → qplus (qtimes (rec a) b) (qtimes a (rec b))
+-- the polynomial a code denotes (a numeral's successor is 1 + k, plus recursing on its first)
+pl-of-pc : PCode → Pl
+pl-of-pc c =
+  case c return (λ w → Pl) of
+    qx → kx
+    qzero → kc zero
+    qsuc k → kadd (kc (suc zero)) (rec k)
+    qplus a b → kadd (rec a) (rec b)
+    qtimes a b → kmul (rec a) (rec b)
+cev-pl : (x : Nat) (c : PCode) → cev x c ≡ pat x (pl-of-pc c)
+cev-pl x c =
+  case c return (λ w → cev x w ≡ pat x (pl-of-pc w)) of
+    qx → λ i → x
+    qzero → λ i → zero
+    qsuc k → λ i → suc (rec k i)
+    qplus a b → cong2N (λ u v → plus u v) (rec a) (rec b)
+    qtimes a b → cong2N (λ u v → times u v) (rec a) (rec b)
+-- the derivative code denotes D of the polynomial
+dpc-pl : (x : Nat) (c : PCode) → cev x (dpc c) ≡ pat x (D (pl-of-pc c))
+dpc-pl x c =
+  case c return (λ w → cev x (dpc w) ≡ pat x (D (pl-of-pc w))) of
+    qx → λ i → suc zero
+    qzero → λ i → zero
+    qsuc k → rec k
+    qplus a b → cong2N (λ u v → plus u v) (rec a) (rec b)
+    qtimes a b →
+      cong2N (λ u v → plus u v)
+        (cong2N (λ u v → times u v) (rec a) (cev-pl x b))
+        (cong2N (λ u v → times u v) (cev-pl x a) (rec b))
+-- D-correct: for every code c of the fragment, the code dpc c is its derivative — what c computes
+-- at x + h is what it computes at x, plus h times what dpc c computes at x, plus h² times a
+-- remainder (the Taylor form over Nat; taylor above, transported along cev-pl and dpc-pl)
+D-correct-at : (c : PCode) (x h q : Nat) →
+               pat (plus x h) (pl-of-pc c) ≡ TF h (pat x (pl-of-pc c)) (pat x (D (pl-of-pc c))) q →
+               cev (plus x h) c ≡ TF h (cev x c) (cev x (dpc c)) q
+D-correct-at c x h q t =
+  transN (cev-pl (plus x h) c) (transN t (symN (cong2N (λ u v → TF h u v q) (cev-pl x c) (dpc-pl x c))))
+D-correct : (c : PCode) (x h : Nat) → (q : Nat) × cev (plus x h) c ≡ TF h (cev x c) (cev x (dpc c)) q
+D-correct c x h = (fst (taylor (pl-of-pc c) x h) , D-correct-at c x h (fst (taylor (pl-of-pc c) x h)) (snd (taylor (pl-of-pc c) x h)))
+-- and forward mode over the same codes computes what the derivative code computes
+D-correct-fwd : (c : PCode) (x : Nat) → snd (fwd x (pl-of-pc c)) ≡ cev x (dpc c)
+D-correct-fwd c x = transN (fwd-der x (pl-of-pc c)) (symN (dpc-pl x c))
+-- the copy between Code and the mirror (untyped: Code is). A numeral's constructor is Nat's
+nat-di = case code zero of ccon d k fs ds → d; _ → #0
+plus-gi = gidx-r (code plus)
+times-gi = gidx-r (code times)
+pcode-of-code c =
+  case c of
+    cann t T → pcode-of-code t
+    cvar v → (if %weq v #0 then some qx else none)
+    ccon d k fs ds →
+      (if %weq d nat-di
+       then (if %weq k #0 then some qzero
+             else (case fs of lcons n r → omap (λ m → qsuc m) (pcode-of-code n); _ → none))
+       else none)
+    capp f x →
+      (case f of
+         capp g a →
+           (case rg-glob g of
+              some gi →
+                if %weq gi plus-gi then obind (pcode-of-code a) (λ pa → omap (λ pb → qplus pa pb) (pcode-of-code x))
+                else if %weq gi times-gi then obind (pcode-of-code a) (λ pa → omap (λ pb → qtimes pa pb) (pcode-of-code x))
+                else none
+              none → none)
+         _ → none)
+    _ → none
+code-of-pcode p =
+  case p of
+    qx → cvar #0
+    qzero → ccon nat-di #0 lnil lnil
+    qsuc k → ccon nat-di #1 (lcons (code-of-pcode k) lnil) lnil
+    qplus a b → capp (capp (cglob plus-gi) (code-of-pcode a)) (code-of-pcode b)
+    qtimes a b → capp (capp (cglob times-gi) (code-of-pcode a)) (code-of-pcode b)
+-- the derivative of a program of the fragment, by the checked dpc
+D-code-c c = omap (λ p → clam (code-of-pcode (dpc p))) (pcode-of-code (lam-body c))
+pc1 = pcode-of-code (lam-body cp1)
+#same pc1 = some (qplus (qplus (qtimes qx qx) (qtimes (qsuc (qsuc (qsuc qzero))) qx)) (qsuc qzero))
+-- the copy round-trips on the mirror, and eval-g of a mirrored code is cev
+#same obind pc1 (λ p → pcode-of-code (code-of-pcode p)) = pc1
+#same omap (λ p → eval-g lnil (clam (code-of-pcode p)) 2) pc1 = omap (λ p → cev 2 p) pc1
+#same omap (λ d → eval-g lnil d 2) (D-code-c cp1) = some 7
+#same omap (λ p → cev 2 (dpc p)) pc1 = some 7
+-- the theorem at the code read from the source term: remainder 1 at x = 2, h = 1, as taylor's
+#same omap (λ p → fst (D-correct p 2 1)) pc1 = some 1
+#same D-code-c (code (λ x → suc x)) = some (clam (code-of-pcode (qsuc qzero)))
+#same D-code-c (code (λ x → λ y → times x y)) = none

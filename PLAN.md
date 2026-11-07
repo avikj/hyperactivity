@@ -1346,7 +1346,14 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
     `ring-eq`; the stuck-primitive neutrals have a code (`cprim`, `c8931ab`); `%view` covers
     every value kind the net has (stuck calls as `wcofix`/`wproj`, primitives as `wprim`,
     words with the big case under `wwlit`); `wnative id k` views a `V_NATIVE` handle (B18,
-    2026-11-06). Open: `D-correct` stated over the fragment's codes.
+    2026-11-06). `D-correct` over the fragment's codes (2026-11-06, `lib/autodiff.cub`): `PCode`
+    mirrors the fragment's shapes of `Code` constructor for constructor (the λ's variable, a
+    numeral's zero and successor, `plus`/`times` applied), `cev` is what `eval-g` computes on
+    it, `dpc` the derivative code to code, and `D-correct : (c : PCode) (x h : Nat) → Σ q, cev
+    (x + h) c ≡ cev x c + h·cev x (dpc c) + h²·q` is checked by induction on codes (with
+    `D-correct-fwd`: forward mode agrees); the untyped copy `pcode-of-code`/`code-of-pcode`
+    round-trips and `eval-g` agrees with `cev` on the readings (`Code` is untyped, declared
+    before the checker, so the theorem quantifies over the mirror).
 32. **Status (2026-11-06):** the two verified checkers (`lib/linproof.cub`, `lib/eqproof.cub`), the ring checker, the directed Farkas search (`89ec3e0e`) and the bridges from codes (`d1e5f790`) are built, and over `Int` too (`lib/intproof.cub`, `lib/intlin.cub`: the checker is the word checker over the coordinates of differences, its soundness transported); the elaborator calling `check-cert` on holes is open. Spec as written: Certificate checkers as verified terms over codes; search unverified (in-language or SMT);
     unchecked solvers marked. Essential.
 33. **Status (2026-11-06):** built as `lib/nav.cub` with `lib/cost.cub`'s models (size, recorded steps through `%gsteps`, `13f09662`). Spec as written: Navigation over established identities. Precisely: the store holds identities; a view is
@@ -2715,7 +2722,10 @@ Revision 1.
   `deriving Show` as terms over `dent` (the data table) producing definitions. Autodiff as
   the example: `D : Code → Code` for the first-order arithmetic fragment with `D-correct :
   eval (D f) ≡ derivative (eval f)` stated for polynomial `f` (a proof over the fragment's
-  codes). ~500.
+  codes). ~500. DONE 2026-11-06 (item 31's status): over `PCode`, the typed mirror of the
+  fragment's codes, the derivative in the Taylor form over `Nat`. Found on the way: `let t =
+  taylor … in (fst t , … snd t …)` in a checked body exhausted memory where the same term with
+  the projections written out checks in 9k steps (`D-correct` is written so).
 - **F32, status (2026-11-06).** Both verified checkers exist as typed terms, each with its
   soundness theorem checked by the machine: `lib/linproof.cub` (`cert-sound`: a Farkas
   certificate that checks proves `a ≤ b` wherever the hypotheses hold; order as a witnessed
