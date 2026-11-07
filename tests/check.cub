@@ -325,3 +325,19 @@ once2 n = case n of z2 → n; s2 k → z2
 #usage fine0
 #usage useTk
 #usage lenl
+-- through the composition clauses (§15): a type at 0 that a transport only runs along stays
+-- erasable; a path type's endpoint in the line is read (it becomes a side), so it is used
+tr0 : (X :0 Type) → X → X
+tr0 X x = comp (λ i → X) (λ i → []) x
+#usage tr0
+#fail
+tr-end : (a :0 N2) → PathP (λ i → N2) a a → PathP (λ i → N2) a a
+tr-end a p = comp (λ i → PathP (λ k → N2) a a) (λ i → []) p
+-- a linear value in both the tube and the base is one resource at its two ends
+lin-tb : (n :1 N2) → PathP (λ j → N2) n n
+lin-tb n = λ j → comp (λ i → N2) (λ i → [ j = 0 ↦ n ]) n
+#usage lin-tb
+-- twice within the base is still twice
+#fail
+lin-twice : (n :1 N2) → N2
+lin-twice n = comp (λ i → N2) (λ i → []) (add2 n n)

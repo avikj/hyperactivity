@@ -1432,8 +1432,9 @@ cost, roughly the number of monomial insertions; the proof term is constant.
   `lib/cost.cub`'s `navigate-best`).
 - Lévy-optimal sharing versus full laziness plus memo.
 - Cartesian cubical and higher observational type theory as alternative preludes.
-- Multiplicities over cubical paths: the usage rules through the composition clauses are to be
-  written (bounded; outcome not in doubt).
+- Multiplicities over cubical paths: the usage rules through the composition clauses are
+  written (2026-11-06, 18.1: the line read for what the composition reads, tube and base
+  joined).
 
 ## 16. The ledger
 
@@ -1686,7 +1687,8 @@ Each at revision 2 after a critical pass. Section numbers inside each spec are i
 passes into `V_PI.x` and `cpi m A B`, conversion ignoring it; usage computed after a
 definition checks, in one walk (`usage` in `lib/check.cub`): variables 1, arguments by the
 callee's binder or its computed usage (`%gusage`, so `lib/std.cub`'s unannotated levels and
-types are 0 with no edit), types 0, transport lines and Glue systems ω, case = scrutinee +
+types are 0 with no edit), types 0, Glue systems ω, transport lines read for what the
+composition's computation reads (2026-11-06, below), case = scrutinee +
 join of branches, let as the table; errors `E-erased-used`, `E-linear-dropped`,
 `E-linear-dup`, `E-linear-intro` (a checked definition may not apply a constructor with a
 `:1` field; a primitive may). Usages recorded with the module's forms; `#usage f` prints
@@ -1825,6 +1827,22 @@ lower a binder to `0` at compile time.
 `src/syntax.c` +~120 (`:0`, `:1`, field annotations, `#usage`); `src/lang.c` +~40 (readback,
 error names, `%view` of `wpi m`). About 480 lines.
 
+
+**Through the composition clauses (2026-11-06, §15's thread).** `lusage` in `lib/check.cub`
+reads a composition's line for what its computation reads, in place of counting the whole line
+ω: a path type's endpoints become the sides of the composition in it (ω); a Glue's or a
+universe composition's system runs its equivalences (ω); a data type's parameter that is a type
+is read as a line again, any other parameter counts ω (it can reach a field's path endpoints,
+as a fording index does); a family applied counts ω (it unfolds); a variable in type position
+counts nothing. The tube and the base are joined (`⊔`), not added: where both are present they
+agree (`u 0 = a` on the tube's face), the value on the face is the tube's end and off it is
+built from the base, so a resource in both is one resource at its two ends; used twice within
+the base or within one side it is ω. `tests/check.cub`: `tr0 : (X :0 Type) → X → X` by a
+transport along `X` checks with `X 0` (rejected before); `tr-end`, whose line's endpoint is a
+binder at 0, is rejected (`E-erased-used`); `lin-tb`, a linear `n` in the tube and the base,
+checks with `n 1` (rejected before as `E-linear-dup`); `add2 n n` in the base is still rejected.
+The back end is unaffected where it matters: a region with a composition along an open line is
+`not-fo kan` (B13), so nothing erased by these rules is read by compiled code.
 
 ### 18.2 B12 — Representations as a construct
 

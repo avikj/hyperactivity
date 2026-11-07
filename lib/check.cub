@@ -1421,8 +1421,18 @@ check-recfields c tel fs =
 -- ---------------------------------------------------------------- multiplicities (B11)
 -- The usages of variables xs in a term, a list of words 0, 1, 2 (ω) along xs: 1 + 1 = ω, ω + _ = ω;
 -- a join for alternatives; an argument counts as many times as the function's binder says. Types
--- (the A of a binder, a universe, a path type, an annotation) count nothing; a line of types a
--- transport runs along, and a Glue system, count ω. One walk gives every binder's usage.
+-- (the A of a binder, a universe, a path type, an annotation) count nothing; a Glue system counts
+-- ω. One walk gives every binder's usage.
+-- Through the composition clauses (§15, 2026-11-06): the line a comp runs along is read for what
+-- its computation reads (lusage): a path type's endpoints become the sides of the composition in
+-- it and count ω, a Glue's or a universe composition's system counts ω (its equivalences run), a
+-- data type's parameter that is a type is read as a line again and any other parameter counts ω
+-- (it can reach a field's path endpoints), an application of a family counts ω (it unfolds to who
+-- knows what); a variable in type position counts nothing, so a binder at 0 used only as the type
+-- a transport runs along stays erasable. The tube and the base are joined, not added: where both
+-- are present they agree (u 0 = a on the tube's face), the composition's value on the face is the
+-- tube's end and off it is built from the base, so a resource in both is one resource at its two
+-- ends; a resource used twice within the base, or within one side, is still ω.
 u+ a b = let s = %wadd a b in if %wlt s #2 then s else #2
 u* m u = if %weq m #0 then #0 else if %weq m #1 then u else (if %weq u #0 then #0 else #2)
 v0 xs = lmap (λ x → #0) xs
@@ -1473,8 +1483,8 @@ usage xs c =
     tplam nm b V → usage xs (b (%dim nm))
     tpapp p r V → usage xs p
     tsys bs V → vsys xs bs
-    tcomp A u a V → v+ (v* #2 (usage xs A)) (v+ (usage xs u) (usage xs a))
-    thcomp u a V → v+ (usage xs u) (usage xs a)
+    tcomp A u a V → v+ (lusage xs A) (v⊔ (usage xs u) (usage xs a))
+    thcomp u a V → v⊔ (usage xs u) (usage xs a)
     tgluet A S V → v* #2 (usage xs S)
     tglue S a V → v+ (v* #2 (usage xs S)) (usage xs a)
     tunglue S b V → v+ (v* #2 (usage xs S)) (usage xs b)
@@ -1499,6 +1509,29 @@ usage xs c =
     tguess k g t V → usage xs t
     tspine t V → usage xs t
     _ → v0 xs
+-- the usages of a line of types a composition runs along: what the composition's computation reads
+lusage xs c =
+  case c of
+    tplam nm b V → lusage xs (b (%dim nm))
+    tlam nm b V → lusage xs (b (%var nm Uw) Uw)
+    tpi A nm b V → v+ (lusage xs A) (lusage xs (b (%var nm Uw) Uw))
+    tsigma A nm b V → v+ (lusage xs A) (lusage xs (b (%var nm Uw) Uw))
+    tpathp A a b V → v+ (lusage xs A) (v* #2 (v+ (usage xs a) (usage xs b)))
+    tuniv l V → v0 xs
+    tdata d ps V → lusage-ps xs ps
+    tgluet A S V → v+ (lusage xs A) (v* #2 (usage xs S))
+    thcompu A S V → v* #2 (usage xs S)
+    tann t T V → lusage xs t
+    tguess k g t V → lusage xs t
+    tspine t V → lusage xs t
+    tv y T → v0 xs
+    tg n V → v0 xs
+    tlit V → v0 xs
+    _ → v* #2 (usage xs c)
+lusage-ps xs lnil = v0 xs
+lusage-ps xs (lcons p r) =
+  v+ (case infer p of yes T → (case %view T of wu l → lusage xs p; _ → v* #2 (usage xs p)); _ → v* #2 (usage xs p))
+     (lusage-ps xs r)
 -- a λ's binder against its Π's multiplicity (a linear domain is 1 when the Π says nothing)
 mult-ok x body A m =
   let m2 = if %weq m #2 then (if linear-ty A then #1 else #2) else m
