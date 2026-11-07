@@ -124,6 +124,73 @@ sumPt p k = case p of pt a b → plus (plus a b) k
 #same sumPt (pt 3 40) 2 = 45
 #same sumPt (swapPt (pt 5 6)) 0 = 12
 
+-- item 18, the rest of the record crossing. A sum of records (Shape) is the emitted tagged struct
+-- T<di> { tag; union { struct { f0; } c0; struct { f0; f1; } c1; } u; } by value: its slots are the tag
+-- and the widest constructor's fields (three words), the trampoline switches on the tag both ways, and
+-- the fallback rebuilds the record by branching on the tag slot. A record field that is itself a record
+-- (Seg's Pt ends) is inline: Seg is flat in the emitted program (struct T<Seg> { …; T<Pt> f0; T<Pt> f1;
+-- uint64_t f2; }), five slots in and out
+data Shape = circ (r : Nat) | rect (w : Nat) (h : Nat)
+
+area : Shape → Nat
+area s = case s of circ r → plus r r; rect w h → plus w h
+
+grow : Shape → Shape
+grow s = case s of circ r → rect r 1; rect w h → circ (plus w h)
+
+data Seg = seg (p : Pt) (q : Pt) (k : Nat)
+
+segsum : Seg → Nat
+segsum s = case s of seg p q k → (case p of pt a b → (case q of pt c d → plus (plus a b) (plus (plus c d) k)))
+
+segswap : Seg → Seg
+segswap s = case s of seg p q k → seg q p (plus k 1)
+
+#native area 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (s : Shape) → area s))))
+#native grow 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (s : Shape) → grow s))))
+#native segsum 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (s : Seg) → segsum s))))
+#native segswap 1 = emit-lib-u (lift-program #100000 (program-rep lnil #20 (code (λ (s : Seg) → segswap s))))
+#same area (rect 3 4) = 7
+#same area (circ 5) = 10
+#same grow (rect 3 4) = circ 7
+#same grow (circ 5) = rect 5 1
+#same grow (grow (circ 5)) = circ 6
+#same area (grow (rect 2 9)) = 22
+#same segsum (seg (pt 1 2) (pt 3 4) 5) = 15
+#same segswap (seg (pt 1 2) (pt 3 4) 5) = seg (pt 3 4) (pt 1 2) 6
+#same segsum (segswap (seg (pt 10 20) (pt 30 40) 0)) = 101
+
+-- the same crossing into C written by hand (tests/native/rec.c): struct Shape with its own member names,
+-- struct Seg holding struct Pt inline, and struct Px of B12's primitive fields — UInt32 uint32_t, Float32
+-- float, Float64 double, Int64 int64_t — each slot the field's bits (32 for UInt32 and Float32)
+data Px = px (a : UInt32) (f : Float32) (d : Float64) (i : Int64)
+
+-- each definition is a probe (the identity, or 0): the answer tells that the C entry ran, not the
+-- definition the call falls back to (the emitted crossings above check the fallback's agreement)
+shape-area : Shape → Nat
+shape-area s = 0
+shape-grow : Shape → Shape
+shape-grow s = s
+seg-swap : Seg → Seg
+seg-swap s = s
+px-mix : Px → Px
+px-mix p = p
+px-fbits : Px → Word → Word
+px-fbits p k = k
+
+#native shape-area 1 from "tests/native/rec.c" "shape_area"
+#native shape-grow 1 from "tests/native/rec.c" "shape_grow"
+#native seg-swap 1 from "tests/native/rec.c" "seg_swap"
+#native px-mix 1 from "tests/native/rec.c" "px_mix"
+#native px-fbits 2 from "tests/native/rec.c" "px_fbits"
+#same shape-area (rect 3 4) = 7
+#same shape-area (circ 6) = 12
+#same shape-grow (rect 3 4) = circ 7
+#same shape-grow (circ 5) = rect 5 1
+#same seg-swap (seg (pt 1 2) (pt 3 4) 5) = seg (pt 3 4) (pt 1 2) 6
+#same px-mix (px (u32 #7) (f32ofbits (u32 #1069547520)) (f64 #3) (i64 #20)) = px (u32 #8) (f32ofbits (u32 #1069547520)) (f64 #6) (i64 #40)
+#same px-fbits (px (u32 #7) (f32ofbits (u32 #1069547520)) (f64 #3) (i64 #20)) #1 = #1069547521
+
 -- item 17's re-entry: #native f n at k = P specializes f on its first k arguments while the program runs.
 -- scaleat e b adds b e times; on the first call with e = 3 the net computes P 3 (the specializer
 -- unrolls the loop: ((0 + b) + b) + b), the machine compiles and enters it and keeps it under 3; later

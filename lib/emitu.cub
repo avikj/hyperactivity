@@ -109,10 +109,8 @@ u-mkcc = (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110
 -- boxed field) is the typedef T_d of lib/emitt.cub by value; its values are built as compound
 -- literals, projected as fields, switched on their tag, and boxed/unboxed through generated
 -- functions box_d/unbox_d where a V is wanted or given. Loaded after lib/check.cub for the layouts
-is-flat-layout l = case l of lunion alts → flat-alts alts; _ → false
-flat-alts alts = case alts of lalt l r → andb (flat-fields l) (flat-alts r); _ → true
-flat-fields l = case l of lstruct fs → flat-fields fs; lfield nm fl al r → andb (flat-field fl) (flat-fields r); _ → true
-flat-field fl = case fl of lword → true; _ → false
+-- (lib/emitt.cub's flat-lay: a field a word, or a flat record with a field, inline)
+is-flat-layout l = flat-lay l
 is-flat d = if %weq d #0 then false else is-flat-layout (layout d)
 is-dt t = %wlt #5 t
 dt-of t = %wsub t #6
@@ -505,7 +503,12 @@ add-dts d acc = if orb (%weq d #0) (lmem-w d acc) then acc else (if is-udata d t
 reach-dts d acc = reach-ctors d (nctors-t d) #0 acc
 reach-ctors d n c acc = if %weq c n then acc else reach-ctors d n (%wsucc c) (reach-fields (cshape-r d c) acc)
 reach-fields ks acc = case ks of lnil → acc; lcons k r → reach-fields r (if %weq (fst k) #2 then add-dts (snd k) acc else acc)
-flat-first ds = lapp (keep-if (λ d → is-flat d) ds) (keep-if (λ d → notb-u (is-flat d)) ds)
+flat-first ds = lapp (flat-by-depth ds #0) (keep-if (λ d → notb-u (is-flat d)) ds)
+-- the flat types by how deep they nest records (a type holding one by value after it)
+flat-by-depth ds k = if %wlt #6 k then lnil else lapp (keep-if (λ d → andb (is-flat d) (%weq (flat-depth d #0) k)) ds) (flat-by-depth ds (%wsucc k))
+flat-depth d lim = if %wlt #6 lim then #0 else depth-ctors d (nctors-t d) #0 lim #0
+depth-ctors d n c lim acc = if %weq c n then acc else depth-ctors d n (%wsucc c) lim (depth-fields (cshape-r d c) lim acc)
+depth-fields ks lim acc = case ks of lnil → acc; lcons k r → depth-fields r lim (if %weq (fst k) #2 then %wmax acc (%wsucc (flat-depth (snd k) (%wsucc lim))) else acc)
 keep-if p l = case l of lnil → lnil; lcons x r → (if p x then lcons x (keep-if p r) else keep-if p r)
 flat-list l acc = case l of lnil → acc; lcons x xs → flat-list xs (flat-in x acc)
 flat-alts-in alts acc = case alts of lnil → acc; lcons a r → flat-alts-in r (flat-in (snd (snd a)) acc)
@@ -556,13 +559,29 @@ punbox-fields d ks i =
 box-fn d = cat6 u-boxfn (dec d) u-boxhead (dec d) u-boxbody (lapp (box-cases d (layout d) #0) u-abort)
 box-cases d l c = case l of lunion alts → box-alts d alts c; _ → lnil
 box-alts d alts c = case alts of lalt l r → lapp (box-alt d c (count-fields l)) (box-alts d r (%wsucc c)); _ → lnil
-box-alt d c n = cat7 u-case2 (dec c) u-colon u-mkcc (dec c) u-comma (cat3 (dec n) (box-fields c n #0) (lapp u-rp u-semi))
+box-alt d c n = cat7 u-case2 (dec c) u-colon u-mkcc (dec c) u-comma (cat3 (dec n) (box-fields-k c (cshape-r d c) #0) (lapp u-rp u-semi))
+-- a field: a word mkw(x.u.cK.fI), a nested record box_d2(x.u.cK.fI)
+box-fields-k c ks i =
+  case ks of
+    lnil → lnil
+    lcons k r →
+      let acc = cat4 u-xu (dec c) u-dot-f (dec i)
+          e = if %weq (fst k) #2 then cat4 u-boxname-c (dec (snd k)) u-lp (lapp acc u-rp) else cat3 u-mkw acc u-rp
+      in cat3 u-comma e (box-fields-k c r (%wsucc i))
 box-fields c n i = if %weq i n then lnil else cat7 u-comma u-mkw u-xu (dec c) u-dot-f (dec i) (lapp u-rp (box-fields c n (%wsucc i)))
 -- static T_d unbox_d(V *v) { switch (v->tag - 1) { case c: return (T_d){ .tag = c, .u = { .cK = { v->f[0]->n, … } } }; … } }
 unbox-fn d = cat7 u-unboxfn (dec d) u-unboxname (dec d) u-unboxbody (unbox-cases d (layout d) #0) u-abort
 unbox-cases d l c = case l of lunion alts → unbox-alts d alts c; _ → lnil
 unbox-alts d alts c = case alts of lalt l r → lapp (unbox-alt d c (count-fields l)) (unbox-alts d r (%wsucc c)); _ → lnil
-unbox-alt d c n = cat7 u-case2 (dec c) u-colon u-rcastT (dec d) (cat3 u-brace u-tagdecl (dec c)) (cat5 u-udecl (dec c) u-fdecl (unbox-fields n #0) (lapp u-cend (lcons #32 (lcons #125 u-semi))))
+unbox-alt d c n = cat7 u-case2 (dec c) u-colon u-rcastT (dec d) (cat3 u-brace u-tagdecl (dec c)) (cat5 u-udecl (dec c) u-fdecl (unbox-fields-k (cshape-r d c) #0) (lapp u-cend (lcons #32 (lcons #125 u-semi))))
+-- a field: a word v->f[I]->n, a nested record unbox_d2(v->f[I])
+unbox-fields-k ks i =
+  case ks of
+    lnil → lnil
+    lcons k r →
+      let acc = cat3 u-vf (dec i) u-rb
+          e = if %weq (fst k) #2 then cat4 u-unboxname-c (dec (snd k)) u-lp (lapp acc u-rp) else lapp acc u-n
+      in (case r of lnil → e; _ → cat3 e u-comma (unbox-fields-k r (%wsucc i)))
 unbox-fields n i = if %weq i n then lnil else (case %weq (%wsucc i) n of true → cat3 u-vf (dec i) (lapp u-rb u-n); false → cat5 u-vf (dec i) (lapp u-rb u-n) u-comma (unbox-fields n (%wsucc i)))
 emit-prog-u defs =
   let sigs = sigs-of defs

@@ -451,7 +451,7 @@ void global_park(long g, Cell *op, Cell *glob);
 /* at: an entry specialized when the program runs (item 17, #native f n at k): its index in lang.c's table, -1 otherwise */
 typedef struct { const char *sym; void *fn; int n; unsigned char kind[8]; unsigned char ret; int rdata;
     void *lib; void (*fin)(void *); unsigned char keep;
-    void *tw; int rsd, rnf; int at; } Ffi;   /* tw: the entry's trampoline (words in, words out) when a parameter or the result is a C struct by value (B18); rsd/rnf: the result's data type (machine index) and field count, -1 when not a struct */   /* lib: the library's handle (dlopen); fin: its cubical_release, the finalizer of its handles; keep: a boxed result stays native */
+    void *tw; int rsd, rnf; int at; void *rrec; } Ffi;   /* tw: the entry's trampoline (slots in, slots out) when a parameter or the result is a C struct by value (B18); rsd/rnf: the result's data type (machine index) and slot count, -1 when not a struct; rrec: its record description (lang.c's CRec, read by crec_result) */   /* lib: the library's handle (dlopen); fin: its cubical_release, the finalizer of its handles; keep: a boxed result stays native */
 /* a value kept native (V_NATIVE): refcounted; d -1 an opaque handle (ptr the C object, fin its
  * finalizer, lib the library that made it, k its foreign entry), else the boxed value (ptr a VB
  * the cell owns) of data type d (-2 a word, -3 bytes) */
@@ -460,6 +460,7 @@ Port native_unbox(Cell *c);
 /* kind/ret: PT_* for primitive values, 4 a word, 6 a boxed value (the emitted runtime's V: tag 0 a word in n, tag 2 bytes,
  * tag c+1 constructor c with its fields; B18's #native), 7 an opaque handle (void *, V_NATIVE); rdata: the data type (machine index) of a boxed result, or -1 */
 int data_field_type(int d, int c, int k);
+Port crec_result(const void *rrec, const uint64_t *rb);   /* a struct result's slots as the raw record (B18, records by value) */
 typedef struct VB VB; Port unbox_value(VB *v, int d);   /* a boxed value (B18) into cells: d -2 a word, -3 bytes, a data type's machine index, -1 unknown */   /* the data type of field k of constructor c of data type d: the machine index, -2 a word, -3 bytes, -1 other */
 uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n);
 extern Ffi *FFI; extern int nffi;

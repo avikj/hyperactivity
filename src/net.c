@@ -3017,18 +3017,17 @@ static void interact(Cell *o, Cell *v) {
             }
             if (e->tw) {
                 /* records by value (B18): the trampoline takes the words and gives the result's */
-                uint64_t rb[16] = { 0 };
+                uint64_t rb[32] = { 0 };
                 ((void (*)(const uint64_t *, uint64_t *))e->tw)(a, rb);
                 if (getenv("CUBICAL_SHOW_NATIVE")) fprintf(stderr, "[native] %s through its trampoline, %d words\n", e->sym, n);
                 if (e->rsd >= 0) {
-                    Port f[16]; for (int j = 0; j < e->rnf; j++) f[j] = word_of(rb[j]);
-                    out = con_build(DATA[e->rsd].cons[0], f, NULL);
-                    for (int k = 0; k < n; k++) era(A->v[k]);
+                    out = crec_result(e->rrec, rb);
+                    for (int k = 0; k < n; k++) { if (bd[k] >= 0) free_boxed_d(boxed[k], bd[k]); else free_boxed(boxed[k]); era(A->v[k]); }
                     free(A); link(out, o->port[1]); cell_free(o); return;
                 }
                 r = rb[0];
-                out = word_of(r);
-                for (int k = 0; k < n; k++) era(A->v[k]);
+                out = e->ret == 6 ? unbox_value((VB *)(uintptr_t)r, e->rdata) : word_of(r);
+                for (int k = 0; k < n; k++) { if (bd[k] >= 0) free_boxed_d(boxed[k], bd[k]); else free_boxed(boxed[k]); era(A->v[k]); }
                 free(A); link(out, o->port[1]); cell_free(o); return;
             }
             r = ffi_invoke(e, a, n);

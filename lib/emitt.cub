@@ -44,10 +44,16 @@ field-tk d kind d2 k =
   else if %weq kind #1 then cat4 t-sptr (dec d) (lapp t-starf (dec k)) t-semi
   else if %weq kind #2 then (if flat-dt d2 then cat4 t-T (dec d2) (lapp t-sp (lapp t-fld (dec k))) t-semi else cat4 t-sptr (dec d2) (lapp t-starf (dec k)) t-semi)
   else cat3 t-vptr (dec k) t-semi
--- a flat data type: every field of every constructor a word (its values are by value)
-flat-dt d = flat-ctors d (nctors-t d) #0
-flat-ctors d n c = if %weq c n then true else (if all-words (cshape-r d c) then flat-ctors d n (%wsucc c) else false)
-all-words ks = case ks of lnil → true; lcons kd r → if %weq (fst kd) #0 then all-words r else false
+-- a flat data type: by its layout, every field of every constructor a word or a flat record with a
+-- field (item 18: a nested record inline; a field-less type, Bool, stays a word or a pointer): its
+-- values are by value
+flat-dt d = flat-lay (layout d)
+flat-lay l = case l of lunion alts → flat-lalts alts; _ → false
+flat-lalts alts = case alts of lalt l r → andb (flat-lfields l) (flat-lalts r); _ → true
+flat-lfields l = case l of lstruct fs → flat-lfields fs; lfield nm fl al r → andb (flat-lfield fl) (flat-lfields r); _ → true
+flat-lfield fl = case fl of lword → true; lunion alts → andb (flat-lalts alts) (lay-has-field alts); _ → false
+lay-has-field alts = case alts of lalt l r → orb (lay-nonempty l) (lay-has-field r); _ → false
+lay-nonempty l = case l of lstruct fs → lay-nonempty fs; lfield nm fl al r → true; _ → false
 t-fwd = (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #100 (lcons #101 (lcons #102 (lcons #32 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #84 lnil))))))))))))))))
 t-sp = (lcons #32 lnil)
 t-T = (lcons #84 lnil)
@@ -57,8 +63,8 @@ t-end2 = (lcons #125 (lcons #32 (lcons #117 (lcons #59 (lcons #32 (lcons #125 (l
 t-nl2 = (lcons #10 lnil)
 t-sptr = (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #84 lnil))))))))
 t-starf = (lcons #32 (lcons #42 (lcons #102 lnil)))
-t-vptr = (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #100 (lcons #101 (lcons #102 (lcons #32 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #84 lnil))))))))))))))))0
-t-fld = (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #100 (lcons #101 (lcons #102 (lcons #32 (lcons #115 (lcons #116 (lcons #114 (lcons #117 (lcons #99 (lcons #116 (lcons #32 (lcons #84 lnil))))))))))))))))1
+t-vptr = (lcons #86 (lcons #32 (lcons #42 (lcons #102 lnil))))
+t-fld = (lcons #102 lnil)
 -- a program printing the size of a type: for run.py
 data-idx c = case c of cdata d ps → d; _ → #0
 sizeof-prog d = cat5 t-inc (type-fwd d) (type-c d) t-sizeof (lapp (dec d) t-sizeend)

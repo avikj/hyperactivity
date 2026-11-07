@@ -42,6 +42,32 @@ int main(void) {
     const char *tps[2] = { "struct Pt", "Nat" }; V two = { 0, 2 }; void *psa[2] = { sw, &two };
     V *sm = cubical_call_data("sumPt", 2, psa, tps);
     if (!sm || sm->tag != 0 || sm->n != 46) { fprintf(stderr, "sumPt (pt 41 3) 2 failed\n"); return 1; }
+    /* item 18, the rest: a sum of records as a tag and a union, both ways */
+    struct Shape { uint64_t tag; union { struct { uint64_t r; } circ; struct { uint64_t w, h; } rect; } u; };
+    struct Shape sh = { 1, { .rect = { 3, 4 } } };
+    const char *tsh[1] = { "struct Shape" }; void *ash[1] = { &sh };
+    V *ar = cubical_call_data("area", 1, ash, tsh);
+    if (!ar || ar->tag != 0 || ar->n != 7) { fprintf(stderr, "area (rect 3 4) from C failed\n"); return 1; }
+    struct Shape *g1 = cubical_call_data_r("grow", 1, ash, tsh, "struct Shape");
+    if (!g1 || g1->tag != 0 || g1->u.circ.r != 7) { fprintf(stderr, "grow (rect 3 4) from C failed\n"); return 1; }
+    void *ag1[1] = { g1 };
+    struct Shape *g2 = cubical_call_data_r("grow", 1, ag1, tsh, "struct Shape");
+    if (!g2 || g2->tag != 1 || g2->u.rect.w != 7 || g2->u.rect.h != 1) { fprintf(stderr, "grow (circ 7) from C failed\n"); return 1; }
+    struct Shape bad = { 5, { .circ = { 1 } } }; void *abad[1] = { &bad };
+    if (cubical_call_data("area", 1, abad, tsh)) { fprintf(stderr, "a tag naming no constructor was taken\n"); return 1; }
+    /* a record holding records inline */
+    struct Seg { struct Pt p, q; uint64_t k; } sg = { { 1, 2 }, { 3, 4 }, 5 };
+    const char *tsg[1] = { "struct Seg" }; void *asg[1] = { &sg };
+    struct Seg *ss = cubical_call_data_r("segswap", 1, asg, tsg, "struct Seg");
+    if (!ss || ss->p.a != 3 || ss->p.b != 4 || ss->q.a != 1 || ss->q.b != 2 || ss->k != 6) { fprintf(stderr, "segswap from C failed\n"); return 1; }
+    /* UInt32, Float32, Float64, Int64 at their C widths (a at 0, f at 4, d at 8, i at 16) */
+    struct Px { uint32_t a; float f; double d; int64_t i; } px = { 7, 1.5f, 2.25, -3 };
+    const char *tpx[1] = { "struct Px" }; void *apx[1] = { &px };
+    struct Px *pm = cubical_call_data_r("pxmix", 1, apx, tpx, "struct Px");
+    if (!pm || pm->a != 8 || pm->f != 1.5f || pm->d != 4.5 || pm->i != -6) { fprintf(stderr, "pxmix from C failed\n"); return 1; }
+    printf("area {rect 3 4} = %llu; grow twice = {rect %llu %llu}; segswap = {{%llu,%llu},{%llu,%llu},%llu}; pxmix {7,1.5,2.25,-3} = {%u,%g,%g,%lld}\n",
+        (unsigned long long)ar->n, (unsigned long long)g2->u.rect.w, (unsigned long long)g2->u.rect.h, (unsigned long long)ss->p.a, (unsigned long long)ss->p.b,
+        (unsigned long long)ss->q.a, (unsigned long long)ss->q.b, (unsigned long long)ss->k, pm->a, (double)pm->f, pm->d, (long long)pm->i);
     printf("swapPt {3,40} = {%llu,%llu}; sumPt {41,3} 2 = %llu\n", (unsigned long long)sw->a, (unsigned long long)sw->b, (unsigned long long)sm->n);
     printf("plusw 40 2 = %llu; eqw 7 7 = %llu; boxed: definition %llu answers %llu; length [7,8] = %llu; plus 40 2 on Nat as Word = %llu\n", (unsigned long long)42, (unsigned long long)r, (unsigned long long)k, (unsigned long long)bv->n, (unsigned long long)n, (unsigned long long)pn->n);
     return 0;

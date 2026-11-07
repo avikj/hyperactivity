@@ -263,7 +263,11 @@ table is safe with workers. The other direction is `build/libcubical.a` with
 `src/libcubical.h`: a C program loads libraries with `cubical_init` and calls checked
 definitions on words with `cubical_call_w` (and the emitted C's boxed form, `cubical_call`), on
 boxed data with `cubical_call_data`, and on records as C structs (`"struct D"`, `cubical_call_data_r`);
-`tests/native/main.c`. `%gsteps n` is the steps checked definition `n` took to check, from the
+`tests/native/main.c`. A record crosses `#native` and the C calls as its C struct by value: one
+constructor its fields; several a `uint64_t` tag and a union of one struct per constructor; a field
+that is itself a record inline; a word (or a type represented by `Word`) `uint64_t`, `UInt32`
+`uint32_t`, `Int64` `int64_t`, `Float32` `float`, `Float64` `double` (the emitted program's `T<di>`, or
+a hand-written file's `struct D`, `tests/native/rec.c`). `%gsteps n` is the steps checked definition `n` took to check, from the
 run or the store's `ok` line.
 
 **Commands.** `#check e : T`, `#same a = b` (equal readings, at a type when either side has one),

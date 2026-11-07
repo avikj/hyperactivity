@@ -19,9 +19,11 @@ long cubical_index(const char *name);   /* a checked definition's signature inde
  * name; a constructor is tag c+1 with its fields), the result read by the net and boxed with every field forced;
  * NULL when a type is unknown or the result is not a word, bytes or a constructor of such */
 void *cubical_call_data(const char *name, uint64_t nargs, void **args, const char *const *types);
-/* records by value (B18): a type named "struct D", D a data type of one constructor whose fields are words or of
- * represented types, crosses as the C struct of its fields, each a uint64_t (a represented field as its
- * representation): the argument points to the struct; rtype "struct D" returns a malloc'd array of the result's
- * fields (NULL rtype: the result boxed, as cubical_call_data) */
+/* records by value (B18): a type named "struct D" crosses as D's C struct, laid out as C lays it out: one constructor
+ * its fields; several a uint64_t tag and a union of one struct per constructor; a field that is a record inline; a
+ * word (or a type represented by Word) uint64_t, UInt32 uint32_t, Int64 int64_t, Float32 float, Float64 double. D has
+ * no parameters, path constructors or recursive fields. The argument points to the struct (a tag naming no
+ * constructor: NULL); rtype "struct D" returns the result in a malloc'd struct (NULL rtype: the result boxed, as
+ * cubical_call_data) */
 void *cubical_call_data_r(const char *name, uint64_t nargs, void **args, const char *const *types, const char *rtype);
 #endif
