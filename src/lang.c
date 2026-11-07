@@ -3497,8 +3497,23 @@ static void native_structs(const char *nm, long g, int n, int k, const int *sdi,
  * with the same values calls it at once, another value is another specialization, and across runs the
  * specialization cache by key (P's key text with the values) skips the specializer and the compiler.
  * A call whose arguments are not all words is f's own definition on the net */
-typedef struct { char *name, *prog, *key; int n, k, nc; uint64_t (*vals)[8]; int *ffi; long build; } NatAt;
+/* Kept specializations are bounded and safe with workers (CUBICAL_WORKERS > 0): each entry keeps at
+ * most natat_max() of them (CUBICAL_NATIVE_AT_MAX, 1 to 256, default 16) in foreign-table slots
+ * reserved when the entry is declared, so the foreign table never grows (or moves) while the program
+ * runs. The table is read and changed under one lock; a call copies its slot's entry under the lock
+ * and calls the copy outside it, counting itself in the slot's in-flight count. When every slot is
+ * kept, a new specialization evicts the least recently called one that no call is in (its library
+ * closed: dlclose, the count of its dlopens down by one) — `native at run: f evicts f at #v` — and an
+ * evicted value is specialized again on its next call (from the cache by key: no compiler). When all
+ * slots are in calls, the new specialization is called once without being kept (opened, called,
+ * closed). A builder's compile happens under the lock (one compile at a time) */
+typedef struct { char *name, *prog, *key; int n, k, cap; uint64_t (*vals)[8]; int *ffi; int *use; unsigned long *stamp; bool *live; unsigned long tick; long build; } NatAt;
 static NatAt *NATAT; static int nnatat; static size_t capnatat;
+static pthread_mutex_t natat_mu = PTHREAD_MUTEX_INITIALIZER;
+static int natat_max(void) {
+    const char *s = getenv("CUBICAL_NATIVE_AT_MAX"); int m = s ? atoi(s) : 16;
+    return m < 1 ? 1 : m > 256 ? 256 : m;
+}
 uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n);
 /* the key of the specialization at the values: P's key text and the values */
 static void natat_key(NatAt *t, const uint64_t *a, char sk[65]) {
@@ -3506,63 +3521,92 @@ static void natat_key(NatAt *t, const uint64_t *a, char sk[65]) {
     for (int i = 0; i < t->k; i++) fprintf(km, " #%llu", (unsigned long long)a[i]);
     fclose(km); key_hash(kb, kl, sk); free(kb);
 }
-/* the library so entered and kept under the values */
-static int natat_enter(int at, const uint64_t *a, const char *so, bool spec_hit, size_t len) {
+static int natat_find(NatAt *t, const uint64_t *a) {
+    for (int i = 0; i < t->cap; i++) if (t->live[i] && !memcmp(t->vals[i], a, sizeof(uint64_t) * (size_t)t->k)) return i;
+    return -1;
+}
+/* the library so opened into an entry of the foreign table (not added: written into *out) */
+static void natat_open(NatAt *t, const char *so, Ffi *out) {
     char sym[760]; snprintf(sym, sizeof sym, "%s:cubical_entry", so);
-    unsigned char kw[8]; for (int i = 0; i < 8; i++) kw[i] = 4;
-    NatAt *t = &NATAT[at];
-    int e = ffi_add(sym, t->n - t->k, kw, 4);
-    t->vals = realloc(t->vals, sizeof *t->vals * (size_t)(t->nc + 1)); t->ffi = realloc(t->ffi, sizeof(int) * (size_t)(t->nc + 1));
-    memcpy(t->vals[t->nc], a, sizeof(uint64_t) * (size_t)t->k); t->ffi[t->nc] = e;
+    void *h = dlopen(so, RTLD_NOW | RTLD_GLOBAL); if (!h) die("native at run: cannot open", so);
+    void *fn = dlsym(h, "cubical_entry"); if (!fn) die("native at run: no cubical_entry in", so);
+    *out = (Ffi){ strdup(sym), fn, t->n - t->k, { 4, 4, 4, 4, 4, 4, 4, 4 }, 4, -1, h, NULL, 0, NULL, -1, 0, -1 };
+}
+/* under the lock: the library so kept under the values, in a free slot or the least recently called
+ * one with no call in it; -1 when every slot is in a call (*tmp then holds an entry to call once) */
+static int natat_enter(int at, const uint64_t *a, const char *so, bool spec_hit, size_t len, Ffi *tmp) {
+    NatAt *t = &NATAT[at]; int s = -1;
+    for (int i = 0; i < t->cap && s < 0; i++) if (!t->live[i]) s = i;
+    if (s < 0) for (int i = 0; i < t->cap; i++) if (t->use[i] == 0 && (s < 0 || t->stamp[i] < t->stamp[s])) s = i;
     printf("native at run: %s at", t->name); for (int i = 0; i < t->k; i++) printf(" #%llu", (unsigned long long)a[i]);
-    if (spec_hit) printf("   [specialization cached by key]\n"); else printf("   [specialized now, %zu bytes of C]\n", len);
-    return t->nc++;
+    if (spec_hit) printf("   [specialization cached by key]"); else printf("   [specialized now, %zu bytes of C]", len);
+    if (s < 0) { printf("   [every kept one in a call: called once, not kept]\n"); natat_open(t, so, tmp); return -1; }
+    if (t->live[s]) {
+        Ffi *old = &FFI[t->ffi[s]];
+        printf("   [evicts %s at", t->name); for (int i = 0; i < t->k; i++) printf(" #%llu", (unsigned long long)t->vals[s][i]); printf("]");
+        if (old->lib) dlclose(old->lib);
+        free((char *)old->sym); old->sym = NULL; old->fn = NULL; old->lib = NULL; t->live[s] = false;
+    }
+    printf("\n");
+    natat_open(t, so, &FFI[t->ffi[s]]);
+    memcpy(t->vals[s], a, sizeof(uint64_t) * (size_t)t->k); t->live[s] = true;
+    return s;
+}
+/* the call of slot s (or of tmp when s < 0), the lock held on entry and released for the call */
+static uint64_t natat_invoke(NatAt *t, int s, Ffi *tmp, const uint64_t *a) {
+    Ffi e;
+    if (s >= 0) { t->use[s]++; t->stamp[s] = ++t->tick; e = FFI[t->ffi[s]]; } else e = *tmp;
+    pthread_mutex_unlock(&natat_mu);
+    uint64_t r = ffi_invoke(&e, a + t->k, t->n - t->k);
+    pthread_mutex_lock(&natat_mu);
+    if (s >= 0) t->use[s]--; else { dlclose(tmp->lib); free((char *)tmp->sym); }
+    pthread_mutex_unlock(&natat_mu);
+    return r;
 }
 /* a call with words a: 1 and *r when a specialization at a's first k is kept (in this run, or in the
  * specialization cache by key from an earlier one), 0 when there is none yet (the call is then the
  * builder's: the net computes P at the values and native_at_build compiles it) */
 int native_at_call(int at, const uint64_t *a, uint64_t *r) {
-    NatAt *t = &NATAT[at]; int hit = -1;
-    for (int i = 0; i < t->nc && hit < 0; i++) if (!memcmp(t->vals[i], a, sizeof(uint64_t) * (size_t)t->k)) hit = i;
+    pthread_mutex_lock(&natat_mu);
+    NatAt *t = &NATAT[at]; Ffi tmp; int hit = natat_find(t, a);
     if (hit < 0) {
         char sk[65], dir[512], spath[640], hx[80] = "", so[700]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
         natat_key(t, a, sk); snprintf(spath, sizeof spath, "%s/spec-%s", dir, sk);
-        FILE *sf = fopen(spath, "r"); if (!sf) return 0;
+        FILE *sf = fopen(spath, "r"); if (!sf) { pthread_mutex_unlock(&natat_mu); return 0; }
         if (fscanf(sf, "%64s", hx) != 1) hx[0] = 0; fclose(sf);
         snprintf(so, sizeof so, "%s/%s.so", dir, hx);
-        if (!hx[0] || access(so, 4) != 0) return 0;
-        hit = natat_enter(at, a, so, true, 0); t = &NATAT[at];
+        if (!hx[0] || access(so, 4) != 0) { pthread_mutex_unlock(&natat_mu); return 0; }
+        hit = natat_enter(at, a, so, true, 0, &tmp);
     }
-    *r = ffi_invoke(&FFI[t->ffi[hit]], a + t->k, t->n - t->k);
+    *r = natat_invoke(t, hit, &tmp, a);
     return 1;
 }
 long native_at_builder(int at) { return NATAT[at].build; }
 /* the builder's call: c the C program the net computed (len bytes), a the n words: compiled (once per
  * text, as #native's), entered, kept, called; -1 when the program is not over n − k words */
 int native_at_build(int at, const char *c, size_t len, const uint64_t *a, uint64_t *r) {
+    pthread_mutex_lock(&natat_mu);
     NatAt *t = &NATAT[at];
     char *txt = malloc(len + 1); memcpy(txt, c, len); txt[len] = 0;
     char rt[64], pt[8][64]; int np = proto_types(txt, "cubical_entry(", rt, pt);
     bool ok = np == t->n - t->k && !strcmp(rt, "uint64_t");
     for (int i = 0; i < np && ok; i++) if (strcmp(pt[i], "uint64_t")) ok = false;
-    if (!ok) { printf("FAIL: native %s at run: the program's entry is not over %d words\n", t->name, t->n - t->k); failures++; free(txt); return -1; }
+    if (!ok) { printf("FAIL: native %s at run: the program's entry is not over %d words\n", t->name, t->n - t->k); failures++; free(txt); pthread_mutex_unlock(&natat_mu); return -1; }
     char sk[65], dir[512], spath[640], hx[65], so[700], cpath[700]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
     mkdir(cache_dir(), 0755); mkdir(dir, 0755);
     key_hash(txt, strlen(txt), hx);
     snprintf(cpath, sizeof cpath, "%s/%s.c", dir, hx); snprintf(so, sizeof so, "%s/%s.so", dir, hx);
     if (access(so, 4) != 0) {
-        FILE *cf = fopen(cpath, "w"); if (!cf) { free(txt); return -1; } fputs(txt, cf); fclose(cf);
+        FILE *cf = fopen(cpath, "w"); if (!cf) { free(txt); pthread_mutex_unlock(&natat_mu); return -1; } fputs(txt, cf); fclose(cf);
         char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -Wl,-Bsymbolic -o %s %s", so, cpath);
-        if (system(cmd) != 0) { printf("FAIL: native %s at run   (the C compiler rejected %s)\n", t->name, cpath); failures++; free(txt); return -1; }
+        if (system(cmd) != 0) { printf("FAIL: native %s at run   (the C compiler rejected %s)\n", t->name, cpath); failures++; free(txt); pthread_mutex_unlock(&natat_mu); return -1; }
     }
     free(txt);
     natat_key(t, a, sk); snprintf(spath, sizeof spath, "%s/spec-%s", dir, sk);
     FILE *sf = fopen(spath, "w"); if (sf) { fprintf(sf, "%s\n", hx); fclose(sf); }
-    int hit = -1;
-    for (int i = 0; i < t->nc && hit < 0; i++) if (!memcmp(t->vals[i], a, sizeof(uint64_t) * (size_t)t->k)) hit = i;
-    if (hit < 0) hit = natat_enter(at, a, so, false, len);
-    t = &NATAT[at];
-    *r = ffi_invoke(&FFI[t->ffi[hit]], a + t->k, t->n - t->k);
+    Ffi tmp; int hit = natat_find(t, a);
+    if (hit < 0) hit = natat_enter(at, a, so, false, len, &tmp);
+    *r = natat_invoke(t, hit, &tmp, a);
     return 0;
 }
 static void toplevel(Node *f) {
@@ -4431,7 +4475,12 @@ static void toplevel(Node *f) {
         if (k < 1 || k >= n || n > 8 || n - k > 6) die("native … at k: one to six arguments after the first k, k at least one:", nm);
         GROW(NATAT, capnatat, (size_t)nnatat + 1);
         NatAt *t = &NATAT[nnatat]; memset(t, 0, sizeof *t);
-        t->name = strdup(nm); t->n = n; t->k = k;
+        t->name = strdup(nm); t->n = n; t->k = k; t->cap = natat_max();
+        t->vals = calloc((size_t)t->cap, sizeof *t->vals); t->ffi = calloc((size_t)t->cap, sizeof(int)); t->use = calloc((size_t)t->cap, sizeof(int));
+        t->stamp = calloc((size_t)t->cap, sizeof(unsigned long)); t->live = calloc((size_t)t->cap, sizeof(bool));
+        /* the slots of the kept specializations, reserved now: the foreign table does not move while the program runs */
+        GROW(FFI, capffi, (size_t)nffi + (size_t)t->cap);
+        for (int i = 0; i < t->cap; i++) { FFI[nffi] = (Ffi){ NULL, NULL, n - k, { 4, 4, 4, 4, 4, 4, 4, 4 }, 4, -1, NULL, NULL, 0, NULL, -1, 0, -1 }; t->ffi[i] = nffi++; }
         { char *pb; size_t pl; FILE *pm = open_memstream(&pb, &pl); print_node(pm, f->it[4]); fclose(pm); t->prog = pb; }
         { char *kb; size_t kl; FILE *km = open_memstream(&kb, &kl); fprintf(km, "spec-at %s %d %d ", chk_salt, n, k); spec_key_text(km, f->it[4]); fclose(km); t->key = kb; }
         int at = nnatat++;

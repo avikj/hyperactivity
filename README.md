@@ -255,7 +255,9 @@ the values written in it, the checker's version and the libraries before the fil
 it is computed, and a hit (`specialization cached by key, 0 steps`) runs neither the specializer
 nor the C compiler. `#native f n at k = P` specializes while the program runs: on the first call
 with each value of f's first k word arguments the net computes `P v…` (the residual's C), which is
-compiled, entered and kept under the values (and in the cache by key across runs). The other direction is `build/libcubical.a` with
+compiled, entered and kept under the values (and in the cache by key across runs); at most
+`CUBICAL_NATIVE_AT_MAX` (default 16) are kept per entry, the least recently called evicted, and the
+table is safe with workers. The other direction is `build/libcubical.a` with
 `src/libcubical.h`: a C program loads libraries with `cubical_init` and calls checked
 definitions on words with `cubical_call_w` (and the emitted C's boxed form, `cubical_call`), on
 boxed data with `cubical_call_data`, and on records as C structs (`"struct D"`, `cubical_call_data_r`);
