@@ -70,6 +70,76 @@ represent Tr2 by Int where
   from-to : (x : Tr2 Int) → from (to x) ≡ x = tr2-from-to
 #layout Tr2
 #fo (the (Tr2 Int → Int) (λ x → tr2toInt x))
+-- ---------------------------------------------------------------- a quotient by canonical forms (plan B12
+-- 2.3, item 12): ℤ as pairs of naturals modulo a + d ≡ c + b, a set quotient (the squash makes it a
+-- set), represented by Int through the canonical-form maps: to sends a pair to its difference's
+-- normal form, from an integer to its canonical pair (n , 0) or (0 , n + 1)
+data ZQ = zq (a : Nat) (b : Nat)
+  | zeq (a : Nat) (b : Nat) (c : Nat) (d : Nat) (e : PathP (λ (m : I) → Nat) (plus a d) (plus c b)) (i : I) [ i = 0 ↦ zq a b , i = 1 ↦ zq c d ]
+  | zsq (x : ZQ) (y : ZQ) (p : PathP (λ (m : I) → ZQ) x y) (q : PathP (λ (m : I) → ZQ) x y) (i : I) (j : I)
+      [ i = 0 ↦ p @ j , i = 1 ↦ q @ j , j = 0 ↦ x , j = 1 ↦ y ]
+isSetZQ : isSet ZQ
+isSetZQ = λ a b p q i j → zsq a b p q i j
+-- the difference's normal form (split on the second argument first, so that subN n zero is pos n)
+subN : Nat → Nat → Int
+subN a b = (case b return (λ y → Nat → Int) of
+    zero → λ x → pos x
+    suc b2 → λ x → case x return (λ x2 → Int) of zero → negsuc b2; suc a2 → rec b2 a2) a
+-- a common summand cancels
+subN-cancel : (k a b : Nat) → subN (plus k a) (plus k b) ≡ subN a b
+subN-cancel k a b = case k return (λ y → subN (plus y a) (plus y b) ≡ subN a b) of
+    zero → λ i → subN a b
+    suc k2 → rec k2
+-- the normal form respects the relation
+subN-resp : (a b c d : Nat) → plus a d ≡ plus c b → subN a b ≡ subN c d
+subN-resp a b c d e =
+  concat {lzero} {Int} {subN a b} {subN (plus d a) (plus d b)} {subN c d} (sym (subN-cancel d a b))
+    (concat {lzero} {Int} {subN (plus d a) (plus d b)} {subN (plus a d) (plus d b)} {subN c d} (λ i → subN (plus-comm d a i) (plus d b))
+      (concat {lzero} {Int} {subN (plus a d) (plus d b)} {subN (plus c b) (plus d b)} {subN c d} (λ i → subN (e i) (plus d b))
+        (concat {lzero} {Int} {subN (plus c b) (plus d b)} {subN (plus b c) (plus b d)} {subN c d} (λ i → subN (plus-comm c b i) (plus-comm d b i)) (subN-cancel b c d))))
+zqToInt : ZQ → Int
+zqToInt x = case x return (λ w → Int) of
+    zq a b → subN a b
+    zeq a b c d e i → subN-resp a b c d e i
+    zsq x1 y1 p q i j → isSetInt (rec x1) (rec y1) (rec p) (rec q) i j
+intToZQ : Int → ZQ
+intToZQ z = case z of pos n → zq n zero; negsuc n → zq zero (suc n)
+-- every pair is related to its canonical pair
+zq-canon : (a b : Nat) → intToZQ (subN a b) ≡ zq a b
+zq-canon a b = (case b return (λ y → (x : Nat) → intToZQ (subN x y) ≡ zq x y) of
+    zero → λ x → λ i → zq x zero
+    suc b2 → λ x → case x return (λ x2 → intToZQ (subN x2 (suc b2)) ≡ zq x2 (suc b2)) of
+        zero → λ i → zq zero (suc b2)
+        suc a2 → concat {lzero} {ZQ} {intToZQ (subN a2 b2)} {zq a2 b2} {zq (suc a2) (suc b2)} (rec b2 a2)
+                   (λ i → zeq a2 b2 (suc a2) (suc b2) (plus-suc a2 b2) i)) a
+PZ : ZQ → Type
+PZ y = intToZQ (zqToInt y) ≡ y
+isPropPZ : (y : ZQ) → isProp (PZ y)
+isPropPZ y = isSetZQ (intToZQ (zqToInt y)) y
+zsqfill : (a b : ZQ) (p q : a ≡ b) (ra : PZ a) (rb : PZ b) (rp : PathP (λ j → PZ (p j)) ra rb) (rq : PathP (λ j → PZ (q j)) ra rb) →
+  PathP (λ i → PathP (λ j → PZ (zsq a b p q i j)) ra rb) rp rq
+zsqfill a b p q ra rb rp rq =
+  isProp→PathP {lzero} {PathP (λ j → PZ (p j)) ra rb} {PathP (λ j → PZ (q j)) ra rb} (λ i → PathP (λ j → PZ (zsq a b p q i j)) ra rb)
+    (isPropPathP (λ j → PZ (q j)) (isProp→isSet (isPropPZ b)) ra rb) rp rq
+zq-from-to : (x : ZQ) → PZ x
+zq-from-to x = case x return (λ y → PZ y) of
+    zq a b → zq-canon a b
+    zeq a b c d e i → isProp→PathP {lzero} {PZ (zq a b)} {PZ (zq c d)} (λ j → PZ (zeq a b c d e j)) (isPropPZ (zq c d)) (zq-canon a b) (zq-canon c d) i
+    zsq a b p q i j → zsqfill a b p q (rec a) (rec b) (rec p) (rec q) i j
+-- a region over the quotient is higher until it has a representation
+#fo (the (ZQ → Int) (λ x → zqToInt x))
+represent ZQ by Int where
+  to : ZQ → Int = zqToInt
+  from : Int → ZQ = intToZQ
+  to-from : (z : Int) → to (from z) ≡ z = λ z → case z return (λ y → zqToInt (intToZQ y) ≡ y) of pos n → (λ i → pos n); negsuc n → (λ i → negsuc n)
+  from-to : (x : ZQ) → from (to x) ≡ x = zq-from-to
+#layout ZQ
+#fo (the (ZQ → Int) (λ x → zqToInt x))
+-- the canonical forms compute: (5 , 2) and (7 , 4) are one integer, 3
+#same zqToInt (zq 5 2) = pos 3
+#same zqToInt (zq 2 5) = negsuc 2
+#same intToZQ (zqToInt (zq 7 4)) = zq 3 zero
+#same zqToInt (zeq 5 2 7 4 (λ i → 9) i0) = pos 3
 -- a wrong law is rejected at its type
 #fail
 represent Pt by Word where
@@ -100,6 +170,9 @@ trb = transport (ua notEquiv) true
 #fo (the ((A : Type) → A → A) (λ A x → x))
 #fo (the (C1 → Nat) (λ c → zero))
 #fo (the (Word → Word) (λ w → wadd w #1))
+-- a constructor applied to a field: its fields are read as a list (fo-list once read its tail as a code)
+#fo (the (Nat → Nat) (λ a → suc a))
+#fo (the (Nat → Int) (λ a → pos (suc a)))
 #fo (the ((n :0 Nat) → Bytes n → Nat) (λ n b → n))
 #fo (the ((n : Nat) → Bytes n → Nat) (λ n b → n))
 -- ---------------------------------------------------------------- memory the program does not own (plan C20)

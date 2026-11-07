@@ -1238,8 +1238,17 @@ identity; linear values are introduced only in `primitive` definitions.
     The dynamic side is structural (DONE).
 12. ★ DONE (`01c839c`, 18.2): representation equivalences as a construct, the primitive
     types (floats trusted), `Bytes n` with proved accesses, layouts, `#trusted`. Quotients by
-    canonical forms: a `represent` whose `to`/`from` are the canonical-form maps (the
-    construct allows it; no instance written yet).
+    canonical forms: a `represent` whose `to`/`from` are the canonical-form maps — DONE
+    2026-11-06 (`tests/prim.cub`): `ZQ`, pairs of naturals modulo `a + d ≡ c + b` as a set
+    quotient (a path constructor for the relation, a squash for setness), represented by `Int`:
+    `to` the difference's normal form (`subN`, respecting the relation by cancellation),
+    `from` the canonical pair `(n , 0)` / `(0 , n + 1)`, `from-to` by elimination into the
+    family of propositions (every pair related to its canonical one, `zq-canon`); `#layout
+    ZQ` is Int's. Found on the way: `#fo` crashed on any constructor applied to a field
+    (`lib/stage.cub`'s `fo-list` read its tail as a code since it landed); fixed. As for
+    `Tr2`, `#fo` of a function on the quotient stays `not-fo dim` after the representation
+    (its body holds the relation's branch) until the specializer transports it along the
+    representation.
 13. ★ DONE (`1c5282a`, `lib/stage.cub`): `first-order T c` with the reasons dim, dep-type,
     higher, kan, reflect, mult; `fo-normal` on the normal form; the stage/verdict/strictness
     types as data; `#fo`. Schedules as values: `lib/specialize.cub`'s `Sched` (the rewrite
@@ -1273,7 +1282,9 @@ identity; linear values are introduced only in `primitive` definitions.
     `tabulate`, and `index-update` proved from the byte layer's laws (trusted primitives
     `load64-store64`), possible since stuck primitive operations became neutrals. Open: `Fin n
     → A` as the interface by a representation equivalence; in place when unique (6.4).
-23. State programs as `A ≃ Σ (b : B), fiber f b` then projection. Valuable.
+23. DONE (`967e48e7`, `lib/fiber.cub`; used by `6d098a67`'s state programs): a map factors
+    through its fibers, `fiberEquiv f : A ≃ (b : B) × fiber f b`, the projection the first
+    component. State programs as `A ≃ Σ (b : B), fiber f b` then projection. Valuable.
 
 ### D. The outside world
 24. **Status (2026-11-06):** built as `lib/proc.cub` (Church form, handlers, worlds, replay), its guarded form `GProc` (`5b9de865`), `lib/session.cub`, `lib/choreo.cub` (`6d098a67`); projection as specialization against the role (2026-11-06,
@@ -1287,7 +1298,10 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
     Essential.
 25. **Status (2026-11-06):** built, `7a865cac` (`Outcome`, supervisors by key). Spec as written: Outcomes as values (consequence); supervisors and restart by key (library). Essential.
 26. DONE for the loop and the library STM (2026-11-06, `lib/world.cub`, `src/drivers.c`,
-    `bf3ea4eb`); a hardware memory model (`load`/`store`/`cas`/`fence` on Regions) is open.
+    `bf3ea4eb`); the hardware memory interface is DONE too (`lib/world.cub`'s `w-load` /
+    `w-store` / `w-cas` / `w-fence` at acquire / release / acquire-release / sequentially
+    consistent, on addresses from `ptr-of`, run by `src/drivers.c` with `__atomic_*`;
+    `tests/world.cub`). Relaxed atomics' memory model stays a section 15 thread.
 27. **Status (2026-11-06):** `foreign` built; `world "name" = handler` is `lib/proc.cub`'s named worlds and registry (`96971cee`) with its surface form (2026-11-06, `src/syntax.c`): `world "kv" = kv-world` checks `world-kv : Named S St = (id , kv-world)` and `world-kv-id : Word = id`, id the name's FNV-1a hash, the type from the handler's signature or an annotation (`world "n" : World S St = term`); `tests/proc.cub`. A handler is a checked term, so nothing joins `#trusted`; a world implemented by `foreign` functions is listed there through them. Spec as written: Started (`1c5282a`): `foreign name "symbol" : T` as a trusted primitive over primitive
     types (a C function of the program or a shared library), listed by `#trusted`/`#safe`.
 

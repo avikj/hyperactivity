@@ -145,7 +145,8 @@ fo-code c =
     crec d fs → fo-list fs
     _ → fo
 fo-seq v c = case v of fo → fo-code c; _ → v
-fo-list cs = case cs of lnil → fo; lcons c r → fo-seq (fo-code c) r
+-- (the tail is a list: fo-seq would read it as a code)
+fo-list cs = case cs of lnil → fo; lcons c r → (case fo-code c of fo → fo-list r; v → v)
 first-order T c = case fo-type T of fo → fo-code c; v → v
 -- a code at its type, after the specializer's normalization (evaluated, quoted at T)
 fo-normal T c = first-order T (fromopt (quote-top T (eval-g lnil c)) c)
