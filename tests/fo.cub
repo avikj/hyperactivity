@@ -169,3 +169,17 @@ has-for l = case l of lnil → false; lcons a r → (case r of lcons b r2 → (c
 #same sig-of (sigs-of fib-defs) #1 = some (lcons tW lnil , tW)
 -- the library form exports definition 0 as cubical_entry over the same types
 #same lst-len (entry-u (sigs-of fib-defs) #0) = #47
+
+-- ---------------------------------------------------------------- the justifying path (18.5 step 7)
+-- Each program family's statement `eval-fo (lower (code f)) args ≡ f args`, read by computation:
+-- the net evaluating f and the first-order evaluator running the lowered form give one answer.
+-- The readings above are these statements family by family (words, loops, pairs, data,
+-- closures, the numeric and byte layers); the thunk family's are here. They are `#same`s, not
+-- checked paths: a `#check`ed term may mention checked definitions only, and the first-order
+-- libraries (`lower`, `specialize`, `eval-fo`) are untyped by design (loaded before
+-- lib/check.cub). The path assembled from the specializer's recorded rewrites, inhabiting
+-- `eval-fo f ≡ t` for an arbitrary term rather than by computation, is what remains of step 7.
+#same eval-fo no-defs lnil t-thunk = vw #22
+#same (case lift #1 t-thunk of lifted t2 ds k → eval-fo (table-of ds) lnil t2) = vw #22
+-- a thunk of the source language (`delay`/`force`) has no Code form yet (`cthunk` is not in
+-- lib/code.cub nor src/lang.c's to_code), so the family starts at the first-order form
