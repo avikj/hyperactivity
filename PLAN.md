@@ -1129,8 +1129,8 @@ of type `Native` from hand-written C, `#native … from`; boxed results kept nat
 18.8); (3) A4's
 bitmask formulas (18.19, designed); (4) E28: DONE 2026-11-06 for unification-based implicits through reducing hypothesis types,
 holes in composition lines, generalized variables, and the hypothesis at the field's own index
-for recursion on a fording family (`vmap`; 18.12); left: rewriting a branch's goal by the index
-equation (the branch sees `e : n ≡ suc m`); (5) DONE: item 30's retraction (`#retract`) and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
+for recursion on a fording family (`vmap`; 18.12); and the goal rewritten by the index equation
+(2026-11-06); left: index injectivity across two splits; (5) DONE: item 30's retraction (`#retract`) and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
 `Z2` reading with its laws, `lib/intproof.cub`, `lib/intlin.cub`); (7) DONE: the memory interface in `W` (`w-load`/`w-store`/`w-cas`/`w-fence`, acquire /
 release / acquire-release / sequentially consistent, on addresses from `ptr-of`;
 `tests/world.cub`); (8) item 10's same-machine Agda comparison; (9) DONE (`7a2c96c4`, `62c669fc`, `13ae6b9f`, `54be3050`): Line B's leftovers — `lib/emitx86.cub` (18.7's
@@ -2654,8 +2654,14 @@ which of these it actually needed; the list is what Agda-level convenience means
   `check.cub` reads that shape and types a recursive field's hypothesis at the field's own index,
   `vmap f xs : Vec B m`; before, the hypothesis was at the outer index, which let `vbad f (vcons
   m x xs e) = vbad f xs` through at `Vec B n` — a soundness hole, now closed, `tests/elab.cub`).
-  Not done: substituting the index in the branch's expected type (Agda's unification makes `e`
-  refl and rewrites the goal); the branch sees `e : n ≡ suc m` and rebuilds with it. (ii) FIXED
+  The goal rewritten by the index equation (2026-11-06): a clause that leaves the equality
+  fields out (`vmap f (vcons m x xs) = vcons m (f x) (vmap f xs)`) has its branch checked at the
+  constructor's own index with refl for the equations and transported along them to the motive
+  at v, the line `λ i → R[ix := e (~ i), v := c fs (λ j → e (~ i ∨ j))]` (`ccm_t`, skipped when
+  the goal does not depend on the index); naming the field keeps the old reading. Not done:
+  injectivity of constructor indices across two splits (`vzip` on two vectors of one length
+  needs `suc m ≡ suc m'` → `m ≡ m'`, and absurd cases refuted from the equations, as Agda's
+  unifier does); those are written with the fields named. (ii) FIXED
   (2026-11-06): the motive of a `%welimP` now travels with the elimination (`O_WELIM`'s last
   operand, `V_NWELIM`/`V_WSUSP` keep it), so a stuck word recursion of path type has a type at
   the machine and `p 0` is its type's left end, as for any neutral path (`O_PAPPP`'s endpoint

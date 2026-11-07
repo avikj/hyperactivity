@@ -202,8 +202,10 @@ xs e`) transports along `e` or refutes it (`vtail`'s `vnil` case by `snotz`). Th
 wants the index implicit (`{n : Nat} → Vec A n → …`). A recursion whose index argument is a
 variable has its induction hypothesis at the field's own index (`vmap f xs : Vec B m` for `xs :
 Vec A m`): the motive is written `(λ ix v → Vec B ix) n` and the checker reads it so (the index
-unified at the split, as Agda does), and the constructor is rebuilt with the equality field,
-`vcons m (f x) (vmap f xs) e`. `tests/elab.cub`.
+unified at the split, as Agda does). Leaving the equality field out of the pattern rewrites the
+goal by it: `vmap f (vcons m x xs) = vcons m (f x) (vmap f xs)` is checked at `Vec B (suc m)`
+and transported along the equation; naming it (`vcons m x xs e`) leaves it to the branch.
+`tests/elab.cub`.
 
 **Running processes and calling native code.** `lib/world.cub` is the drivers' signature `W`
 (`time-now`, `write fd n b`, `read fd n`, `sleep ns`, `exit c` as processes of `lib/proc.cub`)

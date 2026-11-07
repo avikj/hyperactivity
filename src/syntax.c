@@ -3886,7 +3886,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     /* an indexed type (fording) whose index arguments are variables n…: the motive written as a λ
      * over the indices applied to them, (λ ix… v → body[n := ix]) n…, so the checker types an
      * induction hypothesis at the field's own index (E28: the index unified at the split) */
-    Node *motx = mot;
+    Node *motx = mot, *ixlam = NULL; int ixk = 0;
     if (!cov && !dv && DATA[d].nidx > 0) {
         Node *vt = ty_of(v); int np = DATA[d].nparams, k = DATA[d].nidx;
         if (vt && vt->list && vt->n == np + 1 && !vt->it[0]->list && !strcmp(vt->it[0]->s, DATA[d].name)) {
@@ -3900,7 +3900,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             if (ok) {
                 Node *inner = sym3("%lam", nsym(v), subst_multi(mot->it[2], ixn, fresh, k));
                 for (int q = k - 1; q >= 0; q--) inner = sym3("%lam", fresh[q], inner);
-                motx = inner;
+                motx = inner; ixlam = inner; ixk = k;
                 for (int q = 0; q < k; q++) motx = lst(2, motx, nsym(ixn[q]));
             }
         }
@@ -3930,8 +3930,13 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         for (int q = 0; q < nf; q++) v2[j + q] = fv[q];
         for (int q = j + 1; q < nv; q++) v2[q - 1 + nf] = vars[q];
         Row *r2 = calloc((size_t)nr + 1, sizeof(Row)); int n2 = 0;
+        bool eq_named = false;   /* a clause names an equality field: its branch is not rewritten */
         for (int r = 0; r < nr; r++) {
             Node *p = rows[r].p[j]; int pc = pat_con(p);
+            if (pc == c && p->list) {
+                Ford *fe = ford_of(CON[c].name);
+                if (fe && p->n - 1 == nf) for (int q = nf - fe->nidx; q < nf; q++) if (!pat_wild(p->it[q + 1]) || strcmp(p->it[q + 1]->s, "_")) eq_named = true;
+            }
             if (!pat_wild(p) && pc >= 0 && pc != c) continue;
             Row x; x.p = calloc((size_t)nv2 + 1, sizeof(Node *)); x.rhs = rows[r].rhs;
             for (int q = 0; q < j; q++) x.p[q] = rows[r].p[q];
@@ -3998,9 +4003,30 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             Node *T = sym4("Sigma", xfresh("_"), subst_sym(dv->M->it[2], vv, cv), subst_sym(dv->Bl->it[2], vv, cv));
             body = lam_t(ihv, T, body);
         }
+        /* the goal rewritten by the index equations (E28, as Agda's unification at the split): when
+         * no clause names them and the motive is over the indices, the branch is checked at the
+         * constructor's own indices with refl for the equations, and transported along them to
+         * the motive at v — the line λ i → P (e (~ i)) … (c fs (λ j → e (~ i ∨ j)) …), at 0 the
+         * constructor's index (e 1) and refl, at 1 the index n and e itself */
+        Ford *fdr = ixlam ? ford_of(CON[c].name) : NULL;
+        bool mentions_eq = false, rewrote = false;
+        if (fdr) for (int q = nf - ixk; q < nf; q++) if (mentions_name(body, fv[q]->s)) mentions_eq = true;
+        if (fdr && fdr->nidx == ixk && !eq_named && !mentions_eq && !mentions_name(body, v) && nd == 0 && !CON[c].ndims) {
+            Node *i = xfresh("i"), *jd = xfresh("j");
+            Node *cvl = nlist(nf + 1); cvl->it[0] = nsym(CON[c].name);
+            for (int q = 0; q < nf - ixk; q++) cvl->it[q + 1] = fv[q];
+            for (int q = nf - ixk; q < nf; q++) cvl->it[q + 1] = sym3("lam", jd, lst(2, fv[q], sym3("\\/", sym2("~", i), jd)));
+            /* the motive's body at those (reduced here: a λ applied is not inferable) */
+            const char *xs[65]; Node *vs[65]; Node *L = ixlam; int nx = 0;
+            for (int q = nf - ixk; q < nf; q++) { xs[nx] = L->it[1]->s; vs[nx++] = lst(2, fv[q], sym2("~", i)); L = L->it[2]; }
+            xs[nx] = L->it[1]->s; vs[nx++] = nf ? cvl : nsym(CON[c].name); L = L->it[2];
+            L = subst_multi(L, xs, vs, nx);
+            /* a goal not depending on the indices (vlen : Vec A n → Nat) needs no transport */
+            if (mentions_name(L, i->s)) { body = lst(4, nsym("comp"), sym3("lam", i, L), sym3("lam", xfresh("i"), lst(1, nsym("sys"))), body); rewrote = true; }
+        }
         /* v rebuilt (and what depends on it) where the branch mentions it */
         for (int q = nd - 1; q >= 0; q--) if (mentions_name(body, cdefs[dep[q]].v)) body = sym4("let", nsym(cdefs[dep[q]].v), typed_def(&cdefs[dep[q]]), body);
-        if (mentions_name(body, v)) body = sym4("let", nsym(v), typed_def(&vdef), body);
+        if (!rewrote && mentions_name(body, v)) body = sym4("let", nsym(v), typed_def(&vdef), body);
         Node *pat = nlist(nf + 1); pat->it[0] = nsym(CON[c].name);
         for (int q = 0; q < nf; q++) pat->it[q + 1] = fv[q];
         alts[na++] = lst(2, pat, body);

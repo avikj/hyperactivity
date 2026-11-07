@@ -170,23 +170,23 @@ dForm : {l : Level} {T : Theory {l}} → HasDiagonal T → Type l
 dForm D = fst (snd (snd D))
 dapp : {l : Level} {T : Theory {l}} {D : HasDiagonal T} → dForm D → Sent T → Sent T
 dapp = fst (snd (snd (snd D)))
-dfix : {l : Level} {T : Theory {l}} {D : HasDiagonal T} →
+diag-fix : {l : Level} {T : Theory {l}} {D : HasDiagonal T} →
                                     (f : dForm D) →
                                     (G : Sent T) ×
                                     Pf (dimp D G (dapp f G)) × Pf (dimp D (dapp f G) G)
-dfix = fst (snd (snd (snd (snd D))))
+diag-fix = fst (snd (snd (snd (snd D))))
 dnegProv : {l : Level} {T : Theory {l}} → (D : HasDiagonal T) → dForm D
 dnegProv D = fst (snd (snd (snd (snd (snd D)))))
 dnegProv-is : {l : Level} {T : Theory {l}} →
                           (D : HasDiagonal T) → (s : Sent T) → dapp (dnegProv D) s ≡ neg (prov s)
 dnegProv-is D = snd (snd (snd (snd (snd (snd D)))))
 goedelSentence : {l : Level} {T : Theory {l}} → HasDiagonal T → Sent T
-goedelSentence D = fst (dfix (dnegProv D))
+goedelSentence D = fst (diag-fix (dnegProv D))
 diagonalGivesGoedelFix : {l : Level} {T : Theory {l}} →
                                      (D : HasDiagonal T) → GoedelFix (goedelSentence D)
 diagonalGivesGoedelFix D =
   let G = goedelSentence D
-      fx = dfix (dnegProv D)
+      fx = diag-fix (dnegProv D)
   in (λ pG → subst {_} {_} {_} {Pf {l} {T}} (dnegProv-is D G) (dmp (fst (snd fx)) pG)
      , λ pNP →
          dmp (snd (snd fx))
@@ -205,7 +205,7 @@ internalFix : {l : Level} {T : Theory {l}} {D : HasDiagonal T} →
 internalFix contra dne trans =
   let G = goedelSentence D
       bwd = subst {_} {_} {_} {λ s → Pf (dimp D s G)} (dnegProv-is D G)
-              (snd (snd (dfix (dnegProv D))))
+              (snd (snd (diag-fix (dnegProv D))))
   in trans (neg G) (neg (neg (prov G))) (prov G) (contra (neg (prov G)) G bwd) (dne (prov G))
 secondConjunct : {l : Level} {T : Theory {l}} {D : HasDiagonal T} →
                                               ((a b : Sent T) →

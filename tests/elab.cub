@@ -151,3 +151,18 @@ dl-arg a b = a
 #same dl-arg #7 (delay (dl-arg #1 #2)) = #7
 #same eval-g lnil (code (λ (n : Nat) → delay (suc n))) zero = suc zero
 #same eval-g lnil (code (λ (w : Word) → %wadd (delay w) (force (delay #1)))) #4 = #5
+-- E28: the goal rewritten by the index equations — clauses that leave the equality fields out are
+-- checked at the constructor's own index and transported along the equation (Agda's unification
+-- at the split); naming the field keeps the old reading (vmap above)
+vmap-u : {A B : Type} {n : Nat} → (A → B) → Vec A n → Vec B n
+vmap-u f vnil = vnil
+vmap-u f (vcons m x xs) = vcons m (f x) (vmap-u f xs)
+vsum-u : {n : Nat} → Vec Nat n → Nat
+vsum-u vnil = 0
+vsum-u (vcons m x xs) = plus x (vsum-u xs)
+#same vlen (vmap-u (λ x → suc x) v2) = 2
+#same vsum-u (vmap-u (λ x → suc x) v2) = 18
+#fail
+vbad-u : {A B : Type} {n : Nat} → (A → B) → Vec A n → Vec B n
+vbad-u f vnil = vnil
+vbad-u f (vcons m x xs) = vbad-u f xs
