@@ -122,6 +122,7 @@ test: build/cubical build/cubical-asan
 	ASAN_OPTIONS=detect_leaks=0 ./build/cubical-asan lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/quote.cub > /dev/null
 	ASAN_OPTIONS=detect_leaks=0 CUBICAL_WORKERS=4 ./build/cubical-asan lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/codata.cub > /dev/null
 	ASAN_OPTIONS=detect_leaks=0 CUBICAL_WORKERS=4 ./build/cubical-asan lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub tests/guarded.cub > /dev/null
+	ASAN_OPTIONS=detect_leaks=0 CUBICAL_NOCACHE=1 ./build/cubical-asan lib/prelude.cub lib/code.cub lib/fo.cub lib/match.cub lib/nav.cub lib/emitc.cub lib/check.cub lib/std.cub lib/stage.cub lib/lower.cub lib/specialize.cub lib/linproof.cub lib/prim.cub lib/decode.cub lib/rules.cub lib/derive.cub lib/proc.cub lib/emitt.cub lib/emitu.cub lib/repr.cub tests/native.cub > build/native-asan.out 2>&1 || { echo "native under ASan failed"; tail -5 build/native-asan.out; exit 1; }
 
 # the checked library and the acceptance tests (the paper's terms, 9.15's sorting): long, run once
 library: export CUBICAL_NOCACHE = 1

@@ -96,7 +96,7 @@ secSigProp BL pB u v p =
        , isPropToPathP (λ (m : I) → Pth (BL (fst (p @ m))) (sg @ m) (snd (p @ m)))
            (λ (m : I) → propPathProp (BL (fst (p @ m))) (pB (fst (p @ m))) (sg @ m) (snd (p @ m)))
            (λ (m : I) → snd u) (λ (m : I) → snd v) @ i @ j)
-cfst w = λ (m : I) → fst (w @ m)
+eqv-fst w = λ (m : I) → fst (w @ m)
 -- retracts
 isPropRetract A f g h p x y = λ (i : I) →
   hcomp A [ i = 0 ↦ λ (j : I) → h x @ j , i = 1 ↦ λ (j : I) → h y @ j ] (g (p (f x) (f y) @ i))
@@ -120,10 +120,10 @@ isEqvT X Y f = (y : Y) → Contr (fib X Y f y)
 EqvT X Y = (f : X → Y) × isEqvT X Y f
 pIE X Y f = isPropIsEquiv lzero lzero X Y f
 equivHL2 X Y hB = λ x y →
-  isPropRetract (Pth (EqvT X Y) x y) cfst (SigProp (λ f → isEqvT X Y f) (pIE X Y) x y)
+  isPropRetract (Pth (EqvT X Y) x y) eqv-fst (SigProp (λ f → isEqvT X Y f) (pIE X Y) x y)
     (secSigProp (λ f → isEqvT X Y f) (pIE X Y) x y) (piHL2 hB (fst x) (fst y))
 equivHL3 X Y hB = λ x y →
-  isSetRetract (Pth (EqvT X Y) x y) cfst (SigProp (λ f → isEqvT X Y f) (pIE X Y) x y)
+  isSetRetract (Pth (EqvT X Y) x y) eqv-fst (SigProp (λ f → isEqvT X Y f) (pIE X Y) x y)
     (secSigProp (λ f → isEqvT X Y f) (pIE X Y) x y) (piHL3 hB (fst x) (fst y))
 -- univalence: transpEquiv, pathToEquiv, uaη
 tE P i =
@@ -140,9 +140,9 @@ pathHL3 X Y a b = isGroupoidRetract (Pth Type X Y) pE (λ e → ua lzero X Y e) 
 -- the universes of 2- and 3-types (isOfHLevelTypeOfHLevel 2, 3)
 hSet = (X : Type) × HL2 X
 hGroupoid = (X : Type) × HL3 X
-TL2 xx yy = isSetRetract (Pth hSet xx yy) cfst (SigProp HL2 isPropHL2 xx yy) (secSigProp HL2 isPropHL2 xx yy)
+TL2 xx yy = isSetRetract (Pth hSet xx yy) eqv-fst (SigProp HL2 isPropHL2 xx yy) (secSigProp HL2 isPropHL2 xx yy)
   (pathHL2 (fst xx) (fst yy) (snd xx) (snd yy))
-TL3 xx yy = isGroupoidRetract (Pth hGroupoid xx yy) cfst (SigProp HL3 isPropHL3 xx yy) (secSigProp HL3 isPropHL3 xx yy)
+TL3 xx yy = isGroupoidRetract (Pth hGroupoid xx yy) eqv-fst (SigProp HL3 isPropHL3 xx yy) (secSigProp HL3 isPropHL3 xx yy)
   (pathHL3 (fst xx) (fst yy) (snd xx) (snd yy))
 -- isOfHLevelΠ 4 (λ _ → squash₄)
 P4 f g p q r s t u = λ (i : I) (j : I) (k : I) (l : I) → λ z →
