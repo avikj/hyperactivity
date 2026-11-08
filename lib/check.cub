@@ -719,6 +719,11 @@ tsrc c =
     _ → cfree (tval c)
 err c why A B = no (tsrc c) why A B
 and-then r k = case r of ok → k; _ → r
+-- the branches of a split are checked against goals of their own, so implicit arguments found in
+-- one hold whatever the others hold: an elaboration in a branch does not stop the rest, and the
+-- solutions of every branch are returned together (one recheck for a split of many branches, not
+-- one per branch)
+and-br r k = case r of ok → k; elab ds → (case k of elab ds2 → elab (lapp ds ds2); _ → elab ds); _ → r
 chk b r = if b then ok else r
 rall f lnil = ok
 rall f (lcons x xs) = and-then (f x) (rall f xs)
@@ -1159,7 +1164,7 @@ check-brs e d Pv Ph F lnil Bs c = chk (isnil Bs) (err e E-nbranch opq opq)
 check-brs e d Pv Ph F (lcons tel rest) Bs c =
   case Bs of
     lnil → err e E-nbranch opq opq
-    lcons b br → and-then (check-branch e d Pv Ph F c tel b) (check-brs e d Pv Ph F rest br (%wsucc c))
+    lcons b br → and-br (check-branch e d Pv Ph F c tel b) (check-brs e d Pv Ph F rest br (%wsucc c))
 check-branches e d ps Pv F Bs = check-brs e d Pv (λ T f → Pv f) F (ctors-at d ps) Bs #0
 branch-boundary Pv F t bs =
   case %view bs of
