@@ -46,6 +46,8 @@ i-pop-rcx = xb1 #89
 i-mov-rcx-rax = xb3 #72 #137 #193
 i-add-rax-rcx = xb3 #72 #1 #200
 i-sub-rax-rcx = xb3 #72 #41 #200
+-- jae +2 skips xor eax, eax: a borrow (rax < rcx) leaves 0, the source's truncating subtraction (until
+-- 2026-11-08 sub alone wrapped: 0 - 1 was 2^64 - 1)
 i-imul-rax-rcx = cat4 (xb1 #72) (xb1 #15) (xb1 #175) (xb1 #193)
 i-cmp-rax-rcx = xb3 #72 #57 #200
 i-sete-al = xb3 #15 #148 #192
@@ -116,16 +118,18 @@ prim-x86 tbl env d p args =
     lnil → i-ud2
 op-x86 p =
   if %weq p P-add then i-add-rax-rcx
-  else if %weq p P-sub then i-sub-rax-rcx
+  else if %weq p P-sub then cat3 i-sub-rax-rcx (xb2 #115 #2) (xb2 #49 #192)
   else if %weq p P-mul then i-imul-rax-rcx
   else if %weq p P-eq then cat3 i-cmp-rax-rcx i-sete-al i-movzx-eax-al
   else if %weq p P-lt then cat3 i-cmp-rax-rcx i-setb-al i-movzx-eax-al
   else i-ud2
 -- the arguments pushed in order, popped into their registers (the last first), the stack aligned
--- at the call (an odd depth pads one slot), the call through the base register
+-- at the call (an odd depth pads one slot: the depth at the call, the arguments popped by then; until
+-- 2026-11-08 it read d + n, which misaligned a call of an odd count at an even depth), the call
+-- through the base register
 call-x86 tbl env d g args =
   let n = lst-len args
-      pad = odd (%wadd d n)
+      pad = odd d
   in cat5 (push-args tbl env d args) (pop-args n)
           (if pad then i-sub-rsp #8 else lnil)
           (cat3 (i-mov-eax-imm32 (tbl-off tbl g)) i-add-rax-r14 i-call-rax)

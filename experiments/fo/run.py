@@ -6,6 +6,9 @@ HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.pat
 CUB = os.path.join(ROOT, 'build', 'cubical')
 LIBS = [os.path.join(ROOT, 'lib', f) for f in ('prelude.cub', 'code.cub', 'fo.cub', 'match.cub', 'nav.cub', 'emitc.cub', 'check.cub', 'std.cub', 'stage.cub', 'lower.cub', 'specialize.cub', 'linproof.cub', 'prim.cub', 'decode.cub', 'rules.cub', 'derive.cub', 'proc.cub', 'emitt.cub', 'emitu.cub', 'repr.cub', 'image.cub', 'reimport.cub', 'emitx86.cub', 'region.cub')]
 PROGS = {
+ # word subtraction is the source's truncating one: 3 - 5 is 0, not 2^64 - 2 (the C printers emitted a
+ # wrapping subtraction until 2026-11-08), boxed and unboxed; X86_PROGS has its machine-code twin
+ 'tsub': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil))) (lcons (#1 , (#1 , fprim P-add (lcons (fprim P-sub (lcons (flit #3) (lcons (fvar #0) lnil))) (lcons (flit #7) lnil)))) lnil)""", "7"),
  # name: (definitions as .cub text building a Lst of (g , (arity , body)), expected output)
  'fact': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil)))
        (lcons (#1 , (#1 , fo-fact)) lnil)""", "120"),
@@ -564,7 +567,7 @@ QROUTE = {
 }
 def qroute(name, defs):
     args, qd = QROUTE[name]
-    imp = ''.join('import "' + os.path.join(ROOT, 'lib', f) + '"\n' for f in ('foproof.cub', 'foproofd.cub', 'foproofq.cub', 'foproofc.cub'))
+    imp = ''.join('import "' + os.path.join(ROOT, 'lib', f) + '"\n' for f in ('foproof.cub', 'foproofd.cub', 'foproofe.cub', 'foproofq.cub', 'foproofc.cub'))
     body = "ca-tr-defs (" + qd + ")" if args is None else "ca-harness (fo-args-fq (" + args + ")) (" + qd + ")"
     return imp + defs + "\nprog = ca-prog (" + body + ")"
 def run(name, defs, expect, contains=None):
@@ -600,6 +603,9 @@ def run(name, defs, expect, contains=None):
 X86 = os.environ.get('X86') == '1'
 X86_PROGS = {
  # plus on words: the two arguments added
+ # word subtraction is the source's truncating one: 3 - x at x = 5 is 0, not 2^64 - 2 (every printer
+ # emitted a wrapping subtraction until 2026-11-08)
+ 'tsub': ("""defs = lcons (#0 , (#1 , fprim P-add (lcons (fprim P-sub (lcons (flit #3) (lcons (fvar #0) lnil))) (lcons (flit #7) lnil)))) lnil""", [5], "7"),
  'plusw': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #40) (lcons (flit #2) lnil)))) (lcons (#1 , (#2 , fo-plus)) lnil)""", [], "42"),
  # the verified compilation of lib/foproof.cub (spec-w std-vrule ex-c, its path ex-path) on x = 4
  'proved': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + """"

@@ -1,21 +1,22 @@
 -- lib/foproofc.cub — the C link of the justifying path (plan 18.5 step 7, B15/B16): from the first-order
 -- form's checked meaning (lib/foproofq.cub's FQ and evq) to the C the back end prints. CA is the C
 -- subset lib/emitc.cub prints, as checked syntax: every construct is one shape of emitted C text, its
--- local names (v<l>) explicit; evc is that subset's meaning, on C's own values (cells: a word, a
+-- local names (v<l>) explicit; evu is that subset's meaning, on C's own values (cells: a word, a
 -- constructor cell, a closure cell, a byte string; no kinds, no data-type indices) and named locals
 -- with C's block scoping; fq-to-ca the checked translation; ca-sound proves it right (whatever the
 -- first-order form computes, the C computes, at every fuel); ca-to-c prints CA as C text, construct for
 -- construct, and is with gcc what stays outside the path.
--- Loaded after lib/foproofq.cub; tested on its own line (tests/foproofc.cub, tests/foproofc-progs.cub).
+-- Loaded after lib/foproofe.cub; its composed paths are lib/foproofcp.cub (after lib/foproofq.cub); tested
+-- with them (tests/foproofc.cub, tests/foproofc-progs.cub).
 --
--- The subset is narrower than C, and evc stricter than C, at these points (each a place where evc has
--- no value, so nothing is claimed there; wherever evc has a value the emitted C computes it):
+-- The subset is narrower than C, and evu stricter than C, at these points (each a place where evu has
+-- no value, so nothing is claimed there; wherever evu has a value the emitted C computes it):
 --   * the runtime's operations (mkw, mkc, mkb, ld64, ld32, st64, st32 and the n<p> helpers of
 --     lib/emitc.cub's s-runtime) are taken at their specification: c-prim, one clause per primitive,
 --     the same machine functions as the mirrors' (two's complement Int64, IEEE Float64 by bits);
 --     malloc and calloc never fail;
 --   * an operation on a cell of the wrong shape (a word operation on a constructor cell, a load from a
---     word, a field of a word, a ternary on a non-word) has no value in evc, where C would read the
+--     word, a field of a word, a ternary on a non-word) has no value in evu, where C would read the
 --     cell's n field or a stray pointer;
 --   * a switch whose scrutinee matches no case, or matches with a field count other than the case's,
 --     has no value (C: the default arm's mkw(0), or reads past the cell);
@@ -229,8 +230,8 @@ ceN GC A CD zero = ce (λ t s → cbot) (λ l n st b s → cbot)
 ceN GC A CD (suc m) = ce (λ t s → cevT GC A CD (ceN GC A CD m) t s) (λ l n st b s → c-lstep n (cevT GC A CD (ceN GC A CD m) b (cs-push st l s)) (λ st2 → ce-lp (ceN GC A CD m) l n st2 b s))
 -- the meaning of a C construct at fuel n: GC the program's functions, A their parameter counts, CD the
 -- keys with a dispatcher case
-evc : (Word → CA) → (Word → Nat) → (Word → Bool) → Nat → CA → CS → CV
-evc GC A CD n t s = cevT GC A CD (ceN GC A CD n) t s
+evu : (Word → CA) → (Word → Nat) → (Word → Bool) → Nat → CA → CS → CV
+evu GC A CD n t s = cevT GC A CD (ceN GC A CD n) t s
 -- ---------------------------------------------------------------- the translation
 -- a first-order term at depth d (its variable n the local v<d-1-n>); a let declares v<d>, a case's
 -- fields v<d> .. v<d+n-1>, a loop's state v<d> ..; argument lists as lists, a loop's state in
@@ -1403,7 +1404,7 @@ ca-sound A df CD G GC inc tok lk n = pstep A df CD G GC n inc (fst (coks A df CD
 -- for a term: at every fuel, the C's value refines evq's
 ca-sound-t : (A : Word → Nat) (df CD : Word → Bool) (G : Word → FQ) (GC : Word → CA) → ((g : Word) → df g ≡ true → CD g ≡ true) → ((g : Word) → df g ≡ true → ca-ok A df (G g) ckt ≡ true)
            → ((g : Word) → df g ≡ true → GC g ≡ fq-to-ca (G g) ckt (A g)) → (n : Nat) (t : FQ) (d : Nat) (e : KQ) (s : CS) → ca-ok A df t ckt ≡ true → Corr A df d e s
-           → CR A df (evq G n t e) (evc GC A CD n (fq-to-ca t ckt d) s)
+           → CR A df (evq G n t e) (evu GC A CD n (fq-to-ca t ckt d) s)
 ca-sound-t A df CD G GC inc tok lk n t d e s hk h = ca-sound A df CD G GC inc tok lk n t ckt d e s hk h unit
 -- ---------------------------------------------------------------- the printer
 -- CA as C text, construct for construct, in lib/emitc.cub's style (its runtime, prototypes, dispatcher
@@ -1446,7 +1447,7 @@ ca-prim p as =
   case as of
     cacons a r →
       (case r of
-         cacons b r2 → cat4 s-mkw (ca-c a) (op-c p) (lapp (ca-c b) (lapp s-n s-close))
+         cacons b r2 → wop-c p (ca-c a) (ca-c b)
          _ → cat5 s-mkw s-not (ca-c a) s-n s-close)
     _ → cat3 s-mkw (dec #0) s-close
 ca-bytes p as =
@@ -1492,82 +1493,3 @@ ca-table ds g = case ds of lnil → caunsup; lcons e r → if %weq (fst e) g the
 ca-arity ds g = case ds of lnil → zero; lcons e r → if %weq (fst e) g then dnat (fst (snd e)) else ca-arity r g
 -- the keys with a dispatcher case: a definition of at least one parameter
 ca-disp ds g = case ds of lnil → false; lcons e r → if %weq (fst e) g then not (%weq (fst (snd e)) #0) else ca-disp r g
--- ---------------------------------------------------------------- the composed path
--- a word the source computes, the C computes: the first-order form's value is that word (qrel at a
--- word), and the C's refines it
-ca-word : (A : Word → Nat) (df : Word → Bool) (D : Word → Nat) (x : TV) (v : KQ) (c : CV) (w : Word) → x ≡ tvw w → qrel D x v → CR A df v c → c ≡ cw w
-ca-word A df D x v c w hx hq hc = subst {lzero} {lzero} {KQ} {λ u → CR A df u c} {v} {kqw w} (subst {lzero} {lzero} {TV} {λ y → qrel D y v} {x} {tvw w} hx hq) hc
--- the data route, end to end: at every fuel and arguments, the source's value refined by the
--- first-order form's (lib/foproofq.cub's q-path-n), refined by the C's (ca-sound); AN the C functions'
--- parameter counts, df the defined keys, CD the dispatcher's, GC the C functions
-ca-path-n : (r : FRule) (G : Word → DC) (T GT : Word → FC) → DGOK G T GT → (D : Word → Nat) (A : Word → Word) → QGOK (fr-tab (fst r) T) (fr-tab (fst r) GT) D A
-          → (AN : Word → Nat) (df CD : Word → Bool) (GC : Word → CA) → ((g : Word) → df g ≡ true → CD g ≡ true)
-          → ((g : Word) → df g ≡ true → ca-ok AN df (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A g) ckt ≡ true)
-          → ((g : Word) → df g ≡ true → GC g ≡ fq-to-ca (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A g) ckt (AN g))
-          → (n : Nat) (c : DC) (a : QA) (m : Nat) (s : CS) → DTok T c → qa-ok D T a → qtok D A (fr-bu (fst r) (dconv c)) (qa-n a) ≡ true
-          → ca-ok AN df (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) ckt ≡ true → Corr AN df (qa-n a) (qa-e a) s
-          → qrel D (derase (dsev G n c (qa-ρ a))) (evq (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-e a))
-            × CR AN df (evq (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-e a))
-                       (evc GC AN CD (fr-addn n m) (fq-to-ca (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) ckt (qa-n a)) s)
-ca-path-n r G T GT go D A gq AN df CD GC inc tok lk n c a m s tk ha hq hok hc =
-  (q-path-n r G T GT go D A gq n c a m tk ha hq ,
-   ca-sound-t AN df CD (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) GC inc tok lk (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-n a) (qa-e a) s hok hc)
--- the word route has no table: no key is defined
-no-df : (P : Word → Type) (g : Word) → (λ u → false) g ≡ true → P g
-no-df P g h = Empty-rec (false≢true h)
--- a word, refined: none or the word; with a value, the C's word is it
-kq-nb : KQ → Type
-kq-nb kqbot = Empty
-kq-nb (kqw w) = Unit
-kq-nb (kqi b) = Unit
-kq-nb (kqf b) = Unit
-kq-nb (kqcon d c fs) = Unit
-kq-nb (kqclos g env) = Unit
-kq-nb (kqlam b env) = Unit
-kq-nb (kqb l) = Unit
-kq-nb kqnil = Unit
-kq-nb (kqcons x r) = Unit
-qw-c : (A : Word → Nat) (df : Word → Bool) (v : KQ) (c : CV) (w : Word) → qle-w v w → CR A df v c → kq-nb v → c ≡ cw w
-qw-c A df (kqw x) c w hq hc hn = hc ∙ cong cw (qw-inj x w hq)
-qw-c A df kqbot c w hq hc hn = Empty-rec hn
-qw-c A df (kqi b) c w hq hc hn = Empty-rec hq
-qw-c A df (kqf b) c w hq hc hn = Empty-rec hq
-qw-c A df (kqcon d k fs) c w hq hc hn = Empty-rec hq
-qw-c A df (kqclos g env) c w hq hc hn = Empty-rec hq
-qw-c A df (kqlam b env) c w hq hc hn = Empty-rec hq
-qw-c A df (kqb l) c w hq hc hn = Empty-rec hq
-qw-c A df kqnil c w hq hc hn = Empty-rec hq
-qw-c A df (kqcons y r) c w hq hc hn = Empty-rec hq
--- the word route, end to end, a one-parameter main: at every fuel, whenever the first-order form has a
--- value at x, the C computes what the source code computes at x
-ca-fw-path : (r : VRule) (c : WC) (x : Word) (N : Nat) → ca-ok (λ g → zero) (λ g → false) (fw-to-fq (spec-w r c)) ckt ≡ true
-           → kq-nb (evq (λ g → fqnet) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil))
-           → evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w r c)) ckt (suc zero)) (csb zero (cw x) csnil) ≡ cw (wc-ev c (envx x))
-ca-fw-path r c x N hok hn =
-  qw-c (λ g → zero) (λ g → false) (evq (λ g → fqnet) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil)) (evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w r c)) ckt (suc zero)) (csb zero (cw x) csnil)) (wc-ev c (envx x))
-    (fw-path r c (λ g → fqnet) (envx x) (kqcons (kqw x) kqnil) N (fenv-x x))
-    (ca-sound-t (λ g → zero) (λ g → false) (λ g → false) (λ g → fqnet) (λ g → caunsup) (no-df (λ g → (λ u → false) g ≡ true)) (no-df (λ g → ca-ok (λ u → zero) (λ u → false) fqnet ckt ≡ true))
-       (no-df (λ g → caunsup ≡ fq-to-ca fqnet ckt zero)) N (fw-to-fq (spec-w r c)) (suc zero) (kqcons (kqw x) kqnil) (csb zero (cw x) csnil) hok
-       (corr-ext (λ g → zero) (λ g → false) zero kqnil csnil (kqw x) (cw x) (corr-nil (λ g → zero) (λ g → false)) (λ i → cw x)))
-    hn
--- ---------------------------------------------------------------- a program's table, by its keys
--- the obligations ca-path-n asks of a table hold of every defined key when the table's keys are a
--- list and the decision over the list computes to true (keys-ok: by the list, weq-sound at each key)
-bool-split : (b : Bool) (Q : Type) → (b ≡ true → Q) → (b ≡ false → Q) → Q
-bool-split true Q t f = t (λ i → true)
-bool-split false Q t f = f (λ i → false)
-kmem : Word → List Word → Bool
-kmem g nil = false
-kmem g (cons k r) = if weq g k then true else kmem g r
-kall : (Word → Bool) → List Word → Bool
-kall p nil = true
-kall p (cons k r) = andbt (p k) (kall p r)
-kmem-miss : (g k : Word) (r : List Word) → weq g k ≡ false → kmem g (cons k r) ≡ true → kmem g r ≡ true
-kmem-miss g k r h hm = subst {lzero} {lzero} {Bool} {λ b → (if b then true else kmem g r) ≡ true} {weq g k} {false} h hm
-keys-ok : (p : Word → Bool) (ks : List Word) → kall p ks ≡ true → (g : Word) → kmem g ks ≡ true → p g ≡ true
-keys-ok p nil ha g hm = Empty-rec (false≢true hm)
-keys-ok p (cons k r) ha g hm =
-  bool-split (weq g k) (p g ≡ true)
-    (λ h → subst {lzero} {lzero} {Word} {λ x → p x ≡ true} {k} {g} (sym (weq-sound g k h)) (andbt-l (p k) (kall p r) ha))
-    (λ h → keys-ok p r (andbt-r (p k) (kall p r) ha) g (kmem-miss g k r h hm))
-

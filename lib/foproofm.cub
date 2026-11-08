@@ -1,0 +1,347 @@
+-- lib/foproofm.cub — the C link on the machine's words (plan 18.5 step 7, B16): evc, the meaning of the C
+-- subset (lib/foproofc.cub's CA) with C's own uint64_t words, and m-sound, its refinement of evu (CA's
+-- meaning on unbounded words, which lib/foproofc.cub's ca-sound proves refines the first-order form's
+-- evq). Composed (cm-sound-t, and lib/foproofcp.cub's cm-path-n and cm-fw-path): whenever evc ends
+-- without a limit hit, the C's value refines evq's, and a source word is the C's word.
+-- Loaded after lib/foproofc.cub.
+--
+-- C's words are 64 bits: uint64_t addition and multiplication wrap at 2^64, a literal from 2^64 up
+-- does not fit (gcc truncates it), where the first-order form's words are exact. evc follows C
+-- exactly up to the first such operation and there answers mlim — a limit hit, no claim:
+--   * addition and multiplication whose exact result is from 2^64 up, and literals from 2^64 up, are
+--     limits (below 2^64 C's wrapping result is the exact one);
+--   * subtraction is the runtime's n1 (a < b ? 0 : a - b), the source's truncating subtraction, on
+--     every pair of words (no limit; lib/emitc.cub printed a wrapping a->n - b->n until 2026-11-08);
+--     comparisons, loads and stores, and the Int64 and Float64 operations agree with the exact ones;
+--   * an operation one of whose operands holds a limit (anywhere inside it) answers a limit, as does
+--     a test, a case, a loop's step or an apply whose scrutinee holds one; a call or a loop whose
+--     argument or state list holds a limit runs in locals that are all limits (mslim); where C would
+--     go on with a wrapped value, evc claims nothing;
+--   * everything else is lib/foproofc.cub's evu construct for construct, with its narrowings.
+-- So evc is stricter than C only at limits: a run that ends without one is C's run.
+-- ---------------------------------------------------------------- values and locals
+-- C's values (lib/foproofc.cub's CV) with mlim, a limit hit; locals with mslim, locals all limits
+data MV = mw (n : Word) | mcon (c : Word) (fs : MV) | mclo (g : Word) (caps : MV) | mb (l : BL) | mnil | mcons (x : MV) (r : MV) | mbot | mlim
+data MSt = msnil | msb (l : Nat) (v : MV) (r : MSt) | msx (v : MV) (r : MSt) | mslim
+mor : Bool → Bool → Bool
+mor true b = true
+mor false b = b
+-- a limit anywhere inside
+haslim : MV → Bool
+haslim (mw n) = false
+haslim (mcon c fs) = haslim fs
+haslim (mclo g caps) = haslim caps
+haslim (mb l) = false
+haslim mnil = false
+haslim (mcons x r) = mor (haslim x) (haslim r)
+haslim mbot = false
+haslim mlim = true
+-- a C value as a machine value, and back (a limit as none)
+c2m : CV → MV
+c2m (cw n) = mw n
+c2m (cvcon c fs) = mcon c (c2m fs)
+c2m (cclo g caps) = mclo g (c2m caps)
+c2m (cb l) = mb l
+c2m cvnil = mnil
+c2m (cvcons x r) = mcons (c2m x) (c2m r)
+c2m cbot = mbot
+m2c : MV → CV
+m2c (mw n) = cw n
+m2c (mcon c fs) = cvcon c (m2c fs)
+m2c (mclo g caps) = cclo g (m2c caps)
+m2c (mb l) = cb l
+m2c mnil = cvnil
+m2c (mcons x r) = cvcons (m2c x) (m2c r)
+m2c mbot = cbot
+m2c mlim = cbot
+c2m-nl : (c : CV) → haslim (c2m c) ≡ false
+c2m-nl (cw n) = λ i → false
+c2m-nl (cvcon c fs) = c2m-nl fs
+c2m-nl (cclo g caps) = c2m-nl caps
+c2m-nl (cb l) = λ i → false
+c2m-nl cvnil = λ i → false
+c2m-nl (cvcons x r) = λ i → mor (c2m-nl x i) (c2m-nl r i)
+c2m-nl cbot = λ i → false
+m2c-c2m : (c : CV) → m2c (c2m c) ≡ c
+m2c-c2m (cw n) = λ i → cw n
+m2c-c2m (cvcon c fs) = λ i → cvcon c (m2c-c2m fs i)
+m2c-c2m (cclo g caps) = λ i → cclo g (m2c-c2m caps i)
+m2c-c2m (cb l) = λ i → cb l
+m2c-c2m cvnil = λ i → cvnil
+m2c-c2m (cvcons x r) = λ i → cvcons (m2c-c2m x i) (m2c-c2m r i)
+m2c-c2m cbot = λ i → cbot
+-- locals: v<l>, x, a chain declared from v<l> (a chain holding a limit: locals all limits)
+ms-get : MSt → Nat → MV
+ms-get msnil l = mbot
+ms-get (msb m v r) l = if neqb m l then v else ms-get r l
+ms-get (msx v r) l = ms-get r l
+ms-get mslim l = mlim
+ms-x : MSt → MV
+ms-x msnil = mbot
+ms-x (msb m v r) = ms-x r
+ms-x (msx v r) = v
+ms-x mslim = mlim
+ms-push0 : MV → Nat → MSt → MSt
+ms-push0 (mcons v r) l s = ms-push0 r (suc l) (msb l v s)
+ms-push0 v l s = s
+ms-push : MV → Nat → MSt → MSt
+ms-push m l s = if haslim m then mslim else ms-push0 m l s
+-- ---------------------------------------------------------------- the operations
+-- every operation reads its operand: a limit inside answers a limit; otherwise lib/foproofc.cub's
+-- operation on it, except where C's words differ from exact ones
+mlift : (CV → CV) → MV → MV
+mlift g m = if haslim m then mlim else c2m (g (m2c m))
+-- a uint64_t holds a word below 2^64; from there, a limit
+c-fits : Word → Bool
+c-fits w = wlt w #18446744073709551616
+mwrap : CV → MV
+mwrap (cw w) = if c-fits w then mw w else mlim
+mwrap c = c2m c
+-- the runtime's operation p: addition (0) and multiplication (2) as uint64_t (their exact result when
+-- it fits), every other as lib/foproofc.cub's c-prim
+mprim0 : Word → CV → MV
+mprim0 p x = if weq p #0 then mwrap (c-ww wadd x) else (if weq p #2 then mwrap (c-ww dmulw x) else c2m (c-prim p x))
+m-prim : Word → MV → MV
+m-prim p m = if haslim m then mlim else mprim0 p (m2c m)
+-- ((c->n != 0) ? (a) : (b))
+msel : CV → MV → MV → MV
+msel (cw w) a b = %welimP (λ u → MV) w b (λ k h → a)
+msel v a b = mbot
+m-if : MV → MV → MV → MV
+m-if c a b = if haslim c then mlim else msel (m2c c) a b
+-- a loop's step (lib/foproofc.cub's c-lstep)
+mls0 : Nat → CV → (MV → MV) → MV
+mls0 k (cvcon c fs) cont = if weq c #0 then (if c-isn k fs then cont (c2m fs) else mbot) else c2m (c-nth fs zero)
+mls0 k v cont = mbot
+m-lstep : Nat → MV → (MV → MV) → MV
+m-lstep k v cont = if haslim v then mlim else mls0 k (m2c v) cont
+-- a case on x (lib/foproofc.cub's c-altsel; calt is its body on the scrutinee)
+calt : Word → Nat → Nat → (CS → CV) → CV → CS → CV → CV
+calt j n l fb rest s x =
+  case x of
+    cvcon c fs → (if weq c j then (if c-isn n fs then fb (cs-push fs l s) else cbot) else rest)
+    _ → cbot
+malt0 : Word → Nat → Nat → (MSt → MV) → MV → MSt → CV → MV
+malt0 j n l fb rest s x =
+  case x of
+    cvcon c fs → (if weq c j then (if c-isn n fs then fb (ms-push (c2m fs) l s) else mbot) else rest)
+    _ → mbot
+m-altsel : Word → Nat → Nat → (MSt → MV) → MV → MSt → MV
+m-altsel j n l fb rest s = if haslim (ms-x s) then mlim else malt0 j n l fb rest s (m2c (ms-x s))
+-- ---------------------------------------------------------------- the meaning
+data ME = me (ev : CA → MSt → MV) (lp : Nat → Nat → MV → CA → MSt → MV)
+me-ev : ME → CA → MSt → MV
+me-ev (me f l) = f
+me-lp : ME → Nat → Nat → MV → CA → MSt → MV
+me-lp (me f l) = l
+m-apenv : Nat → MV → MV → MSt
+m-apenv zero a caps = msnil
+m-apenv (suc m) a caps = msb m a (ms-push caps zero msnil)
+map0 : (Word → CA) → (Word → Nat) → (Word → Bool) → ME → CV → MV → MV
+map0 GC A CD k (cclo g caps) a = if andbt (CD g) (andbt (wlt g #1000000) (c-isar (A g) caps)) then me-ev k (GC g) (m-apenv (A g) a (c2m caps)) else mbot
+map0 GC A CD k v a = mbot
+m-ap1 : (Word → CA) → (Word → Nat) → (Word → Bool) → ME → MV → MV → MV
+m-ap1 GC A CD k f a = if haslim f then mlim else map0 GC A CD k (m2c f) a
+mapl0 : (Word → CA) → (Word → Nat) → (Word → Bool) → ME → CV → MV → MV
+mapl0 GC A CD k (cvcons a r) f = mapl0 GC A CD k r (m-ap1 GC A CD k f (c2m a))
+mapl0 GC A CD k v f = f
+m-appl : (Word → CA) → (Word → Nat) → (Word → Bool) → ME → MV → MV → MV
+m-appl GC A CD k as f = if haslim as then mlim else mapl0 GC A CD k (m2c as) f
+mevT : (Word → CA) → (Word → Nat) → (Word → Bool) → ME → CA → MSt → MV
+mevT GC A CD k (caw w) s = mwrap (cw w)
+mevT GC A CD k (cav l) s = ms-get s l
+mevT GC A CD k (caprim p as) s = m-prim p (mevT GC A CD k as s)
+mevT GC A CD k (cablk l a b) s = mevT GC A CD k b (msb l (mevT GC A CD k a s) s)
+mevT GC A CD k (cacon c fs) s = mcon c (mevT GC A CD k fs s)
+mevT GC A CD k (caproj j x) s = mlift (c-proj j) (mevT GC A CD k x s)
+mevT GC A CD k (casw x alts) s = mevT GC A CD k alts (msx (mevT GC A CD k x s) s)
+mevT GC A CD k (caalt j n l b r) s = m-altsel j n l (λ s2 → mevT GC A CD k b s2) (mevT GC A CD k r s) s
+mevT GC A CD k canone s = mbot
+mevT GC A CD k (caif c a b) s = m-if (mevT GC A CD k c s) (mevT GC A CD k a s) (mevT GC A CD k b s)
+mevT GC A CD k (caclo g caps) s = mclo g (mevT GC A CD k caps s)
+mevT GC A CD k (caap f as) s = m-appl GC A CD k (mevT GC A CD k as s) (mevT GC A CD k f s)
+mevT GC A CD k (cacall g as) s = me-ev k (GC g) (ms-push (mevT GC A CD k as s) zero msnil)
+mevT GC A CD k (caloop l n init b) s = me-lp k l n (mevT GC A CD k init s) b s
+mevT GC A CD k (cadecl l x r) s = mcons (mevT GC A CD k x s) (mevT GC A CD k r (msb l (mevT GC A CD k x s) s))
+mevT GC A CD k canil s = mnil
+mevT GC A CD k (cacons x r) s = mcons (mevT GC A CD k x s) (mevT GC A CD k r s)
+mevT GC A CD k caunsup s = mbot
+meN : (Word → CA) → (Word → Nat) → (Word → Bool) → Nat → ME
+meN GC A CD zero = me (λ t s → mbot) (λ l n st b s → mbot)
+meN GC A CD (suc m) = me (λ t s → mevT GC A CD (meN GC A CD m) t s) (λ l n st b s → m-lstep n (mevT GC A CD (meN GC A CD m) b (ms-push st l s)) (λ st2 → me-lp (meN GC A CD m) l n st2 b s))
+-- the meaning of a C construct at fuel n on C's words (GC, A, CD as for evu)
+evc : (Word → CA) → (Word → Nat) → (Word → Bool) → Nat → CA → MSt → MV
+evc GC A CD n t s = mevT GC A CD (meN GC A CD n) t s
+-- ---------------------------------------------------------------- the relation
+-- a machine value refines an unbounded one: it holds a limit, or it is the same value
+MR : CV → MV → Type
+MR c m = Sum (haslim m ≡ true) (m ≡ c2m c)
+mr-c : (c : CV) → MR c (c2m c)
+mr-c c = inr (λ i → c2m c)
+mr-l : (c : CV) → MR c mlim
+mr-l c = inl (λ i → true)
+mr-bif : (b : Bool) (x : CV) (x2 : MV) (y : CV) (y2 : MV) → MR x x2 → MR y y2 → MR (if b then x else y) (if b then x2 else y2)
+mr-bif true x x2 y y2 hx hy = hx
+mr-bif false x x2 y y2 hx hy = hy
+-- the gate every operation passes: a limit in its operand answers a limit; otherwise the operation on
+-- the operand's unbounded value
+mr-gate : (c : CV) (m : MV) (y : CV) (K : CV → MV) → MR c m → MR y (K c) → MR y (if haslim m then mlim else K (m2c m))
+mr-gate c m y K (inl p) hk = subst {lzero} {lzero} {Bool} {λ b → MR y (if b then mlim else K (m2c m))} {true} {haslim m} (sym p) (mr-l y)
+mr-gate c m y K (inr p) hk =
+  subst {lzero} {lzero} {MV} {λ u → MR y (if haslim u then mlim else K (m2c u))} {c2m c} {m} (sym p)
+    (subst {lzero} {lzero} {Bool} {λ b → MR y (if b then mlim else K (m2c (c2m c)))} {false} {haslim (c2m c)} (sym (c2m-nl c))
+       (subst {lzero} {lzero} {CV} {λ v → MR y (K v)} {c} {m2c (c2m c)} (sym (m2c-c2m c)) hk))
+mr-lift : (g : CV → CV) (c : CV) (m : MV) → MR c m → MR (g c) (mlift g m)
+mr-lift g c m h = mr-gate c m (g c) (λ v → c2m (g v)) h (mr-c (g c))
+-- constructors
+mr-con : (c : Word) (fs : CV) (gs : MV) → MR fs gs → MR (cvcon c fs) (mcon c gs)
+mr-con c fs gs (inl p) = inl p
+mr-con c fs gs (inr p) = inr (λ i → mcon c (p i))
+mr-clo : (g : Word) (cs : CV) (ds : MV) → MR cs ds → MR (cclo g cs) (mclo g ds)
+mr-clo g cs ds (inl p) = inl p
+mr-clo g cs ds (inr p) = inr (λ i → mclo g (p i))
+mr-cons : (x : CV) (y : MV) (r : CV) (q : MV) → MR x y → MR r q → MR (cvcons x r) (mcons y q)
+mr-cons x y r q (inl p) hr = inl (cong (λ b → mor b (haslim q)) p)
+mr-cons x y r q (inr p) (inl pr) = inl (cong (λ u → mor (haslim u) (haslim q)) p ∙ (cong (λ b → mor b (haslim q)) (c2m-nl x) ∙ pr))
+mr-cons x y r q (inr p) (inr pr) = inr (λ i → mcons (p i) (pr i))
+-- the words: a literal or a result of addition or multiplication fits, or is a limit
+mr-wrapw : (w : Word) (b : Bool) → MR (cw w) (if b then mw w else mlim)
+mr-wrapw w true = mr-c (cw w)
+mr-wrapw w false = mr-l (cw w)
+mr-wrap : (c : CV) → MR c (mwrap c)
+mr-wrap (cw w) = mr-wrapw w (c-fits w)
+mr-wrap c = mr-c c
+mr-prim0 : (p : Word) (x : CV) → MR (c-prim p x) (mprim0 p x)
+mr-prim0 p x =
+  bool-split (weq p #0) (MR (c-prim p x) (mprim0 p x))
+    (λ h0 → subst {lzero} {lzero} {Word} {λ u → MR (c-prim u x) (mprim0 u x)} {#0} {p} (sym (weq-sound p #0 h0)) (mr-wrap (c-ww wadd x)))
+    (λ h0 → bool-split (weq p #2) (MR (c-prim p x) (mprim0 p x))
+       (λ h2 → subst {lzero} {lzero} {Word} {λ u → MR (c-prim u x) (mprim0 u x)} {#2} {p} (sym (weq-sound p #2 h2)) (mr-wrap (c-ww dmulw x)))
+       (λ h2 → subst {lzero} {lzero} {Bool} {λ b → MR (c-prim p x) (if b then mwrap (c-ww wadd x) else (if weq p #2 then mwrap (c-ww dmulw x) else c2m (c-prim p x)))} {false} {weq p #0} (sym h0)
+                 (subst {lzero} {lzero} {Bool} {λ b → MR (c-prim p x) (if b then mwrap (c-ww dmulw x) else c2m (c-prim p x))} {false} {weq p #2} (sym h2) (mr-c (c-prim p x)))))
+mr-prim : (p : Word) (x : CV) (m : MV) → MR x m → MR (c-prim p x) (m-prim p m)
+mr-prim p x m h = mr-gate x m (c-prim p x) (mprim0 p) h (mr-prim0 p x)
+mr-sel : (c a : CV) (a2 : MV) (b : CV) (b2 : MV) → MR a a2 → MR b b2 → MR (c-if c a b) (msel c a2 b2)
+mr-sel (cw w) a a2 b b2 ha hb = %welimP (λ u → MR (%welimP (λ u2 → CV) u b (λ k h → a)) (%welimP (λ u2 → MV) u b2 (λ k h → a2))) w hb (λ k h → ha)
+mr-sel c a a2 b b2 ha hb = mr-c cbot
+mr-if : (c : CV) (c2 : MV) (a : CV) (a2 : MV) (b : CV) (b2 : MV) → MR c c2 → MR a a2 → MR b b2 → MR (c-if c a b) (m-if c2 a2 b2)
+mr-if c c2 a a2 b b2 hc ha hb = mr-gate c c2 (c-if c a b) (λ v → msel v a2 b2) hc (mr-sel c a a2 b b2 ha hb)
+-- ---------------------------------------------------------------- the locals
+MEnv : CS → MSt → Type
+MEnv s s2 = ((l : Nat) → MR (cs-get s l) (ms-get s2 l)) × MR (cs-x s) (ms-x s2)
+menv-b : (l : Nat) (v : CV) (v2 : MV) (s : CS) (s2 : MSt) → MEnv s s2 → MR v v2 → MEnv (csb l v s) (msb l v2 s2)
+menv-b l v v2 s s2 h hv = ((λ k → mr-bif (neqb l k) v v2 (cs-get s k) (ms-get s2 k) hv (fst h k)) , snd h)
+menv-x : (v : CV) (v2 : MV) (s : CS) (s2 : MSt) → MEnv s s2 → MR v v2 → MEnv (csx v s) (msx v2 s2)
+menv-x v v2 s s2 h hv = (fst h , hv)
+menv-lim : (s : CS) → MEnv s mslim
+menv-lim s = ((λ k → mr-l (cs-get s k)) , mr-l (cs-x s))
+menv-nil : MEnv csnil msnil
+menv-nil = ((λ k → mr-c cbot) , mr-c cbot)
+menv-push0 : (st : CV) (l : Nat) (s : CS) (s2 : MSt) → MEnv s s2 → MEnv (cs-push st l s) (ms-push0 (c2m st) l s2)
+menv-push0 (cvcons v r) l s s2 h = menv-push0 r (suc l) (csb l v s) (msb l (c2m v) s2) (menv-b l v (c2m v) s s2 h (mr-c v))
+menv-push0 st l s s2 h = h
+menv-push : (st : CV) (st2 : MV) (l : Nat) (s : CS) (s2 : MSt) → MR st st2 → MEnv s s2 → MEnv (cs-push st l s) (ms-push st2 l s2)
+menv-push st st2 l s s2 (inl p) h = subst {lzero} {lzero} {Bool} {λ b → MEnv (cs-push st l s) (if b then mslim else ms-push0 st2 l s2)} {true} {haslim st2} (sym p) (menv-lim (cs-push st l s))
+menv-push st st2 l s s2 (inr p) h =
+  subst {lzero} {lzero} {MV} {λ u → MEnv (cs-push st l s) (if haslim u then mslim else ms-push0 u l s2)} {c2m st} {st2} (sym p)
+    (subst {lzero} {lzero} {Bool} {λ b → MEnv (cs-push st l s) (if b then mslim else ms-push0 (c2m st) l s2)} {false} {haslim (c2m st)} (sym (c2m-nl st)) (menv-push0 st l s s2 h))
+menv-ap : (m : Nat) (a : CV) (a2 : MV) (caps : CV) → MR a a2 → MEnv (c-apenv m a caps) (m-apenv m a2 (c2m caps))
+menv-ap zero a a2 caps ha = menv-nil
+menv-ap (suc m) a a2 caps ha = menv-b m a a2 (cs-push caps zero csnil) (ms-push (c2m caps) zero msnil) (menv-push caps (c2m caps) zero csnil msnil (mr-c caps) menv-nil) ha
+-- ---------------------------------------------------------------- steps, cases, applies
+mr-ls0 : (k : Nat) (v : CV) (cont : CV → CV) (cont2 : MV → MV) → ((x : CV) → MR (cont x) (cont2 (c2m x))) → MR (c-lstep k v cont) (mls0 k v cont2)
+mr-ls0 k (cvcon c fs) cont cont2 hc =
+  mr-bif (weq c #0) (if c-isn k fs then cont fs else cbot) (if c-isn k fs then cont2 (c2m fs) else mbot) (c-nth fs zero) (c2m (c-nth fs zero))
+    (mr-bif (c-isn k fs) (cont fs) (cont2 (c2m fs)) cbot mbot (hc fs) (mr-c cbot)) (mr-c (c-nth fs zero))
+mr-ls0 k v cont cont2 hc = mr-c cbot
+mr-lstep : (k : Nat) (v : CV) (v2 : MV) (cont : CV → CV) (cont2 : MV → MV) → MR v v2 → ((x : CV) → MR (cont x) (cont2 (c2m x))) → MR (c-lstep k v cont) (m-lstep k v2 cont2)
+mr-lstep k v v2 cont cont2 h hc = mr-gate v v2 (c-lstep k v cont) (λ u → mls0 k u cont2) h (mr-ls0 k v cont cont2 hc)
+mr-alt0 : (j : Word) (n l : Nat) (fb : CS → CV) (fb2 : MSt → MV) (R : CV) (R2 : MV) (s : CS) (s2 : MSt) (x : CV) → MEnv s s2 → MR R R2
+        → ((t : CS) (t2 : MSt) → MEnv t t2 → MR (fb t) (fb2 t2)) → MR (calt j n l fb R s x) (malt0 j n l fb2 R2 s2 x)
+mr-alt0 j n l fb fb2 R R2 s s2 (cvcon c fs) h hr hb =
+  mr-bif (weq c j) (if c-isn n fs then fb (cs-push fs l s) else cbot) (if c-isn n fs then fb2 (ms-push (c2m fs) l s2) else mbot) R R2
+    (mr-bif (c-isn n fs) (fb (cs-push fs l s)) (fb2 (ms-push (c2m fs) l s2)) cbot mbot (hb (cs-push fs l s) (ms-push (c2m fs) l s2) (menv-push fs (c2m fs) l s s2 (mr-c fs) h)) (mr-c cbot)) hr
+mr-alt0 j n l fb fb2 R R2 s s2 x h hr hb = mr-c cbot
+mr-alt : (j : Word) (n l : Nat) (fb : CS → CV) (fb2 : MSt → MV) (R : CV) (R2 : MV) (s : CS) (s2 : MSt) → MEnv s s2 → MR R R2
+       → ((t : CS) (t2 : MSt) → MEnv t t2 → MR (fb t) (fb2 t2)) → MR (c-altsel j n l fb R s) (m-altsel j n l fb2 R2 s2)
+mr-alt j n l fb fb2 R R2 s s2 h hr hb = mr-gate (cs-x s) (ms-x s2) (calt j n l fb R s (cs-x s)) (λ u → malt0 j n l fb2 R2 s2 u) (snd h) (mr-alt0 j n l fb fb2 R R2 s s2 (cs-x s) h hr hb)
+-- the functions at fuel n refined: in refining locals, the C function's meanings
+MCallOK : (Word → CA) → (Word → Nat) → (Word → Bool) → Nat → Type
+MCallOK GC A CD n = (g : Word) (s : CS) (s2 : MSt) → MEnv s s2 → MR (ce-ev (ceN GC A CD n) (GC g) s) (me-ev (meN GC A CD n) (GC g) s2)
+mr-ap0 : (GC : Word → CA) (A : Word → Nat) (CD : Word → Bool) (n : Nat) → MCallOK GC A CD n → (f a : CV) (a2 : MV) → MR a a2 → MR (c-ap1 GC A CD (ceN GC A CD n) f a) (map0 GC A CD (meN GC A CD n) f a2)
+mr-ap0 GC A CD n co (cclo g caps) a a2 ha =
+  mr-bif (andbt (CD g) (andbt (wlt g #1000000) (c-isar (A g) caps))) (ce-ev (ceN GC A CD n) (GC g) (c-apenv (A g) a caps)) (me-ev (meN GC A CD n) (GC g) (m-apenv (A g) a2 (c2m caps))) cbot mbot
+    (co g (c-apenv (A g) a caps) (m-apenv (A g) a2 (c2m caps)) (menv-ap (A g) a a2 caps ha)) (mr-c cbot)
+mr-ap0 GC A CD n co f a a2 ha = mr-c cbot
+mr-ap1 : (GC : Word → CA) (A : Word → Nat) (CD : Word → Bool) (n : Nat) → MCallOK GC A CD n → (f : CV) (f2 : MV) (a : CV) (a2 : MV) → MR f f2 → MR a a2 → MR (c-ap1 GC A CD (ceN GC A CD n) f a) (m-ap1 GC A CD (meN GC A CD n) f2 a2)
+mr-ap1 GC A CD n co f f2 a a2 hf ha = mr-gate f f2 (c-ap1 GC A CD (ceN GC A CD n) f a) (λ u → map0 GC A CD (meN GC A CD n) u a2) hf (mr-ap0 GC A CD n co f a a2 ha)
+mr-apl0 : (GC : Word → CA) (A : Word → Nat) (CD : Word → Bool) (n : Nat) → MCallOK GC A CD n → (as f : CV) (f2 : MV) → MR f f2 → MR (c-appl GC A CD (ceN GC A CD n) as f) (mapl0 GC A CD (meN GC A CD n) as f2)
+mr-apl0 GC A CD n co (cvcons a r) f f2 hf = mr-apl0 GC A CD n co r (c-ap1 GC A CD (ceN GC A CD n) f a) (m-ap1 GC A CD (meN GC A CD n) f2 (c2m a)) (mr-ap1 GC A CD n co f f2 a (c2m a) hf (mr-c a))
+mr-apl0 GC A CD n co as f f2 hf = hf
+mr-appl : (GC : Word → CA) (A : Word → Nat) (CD : Word → Bool) (n : Nat) → MCallOK GC A CD n → (as : CV) (as2 : MV) (f : CV) (f2 : MV) → MR as as2 → MR f f2 → MR (c-appl GC A CD (ceN GC A CD n) as f) (m-appl GC A CD (meN GC A CD n) as2 f2)
+mr-appl GC A CD n co as as2 f f2 h hf = mr-gate as as2 (c-appl GC A CD (ceN GC A CD n) as f) (λ u → mapl0 GC A CD (meN GC A CD n) u f2) h (mr-apl0 GC A CD n co as f f2 hf)
+-- the loops at fuel n refined
+MLoopOK : (Word → CA) → (Word → Nat) → (Word → Bool) → Nat → Type
+MLoopOK GC A CD n = (l k : Nat) (st : CV) (st2 : MV) (b : CA) (s : CS) (s2 : MSt) → MR st st2 → MEnv s s2 → MR (ce-lp (ceN GC A CD n) l k st b s) (me-lp (meN GC A CD n) l k st2 b s2)
+-- ---------------------------------------------------------------- the theorem
+MStep : (Word → CA) → (Word → Nat) → (Word → Bool) → Nat → Type
+MStep GC A CD n = (t : CA) (s : CS) (s2 : MSt) → MEnv s s2 → MR (cevT GC A CD (ceN GC A CD n) t s) (mevT GC A CD (meN GC A CD n) t s2)
+mstep : (GC : Word → CA) (A : Word → Nat) (CD : Word → Bool) (n : Nat) → MCallOK GC A CD n → MLoopOK GC A CD n
+      → (t : CA) (s : CS) (s2 : MSt) → MEnv s s2 → MR (cevT GC A CD (ceN GC A CD n) t s) (mevT GC A CD (meN GC A CD n) t s2)
+mstep GC A CD n co lo (caw w) s s2 h = mr-wrap (cw w)
+mstep GC A CD n co lo (cav l) s s2 h = fst h l
+mstep GC A CD n co lo (caprim p as) s s2 h = mr-prim p (cevT GC A CD (ceN GC A CD n) as s) (mevT GC A CD (meN GC A CD n) as s2) (mstep GC A CD n co lo as s s2 h)
+mstep GC A CD n co lo (cablk l a b) s s2 h = (mstep GC A CD n co lo b (csb l (cevT GC A CD (ceN GC A CD n) a s) s) (msb l (mevT GC A CD (meN GC A CD n) a s2) s2) (menv-b l (cevT GC A CD (ceN GC A CD n) a s) (mevT GC A CD (meN GC A CD n) a s2) s s2 h (mstep GC A CD n co lo a s s2 h)))
+mstep GC A CD n co lo (cacon c fs) s s2 h = mr-con c (cevT GC A CD (ceN GC A CD n) fs s) (mevT GC A CD (meN GC A CD n) fs s2) (mstep GC A CD n co lo fs s s2 h)
+mstep GC A CD n co lo (caproj j x) s s2 h = mr-lift (c-proj j) (cevT GC A CD (ceN GC A CD n) x s) (mevT GC A CD (meN GC A CD n) x s2) (mstep GC A CD n co lo x s s2 h)
+mstep GC A CD n co lo (casw x alts) s s2 h = (mstep GC A CD n co lo alts (csx (cevT GC A CD (ceN GC A CD n) x s) s) (msx (mevT GC A CD (meN GC A CD n) x s2) s2) (menv-x (cevT GC A CD (ceN GC A CD n) x s) (mevT GC A CD (meN GC A CD n) x s2) s s2 h (mstep GC A CD n co lo x s s2 h)))
+mstep GC A CD n co lo (caalt j k l b r) s s2 h = mr-alt j k l (λ t → cevT GC A CD (ceN GC A CD n) b t) (λ t → mevT GC A CD (meN GC A CD n) b t) (cevT GC A CD (ceN GC A CD n) r s) (mevT GC A CD (meN GC A CD n) r s2) s s2 h (mstep GC A CD n co lo r s s2 h) (λ t t2 ht → mstep GC A CD n co lo b t t2 ht)
+mstep GC A CD n co lo canone s s2 h = mr-c cbot
+mstep GC A CD n co lo (caif c a b) s s2 h = mr-if (cevT GC A CD (ceN GC A CD n) c s) (mevT GC A CD (meN GC A CD n) c s2) (cevT GC A CD (ceN GC A CD n) a s) (mevT GC A CD (meN GC A CD n) a s2) (cevT GC A CD (ceN GC A CD n) b s) (mevT GC A CD (meN GC A CD n) b s2) (mstep GC A CD n co lo c s s2 h) (mstep GC A CD n co lo a s s2 h) (mstep GC A CD n co lo b s s2 h)
+mstep GC A CD n co lo (caclo g caps) s s2 h = mr-clo g (cevT GC A CD (ceN GC A CD n) caps s) (mevT GC A CD (meN GC A CD n) caps s2) (mstep GC A CD n co lo caps s s2 h)
+mstep GC A CD n co lo (caap f as) s s2 h = mr-appl GC A CD n co (cevT GC A CD (ceN GC A CD n) as s) (mevT GC A CD (meN GC A CD n) as s2) (cevT GC A CD (ceN GC A CD n) f s) (mevT GC A CD (meN GC A CD n) f s2) (mstep GC A CD n co lo as s s2 h) (mstep GC A CD n co lo f s s2 h)
+mstep GC A CD n co lo (cacall g as) s s2 h = co g (cs-push (cevT GC A CD (ceN GC A CD n) as s) zero csnil) (ms-push (mevT GC A CD (meN GC A CD n) as s2) zero msnil) (menv-push (cevT GC A CD (ceN GC A CD n) as s) (mevT GC A CD (meN GC A CD n) as s2) zero csnil msnil (mstep GC A CD n co lo as s s2 h) menv-nil)
+mstep GC A CD n co lo (caloop l k init b) s s2 h = lo l k (cevT GC A CD (ceN GC A CD n) init s) (mevT GC A CD (meN GC A CD n) init s2) b s s2 (mstep GC A CD n co lo init s s2 h) h
+mstep GC A CD n co lo (cadecl l x r) s s2 h = mr-cons (cevT GC A CD (ceN GC A CD n) x s) (mevT GC A CD (meN GC A CD n) x s2) (cevT GC A CD (ceN GC A CD n) r (csb l (cevT GC A CD (ceN GC A CD n) x s) s)) (mevT GC A CD (meN GC A CD n) r (msb l (mevT GC A CD (meN GC A CD n) x s2) s2)) (mstep GC A CD n co lo x s s2 h) (mstep GC A CD n co lo r (csb l (cevT GC A CD (ceN GC A CD n) x s) s) (msb l (mevT GC A CD (meN GC A CD n) x s2) s2) (menv-b l (cevT GC A CD (ceN GC A CD n) x s) (mevT GC A CD (meN GC A CD n) x s2) s s2 h (mstep GC A CD n co lo x s s2 h)))
+mstep GC A CD n co lo canil s s2 h = mr-c cvnil
+mstep GC A CD n co lo (cacons x r) s s2 h = mr-cons (cevT GC A CD (ceN GC A CD n) x s) (mevT GC A CD (meN GC A CD n) x s2) (cevT GC A CD (ceN GC A CD n) r s) (mevT GC A CD (meN GC A CD n) r s2) (mstep GC A CD n co lo x s s2 h) (mstep GC A CD n co lo r s s2 h)
+mstep GC A CD n co lo caunsup s s2 h = mr-c cbot
+mcall-up : (GC : Word → CA) (A : Word → Nat) (CD : Word → Bool) (n : Nat) → MStep GC A CD n → MCallOK GC A CD (suc n)
+mcall-up GC A CD n th g s s2 h = th (GC g) s s2 h
+mloop-up : (GC : Word → CA) (A : Word → Nat) (CD : Word → Bool) (n : Nat) → MStep GC A CD n → MLoopOK GC A CD n → MLoopOK GC A CD (suc n)
+mloop-up GC A CD n th lo l k st st2 b s s2 hs h =
+  mr-lstep k (cevT GC A CD (ceN GC A CD n) b (cs-push st l s)) (mevT GC A CD (meN GC A CD n) b (ms-push st2 l s2)) (λ x → ce-lp (ceN GC A CD n) l k x b s) (λ y → me-lp (meN GC A CD n) l k y b s2)
+    (th b (cs-push st l s) (ms-push st2 l s2) (menv-push st st2 l s s2 hs h))
+    (λ x → lo l k x (c2m x) b s s2 (mr-c x) h)
+mcoks : (GC : Word → CA) (A : Word → Nat) (CD : Word → Bool) (n : Nat) → MCallOK GC A CD n × MLoopOK GC A CD n
+mcoks GC A CD zero = ((λ g s s2 h → mr-c cbot) , (λ l k st st2 b s s2 hs h → mr-c cbot))
+mcoks GC A CD (suc n) =
+  (mcall-up GC A CD n (mstep GC A CD n (fst (mcoks GC A CD n)) (snd (mcoks GC A CD n))) ,
+   mloop-up GC A CD n (mstep GC A CD n (fst (mcoks GC A CD n)) (snd (mcoks GC A CD n))) (snd (mcoks GC A CD n)))
+-- the theorem: at every fuel, every C construct, in refining locals, its meaning on C's words refines
+-- its meaning on unbounded ones (holds a limit, or is the same value)
+m-sound : (GC : Word → CA) (A : Word → Nat) (CD : Word → Bool) (n : Nat) → MStep GC A CD n
+m-sound GC A CD n = mstep GC A CD n (fst (mcoks GC A CD n)) (snd (mcoks GC A CD n))
+-- ---------------------------------------------------------------- composed with ca-sound
+-- C's locals as machine locals
+c2ms : CS → MSt
+c2ms csnil = msnil
+c2ms (csb l v r) = msb l (c2m v) (c2ms r)
+c2ms (csx v r) = msx (c2m v) (c2ms r)
+menv-c : (s : CS) → MEnv s (c2ms s)
+menv-c csnil = menv-nil
+menv-c (csb l v r) = menv-b l v (c2m v) r (c2ms r) (menv-c r) (mr-c v)
+menv-c (csx v r) = menv-x v (c2m v) r (c2ms r) (menv-c r) (mr-c v)
+-- a first-order value refined by a machine value: through the unbounded C value between them
+CRC : (Word → Nat) → (Word → Bool) → KQ → MV → Type
+CRC A df x m = (c : CV) × (CR A df x c × MR c m)
+-- for a term: at every fuel, the C's value on its own words refines evq's
+cm-sound-t : (A : Word → Nat) (df CD : Word → Bool) (G : Word → FQ) (GC : Word → CA) → ((g : Word) → df g ≡ true → CD g ≡ true) → ((g : Word) → df g ≡ true → ca-ok A df (G g) ckt ≡ true)
+           → ((g : Word) → df g ≡ true → GC g ≡ fq-to-ca (G g) ckt (A g)) → (n : Nat) (t : FQ) (d : Nat) (e : KQ) (s : CS) → ca-ok A df t ckt ≡ true → Corr A df d e s
+           → CRC A df (evq G n t e) (evc GC A CD n (fq-to-ca t ckt d) (c2ms s))
+cm-sound-t A df CD G GC inc tok lk n t d e s hk h =
+  (evu GC A CD n (fq-to-ca t ckt d) s , (ca-sound-t A df CD G GC inc tok lk n t d e s hk h , m-sound GC A CD n (fq-to-ca t ckt d) s (c2ms s) (menv-c s)))
+-- a word: the C's value on its own words is a limit hit, or that word
+cm-word : (c : CV) (m : MV) (w : Word) → c ≡ cw w → MR c m → Sum (haslim m ≡ true) (m ≡ mw w)
+cm-word c m w hc (inl p) = inl p
+cm-word c m w hc (inr p) = inr (p ∙ cong c2m hc)

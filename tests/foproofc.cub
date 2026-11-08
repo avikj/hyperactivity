@@ -1,4 +1,4 @@
--- tests/foproofc.cub — lib/foproofc.cub's readings: the C link's meaning (evc, over the checked translation
+-- tests/foproofc.cub — lib/foproofc.cub's readings: the C link's meaning (evu, over the checked translation
 -- fq-to-ca) agrees with the first-order form's checked meaning (evq) construct by construct, on every
 -- form and primitive the printers produce; the printer's text for a program; the word route's path to the
 -- C end to end for run.py's two word programs. Loaded after tests/foproofc-progs.cub (generated: the
@@ -16,7 +16,7 @@ qc-df g = if weq g #3 then true else weq g #4
 qc-GC : Word → CA
 qc-GC g = fq-to-ca (qc-G g) ckt (qc-AN g)
 -- a closed term's C, at the scope with nothing in it
-c-of t = obs-cv (evc qc-GC qc-AN qc-df (dnat #64) (fq-to-ca t ckt zero) csnil)
+c-of t = obs-cv (evu qc-GC qc-AN qc-df (dnat #64) (fq-to-ca t ckt zero) csnil)
 q-of t = obs-q (evq qc-G (dnat #64) t kqnil)
 -- every construct and primitive the printers emit, the two meanings side by side (each term also well
 -- formed for the C link: ca-ok, the translation's precondition)
@@ -93,14 +93,23 @@ q-of t = obs-q (evq qc-G (dnat #64) t kqnil)
 -- ---------------------------------------------------------------- the word route, end to end, to the C
 -- run.py's proved (lib/foproof.cub's ex-c) and proved-fib (fib-c): at every argument and fuel, whenever
 -- the first-order form has a value, the C the proved route prints computes what the source code computes
+-- (ex-cpath on unbounded words; ex-mpath on C's uint64_t words: a limit hit or that word)
 ex-cpath : (x : Word) (N : Nat) → kq-nb (evq (λ g → fqnet) N (fw-to-fq (spec-w std-vrule ex-c)) (kqcons (kqw x) kqnil))
-  → evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w std-vrule ex-c)) ckt (suc zero)) (csb zero (cw x) csnil) ≡ cw (wc-ev ex-c (envx x))
+  → evu (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w std-vrule ex-c)) ckt (suc zero)) (csb zero (cw x) csnil) ≡ cw (wc-ev ex-c (envx x))
 ex-cpath x N hn = ca-fw-path std-vrule ex-c x N (λ j → true) hn
+ex-mpath : (x : Word) (N : Nat) → kq-nb (evq (λ g → fqnet) N (fw-to-fq (spec-w std-vrule ex-c)) (kqcons (kqw x) kqnil))
+  → Sum (haslim (evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w std-vrule ex-c)) ckt (suc zero)) (msb zero (mw x) msnil)) ≡ true)
+        (evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w std-vrule ex-c)) ckt (suc zero)) (msb zero (mw x) msnil) ≡ mw (wc-ev ex-c (envx x)))
+ex-mpath x N hn = cm-fw-path std-vrule ex-c x N (λ j → true) hn
 fib-cpath : (x : Word) (N : Nat) → kq-nb (evq (λ g → fqnet) N (fw-to-fq (spec-w std-vrule fib-c)) (kqcons (kqw x) kqnil))
-  → evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w std-vrule fib-c)) ckt (suc zero)) (csb zero (cw x) csnil) ≡ cw (wc-ev fib-c (envx x))
+  → evu (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w std-vrule fib-c)) ckt (suc zero)) (csb zero (cw x) csnil) ≡ cw (wc-ev fib-c (envx x))
 fib-cpath x N hn = ca-fw-path std-vrule fib-c x N (λ j → true) hn
+fib-mpath : (x : Word) (N : Nat) → kq-nb (evq (λ g → fqnet) N (fw-to-fq (spec-w std-vrule fib-c)) (kqcons (kqw x) kqnil))
+  → Sum (haslim (evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w std-vrule fib-c)) ckt (suc zero)) (msb zero (mw x) msnil)) ≡ true)
+        (evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w std-vrule fib-c)) ckt (suc zero)) (msb zero (mw x) msnil) ≡ mw (wc-ev fib-c (envx x)))
+fib-mpath x N hn = cm-fw-path std-vrule fib-c x N (λ j → true) hn
 -- what run.py's proved prints is that C: the word route's table, its main the instance's
 #same specialize-proved-q (Word → Word) lnil (code (λ (w : Word) → fibx w)) = (#1 , lcons (#0 , (#1 , fw-to-fq (spec-w std-vrule fib-c))) lnil)
 #same ca-table (ca-tr-defs (lcons (#0 , (#1 , fw-to-fq (spec-w std-vrule ex-c))) lnil)) #0 = fq-to-ca (fw-to-fq (spec-w std-vrule ex-c)) ckt (suc zero)
-#same obs-cv (evc (λ g → caunsup) (λ g → zero) (λ g → false) (dnat #64) (fq-to-ca (fw-to-fq (spec-w std-vrule ex-c)) ckt (suc zero)) (csb zero (cw #4) csnil)) = some #13
-#same obs-cv (evc (λ g → caunsup) (λ g → zero) (λ g → false) (dnat #400) (fq-to-ca (fw-to-fq (spec-w std-vrule fib-c)) ckt (suc zero)) (csb zero (cw #90) csnil)) = some #2880067194370816120
+#same obs-cv (evu (λ g → caunsup) (λ g → zero) (λ g → false) (dnat #64) (fq-to-ca (fw-to-fq (spec-w std-vrule ex-c)) ckt (suc zero)) (csb zero (cw #4) csnil)) = some #13
+#same obs-cv (evu (λ g → caunsup) (λ g → zero) (λ g → false) (dnat #400) (fq-to-ca (fw-to-fq (spec-w std-vrule fib-c)) ckt (suc zero)) (csb zero (cw #90) csnil)) = some #2880067194370816120

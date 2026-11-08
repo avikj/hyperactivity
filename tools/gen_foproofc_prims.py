@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # lib/foproofc.cub's primitive chain: cpq-k / cpc-k / cpr-k (k = 0 .. 29) and cr-prim. q-prim
-# (lib/foproofq.cub) and c-prim (lib/foproofc.cub) are if-chains over the primitive's number; cpq-k is
+# (lib/foproofe.cub) and c-prim (lib/foproofc.cub) are if-chains over the primitive's number; cpq-k is
 # q-prim's chain from its k-th test on, cpc-k c-prim's, and cpr-k proves the k-th tail refined, so the
 # proof follows the chain one test at a time (one cr-bif per entry, nothing to normalize under an open
 # test).

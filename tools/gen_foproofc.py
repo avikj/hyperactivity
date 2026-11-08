@@ -4,7 +4,7 @@
 # tests/foproofq-progs.cub defines (loaded first; the tables P-G, P-T, P-GT, P-D, P-A and the proofs
 # P-gok, P-gq): the table's keys as a list (P-ks), the C functions' parameter counts (P-AN), the C
 # functions (P-GC, fq-to-ca of the first-order table at each key), the table's obligations decided over
-# the keys (keys-ok), and ca-path-n instantiated (P-cpath: at every fuel and arguments, the source's
+# the keys (keys-ok), and cm-path-n instantiated (P-cpath: at every fuel and arguments, the source's
 # value refined by the first-order form's, refined by the C's). Readings tie the instance to what the
 # proved route prints: every C function of the table run.py's program prints equal to the instance's
 # at its key, the main's too, and the C's meaning computes run.py's answer at its arguments.
@@ -69,11 +69,12 @@ def gen():
         for j in range(k): ev = '(kqcons %s %s)' % (vs[j], ev)
         binds = ''.join(' (%s : DV) (%s : KQ)' % (xs[j], vs[j]) for j in range(k))
         o.append('-- the checked path to the C: at every fuel, whatever the source computes at the arguments, the first-order')
-        o.append('-- form computes (refined), and the C computes what the first-order form does (refined), in every refining scope')
+        o.append('-- form computes (refined), and the C on its own words computes what the first-order form does (a limit hit or')
+        o.append('-- refined), in every refining scope')
         o.append('%s-cpath : (n : Nat)%s (m : Nat) (s : CS) → qa-ok %s-D %s-T %s → Corr %s-AN %s-df %d %s s' % (P, binds, P, P, qa, P, P, k, ev))
         o.append('  → qrel %s-D (derase (dsev %s-G n %s-m (qa-ρ %s))) (evq %s (fr-addn n m) %s %s)' % (P, P, P, qa, FT, MQ, ev))
-        o.append('    × CR %s-AN %s-df (evq %s (fr-addn n m) %s %s) (evc %s-GC %s-AN %s-df (fr-addn n m) (fq-to-ca %s ckt %d) s)' % (P, P, FT, MQ, ev, P, P, P, MQ, k))
-        o.append('%s-cpath n%s m s ha hc = ca-path-n std-frule %s-G %s-T %s-GT %s-gok %s-D %s-A %s-gq %s-AN %s-df %s-df %s-GC (λ g h → h) %s-tok (λ g h → λ i → %s-GC g) n %s-m %s m s (dtok-auto %s-T %s-m (λ j → true)) ha (λ j → true) (λ j → true) hc' % (
+        o.append('    × CRC %s-AN %s-df (evq %s (fr-addn n m) %s %s) (evc %s-GC %s-AN %s-df (fr-addn n m) (fq-to-ca %s ckt %d) (c2ms s))' % (P, P, FT, MQ, ev, P, P, P, MQ, k))
+        o.append('%s-cpath n%s m s ha hc = cm-path-n std-frule %s-G %s-T %s-GT %s-gok %s-D %s-A %s-gq %s-AN %s-df %s-df %s-GC (λ g h → h) %s-tok (λ g h → λ i → %s-GC g) n %s-m %s m s (dtok-auto %s-T %s-m (λ j → true)) ha (λ j → true) (λ j → true) hc' % (
             P, ''.join(' %s %s' % (xs[j], vs[j]) for j in range(k)), P, P, P, P, P, P, P, P, P, P, P, P, P, P, qa, P, P))
         # what the proved route prints is the instance's C: each function of the printed table
         T = qtab(name, sp)
@@ -87,7 +88,8 @@ def gen():
             H = 'ca-harness (fo-args-fq %s) (%s)' % (args, T)
         else:
             H = 'ca-tr-defs (%s)' % T
-        o.append('#same evc (ca-table (%s)) (ca-arity (%s)) (ca-disp (%s)) (dnat #64) (cacall #0 canil) csnil = cw #%s' % (H, H, H, expect))
+        o.append('#same evu (ca-table (%s)) (ca-arity (%s)) (ca-disp (%s)) (dnat #64) (cacall #0 canil) csnil = cw #%s' % (H, H, H, expect))
+        o.append('#same evc (ca-table (%s)) (ca-arity (%s)) (ca-disp (%s)) (dnat #64) (cacall #0 canil) msnil = mw #%s' % (H, H, H, expect))
     return '\n'.join(o) + '\n'
 
 if __name__ == '__main__':

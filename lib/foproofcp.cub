@@ -1,0 +1,106 @@
+-- lib/foproofcp.cub — the C link's composed paths (split from lib/foproofc.cub, so the C link itself
+-- loads on lib/foproofe.cub alone): the first-order form's paths (lib/foproofq.cub's q-path-n, fw-path)
+-- joined to the C's refinement (lib/foproofc.cub's ca-sound), and the per-program obligations by keys.
+-- Loaded after lib/foproofq.cub and lib/foproofm.cub (so lib/foproofc.cub).
+-- ---------------------------------------------------------------- the composed path
+-- a word the source computes, the C computes: the first-order form's value is that word (qrel at a
+-- word), and the C's refines it
+ca-word : (A : Word → Nat) (df : Word → Bool) (D : Word → Nat) (x : TV) (v : KQ) (c : CV) (w : Word) → x ≡ tvw w → qrel D x v → CR A df v c → c ≡ cw w
+ca-word A df D x v c w hx hq hc = subst {lzero} {lzero} {KQ} {λ u → CR A df u c} {v} {kqw w} (subst {lzero} {lzero} {TV} {λ y → qrel D y v} {x} {tvw w} hx hq) hc
+-- the data route, end to end: at every fuel and arguments, the source's value refined by the
+-- first-order form's (lib/foproofq.cub's q-path-n), refined by the C's (ca-sound); AN the C functions'
+-- parameter counts, df the defined keys, CD the dispatcher's, GC the C functions
+ca-path-n : (r : FRule) (G : Word → DC) (T GT : Word → FC) → DGOK G T GT → (D : Word → Nat) (A : Word → Word) → QGOK (fr-tab (fst r) T) (fr-tab (fst r) GT) D A
+          → (AN : Word → Nat) (df CD : Word → Bool) (GC : Word → CA) → ((g : Word) → df g ≡ true → CD g ≡ true)
+          → ((g : Word) → df g ≡ true → ca-ok AN df (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A g) ckt ≡ true)
+          → ((g : Word) → df g ≡ true → GC g ≡ fq-to-ca (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A g) ckt (AN g))
+          → (n : Nat) (c : DC) (a : QA) (m : Nat) (s : CS) → DTok T c → qa-ok D T a → qtok D A (fr-bu (fst r) (dconv c)) (qa-n a) ≡ true
+          → ca-ok AN df (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) ckt ≡ true → Corr AN df (qa-n a) (qa-e a) s
+          → qrel D (derase (dsev G n c (qa-ρ a))) (evq (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-e a))
+            × CR AN df (evq (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-e a))
+                       (evu GC AN CD (fr-addn n m) (fq-to-ca (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) ckt (qa-n a)) s)
+ca-path-n r G T GT go D A gq AN df CD GC inc tok lk n c a m s tk ha hq hok hc =
+  (q-path-n r G T GT go D A gq n c a m tk ha hq ,
+   ca-sound-t AN df CD (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) GC inc tok lk (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-n a) (qa-e a) s hok hc)
+-- the word route has no table: no key is defined
+no-df : (P : Word → Type) (g : Word) → (λ u → false) g ≡ true → P g
+no-df P g h = Empty-rec (false≢true h)
+-- a word, refined: none or the word; with a value, the C's word is it
+kq-nb : KQ → Type
+kq-nb kqbot = Empty
+kq-nb (kqw w) = Unit
+kq-nb (kqi b) = Unit
+kq-nb (kqf b) = Unit
+kq-nb (kqcon d c fs) = Unit
+kq-nb (kqclos g env) = Unit
+kq-nb (kqlam b env) = Unit
+kq-nb (kqb l) = Unit
+kq-nb kqnil = Unit
+kq-nb (kqcons x r) = Unit
+qw-c : (A : Word → Nat) (df : Word → Bool) (v : KQ) (c : CV) (w : Word) → qle-w v w → CR A df v c → kq-nb v → c ≡ cw w
+qw-c A df (kqw x) c w hq hc hn = hc ∙ cong cw (qw-inj x w hq)
+qw-c A df kqbot c w hq hc hn = Empty-rec hn
+qw-c A df (kqi b) c w hq hc hn = Empty-rec hq
+qw-c A df (kqf b) c w hq hc hn = Empty-rec hq
+qw-c A df (kqcon d k fs) c w hq hc hn = Empty-rec hq
+qw-c A df (kqclos g env) c w hq hc hn = Empty-rec hq
+qw-c A df (kqlam b env) c w hq hc hn = Empty-rec hq
+qw-c A df (kqb l) c w hq hc hn = Empty-rec hq
+qw-c A df kqnil c w hq hc hn = Empty-rec hq
+qw-c A df (kqcons y r) c w hq hc hn = Empty-rec hq
+-- the word route, end to end, a one-parameter main: at every fuel, whenever the first-order form has a
+-- value at x, the C computes what the source code computes at x
+ca-fw-path : (r : VRule) (c : WC) (x : Word) (N : Nat) → ca-ok (λ g → zero) (λ g → false) (fw-to-fq (spec-w r c)) ckt ≡ true
+           → kq-nb (evq (λ g → fqnet) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil))
+           → evu (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w r c)) ckt (suc zero)) (csb zero (cw x) csnil) ≡ cw (wc-ev c (envx x))
+ca-fw-path r c x N hok hn =
+  qw-c (λ g → zero) (λ g → false) (evq (λ g → fqnet) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil)) (evu (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w r c)) ckt (suc zero)) (csb zero (cw x) csnil)) (wc-ev c (envx x))
+    (fw-path r c (λ g → fqnet) (envx x) (kqcons (kqw x) kqnil) N (fenv-x x))
+    (ca-sound-t (λ g → zero) (λ g → false) (λ g → false) (λ g → fqnet) (λ g → caunsup) (no-df (λ g → (λ u → false) g ≡ true)) (no-df (λ g → ca-ok (λ u → zero) (λ u → false) fqnet ckt ≡ true))
+       (no-df (λ g → caunsup ≡ fq-to-ca fqnet ckt zero)) N (fw-to-fq (spec-w r c)) (suc zero) (kqcons (kqw x) kqnil) (csb zero (cw x) csnil) hok
+       (corr-ext (λ g → zero) (λ g → false) zero kqnil csnil (kqw x) (cw x) (corr-nil (λ g → zero) (λ g → false)) (λ i → cw x)))
+    hn
+-- ---------------------------------------------------------------- a program's table, by its keys
+-- the obligations ca-path-n asks of a table hold of every defined key when the table's keys are a
+-- list and the decision over the list computes to true (keys-ok: by the list, weq-sound at each key)
+kmem : Word → List Word → Bool
+kmem g nil = false
+kmem g (cons k r) = if weq g k then true else kmem g r
+kall : (Word → Bool) → List Word → Bool
+kall p nil = true
+kall p (cons k r) = andbt (p k) (kall p r)
+kmem-miss : (g k : Word) (r : List Word) → weq g k ≡ false → kmem g (cons k r) ≡ true → kmem g r ≡ true
+kmem-miss g k r h hm = subst {lzero} {lzero} {Bool} {λ b → (if b then true else kmem g r) ≡ true} {weq g k} {false} h hm
+keys-ok : (p : Word → Bool) (ks : List Word) → kall p ks ≡ true → (g : Word) → kmem g ks ≡ true → p g ≡ true
+keys-ok p nil ha g hm = Empty-rec (false≢true hm)
+keys-ok p (cons k r) ha g hm =
+  bool-split (weq g k) (p g ≡ true)
+    (λ h → subst {lzero} {lzero} {Word} {λ x → p x ≡ true} {k} {g} (sym (weq-sound g k h)) (andbt-l (p k) (kall p r) ha))
+    (λ h → keys-ok p r (andbt-r (p k) (kall p r) ha) g (kmem-miss g k r h hm))
+
+-- ---------------------------------------------------------------- on C's own words (lib/foproofm.cub)
+-- the data route, end to end, to the C's meaning on uint64_t words: the first-order form's value refined
+-- by the C's, a limit hit or the same value (cm-sound-t joined to q-path-n)
+cm-path-n : (r : FRule) (G : Word → DC) (T GT : Word → FC) → DGOK G T GT → (D : Word → Nat) (A : Word → Word) → QGOK (fr-tab (fst r) T) (fr-tab (fst r) GT) D A
+          → (AN : Word → Nat) (df CD : Word → Bool) (GC : Word → CA) → ((g : Word) → df g ≡ true → CD g ≡ true)
+          → ((g : Word) → df g ≡ true → ca-ok AN df (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A g) ckt ≡ true)
+          → ((g : Word) → df g ≡ true → GC g ≡ fq-to-ca (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A g) ckt (AN g))
+          → (n : Nat) (c : DC) (a : QA) (m : Nat) (s : CS) → DTok T c → qa-ok D T a → qtok D A (fr-bu (fst r) (dconv c)) (qa-n a) ≡ true
+          → ca-ok AN df (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) ckt ≡ true → Corr AN df (qa-n a) (qa-e a) s
+          → qrel D (derase (dsev G n c (qa-ρ a))) (evq (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-e a))
+            × CRC AN df (evq (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-e a))
+                        (evc GC AN CD (fr-addn n m) (fq-to-ca (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) ckt (qa-n a)) (c2ms s))
+cm-path-n r G T GT go D A gq AN df CD GC inc tok lk n c a m s tk ha hq hok hc =
+  (q-path-n r G T GT go D A gq n c a m tk ha hq ,
+   cm-sound-t AN df CD (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) GC inc tok lk (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-n a) (qa-e a) s hok hc)
+-- the word route, end to end, on C's words: whenever the first-order form has a value at x, the C's
+-- value at x is a limit hit or the word the source code computes at x
+cm-fw-path : (r : VRule) (c : WC) (x : Word) (N : Nat) → ca-ok (λ g → zero) (λ g → false) (fw-to-fq (spec-w r c)) ckt ≡ true
+           → kq-nb (evq (λ g → fqnet) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil))
+           → Sum (haslim (evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w r c)) ckt (suc zero)) (msb zero (mw x) msnil)) ≡ true)
+                 (evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w r c)) ckt (suc zero)) (msb zero (mw x) msnil) ≡ mw (wc-ev c (envx x)))
+cm-fw-path r c x N hok hn =
+  cm-word (evu (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w r c)) ckt (suc zero)) (csb zero (cw x) csnil))
+          (evc (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w r c)) ckt (suc zero)) (msb zero (mw x) msnil)) (wc-ev c (envx x))
+    (ca-fw-path r c x N hok hn)
+    (m-sound (λ g → caunsup) (λ g → zero) (λ g → false) N (fq-to-ca (fw-to-fq (spec-w r c)) ckt (suc zero)) (csb zero (cw x) csnil) (msb zero (mw x) msnil) (menv-c (csb zero (cw x) csnil)))

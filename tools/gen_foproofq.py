@@ -12,7 +12,7 @@
 import os, re, subprocess, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LIBS = ['prelude', 'code', 'fo', 'match', 'nav', 'emitc', 'check', 'std', 'stage', 'lower', 'specialize', 'linproof',
-        'prim', 'rules', 'proc', 'repr', 'foproof', 'foproofd', 'foproofq', 'region']
+        'prim', 'rules', 'proc', 'repr', 'foproof', 'foproofd', 'foproofe', 'foproofq', 'region']
 # the programs' own definitions (run.py defines them in the program text)
 PRELUDE = '''p0 : Ptr 16
 p0 = (0 , (8 , λ i → 16))
