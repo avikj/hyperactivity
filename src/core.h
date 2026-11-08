@@ -343,6 +343,7 @@ void net_start(int workers);       /* worker threads besides the caller */
 void net_push(Cell *op, Cell *v);  /* enqueue an active pair */
 bool net_observe(Cell *root, long limit); /* reduce until root's port holds a value (root NULL: until no pair is pending); workers then pause */
 void net_drain(void);
+void net_mem(long *slabs, long *keys);
 Cell *global_res(long g);          /* the cell holding a definition's value */
 
 /* data types (higher inductive types, Coquand–Huber–Mörtberg): declared by
@@ -400,6 +401,7 @@ Port apply_gid(long g, const Port *args, int n);
 /* readings */
 extern long stat_steps, stat_kind[K_END];
 void stat_gather_kinds(void);
+void stat_gather(void);
 extern long stat_cells;
 extern FILE *trace_out;   /* CUBICAL_TRACE: interactions of a (show ...) reading, one per line */
 

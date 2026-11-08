@@ -3796,6 +3796,15 @@ bool net_observe(Cell *root, long limit) {
 }
 /* reduce every pending pair: the workload's normal form, or what waits on an input */
 void net_drain(void) { net_observe(NULL, -1); }
+/* memory accounting (CUBICAL_MEMDEF): slabs held over every thread, keys interned */
+void net_mem(long *slabs, long *keys) {
+    long sl = 0, k = 0;
+    pthread_mutex_lock(&allmu);
+    for (Local *l = ALL; l; l = l->next) for (Slab *x = l->slabs; x; x = x->next) sl++;
+    pthread_mutex_unlock(&allmu);
+    for (int i = 0; i < KSH; i++) k += (long)SH[i].KTn;
+    *slabs = sl; *keys = k;
+}
 
 /* ---------------- building a net from syntax ---------------- */
 typedef struct { Port *sup; int cur, n; Key *key; Port inl[4]; } Supply;   /* inl: the providers of a slot used at most 3 times */

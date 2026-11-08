@@ -41,12 +41,14 @@ typedef struct Node { int list; char *s; int n; struct Node **it; char *cmt; sho
 typedef struct Chunk { struct Chunk *prev; size_t cap, used; char data[]; } Chunk;   /* used: how far this chunk was ever filled */
 typedef struct { Chunk *c; char *p; } ArMark;
 static Chunk *ar_cur, *ar_spare; static char *ar_p, *ar_end;
+static size_t ar_nspare;   /* chunks on the spare list: past ar_spare_max, a released chunk goes back to malloc */
+#define AR_SPARE_MAX 64
 static void *ar_alloc(size_t n) {
     n = (n + 15) & ~(size_t)15;
     if ((size_t)(ar_end - ar_p) < n) {
         if (ar_cur) ar_cur->used = (size_t)(ar_p - ar_cur->data);
         Chunk *k = NULL;
-        if (n <= (1u << 20) && ar_spare) { k = ar_spare; ar_spare = k->prev; }   /* a released chunk: zeroed where it was used */
+        if (n <= (1u << 20) && ar_spare) { k = ar_spare; ar_spare = k->prev; ar_nspare--; }   /* a released chunk: zeroed where it was used */
         else {
             size_t c = n > (1u << 20) ? n : (1u << 20);
             k = calloc(1, sizeof(Chunk) + c); if (!k) { fputs("out of memory\n", stderr); exit(2); }
@@ -71,7 +73,8 @@ static void ar_release(ArMark m) {
         Chunk *k = ar_cur; ar_cur = k->prev;
         if (poison) { free(k); continue; }   /* mapped on its own (the threshold fixed): unmapped, a read of it faults */
         if (k->cap > (1u << 20)) free(k);   /* an oversized one-off */
-        else { memset(k->data, 0, k->used); k->used = 0; k->prev = ar_spare; ar_spare = k; }
+        else if (ar_nspare >= AR_SPARE_MAX) free(k);   /* a release far past the next ones' need: returned (a big mark held hundreds of megabytes spare for good) */
+        else { memset(k->data, 0, k->used); k->used = 0; k->prev = ar_spare; ar_spare = k; ar_nspare++; }
     }
     if (poison && ar_cur) {
         /* the mark's own chunk: garbage from the mark on, and nothing after the mark reused */
@@ -81,6 +84,27 @@ static void ar_release(ArMark m) {
     }
     ar_p = m.p; ar_end = ar_cur ? ar_cur->data + ar_cur->cap : NULL;
     if (ar_cur && ar_cur->data + ar_cur->used > ar_p) memset(ar_p, 0, (size_t)(ar_cur->data + ar_cur->used - ar_p));
+}
+/* memory accounting (CUBICAL_MEMDEF): the node arena's chunks in use and spare, in bytes */
+static void ar_mem(long *use, long *spare) {
+    long u = 0, sp = 0;
+    for (Chunk *k = ar_cur; k; k = k->prev) u += (long)k->cap;
+    for (Chunk *k = ar_spare; k; k = k->prev) sp += (long)k->cap;
+    *use = u; *spare = sp;
+}
+static long stat_syn_bytes, stat_perm_bytes, stat_rec_bytes;
+static void mem_report(const char *name) {
+    static int on = -1; if (on < 0) on = getenv("CUBICAL_MEMDEF") != NULL;
+    if (!on) return;
+    long rss = 0, hwm = 0; char line[256];
+    FILE *st = fopen("/proc/self/status", "r");
+    if (st) { while (fgets(line, sizeof line, st)) { if (!strncmp(line, "VmRSS:", 6)) rss = atol(line + 6); else if (!strncmp(line, "VmHWM:", 6)) hwm = atol(line + 6); } fclose(st); }
+    long sl, ks, au, as; net_mem(&sl, &ks); ar_mem(&au, &as);
+    stat_gather();
+    struct mallinfo2 mi = mallinfo2();
+    fprintf(stderr, "mem %s rss=%ld hwm=%ld cells=%ld slabsMB=%ld keys=%ld payloads=%ld arena=%ld spare=%ld heap=%zu free=%zu mmap=%zu syn=%ld perm=%ld rec=%ld\n",
+            name, rss / 1024, hwm / 1024, stat_cells, sl * 64 / 1024, ks, stat_payloads, au >> 20, as >> 20,
+            mi.uordblks >> 20, mi.fordblks >> 20, mi.hblkhd >> 20, stat_syn_bytes >> 20, stat_perm_bytes >> 20, stat_rec_bytes >> 20);
 }
 static char *ar_strdup(const char *s) { size_t l = strlen(s) + 1; char *r = ar_alloc(l); memcpy(r, s, l); return r; }
 /* Symbols are interned: one copy of each spelling, kept for the run, so names compare by
@@ -791,8 +815,9 @@ static void gsteps_set(long k, long steps) {
  * before normalization unfolds the definitions it calls (an operation a representation replaces,
  * B12 §6, is a call there) */
 static Node **CHKSRC; static size_t capchksrc;
+static long stat_perm_bytes, stat_rec_bytes;   /* CUBICAL_MEMDEF */
 static Node *perm_copy(Node *t) {
-    Node *x = calloc(1, sizeof(Node)); x->list = t->list; x->s = t->s; x->n = t->n;
+    Node *x = calloc(1, sizeof(Node)); x->list = t->list; x->s = t->s; x->n = t->n; stat_perm_bytes += (long)sizeof(Node) + (t->list ? (long)((size_t)t->n + 1) * 8 : 0);
     if (t->list) { x->it = calloc((size_t)t->n + 1, sizeof(Node *)); for (int i = 0; i < t->n; i++) x->it[i] = perm_copy(t->it[i]); }
     return x;
 }
@@ -1675,7 +1700,8 @@ typedef struct {
 static Bind *binds; static size_t capbinds; static int nbinds;
 static Level *levels; static size_t caplevels; static int nlevels;
 
-static Syn *syn(int tag, int n) { Syn *s = calloc(1, sizeof(Syn)); s->tag = tag; s->n = n; s->k = calloc((size_t)n + 1, sizeof(Syn *)); return s; }
+static long stat_syn_bytes, stat_perm_bytes, stat_rec_bytes;   /* CUBICAL_MEMDEF: bytes of compiled code made, of permanent node copies, of records */
+static Syn *syn(int tag, int n) { Syn *s = calloc(1, sizeof(Syn)); stat_syn_bytes += (long)(sizeof(Syn) + ((size_t)n + 1) * sizeof(Syn *)); s->tag = tag; s->n = n; s->k = calloc((size_t)n + 1, sizeof(Syn *)); return s; }
 static Bind *lookup(const char *name) { size_t h = (unsigned)kw_hash(name) | 1; for (int i = nbinds - 1; i >= 0; i--) if (binds[i].h == h && (binds[i].name == name || !strcmp(binds[i].name, name))) return &binds[i]; return NULL; }
 /* the same for an interned name: its hash from its header */
 /* the same for an interned name: the binder its header remembers when that is still the latest
@@ -1834,6 +1860,7 @@ static bool syn_eq(Syn *a, Syn *b) {
 }
 static void syn_free(Syn *t) {
     if (!t) return;
+    stat_syn_bytes -= (long)(sizeof(Syn) + ((size_t)t->n + 1) * sizeof(Syn *));
     for (int i = 0; i < t->n; i++) syn_free(t->k[i]);
     if (t->big) big_release(t->big);
     free(t->k); free(t);
@@ -1860,7 +1887,7 @@ static Record *rec_intern(Record *r) {
     size_t i = h & (RTcap - 1);
     for (; RT[i]; i = (i + 1) & (RTcap - 1))
         if (rec_eq(RT[i], r)) { syn_free(r->body); free(r->env_slot); free(r->uses); free(r); return RT[i]; }
-    RT[i] = r; RTn++;
+    RT[i] = r; RTn++; stat_rec_bytes += (long)sizeof(Record) + (long)(r->nenv + r->nslots + 2) * 4;
     return r;
 }
 static CaseTab **TT; static size_t TTcap, TTn;
@@ -2377,7 +2404,18 @@ static Syn *compile_top(Node *t, int *nslots, int **uses) {
     ar_release(m);
     return s;
 }
-static Port build_top(Node *t) { int ns; int *u; Syn *s = compile_top(t, &ns, &u); return top_build(s, ns, u); }
+/* a term posed once (a reading, a check): compiled, built, and its compiled code freed. The net
+ * holds no pointer into a top-level body (cells hold its records and case tables, which are
+ * interned and kept, and numbers' payloads by count), so after the build it is garbage: the
+ * checker's readings compiled every definition's quoted code again each round and kept it
+ * (CUBICAL_KEEPTOP keeps it, to compare) */
+static Port build_top(Node *t) {
+    int ns; int *u; Syn *s = compile_top(t, &ns, &u);
+    Port r = top_build(s, ns, u);
+    static int keep = -1; if (keep < 0) keep = getenv("CUBICAL_KEEPTOP") != NULL;
+    if (!keep) { syn_free(s); free(u); }
+    return r;
+}
 
 /* ---------------- reading back ---------------- */
 typedef struct { Dim d; char name[16]; } DimShow;
@@ -4056,7 +4094,16 @@ static void toplevel(Node *f) {
         int at = define ? 2 : 1;
         if (f->n != at + 2) die(define ? "(checked name T t)" : "(check T t)", NULL);
         /* a copattern definition, which may call itself */
-        if (define && copattern_body(ds(f->it[3]))) { checked_group(&f, 1, expect); return; }
+        ArMark cm = ar_mark();
+        bool cop = define && copattern_body(ds(f->it[3]));
+        ar_release(cm);
+        if (cop) { checked_group(&f, 1, expect); return; }
+        /* what the check makes in the arena (the desugared type and term, their closed copies, the
+         * key's text, the usages read back) is the check's alone: the tables take their own copies
+         * (perm_copy), names are interned, the definition's compiled code is the heap's. Released at
+         * the end (CUBICAL_NOCHKMARK keeps it, to compare) */
+        static int nochk = -1; if (nochk < 0) nochk = getenv("CUBICAL_NOCHKMARK") != NULL;
+        cm = ar_mark();
         Node *T = f->it[at], *t = f->it[at + 1];
         Node *dT = ds(T), *dt = ds(t);
         /* its codebase key (F34): a definition the store holds as checked is not checked again */
@@ -4119,6 +4166,8 @@ static void toplevel(Node *f) {
             } else store_put(f->it[1]->s, key, kcode, ktype, 0, NULL);
         }
         free(kcode); free(ktype);
+        if (!nochk) ar_release(cm);
+        mem_report(define ? f->it[1]->s : "(check)");
     } else if (!strcmp(h, "usages")) {
         /* a cached module's record of a checked definition's parameter usages */
         int ck = checked_index(f->it[1]->s); int n = (f->n - 2) / 2;

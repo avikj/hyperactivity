@@ -4877,6 +4877,10 @@ static Node *el_copy(Node *t) {
     if (t->list) { x->it = calloc((size_t)t->n + 1, sizeof(Node *)); for (int i = 0; i < t->n; i++) x->it[i] = el_copy(t->it[i]); }
     return x;
 }
+static void el_free(Node *t) {
+    if (t->list) { for (int i = 0; i < t->n; i++) el_free(t->it[i]); free(t->it); }
+    free(t);
+}
 typedef struct { ArMark m; int nlt, ncm, ntw; bool on; } ElMark;
 static ElMark el_mark(void) {
     static int off = -1; if (off < 0) off = getenv("CUBICAL_NOELMARK") != NULL;
@@ -4980,8 +4984,13 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
     if (getenv("CUBICAL_SHOW_ELAB")) { fprintf(stderr, "%s : ", name ? name : "(check)"); print_node(stderr, T); fprintf(stderr, "\n  = "); print_node(stderr, t); fprintf(stderr, "\n"); }
     if (em.on) { T = el_copy(T); t = el_copy(t); }
     el_release(em);
+    bool kept = x_collecting;   /* a collected form is read later: its type and term stay */
     if (name) x_top(lst(4, nsym(expect ? "checked" : "checked-fail"), nsym(name), T, t));
     else x_top(lst(3, nsym(expect ? "check" : "check-fail"), T, t));
+    /* the copies are the checked form's, which keeps none of them once handled (its tables take
+     * their own copies, perm_copy): freed (CUBICAL_NOELFREE keeps them, to compare) */
+    { static int keepc = -1; if (keepc < 0) keepc = getenv("CUBICAL_NOELFREE") != NULL;
+      if (em.on && !kept && !keepc) { el_free(T); el_free(t); } }
     if (forced_result) { free((char *)forced_result); forced_result = NULL; }
 }
 
