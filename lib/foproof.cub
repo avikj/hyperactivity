@@ -19,9 +19,23 @@ Envw : Type
 Envw = Nat → Word
 extw : Envw → Word → Envw
 extw ρ a n = case n of zero → a; suc k → ρ k
-data WC = wcl (w : Word) | wcv (n : Nat) | wca (a : WC) (b : WC) | wcs (a : WC) (b : WC) | wcsucc (a : WC) | wclet (a : WC) (b : WC) | wcrec (w : WC) (z : WC) (s : WC)
+-- a word recursion carrying a pair (a pair of words as its accumulator, one component its result):
+-- the step's body sees the pair's components as variables 0 (the second) and 1 (the first), the
+-- counter as 2; pk picks the component the term projects
+-- (the pair as its own data type, so a stuck evaluation shows a constructor, whose type is inferable)
+data P2W = p2w (a : Word) (b : Word)
+p2a : P2W → Word
+p2a (p2w a b) = a
+p2b : P2W → Word
+p2b (p2w a b) = b
+pk : Bool → P2W → Word
+pk false q = p2a q
+pk true q = p2b q
+ext3 : Envw → Word → P2W → Envw
+ext3 ρ k q = extw (extw (extw ρ k) (p2a q)) (p2b q)
+data WC = wcl (w : Word) | wcv (n : Nat) | wca (a : WC) (b : WC) | wcs (a : WC) (b : WC) | wcsucc (a : WC) | wclet (a : WC) (b : WC) | wcrec (w : WC) (z : WC) (s : WC) | wcrec2 (w : WC) (z1 : WC) (z2 : WC) (s1 : WC) (s2 : WC) (sel : Bool)
 -- the meaning of a code: a word recursion rec 0 = z, rec (k+1) = s k (rec k), s's body over acc
--- (variable 0) and k (variable 1)
+-- (variable 0) and k (variable 1); wcrec2 the same over a pair, one component picked (sel)
 wc-ev : WC → Envw → Word
 wc-ev (wcl w) ρ = w
 wc-ev (wcv n) ρ = ρ n
@@ -30,21 +44,26 @@ wc-ev (wcs a b) ρ = wsub (wc-ev a ρ) (wc-ev b ρ)
 wc-ev (wcsucc a) ρ = %wsucc (wc-ev a ρ)
 wc-ev (wclet a b) ρ = wc-ev b (extw ρ (wc-ev a ρ))
 wc-ev (wcrec w z s) ρ = %welimP (λ v → Word) (wc-ev w ρ) (wc-ev z ρ) (λ k acc → wc-ev s (extw (extw ρ k) acc))
+wc-ev (wcrec2 w z1 z2 s1 s2 sel) ρ = pk sel (%welimP (λ v → P2W) (wc-ev w ρ) (p2w (wc-ev z1 ρ) (wc-ev z2 ρ)) (λ k q → p2w (wc-ev s1 (ext3 ρ k q)) (wc-ev s2 (ext3 ρ k q))))
 -- the first-order forms of the fragment: fwp 0 addition, 1 subtraction (P-add, P-sub); fwloop the
 -- loop lower-welim makes, state (w, i, acc) from (w, 0, z), continuing while i < w with
 -- acc := s i acc
-data FW = fwl (w : Word) | fwv (n : Nat) | fwp (p : Word) (a : FW) (b : FW) | fwlet (a : FW) (b : FW) | fwloop (w : FW) (z : FW) (s : FW)
+data FW = fwl (w : Word) | fwv (n : Nat) | fwp (p : Word) (a : FW) (b : FW) | fwlet (a : FW) (b : FW) | fwloop (w : FW) (z : FW) (s : FW) | fwloop2 (w : FW) (z1 : FW) (z2 : FW) (s1 : FW) (s2 : FW) (sel : Bool)
 fw-prim : Word → Word → Word → Word
 fw-prim p a b = if %weq p #0 then wadd a b else wsub a b
 -- the loop run n more times from i with acc: a counting iteration (the first-order form's meaning)
 fw-go : (Word → Word → Word) → Word → Word → Word → Word
 fw-go st n = %welimP (λ v → Word → Word → Word) n (λ i acc → acc) (λ k h i acc → h (%wsucc i) (st i acc))
+-- the same loop over a pair of words
+fw-go2 : (Word → P2W → P2W) → Word → Word → P2W → P2W
+fw-go2 st n = %welimP (λ v → Word → P2W → P2W) n (λ i acc → acc) (λ k h i acc → h (%wsucc i) (st i acc))
 fo-ev : FW → Envw → Word
 fo-ev (fwl w) ρ = w
 fo-ev (fwv n) ρ = ρ n
 fo-ev (fwp p a b) ρ = fw-prim p (fo-ev a ρ) (fo-ev b ρ)
 fo-ev (fwlet a b) ρ = fo-ev b (extw ρ (fo-ev a ρ))
 fo-ev (fwloop w z s) ρ = fw-go (λ i acc → fo-ev s (extw (extw ρ i) acc)) (fo-ev w ρ) #0 (fo-ev z ρ)
+fo-ev (fwloop2 w z1 z2 s1 s2 sel) ρ = pk sel (fw-go2 (λ i q → p2w (fo-ev s1 (ext3 ρ i q)) (fo-ev s2 (ext3 ρ i q))) (fo-ev w ρ) #0 (p2w (fo-ev z1 ρ) (fo-ev z2 ρ)))
 -- the lowering (lib/lower.cub's lower on the fragment: a successor is an addition of 1)
 lower-w : WC → FW
 lower-w (wcl w) = fwl w
@@ -54,6 +73,7 @@ lower-w (wcs a b) = fwp #1 (lower-w a) (lower-w b)
 lower-w (wcsucc a) = fwp #0 (lower-w a) (fwl #1)
 lower-w (wclet a b) = fwlet (lower-w a) (lower-w b)
 lower-w (wcrec w z s) = fwloop (lower-w w) (lower-w z) (lower-w s)
+lower-w (wcrec2 w z1 z2 s1 s2 sel) = fwloop2 (lower-w w) (lower-w z1) (lower-w z2) (lower-w s1) (lower-w s2) sel
 -- ---------------------------------------------------------------- the lemmas, one per form
 -- x + 1 = suc x (the successor's lowering)
 wadd-one : (x : Word) → wadd x #1 ≡ %wsucc x
@@ -69,6 +89,19 @@ fw-go-0 z st n = catw {fw-go st n #0 z} {%welimP (λ v → Word) (plusw #0 n) z 
 -- a step agreeing at every (k , acc) gives the same loop
 fw-go-ext : (st st2 : Word → Word → Word) → ((k a : Word) → st k a ≡ st2 k a) → (n i a : Word) → fw-go st n i a ≡ fw-go st2 n i a
 fw-go-ext st st2 e n = %welimP (λ v → (i a : Word) → fw-go st v i a ≡ fw-go st2 v i a) n (λ i a j → a)
+  (λ k h i a → λ j → h (%wsucc i) (e i a j) j)
+-- the pair loop's lemmas, as the word loop's
+cat2 : {x y z : P2W} → x ≡ y → y ≡ z → x ≡ z
+cat2 p q = λ i → comp (λ j → P2W) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
+fw-go2-rec : (z : P2W) (st : Word → P2W → P2W) (n i : Word) → fw-go2 st n i (%welimP (λ v → P2W) i z st) ≡ %welimP (λ v → P2W) (plusw i n) z st
+fw-go2-rec z st n = %welimP (λ v → (i : Word) → fw-go2 st v i (%welimP (λ u → P2W) i z st) ≡ %welimP (λ u → P2W) (plusw i v) z st) n
+  (λ i → λ j → %welimP (λ u → P2W) i z st)
+  (λ k h i → cat2 {fw-go2 st k (%wsucc i) (st i (%welimP (λ u → P2W) i z st))} {%welimP (λ u → P2W) (plusw (%wsucc i) k) z st} {%welimP (λ u → P2W) (plusw i (%wsucc k)) z st}
+                (h (%wsucc i)) (λ j → %welimP (λ u → P2W) (plusw-suc-l i k j) z st))
+fw-go2-0 : (z : P2W) (st : Word → P2W → P2W) (n : Word) → fw-go2 st n #0 z ≡ %welimP (λ v → P2W) n z st
+fw-go2-0 z st n = cat2 {fw-go2 st n #0 z} {%welimP (λ v → P2W) (plusw #0 n) z st} {%welimP (λ v → P2W) n z st} (fw-go2-rec z st n #0) (λ j → %welimP (λ u → P2W) (plusw-zero-l n j) z st)
+fw-go2-ext : (st st2 : Word → P2W → P2W) → ((k : Word) (a : P2W) → st k a ≡ st2 k a) → (n i : Word) (a : P2W) → fw-go2 st n i a ≡ fw-go2 st2 n i a
+fw-go2-ext st st2 e n = %welimP (λ v → (i : Word) (a : P2W) → fw-go2 st v i a ≡ fw-go2 st2 v i a) n (λ i a j → a)
   (λ k h i a → λ j → h (%wsucc i) (e i a j) j)
 -- the lowering computes what the code means, in every environment
 lower-sound : (c : WC) → (ρ : Envw) → fo-ev (lower-w c) ρ ≡ wc-ev c ρ
@@ -89,6 +122,19 @@ lower-sound (wcrec w z s) ρ =
        (fw-go-ext (λ i acc → fo-ev (lower-w s) (extw (extw ρ i) acc)) (λ i acc → wc-ev s (extw (extw ρ i) acc)) (λ k a → lower-sound s (extw (extw ρ k) a)) (fo-ev (lower-w w) ρ) #0 (fo-ev (lower-w z) ρ))
        (λ j → fw-go (λ i acc → wc-ev s (extw (extw ρ i) acc)) (lower-sound w ρ j) #0 (lower-sound z ρ j)))
     (fw-go-0 (wc-ev z ρ) (λ k acc → wc-ev s (extw (extw ρ k) acc)) (wc-ev w ρ))
+lower-sound (wcrec2 w z1 z2 s1 s2 sel) ρ =
+  λ j → pk sel
+    (cat2 {fw-go2 (λ i q → p2w (fo-ev (lower-w s1) (ext3 ρ i q)) (fo-ev (lower-w s2) (ext3 ρ i q))) (fo-ev (lower-w w) ρ) #0 (p2w (fo-ev (lower-w z1) ρ) (fo-ev (lower-w z2) ρ))}
+          {fw-go2 (λ i q → p2w (wc-ev s1 (ext3 ρ i q)) (wc-ev s2 (ext3 ρ i q))) (wc-ev w ρ) #0 (p2w (wc-ev z1 ρ) (wc-ev z2 ρ))}
+          {%welimP (λ v → P2W) (wc-ev w ρ) (p2w (wc-ev z1 ρ) (wc-ev z2 ρ)) (λ k q → p2w (wc-ev s1 (ext3 ρ k q)) (wc-ev s2 (ext3 ρ k q)))}
+      (cat2 {fw-go2 (λ i q → p2w (fo-ev (lower-w s1) (ext3 ρ i q)) (fo-ev (lower-w s2) (ext3 ρ i q))) (fo-ev (lower-w w) ρ) #0 (p2w (fo-ev (lower-w z1) ρ) (fo-ev (lower-w z2) ρ))}
+            {fw-go2 (λ i q → p2w (wc-ev s1 (ext3 ρ i q)) (wc-ev s2 (ext3 ρ i q))) (fo-ev (lower-w w) ρ) #0 (p2w (fo-ev (lower-w z1) ρ) (fo-ev (lower-w z2) ρ))}
+            {fw-go2 (λ i q → p2w (wc-ev s1 (ext3 ρ i q)) (wc-ev s2 (ext3 ρ i q))) (wc-ev w ρ) #0 (p2w (wc-ev z1 ρ) (wc-ev z2 ρ))}
+         (fw-go2-ext (λ i q → p2w (fo-ev (lower-w s1) (ext3 ρ i q)) (fo-ev (lower-w s2) (ext3 ρ i q))) (λ i q → p2w (wc-ev s1 (ext3 ρ i q)) (wc-ev s2 (ext3 ρ i q)))
+            (λ k a → λ i → p2w (lower-sound s1 (ext3 ρ k a) i) (lower-sound s2 (ext3 ρ k a) i)) (fo-ev (lower-w w) ρ) #0 (p2w (fo-ev (lower-w z1) ρ) (fo-ev (lower-w z2) ρ)))
+         (λ i → fw-go2 (λ i2 q → p2w (wc-ev s1 (ext3 ρ i2 q)) (wc-ev s2 (ext3 ρ i2 q))) (lower-sound w ρ i) #0 (p2w (lower-sound z1 ρ i) (lower-sound z2 ρ i))))
+      (fw-go2-0 (p2w (wc-ev z1 ρ) (wc-ev z2 ρ)) (λ k q → p2w (wc-ev s1 (ext3 ρ k q)) (wc-ev s2 (ext3 ρ k q))) (wc-ev w ρ))
+      j)
 -- ---------------------------------------------------------------- verified rewrites
 -- a rewrite of codes with its soundness: the meaning kept in every environment
 VRule : Type
@@ -102,6 +148,12 @@ rw-bu f (wcs a b) = f (wcs (rw-bu f a) (rw-bu f b))
 rw-bu f (wcsucc a) = f (wcsucc (rw-bu f a))
 rw-bu f (wclet a b) = f (wclet (rw-bu f a) (rw-bu f b))
 rw-bu f (wcrec w z s) = f (wcrec (rw-bu f w) (rw-bu f z) (rw-bu f s))
+rw-bu f (wcrec2 w z1 z2 s1 s2 sel) = f (wcrec2 (rw-bu f w) (rw-bu f z1) (rw-bu f z2) (rw-bu f s1) (rw-bu f s2) sel)
+-- the pair recursion's congruence, once: equal bound, start and steps give the same component
+rec2-cong : (sel : Bool) (w w2 a a2 b b2 : Word) (f f2 g g2 : Word → P2W → Word) → w ≡ w2 → a ≡ a2 → b ≡ b2
+          → ((k : Word) (q : P2W) → f k q ≡ f2 k q) → ((k : Word) (q : P2W) → g k q ≡ g2 k q)
+          → pk sel (%welimP (λ v → P2W) w (p2w a b) (λ k q → p2w (f k q) (g k q))) ≡ pk sel (%welimP (λ v → P2W) w2 (p2w a2 b2) (λ k q → p2w (f2 k q) (g2 k q)))
+rec2-cong sel w w2 a a2 b b2 f f2 g g2 ew ea eb ef eg = λ j → pk sel (%welimP (λ v → P2W) (ew j) (p2w (ea j) (eb j)) (λ k q → p2w (ef k q j) (eg k q j)))
 -- sound by congruence: the meaning of every form is a function of its children's meanings
 rw-bu-sound : (r : VRule) → (c : WC) → (ρ : Envw) → wc-ev (rw-bu (fst r) c) ρ ≡ wc-ev c ρ
 rw-bu-sound r (wcl w) ρ = snd r (wcl w) ρ
@@ -116,6 +168,11 @@ rw-bu-sound r (wclet a b) ρ =
 rw-bu-sound r (wcrec w z s) ρ =
   catw (snd r (wcrec (rw-bu (fst r) w) (rw-bu (fst r) z) (rw-bu (fst r) s)) ρ)
     (λ j → %welimP (λ v → Word) (rw-bu-sound r w ρ j) (rw-bu-sound r z ρ j) (λ k acc → rw-bu-sound r s (extw (extw ρ k) acc) j))
+rw-bu-sound r (wcrec2 w z1 z2 s1 s2 sel) ρ =
+  catw (snd r (wcrec2 (rw-bu (fst r) w) (rw-bu (fst r) z1) (rw-bu (fst r) z2) (rw-bu (fst r) s1) (rw-bu (fst r) s2) sel) ρ)
+    (rec2-cong sel (wc-ev (rw-bu (fst r) w) ρ) (wc-ev w ρ) (wc-ev (rw-bu (fst r) z1) ρ) (wc-ev z1 ρ) (wc-ev (rw-bu (fst r) z2) ρ) (wc-ev z2 ρ)
+       (λ k q → wc-ev (rw-bu (fst r) s1) (ext3 ρ k q)) (λ k q → wc-ev s1 (ext3 ρ k q)) (λ k q → wc-ev (rw-bu (fst r) s2) (ext3 ρ k q)) (λ k q → wc-ev s2 (ext3 ρ k q))
+       (rw-bu-sound r w ρ) (rw-bu-sound r z1 ρ) (rw-bu-sound r z2 ρ) (λ k q → rw-bu-sound r s1 (ext3 ρ k q)) (λ k q → rw-bu-sound r s2 (ext3 ρ k q)))
 -- two rules, one after the other
 vr-then : VRule → VRule → VRule
 vr-then r1 r2 = ((λ c → fst r2 (fst r1 c)) , (λ c ρ → catw (snd r2 (fst r1 c) ρ) (snd r1 c ρ)))
@@ -144,6 +201,7 @@ rz-r a (wcs x y) = wca a (wcs x y)
 rz-r a (wcsucc x) = wca a (wcsucc x)
 rz-r a (wclet x y) = wca a (wclet x y)
 rz-r a (wcrec x y z) = wca a (wcrec x y z)
+rz-r a (wcrec2 x1 x2 x3 x4 x5 xs) = wca a (wcrec2 x1 x2 x3 x4 x5 xs)
 rz-r-ok : (a b : WC) → (ρ : Envw) → wc-ev (rz-r a b) ρ ≡ wc-ev (wca a b) ρ
 rz-r-ok a (wcl w) ρ = rz-lit-r-ok a w ρ
 rz-r-ok a (wcv n) ρ = λ j → wc-ev (wca a (wcv n)) ρ
@@ -152,6 +210,7 @@ rz-r-ok a (wcs x y) ρ = λ j → wc-ev (wca a (wcs x y)) ρ
 rz-r-ok a (wcsucc x) ρ = λ j → wc-ev (wca a (wcsucc x)) ρ
 rz-r-ok a (wclet x y) ρ = λ j → wc-ev (wca a (wclet x y)) ρ
 rz-r-ok a (wcrec x y z) ρ = λ j → wc-ev (wca a (wcrec x y z)) ρ
+rz-r-ok a (wcrec2 x1 x2 x3 x4 x5 xs) ρ = λ j → wc-ev (wca a (wcrec2 x1 x2 x3 x4 x5 xs)) ρ
 rz-add : WC → WC → WC
 rz-add (wcl w) b = rz-lit-l w b
 rz-add (wcv n) b = rz-r (wcv n) b
@@ -160,6 +219,7 @@ rz-add (wcs x y) b = rz-r (wcs x y) b
 rz-add (wcsucc x) b = rz-r (wcsucc x) b
 rz-add (wclet x y) b = rz-r (wclet x y) b
 rz-add (wcrec x y z) b = rz-r (wcrec x y z) b
+rz-add (wcrec2 x1 x2 x3 x4 x5 xs) b = rz-r (wcrec2 x1 x2 x3 x4 x5 xs) b
 rz-add-ok : (a b : WC) → (ρ : Envw) → wc-ev (rz-add a b) ρ ≡ wc-ev (wca a b) ρ
 rz-add-ok (wcl w) b ρ = rz-lit-l-ok w b ρ
 rz-add-ok (wcv n) b ρ = rz-r-ok (wcv n) b ρ
@@ -168,6 +228,7 @@ rz-add-ok (wcs x y) b ρ = rz-r-ok (wcs x y) b ρ
 rz-add-ok (wcsucc x) b ρ = rz-r-ok (wcsucc x) b ρ
 rz-add-ok (wclet x y) b ρ = rz-r-ok (wclet x y) b ρ
 rz-add-ok (wcrec x y z) b ρ = rz-r-ok (wcrec x y z) b ρ
+rz-add-ok (wcrec2 x1 x2 x3 x4 x5 xs) b ρ = rz-r-ok (wcrec2 x1 x2 x3 x4 x5 xs) b ρ
 rz-at : WC → WC
 rz-at (wcl w) = wcl w
 rz-at (wcv n) = wcv n
@@ -176,6 +237,7 @@ rz-at (wcs a b) = wcs a b
 rz-at (wcsucc a) = wcsucc a
 rz-at (wclet a b) = wclet a b
 rz-at (wcrec w z s) = wcrec w z s
+rz-at (wcrec2 x1 x2 x3 x4 x5 xs) = wcrec2 x1 x2 x3 x4 x5 xs
 rz-at-ok : (c : WC) → (ρ : Envw) → wc-ev (rz-at c) ρ ≡ wc-ev c ρ
 rz-at-ok (wcl w) ρ = λ j → w
 rz-at-ok (wcv n) ρ = λ j → ρ n
@@ -184,6 +246,7 @@ rz-at-ok (wcs a b) ρ = λ j → wc-ev (wcs a b) ρ
 rz-at-ok (wcsucc a) ρ = λ j → wc-ev (wcsucc a) ρ
 rz-at-ok (wclet a b) ρ = λ j → wc-ev (wclet a b) ρ
 rz-at-ok (wcrec w z s) ρ = λ j → wc-ev (wcrec w z s) ρ
+rz-at-ok (wcrec2 x1 x2 x3 x4 x5 xs) ρ = λ j → wc-ev (wcrec2 x1 x2 x3 x4 x5 xs) ρ
 zero-vrule : VRule
 zero-vrule = (rz-at , rz-at-ok)
 -- constants folded: an addition of two literals is their sum (refl: the meaning is the sum)
@@ -195,6 +258,7 @@ cf-lit w (wcs x y) = wca (wcl w) (wcs x y)
 cf-lit w (wcsucc x) = wca (wcl w) (wcsucc x)
 cf-lit w (wclet x y) = wca (wcl w) (wclet x y)
 cf-lit w (wcrec x y z) = wca (wcl w) (wcrec x y z)
+cf-lit w (wcrec2 x1 x2 x3 x4 x5 xs) = wca (wcl w) (wcrec2 x1 x2 x3 x4 x5 xs)
 cf-add : WC → WC → WC
 cf-add (wcl w) b = cf-lit w b
 cf-add (wcv n) b = wca (wcv n) b
@@ -203,6 +267,7 @@ cf-add (wcs x y) b = wca (wcs x y) b
 cf-add (wcsucc x) b = wca (wcsucc x) b
 cf-add (wclet x y) b = wca (wclet x y) b
 cf-add (wcrec x y z) b = wca (wcrec x y z) b
+cf-add (wcrec2 x1 x2 x3 x4 x5 xs) b = wca (wcrec2 x1 x2 x3 x4 x5 xs) b
 cf-at : WC → WC
 cf-at (wcl w) = wcl w
 cf-at (wcv n) = wcv n
@@ -211,6 +276,7 @@ cf-at (wcs a b) = wcs a b
 cf-at (wcsucc a) = wcsucc a
 cf-at (wclet a b) = wclet a b
 cf-at (wcrec w z s) = wcrec w z s
+cf-at (wcrec2 x1 x2 x3 x4 x5 xs) = wcrec2 x1 x2 x3 x4 x5 xs
 cf-lit-ok : (w : Word) (b : WC) → (ρ : Envw) → wc-ev (cf-lit w b) ρ ≡ wc-ev (wca (wcl w) b) ρ
 cf-lit-ok w (wcl v) ρ = λ j → wadd w v
 cf-lit-ok w (wcv n) ρ = λ j → wc-ev (wca (wcl w) (wcv n)) ρ
@@ -219,6 +285,7 @@ cf-lit-ok w (wcs x y) ρ = λ j → wc-ev (wca (wcl w) (wcs x y)) ρ
 cf-lit-ok w (wcsucc x) ρ = λ j → wc-ev (wca (wcl w) (wcsucc x)) ρ
 cf-lit-ok w (wclet x y) ρ = λ j → wc-ev (wca (wcl w) (wclet x y)) ρ
 cf-lit-ok w (wcrec x y z) ρ = λ j → wc-ev (wca (wcl w) (wcrec x y z)) ρ
+cf-lit-ok w (wcrec2 x1 x2 x3 x4 x5 xs) ρ = λ j → wc-ev (wca (wcl w) (wcrec2 x1 x2 x3 x4 x5 xs)) ρ
 cf-add-ok : (a b : WC) → (ρ : Envw) → wc-ev (cf-add a b) ρ ≡ wc-ev (wca a b) ρ
 cf-add-ok (wcl w) b ρ = cf-lit-ok w b ρ
 cf-add-ok (wcv n) b ρ = λ j → wc-ev (wca (wcv n) b) ρ
@@ -227,6 +294,7 @@ cf-add-ok (wcs x y) b ρ = λ j → wc-ev (wca (wcs x y) b) ρ
 cf-add-ok (wcsucc x) b ρ = λ j → wc-ev (wca (wcsucc x) b) ρ
 cf-add-ok (wclet x y) b ρ = λ j → wc-ev (wca (wclet x y) b) ρ
 cf-add-ok (wcrec x y z) b ρ = λ j → wc-ev (wca (wcrec x y z) b) ρ
+cf-add-ok (wcrec2 x1 x2 x3 x4 x5 xs) b ρ = λ j → wc-ev (wca (wcrec2 x1 x2 x3 x4 x5 xs) b) ρ
 cf-at-ok : (c : WC) → (ρ : Envw) → wc-ev (cf-at c) ρ ≡ wc-ev c ρ
 cf-at-ok (wcl w) ρ = λ j → w
 cf-at-ok (wcv n) ρ = λ j → ρ n
@@ -235,6 +303,7 @@ cf-at-ok (wcs a b) ρ = λ j → wc-ev (wcs a b) ρ
 cf-at-ok (wcsucc a) ρ = λ j → wc-ev (wcsucc a) ρ
 cf-at-ok (wclet a b) ρ = λ j → wc-ev (wclet a b) ρ
 cf-at-ok (wcrec w z s) ρ = λ j → wc-ev (wcrec w z s) ρ
+cf-at-ok (wcrec2 x1 x2 x3 x4 x5 xs) ρ = λ j → wc-ev (wcrec2 x1 x2 x3 x4 x5 xs) ρ
 fold-vrule : VRule
 fold-vrule = (cf-at , cf-at-ok)
 -- ---------------------------------------------------------------- the justifying path
@@ -274,8 +343,40 @@ wc-of c =
     cwsucc a → omap wcsucc (wc-of a)
     clet t b → wc-two wclet t b
     cwelim w z s → (case s of clam s1 → (case s1 of clam b → (case wc-of w of some w2 → (case wc-of z of some z2 → omap (λ b2 → wcrec w2 z2 b2) (wc-of b); none → none); none → none); _ → none); _ → none)
+    cfst x → wc-rec2 false x
+    csnd x → wc-rec2 true x
     _ → none
 wc-two f a b = case wc-of a of some a2 → omap (λ b2 → f a2 b2) (wc-of b); none → none
+-- a component of a word recursion over a pair: the pair written as cpair, the step as λ k p. cpair
+-- b1 b2 with p used only through its projections (wc-p: inside the step at depth d, fst p is the
+-- mirror's variable d + 1, snd p is d, k is d + 2, and a variable above them is one higher)
+wc-rec2 sel x =
+  case x of
+    cwelim w z s → (case z of cpair z1 z2 → (case s of clam s1 → (case s1 of clam b → (case b of cpair b1 b2 → wc-rec2b sel w z1 z2 b1 b2; _ → none); _ → none); _ → none); _ → none)
+    _ → none
+wc-rec2b sel w z1 z2 b1 b2 =
+  case wc-of w of
+    some w2 → (case wc-of z1 of
+                 some y1 → (case wc-of z2 of
+                              some y2 → (case wc-p #0 b1 of
+                                           some t1 → omap (λ t2 → wcrec2 w2 y1 y2 t1 t2 sel) (wc-p #0 b2)
+                                           none → none)
+                              none → none)
+                 none → none)
+    none → none
+wc-p d c =
+  case c of
+    cwlit w → some (wcl w)
+    cvar n → (if %wlt n d then some (wcv (toNat n)) else if %weq n d then none else if %weq n (%wadd d #1) then some (wcv (toNat (%wadd d #2))) else some (wcv (toNat (%wadd n #1))))
+    cfst x → (case x of cvar n → (if %weq n d then some (wcv (toNat (%wadd d #1))) else none); _ → none)
+    csnd x → (case x of cvar n → (if %weq n d then some (wcv (toNat d)) else none); _ → none)
+    cwop k a b → (if %weq k #2 then wc-p2 d wca a b else if %weq k #4 then wc-p2 d wcs a b else none)
+    cwsucc a → omap wcsucc (wc-p d a)
+    clet t b → (case wc-p d t of some t2 → omap (λ b2 → wclet t2 b2) (wc-p (%wadd d #1) b); none → none)
+    cwelim w z s → (case s of clam s1 → (case s1 of clam b → (case wc-p d w of some w2 → (case wc-p d z of some z2 → omap (λ b2 → wcrec w2 z2 b2) (wc-p (%wadd d #2) b); none → none); none → none); _ → none); _ → none)
+    cann t T → wc-p d t
+    _ → none
+wc-p2 d f a b = case wc-p d a of some a2 → omap (λ b2 → f a2 b2) (wc-p d b); none → none
 -- a first-order form of the fragment read into FW: lower-welim's loop recognized by its shape, the
 -- step's variables above the loop's three slots moved back down by one
 fw-of t = fw-at #0 t
@@ -302,15 +403,27 @@ fw-body d w z body =
     fif c a b → (case a of fcon dd k fs → (case fs of lcons x r → (case r of lcons y r2 → (case r2 of lcons st r3 → (case fw-at d w of some w2 → (case fw-at d z of some z2 → omap (λ s2 → fwloop w2 z2 s2) (fw-at #1 st); none → none); none → none); _ → none); _ → none); _ → none); _ → none)
     _ → none
 -- and back: the checked pipeline's output as the form the printers take
-fw-to-fo t = fw-to-at #0 t
-fw-to-at d t =
+-- the printer back to the first-order form: m maps a mirror variable to the form's (the identity
+-- at the top and under a let or a loop's two binders, where the binders agree); the pair loop is
+-- lower-welim over a pair (fcon 0 0, as lib/lower.cub's cpair), its step opening the pair with two
+-- lets (so the form has the pair itself and the counter one slot further up than the mirror, fw-m3)
+-- and the component projected (fproj 0 0 sel)
+fw-to-fo t = fw-pr (λ n → n) t
+fw-pr m t =
   case t of
     fwl w → flit w
-    fwv n → fvar (fw-shift d (fromNat n))
-    fwp p a b → fprim (if %weq p #0 then P-add else P-sub) (lcons (fw-to-at d a) (lcons (fw-to-at d b) lnil))
-    fwlet a b → flet (fw-to-at d a) (fw-to-at (fw-in d) b)
-    fwloop w z s → lower-welim (fw-to-at d w) (fw-to-at d z) (flam (flam (fw-to-at #0 s)))
-fw-shift d n = n
+    fwv n → fvar (m (fromNat n))
+    fwp p a b → fprim (if %weq p #0 then P-add else P-sub) (lcons (fw-pr m a) (lcons (fw-pr m b) lnil))
+    fwlet a b → flet (fw-pr m a) (fw-pr (fw-m1 m) b)
+    fwloop w z s → lower-welim (fw-pr m w) (fw-pr m z) (flam (flam (fw-pr (fw-m2 m) s)))
+    fwloop2 w z1 z2 s1 s2 sel →
+      fproj #0 #0 (if sel then #1 else #0)
+        (lower-welim (fw-pr m w) (fcon #0 #0 (lcons (fw-pr m z1) (lcons (fw-pr m z2) lnil)))
+           (flam (flam (flet (fproj #0 #0 #0 (fvar #0)) (flet (fproj #0 #0 #1 (fvar #1))
+              (fcon #0 #0 (lcons (fw-pr (fw-m3 m) s1) (lcons (fw-pr (fw-m3 m) s2) lnil))))))))
+fw-m1 m n = if %weq n #0 then #0 else %wadd (m (%wsub n #1)) #1
+fw-m2 m n = if %wlt n #2 then n else %wadd (m (%wsub n #2)) #2
+fw-m3 m n = if %wlt n #2 then n else if %weq n #2 then #3 else %wadd (m (%wsub n #3)) #4
 -- readings: the term of ex-f as a code (written, not normalized) is ex-c in the mirror; the untyped
 -- lower agrees with lower-w on it, and eval-fo with fo-ev; the checked pipeline's output (the rules
 -- fired), back as a first-order form, runs to the same value
@@ -367,3 +480,33 @@ sp-f3 = code (%wadd #3 #4)
 #same specialize-proved-w Word lnil sp-f3 = (#1 , flit #7)
 sp-f4 = code (λ (b : Bool) → (case b return (λ w → Word) of true → #1; false → #0))
 #same fst (specialize-proved-w (Bool → Word) lnil sp-f4) = #0
+-- a pair carried through a word recursion (tests/fo.cub's fact and fib): read as wcrec2 (the step's
+-- pair used through its projections), compiled by the verified pipeline; fib-path is the checked
+-- path for fib's code in the mirror
+mul-wp : Word → Word → Word
+mul-wp a b = %welimP (λ v → Word) b #0 (λ k h → %wadd h a)
+fact-wp : Word → Word
+fact-wp n = snd (%welimP (λ v → Word × Word) n (#1 , #1) (λ k p → (%wsucc (fst p) , mul-wp (fst p) (snd p))))
+fib-wp : Word → Word
+fib-wp n = fst (%welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p))))
+sp-p1 = code (λ (n : Word) → fact-wp n)
+sp-p2 = code (λ (n : Word) → fib-wp n)
+#same fst (specialize-proved-w (Word → Word) lnil sp-p1) = #1
+#same run-fo (fapply (snd (specialize-proved-w (Word → Word) lnil sp-p1)) (lcons (flit #6) lnil)) = #720
+#same run-fo (fapply (snd (specialize-proved-w (Word → Word) lnil sp-p1)) (lcons (flit #6) lnil)) = run-fo (fapply (specialize (Word → Word) lnil sp-p1) (lcons (flit #6) lnil))
+#same fst (specialize-proved-w (Word → Word) lnil sp-p2) = #1
+#same run-fo (fapply (snd (specialize-proved-w (Word → Word) lnil sp-p2)) (lcons (flit #30) lnil)) = #832040
+fib-c : WC
+fib-c = wcrec2 (wcv zero) (wcl #0) (wcl #1) (wcv zero) (wca (wcv (suc zero)) (wcv zero)) false
+#same wc-of (under-lams (normalize (Word → Word) sp-p2)) = some fib-c
+fib-st : Word → Word × Word → Word × Word
+fib-st k p = (snd p , %wadd (fst p) (snd p))
+fib-sim : (x : Word) → %welimP (λ v → P2W) x (p2w #0 #1) (λ k q → p2w (p2b q) (wadd (p2a q) (p2b q)))
+                     ≡ p2w (fst (%welimP (λ v → Word × Word) x (#0 , #1) fib-st)) (snd (%welimP (λ v → Word × Word) x (#0 , #1) fib-st))
+fib-sim x = %welimP (λ v → %welimP (λ u → P2W) v (p2w #0 #1) (λ k q → p2w (p2b q) (wadd (p2a q) (p2b q)))
+                         ≡ p2w (fst (%welimP (λ u → Word × Word) v (#0 , #1) fib-st)) (snd (%welimP (λ u → Word × Word) v (#0 , #1) fib-st))) x
+  (λ j → p2w #0 #1)
+  (λ k h → λ j → p2w (p2b (h j)) (wadd (p2a (h j)) (p2b (h j))))
+fib-path : (x : Word) → fo-ev (spec-w std-vrule fib-c) (envx x) ≡ fib-wp x
+fib-path x = catw (spec-path std-vrule fib-c (envx x)) (λ j → p2a (fib-sim x j))
+#same fo-ev (spec-w std-vrule fib-c) (envx #30) = #832040
