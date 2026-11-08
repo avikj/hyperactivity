@@ -673,16 +673,25 @@ seventeen programs with gcc and runs them, with both printers):
   theorems) applied with soundness by congruence, and `spec-path : fo-ev (spec-w r c) ρ ≡ wc-ev c ρ`
   for every code; `ex-path` is that path for a term. Bridges read real `Code` and `FO` into the
   mirror (the untyped `lower` agrees with the checked one on the readings) and the checked
-  pipeline's output back for the printers. Past the word fragment (`lib/foproofd.cub`), a mirror with data (two word
-  fields, a two-way case), closures, calls and the byte layer at 8 bytes (a fresh string, loads and
-  stores as cells), and checked closure conversion `dconv` with `dc-sound` at every fuel.
+  pipeline's output back for the printers. Past the word fragment (`lib/foproofd.cub`), a mirror of
+  the whole first-order fragment: every primitive `lower` lowers (Int64's, UInt32's as words,
+  Float64's, by their bits, the machine's operation as the evaluator clause), comparisons, Bool as
+  1 and 0 with if, max, pairs, unit and projections, constructors of any data type with any number
+  of fields (a tuple) and cases of any number of alternatives, closures, calls of any arity (a
+  tuple), the byte layer at 4 and 8 bytes and any literal offset (a string as its stores over a
+  base, a partial overlap read byte by byte), and checked closure conversion `dconv` with
+  `dc-sound` at every fuel. The bridge lifts a structural recursion on a recursive type, and a word
+  recursion, to definitions of their own called through the table.
   `specialize-proved` takes the word route (`spec-path`), else the data route: the normal form
   read into the mirror (`dc-prog`, globals quoted and read), its tables decided by `dtok-chk` (so
   `dc-sound` holds through `dtok-auto`), converted and taken to first-order definitions (`run.py`
   `proved-spec`, `proved-region`), else the untyped specializer, tagging which. The data route's
-  rewrites are verified too: `FRule`s on the converted form (folding, `0 + x`, a load forwarded
-  through stores) sound as refinement at every fuel, applied bottom up under every construct and
-  through both tables (`fr-bu-ok`), composed with `dc-sound` in `fr-dc-path`.
+  rewrites are verified too: `FRule`s on the converted form (folding every primitive, `0 + x`, a
+  load forwarded through stores at its width, a projection of a pair and an if on a literal) sound
+  as refinement at every fuel, applied bottom up under every construct and through both tables
+  (`fr-bu-ok`), composed with `dc-sound` in `fr-dc-path`; `run.py`'s `proved-cmp`, `proved-tags`,
+  `proved-list`, `proved-loop`, `proved-num`, `proved-float`, `proved-calls`, `proved-bytes`,
+  `proved-bytes32` and `proved-pair` compile its output boxed and unboxed. Offsets that are variables (`fromNat` of the `Nat`), `%blen` and `max` are read too, on both routes (the untyped `lower` had loaded at 0 for any `Nat` offset and run `max` as addition); `proved-fib` runs the word route's fib as x86.
 - **`lib/derive.cub`**: `derive-eq d`, a decidable equality as a code read off the data table;
   evaluated, quoted back at its type, lowered and compiled (the derived equality on `Nat` prints
   10 for eq(2,2), eq(2,1)).

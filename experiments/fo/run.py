@@ -195,7 +195,7 @@ sd = specialize-proved (PQ → Word) lnil (code (λ (p : PQ) → pq-app p))
 #same fst sd = #2
 defs = lcons (#0 , (#0 , fcall #1 (lcons (fcon (didx (code PQ)) #1 (lcons (flit #9) (lcons (flit #2) lnil))) lnil))) (dc-rekey #1 (snd sd))''', "3"),
  # lib/region.cub's two through the same route: the byte layer in the mirror (a fresh string, stores
- # and loads at multiples of 8 as cells); at 20: 20 + 21
+ # and loads at 8 bytes, forwarded through the stores by the verified rewrite); at 20: 20 + 21
  'proved-region': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
 p0 : Ptr 16
 p0 = (0 , (8 , λ i → 16))
@@ -208,6 +208,36 @@ prog-two w = i64toWord (eval-fresh 16 (two w))
 sr = specialize-proved (Word → Word) lnil (code (λ (w : Word) → prog-two w))
 #same fst sr = #2
 defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #20) lnil))) (dc-rekey #1 (snd sr))''', "41"),
+ # the data route past the first mirror (lib/foproofd.cub): comparisons, an if on Bool and max; at (3, 9): max 3 10
+ 'proved-cmp': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #3) (lcons (flit #9) lnil)))) (dc-rekey #1 (snd (specialize-proved (Word → Word → Word) lnil dq-c1)))''', "10"),
+ # two data types, constructors of 0, 1 and 3 fields, nested cases; at dqta (dq1 8) 3: 8 + 3
+ 'proved-tags': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons dq-tg1 lnil))) (dc-rekey #1 (snd (specialize-proved (DqTg → Word) lnil dq-c2b)))''', "11"),
+ # a list's sum: the structural recursion lifted to a definition of its own; at [3, 4]
+ 'proved-list': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons dq-lst lnil))) (dc-rekey #1 (snd (specialize-proved (DqL → Word) lnil dq-c3)))''', "7"),
+ # a word recursion whose step cases on data, lifted; at 3: (0 + 11) + (1 + 11) + (2 + 11)
+ 'proved-loop': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #3) (lcons dq-tg1 lnil)))) (dc-rekey #1 (snd (specialize-proved (Word → DqTg → Word) lnil dq-c4)))''', "36"),
+ # Int64's subtraction and multiplication on the bits; at 5: (5 − 1)·3
+ 'proved-num': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil))) (dc-rekey #1 (snd (specialize-proved (Word → Word) lnil dq-c5)))''', "12"),
+ # Float64's addition and multiplication on the bits; at 3: the bits of (3 + 1)·2 = 8.0
+ 'proved-float': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #3) lnil))) (dc-rekey #1 (snd (specialize-proved (Word → Word) lnil dq-c6)))''', "4620693217682128896"),
+ # calls of three arguments (a tuple) and of none, read as written; at 4: 4 + (7 − 2)
+ 'proved-calls': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #4) lnil))) (dc-rekey #1 (dc-prog-defs (fromopt (dc-prog dq-c8) dc-dflt)))''', "9"),
+ # a load overlapping a store in part, byte by byte: the high half of 3·2^32 + 2
+ 'proved-bytes': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #12884901890) lnil))) (dc-rekey #1 (snd (specialize-proved (Word → Word) lnil sp-b2)))''', "3"),
+ # a 4-byte store and load at offset 4: the low 32 bits of 2^32 + 5
+ 'proved-bytes32': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #4294967301) lnil))) (dc-rekey #1 (snd (specialize-proved (Word → Word) lnil sp-b3)))''', "5"),
+ # a pair used through its projections; at (3, 4)
+ 'proved-pair': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
+defs = lcons (#0 , (#0 , fcall #1 (lcons (fcon #0 #0 (lcons (flit #3) (lcons (flit #4) lnil))) lnil))) (dc-rekey #1 (snd (specialize-proved (Word × Word → Word) lnil dq-c10)))''', "7"),
  # a process run against its world (lib/proc.cub), specialized under an unknown store: the run
  # becomes a function of the store (st 3 + 1); compiled with a store that answers 40; prints 41
  'process': ("""proc-defs = case lift #100 spec4 of lifted t2 ds k → lcons (#0 , (#0 , fapply t2 (lcons (flam (flit #40)) lnil))) ds
@@ -548,6 +578,15 @@ X86_PROGS = {
  # the verified compilation of lib/foproof.cub (spec-w std-vrule ex-c, its path ex-path) on x = 4
  'proved': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + """"
 defs = lcons (#0 , (#1 , fw-to-fo (spec-w std-vrule ex-c))) lnil""", [4], "13"),
+ # fib through specialize-proved's verified word route (tag 1, as tests/foproofd.cub pins for fibw-pd):
+ # the pair carried through the recursion (wcrec2), lowered by the checked lower-w, run as x86
+ 'proved-fib': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + """"
+fibx : Word → Word
+fibx n = fst (%welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p))))
+spx = specialize-proved (Word → Word) lnil (code (λ (w : Word) → fibx w))
+#same fst spx = #1
+lam-body-px f = case f of flam b → lam-body-px b; _ → f
+defs = lcons (#0 , (#1 , lam-body-px (snd spx))) lnil""", [90], "2880067194370816120"),
  # the arguments come from the command line through the stub (rdi the arena, then the words)
  'plusw-args': ("""defs = lcons (#0 , (#2 , fo-plus)) lnil""", [1000, 234], "1234"),
  # factorial as a loop over (n, acc): continue while n > 0
@@ -594,4 +633,4 @@ def run_x86(name, defs, args, expect):
 if __name__ == '__main__':
     if X86: sys.exit(0 if all(run_x86(n, *X86_PROGS[n]) for n in X86_PROGS) else 1)
     if IMAGE: sys.exit(0 if all(run_image(n, *IMAGES[n]) for n in IMAGES if not sys.argv[1:] or n in sys.argv[1:]) else 1)
-    sys.exit(0 if all(run(n, *PROGS[n]) for n in PROGS) else 1)
+    sys.exit(0 if all(run(n, *PROGS[n]) for n in PROGS if not sys.argv[1:] or n in sys.argv[1:]) else 1)

@@ -309,8 +309,13 @@ pair-at sigs env d want t =
          in if is-pr nat then box-pr nat (emit-u sigs env d t) else
             cat7 u-box (emit-at sigs env d tP t) u-semi (cat4 u-cast u-pr (dec (%wsub want #2)) u-brace) (comp-of (pr-fst want) u-q0) u-comma (cat4 (comp-of (pr-snd want) u-q1) u-bend u-rp u-boxend))
 comp-of t q = if %weq t tW then lapp q u-n else q
--- a pair boxed: mkc(0, 2, box f0, box f1)
-box-pr nat e = cat7 u-box e u-semi u-mkc2 (box-comp (pr-fst nat) (lcons #113 u-f0)) u-comma (cat3 (box-comp (pr-snd nat) (lcons #113 u-f1)) u-rp u-boxend)
+-- a pair boxed: ({ Pr<k> q = e; mkc(0, 2, box q.f0, box q.f1); }) (the pair held by value in q, its
+-- components boxed by their types)
+box-pr nat e = cat7 u-pbox-open u-pr (dec (%wsub nat #2)) u-pbox-q e u-semi (cat7 u-mkc2 (box-comp (pr-fst nat) u-qf0) u-comma (box-comp (pr-snd nat) u-qf1) u-rp u-boxend lnil)
+u-pbox-open = (lcons #40 (lcons #123 (lcons #32 lnil)))
+u-pbox-q = (lcons #32 (lcons #113 (lcons #32 (lcons #61 (lcons #32 lnil)))))
+u-qf0 = (lcons #113 (lcons #46 (lcons #102 (lcons #48 lnil))))
+u-qf1 = (lcons #113 (lcons #46 (lcons #102 (lcons #49 lnil))))
 box-comp t e = if %weq t tW then cat3 u-mkw e u-rp else e
 emit-u sigs env d t =
   case t of

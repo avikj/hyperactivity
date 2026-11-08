@@ -48,7 +48,7 @@ lower c =
     cwlit n → flit n
     cplit k b → if %weq k #0 then fi64 b else if %weq k #2 then ff64 b else if %weq k #1 then flit b else fnet #0 lnil
     cwsucc a → fprim P-add (lcons (lower a) (lcons (flit #1) lnil))
-    cwop k a b → fprim (wop-prim k) (lcons (lower a) (lcons (lower b) lnil))
+    cwop k a b → (if %weq k #3 then lower-max (lower a) (lower b) else fprim (wop-prim k) (lcons (lower a) (lcons (lower b) lnil)))
     cprim k as → lower-prim k as
     cwelim w z s → lower-welim (lower w) (lower z) (lower s)
     _ → fnet #0 lnil
@@ -80,13 +80,22 @@ lower-prim k cs =
 -- the fact the dropped proof established, off + w < n + 1, stated for the C compiler (fassume)
 -- when the quote carried the length (lib/check.cub bytes-len-code); the proof itself is gone.
 -- Numerals in the fact are Nat constructor trees here; lib/repr.cub reads them as words
+-- the offset of a load or store is a Nat (the byte layer's index), and the first-order primitives take
+-- a word: a numeral becomes its word, any other offset fromNat of it (a call, lowered with the
+-- program; it was passed as the Nat's constructor tree, which the loads read as 0)
+lower-off c = case lower-natlit c of some w → flit w; none → lower-app lower-fromnat (lcons (lower c) lnil)
+lower-fromnat = code fromNat
+lower-nat-d = case code zero of ccon d k fs ds → d; _ → #0
+lower-natlit c = case c of cwlit w → some w; ccon d k fs ds → (if %weq d lower-nat-d then (if %weq k #0 then some #0 else (case fs of lcons x r → (case lower-natlit x of some w → some (%wsucc w); none → none); lnil → none)) else none); _ → none
+lset-l l n x = case l of lnil → lnil; lcons y r → (if %weq n #0 then lcons x r else lcons y (lset-l r (%wsub n #1) x))
 ltake-l n l = if %weq n #0 then lnil else (case l of lnil → lnil; lcons x r → lcons x (ltake-l (%wsub n #1) r))
 lower-access k cs as =
   let st = if %wlt k #1024 then false else true
       w = %wsub k (if st then #1024 else #768)
       nargs = if st then #3 else #2
-      body = if %weq w #8 then fprim (if st then P-store64 else P-load64) (ltake-l nargs as)
-             else if %weq w #4 then fprim (if st then P-store32 else P-load32) (ltake-l nargs as) else fnet k (ltake-l nargs as)
+      as2 = lset-l as #1 (lower-off (cl-at cs #1))
+      body = if %weq w #8 then fprim (if st then P-store64 else P-load64) (ltake-l nargs as2)
+             else if %weq w #4 then fprim (if st then P-store32 else P-load32) (ltake-l nargs as2) else fnet k (ltake-l nargs as)
   in if %weq (lst-len cs) (%wsucc nargs)
        then fassume (cwop #1 (cwop #2 (cl-at cs #1) (cwlit w)) (cwsucc (cl-at cs nargs))) body
        else body
@@ -155,7 +164,11 @@ lower-ralts d B k =
 strip-n m b = if %weq m #0 then b else (case b of clam b2 → strip-n (%wsub m #1) b2; _ → b)
 count-lams b = case b of clam b2 → %wsucc (count-lams b2); _ → #0
 strip-lams b = case b of clam b2 → strip-lams b2; _ → b
-wop-prim k = if %weq k #0 then P-eq else if %weq k #1 then P-lt else if %weq k #2 then P-add else if %weq k #4 then P-sub else P-add
+-- %weq %wlt %wadd %wmax %wsub are 0..4; max has no primitive of the first-order form and is lowered by
+-- lower-max (it was lowered as addition: max 3 9 ran as 12)
+wop-prim k = if %weq k #0 then P-eq else if %weq k #1 then P-lt else if %weq k #2 then P-add else P-sub
+-- max a b as let x = a; y = b in if x < y then y else x (each argument computed once)
+lower-max a b = flet a (flet (shift-at #0 #1 b) (fif (fprim P-lt (lcons (fvar #1) (lcons (fvar #0) lnil))) (fvar #0) (fvar #1)))
 -- word elimination as a loop over (w, i, acc): while i < w, acc := s i acc; the step s is a
 -- two-argument function value, applied through fapply. Variables in w z s refer to the
 -- enclosing environment, below the loop's three state slots: shifted by 3 inside the body
