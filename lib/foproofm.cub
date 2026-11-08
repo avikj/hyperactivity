@@ -21,7 +21,7 @@
 -- So evc is stricter than C only at limits: a run that ends without one is C's run.
 -- ---------------------------------------------------------------- values and locals
 -- C's values (lib/foproofc.cub's CV) with mlim, a limit hit; locals with mslim, locals all limits
-data MV = mw (n : Word) | mcon (c : Word) (fs : MV) | mclo (g : Word) (caps : MV) | mb (l : BL) | mnil | mcons (x : MV) (r : MV) | mbot | mlim
+data MV = mw (n : Word) | mcon (c : Word) (fs : MV) | mclo (g : Word) (caps : MV) | mb (l : BL) | mvnil | mvcons (x : MV) (r : MV) | mbot | mlim
 data MSt = msnil | msb (l : Nat) (v : MV) (r : MSt) | msx (v : MV) (r : MSt) | mslim
 mor : Bool → Bool → Bool
 mor true b = true
@@ -32,8 +32,8 @@ haslim (mw n) = false
 haslim (mcon c fs) = haslim fs
 haslim (mclo g caps) = haslim caps
 haslim (mb l) = false
-haslim mnil = false
-haslim (mcons x r) = mor (haslim x) (haslim r)
+haslim mvnil = false
+haslim (mvcons x r) = mor (haslim x) (haslim r)
 haslim mbot = false
 haslim mlim = true
 -- a C value as a machine value, and back (a limit as none)
@@ -42,16 +42,16 @@ c2m (cw n) = mw n
 c2m (cvcon c fs) = mcon c (c2m fs)
 c2m (cclo g caps) = mclo g (c2m caps)
 c2m (cb l) = mb l
-c2m cvnil = mnil
-c2m (cvcons x r) = mcons (c2m x) (c2m r)
+c2m cvnil = mvnil
+c2m (cvcons x r) = mvcons (c2m x) (c2m r)
 c2m cbot = mbot
 m2c : MV → CV
 m2c (mw n) = cw n
 m2c (mcon c fs) = cvcon c (m2c fs)
 m2c (mclo g caps) = cclo g (m2c caps)
 m2c (mb l) = cb l
-m2c mnil = cvnil
-m2c (mcons x r) = cvcons (m2c x) (m2c r)
+m2c mvnil = cvnil
+m2c (mvcons x r) = cvcons (m2c x) (m2c r)
 m2c mbot = cbot
 m2c mlim = cbot
 c2m-nl : (c : CV) → haslim (c2m c) ≡ false
@@ -82,7 +82,7 @@ ms-x (msb m v r) = ms-x r
 ms-x (msx v r) = v
 ms-x mslim = mlim
 ms-push0 : MV → Nat → MSt → MSt
-ms-push0 (mcons v r) l s = ms-push0 r (suc l) (msb l v s)
+ms-push0 (mvcons v r) l s = ms-push0 r (suc l) (msb l v s)
 ms-push0 v l s = s
 ms-push : MV → Nat → MSt → MSt
 ms-push m l s = if haslim m then mslim else ms-push0 m l s
@@ -162,9 +162,9 @@ mevT GC A CD k (caclo g caps) s = mclo g (mevT GC A CD k caps s)
 mevT GC A CD k (caap f as) s = m-appl GC A CD k (mevT GC A CD k as s) (mevT GC A CD k f s)
 mevT GC A CD k (cacall g as) s = me-ev k (GC g) (ms-push (mevT GC A CD k as s) zero msnil)
 mevT GC A CD k (caloop l n init b) s = me-lp k l n (mevT GC A CD k init s) b s
-mevT GC A CD k (cadecl l x r) s = mcons (mevT GC A CD k x s) (mevT GC A CD k r (msb l (mevT GC A CD k x s) s))
-mevT GC A CD k canil s = mnil
-mevT GC A CD k (cacons x r) s = mcons (mevT GC A CD k x s) (mevT GC A CD k r s)
+mevT GC A CD k (cadecl l x r) s = mvcons (mevT GC A CD k x s) (mevT GC A CD k r (msb l (mevT GC A CD k x s) s))
+mevT GC A CD k canil s = mvnil
+mevT GC A CD k (cacons x r) s = mvcons (mevT GC A CD k x s) (mevT GC A CD k r s)
 mevT GC A CD k caunsup s = mbot
 meN : (Word → CA) → (Word → Nat) → (Word → Bool) → Nat → ME
 meN GC A CD zero = me (λ t s → mbot) (λ l n st b s → mbot)
@@ -200,10 +200,10 @@ mr-con c fs gs (inr p) = inr (λ i → mcon c (p i))
 mr-clo : (g : Word) (cs : CV) (ds : MV) → MR cs ds → MR (cclo g cs) (mclo g ds)
 mr-clo g cs ds (inl p) = inl p
 mr-clo g cs ds (inr p) = inr (λ i → mclo g (p i))
-mr-cons : (x : CV) (y : MV) (r : CV) (q : MV) → MR x y → MR r q → MR (cvcons x r) (mcons y q)
+mr-cons : (x : CV) (y : MV) (r : CV) (q : MV) → MR x y → MR r q → MR (cvcons x r) (mvcons y q)
 mr-cons x y r q (inl p) hr = inl (cong (λ b → mor b (haslim q)) p)
 mr-cons x y r q (inr p) (inl pr) = inl (cong (λ u → mor (haslim u) (haslim q)) p ∙ (cong (λ b → mor b (haslim q)) (c2m-nl x) ∙ pr))
-mr-cons x y r q (inr p) (inr pr) = inr (λ i → mcons (p i) (pr i))
+mr-cons x y r q (inr p) (inr pr) = inr (λ i → mvcons (p i) (pr i))
 -- the words: a literal or a result of addition or multiplication fits, or is a limit
 mr-wrapw : (w : Word) (b : Bool) → MR (cw w) (if b then mw w else mlim)
 mr-wrapw w true = mr-c (cw w)
