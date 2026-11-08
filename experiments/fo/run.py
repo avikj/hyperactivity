@@ -542,9 +542,35 @@ def run_image(name, defs, names, main, expect, validate=None, opts=None):
         return ok
 IMAGE = os.environ.get('IMAGE') == '1'
 
+# the proved programs' C through the checked C link (lib/foproofc.cub): the first-order definitions as
+# checked terms (specialize-proved-q: the word route's main or the data route's table), translated by
+# the checked fq-to-ca and printed by ca-to-c (ca-prog); the harness's main calls the program's main
+# on the arguments. Boxed only: the unboxed printer (lib/emitu.cub) stays outside the path.
+QROUTE = {
+ 'proved': ("lcons (flit #4) lnil", "lcons (#0 , (#1 , fw-to-fq (spec-w std-vrule ex-c))) lnil"),
+ 'proved-data': (None, "dc-defs-q dx-prog"),
+ 'proved-spec': ("lcons (fcon (didx (code PQ)) #1 (lcons (flit #9) (lcons (flit #2) lnil))) lnil", "snd (specialize-proved-q (PQ → Word) lnil (code (λ (p : PQ) → pq-app p)))"),
+ 'proved-region': ("lcons (flit #20) lnil", "snd (specialize-proved-q (Word → Word) lnil (code (λ (w : Word) → prog-two w)))"),
+ 'proved-cmp': ("lcons (flit #3) (lcons (flit #9) lnil)", "snd (specialize-proved-q (Word → Word → Word) lnil dq-c1)"),
+ 'proved-tags': ("lcons dq-tg1 lnil", "snd (specialize-proved-q (DqTg → Word) lnil dq-c2b)"),
+ 'proved-list': ("lcons dq-lst lnil", "snd (specialize-proved-q (DqL → Word) lnil dq-c3)"),
+ 'proved-loop': ("lcons (flit #3) (lcons dq-tg1 lnil)", "snd (specialize-proved-q (Word → DqTg → Word) lnil dq-c4)"),
+ 'proved-num': ("lcons (flit #5) lnil", "snd (specialize-proved-q (Word → Word) lnil dq-c5)"),
+ 'proved-float': ("lcons (flit #3) lnil", "snd (specialize-proved-q (Word → Word) lnil dq-c6)"),
+ 'proved-calls': ("lcons (flit #4) lnil", "dc-prog-defs-q (fromopt (dc-prog dq-c8) dc-dflt)"),
+ 'proved-bytes': ("lcons (flit #12884901890) lnil", "snd (specialize-proved-q (Word → Word) lnil sp-b2)"),
+ 'proved-bytes32': ("lcons (flit #4294967301) lnil", "snd (specialize-proved-q (Word → Word) lnil sp-b3)"),
+ 'proved-pair': ("lcons (fcon #0 #0 (lcons (flit #3) (lcons (flit #4) lnil))) lnil", "snd (specialize-proved-q (Word × Word → Word) lnil dq-c10)"),
+}
+def qroute(name, defs):
+    args, qd = QROUTE[name]
+    imp = ''.join('import "' + os.path.join(ROOT, 'lib', f) + '"\n' for f in ('foproof.cub', 'foproofd.cub', 'foproofq.cub', 'foproofc.cub'))
+    body = "ca-tr-defs (" + qd + ")" if args is None else "ca-harness (fo-args-fq (" + args + ")) (" + qd + ")"
+    return imp + defs + "\nprog = ca-prog (" + body + ")"
 def run(name, defs, expect, contains=None):
     with tempfile.TemporaryDirectory() as d:
         cub = os.path.join(d, name + '.cub')
+        if not UNBOXED and name in QROUTE and 'prog =' not in defs: defs = qroute(name, defs)
         if 'prog =' not in defs: defs += "\nprog = " + ("emit-prog-u defs" if UNBOXED else "emit-prog defs")
         open(cub, 'w').write(defs + "\n#show prog\n")
         # the printer of src/syntax.c (pr → pr_flat → pr_str → pr) spends a stack frame of a few KB per
