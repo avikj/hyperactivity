@@ -140,9 +140,17 @@ dv-push (suc m) _ ρ = dv-push m dvbot (dext ρ dvbot)
 dv-pick : Bool → DV → DV → DV
 dv-pick true a b = a
 dv-pick false a b = b
--- a case: the first alternative whose tag is the constructor's
+-- a constructor's fields form a whole tuple of n: pairs ending in unit, n of them (anything else, a
+-- field missing or one too many, is no value: the first-order form pushes every field it has, so a
+-- count that disagreed would read other slots there)
+dv-tup : Nat → DV → Bool
+dv-tup zero dvu = true
+dv-tup zero _ = false
+dv-tup (suc m) (dvpr a r) = dv-tup m r
+dv-tup (suc m) _ = false
+-- a case: the first alternative whose tag is the constructor's, its fields a whole tuple of its count
 dv-alt : (DC → (Nat → DV) → DV) → (Nat → DV) → DV → Word → Nat → DC → DV → DV
-dv-alt ev ρ (dvc k x) j n b rest = dv-pick (weq k j) (ev b (dv-push n x ρ)) rest
+dv-alt ev ρ (dvc k x) j n b rest = dv-pick (weq k j) (dv-pick (dv-tup n x) (ev b (dv-push n x ρ)) dvbot) rest
 dv-alt ev ρ v j n b rest = dvbot
 dv-cases : (DC → (Nat → DV) → DV) → (Nat → DV) → DV → DC → DV
 dv-cases ev ρ v (dcalt j n b r) = dv-alt ev ρ v j n b (dv-cases ev ρ v r)
@@ -217,8 +225,13 @@ tv-push (suc m) _ ρ = tv-push m tvbot (text ρ tvbot)
 tv-pick : Bool → TV → TV → TV
 tv-pick true a b = a
 tv-pick false a b = b
+tv-tup : Nat → TV → Bool
+tv-tup zero tvu = true
+tv-tup zero _ = false
+tv-tup (suc m) (tvpr a r) = tv-tup m r
+tv-tup (suc m) _ = false
 tv-alt : (FC → (Nat → TV) → TV) → (Nat → TV) → TV → Word → Nat → FC → TV → TV
-tv-alt ev ρ (tvc k x) j n b rest = tv-pick (weq k j) (ev b (tv-push n x ρ)) rest
+tv-alt ev ρ (tvc k x) j n b rest = tv-pick (weq k j) (tv-pick (tv-tup n x) (ev b (tv-push n x ρ)) tvbot) rest
 tv-alt ev ρ v j n b rest = tvbot
 tv-cases : (FC → (Nat → TV) → TV) → (Nat → TV) → TV → FC → TV
 tv-cases ev ρ v (fcalt j n b r) = tv-alt ev ρ v j n b (tv-cases ev ρ v r)
@@ -394,17 +407,38 @@ dv-push-fn T n x ρ p = λ j k → snd p k j
 dv-pick-ok : (T : Word → FC) (bv : Bool) (a b : DV) (ta tb : TV) → DOK T a ta → DOK T b tb → DOK T (dv-pick bv a b) (tv-pick bv ta tb)
 dv-pick-ok T true a b ta tb ha hb = ha
 dv-pick-ok T false a b ta tb ha hb = hb
+-- whether the fields are a whole tuple of n is the same before and after erasure
+dv-tup-er : (n : Nat) (x : DV) → dv-tup n x ≡ tv-tup n (derase x)
+dv-tup-er zero dvu = λ i → true
+dv-tup-er zero (dvw w) = λ i → false
+dv-tup-er zero (dvc k x) = λ i → false
+dv-tup-er zero (dvclo i b ρ) = λ j → false
+dv-tup-er zero dvbot = λ i → false
+dv-tup-er zero (dvb l) = λ i → false
+dv-tup-er zero (dvpr a b) = λ i → false
+dv-tup-er (suc m) (dvpr a r) = dv-tup-er m r
+dv-tup-er (suc m) (dvw w) = λ i → false
+dv-tup-er (suc m) (dvc k x) = λ i → false
+dv-tup-er (suc m) (dvclo i b ρ) = λ j → false
+dv-tup-er (suc m) dvbot = λ i → false
+dv-tup-er (suc m) (dvb l) = λ i → false
+dv-tup-er (suc m) dvu = λ i → false
+dv-tpick-ok : (T : Word → FC) (n : Nat) (x : DV) (a : DV) (ta : TV) → DOK T a ta → DOK T (dv-pick (dv-tup n x) a dvbot) (tv-pick (tv-tup n (derase x)) ta tvbot)
+dv-tpick-ok T n x a ta ha =
+  subst {lzero} {lzero} {Bool} {λ c → DOK T (dv-pick (dv-tup n x) a dvbot) (tv-pick c ta tvbot)} {dv-tup n x} {tv-tup n (derase x)} (dv-tup-er n x)
+    (dv-pick-ok T (dv-tup n x) a dvbot ta tvbot ha (unit , λ i → tvbot))
 -- an evaluator pair related at every code whose table is right, in every good environment
 DIH : (Word → FC) → (DC → (Nat → DV) → DV) → (FC → (Nat → TV) → TV) → Type
 DIH T ev evt = (c : DC) (σ : Nat → DV) → DTok T c → DGEnv T σ → DOK T (ev c σ) (evt (dconv c) (denv σ))
 dv-alt-ok : (T : Word → FC) (ev : DC → (Nat → DV) → DV) (evt : FC → (Nat → TV) → TV) → DIH T ev evt → (ρ : Nat → DV) (v : DV) → dgood T v → (j : Word) (n : Nat) (b : DC) → DTok T b → DGEnv T ρ
           → (rest : DV) (trest : TV) → DOK T rest trest → DOK T (dv-alt ev ρ v j n b rest) (tv-alt evt (denv ρ) (derase v) j n (dconv b) trest)
 dv-alt-ok T ev evt ih ρ (dvc k x) gv j n b tb ge rest trest hr =
-  dv-pick-ok T (weq k j) (ev b (dv-push n x ρ)) rest (evt (dconv b) (tv-push n (derase x) (denv ρ))) trest
-    (fst (ih b (dv-push n x ρ) tb (fst (dv-push-ok T n x ρ gv ge))) ,
-     dtrx (derase (ev b (dv-push n x ρ))) (evt (dconv b) (denv (dv-push n x ρ))) (evt (dconv b) (tv-push n (derase x) (denv ρ)))
-          (snd (ih b (dv-push n x ρ) tb (fst (dv-push-ok T n x ρ gv ge))))
-          (λ i → evt (dconv b) (dv-push-fn T n x ρ (dv-push-ok T n x ρ gv ge) i)))
+  dv-pick-ok T (weq k j) (dv-pick (dv-tup n x) (ev b (dv-push n x ρ)) dvbot) rest (tv-pick (tv-tup n (derase x)) (evt (dconv b) (tv-push n (derase x) (denv ρ))) tvbot) trest
+    (dv-tpick-ok T n x (ev b (dv-push n x ρ)) (evt (dconv b) (tv-push n (derase x) (denv ρ)))
+      (fst (ih b (dv-push n x ρ) tb (fst (dv-push-ok T n x ρ gv ge))) ,
+       dtrx (derase (ev b (dv-push n x ρ))) (evt (dconv b) (denv (dv-push n x ρ))) (evt (dconv b) (tv-push n (derase x) (denv ρ)))
+            (snd (ih b (dv-push n x ρ) tb (fst (dv-push-ok T n x ρ gv ge))))
+            (λ i → evt (dconv b) (dv-push-fn T n x ρ (dv-push-ok T n x ρ gv ge) i))))
     hr
 dv-alt-ok T ev evt ih ρ v gv j n b tb ge rest trest hr = (unit , λ i → tvbot)
 dv-cases-ok : (T : Word → FC) (ev : DC → (Nat → DV) → DV) (evt : FC → (Nat → TV) → TV) → DIH T ev evt → (ρ : Nat → DV) (v : DV) → dgood T v → (alts : DC) → DTok T alts → DGEnv T ρ
@@ -1688,12 +1722,35 @@ fr-pick-le : (bv : Bool) (a a' b b' : TV) → fr-le a a' → fr-le b b' → fr-l
 fr-pick-le true a a' b b' ha hb = ha
 fr-pick-le false a a' b b' ha hb = hb
 -- a case: the same alternatives on both sides, or each body rewritten (the chain kept: fr-kids)
+-- a refinement keeps a whole tuple whole (its spine is pairs and unit, which refine only to themselves)
+fr-tpick-le : (n : Nat) (x y A B : TV) → fr-le x y → fr-le A B → fr-le (tv-pick (tv-tup n x) A tvbot) (tv-pick (tv-tup n y) B tvbot)
+fr-tpick-le zero tvu y A B hx hab = subst {lzero} {lzero} {TV} {λ v → fr-le (tv-pick (tv-tup zero tvu) A tvbot) (tv-pick (tv-tup zero v) B tvbot)} {tvu} {y} hx hab
+fr-tpick-le zero (tvw a) y A B hx hab = unit
+fr-tpick-le zero (tvc k z) y A B hx hab = unit
+fr-tpick-le zero (tvclo i ρ) y A B hx hab = unit
+fr-tpick-le zero tvbot y A B hx hab = unit
+fr-tpick-le zero (tvb l) y A B hx hab = unit
+fr-tpick-le zero (tvpr a r) y A B hx hab = unit
+fr-tpick-le (suc m) (tvpr a r) (tvpr c d) A B hx hab = fr-tpick-le m r d A B (snd hx) hab
+fr-tpick-le (suc m) (tvpr a r) (tvw w) A B hx hab = Empty-rec hx
+fr-tpick-le (suc m) (tvpr a r) (tvc k z) A B hx hab = Empty-rec hx
+fr-tpick-le (suc m) (tvpr a r) (tvclo i ρ) A B hx hab = Empty-rec hx
+fr-tpick-le (suc m) (tvpr a r) tvbot A B hx hab = Empty-rec hx
+fr-tpick-le (suc m) (tvpr a r) (tvb l) A B hx hab = Empty-rec hx
+fr-tpick-le (suc m) (tvpr a r) tvu A B hx hab = Empty-rec hx
+fr-tpick-le (suc m) (tvw a) y A B hx hab = unit
+fr-tpick-le (suc m) (tvc k z) y A B hx hab = unit
+fr-tpick-le (suc m) (tvclo i ρ) y A B hx hab = unit
+fr-tpick-le (suc m) tvbot y A B hx hab = unit
+fr-tpick-le (suc m) (tvb l) y A B hx hab = unit
+fr-tpick-le (suc m) tvu y A B hx hab = unit
 fr-alt-le : (ev ev' : FC → (Nat → TV) → TV) (ρ σ : Nat → TV) (v v' : TV) (l : Word) (n : Nat) (b b' : FC) (R R' : TV) → fr-le v v' → FrEnv ρ σ
           → ((r1 s1 : Nat → TV) → FrEnv r1 s1 → fr-le (ev b r1) (ev' b' s1)) → fr-le R R'
           → fr-le (tv-alt ev ρ v l n b R) (tv-alt ev' σ v' l n b' R')
 fr-alt-le ev ev' ρ σ (tvc k x) (tvc j y) l n b b' R R' hv he hb hr =
-  subst {lzero} {lzero} {Word} {λ u → fr-le (tv-pick (weq k l) (ev b (tv-push n x ρ)) R) (tv-pick (weq u l) (ev' b' (tv-push n y σ)) R')} {k} {j} (fst hv)
-    (fr-pick-le (weq k l) (ev b (tv-push n x ρ)) (ev' b' (tv-push n y σ)) R R' (hb (tv-push n x ρ) (tv-push n y σ) (fr-push-le n x y ρ σ (snd hv) he)) hr)
+  subst {lzero} {lzero} {Word} {λ u → fr-le (tv-pick (weq k l) (tv-pick (tv-tup n x) (ev b (tv-push n x ρ)) tvbot) R) (tv-pick (weq u l) (tv-pick (tv-tup n y) (ev' b' (tv-push n y σ)) tvbot) R')} {k} {j} (fst hv)
+    (fr-pick-le (weq k l) (tv-pick (tv-tup n x) (ev b (tv-push n x ρ)) tvbot) (tv-pick (tv-tup n y) (ev' b' (tv-push n y σ)) tvbot) R R'
+      (fr-tpick-le n x y (ev b (tv-push n x ρ)) (ev' b' (tv-push n y σ)) (snd hv) (hb (tv-push n x ρ) (tv-push n y σ) (fr-push-le n x y ρ σ (snd hv) he))) hr)
 fr-alt-le ev ev' ρ σ (tvc k x) _ l n b b' R R' hv he hb hr = Empty-rec hv
 fr-alt-le ev ev' ρ σ v v' l n b b' R R' hv he hb hr = unit
 fr-cases-le0 : (ev ev' : FC → (Nat → TV) → TV) (ρ σ : Nat → TV) (v v' : TV) (alts : FC) → fr-le v v' → FrEnv ρ σ
@@ -2038,7 +2095,8 @@ dnat w = %welimP (λ v → Nat) w zero (λ m h → suc h)
 #same dsev dx-G (dnat #3) dx-main dvnone = dvbot
 #same dtev dx-T dx-GT (dnat #3) (dconv dx-main) tvnone = tvbot
 -- ---------------------------------------------------------------- the bridge to the first-order form
--- (an untyped translation, like fw-to-fo; the readings check it per program). At depth d (the number
+-- (a checked translation into FQ, lib/foproof.cub's checked mirror of the first-order form, which
+-- fq-to-fo prints constructor for constructor; lib/foproofq.cub proves it right). At depth d (the number
 -- of variables in scope): a closure reference captures every variable, x_{d-1} first, so that the
 -- lifted body (key dc-base + i, arity d + 1) sees the argument then x_0 … x_{d-1}, as dext does; a
 -- call passes its arguments (a tuple's components for more than one); a constructor its tuple's
@@ -2048,7 +2106,9 @@ dnat w = %welimP (λ v → Nat) w zero (λ m h → suc h)
 fc-caps d = case d of zero → lnil; suc k → lcons (fvar (fromNat k)) (fc-caps k)
 -- the lifted bodies' keys: dc-base + i (above any definition the bridge reads from the store, below the
 -- recursions it lifts (dc-lbase) and the printers' closure tags, which add 1000000 to a key)
-dc-base = #500000
+dcbase : Word
+dcbase = #500000
+dc-base = dcbase
 dc-lbase = #700000
 fo-1 p a = fprim p (lcons a lnil)
 fo-2 p a b = fprim p (lcons a (lcons b lnil))
@@ -2070,62 +2130,177 @@ fc-prim1 p a =
   else if %weq p #40 then fo-2 P-load32 (fprim P-store32 (lcons (fo-1 P-bytes (flit #4)) (lcons (flit #0) (lcons a lnil)))) (flit #0)
   else a
 dadd d n = case n of zero → d; suc m → suc (dadd d m)
-fc-to-fo d t =
+-- the printer, checked: in mode qmt a term, qmf a tuple's components as a chain (a constructor's
+-- fields, a call's arguments), qma a case's alternatives
+data QMd = qmt | qmf | qma
+qadd : Nat → Nat → Nat
+qadd d zero = d
+qadd d (suc m) = suc (qadd d m)
+fq-caps : Nat → FQ
+fq-caps zero = fqnil
+fq-caps (suc k) = fqcons (fqv k) (fq-caps k)
+fq-i64 : FQ → FQ
+fq-i64 x = fqprim #25 (fq1 x)
+fq-w64 : FQ → FQ
+fq-w64 x = fqprim #26 (fq1 x)
+fq-f64 : FQ → FQ
+fq-f64 x = fqprim #33 (fq1 (fq-i64 x))
+fq-wf : FQ → FQ
+fq-wf x = fq-w64 (fqprim #32 (fq1 x))
+-- (each by the classes' booleans, so a proof about every primitive cases on four booleans)
+fq-p2b : Bool → Bool → Bool → Bool → Word → FQ → FQ → FQ
+fq-p2b true b2 b3 b4 p a b = fqprim p (fq2 a b)
+fq-p2b false true b3 b4 p a b = fq-w64 (fqprim p (fq2 (fq-i64 a) (fq-i64 b)))
+fq-p2b false false true b4 p a b = fqprim p (fq2 (fq-i64 a) (fq-i64 b))
+fq-p2b false false false true p a b = fq-wf (fqprim p (fq2 (fq-f64 a) (fq-f64 b)))
+fq-p2b false false false false p a b = fqprim p (fq2 (fq-f64 a) (fq-f64 b))
+fq-p2 : Word → FQ → FQ → FQ
+fq-p2 p a b = fq-p2b (wlt p #5) (wlt p #17) (wlt p #19) (wlt p #23) p a b
+-- (40, the low 32 bits: a 4-byte store into a scratch string and the load back)
+fq-p1b : Bool → Bool → Bool → Bool → FQ → FQ
+fq-p1b true b2 b3 b4 a = fq-wf (fqprim #27 (fq1 (fq-i64 a)))
+fq-p1b false true b3 b4 a = fq-w64 (fqprim #28 (fq1 (fq-f64 a)))
+fq-p1b false false true b4 a = fq-wf (fqprim #29 (fq1 a))
+fq-p1b false false false true a = fqprim #10 (fq2 (fqprim #11 (fq3 (fqprim #12 (fq1 (fql #4))) (fql #0) a)) (fql #0))
+fq-p1b false false false false a = a
+fq-p1 : Word → FQ → FQ
+fq-p1 p a = fq-p1b (weq p #27) (weq p #28) (weq p #29) (weq p #40) a
+fcq : FC → QMd → Nat → FQ
+fcq (fcl w) qmt d = fql w
+fcq (fcv n) qmt d = fqv n
+fcq (fcp p a b) qmt d = fq-p2 p (fcq a qmt d) (fcq b qmt d)
+fcq (fcp1 p a) qmt d = fq-p1 p (fcq a qmt d)
+fcq (fclet a b) qmt d = fqlet (fcq a qmt d) (fcq b qmt (suc d))
+fcq fcu qmt d = fql #0
+fcq (fcpr a b) qmt d = fqcon #0 #0 (fq2 (fcq a qmt d) (fcq b qmt d))
+fcq (fcfst a) qmt d = fqproj #0 #0 #0 (fcq a qmt d)
+fcq (fcsnd a) qmt d = fqproj #0 #0 #1 (fcq a qmt d)
+fcq (fccon dd k a) qmt d = fqcon dd k (fcq a qmf d)
+fcq (fccase x alts) qmt d = fqsw (fcq x qmt d) (fcq alts qma d)
+fcq (fcalt k n b r) qmt d = fqnet
+fcq fcnone qmt d = fqnet
+fcq (fcif c a b) qmt d = fqif (fcq c qmt d) (fcq a qmt d) (fcq b qmt d)
+fcq (fcclo i) qmt d = fqclos (wadd dcbase i) (fq-caps d)
+fcq (fcapp f a) qmt d = fqapp (fcq f qmt d) (fq1 (fcq a qmt d))
+fcq (fccall g m a) qmt d = fqcall g (if weq m #0 then fqnil else (if weq m #1 then fq1 (fcq a qmt d) else fcq a qmf d))
+fcq (fcby a) qmt d = fqprim #12 (fq1 (fcq a qmt d))
+fcq (fcld w b o) qmt d = if weq w #8 then fq-w64 (fqprim #8 (fq2 (fcq b qmt d) (fcq o qmt d))) else fqprim #10 (fq2 (fcq b qmt d) (fcq o qmt d))
+fcq (fcst w b o v) qmt d = if weq w #8 then fqprim #9 (fq3 (fcq b qmt d) (fcq o qmt d) (fq-i64 (fcq v qmt d))) else fqprim #11 (fq3 (fcq b qmt d) (fcq o qmt d) (fcq v qmt d))
+fcq (fcblen b) qmt d = fqprim #13 (fq1 (fcq b qmt d))
+fcq (fcpr x r) qmf d = fqcons (fcq x qmt d) (fcq r qmf d)
+fcq (fcl w) qmf d = fqnil
+fcq (fcv n) qmf d = fqnil
+fcq (fcp p a b) qmf d = fqnil
+fcq (fcp1 p a) qmf d = fqnil
+fcq (fclet a b) qmf d = fqnil
+fcq fcu qmf d = fqnil
+fcq (fcfst a) qmf d = fqnil
+fcq (fcsnd a) qmf d = fqnil
+fcq (fccon dd k a) qmf d = fqnil
+fcq (fccase x alts) qmf d = fqnil
+fcq (fcalt k n b r) qmf d = fqnil
+fcq fcnone qmf d = fqnil
+fcq (fcif c a b) qmf d = fqnil
+fcq (fcclo i) qmf d = fqnil
+fcq (fcapp f a) qmf d = fqnil
+fcq (fccall g m a) qmf d = fqnil
+fcq (fcby a) qmf d = fqnil
+fcq (fcld w b o) qmf d = fqnil
+fcq (fcst w b o v) qmf d = fqnil
+fcq (fcblen b) qmf d = fqnil
+fcq (fcalt k n b r) qma d = fqalt k n (fcq b qmt (qadd d n)) (fcq r qma d)
+fcq (fcl w) qma d = fqanone
+fcq (fcv n) qma d = fqanone
+fcq (fcp p a b) qma d = fqanone
+fcq (fcp1 p a) qma d = fqanone
+fcq (fclet a b) qma d = fqanone
+fcq fcu qma d = fqanone
+fcq (fcpr x r) qma d = fqanone
+fcq (fcfst a) qma d = fqanone
+fcq (fcsnd a) qma d = fqanone
+fcq (fccon dd k a) qma d = fqanone
+fcq (fccase x alts) qma d = fqanone
+fcq fcnone qma d = fqanone
+fcq (fcif c a b) qma d = fqanone
+fcq (fcclo i) qma d = fqanone
+fcq (fcapp f a) qma d = fqanone
+fcq (fccall g m a) qma d = fqanone
+fcq (fcby a) qma d = fqanone
+fcq (fcld w b o) qma d = fqanone
+fcq (fcst w b o v) qma d = fqanone
+fcq (fcblen b) qma d = fqanone
+fc-to-fq : Nat → FC → FQ
+fc-to-fq d t = fcq t qmt d
+-- a definition of m parameters: the mirror's body sees one value (the argument for m = 1, the tuple
+-- of them otherwise), rebuilt from the parameters (the first deepest)
+fq-tupn : Nat → FQ
+fq-tupn zero = fql #0
+fq-tupn (suc j) = fqcon #0 #0 (fq2 (fqv j) (fq-tupn j))
+fq-def-body : Word → FC → FQ
+fq-def-body m b = if weq m #1 then fc-to-fq (suc zero) b else fqlet (fq-tupn (dnat m)) (fc-to-fq (suc zero) b)
+fc-to-fo d t = fq-to-fo (fc-to-fq d t)
+fc-def-body m b = fq-to-fo (fq-def-body m b)
+-- the untyped printer this replaced, kept for the readings that show the checked one prints the same
+fc-to-fo-ref d t =
   case t of
     fcl w → flit w
     fcv n → fvar (fromNat n)
-    fcp p a b → fc-prim2 p (fc-to-fo d a) (fc-to-fo d b)
-    fcp1 p a → fc-prim1 p (fc-to-fo d a)
-    fclet a b → flet (fc-to-fo d a) (fc-to-fo (suc d) b)
+    fcp p a b → fc-prim2 p (fc-to-fo-ref d a) (fc-to-fo-ref d b)
+    fcp1 p a → fc-prim1 p (fc-to-fo-ref d a)
+    fclet a b → flet (fc-to-fo-ref d a) (fc-to-fo-ref (suc d) b)
     fcu → flit #0
-    fcpr a b → fcon #0 #0 (lcons (fc-to-fo d a) (lcons (fc-to-fo d b) lnil))
-    fcfst a → fproj #0 #0 #0 (fc-to-fo d a)
-    fcsnd a → fproj #0 #0 #1 (fc-to-fo d a)
-    fccon dd k a → fcon dd k (fc-fields d a)
-    fccase s alts → fswitch (fc-to-fo d s) (fc-alts d alts)
-    fcif c th el → fif (fc-to-fo d c) (fc-to-fo d th) (fc-to-fo d el)
+    fcpr a b → fcon #0 #0 (lcons (fc-to-fo-ref d a) (lcons (fc-to-fo-ref d b) lnil))
+    fcfst a → fproj #0 #0 #0 (fc-to-fo-ref d a)
+    fcsnd a → fproj #0 #0 #1 (fc-to-fo-ref d a)
+    fccon dd k a → fcon dd k (fc-fields-ref d a)
+    fccase s alts → fswitch (fc-to-fo-ref d s) (fc-alts-ref d alts)
+    fcif c th el → fif (fc-to-fo-ref d c) (fc-to-fo-ref d th) (fc-to-fo-ref d el)
     fcclo i → fclos (%wadd dc-base i) (fc-caps d)
-    fcapp f a → fapply (fc-to-fo d f) (lcons (fc-to-fo d a) lnil)
-    fccall g m a → fcall g (fc-args d m a)
-    fcby a → fo-1 P-bytes (fc-to-fo d a)
-    fcld w b o → (if %weq w #8 then fo-w64 (fo-2 P-load64 (fc-to-fo d b) (fc-to-fo d o)) else fo-2 P-load32 (fc-to-fo d b) (fc-to-fo d o))
-    fcst w b o v → (if %weq w #8 then fprim P-store64 (lcons (fc-to-fo d b) (lcons (fc-to-fo d o) (lcons (fo-i64 (fc-to-fo d v)) lnil)))
-                    else fprim P-store32 (lcons (fc-to-fo d b) (lcons (fc-to-fo d o) (lcons (fc-to-fo d v) lnil))))
-    fcblen b → fo-1 P-blen (fc-to-fo d b)
+    fcapp f a → fapply (fc-to-fo-ref d f) (lcons (fc-to-fo-ref d a) lnil)
+    fccall g m a → fcall g (fc-args-ref d m a)
+    fcby a → fo-1 P-bytes (fc-to-fo-ref d a)
+    fcld w b o → (if %weq w #8 then fo-w64 (fo-2 P-load64 (fc-to-fo-ref d b) (fc-to-fo-ref d o)) else fo-2 P-load32 (fc-to-fo-ref d b) (fc-to-fo-ref d o))
+    fcst w b o v → (if %weq w #8 then fprim P-store64 (lcons (fc-to-fo-ref d b) (lcons (fc-to-fo-ref d o) (lcons (fo-i64 (fc-to-fo-ref d v)) lnil)))
+                    else fprim P-store32 (lcons (fc-to-fo-ref d b) (lcons (fc-to-fo-ref d o) (lcons (fc-to-fo-ref d v) lnil))))
+    fcblen b → fo-1 P-blen (fc-to-fo-ref d b)
     _ → fnet #0 lnil
-fc-fields d a = case a of fcpr x r → lcons (fc-to-fo d x) (fc-fields d r); _ → lnil
-fc-args d m a = if %weq m #0 then lnil else (if %weq m #1 then lcons (fc-to-fo d a) lnil else fc-fields d a)
-fc-alts d alts = case alts of fcalt k n b r → lcons (k , (fromNat n , fc-to-fo (dadd d n) b)) (fc-alts d r); _ → lnil
+fc-fields-ref d a = case a of fcpr x r → lcons (fc-to-fo-ref d x) (fc-fields-ref d r); _ → lnil
+fc-args-ref d m a = if %weq m #0 then lnil else (if %weq m #1 then lcons (fc-to-fo-ref d a) lnil else fc-fields-ref d a)
+fc-alts-ref d alts = case alts of fcalt k n b r → lcons (k , (fromNat n , fc-to-fo-ref (dadd d n) b)) (fc-alts-ref d r); _ → lnil
 -- a definition of m parameters: the mirror's body sees one value (the argument for m = 1, the tuple
 -- of them otherwise), rebuilt from the parameters (the first deepest)
 fc-tup k = if %weq k #0 then flit #0 else fcon #0 #0 (lcons (fvar (%wsub k #1)) (lcons (fc-tup (%wsub k #1)) lnil))
-fc-def-body m b = if %weq m #1 then fc-to-fo (suc zero) b else flet (fc-tup m) (fc-to-fo (suc zero) b)
+fc-def-body-ref m b = if %weq m #1 then fc-to-fo-ref (suc zero) b else flet (fc-tup m) (fc-to-fo-ref (suc zero) b)
 -- the lifted table, read off the source: each λ i b at depth d gives entry dc-base + i
-dc-lifts d c =
+dc-lifts-q d c =
   case c of
-    dcp p a b → lst-app (dc-lifts d a) (dc-lifts d b)
-    dcp1 p a → dc-lifts d a
-    dclet a b → lst-app (dc-lifts d a) (dc-lifts (suc d) b)
-    dcpr a b → lst-app (dc-lifts d a) (dc-lifts d b)
-    dcfst a → dc-lifts d a
-    dcsnd a → dc-lifts d a
-    dccon dd k a → dc-lifts d a
-    dccase s alts → lst-app (dc-lifts d s) (dc-lifts d alts)
-    dcalt k n b r → lst-app (dc-lifts (dadd d n) b) (dc-lifts d r)
-    dcif c t e → lst-app (dc-lifts d c) (lst-app (dc-lifts d t) (dc-lifts d e))
-    dclam i b → lcons (%wadd dc-base i , (fromNat (suc d) , fc-to-fo (suc d) (fr-bu (fst std-frule) (dconv b)))) (dc-lifts (suc d) b)
-    dcapp f a → lst-app (dc-lifts d f) (dc-lifts d a)
-    dccall g m a → dc-lifts d a
-    dcby a → dc-lifts d a
-    dcld w b o → lst-app (dc-lifts d b) (dc-lifts d o)
-    dcst w b o v → lst-app (dc-lifts d b) (lst-app (dc-lifts d o) (dc-lifts d v))
-    dcblen b → dc-lifts d b
+    dcp p a b → lst-app (dc-lifts-q d a) (dc-lifts-q d b)
+    dcp1 p a → dc-lifts-q d a
+    dclet a b → lst-app (dc-lifts-q d a) (dc-lifts-q (suc d) b)
+    dcpr a b → lst-app (dc-lifts-q d a) (dc-lifts-q d b)
+    dcfst a → dc-lifts-q d a
+    dcsnd a → dc-lifts-q d a
+    dccon dd k a → dc-lifts-q d a
+    dccase s alts → lst-app (dc-lifts-q d s) (dc-lifts-q d alts)
+    dcalt k n b r → lst-app (dc-lifts-q (dadd d n) b) (dc-lifts-q d r)
+    dcif c t e → lst-app (dc-lifts-q d c) (lst-app (dc-lifts-q d t) (dc-lifts-q d e))
+    dclam i b → lcons (%wadd dc-base i , (fromNat (suc d) , fc-to-fq (suc d) (fr-bu (fst std-frule) (dconv b)))) (dc-lifts-q (suc d) b)
+    dcapp f a → lst-app (dc-lifts-q d f) (dc-lifts-q d a)
+    dccall g m a → dc-lifts-q d a
+    dcby a → dc-lifts-q d a
+    dcld w b o → lst-app (dc-lifts-q d b) (dc-lifts-q d o)
+    dcst w b o v → lst-app (dc-lifts-q d b) (lst-app (dc-lifts-q d o) (dc-lifts-q d v))
+    dcblen b → dc-lifts-q d b
     _ → lnil
+-- a table whose bodies are FQ, printed
+dq-fo ds = case ds of lnil → lnil; lcons e r → lcons (fst e , (fst (snd e) , fq-to-fo (snd (snd e)))) (dq-fo r)
+dc-lifts d c = dq-fo (dc-lifts-q d c)
 -- a program, a Lst of (key , (arity , body)) with main #0 (its arity's parameters as variables) and
 -- the definitions (one value each, as above), as first-order definitions, the rules applied
 dc-rw c = fr-bu (fst std-frule) (dconv c)
-dc-defs ds = case ds of lnil → lnil; lcons e r → lcons (dc-def1 e) (lst-app (dc-lifts (dc-depth e) (snd (snd e))) (dc-defs r))
-dc-def1 e = if %weq (fst e) #0 then (#0 , (fst (snd e) , fc-to-fo (dnat (fst (snd e))) (dc-rw (snd (snd e))))) else (fst e , (fst (snd e) , fc-def-body (fst (snd e)) (dc-rw (snd (snd e)))))
+dc-defs-q ds = case ds of lnil → lnil; lcons e r → lcons (dc-def1-q e) (lst-app (dc-lifts-q (dc-depth e) (snd (snd e))) (dc-defs-q r))
+dc-def1-q e = if %weq (fst e) #0 then (#0 , (fst (snd e) , fc-to-fq (dnat (fst (snd e))) (dc-rw (snd (snd e))))) else (fst e , (fst (snd e) , fq-def-body (fst (snd e)) (dc-rw (snd (snd e)))))
+dc-defs ds = dq-fo (dc-defs-q ds)
 dc-depth e = if %weq (fst e) #0 then dnat (fst (snd e)) else suc zero
 dx-prog = lcons (#0 , (#0 , dx-main)) (lcons (#1 , (#1 , dx-body1)) (lcons (#2 , (#1 , dx-body2)) lnil))
 #same eval-fo (table-of (dc-defs dx-prog)) lnil (fc-to-fo zero (dconv dx-main)) = vw #15
@@ -2427,21 +2602,40 @@ dc-GT gs g = dconv (dc-G gs g)
 dc-ok-all T m gs = case gs of lnil → dtok-chk T m; lcons e r → andb (dtok-chk T (snd (snd e))) (dc-ok-all T m r)
 dc-prog-ok p = dc-ok-all (dc-T (fst (snd p)) (snd (snd p))) (fst (snd p)) (snd (snd p))
 -- the program in the first-order form: main #0 of arity k, each definition at its key
-dc-prog-defs p = dc-defs (lcons (#0 , (fst p , fst (snd p))) (snd (snd p)))
+dc-prog-defs-q p = dc-defs-q (lcons (#0 , (fst p , fst (snd p))) (snd (snd p)))
+dc-prog-defs p = dq-fo (dc-prog-defs-q p)
 -- main moved to key m (a harness puts its own main at #0)
 dc-rekey m ds = case ds of lnil → lnil; lcons e r → lcons ((if %weq (fst e) #0 then m else fst e) , snd e) (dc-rekey m r)
 -- main's Int64 and Float64 parameters and result by their bits: each parameter converted to its word
 -- (k lets, each converting the parameter now k − 1 down), the result back
-dc-pconv f x = case f of fti64 → fo-w64 x; ftf64 → fo-wf x; _ → x
-dc-rconv f x = case f of fti64 → fo-i64 x; ftf64 → fo-f64 x; _ → x
-dc-needs fs = case fs of lnil → false; lcons f r → (case f of fti64 → true; ftf64 → true; _ → dc-needs r)
-dc-cvlets k fs body = case fs of lnil → body; lcons f r → flet (dc-pconv f (fvar (%wsub k #1))) (dc-cvlets k r body)
-dc-wrap-main sg ds =
+-- (checked, on FQ: a parameter or result's kind, word, Int64 or Float64, read off the signature)
+data QK = qkw | qki | qkf
+fq-pconv : QK → FQ → FQ
+fq-pconv qkw x = x
+fq-pconv qki x = fq-w64 x
+fq-pconv qkf x = fq-wf x
+fq-rconv : QK → FQ → FQ
+fq-rconv qkw x = x
+fq-rconv qki x = fq-i64 x
+fq-rconv qkf x = fq-f64 x
+fq-needs : List QK → Bool
+fq-needs nil = false
+fq-needs (cons qkw r) = fq-needs r
+fq-needs (cons qki r) = true
+fq-needs (cons qkf r) = true
+fq-cvlets : Word → List QK → FQ → FQ
+fq-cvlets k nil body = body
+fq-cvlets k (cons f r) body = fqlet (fq-pconv f (fqv (dnat (wsub k #1)))) (fq-cvlets k r body)
+qk-of f = case f of fti64 → qki; ftf64 → qkf; _ → qkw
+qk-list fs = case fs of lnil → nil; lcons f r → cons (qk-of f) (qk-list r)
+fq-wrap : Word → List QK → QK → FQ → FQ
+fq-wrap k ps r body = fq-rconv r (if fq-needs ps then fq-cvlets k ps body else body)
+dc-wrap-main-q sg ds =
   case ds of
     lnil → lnil
     lcons e r → (if %weq (fst e) #0
-                   then lcons (#0 , (fst (snd e) , dc-rconv (snd sg) (if dc-needs (fst sg) then dc-cvlets (fst (snd e)) (fst sg) (snd (snd e)) else snd (snd e)))) r
-                   else lcons e (dc-wrap-main sg r))
+                   then lcons (#0 , (fst (snd e) , fq-wrap (fst (snd e)) (qk-list (fst sg)) (qk-of (snd sg)) (snd (snd e)))) r
+                   else lcons e (dc-wrap-main-q sg r))
 -- ---------------------------------------------------------------- the specializer, both routes
 -- specialize-proved T rules c: the word route first ((#1 , f), spec-path), then the data route — the
 -- normal form read by dc-prog, its tables decided (dtok-chk, so dc-sound holds of it through
@@ -2451,9 +2645,9 @@ dc-wrap-main sg ds =
 specialize-proved T rules c =
   let n = normalize T c
   in (case wc-of (under-lams n) of
-        some w → (#1 , wrap-flams (lams-of n) (fw-to-fo (spec-w std-vrule w)))
+        some w → (#1 , fq-to-fo (wrap-fq (lams-of n) (fw-to-fq (spec-w std-vrule w))))
         none → (case dc-prog n of
-                  some p → (if dc-prog-ok p then (#2 , dc-wrap-main (sig-ft (fromopt (quote-ty T) cword)) (dc-prog-defs p)) else (#0 , specialize T rules c))
+                  some p → (if dc-prog-ok p then (#2 , dq-fo (dc-wrap-main-q (sig-ft (fromopt (quote-ty T) cword)) (dc-prog-defs-q p))) else (#0 , specialize T rules c))
                   none → (#0 , specialize T rules c)))
 -- ---------------------------------------------------------------- readings
 data PQ = pqa (x : Word) (y : Word) | pqb (x : Word) (y : Word)
@@ -2742,3 +2936,16 @@ dq-path-bytes = dq-path dq-p-bytes (λ i → true)
 #same dsev dq-G (dnat #20) dq-p-call (dext dvnone (dvw #4)) = dvw #11
 #same dsev dq-G (dnat #20) dq-p-bytes (dext dvnone (dvw #262144)) = dvw #65540
 #same dtev dq-T dq-GT (dnat #20) (dconv dq-p-bytes) (text tvnone (tvw #262144)) = tvw #65540
+-- the checked printer prints what the untyped one did (fc-to-fo-ref), on every form: the examples above
+#same fc-to-fo zero (dconv dx-main) = fc-to-fo-ref zero (dconv dx-main)
+#same fc-to-fo (suc zero) (dconv dx-body1) = fc-to-fo-ref (suc zero) (dconv dx-body1)
+#same fc-to-fo (suc zero) (dconv pq-dc) = fc-to-fo-ref (suc zero) (dconv pq-dc)
+#same fc-to-fo (suc zero) (dconv dq-p-if) = fc-to-fo-ref (suc zero) (dconv dq-p-if)
+#same fc-to-fo (suc zero) (dconv dq-p-max) = fc-to-fo-ref (suc zero) (dconv dq-p-max)
+#same fc-to-fo (suc zero) (dconv dq-p-case) = fc-to-fo-ref (suc zero) (dconv dq-p-case)
+#same fc-to-fo (suc zero) (dconv dq-p-pair) = fc-to-fo-ref (suc zero) (dconv dq-p-pair)
+#same fc-to-fo (suc zero) (dconv dq-p-num) = fc-to-fo-ref (suc zero) (dconv dq-p-num)
+#same fc-to-fo (suc zero) (dconv dq-p-call) = fc-to-fo-ref (suc zero) (dconv dq-p-call)
+#same fc-to-fo (suc zero) (dconv dq-p-bytes) = fc-to-fo-ref (suc zero) (dconv dq-p-bytes)
+#same fc-def-body #3 (dconv (dq-G #1)) = fc-def-body-ref #3 (dconv (dq-G #1))
+#same fc-def-body #1 (dconv dx-body1) = fc-def-body-ref #1 (dconv dx-body1)

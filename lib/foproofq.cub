@@ -1,0 +1,1035 @@
+-- lib/foproofq.cub — the last link of the justifying path (plan 18.5 step 7, B15): from the mirrors'
+-- target forms to the first-order form the back ends print. lib/foproof.cub's FQ is lib/fo.cub's FO as
+-- checked data, fq-to-fo printing it constructor for constructor, and both printers are checked
+-- functions into it (fw-to-fq from the word mirror's FW, fc-to-fq from the data mirror's FC), so what
+-- specialize-proved hands to the back ends is fq-to-fo of a checked term. This file gives FQ its
+-- meaning — evq, a checked evaluator by fuel, mirroring lib/fo.cub's eval-fo construct by construct
+-- (the readings at the end show the two agree, construct by construct and on every program of the
+-- verified routes) — and proves the printers right: q-sound, the converted form's meaning (dtev) is
+-- refined by its printed form's (a value the source has, the printed form has, at every fuel), and
+-- fw-sound, the word mirror's meaning (fo-ev) is what the printed form computes whenever it ends; so
+-- the path from a program to the form handed to the back ends is checked end to end, the printers
+-- from FO to C or x86 text and the C compiler being what remains outside it.
+-- Loaded after lib/foproofd.cub; tested on its own line (tests/foproofq.cub).
+-- ---------------------------------------------------------------- values
+-- lib/fo.cub's FV, as the mirrors model them: a word; an Int64 and a Float64 by the word of their bits
+-- (the machine's operation between the conversions, as the mirrors' primitives are); a constructor of
+-- data type d with its fields (a chain); a closure (a definition's key over its captures); a λ over its
+-- environment; a byte string as the mirrors' stores (BL); chains (kqnil, kqcons) for lists and
+-- environments; kqbot no value (out of fuel, or a form applied to what it does not take, where eval-fo
+-- answers a default: the reference meaning is the stricter one)
+data KQ = kqw (w : Word) | kqi (b : Word) | kqf (b : Word) | kqcon (d : Word) (c : Word) (fs : KQ) | kqclos (g : Word) (env : KQ) | kqlam (b : FQ) (env : KQ) | kqb (l : BL) | kqnil | kqcons (x : KQ) (r : KQ) | kqbot
+-- the n-th of a chain (variable n of an environment, innermost first)
+q-nth : KQ → Nat → KQ
+q-nth (kqcons x r) zero = x
+q-nth (kqcons x r) (suc k) = q-nth r k
+q-nth kqnil k = kqbot
+q-nth (kqw w) k = kqbot
+q-nth (kqi b) k = kqbot
+q-nth (kqf b) k = kqbot
+q-nth (kqcon d c fs) k = kqbot
+q-nth (kqclos g env) k = kqbot
+q-nth (kqlam b env) k = kqbot
+q-nth (kqb l) k = kqbot
+q-nth kqbot k = kqbot
+-- lib/fo.cub's push-all: a chain's values pushed in order, the last innermost
+q-push : KQ → KQ → KQ
+q-push (kqcons v r) e = q-push r (kqcons v e)
+q-push kqnil e = e
+q-push (kqw w) e = e
+q-push (kqi b) e = e
+q-push (kqf b) e = e
+q-push (kqcon d c fs) e = e
+q-push (kqclos g env) e = e
+q-push (kqlam b env) e = e
+q-push (kqb l) e = e
+q-push kqbot e = e
+-- a chain of exactly n values
+q-isn : Nat → KQ → Bool
+q-isn zero kqnil = true
+q-isn (suc m) (kqcons x r) = q-isn m r
+q-isn zero (kqcons x r) = false
+q-isn (suc m) kqnil = false
+q-isn n (kqw w) = false
+q-isn n (kqi b) = false
+q-isn n (kqf b) = false
+q-isn n (kqcon d c fs) = false
+q-isn n (kqclos g env) = false
+q-isn n (kqlam b env) = false
+q-isn n (kqb l) = false
+q-isn n kqbot = false
+-- a chain of fields as the mirrors' tuple: pairs (constructor 0 of data type 0, two fields) ending in 0
+q-tupv : KQ → KQ
+q-tupv kqnil = kqw #0
+q-tupv (kqcons x r) = kqcon #0 #0 (kqcons x (kqcons (q-tupv r) kqnil))
+q-tupv (kqw w) = kqbot
+q-tupv (kqi b) = kqbot
+q-tupv (kqf b) = kqbot
+q-tupv (kqcon d c fs) = kqbot
+q-tupv (kqclos g env) = kqbot
+q-tupv (kqlam b env) = kqbot
+q-tupv (kqb l) = kqbot
+q-tupv kqbot = kqbot
+-- ---------------------------------------------------------------- the primitives
+-- lib/fo.cub's prim-ap, prim-num and prim-bytes on the values above, each on the kinds it takes
+-- (Int64 and Float64 by their bits: the mirrors' dbi/dib/dbf/dfb between the bits and the machine's
+-- values, so each clause is the mirrors' own dprim2/dprim1 clause)
+q-ww : (Word → Word → Word) → KQ → KQ
+q-ww f (kqcons (kqw a) (kqcons (kqw b) kqnil)) = kqw (f a b)
+q-ww f v = kqbot
+q-ii : (Word → Word → Word) → KQ → KQ
+q-ii f (kqcons (kqi a) (kqcons (kqi b) kqnil)) = kqi (f a b)
+q-ii f v = kqbot
+q-iw : (Word → Word → Word) → KQ → KQ
+q-iw f (kqcons (kqi a) (kqcons (kqi b) kqnil)) = kqw (f a b)
+q-iw f v = kqbot
+q-ff : (Word → Word → Word) → KQ → KQ
+q-ff f (kqcons (kqf a) (kqcons (kqf b) kqnil)) = kqf (f a b)
+q-ff f v = kqbot
+q-fw : (Word → Word → Word) → KQ → KQ
+q-fw f (kqcons (kqf a) (kqcons (kqf b) kqnil)) = kqw (f a b)
+q-fw f v = kqbot
+q-1 : (KQ → KQ) → KQ → KQ
+q-1 f (kqcons a kqnil) = f a
+q-1 f v = kqbot
+-- the unary conversions
+q-i-of-w : KQ → KQ
+q-i-of-w (kqw w) = kqi w
+q-i-of-w v = kqbot
+q-w-of-i : KQ → KQ
+q-w-of-i (kqi b) = kqw b
+q-w-of-i v = kqbot
+q-f-of-i : KQ → KQ
+q-f-of-i (kqi b) = kqf (dfb (f64ofi64 (dbi b)))
+q-f-of-i v = kqbot
+q-i-of-f : KQ → KQ
+q-i-of-f (kqf b) = kqi (dib (i64off64 (dbf b)))
+q-i-of-f v = kqbot
+q-f-of-w : KQ → KQ
+q-f-of-w (kqw w) = kqf (dfb (f64 w))
+q-f-of-w v = kqbot
+q-bits : KQ → KQ
+q-bits (kqf b) = kqi b
+q-bits v = kqbot
+q-ofbits : KQ → KQ
+q-ofbits (kqi b) = kqf b
+q-ofbits v = kqbot
+-- the byte layer: a fresh string of n zero bytes, its length, the loads (64 bits as an Int64, 32 as a
+-- word) and the stores (an Int64's bits, a word's low 32)
+qk-bytes : KQ → KQ
+qk-bytes (kqw n) = kqb (blm n bzero)
+qk-bytes v = kqbot
+q-blen : KQ → KQ
+q-blen (kqb l) = kqw (bl-len l)
+q-blen v = kqbot
+q-ld8 : KQ → KQ
+q-ld8 (kqcons (kqb l) (kqcons (kqw o) kqnil)) = kqi (bl-ld #8 o l)
+q-ld8 v = kqbot
+q-ld4 : KQ → KQ
+q-ld4 (kqcons (kqb l) (kqcons (kqw o) kqnil)) = kqw (bl-ld #4 o l)
+q-ld4 v = kqbot
+q-st8 : KQ → KQ
+q-st8 (kqcons (kqb l) (kqcons (kqw o) (kqcons (kqi v) kqnil))) = kqb (bl-st #8 o v l)
+q-st8 v = kqbot
+q-st4 : KQ → KQ
+q-st4 (kqcons (kqb l) (kqcons (kqw o) (kqcons (kqw v) kqnil))) = kqb (bl-st #4 o v l)
+q-st4 v = kqbot
+q-prim : Word → KQ → KQ
+q-prim p as =
+  if weq p #0 then q-ww wadd as
+  else if weq p #1 then q-ww wsub as
+  else if weq p #2 then q-ww dmulw as
+  else if weq p #3 then q-ww (λ a b → dbw (weq a b)) as
+  else if weq p #4 then q-ww (λ a b → dbw (wlt a b)) as
+  else if weq p #8 then q-ld8 as
+  else if weq p #9 then q-st8 as
+  else if weq p #10 then q-ld4 as
+  else if weq p #11 then q-st4 as
+  else if weq p #12 then q-1 qk-bytes as
+  else if weq p #13 then q-1 q-blen as
+  else if weq p #14 then q-ii (λ a b → dib (i64add (dbi a) (dbi b))) as
+  else if weq p #15 then q-ii (λ a b → dib (i64sub (dbi a) (dbi b))) as
+  else if weq p #16 then q-ii (λ a b → dib (i64mul (dbi a) (dbi b))) as
+  else if weq p #17 then q-iw (λ a b → dbw (i64eq (dbi a) (dbi b))) as
+  else if weq p #18 then q-iw (λ a b → dbw (i64lt (dbi a) (dbi b))) as
+  else if weq p #19 then q-ff (λ a b → dfb (f64add (dbf a) (dbf b))) as
+  else if weq p #20 then q-ff (λ a b → dfb (f64sub (dbf a) (dbf b))) as
+  else if weq p #21 then q-ff (λ a b → dfb (f64mul (dbf a) (dbf b))) as
+  else if weq p #22 then q-ff (λ a b → dfb (f64div (dbf a) (dbf b))) as
+  else if weq p #23 then q-fw (λ a b → dbw (f64eq (dbf a) (dbf b))) as
+  else if weq p #24 then q-fw (λ a b → dbw (f64lt (dbf a) (dbf b))) as
+  else if weq p #25 then q-1 q-i-of-w as
+  else if weq p #26 then q-1 q-w-of-i as
+  else if weq p #27 then q-1 q-f-of-i as
+  else if weq p #28 then q-1 q-i-of-f as
+  else if weq p #29 then q-1 q-f-of-w as
+  else if weq p #32 then q-1 q-bits as
+  else if weq p #33 then q-1 q-ofbits as
+  else kqbot
+-- ---------------------------------------------------------------- the evaluator
+-- fuel is spent where eval-fo may not end — entering a definition (a call, a closure applied) and each
+-- turn of a loop — and nowhere else: QE is the evaluator one unit of fuel down (a form's meaning and a
+-- loop's run from a state), evT the evaluation of every other form, by structure, over it
+data QE = qe (ev : FQ → KQ → KQ) (lp : KQ → FQ → KQ → KQ)
+qe-ev : QE → FQ → KQ → KQ
+qe-ev (qe f l) = f
+qe-lp : QE → KQ → FQ → KQ → KQ
+qe-lp (qe f l) = l
+-- a function value applied to one argument: a closure's definition over the argument then its captures
+-- (pushed, as apply-args does), a λ's body over the argument and its environment
+q-ap1 : (Word → FQ) → QE → KQ → KQ → KQ
+q-ap1 G k (kqclos g env) a = qe-ev k (G g) (kqcons a (q-push env kqnil))
+q-ap1 G k (kqlam b env) a = qe-ev k b (kqcons a env)
+q-ap1 G k (kqw w) a = kqbot
+q-ap1 G k (kqi b) a = kqbot
+q-ap1 G k (kqf b) a = kqbot
+q-ap1 G k (kqcon d c fs) a = kqbot
+q-ap1 G k (kqb l) a = kqbot
+q-ap1 G k kqnil a = kqbot
+q-ap1 G k (kqcons x r) a = kqbot
+q-ap1 G k kqbot a = kqbot
+-- applied to a chain of arguments, one at a time
+q-app : (Word → FQ) → QE → KQ → KQ → KQ
+q-app G k (kqcons a r) f = q-app G k r (q-ap1 G k f a)
+q-app G k kqnil f = f
+q-app G k (kqw w) f = f
+q-app G k (kqi b) f = f
+q-app G k (kqf b) f = f
+q-app G k (kqcon d c fs) f = f
+q-app G k (kqclos g env) f = f
+q-app G k (kqlam b env) f = f
+q-app G k (kqb l) f = f
+q-app G k kqbot f = f
+-- an alternative of a switch, the scrutinee's value on top of the environment: the first whose tag is
+-- the constructor's, its fields (exactly n of them) pushed; otherwise the rest
+q-altsel : Word → Nat → (KQ → KQ) → KQ → KQ → KQ
+q-altsel j n fb rest e =
+  case e of
+    kqcons v e2 → (case v of
+                     kqcon d c fs → (if weq c j then (if q-isn n fs then fb (q-push fs e2) else kqbot) else rest)
+                     _ → kqbot)
+    _ → kqbot
+-- a word condition, nonzero true (as the mirrors' tv-if)
+q-if : KQ → KQ → KQ → KQ
+q-if (kqw w) a b = %welimP (λ u → KQ) w b (λ m h → a)
+q-if (kqi x) a b = kqbot
+q-if (kqf x) a b = kqbot
+q-if (kqcon d c fs) a b = kqbot
+q-if (kqclos g env) a b = kqbot
+q-if (kqlam t env) a b = kqbot
+q-if (kqb l) a b = kqbot
+q-if kqnil a b = kqbot
+q-if (kqcons x r) a b = kqbot
+q-if kqbot a b = kqbot
+-- field j of a constructor
+q-proj : Word → KQ → KQ
+q-proj j (kqcon d c fs) = q-nth fs (dnat j)
+q-proj j (kqw w) = kqbot
+q-proj j (kqi b) = kqbot
+q-proj j (kqf b) = kqbot
+q-proj j (kqclos g env) = kqbot
+q-proj j (kqlam b env) = kqbot
+q-proj j (kqb l) = kqbot
+q-proj j kqnil = kqbot
+q-proj j (kqcons x r) = kqbot
+q-proj j kqbot = kqbot
+-- a loop's body has answered: constructor tag 0 continues with its fields as the state, any other tag
+-- breaks with its first field (lib/fo.cub's run-loop)
+q-lstep : KQ → (KQ → KQ) → KQ
+q-lstep v cont = case v of
+  kqcon d c fs → (if weq c #0 then cont fs else q-nth fs zero)
+  _ → kqbot
+evT : (Word → FQ) → QE → FQ → KQ → KQ
+evT G k (fql w) e = kqw w
+evT G k (fqv n) e = q-nth e n
+evT G k (fqprim p as) e = q-prim p (evT G k as e)
+evT G k (fqlet a b) e = evT G k b (kqcons (evT G k a e) e)
+evT G k (fqcon d c fs) e = kqcon d c (evT G k fs e)
+evT G k (fqproj d c j x) e = q-proj j (evT G k x e)
+evT G k (fqsw x alts) e = evT G k alts (kqcons (evT G k x e) e)
+evT G k (fqif c a b) e = q-if (evT G k c e) (evT G k a e) (evT G k b e)
+evT G k (fqclos g env) e = kqclos g (evT G k env e)
+evT G k (fqlam b) e = kqlam b e
+evT G k (fqapp f as) e = q-app G k (evT G k as e) (evT G k f e)
+evT G k (fqcall g as) e = qe-ev k (G g) (q-push (evT G k as e) kqnil)
+evT G k (fqloop init b) e = qe-lp k (evT G k init e) b e
+evT G k fqnil e = kqnil
+evT G k (fqcons x r) e = kqcons (evT G k x e) (evT G k r e)
+evT G k (fqalt j n b r) e = q-altsel j n (λ e2 → evT G k b e2) (evT G k r e) e
+evT G k fqanone e = kqbot
+evT G k fqnet e = kqbot
+-- the evaluator at each fuel: none at 0; at n + 1 a form by evT over the evaluator at n, and a loop's
+-- turn its body at n, continuing at n
+qeN : (Word → FQ) → Nat → QE
+qeN G zero = qe (λ t e → kqbot) (λ st b e → kqbot)
+qeN G (suc n) = qe (λ t e → evT G (qeN G n) t e) (λ st b e → q-lstep (evT G (qeN G n) b (q-push st e)) (λ st2 → qe-lp (qeN G n) st2 b e))
+-- the meaning of a first-order term at fuel n, G the table of definitions
+evq : (Word → FQ) → Nat → FQ → KQ → KQ
+evq G n t e = evT G (qeN G n) t e
+-- ---------------------------------------------------------------- the relation
+-- the lifted recursions' keys start at dc-lbase (lib/foproofd.cub); a key below dc-base or from
+-- dc-lbase up is a definition's, between them a closure's (dc-base + i, the λ numbered i)
+dclbase : Word
+dclbase = #700000
+q-le : Nat → Nat → Bool
+q-le zero n = true
+q-le (suc m) zero = false
+q-le (suc m) (suc n) = q-le m n
+-- key dc-base + i names closure i (no wrap past either bound)
+q-cloq : Word → Bool
+q-cloq i = andbt (not (wlt (wadd dcbase i) dcbase)) (andbt (wlt (wadd dcbase i) dclbase) (weq (wsub (wadd dcbase i) dcbase) i))
+-- a converted value (TV) refined by a first-order one: none is refined by anything; a word, a byte
+-- string, unit (the word 0) by themselves; a constructor by one of its tag whose fields are its tuple;
+-- a pair by constructor 0 of two fields; closure i by key dc-base + i over captures that, pushed as a
+-- closure call pushes them, refine its environment, which has nothing from D i (the λ's depth) up
+qrel : (Word → Nat) → TV → KQ → Type
+qrel D tvbot v = Unit
+qrel D (tvw a) v = v ≡ kqw a
+qrel D (tvb l) v = v ≡ kqb l
+qrel D tvu v = v ≡ kqw #0
+qrel D (tvc k x) (kqcon d j fs) = (k ≡ j) × qrel D x (q-tupv fs)
+qrel D (tvc k x) v = Empty
+qrel D (tvpr a b) (kqcon d c (kqcons x (kqcons y kqnil))) = qrel D a x × qrel D b y
+qrel D (tvpr a b) v = Empty
+qrel D (tvclo i ρ) (kqclos g cs) = ((g ≡ wadd dcbase i) × (q-cloq i ≡ true)) × (((k : Nat) → qrel D (ρ k) (q-nth (q-push cs kqnil) k)) × ((k : Nat) → q-le (D i) k ≡ true → ρ k ≡ tvbot))
+qrel D (tvclo i ρ) v = Empty
+-- an environment at depth d: each variable refined, nothing from d up
+QEnv : (Word → Nat) → Nat → (Nat → TV) → KQ → Type
+QEnv D d ρ e = ((k : Nat) → qrel D (ρ k) (q-nth e k)) × ((k : Nat) → q-le d k ≡ true → ρ k ≡ tvbot)
+qe-x1 : (D : Word → Nat) (ρ : Nat → TV) (x : TV) (v e : KQ) → ((k : Nat) → qrel D (ρ k) (q-nth e k)) → qrel D x v → (k : Nat) → qrel D (text ρ x k) (q-nth (kqcons v e) k)
+qe-x1 D ρ x v e h hx zero = hx
+qe-x1 D ρ x v e h hx (suc k) = h k
+qe-x2 : (d : Nat) (ρ : Nat → TV) (x : TV) → ((k : Nat) → q-le d k ≡ true → ρ k ≡ tvbot) → (k : Nat) → q-le (suc d) k ≡ true → text ρ x k ≡ tvbot
+qe-x2 d ρ x h zero e = Empty-rec (false≢true e)
+qe-x2 d ρ x h (suc k) e = h k e
+qenv-ext : (D : Word → Nat) (d : Nat) (ρ : Nat → TV) (x : TV) (v e : KQ) → QEnv D d ρ e → qrel D x v → QEnv D (suc d) (text ρ x) (kqcons v e)
+qenv-ext D d ρ x v e he hx = (qe-x1 D ρ x v e (fst he) hx , qe-x2 d ρ x (snd he))
+-- none is refined by anything
+qrel-bot : (D : Word → Nat) (x : TV) (v : KQ) → x ≡ tvbot → qrel D x v
+qrel-bot D x v p = subst {lzero} {lzero} {TV} {λ y → qrel D y v} {tvbot} {x} (sym p) unit
+fr-addn-s : (n m : Nat) → fr-addn n (suc m) ≡ suc (fr-addn n m)
+fr-addn-s zero m = λ j → suc m
+fr-addn-s (suc n) m = λ j → suc (fr-addn-s n m j)
+-- ---------------------------------------------------------------- tuples, calls' arguments, captures
+-- a syntactic tuple (pairs ending in unit), of n components
+q-istup : FC → Bool
+q-istup fcu = true
+q-istup (fcpr x r) = q-istup r
+q-istup _ = false
+q-istupn : Nat → FC → Bool
+q-istupn zero fcu = true
+q-istupn (suc m) (fcpr x r) = q-istupn m r
+q-istupn n a = false
+istupn-tup : (n : Nat) (a : FC) → q-istupn n a ≡ true → q-istup a ≡ true
+istupn-tup zero fcu h = h
+istupn-tup (suc m) (fcpr x r) h = istupn-tup m r h
+istupn-tup n a h = Empty-rec (false≢true h)
+-- a tuple printed as a term is the tuple of its components printed as a chain
+tm-fl : (G : Word → FQ) (k : QE) (a : FC) (d : Nat) (e : KQ) → q-istup a ≡ true → evT G k (fcq a qmt d) e ≡ q-tupv (evT G k (fcq a qmf d) e)
+tm-fl G k fcu d e h = λ j → kqw #0
+tm-fl G k (fcpr x r) d e h = λ j → kqcon #0 #0 (kqcons (evT G k (fcq x qmt d) e) (kqcons (tm-fl G k r d e h j) kqnil))
+tm-fl G k a d e h = Empty-rec (false≢true h)
+-- and the chain has as many values as the tuple components
+fl-len : (G : Word → FQ) (k : QE) (n : Nat) (a : FC) (d : Nat) (e : KQ) → q-istupn n a ≡ true → q-isn n (evT G k (fcq a qmf d) e) ≡ true
+fl-len G k zero fcu d e h = λ j → true
+fl-len G k (suc m) (fcpr x r) d e h = fl-len G k m r d e h
+fl-len G k n a d e h = Empty-rec (false≢true h)
+-- the values of a chain of j pushed: variable j + i is the environment's i
+nth-push : (j : Nat) (r E : KQ) (i : Nat) → q-isn j r ≡ true → q-nth (q-push r E) (fr-addn j i) ≡ q-nth E i
+nth-push zero kqnil E i h = λ t → q-nth E i
+nth-push (suc j) (kqcons x r) E i h = cong (λ u → q-nth (q-push r (kqcons x E)) u) (sym (fr-addn-s j i)) ∙ nth-push j r (kqcons x E) (suc i) h
+nth-push j r E i h = Empty-rec (false≢true h)
+tn-nth : (j : Nat) (r : KQ) (v E : KQ) → q-isn j r ≡ true → q-nth (q-push r (kqcons v E)) j ≡ v
+tn-nth j r v E h = cong (λ u → q-nth (q-push r (kqcons v E)) u) (sym (fr-addn-0 j)) ∙ nth-push j r (kqcons v E) zero h
+-- a definition's tuple rebuilt from its pushed parameters (fq-def-body) is the tuple of them
+tupn-eval : (G : Word → FQ) (k : QE) (j : Nat) (fs E : KQ) → q-isn j fs ≡ true → evT G k (fq-tupn j) (q-push fs E) ≡ q-tupv fs
+tupn-eval G k zero kqnil E h = λ t → kqw #0
+tupn-eval G k (suc j) (kqcons v r) E h = λ t → kqcon #0 #0 (kqcons (tn-nth j r v E h t) (kqcons (tupn-eval G k j r (kqcons v E) h t) kqnil))
+tupn-eval G k j fs E h = Empty-rec (false≢true h)
+-- a closure's captures (fq-caps d: x_{d-1} first), pushed: variable i below d is the environment's i
+caps-isn : (G : Word → FQ) (k : QE) (d : Nat) (e : KQ) → q-isn d (evT G k (fq-caps d) e) ≡ true
+caps-isn G k zero e = λ t → true
+caps-isn G k (suc d) e = caps-isn G k d e
+le-eq : (d i : Nat) → q-le d i ≡ true → q-le (suc d) i ≡ false → i ≡ d
+le-eq zero zero h1 h2 = λ t → zero
+le-eq zero (suc i) h1 h2 = Empty-rec (true≢false h2)
+le-eq (suc d) zero h1 h2 = Empty-rec (false≢true h1)
+le-eq (suc d) (suc i) h1 h2 = λ t → suc (le-eq d i h1 h2 t)
+caps-lo : (G : Word → FQ) (k : QE) (d i : Nat) (e E : KQ) → q-le d i ≡ false → q-nth (q-push (evT G k (fq-caps d) e) E) i ≡ q-nth e i
+caps-lo G k zero i e E h = Empty-rec (true≢false h)
+caps-lo G k (suc d) i e E h =
+  (case q-le d i return (λ b → q-le d i ≡ b → q-nth (q-push (evT G k (fq-caps d) e) (kqcons (q-nth e d) E)) i ≡ q-nth e i) of
+     true → λ eb → subst {lzero} {lzero} {Nat} {λ u → q-nth (q-push (evT G k (fq-caps d) e) (kqcons (q-nth e d) E)) u ≡ q-nth e u} {d} {i} (sym (le-eq d i eb h))
+                     (tn-nth d (evT G k (fq-caps d) e) (q-nth e d) E (caps-isn G k d e))
+     false → λ eb → caps-lo G k d i e (kqcons (q-nth e d) E) eb) (λ t → q-le d i)
+-- so a closure made at depth d over a refining environment captures what refines it
+clo-env : (D : Word → Nat) (d : Nat) (ρ : Nat → TV) (G : Word → FQ) (k : QE) (e : KQ) → QEnv D d ρ e → (kk : Nat) → qrel D (ρ kk) (q-nth (q-push (evT G k (fq-caps d) e) kqnil) kk)
+clo-env D d ρ G k e he kk =
+  (case q-le d kk return (λ b → q-le d kk ≡ b → qrel D (ρ kk) (q-nth (q-push (evT G k (fq-caps d) e) kqnil) kk)) of
+     true → λ eb → qrel-bot D (ρ kk) (q-nth (q-push (evT G k (fq-caps d) e) kqnil) kk) (snd he kk eb)
+     false → λ eb → subst {lzero} {lzero} {KQ} {λ v → qrel D (ρ kk) v} {q-nth e kk} {q-nth (q-push (evT G k (fq-caps d) e) kqnil) kk} (sym (caps-lo G k d kk e kqnil eb)) (fst he kk)) (λ t → q-le d kk)
+-- ---------------------------------------------------------------- the table and the conditions
+-- the first-order table of a converted program: a definition (key below dc-base, or from dc-lbase up)
+-- its body as fq-def-body prints it at its arity A g, a closure (dc-base + i) its body at depth D i + 1
+q-ft : (Word → FC) → (Word → FC) → (Word → Nat) → (Word → Word) → Word → FQ
+q-ft T GT D A g = if wlt g dcbase then fq-def-body (A g) (GT g) else (if wlt g dclbase then fc-to-fq (suc (D (wsub g dcbase))) (T (wsub g dcbase)) else fq-def-body (A g) (GT g))
+-- a key that names a definition
+q-glob : Word → Bool
+q-glob g = if wlt g dcbase then true else not (wlt g dclbase)
+-- the binary primitives the printer gives a meaning (the mirrors' dprim2 numbers: every other one is
+-- the mirrors' 0, which the first-order form does not compute)
+kn : List Word → Word → Bool
+kn nil p = false
+kn (cons q r) p = if weq p q then true else kn r p
+kn2-list : List Word
+kn2-list = cons #0 (cons #1 (cons #2 (cons #3 (cons #4 (cons #14 (cons #15 (cons #16 (cons #17 (cons #18 (cons #19 (cons #20 (cons #21 (cons #22 (cons #23 (cons #24 nil)))))))))))))))
+kn2 : Word → Bool
+kn2 p = kn kn2-list p
+-- a call's argument: one value (arity 1), else a tuple of the arity's components
+q-argok : Word → FC → Bool
+q-argok m a = if weq m #1 then true else q-istupn (dnat m) a
+-- the byte layer's widths
+q-w48 : Word → Bool
+q-w48 w = if weq w #8 then true else weq w #4
+-- the conditions the printer's correctness needs of a converted term at depth d, decided: the byte
+-- layer's widths 4 or 8, the binary primitives known, a constructor's fields a tuple, a closure made
+-- at its λ's depth (D) and named by its key, a call to a definition at its arity (A) with its argument
+-- in the arity's shape
+qtok : (Word → Nat) → (Word → Word) → FC → Nat → Bool
+qtok D A (fcl w) d = true
+qtok D A (fcv n) d = true
+qtok D A (fcp p a b) d = andbt (kn2 p) (andbt (qtok D A a d) (qtok D A b d))
+qtok D A (fcp1 p a) d = qtok D A a d
+qtok D A (fclet a b) d = andbt (qtok D A a d) (qtok D A b (suc d))
+qtok D A fcu d = true
+qtok D A (fcpr a b) d = andbt (qtok D A a d) (qtok D A b d)
+qtok D A (fcfst a) d = qtok D A a d
+qtok D A (fcsnd a) d = qtok D A a d
+qtok D A (fccon dd k a) d = andbt (q-istup a) (qtok D A a d)
+qtok D A (fccase x alts) d = andbt (qtok D A x d) (qtok D A alts d)
+qtok D A (fcalt k n b r) d = andbt (qtok D A b (qadd d n)) (qtok D A r d)
+qtok D A fcnone d = true
+qtok D A (fcif c a b) d = andbt (qtok D A c d) (andbt (qtok D A a d) (qtok D A b d))
+qtok D A (fcclo i) d = andbt (neqb (D i) d) (q-cloq i)
+qtok D A (fcapp f a) d = andbt (qtok D A f d) (qtok D A a d)
+qtok D A (fccall g m a) d = andbt (q-glob g) (andbt (weq (A g) m) (andbt (q-argok m a) (qtok D A a d)))
+qtok D A (fcby a) d = qtok D A a d
+qtok D A (fcld w b o) d = andbt (q-w48 w) (andbt (qtok D A b d) (qtok D A o d))
+qtok D A (fcst w b o v) d = andbt (q-w48 w) (andbt (qtok D A b d) (andbt (qtok D A o d) (qtok D A v d)))
+qtok D A (fcblen b) d = qtok D A b d
+-- and of the tables: every definition's body at depth 1, every closure's at its depth + 1
+QGOK : (Word → FC) → (Word → FC) → (Word → Nat) → (Word → Word) → Type
+QGOK T GT D A = ((g : Word) → qtok D A (GT g) (suc zero) ≡ true) × ((i : Word) → qtok D A (T i) (suc (D i)) ≡ true)
+-- ---------------------------------------------------------------- small lemmas
+not-t : (b : Bool) → not b ≡ true → b ≡ false
+not-t true h = Empty-rec (false≢true h)
+not-t false h = λ t → false
+andl : (a b : Bool) → andbt a b ≡ true → a ≡ true
+andl a b h = andbt-l a b h
+andr : (a b : Bool) → andbt a b ≡ true → b ≡ true
+andr a b h = andbt-r a b h
+-- a value that is a word is no other
+kq-isw : KQ → Type
+kq-isw (kqw w) = Unit
+kq-isw (kqi b) = Empty
+kq-isw (kqf b) = Empty
+kq-isw (kqcon d c fs) = Empty
+kq-isw (kqclos g env) = Empty
+kq-isw (kqlam b env) = Empty
+kq-isw (kqb l) = Empty
+kq-isw kqnil = Empty
+kq-isw (kqcons x r) = Empty
+kq-isw kqbot = Empty
+kq-notw : (v : KQ) (w : Word) → v ≡ kqw w → kq-isw v
+kq-notw v w p = subst {lzero} {lzero} {KQ} {kq-isw} {kqw w} {v} (sym p) unit
+qadd-s : (d m : Nat) → qadd (suc d) m ≡ suc (qadd d m)
+qadd-s d zero = λ t → suc d
+qadd-s d (suc m) = λ t → suc (qadd-s d m t)
+-- the table's entry at a closure's key, and at a definition's
+ft-clo : (T GT : Word → FC) (D : Word → Nat) (A : Word → Word) (i : Word) → q-cloq i ≡ true → q-ft T GT D A (wadd dcbase i) ≡ fc-to-fq (suc (D i)) (T i)
+ft-clo T GT D A i h =
+  cong (λ b → if b then fq-def-body (A (wadd dcbase i)) (GT (wadd dcbase i)) else (if wlt (wadd dcbase i) dclbase then fc-to-fq (suc (D (wsub (wadd dcbase i) dcbase))) (T (wsub (wadd dcbase i) dcbase)) else fq-def-body (A (wadd dcbase i)) (GT (wadd dcbase i))))
+       (not-t (wlt (wadd dcbase i) dcbase) (andl (not (wlt (wadd dcbase i) dcbase)) (andbt (wlt (wadd dcbase i) dclbase) (weq (wsub (wadd dcbase i) dcbase) i)) h))
+  ∙ cong (λ b → if b then fc-to-fq (suc (D (wsub (wadd dcbase i) dcbase))) (T (wsub (wadd dcbase i) dcbase)) else fq-def-body (A (wadd dcbase i)) (GT (wadd dcbase i)))
+         (andl (wlt (wadd dcbase i) dclbase) (weq (wsub (wadd dcbase i) dcbase) i) (andr (not (wlt (wadd dcbase i) dcbase)) (andbt (wlt (wadd dcbase i) dclbase) (weq (wsub (wadd dcbase i) dcbase) i)) h))
+  ∙ cong (λ u → fc-to-fq (suc (D u)) (T u))
+         (weq-sound (wsub (wadd dcbase i) dcbase) i (andr (wlt (wadd dcbase i) dclbase) (weq (wsub (wadd dcbase i) dcbase) i) (andr (not (wlt (wadd dcbase i) dcbase)) (andbt (wlt (wadd dcbase i) dclbase) (weq (wsub (wadd dcbase i) dcbase) i)) h)))
+ft-glob : (T GT : Word → FC) (D : Word → Nat) (A : Word → Word) (g : Word) → q-glob g ≡ true → q-ft T GT D A g ≡ fq-def-body (A g) (GT g)
+ft-glob T GT D A g h =
+  (case wlt g dcbase return (λ b → wlt g dcbase ≡ b → q-ft T GT D A g ≡ fq-def-body (A g) (GT g)) of
+     true → λ eb → cong (λ b → if b then fq-def-body (A g) (GT g) else (if wlt g dclbase then fc-to-fq (suc (D (wsub g dcbase))) (T (wsub g dcbase)) else fq-def-body (A g) (GT g))) eb
+     false → λ eb → cong (λ b → if b then fq-def-body (A g) (GT g) else (if wlt g dclbase then fc-to-fq (suc (D (wsub g dcbase))) (T (wsub g dcbase)) else fq-def-body (A g) (GT g))) eb
+                    ∙ cong (λ b → if b then fc-to-fq (suc (D (wsub g dcbase))) (T (wsub g dcbase)) else fq-def-body (A g) (GT g))
+                           (not-t (wlt g dclbase) (cong (λ b → if b then true else not (wlt g dclbase)) (sym eb) ∙ h))) (λ t → wlt g dcbase)
+-- ---------------------------------------------------------------- one lemma per form
+-- primitives: a binary one by its value on words (a known primitive's, concretely), reached from the
+-- printed form by its four class booleans; a unary one by the same booleans as the mirrors' dprim1
+Pp2 : (Word → FQ) → QE → Word → Type
+Pp2 G K q = (x y : Word) (A B : KQ) → A ≡ kqw x → B ≡ kqw y → evT G K (fq-p2 q (fqv zero) (fqv (suc zero))) (kqcons A (kqcons B kqnil)) ≡ kqw (dprim2 q x y)
+AllP2 : (Word → FQ) → QE → List Word → Type
+AllP2 G K nil = Unit
+AllP2 G K (cons q r) = Pp2 G K q × AllP2 G K r
+all-p2 : (G : Word → FQ) (K : QE) → AllP2 G K kn2-list
+all-p2 G K =
+  ((λ x y A B hx hy t → evT G K (fq-p2 #0 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #1 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #2 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #3 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) ,
+  ((λ x y A B hx hy t → evT G K (fq-p2 #4 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #14 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #15 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #16 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) ,
+  ((λ x y A B hx hy t → evT G K (fq-p2 #17 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #18 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #19 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #20 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) ,
+  ((λ x y A B hx hy t → evT G K (fq-p2 #21 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #22 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #23 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , ((λ x y A B hx hy t → evT G K (fq-p2 #24 (fqv zero) (fqv (suc zero))) (kqcons (hx t) (kqcons (hy t) kqnil))) , unit))))))))))))))))
+kn-get : (G : Word → FQ) (K : QE) (ks : List Word) → AllP2 G K ks → (p : Word) → kn ks p ≡ true → Pp2 G K p
+kn-get G K nil al p h = Empty-rec (false≢true h)
+kn-get G K (cons q r) al p h =
+  (case weq p q return (λ b → weq p q ≡ b → Pp2 G K p) of
+     true → λ eb → subst {lzero} {lzero} {Word} {λ u → Pp2 G K u} {q} {p} (sym (weq-sound p q eb)) (fst al)
+     false → λ eb → kn-get G K r (snd al) p (cong (λ b → if b then true else kn r p) (sym eb) ∙ h)) (λ t → weq p q)
+p2-sub : (G : Word → FQ) (K : QE) (b1 b2 b3 b4 : Bool) (p : Word) (a b : FQ) (e : KQ) → evT G K (fq-p2b b1 b2 b3 b4 p a b) e ≡ evT G K (fq-p2b b1 b2 b3 b4 p (fqv zero) (fqv (suc zero))) (kqcons (evT G K a e) (kqcons (evT G K b e) kqnil))
+p2-sub G K true b2 b3 b4 p a b e = λ t → evT G K (fq-p2b true b2 b3 b4 p a b) e
+p2-sub G K false true b3 b4 p a b e = λ t → evT G K (fq-p2b false true b3 b4 p a b) e
+p2-sub G K false false true b4 p a b e = λ t → evT G K (fq-p2b false false true b4 p a b) e
+p2-sub G K false false false true p a b e = λ t → evT G K (fq-p2b false false false true p a b) e
+p2-sub G K false false false false p a b e = λ t → evT G K (fq-p2b false false false false p a b) e
+pq-gen : (D : Word → Nat) (G : Word → FQ) (K : QE) (q : Word) → Pp2 G K q → (X Y : TV) (A B : KQ) → qrel D X A → qrel D Y B → qrel D (tv-prim q X Y) (evT G K (fq-p2 q (fqv zero) (fqv (suc zero))) (kqcons A (kqcons B kqnil)))
+pq-gen D G K q P (tvw x) (tvw y) A B hx hy = P x y A B hx hy
+pq-gen D G K q P (tvw x) (tvc k z) A B hx hy = unit
+pq-gen D G K q P (tvw x) (tvclo i ρ) A B hx hy = unit
+pq-gen D G K q P (tvw x) tvbot A B hx hy = unit
+pq-gen D G K q P (tvw x) (tvb l) A B hx hy = unit
+pq-gen D G K q P (tvw x) tvu A B hx hy = unit
+pq-gen D G K q P (tvw x) (tvpr a b) A B hx hy = unit
+pq-gen D G K q P (tvc k z) Y A B hx hy = unit
+pq-gen D G K q P (tvclo i ρ) Y A B hx hy = unit
+pq-gen D G K q P tvbot Y A B hx hy = unit
+pq-gen D G K q P (tvb l) Y A B hx hy = unit
+pq-gen D G K q P tvu Y A B hx hy = unit
+pq-gen D G K q P (tvpr a b) Y A B hx hy = unit
+prim2-ok : (D : Word → Nat) (G : Word → FQ) (K : QE) (p : Word) (a b : FQ) (e : KQ) (X Y : TV) → kn2 p ≡ true → qrel D X (evT G K a e) → qrel D Y (evT G K b e) → qrel D (tv-prim p X Y) (evT G K (fq-p2 p a b) e)
+prim2-ok D G K p a b e X Y hk hx hy =
+  subst {lzero} {lzero} {KQ} {λ v → qrel D (tv-prim p X Y) v} {evT G K (fq-p2 p (fqv zero) (fqv (suc zero))) (kqcons (evT G K a e) (kqcons (evT G K b e) kqnil))} {evT G K (fq-p2 p a b) e}
+    (sym (p2-sub G K (wlt p #5) (wlt p #17) (wlt p #19) (wlt p #23) p a b e))
+    (pq-gen D G K p (kn-get G K kn2-list (all-p2 G K) p hk) X Y (evT G K a e) (evT G K b e) hx hy)
+d1b : Bool → Bool → Bool → Bool → Word → Word
+d1b b1 b2 b3 b4 a = if b1 then dfb (f64ofi64 (dbi a)) else if b2 then dib (i64off64 (dbf a)) else if b3 then dfb (f64 a) else if b4 then u32toWord (u32 a) else a
+p1-gen : (G : Word → FQ) (K : QE) (b1 b2 b3 b4 : Bool) (a : FQ) (e : KQ) (x : Word) → evT G K a e ≡ kqw x → evT G K (fq-p1b b1 b2 b3 b4 a) e ≡ kqw (d1b b1 b2 b3 b4 x)
+p1-gen G K true b2 b3 b4 a e x h = cong (λ u → evT G K (fq-p1b true b2 b3 b4 (fqv zero)) (kqcons u e)) h
+p1-gen G K false true b3 b4 a e x h = cong (λ u → evT G K (fq-p1b false true b3 b4 (fqv zero)) (kqcons u e)) h
+p1-gen G K false false true b4 a e x h = cong (λ u → evT G K (fq-p1b false false true b4 (fqv zero)) (kqcons u e)) h
+p1-gen G K false false false true a e x h = cong (λ u → evT G K (fq-p1b false false false true (fqv zero)) (kqcons u e)) h
+p1-gen G K false false false false a e x h = h
+prim1-ok : (D : Word → Nat) (G : Word → FQ) (K : QE) (p : Word) (a : FQ) (e : KQ) (X : TV) → qrel D X (evT G K a e) → qrel D (tv-prim1 p X) (evT G K (fq-p1 p a) e)
+prim1-ok D G K p a e (tvw x) h = p1-gen G K (weq p #27) (weq p #28) (weq p #29) (weq p #40) a e x h
+prim1-ok D G K p a e X h = unit
+-- a word condition
+if-ok : (D : Word → Nat) (ev : FC → (Nat → TV) → TV) (ρ : Nat → TV) (X : TV) (C : KQ) (a b : FC) (A B : KQ) → qrel D X C → qrel D (ev a ρ) A → qrel D (ev b ρ) B → qrel D (tv-if ev ρ X a b) (q-if C A B)
+if-ok D ev ρ (tvw w) C a b A B hc ha hb =
+  subst {lzero} {lzero} {KQ} {λ v → qrel D (tv-if ev ρ (tvw w) a b) (q-if v A B)} {kqw w} {C} (sym hc)
+    (%welimP (λ u → qrel D (%welimP (λ u2 → TV) u (ev b ρ) (λ m h → ev a ρ)) (%welimP (λ u2 → KQ) u B (λ m h → A))) w hb (λ m h → ha))
+if-ok D ev ρ X C a b A B hc ha hb = unit
+-- the projections
+fst-ok : (D : Word → Nat) (X : TV) (V : KQ) → qrel D X V → qrel D (tv-fst X) (q-proj #0 V)
+fst-ok D (tvpr a b) (kqcon d c (kqcons x (kqcons y kqnil))) h = fst h
+fst-ok D (tvpr a b) V h = Empty-rec h
+fst-ok D X V h = unit
+snd-ok : (D : Word → Nat) (X : TV) (V : KQ) → qrel D X V → qrel D (tv-snd X) (q-proj #1 V)
+snd-ok D (tvpr a b) (kqcon d c (kqcons x (kqcons y kqnil))) h = snd h
+snd-ok D (tvpr a b) V h = Empty-rec h
+snd-ok D X V h = unit
+-- the byte layer
+by-ok : (D : Word → Nat) (X : TV) (V : KQ) → qrel D X V → qrel D (tv-bytes X) (q-prim #12 (kqcons V kqnil))
+by-ok D (tvw n) V h = cong (λ u → q-prim #12 (kqcons u kqnil)) h
+by-ok D X V h = unit
+blen-ok : (D : Word → Nat) (X : TV) (V : KQ) → qrel D X V → qrel D (tv-blen X) (q-prim #13 (kqcons V kqnil))
+blen-ok D (tvb l) V h = cong (λ u → q-prim #13 (kqcons u kqnil)) h
+blen-ok D X V h = unit
+ld8-ok : (D : Word → Nat) (X Y : TV) (Ub Vb : KQ) → qrel D X Ub → qrel D Y Vb → qrel D (tv-ld #8 X Y) (q-prim #26 (kqcons (q-prim #8 (kqcons Ub (kqcons Vb kqnil))) kqnil))
+ld8-ok D (tvb l) (tvw o) Ub Vb hu hv = λ t → q-prim #26 (kqcons (q-prim #8 (kqcons (hu t) (kqcons (hv t) kqnil))) kqnil)
+ld8-ok D X Y Ub Vb hu hv = unit
+ld4-ok : (D : Word → Nat) (X Y : TV) (Ub Vb : KQ) → qrel D X Ub → qrel D Y Vb → qrel D (tv-ld #4 X Y) (q-prim #10 (kqcons Ub (kqcons Vb kqnil)))
+ld4-ok D (tvb l) (tvw o) Ub Vb hu hv = λ t → q-prim #10 (kqcons (hu t) (kqcons (hv t) kqnil))
+ld4-ok D X Y Ub Vb hu hv = unit
+st8-ok : (D : Word → Nat) (X Y Z : TV) (Ub Vb Wb : KQ) → qrel D X Ub → qrel D Y Vb → qrel D Z Wb → qrel D (tv-st #8 X Y Z) (q-prim #9 (kqcons Ub (kqcons Vb (kqcons (q-prim #25 (kqcons Wb kqnil)) kqnil))))
+st8-ok D (tvb l) (tvw o) (tvw v) Ub Vb Wb hu hv hw = λ t → q-prim #9 (kqcons (hu t) (kqcons (hv t) (kqcons (q-prim #25 (kqcons (hw t) kqnil)) kqnil)))
+st8-ok D X Y Z Ub Vb Wb hu hv hw = unit
+st4-ok : (D : Word → Nat) (X Y Z : TV) (Ub Vb Wb : KQ) → qrel D X Ub → qrel D Y Vb → qrel D Z Wb → qrel D (tv-st #4 X Y Z) (q-prim #11 (kqcons Ub (kqcons Vb (kqcons Wb kqnil))))
+st4-ok D (tvb l) (tvw o) (tvw v) Ub Vb Wb hu hv hw = λ t → q-prim #11 (kqcons (hu t) (kqcons (hv t) (kqcons (hw t) kqnil)))
+st4-ok D X Y Z Ub Vb Wb hu hv hw = unit
+w48 : (w : Word) → q-w48 w ≡ true → weq w #8 ≡ false → w ≡ #4
+w48 w h e = weq-sound w #4 (cong (λ b → if b then true else weq w #4) (sym e) ∙ h)
+-- a case's alternatives: the tag picked, the fields a whole tuple of the count (then the chain has
+-- exactly that many, and pushing them refines the converted push)
+tup-isn : (D : Word → Nat) (k : Nat) (x : TV) (fs : KQ) → qrel D x (q-tupv fs) → tv-tup k x ≡ true → q-isn k fs ≡ true
+tup-isn D zero tvu kqnil h ht = λ t → true
+tup-isn D zero tvu fs h ht = Empty-rec (kq-notw (q-tupv fs) #0 h)
+tup-isn D zero x fs h ht = Empty-rec (false≢true ht)
+tup-isn D (suc m) (tvpr a r) (kqcons y rs) h ht = tup-isn D m r rs (snd h) ht
+tup-isn D (suc m) (tvpr a r) fs h ht = Empty-rec h
+tup-isn D (suc m) x fs h ht = Empty-rec (false≢true ht)
+push-env : (D : Word → Nat) (k : Nat) (x : TV) (fs : KQ) (d : Nat) (ρ : Nat → TV) (e : KQ) → qrel D x (q-tupv fs) → tv-tup k x ≡ true → QEnv D d ρ e → QEnv D (qadd d k) (tv-push k x ρ) (q-push fs e)
+push-env D zero tvu kqnil d ρ e h ht he = he
+push-env D zero tvu fs d ρ e h ht he = Empty-rec (kq-notw (q-tupv fs) #0 h)
+push-env D zero x fs d ρ e h ht he = Empty-rec (false≢true ht)
+push-env D (suc m) (tvpr a r) (kqcons y rs) d ρ e h ht he =
+  subst {lzero} {lzero} {Nat} {λ u → QEnv D u (tv-push m r (text ρ a)) (q-push rs (kqcons y e))} {qadd (suc d) m} {suc (qadd d m)} (qadd-s d m)
+    (push-env D m r rs (suc d) (text ρ a) (kqcons y e) (snd h) ht (qenv-ext D d ρ a y e he (fst h)))
+push-env D (suc m) (tvpr a r) fs d ρ e h ht he = Empty-rec h
+push-env D (suc m) x fs d ρ e h ht he = Empty-rec (false≢true ht)
+pick-ok : (D : Word → Nat) (b : Bool) (P1 P2 : TV) (Q1 Q2 : KQ) → qrel D P1 Q1 → qrel D P2 Q2 → qrel D (tv-pick b P1 P2) (if b then Q1 else Q2)
+pick-ok D true P1 P2 Q1 Q2 h1 h2 = h1
+pick-ok D false P1 P2 Q1 Q2 h1 h2 = h2
+tpick-ok : (D : Word → Nat) (k : Nat) (x : TV) (fs : KQ) (P : TV) (Q : KQ) → qrel D x (q-tupv fs) → (tv-tup k x ≡ true → qrel D P Q) → qrel D (tv-pick (tv-tup k x) P tvbot) (if q-isn k fs then Q else kqbot)
+tpick-ok D k x fs P Q hx hp =
+  (case tv-tup k x return (λ b → tv-tup k x ≡ b → qrel D (tv-pick b P tvbot) (if q-isn k fs then Q else kqbot)) of
+     true → λ eb → subst {lzero} {lzero} {Bool} {λ c → qrel D P (if c then Q else kqbot)} {true} {q-isn k fs} (sym (tup-isn D k x fs hx eb)) (hp eb)
+     false → λ eb → unit) (λ t → tv-tup k x)
+alt1 : (D : Word → Nat) (ev : FC → (Nat → TV) → TV) (ρ : Nat → TV) (j : Word) (k : Nat) (b : FC) (fb : KQ → KQ) (Rf : TV) (Rq : KQ) (e : KQ) (V : TV) (S : KQ) → qrel D V S → qrel D Rf Rq
+     → ((x : TV) (fs : KQ) → qrel D x (q-tupv fs) → tv-tup k x ≡ true → qrel D (ev b (tv-push k x ρ)) (fb (q-push fs e)))
+     → qrel D (tv-alt ev ρ V j k b Rf) (q-altsel j k fb Rq (kqcons S e))
+alt1 D ev ρ j k b fb Rf Rq e (tvc kv x) (kqcon dd c fs) h hr hb =
+  subst {lzero} {lzero} {Word} {λ u → qrel D (tv-alt ev ρ (tvc kv x) j k b Rf) (if weq u j then (if q-isn k fs then fb (q-push fs e) else kqbot) else Rq)} {kv} {c} (fst h)
+    (pick-ok D (weq kv j) (tv-pick (tv-tup k x) (ev b (tv-push k x ρ)) tvbot) Rf (if q-isn k fs then fb (q-push fs e) else kqbot) Rq
+       (tpick-ok D k x fs (ev b (tv-push k x ρ)) (fb (q-push fs e)) (snd h) (hb x fs (snd h))) hr)
+alt1 D ev ρ j k b fb Rf Rq e (tvc kv x) S h hr hb = Empty-rec h
+alt1 D ev ρ j k b fb Rf Rq e V S h hr hb = unit
+-- ---------------------------------------------------------------- the theorem
+-- at fuel n, every term at depth d meeting the conditions, in every refining environment: its
+-- converted meaning refined by its printed form's at fuel n + m, for every m (the printed form spends
+-- fuel only at calls, closures applied and loops, the converted one at every node)
+Thm : (Word → FC) → (Word → FC) → (Word → Nat) → (Word → Word) → Nat → Type
+Thm T GT D A n = (c : FC) (d : Nat) (ρ : Nat → TV) (e : KQ) (m : Nat) → qtok D A c d ≡ true → QEnv D d ρ e → qrel D (dtev T GT n c ρ) (evq (q-ft T GT D A) (fr-addn n m) (fc-to-fq d c) e)
+-- a subterm, evaluated at the node's fuel
+ih-up : (T GT : Word → FC) (D : Word → Nat) (A : Word → Word) (n : Nat) → Thm T GT D A n → (c : FC) (d : Nat) (ρ : Nat → TV) (e : KQ) (m : Nat) → qtok D A c d ≡ true → QEnv D d ρ e
+      → qrel D (dtev T GT n c ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d c) e)
+ih-up T GT D A n ih c d ρ e m h he = subst {lzero} {lzero} {Nat} {λ L → qrel D (dtev T GT n c ρ) (evq (q-ft T GT D A) L (fc-to-fq d c) e)} {fr-addn n (suc m)} {suc (fr-addn n m)} (fr-addn-s n m) (ih c d ρ e (suc m) h he)
+alts-ok : (T GT : Word → FC) (D : Word → Nat) (A : Word → Word) (n : Nat) → Thm T GT D A n → (m : Nat) (alts : FC) (d : Nat) (ρ : Nat → TV) (e : KQ) (V : TV) (S : KQ) → qtok D A alts d ≡ true → QEnv D d ρ e → qrel D V S
+        → qrel D (tv-cases (λ c σ → dtev T GT n c σ) ρ V alts) (evT (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) (fcq alts qma d) (kqcons S e))
+alts-ok T GT D A n ih m (fcalt j k b r) d ρ e V S h he hv =
+  alt1 D (λ c σ → dtev T GT n c σ) ρ j k b (λ e2 → evT (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) (fcq b qmt (qadd d k)) e2)
+    (tv-cases (λ c σ → dtev T GT n c σ) ρ V r) (evT (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) (fcq r qma d) (kqcons S e)) e V S hv
+    (alts-ok T GT D A n ih m r d ρ e V S (andr (qtok D A b (qadd d k)) (qtok D A r d) h) he hv)
+    (λ x fs hx ht → ih-up T GT D A n ih b (qadd d k) (tv-push k x ρ) (q-push fs e) m (andl (qtok D A b (qadd d k)) (qtok D A r d) h) (push-env D k x fs d ρ e hx ht he))
+alts-ok T GT D A n ih m alts d ρ e V S h he hv = unit
+-- a closure applied: its key's entry is its body at its depth + 1, over the argument and its captures
+app1 : (T GT : Word → FC) (D : Word → Nat) (A : Word → Word) → QGOK T GT D A → (n : Nat) → Thm T GT D A n → (m : Nat) (V : TV) (F : KQ) (X : TV) (Av : KQ) → qrel D V F → qrel D X Av
+     → qrel D (tv-app T (λ c σ → dtev T GT n c σ) V X) (q-ap1 (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) F Av)
+app1 T GT D A go n ih m (tvclo i σ) (kqclos g cs) X Av h hx =
+  subst {lzero} {lzero} {Word} {λ u → qrel D (dtev T GT n (T i) (text σ X)) (evq (q-ft T GT D A) (fr-addn n m) (q-ft T GT D A u) (kqcons Av (q-push cs kqnil)))} {wadd dcbase i} {g} (sym (fst (fst h)))
+    (subst {lzero} {lzero} {FQ} {λ t → qrel D (dtev T GT n (T i) (text σ X)) (evq (q-ft T GT D A) (fr-addn n m) t (kqcons Av (q-push cs kqnil)))} {fc-to-fq (suc (D i)) (T i)} {q-ft T GT D A (wadd dcbase i)} (sym (ft-clo T GT D A i (snd (fst h))))
+       (ih (T i) (suc (D i)) (text σ X) (kqcons Av (q-push cs kqnil)) m (snd go i) (qenv-ext D (D i) σ X Av (q-push cs kqnil) (snd h) hx)))
+app1 T GT D A go n ih m (tvclo i σ) F X Av h hx = Empty-rec h
+app1 T GT D A go n ih m V F X Av h hx = unit
+-- a call: its arguments, one value or a tuple's components (a definition's tuple rebuilt from them)
+qenv-none : (D : Word → Nat) (e : KQ) → QEnv D zero tvnone e
+qenv-none D e = ((λ k → unit) , (λ k h t → tvbot))
+z-fields : (G : Word → FQ) (K : QE) (a : FC) (d : Nat) (e : KQ) → q-istupn zero a ≡ true → evT G K (fcq a qmf d) e ≡ kqnil
+z-fields G K fcu d e h = λ t → kqnil
+z-fields G K a d e h = Empty-rec (false≢true h)
+args-eq : (G : Word → FQ) (K : QE) (m : Word) (a : FC) (d : Nat) (e : KQ) → weq m #1 ≡ false → q-istupn (dnat m) a ≡ true
+        → evT G K (if weq m #0 then fqnil else (if weq m #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e ≡ evT G K (fcq a qmf d) e
+args-eq G K m a d e h1 hs =
+  (case weq m #0 return (λ b → weq m #0 ≡ b → evT G K (if weq m #0 then fqnil else (if weq m #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e ≡ evT G K (fcq a qmf d) e) of
+     true → λ eb → subst {lzero} {lzero} {Word} {λ u → q-istupn (dnat u) a ≡ true → evT G K (if weq u #0 then fqnil else (if weq u #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e ≡ evT G K (fcq a qmf d) e} {#0} {m} (sym (weq-sound m #0 eb))
+                     (λ hz → sym (z-fields G K a d e hz)) hs
+     false → λ eb → cong (λ b → evT G K (if b then fqnil else (if weq m #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e) eb
+                    ∙ cong (λ b → evT G K (if b then fq1 (fcq a qmt d) else fcq a qmf d) e) h1) (λ t → weq m #0)
+call-many : (T GT : Word → FC) (D : Word → Nat) (A : Word → Word) → QGOK T GT D A → (n : Nat) → Thm T GT D A n → (m : Nat) (g mm : Word) (a : FC) (d : Nat) (ρ : Nat → TV) (e : KQ)
+          → weq mm #1 ≡ false → q-istupn (dnat mm) a ≡ true → qtok D A a d ≡ true → QEnv D d ρ e
+          → qrel D (dtev T GT n (GT g) (text tvnone (dtev T GT n a ρ)))
+                   (evq (q-ft T GT D A) (fr-addn n m) (fq-def-body mm (GT g)) (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (if weq mm #0 then fqnil else (if weq mm #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e) kqnil))
+call-many T GT D A go n ih m g mm a d ρ e e1 hs hta he =
+  subst {lzero} {lzero} {KQ} {λ v → qrel D (dtev T GT n (GT g) (text tvnone (dtev T GT n a ρ))) (evq (q-ft T GT D A) (fr-addn n m) (fq-def-body mm (GT g)) (q-push v kqnil))}
+    {evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e} {evq (q-ft T GT D A) (suc (fr-addn n m)) (if weq mm #0 then fqnil else (if weq mm #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e}
+    (sym (args-eq (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) mm a d e e1 hs))
+    (subst {lzero} {lzero} {FQ} {λ t → qrel D (dtev T GT n (GT g) (text tvnone (dtev T GT n a ρ))) (evq (q-ft T GT D A) (fr-addn n m) t (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e) kqnil))}
+       {fqlet (fq-tupn (dnat mm)) (fc-to-fq (suc zero) (GT g))} {fq-def-body mm (GT g)}
+       (sym (cong (λ c → if c then fc-to-fq (suc zero) (GT g) else fqlet (fq-tupn (dnat mm)) (fc-to-fq (suc zero) (GT g))) e1))
+       (subst {lzero} {lzero} {KQ} {λ v → qrel D (dtev T GT n (GT g) (text tvnone (dtev T GT n a ρ))) (evq (q-ft T GT D A) (fr-addn n m) (fc-to-fq (suc zero) (GT g)) (kqcons v (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e) kqnil)))}
+          {q-tupv (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e)}
+          {evT (q-ft T GT D A) (qeN (q-ft T GT D A) (fr-addn n m)) (fq-tupn (dnat mm)) (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e) kqnil)}
+          (sym (tupn-eval (q-ft T GT D A) (qeN (q-ft T GT D A) (fr-addn n m)) (dnat mm) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e) kqnil
+                 (fl-len (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) (dnat mm) a d e hs)))
+          (ih (GT g) (suc zero) (text tvnone (dtev T GT n a ρ)) (kqcons (q-tupv (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e)) (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e) kqnil)) m (fst go g)
+              (qenv-ext D zero tvnone (dtev T GT n a ρ) (q-tupv (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e)) (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e) kqnil)
+                 (qenv-none D (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e) kqnil))
+                 (subst {lzero} {lzero} {KQ} {λ v → qrel D (dtev T GT n a ρ) v} {evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e} {q-tupv (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e)}
+                    (tm-fl (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) a d e (istupn-tup (dnat mm) a hs))
+                    (ih-up T GT D A n ih a d ρ e m hta he))))))
+call-body : (T GT : Word → FC) (D : Word → Nat) (A : Word → Word) → QGOK T GT D A → (n : Nat) → Thm T GT D A n → (m : Nat) (g mm : Word) (a : FC) (d : Nat) (ρ : Nat → TV) (e : KQ)
+          → q-argok mm a ≡ true → qtok D A a d ≡ true → QEnv D d ρ e
+          → qrel D (dtev T GT n (GT g) (text tvnone (dtev T GT n a ρ)))
+                   (evq (q-ft T GT D A) (fr-addn n m) (fq-def-body mm (GT g)) (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (if weq mm #0 then fqnil else (if weq mm #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e) kqnil))
+call-body T GT D A go n ih m g mm a d ρ e hok hta he =
+  (case weq mm #1 return (λ b → weq mm #1 ≡ b → qrel D (dtev T GT n (GT g) (text tvnone (dtev T GT n a ρ))) (evq (q-ft T GT D A) (fr-addn n m) (fq-def-body mm (GT g)) (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (if weq mm #0 then fqnil else (if weq mm #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e) kqnil))) of
+     true → λ eb → subst {lzero} {lzero} {Word} {λ u → qrel D (dtev T GT n (GT g) (text tvnone (dtev T GT n a ρ))) (evq (q-ft T GT D A) (fr-addn n m) (fq-def-body u (GT g)) (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (if weq u #0 then fqnil else (if weq u #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e) kqnil))} {#1} {mm} (sym (weq-sound mm #1 eb))
+                     (ih (GT g) (suc zero) (text tvnone (dtev T GT n a ρ)) (kqcons (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e) kqnil) m (fst go g)
+                         (qenv-ext D zero tvnone (dtev T GT n a ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e) kqnil (qenv-none D kqnil) (ih-up T GT D A n ih a d ρ e m hta he)))
+     false → λ eb → call-many T GT D A go n ih m g mm a d ρ e eb (cong (λ b → if b then true else q-istupn (dnat mm) a) (sym eb) ∙ hok) hta he) (λ t → weq mm #1)
+call-ok : (T GT : Word → FC) (D : Word → Nat) (A : Word → Word) → QGOK T GT D A → (n : Nat) → Thm T GT D A n → (m : Nat) (g mm : Word) (a : FC) (d : Nat) (ρ : Nat → TV) (e : KQ)
+        → qtok D A (fccall g mm a) d ≡ true → QEnv D d ρ e
+        → qrel D (dtev T GT n (GT g) (text tvnone (dtev T GT n a ρ)))
+                 (evq (q-ft T GT D A) (fr-addn n m) (q-ft T GT D A g) (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (if weq mm #0 then fqnil else (if weq mm #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e) kqnil))
+call-ok T GT D A go n ih m g mm a d ρ e h he =
+  subst {lzero} {lzero} {FQ} {λ t → qrel D (dtev T GT n (GT g) (text tvnone (dtev T GT n a ρ))) (evq (q-ft T GT D A) (fr-addn n m) t (q-push (evq (q-ft T GT D A) (suc (fr-addn n m)) (if weq mm #0 then fqnil else (if weq mm #1 then fq1 (fcq a qmt d) else fcq a qmf d)) e) kqnil))}
+    {fq-def-body mm (GT g)} {q-ft T GT D A g}
+    (sym (ft-glob T GT D A g (andl (q-glob g) (andbt (weq (A g) mm) (andbt (q-argok mm a) (qtok D A a d))) h)
+          ∙ cong (λ u → fq-def-body u (GT g)) (weq-sound (A g) mm (andl (weq (A g) mm) (andbt (q-argok mm a) (qtok D A a d)) (andr (q-glob g) (andbt (weq (A g) mm) (andbt (q-argok mm a) (qtok D A a d))) h)))))
+    (call-body T GT D A go n ih m g mm a d ρ e
+       (andl (q-argok mm a) (qtok D A a d) (andr (weq (A g) mm) (andbt (q-argok mm a) (qtok D A a d)) (andr (q-glob g) (andbt (weq (A g) mm) (andbt (q-argok mm a) (qtok D A a d))) h)))
+       (andr (q-argok mm a) (qtok D A a d) (andr (weq (A g) mm) (andbt (q-argok mm a) (qtok D A a d)) (andr (q-glob g) (andbt (weq (A g) mm) (andbt (q-argok mm a) (qtok D A a d))) h))) he)
+-- a load or a store at width 8 or 4
+ld-ok : (D : Word → Nat) (G : Word → FQ) (K : QE) (w : Word) (b o : FQ) (e : KQ) (X Y : TV) → q-w48 w ≡ true → qrel D X (evT G K b e) → qrel D Y (evT G K o e)
+      → qrel D (tv-ld w X Y) (evT G K (if weq w #8 then fq-w64 (fqprim #8 (fq2 b o)) else fqprim #10 (fq2 b o)) e)
+ld-ok D G K w b o e X Y hw hx hy =
+  (case weq w #8 return (λ c → weq w #8 ≡ c → qrel D (tv-ld w X Y) (evT G K (if weq w #8 then fq-w64 (fqprim #8 (fq2 b o)) else fqprim #10 (fq2 b o)) e)) of
+     true → λ eb → subst {lzero} {lzero} {Word} {λ u → qrel D (tv-ld u X Y) (evT G K (if weq u #8 then fq-w64 (fqprim #8 (fq2 b o)) else fqprim #10 (fq2 b o)) e)} {#8} {w} (sym (weq-sound w #8 eb))
+                     (ld8-ok D X Y (evT G K b e) (evT G K o e) hx hy)
+     false → λ eb → subst {lzero} {lzero} {Word} {λ u → qrel D (tv-ld u X Y) (evT G K (if weq u #8 then fq-w64 (fqprim #8 (fq2 b o)) else fqprim #10 (fq2 b o)) e)} {#4} {w} (sym (w48 w hw eb))
+                     (ld4-ok D X Y (evT G K b e) (evT G K o e) hx hy)) (λ t → weq w #8)
+st-ok : (D : Word → Nat) (G : Word → FQ) (K : QE) (w : Word) (b o v : FQ) (e : KQ) (X Y Z : TV) → q-w48 w ≡ true → qrel D X (evT G K b e) → qrel D Y (evT G K o e) → qrel D Z (evT G K v e)
+      → qrel D (tv-st w X Y Z) (evT G K (if weq w #8 then fqprim #9 (fq3 b o (fq-i64 v)) else fqprim #11 (fq3 b o v)) e)
+st-ok D G K w b o v e X Y Z hw hx hy hz =
+  (case weq w #8 return (λ c → weq w #8 ≡ c → qrel D (tv-st w X Y Z) (evT G K (if weq w #8 then fqprim #9 (fq3 b o (fq-i64 v)) else fqprim #11 (fq3 b o v)) e)) of
+     true → λ eb → subst {lzero} {lzero} {Word} {λ u → qrel D (tv-st u X Y Z) (evT G K (if weq u #8 then fqprim #9 (fq3 b o (fq-i64 v)) else fqprim #11 (fq3 b o v)) e)} {#8} {w} (sym (weq-sound w #8 eb))
+                     (st8-ok D X Y Z (evT G K b e) (evT G K o e) (evT G K v e) hx hy hz)
+     false → λ eb → subst {lzero} {lzero} {Word} {λ u → qrel D (tv-st u X Y Z) (evT G K (if weq u #8 then fqprim #9 (fq3 b o (fq-i64 v)) else fqprim #11 (fq3 b o v)) e)} {#4} {w} (sym (w48 w hw eb))
+                     (st4-ok D X Y Z (evT G K b e) (evT G K o e) (evT G K v e) hx hy hz)) (λ t → weq w #8)
+-- one step of fuel: every form, given the theorem one unit down
+q-step : (T GT : Word → FC) (D : Word → Nat) (A : Word → Word) → QGOK T GT D A → (n : Nat) → Thm T GT D A n → (c : FC) (d : Nat) (ρ : Nat → TV) (e : KQ) (m : Nat) → qtok D A c d ≡ true → QEnv D d ρ e
+       → qrel D (dtev T GT (suc n) c ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d c) e)
+q-step T GT D A go n ih (fcl w) d ρ e m h he = λ t → kqw w
+q-step T GT D A go n ih (fcv k) d ρ e m h he = fst he k
+q-step T GT D A go n ih (fcp p a b) d ρ e m h he =
+  prim2-ok D (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) p (fcq a qmt d) (fcq b qmt d) e (dtev T GT n a ρ) (dtev T GT n b ρ)
+    (andl (kn2 p) (andbt (qtok D A a d) (qtok D A b d)) h)
+    (ih-up T GT D A n ih a d ρ e m (andl (qtok D A a d) (qtok D A b d) (andr (kn2 p) (andbt (qtok D A a d) (qtok D A b d)) h)) he)
+    (ih-up T GT D A n ih b d ρ e m (andr (qtok D A a d) (qtok D A b d) (andr (kn2 p) (andbt (qtok D A a d) (qtok D A b d)) h)) he)
+q-step T GT D A go n ih (fcp1 p a) d ρ e m h he =
+  prim1-ok D (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) p (fcq a qmt d) e (dtev T GT n a ρ) (ih-up T GT D A n ih a d ρ e m h he)
+q-step T GT D A go n ih (fclet a b) d ρ e m h he =
+  ih-up T GT D A n ih b (suc d) (text ρ (dtev T GT n a ρ)) (kqcons (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e) e) m (andr (qtok D A a d) (qtok D A b (suc d)) h)
+    (qenv-ext D d ρ (dtev T GT n a ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e) e he (ih-up T GT D A n ih a d ρ e m (andl (qtok D A a d) (qtok D A b (suc d)) h) he))
+q-step T GT D A go n ih fcu d ρ e m h he = λ t → kqw #0
+q-step T GT D A go n ih (fcpr a b) d ρ e m h he =
+  (ih-up T GT D A n ih a d ρ e m (andl (qtok D A a d) (qtok D A b d) h) he , ih-up T GT D A n ih b d ρ e m (andr (qtok D A a d) (qtok D A b d) h) he)
+q-step T GT D A go n ih (fcfst a) d ρ e m h he =
+  fst-ok D (dtev T GT n a ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e) (ih-up T GT D A n ih a d ρ e m h he)
+q-step T GT D A go n ih (fcsnd a) d ρ e m h he =
+  snd-ok D (dtev T GT n a ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e) (ih-up T GT D A n ih a d ρ e m h he)
+q-step T GT D A go n ih (fccon dd k a) d ρ e m h he =
+  ((λ t → k) ,
+   subst {lzero} {lzero} {KQ} {λ v → qrel D (dtev T GT n a ρ) v} {evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e} {q-tupv (evq (q-ft T GT D A) (suc (fr-addn n m)) (fcq a qmf d) e)}
+     (tm-fl (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) a d e (andl (q-istup a) (qtok D A a d) h))
+     (ih-up T GT D A n ih a d ρ e m (andr (q-istup a) (qtok D A a d) h) he))
+q-step T GT D A go n ih (fccase x alts) d ρ e m h he =
+  alts-ok T GT D A n ih m alts d ρ e (dtev T GT n x ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d x) e) (andr (qtok D A x d) (qtok D A alts d) h) he
+    (ih-up T GT D A n ih x d ρ e m (andl (qtok D A x d) (qtok D A alts d) h) he)
+q-step T GT D A go n ih (fcalt k nn b r) d ρ e m h he = unit
+q-step T GT D A go n ih fcnone d ρ e m h he = unit
+q-step T GT D A go n ih (fcif c a b) d ρ e m h he =
+  if-ok D (λ c1 σ → dtev T GT n c1 σ) ρ (dtev T GT n c ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d c) e) a b
+    (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d b) e)
+    (ih-up T GT D A n ih c d ρ e m (andl (qtok D A c d) (andbt (qtok D A a d) (qtok D A b d)) h) he)
+    (ih-up T GT D A n ih a d ρ e m (andl (qtok D A a d) (qtok D A b d) (andr (qtok D A c d) (andbt (qtok D A a d) (qtok D A b d)) h)) he)
+    (ih-up T GT D A n ih b d ρ e m (andr (qtok D A a d) (qtok D A b d) (andr (qtok D A c d) (andbt (qtok D A a d) (qtok D A b d)) h)) he)
+q-step T GT D A go n ih (fcclo i) d ρ e m h he =
+  (((λ t → wadd dcbase i) , andr (neqb (D i) d) (q-cloq i) h) ,
+   (clo-env D d ρ (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) e he ,
+    λ kk hk → snd he kk (subst {lzero} {lzero} {Nat} {λ u → q-le u kk ≡ true} {D i} {d} (neqb-sound (D i) d (andl (neqb (D i) d) (q-cloq i) h)) hk)))
+q-step T GT D A go n ih (fcapp f a) d ρ e m h he =
+  app1 T GT D A go n ih m (dtev T GT n f ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d f) e) (dtev T GT n a ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e)
+    (ih-up T GT D A n ih f d ρ e m (andl (qtok D A f d) (qtok D A a d) h) he) (ih-up T GT D A n ih a d ρ e m (andr (qtok D A f d) (qtok D A a d) h) he)
+q-step T GT D A go n ih (fccall g mm a) d ρ e m h he = call-ok T GT D A go n ih m g mm a d ρ e h he
+q-step T GT D A go n ih (fcby a) d ρ e m h he =
+  by-ok D (dtev T GT n a ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d a) e) (ih-up T GT D A n ih a d ρ e m h he)
+q-step T GT D A go n ih (fcld w b o) d ρ e m h he =
+  ld-ok D (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) w (fcq b qmt d) (fcq o qmt d) e (dtev T GT n b ρ) (dtev T GT n o ρ)
+    (andl (q-w48 w) (andbt (qtok D A b d) (qtok D A o d)) h)
+    (ih-up T GT D A n ih b d ρ e m (andl (qtok D A b d) (qtok D A o d) (andr (q-w48 w) (andbt (qtok D A b d) (qtok D A o d)) h)) he)
+    (ih-up T GT D A n ih o d ρ e m (andr (qtok D A b d) (qtok D A o d) (andr (q-w48 w) (andbt (qtok D A b d) (qtok D A o d)) h)) he)
+q-step T GT D A go n ih (fcst w b o v) d ρ e m h he =
+  st-ok D (q-ft T GT D A) (qeN (q-ft T GT D A) (suc (fr-addn n m))) w (fcq b qmt d) (fcq o qmt d) (fcq v qmt d) e (dtev T GT n b ρ) (dtev T GT n o ρ) (dtev T GT n v ρ)
+    (andl (q-w48 w) (andbt (qtok D A b d) (andbt (qtok D A o d) (qtok D A v d))) h)
+    (ih-up T GT D A n ih b d ρ e m (andl (qtok D A b d) (andbt (qtok D A o d) (qtok D A v d)) (andr (q-w48 w) (andbt (qtok D A b d) (andbt (qtok D A o d) (qtok D A v d))) h)) he)
+    (ih-up T GT D A n ih o d ρ e m (andl (qtok D A o d) (qtok D A v d) (andr (qtok D A b d) (andbt (qtok D A o d) (qtok D A v d)) (andr (q-w48 w) (andbt (qtok D A b d) (andbt (qtok D A o d) (qtok D A v d))) h))) he)
+    (ih-up T GT D A n ih v d ρ e m (andr (qtok D A o d) (qtok D A v d) (andr (qtok D A b d) (andbt (qtok D A o d) (qtok D A v d)) (andr (q-w48 w) (andbt (qtok D A b d) (andbt (qtok D A o d) (qtok D A v d))) h))) he)
+q-step T GT D A go n ih (fcblen b) d ρ e m h he =
+  blen-ok D (dtev T GT n b ρ) (evq (q-ft T GT D A) (suc (fr-addn n m)) (fc-to-fq d b) e) (ih-up T GT D A n ih b d ρ e m h he)
+-- the theorem, at every fuel: the printed form refines the converted one
+q-sound : (T GT : Word → FC) (D : Word → Nat) (A : Word → Word) → QGOK T GT D A → (n : Nat) → Thm T GT D A n
+q-sound T GT D A go zero = λ c d ρ e m h he → unit
+q-sound T GT D A go (suc n) = λ c d ρ e m h he → q-step T GT D A go n (q-sound T GT D A go n) c d ρ e m h he
+-- ---------------------------------------------------------------- the composed path, data route
+-- a converted value refined is refined by what refines it (so the source's meaning, refined by the
+-- converted form's, lib/foproofd.cub's fr-dc-path, is refined by the printed form's)
+tv-nb : TV → Type
+tv-nb tvbot = Empty
+tv-nb (tvw a) = Unit
+tv-nb (tvc k x) = Unit
+tv-nb (tvclo i ρ) = Unit
+tv-nb (tvb l) = Unit
+tv-nb tvu = Unit
+tv-nb (tvpr a b) = Unit
+fr-bot : (x y : TV) → fr-le x y → y ≡ tvbot → x ≡ tvbot
+fr-bot tvbot y h p = λ t → tvbot
+fr-bot (tvw a) y h p = Empty-rec (subst {lzero} {lzero} {TV} {tv-nb} {tvw a} {tvbot} (h ∙ p) unit)
+fr-bot (tvb l) y h p = Empty-rec (subst {lzero} {lzero} {TV} {tv-nb} {tvb l} {tvbot} (h ∙ p) unit)
+fr-bot tvu y h p = Empty-rec (subst {lzero} {lzero} {TV} {tv-nb} {tvu} {tvbot} (h ∙ p) unit)
+fr-bot (tvc k x) (tvc j z) h p = Empty-rec (subst {lzero} {lzero} {TV} {tv-nb} {tvc j z} {tvbot} p unit)
+fr-bot (tvc k x) y h p = Empty-rec h
+fr-bot (tvpr a b) (tvpr c d) h p = Empty-rec (subst {lzero} {lzero} {TV} {tv-nb} {tvpr c d} {tvbot} p unit)
+fr-bot (tvpr a b) y h p = Empty-rec h
+fr-bot (tvclo i ρ) (tvclo j σ) h p = Empty-rec (subst {lzero} {lzero} {TV} {tv-nb} {tvclo j σ} {tvbot} p unit)
+fr-bot (tvclo i ρ) y h p = Empty-rec h
+qrel-left : (D : Word → Nat) (X Y : TV) (Q : KQ) → fr-le X Y → qrel D Y Q → qrel D X Q
+qrel-left D tvbot Y Q h hq = unit
+qrel-left D (tvw a) Y Q h hq = subst {lzero} {lzero} {TV} {λ y → qrel D y Q} {Y} {tvw a} (sym h) hq
+qrel-left D (tvb l) Y Q h hq = subst {lzero} {lzero} {TV} {λ y → qrel D y Q} {Y} {tvb l} (sym h) hq
+qrel-left D tvu Y Q h hq = subst {lzero} {lzero} {TV} {λ y → qrel D y Q} {Y} {tvu} (sym h) hq
+qrel-left D (tvc k x) (tvc j y) (kqcon d c fs) h hq = (catw (fst h) (fst hq) , qrel-left D x y (q-tupv fs) (snd h) (snd hq))
+qrel-left D (tvc k x) (tvc j y) Q h hq = Empty-rec hq
+qrel-left D (tvc k x) Y Q h hq = Empty-rec h
+qrel-left D (tvpr a b) (tvpr c d) (kqcon dd cc (kqcons x (kqcons y kqnil))) h hq = (qrel-left D a c x (fst h) (fst hq) , qrel-left D b d y (snd h) (snd hq))
+qrel-left D (tvpr a b) (tvpr c d) Q h hq = Empty-rec hq
+qrel-left D (tvpr a b) Y Q h hq = Empty-rec h
+qrel-left D (tvclo i ρ) (tvclo j σ) (kqclos g cs) h hq =
+  ((catw (fst (fst hq)) (congw (λ u → wadd dcbase u) (symw (fst h))) , subst {lzero} {lzero} {Word} {λ u → q-cloq u ≡ true} {j} {i} (symw (fst h)) (snd (fst hq))) ,
+   ((λ k → qrel-left D (ρ k) (σ k) (q-nth (q-push cs kqnil) k) (snd h k) (fst (snd hq) k)) ,
+    (λ k hk → fr-bot (ρ k) (σ k) (snd h k) (snd (snd hq) k (subst {lzero} {lzero} {Word} {λ u → q-le (D u) k ≡ true} {i} {j} (fst h) hk)))))
+qrel-left D (tvclo i ρ) (tvclo j σ) Q h hq = Empty-rec hq
+qrel-left D (tvclo i ρ) Y Q h hq = Empty-rec h
+-- a one-argument main's environment
+q-top1 : (D : Word → Nat) (x : DV) (v : KQ) → qrel D (derase x) v → (k : Nat) → qrel D (denv (dext dvnone x) k) (q-nth (kqcons v kqnil) k)
+q-top1 D x v h zero = h
+q-top1 D x v h (suc k) = unit
+q-top2 : (x : DV) → (k : Nat) → q-le (suc zero) k ≡ true → denv (dext dvnone x) k ≡ tvbot
+q-top2 x zero h = Empty-rec (false≢true h)
+q-top2 x (suc k) h = λ t → tvbot
+-- the source (DC, its meaning dsev) to the first-order form handed to the back ends: at every fuel and
+-- argument, what the source computes the printed form computes, the rules r applied in between
+q-path : (r : FRule) (G : Word → DC) (T GT : Word → FC) → DGOK G T GT → (D : Word → Nat) (A : Word → Word) → QGOK (fr-tab (fst r) T) (fr-tab (fst r) GT) D A
+       → (n : Nat) (c : DC) (x : DV) (v : KQ) (m : Nat) → DTok T c → dgood T x → qtok D A (fr-bu (fst r) (dconv c)) (suc zero) ≡ true → qrel D (derase x) v
+       → qrel D (derase (dsev G n c (dext dvnone x))) (evq (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) (fr-addn n m) (fc-to-fq (suc zero) (fr-bu (fst r) (dconv c))) (kqcons v kqnil))
+q-path r G T GT go D A gq n c x v m tk gx hq hv =
+  qrel-left D (derase (dsev G n c (dext dvnone x))) (dtev (fr-tab (fst r) T) (fr-tab (fst r) GT) n (fr-bu (fst r) (dconv c)) (denv (dext dvnone x)))
+    (evq (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) (fr-addn n m) (fc-to-fq (suc zero) (fr-bu (fst r) (dconv c))) (kqcons v kqnil))
+    (fr-dc-path r G T GT go n c x tk gx)
+    (q-sound (fr-tab (fst r) T) (fr-tab (fst r) GT) D A gq n (fr-bu (fst r) (dconv c)) (suc zero) (denv (dext dvnone x)) (kqcons v kqnil) m hq (q-top1 D x v hv , q-top2 x))
+-- ---------------------------------------------------------------- the word route
+-- a word value refined: none, or the word
+qle-w : KQ → Word → Type
+qle-w kqbot w = Unit
+qle-w (kqw x) w = kqw x ≡ kqw w
+qle-w (kqi b) w = Empty
+qle-w (kqf b) w = Empty
+qle-w (kqcon d c fs) w = Empty
+qle-w (kqclos g env) w = Empty
+qle-w (kqlam b env) w = Empty
+qle-w (kqb l) w = Empty
+qle-w kqnil w = Empty
+qle-w (kqcons x r) w = Empty
+kqw-get : KQ → Word
+kqw-get (kqw w) = w
+kqw-get (kqi b) = #0
+kqw-get (kqf b) = #0
+kqw-get (kqcon d c fs) = #0
+kqw-get (kqclos g env) = #0
+kqw-get (kqlam b env) = #0
+kqw-get (kqb l) = #0
+kqw-get kqnil = #0
+kqw-get (kqcons x r) = #0
+kqw-get kqbot = #0
+-- the printed environment refines the mirror's through the variable map
+FEnv : (Nat → Nat) → Envw → KQ → Type
+FEnv m ρ e = (k : Nat) → qle-w (q-nth e (m k)) (ρ k)
+ww-ok : (f : Word → Word → Word) (A B : KQ) (a b : Word) → qle-w A a → qle-w B b → qle-w (q-ww f (kqcons A (kqcons B kqnil))) (f a b)
+ww-ok f (kqw x) (kqw y) a b ha hb = λ t → kqw (f (kqw-get (ha t)) (kqw-get (hb t)))
+ww-ok f (kqw x) kqbot a b ha hb = unit
+ww-ok f (kqw x) B a b ha hb = Empty-rec hb
+ww-ok f kqbot B a b ha hb = unit
+ww-ok f A B a b ha hb = Empty-rec ha
+qw-inj : (x a : Word) → kqw x ≡ kqw a → x ≡ a
+qw-inj x a p = λ t → kqw-get (p t)
+-- the order on words: a word is not below itself, and is below itself plus one more
+ltw-self : (x : Word) → ltw x x ≡ false
+ltw-self x = %welimP (λ v → ltw v v ≡ false) x (λ t → false) (λ n h → h)
+wlt-self : (x : Word) → wlt x x ≡ false
+wlt-self x = sym (ltw≡wlt x x) ∙ ltw-self x
+ltw-lt : (i n : Word) → ltw i (plusw i (%wsucc n)) ≡ true
+ltw-lt i n = %welimP (λ v → ltw v (plusw v (%wsucc n)) ≡ true) i (λ t → true) (λ i2 h → cong (λ u → ltw i2 u) (plusw-suc-l i2 n) ∙ h)
+wlt-lt : (i n : Word) → wlt i (plusw i (%wsucc n)) ≡ true
+wlt-lt i n = sym (ltw≡wlt i (plusw i (%wsucc n))) ∙ ltw-lt i n
+-- a loop's turn, its condition decided
+lstep-f : (b : Bool) (C accv : KQ) (cont : KQ → KQ) (acc : Word) → b ≡ false → qle-w accv acc → qle-w (q-lstep (q-if (kqw (dbw b)) C (kqcon #0 #1 (kqcons accv kqnil))) cont) acc
+lstep-f b C accv cont acc e h = subst {lzero} {lzero} {Bool} {λ c → qle-w (q-lstep (q-if (kqw (dbw c)) C (kqcon #0 #1 (kqcons accv kqnil))) cont) acc} {false} {b} (sym e) h
+lstep-t : (b : Bool) (FS B : KQ) (cont : KQ → KQ) → b ≡ true → q-lstep (q-if (kqw (dbw b)) (kqcon #0 #0 FS) B) cont ≡ cont FS
+lstep-t b FS B cont e = cong (λ c → q-lstep (q-if (kqw (dbw c)) (kqcon #0 #0 FS) B) cont) e
+-- lower-welim's loop body over a step
+lb : FQ → FQ
+lb st = fqif (fqprim #4 (fq2 (fqv (suc zero)) (fqv (suc (suc zero))))) (fqcon #0 #0 (fq3 (fqv (suc (suc zero))) (fqprim #0 (fq2 (fqv (suc zero)) (fql #1))) st)) (fqcon #0 #1 (fq1 (fqv zero)))
+-- the counting loop over any accumulator (fw-go and fw-go2 are it at words and at pairs)
+fgo : (X : Type) → (Word → X → X) → Word → Word → X → X
+fgo X st n = %welimP (λ v → Word → X → X) n (λ i acc → acc) (λ k h i acc → h (%wsucc i) (st i acc))
+lstep-g : (X : Type) (R : KQ → X → Type) (b : Bool) (C accv : KQ) (cont : KQ → KQ) (acc : X) → b ≡ false → R accv acc → R (q-lstep (q-if (kqw (dbw b)) C (kqcon #0 #1 (kqcons accv kqnil))) cont) acc
+lstep-g X R b C accv cont acc e h = subst {lzero} {lzero} {Bool} {λ c → R (q-lstep (q-if (kqw (dbw c)) C (kqcon #0 #1 (kqcons accv kqnil))) cont) acc} {false} {b} (sym e) h
+-- the loop from state (W, i, acc), n turns left (W = i + n): what the counting loop computes, whenever
+-- it ends (each turn one unit of fuel), for a relation R between values and accumulators that has
+-- none related to everything
+qrun-z : (X : Type) (R : KQ → X → Type) → ((x : X) → R kqbot x) → (G : Word → FQ) (ST : FQ) (e : KQ) (W : Word) (stF : Word → X → X) (i : Word) (acc : X) (accv : KQ) (N : Nat) → W ≡ plusw i #0 → R accv acc
+       → R (qe-lp (qeN G N) (kqcons (kqw W) (kqcons (kqw i) (kqcons accv kqnil))) (lb ST) e) (fgo X stF #0 i acc)
+qrun-z X R rb G ST e W stF i acc accv zero hW h = rb acc
+qrun-z X R rb G ST e W stF i acc accv (suc N) hW h =
+  lstep-g X R (wlt i W) (evT G (qeN G N) (fqcon #0 #0 (fq3 (fqv (suc (suc zero))) (fqprim #0 (fq2 (fqv (suc zero)) (fql #1))) ST)) (kqcons accv (kqcons (kqw i) (kqcons (kqw W) e)))) accv
+    (λ st2 → qe-lp (qeN G N) st2 (lb ST) e) acc (cong (λ u → wlt i u) hW ∙ wlt-self i) h
+qrun-s : (X : Type) (R : KQ → X → Type) → ((x : X) → R kqbot x) → (G : Word → FQ) (ST : FQ) (e : KQ) (W : Word) (stF : Word → X → X)
+       → ((N : Nat) (i : Word) (acc : X) (accv : KQ) → R accv acc → R (evq G N ST (kqcons accv (kqcons (kqw i) (kqcons (kqw W) e)))) (stF i acc))
+       → (n2 : Word) → ((i : Word) (acc : X) (accv : KQ) (N : Nat) → W ≡ plusw i n2 → R accv acc → R (qe-lp (qeN G N) (kqcons (kqw W) (kqcons (kqw i) (kqcons accv kqnil))) (lb ST) e) (fgo X stF n2 i acc))
+       → (i : Word) (acc : X) (accv : KQ) (N : Nat) → W ≡ plusw i (%wsucc n2) → R accv acc
+       → R (qe-lp (qeN G N) (kqcons (kqw W) (kqcons (kqw i) (kqcons accv kqnil))) (lb ST) e) (fgo X stF (%wsucc n2) i acc)
+qrun-s X R rb G ST e W stF sh n2 ih i acc accv zero hW h = rb (fgo X stF (%wsucc n2) i acc)
+qrun-s X R rb G ST e W stF sh n2 ih i acc accv (suc N) hW h =
+  subst {lzero} {lzero} {KQ} {λ v → R v (fgo X stF n2 (%wsucc i) (stF i acc))}
+    {qe-lp (qeN G N) (kqcons (kqw W) (kqcons (kqw (wadd i #1)) (kqcons (evq G N ST (kqcons accv (kqcons (kqw i) (kqcons (kqw W) e)))) kqnil))) (lb ST) e}
+    {q-lstep (q-if (kqw (dbw (wlt i W))) (kqcon #0 #0 (kqcons (kqw W) (kqcons (kqw (wadd i #1)) (kqcons (evq G N ST (kqcons accv (kqcons (kqw i) (kqcons (kqw W) e)))) kqnil)))) (kqcon #0 #1 (kqcons accv kqnil))) (λ st2 → qe-lp (qeN G N) st2 (lb ST) e)}
+    (sym (lstep-t (wlt i W) (kqcons (kqw W) (kqcons (kqw (wadd i #1)) (kqcons (evq G N ST (kqcons accv (kqcons (kqw i) (kqcons (kqw W) e)))) kqnil))) (kqcon #0 #1 (kqcons accv kqnil)) (λ st2 → qe-lp (qeN G N) st2 (lb ST) e)
+           (cong (λ u → wlt i u) hW ∙ wlt-lt i n2)))
+    (subst {lzero} {lzero} {Word} {λ u → R (qe-lp (qeN G N) (kqcons (kqw W) (kqcons (kqw u) (kqcons (evq G N ST (kqcons accv (kqcons (kqw i) (kqcons (kqw W) e)))) kqnil))) (lb ST) e) (fgo X stF n2 (%wsucc i) (stF i acc))}
+       {%wsucc i} {wadd i #1} (symw (wadd-one i))
+       (ih (%wsucc i) (stF i acc) (evq G N ST (kqcons accv (kqcons (kqw i) (kqcons (kqw W) e)))) N (catw hW (symw (plusw-suc-l i n2))) (sh N i acc accv h)))
+qrun : (X : Type) (R : KQ → X → Type) → ((x : X) → R kqbot x) → (G : Word → FQ) (ST : FQ) (e : KQ) (W : Word) (stF : Word → X → X)
+     → ((N : Nat) (i : Word) (acc : X) (accv : KQ) → R accv acc → R (evq G N ST (kqcons accv (kqcons (kqw i) (kqcons (kqw W) e)))) (stF i acc))
+     → (n : Word) (i : Word) (acc : X) (accv : KQ) (N : Nat) → W ≡ plusw i n → R accv acc
+     → R (qe-lp (qeN G N) (kqcons (kqw W) (kqcons (kqw i) (kqcons accv kqnil))) (lb ST) e) (fgo X stF n i acc)
+qrun X R rb G ST e W stF sh n =
+  %welimP (λ v → (i : Word) (acc : X) (accv : KQ) (N : Nat) → W ≡ plusw i v → R accv acc → R (qe-lp (qeN G N) (kqcons (kqw W) (kqcons (kqw i) (kqcons accv kqnil))) (lb ST) e) (fgo X stF v i acc)) n
+    (qrun-z X R rb G ST e W stF) (λ n2 h → qrun-s X R rb G ST e W stF sh n2 h)
+-- a loop whose bound has no value has none
+qrun-bot : (X : Type) (R : KQ → X → Type) → ((x : X) → R kqbot x) → (G : Word → FQ) (ST : FQ) (e Zv : KQ) (N : Nat) (x : X) → R (qe-lp (qeN G N) (kqcons kqbot (kqcons (kqw #0) (kqcons Zv kqnil))) (lb ST) e) x
+qrun-bot X R rb G ST e Zv zero x = rb x
+qrun-bot X R rb G ST e Zv (suc N) x = rb x
+-- the loop from its start (0 and the initial accumulator), its bound refined
+qrun0 : (X : Type) (R : KQ → X → Type) → ((x : X) → R kqbot x) → (G : Word → FQ) (ST : FQ) (e : KQ) (stF : Word → X → X)
+      → ((W : Word) (N : Nat) (i : Word) (acc : X) (accv : KQ) → R accv acc → R (evq G N ST (kqcons accv (kqcons (kqw i) (kqcons (kqw W) e)))) (stF i acc))
+      → (Wv Zv : KQ) (wn : Word) (z : X) (N : Nat) → qle-w Wv wn → R Zv z → R (qe-lp (qeN G N) (kqcons Wv (kqcons (kqw #0) (kqcons Zv kqnil))) (lb ST) e) (fgo X stF wn #0 z)
+qrun0 X R rb G ST e stF sh kqbot Zv wn z N hw hz = qrun-bot X R rb G ST e Zv N (fgo X stF wn #0 z)
+qrun0 X R rb G ST e stF sh (kqw x) Zv wn z N hw hz =
+  subst {lzero} {lzero} {Word} {λ u → R (qe-lp (qeN G N) (kqcons (kqw x) (kqcons (kqw #0) (kqcons Zv kqnil))) (lb ST) e) (fgo X stF u #0 z)} {x} {wn} (qw-inj x wn hw)
+    (qrun X R rb G ST e x stF (sh x) x #0 z Zv N (symw (plusw-zero-l x)) hz)
+qrun0 X R rb G ST e stF sh Wv Zv wn z N hw hz = Empty-rec hw
+-- pairs of words: a pair value refined component by component
+qle-p : KQ → P2W → Type
+qle-p kqbot q = Unit
+qle-p (kqcon d c (kqcons x (kqcons y kqnil))) (p2w a b) = qle-w x a × qle-w y b
+qle-p (kqcon d c fs) q = Empty
+qle-p (kqw w) q = Empty
+qle-p (kqi b) q = Empty
+qle-p (kqf b) q = Empty
+qle-p (kqclos g env) q = Empty
+qle-p (kqlam b env) q = Empty
+qle-p (kqb l) q = Empty
+qle-p kqnil q = Empty
+qle-p (kqcons x r) q = Empty
+proj0-le : (v : KQ) (q : P2W) → qle-p v q → qle-w (q-proj #0 v) (p2a q)
+proj0-le kqbot q h = unit
+proj0-le (kqcon d c (kqcons x (kqcons y kqnil))) (p2w a b) h = fst h
+proj0-le v q h = Empty-rec h
+proj1-le : (v : KQ) (q : P2W) → qle-p v q → qle-w (q-proj #1 v) (p2b q)
+proj1-le kqbot q h = unit
+proj1-le (kqcon d c (kqcons x (kqcons y kqnil))) (p2w a b) h = snd h
+proj1-le v q h = Empty-rec h
+pk-le : (sel : Bool) (v : KQ) (q : P2W) → qle-p v q → qle-w (q-proj (if sel then #1 else #0) v) (pk sel q)
+pk-le true v q h = proj1-le v q h
+pk-le false v q h = proj0-le v q h
+-- the step's environment: a let (q-m1); a loop step (q-m2 then q-sh 2: acc, i, the bound, then the
+-- surroundings); a pair loop's step (q-m3 then q-sh 4: the components, the pair, i, the bound, the rest)
+fenv-let : (m : Nat → Nat) (ρ : Envw) (e A : KQ) (x : Word) → FEnv m ρ e → qle-w A x → (k : Nat) → qle-w (q-nth (kqcons A e) (q-m1 m k)) (extw ρ x k)
+fenv-let m ρ e A x h hA zero = hA
+fenv-let m ρ e A x h hA (suc j) = h j
+fenv-step : (m : Nat → Nat) (ρ : Envw) (e : KQ) (x i acc : Word) (accv : KQ) → FEnv m ρ e → qle-w accv acc → (k : Nat) → qle-w (q-nth (kqcons accv (kqcons (kqw i) (kqcons (kqw x) e))) (q-o (q-sh (suc (suc zero))) (q-m2 m) k)) (extw (extw ρ i) acc k)
+fenv-step m ρ e x i acc accv h ha zero = ha
+fenv-step m ρ e x i acc accv h ha (suc zero) = λ t → kqw i
+fenv-step m ρ e x i acc accv h ha (suc (suc j)) = h j
+fenv-step2 : (m : Nat → Nat) (ρ : Envw) (e : KQ) (x i : Word) (q : P2W) (pv : KQ) → FEnv m ρ e → qle-p pv q
+           → (k : Nat) → qle-w (q-nth (kqcons (q-proj #1 pv) (kqcons (q-proj #0 pv) (kqcons pv (kqcons (kqw i) (kqcons (kqw x) e))))) (q-o (q-sh (suc (suc (suc (suc zero))))) (q-m3 m) k)) (ext3 ρ i q k)
+fenv-step2 m ρ e x i q pv h hp zero = proj1-le pv q hp
+fenv-step2 m ρ e x i q pv h hp (suc zero) = proj0-le pv q hp
+fenv-step2 m ρ e x i q pv h hp (suc (suc zero)) = λ t → kqw i
+fenv-step2 m ρ e x i q pv h hp (suc (suc (suc j))) = h j
+prim-w : (b : Bool) (A B : KQ) (x y : Word) → qle-w A x → qle-w B y → qle-w (q-prim (if b then #0 else #1) (kqcons A (kqcons B kqnil))) (if b then wadd x y else wsub x y)
+prim-w true A B x y ha hb = ww-ok wadd A B x y ha hb
+prim-w false A B x y ha hb = ww-ok wsub A B x y ha hb
+-- the theorem: in every environment refining the mirror's through the variable map, at every fuel,
+-- the printed form computes the mirror's word, whenever it ends
+fw-sound : (G : Word → FQ) (t : FW) (m : Nat → Nat) (ρ : Envw) (e : KQ) (N : Nat) → FEnv m ρ e → qle-w (evq G N (fw-q t m) e) (fo-ev t ρ)
+fw-sound G (fwl w) m ρ e N h = λ t → kqw w
+fw-sound G (fwv n) m ρ e N h = h n
+fw-sound G (fwp p a b) m ρ e N h = prim-w (weq p #0) (evq G N (fw-q a m) e) (evq G N (fw-q b m) e) (fo-ev a ρ) (fo-ev b ρ) (fw-sound G a m ρ e N h) (fw-sound G b m ρ e N h)
+fw-sound G (fwlet a b) m ρ e N h =
+  fw-sound G b (q-m1 m) (extw ρ (fo-ev a ρ)) (kqcons (evq G N (fw-q a m) e) e) N (fenv-let m ρ e (evq G N (fw-q a m) e) (fo-ev a ρ) h (fw-sound G a m ρ e N h))
+fw-sound G (fwloop w z s) m ρ e N h =
+  qrun0 Word qle-w (λ x → unit) G (fw-q s (q-o (q-sh (suc (suc zero))) (q-m2 m))) e (λ i acc → fo-ev s (extw (extw ρ i) acc))
+    (λ x N2 i acc accv ha → fw-sound G s (q-o (q-sh (suc (suc zero))) (q-m2 m)) (extw (extw ρ i) acc) (kqcons accv (kqcons (kqw i) (kqcons (kqw x) e))) N2 (fenv-step m ρ e x i acc accv h ha))
+    (evq G N (fw-q w m) e) (evq G N (fw-q z m) e) (fo-ev w ρ) (fo-ev z ρ) N (fw-sound G w m ρ e N h) (fw-sound G z m ρ e N h)
+fw-sound G (fwloop2 w z1 z2 s1 s2 sel) m ρ e N h =
+  pk-le sel (qe-lp (qeN G N) (kqcons (evq G N (fw-q w m) e) (kqcons (kqw #0) (kqcons (kqcon #0 #0 (kqcons (evq G N (fw-q z1 m) e) (kqcons (evq G N (fw-q z2 m) e) kqnil))) kqnil)))
+                (lb (fqlet (fqproj #0 #0 #0 (fqv zero)) (fqlet (fqproj #0 #0 #1 (fqv (suc zero))) (fqcon #0 #0 (fq2 (fw-q s1 (q-o (q-sh (suc (suc (suc (suc zero))))) (q-m3 m))) (fw-q s2 (q-o (q-sh (suc (suc (suc (suc zero))))) (q-m3 m)))))))) e)
+    (fw-go2 (λ i q → p2w (fo-ev s1 (ext3 ρ i q)) (fo-ev s2 (ext3 ρ i q))) (fo-ev w ρ) #0 (p2w (fo-ev z1 ρ) (fo-ev z2 ρ)))
+    (qrun0 P2W qle-p (λ q → unit) G (fqlet (fqproj #0 #0 #0 (fqv zero)) (fqlet (fqproj #0 #0 #1 (fqv (suc zero))) (fqcon #0 #0 (fq2 (fw-q s1 (q-o (q-sh (suc (suc (suc (suc zero))))) (q-m3 m))) (fw-q s2 (q-o (q-sh (suc (suc (suc (suc zero))))) (q-m3 m))))))) e
+       (λ i q → p2w (fo-ev s1 (ext3 ρ i q)) (fo-ev s2 (ext3 ρ i q)))
+       (λ x N2 i q pv hp → (fw-sound G s1 (q-o (q-sh (suc (suc (suc (suc zero))))) (q-m3 m)) (ext3 ρ i q) (kqcons (q-proj #1 pv) (kqcons (q-proj #0 pv) (kqcons pv (kqcons (kqw i) (kqcons (kqw x) e))))) N2 (fenv-step2 m ρ e x i q pv h hp) ,
+                            fw-sound G s2 (q-o (q-sh (suc (suc (suc (suc zero))))) (q-m3 m)) (ext3 ρ i q) (kqcons (q-proj #1 pv) (kqcons (q-proj #0 pv) (kqcons pv (kqcons (kqw i) (kqcons (kqw x) e))))) N2 (fenv-step2 m ρ e x i q pv h hp)))
+       (evq G N (fw-q w m) e) (kqcon #0 #0 (kqcons (evq G N (fw-q z1 m) e) (kqcons (evq G N (fw-q z2 m) e) kqnil))) (fo-ev w ρ) (p2w (fo-ev z1 ρ) (fo-ev z2 ρ)) N
+       (fw-sound G w m ρ e N h) (fw-sound G z1 m ρ e N h , fw-sound G z2 m ρ e N h))
+-- ---------------------------------------------------------------- a main of any arity
+-- q-path for a main of k parameters: QA lists its arguments, the last innermost (as lib/fo.cub's
+-- fcall pushes them), each a source value with the first-order value it is refined by
+data QA = qa0 | qa1 (x : DV) (v : KQ) (r : QA)
+qa-ρ : QA → Nat → DV
+qa-ρ qa0 = dvnone
+qa-ρ (qa1 x v r) = dext (qa-ρ r) x
+qa-e : QA → KQ
+qa-e qa0 = kqnil
+qa-e (qa1 x v r) = kqcons v (qa-e r)
+qa-n : QA → Nat
+qa-n qa0 = zero
+qa-n (qa1 x v r) = suc (qa-n r)
+qa-ok : (Word → Nat) → (Word → FC) → QA → Type
+qa-ok D T qa0 = Unit
+qa-ok D T (qa1 x v r) = (qrel D (derase x) v × dgood T x) × qa-ok D T r
+qa-ge : (D : Word → Nat) (T : Word → FC) (a : QA) → qa-ok D T a → DGEnv T (qa-ρ a)
+qa-ge D T qa0 h = λ k → unit
+qa-ge D T (qa1 x v r) h = dge-ext T (qa-ρ r) x (qa-ge D T r (snd h)) (snd (fst h))
+qa-rel : (D : Word → Nat) (T : Word → FC) (a : QA) → qa-ok D T a → (k : Nat) → qrel D (denv (qa-ρ a) k) (q-nth (qa-e a) k)
+qa-rel D T qa0 h k = unit
+qa-rel D T (qa1 x v r) h zero = fst (fst h)
+qa-rel D T (qa1 x v r) h (suc k) = qa-rel D T r (snd h) k
+qa-bot : (a : QA) (k : Nat) → q-le (qa-n a) k ≡ true → denv (qa-ρ a) k ≡ tvbot
+qa-bot qa0 k h = λ t → tvbot
+qa-bot (qa1 x v r) zero h = Empty-rec (false≢true h)
+qa-bot (qa1 x v r) (suc k) h = qa-bot r k h
+qa-env : (D : Word → Nat) (T : Word → FC) (a : QA) → qa-ok D T a → QEnv D (qa-n a) (denv (qa-ρ a)) (qa-e a)
+qa-env D T a h = (qa-rel D T a h , qa-bot a)
+-- the source (DC, its meaning dsev) to the first-order form handed to the back ends, a main of
+-- qa-n a parameters: at every fuel and arguments, what the source computes the printed form computes
+q-path-n : (r : FRule) (G : Word → DC) (T GT : Word → FC) → DGOK G T GT → (D : Word → Nat) (A : Word → Word) → QGOK (fr-tab (fst r) T) (fr-tab (fst r) GT) D A
+         → (n : Nat) (c : DC) (a : QA) (m : Nat) → DTok T c → qa-ok D T a → qtok D A (fr-bu (fst r) (dconv c)) (qa-n a) ≡ true
+         → qrel D (derase (dsev G n c (qa-ρ a))) (evq (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-e a))
+q-path-n r G T GT go D A gq n c a m tk ha hq =
+  qrel-left D (derase (dsev G n c (qa-ρ a))) (dtev (fr-tab (fst r) T) (fr-tab (fst r) GT) n (fr-bu (fst r) (dconv c)) (denv (qa-ρ a)))
+    (evq (q-ft (fr-tab (fst r) T) (fr-tab (fst r) GT) D A) (fr-addn n m) (fc-to-fq (qa-n a) (fr-bu (fst r) (dconv c))) (qa-e a))
+    (fr-lpath (derase (dsev G n c (qa-ρ a))) (dtev T GT n (dconv c) (denv (qa-ρ a))) (dtev (fr-tab (fst r) T) (fr-tab (fst r) GT) n (fr-bu (fst r) (dconv c)) (denv (qa-ρ a)))
+       (snd (dc-sound G T GT go n c (qa-ρ a) tk (qa-ge D T a ha)))
+       (fr-bu-ok r T GT n (dconv c) (denv (qa-ρ a)) (denv (qa-ρ a)) (fr-erefl (denv (qa-ρ a)))))
+    (q-sound (fr-tab (fst r) T) (fr-tab (fst r) GT) D A gq n (fr-bu (fst r) (dconv c)) (qa-n a) (denv (qa-ρ a)) (qa-e a) m hq (qa-env D T a ha))
+-- a table given by cases (a key against the listed ones), each case meeting P: every entry meets P
+if-all : (X : Type) (P : X → Type) (b : Bool) (x y : X) → P x → P y → P (if b then x else y)
+if-all X P true x y px py = px
+if-all X P false x y px py = py
+-- ---------------------------------------------------------------- the word route, end to end
+-- the source code c (WC, its meaning wc-ev) to the first-order form handed to the back ends: in every
+-- environment refined through the identity, the printed form computes what c computes, whenever
+-- it ends (lib/foproof.cub's spec-path, then fw-sound)
+fw-path : (r : VRule) (c : WC) (G : Word → FQ) (ρ : Envw) (e : KQ) (N : Nat) → FEnv q-id ρ e → qle-w (evq G N (fw-to-fq (spec-w r c)) e) (wc-ev c ρ)
+fw-path r c G ρ e N h = subst {lzero} {lzero} {Word} {λ u → qle-w (evq G N (fw-to-fq (spec-w r c)) e) u} {fo-ev (spec-w r c) ρ} {wc-ev c ρ} (spec-path r c ρ) (fw-sound G (spec-w r c) q-id ρ e N h)
+-- a one-parameter main: its argument x, refined by the word x
+fenv-x1 : (x : Word) (k : Nat) → qle-w (q-nth (kqcons (kqw x) kqnil) (q-id k)) (envx x k)
+fenv-x1 x zero = λ t → kqw x
+fenv-x1 x (suc k) = unit
+fenv-x : (x : Word) → FEnv q-id (envx x) (kqcons (kqw x) kqnil)
+fenv-x x = fenv-x1 x
