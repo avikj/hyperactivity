@@ -3367,6 +3367,9 @@ static void spec_key_term(FILE *o, Node *t) {
     if (di >= 0) { fprintf(o, "@d%s", dkey_of(di)); return; }
     long g = global_lookup(t->s);
     if (g >= 0 && G[g].file == cur_file) spec_cur = true;
+    /* the binder of a non-dependent → or × (the elaborator's fresh %_N, never referenced) is keyed
+     * as %_: two writings of one type (a program's type, as program-rep and lower take it) key alike */
+    if (t->s[0] == '%' && t->s[1] == '_' && t->s[2] >= '0' && t->s[2] <= '9') { fputs("%_", o); return; }
     fputs(t->s, o);
 }
 /* an unchecked definition (a library printer, the specializer) has no key: the libraries loaded
