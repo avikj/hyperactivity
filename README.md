@@ -720,7 +720,7 @@ the keys registered, fired and hit on stderr, and the entries left at the end. T
 bisimulations, and `(x ≡ y) ≃ (x ≈ y)`) checks in 60k steps, `iso1` (a corecursive square) in 13k.
 
 Brunerie's number, by an untyped port of Ljungström's `brunerie'` from agda/cubical
-(`experiments/brunerie/`, about 1 s in Agda), reads `negsuc (suc zero)`, that is -2, in 1.26M
+(`experiments/brunerie/`), reads `negsuc (suc zero)`, that is -2, in 1.26M
 steps: 0.4 s for the reading, 1.1 s to load the cached library (one thread; the library
 elaborated, compiled and its checks skipped); `make test` checks it with one and four workers. The port has no
 placeholders: isSetℤ is Hedberg's theorem in the library, and the 4-truncation case of the Hopf
@@ -729,3 +729,17 @@ eliminates the circle and S² into truncations, the Hopf fibration and `Code` in
 and transports through the proofs that the types of sets and of groupoids have the next h-level.
 Before compositions of types were a type former and the glue base was held unbuilt it ran out of
 7 GB of memory.
+
+Against Agda on the same machine (2026-11-09, 2 shared cores; PLAN item 10 has the full table,
+`experiments/agda/measure.sh` reproduces it). Both compute the same formulation, `brunerie'`, and
+read -2. Agda 2.8.0 (the release binary) with agda/cubical at `c37782bb`: from no interfaces,
+checking BrunerieExperiments and its `brunerie'≡-2 = refl` takes 118–120 s wall, 116 s CPU, 870 MB
+peak; with interfaces present, a module proving `brunerie' ≡ -2` by refl takes 4.9–5.1 s and 418 MB,
+of which the refl is 0.30–0.33 s by Agda's profiler and the rest is loading interfaces. This machine
+at `d72a42f3`, uncached at `CUBICAL_WORKERS=0`: the untyped port end to end 5.4 s CPU (7.4 s wall,
+median of 3), 139 MB, 443,066 steps for the number; the typed port 8.5 s CPU (11.6 s wall), 171 MB,
+999,755 steps; with the library cached and the number read afresh, 0.34–0.46 s CPU and 45 MB in all.
+At 1 and 2 workers both ports take more CPU and wall time, not less. The two libraries differ
+(agda/cubical's 182 general modules against this machine's prelude and std), so the end-to-end
+figures are the cost of reaching the number on each system; the number's own computation is a few
+hundred milliseconds on both.

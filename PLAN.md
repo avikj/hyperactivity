@@ -1135,7 +1135,7 @@ for recursion on a fording family (`vmap`; 18.12); the goal rewritten by the ind
 unification at splits with absurd cases (2026-11-06); (5) DONE: item 30's retraction (`#retract`) and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
 `Z2` reading with its laws, `lib/intproof.cub`, `lib/intlin.cub`); (7) DONE: the memory interface in `W` (`w-load`/`w-store`/`w-cas`/`w-fence`, acquire /
 release / acquire-release / sequentially consistent, on addresses from `ptr-of`;
-`tests/world.cub`); (8) item 10's same-machine Agda comparison; (9) DONE (`7a2c96c4`, `62c669fc`, `13ae6b9f`, `54be3050`): Line B's leftovers — `lib/emitx86.cub` (18.7's
+`tests/world.cub`); (8) DONE 2026-11-09: item 10's same-machine Agda comparison (measured, in item 10); (9) DONE (`7a2c96c4`, `62c669fc`, `13ae6b9f`, `54be3050`): Line B's leftovers — `lib/emitx86.cub` (18.7's
 encoder for the word-only fragment, run from executable memory; `X86=1 run.py`), 18.5 step 7's
 statements read by computation per family (item 15: lowering as transport is the open work),
 `fthunk` in the printers, parameterized data types in the C++ image (templates, read back). A trap for test writers: `#same f #1 = #8` parses `#1 = #8` as a
@@ -1231,10 +1231,66 @@ port (A10b) is the checker at scale and gates E28.
    check, prim, guarded, cert, `--serve` and error suites and the typed port run identically so).
 10. Measured 2026-11-06 on a 2-core container (`CUBICAL_NOCACHE=1`, end to end): 2.6 s at 0
     workers, 3.6 s at 1, 2 and 4 (no gain on two cores; the number's own computation is about
-    0.3 s of it, the rest library checking); 619,852 steps, −2 at every count. Agda is not
-    installed there (no package installs in that container), so the same-machine comparison
-    is still open. Brunerie's original number at 1–16 workers, and Agda measured on the same machine (doable;
-    it is a measurement, on the builder's queue). Demonstration. **10b. DONE (`546bdb8`):**
+    0.3 s of it, the rest library checking); 619,852 steps, −2 at every count. Brunerie's
+    original number at 1–16 workers is open. Demonstration.
+    **Same-machine comparison with Agda: measured 2026-11-09** (`experiments/agda/measure.sh`
+    reproduces it: `setup`, `agda`, `machine`; logs under `/tmp/agda/logs`). Machine: 2 cores
+    (Intel Xeon @ 2.10 GHz), 8 GB, shared with other agents (load average 1.4–4.4 during the
+    runs, so wall times vary by up to 2×; CPU time, user+system over all threads, is the steadier
+    figure). Peak RSS is VmHWM and CPU time utime+stime, both polled from `/proc` every 50 ms;
+    every run went through `heavy.sh` (`--big` for Agda). Neither the 3 h nor the 7 GB cap was
+    approached.
+    *What each side computes.* The same formulation on both: Ljungström's `brunerie'`,
+    `g10 (g9 (g8 λ i j → f7' (η₃ (push (loop i) (loop j)))))`, which starts from π₃(S³) via η₃
+    and is not the original `brunerie` (the π₃(S²) pipeline f3…g10, marked "don't run me" in the
+    library; not run on either side). Agda checks agda/cubical's own definition and its
+    `brunerie'≡-2 = refl`; this machine runs the untyped port (`experiments/brunerie/brunerie.cub`)
+    and the typed port (`typed.cub`). Both read −2 (Agda: refl accepted; machine:
+    `negsuc (suc zero)`). The libraries differ: from nothing Agda checks 202 modules (BrunerieExperiments, the 182
+    agda/cubical modules it depends on, 19 builtins), this machine its own `prelude`/`code`/`check`/`std`.
+    *Versions.* Agda 2.8.0, the prebuilt `Agda-v2.8.0-linux.tar.xz` from the GitHub release
+    (static, GHC 9.8.2, `optimise-heavily`; sha256 `824081b8…2632faf`), default RTS options;
+    v2.8.0 is the `AGDA_BRANCH` of agda/cubical's CI at the commit used, `c37782bb` (2026-10-08,
+    library `cubical-0.9`; flags from its `.agda-lib`). This machine at `d72a42f3`,
+    `build/cubical` by `make build/cubical` (gcc -O2).
+    *Agda* (`AGDA_DIR` with `libraries` and `defaults` naming `cubical-0.9`):
+    | run | wall | CPU | peak RSS |
+    |---|---|---|---|
+    | `agda BrunerieExperiments.agda`, no interfaces (2 runs) | 120.3 / 118.0 s | 116.3 / 116.7 s | 870 / 868 MB |
+    | the same in two parts: its 20 imports alone | 124.2 s | 122.8 s | 863 MB |
+    | then BrunerieExperiments on their interfaces | 5.3 s | 5.2 s | 408 MB |
+    | interfaces present: a module importing it (load only, 3 runs) | 4.45–4.76 s | 4.28–4.62 s | 395 MB |
+    | interfaces present: `again : brunerie' ≡ -2; again = refl` (3 runs) | 4.85–5.13 s | 4.71–5.02 s | 418–419 MB |
+    Agda's profiler (`--profile=definitions`): `brunerie'≡-2` takes 296 ms of the module's 5,066 ms;
+    `again` 328 ms of 4,647 ms in the refl module, the other 4,319 ms loading interfaces.
+    *This machine*, `CUBICAL_NOCACHE=1 CUBICAL_WORKERS=w ./build/cubical lib/prelude.cub lib/code.cub
+    lib/check.cub lib/std.cub experiments/brunerie/brunerie.cub experiments/brunerie/run-brunerie.cub`,
+    and for the typed port `… experiments/brunerie/typed.cub experiments/brunerie/run-typed.cub`
+    (the Makefile's lines), 3 runs each, median (range):
+    | run | w | wall | CPU | peak RSS | steps for the number | checks |
+    |---|---|---|---|---|---|---|
+    | untyped, end to end | 0 | 7.4 s (6.7–13.2) | 5.4 s (4.7–5.7) | 137–139 MB | 443,066 | 175, 0 failed |
+    | | 1 | 10.5 s (9.8–11.5) | 5.6 s (5.4–6.5) | 166–172 MB | 473,691 | 175, 0 failed |
+    | | 2 | 9.4 s (8.6–12.9) | 6.6 s (5.9–6.7) | 172–180 MB | 473,691–473,793 | 175, 0 failed |
+    | typed, end to end | 0 | 11.6 s (9.2–18.4) | 8.5 s (8.0–8.6) | 171 MB | 999,755 | 242, 0 failed |
+    | | 1 | 16.5 s (14.3–19.0) | 9.5 s (9.4–10.1) | 229–231 MB | 1,068,392–1,068,398 | 242, 0 failed |
+    | | 2 | 16.8 s (15.3–22.4) | 11.0 s (10.9–12.1) | 235–249 MB | 1,068,398 | 242, 0 failed |
+    | untyped, library from the module cache and store, number read afresh | 0 | 0.54–1.22 s | 0.34–0.46 s | 43–45 MB | 443,066 | |
+    | | 1 | 0.98–1.29 s | 0.35–0.39 s | 41–46 MB | 473,691 | |
+    | | 2 | 0.94–1.55 s | 0.41–0.50 s | 44–47 MB | 473,691 | |
+    | the cached library alone (no driver) | 0 | 0.37–0.43 s | 0.16–0.26 s | 38 MB | | |
+    Workers bring no gain on two shared cores: median CPU time rises from 0 to 1 to 2 workers
+    (5.4, 5.6, 6.6 s untyped; 8.5, 9.5, 11.0 s typed), and median wall time at 1 and 2 is above 0's.
+    *Reading the comparison.* End to end from nothing: Agda 116 s CPU / 870 MB, this machine
+    5.4 s / 139 MB untyped and 8.5 s / 171 MB typed — about 21× and 14× less CPU, 6× and 5×
+    less memory, though over different libraries (agda/cubical's general modules against this
+    machine's smaller prelude and std), so this is the cost of getting to the number on each
+    system, not a like-for-like checking benchmark. With the library already processed:
+    Agda 4.7–5.0 s / 418 MB, of which loading interfaces is about 4.3 s and the number 0.30–0.33 s;
+    this machine 0.34–0.46 s / 45 MB in all, of which the cached library is 0.16–0.26 s and the
+    number about 0.1–0.3 s (the difference of the two rows, at the 50 ms resolution of the polling).
+    The number's own computation is the same order on both (a few hundred ms); the gap is in
+    loading and checking, where A9 (load time) applies. **10b. DONE (`546bdb8`):**
     `experiments/brunerie/typed.cub`, a signature on every definition, 229 checks; −2 in
     3.16M steps (untyped 1.26M; std's path algebra and the generic set-eliminators are the
     difference). With 18.17 landed (`c186b81`) no primitive is left: `rec2/3/4` and `surfc` are checked
@@ -1525,8 +1581,9 @@ later by translation validation against Sail instruction-set models.
 Brunerie simplified: 1.26M steps, −2; g8 1.136M; 6,706 unkeyed transports; 291 hits;
 substitution+erasure 53%; library load 1.0 s cached, 1.4 s uncached (one thread); compute
 about 0.3 s; end to end 3.1 s (one worker) / 2.7 s (one thread) on the builder's box; memo
-hits 248 on one thread, 9 with workers; Agda's figure for the same construction is about 1 s on other
-hardware and is not comparable until measured on the same machine. Nested-loop transport
+hits 248 on one thread, 9 with workers; Agda on the same machine (item 10, 2026-11-09, Agda 2.8.0): the
+same construction's refl check 0.30–0.33 s by Agda's profiler, after 4.3 s of interface loading; from
+nothing 116 s CPU / 870 MB against this machine's 5.4 s / 139 MB (untyped port). Nested-loop transport
 linear: 4.2k/9.1k/19.0k/78.4k (left), 5.1k/12.0k/27.0k/146k (right) at 4/8/16/64 loops.
 `fibw 90` by word elimination over a pair reads in 2,416 steps on the net (words are exact:
 `fibw 1000` reads its 209 digits); specialized under an unknown argument it is a `for` loop in
