@@ -39,8 +39,18 @@ def recipe():
 
 # the machine-wide memory gate (two slots; run.py lines run two programs at once, so they take both)
 GATE = os.environ.get('HEAVY_GATE', '/home/claude/avikj/heavy.sh')
+# Only the heavy lines go through it: a small line queued behind a long run would wait for nothing.
+# Heavy: the proof files (foproof*), Brunerie, run.py, and any line recorded above 500 MB before.
+HEAVY = re.compile(r'foproof|brunerie|run\.py|typed\.cub')
+def recorded_heavy(cmd):
+    p = os.path.join(ROOT, 'build', 'mtest.rss'); head = cmd.split(chr(10))[0][:200]
+    if not os.path.exists(p): return False
+    for l in open(p):
+        mb, _, c = l.rstrip('\n').partition('\t')
+        if c == head and mb.lstrip('-').isdigit() and int(mb) > 500: return True
+    return False
 def gate(cmd):
-    if not os.path.exists(GATE) or 'cubical' not in cmd and 'run.py' not in cmd: return []
+    if not os.path.exists(GATE) or not (HEAVY.search(cmd) or recorded_heavy(cmd)): return []
     return [GATE, '--big'] if 'run.py' in cmd else [GATE]
 
 _fh = {}
