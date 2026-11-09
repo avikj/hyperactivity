@@ -127,9 +127,9 @@ emit d t =
     fproj dd c k x → cat4 (emit d x) s-arrow (dec k) s-rb
     fcall g args → cat4 s-f (dec g) s-open (lapp (args-c d args) s-close)
     fprim p args → prim-c d p args
-    flet a b → cat7 s-bsx s-vstar (var (%wsucc d) #0) s-assign (emit d a) s-semi (lapp (emit (%wsucc d) b) s-bsend)
+    flet ty a b → cat7 s-bsx s-vstar (var (%wsucc d) #0) s-assign (emit d a) s-semi (lapp (emit (%wsucc d) b) s-bsend)
     fif c a b → cat6 s-if (emit d c) s-ifm (emit d a) s-ifs (lapp (emit d b) s-ifend)
-    floop init body → loop-c d init body
+    floop tys init body → loop-c d init body
     fclos g env → cat7 s-clo (dec g) s-comma (dec (lst-len env)) (args-rest d env) s-close lnil
     fapply f args → apply-c d (emit d f) args
     fassume fact b → cat5 s-assume (fact-c d fact) s-asmend (emit d b) s-bsend2
@@ -252,12 +252,12 @@ dispatch-cases defs =
   case defs of
     lnil → lnil
     lcons d r →
-      (if %weq (fst (snd d)) #0 then dispatch-cases r
-       else lapp (cat6 s-casef (dec (fst d)) s-retf (dec (fst d)) s-open (lapp (caps-c (%wsub (fst (snd d)) #1) #0) (lapp s-aclose (lcons #10 lnil)))) (dispatch-cases r))
+      (if %weq (def-n d) #0 then dispatch-cases r
+       else lapp (cat6 s-casef (dec (fst d)) s-retf (dec (fst d)) s-open (lapp (caps-c (%wsub (def-n d) #1) #0) (lapp s-aclose (lcons #10 lnil)))) (dispatch-cases r))
 
 caps-c n i = if %weq i n then lnil else cat4 s-ff (dec i) s-rb (lapp s-comma (caps-c n (%wsucc i)))
-protos defs = case defs of lnil → lnil; lcons d r → lapp (proto-c (fst d) (fst (snd d))) (protos r)
-defs-c defs = case defs of lnil → lnil; lcons d r → lapp (emit-def (fst d) (fst (snd d)) (snd (snd d))) (defs-c r)
+protos defs = case defs of lnil → lnil; lcons d r → lapp (proto-c (fst d) (def-n d)) (protos r)
+defs-c defs = case defs of lnil → lnil; lcons d r → lapp (emit-def (fst d) (def-n d) (snd (snd d))) (defs-c r)
 -- ---------------------------------------------------------------- readings
 -- the bytes of mkw(7)
 #same emit #0 (fprim P-i64lt (lcons (fi64 #3) (lcons (fi64 #4) lnil))) = (lcons #109 (lcons #107 (lcons #119 (lcons #40 (lcons #110 (lcons #49 (lcons #56 (lcons #40 (lcons #109 (lcons #107 (lcons #119 (lcons #40 (lcons #51 (lcons #41 (lcons #45 (lcons #62 (lcons #110 (lcons #44 (lcons #32 (lcons #109 (lcons #107 (lcons #119 (lcons #40 (lcons #52 (lcons #41 (lcons #45 (lcons #62 (lcons #110 (lcons #41 (lcons #41 lnil))))))))))))))))))))))))))))))

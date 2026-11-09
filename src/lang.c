@@ -1071,7 +1071,7 @@ static Node *to_code(Node *t) {
     if (!strcmp(h, "%wsucc")) return capp1("cwsucc", to_code(t->it[1]));
     { static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub" };
       for (int q = 0; q < 5; q++) if (!strcmp(h, WO[q])) return capp3("cwop", word(q), to_code(t->it[1]), to_code(t->it[2])); }
-    if (!strcmp(h, "%welimP") && t->n == 5) return capp3("cwelim", to_code(t->it[2]), to_code(t->it[3]), to_code(t->it[4]));
+    if (!strcmp(h, "%welimP") && t->n == 5) return capp4("cwelim", to_code(t->it[2]), to_code(t->it[3]), to_code(t->it[4]), capp1("some", to_code(t->it[1])));
     /* a primitive operation (B12): (cprim k args), k = class·256 + sub as lib/code.cub's prim-apply reads it */
     {
         static const char *PO1[] = { "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
@@ -3104,7 +3104,7 @@ static void pcode(FILE *o, Port p) {
         if (c->n == 1) { fputs(F[f].s, o); return; }
         fprintf(o, "(%s", F[f].s);
         if (!strcmp(h, "cann")) { fputc(' ', o); pcode(o, c->port[2]); fputc(' ', o); pcode(o, c->port[1]); }
-        else for (int k = 1; k < c->n; k++) { fputc(' ', o); pcode(o, c->port[k]); }
+        else for (int k = 1; k < (strcmp(h, "cwelim") ? c->n : 4); k++) { fputc(' ', o); pcode(o, c->port[k]); }   /* (cwelim's motive is an Opt, not printed) */
         fputc(')', o);
     }
 }
@@ -3370,6 +3370,9 @@ static void spec_key_term(FILE *o, Node *t) {
     if (di >= 0) { fprintf(o, "@d%s", dkey_of(di)); return; }
     long g = global_lookup(t->s);
     if (g >= 0 && G[g].file == cur_file) spec_cur = true;
+    /* the binder of a non-dependent → or × (the elaborator's fresh %_N, never referenced) is keyed
+     * as %_: two writings of one type (a program's type, as program-rep and lower take it) key alike */
+    if (t->s[0] == '%' && t->s[1] == '_' && t->s[2] >= '0' && t->s[2] <= '9') { fputs("%_", o); return; }
     fputs(t->s, o);
 }
 /* an unchecked definition (a library printer, the specializer) has no key: the libraries loaded

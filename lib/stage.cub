@@ -72,7 +72,7 @@ code-mentions k c =
     cwsucc a → code-mentions k a
     cwop p a b → orb (code-mentions k a) (code-mentions k b)
     cprim p as → lany (code-mentions k) as
-    cwelim w z s → orb (code-mentions k w) (orb (code-mentions k z) (code-mentions k s))
+    cwelim w z s mo → orb (code-mentions k w) (orb (code-mentions k z) (orb (code-mentions k s) (case mo of some P → code-mentions k P; none → false)))
     ccomp A u a → orb (code-mentions k A) (orb (code-mentions k u) (code-mentions k a))
     chcomp u a → orb (code-mentions k u) (code-mentions k a)
     cforce t → code-mentions k t
@@ -138,7 +138,7 @@ fo-code c =
     cwsucc a → fo-code a
     cwop p a b → fo-seq (fo-code a) b
     cprim p as → fo-list as
-    cwelim w z s → fo-seq (fo-seq (fo-code w) z) s
+    cwelim w z s mo → fo-seq (fo-seq (fo-code w) z) s
     cforce t → fo-code t
     cthunk t → fo-code t
     cproj d f x → fo-code x

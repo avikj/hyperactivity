@@ -17,49 +17,146 @@ rec-fields ks i = case ks of lnil → lnil; lcons k r → if %weq (fst k) #1 the
 lst-count l = case l of lnil → #0; lcons x xs → %wsucc (lst-count xs)
 -- ---------------------------------------------------------------- lowering
 -- Bool is a word in the first-order form (true 1, false 0, as the native comparisons answer):
--- its constructors are literals and a case on it is an if
+-- its constructors are literals and a case on it is an if (each branch at its type: the motive at
+-- the constructor, or the case's own type)
 bool-idx = case code Bool of cdata d ps → d; _ → #0
-lower-bool B x = case B of lcons t r → (case r of lcons f r2 → fif x (lower (strip-n #0 t)) (lower (strip-n #0 f)); _ → fnet #0 lnil); _ → fnet #0 lnil
--- lower c: the first-order form of a code in the first-order fragment: variables, words and
--- their operations, constructors and case, pairs, λ and application, let, word elimination as a
--- loop. Any other form becomes a call into the net on the code itself (fnet, the code as its
--- argument), which is what the criterion (B13) reports as not-fo; the specializer removes such
--- forms before lowering where it can. Pairs are the constructor 0 of data type 0 with two fields.
--- The word operations' codes: 0 eq, 1 lt, 2 add, 3 max, 4 sub (code.cub cwop)
-lower c =
+lower-bool vs ts Et Ef B x = case B of lcons t r → (case r of lcons f r2 → fif x (lower-at vs ts Et (strip-n #0 t)) (lower-at vs ts Ef (strip-n #0 f)); _ → fnet #0 lnil); _ → fnet #0 lnil
+-- lower T c: the first-order form of a code in the first-order fragment, at its type T (a type
+-- value): variables, words and their operations, constructors and case, pairs, λ and application,
+-- let, word elimination as a loop. Any other form becomes a call into the net on the code itself
+-- (fnet, the code as its argument), which is what the criterion (B13) reports as not-fo; the
+-- specializer removes such forms before lowering where it can. Pairs are the constructor 0 of data
+-- type 0 with two fields. The word operations' codes: 0 eq, 1 lt, 2 add, 3 max, 4 sub (code.cub cwop).
+-- The lowering is type-directed: every binder it makes carries its type (FT, read off the type
+-- value by ft-v), and the type comes from where the code stands, not from how the binder is used:
+-- a λ's binder is the domain of the Π it is checked at; a constructor's fields are checked at the
+-- data table's telescope at the type's parameters; a case's fields bind at that telescope (the
+-- form does not record them: a printer reads the same table where it binds them), its hypotheses
+-- at the motive at their field, its branches at the motive at the constructor (a case without a
+-- motive: at the type the case is checked at); an argument at the domain of its function's type; a
+-- let at the type of what it binds; a loop's state is (bound, counter, the motive at the counter)
+-- — the motive the quote keeps on cwelim (lib/check.cub's qneu). A type it cannot compute (an
+-- elimination written without its motive, a case's result where nothing checks it) is ftany, and a
+-- printer boxes such a value.
+-- vs: the values of the variables in scope (the evaluator's environment, innermost first, for the
+-- types that depend on them: a fresh variable for each binder); ts: their types (Opt type values)
+lower T c = lower-at lnil lnil (some T) c
+lower-at vs ts E c =
   case c of
     cvar n → fvar n
     cglob n → fcall n lnil
-    clam b → flam (lower b)
-    capp f a → lower-app f (lcons (lower a) lnil)
-    cpair a b → fcon #0 #0 (lcons (lower a) (lcons (lower b) lnil))
-    cfst p → fproj #0 #0 #0 (lower p)
-    csnd p → fproj #0 #0 #1 (lower p)
-    clet t b → flet (lower t) (lower b)
-    cann t T → lower t
-    ccon d k fs ds → if %weq d bool-idx then flit (if %weq k #0 then #1 else #0) else fcon d k (lower-list fs)
-    ccase d B x → if %weq d bool-idx then lower-bool B (lower x) else frec d (lower x) (lower-ralts d B #0)
-    celim d P B x → if %weq d bool-idx then lower-bool B (lower x) else frec d (lower x) (lower-ralts d B #0)
-    cforce t → fforce (lower t)
+    clam b → lower-lam vs ts E b
+    capp f a → lower-app vs ts f (lcons a lnil)
+    cpair a b → lower-pair vs ts E a b
+    cfst p → fproj #0 #0 #0 (lower-at vs ts (syn vs ts p) p)
+    csnd p → fproj #0 #0 #1 (lower-at vs ts (syn vs ts p) p)
+    clet t b → (let Tt = syn vs ts t in flet (ft-o Tt) (lower-at vs ts Tt t) (lower-at (lcons (eval-g vs t) vs) (lcons Tt ts) E b))
+    cann t T → lower-at vs ts (some (eval-g vs T)) t
+    ccon d k fs ds → if %weq d bool-idx then flit (if %weq k #0 then #1 else #0) else fcon d k (lower-fields vs ts (con-tel d k E) fs)
+    ccase d B x →
+      (let Tx = syn vs ts x
+           lx = lower-at vs ts Tx x
+       in if %weq d bool-idx then lower-bool vs ts E E B lx else frec d lx (lower-ralts vs ts d (tels-of d Tx) none E B #0))
+    celim d P B x →
+      (let Tx = syn vs ts x
+           lx = lower-at vs ts Tx x
+           Pv = eval-g vs P
+       in if %weq d bool-idx then lower-bool vs ts (some (Pv (mkcon d #0 lnil lnil))) (some (Pv (mkcon d #1 lnil lnil))) B lx
+          else frec d lx (lower-ralts vs ts d (tels-of d Tx) (some Pv) E B #0))
+    cforce t → fforce (lower-at vs ts none t)
     -- a delayed term is transparent (it has its term's type, and every operation meeting it builds
     -- it): the first-order form is strict, so it is the term, evaluated where it stands (a checked
     -- term terminates, so the value is the same); fthunk is for the suspensions lift makes
-    cthunk t → lower t
+    cthunk t → lower-at vs ts E t
     cwlit n → flit n
     cplit k b → if %weq k #0 then fi64 b else if %weq k #2 then ff64 b else if %weq k #1 then flit b else fnet #0 lnil
-    cwsucc a → fprim P-add (lcons (lower a) (lcons (flit #1) lnil))
-    cwop k a b → fprim (wop-prim k) (lcons (lower a) (lcons (lower b) lnil))
-    cprim k as → lower-prim k as
-    cwelim w z s → lower-welim (lower w) (lower z) (lower s)
+    cwsucc a → fprim P-add (lcons (lower-w vs ts a) (lcons (flit #1) lnil))
+    cwop k a b → fprim (wop-prim k) (lcons (lower-w vs ts a) (lcons (lower-w vs ts b) lnil))
+    cprim k as → lower-prim vs ts k as
+    cwelim w z s mo → lower-welim-t vs ts w z s mo
     _ → fnet #0 lnil
+lower-w vs ts a = lower-at vs ts (some Word) a
+lower-list vs ts l = case l of lnil → lnil; lcons x xs → lcons (lower-at vs ts none x) (lower-list vs ts xs)
+-- a λ at a Π: its binder of the domain, a fresh variable of it, the body at the codomain there
+lower-lam vs ts E b =
+  case E of
+    some T → (case %view T of
+                wpi A B → (let x = %var A in flam (ft-v A) (lower-at (lcons x vs) (lcons (some A) ts) (some (B x)) b))
+                _ → lower-lam-u vs ts b)
+    none → lower-lam-u vs ts b
+lower-lam-u vs ts b = (let x = %var Uw in flam ftany (lower-at (lcons x vs) (lcons none ts) none b))
+lower-pair vs ts E a b =
+  case E of
+    some T → (case %view T of
+                wsigma A B → fcon #0 #0 (lcons (lower-at vs ts (some A) a) (lcons (lower-at vs ts (some (B (eval-g vs a))) b) lnil))
+                _ → lower-pair-u vs ts a b)
+    none → lower-pair-u vs ts a b
+lower-pair-u vs ts a b = fcon #0 #0 (lcons (lower-at vs ts none a) (lcons (lower-at vs ts none b) lnil))
+-- the type of a code where it can be read off the code (a variable's, a global's, an application's
+-- codomain, a projection's component, an annotation, an elimination's motive, a word operation's,
+-- a primitive's result); none where it cannot
+ts-at ts n = case ts of lnil → none; lcons t r → if %weq n #0 then t else ts-at r (%wsub n #1)
+syn vs ts c =
+  case c of
+    cvar n → ts-at ts n
+    cglob n → some (%gty n)
+    capp f a → (case syn vs ts f of some T → (case %view T of wpi A B → some (B (eval-g vs a)); _ → none); none → none)
+    cfst p → (case syn vs ts p of some T → (case %view T of wsigma A B → some A; _ → none); none → none)
+    csnd p → (case syn vs ts p of some T → (case %view T of wsigma A B → some (B (fst (eval-g vs p))); _ → none); none → none)
+    cann t T → some (eval-g vs T)
+    celim d P B x → some (eval-g vs P (eval-g vs x))
+    cwelim w z s mo → (case mo of some P → some (eval-g vs P (eval-g vs w)); none → none)
+    cwop k a b → some (if %wlt k #2 then Bool else Word)
+    cwsucc a → some Word
+    cwlit n → some Word
+    cplit k b → some (%pty k)
+    cprim k as → some (prim-ty k)
+    cthunk t → syn vs ts t
+    clet t b → syn (lcons (eval-g vs t) vs) (lcons (syn vs ts t) ts) b
+    _ → none
+-- the FT of a type value (none: ftany); the representations are not read here (a Nat is its
+-- constructors until lib/repr.cub's program-rep consumes its representation, which retypes the
+-- binders it changes)
+ft-o E = case E of some T → ft-v T; none → ftany
+ft-v T = case quote-ty T of some c → ft-raw c; none → ftany
+-- the constructors' telescopes of d at the parameters of the type T (at fresh parameters when T is
+-- not known or not d's)
+tels-of d E = case E of some T → (case %view T of wdata d2 ps → ctors-at d ps; _ → tels-fresh d); none → tels-fresh d
+tels-fresh d = snd (params-fresh (dtel (%dent d)) lnil)
+tel-at tels k = fromopt (lnth tels k) (tz (tsys lnil []))
+con-tel d k E = tel-at (tels-of d E) k
+-- a constructor's fields, each at its field's type (the telescope instantiated at the fields before it)
+lower-fields vs ts tel fs =
+  case fs of
+    lnil → lnil
+    lcons f r → (case tel of
+                   tx A nm k → (let Av = tval A in lcons (lower-at vs ts (some Av) f) (lower-fields vs ts (k (eval-g vs f) Av) r))
+                   _ → lcons (lower-at vs ts none f) (lower-fields vs ts tel r))
+-- an application spine: nested capps become one fapply, each argument at its domain; a global head
+-- becomes fcall, with the arguments at its erased parameters (usage 0, B11: proofs, lengths only
+-- types mention) dropped — erasure by computed usage, the call and the definition (program-defs)
+-- agreeing on the positions
+lower-app vs ts f args =
+  case f of
+    capp g a → lower-app vs ts g (lcons a args)
+    cglob n → fcall n (drop-erased (g-erased n) #0 (lower-args vs ts (some (%gty n)) args))
+    _ → (let Tf = syn vs ts f in fapply (lower-at vs ts Tf f) (lower-args vs ts Tf args))
+lower-args vs ts Tf args =
+  case args of
+    lnil → lnil
+    lcons a r → (case Tf of
+                   some T → (case %view T of
+                               wpi A B → lcons (lower-at vs ts (some A) a) (lower-args vs ts (some (B (eval-g vs a))) r)
+                               _ → lcons (lower-at vs ts none a) (lower-args vs ts none r))
+                   none → lcons (lower-at vs ts none a) (lower-args vs ts none r))
 -- A primitive operation's code (cprim k as, lib/code.cub prim-apply's numbering) in the first-order
 -- form: the fixed-width integer and floating-point operations are the form's own primitives
 -- (P-i64add .. P-f64ofw, P-u32add .. P-wofu32, lib/fo.cub; a UInt32 is the word of its 32 bits and its
 -- operations wrap at 2^32; a Float32 is the word of its bits, so f32bits and f32ofbits read the same
 -- word: no operation), the 8- and 4-byte loads and stores the byte
 -- layer's; the 1- and 2-byte accesses are a call into the net (fnet) until the form gains them
-lower-prim k cs =
-  let as = lower-list cs
+lower-prim vs ts k cs =
+  let as = lower-list vs ts cs
   in if %wlt k #512
        then (let sb = %wsub k #256
              in if %weq sb #16 then fprim P-i64ofw as else if %weq sb #17 then fprim P-wofi64 as
@@ -74,7 +171,7 @@ lower-prim k cs =
                in if %wlt sb #5 then fprim (%wadd P-i64add sb) as
                   else if %wlt sb #10 then fprim (%wadd P-u32add (%wsub sb #5)) as
                   else if %wlt sb #16 then fprim (%wadd P-f64add (%wsub sb #10)) as else fnet k as)
-         else if %wlt k #1280 then lower-access k cs as
+         else if %wlt k #1280 then lower-access vs ts k cs as
          else if %wlt k #1536 then fprim P-blen as else fprim P-bytes as
 -- a load (class 3) or store (class 4) of w bytes at off in a buffer of n bytes: the access, under
 -- the fact the dropped proof established, off + w < n + 1, stated for the C compiler (fassume)
@@ -82,7 +179,7 @@ lower-prim k cs =
 -- the offset of a load or store is a Nat (the byte layer's index), and the first-order primitives take
 -- a word: a numeral becomes its word, any other offset fromNat of it (a call, lowered with the
 -- program; it was passed as the Nat's constructor tree, which the loads read as 0)
-lower-off c = case lower-natlit c of some w → flit w; none → lower-app lower-fromnat (lcons (lower c) lnil)
+lower-off vs ts c = case lower-natlit c of some w → flit w; none → lower-app vs ts lower-fromnat (lcons c lnil)
 lower-fromnat = code fromNat
 lower-nat-d = case code zero of ccon d k fs ds → d; _ → #0
 lower-natlit c = case c of cwlit w → some w; ccon d k fs ds → (if %weq d lower-nat-d then (if %weq k #0 then some #0 else (case fs of lcons x r → (case lower-natlit x of some w → some (%wsucc w); none → none); lnil → none)) else none); _ → none
@@ -91,25 +188,16 @@ ltake-l n l = if %weq n #0 then lnil else (case l of lnil → lnil; lcons x r �
 -- a Nat numeral in the fact (the offset, the length) as the word the machine holds it as (a numeral
 -- is a word in the machine, B12 §6.2); any other code as it stands
 fact-nat c = case lower-natlit c of some w → cwlit w; none → c
-lower-access k cs as =
+lower-access vs ts k cs as =
   let st = if %wlt k #1024 then false else true
       w = %wsub k (if st then #1024 else #768)
       nargs = if st then #3 else #2
-      as2 = lset-l as #1 (lower-off (cl-at cs #1))
+      as2 = lset-l as #1 (lower-off vs ts (cl-at cs #1))
       body = if %weq w #8 then fprim (if st then P-store64 else P-load64) (ltake-l nargs as2)
              else if %weq w #4 then fprim (if st then P-store32 else P-load32) (ltake-l nargs as2) else fnet k (ltake-l nargs as)
   in if %weq (lst-len cs) (%wsucc nargs)
        then fassume (cwop #1 (cwop #2 (fact-nat (cl-at cs #1)) (cwlit w)) (cwsucc (fact-nat (cl-at cs nargs)))) body
        else body
--- an application spine: nested capps become one fapply; a global head becomes fcall, with the
--- arguments at its erased parameters (usage 0, B11: proofs, lengths only types mention) dropped
--- — erasure by computed usage, the call and the definition (program-defs) agreeing on the
--- positions
-lower-app f args =
-  case f of
-    capp g a → lower-app g (lcons (lower a) args)
-    cglob n → fcall n (drop-erased (g-erased n) #0 args)
-    _ → fapply (lower f) args
 -- the erased parameters of a checked definition: the indices of its type's Π binders at usage 0
 g-erased g = case quote-ty (%gty g) of some T → erased-of g #0 T; none → lnil
 erased-of g i T = case T of cpi m A B → (if %weq (%gusage g i) #0 then lcons i (erased-of g (%wsucc i) B) else erased-of g (%wsucc i) B); _ → lnil
@@ -120,7 +208,7 @@ lmem-l x l = case l of lnil → false; lcons y r → if %weq x y then true else 
 -- assumed facts (the usage pass admits nothing else), and such a fact is dropped with it
 erase-lams es k t =
   case t of
-    flam b → if lmem-l k es then erase-lams es (%wsucc k) (funshift-at #0 b) else flam (erase-lams es (%wsucc k) b)
+    flam ty b → if lmem-l k es then erase-lams es (%wsucc k) (funshift-at #0 b) else flam ty (erase-lams es (%wsucc k) b)
     _ → t
 funshift-at d t =
   case t of
@@ -131,11 +219,11 @@ funshift-at d t =
     fproj dd c j x → fproj dd c j (funshift-at d x)
     fcall g args → fcall g (funshift-list d args)
     fprim p args → fprim p (funshift-list d args)
-    flet a b → flet (funshift-at d a) (funshift-at (%wsucc d) b)
+    flet ty a b → flet ty (funshift-at d a) (funshift-at (%wsucc d) b)
     fif c a b → fif (funshift-at d c) (funshift-at d a) (funshift-at d b)
-    floop init body → floop (funshift-list d init) (funshift-at (%wadd d (lst-count init)) body)
+    floop tys init body → floop tys (funshift-list d init) (funshift-at (%wadd d (lst-count init)) body)
     fclos g env → fclos g (funshift-list d env)
-    flam b → flam (funshift-at (%wsucc d) b)
+    flam ty b → flam ty (funshift-at (%wsucc d) b)
     fapply f args → fapply (funshift-at d f) (funshift-list d args)
     fthunk a → fthunk (funshift-at d a)
     fforce x → fforce (funshift-at d x)
@@ -148,32 +236,51 @@ funshift-alts d alts = case alts of lnil → lnil; lcons a r → lcons (fst a , 
 funshift-ralts d alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , funshift-at (%wadd d (%wadd (fst (snd a)) (lst-count (fst (snd (snd a)))))) (snd (snd (snd a)))))) (funshift-ralts d r)
 fact-mentions d c = case c of cvar n → %weq n d; cwop k a b → orb (fact-mentions d a) (fact-mentions d b); cwsucc a → fact-mentions d a; cann a T → fact-mentions d a; _ → false
 funshift-fact d c = case c of cvar n → (if %wlt d n then cvar (%wsub n #1) else c); cwop k a b → cwop k (funshift-fact d a) (funshift-fact d b); cwsucc a → cwsucc (funshift-fact d a); cann a T → funshift-fact d a; _ → c
-lower-list l = case l of lnil → lnil; lcons x xs → lcons (lower x) (lower-list xs)
--- branches: the k-th code is a λ over the constructor's fields; its λs are stripped, the fields
--- being pushed by fswitch in order
-lower-alts B k = case B of lnil → lnil; lcons b r → lcons (k , (count-lams b , lower (strip-lams b))) (lower-alts r (%wsucc k))
 -- a case or elimination: branch k binds the constructor's fields then a hypothesis per recursive
 -- field (the shape from the data table); its λs are stripped and the recursion form records
--- which fields carry hypotheses
-lower-ralts d B k =
+-- which fields carry hypotheses. The body is lowered with the fields in scope at the telescope's
+-- types (fresh variables as their values), each hypothesis at the motive at its field (at E, the
+-- case's own type, without a motive), at the motive at the constructor built from the fields (at E)
+lower-ralts vs ts d tels mo E B k =
   case B of
     lnil → lnil
     lcons b r →
       let ks = cshape d k
+          n = lst-count ks
           hs = rec-fields ks #0
-      in lcons (k , (lst-count ks , (hs , lower (strip-n (%wadd (lst-count ks) (lst-count hs)) b)))) (lower-ralts d r (%wsucc k))
+          fe = br-env (tel-at tels k) n vs ts lnil
+          he = hyp-env mo E (snd (snd fe)) hs (fst fe) (fst (snd fe))
+          Eb = (case mo of some P → some (P (mkcon d k (snd (snd fe)) lnil)); none → E)
+      in lcons (k , (n , (hs , lower-at (fst he) (snd he) Eb (strip-n (%wadd n (lst-count hs)) b)))) (lower-ralts vs ts d tels mo E r (%wsucc k))
+-- the n fields from the telescope: (values , (types , the fields' values in order))
+br-env tel n vs ts acc =
+  if %weq n #0 then (vs , (ts , acc))
+  else (case tel of
+          tx A nm r → (let Av = tval A in let x = %var nm Av in br-env (r x Av) (%wsub n #1) (lcons x vs) (lcons (some Av) ts) (lsnoc acc x))
+          _ → (let x = %var Uw in br-env tel (%wsub n #1) (lcons x vs) (lcons none ts) (lsnoc acc x)))
+hyp-env mo E fvs hs vs ts =
+  case hs of
+    lnil → (vs , ts)
+    lcons j r → (let Th = (case mo of some P → some (P (cl-at fvs j)); none → E)
+                 in let h = %var (fromopt Th Uw) in hyp-env mo E fvs r (lcons h vs) (lcons Th ts))
 -- exactly m λs stripped: a branch whose body is itself a λ keeps it
 strip-n m b = if %weq m #0 then b else (case b of clam b2 → strip-n (%wsub m #1) b2; _ → b)
-count-lams b = case b of clam b2 → %wsucc (count-lams b2); _ → #0
-strip-lams b = case b of clam b2 → strip-lams b2; _ → b
 -- %weq %wlt %wadd %wmax %wsub are 0..4, each one primitive of the first-order form (max was lowered as
 -- addition until 2026-11-07, then expanded into a let and an if; P-max since 2026-11-09)
 wop-prim k = if %weq k #0 then P-eq else if %weq k #1 then P-lt else if %weq k #2 then P-add else if %weq k #3 then P-max else P-sub
 -- word elimination as a loop over (w, i, acc): while i < w, acc := s i acc; the step s is a
 -- two-argument function value, applied through fapply. Variables in w z s refer to the
--- enclosing environment, below the loop's three state slots: shifted by 3 inside the body
-lower-welim w z s =
-  floop (lcons w (lcons (flit #0) (lcons z lnil)))
+-- enclosing environment, below the loop's three state slots: shifted by 3 inside the body. The
+-- state's types: two words, and the motive at a fresh word (z at the motive at 0, the step at
+-- (n : Word) → P n → P (n + 1)); without a motive, ftany
+lower-welim-t vs ts w z s mo =
+  case mo of
+    some cP → (let P = eval-g vs cP
+               in lower-welim (lcons ftword (lcons ftword (lcons (ft-v (P (%var Word))) lnil))) (lower-w vs ts w) (lower-at vs ts (some (P #0)) z)
+                    (lower-at vs ts (some ((n : Word) → P n → P (%wsucc n))) s))
+    none → lower-welim (lcons ftword (lcons ftword (lcons ftany lnil))) (lower-w vs ts w) (lower-at vs ts none z) (lower-at vs ts none s)
+lower-welim tys w z s =
+  floop tys (lcons w (lcons (flit #0) (lcons z lnil)))
     (fif (fprim P-lt (lcons (fvar #1) (lcons (fvar #2) lnil)))
        (fcon #0 #0 (lcons (fvar #2)
                    (lcons (fprim P-add (lcons (fvar #1) (lcons (flit #1) lnil)))
@@ -184,26 +291,30 @@ lower-welim w z s =
 -- lying above the loop's three slots (shifted by 1: they were above the λ's two binders)
 step-call s =
   case s of
-    flam s1 → (case s1 of flam b → shift-at #2 #1 b; _ → fapply (shift #3 s) (lcons (fvar #1) (lcons (fvar #0) lnil)))
+    flam t1 s1 → (case s1 of flam t2 b → shift-at #2 #1 b; _ → fapply (shift #3 s) (lcons (fvar #1) (lcons (fvar #0) lnil)))
     _ → fapply (shift #3 s) (lcons (fvar #1) (lcons (fvar #0) lnil))
 -- ---------------------------------------------------------------- types (B14: FT from the elaborated types)
--- ft-of T: the first-order type of a type code: words (Word, UInt32, Bool, a type represented by
--- Word), Int64, Float64, byte strings, pairs, data types (by index, with their parameters' codes),
--- functions (a Π chain, its domains then its codomain; dependencies are not expressible in FT and
--- are read as ftany); a type outside the fragment is ftany
-ft-of T =
+-- ft-at r T: the first-order type of a type code: words (Word, UInt32, Bool; with r, a type
+-- represented by Word), Int64, Float64, byte strings, pairs, data types (by index, with their
+-- parameters' codes), functions (a Π chain, its domains then its codomain; dependencies are not
+-- expressible in FT and are read as ftany); a type outside the fragment is ftany
+ft-at r T =
   case T of
     cword → ftword
     cpty k n → if %weq k #0 then fti64 else if %weq k #2 then ftf64 else if %weq k #4 then ftbytes (bytes-len n) else ftword
-    cdata d ps → if %weq d bool-idx then ftword else (case %rtab d of some R → ft-of-rep R; none → ftdata d ps #0)
-    csigma A B → ftpair (ft-of A) (ft-of B)
-    cpi m A B → ft-pi (lcons (ft-of A) lnil) B
-    cann t T2 → ft-of t
+    cdata d ps → if %weq d bool-idx then ftword else (if r then (case %rtab d of some R → ft-of-rep R; none → ftdata d ps #0) else ftdata d ps #0)
+    csigma A B → ftpair (ft-at r A) (ft-at r B)
+    cpi m A B → ft-pi r (lcons (ft-at r A) lnil) B
+    cann t T2 → ft-at r t
     _ → ftany
-ft-pi args B = case B of cpi m A B2 → ft-pi (lsnoc args (ft-of A)) B2; _ → ftfun args (ft-of B)
+ft-pi r args B = case B of cpi m A B2 → ft-pi r (lsnoc args (ft-at r A)) B2; _ → ftfun args (ft-at r B)
+-- ft-of reads a represented type as its representation's (the declared signatures of programs whose
+-- representations are consumed, lib/emitu.cub's emit-prog-d); ft-raw as itself (the lowering's)
+ft-of T = ft-at true T
+ft-raw T = ft-at false T
 -- a represented type's value: its representation's type, quoted
 ft-of-rep R = ft-of (fromopt (quote-ty R) cword)
-bytes-len n = case n of cwlit w → w; _ → #0
+bytes-len n = case lower-natlit n of some w → w; none → #0
 -- the signature of a Π type: its parameters' types and its result's
 sig-ft T = case ft-of T of ftfun args r → (args , r); t → (lnil , t)
 -- the signature of a checked definition, from its type in the store
@@ -212,11 +323,11 @@ global-sig g = sig-ft (fromopt (quote-ty (%gty g)) cword)
 didx c = case c of cdata d ps → d; _ → #0
 -- plus on words as code, lowered and evaluated
 c-plus = clam (clam (cwop #2 (cvar #1) (cvar #0)))
-#same eval-fo no-defs lnil (fapply (lower c-plus) (lcons (flit #3) (lcons (flit #4) lnil))) = vw #7
+#same eval-fo no-defs lnil (fapply (lower (Word → Word → Word) c-plus) (lcons (flit #3) (lcons (flit #4) lnil))) = vw #7
 -- a case on a data type declared here: branch 1 returns its single field
 data Two = tw0 | tw1 (w : Word)
 c-case = ccase (didx (code Two)) (lcons (cwlit #0) (lcons (clam (cvar #0)) lnil)) (ccon (didx (code Two)) #1 (lcons (cwlit #42) lnil) lnil)
-#same eval-fo no-defs lnil (lower c-case) = vw #42
+#same eval-fo no-defs lnil (lower Word c-case) = vw #42
 -- structural recursion lowered: the length of a list written with case and rec, on an unknown
 -- list, becomes a recursion form with the hypothesis on the second field; evaluated on a list.
 -- (The code is the case written out: a call of the definition lenw stays a call, 18.6's finding.)
@@ -232,10 +343,14 @@ lw3 = fcon (didx (code LW)) #1 (lcons (flit #5) (lcons (fcon (didx (code LW)) #1
 -- the globals zw and sw called by the branches, as first-order definitions
 gidx c = case c of cglob n → n; _ → #0
 len-defs g = if %weq g (gidx (code zw)) then flit #0 else if %weq g (gidx (code sw)) then fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)) else flit #0
-#same eval-fo len-defs lnil (fapply (lower c-len) (lcons lw3 lnil)) = vw #2
+#same eval-fo len-defs lnil (fapply (lower (LW → Word) c-len) (lcons lw3 lnil)) = vw #2
+-- typed by where it stands: the λ's binder is the Π's domain, the list
+#same (case lower (LW → Word) c-len of flam t b → t; _ → ftany) = ftdata (didx (code LW)) lnil #0
+-- the binders of plus on words, from the type it is lowered at
+#same lower (Word → Word → Word) c-plus = flam ftword (flam ftword (fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil))))
 -- and lifted: the recursion is a definition of its own (numbered from 1000), called at the site
 with-defs ds g = case ds of lnil → len-defs g; lcons d r → if %weq (fst d) g then snd (snd d) else with-defs r g
-#same (case lift #1000 (lower c-len) of lifted t2 ds k → eval-fo (with-defs ds) lnil (fapply t2 (lcons lw3 lnil))) = vw #2
+#same (case lift #1000 (lower (LW → Word) c-len) of lifted t2 ds k → eval-fo (with-defs ds) lnil (fapply t2 (lcons lw3 lnil))) = vw #2
 -- the signatures read off types: lenw takes a list and returns a word; a pair type is a pair
 #same global-sig (gidx (code lenw)) = (lcons (ftdata (didx (code LW)) lnil #0) lnil , ftword)
 #same ft-of (code (Word × Word)) = ftpair ftword ftword
@@ -245,5 +360,5 @@ with-defs ds g = case ds of lnil → len-defs g; lcons d r → if %weq (fst d) g
 useless : Word → Unit → Word
 useless w p = %wadd w #1
 #same g-erased (gidx (code useless)) = lcons #1 lnil
-#same lower (code (λ (w : Word) → useless w unit)) = flam (fcall (gidx (code useless)) (lcons (fvar #0) lnil))
-#same erase-lams (g-erased (gidx (code useless))) #0 (lower (fromopt (quote-top (%gty (gidx (code useless))) (%gval (gidx (code useless)))) cword)) = flam (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))
+#same lower (Word → Word) (code (λ (w : Word) → useless w unit)) = flam ftword (fcall (gidx (code useless)) (lcons (fvar #0) lnil))
+#same erase-lams (g-erased (gidx (code useless))) #0 (lower (%gty (gidx (code useless))) (fromopt (quote-top (%gty (gidx (code useless))) (%gval (gidx (code useless)))) cword)) = flam ftword (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))

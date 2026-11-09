@@ -650,9 +650,9 @@ convneu wu wv =
             then if uconv a c then if uconv b e then some opq else none else none
             else none
         _ → none
-    wwelim x z s → 
+    wwelim x z s mo → 
       case wv of
-        wwelim y z2 s2 → 
+        wwelim y z2 s2 mo2 → 
           if uconv x y
             then if uconv z z2 then if uconv s s2 then some opq else none else none
             else none
@@ -1918,7 +1918,7 @@ is-neu (welim d x f T) = true
 is-neu (wtrans d psi ls x T) = true
 is-neu (wwplus k x) = true
 is-neu (wwop k a b) = true
-is-neu (wwelim x z s) = true
+is-neu (wwelim x z s mo) = true
 is-neu (wprim k as) = true
 is-neu (wcofix n T) = true
 is-neu (wproj d k x T) = true
@@ -2080,6 +2080,12 @@ q-wstep bs s =
       h = %var Uw
   in omap (λ c → clam (clam c))
        (qv-un (lcons (qv (var-level h)) (lcons (qv (var-level n)) bs)) (s n h))
+-- the step of an elimination with its motive: at (n : Word) → P n → P (n + 1)
+q-wstep-p bs P s =
+  let n = %var Word
+      h = %var (P n)
+  in omap (λ c → clam (clam c))
+       (quote (lcons (qv (var-level h)) (lcons (qv (var-level n)) bs)) (P (%wsucc n)) (s n h))
 qneu bs E v (wvar l T) = qn (q-var-at bs v l #0) T
 -- a copattern definition, stuck: its name; a field of a neutral: at the field's type
 qneu bs E v (wcofix n T) = qn (cglob n) T
@@ -2130,9 +2136,16 @@ qneu bs E v (wwplus k x) =
 qneu bs E v (wwop k a b) =
   obind (quote bs Word a)
     (λ ca → omap (λ cb → (cwop k ca cb , if %wlt k #2 then Bool else Word)) (quote bs Word b))
-qneu bs E v (wwelim x z s) =
-  obind (quote bs Word x)
-    (λ cx → obind (qv-un bs z) (λ cz → omap (λ cs → (cwelim cx cz cs , opq)) (q-wstep bs s)))
+-- (with its motive, when it has one: z quoted at P 0, the step at its type, the motive's code kept on
+-- the elimination, where the lowering reads the loop's state type; at P x)
+qneu bs E v (wwelim x z s mo) =
+  case mo of
+    some P → 
+      obind (quote bs Word x)
+        (λ cx → obind (quote bs (P #0) z) (λ cz → obind (q-wstep-p bs P s) (λ cs → omap (λ cP → (cwelim cx cz cs (some cP) , P x)) (quote bs (Word → Uw) P))))
+    none → 
+      obind (quote bs Word x)
+        (λ cx → obind (qv-un bs z) (λ cz → omap (λ cs → (cwelim cx cz cs none , opq)) (q-wstep bs s)))
 -- a primitive operation stuck on a neutral: the operation's code at its arguments' codes (each
 -- quoted as the value it is: a variable, a literal, a further operation), at the operation's result
 -- type (lib/code.cub prim-apply names the numbering)

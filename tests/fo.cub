@@ -19,7 +19,7 @@ t-args2 a b = lcons (flit a) (lcons (flit b) lnil)
 t-spec T c args = t-run (specialize T lnil c) args
 -- a whole program (the code and the definitions it calls, lowered from the store, lifted): the
 -- word definition 0 answers on the arguments
-t-prog c args = wof (eval-fo (table-of (lift-program #100000 (program-of #20 c))) lnil (fcall #0 args))
+t-prog T c args = wof (eval-fo (table-of (lift-program #100000 (program-of T #20 c))) lnil (fcall #0 args))
 
 -- ---------------------------------------------------------------- words: the arithmetic and the comparisons
 addw3 : Word → Word → Word
@@ -49,7 +49,9 @@ fact-fo = specialize (Word → Word) lnil (code (λ (n : Word) → factw n))
 #same t-run fact-fo (lcons (flit #6) lnil) = factw #6
 #same t-run fact-fo (lcons (flit #7) lnil) = #5040
 -- the shape is the projection of a loop over the state (n, i, acc) whose body continues or breaks
-#same (case fact-fo of flam b → (case b of fproj d c k l → (case l of floop i body → lst-len i; _ → #0); _ → #0); _ → #0) = #3
+#same (case fact-fo of flam t b → (case b of fproj d c k l → (case l of floop ts i body → lst-len i; _ → #0); _ → #0); _ → #0) = #3
+-- its state typed by the motive: two words and the pair of words
+#same (case fact-fo of flam t b → (case b of fproj d c k l → (case l of floop ts i body → ts; _ → lnil); _ → lnil); _ → lnil) = lcons ftword (lcons ftword (lcons (ftpair ftword ftword) lnil))
 -- fib over a pair: the same number as the net's reading (2,416 steps there, a for loop here)
 fibp2 : Word → Word × Word
 fibp2 n = %welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p)))
@@ -73,18 +75,18 @@ tsum l = case l of tnil → #0; tcons x xs → %wadd x (rec xs)
 tl3 : TL
 tl3 = tcons #5 (tcons #6 (tcons #7 tnil))
 -- the list as a first-order value, built by the lowering of its code
-tl3-fo = lower (fromopt (quote-top TL tl3) cword)
-#same t-prog (code (λ (l : TL) → tsum l)) (lcons tl3-fo lnil) = tsum tl3
-#same t-prog (code (λ (l : TL) → tsum l)) (lcons tl3-fo lnil) = #18
+tl3-fo = lower TL (fromopt (quote-top TL tl3) cword)
+#same t-prog (TL → Word) (code (λ (l : TL) → tsum l)) (lcons tl3-fo lnil) = tsum tl3
+#same t-prog (TL → Word) (code (λ (l : TL) → tsum l)) (lcons tl3-fo lnil) = #18
 -- a case returning a constructor's field, and the whole value rebuilt field by field (the
 -- recursion has a hypothesis, so the rebuild is not read as the scrutinee: that variable names the
 -- whole list on every re-entry, C21)
 thead : TL → Word
 thead l = case l of tnil → #0; tcons x xs → x
-#same t-prog (code (λ (l : TL) → thead l)) (lcons tl3-fo lnil) = #5
+#same t-prog (TL → Word) (code (λ (l : TL) → thead l)) (lcons tl3-fo lnil) = #5
 tsame : TL → TL
 tsame l = case l of tnil → tnil; tcons x xs → tcons x xs
-#same (case specialize (TL → TL) lnil (code (λ (l : TL) → tsame l)) of flam b → (case b of frec d x alts → (case alts of lcons a r → (case r of lcons a2 r2 → snd (snd (snd a2)); _ → flit #9); _ → flit #9); _ → flit #9); _ → flit #9) = fcon (didx (code TL)) #1 (lcons (fvar #2) (lcons (fvar #1) lnil))
+#same (case specialize (TL → TL) lnil (code (λ (l : TL) → tsame l)) of flam t b → (case b of frec d x alts → (case alts of lcons a r → (case r of lcons a2 r2 → snd (snd (snd a2)); _ → flit #9); _ → flit #9); _ → flit #9); _ → flit #9) = fcon (didx (code TL)) #1 (lcons (fvar #2) (lcons (fvar #1) lnil))
 -- the derived equality (lib/derive.cub) lowered, lifted and run: Nat 2 = 2, Nat 2 ≠ 1
 deq-prog = case lift #10 eq-fo of lifted t2 ds k → (t2 , ds)
 #same wof (eval-fo (table-of (snd deq-prog)) lnil (fapply (fst deq-prog) (lcons n2 (lcons n2 lnil)))) = #1
@@ -126,7 +128,7 @@ st-ld-fo = specialize-r (Bytes 32 → Int64 → Word) lnil st-ld-code
 buf32 = fprim P-bytes (lcons (flit #32) lnil)
 #same t-run st-ld-fo (lcons buf32 (lcons (fi64 #77) lnil)) = #77
 -- the assumed fact of the dropped proof is in the form
-has-assume t = case t of fassume f b → true; flam b → has-assume b; fprim p as → has-assume-list as; _ → false
+has-assume t = case t of fassume f b → true; flam ty b → has-assume b; fprim p as → has-assume-list as; _ → false
 has-assume-list l = case l of lnil → false; lcons x xs → (case has-assume x of true → true; false → has-assume-list xs)
 #same has-assume st-ld-fo = true
 -- the two-load decoder of lib/repr.cub agrees with the machine on a buffer built by the machine
@@ -139,7 +141,7 @@ mbuf = store64 32 (store64 32 (bytes 32) 0 (24 , λ i → 32) (i64 #5)) 16 (8 , 
 -- ---------------------------------------------------------------- the specializer: laws consumed, rules
 -- plusw x 0 → x by the store's theorem: the lowered body is the identity
 zl-rule = fromopt (rule-of (gidx (code plusw-zero-l))) (rule #0 cword cword)
-#same specialize (Word → Word) (lcons zl-rule lnil) (clam (capp (capp (code plusw) (cwlit #0)) (cvar #0))) = flam (fvar #0)
+#same specialize (Word → Word) (lcons zl-rule lnil) (clam (capp (capp (code plusw) (cwlit #0)) (cvar #0))) = flam ftword (fvar #0)
 -- the schedule as a value: no rewrites leaves the recursion plusw unfolds to; the answers agree
 no-rw = specialize-s (sched #0 lnil lnil) (Word → Word) (lcons zl-rule lnil) (clam (capp (capp (code plusw) (cwlit #0)) (cvar #0)))
 #same t-run no-rw (lcons (flit #9) lnil) = #9
@@ -154,7 +156,7 @@ data P2 = p2 (x : Word) (y : Word)
 bump : P2 → P2
 bump p = case p of p2 x y → p2 x (%wadd y #1)
 bump-fo = specialize (P2 → P2) lnil (code (λ (p : P2) → bump p))
-#same (case bump-fo of flam b → (case b of frec d x alts → (case alts of lcons a r → (case snd (snd (snd a)) of fupd u dd y c k v → u; _ → #9); _ → #9); _ → #9); _ → #9) = #0
+#same (case bump-fo of flam t b → (case b of frec d x alts → (case alts of lcons a r → (case snd (snd (snd a)) of fupd u dd y c k v → u; _ → #9); _ → #9); _ → #9); _ → #9) = #0
 #same eval-fo no-defs lnil (fapply bump-fo (lcons (fcon (didx (code P2)) #0 (t-args2 #5 #6)) lnil)) = vcon (didx (code P2)) #0 (lcons (vw #5) (lcons (vw #7) lnil))
 
 -- ---------------------------------------------------------------- the printers: the shapes they print
@@ -162,7 +164,7 @@ bump-fo = specialize (P2 → P2) lnil (code (λ (p : P2) → bump p))
 #same emit #0 (flit #7) = (lcons #109 (lcons #107 (lcons #119 (lcons #40 (lcons #55 (lcons #41 lnil))))))
 #same emit-u lnil lnil #0 (fprim P-add (t-args2 #1 #2)) = (lcons #40 (lcons #49 (lcons #32 (lcons #43 (lcons #32 (lcons #50 (lcons #41 lnil)))))))
 -- a program's source begins with the runtime and ends with main; the unboxed fib is a for loop
-fib-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #30) lnil))) (lcons (#1 , (#1 , strip-flams fib-fo)) lnil)
+fib-defs = lcons (#0 , (lnil , fcall #1 (lcons (flit #30) lnil))) (lcons (fo-def #1 fib-fo) lnil)
 has-for l = case l of lnil → false; lcons a r → (case r of lcons b r2 → (case r2 of lcons c r3 → (case r3 of lcons d r4 → (if andb (%weq a #102) (andb (%weq b #111) (andb (%weq c #114) (%weq d #32))) then true else has-for r); _ → false); _ → false); _ → false)
 #same has-for (emit-prog-u fib-defs) = true
 -- the unboxed signature of fib's definition: a word in, a word out
@@ -184,5 +186,5 @@ has-for l = case l of lnil → false; lcons a r → (case r of lcons b r2 → (c
 -- a thunk of the source language (`delay`/`force`) has no Code form yet (`cthunk` is not in
 -- lib/code.cub nor src/lang.c's to_code), so the family starts at the first-order form
 -- a delayed term lowers to the term (the first-order form is strict; fthunk is lift's)
-#same eval-fo no-defs lnil (lower (code (%wadd (delay #1) #2))) = vw #3
-#same eval-fo no-defs lnil (lower (code (force (delay (%wadd #4 #5))))) = vw #9
+#same eval-fo no-defs lnil (lower Word (code (%wadd (delay #1) #2))) = vw #3
+#same eval-fo no-defs lnil (lower Word (code (force (delay (%wadd #4 #5))))) = vw #9

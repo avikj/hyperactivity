@@ -5,6 +5,24 @@
 -- fixed-width numbers, constructors with their non-erased fields, switches on constructor tags,
 -- projections, calls of compiled definitions by key, native primitives, lets, loops, closures,
 -- thunks for lazy positions, and calls into the net for regions that stay symbolic.
+-- first-order types (the FT of the plan), for the printers; eval-fo does not consult them. Every
+-- binder of the form carries one (flam, flet, floop's state, and a definition's parameters: a
+-- program is a Lst of (g , (params , body)), params a Lst of FT, the first parameter first),
+-- computed by the type-directed lowering (lib/lower.cub) from the program's type, or declared by
+-- whoever writes a program by hand; ftany says the type is not known (the printers box such a value)
+data FT
+  = ftword
+  | fti64
+  | ftf64
+  | ftbytes (n : Word)
+  | ftdata (d : Word) (ps : Lst) (rep : Word)
+  | ftfun (args : Lst) (ret : FT)
+  | ftlazy (t : FT)
+  | ftpair (a : FT) (b : FT)
+  | ftfield (d : Word) (c : Word) (j : Word)   -- the type of field j of constructor c of data type d, as a printer binds it
+                                             -- (lift types a captured field so: the printer resolves it from the data
+                                             -- table by the rule it binds the field with, so both sides agree)
+  | ftany
 data FO
   = fvar (n : Word)                          -- de Bruijn index into the environment
   | flit (w : Word)                          -- a word
@@ -15,11 +33,11 @@ data FO
   | fproj (d : Word) (c : Word) (k : Word) (x : FO)   -- field k of constructor c of x
   | fcall (g : Word) (args : Lst)            -- a compiled definition g (a key) on arguments
   | fprim (p : Word) (args : Lst)            -- a native primitive p on arguments
-  | flet (t : FO) (b : FO)                   -- let: t pushed, b over it
+  | flet (ty : FT) (t : FO) (b : FO)         -- let: t (of type ty) pushed, b over it
   | fif (c : FO) (t : FO) (e : FO)           -- a word condition: nonzero is true
-  | floop (init : Lst) (body : FO)           -- a loop: state pushed; body returns continue (tag 0) or break (tag 1)
+  | floop (tys : Lst) (init : Lst) (body : FO)   -- a loop: state pushed (tys its types, a Lst of FT); body returns continue (tag 0) or break (tag 1)
   | fclos (g : Word) (env : Lst)             -- a closure: definition g over captured values env
-  | flam (b : FO)                            -- a λ as a value over the environment at its creation
+  | flam (ty : FT) (b : FO)                  -- a λ (its binder of type ty) as a value over the environment at its creation
   | fapply (f : FO) (args : Lst)             -- call through a function value
   | fthunk (t : FO)                          -- a lazy position: evaluated on force
   | fforce (x : FO)
@@ -43,19 +61,6 @@ data FV
   | vbytes (b : Word)                        -- a machine byte string (B12's Bytes; the field's type is nominal: FO is untyped)
   | vi64 (x : Word)                          -- a machine Int64 (nominal, as vbytes)
   | vf64 (x : Word)                          -- a machine Float64 (nominal)
--- first-order types (the FT of the plan), for the printers; eval-fo does not consult them.
--- A definition's signature is (params : Lst of FT , ret : FT), read off its elaborated type by
--- lib/lower.cub's ft-of; ftany is what the printer infers for itself
-data FT
-  = ftword
-  | fti64
-  | ftf64
-  | ftbytes (n : Word)
-  | ftdata (d : Word) (ps : Lst) (rep : Word)
-  | ftfun (args : Lst) (ret : FT)
-  | ftlazy (t : FT)
-  | ftpair (a : FT) (b : FT)
-  | ftany
 -- a schedule (plan 5.2, 18.3 §6), the value the specializer takes (lib/specialize.cub reads it;
 -- declared here, before the checker, as untyped data): the rewrite bound, the binding-time
 -- assignment (a Lst of (binder index , Stage)), the representations consumed (a Lst of data
@@ -225,11 +230,11 @@ eval-fo G e t =
               lcons b r2 → vw (prim-ap p (wof a) (wof b))
               lnil → vw (if %weq p P-not then (if %weq (wof a) #0 then #1 else #0) else wof a))
          lnil → vw #0)
-    flet t2 b → eval-fo G (lcons (eval-fo G e t2) e) b
+    flet ty t2 b → eval-fo G (lcons (eval-fo G e t2) e) b
     fif c th el → if %weq (wof (eval-fo G e c)) #0 then eval-fo G e el else eval-fo G e th
-    floop init body → run-loop G e (eval-list G e init) body
+    floop tys init body → run-loop G e (eval-list G e init) body
     fclos g env → vclos g (eval-list G e env)
-    flam b → vlam b e
+    flam ty b → vlam b e
     fapply f args → apply-args G (eval-fo G e f) (eval-list G e args)
     fthunk t2 → vthunk t2 e
     fforce x → (case eval-fo G e x of vthunk t2 e2 → eval-fo G e2 t2; vrec d alts v e2 → enter-rec G e2 d alts v; v → v)
@@ -277,7 +282,7 @@ fbreak-v r = vcon #0 #1 (lcons r lnil)
 fo-plus = fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil))
 -- factorial as a loop: state (n, acc); continue while n > 0
 fo-fact =
-  floop (lcons (fvar #0) (lcons (flit #1) lnil))
+  floop (lcons ftword (lcons ftword lnil)) (lcons (fvar #0) (lcons (flit #1) lnil))
     (fif (fprim P-lt (lcons (flit #0) (lcons (fvar #1) lnil)))
        (fcon #0 #0 (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil)))
                           (lcons (fprim P-mul (lcons (fvar #0) (lcons (fvar #1) lnil))) lnil)))
@@ -308,11 +313,11 @@ shift-at d k t =
     fproj dd c j x → fproj dd c j (shift-at d k x)
     fcall g args → fcall g (fshift-list d k args)
     fprim p args → fprim p (fshift-list d k args)
-    flet a b → flet (shift-at d k a) (shift-at (%wsucc d) k b)
+    flet ty a b → flet ty (shift-at d k a) (shift-at (%wsucc d) k b)
     fif c a b → fif (shift-at d k c) (shift-at d k a) (shift-at d k b)
-    floop init body → floop (fshift-list d k init) (shift-at (%wadd d #3) k body)
+    floop tys init body → floop tys (fshift-list d k init) (shift-at (%wadd d #3) k body)
     fclos g env → fclos g (fshift-list d k env)
-    flam b → flam b
+    flam ty b → flam ty b
     fapply f args → fapply (shift-at d k f) (fshift-list d k args)
     fthunk a → fthunk (shift-at d k a)
     fforce x → fforce (shift-at d k x)
@@ -346,11 +351,11 @@ fv d t acc =
     fproj dd c k x → fv d x acc
     fcall g args → fv-list d args acc
     fprim p args → fv-list d args acc
-    flet a b → fv (%wsucc d) b (fv d a acc)
+    flet ty a b → fv (%wsucc d) b (fv d a acc)
     fif c a b → fv d b (fv d a (fv d c acc))
-    floop init body → fv (%wadd d #3) body (fv-list d init acc)
+    floop tys init body → fv (%wadd d #3) body (fv-list d init acc)
     fclos g env → fv-list d env acc
-    flam b → fv (%wsucc d) b acc
+    flam ty b → fv (%wsucc d) b acc
     fapply f args → fv-list d args (fv d f acc)
     fthunk a → fv d a acc
     fforce x → fv d x acc
@@ -380,11 +385,11 @@ renumber d caps t =
     fproj dd c k x → fproj dd c k (renumber d caps x)
     fcall g args → fcall g (renumber-list d caps args)
     fprim p args → fprim p (renumber-list d caps args)
-    flet a b → flet (renumber d caps a) (renumber (%wsucc d) caps b)
+    flet ty a b → flet ty (renumber d caps a) (renumber (%wsucc d) caps b)
     fif c a b → fif (renumber d caps c) (renumber d caps a) (renumber d caps b)
-    floop init body → floop (renumber-list d caps init) (renumber (%wadd d #3) caps body)
+    floop tys init body → floop tys (renumber-list d caps init) (renumber (%wadd d #3) caps body)
     fclos g env → fclos g (renumber-list d caps env)
-    flam b → flam (renumber (%wsucc d) caps b)
+    flam ty b → flam ty (renumber (%wsucc d) caps b)
     fapply f args → fapply (renumber d caps f) (renumber-list d caps args)
     fthunk a → fthunk (renumber d caps a)
     fforce x → fforce (renumber d caps x)
@@ -396,24 +401,36 @@ renumber d caps t =
 renumber-ralts d caps alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , renumber (%wadd d (%wadd (fst (snd a)) (lst-len2 (fst (snd (snd a)))))) caps (snd (snd (snd a)))))) (renumber-ralts d caps r)
 renumber-list d caps l = case l of lnil → lnil; lcons x xs → lcons (renumber d caps x) (renumber-list d caps xs)
 renumber-alts d caps alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , renumber (%wadd d (fst (snd a))) caps (snd (snd a)))) (renumber-alts d caps r)
--- lift: definitions numbered from k; innermost λs first so that a λ's body is already converted
-lift k t =
+-- lift: definitions numbered from k; innermost λs first so that a λ's body is already converted.
+-- lift-e env k t: env the types of t's free variables (a Lst of FT, innermost first; ftany past its
+-- end), from which a lifted definition's parameters are typed: the captured variables at their
+-- types, then the λ's own binder (a recursion's: the scrutinee, of its data type). A field bound by
+-- a recursion's alternative is at ftfield d c j (the form records the data type and the
+-- constructor, the printers read the field's type from the data table where they bind it); one
+-- bound by a switch (which records no data type) and a hypothesis are at ftany. lift k t: a
+-- closed term
+env-ft env n = case env of lnil → ftany; lcons t r → if %weq n #0 then t else env-ft r (%wsub n #1)
+caps-fts env caps = case caps of lnil → lnil; lcons v r → lcons (env-ft env v) (caps-fts env r)
+push-ftany n env = if %weq n #0 then env else push-ftany (%wsub n #1) (lcons ftany env)
+push-fts tys env = case tys of lnil → env; lcons t r → push-fts r (lcons t env)
+field-fts d c j n = if %weq j n then lnil else lcons (ftfield d c j) (field-fts d c (%wsucc j) n)
+lift-e env k t =
   case t of
-    flam b →
-      (case lift k b of
+    flam ty b →
+      (case lift-e (lcons ty env) k b of
          lifted b2 ds k2 →
            let caps = free-vars #1 b2
-           in lifted (fclos k2 (caps-as-vars caps)) (lapp2 ds (lcons (k2 , (%wsucc (lst-len2 caps) , renumber #1 caps b2)) lnil)) (%wsucc k2))
-    fcon dd c fs → (case lift-list k fs of lifted2 fs2 ds k2 → lifted (fcon dd c fs2) ds k2)
-    fswitch x alts → (case lift k x of lifted x2 ds k2 → (case lift-alts k2 alts of lifted2 alts2 ds2 k3 → lifted (fswitch x2 alts2) (lapp2 ds ds2) k3))
-    fproj dd c j x → (case lift k x of lifted x2 ds k2 → lifted (fproj dd c j x2) ds k2)
-    fcall g args → (case lift-list k args of lifted2 as ds k2 → lifted (fcall g as) ds k2)
-    fprim p args → (case lift-list k args of lifted2 as ds k2 → lifted (fprim p as) ds k2)
-    flet a b → (case lift k a of lifted a2 ds k2 → (case lift k2 b of lifted b2 ds2 k3 → lifted (flet a2 b2) (lapp2 ds ds2) k3))
-    fif c a b → (case lift k c of lifted c2 ds k2 → (case lift k2 a of lifted a2 ds2 k3 → (case lift k3 b of lifted b2 ds3 k4 → lifted (fif c2 a2 b2) (lapp2 ds (lapp2 ds2 ds3)) k4)))
-    floop init body → (case lift-list k init of lifted2 is ds k2 → (case lift k2 body of lifted b2 ds2 k3 → lifted (floop is b2) (lapp2 ds ds2) k3))
-    fapply f args → (case lift k f of lifted f2 ds k2 → (case lift-list k2 args of lifted2 as ds2 k3 → lifted (fapply f2 as) (lapp2 ds ds2) k3))
-    fupd u dd x c j v → (case lift k x of lifted x2 ds k2 → (case lift k2 v of lifted v2 ds2 k3 → lifted (fupd u dd x2 c j v2) (lapp2 ds ds2) k3))
+           in lifted (fclos k2 (caps-as-vars caps)) (lapp2 ds (lcons (k2 , (lsnoc2 (caps-fts env caps) ty , renumber #1 caps b2)) lnil)) (%wsucc k2))
+    fcon dd c fs → (case lift-list env k fs of lifted2 fs2 ds k2 → lifted (fcon dd c fs2) ds k2)
+    fswitch x alts → (case lift-e env k x of lifted x2 ds k2 → (case lift-alts env k2 alts of lifted2 alts2 ds2 k3 → lifted (fswitch x2 alts2) (lapp2 ds ds2) k3))
+    fproj dd c j x → (case lift-e env k x of lifted x2 ds k2 → lifted (fproj dd c j x2) ds k2)
+    fcall g args → (case lift-list env k args of lifted2 as ds k2 → lifted (fcall g as) ds k2)
+    fprim p args → (case lift-list env k args of lifted2 as ds k2 → lifted (fprim p as) ds k2)
+    flet ty a b → (case lift-e env k a of lifted a2 ds k2 → (case lift-e (lcons ty env) k2 b of lifted b2 ds2 k3 → lifted (flet ty a2 b2) (lapp2 ds ds2) k3))
+    fif c a b → (case lift-e env k c of lifted c2 ds k2 → (case lift-e env k2 a of lifted a2 ds2 k3 → (case lift-e env k3 b of lifted b2 ds3 k4 → lifted (fif c2 a2 b2) (lapp2 ds (lapp2 ds2 ds3)) k4)))
+    floop tys init body → (case lift-list env k init of lifted2 is ds k2 → (case lift-e (push-fts tys env) k2 body of lifted b2 ds2 k3 → lifted (floop tys is b2) (lapp2 ds ds2) k3))
+    fapply f args → (case lift-e env k f of lifted f2 ds k2 → (case lift-list env k2 args of lifted2 as ds2 k3 → lifted (fapply f2 as) (lapp2 ds ds2) k3))
+    fupd u dd x c j v → (case lift-e env k x of lifted x2 ds k2 → (case lift-e env k2 v of lifted v2 ds2 k3 → lifted (fupd u dd x2 c j v2) (lapp2 ds ds2) k3))
     -- a thunk is lifted to a closure over its free variables taking one ignored argument (the
     -- printers have closures of one argument through the dispatcher), kept under fthunk as the
     -- suspended application of that closure to 0: the evaluator forces it by evaluating the
@@ -421,16 +438,16 @@ lift k t =
     -- Lifted recursion hypotheses are forced too and are values, which force leaves alone; a
     -- thunk forced twice is computed twice (the first-order form shares by let, not by memoized
     -- suspensions)
-    fthunk a → (case lift k (flam (shift-at #0 #1 a)) of lifted c ds k2 → lifted (fthunk (fapply c (lcons (flit #0) lnil))) ds k2)
-    fforce x → (case lift k x of lifted x2 ds k2 → lifted (fforce x2) ds k2)
+    fthunk a → (case lift-e env k (flam ftword (shift-at #0 #1 a)) of lifted c ds k2 → lifted (fthunk (fapply c (lcons (flit #0) lnil))) ds k2)
+    fforce x → (case lift-e env k x of lifted x2 ds k2 → lifted (fforce x2) ds k2)
     frec dd x alts →
-      (case lift k x of
+      (case lift-e env k x of
          lifted x2 ds k2 →
-           (case lift-ralts k2 alts of
+           (case lift-ralts env dd k2 alts of
               lifted2 alts2 ds2 k3 →
                 let caps = free-vars #0 (frec dd (flit #0) alts2)
                 in lifted (fcall k3 (lapp2 (caps-as-vars caps) (lcons x2 lnil)))
-                     (lapp2 ds (lapp2 ds2 (lcons (k3 , (%wsucc (lst-len2 caps) , renumber #1 caps (frec dd (fvar #0) (rec-alts k3 caps alts2)))) lnil)))
+                     (lapp2 ds (lapp2 ds2 (lcons (k3 , (lsnoc2 (caps-fts env caps) (ftdata dd lnil #0) , renumber #1 caps (frec dd (fvar #0) (rec-alts k3 caps alts2)))) lnil)))
                      (%wsucc k3)))
     _ → lifted t lnil k
 -- the switch of a lifted recursion — a recursion form with no hypotheses left (the printers read
@@ -451,10 +468,10 @@ rec-alts g caps alts =
 inline-hyps k t =
   if %weq k #0 then t
   else (case t of
-          flet a b →
+          flet ty a b →
             let b2 = inline-hyps (%wsub k #1) b
                 n = occ-count #0 b2
-            in if %weq n #0 then funshift0 #0 b2 else if %weq n #1 then fsubst #0 a b2 else flet a b2
+            in if %weq n #0 then funshift0 #0 b2 else if %weq n #1 then fsubst #0 a b2 else flet ty a b2
           _ → t)
 -- occurrences of variable v in t; one under a λ, a thunk or a loop body counts as many
 occ-count v t =
@@ -466,11 +483,11 @@ occ-count v t =
     fproj d c k x → occ-count v x
     fcall g args → occ-list v args
     fprim p args → occ-list v args
-    flet a b → %wadd (occ-count v a) (occ-count (%wsucc v) b)
+    flet ty a b → %wadd (occ-count v a) (occ-count (%wsucc v) b)
     fif c a b → %wadd (occ-count v c) (%wadd (occ-count v a) (occ-count v b))
-    floop init body → %wadd (occ-list v init) (occ-many (occ-count (%wadd v (lst-len2 init)) body))
+    floop tys init body → %wadd (occ-list v init) (occ-many (occ-count (%wadd v (lst-len2 init)) body))
     fclos g env → occ-list v env
-    flam b → occ-many (occ-count (%wsucc v) b)
+    flam ty b → occ-many (occ-count (%wsucc v) b)
     fapply f args → %wadd (occ-count v f) (occ-list v args)
     fthunk a → occ-many (occ-count v a)
     fforce x → occ-count v x
@@ -494,11 +511,11 @@ fsubst d e t =
     fproj dd c j x → fproj dd c j (fsubst d e x)
     fcall g args → fcall g (fsubst-list d e args)
     fprim p args → fprim p (fsubst-list d e args)
-    flet a b → flet (fsubst d e a) (fsubst (%wsucc d) e b)
+    flet ty a b → flet ty (fsubst d e a) (fsubst (%wsucc d) e b)
     fif c a b → fif (fsubst d e c) (fsubst d e a) (fsubst d e b)
-    floop init body → floop (fsubst-list d e init) (fsubst (%wadd d (lst-len2 init)) e body)
+    floop tys init body → floop tys (fsubst-list d e init) (fsubst (%wadd d (lst-len2 init)) e body)
     fclos g env → fclos g (fsubst-list d e env)
-    flam b → flam (fsubst (%wsucc d) e b)
+    flam ty b → flam ty (fsubst (%wsucc d) e b)
     fapply f args → fapply (fsubst d e f) (fsubst-list d e args)
     fthunk a → fthunk (fsubst d e a)
     fforce x → fforce (fsubst d e x)
@@ -514,37 +531,43 @@ funshift0 d t = fsubst d (flit #0) t
 hyp-lets g caps n t hyps body =
   case hyps of
     lnil → body
-    lcons j r → flet (fcall g (lapp2 (caps-at (%wsucc (%wadd n t)) caps) (lcons (fvar (%wadd (%wsub (%wsub n #1) j) t)) lnil))) (hyp-lets g caps n (%wsucc t) r body)
+    lcons j r → flet ftany (fcall g (lapp2 (caps-at (%wsucc (%wadd n t)) caps) (lcons (fvar (%wadd (%wsub (%wsub n #1) j) t)) lnil))) (hyp-lets g caps n (%wsucc t) r body)
 caps-at d caps = case caps of lnil → lnil; lcons v r → lcons (fvar (%wadd v d)) (caps-at d r)
-lift-ralts k alts =
+lift-ralts env dd k alts =
   case alts of
     lnil → lifted2 lnil lnil k
-    lcons a r → (case lift k (snd (snd (snd a))) of lifted b2 ds k2 → (case lift-ralts k2 r of lifted2 r2 ds2 k3 → lifted2 (lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , b2))) r2) (lapp2 ds ds2) k3))
-lift-list k l =
+    lcons a r → (case lift-e (push-ftany (lst-len2 (fst (snd (snd a)))) (push-fts (field-fts dd (fst a) #0 (fst (snd a))) env)) k (snd (snd (snd a))) of lifted b2 ds k2 → (case lift-ralts env dd k2 r of lifted2 r2 ds2 k3 → lifted2 (lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , b2))) r2) (lapp2 ds ds2) k3))
+lift-list env k l =
   case l of
     lnil → lifted2 lnil lnil k
-    lcons x xs → (case lift k x of lifted x2 ds k2 → (case lift-list k2 xs of lifted2 xs2 ds2 k3 → lifted2 (lcons x2 xs2) (lapp2 ds ds2) k3))
-lift-alts k alts =
+    lcons x xs → (case lift-e env k x of lifted x2 ds k2 → (case lift-list env k2 xs of lifted2 xs2 ds2 k3 → lifted2 (lcons x2 xs2) (lapp2 ds ds2) k3))
+lift-alts env k alts =
   case alts of
     lnil → lifted2 lnil lnil k
-    lcons a r → (case lift k (snd (snd a)) of lifted b2 ds k2 → (case lift-alts k2 r of lifted2 r2 ds2 k3 → lifted2 (lcons (fst a , (fst (snd a) , b2)) r2) (lapp2 ds ds2) k3))
+    lcons a r → (case lift-e (push-ftany (fst (snd a)) env) k (snd (snd a)) of lifted b2 ds k2 → (case lift-alts env k2 r of lifted2 r2 ds2 k3 → lifted2 (lcons (fst a , (fst (snd a) , b2)) r2) (lapp2 ds ds2) k3))
+lift k t = lift-e lnil k t
 caps-as-vars caps = case caps of lnil → lnil; lcons n r → lcons (fvar n) (caps-as-vars r)
 lapp2 l m = case l of lnil → m; lcons x xs → lcons x (lapp2 xs m)
+lsnoc2 l x = lapp2 l (lcons x lnil)
+-- a program's definition (g , (params , body)): its arity
+def-n d = lst-len2 (fst (snd d))
 -- a converted λ applied through eval-fo: fclos g env with the definition table from the lifted
 -- definitions; the definitions' bodies take the captured values then the argument
 table-of defs g = case defs of lnil → flit #0; lcons d r → if %weq (fst d) g then snd (snd d) else table-of r g
 -- (λ x → x + c) with c captured, lifted and applied: 5 + 10
-t-clo = flet (flit #10) (fapply (flam (fprim P-add (lcons (fvar #0) (lcons (fvar #1) lnil)))) (lcons (flit #5) lnil))
+t-clo = flet ftword (flit #10) (fapply (flam ftword (fprim P-add (lcons (fvar #0) (lcons (fvar #1) lnil)))) (lcons (flit #5) lnil))
 -- a thunk over a let-bound value, forced twice and the forcings added: 10 + 1 twice = 22, before
 -- and after lifting (the thunk a closure, force its application to 0)
-t-thunk = flet (flit #10) (flet (fthunk (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))) (fprim P-add (lcons (fforce (fvar #0)) (lcons (fforce (fvar #0)) lnil))))
+t-thunk = flet ftword (flit #10) (flet (ftlazy ftword) (fthunk (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))) (fprim P-add (lcons (fforce (fvar #0)) (lcons (fforce (fvar #0)) lnil))))
 defs-table ds g = case ds of lnil → flit #0; lcons d r → if %weq (fst d) g then snd (snd d) else defs-table r g
 #same eval-fo lnil lnil t-thunk = vw #22
 #same (case lift #1 t-thunk of lifted t2 ds k → eval-fo (defs-table ds) lnil t2) = vw #22
 #same (case lift #1 t-clo of lifted t2 ds k → eval-fo (table-of ds) lnil t2) = vw #15
 #same (case lift #1 t-clo of lifted t2 ds k → k) = #2
 -- the lifted definition captures one variable: arity 2
-#same (case lift #1 t-clo of lifted t2 ds k → (case ds of lcons d r → fst (snd d); lnil → #0)) = #2
+#same (case lift #1 t-clo of lifted t2 ds k → (case ds of lcons d r → lst-len2 (fst (snd d)); lnil → #0)) = #2
+-- typed: the captured word, then the λ's own word
+#same (case lift #1 t-clo of lifted t2 ds k → (case ds of lcons d r → fst (snd d); lnil → lnil)) = lcons ftword (lcons ftword lnil)
 -- the byte layer in the evaluator: a store then a load, 64 and 32 bits, and the length
 #same eval-fo (λ g → flit #0) lnil (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fprim P-store64 (lcons (fprim P-bytes (lcons (flit #16) lnil)) (lcons (flit #8) (lcons (flit #9) lnil)))) (lcons (flit #8) lnil))) lnil)) = vw #9
 #same eval-fo (λ g → flit #0) lnil (fprim P-load32 (lcons (fprim P-store32 (lcons (fprim P-bytes (lcons (flit #16) lnil)) (lcons (flit #4) (lcons (flit #258) lnil)))) (lcons (flit #4) lnil))) = vw #258
@@ -559,11 +582,11 @@ defs-table ds g = case ds of lnil → flit #0; lcons d r → if %weq (fst d) g t
 fo-len = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lcons #1 lnil , fprim P-add (lcons (fforce (fvar #0)) (lcons (flit #1) lnil))))) lnil))
 l3 = fcon #7 #1 (lcons (flit #5) (lcons (fcon #7 #1 (lcons (flit #6) (lcons (fcon #7 #0 lnil) lnil))) lnil))
 #same eval-fo no-defs (lcons (eval-fo no-defs lnil l3) lnil) fo-len = vw #2
-#same (case lift #1 (flam fo-len) of lifted t2 ds k → eval-fo (table-of ds) lnil (fapply t2 (lcons l3 lnil))) = vw #2
+#same (case lift #1 (flam ftany fo-len) of lifted t2 ds k → eval-fo (table-of ds) lnil (fapply t2 (lcons l3 lnil))) = vw #2
 -- a captured variable in the recursion (the increment c), lifted: the definition takes c then the list
-fo-lenc = flet (flit #10) (frec #7 (fvar #1) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lcons #1 lnil , fprim P-add (lcons (fforce (fvar #0)) (lcons (fvar #3) lnil))))) lnil)))
-#same (case lift #1 (flam fo-lenc) of lifted t2 ds k → eval-fo (table-of ds) lnil (fapply t2 (lcons l3 lnil))) = vw #20
-#same (case lift #1 (flam fo-lenc) of lifted t2 ds k → k) = #3
+fo-lenc = flet ftword (flit #10) (frec #7 (fvar #1) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lcons #1 lnil , fprim P-add (lcons (fforce (fvar #0)) (lcons (fvar #3) lnil))))) lnil)))
+#same (case lift #1 (flam ftany fo-lenc) of lifted t2 ds k → eval-fo (table-of ds) lnil (fapply t2 (lcons l3 lnil))) = vw #20
+#same (case lift #1 (flam ftany fo-lenc) of lifted t2 ds k → k) = #3
 -- ---------------------------------------------------------------- in-place update (C21)
 -- A constructor rebuilt from another value's fields is an update of that value: reuse-cons turns
 -- fcon d c fs, where some field i is field i of one base X (a projection fproj d c i X, or the
@@ -587,11 +610,11 @@ reuse-at flds dd t =
     fproj d c k x → fproj d c k (reuse-at flds dd x)
     fcall g args → fcall g (reuse-list flds dd args)
     fprim p args → fprim p (reuse-list flds dd args)
-    flet a b → flet (reuse-at flds dd a) (reuse-at flds (%wsucc dd) b)
+    flet ty a b → flet ty (reuse-at flds dd a) (reuse-at flds (%wsucc dd) b)
     fif c a b → fif (reuse-at flds dd c) (reuse-at flds dd a) (reuse-at flds dd b)
-    floop init body → floop (reuse-list flds dd init) (reuse-at flds (%wadd dd (lst-len2 init)) body)
+    floop tys init body → floop tys (reuse-list flds dd init) (reuse-at flds (%wadd dd (lst-len2 init)) body)
     fclos g env → fclos g (reuse-list flds dd env)
-    flam b → flam (reuse-at flds (%wsucc dd) b)
+    flam ty b → flam ty (reuse-at flds (%wsucc dd) b)
     fapply f args → fapply (reuse-at flds dd f) (reuse-list flds dd args)
     fthunk a → fthunk (reuse-at flds dd a)
     fforce x → fforce (reuse-at flds dd x)
@@ -661,7 +684,7 @@ safe v t =
                         _ → safe-seq (safe v x) (safe v w))
     fswitch x alts → safe-seq (safe-scrut v x) (safe-alts v alts)
     frec d x alts → safe-seq (safe-scrut v x) (safe-ralts v alts)
-    flet a b → safe-seq (safe v a) (safe (%wsucc v) b)
+    flet ty a b → safe-seq (safe v a) (safe (%wsucc v) b)
     fif c a b → safe-seq (safe v c) (safe-branch (safe v a) (safe v b))
     fcon d c fs → safe-list v fs
     fcall g args → safe-list v args
@@ -679,8 +702,8 @@ safe v t =
     fclos g env → safe-list v env
     fnet g args → safe-list v args
     fapply f args → safe-par (safe v f) (safe-list v args)
-    floop init body → safe-par (safe-list v init) (safe-again (safe (%wadd v (lst-len2 init)) body))
-    flam b → safe-again (safe (%wsucc v) b)
+    floop tys init body → safe-par (safe-list v init) (safe-again (safe (%wadd v (lst-len2 init)) body))
+    flam ty b → safe-again (safe (%wsucc v) b)
     fthunk a → safe-again (safe v a)
     fforce x → safe v x
     fassume f b → safe v b
@@ -704,7 +727,7 @@ fresh t =
   case t of
     fcon d c fs → true
     fupd u dd x c k v → true
-    flet a b → fresh b
+    flet ty a b → fresh b
     fif c a b → andf (fresh a) (fresh b)
     fswitch x alts → fresh-alts alts
     frec d x alts → fresh-ralts alts
@@ -727,7 +750,7 @@ set-ip v t =
                                                               _ → fprim p (set-ip-list v args))
                                             lnil → t)
                      else fprim p (set-ip-list v args))
-    flet a b → flet (set-ip v a) (set-ip (%wsucc v) b)
+    flet ty a b → flet ty (set-ip v a) (set-ip (%wsucc v) b)
     fif c a b → fif (set-ip v c) (set-ip v a) (set-ip v b)
     fcon d c fs → fcon d c (set-ip-list v fs)
     fapply f args → fapply (set-ip v f) (set-ip-list v args)
@@ -743,7 +766,7 @@ cont-fresh i body =
   case body of
     fcon d c fs → if %weq c #0 then fresh (lst-nth-fo fs i) else true
     fif c a b → andf (cont-fresh i a) (cont-fresh i b)
-    flet a b → cont-fresh i b
+    flet ty a b → cont-fresh i b
     fswitch x alts → cont-fresh-alts i alts
     frec d x alts → cont-fresh-ralts i alts
     fassume f b → cont-fresh i b
@@ -757,8 +780,8 @@ lst-nth-fo l n = case l of lnil → flit #0; lcons x xs → if %weq n #0 then x 
 mark-uniq t =
   case t of
     fupd u dd x c k v → fupd (if fresh x then #1 else u) dd (mark-uniq x) c k (mark-uniq v)
-    flet a b → (let b2 = mark-uniq b in flet (mark-uniq a) (if andf (fresh a) (%weq (safe #0 b2) #2) then set-ip #0 b2 else b2))
-    floop init body → floop (mark-list init) (mark-slots (lst-len2 init) init #0 (mark-uniq body))
+    flet ty a b → (let b2 = mark-uniq b in flet ty (mark-uniq a) (if andf (fresh a) (%weq (safe #0 b2) #2) then set-ip #0 b2 else b2))
+    floop tys init body → floop tys (mark-list init) (mark-slots (lst-len2 init) init #0 (mark-uniq body))
     fswitch x alts → fswitch (mark-uniq x) (mark-alts alts)
     frec d x alts → frec d (mark-uniq x) (mark-ralts alts)
     fproj d c k x → fproj d c k (mark-uniq x)
@@ -769,7 +792,7 @@ mark-uniq t =
     fif c a b → fif (mark-uniq c) (mark-uniq a) (mark-uniq b)
     fcon d c fs → fcon d c (mark-list fs)
     fclos g env → fclos g (mark-list env)
-    flam b → flam (mark-uniq b)
+    flam ty b → flam ty (mark-uniq b)
     fapply f args → fapply (mark-uniq f) (mark-list args)
     fthunk a → fthunk (mark-uniq a)
     fforce x → fforce (mark-uniq x)
@@ -791,43 +814,43 @@ pr-upd = fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (flit #9) lnil))
 -- and evaluates to the pair with the field replaced
 #same eval-fo no-defs (lcons (vcon #0 #0 (lcons (vw #1) (lcons (vw #2) lnil))) lnil) (reuse-cons pr-upd) = vcon #0 #0 (lcons (vw #1) (lcons (vw #9) lnil))
 -- a let-bound pair updated once, its old field read in the new value: unique, so in place
-let-upd = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (fprim P-add (lcons (fproj #0 #0 #1 (fvar #0)) (lcons (flit #40) lnil))) lnil)))
-#same inplace let-upd = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fupd #1 #0 (fvar #0) #0 #1 (fprim P-add (lcons (fproj #0 #0 #1 (fvar #0)) (lcons (flit #40) lnil))))
+let-upd = flet (ftpair ftword ftword) (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (fprim P-add (lcons (fproj #0 #0 #1 (fvar #0)) (lcons (flit #40) lnil))) lnil)))
+#same inplace let-upd = flet (ftpair ftword ftword) (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fupd #1 #0 (fvar #0) #0 #1 (fprim P-add (lcons (fproj #0 #0 #1 (fvar #0)) (lcons (flit #40) lnil))))
 #same eval-fo no-defs lnil (inplace let-upd) = vcon #0 #0 (lcons (vw #1) (lcons (vw #42) lnil))
 -- the same pair also read beside the update (unsequenced): a copy
-let-upd2 = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (flit #9) lnil))) lnil)))
-#same inplace let-upd2 = flet (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fupd #0 #0 (fvar #0) #0 #1 (fupd #0 #0 (fvar #0) #0 #1 (flit #9)))
+let-upd2 = flet (ftpair ftword ftword) (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (fcon #0 #0 (lcons (fproj #0 #0 #0 (fvar #0)) (lcons (flit #9) lnil))) lnil)))
+#same inplace let-upd2 = flet (ftpair ftword ftword) (fcon #0 #0 (lcons (flit #1) (lcons (flit #2) lnil))) (fupd #0 #0 (fvar #0) #0 #1 (fupd #0 #0 (fvar #0) #0 #1 (flit #9)))
 -- a parameter updated (the base is not fresh): a copy; a recursion's alternative rebuilding its
 -- constructor with one field changed is the update of the scrutinee (no hypotheses here)
 rec-upd = frec #12 (fvar #0) (lcons (#0 , (#2 , (lnil , fcon #12 #0 (lcons (fvar #1) (lcons (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil))) lnil))))) lnil)
 #same inplace rec-upd = frec #12 (fvar #0) (lcons (#0 , (#2 , (lnil , fupd #0 #12 (fvar #2) #0 #1 (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))))) lnil)
 #same eval-fo no-defs (lcons (vcon #12 #0 (lcons (vw #5) (lcons (vw #6) lnil))) lnil) (inplace rec-upd) = vcon #12 #0 (lcons (vw #5) (lcons (vw #7) lnil))
 -- a loop over a fresh record, updated each iteration: in place
-loop-upd = floop (lcons (flit #3) (lcons (fcon #7712 #0 (lcons (flit #0) (lcons (flit #10) lnil))) lnil))
+loop-upd = floop (lcons ftword (lcons (ftdata #7712 lnil #0) lnil)) (lcons (flit #3) (lcons (fcon #7712 #0 (lcons (flit #0) (lcons (flit #10) lnil))) lnil))
   (fif (fprim P-lt (lcons (flit #0) (lcons (fvar #1) lnil)))
      (fcon #0 #0 (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (frec #7712 (fvar #0) (lcons (#0 , (#2 , (lnil , fcon #7712 #0 (lcons (fvar #1) (lcons (fprim P-add (lcons (fvar #0) (lcons (fvar #3) lnil))) lnil))))) lnil)) lnil)))
      (fcon #0 #1 (lcons (fvar #0) lnil)))
-#same (case inplace loop-upd of floop i b → (case b of fif c a e → (case a of fcon d k st → (case lst-nth-fo st #1 of frec dd x alts → (case alts of lcons al r → (case snd (snd (snd al)) of fupd u dd y c k v → u; _ → #9); _ → #9); _ → #9); _ → #9); _ → #9); _ → #9) = #1
+#same (case inplace loop-upd of floop ts i b → (case b of fif c a e → (case a of fcon d k st → (case lst-nth-fo st #1 of frec dd x alts → (case alts of lcons al r → (case snd (snd (snd al)) of fupd u dd y c k v → u; _ → #9); _ → #9); _ → #9); _ → #9); _ → #9); _ → #9) = #1
 #same eval-fo no-defs lnil (inplace loop-upd) = vcon #7712 #0 (lcons (vw #0) (lcons (vw #16) lnil))
 -- the byte layer (C21 on buffers, item 22's arrays): a store into a fresh buffer, or into a
 -- let-bound one whose other uses are reads before it, stores in place; into a parameter, or beside
 -- an unsequenced read, it copies
 st-fresh = fprim P-store64 (lcons (fprim P-bytes (lcons (flit #16) lnil)) (lcons (flit #8) (lcons (fi64 #9) lnil)))
 #same inplace st-fresh = fprim P-store64-ip (lcons (fprim P-bytes (lcons (flit #16) lnil)) (lcons (flit #8) (lcons (fi64 #9) lnil)))
-st-let = flet (fprim P-bytes (lcons (flit #16) lnil)) (fprim P-store64 (lcons (fvar #0) (lcons (flit #8) (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #0) lnil))) lnil))))
-#same inplace st-let = flet (fprim P-bytes (lcons (flit #16) lnil)) (fprim P-store64-ip (lcons (fvar #0) (lcons (flit #8) (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #0) lnil))) lnil))))
+st-let = flet (ftbytes #16) (fprim P-bytes (lcons (flit #16) lnil)) (fprim P-store64 (lcons (fvar #0) (lcons (flit #8) (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #0) lnil))) lnil))))
+#same inplace st-let = flet (ftbytes #16) (fprim P-bytes (lcons (flit #16) lnil)) (fprim P-store64-ip (lcons (fvar #0) (lcons (flit #8) (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #0) lnil))) lnil))))
 st-par = fprim P-store64 (lcons (fvar #0) (lcons (flit #8) (lcons (fi64 #9) lnil)))
 #same inplace st-par = st-par
-st-beside = flet (fprim P-bytes (lcons (flit #16) lnil)) (fprim P-add (lcons (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fprim P-store64 (lcons (fvar #0) (lcons (flit #8) (lcons (fi64 #9) lnil)))) (lcons (flit #8) lnil))) lnil)) (lcons (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #8) lnil))) lnil)) lnil)))
+st-beside = flet (ftbytes #16) (fprim P-bytes (lcons (flit #16) lnil)) (fprim P-add (lcons (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fprim P-store64 (lcons (fvar #0) (lcons (flit #8) (lcons (fi64 #9) lnil)))) (lcons (flit #8) lnil))) lnil)) (lcons (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #8) lnil))) lnil)) lnil)))
 #same inplace st-beside = st-beside
 -- a loop filling an 8-word buffer, the buffer its own state: each iteration's store in place; the
 -- value is unchanged (slot k holds k; 7 + 3 read back)
-loop-buf = flet (floop (lcons (flit #8) (lcons (fprim P-bytes (lcons (flit #64) lnil)) lnil))
+loop-buf = flet (ftbytes #64) (floop (lcons ftword (lcons (ftbytes #64) lnil)) (lcons (flit #8) (lcons (fprim P-bytes (lcons (flit #64) lnil)) lnil))
     (fif (fprim P-lt (lcons (flit #0) (lcons (fvar #1) lnil)))
        (fcon #0 #0 (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (fprim P-store64 (lcons (fvar #0) (lcons (fprim P-mul (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (flit #8) lnil))) (lcons (fprim P-i64ofw (lcons (fprim P-sub (lcons (fvar #1) (lcons (flit #1) lnil))) lnil)) lnil)))) lnil)))
        (fcon #0 #1 (lcons (fvar #0) lnil))))
   (fprim P-add (lcons (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #56) lnil))) lnil)) (lcons (fprim P-wofi64 (lcons (fprim P-load64 (lcons (fvar #0) (lcons (flit #24) lnil))) lnil)) lnil)))
-#same (case inplace loop-buf of flet l b → (case l of floop i body → (case body of fif c a e → (case a of fcon d k st → (case lst-nth-fo st #1 of fprim p as → p; _ → #99); _ → #99); _ → #99); _ → #99); _ → #99) = P-store64-ip
+#same (case inplace loop-buf of flet ty l b → (case l of floop ts i body → (case body of fif c a e → (case a of fcon d k st → (case lst-nth-fo st #1 of fprim p as → p; _ → #99); _ → #99); _ → #99); _ → #99); _ → #99) = P-store64-ip
 #same eval-fo no-defs lnil (inplace loop-buf) = vw #10
 #same eval-fo no-defs lnil loop-buf = vw #10
 -- with hypotheses the rebuild stays a constructor: the alternative runs again on the tail, where
@@ -838,5 +861,5 @@ rec-id = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , fcon #7 #0 lnil))) (lcons 
 -- a lifted recursion computes a hypothesis where it is read: the head of a list does not walk
 -- it (the hypothesis is dropped), the length reads it once (the call is in place of the let)
 head-fo = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lcons #1 lnil , fvar #2))) lnil))
-#same (case lift #1 (flam head-fo) of lifted t2 ds k → (case ds of lcons d r → snd (snd d); lnil → flit #0)) = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lnil , fvar #1))) lnil))
-#same (case lift #1 (flam fo-len) of lifted t2 ds k → (case ds of lcons d r → snd (snd d); lnil → flit #0)) = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lnil , fprim P-add (lcons (fforce (fcall #1 (lcons (fvar #0) lnil))) (lcons (flit #1) lnil))))) lnil))
+#same (case lift #1 (flam ftany head-fo) of lifted t2 ds k → (case ds of lcons d r → snd (snd d); lnil → flit #0)) = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lnil , fvar #1))) lnil))
+#same (case lift #1 (flam ftany fo-len) of lifted t2 ds k → (case ds of lcons d r → snd (snd d); lnil → flit #0)) = frec #7 (fvar #0) (lcons (#0 , (#0 , (lnil , flit #0))) (lcons (#1 , (#2 , (lnil , fprim P-add (lcons (fforce (fcall #1 (lcons (fvar #0) lnil))) (lcons (flit #1) lnil))))) lnil))

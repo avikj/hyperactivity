@@ -352,7 +352,7 @@ cxx-expr env want c =
                  else xcat5 (xs x-lp) (cxx-expr env none a) (xs (wop-text k)) (cxx-expr env none b) (xs x-rp)
     cplit k b → if %weq k #0 then xs (cat4 x-i64c x-ulit (dec b) (lapp x-rp x-rp)) else if %weq k #2 then xs (cat4 x-f64bits x-ulit (dec b) (lapp x-rp x-rp)) else if %weq k #1 then xs (cat4 x-u32c x-ulit (dec b) (lapp x-rp x-rp)) else xno (lapp x-r-form (lcons #112 lnil))
     cprim k as → prim-expr env k as
-    cwelim w z s → xcat7 (xs x-welim) (cxx-expr env none w) (xs x-comma) (cxx-expr env none z) (xs x-comma) (cxx-expr env none s) (xs x-rp)
+    cwelim w z s mo → xcat7 (xs x-welim) (cxx-expr env none w) (xs x-comma) (cxx-expr env none z) (xs x-comma) (cxx-expr env none s) (xs x-rp)
     ccon d k fs ds → (case ds of lnil → (if %weq d bool-idx then xs (if %weq k #0 then x-true else x-false) else (case (if andb nat-rep (andb (%weq d nat-d) (notb (dform-has env d))) then nat-code c else none) of some n → xs (cat5 (x-dname d) x-from-c x-ulit (dec n) (lapp x-rp x-rp)); none → con-expr env want d k fs)); _ → xno x-r-dim)
     ccase d B x → if %weq d bool-idx then bool-case env want B x else case-expr env want d none B x
     celim d P B x → if %weq d bool-idx then bool-case env want B x else case-expr env want d (some P) B x
@@ -658,7 +658,7 @@ datas-in c acc =
     csigma A B → datas-in B (datas-in A acc)
     cwsucc a → datas-in a acc
     cwop k a b → datas-in b (datas-in a acc)
-    cwelim w z s → datas-in s (datas-in z (datas-in w acc))
+    cwelim w z s mo → datas-in s (datas-in z (datas-in w acc))
     cprim k as → datas-list as acc
     cforce t → datas-in t acc
     cthunk t → datas-in t acc
