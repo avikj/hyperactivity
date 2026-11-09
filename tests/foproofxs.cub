@@ -1,0 +1,89 @@
+-- tests/foproofxs.cub — lib/foproofxs.cub's theorem used: xa-sound composed into the x86 route's per-program
+-- paths (run.py's proved and proved-fib, the word route), as lib/foproofcp.cub's ca-fw-path does for C;
+-- and readings tying the checked tables the paths are about to the untyped ones the route prints.
+-- Loaded after lib/foproofq.cub (fw-path) and lib/foproofxs.cub.
+-- ---------------------------------------------------------------- a machine to start from
+-- the arena [4096, 1048576), the stack from 2000000 up, rsp at 4000000 (T, the top), every argument
+-- register holding the argument
+xs-B : XB
+xs-B = xb #4096 #1048576 #2000000
+xs-s0 : Word → XM
+xs-s0 x = xm #0 #0 #0 #4000000 #4096 (λ i → x) (λ a → #0)
+-- a value: not none
+xs-nb : KQ → Type
+xs-nb kqbot = Empty
+xs-nb (kqw w) = Unit
+xs-nb (kqi b) = Unit
+xs-nb (kqf b) = Unit
+xs-nb (kqcon d c fs) = Unit
+xs-nb (kqclos g env) = Unit
+xs-nb (kqlam b env) = Unit
+xs-nb (kqb l) = Unit
+xs-nb kqnil = Unit
+xs-nb (kqcons x r) = Unit
+-- a word refining a value that is the word w0: w0
+xs-qw : (m : Word → Word) (f : Word) (v : KQ) (w w0 : Word) → XSV m f v w → qle-w v w0 → xs-nb v → w ≡ w0
+xs-qw m f (kqw y) w w0 h hq hn = h ∙ qw-inj y w0 hq
+xs-qw m f kqbot w w0 h hq hn = Empty-rec hn
+xs-qw m f (kqi y) w w0 h hq hn = Empty-rec hq
+xs-qw m f (kqf y) w w0 h hq hn = Empty-rec hq
+xs-qw m f (kqcon d c fs) w w0 h hq hn = Empty-rec hq
+xs-qw m f (kqclos g env) w w0 h hq hn = Empty-rec hq
+xs-qw m f (kqlam b env) w w0 h hq hn = Empty-rec hq
+xs-qw m f (kqb l) w w0 h hq hn = Empty-rec hq
+xs-qw m f kqnil w w0 h hq hn = Empty-rec hq
+xs-qw m f (kqcons y r) w w0 h hq hn = Empty-rec hq
+-- the value in rax of an end state
+xs-pt-v : (B : XB) (a c b p f : Word) (r m : Word → Word) (v : KQ) (s : XM) → XPT B (xm a c b p f r m) v s → XSV (x-mem s) (x-r15 s) v (x-rax s)
+xs-pt-v B a c b p f r m v (xm a2 c2 b2 p2 f2 r2 m2) h = snd (snd (snd (snd (snd h))))
+-- the one argument in register 0
+xs-ar1 : (m : Word → Word) (f x : Word) (i : Nat) → q-le (suc i) (suc zero) ≡ true → XSV m f (q-nth (kqcons (kqw x) kqnil) i) x
+xs-ar1 m f x zero h = λ t → x
+xs-ar1 m f x (suc i) h = Empty-rec (false≢true h)
+-- ---------------------------------------------------------------- the word route, end to end, to the machine
+-- the program run.py's X86 route runs for a word-route main of one parameter: key 0 is xfn 1 of the
+-- printed body (each key, as no other is called); at every fuel and argument, whenever the machine's run
+-- of call 0 ends without a limit hit and the first-order form has a value, rax is what the source code
+-- computes
+xa-fw-path : (r : VRule) (c : WC) (x : Word) (N : Nat) (s : XM) → xq-ok (λ g → suc zero) (λ g → weq g #0) (fw-to-fq (spec-w r c)) xkt ≡ true
+           → xs-nb (evq (λ g → fw-to-fq (spec-w r c)) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil))
+           → evx (λ g → xfn (suc zero) (fw-to-fq (spec-w r c))) xs-B (suc N) (x1 (xcall #0)) (xs-s0 x) ≡ xon s → x-rax s ≡ wc-ev c (envx x)
+xa-fw-path r c x N s hok hn he =
+  xs-qw (x-mem s) (x-r15 s) (evq (λ g → fw-to-fq (spec-w r c)) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil)) (x-rax s) (wc-ev c (envx x))
+    (xs-pt-v xs-B #0 #0 #0 #4000000 #4096 (λ i → x) (λ a → #0) (evq (λ g → fw-to-fq (spec-w r c)) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil)) s
+       (xs-on-eq (evx (λ g → xfn (suc zero) (fw-to-fq (spec-w r c))) xs-B (suc N) (x1 (xcall #0)) (xs-s0 x)) s
+          (XPT xs-B (xs-s0 x) (evq (λ g → fw-to-fq (spec-w r c)) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil))) XE0 XE0 XE0
+          (xa-sound-call (λ g → fw-to-fq (spec-w r c)) (λ g → suc zero) (λ g → weq g #0) (λ g → xfn (suc zero) (fw-to-fq (spec-w r c))) xs-B #4000000 (λ t → false)
+             (λ g hg → hok) (λ g hg t → xfn (suc zero) (fw-to-fq (spec-w r c))) (suc N) #0 (kqcons (kqw x) kqnil) (xs-s0 x) (λ t → true) (λ t → true)
+             ((λ t → false) , ((λ t → false) , ((λ t → false) , (λ i hi → xs-ar1 (λ a → #0) #4096 x i hi)))))
+          he))
+    (fw-path r c (λ g → fw-to-fq (spec-w r c)) (envx x) (kqcons (kqw x) kqnil) N (fenv-x x)) hn
+-- run.py's proved (lib/foproof.cub's ex-c) and proved-fib (fib-c) through the x86 route
+ex-xpath : (x : Word) (N : Nat) (s : XM) → xs-nb (evq (λ g → fw-to-fq (spec-w std-vrule ex-c)) N (fw-to-fq (spec-w std-vrule ex-c)) (kqcons (kqw x) kqnil))
+         → evx (λ g → xfn (suc zero) (fw-to-fq (spec-w std-vrule ex-c))) xs-B (suc N) (x1 (xcall #0)) (xs-s0 x) ≡ xon s → x-rax s ≡ wc-ev ex-c (envx x)
+ex-xpath x N s hn he = xa-fw-path std-vrule ex-c x N s (λ t → true) hn he
+fib-xpath : (x : Word) (N : Nat) (s : XM) → xs-nb (evq (λ g → fw-to-fq (spec-w std-vrule fib-c)) N (fw-to-fq (spec-w std-vrule fib-c)) (kqcons (kqw x) kqnil))
+          → evx (λ g → xfn (suc zero) (fw-to-fq (spec-w std-vrule fib-c))) xs-B (suc N) (x1 (xcall #0)) (xs-s0 x) ≡ xon s → x-rax s ≡ wc-ev fib-c (envx x)
+fib-xpath x N s hn he = xa-fw-path std-vrule fib-c x N s (λ t → true) hn he
+-- ---------------------------------------------------------------- the paths' tables are the route's
+-- run.py's X86 route prints xa-prog of these definitions (tests/foproofx.cub's xt-pr, xt-fib): key 0 of
+-- one parameter, its body the word route's printed form; the table xa-table builds is the one the paths
+-- are about, and the machine answers through it what run.py prints (that specialize-proved-q gives
+-- proved-fib's definitions as fib-c's printed body is tests/foproofc.cub's reading)
+xs-pr = lcons (#0 , (#1 , fw-to-fq (spec-w std-vrule ex-c))) lnil
+#same xa-table xs-pr #0 = xfn (suc zero) (fw-to-fq (spec-w std-vrule ex-c))
+#same xa-table (lcons (#0 , (#1 , fw-to-fq (spec-w std-vrule fib-c))) lnil) #0 = xfn (suc zero) (fw-to-fq (spec-w std-vrule fib-c))
+#same xq-defs-ok xs-pr = true
+#same xq-defs-ok (lcons (#0 , (#1 , fw-to-fq (spec-w std-vrule fib-c))) lnil) = true
+-- the fragment's decision on the paths' tables (the paths' xq-ok premise, here by computation)
+#same xq-ok (λ g → suc zero) (λ g → weq g #0) (fw-to-fq (spec-w std-vrule ex-c)) xkt = true
+#same xq-ok (λ g → suc zero) (λ g → weq g #0) (fw-to-fq (spec-w std-vrule fib-c)) xkt = true
+-- the machine's answers from the paths' start state: 13 at 4, fib 90; the first-order form's the same
+xs-ans : XO → Word
+xs-ans o = case o of xon s → x-rax s; xlim → #77777; _ → #99999
+#same xs-ans (evx (λ g → xfn (suc zero) (fw-to-fq (spec-w std-vrule ex-c))) xs-B (dnat #200) (x1 (xcall #0)) (xs-s0 #4)) = #13
+#same xs-ans (evx (λ g → xfn (suc zero) (fw-to-fq (spec-w std-vrule fib-c))) xs-B (dnat #200) (x1 (xcall #0)) (xs-s0 #90)) = #2880067194370816120
+#same wc-ev ex-c (envx #4) = #13
+#same wc-ev fib-c (envx #90) = #2880067194370816120
+-- a run that hits a limit claims nothing: fib 100 overflows 64 bits on the machine
+#same xs-ans (evx (λ g → xfn (suc zero) (fw-to-fq (spec-w std-vrule fib-c))) xs-B (dnat #200) (x1 (xcall #0)) (xs-s0 #100)) = #77777

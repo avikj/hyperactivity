@@ -723,8 +723,8 @@ seventeen programs with gcc and runs them, with both printers):
   `uint64_t` words (a limit hit, no claim, wherever an addition, multiplication or literal leaves 64
   bits), and `m-sound`: whenever the C runs without a limit hit its value refines `evq`'s
   (`cm-path-n`, `cm-fw-path` in `lib/foproofcp.cub`; the per-program paths end there). Outside the
-  path on the boxed route: `ca-to-c`'s text and gcc; the x86 printer runs from the first-order form,
-  outside it, and the unboxed route through `lib/foproofcu.cub` below.
+  path on the boxed route: `ca-to-c`'s text and gcc; the unboxed route's path is `lib/foproofcu.cub`'s
+  and `lib/foproofus.cub`'s, the x86 route's `lib/foproofxs.cub`'s, below.
 - **`lib/foproofu.cub`**: the unboxed C link's first piece (U1), kinds for the first-order form: a
   word (`kw`: a word, an Int64 or a Float64, a C `uint64_t`), a byte string (`kb`), a constructor of
   data type `d` (`kdc d`, its fields' kinds from a per-program table), anything (`ka`, boxed), no value
@@ -766,7 +766,13 @@ seventeen programs with gcc and runs them, with both printers):
   wherever a word leaves 64 bits or an access leaves the stack or arena); `fq-to-xa` the checked
   translation; `xa-prog` the encoder, equal to `emit-x86` byte for byte (`tests/foproofx.cub`, where
   `evx` agrees with `evq` on every construct and on the proved programs). `run.py`'s X86 route prints
-  the proved programs through it. Its soundness proof (`xa-sound`) is not built yet.
+  the proved programs through it. `lib/foproofxs.cub` proves it (`xa-sound`): at every fuel, code
+  `fq-to-xa` gives for the fragment, run by `evx` from a stack whose slots refine the environment,
+  either hits a limit or ends with rsp and rbp restored, the arena only grown, the caller's memory
+  unchanged and in rax a word refining `evq`'s value (a constructor as an address below `r15` holding
+  its tag and fields). `tests/foproofxs.cub` composes it with the word route's `fw-path`: for
+  `proved` and `proved-fib` the path runs from the source to the machine's meaning; outside it, the
+  encoder `xa-prog` and the CPU.
 - **`lib/derive.cub`**: `derive-eq d`, a decidable equality as a code read off the data table;
   evaluated, quoted back at its type, lowered and compiled (the derived equality on `Nat` prints
   10 for eq(2,2), eq(2,1)).
