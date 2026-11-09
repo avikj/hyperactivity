@@ -180,10 +180,9 @@ variable is a neutral the checker views (`wprim k args`) and compares argument b
 such laws follow by unfolding (an operation stuck on a variable used to be an unknown value).
 `Fin→Array n : Equiv (Fin n → Int64) (Array n)` is the interface (item 22): a program written
 against functions uses application and `fin-set n f p v`, and under `atab` they are `index` and
-`update` (`apply-by`, `fin-set-by`). Byte strings convert by their contents (`%beq`). On the
-first-order side a store into a buffer nobody else holds — fresh, or let-bound or loop state
-whose other uses are reads before it — is stored in place (`P-store64-ip`, printed `st64i`, no
-copy); into a parameter or beside an unsequenced read it copies (`lib/fo.cub`'s `mark-uniq`).
+`update` (`apply-by`, `fin-set-by`). Byte strings convert by their contents (`%beq`). (The in-place
+store of a uniquely held buffer in compiled code returns with PLAN §5's reader, as the
+uniqueness the net already tracks structurally; the earlier first-order pass is removed.)
 Other element types: `UInt32` on the 4-byte layer (`Array32`, `index32`/`update32`, `Fin→Array32`,
 its two laws trusted like the 8-byte ones), and any `A` with an equivalence to `Int64` on the 8-byte
 layer (`indexV`/`updateV`/`Fin→ArrayV A to from ft tf n`): `Float64` by its bits (`f64bits`,
@@ -239,11 +238,10 @@ clause: `Fin zero` has no constructor). `tests/elab.cub`.
 (`time-now`, `write fd n b`, `read fd n`, `sleep ns`, `exit c` as processes of `lib/proc.cub`)
 and `to-step p` a process as a tree of steps; `#run (to-step p)` performs it against the
 operating system (plan D26, `src/drivers.c`), ending with `run: done a`. `#native f n = prog`
-compiles the bytes of `emit-lib-u` (the unboxed C of `lib/emitu.cub`) into a shared library and
-redefines `f` over it: on word arguments the compiled code answers, on any other `f` computes
-on the net (plan B18, `%native`; up to 32 parameters and argument words, above six through the entry's trampoline; over represented values an argument with a neutral part takes `f`'s own definition, so an open term reads as it does). `#native f n keep = prog` keeps a boxed result native (the
-emitted runtime's `V`, passed to the next compiled call as it is; unboxed into cells when the net
-reads it). `#native f n from "lib.c" "sym"` enters a hand-written C file's function: a `void *`
+over emitted C is removed at revision 8 with the back end (its compiled code carried no path
+to `f`); the call boundary returns with PLAN §5.5, the compiled bytes entered through the
+machine's executable memory and `foreign`'s call families with the path checked.
+`#native f n from "lib.c" "sym"` enters a hand-written C file's function: a `void *`
 result is a handle of type `Native` (`lib/prim.cub`), held by the net without being read, passed
 to that library's `void *` parameters, printed `(%handle #k)`, compared by identity through
 `%view` (`wnative id k`), and finalized by the library's `cubical_release` when its last copy is
@@ -585,129 +583,30 @@ determines is the one clock in scope. A recursive call needed now is reported wh
 
 The plan and status document is `PLAN.md` (the single one; a fresh agent starts there).
 
-## 9. Programs about programs: the first-order form, matching, navigation, certificates
+## 9. Programs about programs: matching, navigation, certificates; compilation at revision 8
 
-Six libraries over codes, each untyped data as `lib/code.cub` is and loaded before the checker (two after it),
-each with its readings in `make test`:
+Programs about programs are definitions over codes (`lib/code.cub`), and their outputs carry
+paths: a rewrite carries `ap` of the theorem it applied, a compiled program carries `⟦p⟧ ≡ f`.
+The libraries that stand: **`lib/match.cub`** (first-order matching and rewriting over codes,
+capture-safe under binders), **`lib/rules.cub`** (the store's theorems as rewrite rules read
+from their types), **`lib/nav.cub`** and **`lib/cost.cub`** (navigation over established
+identities, choice by cost and purpose), **`lib/specialize.cub`** (normalize, then rewrite
+along the rules under a terminating discipline), **`lib/derive.cub`** (decidable equality as a
+code read off the data table), the verified certificate checkers (`lib/lin.cub`,
+`lib/linproof.cub`, `lib/eqproof.cub`, `lib/ring.cub`, `lib/intproof.cub`: search unverified,
+the checker a verified term, the verdict decided by the checker's own normalization), and
+`lib/autodiff.cub`'s typed theorems.
 
-- **`lib/fo.cub`**, the first-order form. A program with no types, paths, dimensions or universes in
-  it: variables, words, constructors with their fields, switches on tags, projections, calls by key,
-  native primitives, let, if, loops, closures, thunks, calls into the net. `eval-fo` runs it; `lower`
-  maps the first-order fragment of `Code` to it (variables, words and their operations, constructors
-  and case, pairs, λ and application, let, word elimination as a loop; a written step λ is inlined
-  into the loop). **`lib/emitc.cub`** prints a first-order program as C source (a list of bytes: a
-  small runtime of boxed values, one function per definition, a main); `experiments/fo/run.py` decodes
-  a program, compiles it with gcc and runs it: factorial as a loop, a switch, let and if, and a code
-  that the machine specialized.
-- **`lib/match.cub`**, matching and rewriting. A pattern is a code whose variables above a bound are
-  metavariables; matching binds them, consistently when one is met twice and never capturing a
-  variable bound inside the pattern; instantiation shifts under binders; a rule is (depth, left,
-  right); rewriting at the root, at the first position, and the count of applicable positions.
-- **`lib/nav.cub`**, navigation. A view is a list of rules; the available steps from a term are the
-  rules that apply; a step rewrites; the choice is by the size of the result, with a goal pattern
-  taken first; navigation runs to a bound, to the goal, or until nothing applies. Validity never
-  enters the choice: every step is a transport along an identity in view.
-- **`lib/specialize.cub`** (after the checker), the pipeline: a closed code is normalized by the
-  machine (`eval`, then `quote` at its type), rewritten along rules to a bound, lowered. A known
-  computation becomes a literal, an open function a λ over a primitive, word elimination with an
-  unknown bound a loop; the native evaluation agrees with the normal form, and `run.py` compiles one.
-  `residual sch T rules c env` substitutes the schedule's leading `st-now` binders from `env` first:
-  a choreography's projection to a role is the residual of `λ m → project-raw m g` with the role
-  now (`tests/choreo-spec.cub`).
-- **`lib/lin.cub`**, linear arithmetic. Normal forms for words built from literals, variables,
-  addition and successor; equality by normal form; order over naturals by pointwise domination; a
-  Farkas certificate (nonnegative multipliers of hypotheses `l ≤ r`) verified by `check-cert`, and a
-  bounded search whose answer is checked before use. The reading is a decoder's obligation
-  `off + 4 ≤ n` from `off ≤ i` and `i + 8 ≤ n`.
-- **`lib/rules.cub`** (after the checker and `lib/std.cub`), the store's identities as rules. A
-  checked definition whose type is `Π x1 … xk. l ≡ r` is read through `quote-ty`; `rule-of` makes
-  `l → r` with the binders as metavariables, `view-of` a navigation view from named theorems. The
-  endpoints come from the type's value, so they are in normal form, as the specializer's terms are:
-  `plus-assoc` rewrites the normal form of `(a+b)+c` to that of `a+(b+c)`, navigation reaches it in
-  one step, and `plus-zero` is consumed by the specializer so that what is lowered is the identity;
-  `run.py`'s `law` case takes `plusw-zero-l` through the specializer to a compiled identity, and its
-  `assume` case prints an assumed fact as `ASSUME(expr)` for the C compiler.
-
-Four more are typed, loaded after `lib/std.cub`, and are theorems the machine checks: the method of
-reflection, where a decision procedure is a term, its soundness is checked once, and each use is an
-evaluation.
-
-- **`lib/linproof.cub`**: the linear normalizer over words with `same-norm-eq` (equal normal forms,
-  equal values), order as a witnessed sum, and `cert-sound`: a Farkas certificate that checks
-  proves `a ≤ b` wherever the hypotheses hold. Multiples are repeated addition, so no multiplication
-  law enters; the order check is an equality test on `f + (g − f)`, so the subtraction need not be
-  verified.
-- **`by-lin`** fills a hole whose type is `Lew a b` (words) or `leZ a b` (integers): the goal and the
-  hypotheses of those types in scope are read as linear codes over their atoms, `lib/lin.cub`'s
-  search finds a certificate while elaborating (untrusted), and the hole becomes `cert-sound` at
-  the atoms' environment, which the checker verifies by normalization. Needs `lib/lin.cub` and
-  `lib/linproof.cub` (and `lib/intproof.cub` for integers). `leZ-add` is
-  `leZ-add a b c d h k = by-lin`.
-- **`lib/eqproof.cub`**: equality certificates over uninterpreted functions. A certificate is a
-  trace of steps (position, hypothesis, direction, substitution); `eq-cert-sound`: a trace that
-  checks proves `s = t` in every model where the schematic hypotheses hold at every valuation.
-  `find-trace` searches (unverified) and what it finds is checked.
-- **`lib/ring.cub`**: the commutative semiring of `Nat` decided by reflection. Expressions
-  normalize to sorted sums of monomials; `ring-eq : norm a ≡ norm b → xeval e a ≡ xeval e b` from
-  the semiring laws of `lib/std.cub`. `(x+1)² = x²+2x+1` is a theorem at every valuation with the
-  proof term a constant path, one evaluation of the normalizer; a non-identity is rejected.
-- **`lib/autodiff.cub`**: `D` the symbolic derivative over polynomial codes, `fwd` forward-mode
-  differentiation by dual numbers, `fwd-der` (they agree), and `taylor`: `p(x+h) = p(x) + h·p'(x) +
-  h²·q` with `q` computed, each inductive step a ring identity discharged by the normalizer.
-
-Every top-level name in `lib/` is unique (`tools/names.py`, first in `make test`): a later module's
-name rebinds the references of every module parsed after it.
-
-The back end, as it stands (all libraries, each with readings; `experiments/fo/run.py` compiles
-seventeen programs with gcc and runs them, with both printers):
-
-- **`lib/lower.cub`** (after the checker): codes to the first-order form, with the data table's
-  shapes: a `case`/`rec` becomes a recursion form (`frec`: the fields pushed, then a suspended
-  recursion per recursive field), which `lift` turns into a definition that calls itself on the
-  field. The length of a list written with `rec` is a C function calling itself on the tail.
-- **`lib/specialize.cub`** also takes the schedule as a value (`specialize-s`); `program-of` lowers a code and, transitively, the definitions it calls;
-  `fo-report` lists the forms of a code outside the fragment.
-- **`lib/repr.cub`** consumes the representations: calls of `load64`, `store64`, … become native
-  primitives on the arguments that carry information (the length and the bound proof dropped, the
-  proof becoming an `ASSUME` around the access), the conversions vanish, the word operations and
-  `plus` on represented `Nat` go native, closed `Nat` trees become words by `%rtab`. Two loads from
-  an unknown buffer, written with their proofs, compile and run. `program-rep T reps fuel c` is the
-  whole program with the representations consumed in the term (B12 §6): each definition it reaches
-  transported at its own boundary (`to ∘ g ∘ from`, along each type's chain of representations),
-  its calls held as calls (the schedule's `holds`: the code normalized with the other definitions as
-  variables), normalized and rewritten along the representations' laws, so the conversions between
-  definitions cancel. A record whose fields have representations has an induced one generated when
-  it is declared (`data Pt = pt (a : Nat) (b : Nat)` gives `Pt·W` of two words and `Pt ≃ Pt·W` field
-  by field), so the program holds a `Pt·W` and the printers and `#native` lay it out as it is.
-- **`lib/derive.cub`**: `derive-eq d`, a decidable equality as a code read off the data table;
-  evaluated, quoted back at its type, lowered and compiled (the derived equality on `Nat` prints
-  10 for eq(2,2), eq(2,1)).
-- **`lib/decode.cub`**: a byte decoder whose access bounds are certificates checked by
-  evaluation (`cert-sound` of `lib/linproof.cub` across `Word ≃ Nat`), including a loop over
-  messages with one certificate serving every offset.
-- **`lib/proc.cub`**: processes over a signature in Church form, worlds as state handlers that may
-  refuse, outcomes, handlers between signatures, supervision with restart strategies, and replay
-  (a recording world and a replaying world). A process run against its world with the store
-  unknown specializes to a function of the store and compiles.
-- **`lib/emitt.cub`**: C type declarations from the layouts.
-- **`lib/emitu.cub`**: the C printer with words, pairs and flat data unboxed. Every local,
-  parameter and return is typed by inference (a parameter by its uses, a return by its body, calls
-  by their callees); a loop of `lower-welim`'s shape is a `for` over typed state; pairs are structs
-  by value; a data type whose layout is a union of structs of words (a field of `UInt32`, `Int64`,
-  `Float32` or `Float64` at its C width) is its typedef by value, with
-  `box_d`/`unbox_d` generated where a boxed value meets an unboxed one. Two loads from a buffer
-  print as `uint64_t f(V *b) { return ld64(b, 16) + ld64(b, 0); }` under their `ASSUME`s; `fib` by
-  word elimination over a pair is a `for` over a `uint64_t` and a `Pr0` with no allocation.
-  `run.py` runs every program with both printers (`UNBOXED=1`).
-- **`lib/image.cub`**, **`lib/reimport.cub`**: the C++ image (18.9) and its re-import for
-  translation validation. A checked definition becomes a C++20 function (a type parameter a
-  template parameter, a data type structs and a `std::variant`, a case a `std::visit`), read back
-  equal to its source; records of operations become concepts and instances, codata types classes
-  with lazily computed observations, represented types classes wrapping their representation, and
-  `cxx-module` writes the image as a module interface unit. `cxx-image-cfg` specializes the image
-  against a configuration (18.15): the platform's word width, byte order and alignment, and the
-  instantiations consumers recorded (`$CUB_CONFIG_OUT`) as explicit specializations.
-  `IMAGE=1 run.py` compiles twelve programs with g++ and runs them.
+**Compilation.** The back end that stood here until 2026-11-09 — a first-order form with its
+own evaluator, lowering into it, and printers to C, C++ and x86 related to the machine by
+comparing answers — is removed: a compiled program never carried a path to its term, and the
+printers asserted in a table that the machine's unbounded `Word` is `uint64_t`, which was
+false. What replaces it is specified in `PLAN.md` section 5: a structured machine program `M`
+whose meaning `⟦_⟧` is defined construct by construct, a reader from the checker's quoted
+normal form into `M` whose path `⟦read c⟧ ≡ eval-g c` holds by construction, `encode` to bytes
+by fifteen trusted templates (PLAN §13), and `compile f : Σ (p : Bytes), ⟦p⟧ ≡ f` checked by
+the checker. At this revision nothing compiles to native code; PLAN §12's queue item 1 is the
+first compiled program.
 
 ## Measurements
 

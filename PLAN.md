@@ -1,7 +1,9 @@
 # The system: direction, scope and build plan
 
-Revision 7.9, 2026-11-06. Repo avikj/math, `scoped-machine` at `a774e2ee` (revision 7.8 was at `dd301c8`; the day's commits are listed in section 12's queue paragraph; the specs of section 18 were written against `9b94b43` and their status paragraphs say what was built). This document lives at `scoped-machine/PLAN.md` from this revision on; it is the single plan and status document — a fresh agent starts here.
+Revision 8, 2026-11-09. Repo avikj/math, `scoped-machine` at `ccafee2d` on `main` (revision 7.9 was at `a774e2ee`). This document lives at `scoped-machine/PLAN.md`; it is the single plan and status document — a fresh agent starts here.
 Each revision replaces the last. Section 17 records changes and retractions.
+
+**Revision 8 in one paragraph.** The compile path built between 2026-11-05 and 2026-11-09 (`lib/fo.cub`, `lower`, the C, C++ and x86 printers, `repr`, `stage`, their tests and harnesses) is removed. It was a sequence of passes between syntaxes the checker could not relate — a first-order form with its own evaluator, printers mapping machine primitives to target operations through a table nobody checked — tied to the machine by comparing answers. That is a second description of the system with a convention between them, the one thing the premise forbids, and it produced wrong answers twice in a day (32-bit arithmetic lowered to 64-bit; unbounded `Word` printed as `uint64_t`). The ~14k-line checked model of the pipeline (`foproof*`) removed the same morning was the same error at a larger size. What replaces them is one definition: the *meaning of the target* in the language (section 5), against which a compiled program carries a path the checker checks, and the same definition is how every language, OS and processor is lifted (sections 9–10). The test every piece must pass from now on: **can the checker reject this piece's output when it is wrong?** If not, the piece is outside the theory and is not built. Section 0 states the endgame this serves; section 12's queue is the order of work.
 
 ---
 
@@ -53,13 +55,14 @@ the owner holds this to be the form every other language approximates.
   checker or build system written in another language to trust: `src/net.c` holds the
   rewrite rules and nothing semantic beyond them. `#trusted` and `#safe f` list exactly what
   is assumed, and for most definitions the answer is nothing.
-- **Programs about programs are ordinary programs.** The specializer, the first-order
-  lowering, the C printers, the matcher and navigator, the derivation of decidable
-  equality from the data table, the three verified decision procedures: every one is a
-  definition in the language over codes, with readings in the same test suite as any other
-  definition. A proof by reflection (`ring-eq`) is one evaluation of the normalizer; the
-  proof term is a constant path. Nothing in the pipeline is a pass of the implementation
-  that the language cannot see, quote, prove things about, or replace.
+- **Programs about programs are ordinary programs, and their outputs carry paths.** The
+  specializer, the matcher and navigator, the derivation of decidable equality from the
+  data table, the three verified decision procedures: every one is a definition in the
+  language over codes. A proof by reflection (`ring-eq`) is one evaluation of the
+  normalizer; the proof term is a constant path. A program about programs needs no proof of
+  its own: what it produces carries a path the checker checks (a rewrite carries `ap` of the
+  theorem it applied; a compiled program carries `⟦p⟧ ≡ f`), so a wrong program about
+  programs produces an output that does not check, and nothing it produces is trusted.
 - **One runtime, one notion of time.** There is no compile time versus run time; there is
   the binding time of each value (now, a consumer's build, a known run-time moment, never),
   and one back end substitutes what is known when it is known. A schedule — what to inline,
@@ -91,10 +94,14 @@ the owner holds this to be the form every other language approximates.
   signature; a world is a handler; what the world may refuse is in the outcome type; a run
   is reproduced from the responses alone (replay); supervision is a function on outcomes.
   Foreign code, raw addresses and syscalls are trusted primitives that announce themselves.
-- **The hot path is the C an engineer writes.** Words, pairs and flat records are unboxed
-  by inference; loops have no allocation; a two-load decoder prints as
-  `uint64_t f(V *b) { return ld64(b, 16) + ld64(b, 0); }`. The same term also runs on the
-  net with open variables, where it is a proof.
+- **The hot path is the machine code an engineer writes, and it carries its path.** A
+  compiled definition is a pair: the bytes, and the path `⟦p⟧ ≡ f` from the bytes' meaning
+  to the term, checked by the checker (section 5). Words, pairs and flat records are
+  machine words and registers because the environment's layout is a representation and the
+  reading is transport along it; loops are counted loops because a word elimination's
+  meaning is defined to be one. The same term also runs on the net with open variables,
+  where it is a proof. (Until 2026-11-09 this bullet described printers whose output had no
+  path; see revision 8's paragraph above.)
 - **Nothing is a hole in meaning.** Every feature in section 16's ledger of frontier
   languages is either a consequence of the theory, a library with no new judgment form, or
   declared not worth having — and a row with no answer is a gap to close, not a limitation
@@ -182,8 +189,9 @@ so laws cannot be carried into C++ as types. The first proposal — laws become 
 was rejected outright. The resolution, in the owner's words, "compilation can always erase
 things": laws are used, not exported; what survives is `[[assume]]` where an instance of a
 proven law is a C++ expression, contracts at consumer boundaries, and optionally
-certificates (`static_assert` by exhaustion). The library now does exactly this
-(`run.py`'s `law` and `assume` cases). The owner also asked whether anything provable
+certificates (`static_assert` by exhaustion). (The readings that showed this through the
+removed back end are gone with it; the rule stands and section 5.3 makes the assumed fact a
+field of the access's meaning.) The owner also asked whether anything provable
 remains provable in the lifted state: yes — the system lives in the theory with all its
 proofs; the C++ image is a projection of it, and nothing is proved *in* the image.
 
@@ -209,6 +217,35 @@ estimates an order of magnitude too high (the right method: lines × token rate 
 machine time, tests once at the end); and, on 2026-11-06, a reading of the specializer's
 fallback as "definitions are not unfolded under neutral arguments" — wrong, retracted at
 `7be3368`; the real limit is that a stuck primitive operation has no code.
+
+**What went wrong between 2026-11-05 and 2026-11-09, so that it is not done again.** The
+back end was built the way compilers are built elsewhere: a first-order form with its own
+evaluator (`lib/fo.cub`), lowering from codes into it, printers mapping its primitives to C
+and x86 through a table, a C++ image with re-import as its check, and representations
+consumed by rewriting after lowering. Each stage was related to the next by comparing
+answers (`run.py`, `tests/fo.cub`, `#same` readings), never by anything the checker could
+see. When the owner asked that compiling be transport, a ~14k-line *checked model* of that
+pipeline was built beside it (`lib/foproof*.cub`): duplicate syntaxes, evaluators and
+translations with simulation proofs, tied to the real compiler by readings. The owner's
+verdict, which is the rule: never manufacture a copy, prove things about the copy, and tie
+it to the real thing with tests; correctness holds of the thing that runs or it does not
+hold. The model was deleted (`d72a42f3`), and a day later the compile path itself was
+found to be the same error at a smaller size: the printers claimed, in a table, that the
+machine's unbounded `Word` is `uint64_t`, and compiled programs answered wrongly past
+2^64; a day earlier 32-bit operations had been lowered to 64-bit ones. The owner's
+diagnosis was exact: two representations held and assumed equal where the type system
+relates them by nothing. Everything built on that path is removed in revision 8. Three
+further errors made while correcting it, each caught by the owner within the hour, and
+each the same error in a new costume: proposing to write a C++ semantics from the standard
+(a model beside the implementation that runs); calling a lifted implementation "the
+complete semantics" (an exact object is not a correctness theorem); and adopting a
+proof-assistant frame in which code is written and then proved by "obligations" and
+"proof search" (here every equality is a path the computation produces, and the cost of
+correctness is the cost of writing the representation; there is no proof library). The
+single test that excludes all of these, applied to every line before it is written: *is
+this a definition, a representation with its laws, a transport, or a declared assumption?*
+Anything else — a model, a separate proof, a test standing in for checking, a pass
+connected to the next by comparison — is not built.
 
 **How the owner works.** From a phone, in long sessions; expects deliverables consolidated
 in one document; will not read a draft that needs a critical read (do it yourself and
@@ -262,6 +299,33 @@ in the git log and are pushed at once; pull before every commit.
   the guarded form waits on positivity under Π codomains (18.18).
 - **Navigation** (F33): a view is a set of identities; applicability is first-order matching
   on normal forms; validity is never a step; choice is by cost and purpose.
+- **Every piece's output is checkable, or the piece is not built** (2026-11-09). A program
+  about programs — the specializer, the reader that compiles, an importer, a lift — carries
+  with each output the path that relates it to its input (the `ap` of the theorem a rewrite
+  applied; `⟦p⟧ ≡ f` for a compiled program). The program itself is never proved; a wrong
+  one produces an output that does not check. Consequently there are no passes between
+  forms the checker cannot relate, and no tests as evidence of correctness: for everything
+  above the trusted base the checker is the evidence. Tests remain only where they are the
+  only evidence that exists, for the trusted base itself (the rules against CCHM, workers
+  against one thread, race and memory detectors, an imported model against hardware traces,
+  an encoder's bytes against a reference assembler), and nowhere else.
+- **Semantics are lifted, not written** (2026-11-09). The meaning of a processor is its
+  formal ISA model, imported; of a compiler, kernel or interpreter, its binary under that
+  model; of a language, its implementation's elaboration with a structured reading that
+  keeps the abstractions, related by a checked path per program. A semantics written from a
+  prose standard is a specification object, admissible only when related by a path to the
+  implementation that runs, and needed only for conformance and portability claims. The
+  three are different types and are kept distinct: what a pinned implementation does, that
+  it conforms to a standard, and that an application has its intended properties.
+- **Imports carry coverage** (2026-11-09). An imported model is complete only on the
+  instructions, terminators or syscalls it implements; what it lacks is an inventory, and a
+  program using a missing item does not lift until the model is extended. An importer is in
+  the trusted base until its outputs carry their own evidence; round-tripping proves nothing.
+- **The artifact is the bytes.** A correctness claim about compiled code states where it
+  starts and ends: source and build context → elaborated program → structured machine
+  program → bytes → the loaded process. Each link is a transport, a per-output checked path,
+  or a declared assumption, named as such. The loader and the OS contract are assumptions
+  until the kernel is lifted.
 
 ### Vocabulary you must have before reading code
 
@@ -273,19 +337,23 @@ global's type, value, usages), `%dent`/`%dtab`/`%rtab` (the data, case and repre
 tables), telescopes `tx/ty/tz`, `Lst`/`lcons`/`lnil` (the untyped list used everywhere before
 the checker), `some`/`none` (`Opt`), "typed" versus "untyped" definitions (a definition with
 a signature is checked; one without is not, and a checked definition may not mention an
-unchecked one), the first-order form `FO` (`lib/fo.cub`: `fvar/flit/fcon/fswitch/frec/fprim/
-flet/fif/floop/fclos/flam/fapply/fassume`), `lower` (codes → FO), `lift` (closure conversion
-and recursions to definitions), `specialize` (normalize, rewrite along rules, lower),
-`emit-prog` (boxed C) and `emit-prog-u` (unboxed C), `Lew`/`le` (order as a witnessed sum,
-over Word and over Nat), `fromNat`/`toNat` (the Word ≃ Nat used to carry proofs across).
+unchecked one), `specialize` (normalize, rewrite along the store's theorems, each rewrite
+carrying its path), `M` (section 5: the structured machine program, a data type whose
+meaning `⟦_⟧` is defined construct by construct), `read` (a normal form into `M`, its path
+`⟦read c⟧ ≡ eval-g c` by construction), `encode` (`M` to bytes by fixed templates),
+`Lew`/`le` (order as a witnessed sum, over Word and over Nat), `fromNat`/`toNat` (the Word ≃
+Nat used to carry proofs across). `Word` is the machine's *unbounded* natural (`src/big.c`
+past 64 bits); `U64` (section 5) is the modular 64-bit type; they are different types and
+nothing prints one as the other.
 
 ### The elaborator's current behaviour (these cost hours each when unknown)
 
 1. Definitions must be declared before use; a mutually recursive pair is written with the
    later function passed as an argument.
 2. A name declared by a later module rebinds the references of every module parsed *after*
-   it — silently. `tools/names.py` (first in `make test`) keeps every top-level name and
-   constructor in `lib/` unique. Run it before every commit.
+   it — silently. Until revision 8 a script (`tools/names.py`) policed this; the elaborator
+   refuses a redeclaration of a top-level name or constructor instead (revision 8's
+   deletion item), so the machine reports it where it happens.
 3. A checked definition may not mention an untyped one (stderr: `not a bound variable or
    checked definition`, while stdout continues — a test reading stdout sees a silent exit).
 4. `data` after the checker needs typed fields; untyped data goes before `lib/check.cub`.
@@ -300,7 +368,9 @@ over Word and over Nat), `fromNat`/`toNat` (the Word ≃ Nat used to carry proof
 9. Positivity: a recursive occurrence under a Π codomain (`psend (n : Word → Pr)`) is
    rejected until 18.18 lands.
 10. The store (`CUBICAL_STORE`, default `.cubical-store`) skips definitions the current
-    checker already accepted; `CUBICAL_NOCACHE=1` turns it off, and the tests set it.
+    checker already accepted; `CUBICAL_NOCACHE=1` turns it off. A `#native` reading under
+    a private `CUBICAL_CACHE` alone is read from the cache and runs nothing; use NOCACHE to
+    see the native path run.
 
 ### Known defects and cautions in the machine (from the builder's own review, 2026-11-06)
 
@@ -328,19 +398,24 @@ over Word and over Nat), `fromNat`/`toNat` (the Word ≃ Nat used to carry proof
 
 ### The state in one picture
 
-Machine (builder): the net, composition, the checker as a term, keys, structural retention,
-multiplicities (B11), representations and the byte layer (B12), the first-order criterion
-(B13), content keys and the store (F34), `#safe`, instance arguments, records, modules,
-`deriving eq`, `foreign` C calls, stuck primitive operations as neutrals (no code for them
-yet), C22 arrays. Library (side agent): verified checkers for linear arithmetic, equational
-rewriting and the semiring of Nat, with autodiff's Taylor theorem by reflection; the store's
-theorems as rewrite rules; the back end from codes through the first-order form (recursion,
-closures, the byte layer, representations consumed) to C, boxed and unboxed (words, pairs
-and flat records by value; `fib` and a two-load decoder print as the C an engineer writes);
-decidable equality derived from the data table and compiled; a byte decoder with its bounds
-discharged by certificates; processes with handlers, supervision and replay. Seventeen
-programs compile with gcc and run under both printers; `make test` is green at the commit
-in the header.
+Built and standing (revision 8, 2026-11-09): the net running CCHM with univalence
+computing and canonicity (Brunerie's number −2 at 21× less CPU than Agda from nothing);
+the composition clauses as terms; the checker as a term over `%view`, quote and `eval-g`;
+keys, structural retention, pending substitution and call by need in the net (A8e, CBN);
+multiplicities (B11); `represent` and the byte layer (B12); content keys and the store
+(F34); the elaborator (instances, records, modules, fording, `by-lin`, `--serve`, an LSP);
+the mathematics library; three verified certificate checkers over words and `Int`;
+processes, worlds, handlers, supervision, replay, session types and choreographies with
+projection as specialization; the store's theorems as rewrite rules with matching and
+navigation. About 23k lines, all of it either a definition, a transport, or the trusted
+machine, and none of it depends on what is removed.
+
+Removed (revision 8): the whole back end from codes to C, C++ and x86 (`lib/fo.cub`,
+`lower`, `emitc`, `emitu`, `emitt`, `emitx86`, `image`, `reimport`, `repr`, `stage`; the
+C in `src/` that served it; `tests/`, `experiments/fo`, the tools), ~12k lines, and
+autodiff's `PCode` mirror. Section 5 states what is built in its place and section 12's
+queue the order. Nothing compiles to native code at this revision; the first compiled
+program with its checked path is the first item of the queue.
 
 ### Reading order
 
@@ -354,12 +429,14 @@ in the header.
    their author, not by the owner; where a status paragraph and the spec text differ, the
    status paragraph (what was built, with its commit) is the truth and the spec is the
    intention it was built against.
-5. `README.md` §9 and these files, in this order, each with its readings at the end:
-   `lib/code.cub` (the Code type), `lib/fo.cub`, `lib/lower.cub`, `lib/specialize.cub`,
-   `lib/repr.cub`, `lib/emitu.cub`, `lib/linproof.cub` (how proofs are written in this
-   elaborator), `lib/proc.cub`, `tests/prim.cub` and `lib/prim.cub` (B12), `lib/stage.cub`
-   (B13).
-6. Run `make test` once (it takes a while and is the arbiter). Then the queue.
+5. These files, in this order: `lib/code.cub` (the Code type and `eval-g`, which is not a
+   second evaluator but the denotation of a code as the term it names), `lib/check.cub`'s
+   `quote`/`qneu` (what a normal form looks like as a code: this is what section 5's reader
+   reads), `lib/specialize.cub`, `lib/match.cub`, `lib/rules.cub`, `lib/prim.cub` (B12:
+   `represent Nat by Word` is the model for every representation), `lib/linproof.cub` (how
+   proofs are written in this elaborator), `lib/proc.cub`, `lib/world.cub`,
+   `lib/region.cub`.
+6. Build the machine (`make build/cubical`) and load the library once. Then the queue.
 
 ### Before taking an item, you should be able to answer these without looking
 
@@ -368,12 +445,15 @@ not approximations? Why do laws never reach the emitted image as comments, and w
 Why does a stuck primitive operation without a code block specialization of anything over the
 byte layer? Why is the checker's decision not first-order? What does "work proportional to
 result size" promise and not promise? Why is the inductive process type in Church form, and
-what exactly waits on 18.18? What does `tools/names.py` protect against, and why is it in
-`make test`? Why are open dimensions and higher inductive types not limitations of the
-compiler? What is section 16's ledger for, and what does an unanswered row become? Where exactly
-does univalence compute in the path from a definition to the C that runs — name the
-equivalence, the path, and the transport? If any answer is missing, read the section that
-holds it.
+what exactly waits on 18.18? Why are open dimensions and higher inductive types not
+limitations of the compiler? What is section 16's ledger for, and what does an unanswered
+row become? Where exactly does univalence compute in the path from a definition to the
+bytes that run — name the equivalence, the path, and the transport? What is the one test
+every new piece must pass, and which four kinds of thing pass it? Why is `Word` not
+`uint64_t`, and what does a `Nat` program compile to? Why does the compiler need no proof of
+its own correctness, and what does that make the compiler's output? What is the difference
+between lifting an implementation and proving it conforms, and which of the two does
+lifting deployed code need? If any answer is missing, read the section that holds it.
 
 ---
 
@@ -407,6 +487,93 @@ Success is measured by three things, none of them a benchmark:
    size. Published numbers such as Brunerie's are measurements of this, not the goal.
 3. A full-scale system, the trading stack (section 10), runs at hand-written speed with every
    assumption visible.
+
+### 0.1 The endgame: the tower
+
+The scope is every computing process, stated as a tower in which every layer that runs is a
+term and every property is a type, with trust ending at formal hardware models and the
+physics beneath them. Everything in the tower is produced by one operation, normalization on
+the net, and related by one kind of evidence, a path. There are no passes the checker cannot
+relate, no models beside the thing that runs, no tests as evidence. Bottom to top:
+
+- **Hardware.** `⟦x86⟧`, `⟦Armv9⟧`, `⟦RISC-V⟧`: the meaning of machine code as a function of
+  the initial state and the environment's responses, *imported* from the formal models that
+  exist: Arm's own ASL for Armv9.4/9.3/8.5-A through Sail (complete, able to boot an OS,
+  113k lines, tested against Arm's validation suite); Sail RISC-V (complete, the official
+  specification); for x86 the ACL2 `x86isa` model (Goel, Hunt, Kaufmann; 413 instructions
+  with semantics as of 2018, decoding of every opcode map including AVX/AVX2/AVX-512, IA-32e
+  64-bit focus, user and system views, Linux syscalls for user programs, validated by
+  co-simulation against hardware), of which Sail holds an automatic translation. One
+  importer from Sail's first-order imperative language into our data types covers all three;
+  what each model lacks is its inventory (what x86isa decodes but does not implement; what
+  Sail x86 carries of x86isa). Memory models: x86-TSO and the Armv8 model as published
+  axiomatic definitions, imported as predicates over executions, with their integration with
+  the instruction models as the work it is (Isla is the precedent). Below this is physics.
+- **Binaries.** With `⟦x86⟧`, every ELF program has a meaning: the model applied to its
+  bytes, under a loader (relocation, linking, initial state) and the OS world. This is the
+  ground truth for every layer above: a compiler, an interpreter, a kernel, a NIC's firmware
+  (its own ISA, imported the same way) each has an exact meaning without anyone writing it.
+- **The OS.** The syscall interface as a world: each syscall a command with its response type
+  and the contract the kernel honours. A trading box's hot path uses a few dozen, plus the
+  kernel-bypass NIC APIs (ef_vi, DPDK), which are worlds too. The contract is an assumption
+  until the kernel, which is C, is lifted; then it is a path.
+- **Languages.** For each language L: the exact behaviour of its pinned implementation
+  (Clang at a version and flags; CPython; V8), obtained by lifting that implementation's
+  binary under `⟦x86⟧`; and a *structured reading* of the implementation's elaborated
+  program into terms that keep L's abstractions (a template a λ over types, a class a record
+  at its ABI layout, Python's `int` as ℤ), related to the exact behaviour by a path checked
+  per program (section 9). Most languages' semantics *are* their reference implementation
+  and that implementation is C or C++, so lifting C and C++ lifts the interpreters of
+  Python, JavaScript, Java, Lua, Ruby, PHP and R; languages with precise cores of their own
+  (Haskell, OCaml, Rust via rustc, Go via its own compiler, Lean and Coq as programs) follow
+  the same pattern with their own readings. Conformance to a language's standard is a
+  separate type, needed for portability claims and not for lifting deployed code.
+- **Our own compiler** (section 5): the case where the source is already a term. The normal
+  form is read into a structured machine program whose meaning is defined construct by
+  construct, so `⟦read c⟧ ≡ eval-g c` holds by construction; the bytes are produced by fixed
+  templates; `compile f` returns the bytes with the path, and the checker checks it. The JIT
+  is the same at run time, cached by the content key of the specialized term.
+- **Programs.** Terms, checked: the library as it stands.
+- **Systems.** A node is a process over its world signature; the network is a world (a
+  handler connecting sends and receives, with loss, reordering, delay, partition and the
+  scheduling model as its responses); a fleet is the parallel composition of nodes under
+  that handler, again a process over the residual world (clients, exchanges, time, the
+  adversary). Properties are types over that term: safety as `Π (ρ : responses), Inv (trace
+  ρ)`; liveness under a fairness predicate on `ρ`; refinement to a sequential specification
+  as a path in the quotient of processes by observation; replica convergence by defining a
+  replica's state as a function of the *set* of updates it has received (order-independence
+  by construction) with eventual delivery as the hypothesis; Byzantine behaviour as a class
+  of worlds; protocol conformance by projection from one choreography under its
+  realizability conditions. Equivalence of two implementations relates their executions by
+  a simulation, not by feeding both the same internal choices.
+- **Infrastructure.** `deploy : Corpus → Config → Fleet` is a term: a box's binary is the
+  corpus specialized against its configuration and role (10.2), its placement part of the
+  fleet value. An observation of the running fleet is partial and delayed, so what is stated
+  is that the observation satisfies the deployment's contract and that the execution follows
+  the reconciliation protocol; a finite configuration comparison decides drift, behavioural
+  equality does not. Configuration languages are lifted like any other, with the cloud API
+  as a world. A rolling upgrade is two versions coexisting, compatible on the observed
+  interface by an equivalence or a retraction where they differ; state migration is a
+  relation between state types; hot loading is rebinding a key *and* accounting for the
+  frames, closures and in-flight messages of the running instance.
+- **The quotient.** An observation signature `Obs` and a projection `obs` from processes over
+  the full world to processes over `Obs`. Two programs, in any two languages, are equivalent
+  when `obs ⟦p⟧ ≡ obs ⟦q⟧`, a path in the quotient; both lie in the fiber over one term `r :
+  Proc Obs`, the program with the execution details unspecified (C23's fiberization applied
+  to programs). The path is a witness written or computed for the equivalence at hand; the
+  quotient has a canonical form only where a normalization for *that* relation is defined
+  (`ZQ` by `Int` is one); program equivalence in general is not decided by anything.
+- **Identity across machines.** A content key names a closed definition under a semantic
+  environment, and nothing more: not behavioural equivalence, not an effect's result, not
+  authority, not attestation of what a remote process runs. Within that, two machines
+  holding the same key hold the same meaning, so code mobility is sending keys with a fetch
+  protocol, and a cache keyed by content cannot be stale. Distribution by keys (item 35) is
+  the substrate of the tower across machines and is essential, not optional.
+
+At every layer, what was trusted becomes a path when the layer below is lifted, so the
+trusted base shrinks monotonically and ends at the ISA models and the hardware matching
+them. The trading fleet (section 10) is the first instance because every layer appears in it
+and its standard is exact. The order of work is section 12's queue.
 
 ## 1. The core
 
@@ -480,163 +647,50 @@ conventional languages split across (imperative, object, functional, reactive, q
 shader, hardware description, scripting, proof) are each one region of this spectrum; the
 ledger in section 16 names the construct for each.
 
-## 3. State of the machine (at `9b94b43`)
+## 3. State of the machine (revision 8, 2026-11-09, `main` at the header's commit)
 
-Built and tested:
+Built, standing, and depending on nothing that was removed:
 - The net running CCHM: paths, univalence via Glue, higher inductive types including
-  truncations, `%hcompU`, generalized composition (the tube gets the complement of its face),
-  constructor-matching composition for path-free data. Canonicity as enforced: a closed value
-  of a path-free data type is a constructor; the checker accepts a formal `hcompD` in such a
-  type only when its tube covers every closed point.
-- Composition clauses as terms: `%comp-pi`, `%comp-sigma`, `%comp-path`, `%comp-glue`,
-  `%comp-u`, `%comp-gluel` with `%tproof`, `%case-hcomp`; data-type composition derived from
-  declarations.
-- Coinduction by copatterns; guarded recursion with clocks, ticks, timelessness, `dfix` at
-  `⋄`, `forceκ`, `pfix` as a computing path; productivity checked.
-- The checker: conversion with η at Π, Σ, paths; levels with `lomega`; positivity, boundaries,
-  coverage, termination (structural, course-of-values, measured), clocks and ticks; quote/eval
-  laws tested.
-- The surface language and elaborator: holes, dependent matching including on path
-  constructors, `decreasing by … using`, copatterns, tick insertion, `calc`, records.
-- Sharing: full laziness, lazy one-level copying, substitutions on references, unbuilt
-  branches and glue bases; memo with keys per producer, retention by reachability, names by
-  origin.
-- Wires as variables (`9b94b43`): a port is a principal port or a slot linked by atomic
-  exchange; cells carry no back pointers; rules lock nothing; a popped pair is never stale;
-  one set of rules for one thread and many; per-worker Chase-Lev deques; termination by an
-  in-flight count. Results identical at every worker count with the memo off; TSan clean.
-- Brunerie's number (simplified, Ljungström's `brunerie'`, untyped port): −2 in 1.26M steps;
-  end to end 3.1 s with one worker, 2.7 s on one thread, on the builder's box. Cached modules
-  replay the checked program.
+  truncations, `%hcompU`, generalized composition, constructor-matching composition for
+  path-free data; canonicity enforced (a closed value of a path-free data type is a
+  constructor). Composition clauses as terms (`lib/prelude.cub`). Coinduction by
+  copatterns; guarded recursion with clocks and ticks.
+- The checker as a term (`lib/check.cub`): conversion with η at Π, Σ and paths; levels;
+  positivity, boundaries, coverage, termination (structural, course-of-values, measured);
+  it reads the machine's values through `%view` and quotes them to codes at their types
+  (`quote`/`qneu`), and `eval-g` (`lib/code.cub`) maps a code to the term it names, clause
+  by clause (`clam b → λ x → …`): reflection, not a second evaluator.
+- The surface language and elaborator: holes, dependent matching on path constructors,
+  `decreasing by … using`, copatterns, `calc`, records, instances, parameterized modules,
+  fording, `by-lin`, `--serve`, `#retract`, an LSP.
+- Sharing and cost in the net: full laziness, memo by content keys, retention by
+  reachability, wires as variables (no locks), per-worker deques; results identical at every
+  worker count; a dimension substitution pending on every value with parts and applied one
+  level when read (A8e, 2026-11-09); call by need in `build` (CBN, 2026-11-09). Steps of a
+  read over the normal form's cells: g8 106 per cell, the corner 146, the generic 6-cube
+  ~24 flat, the number and the typed port the computation's own work (18.16).
+- Multiplicities computed after checking (B11); `represent` with its laws, the primitive
+  types, `Bytes n` with proved accesses, `#layout`, `#trusted`, `#safe` (B12); the store by
+  content keys (F34); arrays over the byte layer (C22); regions (C20).
+- The mathematics library (`lib/std.cub`, `fiber`, `sort`), the verified certificate
+  checkers (`linproof`, `eqproof`, `ring`, over `Int` through `intproof`), `derive-eq` over
+  the data table, autodiff's typed theorems (`fwd-der`, `taylor`), the store's theorems as
+  rewrite rules (`rules`, `match`, `nav`, `cost`).
+- Processes in Church and guarded form, worlds, handlers, outcomes, supervision, replay,
+  the drivers' signature `W` with the memory interface, named worlds, `foreign`, session
+  types, choreographies with projection as specialization (`proc`, `world`, `session`,
+  `choreo`, `decode`, `region`).
+- Measured: Brunerie's `brunerie'` −2, 230,326 steps of the read after A8e; Agda 2.8.0 on
+  the same machine 116 s CPU / 870 MB from nothing against 5.4 s / 139 MB (item 10).
 
-Built on 2026-11-06, in parallel with the builder, as new library files (each with its readings
-in `make test`):
-- `lib/fo.cub` (`c4c1d79`): the first-order form `FO` (18.5) as data, its evaluator, and
-  `lower` from the first-order fragment of `Code` (variables, words and their operations,
-  constructors and case, pairs, λ and application, let, word elimination as a loop; everything
-  else a call into the net).
-- `lib/match.cub` (`80e92db`): first-order matching of patterns with metavariables against
-  codes, capture-safe under binders, instantiation, rules, rewriting at the root and at the
-  first position, the count of applicable positions: the operation behind 18.6 step 3 and
-  18.14.
-- `lib/nav.cub` (`48b58f8`): the first executable navigation (18.14): available steps from a
-  view, choice by result size with a goal pattern first, navigation to a bound.
-- `lib/specialize.cub` (`c99c25e`): the pipeline of 18.6 as it exists today: normalize a
-  closed code by the machine (eval then quote), rewrite along rules to a bound, lower to `FO`;
-  readings show a known computation becoming a literal, an open function becoming a λ over a
-  primitive that runs natively, and word elimination becoming a loop. Steps 4, 5 and 7 wait
-  on B11, B13 and the proof lemmas. Load order: the untyped libraries before `check.cub`.
-- `lib/lin.cub` (`b8be7b1`): linear arithmetic over codes (F32's core): normal forms, equality,
-  order over naturals, Farkas certificates verified by `check-cert`, a bounded unverified
-  search whose answer is checked before use; the decoder's `off + 4 ≤ n` obligation as the
-  reading. Soundness of `check-cert` against `plusw`'s laws: to state in `lib/std.cub`.
-- `lib/emitc.cub` (`d93dfd5`, `21d3894`): the C printer for the first-order form (B16 milestone
-  1): boxed values, one C function per definition, GNU statement expressions for let, switch and
-  loops, closures through a generated dispatcher; `experiments/fo/run.py` decodes, compiles with
-  gcc and runs: factorial as a loop, a switch, let/if, a closure capturing a value, and a code
-  specialized by the machine (2^n as a loop) — the pipeline runs from a code to a native binary.
-- `lib/fo.cub` gained closure conversion (`lift`): every λ becomes a definition over its free
-  variables; the evaluator and the printer agree.
-- `lib/linproof.cub` (`39b4c66`): the linear-arithmetic normalizer verified (42 checked
-  definitions): `same-norm-eq`, with `plusw` commutativity, associativity, middle exchange,
-  `mulw` distributivity and `weq-sound` proved by word induction; order and the certificate
-  theorem (`c8cadc0`, `cert-sound`, 251 checks).
-- `lib/eqproof.cub` (`2cf715f`, `7fcedec`): equality certificates over uninterpreted
-  functions with schematic hypotheses, verified (`eq-cert-sound`), and a bounded trace search
-  whose output the checker checks; 308 checks on the line.
-- `lib/ring.cub` (`5564454`): the commutative semiring of `Nat` decided by reflection:
-  `norm : Ex → Poly` (sorted sums of monomials), `ring-eq : norm a ≡ norm b → eval e a ≡
-  eval e b` from the semiring laws of `lib/std.cub`; `(x+1)² = x²+2x+1` and the two-variable
-  square are theorems at every valuation by one evaluation of the normalizer (12k steps),
-  the proof term the constant path at the shared normal form. This is F31's method
-  (reflection) and F32's third checker; 310 checks on the line.
-- `lib/derive.cub` (`693067f`): `derive-eq d`, decidable equality as a code read off the data
-  table (fields by `%weq`, recursive fields by the case's hypothesis, other data types by
-  their own derived equality; HITs none); evaluated on `Nat`, `Bool`, a tree, a record; the
-  derived function quotes back at its type. F31's "deriving as terms over `dent`".
-- `lib/decode.cub` (`442bbbb`): B12's byte layer meeting F32: `load32`'s bound `le (plus i 4)
-  n` from `i + 8 ≤ n` proved by `cert-sound` on a one-multiplier certificate, the check
-  evaluated by the checker (17k steps for the bound), carried across `Word ≃ Nat`.
-- `lib/emitt.cub` (`49049a6`): C typedefs from B12's layouts (a tag and a union of structs);
-  `run.py` compiles a tree's and prints its size.
-- The byte layer end to end (`70854ad`): `fo.cub` gains the load/store/bytes primitives
-  (evaluated by the machine's), `emitc.cub` a bytes value and `ld64`/`st64`/… in the C
-  runtime, `lib/repr.cub` consumes the representations (primitive definitions → native
-  primitives with the lengths and bound proofs dropped, conversions the identity, std's word
-  operations and represented `plus` native, closed Nat trees words by `%rtab`); `run.py`
-  compiles two loads from an unknown buffer with their proofs and runs them (14). Found: a
-  term over a stuck primitive has no quote, so nothing over the byte layer specializes under
-  an unknown input — recorded under 18.6 as the machine work that B15 needs first.
-- Structural recursion in the first-order form (`f502f0d`, `6a6cf58`): `frec d x alts` with
-  the recursive fields' hypotheses (from the data table's shapes, `lib/lower.cub` after the
-  checker), `vrec` suspensions in the evaluator, `lift` turning a recursion into a definition
-  that calls itself on the field; `ccase`/`celim` lower to it. `run.py`: the length of a list
-  written as a case with `rec` → a C function calling itself on the tail; the derived
-  equality on `Nat` (`derive-eq`) lowered, lifted and compiled (`deq`, prints 10). 12 cases.
-- Assumed facts generated (`4f59d7f`): the proof argument a primitive access drops
-  becomes `fassume (off + w < n + 1)` around the access; the C image carries the `ASSUME`.
-- The specializer under unknowns (`e96cc45`, corrected `7be3368`): a process run against
-  its world with the store unknown normalizes to a function of the store and compiles with
-  a store closure; the schedule as a value (`Sched`, the rewrite bound).
-- `lib/emitu.cub` (`89aed69`): the C printer with words unboxed (typed locals, parameters
-  and returns by inference; loops over typed state); all 16 harness programs compile and
-  run with it (`UNBOXED=1`, in `make test`).
-- Bool as a word in the first-order form, a tagged message decoder (`e2ee1dd`): the decoder's
-  `case weq tag 1` lowers to an `if` over loads at literal offsets under their assumed
-  bounds; compiled and run (`run.py`'s `itch`, 16 cases). `lower.cub`/`specialize.cub` now
-  load after `std.cub`.
-- Whole programs (`cd27cdc`): `program-of` lowers a code and then, transitively, every
-  checked definition it calls, from the quote of the definition's value (the quote inlines
-  the non-recursive definitions it meets; recursive ones become `celim` bodies; what does
-  not quote — definitions over stuck primitives — is left as a call); `lift-program`
-  converts every body. `run.py`: a code calling the library's `lenw` becomes a C program
-  with `lenw` as a function. 13 cases.
-- `lib/autodiff.cub` (`bd6130b`): F31's example done as a typed fragment: `D` the symbolic
-  derivative over polynomial codes, `fwd` forward-mode AD by dual numbers, `fwd-der : snd
-  (fwd x p) ≡ pat x (D p)`, and `taylor : p(x+h) ≡ p(x) + h·p'(x) + h²·q` with `q`
-  computed, each inductive step a ring identity discharged by one evaluation of the
-  normalizer. 352 checks on the line (409 after B11's usage walk).
-- `lib/rules.cub` (`b497f96`): the store's identities as rewrite rules. `rule-of g` reads a
-  checked theorem's type through `quote-ty` and makes `l → r` with its Π binders as
-  metavariables; `view-of` builds a navigation view from named theorems. Because a type's
-  value holds the endpoints in normal form (`plus a b` on a variable is its stuck
-  elimination), the rules and the specializer's normalized terms meet in the same form:
-  `plus-assoc` rewrites the normal form of `(a+b)+c` to that of `a+(b+c)`, navigation
-  reaches it in one step, and `plus-zero` is consumed by the specializer so that what is
-  lowered to `FO` is the identity — 10.1's "laws used by the specializer, never emitted",
-  running. `match.cub`/`nav.cub` now traverse `celim`, `cforce`, `cdata`. Found and fixed:
-  `fo.cub`'s `FT` constructors `tword`/`tdata` shadowed the checker's own (`Tm`), so loading
-  `fo.cub` before `check.cub` made the checker loop without bound on `std.cub` — the
-  specializer and the typed library had never been loaded together; renamed `ft…`. For E28:
-  a constructor name declared by a later module silently rebinds an earlier module's
-  references (a checker-side name-shadowing error is the fix, ~20 lines in `src/lang.c`).
-- `4e33086`, `bbe9d77`: `experiments/fo/run.py` gains `law` — `plusw-zero-l` read from the
-  store, consumed by the specializer, the lowered body `flam (fvar 0)`, compiled with gcc
-  and run; `cwelim` added to the matcher (word functions normalize to word eliminations).
-  `tools/names.py` keeps every top-level name and constructor in `lib/` unique and runs
-  first in `make test`; the clashes it found were renamed (eqproof's `Tm`/`tv`/`tapp` were
-  the checker's own; ring's `eval` was code.cub's evaluator; linproof's parallels of lin.cub;
-  fo's `shift-list`, a different function from match's).
-- `lib/proc.cub` (`92f5aa4` … `953e177`): processes over a signature in Church form,
-  worlds as state handlers that may refuse, outcomes, handlers between signatures,
-  supervision with restart strategies, replay by recording and replaying worlds (D24–D25,
-  7.3); the guarded form waits on 18.18. A process run against its world with the store
-  unknown specializes to a function of the store and compiles (`run.py`'s `process`).
-- `experiments/fo/run.py`: seventeen programs compiled with gcc and run, with both printers.
+Removed at revision 8 (section 17 has the reasons): the back end from codes to C, C++ and
+x86 and everything that served it. At this revision nothing compiles to native code.
+Section 5 is what replaces it and section 12's queue is the order.
 
-Measured, open:
-- g8 (transport through the groupoid truncation of the Hopf fibration) is 1.136M of 1.26M
-  steps for a 20 KB result; its 6,706 transports of formal compositions carry no memo key
-  (systems of faces have none); 291 hits in the run.
-- Substitution and erasure are 53% of steps; many substitutions enter values with no dimension.
-- `surfc` on a 4-truncation cube with every dimension open does not finish in 6.5 GB.
-- Library load about 1.0 s, 0.85 s compiling `check.cub`.
-- The Brunerie port is untyped except its data declarations, the 4-cube filler and the
-  library lemmas it uses.
-- Not in the library (as of 2026-11-06): indexed families, strings with a byte
-  representation, arrays (C22), the guarded (run-forever) process form, session types,
-  choreographies. (Floating point and fixed-width integers: B12; linear binders: B11;
-  decision procedures: `linproof`, `eqproof`, `ring`; processes: `proc.cub`.)
+Open, measured: g8 and the corner at 100–160 steps per result cell against the 6-cube's
+~24 (the remainder is evaluation, not substitution); the 6-cube's normal form past 2.06M
+cells does not fit a 2.5 GB cap; `surfc` with every dimension open does not finish. A8 is
+the property and stays on the queue.
 
 ## 4. Semantics
 
@@ -679,194 +733,129 @@ type theory (Atkey; Idris 2).
 | when the value is known | what the back end does with it |
 |---|---|
 | now, in the net | normalize it away |
-| at a C++ consumer's build | a template or `constexpr` parameter (section 10) |
-| at run time, at a known moment | a JIT specialization point, cached by key |
-| never fixed | an ordinary function argument |
+| at a consumer's build | a template or `constexpr` parameter of the image (section 10) |
+| at run time, at a known moment | a specialization point, cached by the specialized term's key (the JIT) |
+| never fixed | a parameter |
 
-C, C++ templates and the JIT consume one residual term; the only decision per free variable is
-its binding time, read off the term.
+There is one residual term; the only decision per free variable is its binding time, read
+off the term.
 
-### 5.2 The first-order criterion, strictness, schedules
-A region compiles when it has no free variables or dimensions beyond those assigned to later
-stages; every type in it is determined by first- and second-stage variables; its inputs and
-outputs are path-free inductive types (closures are code plus captured values). Kan operations
-over fixed lines reduce during specialization to first-order terms (identity along a constant
-line; `e` along `ua e`; `%comp-pi`/`%comp-sigma` applied along lines of function or pair
-types, computable, not free). Only Kan operations with free dimensions remain net work.
+### 5.2 What compilation is here
 
-Strictness: closed *checked* terms of inductive type normalize, so strict and lazy evaluation
-agree on them; the machine also runs unchecked terms, which strict evaluation can send into a
-divergence lazy evaluation would skip, so strictness is a schedule choice for checked regions
-only. A codata value's normal form is its stuck call; native code unfolds it only on
-observation, to the depth observed; the delay type is run step by step until an observation is
-met. A native stage that forced codata would loop.
+Four things, all already one operation. *Binding time*: what is known is substituted when it
+is known; the specializer is the machine normalizing a term with some inputs fixed and the
+rest left as variables (`fibw #30` is `#832040`; `fibw w` is a stuck word elimination with
+`w` free, and that stuck elimination *is* the loop). *Laws*: a rule is a theorem of the store
+read as a direction (`rule-of`), and applying it is substitution along its path, so the
+specializer can only produce a term equal to the one it was given; `plus x 0 → x` is
+consumed before anything is emitted. *Representation*: an equivalence between a type and its
+encoding, declared with its laws (section 6); the program is transported along it, and the
+conversions cancel by the laws. *Control and the world*: a case is a switch, a constructor a
+record at its layout, a word elimination a counted loop, structural recursion a recursive
+function, a process's command a call into a driver.
 
-Schedules: everything that fixes cost without fixing meaning (strictness, binding-time
-assignment, representation choice, fusion depth, inlining depth, parallel split) is sound by
-construction, so a schedule is a first-class value written beside the term; the back end's
-defaults are a default schedule; tuning is search over schedules, every candidate correct.
-Generality is on the same axis: a binding time may be set *later* than the value is known,
-so that an export keeps an abstraction a consumer may instantiate differently; the C++ image
-(10.1) is the assignment "as late as C++ can express".
+The normal form that results is already correct: every step that produced it was a path.
+What a compiler adds is only this: **spell the normal form in the target, with a path from
+the target program's meaning back to the term.** That path is the one thing the removed
+back end never had.
 
-### 5.3 Multiplicities: erasure, uniqueness, linearity ★
-Proof terms are terms, and types disappearing does not remove them. Cubical makes "erase
-h-level 1" wrong (transport along `ua e` runs `e`). One lattice, two mechanisms:
-- **Static, by the checker's usage accounting (QTT):** a binder is **0** when its variable
-  occurs only in types or in positions the specializer reduces away; **1-linear** when it
-  occurs exactly once and erasure is rejected (an order in flight, a socket, a pool slot: the
-  checker reports a resource reaching the end of its scope unconsumed). Native code is emitted
-  once for all runs, so what it omits is decided here.
-- **Dynamic, by the net (structural since `9b94b43`):** every value cell has exactly one
-  handle; sharing exists only through counted boxes and duplicators; so a value is unique
-  (**1-affine**) when it is not in a box or its box has one holder, readable at any moment with
-  no analysis, and the substitution rules already mutate payloads in place on it; **ω**
-  otherwise. Uniqueness may also be asserted statically and checked.
-Closed paths in path-free data normalize to constructor trees in the dimension, transport
-along them along constant families reduces away, and the path is then 0 by usage. Linearity
-and the memo coexist by one invariant: a 1-linear value is never memo-identified, which holds
-because resources are created by commands and a command's response enters every dependent
-key; purely computed values are never linear.
+### 5.3 The target is a data type with a meaning
 
-### 5.4 Components
-1. **The specializer, as a term.** Takes a region, known inputs and a schedule; unfolds,
-   selects, fixes interval formulas; applies theorems marked as rewrite directions (fusion,
-   deforestation) under a terminating discipline (oriented rules with a well-founded order, or
-   bounded application; commutativity-shaped paths are never rules); emits first-order code
-   with its justifying equivalence. Runs on the runtime; compiles itself.
-2. **The first-order intermediate form.** `case` → switch on tag; constructor → struct; tail
-   recursion → loop; call → direct call; word arithmetic → machine ops; arrays → native arrays;
-   multiplicity-0 binders absent.
-3. **The C back end.** Readable C. gcc/clang for speed; CompCert (verified; x86, ARM, RISC-V,
-   PowerPC; 10–20% slower than gcc -O2) where the compiler is to leave the trusted base today.
-4. **The JIT**, for third-stage variables, memo-cached.
-5. **The call boundary.** Closed application of a compiled definition to constructor-built
-   arguments → native call; results back as cells or opaque native cells; reading back is
-   transport along the inverse equivalence.
-6. **Compiled code in the store** under the specialized term's key (section 11).
-7. **The C ABI in both directions**: foreign C as postulated representations; compiled
-   definitions over declared representations as exported C functions.
-8. **The C++ export** (section 10).
-Optional targets: WebAssembly (linear memory is the byte layer; the component model gives
-sandboxed modules); MLIR for accelerators; circuits (a first-order region over fixed-width data
-is a circuit; Clash and Bluespec are the precedents).
-Precedents that validate the design: Low\*/KaRaMeL (HACL\* in Firefox and Linux), Lean 4 and
-Idris 2 to C.
+`M` is a data type in the language: the structured machine program. Its constructs are
+exactly the forms a first-order normal form has, each paired with the meaning the hardware
+gives it:
 
-### 5.5 Compilation and the JIT, worked through
+- word operations on `U64` (modular, section 6.2), `U32`, `I64` (two's complement through
+  the unsigned operations, so no signed overflow is ever emitted), `F64` (IEEE binary64, the
+  machine's `%f64*`, under pinned rounding and no contraction), comparisons;
+- `mcheck op a b`: a word operation on *unbounded* `Word` operands, whose meaning is `ok (a
+  op b)` when the result is below 2^64 and `overflow` otherwise;
+- loads and stores at offsets in a region, each carrying its bound as a field (the
+  `ASSUME` the source proof discharged is a hypothesis of the meaning, not a comment);
+- `mloop n init step`, whose meaning *is* the word eliminator `welim n init step`;
+- `mswitch d x alts`, whose meaning is the eliminator of `d`; `mrec d alts`, structural
+  recursion; `mwhile m body`, recursion along a measure, the language's own;
+- records as tuples of slots with the automatic layouts (6.1); `mclos env code`, a closure
+  record whose meaning is the λ it closes (closure conversion is this one clause);
+- `mcall g args`, application of a definition of the program; `mcmd c`, a command of the
+  world (its meaning the process constructor, its bytes a call into a driver).
 
-The sections above are the compressed form; this is the same content rebuilt from the
-beginning with the examples that exist in the repository, because the questions "what does
-first-order mean", "what is a JIT here", and "how is this different from Julia, Zig, GHC
-rules, Halide, C++ templates" were each asked and answered at length, and the answers are
-part of the design.
+`⟦_⟧ : M → meaning` is one definition by recursion on `M`, with the meanings above. The
+fragment is total by construction: its loops are the eliminators the checker already
+requires to terminate; its division is written total (`d = 0 → 0`) and printed so; its
+shifts carry the width bound. Undefined behaviour is not avoided at the end; `M` cannot
+express it.
 
-**One term, four moments it can be known.** Take `fibw : Word → Word` (fib by word
-elimination over a pair). Applied to `#30`, everything is known now: the net normalizes
-`fibw #30` to `#832040` and there is nothing to compile — normalization *is* the compiler
-at binding time "now". Applied to a variable `w`, the net still normalizes: it unfolds `fibw`
-to its body, the elimination on `w` is stuck on the unknown, and the normal form is the
-loop itself with `w` free (`cwelim w (0,1) (λ k p → (snd p, fst p + snd p))`). That normal
-form is *first-order* — it mentions no dimension, every type in it is fixed, its input and
-output are words — so it is handed to the back end, which lowers it to the first-order form
-(`lib/lower.cub`: a `floop`), and prints it as C (`lib/emitu.cub`): a `for` over a
-`uint64_t` and a struct of two words. The variable `w` has become a parameter: that is the
-binding time "never fixed". If instead the consumer is a C++ translation unit that knows
-`w` at *its* build, `w` is a template parameter and the consumer's compiler does the
-substitution: binding time "C++ build". And if `w` is known at a moment during the run — a
-message layout learned at startup, a table size read from a config — the specializer runs
-*then*, on the term with that value substituted, and the result is compiled and cached:
-binding time "run-known", which is the JIT. There is one term and one back end; the only
-decision per free variable is when it is known.
+### 5.4 The reader, and why the path is by construction
 
-**What "first-order" adds over "I can write a native f(x) in any language".** In any
-language a function is compiled once and covers every argument. Here too — but the class of
-terms a compiled definition covers is exactly the class whose answers are plain data: terms
-with no interval dimension, whose types are fixed at the boundary, whose inputs and outputs
-are path-free inductive data, with no composition or transport left over an unknown
-dimension and no reflection on the value. The criterion (B13, `lib/stage.cub`) decides
-membership and names the reason when a term is outside it (`dim`, `dep-type`, `higher`,
-`kan`, `reflect`, `mult`). What is outside is not rejected: it is read by the net, at work
-proportional to the result, where paths, higher inductive types and the universe compute.
-The owner's phrasing of the line is exact: ordinary inductive types versus higher inductive
-types. A proof is a term over paths; it normalizes on the net; what it *proves about* a
-first-order term is what the back end uses (a bound becomes an `ASSUME`), and the proof
-itself is erased by usage.
+A definition `f : T` is quoted by the checker at its type (`quote`), giving a code `c`.
+`specialize` normalizes and rewrites `c` to `c'`, each rewrite carrying `ap (λ h → …) (thm
+σ)` and the rewrites composed, so `eval-g c ≡ eval-g c'` is a term the checker checks. The
+**reader** walks `c'` through the same view the checker uses and emits one `M` construct per
+normal-form construct, under an **environment representation**: the variables in scope are
+laid out in slots (registers and a frame), an equivalence between the code's environment
+and a machine environment declared like any other representation, with its round trips by
+computation on the structural cases. Reading is transport along it. Because `read` and
+`⟦_⟧` are inverse construct by construct, `⟦read c'⟧ ≡ eval-g c'` is `refl`: the checker's
+conversion normalizes both sides to the same normal form, and nothing is proved. The reader
+is partial, and its partiality is B13's first-order criterion, produced where it is needed
+rather than by a separate pass: a free dimension, a composition over an unknown dimension, a
+higher inductive constructor without a canonical-form representation, a type depending on a
+run-time value, have no `M` construct, and the reader names the construct and the reason
+(`dim`, `kan`, `higher`, `dep-type`, `reflect`). What it refuses runs on the net, which is
+always correct.
 
-**A path argument does not force the net.** `decode` takes `h : le (plus i 8) n` and passes
-`bound-i4 i n h` to `load32`. The bound is a certificate checked by evaluation
-(`lib/decode.cub`): `cert-check` evaluates to `true` and `cert-sound` turns that into the
-proof. At lowering, the proof's usage is zero (it reaches nothing that is read at run time),
-so it is dropped, and the fact it carried is printed as `ASSUME((i + 4) < (n + 1))` for the
-C compiler. A transport along a *known* equivalence likewise reduces during normalization
-(transport along `ua e` runs `e`); only a transport along an unknown dimension stays on the
-net. So "the term has proofs in it" is never the reason a term is not native.
+A `Nat` program meets the reader with unbounded `Word` operations. There is no `M` construct
+whose meaning is unbounded addition on a 64-bit value, so either the program is written
+over `U64` (as an engineer writes the hot path) and reads directly, or it reads into
+`mcheck` and compiles to `p` with the source `f` as its fallback: the entry is `run p f a =
+case ⟦p⟧ a of ok b → b; overflow → f a`, and the path checked is `run p f ≡ f`, `refl` on
+each branch. A standalone binary with no machine behind it has no fallback, aborts on
+`overflow`, and its meaning is partial, which is in its type. Both are forced by `⟦_⟧`; the
+bug that ended the old back end cannot be written in this one.
 
-**The JIT is a specialization point, and its cache is the store.** When `v` becomes known
-at run time, the machine substitutes `v` into the term and normalizes; the result, if
-first-order, is compiled and stored under the key of the specialized term — the hash of its
-elaborated form, which includes `v`. The next time the same term is specialized on the same
-value, the key is already in the store and nothing is compiled. There is no speculation, no
-deoptimization and no invalidation: a key is the content, so it can never go stale, and a
-term that is not first-order after substitution simply keeps running on the net, which is
-always correct. This is the difference from a JVM or V8 JIT (profile, speculate, deoptimize)
-and from Julia (specialize per method on argument *types*, cached per signature, with no
-proofs between the specializations): here specialization is on known *values and types
-alike*, every specialization is an identity (the justifying path), and the cache is
-content-addressed.
+### 5.5 Bytes, the boundary, and what is trusted
 
-**What the specializer does, in order** (`lib/specialize.cub`, running on the net, itself a
-term): normalize the code at its type (evaluate, then quote the value back to a code —
-definitions unfold, known arguments reduce, unknown ones stay as variables); rewrite along
-the rules the schedule names — theorems of the store read as directions (`lib/rules.cub`:
-`plus-assoc`, `plus-zero`, map fusion), under a bound, together with the representations' own
-laws (`lib/repr.cub`: the program transported at its boundary along `Nat ≃ Word`, so its op line
-read right to left and to-from leave the machine's add where `plus` was — a rewrite along paths,
-not a replacement after lowering); lower to the first-order form (a call of `load64 n b off pf`
-is the native load with the length and the proof erased by usage and an `ASSUME` in their place;
-a numeral is the word the machine holds it as);
-lift closures and recursions to definitions; print. The schedule (`Sched`, B13's stage
-types) is a value: how many rewrites, what to inline and fuse, how general to keep the
-result. Every candidate schedule yields a correct program, so tuning is search over
-schedules with nothing to verify afterwards. That is Halide's algorithm/schedule split with
-the schedule's correctness by construction rather than by the schedule language's design.
+`encode : M → Bytes` maps each `M` construct to a fixed x86-64 instruction template under a
+fixed frame and calling convention: about fifteen templates (the word operations, the two
+comparisons and branch, the counted loop as `dec/jnz`, the switch as a jump on the tag, the
+call and return, load and store, the checked operation as `add` plus `jc`, the SSE2 scalar
+operations). The compiled definition is the pair `(encode (read c'), π)`. The trusted base
+of the compiler is the fifteen templates, each one line in section 13 ("`add r, s` on
+64-bit registers is addition mod 2^64", "`dec rcx; jnz top` over the body computes the word
+eliminator"), and the frame convention. When `⟦x86⟧` is imported (item 36), each template's
+line becomes a short equation between `⟦_⟧`'s construct and `⟦x86⟧` of the template's bytes
+— one computation on literals for the straight-line templates, one induction on the counter
+for the loop — written once, fifteen in all, after which the compiler's trust is the ISA
+model's alone. No C compiler is in the path at any point.
 
-**Rewriting along theorems, versus GHC RULES.** A GHC rule is a syntactic rewrite the
-compiler trusts. Here a rule is a checked theorem whose two sides are quoted from its type
-(`rule-of`); applying it is substitution along a path; the specializer can only ever produce
-a term equal to the one it was given. `plus x 0 → x` is consumed before lowering, so the
-loop that `plus` unfolds to never reaches C (`run.py`'s `law` case).
+The **call boundary**: a closed application of a compiled definition to constructor-built
+data runs `p` in executable memory (the machine already has `mmap`/`mprotect` for this and
+the two x86-64 call families of `foreign`), marshalling along the environment representation
+and the ABI (a `U64` a register, a flat record a struct by value, a recursive value a
+pointer into a region). The marshalling C in `src/lang.c` is in the trusted base beside the
+drivers, listed. The **JIT**: when a value becomes known at run time, `specialize` runs on
+the term with it substituted and the result compiles and is stored under the specialized
+term's key; a key is the content and cannot go stale; a term that is not first-order after
+substitution keeps running on the net. Allocation in compiled code is a region threaded as
+state (`lib/region.cub`), compiled like any other definition; no allocator is trusted.
+Output and input are commands of `W`, run by the drivers.
 
-**Zig `comptime`, C++ `constexpr`, templates.** All three substitute values known at compile
-time, and nothing else: they cannot specialize on a value known at run time, cannot act on
-a term with an unknown inside (Zig's comptime evaluator stops at the first unknown), and
-carry no laws. Here the same mechanism — normalization — runs at every binding time, with
-unknowns, and the laws it applies are theorems. The C++ image (section 10) is the choice to
-*stop* specializing at the point C++ can still express — so the exported header keeps a
-template where C++ would, and the consumer's compiler does the rest.
+### 5.6 Multiplicities: erasure, uniqueness, linearity
 
-**Strictness and codata.** A closed checked term of inductive type normalizes, so for it
-strict and lazy evaluation agree and strictness is a schedule choice. Codata (a process, a
-stream) has as its normal form its stuck call; native code unfolds it only when observed, to
-the depth observed; a native stage that forced codata would loop. That is why a process
-compiled against its world is a function of the store it reads (`run.py`'s `process`), and
-why the run-forever form of processes waits on the guarded (▸) types.
+Unchanged from revision 7 (18.1, built): usage is computed after a definition checks;
+erasure is by computed usage, never by annotation; 1-linear values are introduced only by
+primitives; uniqueness is structural in the net (box holder counts) and read by the
+compiled code's in-place updates. A proof argument reaches nothing read at run time, so it
+is erased and its fact becomes the bound field of the access it protected.
 
-**The call boundary and readback.** A closed application of a compiled definition to
-constructor-built arguments is a native call; the result comes back as cells, or as an
-opaque native cell read through the inverse of the representation's equivalence. Nothing
-crosses the boundary without a type on both sides.
+### 5.7 Schedules
 
-**Where this stands today (2026-11-09).** The pipeline above runs end to end on every `experiments/fo/run.py` program under the boxed, unboxed and x86 printers. The specializer calls `first-order` before lowering (item 15). Stuck primitive operations have codes, so a term over the byte layer is quoted and specialized under an unknown input. The run-known binding time is `#native` through gcc, cached by the store's keys.
-
-The separate checked model of lowering was removed (item 15). Representations are consumed in the term, as transport:
-- `specialize-r` puts `to`/`from` at the program's boundary, normalizes, and rewrites along the representation's laws (`%rlaws`): to-from, from-to, and the op lines read right to left. `plus` on Nat-as-Word reaches `lower` as the machine's addition, and nothing is replaced after lowering.
-- `max` and UInt32 arithmetic are primitives of the form, read one to one.
-- `program-rep` transports each definition of a whole program at its own boundary with its calls held (the schedule's `holds`), records through their induced representations (`Pt ≃ Pt·W`, generated when the record is declared), so a record's Nat field is a word because the program holds a `Pt·W`.
-
-What still acts after lowering, each for a construct item 15 names:
-- closure conversion: a Π type's representation.
-- emitu's typing of undeclared parameters by use: binder types in codes and the form.
+Everything that fixes cost without fixing meaning (strictness, binding-time assignment,
+representation choice, fusion depth, inlining depth, which definitions are held neutral,
+register assignment) is a value the specializer and reader take, sound by construction, so
+tuning is search over schedules with nothing to verify afterwards. Better register
+allocation is rewriting along laws in `⟦M⟧`, still by construction.
 
 ## 6. Representations
 
@@ -977,80 +966,89 @@ invariants; safety properties for every world; bisimulations. Lifting makes proo
 transport. Assumptions and world specifications are hypotheses. Physical time is not meaning;
 latency claims hold against a cost model; address-level claims outright.
 
-## 9. The correspondence with C++
-Export is constructive (section 10). Import splits: for arbitrary C++ it is a thesis (every
-C++ program with defined behaviour has a counterpart; UB becomes a proof, check or marked
-assumption; data races have no counterpart), a theorem only once a formal C++ semantics
-exists in the language (none complete exists anywhere; Cerberus covers much of C). For the
-fragment the image emits (10.1) it is constructive and finite: the fragment has a semantics we
-define because we emit it, so code written in it imports losslessly up to proofs, and that
-fragment is the migration dialect. The construct-by-construct mapping is in the ledger (16.1).
+## 9. Lifting: every language, by its implementation
 
-## 10. The C++ export and lifting a trading system
+To lift a language L is to give every L-program a meaning as a term and every L-abstraction
+a counterpart that keeps it. Two objects, related by a path, and neither is written from a
+standard.
+
+**The exact behaviour** of L is the behaviour of its pinned implementation: Clang at a
+version and flags, CPython, V8, HotSpot. Each is a binary, so under `⟦x86⟧` (0.1) each has
+a meaning, and `⟦impl⟧ (p)` is what L does with `p`, including every undefined and
+implementation-defined behaviour resolved the way the implementation resolves it. This is
+the object that preserves deployed behaviour exactly, quirks included, and it is obtained
+by lifting, not by transcription. It is *not* a correctness theorem: that the implementation
+conforms to L's standard is a separate type, needed for portability claims, and stated only
+when a formal object for the standard is related by a path to the implementation.
+
+**The structured reading** is where L's abstractions become terms. For C++, Clang's parser
+and Sema produce the elaborated AST: names resolved, overloads chosen, templates
+instantiated *and kept* as declarations with their specializations, deduced arguments,
+implicit conversions and `constexpr` results present as nodes. That AST becomes a data type
+here, and the reading maps it into terms: a class template is a λ over types and
+instantiation is β; a function template is a Π; a concept is a predicate on types and
+`requires` a case on whether a code checks; a class is a record at its Itanium-ABI layout;
+a virtual function is a field of the vtable record at the ABI's offset; `this` is an
+address; a member access is a load at an offset in the byte tier; a reference is a pointer;
+exceptions are explicit control flow with destructors at each unwinding step; coroutines a
+frame record and a state machine; threads processes over the memory world (`w-load`,
+`w-store`, `w-cas`, `w-fence` at the four orderings, `lib/world.cub`); allocation a region.
+Every detail of memory interaction is in the byte tier with exact layouts; nothing is a
+supported subset. The reading's λ for a template *is* the meaning assigned to the template;
+no claim is made about the implementation's behaviour on instantiations not present.
+
+**The path** between them is checked per program: `⟦clang(p)⟧_x86 ≡ obs (read (ast p))`,
+the compiled binary's meaning under the ISA model against the reading's, both normalized
+by the machine, under the observation that forgets the binary's registers and frame. Where
+the two agree by computation nothing more is written; where a construct's agreement is not
+computational, its equivalence is written once as a representation with its laws (section
+6), which is the only mathematics in the lift. If the reading is wrong, the path does not
+check; the reading needs no proof of its own. This also settles the one place the C++
+standard itself is unsettled (relaxed atomics and out-of-thin-air executions): the ground
+truth is the compiled code on the hardware's memory model, which is fully specified, so no
+model is chosen.
+
+**Bootstrap.** Lifting Clang's source needs the C++ lift, so Clang is lifted from its
+binary (or its own bitcode) under the ISA model once the machine runs binaries of that size
+(the measurement in 12's queue). Until then Clang's AST dump is an oracle for the elaborated
+AST, with trust exactly in "the dumped AST is the one CodeGen consumed", and that oracle is
+removed when the binary lift runs. The same applies to every reference implementation.
+
+**The order of languages** follows from one fact: most languages' semantics are their
+reference implementation and that implementation is C or C++. Lifting C and C++ lifts the
+interpreters of Python, JavaScript, Java, Lua, Ruby, PHP and R; their structured readings
+are small because the exactness comes from the interpreter. Languages with their own
+precise cores (Haskell via GHC, OCaml, Rust via rustc with MIR as the structured level, Go
+via its self-hosted compiler's binary) follow the same pattern. Lean and Coq lift exactly
+*as programs*, so "accepted by Lean" has a meaning here; their theorems do not transfer
+automatically (UIP contradicts univalence; impredicative `Prop` has no counterpart) and are
+translated per fragment where the theories agree: a ledger row with a trade.
+
+**Coverage.** A lift is complete on the constructs its models implement. The ISA model's
+unimplemented instructions, the loader's unsupported relocations, a syscall without a
+contract: each is an inventory item, and a program using one does not lift until it is
+added. The inventories live with the imports (item 36).
+
+## 10. The C++ image, and lifting a trading system
 
 ### 10.1 The C++ image
-C++ holds, at compile time, a functional language over types and integral constants; at run
-time, a simply typed language over structs and functions; and no types depending on run-time
-values. A translation into C++ therefore assigns each dependency one of four binding times:
-the net (normalized away), C++ compile time (a template or `constexpr` parameter), C++ run
-time (a value, with the dependency erased from the type and kept as an invariant), or erased
-(proofs). The specialized export sets each as early as possible. The **image** sets each as
-late as C++ can express: dependencies on types and constants stay template parameters,
-dependencies on run-time values become run-time values with contracts, proofs are erased, and
-only what C++ cannot express at any stage (paths as objects, HITs without a declared
-canonical form, dimensions, universe levels) is normalized away first. Every assignment
-between the two is a valid image; the assignment is a schedule parameter (5.2).
 
-The image is as factored as the source because the translator is **compositional**: one
-source form to one C++ form, one definition to one C++ entity, nothing inlined or specialized
-unless the assignment says so; names, modules and documentation come from the store's
-metadata as identifiers, namespaces and comments. Form by form:
-- function uniform in a type → template; function over codes matching on the code → partial
-  specializations or `if constexpr` over traits; a type computed from a constant by recursion
-  → a template metafunction on a non-type parameter;
-- records of operations with laws → a concept plus the generic algorithm as a constrained
-  template; instance resolution → overload resolution or a traits specialization; laws → the
-  four carriers below, never a comment;
-- inductive data → `std::variant` of structs or a tagged struct, matching as `std::visit`;
-  where a representation is declared, its layout and operations instead;
-- dependent pair with hidden type → `variant` over a finite code set, else a virtual
-  interface or `function_ref`-style erased object;
-- codata and processes → senders (stdexec) or coroutine awaitables; ticks and clocks erased;
-- paths → erased at multiplicity 0; transport along a representation equivalence → the
-  explicit conversion pair with its round-trip laws carried as below;
-  `transport (ua e)` → `e`; a HIT exports only through its canonical-form equivalence;
-- multiplicities → 1: move-only by value; ω: `const&`; 0: absent; 1-linear: move-only with
-  `[[nodiscard]]` and a debug-asserting destructor (C++ cannot enforce linearity);
-- representations → classes with the declared layout; `mdspan` for index layouts; `bit_cast`
-  for punning; universe levels erased; modules → namespaces and headers; the codebase key as
-  an attribute on the entity.
-
-**Laws.** Laws are data the specializer consumes before erasure: it rewrites along them,
-decides validity facts so no check is emitted, and fixes representations. Compilation then
-erases them. What reaches C++ is only what still has a use after our erasure, and there are
-two such uses: `[[assume(expr)]]` where an instance of a proven law is a C++ expression,
-because the C++ optimizer runs after us and can use a fact we proved (a false assumption is
-undefined behaviour, so this slot is for proven facts and nothing else); and a contract
-`pre`/`post` at a consumer boundary, because a consumer-supplied parameter arrives after our
-erasure and the hypothesis about it is enforced there. Optional output, not part of the
-translation: `static_assert` by exhaustion on finite domains, and the law as a named
-`constexpr` predicate with its certificate checked by `static_assert(check(cert, goal))`
-through the image of F32, for readers who want the compiler to verify it.
-
-What C++ cannot hold is the proofs themselves; the image carries each law in the strongest
-form C++ has, so its correctness argument is reduced to C++'s trusted forms, which is what
-"erase the machine" means; the codebase stands alone and compiles with gcc. Productivity,
-linearity and dependency on run-time values become checked or trusted. The translator reports
-per definition: exported fully, exported with contracts, or not exportable with the reason.
-
-The image uses a deliberate **fragment** of C++ (concepts, `constexpr`, `if constexpr`, folds,
-`variant`/`visit`, `span`, `array`, `unique_ptr`, move-only types, senders, `bit_cast`,
-`mdspan`, contracts where available; no raw `new`, no macros, no inheritance except for type
-erasure). The fragment has a semantics we define, so: translation validation of the image is
-feasible without a semantics of all of C++ (re-read the emitted fragment as a term, compare
-with the source up to erasure, per definition), and consumer code written in the fragment
-imports losslessly up to proofs (section 9). The residue printer (B19's first milestone) is
-the image at the fully specialized assignment.
+The image is the lift run backwards: a term's reading as C++ at the binding-time assignment
+"as late as C++ can express" (dependencies on types and constants stay template parameters,
+dependencies on run-time values become values with contracts, proofs are erased, and what
+C++ cannot express at any stage — paths as objects, HITs without a canonical form,
+dimensions, levels — is normalized away first). Form by form it is the reading of section 9
+inverted: a function uniform in a type → a template; a record of operations with laws → a
+concept and a constrained template; inductive data → a tagged struct, or the declared
+representation's layout; codata and processes → senders or awaitables; paths → erased at
+multiplicity 0; transport along a representation → the conversion pair; multiplicities → by
+value, `const&`, absent, or move-only with `[[nodiscard]]`. Laws reach C++ only as
+`[[assume]]` where an instance of a proven law is a C++ expression, and as contracts at
+consumer boundaries; never as comments (revision 6.3). What makes the image *correct* is the
+same path as the lift: the emitted C++, compiled by the pinned Clang, has a meaning under
+`⟦x86⟧`, and `⟦clang(image f)⟧ ≡ obs f` is checked per export. The image is therefore not
+built before the lift's machinery exists (item 39 in 12's queue); the earlier `lib/image.cub`
+with re-import as its check was removed at revision 8.
 
 ### 10.2 Lifting a trading system
 A trading stack is the first full-scale system because it exercises every layer and has an
@@ -1113,51 +1111,64 @@ Dependency order. DONE is as of the revision's commit. ★ marks a core decision
 checker, the key, or the net's rules); other items are consequences to state or library to
 write.
 
-**The queue as of revision 7.9 (2026-11-06, after the three-line build).** Of revision 7.8's
-queue below, everything landed: the `retire_boxes` race (`69b1372`), the stuck-primitive
-code `cprim` (`c8931ab`), primitive parameter usages (`df1c553`), 18.18 (`d5e47fb`), A8
-measured with `%transH` and the next step named (18.16's status), the specializer consuming
-usages, B13 and `Sched` (`36b9e30b`), recursive data in `emitu`, the acceptance programs and
-`tests/fo.cub` (`8b099b02`), choreographies (`6d098a67`). Also landed the same day: B18
-(both directions for words, `e9b9c983`, `680485ea`), B19 the C++ image (`ee5c04a2`), C21
-in-place update (`e27eda2c`), D24's guarded form (`5b9de865`), D26 (`43e8fb10`,
-`bf3ea4eb`), E28's redeclaration error, rebuilt scrutinees and fording (`e7632b1e`,
-`38c1fa89`), F31's remaining pieces (`896713ea`, `e1f33110`, `5b1b57f9`), F32's directed
-search and bridges (`89ec3e0e`, `d1e5f790`), item 29 (`fd188bf6`), `%gsteps` (`c20116d7`),
-`--serve` (`50ffb680`), the rewriting discipline (`bd21c486`). What remains, in order of
-value: (1) A8's next step — off the queue as of 2026-11-07 (18.16's A8d status: dimension-invariant keys built, no keyed composition repeats, keys alone +1–4% steps, withdrawn; A8c status: sharing by key never applies, 0 of 311 compositions with keyed inputs; the watermark bound cut nothing, the rest unbuilt behind wires with no back pointer; the generic 6-cube past a 2.5 GB cap); not formal compositions in path types (tried, withdrawn, 18.16):
-sharing a composition across the dimensions the tube maps apply it at; (2) B18 DONE for words, byte strings and constructors both ways (`#native` over
-`emit-lib-boxed-u`: a constructor whose fields are values crosses as the boxed `V`, a boxed
-result is rebuilt by the entry's `box<d>`; `cubical_call_data(name, args, types)` from C;
-libraries cached by the program's hash, item 17); `V_NATIVE` DONE 2026-11-06 (opaque handles
-of type `Native` from hand-written C, `#native … from`; boxed results kept native, `#native … keep`;
-18.8); (3) A4's
-bitmask formulas (18.19, designed); (4) E28: DONE 2026-11-06 for unification-based implicits through reducing hypothesis types,
-holes in composition lines, generalized variables, and the hypothesis at the field's own index
-for recursion on a fording family (`vmap`; 18.12); the goal rewritten by the index equation and index
-unification at splits with absurd cases (2026-11-06); (5) DONE: item 30's retraction (`#retract`) and positions in errors; (6) DONE: F32 over `Int` (`lib/std.cub`'s
-`Z2` reading with its laws, `lib/intproof.cub`, `lib/intlin.cub`); (7) DONE: the memory interface in `W` (`w-load`/`w-store`/`w-cas`/`w-fence`, acquire /
-release / acquire-release / sequentially consistent, on addresses from `ptr-of`;
-`tests/world.cub`); (8) DONE 2026-11-09: item 10's same-machine Agda comparison (measured, in item 10); (9) DONE (`7a2c96c4`, `62c669fc`, `13ae6b9f`, `54be3050`): Line B's leftovers — `lib/emitx86.cub` (18.7's
-encoder for the word-only fragment, run from executable memory; `X86=1 run.py`), 18.5 step 7's
-statements read by computation per family (item 15: lowering as transport is the open work),
-`fthunk` in the printers, parameterized data types in the C++ image (templates, read back). A trap for test writers: `#same f #1 = #8` parses `#1 = #8` as a
-face (`src/syntax.c`'s system syntax); parenthesize the application. The list of revision 7.8
-follows for the record.
+**The queue as of revision 8 (2026-11-09).** Dependency order; each item is sized in lines
+written at the calibrated rate (about 1.5 h per thousand) where its content is fixed, and
+marked *measured* where a number decides it. Nothing is optional.
 
-Before anything: the `retire_boxes` race in
-`src/net.c` (above). Then, machine side, in order of what they unblock: (1) a *code* for the new stuck-primitive neutrals (`V_NPRIM` is read by `%view`
-as `wprim k args` but `qneu` gives none), so that terms over the byte layer quote and
-specialize under unknowns — the one thing standing between `lib/repr.cub`'s direct lowering
-and the specializer proper (18.6); (2) 18.1's primitive parameter usages (erasure of bound
-proofs by usage instead of `repr.cub`'s by-name dropping); (3) 18.18 positivity under Π
-codomains (guarded processes, session types); (4) 18.16 A8; (5) the back end consuming
-B13's verdicts and `%rtab` (the specializer calling `first-order` before `lower`). Library
-side (this agent's line), independent of those: recursive data as typed pointers to their
-own structs in `lib/emitu.cub` (the rest of B16 milestone 2), the acceptance programs at
-size (`fib 30` recursive, a sort over C22 arrays, the decoder from the boundary), the
-specializer reading `Sched`'s stages, choreographies in Church form. Everything listed is
-current scope; none of it is blocked on a decision.
+0. **Deletion** (~1 h): `lib/fo.cub`, `lower`, `emitc`, `emitu`, `emitt`, `emitx86`,
+   `image`, `reimport`, `repr`, `stage`; autodiff's `PCode`, `cev`, `dpc`, `pl-of-pc`,
+   `D-correct*` and the untyped bridge (the typed `D`, `fwd`, `taylor` stand); derive's
+   `eq-fo` reading; `src/syntax.c`'s induced-record generation (`x_rep_induce`) and the
+   `%rops`/`%rlaws` tables; `src/lang.c`'s `%natfb`/`%natsfb`/`%natcv`, `rep_chain`, and the
+   `#native` path that emitted C through gcc (the `mmap`/`foreign` call machinery stays for
+   item 18); `tests/`, `experiments/fo`, `tools/mtest.py`, `tools/names.py` (the elaborator
+   refuses redeclaration instead, ~20 lines), the Makefile's lines for them, and every
+   `#same` reading in `lib/` of an untyped definition. Kept: `experiments/brunerie` and
+   `experiments/agda` (the A8 and item-10 measurements), the readings that are the only
+   evidence for the trusted base (section 13, items 1–2), and the removed harness's programs
+   as the acceptance list of item 19. README rewritten to the same state.
+1. Items 14–18 of 12.B in order: `U64` and the machine types; `M` and `⟦_⟧`; the
+   specializer's paths; the reader and `compile` with its **gate** (the conversion cost on
+   `fibw` and the decoder); `encode` and the boundary. About 1.9k lines, ~3 h, then the
+   measurement.
+2. Item 19: the acceptance programs compiled with their paths and run.
+3. **Item 36, the ISA import** (*measured*): the importer from Sail into our data types,
+   covering the Sail translation of ACL2 `x86isa`, Sail Armv9 and Sail RISC-V in one; the
+   coverage inventory of each (x86isa's implemented opcodes against the instructions our
+   templates and our workloads' binaries use); the loader (ELF, relocations, initial state);
+   x86-TSO as a predicate over executions. Then section 13 item 3's fifteen lines become
+   equations. Size: the importer by Sail's grammar (first-order imperative with
+   dependent bitvector types), a few thousand lines; the inventory by reading the model's
+   `implemented-opcodes`. **Gate:** a small real binary's observed output under the imported
+   `⟦x86⟧` on the net, and the net's steps per instruction, which sizes everything in items
+   5–7.
+4. **Item 37, the OS world**: Linux's syscalls as commands with contracts, the ones a trading
+   box's hot path uses first; the kernel-bypass NIC APIs as worlds. ~3k lines for the first
+   set.
+5. **Item 38, the C++ lift** (section 9): Clang's AST as a data type; the reading, node kind
+   by node kind, into terms at the Itanium ABI's layouts, exceptions, coroutines, threads
+   over the memory world; the per-program path against the compiled binary under `⟦x86⟧`;
+   Clang's AST dump as the oracle until Clang's own binary runs under the model (item 3's
+   measurement decides when). The standard library lifted as the C++ it is, its OS-bound
+   parts to worlds. Sized when the AST's node kinds are inventoried against Clang's
+   `ASTNodeKinds`; the reading is large and fixed in content.
+6. **Item 39, the image** (10.1), on item 38's machinery: the reading inverted, checked per
+   export against the pinned Clang's binary.
+7. **Item 40, the systems layer** (0.1): the network world with its delivery model and
+   scheduling; composition of processes under a handler; the observation quotient and the
+   fiber over `Proc Obs`; replicated state as a function of the received set; `deploy` and
+   the deployment contract; migration relations; distribution by keys (item 35, essential).
+   On the existing `proc`, `world`, `session`, `choreo`. ~6k lines.
+8. **The fleet** (10.2): the existing C++ lifted through item 38 with its abstraction
+   representations, the strategies as processes, the per-box specializations, the OS and
+   NIC as worlds, latency against a cost model over `⟦x86⟧`.
+9. **Other languages** (section 9's order), each by its reference implementation's binary
+   under the model once item 3's measurement allows, with its structured reading.
+
+Throughout: A8 (item 8) stays on the queue as the property every lift's cost depends on,
+since specializing an interpreter's binary on a program is normalization with open inputs
+at the scale of the binary; the 6-cube's memory per result cell and g8's steps per cell are
+its current numbers.
 
 **Priority, derived from the claims.** Three properties are claimed: determinism across
 workers (A1, DONE); canonicity (DONE); and that normalizing a term with open dimensions does
@@ -1170,8 +1181,9 @@ figure, a useful benchmark and not the center. Engineering with a known answer i
 B11's static side (usage accounting; built 2026-11-06, usages computed, erasure by them
 still to be applied by the back end). A9 is separate: it closes the simplified comparison with
 Agda by removing load time, which is engineering with a known answer. Neither gates the core
-decisions B11–B13, which proceed in parallel and in that order (B11 and B12 landed; B13 next); the back end (B14–B18) is
-engineering once they are made. D and E are independent of B. F follows B and E. The typed
+decisions B11–B13, which are made; the compiler (12.B items 14–19) is definitions over them
+with no proof work of its own, and the lifts (36–40) are imports, readings and their
+inventories. D and E are independent of B. F follows B and E. The typed
 port (A10b) is the checker at scale and gates E28.
 
 ### A. The rewriting runtime
@@ -1332,117 +1344,51 @@ port (A10b) is the checker at scale and gates E28.
     computation used as a value stands as a neutral, applied or not (`tests/elab.cub`'s `frob0`).
 
 ### B. Compilation by transport
-Specifications for the ★ items are section 18 of this document, each at revision 2 after a
-critical pass, with syntax, checker rules, acceptance tests and size. The
-builder took B11 and B12 together (shared field-annotation syntax), then B13 and F34; none
-touches `net.c` or the composition clauses. Corrections from the pass that bind the plan:
-erasure is by computed usage, never by a binder's type; the checker's decision runs on the
-net (only code-to-code programs compile); representation choice is a schedule, not part of
-identity; linear values are introduced only in `primitive` definitions.
-11. ★ DONE (`0729899`, 18.1): multiplicities, static side: usage computed after each
-    definition checks, erasure by usage, linear introduction only in primitives, the errors.
-    The dynamic side is structural (DONE).
+Revision 8 replaces items 14–19 of revisions 7.x (the first-order form, the specializer's
+lowering, the C back end and JIT, the call boundary over emitted C, the C++ image). What
+they built is removed and section 5 is the specification of what replaces them. B11–B13
+stand.
+11. ★ DONE (`0729899`, 18.1): multiplicities, static side.
 12. ★ DONE (`01c839c`, 18.2): representation equivalences as a construct, the primitive
-    types (floats trusted), `Bytes n` with proved accesses, layouts, `#trusted`. Quotients by
-    canonical forms: a `represent` whose `to`/`from` are the canonical-form maps — DONE
-    2026-11-06 (`tests/prim.cub`): `ZQ`, pairs of naturals modulo `a + d ≡ c + b` as a set
-    quotient (a path constructor for the relation, a squash for setness), represented by `Int`:
-    `to` the difference's normal form (`subN`, respecting the relation by cancellation),
-    `from` the canonical pair `(n , 0)` / `(0 , n + 1)`, `from-to` by elimination into the
-    family of propositions (every pair related to its canonical one, `zq-canon`); `#layout
-    ZQ` is Int's. Found on the way: `#fo` crashed on any constructor applied to a field
-    (`lib/stage.cub`'s `fo-list` read its tail as a code since it landed); fixed. As for
-    `Tr2`, `#fo` of a function on the quotient stays `not-fo dim` after the representation
-    (its body holds the relation's branch) until the specializer transports it along the
-    representation.
-13. ★ DONE (`1c5282a`, `lib/stage.cub`): `first-order T c` with the reasons dim, dep-type,
-    higher, kan, reflect, mult; `fo-normal` on the normal form; the stage/verdict/strictness
-    types as data; `#fo`. Schedules as values: `lib/specialize.cub`'s `Sched` (the rewrite
-    bound) and `lib/code.cub`'s stage types; the specializer calls `first-order` (item 15).
-14. First-order intermediate form. Essential. Built as a library: `lib/fo.cub` (the
-    form, its evaluator, closure conversion, structural recursion, the byte layer),
-    `lib/lower.cub` (from codes, with the data table's shapes), `lib/repr.cub` (the
-    representations consumed). **Unboxing by representations and layouts (2026-11-07):**
-    `program-rep reps fuel c` (`lib/repr.cub`) consumes every declared representation in a whole
-    program (B12 §6): each definition lowered from its code as written (`%gcode n`, new: the
-    checked definition's desugared term kept and quoted on demand, so calls stay calls — the
-    normal form had unfolded `plus` into its recursion, and an op line had nothing to replace);
-    a call of an operation with an op line becomes its native counterpart (aliases chased:
-    `plus` → `plusw` → `P-add`); a constructor of a represented type its representation (a closed
-    tree computed now through `to` on the net, an open one `to` at run time with its represented
-    fields read back by `from`); a recursion on a represented value recurses on `from` of it, the
-    branch's represented fields read through `to`; `to`, `from` and what they call stay as written.
-    The table is `%rops d = some (to , (from , [(op , native)]))` (new, filled by `represent`'s op
-    lines through `(repops …)`). In the printers (`lib/emitt.cub`, `lib/emitu.cub`), a field of a
-    type represented by `Word` is a word (`cshape-r`, as its layout `lword` says): a record with a
-    `Nat` field is a struct of two words passed by value. (Superseded 2026-11-09, item 15 (b): the
-    program holds the record's induced representation, and the printers read no representation.) `run.py` programs `rep` (plus as `v0 + v0`,
-    a list of Nats, a case through `from`: 89) and `rep-rec` (a record by value: 44) under every
-    printer; boxed/UNBOXED/IMAGE/X86 all ok. What has no op line is correct and slow (a case on a
-    `Nat` costs `from`, B12 §6's W-slow-op); **Declared signatures (2026-11-07, fork B2):** `emit-prog-d m defs` / `emit-lib-d m defs`
-    (`lib/emitu.cub`) type every definition that comes from the store (global g is definition g + 1 in
-    `program-at`/`program-rep-at m`'s numbering) from its checked type: `global-sig`'s FT, each
-    parameter and the result a word (Word, Int64, Float64), a pair of such, or a data type (flat by
-    value, pointer data a typed pointer, else boxed), and by use where FT says nothing (ftany, byte
-    strings, functions) or its arity is not the definition's (an erased parameter). `run.py`'s
-    `sig-decl` and `sig-use` print the same program both ways: a parameter only returned is
-    `uint64_t` declared, `V *` by use, and a record only passed through is `T<d>` by value declared,
-    boxed and unboxed around the call by use (both 19). Not changed: `emit-prog-u`/`emit-lib-u`
-    (and so `#native`) still infer by use, since `ft-of` reads a represented type as its
-    representation and is right only for programs with the representations consumed (`program-rep`);
-    the entry and lifted closures have no declared type and are typed by use.
-15. **Status (2026-11-09):** the specializer is built and consistent with the premise — `lib/specialize.cub` normalizes, rewrites along the store's theorems (a rule is its path, so the output's meaning is the input's by construction) under the terminating discipline (`bd21c486`), erases by `%gusage`, runs `first-order` and honours `Sched` (`36b9e30b`). **Not met: lowering and printing are not yet transport.** `lib/lower.cub` and the printers (`lib/emitc.cub`, `lib/emitu.cub`, `lib/emitx86.cub`) are functions that transform the normal form (typed since line TL: lowering is type-directed and the unboxed printer reads binder types, below), not the forward map of the representation equivalences (item 12), so the compiled code is not the program carried along a path. Between 2026-11-07 and 2026-11-09 this was attempted as a separate checked model of the pipeline (`lib/foproof*.cub`, ~14k lines: duplicate syntaxes, evaluators and translations with simulation proofs, tied to the real compiler by readings); that is the opposite of the premise and was removed (2026-11-09). Kept from it: three compiler bugs it exposed, fixed in the real compiler — `max` lowered as addition (`lower-max`; run.py `maxw`), a byte offset that is a `Nat` read as 0 (`lower-off`), and a wrapping word subtraction in every back end (now the source's truncating one; run.py `tsub`). **The work:** lowering as the transport of the normal form along the layout equivalences (§6.1's automatic layouts, `represent`'s declared ones): every semantic step `lower` and `repr` perform becomes normalization of a transport the machine computes, and what remains of `lower` and the printers is the structural reading of a first-order normal form, one form per construct.
-    **Lowering and printing: the inventory, and what moved (2026-11-09, line A15).** Every clause of `lib/lower.cub`, `lib/repr.cub`, `lib/emitc.cub`, `lib/emitu.cub` and `lib/emitx86.cub` that did more than read one normal-form construct as one first-order construct, and where its meaning now lives:
-    - *Moved into the term.*
-      - (a) The Nat-by-Word representation consumed by the specializer, not after lowering. `specialize-r T rules c` (`lib/repr.cub`) transports the program at T's boundary: `from` on each parameter whose type is represented, `to` on such a result, T[d := R]. The machine normalizes it, and the specializer rewrites along the representation's own paths: to-from and from-to, oriented, and each op line's law read right to left. `specialize-r (Nat → Nat)` of `λ n → plus n n` is `flam (P-add v0 v0)`.
-      - What this needed: the machine publishes each representation's laws (`%rlaws d = some (to-from , (from-to , [op·f·by]))`: `src/syntax.c` emits `(replaws …)`, `src/lang.c` builds the table, `src/net.c` reads it).
-      - It needed two fixes in `lib/match.cub`: a pattern holding `cword`, `cpty`, `cplit`, `cprim`, Π or Σ never matched, so to-from, whose sides mention Word, applied nowhere.
-      - It needed one fix in `lib/specialize.cub`: `rewrite-all` runs the oriented rules to their fixpoint again after each unoriented step; before, they ran once, before the first step.
-      - Nat's op line names `wadd`, whose body is the machine's addition (`toNat-wadd`, `lib/prim.cub`), so no further rule for `plusw` is needed.
-      - Deleted: `consume-reps` and its helpers, `nat-lit`, `nat-code`, `nat-lits` (an untyped pass that replaced word operations by name, counted closed Nat trees into words and read facts' numerals as words). `lib/image.cub` keeps its own `nat-code`, a reading of a numeral where the C++ image writes a word.
-      - (c) `max`: `lower-max` (let plus if) is deleted. `cwop 3` is one primitive, `P-max` (`lib/fo.cub`: eval `%wmax`; C `n34`, `a < b ? b : a`; x86 `cmp` then `cmovb`; run.py `maxw` under X86 too).
-      - UInt32: `lower-prim` used to lower the 32-bit operations to the word ones, which gave wrong answers on overflow: u32add carried past 2^32, u32sub truncated at 0, u32 w kept the high bits. They are now the form's own primitives `P-u32add … P-wofu32`: eval is the machine's u32 operations, C is `(uint32_t)` arithmetic. run.py `u32wrap` (4294967299) and `u32cmp` (10) failed before and pass now (they answered 12884901893 and 100).
-      - (b) Whole programs and records (2026-11-09, line PW): `program-rep T reps fuel c` (`lib/repr.cub`; it now takes the entry's type, as `specialize` does) transports every definition the program reaches at its own boundary, its calls held. Nothing of it acts after lowering.
-        - Induced representations, generated in elaboration (`src/syntax.c` `x_rep_induce`): a data type with no parameters, indices, path constructors, recursive or erased fields, one of whose fields has a type with a representation, gets `D·W` (the same constructors `c·W`, each such field at its type's representation) and `represent D by D·W` with `to`/`from` field by field and `to-from`/`from-to` the fields' paths side by side (functoriality). It is surface text checked like a written block, so `%rtab`, `%rops` and `%rlaws` hold it like a declared one; a representation declared for `D` later replaces it in every table (`(rep-induced D)`, `src/lang.c`). `#layout Pt` is `Pt·W`'s. Nested records compose (`Seg ≃ Seg·W` through `Pt ≃ Pt·W`); a type represented by a record that has its own is followed to the end (`RBox` by `RPt` by `RPt·W`).
-        - Holding (`lib/specialize.cub`): `Sched`'s fourth field `holds`, global indices; `normalize-held` abstracts them (`glob-map`, over the generic `cmap`), normalizes under λs typed by their types, so each is a neutral variable to the machine, and strips the λs back to globals (`normalize-abs`, `unhold-k`).
-        - Per definition (`tr-def`): `g`'s code as written (`%gcode`) at its type's boundary — `from` on each parameter, `to` on the result, each along its chain — with every other definition it names held as a variable standing for `h_R` (`λ x → from (h_R (to x))`), so the conversions between two transported definitions meet and cancel. A parameter whose chain ends in a record is opened by its eliminator at the boundary (a case on the `Pt·W`, nested records opened in turn), so `from` meets a constructor and computes: each branch is `to ∘ g ∘ from` at that constructor, by refl. Normalized and rewritten in turn under the held λs (to-from and from-to, the op lines read right to left, `plusw≡wadd`), to the fixpoint or four rounds (a rule's right side can expose a redex: `to 1` in `plus a 1`); then the eliminator's η on a case of a record variable (a constructor rebuilt from the branch's fields is the variable; a case whose branches are one body naming no field is that body); the held variables back to globals, each annotated with its transported type (`cann (cglob g) T_R`: the call is of `g_R`, numbered `g + 1` as before, and `lib/lower.cub`'s `lower-app` types it by the annotation); lowered at the transported type. Not held: the representations' conversions (the machine unfolds them; the rules match their normal forms), the operations the rules rewrite (op lines' sources, `plusw`), types, and a definition whose code is one primitive operation on its parameters (`wadd`, `weq`, …: inlined).
-        - `#native`'s struct crossing reads the program's record: `T<Pt·W>` takes Pt's `to` before and its `from` after; a parameter or result follows its type's chain to the struct's data type (`rep_chain`; `struct Pt` itself, none), and a hand-written `struct Seg` holding `struct Pt` matches `Seg`'s description, whose field is `Pt·W`'s (`cr_tw` accepts the struct of a type whose induced representation is the record described). `cubical_call_data` follows the chain to the result struct's data type, or to the chain's end. `lib/emitt.cub`'s `cshape-r` reads no representation: the typedef of `Pt·W` is its own struct of words.
-        - Deleted (`lib/repr.cub`): `rc` and `rc-list`, `rc-alts`, `rc-ralts`, `rc-ralts-rep`; `tb-del`, `rcv-data`, `rcv-is`, `rcv-convs`, `rcv-conv-of`; `raw-fields`, `raw-field`, `field-rep`, `rep-lit`, `tree-code`, `tree-fields`, `shape-of`, `lmap-k`; `wrap-fields`, `to-at`, `var-map` and its lists; `wn` and its lists, `word-native`, `g-plusw` … `g-wlt`; `rep-op`, `op-native`, `rep-to`, `rep-from`, `rep-ops`, `rep-table`, `rep-table-of`, `rep-lookup`, `rep-convs`; `fo-datas` and its lists, `datas-of-defs`, `defs-reach`, `lower-def`, `def-names`, `keep-t`, `isnil-l`. (`lib/emitt.cub`): `word-rep-kind`, `word-rep`.
-        - Readings: `lib/repr.cub`'s `dbl-rp` program is the same form as before (a call of `dbl-rp`, its body `v0 + v0`); every `run-rep`, `rbox` included; the native line (Pt, Shape, Seg emitted and by hand); run.py `rep-held` (new, 131 boxed and unboxed: a held call's record result taken apart, a record result chosen by a case on a Nat), and `rep`, `rep-rec`, `rep-box`, `prim-rec`, `sig-decl`, `sig-use` as before. Program shapes that differ from rc's, answers identical: a call of `plusw` stays a call of its transported definition (`plusw≡wadd` makes that `v0 + v1`; `wn` replaced the call by `P-add`, as the inlining of `wadd`, `wsub`, `weq`, `wlt` still does); a `Nat` inside a type with no induced representation (`List Nat`, a recursive type, a Σ, a function) is a `Nat` tree, converted by `to`/`from` where it meets a word (rc laid every `Nat` value out as a word, in any position: its clause "one representation throughout the program, so a value of d is tb everywhere: in a variable, a field of another type, a result" has no counterpart, since such positions have no type to transport to; `List Nat ≃ List Word` by functoriality is the missing piece, with the recursive and parameterized records); a definition that cases on a held call's record result builds the record's own form there (`from` of the call, then the case: `ag2` in `rep-held`).
-    - *Kept, as one-construct readings.*
-      - `lower-welim`'s counting loop: the reading of the word recursor. `cthunk` becomes its term (checked terms terminate).
-      - Erasure by computed usage: `g-erased`, `drop-erased`, `erase-lams`.
-      - `fassume` from an erased bound. Its numerals are now read as words in `lower-access` (`fact-nat`), as the offset is.
-      - `lower-off` and `lower-natlit`: the machine's Nat is word-backed (`big.c` past 64 bits), so a numeral read as its word is the machine's own representation, not a transformation.
-      - The Int64/Float64/UInt32 primitive table, one primitive to one.
-      - `lower-bool`: a case on a comparison is the language's conditional, and lower-bool reading it is a structural reading, not a representation consumer. (`represent` accepts a Σ such as `(w : Word) × Bit w`; it is not declared for Bool.)
-      - The automatic layouts (§6.1): `cshape`, pairs as constructor 0 of type 0, emitt's typedefs.
-      - The printers: `lib/emitc.cub` and `lib/emitx86.cub`, read clause by clause, print one construct per clause. Subtraction is the truncating `n1` (`jae`/`xor` on x86); facts' `max` is one ternary; x86 drops `fassume`.
-    - *Built (2026-11-09, line TL): lowering is type-directed, every first-order binder carries its type, and the unboxed printer reads binder types.* (This was decided as typed binders in the codes — Code's `clam`/`clet` carrying a domain — and built instead in the lowering, which knows the type it lowers at, so the codes are unchanged except for the motive below.)
-      - `lower T c` (`lib/lower.cub`) checks the normal form at its type T, a type value: a λ's binder is the domain of the Π it is checked at (a fresh variable of it in scope for the dependent positions); a constructor's fields are checked at the data table's telescope at the type's parameters; a case's fields are in scope at that telescope, its hypotheses at the motive at their field, its branches at the motive at the constructor (a case without a motive: at the type it is checked at); an argument at its function's domain; a let at its definiens' type; a loop's state is (the bound, the counter, the word elimination's motive at the counter). Types are synthesized where the code says them (`syn`: variables, globals, application spines, projections, annotations, eliminations' motives, word and primitive operations). A type that cannot be computed (an elimination written without its motive, an unchecked `%welim`; a case's result where nothing checks it) is `ftany`, and the printer boxes such a value.
-      - The motive: `%view` gives `wwelim x z s mo` (`src/net.c`: the stuck elimination already kept it, the view dropped it), `lib/check.cub`'s `qneu` quotes it onto `cwelim w z s mo` (z at P 0, the step at (n : Word) → P n → P (n + 1), the elimination at P x, so a spine over it quotes typed), `lib/code.cub`'s eval passes it on (`%welimP`), `src/syntax.c` reads it back as the motive (a hole only when absent), and match/stage/specialize/image carry it where it has free variables. The C++ image cannot hold it: `reimport.cub`'s `erase-code` drops it.
-      - `lib/fo.cub`: `flam ty b`, `flet ty a b`, `floop tys init b`; a program is a Lst of `(g , (params , body))`, params a Lst of FT (`def-n` the arity; `fo-def g t` for a λ). `lift-e env k t` types a lifted definition's parameters: the captured variables at their types in env, then the λ's binder (a recursion's: the scrutinee at its data type); a captured field of a recursion's alternative is `ftfield d c j`, which the printer resolves from the data table by the rule it binds the field with. `lift k t` is `lift-e` on a closed term; `lift-program` lifts each body over its parameters' types.
-      - `program-at`, `program-of`, `program-rep`, `program-rep-at` take the program's type, as `specialize T` does; the store's definitions are lowered at `%gty`. `lib/repr.cub`'s `rc` retypes the binders it consumes (`rc-ft`: a represented type's binder at its representation's type), and an update of a represented value is the update of `from` of it under `to`, as a constructor is (before, `rbox-bump`'s update of an `RBox` was left on the `RPt` value, which compiled only because the two records share a layout). (Line PW deleted `rc`, with `rc-ft` and the update clause: see (b). A transported program is lowered at its transported type, each held call annotated with its definition's transported type — `cann (cglob g) T_R`, read by `lower-app` — so its binders are typed by the representations without a retyping pass.)
-      - Hand-built programs declare their signatures (run.py, `tests/fo.cub`, `tests/native.cub`, `tests/native-at.cub`, the readings).
-      - `lib/emitu.cub`: a parameter, a let and a loop's state are typed by their binders (a let or a state at `ftany` takes its definiens' synthesized type); `use-ty` (typing by first use) is deleted; `infer-u` is kept, as synthesis from constructs and binder types. The prototypes `cubical_entry` gets in every `#native` program of `tests/native.cub` are unchanged (compared over all 41 generated libraries); internal ones changed where use had boxed a word (an identity on a word, `f_267(V *)`, is now `uint64_t`), so nothing on the machine's side moved. run.py `sig-use` now expects the declared signatures from `emit-prog-u` too (it pinned the by-use boxing).
-      - A `#native` specialization's key is up to the fresh binder of a non-dependent → or × (`src/lang.c`'s `spec_key_term`): with the program's type in the expression, `add5b`, `px-probe` and `nflip-probe` stopped hitting their twins' specializations within a run.
-    - *Decided (2026-11-09), not yet built; until then these act after lowering.*
-      - (2) Closure conversion and lifting (`lift`, `lib/fo.cub`): a λ as a code pointer plus its captured values is a representation of a Π type. `represent` takes a data type on the left (`lib/prim.cub` states the Fin-function representation as a library equivalence for the same reason). Missing: `represent` over a Π type.
-    Essential. (The discipline, usage and the criterion, once listed here as not yet applied,
-    are applied: see the status above.)
-16. **Status (2026-11-06):** milestones 1 and 2 built (`lib/emitc.cub`, `lib/emitu.cub` with recursive data as typed pointers `a8d9028c`, 22 harness programs under both printers); the JIT is `#native` through gcc (`e9b9c983`); `fthunk` in both printers as a thunk cell computed once by `force()` (`7a2c96c4`); 18.7's own encoder `lib/emitx86.cub` for the word-only fragment, run from executable memory by `experiments/fo/x86main.c` (`54be3050`, `X86=1 run.py`: six programs, fib 90 among them). Spec as written: C back end (gcc/clang, CompCert); JIT. Essential. Milestone 1 as a library:
-    `lib/emitc.cub` prints the first-order form as C (boxed values, closures through a
-    dispatcher, `ASSUME` for assumed facts), `experiments/fo/run.py` compiles and runs seven
-    cases with gcc. WebAssembly, MLIR, circuits: optional.
-17. **Status (2026-11-07):** the mechanism is `#native f n = prog` and `specialize-v` (`36b9e30b`); **cached by key (2026-11-07):** a `#native` specialization is named before it is computed — by its expression with each checked definition and data type replaced by its codebase key (F34, which covers what it depends on), the values written in it (the run-known values), the arity, `keep`, the checker's version (`chk_salt`, the binary included) and the libraries loaded before the file (an unchecked definition — the specializer, the printer — has no key; an unchecked definition of the file itself adds the file's text) — and a hit (`.cubical-cache/native/spec-<key>`, naming the library's hash) skips the specializer and the C compiler: `ok: native add5b [specialization cached by key, 0 steps, …]`; a second run of `tests/native.cub` hits on every compiled entry; another value (`add6`) is another key. **Re-entry while the program runs (2026-11-07, fork B2):** `#native f n at k = P` (core `(native-at f n k P)`) — f's first k arguments become known only at run time. f becomes a lookup entry: a call whose arguments are words calls the specialization kept under its first k values; when there is none (in this run or in the specialization cache by key, P's key text with the values), the call becomes a generated builder's, in which the net itself computes `P v1 … vk` (the C of the residual over the other n − k words, `emit-lib-u`'s) as a byte string (`bytes-of-list`, `lib/emitu.cub`), and the machine compiles it (once per text), enters it, keeps it under the values and calls it. The program is computed by the net as part of the run, not by a nested evaluation (a `readback` inside a reduction waits on the reduction it is in). `tests/native.cub`: `scaleat e b` (b added e times) at 1: `native at run: scaleat at #3 [specialized now]`, the residual `((0 + v0) + v0) + v0`; the later calls with 3, and those inside `use-scaleat`, use it; 4 is a second specialization; a call on a variable is the definition on the net; a second run reads both from the cache by key. **Workers and a bound (2026-11-07, fork B4):** the kept specializations of an entry live in at most `CUBICAL_NATIVE_AT_MAX` (1–256, default 16) foreign-table slots reserved when the entry is declared (the foreign table no longer grows while the program runs), read and changed under one lock; a call copies its slot under the lock and calls outside it, counted in the slot's in-flight count; a new specialization past the bound evicts the least recently called slot with no call in it (its library `dlclose`d; `[evicts f at #v]`), and when every slot is in a call it is called once without being kept; a builder's compile is under the lock. `tests/native-at.cub`: twelve values from one reading with a bound of 4, then again (each evicted value re-entered from the cache by key), with `CUBICAL_WORKERS=4` and under TSan. Not built: arguments other than words (represented or boxed values in the known or residual positions). Spec as written: Progressive specialization on run-time values, cached by key. Essential.
-18. **Status (2026-11-06):** both directions for words, byte strings and constructors (`e9b9c983`, `680485ea`, `e5bbd429`, 18.8's status); `V_NATIVE` opaque handles from hand-written C (`#native … from`, type `Native`, finalized by `cubical_release`) and boxed results kept native (`#native … keep`); **represented values by their representation (2026-11-07):** a `#native` entry whose parameter or result has a type with a declared representation takes and returns the representation (the compiled program is `program-rep`'s: Nat as `uint64_t`); the call converts by `to` before and `from` after, and the definition it falls back to is the one over the representations (`to ∘ f ∘ from`, a generated `%natfb`), so both paths agree; from C, `cubical_call_data` with a type naming a represented data type takes the representation's value (a word for `Nat`) and reads a represented result out by `to` (`tests/native/main.c`: `plus 40 2` on Nat as words = 42). **Records by value (2026-11-07, fork B2):** a `#native` entry whose parameter or result is a record (one constructor) of word fields or fields of word-represented types is emitted by `emit-lib-u` as its flat C struct `T<di>` taken and returned by value; the machine appends a trampoline (`<entry>__tw(const uint64_t *a, uint64_t *r)`: the struct's fields as words in, the result's as words out) and opens the record into its fields, each converted by its field type's `to`, rebuilding the result's by `from`; the fallback (`%natsfb`) is the definition over the same words, so both paths agree (tests/native.cub: `swapPt`, `sumPt` on `Pt` of two Nat). Libraries are linked `-Bsymbolic` (every one exports `cubical_entry`, opened `RTLD_GLOBAL`). From C, `cubical_call_data` takes a type `"struct D"` as a pointer to the struct of D's fields (each a `uint64_t`, a represented field as its representation) and `cubical_call_data_r(…, "struct D")` returns the result as a malloc'd struct of its fields (`tests/native/main.c` over `tests/native/rec.cub`: `swapPt {3,40} = {41,3}`, `sumPt {41,3} 2 = 46`). Then not built: records of more than one constructor (the tagged union by value), nested records (a field itself a struct), fields of floating or 32-bit types (each field is a `uint64_t` word), and more than 8 argument words or 16 result words (all but the argument limit built by fork B5, below). A type represented by a record (`represent Box by Pt`) crosses as its own struct (the back end keeps it as itself: `program-rep` consumes representations by `Word`), but the program `program-rep` emits for it is wrong on its own: it routes the value through `to`/`from` and applies the field type's `from` (Nat's `toNat`, counting a tree) to fields that are already words (`f_104(mkw(v))` reads 0), so `bumpBox (box 1 2)` answered `box 10 0`. **Fixed (2026-11-07, fork B4):** a type represented by a data type has its `to` and `from` consumed like the rest of the program with the type itself unrepresented (`lib/repr.cub` `tb-del`, `rcv-convs`), so the record they make or take is in the program's form (a Nat field a word); a constructor is `to` of the record built from the program's fields and a case reads `from` of it, no field conversion either side (the typed C back end has one layout per data type, so tree and word fields cannot share it). `lib/repr.cub`'s `rbox` readings (12, 3; failing before), `run.py rep-box` boxed and unboxed (41). The first reading after a plain `#native` (B3's report: neither the compiled code nor the fallback) does not reproduce on this tree: every reading of `tests/native.cub` under `CUBICAL_SHOW_NATIVE=1` with unbuffered output has its call line (the missing lines were stdout/stderr buffering), fresh and cached libraries alike; `tests/native.cub`'s `probe` pins the first reading to the compiled answer. What does answer from neither is a definition compiled before the `#native` (`useprobe`): it keeps the definition it was compiled against, by design (the name is rebound, not the global); rebinding in place is not built. **The rest of the record crossing (2026-11-07, fork B5):** a record is described once from its data type (`crec_of`, src/lang.c): no parameters, path constructors or recursive fields; each field a word (`Word`, or a type represented by `Word`), a primitive at B12's widths (`UInt32`, `Int64`, `Float32`, `Float64`), or such a record (inline; a type represented by a record, its representation). Between the net and C the value is a run of slots: the tag when there are several constructors, then the constructor's fields (a nested record its own slots), padded to the widest constructor, each slot a word (a 32-bit field its bits). `#native` (emitted `T<di>` or a hand-written `struct D` in a `from` file, any member names) reads the entry's prototype, matches each struct's text against the data type (`cr_tw`: a tag word and a union of one anonymous struct per constructor, or one constructor's fields; `uint32_t`/`float`/`double`/`int64_t`/`uint64_t` for the scalars) and generates the trampoline from it (a switch on the tag both ways, `__builtin_memcpy` for the float bits); the definition opens each record by a case per constructor (the tag a literal, each scalar to its word: `%wofu32`, `%wofi64`, `%f32bits`, `%f64bits`, a represented field by `to`) and reads the native's raw result (built by `crec_result` in net.c from the slots, the tag choosing the constructor) back by a case per constructor (`%u32ofw`, `%f64ofbits`, …, `from`); the fallback takes the same slots and rebuilds each record by branching on the tag slot (`(if (%weq s #c) …)`), so both paths agree (under a binder the fallback's answer is `from (to n)` where the definition's is `n`: equal values, not equal readings). A parameter that is not a record keeps its kind (a `V *` boxed, a `void *` a handle), as a non-record result does (a `V *` result unboxed: `segsum`'s). From C, `"struct D"` is laid out as C lays it out (a field at its width and alignment, the union after the tag at 8; `crec_read`/`crec_write`), `%recin_D` rebuilds from the slots (branching on the tag; a tag naming no constructor answers NULL) and `%recout_D` reads the result raw. Results up to 32 slots. In the emitted program (`lib/emitu.cub`, `lib/emitt.cub`): a switch alternative's locals scoped to it (every multi-constructor case binding fields in two alternatives failed to compile: made here and, the same fix, in `bb6009f0`), a record whose fields are words or flat records with a field is flat (`flat-lay`; Seg holds two `T<Pt>` inline; Bool and other field-less types stay as before), its typedef after the ones it holds (`flat-by-depth`), boxed and unboxed through theirs; `t-fld`/`t-vptr` were not strings (a list applied to a numeral since `a8d9028c`: the typedef of any type with a data-typed or boxed field did not terminate, `emit-lib-u` on `Seg` ran out of memory). Tests: `tests/native.cub` `area`, `grow`, `segsum`, `segswap` emitted (failing before: the C compiler rejected `area`/`grow`, `segsum` ran out of memory) and `shape-area`, `shape-grow`, `seg-swap`, `px-mix`, `px-fbits` from `tests/native/rec.c` as probes (the definitions answer otherwise; seven readings failing before); `tests/native/main.c` over `tests/native/rec.cub`: `area`, `grow` twice, a bad tag refused, `segswap`, `pxmix {7,1.5,2.25,-3} = {8,1.5,4.5,-6}` (failing before). **Primitive fields in emitted programs (2026-11-07, fork C3):** `lib/emitt.cub`'s `cprims d c` gives each field of a primitive type other than `Bytes` its kind (wpty k + 1); `cshape-r` reads such a field as a word (it is one in the first-order form), the typedef holds it at its C width (`uint32_t`, `int64_t`, `float`, `double`, as `crec_of` lays it out), and a type is flat when its layout is (a primitive's `lbytes` now accepted) and every field is a word or a flat record (`fields-flat`: a `Bytes 8` or `Native` field, bytes to the layout but boxed to the printers, keeps the type boxed). `lib/emitu.cub` converts at every place a field is read or written — projection, switch, update, literal, `box_d`/`unbox_d` and the pointer forms — by `rd-prim`/`wr-prim` (integer casts; a float by its bits through `W`/`W4` and `F`/`F4`, `F4`/`W4` added to the runtime), so a list of `UInt32` is a typed pointer whose struct holds a `uint32_t`. `tests/native.cub`: `pxmix-e` against its fallback, `px-probe` (the identity over `pxmix-e`'s emitted program; the UInt32 at 2³² − 1 wraps to 0 in its field), `nflip`/`nflip-probe` (a sum of `Int64`, `Float64`, and `UInt32` with `Float32`), `pxk-probe` (Px inline in a record), `bbw` (a `Bytes 8` field stays boxed); `run.py` `prim-rec` boxed and unboxed (125; the unboxed source holds `struct { uint32_t f0; float f1; double f2; int64_t f3; }`). Not changed: inside the program a `UInt32` is a word that `u32add` can carry past 32 bits (the emitted `u32add` is a plain addition), truncated only when stored into a field. **An open term reads as the definition (2026-11-07, fork C3):** over represented values the converting call is its own definition (`%natcv<k>`, `from (native (to a…))`) and the entry is `(lam a… (%natrep cv g a…))`: the arguments are read whole (`O_DEEP`/`O_DEEPC`, a constructor's fields forced in turn) and, when every one is closed data (words, primitive values, byte strings, native values, constructors of such all the way down), the call is `cv`'s; an argument with a neutral part (under a binder) takes `g`, the definition itself, so `λ n → dbln n` reads as `λ n → dbl0 n` and not as `from (to …)` of it (`tests/native.cub`, three `#same`s under a binder, failing before). **More argument words and fields (2026-11-07, fork C3):** a `#native` entry takes up to `NATIVE_MAXW` = 32 parameters and argument words (`src/core.h`; the foreign table's kinds, the prototype reader and the struct code sized by it); above six parameters the call goes through the entry's trampoline, as a struct crossing does (a direct call covers at most six words). A record's constructors and fields have no fixed bound (`CRec`'s per-constructor arrays allocated to size); a record crosses by value while its slots fit 32 words, else boxed. `tests/native.cub`: `sum10p` (ten words, 77), `r6p` (a six-word record and four more words, 65), `r20p` (a record of twenty fields with a `UInt32`, 321), each failing before (refused: one to six arguments, more than eight words, more than sixteen fields). Found on the way: `CHKSRC` and `CHKTY` (a checked definition's desugared term and type, `%gcode` and the boundary's reading) grew without zeroing their new entries, so a definition that never set one read garbage (`gcode_build` dereferenced it: ASan over `tests/native.cub`, `to_code` at a 0xbe… address); the new entries are zeroed, as `CRECS`' were. ASan over `tests/native.cub` clean. **Records through their induced representations (2026-11-09, item 15 (b)):** a record with represented fields (`Pt`, `Shape`, `Seg`) is represented by its generated `Pt·W`, and the emitted program holds `Pt·W`; a parameter or result converts along its type's chain of representations to the struct's data type (`rep_chain`: `T<Pt·W>` by Pt's `to`/`from`, `RBox` by `RPt` by `RPt·W`, a hand-written `struct Pt` by none and its fields as before), and `cubical_call_data` likewise. Spec as written: Call boundary; C ABI both directions. Essential.
-19. **Status (2026-11-06):** built, `ee5c04a2` (`lib/image.cub`, `lib/reimport.cub`; `IMAGE=1 run.py`: 4 headers through g++ -std=c++20, re-imported equal to the source up to erasure); parameterized data types exported as templates and read back (`13ae6b9f`: a type parameter a template parameter of the structs, a case a visit by template lambdas; a parameter at a value stays outside the fragment). **18.9's remaining constructs and 18.15's configuration (2026-11-07, fork C5):** records of operations as concepts, codata as classes, representations' classes, the module file, and the image specialized against a `Config` (its `Platform`: word width, byte order, alignment) with consumers' instantiations recorded statically and read back as the next specialization's `Config` (18.9's status); `IMAGE=1 run.py` runs twelve programs (`concept`, `codata`, `repcls`, `module`, `platform`, `config` new). Spec as written: The C++ image (10.1): a compositional translator over codes, one clause per source form
-    (~30 forms), parameterized by the binding-time assignment; the fully specialized residue
-    printer is its first milestone; the fragment's re-import for translation validation and
-    for importing consumer code in the fragment. ~3,500 lines. Essential for adoption; the
-    highest adoption value per line in the plan.
+    types, `Bytes n`, layouts, `#trusted`; quotients by canonical forms (`ZQ` by `Int`).
+13. ★ DONE as a criterion (`1c5282a`, 18.3); at revision 8 the verdict is produced by the
+    reader where a construct has no `M` form (5.4), with the same reasons; `lib/stage.cub`
+    as a separate pass is removed. `Sched` moves to the specializer's and reader's schedule
+    (5.7).
+14. **`U64` and the machine types** (5.3): `U64` modular with its operations and ring laws
+    beside `Int64`/`UInt32`; `F64`'s operations the machine's `%f64*` with pinned rounding
+    and no contraction, their specifications listed by `#trusted`. ~300 lines. Essential.
+15. **`M` and `⟦_⟧`** (5.3): the structured machine program as a data type and its meaning,
+    one clause per construct, total by construction. ~500 lines. Essential.
+16. **The specializer's paths** (5.4): each rewrite carries `ap` of its theorem, composed;
+    `specialize` returns the code with the path, and the checker checks it. `match`,
+    `rules` and `nav` become certificate producers. ~150 lines in `lib/specialize.cub`.
+    Essential.
+17. **The reader and `compile`** (5.4): the environment representation; `read` from the
+    quoted normal form into `M` through `%view`, with its failure reasons; `compile`
+    returning `(encode (read c'), π)` with `⟦read c'⟧ ≡ eval-g c'` by `refl`; the `mcheck`
+    route for `Word` programs with `run p f ≡ f`. ~500 lines. Essential. **Gate:** the cost
+    of the checker's conversion on the path, measured on `fibw` and the tagged-message
+    decoder before anything is built on it (expected linear in the normal form; it is
+    checking, not proving).
+18. **`encode` and the boundary** (5.5): the fifteen templates and the frame convention,
+    each a line in section 13; the bytes into executable memory through the machine's
+    existing `mmap`/`mprotect` and `foreign` call families; marshalling along the environment
+    representation and the ABI; the JIT by the specialized term's key; allocation through
+    regions; I/O through `W`. ~400 lines in `lib/` and `src/lang.c`, reusing the crossing
+    code that matches and deleting the rest. Essential.
+19. **Acceptance programs**, the workloads kept from the removed harness, each compiled
+    with its path and run at the boundary: fib by word elimination, the tagged-message
+    decoder with its bounds, the region program with in-place stores, the record crossings
+    (`Pt`, `Shape`, `Seg`), a process against its world, a `Nat` program through `mcheck`
+    with the fallback taken past 2^64. These are the first compiled programs of the system;
+    their answers are read on the net and natively from the same term, and the path is what
+    says they agree.
 
 ### C. Memory and state
+(The "compiled" and "in place" readings recorded in items 20–22 below went through the back
+end removed at revision 8 and are history; the byte layer, the regions, the arrays and their
+laws stand, and compiling them is item 19's acceptance list.)
 20. DONE in parts: the byte layer (B12), validity facts as certificates (`lib/decode.cub`),
     `ptr-of`/`region-at` trusted and `#safe f` listing what a definition assumes
     (`1c5282a`). The Region threading idiom: DONE 2026-11-06, `lib/region.cub` — a region is
@@ -1578,7 +1524,10 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
     declaration. DONE.
 
 ### F. Programs about programs
-31. DONE in parts: `deriving eq D` (`1c5282a`), `deriving show`/`derive-show` (`896713ea`),
+31. DONE in parts (revision 8: autodiff's `PCode` mirror — a copy of a fragment of `Code`
+    with its own evaluator `cev`, the theorem `D-correct` stated over the copy and tied to
+    `Code` by readings — is removed as an instance of the error section 17 records; the
+    typed theorems `fwd-der` and `taylor` over `Pl` stand): `deriving eq D` (`1c5282a`), `deriving show`/`derive-show` (`896713ea`),
     autodiff with the Taylor theorem and `D-code` over codes (`896713ea`), reflection by
     `ring-eq`; the stuck-primitive neutrals have a code (`cprim`, `c8931ab`); `%view` covers
     every value kind the net has (stuck calls as `wcofix`/`wproj`, primitives as `wprim`,
@@ -1626,8 +1575,24 @@ time, the role stays a λ. Spec as written: The process library: interfaces, gua
     a checked definition took, from the run or from the store's ok line: 18.14's cost model
     table in-language (`lib/cost.cub` can consume it).
 
-### G. Scale
-35. Distribution by keys over wires; the net on GPUs. Optional now.
+### G. Scale, and the lifts
+35. Distribution by keys over wires. Essential (0.1: the substrate of the tower across
+    machines; a key names a closed definition under a semantic environment, with a fetch
+    protocol, dependency resolution and execution authority as their own definitions). The
+    net on GPUs: later.
+36. **The ISA import** (queue item 3; 0.1, 5.5): the importer from Sail; x86isa's, Armv9's
+    and RISC-V's models as data types with `⟦_⟧`; coverage inventories; the ELF loader;
+    x86-TSO. Essential; *measured* (steps per instruction on the net).
+37. **The OS world** (queue item 4): syscalls as commands with contracts; kernel-bypass NIC
+    APIs as worlds. Essential.
+38. **The C++ lift** (queue item 5; section 9): Clang's AST as a data type, the structured
+    reading at the ABI's layouts, the per-program path against the binary under `⟦x86⟧`,
+    the oracle and its removal, the standard library. Essential; the largest fixed-content
+    item in the plan.
+39. **The image** (queue item 6; 10.1): the reading inverted, checked per export.
+40. **The systems layer** (queue item 7; 0.1): the network world, composition under a
+    handler, the observation quotient, replicated state over the received set, `deploy`
+    and its contract, migration relations. Essential.
 
 **After the build.** The system extends itself: new components are terms, judged by the same
 normalization as user programs, accepted into the store under their keys; the theory contains
@@ -1636,13 +1601,39 @@ the only thing trusted, a few thousand lines (what else is trusted today is sect
 for, and the trajectory after the build is the system doing this across machines.
 
 ## 13. The trusted surface
-The rewrite rules, including three things about them that are tested and not proved: that they
-implement CCHM, that normalization terminates on checked terms, and that the canonicity
-statement holds for them. The checker term's correctness relative to the rules (tested by the
-quote/eval laws and the `#fail` suites). The small definition or postulated specification
-behind each native primitive. The drivers. Stated hypotheses for consumer C++ parameters.
-Unchecked solvers. The C compiler, removed today by CompCert for proof-critical builds and
-later by translation validation against Sail instruction-set models.
+
+Everything not checked by the checker, in full. Each item names how it leaves the list.
+1. The rewrite rules (`src/net.c`) implement CCHM, terminate on checked terms, and satisfy
+   canonicity. Tested, not proved: the readings of the library, workers against one thread,
+   TSan and ASan. Leaves the list when the metatheory is done in the system.
+2. The checker term is correct relative to the rules; the quote/eval laws hold. Tested by
+   the `#fail` suites and the laws' readings. Same.
+3. The fifteen `encode` templates and the frame convention (5.5), one line each: `add r, s`
+   on 64-bit registers is addition mod 2^64; `sub` likewise; `imul`; `shl`/`shr` with the
+   count below 64; `cmp` then `jb`/`je` is the comparison; `dec rcx; jnz top` over the body
+   computes the word eliminator at the counter; a jump table on the tag is the switch;
+   `call`/`ret` under the frame is application; `mov [base+off], r` and its load are the
+   store and load at the offset; `add; jc` is the checked operation; `addsd`/`subsd`/
+   `mulsd`/`divsd` under round-to-nearest-even with no contraction are IEEE binary64;
+   `cvt` and the bit moves are the identities they are. Leaves the list when `⟦x86⟧` is
+   imported (item 36) and each line is written as the equation between `⟦_⟧`'s construct
+   and the model's meaning of the template.
+4. The marshalling C at the call boundary (`src/lang.c`), the drivers (`src/drivers.c`), and
+   each `foreign` declaration, listed by `#trusted`. The drivers and `foreign` are the
+   boundary with the OS and leave the list as the kernel is lifted (0.1).
+5. The specification postulated for each floating-point primitive (`%f64add` is IEEE
+   binary64 addition, …), until the operations are defined in the language.
+6. Imported models and their importers (item 36): the ISA model describes the hardware
+   (validated by its authors against silicon; the floor), and the importer preserves it (in
+   the list until its outputs carry their own evidence; round-tripping proves nothing).
+7. Oracles named per lift and removed per lift (section 9): a reference implementation's
+   elaborated-program dump, until that implementation's binary runs under the ISA model.
+8. The OS contract and the loader, as hypotheses of every compiled program's meaning, until
+   lifted.
+
+Nothing in any compiler, reader, specializer, matcher, importer or lift is on this list:
+each produces outputs that carry their paths, and a wrong one produces an output that does
+not check.
 
 ## 14. Measured facts to keep
 Brunerie simplified: 1.26M steps, −2; g8 1.136M; 6,706 unkeyed transports; 291 hits;
@@ -1653,14 +1644,20 @@ same construction's refl check 0.30–0.33 s by Agda's profiler, after 4.3 s of 
 nothing 116 s CPU / 870 MB against this machine's 5.4 s / 139 MB (untyped port). Nested-loop transport
 linear: 4.2k/9.1k/19.0k/78.4k (left), 5.1k/12.0k/27.0k/146k (right) at 4/8/16/64 loops.
 `fibw 90` by word elimination over a pair reads in 2,416 steps on the net (words are exact:
-`fibw 1000` reads its 209 digits); specialized under an unknown argument it is a `for` loop in
-C that gcc runs in the microseconds (`run.py`'s `fib`), the same number.
+`fibw 1000` reads its 209 digits); its compilation as a counted loop with its path is item
+19's first acceptance program (the earlier C-loop figure went through the removed back end).
 Reflection (`lib/ring.cub`): `(x+1)^n` against its right-nested product checks in 9.6k / 15.5k /
 24.2k / 37.3k steps at n = 2/3/4/5, `(x+y)^n` in 18.7k / 30.3k at n = 3/4 — the normalizer's
 cost, roughly the number of monomial insertions; the proof term is constant.
 
 ## 15. Open threads
-- The memory model for relaxed atomics.
+- The memory model for relaxed atomics in *source* C++ (out-of-thin-air, RC11 and the
+  promising semantics): dissolved for lifted code, whose ground truth is the compiled
+  binary on the hardware's model (x86-TSO, the Armv8 model), which is fully specified; open
+  only as a conformance claim about a compiler, if one is ever wanted.
+- Two measurements the queue depends on (section 12): the checker's conversion cost on a
+  compiled program's path (item 17), and the net's steps per instruction running a real
+  binary under the imported `⟦x86⟧` (item 36), which sizes every lift by implementation.
 - The configuration value's form (venues, parameters, role) and feedback of consumers'
   instantiations: answered and built (18.15).
 - The cost model (latency claims, schedules, navigation): navigation's form is decided
@@ -1825,6 +1822,54 @@ exactly this project's content. Where it leads (GPUs, machine-code compilation o
 calculus), parity is the acceptance and is in the queue, not claimed.
 
 ## 17. Changes in revisions 4 to 6, and retracted claims
+Revision 8 (2026-11-09): the back end from codes to C, C++ and x86 removed with everything
+that served it (section 12's queue item 0 lists the files); section 5 rewritten as the
+target's meaning `⟦_⟧` over a structured machine program `M`, the reader with its path by
+construction, `encode` by fifteen trusted templates, and the boundary; section 0.1 added
+(the tower); section 9 rewritten as lifting by implementation with structured readings and
+a checked path per program; 10.1 restated as the lift inverted; 12.B replaced by items
+14–19 and the queue by items 0–9 and 36–40; section 13 enumerated in full with how each
+item leaves the list; 18.5–18.9 withdrawn. **Retracted, with the record of how each was
+stated and corrected:**
+- "Compiling is transport" was stated as a property of the code from revision 6 to 7.9 and
+  in item 15's reports of 2026-11-09 ("lowering as transport", "representations consumed in
+  the term"). At no point did any compiled program carry a path to its term; the compile
+  path was passes between syntaxes related by comparing answers. The statements were
+  false of the code throughout.
+- The checked model of the compiler (`lib/foproof*.cub`, 2026-11-07 to 11-09, ~14k lines)
+  proved properties of copies of the compiler's syntaxes and tied them to the compiler by
+  readings: the opposite of the premise; removed at `d72a42f3`.
+- The printers' primitive table (`P-add` as `uint64_t +`, `add rax, rcx`) asserted that the
+  machine's unbounded `Word` is a 64-bit word; compiled programs answered wrongly past 2^64.
+  The 32-bit operations had been lowered to the 64-bit ones the day before (fixed in
+  `4d2f7e4f`, but the class was not fixed). Floating point was compiled by `cc -O2` with no
+  `-ffp-contract=off`, so contraction was permitted and compiled float results could differ
+  from the machine's; not demonstrated, recorded as what the flags allowed.
+- Item 15's status of 2026-11-09 ("the specializer is consistent with the premise") was
+  partly true (its rewrites are along theorems) and partly not (it emitted no path); the
+  rest of the status described passes.
+- Proposed and withdrawn the same morning (2026-11-09): a C++ semantics written from the
+  standard (a model beside the implementation that runs); "lifting Clang gives the complete
+  C++ semantics" (an exact object, not a theorem; conformance is a separate type); a
+  proof-assistant frame with "proof obligations", "simulation certificates", a
+  "CompCert-shaped backend proof" and "proof-search cost" (there is no proof library; every
+  equality is a path the computation produces, and the compiler's one-time trust is fifteen
+  template lines); "`vector ≃ sequence`" as an equivalence (a representation with retained
+  state, or a quotient, chosen by what is observed); CRDT convergence from merge laws as
+  HIT paths (the state is a function of the received set; convergence needs delivery); a
+  general "computable quotient" of processes by observation (canonical forms only where a
+  normalization for the relation is defined); `observed ≡ deploy …` as drift (an
+  observation is partial; the claim is a contract); "round-tripping an importer removes it
+  from trust" (it does not); an eight-hour import of Vellvm as a complete LLVM semantics
+  (Vellvm covers the sequential core and lacks `invoke`/`landingpad` and concurrency;
+  `⟦LLVM⟧` is not on the critical path at all, the per-program path for lifts is against
+  the binary under `⟦x86⟧`); a 70-hour total (priced writing, not the imports' inventories
+  or the measurements; withdrawn in favour of per-item sizes and two gates).
+- Process, 2026-11-07 to 11-09: agents given open-ended goals; work left uncommitted
+  through a server restart; a suite run on an agent's own test list rather than the full
+  one. Rules now: commits at every green point and at most 15 minutes of uncommitted work;
+  the full suite before anything reaches `main`; no agent is given a goal without a
+  specification it can be checked against.
 Revision 7.9 (2026-11-06, the three-line build: a machine line and two library lines in
 parallel worktrees, 37 commits): 7.8's whole queue landed and the items listed in section
 12's queue paragraph; statuses written into 18.8, 18.12, 18.16 (with the A8 measurements and
@@ -2460,364 +2505,9 @@ automatic here, by design.
 (commands). About 560 lines. The hash function: BLAKE3 reference C, ~150 lines vendored.
 
 
-### 18.5 B14 — The first-order form
+### 18.5–18.9 Withdrawn at revision 8
 
-Revision 1. The target of the specializer and the input of every back end.
-
-**Status (2026-11-06).** Built as `lib/fo.cub`, with these differences from the definition
-below: `fswitch` alternatives carry their field count (`(c , (n , body))`); a recursion form
-`frec d x alts` (alternatives `(c , (n , (hyps , body)))`, the hypotheses the suspended
-recursions on the fields named, from the data table's shapes) stands beside `fswitch` and is
-what `case`/`rec` codes lower to, `lift` turning it into a self-calling definition; the byte
-layer is `fprim` with `P-load64 … P-blen` on `vbytes` values rather than `fbytes` literals;
-`fi64`/`ff64` are not yet forms (FO holds words; the conversions are dropped at the
-boundary); `fcall` is by global index (+1 in a program), not by codebase key (F34); `FT` is
-declared and not yet attached to terms, so the printer boxes every value — the typed form
-and B12's layouts are the next step here. The justifying path is not an assembled proof term: the separate checked model built for it (2026-11-07 to 2026-11-09) was removed; lowering as transport along the layout equivalences is item 15's open work.
-
-#### Definition
-A data type in the language, `lib/fo.cub`:
-```
-data FO
-  = fvar n                       -- de Bruijn, a run or run-known variable or a local
-  | flit (w : Word) | fi64 n | ff64 bits | fbytes (bs : List Word)
-  | fcon (d : Word) (c : Word) (fs : List FO)        -- constructor with its non-0 fields
-  | fswitch (x : FO) (alts : List (c × FO))          -- case on a constructor tag
-  | fproj (d c k : Word) (x : FO)                    -- field k of constructor c
-  | fcall (g : Key) (args : List FO)                 -- a compiled definition, by codebase key
-  | fprim (p : Word) (args : List FO)                -- a native primitive (%wadd, %load32 …)
-  | flet (t : FO) (b : FO) | fif (c t e : FO)
-  | floop (init : List FO) (body : FO)               -- tail recursion as a loop over state
-  | fclos (g : Key) (env : List FO)                  -- a closure: code pointer and captured values
-  | fapply (f : FO) (args : List FO)                 -- call through a closure
-  | fthunk (t : FO) | fforce (x : FO)                -- lazy positions (codata, unchecked regions)
-  | fnet (k : Key) (args : List FO)                  -- a call into the net (B18) for a not-fo region
-  | fassume (fact : Code) (b : FO)                   -- a proven fact at this point, for the C++ image
-```
-Every `FO` is typed by a first-order type `FT`: `tword | ti64 | tf64 | tbytes n | tdata d
-(ps) as R | tfun (args) ret | tlazy FT`, where `tdata` carries its chosen representation.
-Multiplicity-0 binders and fields do not occur. There are no types, paths, dimensions or
-universes in `FO`.
-
-#### Properties
-- `FO` is path-free inductive data, so programs over it compile, and `FO` itself has an
-  automatic layout: the specializer, the printers and the certificate checker are first-order.
-- Each `FO` program carries its justifying path: the specializer produces `(f : FO) × (p :
-  eval-fo f ≡ t)` where `eval-fo : FO → Value` is the first-order evaluator written in the
-  language and `t` the source term; `p` is 0 and erased, and it is what `#same` checks when
-  asked to validate a compilation.
-
-#### Acceptance
-`eval-fo` on the `FO` of `plus`, `fib`, `sort` on numerals agrees with the net's readings
-(`#same`); `#fo-print t` shows the form; `FO` round-trips through its own automatic layout.
-
-#### Size
-`lib/fo.cub` ~250 (the type, `eval-fo`, printer). Part of B15's 1,500 in the plan's count.
-
-### 18.6 B15 — The specializer
-
-Revision 1. A term over codes: `specialize : Code → Sched → Assign → (FO × Proof) + Report`.
-
-**Status (2026-11-06).** `lib/specialize.cub`: `specialize T rules c` = normalize (eval,
-then quote at `T`), rewrite along rules to a bound, lower; `specialize-s` takes the
-schedule as a value; `program-of` lowers a code and the
-definitions it calls; `fo-report` is the report of the criterion over codes; the rules come
-from the store's identities (`lib/rules.cub`). Not yet: the schedule as a value with its
-`fuse`/`inline` depths and generality, the assignment of binding times, usage (B11) and
-the criterion (B13) applied, the ordered terminating discipline for rewriting (a count
-today), the justifying proof.
-
-**Finding (2026-11-06, `70854ad`, corrected at `7be3368`), binding on step 2 and on the
-machine.** A value containing a stuck primitive application (`load64` on a neutral buffer)
-has no quote (`quote-top` gives `none`: F31's missing `wnative`/stuck-call view), and
-`normalize` then falls back to the source code, so a program over B12's byte layer cannot
-be specialized under an unknown input — the whole of it, not only the primitive call.
-(Normalization itself does unfold definitions applied to neutral arguments: `lenw l` and
-`run4 st` normalize to their bodies; an earlier reading of the fallback as a kept call was
-wrong and the inliner written for it was retracted.) The fix is a code form for stuck
-primitive calls. Half landed at `be7149d`: a stuck operation is now a neutral `V_NPRIM`
-that `%view` reads as `wprim k args` and the checker compares argument by argument (so two
-loads of the same string at the same offset are equal, and C22's array law is proved from
-the byte layer's); what remains is the code (`qneu` gives none for it): a constructor
-`cprim k args` in `lib/code.cub`, `qneu` producing it, `eval-g` applying the operation, and
-`lower` mapping it to `fprim` — ~60 lines, the first item of the queue. Until
-then `lib/repr.cub` lowers the source code of such programs directly (calls of the
-primitive definitions mapped to native primitives, lengths and proofs dropped). With no
-primitives in the way, specialization under unknowns works today: a process of
-`lib/proc.cub` run against its world with the store unknown normalizes to a function of the
-store (`pr1`, which puts before it gets, to the constant 12; `pr4` to `st 3 + 1`), and the
-latter compiles with a store closure (`run.py`'s `process`, 41).
-
-#### Steps, in order
-1. **Substitute** the `now` variables from the environment.
-2. **Normalize** to the schedule's `fuse` and `inline` depths. This is the net's own
-   normalization invoked on a code (`eval` then `quote`), so no second evaluator exists; the
-   depth bounds are applied by the quoter stopping at calls below the depth.
-3. **Rewrite** along marked theorems: a library of paths tagged `rewrite →`, applied left to
-   right by matching on codes, under the terminating discipline: rules are oriented, a
-   rule's right side is smaller under a fixed order (size, then a user-given rank), a rule
-   whose sides are equal in size (commutativity shapes) is rejected at tagging time
-   (**E-rule-unoriented**). Each application records the path.
-4. **Usage** (B11) on the residual; drop 0 binders.
-5. **Criterion** (B13) per region; `not-fo` regions become `fnet` calls.
-6. **Lower** to `FO`: constructors by representation (B12), `case` to `fswitch`, tail
-   recursion to `floop`, calls to compiled definitions to `fcall` by codebase key, calls to
-   primitives with `op` entries to `fprim`, codata to `fclos`/`fthunk`.
-7. **Prove**: assemble `p : eval-fo f ≡ t` from the recorded paths (steps 2–3) and the
-   representation `by` paths (step 6); the lowering of steps 4–6 is justified by one lemma
-   per `FO` constructor, proved once in `lib/fo.cub`.
-8. **Store** `(f, p)` under `obj/<cv>/<sched>` of the definition's codebase key (F34), and
-   `f`'s own key for the memo of compiled code.
-
-The specializer specializes itself: its code is first-order over `Code` and `FO`, so step
-6 applied to `specialize` yields its own `FO`, compiled by B16; `#fo specialize` is `fo`.
-
-#### Progressive specialization (B17)
-At run time, a `run-known` variable receiving a value re-enters step 1 with that value
-`now`, producing a new `(f, p)` under a new key, which the JIT (B16) compiles and the call
-boundary installs for later occurrences. The schedule says which variables are `run-known`.
-
-#### Acceptance
-`specialize` of `plus` on `Nat as Word`: `fprim %wadd`; of `map f (map g xs)` with the
-fusion rule tagged: one loop; of `transport (ua not) b` with `b` run: `fswitch` on `b`;
-of `g10` in the Brunerie port with `x` run: `fnet` for the truncation, `fcall` for
-`rec2`'s target with `represent ∥ℤ∥₂ by Int`: `fo` throughout. `eval-fo` agrees with the
-net on each.
-
-#### Size
-~1,200 lines of `.cub` (`lib/specialize.cub`) plus the rewrite tagging in `src/syntax.c`
-(~60).
-
-### 18.7 B16 — The C back end and the JIT
-
-Revision 1.
-
-**Status (2026-11-06).** Milestone 1 built as `lib/emitc.cub` (`emit-prog`): C source as a
-list of bytes with a small runtime of boxed values (`V {tag, n, f[]}`: a word, a
-constructor with its fields, a byte string with the bytes in `f[]`); one C function per
-definition, GNU statement expressions for `let`, `switch` and loops, closures through a
-generated dispatcher (`apply`), `ASSUME` for `fassume` (`__builtin_assume` on clang,
-`__attribute__((assume))` on gcc ≥ 13, nothing otherwise), `ld64`/`st64`/`ld32`/`st32`/`mkb`
-for the byte layer, hypotheses of recursions as eager lets. `lib/emitt.cub` prints a data
-type's layout as a typedef. Milestone 2, first part (`89aed69`, `lib/emitu.cub`): words
-unboxed — every local, parameter and return typed `uint64_t` or boxed by inference
-(parameters by their uses, returns by their bodies, three rounds; conversions where the
-types differ; closure targets boxed for the dispatcher); a loop of `lower-welim`'s shape is
-a `for` over typed state with no allocation. Two loads from a buffer print as
-`uint64_t f(V *b) { return ld64(b, 16) + ld64(b, 0); }` under their `ASSUME`s; factorial
-is a `for` over two `uint64_t`; pairs are C structs by value (`63aa45e`), so `fib` by word
-elimination over a pair is a `for` over a `uint64_t` and a `Pr0` with no allocation. Flat data
-types (a union of structs of words, by B12's layouts) are `lib/emitt.cub`'s typedefs by
-value (`1a843be`): compound literals, field projections, a switch on the tag binding
-`uint64_t` fields, `box_d`/`unbox_d` generated where a `V` is wanted or given. Recursive
-and pointer-carrying types (lists, trees) remain boxed `V`: typed pointers to their own
-structs, with the same layouts, are what is left of milestone 2. `experiments/fo/run.py` compiles fourteen programs with gcc at
-`-O2` and runs them (factorial, a switch, a specialized loop, a closure, a law consumed, an
-assumed fact, the typedefs, the byte layer, loads with proofs, a recursion, a derived
-equality, a whole program from the store, a process against its world). `fthunk` in both
-printers (`7a2c96c4`): a thunk is a closure cell tagged `2000000 + g` through the dispatcher
-(which switches on the tag modulo 1000000), `force()` applies it to 0 once, stores the value
-in its first field and retags it `3000000`, and leaves any other value alone (lifted recursion
-hypotheses are read through `fforce` too). The JIT's own encoder, `lib/emitx86.cub`
-(`54be3050`): the word-only fragment (fvar, flit, add/sub/mul/eq/lt, let, if, loops with their
-continue/break cells, calls up to six arguments, constructor cells of words in a bump arena with
-projections as loads) to one position-independent x86-64 blob — a stack machine over rbp
-slots, an entry stub setting r15 (the arena) and r14 (the blob's base, calls base-relative),
-the stack 16-aligned at calls, offsets from a measuring pass; `x86-ok` says whether a program
-is inside the fragment. `experiments/fo/x86main.c` copies a blob into executable memory and
-calls it; `X86=1 run.py` runs plus (by call and by the stub's arguments), factorial, plusw's
-specialized loop, fib 90 through pairs, a call inside a loop. Not yet: `fnet` natively, the
-codebase keys in the file header, CompCert, SSE2 floats and `fswitch` in the encoder, the
-acceptance programs at size (the sort, the decoder from the boundary).
-
-#### C
-`emit-c : FO × FT → CSource`, a term over `FO` producing a string (the fragment of C it
-emits is: structs, unions with tags, `switch`, `for` loops, function calls, fixed-width
-integer and float arithmetic, `memcpy` for relocation, no undefined behaviour by
-construction given valid representations). One C function per `fcall` target; `fclos` as a
-struct of a function pointer and its environment; `fthunk` as a struct with a computed flag;
-`fnet` as a call into `libcubical`'s boundary (B18). `fassume` prints `__builtin_assume`
-(gcc/clang) or `[[assume]]` (C++23) in the image; nothing in plain C99 for CompCert, where
-it is dropped. Representations' layouts print as their structs. Every emitted file begins
-with the codebase keys it was generated from.
-
-Two compilers: gcc/clang at `-O2`; CompCert for proof-critical builds, with `fassume`
-dropped and the fragment restricted to what CompCert accepts (C99 without VLAs).
-
-#### JIT
-`emit-x86 : FO × FT → Bytes`, the same lowering to machine code for the `run-known` path,
-emitted into executable memory with a fixed calling convention matching the boundary's.
-First target x86-64 System V; a second target is a second `emit-*` over the same `FO`.
-The JIT emits straightforward code (no register allocation beyond a linear scan); the C
-path is for peak performance, the JIT for latency of re-specialization.
-
-#### Acceptance
-`fib 30`, `sort` on 10⁶ words, the ITCH-shaped decoder from the codec example, compiled
-through gcc and run from the boundary: results equal the net's; `#same`. The same `FO`
-through CompCert compiles and agrees. The JIT on `plus` and the decoder agrees.
-
-#### Size
-`lib/emit-c.cub` ~600; `lib/emit-x86.cub` ~700 (encoder for the instruction subset used:
-mov, add/sub/imul, cmp/jcc, call/ret, load/store with offsets, SSE2 for floats).
-
-### 18.8 B18 — The call boundary and the C ABI
-
-**Status (2026-11-06).** Both directions built for words. Net → native: `#native name n =
-prog` (`src/lang.c`, `src/syntax.c`) takes the bytes of `emit-lib-u defs` (`lib/emitu.cub`,
-`c7f3cfc9`: the unboxed program with definition 0 exported as `cubical_entry`), compiles them
-with `cc -shared` into the cache directory, opens the library as a foreign entry and
-redefines `name` as `λ a₁…aₙ → %native k g a₁…aₙ`; the `O_NATIVE` rule (`src/net.c`) reads the
-arguments in turn and calls the compiled code when all are words, else applies the
-definition `g` itself (so `λ x → plusw x #0` still reads `λ x → x` on the net).
-`tests/native.cub`: `plusw` entered (23.7k steps to specialize, lower and print; 3.3 KB of C),
-`plusw #3 #4`, `plusw #1000000 #1000000` native; a byte string crosses by the entry's prototype
-(`V *` parameters and results are the emitted runtime's boxed bytes, copied in and out; `sum2-def`
-over `Bytes 32`). Native → net: `src/libcubical.h`,
-`build/libcubical.a` (the sources with `-DCUBICAL_LIB`, `main` renamed), `cubical_init(files)`
-and `cubical_call_w(name, words, n, &out)` (the application read back by the net, a word or a
-Bool); `tests/native/main.c` calls `plusw` and `eqw`, in `make test`. Not built: marshaling
-of values of declared representations by their layouts (`tdata` walks, `Bytes` as pointer
-and length), exported prototypes per compiled definition, the
-`foreign` → `fprim` lowering; `#native` is per definition on demand, not a cache by key
-(item 17). The foreign side of D27 (`O_FFI`) is what `O_NATIVE` reuses (`ffi_invoke`).
-`V_NATIVE` (2026-11-06): a cell holding a refcounted `NObj`. (a) Opaque handles: `#native f n
-from "lib.c" "sym"` enters a hand-written C file's function (compiled once by the text's hash);
-a `void *` result is a handle of the primitive type `Native` (`%pty #5`, `lib/prim.cub`), a
-`void *` parameter takes only handles the same library made (another library's, or any other
-value, falls back to `f` on the net — for a postulate, stuck); the library's `cubical_release`,
-when it defines one, runs exactly once when the last copy is erased (the count reaches 0 once;
-arguments are erased after the call, so a handle passed as its last copy outlives the call).
-Nothing else reads a handle: an eliminator meeting one is stuck; a reading prints `(%handle #k)`
-(k the entry that made it, so readings are the same at any schedule) and drops its copy; `%view`
-gives `wnative id k` (`lib/code.cub`), id a serial number unique for the run, and the checker's
-conversion compares ids. The entries are trusted to treat a handle as read-only (the net shares
-it). (b) Boxed results kept native: `#native f n keep = prog` keeps a `V *` result as the
-emitted runtime's value (a copy the cell owns, freed by the data type's own walk), passed to the
-next compiled call as a copy with no cells built; any other reader unboxes it into cells
-(`native_unbox`). The schedule is the programmer's word `keep`, not an analysis. Tests:
-`tests/native.cub` (handles made, shared, finalized: `buf-live` 0 after every reading; `consk`
-kept and passed to `lenw`), TSan clean on the handle tests at 4 workers. Found on the way: a
-memo race (an entry freed by a reader that found its box dying while the box's releaser was
-about to read it, `entry_hold_box`/`memo_begin`), fixed.
-
-Revision 1. In `src/net.c` and `src/lang.c`.
-
-- **Net → native.** A cell `O_NATIVE` (`0..n-1` = arguments, `out`): when all arguments are
-  constructor-built values (checked by the same readiness the `O_CALL` rule uses), marshal
-  each by its representation's layout into native memory, call the compiled function (found
-  by codebase key in the compiled-code memo), and unmarshal the result into cells by its
-  layout, or wrap it as an opaque `V_NATIVE` cell when the schedule says the result is
-  consumed by other compiled code. Marshaling of a `tdata` value is a walk over its
-  constructors; of a `Word` it is the word; of a `Bytes` it is a pointer and a length.
-- **Native → net.** `fnet k args` calls `cubical_call(k, args)`: build the `O_CALL` for the
-  definition `k` with marshaled arguments, run the net to normalization of its result (a
-  reading), unmarshal. This is how a `not-fo` region inside compiled code is reached. It is
-  synchronous; a compiled process that needs the net blocks on the reading.
-- **Exported C functions.** For every compiled definition over declared representations,
-  `emit-c` also prints a C prototype with the representation's struct types, and
-  `libcubical.h` declares `cubical_call`. A C program links `libcubical.a` and calls either.
-- **Foreign C in.** A `primitive` definition with a declared type and a C symbol (`foreign
-  "memcpy" : …`) becomes an `fprim`; its validity facts are the declared type's and are
-  trusted (`#trusted` lists it).
-
-#### Acceptance
-A C `main` calls the compiled `sort` on an array and prints it; the net calls `sort` through
-`O_NATIVE` and reads the same; `fnet` from compiled code into `check` returns the checker's
-verdict on a code. `make test` unchanged.
-
-#### Size
-`src/net.c` ~250 (`O_NATIVE`, marshaling), `src/lang.c` ~150 (`cubical_call`, prototypes,
-`foreign`), `src/syntax.c` ~40. About 440 lines.
-
-### 18.9 B19 — The C++ image
-
-**Status (2026-11-06).** Built (`ee5c04a2`; `lib/image.cub`, `lib/reimport.cub`), `IMAGE=1 run.py`
-compiling five headers with g++ at `-std=c++20` and re-importing each definition equal to its
-source up to erasure. Parameterized data types (`13ae6b9f`): a type parameter is a template
-parameter of the structs (`template<class P0> struct D; … struct D_c1 { P0 f0;
-std::shared_ptr<D<P0>> f1; }; … std::variant<D_c0<P0>, …>`), the field types the constructor
-telescope's quoted codes over the parameters; `D<args>` as a type; a constructor at the expected
-type's arguments (`D<T>{D_c<T>{…}}`, reported when the type is unknown); a case on such a type a
-fix over `const auto &x` whose alternatives are template lambdas `[&]<class Q0>(const D_c<Q0> &k)`;
-the re-import reads all of it back (template struct declarations skipped, the scrutinee's type
-from the alternatives). A parameter at a value (an index) stays outside the fragment.
-**The rest of 18.9 (2026-11-07, fork C5)**, each a program of `IMAGE=1 run.py` compiled by g++
--std=c++20, run, and read back equal to the source (`def-src`: a copattern definition's record as
-written, any other definition's value):
-- *Concepts from records* (`concept`): a parameter whose type is a non-dependent Σ with an
-  operation among its components is a template parameter `C<i>` constrained by a concept
-  generated from the components' signatures (`template<class C> concept g_k<i> = requires(const C
-  &c) { { c.f0(std::declval<A>()…) } -> std::convertible_to<R>; { c.f1_ } -> …; }`); a projection
-  is the member, an operation called with all its arguments at once. A checked definition of such a
-  record (an instance) is `struct [[cub::instance]] g_t { R f0(A v0, …) const { return e; } T f1_
-  = e; }; inline const g_t g{};`. The consumer folds with the image's instance and with its own
-  struct satisfying the same concept (`static_assert`ed).
-- *Codata as classes* (`codata`): a codata type without parameters is a class with one lazily
-  computed cell per field (`std::shared_ptr<cub::lazy<T>>`: computed at the first observation,
-  then kept) and the observations as member functions `D<d>_o<k>()`; a copattern definition's
-  record is `D<d>{cub::delay<T>([=]() { return e; }), …}` (the checked group keeps its body as
-  written, `%gcode`, since its value is its stuck head); the re-import reads the record back.
-- *Representations' classes* (`repcls`): a type with a declared representation is `struct D<d> {
-  R r; static D<d> from(R); R to() const; static D<d> of(const D<d>_v &); D<d>_v data() const; }`,
-  its data form the structs `D<d>_v`/`D<d>_c<k>`; constructors are `D<d>::of(D<d>_v{…})`, cases
-  visit `(x).data()`, through the representation's own conversions (`%rops`), exported with it.
-  The class is the size of its representation (`static_assert`ed).
-- *The module file* (`module`): `cxx-module name …` is the image as a C++20 module interface unit
-  (`module;` and the includes, `export module name;`, the helpers and the image exported),
-  compiled with `-fmodules-ts` (g++ 13.3) and imported by the consumer; read back from its text.
-Not in the re-import fragment, checked by running instead: primitive arithmetic on Int64, UInt32
-and Float64 (printed as the C++ operator, read back as word arithmetic).
-
-
-Revision 1. `image : Code × Sched → CxxSource + Report`, a term over codes. The schedule's
-`generality` is `specialized` (then `image` = `emit-c` over `specialize`'s `FO`, printed as
-C++) or `image` (the compositional translation below). Mixed assignments are per binder.
-
-#### The compositional translation, one clause per source form
-| source form | C++ |
-|---|---|
-| definition `f : T = t` | one entity in namespace from the name table; `// key: K(f)` as an attribute comment |
-| `(A : Type) → B` with `A` at `build` | `template<class A> …`; `(n : Nat) → B` with `n` at `build` | `template<std::size_t n>` |
-| `(x : A) → B` with `x` at `run` and `B` not depending on `x` | a parameter |
-| `(x : A) → B` with `B` depending on `x` at `run` | `B` erased to its run-time shape; the dependency becomes a `[[assume]]`/contract (B11's `0` field cases erase cleanly) |
-| record of operations with laws, as a parameter | `template<Concept C>`; the concept generated from the record's operation signatures; laws per 10.1 |
-| instance of such a record | a `struct` satisfying the concept; instance resolution → the argument at the call |
-| function over codes matching on codes | partial specializations of a class template, or `if constexpr (std::is_same_v<…>)` chains, chosen by whether the code set is closed |
-| `data` without a representation | `struct` per constructor; `std::variant<…>`; `case` → `std::visit` with an overloaded lambda; recursive fields `std::unique_ptr` |
-| `data` with a representation | the representation's class (B12) |
-| `Σ (A : Type), …` hidden type, finite code set | `std::variant`; open | an abstract base with virtual projections, or a `function_ref` when it has one operation |
-| codata | a class with the copattern projections as members; a process → a sender type whose `connect` builds the operation state from the guarded tree |
-| `let` | a local; `fif`/`fswitch` | `if`/`switch`; `floop` | `for` |
-| `0` binders and fields | absent |
-| `1`-linear binders | move-only parameter types with `[[nodiscard]]` |
-| paths | erased; representation equivalences → `to`/`from` members; laws per 10.1 |
-| `fassume` | `[[assume]]` |
-| `fnet` | a call into `libcubical` (the image can also be built without the net: then `fnet` is a report line "not exportable: needs the net") |
-| modules | headers, one per module, `#pragma once`; a `module` file when the consumer's compiler supports C++20 modules |
-
-Names: the source identifier, converted to C++ rules (`plus-comm` → `plus_comm`); Unicode
-operators to named functions.
-
-#### Validation of the image
-`reimport : CxxFragment → Code`, a parser for exactly the fragment the image emits (not
-C++), followed by `#same` of the re-imported code against the source up to erasure. Run
-on every exported definition when `#image --validate` is asked. This is the fragment's
-semantics (plan 10.1), given as a parser into our own codes rather than as a separate
-semantics, which is what makes it one document and one truth.
-
-#### Acceptance
-The image of `map`, `fold`, `sort` with a comparator record: a header-only library with a
-`template<class A, Ord<A> C>` sort; instantiated by a hand-written `main` with `int` and
-`std::less`; compiles with gcc 13 at `-std=c++20`; `reimport` of the header equals the
-source up to erasure. The image of the ITCH-shaped decoder over a handler record: a
-template over the handler; a hand-written handler inlines into the decode loop (checked by
-inspecting the assembly for one message type). The image of a `Str Nat` process: a sender
-usable with stdexec's `sync_wait`.
-
-#### Size
-`lib/image.cub` ~2,400 (the clauses, concept generation, name conversion, the laws' four
-carriers); `lib/reimport.cub` ~900 (the fragment parser). About 3,300; the plan's 3,500
-stands.
+The specifications of the first-order form (B14), the specializer's lowering (B15), the C back end and JIT (B16), the call boundary over emitted C (B18) and the C++ image (B19) described passes between syntaxes related by comparing answers; what was built against them is removed and section 5 is the specification that replaces them. The git history before `ccafee2d` holds the text.
 
 ### 18.10 C20–C22 — Memory and state
 
