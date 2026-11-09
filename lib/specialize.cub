@@ -8,6 +8,195 @@
 -- The rewrite bound is the terminating discipline's crude form (a count); the ordered form
 -- (18.6) replaces it.
 normalize T c = fromopt (quote-top T (eval-g lnil c)) c
+-- ---------------------------------------------------------------- held definitions (Sched's holds)
+-- glob-map f d c: c with each global g replaced by f g d's code where it gives one (d the binders
+-- above the occurrence, inside c); every form, every binder counted
+glob-map f d c =
+  case c of
+    cglob g → (case f g d of some c2 → c2; none → c)
+    clam b → clam (glob-map f (%wsucc d) b)
+    capp a b → capp (glob-map f d a) (glob-map f d b)
+    cpair a b → cpair (glob-map f d a) (glob-map f d b)
+    cfst p → cfst (glob-map f d p)
+    csnd p → csnd (glob-map f d p)
+    cpi m A B → cpi m (glob-map f d A) (glob-map f (%wsucc d) B)
+    csigma A B → csigma (glob-map f d A) (glob-map f (%wsucc d) B)
+    cuniv l → cuniv (glob-map f d l)
+    cpathp A a b → cpathp (glob-map f d A) (glob-map f d a) (glob-map f d b)
+    cplam b → cplam (glob-map f (%wsucc d) b)
+    cpapp p r → cpapp (glob-map f d p) (glob-map f d r)
+    cneg r → cneg (glob-map f d r)
+    cmeet r s → cmeet (glob-map f d r) (glob-map f d s)
+    cjoin r s → cjoin (glob-map f d r) (glob-map f d s)
+    ceq0 r → ceq0 (glob-map f d r)
+    ceq1 r → ceq1 (glob-map f d r)
+    cfand a b → cfand (glob-map f d a) (glob-map f d b)
+    cfor a b → cfor (glob-map f d a) (glob-map f d b)
+    cforall b → cforall (glob-map f (%wsucc d) b)
+    csysc a t r → csysc (glob-map f d a) (glob-map f d t) (glob-map f d r)
+    ccomp A u a → ccomp (glob-map f d A) (glob-map f d u) (glob-map f d a)
+    cgluet A S → cgluet (glob-map f d A) (glob-map f d S)
+    cglue S a → cglue (glob-map f d S) (glob-map f d a)
+    cunglue S b → cunglue (glob-map f d S) (glob-map f d b)
+    chcompu A S → chcompu (glob-map f d A) (glob-map f d S)
+    cunglueu S b → cunglueu (glob-map f d S) (glob-map f d b)
+    clet t b → clet (glob-map f d t) (glob-map f (%wsucc d) b)
+    cann t T → cann (glob-map f d t) (glob-map f d T)
+    cdata dd ps → cdata dd (glob-map-l f d ps)
+    ccon dd k fs ds → ccon dd k (glob-map-l f d fs) (glob-map-l f d ds)
+    celim dd P B x → celim dd (glob-map f d P) (glob-map-l f d B) (glob-map f d x)
+    ccase dd B x → ccase dd (glob-map-l f d B) (glob-map f d x)
+    chcomp u a → chcomp (glob-map f d u) (glob-map f d a)
+    cdlam b → cdlam (glob-map f (%wsucc d) b)
+    cforce t → cforce (glob-map f d t)
+    cthunk t → cthunk (glob-map f d t)
+    clsuc l → clsuc (glob-map f d l)
+    clmax a b → clmax (glob-map f d a) (glob-map f d b)
+    cpty k n → cpty k (glob-map f d n)
+    cwsucc a → cwsucc (glob-map f d a)
+    cwop k a b → cwop k (glob-map f d a) (glob-map f d b)
+    cwelim w z s mo → cwelim (glob-map f d w) (glob-map f d z) (glob-map f d s) (omap (glob-map f d) mo)
+    ctrans dd psi ls x → ctrans dd (glob-map f d psi) (glob-map-l f d ls) (glob-map f d x)
+    cproj dd k x → cproj dd k (glob-map f d x)
+    crec dd fs → crec dd (glob-map-l f d fs)
+    ctick k → ctick (glob-map f d k)
+    cprim k as → cprim k (glob-map-l f d as)
+    _ → c
+glob-map-l f d l = case l of lnil → lnil; lcons x xs → lcons (glob-map f d x) (glob-map-l f d xs)
+-- the variables of a code at or above d (the free ones, under d binders) mapped by f n d
+var-map-c f d c =
+  case c of
+    cvar n → if %wlt n d then c else f n d
+    clam b → clam (var-map-c f (%wsucc d) b)
+    capp a b → capp (var-map-c f d a) (var-map-c f d b)
+    cpair a b → cpair (var-map-c f d a) (var-map-c f d b)
+    cfst p → cfst (var-map-c f d p)
+    csnd p → csnd (var-map-c f d p)
+    cpi m A B → cpi m (var-map-c f d A) (var-map-c f (%wsucc d) B)
+    csigma A B → csigma (var-map-c f d A) (var-map-c f (%wsucc d) B)
+    cuniv l → cuniv (var-map-c f d l)
+    cpathp A a b → cpathp (var-map-c f d A) (var-map-c f d a) (var-map-c f d b)
+    cplam b → cplam (var-map-c f (%wsucc d) b)
+    cpapp p r → cpapp (var-map-c f d p) (var-map-c f d r)
+    cneg r → cneg (var-map-c f d r)
+    cmeet r s → cmeet (var-map-c f d r) (var-map-c f d s)
+    cjoin r s → cjoin (var-map-c f d r) (var-map-c f d s)
+    ceq0 r → ceq0 (var-map-c f d r)
+    ceq1 r → ceq1 (var-map-c f d r)
+    cfand a b → cfand (var-map-c f d a) (var-map-c f d b)
+    cfor a b → cfor (var-map-c f d a) (var-map-c f d b)
+    cforall b → cforall (var-map-c f (%wsucc d) b)
+    csysc a t r → csysc (var-map-c f d a) (var-map-c f d t) (var-map-c f d r)
+    ccomp A u a → ccomp (var-map-c f d A) (var-map-c f d u) (var-map-c f d a)
+    cgluet A S → cgluet (var-map-c f d A) (var-map-c f d S)
+    cglue S a → cglue (var-map-c f d S) (var-map-c f d a)
+    cunglue S b → cunglue (var-map-c f d S) (var-map-c f d b)
+    chcompu A S → chcompu (var-map-c f d A) (var-map-c f d S)
+    cunglueu S b → cunglueu (var-map-c f d S) (var-map-c f d b)
+    clet t b → clet (var-map-c f d t) (var-map-c f (%wsucc d) b)
+    cann t T → cann (var-map-c f d t) (var-map-c f d T)
+    cdata dd ps → cdata dd (var-map-cl f d ps)
+    ccon dd k fs ds → ccon dd k (var-map-cl f d fs) (var-map-cl f d ds)
+    celim dd P B x → celim dd (var-map-c f d P) (var-map-cl f d B) (var-map-c f d x)
+    ccase dd B x → ccase dd (var-map-cl f d B) (var-map-c f d x)
+    chcomp u a → chcomp (var-map-c f d u) (var-map-c f d a)
+    cdlam b → cdlam (var-map-c f (%wsucc d) b)
+    cforce t → cforce (var-map-c f d t)
+    cthunk t → cthunk (var-map-c f d t)
+    clsuc l → clsuc (var-map-c f d l)
+    clmax a b → clmax (var-map-c f d a) (var-map-c f d b)
+    cpty k n → cpty k (var-map-c f d n)
+    cwsucc a → cwsucc (var-map-c f d a)
+    cwop k a b → cwop k (var-map-c f d a) (var-map-c f d b)
+    cwelim w z s mo → cwelim (var-map-c f d w) (var-map-c f d z) (var-map-c f d s) (omap (var-map-c f d) mo)
+    ctrans dd psi ls x → ctrans dd (var-map-c f d psi) (var-map-cl f d ls) (var-map-c f d x)
+    cproj dd k x → cproj dd k (var-map-c f d x)
+    crec dd fs → crec dd (var-map-cl f d fs)
+    ctick k → ctick (var-map-c f d k)
+    cprim k as → cprim k (var-map-cl f d as)
+    _ → c
+var-map-cl f d l = case l of lnil → lnil; lcons x xs → lcons (var-map-c f d x) (var-map-cl f d xs)
+-- the globals a code names, each once
+code-globals c = cg-acc c lnil
+cg-acc c acc = case c of cglob g → (if lmem g acc then acc else lcons g acc); _ → cg-list (code-kids c) acc
+cg-list l acc = case l of lnil → acc; lcons x r → cg-list r (cg-acc x acc)
+-- a code's immediate parts
+code-kids c =
+  case c of
+    clam b → lcons b lnil
+    capp a b → lcons a (lcons b lnil)
+    cpair a b → lcons a (lcons b lnil)
+    cfst p → lcons p lnil
+    csnd p → lcons p lnil
+    cpi m A B → lcons A (lcons B lnil)
+    csigma A B → lcons A (lcons B lnil)
+    cuniv l → lcons l lnil
+    cpathp A a b → lcons A (lcons a (lcons b lnil))
+    cplam b → lcons b lnil
+    cpapp p r → lcons p (lcons r lnil)
+    cneg r → lcons r lnil
+    cmeet r s → lcons r (lcons s lnil)
+    cjoin r s → lcons r (lcons s lnil)
+    ceq0 r → lcons r lnil
+    ceq1 r → lcons r lnil
+    cfand a b → lcons a (lcons b lnil)
+    cfor a b → lcons a (lcons b lnil)
+    cforall b → lcons b lnil
+    csysc a t r → lcons a (lcons t (lcons r lnil))
+    ccomp A u a → lcons A (lcons u (lcons a lnil))
+    cgluet A S → lcons A (lcons S lnil)
+    cglue S a → lcons S (lcons a lnil)
+    cunglue S b → lcons S (lcons b lnil)
+    chcompu A S → lcons A (lcons S lnil)
+    cunglueu S b → lcons S (lcons b lnil)
+    clet t b → lcons t (lcons b lnil)
+    cann t T → lcons t (lcons T lnil)
+    cdata dd ps → ps
+    ccon dd k fs ds → lapp2 fs ds
+    celim dd P B x → lcons P (lcons x B)
+    ccase dd B x → lcons x B
+    chcomp u a → lcons u (lcons a lnil)
+    cdlam b → lcons b lnil
+    cforce t → lcons t lnil
+    cthunk t → lcons t lnil
+    clsuc l → lcons l lnil
+    clmax a b → lcons a (lcons b lnil)
+    cpty k n → lcons n lnil
+    cwsucc a → lcons a lnil
+    cwop k a b → lcons a (lcons b lnil)
+    cwelim w z s mo → (case mo of some P → lcons P (lcons w (lcons z (lcons s lnil))); none → lcons w (lcons z (lcons s lnil)))
+    ctrans dd psi ls x → lcons psi (lcons x ls)
+    cproj dd k x → lcons x lnil
+    crec dd fs → fs
+    ctick k → lcons k lnil
+    cprim k as → as
+    _ → lnil
+-- normalization with the held definitions abstracted (Sched's holds): those of hs the code names,
+-- h_0 … h_{k-1}, become the variables of k λs around it (h_j under d binders of the code: index
+-- d + k − 1 − j); the λs are typed by the definitions' types, so the machine normalizes under them
+-- with each h_j a neutral variable; the λs are then stripped and each variable is h_j's global again
+normalize-held hs T c =
+  let gs = code-globals c
+      ks = lfilter-g (λ g → lmem g gs) hs
+  in if isnil-g ks then normalize T c else normalize-abs ks (lmap-g (λ g → %gty g) ks) T (glob-map (hold-var ks (lst-count ks)) #0 c)
+-- hold-var ks k g d: h_j's variable under d binders
+hold-var ks k g d = omap (λ j → cvar (%wadd d (%wsub (%wsub k #1) j))) (lindex-g g ks #0)
+-- the code under λs over the held definitions ks (their types Ts, values), normalized at T, the λs
+-- stripped and each variable back to its global
+normalize-abs ks Ts T c =
+  let k = lst-count ks
+      q = quote-top (pis-g Ts T) (eval-g lnil (lam-k k c))
+  in case q of
+       some n → var-map-c (unhold-var ks k) #0 (strip-k k n)
+       none → c
+unhold-var ks k n d = (let i = %wsub n d in if %wlt i k then (case lnth ks (%wsub (%wsub k #1) i) of some g → cglob g; none → cvar n) else cvar (%wsub n k))
+pis-g Ts T = case Ts of lnil → T; lcons A r → ((x : A) → pis-g r T)
+lam-k k b = if %weq k #0 then b else clam (lam-k (%wsub k #1) b)
+strip-k k b = if %weq k #0 then b else (case b of clam b2 → strip-k (%wsub k #1) b2; _ → b)
+lfilter-g p l = case l of lnil → lnil; lcons x r → if p x then lcons x (lfilter-g p r) else lfilter-g p r
+lmap-g f l = case l of lnil → lnil; lcons x r → lcons (f x) (lmap-g f r)
+lindex-g g l i = case l of lnil → none; lcons x r → if %weq x g then some i else lindex-g g r (%wsucc i)
+isnil-g l = case l of lnil → true; _ → false
 -- rewriting under the terminating discipline (18.6 step 3, lib/match.cub): the oriented rules to
 -- the fixpoint, which terminates by the size of the term; the unoriented ones (commutativity
 -- shapes, the ones E-rule-unoriented rejects) at most n times, the schedule's bound
@@ -178,19 +367,22 @@ is-fo c = case fo-report c of lnil → true; _ → false
 -- what the specializer may do is a value: how many rewrites; the binding-time assignment
 -- (stages: a Lst of (binder index , Stage), read by the C++ image for its template parameters
 -- and by the criterion); the representations chosen (reps: a Lst of data type indices whose
--- declared representation is consumed, lib/repr.cub; every declared one when empty). The inline
--- depth is the machine's (normalization unfolds every definition it reaches: quote renders a
--- definition applied to a neutral by its body); fusion and strictness follow.
-sched-rewrites s = case s of sched r st rp → r
-sched-stages s = case s of sched r st rp → st
-sched-reps s = case s of sched r st rp → rp
-sched-default = sched #64 lnil lnil
+-- declared representation is consumed, lib/repr.cub; every declared one when empty); the
+-- definitions held neutral (holds: a Lst of global indices). Normalization unfolds every
+-- definition it reaches (quote renders a definition applied to a neutral by its body) except the
+-- held ones: the code is abstracted over them and normalized under the λs, so a held definition is
+-- a variable to the machine and its call stays a call (normalize-held); fusion and strictness follow.
+sched-rewrites s = case s of sched r st rp hd → r
+sched-stages s = case s of sched r st rp hd → st
+sched-reps s = case s of sched r st rp hd → rp
+sched-holds s = case s of sched r st rp hd → hd
+sched-default = sched #64 lnil lnil lnil
 -- the specializer with the criterion (B13, lib/stage.cub): the code normalized and rewritten is
 -- judged by first-order at its type; the verdict comes back with the form (a not-fo region is
 -- lowered all the same: its forms outside the fragment are calls into the net, fnet, and the
 -- verdict names the first of them and why)
 specialize-v sch T rules c =
-  let c2 = rewrite-all (sched-rewrites sch) rules (normalize T c)
+  let c2 = rewrite-all (sched-rewrites sch) rules (normalize-held (sched-holds sch) T c)
   in (first-order T c2 , inplace (lower T c2))
 specialize-s sch T rules c = snd (specialize-v sch T rules c)
 -- step 1, the now variables substituted from the environment (18.6): the code's leading binders
@@ -215,10 +407,16 @@ apply-now i st c env =
   let m = last-now #0 st (lam-chain c) #0
       r = count-runs #0 st m
   in wrap-lams r (now-args #0 m st (shift-code #0 r c) env r #0)
-residual sch T rules c env = rewrite-all (sched-rewrites sch) rules (normalize T (apply-now #0 (sched-stages sch) c env))
+residual sch T rules c env = rewrite-all (sched-rewrites sch) rules (normalize-held (sched-holds sch) T (apply-now #0 (sched-stages sch) c env))
 -- readings: a word function is fo; a path is not (dim), and the form is a call into the net
 #same fst (specialize-v sched-default (Word → Word) lnil c3) = fo
 #same fst (specialize-v sched-default (Word ≡ Word) lnil (cplam cword)) = not-fo dim (cplam (cvar #0))
 #same snd (specialize-v sched-default (Word ≡ Word) lnil (cplam cword)) = fnet #0 lnil
 -- the call of lenw under an unknown list normalizes to the recursion itself
 #same specialize-s sched-default (LW → Word) lnil (code (λ (l : LW) → lenw l)) = inplace (lower (LW → Word) (fromopt (unfold (gidx (code lenw))) cword))
+-- a held definition stays a call: lenw held, its call under an unknown list is the call itself
+-- (unheld, the recursion: the reading above); a held definition the code does not name changes nothing
+#same specialize-s (sched #64 lnil lnil (lcons (gidx (code lenw)) lnil)) (LW → Word) lnil (code (λ (l : LW) → lenw l)) = flam (ftdata (didx (code LW)) lnil #0) (fcall (gidx (code lenw)) (lcons (fvar #0) lnil))
+#same specialize-s (sched #64 lnil lnil (lcons (gidx (code lenw)) lnil)) (Word → Word) lnil c3 = specialize (Word → Word) lnil c3
+-- held under binders and applied to a known value: sw held, zw unfolded; the call of sw keeps its argument, computed
+#same specialize-s (sched #64 lnil lnil (lcons (gidx (code sw)) lnil)) (Word → Word) lnil (code (λ (w : Word) → sw (%wadd zw w))) = flam ftword (fcall (gidx (code sw)) (lcons (fprim P-add (lcons (flit #0) (lcons (fvar #0) lnil))) lnil))
