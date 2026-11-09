@@ -419,11 +419,13 @@ program with its checked path is the first item of the queue.
 
 ### Reading order
 
-1. This section, then sections 0–3 (value, core, principle, machine state): the premises.
-2. Sections 4–7 (semantics, compilation, representations, world) and 10–11 (the C++ image,
-   the store): what is being built and why in that form.
-3. Section 12 (the build list with statuses) and section 13 (the trusted surface).
-4. Section 18's status paragraphs (18.1, 18.2, 18.3, 18.5, 18.6, 18.7, 18.13, 18.14) and
+1. This section, then sections 0 (value and the tower), 1–3 (core, principle, machine
+   state): the premises.
+2. Sections 4–7 (semantics, compilation, representations, world), 9 (lifting) and 10–11
+   (the image, the fleet, the store): what is being built and why in that form.
+3. Section 12 (the queue and the build list with statuses), section 13 (the trusted surface,
+   in full) and section 17's revision 8 entry (what was stated falsely and why).
+4. Section 18's status paragraphs (18.1, 18.2, 18.3, 18.13, 18.14, 18.16) and
    18.12's elaborator findings; the full specs only for the item you take on. The specs of
    section 18 are drafts written before the items were built and critically reviewed by
    their author, not by the owner; where a status paragraph and the spec text differ, the
