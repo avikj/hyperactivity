@@ -1414,6 +1414,13 @@ static uint64_t jit_in(Cell *c, JT *t, JitCtx *x) {
         if (x->flag) return 0;
         switch (t->k) {
         case JT_WORD: case JT_PRIM: *slot = c->a; return r;
+        case JT_ERASED: *slot = 0; return r;
+        case JT_NAT: {
+            /* a numeral counted to the word it is (Nat by Word) */
+            uint64_t k = 0;
+            while (c && c->kind == V_CON && CON[c->a].nfields == 1) { k++; c = cell_at(c->port[1]); }
+            *slot = k; return r;
+        }
         case JT_BYTES: {
             Bytes *b = c->p; size_t n = b ? b->n : 0;
             uint64_t *p = jit_alloc(x, 1 + (n + 7) / 8); if (!p) return 0;
@@ -1459,6 +1466,12 @@ static Port jit_read(uint64_t v, JT *t) {
     Port tail;
     for (;;) {
         if (t->k == JT_WORD) { tail = word_of(v); break; }
+        if (t->k == JT_NAT) {
+            /* the word as a numeral: zero, then suc v times */
+            Port none[1]; tail = con_build(DATA[t->d].cons[0], none, NULL);
+            for (uint64_t i = 0; i < v; i++) { Port f[1] = { tail }; tail = con_build(DATA[t->d].cons[1], f, NULL); }
+            break;
+        }
         if (t->k == JT_PRIM) { Cell *c = cell(V_PVAL, 1); c->x = (uint32_t)t->pt; c->a = v; tail = P(c, 0); break; }
         if (t->k == JT_BYTES) {
             uint64_t *p = (uint64_t *)(uintptr_t)v; size_t bn = (size_t)p[0];
@@ -1485,7 +1498,7 @@ static bool jit_call(const Ffi *e, Port *args, int n, Port *out) {
     }
     JitCtx x = { 0, jit_arena, jit_arena + JIT_ARENA };
     uint64_t a[NATIVE_MAXW];
-    for (int k = 0; k < n; k++) a[k] = jit_in(cell_at(args[k]), e->jt[k], &x);
+    for (int k = 0; k < n; k++) a[k] = e->jt[k]->k == JT_ERASED ? 0 : jit_in(cell_at(args[k]), e->jt[k], &x);
     if (x.flag) return false;
     uint64_t r = ((uint64_t (*)(const uint64_t *, uint64_t, JitCtx *))e->fn)(a, (uint64_t)n, &x);
     if (x.flag) return false;
@@ -3361,6 +3374,7 @@ static void interact(Cell *o, Cell *v) {
             if (e->kind[k] == 7) { if (!nb || nb->d != -1 || nb->lib != e->lib) words = false; }   /* a handle: of this library only */
             else if (e->kind[k] == 6) { if (nb ? nb->d == -1 : !boxable(c)) { if (!nb && c->kind == V_CON && !A->deep) unbuilt++; else words = false; } }
             else if (e->kind[k] == 5) { if (c->kind != V_PVAL) words = false; }
+            else if (e->kind[k] == 9) { }
             else if (e->kind[k] == 8) { if (!jit_ready(c)) { if (c->kind == V_CON && !A->deep) unbuilt++; else words = false; } }
             else if (c->kind != V_WORD || c->p) words = false;
         }

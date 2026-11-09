@@ -481,7 +481,7 @@ void global_park(long g, Cell *op, Cell *glob);
  * which decides how a value crosses (src/net.c jit_in, jit_read). A data type's fields are found by
  * name in its declaration, at its parameters, when first needed (fl: per constructor, per field) */
 typedef struct JT { int k, pt, d, np; struct JT *a, *b; struct JT **ps; struct JT ***fl; } JT;
-enum { JT_NO, JT_WORD, JT_PRIM, JT_BYTES, JT_DATA, JT_PAIR };
+enum { JT_NO, JT_WORD, JT_PRIM, JT_BYTES, JT_DATA, JT_PAIR, JT_NAT, JT_ERASED };
 JT *jt_field(JT *t, int c, int j);   /* lang.c */
 typedef struct { const char *sym; void *fn; int n; unsigned char kind[NATIVE_MAXW]; unsigned char ret; int rdata;
     void *lib; void (*fin)(void *); unsigned char keep;

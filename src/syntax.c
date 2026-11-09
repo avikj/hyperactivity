@@ -1679,8 +1679,11 @@ static void p_decl(void) {
                 if (len == cap) { cap *= 2; bytes = realloc(bytes, cap); }
                 bytes[len++] = (unsigned char)atol(cur->it[1]->s + 1);
             }
-            int arity = 0; for (Node *cur = grp[3]; cur->list && cur->n == 2 && !cur->it[0]->list && !strcmp(cur->it[0]->s, "clam"); cur = cur->it[1]) arity++;
-            int k = jit_bind(fn->s, ck, bytes, len, arity);
+            int arity = 0; Node *body = grp[3];
+            for (; body->list && body->n == 2 && !body->it[0]->list && !strcmp(body->it[0]->s, "clam"); body = body->it[1]) arity++;
+            bool used[NATIVE_MAXW] = { 0 };
+            for (int i = 0; i < arity && i < NATIVE_MAXW; i++) used[i] = code_reads(body, arity - 1 - i, 0);
+            int k = jit_bind(fn->s, ck, bytes, len, arity, used);
             free(bytes);
             if (k < 0) {
                 if (k <= -3) printf("jit: %s stays on the net: its %s does not cross the boundary (a function, a dependent pair, a higher inductive type)\n", fn->s, k == -3 - arity ? "result" : "parameter");

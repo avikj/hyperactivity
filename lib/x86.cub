@@ -11,7 +11,11 @@
 --   a constructor with no fields: its index (below 4096, never an address);
 --   a constructor with fields: the address of an arena cell [index][field]…[field], each field 64 bits;
 --   a pair: a cell [0][first][second];
---   bytes: the address of [length][bytes, padded to 8].
+--   bytes: the address of [length][bytes, padded to 8];
+--   a Nat: the word it is, by the declared representation Nat ≃ Word (lib/prim.cub): zero is 0,
+--   suc k is k + 1 (past 2^64 the overflow exit), a case on a Nat tests for 0 and binds the
+--   predecessor. So an offset or a length, which the machine takes as a Word or a Nat alike, is a
+--   word whichever it was.
 -- Booleans are the constructors true (0) and false (1) of Bool. The boundary (src/lang.c, jit_in and
 -- jit_read) converts between these and the net's values by the definition's type.
 --
@@ -162,12 +166,15 @@ i-exit = xcat4 (lapp (xb3 #65 #198 #69) (xb2 #0 #1)) (xb3 #72 #137 #220)
 -- a jump over the exit when the flag (carry, or r15 within r12) is clear
 i-over-if-c = lapp (i-jcc j-nc (xlen i-exit)) i-exit
 i-over-if-above = lapp (i-jcc j-be (xlen i-exit)) i-exit
+-- the data type Nat, represented by Word in compiled code
+x-nat-d = didx (code Nat)
 -- ---------------------------------------------------------------- the forms a program is in
 -- After specialization a definition's code is a normal form; three passes put it in the shape the
 -- templates cover, each producing a code that means the same (each step is β, η or the naming of
 -- a recursion as a definition, which eval-g computes identically):
 --   apps: an application whose head is a λ is a let; an application of a case or a let is pushed
---         into its branches or body;
+--         into its branches or body; a thunk is its value (delay and force dropped: checked terms
+--         terminate and compiled code is pure, so the order of evaluation changes no answer);
 --   lift: an elimination (structural recursion) becomes a call of a new definition whose
 --         parameters are the elimination's free variables, the arguments it is applied to and the
 --         scrutinee; its recursive hypotheses become calls of that definition on the recursive fields
@@ -194,6 +201,8 @@ x-push c =
     clam b → clam (x-push b)
     clet t b → clet (x-push t) (x-push b)
     cann t T → x-push t
+    cthunk t → x-push t
+    cforce t → x-push t
     cpair a b → cpair (x-push a) (x-push b)
     cfst p → cfst (x-push p)
     csnd p → csnd (x-push p)
@@ -274,12 +283,17 @@ x-lift-app c st =
       ra = x-lift-l (snd sp) st
   in case fst sp of
        celim dd P B x →
-         (let rb = x-lift-l B (snd ra) in
-          let rx = x-lift x (snd rb) in
-          x-elim dd (fst rb) (fst rx) (fst ra) (snd rx))
+         (let rx = x-lift x (snd ra) in x-lift-made (x-elim dd B (fst rx) (fst ra) (snd rx)))
        _ → (let rh = x-lift-head (fst sp) (snd ra) in (x-apps (fst rh) (fst ra) , snd rh))
 x-lift-head h st = case h of capp f a → x-lift h st; _ → x-lift h st
--- the elimination of x by branches B (already lifted inside), applied to args: a new definition g,
+-- outermost first: the elimination is named as a definition with its branches as they are (so a
+-- hypothesis applied inside an inner elimination is already a call when the inner one is named), then
+-- the new definition's body is lifted in turn
+x-lift-made r =
+  case fst (snd r) of
+    lnil → r
+    lcons e rest → (let rb = x-lift (snd (snd e)) (rest , snd (snd r)) in (fst r , (lcons (fst e , (fst (snd e) , fst rb)) (fst (snd rb)) , snd (snd rb))))
+-- the elimination of x by branches B (lifted afterwards, x-lift-made), applied to args: a new definition g,
 -- its parameters the free variables of B (fv), the arguments (a of them) and the scrutinee
 x-elim dd B x args st =
   let fv = x-frees-l-sorted B
@@ -428,8 +442,8 @@ cx tbl env d c =
     cpair a b → x-cell tbl env d #0 (lcons a (lcons b lnil))
     cfst p → lapp (cx tbl env d p) (i-ld-rax #8)
     csnd p → lapp (cx tbl env d p) (i-ld-rax #16)
-    ccon dd k fs ds → (case fs of lnil → i-mov-rax-imm k; _ → x-cell tbl env d k fs)
-    ccase dd B x → x-case tbl env d dd B x
+    ccon dd k fs ds → (if %weq dd x-nat-d then x-nat-con tbl env d k fs else (case fs of lnil → i-mov-rax-imm k; _ → x-cell tbl env d k fs))
+    ccase dd B x → (if %weq dd x-nat-d then x-nat-case tbl env d B x else x-case tbl env d dd B x)
     cwlit n → i-mov-rax-imm n
     cplit k b → i-mov-rax-imm b
     cwsucc a → xcat3 (cx tbl env d a) i-add1 i-over-if-c
@@ -501,11 +515,12 @@ x-un tbl env d sb a =
      else if %weq sb #39 then x-u2f else if %weq sb #40 then xcat3 i-cvtsi2sd i-movq-rax-x0 lnil
      else if %weq sb #41 then xcat3 i-movq-x0-rax i-cvttsd2si lnil
      else lnil)
--- a word to Float64, unsigned: below 2^63 directly, else halved (keeping the low bit) and doubled
+-- a word to Float64, unsigned: below 2^63 directly; else halved keeping the low bit (round to odd),
+-- converted, doubled — the sequence that rounds as the unsigned conversion does
 x-u2f =
-  let small = lapp i-cvtsi2sd (i-jmp (%wadd #9 (%wadd #6 (%wadd #3 (%wadd (xlen i-cvtsi2sd) #4)))))
-      big = xcat5 i-mov-rcx-rax (xb4 #72 #209 #233 #144) (xb3 #131 #224 #1) (xb3 #72 #9 #193) (lapp (lapp (xb3 #72 #137 #200) i-cvtsi2sd) i-addsd-x0x0)
-  in xcat4 i-test-rax (i-jcc j-s (xlen small)) small (lapp big i-movq-rax-x0)
+  let big = xcat5 i-mov-rcx-rax (xb3 #72 #209 #233) (xb3 #131 #224 #1) (xb3 #72 #9 #193) (xcat3 (xb3 #72 #137 #200) i-cvtsi2sd i-addsd-x0x0)
+      small = lapp i-cvtsi2sd (i-jmp (xlen big))
+  in xcat5 i-test-rax (i-jcc j-s (xlen small)) small big i-movq-rax-x0
 -- a cell of k fields: the fields pushed, the cell taken from the arena, the fields stored
 x-cell tbl env d tag fs =
   let n = xlen fs
@@ -547,6 +562,16 @@ x-case-chain brs =
          lnil → snd e
          _ → x-case-link e (x-case-chain r))
 x-case-link e rest = let body = lapp (snd e) (i-jmp (xlen rest)) in xcat3 (i-cmp-rcx-imm (fst e)) (i-jcc j-ne (xlen body)) (lapp body rest)
+-- Nat by Word: zero is 0, suc k is k + 1 (the overflow exit past 2^64)
+x-nat-con tbl env d k fs = case fs of lcons a r → xcat3 (cx tbl env d a) i-add1 i-over-if-c; lnil → i-mov-rax-imm #0
+-- a case on a Nat: the scrutinee pushed (slot d); 0 takes the zero branch, else the predecessor is
+-- pushed (slot d+1) as the suc branch's field
+x-nat-case tbl env d B x =
+  let bz = cx tbl env (%wsucc d) (cl-at B #0)
+      bs = xcat3 (lapp (i-ld-rbp (x-disp (x-slot d))) (xb4 #72 #131 #232 #1)) i-push-rax
+                 (lapp (cx tbl (lcons (x-slot (%wsucc d)) env) (%wadd d #2) (x-strip #1 (cl-at B #1))) (i-add-rsp #8))
+      zpart = lapp bz (i-jmp (xlen bs))
+  in xcat5 (cx tbl env d x) i-push-rax (lapp i-test-rax (i-jcc j-ne (xlen zpart))) (lapp zpart bs) (i-add-rsp #8)
 -- a word loop: the bound (slot d), the counter (slot d+1, from 0), the state (slot d+2); while the
 -- counter is below the bound the step computes the next state; then the state
 x-loop tbl env d w z s =
@@ -560,21 +585,22 @@ x-loop tbl env d w z s =
       body = lapp step (i-jmp (xneg32 (%wadd (xlen test) (%wadd #6 (%wadd (xlen step) #5)))))
       head = xcat6 (cx tbl env d w) i-push-rax (i-mov-rax-imm #0) i-push-rax (cx tbl env (%wadd d #2) z) i-push-rax
   in xcat5 head test (i-jcc j-ae (xlen body)) body (lapp (i-ld-rbp (x-disp acc)) (i-add-rsp #24))
--- a store: a copy of the bytes (length 8 + the padded data, taken from the arena, the bytes copied
--- with rep movsb), the value stored in the copy. The original is never written: a buffer is shared
--- whenever a variable naming it occurs again, and the copy is what makes that true of the bytes
+-- a store: a copy of the bytes (8 + the data padded to 8, from the arena, copied with rep movsb), the
+-- value stored in the copy, the copy the result. The original is never written: a buffer is shared
+-- whenever a variable naming it occurs again, and copying is what makes that true of the bytes (an
+-- in-place store needs ownership the checker tracks, B11's 1-linear resources, and is not done here)
 x-store tbl env d w b off v =
   xcat6 (cx tbl env d b) i-push-rax (cx tbl env (%wsucc d) off) i-push-rax (cx tbl env (%wadd d #2) v)
-        (xcat5 i-mov-rdx-rax (lapp i-pop-rcx (lapp (xb1 #88) lnil)) x-copy-bytes
-               (lapp i-add-rax-rcx (x-st w)) (i-ld-rax #0))
--- rax the source bytes (rcx the offset and rdx the value kept): rax becomes a fresh copy, left in
--- rax after the store's base is restored (the store writes at rax + rcx + 8 and returns the copy)
+        (xcat5 i-mov-rdx-rax i-pop-rcx i-pop-rax x-copy-bytes
+               (xcat4 i-push-rax i-add-rax-rcx (x-st w) i-pop-rax))
+-- rax the source bytes, rcx the offset, rdx the value (both kept): rax becomes a fresh copy
 x-copy-bytes =
-  xcat6 (xb2 #81 #82) (xcat3 i-mov-rsi-rax (i-ld-rax #0) (xb3 #72 #131 #192))
-        (xcat3 (xb4 #72 #131 #192 #15) (xb4 #72 #131 #224 #248) i-mov-rcx-rax)
-        (xcat4 i-mov-rax-r15 i-add-r15-rcx (lapp i-cmp-r15-r12 i-over-if-above) i-mov-rdi-rax)
-        (xcat3 (xb1 #80) i-rep-movsb (xb1 #88))
-        (lapp (xb2 #90 #89) (lapp (xb1 #80) (xb1 #88)))
+  xcat6 (xb2 #81 #82)
+        (xcat4 i-mov-rsi-rax (i-ld-rax #0) (xb4 #72 #131 #192 #15) (xb4 #72 #131 #224 #248))
+        (xcat3 i-mov-rcx-rax i-mov-rax-r15 i-add-r15-rcx)
+        (xcat3 (lapp i-cmp-r15-r12 i-over-if-above) i-mov-rdi-rax i-push-rax)
+        (lapp i-rep-movsb i-pop-rax)
+        (xb2 #90 #89)
 -- fresh bytes of length n, zeroed: 8 + n rounded up to 8 from the arena, the length stored
 x-fresh tbl env d n =
   xcat6 (cx tbl env d n) i-push-rax (xb4 #72 #131 #192 #15) (xb4 #72 #131 #224 #248)

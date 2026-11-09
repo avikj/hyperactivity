@@ -24,6 +24,10 @@ fragment d c =
     csnd p → frag-wrap (fragment d p) c
     clet t b → frag-both (fragment d t) (fragment (%wsucc d) b) c
     cann t T → fragment d t
+    -- a thunk is its value in compiled code: checked terms terminate and compiled code writes nothing
+    -- outside its arena, so computing a delayed value early changes no answer (it may cost time)
+    cthunk t → fragment d t
+    cforce t → fragment d t
     ccon dd k fs ds →
       (case ds of
          lnil → (if data-has-dims dd then not-fo higher c else frag-list d fs c)

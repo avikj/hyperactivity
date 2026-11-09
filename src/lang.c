@@ -5545,6 +5545,8 @@ static JT *jt_app(Node *h, Node **args, int na, const char **pn, JT **pv, int np
         for (int i = 0; P[i].n; i++) if (!strcmp(h->s, P[i].n)) { JT *t = jt_new(JT_PRIM); t->pt = P[i].pt; return t; }
     }
     if (!strcmp(h->s, "Bytes") || !strcmp(h->s, "%bytesty")) return jt_new(JT_BYTES);
+    /* Nat by Word (its declared representation): a numeral crosses as the word it counts */
+    if (na == 0 && !strcmp(h->s, "Nat") && data_lookup("Nat") >= 0) { JT *t = jt_new(JT_NAT); t->d = data_lookup("Nat"); return t; }
     int d = data_lookup(h->s);
     if (d < 0 || DATA[d].nparams != na || DATA[d].co) return jt_new(JT_NO);
     JT *t = jt_new(JT_DATA); t->d = d; t->np = na; t->ps = calloc((size_t)na + 1, sizeof(JT *));
@@ -5601,20 +5603,36 @@ static bool jt_crosses(JT *t, int depth) {
     default: return true;
     }
 }
+/* does the code (its S-expression readback) under its leading λs read parameter i of n? depth counts
+ * the binders entered since: λ, let's body, a path abstraction, ∀, a dimension λ, Π and Σ codomains */
+static bool code_reads(Node *c, long target, long depth) {
+    if (!c->list || !c->n) return false;
+    const char *h = c->it[0]->list ? "" : c->it[0]->s;
+    if (!strcmp(h, "cvar") && c->n == 2) { long k = !c->it[1]->list && c->it[1]->s[0] == '#' ? atol(c->it[1]->s + 1) : -1; return k == target + depth; }
+    if ((!strcmp(h, "clam") || !strcmp(h, "cplam") || !strcmp(h, "cforall") || !strcmp(h, "cdlam")) && c->n == 2) return code_reads(c->it[1], target, depth + 1);
+    if (!strcmp(h, "clet") && c->n == 3) return code_reads(c->it[1], target, depth) || code_reads(c->it[2], target, depth + 1);
+    if ((!strcmp(h, "cpi") && c->n == 4) || (!strcmp(h, "csigma") && c->n == 3)) { int a = c->n - 2; return code_reads(c->it[a], target, depth) || code_reads(c->it[a + 1], target, depth + 1); }
+    for (int i = 1; i < c->n; i++) if (code_reads(c->it[i], target, depth)) return true;
+    return false;
+}
 /* the bytes into executable memory, an entry over them, and name rebound to (%native k g a…): the
  * call on closed data runs the bytes, anything else (and an overflow) runs g, the definition */
-static int jit_bind(const char *name, int ck, const unsigned char *b, size_t len, int arity) {
+static int jit_bind(const char *name, int ck, const unsigned char *b, size_t len, int arity, const bool *used) {
     if ((size_t)ck >= capchkty || !CHKTY[ck]) return -1;
     Node *doms[NATIVE_MAXW], *cod; int n = pi_parts(CHKTY[ck], doms, NATIVE_MAXW, &cod);
     if (n != arity || n < 1) return -2;
     JT **jt = calloc((size_t)n + 1, sizeof(JT *));
-    for (int i = 0; i <= n; i++) { jt[i] = jt_of(i < n ? doms[i] : cod, NULL, NULL, 0); if (!jt_crosses(jt[i], 0)) return -3 - i; }
+    /* a parameter the code never reads (a proof, erased) crosses as nothing, whatever its type */
+    for (int i = 0; i <= n; i++) {
+        if (i < n && !used[i]) { jt[i] = jt_new(JT_ERASED); continue; }
+        jt[i] = jt_of(i < n ? doms[i] : cod, NULL, NULL, 0); if (!jt_crosses(jt[i], 0)) return -3 - i;
+    }
     void *m = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (m == MAP_FAILED) return -1;
     memcpy(m, b, len);
     if (mprotect(m, len, PROT_READ | PROT_EXEC) != 0) return -1;
     unsigned char kind[NATIVE_MAXW];
-    for (int i = 0; i < n; i++) kind[i] = jt[i]->k == JT_WORD ? 4 : jt[i]->k == JT_PRIM ? 5 : 8;
+    for (int i = 0; i < n; i++) kind[i] = jt[i]->k == JT_WORD ? 4 : jt[i]->k == JT_PRIM ? 5 : jt[i]->k == JT_ERASED ? 9 : 8;   /* 8: converted by type (jit_in); 9: not read */
     GROW(FFI, capffi, (size_t)nffi + 1);
     char sym[300]; snprintf(sym, sizeof sym, "jit:%s", name);
     FFI[nffi] = (Ffi){ strdup(sym), m, n, { 0 }, 4, -1, NULL, NULL, 0, NULL, -1, 0, -1, NULL, jt };
