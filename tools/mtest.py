@@ -16,6 +16,10 @@ import hashlib, os, subprocess, sys, time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RETRIES, PAUSE = 6, 60
 
+# `make -n` runs a recipe line that calls make itself (build/native-main's), and that line's
+# output is mixed into the listing; a block is kept only when it starts like a command
+import re
+CMD = re.compile(r'^(\./|#|[A-Z_][A-Z0-9_]*=|(for|python3|grep|cmp|rm|env|tail|sh|bash|set|make|echo|mkdir|cc|ar|gcc|g\+\+|if|cd|test|diff|cat|true|\[)(\s|$))')
 def recipe():
     out = subprocess.run(['make', '-n', 'test'], cwd=ROOT, capture_output=True, text=True, check=True).stdout
     lines, cur = [], ''
@@ -23,7 +27,7 @@ def recipe():
         if cur: cur += '\n' + l
         else: cur = l
         if cur.endswith('\\'): continue
-        if cur.strip(): lines.append(cur)
+        if cur.strip() and CMD.match(cur): lines.append(cur)
         cur = ''
     # the build lines (cc ...) run once, first
     return lines
