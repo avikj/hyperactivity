@@ -5739,11 +5739,6 @@ void *cubical_call_data_r(const char *name, uint64_t nargs, void **args, const c
     net_drain();
     return v;
 }
-#ifdef CUBICAL_LIB
-/* the name the emitted C calls (lib/emitc.cub's fnet: cubical_call(key, n, (V *[]){…})) */
-void *cubical_call(uint64_t k, uint64_t nargs, void **args) { return cubical_call_v(k, nargs, (CubV **)args); }
-int cubical_main(int argc, char **argv)
-#else
 static void memend_report(void) {
     if (!getenv("CUBICAL_MEMEND")) return;
     /* what a sweep now would keep whole, keep named only, free (bytes of record bodies, shallow) */
@@ -5759,6 +5754,11 @@ static void memend_report(void) {
     fprintf(stderr, "memend: definitions' top bodies %ld MB; records built from %ld (%ld MB), named only %ld (%ld MB, %ld dropped), unreached %ld (%ld MB); %ld sweeps: %ld records freed, %ld dropped, %ld given back, %ld tables freed\n",
             gb >> 20, nn[0], nb[0] >> 20, nn[1], nb[1] >> 20, ngone, nn[2], nb[2] >> 20, stat_sweeps, stat_swept_recs, stat_dropped_recs, stat_rec_revived, stat_swept_tabs);
 }
+#ifdef CUBICAL_LIB
+/* the name the emitted C calls (lib/emitc.cub's fnet: cubical_call(key, n, (V *[]){…})) */
+void *cubical_call(uint64_t k, uint64_t nargs, void **args) { return cubical_call_v(k, nargs, (CubV **)args); }
+int cubical_main(int argc, char **argv)
+#else
 int main(int argc, char **argv)
 #endif
 {
