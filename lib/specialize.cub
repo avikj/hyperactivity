@@ -38,10 +38,10 @@ c3 = clam (cwop #2 (cvar #0) (cwlit #1))
 #same specialize (Word → Word) lnil c3 = flam (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))
 #same run-fo (fapply (specialize (Word → Word) lnil c3) (lcons (flit #41) lnil)) = #42
 -- word elimination with a known bound normalizes away entirely: 2^5 is a literal
-c4 = cwelim (cwlit #5) (cwlit #1) (clam (clam (cwop #2 (cvar #0) (cvar #0))))
+c4 = cwelim (cwlit #5) (cwlit #1) (clam (clam (cwop #2 (cvar #0) (cvar #0)))) (some (clam cword))
 #same specialize Word lnil c4 = flit #32
 -- with an unknown bound it stays a loop, and the loop computes
-c5 = clam (cwelim (cvar #0) (cwlit #1) (clam (clam (cwop #2 (cvar #0) (cvar #0)))))
+c5 = clam (cwelim (cvar #0) (cwlit #1) (clam (clam (cwop #2 (cvar #0) (cvar #0)))) (some (clam cword)))
 #same run-fo (fapply (specialize (Word → Word) lnil c5) (lcons (flit #6) lnil)) = #64
 -- ---------------------------------------------------------------- whole programs
 -- program-of fuel c: the first-order definitions a code needs, by lowering the code and then every
@@ -148,7 +148,7 @@ fo-report c =
     cthunk t → fo-report t
     cwsucc a → fo-report a
     cwop k a b → lapp2 (fo-report a) (fo-report b)
-    cwelim w z s → lapp2 (fo-report w) (lapp2 (fo-report z) (fo-report s))
+    cwelim w z s mo → lapp2 (fo-report w) (lapp2 (fo-report z) (fo-report s))
     cprim k as → fo-report-list as
     cplit k b → lnil
     cvar n → lnil
@@ -159,7 +159,7 @@ fo-report c =
 fo-report-list l = case l of lnil → lnil; lcons x xs → lapp2 (fo-report x) (fo-report-list xs)
 is-fo c = case fo-report c of lnil → true; _ → false
 -- readings: the loop is first-order; a path abstraction and a transport are reported
-#same is-fo (cwelim (cwlit #5) (cwlit #1) (clam (clam (cwop #2 (cvar #0) (cvar #0))))) = true
+#same is-fo (cwelim (cwlit #5) (cwlit #1) (clam (clam (cwop #2 (cvar #0) (cvar #0)))) (some (clam cword))) = true
 #same is-fo (code (λ (l : LW) → lenw l)) = true
 #same fo-report (cplam (cvar #0)) = lcons (cplam (cvar #0)) lnil
 #same lst-len (fo-report (capp (cplam (cvar #0)) (ctrans #1 cftt lnil (cvar #0)))) = #2

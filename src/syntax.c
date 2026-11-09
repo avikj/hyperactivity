@@ -2768,10 +2768,13 @@ static Node *cn(Node *c) {
         long k = cn_word(c->it[1]); if (k < 0 || k > 4) return NULL;
         a = cn(c->it[2]); b = cn(c->it[3]); return a && b ? lst(3, nsym(WO[k]), a, b) : NULL;
     }
-    if (!strcmp(h, "cwelim") && c->n == 4) {
-        /* the motive is not in the code: a hole of the elaborator's, solved against the expected type */
+    if (!strcmp(h, "cwelim") && c->n == 5) {
+        /* the motive, when the code has one (some P); otherwise a hole of the elaborator's, solved
+         * against the expected type */
         a = cn(c->it[1]); b = cn(c->it[2]); d = cn(c->it[3]); if (!(a && b && d)) return NULL;
-        bool pend = false; Node *mot = hole_or_sol(c, 0, &pend);
+        bool pend = false; Node *mot = NULL;
+        if (c->it[4]->list && c->it[4]->n == 2 && is(c->it[4]->it[0], "some")) mot = cn(c->it[4]->it[1]);
+        if (!mot) mot = hole_or_sol(c, 0, &pend);
         return lst(5, nsym("%welimP"), mot, a, b, d);
     }
     if (!strcmp(h, "csysc")) {

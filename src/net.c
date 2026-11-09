@@ -1717,7 +1717,13 @@ static void rule_view(Cell *o, Cell *v) {
     case V_WPLUS: r = mk(WC[W_WPLUS], word_wn(cell_wn(v)), v->port[1], 0, 0); break;
     case V_NWOP: r = mk(WC[W_WOP], word_of((uint64_t)(v->x - O_WEQ)), v->port[1], v->port[2], 0); break;
     case V_NPRIM: r = mk(WC[W_PRIM], word_of((uint64_t)v->x), list_of(&v->port[1], v->n - 1), 0, 0); break;
-    case V_NWELIM: if (v->n == 5) era(v->port[4]); r = mk(WC[W_WELIM], v->port[1], v->port[2], v->port[3], 0); break;
+    case V_NWELIM: {
+        /* the motive, when the elimination was written with one (%welimP): some P, else none (the
+         * quote reads it: lib/check.cub's qneu gives cwelim its motive, the loop's state type) */
+        Port mo;
+        if (v->n == 5) { Port f[1] = { v->port[4] }; mo = con_build(C_SOME, f, NULL); } else mo = con_build(C_NONE, NULL, NULL);
+        r = mk(WC[W_WELIM], v->port[1], v->port[2], v->port[3], mo); break;
+    }
     case V_PI: r = mk(WC[W_PI], v->port[1], v->port[2], 0, 0); break;
     case V_SIGMA: r = mk(WC[W_SIGMA], v->port[1], v->port[2], 0, 0); break;
     case V_U: r = mk(WC[W_U], v->port[1], 0, 0, 0); break;

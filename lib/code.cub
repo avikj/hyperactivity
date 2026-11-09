@@ -70,7 +70,7 @@ data Code
   | cplit k b
   | cwsucc a
   | cwop k a b
-  | cwelim w z s
+  | cwelim w z s mo                         -- mo: some P, the motive's code (Word → U), or none
   | ctrans d psi ls x
   | cproj d k x
   | crec d fs
@@ -118,7 +118,7 @@ data View
   | wbytes n
   | wwplus k x
   | wwop k a b
-  | wwelim x z s
+  | wwelim x z s mo                         -- mo: some P, the motive, when written with one (%welimP)
   | wcofix n T
   | wproj d k x T
   | wrec d fs
@@ -243,7 +243,7 @@ eval-g e c =
                   then %wlt x y
                   else if %weq k #2 then %wadd x y else if %weq k #3 then %wmax x y else %wsub x y
     cprim k as → prim-apply k (cl-map (eval-g e) as)
-    cwelim w z s → %welim (eval-g e w) (eval-g e z) (eval-g e s)
+    cwelim w z s mo → %welim (eval-g e w) (eval-g e z) (eval-g e s)
     ctrans d psi ls x → 
       app-all (%dtrans d)
         (lcons (eval-g e psi) (cl-app (cl-map (eval-g e) ls) (lcons (eval-g e x) lnil)))

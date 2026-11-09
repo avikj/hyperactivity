@@ -34,7 +34,7 @@ shift-code d k c =
     cdata dd ps → cdata dd (shift-list d k ps)
     cwsucc a → cwsucc (shift-code d k a)
     cwop o a b → cwop o (shift-code d k a) (shift-code d k b)
-    cwelim w z s → cwelim (shift-code d k w) (shift-code d k z) (shift-code d k s)
+    cwelim w z s mo → cwelim (shift-code d k w) (shift-code d k z) (shift-code d k s) (omap (shift-code d k) mo)
     _ → c
 shift-list d k l = case l of lnil → lnil; lcons x xs → lcons (shift-code d k x) (shift-list d k xs)
 -- ---------------------------------------------------------------- substitutions
@@ -62,7 +62,7 @@ code-same a b =
     cwlit n → (case b of cwlit m → %weq n m; _ → false)
     cwsucc x → (case b of cwsucc y → code-same x y; _ → false)
     cwop o x y → (case b of cwop o2 x2 y2 → andb (%weq o o2) (andb (code-same x x2) (code-same y y2)); _ → false)
-    cwelim w z s → (case b of cwelim w2 z2 s2 → andb (code-same w w2) (andb (code-same z z2) (code-same s s2)); _ → false)
+    cwelim w z s mo → (case b of cwelim w2 z2 s2 mo2 → andb (code-same w w2) (andb (code-same z z2) (code-same s s2)); _ → false)
     cann t T → (case b of cann t2 T2 → code-same t t2; _ → false)
     -- types, as a residual's motives hold them (a specialized process's eliminations)
     cpi m x y → (case b of cpi m2 x2 y2 → andb (%weq m m2) (andb (code-same x x2) (code-same y y2)); _ → false)
@@ -110,7 +110,7 @@ match k b p t s =
     cthunk x → (case t of cthunk y → match k b x y s; _ → none)
     cdata d ps → (case t of cdata d2 ps2 → if %weq d d2 then match-list k b ps ps2 s else none; _ → none)
     cwlit n → (case t of cwlit m → if %weq n m then some s else none; _ → none)
-    cwelim w z st → (case t of cwelim w2 z2 st2 → (case match k b w w2 s of some s2 → (case match k b z z2 s2 of some s3 → match k b st st2 s3; none → none); none → none); _ → none)
+    cwelim w z st mo → (case t of cwelim w2 z2 st2 mo2 → (case match k b w w2 s of some s2 → (case match k b z z2 s2 of some s3 → match k b st st2 s3; none → none); none → none); _ → none)
     cwsucc x → (case t of cwsucc y → match k b x y s; _ → none)
     cwop o x y → (case t of cwop o2 x2 y2 → if %weq o o2 then (case match k b x x2 s of some s2 → match k b y y2 s2; none → none) else none; _ → none)
     cann a T → match k b a t s
@@ -147,7 +147,7 @@ mentions-lt d b t =
     cdata dd ps → mentions-any d b ps
     cwsucc x → mentions-lt d b x
     cwop o x y → orb (mentions-lt d b x) (mentions-lt d b y)
-    cwelim w z s → orb (mentions-lt d b w) (orb (mentions-lt d b z) (mentions-lt d b s))
+    cwelim w z s mo → orb (mentions-lt d b w) (orb (mentions-lt d b z) (orb (mentions-lt d b s) (case mo of some P → mentions-lt d b P; none → false)))
     cann a T → mentions-lt d b a
     cpty q n → mentions-lt d b n
     cprim q as → mentions-any d b as
@@ -176,7 +176,7 @@ unshift-at d b c =
     cdata dd ps → cdata dd (unshift-list d b ps)
     cwsucc x → cwsucc (unshift-at d b x)
     cwop o x y → cwop o (unshift-at d b x) (unshift-at d b y)
-    cwelim w z s → cwelim (unshift-at d b w) (unshift-at d b z) (unshift-at d b s)
+    cwelim w z s mo → cwelim (unshift-at d b w) (unshift-at d b z) (unshift-at d b s) (omap (unshift-at d b) mo)
     cann a T → cann (unshift-at d b a) (unshift-at d b T)
     cpty q n → cpty q (unshift-at d b n)
     cprim q as → cprim q (unshift-list d b as)
@@ -206,7 +206,7 @@ inst k b s p =
     cdata d ps → cdata d (inst-list k b s ps)
     cwsucc x → cwsucc (inst k b s x)
     cwop o x y → cwop o (inst k b s x) (inst k b s y)
-    cwelim w z st → cwelim (inst k b s w) (inst k b s z) (inst k b s st)
+    cwelim w z st mo → cwelim (inst k b s w) (inst k b s z) (inst k b s st) (omap (inst k b s) mo)
     cann a T → cann (inst k b s a) (inst k b s T)
     cpty q n → cpty q (inst k b s n)
     cprim q as → cprim q (inst-list k b s as)
@@ -242,7 +242,7 @@ rewrite-first r t =
          cthunk x → omap cthunk (rewrite-first r x)
          cdata d ps → omap (cdata d) (rewrite-first-list r ps)
          cwsucc a → omap cwsucc (rewrite-first r a)
-         cwelim w z st → (case rewrite-first r w of some w2 → some (cwelim w2 z st); none → (case rewrite-first r z of some z2 → some (cwelim w z2 st); none → omap (cwelim w z) (rewrite-first r st)))
+         cwelim w z st mo → (case rewrite-first r w of some w2 → some (cwelim w2 z st mo); none → (case rewrite-first r z of some z2 → some (cwelim w z2 st mo); none → omap (λ st2 → cwelim w z st2 mo) (rewrite-first r st)))
          cwop o a b → (case rewrite-first r a of some a2 → some (cwop o a2 b); none → omap (cwop o a) (rewrite-first r b))
          cprim q as → omap (cprim q) (rewrite-first-list r as)
          _ → none)
@@ -292,7 +292,7 @@ code-size c =
     cdata d ps → %wsucc (size-list ps)
     cwsucc a → %wsucc (code-size a)
     cwop o a b → %wsucc (%wadd (code-size a) (code-size b))
-    cwelim w z s → %wsucc (%wadd (code-size w) (%wadd (code-size z) (code-size s)))
+    cwelim w z s mo → %wsucc (%wadd (code-size w) (%wadd (code-size z) (code-size s)))
     cann a T → %wsucc (%wadd (code-size a) (code-size T))
     cpi m A B → %wsucc (%wadd (code-size A) (code-size B))
     csigma A B → %wsucc (%wadd (code-size A) (code-size B))
@@ -317,7 +317,7 @@ mv-count m d c =
     cdata dd ps → mv-list m d ps
     cwsucc a → mv-count m d a
     cwop o a b → %wadd (mv-count m d a) (mv-count m d b)
-    cwelim w z s → %wadd (mv-count m d w) (%wadd (mv-count m d z) (mv-count m d s))
+    cwelim w z s mo → %wadd (mv-count m d w) (%wadd (mv-count m d z) (mv-count m d s))
     cann a T → %wadd (mv-count m d a) (mv-count m d T)
     cpi mm A B → %wadd (mv-count m d A) (mv-count m (%wsucc d) B)
     csigma A B → %wadd (mv-count m d A) (mv-count m (%wsucc d) B)

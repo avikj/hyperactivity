@@ -164,7 +164,7 @@ p-named names env nm r =
   else if lst-eq nm (lcons #116 (lcons #114 (lcons #117 (lcons #101 lnil)))) then some (ccon bool-idx #0 lnil lnil , r)
   else if lst-eq nm (lcons #102 (lcons #97 (lcons #108 (lcons #115 (lcons #101 lnil))))) then some (ccon bool-idx #1 lnil lnil , r)
   else if lst-eq nm (lcons #115 (lcons #116 (lcons #100 (lcons #58 (lcons #58 (lcons #112 (lcons #97 (lcons #105 (lcons #114 lnil))))))))) then obind (p-punct r (lcons #123 lnil)) (λ r2 → obind (p-expr names env r2) (λ ar → obind (p-punct (snd ar) (lcons #44 lnil)) (λ r3 → obind (p-expr names env r3) (λ br → omap (λ r4 → (cpair (fst ar) (fst br) , r4)) (p-punct (snd br) (lcons #125 lnil))))))
-  else if lst-eq nm (lcons #99 (lcons #117 (lcons #98 (lcons #58 (lcons #58 (lcons #119 (lcons #101 (lcons #108 (lcons #105 (lcons #109 lnil)))))))))) then obind (p-punct r (lcons #40 lnil)) (λ r2 → obind (p-args names env r2) (λ ar → (case fst ar of lcons w rest → (case rest of lcons z rest2 → (case rest2 of lcons s rest3 → some (cwelim w z s , snd ar); _ → none); _ → none); _ → none)))
+  else if lst-eq nm (lcons #99 (lcons #117 (lcons #98 (lcons #58 (lcons #58 (lcons #119 (lcons #101 (lcons #108 (lcons #105 (lcons #109 lnil)))))))))) then obind (p-punct r (lcons #40 lnil)) (λ r2 → obind (p-args names env r2) (λ ar → (case fst ar of lcons w rest → (case rest of lcons z rest2 → (case rest2 of lcons s rest3 → some (cwelim w z s none , snd ar); _ → none); _ → none); _ → none)))
   else if lst-eq nm (lcons #99 (lcons #117 (lcons #98 (lcons #58 (lcons #58 (lcons #109 (lcons #97 (lcons #120 lnil)))))))) then obind (p-punct r (lcons #40 lnil)) (λ r2 → obind (p-args names env r2) (λ ar → (case fst ar of lcons a rest → (case rest of lcons b r3 → some (cwop #3 a b , snd ar); _ → none); _ → none)))
   else if lst-eq nm (lcons #99 (lcons #117 (lcons #98 (lcons #58 (lcons #58 (lcons #102 (lcons #105 (lcons #120 lnil)))))))) then p-fix names env r
   else if lst-eq nm (lcons #115 (lcons #101 (lcons #108 (lcons #102 lnil)))) then p-self env r
@@ -335,8 +335,8 @@ skip-struct ts = case ts of lnil → lnil; lcons t r → if is-tok ts #2 (lcons 
 skip-semi ts = case ts of lnil → lnil; lcons t r → if is-tok ts #2 (lcons #59 lnil) then r else skip-semi r
 -- ---------------------------------------------------------------- up to erasure
 -- what the image erases and the fragment cannot give back: the motive of a case on Bool (a
--- ternary's type is deduced; a data type's case keeps its result type in the fix's `-> T`), and
--- a parameter at usage 0 (absent on both sides). erase-code c is the source code with those
+-- ternary's type is deduced; a data type's case keeps its result type in the fix's `-> T`), the
+-- motive of a word elimination (cub::welim deduces its state's type from z), and a parameter at usage 0 (absent on both sides). erase-code c is the source code with those
 -- gone, the term #same compares the re-import against
 erase-code c =
   case c of
@@ -352,7 +352,7 @@ erase-code c =
     ccon d k fs ds → ccon d k (erase-list fs) ds
     cwsucc a → cwsucc (erase-code a)
     cwop k a b → cwop k (erase-code a) (erase-code b)
-    cwelim w z s → cwelim (erase-code w) (erase-code z) (erase-code s)
+    cwelim w z s mo → cwelim (erase-code w) (erase-code z) (erase-code s) none
     cprim k as → cprim k (erase-list as)
     cforce t → cforce (erase-code t)
     cthunk t → cthunk (erase-code t)
@@ -375,7 +375,7 @@ maxq a b = if %wlt a b then b else a
 -- a loop over a pair through cub::welim, let and λ
 fibq : Word → Word
 fibq n = fst (%welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p))))
-#same reimport-def lnil (fst (image-def lnil lnil (gidx (code fibq)))) = unfold (gidx (code fibq))
+#same reimport-def lnil (fst (image-def lnil lnil (gidx (code fibq)))) = omap erase-code (unfold (gidx (code fibq)))
 -- a whole header read back: every definition by its name
 hdr-x = cxx-image lnil lnil (lcons (gidx (code add3x)) (lcons (gidx (code tsumx)) lnil))
 #same lst-len (reimport-header lnil (fst hdr-x)) = #2
