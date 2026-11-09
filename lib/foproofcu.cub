@@ -1,0 +1,377 @@
+-- lib/foproofcu.cub — the unboxed C link, U2 (plan item 15; lib/foproofu.cub's U1 gives the kinds): CU, the
+-- unboxed C as checked syntax; evcu, its meaning; fq-to-cu, the checked translation from the first-order
+-- form guided by U1's kinds; cuty, C's typing of the subset, decided; cu-to-c (cu-c, cu-prog), its printer,
+-- the only trusted printing step. U3 (cu-sound: whatever the first-order form computes, the unboxed C
+-- computes) is the follow-up: evcu is kept construct for construct parallel to lib/foproofm.cub's evc, and
+-- cu-erase takes CU to CA dropping the conversions, so fq-to-ca is cu-erase of fq-to-cu on every program
+-- (tests/foproofcu.cub reads it) and cu-sound is a simulation of evcu against evc on the erased term.
+-- Loaded after lib/foproofm.cub and lib/foproofu.cub; tested on its own line (tests/foproofcu.cub).
+--
+-- CU is lib/foproofc.cub's CA (its constructors as cu…, the same C text) and four nodes:
+--   cupw p as        a word primitive on uint64_t operands, lib/emitu.cub's text: (a + b), n1(a, b),
+--                    (a * b), (a == b), (a < b), n<p>(a, b) / n<p>(a) for Int64 and Float64 by their bits
+--   cuunw x          (x)->n: the word of a cell (printed w for mkw(w), and x for mkw(x))
+--   cumkw x          mkw(x): a word as a cell
+--   cublk t l a b    ({ uint64_t v<l> = a; b; }) or ({ V *v<l> = a; b; }), t the local's C type
+-- A uint64_t is a word in lib/foproofm.cub's model as a word cell is (mw w): cells are immutable, so a
+-- word and its cell are one value. evcu is evc on CU's CA constructors; cupw is caprim's meaning, cumkw
+-- the identity, cublk cablk's; cuunw on a word is that word and on any other value no value (C would
+-- read a constructor's, a closure's or a string's n field). evcu claims C's value for a term C's types
+-- accept (cuty: every uint64_t expression typed so, every V * so), which fq-to-cu's output is,
+-- decided per program; the definitions' C types are the program's signature (each parameter's and
+-- the result's), a closure's target (called through apply, the dispatcher passing V *) all V *.
+-- Where fq-to-cu makes a local, parameter or result a uint64_t: a let's local, a definition's
+-- parameter and its result exactly where U1's kind is kw. A case's fields and a loop's state are a
+-- cell's fields, V * as in CA (read as words through cuunw where a word is wanted).
+-- ---------------------------------------------------------------- the syntax
+data CTy = ctw | ctb
+data CU = cuw (w : Word) | cuv (l : Nat) | cuprim (p : Word) (as : CU) | cuablk (l : Nat) (a : CU) (b : CU) | cucon (c : Word) (fs : CU) | cuproj (k : Word) (x : CU) | cusw (x : CU) (alts : CU) | cualt (c : Word) (n : Nat) (l : Nat) (b : CU) (r : CU) | cunone | cuif (c : CU) (a : CU) (b : CU) | cuclo (g : Word) (caps : CU) | cuap (f : CU) (as : CU) | cucall (g : Word) (as : CU) | culoop (l : Nat) (k : Nat) (init : CU) (b : CU) | cudecl (l : Nat) (x : CU) (r : CU) | cunil | cucons (x : CU) (r : CU) | cuunsup | cupw (p : Word) (as : CU) | cuunw (x : CU) | cumkw (x : CU) | cublk (t : CTy) (l : Nat) (a : CU) (b : CU)
+-- ---------------------------------------------------------------- the meaning
+-- (x)->n: a word cell's word; any other value none
+c-word : CV → CV
+c-word (cw n) = cw n
+c-word (cvcon c fs) = cbot
+c-word (cclo g caps) = cbot
+c-word (cb l) = cbot
+c-word cvnil = cbot
+c-word (cvcons x r) = cbot
+c-word cbot = cbot
+-- the meaning one unit of fuel down (lib/foproofm.cub's ME over CU)
+data UE = ue (ev : CU → MSt → MV) (lp : Nat → Nat → MV → CU → MSt → MV)
+ue-ev : UE → CU → MSt → MV
+ue-ev (ue f l) = f
+ue-lp : UE → Nat → Nat → MV → CU → MSt → MV
+ue-lp (ue f l) = l
+-- apply (lib/foproofm.cub's map0, m-ap1, mapl0, m-appl)
+uap0 : (Word → CU) → (Word → Nat) → (Word → Bool) → UE → CV → MV → MV
+uap0 GC A CD k (cclo g caps) a = if andbt (CD g) (andbt (wlt g #1000000) (c-isar (A g) caps)) then ue-ev k (GC g) (m-apenv (A g) a (c2m caps)) else mbot
+uap0 GC A CD k (cw n) a = mbot
+uap0 GC A CD k (cvcon c fs) a = mbot
+uap0 GC A CD k (cb l) a = mbot
+uap0 GC A CD k cvnil a = mbot
+uap0 GC A CD k (cvcons x r) a = mbot
+uap0 GC A CD k cbot a = mbot
+u-ap1 : (Word → CU) → (Word → Nat) → (Word → Bool) → UE → MV → MV → MV
+u-ap1 GC A CD k f a = if haslim f then mlim else uap0 GC A CD k (m2c f) a
+uapl0 : (Word → CU) → (Word → Nat) → (Word → Bool) → UE → CV → MV → MV
+uapl0 GC A CD k (cvcons a r) f = uapl0 GC A CD k r (u-ap1 GC A CD k f (c2m a))
+uapl0 GC A CD k (cw n) f = f
+uapl0 GC A CD k (cvcon c fs) f = f
+uapl0 GC A CD k (cclo g caps) f = f
+uapl0 GC A CD k (cb l) f = f
+uapl0 GC A CD k cvnil f = f
+uapl0 GC A CD k cbot f = f
+u-appl : (Word → CU) → (Word → Nat) → (Word → Bool) → UE → MV → MV → MV
+u-appl GC A CD k as f = if haslim as then mlim else uapl0 GC A CD k (m2c as) f
+-- every CA construct as lib/foproofm.cub's mevT has it; the four nodes last
+uevT : (Word → CU) → (Word → Nat) → (Word → Bool) → UE → CU → MSt → MV
+uevT GC A CD k (cuw w) s = mwrap (cw w)
+uevT GC A CD k (cuv l) s = ms-get s l
+uevT GC A CD k (cuprim p as) s = m-prim p (uevT GC A CD k as s)
+uevT GC A CD k (cuablk l a b) s = uevT GC A CD k b (msb l (uevT GC A CD k a s) s)
+uevT GC A CD k (cucon c fs) s = mcon c (uevT GC A CD k fs s)
+uevT GC A CD k (cuproj j x) s = mlift (c-proj j) (uevT GC A CD k x s)
+uevT GC A CD k (cusw x alts) s = uevT GC A CD k alts (msx (uevT GC A CD k x s) s)
+uevT GC A CD k (cualt j n l b r) s = m-altsel j n l (λ s2 → uevT GC A CD k b s2) (uevT GC A CD k r s) s
+uevT GC A CD k cunone s = mbot
+uevT GC A CD k (cuif c a b) s = m-if (uevT GC A CD k c s) (uevT GC A CD k a s) (uevT GC A CD k b s)
+uevT GC A CD k (cuclo g caps) s = mclo g (uevT GC A CD k caps s)
+uevT GC A CD k (cuap f as) s = u-appl GC A CD k (uevT GC A CD k as s) (uevT GC A CD k f s)
+uevT GC A CD k (cucall g as) s = ue-ev k (GC g) (ms-push (uevT GC A CD k as s) zero msnil)
+uevT GC A CD k (culoop l n init b) s = ue-lp k l n (uevT GC A CD k init s) b s
+uevT GC A CD k (cudecl l x r) s = mvcons (uevT GC A CD k x s) (uevT GC A CD k r (msb l (uevT GC A CD k x s) s))
+uevT GC A CD k cunil s = mvnil
+uevT GC A CD k (cucons x r) s = mvcons (uevT GC A CD k x s) (uevT GC A CD k r s)
+uevT GC A CD k cuunsup s = mbot
+uevT GC A CD k (cupw p as) s = m-prim p (uevT GC A CD k as s)
+uevT GC A CD k (cuunw x) s = mlift c-word (uevT GC A CD k x s)
+uevT GC A CD k (cumkw x) s = uevT GC A CD k x s
+uevT GC A CD k (cublk t l a b) s = uevT GC A CD k b (msb l (uevT GC A CD k a s) s)
+ueN : (Word → CU) → (Word → Nat) → (Word → Bool) → Nat → UE
+ueN GC A CD zero = ue (λ t s → mbot) (λ l n st b s → mbot)
+ueN GC A CD (suc m) = ue (λ t s → uevT GC A CD (ueN GC A CD m) t s) (λ l n st b s → m-lstep n (uevT GC A CD (ueN GC A CD m) b (ms-push st l s)) (λ st2 → ue-lp (ueN GC A CD m) l n st2 b s))
+-- the meaning of a CU construct at fuel n on C's words (GC the program's functions, A their parameter
+-- counts, CD the keys with a dispatcher case, as for evc)
+evcu : (Word → CU) → (Word → Nat) → (Word → Bool) → Nat → CU → MSt → MV
+evcu GC A CD n t s = uevT GC A CD (ueN GC A CD n) t s
+-- ---------------------------------------------------------------- CA in CU, and back
+-- CA's constructors are CU's (ca-cu); a CU term with its conversions dropped, its word primitives and
+-- typed blocks as CA's, is a CA term (cu-erase)
+ca-cu : CA → CU
+ca-cu (caw w) = cuw w
+ca-cu (cav l) = cuv l
+ca-cu (caprim p as) = cuprim p (ca-cu as)
+ca-cu (cablk l a b) = cuablk l (ca-cu a) (ca-cu b)
+ca-cu (cacon c fs) = cucon c (ca-cu fs)
+ca-cu (caproj k x) = cuproj k (ca-cu x)
+ca-cu (casw x alts) = cusw (ca-cu x) (ca-cu alts)
+ca-cu (caalt c n l b r) = cualt c n l (ca-cu b) (ca-cu r)
+ca-cu canone = cunone
+ca-cu (caif c a b) = cuif (ca-cu c) (ca-cu a) (ca-cu b)
+ca-cu (caclo g caps) = cuclo g (ca-cu caps)
+ca-cu (caap f as) = cuap (ca-cu f) (ca-cu as)
+ca-cu (cacall g as) = cucall g (ca-cu as)
+ca-cu (caloop l k init b) = culoop l k (ca-cu init) (ca-cu b)
+ca-cu (cadecl l x r) = cudecl l (ca-cu x) (ca-cu r)
+ca-cu canil = cunil
+ca-cu (cacons x r) = cucons (ca-cu x) (ca-cu r)
+ca-cu caunsup = cuunsup
+cu-erase : CU → CA
+cu-erase (cuw w) = caw w
+cu-erase (cuv l) = cav l
+cu-erase (cuprim p as) = caprim p (cu-erase as)
+cu-erase (cuablk l a b) = cablk l (cu-erase a) (cu-erase b)
+cu-erase (cucon c fs) = cacon c (cu-erase fs)
+cu-erase (cuproj k x) = caproj k (cu-erase x)
+cu-erase (cusw x alts) = casw (cu-erase x) (cu-erase alts)
+cu-erase (cualt c n l b r) = caalt c n l (cu-erase b) (cu-erase r)
+cu-erase cunone = canone
+cu-erase (cuif c a b) = caif (cu-erase c) (cu-erase a) (cu-erase b)
+cu-erase (cuclo g caps) = caclo g (cu-erase caps)
+cu-erase (cuap f as) = caap (cu-erase f) (cu-erase as)
+cu-erase (cucall g as) = cacall g (cu-erase as)
+cu-erase (culoop l k init b) = caloop l k (cu-erase init) (cu-erase b)
+cu-erase (cudecl l x r) = cadecl l (cu-erase x) (cu-erase r)
+cu-erase cunil = canil
+cu-erase (cucons x r) = cacons (cu-erase x) (cu-erase r)
+cu-erase cuunsup = caunsup
+cu-erase (cupw p as) = caprim p (cu-erase as)
+cu-erase (cuunw x) = cu-erase x
+cu-erase (cumkw x) = cu-erase x
+cu-erase (cublk t l a b) = cablk l (cu-erase a) (cu-erase b)
+-- ---------------------------------------------------------------- C's types
+cteq : CTy → CTy → Bool
+cteq ctw ctw = true
+cteq ctb ctb = true
+cteq ctw ctb = false
+cteq ctb ctw = false
+-- a kind's C type: a word (kw) a uint64_t, anything else a V *
+ct-of : Kd → CTy
+ct-of kw = ctw
+ct-of kb = ctb
+ct-of (kdc d) = ctb
+ct-of ka = ctb
+ct-of kdn = ctb
+ct-of knil = ctb
+ct-of (kcons k r) = ctb
+-- the locals' C types by name: v<l> declared at t; n V * names from l (ct-push n l C) (a case's fields, a loop's state)
+ct-set : (Nat → CTy) → Nat → CTy → Nat → CTy
+ct-set C l t m = if neqb l m then t else C m
+ct-push : Nat → Nat → (Nat → CTy) → Nat → CTy
+ct-push zero l C m = C m
+ct-push (suc n) l C m = ct-push n (suc l) (ct-set C l ctb) m
+-- the word primitives (on uint64_t operands, a uint64_t result): word arithmetic and comparisons,
+-- Int64's and Float64's on their bits, the conversions
+cu-wprim : Word → Bool
+cu-wprim p = mor (wlt p #5) (mor (andbt (wlt #13 p) (wlt p #30)) (mor (weq p #32) (weq p #33)))
+-- a term's C type is the wanted one (W: a list's wanted types by position, a term's at 0): a uint64_t
+-- where W says so, every operand of a word primitive and of cuunw's result, a V * everywhere CA has one;
+-- a call's arguments at its parameters' types (P) and its value at its result's (R)
+cuty : (Word → Nat → CTy) → (Word → CTy) → CU → (Nat → CTy) → (Nat → CTy) → Bool
+cuty P R (cuw w) C W = cteq (W zero) ctb
+cuty P R (cuv l) C W = cteq (C l) (W zero)
+cuty P R (cuprim p as) C W = andbt (cteq (W zero) ctb) (cuty P R as C (λ i → ctb))
+cuty P R (cuablk l a b) C W = andbt (cuty P R a C (λ i → ctb)) (cuty P R b (ct-set C l ctb) W)
+cuty P R (cucon c fs) C W = andbt (cteq (W zero) ctb) (cuty P R fs C (λ i → ctb))
+cuty P R (cuproj k x) C W = andbt (cteq (W zero) ctb) (cuty P R x C (λ i → ctb))
+cuty P R (cusw x alts) C W = andbt (cteq (W zero) ctb) (andbt (cuty P R x C (λ i → ctb)) (cuty P R alts C (λ i → ctb)))
+cuty P R (cualt c n l b r) C W = andbt (cuty P R b (ct-push n l C) W) (cuty P R r C W)
+cuty P R cunone C W = true
+cuty P R (cuif c a b) C W = andbt (cuty P R c C (λ i → ctb)) (andbt (cuty P R a C W) (cuty P R b C W))
+cuty P R (cuclo g caps) C W = andbt (cteq (W zero) ctb) (cuty P R caps C (λ i → ctb))
+cuty P R (cuap f as) C W = andbt (cteq (W zero) ctb) (andbt (cuty P R f C (λ i → ctb)) (cuty P R as C (λ i → ctb)))
+cuty P R (cucall g as) C W = andbt (cteq (R g) (W zero)) (cuty P R as C (P g))
+cuty P R (culoop l k init b) C W = andbt (cteq (W zero) ctb) (andbt (cuty P R init C (λ i → ctb)) (cuty P R b (ct-push k l C) (λ i → ctb)))
+cuty P R (cudecl l x r) C W = andbt (cuty P R x C (λ i → W zero)) (cuty P R r (ct-set C l (W zero)) (λ i → W (suc i)))
+cuty P R cunil C W = true
+cuty P R (cucons x r) C W = andbt (cuty P R x C (λ i → W zero)) (cuty P R r C (λ i → W (suc i)))
+cuty P R cuunsup C W = cteq (W zero) ctb
+cuty P R (cupw p as) C W = andbt (cteq (W zero) ctw) (andbt (cu-wprim p) (cuty P R as C (λ i → ctw)))
+cuty P R (cuunw x) C W = andbt (cteq (W zero) ctw) (cuty P R x C (λ i → ctb))
+cuty P R (cumkw x) C W = andbt (cteq (W zero) ctb) (cuty P R x C (λ i → ctw))
+cuty P R (cublk t l a b) C W = andbt (cuty P R a C (λ i → t)) (cuty P R b (ct-set C l t) W)
+-- ---------------------------------------------------------------- the translation
+-- a term produced at one C type, wanted at another: mkw(x) or (x)->n
+cu-conv : CTy → CTy → CU → CU
+cu-conv ctw ctw u = u
+cu-conv ctb ctb u = u
+cu-conv ctw ctb u = cumkw u
+cu-conv ctb ctw u = cuunw u
+-- a literal: the word w, or its cell mkw(w)
+cu-lit : Word → CTy → CU
+cu-lit w ctw = cuunw (cuw w)
+cu-lit w ctb = cuw w
+-- a definition's parameters' and result's C types, from U1's tables (a closure's target's kinds are
+-- anything: all V *)
+cu-pt : KS → Word → Nat → CTy
+cu-pt S g l = ct-of (knth (ks-SK S g) l)
+cu-rt : KS → Word → CTy
+cu-rt S g = ct-of (ks-SR S g)
+-- a list's cons (lib/foproofc.cub's ca-cons)
+cu-cons : CK → CU → CU → CU
+cu-cons (ckd l) a b = cudecl l a b
+cu-cons ckt a b = cucons a b
+cu-cons ckl a b = cucons a b
+cu-cons cka a b = cucons a b
+-- fq-to-ca's traversal (locals named by depth, the same modes) with U1's kinds of the variables (Γ,
+-- innermost first, threaded as ksyn threads them), the locals' C types by name (C) and the wanted C
+-- types (W): a let's local is a uint64_t exactly where its kind is kw, a call's arguments and value at
+-- the callee's parameters' and result's types, a word primitive's operands and value uint64_t, every
+-- other construct's operands and value V * as in CA, a mismatch converted (cu-conv)
+fq-to-cu : KS → FQ → CK → (Nat → Kd) → (Nat → CTy) → Nat → (Nat → CTy) → CU
+fq-to-cu S (fql w) m Γ C d W = cu-lit w (W zero)
+fq-to-cu S (fqv n) m Γ C d W = cu-conv (C (ca-lvl d n)) (W zero) (cuv (ca-lvl d n))
+fq-to-cu S (fqprim p as) m Γ C d W = if cu-wprim p then cu-conv ctw (W zero) (cupw p (fq-to-cu S as ckl Γ C d (λ i → ctw))) else cu-conv ctb (W zero) (cuprim p (fq-to-cu S as ckl Γ C d (λ i → ctb)))
+fq-to-cu S (fqlet a b) m Γ C d W = cublk (ct-of (ksyn S a kmt Γ)) d (fq-to-cu S a ckt Γ C d (λ i → ct-of (ksyn S a kmt Γ))) (fq-to-cu S b ckt (kext Γ (ksyn S a kmt Γ)) (ct-set C d (ct-of (ksyn S a kmt Γ))) (suc d) W)
+fq-to-cu S (fqcon dd c fs) m Γ C d W = cu-conv ctb (W zero) (cucon c (fq-to-cu S fs ckl Γ C d (λ i → ctb)))
+fq-to-cu S (fqproj dd c k x) m Γ C d W = cu-conv ctb (W zero) (cuproj k (fq-to-cu S x ckt Γ C d (λ i → ctb)))
+fq-to-cu S (fqsw x alts) m Γ C d W = cu-conv ctb (W zero) (cusw (fq-to-cu S x ckt Γ C d (λ i → ctb)) (fq-to-cu S alts cka (kext Γ (ksyn S x kmt Γ)) C d (λ i → ctb)))
+fq-to-cu S (fqif c a b) m Γ C d W = cuif (fq-to-cu S c ckt Γ C d (λ i → ctb)) (fq-to-cu S a ckt Γ C d W) (fq-to-cu S b ckt Γ C d W)
+fq-to-cu S (fqclos g env) m Γ C d W = cu-conv ctb (W zero) (cuclo g (fq-to-cu S env ckl Γ C d (λ i → ctb)))
+fq-to-cu S (fqlam b) m Γ C d W = cu-conv ctb (W zero) cuunsup
+fq-to-cu S (fqapp f as) m Γ C d W = cu-conv ctb (W zero) (cuap (fq-to-cu S f ckt Γ C d (λ i → ctb)) (fq-to-cu S as ckl Γ C d (λ i → ctb)))
+fq-to-cu S (fqcall g as) m Γ C d W = cu-conv (cu-rt S g) (W zero) (cucall g (fq-to-cu S as ckl Γ C d (cu-pt S g)))
+fq-to-cu S (fqloop init b) m Γ C d W = cu-conv ctb (W zero) (culoop d (fq-len init) (fq-to-cu S init (ckd d) Γ C d (λ i → ctb)) (fq-to-cu S b ckt (kpush (lst S Γ init b) Γ) (ct-push (fq-len init) d C) (qadd d (fq-len init)) (λ i → ctb)))
+fq-to-cu S fqnil m Γ C d W = cunil
+fq-to-cu S (fqcons x r) m Γ C d W = cu-cons m (fq-to-cu S x ckt Γ C d (λ i → W zero)) (fq-to-cu S r (ck-next m) Γ C d (λ i → W (suc i)))
+fq-to-cu S (fqalt j n b r) m Γ C d W = cualt j n d (fq-to-cu S b ckt (kpush (kfl (ks-T S) (Γ zero) j n) (kdrop Γ)) (ct-push n d C) (qadd d n) W) (fq-to-cu S r m Γ C d W)
+fq-to-cu S fqanone m Γ C d W = cunone
+fq-to-cu S fqnet m Γ C d W = cu-conv ctb (W zero) cuunsup
+-- a definition's body: in its parameters' kinds (spk) and C types, at its result's type
+fq-to-cu-def : KS → Word → Nat → FQ → CU
+fq-to-cu-def S g n t = fq-to-cu S t ckt (spk S g) (cu-pt S g) n (λ i → cu-rt S g)
+-- ---------------------------------------------------------------- the printer
+cu-uint = (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 lnil)))))))))
+cu-static = (lcons #115 (lcons #116 (lcons #97 (lcons #116 (lcons #105 (lcons #99 (lcons #32 lnil)))))))
+cu-ifm = (lcons #32 (lcons #33 (lcons #61 (lcons #32 (lcons #48 (lcons #41 (lcons #32 (lcons #63 (lcons #32 (lcons #40 lnil))))))))))
+cu-plus = (lcons #32 (lcons #43 (lcons #32 lnil)))
+cu-times = (lcons #32 (lcons #42 (lcons #32 lnil)))
+cu-eq = (lcons #32 (lcons #61 (lcons #61 (lcons #32 lnil))))
+cu-lt = (lcons #32 (lcons #60 (lcons #32 lnil)))
+cu-protoend = (lcons #41 (lcons #59 (lcons #10 lnil)))
+cu-main-w = (lcons #105 (lcons #110 (lcons #116 (lcons #32 (lcons #109 (lcons #97 (lcons #105 (lcons #110 (lcons #40 (lcons #118 (lcons #111 (lcons #105 (lcons #100 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #112 (lcons #114 (lcons #105 (lcons #110 (lcons #116 (lcons #102 (lcons #40 (lcons #34 (lcons #37 (lcons #108 (lcons #108 (lcons #117 (lcons #92 (lcons #110 (lcons #34 (lcons #44 (lcons #32 (lcons #40 (lcons #117 (lcons #110 (lcons #115 (lcons #105 (lcons #103 (lcons #110 (lcons #101 (lcons #100 (lcons #32 (lcons #108 (lcons #111 (lcons #110 (lcons #103 (lcons #32 (lcons #108 (lcons #111 (lcons #110 (lcons #103 (lcons #41 (lcons #32 (lcons #102 (lcons #95 (lcons #48 (lcons #40 (lcons #41 (lcons #41 (lcons #59 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #48 (lcons #59 (lcons #32 (lcons #125 (lcons #10 lnil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+cu-refused = (lcons #35 (lcons #101 (lcons #114 (lcons #114 (lcons #111 (lcons #114 (lcons #32 (lcons #116 (lcons #104 (lcons #101 (lcons #32 (lcons #117 (lcons #110 (lcons #98 (lcons #111 (lcons #120 (lcons #101 (lcons #100 (lcons #32 (lcons #114 (lcons #111 (lcons #117 (lcons #116 (lcons #101 (lcons #32 (lcons #114 (lcons #101 (lcons #102 (lcons #117 (lcons #115 (lcons #101 (lcons #100 (lcons #32 (lcons #116 (lcons #104 (lcons #105 (lcons #115 (lcons #32 (lcons #112 (lcons #114 (lcons #111 (lcons #103 (lcons #114 (lcons #97 (lcons #109 (lcons #58 (lcons #32 (lcons #105 (lcons #116 (lcons #115 (lcons #32 (lcons #107 (lcons #105 (lcons #110 (lcons #100 (lcons #115 (lcons #32 (lcons #111 (lcons #114 (lcons #32 (lcons #105 (lcons #116 (lcons #115 (lcons #32 (lcons #67 (lcons #32 (lcons #116 (lcons #121 (lcons #112 (lcons #101 (lcons #115 (lcons #32 (lcons #119 (lcons #101 (lcons #114 (lcons #101 (lcons #32 (lcons #110 (lcons #111 (lcons #116 (lcons #32 (lcons #100 (lcons #101 (lcons #99 (lcons #105 (lcons #100 (lcons #101 (lcons #100 (lcons #10 lnil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+-- CU as C text, construct for construct: CA's constructors as lib/foproofc.cub's ca-c prints them, the
+-- four nodes in lib/emitu.cub's style; a program in lib/emitc.cub's frame (its runtime, prototypes,
+-- the dispatcher for the definitions whose parameters and result are all V *, a main printing f_0's
+-- value: as a uint64_t, or its n field). This and gcc are what U2 leaves outside the path.
+cu-c t =
+  case t of
+    cuw w → cat3 s-mkw (dec w) s-close
+    cuv l → ca-v l
+    cuprim p as → cu-prim p as
+    cuablk l a b → cat7 s-bsx s-vstar (ca-v l) s-assign (cu-c a) s-semi (lapp (cu-c b) s-bsend)
+    cucon c fs → cat7 s-mkc (dec c) s-comma (dec (cu-len fs)) (cu-rest fs) s-close lnil
+    cuproj k x → cat4 (cu-c x) s-arrow (dec k) s-rb
+    cusw x alts → cat6 s-bsx s-rdecl (cat3 s-xbind (cu-c x) s-switchx) (cu-alts alts) s-default (lapp (lcons #114 lnil) s-bsend)
+    cuif c a b → cat6 s-if (cu-cw c) cu-ifm (cu-c a) s-ifs (lapp (cu-c b) s-ifend)
+    cuclo g caps → cat7 s-clo (dec g) s-comma (dec (cu-len caps)) (cu-rest caps) s-close lnil
+    cuap f as → cu-apply (cu-c f) as
+    cucall g as → cat4 s-f (dec g) s-open (lapp (cu-args as) s-close)
+    culoop l k init b → cat6 s-bsx s-rdecl (cu-decls init) (cat3 s-for (cu-c b) s-fortest) (ca-reassign l k zero) (lapp s-forelse (lapp (lcons #114 lnil) s-bsend))
+    cupw p as → cu-wp p as
+    cuunw x → cu-cw x
+    cumkw x → cat3 s-mkw (cu-c x) s-close
+    cublk ct l a b → cat7 s-bsx (cu-tyd ct) (ca-v l) s-assign (cu-c a) s-semi (lapp (cu-c b) s-bsend)
+    _ → s-unsup
+-- a cell's word as a uint64_t: (x)->n; of mkw(w) the literal w, of mkw(x) x itself
+cu-cw t = case t of cuw w → dec w; cumkw x → cat3 s-open (cu-c x) s-close; _ → cat4 s-open (cu-c t) s-close s-n
+-- a local's declared type
+cu-tyd ct = case ct of ctw → cu-uint; _ → s-vstar
+cu-len l = case l of cucons x r → %wsucc (cu-len r); _ → #0
+cu-rest l = case l of cucons x r → cat3 s-comma (cu-c x) (cu-rest r); _ → lnil
+cu-args l = case l of cucons x r → (case r of cucons y r2 → cat3 (cu-c x) s-comma (cu-args r); _ → cu-c x); _ → lnil
+cu-apply f l = case l of cucons a r → cu-apply (cat5 s-apply f s-comma (cu-c a) s-close) r; _ → f
+cu-alts al = case al of cualt ac an ak ab ar → lapp (cat6 s-case (dec ac) s-colon (ca-fields ak an zero) (cat3 s-rr (cu-c ab) s-semi) s-break) (cu-alts ar); _ → lnil
+cu-decls dl = case dl of cudecl dk dx dr → cat7 s-vstar (ca-v dk) s-assign (cu-c dx) s-semi (cu-decls dr) lnil; _ → lnil
+-- a word primitive on uint64_t operands (lib/emitu.cub's prim-u and num-u)
+cu-wp p as =
+  case as of
+    cucons a r →
+      (case r of
+         cucons b r2 → (if %weq p #1 then cat5 s-n1o (cu-c a) s-n1c (cu-c b) s-close else if %wlt #13 p then cat6 (lcons #110 (dec p)) s-open (cu-c a) s-n1c (cu-c b) s-close else cat5 s-open (cu-c a) (cu-op p) (cu-c b) s-close)
+         _ → cat4 (lcons #110 (dec p)) s-open (cu-c a) s-close)
+    _ → s-unsup
+cu-op p = if %weq p #0 then cu-plus else if %weq p #2 then cu-times else if %weq p #3 then cu-eq else cu-lt
+-- the runtime's operations on cells (lib/foproofc.cub's ca-prim, ca-bytes, ca-num over CU)
+cu-prim p as =
+  if store-ip p then cu-byt p as else
+  if %wlt #13 p then cu-num p as else
+  if %wlt #7 p then cu-byt p as else
+  case as of
+    cucons a r →
+      (case r of
+         cucons b r2 → wop-c p (cu-c a) (cu-c b)
+         _ → cat5 s-mkw s-not (cu-c a) s-n s-close)
+    _ → cat3 s-mkw (dec #0) s-close
+cu-byt p as =
+  case as of
+    cucons a r →
+      (case r of
+         cucons b r2 →
+           (case r2 of
+              cucons c r3 → cat7 (if %weq p P-store64 then s-st64 else if %weq p P-store64-ip then s-st64i else if %weq p P-store32-ip then s-st32i else s-st32) (cu-c a) s-comma (cu-c b) s-nc (cu-c c) s-nn
+              _ → cat5 (if %weq p P-load64 then s-ld64 else s-ld32) (cu-c a) s-comma (cu-c b) s-nnn)
+         _ → (if %weq p P-bytes then cat3 s-mkb (cu-c a) s-nn else cat3 s-blen (cu-c a) s-nn))
+    _ → s-unsup
+cu-num p as =
+  case as of
+    cucons a r →
+      (case r of
+         cucons b r2 → cat7 s-mkw (lcons #110 (dec p)) (lcons #40 lnil) (cu-c a) s-nn-comma (cu-c b) (lapp s-nn s-close)
+         _ → cat6 s-mkw (lcons #110 (dec p)) (lcons #40 lnil) (cu-c a) s-nn s-close)
+    _ → s-unsup
+-- a program: (key , (parameter count , (parameters' C types , (result's C type , body)))), main key 0
+cu-e-g e = fst e
+cu-e-n e = fst (snd e)
+cu-e-ps e = fst (snd (snd e))
+cu-e-rt e = fst (snd (snd (snd e)))
+cu-e-body e = snd (snd (snd (snd e)))
+cu-params ps i = case ps of lnil → lnil; lcons t r → (case r of lnil → cat3 (cu-tyd t) (ca-v i) lnil; _ → cat4 (cu-tyd t) (ca-v i) s-comma (cu-params r (suc i)))
+cu-head e = cat6 cu-static (cu-tyd (cu-e-rt e)) s-f (dec (cu-e-g e)) s-open (case cu-e-ps e of lnil → s-void; _ → cu-params (cu-e-ps e) zero)
+cu-def e = cat4 (cu-head e) s-body (cu-c (cu-e-body e)) s-fnend
+cu-protos ds = case ds of lnil → lnil; lcons e r → cat3 (cu-head e) cu-protoend (cu-protos r)
+cu-defs-c ds = case ds of lnil → lnil; lcons e r → lapp (cu-def e) (cu-defs-c r)
+-- a definition the dispatcher calls: its parameters and result all V *
+cu-allb ps = case ps of lnil → true; lcons t r → (case t of ctw → false; _ → cu-allb r)
+cu-isdisp e = case cu-e-rt e of ctw → false; _ → cu-allb (cu-e-ps e)
+cu-dispdefs ds = case ds of lnil → lnil; lcons e r → (if cu-isdisp e then lcons e (cu-dispdefs r) else cu-dispdefs r)
+cu-main ds = case cu-trt ds #0 of ctw → cu-main-w; _ → s-main
+cu-prog ds = cat4 s-runtime (cu-protos ds) (dispatch (cu-dispdefs ds)) (lapp (cu-defs-c ds) (cu-main ds))
+-- ---------------------------------------------------------------- the proved route's unboxed C
+-- a program's first-order definitions (key , (parameter count , FQ body)) as lib/foproofu.cub's tables
+-- read them (outside the path: what they decide is checked by kkeys-ok and cuty below)
+cu-ftab ds g = case ds of lnil → fqnet; lcons e r → if %weq (fst e) g then snd (snd e) else cu-ftab r g
+cu-an ds g = case ds of lnil → zero; lcons e r → if %weq (fst e) g then dnat (fst (snd e)) else cu-an r g
+cu-keys ds = case ds of lnil → nil; lcons e r → cons (fst e) (cu-keys r)
+-- U1's kinds of the program: inferred from every definition's body (kinfer), decided (kkeys-ok)
+cu-kinds ds = kinfer (cu-ftab ds) (cu-keys ds) (cu-an ds) fqnet knil
+cu-kok S ds = kkeys-ok S (λ g → kmemu g (cu-keys ds)) (cu-ftab ds) (cu-keys ds)
+-- each definition translated at its kinds: its parameters' and result's C types and its body
+cu-pl S g i k = case k of zero → lnil; suc k2 → lcons (cu-pt S g i) (cu-pl S g (suc i) k2)
+cu-tr1 S e = (fst e , (fst (snd e) , (cu-pl S (fst e) zero (dnat (fst (snd e))) , (cu-rt S (fst e) , fq-to-cu-def S (fst e) (dnat (fst (snd e))) (snd (snd e))))))
+cu-trs S ds = case ds of lnil → lnil; lcons e r → lcons (cu-tr1 S e) (cu-trs S r)
+cu-tr ds = cu-trs (cu-kinds ds) ds
+-- the translated program's tables: bodies, parameter counts, dispatcher keys, C types
+cu-tg tr g = case tr of lnil → cuunsup; lcons e r → if %weq (fst e) g then cu-e-body e else cu-tg r g
+cu-ta tr g = case tr of lnil → zero; lcons e r → if %weq (fst e) g then dnat (cu-e-n e) else cu-ta r g
+cu-tcd tr g = case tr of lnil → false; lcons e r → if %weq (fst e) g then andbt (notb (%weq (cu-e-n e) #0)) (cu-isdisp e) else cu-tcd r g
+cu-nth-ct ps l = case ps of lnil → ctb; lcons t r → (case l of zero → t; suc l2 → cu-nth-ct r l2)
+cu-tps tr g = case tr of lnil → lnil; lcons e r → if %weq (fst e) g then cu-e-ps e else cu-tps r g
+cu-tpt tr g l = cu-nth-ct (cu-tps tr g) l
+cu-trt tr g = case tr of lnil → ctb; lcons e r → if %weq (fst e) g then cu-e-rt e else cu-trt r g
+-- every body of its C types: its parameters' (by name), at its result's
+cu-wt1 tr e = cuty (cu-tpt tr) (cu-trt tr) (cu-e-body e) (cu-nth-ct (cu-e-ps e)) (λ i → cu-e-rt e)
+cu-wt-go tr ds = case ds of lnil → true; lcons e r → andbt (cu-wt1 tr e) (cu-wt-go tr r)
+cu-wt tr = cu-wt-go tr tr
+-- the harness: its main f_0 calls the program's main (moved to key 1) on args (an FQ list)
+cu-harness args ds = lcons (#0 , (#0 , fqcall #1 args)) (dc-rekey #1 ds)
+-- the route: the C of the program, through cu-to-c ∘ fq-to-cu, when its kinds are decided and its C
+-- types accepted; else a C text that does not compile
+cu-route ds = let S = cu-kinds ds in (if cu-kok S ds then (let tr = cu-trs S ds in (if cu-wt tr then cu-prog tr else cu-refused)) else cu-refused)
+-- the translated program's main at fuel n, by evcu
+cu-run tr n = evcu (cu-tg tr) (cu-ta tr) (cu-tcd tr) n (cu-tg tr #0) msnil
+-- (for the readings) each body erased, keyed; a CA program's bodies, keyed; the C types, keyed
+cu-ebodies tr = case tr of lnil → lnil; lcons e r → lcons (fst e , cu-erase (cu-e-body e)) (cu-ebodies r)
+ca-bodies cds = case cds of lnil → lnil; lcons e r → lcons (fst e , snd (snd e)) (ca-bodies r)
+cu-sigs tr = case tr of lnil → lnil; lcons e r → lcons (fst e , (cu-e-ps e , cu-e-rt e)) (cu-sigs r)

@@ -548,7 +548,10 @@ IMAGE = os.environ.get('IMAGE') == '1'
 # the proved programs' C through the checked C link (lib/foproofc.cub): the first-order definitions as
 # checked terms (specialize-proved-q: the word route's main or the data route's table), translated by
 # the checked fq-to-ca and printed by ca-to-c (ca-prog); the harness's main calls the program's main
-# on the arguments. Boxed only: the unboxed printer (lib/emitu.cub) stays outside the path.
+# on the arguments. Under UNBOXED=1 the same definitions print through the unboxed link
+# (lib/foproofcu.cub, U2): U1's kinds of the table (lib/foproofu.cub's kinfer, decided by kkeys-ok), the
+# checked fq-to-cu guided by them (a let's local, a parameter, a result a uint64_t exactly where its
+# kind is kw), C's types decided (cuty) and the C printed by cu-to-c (cu-prog), not lib/emitu.cub's guess.
 QROUTE = {
  'proved': ("lcons (flit #4) lnil", "lcons (#0 , (#1 , fw-to-fq (spec-w std-vrule ex-c))) lnil"),
  'proved-data': (None, "dc-defs-q dx-prog"),
@@ -570,10 +573,15 @@ def qroute(name, defs):
     imp = ''.join('import "' + os.path.join(ROOT, 'lib', f) + '"\n' for f in ('foproof.cub', 'foproofd.cub', 'foproofe.cub', 'foproofq.cub', 'foproofc.cub'))
     body = "ca-tr-defs (" + qd + ")" if args is None else "ca-harness (fo-args-fq (" + args + ")) (" + qd + ")"
     return imp + defs + "\nprog = ca-prog (" + body + ")"
+def curoute(name, defs):
+    args, qd = QROUTE[name]
+    imp = ''.join('import "' + os.path.join(ROOT, 'lib', f) + '"\n' for f in ('foproof.cub', 'foproofd.cub', 'foproofe.cub', 'foproofq.cub', 'foproofc.cub', 'foproofm.cub', 'foproofu.cub', 'foproofcu.cub'))
+    body = "(" + qd + ")" if args is None else "(cu-harness (fo-args-fq (" + args + ")) (" + qd + "))"
+    return imp + defs + "\nprog = cu-route " + body
 def run(name, defs, expect, contains=None):
     with tempfile.TemporaryDirectory() as d:
         cub = os.path.join(d, name + '.cub')
-        if not UNBOXED and name in QROUTE and 'prog =' not in defs: defs = qroute(name, defs)
+        if name in QROUTE and 'prog =' not in defs: defs = curoute(name, defs) if UNBOXED else qroute(name, defs)
         if 'prog =' not in defs: defs += "\nprog = " + ("emit-prog-u defs" if UNBOXED else "emit-prog defs")
         open(cub, 'w').write(defs + "\n#show prog\n")
         # the printer of src/syntax.c (pr → pr_flat → pr_str → pr) spends a stack frame of a few KB per
