@@ -3,10 +3,10 @@
 -- argument, reached from independent branches of one reading, specialize concurrently; only four are
 -- kept at a time, the least recently called evicted (its library closed), and an evicted value
 -- called again is specialized again with the same answer
-lam-body f = case f of flam b → b; _ → f
+lam-body f = case f of flam t b → b; _ → f
 scalet : Word → Word → Word
 scalet e b = %welimP (λ v → Word) e #0 (λ k r → %wadd r b)
-#native scalet 2 at 1 = λ (e : Word) → emit-lib-u (lcons (#0 , (#1 , lam-body (specialize (Word → Word) lnil (clam (capp (capp (code scalet) (cwlit e)) (cvar #0)))))) lnil)
+#native scalet 2 at 1 = λ (e : Word) → emit-lib-u (lcons (fo-def #0 (specialize (Word → Word) lnil (clam (capp (capp (code scalet) (cwlit e)) (cvar #0))))) lnil)
 -- Σ_{e=1}^{12} e·(e+1) = 728
 sum-scalet : Word → Word
 sum-scalet e = %welimP (λ v → Word) e #0 (λ k r → %wadd r (scalet (%wadd k #1) (%wadd k #2)))

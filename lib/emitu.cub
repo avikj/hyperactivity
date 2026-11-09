@@ -181,9 +181,9 @@ infer-u sigs env t =
     fproj d c k x → (let tx = infer-u sigs env x in if is-pr tx then pr-k tx k else if is-dt tx then fld-ty (dt-of tx) c k else tP)
     fcall g args → ret-ty sigs g
     fprim p args → if store-any p then tP else if %weq p P-bytes then tP else tW
-    flet a b → infer-u sigs (lcons (infer-u sigs env a) env) b
+    flet ty a b → infer-u sigs (lcons (infer-u sigs env a) env) b
     fif c a b → join-ty (infer-u sigs env a) (infer-u sigs env b)
-    floop init body → loop-ty sigs env init body
+    floop tys init body → loop-ty sigs env init body
     fassume f b → infer-u sigs env b
     fforce x → infer-u sigs env x
     fthunk a → tP
@@ -222,9 +222,9 @@ use-ty sigs d n t =
     fproj dd c k x → if is-var d n x then some tP else use-ty sigs d n x
     fcall g args → use-args sigs d n g #0 args
     fprim p args → if %wlt #13 p then use-arith sigs d n args else if %wlt #7 p then use-bytes sigs d n p args else use-arith sigs d n args
-    flet a b → first-some (use-ty sigs d n a) (use-ty sigs (%wsucc d) n b)
+    flet ty a b → first-some (use-ty sigs d n a) (use-ty sigs (%wsucc d) n b)
     fif c a b → first-some (if is-var d n c then some tW else use-ty sigs d n c) (first-some (use-ty sigs d n a) (use-ty sigs d n b))
-    floop init body → first-some (use-init sigs d n (lst-len init) init #0 body) (use-ty sigs (%wadd d (lst-len init)) n body)
+    floop tys init body → first-some (use-init sigs d n (lst-len init) init #0 body) (use-ty sigs (%wadd d (lst-len init)) n body)
     fclos g env → use-list sigs d n env
     fapply f args → first-some (if is-var d n f then some tP else use-ty sigs d n f) (use-list sigs d n args)
     fassume f b → use-ty sigs d n b
@@ -260,7 +260,7 @@ sigs-of defs = let ct = clos-targets defs in sigs-round ct (sigs-round ct (sigs-
 sigs-round ct sigs defs =
   case defs of
     lnil → lnil
-    lcons d r → lcons (fst d , (if lmem-w (fst d) ct then (push-n tP (fst (snd d)) lnil , tP) else def-sig sigs (fst (snd d)) (snd (snd d)))) (sigs-round ct sigs r)
+    lcons d r → lcons (fst d , (if lmem-w (fst d) ct then (push-n tP (def-n d) lnil , tP) else def-sig sigs (def-n d) (snd (snd d)))) (sigs-round ct sigs r)
 -- the targets of closures are called through the dispatcher with boxed arguments: P throughout;
 -- the dispatcher lists only them (a definition with typed parameters is called directly)
 clos-defs defs = let ct = clos-targets defs in keep-if (λ d → lmem-w (fst d) ct) defs
@@ -276,9 +276,9 @@ clos-in t acc =
     fproj d c k x → clos-in x acc
     fcall g args → clos-list args acc
     fprim p args → clos-list args acc
-    flet a b → clos-in b (clos-in a acc)
+    flet ty a b → clos-in b (clos-in a acc)
     fif c a b → clos-in b (clos-in a (clos-in c acc))
-    floop init body → clos-in body (clos-list init acc)
+    floop tys init body → clos-in body (clos-list init acc)
     fapply f args → clos-list args (clos-in f acc)
     fassume f b → clos-in b acc
     fforce x → clos-in x acc
@@ -332,13 +332,13 @@ emit-u sigs env d t =
     fproj dd c k x → (let tx = infer-u sigs env x in if is-pr tx then cat3 u-lp (emit-u sigs env d x) (if %weq k #0 then u-f0 else u-f1) else if is-dt tx then rd-prim (fprim-at (dt-of tx) c k) (cat7 u-lp (emit-u sigs env d x) u-rp (if is-flat (dt-of tx) then u-u-c else u-pu-c) (dec c) u-dot-f (dec k)) else cat4 (emit-at sigs env d tP x) u-arrow (dec k) u-rb)
     fcall g args → cat4 u-f (dec g) u-lp (lapp (args-u sigs env d g #0 args) u-rp)
     fprim p args → prim-u sigs env d p args
-    flet a b →
+    flet ty a b →
       let ta = infer-u sigs env a
       in cat7 u-bsx (ty-decl ta) (var (%wsucc d) #0) u-assign (emit-u sigs env d a) u-semi (lapp (emit-u sigs (lcons ta env) (%wsucc d) b) u-bsend)
     fif c a b →
       let rt = infer-u sigs env t
       in cat6 u-if (emit-at sigs env d tW c) u-ifm (emit-at sigs env d rt a) u-ifs (lapp (emit-at sigs env d rt b) u-ifend)
-    floop init body → loop-u sigs env d init body
+    floop tys init body → loop-u sigs env d tys init body
     fclos g cenv → cat7 u-clo (dec g) u-comma (dec (lst-len cenv)) (args-rest-u sigs env d cenv) u-rp lnil
     fapply f args → apply-u sigs env d (emit-at sigs env d tP f) args
     fassume fact b → cat5 u-assume (fact-u sigs env d fact) u-asmend (emit-u sigs env d b) u-bsend
@@ -449,7 +449,7 @@ bytes-u sigs env d p args =
     lnil → s-unsup
 -- a loop: typed state locals; the body's shape if c then continue (state) else break r prints as
 -- a for with reassignments; any other body falls back to the boxed protocol of lib/emitc.cub
-loop-u sigs env d init body =
+loop-u sigs env d tys0 init body =
   let k = lst-len init
       tys = init-types sigs env init
       env2 = push-types sigs env init
@@ -466,10 +466,10 @@ loop-u sigs env d init body =
                           (cat4 u-for (emit-at sigs env2 (%wadd d k) tW c) u-forthen (reassign-u sigs env2 (%wadd d k) tys k st #0))
                           (cat3 u-cont (emit-at sigs env2 (%wadd d k) rt r) u-forend)
                           (lapp (lcons #114 lnil) u-bsend)
-                      _ → emit d (floop init body))
-                 _ → emit d (floop init body))
-            _ → emit d (floop init body))
-       _ → emit d (floop init body)
+                      _ → emit d (floop tys0 init body))
+                 _ → emit d (floop tys0 init body))
+            _ → emit d (floop tys0 init body))
+       _ → emit d (floop tys0 init body)
 init-types sigs env l = case l of lnil → lnil; lcons x xs → lcons (infer-u sigs env x) (init-types sigs (lcons (infer-u sigs env x) env) xs)
 -- state variable i is v_(d+1+i); typed by tys
 inits-u sigs env d tys l i =
@@ -493,8 +493,8 @@ emit-def-u sigs g n body =
     some s → cat3 (head-u sigs g n) u-body (lapp (emit-at sigs (lst-rev (fst s)) n (snd s) body) u-end)
     none → cat3 (head-u sigs g n) u-body (lapp (emit-at sigs lnil n tP body) u-end)
 proto-u sigs g n = lapp (head-u sigs g n) u-proto-end
-protos-u sigs defs = case defs of lnil → lnil; lcons d r → lapp (proto-u sigs (fst d) (fst (snd d))) (protos-u sigs r)
-defs-u sigs defs = case defs of lnil → lnil; lcons d r → lapp (emit-def-u sigs (fst d) (fst (snd d)) (snd (snd d))) (defs-u sigs r)
+protos-u sigs defs = case defs of lnil → lnil; lcons d r → lapp (proto-u sigs (fst d) (def-n d)) (protos-u sigs r)
+defs-u sigs defs = case defs of lnil → lnil; lcons d r → lapp (emit-def-u sigs (fst d) (def-n d) (snd (snd d))) (defs-u sigs r)
 -- box_d and unbox_d for every flat type a program constructs
 flat-types defs = case defs of lnil → lnil; lcons d r → flat-in (snd (snd d)) (flat-types r)
 flat-in t acc =
@@ -505,9 +505,9 @@ flat-in t acc =
     fproj d c k x → flat-in x (add-dts d acc)
     fcall g args → flat-list args acc
     fprim p args → flat-list args acc
-    flet a b → flat-in b (flat-in a acc)
+    flet ty a b → flat-in b (flat-in a acc)
     fif c a b → flat-in b (flat-in a (flat-in c acc))
-    floop init body → flat-in body (flat-list init acc)
+    floop tys init body → flat-in body (flat-list init acc)
     fclos g env → flat-list env acc
     fapply f args → flat-list args (flat-in f acc)
     fassume f b → flat-in b acc
@@ -631,7 +631,7 @@ xparams-u tys i n = if %weq i n then lnil else (let t = ty-at tys i; dcl = (if i
 xentry-args tys i n = if %weq i n then lnil else (let t = ty-at tys i; a = (if is-pdt t then cat4 u-unboxname-c (dec (dt-of t)) u-lp (lapp (var (%wsucc i) #0) u-rp) else var (%wsucc i) #0) in case %weq (%wsucc i) n of true → a; false → cat3 a u-comma (xentry-args tys (%wsucc i) n))
 -- ") { return box"
 u-body-rb = (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #98 (lcons #111 (lcons #120 lnil))))))))))))))
-def-arity defs g = case defs of lnil → #0; lcons d r → if %weq (fst d) g then fst (snd d) else def-arity r g
+def-arity defs g = case defs of lnil → #0; lcons d r → if %weq (fst d) g then def-n d else def-arity r g
 -- the boxed export (B18, the machine's #native with data values): every data-typed parameter and
 -- result crosses as the boxed V (unbox<d> on the way in, box<d> on the way out), words as
 -- uint64_t; <ret> name(V *v0, uint64_t v1) { return box<d>(f_g(unbox<d2>(v0), v1)); }
@@ -684,7 +684,7 @@ sigs-of-d m defs = let ct = clos-targets defs in sigs-round-d m ct (sigs-round-d
 sigs-round-d m ct sigs defs =
   case defs of
     lnil → lnil
-    lcons d r → lcons (fst d , (if lmem-w (fst d) ct then (push-n tP (fst (snd d)) lnil , tP) else decl-or-use m sigs (fst d) (fst (snd d)) (snd (snd d)))) (sigs-round-d m ct sigs r)
+    lcons d r → lcons (fst d , (if lmem-w (fst d) ct then (push-n tP (def-n d) lnil , tP) else decl-or-use m sigs (fst d) (def-n d) (snd (snd d)))) (sigs-round-d m ct sigs r)
 emit-prog-d m defs =
   let sigs = sigs-of-d m defs
   in cat6 s-runtime (lapp u-f32h u-prdecl) (box-fns (flat-types defs)) (protos-u sigs defs) (dispatch (clos-defs defs)) (lapp (defs-u sigs defs) (if %weq (ret-ty sigs #0) tW then u-main-w else if is-pr (ret-ty sigs #0) then u-main-pr else u-main-p))
@@ -692,4 +692,4 @@ emit-lib-d m defs =
   let sigs = sigs-of-d m defs
   in cat6 s-runtime (lapp u-f32h u-prdecl) (box-fns (flat-types defs)) (protos-u sigs defs) (dispatch (clos-defs defs)) (lapp (defs-u sigs defs) (exports-u sigs defs (lcons (#0 , u-entry-name) lnil)))
 -- the exported entry of a one-definition program over two words: uint64_t cubical_entry(uint64_t v0, uint64_t v1) { return f_0(v0, v1); }
-#same entry-u (sigs-of (lcons (#0 , (#2 , fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil)))) lnil)) #2 = (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #99 (lcons #117 (lcons #98 (lcons #105 (lcons #99 (lcons #97 (lcons #108 (lcons #95 (lcons #101 (lcons #110 (lcons #116 (lcons #114 (lcons #121 (lcons #40 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #118 (lcons #48 (lcons #44 (lcons #32 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #118 (lcons #49 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #102 (lcons #95 (lcons #48 (lcons #40 (lcons #118 (lcons #48 (lcons #44 (lcons #32 (lcons #118 (lcons #49 (lcons #41 (lcons #59 (lcons #32 (lcons #125 (lcons #10 lnil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+#same entry-u (sigs-of (lcons (#0 , (lcons ftword (lcons ftword lnil) , fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil)))) lnil)) #2 = (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #99 (lcons #117 (lcons #98 (lcons #105 (lcons #99 (lcons #97 (lcons #108 (lcons #95 (lcons #101 (lcons #110 (lcons #116 (lcons #114 (lcons #121 (lcons #40 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #118 (lcons #48 (lcons #44 (lcons #32 (lcons #117 (lcons #105 (lcons #110 (lcons #116 (lcons #54 (lcons #52 (lcons #95 (lcons #116 (lcons #32 (lcons #118 (lcons #49 (lcons #41 (lcons #32 (lcons #123 (lcons #32 (lcons #114 (lcons #101 (lcons #116 (lcons #117 (lcons #114 (lcons #110 (lcons #32 (lcons #102 (lcons #95 (lcons #48 (lcons #40 (lcons #118 (lcons #48 (lcons #44 (lcons #32 (lcons #118 (lcons #49 (lcons #41 (lcons #59 (lcons #32 (lcons #125 (lcons #10 lnil)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))

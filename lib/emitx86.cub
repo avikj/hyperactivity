@@ -96,7 +96,7 @@ cx tbl env d t =
     fvar n → i-load-slot (slot-of env n)
     flit w → i-mov-rax-imm64 w
     fprim p args → prim-x86 tbl env d p args
-    flet a b → cat3 (cx tbl env d a) i-push-rax (lapp (cx tbl (lcons d env) (%wsucc d) b) (i-add-rsp #8))
+    flet ty a b → cat3 (cx tbl env d a) i-push-rax (lapp (cx tbl (lcons d env) (%wsucc d) b) (i-add-rsp #8))
     fif c a b →
       let ca = cx tbl env d a
           cb = cx tbl env d b
@@ -105,7 +105,7 @@ cx tbl env d t =
     fassume fact b → cx tbl env d b
     fcon dd c fs → con-x86 tbl env d c fs
     fproj dd c k x → lapp (cx tbl env d x) (i-load-field k)
-    floop init body → loop-x86 tbl env d init body
+    floop tys init body → loop-x86 tbl env d init body
     _ → i-ud2
 slot-of env n = case env of lnil → #0; lcons s r → if %weq n #0 then s else slot-of r (%wsub n #1)
 -- a binary primitive: the first operand pushed, the second into rcx, the first back into rax
@@ -170,7 +170,7 @@ lx tbl env d base off total t =
           ca = lx tbl env d base off1 total a
           cb = lx tbl env d base (%wadd off1 (%wadd (lst-len ca) #5)) total b
       in cat5 cc i-test-rax (i-je (%wadd (lst-len ca) #5)) ca (lapp (i-jmp (lst-len cb)) cb)
-    flet a b → (let ca = cx tbl env d a in cat3 ca i-push-rax (lx tbl (lcons d env) (%wsucc d) base (%wadd off (%wadd (lst-len ca) #1)) total b))
+    flet ty a b → (let ca = cx tbl env d a in cat3 ca i-push-rax (lx tbl (lcons d env) (%wsucc d) base (%wadd off (%wadd (lst-len ca) #1)) total b))
     fassume fact b → lx tbl env d base off total b
     fcon dd c fs →
       if %weq c #0 then
@@ -191,31 +191,31 @@ fn-x86 tbl arity body = cat5 i-push-rbp i-mov-rbp-rsp (push-params arity #0) (cx
 push-params n i = if %weq i n then lnil else lapp (i-push-arg i) (push-params n (%wsucc i))
 -- the offsets: the stub first, then the definitions in order; the lengths do not depend on the
 -- offsets (every call and jump is a fixed-width encoding), so one pass with a zero table measures
-layout-x86 defs tbl off = case defs of lnil → lnil; lcons dd r → lcons (fst dd , off) (layout-x86 r tbl (%wadd off (lst-len (fn-x86 tbl (fst (snd dd)) (snd (snd dd))))))
-fns-x86 tbl defs = case defs of lnil → lnil; lcons dd r → lapp (fn-x86 tbl (fst (snd dd)) (snd (snd dd))) (fns-x86 tbl r)
+layout-x86 defs tbl off = case defs of lnil → lnil; lcons dd r → lcons (fst dd , off) (layout-x86 r tbl (%wadd off (lst-len (fn-x86 tbl (def-n dd) (snd (snd dd))))))
+fns-x86 tbl defs = case defs of lnil → lnil; lcons dd r → lapp (fn-x86 tbl (def-n dd) (snd (snd dd))) (fns-x86 tbl r)
 emit-x86 defs = let tbl = layout-x86 defs lnil stub-len in lapp (stub-x86 (tbl-off tbl #0)) (fns-x86 tbl defs)
 -- ---------------------------------------------------------------- the fragment
 andx a b = case a of true → b; false → false
 -- x86-ok defs: every definition inside the fragment (at most six arguments)
-x86-ok defs = case defs of lnil → true; lcons dd r → andx (andx (%wlt (fst (snd dd)) #7) (ok-x (snd (snd dd)))) (x86-ok r)
+x86-ok defs = case defs of lnil → true; lcons dd r → andx (andx (%wlt (def-n dd) #7) (ok-x (snd (snd dd)))) (x86-ok r)
 ok-x t =
   case t of
     fvar n → true
     flit w → true
     fprim p args → andx (orb (%wlt p #5) (%weq p P-max)) (andx (%weq (lst-len args) #2) (ok-list args))
-    flet a b → andx (ok-x a) (ok-x b)
+    flet ty a b → andx (ok-x a) (ok-x b)
     fif c a b → andx (ok-x c) (andx (ok-x a) (ok-x b))
     fcall g args → andx (%wlt (lst-len args) #7) (ok-list args)
     fassume fact b → ok-x b
     fcon dd c fs → ok-list fs
     fproj dd c k x → ok-x x
-    floop init body → andx (ok-list init) (ok-loop body)
+    floop tys init body → andx (ok-list init) (ok-loop body)
     _ → false
 ok-list l = case l of lnil → true; lcons x r → andx (ok-x x) (ok-list r)
 ok-loop t =
   case t of
     fif c a b → andx (ok-x c) (andx (ok-loop a) (ok-loop b))
-    flet a b → andx (ok-x a) (ok-loop b)
+    flet ty a b → andx (ok-x a) (ok-loop b)
     fassume fact b → ok-loop b
     fcon dd c fs → if %weq c #0 then ok-list fs else andx (%weq (lst-len fs) #1) (ok-list fs)
     _ → false
@@ -227,11 +227,11 @@ ok-loop t =
 #same imm32 (neg32 #15) = (lcons #241 (lcons #255 (lcons #255 (lcons #255 lnil))))
 #same imm64 #2880067194370816120 = le-bytes #2880067194370816120 #8
 -- plus on words: the two arguments loaded from their slots and added
-#same x86-ok (lcons (#0 , (#2 , fo-plus)) lnil) = true
+#same x86-ok (lcons (#0 , (lcons ftword (lcons ftword lnil) , fo-plus)) lnil) = true
 -- (prologue 4, two pushes 2, load 7 push 1 load 7 mov 3 pop 1 add 3, epilogue 5)
 #same lst-len (fn-x86 lnil #2 fo-plus) = #33
 -- factorial as a loop is inside the fragment; a closure is not
-#same x86-ok (lcons (#0 , (#1 , fo-fact)) lnil) = true
-#same x86-ok (lcons (#0 , (#0 , fclos #1 lnil)) lnil) = false
+#same x86-ok (lcons (#0 , (lcons ftword lnil , fo-fact)) lnil) = true
+#same x86-ok (lcons (#0 , (lnil , fclos #1 lnil)) lnil) = false
 -- a conditional's else branch is reached over the then branch: je skips it and its jmp
 #same lst-len (cx lnil lnil #0 (fif (flit #1) (flit #2) (flit #3))) = %wadd #10 (%wadd #3 (%wadd #6 (%wadd #10 (%wadd #5 #10))))
