@@ -1619,6 +1619,79 @@ static void p_decl(void) {
         NX();
         decl_end(); return;
     }
+    if (x_is(t, "#jit")) {
+        /* #jit f [using t1 t2 …] (plan 5.4, 5.5): f compiled to x86-64 and bound to the bytes. The
+         * library computes the plan (lib/x86.cub jit-plan): the specialized code (rewritten along the
+         * theorems given, each rewrite carrying its path), the checker's conversion of f with the code's
+         * meaning, and the bytes. With theorems the path is checked by the checker as the definition
+         * f·jit : f ≡ code. f is bound only when the program compiles and the check holds; on closed
+         * data the bytes compute f, on anything else (and past 2^64 in a word operation) f's
+         * definition does. Trusted: the encoder's templates (PLAN §13 item 3) and the boundary */
+        NX(); Tok *fn = NX(); if (fn->k != X_ID) x_err("#jit names a checked definition, found", fn);
+        int ck = checked_index(fn->s); if (ck < 0) x_err("#jit: not a checked definition:", fn);
+        long ths[64]; int nth = 0;
+        if (x_is(P0(), "using") && P0()->line == fn->line) {
+            NX();
+            while (P0()->k == X_ID && P0()->line == fn->line) {
+                Tok *tn = NX(); int tk = checked_index(tn->s); if (tk < 0) x_err("#jit … using: not a checked theorem:", tn);
+                if (nth < 64) ths[nth++] = tk;
+            }
+        }
+        if (global_lookup("jit-plan") < 0) x_err("#jit needs lib/x86.cub loaded, for", fn);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            int nt = attempt ? 0 : nth;
+            Node *rl = nsym("lnil"); for (int i = nt - 1; i >= 0; i--) rl = lst(3, nsym("lcons"), wordn(ths[i]), rl);
+            long steps = 0;
+            char *r = readback(nl3("%%jit-plan", wordn(ck), nl2("%%view-of", rl)), &steps);
+            if (getenv("CUBICAL_JIT_DEBUG")) fprintf(stderr, "[jit plan] %.600s\n", r);
+            const char *saved = src; src = r; Node *rn = read_node(); src = saved;
+            /* the plan's five parts: (pair a (pair b (pair c (pair d e)))) */
+            Node *grp[5]; int ng = 0;
+            for (Node *cur = rn; ng < 5; ) {
+                if (ng == 4) { grp[ng++] = cur; break; }
+                if (!cur || !cur->list || cur->n != 3 || !is(cur->it[0], "pair")) break;
+                grp[ng++] = cur->it[1]; cur = cur->it[2];
+            }
+            free(r);
+            if (ng != 5) x_err("#jit: the plan did not read back, for", fn);
+            Node *v = grp[0];
+            if (v->list && v->n >= 2 && !v->it[0]->list && !strcmp(v->it[0]->s, "not-fo")) {
+                printf("jit: %s stays on the net: %s   [%ld steps]\n", fn->s, v->it[1]->list ? "?" : v->it[1]->s, steps);
+                decl_end(); return;
+            }
+            if (grp[1]->list || strcmp(grp[1]->s, "true")) {
+                failures++; printf("FAIL: jit %s: the specialized code does not convert with %s   [%ld steps]\n", fn->s, fn->s, steps);
+                decl_end(); return;
+            }
+            const char *how = "the checker's conversion";
+            if (nt) {
+                ncn = 0; Node *term = cn(grp[2]); ncn = 0; Node *ct = cn(grp[3]);
+                if (!term || !ct) { printf("jit: %s: the path along the theorems is not readable as a term; compiled without them\n", fn->s); continue; }
+                char *jn = malloc(strlen(fn->s) + 8); sprintf(jn, "%s·jit", fn->s);
+                tsig.np = 0;
+                x_checked(jn, lst(3, nsym("_≡_"), nsym(fn->s), ct), term, true, 0, 0);
+                if (checked_index(jn) < 0) { printf("FAIL: jit %s: the path along the theorems does not check\n", fn->s); failures++; decl_end(); return; }
+                how = "the path checked as a definition";
+            }
+            /* the bytes, and the entry's arity (the code's leading λs) */
+            size_t cap = 256, len = 0; unsigned char *bytes = malloc(cap);
+            for (Node *cur = grp[4]; cur->list && cur->n == 3 && !cur->it[0]->list && !strcmp(cur->it[0]->s, "lcons"); cur = cur->it[2]) {
+                if (len == cap) { cap *= 2; bytes = realloc(bytes, cap); }
+                bytes[len++] = (unsigned char)atol(cur->it[1]->s + 1);
+            }
+            int arity = 0; for (Node *cur = grp[3]; cur->list && cur->n == 2 && !cur->it[0]->list && !strcmp(cur->it[0]->s, "clam"); cur = cur->it[1]) arity++;
+            int k = jit_bind(fn->s, ck, bytes, len, arity);
+            free(bytes);
+            if (k < 0) {
+                if (k <= -3) printf("jit: %s stays on the net: its %s does not cross the boundary (a function, a dependent pair, a higher inductive type)\n", fn->s, k == -3 - arity ? "result" : "parameter");
+                else printf("jit: %s stays on the net: %s\n", fn->s, k == -2 ? "no parameters, or its arity differs from its type's" : "executable memory refused");
+                decl_end(); return;
+            }
+            passes++; printf("ok: jit %s   [%zu bytes, %s, %ld steps]\n", fn->s, len, how, steps);
+            decl_end(); return;
+        }
+        decl_end(); return;
+    }
     if (x_is(t, "#show")) { NX(); x_test("show", x_solve_expr(p_expr(0)), NULL); decl_end(); return; }
     if (x_is(t, "#type")) { NX(); x_top(sym2("type", x_solve_expr(p_expr(0)))); decl_end(); return; }
     if (x_is(t, "#usage")) { NX(); Tok *n = NX(); x_top(sym2("usage", nsym(n->s))); decl_end(); return; }

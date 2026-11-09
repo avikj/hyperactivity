@@ -477,9 +477,15 @@ void global_park(long g, Cell *op, Cell *glob);
 /* the most argument words a compiled definition is called with (#native: its parameters, a record's
  * slots counted one per word); above six the call goes through the entry's trampoline */
 #define NATIVE_MAXW 32
+/* #jit (plan 5.5): the type of a compiled definition's parameter or result, read off its checked type,
+ * which decides how a value crosses (src/net.c jit_in, jit_read). A data type's fields are found by
+ * name in its declaration, at its parameters, when first needed (fl: per constructor, per field) */
+typedef struct JT { int k, pt, d, np; struct JT *a, *b; struct JT **ps; struct JT ***fl; } JT;
+enum { JT_NO, JT_WORD, JT_PRIM, JT_BYTES, JT_DATA, JT_PAIR };
+JT *jt_field(JT *t, int c, int j);   /* lang.c */
 typedef struct { const char *sym; void *fn; int n; unsigned char kind[NATIVE_MAXW]; unsigned char ret; int rdata;
     void *lib; void (*fin)(void *); unsigned char keep;
-    void *tw; int rsd, rnf; int at; void *rrec; } Ffi;   /* tw: the entry's trampoline (slots in, slots out) when a parameter or the result is a C struct by value (B18); rsd/rnf: the result's data type (machine index) and slot count, -1 when not a struct; rrec: its record description (lang.c's CRec, read by crec_result) */   /* lib: the library's handle (dlopen); fin: its cubical_release, the finalizer of its handles; keep: a boxed result stays native */
+    void *tw; int rsd, rnf; int at; void *rrec; struct JT **jt; } Ffi;   /* tw: the entry's trampoline (slots in, slots out) when a parameter or the result is a C struct by value (B18); rsd/rnf: the result's data type (machine index) and slot count, -1 when not a struct; rrec: its record description (lang.c's CRec, read by crec_result) */   /* lib: the library's handle (dlopen); fin: its cubical_release, the finalizer of its handles; keep: a boxed result stays native */
 /* a value kept native (V_NATIVE): refcounted; d -1 an opaque handle (ptr the C object, fin its
  * finalizer, lib the library that made it, k its foreign entry), else the boxed value (ptr a VB
  * the cell owns) of data type d (-2 a word, -3 bytes) */

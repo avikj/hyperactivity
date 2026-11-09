@@ -5,6 +5,7 @@
 /* lang.c — reading terms, compiling them to binder records, definitions,
  * reading values back, and the driver. */
 #include "core.h"
+#include <sys/mman.h>
 #include <string.h>
 #include <ctype.h>
 #include <pthread.h>
@@ -5528,6 +5529,103 @@ static void toplevel_in(Node *f) {
         } else { passes++; printf("ok: "); out_term(f->it[1]); printf("\n"); }
         free(a); free(b);
     } else die("unknown top-level form", h);
+}
+/* ---- #jit (plan 5.5): binding a compiled definition's bytes ----
+ * The type of each parameter and of the result, read off the checked type (desugared): a word, a
+ * primitive type, Bytes n, a pair, or a data type applied to its parameters; anything else does not
+ * cross and the definition is not bound (it keeps running on the net) */
+static JT *jt_new(int k) { JT *t = calloc(1, sizeof(JT)); t->k = k; t->d = -1; return t; }
+static JT *jt_of(Node *ty, const char **pn, JT **pv, int np);
+static JT *jt_app(Node *h, Node **args, int na, const char **pn, JT **pv, int np) {
+    if (h->list) return jt_new(JT_NO);
+    for (int i = 0; i < np; i++) if (na == 0 && !strcmp(h->s, pn[i])) return pv[i];
+    if (na == 0) {
+        if (!strcmp(h->s, "Word")) return jt_new(JT_WORD);
+        static const struct { const char *n; int pt; } P[] = { { "Int64", PT_I64 }, { "UInt32", PT_U32 }, { "Float64", PT_F64 }, { "Float32", PT_F32 }, { "UInt64", PT_U64 }, { NULL, 0 } };
+        for (int i = 0; P[i].n; i++) if (!strcmp(h->s, P[i].n)) { JT *t = jt_new(JT_PRIM); t->pt = P[i].pt; return t; }
+    }
+    if (!strcmp(h->s, "Bytes") || !strcmp(h->s, "%bytesty")) return jt_new(JT_BYTES);
+    int d = data_lookup(h->s);
+    if (d < 0 || DATA[d].nparams != na || DATA[d].co) return jt_new(JT_NO);
+    JT *t = jt_new(JT_DATA); t->d = d; t->np = na; t->ps = calloc((size_t)na + 1, sizeof(JT *));
+    for (int i = 0; i < na; i++) { t->ps[i] = jt_of(args[i], pn, pv, np); if (t->ps[i]->k == JT_NO) return jt_new(JT_NO); }
+    return t;
+}
+static JT *jt_of(Node *ty, const char **pn, JT **pv, int np) {
+    if (!ty->list) return jt_app(ty, NULL, 0, pn, pv, np);
+    if (!ty->n) return jt_new(JT_NO);
+    Node *h = ty->it[0];
+    if (!h->list && !strcmp(h->s, "Sigma")) {
+        Node *A = NULL, *B = NULL;
+        if (ty->n == 4) { A = ty->it[2]; B = ty->it[3]; }
+        else if (ty->n == 3 && ty->it[2]->list && ty->it[2]->n == 3 && is(ty->it[2]->it[0], "lam")) { A = ty->it[1]; B = ty->it[2]->it[2]; }
+        if (!A) return jt_new(JT_NO);
+        JT *t = jt_new(JT_PAIR); t->a = jt_of(A, pn, pv, np); t->b = jt_of(B, pn, pv, np);
+        return t->a->k == JT_NO || t->b->k == JT_NO ? jt_new(JT_NO) : t;
+    }
+    /* an application: (app f a) nested, or (f a …) */
+    Node *args[16]; int na = 0; Node *f = ty;
+    while (f->list && f->n == 3 && is(f->it[0], "app") && na < 16) { args[na++] = f->it[2]; f = f->it[1]; }
+    if (na) { for (int i = 0; i < na / 2; i++) { Node *s = args[i]; args[i] = args[na - 1 - i]; args[na - 1 - i] = s; } return jt_app(f, args, na, pn, pv, np); }
+    if (ty->n - 1 > 16) return jt_new(JT_NO);
+    return jt_app(h, ty->it + 1, ty->n - 1, pn, pv, np);
+}
+/* field j of constructor c of t's data type: its declared type at t's parameters, found once */
+JT *jt_field(JT *t, int c, int j) {
+    if (!t->fl) t->fl = calloc((size_t)DATA[t->d].ncons + 1, sizeof(JT **));
+    if (!t->fl[c]) {
+        Node *dd = DATA[t->d].decl, *hd = dd->it[1], *cd = dd->it[2 + c];
+        int np = hd->list ? hd->n - 1 : 0, nf = cd->list ? cd->n - 1 : 0;
+        const char *pn[64]; for (int k = 0; k < np && k < 64; k++) pn[k] = param_name(hd->it[k + 1])->s;
+        t->fl[c] = calloc((size_t)nf + 1, sizeof(JT *));
+        for (int k = 0; k < nf; k++) {
+            Node *f = cd->it[k + 1];
+            t->fl[c][k] = f->list && f->n == 2 ? jt_of(f->it[1], pn, t->ps, np) : jt_new(JT_NO);
+        }
+    }
+    return t->fl[c][j];
+}
+/* every type reachable from t crosses (a data type's fields, all its constructors, each once) */
+static bool jt_crosses(JT *t, int depth) {
+    if (depth > 64) return true;
+    switch (t->k) {
+    case JT_NO: return false;
+    case JT_PAIR: return jt_crosses(t->a, depth + 1) && jt_crosses(t->b, depth + 1);
+    case JT_DATA:
+        for (int c = 0; c < DATA[t->d].ncons; c++) {
+            ConInfo *k = &CON[DATA[t->d].cons[c]];
+            if (k->ndims) return false;
+            for (int j = 0; j < k->nfields; j++) { JT *f = jt_field(t, c, j); if (f != t && !(f->k == JT_DATA && f->d == t->d) && !jt_crosses(f, depth + 1)) return false; if (f->k == JT_NO) return false; }
+        }
+        return true;
+    default: return true;
+    }
+}
+/* the bytes into executable memory, an entry over them, and name rebound to (%native k g a…): the
+ * call on closed data runs the bytes, anything else (and an overflow) runs g, the definition */
+static int jit_bind(const char *name, int ck, const unsigned char *b, size_t len, int arity) {
+    if ((size_t)ck >= capchkty || !CHKTY[ck]) return -1;
+    Node *doms[NATIVE_MAXW], *cod; int n = pi_parts(CHKTY[ck], doms, NATIVE_MAXW, &cod);
+    if (n != arity || n < 1) return -2;
+    JT **jt = calloc((size_t)n + 1, sizeof(JT *));
+    for (int i = 0; i <= n; i++) { jt[i] = jt_of(i < n ? doms[i] : cod, NULL, NULL, 0); if (!jt_crosses(jt[i], 0)) return -3 - i; }
+    void *m = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (m == MAP_FAILED) return -1;
+    memcpy(m, b, len);
+    if (mprotect(m, len, PROT_READ | PROT_EXEC) != 0) return -1;
+    unsigned char kind[NATIVE_MAXW];
+    for (int i = 0; i < n; i++) kind[i] = jt[i]->k == JT_WORD ? 4 : jt[i]->k == JT_PRIM ? 5 : 8;
+    GROW(FFI, capffi, (size_t)nffi + 1);
+    char sym[300]; snprintf(sym, sizeof sym, "jit:%s", name);
+    FFI[nffi] = (Ffi){ strdup(sym), m, n, { 0 }, 4, -1, NULL, NULL, 0, NULL, -1, 0, -1, NULL, jt };
+    memcpy(FFI[nffi].kind, kind, (size_t)n);
+    int k = nffi++;
+    long g = global_lookup(name);
+    char *buf; size_t bl; FILE *ms = open_memstream(&buf, &bl);
+    fprintf(ms, "(def %s (lam", name); for (int i = 0; i < n; i++) fprintf(ms, " %%a%d", i);
+    fprintf(ms, " (%%native #%d #%ld", k, g); for (int i = 0; i < n; i++) fprintf(ms, " %%a%d", i);
+    fprintf(ms, ")))"); fclose(ms); emit(buf); free(buf);
+    return k;
 }
 #include "syntax.c"
 #include "drivers.c"

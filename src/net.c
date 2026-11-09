@@ -1,6 +1,7 @@
 /* net.c — cells, wiring, the interaction rules, and building a net from
  * compiled syntax. */
 #include "core.h"
+#include <sys/mman.h>
 #include <string.h>
 #include <pthread.h>
 #include <time.h>
@@ -1368,6 +1369,128 @@ Port unbox_value(VB *v, int d) {
     Port r = con_build(c, f, NULL);
     free(f);
     return r;
+}
+/* ---- #jit (plan 5.5): a compiled definition's bytes, called from the net ----
+ * The compiled code's values are 64 bits each (lib/x86.cub): a word or primitive by its bits; a
+ * constructor with no fields by its index (below 4096); a constructor with fields, a pair, bytes, by
+ * the address of a cell in the call's arena. A value of the net crosses when it is closed data (built
+ * all the way down, no dimensions, every word within 64 bits); the result is read back by the
+ * definition's type. The arena is the calling thread's, reset at each call: compiled code allocates
+ * nothing else and writes nothing outside it (stores copy), so a call that leaves through the
+ * overflow exit is computed again on the net with nothing done twice. */
+typedef struct { uint64_t flag; unsigned char *cur, *end; } JitCtx;
+static Port pair_of(Port a, Port b);
+static __thread unsigned char *jit_arena;
+static const size_t JIT_ARENA = (size_t)1 << 30;
+static bool jit_ready(Cell *c) {
+    size_t cap = 64, sp = 0; Cell **st = malloc(cap * sizeof(Cell *)); st[sp++] = c; bool ok = true;
+    while (sp && ok) {
+        Cell *x = st[--sp];
+        if (!x) { ok = false; break; }
+        switch (x->kind) {
+        case V_WORD: if (x->p) ok = false; break;
+        case V_PVAL: case V_BYTES: break;
+        case V_CON:
+            if (CON[x->a].ndims) { ok = false; break; }
+            for (int j = 0; j < CON[x->a].nfields; j++) { if (sp == cap) { cap *= 2; st = realloc(st, cap * sizeof(Cell *)); } st[sp++] = cell_at(x->port[1 + j]); }
+            break;
+        case V_PAIR:
+            if (sp + 2 > cap) { cap *= 2; st = realloc(st, cap * sizeof(Cell *)); }
+            st[sp++] = cell_at(x->port[1]); st[sp++] = cell_at(x->port[2]); break;
+        default: ok = false;
+        }
+    }
+    free(st); return ok;
+}
+static uint64_t *jit_alloc(JitCtx *x, size_t words) {
+    size_t sz = words * 8;
+    if ((size_t)(x->end - x->cur) < sz) { x->flag = 1; return NULL; }
+    uint64_t *p = (uint64_t *)x->cur; x->cur += sz; return p;
+}
+/* a value of the net into the arena; a data type's last field followed by a loop (a list's tail) */
+static uint64_t jit_in(Cell *c, JT *t, JitCtx *x) {
+    uint64_t r = 0, *slot = &r;
+    for (;;) {
+        if (x->flag) return 0;
+        switch (t->k) {
+        case JT_WORD: case JT_PRIM: *slot = c->a; return r;
+        case JT_BYTES: {
+            Bytes *b = c->p; size_t n = b ? b->n : 0;
+            uint64_t *p = jit_alloc(x, 1 + (n + 7) / 8); if (!p) return 0;
+            p[0] = n; if (n) memcpy(p + 1, b->b, n);
+            *slot = (uint64_t)(uintptr_t)p; return r;
+        }
+        case JT_PAIR: {
+            uint64_t *p = jit_alloc(x, 3); if (!p) return 0;
+            p[0] = 0; p[1] = jit_in(cell_at(c->port[1]), t->a, x);
+            *slot = (uint64_t)(uintptr_t)p; slot = &p[2]; c = cell_at(c->port[2]); t = t->b; continue;
+        }
+        case JT_DATA: {
+            ConInfo *k = &CON[c->a]; int nf = k->nfields;
+            if (nf == 0) { *slot = (uint64_t)k->index; return r; }
+            uint64_t *p = jit_alloc(x, 1 + (size_t)nf); if (!p) return 0;
+            p[0] = (uint64_t)k->index;
+            for (int j = 0; j < nf - 1; j++) p[1 + j] = jit_in(cell_at(c->port[1 + j]), jt_field(t, k->index, j), x);
+            *slot = (uint64_t)(uintptr_t)p; slot = &p[nf];
+            JT *tl = jt_field(t, k->index, nf - 1); c = cell_at(c->port[nf]); t = tl; continue;
+        }
+        default: x->flag = 1; return 0;
+        }
+    }
+}
+/* a compiled value back into cells by its type; along the last field the spine is collected first and
+ * built from its end, so a long list is read without deep recursion */
+static Port jit_read(uint64_t v, JT *t);
+static Port jit_read_one(uint64_t v, JT *t, Port last) {
+    switch (t->k) {
+    case JT_PAIR: { uint64_t *p = (uint64_t *)(uintptr_t)v; return pair_of(jit_read(p[1], t->a), last); }
+    case JT_DATA: {
+        uint64_t *p = (uint64_t *)(uintptr_t)v; int ci = (int)p[0], c = DATA[t->d].cons[ci], nf = CON[c].nfields;
+        Port *f = malloc((size_t)(nf + 1) * sizeof(Port));
+        for (int j = 0; j < nf - 1; j++) f[j] = jit_read(p[1 + j], jt_field(t, ci, j));
+        f[nf - 1] = last;
+        Port r = con_build(c, f, NULL); free(f); return r;
+    }
+    default: return word_of(0);
+    }
+}
+static Port jit_read(uint64_t v, JT *t) {
+    size_t cap = 16, n = 0; uint64_t *vs = malloc(cap * sizeof(uint64_t)); JT **ts = malloc(cap * sizeof(JT *));
+    Port tail;
+    for (;;) {
+        if (t->k == JT_WORD) { tail = word_of(v); break; }
+        if (t->k == JT_PRIM) { Cell *c = cell(V_PVAL, 1); c->x = (uint32_t)t->pt; c->a = v; tail = P(c, 0); break; }
+        if (t->k == JT_BYTES) {
+            uint64_t *p = (uint64_t *)(uintptr_t)v; size_t bn = (size_t)p[0];
+            Bytes *b = calloc(1, sizeof(Bytes) + bn); b->rc = 1; b->n = bn; if (bn) memcpy(b->b, p + 1, bn);
+            Cell *c = cell(V_BYTES, 1); c->x = PT_BYTES; c->p = b; tail = P(c, 0); break;
+        }
+        if (t->k == JT_DATA && v < 4096) { Port none[1]; tail = con_build(DATA[t->d].cons[v], none, NULL); break; }
+        if (t->k != JT_DATA && t->k != JT_PAIR) { tail = word_of(0); break; }
+        if (n == cap) { cap *= 2; vs = realloc(vs, cap * sizeof(uint64_t)); ts = realloc(ts, cap * sizeof(JT *)); }
+        vs[n] = v; ts[n] = t; n++;
+        uint64_t *p = (uint64_t *)(uintptr_t)v;
+        if (t->k == JT_PAIR) { v = p[2]; t = t->b; }
+        else { int ci = (int)p[0], nf = CON[DATA[t->d].cons[ci]].nfields; v = p[nf]; t = jt_field(t, ci, nf - 1); }
+    }
+    while (n) { n--; tail = jit_read_one(vs[n], ts[n], tail); }
+    free(vs); free(ts); return tail;
+}
+/* the call: the arguments converted, the code entered as jit(args, n, ctx); the flag set means the
+ * call is the definition's on the net (the fallback, run p f ≡ f) */
+static bool jit_call(const Ffi *e, Port *args, int n, Port *out) {
+    if (!jit_arena) {
+        jit_arena = mmap(NULL, JIT_ARENA, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+        if (jit_arena == MAP_FAILED) { jit_arena = NULL; return false; }
+    }
+    JitCtx x = { 0, jit_arena, jit_arena + JIT_ARENA };
+    uint64_t a[NATIVE_MAXW];
+    for (int k = 0; k < n; k++) a[k] = jit_in(cell_at(args[k]), e->jt[k], &x);
+    if (x.flag) return false;
+    uint64_t r = ((uint64_t (*)(const uint64_t *, uint64_t, JitCtx *))e->fn)(a, (uint64_t)n, &x);
+    if (x.flag) return false;
+    *out = jit_read(r, e->jt[n]);
+    return true;
 }
 /* a foreign entry called on its arguments' bits (D27, B18): every argument and the result integers
  * (or pointers), or every one a double */
@@ -3237,6 +3360,8 @@ static void interact(Cell *o, Cell *v) {
             NObj *nb = c->kind == V_NATIVE ? c->p : NULL;
             if (e->kind[k] == 7) { if (!nb || nb->d != -1 || nb->lib != e->lib) words = false; }   /* a handle: of this library only */
             else if (e->kind[k] == 6) { if (nb ? nb->d == -1 : !boxable(c)) { if (!nb && c->kind == V_CON && !A->deep) unbuilt++; else words = false; } }
+            else if (e->kind[k] == 5) { if (c->kind != V_PVAL) words = false; }
+            else if (e->kind[k] == 8) { if (!jit_ready(c)) { if (c->kind == V_CON && !A->deep) unbuilt++; else words = false; } }
             else if (c->kind != V_WORD || c->p) words = false;
         }
         if (words && unbuilt) {
@@ -3246,7 +3371,7 @@ static void interact(Cell *o, Cell *v) {
             NArgs *B = calloc(1, sizeof(NArgs)); B->deep = true; c->p = B;
             for (int k = 0; k < n; k++) {
                 Cell *ak = cell_at(A->v[k]);
-                if (e->kind[k] == 6 && ak && ak->kind == V_CON && !boxable(ak)) { Cell *d = cell(O_DEEP, 2); link(A->v[k], P(d, 0)); link(P(d, 1), P(c, k)); }
+                if (((e->kind[k] == 6 && !boxable(ak)) || (e->kind[k] == 8 && !jit_ready(ak))) && ak && ak->kind == V_CON) { Cell *d = cell(O_DEEP, 2); link(A->v[k], P(d, 0)); link(P(d, 1), P(c, k)); }
                 else link(A->v[k], P(c, k));
             }
             mv(o, 1, P(c, n));
@@ -3254,6 +3379,12 @@ static void interact(Cell *o, Cell *v) {
             return;
         }
         Port out;
+        if (words && e->jt) {
+            /* a #jit entry: computed by its bytes, or (the overflow exit) by its definition on the net */
+            if (jit_call(e, A->v, n, &out)) { for (int k = 0; k < n; k++) era(A->v[k]); }
+            else out = apply_gid((long)o->a, A->v, n);
+            free(A); link(out, o->port[1]); cell_free(o); return;
+        }
         if (words) {
             /* words by value; a boxed argument (a byte string, or a constructor whose fields are values
              * already) as the emitted runtime's V, copied (the compiled code may update it in place);
