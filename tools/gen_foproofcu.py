@@ -123,6 +123,9 @@ def gen():
     reg = R.PROGS['proved-region'][0]
     for line in reg.split('\n')[1:]:
         if line.startswith('sr =') or line.startswith('#same') or line.startswith('defs ='): continue
+        # run.py's programs import by absolute path; the test file lives in tests/, so its imports are
+        # relative to it (an absolute path would name whichever checkout ran the generator)
+        line = line.replace('"' + os.path.join(ROOT, 'lib') + '/', '"../lib/')
         o.append(line)
     for name, (args, qd) in R.QROUTE.items():
         expect = R.PROGS[name][1]
