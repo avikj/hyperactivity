@@ -2013,7 +2013,7 @@ static Port nprim(int cls, int sb, Port *args, int n) {
 }
 static Port pval_of(int kind, uint64_t bits) { Cell *c = cell(V_PVAL, 1); c->x = (uint32_t)kind; c->a = bits; return P(c, 0); }
 static Port bytes_cell(Bytes *b) { Cell *c = cell(V_BYTES, 1); c->x = PT_BYTES; c->p = b; return P(c, 0); }
-static int po_kind(int op) { return op <= PO_I64LT ? PT_I64 : op <= PO_U32LT ? PT_U32 : PT_F64; }   /* a binary operation's operands */
+static int po_kind(int op) { return op <= PO_I64LT ? PT_I64 : op <= PO_U32LT ? PT_U32 : op <= PO_F64LT ? PT_F64 : op <= PO_U64SHR ? PT_U64 : PT_I64; }   /* a binary operation's operands */
 /* an operation on a value it has no rule for (an ill-typed term, run unchecked): the result is
  * unknown, the operands erased — the machine does not stop, and a checker reading the value of a
  * term it rejected reads ? there */
@@ -2965,9 +2965,11 @@ static void interact(Cell *o, Cell *v) {
         case PO_F64OFBITS: r = a; k = PT_F64; break;
         case PO_F32BITS: r = (uint32_t)a; k = PT_U32; break;      /* a Float32's bits as a UInt32, and back (Float32 stored by the 4-byte layer) */
         case PO_F32OFBITS: r = (uint32_t)a; k = PT_F32; break;
+        case PO_U64OFW: r = a; k = PT_U64; break;
+        case PO_WOFU64: r = a; break;
         default: fprintf(stderr, "primitive operation: not unary\n"); exit(2);
         }
-        if (o->x == PO_WOFI64 || o->x == PO_WOFU32) link(word_of(r), o->port[1]);
+        if (o->x == PO_WOFI64 || o->x == PO_WOFU32 || o->x == PO_WOFU64) link(word_of(r), o->port[1]);
         else { Cell *c = cell(V_PVAL, 1); c->x = k; c->a = r; link(P(c, 0), o->port[1]); }
         cell_free(o); cell_free(v);
         return;
@@ -2985,9 +2987,29 @@ static void interact(Cell *o, Cell *v) {
         int64_t ia = (int64_t)a, ib = (int64_t)b; uint32_t ua = (uint32_t)a, ub = (uint32_t)b; double da, db, dr;
         memcpy(&da, &a, 8); memcpy(&db, &b, 8);
         switch ((int)o->x) {
-        case PO_I64ADD: r = (uint64_t)(ia + ib); k = PT_I64; break;
-        case PO_I64SUB: r = (uint64_t)(ia - ib); k = PT_I64; break;
-        case PO_I64MUL: r = (uint64_t)(ia * ib); k = PT_I64; break;
+        /* two's complement through the unsigned operations: the machine itself has no signed overflow */
+        case PO_I64ADD: r = a + b; k = PT_I64; break;
+        case PO_I64SUB: r = a - b; k = PT_I64; break;
+        case PO_I64MUL: r = a * b; k = PT_I64; break;
+        case PO_I64DIV: r = ib == 0 ? 0 : (ia == INT64_MIN && ib == -1) ? a : (uint64_t)(ia / ib); k = PT_I64; break;
+        case PO_I64MOD: r = ib == 0 ? a : (ia == INT64_MIN && ib == -1) ? 0 : (uint64_t)(ia % ib); k = PT_I64; break;
+        case PO_I64AND: r = a & b; k = PT_I64; break;
+        case PO_I64OR: r = a | b; k = PT_I64; break;
+        case PO_I64XOR: r = a ^ b; k = PT_I64; break;
+        case PO_I64SHL: r = a << (b & 63); k = PT_I64; break;
+        case PO_I64SHR: r = (uint64_t)(ia >> (b & 63)); k = PT_I64; break;   /* arithmetic: gcc's >> on a negative int64_t is arithmetic (implementation-defined in C, pinned) */
+        case PO_U64ADD: r = a + b; k = PT_U64; break;
+        case PO_U64SUB: r = a - b; k = PT_U64; break;
+        case PO_U64MUL: r = a * b; k = PT_U64; break;
+        case PO_U64EQ: bl = true; res = a == b; break;
+        case PO_U64LT: bl = true; res = a < b; break;
+        case PO_U64DIV: r = b == 0 ? 0 : a / b; k = PT_U64; break;
+        case PO_U64MOD: r = b == 0 ? a : a % b; k = PT_U64; break;
+        case PO_U64AND: r = a & b; k = PT_U64; break;
+        case PO_U64OR: r = a | b; k = PT_U64; break;
+        case PO_U64XOR: r = a ^ b; k = PT_U64; break;
+        case PO_U64SHL: r = a << (b & 63); k = PT_U64; break;
+        case PO_U64SHR: r = a >> (b & 63); k = PT_U64; break;
         case PO_I64EQ: bl = true; res = ia == ib; break;
         case PO_I64LT: bl = true; res = ia < ib; break;
         case PO_U32ADD: r = (uint32_t)(ua + ub); k = PT_U32; break;

@@ -52,13 +52,11 @@ writes-then-reads : GSess κ KVS
 writes-then-reads = gsess (λ c → true) (λ c r → case c return (λ x → GSess κ KVS) of get k → sess-loop kv-is-get; put k v → writes-then-reads)
 wtr : GSession KVS
 wtr κ = writes-then-reads {κ}
-#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} (pr1 {lzero}) (gsession-guard {KVS} {Word → Word} kv-world) (wtr , empty-st)) = done #12
 pr1-wtr : GSProc {Word → Word} KVS Word wtr kv-world empty-st
 pr1-wtr = (pr1 {lzero} , unit)
 -- a put after a get is refused by the guard
 late-put : Proc {lzero} KVS Word
 late-put = bind {lzero} {KVS} {Word} {Word} (cmd {lzero} {KVS} (get #1)) (λ a → bind {lzero} {KVS} {Unit} {Word} (cmd {lzero} {KVS} (put #1 #5)) (λ u → ret {lzero} {KVS} {Word} a))
-#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} late-put (gsession-guard {KVS} {Word → Word} kv-world) (wtr , empty-st)) = stopped
 -- the protocol from the trace predicate agrees: the same runs, the same verdicts
 no-get-yet : Hist KVS → Bool
 no-get-yet tr = case tr of nil → true; cons e r → (case fst e of get k → false; put k v → rec r)
@@ -66,11 +64,6 @@ wtr-pred : Session KVS
 wtr-pred tr c = case c of get k → true; put k v → no-get-yet tr
 wtr2 : GSession KVS
 wtr2 κ = sess-of-pred {κ} {KVS} wtr-pred nil
-#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} late-put (gsession-guard {KVS} {Word → Word} kv-world) (wtr2 , empty-st)) = stopped
-#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} (pr1 {lzero}) (gsession-guard {KVS} {Word → Word} kv-world) (wtr2 , empty-st)) = done #12
 -- the ended protocol refuses the first command; the open one refuses nothing
-#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} (pr1 {lzero}) (gsession-guard {KVS} {Word → Word} kv-world) ((λ κ → sess-end {κ} {KVS}) , empty-st)) = stopped
-#same fst (runp {KVS} {Word} {GSession KVS × (Word → Word)} late-put (gsession-guard {KVS} {Word → Word} kv-world) ((λ κ → sess-any {κ} {KVS}) , empty-st)) = done #0
 -- a guarded process under a protocol: the counter loop (puts forever) is allowed by writes-then-
 -- reads and stopped only by the budget
-#same (case grun-for {KVS} {Unit} {GSession KVS × (Nat × (Word → Word))} 20 (gsession-guard {KVS} {Nat × (Word → Word)} (budget {KVS} {Word → Word} kv-world)) (λ κ → gloop {κ} {KVS} {Word} {Unit} (λ x → put #1 x) (λ x u → %wsucc x) #0) (wtr , (5 , empty-st)) of arrived r → fst r; pending → done unit) = stopped

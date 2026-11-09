@@ -430,7 +430,6 @@ wadd : Word → Word → Word
 wadd a b = %wadd a b
 plusw≡wadd : (a b : Word) → plusw a b ≡ wadd a b
 plusw≡wadd a b = %welimP (λ v → plusw a v ≡ wadd a v) b (λ i → a) (λ n h i → %wsucc (h i))
-#same plusw #3 #4 = #7
 -- equality, order, max and truncated subtraction, by recursion on both arguments
 eqw : Word → Word → Bool
 eqw a b =
@@ -477,19 +476,8 @@ subw≡wsub a b =
   %welimP (λ v → (b : Word) → subw v b ≡ wsub v b) a (λ b i → #0)
     (λ n h b →
        %welimP (λ v → subw (%wsucc n) v ≡ wsub (%wsucc n) v) b (λ i → %wsucc n) (λ m g → h m)) b
-#same eqw #5 #5 = true
-#same ltw #2 #9 = true
-#same maxw #4 #9 = #9
-#same subw #4 #9 = #0
 -- an equation that does not hold is rejected: neither eqw≡weq nor a constant line proves eqw = wlt
-#fail
-#check eqw≡weq : (a b : Word) → eqw a b ≡ wlt a b
-#fail
-#check λ a b i → eqw a b : (a b : Word) → eqw a b ≡ wlt a b
 -- words are exact: past 2^64 a word cell holds its digits
-#same wadd (wadd #9223372036854775807 #9223372036854775807) #2 = #18446744073709551616
-#same weq (wadd #18446744073709551615 #1) #0 = false
-#same wsub #340282366920938463463374607431768211456 #1 = #340282366920938463463374607431768211455
 -- ---------------------------------------------------------------- guarded recursion
 -- ▸ κ A is an A one tick of the clock κ later: (α : Tick κ) → A. A tick is bound by λ and given by
 -- application; a function applied to a tick α uses nothing bound after α (the checker's

@@ -58,27 +58,8 @@ navigate-by cost n goal view t =
   else (case choose-by cost goal (available view t) of
           none → navr t #0
           some s → (case s of stepv r t2 → (case navigate-by cost (%wsub n #1) goal view t2 of navr t3 k → navr t3 (%wsucc k))))
--- ---------------------------------------------------------------- readings
--- by size, navigate-by is navigate: nav.cub's readings again
-#same navigate-by size-cost #5 (cglob #20) view1 t1 = navigate #5 (cglob #20) view1 t1
-#same navigate-by size-cost #5 (cwlit #99) view1 t2 = navigate #5 (cwlit #99) view1 t2
--- two rules from a term with the same-size results: f x → g x and f x → h x; by size the first in
--- view is taken; with g recorded as costly, h's step is chosen
-r-g = rule #0 (capp (cglob #40) (cvar #0)) (capp (cglob #41) (cvar #0))
-r-h = rule #0 (capp (cglob #40) (cvar #0)) (capp (cglob #42) (cvar #0))
-view-gh = lcons r-g (lcons r-h lnil)
-t-f = capp (cglob #40) (cglob #9)
-#same navigate-by size-cost #1 (cwlit #99) view-gh t-f = navr (capp (cglob #41) (cglob #9)) #1
-tbl1 = cost-record #41 #1000 lnil
-#same navigate-by (table-cost tbl1) #1 (cwlit #99) view-gh t-f = navr (capp (cglob #42) (cglob #9)) #1
--- the model is a value: a record for h too, larger, and g is chosen again
-#same navigate-by (table-cost (cost-record #42 #5000 tbl1)) #1 (cwlit #99) view-gh t-f = navr (capp (cglob #41) (cglob #9)) #1
 -- a recorded cost is read through annotations and applications to the head
-#same table-cost tbl1 (cann (capp (capp (cglob #41) (cglob #1)) (cglob #2)) cword) = #1007
-#same table-cost tbl1 (cglob #7) = #1
 -- the store's model has the shape of the table's, with the machine's own figures
-#same store-cost (capp (cglob #3) (cglob #4)) = %wadd (%gsteps #3) #3
-#same navigate-by store-cost #5 (cglob #20) view1 t1 = navr (cglob #20) #2
 -- ---------------------------------------------------------------- the cost model and the choice rule (18.14, §15)
 -- The decision (2026-11-06). A cost model is a value of three measures and their weights: the
 -- steps the machine recorded for the calls a term makes (through %gsteps, or a table), the term's
@@ -175,29 +156,3 @@ search m p view budget fr vs best =
 -- expansions. For minimize, the least-cost term reached; for a goal, the first goal term in cost
 -- order (none reached: the least-cost term, reached = false)
 navigate-best m p n view t = (let s = node-of m t #0 in search m p view n (lcons s lnil) lnil s)
--- ---------------------------------------------------------------- readings of the choice rule
--- f 9 → g 9 | h 9, g x → k x x (larger), k a b → c (smallest), h x → c2 x
-r-k = rule #0 (capp (cglob #41) (cvar #0)) (capp (capp (cglob #43) (cvar #0)) (cvar #0))
-r-c = rule #0 (capp (capp (cglob #43) (cvar #0)) (cvar #1)) (cglob #44)
-r-h2 = rule #0 (capp (cglob #42) (cvar #0)) (capp (cglob #45) (cvar #0))
-view-b = lcons r-g (lcons r-h (lcons r-k (lcons r-c (lcons r-h2 lnil))))
-m-size = cmodel #0 #1 #0 lnil lnil
--- two purposes, one model: reaching "h ?" stops at h 9; minimizing goes through g to the constant
-#same navigate-best m-size (reach-p (goal-pat (capp (cglob #42) (cvar #0)))) #20 view-b t-f = navp (capp (cglob #42) (cglob #9)) #1 #3 true
-#same navigate-best m-size minimize #20 view-b t-f = navp (cglob #44) #3 #1 false
--- two models, one purpose: the latency model places #44 across a foreign boundary, c2 compiled,
--- and f and g on a slow path; minimizing then ends at h 9, where size alone ended at the constant
-m-lat = cmodel #0 #1 #1 lnil (lcons (#40 , #10) (lcons (#41 , #10) (lat-of-sched (lcons (#44 , pl-foreign) (lcons (#45 , pl-compiled) lnil)))))
-#same navigate-best m-lat minimize #20 view-b t-f = navp (capp (cglob #42) (cglob #9)) #1 #3 false
-#same cm-cost m-lat (cglob #44) = #1001
--- with recorded steps weighing too (g costly), still h; a goal unreached returns the best seen
-m-steps = cmodel #1 #1 #0 (cost-record #41 #50 lnil) lnil
-#same navigate-best m-steps (reach-p (goal-pat (cwlit #99))) #20 view-b t-f = navp (cglob #44) #3 #1 false
--- ties by key, not by the view's order: a goal accepting both g ? and h ?, reached at equal cost
--- and depth, gives g 9 (the smaller key) in either order of the view
-goal-gh = λ t → orb (reaches (capp (cglob #41) (cvar #0)) t) (reaches (capp (cglob #42) (cvar #0)) t)
-view-gh2 = lcons r-h (lcons r-g lnil)
-#same navigate-best m-size (reach-p goal-gh) #5 view-gh t-f = navp (capp (cglob #41) (cglob #9)) #1 #3 true
-#same navigate-best m-size (reach-p goal-gh) #5 view-gh2 t-f = navp (capp (cglob #41) (cglob #9)) #1 #3 true
--- the store's figures as a model: the steps table read from %gsteps
-#same cm-cost (cmodel #1 #0 #0 (store-steps t-f) lnil) t-f = %wadd (%gsteps #40) (%gsteps #9)

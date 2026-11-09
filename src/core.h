@@ -364,12 +364,18 @@ typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; v
  * comp its composition, a copattern definition */
 typedef struct { char *name; int data, index; long fty; int mult; } FldInfo;
 /* primitive types (B12) */
-enum { PT_I64, PT_U32, PT_F64, PT_F32, PT_BYTES, PT_NATIVE, PT_N };
+enum { PT_I64, PT_U32, PT_F64, PT_F32, PT_BYTES, PT_NATIVE, PT_U64, PT_N };
 typedef struct { long rc; size_t n; unsigned char b[]; } Bytes;
 /* the primitive operations of O_POP1/O_POP2, by x */
 enum { PO_I64ADD, PO_I64SUB, PO_I64MUL, PO_I64EQ, PO_I64LT, PO_U32ADD, PO_U32SUB, PO_U32MUL, PO_U32EQ, PO_U32LT,
        PO_F64ADD, PO_F64SUB, PO_F64MUL, PO_F64DIV, PO_F64EQ, PO_F64LT,
-       PO_I64OFW, PO_WOFI64, PO_U32OFW, PO_WOFU32, PO_F64OFW, PO_F64OFI64, PO_I64OFF64, PO_F64BITS, PO_F64OFBITS, PO_F32BITS, PO_F32OFBITS, PO_N };   /* fty: λ params x. the field's type at x */
+       /* the modular 64-bit type UInt64 (plan 5.3), and the operations Int64 lacked; division and
+        * modulus are total (x/0 = 0, x%0 = x), shifts take their count mod 64: no operation has an
+        * undefined case, in the machine or in the template that prints it */
+       PO_U64ADD, PO_U64SUB, PO_U64MUL, PO_U64EQ, PO_U64LT, PO_U64DIV, PO_U64MOD, PO_U64AND, PO_U64OR, PO_U64XOR, PO_U64SHL, PO_U64SHR,
+       PO_I64DIV, PO_I64MOD, PO_I64AND, PO_I64OR, PO_I64XOR, PO_I64SHL, PO_I64SHR,
+       PO_I64OFW, PO_WOFI64, PO_U32OFW, PO_WOFU32, PO_F64OFW, PO_F64OFI64, PO_I64OFF64, PO_F64BITS, PO_F64OFBITS, PO_F32BITS, PO_F32OFBITS,
+       PO_U64OFW, PO_WOFU64, PO_N };   /* fty: λ params x. the field's type at x */
 extern FldInfo *FLD;
 extern ConInfo *CON;
 extern DataInfo *DATA;

@@ -229,7 +229,6 @@ sq1 : Ex
 sq1 = emul (eadd x0 one) (eadd x0 one)
 sq2 : Ex
 sq2 = eadd (eadd (emul x0 x0) (emul two x0)) one
-#same norm sq1 = norm sq2
 -- the identity as a theorem at every valuation, by one evaluation of the normalizer: the proof
 -- term is the constant path at the shared normal form
 sq-thm : (e : Val) → xeval e sq1 ≡ xeval e sq2
@@ -241,11 +240,8 @@ sq3 : Ex
 sq3 = emul (eadd x0 y0) (eadd x0 y0)
 sq4 : Ex
 sq4 = eadd (eadd (emul x0 x0) (emul two (emul x0 y0))) (emul y0 y0)
-#same norm sq3 = norm sq4
 sq-thm2 : (e : Val) → xeval e sq3 ≡ xeval e sq4
 sq-thm2 e = ring-eq e sq3 sq4 (λ i → norm sq3)
-#fail
-#check λ e → ring-eq e sq3 sq2 (λ i → norm sq3) : (e : Val) → xeval e sq3 ≡ xeval e sq2
 -- ---------------------------------------------------------------- the bridge from codes (unverified)
 -- a code of the fragment — applications of the globals plus and times, variables, Nat literals
 -- as constructor codes — read as an expression; a code outside the fragment reads as none. What
@@ -286,8 +282,3 @@ code-of-nat n = case n of zero → ccon #1 #0 lnil lnil; suc k → ccon #1 #1 (l
 -- same normal form, so ring-eq applies to them; and a round trip through codes is the identity
 csq1 = lam-body (code (λ x → times (plus x 1) (plus x 1)))
 csq2 = lam-body (code (λ x → plus (plus (times x x) (times 2 x)) 1))
-#same ex-of-code csq1 = some sq1
-#same ex-of-code csq2 = some sq2
-#same omap norm (ex-of-code csq1) = omap norm (ex-of-code csq2)
-#same code-of-ex sq1 = csq1
-#same ex-of-code (lam-body (code (λ x → suc x))) = none

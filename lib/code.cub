@@ -8,13 +8,14 @@ data Lst = lnil | lcons x xs
 data Opt = none | some x
 -- a layout (plan B12): first-order data the checker computes for a type and the back end reads;
 -- a struct's fields and a union's alternatives are chains in the type itself, ending in lnone
--- binding times, the first-order criterion's verdict (plan B13, lib/stage.cub) and the parts of a schedule (Sched itself is lib/specialize.cub's)
+-- binding times (a schedule's stages, lib/specialize.cub) and the reader's verdict (plan 5.4, lib/m.cub):
+-- a first-order machine program, or the construct that has none and why
 data Stage = st-now | st-build | st-run-known | st-run
-data Reason = dim | dep-type | higher | kan | reflect | mult
-data Verdict = fo | not-fo reason at
-data Strictness = strict | lazy | per-def names
-data Par = par-all | par-none
-data Generality = specialized | image
+-- a schedule (plan 5.7): the rewrite bound, the binding-time stages, the held definitions and the
+-- register assignment; its operations are in lib/specialize.cub
+data Sched = sched (rewrites : Word) (stages : Lst) (holds : Lst) (regs : Lst)
+data Reason = dim | dep-type | higher | kan | reflect | mult | copy
+data Verdict = fo m | not-fo reason at
 data Layout = lword | lbytes n | lptr target | larray n elem | lstruct fields | lunion alts | lnone | lfield name layout align rest | lalt layout rest
 data Code
   = cvar n
@@ -135,9 +136,14 @@ data View
 -- two λs of one record (%clos): the pairs of (copies of) their environments, and the λs; else
 -- both, untouched
 data CloCmp = csame ps f g | cdiff f g
+-- a data type's and a global's index from a code (code D), (code f)
+didx c = case c of cdata d ps → d; _ → #0
+gidx c = case c of cglob n → n; _ → #0
 cl-at l n = case l of lnil → l; lcons x xs → if %weq n #0 then x else cl-at xs (%wsub n #1)
 cl-map f l = case l of lnil → lnil; lcons x xs → lcons (f x) (cl-map f xs)
 cl-app l m = case l of lnil → m; lcons x xs → lcons x (cl-app xs m)
+lapp2 l m = cl-app l m
+lst-count l = case l of lnil → #0; lcons x xs → %wsucc (lst-count xs)
 app-all f xs = case xs of lnil → f; lcons x r → app-all (f x) r
 -- the machine's data types, for the evaluator: (dtab former constructors elim case); a data
 -- type's transport as a function is the table %dtrans. A codata type's entry is (dtab former
@@ -151,7 +157,7 @@ dt-case t = case t of dtab f c e s → s
 -- and data types are read from the checker's tables (%gval, %dtab)
 -- A primitive operation (B12) by its number k = class·256 + sub, as %view names a stuck one (wprim k as)
 -- and a code names it (cprim k as): class 1 a unary operation, 2 a binary one (sub in the order of
--- lib/prim.cub's %i64add ... %i64off64), 3 a load and 4 a store of sub bytes, 5 %blen, 6 %bytes.
+-- lib/prim.cub's %i64add ... %wofu64, the PO_* index of src/core.h), 3 a load and 4 a store of sub bytes, 5 %blen, 6 %bytes.
 -- Applied to its evaluated arguments: the machine's operation, which computes on values and stays a
 -- neutral (wprim) on unknowns; so a code over the byte layer evaluates and quotes under unknowns
 prim-apply k as =
@@ -161,17 +167,23 @@ prim-apply k as =
   else if %wlt k #1280 then prim-st (%wsub k #1024) (cl-at as #0) (cl-at as #1) (cl-at as #2)
   else if %wlt k #1536 then %blen (cl-at as #0) else %bytes (cl-at as #0)
 prim-1 sb a =
-  if %weq sb #16 then %i64ofw a else if %weq sb #17 then %wofi64 a else if %weq sb #18 then %u32ofw a
-  else if %weq sb #19 then %wofu32 a else if %weq sb #20 then %f64ofw a else if %weq sb #21 then %f64ofi64 a
-  else if %weq sb #22 then %i64off64 a else if %weq sb #23 then %f64bits a else if %weq sb #24 then %f64ofbits a
-  else if %weq sb #25 then %f32bits a else %f32ofbits a
+  if %weq sb #35 then %i64ofw a else if %weq sb #36 then %wofi64 a else if %weq sb #37 then %u32ofw a
+  else if %weq sb #38 then %wofu32 a else if %weq sb #39 then %f64ofw a else if %weq sb #40 then %f64ofi64 a
+  else if %weq sb #41 then %i64off64 a else if %weq sb #42 then %f64bits a else if %weq sb #43 then %f64ofbits a
+  else if %weq sb #44 then %f32bits a else if %weq sb #45 then %f32ofbits a else if %weq sb #46 then %u64ofw a else %wofu64 a
 prim-2 sb a b =
   if %weq sb #0 then %i64add a b else if %weq sb #1 then %i64sub a b else if %weq sb #2 then %i64mul a b
   else if %weq sb #3 then %i64eq a b else if %weq sb #4 then %i64lt a b
   else if %weq sb #5 then %u32add a b else if %weq sb #6 then %u32sub a b else if %weq sb #7 then %u32mul a b
   else if %weq sb #8 then %u32eq a b else if %weq sb #9 then %u32lt a b
   else if %weq sb #10 then %f64add a b else if %weq sb #11 then %f64sub a b else if %weq sb #12 then %f64mul a b
-  else if %weq sb #13 then %f64div a b else if %weq sb #14 then %f64eq a b else %f64lt a b
+  else if %weq sb #13 then %f64div a b else if %weq sb #14 then %f64eq a b else if %weq sb #15 then %f64lt a b
+  else if %weq sb #16 then %u64add a b else if %weq sb #17 then %u64sub a b else if %weq sb #18 then %u64mul a b
+  else if %weq sb #19 then %u64eq a b else if %weq sb #20 then %u64lt a b else if %weq sb #21 then %u64div a b
+  else if %weq sb #22 then %u64mod a b else if %weq sb #23 then %u64and a b else if %weq sb #24 then %u64or a b
+  else if %weq sb #25 then %u64xor a b else if %weq sb #26 then %u64shl a b else if %weq sb #27 then %u64shr a b
+  else if %weq sb #28 then %i64div a b else if %weq sb #29 then %i64mod a b else if %weq sb #30 then %i64and a b
+  else if %weq sb #31 then %i64or a b else if %weq sb #32 then %i64xor a b else if %weq sb #33 then %i64shl a b else %i64shr a b
 prim-ld w b off =
   if %weq w #1 then %load8 b off else if %weq w #2 then %load16 b off else if %weq w #4 then %load32 b off else %load64 b off
 prim-st w b off v =

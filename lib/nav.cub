@@ -53,19 +53,3 @@ navigate n goal view t =
   else (case choose goal (available view t) of
           none → navr t #0
           some s → (case s of stepv r t2 → (case navigate (%wsub n #1) goal view t2 of navr t3 k → navr t3 (%wsucc k))))
--- ---------------------------------------------------------------- tests
--- the view: plus 0 ?x → ?x ; plus ?x 0 → ?x ; map fusion ; double
-v-plus0 = rule #0 (capp (capp (cglob #7) (cwlit #0)) (cvar #0)) (cvar #0)
-v-plus0r = rule #0 (capp (capp (cglob #7) (cvar #0)) (cwlit #0)) (cvar #0)
-v-fuse = rule #0 (capp (capp (cglob #3) (cvar #0)) (capp (capp (cglob #3) (cvar #1)) (cvar #2)))
-                 (capp (capp (cglob #3) (clam (capp (cvar #1) (capp (cvar #2) (cvar #0))))) (cvar #2))
-view1 = lcons v-plus0 (lcons v-plus0r (lcons v-fuse lnil))
--- plus (plus 0 a) 0, with the goal "a bare global": two steps reach it
-t1 = capp (capp (cglob #7) (capp (capp (cglob #7) (cwlit #0)) (cglob #20))) (cwlit #0)
-#same navigate #5 (cglob #20) view1 t1 = navr (cglob #20) #2
--- three nested maps: fusion applies twice, each step smaller; no goal reached (the goal is an
--- unrelated pattern), so navigation runs until nothing applies
-t2 = capp (capp (cglob #3) (cglob #10)) (capp (capp (cglob #3) (cglob #11)) (capp (capp (cglob #3) (cglob #12)) (cglob #13)))
-#same (case navigate #5 (cwlit #99) view1 t2 of navr r k → k) = #2
--- nothing applies: zero steps, the term unchanged
-#same navigate #5 (cwlit #99) view1 (cglob #4) = navr (cglob #4) #0

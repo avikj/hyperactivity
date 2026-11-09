@@ -1,0 +1,117 @@
+-- lib/machine.cub — the first-order fragment of codes, which is what compiles (plan 5.3, 5.4).
+-- Loaded after lib/check.cub and lib/specialize.cub.
+-- A code is in the fragment when every construct in it has a machine form: variables, globals,
+-- λ and application, let, pairs, constructors, cases and eliminations of path-free data types,
+-- projections, word and primitive literals below 2^64, the word operations, the primitive
+-- operations (arithmetic, conversions, loads, stores, lengths, fresh bytes), and word elimination.
+-- Nothing outside it compiles: a dimension, a composition, a constructor with dimensions, a type as
+-- a value, a clock or tick has no machine form, and `fragment` names the first such construct and
+-- why (the first-order criterion of B13, produced here rather than by a pass). The fragment's
+-- meaning is eval-g's: there is no second syntax and no second evaluator; `encode` (lib/x86.cub)
+-- prints each construct of the fragment by its template, and the compiled program's path to its
+-- term is refl (plan 5.4).
+-- ---------------------------------------------------------------- the fragment
+-- fragment d c: fo c when c is in the fragment (d the binder depth, for the report), else the
+-- first construct outside it with its reason
+fragment d c =
+  case c of
+    cvar n → fo c
+    cglob n → fo c
+    clam b → frag-wrap (fragment (%wsucc d) b) c
+    capp f a → frag-both (fragment d f) (fragment d a) c
+    cpair a b → frag-both (fragment d a) (fragment d b) c
+    cfst p → frag-wrap (fragment d p) c
+    csnd p → frag-wrap (fragment d p) c
+    clet t b → frag-both (fragment d t) (fragment (%wsucc d) b) c
+    cann t T → fragment d t
+    ccon dd k fs ds →
+      (case ds of
+         lnil → (if data-has-dims dd then not-fo higher c else frag-list d fs c)
+         _ → not-fo higher c)
+    ccase dd B x → (if data-has-dims dd then not-fo higher c else frag-both (frag-list d B c) (fragment d x) c)
+    celim dd P B x → (if data-has-dims dd then not-fo higher c else frag-both (frag-list d B c) (fragment d x) c)
+    cproj dd k x → frag-wrap (fragment d x) c
+    cwlit n → (if %wlt n #18446744073709551616 then fo c else not-fo mult c)
+    cplit k b → fo c
+    cwsucc a → frag-wrap (fragment d a) c
+    cwop k a b → frag-both (fragment d a) (fragment d b) c
+    cprim k as → frag-list d as c
+    cwelim w z s mo → frag-both (frag-both (fragment d w) (fragment d z) c) (fragment d s) c
+    cword → not-fo dep-type c
+    cpty k n → not-fo dep-type c
+    cpi m A B → not-fo dep-type c
+    csigma A B → not-fo dep-type c
+    cuniv l → not-fo dep-type c
+    cdata dd ps → not-fo dep-type c
+    cpathp A a b → not-fo dim c
+    cplam b → not-fo dim c
+    cpapp p r → not-fo dim c
+    ci0 → not-fo dim c
+    ci1 → not-fo dim c
+    cneg r → not-fo dim c
+    cmeet r s → not-fo dim c
+    cjoin r s → not-fo dim c
+    ceq0 r → not-fo dim c
+    ceq1 r → not-fo dim c
+    cfand a b → not-fo dim c
+    cfor a b → not-fo dim c
+    cftt → not-fo dim c
+    cfff → not-fo dim c
+    cforall b → not-fo dim c
+    csys0 → not-fo kan c
+    csysc f t r → not-fo kan c
+    ccomp A u a → not-fo kan c
+    cgluet A S → not-fo kan c
+    cglue S a → not-fo kan c
+    cunglue S b → not-fo kan c
+    chcompu A S → not-fo kan c
+    cunglueu S b → not-fo kan c
+    chcomp u a → not-fo kan c
+    ctrans dd psi ls x → not-fo kan c
+    crec dd fs → not-fo reflect c
+    _ → not-fo reflect c
+frag-wrap v c = case v of fo x → fo c; not-fo r at → not-fo r at
+frag-both v w c = case v of fo x → (case w of fo y → fo c; not-fo r at → not-fo r at); not-fo r at → not-fo r at
+frag-list d l c = case l of lnil → fo c; lcons x xs → frag-both (fragment d x) (frag-list d xs c) c
+-- a data type with a dimension in a constructor (a higher inductive type) is outside the fragment
+data-has-dims d = lany tel-has-dims (ctors-at d (snd (params-fresh (dtel (%dent d)) lnil)))
+is-fo c = case fragment #0 c of fo x → true; not-fo r at → false
+-- ---------------------------------------------------------------- the program of a code
+-- A compiled program is a list of definitions (g , code): the entry (g = the entry's own index, m)
+-- and every checked definition it names, transitively, each the quote of the definition's value
+-- at its type (its code without its name). A definition whose value does not quote (one over a
+-- stuck primitive) or whose code is outside the fragment keeps the program from compiling, and
+-- the verdict names it
+unfold g = quote-top (%gty g) (%gval g)
+program-of m c fuel =
+  case fragment #0 c of
+    not-fo r at → (not-fo r at , lnil)
+    fo x → program-defs fuel (code-globals c) (lcons m lnil) (lcons (m , c) lnil)
+program-defs fuel todo seen acc =
+  if %weq fuel #0 then (fo (cwlit #0) , acc) else
+  (case todo of
+     lnil → (fo (cwlit #0) , acc)
+     lcons g rest →
+       if lmem g seen then program-defs fuel rest seen acc
+       else program-defs-g fuel g rest seen acc)
+program-defs-g fuel g rest seen acc =
+  case unfold g of
+    none → (not-fo reflect (cglob g) , acc)
+    some cd → program-defs-f fuel g cd rest seen acc (fragment #0 cd)
+program-defs-f fuel g cd rest seen acc v =
+  case v of
+    not-fo r at → (not-fo r at , acc)
+    fo x → program-defs (%wsub fuel #1) (lapp2 rest (code-globals cd)) (lcons g seen) (lapp2 acc (lcons (g , cd) lnil))
+-- the definition g of a program
+prog-def prog g = case prog of lnil → none; lcons d r → if %weq (fst d) g then some (snd d) else prog-def r g
+-- ---------------------------------------------------------------- compile
+-- compile T sch rules m c: the code c at type T (the entry, numbered m), specialized with its path
+-- (lib/specialize.cub), its program; the result is (verdict , program , path): the verdict fo when
+-- every definition is in the fragment. The #jit directive (src/lang.c) checks the path at
+-- eval-g lnil c' ≡ eval-g lnil c with the checker, encodes the program (lib/x86.cub) and binds the
+-- entry to the bytes; it binds nothing when the verdict is not fo or the path does not check
+compile T sch rules m c =
+  let s = specialize T sch rules c
+      p = program-of m (fst s) #256
+  in (fst p , (snd p , snd s))
+compile-default T m c = compile T sched-default lnil m c

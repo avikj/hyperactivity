@@ -215,13 +215,72 @@ inst k b s p =
     _ → p
 inst-list k b s l = case l of lnil → lnil; lcons x xs → lcons (inst k b s x) (inst-list k b s xs)
 -- ---------------------------------------------------------------- rules and positions
--- a rule: k metavariable-bound pattern depth, left side, right side
-data Rule = rule (k : Word) (lhs : Code) (rhs : Code)
+-- a rule: k metavariable-bound pattern depth, left side, right side, and its justification: the
+-- theorem of the store it was read from (its global g, the number n of its Π-bound variables, and
+-- whether it is read right to left), or none for a hand-written rule, which navigation may use but
+-- the specializer refuses (a rewrite it cannot justify by a path is not a rewrite it makes)
+data Just = nojust | thm (g : Word) (n : Word) (rev : Bool)
+data Rule = rule (k : Word) (lhs : Code) (rhs : Code) (just : Just)
 -- a position: a list of child indices from the root (words); child order as the code's fields
 -- rewrite-at r t: the term with the rule applied at the root if it matches, else none
 rewrite-root r t =
   case r of
-    rule k l rh → (case match k #0 l t mnil of some s → some (inst k #0 s rh); none → none)
+    rule k l rh j → (case match k #0 l t mnil of some s → some (inst k #0 s rh); none → none)
+-- the rewrite at the root with its justifying path, the root under d binders of the whole term: the
+-- rewritten code, and the code of the path λ i → (g σ) @ i from t to it, g the theorem applied to
+-- the metavariables' instances (σ, the match), read backwards (@ ~i) for a symmetric rule. The path
+-- is placed under the dimension binder, the outermost one: t's variables that refer outside the
+-- term (at or above d) shift by one, and the dimension is cvar d. none for a hand-written rule
+rewrite-root-path d r t =
+  case r of
+    rule k l rh j →
+      (case j of
+         nojust → none
+         thm g n rev →
+           (case match k #0 l t mnil of
+              some s → some (inst k #0 s rh , cpapp (shift-code d #1 (thm-app g n s)) (if rev then cneg (cvar d) else cvar d))
+              none → none))
+-- the theorem g applied to its n variables' instances from the match s: variable x_j (de Bruijn n−1−j
+-- in the theorem's body) is metavariable n−1−j, so x_1 is metavariable n−1 and x_n is metavariable 0
+thm-app g n s = thm-app-from g n #0 s (cglob g)
+thm-app-from g n i s acc = if %weq i n then acc else thm-app-from g n (%wsucc i) s (capp acc (case mlookup s (%wsub (%wsub n #1) i) of some c → c; none → cwlit #0))
+-- rewrite-first-path r t: the first position in pre-order where the rule applies, rewritten, with
+-- the path λ i → t[(g σ) @ i at that position]; every untouched part is shifted by one for the
+-- dimension binder (d the binder depth, so the hole's reference to the dimension is cvar d)
+rewrite-first-path r t = rfp r #0 t
+rfp r d t =
+  case rewrite-root-path d r t of
+    some p → some p
+    none →
+      (case t of
+         clam x → omap2 clam clam (rfp r (%wsucc d) x)
+         capp f a → (case rfp r d f of some p → some (capp (fst p) a , capp (snd p) (sh1 d a)); none → omap2 (capp f) (capp (sh1 d f)) (rfp r d a))
+         cpair a b → (case rfp r d a of some p → some (cpair (fst p) b , cpair (snd p) (sh1 d b)); none → omap2 (cpair a) (cpair (sh1 d a)) (rfp r d b))
+         cfst x → omap2 cfst cfst (rfp r d x)
+         csnd x → omap2 csnd csnd (rfp r d x)
+         clet a x → (case rfp r d a of some p → some (clet (fst p) x , clet (snd p) (sh1 (%wsucc d) x)); none → omap2 (clet a) (clet (sh1 d a)) (rfp r (%wsucc d) x))
+         ccon dd c fs ds → omap2 (λ fs2 → ccon dd c fs2 ds) (λ fs2 → ccon dd c fs2 (sh1-list d ds)) (rfp-list r d fs)
+         ccase dd B x → (case rfp r d x of some p → some (ccase dd B (fst p) , ccase dd (sh1-list d B) (snd p)); none → omap2 (λ B2 → ccase dd B2 x) (λ B2 → ccase dd B2 (sh1 d x)) (rfp-list r d B))
+         celim dd P B x → (case rfp r d x of some p → some (celim dd P B (fst p) , celim dd (sh1 d P) (sh1-list d B) (snd p)); none → omap2 (λ B2 → celim dd P B2 x) (λ B2 → celim dd (sh1 d P) B2 (sh1 d x)) (rfp-list r d B))
+         cwop o a b → (case rfp r d a of some p → some (cwop o (fst p) b , cwop o (snd p) (sh1 d b)); none → omap2 (cwop o a) (cwop o (sh1 d a)) (rfp r d b))
+         cwsucc a → omap2 cwsucc cwsucc (rfp r d a)
+         cwelim w z s mo → (case rfp r d w of
+                              some p → some (cwelim (fst p) z s mo , cwelim (snd p) (sh1 d z) (sh1 d s) (omap (sh1 d) mo))
+                              none → (case rfp r d z of
+                                        some p → some (cwelim w (fst p) s mo , cwelim (sh1 d w) (snd p) (sh1 d s) (omap (sh1 d) mo))
+                                        none → omap2 (λ s2 → cwelim w z s2 mo) (λ s2 → cwelim (sh1 d w) (sh1 d z) s2 (omap (sh1 d) mo)) (rfp r d s)))
+         cprim q as → omap2 (cprim q) (cprim q) (rfp-list r d as)
+         cann a T → omap2 (λ a2 → cann a2 T) (λ a2 → cann a2 (sh1 d T)) (rfp r d a)
+         cforce x → omap2 cforce cforce (rfp r d x)
+         cthunk x → omap2 cthunk cthunk (rfp r d x)
+         _ → none)
+rfp-list r d l =
+  case l of
+    lnil → none
+    lcons x xs → (case rfp r d x of some p → some (lcons (fst p) xs , lcons (snd p) (sh1-list d xs)); none → omap2 (lcons x) (lcons (sh1 d x)) (rfp-list r d xs))
+sh1 d c = shift-code d #1 c
+sh1-list d l = case l of lnil → lnil; lcons x xs → lcons (sh1 d x) (sh1-list d xs)
+omap2 f g o = case o of none → none; some p → some (f (fst p) , g (snd p))
 -- rewrite-anywhere r t: the first position in pre-order where the rule applies, rewritten; the
 -- binder depth is tracked so that a metavariable never captures (match refuses it)
 rewrite-first r t =
@@ -324,7 +383,7 @@ mv-count m d c =
     cprim k as → mv-list m d as
     _ → #0
 mv-list m d l = case l of lnil → #0; lcons x xs → %wadd (mv-count m d x) (mv-list m d xs)
-oriented r = case r of rule k l rh → andb (%wlt (code-size rh) (code-size l)) (mv-ok k #0 l rh)
+oriented r = case r of rule k l rh j → andb (%wlt (code-size rh) (code-size l)) (mv-ok k #0 l rh)
 mv-ok k m l rh = if %weq m k then true else andb (notb (%wlt (mv-count m #0 l) (mv-count m #0 rh))) (mv-ok k (%wsucc m) l rh)
 -- the rules split: (oriented , rejected)
 orient-rules rules = case rules of lnil → (lnil , lnil); lcons r rest → (let o = orient-rules rest in if oriented r then (lcons r (fst o) , snd o) else (fst o , lcons r (snd o)))
@@ -334,34 +393,3 @@ first-applicable rules c =
   case rules of
     lnil → none
     lcons r rest → (case rewrite-first r c of some c2 → some c2; none → first-applicable rest c)
--- ---------------------------------------------------------------- tests
--- the rule  plus 0 ?x  →  ?x  (plus as the global 7; metavariable 0 is cvar 0 at depth k = 0)
-r-plus0 = rule #0 (capp (capp (cglob #7) (cwlit #0)) (cvar #0)) (cvar #0)
-#same rewrite-root r-plus0 (capp (capp (cglob #7) (cwlit #0)) (cwlit #5)) = some (cwlit #5)
-#same rewrite-root r-plus0 (capp (capp (cglob #7) (cwlit #1)) (cwlit #5)) = none
--- under a binder: λ y → plus 0 y  →  λ y → y (the metavariable binds the bound variable y, which
--- is under one binder of the term but none of the pattern: allowed, since the pattern's root is
--- matched at that position and the result stays there)
-#same rewrite-first r-plus0 (clam (capp (capp (cglob #7) (cwlit #0)) (cvar #0))) = some (clam (cvar #0))
--- map fusion: map ?f (map ?g ?xs) → map (λ x → ?f (?g x)) ?xs, map the global 3; metavariables
--- 0 f, 1 g, 2 xs; on the right, under the λ, each bound code is shifted by one
-r-fuse = rule #0 (capp (capp (cglob #3) (cvar #0)) (capp (capp (cglob #3) (cvar #1)) (cvar #2)))
-                 (capp (capp (cglob #3) (clam (capp (cvar #1) (capp (cvar #2) (cvar #0))))) (cvar #2))
-t-fuse = capp (capp (cglob #3) (cglob #10)) (capp (capp (cglob #3) (cglob #11)) (cglob #12))
-#same rewrite-root r-fuse t-fuse = some (capp (capp (cglob #3) (clam (capp (cglob #10) (capp (cglob #11) (cvar #0))))) (cglob #12))
--- a metavariable met twice binds equal codes: plus ?x ?x → double ?x (double the global 8)
-r-dbl = rule #0 (capp (capp (cglob #7) (cvar #0)) (cvar #0)) (capp (cglob #8) (cvar #0))
-#same rewrite-root r-dbl (capp (capp (cglob #7) (cwlit #2)) (cwlit #2)) = some (capp (cglob #8) (cwlit #2))
-#same rewrite-root r-dbl (capp (capp (cglob #7) (cwlit #2)) (cwlit #3)) = none
--- how many positions a rule applies at
-#same count-applicable r-plus0 (cpair (capp (capp (cglob #7) (cwlit #0)) (cwlit #1)) (capp (capp (cglob #7) (cwlit #0)) (cwlit #2))) = #2
--- plus 0 ?x → ?x is oriented; plus ?x ?y → plus ?y ?x (commutativity) is not, nor is ?x → plus ?x 0
-#same oriented r-plus0 = true
-#same oriented (rule #0 (capp (capp (cglob #7) (cvar #0)) (cvar #1)) (capp (capp (cglob #7) (cvar #1)) (cvar #0))) = false
-#same oriented (rule #0 (cvar #0) (capp (capp (cglob #7) (cvar #0)) (cwlit #0))) = false
--- a metavariable duplicated on the right is not oriented even when the right is smaller:
--- plus (plus ?x ?x) 0 → plus ?x ?x is; plus ?x 0 → plus ?x ?x is not
-#same oriented (rule #0 (capp (capp (cglob #7) (capp (capp (cglob #7) (cvar #0)) (cvar #0))) (cwlit #0)) (capp (capp (cglob #7) (cvar #0)) (cvar #0))) = true
-#same oriented (rule #0 (capp (capp (cglob #7) (cvar #0)) (cwlit #0)) (capp (capp (cglob #7) (cvar #0)) (cvar #0))) = false
--- rewriting to the fixpoint: 0 + (0 + 5) → 5
-#same rewrite-fix (lcons r-plus0 lnil) (capp (capp (cglob #7) (cwlit #0)) (capp (capp (cglob #7) (cwlit #0)) (cwlit #5))) = cwlit #5

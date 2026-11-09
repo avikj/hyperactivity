@@ -1,12 +1,13 @@
--- lib/specialize.cub — the specializer's pipeline on codes (plan 18.6), the steps that exist today.
--- Loaded after lib/check.cub, lib/match.cub, lib/fo.cub and lib/lower.cub.
--- specialize T rules c: the code c (closed, at type T) is normalized by the machine (eval, then
--- quote at T: step 2), rewritten along the rules until none applies (step 3, bounded), and
--- lowered to the first-order form (step 6). Steps 4 (usage), 5 (the criterion) and 7 (the
--- proof) follow B11, B13 and the proof lemmas of 18.5; today the result is checked by
--- evaluating the first-order form and comparing with the normal form (the readings below).
--- The rewrite bound is the terminating discipline's crude form (a count); the ordered form
--- (18.6) replaces it.
+-- lib/specialize.cub — the specializer on codes (plan 5.2, 5.4). Loaded after lib/check.cub,
+-- lib/match.cub and lib/std.cub.
+-- specialize T sched rules c: the code c (closed, at type T) is normalized by the machine (eval,
+-- then quote at T), with the schedule's held definitions kept as variables, and rewritten along the
+-- rules until none applies (bounded). Every rewrite is along a theorem of the store (lib/rules.cub)
+-- and carries its justifying path: the result is (c' , π) with π the code of a path
+-- eval-g c ≡ eval-g c' — refl when no rule applied — which the checker checks (the #jit directive,
+-- src/lang.c). Normalization itself contributes refl: eval-g (quote (eval-g c)) and eval-g c are
+-- convertible (the quote/eval law, PLAN §13 item 2). The specializer is never proved correct: a
+-- wrong rewrite produces a path that does not check.
 normalize T c = fromopt (quote-top T (eval-g lnil c)) c
 -- ---------------------------------------------------------------- held definitions (Sched's holds)
 -- cmap f d c: c with each part p for which f p d (d the binders above p, inside c) gives a code
@@ -71,6 +72,7 @@ glob-map f d c = cmap (λ p e → case p of cglob g → f g e; _ → none) d c
 -- the variables free in c (at or above d, under d binders) mapped by f n d
 var-map-c f d c = cmap (λ p e → case p of cvar n → (if %wlt n e then some p else some (f n e)); _ → none) d c
 -- the globals a code names, each once
+lmem g l = case l of lnil → false; lcons x xs → if %weq x g then true else lmem g xs
 code-globals c = cg-acc c lnil
 cg-acc c acc = case c of cglob g → (if lmem g acc then acc else lcons g acc); _ → cg-list (code-kids c) acc
 cg-list l acc = case l of lnil → acc; lcons x r → cg-list r (cg-acc x acc)
@@ -150,203 +152,63 @@ lfilter-g p l = case l of lnil → lnil; lcons x r → if p x then lcons x (lfil
 lmap-g f l = case l of lnil → lnil; lcons x r → lcons (f x) (lmap-g f r)
 lindex-g g l i = case l of lnil → none; lcons x r → if %weq x g then some i else lindex-g g r (%wsucc i)
 isnil-g l = case l of lnil → true; _ → false
--- rewriting under the terminating discipline (18.6 step 3, lib/match.cub): the oriented rules to
--- the fixpoint, which terminates by the size of the term; the unoriented ones (commutativity
--- shapes, the ones E-rule-unoriented rejects) at most n times, the schedule's bound
--- (after each unoriented step the oriented rules run to their fixpoint again: an unoriented rule —
--- a representation's op line read right to left — exposes the redexes the oriented ones remove,
--- to (from x) → x among them; until 2026-11-09 they ran only before the first unoriented step)
-rewrite-all n rules c =
+-- rewriting under the terminating discipline (lib/match.cub): the oriented rules to the fixpoint,
+-- which terminates by the size of the term; the unoriented ones (commutativity shapes) at most n
+-- times, the schedule's bound; after each unoriented step the oriented rules run to their fixpoint
+-- again. Each step's path is composed onto the path so far (none: refl so far). Tc is the code of
+-- the type T the path is at (the line of the composition)
+rewrite-all n Tc rules c =
   let o = orient-rules rules
-  in rewrite-bounded n (fst o) (snd o) (rewrite-fix (fst o) c)
-rewrite-bounded n ors rules c =
-  if %weq n #0 then c
-  else (case first-applicable rules c of
-          none → c
-          some c2 → rewrite-bounded (%wsub n #1) ors rules (rewrite-fix ors c2))
-specialize T rules c = inplace (lower T (rewrite-all #64 rules (normalize T c)))
--- the specialized form evaluated, as a word (for readings over word-valued programs)
-run-fo f = wof (eval-fo (λ g → flit #0) lnil f)
--- ---------------------------------------------------------------- readings
--- a closed word computation: normalization does the whole job; the form is a literal
-c1 = cwop #2 (cwlit #3) (cwlit #4)
-#same specialize Word lnil c1 = flit #7
--- a function applied to a known argument, specialized to the result
-c2 = capp (clam (cwop #2 (cvar #0) (cwlit #10))) (cwlit #5)
-#same specialize Word lnil c2 = flit #15
--- an open function: its body survives as a λ over a primitive; the environment supplies the
--- argument at run time (stage "run")
-c3 = clam (cwop #2 (cvar #0) (cwlit #1))
-#same specialize (Word → Word) lnil c3 = flam ftword (fprim P-add (lcons (fvar #0) (lcons (flit #1) lnil)))
-#same run-fo (fapply (specialize (Word → Word) lnil c3) (lcons (flit #41) lnil)) = #42
--- word elimination with a known bound normalizes away entirely: 2^5 is a literal
-c4 = cwelim (cwlit #5) (cwlit #1) (clam (clam (cwop #2 (cvar #0) (cvar #0)))) (some (clam cword))
-#same specialize Word lnil c4 = flit #32
--- with an unknown bound it stays a loop, and the loop computes
-c5 = clam (cwelim (cvar #0) (cwlit #1) (clam (clam (cwop #2 (cvar #0) (cvar #0)))) (some (clam cword)))
-#same run-fo (fapply (specialize (Word → Word) lnil c5) (lcons (flit #6) lnil)) = #64
--- the loop's state typed from the motive: the bound, the counter, the motive at the counter (a word)
-#same (case specialize (Word → Word) lnil c5 of flam t b → (case b of floop tys i bd → tys; _ → lnil); _ → lnil) = lcons ftword (lcons ftword (lcons ftword lnil))
--- a motive of pairs: the state a pair of words
-c6 = code (λ (n : Word) → fst (%welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p)))))
-#same (case specialize (Word → Word) lnil c6 of flam t b → (case b of fproj d c j l → (case l of floop tys i bd → tys; _ → lnil); _ → lnil); _ → lnil) = lcons ftword (lcons ftword (lcons (ftpair ftword ftword) lnil))
-#same run-fo (fapply (specialize (Word → Word) lnil c6) (lcons (flit #10) lnil)) = #55
--- ---------------------------------------------------------------- whole programs
--- program-of fuel c: the first-order definitions a code needs, by lowering the code and then every
--- checked definition it calls, transitively, from the quote of the definition's value (its code
--- without its name; definitions whose values do not quote — those over stuck primitives, 18.6's
--- finding — are left as calls for lib/repr.cub or the harness to supply). A definition's arity is
--- its leading λs; its body takes the arguments pushed in order. Then lift converts the closures
--- and recursions of every body into definitions numbered from k
-unfold g = quote-top (%gty g) (%gval g)
-lam-arity t = case t of flam ty b → %wsucc (lam-arity b); _ → #0
-strip-flams t = case t of flam ty b → strip-flams b; _ → t
--- a definition's parameters: the types of its leading λs' binders
-lam-sig t = case t of flam ty b → lcons ty (lam-sig b); _ → lnil
--- a program's definition from a λ: its signature (the λs' binder types) and its body
-fo-def g t = (g , (lam-sig t , strip-flams t))
-fcalls t acc =
-  case t of
-    fcall g args → fcalls-list args (if lmem g acc then acc else lcons g acc)
-    fcon d c fs → fcalls-list fs acc
-    fswitch x alts → fcalls-alts alts (fcalls x acc)
-    frec d x alts → fcalls-ralts alts (fcalls x acc)
-    fproj d c k x → fcalls x acc
-    fprim p args → fcalls-list args acc
-    flet ty a b → fcalls b (fcalls a acc)
-    fif c a b → fcalls b (fcalls a (fcalls c acc))
-    floop tys init body → fcalls body (fcalls-list init acc)
-    fclos g env → fcalls-list env acc
-    flam ty b → fcalls b acc
-    fapply f args → fcalls-list args (fcalls f acc)
-    fthunk a → fcalls a acc
-    fforce x → fcalls x acc
-    fassume f b → fcalls b acc
-    fupd u dd x c k v → fcalls v (fcalls x acc)
-    _ → acc
-fcalls-list l acc = case l of lnil → acc; lcons x xs → fcalls-list xs (fcalls x acc)
-fcalls-alts alts acc = case alts of lnil → acc; lcons a r → fcalls-alts r (fcalls (snd (snd a)) acc)
-fcalls-ralts alts acc = case alts of lnil → acc; lcons a r → fcalls-ralts r (fcalls (snd (snd (snd a))) acc)
-lmem g l = case l of lnil → false; lcons x xs → if %weq x g then true else lmem g xs
--- the definitions, as (g , (arity , body)), for the globals pending, those done listed
-program-defs fuel pending done =
-  if %weq fuel #0 then lnil else
-  (case pending of
-     lnil → lnil
-     lcons g rest →
-       if lmem g done then program-defs fuel rest done
-       else (case unfold g of
-               none → program-defs (%wsub fuel #1) rest (lcons g done)
-               some cd →
-                 let t = inplace (erase-lams (g-erased g) #0 (lower (%gty g) cd))
-                 in lcons (g , (lam-sig t , strip-flams t)) (program-defs (%wsub fuel #1) (lapp2 rest (fcalls t lnil)) (lcons g done))))
--- the program of a code: definition m is the code itself (its λs its arity), then what it calls;
--- a global g is definition g + 1 in the program (0 is left for a main)
-program-at T m fuel c =
-  let t = inplace (lower T c)
-  in lcons (m , (lam-sig t , offset-calls (strip-flams t))) (offset-defs (program-defs fuel (fcalls t lnil) lnil))
-program-of T fuel c = program-at T #0 fuel c
-offset-defs defs = case defs of lnil → lnil; lcons d r → lcons (%wsucc (fst d) , (fst (snd d) , offset-calls (snd (snd d)))) (offset-defs r)
-offset-calls t =
-  case t of
-    fcall g args → fcall (%wsucc g) (offset-list args)
-    fcon d c fs → fcon d c (offset-list fs)
-    fswitch x alts → fswitch (offset-calls x) (offset-alts alts)
-    frec d x alts → frec d (offset-calls x) (offset-ralts alts)
-    fproj d c k x → fproj d c k (offset-calls x)
-    fprim p args → fprim p (offset-list args)
-    flet ty a b → flet ty (offset-calls a) (offset-calls b)
-    fif c a b → fif (offset-calls c) (offset-calls a) (offset-calls b)
-    floop tys init body → floop tys (offset-list init) (offset-calls body)
-    flam ty b → flam ty (offset-calls b)
-    fapply f args → fapply (offset-calls f) (offset-list args)
-    fthunk a → fthunk (offset-calls a)
-    fforce x → fforce (offset-calls x)
-    fassume f b → fassume f (offset-calls b)
-    fupd u dd x c k v → fupd u dd (offset-calls x) c k (offset-calls v)
-    _ → t
-offset-list l = case l of lnil → lnil; lcons x xs → lcons (offset-calls x) (offset-list xs)
-offset-alts alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , offset-calls (snd (snd a)))) (offset-alts r)
-offset-ralts alts = case alts of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , offset-calls (snd (snd (snd a)))))) (offset-ralts r)
--- every body lifted, the new definitions numbered from k; a body's free variables are its
--- definition's parameters (the last innermost), at their types
-lift-program k defs =
-  case defs of
-    lnil → lnil
-    lcons d rest → (case lift-e (lst-rev (fst (snd d))) k (snd (snd d)) of lifted b2 ds k2 → lcons (fst d , (fst (snd d) , b2)) (lapp2 ds (lift-program k2 rest)))
--- readings: a function calling a recursive definition of the store (lenw of lib/lower.cub, on the
--- list type LW): the program has lenw lowered from its value (sw and zw inlined by the quote)
-#same lst-len (program-of (LW → Word) #10 (code (λ (l : LW) → lenw l))) = #2
-prog-len = lift-program #100000 (program-of (LW → Word) #10 (code (λ (l : LW) → lenw l)))
-#same eval-fo (table-of prog-len) lnil (fcall #0 (lcons lw3 lnil)) = vw #2
--- ---------------------------------------------------------------- the criterion's report (B13, the code side)
--- fo-report c: the forms of c outside the first-order fragment, each as its code (a dimension
--- binder or application, a path type or composition, Glue, a transport, a universe, a Π or Σ type
--- as a value, a code with dimensions in a constructor, a call into the net); empty when the code is
--- first-order. The checker's own decision (strictness, the codata rule, 18.3) is the machine's;
--- this is what lower would turn into fnet
-fo-report c =
-  case c of
-    clam b → fo-report b
-    capp f a → lapp2 (fo-report f) (fo-report a)
-    cpair a b → lapp2 (fo-report a) (fo-report b)
-    cfst p → fo-report p
-    csnd p → fo-report p
-    clet t b → lapp2 (fo-report t) (fo-report b)
-    cann t T → fo-report t
-    ccon d k fs ds → (case ds of lnil → fo-report-list fs; _ → lcons c lnil)
-    ccase d B x → lapp2 (fo-report-list B) (fo-report x)
-    celim d P B x → lapp2 (fo-report-list B) (fo-report x)
-    cforce t → fo-report t
-    cthunk t → fo-report t
-    cwsucc a → fo-report a
-    cwop k a b → lapp2 (fo-report a) (fo-report b)
-    cwelim w z s mo → lapp2 (fo-report w) (lapp2 (fo-report z) (fo-report s))
-    cprim k as → fo-report-list as
-    cplit k b → lnil
-    cvar n → lnil
-    cglob n → lnil
-    cwlit n → lnil
-    cdata d ps → lnil
-    _ → lcons c lnil
-fo-report-list l = case l of lnil → lnil; lcons x xs → lapp2 (fo-report x) (fo-report-list xs)
-is-fo c = case fo-report c of lnil → true; _ → false
--- readings: the loop is first-order; a path abstraction and a transport are reported
-#same is-fo (cwelim (cwlit #5) (cwlit #1) (clam (clam (cwop #2 (cvar #0) (cvar #0)))) (some (clam cword))) = true
-#same is-fo (code (λ (l : LW) → lenw l)) = true
-#same fo-report (cplam (cvar #0)) = lcons (cplam (cvar #0)) lnil
-#same lst-len (fo-report (capp (cplam (cvar #0)) (ctrans #1 cftt lnil (cvar #0)))) = #2
--- ---------------------------------------------------------------- schedules as values (5.2, 18.3 §6)
+      f = rewrite-fix-p Tc (fst o) c none
+  in rewrite-bounded n Tc (fst o) (snd o) (fst f) (snd f)
+rewrite-bounded n Tc ors rules c p =
+  if %weq n #0 then (c , p)
+  else (case first-applicable-p rules c of
+          none → (c , p)
+          some q → (let f = rewrite-fix-p Tc ors (fst q) (compose-p Tc c p (snd q)) in rewrite-bounded (%wsub n #1) Tc ors rules (fst f) (snd f)))
+rewrite-fix-p Tc rules c p = case first-applicable-p rules c of none → (c , p); some q → rewrite-fix-p Tc rules (fst q) (compose-p Tc c p (snd q))
+first-applicable-p rules c =
+  case rules of
+    lnil → none
+    lcons r rest → (case rewrite-first-path r c of some q → some q; none → first-applicable-p rest c)
+-- compose-p Tc c0 p q: the path so far p (none: refl at c0, the code before it) followed by the
+-- step q, as the code of concat (lib/std.cub): λ i → comp (λ j → T) [ i = 0 ↦ c0 , i = 1 ↦ q @ j ] (p @ i).
+-- Under the outer binder i the step and the path shift by one, under j by two; c0 is the left
+-- endpoint of the whole path
+compose-p Tc c0 p q =
+  case p of
+    none → some q
+    some p1 → some (cplam (ccomp (cplam (shift-code #0 #2 Tc))
+                                (cplam (csysc (ceq0 (cvar #1)) (shift-code #0 #2 c0)
+                                              (csysc (ceq1 (cvar #1)) (cpapp (shift-code #0 #2 q) (cvar #0)) csys0)))
+                                (cpapp (shift-code #0 #1 p1) (cvar #0))))
+-- the path's code as a term's code: refl where none
+path-code p c = case p of some q → q; none → cplam (shift-code #0 #1 c)
+-- ---------------------------------------------------------------- schedules as values (5.7)
 -- what the specializer may do is a value: how many rewrites; the binding-time assignment
--- (stages: a Lst of (binder index , Stage), read by the C++ image for its template parameters
--- and by the criterion); the representations chosen (reps: a Lst of data type indices whose
--- declared representation is consumed, lib/repr.cub; every declared one when empty); the
--- definitions held neutral (holds: a Lst of global indices). Normalization unfolds every
--- definition it reaches (quote renders a definition applied to a neutral by its body) except the
--- held ones: the code is abstracted over them and normalized under the λs, so a held definition is
--- a variable to the machine and its call stays a call (normalize-held); fusion and strictness follow.
-sched-rewrites s = case s of sched r st rp hd → r
-sched-stages s = case s of sched r st rp hd → st
-sched-reps s = case s of sched r st rp hd → rp
-sched-holds s = case s of sched r st rp hd → hd
+-- (stages: a Lst of (binder index , Stage)); the definitions held neutral (holds: a Lst of global
+-- indices); the register assignment the reader and encoder use (regs: a Lst of (slot , register
+-- number), lib/x86.cub; empty: the default). Normalization unfolds every definition it reaches
+-- except the held ones: the code is abstracted over them and normalized under the λs, so a held
+-- definition is a variable to the machine and its call stays a call (normalize-held)
+sched-rewrites s = case s of sched r st hd rg → r
+sched-stages s = case s of sched r st hd rg → st
+sched-holds s = case s of sched r st hd rg → hd
+sched-regs s = case s of sched r st hd rg → rg
 sched-default = sched #64 lnil lnil lnil
--- the specializer with the criterion (B13, lib/stage.cub): the code normalized and rewritten is
--- judged by first-order at its type; the verdict comes back with the form (a not-fo region is
--- lowered all the same: its forms outside the fragment are calls into the net, fnet, and the
--- verdict names the first of them and why)
-specialize-v sch T rules c =
-  let c2 = rewrite-all (sched-rewrites sch) rules (normalize-held (sched-holds sch) T c)
-  in (first-order T c2 , inplace (lower T c2))
-specialize-s sch T rules c = snd (specialize-v sch T rules c)
--- step 1, the now variables substituted from the environment (18.6): the code's leading binders
--- whose stage in the schedule is st-now take the environment's codes in order (env a Lst of
--- codes); the residual is the result normalized at T (the type left after them) and rewritten.
--- Against a role, a choreography's projection is this residual (lib/choreo.cub, item 24)
+-- the specializer: (c' , π), π the path's code from eval-g c to eval-g c' at T
+specialize T sch rules c =
+  let c0 = normalize-held (sched-holds sch) T c
+      r = rewrite-all (sched-rewrites sch) (fromopt (quote-ty T) cword) rules c0
+  in (fst r , path-code (snd r) c0)
+-- step 1, the now variables substituted from the environment: the code's leading binders whose
+-- stage in the schedule is st-now take the environment's codes in order (env a Lst of codes); the
+-- residual is the result normalized at T (the type left after them) and rewritten. Against a role,
+-- a choreography's projection is this residual (lib/choreo.cub, item 24)
 now-stage-of i st = case st of lnil → st-run; lcons p r → (if %weq (fst p) i then snd p else now-stage-of i r)
 -- Now binders may stand after run-time ones: the code is applied under λs for the run-time
 -- binders before the last now binder, each run-time binder its λ's variable, each now binder the
--- next environment code (shifted under those λs); normalization does the β (λ x → c x v for
--- c = λ x k → … with k now). With only leading now binders this is c v1 … vk, as before.
+-- next environment code (shifted under those λs); normalization does the β
 lam-chain c = case c of clam b → %wsucc (lam-chain b); _ → #0
 last-now i st n acc = if %weq i n then acc else last-now (%wsucc i) st n (case now-stage-of i st of st-now → %wsucc i; _ → acc)
 count-runs i st m = if %weq i m then #0 else (case now-stage-of i st of st-now → count-runs (%wsucc i) st m; _ → %wsucc (count-runs (%wsucc i) st m))
@@ -360,16 +222,4 @@ apply-now i st c env =
   let m = last-now #0 st (lam-chain c) #0
       r = count-runs #0 st m
   in wrap-lams r (now-args #0 m st (shift-code #0 r c) env r #0)
-residual sch T rules c env = rewrite-all (sched-rewrites sch) rules (normalize-held (sched-holds sch) T (apply-now #0 (sched-stages sch) c env))
--- readings: a word function is fo; a path is not (dim), and the form is a call into the net
-#same fst (specialize-v sched-default (Word → Word) lnil c3) = fo
-#same fst (specialize-v sched-default (Word ≡ Word) lnil (cplam cword)) = not-fo dim (cplam (cvar #0))
-#same snd (specialize-v sched-default (Word ≡ Word) lnil (cplam cword)) = fnet #0 lnil
--- the call of lenw under an unknown list normalizes to the recursion itself
-#same specialize-s sched-default (LW → Word) lnil (code (λ (l : LW) → lenw l)) = inplace (lower (LW → Word) (fromopt (unfold (gidx (code lenw))) cword))
--- a held definition stays a call: lenw held, its call under an unknown list is the call itself
--- (unheld, the recursion: the reading above); a held definition the code does not name changes nothing
-#same specialize-s (sched #64 lnil lnil (lcons (gidx (code lenw)) lnil)) (LW → Word) lnil (code (λ (l : LW) → lenw l)) = flam (ftdata (didx (code LW)) lnil #0) (fcall (gidx (code lenw)) (lcons (fvar #0) lnil))
-#same specialize-s (sched #64 lnil lnil (lcons (gidx (code lenw)) lnil)) (Word → Word) lnil c3 = specialize (Word → Word) lnil c3
--- held under binders and applied to a known value: sw held, zw unfolded; the call of sw keeps its argument, computed
-#same specialize-s (sched #64 lnil lnil (lcons (gidx (code sw)) lnil)) (Word → Word) lnil (code (λ (w : Word) → sw (%wadd zw w))) = flam ftword (fcall (gidx (code sw)) (lcons (fprim P-add (lcons (flit #0) (lcons (fvar #0) lnil))) lnil))
+residual sch T rules c env = specialize T sch rules (apply-now #0 (sched-stages sch) c env)

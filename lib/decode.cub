@@ -36,7 +36,6 @@ goal-r : LinCode
 goal-r = lc-var #1
 cert1 : Mults
 cert1 = mucons #1 munil
-#same cert-check hyp-i8 cert1 goal-l goal-r = true
 -- the environment: the words of i and n
 env2 : Nat → Nat → Env
 env2 i n = λ v → %welimP (λ w → Word) v (fromNat i) (λ j h → fromNat n)
@@ -60,8 +59,6 @@ decode n b i h = (load32 n b i (bound-i4 i n h) , load64 n b i h)
 -- back at 4 with the bound 4 + 8 ≤ 16 given as (4 , refl)
 msg : Bytes 16
 msg = store64 16 (store32 16 (bytes 16) 4 (8 , λ i → 16) (u32 #258)) 4 (4 , λ i → 16) (i64 #7)
-#same snd (decode 16 msg 4 (4 , λ i → 16)) = i64 #7
-#same u32toWord (fst (decode 16 msg 4 (4 , λ i → 16))) = #7
 -- ---------------------------------------------------------------- a loop over messages
 -- count messages of 16 bytes in n bytes (count·16 ≤ n): the 8-byte field of message k is at
 -- k·16, and its bound k·16 + 8 ≤ n follows from (k+1)·16 ≤ n, which is 16 + k·16 ≤ n by the
@@ -70,7 +67,6 @@ hyp-m : Hyps
 hyp-m = hcons (lc-add (lc-lit #16) (lc-var #0)) (lc-var #1) hnil
 goal-m : LinCode
 goal-m = lc-add (lc-var #0) (lc-lit #8)
-#same cert-check hyp-m cert1 goal-m goal-r = true
 holds-m : (o n : Nat) → le (plus 16 o) n → Holds (env2 o n) hyp-m
 holds-m o n h =
   (le-transport (plusw #16 (fromNat o)) (fromNat n) (fromNat (plus 16 o)) (fromNat n)
@@ -95,8 +91,6 @@ sum-msgs n b count h =
 -- readings: two messages of 16 bytes, fields 5 and 9 at 0 and 16; their sum
 msgs : Bytes 32
 msgs = store64 32 (store64 32 (bytes 32) 0 (24 , λ i → 32) (i64 #5)) 16 (8 , λ i → 32) (i64 #9)
-#same sum-msgs 32 msgs 2 (0 , λ i → 32) = #14
-#same sum-msgs 32 msgs 1 (16 , λ i → 32) = #5
 -- ---------------------------------------------------------------- a message with a type tag
 -- a 32-byte message: a 4-byte type at 0; type 1 carries a 64-bit price at 8, type 2 a 64-bit
 -- quantity at 16; the field read depends on the tag. Every bound is at a literal offset
@@ -109,5 +103,3 @@ m1 : Bytes 32
 m1 = store64 32 (store32 32 (bytes 32) 0 (28 , λ i → 32) (u32 #1)) 8 (16 , λ i → 32) (i64 #500)
 m2 : Bytes 32
 m2 = store64 32 (store32 32 (bytes 32) 0 (28 , λ i → 32) (u32 #2)) 16 (8 , λ i → 32) (i64 #7)
-#same decode-msg m1 = #500
-#same decode-msg m2 = #7

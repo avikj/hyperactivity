@@ -2809,7 +2809,7 @@ static Node *cn(Node *c) {
     if (!strcmp(h, "cpty") && c->n == 3) {
         /* a primitive type: lib/prim.cub's name for it (Bytes at its size) where loaded */
         long k = cn_word(c->it[1]);
-        static const char *TN[] = { "Int64", "UInt32", "Float64", "Float32", "Bytes", "Native" };
+        static const char *TN[] = { "Int64", "UInt32", "Float64", "Float32", "Bytes", "Native", "UInt64" };
         if (k < 0 || k > 5) return NULL;
         if (k == 4) { Node *n = cn(c->it[2]); if (!n) return NULL; return global_lookup("Bytes") >= 0 ? lst(2, nsym("Bytes"), n) : lst(2, nsym("%bytesty"), n); }
         return global_lookup(TN[k]) >= 0 ? nsym(TN[k]) : lst(2, nsym("%pty"), wordn(k));
@@ -2819,10 +2819,12 @@ static Node *cn(Node *c) {
          * operations read back as lib/prim.cub's checked primitives of the same arguments; the
          * byte operations take proofs at the checked level and have no reading here */
         static const char *PN[] = { "i64add", "i64sub", "i64mul", "i64eq", "i64lt", "u32add", "u32sub", "u32mul", "u32eq", "u32lt", "f64add", "f64sub", "f64mul", "f64div", "f64eq", "f64lt",
-            "i64", "i64toWord", "u32", "u32toWord", "f64", "f64ofi64", "i64off64" };
+            "u64add", "u64sub", "u64mul", "u64eq", "u64lt", "u64div", "u64mod", "u64and", "u64or", "u64xor", "u64shl", "u64shr",
+            "i64div", "i64mod", "i64and", "i64or", "i64xor", "i64shl", "i64shr",
+            "i64", "i64toWord", "u32", "u32toWord", "f64", "f64ofi64", "i64off64", NULL, NULL, NULL, NULL, "u64", "u64toWord" };
         long k = cn_word(c->it[1]); if (k < 0) return NULL;
         int cls = (int)(k >> 8), sb = (int)(k & 255); const char *name;
-        if (cls <= 2 && sb < 23 && global_lookup(PN[sb]) >= 0) name = PN[sb]; else return NULL;
+        if (cls <= 2 && sb < PO_N && PN[sb] && global_lookup(PN[sb]) >= 0) name = PN[sb]; else return NULL;
         Node *as[16]; int n = cn_list(c->it[2], as, 16); if (n < 0) return NULL;
         Node *r = nlist(n + 1); r->it[0] = nsym(name);
         for (int i = 0; i < n; i++) { R(r->it[i + 1] = cn(as[i])); }
@@ -5153,7 +5155,7 @@ static void x_foreign(const char *nm, Tok *st, Node *sig, Tok *nt) {
         passed[nx] = m != 0;
         if (m != 0) {
             int k = -1;
-            if (!A->list) k = !strcmp(A->s, "Int64") ? PT_I64 : !strcmp(A->s, "UInt32") ? PT_U32 : !strcmp(A->s, "Float64") ? PT_F64 : !strcmp(A->s, "Word") ? 4 : -1;
+            if (!A->list) k = !strcmp(A->s, "Int64") ? PT_I64 : !strcmp(A->s, "UInt32") ? PT_U32 : !strcmp(A->s, "Float64") ? PT_F64 : !strcmp(A->s, "Word") || !strcmp(A->s, "UInt64") ? 4 : -1;
             else if (A->n == 2 && is(A->it[0], "Bytes")) k = PT_BYTES;
             if (k < 0) x_err("foreign: an argument's type is Int64, UInt32, Float64, Word or Bytes n (or at multiplicity 0), in", nt);
             kind[n++] = (unsigned char)k;
@@ -5161,7 +5163,7 @@ static void x_foreign(const char *nm, Tok *st, Node *sig, Tok *nt) {
         xs[nx++] = xn;
         x = x->it[3];
     }
-    int ret = !x->list ? (!strcmp(x->s, "Int64") ? PT_I64 : !strcmp(x->s, "UInt32") ? PT_U32 : !strcmp(x->s, "Float64") ? PT_F64 : !strcmp(x->s, "Word") ? 4 : -1) : -1;
+    int ret = !x->list ? (!strcmp(x->s, "Int64") ? PT_I64 : !strcmp(x->s, "UInt32") ? PT_U32 : !strcmp(x->s, "Float64") ? PT_F64 : !strcmp(x->s, "Word") || !strcmp(x->s, "UInt64") ? 4 : -1) : -1;
     if (ret < 0) x_err("foreign: the result type is Int64, UInt32, Float64 or Word, in", nt);
     if (n < 1 || n > 6) x_err("foreign: one to six arguments passed, in", nt);
     bool dbl = ret == PT_F64; for (int i = 0; i < n; i++) if ((kind[i] == PT_F64) != dbl) x_err("foreign: every argument and the result are doubles, or none is, in", nt);

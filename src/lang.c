@@ -248,7 +248,8 @@ static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
     "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%rlaws", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
-    "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
+    "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr", "%i64div", "%i64mod", "%i64and", "%i64or", "%i64xor", "%i64shl", "%i64shr",
+    "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%u64ofw", "%wofu64", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
 /* the keywords, in an open-addressed table (asked of every symbol the compiler walks) */
 static size_t kw_hash(const char *s);
 static size_t kw_hash(const char *s) { size_t h = 1469598103934665603ull; for (; *s; s++) h = (h ^ (unsigned char)*s) * 1099511628211ull; return h; }
@@ -369,6 +370,7 @@ int data_field_type(int d, int c, int k) {
     if (!strcmp(h->s, "UInt32")) return -10 - PT_U32;
     if (!strcmp(h->s, "Float64")) return -10 - PT_F64;
     if (!strcmp(h->s, "Float32")) return -10 - PT_F32;
+    if (!strcmp(h->s, "UInt64")) return -10 - PT_U64;
     return data_lookup(h->s);
 }
 
@@ -1082,7 +1084,9 @@ static Node *to_code(Node *t) {
     /* a primitive operation (B12): (cprim k args), k = class·256 + sub as lib/code.cub's prim-apply reads it */
     {
         static const char *PO1[] = { "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
-            "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits" };
+            "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr",
+            "%i64div", "%i64mod", "%i64and", "%i64or", "%i64xor", "%i64shl", "%i64shr",
+            "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%u64ofw", "%wofu64" };
         long k = -1;
         for (int q = 0; q < PO_N; q++) if (!strcmp(h, PO1[q])) { k = (q >= PO_I64OFW ? 1 : 2) * 256 + q; break; }
         if (k < 0 && !strncmp(h, "%load", 5) && t->n == 3) k = 3 * 256 + atoi(h + 5) / 8;
@@ -2444,6 +2448,10 @@ static Syn *compile(Node *t) {
             { "%u32add", PO_U32ADD, 2 }, { "%u32sub", PO_U32SUB, 2 }, { "%u32mul", PO_U32MUL, 2 }, { "%u32eq", PO_U32EQ, 2 }, { "%u32lt", PO_U32LT, 2 },
             { "%f64add", PO_F64ADD, 2 }, { "%f64sub", PO_F64SUB, 2 }, { "%f64mul", PO_F64MUL, 2 }, { "%f64div", PO_F64DIV, 2 }, { "%f64eq", PO_F64EQ, 2 }, { "%f64lt", PO_F64LT, 2 },
             { "%i64ofw", PO_I64OFW, 1 }, { "%wofi64", PO_WOFI64, 1 }, { "%u32ofw", PO_U32OFW, 1 }, { "%wofu32", PO_WOFU32, 1 }, { "%f64ofw", PO_F64OFW, 1 }, { "%f64ofi64", PO_F64OFI64, 1 }, { "%i64off64", PO_I64OFF64, 1 }, { "%f64bits", PO_F64BITS, 1 }, { "%f64ofbits", PO_F64OFBITS, 1 }, { "%f32bits", PO_F32BITS, 1 }, { "%f32ofbits", PO_F32OFBITS, 1 },
+            { "%u64add", PO_U64ADD, 2 }, { "%u64sub", PO_U64SUB, 2 }, { "%u64mul", PO_U64MUL, 2 }, { "%u64eq", PO_U64EQ, 2 }, { "%u64lt", PO_U64LT, 2 }, { "%u64div", PO_U64DIV, 2 }, { "%u64mod", PO_U64MOD, 2 },
+            { "%u64and", PO_U64AND, 2 }, { "%u64or", PO_U64OR, 2 }, { "%u64xor", PO_U64XOR, 2 }, { "%u64shl", PO_U64SHL, 2 }, { "%u64shr", PO_U64SHR, 2 },
+            { "%i64div", PO_I64DIV, 2 }, { "%i64mod", PO_I64MOD, 2 }, { "%i64and", PO_I64AND, 2 }, { "%i64or", PO_I64OR, 2 }, { "%i64xor", PO_I64XOR, 2 }, { "%i64shl", PO_I64SHL, 2 }, { "%i64shr", PO_I64SHR, 2 },
+            { "%u64ofw", PO_U64OFW, 1 }, { "%wofu64", PO_WOFU64, 1 },
             { NULL, 0, 0 } };
         for (int q = 0; PO[q].name; q++) if (!strcmp(h, PO[q].name)) {
             if (t->n != PO[q].n + 1) die("a primitive operation with its arguments:", h);
@@ -2773,11 +2781,12 @@ static void rb_one(FILE *o, Port prov) {
     case V_WTY: fputs("Word", o); return;
     case V_PTY:
         if (c->a == PT_BYTES) { fputs("(Bytes ", o); push_str(")"); push_field(c, 1); return; }
-        fputs(c->a == PT_I64 ? "Int64" : c->a == PT_U32 ? "UInt32" : c->a == PT_F64 ? "Float64" : c->a == PT_NATIVE ? "Native" : "Float32", o); return;
+        fputs(c->a == PT_I64 ? "Int64" : c->a == PT_U32 ? "UInt32" : c->a == PT_F64 ? "Float64" : c->a == PT_NATIVE ? "Native" : c->a == PT_U64 ? "UInt64" : "Float32", o); return;
     case V_PVAL: {
         /* a primitive value: #i64:n, #u32:n, #f64:x */
         if (c->x == PT_I64) fprintf(o, "#i64:%lld", (long long)(int64_t)c->a);
         else if (c->x == PT_U32) fprintf(o, "#u32:%u", (unsigned)c->a);
+        else if (c->x == PT_U64) fprintf(o, "#u64:%llu", (unsigned long long)c->a);
         else if (c->x == PT_F32) { float f; uint32_t b32 = (uint32_t)c->a; memcpy(&f, &b32, 4); fprintf(o, "#f32:%.9g", (double)f); }   /* a Float32 is its 32 bits (f32ofbits) */
         else { double d; uint64_t bits = c->a; memcpy(&d, &bits, 8); fprintf(o, "#f64:%.17g", d); }
         return;
@@ -2805,7 +2814,9 @@ static void rb_one(FILE *o, Port prov) {
     case V_NPRIM: {
         /* a primitive operation stuck on a neutral: the operation at its arguments */
         static const char *PO1[] = { "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
-            "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits" };
+            "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr",
+            "%i64div", "%i64mod", "%i64and", "%i64or", "%i64xor", "%i64shl", "%i64shr",
+            "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%u64ofw", "%wofu64" };
         int cls = (int)(c->x >> 8), sb = (int)(c->x & 255); char nm[32]; const char *name;
         if (cls <= 2) name = sb < PO_N ? PO1[sb] : "%op";
         else if (cls == 3 || cls == 4) { snprintf(nm, sizeof nm, "%%%s%d", cls == 3 ? "load" : "store", sb * 8); name = nm; }
@@ -3089,6 +3100,7 @@ static void pcode(FILE *o, Port p) {
         long k = word_val(c->port[1]); Cell *w = obs_val(c->port[2]); uint64_t b = w && w->kind == V_WORD && !w->p ? w->a : 0;
         if (k == PT_I64) fprintf(o, "#i64:%lld", (long long)(int64_t)b);
         else if (k == PT_U32) fprintf(o, "#u32:%u", (unsigned)b);
+        else if (k == PT_U64) fprintf(o, "#u64:%llu", (unsigned long long)b);
         else if (k == PT_F32) { float f; uint32_t b32 = (uint32_t)b; memcpy(&f, &b32, 4); fprintf(o, "#f32:%.9g", (double)f); }
         else { double d; memcpy(&d, &b, 8); fprintf(o, "#f64:%.17g", d); }
     }

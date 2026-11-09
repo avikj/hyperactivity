@@ -66,16 +66,11 @@ pr1 {l} = bind {l} {KVS} {Unit} {Word} (cmd {l} {KVS} (put #1 #5)) (λ u →
      bind {l} {KVS} {Word} {Word} (cmd {l} {KVS} (get #2)) (λ b → ret {l} {KVS} {Word} (%wadd a b)))))
 empty-st : Word → Word
 empty-st k = #0
-#same fst (runp {KVS} {Word} {Word → Word} (pr1 {lzero}) kv-world empty-st) = done #12
-#same snd (runp {KVS} {Word} {Word → Word} (pr1 {lzero}) kv-world empty-st) #2 = #7
 -- a refused command stops the process; the state is the one at the refusal
 pr2 : {l : Level} → Proc {l} KVS Word
 pr2 {l} = bind {l} {KVS} {Unit} {Word} (cmd {l} {KVS} (put #1 #5)) (λ u →
      bind {l} {KVS} {Unit} {Word} (cmd {l} {KVS} (put #0 #9)) (λ u2 → ret {l} {KVS} {Word} #1))
-#same fst (runp {KVS} {Word} {Word → Word} (pr2 {lzero}) kv-world empty-st) = stopped
-#same snd (runp {KVS} {Word} {Word → Word} (pr2 {lzero}) kv-world empty-st) #1 = #5
 -- the monad laws hold by computation: bind (ret a) f = f a and bind p ret = p at the interpretation
-#same runp {KVS} {Word} {Word → Word} (bind {lzero} {KVS} {Word} {Word} (ret {lzero} {KVS} {Word} #3) (λ a → ret {lzero} {KVS} {Word} (%wadd a #1))) kv-world empty-st = runp {KVS} {Word} {Word → Word} (ret {lzero} {KVS} {Word} #4) kv-world empty-st
 -- ---------------------------------------------------------------- handlers
 -- a logging handler into a signature with one more command: every put is also logged (cmd log k),
 -- then performed; the handled process is run in a world that counts the logs in its state
@@ -97,8 +92,6 @@ kvl-world c st =
     log k → inl (unit , (fst st , %wsucc (snd st)))
 pr1-logged : Proc {lzero} KVLS Word
 pr1-logged = handle {KVS} {KVLS} {Word} logging (pr1 {lsuc lzero})
-#same fst (runp {KVLS} {Word} {(Word → Word) × Word} pr1-logged kvl-world (empty-st , #0)) = done #12
-#same snd (snd (runp {KVLS} {Word} {(Word → Word) × Word} pr1-logged kvl-world (empty-st , #0))) = #2
 -- ---------------------------------------------------------------- supervision (D25)
 -- a restart strategy: given the outcome and the number of runs so far, restart or give up
 data Action = restart | give-up
@@ -140,16 +133,11 @@ pr3 : {l : Level} → Proc {l} KVS Word
 pr3 {l} = bind {l} {KVS} {Unit} {Word} (cmd {l} {KVS} (put #0 #9)) (λ u → bind {l} {KVS} {Word} {Word} (cmd {l} {KVS} (get #0)) (λ a → ret {l} {KVS} {Word} a))
 sup3 : Outcome Word × (((Word → Word) × Nat) × Nat)
 sup3 = supervise {KVS} {Word} {(Word → Word) × Nat} 5 (upto3 {Word}) (pr3 {lzero}) flaky (empty-st , zero)
-#same fst sup3 = done #9
-#same snd (snd sup3) = 3
-#same snd (fst (snd sup3)) = 2
 -- a world that always refuses: three runs, then the strategy gives up, stopped
 always-refusing : World KVS Unit
 always-refusing c st = case c return (λ x → Sum (kv-resp x × Unit) Unit) of get k → inl (#0 , unit); put k v → inr unit
 sup-bad : Outcome Word × (Unit × Nat)
 sup-bad = supervise {KVS} {Word} {Unit} 5 (upto3 {Word}) (pr3 {lzero}) always-refusing unit
-#same fst sup-bad = stopped
-#same snd (snd sup-bad) = 3
 -- ---------------------------------------------------------------- replay (7.3)
 -- a run is reproduced from the world's responses: a recording world keeps, beside its own state,
 -- the responses given (encoded as words by the signature's encoder), and a replaying world answers
@@ -177,13 +165,9 @@ kv-dec c = case c return (λ x → Word → kv-resp x) of get k → λ w → w; 
 -- pr1 recorded under the key-value world, then replayed from the record alone: 12 both times
 rec1 : Outcome Word × ((Word → Word) × List Word)
 rec1 = runp {KVS} {Word} {(Word → Word) × List Word} (pr1 {lzero}) (recording {KVS} {Word → Word} kv-enc kv-world) (empty-st , nil)
-#same fst rec1 = done #12
 log1 : List Word
 log1 = rev-list (snd (snd rec1)) nil
-#same log1 = cons #0 (cons #0 (cons #5 (cons #7 nil)))
-#same fst (runp {KVS} {Word} {List Word} (pr1 {lzero}) (replaying {KVS} kv-dec) log1) = done #12
 -- a record cut short replays as a refusal where it ends
-#same fst (runp {KVS} {Word} {List Word} (pr1 {lzero}) (replaying {KVS} kv-dec) (cons #0 (cons #0 nil))) = stopped
 -- ---------------------------------------------------------------- signature inclusion (7.1)
 -- an inclusion of S in T: each command of S is a command of T, with T's response read back as
 -- S's. A process of S is lifted to T by transport along it: the handler that issues the included

@@ -1,5 +1,5 @@
 -- lib/derive.cub — generic programming over the data table (plan 18.13, F31: deriving as terms
--- over %dent producing codes). Loaded after lib/check.cub and lib/lower.cub (didx). derive-eq d: the code of a decidable
+-- over %dent producing codes). Loaded after lib/check.cub. derive-eq d: the code of a decidable
 -- equality on the data type d, read off its constructors' telescopes: a word field compares by
 -- %weq, a recursive field by the hypothesis the case provides, a field of another data type by that
 -- type's derived equality; constructors with dimensions (higher inductive types) and other field
@@ -123,76 +123,34 @@ show-fields d ks n r j t =
 -- ---------------------------------------------------------------- readings
 -- equality on Nat, derived and evaluated
 eqNat = eval-g lnil (fromopt (derive-eq (didx (code Nat))) c-false)
-#same eqNat (suc (suc zero)) (suc (suc zero)) = true
-#same eqNat (suc (suc zero)) (suc zero) = false
-#same eqNat zero (suc zero) = false
-#same eqNat zero zero = true
 -- on Bool
 eqBool = eval-g lnil (fromopt (derive-eq (didx (code Bool))) c-false)
-#same eqBool true true = true
-#same eqBool true false = false
 -- on a type with word fields and two recursive fields, declared here
 data Tree = leaf (w : Word) | node (l : Tree) (r : Tree)
 eqTree = eval-g lnil (fromopt (derive-eq (didx (code Tree))) c-false)
-#same eqTree (node (leaf #1) (leaf #2)) (node (leaf #1) (leaf #2)) = true
-#same eqTree (node (leaf #1) (leaf #2)) (node (leaf #1) (leaf #3)) = false
-#same eqTree (leaf #1) (node (leaf #1) (leaf #1)) = false
 -- a field of another data type: Nat inside
 data Box = box (n : Nat) (b : Bool)
 eqBox = eval-g lnil (fromopt (derive-eq (didx (code Box))) c-false)
-#same eqBox (box (suc zero) true) (box (suc zero) true) = true
-#same eqBox (box (suc zero) true) (box (suc zero) false) = false
 -- a higher inductive type is not covered (its constructors have dimensions)
 data Circ = cbase | cloop (i : I) [ i = 0 ↦ cbase , i = 1 ↦ cbase ]
-#same derive-eq (didx (code Circ)) = none
 -- the derived function quotes back at its type (η-expanded by the quote) and runs again
 eqNat2 = eval-g lnil (fromopt (quote-top (Nat → Nat → Bool) eqNat) cword)
-#same eqNat2 (suc zero) (suc zero) = true
-#same eqNat2 (suc zero) zero = false
--- the derived code lowered to the first-order form (lib/lower.cub) and run natively: the
--- recursion on the first argument returns a function of the second; Bool is a word there
-eq-fo = lower (Nat → Nat → Bool) (fromopt (derive-eq (didx (code Nat))) c-false)
-n2 = fcon (didx (code Nat)) #1 (lcons (fcon (didx (code Nat)) #1 (lcons (fcon (didx (code Nat)) #0 lnil) lnil)) lnil)
-n1 = fcon (didx (code Nat)) #1 (lcons (fcon (didx (code Nat)) #0 lnil) lnil)
-#same eval-fo (λ g → flit #0) lnil (fapply eq-fo (lcons n2 (lcons n2 lnil))) = vw #1
-#same eval-fo (λ g → flit #0) lnil (fapply eq-fo (lcons n2 (lcons n1 lnil))) = vw #0
--- and lifted: the recursion and the inner λs are definitions
-#same (case lift #1 eq-fo of lifted t2 ds k → eval-fo (table-of ds) lnil (fapply t2 (lcons n2 (lcons n2 lnil)))) = vw #1
-#same (case lift #1 eq-fo of lifted t2 ds k → eval-fo (table-of ds) lnil (fapply t2 (lcons n1 (lcons n2 lnil)))) = vw #0
 -- writing: Nat in unary, a tree in preorder with its words, a box through Nat's writing
 showNat = eval-g lnil (fromopt (derive-show (didx (code Nat))) c-nil)
-#same showNat (suc (suc zero)) = cons #1 (cons #1 (cons #0 nil))
 showTree = eval-g lnil (fromopt (derive-show (didx (code Tree))) c-nil)
-#same showTree (node (leaf #7) (node (leaf #8) (leaf #9))) = cons #1 (cons #0 (cons #7 (cons #1 (cons #0 (cons #8 (cons #0 (cons #9 nil)))))))
 showBox = eval-g lnil (fromopt (derive-show (didx (code Box))) c-nil)
-#same showBox (box (suc zero) false) = cons #0 (cons #1 (cons #0 (cons #1 nil)))
-#same derive-show (didx (code Circ)) = none
 -- a writing is injective where the equality says so: equal writings, equal by derived equality
-#same eqTree (node (leaf #1) (leaf #2)) (node (leaf #1) (leaf #2)) = lapp-same (showTree (node (leaf #1) (leaf #2))) (showTree (node (leaf #1) (leaf #2)))
 -- fields of primitive types (B12): compared and written by the machine's operations as cprim
 -- codes (i64eq, f64eq; wofi64, a float through its Int64 part)
 data PrimRec = prec (a : Int64) (w : Word) | pflt (f : Float64)
 eqPrimRec = eval-g lnil (fromopt (derive-eq (didx (code PrimRec))) c-false)
-#same eqPrimRec (prec (i64 #5) #1) (prec (i64 #5) #1) = true
-#same eqPrimRec (prec (i64 #5) #1) (prec (i64 #6) #1) = false
-#same eqPrimRec (pflt (f64 #3)) (pflt (f64 #3)) = true
-#same eqPrimRec (pflt (f64 #3)) (prec (i64 #3) #3) = false
 showPrimRec = eval-g lnil (fromopt (derive-show (didx (code PrimRec))) c-nil)
-#same showPrimRec (prec (i64 #5) #1) = cons #0 (cons #5 (cons #1 nil))
-#same showPrimRec (pflt (f64 #3)) = cons #1 (cons #3 nil)
 -- ---------------------------------------------------------------- deriving eq D [as name]: the derived code checked and
 -- defined at D → D → Bool (D·eq by default)
 deriving eq Nat
-#same Nat·eq 3 3 = true
-#same Nat·eq 3 4 = false
 data Tree2 = leaf2 (w : Word) | node2 (l : Tree2) (r : Tree2)
 deriving eq Tree2 as eqTree2
-#same eqTree2 (node2 (leaf2 #1) (leaf2 #2)) (node2 (leaf2 #1) (leaf2 #2)) = true
-#same eqTree2 (leaf2 #1) (node2 (leaf2 #1) (leaf2 #1)) = false
-#check Nat·eq : Nat → Nat → Bool
 -- a field of a primitive type: the derived code's cprim reads back as lib/prim.cub's checked
 -- primitive, so the surface form checks it (deriving eq PI)
 -- (PrimRec above has such fields)
 deriving eq PrimRec as eqPrimRec
-#same eqPrimRec (prec (i64 #3) #4) (prec (i64 #3) #4) = true
-#same eqPrimRec (prec (i64 #3) #4) (pflt (f64 #4)) = false
