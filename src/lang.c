@@ -1687,6 +1687,7 @@ void global_park(long g, Cell *op, Cell *glob) {
 long global_unfold(long g) { return G[g].unf; }
 int global_tickar(long g) { return G[g].tickar; }
 int global_checked(long g) { return g >= 0 && g < nG ? G[g].chk : -1; }
+uint64_t global_strict(long g) { return g >= 0 && g < nG && G[g].kind == G_DEF ? G[g].strict : 0; }   /* the parameters g always reads (call by need: built strict) */
 Record *global_nary(long g) { return g >= 0 && g < nG && G[g].kind == G_DEF ? G[g].nary : NULL; }
 /* a copy of the value held by an observation cell */
 static Port held_copy(Cell *r) {

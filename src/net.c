@@ -839,16 +839,47 @@ static Port case_of_susp(Cell *v);
 static Port welim_of_wsusp(Cell *v);
 /* a deferred operation, run: its inputs moved onto the operation (the principal last, so the pair
  * forms with every port wired); the cell is consumed */
+/* Call by need (CBN): an input the operation always reads (its principal; defer_reads) that is
+ * itself a deferred operation held by this one alone (wired straight to it) is run with it, as
+ * building the operation strict would have built it; no interaction is skipped, none happens. The
+ * operation takes the deferred cell's key and its pending memo entry */
+static bool defer_reads(const Cell *d, int k);
 static Port defer_build(Cell *d) {
     int nin = d->n - 1;
     Cell *c = cell((int)d->ty, nin + 1); c->x = d->x; c->a = d->a; c->p = d->p; d->p = NULL;
-    for (int k = 1; k < nin; k++) link(d->port[k + 1], P(c, k));
-    link(d->port[1], P(c, 0));
+    c->key = d->key; d->key = NULL; c->e = d->e; d->e = NULL;
+    Port in[nin > 0 ? nin : 1];
+    for (int k = 0; k < nin; k++) {
+        Port q = d->port[k + 1];
+        if (q && !is_var(q) && PI(q) == 0 && PC(q)->kind == V_DEFER && defer_reads(d, k)) q = defer_build(PC(q));
+        in[k] = q;
+    }
+    for (int k = 1; k < nin; k++) link(in[k], P(c, k));
+    link(in[0], P(c, 0));
     cell_free(d);
     return P(c, nin);
 }
 /* an operation of kind op with nin inputs, deferred: its inputs go to ports 1..nin */
 static Cell *defer_cell(int op, int nin) { Cell *d = cell(V_DEFER, nin + 1); d->ty = (uint32_t)op; return d; }
+/* does the deferred operation always read its input k (its port k), in every outcome but a stuck
+ * one? As syn_reads, from the cell: its principal; a plain path application's path; a meet or
+ * join's second operand; a call's parameters its definition always reads */
+static bool defer_reads(const Cell *d, int k) {
+    if (k == 0) return true;
+    switch ((int)d->ty) {
+    case O_PAPPR: return !d->x && k == 1;
+    case O_BIN: return k == 1;
+    case O_TRANSD1: return k == d->n - 2;
+    case O_WEQ: case O_WLT: case O_WADD: case O_WMAX: case O_WSUB: return k == 1;   /* as syn_reads */
+    case O_CALL: {
+        Port g = d->port[1];
+        if (!g || is_var(g) || PI(g) != 0 || PC(g)->kind != V_GLOBAL) return false;
+        extern uint64_t global_strict(long g); int q = k - 1;
+        return q < 64 && (global_strict((long)PC(g)->a) >> q & 1);
+    }
+    default: return false;
+    }
+}
 Port unbuilt_build(Cell *v) {
     if (v->kind == V_DEFER) return defer_build(v);
     if (v->kind == V_SUSP) return case_of_susp(v);
@@ -934,7 +965,15 @@ static bool fd_taint_of(const Cell *v) {
     case V_SUSP: case V_CASEF: return casetab_mkdim((const CaseTab *)v->p);
     case V_GLOBAL: return global_mkdim((long)v->a);
     case V_REC: case V_NATIVE: return true;
-    case V_DEFER: return v->ty == O_CASE ? casetab_mkdim((const CaseTab *)v->p) : (v->ty == O_MKDIM || v->ty == O_GLOB);
+    case V_DEFER:
+        /* as fd_pending refuses a pending operation */
+        switch ((int)v->ty) {
+        case O_CASE: return casetab_mkdim((const CaseTab *)v->p);
+        case O_MKDIM: case O_GLOB: case O_ERA: return true;
+        case O_NATIVE: return global_mkdim((long)v->a);
+        case O_NATREP: return global_mkdim((long)v->a) || global_mkdim((long)v->x);
+        default: return false;
+        }
     default: return false;
     }
 }
@@ -1429,7 +1468,9 @@ static void rule_era(Cell *o, Cell *v) {
 static void subst_level(Cell *o, Cell *v) {
     Subst *s = o->p;
     Port out = o->port[1];
-    if (v->kind == V_DEFER) { link(sub(defer_build(v), s), out); cell_free(o); return; }
+    /* a deferred operation read under a substitution: run, and its value substituted one level when
+     * it arrives (the reader is reading it now: held again it would be read at once) */
+    if (v->kind == V_DEFER) { link(sub_read(defer_build(v), s), out); cell_free(o); return; }
     switch (v->kind) {
     case V_GLOBAL: case V_UNK:
         link(P(v, 0), out); cell_free(o); return;
@@ -4040,37 +4081,44 @@ static Key *synkey(Syn *t, Frame *f) {
     if (z) key_release(z);
     return r;
 }
-static Port build(Syn *t, Frame *f);
-static Port op1(int kind, Syn *a, Frame *f) { Cell *c = cell(kind, 2); link(build(a, f), P(c, 0)); return P(c, 1); }
-
-/* A8: an operand read only on some outcomes (a typed path application's endpoints, read only when
- * the path is neutral at an end; a composition's base and an hcomp's cap, erased when the tube is
- * total) is built with its top operation deferred (V_DEFER): run when it is read, erased unrun
- * otherwise. Its own operands are built as usual */
-static Port build_deferred(Syn *t, Frame *f) {
-    Cell *d;
+/* Call by need (A8, CBN). Every operand is compiled unbuilt: an operation in an operand position is
+ * built as a V_DEFER cell (its kind, payload and inputs, the operation not yet run), run by its
+ * reader (an operation meeting it), held once by a duplicator, erased unrun if nobody reads it. Its
+ * own operands are deferred the same way, so nothing below an unread operand runs. Built strict
+ * (`lazy` false) are only what is read as soon as the building is: the result of a body being built
+ * (its reader asked for it) and, through it, the inputs its operation always reads (op_reads); in
+ * a deferred operation those are deferred too and are run with it, without a step, when it is run
+ * (defer_build), as building it strict would have. Values are built as they are, their parts
+ * deferred. */
+static Port build_m(Syn *t, Frame *f, bool lazy);
+static Port build(Syn *t, Frame *f) { return build_m(t, f, false); }
+/* does the operation of syntax t always read its operand q (the port it goes to), in every outcome
+ * but a stuck one? Its principal; a plain path application's path (x = 0: a typed one's endpoints
+ * answer at 0 and 1 without it); a meet or join's second operand; a transport's value (read, or
+ * passed on as the result where ψ holds: whoever runs the transport reads it); a call's parameters
+ * its definition always reads (lang.c's analysis, G.strict) */
+static bool syn_reads(Syn *t, int port) {
+    if (port == 0) return true;
     switch (t->tag) {
-    case S_APP: d = defer_cell(O_APP, 2); link(build(t->k[0], f), P(d, 1)); link(build(t->k[1], f), P(d, 2)); return P(d, 0);
-    case S_PAPP:
-        d = defer_cell(O_PAPPR, t->x ? 4 : 2); d->x = t->x;
-        link(build(t->k[1], f), P(d, 1)); link(build(t->k[0], f), P(d, 2));
-        if (t->x) { link(build(t->k[2], f), P(d, 3)); link(build(t->k[3], f), P(d, 4)); }
-        return P(d, 0);
-    case S_TRANSD:
-        d = defer_cell(O_TRANSD1, t->n); d->a = (uint64_t)t->id;
-        for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(d, k + 1));
-        return P(d, 0);
-    case S_CALL: {
-        d = defer_cell(O_CALL, t->n + 1);
-        Cell *gv = cell(V_GLOBAL, 1); gv->a = (uint64_t)t->id; gv->key = key_global(t->id);
-        link(P(gv, 0), P(d, 1));
-        for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(d, 2 + k));
-        return P(d, 0);
-    }
-    default: return build(t, f);
+    case S_PAPP: return !t->x && port == 1;
+    case S_BIN: return port == 1;
+    case S_TRANSD: return port == t->n - 1;   /* the value transported: read, or the result itself where ψ holds */
+    /* a word operation's second operand (it reads the first, then the second, unless the first is
+     * neutral): built strict, not deferred. Deferred, the native calls in it would run after the
+     * first operand's rather than beside them, and the compiled-code cache's evictions, which the
+     * run prints (tests/native-at.cub), would come in another order */
+    case S_PRIM: return port == 1 && (t->x == O_WEQ || t->x == O_WLT || t->x == O_WADD || t->x == O_WMAX || t->x == O_WSUB);
+    case S_CALL: { extern uint64_t global_strict(long g); int q = port - 1; return q < 64 && (global_strict((long)t->id) >> q & 1); }
+    default: return false;
     }
 }
-static Port build(Syn *t, Frame *f) {
+#define OPC(kind, n) (lazy ? defer_cell((kind), (n) - 1) : cell((kind), (n)))
+#define IN(c, k) P((c), lazy ? (k) + 1 : (k))
+#define OUT(c) (lazy ? P((c), 0) : P((c), (c)->n - 1))
+/* an operand of t at the operation's port k: built strict when t's operation is and reads it always */
+#define OPND(s, k) build_m((s), f, lazy || !syn_reads(t, (k)))
+static Port op1(int kind, Syn *a, Frame *f, bool lazy) { Cell *c = OPC(kind, 2); link(build_m(a, f, lazy), IN(c, 0)); return OUT(c); }
+static Port build_m(Syn *t, Frame *f, bool lazy) {
     Cell *c;
     switch (t->tag) {
     case S_VAR: {
@@ -4080,139 +4128,148 @@ static Port build(Syn *t, Frame *f) {
     }
     case S_LAM: case S_THUNK:
         c = cell(t->tag == S_LAM ? V_LAM : V_THUNK, t->n + 1); c->p = t->rec;
-        for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(c, k + 1));
+        for (int k = 0; k < t->n; k++) link(build_m(t->k[k], f, true), P(c, k + 1));
         c->key = synkey(t, f);
         if (t->tag == S_THUNK && c->key) memo_register(c);
         return P(c, 0);
     case S_APP:
-        c = cell(O_APP, 3); link(build(t->k[0], f), P(c, 0)); link(build(t->k[1], f), P(c, 1));
+        c = OPC(O_APP, 3); link(OPND(t->k[0], 0), IN(c, 0)); link(OPND(t->k[1], 1), IN(c, 1));
         c->key = synkey(t, f); if (c->key) memo_register(c);
-        return P(c, 2);
+        return OUT(c);
     case S_PAIR: c = cell(V_PAIR, 3); goto fields;
     case S_PI: c = cell(V_PI, 3); c->x = t->x; goto fields;
     case S_SIGMA: c = cell(V_SIGMA, 3); goto fields;
     case S_PATHP: c = cell(V_PATHP, 4); goto fields;
     fields:
-        for (int k = 0; k < c->n - 1; k++) link(build(t->k[k], f), P(c, k + 1));
+        for (int k = 0; k < c->n - 1; k++) link(build_m(t->k[k], f, true), P(c, k + 1));
         c->key = synkey(t, f);
         return P(c, 0);
-    case S_FST: { Port r = op1(O_FST, t->k[0], f); PC(r)->key = synkey(t, f); return r; }
-    case S_SND: { Port r = op1(O_SND, t->k[0], f); PC(r)->key = synkey(t, f); return r; }
+    case S_FST: { Port r = op1(O_FST, t->k[0], f, lazy); PC(r)->key = synkey(t, f); return r; }
+    case S_SND: { Port r = op1(O_SND, t->k[0], f, lazy); PC(r)->key = synkey(t, f); return r; }
     case S_U: {
         /* U at its level: lzero when none is written */
         c = cell(V_U, 2);
-        if (t->n) link(build(t->k[0], f), P(c, 1));
+        if (t->n) link(build_m(t->k[0], f, true), P(c, 1));
         else { int z = con_index("lzero"); if (z < 0) { fprintf(stderr, "U needs Level (lib/prelude.cub)\n"); exit(2); } link(con_build(z, NULL, NULL), P(c, 1)); }
         return P(c, 0);
     }
-    case S_BOX: return ref_of(build(t->k[0], f));
+    case S_BOX: return ref_of(build_m(t->k[0], f, true));
     case S_WORD: c = cell(V_WORD, 1); c->a = (uint64_t)t->id; c->p = big_retain(t->big); c->key = synkey(t, f); return P(c, 0);
     case S_WORDTY: c = cell(V_WTY, 1); c->key = synkey(t, f); return P(c, 0);
     case S_CALL: {
-        c = cell(O_CALL, t->n + 2);
-        for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(c, 1 + k));
+        c = OPC(O_CALL, t->n + 2);
+        for (int k = 0; k < t->n; k++) link(OPND(t->k[k], 1 + k), IN(c, 1 + k));
         Cell *gv = cell(V_GLOBAL, 1); gv->a = (uint64_t)t->id; gv->key = key_global(t->id);
-        link(P(gv, 0), P(c, 0));
+        link(P(gv, 0), IN(c, 0));
         c->key = synkey(t, f); if (c->key) memo_register(c);
-        return P(c, t->n + 1);
+        return OUT(c);
     }
     case S_GLOBTAB:
-        c = cell(O_GLOB, 2); c->x = t->x;
-        link(build(t->k[0], f), P(c, 0));
-        return P(c, 1);
+        c = OPC(O_GLOB, 2); c->x = t->x;
+        link(OPND(t->k[0], 0), IN(c, 0));
+        return OUT(c);
     case S_PRIM:
-        c = cell((int)t->x, t->n + 1);
+        c = OPC((int)t->x, t->n + 1);
         if (t->x == O_POP1 || t->x == O_POP2 || t->x == O_LOAD || t->x == O_STORE || t->x == O_FFI || t->x == O_NATIVE) c->x = (uint32_t)t->id;   /* the operation, the width, or the foreign entry */
         if (t->x == O_NATIVE) c->a = (uint64_t)t->slot;   /* the definition the native form stands for */
         if (t->x == O_NATREP) { c->x = (uint32_t)t->id; c->a = (uint64_t)t->slot; }   /* the converting call, the definition */
-        for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(c, k));
-        return P(c, t->n);
-    case S_PLAM: {
+        for (int k = 0; k < t->n; k++) link(OPND(t->k[k], k), IN(c, k));
+        return OUT(c);
+    case S_PLAM: case S_FORALL: {
         Dim i = fresh_dim();
         bind_dim(f, t->slot, i);
-        Cell *m = cell(O_MKPLAM, 2); m->a = i;
-        link(build(t->k[0], f), P(m, 0));
-        return P(m, 1);
-    }
-    case S_FORALL: {
-        Dim i = fresh_dim();
-        bind_dim(f, t->slot, i);
-        Cell *m = cell(O_FORALL, 2); m->a = i;
-        link(build(t->k[0], f), P(m, 0));
-        return P(m, 1);
+        Cell *m = OPC(t->tag == S_PLAM ? O_MKPLAM : O_FORALL, 2); m->a = i;
+        link(OPND(t->k[0], 0), IN(m, 0));
+        return OUT(m);
     }
     case S_PAPP:
-        c = cell(O_PAPPR, t->x ? 5 : 3); c->x = t->x;
-        link(build(t->k[1], f), P(c, 0)); link(build(t->k[0], f), P(c, 1));
-        if (t->x) { link(build_deferred(t->k[2], f), P(c, 2)); link(build_deferred(t->k[3], f), P(c, 3)); }
-        return P(c, c->n - 1);
+        c = OPC(O_PAPPR, t->x ? 5 : 3); c->x = t->x;
+        link(OPND(t->k[1], 0), IN(c, 0)); link(OPND(t->k[0], 1), IN(c, 1));
+        if (t->x) { link(OPND(t->k[2], 2), IN(c, 2)); link(OPND(t->k[3], 3), IN(c, 3)); }
+        return OUT(c);
     case S_IV0: { Port r = iv_cell(dnf_zero()); PC(r)->key = synkey(t, f); return r; }
     case S_IV1: { Port r = iv_cell(dnf_one()); PC(r)->key = synkey(t, f); return r; }
-    case S_NEG: return op1(O_NEG, t->k[0], f);
-    case S_BIN: c = cell(O_BIN, 3); c->x = t->x; link(build(t->k[0], f), P(c, 0)); link(build(t->k[1], f), P(c, 1)); return P(c, 2);
-    case S_FEQ: c = cell(O_FEQ, 2); c->a = t->x; link(build(t->k[0], f), P(c, 0)); return P(c, 1);
+    case S_NEG: return op1(O_NEG, t->k[0], f, lazy);
+    case S_BIN: c = OPC(O_BIN, 3); c->x = t->x; link(OPND(t->k[0], 0), IN(c, 0)); link(OPND(t->k[1], 1), IN(c, 1)); return OUT(c);
+    case S_FEQ: c = OPC(O_FEQ, 2); c->a = t->x; link(OPND(t->k[0], 0), IN(c, 0)); return OUT(c);
     case S_FTT: c = cell(V_FACE, 1); c->p = dnf_one(); c->key = synkey(t, f); return P(c, 0);
     case S_FFF: c = cell(V_FACE, 1); c->p = dnf_zero(); c->key = synkey(t, f); return P(c, 0);
-    case S_FACEOF: return op1(O_FACEOF, t->k[0], f);
-    case S_FNEG: return op1(O_FNEG, t->k[0], f);
+    case S_FACEOF: return op1(O_FACEOF, t->k[0], f, lazy);
+    case S_FNEG: return op1(O_FNEG, t->k[0], f, lazy);
     case S_SYS0: c = cell(V_SYS, 1); c->p = NULL; return P(c, 0);
     case S_SYSCONS:
-        c = cell(O_SYSCONS, 4);
-        link(build(t->k[0], f), P(c, 0)); link(build(t->k[1], f), P(c, 1)); link(build(t->k[2], f), P(c, 2));
-        return P(c, 3);
-    case S_SYSMAP: c = cell(O_SYSMAP, 3); link(build(t->k[1], f), P(c, 0)); link(build(t->k[0], f), P(c, 1)); return P(c, 2);
+        c = OPC(O_SYSCONS, 4);
+        link(OPND(t->k[0], 0), IN(c, 0)); link(OPND(t->k[1], 1), IN(c, 1)); link(OPND(t->k[2], 2), IN(c, 2));
+        return OUT(c);
+    case S_SYSMAP: c = OPC(O_SYSMAP, 3); link(OPND(t->k[1], 0), IN(c, 0)); link(OPND(t->k[0], 1), IN(c, 1)); return OUT(c);
     case S_COMP:
-        c = cell(O_COMP, 4);
-        link(build(t->k[1], f), P(c, 0)); link(build(t->k[0], f), P(c, 1)); link(build_deferred(t->k[2], f), P(c, 2));
-        return P(c, 3);
-    case S_GLUE: c = cell(O_MKGLUE, 3); c->x = t->x; link(build(t->k[1], f), P(c, 0)); link(build(t->k[0], f), P(c, 1)); return P(c, 2);
-    case S_GLUEV: c = cell(O_MKGLUEV, 3); link(build(t->k[0], f), P(c, 0)); link(build(t->k[1], f), P(c, 1)); return P(c, 2);
-    case S_UNGLUE: c = cell(O_UNGLUE, 3); c->x = t->x; link(build(t->k[0], f), P(c, 0)); link(build(t->k[1], f), P(c, 1)); return P(c, 2);
+        c = OPC(O_COMP, 4);
+        link(OPND(t->k[1], 0), IN(c, 0)); link(OPND(t->k[0], 1), IN(c, 1)); link(OPND(t->k[2], 2), IN(c, 2));
+        return OUT(c);
+    case S_GLUE: c = OPC(O_MKGLUE, 3); c->x = t->x; link(OPND(t->k[1], 0), IN(c, 0)); link(OPND(t->k[0], 1), IN(c, 1)); return OUT(c);
+    case S_GLUEV: c = OPC(O_MKGLUEV, 3); link(OPND(t->k[0], 0), IN(c, 0)); link(OPND(t->k[1], 1), IN(c, 1)); return OUT(c);
+    case S_UNGLUE: c = OPC(O_UNGLUE, 3); c->x = t->x; link(OPND(t->k[0], 0), IN(c, 0)); link(OPND(t->k[1], 1), IN(c, 1)); return OUT(c);
     case S_GLOBAL: c = cell(V_GLOBAL, 1); c->a = (uint64_t)t->id; c->key = key_global(t->id); return P(c, 0);
     case S_AXIOM:
         c = cell(V_NVAR, 2); c->a = (uint64_t)t->id; c->key = synkey(t, f);
         if (t->slot >= 0) { Cell *g = cell(V_GLOBAL, 1); g->a = (uint64_t)t->slot; link(P(g, 0), P(c, 1)); c->ty = 1; }
         else link(unk(), P(c, 1));
         return P(c, 0);
-    case S_FORCE: { Port r = op1(O_FORCE, t->k[0], f); PC(r)->key = synkey(t, f); return r; }
+    case S_FORCE: { Port r = op1(O_FORCE, t->k[0], f, lazy); PC(r)->key = synkey(t, f); return r; }
     case S_DATA: c = cell(V_DATA, t->n + 1); c->a = (uint64_t)t->id; goto fields;
     case S_CON: {
+        ConInfo *ci = &CON[t->id];
+        int nf = ci->nfields, nd = ci->ndims;
+        if (lazy && ci->bdy >= 0 && nd > 0 && a8_conw()) {
+            /* a path constructor waiting for its dimensions (con_build), deferred: 0=dimension 0,
+             * 1..nf=fields, nf+1..=the other dimensions */
+            c = defer_cell(O_CONW, nf + nd); c->a = (uint64_t)t->id; c->x = 0;
+            link(build_m(t->k[nf], f, true), P(c, 1));
+            for (int j = 0; j < nf; j++) link(build_m(t->k[j], f, true), P(c, 2 + j));
+            for (int j = 1; j < nd; j++) link(build_m(t->k[nf + j], f, true), P(c, 1 + nf + j));
+            return P(c, 0);
+        }
         Port *a = malloc((size_t)(t->n + 1) * sizeof(Port));
-        for (int k = 0; k < t->n; k++) a[k] = build(t->k[k], f);
-        Port r = con_build((int)t->id, a, a + CON[t->id].nfields);
+        /* a path constructor's first dimension is what its building reads first */
+        for (int k = 0; k < t->n; k++) a[k] = build_m(t->k[k], f, !(k == nf && ci->bdy >= 0 && nd > 0 && a8_conw()) || lazy);
+        Port r = con_build((int)t->id, a, a + nf);
         free(a);
         if (PI(r) == 0) PC(r)->key = synkey(t, f);   /* a plain constructor (one with a boundary is checked first) */
         return r;
     }
-    case S_PROJ: c = cell(O_PROJ, 2); c->a = (uint64_t)t->id; link(build(t->k[0], f), P(c, 0)); return P(c, 1);
+    case S_PROJ: c = OPC(O_PROJ, 2); c->a = (uint64_t)t->id; link(OPND(t->k[0], 0), IN(c, 0)); return OUT(c);
     case S_REC:
         c = cell(V_REC, t->n + 1); c->a = (uint64_t)t->id;
-        for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(c, k + 1));
+        for (int k = 0; k < t->n; k++) link(build_m(t->k[k], f, true), P(c, k + 1));
         return P(c, 0);
     case S_HCOMPD:
-        c = cell(O_HCOMP, t->n + 1); link(build(t->k[0], f), P(c, 0)); link(build_deferred(t->k[1], f), P(c, 1));
-        if (t->n == 3) link(build(t->k[2], f), P(c, 2));
-        return P(c, t->n);
+        c = OPC(O_HCOMP, t->n + 1); link(OPND(t->k[0], 0), IN(c, 0)); link(OPND(t->k[1], 1), IN(c, 1));
+        if (t->n == 3) link(OPND(t->k[2], 2), IN(c, 2));
+        return OUT(c);
     case S_TRANSD:
-        c = cell(O_TRANSD1, t->n + 1); c->a = (uint64_t)t->id;
-        for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(c, k));
-        return P(c, t->n);
+        c = OPC(O_TRANSD1, t->n + 1); c->a = (uint64_t)t->id;
+        for (int k = 0; k < t->n; k++) link(OPND(t->k[k], k), IN(c, k));
+        return OUT(c);
     case S_CASE: {
         /* k[0]=scrutinee k[1]=motive (or none) k[2..]=the shared variables */
         int ne = t->tab->nenv;
-        c = cell(O_CASE, ne + 2); c->x = 0; c->p = t->tab;
-        link(build(t->k[0], f), P(c, 0));
-        for (int e = 0; e < ne; e++) link(build(t->k[2 + e], f), P(c, 1 + e));
+        c = OPC(O_CASE, ne + 2); c->x = 0; c->p = t->tab;
+        link(OPND(t->k[0], 0), IN(c, 0));
+        for (int e = 0; e < ne; e++) link(OPND(t->k[2 + e], 1 + e), IN(c, 1 + e));
         c->key = synkey(t, f); if (c->key) memo_register(c);
-        return P(c, c->n - 1);
+        return OUT(c);
     }
     case S_LET: {
-        bind(f, t->slot, build(t->k[0], f));
-        return build(t->k[1], f);
+        bind(f, t->slot, build_m(t->k[0], f, true));
+        return build_m(t->k[1], f, lazy);
     }
     }
     fprintf(stderr, "build: tag %d\n", t->tag); exit(2);
 }
+#undef OPC
+#undef IN
+#undef OUT
+#undef OPND
 
 static Port run_frame(Syn *body, int nslots, const int *uses, int nparam, const Port *params, int nenv, const int *env_slot, const Port *env, int where) {
     Supply local_s[16];
