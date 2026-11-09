@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 """Compile-and-run check for lib/emitc.cub: a first-order program is printed by the machine as a
 list of bytes, decoded here, compiled with gcc, run, and its output compared with eval-fo's."""
-import re, subprocess, sys, tempfile, os, resource
+import re, subprocess, sys, tempfile, os, resource, time
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(os.path.dirname(HERE))
 CUB = os.path.join(ROOT, 'build', 'cubical')
+# The libraries and the proof files every program imports are checked once per build and then read from
+# the store's cache: its key mixes each file's text with the binary's build time, so a rebuilt binary or
+# an edited file is checked afresh. The programs' own files are new each run, so they are always
+# checked. RUNPY_NOCACHE=1 checks everything every time (the old behaviour).
+_cenv = {k: v for k, v in os.environ.items() if k != 'CUBICAL_NOCACHE'}
+_cenv['CUBICAL_CACHE'] = os.path.join(ROOT, 'build', 'runpy-cache')
+CUB_ENV = dict(os.environ, CUBICAL_NOCACHE='1') if os.environ.get('RUNPY_NOCACHE') == '1' else _cenv
+os.makedirs(_cenv['CUBICAL_CACHE'], exist_ok=True)
+def FRESH():   # a first line unique to this run, so a program's own file is never read from the cache
+    return f"-- run {os.getpid()} {time.time_ns()}\n"
 LIBS = [os.path.join(ROOT, 'lib', f) for f in ('prelude.cub', 'code.cub', 'fo.cub', 'match.cub', 'nav.cub', 'emitc.cub', 'check.cub', 'std.cub', 'stage.cub', 'lower.cub', 'specialize.cub', 'linproof.cub', 'prim.cub', 'decode.cub', 'rules.cub', 'derive.cub', 'proc.cub', 'emitt.cub', 'emitu.cub', 'repr.cub', 'image.cub', 'reimport.cub', 'emitx86.cub', 'region.cub')]
 PROGS = {
  # word subtraction is the source's truncating one: 3 - 5 is 0, not 2^64 - 2 (the C printers emitted a
@@ -508,8 +518,8 @@ def run_image(name, defs, names, main, expect, validate=None, opts=None):
         checks = ''.join(f"#same omap (λ p → snd p) (lnth (reimport-header {tbl} (fst hdr)) #{i}) = omap erase-code (def-src (gidx (code {k})))\n"
                          for i, k in enumerate(names) if validate is None or k in validate)
         img = opts.get('img', 'cxx-image {tbl} lnil {gs}').replace('{tbl}', tbl).replace('{gs}', gs).replace('{cfg}', opts.get('cfg', 'nil'))
-        open(cub, 'w').write(defs + f"\nhdr = {img}\n#show fst hdr\n#show report-text {tbl} (snd hdr)\n" + checks)
-        out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'),
+        open(cub, 'w').write(FRESH() + defs + f"\nhdr = {img}\n#show fst hdr\n#show report-text {tbl} (snd hdr)\n" + checks)
+        out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=CUB_ENV,
                              preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))).stdout
         m = re.search(r'^fst hdr\s*=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
         if not m: print(name, 'FAIL: no reading'); print(out[-500:]); return False
@@ -583,11 +593,11 @@ def run(name, defs, expect, contains=None):
         cub = os.path.join(d, name + '.cub')
         if name in QROUTE and 'prog =' not in defs: defs = curoute(name, defs) if UNBOXED else qroute(name, defs)
         if 'prog =' not in defs: defs += "\nprog = " + ("emit-prog-u defs" if UNBOXED else "emit-prog defs")
-        open(cub, 'w').write(defs + "\n#show prog\n")
+        open(cub, 'w').write(FRESH() + defs + "\n#show prog\n")
         # the printer of src/syntax.c (pr → pr_flat → pr_str → pr) spends a stack frame of a few KB per
         # nesting level, and a program is a byte list nested once per byte: a 4000-byte program
         # overflows the default 8 MB stack. Raised here until the printer iterates on the last argument.
-        out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'),
+        out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=CUB_ENV,
                              preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))).stdout
         m = re.search(r'^prog\s*=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
         if not m: print(name, 'FAIL: no reading'); print(out[-500:]); return False
@@ -662,10 +672,10 @@ def run_x86(name, defs, args, expect):
         cub = os.path.join(d, name + '.cub')
         if name in XQ:
             imp = ''.join('import "' + os.path.join(ROOT, 'lib', f) + '"\n' for f in ('foproof.cub', 'foproofd.cub', 'foproofe.cub', 'foproofq.cub', 'foproofc.cub', 'foproofx.cub'))
-            open(cub, 'w').write(imp + defs + "\ndefsq = " + XQ[name] + "\nx86ok = xq-defs-ok defsq\n#show x86ok\nprog = xa-prog defsq\n#show prog\n")
+            open(cub, 'w').write(FRESH() + imp + defs + "\ndefsq = " + XQ[name] + "\nx86ok = xq-defs-ok defsq\n#show x86ok\nprog = xa-prog defsq\n#show prog\n")
         else:
-            open(cub, 'w').write(defs + "\n#show x86-ok defs\nprog = emit-x86 defs\n#show prog\n")
-        out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'),
+            open(cub, 'w').write(FRESH() + defs + "\n#show x86-ok defs\nprog = emit-x86 defs\n#show prog\n")
+        out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=CUB_ENV,
                              preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))).stdout
         okm = re.search(r'^(?:x86-ok defs|x86ok)\s*=\s*(\w+)', out, re.M)
         m = re.search(r'^prog\s*=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
@@ -681,7 +691,23 @@ def run_x86(name, defs, args, expect):
         ok = got == expect and r.returncode == 0
         print(name, 'ok' if ok else f'FAIL: got {got!r} (exit {r.returncode}), expected {expect}; {len(bs)} bytes')
         return ok
+def one(n):
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf): ok = run(n, *PROGS[n])
+    return ok, buf.getvalue()
 if __name__ == '__main__':
     if X86: sys.exit(0 if all(run_x86(n, *X86_PROGS[n]) for n in X86_PROGS) else 1)
     if IMAGE: sys.exit(0 if all(run_image(n, *IMAGES[n]) for n in IMAGES if not sys.argv[1:] or n in sys.argv[1:]) else 1)
-    sys.exit(0 if all(run(n, *PROGS[n]) for n in PROGS if not sys.argv[1:] or n in sys.argv[1:]) else 1)
+    names = [n for n in PROGS if not sys.argv[1:] or n in sys.argv[1:]]
+    # RUNPY_JOBS programs at a time (default 2, this machine's cores); each one's output is printed
+    # whole, in the table's order. The first program warms the library cache alone.
+    jobs = int(os.environ.get('RUNPY_JOBS', '2'))
+    if jobs <= 1 or len(names) <= 1:
+        sys.exit(0 if all(run(n, *PROGS[n]) for n in names) else 1)
+    import multiprocessing
+    ok0, out0 = one(names[0]); sys.stdout.write(out0); sys.stdout.flush()
+    with multiprocessing.Pool(jobs) as pool:
+        res = pool.map(one, names[1:], chunksize=1)
+    for ok, out in res: sys.stdout.write(out)
+    sys.exit(0 if ok0 and all(ok for ok, _ in res) else 1)
