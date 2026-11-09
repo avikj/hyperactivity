@@ -99,6 +99,7 @@ static void payload_retain(Cell *c) {
     else if (c->kind == V_WORD || c->kind == V_WPLUS) big_retain(c->p);
     else if (c->kind == V_BYTES && c->p) rcl_inc(&((Bytes *)c->p)->rc);
     else if (c->kind == V_THUNK && c->a) subst_retain((Subst *)(uintptr_t)c->a);
+    else if (c->kind == V_DEFER && c->p && owns_dnf((int)c->ty)) dnf_retain(c->p);
 }
 static void payload_release(Cell *c) {
     if (c->kind == V_NATIVE) { if (c->p) nobj_release(c->p); c->p = NULL; return; }
@@ -107,6 +108,7 @@ static void payload_release(Cell *c) {
     else if (c->kind == V_WORD || c->kind == V_WPLUS) big_release(c->p);
     else if (c->kind == V_BYTES && c->p) { Bytes *b = c->p; if (rcl_dec(&b->rc) == 0) free(b); }
     else if (c->kind == V_THUNK && c->a) { subst_release((Subst *)(uintptr_t)c->a); c->a = 0; }
+    else if (c->kind == V_DEFER && c->p && owns_dnf((int)c->ty)) dnf_release(c->p);
     c->p = NULL;
 }
 static void memo_leave(Cell *c);
@@ -558,6 +560,14 @@ static Key *eff_key(Cell *c) {
     }
     return key_retain(k);
 }
+/* the key of the value named k under the substitution s (the caller owns it), or NULL */
+static Key *key_under(Key *k, const Subst *s) {
+    if (!s || !s->n) return key_retain(k);
+    Key *sk = subst_key(s);
+    if (!sk) return NULL;
+    Key *r = key2(K_SUB, 0, NULL, k, sk); key_release(sk);
+    return r;
+}
 /* the key the output port of a keyed operation carries (a duplicator's outputs carry their input's
  * key); the caller owns the result */
 static Key *key_of_aux(Port p) {
@@ -754,6 +764,7 @@ Port thunk_build(Cell *v);
 Port unbuilt_build(Cell *v);
 static bool unbuilt(int k);
 static Port sub(Port prov, Subst *s);
+static Port sub_read(Port prov, Subst *s);
 static Port copy_top(Key *as, Cell *v);
 /* as: the key of what is held (the box's; a definition's name): a copy carries it */
 Port lazy_copy(Key *as, Cell *root) {
@@ -823,10 +834,23 @@ static Port copy_top(Key *as, Cell *v) {
 
 /* a subterm held unbuilt, built (its environment moved into the body) */
 /* an unbuilt subterm (a thunk, an induction hypothesis, a word's hypothesis), built */
-static bool unbuilt(int k) { return k == V_THUNK || k == V_SUSP || k == V_WSUSP; }
+static bool unbuilt(int k) { return k == V_THUNK || k == V_SUSP || k == V_WSUSP || k == V_DEFER; }
 static Port case_of_susp(Cell *v);
 static Port welim_of_wsusp(Cell *v);
+/* a deferred operation, run: its inputs moved onto the operation (the principal last, so the pair
+ * forms with every port wired); the cell is consumed */
+static Port defer_build(Cell *d) {
+    int nin = d->n - 1;
+    Cell *c = cell((int)d->ty, nin + 1); c->x = d->x; c->a = d->a; c->p = d->p; d->p = NULL;
+    for (int k = 1; k < nin; k++) link(d->port[k + 1], P(c, k));
+    link(d->port[1], P(c, 0));
+    cell_free(d);
+    return P(c, nin);
+}
+/* an operation of kind op with nin inputs, deferred: its inputs go to ports 1..nin */
+static Cell *defer_cell(int op, int nin) { Cell *d = cell(V_DEFER, nin + 1); d->ty = (uint32_t)op; return d; }
 Port unbuilt_build(Cell *v) {
+    if (v->kind == V_DEFER) return defer_build(v);
     if (v->kind == V_SUSP) return case_of_susp(v);
     if (v->kind == V_WSUSP) return welim_of_wsusp(v);
     return thunk_build(v);
@@ -910,6 +934,7 @@ static bool fd_taint_of(const Cell *v) {
     case V_SUSP: case V_CASEF: return casetab_mkdim((const CaseTab *)v->p);
     case V_GLOBAL: return global_mkdim((long)v->a);
     case V_REC: case V_NATIVE: return true;
+    case V_DEFER: return v->ty == O_CASE ? casetab_mkdim((const CaseTab *)v->p) : (v->ty == O_MKDIM || v->ty == O_GLOB);
     default: return false;
     }
 }
@@ -949,6 +974,22 @@ static bool fd_cell(Cell *v, FdSet *x, int depth) {
         x->inexact = true;
         /* a thunk's pending substitution (applied when it is built) brings its values' dimensions */
         if (v->kind == V_THUNK && v->a) { const Subst *s = (const Subst *)(uintptr_t)v->a; for (uint32_t k = 0; k < s->n; k++) fd_dnf(x, s->v[k]); }
+        if (v->kind == V_DEFER) {
+            /* a deferred operation: its inputs' dimensions and its payload's, less a binder's own;
+             * refused when running it may make a dimension (a record, table or global among its
+             * inputs reaching %dim), as a pending operation is (fd_pending) */
+            FdSet *y = malloc(sizeof *y); y->n = 0; y->taint = false; y->inexact = true;
+            bool ok = true;
+            for (int k = 1; k < v->n && ok; k++) ok = fd_port(v->port[k], y, depth + 1);
+            if (ok && y->taint) { fd_why = 6; ok = false; }
+            if (ok && owns_dnf((int)v->ty)) fd_dnf(y, v->p);
+            if (ok && y->n <= 256) {
+                if (v->ty == O_MKPLAM || v->ty == O_FORALL) for (int q = 0; q < y->n; q++) if (y->d[q] == (Dim)v->a) { y->d[q] = y->d[--y->n]; break; }
+                fd_merge(x, y);
+            } else ok = false;
+            free(y);
+            return ok && x->n <= 256;
+        }
         for (int k = 1; k < v->n; k++) if (!fd_port(v->port[k], x, depth + 1)) return false;
         return x->n <= 256;
     }
@@ -1052,12 +1093,12 @@ static Port ref_read(Cell *r) {
             if (!t) { if (prof_on) prof_fd_dropped++; return lazy_copy(b->key, b->root); }
             if (t->n < ((Subst *)(uintptr_t)r->a)->n && prof_on) prof_fd_cut++;
             Port p = lazy_copy(b->key, b->root);
-            Port o = sub(p, t); subst_release(t);
+            Port o = sub_read(p, t); subst_release(t);
             return o;
         }
     }
     Port p = lazy_copy(r->a ? b->key : r->key, b->root);
-    return r->a ? sub(p, (Subst *)(uintptr_t)r->a) : p;
+    return r->a ? sub_read(p, (Subst *)(uintptr_t)r->a) : p;
 }
 Port ref_copy(Cell *c) { return ref_read(c); }
 /* a word's suspended elimination, computed (for readback) */
@@ -1103,7 +1144,13 @@ static void rekey_formula(Cell *v) {
     key_release(v->key);
     v->key = key0(v->kind == V_IV ? K_IV : K_FACE, 0, v->p);
 }
+/* A substitution is pending wherever it meets a value with parts (rule_subst, A8): the value is held
+ * in a box and a reference carries the substitution, applied one level when the reference is read
+ * (ref_read: the copy's top cell substituted by an O_SUBST with x = 1, each part a reference
+ * carrying the substitution on). sub: a substitution to apply (pending where it meets parts);
+ * sub_read: one read level, applied at once. Both are steps where they meet a value */
 static Port sub(Port prov, Subst *s) { Cell *c = cell(O_SUBST, 2); c->p = subst_retain(s); link(prov, P(c, 0)); return P(c, 1); }  /* borrows s */
+static Port sub_read(Port prov, Subst *s) { Cell *c = cell(O_SUBST, 2); c->p = subst_retain(s); c->x = 1; link(prov, P(c, 0)); return P(c, 1); }  /* borrows s */
 static Port mkplam_of(Port prov, Dim i) { Cell *m = cell(O_MKPLAM, 2); m->a = i; link(prov, P(m, 0)); return P(m, 1); }
 static Port iv_cell(Dnf *r) { Cell *c = cell(V_IV, 1); c->p = r; return P(c, 0); }  /* takes r */
 /* m providers sharing one value (a chain of duplicators) */
@@ -1378,10 +1425,11 @@ static void rule_era(Cell *o, Cell *v) {
     cell_free(o); cell_free(v);
 }
 
-/* substitution of dimensions */
-static void rule_subst(Cell *o, Cell *v) {
+/* substitution of dimensions, one level: the parts get the substitution as pending (sub) */
+static void subst_level(Cell *o, Cell *v) {
     Subst *s = o->p;
     Port out = o->port[1];
+    if (v->kind == V_DEFER) { link(sub(defer_build(v), s), out); cell_free(o); return; }
     switch (v->kind) {
     case V_GLOBAL: case V_UNK:
         link(P(v, 0), out); cell_free(o); return;
@@ -1527,14 +1575,66 @@ static void rule_subst(Cell *o, Cell *v) {
     case V_GLUE: { Cell *a = cell(O_MKGLUE, 3); a->x = v->x; link(sub(v->port[2], s), P(a, 0)); link(sub(v->port[1], s), P(a, 1)); link(P(a, 2), out); break; }
     case V_GLUEV: { Cell *a = cell(O_MKGLUEV, 3); link(sub(v->port[1], s), P(a, 0)); link(sub(v->port[2], s), P(a, 1)); link(P(a, 2), out); break; }
     default: {
-        /* constructors: λ (its environment), pair, Π, Σ, PathP */
+        /* constructors: λ (its environment), pair, Π, Σ, PathP; named as the value under s */
         Cell *c = clone(v);
+        if (c->key) { Key *k = key_under(c->key, s); key_release(c->key); c->key = k; }
         for (int k = 1; k < v->n; k++) link(sub(v->port[k], s), P(c, k));
         link(P(c, 0), out);
         break;
     }
     }
     cell_free(o); cell_free(v);
+}
+/* A8: does a substitution meeting this value stay pending (a value with parts other than a
+ * reference, an unbuilt subterm, a variable or a formula)? */
+static bool subst_defers(const Cell *v) {
+    if (v->kind == V_DEFER) return true;
+    if (v->n <= 1 || unbuilt(v->kind)) return false;
+    switch (v->kind) {
+    case V_GLOBAL: case V_UNK: case V_REF: case V_NVAR: case V_IV: case V_FACE: return false;
+    default: return true;
+    }
+}
+long prof_sub_held, prof_sub_dropped;
+static void rule_subst(Cell *o, Cell *v) {
+    if (o->x == 1 || !subst_defers(v)) {
+        /* a read's level (x = 1), or a value with nothing to hold: substituted now */
+        subst_level(o, v);
+        return;
+    }
+    /* the value is held and the substitution pending on a reference to it: nothing is copied or
+     * re-dispatched until a reader reads it, one level at a time (ref_read). With the memo, on one
+     * worker, the value's free dimensions cut the substitution first (as a box's do, box_fd): one
+     * that does not meet them is dropped */
+    Subst *s = subst_retain(o->p);
+    Port out = o->port[1];
+    FdInfo *nf = NULL;
+    if (!no_memo && !getenv_a8_off() && net_solo) {
+        FdSet *y = malloc(sizeof *y); y->n = 0; y->taint = false; y->inexact = false;
+        long saved = fd_budget; fd_budget = 4000; fd_why = 0;
+        bool ok = fd_cell(v, y, 0);
+        fd_budget = saved;
+        if (ok && y->n <= 256) {
+            nf = malloc(sizeof(FdInfo) + (size_t)y->n * sizeof(Dim)); nf->n = (uint32_t)y->n;
+            nf->taint = y->taint; nf->inexact = y->inexact;
+            memcpy(nf->d, y->d, (size_t)y->n * sizeof(Dim));
+        }
+        free(y);
+        if (nf) {
+            Subst *t = subst_to_fd(s, nf); subst_release(s); s = t;
+            if (!s) {
+                if (prof_on) prof_sub_dropped++;
+                free(nf);
+                link(P(v, 0), out); cell_free(o); return;
+            }
+        }
+    }
+    if (prof_on) prof_sub_held++;
+    Box *b = box_new(P(v, 0));
+    if (nf) { b->fd = nf; b->fdtries = nf->inexact ? 1 : 0; }
+    Cell *r = ref_to(b); r->a = (uint64_t)(uintptr_t)s;
+    link(P(r, 0), out);
+    cell_free(o);
 }
 
 /* a value is put under a dimension binder; a system whose clauses avoid the
@@ -1555,7 +1655,8 @@ static void rule_mkplam(Cell *o, Cell *v) {
         for (int k = 0; k < nb; k++) if (clause_mentions(cl->c[k], i)) avoid = false;
         if (avoid) {
             Cell *ns = cell(V_SYS, nb + 1); ns->p = dnf_retain(cl);
-            for (int k = 0; k < nb; k++) link(mkplam_of(v->port[k + 1], i), P(ns, k + 1));
+            /* each branch put under the binder when it is read (A8) */
+            for (int k = 0; k < nb; k++) { Cell *m = defer_cell(O_MKPLAM, 1); m->a = i; link(v->port[k + 1], P(m, 1)); link(P(m, 0), P(ns, k + 1)); }
             link(P(ns, 0), out);
             cell_free(o); cell_free(v); return;
         }
@@ -1596,40 +1697,43 @@ static void distribute(Cell *o, Cell *v) {
     Port out = out_of(o);
     Port *cp[o->n];
     for (int e = 0; e < ne; e++) { cp[e] = malloc((size_t)(nb + 1) * sizeof(Port)); split_restrict(ex[e], cl, nb, cp[e]); }
+    /* each branch's operation is deferred (V_DEFER): run when that branch is read (A8) */
+#define DI(c, k) P(c, (k) + 1)
     for (int b = 0; b < nb; b++) {
         Port val = v->port[b + 1], res = P(ns, b + 1);
         Cell *c;
         switch (o->kind) {
-        case O_APP: c = cell(O_APP, 3); link(val, P(c, 0)); link(cp[0][b], P(c, 1)); link(P(c, 2), res); break;
-        case O_SYSMAP: c = cell(O_APP, 3); link(cp[0][b], P(c, 0)); link(val, P(c, 1)); link(P(c, 2), res); break;
-        case O_FST: case O_SND: case O_FORCE: case O_TPART: case O_PROJ: case O_UNFOLD: c = cell(o->kind, 2); c->a = o->a; link(val, P(c, 0)); link(P(c, 1), res); break;
-        case O_DAPPLY: c = cell(O_DAPPLY, 3); link(val, P(c, 0)); link(cp[0][b], P(c, 1)); link(P(c, 2), res); break;
-        case O_FACEOF: c = cell(O_FACEOF, 2); link(val, P(c, 0)); link(P(c, 1), res); break;
-        case O_PAPPP:
-            c = cell(O_PAPPR, o->x ? 5 : 3); c->x = o->x;
-            { Subst *t = subst_of_clause(cl->c[b]); link(iv_cell(iv_subst(o->p, t)), P(c, 0)); subst_release(t); }
-            link(val, P(c, 1));
-            if (o->x) { link(cp[0][b], P(c, 2)); link(cp[1][b], P(c, 3)); }
-            link(P(c, c->n - 1), res);
+        case O_APP: c = defer_cell(O_APP, 2); link(val, DI(c, 0)); link(cp[0][b], DI(c, 1)); break;
+        case O_SYSMAP: c = defer_cell(O_APP, 2); link(cp[0][b], DI(c, 0)); link(val, DI(c, 1)); break;
+        case O_FST: case O_SND: case O_FORCE: case O_TPART: case O_PROJ: case O_UNFOLD: c = defer_cell(o->kind, 1); c->a = o->a; link(val, DI(c, 0)); break;
+        case O_DAPPLY: c = defer_cell(O_DAPPLY, 2); link(val, DI(c, 0)); link(cp[0][b], DI(c, 1)); break;
+        case O_FACEOF: c = defer_cell(O_FACEOF, 1); link(val, DI(c, 0)); break;
+        case O_PAPPP: {
+            /* the interval restricted is formed now: the deferred operation is the application */
+            c = defer_cell(O_PAPPR, o->x ? 4 : 2); c->x = o->x;
+            { Subst *t = subst_of_clause(cl->c[b]); link(iv_cell(iv_subst(o->p, t)), DI(c, 0)); subst_release(t); }
+            link(val, DI(c, 1));
+            if (o->x) { link(cp[0][b], DI(c, 2)); link(cp[1][b], DI(c, 3)); }
             break;
-        case O_UNGLUE2: c = cell(O_UNGLUE, 3); c->x = o->x; link(cp[0][b], P(c, 0)); link(val, P(c, 1)); link(P(c, 2), res); break;
-        case O_COMPA: c = cell(O_COMP, 4); link(cp[0][b], P(c, 0)); link(val, P(c, 1)); link(cp[1][b], P(c, 2)); link(P(c, 3), res); break;
+        }
+        case O_UNGLUE2: c = defer_cell(O_UNGLUE, 2); c->x = o->x; link(cp[0][b], DI(c, 0)); link(val, DI(c, 1)); break;
+        case O_COMPA: c = defer_cell(O_COMP, 3); link(cp[0][b], DI(c, 0)); link(val, DI(c, 1)); link(cp[1][b], DI(c, 2)); break;
         case O_CASE:
-            c = cell(O_CASE, o->n); c->x = o->x; c->p = o->p;
-            link(val, P(c, 0));
-            for (int e = 0; e < ne; e++) link(cp[e][b], P(c, 1 + e));
-            link(P(c, o->n - 1), res);
+            c = defer_cell(O_CASE, o->n - 1); c->x = o->x; c->p = o->p;
+            link(val, DI(c, 0));
+            for (int e = 0; e < ne; e++) link(cp[e][b], DI(c, 1 + e));
             break;
         case O_TRANSD2:
-            c = cell(O_TRANSD2, o->n); c->a = o->a;
+            c = defer_cell(O_TRANSD2, o->n - 1); c->a = o->a;
             { Subst *t = subst_of_clause(cl->c[b]); c->p = face_subst(o->p, t); subst_release(t); }
-            link(val, P(c, 0));
-            for (int e = 0; e < ne; e++) link(cp[e][b], P(c, 1 + e));
-            link(P(c, o->n - 1), res);
+            link(val, DI(c, 0));
+            for (int e = 0; e < ne; e++) link(cp[e][b], DI(c, 1 + e));
             break;
         default: fprintf(stderr, "distribute: kind %d\n", o->kind); exit(2);
         }
+        link(P(c, 0), res);
     }
+#undef DI
     for (int e = 0; e < ne; e++) free(cp[e]);
     link(P(ns, 0), out);
     cell_free(o); cell_free(v);
@@ -1914,7 +2018,7 @@ static const char *const KIND_NAME[K_END] = {
     [V_WSUSP] = "WSUSP",
     [V_WTY] = "WTY",
     [V_PTY] = "PTY", [V_PVAL] = "PVAL", [V_BYTES] = "BYTES",
-    [V_THUNK] = "THUNK", [V_NATIVE] = "NATIVE",
+    [V_THUNK] = "THUNK", [V_NATIVE] = "NATIVE", [V_DEFER] = "DEFER",
     [V_WPLUS] = "WPLUS",
     [V_NWOP] = "NWOP",
     [V_NPRIM] = "NPRIM",
@@ -2038,7 +2142,7 @@ static void interact(Cell *o, Cell *v) {
       /* CUBICAL_PROGRESS=n: every n steps of a thread, its steps and the cells it holds (A8's
        * measurements of reads too large to finish) */
       static long prog = -1; if (prog < 0) { const char *e = getenv("CUBICAL_PROGRESS"); prog = e ? atol(e) : 0; }
-      if (prog > 0 && l->steps % prog == 0) fprintf(stderr, "[progress] %ld steps, %ld cells\n", l->steps, (long)l->cells); }
+      if (prog > 0 && l->steps % prog == 0) { extern long rb_nodes; fprintf(stderr, "[progress] %ld steps, %ld cells, %ld read back\n", l->steps, (long)l->cells, rb_nodes); } }
     if (prof_on && (o->kind == O_SUBST || o->kind == O_ERA || o->kind == O_DUP || o->kind == O_PAPPP)) ADD(prof_pair[o->kind == O_SUBST ? 0 : o->kind == O_ERA ? 1 : o->kind == O_DUP ? 2 : 3][v->kind & 255], 1);
     if (trace_out) trace_step(o, v);
     if (prof_on) {
@@ -2301,8 +2405,10 @@ static void interact(Cell *o, Cell *v) {
             q = 0;
             for (int k = 0; k < nb; k++) {
                 if (clause_mentions(cl->c[k], i)) { era(v->port[k + 1]); continue; }
-                Cell *c = cell(O_COMP, 4);
-                link(uc[q], P(c, 0)); link(mkplam_of(v->port[k + 1], i), P(c, 1)); link(ac[q], P(c, 2)); link(P(c, 3), P(ns, q + 1));
+                /* the branch's composition, and the line it composes in, deferred until the branch is read (A8) */
+                Cell *m = defer_cell(O_MKPLAM, 1); m->a = i; link(v->port[k + 1], P(m, 1));
+                Cell *c = defer_cell(O_COMP, 3);
+                link(uc[q], P(c, 1)); link(P(m, 0), P(c, 2)); link(ac[q], P(c, 3)); link(P(c, 0), P(ns, q + 1));
                 q++;
             }
             free(uc); free(ac);
@@ -2449,7 +2555,8 @@ static void interact(Cell *o, Cell *v) {
             split_restrict(o->port[1], f, m, cp);
             for (int q = 0; q < m; q++) {
                 ncl[nb + q] = f->c[q];
-                Cell *fo = cell(O_FORCE, 2); link(cp[q], P(fo, 0)); link(P(fo, 1), P(ns, nb + q + 1));
+                /* forced when that branch is read (A8) */
+                Cell *fo = defer_cell(O_FORCE, 1); link(cp[q], P(fo, 1)); link(P(fo, 0), P(ns, nb + q + 1));
             }
             ns->p = clause_list(ncl, (uint32_t)(nb + m));
             free(ncl);
@@ -3930,6 +4037,33 @@ static Key *synkey(Syn *t, Frame *f) {
 static Port build(Syn *t, Frame *f);
 static Port op1(int kind, Syn *a, Frame *f) { Cell *c = cell(kind, 2); link(build(a, f), P(c, 0)); return P(c, 1); }
 
+/* A8: an operand read only on some outcomes (a typed path application's endpoints, read only when
+ * the path is neutral at an end; a composition's base and an hcomp's cap, erased when the tube is
+ * total) is built with its top operation deferred (V_DEFER): run when it is read, erased unrun
+ * otherwise. Its own operands are built as usual */
+static Port build_deferred(Syn *t, Frame *f) {
+    Cell *d;
+    switch (t->tag) {
+    case S_APP: d = defer_cell(O_APP, 2); link(build(t->k[0], f), P(d, 1)); link(build(t->k[1], f), P(d, 2)); return P(d, 0);
+    case S_PAPP:
+        d = defer_cell(O_PAPPR, t->x ? 4 : 2); d->x = t->x;
+        link(build(t->k[1], f), P(d, 1)); link(build(t->k[0], f), P(d, 2));
+        if (t->x) { link(build(t->k[2], f), P(d, 3)); link(build(t->k[3], f), P(d, 4)); }
+        return P(d, 0);
+    case S_TRANSD:
+        d = defer_cell(O_TRANSD1, t->n); d->a = (uint64_t)t->id;
+        for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(d, k + 1));
+        return P(d, 0);
+    case S_CALL: {
+        d = defer_cell(O_CALL, t->n + 1);
+        Cell *gv = cell(V_GLOBAL, 1); gv->a = (uint64_t)t->id; gv->key = key_global(t->id);
+        link(P(gv, 0), P(d, 1));
+        for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(d, 2 + k));
+        return P(d, 0);
+    }
+    default: return build(t, f);
+    }
+}
 static Port build(Syn *t, Frame *f) {
     Cell *c;
     switch (t->tag) {
@@ -4004,7 +4138,7 @@ static Port build(Syn *t, Frame *f) {
     case S_PAPP:
         c = cell(O_PAPPR, t->x ? 5 : 3); c->x = t->x;
         link(build(t->k[1], f), P(c, 0)); link(build(t->k[0], f), P(c, 1));
-        if (t->x) { link(build(t->k[2], f), P(c, 2)); link(build(t->k[3], f), P(c, 3)); }
+        if (t->x) { link(build_deferred(t->k[2], f), P(c, 2)); link(build_deferred(t->k[3], f), P(c, 3)); }
         return P(c, c->n - 1);
     case S_IV0: { Port r = iv_cell(dnf_zero()); PC(r)->key = synkey(t, f); return r; }
     case S_IV1: { Port r = iv_cell(dnf_one()); PC(r)->key = synkey(t, f); return r; }
@@ -4023,7 +4157,7 @@ static Port build(Syn *t, Frame *f) {
     case S_SYSMAP: c = cell(O_SYSMAP, 3); link(build(t->k[1], f), P(c, 0)); link(build(t->k[0], f), P(c, 1)); return P(c, 2);
     case S_COMP:
         c = cell(O_COMP, 4);
-        link(build(t->k[1], f), P(c, 0)); link(build(t->k[0], f), P(c, 1)); link(build(t->k[2], f), P(c, 2));
+        link(build(t->k[1], f), P(c, 0)); link(build(t->k[0], f), P(c, 1)); link(build_deferred(t->k[2], f), P(c, 2));
         return P(c, 3);
     case S_GLUE: c = cell(O_MKGLUE, 3); c->x = t->x; link(build(t->k[1], f), P(c, 0)); link(build(t->k[0], f), P(c, 1)); return P(c, 2);
     case S_GLUEV: c = cell(O_MKGLUEV, 3); link(build(t->k[0], f), P(c, 0)); link(build(t->k[1], f), P(c, 1)); return P(c, 2);
@@ -4050,7 +4184,7 @@ static Port build(Syn *t, Frame *f) {
         for (int k = 0; k < t->n; k++) link(build(t->k[k], f), P(c, k + 1));
         return P(c, 0);
     case S_HCOMPD:
-        c = cell(O_HCOMP, t->n + 1); link(build(t->k[0], f), P(c, 0)); link(build(t->k[1], f), P(c, 1));
+        c = cell(O_HCOMP, t->n + 1); link(build(t->k[0], f), P(c, 0)); link(build_deferred(t->k[1], f), P(c, 1));
         if (t->n == 3) link(build(t->k[2], f), P(c, 2));
         return P(c, t->n);
     case S_TRANSD:

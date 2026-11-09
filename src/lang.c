@@ -2662,11 +2662,12 @@ static char *dnf_string(const Dnf *d, bool face) {
     return buf;
 }
 static int obs_depth;
-static long rb_nodes;   /* cells of the value read back: its size, reported beside the steps */
+long rb_nodes;   /* cells of the value read back: its size, reported beside the steps */
 static void rb_one(FILE *o, Port prov) {
     Cell *c = observe(prov);
     if (!c) { fputs("<pending>", o); return; }
-    rb_nodes++;
+    /* the size counts the value's cells, not the references and unbuilt subterms it is read through */
+    if (c->kind != V_REF && c->kind != V_THUNK && c->kind != V_DEFER) rb_nodes++;
     long nm;
     if (obs_depth > 0 && (c->kind == V_NVAR || c->kind == V_NAPP || c->kind == V_NPAPP) && (c->ty & TY_COFIX)) {
         /* (observe n t): a stuck call unfolded, its fields read one level less deep */
@@ -2753,6 +2754,7 @@ static void rb_one(FILE *o, Port prov) {
     case V_NCOMP: push_fields_to(o, "comp", c, 1, 4); return;
     case V_NUNGLUE: push_fields_to(o, c->x ? "%unglueU" : "unglue", c, 1, 3); return;
     case V_THUNK: { extern Port thunk_build(Cell *c); push_port(thunk_build(c)); return; }
+    case V_DEFER: { extern Port unbuilt_build(Cell *c); push_port(unbuilt_build(c)); return; }
     case V_UNK: fputs("?", o); return;
     case V_DATA: if (c->n == 1) fputs(DATA[c->a].name, o); else push_fields(o, DATA[c->a].name, c, 1); return;
     case V_CON: if (c->n == 1) fputs(CON[c->a].name, o); else push_fields(o, CON[c->a].name, c, 1); return;
@@ -2921,6 +2923,7 @@ static Cell *obs_val(Port p) {
         if (!c) return NULL;
         if (c->kind == V_REF) { p = ref_copy(c); continue; }
         if (c->kind == V_THUNK) { p = thunk_build(c); continue; }
+        if (c->kind == V_DEFER) { extern Port unbuilt_build(Cell *c); p = unbuilt_build(c); continue; }
         if (c->kind == V_GLOBAL) { Port v = global_copy((long)c->a, c->key); if (!v) return c; p = v; continue; }
         return c;
     }
@@ -5834,6 +5837,7 @@ static void prof_print(void) {
           for (int q = 0; q < 4; q++) for (int k = 0; k < 256; k++) if (prof_pair[q][k]) fprintf(stderr, "kind %s·%s: %ld\n", pn[q], kind_name(k), prof_pair[q][k]); }
         { extern long prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep, prof_reads_sub_boxes;
           fprintf(stderr, "kind reads-subst-boxes: %ld\n", prof_reads_sub_boxes);
+          { extern long prof_sub_held, prof_sub_dropped; fprintf(stderr, "kind subst-held: %ld\nkind subst-dropped: %ld\n", prof_sub_held, prof_sub_dropped); }
           extern long prof_fd_cut, prof_fd_dropped, prof_fd_why[7], prof_fd_pending; { extern long prof_fd_var, prof_fd_prin[512]; fprintf(stderr, "kind fd-var: %ld\n", prof_fd_var); for (int k = 0; k < 512; k++) if (prof_fd_prin[k]) fprintf(stderr, "kind fd-prin %d: %ld\n", k, prof_fd_prin[k]); } fprintf(stderr, "kind fd-cut: %ld\nkind fd-dropped: %ld\nkind fd-unknown root/unbuilt/pending/budget/tries/taint: %ld %ld %ld %ld %ld %ld\nkind fd-pending-bounded: %ld\n", prof_fd_cut, prof_fd_dropped, prof_fd_why[1], prof_fd_why[2], prof_fd_why[3], prof_fd_why[4], prof_fd_why[5], prof_fd_why[6], prof_fd_pending); fprintf(stderr, "kind reads-plain: %ld\nkind reads-plain-repeat: %ld\nkind reads-subst: %ld\nkind reads-subst-repeat: %ld\n", prof_reads, prof_reads_rep, prof_reads_sub, prof_reads_sub_rep); }
         for (int k = 0; k < 64; k++) if (prof_dupk[k] || prof_erak[k]) fprintf(stderr, "value kind %3d: dup %ld era %ld\n", k, prof_dupk[k], prof_erak[k]);
         for (int i = 0; i < prof_n; i++) ix2[i] = i;
@@ -5848,7 +5852,7 @@ static void prof_print(void) {
                 for (int i = 0; i < 65536; i++) if (rec[i]) o[no++] = i;
                 for (int i = 0; i < no; i++) for (int j = i + 1; j < no; j++) if (rec[o[j]] > rec[o[i]]) { int t = o[i]; o[i] = o[j]; o[j] = t; }
                 for (int i = 0; i < no && i < 25; i++) fprintf(stderr, "%s from %10ld  %s\n", w ? "era" : "dup", rec[o[i]], o[i] == 0 ? "(top or unknown)" : (o[i] - 1 < prof_n ? prof_name[o[i] - 1] : "?"));
-                for (int k = 0; k < 256; k++) if (rul[k] > 100000) fprintf(stderr, "%s from %10ld  rule kind %d\n", w ? "era" : "dup", rul[k], k);
+                extern const char *kind_name(int); for (int k = 0; k < 256; k++) if (rul[k] > 100) fprintf(stderr, "%s from %10ld  rule kind %d %s\n", w ? "era" : "dup", rul[k], k, kind_name(k));
                 free(o);
             }
         }

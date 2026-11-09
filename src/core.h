@@ -149,6 +149,10 @@ enum {
                  * as itself (%view: wnative), its finalizer run once when the last copy is erased. Or the
                  * emitted runtime's boxed value of data type d (#native … keep): passed to compiled code
                  * as it is, unboxed into cells when anything else reads it */
+    V_DEFER,    /* ty=an operation's kind, x, a, p its own; 1..=its inputs (its ports 0..): an operation not yet
+                 * run, an unbuilt value (A8): a reader runs it (defer_build), a duplicator holds it once, a
+                 * substitution waits on a reference to it. Made where a rule would otherwise build one
+                 * operation per branch of a system (distribute, a composition over a system of families) */
     V_END,
     /* operations: negative principal port; the last port is the result */
     O_APP,      /* 0=f 1=arg 2=out */
