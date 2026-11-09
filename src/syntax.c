@@ -1643,7 +1643,6 @@ static void p_decl(void) {
             Node *rl = nsym("lnil"); for (int i = nt - 1; i >= 0; i--) rl = lst(3, nsym("lcons"), wordn(ths[i]), rl);
             long steps = 0;
             char *r = readback(nl3("%%jit-plan", wordn(ck), nl2("%%view-of", rl)), &steps);
-            if (getenv("CUBICAL_JIT_DEBUG")) fprintf(stderr, "[jit plan] %.600s\n", r);
             const char *saved = src; src = r; Node *rn = read_node(); src = saved;
             /* the plan's five parts: (pair a (pair b (pair c (pair d e)))) */
             Node *grp[5]; int ng = 0;
@@ -1659,7 +1658,9 @@ static void p_decl(void) {
                 printf("jit: %s stays on the net: %s   [%ld steps]\n", fn->s, v->it[1]->list ? "?" : v->it[1]->s, steps);
                 decl_end(); return;
             }
-            if (grp[1]->list || strcmp(grp[1]->s, "true")) {
+            /* without theorems the code is f's normal form, and the check is the checker's conversion;
+             * with them the code is only propositionally f, and the check is the path, below */
+            if (!nt && (grp[1]->list || strcmp(grp[1]->s, "true"))) {
                 failures++; printf("FAIL: jit %s: the specialized code does not convert with %s   [%ld steps]\n", fn->s, fn->s, steps);
                 decl_end(); return;
             }

@@ -159,29 +159,32 @@ isnil-g l = case l of lnil → true; _ → false
 -- the type T the path is at (the line of the composition)
 rewrite-all n Tc rules c =
   let o = orient-rules rules
-      f = rewrite-fix-p Tc (fst o) c none
-  in rewrite-bounded n Tc (fst o) (snd o) (fst f) (snd f)
-rewrite-bounded n Tc ors rules c p =
+      f = rewrite-fix-p Tc c (fst o) c none
+  in rewrite-bounded n Tc c (fst o) (snd o) (fst f) (snd f)
+rewrite-bounded n Tc s ors rules c p =
   if %weq n #0 then (c , p)
   else (case first-applicable-p rules c of
           none → (c , p)
-          some q → (let f = rewrite-fix-p Tc ors (fst q) (compose-p Tc c p (snd q)) in rewrite-bounded (%wsub n #1) Tc ors rules (fst f) (snd f)))
-rewrite-fix-p Tc rules c p = case first-applicable-p rules c of none → (c , p); some q → rewrite-fix-p Tc rules (fst q) (compose-p Tc c p (snd q))
+          some q → (let f = rewrite-fix-p Tc s ors (fst q) (compose-p Tc s c (fst q) p (snd q)) in rewrite-bounded (%wsub n #1) Tc s ors rules (fst f) (snd f)))
+rewrite-fix-p Tc s rules c p = case first-applicable-p rules c of none → (c , p); some q → rewrite-fix-p Tc s rules (fst q) (compose-p Tc s c (fst q) p (snd q))
 first-applicable-p rules c =
   case rules of
     lnil → none
     lcons r rest → (case rewrite-first-path r c of some q → some q; none → first-applicable-p rest c)
--- compose-p Tc c0 p q: the path so far p (none: refl at c0, the code before it) followed by the
--- step q, as the code of concat (lib/std.cub): λ i → comp (λ j → T) [ i = 0 ↦ c0 , i = 1 ↦ q @ j ] (p @ i).
--- Under the outer binder i the step and the path shift by one, under j by two; c0 is the left
--- endpoint of the whole path
-compose-p Tc c0 p q =
+-- compose-p Tc s m c' p q: the path so far p (none: refl) from s, the code the whole path starts
+-- at, to m, followed by the step q from m to c', as the code of concat (lib/std.cub):
+-- λ i → comp (λ j → T) [ i = 0 ↦ s , i = 1 ↦ q @ j ] (p @ i). Each path is annotated with its
+-- type, PathP (λ _ → T) at its endpoints, so its application is inferable (a step is a path
+-- abstraction, which checks but does not infer). Under the outer binder i the codes shift by
+-- one, under j by two
+path-at Tc a b = cpathp (cplam (shift-code #0 #1 Tc)) a b
+compose-p Tc s m c' p q =
   case p of
     none → some q
     some p1 → some (cplam (ccomp (cplam (shift-code #0 #2 Tc))
-                                (cplam (csysc (ceq0 (cvar #1)) (shift-code #0 #2 c0)
-                                              (csysc (ceq1 (cvar #1)) (cpapp (shift-code #0 #2 q) (cvar #0)) csys0)))
-                                (cpapp (shift-code #0 #1 p1) (cvar #0))))
+                                (cplam (csysc (ceq0 (cvar #1)) (shift-code #0 #2 s)
+                                              (csysc (ceq1 (cvar #1)) (cpapp (shift-code #0 #2 (cann q (path-at Tc m c'))) (cvar #0)) csys0)))
+                                (cpapp (shift-code #0 #1 (cann p1 (path-at Tc s m))) (cvar #0))))
 -- the path's code as a term's code: refl where none
 path-code p c = case p of some q → q; none → cplam (shift-code #0 #1 c)
 -- ---------------------------------------------------------------- schedules as values (5.7)
