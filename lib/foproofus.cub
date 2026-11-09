@@ -1,0 +1,850 @@
+-- lib/foproofus.cub — the unboxed C link, U3 (plan item 15): cu-sound, whatever the first-order form
+-- computes the unboxed C computes. lib/foproofu.cub's U1 gives the kinds (ksyn, kok, kind-sound);
+-- lib/foproofcu.cub's U2 the unboxed C (CU), its meaning on C's words (evcu, lib/foproofm.cub's MV and
+-- MSt) and the translation guided by the kinds (fq-to-cu). Loaded after lib/foproofcu.cub.
+--
+-- The relation (UR): an unboxed C value refines a first-order value when it holds a limit (a C word
+-- operation left the exact words: no claim, as lib/foproofm.cub's evc), or it is, read as a C cell, a
+-- value lib/foproofc.cub's CR relates to it. A uint64_t is a word cell in this model (evcu's), so the
+-- representation the kinds choose changes no value: what the kinds decide is where a conversion is
+-- sound. (x)->n (cuunw) is the identity on a word cell and has no value on any other cell, so it is
+-- sound exactly where the first-order value is a word or none: kind kw (U1's Kv T kw). A term the
+-- translation wants as a uint64_t (W) is related only where its value has kind kw (VR); a let's local,
+-- a parameter and a result are uint64_t exactly where their kind is kw, and kind-sound gives that kind
+-- to the value, so every local and every function's value is related in full (vr-k); a word primitive's
+-- operands, uint64_t whatever their kinds, are related only where they are words, which is all a word
+-- primitive reads (its value is none otherwise: wrp-k, the chain over q-prim).
+--
+-- cu-sound is one induction over the term (ustep: lib/foproofc.cub's pstep and lib/foproofm.cub's
+-- mstep at once, the kinds alongside) inside one over the fuel for calls and loops (ucoks), kind-sound
+-- read at each let, call, loop and definition. A closure's target is called by apply through the
+-- dispatcher with V * arguments: such a key (dc) has a dispatcher case (CD), its parameters' kinds are
+-- anything (kanys) so any arguments have them, and the term's closures name only such keys (uok, the
+-- boxed link's ca-ok with that one condition more). cu-sound-k states it for a term translated at its
+-- kind's C type (as fq-to-cu-def and U2's main are); cu-word, cu-agree read it at a word against the
+-- boxed link's evc (lib/foproofm.cub's cm-sound-t): when the first-order form answers a word, the boxed
+-- C and the unboxed C each answer that word or hit a limit.
+-- ---------------------------------------------------------------- small facts
+mor-fl : (a b : Bool) → mor a b ≡ false → a ≡ false
+mor-fl true b h = h
+mor-fl false b h = λ i → false
+mor-fr : (a b : Bool) → mor a b ≡ false → b ≡ false
+mor-fr true b h = Empty-rec (true≢false h)
+mor-fr false b h = h
+-- a machine value without a limit is a C value read back
+c2m-m2c : (u : MV) → haslim u ≡ false → c2m (m2c u) ≡ u
+c2m-m2c (mw n) h = λ i → mw n
+c2m-m2c (mcon c fs) h = λ i → mcon c (c2m-m2c fs h i)
+c2m-m2c (mclo g caps) h = λ i → mclo g (c2m-m2c caps h i)
+c2m-m2c (mb l) h = λ i → mb l
+c2m-m2c mvnil h = λ i → mvnil
+c2m-m2c (mvcons x r) h = λ i → mvcons (c2m-m2c x (mor-fl (haslim x) (haslim r) h) i) (c2m-m2c r (mor-fr (haslim x) (haslim r) h) i)
+c2m-m2c mbot h = λ i → mbot
+c2m-m2c mlim h = Empty-rec (true≢false h)
+-- a dependent if on CU (a case's goal stated through a function of the test, met on each side)
+bif-el : (P : CU → Type) (b : Bool) (X Y : CU) → (b ≡ true → P X) → (b ≡ false → P Y) → P (if b then X else Y)
+bif-el P true X Y hx hy = hx (λ i → true)
+bif-el P false X Y hx hy = hy (λ i → false)
+-- a chain of m anythings, decided
+kanysb : Kd → Nat → Bool
+kanysb knil zero = true
+kanysb (kcons ka r) (suc m) = kanysb r m
+kanysb k m = false
+kanysb-ok : (k : Kd) (m : Nat) → kanysb k m ≡ true → k ≡ kanys m
+kanysb-ok knil zero h = λ i → knil
+kanysb-ok (kcons ka r) (suc m) h = λ i → kcons ka (kanysb-ok r m h i)
+kanysb-ok k m h = Empty-rec (false≢true h)
+-- ---------------------------------------------------------------- the relation
+-- an unboxed C value refines a first-order value: a limit inside, or a C value CR relates, read as a
+-- machine value
+UR : (Word → Nat) → (Word → Bool) → KQ → MV → Type
+UR A df q u = Sum (haslim u ≡ true) ((c : CV) × (CR A df q c × (u ≡ c2m c)))
+ur-c : (A : Word → Nat) (df : Word → Bool) (q : KQ) (c : CV) → CR A df q c → UR A df q (c2m c)
+ur-c A df q c h = inr (c , (h , (λ i → c2m c)))
+ur-mr : (A : Word → Nat) (df : Word → Bool) (q : KQ) (c : CV) (m : MV) → CR A df q c → MR c m → UR A df q m
+ur-mr A df q c m hc (inl p) = inl p
+ur-mr A df q c m hc (inr p) = inr (c , (hc , p))
+-- none is refined by anything
+ur-bot : (A : Word → Nat) (df : Word → Bool) (u : MV) → UR A df kqbot u
+ur-bot A df u = bool-split (haslim u) (UR A df kqbot u) (λ h → inl h) (λ h → inr (m2c u , (unit , sym (c2m-m2c u h))))
+-- without a limit, the C value read back is related
+ur-nl : (A : Word → Nat) (df : Word → Bool) (q : KQ) (u : MV) → haslim u ≡ false → UR A df q u → CR A df q (m2c u)
+ur-nl A df q u h (inl p) = Empty-rec (true≢false (sym p ∙ h))
+ur-nl A df q u h (inr p) = subst {lzero} {lzero} {CV} {λ v → CR A df q v} {fst p} {m2c u} (sym (cong m2c (snd (snd p)) ∙ m2c-c2m (fst p))) (fst (snd p))
+-- the gate every operation on C's words passes: a limit in its operand answers a limit; otherwise the
+-- operation on the operand's C value
+ur-gate : (A : Word → Nat) (df : Word → Bool) (q : KQ) (u : MV) (y : KQ) (K : CV → MV) → UR A df q u → ((c : CV) → CR A df q c → UR A df y (K c))
+        → UR A df y (if haslim u then mlim else K (m2c u))
+ur-gate A df q u y K h hk =
+  bool-split (haslim u) (UR A df y (if haslim u then mlim else K (m2c u)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → UR A df y (if b then mlim else K (m2c u))} {true} {haslim u} (sym e) (inl (λ i → true)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → UR A df y (if b then mlim else K (m2c u))} {false} {haslim u} (sym e) (hk (m2c u) (ur-nl A df q u e h)))
+ur-lift : (A : Word → Nat) (df : Word → Bool) (g : CV → CV) (q y : KQ) (u : MV) → ((c : CV) → CR A df q c → CR A df y (g c)) → UR A df q u → UR A df y (mlift g u)
+ur-lift A df g q y u hg h = ur-gate A df q u y (λ v → c2m (g v)) h (λ c hc → ur-c A df y (g c) (hg c hc))
+ur-prim : (A : Word → Nat) (df : Word → Bool) (p : Word) (qs : KQ) (us : MV) → UR A df qs us → UR A df (q-prim p qs) (m-prim p us)
+ur-prim A df p qs us h = ur-gate A df qs us (q-prim p qs) (mprim0 p) h (λ c hc → ur-mr A df (q-prim p qs) (c-prim p c) (mprim0 p c) (cr-prim A df p qs c hc) (mr-prim0 p c))
+ur-con : (A : Word → Nat) (df : Word → Bool) (d c : Word) (qs : KQ) (us : MV) → UR A df qs us → UR A df (kqcon d c qs) (mcon c us)
+ur-con A df d c qs us (inl p) = inl p
+ur-con A df d c qs us (inr p) = inr (cvcon c (fst p) , (((λ i → c) , fst (snd p)) , (λ i → mcon c (snd (snd p) i))))
+ur-clo : (A : Word → Nat) (df : Word → Bool) (g : Word) (qs : KQ) (us : MV) → cr-clo A df g qs ≡ true → UR A df qs us → UR A df (kqclos g qs) (mclo g us)
+ur-clo A df g qs us hc (inl p) = inl p
+ur-clo A df g qs us hc (inr p) = inr (cclo g (fst p) , ((((λ i → g) , hc) , fst (snd p)) , (λ i → mclo g (snd (snd p) i))))
+ur-cons : (A : Word → Nat) (df : Word → Bool) (x : KQ) (y : MV) (r : KQ) (v : MV) → UR A df x y → UR A df r v → UR A df (kqcons x r) (mvcons y v)
+ur-cons A df x y r v (inl p) hr = inl (cong (λ b → mor b (haslim v)) p)
+ur-cons A df x y r v (inr p) (inl pr) = inl (cong (λ u → mor (haslim u) (haslim v)) (snd (snd p)) ∙ (cong (λ b → mor b (haslim v)) (c2m-nl (fst p)) ∙ pr))
+ur-cons A df x y r v (inr p) (inr pr) = inr (cvcons (fst p) (fst pr) , ((fst (snd p) , fst (snd pr)) , (λ i → mvcons (snd (snd p) i) (snd (snd pr) i))))
+ur-nil : (A : Word → Nat) (df : Word → Bool) → UR A df kqnil mvnil
+ur-nil A df = ur-c A df kqnil cvnil (λ i → cvnil)
+-- (x)->n of a value of kind kw: the identity on its word cell
+cr-word : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (q : KQ) (c : CV) → Kv T kw q → CR A df q c → CR A df q (c-word c)
+cr-word A df T kqbot c hk h = unit
+cr-word A df T (kqw w) c hk h = subst {lzero} {lzero} {CV} {λ v → CR A df (kqw w) (c-word v)} {cw w} {c} (sym h) (λ i → cw w)
+cr-word A df T (kqi b) c hk h = subst {lzero} {lzero} {CV} {λ v → CR A df (kqi b) (c-word v)} {cw b} {c} (sym h) (λ i → cw b)
+cr-word A df T (kqf b) c hk h = subst {lzero} {lzero} {CV} {λ v → CR A df (kqf b) (c-word v)} {cw b} {c} (sym h) (λ i → cw b)
+cr-word A df T q c hk h = Empty-rec hk
+ur-word : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (q : KQ) (u : MV) → Kv T kw q → UR A df q u → UR A df q (mlift c-word u)
+ur-word A df T q u hk h = ur-lift A df c-word q q u (λ c hc → cr-word A df T q c hk hc) h
+-- ---------------------------------------------------------------- at a wanted C type
+-- what a C type asks of the value: a uint64_t, kind kw; a V *, nothing
+wkp : (Word → Word → Nat → Kd) → CTy → KQ → Type
+wkp T ctw q = Kv T kw q
+wkp T ctb q = Unit
+-- a term wanted at C type t: related wherever its value meets t's condition
+VR : (Word → Nat) → (Word → Bool) → (Word → Word → Nat → Kd) → CTy → KQ → MV → Type
+VR A df T t q u = wkp T t q → UR A df q u
+-- a list wanted at the types W (by position)
+VRL : (Word → Nat) → (Word → Bool) → (Word → Word → Nat → Kd) → KQ → MV → (Nat → CTy) → Type
+VRL A df T (kqcons x r) (mvcons y v) W = VR A df T (W zero) x y × VRL A df T r v (λ i → W (suc i))
+VRL A df T kqnil mvnil W = Unit
+VRL A df T q u W = Empty
+vr-b : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (q : KQ) (u : MV) → VR A df T ctb q u → UR A df q u
+vr-b A df T q u h = h unit
+vr-u : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (t : CTy) (q : KQ) (u : MV) → UR A df q u → VR A df T t q u
+vr-u A df T t q u h = λ hk → h
+vr-bot : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (t : CTy) (u : MV) → VR A df T t kqbot u
+vr-bot A df T t u = λ hk → ur-bot A df u
+-- a value of kind k wanted at k's C type is related in full
+vr-k : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (k : Kd) (q : KQ) (u : MV) → Kv T k q → VR A df T (ct-of k) q u → UR A df q u
+vr-k A df T kw q u hk h = h hk
+vr-k A df T kb q u hk h = h unit
+vr-k A df T (kdc d) q u hk h = h unit
+vr-k A df T ka q u hk h = h unit
+vr-k A df T kdn q u hk h = h unit
+vr-k A df T knil q u hk h = h unit
+vr-k A df T (kcons k r) q u hk h = h unit
+-- a list of values of the kinds ks wanted at their C types (a call's arguments), and a list wanted
+-- boxed, related in full
+vrl-k : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (q : KQ) (ks : Kd) (u : MV) → kvs T q ks → VRL A df T q u (λ i → ct-of (knth ks i)) → UR A df q u
+vrl-k A df T (kqcons x xs) (kcons k r) (mvcons y v) hk h = ur-cons A df x y xs v (vr-k A df T k x y (fst hk) (fst h)) (vrl-k A df T xs r v (snd hk) (snd h))
+vrl-k A df T (kqcons x xs) (kcons k r) u hk h = Empty-rec h
+vrl-k A df T kqnil knil mvnil hk h = ur-nil A df
+vrl-k A df T kqnil knil u hk h = Empty-rec h
+vrl-k A df T q ks u hk h = Empty-rec hk
+vrl-b : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (q : KQ) (u : MV) → VRL A df T q u (λ i → ctb) → UR A df q u
+vrl-b A df T (kqcons x xs) (mvcons y v) h = ur-cons A df x y xs v (fst h unit) (vrl-b A df T xs v (snd h))
+vrl-b A df T (kqcons x xs) u h = Empty-rec h
+vrl-b A df T kqnil mvnil h = ur-nil A df
+vrl-b A df T kqnil u h = Empty-rec h
+vrl-b A df T q u h = Empty-rec h
+-- a term produced at C type pt, related in full, converted to the wanted wt (mkw(x) the identity, (x)->n
+-- sound where the value has kind kw, which VR at a uint64_t assumes)
+ucv : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (GC : Word → CU) (CD : Word → Bool) (K : UE) (x : CU) (s : MSt) (pt wt : CTy) (q : KQ)
+    → UR A df q (uevT GC A CD K x s) → VR A df T wt q (uevT GC A CD K (cu-conv pt wt x) s)
+ucv A df T GC CD K x s ctw ctw q h = λ hk → h
+ucv A df T GC CD K x s ctb ctb q h = λ hk → h
+ucv A df T GC CD K x s ctw ctb q h = λ hk → h
+ucv A df T GC CD K x s ctb ctw q h = λ hk → ur-word A df T q (uevT GC A CD K x s) hk h
+-- a literal at its wanted type: mkw(w), or w as a uint64_t (cuunw of mkw(w)); a limit from 2^64 up
+ur-litb : (A : Word → Nat) (df : Word → Bool) (w : Word) (b : Bool) → UR A df (kqw w) (if b then mw w else mlim)
+ur-litb A df w true = ur-c A df (kqw w) (cw w) (λ i → cw w)
+ur-litb A df w false = inl (λ i → true)
+ur-lit : (A : Word → Nat) (df : Word → Bool) (w : Word) → UR A df (kqw w) (mwrap (cw w))
+ur-lit A df w = ur-litb A df w (c-fits w)
+vr-lit : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (GC : Word → CU) (CD : Word → Bool) (K : UE) (s : MSt) (w : Word) (t : CTy)
+       → VR A df T t (kqw w) (uevT GC A CD K (cu-lit w t) s)
+vr-lit A df T GC CD K s w ctw = λ hk → ur-word A df T (kqw w) (mwrap (cw w)) unit (ur-lit A df w)
+vr-lit A df T GC CD K s w ctb = λ hk → ur-lit A df w
+-- ---------------------------------------------------------------- the operations at a wanted type
+vr-gate : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (t : CTy) (q : KQ) (u : MV) (y : KQ) (K : CV → MV) → UR A df q u
+        → ((c : CV) → CR A df q c → VR A df T t y (K c)) → VR A df T t y (if haslim u then mlim else K (m2c u))
+vr-gate A df T t q u y K h hk =
+  bool-split (haslim u) (VR A df T t y (if haslim u then mlim else K (m2c u)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → VR A df T t y (if b then mlim else K (m2c u))} {true} {haslim u} (sym e) (λ hw → inl (λ i → true)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → VR A df T t y (if b then mlim else K (m2c u))} {false} {haslim u} (sym e) (hk (m2c u) (ur-nl A df q u e h)))
+-- ((c->n != 0) ? (a) : (b)): the branch the word picks
+vr-sel : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (t : CTy) (qc : KQ) (cc : CV) (qa : KQ) (ua : MV) (qb : KQ) (ub : MV) → CR A df qc cc
+       → VR A df T t qa ua → VR A df T t qb ub → VR A df T t (q-if qc qa qb) (msel cc ua ub)
+vr-sel A df T t (kqw w) cc qa ua qb ub hc ha hb =
+  subst {lzero} {lzero} {CV} {λ v → VR A df T t (q-if (kqw w) qa qb) (msel v ua ub)} {cw w} {cc} (sym hc)
+    (%welimP (λ x → VR A df T t (%welimP (λ x2 → KQ) x qb (λ m h → qa)) (%welimP (λ x2 → MV) x ub (λ m h → ua))) w hb (λ m h → ha))
+vr-sel A df T t qc cc qa ua qb ub hc ha hb = vr-bot A df T t (msel cc ua ub)
+vr-if : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (t : CTy) (qc : KQ) (uc : MV) (qa : KQ) (ua : MV) (qb : KQ) (ub : MV) → UR A df qc uc
+      → VR A df T t qa ua → VR A df T t qb ub → VR A df T t (q-if qc qa qb) (m-if uc ua ub)
+vr-if A df T t qc uc qa ua qb ub hc ha hb = vr-gate A df T t qc uc (q-if qc qa qb) (λ v → msel v ua ub) hc (λ c h → vr-sel A df T t qc c qa ua qb ub h ha hb)
+-- a case's alternative: the tag picked (b the test, its value given to the branch), the fields counted
+vr-bsel : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (t : CTy) (b : Bool) (X1 : KQ) (Y1 : MV) (X2 : KQ) (Y2 : MV)
+        → (b ≡ true → VR A df T t X1 Y1) → VR A df T t X2 Y2 → VR A df T t (if b then X1 else X2) (if b then Y1 else Y2)
+vr-bsel A df T t true X1 Y1 X2 Y2 h1 h2 = h1 (λ i → true)
+vr-bsel A df T t false X1 Y1 X2 Y2 h1 h2 = h2
+vr-cnt : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (t : CTy) (bq bc : Bool) (X : KQ) (Y : MV) → (bq ≡ true → bc ≡ true) → (bq ≡ true → VR A df T t X Y)
+       → VR A df T t (if bq then X else kqbot) (if bc then Y else mbot)
+vr-cnt A df T t true bc X Y hb hx = subst {lzero} {lzero} {Bool} {λ v → VR A df T t X (if v then Y else mbot)} {true} {bc} (sym (hb (λ i → true))) (hx (λ i → true))
+vr-cnt A df T t false bc X Y hb hx = vr-bot A df T t (if bc then Y else mbot)
+-- the scrutinee x on top of the locals (msx), kx its kind; the branch gets the fields with their kinds
+vr-alt0 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (t : CTy) (j : Word) (k d : Nat) (e : KQ) (s : MSt) (qx : KQ) (ux : MV) (kx : Kd) (cx : CV)
+        (fb : KQ → KQ) (fbu : MSt → MV) (R : KQ) (Ru : MV) → Kv T kx qx → CR A df qx cx → VR A df T t R Ru
+        → ((fs : KQ) (gs : CV) → q-isn k fs ≡ true → CR A df fs gs → kvs T fs (kfl T kx j k) → VR A df T t (fb (q-push fs e)) (fbu (ms-push (c2m gs) d (msx ux s))))
+        → VR A df T t (q-altsel j k fb R (kqcons qx e)) (malt0 j k d fbu Ru (msx ux s) cx)
+vr-alt0 A df T t j k d e s (kqcon dd i fs) ux kx (cvcon i2 gs) fb fbu R Ru hk h hr hb =
+  subst {lzero} {lzero} {Word} {λ v → VR A df T t (if weq i j then (if q-isn k fs then fb (q-push fs e) else kqbot) else R) (if weq v j then (if c-isn k gs then fbu (ms-push (c2m gs) d (msx ux s)) else mbot) else Ru)} {i} {i2} (fst h)
+    (vr-bsel A df T t (weq i j) (if q-isn k fs then fb (q-push fs e) else kqbot) (if c-isn k gs then fbu (ms-push (c2m gs) d (msx ux s)) else mbot) R Ru
+       (λ ej → vr-cnt A df T t (q-isn k fs) (c-isn k gs) (fb (q-push fs e)) (fbu (ms-push (c2m gs) d (msx ux s))) (cr-isn A df k fs gs (snd h))
+                 (λ en → hb fs gs en (snd h) (kfl-kv T kx j k dd i fs hk ej en))) hr)
+vr-alt0 A df T t j k d e s (kqcon dd i fs) ux kx cx fb fbu R Ru hk h hr hb = Empty-rec h
+vr-alt0 A df T t j k d e s qx ux kx cx fb fbu R Ru hk h hr hb = vr-bot A df T t (malt0 j k d fbu Ru (msx ux s) cx)
+vr-alt : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (t : CTy) (j : Word) (k d : Nat) (e : KQ) (s : MSt) (qx : KQ) (ux : MV) (kx : Kd)
+       (fb : KQ → KQ) (fbu : MSt → MV) (R : KQ) (Ru : MV) → Kv T kx qx → UR A df qx ux → VR A df T t R Ru
+       → ((fs : KQ) (gs : CV) → q-isn k fs ≡ true → CR A df fs gs → kvs T fs (kfl T kx j k) → VR A df T t (fb (q-push fs e)) (fbu (ms-push (c2m gs) d (msx ux s))))
+       → VR A df T t (q-altsel j k fb R (kqcons qx e)) (m-altsel j k d fbu Ru (msx ux s))
+vr-alt A df T t j k d e s qx ux kx fb fbu R Ru hk h hr hb =
+  vr-gate A df T t qx ux (q-altsel j k fb R (kqcons qx e)) (λ v → malt0 j k d fbu Ru (msx ux s) v) h (λ c hc → vr-alt0 A df T t j k d e s qx ux kx c fb fbu R Ru hk hc hr hb)
+-- a loop's turn: a continuing state (tag 0, the state's k fields, of its kinds) goes on, a break gives
+-- its field 0 (LB the body's kind facts as lib/foproofu.cub's Lr has them, by the test)
+ur-lsb : (A : Word → Nat) (df : Word → Bool) (b q cb : Bool) (X : KQ) (Y : MV) (X2 : KQ) (Y2 : MV) (P P2 : Type) → (if b then q else true) ≡ true → (q ≡ true → cb ≡ true)
+       → (if b then P else P2) → (q ≡ true → P → UR A df X Y) → UR A df X2 Y2 → UR A df (if b then X else X2) (if b then (if cb then Y else mbot) else Y2)
+ur-lsb A df true q cb X Y X2 Y2 P P2 hl hq hp hx h2 = subst {lzero} {lzero} {Bool} {λ v → UR A df X (if v then Y else mbot)} {true} {cb} (sym (hq hl)) (hx hl hp)
+ur-lsb A df false q cb X Y X2 Y2 P P2 hl hq hp hx h2 = h2
+ur-ls0 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (k : Nat) (st kr : Kd) (v : KQ) (c : CV) (cont : KQ → KQ) (cont2 : MV → MV) → CR A df v c → Lr T st kr v → lres k v ≡ true
+       → ((x : KQ) (y : MV) → q-isn k x ≡ true → kvs T x st → UR A df x y → UR A df (cont x) (cont2 y)) → UR A df (q-lstep v cont) (mls0 k c cont2)
+ur-ls0 A df T k st kr (kqcon d j fs) (cvcon i gs) cont cont2 h hl hr hc =
+  subst {lzero} {lzero} {Word} {λ u → UR A df (if weq j #0 then cont fs else q-nth fs zero) (if weq u #0 then (if c-isn k gs then cont2 (c2m gs) else mbot) else c2m (c-nth gs zero))} {j} {i} (fst h)
+    (ur-lsb A df (weq j #0) (q-isn k fs) (c-isn k gs) (cont fs) (cont2 (c2m gs)) (q-nth fs zero) (c2m (c-nth gs zero)) (kvs T fs st) (Kv T kr (q-nth fs zero)) hr (cr-isn A df k fs gs (snd h)) hl
+       (λ hq hp → hc fs (c2m gs) hq hp (ur-c A df fs gs (snd h))) (ur-c A df (q-nth fs zero) (c-nth gs zero) (cr-nth A df fs gs (snd h) zero)))
+ur-ls0 A df T k st kr (kqcon d j fs) c cont cont2 h hl hr hc = Empty-rec h
+ur-ls0 A df T k st kr v c cont cont2 h hl hr hc = ur-bot A df (mls0 k c cont2)
+ur-lstep : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (k : Nat) (st kr : Kd) (v : KQ) (u : MV) (cont : KQ → KQ) (cont2 : MV → MV) → UR A df v u → Lr T st kr v → lres k v ≡ true
+         → ((x : KQ) (y : MV) → q-isn k x ≡ true → kvs T x st → UR A df x y → UR A df (cont x) (cont2 y)) → UR A df (q-lstep v cont) (m-lstep k u cont2)
+ur-lstep A df T k st kr v u cont cont2 h hl hr hc = ur-gate A df v u (q-lstep v cont) (λ c → mls0 k c cont2) h (λ c h2 → ur-ls0 A df T k st kr v c cont cont2 h2 hl hr hc)
+-- ---------------------------------------------------------------- a word primitive's operands
+-- an operand wanted as a uint64_t, read back as a C cell: related where the value is a word (all a word
+-- primitive reads)
+WR : (Word → Nat) → (Word → Bool) → (Word → Word → Nat → Kd) → KQ → CV → Type
+WR A df T q c = Kv T kw q → CR A df q c
+WRL : (Word → Nat) → (Word → Bool) → (Word → Word → Nat → Kd) → KQ → CV → Type
+WRL A df T (kqcons x r) (cvcons y v) = WR A df T x y × WRL A df T r v
+WRL A df T kqnil c = c ≡ cvnil
+WRL A df T q c = Empty
+vrl-wr : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (qs : KQ) (us : MV) → haslim us ≡ false → VRL A df T qs us (λ i → ctw) → WRL A df T qs (m2c us)
+vrl-wr A df T (kqcons x r) (mvcons y v) hl h = ((λ hk → ur-nl A df x y (mor-fl (haslim y) (haslim v) hl) (fst h hk)) , vrl-wr A df T r v (mor-fr (haslim y) (haslim v) hl) (snd h))
+vrl-wr A df T (kqcons x r) us hl h = Empty-rec h
+vrl-wr A df T kqnil mvnil hl h = λ i → cvnil
+vrl-wr A df T kqnil us hl h = Empty-rec h
+vrl-wr A df T qs us hl h = Empty-rec h
+-- the word primitives' families: each refined on operands related where they are words (WRL), the
+-- splits following the family's patterns; wrp-k the chain over cpq-k / cpc-k for a word primitive
+wr-wwd : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p q : Word) (r : KQ) (cs : CV) → WRL A df T (kqcons (kqw p) (kqcons (kqw q) r)) cs → CR A df (q-ww f (kqcons (kqw p) (kqcons (kqw q) r))) (c-ww f cs)
+wr-wwd A df T f p q kqnil (cvcons x (cvcons y z)) h = λ t → c-ww f (cvcons (fst h unit t) (cvcons (fst (snd h) unit t) (snd (snd h) t)))
+wr-wwd A df T f p q kqnil (cvcons x y) h = Empty-rec (snd h)
+wr-wwd A df T f p q kqnil cs h = Empty-rec h
+wr-wwd A df T f p q r cs h = unit
+wr-wwc : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p : Word) (b r : KQ) (cs : CV) → WRL A df T (kqcons (kqw p) (kqcons b r)) cs → CR A df (q-ww f (kqcons (kqw p) (kqcons b r))) (c-ww f cs)
+wr-wwc A df T f p (kqw q) r cs h = wr-wwd A df T f p q r cs h
+wr-wwc A df T f p b r cs h = unit
+wr-wwb : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p : Word) (r : KQ) (cs : CV) → WRL A df T (kqcons (kqw p) r) cs → CR A df (q-ww f (kqcons (kqw p) r)) (c-ww f cs)
+wr-wwb A df T f p (kqcons b r) cs h = wr-wwc A df T f p b r cs h
+wr-wwb A df T f p r cs h = unit
+wr-wwa : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (a r : KQ) (cs : CV) → WRL A df T (kqcons a r) cs → CR A df (q-ww f (kqcons a r)) (c-ww f cs)
+wr-wwa A df T f (kqw p) r cs h = wr-wwb A df T f p r cs h
+wr-wwa A df T f a r cs h = unit
+wr-ww : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (as : KQ) (cs : CV) → WRL A df T as cs → CR A df (q-ww f as) (c-ww f cs)
+wr-ww A df T f (kqcons a r) cs h = wr-wwa A df T f a r cs h
+wr-ww A df T f as cs h = unit
+wr-iid : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p q : Word) (r : KQ) (cs : CV) → WRL A df T (kqcons (kqi p) (kqcons (kqi q) r)) cs → CR A df (q-ii f (kqcons (kqi p) (kqcons (kqi q) r))) (c-ww f cs)
+wr-iid A df T f p q kqnil (cvcons x (cvcons y z)) h = λ t → c-ww f (cvcons (fst h unit t) (cvcons (fst (snd h) unit t) (snd (snd h) t)))
+wr-iid A df T f p q kqnil (cvcons x y) h = Empty-rec (snd h)
+wr-iid A df T f p q kqnil cs h = Empty-rec h
+wr-iid A df T f p q r cs h = unit
+wr-iic : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p : Word) (b r : KQ) (cs : CV) → WRL A df T (kqcons (kqi p) (kqcons b r)) cs → CR A df (q-ii f (kqcons (kqi p) (kqcons b r))) (c-ww f cs)
+wr-iic A df T f p (kqi q) r cs h = wr-iid A df T f p q r cs h
+wr-iic A df T f p b r cs h = unit
+wr-iib : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p : Word) (r : KQ) (cs : CV) → WRL A df T (kqcons (kqi p) r) cs → CR A df (q-ii f (kqcons (kqi p) r)) (c-ww f cs)
+wr-iib A df T f p (kqcons b r) cs h = wr-iic A df T f p b r cs h
+wr-iib A df T f p r cs h = unit
+wr-iia : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (a r : KQ) (cs : CV) → WRL A df T (kqcons a r) cs → CR A df (q-ii f (kqcons a r)) (c-ww f cs)
+wr-iia A df T f (kqi p) r cs h = wr-iib A df T f p r cs h
+wr-iia A df T f a r cs h = unit
+wr-ii : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (as : KQ) (cs : CV) → WRL A df T as cs → CR A df (q-ii f as) (c-ww f cs)
+wr-ii A df T f (kqcons a r) cs h = wr-iia A df T f a r cs h
+wr-ii A df T f as cs h = unit
+wr-iwd : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p q : Word) (r : KQ) (cs : CV) → WRL A df T (kqcons (kqi p) (kqcons (kqi q) r)) cs → CR A df (q-iw f (kqcons (kqi p) (kqcons (kqi q) r))) (c-ww f cs)
+wr-iwd A df T f p q kqnil (cvcons x (cvcons y z)) h = λ t → c-ww f (cvcons (fst h unit t) (cvcons (fst (snd h) unit t) (snd (snd h) t)))
+wr-iwd A df T f p q kqnil (cvcons x y) h = Empty-rec (snd h)
+wr-iwd A df T f p q kqnil cs h = Empty-rec h
+wr-iwd A df T f p q r cs h = unit
+wr-iwc : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p : Word) (b r : KQ) (cs : CV) → WRL A df T (kqcons (kqi p) (kqcons b r)) cs → CR A df (q-iw f (kqcons (kqi p) (kqcons b r))) (c-ww f cs)
+wr-iwc A df T f p (kqi q) r cs h = wr-iwd A df T f p q r cs h
+wr-iwc A df T f p b r cs h = unit
+wr-iwb : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p : Word) (r : KQ) (cs : CV) → WRL A df T (kqcons (kqi p) r) cs → CR A df (q-iw f (kqcons (kqi p) r)) (c-ww f cs)
+wr-iwb A df T f p (kqcons b r) cs h = wr-iwc A df T f p b r cs h
+wr-iwb A df T f p r cs h = unit
+wr-iwa : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (a r : KQ) (cs : CV) → WRL A df T (kqcons a r) cs → CR A df (q-iw f (kqcons a r)) (c-ww f cs)
+wr-iwa A df T f (kqi p) r cs h = wr-iwb A df T f p r cs h
+wr-iwa A df T f a r cs h = unit
+wr-iw : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (as : KQ) (cs : CV) → WRL A df T as cs → CR A df (q-iw f as) (c-ww f cs)
+wr-iw A df T f (kqcons a r) cs h = wr-iwa A df T f a r cs h
+wr-iw A df T f as cs h = unit
+wr-ffd : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p q : Word) (r : KQ) (cs : CV) → WRL A df T (kqcons (kqf p) (kqcons (kqf q) r)) cs → CR A df (q-ff f (kqcons (kqf p) (kqcons (kqf q) r))) (c-ww f cs)
+wr-ffd A df T f p q kqnil (cvcons x (cvcons y z)) h = λ t → c-ww f (cvcons (fst h unit t) (cvcons (fst (snd h) unit t) (snd (snd h) t)))
+wr-ffd A df T f p q kqnil (cvcons x y) h = Empty-rec (snd h)
+wr-ffd A df T f p q kqnil cs h = Empty-rec h
+wr-ffd A df T f p q r cs h = unit
+wr-ffc : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p : Word) (b r : KQ) (cs : CV) → WRL A df T (kqcons (kqf p) (kqcons b r)) cs → CR A df (q-ff f (kqcons (kqf p) (kqcons b r))) (c-ww f cs)
+wr-ffc A df T f p (kqf q) r cs h = wr-ffd A df T f p q r cs h
+wr-ffc A df T f p b r cs h = unit
+wr-ffb : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p : Word) (r : KQ) (cs : CV) → WRL A df T (kqcons (kqf p) r) cs → CR A df (q-ff f (kqcons (kqf p) r)) (c-ww f cs)
+wr-ffb A df T f p (kqcons b r) cs h = wr-ffc A df T f p b r cs h
+wr-ffb A df T f p r cs h = unit
+wr-ffa : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (a r : KQ) (cs : CV) → WRL A df T (kqcons a r) cs → CR A df (q-ff f (kqcons a r)) (c-ww f cs)
+wr-ffa A df T f (kqf p) r cs h = wr-ffb A df T f p r cs h
+wr-ffa A df T f a r cs h = unit
+wr-ff : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (as : KQ) (cs : CV) → WRL A df T as cs → CR A df (q-ff f as) (c-ww f cs)
+wr-ff A df T f (kqcons a r) cs h = wr-ffa A df T f a r cs h
+wr-ff A df T f as cs h = unit
+wr-fwd : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p q : Word) (r : KQ) (cs : CV) → WRL A df T (kqcons (kqf p) (kqcons (kqf q) r)) cs → CR A df (q-fw f (kqcons (kqf p) (kqcons (kqf q) r))) (c-ww f cs)
+wr-fwd A df T f p q kqnil (cvcons x (cvcons y z)) h = λ t → c-ww f (cvcons (fst h unit t) (cvcons (fst (snd h) unit t) (snd (snd h) t)))
+wr-fwd A df T f p q kqnil (cvcons x y) h = Empty-rec (snd h)
+wr-fwd A df T f p q kqnil cs h = Empty-rec h
+wr-fwd A df T f p q r cs h = unit
+wr-fwc : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p : Word) (b r : KQ) (cs : CV) → WRL A df T (kqcons (kqf p) (kqcons b r)) cs → CR A df (q-fw f (kqcons (kqf p) (kqcons b r))) (c-ww f cs)
+wr-fwc A df T f p (kqf q) r cs h = wr-fwd A df T f p q r cs h
+wr-fwc A df T f p b r cs h = unit
+wr-fwb : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (p : Word) (r : KQ) (cs : CV) → WRL A df T (kqcons (kqf p) r) cs → CR A df (q-fw f (kqcons (kqf p) r)) (c-ww f cs)
+wr-fwb A df T f p (kqcons b r) cs h = wr-fwc A df T f p b r cs h
+wr-fwb A df T f p r cs h = unit
+wr-fwa : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (a r : KQ) (cs : CV) → WRL A df T (kqcons a r) cs → CR A df (q-fw f (kqcons a r)) (c-ww f cs)
+wr-fwa A df T f (kqf p) r cs h = wr-fwb A df T f p r cs h
+wr-fwa A df T f a r cs h = unit
+wr-fw : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : Word → Word → Word) (as : KQ) (cs : CV) → WRL A df T as cs → CR A df (q-fw f as) (c-ww f cs)
+wr-fw A df T f (kqcons a r) cs h = wr-fwa A df T f a r cs h
+wr-fw A df T f as cs h = unit
+wr-1 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (f : KQ → KQ) (g : CV → CV) → ((a : KQ) (x : CV) → WR A df T a x → CR A df (f a) (g x)) → (as : KQ) (cs : CV) → WRL A df T as cs → CR A df (q-1 f as) (c-1 g cs)
+wr-1 A df T f g fg (kqcons a kqnil) (cvcons x z) h = subst {lzero} {lzero} {CV} {λ u → CR A df (f a) (c-1 g (cvcons x u))} {cvnil} {z} (sym (snd h)) (fg a x (fst h))
+wr-1 A df T f g fg (kqcons a kqnil) cs h = Empty-rec h
+wr-1 A df T f g fg as cs h = unit
+wu-iw : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (a : KQ) (x : CV) → WR A df T a x → CR A df (q-i-of-w a) (c-wm (λ w → w) x)
+wu-iw A df T (kqw w) x h = cu-iw A df (kqw w) x (h unit)
+wu-iw A df T a x h = unit
+wu-wi : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (a : KQ) (x : CV) → WR A df T a x → CR A df (q-w-of-i a) (c-wm (λ w → w) x)
+wu-wi A df T (kqi b) x h = cu-wi A df (kqi b) x (h unit)
+wu-wi A df T a x h = unit
+wu-fi : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (a : KQ) (x : CV) → WR A df T a x → CR A df (q-f-of-i a) (c-wm (λ b → dfb (f64ofi64 (dbi b))) x)
+wu-fi A df T (kqi b) x h = cu-fi A df (kqi b) x (h unit)
+wu-fi A df T a x h = unit
+wu-if : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (a : KQ) (x : CV) → WR A df T a x → CR A df (q-i-of-f a) (c-wm (λ b → dib (i64off64 (dbf b))) x)
+wu-if A df T (kqf b) x h = cu-if A df (kqf b) x (h unit)
+wu-if A df T a x h = unit
+wu-fw : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (a : KQ) (x : CV) → WR A df T a x → CR A df (q-f-of-w a) (c-wm (λ w → dfb (f64 w)) x)
+wu-fw A df T (kqw w) x h = cu-fw A df (kqw w) x (h unit)
+wu-fw A df T a x h = unit
+wu-bits : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (a : KQ) (x : CV) → WR A df T a x → CR A df (q-bits a) (c-wm (λ w → w) x)
+wu-bits A df T (kqf b) x h = cu-bits A df (kqf b) x (h unit)
+wu-bits A df T a x h = unit
+wu-ofbits : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (a : KQ) (x : CV) → WR A df T a x → CR A df (q-ofbits a) (c-wm (λ w → w) x)
+wu-ofbits A df T (kqi b) x h = cu-ofbits A df (kqi b) x (h unit)
+wu-ofbits A df T a x h = unit
+wrp-29 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-29 p as) (cpc-29 p cs)
+wrp-29 A df T p as cs hw h = unit
+wrp-28 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-28 p as) (cpc-28 p cs)
+wrp-28 A df T p as cs hw h = cr-bif A df (weq p #33) (q-1 q-ofbits as) (c-1 (c-wm (λ w → w)) cs) (cpq-29 p as) (cpc-29 p cs) (wr-1 A df T q-ofbits (c-wm (λ w → w)) (wu-ofbits A df T) as cs h) (wrp-29 A df T p as cs hw h)
+wrp-27 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-27 p as) (cpc-27 p cs)
+wrp-27 A df T p as cs hw h = cr-bif A df (weq p #32) (q-1 q-bits as) (c-1 (c-wm (λ w → w)) cs) (cpq-28 p as) (cpc-28 p cs) (wr-1 A df T q-bits (c-wm (λ w → w)) (wu-bits A df T) as cs h) (wrp-28 A df T p as cs hw h)
+wrp-26 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-26 p as) (cpc-26 p cs)
+wrp-26 A df T p as cs hw h = cr-bif A df (weq p #29) (q-1 q-f-of-w as) (c-1 (c-wm (λ w → dfb (f64 w))) cs) (cpq-27 p as) (cpc-27 p cs) (wr-1 A df T q-f-of-w (c-wm (λ w → dfb (f64 w))) (wu-fw A df T) as cs h) (wrp-27 A df T p as cs hw h)
+wrp-25 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-25 p as) (cpc-25 p cs)
+wrp-25 A df T p as cs hw h = cr-bif A df (weq p #28) (q-1 q-i-of-f as) (c-1 (c-wm (λ b → dib (i64off64 (dbf b)))) cs) (cpq-26 p as) (cpc-26 p cs) (wr-1 A df T q-i-of-f (c-wm (λ b → dib (i64off64 (dbf b)))) (wu-if A df T) as cs h) (wrp-26 A df T p as cs hw h)
+wrp-24 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-24 p as) (cpc-24 p cs)
+wrp-24 A df T p as cs hw h = cr-bif A df (weq p #27) (q-1 q-f-of-i as) (c-1 (c-wm (λ b → dfb (f64ofi64 (dbi b)))) cs) (cpq-25 p as) (cpc-25 p cs) (wr-1 A df T q-f-of-i (c-wm (λ b → dfb (f64ofi64 (dbi b)))) (wu-fi A df T) as cs h) (wrp-25 A df T p as cs hw h)
+wrp-23 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-23 p as) (cpc-23 p cs)
+wrp-23 A df T p as cs hw h = cr-bif A df (weq p #26) (q-1 q-w-of-i as) (c-1 (c-wm (λ w → w)) cs) (cpq-24 p as) (cpc-24 p cs) (wr-1 A df T q-w-of-i (c-wm (λ w → w)) (wu-wi A df T) as cs h) (wrp-24 A df T p as cs hw h)
+wrp-22 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-22 p as) (cpc-22 p cs)
+wrp-22 A df T p as cs hw h = cr-bif A df (weq p #25) (q-1 q-i-of-w as) (c-1 (c-wm (λ w → w)) cs) (cpq-23 p as) (cpc-23 p cs) (wr-1 A df T q-i-of-w (c-wm (λ w → w)) (wu-iw A df T) as cs h) (wrp-23 A df T p as cs hw h)
+wrp-21 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-21 p as) (cpc-21 p cs)
+wrp-21 A df T p as cs hw h = cr-bif A df (weq p #24) (q-fw (λ a b → dbw (f64lt (dbf a) (dbf b))) as) (c-ww (λ a b → dbw (f64lt (dbf a) (dbf b))) cs) (cpq-22 p as) (cpc-22 p cs) (wr-fw A df T (λ a b → dbw (f64lt (dbf a) (dbf b))) as cs h) (wrp-22 A df T p as cs hw h)
+wrp-20 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-20 p as) (cpc-20 p cs)
+wrp-20 A df T p as cs hw h = cr-bif A df (weq p #23) (q-fw (λ a b → dbw (f64eq (dbf a) (dbf b))) as) (c-ww (λ a b → dbw (f64eq (dbf a) (dbf b))) cs) (cpq-21 p as) (cpc-21 p cs) (wr-fw A df T (λ a b → dbw (f64eq (dbf a) (dbf b))) as cs h) (wrp-21 A df T p as cs hw h)
+wrp-19 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-19 p as) (cpc-19 p cs)
+wrp-19 A df T p as cs hw h = cr-bif A df (weq p #22) (q-ff (λ a b → dfb (f64div (dbf a) (dbf b))) as) (c-ww (λ a b → dfb (f64div (dbf a) (dbf b))) cs) (cpq-20 p as) (cpc-20 p cs) (wr-ff A df T (λ a b → dfb (f64div (dbf a) (dbf b))) as cs h) (wrp-20 A df T p as cs hw h)
+wrp-18 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-18 p as) (cpc-18 p cs)
+wrp-18 A df T p as cs hw h = cr-bif A df (weq p #21) (q-ff (λ a b → dfb (f64mul (dbf a) (dbf b))) as) (c-ww (λ a b → dfb (f64mul (dbf a) (dbf b))) cs) (cpq-19 p as) (cpc-19 p cs) (wr-ff A df T (λ a b → dfb (f64mul (dbf a) (dbf b))) as cs h) (wrp-19 A df T p as cs hw h)
+wrp-17 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-17 p as) (cpc-17 p cs)
+wrp-17 A df T p as cs hw h = cr-bif A df (weq p #20) (q-ff (λ a b → dfb (f64sub (dbf a) (dbf b))) as) (c-ww (λ a b → dfb (f64sub (dbf a) (dbf b))) cs) (cpq-18 p as) (cpc-18 p cs) (wr-ff A df T (λ a b → dfb (f64sub (dbf a) (dbf b))) as cs h) (wrp-18 A df T p as cs hw h)
+wrp-16 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-16 p as) (cpc-16 p cs)
+wrp-16 A df T p as cs hw h = cr-bif A df (weq p #19) (q-ff (λ a b → dfb (f64add (dbf a) (dbf b))) as) (c-ww (λ a b → dfb (f64add (dbf a) (dbf b))) cs) (cpq-17 p as) (cpc-17 p cs) (wr-ff A df T (λ a b → dfb (f64add (dbf a) (dbf b))) as cs h) (wrp-17 A df T p as cs hw h)
+wrp-15 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-15 p as) (cpc-15 p cs)
+wrp-15 A df T p as cs hw h = cr-bif A df (weq p #18) (q-iw (λ a b → dbw (i64lt (dbi a) (dbi b))) as) (c-ww (λ a b → dbw (i64lt (dbi a) (dbi b))) cs) (cpq-16 p as) (cpc-16 p cs) (wr-iw A df T (λ a b → dbw (i64lt (dbi a) (dbi b))) as cs h) (wrp-16 A df T p as cs hw h)
+wrp-14 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-14 p as) (cpc-14 p cs)
+wrp-14 A df T p as cs hw h = cr-bif A df (weq p #17) (q-iw (λ a b → dbw (i64eq (dbi a) (dbi b))) as) (c-ww (λ a b → dbw (i64eq (dbi a) (dbi b))) cs) (cpq-15 p as) (cpc-15 p cs) (wr-iw A df T (λ a b → dbw (i64eq (dbi a) (dbi b))) as cs h) (wrp-15 A df T p as cs hw h)
+wrp-13 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-13 p as) (cpc-13 p cs)
+wrp-13 A df T p as cs hw h = cr-bif A df (weq p #16) (q-ii (λ a b → dib (i64mul (dbi a) (dbi b))) as) (c-ww (λ a b → dib (i64mul (dbi a) (dbi b))) cs) (cpq-14 p as) (cpc-14 p cs) (wr-ii A df T (λ a b → dib (i64mul (dbi a) (dbi b))) as cs h) (wrp-14 A df T p as cs hw h)
+wrp-12 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-12 p as) (cpc-12 p cs)
+wrp-12 A df T p as cs hw h = cr-bif A df (weq p #15) (q-ii (λ a b → dib (i64sub (dbi a) (dbi b))) as) (c-ww (λ a b → dib (i64sub (dbi a) (dbi b))) cs) (cpq-13 p as) (cpc-13 p cs) (wr-ii A df T (λ a b → dib (i64sub (dbi a) (dbi b))) as cs h) (wrp-13 A df T p as cs hw h)
+wrp-11 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-11 p as) (cpc-11 p cs)
+wrp-11 A df T p as cs hw h = cr-bif A df (weq p #14) (q-ii (λ a b → dib (i64add (dbi a) (dbi b))) as) (c-ww (λ a b → dib (i64add (dbi a) (dbi b))) cs) (cpq-12 p as) (cpc-12 p cs) (wr-ii A df T (λ a b → dib (i64add (dbi a) (dbi b))) as cs h) (wrp-12 A df T p as cs hw h)
+wrp-10 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-10 p as) (cpc-10 p cs)
+wrp-10 A df T p as cs hw h =
+  bool-split (weq p #13) (CR A df (cpq-10 p as) (cpc-10 p cs))
+    (λ e → Empty-rec {lzero} {CR A df (cpq-10 p as) (cpc-10 p cs)} (false≢true (subst {lzero} {lzero} {Word} {λ u → cu-wprim u ≡ true} {p} {#13} (weq-sound p #13 e) hw)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → CR A df (if b then q-1 q-blen as else cpq-11 p as) (if b then c-1 c-blen cs else cpc-11 p cs)} {false} {weq p #13} (sym e) (wrp-11 A df T p as cs hw h))
+wrp-9 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-9 p as) (cpc-9 p cs)
+wrp-9 A df T p as cs hw h =
+  bool-split (weq p #12) (CR A df (cpq-9 p as) (cpc-9 p cs))
+    (λ e → Empty-rec {lzero} {CR A df (cpq-9 p as) (cpc-9 p cs)} (false≢true (subst {lzero} {lzero} {Word} {λ u → cu-wprim u ≡ true} {p} {#12} (weq-sound p #12 e) hw)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → CR A df (if b then q-1 qk-bytes as else cpq-10 p as) (if b then c-1 c-bytes cs else cpc-10 p cs)} {false} {weq p #12} (sym e) (wrp-10 A df T p as cs hw h))
+wrp-8 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-8 p as) (cpc-8 p cs)
+wrp-8 A df T p as cs hw h =
+  bool-split (weq p #11) (CR A df (cpq-8 p as) (cpc-8 p cs))
+    (λ e → Empty-rec {lzero} {CR A df (cpq-8 p as) (cpc-8 p cs)} (false≢true (subst {lzero} {lzero} {Word} {λ u → cu-wprim u ≡ true} {p} {#11} (weq-sound p #11 e) hw)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → CR A df (if b then q-st4 as else cpq-9 p as) (if b then c-st #4 cs else cpc-9 p cs)} {false} {weq p #11} (sym e) (wrp-9 A df T p as cs hw h))
+wrp-7 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-7 p as) (cpc-7 p cs)
+wrp-7 A df T p as cs hw h =
+  bool-split (weq p #10) (CR A df (cpq-7 p as) (cpc-7 p cs))
+    (λ e → Empty-rec {lzero} {CR A df (cpq-7 p as) (cpc-7 p cs)} (false≢true (subst {lzero} {lzero} {Word} {λ u → cu-wprim u ≡ true} {p} {#10} (weq-sound p #10 e) hw)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → CR A df (if b then q-ld4 as else cpq-8 p as) (if b then c-ld #4 cs else cpc-8 p cs)} {false} {weq p #10} (sym e) (wrp-8 A df T p as cs hw h))
+wrp-6 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-6 p as) (cpc-6 p cs)
+wrp-6 A df T p as cs hw h =
+  bool-split (weq p #9) (CR A df (cpq-6 p as) (cpc-6 p cs))
+    (λ e → Empty-rec {lzero} {CR A df (cpq-6 p as) (cpc-6 p cs)} (false≢true (subst {lzero} {lzero} {Word} {λ u → cu-wprim u ≡ true} {p} {#9} (weq-sound p #9 e) hw)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → CR A df (if b then q-st8 as else cpq-7 p as) (if b then c-st #8 cs else cpc-7 p cs)} {false} {weq p #9} (sym e) (wrp-7 A df T p as cs hw h))
+wrp-5 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-5 p as) (cpc-5 p cs)
+wrp-5 A df T p as cs hw h =
+  bool-split (weq p #8) (CR A df (cpq-5 p as) (cpc-5 p cs))
+    (λ e → Empty-rec {lzero} {CR A df (cpq-5 p as) (cpc-5 p cs)} (false≢true (subst {lzero} {lzero} {Word} {λ u → cu-wprim u ≡ true} {p} {#8} (weq-sound p #8 e) hw)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → CR A df (if b then q-ld8 as else cpq-6 p as) (if b then c-ld #8 cs else cpc-6 p cs)} {false} {weq p #8} (sym e) (wrp-6 A df T p as cs hw h))
+wrp-4 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-4 p as) (cpc-4 p cs)
+wrp-4 A df T p as cs hw h = cr-bif A df (weq p #4) (q-ww (λ a b → dbw (wlt a b)) as) (c-ww (λ a b → dbw (wlt a b)) cs) (cpq-5 p as) (cpc-5 p cs) (wr-ww A df T (λ a b → dbw (wlt a b)) as cs h) (wrp-5 A df T p as cs hw h)
+wrp-3 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-3 p as) (cpc-3 p cs)
+wrp-3 A df T p as cs hw h = cr-bif A df (weq p #3) (q-ww (λ a b → dbw (weq a b)) as) (c-ww (λ a b → dbw (weq a b)) cs) (cpq-4 p as) (cpc-4 p cs) (wr-ww A df T (λ a b → dbw (weq a b)) as cs h) (wrp-4 A df T p as cs hw h)
+wrp-2 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-2 p as) (cpc-2 p cs)
+wrp-2 A df T p as cs hw h = cr-bif A df (weq p #2) (q-ww dmulw as) (c-ww dmulw cs) (cpq-3 p as) (cpc-3 p cs) (wr-ww A df T dmulw as cs h) (wrp-3 A df T p as cs hw h)
+wrp-1 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-1 p as) (cpc-1 p cs)
+wrp-1 A df T p as cs hw h = cr-bif A df (weq p #1) (q-ww wsub as) (c-ww wsub cs) (cpq-2 p as) (cpc-2 p cs) (wr-ww A df T wsub as cs h) (wrp-2 A df T p as cs hw h)
+wrp-0 : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (as : KQ) (cs : CV) → cu-wprim p ≡ true → WRL A df T as cs → CR A df (cpq-0 p as) (cpc-0 p cs)
+wrp-0 A df T p as cs hw h = cr-bif A df (weq p #0) (q-ww wadd as) (c-ww wadd cs) (cpq-1 p as) (cpc-1 p cs) (wr-ww A df T wadd as cs h) (wrp-1 A df T p as cs hw h)
+-- a word primitive on uint64_t operands: a limit in them answers a limit; otherwise its value refines
+-- q-prim's (a word primitive on anything but words has none)
+uw-prim : (A : Word → Nat) (df : Word → Bool) (T : Word → Word → Nat → Kd) (p : Word) (qs : KQ) (us : MV) → cu-wprim p ≡ true → VRL A df T qs us (λ i → ctw)
+        → UR A df (q-prim p qs) (m-prim p us)
+uw-prim A df T p qs us hw h =
+  bool-split (haslim us) (UR A df (q-prim p qs) (m-prim p us))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → UR A df (q-prim p qs) (if b then mlim else mprim0 p (m2c us))} {true} {haslim us} (sym e) (inl (λ i → true)))
+    (λ e → subst {lzero} {lzero} {Bool} {λ b → UR A df (q-prim p qs) (if b then mlim else mprim0 p (m2c us))} {false} {haslim us} (sym e)
+             (ur-mr A df (q-prim p qs) (c-prim p (m2c us)) (mprim0 p (m2c us)) (wrp-0 A df T p qs (m2c us) hw (vrl-wr A df T qs us e h)) (mr-prim0 p (m2c us))))
+-- ---------------------------------------------------------------- the locals
+-- the first-order environment e at depth d and the unboxed C's locals s: variable k below d refined by
+-- its name v<d-1-k> (lib/foproofc.cub's Corr on C's words), nothing from d up
+UCorr : (Word → Nat) → (Word → Bool) → Nat → KQ → MSt → Type
+UCorr A df d e s = ((k : Nat) → q-le (suc k) d ≡ true → UR A df (q-nth e k) (ms-get s (ca-lvl d k))) × ((k : Nat) → q-le d k ≡ true → q-nth e k ≡ kqbot)
+ucorr-nil : (A : Word → Nat) (df : Word → Bool) → UCorr A df zero kqnil msnil
+ucorr-nil A df = ((λ k hk → Empty-rec (false≢true hk)) , (λ k hk → λ t → kqbot))
+mget-hit : (m : Nat) (v : MV) (r : MSt) → ms-get (msb m v r) m ≡ v
+mget-hit m v r = cong (λ b → if b then v else ms-get r m) (neqb-refl m)
+mget-miss : (m l : Nat) (v : MV) (r : MSt) → neqb m l ≡ false → ms-get (msb m v r) l ≡ ms-get r l
+mget-miss m l v r h = cong (λ b → if b then v else ms-get r l) h
+bot-ext : (d : Nat) (e v : KQ) → ((k : Nat) → q-le d k ≡ true → q-nth e k ≡ kqbot) → (k : Nat) → q-le (suc d) k ≡ true → q-nth (kqcons v e) k ≡ kqbot
+bot-ext d e v hb zero hk = Empty-rec (false≢true hk)
+bot-ext d e v hb (suc k) hk = hb k hk
+ucorr-e1 : (A : Word → Nat) (df : Word → Bool) (d : Nat) (e : KQ) (s : MSt) (v : KQ) (u : MV) → UCorr A df d e s → UR A df v u → (k : Nat) → q-le (suc k) (suc d) ≡ true
+         → UR A df (q-nth (kqcons v e) k) (ms-get (msb d u s) (ca-lvl (suc d) k))
+ucorr-e1 A df d e s v u h hv zero hk = subst {lzero} {lzero} {MV} {λ x → UR A df v x} {u} {ms-get (msb d u s) d} (sym (mget-hit d u s)) hv
+ucorr-e1 A df d e s v u h hv (suc k) hk =
+  subst {lzero} {lzero} {Nat} {λ x → UR A df (q-nth e k) (ms-get (msb d u s) x)} {ca-lvl d k} {cn-sub d (suc k)} (sym (sub-suc d k))
+    (subst {lzero} {lzero} {MV} {λ x → UR A df (q-nth e k) x} {ms-get s (ca-lvl d k)} {ms-get (msb d u s) (ca-lvl d k)}
+       (sym (mget-miss d (ca-lvl d k) u s (neq-lt (ca-lvl d k) d (lt-lvl d k hk)))) (fst h k hk))
+-- a declaration v<d> = u of a value refining v
+ucorr-ext : (A : Word → Nat) (df : Word → Bool) (d : Nat) (e : KQ) (s : MSt) (v : KQ) (u : MV) → UCorr A df d e s → UR A df v u → UCorr A df (suc d) (kqcons v e) (msb d u s)
+ucorr-ext A df d e s v u h hv = (ucorr-e1 A df d e s v u h hv , bot-ext d e v (snd h))
+-- a declaration of a name from d up hides none of the first d
+ucorr-weaken : (A : Word → Nat) (df : Word → Bool) (d : Nat) (e : KQ) (s : MSt) (m : Nat) (u : MV) → UCorr A df d e s → q-le d m ≡ true → UCorr A df d e (msb m u s)
+ucorr-weaken A df d e s m u h hm =
+  ((λ k hk → subst {lzero} {lzero} {MV} {λ x → UR A df (q-nth e k) x} {ms-get s (ca-lvl d k)} {ms-get (msb m u s) (ca-lvl d k)}
+                (sym (mget-miss m (ca-lvl d k) u s (neq-lt (ca-lvl d k) m (q-le-trans (suc (ca-lvl d k)) d m (lt-lvl d k hk) hm)))) (fst h k hk)) ,
+   snd h)
+-- locals all limits refine any environment with nothing from d up
+ucorr-lim : (A : Word → Nat) (df : Word → Bool) (d : Nat) (e : KQ) → ((k : Nat) → q-le d k ≡ true → q-nth e k ≡ kqbot) → UCorr A df d e mslim
+ucorr-lim A df d e hb = ((λ k hk → inl (λ i → true)) , hb)
+-- a chain of j values pushed: nothing from d + j up
+push-bot : (j : Nat) (xs : KQ) (d : Nat) (e : KQ) → q-isn j xs ≡ true → ((k : Nat) → q-le d k ≡ true → q-nth e k ≡ kqbot) → (k : Nat) → q-le (qadd d j) k ≡ true → q-nth (q-push xs e) k ≡ kqbot
+push-bot zero kqnil d e hj hb = hb
+push-bot zero xs d e hj hb = Empty-rec (false≢true hj)
+push-bot (suc j) (kqcons x r) d e hj hb =
+  λ k hk → push-bot j r (suc d) (kqcons x e) hj (bot-ext d e x hb) k (subst {lzero} {lzero} {Nat} {λ u → q-le u k ≡ true} {suc (qadd d j)} {qadd (suc d) j} (sym (qadd-s d j)) hk)
+push-bot (suc j) xs d e hj hb = Empty-rec (false≢true hj)
+-- a chain of j values declared from v<d>, refining the chain pushed (without a limit: each declared)
+push-ucorr0 : (A : Word → Nat) (df : Word → Bool) (j : Nat) (xs : KQ) (cs : CV) (d : Nat) (e : KQ) (s : MSt) → q-isn j xs ≡ true → CR A df xs cs → UCorr A df d e s
+            → UCorr A df (qadd d j) (q-push xs e) (ms-push0 (c2m cs) d s)
+push-ucorr0 A df zero kqnil cs d e s hj h he = subst {lzero} {lzero} {CV} {λ u → UCorr A df d e (ms-push0 (c2m u) d s)} {cvnil} {cs} (sym h) he
+push-ucorr0 A df zero xs cs d e s hj h he = Empty-rec (false≢true hj)
+push-ucorr0 A df (suc j) (kqcons x r) (cvcons y q) d e s hj h he =
+  subst {lzero} {lzero} {Nat} {λ u → UCorr A df u (q-push r (kqcons x e)) (ms-push0 (c2m q) (suc d) (msb d (c2m y) s))} {qadd (suc d) j} {suc (qadd d j)} (qadd-s d j)
+    (push-ucorr0 A df j r q (suc d) (kqcons x e) (msb d (c2m y) s) hj (snd h) (ucorr-ext A df d e s x (c2m y) he (ur-c A df x y (fst h))))
+push-ucorr0 A df (suc j) (kqcons x r) cs d e s hj h he = Empty-rec h
+push-ucorr0 A df (suc j) xs cs d e s hj h he = Empty-rec (false≢true hj)
+push-ucorr : (A : Word → Nat) (df : Word → Bool) (j : Nat) (xs : KQ) (us : MV) (d : Nat) (e : KQ) (s : MSt) → q-isn j xs ≡ true → UR A df xs us → UCorr A df d e s
+           → UCorr A df (qadd d j) (q-push xs e) (ms-push us d s)
+push-ucorr A df j xs us d e s hj (inl p) he =
+  subst {lzero} {lzero} {Bool} {λ b → UCorr A df (qadd d j) (q-push xs e) (if b then mslim else ms-push0 us d s)} {true} {haslim us} (sym p)
+    (ucorr-lim A df (qadd d j) (q-push xs e) (push-bot j xs d e hj (snd he)))
+push-ucorr A df j xs us d e s hj (inr p) he =
+  subst {lzero} {lzero} {MV} {λ u → UCorr A df (qadd d j) (q-push xs e) (ms-push u d s)} {c2m (fst p)} {us} (sym (snd (snd p)))
+    (subst {lzero} {lzero} {Bool} {λ b → UCorr A df (qadd d j) (q-push xs e) (if b then mslim else ms-push0 (c2m (fst p)) d s)} {false} {haslim (c2m (fst p))} (sym (c2m-nl (fst p)))
+       (push-ucorr0 A df j xs (fst p) d e s hj (fst (snd p)) he))
+-- a variable's value
+uvar-ok : (A : Word → Nat) (df : Word → Bool) (d : Nat) (e : KQ) (s : MSt) (k : Nat) → UCorr A df d e s → UR A df (q-nth e k) (ms-get s (ca-lvl d k))
+uvar-ok A df d e s k h =
+  bool-split (q-le (suc k) d) (UR A df (q-nth e k) (ms-get s (ca-lvl d k)))
+    (λ eb → fst h k eb)
+    (λ eb → subst {lzero} {lzero} {KQ} {λ v → UR A df v (ms-get s (ca-lvl d k))} {kqbot} {q-nth e k} (sym (snd h k (le-flip k d eb))) (ur-bot A df (ms-get s (ca-lvl d k))))
+-- apply's callee: f_g(f->f[0], ..., a)
+uap-corr : (A : Word → Nat) (df : Word → Bool) (m : Nat) (env : KQ) (caps : CV) (a : KQ) (ua : MV) → q-isar m env ≡ true → CR A df env caps → UR A df a ua
+         → UCorr A df m (kqcons a (q-push env kqnil)) (m-apenv m ua (c2m caps))
+uap-corr A df zero env caps a ua hi h ha = Empty-rec (false≢true hi)
+uap-corr A df (suc m) env caps a ua hi h ha =
+  ucorr-ext A df m (q-push env kqnil) (ms-push (c2m caps) zero msnil) a ua
+    (subst {lzero} {lzero} {Nat} {λ u → UCorr A df u (q-push env kqnil) (ms-push (c2m caps) zero msnil)} {qadd zero m} {m} (qadd-0l m)
+       (push-ucorr A df m env (c2m caps) zero kqnil msnil hi (ur-c A df env caps h) (ucorr-nil A df))) ha
+-- a closure's target: its parameters' kinds anything, so any arguments have them
+allk-ext : (T : Word → Word → Nat → Kd) (Γ : Nat → Kd) → ((n : Nat) (v : KQ) → Kv T (Γ n) v) → (n : Nat) (v : KQ) → Kv T (kext Γ ka n) v
+allk-ext T Γ h n v = (case n return (λ m → Kv T (kext Γ ka m) v) of zero → unit; suc m → h m v)
+allk-anys : (T : Word → Word → Nat → Kd) (m : Nat) (Γ : Nat → Kd) → ((n : Nat) (v : KQ) → Kv T (Γ n) v) → (n : Nat) (v : KQ) → Kv T (kpush (kanys m) Γ n) v
+allk-anys T zero Γ h = h
+allk-anys T (suc m) Γ h = allk-anys T m (kext Γ ka) (allk-ext T Γ h)
+envk-dc : (S : KS) (A : Word → Nat) (g : Word) (e : KQ) → ks-SK S g ≡ kanys (A g) → EnvK (ks-T S) (spk S g) e
+envk-dc S A g e h =
+  subst {lzero} {lzero} {Kd} {λ K → EnvK (ks-T S) (kpush K (λ n → ka)) e} {kanys (A g)} {ks-SK S g} (sym h)
+    (λ n → allk-anys (ks-T S) (A g) (λ n2 → ka) (λ n2 v → unit) n (q-nth e n))
+-- ---------------------------------------------------------------- what the translation needs
+-- lib/foproofc.cub's ca-ok, a closure's key also a closure target (dc: its dispatcher case, its
+-- parameters' kinds anything)
+uok : (Word → Nat) → (Word → Bool) → (Word → Bool) → FQ → CK → Bool
+uok A df dc (fql w) m = ck-t m
+uok A df dc (fqv n) m = ck-t m
+uok A df dc (fqprim p as) m = andbt (ck-t m) (uok A df dc as ckl)
+uok A df dc (fqlet a b) m = andbt (ck-t m) (andbt (uok A df dc a ckt) (uok A df dc b ckt))
+uok A df dc (fqcon dd c fs) m = andbt (ck-t m) (uok A df dc fs ckl)
+uok A df dc (fqproj dd c k x) m = andbt (ck-t m) (uok A df dc x ckt)
+uok A df dc (fqsw x alts) m = andbt (ck-t m) (andbt (uok A df dc x ckt) (uok A df dc alts cka))
+uok A df dc (fqif c a b) m = andbt (ck-t m) (andbt (uok A df dc c ckt) (andbt (uok A df dc a ckt) (uok A df dc b ckt)))
+uok A df dc (fqclos g env) m = andbt (ck-t m) (andbt (dc g) (andbt (wlt g #1000000) (andbt (fq-isar (A g) env) (uok A df dc env ckl))))
+uok A df dc (fqlam b) m = false
+uok A df dc (fqapp f as) m = andbt (ck-t m) (andbt (uok A df dc f ckt) (uok A df dc as ckl))
+uok A df dc (fqcall g as) m = andbt (ck-t m) (andbt (df g) (andbt (fq-isn (A g) as) (uok A df dc as ckl)))
+uok A df dc (fqloop init b) m = andbt (ck-t m) (andbt (uok A df dc init ckl) (andbt (lbok (fq-len init) b) (uok A df dc b ckt)))
+uok A df dc fqnil m = ck-l m
+uok A df dc (fqcons x r) m = andbt (ck-l m) (andbt (uok A df dc x ckt) (uok A df dc r ckl))
+uok A df dc (fqalt j n b r) m = andbt (ck-a m) (andbt (uok A df dc b ckt) (uok A df dc r cka))
+uok A df dc fqanone m = ck-ta m
+uok A df dc fqnet m = ck-t m
+uok-len : (A : Word → Nat) (df dc : Word → Bool) (t : FQ) → uok A df dc t ckl ≡ true → fq-isn (fq-len t) t ≡ true
+uok-len A df dc fqnil h = λ i → true
+uok-len A df dc (fqcons x r) h = uok-len A df dc r (andr (uok A df dc x ckt) (uok A df dc r ckl) h)
+uok-len A df dc t h = Empty-rec (false≢true h)
+-- ---------------------------------------------------------------- calls, closures applied, loops
+-- the calls at fuel n refined: every defined key's body, in refining parameters of its kinds
+UCallOK : KS → (Word → Nat) → (Word → Bool) → (Word → Bool) → (Word → Bool) → (Word → FQ) → (Word → CU) → Nat → Type
+UCallOK S A df dc CD G GC n = (g : Word) (e2 : KQ) (s2 : MSt) → df g ≡ true → UCorr A dc (A g) e2 s2 → EnvK (ks-T S) (spk S g) e2
+  → UR A dc (qe-ev (qeN G n) (G g) e2) (ue-ev (ueN GC A CD n) (GC g) s2)
+ur-ap0 : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) (n : Nat) → ((g : Word) → dc g ≡ true → CD g ≡ true) → ((g : Word) → dc g ≡ true → df g ≡ true)
+       → ((g : Word) → dc g ≡ true → ks-SK S g ≡ kanys (A g)) → UCallOK S A df dc CD G GC n
+       → (f : KQ) (cf : CV) (a : KQ) (ua : MV) → CR A dc f cf → UR A dc a ua → UR A dc (q-ap1 G (qeN G n) f a) (uap0 GC A CD (ueN GC A CD n) cf ua)
+ur-ap0 S A df dc CD G GC n hcd hdf hsk co (kqclos g env) (cclo g2 caps) a ua h ha =
+  subst {lzero} {lzero} {Word} {λ x → UR A dc (qe-ev (qeN G n) (G g) (kqcons a (q-push env kqnil))) (if andbt (CD x) (andbt (wlt x #1000000) (c-isar (A x) caps)) then ue-ev (ueN GC A CD n) (GC x) (m-apenv (A x) ua (c2m caps)) else mbot)} {g} {g2} (fst (fst h))
+    (subst {lzero} {lzero} {Bool} {λ b → UR A dc (qe-ev (qeN G n) (G g) (kqcons a (q-push env kqnil))) (if b then ue-ev (ueN GC A CD n) (GC g) (m-apenv (A g) ua (c2m caps)) else mbot)} {true} {andbt (CD g) (andbt (wlt g #1000000) (c-isar (A g) caps))}
+       (sym (clo-c A dc CD hcd g env caps (snd (fst h)) (snd h)))
+       (co g (kqcons a (q-push env kqnil)) (m-apenv (A g) ua (c2m caps)) (hdf g (clo-df A dc g env (snd (fst h)))) (uap-corr A dc (A g) env caps a ua (clo-ar A dc g env (snd (fst h))) (snd h) ha)
+          (envk-dc S A g (kqcons a (q-push env kqnil)) (hsk g (clo-df A dc g env (snd (fst h)))))))
+ur-ap0 S A df dc CD G GC n hcd hdf hsk co (kqclos g env) cf a ua h ha = Empty-rec h
+ur-ap0 S A df dc CD G GC n hcd hdf hsk co (kqlam b env) cf a ua h ha = Empty-rec h
+ur-ap0 S A df dc CD G GC n hcd hdf hsk co f cf a ua h ha = ur-bot A dc (uap0 GC A CD (ueN GC A CD n) cf ua)
+ur-ap1 : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) (n : Nat) → ((g : Word) → dc g ≡ true → CD g ≡ true) → ((g : Word) → dc g ≡ true → df g ≡ true)
+       → ((g : Word) → dc g ≡ true → ks-SK S g ≡ kanys (A g)) → UCallOK S A df dc CD G GC n
+       → (f : KQ) (uf : MV) (a : KQ) (ua : MV) → UR A dc f uf → UR A dc a ua → UR A dc (q-ap1 G (qeN G n) f a) (u-ap1 GC A CD (ueN GC A CD n) uf ua)
+ur-ap1 S A df dc CD G GC n hcd hdf hsk co f uf a ua hf ha =
+  ur-gate A dc f uf (q-ap1 G (qeN G n) f a) (λ v → uap0 GC A CD (ueN GC A CD n) v ua) hf (λ c hc → ur-ap0 S A df dc CD G GC n hcd hdf hsk co f c a ua hc ha)
+ur-app : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) (n : Nat) → ((g : Word) → dc g ≡ true → CD g ≡ true) → ((g : Word) → dc g ≡ true → df g ≡ true)
+       → ((g : Word) → dc g ≡ true → ks-SK S g ≡ kanys (A g)) → UCallOK S A df dc CD G GC n
+       → (m : Nat) (as : KQ) (cs : CV) (f : KQ) (uf : MV) → q-isn m as ≡ true → CR A dc as cs → UR A dc f uf → UR A dc (q-app G (qeN G n) as f) (uapl0 GC A CD (ueN GC A CD n) cs uf)
+ur-app S A df dc CD G GC n hcd hdf hsk co (suc m) (kqcons a r) (cvcons a2 q) f uf hm h hf =
+  ur-app S A df dc CD G GC n hcd hdf hsk co m r q (q-ap1 G (qeN G n) f a) (u-ap1 GC A CD (ueN GC A CD n) uf (c2m a2)) hm (snd h)
+    (ur-ap1 S A df dc CD G GC n hcd hdf hsk co f uf a (c2m a2) hf (ur-c A dc a a2 (fst h)))
+ur-app S A df dc CD G GC n hcd hdf hsk co zero kqnil cs f uf hm h hf = subst {lzero} {lzero} {CV} {λ u → UR A dc f (uapl0 GC A CD (ueN GC A CD n) u uf)} {cvnil} {cs} (sym h) hf
+ur-app S A df dc CD G GC n hcd hdf hsk co (suc m) (kqcons a r) cs f uf hm h hf = Empty-rec h
+ur-app S A df dc CD G GC n hcd hdf hsk co m as cs f uf hm h hf = Empty-rec (false≢true hm)
+ur-appl : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) (n : Nat) → ((g : Word) → dc g ≡ true → CD g ≡ true) → ((g : Word) → dc g ≡ true → df g ≡ true)
+        → ((g : Word) → dc g ≡ true → ks-SK S g ≡ kanys (A g)) → UCallOK S A df dc CD G GC n
+        → (m : Nat) (as : KQ) (us : MV) (f : KQ) (uf : MV) → q-isn m as ≡ true → UR A dc as us → UR A dc f uf → UR A dc (q-app G (qeN G n) as f) (u-appl GC A CD (ueN GC A CD n) us uf)
+ur-appl S A df dc CD G GC n hcd hdf hsk co m as us f uf hm h hf =
+  ur-gate A dc as us (q-app G (qeN G n) as f) (λ v → uapl0 GC A CD (ueN GC A CD n) v uf) h (λ c hc → ur-app S A df dc CD G GC n hcd hdf hsk co m as c f uf hm hc hf)
+-- the loops at fuel n refined: from a state of k values of the state's kinds stk refining one another,
+-- a body answering its state's shape and meeting the conditions, in refining environments of their kinds
+ULoopOK : KS → (Word → Nat) → (Word → Bool) → (Word → Bool) → (Word → Bool) → (Word → FQ) → (Word → CU) → Nat → Type
+ULoopOK S A df dc CD G GC n = (k : Nat) (st : KQ) (ust : MV) (b : FQ) (d : Nat) (e : KQ) (s : MSt) (stk : Kd) (Γ : Nat → Kd) (C : Nat → CTy)
+  → q-isn k st ≡ true → UR A dc st ust → uok A df dc b ckt ≡ true → lbok k b ≡ true → kok S df b (kmb stk) (kpush stk Γ) ≡ true → UCorr A dc d e s → kvs (ks-T S) st stk → EnvK (ks-T S) Γ e
+  → UR A dc (qe-lp (qeN G n) st b e) (ue-lp (ueN GC A CD n) d k ust (fq-to-cu S b ckt (kpush stk Γ) (ct-push k d C) (qadd d k) (λ i → ctb)) s)
+-- ---------------------------------------------------------------- the theorem
+-- the modes: a term, a list, alternatives (the scrutinee on top), a loop's state declared from v<l>, a
+-- loop's body (a term, its kinds' conditions those of a body of state kinds st)
+data UM = umt | uml | uma | umd (l : Nat) | umb (st : Kd)
+um-ok : UM → CK
+um-ok umt = ckt
+um-ok uml = ckl
+um-ok uma = cka
+um-ok (umd l) = ckl
+um-ok (umb st) = ckt
+um-km : UM → KM
+um-km umt = kmt
+um-km uml = kml
+um-km uma = kmt
+um-km (umd l) = kml
+um-km (umb st) = kmb st
+-- the extra premise of each mode: for alternatives the scrutinee refined, for declarations from v<l> l
+-- from d up
+UPre : (Word → Nat) → (Word → Bool) → UM → Nat → Type
+UPre A dc umt d = Unit
+UPre A dc uml d = Unit
+UPre A dc uma d = (v : KQ) × ((u : MV) × UR A dc v u)
+UPre A dc (umd l) d = q-le d l ≡ true
+UPre A dc (umb st) d = Unit
+-- the environment the kinds see (for alternatives, the scrutinee on top)
+UEnv : KS → (A : Word → Nat) → (dc : Word → Bool) → (m : UM) → (d : Nat) → (Nat → Kd) → KQ → UPre A dc m d → Type
+UEnv S A dc umt d Γ e x = EnvK (ks-T S) Γ e
+UEnv S A dc uml d Γ e x = EnvK (ks-T S) Γ e
+UEnv S A dc uma d Γ e x = EnvK (ks-T S) Γ (kqcons (fst x) e)
+UEnv S A dc (umd l) d Γ e x = EnvK (ks-T S) Γ e
+UEnv S A dc (umb st) d Γ e x = EnvK (ks-T S) Γ e
+UGoal : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) (n : Nat) (m : UM) (t : FQ) (Γ : Nat → Kd) (C : Nat → CTy) (d : Nat) (e : KQ) (s : MSt) (W : Nat → CTy) → UPre A dc m d → Type
+UGoal S A df dc CD G GC n umt t Γ C d e s W x = VR A dc (ks-T S) (W zero) (evT G (qeN G n) t e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S t ckt Γ C d W) s)
+UGoal S A df dc CD G GC n uml t Γ C d e s W x = VRL A dc (ks-T S) (evT G (qeN G n) t e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S t ckl Γ C d W) s) W
+UGoal S A df dc CD G GC n uma t Γ C d e s W x = VR A dc (ks-T S) (W zero) (evT G (qeN G n) t (kqcons (fst x) e)) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S t cka Γ C d W) (msx (fst (snd x)) s))
+UGoal S A df dc CD G GC n (umd l) t Γ C d e s W x = VRL A dc (ks-T S) (evT G (qeN G n) t e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S t (ckd l) Γ C d W) s) W
+UGoal S A df dc CD G GC n (umb st) t Γ C d e s W x = VR A dc (ks-T S) (W zero) (evT G (qeN G n) t e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S t ckt Γ C d W) s)
+-- every form at fuel n, given the kinds, the calls and the loops at fuel n
+ustep : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) (n : Nat) → ((g : Word) → dc g ≡ true → CD g ≡ true) → ((g : Word) → dc g ≡ true → df g ≡ true)
+      → ((g : Word) → dc g ≡ true → ks-SK S g ≡ kanys (A g)) → KThm S df G n → UCallOK S A df dc CD G GC n → ULoopOK S A df dc CD G GC n
+      → (t : FQ) (m : UM) (Γ : Nat → Kd) (C : Nat → CTy) (d : Nat) (e : KQ) (s : MSt) (W : Nat → CTy) → uok A df dc t (um-ok m) ≡ true → kok S df t (um-km m) Γ ≡ true → UCorr A dc d e s
+      → (x : UPre A dc m d) → UEnv S A dc m d Γ e x → UGoal S A df dc CD G GC n m t Γ C d e s W x
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fql w) umt Γ C d e s W hu hk h x he =
+  vr-lit A dc (ks-T S) GC CD (ueN GC A CD n) s w (W zero)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqv k) umt Γ C d e s W hu hk h x he =
+  ucv A dc (ks-T S) GC CD (ueN GC A CD n) (cuv (ca-lvl d k)) s (C (ca-lvl d k)) (W zero) (q-nth e k) (uvar-ok A dc d e s k h)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqprim p as) umt Γ C d e s W hu hk h x he =
+  bif-el (λ X → VR A dc (ks-T S) (W zero) (q-prim p (evT G (qeN G n) as e)) (uevT GC A CD (ueN GC A CD n) X s)) (cu-wprim p) (cu-conv ctw (W zero) (cupw p (fq-to-cu S as ckl Γ C d (λ i → ctw)))) (cu-conv ctb (W zero) (cuprim p (fq-to-cu S as ckl Γ C d (λ i → ctb))))
+    (λ hw → ucv A dc (ks-T S) GC CD (ueN GC A CD n) (cupw p (fq-to-cu S as ckl Γ C d (λ i → ctw))) s ctw (W zero) (q-prim p (evT G (qeN G n) as e)) (uw-prim A dc (ks-T S) p (evT G (qeN G n) as e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S as ckl Γ C d (λ i → ctw)) s) hw (ustep S A df dc CD G GC n hcd hdf hsk kt co lo as uml Γ C d e s (λ i → ctw) hu hk h unit he)))
+    (λ hw → ucv A dc (ks-T S) GC CD (ueN GC A CD n) (cuprim p (fq-to-cu S as ckl Γ C d (λ i → ctb))) s ctb (W zero) (q-prim p (evT G (qeN G n) as e)) (ur-prim A dc p (evT G (qeN G n) as e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S as ckl Γ C d (λ i → ctb)) s) (vrl-b A dc (ks-T S) (evT G (qeN G n) as e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S as ckl Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo as uml Γ C d e s (λ i → ctb) hu hk h unit he))))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqlet a b) umt Γ C d e s W hu hk h x he =
+  ustep S A df dc CD G GC n hcd hdf hsk kt co lo b umt (kext Γ (ksyn S a kmt Γ)) (ct-set C d (ct-of (ksyn S a kmt Γ))) (suc d) (kqcons (evT G (qeN G n) a e) e) (msb d (uevT GC A CD (ueN GC A CD n) (fq-to-cu S a ckt Γ C d (λ i → ct-of (ksyn S a kmt Γ))) s) s) W (andr (uok A df dc a ckt) (uok A df dc b ckt) hu) (andr (kok S df a kmt Γ) (kok S df b kmt (kext Γ (ksyn S a kmt Γ))) hk)
+    (ucorr-ext A dc d e s (evT G (qeN G n) a e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S a ckt Γ C d (λ i → ct-of (ksyn S a kmt Γ))) s) h (vr-k A dc (ks-T S) (ksyn S a kmt Γ) (evT G (qeN G n) a e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S a ckt Γ C d (λ i → ct-of (ksyn S a kmt Γ))) s) (kt a kmt Γ e (andl (kok S df a kmt Γ) (kok S df b kmt (kext Γ (ksyn S a kmt Γ))) hk) he) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo a umt Γ C d e s (λ i → ct-of (ksyn S a kmt Γ)) (andl (uok A df dc a ckt) (uok A df dc b ckt) hu) (andl (kok S df a kmt Γ) (kok S df b kmt (kext Γ (ksyn S a kmt Γ))) hk) h unit he))) unit (envk-ext (ks-T S) Γ (ksyn S a kmt Γ) (evT G (qeN G n) a e) e he (kt a kmt Γ e (andl (kok S df a kmt Γ) (kok S df b kmt (kext Γ (ksyn S a kmt Γ))) hk) he))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqlet a b) (umb st) Γ C d e s W hu hk h x he =
+  ustep S A df dc CD G GC n hcd hdf hsk kt co lo b (umb st) (kext Γ (ksyn S a kmt Γ)) (ct-set C d (ct-of (ksyn S a kmt Γ))) (suc d) (kqcons (evT G (qeN G n) a e) e) (msb d (uevT GC A CD (ueN GC A CD n) (fq-to-cu S a ckt Γ C d (λ i → ct-of (ksyn S a kmt Γ))) s) s) W (andr (uok A df dc a ckt) (uok A df dc b ckt) hu) (andr (kok S df a kmt Γ) (kok S df b (kmb st) (kext Γ (ksyn S a kmt Γ))) hk)
+    (ucorr-ext A dc d e s (evT G (qeN G n) a e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S a ckt Γ C d (λ i → ct-of (ksyn S a kmt Γ))) s) h (vr-k A dc (ks-T S) (ksyn S a kmt Γ) (evT G (qeN G n) a e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S a ckt Γ C d (λ i → ct-of (ksyn S a kmt Γ))) s) (kt a kmt Γ e (andl (kok S df a kmt Γ) (kok S df b (kmb st) (kext Γ (ksyn S a kmt Γ))) hk) he) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo a umt Γ C d e s (λ i → ct-of (ksyn S a kmt Γ)) (andl (uok A df dc a ckt) (uok A df dc b ckt) hu) (andl (kok S df a kmt Γ) (kok S df b (kmb st) (kext Γ (ksyn S a kmt Γ))) hk) h unit he))) unit (envk-ext (ks-T S) Γ (ksyn S a kmt Γ) (evT G (qeN G n) a e) e he (kt a kmt Γ e (andl (kok S df a kmt Γ) (kok S df b (kmb st) (kext Γ (ksyn S a kmt Γ))) hk) he))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqcon dd c fs) umt Γ C d e s W hu hk h x he =
+  ucv A dc (ks-T S) GC CD (ueN GC A CD n) (cucon c (fq-to-cu S fs ckl Γ C d (λ i → ctb))) s ctb (W zero) (kqcon dd c (evT G (qeN G n) fs e)) (ur-con A dc dd c (evT G (qeN G n) fs e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S fs ckl Γ C d (λ i → ctb)) s) (vrl-b A dc (ks-T S) (evT G (qeN G n) fs e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S fs ckl Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo fs uml Γ C d e s (λ i → ctb) hu (andl (kok S df fs kml Γ) (if kcok dd c fs then klle (ksyn S fs kmt Γ) (kft (ks-T S) dd c (fq-len fs) zero) else true) hk) h unit he)))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqcon dd c fs) (umb st) Γ C d e s W hu hk h x he =
+  ucv A dc (ks-T S) GC CD (ueN GC A CD n) (cucon c (fq-to-cu S fs ckl Γ C d (λ i → ctb))) s ctb (W zero) (kqcon dd c (evT G (qeN G n) fs e)) (ur-con A dc dd c (evT G (qeN G n) fs e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S fs ckl Γ C d (λ i → ctb)) s) (vrl-b A dc (ks-T S) (evT G (qeN G n) fs e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S fs ckl Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo fs uml Γ C d e s (λ i → ctb) hu (andl (kok S df fs kml Γ) (if weq c #0 then klle (ksyn S fs kmt Γ) st else kok S df fs kmh Γ) hk) h unit he)))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqproj dd c j y) umt Γ C d e s W hu hk h x he =
+  ucv A dc (ks-T S) GC CD (ueN GC A CD n) (cuproj j (fq-to-cu S y ckt Γ C d (λ i → ctb))) s ctb (W zero) (q-proj j (evT G (qeN G n) y e)) (ur-lift A dc (c-proj j) (evT G (qeN G n) y e) (q-proj j (evT G (qeN G n) y e)) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S y ckt Γ C d (λ i → ctb)) s) (λ cc hc → cr-proj A dc j (evT G (qeN G n) y e) cc hc) (vr-b A dc (ks-T S) (evT G (qeN G n) y e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S y ckt Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo y umt Γ C d e s (λ i → ctb) hu hk h unit he)))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqsw y alts) umt Γ C d e s W hu hk h x he =
+  ucv A dc (ks-T S) GC CD (ueN GC A CD n) (cusw (fq-to-cu S y ckt Γ C d (λ i → ctb)) (fq-to-cu S alts cka (kext Γ (ksyn S y kmt Γ)) C d (λ i → ctb))) s ctb (W zero) (evT G (qeN G n) alts (kqcons (evT G (qeN G n) y e) e)) (vr-b A dc (ks-T S) (evT G (qeN G n) alts (kqcons (evT G (qeN G n) y e) e)) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S alts cka (kext Γ (ksyn S y kmt Γ)) C d (λ i → ctb)) (msx (uevT GC A CD (ueN GC A CD n) (fq-to-cu S y ckt Γ C d (λ i → ctb)) s) s))
+    (ustep S A df dc CD G GC n hcd hdf hsk kt co lo alts uma (kext Γ (ksyn S y kmt Γ)) C d e s (λ i → ctb) (andr (uok A df dc y ckt) (uok A df dc alts cka) hu) (andr (kok S df y kmt Γ) (kok S df alts kmt (kext Γ (ksyn S y kmt Γ))) hk) h ((evT G (qeN G n) y e) , ((uevT GC A CD (ueN GC A CD n) (fq-to-cu S y ckt Γ C d (λ i → ctb)) s) , vr-b A dc (ks-T S) (evT G (qeN G n) y e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S y ckt Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo y umt Γ C d e s (λ i → ctb) (andl (uok A df dc y ckt) (uok A df dc alts cka) hu) (andl (kok S df y kmt Γ) (kok S df alts kmt (kext Γ (ksyn S y kmt Γ))) hk) h unit he))) (envk-ext (ks-T S) Γ (ksyn S y kmt Γ) (evT G (qeN G n) y e) e he (kt y kmt Γ e (andl (kok S df y kmt Γ) (kok S df alts kmt (kext Γ (ksyn S y kmt Γ))) hk) he))))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqif c a b) umt Γ C d e s W hu hk h x he =
+  vr-if A dc (ks-T S) (W zero) (evT G (qeN G n) c e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S c ckt Γ C d (λ i → ctb)) s) (evT G (qeN G n) a e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S a ckt Γ C d W) s) (evT G (qeN G n) b e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S b ckt Γ C d W) s)
+    (vr-b A dc (ks-T S) (evT G (qeN G n) c e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S c ckt Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo c umt Γ C d e s (λ i → ctb) (andl (uok A df dc c ckt) (andbt (uok A df dc a ckt) (uok A df dc b ckt)) hu) (andl (kok S df c kmt Γ) (andbt (kok S df a kmt Γ) (kok S df b kmt Γ)) hk) h unit he))
+    (ustep S A df dc CD G GC n hcd hdf hsk kt co lo a umt Γ C d e s W (andl (uok A df dc a ckt) (uok A df dc b ckt) (andr (uok A df dc c ckt) (andbt (uok A df dc a ckt) (uok A df dc b ckt)) hu)) (andl (kok S df a kmt Γ) (kok S df b kmt Γ) (andr (kok S df c kmt Γ) (andbt (kok S df a kmt Γ) (kok S df b kmt Γ)) hk)) h unit he)
+    (ustep S A df dc CD G GC n hcd hdf hsk kt co lo b umt Γ C d e s W (andr (uok A df dc a ckt) (uok A df dc b ckt) (andr (uok A df dc c ckt) (andbt (uok A df dc a ckt) (uok A df dc b ckt)) hu)) (andr (kok S df a kmt Γ) (kok S df b kmt Γ) (andr (kok S df c kmt Γ) (andbt (kok S df a kmt Γ) (kok S df b kmt Γ)) hk)) h unit he)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqif c a b) (umb st) Γ C d e s W hu hk h x he =
+  vr-if A dc (ks-T S) (W zero) (evT G (qeN G n) c e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S c ckt Γ C d (λ i → ctb)) s) (evT G (qeN G n) a e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S a ckt Γ C d W) s) (evT G (qeN G n) b e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S b ckt Γ C d W) s)
+    (vr-b A dc (ks-T S) (evT G (qeN G n) c e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S c ckt Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo c umt Γ C d e s (λ i → ctb) (andl (uok A df dc c ckt) (andbt (uok A df dc a ckt) (uok A df dc b ckt)) hu) (andl (kok S df c kmt Γ) (andbt (kok S df a (kmb st) Γ) (kok S df b (kmb st) Γ)) hk) h unit he))
+    (ustep S A df dc CD G GC n hcd hdf hsk kt co lo a (umb st) Γ C d e s W (andl (uok A df dc a ckt) (uok A df dc b ckt) (andr (uok A df dc c ckt) (andbt (uok A df dc a ckt) (uok A df dc b ckt)) hu)) (andl (kok S df a (kmb st) Γ) (kok S df b (kmb st) Γ) (andr (kok S df c kmt Γ) (andbt (kok S df a (kmb st) Γ) (kok S df b (kmb st) Γ)) hk)) h unit he)
+    (ustep S A df dc CD G GC n hcd hdf hsk kt co lo b (umb st) Γ C d e s W (andr (uok A df dc a ckt) (uok A df dc b ckt) (andr (uok A df dc c ckt) (andbt (uok A df dc a ckt) (uok A df dc b ckt)) hu)) (andr (kok S df a (kmb st) Γ) (kok S df b (kmb st) Γ) (andr (kok S df c kmt Γ) (andbt (kok S df a (kmb st) Γ) (kok S df b (kmb st) Γ)) hk)) h unit he)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqclos g env) umt Γ C d e s W hu hk h x he =
+  ucv A dc (ks-T S) GC CD (ueN GC A CD n) (cuclo g (fq-to-cu S env ckl Γ C d (λ i → ctb))) s ctb (W zero) (kqclos g (evT G (qeN G n) env e)) (ur-clo A dc g (evT G (qeN G n) env e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S env ckl Γ C d (λ i → ctb)) s)
+    (andt-i (dc g) (andbt (wlt g #1000000) (q-isar (A g) (evT G (qeN G n) env e))) (andl (dc g) (andbt (wlt g #1000000) (andbt (fq-isar (A g) env) (uok A df dc env ckl))) hu)
+      (andt-i (wlt g #1000000) (q-isar (A g) (evT G (qeN G n) env e)) (andl (wlt g #1000000) (andbt (fq-isar (A g) env) (uok A df dc env ckl)) (andr (dc g) (andbt (wlt g #1000000) (andbt (fq-isar (A g) env) (uok A df dc env ckl))) hu)) (ev-isar G (qeN G n) (A g) env e (andl (fq-isar (A g) env) (uok A df dc env ckl) (andr (wlt g #1000000) (andbt (fq-isar (A g) env) (uok A df dc env ckl)) (andr (dc g) (andbt (wlt g #1000000) (andbt (fq-isar (A g) env) (uok A df dc env ckl))) hu))))))
+    (vrl-b A dc (ks-T S) (evT G (qeN G n) env e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S env ckl Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo env uml Γ C d e s (λ i → ctb) (andr (fq-isar (A g) env) (uok A df dc env ckl) (andr (wlt g #1000000) (andbt (fq-isar (A g) env) (uok A df dc env ckl)) (andr (dc g) (andbt (wlt g #1000000) (andbt (fq-isar (A g) env) (uok A df dc env ckl))) hu))) hk h unit he)))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqapp f as) umt Γ C d e s W hu hk h x he =
+  ucv A dc (ks-T S) GC CD (ueN GC A CD n) (cuap (fq-to-cu S f ckt Γ C d (λ i → ctb)) (fq-to-cu S as ckl Γ C d (λ i → ctb))) s ctb (W zero) (q-app G (qeN G n) (evT G (qeN G n) as e) (evT G (qeN G n) f e))
+    (ur-appl S A df dc CD G GC n hcd hdf hsk co (fq-len as) (evT G (qeN G n) as e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S as ckl Γ C d (λ i → ctb)) s) (evT G (qeN G n) f e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S f ckt Γ C d (λ i → ctb)) s) (ev-isn G (qeN G n) (fq-len as) as e (uok-len A df dc as (andr (uok A df dc f ckt) (uok A df dc as ckl) hu)))
+       (vrl-b A dc (ks-T S) (evT G (qeN G n) as e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S as ckl Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo as uml Γ C d e s (λ i → ctb) (andr (uok A df dc f ckt) (uok A df dc as ckl) hu) (andr (kok S df f kmt Γ) (kok S df as kml Γ) hk) h unit he)) (vr-b A dc (ks-T S) (evT G (qeN G n) f e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S f ckt Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo f umt Γ C d e s (λ i → ctb) (andl (uok A df dc f ckt) (uok A df dc as ckl) hu) (andl (kok S df f kmt Γ) (kok S df as kml Γ) hk) h unit he)))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqcall g as) umt Γ C d e s W hu hk h x he =
+  ucv A dc (ks-T S) GC CD (ueN GC A CD n) (cucall g (fq-to-cu S as ckl Γ C d (cu-pt S g))) s (cu-rt S g) (W zero) (qe-ev (qeN G n) (G g) (q-push (evT G (qeN G n) as e) kqnil))
+    (co g (q-push (evT G (qeN G n) as e) kqnil) (ms-push (uevT GC A CD (ueN GC A CD n) (fq-to-cu S as ckl Γ C d (cu-pt S g)) s) zero msnil) (andl (df g) (andbt (fq-isn (A g) as) (uok A df dc as ckl)) hu)
+       (subst {lzero} {lzero} {Nat} {λ x2 → UCorr A dc x2 (q-push (evT G (qeN G n) as e) kqnil) (ms-push (uevT GC A CD (ueN GC A CD n) (fq-to-cu S as ckl Γ C d (cu-pt S g)) s) zero msnil)} {qadd zero (A g)} {A g} (qadd-0l (A g))
+          (push-ucorr A dc (A g) (evT G (qeN G n) as e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S as ckl Γ C d (cu-pt S g)) s) zero kqnil msnil (ev-isn G (qeN G n) (A g) as e (andl (fq-isn (A g) as) (uok A df dc as ckl) (andr (df g) (andbt (fq-isn (A g) as) (uok A df dc as ckl)) hu))) (vrl-k A dc (ks-T S) (evT G (qeN G n) as e) (ks-SK S g) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S as ckl Γ C d (cu-pt S g)) s) (klle-sound (ks-T S) (evT G (qeN G n) as e) (ksyn S as kmt Γ) (ks-SK S g) (andr (df g) (klle (ksyn S as kmt Γ) (ks-SK S g)) (andr (kok S df as kml Γ) (andbt (df g) (klle (ksyn S as kmt Γ) (ks-SK S g))) hk)) (kt as kml Γ e (andl (kok S df as kml Γ) (andbt (df g) (klle (ksyn S as kmt Γ) (ks-SK S g))) hk) he)) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo as uml Γ C d e s (cu-pt S g) (andr (fq-isn (A g) as) (uok A df dc as ckl) (andr (df g) (andbt (fq-isn (A g) as) (uok A df dc as ckl)) hu)) (andl (kok S df as kml Γ) (andbt (df g) (klle (ksyn S as kmt Γ) (ks-SK S g))) hk) h unit he)) (ucorr-nil A dc)))
+       (envk-push (ks-T S) (evT G (qeN G n) as e) (ks-SK S g) (λ m → ka) kqnil (klle-sound (ks-T S) (evT G (qeN G n) as e) (ksyn S as kmt Γ) (ks-SK S g) (andr (df g) (klle (ksyn S as kmt Γ) (ks-SK S g)) (andr (kok S df as kml Γ) (andbt (df g) (klle (ksyn S as kmt Γ) (ks-SK S g))) hk)) (kt as kml Γ e (andl (kok S df as kml Γ) (andbt (df g) (klle (ksyn S as kmt Γ) (ks-SK S g))) hk) he)) (λ m → unit)))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqloop init b) umt Γ C d e s W hu hk h x he =
+  ucv A dc (ks-T S) GC CD (ueN GC A CD n) (culoop d (fq-len init) (fq-to-cu S init (ckd d) Γ C d (λ i → ctb)) (fq-to-cu S b ckt (kpush (lst S Γ init b) Γ) (ct-push (fq-len init) d C) (qadd d (fq-len init)) (λ i → ctb))) s ctb (W zero) (qe-lp (qeN G n) (evT G (qeN G n) init e) b e)
+    (lo (fq-len init) (evT G (qeN G n) init e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S init (ckd d) Γ C d (λ i → ctb)) s) b d e s (lst S Γ init b) Γ C (ev-isn G (qeN G n) (fq-len init) init e (uok-len A df dc init (andl (uok A df dc init ckl) (andbt (lbok (fq-len init) b) (uok A df dc b ckt)) hu)))
+       (vrl-b A dc (ks-T S) (evT G (qeN G n) init e) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S init (ckd d) Γ C d (λ i → ctb)) s) (ustep S A df dc CD G GC n hcd hdf hsk kt co lo init (umd d) Γ C d e s (λ i → ctb) (andl (uok A df dc init ckl) (andbt (lbok (fq-len init) b) (uok A df dc b ckt)) hu) (andl (kok S df init kml Γ) (andbt (klle (ksyn S init kmt Γ) (lst S Γ init b)) (kok S df b (kmb (lst S Γ init b)) (kpush (lst S Γ init b) Γ))) hk) h (q-le-refl d) he))
+       (andr (lbok (fq-len init) b) (uok A df dc b ckt) (andr (uok A df dc init ckl) (andbt (lbok (fq-len init) b) (uok A df dc b ckt)) hu)) (andl (lbok (fq-len init) b) (uok A df dc b ckt) (andr (uok A df dc init ckl) (andbt (lbok (fq-len init) b) (uok A df dc b ckt)) hu)) (andr (klle (ksyn S init kmt Γ) (lst S Γ init b)) (kok S df b (kmb (lst S Γ init b)) (kpush (lst S Γ init b) Γ)) (andr (kok S df init kml Γ) (andbt (klle (ksyn S init kmt Γ) (lst S Γ init b)) (kok S df b (kmb (lst S Γ init b)) (kpush (lst S Γ init b) Γ))) hk)) h
+       (klle-sound (ks-T S) (evT G (qeN G n) init e) (ksyn S init kmt Γ) (lst S Γ init b) (andl (klle (ksyn S init kmt Γ) (lst S Γ init b)) (kok S df b (kmb (lst S Γ init b)) (kpush (lst S Γ init b) Γ)) (andr (kok S df init kml Γ) (andbt (klle (ksyn S init kmt Γ) (lst S Γ init b)) (kok S df b (kmb (lst S Γ init b)) (kpush (lst S Γ init b) Γ))) hk)) (kt init kml Γ e (andl (kok S df init kml Γ) (andbt (klle (ksyn S init kmt Γ) (lst S Γ init b)) (kok S df b (kmb (lst S Γ init b)) (kpush (lst S Γ init b) Γ))) hk) he)) he)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo fqanone umt Γ C d e s W hu hk h x he =
+  vr-bot A dc (ks-T S) (W zero) mbot
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo fqnet umt Γ C d e s W hu hk h x he =
+  vr-bot A dc (ks-T S) (W zero) (uevT GC A CD (ueN GC A CD n) (cu-conv ctb (W zero) cuunsup) s)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo fqnil uml Γ C d e s W hu hk h x he =
+  unit
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqcons y r) uml Γ C d e s W hu hk h x he =
+  (ustep S A df dc CD G GC n hcd hdf hsk kt co lo y umt Γ C d e s (λ i → W zero) (andl (uok A df dc y ckt) (uok A df dc r ckl) hu) (andl (kok S df y kmt Γ) (kok S df r kml Γ) hk) h unit he ,
+   ustep S A df dc CD G GC n hcd hdf hsk kt co lo r uml Γ C d e s (λ i → W (suc i)) (andr (uok A df dc y ckt) (uok A df dc r ckl) hu) (andr (kok S df y kmt Γ) (kok S df r kml Γ) hk) h unit he)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqalt j k b r) uma Γ C d e s W hu hk h x he =
+  vr-alt A dc (ks-T S) (W zero) j k d e s (fst x) (fst (snd x)) (Γ zero) (λ e2 → (evT G (qeN G n) b e2)) (λ s2 → (uevT GC A CD (ueN GC A CD n) (fq-to-cu S b ckt (kpush (kfl (ks-T S) (Γ zero) j k) (kdrop Γ)) (ct-push k d C) (qadd d k) W) s2)) (evT G (qeN G n) r (kqcons (fst x) e)) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S r cka Γ C d W) (msx (fst (snd x)) s)) (he zero) (snd (snd x))
+    (ustep S A df dc CD G GC n hcd hdf hsk kt co lo r uma Γ C d e s W (andr (uok A df dc b ckt) (uok A df dc r cka) hu) (andr (kok S df b kmt (kpush (kfl (ks-T S) (Γ zero) j k) (kdrop Γ))) (kok S df r kmt Γ) hk) h x he)
+    (λ fs gs hq hc hkf → ustep S A df dc CD G GC n hcd hdf hsk kt co lo b umt (kpush (kfl (ks-T S) (Γ zero) j k) (kdrop Γ)) (ct-push k d C) (qadd d k) (q-push fs e) (ms-push (c2m gs) d (msx (fst (snd x)) s)) W (andl (uok A df dc b ckt) (uok A df dc r cka) hu) (andl (kok S df b kmt (kpush (kfl (ks-T S) (Γ zero) j k) (kdrop Γ))) (kok S df r kmt Γ) hk)
+                          (push-ucorr A dc k fs (c2m gs) d e (msx (fst (snd x)) s) hq (ur-c A dc fs gs hc) h) unit (envk-push (ks-T S) fs (kfl (ks-T S) (Γ zero) j k) (kdrop Γ) e hkf (envk-drop (ks-T S) Γ (fst x) e he)))
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo fqanone uma Γ C d e s W hu hk h x he =
+  vr-bot A dc (ks-T S) (W zero) mbot
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo fqnil (umd l) Γ C d e s W hu hk h x he =
+  unit
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqcons y r) (umd l) Γ C d e s W hu hk h x he =
+  (ustep S A df dc CD G GC n hcd hdf hsk kt co lo y umt Γ C d e s (λ i → W zero) (andl (uok A df dc y ckt) (uok A df dc r ckl) hu) (andl (kok S df y kmt Γ) (kok S df r kml Γ) hk) h unit he ,
+   ustep S A df dc CD G GC n hcd hdf hsk kt co lo r (umd (suc l)) Γ C d e (msb l (uevT GC A CD (ueN GC A CD n) (fq-to-cu S y ckt Γ C d (λ i → W zero)) s) s) (λ i → W (suc i)) (andr (uok A df dc y ckt) (uok A df dc r ckl) hu) (andr (kok S df y kmt Γ) (kok S df r kml Γ) hk) (ucorr-weaken A dc d e s l (uevT GC A CD (ueN GC A CD n) (fq-to-cu S y ckt Γ C d (λ i → W zero)) s) h x) (q-le-step d l x) he)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fql w) (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqv k) (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqprim p as) (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqproj dd c j y) (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqsw y alts) (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqclos g env) (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqapp f as) (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqcall g as) (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqloop init b) (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo fqnet (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo fqanone (umb st) Γ C d e s W hu hk h x he = Empty-rec (false≢true hk)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fql w) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqv k) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqprim p as) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqlet a b) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqcon dd c fs) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqproj dd c j y) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqsw y alts) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqif c a b) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqclos g env) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqlam b) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqapp f as) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqcall g as) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqloop init b) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo fqnet m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo fqanone m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo fqnil m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqcons y r) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+ustep S A df dc CD G GC n hcd hdf hsk kt co lo (fqalt j k b r) m Γ C d e s W hu hk h x he = Empty-rec (false≢true hu)
+-- the theorem at fuel n
+UThm : KS → (Word → Nat) → (Word → Bool) → (Word → Bool) → (Word → Bool) → (Word → FQ) → (Word → CU) → Nat → Type
+UThm S A df dc CD G GC n = (t : FQ) (m : UM) (Γ : Nat → Kd) (C : Nat → CTy) (d : Nat) (e : KQ) (s : MSt) (W : Nat → CTy) → uok A df dc t (um-ok m) ≡ true → kok S df t (um-km m) Γ ≡ true
+  → UCorr A dc d e s → (x : UPre A dc m d) → UEnv S A dc m d Γ e x → UGoal S A df dc CD G GC n m t Γ C d e s W x
+-- one unit of fuel up: a defined key's body, translated at its kinds (fq-to-cu-def), in refining
+-- parameters of its parameters' kinds, refines its first-order meaning in full (its value has its
+-- result's kind)
+ucall-up : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) (n : Nat)
+         → ((g : Word) → df g ≡ true → uok A df dc (G g) ckt ≡ true) → ((g : Word) → df g ≡ true → kok S df (G g) kmt (spk S g) ≡ true)
+         → ((g : Word) → df g ≡ true → kle (ksyn S (G g) kmt (spk S g)) (ks-SR S g) ≡ true) → ((g : Word) → df g ≡ true → GC g ≡ fq-to-cu-def S g (A g) (G g))
+         → KThm S df G n → UThm S A df dc CD G GC n → UCallOK S A df dc CD G GC (suc n)
+ucall-up S A df dc CD G GC n tu tk tle lk kt th g e2 s2 hd h he =
+  subst {lzero} {lzero} {CU} {λ X → UR A dc (evT G (qeN G n) (G g) e2) (uevT GC A CD (ueN GC A CD n) X s2)} {fq-to-cu-def S g (A g) (G g)} {GC g} (sym (lk g hd))
+    (vr-k A dc (ks-T S) (ks-SR S g) (evT G (qeN G n) (G g) e2) (uevT GC A CD (ueN GC A CD n) (fq-to-cu-def S g (A g) (G g)) s2)
+       (kle-sound (ks-T S) (ksyn S (G g) kmt (spk S g)) (ks-SR S g) (evT G (qeN G n) (G g) e2) (tle g hd) (kt (G g) kmt (spk S g) e2 (tk g hd) he))
+       (th (G g) umt (spk S g) (cu-pt S g) (A g) e2 s2 (λ i → cu-rt S g) (tu g hd) (tk g hd) h unit he))
+-- one unit of fuel up: a loop's turn, its body at n (the continuing state's kinds from its body's, kind-sound
+-- in a loop body's mode)
+uloop-up : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) (n : Nat) → KThm S df G n → UThm S A df dc CD G GC n → ULoopOK S A df dc CD G GC n
+         → ULoopOK S A df dc CD G GC (suc n)
+uloop-up S A df dc CD G GC n kt th lo k st ust b d e s stk Γ C hq hst hu hl hk h hkv he =
+  ur-lstep A dc (ks-T S) k stk (ksyn S b (kmb stk) (kpush stk Γ)) (evT G (qeN G n) b (q-push st e))
+    (uevT GC A CD (ueN GC A CD n) (fq-to-cu S b ckt (kpush stk Γ) (ct-push k d C) (qadd d k) (λ i → ctb)) (ms-push ust d s))
+    (λ st2 → qe-lp (qeN G n) st2 b e) (λ st2 → ue-lp (ueN GC A CD n) d k st2 (fq-to-cu S b ckt (kpush stk Γ) (ct-push k d C) (qadd d k) (λ i → ctb)) s)
+    (vr-b A dc (ks-T S) (evT G (qeN G n) b (q-push st e)) (uevT GC A CD (ueN GC A CD n) (fq-to-cu S b ckt (kpush stk Γ) (ct-push k d C) (qadd d k) (λ i → ctb)) (ms-push ust d s))
+       (th b (umb stk) (kpush stk Γ) (ct-push k d C) (qadd d k) (q-push st e) (ms-push ust d s) (λ i → ctb) hu hk (push-ucorr A dc k st ust d e s hq hst h) unit (envk-push (ks-T S) st stk Γ e hkv he)))
+    (kt b (kmb stk) (kpush stk Γ) (q-push st e) hk (envk-push (ks-T S) st stk Γ e hkv he))
+    (lb-res G (qeN G n) k b (q-push st e) hl)
+    (λ x y hx hkx hxy → lo k x y b d e s stk Γ C hx hxy hu hl hk h hkx he)
+ucoks : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) → ((g : Word) → dc g ≡ true → CD g ≡ true) → ((g : Word) → dc g ≡ true → df g ≡ true)
+      → ((g : Word) → dc g ≡ true → ks-SK S g ≡ kanys (A g)) → ((g : Word) → df g ≡ true → uok A df dc (G g) ckt ≡ true) → ((g : Word) → df g ≡ true → kok S df (G g) kmt (spk S g) ≡ true)
+      → ((g : Word) → df g ≡ true → kle (ksyn S (G g) kmt (spk S g)) (ks-SR S g) ≡ true) → ((g : Word) → df g ≡ true → GC g ≡ fq-to-cu-def S g (A g) (G g))
+      → (n : Nat) → UCallOK S A df dc CD G GC n × ULoopOK S A df dc CD G GC n
+ucoks S A df dc CD G GC hcd hdf hsk tu tk tle lk zero = ((λ g e2 s2 hd h he → ur-bot A dc mbot) , (λ k st ust b d e s stk Γ C hq hst hu hl hk h hkv he → ur-bot A dc mbot))
+ucoks S A df dc CD G GC hcd hdf hsk tu tk tle lk (suc n) =
+  (ucall-up S A df dc CD G GC n tu tk tle lk (kind-sound S df G tk tle n)
+     (ustep S A df dc CD G GC n hcd hdf hsk (kind-sound S df G tk tle n) (fst (ucoks S A df dc CD G GC hcd hdf hsk tu tk tle lk n)) (snd (ucoks S A df dc CD G GC hcd hdf hsk tu tk tle lk n))) ,
+   uloop-up S A df dc CD G GC n (kind-sound S df G tk tle n)
+     (ustep S A df dc CD G GC n hcd hdf hsk (kind-sound S df G tk tle n) (fst (ucoks S A df dc CD G GC hcd hdf hsk tu tk tle lk n)) (snd (ucoks S A df dc CD G GC hcd hdf hsk tu tk tle lk n)))
+     (snd (ucoks S A df dc CD G GC hcd hdf hsk tu tk tle lk n)))
+-- the theorem: at every fuel, every term meeting the conditions (uok, and U1's kok in an environment of its
+-- kinds), in refining locals, its unboxed translation refines its first-order meaning wherever the
+-- wanted C type's condition holds (G the first-order table, A its parameter counts, df its defined keys,
+-- dc the closure targets, CD the dispatcher's keys, S U1's tables: every defined key's body meeting the
+-- conditions in its parameters' kinds, of its result's kind; GC the unboxed functions: each defined
+-- key's body translated at its kinds)
+cu-sound : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) → ((g : Word) → dc g ≡ true → CD g ≡ true) → ((g : Word) → dc g ≡ true → df g ≡ true)
+         → ((g : Word) → dc g ≡ true → ks-SK S g ≡ kanys (A g)) → ((g : Word) → df g ≡ true → uok A df dc (G g) ckt ≡ true) → ((g : Word) → df g ≡ true → kok S df (G g) kmt (spk S g) ≡ true)
+         → ((g : Word) → df g ≡ true → kle (ksyn S (G g) kmt (spk S g)) (ks-SR S g) ≡ true) → ((g : Word) → df g ≡ true → GC g ≡ fq-to-cu-def S g (A g) (G g))
+         → (n : Nat) → UThm S A df dc CD G GC n
+cu-sound S A df dc CD G GC hcd hdf hsk tu tk tle lk n =
+  ustep S A df dc CD G GC n hcd hdf hsk (kind-sound S df G tk tle n) (fst (ucoks S A df dc CD G GC hcd hdf hsk tu tk tle lk n)) (snd (ucoks S A df dc CD G GC hcd hdf hsk tu tk tle lk n))
+-- for a term translated at its kind's C type (as fq-to-cu-def translates a body and U2 a main): at every
+-- fuel, the unboxed C's value refines evq's in full, a limit hit or a C value CR relates
+cu-sound-k : (S : KS) (A : Word → Nat) (df dc CD : Word → Bool) (G : Word → FQ) (GC : Word → CU) → ((g : Word) → dc g ≡ true → CD g ≡ true) → ((g : Word) → dc g ≡ true → df g ≡ true)
+           → ((g : Word) → dc g ≡ true → ks-SK S g ≡ kanys (A g)) → ((g : Word) → df g ≡ true → uok A df dc (G g) ckt ≡ true) → ((g : Word) → df g ≡ true → kok S df (G g) kmt (spk S g) ≡ true)
+           → ((g : Word) → df g ≡ true → kle (ksyn S (G g) kmt (spk S g)) (ks-SR S g) ≡ true) → ((g : Word) → df g ≡ true → GC g ≡ fq-to-cu-def S g (A g) (G g))
+           → (n : Nat) (t : FQ) (Γ : Nat → Kd) (C : Nat → CTy) (d : Nat) (e : KQ) (s : MSt) → uok A df dc t ckt ≡ true → kok S df t kmt Γ ≡ true → UCorr A dc d e s → EnvK (ks-T S) Γ e
+           → UR A dc (evq G n t e) (evcu GC A CD n (fq-to-cu S t ckt Γ C d (λ i → ct-of (ksyn S t kmt Γ))) s)
+cu-sound-k S A df dc CD G GC hcd hdf hsk tu tk tle lk n t Γ C d e s hu hk h he =
+  vr-k A dc (ks-T S) (ksyn S t kmt Γ) (evq G n t e) (evcu GC A CD n (fq-to-cu S t ckt Γ C d (λ i → ct-of (ksyn S t kmt Γ))) s) (kind-sound S df G tk tle n t kmt Γ e hk he)
+    (cu-sound S A df dc CD G GC hcd hdf hsk tu tk tle lk n t umt Γ C d e s (λ i → ct-of (ksyn S t kmt Γ)) hu hk h unit he)
+-- ---------------------------------------------------------------- read at a word, against the boxed link
+-- a word refined: the unboxed C's value is a limit hit or that word
+cu-word : (A : Word → Nat) (df : Word → Bool) (w : Word) (u : MV) → UR A df (kqw w) u → Sum (haslim u ≡ true) (u ≡ mw w)
+cu-word A df w u (inl p) = inl p
+cu-word A df w u (inr p) = inr (snd (snd p) ∙ cong c2m (fst (snd p)))
+-- when the first-order form answers a word, the boxed C (refined: lib/foproofm.cub's CRC) and the unboxed
+-- C (refined: UR) each answer it or hit a limit
+cu-agree : (A : Word → Nat) (df dc : Word → Bool) (w : Word) (m u : MV) → CRC A df (kqw w) m → UR A dc (kqw w) u → Sum (haslim m ≡ true) (m ≡ mw w) × Sum (haslim u ≡ true) (u ≡ mw w)
+cu-agree A df dc w m u hm hu = (cm-word (fst hm) m w (fst (snd hm)) (snd (snd hm)) , cu-word A dc w u hu)
+-- ---------------------------------------------------------------- a program's keys, by computation
+-- a decision over the keys (lib/foproofu.cub's kmemu), per key
+kallu : (Word → Bool) → List Word → Bool
+kallu p nil = true
+kallu p (cons k r) = andbt (p k) (kallu p r)
+ukeys-ok : (p : Word → Bool) (ks0 : List Word) → kallu p ks0 ≡ true → (g : Word) → kmemu g ks0 ≡ true → p g ≡ true
+ukeys-ok p nil ha g hm = Empty-rec (false≢true hm)
+ukeys-ok p (cons k r) ha g hm =
+  bool-split (weq g k) (p g ≡ true)
+    (λ h → subst {lzero} {lzero} {Word} {λ x → p x ≡ true} {k} {g} (sym (weq-sound g k h)) (andl (p k) (kallu p r) ha))
+    (λ h → ukeys-ok p r (andr (p k) (kallu p r) ha) g (kmemu-miss g k r h hm))
+-- ---------------------------------------------------------------- the word route
+-- no table (no key defined), the main of one word parameter v0, a uint64_t; S the main's kinds (its
+-- constructors' field kinds: U1's kinfer from the main, no key)
+cu-g1 : Nat → Kd
+cu-g1 = kpush (kcons kw knil) (λ n → ka)
+cu-c1 : Nat → CTy
+cu-c1 l = ct-of (knth (kcons kw knil) l)
+-- a value below a word, with a value, refined: that word or a limit
+qw-u : (A : Word → Nat) (df : Word → Bool) (v : KQ) (u : MV) (w : Word) → qle-w v w → UR A df v u → kq-nb v → Sum (haslim u ≡ true) (u ≡ mw w)
+qw-u A df (kqw x) u w hq h hn = cu-word A df w u (subst {lzero} {lzero} {Word} {λ y → UR A df (kqw y) u} {x} {w} (qw-inj x w hq) h)
+qw-u A df kqbot u w hq h hn = Empty-rec hn
+qw-u A df v u w hq h hn = Empty-rec hq
+-- the word route, end to end, to the unboxed C: whenever the first-order form has a value at x, the
+-- unboxed C's value at x is a limit hit or the word the source code computes at x
+cu-fw-path : (S : KS) (r : VRule) (c : WC) (x : Word) (N : Nat) → uok (λ g → zero) (λ g → false) (λ g → false) (fw-to-fq (spec-w r c)) ckt ≡ true → kok S (λ g → false) (fw-to-fq (spec-w r c)) kmt cu-g1 ≡ true
+           → kq-nb (evq (λ g → fqnet) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil))
+           → Sum (haslim (evcu (λ g → cuunsup) (λ g → zero) (λ g → false) N (fq-to-cu S (fw-to-fq (spec-w r c)) ckt cu-g1 cu-c1 (suc zero) (λ i → ct-of (ksyn S (fw-to-fq (spec-w r c)) kmt cu-g1))) (msb zero (mw x) msnil)) ≡ true)
+                 (evcu (λ g → cuunsup) (λ g → zero) (λ g → false) N (fq-to-cu S (fw-to-fq (spec-w r c)) ckt cu-g1 cu-c1 (suc zero) (λ i → ct-of (ksyn S (fw-to-fq (spec-w r c)) kmt cu-g1))) (msb zero (mw x) msnil) ≡ mw (wc-ev c (envx x)))
+cu-fw-path S r c x N hu hk hn =
+  qw-u (λ g → zero) (λ g → false) (evq (λ g → fqnet) N (fw-to-fq (spec-w r c)) (kqcons (kqw x) kqnil))
+    (evcu (λ g → cuunsup) (λ g → zero) (λ g → false) N (fq-to-cu S (fw-to-fq (spec-w r c)) ckt cu-g1 cu-c1 (suc zero) (λ i → ct-of (ksyn S (fw-to-fq (spec-w r c)) kmt cu-g1))) (msb zero (mw x) msnil))
+    (wc-ev c (envx x)) (fw-path r c (λ g → fqnet) (envx x) (kqcons (kqw x) kqnil) N (fenv-x x))
+    (cu-sound-k S (λ g → zero) (λ g → false) (λ g → false) (λ g → false) (λ g → fqnet) (λ g → cuunsup)
+       (no-df (λ g → (λ u → false) g ≡ true)) (no-df (λ g → (λ u → false) g ≡ true)) (no-df (λ g → ks-SK S g ≡ kanys zero))
+       (no-df (λ g → uok (λ u → zero) (λ u → false) (λ u → false) fqnet ckt ≡ true)) (no-df (λ g → kok S (λ u → false) fqnet kmt (spk S g) ≡ true))
+       (no-df (λ g → kle (ksyn S fqnet kmt (spk S g)) (ks-SR S g) ≡ true)) (no-df (λ g → cuunsup ≡ fq-to-cu-def S g zero fqnet))
+       N (fw-to-fq (spec-w r c)) cu-g1 cu-c1 (suc zero) (kqcons (kqw x) kqnil) (msb zero (mw x) msnil) hu hk
+       (ucorr-ext (λ g → zero) (λ g → false) zero kqnil msnil (kqw x) (mw x) (ucorr-nil (λ g → zero) (λ g → false)) (ur-c (λ g → zero) (λ g → false) (kqw x) (cw x) (λ i → cw x)))
+       (envk-ext (ks-T S) (λ n → ka) kw (kqw x) kqnil (λ n → unit) unit))
+    hn
