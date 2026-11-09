@@ -1209,6 +1209,21 @@ port (A10b) is the checker at scale and gates E28.
    withdrawn (A8d: the compositions whose inputs can all be named never repeat — 39 of 312 at the
    corner, 11 of 285 in g8, all distinct — and the keys alone cost 1–4% steps). What is left is back
    pointers from wires to producers (for bounds on unbuilt values), outside the net as it is.
+   **Status (2026-11-09, A8e, 18.16):** a dimension substitution is now pending on every value with
+   parts (held in a box, a reference carrying it, applied one level when read, cut to the value's
+   free dimensions), not walked: neutrals re-run their operation and systems decide their faces
+   only when read; the operations built per branch of a system (`distribute`, a composition over a
+   system of families, a binder over a system of lines, `sys+`'s forces) and the operands read
+   only on some outcomes (`%@`'s endpoints, a composition's base, an hcomp's cap) are `V_DEFER`
+   cells, run by their reader and erased unrun. Steps of the read alone (memo on, 0 workers),
+   before → after, over the normal form's cells: g8 305,036 → 161,006 (1,566 cells; 195 → 103 per
+   cell), surfc's corner 121,261 → 6,322 (39; 3,109 → 162), the number 443,066 → 230,326 (4), the
+   typed port 999,755 → 352,234 (1). The generic 6-cube still passes the 2.5 GB cap, but now reads
+   back at a flat ~27 steps per result cell (before ~300): its normal form is past 2.06M cells, so
+   the cap is the result's size, not work beyond it. Not flat: the number and the typed port
+   (computing a winding number: the work is the computation's, not substitution's), and g8 and the
+   corner at 100–160 steps per cell against the 6-cube's 27 (what remains is evaluation: β, the
+   composition clauses, erasing the unread parts of what was read; 18.16 lists it).
 9. DONE (`15625ce`, `91c128b`): interned symbols, free names kept per node, one desugaring,
    kept arena chunks; the compiled-form cache beside the recorded forms. Cached library
    load 0.105 s; Brunerie end to end 0.35 s, computation about 0.25 s. Further (2026-11-06,
@@ -3116,6 +3131,86 @@ Revision 1. A design, since this is the open item; stated so it can be criticize
 - **The cost model.** 18.14's first form: recorded steps per key, size as the estimate.
 
 ### 18.16 A8 — Proposal: formal transported compositions
+
+**Status (2026-11-09, A8e: substitution pending on every value with parts).** The diagnosis:
+`rule_subst` applied a dimension substitution at once and structurally — (A) built values (λ
+environments, pairs, Π, Σ, PathP) cloned with the substitution pushed into every part, whether or
+not the dimension occurs or the part is read; (B) neutrals turned back into their operations at
+once (`V_NAPP`→`O_APP`, `V_NCOMP`→`O_COMP`, `V_NCASE`, `V_NTRANS`, `V_HCOMP`, `V_TRANSH`, `V_NPRIM`,
+`V_NWELIM`, `V_CON` through `con_build`), what was computed erased and the operation dispatched
+again; (C) `V_SYS` split per clause of every substituted face, every branch substituted; (D)
+`O_COMPH` on a system type and `distribute` building an operation for every branch; (E) the
+collapse decisions (a tube the substitution makes total, a branch it entails, the constructor
+boundary's `O_FACEOF`/`O_CONCHK`) deciding from formulas first, but after A–C had walked
+everything. Boxes already had the mechanism (a reference carries its pending substitution,
+composes new ones, drops them where the box's free dimensions do not meet them, applies them one
+level when read); it is now the rule for every value. **Built** (`src/net.c`, `src/core.h`,
+`src/lang.c`): (1) a substitution meeting a value with parts — anything but a reference, an
+unbuilt subterm, a variable, a formula, a global — holds the value in a box and returns a
+reference carrying the substitution (`rule_subst`); nothing is walked, cloned or dispatched.
+(2) Reading such a reference copies one level and applies the substitution to it (`ref_read` →
+`sub_read`, an `O_SUBST` with x = 1, `subst_level`: the old structural rule, one level), each part
+a reference carrying the substitution on. Reading a neutral re-runs its operation then; reading a
+system decides from its substituted faces first: a branch the substitution entails is that value,
+the rest are erased unread, and the others get the substitution pending. (3) At the hold, on one
+worker with the memo, the value's free dimensions are walked (`fd_cell`, as `box_fd` does) and
+kept on the box, and a substitution that does not meet them is dropped there (the value passed on
+unchanged). The walk never runs with workers (the race 6007e3f4 fixed); with workers or without the
+memo the substitution is held uncut, so step counts without the memo stay schedule-independent.
+(4) The operations built per branch are `V_DEFER` cells (a new value kind: an operation not yet
+run — its kind, payload and inputs — run by its reader, `defer_build`; held once by a duplicator;
+erased unrun; its free dimensions its inputs' and payload's less a binder's, refused when running
+it may make a dimension): `distribute`'s per-branch eliminators, `O_COMPH`'s per-branch
+compositions over a system of families and the lines they compose in, `rule_mkplam`'s per-branch
+binders over a system of lines (it read every branch one level to decide whether it was itself a
+system), `O_SYSCONS2`'s per-clause forces. (5) Operands read only on some outcomes are built with
+their top operation deferred (`build_deferred`): a typed path application's endpoints (read only
+when the path is neutral at an end), a composition's base and an hcomp's cap (erased when the
+tube is total). E follows: the decisions now come before anything is read. (6) Keys: a value
+substituted at a read is named `K_SUB` over its box's key and the substitution (`key_under`); the
+clone used to keep the unsubstituted value's key. (7) The readback size counts the result's cells,
+not the references, thunks and deferred cells it is read through (earlier counts included
+references: g8's 2,189 was 1,566 cells and 623 references, the corner's 47 was 39; the figures
+below are counted the new way, before and after). `CUBICAL_PROGRESS` also prints the cells read
+back so far; the profile prints holds and drops (`subst-held`, `subst-dropped`) and rule-origin
+erasures above 100. Every interaction is still a step, a read's level included.
+
+Measured (steps of the read alone, memo on, `CUBICAL_WORKERS=0`; size = cells of the normal form):
+
+| read | steps before | steps after | size | per cell before | per cell after |
+|---|---|---|---|---|---|
+| g8 | 305,036 | 161,006 | 1,566 | 195 | 103 |
+| surfc's corner (`@ 0 @ 0`) | 121,261 | 6,322 | 39 | 3,109 | 162 |
+| the corner at `@ a @ 0` | 121,260 | 6,324 | 40 | 3,032 | 158 |
+| the number | 443,066 | 230,326 | 4 | 110,767 | 57,582 |
+| the typed port | 999,755 | 352,234 | 1 | 999,755 | 352,234 |
+
+The corner's `%comp-path` entries went 3,420 → 172. **The generic
+6-cube** (the corner's read with `@ a @ b` over six λ dimensions, polled under a 2.5 GB resident
+cap): killed at the cap both before and after, but `CUBICAL_PROGRESS` now shows why: its normal
+form is large. After: 2,062,458 cells read back at 55M steps (29 s), ~27 steps per cell read back
+and flat through the run (255,636 at 10M steps, 1,058,703 at 30M), 8.5 live cells per cell read
+back. Before: 518,846 cells read back at 160M steps (45 s), ~300 steps per cell, 33 live cells per
+cell. So the cap is the result's size (past 2.06M cells; how far past is not known), not work
+beyond it. **Tried and not kept:** a substitution applied one level to a constructor at once, its
+parts pending (g8 158,174, the corner 5,917: 2–6% fewer steps, but it builds the substituted cell
+whether or not it is read, against (1)); `sys+`'s rest built deferred (g8 +2.4%, the corner +1%);
+`sys+`'s branch and a pair's components built deferred (no change: they are values already).
+**Correctness:** every line of `make test` gives the same output as before with step counts
+stripped (`build/native-main` fails to link on both, `memend_report`, fixed on main by 6ba4acec);
+Brunerie −2 untyped and typed with 0 and 4 workers; g8's and the corner's normal forms identical
+with and without the memo; without the memo the output is identical across 0, 1, 2, 4, 8, 16
+workers on the determinism list; TSan clean on the `make tsan` lines (three rounds, one at a time);
+ASan clean on the `make test` ASan lines. **What is not flat:** the number and the typed port are
+a winding number's computation, a 4-cell and a 1-cell result: the work is the computation's.
+g8 and the corner sit at 100–160 steps per cell against the 6-cube's 27; in g8's read the steps
+are a quarter `SUBST` (half of them a substitution composed onto a reference when a level is
+read), a fifth `ERA` (two thirds of it references: the parts of read cells that are not read),
+then `MKPLAM`, `APP`, `PAPPP`, `HCOMP` — evaluation and the reads' own cost, with no substitution
+walking a value or a branch built for nothing. What the read builds that the result does not
+contain is now what evaluation itself builds (β-reduced bodies, the composition clauses' terms);
+making that pending too would mean building every operand unbuilt (call by need throughout), a
+change to compilation, not to the substitution rules.
 
 **Status (2026-11-07, A8 round four: the `%comp-path` volume).** `%comp-path` is the most
 entered definition (surfc's corner, `CUBICAL_PROFILE=show`: 3,420 entries, next `%bdy-squash4`
