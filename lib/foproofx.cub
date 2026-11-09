@@ -1,0 +1,335 @@
+-- lib/foproofx.cub — the x86 link of the justifying path (plan 18.7's JIT path, B16): from the first-order
+-- form's checked meaning (lib/foproofe.cub's evq) to the machine code lib/emitx86.cub's route runs.
+-- XA is the x86-64 that lib/emitx86.cub emits, as checked syntax: its instructions, and its two control
+-- shapes (a conditional, a loop with its back and end jumps) as structured blocks whose jumps the
+-- encoder fills in; evx is the machine's meaning, fuel-indexed, on its registers and one flat memory
+-- (the stack and the arena both in it); fq-to-xa is the checked translation, lib/emitx86.cub's code
+-- shape construct for construct; xa-sound (lib/foproofxs.cub) proves it right; xa-prog prints XA as
+-- bytes (lib/emitx86.cub's encodings, the jumps' displacements the encoded lengths), with the CPU what
+-- stays outside the path.
+-- Loaded after lib/foproofe.cub and lib/emitx86.cub.
+--
+-- The machine, and where evx is narrower or stricter than the CPU (each an answer xlim, a limit hit,
+-- or xbot, no value; wherever evx has a normal answer the bytes compute it):
+--   * registers rax, rcx, rbp, rsp, r15 (the arena pointer), the argument registers rdi rsi rdx rcx r8
+--     r9 as ar 0 .. 5 (rcx the fourth argument is the same register only in name: emitted code never
+--     holds a value in rcx across a call or an argument pop), one memory from 64-bit addresses to
+--     words; r14 (the blob's base) and the return addresses are the encoder's (a call is to a
+--     definition by its key; a return address is a word nothing reads);
+--   * the words are uint64_t: an addition or multiplication whose exact result is from 2^64 up, or a
+--     literal from 2^64 up, is a limit; subtraction is sub; jae +2; xor eax, eax (truncating, the
+--     source's); comparisons are cmp; setcc al; movzx eax, al as one instruction (rax := 1 or 0; the
+--     flags are dead after every such block, and the conditional's test; je is its block's);
+--   * the stack: a push or a store below slo, or rsp brought below slo, is a limit; the arena: a store
+--     outside [alo, ahi), or r15 bumped past ahi, is a limit; the soundness theorem asks ahi <= slo,
+--     so the two regions never meet;
+--   * immediates fit their encodings (displacements and offsets in 32 bits, the tag in 31: xa-fits),
+--     as the translation's precondition;
+--   * ud2 has no value; a loop body that falls off its end, a function that ends other than by ret,
+--     a call that does not return through ret, have no value;
+--   * stack alignment is not modelled (the blob calls only its own functions, which use no aligned
+--     operation; lib/emitx86.cub aligns every call nonetheless).
+-- ---------------------------------------------------------------- the machine
+-- a memory or the argument registers: a word at every index
+upd : (Word → Word) → Word → Word → Word → Word
+upd m a v b = if weq b a then v else m b
+data XM = xm (rax : Word) (rcx : Word) (rbp : Word) (rsp : Word) (r15 : Word) (ar : Word → Word) (mem : Word → Word)
+x-rax : XM → Word
+x-rax (xm a c b p f r m) = a
+x-rcx : XM → Word
+x-rcx (xm a c b p f r m) = c
+x-rbp : XM → Word
+x-rbp (xm a c b p f r m) = b
+x-rsp : XM → Word
+x-rsp (xm a c b p f r m) = p
+x-r15 : XM → Word
+x-r15 (xm a c b p f r m) = f
+x-ar : XM → Word → Word
+x-ar (xm a c b p f r m) = r
+x-mem : XM → Word → Word
+x-mem (xm a c b p f r m) = m
+-- the regions: the arena [alo, ahi), the stack from slo up
+data XB = xb (alo : Word) (ahi : Word) (slo : Word)
+b-alo : XB → Word
+b-alo (xb a h s) = a
+b-ahi : XB → Word
+b-ahi (xb a h s) = h
+b-slo : XB → Word
+b-slo (xb a h s) = s
+-- an outcome: on, at a loop's back jump, at its end jump, returned, a limit, no value
+data XO = xon (s : XM) | xjh (s : XM) | xje (s : XM) | xrt (s : XM) | xlim | xbot
+-- ---------------------------------------------------------------- the syntax
+-- xpush rax, pop rax, pop rcx, mov rcx rax, mov rax imm64, mov rax [rbp - 8(s+1)], mov [rbp - 8(s+1)] rcx,
+-- add rax rcx, sub (truncating), imul rax rcx, the comparisons, mov rax r15, mov qword [rax] imm32,
+-- mov [rax + 8(k+1)] rcx, mov rax [rax + 8(k+1)], add r15 imm32, add rsp imm32, sub rsp imm32, push and
+-- pop of argument register i, push rbp, pop rbp, mov rbp rsp, mov rsp rbp, ret, a call of definition g,
+-- ud2; the conditional (test rax rax; je over a and its jmp; a; jmp over b; b), the loop (its body; the
+-- back jump to its head, the end jump past it)
+-- (one type: code is a list, xnil and xseq, of instructions; xseq's first field is an instruction)
+data XA = xnil | xseq (i : XA) (r : XA) | xpushrax | xpoprax | xpoprcx | xmovrcxrax | xmovimm (w : Word) | xload (s : Word) | xstore (s : Word) | xadd | xsubt | ximul | xseteq | xsetlt | xmovraxr15 | xtag (c : Word) | xstf (k : Word) | xldf (k : Word) | xaddr15 (n : Word) | xaddrsp (n : Word) | xsubrsp (n : Word) | xpusharg (i : Word) | xpoparg (i : Word) | xpushrbp | xpoprbp | xmovrbprsp | xmovrsprbp | xret | xcall (g : Word) | xud2 | xif (a : XA) (b : XA) | xloop (b : XA) | xjh0 | xje0
+xapp : XA → XA → XA
+xapp xnil b = b
+xapp (xseq i r) b = xseq i (xapp r b)
+xapp t b = xseq xud2 xnil
+x1 : XA → XA
+x1 i = xseq i xnil
+-- ---------------------------------------------------------------- the meaning
+-- eight times a word; slot s at rbp - 8(s+1); field k of a cell at its address + 8(k+1)
+w8 : Word → Word
+w8 w = wadd (wadd (wadd w w) (wadd w w)) (wadd (wadd w w) (wadd w w))
+slot-a : Word → Word → Word
+slot-a b s = wsub b (w8 (wadd s #1))
+fld-a : Word → Word → Word
+fld-a a k = wadd a (w8 (wadd k #1))
+arena-ok : XB → Word → Bool
+arena-ok B a = andbt (not (wlt a (b-alo B))) (wlt a (b-ahi B))
+-- a uint64_t holds a word below 2^64
+x-fits : Word → Bool
+x-fits w = wlt w #18446744073709551616
+-- a push of v: rsp down by 8, v stored there (from slo up)
+x-push : XB → Word → XM → XO
+x-push B v (xm a c b p f r m) = if wlt p (wadd (b-slo B) #8) then xlim else xon (xm a c b (wsub p #8) f r (upd m (wsub p #8) v))
+-- the fuel-indexed parts: a function's code run one unit down, a loop's run from a state one unit down
+data XE = xe (ev : XA → XM → XO) (lp : XA → XM → XO)
+xe-ev : XE → XA → XM → XO
+xe-ev (xe f l) = f
+xe-lp : XE → XA → XM → XO
+xe-lp (xe f l) = l
+xthen : XO → (XM → XO) → XO
+xthen (xon s) k = k s
+xthen (xjh s) k = xjh s
+xthen (xje s) k = xje s
+xthen (xrt s) k = xrt s
+xthen xlim k = xlim
+xthen xbot k = xbot
+-- a call's callee has answered: it returned through ret
+xret-of : XO → XO
+xret-of (xrt s) = xon s
+xret-of xlim = xlim
+xret-of (xon s) = xbot
+xret-of (xjh s) = xbot
+xret-of (xje s) = xbot
+xret-of xbot = xbot
+-- a loop body has answered: the back jump runs it again, the end jump is past the loop
+xlstep : XO → (XM → XO) → XO
+xlstep (xjh s) k = k s
+xlstep (xje s) k = xon s
+xlstep xlim k = xlim
+xlstep (xon s) k = xbot
+xlstep (xrt s) k = xbot
+xlstep xbot k = xbot
+-- one instruction (the blocks and the call are xrun's)
+xstep : XB → XA → XM → XO
+xstep B xpushrax (xm a c b p f r m) = x-push B a (xm a c b p f r m)
+xstep B xpoprax (xm a c b p f r m) = xon (xm (m p) c b (wadd p #8) f r m)
+xstep B xpoprcx (xm a c b p f r m) = xon (xm a (m p) b (wadd p #8) f r m)
+xstep B xmovrcxrax (xm a c b p f r m) = xon (xm a a b p f r m)
+xstep B (xmovimm w) (xm a c b p f r m) = if x-fits w then xon (xm w c b p f r m) else xlim
+xstep B (xload s) (xm a c b p f r m) = xon (xm (m (slot-a b s)) c b p f r m)
+xstep B (xstore s) (xm a c b p f r m) = if wlt (slot-a b s) (b-slo B) then xlim else xon (xm a c b p f r (upd m (slot-a b s) c))
+xstep B xadd (xm a c b p f r m) = if x-fits (wadd a c) then xon (xm (wadd a c) c b p f r m) else xlim
+xstep B xsubt (xm a c b p f r m) = xon (xm (wsub a c) c b p f r m)
+xstep B ximul (xm a c b p f r m) = if x-fits (dmulw a c) then xon (xm (dmulw a c) c b p f r m) else xlim
+xstep B xseteq (xm a c b p f r m) = xon (xm (dbw (weq a c)) c b p f r m)
+xstep B xsetlt (xm a c b p f r m) = xon (xm (dbw (wlt a c)) c b p f r m)
+xstep B xmovraxr15 (xm a c b p f r m) = xon (xm f c b p f r m)
+xstep B (xtag t) (xm a c b p f r m) = if arena-ok B a then xon (xm a c b p f r (upd m a t)) else xlim
+xstep B (xstf j) (xm a c b p f r m) = if arena-ok B (fld-a a j) then xon (xm a c b p f r (upd m (fld-a a j) c)) else xlim
+xstep B (xldf j) (xm a c b p f r m) = xon (xm (m (fld-a a j)) c b p f r m)
+xstep B (xaddr15 n) (xm a c b p f r m) = if wlt (b-ahi B) (wadd f n) then xlim else xon (xm a c b p (wadd f n) r m)
+xstep B (xaddrsp n) (xm a c b p f r m) = xon (xm a c b (wadd p n) f r m)
+xstep B (xsubrsp n) (xm a c b p f r m) = if wlt p (wadd (b-slo B) n) then xlim else xon (xm a c b (wsub p n) f r m)
+xstep B (xpusharg i) (xm a c b p f r m) = x-push B (r i) (xm a c b p f r m)
+xstep B (xpoparg i) (xm a c b p f r m) = xon (xm a c b (wadd p #8) f (upd r i (m p)) m)
+xstep B xpushrbp (xm a c b p f r m) = x-push B b (xm a c b p f r m)
+xstep B xpoprbp (xm a c b p f r m) = xon (xm a c (m p) (wadd p #8) f r m)
+xstep B xmovrbprsp (xm a c b p f r m) = xon (xm a c p p f r m)
+xstep B xmovrsprbp (xm a c b p f r m) = xon (xm a c b b f r m)
+xstep B xret (xm a c b p f r m) = xrt (xm a c b (wadd p #8) f r m)
+xstep B xud2 s = xbot
+xstep B xjh0 s = xjh s
+xstep B xje0 s = xje s
+xstep B (xcall g) s = xbot
+xstep B (xif t e) s = xbot
+xstep B (xloop t) s = xbot
+xstep B xnil s = xbot
+xstep B (xseq i r) s = xbot
+-- a conditional: rax nonzero the first block, zero the second
+xif-of : Word → XO → XO → XO
+xif-of a o1 o2 = if weq a #0 then o2 else o1
+-- code from a state: an instruction, then the rest from where it leaves the machine
+xrun : (Word → XA) → XB → XE → XA → XM → XO
+xrun G B k xnil s = xon s
+xrun G B k (xseq (xif t e) r) s = xthen (xif-of (x-rax s) (xrun G B k t s) (xrun G B k e s)) (λ s2 → xrun G B k r s2)
+xrun G B k (xseq (xloop t) r) s = xthen (xe-lp k t s) (λ s2 → xrun G B k r s2)
+xrun G B k (xseq (xcall g) r) s = xthen (xthen (x-push B #0 s) (λ s2 → xret-of (xe-ev k (G g) s2))) (λ s2 → xrun G B k r s2)
+xrun G B k (xseq i r) s = xthen (xstep B i s) (λ s2 → xrun G B k r s2)
+xrun G B k t s = xbot
+xeN : (Word → XA) → XB → Nat → XE
+xeN G B zero = xe (λ c s → xbot) (λ t s → xbot)
+xeN G B (suc n) = xe (λ c s → xrun G B (xeN G B n) c s) (λ t s → xlstep (xrun G B (xeN G B n) t s) (λ s2 → xe-lp (xeN G B n) t s2))
+-- the machine's meaning of code at fuel n: G each definition's code, B the regions
+evx : (Word → XA) → XB → Nat → XA → XM → XO
+evx G B n c s = xrun G B (xeN G B n) c s
+-- ---------------------------------------------------------------- the translation
+-- lib/emitx86.cub's code shape over the checked first-order form: every expression leaves its value in
+-- rax; env the slots of the variables (innermost first), d the slots pushed; the modes: a term, an
+-- argument or field list (each pushed in order), a loop body (its state's slots below base; every path
+-- continues, storing the new state and jumping back, or breaks, its value in rax, jumping to the end)
+data XL = xlnil | xlcons (s : Word) (r : XL)
+xl-nth : XL → Nat → Word
+xl-nth xlnil n = #0
+xl-nth (xlcons s r) zero = s
+xl-nth (xlcons s r) (suc n) = xl-nth r n
+xlapp : XL → XL → XL
+xlapp xlnil b = b
+xlapp (xlcons s r) b = xlcons s (xlapp r b)
+-- base − 1, base − 2, …, base − k: a loop's state, the last pushed the innermost
+xslots : Nat → Word → XL
+xslots zero b = xlnil
+xslots (suc k) b = xlcons (wsub b #1) (xslots k (wsub b #1))
+xq-len : FQ → Nat
+xq-len (fqcons x r) = suc (xq-len r)
+xq-len t = zero
+wodd : Word → Bool
+wodd w = %welimP (λ v → Bool) w false (λ k h → not h)
+xop : Word → XA
+xop p = if weq p #0 then xadd else (if weq p #1 then xsubt else (if weq p #2 then ximul else (if weq p #3 then xseteq else (if weq p #4 then xsetlt else xud2))))
+-- popped into the argument registers, the last first
+xpop-args : Nat → XA
+xpop-args zero = xnil
+xpop-args (suc k) = xseq (xpoparg (fromNat k)) (xpop-args k)
+-- popped into a cell's fields, the last first
+xpop-fields : Nat → XA
+xpop-fields zero = xnil
+xpop-fields (suc k) = xseq xpoprcx (xseq (xstf (fromNat k)) (xpop-fields k))
+-- popped into a loop's state slots, the last first
+xpop-state : Nat → Word → XA
+xpop-state zero b = xnil
+xpop-state (suc k) b = xseq xpoprcx (xseq (xstore (wsub b #1)) (xpop-state k (wsub b #1)))
+-- the lets pushed since a loop's head dropped
+xdrop : Word → Word → XA
+xdrop d b = if weq d b then xnil else x1 (xaddrsp (w8 (wsub d b)))
+data XK = xkt | xkl | xkb (base : Word)
+xc : FQ → XL → Word → XK → XA
+xc (fql w) env d xkt = x1 (xmovimm w)
+xc (fqv n) env d xkt = x1 (xload (xl-nth env n))
+xc (fqprim p (fqcons a (fqcons b fqnil))) env d xkt = xapp (xc a env d xkt) (xseq xpushrax (xapp (xc b env (wadd d #1) xkt) (xseq xmovrcxrax (xseq xpoprax (x1 (xop p))))))
+xc (fqlet a b) env d xkt = xapp (xc a env d xkt) (xseq xpushrax (xapp (xc b (xlcons d env) (wadd d #1) xkt) (x1 (xaddrsp #8))))
+xc (fqif c a b) env d xkt = xapp (xc c env d xkt) (x1 (xif (xc a env d xkt) (xc b env d xkt)))
+xc (fqcall g as) env d xkt = xapp (xc as env d xkl) (xapp (xpop-args (xq-len as)) (if wodd d then xseq (xsubrsp #8) (xseq (xcall g) (x1 (xaddrsp #8))) else x1 (xcall g)))
+xc (fqcon dd c fs) env d xkt = xapp (xc fs env d xkl) (xseq xmovraxr15 (xseq (xtag c) (xapp (xpop-fields (xq-len fs)) (x1 (xaddr15 (w8 (wadd (fromNat (xq-len fs)) #1)))))))
+xc (fqproj dd c k x) env d xkt = xapp (xc x env d xkt) (x1 (xldf k))
+xc (fqloop init b) env d xkt = xapp (xc init env d xkl) (xseq (xloop (xc b (xlapp (xslots (xq-len init) (wadd d (fromNat (xq-len init)))) env) (wadd d (fromNat (xq-len init))) (xkb (wadd d (fromNat (xq-len init)))))) (x1 (xaddrsp (w8 (fromNat (xq-len init))))))
+xc fqnil env d xkl = xnil
+xc (fqcons a r) env d xkl = xapp (xc a env d xkt) (xseq xpushrax (xc r env (wadd d #1) xkl))
+xc (fqif c a b) env d (xkb base) = xapp (xc c env d xkt) (x1 (xif (xc a env d (xkb base)) (xc b env d (xkb base))))
+xc (fqlet a b) env d (xkb base) = xapp (xc a env d xkt) (xseq xpushrax (xc b (xlcons d env) (wadd d #1) (xkb base)))
+xc (fqcon dd c (fqcons x r)) env d (xkb base) = if weq c #0 then xapp (xc (fqcons x r) env d xkl) (xapp (xpop-state (xq-len (fqcons x r)) base) (xapp (xdrop d base) (x1 xjh0))) else xapp (xc x env d xkt) (xapp (xdrop d base) (x1 xje0))
+xc (fqcon dd c fs) env d (xkb base) = if weq c #0 then xapp (xc fs env d xkl) (xapp (xpop-state (xq-len fs) base) (xapp (xdrop d base) (x1 xjh0))) else xapp (x1 xud2) (xapp (xdrop d base) (x1 xje0))
+xc t env d m = x1 xud2
+-- push the parameters' registers in order: prologue, parameters, body, epilogue
+xpp : Nat → Nat → XA
+xpp zero i = xnil
+xpp (suc k) i = xseq (xpusharg (fromNat i)) (xpp k (suc i))
+xfn : Nat → FQ → XA
+xfn n body = xseq xpushrbp (xseq xmovrbprsp (xapp (xpp n zero) (xapp (xc body (xslots n (fromNat n)) (fromNat n) xkt) (xseq xmovrsprbp (xseq xpoprbp (x1 xret))))))
+-- the fragment, decided (lib/emitx86.cub's x86-ok, with each call's argument count its definition's, at
+-- most six, and each loop's continuing cell its state's size)
+xq-isn : Nat → FQ → Bool
+xq-isn zero fqnil = true
+xq-isn (suc m) (fqcons x r) = xq-isn m r
+xq-isn n t = false
+xq-le6 : Nat → Bool
+xq-le6 n = wlt (fromNat n) #7
+xq-ok : (Word → Nat) → (Word → Bool) → FQ → XK → Bool
+xq-ok A df (fql w) xkt = true
+xq-ok A df (fqv n) xkt = true
+xq-ok A df (fqprim p as) xkt = andbt (wlt p #5) (andbt (xq-isn (suc (suc zero)) as) (xq-ok A df as xkl))
+xq-ok A df (fqlet a b) xkt = andbt (xq-ok A df a xkt) (xq-ok A df b xkt)
+xq-ok A df (fqif c a b) xkt = andbt (xq-ok A df c xkt) (andbt (xq-ok A df a xkt) (xq-ok A df b xkt))
+xq-ok A df (fqcall g as) xkt = andbt (df g) (andbt (xq-le6 (A g)) (andbt (xq-isn (A g) as) (xq-ok A df as xkl)))
+xq-ok A df (fqcon dd c fs) xkt = xq-ok A df fs xkl
+xq-ok A df (fqproj dd c k x) xkt = xq-ok A df x xkt
+xq-ok A df (fqloop init b) xkt = andbt (xq-ok A df init xkl) (xq-ok A df b (xkb (fromNat (xq-len init))))
+xq-ok A df fqnil xkl = true
+xq-ok A df (fqcons a r) xkl = andbt (xq-ok A df a xkt) (xq-ok A df r xkl)
+xq-ok A df (fqif c a b) (xkb k) = andbt (xq-ok A df c xkt) (andbt (xq-ok A df a (xkb k)) (xq-ok A df b (xkb k)))
+xq-ok A df (fqlet a b) (xkb k) = andbt (xq-ok A df a xkt) (xq-ok A df b (xkb k))
+xq-ok A df (fqcon dd c fs) (xkb k) = if weq c #0 then andbt (xq-isn (dnat k) fs) (xq-ok A df fs xkl) else andbt (xq-isn (suc zero) fs) (xq-ok A df fs xkl)
+xq-ok A df t m = false
+-- ---------------------------------------------------------------- the encoder (the trusted step)
+-- XA as bytes, lib/emitx86.cub's encodings instruction for instruction: tbl the definitions' offsets,
+-- off the bytes since the innermost loop's head, tot its body's length (a back jump to its head, an end
+-- jump past it); a conditional's je skips its first block and that block's jmp
+xienc tbl off tot i =
+  case i of
+    xpushrax → i-push-rax
+    xpoprax → i-pop-rax
+    xpoprcx → i-pop-rcx
+    xmovrcxrax → i-mov-rcx-rax
+    xmovimm w → i-mov-rax-imm64 w
+    xload s → i-load-slot s
+    xstore s → i-store-slot-rcx s
+    xadd → i-add-rax-rcx
+    xsubt → cat3 i-sub-rax-rcx (xb2 #115 #2) (xb2 #49 #192)
+    ximul → i-imul-rax-rcx
+    xseteq → cat3 i-cmp-rax-rcx i-sete-al i-movzx-eax-al
+    xsetlt → cat3 i-cmp-rax-rcx i-setb-al i-movzx-eax-al
+    xmovraxr15 → i-mov-rax-r15
+    xtag c → i-store-tag c
+    xstf k → i-store-field-rcx k
+    xldf k → i-load-field k
+    xaddr15 n → i-add-r15 n
+    xaddrsp n → i-add-rsp n
+    xsubrsp n → i-sub-rsp n
+    xpusharg j → i-push-arg j
+    xpoparg j → i-pop-arg j
+    xpushrbp → i-push-rbp
+    xpoprbp → i-pop-rbp
+    xmovrbprsp → i-mov-rbp-rsp
+    xmovrsprbp → i-mov-rsp-rbp
+    xret → i-ret
+    xcall g → cat3 (i-mov-eax-imm32 (tbl-off tbl g)) i-add-rax-r14 i-call-rax
+    xud2 → i-ud2
+    xif a b →
+      (let ca = xenc tbl (%wadd off #9) tot a
+           cb = xenc tbl (%wadd off (%wadd #14 (lst-len ca))) tot b
+       in cat5 i-test-rax (i-je (%wadd (lst-len ca) #5)) ca (i-jmp (lst-len cb)) cb)
+    xloop b → (let b1 = xenc tbl #0 #0 b in xenc tbl #0 (lst-len b1) b)
+    xjh0 → i-jmp (neg32 (%wadd off #5))
+    xje0 → i-jmp (%wsub tot (%wadd off #5))
+    _ → i-ud2
+xenc tbl off tot t = case t of xnil → lnil; xseq i r → (let bi = xienc tbl off tot i in lapp bi (xenc tbl (%wadd off (lst-len bi)) tot r)); _ → i-ud2
+-- a program: defs a Lst of (key , (arity , FQ body)); the stub, then each definition's code
+xa-fn-bytes tbl dd = xenc tbl #0 #0 (xfn (dnat (fst (snd dd))) (snd (snd dd)))
+xa-layout defs off = case defs of lnil → lnil; lcons dd r → lcons (fst dd , off) (xa-layout r (%wadd off (lst-len (xa-fn-bytes lnil dd))))
+xa-fns tbl defs = case defs of lnil → lnil; lcons dd r → lapp (xa-fn-bytes tbl dd) (xa-fns tbl r)
+xa-prog defs = let tbl = xa-layout defs stub-len in lapp (stub-x86 (tbl-off tbl #0)) (xa-fns tbl defs)
+-- the immediates fit their encodings (the encoder's precondition): displacements, offsets and sizes
+-- below 2^31, tags below 2^31
+x31 w = %wlt w #2147483648
+xa-fits t = case t of xnil → true; xseq i r → andx (xi-fits i) (xa-fits r); _ → false
+xi-fits i =
+  case i of
+    xload s → x31 (wmul8x (%wsucc s))
+    xstore s → x31 (wmul8x (%wsucc s))
+    xtag c → x31 c
+    xstf k → x31 (wmul8x (%wsucc k))
+    xldf k → x31 (wmul8x (%wsucc k))
+    xaddr15 n → x31 n
+    xaddrsp n → x31 n
+    xsubrsp n → x31 n
+    xif a b → andx (xa-fits a) (xa-fits b)
+    xloop b → xa-fits b
+    _ → true
+-- the program's first-order form as lib/emitx86.cub's input, and the table of its code
+xq-defs-fo defs = case defs of lnil → lnil; lcons dd r → lcons (fst dd , (fst (snd dd) , fq-to-fo (snd (snd dd)))) (xq-defs-fo r)
+xa-table defs g = case defs of lnil → x1 xud2; lcons dd r → if %weq (fst dd) g then xfn (dnat (fst (snd dd))) (snd (snd dd)) else xa-table r g
+xa-arity defs g = case defs of lnil → zero; lcons dd r → if %weq (fst dd) g then dnat (fst (snd dd)) else xa-arity r g
+xa-body defs g = case defs of lnil → fqnet; lcons dd r → if %weq (fst dd) g then snd (snd dd) else xa-body r g
+xa-has defs g = case defs of lnil → false; lcons dd r → if %weq (fst dd) g then true else xa-has r g
+-- the program in the x86 fragment, decided on the checked form: each definition's body meets xq-ok
+-- (calls at their definitions' arities, at most six), each arity at most six, every immediate fits
+xq-all all defs = case defs of lnil → true; lcons dd r → andx (andx (xq-ok (λ g → xa-arity all g) (λ g → xa-has all g) (snd (snd dd)) xkt) (andx (xq-le6 (dnat (fst (snd dd)))) (xa-fits (xfn (dnat (fst (snd dd))) (snd (snd dd)))))) (xq-all all r)
+xq-defs-ok defs = xq-all defs defs

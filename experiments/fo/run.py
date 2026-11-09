@@ -642,13 +642,24 @@ lam-body5 f = case f of flam b → b; _ → f
 sum-fib = floop (lcons (flit #0) (lcons (flit #0) lnil)) (fif (fprim P-lt (lcons (fvar #1) (lcons (flit #10) lnil))) (fcon #0 #0 (lcons (fprim P-add (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (fprim P-add (lcons (fvar #0) (lcons (fcall #1 (lcons (fvar #1) lnil)) lnil))) lnil))) (fcon #0 #1 (lcons (fvar #0) lnil)))
 defs = lcons (#0 , (#0 , sum-fib)) (lcons (#1 , (#1 , lam-body5 (specialize (Word → Word) lnil (code (λ w → fibw2 w))))) lnil)""", [], "88"),
 }
+# the proved programs' machine code through the x86 link (lib/foproofx.cub): XA from the checked
+# first-order form by fq-to-xa, printed by its encoder xa-prog (the trusted step), the fragment
+# decided by xq-defs-ok on the checked form
+XQ = {
+ 'proved': "lcons (#0 , (#1 , fw-to-fq (spec-w std-vrule ex-c))) lnil",
+ 'proved-fib': "snd (specialize-proved-q (Word → Word) lnil (code (λ (w : Word) → fibx w)))",
+}
 def run_x86(name, defs, args, expect):
     with tempfile.TemporaryDirectory() as d:
         cub = os.path.join(d, name + '.cub')
-        open(cub, 'w').write(defs + "\n#show x86-ok defs\nprog = emit-x86 defs\n#show prog\n")
+        if name in XQ:
+            imp = ''.join('import "' + os.path.join(ROOT, 'lib', f) + '"\n' for f in ('foproof.cub', 'foproofd.cub', 'foproofe.cub', 'foproofq.cub', 'foproofc.cub', 'foproofx.cub'))
+            open(cub, 'w').write(imp + defs + "\ndefsq = " + XQ[name] + "\nx86ok = xq-defs-ok defsq\n#show x86ok\nprog = xa-prog defsq\n#show prog\n")
+        else:
+            open(cub, 'w').write(defs + "\n#show x86-ok defs\nprog = emit-x86 defs\n#show prog\n")
         out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'),
                              preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))).stdout
-        okm = re.search(r'^x86-ok defs\s*=\s*(\w+)', out, re.M)
+        okm = re.search(r'^(?:x86-ok defs|x86ok)\s*=\s*(\w+)', out, re.M)
         m = re.search(r'^prog\s*=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
         if not m or not okm: print(name, 'FAIL: no reading'); print(out[-500:]); return False
         if okm.group(1) != 'true': print(name, 'FAIL: outside the x86 fragment'); return False
