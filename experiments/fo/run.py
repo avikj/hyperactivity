@@ -105,9 +105,11 @@ u32c w = wadd (if u32eq (u32 w) (u32 #1) then #10 else #0) (if u32lt (u32 #5) (u
 sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → u32c w))
 defs = lcons (#0 , (lnil , fcall #1 (lcons (flit #4294967297) lnil))) (lift-program #2 (lcons (fo-def #1 sp) lnil))""", "10"),
  # signatures from the declared types (item 14, lib/emitu.cub's emit-prog-d): selw's second
- # parameter is only returned and keep5's only passed through, so by use they are boxed (V *, the
- # record boxed and unboxed around the call); from their checked types they are uint64_t and the
- # flat record by value. The same program printed both ways; 3 + 1 + (5 + 10) = 19
+ # parameter is only returned and keep5's only passed through; from their checked types they are
+ # uint64_t and the flat record by value. sig-use prints the same program with emit-prog-u, which
+ # reads the binders' types (the type-directed lowering's): the same signatures. Until 2026-11-09
+ # emit-prog-u typed a parameter by its first use, so these two were boxed (V *, the record boxed
+ # and unboxed around the call). 3 + 1 + (5 + 10) = 19
  'sig-decl': ('''selw : Word → Word → Word
 selw a b = if %wlt a #10 then b else a
 useselw : Word → Word
@@ -131,7 +133,7 @@ sum6 : Pt6 → Word
 sum6 p = case keep6 p of pt6 x y → %wadd x y
 su-defs = lift-program #100000 (program-rep-at (Word → Word) #99999 lnil #20 (code (λ (n : Word) → %wadd (useselw2 n) (sum6 (pt6 n #10)))))
 defs = lcons (#0 , (lnil , fcall #99999 (lcons (flit #5) lnil))) su-defs
-prog = emit-prog-u defs''', "19", r"re:(?s)(?=.*V \*f_\d+\(V \*v0\) \{ return v0; \})(?=.*box\d+\()"),
+prog = emit-prog-u defs''', "19", r"re:(?s)(?=.*uint64_t f_\d+\(uint64_t v0, uint64_t v1\) \{)(?=.*T\d+ f_\d+\(T\d+ v0\) \{ return v0; \})"),
  # a code over the byte layer (two loads from an unknown buffer, with their bound proofs and Nat
  # lengths) lowered with the representations consumed (lib/repr.cub), compiled, run on a buffer
  'loads': ("""defs = lcons (#0 , (lnil , fcall #1 (lcons buf2 lnil))) (lcons (fo-def #1 sum2) lnil)""", "14", "ASSUME(((16 + 8) < (32 + 1)));"),

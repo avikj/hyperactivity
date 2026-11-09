@@ -1,9 +1,12 @@
 -- lib/emitu.cub — the C printer with words, pairs and flat data unboxed (plan 18.7, B16 milestone 2:
 -- types on the first-order form). Loaded after lib/emitc.cub (its runtime and byte strings). A type
--- here is W (uint64_t) or P (a boxed V *, as lib/emitc.cub prints everything); every local,
--- parameter and return is typed by inference — a parameter by its uses in the body (arithmetic W,
--- a switch's scrutinee or a buffer P, an argument of a call by that call's parameter), a return by
--- its body — and a value is converted where the inferred and the wanted types differ (mkw, ->n).
+-- here is W (uint64_t), P (a boxed V *, as lib/emitc.cub prints everything), a pair or a data
+-- type; every parameter, let and loop state is typed by its binder's FT (the type-directed
+-- lowering's, lib/lower.cub, or a hand-written program's declared signature; a binder at ftany is
+-- boxed, a let or a state at ftany takes its value's synthesized type), a case's fields by the data
+-- table, and every expression by synthesis from its construct and the binders' types (infer-u), a
+-- return by its body — and a value is converted where its type and the wanted one differ (mkw,
+-- ->n, box/unbox). (Until 2026-11-09 a parameter was typed by its first use in the body, use-ty.)
 -- A loop whose body is the shape lower-welim makes (if c then continue (state) else break r) is
 -- printed as a for loop over typed state variables with no allocation; other loops, closures and
 -- constructors keep the boxed protocol. emit-prog-u defs: the program, main printing f_0's value.
@@ -181,9 +184,9 @@ infer-u sigs env t =
     fproj d c k x → (let tx = infer-u sigs env x in if is-pr tx then pr-k tx k else if is-dt tx then fld-ty (dt-of tx) c k else tP)
     fcall g args → ret-ty sigs g
     fprim p args → if store-any p then tP else if %weq p P-bytes then tP else tW
-    flet ty a b → infer-u sigs (lcons (infer-u sigs env a) env) b
+    flet ty a b → infer-u sigs (lcons (let-ty sigs env ty a) env) b
     fif c a b → join-ty (infer-u sigs env a) (infer-u sigs env b)
-    floop tys init body → loop-ty sigs env init body
+    floop tys init body → loop-ty sigs env tys init body
     fassume f b → infer-u sigs env b
     fforce x → infer-u sigs env x
     fthunk a → tP
@@ -199,68 +202,36 @@ alts-ty sigs env tx alts =
     lcons a r → (case r of lnil → infer-u sigs (alt-env tx (fst a) (fst (snd a)) env) (snd (snd a)); _ → join-ty (infer-u sigs (alt-env tx (fst a) (fst (snd a)) env) (snd (snd a))) (alts-ty sigs env tx r))
 alt-env tx c n env = if is-dt tx then push-tys (ctor-tys (dt-of tx) c) env else push-n tP n env
 -- a loop's result: the break's payload when the body has the shape, else P
-loop-ty sigs env init body =
-  let env2 = push-types sigs env init
+loop-ty sigs env tys init body =
+  let env2 = push-tys (state-tys sigs env tys init) env
   in case body of
        fif c a b → (case b of fcon d k fs → (case fs of lcons r rest → infer-u sigs env2 r; _ → tP); _ → tP)
        _ → tP
-push-types sigs env l = case l of lnil → env; lcons x xs → push-types sigs (lcons (infer-u sigs env x) env) xs
--- ---------------------------------------------------------------- parameter types by use
--- use-ty sigs env d n body: the type a variable at depth n (from the body's top, d binders deep)
--- is used at: W when an operand of arithmetic or a fact, P when a scrutinee, a projected value, a
--- buffer, an applied function; an argument of a call takes the callee's parameter type; the first
--- use found decides, P when none
-use-ty sigs d n t =
-  case t of
-    fvar m → none
-    flit w → none
-    fi64 n → none
-    ff64 w → none
-    fcon dd c fs → use-list sigs d n fs
-    fswitch x alts → first-some (if is-var d n x then some tP else use-ty sigs d n x) (use-alts sigs d n alts)
-    frec dd x alts → first-some (if is-var d n x then some (if is-udata dd then dt-ty dd else tP) else use-ty sigs d n x) (use-ralts sigs d n alts)
-    fproj dd c k x → if is-var d n x then some tP else use-ty sigs d n x
-    fcall g args → use-args sigs d n g #0 args
-    fprim p args → if %wlt #13 p then use-arith sigs d n args else if %wlt #7 p then use-bytes sigs d n p args else use-arith sigs d n args
-    flet ty a b → first-some (use-ty sigs d n a) (use-ty sigs (%wsucc d) n b)
-    fif c a b → first-some (if is-var d n c then some tW else use-ty sigs d n c) (first-some (use-ty sigs d n a) (use-ty sigs d n b))
-    floop tys init body → first-some (use-init sigs d n (lst-len init) init #0 body) (use-ty sigs (%wadd d (lst-len init)) n body)
-    fclos g env → use-list sigs d n env
-    fapply f args → first-some (if is-var d n f then some tP else use-ty sigs d n f) (use-list sigs d n args)
-    fassume f b → use-ty sigs d n b
-    fforce x → use-ty sigs d n x
-    fthunk a → use-ty sigs d n a
-    fupd u dd x c k v → first-some (if is-var d n x then some (if is-udata dd then dt-ty dd else tP) else use-ty sigs d n x) (use-ty sigs d n v)
-    _ → none
-is-var d n t = case t of fvar m → %weq m (%wadd d n); _ → false
--- a variable that initializes loop state i is used as that state is used in the body (state i is
--- the body's variable k − 1 − i)
-use-init sigs d n k init i body =
+-- ---------------------------------------------------------------- binder types
+-- every binder of the form carries its FT (lib/fo.cub: the type-directed lowering's, or a hand-
+-- written program's declared signature); its C type here: a word (Word, Bool, UInt32, Int64 and
+-- Float64 by their bits) W, a pair of such Pr, a data type by value when flat and a typed pointer
+-- when pointer data, anything else (byte strings, functions, ftany) boxed P
+bt t = fromopt (ft-ty t) tP
+bts ts = case ts of lnil → lnil; lcons t r → lcons (bt t) (bts r)
+-- a let's type: its binder's, or (ftany) its definiens' synthesized type
+let-ty sigs env ty a = case ft-ty ty of some t → t; none → infer-u sigs env a
+-- a loop's state types: each slot's binder type, or (ftany) its initial value's synthesized type
+state-tys sigs env tys init =
   case init of
-    lnil → none
-    lcons x xs → first-some (if is-var d n x then use-ty sigs #0 (%wsub (%wsub k #1) i) body else use-ty sigs d n x) (use-init sigs d n k xs (%wsucc i) body)
-first-some a b = case a of some x → a; none → b
-use-list sigs d n l = case l of lnil → none; lcons x xs → first-some (use-ty sigs d n x) (use-list sigs d n xs)
-use-alts sigs d n alts = case alts of lnil → none; lcons a r → first-some (use-ty sigs (%wadd d (fst (snd a))) n (snd (snd a))) (use-alts sigs d n r)
-use-ralts sigs d n alts = case alts of lnil → none; lcons a r → first-some (use-ty sigs (%wadd d (%wadd (fst (snd a)) (lst-len (fst (snd (snd a)))))) n (snd (snd (snd a)))) (use-ralts sigs d n r)
-use-args sigs d n g j args = case args of lnil → none; lcons a r → first-some (if is-var d n a then some (param-ty sigs g j) else use-ty sigs d n a) (use-args sigs d n g (%wsucc j) r)
-use-arith sigs d n args = case args of lnil → none; lcons a r → first-some (if is-var d n a then some tW else use-ty sigs d n a) (use-arith sigs d n r)
--- the byte primitives: the buffer P, the offset and the stored value W
-use-bytes sigs d n p args =
-  case args of
-    lnil → none
-    lcons a r → first-some (if is-var d n a then some (if %weq p P-bytes then tW else tP) else use-ty sigs d n a) (use-arith sigs d n r)
--- the signature of a definition (arity n): parameter i is the variable n − 1 − i at the top
-def-sig sigs n body = (param-tys sigs n #0 body , infer-u sigs (param-env sigs n #0 body) body)
-param-tys sigs n i body = if %weq i n then lnil else lcons (case use-ty sigs #0 (%wsub (%wsub n #1) i) body of some t → t; none → tP) (param-tys sigs n (%wsucc i) body)
--- the environment of the body: parameters innermost-last (variable 0 is the last parameter)
-param-env sigs n i body = if %weq i n then lnil else lapp (param-env sigs n (%wsucc i) body) (lcons (case use-ty sigs #0 (%wsub (%wsub n #1) i) body of some t → t; none → tP) lnil)
+    lnil → lnil
+    lcons x xs → (let t = (case ft-ty (ty-hd tys) of some t0 → t0; none → infer-u sigs env x) in lcons t (state-tys sigs (lcons t env) (ty-tl tys) xs))
+ty-hd l = case l of lnil → ftany; lcons x r → x
+ty-tl l = case l of lnil → lnil; lcons x r → r
+-- the signature of a definition: its parameters' binder types, its result synthesized from the body
+-- in the environment of the parameters (variable 0 the last)
+def-sig sigs ps body = (bts ps , infer-u sigs (lst-rev (bts ps)) body)
 -- all signatures, iterated so that calls see their callees' types
 sigs-of defs = let ct = clos-targets defs in sigs-round ct (sigs-round ct (sigs-round ct lnil defs) defs) defs
 sigs-round ct sigs defs =
   case defs of
     lnil → lnil
-    lcons d r → lcons (fst d , (if lmem-w (fst d) ct then (push-n tP (def-n d) lnil , tP) else def-sig sigs (def-n d) (snd (snd d)))) (sigs-round ct sigs r)
+    lcons d r → lcons (fst d , (if lmem-w (fst d) ct then (push-n tP (def-n d) lnil , tP) else def-sig sigs (fst (snd d)) (snd (snd d)))) (sigs-round ct sigs r)
 -- the targets of closures are called through the dispatcher with boxed arguments: P throughout;
 -- the dispatcher lists only them (a definition with typed parameters is called directly)
 clos-defs defs = let ct = clos-targets defs in keep-if (λ d → lmem-w (fst d) ct) defs
@@ -333,8 +304,8 @@ emit-u sigs env d t =
     fcall g args → cat4 u-f (dec g) u-lp (lapp (args-u sigs env d g #0 args) u-rp)
     fprim p args → prim-u sigs env d p args
     flet ty a b →
-      let ta = infer-u sigs env a
-      in cat7 u-bsx (ty-decl ta) (var (%wsucc d) #0) u-assign (emit-u sigs env d a) u-semi (lapp (emit-u sigs (lcons ta env) (%wsucc d) b) u-bsend)
+      let ta = let-ty sigs env ty a
+      in cat7 u-bsx (ty-decl ta) (var (%wsucc d) #0) u-assign (emit-at sigs env d ta a) u-semi (lapp (emit-u sigs (lcons ta env) (%wsucc d) b) u-bsend)
     fif c a b →
       let rt = infer-u sigs env t
       in cat6 u-if (emit-at sigs env d tW c) u-ifm (emit-at sigs env d rt a) u-ifs (lapp (emit-at sigs env d rt b) u-ifend)
@@ -451,9 +422,9 @@ bytes-u sigs env d p args =
 -- a for with reassignments; any other body falls back to the boxed protocol of lib/emitc.cub
 loop-u sigs env d tys0 init body =
   let k = lst-len init
-      tys = init-types sigs env init
-      env2 = push-types sigs env init
-      rt = loop-ty sigs env init body
+      tys = state-tys sigs env tys0 init
+      env2 = push-tys tys env
+      rt = loop-ty sigs env tys0 init body
   in case body of
        fif c a b →
          (case a of
@@ -470,12 +441,11 @@ loop-u sigs env d tys0 init body =
                  _ → emit d (floop tys0 init body))
             _ → emit d (floop tys0 init body))
        _ → emit d (floop tys0 init body)
-init-types sigs env l = case l of lnil → lnil; lcons x xs → lcons (infer-u sigs env x) (init-types sigs (lcons (infer-u sigs env x) env) xs)
 -- state variable i is v_(d+1+i); typed by tys
 inits-u sigs env d tys l i =
   case l of
     lnil → lnil
-    lcons x xs → cat7 (ty-decl (ty-at tys i)) (var (%wsucc (%wadd d i)) #0) u-assign (emit-at sigs env d (ty-at tys i) x) u-semi (inits-u sigs (lcons (infer-u sigs env x) env) d tys xs (%wsucc i)) lnil
+    lcons x xs → cat7 (ty-decl (ty-at tys i)) (var (%wsucc (%wadd d i)) #0) u-assign (emit-at sigs env d (ty-at tys i) x) u-semi (inits-u sigs env d tys xs (%wsucc i)) lnil
 ty-at tys i = case tys of lnil → tP; lcons t r → if %weq i #0 then t else ty-at r (%wsub i #1)
 -- the new state: computed into temporaries first (each reads the old state), then assigned
 reassign-u sigs env d tys k st i =
@@ -658,10 +628,10 @@ bl-fill b i l = case l of lnil → b; lcons x r → bl-fill (%store8 b i (%u32of
 -- g + 1; the entry m, definition 0 and the lifted closures from 100000 are not globals) is typed
 -- from its checked type (FT by global-sig, lib/lower.cub): each parameter and the result by its
 -- declared type — a word, an Int64 or Float64 (a word here), a pair of such, a data type (by value
--- when flat, a typed pointer when pointer data, else boxed) — and by use where FT says nothing
--- (ftany, byte strings, functions) or where the FT's arity is not the definition's (an erased
--- parameter). ft-of reads a represented type as its representation, so these printers are for
--- programs with the representations consumed (program-rep). The entries: emit-prog-d m defs,
+-- when flat, a typed pointer when pointer data, else boxed) — and by its binders' types where FT
+-- says nothing (ftany, byte strings, functions) or where the FT's arity is not the definition's (an
+-- erased parameter). ft-of reads a represented type as its representation, so these printers are
+-- for programs with the representations consumed (program-rep). The entries: emit-prog-d m defs,
 -- emit-lib-d m defs
 ft-ty t =
   case t of
@@ -670,11 +640,15 @@ ft-ty t =
     ftf64 → some tW
     ftpair a b → (case ft-ty a of some x → (case ft-ty b of some y → some (pr-ty x y); none → none); none → none)
     ftdata d ps r → some (if is-udata d then dt-ty d else tP)
+    -- a field as the printer binds it: by the data table when the type is laid out (switch-dt's
+    -- ctor-tys), boxed otherwise (alt-u)
+    ftfield d c j → some (if is-udata d then fld-ty d c j else tP)
     _ → none
 from-store m g = andb (notb-u (%weq g #0)) (andb (notb-u (%weq g m)) (%wlt g #100000))
 merge-tys fs us = case fs of lnil → us; lcons f fr → (case us of lnil → lnil; lcons u ur → lcons (fromopt (ft-ty f) u) (merge-tys fr ur))
-decl-or-use m sigs g n body =
-  let u = def-sig sigs n body
+decl-or-use m sigs g ps body =
+  let n = lst-len ps
+      u = def-sig sigs ps body
   in if from-store m g
        then (case quote-ty (%gty (%wsub g #1)) of
                some T → (let s = sig-ft T in if %weq (lst-len (fst s)) n then (merge-tys (fst s) (fst u) , fromopt (ft-ty (snd s)) (snd u)) else u)
@@ -684,7 +658,7 @@ sigs-of-d m defs = let ct = clos-targets defs in sigs-round-d m ct (sigs-round-d
 sigs-round-d m ct sigs defs =
   case defs of
     lnil → lnil
-    lcons d r → lcons (fst d , (if lmem-w (fst d) ct then (push-n tP (def-n d) lnil , tP) else decl-or-use m sigs (fst d) (def-n d) (snd (snd d)))) (sigs-round-d m ct sigs r)
+    lcons d r → lcons (fst d , (if lmem-w (fst d) ct then (push-n tP (def-n d) lnil , tP) else decl-or-use m sigs (fst d) (fst (snd d)) (snd (snd d)))) (sigs-round-d m ct sigs r)
 emit-prog-d m defs =
   let sigs = sigs-of-d m defs
   in cat6 s-runtime (lapp u-f32h u-prdecl) (box-fns (flat-types defs)) (protos-u sigs defs) (dispatch (clos-defs defs)) (lapp (defs-u sigs defs) (if %weq (ret-ty sigs #0) tW then u-main-w else if is-pr (ret-ty sigs #0) then u-main-pr else u-main-p))

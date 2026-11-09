@@ -19,6 +19,9 @@ data FT
   | ftfun (args : Lst) (ret : FT)
   | ftlazy (t : FT)
   | ftpair (a : FT) (b : FT)
+  | ftfield (d : Word) (c : Word) (j : Word)   -- the type of field j of constructor c of data type d, as a printer binds it
+                                             -- (lift types a captured field so: the printer resolves it from the data
+                                             -- table by the rule it binds the field with, so both sides agree)
   | ftany
 data FO
   = fvar (n : Word)                          -- de Bruijn index into the environment
@@ -402,13 +405,15 @@ renumber-alts d caps alts = case alts of lnil → lnil; lcons a r → lcons (fst
 -- lift-e env k t: env the types of t's free variables (a Lst of FT, innermost first; ftany past its
 -- end), from which a lifted definition's parameters are typed: the captured variables at their
 -- types, then the λ's own binder (a recursion's: the scrutinee, of its data type). A field bound by
--- a switch or a recursion's alternative, or a hypothesis, is at ftany here (the form does not say
--- the field's type: the printers read it from the data table where they bind it). lift k t: a
+-- a recursion's alternative is at ftfield d c j (the form records the data type and the
+-- constructor, the printers read the field's type from the data table where they bind it); one
+-- bound by a switch (which records no data type) and a hypothesis are at ftany. lift k t: a
 -- closed term
 env-ft env n = case env of lnil → ftany; lcons t r → if %weq n #0 then t else env-ft r (%wsub n #1)
 caps-fts env caps = case caps of lnil → lnil; lcons v r → lcons (env-ft env v) (caps-fts env r)
 push-ftany n env = if %weq n #0 then env else push-ftany (%wsub n #1) (lcons ftany env)
 push-fts tys env = case tys of lnil → env; lcons t r → push-fts r (lcons t env)
+field-fts d c j n = if %weq j n then lnil else lcons (ftfield d c j) (field-fts d c (%wsucc j) n)
 lift-e env k t =
   case t of
     flam ty b →
@@ -438,7 +443,7 @@ lift-e env k t =
     frec dd x alts →
       (case lift-e env k x of
          lifted x2 ds k2 →
-           (case lift-ralts env k2 alts of
+           (case lift-ralts env dd k2 alts of
               lifted2 alts2 ds2 k3 →
                 let caps = free-vars #0 (frec dd (flit #0) alts2)
                 in lifted (fcall k3 (lapp2 (caps-as-vars caps) (lcons x2 lnil)))
@@ -528,10 +533,10 @@ hyp-lets g caps n t hyps body =
     lnil → body
     lcons j r → flet ftany (fcall g (lapp2 (caps-at (%wsucc (%wadd n t)) caps) (lcons (fvar (%wadd (%wsub (%wsub n #1) j) t)) lnil))) (hyp-lets g caps n (%wsucc t) r body)
 caps-at d caps = case caps of lnil → lnil; lcons v r → lcons (fvar (%wadd v d)) (caps-at d r)
-lift-ralts env k alts =
+lift-ralts env dd k alts =
   case alts of
     lnil → lifted2 lnil lnil k
-    lcons a r → (case lift-e (push-ftany (%wadd (fst (snd a)) (lst-len2 (fst (snd (snd a))))) env) k (snd (snd (snd a))) of lifted b2 ds k2 → (case lift-ralts env k2 r of lifted2 r2 ds2 k3 → lifted2 (lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , b2))) r2) (lapp2 ds ds2) k3))
+    lcons a r → (case lift-e (push-ftany (lst-len2 (fst (snd (snd a)))) (push-fts (field-fts dd (fst a) #0 (fst (snd a))) env)) k (snd (snd (snd a))) of lifted b2 ds k2 → (case lift-ralts env dd k2 r of lifted2 r2 ds2 k3 → lifted2 (lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , b2))) r2) (lapp2 ds ds2) k3))
 lift-list env k l =
   case l of
     lnil → lifted2 lnil lnil k
