@@ -63,12 +63,17 @@ void stat_gather_kinds(void) {
     pthread_mutex_unlock(&allmu);
 }
 
+/* the cells too large for a slab, while their memory is held (net_scan_payloads walks them) */
+static Cell **BIGS; static size_t nbigs, capbigs; static pthread_mutex_t bigmu = PTHREAD_MUTEX_INITIALIZER;
+static void big_note(Cell *c) { pthread_mutex_lock(&bigmu); if (nbigs == capbigs) { capbigs = capbigs ? capbigs * 2 : 64; BIGS = realloc(BIGS, capbigs * sizeof(Cell *)); } BIGS[nbigs++] = c; pthread_mutex_unlock(&bigmu); }
+static void big_forget(Cell *c) { pthread_mutex_lock(&bigmu); for (size_t i = 0; i < nbigs; i++) if (BIGS[i] == c) { BIGS[i] = BIGS[--nbigs]; break; } pthread_mutex_unlock(&bigmu); }
 Cell *cell(int kind, int n) {
     Local *l = local();
     Cell *c;
     if (n > MAXFREE) {
         c = malloc(cell_bytes(n));
         if (!c) { fputs("out of memory\n", stderr); exit(2); }
+        big_note(c);
     } else if (l->free[n]) { c = l->free[n]; l->free[n] = (Cell *)(uintptr_t)c->a; slab_take(slab_of(c)); }
     else {
         size_t sz = cell_bytes(n);
@@ -134,7 +139,7 @@ static void arenas_release(void) {
         if (l->vcur && l->vcur->live == 0) l->vcur = NULL;
         Var **vp = &l->vfree;
         while (*vp) { Var *v = *vp; if (slab_of(v)->live == 0) *vp = v->next; else vp = &v->next; }
-        while (l->big) { Cell *c = l->big; l->big = (Cell *)(uintptr_t)c->a; free(c); }
+        while (l->big) { Cell *c = l->big; l->big = (Cell *)(uintptr_t)c->a; big_forget(c); free(c); }
     }
     for (Local *l = ALL; l; l = l->next) {
         Slab **sp = &l->slabs;
@@ -3796,6 +3801,25 @@ bool net_observe(Cell *root, long limit) {
 }
 /* reduce every pending pair: the workload's normal form, or what waits on an input */
 void net_drain(void) { net_observe(NULL, -1); }
+/* every payload pointer the net holds, a cell's to cellf and a key's to keyf (NULL: not walked): the
+ * roots lang.c's records_sweep marks from. Run with every worker parked. A freed cell's p is NULL
+ * (payload_release), so a cell on a free list hands nothing; a slab of variables holds no payloads */
+void net_scan_payloads(void (*cellf)(void *), void (*keyf)(void *)) {
+    if (cellf) {
+        pthread_mutex_lock(&allmu);
+        for (Local *l = ALL; l; l = l->next)
+            for (Slab *x = l->slabs; x; x = x->next) {
+                if (x->n == ~0u) continue;
+                size_t sz = cell_bytes((int)x->n);
+                for (size_t off = SLAB_HDR; off + sz <= x->used; off += sz) { Cell *c = (Cell *)((char *)x + off); if (c->p) cellf(c->p); }
+            }
+        pthread_mutex_unlock(&allmu);
+        pthread_mutex_lock(&bigmu);
+        for (size_t i = 0; i < nbigs; i++) if (BIGS[i]->p) cellf(BIGS[i]->p);
+        pthread_mutex_unlock(&bigmu);
+    }
+    if (keyf) for (int i = 0; i < KSH; i++) for (size_t j = 0; j < SH[i].KTcap; j++) if (SH[i].KT[j] && SH[i].KT[j]->p) keyf(SH[i].KT[j]->p);
+}
 /* memory accounting (CUBICAL_MEMDEF): slabs held over every thread, keys interned */
 void net_mem(long *slabs, long *keys) {
     long sl = 0, k = 0;

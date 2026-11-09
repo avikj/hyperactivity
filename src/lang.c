@@ -1866,17 +1866,42 @@ static void syn_free(Syn *t) {
     free(t->k); free(t);
 }
 static Record **RT; static size_t RTcap, RTn;
+/* CUBICAL_MEMEND: at exit, the compiled code held, split by owner (definitions' bodies, their
+ * n-ary records, every interned record's body), in bytes of Syn nodes not counting records reached */
+static long syn_bytes_shallow(const Syn *t) {
+    if (!t) return 0;
+    long b = (long)(sizeof(Syn) + ((size_t)t->n + 1) * sizeof(Syn *));
+    for (int i = 0; i < t->n; i++) b += syn_bytes_shallow(t->k[i]);
+    return b;
+}
+static void memend_report(void);
+/* a record whose body was dropped (records_sweep): only keys still name it, by pointer. Equal code
+ * compiled again must get the same pointer (a key naming it is the name of a value the memo may
+ * hold), so what interning compares is kept: the hash, and the SHA-256 of the body as rec_eq
+ * reads it (nested records and tables by pointer); and the records and tables the body named, so
+ * that they keep their pointers too. Interning equal code again gives it its body back */
+typedef struct RecGone { unsigned char dig[32]; Record **rec; CaseTab **tab; int nrec, ntab; } RecGone;
+static void rec_digest(const Record *r, unsigned char out[32]);   /* after store.c (sha256) */
 static uint64_t rec_hash(const Record *r) {
+    if (r->h) return r->h;
     uint64_t h = hmix(hmix(hmix(7, (uint64_t)r->nparam), (uint64_t)r->nslots), (uint64_t)r->nenv);
     for (int i = 0; i < r->nenv; i++) h = hmix(h, (uint64_t)r->env_slot[i]);
-    return hmix(h, syn_hash(r->body));
+    h = hmix(h, syn_hash(r->body));
+    if (!h) h = 1;
+    return ((Record *)r)->h = h;
 }
 static bool rec_eq(const Record *a, const Record *b) {
     if (a->nparam != b->nparam || a->nslots != b->nslots || a->nenv != b->nenv) return false;
     for (int i = 0; i < a->nenv; i++) if (a->env_slot[i] != b->env_slot[i]) return false;
+    if (a->gone) {
+        if (rec_hash(a) != rec_hash(b)) return false;
+        unsigned char d[32]; rec_digest(b, d);
+        return !memcmp(d, a->gone->dig, 32);
+    }
     return syn_eq(a->body, b->body);
 }
-/* r, or the record equal to it made earlier (r then freed) */
+static long stat_rec_revived;
+/* r, or the record equal to it made earlier (r then freed; a dropped one takes r's body back) */
 static Record *rec_intern(Record *r) {
     if (RTn * 2 >= RTcap) {
         size_t nc = RTcap ? RTcap * 2 : 4096; Record **nt = calloc(nc, sizeof(Record *));
@@ -1886,7 +1911,16 @@ static Record *rec_intern(Record *r) {
     uint64_t h = rec_hash(r);
     size_t i = h & (RTcap - 1);
     for (; RT[i]; i = (i + 1) & (RTcap - 1))
-        if (rec_eq(RT[i], r)) { syn_free(r->body); free(r->env_slot); free(r->uses); free(r); return RT[i]; }
+        if (rec_eq(RT[i], r)) {
+            Record *o = RT[i];
+            if (o->gone) {
+                o->body = r->body; o->uses = r->uses;
+                free(o->gone->rec); free(o->gone->tab); free(o->gone); o->gone = NULL;
+                free(r->env_slot); free(r); stat_rec_revived++;
+                return o;
+            }
+            syn_free(r->body); free(r->env_slot); free(r->uses); free(r); return o;
+        }
     RT[i] = r; RTn++; stat_rec_bytes += (long)sizeof(Record) + (long)(r->nenv + r->nslots + 2) * 4;
     return r;
 }
@@ -1917,6 +1951,141 @@ static CaseTab *tab_intern(CaseTab *t) {
     TT[i] = t; TTn++;
     return t;
 }
+/* ---------------- sweeping compiled code ----------------
+ * Records and case tables are interned and were kept for the run, but most are made by the
+ * checker's readings of a definition (its quoted code compiled and run once). Between top-level
+ * forms (every worker parked, nothing being compiled) they are sorted in three:
+ *  - built from: reached from a definition's body or n-ary record or a cell's payload (a λ or
+ *    thunk's record, a case's table), and through the bodies and branches of those. Kept whole.
+ *  - named only: reached from a key's payload (a λ's key is its record over its captures' keys, a
+ *    case's its table), and through what those name (a body's records and tables, a table's
+ *    branches, a dropped body's list). Nothing builds them, but equal code compiled again must
+ *    get the same pointer, so a key names it as before and the memo finds what it found: the
+ *    body is dropped and what interning compares is kept (RecGone); equal code interned again
+ *    gives the body back. A table is kept whole (it holds no code).
+ *  - the rest: no cell, key, definition or kept code mentions them; freed. Equal code compiled
+ *    later gets a fresh pointer, which nothing compares against the old one.
+ * Run once the compiled code made since the last sweep has grown past a quarter of what that
+ * sweep kept, and 32 MB (CUBICAL_NOSWEEP: never; CUBICAL_SWEEPALL: after every top-level form) */
+typedef struct { void **v; size_t cap; } PSet;
+static size_t ps_slot(const PSet *s, const void *p) { return (size_t)(((uintptr_t)p >> 4) * 0x9E3779B97F4A7C15ull) & (s->cap - 1); }
+static void ps_init(PSet *s, size_t n) { s->cap = 64; while (s->cap < 2 * n + 2) s->cap *= 2; s->v = calloc(s->cap, sizeof(void *)); }
+static bool ps_has(const PSet *s, const void *p) { for (size_t i = ps_slot(s, p); s->v[i]; i = (i + 1) & (s->cap - 1)) if (s->v[i] == p) return true; return false; }
+static bool ps_add(PSet *s, void *p) { size_t i = ps_slot(s, p); for (; s->v[i]; i = (i + 1) & (s->cap - 1)) if (s->v[i] == p) return false; s->v[i] = p; return true; }
+/* the interned ones; those built from (sw_live*); those named (sw_name*, a superset) */
+static PSet sw_recs, sw_tabs, sw_liver, sw_livet, sw_namer, sw_namet;
+static PSet *sw_mr, *sw_mt;   /* the sets being marked */
+static void **sw_stack; static size_t sw_n, sw_cap;   /* to visit: a record, or a table with its low bit set */
+static void sw_rec(Record *r) { if (r && ps_add(sw_mr, r)) { GROW(sw_stack, sw_cap, sw_n + 1); sw_stack[sw_n++] = r; } }
+static void sw_tab(CaseTab *t) { if (t && ps_add(sw_mt, t)) { GROW(sw_stack, sw_cap, sw_n + 1); sw_stack[sw_n++] = (void *)((uintptr_t)t | 1); } }
+static void sw_syn(const Syn *t) {
+    if (!t) return;
+    if (t->rec) sw_rec(t->rec);
+    if (t->tab) sw_tab(t->tab);
+    for (int i = 0; i < t->n; i++) sw_syn(t->k[i]);
+}
+static bool sw_building;   /* marking what is built from: a dropped record reached is an internal error */
+static void sw_drain(void) {
+    while (sw_n) {
+        void *x = sw_stack[--sw_n];
+        if ((uintptr_t)x & 1) {
+            CaseTab *t = (CaseTab *)((uintptr_t)x & ~(uintptr_t)1);
+            int N = tab_n(t); for (int i = 0; i < N; i++) sw_rec(t->br[i]);
+            sw_rec(t->motive);
+            continue;
+        }
+        Record *r = x;
+        if (r->gone) {
+            if (sw_building) die("internal: code built from a record whose body was dropped", NULL);
+            for (int i = 0; i < r->gone->nrec; i++) sw_rec(r->gone->rec[i]);
+            for (int i = 0; i < r->gone->ntab; i++) sw_tab(r->gone->tab[i]);
+        } else sw_syn(r->body);
+    }
+}
+static void sw_cell_payload(void *p) {
+    if (ps_has(&sw_recs, p)) sw_rec(p);
+    else if (ps_has(&sw_tabs, p)) sw_tab(p);
+}
+static void sw_key_payload(void *p) { sw_cell_payload(p); }
+/* a body's records and tables, each once, for a record about to lose it */
+static PSet sw_seen; static Record **sw_gr; static size_t sw_grn, sw_grcap; static CaseTab **sw_gt; static size_t sw_gtn, sw_gtcap;
+static void sw_gone_walk(const Syn *t) {
+    if (!t) return;
+    if (t->rec && ps_add(&sw_seen, t->rec)) { GROW(sw_gr, sw_grcap, sw_grn + 1); sw_gr[sw_grn++] = t->rec; }
+    if (t->tab && ps_add(&sw_seen, t->tab)) { GROW(sw_gt, sw_gtcap, sw_gtn + 1); sw_gt[sw_gtn++] = t->tab; }
+    for (int i = 0; i < t->n; i++) sw_gone_walk(t->k[i]);
+}
+static void rec_drop_body(Record *r) {
+    RecGone *g = calloc(1, sizeof(RecGone));
+    rec_hash(r); rec_digest(r, g->dig);
+    ps_init(&sw_seen, 16); sw_grn = sw_gtn = 0;
+    sw_gone_walk(r->body);
+    free(sw_seen.v);
+    if (sw_grn) { g->rec = malloc(sw_grn * sizeof(Record *)); memcpy(g->rec, sw_gr, sw_grn * sizeof(Record *)); g->nrec = (int)sw_grn; }
+    if (sw_gtn) { g->tab = malloc(sw_gtn * sizeof(CaseTab *)); memcpy(g->tab, sw_gt, sw_gtn * sizeof(CaseTab *)); g->ntab = (int)sw_gtn; }
+    syn_free(r->body); free(r->uses); r->body = NULL; r->uses = NULL; r->gone = g;
+}
+static long sw_kept_bytes = 0, stat_swept_recs, stat_swept_tabs, stat_dropped_recs, stat_sweeps;
+static int toplevel_depth;
+/* marks: what is built from (into sw_liver/sw_livet), then what is named (sw_namer/sw_namet, holding
+ * the first); the interned sets sw_recs/sw_tabs filled. names: whether to mark the second */
+static void sw_mark(bool names) {
+    ps_init(&sw_recs, RTn); ps_init(&sw_tabs, TTn);
+    for (size_t i = 0; i < RTcap; i++) if (RT[i]) ps_add(&sw_recs, RT[i]);
+    for (size_t i = 0; i < TTcap; i++) if (TT[i]) ps_add(&sw_tabs, TT[i]);
+    ps_init(&sw_liver, RTn); ps_init(&sw_livet, TTn);
+    sw_mr = &sw_liver; sw_mt = &sw_livet; sw_building = true;
+    for (long g = 0; g < nG; g++) { sw_syn(G[g].body); sw_rec(G[g].nary); }
+    net_scan_payloads(sw_cell_payload, NULL);
+    sw_drain();
+    sw_building = false;
+    if (!names) return;
+    ps_init(&sw_namer, RTn); ps_init(&sw_namet, TTn);
+    for (size_t i = 0; i < sw_liver.cap; i++) if (sw_liver.v[i]) ps_add(&sw_namer, sw_liver.v[i]);
+    for (size_t i = 0; i < sw_livet.cap; i++) if (sw_livet.v[i]) ps_add(&sw_namet, sw_livet.v[i]);
+    sw_mr = &sw_namer; sw_mt = &sw_namet;
+    net_scan_payloads(NULL, sw_key_payload);
+    sw_drain();
+}
+static void sw_unmark(bool names) {
+    free(sw_recs.v); free(sw_tabs.v); free(sw_liver.v); free(sw_livet.v);
+    if (names) { free(sw_namer.v); free(sw_namet.v); }
+}
+static void records_sweep(bool force) {
+    static int off = -1; if (off < 0) off = getenv("CUBICAL_NOSWEEP") != NULL;
+    if (off || toplevel_depth) return;
+    if (!force && stat_syn_bytes < sw_kept_bytes + sw_kept_bytes / 4 + (32L << 20)) return;
+    stat_sweeps++;
+    sw_mark(true);
+    /* tables: kept when named (built from is named too), rebuilt; the rest freed */
+    {
+        CaseTab **old = TT; size_t oc = TTcap; TT = calloc(oc, sizeof(CaseTab *)); TTn = 0;
+        for (size_t i = 0; i < oc; i++) if (old[i]) {
+            CaseTab *t = old[i];
+            if (!ps_has(&sw_namet, t)) { free(t->br); free(t); stat_swept_tabs++; continue; }
+            size_t q = tab_hash(t) & (oc - 1); while (TT[q]) q = (q + 1) & (oc - 1); TT[q] = t; TTn++;
+        }
+        free(old);
+    }
+    /* records: built from, kept; named only, the body dropped; the rest freed */
+    {
+        Record **old = RT; size_t oc = RTcap; RT = calloc(oc, sizeof(Record *)); RTn = 0;
+        for (size_t i = 0; i < oc; i++) if (old[i]) {
+            Record *r = old[i];
+            if (!ps_has(&sw_namer, r)) {
+                stat_rec_bytes -= (long)sizeof(Record) + (long)(r->nenv + r->nslots + 2) * 4;
+                if (r->gone) { free(r->gone->rec); free(r->gone->tab); free(r->gone); }
+                else syn_free(r->body);
+                free(r->env_slot); free(r->uses); free(r); stat_swept_recs++; continue;
+            }
+            if (!r->gone && !ps_has(&sw_liver, r)) { rec_drop_body(r); stat_dropped_recs++; }
+            size_t q = rec_hash(r) & (oc - 1); while (RT[q]) q = (q + 1) & (oc - 1); RT[q] = r; RTn++;
+        }
+        free(old);
+    }
+    sw_unmark(true);
+    sw_kept_bytes = stat_syn_bytes;
+}
 static Syn *compile_record(Node *param, Node *body, bool thunk) {
     GROW(levels, caplevels, (size_t)nlevels + 1);
     int li = nlevels++;
@@ -1933,6 +2102,7 @@ static Syn *compile_record(Node *param, Node *body, bool thunk) {
     Syn *s = syn(S_LAM, L.nenv);
     s->rec = r;
     for (int k = 0; k < L.nenv; k++) s->k[k] = L.env_syns[k];
+    free(L.env_nodes); free(L.env_syns);   /* the level's lifting tables: the record keeps env_slot, the λ its environment's code */
     return s;
 }
 /* Strictness: whether evaluating t to its head always reads the variable x. Such an argument is
@@ -3166,6 +3336,24 @@ static int sig_add(const char *name, long g, long tyg, bool hidden) {
     return nchecked++;
 }
 #include "store.c"
+/* the SHA-256 of a record's body as rec_eq compares it: every node's tag, operand count, slot, x,
+ * id and word, and the records and tables it names by pointer (those keep their pointers while
+ * a dropped record names them) */
+static void syn_digest(Sha256 *h, const Syn *t) {
+    if (!t) { unsigned char z = 0xFF; sha256_update(h, &z, 1); return; }
+    struct { int tag, n, slot; uint32_t x; long id; const void *rec, *tab; uint32_t bn; } f;
+    memset(&f, 0, sizeof f);
+    f.tag = t->tag; f.n = t->n; f.slot = t->slot; f.x = t->x; f.id = t->id; f.rec = t->rec; f.tab = t->tab;
+    f.bn = t->big ? t->big->n : 0;
+    sha256_update(h, &f, sizeof f);
+    if (t->big) sha256_update(h, t->big->l, (size_t)t->big->n * sizeof(uint64_t));
+    for (int i = 0; i < t->n; i++) syn_digest(h, t->k[i]);
+}
+static void rec_digest(const Record *r, unsigned char out[32]) {
+    Sha256 h; sha256_init(&h);
+    syn_digest(&h, r->body);
+    sha256_final(&h, out);
+}
 static Sha256 lib_before; static bool lib_before_on;
 /* the text a specialization is keyed by (item 17): the expression with each checked definition and
  * data type named by its codebase key, everything else (literals, constructors, bound names) as
@@ -3996,7 +4184,16 @@ int native_at_build(int at, const char *c, size_t len, const uint64_t *a, uint64
     *r = natat_invoke(t, hit, &tmp, a);
     return 0;
 }
+static void toplevel_in(Node *f);
+/* a top-level form; once the outermost one is handled, compiled code nothing reaches is swept */
 static void toplevel(Node *f) {
+    toplevel_depth++;
+    toplevel_in(f);
+    toplevel_depth--;
+    static int every = -1; if (every < 0) every = getenv("CUBICAL_SWEEPALL") != NULL;   /* a sweep after every form: to test */
+    if (!toplevel_depth) records_sweep(every);
+}
+static void toplevel_in(Node *f) {
     if (!f->list || f->n == 0 || f->it[0]->list) die("top-level form expected", NULL);
     const char *h = f->it[0]->s;
     if (!strcmp(h, "import")) {
@@ -5414,7 +5611,7 @@ static void serve(void) {
                 /* (verdicts in surface syntax, as for a file) */
                 bool saved_os = out_surface; out_surface = !getenv("CUBICAL_CORE_OUT");
                 jmp_buf jb; if (setjmp(jb) == 0) { die_jb = &jb; load_surface(buf, "<serve>", false); die_jb = NULL; }
-                else { die_jb = NULL; printf("error: %s\n", die_msg); }
+                else { die_jb = NULL; toplevel_depth = 0; printf("error: %s\n", die_msg); }   /* (left from inside a form: sweeps resume) */
                 out_surface = saved_os;
                 net_drain();
             }
@@ -5547,6 +5744,21 @@ void *cubical_call_data_r(const char *name, uint64_t nargs, void **args, const c
 void *cubical_call(uint64_t k, uint64_t nargs, void **args) { return cubical_call_v(k, nargs, (CubV **)args); }
 int cubical_main(int argc, char **argv)
 #else
+static void memend_report(void) {
+    if (!getenv("CUBICAL_MEMEND")) return;
+    /* what a sweep now would keep whole, keep named only, free (bytes of record bodies, shallow) */
+    sw_mark(true);
+    long nb[3] = { 0 }, nn[3] = { 0 }, ngone = 0;
+    for (size_t i = 0; i < RTcap; i++) if (RT[i]) {
+        Record *r = RT[i]; int c = ps_has(&sw_liver, r) ? 0 : ps_has(&sw_namer, r) ? 1 : 2;
+        nn[c]++; nb[c] += syn_bytes_shallow(r->body); if (r->gone) ngone++;
+    }
+    sw_unmark(true);
+    long gb = 0;
+    for (long g = 0; g < nG; g++) if (G[g].kind == G_DEF) gb += syn_bytes_shallow(G[g].body);
+    fprintf(stderr, "memend: definitions' top bodies %ld MB; records built from %ld (%ld MB), named only %ld (%ld MB, %ld dropped), unreached %ld (%ld MB); %ld sweeps: %ld records freed, %ld dropped, %ld given back, %ld tables freed\n",
+            gb >> 20, nn[0], nb[0] >> 20, nn[1], nb[1] >> 20, ngone, nn[2], nb[2] >> 20, stat_sweeps, stat_swept_recs, stat_dropped_recs, stat_rec_revived, stat_swept_tabs);
+}
 int main(int argc, char **argv)
 #endif
 {
@@ -5584,6 +5796,7 @@ int main(int argc, char **argv)
     }
     for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--serve")) serve();
     /* steps performed so far: a reading only when the workload has normalized (show) */
+    memend_report();
     printf("%d passed, %d failed; %ld interaction steps performed; %ld memo hits, %ld shared keys; %ld cells live; %ld payloads live\n", passes, failures, stat_steps, stat_hits, stat_keys, stat_cells, stat_payloads);
     prof_print();
     extern void memo_dump(void); memo_dump();

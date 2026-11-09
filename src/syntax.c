@@ -4921,8 +4921,9 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
     /* an elaboration that cannot go on (a recursive call needed now, ...): the definition rejected */
     jmp_buf ejb;
     jmp_buf *outer_jb = die_jb;   /* --serve's way out, restored after this check */
+    int outer_depth = toplevel_depth;   /* (a form left half done: the sweep's nesting as it was) */
     if (setjmp(ejb)) {
-        die_jb = outer_jb;
+        die_jb = outer_jb; toplevel_depth = outer_depth;
         nesc = 0; nwtick = 0; syn_expect = app_expect = NULL;
         bool ok = !expect;
         if (ok) passes++; else failures++;

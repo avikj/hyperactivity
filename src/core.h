@@ -344,6 +344,7 @@ void net_push(Cell *op, Cell *v);  /* enqueue an active pair */
 bool net_observe(Cell *root, long limit); /* reduce until root's port holds a value (root NULL: until no pair is pending); workers then pause */
 void net_drain(void);
 void net_mem(long *slabs, long *keys);
+void net_scan_payloads(void (*cellf)(void *), void (*keyf)(void *));   /* every cell's payload pointer to cellf, every key's to keyf (either NULL: skipped; workers parked) */
 Cell *global_res(long g);          /* the cell holding a definition's value */
 
 /* data types (higher inductive types, Coquand–Huber–Mörtberg): declared by
@@ -442,6 +443,8 @@ typedef struct Record {
     Syn *body;
     int where;          /* the definition it was compiled in (CUBICAL_PROFILE) */
     int mk;             /* A8: may building it make a dimension (reach %dim)? 0 unknown, 1 no, 2 yes (record_mkdim) */
+    uint64_t h;         /* its interning hash, once computed (kept when the body is dropped) */
+    struct RecGone *gone;   /* the body dropped (lang.c's records_sweep): only keys name it; NULL while it has one */
 } Record;
 int record_mkdim(Record *r);        /* A8: 1 when building r (or anything it calls) may make a fresh free dimension */
 int casetab_mkdim(const struct CaseTab *t);

@@ -409,6 +409,16 @@ computed by `add` and the same numeral written out are two values). Naive Fibona
 is pending, so every `fib k` is computed once and the work is linear in the calls (unary addition
 dominates the count), whether the argument is a numeral the machine computed or one written out.
 
+Compiled code follows the same rule. Records (a λ's or thunk's body) and case tables are interned,
+so equal code compiled twice is one pointer, and the checker compiles every definition's quoted
+code again at each reading. Between top-level forms the code is sorted by what still refers to it:
+what a definition, a cell or kept code can build from is kept whole; what only keys name (a λ's
+key is its record over its captures' keys) loses its body and keeps the hash and SHA-256 interning
+compares, so equal code compiled later gets the same pointer and the body back, and the memo finds
+what it found before; the rest is freed. Output and step counts are those of keeping everything
+(`CUBICAL_NOSWEEP=1`); `CUBICAL_SWEEPALL=1` sorts after every form, `CUBICAL_MEMEND=1` reports
+the split at exit.
+
 A reading reports its steps, and with them the memo hits (values found instead of computed) and
 the values shared. The steps are the work this reading did, given what earlier readings left held
 and the order the rewrites ran in: a term's second reading can cost less than its first, and with
