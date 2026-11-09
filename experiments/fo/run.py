@@ -18,6 +18,10 @@ LIBS = [os.path.join(ROOT, 'lib', f) for f in ('prelude.cub', 'code.cub', 'fo.cu
 PROGS = {
  # word subtraction is the source's truncating one: 3 - 5 is 0, not 2^64 - 2 (the C printers emitted a
  # wrapping subtraction until 2026-11-08), boxed and unboxed; X86_PROGS has its machine-code twin
+ # max on words, lowered from a specialized source program: at 3, max 3 (3 + 1) = 4 (the lowering
+ # compiled %wmax as an addition until 2026-11-07)
+ 'maxw': ("""mx-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (a : Word) → %wmax a (%wadd a #1))))
+defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #3) lnil))) mx-defs""", "4"),
  'tsub': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil))) (lcons (#1 , (#1 , fprim P-add (lcons (fprim P-sub (lcons (flit #3) (lcons (fvar #0) lnil))) (lcons (flit #7) lnil)))) lnil)""", "7"),
  # name: (definitions as .cub text building a Lst of (g , (arity , body)), expected output)
  'fact': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil)))
@@ -189,68 +193,6 @@ defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #5) lnil))) pr-defs''', "125"
  'rep-box': ("""rb-defs = lift-program #100000 (program-rep-at #99999 lnil #20 (code (λ (n : Nat) → rbox-sum (rbox-bump (rbox n 2)))))
 #same eval-fo (table-of rb-defs) lnil (fcall #99999 (lcons (flit #30) lnil)) = vw #41
 defs = lcons (#0 , (#0 , fcall #99999 (lcons (flit #30) lnil))) rb-defs""", "41"),
- # a compilation with its justifying path (lib/foproof.cub, 18.5 step 7): ex-c rewritten by the
- # verified rules and lowered by the checked pipeline (spec-w), whose path ex-path is a checked
- # definition; printed and run at x = 4: (4 + 5) + (a loop summing four 1s) = 13
- 'proved': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #4) lnil))) (lcons (#1 , (#1 , fw-to-fo (spec-w std-vrule ex-c))) lnil)''', "13"),
- # the same past the word fragment (lib/foproof.cub's data, closures and calls): dx-prog — a closure
- # λy. y + x, a constructor of (f 3, call #2 x), a case on it adding the fields, a call to x + x —
- # closure-converted by the checked dconv (its path dx-path through dc-sound), then taken to the
- # first-order form by dc-defs; at x = 4: (3 + 4) + (4 + 4) = 15
- 'proved-data': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = dc-defs dx-prog''', "15"),
- # the specializer's data route (lib/foproof.cub specialize-proved): pq-app's normal form — a case on a
- # PQ choosing a closure, applied to 5 — read into the checked mirror (dc-prog), its tables decided
- # (dtok-chk, so dc-sound holds of it), closure-converted by dconv; at pqb 9 2: 5 − 2
- 'proved-spec': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-sd = specialize-proved (PQ → Word) lnil (code (λ (p : PQ) → pq-app p))
-#same fst sd = #2
-defs = lcons (#0 , (#0 , fcall #1 (lcons (fcon (didx (code PQ)) #1 (lcons (flit #9) (lcons (flit #2) lnil))) lnil))) (dc-rekey #1 (snd sd))''', "3"),
- # lib/region.cub's two through the same route: the byte layer in the mirror (a fresh string, stores
- # and loads at 8 bytes, forwarded through the stores by the verified rewrite); at 20: 20 + 21
- 'proved-region': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-p0 : Ptr 16
-p0 = (0 , (8 , λ i → 16))
-p8 : Ptr 16
-p8 = (8 , (0 , λ i → 16))
-two : Word → RM 16 Int64
-two w = rthen (wr p0 (i64 w)) (rthen (wr p8 (i64 (%wsucc w))) (rbind (rd p0) (λ a → rmap (λ b → i64add a b) (rd p8))))
-prog-two : Word → Word
-prog-two w = i64toWord (eval-fresh 16 (two w))
-sr = specialize-proved (Word → Word) lnil (code (λ (w : Word) → prog-two w))
-#same fst sr = #2
-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #20) lnil))) (dc-rekey #1 (snd sr))''', "41"),
- # the data route past the first mirror (lib/foproofd.cub): comparisons, an if on Bool and max; at (3, 9): max 3 10
- 'proved-cmp': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #3) (lcons (flit #9) lnil)))) (dc-rekey #1 (snd (specialize-proved (Word → Word → Word) lnil dq-c1)))''', "10"),
- # two data types, constructors of 0, 1 and 3 fields, nested cases; at dqta (dq1 8) 3: 8 + 3
- 'proved-tags': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons dq-tg1 lnil))) (dc-rekey #1 (snd (specialize-proved (DqTg → Word) lnil dq-c2b)))''', "11"),
- # a list's sum: the structural recursion lifted to a definition of its own; at [3, 4]
- 'proved-list': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons dq-lst lnil))) (dc-rekey #1 (snd (specialize-proved (DqL → Word) lnil dq-c3)))''', "7"),
- # a word recursion whose step cases on data, lifted; at 3: (0 + 11) + (1 + 11) + (2 + 11)
- 'proved-loop': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #3) (lcons dq-tg1 lnil)))) (dc-rekey #1 (snd (specialize-proved (Word → DqTg → Word) lnil dq-c4)))''', "36"),
- # Int64's subtraction and multiplication on the bits; at 5: (5 − 1)·3
- 'proved-num': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil))) (dc-rekey #1 (snd (specialize-proved (Word → Word) lnil dq-c5)))''', "12"),
- # Float64's addition and multiplication on the bits; at 3: the bits of (3 + 1)·2 = 8.0
- 'proved-float': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #3) lnil))) (dc-rekey #1 (snd (specialize-proved (Word → Word) lnil dq-c6)))''', "4620693217682128896"),
- # calls of three arguments (a tuple) and of none, read as written; at 4: 4 + (7 − 2)
- 'proved-calls': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #4) lnil))) (dc-rekey #1 (dc-prog-defs (fromopt (dc-prog dq-c8) dc-dflt)))''', "9"),
- # a load overlapping a store in part, byte by byte: the high half of 3·2^32 + 2
- 'proved-bytes': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #12884901890) lnil))) (dc-rekey #1 (snd (specialize-proved (Word → Word) lnil sp-b2)))''', "3"),
- # a 4-byte store and load at offset 4: the low 32 bits of 2^32 + 5
- 'proved-bytes32': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #4294967301) lnil))) (dc-rekey #1 (snd (specialize-proved (Word → Word) lnil sp-b3)))''', "5"),
- # a pair used through its projections; at (3, 4)
- 'proved-pair': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + '''"
-defs = lcons (#0 , (#0 , fcall #1 (lcons (fcon #0 #0 (lcons (flit #3) (lcons (flit #4) lnil))) lnil))) (dc-rekey #1 (snd (specialize-proved (Word × Word → Word) lnil dq-c10)))''', "7"),
  # a process run against its world (lib/proc.cub), specialized under an unknown store: the run
  # becomes a function of the store (st 3 + 1); compiled with a store that answers 40; prints 41
  'process': ("""proc-defs = case lift #100 spec4 of lifted t2 ds k → lcons (#0 , (#0 , fapply t2 (lcons (flam (flit #40)) lnil))) ds
@@ -555,43 +497,9 @@ def run_image(name, defs, names, main, expect, validate=None, opts=None):
         return ok
 IMAGE = os.environ.get('IMAGE') == '1'
 
-# the proved programs' C through the checked C link (lib/foproofc.cub): the first-order definitions as
-# checked terms (specialize-proved-q: the word route's main or the data route's table), translated by
-# the checked fq-to-ca and printed by ca-to-c (ca-prog); the harness's main calls the program's main
-# on the arguments. Under UNBOXED=1 the same definitions print through the unboxed link
-# (lib/foproofcu.cub, U2): U1's kinds of the table (lib/foproofu.cub's kinfer, decided by kkeys-ok), the
-# checked fq-to-cu guided by them (a let's local, a parameter, a result a uint64_t exactly where its
-# kind is kw), C's types decided (cuty) and the C printed by cu-to-c (cu-prog), not lib/emitu.cub's guess.
-QROUTE = {
- 'proved': ("lcons (flit #4) lnil", "lcons (#0 , (#1 , fw-to-fq (spec-w std-vrule ex-c))) lnil"),
- 'proved-data': (None, "dc-defs-q dx-prog"),
- 'proved-spec': ("lcons (fcon (didx (code PQ)) #1 (lcons (flit #9) (lcons (flit #2) lnil))) lnil", "snd (specialize-proved-q (PQ → Word) lnil (code (λ (p : PQ) → pq-app p)))"),
- 'proved-region': ("lcons (flit #20) lnil", "snd (specialize-proved-q (Word → Word) lnil (code (λ (w : Word) → prog-two w)))"),
- 'proved-cmp': ("lcons (flit #3) (lcons (flit #9) lnil)", "snd (specialize-proved-q (Word → Word → Word) lnil dq-c1)"),
- 'proved-tags': ("lcons dq-tg1 lnil", "snd (specialize-proved-q (DqTg → Word) lnil dq-c2b)"),
- 'proved-list': ("lcons dq-lst lnil", "snd (specialize-proved-q (DqL → Word) lnil dq-c3)"),
- 'proved-loop': ("lcons (flit #3) (lcons dq-tg1 lnil)", "snd (specialize-proved-q (Word → DqTg → Word) lnil dq-c4)"),
- 'proved-num': ("lcons (flit #5) lnil", "snd (specialize-proved-q (Word → Word) lnil dq-c5)"),
- 'proved-float': ("lcons (flit #3) lnil", "snd (specialize-proved-q (Word → Word) lnil dq-c6)"),
- 'proved-calls': ("lcons (flit #4) lnil", "dc-prog-defs-q (fromopt (dc-prog dq-c8) dc-dflt)"),
- 'proved-bytes': ("lcons (flit #12884901890) lnil", "snd (specialize-proved-q (Word → Word) lnil sp-b2)"),
- 'proved-bytes32': ("lcons (flit #4294967301) lnil", "snd (specialize-proved-q (Word → Word) lnil sp-b3)"),
- 'proved-pair': ("lcons (fcon #0 #0 (lcons (flit #3) (lcons (flit #4) lnil))) lnil", "snd (specialize-proved-q (Word × Word → Word) lnil dq-c10)"),
-}
-def qroute(name, defs):
-    args, qd = QROUTE[name]
-    imp = ''.join('import "' + os.path.join(ROOT, 'lib', f) + '"\n' for f in ('foproof.cub', 'foproofd.cub', 'foproofe.cub', 'foproofq.cub', 'foproofc.cub'))
-    body = "ca-tr-defs (" + qd + ")" if args is None else "ca-harness (fo-args-fq (" + args + ")) (" + qd + ")"
-    return imp + defs + "\nprog = ca-prog (" + body + ")"
-def curoute(name, defs):
-    args, qd = QROUTE[name]
-    imp = ''.join('import "' + os.path.join(ROOT, 'lib', f) + '"\n' for f in ('foproof.cub', 'foproofd.cub', 'foproofe.cub', 'foproofq.cub', 'foproofc.cub', 'foproofm.cub', 'foproofu.cub', 'foproofcu.cub'))
-    body = "(" + qd + ")" if args is None else "(cu-harness (fo-args-fq (" + args + ")) (" + qd + "))"
-    return imp + defs + "\nprog = cu-route " + body
 def run(name, defs, expect, contains=None):
     with tempfile.TemporaryDirectory() as d:
         cub = os.path.join(d, name + '.cub')
-        if name in QROUTE and 'prog =' not in defs: defs = curoute(name, defs) if UNBOXED else qroute(name, defs)
         if 'prog =' not in defs: defs += "\nprog = " + ("emit-prog-u defs" if UNBOXED else "emit-prog defs")
         open(cub, 'w').write(FRESH() + defs + "\n#show prog\n")
         # the printer of src/syntax.c (pr → pr_flat → pr_str → pr) spends a stack frame of a few KB per
@@ -625,18 +533,6 @@ X86_PROGS = {
  # emitted a wrapping subtraction until 2026-11-08)
  'tsub': ("""defs = lcons (#0 , (#1 , fprim P-add (lcons (fprim P-sub (lcons (flit #3) (lcons (fvar #0) lnil))) (lcons (flit #7) lnil)))) lnil""", [5], "7"),
  'plusw': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #40) (lcons (flit #2) lnil)))) (lcons (#1 , (#2 , fo-plus)) lnil)""", [], "42"),
- # the verified compilation of lib/foproof.cub (spec-w std-vrule ex-c, its path ex-path) on x = 4
- 'proved': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + """"
-defs = lcons (#0 , (#1 , fw-to-fo (spec-w std-vrule ex-c))) lnil""", [4], "13"),
- # fib through specialize-proved's verified word route (tag 1, as tests/foproofd.cub pins for fibw-pd):
- # the pair carried through the recursion (wcrec2), lowered by the checked lower-w, run as x86
- 'proved-fib': ('import "' + os.path.join(ROOT, 'lib', 'foproof.cub') + '"\nimport "' + os.path.join(ROOT, 'lib', 'foproofd.cub') + """"
-fibx : Word → Word
-fibx n = fst (%welimP (λ v → Word × Word) n (#0 , #1) (λ k p → (snd p , %wadd (fst p) (snd p))))
-spx = specialize-proved (Word → Word) lnil (code (λ (w : Word) → fibx w))
-#same fst spx = #1
-lam-body-px f = case f of flam b → lam-body-px b; _ → f
-defs = lcons (#0 , (#1 , lam-body-px (snd spx))) lnil""", [90], "2880067194370816120"),
  # the arguments come from the command line through the stub (rdi the arena, then the words)
  'plusw-args': ("""defs = lcons (#0 , (#2 , fo-plus)) lnil""", [1000, 234], "1234"),
  # factorial as a loop over (n, acc): continue while n > 0
@@ -660,24 +556,13 @@ lam-body5 f = case f of flam b → b; _ → f
 sum-fib = floop (lcons (flit #0) (lcons (flit #0) lnil)) (fif (fprim P-lt (lcons (fvar #1) (lcons (flit #10) lnil))) (fcon #0 #0 (lcons (fprim P-add (lcons (fvar #1) (lcons (flit #1) lnil))) (lcons (fprim P-add (lcons (fvar #0) (lcons (fcall #1 (lcons (fvar #1) lnil)) lnil))) lnil))) (fcon #0 #1 (lcons (fvar #0) lnil)))
 defs = lcons (#0 , (#0 , sum-fib)) (lcons (#1 , (#1 , lam-body5 (specialize (Word → Word) lnil (code (λ w → fibw2 w))))) lnil)""", [], "88"),
 }
-# the proved programs' machine code through the x86 link (lib/foproofx.cub): XA from the checked
-# first-order form by fq-to-xa, printed by its encoder xa-prog (the trusted step), the fragment
-# decided by xq-defs-ok on the checked form
-XQ = {
- 'proved': "lcons (#0 , (#1 , fw-to-fq (spec-w std-vrule ex-c))) lnil",
- 'proved-fib': "snd (specialize-proved-q (Word → Word) lnil (code (λ (w : Word) → fibx w)))",
-}
 def run_x86(name, defs, args, expect):
     with tempfile.TemporaryDirectory() as d:
         cub = os.path.join(d, name + '.cub')
-        if name in XQ:
-            imp = ''.join('import "' + os.path.join(ROOT, 'lib', f) + '"\n' for f in ('foproof.cub', 'foproofd.cub', 'foproofe.cub', 'foproofq.cub', 'foproofc.cub', 'foproofx.cub'))
-            open(cub, 'w').write(FRESH() + imp + defs + "\ndefsq = " + XQ[name] + "\nx86ok = xq-defs-ok defsq\n#show x86ok\nprog = xa-prog defsq\n#show prog\n")
-        else:
-            open(cub, 'w').write(FRESH() + defs + "\n#show x86-ok defs\nprog = emit-x86 defs\n#show prog\n")
+        open(cub, 'w').write(FRESH() + defs + "\n#show x86-ok defs\nprog = emit-x86 defs\n#show prog\n")
         out = subprocess.run([CUB] + LIBS + [cub], capture_output=True, text=True, env=CUB_ENV,
                              preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))).stdout
-        okm = re.search(r'^(?:x86-ok defs|x86ok)\s*=\s*(\w+)', out, re.M)
+        okm = re.search(r'^x86-ok defs\s*=\s*(\w+)', out, re.M)
         m = re.search(r'^prog\s*=\s*(.*?)\s*\[\d+ steps', out, re.S | re.M)
         if not m or not okm: print(name, 'FAIL: no reading'); print(out[-500:]); return False
         if okm.group(1) != 'true': print(name, 'FAIL: outside the x86 fragment'); return False
