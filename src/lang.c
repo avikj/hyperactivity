@@ -843,6 +843,13 @@ static void rep_conv_set(int di, long to, long from) {
     for (size_t i = o2; i < caprepfrom; i++) REPFROM[i] = -1;
     REPTO[di] = to; REPFROM[di] = from;
 }
+/* the checked data types whose representation is the induced one (src/syntax.c x_rep_induce) */
+static bool *REPIND; static size_t caprepind;
+static bool rep_induced(long ck) { return ck >= 0 && (size_t)ck < caprepind && REPIND[ck]; }
+static void rep_induced_set(long ck, bool v) {
+    if ((size_t)ck >= caprepind) { size_t o = caprepind; GROW(REPIND, caprepind, (size_t)ck + 1); memset(REPIND + o, 0, caprepind - o); }
+    REPIND[ck] = v;
+}
 /* the representation of a type term (its head a checked data type with a declared one): the data
  * type's checked index, else -1 */
 static int chk_index(int d);
@@ -3674,6 +3681,31 @@ static int rep_target(int di) {
     if (!strcmp(A->s, "Word")) return -2;
     return data_lookup(A->s);
 }
+/* the representations of the checked data type di followed (item 15: a type represented by a record
+ * that has its own, RBox by RPt by RPt·W): c[0] = di, c[1], … each one's representation the next's
+ * data type, until the data type d is reached (d ≥ 0), or while each has one (d < 0, to the end; Word
+ * ends it); the number of conversions, -1 when d is not on the chain (0: di is d itself) */
+static int rep_chain(int di, int d, int *c, int max) {
+    int n = 0, cur = di;
+    while (cur >= 0 && n < max) {
+        if (d >= 0 && checked_data(cur) == d) return n;
+        if ((size_t)cur >= caprepto || REPTO[cur] < 0) return d < 0 ? n : -1;
+        c[n++] = cur;
+        int t = rep_target(cur);
+        if (t == -2) return d < 0 ? n : -1;
+        if (t < 0) return -1;
+        cur = chk_index(t);
+    }
+    return d < 0 && cur < 0 ? n : -1;
+}
+/* along the chain: to (the type's value to the chain's end, c[0]'s to innermost) or from (back,
+ * c[0]'s from outermost) opened before a term; the parentheses to close after it */
+static int rep_conv_open(FILE *m, const int *c, int n, bool to) {
+    if (to) for (int k = n - 1; k >= 0; k--) fprintf(m, "(app %s ", CHECKED[REPTO[c[k]]]);
+    else for (int k = 0; k < n; k++) fprintf(m, "(app %s ", CHECKED[REPFROM[c[k]]]);
+    return n;
+}
+static void rep_conv_close(FILE *m, int n) { for (int k = 0; k < n; k++) fputc(')', m); }
 static size_t cr_round(size_t x, size_t a) { return a ? (x + a - 1) / a * a : x; }
 static CRec *crec_of(int d) {
     if (d < 0 || d >= ndata) return NULL;
@@ -3965,7 +3997,10 @@ static bool cr_scalar_ok(int kind, const char *ty) {
  * a[] into lv; out: from lv into r[]); false when the C struct does not match the data type */
 static bool cr_fields_tw(FILE *m, const char *text, const CRec *r, int c, const CMem *ms, int nm, const char *lv, int k, bool out);
 static bool cr_tw(FILE *m, const char *text, const CRec *r, const char *ty, const char *lv, int o, bool out) {
-    char tag[64]; int d = ctype_data(ty, tag); if (d != r->d) return false;
+    /* the struct of r's data type, or of a type whose induced representation it is (struct Pt for
+     * Pt·W: the same constructors and fields, each field its representation's slot) */
+    char tag[64]; int d = ctype_data(ty, tag);
+    if (d != r->d) { int ck = d >= 0 ? chk_index(d) : -1; if (!(rep_induced(ck) && (size_t)ck < caprepto && REPTO[ck] >= 0 && rep_target(ck) == r->d)) return false; }
     CMem *ms; int n; if (!cstruct_members(text, tag, &ms, &n)) return false;
     bool tagged = n == 2 && cr_scalar_ok(CK_U64, ms[0].ty) && !strcmp(ms[1].ty, "{") && ms[1].nsub == r->ncons;
     for (int c = 0; tagged && c < r->ncons; c++) if (strcmp(ms[1].sub[c].ty, "{")) tagged = false;
@@ -4016,13 +4051,16 @@ static void cr_fin_native(FILE *m, char **s, int ns, void *ctx) {
     fputc(')', m);
 }
 static void native_structs(const char *nm, int n, int k, const CRec **sr, const CRec *rr, int nexp) {
-    int rin[NATIVE_MAXW], rout = -1;
-    for (int i = 0; i < NATIVE_MAXW; i++) rin[i] = -1;
+    /* each parameter's and the result's conversions: its type's representations followed to the
+     * struct's data type (a record parameter: T<Pt·W> from Pt by Pt's to; struct Pt itself, none), or
+     * to the end of the chain (a word, a boxed value) */
+    static int rcin[NATIVE_MAXW][16], rcout[16]; int rin[NATIVE_MAXW], rout = 0;
+    for (int i = 0; i < NATIVE_MAXW; i++) rin[i] = 0;
     int ck0 = checked_index(nm);
     if (ck0 >= 0 && (size_t)ck0 < capchkty && CHKTY[ck0]) {
         Node *doms[NATIVE_MAXW], *cod; int got = pi_parts(CHKTY[ck0], doms, n, &cod);
-        for (int i = 0; i < got; i++) rin[i] = type_rep(doms[i]);
-        if (got == n) rout = type_rep(cod);
+        for (int i = 0; i < got; i++) { int di = type_rep(doms[i]); rin[i] = di < 0 ? 0 : rep_chain(di, sr[i] ? sr[i]->d : -1, rcin[i], 16); if (rin[i] < 0) die("native: a parameter's struct is neither its type's nor its representation's:", nm); }
+        if (got == n) { int di = type_rep(cod); rout = di < 0 ? 0 : rep_chain(di, rr ? rr->d : -1, rcout, 16); if (rout < 0) die("native: the result's struct is neither its type's nor its representation's:", nm); }
     }
     /* the slots' names: %s<i>_<j> for a record parameter's, %r<i> for another's */
     char **sl = malloc(sizeof(char *) * (size_t)(nexp ? nexp : 1)); int o = 0, off[NATIVE_MAXW];
@@ -4033,17 +4071,17 @@ static void native_structs(const char *nm, int n, int k, const CRec **sr, const 
     }
     static int nfb; char fbn[64]; snprintf(fbn, sizeof fbn, "%%natsfb%d", nfb++);
     char *call; size_t cl; FILE *cm = open_memstream(&call, &cl);
-    if (rout >= 0) fprintf(cm, "(app %s ", CHECKED[REPTO[rout]]);
+    rep_conv_open(cm, rcout, rout, true);
     for (int i = 0; i < n; i++) fprintf(cm, "(app ");
     fputs(nm, cm);
     for (int i = 0; i < n; i++) {
         fputc(' ', cm);
-        if (rin[i] >= 0) fprintf(cm, "(app %s ", CHECKED[REPFROM[rin[i]]]);
+        rep_conv_open(cm, rcin[i], rin[i], false);
         if (sr[i]) cr_rebuild(cm, sr[i], sl, off[i]); else fputs(sl[off[i]], cm);
-        if (rin[i] >= 0) fputc(')', cm);
+        rep_conv_close(cm, rin[i]);
         fputc(')', cm);
     }
-    if (rout >= 0) fputc(')', cm);
+    rep_conv_close(cm, rout);
     fclose(cm);
     char *fbuf; size_t fl; FILE *fm = open_memstream(&fbuf, &fl);
     fprintf(fm, "(def %s (lam", fbn); for (int i = 0; i < nexp; i++) fprintf(fm, " %s", sl[i]); fputc(' ', fm);
@@ -4053,8 +4091,7 @@ static void native_structs(const char *nm, int n, int k, const CRec **sr, const 
     /* name: the records opened, the native called on the slots */
     char **s0 = malloc(sizeof(char *) * (size_t)(nexp ? nexp : 1)); CrPend pend[NATIVE_MAXW]; int np = 0;
     for (int i = 0; i < n; i++) {
-        char b[64];
-        if (rin[i] >= 0) snprintf(b, sizeof b, "(app %s %%a%d)", CHECKED[REPTO[rin[i]]], i); else snprintf(b, sizeof b, "%%a%d", i);
+        char b[1024]; { FILE *bm2 = fmemopen(b, sizeof b, "w"); int c_ = rep_conv_open(bm2, rcin[i], rin[i], true); fprintf(bm2, "%%a%d", i); rep_conv_close(bm2, c_); fputc(0, bm2); fclose(bm2); }
         if (sr[i]) { pend[np++] = (CrPend){ strdup(b), sr[i], off[i] }; for (int j = 0; j < sr[i]->words; j++) s0[off[i] + j] = "#0"; }
         else s0[off[i]] = strdup(b);
     }
@@ -4064,9 +4101,9 @@ static void native_structs(const char *nm, int n, int k, const CRec **sr, const 
     char *buf; size_t bl2; FILE *m = open_memstream(&buf, &bl2);
     fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
     fputc(' ', m);
-    if (rout >= 0) fprintf(m, "(app %s ", CHECKED[REPFROM[rout]]);
+    rep_conv_open(m, rcout, rout, false);
     if (rr) cr_raw(m, rr, body, true); else fputs(body, m);
-    if (rout >= 0) fputc(')', m);
+    rep_conv_close(m, rout);
     fprintf(m, "))");
     fclose(m); emit(buf); free(buf); free(body);
     free(sl); free(s0);
@@ -5039,7 +5076,14 @@ static void toplevel_in(Node *f) {
         char nm[64]; snprintf(nm, sizeof nm, "%%rep%d", nrep++);
         Node *dd = nlist(3); dd->it[0] = nsym("def"); dd->it[1] = nsym(nm); dd->it[2] = f->it[2];
         toplevel(dd);
-        if (table_global(TB_REP, ck) < 0) table_set(TB_REP, ck, global_lookup(nm));
+        if (table_global(TB_REP, ck) < 0 || rep_induced(ck)) table_set(TB_REP, ck, global_lookup(nm));
+    } else if (!strcmp(h, "rep-induced")) {
+        /* (rep-induced T): T's representation so far is its induced one (src/syntax.c x_rep_induce,
+         * item 15): a representation declared for T later replaces it in every table */
+        if (f->n != 2 || f->it[1]->list) die("(rep-induced T)", NULL);
+        int d = data_lookup(f->it[1]->s), ck = d < 0 ? -1 : chk_index(d);
+        if (ck < 0) die("rep-induced: not a checked data type:", f->it[1]->s);
+        rep_induced_set(ck, true);
     } else if (!strcmp(h, "repops")) {
         /* (repops T to from (op native) …): the representation's table for the back end (B12 §6,
          * B14): the checked indices of to, from and each op's source operation and native
@@ -5048,7 +5092,7 @@ static void toplevel_in(Node *f) {
         int d = data_lookup(f->it[1]->s);
         int ck = d < 0 ? -1 : chk_index(d);
         if (ck < 0) die("repops: not a checked data type:", f->it[1]->s);
-        if (table_global(TB_ROPS, ck) >= 0) return;
+        if (table_global(TB_ROPS, ck) >= 0 && !rep_induced(ck)) return;
         long gto = checked_index(f->it[2]->s), gfr = checked_index(f->it[3]->s);
         if (gto < 0 || gfr < 0) die("repops: to/from not checked:", f->it[2]->s);
         Node *ops = nsym("lnil");
@@ -5072,7 +5116,7 @@ static void toplevel_in(Node *f) {
         int d = data_lookup(f->it[1]->s);
         int ck = d < 0 ? -1 : chk_index(d);
         if (ck < 0) die("replaws: not a checked data type:", f->it[1]->s);
-        if (table_global(TB_RLAWS, ck) >= 0) return;
+        if (table_global(TB_RLAWS, ck) >= 0 && !rep_induced(ck)) return;
         long gtf = checked_index(f->it[2]->s), gft = checked_index(f->it[3]->s);
         if (gtf < 0 || gft < 0) die("replaws: the laws are not checked:", f->it[2]->s);
         Node *ls = nsym("lnil");
@@ -5082,6 +5126,7 @@ static void toplevel_in(Node *f) {
         Node *dd = nlist(3); dd->it[0] = nsym("def"); dd->it[1] = nsym(nm); dd->it[2] = nl3("pair", word(gtf), nl3("pair", word(gft), ls));
         toplevel(dd);
         table_set(TB_RLAWS, ck, global_lookup(nm));
+        rep_induced_set(ck, false);   /* (a declared representation's laws are its last form) */
     } else if (!strcmp(h, "run")) {
         /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c, D26) */
         if (f->n != 2) die("(run step)", NULL);
@@ -5307,14 +5352,15 @@ static void toplevel_in(Node *f) {
          * lib/repr.cub's program-rep): the argument is converted by to before the call, the result
          * by from after it, and the definition the call falls back to is the one over the
          * representations (to ∘ name ∘ from), so both paths agree */
-        int rin[NATIVE_MAXW], rout = -1; bool anyrep = false;
-        for (int i = 0; i < NATIVE_MAXW; i++) rin[i] = -1;
+        /* (each followed to the end of its chain of representations: RBox by RPt by RPt·W) */
+        static int rcin[NATIVE_MAXW][16], rcout[16]; int rin[NATIVE_MAXW], rout = 0; bool anyrep = false;
+        for (int i = 0; i < NATIVE_MAXW; i++) rin[i] = 0;
         {
             int ck0 = checked_index(nm);
             if (ck0 >= 0 && (size_t)ck0 < capchkty && CHKTY[ck0]) {
                 Node *doms[NATIVE_MAXW], *cod; int got = pi_parts(CHKTY[ck0], doms, n, &cod);
-                for (int i = 0; i < got; i++) { rin[i] = type_rep(doms[i]); if (rin[i] >= 0) anyrep = true; }
-                if (got == n) { rout = type_rep(cod); if (rout >= 0) anyrep = true; }
+                for (int i = 0; i < got; i++) { int di = type_rep(doms[i]); if (di >= 0 && (rin[i] = rep_chain(di, -1, rcin[i], 16)) > 0) anyrep = true; else rin[i] = 0; }
+                if (got == n) { int di = type_rep(cod); if (di >= 0 && (rout = rep_chain(di, -1, rcout, 16)) > 0) anyrep = true; else rout = 0; }
             }
         }
         long fb = g;
@@ -5322,11 +5368,11 @@ static void toplevel_in(Node *f) {
             static int nfb; char fbn[64]; snprintf(fbn, sizeof fbn, "%%natfb%d", nfb++);
             char *fbuf; size_t fl; FILE *fm = open_memstream(&fbuf, &fl);
             fprintf(fm, "(def %s (lam", fbn); for (int i = 0; i < n; i++) fprintf(fm, " %%r%d", i); fprintf(fm, " ");
-            if (rout >= 0) fprintf(fm, "(app %s ", CHECKED[REPTO[rout]]);
+            rep_conv_open(fm, rcout, rout, true);
             for (int i = n - 1; i >= 0; i--) fprintf(fm, "(app ");
             fprintf(fm, "%s", nm);
-            for (int i = 0; i < n; i++) { if (rin[i] >= 0) fprintf(fm, " (app %s %%r%d))", CHECKED[REPFROM[rin[i]]], i); else fprintf(fm, " %%r%d)", i); }
-            if (rout >= 0) fprintf(fm, ")");
+            for (int i = 0; i < n; i++) { fputc(' ', fm); rep_conv_open(fm, rcin[i], rin[i], false); fprintf(fm, "%%r%d", i); rep_conv_close(fm, rin[i]); fputc(')', fm); }
+            rep_conv_close(fm, rout);
             fprintf(fm, "))"); fclose(fm); emit(fbuf); free(fbuf);
             fb = global_lookup(fbn);
         }
@@ -5339,10 +5385,10 @@ static void toplevel_in(Node *f) {
         char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
         fprintf(m, "(def %s (lam", anyrep ? cvn : nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
         fprintf(m, " ");
-        if (rout >= 0) fprintf(m, "(app %s ", CHECKED[REPFROM[rout]]);
+        rep_conv_open(m, rcout, rout, false);
         fprintf(m, "(%%native #%d #%ld", k, fb);
-        for (int i = 0; i < n; i++) { if (rin[i] >= 0) fprintf(m, " (app %s %%a%d)", CHECKED[REPTO[rin[i]]], i); else fprintf(m, " %%a%d", i); }
-        fprintf(m, ")"); if (rout >= 0) fprintf(m, ")");
+        for (int i = 0; i < n; i++) { fputc(' ', m); rep_conv_open(m, rcin[i], rin[i], true); fprintf(m, "%%a%d", i); rep_conv_close(m, rin[i]); }
+        fprintf(m, ")"); rep_conv_close(m, rout);
         fprintf(m, "))");
         fclose(m); emit(buf); free(buf);
         if (anyrep) {
@@ -5352,7 +5398,7 @@ static void toplevel_in(Node *f) {
             fprintf(nm2, " (%%natrep #%ld #%ld", cv, g); for (int i = 0; i < n; i++) fprintf(nm2, " %%a%d", i);
             fprintf(nm2, ")))"); fclose(nm2); emit(nb); free(nb);
         }
-        int nrep = rout >= 0; for (int i = 0; i < n; i++) nrep += rin[i] >= 0;
+        int nrep = rout > 0; for (int i = 0; i < n; i++) nrep += rin[i] > 0;
         passes++; printf("ok: native %s   [%s%ld steps, %zu bytes of C%s%s%s]\n", nm, spec_hit ? "specialization cached by key, " : "", steps, len, cached ? ", cached" : "", keep ? ", results kept native" : "", nrep ? ", represented values by their representation" : "");
     } else if (!strcmp(h, "layout")) {
         /* #layout T [as R]: by the checker's layout function (lib/check.cub) */
@@ -5732,10 +5778,13 @@ void *cubical_call_data_r(const char *name, uint64_t nargs, void **args, const c
         /* a type with a declared representation crosses as it (B18 by layout): the C value is the
          * representation's (a word for Nat as Word), read into the net by from */
         int di = d >= 0 ? chk_index(d) : -1;
-        if (di >= 0 && (size_t)di < caprepto && REPTO[di] >= 0) {
-            Port w = unbox_value((VB *)args[i], -2);
-            long gf = table_global(TB_VAL, REPFROM[di]);
-            ps[i] = apply_gid(gf, &w, 1);
+        int ch[16], nch = di >= 0 && (size_t)di < caprepto && REPTO[di] >= 0 ? rep_chain(di, -1, ch, 16) : 0;
+        if (nch > 0) {
+            /* (the end of the chain: a word, or a boxed record's representation, RBox by RPt by RPt·W) */
+            int t = rep_target(ch[nch - 1]);
+            Port w = unbox_value((VB *)args[i], t == -2 ? -2 : t);
+            for (int k = nch - 1; k >= 0; k--) { long gf = table_global(TB_VAL, REPFROM[ch[k]]); w = apply_gid(gf, &w, 1); }
+            ps[i] = w;
         } else ps[i] = unbox_value((VB *)args[i], d);
     }
     Port r = nargs ? apply_gid(g, ps, (int)nargs) : global_copy(g, NULL);
@@ -5745,8 +5794,10 @@ void *cubical_call_data_r(const char *name, uint64_t nargs, void **args, const c
         int ck = checked_index(name);
         if (ck >= 0 && (size_t)ck < capchkty && CHKTY[ck]) {
             Node *doms[64], *cod; int got = pi_parts(CHKTY[ck], doms, (int)nargs, &cod);
-            int ro = got == (int)nargs ? type_rep(cod) : -1;
-            if (ro >= 0) { long gt = table_global(TB_VAL, REPTO[ro]); r = apply_gid(gt, &r, 1); }
+            /* along the chain to the struct's data type (struct Pt: none), or to its end */
+            int ro = got == (int)nargs ? type_rep(cod) : -1, ch[16];
+            int nch = ro >= 0 ? rep_chain(ro, rrd, ch, 16) : 0;
+            for (int k = 0; k < nch; k++) { long gt = table_global(TB_VAL, REPTO[ch[k]]); r = apply_gid(gt, &r, 1); }
         }
     }
     if (rrd >= 0) {

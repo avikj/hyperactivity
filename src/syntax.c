@@ -1200,6 +1200,90 @@ static void x_test(const char *h, Node *a, Node *b) {
     x_top(f);
 }
 static void p_decl(void);
+/* the representations declared so far, by the represented type's name (the first one each; a
+ * declared one replaces an induced one): the representation's text and its four definitions'
+ * names. Read when a data type is declared, for its induced representation (x_rep_induce) */
+typedef struct { const char *T, *R, *to, *from, *tf, *ft; bool induced; } XRep;
+static XRep *XREPS; static size_t capxreps; static int nxreps;
+static XRep *xrep_of(const char *T) { for (int i = 0; i < nxreps; i++) if (!strcmp(XREPS[i].T, T)) return &XREPS[i]; return NULL; }
+static void xrep_add(const char *T, const char *R, const char *to, const char *from, const char *tf, const char *ft, bool induced) {
+    XRep *e = xrep_of(T);
+    if (e && !e->induced) return;
+    if (!e) { GROW(XREPS, capxreps, (size_t)nxreps + 1); e = &XREPS[nxreps++]; }
+    *e = (XRep){ strdup(T), strdup(R), strdup(to), strdup(from), strdup(tf), strdup(ft), induced };
+}
+static void load_surface(const char *text, const char *path, bool imports_only);
+static char *pr_flat(Node *t, int prec);
+/* The induced representation of a data type whose fields have representations (item 15): for
+ * data D = c (x : A) … with no parameters, indices, path constructors or recursive fields, at least
+ * one field's type a represented type T (named), and every field unerased, the data type D·W with
+ * the same constructors (c·W) and each such field at T's representation, and the equivalence D ≃ D·W
+ * built field by field from the fields' equivalences: to and from convert each field by its type's,
+ * to-from and from-to are the fields' paths side by side (functoriality). It is declared as
+ * `represent D by D·W`, so it is checked like a written one and goes into the same tables; a
+ * representation declared for D later replaces it. Generated, never written per record. */
+static void x_rep_induce(Node *d) {
+    if (!d->list || d->n < 2 || d->it[1]->list) return;   /* parameters or indices: none */
+    const char *D = d->it[1]->s; int nc = d->n - 2;
+    if (nc < 1 || xrep_of(D)) return;
+    bool any = false;
+    for (int c = 0; c < nc; c++) {
+        Node *k = d->it[2 + c];
+        if (!k->list || k->n < 1 || k->it[0]->list) return;
+        for (int j = 1; j < k->n; j++) {
+            Node *f = k->it[j];
+            if (!f->list || f->n != 2 || f->it[0]->list) return;   /* dimensions, a boundary */
+            if (is(f->it[0], "dims")) return;
+            if (bnd_mult(f->it[0]) != 2) return;
+            Node *A = f->it[1];
+            if (!A->list && !strcmp(A->s, D)) return;   /* recursive */
+            if (!A->list && xrep_of(A->s)) any = true;
+        }
+    }
+    if (!any) return;
+    char *t; size_t tl; FILE *m = open_memstream(&t, &tl);
+    /* the data type */
+    fprintf(m, "data %s·W =", D);
+    for (int c = 0; c < nc; c++) {
+        Node *k = d->it[2 + c];
+        fprintf(m, "%s %s·W", c ? " |" : "", k->it[0]->s);
+        for (int j = 1; j < k->n; j++) {
+            Node *A = k->it[j]->it[1]; XRep *e = !A->list ? xrep_of(A->s) : NULL;
+            if (e) fprintf(m, " (%s : %s)", k->it[j]->it[0]->s, e->R);
+            else { char *s = pr_flat(A, 0); fprintf(m, " (%s : %s)", k->it[j]->it[0]->s, s); free(s); }
+        }
+    }
+    fprintf(m, "\nrepresent %s by %s·W where\n", D, D);
+    /* to, from: a case per constructor, each field by its type's conversion; the laws: a case per
+     * constructor (on the motive's family), each field's path at i */
+    for (int w = 0; w < 4; w++) {
+        bool on_w = w == 1 || w == 2;   /* the case is on D·W's constructors */
+        if (w == 0) fprintf(m, "  to : %s → %s·W = λ p → case p of", D, D);
+        else if (w == 1) fprintf(m, "  from : %s·W → %s = λ p → case p of", D, D);
+        else if (w == 2) fprintf(m, "  to-from : (p : %s·W) → to (from p) ≡ p = λ p → case p return (λ q → to (from q) ≡ q) of", D);
+        else fprintf(m, "  from-to : (p : %s) → from (to p) ≡ p = λ p → case p return (λ q → from (to q) ≡ q) of", D);
+        for (int c = 0; c < nc; c++) {
+            Node *k = d->it[2 + c]; const char *cn = k->it[0]->s;
+            fprintf(m, "%s %s%s", c ? ";" : "", cn, on_w ? "·W" : "");
+            for (int j = 1; j < k->n; j++) fprintf(m, " x%d", j - 1);
+            fprintf(m, " → ");
+            if (w >= 2) fprintf(m, "(λ i → ");
+            fprintf(m, "%s%s", cn, w == 0 || w == 2 ? "·W" : "");   /* the result: D·W's constructor for to and to-from */
+            for (int j = 1; j < k->n; j++) {
+                Node *A = k->it[j]->it[1]; XRep *e = !A->list ? xrep_of(A->s) : NULL;
+                if (!e) fprintf(m, " x%d", j - 1);
+                else fprintf(m, " (%s x%d%s)", w == 0 ? e->to : w == 1 ? e->from : w == 2 ? e->tf : e->ft, j - 1, w >= 2 ? " i" : "");
+            }
+            if (w >= 2) fputc(')', m);
+        }
+        fputc('\n', m);
+    }
+    fclose(m);
+    char path[512]; snprintf(path, sizeof path, "%s (%s·W, induced)", x_file ? x_file : "?", D);
+    load_surface(t, strdup(path), false);
+    free(t);
+    XRep *e = xrep_of(D); if (e) { e->induced = true; x_top(sym2("rep-induced", nsym(D))); }
+}
 static void p_decls_block(void) {
     wantk(X_VO, "a block");
     while (P0()->k != X_VC && P0()->k != X_EOF) { p_decl(); }
@@ -1307,6 +1391,7 @@ static void p_decl(void) {
         Node *d = p_data();
         if (x_typed) x_top(sym2(fail ? "checked-data-fail" : "checked-data", d));
         else x_top(d);
+        if (x_typed && !fail) x_rep_induce(d);
         decl_end(); return;
     }
     if (x_is(t, "codata") || x_is(t, "record")) {
@@ -1434,7 +1519,9 @@ static void p_decl(void) {
         while (P0()->k == X_ID && !x_is(P0(), "by")) NX();   /* the data type's parameters, named for reading */
         want("by");
         if (x_is(P0(), "auto")) { NX(); decl_end(); return; }
+        int r0 = xp;
         Node *R = p_expr(0);
+        char *Rtext; { size_t rl; FILE *rm = open_memstream(&Rtext, &rl); for (int q = r0; q < xp; q++) fprintf(rm, "%s%s", q > r0 ? " " : "", lt[q].s); fclose(rm); }
         Node *Rh = R; while (Rh->list && Rh->n > 0) Rh = Rh->it[0];
         char pre[256]; snprintf(pre, sizeof pre, "%s·%s·", T, Rh->s);
         bool have[4] = { false, false, false, false }; static const char *LAWS[4] = { "to", "from", "to-from", "from-to" };
@@ -1485,6 +1572,7 @@ static void p_decl(void) {
             Node *rl = nlist(4 + nby); rl->it[0] = nsym("replaws"); rl->it[1] = nsym(T); rl->it[2] = nsym(qtf); rl->it[3] = nsym(qft);
             for (int q = 0; q < nby; q++) rl->it[4 + q] = nsym(qby[q]);
             x_top(rl);
+            xrep_add(T, Rtext, qto, qfrom, qtf, qft, false);
         }
         decl_end(); return;
     }

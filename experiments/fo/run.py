@@ -201,6 +201,28 @@ defs = lcons (#0 , (lnil , fcall #99999 (lcons (flit #5) lnil))) pr-defs''', "12
  'rep-box': ("""rb-defs = lift-program #100000 (program-rep-at (Nat → Nat) #99999 lnil #20 (code (λ (n : Nat) → rbox-sum (rbox-bump (rbox n 2)))))
 #same eval-fo (table-of rb-defs) lnil (fcall #99999 (lcons (flit #30) lnil)) = vw #41
 defs = lcons (#0 , (lnil , fcall #99999 (lcons (flit #30) lnil))) rb-defs""", "41"),
+ # each definition transported at its own boundary with its calls held (lib/repr.cub, 2026-11-09):
+ # records through their induced representations (ShH by ShH·W), a call of a held definition kept,
+ # a case on a held call's record result (ag2: from of the call's result, then the case), a record
+ # result chosen by a case on a Nat (pickh: to of the case, ShH's and PtH's own constructors in the
+ # program, their Nat fields as Nat). At 5: 14 + 106 + 11 = 131
+ 'rep-held': ("""data PtH = pth (a : Nat) (b : Nat)
+data ShH = sc (r : Nat) | sr (w : Nat) (h : Nat)
+growh : ShH → ShH
+growh s = case s of sc r → sr r 1; sr w h → sc (plus w h)
+areah : ShH → Nat
+areah s = case s of sc r → plus r r; sr w h → plus w h
+ag : ShH → Nat
+ag s = areah (growh s)
+ag2 : ShH → Nat
+ag2 s = case growh s of sc r → r; sr w h → plus w (plus h 100)
+pickh : Nat → PtH → PtH
+pickh n p = case p of pth a b → (case n of zero → pth b a; suc k → pth (plus a k) b)
+sumh : PtH → Nat
+sumh p = case p of pth a b → plus a b
+rh-defs = lift-program #100000 (program-rep-at (Nat → Nat) #99999 lnil #20 (code (λ (n : Nat) → plus (ag (sr n 2)) (plus (ag2 (sc n)) (sumh (pickh n (pth 3 4)))))))
+#same eval-fo (table-of rh-defs) lnil (fcall #99999 (lcons (flit #5) lnil)) = vw #131
+defs = lcons (#0 , (lnil , fcall #99999 (lcons (flit #5) lnil))) rh-defs""", "131"),
  # a process run against its world (lib/proc.cub), specialized under an unknown store: the run
  # becomes a function of the store (st 3 + 1); compiled with a store that answers 40; prints 41
  'process': ("""proc-defs = case lift #100 spec4 of lifted t2 ds k → lcons (#0 , (lnil , fapply t2 (lcons (flam ftword (flit #40)) lnil))) ds

@@ -140,7 +140,11 @@ lower-app vs ts f args =
   case f of
     capp g a → lower-app vs ts g (lcons a args)
     cglob n → fcall n (drop-erased (g-erased n) #0 (lower-args vs ts (some (%gty n)) args))
-    _ → (let Tf = syn vs ts f in fapply (lower-at vs ts Tf f) (lower-args vs ts Tf args))
+    -- a global annotated with another type (lib/repr.cub: a held definition standing for itself
+    -- transported, at the transported type): the call, its arguments at the annotation's domains
+    cann t T → (case t of cglob n → fcall n (drop-erased (g-erased n) #0 (lower-args vs ts (some (eval-g vs T)) args)); _ → lower-app-v vs ts f args)
+    _ → lower-app-v vs ts f args
+lower-app-v vs ts f args = (let Tf = syn vs ts f in fapply (lower-at vs ts Tf f) (lower-args vs ts Tf args))
 lower-args vs ts Tf args =
   case args of
     lnil → lnil

@@ -671,12 +671,14 @@ seventeen programs with gcc and runs them, with both printers):
   primitives on the arguments that carry information (the length and the bound proof dropped, the
   proof becoming an `ASSUME` around the access), the conversions vanish, the word operations and
   `plus` on represented `Nat` go native, closed `Nat` trees become words by `%rtab`. Two loads from
-  an unknown buffer, written with their proofs, compile and run. `program-rep reps fuel c` is the
-  whole program with every declared representation consumed (B12 §6): definitions lowered from
-  their code as written (`%gcode n`), operations with an `op` line replaced by their natives,
-  constructors of a represented type through `to`, recursion on one through `from`, by the
-  representation's table `%rops d`; the printers lay a field of a type represented by `Word` out as
-  a word.
+  an unknown buffer, written with their proofs, compile and run. `program-rep T reps fuel c` is the
+  whole program with the representations consumed in the term (B12 §6): each definition it reaches
+  transported at its own boundary (`to ∘ g ∘ from`, along each type's chain of representations),
+  its calls held as calls (the schedule's `holds`: the code normalized with the other definitions as
+  variables), normalized and rewritten along the representations' laws, so the conversions between
+  definitions cancel. A record whose fields have representations has an induced one generated when
+  it is declared (`data Pt = pt (a : Nat) (b : Nat)` gives `Pt·W` of two words and `Pt ≃ Pt·W` field
+  by field), so the program holds a `Pt·W` and the printers and `#native` lay it out as it is.
 - **`lib/derive.cub`**: `derive-eq d`, a decidable equality as a code read off the data table;
   evaluated, quoted back at its type, lowered and compiled (the derived equality on `Nat` prints
   10 for eq(2,2), eq(2,1)).
