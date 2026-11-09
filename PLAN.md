@@ -1224,6 +1224,18 @@ port (A10b) is the checker at scale and gates E28.
    (computing a winding number: the work is the computation's, not substitution's), and g8 and the
    corner at 100–160 steps per cell against the 6-cube's 27 (what remains is evaluation: β, the
    composition clauses, erasing the unread parts of what was read; 18.16 lists it).
+   **Status (2026-11-09, CBN, 18.16):** call by need in `build`: every operation in an operand
+   position is a deferred cell (`V_DEFER`), its operands deferred too; strict only where always
+   read (a principal, a plain path application's path, a meet or join's second operand, a
+   transport's value, a call's always-read parameters), run with the deferred operation without a
+   step; one named exception (a word operation's second operand: deferred, native calls reorder the
+   compiled-code cache's printed evictions). Steps of the read alone over the normal form's cells:
+   g8 161,006 → 166,158 (103 → 106 per cell), the corner 6,322 → 5,710 (162 → 146), the number
+   230,326 → 233,734, the typed port 352,234 → 358,609; the generic 6-cube's read-back rate 24.9 →
+   23.6 steps per cell (10M–50M steps, 2.5 GB cap). Each read operand costs its reader one
+   interaction, and in g8 the deferred operands are nearly all read (a composition's family above
+   all), so g8 does not fall; what remains unread is built by rules (`distribute`, composition
+   clauses) and the reads' own erasure of unread parts.
 9. DONE (`15625ce`, `91c128b`): interned symbols, free names kept per node, one desugaring,
    kept arena chunks; the compiled-form cache beside the recorded forms. Cached library
    load 0.105 s; Brunerie end to end 0.35 s, computation about 0.25 s. Further (2026-11-06,
@@ -3138,6 +3150,68 @@ Revision 1. A design, since this is the open item; stated so it can be criticize
 - **The cost model.** 18.14's first form: recorded steps per key, size as the estimate.
 
 ### 18.16 A8 — Proposal: formal transported compositions
+
+**Status (2026-11-09, CBN: call by need in `build`).** A8e left the operands that compilation
+builds at once: the operations in operand positions that `build` (`src/net.c`) made as running
+cells (a composition's family, a system's branch and rest, a typed path application's path,
+`sysmap`'s function, a glue's type, an unglue's value, an hcomp's cap and family, a transport's
+lines, a case's environment, a primitive's operands, a constructor's dimensions, a data type's
+parameters), A8e's `build_deferred` covering three of them one level deep. **Built:** `build_m`
+builds every operation in an operand position as a `V_DEFER` cell, its own operands deferred the
+same way, so nothing below an unread operand runs; values are built as they are, their parts
+deferred. Built strict are only what is read as soon as the building is: a body's result, and
+through it the inputs its operation always reads in every outcome but a stuck one (`syn_reads`,
+`defer_reads`): the principal, a plain path application's path, a meet or join's second operand,
+a transport's value (read, or the result itself where ψ holds), a call's parameters its
+definition always reads (lang.c's analysis, `G.strict`, through `global_strict`). In a deferred
+operation those inputs are deferred too and are run with it by `defer_build`, without a step,
+as strict building would have built them; every interaction is still a step, a deferred cell's
+reader included. `defer_build` hands the deferred cell's key and pending memo entry to the
+operation (memo keys name the same values: the cell carries the operation's `synkey`, registered
+at build as before); a duplicator holds a deferred cell once (`rule_dup` boxes unbuilt cells, as
+before); `box_fd` is unchanged (one worker only); `fd_taint_of` refuses a deferred operation
+exactly as `fd_pending` refuses a pending one (`O_MKDIM`, `O_GLOB`, `O_ERA`, a tainted case table
+or native); a deferred operation read under a substitution is substituted one level when its
+value arrives (`sub_read`), not held and read again. lang.c's operand positions that were already
+unbuilt (application and non-strict call arguments, fields, `let` values, lifted subterms: `V_THUNK`
+records) stay records. **Named exception:** a word operation's second operand (`%weq %wlt %wadd
+%wmax %wsub`; read after the first unless the first is neutral) stays strict: deferred,
+`tests/native-at.cub`'s native calls in it run after the first operand's instead of beside them,
+and the compiled-code cache's evictions, which the run prints, come in another order (the
+answers are the same; the output line is not).
+
+Measured (steps of the read alone, memo on, `CUBICAL_WORKERS=0`; size = cells of the normal form):
+
+| read | steps before (A8e) | steps after | size | per cell before | per cell after |
+|---|---|---|---|---|---|
+| g8 | 161,006 | 166,158 | 1,566 | 103 | 106 |
+| surfc's corner (`@ 0 @ 0`) | 6,322 | 5,710 | 39 | 162 | 146 |
+| the number | 230,326 | 233,734 | 4 | 57,582 | 58,434 |
+| the typed port | 352,234 | 358,609 | 1 | 352,234 | 358,609 |
+| the generic 6-cube (2.5 GB cap) | 50M steps: 1,861,602 cells | 50M: 1,960,694 | past 1.96M | 26.9 (24.9 from 10M to 50M) | 25.5 (23.6) |
+
+**Why g8 does not fall:** call by need costs one interaction per operand read (the reader meeting
+the deferred cell), and in these reads the deferred operands are nearly all read. In g8's read the
+forced deferred cells are a composition's family read by `COMPA` 1,295 times (the tube is partial
+in 1,433 of 1,454 compositions), a typed path application's path 286 (`PAPPP`), a system's rest
+387 (`SYSCONS2`); `COMPA` steps go 1,433 → 2,726 and `SUBST` 38,183 → 40,018 (the family held and
+read under substitutions as a deferred cell). The corner, where more operands go unread, falls
+10%. What the reads build that the result does not contain is now what rules build (`distribute`,
+the composition clauses' applications) and the reads' own cost (`ERA·REF`: the unread parts of read
+cells), not compiled operands. **Tried and not kept:** (a) lang.c's operand positions compiled in
+place as deferred cells rather than `V_THUNK` records (`compile_lazy` without the record, explicit
+`delay` and definitions' bodies kept as records): g8 165,192, the corner 6,021, the number 238,892,
+the typed port 368,010; better than records on g8 only. (b) The same with definitions' bodies in
+place too: g8 138,280 and the number 152,649, but only because each definition's body is then
+evaluated at load, outside the read; not a saving. (c) Formulas over bound dimensions (`~ ∧ ∨ =`
+on dimension cells and constants) built at once rather than deferred: no change on any read.
+**Correctness:** every line of `make test` gives the same output as main's binary with step
+counts stripped (separate copies; the only difference is the compiler's warning line numbers in
+the `native-main` build, from the one line added to `lang.c`), Brunerie −2 untyped and typed at 0
+and 4 workers among them; g8's and the corner's normal forms identical with and without the memo
+and to main's; without the memo the output is identical across 0, 1, 2, 4, 8, 16 workers on the
+determinism list; TSan clean on the `make tsan` lines (three rounds, one at a time); ASan clean on
+the `make test` ASan lines.
 
 **Status (2026-11-09, A8e: substitution pending on every value with parts).** The diagnosis:
 `rule_subst` applied a dimension substitution at once and structurally — (A) built values (λ
