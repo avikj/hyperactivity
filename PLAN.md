@@ -819,10 +819,12 @@ content-addressed.
 term): normalize the code at its type (evaluate, then quote the value back to a code —
 definitions unfold, known arguments reduce, unknown ones stay as variables); rewrite along
 the rules the schedule names — theorems of the store read as directions (`lib/rules.cub`:
-`plus-assoc`, `plus-zero`, map fusion), under a bound; consume the representations
-(`lib/repr.cub`: `plus` on a `Nat` represented by `Word` is the machine's add; a call of
-`load64 n b off pf` is the native load with the length and the proof gone and an `ASSUME`
-in their place; a closed `Nat` is the word it represents); lower to the first-order form;
+`plus-assoc`, `plus-zero`, map fusion), under a bound, together with the representations' own
+laws (`lib/repr.cub`: the program transported at its boundary along `Nat ≃ Word`, so its op line
+read right to left and to-from leave the machine's add where `plus` was — a rewrite along paths,
+not a replacement after lowering); lower to the first-order form (a call of `load64 n b off pf`
+is the native load with the length and the proof erased by usage and an `ASSUME` in their place;
+a numeral is the word the machine holds it as);
 lift closures and recursions to definitions; print. The schedule (`Sched`, B13's stage
 types) is a value: how many rewrites, what to inline and fuse, how general to keep the
 result. Every candidate schedule yields a correct program, so tuning is search over
@@ -855,15 +857,16 @@ constructor-built arguments is a native call; the result comes back as cells, or
 opaque native cell read through the inverse of the representation's equivalence. Nothing
 crosses the boundary without a type on both sides.
 
-**Where this stands today (2026-11-08).** The pipeline above runs end to end on every
-`experiments/fo/run.py` program under the boxed, unboxed and x86 printers. The specializer
-calls `first-order` before lowering (item 15); stuck primitive operations have codes, so a
-term over the byte layer is quoted and specialized under an unknown input; the run-known
-binding time is `#native` through gcc, cached by the store's keys. On the first-order
-fragment the lowering and printing are no longer trusted: item 15's checked path runs from
-the source to the C each route prints (boxed `ca-sound`, unboxed `cu-sound`), with x86's
-`xa-sound` being landed; what stays trusted is the structural text printers, gcc or the
-assembler, and the CPU.
+**Where this stands today (2026-11-09).** The pipeline above runs end to end on every `experiments/fo/run.py` program under the boxed, unboxed and x86 printers. The specializer calls `first-order` before lowering (item 15). Stuck primitive operations have codes, so a term over the byte layer is quoted and specialized under an unknown input. The run-known binding time is `#native` through gcc, cached by the store's keys.
+
+The separate checked model of lowering was removed (item 15). Representations are consumed in the term, as transport:
+- `specialize-r` puts `to`/`from` at the program's boundary, normalizes, and rewrites along the representation's laws (`%rlaws`): to-from, from-to, and the op lines read right to left. `plus` on Nat-as-Word reaches `lower` as the machine's addition, and nothing is replaced after lowering.
+- `max` and UInt32 arithmetic are primitives of the form, read one to one.
+
+What still acts after lowering, each for a construct item 15 names:
+- `program-rep`'s whole-program consumption: record fields laid out by their representation.
+- closure conversion: a Π type's representation.
+- emitu's typing of undeclared parameters by use: binder types in codes and the form.
 
 ## 6. Representations
 
@@ -1361,6 +1364,36 @@ identity; linear values are introduced only in `primitive` definitions.
     representation and is right only for programs with the representations consumed (`program-rep`);
     the entry and lifted closures have no declared type and are typed by use.
 15. **Status (2026-11-09):** the specializer is built and consistent with the premise — `lib/specialize.cub` normalizes, rewrites along the store's theorems (a rule is its path, so the output's meaning is the input's by construction) under the terminating discipline (`bd21c486`), erases by `%gusage`, runs `first-order` and honours `Sched` (`36b9e30b`). **Not met: lowering and printing are not yet transport.** `lib/lower.cub` and the printers (`lib/emitc.cub`, `lib/emitu.cub`, `lib/emitx86.cub`) are untyped functions that transform the normal form, not the forward map of the representation equivalences (item 12), so the compiled code is not the program carried along a path. Between 2026-11-07 and 2026-11-09 this was attempted as a separate checked model of the pipeline (`lib/foproof*.cub`, ~14k lines: duplicate syntaxes, evaluators and translations with simulation proofs, tied to the real compiler by readings); that is the opposite of the premise and was removed (2026-11-09). Kept from it: three compiler bugs it exposed, fixed in the real compiler — `max` lowered as addition (`lower-max`; run.py `maxw`), a byte offset that is a `Nat` read as 0 (`lower-off`), and a wrapping word subtraction in every back end (now the source's truncating one; run.py `tsub`). **The work:** lowering as the transport of the normal form along the layout equivalences (§6.1's automatic layouts, `represent`'s declared ones): every semantic step `lower` and `repr` perform becomes normalization of a transport the machine computes, and what remains of `lower` and the printers is the structural reading of a first-order normal form, one form per construct.
+    **Lowering and printing: the inventory, and what moved (2026-11-09, line A15).** Every clause of `lib/lower.cub`, `lib/repr.cub`, `lib/emitc.cub`, `lib/emitu.cub` and `lib/emitx86.cub` that did more than read one normal-form construct as one first-order construct, and where its meaning now lives:
+    - *Moved into the term.*
+      - (a) The Nat-by-Word representation consumed by the specializer, not after lowering. `specialize-r T rules c` (`lib/repr.cub`) transports the program at T's boundary: `from` on each parameter whose type is represented, `to` on such a result, T[d := R]. The machine normalizes it, and the specializer rewrites along the representation's own paths: to-from and from-to, oriented, and each op line's law read right to left. `specialize-r (Nat → Nat)` of `λ n → plus n n` is `flam (P-add v0 v0)`.
+      - What this needed: the machine publishes each representation's laws (`%rlaws d = some (to-from , (from-to , [op·f·by]))`: `src/syntax.c` emits `(replaws …)`, `src/lang.c` builds the table, `src/net.c` reads it).
+      - It needed two fixes in `lib/match.cub`: a pattern holding `cword`, `cpty`, `cplit`, `cprim`, Π or Σ never matched, so to-from, whose sides mention Word, applied nowhere.
+      - It needed one fix in `lib/specialize.cub`: `rewrite-all` runs the oriented rules to their fixpoint again after each unoriented step; before, they ran once, before the first step.
+      - Nat's op line names `wadd`, whose body is the machine's addition (`toNat-wadd`, `lib/prim.cub`), so no further rule for `plusw` is needed.
+      - Deleted: `consume-reps` and its helpers, `nat-lit`, `nat-code`, `nat-lits` (an untyped pass that replaced word operations by name, counted closed Nat trees into words and read facts' numerals as words). `lib/image.cub` keeps its own `nat-code`, a reading of a numeral where the C++ image writes a word.
+      - (c) `max`: `lower-max` (let plus if) is deleted. `cwop 3` is one primitive, `P-max` (`lib/fo.cub`: eval `%wmax`; C `n34`, `a < b ? b : a`; x86 `cmp` then `cmovb`; run.py `maxw` under X86 too).
+      - UInt32: `lower-prim` used to lower the 32-bit operations to the word ones, which gave wrong answers on overflow: u32add carried past 2^32, u32sub truncated at 0, u32 w kept the high bits. They are now the form's own primitives `P-u32add … P-wofu32`: eval is the machine's u32 operations, C is `(uint32_t)` arithmetic. run.py `u32wrap` (4294967299) and `u32cmp` (10) failed before and pass now (they answered 12884901893 and 100).
+    - *Kept, as one-construct readings.*
+      - `lower-welim`'s counting loop: the reading of the word recursor. `cthunk` becomes its term (checked terms terminate).
+      - Erasure by computed usage: `g-erased`, `drop-erased`, `erase-lams`.
+      - `fassume` from an erased bound. Its numerals are now read as words in `lower-access` (`fact-nat`), as the offset is.
+      - `lower-off` and `lower-natlit`: the machine's Nat is word-backed (`big.c` past 64 bits), so a numeral read as its word is the machine's own representation, not a transformation.
+      - The Int64/Float64/UInt32 primitive table, one primitive to one.
+      - `lower-bool`: a case on a comparison is the language's conditional, and lower-bool reading it is a structural reading, not a representation consumer. (`represent` accepts a Σ such as `(w : Word) × Bit w`; it is not declared for Bool.)
+      - The automatic layouts (§6.1): `cshape`, pairs as constructor 0 of type 0, emitt's typedefs.
+      - The printers: `lib/emitc.cub` and `lib/emitx86.cub`, read clause by clause, print one construct per clause. Subtraction is the truncating `n1` (`jae`/`xor` on x86); facts' `max` is one ternary; x86 drops `fassume`.
+    - *Decided (2026-11-09), not yet built; until then these act after lowering.*
+      - (1) `program-rep`'s `rc`, `tb-del`, `rcv-*`, `raw-fields`, `rep-lit`, `wrap-fields`, `to-at`, `var-map*` and `wn`. These are the one place representations are still consumed after lowering.
+        - A whole program whose calls stay calls (`#native`, records with represented fields, the declared signatures of `sig-decl`) lays out a represented type's values as the representation inside other data types: a Nat field of `Pt` is a word, and `#native`'s struct crossing and emitt's typedefs depend on that.
+        - Transport of each definition at its own boundary leaves those fields as Nat trees, because there is no type to transport `Pt` to: Pt with word fields is a layout fact, not a type.
+        - Decided: a record whose field types have representations gets its induced representation, generated in elaboration from the declaration (like the %rtab entries), not written per record. PtW is the record with those fields at the representation type, and Pt ≃ PtW is built field-wise from the field equivalences (equivalently, transport along ap PtF (ua e) with Pt ≡ PtF Nat). #native's struct crossing and emitt's typedefs then read PtW, and rc and its helpers are deleted.
+        - Decided: Sched gains a value naming the definitions held neutral (the inlining control of §5.2), so each definition is transported at its own boundary with its calls held as calls; from (to x) → x cancels the conversions between transported definitions.
+      - (2) Closure conversion and lifting (`lift`, `lib/fo.cub`): a λ as a code pointer plus its captured values is a representation of a Π type. `represent` takes a data type on the left (`lib/prim.cub` states the Fin-function representation as a library equivalence for the same reason). Missing: `represent` over a Π type.
+      - (3) `lib/emitu.cub`'s `use-ty` (a parameter typed by its first use).
+        - Declared types are read first wherever they exist: `emit-prog-d`/`emit-lib-d`, from `%gty` of the store's definitions.
+        - The entry, hand-built programs and lifted closures and recursions have no declared type. The codes they are lowered from carry none either: Code's `clam`/`clet` have no domain, because the quote η-expands at a known Π domain and drops it. The first-order binders (`flam`, `flet`, `floop`, a lifted definition's parameters) carry none.
+        - Decided: typed binders end to end, built in this order, each step green on run.py (boxed, unboxed) and the fo line: Code's `clam`/`clet` carry the domain; the quote emits it at each Π; match handles a term-side `cann`; the form's binders (`flam`, `flet`, `floop`, lifted parameters) carry an FT; `lift` keeps the captured variables' types; emitu reads the types, and `use-ty` and `infer-u` are deleted.
     Essential. (The discipline, usage and the criterion, once listed here as not yet applied,
     are applied: see the status above.)
 16. **Status (2026-11-06):** milestones 1 and 2 built (`lib/emitc.cub`, `lib/emitu.cub` with recursive data as typed pointers `a8d9028c`, 22 harness programs under both printers); the JIT is `#native` through gcc (`e9b9c983`); `fthunk` in both printers as a thunk cell computed once by `force()` (`7a2c96c4`); 18.7's own encoder `lib/emitx86.cub` for the word-only fragment, run from executable memory by `experiments/fo/x86main.c` (`54be3050`, `X86=1 run.py`: six programs, fib 90 among them). Spec as written: C back end (gcc/clang, CompCert); JIT. Essential. Milestone 1 as a library:
