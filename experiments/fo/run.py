@@ -97,6 +97,21 @@ f32a w = u32toWord (u32add (f32bits (indexF32 4 (updateF32 4 (updateF32 4 (anew3
 lam-body f = case f of flam b → b; _ → f
 sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → f32a w))
 defs = case lift #2 (lam-body (inplace sp)) of lifted t2 ds k → lcons (#0 , (#0 , fcall #1 (lcons (flit #5) lnil))) (lcons (#1 , (#1 , t2)) ds)''', "1065353221", "st32i("),
+ # UInt32 arithmetic wraps at 2^32 (the machine's u32 operations; until 2026-11-09 the lowering used the
+ # word ones, so (2^32 - 1) + 3 carried to 2^32 + 2, 3 - 5 truncated to 0, 2^16 * 2^16 was 2^32 and
+ # u32 (w + 2^32) kept the high bit): 2 + (2^32 - 2) + 0 + 3 at w = 3
+ 'u32wrap': ("""u32o : Word → Word
+u32o w = wadd (wadd (u32toWord (u32add (u32 #4294967295) (u32 w))) (u32toWord (u32sub (u32 w) (u32 #5))))
+              (wadd (u32toWord (u32mul (u32 (wadd w #65533)) (u32 #65536))) (u32toWord (u32 (wadd w #4294967296))))
+lam-body f = case f of flam b → b; _ → f
+sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → u32o w))
+defs = case lift #2 (lam-body sp) of lifted t2 ds k → lcons (#0 , (#0 , fcall #1 (lcons (flit #3) lnil))) (lcons (#1 , (#1 , t2)) ds)""", "4294967299"),
+ # u32 comparisons are on the 32 bits: 2^32 + 1 as a UInt32 is 1, not above 5 (10 + 0 at w = 2^32 + 1)
+ 'u32cmp': ("""u32c : Word → Word
+u32c w = wadd (if u32eq (u32 w) (u32 #1) then #10 else #0) (if u32lt (u32 #5) (u32 w) then #100 else #0)
+lam-body f = case f of flam b → b; _ → f
+sp = specialize-r (Word → Word) lnil (code (λ (w : Word) → u32c w))
+defs = case lift #2 (lam-body sp) of lifted t2 ds k → lcons (#0 , (#0 , fcall #1 (lcons (flit #4294967297) lnil))) (lcons (#1 , (#1 , t2)) ds)""", "10"),
  # signatures from the declared types (item 14, lib/emitu.cub's emit-prog-d): selw's second
  # parameter is only returned and keep5's only passed through, so by use they are boxed (V *, the
  # record boxed and unboxed around the call); from their checked types they are uint64_t and the
@@ -532,6 +547,9 @@ X86_PROGS = {
  # word subtraction is the source's truncating one: 3 - x at x = 5 is 0, not 2^64 - 2 (every printer
  # emitted a wrapping subtraction until 2026-11-08)
  'tsub': ("""defs = lcons (#0 , (#1 , fprim P-add (lcons (fprim P-sub (lcons (flit #3) (lcons (fvar #0) lnil))) (lcons (flit #7) lnil)))) lnil""", [5], "7"),
+ # max on words (P-max: cmp then cmovb), specialized from the source: max 9 (9 + 1) = 10
+ 'maxw': ("""lam-body6 f = case f of flam b → b; _ → f
+defs = lcons (#0 , (#1 , lam-body6 (specialize (Word → Word) lnil (code (λ (a : Word) → %wmax a (%wadd a #1)))))) lnil""", [9], "10"),
  'plusw': ("""defs = lcons (#0 , (#0 , fcall #1 (lcons (flit #40) (lcons (flit #2) lnil)))) (lcons (#1 , (#2 , fo-plus)) lnil)""", [], "42"),
  # the arguments come from the command line through the stub (rdi the arena, then the words)
  'plusw-args': ("""defs = lcons (#0 , (#2 , fo-plus)) lnil""", [1000, 234], "1234"),

@@ -105,6 +105,19 @@ P-store32-ip = #31
 -- printers' n32/n33 are the identity on the word of bits
 P-f64bits = #32
 P-f64ofbits = #33
+-- word maximum (the machine's %wmax, code cwop 3): one primitive, printed as one expression
+P-max = #34
+-- UInt32 arithmetic (B12's primitive type, the machine's %u32add … %u32lt): a UInt32 is held as the
+-- word of its 32 bits, and each operation is the machine's, wrapping at 2^32 (until 2026-11-09 they
+-- were lowered to the word operations: u32add past 2^32 carried, u32sub truncated at 0); u32ofw
+-- keeps the low 32 bits, wofu32 reads the 32 bits as a word
+P-u32add = #35
+P-u32sub = #36
+P-u32mul = #37
+P-u32eq = #38
+P-u32lt = #39
+P-u32ofw = #40
+P-wofu32 = #41
 -- (as booleans by case: orf is defined below)
 store-ip p = if %weq p P-store64-ip then true else %weq p P-store32-ip
 store-any p = if store-ip p then true else (if %weq p P-store64 then true else %weq p P-store32)
@@ -151,6 +164,20 @@ prim-bytes p args =
               lnil → (if %weq p P-load64 then vi64 (%load64 (bof a) (wof b)) else vw (%wofu32 (%load32 (bof a) (wof b))))
               lcons c r3 → (if %weq p P-store64 then vbytes (%store64 (bof a) (wof b) (iof c)) else vbytes (%store32 (bof a) (wof b) (%u32ofw (wof c))))))
     lnil → vw #0
+-- the word-valued primitives from P-max on: the machine's operation on the words (a UInt32 by its bits)
+prim-wd p args =
+  case args of
+    lcons a r →
+      (case r of
+         lnil → (if %weq p P-u32ofw then vw (%wofu32 (%u32ofw (wof a))) else vw (wof a))
+         lcons b r2 →
+           if %weq p P-max then vw (%wmax (wof a) (wof b))
+           else if %weq p P-u32add then vw (%wofu32 (%u32add (%u32ofw (wof a)) (%u32ofw (wof b))))
+           else if %weq p P-u32sub then vw (%wofu32 (%u32sub (%u32ofw (wof a)) (%u32ofw (wof b))))
+           else if %weq p P-u32mul then vw (%wofu32 (%u32mul (%u32ofw (wof a)) (%u32ofw (wof b))))
+           else if %weq p P-u32eq then vw (bw (%u32eq (%u32ofw (wof a)) (%u32ofw (wof b))))
+           else vw (bw (%u32lt (%u32ofw (wof a)) (%u32ofw (wof b)))))
+    lnil → vw #0
 prim-ap p a b =
   if %weq p P-add then %wadd a b
   else if %weq p P-sub then %wsub a b
@@ -189,6 +216,7 @@ eval-fo G e t =
     fcall g args → eval-fo G (push-all (eval-list G e args) lnil) (G g)
     fprim p args →
       if store-ip p then prim-bytes (plain-p p) (eval-list G e args) else
+      if %wlt #33 p then prim-wd p (eval-list G e args) else
       if %wlt #13 p then prim-num p (eval-list G e args) else
       if %wlt #7 p then prim-bytes p (eval-list G e args) else
       (case eval-list G e args of

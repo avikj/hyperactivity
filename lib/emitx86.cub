@@ -122,7 +122,10 @@ op-x86 p =
   else if %weq p P-mul then i-imul-rax-rcx
   else if %weq p P-eq then cat3 i-cmp-rax-rcx i-sete-al i-movzx-eax-al
   else if %weq p P-lt then cat3 i-cmp-rax-rcx i-setb-al i-movzx-eax-al
+  else if %weq p P-max then lapp i-cmp-rax-rcx i-cmovb-rax-rcx
   else i-ud2
+-- cmovb rax, rcx after cmp rax, rcx: rcx when rax < rcx (word maximum, P-max)
+i-cmovb-rax-rcx = cat4 (xb1 #72) (xb1 #15) (xb1 #66) (xb1 #193)
 -- the arguments pushed in order, popped into their registers (the last first), the stack aligned
 -- at the call (an odd depth pads one slot: the depth at the call, the arguments popped by then; until
 -- 2026-11-08 it read d + n, which misaligned a call of an odd count at an even depth), the call
@@ -199,7 +202,7 @@ ok-x t =
   case t of
     fvar n → true
     flit w → true
-    fprim p args → andx (%wlt p #5) (andx (%weq (lst-len args) #2) (ok-list args))
+    fprim p args → andx (orb (%wlt p #5) (%weq p P-max)) (andx (%weq (lst-len args) #2) (ok-list args))
     flet a b → andx (ok-x a) (ok-x b)
     fif c a b → andx (ok-x c) (andx (ok-x a) (ok-x b))
     fcall g args → andx (%wlt (lst-len args) #7) (ok-list args)
