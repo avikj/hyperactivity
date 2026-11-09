@@ -198,6 +198,7 @@ raw-field tb k f = case field-rep tb k of some e → fcall (rep-from e) (lcons f
 field-rep tb k = if %weq (fst k) #0 then none else if %weq (fst k) #3 then none else rep-lookup tb (snd k)
 -- the shape's kinds with the type itself named (kind 1 carries d)
 shape-of d c = lmap-k d (cshape d c)
+kind-at ks k = case ks of lnil → (#3 , #0); lcons x r → if %weq k #0 then x else kind-at r (%wsub k #1)
 lmap-k d ks = case ks of lnil → lnil; lcons k r → lcons (if %weq (fst k) #1 then (#1 , d) else k) (lmap-k d r)
 -- a representation that is itself a data type (represent Box by Pt): its to and from are not left
 -- as written but consumed like the rest of the program with Box itself not represented (tb-del),
@@ -238,7 +239,15 @@ rc tb t =
     fthunk a → fthunk (rc tb a)
     fforce a → fforce (rc tb a)
     fassume fact b → fassume fact (rc tb b)
-    fupd u dd x c k v → fupd u dd (rc tb x) c k (rc tb v)
+    -- an update of a represented type's value (reuse-cons made it from a constructor rebuilt from
+    -- a case's fields, before the representation is consumed): the value is its representation in
+    -- the program, so the update is of from of it, and to of the result, as a constructor is (until
+    -- 2026-11-09 the update was left on the representation's value, which the typed printer refuses:
+    -- RBox's update of an RPt; it compiled before only because the two records have one layout)
+    fupd u dd x c k v →
+      (case rep-lookup tb dd of
+         some e → fcall (rep-to e) (lcons (fupd u dd (fcall (rep-from e) (lcons (rc tb x) lnil)) c k (if rcv-is dd then rc tb v else raw-field tb (kind-at (shape-of dd c) k) (rc tb v))) lnil)
+         none → fupd u dd (rc tb x) c k (rc tb v))
     _ → t
 rc-list tb l = case l of lnil → lnil; lcons x xs → lcons (rc tb x) (rc-list tb xs)
 -- a binder's type where the representations are consumed: a value of a represented type is its
