@@ -69,6 +69,9 @@ code-same a b =
     csigma x y → (case b of csigma x2 y2 → andb (code-same x x2) (code-same y y2); _ → false)
     cuniv l → (case b of cuniv l2 → code-same l l2; _ → false)
     cword → (case b of cword → true; _ → false)
+    cpty k n → (case b of cpty k2 n2 → andb (%weq k k2) (code-same n n2); _ → false)
+    cplit k x → (case b of cplit k2 x2 → andb (%weq k k2) (%weq x x2); _ → false)
+    cprim k as → (case b of cprim k2 as2 → andb (%weq k k2) (list-same as as2); _ → false)
     clzero → (case b of clzero → true; _ → false)
     clsuc l → (case b of clsuc l2 → code-same l l2; _ → false)
     clmax x y → (case b of clmax x2 y2 → andb (code-same x x2) (code-same y y2); _ → false)
@@ -111,6 +114,15 @@ match k b p t s =
     cwsucc x → (case t of cwsucc y → match k b x y s; _ → none)
     cwop o x y → (case t of cwop o2 x2 y2 → if %weq o o2 then (case match k b x x2 s of some s2 → match k b y y2 s2; none → none) else none; _ → none)
     cann a T → match k b a t s
+    -- the word type, primitive types and literals, stuck primitives, Π and Σ (a motive or a field's
+    -- type in a normal form: until 2026-11-09 a pattern holding cword never matched, so the
+    -- representation laws, whose sides mention Word, applied nowhere)
+    cword → (case t of cword → some s; _ → none)
+    cpty q n → (case t of cpty q2 n2 → if %weq q q2 then match k b n n2 s else none; _ → none)
+    cplit q x → (case t of cplit q2 x2 → if andb (%weq q q2) (%weq x x2) then some s else none; _ → none)
+    cprim q as → (case t of cprim q2 as2 → if %weq q q2 then match-list k b as as2 s else none; _ → none)
+    cpi m x y → (case t of cpi m2 x2 y2 → if %weq m m2 then (case match k b x x2 s of some s2 → match k (%wsucc b) y y2 s2; none → none) else none; _ → none)
+    csigma x y → (case t of csigma x2 y2 → (case match k b x x2 s of some s2 → match k (%wsucc b) y y2 s2; none → none); _ → none)
     _ → none
 match-list k b ps ts s =
   case ps of
@@ -137,6 +149,10 @@ mentions-lt d b t =
     cwop o x y → orb (mentions-lt d b x) (mentions-lt d b y)
     cwelim w z s → orb (mentions-lt d b w) (orb (mentions-lt d b z) (mentions-lt d b s))
     cann a T → mentions-lt d b a
+    cpty q n → mentions-lt d b n
+    cprim q as → mentions-any d b as
+    cpi m x y → orb (mentions-lt d b x) (mentions-lt (%wsucc d) b y)
+    csigma x y → orb (mentions-lt d b x) (mentions-lt (%wsucc d) b y)
     _ → false
 mentions-any d b l = case l of lnil → false; lcons x xs → orb (mentions-lt d b x) (mentions-any d b xs)
 orb a b = case a of true → true; false → b
@@ -162,6 +178,10 @@ unshift-at d b c =
     cwop o x y → cwop o (unshift-at d b x) (unshift-at d b y)
     cwelim w z s → cwelim (unshift-at d b w) (unshift-at d b z) (unshift-at d b s)
     cann a T → cann (unshift-at d b a) (unshift-at d b T)
+    cpty q n → cpty q (unshift-at d b n)
+    cprim q as → cprim q (unshift-list d b as)
+    cpi m x y → cpi m (unshift-at d b x) (unshift-at (%wsucc d) b y)
+    csigma x y → csigma (unshift-at d b x) (unshift-at (%wsucc d) b y)
     _ → c
 unshift-list d b l = case l of lnil → lnil; lcons x xs → lcons (unshift-at d b x) (unshift-list d b xs)
 -- ---------------------------------------------------------------- instantiation
@@ -188,6 +208,10 @@ inst k b s p =
     cwop o x y → cwop o (inst k b s x) (inst k b s y)
     cwelim w z st → cwelim (inst k b s w) (inst k b s z) (inst k b s st)
     cann a T → cann (inst k b s a) (inst k b s T)
+    cpty q n → cpty q (inst k b s n)
+    cprim q as → cprim q (inst-list k b s as)
+    cpi m x y → cpi m (inst k b s x) (inst k (%wsucc b) s y)
+    csigma x y → csigma (inst k b s x) (inst k (%wsucc b) s y)
     _ → p
 inst-list k b s l = case l of lnil → lnil; lcons x xs → lcons (inst k b s x) (inst-list k b s xs)
 -- ---------------------------------------------------------------- rules and positions
@@ -220,6 +244,7 @@ rewrite-first r t =
          cwsucc a → omap cwsucc (rewrite-first r a)
          cwelim w z st → (case rewrite-first r w of some w2 → some (cwelim w2 z st); none → (case rewrite-first r z of some z2 → some (cwelim w z2 st); none → omap (cwelim w z) (rewrite-first r st)))
          cwop o a b → (case rewrite-first r a of some a2 → some (cwop o a2 b); none → omap (cwop o a) (rewrite-first r b))
+         cprim q as → omap (cprim q) (rewrite-first-list r as)
          _ → none)
 rewrite-first-list r l =
   case l of

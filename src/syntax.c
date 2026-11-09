@@ -1440,6 +1440,7 @@ static void p_decl(void) {
         bool have[4] = { false, false, false, false }; static const char *LAWS[4] = { "to", "from", "to-from", "from-to" };
         const char *qto = NULL, *qfrom = NULL;
         Node *ropl[64]; int nrop = 0;   /* (operation native) per op line: the back end's table (repops) */
+        char *qtf = NULL, *qft = NULL; char *qby[64]; int nby = 0;   /* the laws, for the specializer (replaws) */
         if (!x_typed) x_err("represent needs the checker (the laws are checked):", tn);
         int fail0 = failures, pass0 = passes;   /* under #fail: some definition of the block is rejected */
         if (x_is(P0(), "where")) {
@@ -1460,9 +1461,11 @@ static void p_decl(void) {
                     if (qfrom) { law = x_rename(law, "from", qfrom); prf = x_rename(prf, "from", qfrom); }
                     char *qb = malloc(strlen(qn) + 8); sprintf(qb, "%s·by", qn);
                     tsig.np = 0; x_checked(qb, law, prf, true, 0, 0);
+                    if (nby < 64) qby[nby++] = qb;
                 } else {
                     for (int k = 0; k < 4; k++) if (!strcmp(fn->s, LAWS[k])) have[k] = true;
                     if (!strcmp(fn->s, "to")) qto = qn; else if (!strcmp(fn->s, "from")) qfrom = qn;
+                    else if (!strcmp(fn->s, "to-from")) qtf = qn; else if (!strcmp(fn->s, "from-to")) qft = qn;
                 }
                 if (P0()->k == X_VS || P0()->k == X_SEMI) NX(); else if (P0()->k != X_VC) x_err("expected a new definition of the representation, found", P0());
             }
@@ -1479,6 +1482,9 @@ static void p_decl(void) {
             Node *ro = nlist(4 + nrop); ro->it[0] = nsym("repops"); ro->it[1] = nsym(T); ro->it[2] = nsym(qto); ro->it[3] = nsym(qfrom);
             for (int q = 0; q < nrop; q++) ro->it[4 + q] = ropl[q];
             x_top(ro);
+            Node *rl = nlist(4 + nby); rl->it[0] = nsym("replaws"); rl->it[1] = nsym(T); rl->it[2] = nsym(qtf); rl->it[3] = nsym(qft);
+            for (int q = 0; q < nby; q++) rl->it[4 + q] = nsym(qby[q]);
+            x_top(rl);
         }
         decl_end(); return;
     }

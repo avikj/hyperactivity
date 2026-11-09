@@ -308,6 +308,13 @@ x-mentions k c =
     cwsucc a → x-mentions k a
     cpty j n → x-mentions k n
     _ → false
+-- a Nat numeral in a code as the word it represents (Nat by Word, lib/prim.cub), read by the image
+-- where a word is written
+nat-rep = case %rtab nat-d of some R → true; none → false
+nat-code c =
+  case c of
+    ccon d k fs ds → (if %weq d nat-d then (if %weq k #0 then some #0 else (case fs of lcons x r → omap (λ n → %wsucc n) (nat-code x); lnil → none)) else none)
+    _ → none
 word-code c = case c of cwlit w → xs (dec w); _ → (case nat-code c of some w → xs (dec w); none → xno x-r-dep)
 -- the head of a code, for a report
 code-head c =

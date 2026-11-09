@@ -246,7 +246,7 @@ static bool node_eq(Node *a, Node *b) {
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "%delay", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
-    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
+    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%rlaws", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
 /* the keywords, in an open-addressed table (asked of every symbol the compiler walks) */
@@ -2492,7 +2492,7 @@ static Syn *compile(Node *t) {
             Syn *s = compile_n(S_PRIM, t, 1, PR[q].n); s->x = (uint32_t)PR[q].kind; return s;
         }
         if (IS(h, "%box")) { if (t->n != 2) die("(%box v)", NULL); Syn *s = syn(S_BOX, 1); s->k[0] = compile(t->it[1]); return s; }
-        static const char *TBN[TB_N] = { "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops" };
+        static const char *TBN[TB_N] = { "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%rlaws" };
         for (int q = 0; q < TB_N; q++) if (!strcmp(h, TBN[q])) {
             if (t->n != 2) die("wrong number of operands in", h);
             Syn *s = syn(S_GLOBTAB, 1); s->x = (uint32_t)q; s->k[0] = compile(t->it[1]); return s;
@@ -5058,6 +5058,24 @@ static void toplevel_in(Node *f) {
         toplevel(dd);
         table_set(TB_ROPS, ck, global_lookup(nm));
         rep_conv_set(ck, gto, gfr);
+    } else if (!strcmp(h, "replaws")) {
+        /* (replaws T to-from from-to opby …): the representation's laws as data for the specializer
+         * (item 15, 2026-11-09), (%rlaws d) = some (to-from , (from-to , [op·f·by …])), the checked
+         * indices of the paths it rewrites along when it consumes the representation in the term */
+        if (f->n < 4 || f->it[1]->list) die("(replaws T to-from from-to opby ...)", NULL);
+        int d = data_lookup(f->it[1]->s);
+        int ck = d < 0 ? -1 : chk_index(d);
+        if (ck < 0) die("replaws: not a checked data type:", f->it[1]->s);
+        if (table_global(TB_RLAWS, ck) >= 0) return;
+        long gtf = checked_index(f->it[2]->s), gft = checked_index(f->it[3]->s);
+        if (gtf < 0 || gft < 0) die("replaws: the laws are not checked:", f->it[2]->s);
+        Node *ls = nsym("lnil");
+        for (int q = f->n - 1; q >= 4; q--) { long a = f->it[q]->list ? -1 : checked_index(f->it[q]->s); if (a >= 0) ls = nl3("lcons", word(a), ls); }
+        static int nrl;
+        char nm[64]; snprintf(nm, sizeof nm, "%%rlaws%d", nrl++);
+        Node *dd = nlist(3); dd->it[0] = nsym("def"); dd->it[1] = nsym(nm); dd->it[2] = nl3("pair", word(gtf), nl3("pair", word(gft), ls));
+        toplevel(dd);
+        table_set(TB_RLAWS, ck, global_lookup(nm));
     } else if (!strcmp(h, "run")) {
         /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c, D26) */
         if (f->n != 2) die("(run step)", NULL);

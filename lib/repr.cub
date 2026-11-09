@@ -1,77 +1,84 @@
--- lib/repr.cub — the back end consuming the representations (plan B12/B14: the table %rtab and
--- the primitive definitions of lib/prim.cub). Loaded after lib/specialize.cub and lib/prim.cub.
--- consume-reps t: a first-order program after lower, with (1) calls of the word operations of
--- lib/std.cub (plusw, wadd, …, and plus on Nat under its representation) replaced by the
--- native primitives, (2) closed constructor trees of a type represented by Word (%rtab)
--- replaced by the word they represent, and (3) Nat numerals in assumed facts read as words.
--- The byte layer and the fixed-width and floating-point primitives no longer pass here: a stuck
--- primitive quotes as cprim (lib/code.cub prim-apply) and lower.cub's lower-prim is their path.
-consume-call g as = case as of lnil → (case unfold g of some cd → (case cd of cwlit n → flit n; _ → fcall g as); none → fcall g as); _ → fcall g as
--- the word operations of lib/std.cub are the native ones by definition (plusw≡wadd, ...), and
--- plus on Nat is plusw by its representation's op line
+-- lib/repr.cub — representations consumed by the specializer (plan B12/B14, item 15): the table %rtab,
+-- the conversions %rops and the laws %rlaws of each declared representation (lib/prim.cub's). Loaded
+-- after lib/specialize.cub and lib/prim.cub.
+-- specialize-r T rules c: the program transported along the representations of the data types at
+-- its boundary — p_R = to ∘ p ∘ from at each parameter and result of T whose type d is represented
+-- (T[d := R]) — normalized by the machine and rewritten along the representations' own paths: the
+-- laws to-from and from-to (oriented: from (to x) → x), and each op line's law read right to left
+-- (plus a b → from (wadd (to a) (to b))), which, with to-from, leaves the native operation where the
+-- program had the clean one. Nothing is consumed after lowering: lower sees a normal form in which
+-- the represented boundary no longer appears, and every step was a path of the store.
+-- (Until 2026-11-09 the representations were consumed by an untyped pass over the first-order form,
+-- consume-reps: word operations replaced by name, closed Nat trees counted into words, facts' numerals
+-- read as words.)
+-- the rules of d's representation: its two laws, and its op lines read from right to left
+rep-rules d =
+  case %rlaws d of
+    some t → lapp2 (view-of (lcons (fst t) (lcons (fst (snd t)) lnil))) (rep-op-rules (snd (snd t)))
+    none → lnil
+rep-op-rules gs = case gs of lnil → lnil; lcons g r → (case rule-of-sym g of some ru → lcons ru (rep-op-rules r); none → rep-op-rules r)
+rep-rules-of ds = case ds of lnil → lnil; lcons d r → lapp2 (rep-rules d) (rep-rules-of r)
+-- the boundary of T (a type code, a non-dependent Π chain): (the represented data types met , (the
+-- transported type's code , the program's code transported)), the parameters converted by from and
+-- the result by to; okd d decides which represented types are consumed
+rep-of-code okd A = case A of cdata d ps → rep-of-d okd d A; _ → none
+rep-of-d okd d A = if okd d then rep-of-tab d A (%rtab d) (%rops d) else none
+rep-of-tab d A rt ro = case rt of none → none; some R → (case ro of none → none; some t → some (d , (fromopt (quote-ty R) A , t)))
+-- the arguments of the transported program: parameter i of n (from the outside) is cvar (n − 1 − i),
+-- converted by from when its type is represented
+tr-args okd As n i =
+  case As of
+    lnil → lnil
+    lcons A r → lcons (case rep-of-code okd A of some e → capp (cglob (rep-e-from e)) (cvar (%wsub (%wsub n #1) i)); none → cvar (%wsub (%wsub n #1) i)) (tr-args okd r n (%wsucc i))
+pi-chain T = case T of cpi m A B → (let tr = pi-chain (unshift #1 B) in (lcons (m , A) (fst tr) , snd tr)); _ → (lnil , T)
+tr-ty okd ps B = case ps of lnil → (case rep-of-code okd B of some e → fst (snd e); none → B); lcons p r → cpi (fst p) (case rep-of-code okd (snd p) of some e → fst (snd e); none → snd p) (shift-code #0 #1 (tr-ty okd r B))
+tr-ds okd ps B = lapp2 (lmap-opt (λ p → omap (λ e → fst e) (rep-of-code okd (snd p))) ps) (case rep-of-code okd B of some e → lcons (fst e) lnil; none → lnil)
+lmap-opt f l = case l of lnil → lnil; lcons x r → (case f x of some y → lcons y (lmap-opt f r); none → lmap-opt f r)
+lam-n n b = if %weq n #0 then b else clam (lam-n (%wsub n #1) b)
+app-list f as = case as of lnil → f; lcons a r → app-list (capp f a) r
+transport-rep okd T c =
+  let ch = pi-chain (fromopt (quote-ty T) cword)
+      ps = fst ch
+      B = snd ch
+      n = lst-count ps
+      As = lmap-snd ps
+      body = app-list c (tr-args okd As n #0)
+      out = (case rep-of-code okd B of some e → capp (cglob (rep-e-to e)) body; none → body)
+  in (tr-ds okd ps B , (eval-g lnil (tr-ty okd ps B) , lam-n n out))
+rep-e-to e = fst (snd (snd e))
+rep-e-from e = fst (snd (snd (snd e)))
+lmap-snd l = case l of lnil → lnil; lcons p r → lcons (snd p) (lmap-snd r)
+all-reps d = true
+-- specialize, with the representations consumed in the term; with a schedule, only those it names
+-- (every declared one when it names none)
+specialize-r T rules c = specialize-r-of all-reps T rules c
+specialize-r-of okd T rules c =
+  let tr = transport-rep okd T c
+  in specialize (fst (snd tr)) (lapp2 rules (rep-rules-of (rep-all-ds okd (fst tr)))) (snd (snd tr))
+-- the laws of every representation the boundary names, and of Nat's (a numeral's representation,
+-- met inside any program over the byte layer) when the schedule consumes it
+rep-all-ds okd ds = if okd nat-d then (if lmem-l nat-d ds then ds else lcons nat-d ds) else ds
+specialize-rs sch T rules c =
+  let okd = sched-okd (sched-reps sch)
+      tr = transport-rep okd T c
+  in specialize-s sch (fst (snd tr)) (lapp2 rules (rep-rules-of (rep-all-ds okd (fst tr)))) (snd (snd tr))
+sched-okd reps d = case reps of lnil → true; _ → lmem-l d reps
+nat-d = didx (code Nat)
+-- the word operations of lib/std.cub, by global (program-rep's word-native, below)
 g-plusw = gidx (code plusw)
 g-wadd = gidx (code wadd)
 g-wsub = gidx (code wsub)
 g-weq = gidx (code weq)
 g-wlt = gidx (code wlt)
-g-plus = gidx (code plus)
-nat-d = didx (code Nat)
-nat-rep = case %rtab nat-d of some R → true; none → false
--- a closed Nat tree as a word (the representation's `to`, fromNat, by counting)
-nat-lit t =
-  case t of
-    fcon d c fs → if %weq d nat-d then (if %weq c #0 then some #0 else (case fs of lcons x r → omap (λ n → %wsucc n) (nat-lit x); _ → none)) else none
-    _ → none
--- a Nat numeral in a code (a fact's offset or length) as the word it represents
-nat-code c =
-  case c of
-    ccon d k fs ds → (if %weq d nat-d then (if %weq k #0 then some #0 else (case fs of lcons x r → omap (λ n → %wsucc n) (nat-code x); lnil → none)) else none)
-    _ → none
-nat-lits c =
-  case c of
-    ccon d k fs ds → (case nat-code c of some n → cwlit n; none → c)
-    cwop o a b → cwop o (nat-lits a) (nat-lits b)
-    cwsucc a → cwsucc (nat-lits a)
-    _ → c
-consume-reps t =
-  case t of
-    fcall g args →
-      let as = consume-list args
-      in if %weq g g-plusw then fprim P-add as
-         else if %weq g g-wadd then fprim P-add as
-         else if %weq g g-wsub then fprim P-sub as
-         else if %weq g g-weq then fprim P-eq as
-         else if %weq g g-wlt then fprim P-lt as
-         else if andb nat-rep (%weq g g-plus) then fprim P-add as
-         else consume-call g as
-    fcon d c fs → (case (if nat-rep then nat-lit t else none) of some n → flit n; none → fcon d c (consume-list fs))
-    fswitch x alts → fswitch (consume-reps x) (consume-alts alts)
-    frec d x alts → frec d (consume-reps x) (consume-ralts alts)
-    fproj d c k x → fproj d c k (consume-reps x)
-    fprim p args → fprim p (consume-list args)
-    flet a b → flet (consume-reps a) (consume-reps b)
-    fif c a b → fif (consume-reps c) (consume-reps a) (consume-reps b)
-    floop init body → floop (consume-list init) (consume-reps body)
-    fclos g env → fclos g (consume-list env)
-    flam b → flam (consume-reps b)
-    fapply f args → fapply (consume-reps f) (consume-list args)
-    fthunk a → fthunk (consume-reps a)
-    fforce a → fforce (consume-reps a)
-    fassume fact b → fassume (if nat-rep then nat-lits fact else fact) (consume-reps b)
-    fupd u dd x c k v → fupd u dd (consume-reps x) c k (consume-reps v)
-    _ → t
-consume-list l = case l of lnil → lnil; lcons x xs → lcons (consume-reps x) (consume-list xs)
-consume-ralts l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , (fst (snd (snd a)) , consume-reps (snd (snd (snd a)))))) (consume-ralts r)
-consume-alts l = case l of lnil → lnil; lcons a r → lcons (fst a , (fst (snd a) , consume-reps (snd (snd a)))) (consume-alts r)
--- specialize, then consume: the pipeline with representations; with a schedule, only the
--- representations it names are consumed (every declared one when it names none)
-specialize-r T rules c = consume-reps (specialize T rules c)
-specialize-rs sch T rules c = consume-reps-of (sched-reps sch) (specialize-s sch T rules c)
-consume-reps-of reps t = case reps of lnil → consume-reps t; _ → (if lmem-l nat-d reps then consume-reps t else t)
--- a schedule naming Nat consumes its representation: the numerals are words; one naming
--- another type leaves the Nat constructor trees
-#same specialize-rs (sched #64 lnil (lcons nat-d lnil)) (Bool → Nat) lnil (code (λ (b : Bool) → if b then 5 else 7)) = flam (fif (fvar #0) (flit #5) (flit #7))
+-- a schedule naming Nat consumes its representation: a Nat result is a word; one naming another type
+-- leaves the Nat at the boundary (its numerals constructor trees)
+#same run-fo (fapply (specialize-rs (sched #64 lnil (lcons nat-d lnil)) (Bool → Nat) lnil (code (λ (b : Bool) → if b then 5 else 7))) (lcons (flit #0) lnil)) = #7
 #same (case specialize-rs (sched #64 lnil (lcons #0 lnil)) (Bool → Nat) lnil (code (λ (b : Bool) → if b then 5 else 7)) of flam b → (case b of fif c t e → (case t of fcon d k fs → true; _ → false); _ → false); _ → false) = true
+-- plus on Nat at the boundary: transported, its op line's law and to-from leave the machine's addition
+dbl-tr : Nat → Nat
+dbl-tr n = plus n n
+#same specialize-r (Nat → Nat) lnil (code (λ (n : Nat) → dbl-tr n)) = flam (fprim P-add (lcons (fvar #0) (lcons (fvar #0) lnil)))
+#same specialize-r (Nat → Nat → Nat) lnil (code (λ (a : Nat) (b : Nat) → plus (plus a b) a)) = flam (flam (fprim P-add (lcons (fprim P-add (lcons (fvar #1) (lcons (fvar #0) lnil))) (lcons (fvar #1) lnil))))
 -- ---------------------------------------------------------------- readings
 -- two loads at literal offsets from an unknown buffer, as the decoder's loop computes them: the
 -- Nat lengths and offsets (constructor trees in the code) become words, the bound proofs are gone,
@@ -278,7 +285,7 @@ var-map-ralts g d k l = case l of lnil → lnil; lcons a r → lcons (fst a , (f
 -- (%gcode: the calls it makes stay calls, so an operation with an op line is still a call to
 -- replace — normalization would have unfolded it), each consumed; the conversions to and from
 -- and what they call are left as written (they convert between the two forms); the word
--- operations of lib/std.cub become the native primitives (consume-call's table)
+-- operations of lib/std.cub become the native primitives (word-native)
 def-code g = case %gcode g of some c → some c; none → unfold g
 word-native g args =
   if isnil-l args then fcall g args

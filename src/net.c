@@ -3364,11 +3364,11 @@ static void interact(Cell *o, Cell *v) {
         if (vk != V_WORD || v->p) { fprintf(stderr, "%%gval/%%gty/%%dtab/%%dent: an index is a word\n"); exit(2); }
         o->a = v->a;
         long g = table_global((int)o->x, (long)o->a);
-        if (o->x == TB_REP || o->x == TB_ROPS) {
+        if (o->x == TB_REP || o->x == TB_ROPS || o->x == TB_RLAWS) {
             /* (%rtab d): some R, the data type's first representation, or none */
             need_cons();
             if (g < 0) link(con_build(C_NONE, NULL, NULL), o->port[1]);
-            else if (o->x == TB_ROPS) { Port gv = global_copy(g, NULL); Port f[1] = { gv }; link(con_build(C_SOME, f, NULL), o->port[1]); }
+            else if (o->x == TB_ROPS || o->x == TB_RLAWS) { Port gv = global_copy(g, NULL); Port f[1] = { gv }; link(con_build(C_SOME, f, NULL), o->port[1]); }
             else { Cell *r = cell(V_GLOBAL, 1); r->a = (uint64_t)g; Port f[1] = { P(r, 0) }; link(con_build(C_SOME, f, NULL), o->port[1]); }
             cell_free(o); cell_free(v);
             return;

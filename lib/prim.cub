@@ -470,9 +470,14 @@ toNat-plusw : (a b : Nat) → toNat (plusw (fromNat a) (fromNat b)) ≡ plus a b
 toNat-plusw a b = case b return (λ y → toNat (plusw (fromNat a) (fromNat y)) ≡ plus a y) of
     zero → concat (toNat-fromNat a) (sym (plus-zero a))
     suc k → concat (λ i → suc (rec k i)) (sym (plus-suc a k))
+-- the op line's native is wadd, whose body is the machine's addition, so the normal form of the
+-- transported program holds cwop 2 where it held plus (item 15, 2026-11-09: the law read right to left
+-- is a rule of the specializer; plusw, a recursion, would have needed plusw≡wadd as a further rule)
+toNat-wadd : (a b : Nat) → toNat (wadd (fromNat a) (fromNat b)) ≡ plus a b
+toNat-wadd a b = concat (λ i → toNat (plusw≡wadd (fromNat a) (fromNat b) (~ i))) (toNat-plusw a b)
 represent Nat by Word where
   to : Nat → Word = fromNat
   from : Word → Nat = toNat
   to-from : (w : Word) → to (from w) ≡ w = fromNat-toNat
   from-to : (n : Nat) → from (to n) ≡ n = toNat-fromNat
-  op plus : Word → Word → Word = plusw by (a b : Nat) → from (plusw (to a) (to b)) ≡ plus a b = toNat-plusw
+  op plus : Word → Word → Word = wadd by (a b : Nat) → from (wadd (to a) (to b)) ≡ plus a b = toNat-wadd
