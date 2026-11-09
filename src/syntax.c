@@ -1222,6 +1222,11 @@ static char *pr_flat(Node *t, int prec);
  * to-from and from-to are the fields' paths side by side (functoriality). It is declared as
  * `represent D by D·W`, so it is checked like a written one and goes into the same tables; a
  * representation declared for D later replaces it. Generated, never written per record. */
+static bool x_names(Node *t, const char *x) {
+    if (!t->list) return !strcmp(t->s, x);
+    for (int i = 0; i < t->n; i++) if (x_names(t->it[i], x)) return true;
+    return false;
+}
 static void x_rep_induce(Node *d) {
     if (!d->list || d->n < 2 || d->it[1]->list) return;   /* parameters or indices: none */
     const char *D = d->it[1]->s; int nc = d->n - 2;
@@ -1237,7 +1242,14 @@ static void x_rep_induce(Node *d) {
             if (bnd_mult(f->it[0]) != 2) return;
             Node *A = f->it[1];
             if (!A->list && !strcmp(A->s, D)) return;   /* recursive */
-            if (!A->list && xrep_of(A->s)) any = true;
+            if (!A->list && xrep_of(A->s)) {
+                any = true;
+                /* a later field's type naming this field (w-write's b : Bytes n): at the
+                 * representation the dependent type is not the same family, so no field-wise
+                 * equivalence; none induced */
+                for (int l = j + 1; l < k->n; l++)
+                    if (k->it[l]->list && k->it[l]->n == 2 && x_names(k->it[l]->it[1], f->it[0]->s)) return;
+            }
         }
     }
     if (!any) return;
