@@ -123,3 +123,112 @@ tso-of-mem c =
     mstore a v → cmd {lzero} {TsoIS} (t-store a v)
     mcas a o n → bind {lzero} {TsoIS} {Word} {Bool} (cmd {lzero} {TsoIS} (t-cmpxchg a o n)) (λ r → ret {lzero} {TsoIS} {Bool} (weq r o))
     mfence → cmd {lzero} {TsoIS} t-mfence
+-- ---------------------------------------------------------------- systems of threads
+-- a thread is a tree of instructions ending in the words it observed (its registers); thread
+-- ids are positions in the list, from #0. Written with the helpers below, continuation last
+TsoThread : Type
+TsoThread = Step TsoIS (List Word)
+ti-load : Word → (Word → TsoThread) → TsoThread
+ti-load a k = scmd (t-load a) k
+ti-store : Word → Word → TsoThread → TsoThread
+ti-store a v k = scmd (t-store a v) (λ u → k)
+ti-xchg : Word → Word → (Word → TsoThread) → TsoThread
+ti-xchg a v k = scmd (t-xchg a v) k
+ti-cmpxchg : Word → Word → Word → (Word → TsoThread) → TsoThread
+ti-cmpxchg a o n k = scmd (t-cmpxchg a o n) k
+ti-mfence : TsoThread → TsoThread
+ti-mfence k = scmd t-mfence (λ u → k)
+ti-ret : List Word → TsoThread
+ti-ret r = sdone r
+-- the scheduler's signature: one command, "which transition next"; the response is the choice
+-- (the next instruction of thread t, or a flush of t's buffer)
+data TsoCh = ch-go (t : Word) | ch-flush (t : Word)
+data TsoSchedC = sched-pick
+tso-sched-resp : TsoSchedC → Type
+tso-sched-resp c = TsoCh
+TsoSchedS : Sig
+TsoSchedS = (TsoSchedC , tso-sched-resp)
+-- thread t (counting from j) takes its next instruction; no answer when t has finished, is not
+-- a thread, or the instruction is not enabled
+tso-go : List TsoThread → Word → Word → TsoSt → Sum (List TsoThread × TsoSt) Unit
+tso-go nil t j s = inr unit
+tso-go (cons th r) t j s =
+  if weq t j
+  then (case th of
+          sdone a → inr unit
+          scmd i k → (case tso-world (tso-do t i) s of
+                        inl p → inl (cons (k (fst p)) r , snd p)
+                        inr s2 → inr unit))
+  else (case tso-go r t (%wsucc j) s of
+          inl p → inl (cons th (fst p) , snd p)
+          inr u → inr unit)
+-- one choice of the scheduler applied: the one transition function of the system
+tso-step : TsoCh → List TsoThread → TsoSt → Sum (List TsoThread × TsoSt) Unit
+tso-step ch ths s =
+  case ch of
+    ch-go t → tso-go ths t #0 s
+    ch-flush t → (case tso-world (tso-flush t) s of inl p → inl (ths , snd p); inr s2 → inr unit)
+-- every thread finished: their results, in thread order
+tso-results : List TsoThread → Sum (List Word) Unit
+tso-results nil = inl nil
+tso-results (cons th r) =
+  (case th of
+     sdone a → (case tso-results r of inl x → inl (app-w a x); inr u → inr unit)
+     scmd i k → inr unit)
+-- the buffers of the threads (ids from j) are empty
+tso-quiet : List TsoThread → Word → (Word → List TsoB) → Bool
+tso-quiet nil j bf = true
+tso-quiet (cons th r) j bf = if tso-empty (bf j) then tso-quiet r (%wsucc j) bf else false
+-- the system is finished when every thread has and every buffer is empty
+tso-final : List TsoThread → TsoSt → Sum (List Word) Unit
+tso-final ths s = if tso-quiet ths #0 (ts-buf s) then tso-results ths else inr unit
+-- how a schedule ends: finished with the threads' results; blocked (the scheduler chose a
+-- transition that is not enabled: not a schedule of the machine); or the bound ran out
+data TsoEnd = tso-finished (out : List Word) (s : TsoSt) | tso-blocked | tso-nofuel (s : TsoSt)
+-- the system as a process over the scheduler's signature, in tree form: at most n transitions
+tso-sys : Nat → List TsoThread → TsoSt → Step TsoSchedS TsoEnd
+tso-sys zero ths s =
+  (case tso-final ths s of
+     inl out → sdone (tso-finished out s)
+     inr u → sdone (tso-nofuel s))
+tso-sys (suc n) ths s =
+  (case tso-final ths s of
+     inl out → sdone (tso-finished out s)
+     inr u → scmd sched-pick (λ ch →
+               case tso-step ch ths s of
+                 inl p → tso-sys n (fst p) (snd p)
+                 inr u2 → sdone tso-blocked))
+-- ---------------------------------------------------------------- every schedule
+-- the choices the scheduler has for the threads (ids from j)
+tso-choices : List TsoThread → Word → List TsoCh
+tso-choices nil j = nil
+tso-choices (cons th r) j = cons (ch-go j) (cons (ch-flush j) (tso-choices r (%wsucc j)))
+tso-over : {R : Type} → List TsoCh → (TsoCh → R → R) → R → R
+tso-over nil f acc = acc
+tso-over (cons ch r) f acc = tso-over r f (f ch acc)
+-- the fold of the tree over every response in chs at every command: every schedule's end
+tso-fold : {R : Type} → List TsoCh → (TsoEnd → R → R) → Step TsoSchedS TsoEnd → R → R
+tso-fold chs f (sdone e) acc = f e acc
+tso-fold chs f (scmd c k) acc = tso-over chs (λ ch a → tso-fold chs f (k ch) a) acc
+-- a set of outcomes: a list of results, sorted and without repeats
+tso-weq-l : List Word → List Word → Bool
+tso-weq-l nil ys = (case ys of nil → true; cons y r → false)
+tso-weq-l (cons x xs) ys = (case ys of nil → false; cons y r → if weq x y then tso-weq-l xs r else false)
+tso-wlt-l : List Word → List Word → Bool
+tso-wlt-l nil ys = (case ys of nil → false; cons y r → true)
+tso-wlt-l (cons x xs) ys = (case ys of nil → false; cons y r → if wlt x y then true else if weq x y then tso-wlt-l xs r else false)
+tso-ins : List Word → List (List Word) → List (List Word)
+tso-ins x nil = cons x nil
+tso-ins x (cons y r) = if tso-weq-l x y then cons y r else if tso-wlt-l x y then cons x (cons y r) else cons y (tso-ins x r)
+-- what the enumeration reports: the set of results of finished schedules, how many schedules
+-- finished, and how many ran out of the bound (when that is #0 the enumeration is of every
+-- schedule of the system, not of a prefix)
+data TsoSum = tso-sum (outs : List (List Word)) (fin : Word) (cut : Word)
+tso-tally : TsoEnd → TsoSum → TsoSum
+tso-tally e (tso-sum os f c) =
+  case e of
+    tso-finished out s → tso-sum (tso-ins out os) (%wsucc f) c
+    tso-blocked → tso-sum os f c
+    tso-nofuel s → tso-sum os f (%wsucc c)
+tso-outcomes : Nat → List TsoThread → TsoSum
+tso-outcomes n ths = tso-fold (tso-choices ths #0) tso-tally (tso-sys n ths tso-init) (tso-sum nil #0 #0)

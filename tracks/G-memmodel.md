@@ -43,23 +43,44 @@ Nothing yet.
 How to check (cached library, one file after another; the last line must read `N passed, 0 failed`):
 `LIBS=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p'); (ulimit -v 2500000; timeout 600 ./build/cubical $LIBS lib/isa/tso.cub)`
 
-- `lib/isa/tso.cub`, operational part: instructions `TsoI` (load, store, xchg, lock cmpxchg,
-  mfence) with signature `TsoIS`; machine commands `TsoC` (`tso-do t i`, `tso-flush t`) with
-  signature `TsoS`; state `TsoSt` (memory, last flushed write id per address, per-thread
-  buffers newest first, next event id, trace of labels `TsoL`); `tso-world : World TsoS TsoSt`
-  (a refusal is a transition that is not enabled); `tso-tag`, `tso-of-mem` (proc.cub's `MemS`
-  onto the instructions). 22 definitions check, 184,874 steps, `789 passed, 0 failed`.
+- `lib/isa/tso.cub`, operational part (58 definitions check; the file alone is 264k steps):
+  instructions `TsoI` (load, store, xchg, lock cmpxchg, mfence) with signature `TsoIS`; machine
+  commands `TsoC` (`tso-do t i`, `tso-flush t`) with signature `TsoS`; state `TsoSt` (memory,
+  last flushed write id per address, per-thread buffers newest first, next event id, trace of
+  labels `TsoL`); `tso-world : World TsoS TsoSt` (a refusal is a transition that is not
+  enabled); `tso-tag`, `tso-of-mem` (proc.cub's `MemS` onto the instructions).
+  Systems: `TsoThread = Step TsoIS (List Word)` with the writers `ti-load/ti-store/ti-xchg/
+  ti-cmpxchg/ti-mfence/ti-ret`; the scheduler's signature `TsoSchedS` (one command, response
+  `TsoCh = ch-go t | ch-flush t`); `tso-step` (the one transition function); `tso-sys n ths s :
+  Step TsoSchedS TsoEnd` (the system as a tree of the scheduler's responses, at most n
+  transitions; ends `tso-finished out s`, `tso-blocked`, `tso-nofuel s`); `tso-fold` (every
+  response at every command); `tso-outcomes n ths : TsoSum` = (sorted duplicate-free set of
+  results, number of finished schedules, number cut by the bound).
+- **SB** (`experiments/tso/sb.cub`), `#show tso-outcomes 6 sb`:
+  set `{(0,0),(0,1),(1,0),(1,1)}`, 80 finished schedules, 0 cut by the bound, 108,147 steps.
+  (80 = C(6,3)·2·2: each thread's load and flush in either order after its store.)
 
 ## Found
 
-Nothing yet.
+- **Elaborator refuses a structural recursion when an argument before the matched one changes.**
+  Input (after the library):
+  `g1-a : Word → List Word → Word` / `g1-a j nil = j` / `g1-a j (cons x r) = g1-a (%wsucc j) r`
+  gives `error: g1-a: a recursive call is not on a constructor field or a field's field from one
+  of the definition's own matches (structural recursion)`. With `j` unchanged in the call, or
+  with the list as the first parameter, it checks. Every such definition in my files puts the
+  matched argument first (`tso-go`, `tso-quiet`, `tso-choices`). The error is fatal for the
+  load (later files are not read), unlike a `FAIL:` line.
+- A data constructor takes no implicit arguments: `scmd {S} {A} c k` is `FAIL … an implicit
+  argument {..} applied to something without implicit arguments`; write `scmd c k`.
+- `append`, `map`, `length` of `lib/prelude.cub` are not checked definitions (`error: code: not a
+  bound variable or checked definition: append`, fatal); `app-w` (proc.cub) is.
 
 ## Next step
 
-In `lib/isa/tso.cub`, after `tso-of-mem`: the scheduler signature (`TsoCh = ch-go t | ch-flush t`,
-`TsoSchedS`), threads as `Step TsoIS (List Word)`, `tso-step` (one choice applied to threads and
-state), `tso-sys : Nat → threads → TsoSt → Step TsoSchedS TsoEnd` (the system as a tree of the
-scheduler's choices), `tso-fold` over every response (all schedules), the outcome set as a
-sorted duplicate-free `List (List Word)`. Then `experiments/tso/sb.cub` with `#show` of SB's set.
-Then the axiomatic part (events `TsoEv`, witness `TsoX`, `tso-exec-of` a trace,
-`tso-consistent`, `TsoSound`), MP/LB/IRIW, `lib/mem/atomics.cub`, the spin-lock.
+In `lib/isa/tso.cub`, after `tso-outcomes`: the axiomatic part. Events `TsoEv` (id, thread, kind
+R/W/L(locked)/F(mfence), address, value read, value written), witness `TsoX` (events, rf as
+(read id, write id or #0), co as the list of write ids in order), `tso-exec-of` a trace (the
+reversed `ts-log`), `tso-consistent : TsoX → Bool` (well-formedness; acyclic(po∖(W×R) ∪ rfe ∪ co
+∪ fr) over R/W/L/F nodes; acyclic(po-loc ∪ rf ∪ co ∪ fr)), `TsoSound : Type` (general statement,
+not inhabited), and a fold `tso-all-consistent n ths : Bool` over every schedule. Then
+`experiments/tso/{mp,lb,iriw}.cub`, `lib/mem/atomics.cub`, `experiments/tso/spinlock.cub`.

@@ -1,0 +1,12 @@
+-- experiments/tso/sb.cub — store buffering (SB) on the operational x86-TSO machine
+-- (lib/isa/tso.cub). x at #0, y at #1, both initially 0.
+--   thread 0: x := 1; r0 := y        thread 1: y := 1; r1 := x
+-- The outcome is (r0 , r1). x86-TSO allows all four, including the relaxed (0 , 0).
+sb-t0 : TsoThread
+sb-t0 = ti-store #0 #1 (ti-load #1 (λ r → ti-ret (cons r nil)))
+sb-t1 : TsoThread
+sb-t1 = ti-store #1 #1 (ti-load #0 (λ r → ti-ret (cons r nil)))
+sb : List TsoThread
+sb = cons sb-t0 (cons sb-t1 nil)
+-- 6 transitions finish every schedule (2 stores, 2 flushes, 2 loads)
+#show tso-outcomes 6 sb
