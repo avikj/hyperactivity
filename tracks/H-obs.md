@@ -108,6 +108,15 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   states, by induction on the bound) and **`oc-equal : (n : Nat) → o-ObsEq oc-H1 (oc-svc1 n) zero oc-H2 (oc-svc2 n) zero`**.
   Also `o-traces-cons` (trace inversion) in `lib/obs.cub`.
 
+- Item 5, second half = both acceptance lines (`lib/obs.cub` + `experiments/obs/counter.cub`:
+  901 passed 0 failed; `#trusted` after loading lists only the library's primitives, nothing
+  `o-`/`oc-`): the property `oc-ok`/`oc-Good` on traces over `oc-Obs` (each reply is the number
+  of incs before the oldest unanswered get; an unowed reply is not allowed);
+  `oc-good-svc2 : (n) → oc-Good (o-obs oc-H2 (to-step (oc-svc2 n)) zero)` by induction;
+  **`oc-good-svc1`** for the cell implementation by `o-tree-transport` along `sym (oc-equal n)`
+  (201k steps), with `oc-isSet-cmd` (Hedberg over `oc-disc`) and `oc-isSet-unit`; `oc-witness`
+  (a concrete trace inc, get, reply 1, stop of `oc-svc1 3`, so the property is not vacuous).
+
 ## Found
 
 - `lib/std.cub` has no set quotient `_/_` and no truncations (the track text says it has); the
@@ -118,14 +127,35 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   `#type o-Q2` prints `error: code: not a bound variable or checked definition: o-Q2` and exits 1
   (the data type itself is fine; `#type` of a definition works).
 
+- Structural recursion on a later argument is refused when an earlier argument of a data type
+  changes in the call. Input:
+  ```
+  zr-f : Nat → List Nat → Nat
+  zr-f n (cons e r) = zr-f (suc n) r
+  zr-f n nil = n
+  ```
+  ends the run with `error: zr-f: a recursive call is not on a constructor field or a field's
+  field from one of the definition's own matches (structural recursion), in zr-f`. With the
+  arguments in the other order (`List Nat → Nat → Nat`) it checks. Worked around in
+  `counter.cub` (`oc-okt` takes the trace first; `oc-ok` reorders).
+- Not a defect, a boundary: for the Church `Proc`, "bisimilar ⇒ equal" is provable only for
+  natural processes (`o-natural-path`); for an arbitrary Church term it would need
+  parametricity, which the theory does not have internally. Likewise `to-step (bind p f)` is
+  the bind of the trees only for natural `p` (`o-step-bind`).
+- Complete traces do not determine the tree when a response type is empty (a command with no
+  possible response has no complete trace, whatever its continuation), so only
+  bisimilar ⇒ equal traces is stated, not the converse.
+
 ## Next step
 
-1. In `experiments/obs/counter.cub`, the acceptance property: `oc-ok : Nat → List Nat → o-Tr oc-Obs Unit → Type`
-   (count of `inc`s so far, queue of replies owed; a `reply v` must be the queue's head),
-   `oc-Good t = (x) → o-traces t x → oc-ok 0 nil x`; prove it of `o-obs oc-H2 (to-step (oc-svc2 n)) 0`
-   by induction on `n` (generalized over the state `s`, with `o-traces-cons`), then get it for
-   `oc-svc1` by `o-tree-transport` along `sym (oc-equal n)` (needs `isSet oc-OCmd` by
-   `Discrete→isSet`, and `isSet Unit`).
-2. In `lib/obs.cub`: the guarded form (`GProc`): bisimulation by guarded recursion, its laws,
-   guarded traces, and where it differs from path equality (item 3, second half; item 2's
-   coinductive traces).
+In `lib/obs.cub`, the guarded form (item 3 second half, item 2's coinductive traces), in order:
+1. `og-BisimR`/`og-Bisim` on `GProc κ S A` by guarded recursion (a relation into `Type` defined
+   with `fix`; the later relation applied under a tick), reflexivity, symmetry, transitivity.
+2. guarded traces `og-Tr κ S A` (data with `▸ κ` tail, including silent steps) and
+   `og-traces`; bisimilar ⇒ equal traces.
+3. where the guarded form differs: `gtau (next p)` is not path-equal to `p` (constructor
+   disjointness) though it has the same visible behaviour; the embedding `to-guarded` of a
+   Church process and that tree bisimilarity implies guarded bisimilarity of the embeddings.
+If the checker does not accept a type defined by guarded recursion, record the smallest input
+under Found and state the relation by its finite unfoldings instead (`og-Bisim-n : Nat → …`
+on `(κ : Clock) → GProc κ S A`, forcing with `forceκ` as `lib/choreo.cub`'s `cut` does).

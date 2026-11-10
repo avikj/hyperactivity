@@ -92,3 +92,71 @@ oc-sim (suc n) = λ x y e →
 -- and the state-passing implementation from the state 0 are the same behaviour over oc-Obs
 oc-equal : (n : Nat) → o-ObsEq oc-H1 (oc-svc1 n) zero oc-H2 (oc-svc2 n) zero
 oc-equal n = o-runsim-obseq oc-Rel oc-H1 (oc-svc1 n) zero oc-H2 (oc-svc2 n) zero (oc-sim n zero zero (λ i → zero))
+-- ---------------------------------------------------------------- a property over oc-Obs
+-- "the reply to each get is the number of incs before it", as a predicate on traces: read the
+-- trace keeping the number of incs so far and the replies owed (one per get, oldest first);
+-- a reply must be the oldest one owed (a reply nobody is owed is not allowed)
+oc-snoc : List Nat → Nat → List Nat
+oc-snoc l v = case l of nil → cons v nil; cons e r → cons e (rec r)
+oc-okt : o-Tr oc-Obs Unit → Nat → List Nat → Type
+oc-okt (o-tend a) n pend = Unit
+oc-okt (o-tcons c r x) n pend =
+  (case c return (λ d → oc-oresp d → Type) of
+     oc-recv → λ q → (case q return (λ z → Type) of oc-inc → oc-okt x (suc n) pend; oc-get → oc-okt x n (oc-snoc pend n); oc-stop → oc-okt x n pend)
+     oc-reply v → λ u → (case pend return (λ z → Type) of nil → Empty; cons e rest → (v ≡ e) × oc-okt x n rest)) r
+oc-ok : Nat → List Nat → o-Tr oc-Obs Unit → Type
+oc-ok n pend x = oc-okt x n pend
+oc-Good : Step oc-Obs Unit → Type
+oc-Good t = (x : o-Tr oc-Obs Unit) → o-traces t x → oc-ok zero nil x
+-- proved of the state-passing implementation, by induction on the bound, at every state s
+-- standing for the incs so far
+oc-T2 : Nat → Nat → Step oc-Obs Unit
+oc-T2 n s = o-obs oc-H2 (to-step (oc-svc2 n)) s
+oc-K2 : Nat → Nat → oc-Req → Step oc-Obs Unit
+oc-K2 n s q = o-obs oc-H2 (to-step (oc-on2 (oc-svc2 n) q)) s
+oc-good-stop : (s : Nat) → (x : o-Tr oc-Obs Unit) → o-traces {oc-Obs} {Unit} (sdone unit) x → oc-ok s nil x
+oc-good-stop s (o-tend a) w = unit
+oc-good-stop s (o-tcons c r x) w = Empty-rec w
+oc-good-get : (s : Nat) → (T : Step oc-Obs Unit) → ((x : o-Tr oc-Obs Unit) → o-traces T x → oc-ok s nil x) →
+              (x : o-Tr oc-Obs Unit) → o-traces {oc-Obs} {Unit} (scmd (oc-reply s) (λ u → T)) x → oc-ok s (cons s nil) x
+oc-good-get s T ih (o-tend a) w = Empty-rec w
+oc-good-get s T ih (o-tcons c r x) w =
+  o-traces-cons {oc-Obs} {Unit} (λ y → oc-ok s (cons s nil) y) (oc-reply s) (λ u → T) c r x (λ u w2 → ((λ i → s) , ih x w2)) w
+oc-good2 : (n s : Nat) → (x : o-Tr oc-Obs Unit) → o-traces (oc-T2 n s) x → oc-ok s nil x
+oc-good2 zero s x w = oc-good-stop s x w
+oc-good2 (suc n) s (o-tend a) w = Empty-rec w
+oc-good2 (suc n) s (o-tcons c r x) w =
+  o-traces-cons {oc-Obs} {Unit} (λ y → oc-ok s nil y) oc-recv (oc-K2 n s) c r x
+    (λ q → case q return (λ z → o-traces (oc-K2 n s z) x → oc-ok s nil (o-tcons oc-recv z x)) of
+       oc-inc → λ w2 → oc-good2 n (suc s) x w2
+       oc-get → λ w2 → oc-good-get s (oc-T2 n s) (λ x2 w3 → oc-good2 n s x2 w3) x w2
+       oc-stop → λ w2 → oc-good-stop s x w2) w
+oc-good-svc2 : (n : Nat) → oc-Good (o-obs oc-H2 (to-step (oc-svc2 n)) zero)
+oc-good-svc2 n = λ x w → oc-good2 n zero x w
+-- ---------------------------------------------------------------- and obtained for the cell implementation
+-- by transport along the equality of behaviours, through the normal form: the observation
+-- commands and the result are sets
+oc-is-recv : oc-OCmd → Type
+oc-is-recv c = case c of oc-recv → Unit; oc-reply n → Empty
+oc-unreply : oc-OCmd → Nat
+oc-unreply c = case c of oc-recv → zero; oc-reply n → n
+oc-disc : (a b : oc-OCmd) → Dec (a ≡ b)
+oc-disc oc-recv oc-recv = yes (λ i → oc-recv)
+oc-disc oc-recv (oc-reply n) = no (λ p → comp (λ i → oc-is-recv (p i)) (λ i → []) unit)
+oc-disc (oc-reply m) oc-recv = no (λ p → comp (λ i → oc-is-recv (p (~ i))) (λ i → []) unit)
+oc-disc (oc-reply m) (oc-reply n) =
+  case discreteNat m n of
+    yes e → yes (λ i → oc-reply (e i))
+    no ne → no (λ p → ne (λ i → oc-unreply (p i)))
+oc-isSet-cmd : isSet oc-OCmd
+oc-isSet-cmd = Discrete→isSet {oc-OCmd} oc-disc
+oc-isSet-unit : isSet Unit
+oc-isSet-unit = isProp→isSet {Unit} (isProp-isTrue true)
+oc-good-svc1 : (n : Nat) → oc-Good (o-obs oc-H1 (to-step (oc-svc1 n)) zero)
+oc-good-svc1 n =
+  o-tree-transport {oc-Obs} {oc-S2} {oc-S1} {Unit} {Nat} {Nat} oc-isSet-cmd oc-isSet-unit oc-Good
+    oc-H2 (oc-svc2 n) zero oc-H1 (oc-svc1 n) zero (sym (oc-equal n)) (oc-good-svc2 n)
+-- the property is not empty: a trace of the cell implementation (inc, get, the reply 1, stop)
+oc-witness : o-traces (o-obs oc-H1 (to-step (oc-svc1 3)) zero)
+               (o-tcons oc-recv oc-inc (o-tcons oc-recv oc-get (o-tcons (oc-reply 1) unit (o-tcons oc-recv oc-stop (o-tend unit)))))
+oc-witness = (oc-inc , ((λ i → (oc-recv , oc-inc)) , (oc-get , ((λ i → (oc-recv , oc-get)) , (unit , ((λ i → (oc-reply 1 , unit)) , (oc-stop , ((λ i → (oc-recv , oc-stop)) , (λ i → unit)))))))))
