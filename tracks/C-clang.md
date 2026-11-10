@@ -63,12 +63,33 @@ Files you own: `tools/clang2cub.py`, `lib/cxx/ast.cub`, `experiments/cxx/**`, th
 
 ## Done
 
-(nothing yet)
+- `experiments/cxx/book.cpp` (207 lines) and `experiments/cxx/book_main.c` written. Builds clean with
+  `clang++ -std=c++20 -O2 -fno-exceptions -fno-rtti -Wall -Wextra -c book.cpp` (clang 18.1.3) and
+  `clang -O2 book_main.c book.o`. On 1,000,000 random 22-byte messages (50% add, 25% cancel,
+  ~25% execute, 0.1% reset, prices 994..1006) the reference binary answers `sum -11432484` at
+  about 71 ns/message on this (shared, 2-core) machine.
 
 ## Found
 
+- The checker has no mutual `data` (`mutual` followed by `data`: "unexpected data") and rejects a
+  field `List D` inside `data D` ("the field type is not strictly positive (the type itself at
+  its own parameters, or not mentioning it)"). So `CExpr`/`CStmt`/`CDecl` cannot be mutually
+  recursive and a node's children cannot be a `List` of the same type. `mutual` over functions
+  is for codata only ("a definition of a corecursive group is λs and lines over a record").
+  What does check (measured on a trial file): a type that carries its own list constructors
+  (`te-nil | te-cons (x : TE) (xs : TE)`), and one function recursing structurally through
+  both the node and the list constructors.
+- There is no byte-string literal and no `store8` in `lib/prim.cub`. `%store8 b off v` with a
+  `Word` offset and a `UInt32` value works inside a `primitive` and is bounds-checked by the
+  net (an out-of-range store is a no-op), so a string can be built from a list of byte words.
+- A definition `f : (n : Nat) → Bytes n → Word → List Word → Bytes n` recursing on the list in
+  the fourth position was rejected as not structural; with the list second (before the
+  arguments that change) it checks.
+- `length` of `lib/prelude.cub` is "not a bound variable or checked definition" for a
+  definition loaded after the library (prelude definitions are not in the checked table).
+
 ## Next step
 
-Write `experiments/cxx/book.cpp` and `book_main.c`, confirm they compile and run with clang,
-commit. Then dump the JSON once, list the node kinds reachable from `on_message`, and commit
-that list here before writing the importer.
+Dump the JSON once (`clang++ -std=c++20 -fno-exceptions -fno-rtti -fsyntax-only -Xclang
+-ast-dump=json experiments/cxx/book.cpp`), list the node kinds reachable from `on_message`,
+and commit that list here before writing the importer (`tools/clang2cub.py`).
