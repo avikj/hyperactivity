@@ -1,0 +1,237 @@
+-- lib/os/linux.cub — Linux's system calls as a typed world (PLAN Phase 3 item 1). Loaded after
+-- lib/os/platform.cub.
+--
+-- Linux is a signature (lib/proc.cub): a command per system call with a response type that says
+-- what the kernel answers, and linux-on-w the handler that performs each by the drivers' one raw
+-- command (lib/world.cub's w-sys: the number and six words in, rax out) and the memory commands.
+-- A response is Sum Errno R: the kernel's negative range decoded once (lx-decode), R what a
+-- success carries, with the facts the kernel guarantees as fields (a count read is at most the
+-- count asked: Upto len). The handler decides each fact on the word the kernel returned; a word
+-- outside the contract is answered as the error os-breach (0, which is no errno), so the
+-- contract is assumed nowhere in a process's own text: it is lib/os/contract.cub's model that
+-- states it, and the handler that refuses to pass on what breaks it.
+--
+-- Buffers are addresses (lx-alloc; lx-peek/lx-poke read and write them); structures are values
+-- (SockAddr, Timespec, EpollEvent) the handler writes into a scratch area by the layouts below,
+-- each stated once. The handler is at a Platform (the numbers, the clock, the epoll_event
+-- layout) with the fact that it is little-endian, which the word layouts rely on.
+-- ---------------------------------------------------------------- errors and counts
+Errno : Type
+Errno = Word
+-- the kernel answered outside the contract (no errno is 0)
+os-breach : Errno
+os-breach = #0
+-- rax after a system call: 2^64 − 4095 and above is the two's complement of an errno
+lx-decode : Word → Sum Errno Word
+lx-decode r = if %wlt r #18446744073709547521 then inr r else inl (%wsucc (%wsub #18446744073709551615 r))
+os-wle : Word → Word → Bool
+os-wle a b = case %wlt b a of true → false; false → true
+os-decide : (b : Bool) → Sum (os-So b) Unit
+os-decide b = case b return (λ x → Sum (os-So x) Unit) of true → inl unit; false → inr unit
+-- a count with the fact that it is at most len
+Upto : Word → Type
+Upto len = (n : Word) × os-So (os-wle n len)
+lx-upto : (len : Word) → Word → Sum Errno (Upto len)
+lx-upto len n = case os-decide (os-wle n len) of inl h → inr (n , h); inr u → inl os-breach
+-- ---------------------------------------------------------------- the structures and their layouts
+-- an IPv4 endpoint: the port and the address as numbers (127.0.0.1 is 2130706433)
+record SockAddr = { sa-port : Word ; sa-ip : Word }
+record Timespec = { ts-sec : Word ; ts-nsec : Word }
+record EpollEvent = { ev-events : Word ; ev-data : Word }
+os-swap16 : Word → Word
+os-swap16 p = %wadd (%wmul (%wmod p #256) #256) (%wmod (%wdiv p #256) #256)
+os-swap32 : Word → Word
+os-swap32 x = %wadd (%wmul (os-swap16 (%wmod x #65536)) #65536) (os-swap16 (%wmod (%wdiv x #65536) #65536))
+-- struct sockaddr_in, 16 bytes: sin_family (2 bytes, AF_INET = 2, host order), sin_port (2,
+-- network order), sin_addr (4, network order), 8 bytes of zero. Its first 8 bytes as one
+-- little-endian word; the second word is zero
+sockaddr-word : SockAddr → Word
+sockaddr-word a = %wadd #2 (%wadd (%wmul (os-swap16 (sa-port a)) #65536) (%wmul (os-swap32 (sa-ip a)) #4294967296))
+word-sockaddr : Word → SockAddr
+word-sockaddr w = SockAddr { sa-port = os-swap16 (%wmod (%wdiv w #65536) #65536) ; sa-ip = os-swap32 (%wmod (%wdiv w #4294967296) #4294967296) }
+-- struct timespec, 16 bytes: tv_sec then tv_nsec, a word each.
+-- struct epoll_event: events (4 bytes) at 0, data (8 bytes) at the platform's offset.
+-- The scratch area (4096 bytes, lx-scratch): the sockaddr at 0, its length (a word, 4 bytes used)
+-- at 16, a timespec at 24, an int option value at 40, one epoll_event at 48, the events
+-- epoll_wait fills from 64 (at most lx-max-events of them: 64 × 16 bytes fit)
+lx-scratch : Word
+lx-scratch = #4096
+lx-max-events : Word
+lx-max-events = #64
+-- ---------------------------------------------------------------- the commands
+data LinuxCmd =
+    lx-clock-gettime
+  | lx-nanosleep (t : Timespec)
+  | lx-read (fd : Word) (buf : Word) (len : Word)
+  | lx-write (fd : Word) (buf : Word) (len : Word)
+  | lx-open (path : Word) (flags : Word) (mode : Word)
+  | lx-close (fd : Word)
+  | lx-mmap (addr : Word) (len : Word) (prot : Word) (flags : Word) (fd : Word) (off : Word)
+  | lx-munmap (addr : Word) (len : Word)
+  | lx-mprotect (addr : Word) (len : Word) (prot : Word)
+  | lx-socket (domain : Word) (type : Word) (proto : Word)
+  | lx-bind (fd : Word) (a : SockAddr)
+  | lx-listen (fd : Word) (backlog : Word)
+  | lx-accept4 (fd : Word) (flags : Word)
+  | lx-connect (fd : Word) (a : SockAddr)
+  | lx-recvfrom (fd : Word) (buf : Word) (len : Word) (flags : Word)
+  | lx-sendto (fd : Word) (buf : Word) (len : Word) (flags : Word) (a : SockAddr)
+  | lx-setsockopt (fd : Word) (level : Word) (name : Word) (val : Word)
+  | lx-epoll-create1 (flags : Word)
+  | lx-epoll-ctl (ep : Word) (op : Word) (fd : Word) (ev : EpollEvent)
+  | lx-epoll-wait (ep : Word) (max : Word) (timeout : Word)
+  | lx-futex-wait (addr : Word) (val : Word)
+  | lx-futex-wake (addr : Word) (n : Word)
+  | lx-getpid
+  | lx-exit-group (ec : Word)
+  | lx-alloc (n : Word) | lx-peek8 (a : Word) | lx-poke8 (a : Word) (v : Word) | lx-peek64 (a : Word) | lx-poke64 (a : Word) (v : Word)
+-- What each answers. The time is the platform's clock. read, write, recvfrom, sendto: the count,
+-- at most the count asked (recvfrom is performed without MSG_TRUNC, under which the kernel
+-- answers the datagram's length instead); recvfrom and accept4 also the peer. open (the path the
+-- address of a NUL-terminated name), socket, epoll_create1, accept4: the descriptor. mmap: the
+-- address. epoll_wait (the timeout in milliseconds, 4294967295 for none): the count, at most
+-- max, and that many events in the kernel's order (max above lx-max-events is asked as
+-- lx-max-events). futex-wait: woken (EAGAIN, 11, when the word at addr was not val); futex-wake:
+-- the waiters woken, at most n. getpid cannot fail. exit-group does not return: its response is
+-- never given. The memory commands: n fresh zero bytes; a byte or a word at an address
+lx-resp : LinuxCmd → Type
+lx-resp c = case c return (λ _ → Type) of
+  lx-clock-gettime → Sum Errno Timespec
+  lx-nanosleep t → Sum Errno Unit
+  lx-read fd buf len → Sum Errno (Upto len)
+  lx-write fd buf len → Sum Errno (Upto len)
+  lx-open path flags mode → Sum Errno Word
+  lx-close fd → Sum Errno Unit
+  lx-mmap addr len prot flags fd off → Sum Errno Word
+  lx-munmap addr len → Sum Errno Unit
+  lx-mprotect addr len prot → Sum Errno Unit
+  lx-socket domain type proto → Sum Errno Word
+  lx-bind fd a → Sum Errno Unit
+  lx-listen fd backlog → Sum Errno Unit
+  lx-accept4 fd flags → Sum Errno (Word × SockAddr)
+  lx-connect fd a → Sum Errno Unit
+  lx-recvfrom fd buf len flags → Sum Errno (Upto len × SockAddr)
+  lx-sendto fd buf len flags a → Sum Errno (Upto len)
+  lx-setsockopt fd level name val → Sum Errno Unit
+  lx-epoll-create1 flags → Sum Errno Word
+  lx-epoll-ctl ep op fd ev → Sum Errno Unit
+  lx-epoll-wait ep max timeout → Sum Errno (Upto max × List EpollEvent)
+  lx-futex-wait addr val → Sum Errno Unit
+  lx-futex-wake addr n → Sum Errno (Upto n)
+  lx-getpid → Word
+  lx-exit-group ec → Unit
+  lx-alloc n → Word
+  lx-peek8 a → Word
+  lx-poke8 a v → Unit
+  lx-peek64 a → Word
+  lx-poke64 a v → Unit
+Linux : Sig
+Linux = (LinuxCmd , lx-resp)
+-- a command as a process, and the sequencing of calls that may fail (the first error ends it)
+lx : {l : Level} → (c : LinuxCmd) → Proc {l} Linux (lx-resp c)
+lx {l} c = cmd {l} {Linux} c
+lx-then : {l : Level} {A B : Type} → Proc {l} Linux (Sum Errno A) → (A → Proc {l} Linux (Sum Errno B)) → Proc {l} Linux (Sum Errno B)
+lx-then {l} {A} {B} p f = bind {l} {Linux} {Sum Errno A} {Sum Errno B} p (λ r → case r of inl e → ret {l} {Linux} {Sum Errno B} (inl e); inr a → f a)
+-- ---------------------------------------------------------------- the handler
+lx-bw : {A B : Type} → Proc {lzero} W A → (A → Proc {lzero} W B) → Proc {lzero} W B
+lx-bw {A} {B} p f = bind {lzero} {W} {A} {B} p f
+lx-rw : {A : Type} → A → Proc {lzero} W A
+lx-rw {A} a = ret {lzero} {W} {A} a
+lx-sys : Platform → Sys → (a1 a2 a3 a4 a5 a6 : Word) → Proc {lzero} W (Sum Errno Word)
+lx-sys pf s a1 a2 a3 a4 a5 a6 = lx-bw {Word} {Sum Errno Word} (sys-call (pf-sysnr pf s) a1 a2 a3 a4 a5 a6) (λ r → lx-rw {Sum Errno Word} (lx-decode r))
+-- the result discarded, the result as a count
+lx-unit : Proc {lzero} W (Sum Errno Word) → Proc {lzero} W (Sum Errno Unit)
+lx-unit p = lx-bw {Sum Errno Word} {Sum Errno Unit} p (λ r → lx-rw {Sum Errno Unit} (case r of inl e → inl e; inr w → inr unit))
+lx-count : (len : Word) → Proc {lzero} W (Sum Errno Word) → Proc {lzero} W (Sum Errno (Upto len))
+lx-count len p = lx-bw {Sum Errno Word} {Sum Errno (Upto len)} p (λ r → lx-rw {Sum Errno (Upto len)} (case r of inl e → inl e; inr n → lx-upto len n))
+-- the sockaddr written at the scratch area's start, with its length
+lx-put-addr : Word → SockAddr → Proc {lzero} W Unit
+lx-put-addr sc a =
+  lx-bw {Unit} {Unit} (store-at sc (sockaddr-word a)) (λ u →
+  lx-bw {Unit} {Unit} (store-at (%wadd sc #8) #0) (λ u2 → store-at (%wadd sc #16) #16))
+lx-clear-addr : Word → Proc {lzero} W Unit
+lx-clear-addr sc =
+  lx-bw {Unit} {Unit} (store-at sc #0) (λ u →
+  lx-bw {Unit} {Unit} (store-at (%wadd sc #8) #0) (λ u2 → store-at (%wadd sc #16) #16))
+lx-get-addr : Word → Proc {lzero} W SockAddr
+lx-get-addr sc = lx-bw {Word} {SockAddr} (load-at sc) (λ w → lx-rw {SockAddr} (word-sockaddr w))
+-- the first n events of the array at base, in order: the event k from the last down, consed
+lx-events : Platform → Word → Word → Proc {lzero} W (List EpollEvent)
+lx-events pf base n =
+  %welimP (λ v → List EpollEvent → Proc {lzero} W (List EpollEvent)) n (λ acc → lx-rw {List EpollEvent} acc)
+    (λ k go → λ acc →
+      lx-bw {Word} {List EpollEvent} (load-at (%wadd base (%wmul k (pf-epoll-event-size pf)))) (λ e →
+      lx-bw {Word} {List EpollEvent} (load-at (%wadd (%wadd base (%wmul k (pf-epoll-event-size pf))) (pf-epoll-data-off pf))) (λ d →
+        go (cons (EpollEvent { ev-events = %wmod e #4294967296 ; ev-data = d }) acc))))
+    nil
+lx-clamp : Word → Word
+lx-clamp max = if %wlt lx-max-events max then lx-max-events else max
+linux-on-w : (pf : Platform) → LittleEndian pf → Word → Handler Linux W
+linux-on-w pf le sc c = case c return (λ x → Proc {lzero} W (lx-resp x)) of
+  lx-clock-gettime →
+    lx-bw {Sum Errno Word} {Sum Errno Timespec} (lx-sys pf sys-clock-gettime (pf-clock pf) (%wadd sc #24) #0 #0 #0 #0) (λ r →
+      case r of
+        inl e → lx-rw {Sum Errno Timespec} (inl e)
+        inr z → lx-bw {Word} {Sum Errno Timespec} (load-at (%wadd sc #24)) (λ s →
+                lx-bw {Word} {Sum Errno Timespec} (load-at (%wadd sc #32)) (λ ns →
+                  lx-rw {Sum Errno Timespec} (inr (Timespec { ts-sec = s ; ts-nsec = ns })))))
+  lx-nanosleep t →
+    lx-bw {Unit} {Sum Errno Unit} (store-at (%wadd sc #24) (ts-sec t)) (λ u →
+    lx-bw {Unit} {Sum Errno Unit} (store-at (%wadd sc #32) (ts-nsec t)) (λ u2 →
+      lx-unit (lx-sys pf sys-nanosleep (%wadd sc #24) #0 #0 #0 #0 #0)))
+  lx-read fd buf len → lx-count len (lx-sys pf sys-read fd buf len #0 #0 #0)
+  lx-write fd buf len → lx-count len (lx-sys pf sys-write fd buf len #0 #0 #0)
+  lx-open path flags mode → lx-sys pf sys-open path flags mode #0 #0 #0
+  lx-close fd → lx-unit (lx-sys pf sys-close fd #0 #0 #0 #0 #0)
+  lx-mmap addr len prot flags fd off → lx-sys pf sys-mmap addr len prot flags fd off
+  lx-munmap addr len → lx-unit (lx-sys pf sys-munmap addr len #0 #0 #0 #0)
+  lx-mprotect addr len prot → lx-unit (lx-sys pf sys-mprotect addr len prot #0 #0 #0)
+  lx-socket domain type proto → lx-sys pf sys-socket domain type proto #0 #0 #0
+  lx-bind fd a →
+    lx-bw {Unit} {Sum Errno Unit} (lx-put-addr sc a) (λ u → lx-unit (lx-sys pf sys-bind fd sc #16 #0 #0 #0))
+  lx-listen fd backlog → lx-unit (lx-sys pf sys-listen fd backlog #0 #0 #0 #0)
+  lx-accept4 fd flags →
+    lx-bw {Unit} {Sum Errno (Word × SockAddr)} (lx-clear-addr sc) (λ u →
+    lx-bw {Sum Errno Word} {Sum Errno (Word × SockAddr)} (lx-sys pf sys-accept4 fd sc (%wadd sc #16) flags #0 #0) (λ r →
+      case r of
+        inl e → lx-rw {Sum Errno (Word × SockAddr)} (inl e)
+        inr nfd → lx-bw {SockAddr} {Sum Errno (Word × SockAddr)} (lx-get-addr sc) (λ a → lx-rw {Sum Errno (Word × SockAddr)} (inr (nfd , a)))))
+  lx-connect fd a →
+    lx-bw {Unit} {Sum Errno Unit} (lx-put-addr sc a) (λ u → lx-unit (lx-sys pf sys-connect fd sc #16 #0 #0 #0))
+  lx-recvfrom fd buf len flags →
+    lx-bw {Unit} {Sum Errno (Upto len × SockAddr)} (lx-clear-addr sc) (λ u →
+    lx-bw {Sum Errno Word} {Sum Errno (Upto len × SockAddr)} (lx-sys pf sys-recvfrom fd buf len (%wand flags #4294967263) sc (%wadd sc #16)) (λ r →
+      case r of
+        inl e → lx-rw {Sum Errno (Upto len × SockAddr)} (inl e)
+        inr n → (case lx-upto len n of
+                   inl e2 → lx-rw {Sum Errno (Upto len × SockAddr)} (inl e2)
+                   inr k → lx-bw {SockAddr} {Sum Errno (Upto len × SockAddr)} (lx-get-addr sc) (λ a → lx-rw {Sum Errno (Upto len × SockAddr)} (inr (k , a))))))
+  lx-sendto fd buf len flags a →
+    lx-bw {Unit} {Sum Errno (Upto len)} (lx-put-addr sc a) (λ u → lx-count len (lx-sys pf sys-sendto fd buf len flags sc #16))
+  lx-setsockopt fd level name val →
+    lx-bw {Unit} {Sum Errno Unit} (store-at (%wadd sc #40) val) (λ u → lx-unit (lx-sys pf sys-setsockopt fd level name (%wadd sc #40) #4 #0))
+  lx-epoll-create1 flags → lx-sys pf sys-epoll-create1 flags #0 #0 #0 #0 #0
+  lx-epoll-ctl ep op fd ev →
+    lx-bw {Unit} {Sum Errno Unit} (store-at (%wadd sc #48) (ev-events ev)) (λ u →
+    lx-bw {Unit} {Sum Errno Unit} (store-at (%wadd (%wadd sc #48) (pf-epoll-data-off pf)) (ev-data ev)) (λ u2 →
+      lx-unit (lx-sys pf sys-epoll-ctl ep op fd (%wadd sc #48) #0 #0)))
+  lx-epoll-wait ep max timeout →
+    lx-bw {Sum Errno Word} {Sum Errno (Upto max × List EpollEvent)} (lx-sys pf sys-epoll-wait ep (%wadd sc #64) (lx-clamp max) timeout #0 #0) (λ r →
+      case r of
+        inl e → lx-rw {Sum Errno (Upto max × List EpollEvent)} (inl e)
+        inr n → (case lx-upto max n of
+                   inl e2 → lx-rw {Sum Errno (Upto max × List EpollEvent)} (inl e2)
+                   inr k → lx-bw {List EpollEvent} {Sum Errno (Upto max × List EpollEvent)} (lx-events pf (%wadd sc #64) (if %wlt lx-max-events n then lx-max-events else n)) (λ evs →
+                             lx-rw {Sum Errno (Upto max × List EpollEvent)} (inr (k , evs)))))
+  lx-futex-wait addr val → lx-unit (lx-sys pf sys-futex addr #0 val #0 #0 #0)
+  lx-futex-wake addr n → lx-count n (lx-sys pf sys-futex addr #1 n #0 #0 #0)
+  lx-getpid → sys-call (pf-sysnr pf sys-getpid) #0 #0 #0 #0 #0 #0
+  lx-exit-group ec → lx-bw {Word} {Unit} (sys-call (pf-sysnr pf sys-exit-group) ec #0 #0 #0 #0 #0) (λ r → lx-rw {Unit} unit)
+  lx-alloc n → alloc-bytes n
+  lx-peek8 a → load8-at a
+  lx-poke8 a v → store8-at a v
+  lx-peek64 a → load-at a
+  lx-poke64 a v → store-at a v
+-- a process over Linux as a process of the drivers: the scratch area taken once, then the handler
+linux-run : {A : Type} → (pf : Platform) → LittleEndian pf → Proc {lsuc lzero} Linux A → Proc {lzero} W A
+linux-run {A} pf le p = lx-bw {Word} {A} (alloc-bytes lx-scratch) (λ sc → handle {Linux} {W} {A} (linux-on-w pf le sc) p)

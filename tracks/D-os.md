@@ -77,6 +77,22 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   `struct epoll_event` and its data offset), `LittleEndian pf` (the fact word layouts rely on),
   `x86-64-linux cores` with `x86-64-linux-le`. Loaded after the library: 857 passed, 0 failed
   (23 new definitions; `x86-64-sysnr` 2,942 steps).
+- **Item 2, the typed world**: `lib/os/linux.cub`. `Linux : Sig` over `LinuxCmd` (29 commands:
+  the 23 calls with futex as wait and wake, and `lx-alloc`, `lx-peek8/poke8`, `lx-peek64/poke64`),
+  `lx-resp` (each `Sum Errno R`; `Upto len` = a count with the fact `n ≤ len` for read, write,
+  recvfrom, sendto, epoll_wait, futex-wake; `getpid : Word`), `lx-decode` (rax ≥ 2^64 − 4095 is
+  errno 2^64 − rax), the layouts (`sockaddr-word`/`word-sockaddr`, timespec, epoll_event at the
+  platform's size and offset), `linux-on-w : (pf : Platform) → LittleEndian pf → Word → Handler
+  Linux W` (the `Word` a 4096-byte scratch area for the structures), `linux-run` (takes the
+  scratch once, then `handle`), `lx` and `lx-then` for writing processes. A kernel answer
+  outside a stated fact is returned as the error `os-breach` (0). Measured (NOCACHE, after the
+  library and platform.cub): 896 passed, 0 failed; `linux-on-w` checks (steps in the line above
+  this entry's commit message).
+- **Acceptance, the echo on the net**: `experiments/os/udp-echo.cub` (`udp-echo`, a process over
+  `Linux` at every level; `udp-echo-step` at `x86-64-linux #2`) and `udp-echo-run.cub` (`#run`).
+  With `python3 -c "import socket;s=socket.socket(2,2);s.sendto(b'hello, world',('127.0.0.1',47474));print(s.recvfrom(99))"`
+  from another shell: python prints `(b'hello, world', ('127.0.0.1', 47474))`, the machine
+  `run: done (inr #12)   [1871 steps]`.
 
 ## Found
 
@@ -92,12 +108,10 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
 
 ## Next step
 
-Item 2, `lib/os/linux.cub` (loaded after `lib/os/platform.cub`): the layouts (`sockaddr_in`
-as one little-endian word, `timespec` as two, `epoll_event` at the platform's size), the
-errno decoding (`r ≥ 2^64 − 4095` is errno `2^64 − r`), the command type `Linux` with its
-responses, and `linux-on-w : (pf : Platform) → LittleEndian pf → Word → Handler Linux W` (the
-`Word` is a scratch area of 4096 bytes the structures are written into, taken once by
-`linux-run`). Check with
-`./build/cubical $(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p') lib/os/platform.cub lib/os/linux.cub`.
-Then `experiments/os/udp-echo.cub` on the net and by `#build`, then item 3
-(`lib/os/contract.cub`).
+1. `#build` of the echo: `./build/cubical $(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p') lib/os/platform.cub lib/os/linux.cub experiments/os/udp-echo.cub experiments/os/udp-echo-build.cub`
+   (not yet run); run `build/udp-echo`, send it a datagram as above, record size and result.
+2. Item 3, `lib/os/contract.cub`: `KState` (byte memory, next address, descriptor table, pipes,
+   UDP sockets with their queues, outgoing datagrams, clock, pid) and
+   `linux-model : World Linux KState`; then in `experiments/os/udp-echo.cub`'s directory a
+   file `udp-echo-model.cub` with `runp` of `udp-echo {lzero}` against the model with one
+   queued datagram and a `#show` of the outcome and the outgoing queue.

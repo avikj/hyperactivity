@@ -1,0 +1,20 @@
+-- experiments/os/udp-echo.cub — a process over Linux (loaded after the library and
+-- lib/os/platform.cub, lib/os/linux.cub): bind a UDP socket on 127.0.0.1:47474, receive one
+-- datagram of up to 2048 bytes, send it back to its sender, close; the answer is the count
+-- echoed, or the errno of the first call that failed.
+--   #run   performs it on the net (send the datagram from another shell:
+--          python3 -c "import socket;s=socket.socket(2,2);s.sendto(b'hello, world',('127.0.0.1',47474));print(s.recvfrom(99))")
+--   #build writes build/udp-echo, the same process as a standalone binary
+udp-echo-port : Word
+udp-echo-port = #47474
+udp-echo : {l : Level} → Proc {l} Linux (Sum Errno Word)
+udp-echo {l} =
+  lx-then {l} {Word} {Word} (lx {l} (lx-socket #2 #2 #0)) (λ fd →
+  lx-then {l} {Unit} {Word} (lx {l} (lx-bind fd (SockAddr { sa-port = udp-echo-port ; sa-ip = #2130706433 }))) (λ u →
+  bind {l} {Linux} {Word} {Sum Errno Word} (lx {l} (lx-alloc #2048)) (λ buf →
+  lx-then {l} {Upto #2048 × SockAddr} {Word} (lx {l} (lx-recvfrom fd buf #2048 #0)) (λ r →
+  lx-then {l} {Upto (fst (fst r))} {Word} (lx {l} (lx-sendto fd buf (fst (fst r)) #0 (snd r))) (λ s →
+  lx-then {l} {Unit} {Word} (lx {l} (lx-close fd)) (λ u2 →
+  ret {l} {Linux} {Sum Errno Word} (inr (fst s))))))))
+udp-echo-step : Step W (Sum Errno Word)
+udp-echo-step = to-step (linux-run {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (udp-echo {lsuc lzero}))
