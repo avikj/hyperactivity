@@ -1,0 +1,85 @@
+-- lib/isa/tso-acyclic.cub — the acyclicity decision of lib/isa/tso.cub (`tso-acyclic`: peel
+-- the nodes without a predecessor, as many rounds as there are nodes) against paths.
+-- Loaded after lib/isa/tso.cub.
+--   tso-acyclic-sound : the decision answers true only when no cycle runs through the list
+--   tso-acyclic-stamp : when a stamp into Nat increases along the relation, it answers true
+-- ---------------------------------------------------------------- membership, chains
+TsoIn : {A : Type} → A → List A → Type
+TsoIn x l = case l of nil → Empty; cons y r → Sum (x ≡ y) (rec r)
+-- a chain x → z₁ → … → y of the relation through the nodes zs
+TsoChain : {A : Type} → (A → A → Bool) → A → List A → A → Type
+TsoChain rel x zs y = (case zs return (λ _ → A → Type) of nil → λ u → isTrue (rel u y); cons z r → λ u → isTrue (rel u z) × rec r z) x
+-- a member kept by a filter it passes
+tso-in-keep : {A : Type} → (p : A → Bool) → (x : A) → (ns : List A) → TsoIn x ns → isTrue (p x) → TsoIn x (tso-keep p ns)
+tso-in-keep p x nil m h = Empty-rec m
+tso-in-keep p x (cons y r) m h =
+  (case m of
+     inl e → (case p y return (λ b → isTrue b → TsoIn x (if b then cons y (tso-keep p r) else tso-keep p r)) of
+                true → λ u → inl e
+                false → λ f → Empty-rec f) (subst {_} {_} {_} {λ z → isTrue (p z)} e h)
+     inr m2 → (case p y return (λ b → TsoIn x (if b then cons y (tso-keep p r) else tso-keep p r)) of
+                 true → inr (tso-in-keep p x r m2 h)
+                 false → tso-in-keep p x r m2 h))
+-- a member passing a test makes tso-any true
+tso-any-intro : {A : Type} → (q : A → Bool) → (y : A) → (ns : List A) → TsoIn y ns → isTrue (q y) → isTrue (tso-any q ns)
+tso-any-intro q y nil m h = Empty-rec m
+tso-any-intro q y (cons z r) m h =
+  (case m of
+     inl e → (case q z return (λ b → isTrue b → isTrue (if b then true else tso-any q r)) of
+                true → λ u → unit
+                false → λ f → Empty-rec f) (subst {_} {_} {_} {λ w → isTrue (q w)} e h)
+     inr m2 → (case q z return (λ b → isTrue (if b then true else tso-any q r)) of
+                 true → unit
+                 false → tso-any-intro q y r m2 h))
+-- ---------------------------------------------------------------- the decision is sound
+-- a set of nodes each with a predecessor in the set
+TsoBack : {A : Type} → (A → A → Bool) → (A → Type) → Type
+TsoBack rel S = (c : A) → S c → (y : A) × (S y × isTrue (rel y c))
+-- such a set within the list stays within it through a round of peeling
+tso-peel-keeps : {A : Type} → (rel : A → A → Bool) → (S : A → Type) → (ns : List A) → TsoBack rel S →
+                 ((c : A) → S c → TsoIn c ns) → (c : A) → S c → TsoIn c (tso-peel rel ns)
+tso-peel-keeps rel S ns bk sub c sc =
+  tso-in-keep (λ x → tso-any (λ y → rel y x) ns) c ns (sub c sc)
+    (tso-any-intro (λ y → rel y c) (fst (bk c sc)) ns (sub (fst (bk c sc)) (fst (snd (bk c sc)))) (snd (snd (bk c sc))))
+-- and through every round
+tso-peels-keep : {A : Type} → (n : Nat) → (rel : A → A → Bool) → (S : A → Type) → (ns : List A) → TsoBack rel S →
+                 ((c : A) → S c → TsoIn c ns) → (c : A) → S c → TsoIn c (tso-peels n rel ns)
+tso-peels-keep zero rel S ns bk sub c sc = sub c sc
+tso-peels-keep (suc n) rel S ns bk sub c sc =
+  (case tso-len-eq (tso-peel rel ns) ns return (λ b → TsoIn c (if b then tso-peel rel ns else tso-peels n rel (tso-peel rel ns))) of
+     true → tso-peel-keeps rel S ns bk sub c sc
+     false → tso-peels-keep n rel S (tso-peel rel ns) bk (tso-peel-keeps rel S ns bk sub) c sc)
+tso-in-not-nil : {A : Type} → (l : List A) → (x : A) → TsoIn x l → isTrue (case l return (λ w → Bool) of nil → true; cons y r → false) → Empty
+tso-in-not-nil nil x m h = m
+tso-in-not-nil (cons y r) x m h = h
+-- a nonempty set closed backwards within the list: the decision answers false
+tso-acyclic-closed : {A : Type} → (rel : A → A → Bool) → (S : A → Type) → (ns : List A) → TsoBack rel S →
+                     ((c : A) → S c → TsoIn c ns) → (x : A) → S x → isTrue (tso-acyclic rel ns) → Empty
+tso-acyclic-closed rel S ns bk sub x sx h =
+  (case tso-peels (tso-len ns) rel ns return (λ l → TsoIn x l → isTrue (case l return (λ w → Bool) of nil → true; cons y r → false) → Empty) of
+     nil → λ m2 h2 → m2
+     cons y r → λ m2 h2 → h2) (tso-peels-keep (tso-len ns) rel S ns bk sub x sx) h
+-- the nodes of a chain have predecessors on it
+TsoHasPred : {A : Type} → (A → A → Bool) → List A → A → Type
+TsoHasPred rel cs c = (y : A) × (TsoIn y cs × isTrue (rel y c))
+tso-chain-preds : {A : Type} → (rel : A → A → Bool) → (cs : List A) → (zs : List A) → (x y : A) → TsoIn x cs →
+                  ((c : A) → TsoIn c zs → TsoIn c cs) → TsoChain rel x zs y →
+                  ((c : A) → TsoIn c zs → TsoHasPred rel cs c) × TsoHasPred rel cs y
+tso-chain-preds rel cs nil x y inx sub ch = ((λ c m → Empty-rec m) , (x , (inx , ch)))
+tso-chain-preds rel cs (cons z r) x y inx sub ch =
+  ((λ c m → case m of
+              inl e → subst {_} {_} {_} {TsoHasPred rel cs} (sym e) (x , (inx , fst ch))
+              inr m2 → fst (tso-chain-preds rel cs r z y (sub z (inl (λ i → z))) (λ c2 m3 → sub c2 (inr m3)) (snd ch)) c m2) ,
+   snd (tso-chain-preds rel cs r z y (sub z (inl (λ i → z))) (λ c2 m3 → sub c2 (inr m3)) (snd ch)))
+-- THE DECISION IS SOUND: when tso-acyclic answers true there is no cycle x → z₁ → … → x of the
+-- relation through nodes of the list
+tso-acyclic-sound : {A : Type} → (rel : A → A → Bool) → (ns : List A) → (x : A) → (zs : List A) →
+                    ((c : A) → TsoIn c (cons x zs) → TsoIn c ns) → TsoChain rel x zs x →
+                    isTrue (tso-acyclic rel ns) → Empty
+tso-acyclic-sound rel ns x zs sub ch h =
+  tso-acyclic-closed rel (λ c → TsoIn c (cons x zs)) ns
+    (λ c m → case m of
+               inl e → subst {_} {_} {_} {TsoHasPred rel (cons x zs)} (sym e)
+                         (snd (tso-chain-preds rel (cons x zs) zs x x (inl (λ i → x)) (λ c2 m2 → inr m2) ch))
+               inr m2 → fst (tso-chain-preds rel (cons x zs) zs x x (inl (λ i → x)) (λ c2 m3 → inr m3) ch) c m2)
+    sub x (inl (λ i → x)) h

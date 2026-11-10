@@ -296,6 +296,14 @@ How to check (cached library, one file after another; the last line must read `N
   (sc, xchg), 160.5M (sc, store+mfence). The two files: `1145 passed, 0 failed; 228,887,935
   steps`.
 
+- **Item 4(a), first half.** `lib/isa/tso-acyclic.cub` (after `lib/isa/tso.cub`; 11 checks so
+  far): `TsoIn` (membership), `TsoChain rel x zs y` (a chain x → z₁ → … → y),
+  `tso-acyclic-closed` (a nonempty set of the list's nodes each with a predecessor in the set
+  makes the decision false) and
+  `tso-acyclic-sound : … → ((c : A) → TsoIn c (cons x zs) → TsoIn c ns) → TsoChain rel x zs x →
+  isTrue (tso-acyclic rel ns) → Empty`: **when the decision answers true there is no cycle
+  through nodes of the list.** Checks: `tso-acyclic-sound [22,288 steps]`.
+
 ## Found
 
 - **Elaborator refuses a structural recursion when an argument before the matched one changes.**
@@ -326,6 +334,17 @@ How to check (cached library, one file after another; the last line must read `N
   The non-dependent form `g (scmd c k) = h c (λ x → g (k x))` is accepted (`tso-step-fold`,
   `at-handle`), which is the way round used here.
 - An unchanged file is `cached:` and its `#show` readings are not printed again.
+- **"implicit argument is not determined" when a lemma about `isTrue (case l of …)` is applied
+  at a non-variable list** (for track S). With
+  `g7-nn : (A : Type) → (l : List A) → (x : A) → TsoIn {A} x l → isTrue (case l return (λ w → Bool) of nil → true; cons y r → false) → Empty`
+  (checks), the use
+  `g7-d : {A : Type} → (rel : A → A → Bool) → (ns : List A) → (x : A) → TsoIn x (tso-peels (tso-len ns) rel ns) → isTrue (tso-acyclic rel ns) → Empty`,
+  `g7-d rel ns x m h = g7-nn A (tso-peels (tso-len ns) rel ns) x m h`
+  is `FAIL … at: (case (case (case ns … reason: an implicit argument is not determined by the
+  other arguments' types or the type expected; its type: Type`, with every implicit written
+  out as well. The same proof with the case inlined
+  (`(case tso-peels … return (λ l → TsoIn x l → isTrue (case l return (λ w → Bool) of …) → Empty) of nil → λ m h → m; cons y r → λ m h → h) m h`)
+  checks (`tso-acyclic-closed`).
 - A data constructor takes no implicit arguments: `scmd {S} {A} c k` is `FAIL … an implicit
   argument {..} applied to something without implicit arguments`; write `scmd c k`.
 - `append`, `map`, `length` of `lib/prelude.cub` are not checked definitions (`error: code: not a
@@ -370,10 +389,7 @@ How to check (cached library, one file after another; the last line must read `N
 
 Items 1–3, 6, 7 complete; item 5's computable part complete, its general proof depends on
 item 4. Now: item 4, in this order.
-(a) In a new file `lib/isa/tso-acyclic.cub` (after `lib/isa/tso.cub`): `tso-acyclic` against
-    path-freeness. `TsoPath rel ns x y` (a nonempty path through members of ns);
-    `tso-acyclic-sound : isTrue (tso-acyclic rel ns) → TsoPath rel ns x x → Empty` (every node
-    of a cycle has a predecessor in the list, so no round of `tso-peel` removes it); and
+(a) In `lib/isa/tso-acyclic.cub`: `tso-acyclic-sound` is done. Next, appended to that file,
     `tso-acyclic-stamp`: a stamp `A → Nat` increasing along `rel` on members ⇒
     `tso-acyclic rel ns ≡ true` (a member of least stamp has no predecessor, so a round on a
     nonempty list shortens it).
