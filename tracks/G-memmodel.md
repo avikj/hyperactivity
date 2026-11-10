@@ -69,6 +69,7 @@ Files you own: `lib/isa/tso.cub`, `lib/mem/atomics.cub`, `experiments/tso/**`, t
 
 ## Needs from track A
 
+- OPEN: append `lib/mem/rc11.cub` to `LIB` after `lib/mem/atomics.cub` (+31 checks).
 - DONE by track A (commit `a30e0b2b`): both files are in `LIB`. The request was:
   `Makefile`: append `lib/isa/tso.cub lib/mem/atomics.cub` to `LIB` (after `lib/world.cub`'s
   dependents; they need only `lib/proc.cub`, `lib/world.cub`, and `tso.cub` before
@@ -272,6 +273,29 @@ How to check (cached library, one file after another; the last line must read `N
   after the library, `1156 passed, 0 failed; 179,416,793 steps` (uncached proofs), 145 s under
   load.
 
+- **Item 5, computable part done.** `lib/mem/rc11.cub` (checks after the library; not yet in
+  `LIB`, see Needs from track A): relations as lists of id pairs (`rc-union`, `rc-comp`,
+  `rc-plus`, `rc-irreflexive`, `rc-dom`/`rc-cod`/`rc-id`, `rc-rel`); a language-level candidate
+  `RcX = rc-x (x : TsoX) (modes : List (Word × MOrd))`; `rc11-consistent m0 c : Bool` =
+  `tso-wf` ∧ coherence (hb, hb;eco irreflexive, hb = (sb ∪ sw)+ with sw through rs and
+  fences) ∧ atomicity (rb;mo irreflexive; an update is one event) ∧ SC (psc_base ∪ psc_F
+  acyclic) ∧ no-thin-air (sb ∪ rf acyclic); `Rc11Consistent` the type; `rc11-outcomes m0 dom
+  ths` over `AtomThread`s; `rc-subset`; `rc-x86 hd ths`; and the general statement
+  `AtomsX86Correct hd : Type` (no term: see Limits).
+  RC11 sets (`experiments/tso/rc11.cub`; candidates / consistent / steps):
+  | program | relaxed | release/acquire | seq_cst |
+  |---|---|---|---|
+  | SB | 4/4 all four, 55,273 | 4/4 all four, 60,735 | 4/3 no (0,0), 124,915 |
+  | MP | 4/4 all four, 60,920 | 4/3 no (1,0), 67,865 | 4/3 no (1,0), 99,280 |
+  | LB | 4/3 no (1,1), 84,173 | 4/3 no (1,1), 94,516 | 4/3 no (1,1), 127,628 |
+  | IRIW | 16/16, 512,627 | 16/16, 633,869 | 16/15 no (1,0,1,0), 1,319,871 |
+  **Compilation of the atomics to x86 on these programs**: the 24 definitions
+  `rl-<prog>-<rlx|ra|sc>-<xchg|mfence> : isTrue (rl-incl hd n ths)` (no schedule cut by the
+  bound ∧ TSO outcome set of the handled program ⊆ RC11 set) all check with `= unit`. Steps:
+  SB 144k–388k each, MP 119k–224k, LB 147k–373k, IRIW 14.7M (rlx), 14.9M (ra), 2.2M
+  (sc, xchg), 160.5M (sc, store+mfence). The two files: `1145 passed, 0 failed; 228,887,935
+  steps`.
+
 ## Found
 
 - **Elaborator refuses a structural recursion when an argument before the matched one changes.**
@@ -329,22 +353,44 @@ How to check (cached library, one file after another; the last line must read `N
   unaffected; the two outcome sets are equal only for single-cell programs. Closing it: an
   "atomic group" relation on events (same store / same load) and the axiom that no other
   thread's write to the group's cells is ordered between the group's members.
+- `AtomsX86Correct hd` (TSO outcomes of every handled program ⊆ RC11 outcomes) is stated and
+  has no term. Proved: its 24 instances above, by computation. Missing for the general proof,
+  in order: (1) `TsoSound` in general (item 4); (2) a map from a TSO execution of a handled
+  program to a language-level candidate (events of one atomic command merged: a seq_cst
+  store's `W;F` or `L` becomes one `W`, a failed `lock cmpxchg`'s `L` becomes an `R`, the
+  ordering attached), preserving results; (3) the lemma that this map takes TSO-consistent to
+  RC11-consistent: hb ⊆ the TSO order (po ∪ rfe-forward), eco forward in the same order
+  except plain W→R pairs, and for psc that between seq_cst events of one thread a locked
+  event or an mfence intervenes. None of (2), (3) is written.
 - The converse of `TsoSound` (every consistent candidate of a program is some schedule's
   execution) is not stated as a type; what exists is the equality of the two outcome sets on
   the six programs above.
 
 ## Next step
 
-Items 1–3, 6, 7 are complete. Remaining: 5 then 4 (section "Continuation").
-Now: item 5, computable part. New file `lib/mem/rc11.cub` (after `lib/mem/atomics.cub`):
-relations as lists of id pairs (`rc-compose`, `rc-plus` with duplicate-free insert,
-`rc-irreflexive`); language-level candidates = `TsoEv` events + a mode per event id
-(`List (Word × MOrd)`) + the `TsoX` witness shape (rf, mo as `co`); `rc11-consistent`
-(RC11 of Lahav–Vafeiadis–Kang–Hur–Dreyer 2017: hb = (sb ∪ sw)+, coherence irreflexive(hb;eco?),
-atomicity, SC acyclic(psc_base ∪ psc_F), no-thin-air acyclic(sb ∪ rf); an update is one event
-that reads and writes); `rc11-outcomes m0 dom ths` over `AtomThread`s (reusing `tso-step-fold`,
-`tso-ax-rfs`, `tso-ax-cos`). Then `experiments/tso/rc11.cub`: SB/MP/LB/IRIW at relaxed,
-release/acquire, seq_cst: the RC11 sets, and `isTrue (subset (TSO outcomes under each handler)
-(RC11 set))`.
-Then item 4 (plan under the item; start with `tso-acyclic` against path-freeness).
-`$LIBS` already contains `lib/isa/tso.cub lib/mem/atomics.cub`: name only experiment files.
+Items 1–3, 6, 7 complete; item 5's computable part complete, its general proof depends on
+item 4. Now: item 4, in this order.
+(a) In a new file `lib/isa/tso-acyclic.cub` (after `lib/isa/tso.cub`): `tso-acyclic` against
+    path-freeness. `TsoPath rel ns x y` (a nonempty path through members of ns);
+    `tso-acyclic-sound : isTrue (tso-acyclic rel ns) → TsoPath rel ns x x → Empty` (every node
+    of a cycle has a predecessor in the list, so no round of `tso-peel` removes it); and
+    `tso-acyclic-stamp`: a stamp `A → Nat` increasing along `rel` on members ⇒
+    `tso-acyclic rel ns ≡ true` (a member of least stamp has no predecessor, so a round on a
+    nonempty list shortens it).
+(b) `TsoSound`. Design decided (not started): give every transition, flushes included, a
+    fresh id used as its time; the witness's order on writes becomes `List (Word × Word)`
+    (writer id, commit time) and `tso-annot` reads `cp`/`scp` as commit times with
+    earliest-match lookups defined by recursion on the latest-first log (so a lookup on
+    `cons l lg` unfolds one step and a value once defined never changes). Stamp for
+    `tso-ghb`: a write's commit time, any other event's id. Stamp for `tso-loc`: the pair
+    (commit time of the source if it was pending at the read, else the read's id; the read's
+    id). Invariants on `TsoSt`, each preserved by `tso-read1`, the store's enqueue,
+    `tso-apply`, `tso-lockn`, the fence: (I1) a committed write's commit time exceeds its id;
+    (I2) one thread's writes commit in id order; (I3) at a locked event or fence of thread t
+    every earlier write of t is committed; (I4) a read from memory has its source committed
+    before it; (I5) a read from the buffer has its own thread's newest pending write to the
+    address as source; (I6) ids below `next` and distinct. Ids/times should become `Nat` (or
+    the order lemmas on `%wlt` be proved first: transitivity, irreflexivity, n < n+1).
+(c) The converse: state `TsoComplete`; record the obstacle if not proved.
+`$LIBS` already contains `lib/isa/tso.cub lib/mem/atomics.cub`: name `lib/mem/rc11.cub` and the
+experiment files after it.

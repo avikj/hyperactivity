@@ -1,0 +1,89 @@
+-- experiments/tso/rc11.cub — the four litmus programs at the language level (atomics with an
+-- ordering for stores and one for loads), their outcomes under RC11 (lib/mem/rc11.cub), and
+-- the compilation to x86: the outcomes of the handled program on the TSO machine are among
+-- those RC11 allows, for each ordering choice and both handlers.
+rl-dom : List Word
+rl-dom = cons #0 (cons #1 nil)
+rl-sb : MOrd → MOrd → List AtomThread
+rl-sb so lo = cons (ai-store so #0 #1 (ai-load lo #1 (λ r → ai-ret (cons r nil))))
+             (cons (ai-store so #1 #1 (ai-load lo #0 (λ r → ai-ret (cons r nil)))) nil)
+rl-mp : MOrd → MOrd → List AtomThread
+rl-mp so lo = cons (ai-store so #0 #1 (ai-store so #1 #1 (ai-ret nil)))
+             (cons (ai-load lo #1 (λ r0 → ai-load lo #0 (λ r1 → ai-ret (cons r0 (cons r1 nil))))) nil)
+rl-lb : MOrd → MOrd → List AtomThread
+rl-lb so lo = cons (ai-load lo #0 (λ r → ai-store so #1 #1 (ai-ret (cons r nil))))
+             (cons (ai-load lo #1 (λ r → ai-store so #0 #1 (ai-ret (cons r nil)))) nil)
+rl-iriw : MOrd → MOrd → List AtomThread
+rl-iriw so lo = cons (ai-store so #0 #1 (ai-ret nil)) (cons (ai-store so #1 #1 (ai-ret nil))
+               (cons (ai-load lo #0 (λ r0 → ai-load lo #1 (λ r1 → ai-ret (cons r0 (cons r1 nil)))))
+               (cons (ai-load lo #1 (λ r2 → ai-load lo #0 (λ r3 → ai-ret (cons r2 (cons r3 nil))))) nil)))
+rl-rc : List AtomThread → TsoAx
+rl-rc ths = rc11-outcomes (λ a → #0) rl-dom ths
+-- TSO outcomes of the handled program (every schedule: none cut by the bound n) within RC11's
+rl-incl : Handler AtomS TsoIS → Nat → List AtomThread → Bool
+rl-incl hd n ths =
+  andB (weq (tso-sum-cut (tso-outcomes n (rc-x86 hd ths))) #0)
+       (rc-subset (tso-sum-outs (tso-outcomes n (rc-x86 hd ths))) (tso-ax-outs (rl-rc ths)))
+-- RC11's sets
+#show rl-rc (rl-sb mo-relaxed mo-relaxed)
+#show rl-rc (rl-sb mo-release mo-acquire)
+#show rl-rc (rl-sb mo-seq-cst mo-seq-cst)
+#show rl-rc (rl-mp mo-relaxed mo-relaxed)
+#show rl-rc (rl-mp mo-release mo-acquire)
+#show rl-rc (rl-mp mo-seq-cst mo-seq-cst)
+#show rl-rc (rl-lb mo-relaxed mo-relaxed)
+#show rl-rc (rl-lb mo-release mo-acquire)
+#show rl-rc (rl-lb mo-seq-cst mo-seq-cst)
+#show rl-rc (rl-iriw mo-relaxed mo-relaxed)
+#show rl-rc (rl-iriw mo-release mo-acquire)
+#show rl-rc (rl-iriw mo-seq-cst mo-seq-cst)
+-- COMPILATION TO x86 ON THESE PROGRAMS: for each ordering choice and each handler, every
+-- outcome of the handled program over every schedule of the TSO machine is an RC11 outcome
+rl-sb-rlx-xchg : isTrue (rl-incl atom-x86-xchg 6 (rl-sb mo-relaxed mo-relaxed))
+rl-sb-rlx-xchg = unit
+rl-sb-rlx-mfence : isTrue (rl-incl atom-x86-mfence 6 (rl-sb mo-relaxed mo-relaxed))
+rl-sb-rlx-mfence = unit
+rl-sb-ra-xchg : isTrue (rl-incl atom-x86-xchg 6 (rl-sb mo-release mo-acquire))
+rl-sb-ra-xchg = unit
+rl-sb-ra-mfence : isTrue (rl-incl atom-x86-mfence 6 (rl-sb mo-release mo-acquire))
+rl-sb-ra-mfence = unit
+rl-sb-sc-xchg : isTrue (rl-incl atom-x86-xchg 4 (rl-sb mo-seq-cst mo-seq-cst))
+rl-sb-sc-xchg = unit
+rl-sb-sc-mfence : isTrue (rl-incl atom-x86-mfence 8 (rl-sb mo-seq-cst mo-seq-cst))
+rl-sb-sc-mfence = unit
+rl-mp-rlx-xchg : isTrue (rl-incl atom-x86-xchg 6 (rl-mp mo-relaxed mo-relaxed))
+rl-mp-rlx-xchg = unit
+rl-mp-rlx-mfence : isTrue (rl-incl atom-x86-mfence 6 (rl-mp mo-relaxed mo-relaxed))
+rl-mp-rlx-mfence = unit
+rl-mp-ra-xchg : isTrue (rl-incl atom-x86-xchg 6 (rl-mp mo-release mo-acquire))
+rl-mp-ra-xchg = unit
+rl-mp-ra-mfence : isTrue (rl-incl atom-x86-mfence 6 (rl-mp mo-release mo-acquire))
+rl-mp-ra-mfence = unit
+rl-mp-sc-xchg : isTrue (rl-incl atom-x86-xchg 4 (rl-mp mo-seq-cst mo-seq-cst))
+rl-mp-sc-xchg = unit
+rl-mp-sc-mfence : isTrue (rl-incl atom-x86-mfence 8 (rl-mp mo-seq-cst mo-seq-cst))
+rl-mp-sc-mfence = unit
+rl-lb-rlx-xchg : isTrue (rl-incl atom-x86-xchg 6 (rl-lb mo-relaxed mo-relaxed))
+rl-lb-rlx-xchg = unit
+rl-lb-rlx-mfence : isTrue (rl-incl atom-x86-mfence 6 (rl-lb mo-relaxed mo-relaxed))
+rl-lb-rlx-mfence = unit
+rl-lb-ra-xchg : isTrue (rl-incl atom-x86-xchg 6 (rl-lb mo-release mo-acquire))
+rl-lb-ra-xchg = unit
+rl-lb-ra-mfence : isTrue (rl-incl atom-x86-mfence 6 (rl-lb mo-release mo-acquire))
+rl-lb-ra-mfence = unit
+rl-lb-sc-xchg : isTrue (rl-incl atom-x86-xchg 4 (rl-lb mo-seq-cst mo-seq-cst))
+rl-lb-sc-xchg = unit
+rl-lb-sc-mfence : isTrue (rl-incl atom-x86-mfence 8 (rl-lb mo-seq-cst mo-seq-cst))
+rl-lb-sc-mfence = unit
+rl-iriw-rlx-xchg : isTrue (rl-incl atom-x86-xchg 8 (rl-iriw mo-relaxed mo-relaxed))
+rl-iriw-rlx-xchg = unit
+rl-iriw-rlx-mfence : isTrue (rl-incl atom-x86-mfence 8 (rl-iriw mo-relaxed mo-relaxed))
+rl-iriw-rlx-mfence = unit
+rl-iriw-ra-xchg : isTrue (rl-incl atom-x86-xchg 8 (rl-iriw mo-release mo-acquire))
+rl-iriw-ra-xchg = unit
+rl-iriw-ra-mfence : isTrue (rl-incl atom-x86-mfence 8 (rl-iriw mo-release mo-acquire))
+rl-iriw-ra-mfence = unit
+rl-iriw-sc-xchg : isTrue (rl-incl atom-x86-xchg 6 (rl-iriw mo-seq-cst mo-seq-cst))
+rl-iriw-sc-xchg = unit
+rl-iriw-sc-mfence : isTrue (rl-incl atom-x86-mfence 10 (rl-iriw mo-seq-cst mo-seq-cst))
+rl-iriw-sc-mfence = unit
