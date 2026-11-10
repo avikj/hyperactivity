@@ -295,14 +295,17 @@ passes, and its answers equal the machine's.
    an intermediate language would need its own meaning and its own check, and the hardware
    model is the meaning that matters.
 
-6. **The standard's memory and the machine's memory are two handlers of one signature.** A
-   language's meaning needs allocations, bounds and lifetimes to say what is undefined; the
-   machine has addresses. A reader therefore produces a process over a signature of memory
-   commands; `mem-std` (into the abstract memory, undefined behaviour an outcome) gives the
-   meaning, `mem-flat` (into addresses, one instruction per access) gives what is compiled,
-   and one theorem about the signature — a lemma per command — says the second agrees with
-   the first on every run that is defined. Proved once; nothing per program. Properties are
-   proved of the first and hold of the binary by that theorem.
+6. **The standard's memory and the machine's memory.** A language's meaning needs
+   allocations, bounds and lifetimes to say what is undefined; the machine has addresses. A
+   reader produces a process over a signature of memory commands. `mem-std` (into the
+   abstract memory, undefined behaviour an outcome) gives the meaning. The machine's memory is
+   a type indexed by the abstract memory it represents, and each command on it is written at
+   the type that says it computes the abstract command's answer on a defined run; the index is
+   ghost and erased. So what is compiled is, by its type, the meaning.
+7. **No proof work.** As there are no tests: a definition is written at the type that says
+   what it is for (a template with its equation, a pass with its path, a representation
+   indexed by what it represents, a machine over states satisfying its invariant). Reasoning
+   is the type the code is written at, never a later activity.
 
 ## 6. Phases 2–8: everything that will be built
 
@@ -322,19 +325,15 @@ Built:
    stack and registers under SysV, as a definition producing the model's initial state.
 4. **The memory model.** x86-TSO as an axiomatic predicate over executions, integrated with the
    instruction model's memory events (Isla is the precedent).
-5. **The template lemmas, and the encoder returns its path.** One lemma per template
-   (`lib/isa/templates.cub`, about 45): *for every state satisfying the frame predicate, if
-   the sub-bytes compute the sub-terms' values into `rax`, then these bytes compute this
-   construct's value into `rax` and preserve the frame*, stated up to an observation that
-   forgets flags and dead stack. Straight-line templates are proved by running the model on
-   the literal bytes with symbolic operands (conversion); the counted loop and the apply
-   routine by induction; the overflow and stack exits by cases. `cx` then returns
-   `(bytes , path)`, the path assembled from the lemmas along its own recursion, exactly as
-   the specializer assembles its path from theorems; `x-push` and `x-lift` return paths the
-   same way (β and naming). The checker checks the assembled path per program. This is the
-   only proof-writing in the plan: once, bounded by the template count, nothing per program.
-   After it, compiling `f` yields `⟦x86⟧ (bytes) ≡ f` and the encoder is out of the trusted
-   base.
+5. **The encoder is written at its type.** A template is not bytes: it is a value of
+   `Tmpl m = Σ bytes . (for every state in the frame, ⟦x86⟧ bytes computes m into rax and keeps
+   the frame)`, up to the observation that forgets flags and dead stack. The straight-line
+   templates inhabit their types by the model running on the literal bytes (conversion); the
+   combinators that sequence, branch, loop and call take `Tmpl`s to `Tmpl`s. `cx : (c : Code)
+   → Tmpl (eval-g c)` is then the encoder; `x-push`, `x-lift`, erasure and η-contraction
+   become functions returning their path with their result, as the specializer already does.
+   Today's `lib/x86.cub` is the opposite (bytes and passes with no reason attached, trusted):
+   it is rewritten at these types when the model lands, not annotated afterwards.
 6. **Floating point in the model.** The Sail snapshot has no scalar SSE; `addsd`, `subsd`,
    `mulsd`, `divsd`, `ucomisd`, `cvtsi2sd`, `cvttsd2si`, `movq` are added from the ACL2
    originals over the machine's IEEE primitives. Until then the float templates are trusted.

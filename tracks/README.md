@@ -52,9 +52,19 @@ for one of them, the spec is wrong: say so under "Found" and do the right thing.
 3. **Assumptions passed off as facts.** A model of something outside the system (the kernel,
    the hardware's memory ordering, Clang's Sema, an imported ISA model) is an *assumption*:
    it is named in PLAN §7 and every theorem that uses it has it as a hypothesis or parameter.
-4. **Proof bulk.** A proof that is not a path by construction, a rewrite along a theorem the
-   code needed anyway, or one lemma per construct of a fixed finite signature, means the
-   design is wrong: stop and write the problem under "Found".
+4. **Code written without its reason, with "proof" as a later activity.** There is no proof
+   work here, as there are no tests. A definition is written at the type that says what it is
+   for, so that it cannot be written wrong: an encoder template is a value of
+   `Σ bytes . ⟦x86⟧ bytes ≡ meaning`, not bytes with a lemma owed; a pass over codes returns
+   its path with its result; a handler into a representation is written over a type indexed
+   by what it represents; a machine whose runs must satisfy a predicate has transitions typed
+   over states that satisfy it. The index is ghost and costs nothing at run time (the compiler
+   erases what no result depends on). If writing the definition at its real type is hard, the
+   design is wrong and that is found on the first line, not after the code exists. "State the
+   theorem, prove it later", "one lemma per …, afterwards", a type with no inhabitant recorded
+   as a result: all forbidden. The only reasoning ever supplied separately from code is about
+   foreign code that did not carry it (a property of imported C++), and that is done by
+   computation (a checker decides it) wherever it can be.
 5. **Deferral.** "Not modelled", "v1", "later" are allowed only under "Limits" with what is
    missing; a Limit on something the track's samples use keeps the track open.
 
@@ -67,15 +77,15 @@ value. There are then two handlers of that one signature, and one theorem:
 - `mem-std`: into the standard's abstract memory (`lib/mem/memory.cub`'s `AMem`: allocations,
   bounds, liveness, initialization; undefined behaviour as an outcome). The reader's term
   under this handler **is** the language's meaning; properties are stated of it.
-- `mem-flat`: into the machine's memory (addresses are words; `load`/`store` are the world's
-  `w-load`/`w-store`, which the compiler encodes as one instruction). The reader's term under
-  this handler is what `#jit`/`#build` compile.
-- **Once, for the signature** (one lemma per command, composed by `lib/obs.cub`'s up-to-context
-  rule, the same shape as `experiments/obs/two-compilers.cub`): for every process `p`, if
-  `p` under `mem-std` ends without undefined behaviour, then `p` under `mem-flat` gives the
-  same observations, for any placement of allocations at disjoint addresses. Nothing per
-  program. Without it, compiled C++ would be either an interpreter of `AMem` or a term nobody
-  proved anything about.
+- `mem-flat` is **not a second handler with a theorem owed**. It is written over the type of
+  flat memories *indexed by the abstract memory they represent*: `Flat s` for `s : AMem`
+  (bytes at addresses, with the placement of `s`'s live allocations). Each command is
+  implemented at the type that says it is the abstract one:
+  `flat-load : (k p) → Flat s → (mem-std-load k p s ≡ ok v) → Σ v′ . v′ ≡ v`, likewise store
+  (returning `Flat s′` for the abstract successor `s′`), alloc, free. The index `s` and the
+  definedness argument are ghosts the compiler erases, so the compiled command is one
+  instruction; and a reader's term run through these is, by its type, the meaning's value on
+  every defined run. Nothing is proved afterwards because nothing can be written otherwise.
 
 ## The tracks
 
