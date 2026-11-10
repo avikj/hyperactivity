@@ -315,6 +315,12 @@ How to check (cached library, one file after another; the last line must read `N
   Not proved: decision false ⇒ a cycle exists (needs a pigeonhole on a list every node of
   which has a predecessor in it); see Limits.
 
+- **Item 4(b), the reduction (not the theorem).** `tso-consistent-stamps` (in
+  `lib/isa/tso-acyclic.cub`, checks): `isTrue (tso-wf m0 x)` and a stamp increasing along
+  `tso-ghb` and one along `tso-loc` on the annotated events give `isTrue (tso-consistent m0 x)`.
+  So `TsoSound` is reduced to: every quiet reachable state's execution is well-formed and has
+  the two stamps. **`TsoSound` itself still has no term** (see Limits and Next step).
+
 ## Found
 
 - **Elaborator refuses a structural recursion when an argument before the matched one changes.**
@@ -363,10 +369,23 @@ How to check (cached library, one file after another; the last line must read `N
 
 ## Limits
 
-- `TsoSound` in general (all programs, all schedules) is stated and not proved. Proved: its
-  instances at SB, MP, LB, IRIW over every schedule, by computation. A general proof is an
-  invariant on `TsoSt` (every edge of `tso-ghb` and `tso-loc` goes forward in the trace when a
-  write is placed at its flush) carried through `tso-step`; it has not been written.
+- **`TsoSound` in general is stated and NOT proved** (item 4's main demand is unmet). Proved:
+  its instances by computation (SB, MP, LB, IRIW, both seq_cst SBs, the k=2 spin-lock, three
+  byte-level programs), and the reduction `tso-consistent-stamps`. Missing: that the
+  machine's traces are well-formed and supply the two stamps; the invariants this needs are
+  listed under Next step (b). Nothing is postulated.
+- **The converse (completeness) is false as the machine now stands, and unproved where it is
+  true.** Counterexample, computed: `by-w2` (`experiments/tso/bytes.cub`; a 16-bit store of 513
+  beside a 16-bit load) has axiomatic outcome set {0, 1, 512, 513} and operational set
+  {0, 513}: the axiomatic form has no axiom tying the bytes of one store together. For
+  programs of single-cell instructions the two sets agree on every program computed (six
+  litmus programs and the spin-lock), and the general statement is not proved; its proof
+  needs (1) from `isTrue (tso-acyclic tso-ghb ns)` a list of the events sorted along ghb (the
+  unproved direction of the decision: no stuck round, so the peeling order is a linear
+  extension), (2) that replaying the threads in that order (an instruction at each
+  R/L/F/W-enqueue, a flush at each W's place) is enabled at every step, which uses the same
+  buffer invariants as soundness, (3) that the replay's trace yields the candidate up to the
+  renaming of ids. None is written.
 - The consistency predicate is the rf/co ("global happens-before") formulation of x86-TSO
   (Owens–Sarkar–Sewell's model as rendered by Alglave–Maranget–Tautschnig's `x86tso.cat`), not
   OSS's own memory-order-with-reads formulation; the two are equivalent in the literature, and
@@ -401,24 +420,46 @@ How to check (cached library, one file after another; the last line must read `N
 ## Next step
 
 Items 1–3, 6, 7 complete; item 5's computable part complete, its general proof depends on
-item 4. Now: item 4, in this order.
+item 4; item 4(a) complete; **item 4(b) (`tso-sound : TsoSound`) is the open work**, then
+item 5's general inclusion. Item 4, in this order.
 (a) DONE (`tso-acyclic-sound`, `tso-acyclic-stamp`). What `tso-acyclic-stamp` is for in (b): a stamp `A → Nat` increasing along `rel` on members ⇒
     `tso-acyclic rel ns ≡ true` (a member of least stamp has no predecessor, so a round on a
     nonempty list shortens it).
-(b) `TsoSound`. Design decided (not started): give every transition, flushes included, a
-    fresh id used as its time; the witness's order on writes becomes `List (Word × Word)`
-    (writer id, commit time) and `tso-annot` reads `cp`/`scp` as commit times with
-    earliest-match lookups defined by recursion on the latest-first log (so a lookup on
-    `cons l lg` unfolds one step and a value once defined never changes). Stamp for
-    `tso-ghb`: a write's commit time, any other event's id. Stamp for `tso-loc`: the pair
-    (commit time of the source if it was pending at the read, else the read's id; the read's
-    id). Invariants on `TsoSt`, each preserved by `tso-read1`, the store's enqueue,
-    `tso-apply`, `tso-lockn`, the fence: (I1) a committed write's commit time exceeds its id;
-    (I2) one thread's writes commit in id order; (I3) at a locked event or fence of thread t
-    every earlier write of t is committed; (I4) a read from memory has its source committed
-    before it; (I5) a read from the buffer has its own thread's newest pending write to the
-    address as source; (I6) ids below `next` and distinct. Ids/times should become `Nat` (or
-    the order lemmas on `%wlt` be proved first: transitivity, irreflexivity, n < n+1).
-(c) The converse: state `TsoComplete`; record the obstacle if not proved.
+(b) `TsoSound : (ths) (sch) → isTrue (tso-state-ok …)`. Use `tso-consistent-stamps`. Plan, with
+    every fact needed (worked out on paper; none written as a term):
+    1. Instrument: every transition, flushes included, takes a fresh id as its time
+       (`l-flush t id a v ft`); a read's label also records the thread of its source
+       (`stid`: own t for a buffer read; for memory, a new state field "thread of the last
+       flushed write per address"). The witness's order on writes becomes
+       `List ((Word × Word) × Word)` ((thread, writer id), commit time); `tso-annot` sets
+       `cp` = commit time by earliest-match lookup defined by recursion on the latest-first
+       log (a lookup on `cons l lg` unfolds one step; a value once nonzero never changes),
+       `scp` = that lookup at (stid, src); a locked event's `cp` is its id. `tso-ghb`'s rfe
+       test becomes `stid ≠ tid` on the reader, and `tso-wf` checks stid against the source.
+       Ids/times as `Nat` (the order lemmas of `tso-acyclic.cub` then apply; on `Word` one
+       needs `%wlt` transitive, irreflexive, n < n+1 first).
+    2. Stamp for `tso-ghb`: `cp` for a plain write, `id` otherwise. Edges: po from R/L/F to
+       R/L/F: by ids. To W: (F1) a commit time exceeds the write's id. W→W one thread: (G2)
+       FIFO. W→L/F: (G3) at a locked event or fence of t every earlier write of t is
+       committed. rfe: (S1) the last flushed write of an address is committed before now.
+       co: definitional. fr: memory read: (S3) every committed write to a has commit time ≤
+       that of the last flushed one, and later commits are after the read; buffer read: (R2)
+       a pending write's commit is after the read.
+    3. Stamp for `tso-loc`: lexicographic (cp, 0, 0) for a write, (scp, 1, id) for a read;
+       `tso-acyclic-stamp` must first be generalized from `Nat` to an order with
+       `tso-cmp`/`tso-lt-le-absurd`/`tso-le-trans`/`tso-lt-le` (its proof uses only these).
+       rf, co, fr edges are then definitional; po-loc W→W is (G2); R→W, W→R, R→R on one
+       location need (G2), (S3) and "a buffer read's source is the thread's newest pending
+       write to the address".
+    4. The buffer invariant everything in 2–3 marked G/R rests on, preserved by `tso-read1`,
+       the enqueue, `tso-apply`, `tso-lockn`, the fence: (B1) the entries of `bf t` are exactly
+       t's uncommitted write labels of the log, newest first, ids strictly decreasing and
+       below `next`; (B2) hence the entry flushed is t's oldest uncommitted write.
+    5. `tso-wf`: ids distinct (all below `next`, each label takes `next`), each reader one rf
+       entry, each writer one commit entry once quiet (B1), the source exists with the value.
+    6. Lift through `tso-go`/`tso-step`/`tso-run` (the state after a step is `tso-instr` or
+       `tso-flush1` of the state before) and the n-cell loops (`tso-readn`, `tso-lockn`).
+(c) The converse: its counterexample and obstacle are under Limits. To make it true: add the
+    atomic-group axiom for n-cell accesses (Limits), then the three steps listed there.
 `$LIBS` already contains `lib/isa/tso.cub lib/mem/atomics.cub`: name `lib/mem/rc11.cub` and the
 experiment files after it.

@@ -209,3 +209,19 @@ tso-peels-nil (suc n) rel st ns mono hl =
 tso-acyclic-stamp : {A : Type} → (rel : A → A → Bool) → (st : A → Nat) → (ns : List A) → TsoMono rel st ns →
                     isTrue (tso-acyclic rel ns)
 tso-acyclic-stamp rel st ns mono = tso-peels-nil (tso-len ns) rel st ns mono (<-suc-self (tso-len ns))
+-- ---------------------------------------------------------------- consistency from stamps
+-- TSO consistency of a candidate reduced to three facts: it is well-formed, and its annotated
+-- events embed in a linear order along tso-ghb, and in one along tso-loc. (This is the step
+-- from a memory order to the rf/co form: a memory order is such a stamp. What TsoSound needs
+-- beyond it is that the machine's traces supply the stamps: see tracks/G-memmodel.md.)
+tso-consistent-stamps : (m0 : Memory) → (es : List TsoEv) → (rf : List (Word × Word)) → (co : List Word) →
+                        (st1 st2 : TsoN → Nat) →
+                        isTrue (tso-wf m0 (tso-x es rf co)) →
+                        TsoMono tso-ghb st1 (tso-map (tso-annot rf co) es) →
+                        TsoMono tso-loc st2 (tso-map (tso-annot rf co) es) →
+                        isTrue (tso-consistent m0 (tso-x es rf co))
+tso-consistent-stamps m0 es rf co st1 st2 wf g l =
+  and-intro {tso-wf m0 (tso-x es rf co)} wf
+    (and-intro {tso-acyclic tso-ghb (tso-map (tso-annot rf co) es)}
+       (tso-acyclic-stamp tso-ghb st1 (tso-map (tso-annot rf co) es) g)
+       (tso-acyclic-stamp tso-loc st2 (tso-map (tso-annot rf co) es) l))
