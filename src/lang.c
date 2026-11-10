@@ -1669,6 +1669,8 @@ Port global_copy(long g, Key *as) {
     return p;
 }
 Cell *global_res(long g) { return G[g].res; }
+/* an axiom's type (its global), or -2 when g is not an axiom (a primitive with no computation) */
+long global_axiom_ty(long g) { return g >= 0 && g < nG && G[g].kind == G_AXIOM ? G[g].tyg : -2; }
 static pthread_mutex_t park_mu = PTHREAD_MUTEX_INITIALIZER;
 void global_park(long g, Cell *op, Cell *glob) {
     pthread_mutex_lock(&park_mu);

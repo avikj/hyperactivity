@@ -507,3 +507,89 @@ toNat-plusw a b = case b return (λ y → toNat (plusw (fromNat a) (fromNat y)) 
 -- the machine's addition, along the path
 toNat-wadd : (a b : Nat) → toNat (wadd (fromNat a) (fromNat b)) ≡ plus a b
 toNat-wadd a b = concat (λ i → toNat (plusw≡wadd (fromNat a) (fromNat b) (~ i))) (toNat-plusw a b)
+
+-- ---------------------------------------------------------------- what the bitwise word operations compute
+-- The bitwise operations and the shifts compute on numerals only. What they compute on any word is
+-- stated here, trusted, for a word written by its bits (nbw, little endian): five laws, each the
+-- operation's meaning; and one law that a word below 2^k is the word of its k lowest bits. Everything
+-- else about them is proved from these (lib/word.cub).
+bb-not : Bool → Bool
+bb-not true = false
+bb-not false = true
+
+-- each a case on the second argument (a mask, a numeral's bit, is there)
+bb-and : Bool → Bool → Bool
+bb-and x true = x
+bb-and x false = false
+
+bb-or : Bool → Bool → Bool
+bb-or x true = true
+bb-or x false = x
+
+bb-xor : Bool → Bool → Bool
+bb-xor x true = bb-not x
+bb-xor x false = x
+
+b2w : Bool → Word
+b2w true = #1
+b2w false = #0
+
+-- a little-endian bit list's word (the rest once, doubled by %wmul: a word written twice would be
+-- compared twice at every bit; the bit added last, %wadd computing on its second argument)
+nbw : List Bool → Word
+nbw nil = #0
+nbw (cons b r) = %wadd (%wmul (nbw r) #2) (b2w b)
+
+-- bit i of a word and its k lowest bits, by the primitives (so a numeral's compute)
+wbit : Word → Bool
+wbit w = %weq (%wand w #1) #1
+
+wbits : Nat → Word → List Bool
+wbits zero w = nil
+wbits (suc k) w = cons (wbit w) (wbits k (%wshr w #1))
+
+-- bitwise on lists, a missing bit 0
+zl-and : List Bool → List Bool → List Bool
+zl-and nil ys = nil
+zl-and (cons x xs) ys = case ys return (λ z → List Bool) of
+  nil → nil
+  cons y r → cons (bb-and x y) (zl-and xs r)
+
+zl-or : List Bool → List Bool → List Bool
+zl-or nil ys = ys
+zl-or (cons x xs) ys = case ys return (λ z → List Bool) of
+  nil → cons x xs
+  cons y r → cons (bb-or x y) (zl-or xs r)
+
+zl-xor : List Bool → List Bool → List Bool
+zl-xor nil ys = ys
+zl-xor (cons x xs) ys = case ys return (λ z → List Bool) of
+  nil → cons x xs
+  cons y r → cons (bb-xor x y) (zl-xor xs r)
+
+zl-falses : Nat → List Bool
+zl-falses zero = nil
+zl-falses (suc n) = cons false (zl-falses n)
+
+zl-drop : Nat → List Bool → List Bool
+zl-drop zero l = l
+zl-drop (suc n) l = case l return (λ z → List Bool) of
+  nil → nil
+  cons x r → zl-drop n r
+
+-- 2^k
+wpow2 : Nat → Word
+wpow2 zero = #1
+wpow2 (suc k) = %wmul (wpow2 k) #2
+
+-- the laws, each a constant of its type with no computation (a path's ends are its type's, so a
+-- transport along one is stuck, never wrong). Multiplication, by recursion on the second argument:
+primitive w-mul-zero : (x : Word) → PathP (λ (i : I) → Word) (%wmul x #0) #0
+primitive w-mul-suc : (x : Word) → (y : Word) → PathP (λ (i : I) → Word) (%wmul x (%wsucc y)) (%wadd (%wmul x y) x)
+-- the bits:
+primitive w-of-bits : (k : Nat) → (x : Word) → PathP (λ (i : I) → Bool) (%wlt x (wpow2 k)) true → PathP (λ (i : I) → Word) (nbw (wbits k x)) x
+primitive w-and-bits : (xs : List Bool) → (ys : List Bool) → PathP (λ (i : I) → Word) (%wand (nbw xs) (nbw ys)) (nbw (zl-and xs ys))
+primitive w-or-bits : (xs : List Bool) → (ys : List Bool) → PathP (λ (i : I) → Word) (%wor (nbw xs) (nbw ys)) (nbw (zl-or xs ys))
+primitive w-xor-bits : (xs : List Bool) → (ys : List Bool) → PathP (λ (i : I) → Word) (%wxor (nbw xs) (nbw ys)) (nbw (zl-xor xs ys))
+primitive w-shl-bits : (xs : List Bool) → (k : Nat) → PathP (λ (i : I) → Word) (%wshl (nbw xs) (fromNat k)) (nbw (list-append (zl-falses k) xs))
+primitive w-shr-bits : (xs : List Bool) → (k : Nat) → PathP (λ (i : I) → Word) (%wshr (nbw xs) (fromNat k)) (nbw (zl-drop k xs))

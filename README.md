@@ -35,7 +35,7 @@ of a thing proved in place of the thing.
 
 ```
 make build/cubical          # the machine
-make library                # loads the LIB list of the Makefile: 1,480 passed, 406 failed
+make library                # loads the LIB list of the Makefile: 1,684 passed, 406 failed
 ```
 
 401 of the 406 are refused untyped definitions; the other 5 (`cstr-fill`, `cstr`, `cstr-at`,
@@ -105,7 +105,7 @@ All **check** in `make library` unless a load is named.
 | file | lines | what it is | depends on |
 |---|---|---|---|
 | `std.cub` | 578 | paths, equivalences, univalence (`ua`, `uaβ`), `Nat`, `Int`, Hedberg, `Word ≃ Nat` and `Word ≡ Nat`, machine word operations equal to their definitions, guarded recursion, streams | CORE |
-| `prim.cub` | 509 | `Int64`, `UInt32`, `UInt64`, `Float64`, `Float32`, `Bytes n` with proof-carrying loads and stores; arrays; `Fin n → A ≃ Array n`. 72 primitives; the load/store and array-extensionality laws are trusted | std |
+| `prim.cub` | 595 | `Int64`, `UInt32`, `UInt64`, `Float64`, `Float32`, `Bytes n` with proof-carrying loads and stores; arrays; `Fin n → A ≃ Array n`. 72 primitives; the load/store and array-extensionality laws are trusted; and what the bitwise word operations compute, stated: eight laws (multiplication by recursion; and, or, xor, shifts on a word written by its bits; a word below 2^k is its k lowest bits), each a constant with no computation | std |
 | `sort.cub`, `fiber.cub`, `decode.cub`, `region.cub` | 525 | sorting with its specification; fibres; a decoder with bounds discharged; regions as a state monad | std, prim, linproof |
 | `linproof.cub`, `eqproof.cub`, `ring.cub`, `intproof.cub`, `autodiff.cub` | 1,298 | decision procedures proved sound over their own typed codes (linear arithmetic, equational, ring, integer; forward-mode derivative). 15 untyped helper definitions at the ends of `eqproof`, `ring`, `autodiff` are refused | std |
 | `proc.cub` | 390 | signatures, processes (free monad), worlds, handlers, supervision, recording and replay, choreographies, guarded processes, transactions | std, prim |
@@ -115,6 +115,7 @@ All **check** in `make library` unless a load is named.
 | `net.cub` | 194 | a network with an adversary (drop, duplicate, reorder, partition) | proc |
 | `fleet.cub` | 451 | nodes over that network; `Safe`, `Live`, `Refines`, `Converges` stated of the processes that run | net, proc |
 | `deploy.cub` | 120 | wire format, codec, node configuration (definitions) | fleet |
+| `word.cub` | 356 | word laws proved from those: addition on bits (ripple carry), bits that are known or a variable, and reflected word expressions (`BE`) whose word is their bits' word (`be-sound`) — how a statement about the x86 semantics' bit arithmetic is proved | std, prim |
 | `bits.cub` | 312 | bit-vector operations the imported x86 semantics calls | std, prim |
 
 Loads run: fleet + KV experiment 931 passed, 3 failed (the 3 are `eqproof`'s refused helpers);
@@ -184,7 +185,7 @@ Each instruction of the machine is one or a few of `lib/x86.cub`'s templates (pu
 (those compile to `kfail`, the run leaves — never a wrong answer).
 
 **Next:** closures (`jlam`/`japp`, with a heap); the x86 level — each instruction's bytes stepped
-by `lib/isa/x86`'s semantics to the same stack (needs word lemmas: masks, bounds below 2^64;
+by `lib/isa/x86`'s semantics to the same stack (word lemmas: `lib/word.cub`, first used for push/pop;
 memory byte round trips); the blob and ELF layout; then `#jit`/`#build` use it and `lib/x86.cub`'s
 unchecked stretch is deleted.
 
@@ -193,6 +194,7 @@ unchecked stretch is deleted.
 | file | lines | what it is | produces |
 |---|---|---|---|
 | `sail2cub.py` | 2,702 | reads the Sail x86 model | `lib/isa/x86/` |
+| `reify-be.py` | 40 | a printed word expression as a `BE` term (untrusted: the statement using it is checked) | `experiments/isa/pushpop.cub` |
 | `clang2cub.py` | 3,774 | reads a C++ translation unit from Clang's AST, record layouts and vtables | `lib/cxx/ast.cub`, `experiments/cxx/*.cub` |
 | `mir2cub.py` | 2,175 | reads Rust MIR from `rustc` | `experiments/rust/*.cub` |
 | `agda2cub.py` | 287 | line-by-line translation of Cubical Agda to this surface syntax | used for the Brunerie port |
@@ -215,7 +217,7 @@ fuel bound returns a default, Sail's constraints are not checked.
 | `mem/` | 1 | — | `int sum(const int*, int)` given its meaning by hand, with its undefined-behaviour cases |
 | `cxx/` | 20 | generated data checks; needs the readers of §4 to mean anything | seven C++ programs (order book, member pointers, virtual inheritance, exceptions, coroutines) and their imports. `sem/gen/` is a stale copy of four of them |
 | `rust/` | 9 | same | two Rust programs and their MIR imports |
-| `isa/` | 2 | `add.cub` checks (above) | one instruction stepped with symbolic operands; the instruction classes the compiler emits |
+| `isa/` | 3 | `add.cub`, `pushpop.cub` check | one instruction stepped with symbolic operands; `push rax; pop rcx` returns every word below 2^64 (`pp-ok-w`, through `be-sound`; the expression reified by `tools/reify-be.py`) |
 | `jit/`, `native/` | 4 | need the compiler | compiled workloads; processes built to ELF |
 | `surface/` | 9 | checks | inputs for elaborator items 1–8 of track S |
 | `machine/`, `agda/` | 2 | — | the 10^6 numeral; a script timing Agda on Brunerie (reads outside this directory) |
@@ -251,4 +253,5 @@ src/  ──►  prelude, code, match, nav, cost, lin, check  ──►  std  �
    four `#show` lines in `lib/mem/target.cub`, removed-back-end handlers in `lang.c`, status
    lines in `tracks/F-cxx.md` and `tracks/R-rust.md`.
 7. Trusted without statement: `prim.cub`'s byte and array laws; a primitive's computation
+   (stated, for the word operations: the eight laws at the end of `prim.cub`)
    against its type; the importers; `rc11`'s one unproved statement.
