@@ -52,75 +52,103 @@ uses `core`/`std` only. Find which MIR output this toolchain gives (`rustc --emi
 
 ## Done
 
-- **Toolchain** (recorded): `rustc 1.97.0 (2d8144b78 2026-07-07)`, stable, LLVM 22.1.6, host
-  `x86_64-unknown-linux-gnu`, in `/root/.cargo/bin`. `--emit=mir` works on stable and is what is
-  used. `-Z` flags (`-Zunpretty=mir`, `-Zprint-type-sizes`, `-Zprint-mono-items`) are refused
-  on stable unless `RUSTC_BOOTSTRAP=1` is set; with it they work. No `rust-src`: the MIR of
-  `core`/`std` functions is not available as separate bodies, so the dump is taken with `-O`
-  (MIR inlining brings the `core` bodies into the crate's own; see Limits).
-- **`experiments/rust/book.rs`** (245 lines), the twin of `experiments/cxx/book.cpp`: `#[repr(u8)]
+Both acceptance lines are met. Everything below was measured on this machine with
+`rustc 1.97.0 (2d8144b78 2026-07-07)` (stable, LLVM 22.1.6, `x86_64-unknown-linux-gnu`,
+`/root/.cargo/bin`), clang 18.1.3, `llvm-dwarfdump`/`llvm-cxxfilt` 18, binutils `objdump`.
+
+### Toolchain facts
+
+- `--emit=mir` works on stable and is what the importer uses. `-Z` flags (`-Zunpretty=mir`,
+  `-Zprint-type-sizes`, `-Zprint-mono-items`) are refused on stable unless `RUSTC_BOOTSTRAP=1`;
+  the importer does not use them (they were used once, by hand, to compare: see below).
+- The MIR text is **pre-monomorphization**: `Book<N>::add` is printed once with `const N` and
+  `[Level; N]`; callers name the instance (`Book::<8>::add(..)`). The importer keeps bodies
+  generic and carries the substitutions as data (below).
+- No `rust-src`, and rustc prints MIR only for the crate being compiled. With `-O` the MIR
+  inliner brings the `core` functions the samples use into the crate's bodies
+  (`slice::IterMut::next`, `from_raw_parts`, `checked_sub`, `from_le_bytes`, derived
+  comparisons, `wrapping_*`); the calls left are to bodies of the crate, through `dyn`, or
+  through a function pointer. Without `-O` they are calls to `core` bodies that are not printed.
+
+### The sample pair (acceptance line 2)
+
+- `experiments/rust/book.rs` (259 lines), the twin of `experiments/cxx/book.cpp`: `#[repr(u8)]
   enum Side`, `Price` with derived comparisons and `impl Sub`, `#[repr(C, packed)] WireMsg`
   decoded from `&[u8]`, `Book<const N: usize>` with `[Level; N]` and add/reduce/reset, a closure,
   `iter_mut` loops, `checked_sub` and `wrapping_add`/`wrapping_sub`, `match` on a byte and on
   enums, `trait Handler` called through `&mut dyn Handler`, a `static mut` handler,
   `#[no_mangle] pub extern "C" fn on_message(p: *const u8, n: usize) -> i64`.
-- **The pair is the same function on the recorded inputs.** `experiments/rust/book_out.c` prints
-  every answer; `experiments/rust/gen_messages.py COUNT SEED` writes the messages. Commands
-  (from `experiments/rust`, outputs in a scratch directory `$B`):
+- `experiments/rust/book_out.c` prints every answer; `experiments/rust/gen_messages.py COUNT SEED`
+  writes the messages (48% add, 24% cancel, 24% execute, 0.1% reset, the rest unknown types;
+  rare random sides, 64-bit prices and 32-bit quantities). From `experiments/rust`, `$B` a
+  scratch directory:
   `rustc --edition=2021 --crate-type=staticlib -O -Cpanic=abort book.rs -o $B/libbook.a;
   clang -O2 book_out.c $B/libbook.a -o $B/book_out_rs;
   clang++ -std=c++20 -O2 -fno-exceptions -fno-rtti -c ../cxx/book.cpp -o $B/book.o;
   clang -O2 book_out.c $B/book.o -o $B/book_out_cxx;
   python3 gen_messages.py 100000 1 > $B/m1.bin;
   $B/book_out_rs < $B/m1.bin | sha256sum; $B/book_out_cxx < $B/m1.bin | sha256sum`.
-  Result (clang 18.1.3, rustc 1.97.0): 100,000 messages (seed 1), the two outputs byte-identical,
-  sha256 `1422f7495869b550…` (3,983 answers `-2`, the rest spreads and `-1`); with `n = 21`
-  passed (`book_out_* 21`) both answer `-3` 100,000 times; 1,000,000 messages (seed 2) also
-  byte-identical, sha256 `896e0075f0f2745f…`.
+- Result: on 100,000 messages (seed 1) the two outputs are byte-identical, sha256
+  `1422f7495869b550…` (3,983 answers `-2`, the rest spreads and `-1`); with `n = 21` passed
+  (`book_out_* 21`) both answer `-3` 100,000 times; on 1,000,000 messages (seed 2) byte-identical,
+  sha256 `896e0075f0f2745f…`.
 
-- **`lib/lang/rust/ast.cub`** (first version): `RTy` (with its own list constructors), `RProj`,
-  `RPlace`, `RConst`, `ROperand`, `RBinOp`, `RUnOp`, `RCastKind`, `RAggregate`, `RRvalue`, `RStmt`,
-  `RUnwind`, `RCallee`, `RAssertMsg`, `RTerm`, `RBlock`, `RLocal`, `RBody`, `RAdt`, `RLayout` (fields,
-  variants, tag), `RTrait`, `RVtable`, `RStatic`, `RInstance`, `RCrate`. Loads after the cached
-  library in 2.2 s, every `data` checked (`data RCrate` 71,652 steps); a trial `RBody` value checks.
+### The importer and the AST (acceptance line 1)
 
-- **`tools/mir2cub.py`** (1,996 lines) and **`experiments/rust/book.cub`** (generated; 1,195 lines,
-  108,457 bytes, 346 definitions). `python3 tools/mir2cub.py experiments/rust/book.rs -o
-  experiments/rust/book.cub` runs in about 1 s and prints what it met. How each part is obtained
-  (also in the tool's header):
-  - bodies: `rustc --edition=2021 --crate-type=lib -O -Cpanic=abort --emit=mir`. The MIR is
-    **pre-monomorphization**; bodies keep their generic parameters (`rty-param`,
-    `rty-const-param`, `rc-param` by position, `RBody.generics`), calls and ADT types carry their
-    generic arguments, and `RCrate.instances` lists every (body, closed arguments) reached from
-    the entry by walking calls and vtables.
-  - impls: read from the source text at the span rustc names the impl by (generics, trait, self
-    type; a derive's span is the trait name and its type is the next item); a call is connected
-    to its body by unifying the impl's self type with the call's.
-  - layouts: a copy of the source with one `static` per needed type appended is compiled with
-    `-g -Ccodegen-units=1 -Csymbol-mangling-version=v0 --emit=obj`; `llvm-dwarfdump --debug-info`
-    gives size, alignment, fields (name, offset, type) in declaration order = MIR field index,
-    and variants with tag place/size and tag values. (Functions were tried first for forcing
-    the descriptions: LLVM merged the identical ones and only one kept its description.)
-  - vtables: the object file's `.data.rel.ro` section whose relocations demangle
-    (`llvm-cxxfilt`) to `<T as Trait>::method`: size and align words from `objdump -s`, methods
-    in slot order from `objdump -r`; that order is also the trait's method list (`RTrait`),
-    which `rcallee-dyn trait method` indexes.
-  - statics: the evaluated allocation rustc prints after the bodies (init bytes and padding).
-  **Measured on book.rs** (acceptance line 1):
-  - 10 bodies (`on_message`, `decode`, `dispatch`, `<BookHandler as Handler>::on_add/on_cancel/
-    on_execute/on_reset`, `Book<N>::add/reduce/reset`), 10 instances (the three `Book` bodies at
-    `N = 8`), 157 blocks, 707 statements, 280 locals, 52 distinct types, 11 ADTs (`WireMsg`,
-    `Option`, `BookHandler`, `Side`, `Price`, `Book`, `Level`, `IterMut`, `NonNull`, `PhantomData`,
-    `Ordering`), 13 layouts, 1 trait, 1 vtable, 1 static (424 bytes).
-  - The same counts taken from the MIR text by line (blocks and `;` lines of the ten bodies):
-    10 / 157 / 707. `-Zprint-mono-items` lists exactly the same ten functions plus the static
-    `G_HANDLER`. `-Zprint-type-sizes` gives the same size and alignment for all 13 types.
-  - Check (library from the cache, then `lib/lang/rust/ast.cub`, then `book.cub`):
-    `1155 passed, 0 failed`, `book-crate : RCrate` checked (7,104 steps). Fresh (no cached result
-    for the two files): 2,489,691 interaction steps in all, of which `ast.cub` is 909,818 and
-    `book.cub` about 1,580,000 (largest single definition 50,706); 3.3 s wall for both against
-    1.1 s for the cached library alone.
-  - Kinds met in the ten bodies (count of occurrences):
+- `lib/lang/rust/ast.cub` (190 lines, 40 declarations, 1,555,445 steps to check): `RTy` (with
+  its own list constructors; types, generic arguments and array lengths), `RProj`, `RPlace`,
+  `RConst`, `ROperand`, `RBinOp`, `RUnOp`, `RCastKind`, `RBorrow`, `RAggregate`, `RRvalue`, `RStmt`,
+  `RUnwind`, `RCallee`, `RAssertMsg`, `RTerm`, `RBlock`, `RLocal`, `RGeneric`, `RBody`, `RAdt`,
+  `RFieldLayout`/`RVariantLayout`/`RTagLayout`/`RLayout`/`RLayoutEntry`, `RTrait`, `RVtable`,
+  `RStatic`, `RDropImpl`, `RInstance`, `RCrate`. Conventions are in the file's header (ids are
+  positions in the crate's lists; integers are the low 64 bits two's complement beside their
+  type; names are byte lists).
+- `tools/mir2cub.py` (2,111 lines). `python3 tools/mir2cub.py SRC.rs -o OUT.cub [--entry NAME]`
+  (default entry `on_message`; definitions are prefixed with OUT's stem). About 1 s. It prints
+  the counts and kinds it met on stderr. Where each part comes from:
+  - bodies: `rustc --edition=2021 --crate-type=lib -O -Cpanic=abort --emit=mir`; only bodies
+    reachable from the entry are parsed and emitted, and body ids are in order of first reach.
+  - generics as data: `RBody.generics`; inside a body `rty-param i` / `rty-const-param i` /
+    `rc-param i`; `rcallee-fn body args`, `rc-fn body args`, `rty-adt adt args`; and
+    `RCrate.instances`, every (body, closed arguments) reached from the entry by walking calls,
+    function-item casts, vtables and Drop impls.
+  - impl headers (generics, trait, self type) are read from the source at the span rustc
+    names the impl by; a derive's span is the trait name and its type the next item. A free
+    function's generic parameters are read from its `fn` declaration in the source. A call is
+    connected to its body by unifying the impl's self type with the call's.
+  - layouts: a copy of the source with one `static` per needed type appended, compiled
+    `-g -Copt-level=0 -Ccodegen-units=1 -Csymbol-mangling-version=v0 --emit=obj`, read with
+    `llvm-dwarfdump --debug-info`: size, alignment, fields (name, offset, type) in declaration
+    order, variants with the tag's offset/size and each variant's tag value; the variant a
+    niche encoding leaves untagged has none. `RVariantLayout.discr` is what MIR's
+    `discriminant` reads (the tag value for a direct tag, the variant index for a niche).
+    Layouts are emitted for every ADT instance and tuple in a reachable instance's types, and
+    every type inside those.
+  - vtables: the object's `.data.rel.ro` section whose relocations (`objdump -r`) demangle
+    (`llvm-cxxfilt`) to `<T as Trait>::method`; size and align from the section's bytes
+    (`objdump -s`). Slot order is the trait's method list (`RTrait`), indexed by
+    `rcallee-dyn trait method`.
+  - statics: the evaluated allocation rustc prints after the bodies (`RStatic.init`: runs of
+    initialized bytes and of padding).
+  - drops: for each type a reachable `Drop` terminator drops and each type inside it, the
+    `Drop` impl in the crate if any (`RDropImpl`); rustc's glue shim itself is not a MIR body.
+- **`experiments/rust/book.cub`** (generated, 1,200 lines, 108,588 bytes, 347 definitions):
+  - 10 bodies: `on_message`, `decode`, `dispatch`, `<BookHandler as Handler>::on_add / on_cancel /
+    on_execute / on_reset`, `Book<N>::add / reduce / reset`; 10 instances (the three `Book` bodies
+    at `N = 8`); **157 blocks, 707 statements**, 280 locals, 52 distinct types, 11 ADTs
+    (`WireMsg`, `Option`, `BookHandler`, `Side`, `Price`, `Book`, `Level`, `IterMut`, `NonNull`,
+    `PhantomData`, `Ordering`), 13 layouts, 1 trait (4 methods), 1 vtable, 1 static (424 bytes).
+  - Compared by hand with rustc's own listings: blocks and statement lines of the ten bodies
+    counted in the MIR text are 157 and 707; `RUSTC_BOOTSTRAP=1 rustc … -Zprint-mono-items=yes`
+    lists exactly the same ten functions (plus the static `G_HANDLER`); `-Zprint-type-sizes`
+    gives the same size and alignment for all 13 types.
+  - **Check**: `./build/cubical $(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p')
+    lib/lang/rust/ast.cub experiments/rust/book.cub` ends `1157 passed, 0 failed`
+    (770 library + 40 + 347), `book-crate : RCrate` checked (7,272 steps). With no cached result
+    for the two files: 3,182,739 interaction steps (ast 1,555,445; book 1,627,294; largest
+    single definition 58,086), 3.3 s wall on a quiet machine, 7.5 s at load 5; the cached
+    library alone is 1.1 s. Peak well under the 2.5 GB limit (29,472 cells live at the end).
+  - Kinds met in the ten bodies (occurrences):
     - statements: `Assign` 283, `StorageLive` 184, `StorageDead` 240.
     - rvalues: `Use` 126, `BinaryOp` 82, `Cast` 28, `Ref` shared 5 / mut 18, `RawPtr` (`&raw mut`) 2,
       `Aggregate` 15, `Discriminant` 5, `UnaryOp` 2.
@@ -134,57 +162,101 @@ uses `core`/`std` only. Find which MIR output this toolchain gives (`rustc --emi
       4 (through `dyn Handler`), `Assert` 38 (all `BoundsCheck`). Every unwind action is
       `unreachable` (`-Cpanic=abort`).
     - operands: `Copy` 253, `Move` 157, `Constant` 133. Constants: integer 86, bool 4, generic
-      constant parameter (`N`) 38, ADT value 5 (`Price {{ ticks: 0 }}`, `Side::Bid`), zero-sized
-      value 2 (`PhantomData`), address of a static 1.
+      constant parameter (`N`) 38, ADT value 5 (`Price {{ ticks: 0 }}`, `Side::Bid`/`Ask`),
+      zero-sized value 2 (`PhantomData`), address of a static 1.
     - place projections: `Deref` 110, `Field` 99, `Index` 16, `ConstantIndex` 28, `Downcast` 3.
     - types: `bool`, `i8 i64 isize u8 u32 u64 usize`, `&T`/`&mut T`, `*const T`/`*mut T`, `[T; n]`
       (n a literal or the parameter `N`), `[T]`, `()`, ADTs with arguments, `dyn Handler`.
-    - not met in book.rs (rustc inlined or optimized them away, or the source has none): `Drop`,
-      `Repeat`, non-unit tuples, function pointers, `SetDiscriminant`, `Len`, `CopyForDeref`,
-      checked arithmetic (`*WithOverflow`), the closure (inlined into `add`), `Option<u64>`
-      from `checked_sub` (folded to `Lt` + `SubUnchecked`).
+    - Not in book.rs's reachable MIR (rustc inlined or folded them, or the source has none):
+      `Drop`, `Repeat`, non-unit tuples, function pointers, the closure in `add` (inlined; its
+      type survives only in debug lines), `Option<u64>` from `checked_sub` (folded to `Lt` +
+      `SubUnchecked`), `side_mut` and `spread` (inlined), checked arithmetic (`*WithOverflow`),
+      `SetDiscriminant`.
+- **`experiments/rust/more.rs`** (100 lines) and **`more.cub`** (generated, 500 lines, 137
+  definitions), a second input for what book.rs does not reach; `python3 tools/mir2cub.py
+  experiments/rust/more.rs -o experiments/rust/more.cub --entry more_entry`:
+  - 11 bodies, 12 instances (`pick<T>` at `i32` and `u16`), 51 blocks, 189 statements, 3 layouts
+    (`(i64, i64)`, `Shape` with tags 2/5/9, `Tally`), 1 static, 1 Drop impl. `-Zprint-mono-items`
+    lists the same 12 functions plus `drop_glue::<Tally>` (the shim; here the `RDropImpl` entry).
+  - It adds to the kinds above: terminators `Drop` 3, `Call` through a function pointer 1,
+    `Assert` `DivisionByZero` 1 and `Overflow(Div)` 1; rvalues `Repeat` 1, `Use` with `no_retag` 2;
+    cast `PointerCoercion(ReifyFnPointer)` 2; operators `Mul`, `Div`, `Rem`, `BitAnd`, `BitXor`,
+    `Shl`, `Shr`, `Neg`; aggregate `Tuple` 2; constants function item 2 and `i64::MIN`; types
+    `i32`, `u16`, a tuple, `fn(u32) -> u32`, a type parameter.
+  - Library + `ast.cub` + `book.cub` + `more.cub`: `1294 passed, 0 failed`; `more.cub` is 490,309
+    steps fresh, `more-crate` 4,978.
+- Also imported without change (not committed; a 4-line trial with a slice iterator, `%` and a
+  `dyn` call from a generic impl): 2 bodies, `Assert` `RemainderByZero`, `&raw const`.
 
 ## Found
 
-- No fault of the machine found so far: every generated file loaded on the first attempt
-  (largest: 108 KB, 346 definitions, 3.3 s). The output is deliberately many small definitions
-  (one per type, name, block, layout); one large literal was never tried.
-- (design facts measured before writing the importer, all on rustc 1.97.0)
-  - `--emit=mir` prints **pre-monomorphization** MIR: `Book<N>::add` once, with `const N` and
-    `[Level; N]` in it; callers name the instance in the call (`Book::<8>::add(..)`).
-  - With `-O` the MIR inliner brings every `core` function the sample uses into the crate's own
-    bodies (`slice::IterMut::next`, `from_raw_parts`, `checked_sub`, `from_le_bytes`, the derived
-    comparisons): the calls left in the 2,680-line dump are all to bodies of the crate or
-    through `dyn Handler`. Without `-O` they are calls to `core` bodies rustc does not print.
-  - Bodies in impls are named by span (`<impl at book.rs:63:1: 63:29>::add`), calls by path
-    (`Book::<8>::add`, `<dyn Handler as Handler>::on_add`); the importer reads the impl header at
-    the span from the source to connect them.
-  - `-g` debug information (read with `llvm-dwarfdump`) has, for every monomorphic type it
-    describes, size, alignment, field names/types/offsets, enumerator values, and for data
-    enums the tag's place and each variant's tag value (the untagged variant of a niche
-    encoding has none). `-Zprint-type-sizes` lacks tag values and field types, so the
-    debug information is the layout source. It omits types no variable has
-    (`Option<&mut Level>`, `NonNull<[Level]>` here), so the importer compiles a copy of the
-    source with one function per needed type appended to make rustc describe it.
-  - The vtable is a `.data.rel.ro` section of the object file: size and align words, then one
-    relocation per method to a v0-mangled symbol (`llvm-cxxfilt` gives
-    `<book::BookHandler as book::Handler>::on_add`); `drop_in_place` is 0 for a type without drop glue.
-  - A static's evaluated initial bytes are printed after the bodies (`alloc7 (static: G_HANDLER,
-    size: 424, align: 8)`, `__` for padding).
+- No fault of the machine: every generated file loaded on its first attempt (largest 108 KB,
+  347 definitions, 1.6 M steps). The output is many small definitions on purpose (one per type,
+  name, layout, block; a block's statements in runs of 16); a single large literal was not tried,
+  so no size limit was measured.
+- The checker caches a whole file's result under `.cubical-cache` (`CUBICAL_CACHE`) as well as
+  definitions under `.cubical-store`: a rerun reports `0 interaction steps performed`. To measure
+  a file, point both variables at copies holding the library only.
+- rustc/LLVM facts the importer depends on (each cost a wrong first attempt):
+  - Debug information omits types no variable has (`Option<&mut Level>`, `NonNull<[Level]>`), so
+    the importer makes rustc describe every needed type. Functions taking the type do not work
+    for this: LLVM merges the identical ones and one description survives. Statics do.
+  - At `-O` LLVM deletes a vtable it can devirtualize (the 4-line trial), so the object read
+    for layouts and vtables is built at `-Copt-level=0`.
+  - Debug information lists a struct's fields in declaration order with their offsets
+    (`S { a: u8, b: u64, c: u8, d: u32 }`: a 12, b 0, c 13, d 8), which is MIR's field index;
+    `-Zprint-type-sizes` lists them by offset and has no tag values or field types, which is
+    why it is not the layout source.
+  - A data enum with explicit discriminants (`#[repr(u8)] enum F { P = 3, Q(u16) = 9 }`) has tag
+    values 3 and 9 in the debug information and `switchInt` arms 3 and 9 on `discriminant`.
+  - New in this rustc's MIR text: `no_retag copy P` on a use, `// DBG: _5 = &_2;` lines inside
+    blocks, `P[2 of 3]` for constant indices, `*const [u8] from (a, b)` for a pointer built from
+    parts, constants like `Price {{ ticks: 0_i64 }}`.
 
 ## Limits
 
+- **Stops, each with a message naming the construct** (nothing is emitted for them; extend the
+  importer when an input needs one): a call to a function of another crate that rustc did not
+  inline; a closure body reached by a call, and closure or coroutine types; generic parameters
+  on a method of an impl (the impl's own and a free function's are read); a trait with generic
+  arguments, `where` clauses on an impl header, associated-type paths (`<T as Tr>::X`); a call
+  to a trait method on a type parameter (it would have to be resolved per instance); `i128`/
+  `u128`, floats, `char`, `str`; constant generic arguments other than `usize` literals;
+  unions; a vtable with no methods or with drop glue; a supertrait method called through `dyn`;
+  dropping a type of another crate, or an unsized one; allocations that are not statics or that
+  hold pointers; cleanup blocks and any unwind target other than continue/unreachable/terminate;
+  statements other than `Assign`/`StorageLive`/`StorageDead` (`SetDiscriminant`, `Deinit`,
+  `Retag`, intrinsics); assert messages other than the four listed above; subslice projections;
+  two items with the same last path segment (ADTs and traits are identified by it).
+- **Not imported, by decision**: debug information (`debug` lines, scopes, `// DBG` notes, hence
+  variable names and the inlining tree); lifetimes; the mutability of arguments (the text does
+  not print it: `rlocal-arg`); the ABI and `#[no_mangle]` of the entry (not in the MIR text;
+  `RCrate.entry` is body 0); bodies evaluated at compile time (constants, the static's
+  initializer, CTFE copies of `const fn`), whose results are in the text as values.
+- The MIR is rustc's after its MIR optimizations (`-O`), not the MIR borrow checking ran on;
+  "the borrow discipline read as multiplicities" (PLAN Phase 5) will need the pre-optimization
+  MIR (`-Zunpretty=mir` at `mir-opt-level=0`), where the `core` calls are not inlined.
+- `rustc`'s own vtable and layout choices are read from one compilation for x86-64; they are
+  implementation parameters of this target, not of Rust.
 - Signed subtraction of prices: `book.cpp` computes `ticks - o.ticks` on `int64_t` (undefined on
   overflow in C++), `book.rs` uses `wrapping_sub`. The binaries agree on all inputs run
   (including random 64-bit prices) because clang emits a plain `sub`; at the level of the two
   standards the C++ one is defined on fewer inputs.
 - Out-of-range indices: `book.rs` has bounds checks that abort (`-Cpanic=abort`); `book.cpp`
-  has none. No input reaches them (indices are below `N` by construction).
+  has none. No input reaches them (indices are below `N` by construction), and showing that
+  is part of the equality proof.
+- Track C's `lib/cxx/ast.cub` had not landed when this was written, so the two ASTs have not been
+  aligned against each other; the shared conventions taken from C-clang.md are: first-order
+  data, own list constructors inside a self-recursive type, ids as `Word`, prefixed constructors.
+  C plans strings as `Bytes n`; here a name is `List Word` of bytes (no primitive needed).
 
 ## Next step
 
-`experiments/rust/more.rs` now imports (`--entry more_entry`: 11 bodies, 12 instances, 51 blocks,
-189 statements) and `book.cub` + `more.cub` check together (`1294 passed, 0 failed`). Left: record
-`more.rs` under Done with its kinds and the comparison with `-Zprint-mono-items` (same 12
-functions, plus rustc's `drop_glue::<Tally>` shim which is `RDropImpl` data here); write Limits;
-re-measure fresh check cost of the final `book.cub`.
+This track's acceptance is met; nothing is pending in it. What follows it (PLAN Phase 5,
+second half, a new track): the semantics of exactly the kinds listed under Done over track M's
+memory (`lib/mem/`), as a structural recursion on `RBody` under an `RInstance`'s arguments,
+reading `book-crate`. If an input stops the importer, the message names the construct: add
+the constructor to `lib/lang/rust/ast.cub`, the parse in `BodyParser` and the emission in `Emit`
+(`tools/mir2cub.py`), regenerate **every** `.cub` under `experiments/rust/` (the AST is shared),
+and check them together with the command under Done. When track C lands `lib/cxx/ast.cub`,
+compare conventions (names, integer literals, layout records) and record differences here.

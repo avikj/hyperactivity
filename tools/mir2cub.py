@@ -19,19 +19,27 @@ Where each part comes from (rustc 1.97.0; nothing here is computed by a second r
              header's self type against the call's.
   instances  walked from the entry: each call's generic arguments under the caller's.
   layouts    a copy of the source with one function per needed type appended is compiled with
-             `-g`, and `llvm-dwarfdump --debug-info` is read: size, alignment, fields with
+             `-g -Copt-level=0`, and `llvm-dwarfdump --debug-info` is read: size, alignment, fields with
              offsets and types, variants with their tag values.
   vtables    from the same object: the relocations of the vtable's section (`objdump -r`), its
              size and align words (`objdump -s`), symbols demangled by `llvm-cxxfilt`.
   statics    the evaluated allocation rustc prints after the bodies.
 
+  drops      for each type a reachable Drop terminator drops, and each type inside it, the Drop
+             impl in this crate if there is one (RDropImpl); a type of another crate stops the import.
+  fn items   a function's own generic parameters are read from its declaration in the source.
+
 A statement, rvalue, terminator, type, constant or layout form not handled stops the import with
-a message naming it (class Unhandled); nothing is emitted as unknown.
+a message naming it (class Unhandled); nothing is emitted as unknown. Not imported, by decision:
+debug information (`debug` lines, scopes, `// DBG` notes), lifetimes, and the bodies rustc
+evaluates at compile time (constants, static initializers, the CTFE copies of const fns), whose
+results are in the text as values.
 """
-import argparse, os, re, subprocess, sys, tempfile
+import argparse, os, re, shutil, subprocess, sys, tempfile
 
 RUSTC = os.environ.get('RUSTC', '/root/.cargo/bin/rustc')
-RUSTC_FLAGS = ['--edition=2021', '--crate-type=lib', '-O', '-Cpanic=abort']
+RUSTC_FLAGS = ['--edition=2021', '--crate-type=lib', '-O', '-Cpanic=abort']             # the MIR
+OBJECT_FLAGS = ['--edition=2021', '--crate-type=lib', '-Copt-level=0', '-Cpanic=abort']  # the object read for layouts and vtables
 
 
 class Unhandled(Exception):
@@ -74,13 +82,15 @@ class Paths:
         old = self.full.get(name)
         if old is None or len(segs) > len(old):
             self.full[name] = list(segs)
-        if old is not None and len(old) > 1 and len(segs) > 1 and old[-2] != segs[-2]:
+        if old is not None:
             # rustc prints a path as short as it can be in context (`Option`,
             # `std::option::Option`; the debug information says `core::option::Option`), and a
-            # re-export changes the module (`std::ptr::NonNull` is `core::ptr::non_null::NonNull`).
-            # Two spellings that both give modules and share none are two items of one name,
-            # which this importer does not tell apart.
-            if not (set(old[:-1]) & set(segs[:-1])):
+            # re-export leaves out modules (`std::ptr::NonNull` is `core::ptr::non_null::NonNull`).
+            # So two spellings of one item are one a subsequence of the other; anything else is
+            # two items of one name, which this importer does not tell apart.
+            a, b = (old, segs) if len(old) <= len(segs) else (segs, old)
+            it = iter(b)
+            if not all(x in it for x in a):
                 stop('path (two items with the same last segment)', '%s and %s' % ('::'.join(old), '::'.join(segs)))
         return name
 
@@ -129,6 +139,7 @@ class TypeParser:
     def __init__(self, paths, generics=()):
         self.paths = paths
         self.generics = list(generics)  # [(kind, name)], kind 'type' | 'const'
+        self.seen = []                  # every type read, in order
 
     def gen_index(self, name):
         for i, (k, n) in enumerate(self.generics):
@@ -137,6 +148,11 @@ class TypeParser:
         return None
 
     def ty(self, p):
+        t = self.ty1(p)
+        self.seen.append(t)
+        return t
+
+    def ty1(self, p):
         p.ws()
         if p.eat('&'):
             p.m(r"'" + IDENT + r" ?")
@@ -644,6 +660,7 @@ class BodyParser:
         if sorted(blocks) != list(range(nb)):
             stop('blocks (not numbered 0..n)', it.name)
         it.blocks = []
+        it.types = self.tp.seen
         for b in range(nb):
             ls = blocks[b]
             stmts = [self.stmt(x) for x in ls[:-1]]
@@ -1242,8 +1259,8 @@ class Import:
     def met(self, cls, k):
         self.kinds[cls][k] = self.kinds[cls].get(k, 0) + 1
 
-    def rustc(self, args):
-        r = subprocess.run([RUSTC] + RUSTC_FLAGS + args, capture_output=True, text=True)
+    def rustc(self, args, flags=RUSTC_FLAGS):
+        r = subprocess.run([RUSTC] + flags + args, capture_output=True, text=True)
         if r.returncode != 0:
             sys.stderr.write(r.stderr)
             raise SystemExit('mir2cub: rustc failed: ' + ' '.join(args))
@@ -1474,24 +1491,8 @@ class Import:
     # -- the types whose layouts are needed: every ADT instance and tuple in a reachable instance
 
     def body_types(self, it):
-        if hasattr(it, 'types'):
-            return it.types
-        acc = []
-
-        def scan(x):
-            if isinstance(x, tuple) and x and isinstance(x[0], str) and x[0] in (
-                    'bool', 'int', 'never', 'ref', 'ptr', 'array', 'slice', 'tuple', 'adt', 'dyn', 'fnptr', 'param'):
-                if is_type(x):
-                    acc.append(x)
-                    return
-            if isinstance(x, (tuple, list)):
-                for y in x:
-                    scan(y)
-
-        scan([l[1] for l in it.locals])
-        scan(it.blocks)
-        it.types = acc
-        return acc
+        """every type the body's text mentions (locals, projections, casts, generic arguments)."""
+        return it.types
 
     def needed_types(self):
         need = []
@@ -1556,7 +1557,9 @@ class Import:
             text += 'pub static __MIR2CUB_LAYOUT_%d: core::marker::PhantomData<fn(*const %s)> = core::marker::PhantomData;\n' % (i, self.rust_ty(t))
         open(copy, 'w').write(text)
         self.obj = os.path.join(self.tmp, 'crate.o')
-        self.rustc(['-g', '-Ccodegen-units=1', '-Csymbol-mangling-version=v0', '--emit=obj', copy, '-o', self.obj])
+        # without optimization: LLVM removes a vtable (and a type's description) it finds unused,
+        # and neither layouts nor vtable contents depend on the optimization level
+        self.rustc(['-g', '-Ccodegen-units=1', '-Csymbol-mangling-version=v0', '--emit=obj', copy, '-o', self.obj], OBJECT_FLAGS)
         self.obj_types = set(need)
         self.relocs = None
 
@@ -1634,34 +1637,6 @@ class Import:
             methods.append((m, b, f[1]))
             self.add_instance(b, f[1])
         self.vtables[key] = (size, align, methods)
-
-
-def is_type(x):
-    k = x[0]
-    try:
-        if k == 'bool' or k == 'never':
-            return len(x) == 1
-        if k == 'int':
-            return len(x) == 2 and x[1] in INTS
-        if k in ('ref', 'ptr'):
-            return len(x) == 3 and isinstance(x[1], bool) and isinstance(x[2], tuple)
-        if k == 'array':
-            return len(x) == 3 and isinstance(x[2], tuple) and x[2][0] in ('const', 'cparam')
-        if k == 'slice':
-            return len(x) == 2 and isinstance(x[1], tuple)
-        if k == 'tuple':
-            return len(x) == 2 and isinstance(x[1], tuple) and all(isinstance(y, tuple) for y in x[1])
-        if k == 'adt':
-            return len(x) == 3 and isinstance(x[1], str) and isinstance(x[2], tuple)
-        if k == 'dyn':
-            return len(x) == 2 and isinstance(x[1], str)
-        if k == 'fnptr':
-            return len(x) == 3 and isinstance(x[1], tuple)
-        if k == 'param':
-            return len(x) == 2 and isinstance(x[1], int)
-    except (IndexError, TypeError):
-        return False
-    return False
 
 
 # ------------------------------------------------------------------------------------------
@@ -2119,6 +2094,7 @@ def main():
     except Unhandled as e:
         raise SystemExit(str(e))
     open(a.output, 'w').write(text)
+    shutil.rmtree(imp.tmp)
     rep = sys.stderr
     rep.write('mir2cub: %s → %s (%d bytes, %d lines)\n' % (imp.src, a.output, len(text), text.count('\n')))
     rep.write('  bodies %d, instances %d, blocks %d, statements %d, locals %d, definitions %d\n' % (
