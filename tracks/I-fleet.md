@@ -132,7 +132,9 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
   `kvl-deliver` (delivery fairness, `took-elim`, a replica never halts), `kvl-replica`,
   `kv-app-later` (applied stays applied, `ns-local` + `stable-later`), `kvl-claim` (induction on
   the list, times merged by `nt-later-comm`). `lib/fleet.cub` gained `took-elim`.
-  Measured: library + net, fleet, kv, liveness: 1028 passed, 0 failed, 3,407,100 steps, 24 s
+  `kv-client-finishes` uses the measure rule `live-measure` on this fleet (measure: the number
+  of writes still to send; premise from `kvl-client`).
+  Measured: library + net, fleet, kv, liveness: 1033 passed, 0 failed, 3,457,330 steps, 27 s
   uncached (`kvl-owe` 446,906 steps is the largest).
 
 ## Found
@@ -155,13 +157,17 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
 3. A signature must be followed at once by its clauses (`kvl-claim :` followed by another
    signature is a parse error `expected =, found :`), and a multi-binding `let` inside
    parentheses is not laid out (`expected in`): one `let … in` per binding.
+5. **Out of memory on `<` over a run's state.** `subst {B = λ o → above (kv-todo (fleet-at … t)) (nt-len o)} …`
+   (the measure premise written directly over `fleet-at`) exhausted 2.5 GB after 60 s; the same
+   two `subst`s as a lemma over three list variables (`kvl-len-lt`) applied to the run's lists
+   check in 33,745 steps.
 4. A type alias that hides a Π (`Beh M St`, `LocalInv P beh`) cannot be the signature of a
    definition by clauses (`a dimension is matched only by a variable`): the Π is written out.
 
 ## Next step
 
-1. `experiments/fleet/kv/liveness.cub`: add `kv-client-finishes` by `live-measure` (measure:
-   the length of `c-out`; premise from `kvl-client`).
+1. `lib/deploy.cub`, the node binary, the localhost run (see "What is built" 4 and Acceptance):
+   done before refinement because it may need track A.
 2. `experiments/fleet/kv/refine.cub`: `Refines kv-map-world (λ k → #0) (client history) kv-seq-beh
    (kv-init (kv-seq-cli prog))` by `safe-by-events` with the invariant: applied₀ ⊆ issued,
    acknowledged ⊆ applied₀, every `m-put` in flight issued, every `m-ack` from 0 applied at 0,
@@ -169,4 +175,3 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
    client waiting on that key and the value `kv-store conf k`; history is the map's. Write
    every lemma over explicit fields (records have η) and pass intermediate results as
    arguments (Found 2).
-3. `lib/deploy.cub`, the node binary, the localhost run (see "What is built" 4 and Acceptance).

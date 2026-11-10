@@ -203,3 +203,23 @@ kvl-bcast-rep nil = unit
 kvl-bcast-rep (cons w r) = (unit , (unit , (unit , kvl-bcast-rep r)))
 kv-live-bcast : (ws : List KvWrite) → Live {KvMsg} {KvSt} 4 (KvAllApp (kv-bcast ws)) kv-bc-beh (kv-init (kv-cli-init nil (kv-bcast ws) ph-done))
 kv-live-bcast ws = kv-live (kv-cli-init nil (kv-bcast ws) ph-done) (kvl-bcast-rep ws)
+-- ---------------------------------------------------------------- the measure rule at work
+-- the client finishes: the writes still to send are a measure that a fair sequence decreases
+-- (live-measure; the premise is kvl-client)
+kvl-len-lt : (a b u : (List (NodeId × KvWrite))) → (x : NodeId × KvWrite) → Path (List (NodeId × KvWrite)) b u → Path (List (NodeId × KvWrite)) a (cons x u) → nt-len {NodeId × KvWrite} b < nt-len {NodeId × KvWrite} a
+kvl-len-lt a b u x eb ea =
+  subst {lzero} {lzero} {(List (NodeId × KvWrite))} {λ o → above (nt-len {NodeId × KvWrite} a) (nt-len {NodeId × KvWrite} o)} (sym eb)
+     (subst {lzero} {lzero} {(List (NodeId × KvWrite))} {λ o2 → above (nt-len {NodeId × KvWrite} o2) (nt-len {NodeId × KvWrite} u)} (sym ea) (<-suc-self (nt-len {NodeId × KvWrite} u)))
+kv-todo : KvG → Nat
+kv-todo g = nt-len {NodeId × KvWrite} (kv-out g)
+kvl-fin-k : (chs : AdvSeq) → (g0 : KvG) → (t : Nat) → (x : NodeId × KvWrite) → (u : (List (NodeId × KvWrite))) → Path (List (NodeId × KvWrite)) (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)) (cons x u) →
+            (c1 : (t1 : Nat) × KvSent (fst x) (snd x) u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t1)) → (s : Nat) × (kv-todo (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s) < kv-todo (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t))
+kvl-fin-k chs g0 t x u e c1 = (fst c1 , kvl-len-lt (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)) (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 (fst c1))) u x (fst (snd c1)) e)
+kvl-fin-go : (chs : AdvSeq) → (g0 : KvG) → Fair {KvMsg} {KvSt} 4 kv-bc-beh chs g0 → (t : Nat) → (out : (List (NodeId × KvWrite))) → Path (List (NodeId × KvWrite)) (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)) out →
+             Sum (Path (List (NodeId × KvWrite)) (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)) nil) ((s : Nat) × (kv-todo (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s) < kv-todo (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)))
+kvl-fin-go chs g0 fair t nil e = inl e
+kvl-fin-go chs g0 fair t (cons x u) e = inr (kvl-fin-k chs g0 t x u e (kvl-client chs g0 fair t (fst x) (snd x) u e))
+kv-client-finishes : (c0 : KvCli) → Live {KvMsg} {KvSt} 4 (λ g → Path (List (NodeId × KvWrite)) (kv-out g) nil) kv-bc-beh (kv-init c0)
+kv-client-finishes c0 chs fair =
+  live-measure {KvMsg} {KvSt} (λ g → Path (List (NodeId × KvWrite)) (kv-out g) nil) kv-bc-beh (kv-init c0) chs kv-todo
+    (λ t → kvl-fin-go chs (kv-init c0) fair t (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs (kv-init c0) t)) (λ i → kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs (kv-init c0) t)))
