@@ -1,0 +1,81 @@
+-- experiments/fleet/kv/run.cub — a recorded run of the kv fleet (loaded after kv.cub): the
+-- sequential client puts (1,10), (2,20), (1,11) and gets key 1. The adversary partitions
+-- replica 0 away for a while, lets time pass, duplicates the first write to replica 1 (both
+-- copies are delivered), and drops replica 1's first acknowledgement.
+kvr-prog : List KvCmd
+kvr-prog = cons (k-put (#1 , #10)) (cons (k-put (#2 , #20)) (cons (k-put (#1 , #11)) (cons (k-get #1) nil)))
+kvr-init : FState KvMsg KvSt
+kvr-init = kv-init (kv-seq-cli kvr-prog)
+kvr-ch1 : List Adv
+kvr-ch1 = cons (a-run 3) (cons (a-run 3) (cons (a-run 3)
+          (cons (a-part (cons 0 nil)) (cons (a-deliver 2) (cons (a-tick #5) (cons (a-part nil)
+          (cons (a-dup 1) (cons (a-deliver 3) (cons (a-run 0) (cons (a-deliver 0)
+          (cons (a-deliver 0) (cons (a-run 1) (cons (a-drop 0)
+          (cons (a-deliver 1) (cons (a-run 1) (cons (a-deliver 1) (cons (a-run 2) nil)))))))))))))))))
+kvr-ch2 : List Adv
+kvr-ch2 = cons (a-run 3) (cons (a-run 3) (cons (a-run 3)
+          (cons (a-deliver 3) (cons (a-deliver 2) (cons (a-run 0) (cons (a-deliver 0)
+          (cons (a-deliver 0) (cons (a-run 2) (cons (a-deliver 1) (cons (a-run 1) nil))))))))))
+kvr-ch3 : List Adv
+kvr-ch3 = cons (a-run 3) (cons (a-run 3) (cons (a-run 3)
+          (cons (a-deliver 2) (cons (a-run 0) (cons (a-deliver 0)
+          (cons (a-deliver 0) (cons (a-run 2) (cons (a-deliver 1) (cons (a-run 1)
+          (cons (a-run 3) (cons (a-deliver 0) (cons (a-run 0) (cons (a-deliver 0) nil)))))))))))))
+kvr-app : List Adv → List Adv → List Adv
+kvr-app xs ys = case xs of nil → ys; cons x r → cons x (rec r)
+kvr-choices : List Adv
+kvr-choices = kvr-app kvr-ch1 (kvr-app kvr-ch2 kvr-ch3)
+kvr-final : FState KvMsg KvSt
+kvr-final = fleet-run {KvMsg} {KvSt} kv-seq-beh kvr-choices kvr-init
+-- what the client observed, latest first: the get of key 1 answered 11 after the three puts
+#show c-hist (snd (fst kvr-final 3))
+#show c-ph (snd (fst kvr-final 3))
+-- the replicas' applied writes (replica 1 applied the first write twice) and what is left in flight
+#show r-app (fst (fst kvr-final 0))
+#show r-app (fst (fst kvr-final 1))
+#show r-app (fst (fst kvr-final 2))
+#show flight (snd kvr-final)
+#show clock (snd kvr-final)
+-- the replicas' stores at the keys written
+#show kv-store (r-app (fst (fst kvr-final 0))) #1
+#show kv-store (r-app (fst (fst kvr-final 1))) #1
+#show kv-store (r-app (fst (fst kvr-final 2))) #1
+#show kv-store (r-app (fst (fst kvr-final 0))) #2
+-- the final replica states are equal: the three stores are equal as functions, because the
+-- applied writes are the same set (replica 1's list repeats one)
+kvr-s01 : (a b c x : KvWrite) → InL {KvWrite} x (cons a (cons b (cons c nil))) → InL {KvWrite} x (cons a (cons b (cons c (cons c nil))))
+kvr-s01 a b c x m = case m of
+  inl e → inl e
+  inr m2 → (case m2 of
+    inl e → inr (inl e)
+    inr m3 → (case m3 of
+      inl e → inr (inr (inl e))
+      inr m4 → Empty-rec m4))
+kvr-s10 : (a b c x : KvWrite) → InL {KvWrite} x (cons a (cons b (cons c (cons c nil)))) → InL {KvWrite} x (cons a (cons b (cons c nil)))
+kvr-s10 a b c x m = case m of
+  inl e → inl e
+  inr m2 → (case m2 of
+    inl e → inr (inl e)
+    inr m3 → (case m3 of
+      inl e → inr (inr (inl e))
+      inr m4 → (case m4 of
+        inl e → inr (inr (inl e))
+        inr m5 → Empty-rec m5)))
+kvr-stores-01 : Path (Word → Word) (kv-store (r-app (fst (fst kvr-final 0)))) (kv-store (r-app (fst (fst kvr-final 1))))
+kvr-stores-01 = kv-replicas-agree kvr-final 0 1 (kvr-s01 (#1 , #11) (#2 , #20) (#1 , #10)) (kvr-s10 (#1 , #11) (#2 , #20) (#1 , #10))
+kvr-stores-02 : Path (Word → Word) (kv-store (r-app (fst (fst kvr-final 0)))) (kv-store (r-app (fst (fst kvr-final 2))))
+kvr-stores-02 = λ i → kv-store (r-app (fst (fst kvr-final 0)))
+-- replay: the run is a function of the recorded choices. Running the fleet as a process over
+-- the environment's signature against the record (feed-world) ends done in the same state
+-- with the record used up
+kvr-replay : Path (Outcome (FState KvMsg KvSt) × List Adv)
+                  (runp {EnvS} {FState KvMsg KvSt} {List Adv} (fleet-proc {KvMsg} {KvSt} kv-seq-beh (nt-len {Adv} kvr-choices) kvr-init) (feed-world {Adv}) kvr-choices)
+                  (done kvr-final , nil)
+kvr-replay = fleet-proc-run {KvMsg} {KvSt} kv-seq-beh kvr-choices kvr-init
+kvr-replay-eq : (chs : List Adv) → Path (List Adv) chs kvr-choices → Path (FState KvMsg KvSt) (fleet-run {KvMsg} {KvSt} kv-seq-beh chs kvr-init) kvr-final
+kvr-replay-eq chs e = fleet-replay {KvMsg} {KvSt} kv-seq-beh chs kvr-choices kvr-init e
+-- the client's observed history is the sequential map's: what the refinement statement says of
+-- every reachable state, here by computation
+kvr-hist : Path (Hist KvS) (c-hist (snd (fst kvr-final 3)))
+                (cons (k-get #1 , #11) (cons (k-put (#1 , #11) , unit) (cons (k-put (#2 , #20) , unit) (cons (k-put (#1 , #10) , unit) nil))))
+kvr-hist = λ i → c-hist (snd (fst kvr-final 3))

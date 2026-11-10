@@ -54,7 +54,8 @@ Files you own: `lib/net.cub`, `lib/fleet.cub`, `lib/deploy.cub`, `experiments/fl
 
 ```
 L=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p')
-(ulimit -v 2500000; timeout 600 ./build/cubical $L lib/net.cub lib/fleet.cub experiments/fleet/ping.cub | grep -v '^ok: \|^cached: ')
+(ulimit -v 2500000; timeout 600 ./build/cubical $L lib/net.cub lib/fleet.cub experiments/fleet/ping.cub \
+  experiments/fleet/kv/kv.cub experiments/fleet/kv/run.cub | grep -v '^ok: \|^cached: ')
 ```
 The library is read from the cache (about 1 s); the last line is `N passed, 0 failed`.
 
@@ -101,19 +102,45 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
   duplicate (`#22`, 974 steps).
   Measured: library + the three files, 929 passed, 0 failed, 1.7 s from the cache.
 
+- `lib/fleet.cub` also: the local-invariant rule `safe-local` (an invariant of each node's own
+  state that its view preserves is `Safe`: `VOk`, `LocalInv`, `ns-self`, `ns-local`), and
+  `fleet-proc-run` (the fleet process over `EnvS` run by `runp` against a recorded list through
+  `feed-world` ends `done (fleet-run …)` with the record used up).
+- `experiments/fleet/kv/kv.cub`: writes, messages, `kv-store`, the replica (`kv-rep-view`), the
+  client state, `kv-beh cb` (node 3's behaviour a parameter), the broadcasting client
+  (`kv-bc-view`), the sequential client (`kv-seq-view`).
+  - **Safety** `kv-safe`: for every client behaviour `cb` and client state, in every reachable
+    state each replica has `applied ⊆ log` and an owed acknowledgement's write logged
+    (`safe-local`); `kv-applied-logged` is the PLAN wording for replica 0.
+  - **Convergence** `kv-converges : Converges kv-store` (stores are equal as functions when the
+    applied lists are the same set), `kv-replicas-agree`.
+- `experiments/fleet/kv/run.cub`: a recorded run of 43 choices (partition and heal, tick,
+  duplicate of the first write to replica 1, drop of replica 1's first ack). `#show`: the
+  client's history `get 1 = 11` after three puts (12,043 steps), replicas' applied lists
+  (replica 1 holds `(1,10)` twice), stores at key 1 all `#11`; **final replica states equal**
+  as functions (`kvr-stores-01` by `kv-replicas-agree`, `kvr-stores-02` by `refl`).
+  - **Replay** `kvr-replay` (the fleet process against the record by `feed-world` ends
+    `done kvr-final , nil`, by `fleet-proc-run`), `kvr-replay-eq` (equal choices, equal run).
+  Measured: library + net, fleet, ping, kv, run: 996 passed, 0 failed.
+
 ## Found
 
 (nothing yet)
 
 ## Next step
 
-`experiments/fleet/kv/kv.cub` (loaded after `lib/net.cub lib/fleet.cub`). Design: a write is
-`(key , version) : Word × Word`; messages `m-put w | m-ack w | m-get k rid | m-val rid v`; node
-state `KvSt = Rep × Cli` for every node; nodes 0,1,2 are replicas (`log`, `applied`, pending
-reply), node 3 the client (behaviour a parameter). A replica on `m-put w` logs `w` and owes an
-ack; sending the ack applies `w`; on `m-get k rid` it owes `m-val rid (store-of applied k)`;
-`store-of l k = jfold wmax #0 (λ w → version if key = k else #0) l`. Statements: safety
-(`applied ⊆ log` for every client behaviour, by `safe-by-events`), convergence
-(`converges-fold`), replay, liveness for the broadcasting client (chain: client run →
-delivery → replica run, by `wait-run` and fairness), refinement to `kv-map-world` for the
-sequential client; then a `#show` of a run with a drop and a duplicate.
+1. `experiments/fleet/kv/liveness.cub` (after `kv.cub`): for the broadcasting client
+   (`kv-bc-beh`, `c-out = kv-bcast ws`), under every `Fair 4` sequence there is a time at which
+   every replica has applied every write. Proof plan: (a) `InL w (r-app …r)` is stable
+   (`step-by-events`, then `stable-later`); (b) client at `cons (r , w) U`: `SchedFair` + `wait-run`
+   + `step-run-eq` give a time after which the packet `(3, r, m-put w)` is in flight and
+   `c-out = U`; (c) `DeliveryFair` on that packet: `Took` (a lemma over `Resolved` turns `dl-go`
+   into: after the step replica r owes `kp-ack 3 w`) — `Gone` is impossible for a replica;
+   (d) `SchedFair` + `wait-run` on r: after its run `w` is applied; (e) induction on `c-out`,
+   merging times with `nt-later-comm` and (a).
+2. `experiments/fleet/kv/refine.cub`: `Refines kv-map-world (λ k → #0) (client history) kv-seq-beh
+   (kv-init (kv-seq-cli prog))` by `safe-by-events` with the invariant: applied₀ ⊆ issued,
+   acknowledged ⊆ applied₀, every `m-put` in flight issued, every `m-ack` from 0 applied at 0,
+   every `m-get`/`m-val`(from 0)/owed value with request id ≤ `c-idx` and, when equal, the
+   client waiting on that key and the value `kv-store conf k`; history is the map's.
+3. `lib/deploy.cub`, the node binary, the localhost run (see "What is built" 4 and Acceptance).

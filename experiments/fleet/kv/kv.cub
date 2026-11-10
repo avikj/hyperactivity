@@ -130,3 +130,68 @@ kv-replicas-agree : (g : FState KvMsg KvSt) → (i j : NodeId) →
                     SubL {KvWrite} (r-app (fst (fst g i))) (r-app (fst (fst g j))) → SubL {KvWrite} (r-app (fst (fst g j))) (r-app (fst (fst g i))) →
                     Path (Word → Word) (kv-store (r-app (fst (fst g i)))) (kv-store (r-app (fst (fst g j))))
 kv-replicas-agree g i j s1 s2 = kv-converges (r-app (fst (fst g i))) (r-app (fst (fst g j))) s1 s2
+-- ---------------------------------------------------------------- the broadcasting client
+-- it sends each write of c-out to its addressee, in order, and stops (it awaits nothing)
+kv-bc-go : KvSt → List (NodeId × KvWrite) → NView KvMsg KvSt
+kv-bc-go st out = case out of
+  nil → v-halt
+  cons e r → v-send (fst e) (m-put (snd e)) (fst st , KvCli { c-hist = c-hist (snd st) ; c-conf = c-conf (snd st) ; c-idx = c-idx (snd st) ; c-todo = c-todo (snd st) ; c-ph = c-ph (snd st) ; c-out = r })
+kv-bc-view : KvSt → NView KvMsg KvSt
+kv-bc-view st = kv-bc-go st (c-out (snd st))
+-- a write to every replica
+kv-bcast : List KvWrite → List (NodeId × KvWrite)
+kv-bcast ws = case ws of nil → nil; cons w r → cons (0 , w) (cons (1 , w) (cons (2 , w) (rec r)))
+-- ---------------------------------------------------------------- the sequential client
+-- one request at a time: a put is sent to replicas 0, 1, 2 and is answered when replica 0
+-- acknowledges it; a get is sent to replica 0 with the request's number and is answered by the
+-- value carrying that number from replica 0. Anything else received is ignored
+kv-start : List KvCmd → KvPhase × List KvCmd
+kv-start todo = case todo of
+  nil → (ph-done , nil)
+  cons c r → (case c of k-put w → (ph-put w zero , r); k-get k → (ph-get-send k , r))
+kv-set-ph : KvCli → KvPhase → KvCli
+kv-set-ph c ph = KvCli { c-hist = c-hist c ; c-conf = c-conf c ; c-idx = c-idx c ; c-todo = c-todo c ; c-ph = ph ; c-out = c-out c }
+kv-adv-put : KvCli → KvWrite → KvCli
+kv-adv-put c w = KvCli { c-hist = cons (k-put w , unit) (c-hist c) ; c-conf = cons w (c-conf c) ; c-idx = suc (c-idx c)
+                       ; c-todo = snd (kv-start (c-todo c)) ; c-ph = fst (kv-start (c-todo c)) ; c-out = c-out c }
+kv-adv-get : KvCli → Word → Word → KvCli
+kv-adv-get c k v = KvCli { c-hist = cons (k-get k , v) (c-hist c) ; c-conf = c-conf c ; c-idx = suc (c-idx c)
+                         ; c-todo = snd (kv-start (c-todo c)) ; c-ph = fst (kv-start (c-todo c)) ; c-out = c-out c }
+kv-weq2 : KvWrite → KvWrite → Bool
+kv-weq2 a b = andB (weq (fst a) (fst b)) (weq (snd a) (snd b))
+kv-seq-ack : KvCli → KvWrite → Rcv KvMsg → KvCli
+kv-seq-ack c w r = case r of
+  r-timeout → c
+  r-msg from m → (case m of
+     m-put w2 → c
+     m-ack w2 → (case andB (eqb from zero) (kv-weq2 w w2) of true → kv-adv-put c w; false → c)
+     m-get k rid → c
+     m-val rid v → c)
+kv-seq-val : KvCli → Word → Rcv KvMsg → KvCli
+kv-seq-val c k r = case r of
+  r-timeout → c
+  r-msg from m → (case m of
+     m-put w2 → c
+     m-ack w2 → c
+     m-get k2 rid → c
+     m-val rid v → (case andB (eqb from zero) (eqb rid (c-idx c)) of true → kv-adv-get c k v; false → c))
+kv-put-view : KvCli → KvWrite → Nat → NView KvMsg KvCli
+kv-put-view c w zero = v-send 0 (m-put w) (kv-set-ph c (ph-put w 1))
+kv-put-view c w (suc zero) = v-send 1 (m-put w) (kv-set-ph c (ph-put w 2))
+kv-put-view c w (suc (suc zero)) = v-send 2 (m-put w) (kv-set-ph c (ph-put w 3))
+kv-put-view c w (suc (suc (suc j))) = v-recv (λ r → kv-seq-ack c w r)
+kv-seq-go : KvCli → KvPhase → NView KvMsg KvCli
+kv-seq-go c ph = case ph of
+  ph-done → v-halt
+  ph-put w n → kv-put-view c w n
+  ph-get-send k → v-send 0 (m-get k (c-idx c)) (kv-set-ph c (ph-get-wait k))
+  ph-get-wait k → v-recv (λ r → kv-seq-val c k r)
+kv-seq-view : KvSt → NView KvMsg KvSt
+kv-seq-view st = nview-map {KvMsg} {KvCli} {KvSt} (λ c → (fst st , c)) (kv-seq-go (snd st) (c-ph (snd st)))
+-- the sequential client's initial state for a list of requests, and the fleet
+kv-seq-cli : List KvCmd → KvCli
+kv-seq-cli prog = kv-cli-init (snd (kv-start prog)) nil (fst (kv-start prog))
+kv-seq-beh : Beh KvMsg KvSt
+kv-seq-beh = kv-beh kv-seq-view
+kv-bc-beh : Beh KvMsg KvSt
+kv-bc-beh = kv-beh kv-bc-view
