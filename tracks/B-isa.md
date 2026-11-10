@@ -68,7 +68,27 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
 
 ## Done
 
-(nothing yet)
+- **Importer, lexer and parser** (`tools/sail2cub.py`, `--parse`). Sail model cloned at
+  `0c6c023dccc7c20d8d9dbfc481f01d9bb49d62bf` to `/home/claude/ext/sail-x86-from-acl2` (not vendored).
+  `python3 tools/sail2cub.py /home/claude/ext/sail-x86-from-acl2/model --parse` reads the 11 files
+  of the model's Makefile (`PRELUDE_SAILS`, `step.sail`, `main.sail`) and everything they
+  `$include`, each once, in include order: 63 files, 528 functions, 501 `val`, 38 bitfields,
+  36 registers, 27 overloads, 7 type synonyms, 4 structs, 1 enum, 1 union, 1 scattered function.
+  Constructs the parser had to learn beyond the list in item 1: `struct { f = e }` literals,
+  `let x : int : int = …` (a doubled annotation), an annotation binding as an atom
+  (`[false, …] : vector(256, dec, bool)[unsigned(opcode)]`), `foreach`, `try`/`catch`.
+
+## Decisions (what the generated code is, so far)
+
+- Names. `Res`, `ok`, `fault` are taken by `lib/check.cub`; the outcome type is named in
+  `lib/bits.cub` when it is written (see Next step).
+- Cub facts the emitter relies on (probed): a `let` binding needs a signature line when its value
+  has no inferable type (`let x : T` newline `x = e`); a `let` binds a name, not a pattern (tuples
+  are taken apart with `fst`/`snd`); a later `let` of the same name shadows; identifiers may
+  contain `_`, `?`, `'`; `%wsub` is truncated subtraction (3 − 5 = 0).
+- Run a file against the cached library:
+  `CUBICAL_STORE=/tmp/trackB/store ./build/cubical $(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p') FILE.cub`
+  (first run 20 s, later runs under 1 s).
 
 ## Found
 
@@ -76,7 +96,10 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
 
 ## Next step
 
-Clone the Sail model. Write `tools/sail2cub.py`'s lexer and parser, run it over all of
-`model/*.sail`, and commit when it parses every file (print per-file counts of functions
-parsed; no emission yet). Then the emitter for pure functions, `add_spec.sail` first, and get
-`lib/isa/x86/add_spec.cub` to check.
+1. Write `lib/bits.cub` (`Bits`, `ZI`, the outcome type, the state monad's bind) against
+   `wand wor wxor wshl wshr wquot wrem` of `lib/prim.cub`.
+2. In `tools/sail2cub.py` add, after `Model`: the type pass (every expression gets its Sail type;
+   bit widths are either a Python int or a cub term of type `Word` built from the function's
+   `int('n)` arguments), overload resolution by argument types, the effect fixed point over the
+   call graph, and the emitter (`--out lib/isa/x86`). First target: `lib/isa/x86/add_spec.cub`
+   and what it includes (`rflags_spec`, `structures`, `prelude`) checking.
