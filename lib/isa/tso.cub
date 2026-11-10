@@ -1,0 +1,125 @@
+-- lib/isa/tso.cub — x86-TSO as terms (PLAN §1 layer 1, §6 Phase 2 item 4; track G). Loaded after
+-- lib/world.cub (Sig, World, Step, Memory, mem-write).
+--
+-- Two forms and their relation:
+--   operational: a store buffer per thread over one shared memory; a thread's instruction or the
+--     flush of a buffer's oldest entry is a command of the world `tso-world`; which transition
+--     happens next is the response to the one command of the scheduler's signature, so a
+--     system of threads is a tree (`tso-sys`) whose branches are the environment's choices;
+--   axiomatic: a candidate execution (events, rf, the total order on writes) and the TSO
+--     consistency predicate `tso-consistent` over it;
+--   the relation: `TsoSound`, every trace of the operational machine after which the buffers
+--     are empty yields a consistent execution. Stated in general; inhabited only per program by
+--     computation over every schedule (experiments/tso/).
+-- ---------------------------------------------------------------- instructions of one thread
+-- the memory instructions a thread issues: a plain load and store, the two locked
+-- read-modify-writes (xchg; lock cmpxchg, which answers the value seen and, as on the
+-- hardware, writes in either case: the new value when the value seen equals `old`, the value
+-- seen otherwise), and mfence
+data TsoI = t-load (a : Word) | t-store (a : Word) (v : Word) | t-xchg (a : Word) (v : Word)
+  | t-cmpxchg (a : Word) (old : Word) (new : Word) | t-mfence
+tsoi-resp : TsoI → Type
+tsoi-resp c = case c return (λ _ → Type) of
+  t-load a → Word
+  t-store a v → Unit
+  t-xchg a v → Word
+  t-cmpxchg a o n → Word
+  t-mfence → Unit
+TsoIS : Sig
+TsoIS = (TsoI , tsoi-resp)
+-- ---------------------------------------------------------------- the machine's commands
+-- thread-tagged instructions, and the flush of a thread's oldest buffered write
+data TsoC = tso-do (t : Word) (i : TsoI) | tso-flush (t : Word)
+tsoc-resp : TsoC → Type
+tsoc-resp c = case c return (λ _ → Type) of
+  tso-do t i → tsoi-resp i
+  tso-flush t → Unit
+TsoS : Sig
+TsoS = (TsoC , tsoc-resp)
+-- the trace: one label per transition, each event with its id (ids are given in the order the
+-- events happen, from #1; #0 names the initial memory as the source of a read). A read records
+-- the write it took its value from; a flush names the write it performs
+data TsoL =
+    l-read (t : Word) (id : Word) (a : Word) (v : Word) (src : Word)
+  | l-write (t : Word) (id : Word) (a : Word) (v : Word)
+  | l-flush (t : Word) (id : Word) (a : Word) (v : Word)
+  | l-locked (t : Word) (id : Word) (a : Word) (vr : Word) (src : Word) (vw : Word)
+  | l-fence (t : Word) (id : Word)
+-- a buffered write: address, value, the id of its write event
+data TsoB = tso-b (a : Word) (v : Word) (id : Word)
+-- the state: memory; per address the id of the write last flushed to it; per thread its buffer,
+-- newest first; the next event id; the trace, latest first
+data TsoSt = tso-st (mem : Memory) (last : Word → Word) (buf : Word → List TsoB) (next : Word) (log : List TsoL)
+tso-init : TsoSt
+tso-init = tso-st (λ a → #0) (λ a → #0) (λ t → nil) #1 nil
+ts-mem : TsoSt → Memory
+ts-mem (tso-st m ls bf nx lg) = m
+ts-buf : TsoSt → Word → List TsoB
+ts-buf (tso-st m ls bf nx lg) = bf
+ts-log : TsoSt → List TsoL
+ts-log (tso-st m ls bf nx lg) = lg
+tso-upd : {A : Type} → Word → A → (Word → A) → Word → A
+tso-upd a v m = λ j → if weq j a then v else m j
+-- the newest buffered write to an address
+tso-buf-find : Word → List TsoB → Sum (Word × Word) Unit
+tso-buf-find a nil = inr unit
+tso-buf-find a (cons e r) = (case e of tso-b b v id → if weq a b then inl (v , id) else tso-buf-find a r)
+tso-empty : List TsoB → Bool
+tso-empty nil = true
+tso-empty (cons e r) = false
+-- the oldest buffered write and the buffer without it
+tso-oldest : List TsoB → Sum (TsoB × List TsoB) Unit
+tso-oldest nil = inr unit
+tso-oldest (cons e r) = (case tso-oldest r of inr u → inl (e , nil); inl p → inl (fst p , cons e (snd p)))
+-- ---------------------------------------------------------------- the transitions
+-- an instruction of thread t: a load reads the newest write to the address in t's own buffer,
+-- else memory; a store enters t's buffer; a locked instruction and mfence are enabled only
+-- when t's buffer is empty (otherwise refused: the state is returned unchanged), and a locked
+-- instruction reads and writes memory in one transition
+tso-instr : (t : Word) → (i : TsoI) → TsoSt → Sum (tsoi-resp i × TsoSt) TsoSt
+tso-instr t i (tso-st m ls bf nx lg) =
+  case i return (λ x → Sum (tsoi-resp x × TsoSt) TsoSt) of
+    t-load a →
+      (case tso-buf-find a (bf t) of
+         inl p → inl (fst p , tso-st m ls bf (%wsucc nx) (cons (l-read t nx a (fst p) (snd p)) lg))
+         inr u → inl (m a , tso-st m ls bf (%wsucc nx) (cons (l-read t nx a (m a) (ls a)) lg)))
+    t-store a v →
+      inl (unit , tso-st m ls (tso-upd t (cons (tso-b a v nx) (bf t)) bf) (%wsucc nx) (cons (l-write t nx a v) lg))
+    t-xchg a v →
+      (case tso-empty (bf t) of
+         true → inl (m a , tso-st (mem-write a v m) (tso-upd a nx ls) bf (%wsucc nx) (cons (l-locked t nx a (m a) (ls a) v) lg))
+         false → inr (tso-st m ls bf nx lg))
+    t-cmpxchg a o n →
+      (case tso-empty (bf t) of
+         true → (let w = (if weq (m a) o then n else m a)
+                 in inl (m a , tso-st (mem-write a w m) (tso-upd a nx ls) bf (%wsucc nx) (cons (l-locked t nx a (m a) (ls a) w) lg)))
+         false → inr (tso-st m ls bf nx lg))
+    t-mfence →
+      (case tso-empty (bf t) of
+         true → inl (unit , tso-st m ls bf (%wsucc nx) (cons (l-fence t nx) lg))
+         false → inr (tso-st m ls bf nx lg))
+-- the flush of thread t's oldest write to memory; refused when the buffer is empty
+tso-flush1 : Word → TsoSt → Sum (Unit × TsoSt) TsoSt
+tso-flush1 t (tso-st m ls bf nx lg) =
+  case tso-oldest (bf t) of
+    inr u → inr (tso-st m ls bf nx lg)
+    inl p → (case fst p of
+               tso-b a v id → inl (unit , tso-st (mem-write a v m) (tso-upd a id ls) (tso-upd t (snd p) bf) nx (cons (l-flush t id a v) lg)))
+-- the operational machine as a world: a refusal is a transition that is not enabled
+tso-world : World TsoS TsoSt
+tso-world c s =
+  case c return (λ x → Sum (tsoc-resp x × TsoSt) TsoSt) of
+    tso-do t i → tso-instr t i s
+    tso-flush t → tso-flush1 t s
+-- one thread alone is a process of the machine: its instructions tagged with its id
+tso-tag : Word → Handler TsoIS TsoS
+tso-tag t i = cmd {lzero} {TsoS} (tso-do t i)
+-- lib/proc.cub's memory interface on this machine: mcas is lock cmpxchg and the comparison of
+-- the value it saw
+tso-of-mem : Handler MemS TsoIS
+tso-of-mem c =
+  case c return (λ x → Proc {lzero} TsoIS (mem-resp x)) of
+    mload a → cmd {lzero} {TsoIS} (t-load a)
+    mstore a v → cmd {lzero} {TsoIS} (t-store a v)
+    mcas a o n → bind {lzero} {TsoIS} {Word} {Bool} (cmd {lzero} {TsoIS} (t-cmpxchg a o n)) (λ r → ret {lzero} {TsoIS} {Bool} (weq r o))
+    mfence → cmd {lzero} {TsoIS} t-mfence

@@ -35,9 +35,31 @@ Files you own: `lib/isa/tso.cub`, `lib/mem/atomics.cub`, `experiments/tso/**`, t
   every schedule up to a bound and checked.
 
 ## Needs from track A
+
+Nothing yet.
+
 ## Done
+
+How to check (cached library, one file after another; the last line must read `N passed, 0 failed`):
+`LIBS=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p'); (ulimit -v 2500000; timeout 600 ./build/cubical $LIBS lib/isa/tso.cub)`
+
+- `lib/isa/tso.cub`, operational part: instructions `TsoI` (load, store, xchg, lock cmpxchg,
+  mfence) with signature `TsoIS`; machine commands `TsoC` (`tso-do t i`, `tso-flush t`) with
+  signature `TsoS`; state `TsoSt` (memory, last flushed write id per address, per-thread
+  buffers newest first, next event id, trace of labels `TsoL`); `tso-world : World TsoS TsoSt`
+  (a refusal is a transition that is not enabled); `tso-tag`, `tso-of-mem` (proc.cub's `MemS`
+  onto the instructions). 22 definitions check, 184,874 steps, `789 passed, 0 failed`.
+
 ## Found
+
+Nothing yet.
 
 ## Next step
 
-Read `lib/proc.cub` for `World`, `runp`, `MemS`; write the operational TSO machine and SB.
+In `lib/isa/tso.cub`, after `tso-of-mem`: the scheduler signature (`TsoCh = ch-go t | ch-flush t`,
+`TsoSchedS`), threads as `Step TsoIS (List Word)`, `tso-step` (one choice applied to threads and
+state), `tso-sys : Nat → threads → TsoSt → Step TsoSchedS TsoEnd` (the system as a tree of the
+scheduler's choices), `tso-fold` over every response (all schedules), the outcome set as a
+sorted duplicate-free `List (List Word)`. Then `experiments/tso/sb.cub` with `#show` of SB's set.
+Then the axiomatic part (events `TsoEv`, witness `TsoX`, `tso-exec-of` a trace,
+`tso-consistent`, `TsoSound`), MP/LB/IRIW, `lib/mem/atomics.cub`, the spin-lock.
