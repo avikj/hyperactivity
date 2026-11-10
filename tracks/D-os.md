@@ -50,25 +50,14 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
 
 ## Needs from track A
 
-1. **ELF driver cases for the four new commands** (`lib/elf.cub`, `i-driver-loop`). The exact
-   bytes are being produced as an assembly source of the whole loop in `experiments/os/`
-   (next step below); until that lands, the statement of each case, in the loop's own
-   conventions (`rsi` the command's cell `[index][fields]`, every `Word` field a raw 64-bit
-   value, the response left in `rax` before the jump to `resp`, `r15`/`r12` the arena's next
-   and end, the overflow exit the first byte after the loop):
-   - index 11, `w-sys nr a1 a2 a3 a4 a5 a6` (fields at `[rsi+8]`…`[rsi+56]`): `rax=nr, rdi=a1,
-     rsi=a2, rdx=a3, r10=a4, r8=a5, r9=a6; syscall`; response `rax` unchanged (no sign
-     extension, no clamping to 0).
-   - index 12, `w-alloc n` (`[rsi+8]`): `rax = r15; r15 += (n+7) & ~7`; overflow exit when the
-     sum carries or passes `r12`; response the old `r15` (arena memory is fresh, zero, and
-     never reused).
-   - index 13, `w-load8 a`: response `movzx eax, byte [a]`.
-   - index 14, `w-store8 a v`: `mov [a], v's low byte`; response unit (`xor eax, eax`).
-   - the dispatch chain today sends every index above 8 to `w-cas` (index 9): it needs
-     `cmp rcx, 9 / je cas` and the four new comparisons.
-2. **`.gitignore` hides `experiments/build/`** (see Found): `feed.cub` is not in the repository.
-3. Append `lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub` to `LIB` in the `Makefile`
-   when they land (not yet written).
+1. ~~ELF driver cases for `w-sys` (11), `w-alloc` (12), `w-load8` (13), `w-store8` (14)~~ —
+   **done by A** in `6533fae9` (`tools/asm/driver.s`, `python3 tools/asm/gen.py --patch`;
+   `experiments/native/sys.cub`). Any further command is requested here; no assembly source of
+   the loop is kept in `experiments/os/`.
+2. ~~`.gitignore` hid `experiments/build/`~~ — **done by A**: the demos are `experiments/native/`.
+3. Append `lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub` (this order) to `LIB` in
+   the `Makefile`. **Not yet**: only `platform.cub` exists; this line is rewritten to "ready"
+   when all three load.
 
 ## Done
 
@@ -83,6 +72,11 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   (the process id); `experiments/build/feed.cub` (from track A's checkout, see Found) still
   builds: `ok: build feed-step [build/feed, 8064 bytes, the checker's conversion, 1216718
   steps]` and the binary answers 5, 3, 13 on three messages (bid 5, ask 2, bid 10).
+- **Item 4, platform parameters**: `lib/os/platform.cub`. `Sys` (the 23 calls), `Platform`
+  (page, cache line, cores, clock id, byte order, `pf-sysnr : Sys → Word`, the size of
+  `struct epoll_event` and its data offset), `LittleEndian pf` (the fact word layouts rely on),
+  `x86-64-linux cores` with `x86-64-linux-le`. Loaded after the library: 857 passed, 0 failed
+  (23 new definitions; `x86-64-sysnr` 2,942 steps).
 
 ## Found
 
@@ -98,8 +92,12 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
 
 ## Next step
 
-Write `experiments/os/driver-loop.s`: the whole ELF driver loop as assembly (the existing 523
-bytes reproduced exactly when the new cases are left out, checked with `as` + `objcopy` +
-`cmp` against the bytes in `lib/elf.cub`), with the four new cases; put the resulting bytes
-and the replacement `i-driver-loop` line under Needs 1. Then item 4 (`lib/os/platform.cub`),
-item 2 (`lib/os/linux.cub`), `experiments/os/udp-echo.cub`, item 3 (`lib/os/contract.cub`).
+Item 2, `lib/os/linux.cub` (loaded after `lib/os/platform.cub`): the layouts (`sockaddr_in`
+as one little-endian word, `timespec` as two, `epoll_event` at the platform's size), the
+errno decoding (`r ≥ 2^64 − 4095` is errno `2^64 − r`), the command type `Linux` with its
+responses, and `linux-on-w : (pf : Platform) → LittleEndian pf → Word → Handler Linux W` (the
+`Word` is a scratch area of 4096 bytes the structures are written into, taken once by
+`linux-run`). Check with
+`./build/cubical $(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p') lib/os/platform.cub lib/os/linux.cub`.
+Then `experiments/os/udp-echo.cub` on the net and by `#build`, then item 3
+(`lib/os/contract.cub`).
