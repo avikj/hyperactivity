@@ -62,7 +62,7 @@ Files you own: `tools/clang2cub.py`, `lib/cxx/ast.cub`, `experiments/cxx/**`, th
 1. `Makefile`: add `lib/cxx/ast.cub` to `LIB` so `make library` checks it. It needs only
    `lib/prelude.cub` … `lib/std.cub` and `lib/prim.cub` (it uses `List`, `Word`, `wadd`, `Bytes`,
    `bytes`), so it can stand anywhere after `lib/prim.cub`; at the end is simplest:
-   `... lib/x86.cub lib/elf.cub lib/cxx/ast.cub`. Cost measured: 35.1M steps, about 25 s (see
+   `... lib/x86.cub lib/elf.cub lib/cxx/ast.cub`. Cost measured: 37.0M steps, about 30 s (see
    Found 6 — most of it is the checker re-walking the types a `data` mentions).
 2. Mutual `data` and/or `List D` as a field of `data D` (Found 1). With either, the in-type
    list constructors (`ct-nil`/`ct-cons`, `ce-nil`/`ce-cons`, `cs-nil`/`cs-cons`) become the
@@ -86,21 +86,25 @@ CUBICAL_NOCACHE=1 ./build/cubical $L lib/cxx/ast.cub experiments/cxx/book.cub   
 
 The generated files are committed; regenerating them gives the same bytes (checked).
 
-### Acceptance record (clang 18.1.3, x86_64-pc-linux-gnu; machine shared, times vary ±30%)
+### Acceptance record (clang 18.1.3, x86_64-pc-linux-gnu; library of 35 files at `c398191b`)
 
-| run | result | steps (this file's share) | wall |
-|---|---|---|---|
-| library | 845 passed, 0 failed | 21,745,292 | 27 s |
-| + `lib/cxx/ast.cub` | 887 passed, 0 failed | 56,866,695 (35,121,403; 42 definitions) | 57 s |
-| + `book.cub` | 1079 passed, 0 failed, `ok: checks book-tu` | 58,484,080 (1,617,385; 192 definitions) | 69 s |
-| + `second.cub` (instead) | 1048 passed, 0 failed, `ok: checks second-tu` | 58,179,993 (1,313,298; 161 definitions) | 51 s |
-| + `third.cub` (instead) | 1058 passed, 0 failed, `ok: checks third-tu` | 57,854,040 (987,345; 171 definitions) | 58 s |
+| run | result | steps (this file's share) |
+|---|---|---|
+| library | 1131 passed, 0 failed | 24,785,474 |
+| + `lib/cxx/ast.cub` | 1173 passed, 0 failed | 61,775,019 (36,989,545; 42 definitions) |
+| + `book.cub` | 1365 passed, 0 failed, `ok: checks book-tu` | 63,427,867 (1,652,848; 192 definitions) |
+| + `second.cub` (instead) | 1334 passed, 0 failed, `ok: checks second-tu` | 63,106,718 (1,331,699; 161 definitions) |
+| + `third.cub` (instead) | 1344 passed, 0 failed, `ok: checks third-tu` | 62,786,294 (1,011,275; 171 definitions) |
+
+Wall time, with `CUBICAL_NOCACHE=1`: measured on a quiet machine with the 29-file library of
+that hour, library 27 s, + `ast.cub` 57 s, + `book.cub` 69 s; with other tracks' checks running
+the same runs took 60–115 s. A unit by itself is 1–2 s of that (about 480 steps per node).
 
 | unit | source lines | nodes written | declarations | shared types | records with layouts | import |
 |---|---|---|---|---|---|---|
-| `book.cpp` | 207 | 3408 | 62 | 98 | 8 of 8 | 5.4 s |
-| `second.cpp` | 195 | 3161 | 43 | 90 | 8 of 8 | 0.7 s |
-| `third.cpp` | 158 | 2274 | 45 | 86 | 8 of 8 | 0.8 s |
+| `book.cpp` | 207 | 3462 | 62 | 98 | 8 of 8 | 5.4 s |
+| `second.cpp` | 195 | 3188 | 43 | 90 | 8 of 8 | 0.7 s |
+| `third.cpp` | 158 | 2318 | 45 | 86 | 8 of 8 | 0.8 s |
 
 (`book.cpp` pulls in `<array>`: the JSON dump is 45.6 MB, of which the 62 declarations
 reachable from the roots are written.) Reference binary for the latency comparison:
@@ -119,8 +123,8 @@ execute, 0.1% reset, prices 994..1006, seed 1) at about 71 ns/message here.
   `double`, a static data member, a static local, a function template instantiated twice, a
   conversion function, a lambda capturing `this`, one name declared in two namespaces, a
   delegating constructor, ref-qualified methods, lifetime-extended temporaries (automatic and
-  static), `alignas` on variables, C-style and `reinterpret_cast`, the remaining integer
-  types, operators and cast kinds.
+  static), `alignas` on variables, default arguments, C-style and `reinterpret_cast`, the
+  remaining integer types, operators and cast kinds.
 - `tools/clang2cub.py`: three Clang runs per unit (JSON AST + record layouts in one process;
   vtable layouts from a code-generation run; the text AST for two facts the JSON omits), a
   parser for Clang's type strings with scoped name lookup, a worklist from the unit's roots,
@@ -130,7 +134,7 @@ execute, 0.1% reset, prices 994..1006, seed 1) at about 71 ns/message here.
   one description of the AST; `--emit-ast` prints it as `lib/cxx/ast.cub`, and every term is
   validated against it as it is built. The header of each generated file repeats the unit's
   own counts and kind lists.
-- `lib/cxx/ast.cub`: 37 data types, 219 constructors, plus `CStr`/`cstr`.
+- `lib/cxx/ast.cub`: 37 data types, 220 constructors, plus `CStr`/`cstr`.
 
 ### The AST: what the next track reads (conventions)
 
@@ -153,6 +157,9 @@ execute, 0.1% reset, prices 994..1006, seed 1) at about 71 ns/message here.
   class's constructors by the type Clang prints; the JSON has no id there).
 - `ce-default-init … field`: the field whose default member initializer is meant; the
   initializer itself is the `init` of that `cfield`.
+- `ce-default-arg … parm`: the parameter whose default argument is meant; the argument itself
+  is the `default` of that `cv-parm` (taken from whichever declaration of the function wrote
+  it). The JSON names neither; the callee's declaration and the argument's position do.
 - `ce-init-list … union-field filler inits`: for a class, `inits` are bases then fields in
   order; `filler` (or `ce-nil`) initializes the array elements `inits` does not reach.
 - `ce-lambda … closure captures`: `closure` is the id of the closure class (a `cd-record`
@@ -180,7 +187,7 @@ Counts are book/second/third.
 Declarations: CXXRecordDecl 6/6/8, ClassTemplateSpecializationDecl 2/2/0 (TemplateArgument
 3/4/0), FieldDecl 19/30/11, EnumDecl 2/0/0, EnumConstantDecl 6/0/0, FunctionDecl 8/8/11,
 CXXMethodDecl 27/12/8, CXXConstructorDecl 9/6/6 (CXXCtorInitializer 16/12/10),
-CXXDestructorDecl 7/7/7, CXXConversionDecl 0/0/1, VarDecl 24/23/27, ParmVarDecl 54/27/26,
+CXXDestructorDecl 7/7/7, CXXConversionDecl 0/0/1, VarDecl 24/23/27, ParmVarDecl 54/27/27,
 AlignedAttr on a variable 0/0/2.
 
 Statements: CompoundStmt 43/26/26 (and 39/23/25 as function bodies), DeclStmt 23/22/24, IfStmt
@@ -188,15 +195,15 @@ Statements: CompoundStmt 43/26/26 (and 39/23/25 as function bodies), DeclStmt 23
 CaseStmt 4/0/2, DefaultStmt 1/0/1, BreakStmt 1/1/1, ContinueStmt 1/2/0, ReturnStmt 38/29/16,
 NullStmt 2/0/0.
 
-Expressions: IntegerLiteral 38/71/46, CharacterLiteral 0/4/0, CXXBoolLiteralExpr 6/12/0,
+Expressions: IntegerLiteral 38/71/47, CharacterLiteral 0/4/0, CXXBoolLiteralExpr 6/12/0,
 FloatingLiteral 0/0/2, StringLiteral 0/1/0, CXXNullPtrLiteralExpr 0/1/2, DeclRefExpr
 190/123/108, MemberExpr 99/106/31, CallExpr 4/6/9, CXXMemberCallExpr 23/11/10,
 CXXOperatorCallExpr 28/2/1, CXXConstructExpr 19/7/7, CXXTemporaryObjectExpr 0/0/2,
-ImplicitCastExpr 186/205/161, CXXStaticCastExpr 9/12/6, CXXFunctionalCastExpr 6/0/1,
+ImplicitCastExpr 186/205/163, CXXStaticCastExpr 9/12/6, CXXFunctionalCastExpr 6/0/1,
 CXXReinterpretCastExpr 0/0/1, CStyleCastExpr 0/0/2, UnaryOperator 25/27/15, BinaryOperator
 50/82/39, CompoundAssignOperator 4/9/12, ConditionalOperator 8/4/2, ParenExpr 1/11/2,
 ArraySubscriptExpr 2/14/10, InitListExpr 3/6/8, ImplicitValueInitExpr 0/8/5,
-CXXDefaultInitExpr 11/0/4, CXXThisExpr 49/50/15, MaterializeTemporaryExpr 3/0/3,
+CXXDefaultInitExpr 11/0/4, CXXDefaultArgExpr 0/0/2, CXXThisExpr 49/50/15, MaterializeTemporaryExpr 3/0/3,
 ExprWithCleanups 3/0/3, ConstantExpr 4/0/2, LambdaExpr 1/0/1, UnaryExprOrTypeTraitExpr 2/6/0,
 SubstNonTypeTemplateParmExpr 5/6/0, CXXNewExpr 0/1/3, CXXDeleteExpr 0/1/2.
 
@@ -270,13 +277,13 @@ In the machine:
 5. Field names `then`, `else`, `record` in a `data` declaration are syntax errors ("unexpected
    then"): keywords are not allowed as field names. (Renamed `then-s`, `else-s`, `base`.)
 6. Checking a `data` declaration costs steps in proportion to everything the types it mentions
-   contain, again for each mention: `CExpr` (43 constructors) 221,911 steps; `CVarInit` (three
-   fields of type `CExpr`) 634,883; `CStmt` 2,654,940; `CBody` (one field of type `CStmt`)
-   2,946,936; `CFunction` 3,150,346; `CDecl` (8 constructors) 12,462,605; `CTU` (one
-   constructor, one field `List CDecl`) 11,252,811. `ast.cub` is 35.1M steps, 62% of them
+   contain, again for each mention: `CExpr` (44 constructors) 226,961 steps; `CVarInit` (three
+   fields of type `CExpr`) 650,153; `CStmt` 2,912,021; `CBody` (one field of type `CStmt`)
+   3,082,688; `CFunction` 3,355,614; `CDecl` (9 constructors) 13,017,022; `CTU` (one
+   constructor, one field `List CDecl`) 11,715,810. `ast.cub` is 37.0M steps, 67% of them
    those last two. A declaration's check should not re-walk the declarations it names.
-7. No hang, kill or segfault met: the largest generated file is 103 KB / 3408 nodes in 192
-   definitions (largest single definition about 400 nodes, 81k steps); a unit costs about 475
+7. No hang, kill or segfault met: the largest generated file is 103 KB / 3462 nodes in 192
+   definitions (largest single definition about 400 nodes, 81k steps); a unit costs about 480
    steps per node. An earlier binary failed at once with `error: unbound name %wmul` after a
    `git pull` changed `src/`: rebuild (`make build/cubical`) after every pull.
 
@@ -312,17 +319,15 @@ closed by writing the construct into a checked-in unit, importing, and adding th
 constructor the stop message names (then `--emit-ast`, re-import all units, re-run the
 acceptance commands, update the lists above). In the order real code will hit them:
 
-1. Default arguments (`ParmVarDecl` with an initializer; `CXXDefaultArgExpr`, whose parameter
-   the JSON does not name: take it from the callee's declaration and the argument's position).
-2. `std::span`: a template argument printed as the name of a constant
+1. `std::span`: a template argument printed as the name of a constant
    (`__extent_storage<dynamic_extent>`; the layout dump prints the same class with the value,
    which can identify it), and `CXXRewrittenBinaryOperator` (C++20 `!=` from `==`).
-3. Enumerations without a fixed underlying type (the dump does not give the type Sema chose).
-4. Anonymous struct/union members (`IndirectFieldDecl`), init-captures, alias templates and
+2. Enumerations without a fixed underlying type (the dump does not give the type Sema chose).
+3. Anonymous struct/union members (`IndirectFieldDecl`), init-captures, alias templates and
    `decltype(expr)`/`noexcept(expr)` in type strings, `float`/`long double`/wide literals,
    `thread_local`, `if constexpr`/`consteval`, `std::initializer_list`, GNU case ranges.
-5. Multiple and virtual inheritance (several vtable address points, thunks, vbase offsets), a
+4. Multiple and virtual inheritance (several vtable address points, thunks, vbase offsets), a
    polymorphic class whose vtable is laid out in another unit, a class used only incomplete.
-6. Any other node kind: the import stops with `… kind with no rule yet: K (at file:line)`.
+5. Any other node kind: the import stops with `… kind with no rule yet: K (at file:line)`.
 
 When track A applies "Needs from track A" items 2 or 3, make the change described there.

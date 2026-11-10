@@ -5,7 +5,7 @@
 // floating point; a static data member and a static local; a function template instantiated
 // at two types; a conversion operator; a lambda that captures `this`; and the same name
 // (`Quote`) declared in two namespaces, both used; and in `Band` and `from_c` the operators,
-// integer types and casts the other units happen not to use.
+// integer types and casts the other units happen not to use, and default arguments.
 //   clang++ -std=c++20 -O2 -fno-exceptions -fno-rtti -c third.cpp
 #include <cstddef>
 #include <cstdint>
@@ -82,14 +82,14 @@ struct Band {
     long long hi;
 
     Band() : Band(0, 1, 0) {}  // a delegating constructor
-    Band(short l, signed char s, long long h) : lo(l), step(s), hi(h) {}
+    Band(short l, signed char s, long long h = 8) : lo(l), step(s), hi(h) {}
 
     long long width() const& { return hi - lo; }
     long long width() && { return (hi - lo) / 2; }
     bool holds(long long x) const { return lo <= x && x <= hi; }
 };
 
-inline Band make_band(int k) { return Band(static_cast<short>(-k), 2, k); }
+inline Band make_band(int k, signed char step = 2) { return Band(static_cast<short>(-k), step, k); }
 
 // What a C interface hands over: an opaque pointer and a selector.
 inline long from_c(void* opaque, int which, long Total::* field) {
@@ -146,9 +146,9 @@ extern "C" long risk_step(const int* p, long n) {
     if (total) r += total.sum;
 
     const Band& kept = make_band(4);          // a temporary whose lifetime is the reference's
-    static const Band& fixed = Band(-8, 1, 8);  // and one of static storage
+    static const Band& fixed = Band(-8, 1);    // and one of static storage (a default argument)
     Band unit;
-    r += kept.width() + make_band(6).width() + fixed.holds(r) + unit.step;
+    r += kept.width() + make_band(6, 3).width() + fixed.holds(r) + unit.step;
     r += from_c(&total, -1, &Total::sum) + from_c(&total, 0, nullptr) + from_c(&total, 2, &Total::sum);
     counters[0] += r;
 

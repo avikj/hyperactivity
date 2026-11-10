@@ -169,6 +169,7 @@ data CExpr =
   | ce-init-list (t : CType) (vc : CValCat) (union-field : COptId) (filler : CExpr) (inits : CExpr)
   | ce-implicit-value-init (t : CType) (vc : CValCat)
   | ce-default-init (t : CType) (vc : CValCat) (field : Word)
+  | ce-default-arg (t : CType) (vc : CValCat) (parm : Word)
   | ce-this (t : CType) (vc : CValCat)
   | ce-materialize-temporary (t : CType) (vc : CValCat) (sd : CStorageDuration) (extending : COptId) (e : CExpr)
   | ce-with-cleanups (t : CType) (vc : CValCat) (e : CExpr)
@@ -186,10 +187,10 @@ data CStorage = cst-none | cst-static | cst-extern
 data CVarInit = cvi-none | cvi-c (e : CExpr) | cvi-call (e : CExpr) | cvi-list (e : CExpr)
 -- CAlign: an alignment specifier on a variable: a number of bytes, or as of a type
 data CAlign = cal-none | cal-bytes (n : Word) | cal-type (t : CType)
--- CVar: VarDecl and ParmVarDecl
+-- CVar: VarDecl and ParmVarDecl (with its default argument, ce-nil when it has none)
 data CVar =
     cv-var (id : Word) (name : CStr) (t : CType) (storage : CStorage) (align : CAlign) (constexpr : Bool) (nrvo : Bool) (init : CVarInit)
-  | cv-parm (id : Word) (name : CStr) (t : CType)
+  | cv-parm (id : Word) (name : CStr) (t : CType) (default : CExpr)
 -- CStmt: a statement. One constructor per Clang Stmt kind met; cs-expr is an expression in statement position; cs-none an absent child; cs-nil/cs-cons the children of cs-compound
 data CStmt =
     cs-compound (ss : CStmt)

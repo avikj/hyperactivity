@@ -177,6 +177,7 @@ SCHEMA = [
                           ('filler', 'CExpr'), ('inits', 'CExpr')]),
         ('ce-implicit-value-init', [('t', 'CType'), ('vc', 'CValCat')]),
         ('ce-default-init', [('t', 'CType'), ('vc', 'CValCat'), ('field', 'Word')]),
+        ('ce-default-arg', [('t', 'CType'), ('vc', 'CValCat'), ('parm', 'Word')]),
         ('ce-this', [('t', 'CType'), ('vc', 'CValCat')]),
         ('ce-materialize-temporary', [('t', 'CType'), ('vc', 'CValCat'),
                                       ('sd', 'CStorageDuration'), ('extending', 'COptId'),
@@ -210,11 +211,11 @@ SCHEMA = [
         ('cal-bytes', [('n', 'Word')]),
         ('cal-type', [('t', 'CType')]),
     ]),
-    ('CVar', 'VarDecl and ParmVarDecl', [
+    ('CVar', 'VarDecl and ParmVarDecl (with its default argument, ce-nil when it has none)', [
         ('cv-var', [('id', 'Word'), ('name', 'CStr'), ('t', 'CType'), ('storage', 'CStorage'),
                     ('align', 'CAlign'), ('constexpr', 'Bool'), ('nrvo', 'Bool'),
                     ('init', 'CVarInit')]),
-        ('cv-parm', [('id', 'Word'), ('name', 'CStr'), ('t', 'CType')]),
+        ('cv-parm', [('id', 'Word'), ('name', 'CStr'), ('t', 'CType'), ('default', 'CExpr')]),
     ]),
     ('CStmt', 'a statement. One constructor per Clang Stmt kind met; cs-expr is an expression '
               'in statement position; cs-none an absent child; cs-nil/cs-cons the children of '
@@ -1037,7 +1038,7 @@ class Unit:
             while r in self.redecl and self.redecl[r] in self.nodes:
                 r = self.redecl[r]
             groups.setdefault(r, []).append(i)
-        self.canon = {}
+        self.canon, self.redecls = {}, {}
         for r, ids in groups.items():
             if len(ids) == 1:
                 continue
@@ -1045,6 +1046,7 @@ class Unit:
             c = d[0] if d else r
             for i in ids:
                 self.canon[i] = c
+            self.redecls[c] = ids
         self.type_memo, self.typedef_memo, self.table_memo, self.spec_memo = {}, {}, {}, {}
         self.global_memo = {}
 
@@ -2338,14 +2340,58 @@ class Unit:
         return T('cv-var', W(w), S(n.get('name', '')), self.tyof(n), self.storage(n), align,
                  bool(n.get('constexpr')), bool(n.get('nrvo')), init)
 
-    def parm(self, n):
+    def parms_of(self, fn):
+        return [c for c in fn.get('inner', []) if c.get('kind') == 'ParmVarDecl']
+
+    def parm(self, n, fn, i):
+        """The i-th parameter of the function fn (its defining declaration). Its default
+        argument may be written on another declaration of the function: all are searched."""
         self.count('ParmVarDecl')
         w = self.idof(n['id'])
         self.defined.add(w)
-        if self.attrs(n):
-            # a default argument: every call that uses it has it as a CXXDefaultArgExpr
-            stop('a parameter with a default argument at %s: no rule yet' % self.where(n))
-        return T('cv-parm', W(w), S(n.get('name', '')), self.tyof(n))
+        defaults = []
+        for rid in self.redecls.get(fn['id'], [fn['id']]):
+            ps = self.parms_of(self.nodes[rid])
+            if i < len(ps):
+                ks = self.attrs(ps[i])
+                if ks:
+                    if 'init' not in ps[i] or len(ks) != 1:
+                        stop('a parameter with children this rule does not place: %s at %s' % (n.get('name'), self.where(ps[i])))
+                    defaults.append(ks[0])
+        if len(defaults) > 1:
+            stop('the parameter %s of %s has a default argument on %d declarations' % (n.get('name'), fn.get('name'), len(defaults)))
+        return T('cv-parm', W(w), S(n.get('name', '')), self.tyof(n), self.expr(defaults[0]) if defaults else T('ce-nil'))
+
+    def e_CXXDefaultArgExpr(self, n):
+        """The parameter whose default argument this is: the JSON does not say, the position in
+        the call does (the callee's declaration and the argument's index)."""
+        p = self.parent[id(n)]
+        i = [id(c) for c in p['inner']].index(id(n))
+        k = p.get('kind')
+        if k in ('CXXConstructExpr', 'CXXTemporaryObjectExpr'):
+            fn = self.constructor_of(p)
+        elif k in ('CallExpr', 'CXXMemberCallExpr', 'CXXOperatorCallExpr'):
+            c = p['inner'][0]
+            while c.get('kind') in ('ImplicitCastExpr', 'ParenExpr'):
+                c = c['inner'][0]
+            if c.get('kind') == 'DeclRefExpr':
+                fn = self.node(c['referencedDecl']['id'])
+            elif c.get('kind') == 'MemberExpr':
+                fn = self.node(c['referencedMemberDecl'])
+            else:
+                stop('a default argument in a call whose callee is a %s at %s: no rule yet' % (c.get('kind'), self.where(p)))
+            i -= 1
+            if k == 'CXXOperatorCallExpr' and fn['kind'] != 'FunctionDecl' and fn.get('storageClass') != 'static':
+                i -= 1                      # the first argument of a member operator call is the object
+        else:
+            stop('a default argument under a %s at %s: no rule yet' % (k, self.where(n)))
+        if fn['kind'] not in FUNCTION_KINDS:
+            stop('a default argument in a call of a %s at %s' % (fn['kind'], self.where(p)))
+        ps = self.parms_of(fn)
+        if not 0 <= i < len(ps):
+            stop('a default argument at position %d of %s, which has %d parameters (at %s)' % (i, fn.get('name'), len(ps), self.where(p)))
+        self.need(fn['id'])
+        return T('ce-default-arg', *self.head(n), W(self.idof(ps[i]['id'])))
 
     # ------------------------------------------------------------------ declarations
     def run(self):
@@ -2414,7 +2460,7 @@ class Unit:
         for c in ks:
             ck = c.get('kind')
             if ck == 'ParmVarDecl':
-                params.append(self.parm(c))
+                params.append(self.parm(c, n, len(params)))
             elif ck == 'CompoundStmt':
                 body = c
             elif ck == 'CXXCtorInitializer':
@@ -2808,7 +2854,10 @@ def main(argv):
     except Stop as e:
         sys.stderr.write('clang2cub: %s\n' % e)
         return 1
-    print(u.report())
+    try:
+        print(u.report())
+    except BrokenPipeError:
+        pass
     return 0
 
 
