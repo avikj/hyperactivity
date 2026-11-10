@@ -72,6 +72,13 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   on trees for natural arguments (`o-handle-step`); inclusions `o-incl`, `o-lift`, `o-lift-id`,
   `o-lift-comp`.
 
+- Item 1, stateful half and item 2 (803 passed 0 failed, 15.7M steps): `o-ObsOf`, `o-run`, `o-obs`,
+  `o-run-bind`, `o-run-handle` (observation after a morphism is observation at the composite),
+  `o-ido`/`o-obs-id`, `o-compo`/`o-run-comp` (two observations compose, states paired),
+  `o-Section`/`o-obs-lift` (obs after lift along `i : O ↪ S` is the identity), the sum signature
+  `o-SumS`, `o-RWorld`, `o-split`, `o-inl`, `o-inr`, `o-split-section`; traces `o-Tr`, `o-traces`,
+  `o-TrEq`, `o-ptraces`.
+
 ## Found
 
 - `lib/std.cub` has no set quotient `_/_` and no truncations (the track text says it has); the
@@ -81,10 +88,12 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
 ## Next step
 
 In `lib/obs.cub`, append in this order, checking and committing after each:
-1. stateful observation: `o-ObsOf Obs S St = (c : Cmd S) → St → Step Obs (Resp S c × St)`,
-   `o-run`, `o-obs = o-map fst ∘ o-run`, laws `o-run-bind`, `o-run-handle`, identity, composition;
-   the constructor from a sum signature and a pure handler of the rest.
-2. item 2: `o-Tr`, `o-traces` (by recursion on the tree), trace equality.
-3. item 3: `o-Bisim` by recursion on the trees (PathP form for responses), refl/sym/trans,
-   `o-bisim-path`/`o-path-bisim`, `isProp`/`isSet` results, bisimilar ⇒ equal traces; then `GProc`.
-4. items 4, 6, then `experiments/obs/counter.cub` (item 5 and the acceptance property).
+1. item 3: `o-BisimR Q` (bisimulation with a relation `Q` on results; `o-Bisim` is it at `≡`) by
+   recursion on both trees, the response clause in PathP form
+   `(e : c ≡ c2) × ((r)(r2) → PathP (λ i → Resp S (e i)) r r2 → o-BisimR Q (k r) (k2 r2))`;
+   refl/sym/trans (eliminate `e` with a J, `o-J`), `o-bisim-path`/`o-path-bisim`, isProp of it and
+   `isSet (Step S A)` (std's `Discrete→isSet` proof shape with `hconst` replaced), bisimilar ⇒
+   equal traces; then the guarded form (`GProc`).
+2. item 4 (`o-Quot`, `o-Beh`, `o-beh`, `≈`, the normal form `o-nf : Beh → Step`, congruences),
+   item 6 (up to bind: `o-bisimR-bind`; up to context: `o-run` of one context under two
+   observations related per command), then `experiments/obs/counter.cub` (item 5, acceptance).

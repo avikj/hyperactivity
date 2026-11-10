@@ -134,3 +134,99 @@ o-lift-id t = o-handle-id t
 o-lift-comp : {S T W : Sig} {A : Type} → (i : Incl S T) → (j : Incl T W) → (t : Step S A) →
               o-lift (o-incl-comp i j) t ≡ o-lift j (o-lift i t)
 o-lift-comp i j t = o-handle-comp (o-incl i) (o-incl j) t
+-- ---------------------------------------------------------------- observation: handling the rest with state
+-- the projection to an observation signature O: each command of S as a tree over O that also
+-- threads a state (what the handler of the commands outside O keeps: a memory, a heap, a cell).
+-- o-run is the process over O with its final state, o-obs forgets the state
+o-ObsOf : Sig → Sig → Type → Type
+o-ObsOf O S St = (c : Cmd S) → St → Step O (Resp S c × St)
+o-run : {O S : Sig} {A St : Type} → o-ObsOf O S St → Step S A → St → Step O (A × St)
+o-run H (sdone a) s = sdone (a , s)
+o-run H (scmd c k) s = o-bind (H c s) (λ rs → o-run H (k (fst rs)) (snd rs))
+o-obs : {O S : Sig} {A St : Type} → o-ObsOf O S St → Step S A → St → Step O A
+o-obs {O} {S} {A} {St} H t s = o-map {O} {A × St} {A} (λ x → fst x) (o-run H t s)
+o-run-bind : {O S : Sig} {A B St : Type} → (H : o-ObsOf O S St) → (t : Step S A) → (f : A → Step S B) → (s : St) →
+             o-run H (o-bind t f) s ≡ o-bind (o-run H t s) (λ x → o-run H (f (fst x)) (snd x))
+o-run-bind H (sdone a) f s = λ i → o-run H (f a) s
+o-run-bind {O} {S} {A} {B} {St} H (scmd c k) f s =
+  (λ i → o-bind (H c s) (λ rs → o-run-bind H (k (fst rs)) f (snd rs) i))
+  ∙ sym (o-bind-assoc (H c s) (λ rs → o-run H (k (fst rs)) (snd rs)) (λ x → o-run H (f (fst x)) (snd x)))
+-- observation after a stateless morphism is observation at the composite
+o-run-handle : {O S T : Sig} {A St : Type} → (H : o-ObsOf O T St) → (hd : o-THandler S T) → (t : Step S A) → (s : St) →
+               o-run H (o-handle hd t) s ≡ o-run {O} {S} {A} {St} (λ c s2 → o-run H (hd c) s2) t s
+o-run-handle H hd (sdone a) s = λ i → sdone (a , s)
+o-run-handle {O} {S} {T} {A} {St} H hd (scmd c k) s =
+  o-run-bind H (hd c) (λ r → o-handle hd (k r)) s
+  ∙ (λ i → o-bind (o-run H (hd c) s) (λ x → o-run-handle H hd (k (fst x)) (snd x) i))
+-- the identity observation (every command observed, the state untouched) forgets nothing
+o-ido : {S : Sig} {St : Type} → o-ObsOf S S St
+o-ido c s = scmd c (λ r → sdone (r , s))
+o-obs-id : {S : Sig} {A St : Type} → (t : Step S A) → (s : St) → o-obs (o-ido {S} {St}) t s ≡ t
+o-obs-id (sdone a) s = λ i → sdone a
+o-obs-id (scmd c k) s = λ i → scmd c (λ r → o-obs-id (k r) s i)
+-- two observations compose, their states paired
+o-assoc : {A X Y : Type} → (A × X) × Y → A × (X × Y)
+o-assoc x = (fst (fst x) , (snd (fst x) , snd x))
+o-compo : {O T S : Sig} {X Y : Type} → o-ObsOf T S X → o-ObsOf O T Y → o-ObsOf O S (X × Y)
+o-compo {O} {T} {S} {X} {Y} H1 H2 c s = o-map {O} {(Resp S c × X) × Y} {Resp S c × (X × Y)} (λ x → o-assoc x) (o-run H2 (H1 c (fst s)) (snd s))
+o-run-comp : {O T S : Sig} {A X Y : Type} → (H1 : o-ObsOf T S X) → (H2 : o-ObsOf O T Y) → (t : Step S A) → (s1 : X) → (s2 : Y) →
+             o-run (o-compo H1 H2) t (s1 , s2) ≡ o-map {O} {(A × X) × Y} {A × (X × Y)} (λ x → o-assoc x) (o-run H2 (o-run H1 t s1) s2)
+o-run-comp H1 H2 (sdone a) s1 s2 = λ i → sdone (a , (s1 , s2))
+o-run-comp {O} {T} {S} {A} {X} {Y} H1 H2 (scmd c k) s1 s2 =
+  calc o-bind (o-map {O} {(Resp S c × X) × Y} {Resp S c × (X × Y)} (λ x → o-assoc x) (o-run H2 (H1 c s1) s2)) (λ rs → o-run (o-compo H1 H2) (k (fst rs)) (snd rs))
+     ≡ o-bind (o-run H2 (H1 c s1) s2) (λ x → o-run (o-compo H1 H2) (k (fst (fst x))) (snd (fst x) , snd x))
+         by o-bind-assoc {O} {(Resp S c × X) × Y} {Resp S c × (X × Y)} {A × (X × Y)} (o-run H2 (H1 c s1) s2) (λ x → sdone (o-assoc x)) (λ rs → o-run (o-compo H1 H2) (k (fst rs)) (snd rs))
+     ≡ o-bind (o-run H2 (H1 c s1) s2) (λ x → o-map {O} {(A × X) × Y} {A × (X × Y)} (λ y → o-assoc y) (o-run H2 (o-run H1 (k (fst (fst x))) (snd (fst x))) (snd x)))
+         by (λ i → o-bind (o-run H2 (H1 c s1) s2) (λ x → o-run-comp H1 H2 (k (fst (fst x))) (snd (fst x)) (snd x) i))
+     ≡ o-map {O} {(A × X) × Y} {A × (X × Y)} (λ y → o-assoc y) (o-bind (o-run H2 (H1 c s1) s2) (λ x → o-run H2 (o-run H1 (k (fst (fst x))) (snd (fst x))) (snd x)))
+         by sym (o-bind-assoc {O} {(Resp S c × X) × Y} {(A × X) × Y} {A × (X × Y)} (o-run H2 (H1 c s1) s2) (λ x → o-run H2 (o-run H1 (k (fst (fst x))) (snd (fst x))) (snd x)) (λ y → sdone (o-assoc y)))
+     ≡ o-map {O} {(A × X) × Y} {A × (X × Y)} (λ y → o-assoc y) (o-run H2 (o-bind (H1 c s1) (λ rs → o-run H1 (k (fst rs)) (snd rs))) s2)
+         by (λ i → o-map {O} {(A × X) × Y} {A × (X × Y)} (λ y → o-assoc y) (o-run-bind H2 (H1 c s1) (λ rs → o-run H1 (k (fst rs)) (snd rs)) s2 (~ i)))
+-- obs along an inclusion i : O ↪ S: an observation that answers the included commands by
+-- themselves (o-Section) projects a lifted process back to itself
+o-Section : {O S : Sig} {St : Type} → Incl O S → o-ObsOf O S St → Type
+o-Section {O} {S} {St} i H = (c : Cmd O) → (s : St) → o-run H (o-incl i c) s ≡ o-ido {O} {St} c s
+o-obs-lift : {O S : Sig} {A St : Type} → (i : Incl O S) → (H : o-ObsOf O S St) → o-Section i H → (t : Step O A) → (s : St) →
+             o-obs H (o-lift i t) s ≡ t
+o-obs-lift {O} {S} {A} {St} i H sec t s =
+  calc o-obs H (o-lift i t) s
+     ≡ o-map {O} {A × St} {A} (λ x → fst x) (o-run {O} {O} {A} {St} (λ c s2 → o-run H (o-incl i c) s2) t s)
+         by (λ j → o-map {O} {A × St} {A} (λ x → fst x) (o-run-handle H (o-incl i) t s j))
+     ≡ o-obs (o-ido {O} {St}) t s
+         by (λ j → o-map {O} {A × St} {A} (λ x → fst x) (o-run {O} {O} {A} {St} (λ c s2 → sec c s2 j) t s))
+     ≡ t by o-obs-id t s
+-- the sum of two signatures, and the observation of the left summand given a total handler of
+-- the right one over a state: the canonical "O and the rest"
+o-sum-resp : (O R : Sig) → Sum (Cmd O) (Cmd R) → Type
+o-sum-resp O R c = case c of inl o → Resp O o; inr x → Resp R x
+o-SumS : Sig → Sig → Sig
+o-SumS O R = (Sum (Cmd O) (Cmd R) , o-sum-resp O R)
+o-RWorld : Sig → Type → Type
+o-RWorld R St = (x : Cmd R) → St → Resp R x × St
+o-split : {O R : Sig} {St : Type} → o-RWorld R St → o-ObsOf O (o-SumS O R) St
+o-split {O} {R} {St} w c s =
+  case c return (λ y → Step O (o-sum-resp O R y × St)) of
+    inl o → scmd o (λ r → sdone (r , s))
+    inr x → sdone (w x s)
+o-inl : {O R : Sig} → Incl O (o-SumS O R)
+o-inl = (λ o → inl o , λ o r → r)
+o-inr : {O R : Sig} → Incl R (o-SumS O R)
+o-inr = (λ x → inr x , λ x r → r)
+o-split-section : {O R : Sig} {St : Type} → (w : o-RWorld R St) → o-Section {O} {o-SumS O R} {St} (o-inl {O} {R}) (o-split {O} {R} {St} w)
+o-split-section w c s = λ i → scmd c (λ r → sdone (r , s))
+-- ---------------------------------------------------------------- traces
+-- a (complete) trace: the commands issued with the responses given, ending in the result
+data o-Tr (S : Sig) (A : Type) = o-tend (a : A) | o-tcons (c : Cmd S) (r : Resp S c) (t : o-Tr S A)
+-- x is a trace of t: t ends as x ends, or t issues x's first command and, continued with x's
+-- first response, has the rest of x as a trace
+o-traces : {S : Sig} {A : Type} → Step S A → o-Tr S A → Type
+o-traces (sdone a) (o-tend b) = a ≡ b
+o-traces (sdone a) (o-tcons c2 r2 x) = Empty
+o-traces (scmd c k) (o-tend b) = Empty
+o-traces {S} {A} (scmd c k) (o-tcons c2 r2 x) = (r : Resp S c) × (Path ((d : Cmd S) × Resp S d) (c , r) (c2 , r2) × o-traces (k r) x)
+-- trace equality: the same traces, as a path between the predicates
+o-TrEq : {S : Sig} {A : Type} → Step S A → Step S A → Type (lsuc lzero)
+o-TrEq {S} {A} t u = (x : o-Tr S A) → o-traces t x ≡ o-traces u x
+-- the traces of a Church process are its tree's
+o-ptraces : {S : Sig} {A : Type} → Proc {lzero} S A → o-Tr S A → Type
+o-ptraces p x = o-traces (to-step p) x
