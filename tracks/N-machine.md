@@ -43,10 +43,90 @@ crash fix, in small commits, pulling first.
 - The two profiles recorded; each machine-side fix with steps before and after.
 
 ## Needs from track A
+
+(none yet)
+
+## Baseline (before any change of this track; machine shared, load average 4–7, so seconds are noisy)
+
+At commit `main` of 2026-11-09 before the LIB additions: `make library` 842 passed, 0 failed,
+21,740,361 steps, 19.4 s user. `experiments/jit/workloads.cub`: 33 `ok: jit`, 921 passed,
+23,806,358 steps. `experiments/native/feed.cub`: `ok: build feed-step` 8210 bytes, 1,221,139
+steps; `build/feed` prints 5 then 2. Brunerie at 0 workers: −2, the reading 233,628 steps,
+3,851,045 steps in all, 5.3 s user; at 4 workers −2 (264,211 steps for the reading that run).
+Track A reports the library is now 1398 passed, ~96M steps (lib/os, tso, atomics, obs, the C++
+and Rust AST types added to LIB): **re-baseline after pulling before the first C change.**
+
 ## Done
+
+Nothing changed in C yet. Measured and diagnosed (see Found); the scratch verification script
+is `experiments/machine/verify.sh`.
+
 ## Found
+
+1. **A numeral of 10⁶ segfaults in `ds` (src/lang.c:716), not in the net.** `experiments/machine/big-nat.cub`
+   (`big : Nat; big = 1000000; #show big`): SIGSEGV with the 1 GB stack full
+   (`$sp = 0x7fffbfffe9a0`, stack mapping `0x7fffbffff000-0x7ffffffff000`). `ds` has a
+   2368-byte frame and recurses once per `suc`.
+2. **The recursion is a class of 150 C functions in 95 mutually recursive groups** (from
+   `gcc -fcallgraph-info=su`, strongly connected components of the call graph): 9 in
+   `src/net.c` (`build_m`/`op1`, `synkey`, `defer_build`, `box_fd`/`fd_pending`/`fd_cell`/`fd_port`,
+   `jit_in`, `jit_read`, `ih_maker`, `key_print_d`), the rest in `src/lang.c`, `src/syntax.c`,
+   `src/store.c`. Frame sizes on the numeral's route: `toplevel_in` 68,640 bytes, `el_app`
+   17,760, `syn_solve` 9,024, `by_lin` 7,904, `p_block_lets` 5,792, `ann` 2,384, `ds` 2,368,
+   `pr` 2,336, `compile` 304, `to_code` 192, `build_m` 96, `synkey` 144.
+3. **With the stack unlimited (`ulimit -s unlimited`) the numeral works but is not linear.**
+   n = 10⁴: checks, `#show` reads 10000 in 1,130,045 steps (113 steps per `suc`). n = 2·10⁴:
+   check 2,400,137 steps in ~8 s, `#show` 2,260,045 steps in ~71 s. n = 4·10⁴: check
+   4,800,137 steps in ~28 s, `#show` not finished after 260 s. Steps are linear (120 per `suc`
+   to check, 113 to show); the seconds are quadratic and they are C, not rewrites: every
+   sample of the `#show` phase is inside `synkey` (src/net.c:4004) called from `build_m`.
+   `build_m` calls `synkey(t, f)` at every node it builds, and `synkey` walks the whole
+   subterm: building a term of depth d costs d² key computations. This is the machine's
+   (item 3): the key of a built term must be computed once, bottom-up.
+4. **4 workers under `ulimit -v 3000000` hang forever with no output.** `net_start`
+   (src/net.c:3868) does not check `pthread_create`; each worker's stack is the 1 GB
+   `RLIMIT_STACK` that `main` sets (4 × 1024 MB mappings, `VmSize` 4.28 GB), so two of four
+   creations fail and `net_start` waits on `parked < nworkers` for threads that do not exist
+   (gdb: main in `pthread_cond_wait` at net.c:3870, two workers parked). `make brunerie`'s
+   4-worker half therefore cannot run under the 3 GB cap every run here is told to use.
+5. Reported by track C (through A): checking a `data` declaration re-walks every type it
+   mentions once per mention: in `lib/cxx/ast.cub`, `CExpr` 227k steps, `CDecl` (9
+   constructors) 13.0M, `CTU` (one constructor) 11.7M; the two are 67% of the file's 37M
+   steps. Not yet attributed (machine sharing/memo, or `lib/check.cub`'s data checking).
+6. Reported by track D (through A): `#build` of a process written through a handler is
+   superlinear: 7 commands 42M steps, 22 commands 1.21·10⁹ (tracks/D-os.md Found; D is
+   making a per-stage table). Not yet attributed.
+
+## Decisions (so a successor does not redo them)
+
+- The 141 recursive functions of `lang.c`/`syntax.c`/`store.c` are not rewritten one by one:
+  they run on the main thread only, and its stack is made to grow until memory ends
+  (`RLIMIT_STACK` raised to unlimited before the re-exec `main` already does, where the hard
+  limit allows; then growth is bounded by `RLIMIT_AS` and memory, not by 1 GB). Running out
+  is reported by a SIGSEGV handler on an alternate stack that recognises a fault next to the
+  stack pointer and prints `error: out of stack in <form> <name> (file:line)` and exits 2; any
+  other fault prints where it was and is re-raised (a bug stays a signal).
+- The 9 of `src/net.c` run on workers too, inside a rewrite: they are made iterative, and
+  workers get a fixed modest stack (so 4 workers fit under a 3 GB cap).
+- Allocation: `malloc`/`calloc`/`realloc`/`strdup`/`aligned_alloc` go through checked
+  wrappers (macros in `src/core.h`, bodies in `src/net.c`) that end with
+  `error: out of memory in <form> <name> (file:line)`, exit 2.
+- On the numeral's route the fat frames (`ds`, `ann`, `el_app`, `pr`, `compile`, `to_code`)
+  are made to loop along the last argument, so a right-nested value costs heap, not stack.
 
 ## Next step
 
-Reproduce the crash: a file with `big : Nat` / `big = 1000000` and `#show big`, under
-`stdbuf -oL` and gdb if present (else ASan build) to get the recursing function; fix; commit.
+1. `git pull`, `make build/cubical`, run `experiments/machine/verify.sh`, record the new
+   baseline above.
+2. In `src/net.c` after `net_start`: add `net_doing[2]`, the SIGSEGV handler
+   (`sigaltstack`, `SA_ONSTACK|SA_SIGINFO`, compare `si_addr` with the context's `RSP`), the
+   checked allocators, `pthread_attr_setstacksize(64 MB)` and a checked `pthread_create`
+   (on failure: fewer workers, said on stderr). In `src/core.h` the macros. In `src/lang.c`
+   `main`: `want = RLIM_INFINITY` when `rl.rlim_max` allows; in `toplevel`: set `net_doing`.
+   Verify (library, workloads, feed, brunerie 0 and 4 under `ulimit -v 3000000`), commit.
+3. `build_m`/`synkey` (src/net.c:3970–4200): return each built child's key to its parent
+   instead of recomputing; check by a temporary assertion that the passed key is the pointer
+   `synkey` returns, over the library and Brunerie; steps must be identical. Record seconds
+   for n = 2·10⁴, 4·10⁴, 10⁵ before and after.
+4. Then the numeral at 10⁵, 10⁶, 10⁷ and a 10⁶ list literal, fixing each stop as found; then
+   item 2 (asan, tsan), item 3 (profiles; findings 5 and 6), item 4 (g8).
