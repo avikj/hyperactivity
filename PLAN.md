@@ -183,10 +183,10 @@ leaves to the net instead of faulting (measured: a 300,000-deep sum on a 6 MB st
 
 Compiled code is pure: stores copy, the arena is private and discarded, and no command of the
 world is compiled. So an overflow can restore the stack and return, and the net computes the
-same call from the start (`run p f ≡ f` by cases). Processes and their commands run on the net;
-compiling them is not part of Phase 1 and is withdrawn as a design (the machine-command
-construct `mcmd` of revision 8 is gone): a process's hot inner computations are pure functions
-and compile; its commands are driver calls the net makes.
+same call from the start (`run p f ≡ f` by cases). That argument is `#jit`'s, where the net is
+behind the bytes. A deployed binary has no net behind it, so processes compile too, by
+`#build` (4.4 item 5): a command is a syscall, and an overflow is an abort outcome in the
+program's type, never a restart.
 
 ### 4.3 Acceptance workloads (`experiments/jit/workloads.cub`)
 
@@ -237,14 +237,23 @@ passes, and its answers equal the machine's.
 4. **In-place stores under uniqueness.** When B11's computed usage shows a byte string is used
    once, `store` writes in place instead of copying. The path is unchanged (the meaning of a
    store is the same); only the template differs, chosen by the usage the checker computed.
-5. **Specialization when values arrive.** When an argument becomes known at run time, the term
+5. **Processes and standalone binaries: `#build main`.** `main : Proc W A` (Church or guarded
+   form) specialized at the world's signature is a tree of commands with continuations; a
+   command encodes as the syscall instruction with its arguments in the ABI's registers, the
+   continuation inline, a guarded fixed point as a loop. `lib/elf.cub` writes the blob as a
+   static ELF64 with an entry stub that maps the arena and calls `main`. No overflow exit
+   exists in a standalone binary: checked `Word` arithmetic there ends the process with the
+   `overflow` outcome, which is in `main`'s type, and hot paths are written over `UInt64`.
+   Acceptance: a binary that reads bytes, decodes a message, updates a book, writes a reply,
+   run on recorded input, produces the outcome trace the net produces for `main`.
+6. **Specialization when values arrive.** When an argument becomes known at run time, the term
    with it substituted is specialized, checked and compiled, and stored under the specialized
    term's content key, so a cache hit cannot be stale. This is the JIT proper; `#jit` at load is
-   its first case.
-6. **Schedules used.** The register assignment and binding-time stages in `Sched` drive the
+   its first case, and `#lift`'s indirect jumps (Phase 2) are another.
+7. **Schedules used.** The register assignment and binding-time stages in `Sched` drive the
    encoder (today every value lives in the frame); register allocation is a choice of
    template, so it changes cost, never meaning.
-7. **Compile cost.** Steps per compiled byte is measured per workload and driven down as a net
+8. **Compile cost.** Steps per compiled byte is measured per workload and driven down as a net
    property (it is the same cost as every program about programs).
 
 ## 5. The distinctions everything above x86 rests on
@@ -296,15 +305,30 @@ Built:
    stack and registers under SysV, as a definition producing the model's initial state.
 4. **The memory model.** x86-TSO as an axiomatic predicate over executions, integrated with the
    instruction model's memory events (Isla is the precedent).
-5. **The template equations.** For each encoder template, the equation between the construct's
-   meaning and `⟦x86⟧` of the template's bytes: straight-line templates by computation on
-   literals under the model, the counted loop by induction on the counter, the overflow exit
-   by cases on the carry. Then `x-push` and `x-lift` are stated as code-to-code functions whose
-   output is checked equal to their input by the checker (they rewrite by β and by naming), so
-   the passes are checked per use like the specializer. After this, compiling `f` yields a
-   path from `⟦x86⟧ (bytes)` to `f`, and the encoder is out of the trusted base.
-6. **Measurement.** Net steps per simulated instruction on the imported model, which decides how
-   large a binary can be lifted (Clang's binary is the large case of Phase 4).
+5. **The template lemmas, and the encoder returns its path.** One lemma per template
+   (`lib/isa/templates.cub`, about 45): *for every state satisfying the frame predicate, if
+   the sub-bytes compute the sub-terms' values into `rax`, then these bytes compute this
+   construct's value into `rax` and preserve the frame*, stated up to an observation that
+   forgets flags and dead stack. Straight-line templates are proved by running the model on
+   the literal bytes with symbolic operands (conversion); the counted loop and the apply
+   routine by induction; the overflow and stack exits by cases. `cx` then returns
+   `(bytes , path)`, the path assembled from the lemmas along its own recursion, exactly as
+   the specializer assembles its path from theorems; `x-push` and `x-lift` return paths the
+   same way (β and naming). The checker checks the assembled path per program. This is the
+   only proof-writing in the plan: once, bounded by the template count, nothing per program.
+   After it, compiling `f` yields `⟦x86⟧ (bytes) ≡ f` and the encoder is out of the trusted
+   base.
+6. **Floating point in the model.** The Sail snapshot has no scalar SSE; `addsd`, `subsd`,
+   `mulsd`, `divsd`, `ucomisd`, `cvtsi2sd`, `cvttsd2si`, `movq` are added from the ACL2
+   originals over the machine's IEEE primitives. Until then the float templates are trusted.
+7. **`#lift`: a binary as a term, by specialization.** The model specialized at a binary's bytes
+   (decode ahead of time, a definition per basic block, direct jumps as calls) is the
+   binary's meaning as a term; it compiles by our compiler and runs natively. An indirect
+   jump's target is specialized when it arrives (Phase 1 item 6). The model is never run as an
+   interpreter over a large binary: at thousands of net steps per instruction that would not
+   finish, and specialization is the same meaning by construction.
+8. **Measurement.** Net steps per decoded instruction during specialization, and the size of
+   the term per block.
 
 Acceptance: every workload's bytes, run under the imported model from the loader's state,
 produce the machine's answers *as a checked equation*, and the trusted base lists the ISA
@@ -351,9 +375,8 @@ Built:
    mistake in the definition of C++'s meaning here, fixed in one place.
 4. **Compilation** by the section 4 compiler, via the Futamura specialization of `⟦_⟧_std` at
    the program; the result runs under the platform parameters of Phase 3.
-5. **Lifting Clang itself** from its binary under `⟦x86⟧` once Phase 2's measurement says the
-   net can run a binary of that size; then the Sema oracle is removed (the AST is Clang's
-   lifted computation on the source).
+5. **Lifting Clang itself** by `#lift` of its binary (Phase 2 item 7); then the Sema oracle is
+   removed (the AST is the lifted Clang's computation on the source).
 
 Acceptance: a trading codec, order book and session layer written in C++ are read, compiled by
 our compiler, and run with the latency of the same code compiled by Clang (within a stated
@@ -439,6 +462,15 @@ Built:
 Acceptance: the trading fleet deployed from one corpus and one configuration value, every
 binary produced by `deploy`, the deployment's checks passing, and an upgrade carried out as a
 checked transition.
+
+## 6.9 Size of what remains
+
+New code that must check, by phase (lines; hours of building at this repo's measured rate):
+Phase 1 remainder 2,500 / 7; Phase 2 9,200 / 20; Phase 3 1,500 / 3; Phase 4 35,000 / 60;
+Phase 5 46,000 / 75; Phase 6 2,500 / 5; Phase 7 6,000 / 12; Phase 8 3,000 / 6. About 106,000
+lines and 190 hours, plus machine time for checks. Not covered by these: how fast a
+specialized production interpreter runs (its meaning is by construction, its speed depends on
+the interpreter), and the trading system's own code.
 
 ## 7. The trusted base, exactly (revision 9)
 
