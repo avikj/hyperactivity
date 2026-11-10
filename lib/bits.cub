@@ -104,6 +104,9 @@ z-mkneg m = if weq m #0 then zpos #0 else zneg m
 z-nat : ZI → Word
 z-nat (zpos n) = n
 z-nat (zneg n) = #0
+z-mag : ZI → Word
+z-mag (zpos n) = n
+z-mag (zneg n) = n
 z-negate : ZI → ZI
 z-negate (zpos n) = z-mkneg n
 z-negate (zneg n) = zpos n
@@ -186,6 +189,26 @@ str-cat : Text → Text → Text
 str-cat a b = wor (wshl a (wmul #8 (str-len b))) b
 str-eq : Text → Text → Bool
 str-eq a b = weq a b
+-- a digit's character (0-9, A-F), and the k digits of x in a base, highest first
+str-digit : Word → Word
+str-digit d = if wlt d #10 then wadd #48 d else wadd #55 d
+str-digits : (base k : Word) → Word → Text
+str-digits base k x =
+  %welimP (λ v → Word → Text) k (λ y → #0)
+    (λ j h y → wor (wshl (h (wquot y base)) #8) (str-digit (wrem y base))) x
+-- how many digits x has in a base (at least one; the recursion is bounded by x itself)
+str-count : (base : Word) → Word → Word
+str-count base x =
+  %welimP (λ v → Word → Word) x (λ y → #1) (λ j h y → if wlt y base then #1 else wadd #1 (h (wquot y base))) x
+-- dec_str, and bits_str ("0x" and hex digits when the width is a multiple of 4, else "0b" and bits)
+str-of-int : ZI → Text
+str-of-int (zpos n) = str-digits #10 (str-count #10 n) n
+str-of-int (zneg n) = str-cat #45 (str-digits #10 (str-count #10 n) n)
+str-of-bits : (n : Word) → Bits n → Text
+str-of-bits n a =
+  if weq (wrem n #4) #0
+  then str-cat #12408 (str-digits #16 (wquot n #4) a)
+  else str-cat #12386 (str-digits #2 n a)
 
 -- ---------------------------------------------------------------- option, lists, vectors
 data Option (A : Type) = None | Some (a : A)
@@ -196,6 +219,9 @@ is_some (Some a) = true
 vec-get : {A : Type} → A → List A → Word → A
 vec-get d nil i = d
 vec-get d (cons x xs) i = if weq i #0 then x else vec-get d xs (wsub i #1)
+vec-len : {A : Type} → List A → Word
+vec-len nil = #0
+vec-len (cons x xs) = wadd #1 (vec-len xs)
 vec-set : {A : Type} → List A → Word → A → List A
 vec-set nil i y = nil
 vec-set (cons x xs) i y = if weq i #0 then cons y xs else cons x (vec-set xs (wsub i #1) y)
@@ -228,6 +254,15 @@ mem-load : ByteMap → Bits #64 → Bits #8
 mem-load m a = mem-get 64 m a
 mem-store : ByteMap → Bits #64 → Bits #8 → ByteMap
 mem-store m a v = mem-put 64 m a v
+-- n bytes from an address, the lowest address the lowest byte (the address wraps at 2⁶⁴)
+mem-load-n : ByteMap → (n : Word) → Bits #64 → Bits (wmul #8 n)
+mem-load-n m n a =
+  %welimP (λ v → Word → Word) n (λ x → #0)
+    (λ j h x → wor (mem-load m x) (wshl (h (bv-add #64 x #1)) #8)) a
+mem-store-n : ByteMap → (n : Word) → Bits #64 → Bits (wmul #8 n) → ByteMap
+mem-store-n m n a v =
+  %welimP (λ w → ByteMap → Word → Word → ByteMap) n (λ k x y → k)
+    (λ j h k x y → h (mem-store k x (wand y #255)) (bv-add #64 x #1) (wshr y #8)) m a v
 
 -- ---------------------------------------------------------------- outcomes
 -- E the model's exception type. An abort carries its reason as a string.

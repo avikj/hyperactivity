@@ -95,6 +95,17 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
   Measured: one `mem-store` or `mem-load` is about 1 400 steps (64 levels × ~20); two stores and
   a load, 4 187 steps.
 
+- **Importer, type pass and emitter** (`tools/sail2cub.py MODEL --out lib/isa/x86`): writes
+  `state.cub` (the `X86` data type: `mem : ByteMap` and the 36 registers, a projection
+  `x86-R` and an update `x86-set-R` each) and one `.cub` per `.sail` (63), and `ORDER` (64 names).
+  Its report: `functions: 505 translated (152 pure, 118 outcome, 235 state), 0 not translated`
+  (the model's 528 `function` items are 505 functions: `__SetConfig` has 24 clauses);
+  `moved to a later file: 56`; `undefined: prelude.sail:82`; `prints dropped: 41`.
+  45 188 generated lines, 3.9 MB.
+  Check: `./build/cubical <library> lib/bits.cub $(sed 's|^|lib/isa/x86/|' lib/isa/x86/ORDER)` ends
+  `3574 passed, 0 failed` (the library's 830, `lib/bits.cub`, and 2 715 definitions of the
+  model; no `postulate`, every definition has a signature).
+
 ## Decisions (what the generated code is, so far)
 
 - Memory: a trie rather than a write list over `Bytes n`, because `Bytes n`'s loads need a
@@ -121,14 +132,53 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
   `CUBICAL_STORE=/tmp/trackB/store ./build/cubical $(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p') FILE.cub`
   (first run 20 s, later runs under 1 s).
 
+- What each Sail construct becomes (the importer's rules, all in `tools/sail2cub.py`):
+  - `bits(n)` → `Bits n`; a width is a numeral or a term over the function's `int('n)`
+    parameters (`wmul #8 (z-nat nbytes)`); an integer type variable no `int('n)` parameter
+    gives is a leading `Word` parameter `w_n`. `int`, `nat`, `range`, `{|…|}` → `ZI`. A
+    bitfield is an alias of its `Bits` with `B-f` / `B-set-f` per field; `Mk_B` and `.bits` are
+    the identity. An enum is a data type with `E-ix`; a struct a one-constructor data type;
+    `option` → `Option`; `list` and `vector` → `List` (a `dec` vector literal reversed, so
+    position is index); a string → `Text` numeral; a tuple → right-nested pairs.
+  - An effectful subexpression is bound before the expression that uses it, left to right
+    (`bindS {A} {B} m (λ x → …)`, `bindF` for outcome-only, `onS` for an outcome inside state
+    code); a register read is `getS x86-R`, a write `putS (x86-set-R v)`; `__read_mem` /
+    `__write_mem` are `x86-read-mem` / `x86-write-mem` (`__write_mem_ea` is `unit`).
+    `&` / `|` with an effectful right operand read it only when the left does not decide.
+  - `match` on literals: an `if` chain in the cases' order; with 8 or more cases each case is
+    a definition `F-caseN` over the locals it mentions and the literal is found by halving
+    (`wlt`), the default at every leaf. A literal match with no wildcard takes its last case as
+    the rest (Sail accepted it as complete). `match` on an enum, option, list or union: `case`.
+  - `throw e` → `out-throw e`; `assert(c, msg)` → `fl-assert c msg` (without a message, the
+    Sail `file:line`); `try`/`catch` → `tryS`/`tryF`, an exception no handler names goes on;
+    `return e` is accepted in tail position only (all 17 are); `foreach` → `foreachS` over the
+    variables its body assigns; a block-local assignment is a shadowing `let`.
+  - Recursion (7 functions) is on a stated bound, `F-body` (open recursion) under `%welimP` in
+    `F-fuel`; the bounds and why they suffice are the table `BOUNDS` in the importer:
+    `feature_flags_fn`, `in_list` (list length), `logcount_int`, `logand_int` (magnitude + 2),
+    `bitcount8` (9), `get_prefixes` (`cnt`), `x86_run_halt` (`maxSteps`). Past the bound an
+    outcome function aborts `recursion-bound`; the three pure ones return their type's default.
+  - A function is emitted in the latest of its own file and the files of what it calls (56 move:
+    e.g. `rb`, `wb` to `paging.cub`); a comment says where each came from.
+  - A Sail global whose name the library mentions gets `_` appended (`rb_`, `abs_`, `mod_`,
+    `ms_`, `fault_`, `exception_` when the library has the word); a local with a global's name
+    gets `'`.
+  - `undefined` (one use, `undef_read_logic : nat`) is the type's default, `zpos #0` (the
+    model's comment: Sail's C backend returns zero there). `print_endline`, `print_int`,
+    `print_bits` are `unit`: the emulator's console is not in `X86`.
+- Found while checking: a definition the size of `two_byte_opcode_execute` as one term (4 000
+  lines, a 256-deep `if` chain) exhausts 6 GB in the checker; hence the per-case definitions.
+
 ## Found
 
 (defects in the machine or the model you hit, with the input that shows them)
 
 ## Next step
 
-1. In `tools/sail2cub.py` add, after `Model`: the type pass (every expression gets its Sail type;
-   bit widths are either a Python int or a cub term of type `Word` built from the function's
-   `int('n)` arguments), overload resolution by argument types, the effect fixed point over the
-   call graph, and the emitter (`--out lib/isa/x86`). First target: `lib/isa/x86/add_spec.cub`
-   and what it includes (`rflags_spec`, `structures`, `prelude`) checking.
+1. `lib/isa/x86/run.cub` (hand-written): `x86-step` = `x86_fetch_decode_execute`, `x86-run n`.
+   Then `experiments/isa/add.cub`: a state with `48 01 C8` at `rip` in memory (`mem-store-n`),
+   64-bit mode set as `main.sail`'s `initialise_64_bit_mode` does (`msrs[0]` bit 10 `lma`,
+   `seg_hidden_attrs[1]` bit `l`), `app_view = true`, `rax` and `rcx` λ-bound; `#show` the step.
+   Whatever does not reduce (a stuck test on a variable, a wrong built-in) is the next thing to fix.
+2. Then one instruction per class of `lib/x86.cub`'s template table, `sse.cub`, `loader.cub`,
+   `experiments/isa/hello.cub`.
