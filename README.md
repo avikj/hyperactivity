@@ -185,7 +185,7 @@ Each instruction of the machine is one or a few of `lib/x86.cub`'s templates (pu
 (those compile to `kfail`, the run leaves — never a wrong answer).
 
 **Next:** closures (`jlam`/`japp`, with a heap); the x86 level — each instruction's bytes stepped
-by `lib/isa/x86`'s semantics to the same stack (word lemmas: `lib/word.cub`, first used for push/pop;
+by `lib/isa/x86`'s semantics to the same stack (by computation, as `experiments/isa/e1.cub` does for one program;
 memory byte round trips); the blob and ELF layout; then `#jit`/`#build` use it and `lib/x86.cub`'s
 unchecked stretch is deleted.
 
@@ -194,7 +194,6 @@ unchecked stretch is deleted.
 | file | lines | what it is | produces |
 |---|---|---|---|
 | `sail2cub.py` | 2,702 | reads the Sail x86 model | `lib/isa/x86/` |
-| `reify-be.py` | 40 | a printed word expression as a `BE` term (untrusted: the statement using it is checked) | `experiments/isa/pushpop.cub` |
 | `clang2cub.py` | 3,774 | reads a C++ translation unit from Clang's AST, record layouts and vtables | `lib/cxx/ast.cub`, `experiments/cxx/*.cub` |
 | `mir2cub.py` | 2,175 | reads Rust MIR from `rustc` | `experiments/rust/*.cub` |
 | `agda2cub.py` | 287 | line-by-line translation of Cubical Agda to this surface syntax | used for the Brunerie port |
@@ -217,7 +216,7 @@ fuel bound returns a default, Sail's constraints are not checked.
 | `mem/` | 1 | — | `int sum(const int*, int)` given its meaning by hand, with its undefined-behaviour cases |
 | `cxx/` | 20 | generated data checks; needs the readers of §4 to mean anything | seven C++ programs (order book, member pointers, virtual inheritance, exceptions, coroutines) and their imports. `sem/gen/` is a stale copy of four of them |
 | `rust/` | 9 | same | two Rust programs and their MIR imports |
-| `isa/` | 3 | `add.cub`, `pushpop.cub` check | one instruction stepped with symbolic operands; `push rax; pop rcx` returns every word below 2^64 (`pp-ok-w`, through `be-sound`; the expression reified by `tools/reify-be.py`) |
+| `isa/` | 4 | `add.cub`, `pushpop.cub`, `e1.cub` check | one instruction stepped with symbolic operands; `push rax; pop rcx` returns every word below 2^64; a compiled program (`(x and 255) xor y`, `lib/compile/` to bytes) leaves `jev`'s value in rax for every two words below 2^64. Both by computation (refl): the evaluator computes bitwise operations, shifts, addition and comparisons on words given by their bits |
 | `jit/`, `native/` | 4 | need the compiler | compiled workloads; processes built to ELF |
 | `surface/` | 9 | checks | inputs for elaborator items 1–8 of track S |
 | `machine/`, `agda/` | 2 | — | the 10^6 numeral; a script timing Agda on Brunerie (reads outside this directory) |
