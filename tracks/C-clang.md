@@ -389,6 +389,29 @@ against the earlier file needs new cases only:
   function types. `std::type_info` shows the third kind of vtable: a polymorphic class Clang
   lays out no vtable for in the unit (`cvtable-full false` with no slots).
 
+- `experiments/cxx/seventh.cpp` (item 5, coroutines; `--flags=-std=c++20`) imports and
+  checks: 3067 nodes, 80 declarations, 104 shared types, 10 records with layouts of 10. A
+  generator (`co_yield`, `co_return;`) and an eager task (`co_await`, `co_return v`), driven
+  by `resume()`. New constructors: `cs-coroutine-body` (CoroutineBodyStmt: Clang's twelve
+  sub-statements in its order: body, promise declaration, initial suspend, final suspend,
+  on-exception, on-fallthrough, allocate, deallocate, result declaration, return value,
+  return statement, return on allocation failure; then the parameter copies), `ce-coawait` /
+  `ce-coyield` (operand, the awaiter, and the `await_ready`, `await_suspend`, `await_resume`
+  calls Sema built), `cs-coreturn operand promise-call`, `ce-opaque-value id source`
+  (OpaqueValueExpr: one value named in several places; the id says which),
+  `ce-paren-list-init`, `ctk-preferred-alignof` (`__alignof`). The frame's layout and the
+  split into resume points are LLVM's, not in the AST: the `__builtin_coro_*` calls are
+  written as the calls they are.
+- Two more sources, used only when a printed type string is not read. Clang prints template
+  arguments as written where the template was named, so inside
+  `coroutine_handle<Stream::promise_type>` a signature says `coroutine_handle<promise_type>`,
+  which names two types in this unit. (1) A function's type is then asked of Clang by a
+  probe (`decltype(&f)`), as for `decltype`/`noexcept(expr)`. (2) Where there is no address
+  to take (constructors, destructors) or the string of one parameter fails, the parameter
+  types are read from the function's mangled name, demangled by `c++filt` (canonical, fully
+  qualified). Both are listed in the generated header. Template arguments left out of a
+  printed name are filled from the parameters' defaults (`coroutine_handle<>`).
+
 ## Found
 
 In the machine:
@@ -460,4 +483,7 @@ commit regenerating `lib/cxx/ast.cub` and every unit and recording the new kinds
    whose type has `noexcept(expr)`/`decltype(expr)`; `if consteval`; parameter packs or
    defaults in alias templates; GNU case ranges.
 2. (done: `fifth.cpp`, see the log.)
-3. Item 5 units, then item 6.
+3. (done: item 5, `sixth.cpp` and `seventh.cpp`, see the log.)
+4. Item 6: `experiments/cxx/prog/` (two units and the program value), then the list of
+   out-of-unit functions, then rewrite the kind lists and the acceptance record above for
+   all units.

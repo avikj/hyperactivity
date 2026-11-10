@@ -137,8 +137,8 @@ SCHEMA = [
     ('CStorageDuration', 'the storage duration of a materialized temporary', [
         ('csd-full-expression', []), ('csd-automatic', []), ('csd-static', []),
     ]),
-    ('CTraitKind', 'sizeof, alignof', [
-        ('ctk-sizeof', []), ('ctk-alignof', []),
+    ('CTraitKind', 'sizeof, alignof, and __alignof (the preferred alignment)', [
+        ('ctk-sizeof', []), ('ctk-alignof', []), ('ctk-preferred-alignof', []),
     ]),
     ('CAtomicOp', "the operation of an AtomicExpr, by Clang's builtin name", [
         ('cao-atomic-load', []), ('cao-atomic-load-n', []), ('cao-atomic-store-n', []),
@@ -209,6 +209,12 @@ SCHEMA = [
                                     ('arg-type', 'CType'), ('arg', 'CExpr')]),
         ('ce-subst-nttp', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
         ('ce-rewritten-binary', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
+        ('ce-coawait', [('t', 'CType'), ('vc', 'CValCat'), ('operand', 'CExpr'), ('common', 'CExpr'),
+                        ('ready', 'CExpr'), ('suspend', 'CExpr'), ('resume', 'CExpr')]),
+        ('ce-coyield', [('t', 'CType'), ('vc', 'CValCat'), ('operand', 'CExpr'), ('common', 'CExpr'),
+                        ('ready', 'CExpr'), ('suspend', 'CExpr'), ('resume', 'CExpr')]),
+        ('ce-opaque-value', [('t', 'CType'), ('vc', 'CValCat'), ('id', 'Word'), ('source', 'CExpr')]),
+        ('ce-paren-list-init', [('t', 'CType'), ('vc', 'CValCat'), ('inits', 'CExpr')]),
         ('ce-throw', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
         ('ce-bind-temporary', [('t', 'CType'), ('vc', 'CValCat'), ('dtor', 'Word'), ('e', 'CExpr')]),
         ('ce-dynamic-cast', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CCastKind'),
@@ -271,6 +277,13 @@ SCHEMA = [
                        ('body', 'CStmt')]),
         ('cs-case', [('value', 'CExpr'), ('s', 'CStmt')]),
         ('cs-default', [('s', 'CStmt')]),
+        ('cs-coroutine-body', [('body', 'CStmt'), ('promise', 'CStmt'), ('init-suspend', 'CStmt'),
+                               ('final-suspend', 'CStmt'), ('on-exception', 'CStmt'),
+                               ('on-fallthrough', 'CStmt'), ('allocate', 'CStmt'),
+                               ('deallocate', 'CStmt'), ('result-decl', 'CStmt'),
+                               ('return-value', 'CStmt'), ('return-stmt', 'CStmt'),
+                               ('return-on-alloc-failure', 'CStmt'), ('param-moves', 'CStmt')]),
+        ('cs-coreturn', [('operand', 'CExpr'), ('promise-call', 'CExpr')]),
         ('cs-try', [('body', 'CStmt'), ('handlers', 'CStmt')]),
         ('cs-catch', [('var', 'List CVar'), ('body', 'CStmt')]),
         ('cs-goto', [('label', 'Word')]),
@@ -1191,6 +1204,8 @@ class Unit:
         self.probes, self.fn_type_memo = {}, {}
         self.sources, self.stubs = {}, []
         self._dynamic = None
+        self.mangled_memo, self.from_mangled = {}, set()
+        self.opaque = {}
         self.type_attrs = set()
         self.lazy_inits = set()
 
@@ -1199,7 +1214,7 @@ class Unit:
         if k in RECORD_KINDS or k == 'EnumDecl':
             return bool(n.get('completeDefinition')) or k == 'EnumDecl' and 'inner' in n
         if k in FUNCTION_KINDS:
-            return any(c.get('kind') in ('CompoundStmt', 'CXXTryStmt') for c in n.get('inner', [])) or \
+            return any(c.get('kind') in ('CompoundStmt', 'CXXTryStmt', 'CoroutineBodyStmt') for c in n.get('inner', [])) or \
                 'explicitlyDefaulted' in n
         if k in ('VarDecl', 'VarTemplateSpecializationDecl'):
             return 'init' in n or n.get('storageClass') != 'extern'
@@ -1552,16 +1567,28 @@ class Unit:
         return sc + '::' + n['name'] + (self.spell_args(n) if n['kind'] in FUNCTION_KINDS + ('ClassTemplateSpecializationDecl',) else '')
 
     def function_type(self, d):
-        """The type of the function d. Its string is read in d's scope; when it has a part only
-        Clang can evaluate, Clang is asked for the type of `&d`."""
+        """The type of the function d. Its string is read in d's scope; when that fails (a part
+        only Clang can evaluate, a name printed as written elsewhere) Clang is asked for the type
+        of `&d`."""
         if d['id'] in self.fn_type_memo:
             return self.fn_type_memo[d['id']]
         try:
             t = self.resolve_type(d['type'], d)
-        except NeedsProbe:
+        except Stop as why:
+            # the string has a part only Clang can evaluate, or a name that the place of the
+            # declaration does not determine (sugar printed as written somewhere else)
             if d['kind'] in ('CXXConstructorDecl', 'CXXDestructorDecl'):
-                stop('the type of %s (at %s) has a noexcept that is an expression, and its address cannot be taken to ask Clang: no rule yet'
-                     % (d.get('name'), self.where(d)))
+                # its address cannot be taken to ask Clang; its parameters are in its mangled
+                # name, its result is void, and what is left is the exception specification
+                q = d['type']['qualType']
+                tail = q[q.rindex(')') + 1:].strip() if ')' in q else '?'
+                if tail not in ('', 'noexcept', 'noexcept(false)', 'noexcept(true)'):
+                    stop('the type of %s (at %s) is not read from its string (%s), and its exception specification is %r'
+                         % (d.get('name'), self.where(d), why, tail))
+                t = ('func', ('builtin', 'void'), tuple(self.mangled_params(d)), False, False, False, 'none',
+                     tail in ('noexcept', 'noexcept(true)'))
+                self.fn_type_memo[d['id']] = t
+                return t
             t = self.probe_type('decltype(&%s)' % self.spell_decl(d))
             if t[0] == 'ptr' and t[1][0] == 'func':
                 t = t[1]
@@ -1571,6 +1598,50 @@ class Unit:
                 stop('a probe for the type of %s answered %s' % (d.get('name'), type_str(t)))
         self.fn_type_memo[d['id']] = t
         return t
+
+    def mangled_params(self, d):
+        """The parameter types of the function d from its mangled name, demangled by c++filt:
+        canonical and fully qualified, whatever sugar the dump printed. (A parameter's own
+        top-level const is not part of a function's signature and is not there.)"""
+        if d['id'] in self.mangled_memo:
+            return self.mangled_memo[d['id']]
+        if not d.get('mangledName'):
+            stop('%s (at %s) has no mangled name to read its parameter types from' % (d.get('name'), self.where(d)))
+        p = subprocess.run(['c++filt', d['mangledName']], capture_output=True, text=True)
+        dem = p.stdout.strip()
+        if p.returncode != 0 or dem == d['mangledName']:
+            stop('c++filt did not demangle %s' % d['mangledName'])
+        body = re.sub(r'(\s*(const|volatile|&&|&))*$', '', dem)
+        body = re.sub(r'\s*\[clone [^\]]*\]$', '', body)
+        if not body.endswith(')'):
+            stop('demangled name not read: %r' % dem)
+        depth, i = 0, len(body) - 1
+        while i >= 0:
+            if body[i] == ')':
+                depth += 1
+            elif body[i] == '(':
+                depth -= 1
+                if depth == 0:
+                    break
+            i -= 1
+        inner, parts, depth, cur = body[i + 1:-1], [], 0, ''
+        for ch in inner:
+            if ch in '<([':
+                depth += 1
+            elif ch in '>)]':
+                depth -= 1
+            if ch == ',' and depth == 0:
+                parts.append(cur)
+                cur = ''
+            else:
+                cur += ch
+        if cur.strip():
+            parts.append(cur)
+        variadic = bool(parts) and parts[-1].strip() == '...'
+        out = [TypeParser(self, x.strip(), self.tu, None).whole() for x in (parts[:-1] if variadic else parts)]
+        self.mangled_memo[d['id']] = out
+        self.from_mangled.add(dem)
+        return out
 
     def is_pattern(self, e):
         """Is the declaration inside a template that is not instantiated (or a partial
@@ -1802,6 +1873,28 @@ class Unit:
         root = tmpl['id']
         chain = [n for n in self.nodes.values() if n.get('kind') == 'ClassTemplateDecl' and
                  self.redecl_root(n['id']) == self.redecl_root(root)]
+        # arguments left out are the parameters' defaults (written on any declaration of the
+        # template), read with the arguments before them bound; a default that is not a type
+        # leaves the list short, and then the specialization must be the only one it begins
+        args = list(args)
+        params = [c for c in tmpl.get('inner', []) if c.get('kind', '').endswith('ParmDecl')]
+        if len(args) < len(params) and not any(c.get('isParameterPack') for c in params):
+            env = {c.get('name'): a for c, a in zip(params, args) if c.get('name') and a[0] != 'int?'}
+            for i in range(len(args), len(params)):
+                d = None
+                for t in chain:
+                    ps = [c for c in t.get('inner', []) if c.get('kind', '').endswith('ParmDecl')]
+                    if i < len(ps) and 'defaultArg' in ps[i]:
+                        d, scope = ps[i]['defaultArg'], ps[i]
+                if d is None or 'type' not in d:
+                    break
+                try:
+                    v = ('type', TypeParser(self, d['type']['qualType'], scope, None, env).whole())
+                except (Stop, Dependent):
+                    break
+                args.append(v)
+                if params[i].get('name'):
+                    env[params[i]['name']] = v
         exact, prefix = [], []
         for t in chain:
             for s in t.get('inner', []):
@@ -2650,7 +2743,7 @@ class Unit:
         return T('ce-lambda', *self.head(n), W(self.need(rec['id'])), self.exprs(ks[1:-1]))
 
     def e_UnaryExprOrTypeTraitExpr(self, n):
-        kinds = {'sizeof': 'sizeof', 'alignof': 'alignof'}
+        kinds = {'sizeof': 'sizeof', 'alignof': 'alignof', '__alignof': 'preferred-alignof'}
         if n.get('name') not in kinds:
             stop('type trait %r at %s: no rule yet' % (n.get('name'), self.where(n)))
         ks = self.kids(n)
@@ -2665,6 +2758,30 @@ class Unit:
         if parm.get('kind') != 'NonTypeTemplateParmDecl':
             stop('a SubstNonTypeTemplateParmExpr of an unexpected shape at %s' % self.where(n))
         return T('ce-subst-nttp', *self.head(n), self.expr(sub))
+
+    def suspend(self, con, n):
+        # operand; the awaiter (the value the three calls below share, as OpaqueValueExprs);
+        # await_ready, await_suspend, await_resume
+        ks = self.kids(n)
+        if len(ks) != 5:
+            stop('a %s with %d children at %s' % (n['kind'], len(ks), self.where(n)))
+        return T(con, *self.head(n), *[self.expr(c) for c in ks])
+
+    def e_CoawaitExpr(self, n):
+        return self.suspend('ce-coawait', n)
+
+    def e_CoyieldExpr(self, n):
+        return self.suspend('ce-coyield', n)
+
+    def e_OpaqueValueExpr(self, n):
+        # one value named in several places: the id says which; its source is repeated at each
+        ks = self.kids(n)
+        if n['id'] not in self.opaque:
+            self.opaque[n['id']] = len(self.opaque) + 1
+        return T('ce-opaque-value', *self.head(n), W(self.opaque[n['id']]), self.expr(ks[0]) if ks else T('ce-nil'))
+
+    def e_CXXParenListInitExpr(self, n):
+        return T('ce-paren-list-init', *self.head(n), self.exprs(self.kids(n)))
 
     def e_CXXThrowExpr(self, n):
         ks = self.kids(n)
@@ -2828,6 +2945,19 @@ class Unit:
         value, sub = self.kids(n)
         return T('cs-case', self.expr(value), self.stmt(sub))
 
+    def s_CoroutineBodyStmt(self, n):
+        """The coroutine as Sema desugared it. Clang's twelve sub-statements in its order (an
+        absent one is cs-none; an expression is a cs-expr), then the copies of the parameters
+        into the frame."""
+        ks = self.kids(n)
+        if len(ks) < 12:
+            stop('a CoroutineBodyStmt with %d children at %s' % (len(ks), self.where(n)))
+        return T('cs-coroutine-body', *[self.stmt(c) for c in ks[:12]], inlist('CStmt', [self.stmt(c) for c in ks[12:]]))
+
+    def s_CoreturnStmt(self, n):
+        operand, call = self.kids(n)
+        return T('cs-coreturn', self.opt_expr(operand), self.opt_expr(call))
+
     def s_CXXTryStmt(self, n):
         ks = self.kids(n)
         if any(c.get('kind') != 'CXXCatchStmt' for c in ks[1:]):
@@ -2936,7 +3066,20 @@ class Unit:
                     defaults.append(ks[0])
         if len(defaults) > 1:
             stop('the parameter %s of %s has a default argument on %d declarations' % (n.get('name'), fn.get('name'), len(defaults)))
-        return T('cv-parm', W(w), S(n.get('name', '')), self.tyof(n), self.expr(defaults[0]) if defaults else T('ce-nil'))
+        try:
+            t = self.expr_type(n)
+        except Stop as why:
+            # the string is not read (sugar printed as written elsewhere): the type is in the
+            # function's mangled name, without the parameter's own top-level qualifiers
+            q = n['type']['qualType']
+            if re.match(r'(const|volatile)\b', q) and not q.rstrip().endswith(('&', '*', ']', ')')):
+                stop('the type of the parameter %s of %s is not read from its string (%s) and is qualified at the top level'
+                     % (n.get('name'), fn.get('name'), why))
+            ps = self.mangled_params(fn)
+            if i >= len(ps):
+                stop('the mangled name of %s has %d parameters; the parameter %d is not there' % (fn.get('name'), len(ps), i))
+            t = ps[i]
+        return T('cv-parm', W(w), S(n.get('name', '')), self.ty(t), self.expr(defaults[0]) if defaults else T('ce-nil'))
 
     def e_CXXDefaultArgExpr(self, n):
         """The parameter whose default argument this is: the JSON does not say, the position in
@@ -3037,8 +3180,8 @@ class Unit:
             ck = c.get('kind')
             if ck == 'ParmVarDecl':
                 params.append(self.parm(c, n, len(params)))
-            elif ck in ('CompoundStmt', 'CXXTryStmt'):
-                body = c                    # (a function-try-block is the body)
+            elif ck in ('CompoundStmt', 'CXXTryStmt', 'CoroutineBodyStmt'):
+                body = c                    # (a function-try-block, or a coroutine's body, is the body)
             elif ck == 'CXXCtorInitializer':
                 inits.append(c)
             elif ck == 'TemplateArgument':
@@ -3494,6 +3637,8 @@ class Unit:
         r.append('met and not written as nodes (%d): %s' % (len(self.elided), '; '.join(
             '%s %d (%s)' % (k, c, why) for k, (c, why) in sorted(self.elided.items()))))
         r.append('read in type strings and not written (%d): %s' % (len(self.type_attrs), '; '.join(sorted(self.type_attrs))))
+        r.append('signatures read from mangled names, where the printed types were not read (%d): %s'
+                 % (len(self.from_mangled), '; '.join(sorted(self.from_mangled))))
         r.append('asked of Clang by a probe (%d): %s' % (len(self.probes), '; '.join(
             '%s = %s' % kv for kv in sorted(self.probes.items()))))
         r.append('names resolved from the scope of use that name other types elsewhere in the unit (%d): %s'

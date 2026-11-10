@@ -164,8 +164,8 @@ data CRefKind = crk-function | crk-method | crk-var | crk-parm | crk-enum-consta
 data CConstructKind = cck-complete | cck-non-virtual-base | cck-delegating | cck-virtual-base
 -- CStorageDuration: the storage duration of a materialized temporary
 data CStorageDuration = csd-full-expression | csd-automatic | csd-static
--- CTraitKind: sizeof, alignof
-data CTraitKind = ctk-sizeof | ctk-alignof
+-- CTraitKind: sizeof, alignof, and __alignof (the preferred alignment)
+data CTraitKind = ctk-sizeof | ctk-alignof | ctk-preferred-alignof
 -- CAtomicOp: the operation of an AtomicExpr, by Clang's builtin name
 data CAtomicOp =
     cao-atomic-load
@@ -216,6 +216,10 @@ data CExpr =
   | ce-unary-or-type-trait (t : CType) (vc : CValCat) (k : CTraitKind) (arg-type : CType) (arg : CExpr)
   | ce-subst-nttp (t : CType) (vc : CValCat) (e : CExpr)
   | ce-rewritten-binary (t : CType) (vc : CValCat) (e : CExpr)
+  | ce-coawait (t : CType) (vc : CValCat) (operand : CExpr) (common : CExpr) (ready : CExpr) (suspend : CExpr) (resume : CExpr)
+  | ce-coyield (t : CType) (vc : CValCat) (operand : CExpr) (common : CExpr) (ready : CExpr) (suspend : CExpr) (resume : CExpr)
+  | ce-opaque-value (t : CType) (vc : CValCat) (id : Word) (source : CExpr)
+  | ce-paren-list-init (t : CType) (vc : CValCat) (inits : CExpr)
   | ce-throw (t : CType) (vc : CValCat) (e : CExpr)
   | ce-bind-temporary (t : CType) (vc : CValCat) (dtor : Word) (e : CExpr)
   | ce-dynamic-cast (t : CType) (vc : CValCat) (k : CCastKind) (path : List Word) (e : CExpr)
@@ -260,6 +264,8 @@ data CStmt =
   | cs-switch (init : CStmt) (cond-var : CStmt) (cond : CExpr) (body : CStmt)
   | cs-case (value : CExpr) (s : CStmt)
   | cs-default (s : CStmt)
+  | cs-coroutine-body (body : CStmt) (promise : CStmt) (init-suspend : CStmt) (final-suspend : CStmt) (on-exception : CStmt) (on-fallthrough : CStmt) (allocate : CStmt) (deallocate : CStmt) (result-decl : CStmt) (return-value : CStmt) (return-stmt : CStmt) (return-on-alloc-failure : CStmt) (param-moves : CStmt)
+  | cs-coreturn (operand : CExpr) (promise-call : CExpr)
   | cs-try (body : CStmt) (handlers : CStmt)
   | cs-catch (var : List CVar) (body : CStmt)
   | cs-goto (label : Word)
