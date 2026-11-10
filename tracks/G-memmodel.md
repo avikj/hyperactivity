@@ -204,6 +204,16 @@ How to check (cached library, one file after another; the last line must read `N
   Acceptance: line 1 met (this entry); line 2 met (SB, MP, LB, IRIW entries above, sets with
   steps); line 3 met (the spin-lock entry, `SpinMutex`).
 
+- **Item 7 done.** `tso-ax-outcomes` enumerates, through `tso-ax-cos`, every order of the
+  writers of each address (groups concatenated) instead of every permutation of all writers;
+  `tso-peels` stops at a round that removes nothing. Candidate/consistent counts now: SB 4/4
+  (38,381 steps), MP 4/3 (35,454), LB 4/3 (35,433), IRIW 16/15 (345,629), SB seq_cst xchg
+  4/3 (50,437), SB seq_cst mfence 4/3 (69,388); the six `x-ax` paths check with these counts.
+  **Spin-lock, axiomatic** (`experiments/tso/spinlock.cub`, one attempt each, read values in
+  {0,1,2}): 1,322 candidates, 4 consistent, set `{(0,1),(1,0),(1,1)}`, 17,634,373 steps;
+  `spin-ax` states it and `spin-op` states the operational set is the same `spin-set`.
+  The six experiment files after the library: `1125 passed, 0 failed`.
+
 ## Found
 
 - **Elaborator refuses a structural recursion when an argument before the matched one changes.**
@@ -252,22 +262,19 @@ How to check (cached library, one file after another; the last line must read `N
 - Acyclicity is the decision procedure (peel sources n times); no proof relates it to the
   absence of a path from a node to itself.
 
-- `tso-ax-outcomes` enumerates every permutation of all writers (n!), so it is for litmus-sized
-  programs (the spin-lock's axiomatic set is not computed: up to 6 writers × 25 thread-run
-  combinations). Only the per-location order enters `tso-consistent`; enumerating per location
-  would remove the factor and is not done. Its `dom` must contain every value a read can
-  return; that it does is the caller's claim, not checked.
+- `tso-ax-outcomes`'s `dom` must contain every value a read can return; that it does is the
+  caller's claim, not checked.
 - The converse of `TsoSound` (every consistent candidate of a program is some schedule's
   execution) is not stated as a type; what exists is the equality of the two outcome sets on
   the six programs above.
 
 ## Next step
 
-Items 1–3 are complete. Items 4–7 (section "Continuation") in this order: 7, 6, 5, 4.
-Now: item 7. In `lib/isa/tso.cub` replace the use of `tso-perms` over all writers in
-`tso-ax-outcomes` by per-address orders (group the writer ids by address, enumerate each
-group's permutations, concatenate the groups: `tso-consistent` reads only same-address
-positions), re-run the six `x-ax` paths (candidate counts change), then add the spin-lock's
-axiomatic set to `experiments/tso/spinlock.cub`.
-Note `$LIBS` now already contains `lib/isa/tso.cub lib/mem/atomics.cub`: name only the
-experiment files after it.
+Items 1–3 and 7 are complete. Remaining, in this order: 6, 5, 4 (section "Continuation").
+Now: item 6. Read `tracks/B-isa.md` and what B has landed (`lib/bits.cub`, `lib/isa/x86/`) for
+how its model accesses memory; in `lib/isa/tso.cub` add the memory-event signature (`MemEv`:
+read n bytes at an address, write n bytes, each with a locked flag, mfence; thread id by
+tagging) with responses, the byte-granular handler onto `TsoIS` (one `TsoI` per byte for plain
+accesses; a locked access needs a multi-byte atomic instruction, see the item), and the
+"Needs from track B" section.
+`$LIBS` already contains `lib/isa/tso.cub lib/mem/atomics.cub`: name only experiment files.

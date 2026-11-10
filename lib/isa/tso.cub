@@ -292,9 +292,13 @@ tso-src (cons e r) x = if weq x (fst e) then snd e else tso-src r x
 -- every node with no predecessor among those left, leaves none
 tso-peel : {A : Type} → (A → A → Bool) → List A → List A
 tso-peel rel ns = tso-keep (λ x → tso-any (λ y → rel y x) ns) ns
+tso-len-eq : {A : Type} → List A → List A → Bool
+tso-len-eq nil ys = (case ys of nil → true; cons y r → false)
+tso-len-eq (cons x xs) ys = (case ys of nil → false; cons y r → tso-len-eq xs r)
+-- (a round that removes nothing ends the peeling: what is left is empty or stays)
 tso-peels : {A : Type} → Nat → (A → A → Bool) → List A → List A
 tso-peels zero rel ns = ns
-tso-peels (suc n) rel ns = tso-peels n rel (tso-peel rel ns)
+tso-peels (suc n) rel ns = (let ps = tso-peel rel ns in if tso-len-eq ps ns then ps else tso-peels n rel ps)
 tso-acyclic : {A : Type} → (A → A → Bool) → List A → Bool
 tso-acyclic rel ns = (case tso-peels (tso-len ns) rel ns of nil → true; cons x r → false)
 -- an event with what the witness says of it: the write it reads from (src), its position in
@@ -448,7 +452,8 @@ tso-trace s = tso-rev (ts-log s) nil
 -- The axiomatic form computes outcomes without the machine: a thread alone, with each value it
 -- reads taken from a finite domain, gives its events and its result; a choice of such a run
 -- per thread gives the events of a candidate; every rf (each reader to the initial memory or to
--- a writer of its value at its address) and every order of the writers gives the witnesses;
+-- a writer of its value at its address) and every order of the writers of each address gives
+-- the witnesses;
 -- the candidates that are TSO-consistent give the outcomes.
 -- (The domain must contain every value a read can return: the initial values and the values
 -- written. For a program writing constants that is a finite list the caller gives.)
@@ -503,6 +508,25 @@ tso-without (cons y r) x = if weq x y then r else cons y (tso-without r x)
 tso-perms : {R : Type} → Nat → List Word → (List Word → R → R) → List Word → R → R
 tso-perms zero rest k chosen acc = k chosen acc
 tso-perms (suc n) rest k chosen acc = tso-over-w rest (λ x acc2 → tso-perms n (tso-without rest x) k (cons x chosen) acc2) acc
+-- every order on writes that differs on some address: the writers (ws, at most n of them)
+-- grouped by address, every order of each group, the groups one after another. Only the
+-- relative order of writes to one address enters tso-consistent (tso-co, tso-fr compare
+-- positions of same-address writers), so orders that differ only across addresses are one
+tso-ev-addr : TsoEv → Word
+tso-ev-addr e = case e of tso-ev id tid k a vr vw → a
+tso-head-addr : List TsoEv → Sum Word Unit
+tso-head-addr nil = inr unit
+tso-head-addr (cons e r) = inl (tso-ev-addr e)
+tso-ax-cos : {R : Type} → Nat → List TsoEv → (List Word → R → R) → List Word → R → R
+tso-ax-cos zero ws k chosen acc = k chosen acc
+tso-ax-cos (suc n) ws k chosen acc =
+  (case tso-head-addr ws of
+     inr u → k chosen acc
+     inl a →
+       (let g = tso-map tso-ev-id (tso-keep (λ e → weq (tso-ev-addr e) a) ws)
+        in tso-perms (tso-len g) g
+             (λ p acc2 → tso-ax-cos n (tso-keep (λ e → tso-not (weq (tso-ev-addr e) a)) ws) k (app-w p chosen) acc2)
+             nil acc))
 -- what the axiomatic enumeration reports: the set of results of consistent candidates, the
 -- number of candidates, the number consistent
 data TsoAx = tso-ax (outs : List (List Word)) (cands : Word) (ok : Word)
@@ -517,7 +541,7 @@ tso-ax-outcomes m0 dom ths =
     (λ es out acc →
        tso-ax-rfs es m0 es
          (λ rf acc2 →
-            (let ws = tso-map tso-ev-id (tso-keep tso-ev-writes es)
-             in tso-perms (tso-len ws) ws (λ co acc3 → tso-ax-tally m0 es out rf co acc3) nil acc2))
+            (let ws = tso-keep tso-ev-writes es
+             in tso-ax-cos (tso-len ws) ws (λ co acc3 → tso-ax-tally m0 es out rf co acc3) nil acc2))
          nil acc)
     nil #1 nil (tso-ax nil #0 #0)

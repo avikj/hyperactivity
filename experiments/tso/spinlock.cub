@@ -79,3 +79,15 @@ bad-sys : List TsoThread
 bad-sys = cons (at-thread atom-x86-xchg (bad-acquire spin-crit (ai-ret (cons #0 nil)))) (cons (at-thread atom-x86-xchg (bad-acquire spin-crit (ai-ret (cons #0 nil)))) nil)
 #show tso-every 14 bad-sys spin-ok
 #show tso-every 14 bad-sys (λ out s → weq (ts-mem s #1) (spin-sum out))
+-- the axiomatic form's outcomes for the lock, one attempt each (read values in {0 , 1 , 2}:
+-- the lock's two values and the counter's three)
+spin-dom : List Word
+spin-dom = cons #0 (cons #1 (cons #2 nil))
+#show tso-ax-outcomes (λ a → #0) spin-dom (spin-sys 1)
+-- 1,322 candidates, 4 TSO-consistent; their results are the set the machine's schedules give
+spin-set : List (List Word)
+spin-set = cons (cons #0 (cons #1 nil)) (cons (cons #1 (cons #0 nil)) (cons (cons #1 (cons #1 nil)) nil))
+spin-ax : tso-ax-outcomes (λ a → #0) spin-dom (spin-sys 1) ≡ tso-ax spin-set #1322 #4
+spin-ax = λ i → tso-ax spin-set #1322 #4
+spin-op : tso-sum-outs (tso-outcomes 12 (spin-sys 1)) ≡ spin-set
+spin-op = λ i → spin-set
