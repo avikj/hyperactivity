@@ -522,3 +522,80 @@ o-traces-cons : {S : Sig} {A : Type} → (P : o-Tr S A → Type) → (c : Cmd S)
 o-traces-cons {S} {A} P c k c2 r2 x h w =
   o-J {lzero} {lzero} {(d : Cmd S) × Resp S d} {(c , fst w)}
     (λ y e → P (o-tcons (fst y) (snd y) x)) (h (fst w) (snd (snd w))) (c2 , r2) (fst (snd w))
+-- ---------------------------------------------------------------- the guarded form: bisimulation
+-- lib/proc.cub's GProc (a process that may run forever, with silent steps). Bisimilarity is a
+-- relation defined by guarded recursion: both end in equal results; or both issue the same
+-- command and, one tick later, continue bisimilar at each response; or both take a silent step
+-- and continue bisimilar one tick later. The relation is the fixed point of og-BisimF; "later
+-- bisimilar" is the delayed fixed point at a tick, which og-later/og-unlater convert along pfix
+og-BisimF : {κ : Clock} {S : Sig} {A : Type} → ▸ κ (GProc κ S A → GProc κ S A → Type) → GProc κ S A → GProc κ S A → Type
+og-BisimF rc (gret a) (gret b) = a ≡ b
+og-BisimF rc (gret a) (gcmd c2 k2) = Empty
+og-BisimF rc (gret a) (gtau t2) = Empty
+og-BisimF rc (gcmd c k) (gret b) = Empty
+og-BisimF {κ} {S} {A} rc (gcmd c k) (gcmd c2 k2) = (e : c ≡ c2) × ((r : Resp S c) → (r2 : Resp S c2) → PathP (λ i → Resp S (e i)) r r2 → (α : Tick κ) → rc α (k r α) (k2 r2 α))
+og-BisimF rc (gcmd c k) (gtau t2) = Empty
+og-BisimF rc (gtau t) (gret b) = Empty
+og-BisimF rc (gtau t) (gcmd c2 k2) = Empty
+og-BisimF {κ} {S} {A} rc (gtau t) (gtau t2) = (α : Tick κ) → rc α (t α) (t2 α)
+og-Bisim : {κ : Clock} {S : Sig} {A : Type} → GProc κ S A → GProc κ S A → Type
+og-Bisim {κ} {S} {A} = fix {lsuc lzero} {κ} {GProc κ S A → GProc κ S A → Type} (og-BisimF {κ} {S} {A})
+og-later : {κ : Clock} {S : Sig} {A : Type} → (α : Tick κ) → (p q : GProc κ S A) → og-Bisim p q → dfix {lsuc lzero} {κ} {GProc κ S A → GProc κ S A → Type} (og-BisimF {κ} {S} {A}) α p q
+og-later {κ} {S} {A} α p q b = comp (λ i → pfix {lsuc lzero} {κ} {GProc κ S A → GProc κ S A → Type} (og-BisimF {κ} {S} {A}) (~ i) α p q) (λ i → []) b
+og-unlater : {κ : Clock} {S : Sig} {A : Type} → (α : Tick κ) → (p q : GProc κ S A) → dfix {lsuc lzero} {κ} {GProc κ S A → GProc κ S A → Type} (og-BisimF {κ} {S} {A}) α p q → og-Bisim p q
+og-unlater {κ} {S} {A} α p q b = comp (λ i → pfix {lsuc lzero} {κ} {GProc κ S A → GProc κ S A → Type} (og-BisimF {κ} {S} {A}) i α p q) (λ i → []) b
+og-bisim-reflF : {κ : Clock} {S : Sig} {A : Type} → ▸ κ ((p : GProc κ S A) → og-Bisim p p) → (p : GProc κ S A) → og-Bisim p p
+og-bisim-reflF rc (gret a) = λ i → a
+og-bisim-reflF {κ} {S} {A} rc (gcmd c k) = ((λ i → c) , λ r r2 pr α → og-later α (k r α) (k r2 α) (comp (λ i → og-Bisim (k r α) (k (pr i) α)) (λ i → []) (rc α (k r α))))
+og-bisim-reflF {κ} {S} {A} rc (gtau t) = λ α → og-later α (t α) (t α) (rc α (t α))
+og-bisim-refl : {κ : Clock} {S : Sig} {A : Type} → (p : GProc κ S A) → og-Bisim p p
+og-bisim-refl {κ} {S} {A} = fix {lzero} {κ} {(p : GProc κ S A) → og-Bisim p p} (og-bisim-reflF {κ} {S} {A})
+og-path-bisim : {κ : Clock} {S : Sig} {A : Type} → (p q : GProc κ S A) → p ≡ q → og-Bisim p q
+og-path-bisim p q e = comp (λ i → og-Bisim p (e i)) (λ i → []) (og-bisim-refl p)
+og-bisim-pathF : {κ : Clock} {S : Sig} {A : Type} → ▸ κ ((p q : GProc κ S A) → og-Bisim p q → p ≡ q) → (p q : GProc κ S A) → og-Bisim p q → p ≡ q
+og-bisim-pathF rc (gret a) (gret b) e = λ i → gret (e i)
+og-bisim-pathF rc (gret a) (gcmd c2 k2) e = Empty-rec e
+og-bisim-pathF rc (gret a) (gtau t2) e = Empty-rec e
+og-bisim-pathF rc (gcmd c k) (gret b) e = Empty-rec e
+og-bisim-pathF {κ} {S} {A} rc (gcmd c k) (gcmd c2 k2) b =
+  o-J {lzero} {lzero} {Cmd S} {c}
+    (λ y e → (k3 : Resp S y → ▸ κ (GProc κ S A)) →
+             ((r : Resp S c) → (r2 : Resp S y) → PathP (λ i → Resp S (e i)) r r2 → (α : Tick κ) →
+                dfix {lsuc lzero} {κ} {GProc κ S A → GProc κ S A → Type} (og-BisimF {κ} {S} {A}) α (k r α) (k3 r2 α)) →
+             Path (GProc κ S A) (gcmd c k) (gcmd y k3))
+    (λ k3 f i → gcmd c (λ r α → rc α (k r α) (k3 r α) (og-unlater α (k r α) (k3 r α) (f r r (λ j → r) α)) i))
+    c2 (fst b) k2 (snd b)
+og-bisim-pathF rc (gcmd c k) (gtau t2) e = Empty-rec e
+og-bisim-pathF rc (gtau t) (gret b) e = Empty-rec e
+og-bisim-pathF rc (gtau t) (gcmd c2 k2) e = Empty-rec e
+og-bisim-pathF {κ} {S} {A} rc (gtau t) (gtau t2) b = λ i → gtau (λ α → rc α (t α) (t2 α) (og-unlater α (t α) (t2 α) (b α)) i)
+og-bisim-path : {κ : Clock} {S : Sig} {A : Type} → (p q : GProc κ S A) → og-Bisim p q → p ≡ q
+og-bisim-path {κ} {S} {A} = fix {lzero} {κ} {(p q : GProc κ S A) → og-Bisim p q → p ≡ q} (og-bisim-pathF {κ} {S} {A})
+og-bisim-sym : {κ : Clock} {S : Sig} {A : Type} → (p q : GProc κ S A) → og-Bisim p q → og-Bisim q p
+og-bisim-sym p q b = og-path-bisim q p (sym (og-bisim-path p q b))
+og-bisim-trans : {κ : Clock} {S : Sig} {A : Type} → (p q r : GProc κ S A) → og-Bisim p q → og-Bisim q r → og-Bisim p r
+og-bisim-trans p q r b1 b2 = comp (λ i → og-Bisim p (og-bisim-path q r b2 i)) (λ i → []) b1
+-- ---------------------------------------------------------------- the guarded form: traces
+-- the coinductive form of a trace: a result, or a command with its response and the rest one
+-- tick later, or a silent step and the rest one tick later; it may go on forever
+data og-Tr (κ : Clock) (S : Sig) (A : Type) =
+    og-tend (a : A)
+  | og-tcons (c : Cmd S) (r : Resp S c) (x : ▸ κ (og-Tr κ S A))
+  | og-ttau (x : ▸ κ (og-Tr κ S A))
+og-tracesF : {κ : Clock} {S : Sig} {A : Type} → ▸ κ (GProc κ S A → og-Tr κ S A → Type) → GProc κ S A → og-Tr κ S A → Type
+og-tracesF rc (gret a) (og-tend b) = a ≡ b
+og-tracesF rc (gret a) (og-tcons c2 r2 x) = Empty
+og-tracesF rc (gret a) (og-ttau x) = Empty
+og-tracesF rc (gcmd c k) (og-tend b) = Empty
+og-tracesF {κ} {S} {A} rc (gcmd c k) (og-tcons c2 r2 x) =
+  (r : Resp S c) × (Path ((d : Cmd S) × Resp S d) (c , r) (c2 , r2) × ((α : Tick κ) → rc α (k r α) (x α)))
+og-tracesF rc (gcmd c k) (og-ttau x) = Empty
+og-tracesF rc (gtau t) (og-tend b) = Empty
+og-tracesF rc (gtau t) (og-tcons c2 r2 x) = Empty
+og-tracesF {κ} {S} {A} rc (gtau t) (og-ttau x) = (α : Tick κ) → rc α (t α) (x α)
+og-traces : {κ : Clock} {S : Sig} {A : Type} → GProc κ S A → og-Tr κ S A → Type
+og-traces {κ} {S} {A} = fix {lsuc lzero} {κ} {GProc κ S A → og-Tr κ S A → Type} (og-tracesF {κ} {S} {A})
+og-TrEq : {κ : Clock} {S : Sig} {A : Type} → GProc κ S A → GProc κ S A → Type (lsuc lzero)
+og-TrEq {κ} {S} {A} p q = (x : og-Tr κ S A) → og-traces p x ≡ og-traces q x
+og-bisim-traces : {κ : Clock} {S : Sig} {A : Type} → (p q : GProc κ S A) → og-Bisim p q → og-TrEq p q
+og-bisim-traces p q b = λ x i → og-traces (og-bisim-path p q b i) x
