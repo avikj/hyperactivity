@@ -324,10 +324,14 @@ Both acceptance lines are met. Everything below was measured on this machine wit
 
 ## Next step
 
-This track's acceptance is met; nothing is pending in it. What follows it (PLAN Phase 5,
-second half, a new track): the semantics of exactly the kinds listed under Done over track M's
-memory (`lib/mem/`), as a structural recursion on `RBody` under an `RInstance`'s arguments,
-reading `book-crate`. If an input stops the importer, the message names the construct: add
-the constructor to `lib/lang/rust/ast.cub`, the parse in `BodyParser` and the emission in `Emit`
-(`tools/mir2cub.py`), regenerate **every** `.cub` under `experiments/rust/` (the AST is shared),
-and check them together with the command under Done.
+Item 4 in progress. `lib/lang/rust/machine.cub` (outcomes `RExc`, values `RV`/`RSlot`/`RFrame`,
+`REv`, static results `RSt`, type substitution/equality/class/size/alignment, layout lookup)
+checks after the library, `lib/mem/*.cub` and `lib/lang/rust/ast.cub` (`1215 passed, 0 failed`).
+Design (in the file's header): scalar and wide-pointer locals are registers in the frame,
+other locals are allocations; readers are staged (`RCx → syntax → RFrame → REv …`, every
+decision on MIR data before the frame is taken); blocks and calls run by one `%welimP` on the
+fuel over a function table of the crate's instances. Next: `lib/lang/rust/read-place.cub`
+(memory helpers, typed copy by layout, places, operands, constants), then
+`read-rvalue.cub`, then `read.cub` (statements, terminators, frames, tables, the runner,
+`rust-init`, `rust-entry`), then `experiments/rust/sem/` drivers for item 5. Check with
+`./build/cubical $LIB lib/mem/{target,scalar,memory,layout,monad}.cub lib/lang/rust/ast.cub lib/lang/rust/machine.cub …`.
