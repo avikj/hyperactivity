@@ -367,6 +367,10 @@ class Mir:
         self.src_path = src_path
         self.src_lines = src_text.split('\n')
         self.src_text = src_text
+        # the source with comments, string and character literals blanked (same offsets), for
+        # finding declarations and matching braces
+        self.code_text = re.sub(r'//[^\n]*|/\*.*?\*/|b?"(?:\\.|[^"\\])*"|b?\'(?:\\.|[^\'\\])\'',
+                                lambda m: re.sub(r'[^\n]', ' ', m.group(0)), src_text, flags=re.S)
         self.items = []       # every fn body of the dump (unparsed)
         self.statics = {}     # name → (mut, type text)
         self.allocs = {}      # alloc name → (static name, size, align, [byte|None])
@@ -453,6 +457,7 @@ class Mir:
         text = ' '.join(x.strip() for x in ls)
         imp = Item()
         imp.span, imp.text = span, text
+        imp.end_offset = sum(len(x) + 1 for x in self.src_lines[:l2 - 1]) + c2 - 1
         if text.startswith('impl'):
             p = P(text, 4)
             imp.generics = self.generics_decl(p) if p.peek('<') else []
@@ -534,11 +539,50 @@ class Mir:
             it.span, it.method = None, it.name
 
     def generics_of(self, it):
+        """the body's generic parameters: the impl's, or for a free function those of its
+        declaration in the source (the MIR text prints neither)."""
         if it.span is None:
-            # the MIR text does not print a free function's generic parameters; a parameter then
-            # reads as an unknown type name and stops the import where it is used.
-            return []
-        return self.impl_at(it.span).generics
+            name = it.name.split('::')[-1]
+            if not re.fullmatch(IDENT, name):
+                return []
+            ds = [m for m in re.finditer(r'\bfn\s+' + name + r'\s*(<)?', self.code_text)
+                  if not any(a <= m.start() < b for (a, b) in self.item_blocks())]
+            if len(ds) != 1:
+                stop('function declaration (%d declarations of this name outside impls in the source)' % len(ds), it.name)
+            if not ds[0].group(1):
+                return []
+            return self.generics_decl(P(self.code_text, ds[0].end() - 1))
+        imp = self.impl_at(it.span)
+        if imp.text.startswith('impl'):
+            # a method's own parameters come after the impl's; they are not read yet
+            a, b = self.block_after(imp.end_offset)
+            m = re.compile(r'\bfn\s+' + re.escape(it.method.split('::')[0]) + r'\s*(<)?').search(self.code_text, a, b)
+            if m is None:
+                stop('method declaration (not found in the impl block)', it.name)
+            if m.group(1) and [g for g in split_top(self.code_text[m.end():self.code_text.index('>', m.end())]) if not g.strip().startswith("'")]:
+                stop('generic parameters on a method of an impl (only the impl\'s and a free function\'s are read)', it.name)
+        return imp.generics
+
+    def block_after(self, off):
+        """(start, end) of the {...} block that opens first after off, in the source with
+        comments and literals blanked."""
+        t = self.code_text
+        a = t.index('{', off)
+        depth, j = 0, a
+        while True:
+            depth += t[j] == '{'
+            depth -= t[j] == '}'
+            j += 1
+            if depth == 0:
+                return a, j
+
+    def item_blocks(self):
+        if not hasattr(self, '_blocks'):
+            self._blocks = []
+            for m in re.finditer(r'\b(impl|trait)\b[^;{]*\{', self.code_text):
+                if not any(a <= m.start() < b for (a, b) in self._blocks):
+                    self._blocks.append(self.block_after(m.start()))
+        return self._blocks
 
 
 class BodyParser:
@@ -664,6 +708,12 @@ class BodyParser:
             return c
         if re.compile(r'-?\d').match(p.s, p.i):
             stop('constant (numeric literal of a type not handled)', p.rest())
+        r = p.m(r'(' + '|'.join(INTS) + r')::(MIN|MAX)\b')
+        if r:
+            bits, signed = INT_BITS[r.group(1)], r.group(1).startswith('i')
+            if r.group(2) == 'MIN':
+                return ('int', -(1 << (bits - 1)) if signed else 0, r.group(1))
+            return ('int', (1 << (bits - (1 if signed else 0))) - 1, r.group(1))
         if p.m(r'true\b'):
             return ('bool', True)
         if p.m(r'false\b'):
@@ -726,7 +776,9 @@ class BodyParser:
               'Eq': 'eq', 'Lt': 'lt', 'Le': 'le', 'Ne': 'ne', 'Ge': 'ge', 'Gt': 'gt', 'Cmp': 'cmp', 'Offset': 'offset'}
     UNOPS = {'Not': 'not', 'Neg': 'neg', 'PtrMetadata': 'ptr-metadata'}
     CASTS = {'IntToInt': 'int-to-int', 'Transmute': 'transmute', 'PtrToPtr': 'ptr-to-ptr',
-             'PointerCoercion(Unsize, Implicit)': 'unsize', 'PointerCoercion(Unsize, AsCast)': 'unsize'}
+             'PointerCoercion(Unsize, Implicit)': 'unsize', 'PointerCoercion(Unsize, AsCast)': 'unsize',
+             'PointerCoercion(ReifyFnPointer(Safe), Implicit)': 'reify-fn-pointer',
+             'PointerCoercion(ReifyFnPointer(Safe), AsCast)': 'reify-fn-pointer'}
 
     def rvalue(self, p):
         if p.eat('&raw const '):
@@ -802,9 +854,17 @@ class BodyParser:
             return ('unop', self.UNOPS[r.group(1)], a)
         if not re.compile(IDENT).match(p.s, p.i):
             stop('rvalue', p.s)
-        # an ADT aggregate: Path { f: op, .. } | Path(op, ..) | Path
+        # an ADT aggregate: Path { f: op, .. } | Path(op, ..) | Path; or a function item cast to a pointer
         segs, args = self.tp.path(p)
         argseg = self.tp.last_argseg
+        if p.eat(' as '):
+            t = self.tp.ty(p)
+            p.need(' (')
+            kind = p.rest()[:-1]
+            if not p.rest().endswith(')') or self.CASTS.get(kind) != 'reify-fn-pointer':
+                stop('cast kind (of a function item)', p.rest())
+            p.i = len(p.s)
+            return ('cast', 'reify-fn-pointer', ('const', ('fnitem', ('path', segs, tuple(args), argseg))), t)
         ops = []
         if p.eat(' { '):
             while not p.eat('}'):
@@ -833,7 +893,10 @@ class BodyParser:
             return ('terminate',)
         stop('unwind action', s)
 
-    ASSERTS = {'"index out of bounds: the length is {} but the index is {}"': ('bounds-check', 2)}
+    ASSERTS = {'"index out of bounds: the length is {} but the index is {}"': ('bounds-check', 2),
+               '"attempt to divide `{}` by zero"': ('division-by-zero', 1),
+               '"attempt to calculate the remainder of `{}` with a divisor of zero"': ('remainder-by-zero', 1),
+               '"attempt to compute `{} / {}`, which would overflow"': ('overflow rbin-div', 2)}
 
     def term(self, l):
         if not l.endswith(';'):
@@ -885,6 +948,13 @@ class BodyParser:
                 if not p.end():
                     stop('assert operand', x)
             return ('assert', ops[0], expected, kind, ops[1:], int(r.group(2)), self.unwind(r.group(3)))
+        r = re.fullmatch(r'drop\((.*)\) -> \[return: bb(\d+), (unwind [^\]]*)\]', l)
+        if r:
+            p = P(r.group(1))
+            pl = self.place(p)
+            if not p.end():
+                stop('terminator', l)
+            return ('drop', pl, int(r.group(2)), self.unwind(r.group(3)))
         r = re.fullmatch(r'(.*) -> \[return: bb(\d+), (unwind [^\]]*)\]', l)
         if r and (l.startswith('_') or l.startswith('(')):
             p = P(r.group(1))
@@ -904,7 +974,7 @@ class BodyParser:
 
     def callee(self, p):
         if p.peek('copy ') or p.peek('move '):
-            stop('call through a function pointer', p.s)
+            return ('ptr', self.operand(p))
         if p.eat('<'):
             t = self.tp.ty(p)
             trait = None
@@ -1190,6 +1260,9 @@ class Import:
         self.instances = []       # (body id, closed args)
         self.inst_seen = set()
         self.vtables_wanted = []  # (closed type, trait)
+        self.drops_wanted = []    # closed types a reachable Drop terminator drops
+        self.drop_seen = set()
+        self.drop_impls = []      # (closed type, body id, args): the type's own Drop impl
         self.statics = []         # alloc names, in order: the static ids
         self.walk_from_entry()
         # the walk of vtable methods needs the object file, and the object file's appended
@@ -1200,15 +1273,53 @@ class Import:
             need = self.needed_types()
             if self.obj is None or not set(need) <= self.obj_types:
                 self.compile_object(need)
+                self.paths.origin = 'object'
+                self.layouts = Layouts(self.obj, self.paths)
+                self.paths.origin = 'mir'
             n = len(self.instances)
             for key in list(self.vtables_wanted):
                 if key not in self.vtables:
                     self.read_vtable(key)
+            for t in list(self.drops_wanted):
+                self.drop_glue(t)
             self.drain()
             if len(self.instances) == n and set(self.needed_types()) <= self.obj_types:
                 break
         self.paths.origin = 'object'
-        self.layouts = Layouts(self.obj, self.paths)
+
+    def drop_glue(self, t):
+        """what dropping a value of the closed type t runs: the Drop impl of each ADT in it that
+        has one (a body of this crate), found through the layouts."""
+        if t in self.drop_seen:
+            return
+        self.drop_seen.add(t)
+        k = t[0]
+        if k in ('bool', 'int', 'never', 'ref', 'ptr', 'fnptr'):
+            return
+        if k == 'array':
+            return self.drop_glue(t[1])
+        if k == 'tuple':
+            for x in t[1]:
+                self.drop_glue(x)
+            return
+        if k != 'adt':
+            stop('drop (of an unsized or unhandled type)', show_ty(t))
+        d = self.layouts.die_of(t)
+        if d is None:
+            stop('layout (the debug information does not describe this type)', show_ty(t))
+        if not self.layouts.qual(d).startswith(self.paths.crate + '::'):
+            stop('drop (of a type of another crate: its Drop impl, if it has one, is not in the MIR text)', show_ty(t))
+        f = self.find_method(t, 'Drop', 'drop')
+        if f is not None:
+            b = self.body_id(f[0])
+            self.drop_impls.append((t, b, f[1]))
+            self.add_instance(b, f[1])
+        self.paths.origin = 'object'
+        lay = self.layouts.layout(t)
+        self.paths.origin = 'mir'
+        for (_, _, _, fs) in lay[3]:
+            for (_, _, ft) in fs:
+                self.drop_glue(ft)
 
     # -- bodies and instances
 
@@ -1243,7 +1354,9 @@ class Import:
         return found[0] if found else None
 
     def resolve_callee(self, c):
-        """→ ('fn', body id, args in the caller's parameters) | ('dyn', trait, method name)"""
+        """→ ('fn', body id, args in the caller's parameters) | ('dyn', trait, method name) | ('ptr', operand)"""
+        if c[0] == 'ptr':
+            return c
         if c[0] == 'qual':
             _, t, trait, method = c
             if t[0] == 'dyn':
@@ -1258,9 +1371,10 @@ class Import:
         _, segs, args, argseg = c
         it = self.find_free(segs)
         if it is not None:
-            if args:
-                stop('call (generic arguments on a free function)', '::'.join(segs))
-            return ('fn', self.body_id(it), ())
+            b = self.body_id(it)
+            if len(args) != len(it.generics) or (args and argseg != len(segs) - 1):
+                stop('call (generic arguments do not match the function\'s parameters)', '::'.join(segs))
+            return ('fn', b, tuple(args))
         if len(segs) >= 2 and (argseg is None or argseg == len(segs) - 2):
             self_ty = ('adt', self.paths.note(segs[:-1]), tuple(args))
             f = self.find_method(self_ty, None, segs[-1])
@@ -1296,6 +1410,10 @@ class Import:
                 key = (subst(t, args), trait)
                 if key not in self.vtables_wanted:
                     self.vtables_wanted.append(key)
+            for t in it.drops:
+                t = subst(t, args)
+                if t not in self.drops_wanted:
+                    self.drops_wanted.append(t)
 
     def place_ty(self, it, pl):
         t = it.locals[pl[0]][1]
@@ -1314,9 +1432,13 @@ class Import:
 
     def resolve_body(self, it):
         it.resolved = True
-        it.calls, it.unsizes = [], []
+        it.calls, it.unsizes, it.drops = [], [], []
         for bi, (stmts, term) in enumerate(it.blocks):
-            for s in stmts:
+            for si, s in enumerate(stmts):
+                if s[0] == 'assign' and s[2][0] == 'cast' and s[2][1] == 'reify-fn-pointer':
+                    c = self.resolve_callee(s[2][2][1][1])
+                    stmts[si] = ('assign', s[1], ('cast', 'reify-fn-pointer', ('const', ('fnitem', c)), s[2][3]))
+                    it.calls.append((c[1], c[2]))
                 if s[0] == 'assign' and s[2][0] == 'cast' and s[2][1] == 'unsize':
                     to = s[2][3]
                     if to[0] in ('ref', 'ptr') and to[2][0] == 'dyn':
@@ -1333,6 +1455,8 @@ class Import:
                 it.blocks[bi] = (stmts, ('call', c) + term[2:])
                 if c[0] == 'fn':
                     it.calls.append((c[1], c[2]))
+            if term[0] == 'drop':
+                it.drops.append(self.place_ty(it, term[1]))
             self.scan_statics(term)
 
     def scan_statics(self, x):
@@ -1384,6 +1508,8 @@ class Import:
         for a in self.statics:
             add(self.static_ty(a))
         for (t, trait) in self.vtables_wanted:
+            add(t)
+        for t in self.drops_wanted:
             add(t)
         return need
 
@@ -1689,6 +1815,9 @@ class Emit:
         if k == 'cparam':
             self.imp.met('constant', 'generic constant parameter')
             return '(rc-param %s)' % self.w(c[1])
+        if k == 'fnitem':
+            self.imp.met('constant', 'function item')
+            return '(rc-fn %s %s)' % (self.w(c[1][1]), self.tys(c[1][2]))
         if k == 'alloc':
             self.imp.met('constant', 'address of a static')
             return '(rc-static %s %s)' % (self.w(self.imp.statics.index(c[1])), self.ty(c[2]))
@@ -1781,7 +1910,9 @@ class Emit:
     def unwind(self, u):
         return 'ru-' + u[0]
 
-    def callee(self, c):
+    def callee(self, it, c):
+        if c[0] == 'ptr':
+            return '(rcallee-ptr %s)' % self.operand(it, c[1])
         if c[0] == 'dyn':
             ms = self.trait_methods(c[1])
             if c[2] not in ms:
@@ -1813,14 +1944,17 @@ class Emit:
             arms = self.lst(['(rarm %s %s)' % (self.w(v & M64), self.w(b)) for (v, b) in t[2]])
             return '(rt-switch-int %s %s %s)' % (self.operand(it, t[1]), arms, self.w(t[3]))
         if k == 'call':
-            self.imp.met('terminator', 'Call (dyn)' if t[1][0] == 'dyn' else 'Call')
-            return '(rt-call %s %s %s %s %s)' % (self.callee(t[1]), self.lst([self.operand(it, o) for o in t[2]]),
+            self.imp.met('terminator', {'dyn': 'Call (dyn)', 'ptr': 'Call (function pointer)', 'fn': 'Call'}[t[1][0]])
+            return '(rt-call %s %s %s %s %s)' % (self.callee(it, t[1]), self.lst([self.operand(it, o) for o in t[2]]),
                                                  self.place(it, t[3]), self.w(t[4]), self.unwind(t[5]))
         if k == 'assert':
-            self.imp.met('terminator', 'Assert (BoundsCheck)')
+            self.imp.met('terminator', 'Assert (%s)' % t[3])
             return '(rt-assert %s %s (rassert-%s %s) %s %s)' % (
                 self.operand(it, t[1]), 'true' if t[2] else 'false', t[3], ' '.join(self.operand(it, o) for o in t[4]),
                 self.w(t[5]), self.unwind(t[6]))
+        if k == 'drop':
+            self.imp.met('terminator', 'Drop')
+            return '(rt-drop %s %s %s)' % (self.place(it, t[1]), self.w(t[2]), self.unwind(t[3]))
         stop('terminator', repr(t))
 
     def body(self, b, it):
@@ -1929,6 +2063,8 @@ class Emit:
             self.want_layout_deep(imp.static_ty(a))
         for (t, trait) in imp.vtables:
             self.want_layout_deep(t)
+        for t in imp.drops_wanted:
+            self.want_layout_deep(t)
         self.out.append('\n-- layouts')
         i, lnames = 0, []
         while i < len(self.layout_order):
@@ -1945,6 +2081,9 @@ class Emit:
             vnames.append(n)
         self.out.append('\n-- statics')
         snames = [self.static(i, a) for i, a in enumerate(imp.statics)]
+        self.out.append('\n-- Drop impls of the types a reachable Drop terminator drops (or contains)')
+        self.define(self.px + '-drops', 'List RDropImpl', self.lst(
+            ['(rdrop-impl %s %s %s)' % (self.ty(t), self.w(b), self.tys(a)) for (t, b, a) in imp.drop_impls]))
         self.out.append('\n-- instances: every (body, generic arguments) reachable from the entry')
         inames = []
         for i, (b, args) in enumerate(imp.instances):
@@ -1960,9 +2099,9 @@ class Emit:
             done = na == len(self.adts) and nt == len(self.traits)
         self.define(self.px + '-adts', 'List RAdt', adts)
         self.define(self.px + '-traits', 'List RTrait', traits)
-        self.define(self.px + '-crate', 'RCrate', 'rcrate %s %s %s %s-adts %s-traits %s %s %s %s-instances' % (
+        self.define(self.px + '-crate', 'RCrate', 'rcrate %s %s %s %s-adts %s-traits %s %s %s %s-drops %s-instances' % (
             self.name(os.path.basename(imp.src)), self.w(0), self.lst(bodies), self.px, self.px,
-            self.lst(lnames), self.lst(vnames), self.lst(snames), self.px))
+            self.lst(lnames), self.lst(vnames), self.lst(snames), self.px, self.px))
         return '\n'.join(head + self.out) + '\n'
 
 
@@ -1985,8 +2124,8 @@ def main():
     rep.write('  bodies %d, instances %d, blocks %d, statements %d, locals %d, definitions %d\n' % (
         len(imp.bodies), len(imp.instances), em.count.get('blocks', 0), em.count.get('statements', 0),
         em.count.get('locals', 0), em.count['definitions']))
-    rep.write('  types %d, ADTs %d (%s), traits %d, layouts %d, vtables %d, statics %d\n' % (
-        len(em.ty_names), len(em.adts), ', '.join(em.adts), len(em.traits), len(em.layout_order), len(imp.vtables), len(imp.statics)))
+    rep.write('  types %d, ADTs %d (%s), traits %d, layouts %d, vtables %d, statics %d, drop impls %d\n' % (
+        len(em.ty_names), len(em.adts), ', '.join(em.adts), len(em.traits), len(em.layout_order), len(imp.vtables), len(imp.statics), len(imp.drop_impls)))
     for cls in ('statement', 'rvalue', 'cast', 'binop', 'unop', 'aggregate', 'terminator', 'operand', 'constant', 'projection', 'type'):
         ks = imp.kinds[cls]
         rep.write('  %s kinds met: %s\n' % (cls, ', '.join('%s %d' % (k, ks[k]) for k in sorted(ks))))

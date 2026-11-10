@@ -65,6 +65,7 @@ data RConst
   | rc-zst (ty : RTy)                      -- the one value of a zero-sized type
   | rc-adt (ty : RTy) (variant : Word) (fields : RConst)
   | rc-static (id : Word) (ty : RTy)       -- the address of a static, at pointer type ty
+  | rc-fn (body : Word) (args : RTy)       -- a function item: a body of this crate at generic arguments
   | rcs-nil
   | rcs-cons (c : RConst) (cs : RConst)
 
@@ -85,6 +86,7 @@ data RCastKind
   | rcast-transmute
   | rcast-ptr-to-ptr
   | rcast-unsize                            -- PointerCoercion(Unsize): array to slice, or to dyn Trait
+  | rcast-reify-fn-pointer                  -- PointerCoercion(ReifyFnPointer): a function item to its address
 
 data RBorrow = rborrow-shared | rborrow-mut
 
@@ -116,9 +118,14 @@ data RUnwind = ru-continue | ru-unreachable | ru-terminate | ru-cleanup (bb : Wo
 data RCallee
   = rcallee-fn (body : Word) (args : RTy)          -- a body of this crate at generic arguments
   | rcallee-dyn (trait : Word) (method : Word)     -- the method-th method of the trait, through the receiver's vtable
+  | rcallee-ptr (f : ROperand)                     -- the function a pointer points to
 
 -- What a failed assertion reports.
-data RAssertMsg = rassert-bounds-check (len : ROperand) (index : ROperand)
+data RAssertMsg
+  = rassert-bounds-check (len : ROperand) (index : ROperand)
+  | rassert-division-by-zero (a : ROperand)
+  | rassert-remainder-by-zero (a : ROperand)
+  | rassert-overflow (o : RBinOp) (a : ROperand) (b : ROperand)
 
 data RSwitchArm = rarm (value : Word) (bb : Word)
 
@@ -129,6 +136,7 @@ data RTerm
   | rt-unreachable
   | rt-call (f : RCallee) (args : List ROperand) (dest : RPlace) (target : Word) (unwind : RUnwind)
   | rt-assert (cond : ROperand) (expected : Bool) (msg : RAssertMsg) (target : Word) (unwind : RUnwind)
+  | rt-drop (p : RPlace) (target : Word) (unwind : RUnwind)
 
 data RBlock = rblock (stmts : List RStmt) (term : RTerm)
 
@@ -170,8 +178,13 @@ data RBytes = rbytes-init (bs : List Word) | rbytes-uninit (n : Word)
 data RStatic = rstatic (name : RName) (ty : RTy) (m : RMut) (size : Word) (align : Word)
                        (init : List RBytes)
 
+-- The Drop impl of a closed type: dropping a value of ty calls body (at args) on a `&mut` to it,
+-- then drops its fields. A type without an entry has no impl of its own. Listed for every type
+-- a reachable rt-drop drops and every type inside those.
+data RDropImpl = rdrop-impl (ty : RTy) (body : Word) (args : RTy)
+
 data RInstance = rinstance (body : Word) (args : RTy)
 
 data RCrate = rcrate (name : RName) (entry : Word) (bodies : List RBody) (adts : List RAdt)
                      (traits : List RTrait) (layouts : List RLayoutEntry) (vtables : List RVtable)
-                     (statics : List RStatic) (instances : List RInstance)
+                     (statics : List RStatic) (drops : List RDropImpl) (instances : List RInstance)

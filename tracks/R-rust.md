@@ -183,12 +183,8 @@ uses `core`/`std` only. Find which MIR output this toolchain gives (`rustc --emi
 
 ## Next step
 
-Both acceptance lines are met for `book.rs`. In progress: `experiments/rust/more.rs` (written,
-not yet importable), the second input: tuples, a call through a function pointer
-(`ReifyFnPointer` cast, `copy _1(..)` callee), a generic function at two types (generics of a
-`fn`, which the MIR text does not print), `Drop` terminator and the `Drop` impl, a data enum
-with explicit discriminants, `Repeat`, `Div`/`Rem`/shifts/`Neg`/`BitAnd`/`BitXor`/`Mul`, the
-division asserts, `no_retag`, `const i64::MIN`. Run `python3 tools/mir2cub.py
-experiments/rust/more.rs -o experiments/rust/more.cub --entry more_entry`, extend the importer
-and `lib/lang/rust/ast.cub` at each stop, check `more.cub`, record the kinds under Done, and
-write Limits.
+`experiments/rust/more.rs` now imports (`--entry more_entry`: 11 bodies, 12 instances, 51 blocks,
+189 statements) and `book.cub` + `more.cub` check together (`1294 passed, 0 failed`). Left: record
+`more.rs` under Done with its kinds and the comparison with `-Zprint-mono-items` (same 12
+functions, plus rustc's `drop_glue::<Tally>` shim which is `RDropImpl` data here); write Limits;
+re-measure fresh check cost of the final `book.cub`.
