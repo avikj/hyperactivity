@@ -83,3 +83,129 @@ tso-acyclic-sound rel ns x zs sub ch h =
                          (snd (tso-chain-preds rel (cons x zs) zs x x (inl (λ i → x)) (λ c2 m2 → inr m2) ch))
                inr m2 → fst (tso-chain-preds rel (cons x zs) zs x x (inl (λ i → x)) (λ c2 m3 → inr m3) ch) c m2)
     sub x (inl (λ i → x)) h
+-- ---------------------------------------------------------------- a stamp makes it answer true
+-- order on Nat (m < n computes, lib/std.cub; m ≤ n is m < suc n)
+tso-cmp : (a b : Nat) → Sum (a < suc b) (b < a)
+tso-cmp zero b = inl unit
+tso-cmp (suc a) zero = inr unit
+tso-cmp (suc a) (suc b) = tso-cmp a b
+tso-lt-le-absurd : (a b : Nat) → a < b → b < suc a → Empty
+tso-lt-le-absurd a zero h k = h
+tso-lt-le-absurd zero (suc b) h k = k
+tso-lt-le-absurd (suc a) (suc b) h k = tso-lt-le-absurd a b h k
+tso-le-trans : (a b c : Nat) → a < suc b → b < suc c → a < suc c
+tso-le-trans zero b c h k = unit
+tso-le-trans (suc a) zero c h k = Empty-rec h
+tso-le-trans (suc a) (suc b) zero h k = Empty-rec k
+tso-le-trans (suc a) (suc b) (suc c) h k = tso-le-trans a b c h k
+tso-lt-le : (a b : Nat) → a < b → a < suc b
+tso-lt-le a zero h = Empty-rec h
+tso-lt-le zero (suc b) h = unit
+tso-lt-le (suc a) (suc b) h = tso-lt-le a b h
+-- a member of least stamp in a nonempty list
+TsoLeast : {A : Type} → (A → Nat) → List A → A → Type
+TsoLeast st l m = TsoIn m l × ((z : A) → TsoIn z l → st m < suc (st z))
+tso-least : {A : Type} → (st : A → Nat) → (r : List A) → (y : A) → (m : A) × TsoLeast st (cons y r) m
+tso-least st nil y =
+  (y , (inl (λ i → y) , (λ z mz → case mz of
+                                    inl e → subst {_} {_} {_} {λ w → st y < suc (st w)} (sym e) (<-suc-self (st y))
+                                    inr f → Empty-rec f)))
+tso-least st (cons y2 r2) y =
+  (case tso-cmp (st y) (st (fst (tso-least st r2 y2))) of
+     inl le →
+       (y , (inl (λ i → y) , (λ z mz → case mz of
+                                         inl e → subst {_} {_} {_} {λ w → st y < suc (st w)} (sym e) (<-suc-self (st y))
+                                         inr mz2 → tso-le-trans (st y) (st (fst (tso-least st r2 y2))) (st z) le (snd (snd (tso-least st r2 y2)) z mz2))))
+     inr lt →
+       (fst (tso-least st r2 y2) ,
+        (inr (fst (snd (tso-least st r2 y2))) ,
+         (λ z mz → case mz of
+                     inl e → subst {_} {_} {_} {λ w → st (fst (tso-least st r2 y2)) < suc (st w)} (sym e)
+                               (tso-lt-le (st (fst (tso-least st r2 y2))) (st y) lt)
+                     inr mz2 → snd (snd (tso-least st r2 y2)) z mz2))))
+-- tso-any true gives a member passing the test
+tso-any-elim : {A : Type} → (q : A → Bool) → (l : List A) → isTrue (tso-any q l) → (y : A) × (TsoIn y l × isTrue (q y))
+tso-any-elim q nil h = Empty-rec h
+tso-any-elim q (cons z r) h =
+  (case q z return (λ b → (isTrue b → isTrue (q z)) → isTrue (if b then true else tso-any q r) → (y : A) × (TsoIn y (cons z r) × isTrue (q y))) of
+     true → λ ev h2 → (z , (inl (λ i → z) , ev unit))
+     false → λ ev h2 → (fst (tso-any-elim q r h2) , (inr (fst (snd (tso-any-elim q r h2))) , snd (snd (tso-any-elim q r h2)))))
+  (λ u → u) h
+-- lengths under a filter
+tso-keep-le : {A : Type} → (p : A → Bool) → (ns : List A) → tso-len (tso-keep p ns) < suc (tso-len ns)
+tso-keep-le p nil = unit
+tso-keep-le p (cons y r) =
+  (case p y return (λ b → tso-len (if b then cons y (tso-keep p r) else tso-keep p r) < suc (suc (tso-len r))) of
+     true → tso-keep-le p r
+     false → tso-lt-le (tso-len (tso-keep p r)) (suc (tso-len r)) (tso-keep-le p r))
+tso-keep-lt : {A : Type} → (p : A → Bool) → (ns : List A) → (m : A) → TsoIn m ns → (isTrue (p m) → Empty) →
+              tso-len (tso-keep p ns) < tso-len ns
+tso-keep-lt p nil m mm np = mm
+tso-keep-lt p (cons y r) m mm np =
+  (case mm of
+     inl e →
+       (case p y return (λ b → (isTrue b → isTrue (p y)) → tso-len (if b then cons y (tso-keep p r) else tso-keep p r) < suc (tso-len r)) of
+          true → λ ev → Empty-rec (np (subst {_} {_} {_} {λ w → isTrue (p w)} (sym e) (ev unit)))
+          false → λ ev → tso-keep-le p r) (λ u → u)
+     inr m2 →
+       (case p y return (λ b → tso-len (if b then cons y (tso-keep p r) else tso-keep p r) < suc (tso-len r)) of
+          true → tso-keep-lt p r m m2 np
+          false → tso-lt-le (tso-len (tso-keep p r)) (tso-len r) (tso-keep-lt p r m m2 np)))
+tso-keep-sub : {A : Type} → (p : A → Bool) → (ns : List A) → (x : A) → TsoIn x (tso-keep p ns) → TsoIn x ns
+tso-keep-sub p nil x m = m
+tso-keep-sub p (cons y r) x m =
+  (case p y return (λ b → TsoIn x (if b then cons y (tso-keep p r) else tso-keep p r) → TsoIn x (cons y r)) of
+     true → λ m2 → (case m2 of inl e → inl e; inr m3 → inr (tso-keep-sub p r x m3))
+     false → λ m2 → inr (tso-keep-sub p r x m2)) m
+-- a shorter list is not of equal length
+tso-len-eq-lt : {A : Type} → (xs ys : List A) → tso-len xs < tso-len ys → isTrue (tso-len-eq xs ys) → Empty
+tso-len-eq-lt nil nil h k = h
+tso-len-eq-lt nil (cons y r) h k = k
+tso-len-eq-lt (cons x xs) nil h k = k
+tso-len-eq-lt (cons x xs) (cons y r) h k = tso-len-eq-lt xs r h k
+-- the stamp increases along the relation between members of the list
+TsoMono : {A : Type} → (A → A → Bool) → (A → Nat) → List A → Type
+TsoMono rel st ns = (x y : A) → TsoIn x ns → TsoIn y ns → isTrue (rel x y) → st x < st y
+-- then a round of peeling shortens a nonempty list: a member of least stamp has no predecessor
+tso-peel-shrinks : {A : Type} → (rel : A → A → Bool) → (st : A → Nat) → (y : A) → (r : List A) → TsoMono rel st (cons y r) →
+                   tso-len (tso-peel rel (cons y r)) < suc (tso-len r)
+tso-peel-shrinks rel st y r mono =
+  tso-keep-lt (λ x → tso-any (λ z → rel z x) (cons y r)) (cons y r) (fst (tso-least st r y)) (fst (snd (tso-least st r y)))
+    (λ h → tso-lt-le-absurd
+             (st (fst (tso-any-elim (λ z → rel z (fst (tso-least st r y))) (cons y r) h)))
+             (st (fst (tso-least st r y)))
+             (mono (fst (tso-any-elim (λ z → rel z (fst (tso-least st r y))) (cons y r) h)) (fst (tso-least st r y))
+                   (fst (snd (tso-any-elim (λ z → rel z (fst (tso-least st r y))) (cons y r) h)))
+                   (fst (snd (tso-least st r y)))
+                   (snd (snd (tso-any-elim (λ z → rel z (fst (tso-least st r y))) (cons y r) h))))
+             (snd (snd (tso-least st r y))
+                  (fst (tso-any-elim (λ z → rel z (fst (tso-least st r y))) (cons y r) h))
+                  (fst (snd (tso-any-elim (λ z → rel z (fst (tso-least st r y))) (cons y r) h)))))
+TsoIsNil : {A : Type} → List A → Type
+TsoIsNil l = isTrue (case l return (λ w → Bool) of nil → true; cons y r → false)
+-- so n rounds empty a list of at most n nodes
+tso-peels-nil : {A : Type} → (n : Nat) → (rel : A → A → Bool) → (st : A → Nat) → (ns : List A) → TsoMono rel st ns →
+                tso-len ns < suc n → TsoIsNil (tso-peels n rel ns)
+tso-peels-nil zero rel st ns mono hl =
+  (case ns return (λ l → tso-len l < suc zero → TsoIsNil l) of
+     nil → λ h → unit
+     cons y r → λ h → Empty-rec h) hl
+tso-peels-nil (suc n) rel st ns mono hl =
+  (case ns return (λ l → TsoMono rel st l → tso-len l < suc (suc n) → TsoIsNil (tso-peels (suc n) rel l)) of
+     nil → λ mono2 h → unit
+     cons y r → λ mono2 h →
+       (case tso-len-eq (tso-peel rel (cons y r)) (cons y r)
+          return (λ b → (isTrue b → isTrue (tso-len-eq (tso-peel rel (cons y r)) (cons y r))) →
+                        TsoIsNil (if b then tso-peel rel (cons y r) else tso-peels n rel (tso-peel rel (cons y r)))) of
+          true → λ ev → Empty-rec (tso-len-eq-lt (tso-peel rel (cons y r)) (cons y r) (tso-peel-shrinks rel st y r mono2) (ev unit))
+          false → λ ev →
+            tso-peels-nil n rel st (tso-peel rel (cons y r))
+              (λ a b ma mb e → mono2 a b (tso-keep-sub (λ x → tso-any (λ z → rel z x) (cons y r)) (cons y r) a ma)
+                                         (tso-keep-sub (λ x → tso-any (λ z → rel z x) (cons y r)) (cons y r) b mb) e)
+              (<-step (tso-len (tso-peel rel (cons y r))) (suc (tso-len r)) (suc n) (tso-peel-shrinks rel st y r mono2) h))
+       (λ u → u)) mono hl
+-- A STAMP MAKES THE DECISION ANSWER TRUE: when some stamp into Nat increases along the
+-- relation between the list's nodes (the nodes embed in a linear order), tso-acyclic is true
+tso-acyclic-stamp : {A : Type} → (rel : A → A → Bool) → (st : A → Nat) → (ns : List A) → TsoMono rel st ns →
+                    isTrue (tso-acyclic rel ns)
+tso-acyclic-stamp rel st ns mono = tso-peels-nil (tso-len ns) rel st ns mono (<-suc-self (tso-len ns))

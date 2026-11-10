@@ -69,7 +69,8 @@ Files you own: `lib/isa/tso.cub`, `lib/mem/atomics.cub`, `experiments/tso/**`, t
 
 ## Needs from track A
 
-- OPEN: append `lib/mem/rc11.cub` to `LIB` after `lib/mem/atomics.cub` (+31 checks).
+- OPEN: append `lib/isa/tso-acyclic.cub` to `LIB` after `lib/isa/tso.cub` (+29 checks, 1.0M
+  steps), and `lib/mem/rc11.cub` after `lib/mem/atomics.cub` (+31 checks).
 - DONE by track A (commit `a30e0b2b`): both files are in `LIB`. The request was:
   `Makefile`: append `lib/isa/tso.cub lib/mem/atomics.cub` to `LIB` (after `lib/world.cub`'s
   dependents; they need only `lib/proc.cub`, `lib/world.cub`, and `tso.cub` before
@@ -304,6 +305,16 @@ How to check (cached library, one file after another; the last line must read `N
   isTrue (tso-acyclic rel ns) → Empty`: **when the decision answers true there is no cycle
   through nodes of the list.** Checks: `tso-acyclic-sound [22,288 steps]`.
 
+- **Item 4(a) done.** `lib/isa/tso-acyclic.cub` now also has
+  `tso-acyclic-stamp : (rel) (st : A → Nat) (ns) → TsoMono rel st ns → isTrue (tso-acyclic rel ns)`
+  (`TsoMono`: st x < st y whenever rel x y between members): **nodes that embed in a linear
+  order make the decision answer true** (a member of least stamp, `tso-least`, has no
+  predecessor, so each round on a nonempty list shortens it, `tso-peel-shrinks`; n rounds
+  empty a list of n, `tso-peels-nil`). With `tso-acyclic-sound` the decision is bracketed:
+  stamp ⇒ decision true ⇒ no cycle. The file: 29 checks, about 1.0M steps, all `ok`.
+  Not proved: decision false ⇒ a cycle exists (needs a pigeonhole on a list every node of
+  which has a predecessor in it); see Limits.
+
 ## Found
 
 - **Elaborator refuses a structural recursion when an argument before the matched one changes.**
@@ -360,9 +371,11 @@ How to check (cached library, one file after another; the last line must read `N
   (Owens–Sarkar–Sewell's model as rendered by Alglave–Maranget–Tautschnig's `x86tso.cat`), not
   OSS's own memory-order-with-reads formulation; the two are equivalent in the literature, and
   that equivalence is not a term here.
-- Acyclicity is the decision procedure (peel sources n times); no proof relates it to the
-  absence of a path from a node to itself.
-
+- Acyclicity: proved are `tso-acyclic-sound` (true ⇒ no cycle) and `tso-acyclic-stamp` (a
+  stamp ⇒ true). Not proved: `tso-acyclic rel ns ≡ false` ⇒ a `TsoChain rel x zs x` exists
+  (from the nonempty fixed point of peeling, where every node has a predecessor, walk back
+  `len + 1` steps and find a repeat: a pigeonhole over `TsoIn` with decidable equality of
+  nodes, not written).
 - `tso-ax-outcomes`'s `dom` must contain every value a read can return; that it does is the
   caller's claim, not checked.
 - The axiomatic form's events are per cell (byte) and it has no axiom that the bytes of one
@@ -389,8 +402,7 @@ How to check (cached library, one file after another; the last line must read `N
 
 Items 1–3, 6, 7 complete; item 5's computable part complete, its general proof depends on
 item 4. Now: item 4, in this order.
-(a) In `lib/isa/tso-acyclic.cub`: `tso-acyclic-sound` is done. Next, appended to that file,
-    `tso-acyclic-stamp`: a stamp `A → Nat` increasing along `rel` on members ⇒
+(a) DONE (`tso-acyclic-sound`, `tso-acyclic-stamp`). What `tso-acyclic-stamp` is for in (b): a stamp `A → Nat` increasing along `rel` on members ⇒
     `tso-acyclic rel ns ≡ true` (a member of least stamp has no predecessor, so a round on a
     nonempty list shortens it).
 (b) `TsoSound`. Design decided (not started): give every transition, flushes included, a
