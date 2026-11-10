@@ -237,10 +237,39 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   nil → …; cons d r2 → … f r2` is refused as non-structural; the nested pattern `f (cons e
   (cons d r2)) = … f r2` is accepted.
 
+- **Item 7, where `#build`'s steps go (interim; the table is being completed).**
+  `experiments/os/build-cost.cub` + `build-cost-{3,5,7,10}.cub`: the stages of `build-plan`
+  on `bc-chain n` (n closes over `Linux` through `linux-run`), cumulative steps per `#show`:
+
+  | stage (cumulative) | n = 3 | n = 5 | n = 7 |
+  |---|---|---|---|
+  | `unfold` (code nodes) | 320,118 (4,101) | 361,654 (4,695) | 402,885 (5,289) |
+  | `specialize` (code nodes) | 770,870 (4,101) | 867,742 (4,695) | 964,015 (5,289) |
+  | `conv` | 898,571 | 992,495 | 1,085,801 |
+  | `program-of` (definitions) | 839,861 (1) | — (1) | 1,051,830 (1) |
+  | `x-forms-all` (nodes, definitions) | 2,153,090 (2,404; 129) | 2,552,960 (2,462; 133) | 3,079,944 (2,520; 137) |
+  | `x-erase` | 31,836,231 | 34,353,194 | 37,070,974 |
+  | `x-verdict` | 32,970,432 | 35,605,009 | 38,440,109 |
+  | `encode-proc` (bytes) | 33,870,456 (50,439) | 36,433,769 (51,523) | 39,198,235 (52,607) |
+
+  Two facts so far. (a) `x-erase` is ~93% of the steps at every n. (b) The cost is not in the
+  number of commands: a process of 3 closes is already 129 definitions and 50 KB, and each
+  further command adds 2 definitions, 542 bytes and 1.4 M steps. The fixed part is the whole
+  handler: the unfolded code's first command is reduced (`w-sys #3 #3 …`), but its
+  continuation is `(case r of inl e → …; inr a → …) R k h` — a `case` on the response, at a
+  function type (`Proc`), applied to the interpretation — which is stuck, so `handle`'s
+  `λ c k → bind (linux-on-w … c) k` stays in the code as a value with all 29 cases (the errno
+  threshold literal occurs 23 times in the code of three closes) and commands are dispatched
+  through it at run time. Cause and fix are being confirmed (passes of the fixed point, the
+  tour's numbers, and the same processes with the case commuted by hand in `lib/os/linux.cub`).
+
 ## Next step
 
-Items 5–7 (above) are open; nothing of them is written yet. Order: item 7 first (a scratch
-file `experiments/os/build-cost.cub` calling `unfold`, `specialize`, `conv`, `program-of`,
-`x-forms-all`, `x-erase`, `x-verdict`, `encode-proc` of `lib/elf.cub`'s `build-plan` separately
-on processes of 3, 5, 7, 10 `Linux` commands, each under `#show` of a size), then item 5 call by
-call (eventfd/timerfd, sendmsg/recvmsg, io_uring, clone), then item 6.
+Item 7 in progress. Running: `build-cost-passes.cub` (the erasure's fixed-point passes for
+`bc-s3`, `udp-echo-step`, `os-tour-step`, in both definition orders) and `build-cost-10.cub`;
+put their numbers in the table under Found. Then in `lib/os/linux.cub`: `lx-then` and every
+`case`/`if` whose result is a process written with the interpretation's arguments inside the
+branches (`λ R k h → case r of inl e → k (inl e); inr a → f a R k h`), the handler's cases on a
+response made cases on values; re-run the table; write the compiler-side fix (the commuting
+conversion in `normalize-held`) under Needs. Then item 5 (eventfd/timerfd, sendmsg/recvmsg,
+io_uring, clone), then item 6 (`lib/os/packet.cub`).

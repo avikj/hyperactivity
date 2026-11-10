@@ -1,0 +1,38 @@
+-- experiments/os/build-cost.cub — where #build's steps go (track D item 7; loaded after the
+-- library). bc-chain n is a process of n commands of Linux (n closes, the first error ending
+-- it, as real code over Linux is written); bc-s3 … bc-s10 are its steps at n = 3, 5, 7, 10.
+-- The stages of lib/elf.cub's build-plan are called one at a time, each under a #show of a
+-- size, so the steps of each line are that stage's and everything before it (a #show starts
+-- from nothing: the difference of two lines is one stage). build-cost-N.cub hold the #show
+-- lines for one N each, so that a run can be bounded.
+bc-chain : {l : Level} → Nat → Word → Proc {l} Linux (Sum Errno Word)
+bc-chain {l} zero acc = ret {l} {Linux} {Sum Errno Word} (inr acc)
+bc-chain {l} (suc n) acc = lx-then {l} {Unit} {Word} (lx {l} (lx-close acc)) (λ u → bc-chain {l} n (%wsucc acc))
+bc-s3 : Step W (Sum Errno Word)
+bc-s3 = to-step (linux-run {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lsuc lzero} 3 #3))
+bc-s5 : Step W (Sum Errno Word)
+bc-s5 = to-step (linux-run {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lsuc lzero} 5 #3))
+bc-s7 : Step W (Sum Errno Word)
+bc-s7 = to-step (linux-run {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lsuc lzero} 7 #3))
+bc-s10 : Step W (Sum Errno Word)
+bc-s10 = to-step (linux-run {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lsuc lzero} 10 #3))
+-- the stages (untyped, as lib/elf.cub's are)
+bc-g c = case c of cglob g → g; _ → #0
+bc-unf g = case unfold g of some c → c; none → cwlit #0
+bc-spec g = fst (specialize (%gty g) sched-default lnil (bc-unf g))
+bc-prog g = program-of g (bc-spec g) #256
+bc-forms g = x-forms-all (snd (bc-prog g))
+bc-defs g = x-erase g (bc-forms g)
+bc-conv g = conv (%gty g) (%gval g) (eval-g lnil (bc-spec g))
+bc-verdict g = case x-verdict (fst (bc-prog g)) (bc-defs g) of fo q → #1; not-fo w at → #0
+bc-enc g = xlen (encode-proc g (bc-defs g))
+-- sizes: the nodes of a program's codes, of the forms' codes, and the number of definitions
+bc-prog-size p = case p of lnil → #0; lcons e r → %wadd (code-size (snd e)) (bc-prog-size r)
+bc-forms-size p = case p of lnil → #0; lcons e r → %wadd (code-size (snd (snd e))) (bc-forms-size r)
+-- the erasure's fixed point (lib/x86.cub's x-rel-fix), its passes counted: (passes , needed set's size)
+bc-passes fuel R ars defs n = if %weq fuel #0 then (n , xlen R) else (let R2 = x-rel-step R ars defs in if %weq (xlen R2) (xlen R) then (%wsucc n , xlen R) else bc-passes (%wsub fuel #1) R2 ars defs (%wsucc n))
+bc-rel g defs0 = let ars = x-arities defs0 in bc-passes #64 (x-root-params (lcons g lnil) ars lnil) ars defs0 #0
+bc-rev l acc = case l of lnil → acc; lcons x r → bc-rev r (lcons x acc)
+-- the same with the definitions visited in the opposite order
+bc-rel-rev g defs0 = let ars = x-arities defs0 in bc-passes #64 (x-root-params (lcons g lnil) ars lnil) ars (bc-rev defs0 lnil) #0
+bc-params defs = case defs of lnil → #0; lcons e r → %wadd (fst (snd e)) (bc-params r)
