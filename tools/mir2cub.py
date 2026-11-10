@@ -561,7 +561,7 @@ class Mir:
             name = it.name.split('::')[-1]
             if not re.fullmatch(IDENT, name):
                 return []
-            ds = [m for m in re.finditer(r'\bfn\s+' + name + r'\s*(<)?', self.code_text)
+            ds = [m for m in re.finditer(r'\bfn\s+' + name + r'\b\s*(<)?', self.code_text)
                   if not any(a <= m.start() < b for (a, b) in self.item_blocks())]
             if len(ds) != 1:
                 stop('function declaration (%d declarations of this name outside impls in the source)' % len(ds), it.name)
@@ -572,7 +572,7 @@ class Mir:
         if imp.text.startswith('impl'):
             # a method's own parameters come after the impl's; they are not read yet
             a, b = self.block_after(imp.end_offset)
-            m = re.compile(r'\bfn\s+' + re.escape(it.method.split('::')[0]) + r'\s*(<)?').search(self.code_text, a, b)
+            m = re.compile(r'\bfn\s+' + re.escape(it.method.split('::')[0]) + r'\b\s*(<)?').search(self.code_text, a, b)
             if m is None:
                 stop('method declaration (not found in the impl block)', it.name)
             if m.group(1) and [g for g in split_top(self.code_text[m.end():self.code_text.index('>', m.end())]) if not g.strip().startswith("'")]:
@@ -1174,7 +1174,7 @@ class Layouts:
                     bits = INT_BITS[under]
                     v &= (1 << bits) - 1
                     discr = v - (1 << bits) if under.startswith('i') and v >> (bits - 1) else v
-                    vs.append((at_str(e, 'name'), discr & M64, v, []))
+                    vs.append((at_str(e, 'name'), discr, v, []))
             return (size, align, ('direct', 0, size), vs)
         vps = [x for x in d.kids if x.tag == 'variant_part']
         if not vps:
@@ -1209,7 +1209,7 @@ class Layouts:
                 discr = i
             else:
                 bits = 8 * tsize
-                discr = (dv - (1 << bits) if tname.startswith('i') and dv >> (bits - 1) else dv) & M64
+                discr = dv - (1 << bits) if tname.startswith('i') and dv >> (bits - 1) else dv
             vs.append((name, discr, dv, fs))
         return (size, align, ('niche' if untagged else 'direct', toff, tsize), vs)
 
@@ -1660,6 +1660,10 @@ class Emit:
             stop('integer (does not fit 64 bits)', str(n))
         return '#%d' % n
 
+    def int(self, v):
+        """a mathematical integer as RInt"""
+        return '(rint-neg %s)' % self.w(-v) if v < 0 else '(rint-pos %s)' % self.w(v)
+
     def lst(self, xs):
         s = 'nil'
         for x in reversed(xs):
@@ -1783,7 +1787,7 @@ class Emit:
         k = c[0]
         if k == 'int':
             self.imp.met('constant', 'integer')
-            return '(rc-int %s ri-%s)' % (self.w(c[1] & M64), c[2])
+            return '(rc-int %s ri-%s)' % (self.int(c[1]), c[2])
         if k == 'bool':
             self.imp.met('constant', 'bool')
             return '(rc-bool %s)' % ('true' if c[1] else 'false')
@@ -1916,7 +1920,23 @@ class Emit:
             return 'rt-unreachable'
         if k == 'switch':
             self.imp.met('terminator', 'SwitchInt')
-            arms = self.lst(['(rarm %s %s)' % (self.w(v & M64), self.w(b)) for (v, b) in t[2]])
+            # rustc prints an arm's value as the unsigned bits at the scrutinee's width; here it
+            # is the integer those bits are at the scrutinee's type
+            if t[1][0] == 'const':
+                stop('switchInt (on a constant)', it.name)
+            st = self.imp.place_ty(it, t[1][1])
+            if st[0] == 'bool':
+                bits, signed = 1, False
+            elif st[0] == 'int':
+                bits, signed = INT_BITS[st[1]], st[1].startswith('i')
+            else:
+                stop('switchInt (scrutinee of type %s)' % show_ty(st), it.name)
+            vals = []
+            for (v, b) in t[2]:
+                if v < 0 or v >> bits:
+                    stop('switchInt (arm value outside the scrutinee\'s width)', '%d in %s' % (v, it.name))
+                vals.append((v - (1 << bits) if signed and v >> (bits - 1) else v, b))
+            arms = self.lst(['(rarm %s %s)' % (self.int(v), self.w(b)) for (v, b) in vals])
             return '(rt-switch-int %s %s %s)' % (self.operand(it, t[1]), arms, self.w(t[3]))
         if k == 'call':
             self.imp.met('terminator', {'dyn': 'Call (dyn)', 'ptr': 'Call (function pointer)', 'fn': 'Call'}[t[1][0]])
@@ -1996,7 +2016,7 @@ class Emit:
             fl = self.lst(['(rfield %s %s %s)' % (self.name(fn), self.w(off), self.ty(ft)) for (fn, off, ft) in fs])
             vn = '%s-layout-%d-v%d' % (self.px, i, vi)
             self.define(vn, 'RVariantLayout', 'rvariant %s %s %s %s' % (
-                self.name(name), self.w(discr), 'rtv-none' if tv is None else '(rtv-some %s)' % self.w(tv), fl))
+                self.name(name), self.int(discr), 'rtv-none' if tv is None else '(rtv-some %s)' % self.w(tv), fl))
             vnames.append(vn)
         n = '%s-layout-%d' % (self.px, i)
         self.out.append('-- layout of %s: size %d, align %d' % (show_ty(t), size, align))

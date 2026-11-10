@@ -9,9 +9,10 @@
 --   ids        Word. Bodies, ADTs, traits and statics are numbered separately from 0, and an id
 --              is the position in the crate's list of that kind.
 --   names      RName, the bytes of the UTF-8 text, one Word per byte.
---   integers   the low 64 bits of the two's-complement value in a Word, beside its integer
---              type (so -3_i64 is #18446744073709551613 with ri-i64). 128-bit integers stop
---              the import.
+--   integers   RInt, the integer itself as sign and magnitude (the shape of lib/cxx/ast.cub's
+--              CInt), beside its type where it has one: -3_i64 is rc-int (rint-neg #3) ri-i64.
+--              A switch arm's value is the integer at the scrutinee's type (rustc prints the
+--              unsigned bits: 255 for -1 on an i8). 128-bit integer types stop the import.
 --   generics   the MIR rustc prints is before monomorphization. A body lists its generic
 --              parameters; inside it a parameter is rty-param / rty-const-param by position.
 --              A call carries the callee's generic arguments, an ADT type carries its own, and
@@ -21,6 +22,8 @@
 
 RName : Type
 RName = List Word
+
+data RInt = rint-pos (n : Word) | rint-neg (n : Word)
 
 data RMut = rmut-not | rmut-mut
 
@@ -59,7 +62,7 @@ data RPlace = rplace (local : Word) (proj : List RProj)
 
 -- Constants. rc-adt's fields are a list (rcs-nil / rcs-cons).
 data RConst
-  = rc-int (bits : Word) (k : RIntTy)
+  = rc-int (v : RInt) (k : RIntTy)
   | rc-bool (b : Bool)
   | rc-param (i : Word)                    -- a constant parameter of the enclosing body
   | rc-zst (ty : RTy)                      -- the one value of a zero-sized type
@@ -127,7 +130,7 @@ data RAssertMsg
   | rassert-remainder-by-zero (a : ROperand)
   | rassert-overflow (o : RBinOp) (a : ROperand) (b : ROperand)
 
-data RSwitchArm = rarm (value : Word) (bb : Word)
+data RSwitchArm = rarm (value : RInt) (bb : Word)
 
 data RTerm
   = rt-goto (bb : Word)
@@ -154,10 +157,10 @@ data RAdt = radt (name : RName) (kind : RAdtKind)
 
 -- Layout of a closed type (an ADT instance, a tuple or a closure), bytes.
 data RFieldLayout = rfield (name : RName) (offset : Word) (ty : RTy)
--- discr: what `discriminant` reads for the variant; tag: the value stored in the tag when the
--- variant is active, absent for the variant a niche encoding leaves untagged.
+-- discr: the integer `discriminant` reads for the variant; tag: the unsigned bits stored in the
+-- tag when the variant is active, absent for the variant a niche encoding leaves untagged.
 data RTagValue = rtv-none | rtv-some (v : Word)
-data RVariantLayout = rvariant (name : RName) (discr : Word) (tag : RTagValue) (fields : List RFieldLayout)
+data RVariantLayout = rvariant (name : RName) (discr : RInt) (tag : RTagValue) (fields : List RFieldLayout)
 data RTagLayout
   = rtag-none                                -- one variant, nothing stored
   | rtag-direct (offset : Word) (size : Word)   -- the tag holds the discriminant
