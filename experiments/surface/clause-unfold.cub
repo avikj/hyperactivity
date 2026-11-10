@@ -1,0 +1,39 @@
+-- Item 4: clauses at a declared type that only unfolds to a function type.
+-- (tracks/D-os.md, Found: lx-replaying : World Linux LxLog.)
+
+CuFn : Type → Type → Type
+CuFn A B = (a : A) → List B → Sum (B × A) A
+
+-- the parameters are those of CuFn's Π; the second is matched by constructor
+cu-step : CuFn Nat Nat
+cu-step c nil = inr c
+cu-step c (cons x rest) = inl (x , suc c)
+
+#same cu-step 3 (cons 7 nil) = inl (7 , 4)
+#same cu-step 3 nil = inr 3
+
+-- through two definitions, with parameters of its own before, and recursion
+CuFn2 : Type → Type
+CuFn2 A = CuFn A A
+
+cu-sum : (n : Nat) → CuFn2 Nat
+cu-sum n a nil = inr (plus n a)
+cu-sum n a (cons x rest) = cu-sum n (plus a x) rest
+
+#same cu-sum 1 0 (cons 2 (cons 3 nil)) = inr 6
+
+-- a binder of the unfolded type with the name of one of the definition's own parameters
+cu-clash : (a : Nat) → CuFn Nat Nat
+cu-clash a b nil = inr (plus a b)
+cu-clash a b (cons x r) = inl (x , a)
+
+#same cu-clash 1 2 nil = inr 3
+
+-- a type that does not unfold to a function type: refused, the load going on
+CuNat : Type
+CuNat = Nat
+
+#fail
+cu-bad : CuNat
+cu-bad zero = zero
+cu-bad (suc n) = n

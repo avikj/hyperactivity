@@ -500,8 +500,8 @@ static Node *p_atom(void) {
         while (P0()->k != X_RC) {
             Tok *f = NX(); if (f->k != X_ID) x_err("a field's name, found", f);
             int k; for (k = 0; k < R->nf && strcmp(R->fn[k], f->s); k++) ;
-            if (k == R->nf) x_err("not a field of the record:", f);
-            if (vals[k]) x_err("a field given twice:", f);
+            if (k == R->nf) x_sem("not a field of the record:", f);
+            if (vals[k]) x_sem("a field given twice:", f);
             want("="); vals[k] = p_expr(0);
             if (P0()->k == X_SEMI) NX(); else if (P0()->k != X_RC) x_err("expected ; or }, found", P0());
         }
@@ -932,6 +932,7 @@ static bool imp_at(Node *a, Node *pn) { return a->list && a->n == 2 && is(a->it[
 static TSig tsig;
 static Node *autobind(Node *sig);
 static void tele(Node *sig);
+static void tele_more(Lhs *ls, int ncl);
 static Node *clauses_typed(const char *f, Lhs *ls, Node **rhs, int n);
 static Node *clauses_wf(const char *f, Lhs *ls, Node **rhs, int n, Node *m, Node *L);
 static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint64_t mask, int mlen);
@@ -1268,20 +1269,20 @@ static void p_decl_in(void) {
          * lib/derive.cub (derive-eq) over the data table, checked and defined at D → D → Bool as
          * name (D·eq by default) (plan F31) */
         NX(); Tok *what = NX(); Tok *dn = NX();
-        if (!x_is(what, "eq") && !x_is(what, "Eq")) x_err("deriving eq D is what can be derived; found", what);
-        if (dn->k != X_ID || data_lookup(dn->s) < 0) x_err("deriving: not a data type:", dn);
+        if (!x_is(what, "eq") && !x_is(what, "Eq")) x_sem("deriving eq D is what can be derived; found", what);
+        if (dn->k != X_ID || data_lookup(dn->s) < 0) x_sem("deriving: not a data type:", dn);
         const char *nm = NULL;
         if (x_is(P0(), "as")) { NX(); nm = NX()->s; }
-        if (global_lookup("derive-eq") < 0) x_err("deriving needs lib/derive.cub loaded, for", dn);
+        if (global_lookup("derive-eq") < 0) x_sem("deriving needs lib/derive.cub loaded, for", dn);
         int di = -1; for (int i = 0; i < nchkdata; i++) if (CHKDATA[i] == data_lookup(dn->s)) di = i;
-        if (di < 0) x_err("deriving: the data type is not checked:", dn);
+        if (di < 0) x_sem("deriving: the data type is not checked:", dn);
         long steps = 0;
         char *r = readback(nl2("%%derive-eq", wordn(di)), &steps);
         const char *saved = src; src = r; Node *rn = read_node(); src = saved;
         Node *code = rn && rn->list && rn->n == 2 && is(rn->it[0], "some") ? rn->it[1] : NULL;
         ncn = 0; Node *term = code ? cn(code) : NULL;
         free(r);
-        if (!term) x_err("deriving eq: not derivable (a higher inductive type, or a field of a kind not covered):", dn);
+        if (!term) x_sem("deriving eq: not derivable (a higher inductive type, or a field of a kind not covered):", dn);
         char *name = nm ? strdup(nm) : NULL;
         if (!name) { name = malloc(strlen(dn->s) + 8); sprintf(name, "%s·eq", dn->s); }
         Node *D = nsym(dn->s);
@@ -1292,7 +1293,7 @@ static void p_decl_in(void) {
     }
     if (x_is(t, "module")) {
         NX(); Tok *mn = NX(); if (mn->k != X_ID) x_err("a module's name, found", mn);
-        if (cur_mod) x_err("a module inside a module:", mn);
+        if (cur_mod) x_sem("a module inside a module:", mn);
         Bnd bs[64]; int nb = p_binders(bs, 64, true);
         want("where"); wantk(X_VO, "a block of definitions");
         GROW(MODS, capmods, (size_t)nmods + 1); Module *m = &MODS[nmods++];
@@ -1306,7 +1307,7 @@ static void p_decl_in(void) {
     }
     if (x_is(t, "open")) {
         /* open M a b: each member of M, at the arguments */
-        NX(); Tok *mn = NX(); Module *m = mod_of(mn->s); if (!m) x_err("not a module:", mn);
+        NX(); Tok *mn = NX(); Module *m = mod_of(mn->s); if (!m) x_sem("not a module:", mn);
         Node *given[64]; int ng = 0;
         while (P0()->k != X_VS && P0()->k != X_VC && P0()->k != X_EOF && P0()->k != X_SEMI && ng < 64) given[ng++] = p_atom();
         /* the arguments at the parameters: an implicit one {a} where given, else a hole */
@@ -1314,9 +1315,9 @@ static void p_decl_in(void) {
         for (int i = 0; i < m->np; i++) {
             bool gimp = gi < ng && given[gi]->list && given[gi]->n == 2 && is(given[gi]->it[0], "%imp");
             if (m->ps[i].imp) args[i] = gimp ? given[gi++]->it[1] : nsym("%hole");
-            else { if (gi >= ng || gimp) x_err("open: the module's parameters are not all given, after", mn); args[i] = given[gi++]; }
+            else { if (gi >= ng || gimp) x_sem("open: the module's parameters are not all given, after", mn); args[i] = given[gi++]; }
         }
-        if (gi != ng) x_err("open: more arguments than the module's parameters, after", mn);
+        if (gi != ng) x_sem("open: more arguments than the module's parameters, after", mn);
         /* an implicit parameter not given: the type of an explicit argument whose parameter's type
          * is that parameter (open Pair true: A is Bool) */
         for (int i = 0; i < m->np; i++) if (m->ps[i].imp && !args[i]->list && !strcmp(args[i]->s, "%hole"))
@@ -1407,7 +1408,7 @@ static void p_decl_in(void) {
                 ls[n] = lhs_of(lh); rs[n++] = p_rhs();
                 if (P0()->k == X_VS) NX(); else break;
             }
-            if (!n) x_err("a signature without clauses in a mutual block:", P0());
+            if (!n) x_sem("a signature without clauses in a mutual block:", P0());
             tele(sg);
             Node *body = ls[0].field ? copattern_wrap(copattern_clauses(l->s, ls, rs, n, true)) : clauses_typed(l->s, ls, rs, n);
             Node *T, *bt; el_once(sg, body, &T, &bt);
@@ -1447,12 +1448,12 @@ static void p_decl_in(void) {
         want("=");
         Node *h = p_expr(0);
         if (!wt && !h->list) wt = sig_of(h->s);
-        if (!wt) x_err("world: give the handler's type (world \"name\" : World S St = handler), at", st);
+        if (!wt) x_sem("world: give the handler's type (world \"name\" : World S St = handler), at", st);
         /* the arguments of World in wt, flattened from a curried or a spine application */
         Node *args[8]; int na = 0; Node *w = wt;
         while (w->list && w->n == 2 && na < 8) { args[na++] = w->it[1]; w = w->it[0]; }
         if (w->list && w->n == 3 && !w->it[0]->list && !strcmp(w->it[0]->s, "World")) { args[na++] = w->it[2]; args[na++] = w->it[1]; w = w->it[0]; }
-        if (w->list || strcmp(w->s, "World") || na != 2) x_err("world: the handler's type is World S St, at", st);
+        if (w->list || strcmp(w->s, "World") || na != 2) x_sem("world: the handler's type is World S St, at", st);
         uint32_t hsh = 2166136261u; for (const unsigned char *q = (const unsigned char *)st->s; *q; q++) { hsh ^= *q; hsh *= 16777619u; }
         char idn[40]; snprintf(idn, sizeof idn, "#%u", hsh);
         char nm[256], nmi[256]; snprintf(nm, sizeof nm, "world-%s", st->s); snprintf(nmi, sizeof nmi, "world-%s-id", st->s);
@@ -1513,10 +1514,10 @@ static void p_decl_in(void) {
         NX(); Tok *fn[4]; int ck[4];
         for (int i = 0; i < 4; i++) {
             fn[i] = NX(); if (fn[i]->k != X_ID) x_err("#build-loop init step copy copy-id \"file\": a checked definition expected, found", fn[i]);
-            ck[i] = checked_index(fn[i]->s); if (ck[i] < 0) x_err("#build-loop: not a checked definition:", fn[i]);
+            ck[i] = checked_index(fn[i]->s); if (ck[i] < 0) x_sem("#build-loop: not a checked definition:", fn[i]);
         }
         Tok *pt = NX(); if (pt->k != X_STR) x_err("#build-loop: the file to write, a string, expected after", fn[3]);
-        if (global_lookup("build-loop-plan") < 0) x_err("#build-loop needs lib/elf.cub loaded, for", fn[0]);
+        if (global_lookup("build-loop-plan") < 0) x_sem("#build-loop needs lib/elf.cub loaded, for", fn[0]);
         if (!checked_type_plain(ck[0])) { failures++; printf("FAIL: build-loop %s: its type is not first-order data without byte strings\n", fn[0]->s); decl_end(); return; }
         long steps = 0;
         Node *call = nlist(5); call->it[0] = nsyml("%%build-loop-plan"); for (int i = 0; i < 4; i++) call->it[i + 1] = wordn(ck[i]);
@@ -1529,7 +1530,7 @@ static void p_decl_in(void) {
             grp[ng++] = cur->it[1]; cur = cur->it[2];
         }
         free(r);
-        if (ng != 3) x_err("#build-loop: the plan did not read back, for", fn[1]);
+        if (ng != 3) x_sem("#build-loop: the plan did not read back, for", fn[1]);
         Node *v = grp[0];
         if (v->list && v->n >= 2 && !v->it[0]->list && !strcmp(v->it[0]->s, "not-fo")) {
             failures++; printf("FAIL: build-loop %s: not compilable: %s   [%ld steps]\n", fn[1]->s, v->it[1]->list ? "?" : v->it[1]->s, steps);
@@ -1539,7 +1540,7 @@ static void p_decl_in(void) {
             failures++; printf("FAIL: build-loop %s: the types are not init : St, step : St → Step W St, copy : St → St, copy-id : (s : St) → copy s ≡ s, or a specialized code does not convert with its definition   [%ld steps]\n", fn[1]->s, steps);
             decl_end(); return;
         }
-        FILE *o = fopen(pt->s, "wb"); if (!o) x_err("#build-loop: the file cannot be written:", pt);
+        FILE *o = fopen(pt->s, "wb"); if (!o) x_sem("#build-loop: the file cannot be written:", pt);
         size_t len = 0;
         for (Node *cur = grp[2]; cur->list && cur->n == 3 && !cur->it[0]->list && !strcmp(cur->it[0]->s, "lcons"); cur = cur->it[2]) { fputc((int)atol(cur->it[1]->s + 1), o); len++; }
         fclose(o); chmod(pt->s, 0755);
@@ -1552,9 +1553,9 @@ static void p_decl_in(void) {
          * by the checker's conversion against s, then encoded with the driver loop as machine code.
          * Nothing is written unless the program compiles and the check holds */
         NX(); Tok *fn = NX(); if (fn->k != X_ID) x_err("#build names a checked definition, found", fn);
-        int ck = checked_index(fn->s); if (ck < 0) x_err("#build: not a checked definition:", fn);
+        int ck = checked_index(fn->s); if (ck < 0) x_sem("#build: not a checked definition:", fn);
         Tok *pt = NX(); if (pt->k != X_STR) x_err("#build: the file to write, a string, expected after", fn);
-        if (global_lookup("build-plan") < 0) x_err("#build needs lib/elf.cub loaded, for", fn);
+        if (global_lookup("build-plan") < 0) x_sem("#build needs lib/elf.cub loaded, for", fn);
         long steps = 0;
         char *r = readback(nl2("%%build-plan", wordn(ck)), &steps);
         const char *saved = src; src = r; Node *rn = read_node(); src = saved;
@@ -1565,7 +1566,7 @@ static void p_decl_in(void) {
             grp[ng++] = cur->it[1]; cur = cur->it[2];
         }
         free(r);
-        if (ng != 3) x_err("#build: the plan did not read back, for", fn);
+        if (ng != 3) x_sem("#build: the plan did not read back, for", fn);
         Node *v = grp[0];
         if (v->list && v->n >= 2 && !v->it[0]->list && !strcmp(v->it[0]->s, "not-fo")) {
             failures++; printf("FAIL: build %s: not compilable: %s   [%ld steps]\n", fn->s, v->it[1]->list ? "?" : v->it[1]->s, steps);
@@ -1575,7 +1576,7 @@ static void p_decl_in(void) {
             failures++; printf("FAIL: build %s: the specialized code does not convert with %s   [%ld steps]\n", fn->s, fn->s, steps);
             decl_end(); return;
         }
-        FILE *o = fopen(pt->s, "wb"); if (!o) x_err("#build: the file cannot be written:", pt);
+        FILE *o = fopen(pt->s, "wb"); if (!o) x_sem("#build: the file cannot be written:", pt);
         size_t len = 0;
         for (Node *cur = grp[2]; cur->list && cur->n == 3 && !cur->it[0]->list && !strcmp(cur->it[0]->s, "lcons"); cur = cur->it[2]) { fputc((int)atol(cur->it[1]->s + 1), o); len++; }
         fclose(o); chmod(pt->s, 0755);
@@ -1591,16 +1592,16 @@ static void p_decl_in(void) {
          * data the bytes compute f, on anything else (and past 2^64 in a word operation) f's
          * definition does. Trusted: the encoder's templates (PLAN §13 item 3) and the boundary */
         NX(); Tok *fn = NX(); if (fn->k != X_ID) x_err("#jit names a checked definition, found", fn);
-        int ck = checked_index(fn->s); if (ck < 0) x_err("#jit: not a checked definition:", fn);
+        int ck = checked_index(fn->s); if (ck < 0) x_sem("#jit: not a checked definition:", fn);
         long ths[64]; int nth = 0;
         if (x_is(P0(), "using") && P0()->line == fn->line) {
             NX();
             while (P0()->k == X_ID && P0()->line == fn->line) {
-                Tok *tn = NX(); int tk = checked_index(tn->s); if (tk < 0) x_err("#jit … using: not a checked theorem:", tn);
+                Tok *tn = NX(); int tk = checked_index(tn->s); if (tk < 0) x_sem("#jit … using: not a checked theorem:", tn);
                 if (nth < 64) ths[nth++] = tk;
             }
         }
-        if (global_lookup("jit-plan") < 0) x_err("#jit needs lib/x86.cub loaded, for", fn);
+        if (global_lookup("jit-plan") < 0) x_sem("#jit needs lib/x86.cub loaded, for", fn);
         for (int attempt = 0; attempt < 2; attempt++) {
             int nt = attempt ? 0 : nth;
             Node *rl = nsym("lnil"); for (int i = nt - 1; i >= 0; i--) rl = lst(3, nsym("lcons"), wordn(ths[i]), rl);
@@ -1615,7 +1616,7 @@ static void p_decl_in(void) {
                 grp[ng++] = cur->it[1]; cur = cur->it[2];
             }
             free(r);
-            if (ng != 5) x_err("#jit: the plan did not read back, for", fn);
+            if (ng != 5) x_sem("#jit: the plan did not read back, for", fn);
             Node *v = grp[0];
             if (v->list && v->n >= 2 && !v->it[0]->list && !strcmp(v->it[0]->s, "not-fo")) {
                 printf("jit: %s stays on the net: %s   [%ld steps]\n", fn->s, v->it[1]->list ? "?" : v->it[1]->s, steps);
@@ -1685,7 +1686,7 @@ static void p_decl_in(void) {
     Node *sig = NULL;
     if (at(":")) {
         if (lhs->list) x_err("a signature names one thing, found", P0());
-        if (!x_typed) x_err("a signature, before the checker is loaded:", P0());
+        if (!x_typed) x_sem("a signature, before the checker is loaded:", P0());
         NX(); sig = p_expr(0);
         if (P0()->k != X_VS) x_err("a signature is followed by its definition, found", P0());
         NX();
@@ -1714,8 +1715,8 @@ static void p_decl_in(void) {
      * references to the module's members applied to them */
     if (cur_mod) {
         Module *m = cur_mod;
-        if (!sig) x_err("a module's definitions have signatures:", P0());
-        if (l0.field) x_err("a copattern definition inside a module is not supported:", P0());
+        if (!sig) x_sem("a module's definitions have signatures:", P0());
+        if (l0.field) x_sem("a copattern definition inside a module is not supported:", P0());
         Node *osig = mod_subst(m, sig);
         char *q = mod_qual(m, l0.f);
         mod_member(m, q, osig, pending_instance);
@@ -1741,7 +1742,7 @@ static void p_decl_in(void) {
                 NX(); if (!x_is(P0(), "by")) x_err("decreasing by a measure: expected by, found", P0());
                 NX(); dec_m = p_expr(0);
                 if (x_is(P0(), "using")) { NX(); dec_l = p_expr(0); }
-                if (!sig) x_err("decreasing by needs a signature (its parameters' names), for", P0());
+                if (!sig) x_sem("decreasing by needs a signature (its parameters' names), for", P0());
             } else xp = save;
         }
     }
@@ -1759,7 +1760,8 @@ static void p_decl_in(void) {
         Node *sg = autobind(resolve_keep(sig));
         tele(sg);
         uint64_t mask = 0; for (int q = 0; q < tsig.np && q < 64; q++) if (tsig.imp[q]) mask |= 1ull << q;
-        for (int i = 0; i < n; i++) if (strcmp(ls[i].f, l0.f)) x_err("a clause of another definition after a signature:", P0());
+        for (int i = 0; i < n; i++) if (strcmp(ls[i].f, l0.f)) x_sem("a clause of another definition after a signature:", P0());
+        tele_more(ls, n);
         Node *body = dec_m ? clauses_wf(l0.f, ls, rs, n, dec_m, dec_l) : clauses_typed(l0.f, ls, rs, n);
         x_checked(l0.f, sg, body, !fail, mask, tsig.np);
     } else def_untyped(l0.f, clauses_untyped(l0.f, ls, rs, n));
@@ -4742,6 +4744,82 @@ static void tele(Node *sig) {
     }
     tsig.R = t;
 }
+/* A signature whose result is a defined name applied, the clauses giving more patterns than it has
+ * parameters (lx : World Linux St, lx c st = …): the name unfolded while its definition is λs over
+ * a Π, and that Π's parameters taken as the definition's. Only where the parameters are found
+ * changes: the definition is checked at the signature as written, so a wrong unfolding (a binder
+ * deeper in the definition capturing an argument's name) is a failed check, never an accepted one. */
+typedef struct { char *name; Node *body; } BodE;
+static BodE *BODS; static int nbods; static size_t capbods;
+static void body_set(const char *n, Node *b) { GROW(BODS, capbods, (size_t)nbods + 1); BODS[nbods++] = (BodE){ strdup(n), b }; }
+static Node *body_of(const char *n) { for (int i = nbods - 1; i >= 0; i--) if (!strcmp(BODS[i].name, n)) return BODS[i].body; return NULL; }
+static Node *sig_unfold(Node *R) {
+    Node *h = R->list ? (R->n ? R->it[0] : NULL) : R;
+    if (!h || h->list) return NULL;
+    for (int q = 0; q < tsig.np; q++) if (!strcmp(tsig.pn[q]->s, h->s)) return NULL;
+    Node *S = sig_of(h->s), *b = body_of(h->s);
+    if (!S || !b || checked_index(h->s) < 0) return NULL;
+    const char *ps[64]; Node *vs[64]; int np = 0, i = 1, na = R->list ? R->n : 1;
+    for (;;) {
+        bool imp = false;
+        if (S->list && S->n == 2 && is(S->it[0], "%impPi")) { imp = true; S = S->it[1]; }
+        if (!(S->list && S->n == 4 && is(S->it[0], "Pi"))) break;
+        if (!(b->list && b->n == 3 && !b->it[0]->list && (is(b->it[0], "%lam") || is(b->it[0], "lam")) && !b->it[1]->list)) break;
+        if (np == 64) return NULL;
+        Node *given = i < na ? R->it[i] : NULL;
+        bool gimp = given && given->list && given->n == 2 && !given->it[0]->list && is(given->it[0], "%imp");
+        if (imp) { vs[np] = gimp ? given->it[1] : nsym("%hole"); if (gimp) i++; }
+        else { if (!given || gimp) break; vs[np] = given; i++; }
+        ps[np++] = b->it[1]->s;
+        S = S->it[3]; b = b->it[2];
+    }
+    if (i != na) return NULL;   /* applied to more or to fewer than its λs */
+    /* the leading binders of the unfolding, renamed */
+    Node *lead[64]; bool limp[64]; int nl = 0; Node *x = b;
+    for (; nl < 64; nl++) {
+        bool imp = false; Node *y = x;
+        if (y->list && y->n == 2 && is(y->it[0], "%impPi")) { imp = true; y = y->it[1]; }
+        if (!(y->list && y->n == 4 && is(y->it[0], "Pi")) || y->it[1]->list) break;
+        Node *bn = y->it[1], *A = y->it[2], *B = y->it[3];
+        /* (a name the clauses cannot write: none of their variables, and no argument's, is captured;
+         * a parameter all clauses name alike takes that name when the type does not mention it) */
+        { Node *f = xfresh("u"); B = subst_sym(B, bn->s, f); bn = f; }
+        lead[nl] = sym3("Pi", bn, A); limp[nl] = imp; x = B;
+    }
+    for (int k = nl - 1; k >= 0; k--) { x = sym4("Pi", lead[k]->it[1], lead[k]->it[2], x); if (limp[k]) x = sym2("%impPi", x); }
+    return np ? subst_multi(x, ps, vs, np) : x;
+}
+static void tele_more(Lhs *ls, int ncl) {
+    /* only when a clause matches past the signature's parameters by a constructor or a numeral
+     * (patterns that are all variables are the result's own λs, as before) */
+    {
+        int have = 0; for (int q = 0; q < tsig.np; q++) if (!tsig.imp[q]) have++;
+        bool con = false;
+        for (int c = 0; c < ncl; c++) { int e = 0; for (int k = 0; k < ls[c].np; k++) { Node *pt = ls[c].ps[k]; if (pt->list && pt->n == 2 && is(pt->it[0], "%imp")) continue; if (e++ >= have && (pt->list || pat_con(pt) >= 0)) con = true; } }
+        if (!con) return;
+    }
+    int ne = 0; for (int k = 0; k < ls[0].np; k++) if (!(ls[0].ps[k]->list && ls[0].ps[k]->n == 2 && is(ls[0].ps[k]->it[0], "%imp"))) ne++;
+    for (int round = 0; round < 16; round++) {
+        int have = 0; for (int q = 0; q < tsig.np; q++) if (!tsig.imp[q]) have++;
+        if (ne <= have) return;
+        Node *t = sig_unfold(tsig.R);
+        if (!t) return;
+        int add = 0; Node *x = t;
+        for (;;) { if (x->list && x->n == 2 && is(x->it[0], "%impPi")) x = x->it[1]; if (!(x->list && x->n == 4 && is(x->it[0], "Pi"))) break; add++; x = x->it[3]; }
+        int n = tsig.np;
+        Node **pn = calloc((size_t)n + add + 1, sizeof(Node *)), **pty = calloc((size_t)n + add + 1, sizeof(Node *)); bool *imp = calloc((size_t)n + add + 1, sizeof(bool));
+        for (int q = 0; q < n; q++) { pn[q] = tsig.pn[q]; pty[q] = tsig.pty[q]; imp[q] = tsig.imp[q]; }
+        x = t;
+        for (;;) {
+            bool im = false;
+            if (x->list && x->n == 2 && is(x->it[0], "%impPi")) { im = true; x = x->it[1]; }
+            if (!(x->list && x->n == 4 && is(x->it[0], "Pi"))) break;
+            pn[n] = x->it[1]; pty[n] = x->it[2]; imp[n] = im; n++; x = x->it[3];
+        }
+        tsig.pn = pn; tsig.pty = pty; tsig.imp = imp; tsig.np = n; tsig.R = t;
+        { Node *y = t; for (;;) { if (y->list && y->n == 2 && is(y->it[0], "%impPi")) y = y->it[1]; if (!(y->list && y->n == 4 && is(y->it[0], "Pi"))) break; y = y->it[3]; } tsig.R = y; }
+    }
+}
 /* does every call of f in e give, at parameter q, the clause's own variable there? */
 static bool uniform_in(Node *e, const char *f, int q, Node *pat) {
     if (!e->list) return strcmp(e->s, f) != 0;
@@ -5062,6 +5140,7 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
     if (name && mask) imask_set(name, mask, mlen);
     if (name && mask) imask_inst(name, sig);
     if (name) sig_set(name, sig);
+    if (name) body_set(name, body);
     if (name && pending_instance) { inst_add(name, sig); pending_instance = false; }
     if (name) {
         Node *h = body;
@@ -5188,7 +5267,7 @@ static void el_once(Node *sig, Node *body, Node **T, Node **t) { neh = neg = 0; 
 /* foreign name "symbol" : T (D27): see p_decl */
 static void x_foreign(const char *nm, Tok *st, Node *sig, Tok *nt) {
     Node *sg = autobind(resolve_keep(sig)); tele(sg);
-    if (tsig.np && tsig.imp[0]) x_err("a foreign function's type has no implicit arguments:", nt);
+    if (tsig.np && tsig.imp[0]) x_sem("a foreign function's type has no implicit arguments:", nt);
     neh = neg = 0; nbk = 0; nesc = 0;
     Node *T = strip_marks(core(el(sg)));
     unsigned char kind[8]; int n = 0; Node *xs[8]; int nx = 0;
@@ -5198,23 +5277,23 @@ static void x_foreign(const char *nm, Tok *st, Node *sig, Tok *nt) {
         if (!(x->list && x->n == 4 && is(x->it[0], "Pi"))) break;
         Node *xn = x->it[1], *A = x->it[2];
         int m = bnd_mult(xn);
-        if (nx == 8) x_err("foreign: at most 8 arguments, in", nt);
+        if (nx == 8) x_sem("foreign: at most 8 arguments, in", nt);
         passed[nx] = m != 0;
         if (m != 0) {
             int k = -1;
             if (!A->list) k = !strcmp(A->s, "Int64") ? PT_I64 : !strcmp(A->s, "UInt32") ? PT_U32 : !strcmp(A->s, "Float64") ? PT_F64 : !strcmp(A->s, "Word") || !strcmp(A->s, "UInt64") ? 4 : -1;
             else if (A->n == 2 && is(A->it[0], "Bytes")) k = PT_BYTES;
-            if (k < 0) x_err("foreign: an argument's type is Int64, UInt32, Float64, Word or Bytes n (or at multiplicity 0), in", nt);
+            if (k < 0) x_sem("foreign: an argument's type is Int64, UInt32, Float64, Word or Bytes n (or at multiplicity 0), in", nt);
             kind[n++] = (unsigned char)k;
         }
         xs[nx++] = xn;
         x = x->it[3];
     }
     int ret = !x->list ? (!strcmp(x->s, "Int64") ? PT_I64 : !strcmp(x->s, "UInt32") ? PT_U32 : !strcmp(x->s, "Float64") ? PT_F64 : !strcmp(x->s, "Word") || !strcmp(x->s, "UInt64") ? 4 : -1) : -1;
-    if (ret < 0) x_err("foreign: the result type is Int64, UInt32, Float64 or Word, in", nt);
-    if (n < 1 || n > 6) x_err("foreign: one to six arguments passed, in", nt);
-    bool dbl = ret == PT_F64; for (int i = 0; i < n; i++) if ((kind[i] == PT_F64) != dbl) x_err("foreign: every argument and the result are doubles, or none is, in", nt);
-    if (dbl && n > 4) x_err("foreign: at most four double arguments, in", nt);
+    if (ret < 0) x_sem("foreign: the result type is Int64, UInt32, Float64 or Word, in", nt);
+    if (n < 1 || n > 6) x_sem("foreign: one to six arguments passed, in", nt);
+    bool dbl = ret == PT_F64; for (int i = 0; i < n; i++) if ((kind[i] == PT_F64) != dbl) x_sem("foreign: every argument and the result are doubles, or none is, in", nt);
+    if (dbl && n > 4) x_sem("foreign: at most four double arguments, in", nt);
     char *sym = strdup(st->s[0] == '"' ? st->s + 1 : st->s); size_t sl = strlen(sym); if (sl && sym[sl - 1] == '"') sym[sl - 1] = 0;
     int k = ffi_add(sym, n, kind, (unsigned char)ret);
     /* the computation: λ over every argument, the call over the passed ones */
@@ -5232,10 +5311,10 @@ static void x_primitive(const char *nm, bool tick, Node *sig, Node *b, Tok *nt) 
     sig_set(nm, sg);
     neh = neg = 0; nbk = 0; nesc = 0;
     Node *T = core(el(sg));
-    if (has_hole(T)) x_err("a primitive's type gives every argument (no implicit argument left to find), in", nt);
+    if (has_hole(T)) x_sem("a primitive's type gives every argument (no implicit argument left to find), in", nt);
     T = strip_marks(T);
     if (b) x_top(lst(4, nsym(tick ? "primitive-tick" : "primitive"), nsym(nm), T, b));
-    else { if (tick) x_err("a tick primitive needs its computation", nt); x_top(lst(3, nsym("primitive"), nsym(nm), T)); }
+    else { if (tick) x_sem("a tick primitive needs its computation", nt); x_top(lst(3, nsym("primitive"), nsym(nm), T)); }
 }
 /* a term to read (#show, #same) in a checked file: elaborated, its implicit arguments found by
  * inferring its type */

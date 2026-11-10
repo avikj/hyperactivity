@@ -1,0 +1,36 @@
+-- Item 5: an error in one definition is that definition's failure; the load goes on.
+-- After the eight core files the last line is `160 passed, 5 failed` (from the cache; the five FAILs are below, each an error that ended the load).
+
+fl-a : Nat → Nat
+fl-a n = suc n
+
+-- the clause compiler: no structural argument
+fl-bad1 : Nat → List Nat → Nat
+fl-bad1 n nil = n
+fl-bad1 n (cons x r) = fl-bad1 (suc n) (cons x r)
+
+-- the clause compiler: fewer patterns than the other clause
+fl-bad2 : Nat → Nat → Nat
+fl-bad2 zero m = m
+fl-bad2 (suc n) = fl-bad2 n
+
+-- the clause compiler: a case missing
+fl-bad3 : Nat → Nat
+fl-bad3 (suc n) = n
+
+-- a name bound twice
+fl-a : Nat → Nat
+fl-a n = n
+
+-- a command that names nothing checked
+deriving eq NoSuchType
+
+fl-b : Nat → Nat
+fl-b n = fl-a (fl-a n)
+
+#same fl-b 1 = 3
+
+#fail
+fl-bad4 : Nat → Nat → Nat
+fl-bad4 zero m = m
+fl-bad4 (suc n) = fl-bad4 n
