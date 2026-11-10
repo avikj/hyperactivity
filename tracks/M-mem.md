@@ -75,6 +75,17 @@ the result type of this layer is `MRes`, not `Res`.
   `tg-char-signed`, `tg-ptr-int`, `tg-alloc-align`, `tg-base`), and three values: `x86-64-sysv`,
   `i386-sysv` (ILP32, no 128-bit integer), `s390x-elf` (big-endian, char unsigned). Loads after
   the cached library: 785 passed, 0 failed (18 new checks, 23,789 steps).
+- `lib/mem/scalar.cub`, first part (879 passed, 0 failed after target.cub; 94 new checks):
+  `UB`, `Stop`, `MRes` (`mok | mub | mstop`, `mr-bind`, `mr-map`); `IW`, `SK`, `MPtr`, `SV`;
+  64-bit helpers (`uq-*`: canonical forms `uq-zx`/`uq-sx`/`uq-cn`); 128-bit arithmetic on
+  `DQ = UInt64 × UInt64` (`dq-add/sub/mul/shl/shr/sar/udivmod/sdiv/srem`, `uq-mulw`);
+  integers: `int-op` (`BinOp`: add sub mul div rem and or xor, at every width and sign, with
+  `ub-signed-overflow`, `ub-div-zero`, `ub-div-overflow`), `int-neg`, `int-not`, `int-shl`
+  (modular), `int-shl-c` (C17's), `int-shr`, `int-cmp` (`CmpOp`), `sv-int-dq`/`dq-to-int`
+  (the two halves of every integer conversion). Read by `#show`: INT_MAX + 1 at i32 is
+  `mub ub-signed-overflow`; 2^32·2^32 at i64 overflows and −2^32·2^31 is −2^63; i32 MIN / −1 is
+  `mub ub-div-overflow`; 2^126·2 at i128 overflows; `1 << 32` at i32 is `mub ub-shift-count`;
+  a 128-bit division is about 43,000 net steps.
 
 ## Found
 
@@ -89,8 +100,8 @@ the result type of this layer is `MRes`, not `Res`.
 
 ## Next step
 
-Write `lib/mem/scalar.cub`: `IW`, `SK`, `MPtr`, `SV`, `UB`, `Stop`, `MRes`; the 64-bit helpers
-(masks, sign extension), the 128-bit arithmetic on pairs of `UInt64`; `sv-conv` (integer
-conversions between every pair of kinds) first; then arithmetic, shifts, comparisons, floats;
-then the C types `CTy` with promotions and the usual arithmetic conversions as functions of
-`Target`. Check with the command above, commit when it ends `N passed, 0 failed`.
+Continue `lib/mem/scalar.cub` after `int-cmp`: floats (`fp-pack`: an integer magnitude times a
+power of two rounded to nearest-even into binary32/binary64 bits; f32↔f64; f32 arithmetic through
+f64; float↔integer conversions with `ub-float-int-range`), then `sv-conv` (every pair of kinds),
+`sv-arith`/`sv-cmp`/`sv-shl`/`sv-shr`/`sv-neg`/`sv-not` by kind, pointer comparison, then the C
+types `CTy` with promotions and the usual arithmetic conversions as functions of `Target`.

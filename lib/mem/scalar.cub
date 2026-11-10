@@ -1,0 +1,491 @@
+-- lib/mem/scalar.cub — scalar kinds, scalar values and their total semantics. Loaded after
+-- lib/mem/target.cub. Every operation is a function into MRes: a value, or undefined behaviour
+-- with its reason, or a stop (the meaning is not given: the reason says why). Nothing here
+-- depends on a language: C and C++ reach the kinds through their types and a Target (the last
+-- section), Rust and Go name the kinds directly.
+--
+-- Binding time (PLAN §5.4): every operation takes the kind first and is a case on it, so at a
+-- fixed program (kinds known) what remains is arithmetic on UInt64/Float64 values.
+
+-- ---------------------------------------------------------------- outcomes
+-- why a behaviour is undefined (each constructor is one rule of the abstract machine)
+data UB = ub-signed-overflow | ub-div-zero | ub-div-overflow | ub-shift-count | ub-shift-negative
+        | ub-float-int-range | ub-out-of-bounds | ub-dead | ub-misaligned | ub-uninit
+        | ub-double-free | ub-free-not-dynamic | ub-free-interior | ub-null | ub-fn-as-object
+        | ub-ptr-arith | ub-ptr-compare | ub-ptr-sub | ub-bad-bool | ub-overlap | ub-no-return
+-- why a meaning stops without being undefined: the loop fuel ran out; the Target does not offer
+-- what was asked (a 128-bit integer on i386, a pointer↔integer conversion under pi-refused); an
+-- operation was applied at a kind it has no meaning at (a reader's error, not the program's:
+-- adding pointers, a value whose constructor is not the kind's)
+data Stop = st-fuel | st-unsupported | st-ill-typed
+data MRes (A : Type) = mok (a : A) | mub (why : UB) | mstop (why : Stop)
+mr-bind : {A B : Type} → MRes A → (A → MRes B) → MRes B
+mr-bind r f = case r of
+  mok a → f a
+  mub w → mub w
+  mstop w → mstop w
+mr-map : {A B : Type} → (A → B) → MRes A → MRes B
+mr-map f r = case r of
+  mok a → mok (f a)
+  mub w → mub w
+  mstop w → mstop w
+
+-- ---------------------------------------------------------------- kinds and values
+-- integer widths; a kind: an integer (signed or not) of a width, bool, the two binary floats, a pointer
+data IW = iw8 | iw16 | iw32 | iw64 | iw128
+data SK = sk-int (sg : Bool) (w : IW) | sk-bool | sk-f32 | sk-f64 | sk-ptr
+-- a pointer: null, a place in an allocation (its id and a byte offset), or a function (its id)
+data MPtr = mp-null | mp-obj (a : Word) (off : Word) | mp-fn (f : Word)
+-- a value. An integer of at most 64 bits is sv-i of its value extended to 64 bits (by its sign
+-- when the kind is signed, by zeros otherwise): the canonical form every operation keeps. A
+-- 128-bit integer is its two halves.
+data SV = sv-i (v : UInt64) | sv-w (lo : UInt64) (hi : UInt64) | sv-b (b : Bool)
+        | sv-f (x : Float32) | sv-d (x : Float64) | sv-p (p : MPtr)
+
+-- ---------------------------------------------------------------- booleans and 64-bit helpers
+m-and : Bool → Bool → Bool
+m-and a b = case a of
+  true → b
+  false → false
+m-or : Bool → Bool → Bool
+m-or a b = case a of
+  true → true
+  false → b
+uq0 : UInt64
+uq0 = u64 #0
+uq1 : UInt64
+uq1 = u64 #1
+uq-ones : UInt64
+uq-ones = u64 #18446744073709551615
+uq-top : UInt64
+uq-top = u64 #9223372036854775808
+uq-b : Bool → UInt64
+uq-b b = case b of
+  true → uq1
+  false → uq0
+uq-not : UInt64 → UInt64
+uq-not x = u64xor x uq-ones
+uq-neg : UInt64 → UInt64
+uq-neg x = u64sub uq0 x
+uq-isneg : UInt64 → Bool
+uq-isneg x = not (u64lt x uq-top)
+uq-slt : UInt64 → UInt64 → Bool
+uq-slt a b = u64lt (u64xor a uq-top) (u64xor b uq-top)
+uq-iszero : UInt64 → Bool
+uq-iszero x = u64eq x uq0
+-- arithmetic shift right by a count below 64
+uq-sar : UInt64 → UInt64 → UInt64
+uq-sar x n = u64or (u64shr x n) (case uq-isneg x of
+  true → uq-not (u64shr uq-ones n)
+  false → uq0)
+-- the width in bits, the mask of a width's bits, its sign bit (for 128 bits: of a half)
+iw-bits : IW → UInt64
+iw-bits w = case w of
+  iw8 → u64 #8
+  iw16 → u64 #16
+  iw32 → u64 #32
+  iw64 → u64 #64
+  iw128 → u64 #128
+iw-bytes : IW → Word
+iw-bytes w = case w of
+  iw8 → #1
+  iw16 → #2
+  iw32 → #4
+  iw64 → #8
+  iw128 → #16
+iw-mask : IW → UInt64
+iw-mask w = case w of
+  iw8 → u64 #255
+  iw16 → u64 #65535
+  iw32 → u64 #4294967295
+  iw64 → uq-ones
+  iw128 → uq-ones
+iw-sign : IW → UInt64
+iw-sign w = case w of
+  iw8 → u64 #128
+  iw16 → u64 #32768
+  iw32 → u64 #2147483648
+  iw64 → uq-top
+  iw128 → uq-top
+-- the canonical form at a width of at most 64 bits: the low bits extended by zeros, or by the sign
+uq-zx : IW → UInt64 → UInt64
+uq-zx w x = u64and x (iw-mask w)
+uq-sx : IW → UInt64 → UInt64
+uq-sx w x = u64sub (u64xor (u64and x (iw-mask w)) (iw-sign w)) (iw-sign w)
+uq-cn : Bool → IW → UInt64 → UInt64
+uq-cn sg w x = case sg of
+  true → uq-sx w x
+  false → uq-zx w x
+
+-- ---------------------------------------------------------------- 128 bits as two halves (lo , hi)
+DQ : Type
+DQ = UInt64 × UInt64
+dq0 : DQ
+dq0 = (uq0 , uq0)
+dq1 : DQ
+dq1 = (uq1 , uq0)
+dq-eq : DQ → DQ → Bool
+dq-eq a b = m-and (u64eq (fst a) (fst b)) (u64eq (snd a) (snd b))
+dq-iszero : DQ → Bool
+dq-iszero a = m-and (uq-iszero (fst a)) (uq-iszero (snd a))
+dq-ult : DQ → DQ → Bool
+dq-ult a b = case u64eq (snd a) (snd b) of
+  true → u64lt (fst a) (fst b)
+  false → u64lt (snd a) (snd b)
+dq-slt : DQ → DQ → Bool
+dq-slt a b = case u64eq (snd a) (snd b) of
+  true → u64lt (fst a) (fst b)
+  false → uq-slt (snd a) (snd b)
+dq-isneg : DQ → Bool
+dq-isneg a = uq-isneg (snd a)
+dq-add : DQ → DQ → DQ
+dq-add a b =
+  let lo = u64add (fst a) (fst b)
+  in (lo , u64add (u64add (snd a) (snd b)) (uq-b (u64lt lo (fst a))))
+dq-not : DQ → DQ
+dq-not a = (uq-not (fst a) , uq-not (snd a))
+dq-neg : DQ → DQ
+dq-neg a = dq-add (dq-not a) dq1
+dq-sub : DQ → DQ → DQ
+dq-sub a b = dq-add a (dq-neg b)
+dq-and : DQ → DQ → DQ
+dq-and a b = (u64and (fst a) (fst b) , u64and (snd a) (snd b))
+dq-or : DQ → DQ → DQ
+dq-or a b = (u64or (fst a) (fst b) , u64or (snd a) (snd b))
+dq-xor : DQ → DQ → DQ
+dq-xor a b = (u64xor (fst a) (fst b) , u64xor (snd a) (snd b))
+-- a 64-bit value extended to 128: by zeros, or by its sign
+dq-zx : UInt64 → DQ
+dq-zx x = (x , uq0)
+dq-sx : UInt64 → DQ
+dq-sx x = (x , (case uq-isneg x of
+  true → uq-ones
+  false → uq0))
+-- the full product of two 64-bit values, by 32-bit halves
+uq-mulw : UInt64 → UInt64 → DQ
+uq-mulw a b =
+  let m32 = u64 #4294967295
+      s32 = u64 #32
+      a0 = u64and a m32
+      a1 = u64shr a s32
+      b0 = u64and b m32
+      b1 = u64shr b s32
+      p00 = u64mul a0 b0
+      p01 = u64mul a0 b1
+      p10 = u64mul a1 b0
+      p11 = u64mul a1 b1
+      mid = u64add (u64add (u64shr p00 s32) (u64and p01 m32)) (u64and p10 m32)
+  in (u64or (u64and p00 m32) (u64shl mid s32)
+     , u64add (u64add p11 (u64shr p01 s32)) (u64add (u64shr p10 s32) (u64shr mid s32)))
+-- the product modulo 2^128
+dq-mul : DQ → DQ → DQ
+dq-mul a b =
+  let p = uq-mulw (fst a) (fst b)
+  in (fst p , u64add (snd p) (u64add (u64mul (fst a) (snd b)) (u64mul (snd a) (fst b))))
+-- shifts by a count below 128 (the 64-bit shifts take their count modulo 64, so the cases are split here)
+dq-shl : DQ → UInt64 → DQ
+dq-shl a n = case uq-iszero n of
+  true → a
+  false → (case u64lt n (u64 #64) of
+    true → (u64shl (fst a) n , u64or (u64shl (snd a) n) (u64shr (fst a) (u64sub (u64 #64) n)))
+    false → (uq0 , u64shl (fst a) (u64sub n (u64 #64))))
+dq-shr : DQ → UInt64 → DQ
+dq-shr a n = case uq-iszero n of
+  true → a
+  false → (case u64lt n (u64 #64) of
+    true → (u64or (u64shr (fst a) n) (u64shl (snd a) (u64sub (u64 #64) n)) , u64shr (snd a) n)
+    false → (u64shr (snd a) (u64sub n (u64 #64)) , uq0))
+dq-sar : DQ → UInt64 → DQ
+dq-sar a n = case uq-iszero n of
+  true → a
+  false → (case u64lt n (u64 #64) of
+    true → (u64or (u64shr (fst a) n) (u64shl (snd a) (u64sub (u64 #64) n)) , uq-sar (snd a) n)
+    false → (uq-sar (snd a) (u64sub n (u64 #64)) , snd (dq-sx (snd a))))
+-- unsigned division with remainder, divisor not zero: one bit of the quotient per step from the
+-- top (the remainder's bit shifted out is a carry: the subtraction is then exact modulo 2^128)
+dq-div-go : Nat → DQ → DQ → DQ → DQ → DQ × DQ
+dq-div-go zero a b q r = (q , r)
+dq-div-go (suc k) a b q r =
+  let carry = dq-isneg r
+      r2 = dq-or (dq-shl r uq1) (dq-shr a (u64 #127))
+      q2 = dq-shl q uq1
+      a2 = dq-shl a uq1
+  in case m-or carry (not (dq-ult r2 b)) of
+       true → dq-div-go k a2 b (dq-or q2 dq1) (dq-sub r2 b)
+       false → dq-div-go k a2 b q2 r2
+dq-udivmod : DQ → DQ → DQ × DQ
+dq-udivmod a b = case m-and (uq-iszero (snd a)) (uq-iszero (snd b)) of
+  true → ((u64div (fst a) (fst b) , uq0) , (u64mod (fst a) (fst b) , uq0))
+  false → dq-div-go 128 a b dq0 dq0
+dq-abs : DQ → DQ
+dq-abs a = case dq-isneg a of
+  true → dq-neg a
+  false → a
+-- signed division truncating toward zero, and its remainder (the dividend's sign)
+dq-sdiv : DQ → DQ → DQ
+dq-sdiv a b =
+  let q = fst (dq-udivmod (dq-abs a) (dq-abs b))
+  in case dq-isneg a of
+       true → (case dq-isneg b of
+         true → q
+         false → dq-neg q)
+       false → (case dq-isneg b of
+         true → dq-neg q
+         false → q)
+dq-srem : DQ → DQ → DQ
+dq-srem a b =
+  let r = snd (dq-udivmod (dq-abs a) (dq-abs b))
+  in case dq-isneg a of
+       true → dq-neg r
+       false → r
+dq-min : DQ
+dq-min = (uq0 , uq-top)
+
+-- ---------------------------------------------------------------- reading a value at its kind
+-- a value whose constructor is not its kind's is a reader's error: the meaning stops
+sv-as-i : SV → MRes UInt64
+sv-as-i v = case v of
+  sv-i x → mok x
+  _ → mstop st-ill-typed
+sv-as-w : SV → MRes DQ
+sv-as-w v = case v of
+  sv-w lo hi → mok (lo , hi)
+  _ → mstop st-ill-typed
+sv-as-b : SV → MRes Bool
+sv-as-b v = case v of
+  sv-b b → mok b
+  _ → mstop st-ill-typed
+sv-as-f : SV → MRes Float32
+sv-as-f v = case v of
+  sv-f x → mok x
+  _ → mstop st-ill-typed
+sv-as-d : SV → MRes Float64
+sv-as-d v = case v of
+  sv-d x → mok x
+  _ → mstop st-ill-typed
+sv-as-p : SV → MRes MPtr
+sv-as-p v = case v of
+  sv-p p → mok p
+  _ → mstop st-ill-typed
+sv-of-dq : DQ → SV
+sv-of-dq a = sv-w (fst a) (snd a)
+-- an integer value as 128 bits (extended by its kind's sign), and 128 bits wrapped to a kind:
+-- the low bits kept, in canonical form. Every integer conversion is the second after the first
+-- (modulo 2^N for an unsigned target; for a signed one the same, C++20's two's complement)
+sv-int-dq : Bool → IW → SV → MRes DQ
+sv-int-dq sg w v = case w of
+  iw128 → sv-as-w v
+  _ → mr-map (λ x → case sg of
+                 true → dq-sx x
+                 false → dq-zx x) (sv-as-i v)
+dq-to-int : Bool → IW → DQ → SV
+dq-to-int sg w a = case w of
+  iw128 → sv-of-dq a
+  _ → sv-i (uq-cn sg w (fst a))
+sv-bool : Bool → MRes SV
+sv-bool b = mok (sv-b b)
+
+-- ---------------------------------------------------------------- integer arithmetic at 64 bits and below
+-- operands and results in canonical form; signed overflow, division by zero and MIN / -1 undefined
+uq-sdiv : UInt64 → UInt64 → UInt64
+uq-sdiv a b = u64 (i64toWord (i64div (i64 (u64toWord a)) (i64 (u64toWord b))))
+uq-srem : UInt64 → UInt64 → UInt64
+uq-srem a b = u64 (i64toWord (i64mod (i64 (u64toWord a)) (i64 (u64toWord b))))
+-- a signed result computed in 64 bits is in range of a narrower width when extending it changes nothing
+ni-fit : IW → UInt64 → MRes UInt64
+ni-fit w r = case u64eq (uq-sx w r) r of
+  true → mok r
+  false → mub ub-signed-overflow
+ni-min : IW → UInt64
+ni-min w = uq-neg (iw-sign w)
+ni-add : Bool → IW → UInt64 → UInt64 → MRes UInt64
+ni-add sg w a b =
+  let r = u64add a b
+  in case sg of
+       false → mok (uq-zx w r)
+       true → (case w of
+         iw64 → (case uq-isneg (u64and (u64xor a r) (u64xor b r)) of
+           true → mub ub-signed-overflow
+           false → mok r)
+         _ → ni-fit w r)
+ni-sub : Bool → IW → UInt64 → UInt64 → MRes UInt64
+ni-sub sg w a b =
+  let r = u64sub a b
+  in case sg of
+       false → mok (uq-zx w r)
+       true → (case w of
+         iw64 → (case uq-isneg (u64and (u64xor a b) (u64xor a r)) of
+           true → mub ub-signed-overflow
+           false → mok r)
+         _ → ni-fit w r)
+ni-mul : Bool → IW → UInt64 → UInt64 → MRes UInt64
+ni-mul sg w a b =
+  let r = u64mul a b
+  in case sg of
+       false → mok (uq-zx w r)
+       true → (case w of
+         iw64 → (let p = dq-mul (dq-sx a) (dq-sx b)
+                 in case u64eq (snd p) (snd (dq-sx (fst p))) of
+                      true → mok r
+                      false → mub ub-signed-overflow)
+         _ → ni-fit w r)
+ni-div : Bool → IW → UInt64 → UInt64 → MRes UInt64
+ni-div sg w a b = case uq-iszero b of
+  true → mub ub-div-zero
+  false → (case sg of
+    false → mok (u64div a b)
+    true → (case m-and (u64eq a (ni-min w)) (u64eq b uq-ones) of
+      true → mub ub-div-overflow
+      false → mok (uq-sdiv a b)))
+ni-rem : Bool → IW → UInt64 → UInt64 → MRes UInt64
+ni-rem sg w a b = case uq-iszero b of
+  true → mub ub-div-zero
+  false → (case sg of
+    false → mok (u64mod a b)
+    true → (case m-and (u64eq a (ni-min w)) (u64eq b uq-ones) of
+      true → mub ub-div-overflow
+      false → mok (uq-srem a b)))
+
+-- ---------------------------------------------------------------- integer arithmetic at 128 bits
+wi-add : Bool → DQ → DQ → MRes DQ
+wi-add sg a b =
+  let r = dq-add a b
+  in case sg of
+       false → mok r
+       true → (case uq-isneg (u64and (u64xor (snd a) (snd r)) (u64xor (snd b) (snd r))) of
+         true → mub ub-signed-overflow
+         false → mok r)
+wi-sub : Bool → DQ → DQ → MRes DQ
+wi-sub sg a b =
+  let r = dq-sub a b
+  in case sg of
+       false → mok r
+       true → (case uq-isneg (u64and (u64xor (snd a) (snd b)) (u64xor (snd a) (snd r))) of
+         true → mub ub-signed-overflow
+         false → mok r)
+-- a signed product overflows exactly when dividing the wrapped product by a (not zero) does not
+-- give b back, or a is -1 and b the minimum (whose wrapped quotient is b again)
+wi-mul : Bool → DQ → DQ → MRes DQ
+wi-mul sg a b =
+  let r = dq-mul a b
+  in case sg of
+       false → mok r
+       true → (case dq-iszero a of
+         true → mok r
+         false → (case m-and (dq-eq a (uq-ones , uq-ones)) (dq-eq b dq-min) of
+           true → mub ub-signed-overflow
+           false → (case dq-eq (dq-sdiv r a) b of
+             true → mok r
+             false → mub ub-signed-overflow)))
+wi-div : Bool → DQ → DQ → MRes DQ
+wi-div sg a b = case dq-iszero b of
+  true → mub ub-div-zero
+  false → (case sg of
+    false → mok (fst (dq-udivmod a b))
+    true → (case m-and (dq-eq a dq-min) (dq-eq b (uq-ones , uq-ones)) of
+      true → mub ub-div-overflow
+      false → mok (dq-sdiv a b)))
+wi-rem : Bool → DQ → DQ → MRes DQ
+wi-rem sg a b = case dq-iszero b of
+  true → mub ub-div-zero
+  false → (case sg of
+    false → mok (snd (dq-udivmod a b))
+    true → (case m-and (dq-eq a dq-min) (dq-eq b (uq-ones , uq-ones)) of
+      true → mub ub-div-overflow
+      false → mok (dq-srem a b)))
+
+-- ---------------------------------------------------------------- the binary operations on integers
+data BinOp = bo-add | bo-sub | bo-mul | bo-div | bo-rem | bo-and | bo-or | bo-xor
+ni-op : BinOp → Bool → IW → UInt64 → UInt64 → MRes UInt64
+ni-op o sg w a b = case o of
+  bo-add → ni-add sg w a b
+  bo-sub → ni-sub sg w a b
+  bo-mul → ni-mul sg w a b
+  bo-div → ni-div sg w a b
+  bo-rem → ni-rem sg w a b
+  bo-and → mok (u64and a b)
+  bo-or → mok (u64or a b)
+  bo-xor → mok (u64xor a b)
+wi-op : BinOp → Bool → DQ → DQ → MRes DQ
+wi-op o sg a b = case o of
+  bo-add → wi-add sg a b
+  bo-sub → wi-sub sg a b
+  bo-mul → wi-mul sg a b
+  bo-div → wi-div sg a b
+  bo-rem → wi-rem sg a b
+  bo-and → mok (dq-and a b)
+  bo-or → mok (dq-or a b)
+  bo-xor → mok (dq-xor a b)
+int-op : BinOp → Bool → IW → SV → SV → MRes SV
+int-op o sg w a b = case w of
+  iw128 → mr-bind (sv-as-w a) (λ x → mr-bind (sv-as-w b) (λ y → mr-map sv-of-dq (wi-op o sg x y)))
+  _ → mr-bind (sv-as-i a) (λ x → mr-bind (sv-as-i b) (λ y → mr-map sv-i (ni-op o sg w x y)))
+-- negation (0 - a: the minimum of a signed kind overflows) and the complement
+int-neg : Bool → IW → SV → MRes SV
+int-neg sg w a = case w of
+  iw128 → mr-bind (sv-as-w a) (λ x → mr-map sv-of-dq (wi-sub sg dq0 x))
+  _ → mr-bind (sv-as-i a) (λ x → mr-map sv-i (ni-sub sg w uq0 x))
+int-not : Bool → IW → SV → MRes SV
+int-not sg w a = case w of
+  iw128 → mr-map (λ x → sv-of-dq (dq-not x)) (sv-as-w a)
+  _ → mr-map (λ x → sv-i (uq-cn sg w (uq-not x))) (sv-as-i a)
+
+-- ---------------------------------------------------------------- shifts
+-- the count, an integer of its own kind, must be at least 0 and below the width of the shifted
+-- kind: anything else is undefined. A left shift is modular (C++20, Rust's wrapping shift); a
+-- right shift of a signed kind fills with the sign. shift-count gives the count checked.
+shift-count : IW → Bool → IW → SV → MRes UInt64
+shift-count w sgc wc c = mr-bind (sv-int-dq sgc wc c) (λ n →
+  case m-and (uq-iszero (snd n)) (u64lt (fst n) (iw-bits w)) of
+    true → mok (fst n)
+    false → mub ub-shift-count)
+int-shl : Bool → IW → Bool → IW → SV → SV → MRes SV
+int-shl sg w sgc wc a c = mr-bind (shift-count w sgc wc c) (λ n → case w of
+  iw128 → mr-map (λ x → sv-of-dq (dq-shl x n)) (sv-as-w a)
+  _ → mr-map (λ x → sv-i (uq-cn sg w (u64shl x n))) (sv-as-i a))
+int-shr : Bool → IW → Bool → IW → SV → SV → MRes SV
+int-shr sg w sgc wc a c = mr-bind (shift-count w sgc wc c) (λ n → case w of
+  iw128 → mr-map (λ x → sv-of-dq (case sg of
+                                    true → dq-sar x n
+                                    false → dq-shr x n)) (sv-as-w a)
+  _ → mr-map (λ x → sv-i (case sg of
+                            true → uq-sar x n
+                            false → u64shr x n)) (sv-as-i a))
+-- C's left shift (C17 6.5.7): of a signed kind, a negative operand is undefined, and so is a
+-- result the kind cannot represent (the shift back must give the operand, and no sign appear)
+int-shl-c : Bool → IW → Bool → IW → SV → SV → MRes SV
+int-shl-c sg w sgc wc a c = case sg of
+  false → int-shl sg w sgc wc a c
+  true → mr-bind (shift-count w sgc wc c) (λ n → case w of
+    iw128 → mr-bind (sv-as-w a) (λ x → case dq-isneg x of
+      true → mub ub-shift-negative
+      false → (let r = dq-shl x n
+               in case m-and (not (dq-isneg r)) (dq-eq (dq-shr r n) x) of
+                    true → mok (sv-of-dq r)
+                    false → mub ub-signed-overflow))
+    _ → mr-bind (sv-as-i a) (λ x → case uq-isneg x of
+      true → mub ub-shift-negative
+      false → (let r = uq-sx w (u64shl x n)
+               in case m-and (not (uq-isneg r)) (u64eq (u64shr r n) x) of
+                    true → mok (sv-i r)
+                    false → mub ub-signed-overflow)))
+
+-- ---------------------------------------------------------------- comparisons of integers
+data CmpOp = co-eq | co-ne | co-lt | co-le | co-gt | co-ge
+-- a comparison from the two tests every ordered kind has
+cmp-by : CmpOp → Bool → Bool → Bool → Bool
+cmp-by o eq lt gt = case o of
+  co-eq → eq
+  co-ne → not eq
+  co-lt → lt
+  co-le → m-or lt eq
+  co-gt → gt
+  co-ge → m-or gt eq
+int-cmp : CmpOp → Bool → IW → SV → SV → MRes Bool
+int-cmp o sg w a b = case w of
+  iw128 → mr-bind (sv-as-w a) (λ x → mr-bind (sv-as-w b) (λ y → mok (case sg of
+    true → cmp-by o (dq-eq x y) (dq-slt x y) (dq-slt y x)
+    false → cmp-by o (dq-eq x y) (dq-ult x y) (dq-ult y x))))
+  _ → mr-bind (sv-as-i a) (λ x → mr-bind (sv-as-i b) (λ y → mok (case sg of
+    true → cmp-by o (u64eq x y) (uq-slt x y) (uq-slt y x)
+    false → cmp-by o (u64eq x y) (u64lt x y) (u64lt y x))))
