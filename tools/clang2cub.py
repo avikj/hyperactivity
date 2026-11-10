@@ -119,11 +119,11 @@ SCHEMA = [
         ('uo-lnot', []),
     ]),
     ('CBinOp', 'binary operators met (a compound assignment names the operator applied)', [
-        ('bo-mul', []), ('bo-div', []), ('bo-rem', []), ('bo-add', []), ('bo-sub', []),
-        ('bo-shl', []), ('bo-shr', []), ('bo-lt', []), ('bo-gt', []), ('bo-le', []), ('bo-ge', []),
-        ('bo-eq', []), ('bo-ne', []), ('bo-and', []), ('bo-xor', []), ('bo-or', []),
-        ('bo-land', []), ('bo-lor', []), ('bo-assign', []), ('bo-comma', []),
-        ('bo-ptr-mem-d', []), ('bo-ptr-mem-i', []),
+        ('cbo-mul', []), ('cbo-div', []), ('cbo-rem', []), ('cbo-add', []), ('cbo-sub', []),
+        ('cbo-shl', []), ('cbo-shr', []), ('cbo-lt', []), ('cbo-gt', []), ('cbo-le', []), ('cbo-ge', []),
+        ('cbo-eq', []), ('cbo-ne', []), ('cbo-and', []), ('cbo-xor', []), ('cbo-or', []),
+        ('cbo-land', []), ('cbo-lor', []), ('cbo-assign', []), ('cbo-comma', []),
+        ('cbo-ptr-mem-d', []), ('cbo-ptr-mem-i', []),
     ]),
     ('CRefKind', 'the kind of declaration a reference names', [
         ('crk-function', []), ('crk-method', []), ('crk-var', []), ('crk-parm', []),
@@ -438,6 +438,25 @@ cstr-len nil = zero
 cstr-len (cons c cs) = suc (cstr-len cs)
 cstr : List Word → CStr
 cstr cs = (cstr-len cs , cstr-fill (cstr-len cs) cs #0 (bytes (cstr-len cs)))
+-- reading a string: its length, the byte at an index (0 outside the string: %load8 is
+-- bounds-checked by the machine; trusted like cstr-put), and whether it is exactly these bytes
+primitive cstr-get : (n : Nat) → Bytes n → Word → Word = λ n b off → %wofu32 (%load8 b off)
+cstr-length : CStr → Word
+cstr-length s = fromNat (fst s)
+cstr-at : CStr → Word → Word
+cstr-at s i = cstr-get (fst s) (snd s) i
+cstr-count : List Word → Word
+cstr-count nil = #0
+cstr-count (cons c cs) = wadd #1 (cstr-count cs)
+cstr-from : (n : Nat) → Bytes n → List Word → Word → Bool
+cstr-from n b nil off = true
+cstr-from n b (cons c cs) off = case weq (cstr-get n b off) c of
+  true → cstr-from n b cs (wadd off #1)
+  false → false
+cstr-is : CStr → List Word → Bool
+cstr-is s cs = case weq (cstr-length s) (cstr-count cs) of
+  true → cstr-from (fst s) (snd s) cs #0
+  false → false
 
 -- ---------------------------------------------------------------- the AST
 '''
@@ -2482,9 +2501,9 @@ class Unit:
         return T('ce-unary', *self.head(n), T('uo-' + UNOPS[key]), self.expr(sub))
 
     def binop(self, op, n):
-        if op not in BINOPS or 'bo-' + BINOPS[op] not in CTORS:
+        if op not in BINOPS or 'cbo-' + BINOPS[op] not in CTORS:
             stop('binary operator %r at %s: no rule yet' % (op, self.where(n)))
-        return T('bo-' + BINOPS[op])
+        return T('cbo-' + BINOPS[op])
 
     def e_BinaryOperator(self, n):
         l, r = self.kids(n)

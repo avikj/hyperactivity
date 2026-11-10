@@ -251,7 +251,7 @@ BuiltinFnToFnPtr 0/2/0, NullToPointer 0/1/0, NullToMemberPointer 0/0/2, Integral
 0/0/1, PointerToBoolean 0/0/1, IntegralToFloating 0/0/1, FloatingToIntegral 0/0/1, ToVoid
 0/0/1.
 
-Unary operators: `x++ x-- ++x --x & * + - ~ !`. Binary: `* / % + - << >> < > <= >= == != & ^ |
+Unary operators: `x++ x-- ++x --x & * + - ~ !`. Binary (constructors `cbo-…`): `* / % + - << >> < > <= >= == != & ^ |
 && || = , .* ->*`; compound assignment names the operator applied.
 
 Builtin types: void bool char schar uchar short ushort int uint long ulong llong ullong
@@ -351,6 +351,14 @@ against the earlier file needs new cases only:
   vtable symbol and slot; `@_ZTV…` defined or `external`/absent), with `c++filt` naming the
   classes. `emitted` false: the vtable is laid out here (calls use its slots) and defined
   elsewhere, or nothing in the unit refers to it.
+
+- **For track F** (`tracks/F-cxx.md`, "Needs from track C", both done): (1) `CBinOp`'s
+  constructors are `cbo-mul` … `cbo-ptr-mem-i` (were `bo-…`, which `lib/mem/scalar.cub`'s
+  `BinOp` also binds); `lib/cxx/ast.cub` and every unit are regenerated with the new names, so
+  `experiments/cxx/sem/regen.sh` and its renamed copies are no longer needed. (2)
+  `lib/cxx/ast.cub` has readers for `CStr`: `cstr-length`, `cstr-at s i` (the byte, 0 outside),
+  `cstr-is s bytes`, over `primitive cstr-get` (`%load8`), so `lib/cxx/machine.cub`'s own
+  `cx-byte` can go. Checked: the full library with the five units, 2269 passed, 0 failed.
 
 ## Found
 
