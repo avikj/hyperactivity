@@ -157,6 +157,19 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   4 1 12 46303 2130706433 | 2 1 12 | 1 1`); then `udp-echo-replay-run.cub` with
   `<build/udp-echo.log`: `run: done (pair (done (inr #12)) #0)   [3172 steps]` — the same
   outcome from the responses alone, none left over.
+- **Replay, compiled**: `udp-echo-rec-build.cub`: `ok: build udp-echo-rec-step
+  [build/udp-echo-rec, 97011 bytes, the checker's conversion, 122343903 steps]` (16 s).
+  `./build/udp-echo-rec 3>build/udp-echo.log` with the python datagram: python prints
+  `(b'hello, world', ('127.0.0.1', 47474))`, status 0, the log is the 15 words `2 1 4 | 1 1 |
+  1 140443966550016 | 4 1 12 40094 2130706433 | 2 1 12 | 1 1`; `udp-echo-replay-run.cub
+  <build/udp-echo.log` prints `run: done (pair (done (inr #12)) #0)   [3172 steps]`: the
+  compiled process's run on the kernel, reproduced on the net from its recorded responses.
+- **State at the last commit of this session** (head includes tracks C, G, H, I): `make library`
+  845 passed, 0 failed (21,745,292 steps; `LIB` does not yet name `lib/os`). The library, then
+  the four `lib/os` files, then `experiments/os/{udp-echo,udp-echo-model,udp-echo-replay,tour,
+  tour-model,tcp}.cub` (NOCACHE): 1028 passed, 0 failed, 23,821,936 steps. Loaded after
+  `lib/bits.cub lib/obs.cub lib/net.cub lib/fleet.cub` as well: 1179 passed, 0 failed (no name
+  of `lib/os` clashes with the other tracks' files).
 
 ## Found
 
@@ -175,11 +188,9 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   fails with `no inferable type here: annotate it with (the T t)` (`at: cfree (inr u)`); the
   same for `case evs of cons x xs → …; nil → (k , evs)` (`at: nil`), and for a `let` whose
   value is a record or a call with an implicit type argument, used in a branch. The variable has
-  a declared type; the refinement loses it. Inputs: the three forms, each in a definition with
-  a full signature (the first versions of `k-autobind`, `k-wait` and the `lx-sendto` case of
-  `linux-model`, in this file's history at the commit that adds `lib/os/contract.cub`, are the
-  working forms; the failing forms are the ones quoted here). Worked around by passing the
-  value as an argument and deciding by a `Bool`.
+  a declared type; the refinement loses it. The failing forms are the ones quoted here (they
+  were never committed); `k-autobind`, `k-wait` and `k-deliver` in `lib/os/contract.cub` are
+  the forms that check: the value passed as an argument, the split decided by a `Bool`.
 - **Structural recursion wants the matched argument first when another argument varies.**
   `k-take n (cons x xs) = … k-take (%wsub n #1) xs` is refused (`a recursive call is not on a
   constructor field …`) although `xs` is a field of the match; `k-take-go (cons x xs) n = …
@@ -202,9 +213,17 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
 
 ## Next step
 
-1. `#build` of the recording echo (not yet run):
-   `./build/cubical <library> lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub experiments/os/udp-echo.cub experiments/os/udp-echo-model.cub experiments/os/udp-echo-replay.cub experiments/os/udp-echo-rec-build.cub`,
-   then `./build/udp-echo-rec 3>build/udp-echo.log` with the python datagram, then
-   `udp-echo-replay-run.cub <build/udp-echo.log`; record size, steps and the replayed outcome
-   (this is "compiled, against the real kernel, with the same outcome on recorded inputs").
-2. After A appends the four files to `LIB` (Needs 3): run `make library`, record the count.
+Everything under "What is built" and every acceptance line is met, and PLAN Phase 3's replay
+acceptance with it. What is left is not this track's to do:
+1. Track A appends `lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub`
+   to `LIB` (Needs 3). Then run `make library` and replace the 845 above with the new count
+   (expected: 845 + 148 from the four files).
+2. Not built here, and in PLAN Phase 3: kernel-bypass interfaces (ef_vi, DPDK) as worlds, and
+   `sendmsg`/`recvmsg`/`io_uring` in `Linux` (this track's command list did not have them). To
+   add a call: a constructor at the end of `LinuxCmd`, its line in `lx-resp`, `linux-on-w`,
+   `linux-model`, `lx-enc`, `lx-dec`, and its number in `Sys` / `x86-64-sysnr`
+   (`lib/os/platform.cub`); no change to `W`, the drivers or the ELF loop is needed (`w-sys`
+   carries any call of up to six arguments).
+3. The model's subset (see `lib/os/contract.cub`'s header) refuses files, TCP, and waits that
+   nothing in the state ends; a process using them ends `stopped` against it (`os-tcp` does).
+   Extending it is the same file, `linux-model`'s cases.
