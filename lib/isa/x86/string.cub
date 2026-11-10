@@ -14,178 +14,242 @@ x86_movs proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
       group_1_prefix = (prefixes-rep prefixes')
       badlength? : Option ZI
       badlength? = (check_instruction_length start_rip temp_rip #0)
-  in let t'2'm : MF Unit
-         t'2'm =
-           if (is_some {ZI} badlength?) then
-             (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-           else
-             (retF {Unit} unit)
-     in onS {Unit} {Unit} t'2'm (λ t'2 →
-          let p2' : Bits #8
-              p2' = (prefixes-seg prefixes')
-              p4? : Bool
-              p4? = (weq #103 (prefixes-adr prefixes'))
-          in bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-               let df : Bits #1
-                   df = (rflagsbits-df rflags_var)
-               in bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ counter_addr_size →
-                    let select_byte_operand : Bool
-                        select_byte_operand = (weq #164 opcode)
-                    in bindS {ZI} {Unit} (select_operand_size proc_mode' select_byte_operand rex_byte false prefixes' false false false) (λ operand_size →
-                         let counter_addr_size_2_4? : Bool
-                             counter_addr_size_2_4? = (b-or (z-eq counter_addr_size (zpos #2)) (z-eq counter_addr_size (zpos #4)))
-                         in let src_addr'm : MS (Bits #65)
-                                src_addr'm =
-                                  if counter_addr_size_2_4? then
-                                    (bindS {Bits #64} {Bits #65} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #6 rex_byte) (λ t'6 →
-                                       retS {Bits #65} (bv-zext #64 #65 t'6)))
-                                  else
-                                    (bindS {Bits #64} {Bits #65} (rgfi (zpos #6)) (λ t'7 →
-                                       retS {Bits #65} (bv-sext #64 #65 t'7)))
-                            in bindS {Bits #65} {Unit} src_addr'm (λ src_addr →
-                                 let t'10'm : MF Bool
-                                     t'10'm =
-                                       if (b-not counter_addr_size_2_4?) then
-                                         (bindF {Bool} {Bool} (canonical_address_p (bv-signed #65 src_addr)) (λ t'9 →
-                                            retF {Bool} (b-not t'9)))
-                                       else
-                                         (retF {Bool} false)
-                                 in onS {Bool} {Unit} t'10'm (λ t'10 →
-                                      let t'12'm : MF Unit
-                                          t'12'm =
-                                            if t'10 then
-                                              (x86_model_error {Unit} #5586470549074715978526124744293057257751081092286464332)
-                                            else
-                                              (retF {Unit} unit)
-                                      in onS {Unit} {Unit} t'12'm (λ t'12 →
-                                           bindS {Bool} {Unit} alignment_checking_enabled_p (λ inst_ac? →
-                                             bindS {ZI} {Unit} (select_segment_register proc_mode' prefixes' mod_var r_m sib') (λ seg_reg →
-                                               bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'15 →
-                                                 bindS {Bits #128} {Unit} (rme_size proc_mode' t'15 operand_size (bv-trunc #65 #64 src_addr) None seg_reg #14930 inst_ac? false) (λ src →
-                                                   let dst_addr'm : MS (Bits #65)
-                                                       dst_addr'm =
-                                                         if counter_addr_size_2_4? then
-                                                           (bindS {Bits #64} {Bits #65} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #7 rex_byte) (λ t'17 →
-                                                              retS {Bits #65} (bv-zext #64 #65 t'17)))
-                                                         else
-                                                           (bindS {Bits #64} {Bits #65} (rgfi (zpos #7)) (λ t'18 →
-                                                              retS {Bits #65} (bv-sext #64 #65 t'18)))
-                                                   in bindS {Bits #65} {Unit} dst_addr'm (λ dst_addr →
-                                                        let t'21'm : MF Bool
-                                                            t'21'm =
-                                                              if (b-not counter_addr_size_2_4?) then
-                                                                (bindF {Bool} {Bool} (canonical_address_p (bv-signed #65 dst_addr)) (λ t'20 →
-                                                                   retF {Bool} (b-not t'20)))
-                                                              else
-                                                                (retF {Bool} false)
-                                                        in onS {Bool} {Unit} t'21'm (λ t'21 →
-                                                             let t'23'm : MF Unit
-                                                                 t'23'm =
-                                                                   if t'21 then
-                                                                     (x86_model_error {Unit} #5580859941341845746228412710183705369804291241280749900)
-                                                                   else
-                                                                     (retF {Unit} unit)
-                                                             in onS {Unit} {Unit} t'23'm (λ t'23 →
-                                                                  let original_dst_addr : Bits #48
-                                                                      original_dst_addr = (bv-trunc #65 #48 dst_addr)
-                                                                      t'28 : (ZI × ZI)
-                                                                      t'28 =
-                                                                        if (z-eq operand_size (zpos #1)) then
-                                                                          (let t'24 : (ZI × ZI)
-                                                                               t'24 =
-                                                                                 if (weq df #0) then
-                                                                                   ((z-add (zpos #1) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zpos #1) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
-                                                                                 else
-                                                                                   ((z-add (zneg #1) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zneg #1) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
-                                                                           in t'24)
-                                                                        else if (z-eq operand_size (zpos #2)) then
-                                                                          (let t'25 : (ZI × ZI)
-                                                                               t'25 =
-                                                                                 if (weq df #0) then
-                                                                                   ((z-add (zpos #2) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zpos #2) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
-                                                                                 else
-                                                                                   ((z-add (zneg #2) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zneg #2) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
-                                                                           in t'25)
-                                                                        else if (z-eq operand_size (zpos #4)) then
-                                                                          (let t'26 : (ZI × ZI)
-                                                                               t'26 =
-                                                                                 if (weq df #0) then
-                                                                                   ((z-add (zpos #4) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zpos #4) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
-                                                                                 else
-                                                                                   ((z-add (zneg #4) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zneg #4) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
-                                                                           in t'26)
-                                                                        else
-                                                                          (let t'27 : (ZI × ZI)
-                                                                               t'27 =
-                                                                                 if (weq df #0) then
-                                                                                   ((z-add (zpos #8) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zpos #8) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
-                                                                                 else
-                                                                                   ((z-add (zneg #8) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zneg #8) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
-                                                                           in t'27)
-                                                                      src_addr : ZI
-                                                                      src_addr = (fst t'28)
-                                                                      dst_addr : ZI
-                                                                      dst_addr = (snd t'28)
-                                                                      src_addr : Bits #49
-                                                                      src_addr = (bits_of_int src_addr (zpos #49))
-                                                                      dst_addr : Bits #49
-                                                                      dst_addr = (bits_of_int dst_addr (zpos #49))
-                                                                  in bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'29 →
-                                                                       bindS {Unit} {Unit} (wme_size proc_mode' t'29 operand_size (bv-sext #48 #64 original_dst_addr) None (zpos #0) src inst_ac? false) (λ t'30 →
-                                                                         let t'46'm : MS Unit
-                                                                             t'46'm =
-                                                                               if (weq group_1_prefix #243) then
-                                                                                 (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
-                                                                                    let counter : Bits #64
-                                                                                        counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
-                                                                                    in let t'33'm : MS Bool
-                                                                                           t'33'm =
-                                                                                             if (weq counter #0) then
-                                                                                               (retS {Bool} true)
+  in let k'93 : Unit → MS Unit
+         k'93 =
+           λ t'2 →
+             let p2' : Bits #8
+                 p2' = (prefixes-seg prefixes')
+                 p4? : Bool
+                 p4? = (weq #103 (prefixes-adr prefixes'))
+             in bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                  let df : Bits #1
+                      df = (rflagsbits-df rflags_var)
+                  in bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ counter_addr_size →
+                       let select_byte_operand : Bool
+                           select_byte_operand = (weq #164 opcode)
+                       in bindS {ZI} {Unit} (select_operand_size proc_mode' select_byte_operand rex_byte false prefixes' false false false) (λ operand_size →
+                            let counter_addr_size_2_4? : Bool
+                                counter_addr_size_2_4? = (b-or (z-eq counter_addr_size (zpos #2)) (z-eq counter_addr_size (zpos #4)))
+                            in let k'90 : (Bits #65) → MS Unit
+                                   k'90 =
+                                     λ src_addr →
+                                       let k'87 : Bool → MS Unit
+                                           k'87 =
+                                             λ t'10 →
+                                               let k'84 : Unit → MS Unit
+                                                   k'84 =
+                                                     λ t'12 →
+                                                       bindS {Bool} {Unit} alignment_checking_enabled_p (λ inst_ac? →
+                                                         bindS {ZI} {Unit} (select_segment_register proc_mode' prefixes' mod_var r_m sib') (λ seg_reg →
+                                                           bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'15 →
+                                                             bindS {Bits #128} {Unit} (rme_size proc_mode' t'15 operand_size (bv-trunc #65 #64 src_addr) None seg_reg #14930 inst_ac? false) (λ src →
+                                                               let k'81 : (Bits #65) → MS Unit
+                                                                   k'81 =
+                                                                     λ dst_addr →
+                                                                       let k'78 : Bool → MS Unit
+                                                                           k'78 =
+                                                                             λ t'21 →
+                                                                               let k'75 : Unit → MS Unit
+                                                                                   k'75 =
+                                                                                     λ t'23 →
+                                                                                       let original_dst_addr : Bits #48
+                                                                                           original_dst_addr = (bv-trunc #65 #48 dst_addr)
+                                                                                           t'28 : (ZI × ZI)
+                                                                                           t'28 =
+                                                                                             if (z-eq operand_size (zpos #1)) then
+                                                                                               (let t'24 : (ZI × ZI)
+                                                                                                    t'24 =
+                                                                                                      if (weq df #0) then
+                                                                                                        ((z-add (zpos #1) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zpos #1) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
+                                                                                                      else
+                                                                                                        ((z-add (zneg #1) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zneg #1) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
+                                                                                                in t'24)
+                                                                                             else if (z-eq operand_size (zpos #2)) then
+                                                                                               (let t'25 : (ZI × ZI)
+                                                                                                    t'25 =
+                                                                                                      if (weq df #0) then
+                                                                                                        ((z-add (zpos #2) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zpos #2) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
+                                                                                                      else
+                                                                                                        ((z-add (zneg #2) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zneg #2) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
+                                                                                                in t'25)
+                                                                                             else if (z-eq operand_size (zpos #4)) then
+                                                                                               (let t'26 : (ZI × ZI)
+                                                                                                    t'26 =
+                                                                                                      if (weq df #0) then
+                                                                                                        ((z-add (zpos #4) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zpos #4) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
+                                                                                                      else
+                                                                                                        ((z-add (zneg #4) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zneg #4) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
+                                                                                                in t'26)
                                                                                              else
-                                                                                               (bindS {rflagsbits} {Bool} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                                                                                  retS {Bool} (weq (rflagsbits-zf rflags_var) #0)))
-                                                                                       in bindS {Bool} {Unit} t'33'm (λ t'33 →
-                                                                                            if t'33 then
-                                                                                              (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte)
-                                                                                            else
-                                                                                              (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'35 →
-                                                                                                 write_iptr proc_mode' temp_rip)))))
-                                                                               else if (weq group_1_prefix #242) then
-                                                                                 (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
-                                                                                    let counter : Bits #64
-                                                                                        counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
-                                                                                    in let t'40'm : MS Bool
-                                                                                           t'40'm =
-                                                                                             if (weq counter #0) then
-                                                                                               (retS {Bool} true)
-                                                                                             else
-                                                                                               (bindS {rflagsbits} {Bool} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                                                                                  retS {Bool} (weq (rflagsbits-zf rflags_var) #1)))
-                                                                                       in bindS {Bool} {Unit} t'40'm (λ t'40 →
-                                                                                            if t'40 then
-                                                                                              (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'41 →
-                                                                                                 write_iptr proc_mode' temp_rip))
-                                                                                            else
-                                                                                              (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte))))
-                                                                               else
-                                                                                 (write_iptr proc_mode' temp_rip)
-                                                                         in bindS {Unit} {Unit} t'46'm (λ t'46 →
-                                                                              let t'50'm : MS Unit
-                                                                                  t'50'm =
-                                                                                    if (z-eq counter_addr_size (zpos #2)) then
-                                                                                      (write_rgfi_size #2 #6 (bv-zext #16 #64 (bv-trunc #49 #16 src_addr)) rex_byte)
-                                                                                    else if (z-eq counter_addr_size (zpos #4)) then
-                                                                                      (write_rgfi_size #4 #6 (bv-zext #32 #64 (bv-trunc #49 #32 src_addr)) rex_byte)
+                                                                                               (let t'27 : (ZI × ZI)
+                                                                                                    t'27 =
+                                                                                                      if (weq df #0) then
+                                                                                                        ((z-add (zpos #8) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zpos #8) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
+                                                                                                      else
+                                                                                                        ((z-add (zneg #8) (bv-signed #48 (bv-trunc #65 #48 src_addr))) , (z-add (zneg #8) (bv-signed #48 (bv-trunc #65 #48 dst_addr))))
+                                                                                                in t'27)
+                                                                                           src_addr : ZI
+                                                                                           src_addr = (fst t'28)
+                                                                                           dst_addr : ZI
+                                                                                           dst_addr = (snd t'28)
+                                                                                           src_addr : Bits #49
+                                                                                           src_addr = (bits_of_int src_addr (zpos #49))
+                                                                                           dst_addr : Bits #49
+                                                                                           dst_addr = (bits_of_int dst_addr (zpos #49))
+                                                                                       in bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'29 →
+                                                                                            bindS {Unit} {Unit} (wme_size proc_mode' t'29 operand_size (bv-sext #48 #64 original_dst_addr) None (zpos #0) src inst_ac? false) (λ t'30 →
+                                                                                              let k'59 : Unit → MS Unit
+                                                                                                  k'59 =
+                                                                                                    λ t'46 →
+                                                                                                      let k'55 : Unit → MS Unit
+                                                                                                          k'55 =
+                                                                                                            λ t'50 →
+                                                                                                              λ s' →
+                                                                                                                if (z-eq counter_addr_size (zpos #2)) then
+                                                                                                                  the (MS Unit)
+                                                                                                                    (write_rgfi_size #2 #7 (bv-zext #16 #64 (bv-trunc #49 #16 dst_addr)) rex_byte) s'
+                                                                                                                else if (z-eq counter_addr_size (zpos #4)) then
+                                                                                                                  the (MS Unit)
+                                                                                                                    (write_rgfi_size #4 #7 (bv-zext #32 #64 (bv-trunc #49 #32 dst_addr)) rex_byte) s'
+                                                                                                                else
+                                                                                                                  the (MS Unit)
+                                                                                                                    (write_rgfi (zpos #7) (bv-sext #49 #64 dst_addr)) s'
+                                                                                                      in λ s' →
+                                                                                                           if (z-eq counter_addr_size (zpos #2)) then
+                                                                                                             the (MS Unit)
+                                                                                                               (bindS {Unit} {Unit} (write_rgfi_size #2 #6 (bv-zext #16 #64 (bv-trunc #49 #16 src_addr)) rex_byte) (λ t'47 →
+                                                                                                                  k'55 t'47)) s'
+                                                                                                           else if (z-eq counter_addr_size (zpos #4)) then
+                                                                                                             the (MS Unit)
+                                                                                                               (bindS {Unit} {Unit} (write_rgfi_size #4 #6 (bv-zext #32 #64 (bv-trunc #49 #32 src_addr)) rex_byte) (λ t'48 →
+                                                                                                                  k'55 t'48)) s'
+                                                                                                           else
+                                                                                                             the (MS Unit)
+                                                                                                               (bindS {Unit} {Unit} (write_rgfi (zpos #6) (bv-sext #49 #64 src_addr)) (λ t'49 →
+                                                                                                                  k'55 t'49)) s'
+                                                                                              in λ s' →
+                                                                                                   if (weq group_1_prefix #243) then
+                                                                                                     the (MS Unit)
+                                                                                                       (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
+                                                                                                          let counter : Bits #64
+                                                                                                              counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
+                                                                                                          in let k'64 : Bool → MS Unit
+                                                                                                                 k'64 =
+                                                                                                                   λ t'33 →
+                                                                                                                     let k'61 : Unit → MS Unit
+                                                                                                                         k'61 =
+                                                                                                                           λ t'37 →
+                                                                                                                             k'59 t'37
+                                                                                                                     in λ s' →
+                                                                                                                          if t'33 then
+                                                                                                                            the (MS Unit)
+                                                                                                                              (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'34 →
+                                                                                                                                 k'61 t'34)) s'
+                                                                                                                          else
+                                                                                                                            the (MS Unit)
+                                                                                                                              (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'35 →
+                                                                                                                                 bindS {Unit} {Unit} (write_iptr proc_mode' temp_rip) (λ t'36 →
+                                                                                                                                   k'61 t'36))) s'
+                                                                                                             in λ s' →
+                                                                                                                  if (weq counter #0) then
+                                                                                                                    the (MS Unit)
+                                                                                                                      (k'64 true) s'
+                                                                                                                  else
+                                                                                                                    the (MS Unit)
+                                                                                                                      (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                                                                                                         k'64 (weq (rflagsbits-zf rflags_var) #0))) s')) s'
+                                                                                                   else if (weq group_1_prefix #242) then
+                                                                                                     the (MS Unit)
+                                                                                                       (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
+                                                                                                          let counter : Bits #64
+                                                                                                              counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
+                                                                                                          in let k'71 : Bool → MS Unit
+                                                                                                                 k'71 =
+                                                                                                                   λ t'40 →
+                                                                                                                     let k'68 : Unit → MS Unit
+                                                                                                                         k'68 =
+                                                                                                                           λ t'44 →
+                                                                                                                             k'59 t'44
+                                                                                                                     in λ s' →
+                                                                                                                          if t'40 then
+                                                                                                                            the (MS Unit)
+                                                                                                                              (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'41 →
+                                                                                                                                 bindS {Unit} {Unit} (write_iptr proc_mode' temp_rip) (λ t'42 →
+                                                                                                                                   k'68 t'42))) s'
+                                                                                                                          else
+                                                                                                                            the (MS Unit)
+                                                                                                                              (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'43 →
+                                                                                                                                 k'68 t'43)) s'
+                                                                                                             in λ s' →
+                                                                                                                  if (weq counter #0) then
+                                                                                                                    the (MS Unit)
+                                                                                                                      (k'71 true) s'
+                                                                                                                  else
+                                                                                                                    the (MS Unit)
+                                                                                                                      (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                                                                                                         k'71 (weq (rflagsbits-zf rflags_var) #1))) s')) s'
+                                                                                                   else
+                                                                                                     the (MS Unit)
+                                                                                                       (bindS {Unit} {Unit} (write_iptr proc_mode' temp_rip) (λ t'45 →
+                                                                                                          k'59 t'45)) s'))
+                                                                               in λ s' →
+                                                                                    if t'21 then
+                                                                                      the (MS Unit)
+                                                                                        (onS {Unit} {Unit} (x86_model_error {Unit} #5580859941341845746228412710183705369804291241280749900) (λ t'22 →
+                                                                                           k'75 t'22)) s'
                                                                                     else
-                                                                                      (write_rgfi (zpos #6) (bv-sext #49 #64 src_addr))
-                                                                              in bindS {Unit} {Unit} t'50'm (λ t'50 →
-                                                                                   if (z-eq counter_addr_size (zpos #2)) then
-                                                                                     (write_rgfi_size #2 #7 (bv-zext #16 #64 (bv-trunc #49 #16 dst_addr)) rex_byte)
-                                                                                   else if (z-eq counter_addr_size (zpos #4)) then
-                                                                                     (write_rgfi_size #4 #7 (bv-zext #32 #64 (bv-trunc #49 #32 dst_addr)) rex_byte)
-                                                                                   else
-                                                                                     (write_rgfi (zpos #7) (bv-sext #49 #64 dst_addr))))))))))))))))))))
+                                                                                      the (MS Unit)
+                                                                                        (k'75 unit) s'
+                                                                       in λ s' →
+                                                                            if (b-not counter_addr_size_2_4?) then
+                                                                              the (MS Unit)
+                                                                                (onS {Bool} {Unit} (canonical_address_p (bv-signed #65 dst_addr)) (λ t'20 →
+                                                                                   k'78 (b-not t'20))) s'
+                                                                            else
+                                                                              the (MS Unit)
+                                                                                (k'78 false) s'
+                                                               in λ s' →
+                                                                    if counter_addr_size_2_4? then
+                                                                      the (MS Unit)
+                                                                        (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #7 rex_byte) (λ t'17 →
+                                                                           k'81 (bv-zext #64 #65 t'17))) s'
+                                                                    else
+                                                                      the (MS Unit)
+                                                                        (bindS {Bits #64} {Unit} (rgfi (zpos #7)) (λ t'18 →
+                                                                           k'81 (bv-sext #64 #65 t'18))) s'))))
+                                               in λ s' →
+                                                    if t'10 then
+                                                      the (MS Unit)
+                                                        (onS {Unit} {Unit} (x86_model_error {Unit} #5586470549074715978526124744293057257751081092286464332) (λ t'11 →
+                                                           k'84 t'11)) s'
+                                                    else
+                                                      the (MS Unit)
+                                                        (k'84 unit) s'
+                                       in λ s' →
+                                            if (b-not counter_addr_size_2_4?) then
+                                              the (MS Unit)
+                                                (onS {Bool} {Unit} (canonical_address_p (bv-signed #65 src_addr)) (λ t'9 →
+                                                   k'87 (b-not t'9))) s'
+                                            else
+                                              the (MS Unit)
+                                                (k'87 false) s'
+                               in λ s' →
+                                    if counter_addr_size_2_4? then
+                                      the (MS Unit)
+                                        (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #6 rex_byte) (λ t'6 →
+                                           k'90 (bv-zext #64 #65 t'6))) s'
+                                    else
+                                      the (MS Unit)
+                                        (bindS {Bits #64} {Unit} (rgfi (zpos #6)) (λ t'7 →
+                                           k'90 (bv-sext #64 #65 t'7))) s')))
+     in λ s' →
+          if (is_some {ZI} badlength?) then
+            the (MS Unit)
+              (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'1 →
+                 k'93 t'1)) s'
+          else
+            the (MS Unit)
+              (k'93 unit) s'
 x86_cmps : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_cmps proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text
@@ -200,185 +264,249 @@ x86_cmps proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
       group_1_prefix = (prefixes-rep prefixes')
       badlength? : Option ZI
       badlength? = (check_instruction_length start_rip temp_rip #0)
-  in let t'2'm : MF Unit
-         t'2'm =
-           if (is_some {ZI} badlength?) then
-             (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-           else
-             (retF {Unit} unit)
-     in onS {Unit} {Unit} t'2'm (λ t'2 →
-          let p2' : Bits #8
-              p2' = (prefixes-seg prefixes')
-              p4? : Bool
-              p4? = (weq #103 (prefixes-adr prefixes'))
-          in bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-               let df : Bits #1
-                   df = (rflagsbits-df rflags_var)
-               in bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ counter_addr_size →
-                    let select_byte_operand : Bool
-                        select_byte_operand = (weq #166 opcode)
-                    in bindS {ZI} {Unit} (select_operand_size proc_mode' select_byte_operand rex_byte false prefixes' false false false) (λ operand_size →
-                         let counter_addr_size_2_4? : Bool
-                             counter_addr_size_2_4? = (b-or (z-eq counter_addr_size (zpos #2)) (z-eq counter_addr_size (zpos #4)))
-                         in let src_addr'm : MS (Bits #65)
-                                src_addr'm =
-                                  if counter_addr_size_2_4? then
-                                    (bindS {Bits #64} {Bits #65} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #6 rex_byte) (λ t'6 →
-                                       retS {Bits #65} (bv-zext #64 #65 t'6)))
-                                  else
-                                    (bindS {Bits #64} {Bits #65} (rgfi (zpos #6)) (λ t'7 →
-                                       retS {Bits #65} (bv-sext #64 #65 t'7)))
-                            in bindS {Bits #65} {Unit} src_addr'm (λ src_addr →
-                                 let t'10'm : MF Bool
-                                     t'10'm =
-                                       if (b-not counter_addr_size_2_4?) then
-                                         (bindF {Bool} {Bool} (canonical_address_p (bv-signed #65 src_addr)) (λ t'9 →
-                                            retF {Bool} (b-not t'9)))
-                                       else
-                                         (retF {Bool} false)
-                                 in onS {Bool} {Unit} t'10'm (λ t'10 →
-                                      let t'12'm : MF Unit
-                                          t'12'm =
-                                            if t'10 then
-                                              (x86_model_error {Unit} #5586470549074715978526124744293057257751081092286464332)
+  in let k'96 : Unit → MS Unit
+         k'96 =
+           λ t'2 →
+             let p2' : Bits #8
+                 p2' = (prefixes-seg prefixes')
+                 p4? : Bool
+                 p4? = (weq #103 (prefixes-adr prefixes'))
+             in bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                  let df : Bits #1
+                      df = (rflagsbits-df rflags_var)
+                  in bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ counter_addr_size →
+                       let select_byte_operand : Bool
+                           select_byte_operand = (weq #166 opcode)
+                       in bindS {ZI} {Unit} (select_operand_size proc_mode' select_byte_operand rex_byte false prefixes' false false false) (λ operand_size →
+                            let counter_addr_size_2_4? : Bool
+                                counter_addr_size_2_4? = (b-or (z-eq counter_addr_size (zpos #2)) (z-eq counter_addr_size (zpos #4)))
+                            in let k'93 : (Bits #65) → MS Unit
+                                   k'93 =
+                                     λ src_addr →
+                                       let k'90 : Bool → MS Unit
+                                           k'90 =
+                                             λ t'10 →
+                                               let k'87 : Unit → MS Unit
+                                                   k'87 =
+                                                     λ t'12 →
+                                                       bindS {Bool} {Unit} alignment_checking_enabled_p (λ inst_ac? →
+                                                         bindS {ZI} {Unit} (select_segment_register proc_mode' prefixes' mod_var r_m sib') (λ seg_reg →
+                                                           bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'15 →
+                                                             bindS {Bits #128} {Unit} (rme_size proc_mode' t'15 operand_size (bv-trunc #65 #64 src_addr) None seg_reg #14930 inst_ac? false) (λ src →
+                                                               let k'84 : (Bits #65) → MS Unit
+                                                                   k'84 =
+                                                                     λ dst_addr →
+                                                                       let k'81 : Bool → MS Unit
+                                                                           k'81 =
+                                                                             λ t'21 →
+                                                                               let k'78 : Unit → MS Unit
+                                                                                   k'78 =
+                                                                                     λ t'23 →
+                                                                                       bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'24 →
+                                                                                         bindS {Bits #128} {Unit} (rme_size proc_mode' t'24 operand_size (bv-trunc #65 #64 dst_addr) None (zpos #0) #14930 inst_ac? false) (λ dst →
+                                                                                           bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ input_rflags →
+                                                                                             onS {((Bits #64) × rflagsbits × rflagsbits)} {Unit} (gpr_arith_logic_spec operand_size (zpos #4) (bv-trunc #128 #64 dst) (bv-trunc #128 #64 src) input_rflags) (λ t'27 →
+                                                                                               let result' : Bits #64
+                                                                                                   result' = (fst t'27)
+                                                                                                   output_rflags : rflagsbits
+                                                                                                   output_rflags = (fst (snd t'27))
+                                                                                                   undefined_flags : rflagsbits
+                                                                                                   undefined_flags = (snd (snd t'27))
+                                                                                               in bindS {Unit} {Unit} (write_user_rflags output_rflags undefined_flags) (λ t'28 →
+                                                                                                    let t'33 : (ZI × ZI)
+                                                                                                        t'33 =
+                                                                                                          if (z-eq operand_size (zpos #1)) then
+                                                                                                            (let t'29 : (ZI × ZI)
+                                                                                                                 t'29 =
+                                                                                                                   if (weq df #0) then
+                                                                                                                     ((z-add (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #1)) , (z-add (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #1)))
+                                                                                                                   else
+                                                                                                                     ((z-sub (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #1)) , (z-sub (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #1)))
+                                                                                                             in t'29)
+                                                                                                          else if (z-eq operand_size (zpos #2)) then
+                                                                                                            (let t'30 : (ZI × ZI)
+                                                                                                                 t'30 =
+                                                                                                                   if (weq df #0) then
+                                                                                                                     ((z-add (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #2)) , (z-add (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #2)))
+                                                                                                                   else
+                                                                                                                     ((z-sub (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #2)) , (z-sub (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #2)))
+                                                                                                             in t'30)
+                                                                                                          else if (z-eq operand_size (zpos #4)) then
+                                                                                                            (let t'31 : (ZI × ZI)
+                                                                                                                 t'31 =
+                                                                                                                   if (weq df #0) then
+                                                                                                                     ((z-add (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #4)) , (z-add (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #4)))
+                                                                                                                   else
+                                                                                                                     ((z-sub (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #4)) , (z-sub (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #4)))
+                                                                                                             in t'31)
+                                                                                                          else
+                                                                                                            (let t'32 : (ZI × ZI)
+                                                                                                                 t'32 =
+                                                                                                                   if (weq df #0) then
+                                                                                                                     ((z-add (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #8)) , (z-add (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #8)))
+                                                                                                                   else
+                                                                                                                     ((z-sub (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #8)) , (z-sub (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #8)))
+                                                                                                             in t'32)
+                                                                                                        src_addr : ZI
+                                                                                                        src_addr = (fst t'33)
+                                                                                                        dst_addr : ZI
+                                                                                                        dst_addr = (snd t'33)
+                                                                                                        src_addr : Bits #49
+                                                                                                        src_addr = (bits_of_int src_addr (zpos #49))
+                                                                                                        dst_addr : Bits #49
+                                                                                                        dst_addr = (bits_of_int dst_addr (zpos #49))
+                                                                                                    in let k'62 : Unit → MS Unit
+                                                                                                           k'62 =
+                                                                                                             λ t'49 →
+                                                                                                               let k'58 : Unit → MS Unit
+                                                                                                                   k'58 =
+                                                                                                                     λ t'53 →
+                                                                                                                       λ s' →
+                                                                                                                         if (z-eq counter_addr_size (zpos #2)) then
+                                                                                                                           the (MS Unit)
+                                                                                                                             (write_rgfi_size #2 #7 (bv-zext #16 #64 (bv-trunc #49 #16 dst_addr)) rex_byte) s'
+                                                                                                                         else if (z-eq counter_addr_size (zpos #4)) then
+                                                                                                                           the (MS Unit)
+                                                                                                                             (write_rgfi_size #4 #7 (bv-zext #32 #64 (bv-trunc #49 #32 dst_addr)) rex_byte) s'
+                                                                                                                         else
+                                                                                                                           the (MS Unit)
+                                                                                                                             (write_rgfi (zpos #7) (bv-sext #49 #64 dst_addr)) s'
+                                                                                                               in λ s' →
+                                                                                                                    if (z-eq counter_addr_size (zpos #2)) then
+                                                                                                                      the (MS Unit)
+                                                                                                                        (bindS {Unit} {Unit} (write_rgfi_size #2 #6 (bv-zext #16 #64 (bv-trunc #49 #16 src_addr)) rex_byte) (λ t'50 →
+                                                                                                                           k'58 t'50)) s'
+                                                                                                                    else if (z-eq counter_addr_size (zpos #4)) then
+                                                                                                                      the (MS Unit)
+                                                                                                                        (bindS {Unit} {Unit} (write_rgfi_size #4 #6 (bv-zext #32 #64 (bv-trunc #49 #32 src_addr)) rex_byte) (λ t'51 →
+                                                                                                                           k'58 t'51)) s'
+                                                                                                                    else
+                                                                                                                      the (MS Unit)
+                                                                                                                        (bindS {Unit} {Unit} (write_rgfi (zpos #6) (bv-sext #49 #64 src_addr)) (λ t'52 →
+                                                                                                                           k'58 t'52)) s'
+                                                                                                       in λ s' →
+                                                                                                            if (weq group_1_prefix #243) then
+                                                                                                              the (MS Unit)
+                                                                                                                (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
+                                                                                                                   let counter : Bits #64
+                                                                                                                       counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
+                                                                                                                   in let k'67 : Bool → MS Unit
+                                                                                                                          k'67 =
+                                                                                                                            λ t'36 →
+                                                                                                                              let k'64 : Unit → MS Unit
+                                                                                                                                  k'64 =
+                                                                                                                                    λ t'40 →
+                                                                                                                                      k'62 t'40
+                                                                                                                              in λ s' →
+                                                                                                                                   if t'36 then
+                                                                                                                                     the (MS Unit)
+                                                                                                                                       (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'37 →
+                                                                                                                                          k'64 t'37)) s'
+                                                                                                                                   else
+                                                                                                                                     the (MS Unit)
+                                                                                                                                       (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'38 →
+                                                                                                                                          bindS {Unit} {Unit} (write_iptr proc_mode' temp_rip) (λ t'39 →
+                                                                                                                                            k'64 t'39))) s'
+                                                                                                                      in λ s' →
+                                                                                                                           if (weq counter #0) then
+                                                                                                                             the (MS Unit)
+                                                                                                                               (k'67 true) s'
+                                                                                                                           else
+                                                                                                                             the (MS Unit)
+                                                                                                                               (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                                                                                                                  k'67 (weq (rflagsbits-zf rflags_var) #0))) s')) s'
+                                                                                                            else if (weq group_1_prefix #242) then
+                                                                                                              the (MS Unit)
+                                                                                                                (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
+                                                                                                                   let counter : Bits #64
+                                                                                                                       counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
+                                                                                                                   in let k'74 : Bool → MS Unit
+                                                                                                                          k'74 =
+                                                                                                                            λ t'43 →
+                                                                                                                              let k'71 : Unit → MS Unit
+                                                                                                                                  k'71 =
+                                                                                                                                    λ t'47 →
+                                                                                                                                      k'62 t'47
+                                                                                                                              in λ s' →
+                                                                                                                                   if t'43 then
+                                                                                                                                     the (MS Unit)
+                                                                                                                                       (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'44 →
+                                                                                                                                          bindS {Unit} {Unit} (write_iptr proc_mode' temp_rip) (λ t'45 →
+                                                                                                                                            k'71 t'45))) s'
+                                                                                                                                   else
+                                                                                                                                     the (MS Unit)
+                                                                                                                                       (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'46 →
+                                                                                                                                          k'71 t'46)) s'
+                                                                                                                      in λ s' →
+                                                                                                                           if (weq counter #0) then
+                                                                                                                             the (MS Unit)
+                                                                                                                               (k'74 true) s'
+                                                                                                                           else
+                                                                                                                             the (MS Unit)
+                                                                                                                               (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                                                                                                                  k'74 (weq (rflagsbits-zf rflags_var) #1))) s')) s'
+                                                                                                            else
+                                                                                                              the (MS Unit)
+                                                                                                                (bindS {Unit} {Unit} (write_iptr proc_mode' temp_rip) (λ t'48 →
+                                                                                                                   k'62 t'48)) s')))))
+                                                                               in λ s' →
+                                                                                    if t'21 then
+                                                                                      the (MS Unit)
+                                                                                        (onS {Unit} {Unit} (x86_model_error {Unit} #5580859941341845746228412710183705369804291241280749900) (λ t'22 →
+                                                                                           k'78 t'22)) s'
+                                                                                    else
+                                                                                      the (MS Unit)
+                                                                                        (k'78 unit) s'
+                                                                       in λ s' →
+                                                                            if (b-not counter_addr_size_2_4?) then
+                                                                              the (MS Unit)
+                                                                                (onS {Bool} {Unit} (canonical_address_p (bv-signed #65 dst_addr)) (λ t'20 →
+                                                                                   k'81 (b-not t'20))) s'
+                                                                            else
+                                                                              the (MS Unit)
+                                                                                (k'81 false) s'
+                                                               in λ s' →
+                                                                    if counter_addr_size_2_4? then
+                                                                      the (MS Unit)
+                                                                        (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #7 rex_byte) (λ t'17 →
+                                                                           k'84 (bv-zext #64 #65 t'17))) s'
+                                                                    else
+                                                                      the (MS Unit)
+                                                                        (bindS {Bits #64} {Unit} (rgfi (zpos #7)) (λ t'18 →
+                                                                           k'84 (bv-sext #64 #65 t'18))) s'))))
+                                               in λ s' →
+                                                    if t'10 then
+                                                      the (MS Unit)
+                                                        (onS {Unit} {Unit} (x86_model_error {Unit} #5586470549074715978526124744293057257751081092286464332) (λ t'11 →
+                                                           k'87 t'11)) s'
+                                                    else
+                                                      the (MS Unit)
+                                                        (k'87 unit) s'
+                                       in λ s' →
+                                            if (b-not counter_addr_size_2_4?) then
+                                              the (MS Unit)
+                                                (onS {Bool} {Unit} (canonical_address_p (bv-signed #65 src_addr)) (λ t'9 →
+                                                   k'90 (b-not t'9))) s'
                                             else
-                                              (retF {Unit} unit)
-                                      in onS {Unit} {Unit} t'12'm (λ t'12 →
-                                           bindS {Bool} {Unit} alignment_checking_enabled_p (λ inst_ac? →
-                                             bindS {ZI} {Unit} (select_segment_register proc_mode' prefixes' mod_var r_m sib') (λ seg_reg →
-                                               bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'15 →
-                                                 bindS {Bits #128} {Unit} (rme_size proc_mode' t'15 operand_size (bv-trunc #65 #64 src_addr) None seg_reg #14930 inst_ac? false) (λ src →
-                                                   let dst_addr'm : MS (Bits #65)
-                                                       dst_addr'm =
-                                                         if counter_addr_size_2_4? then
-                                                           (bindS {Bits #64} {Bits #65} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #7 rex_byte) (λ t'17 →
-                                                              retS {Bits #65} (bv-zext #64 #65 t'17)))
-                                                         else
-                                                           (bindS {Bits #64} {Bits #65} (rgfi (zpos #7)) (λ t'18 →
-                                                              retS {Bits #65} (bv-sext #64 #65 t'18)))
-                                                   in bindS {Bits #65} {Unit} dst_addr'm (λ dst_addr →
-                                                        let t'21'm : MF Bool
-                                                            t'21'm =
-                                                              if (b-not counter_addr_size_2_4?) then
-                                                                (bindF {Bool} {Bool} (canonical_address_p (bv-signed #65 dst_addr)) (λ t'20 →
-                                                                   retF {Bool} (b-not t'20)))
-                                                              else
-                                                                (retF {Bool} false)
-                                                        in onS {Bool} {Unit} t'21'm (λ t'21 →
-                                                             let t'23'm : MF Unit
-                                                                 t'23'm =
-                                                                   if t'21 then
-                                                                     (x86_model_error {Unit} #5580859941341845746228412710183705369804291241280749900)
-                                                                   else
-                                                                     (retF {Unit} unit)
-                                                             in onS {Unit} {Unit} t'23'm (λ t'23 →
-                                                                  bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'24 →
-                                                                    bindS {Bits #128} {Unit} (rme_size proc_mode' t'24 operand_size (bv-trunc #65 #64 dst_addr) None (zpos #0) #14930 inst_ac? false) (λ dst →
-                                                                      bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ input_rflags →
-                                                                        onS {((Bits #64) × rflagsbits × rflagsbits)} {Unit} (gpr_arith_logic_spec operand_size (zpos #4) (bv-trunc #128 #64 dst) (bv-trunc #128 #64 src) input_rflags) (λ t'27 →
-                                                                          let result' : Bits #64
-                                                                              result' = (fst t'27)
-                                                                              output_rflags : rflagsbits
-                                                                              output_rflags = (fst (snd t'27))
-                                                                              undefined_flags : rflagsbits
-                                                                              undefined_flags = (snd (snd t'27))
-                                                                          in bindS {Unit} {Unit} (write_user_rflags output_rflags undefined_flags) (λ t'28 →
-                                                                               let t'33 : (ZI × ZI)
-                                                                                   t'33 =
-                                                                                     if (z-eq operand_size (zpos #1)) then
-                                                                                       (let t'29 : (ZI × ZI)
-                                                                                            t'29 =
-                                                                                              if (weq df #0) then
-                                                                                                ((z-add (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #1)) , (z-add (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #1)))
-                                                                                              else
-                                                                                                ((z-sub (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #1)) , (z-sub (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #1)))
-                                                                                        in t'29)
-                                                                                     else if (z-eq operand_size (zpos #2)) then
-                                                                                       (let t'30 : (ZI × ZI)
-                                                                                            t'30 =
-                                                                                              if (weq df #0) then
-                                                                                                ((z-add (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #2)) , (z-add (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #2)))
-                                                                                              else
-                                                                                                ((z-sub (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #2)) , (z-sub (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #2)))
-                                                                                        in t'30)
-                                                                                     else if (z-eq operand_size (zpos #4)) then
-                                                                                       (let t'31 : (ZI × ZI)
-                                                                                            t'31 =
-                                                                                              if (weq df #0) then
-                                                                                                ((z-add (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #4)) , (z-add (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #4)))
-                                                                                              else
-                                                                                                ((z-sub (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #4)) , (z-sub (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #4)))
-                                                                                        in t'31)
-                                                                                     else
-                                                                                       (let t'32 : (ZI × ZI)
-                                                                                            t'32 =
-                                                                                              if (weq df #0) then
-                                                                                                ((z-add (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #8)) , (z-add (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #8)))
-                                                                                              else
-                                                                                                ((z-sub (bv-signed #48 (bv-trunc #65 #48 src_addr)) (zpos #8)) , (z-sub (bv-signed #48 (bv-trunc #65 #48 dst_addr)) (zpos #8)))
-                                                                                        in t'32)
-                                                                                   src_addr : ZI
-                                                                                   src_addr = (fst t'33)
-                                                                                   dst_addr : ZI
-                                                                                   dst_addr = (snd t'33)
-                                                                                   src_addr : Bits #49
-                                                                                   src_addr = (bits_of_int src_addr (zpos #49))
-                                                                                   dst_addr : Bits #49
-                                                                                   dst_addr = (bits_of_int dst_addr (zpos #49))
-                                                                               in let t'49'm : MS Unit
-                                                                                      t'49'm =
-                                                                                        if (weq group_1_prefix #243) then
-                                                                                          (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
-                                                                                             let counter : Bits #64
-                                                                                                 counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
-                                                                                             in let t'36'm : MS Bool
-                                                                                                    t'36'm =
-                                                                                                      if (weq counter #0) then
-                                                                                                        (retS {Bool} true)
-                                                                                                      else
-                                                                                                        (bindS {rflagsbits} {Bool} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                                                                                           retS {Bool} (weq (rflagsbits-zf rflags_var) #0)))
-                                                                                                in bindS {Bool} {Unit} t'36'm (λ t'36 →
-                                                                                                     if t'36 then
-                                                                                                       (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte)
-                                                                                                     else
-                                                                                                       (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'38 →
-                                                                                                          write_iptr proc_mode' temp_rip)))))
-                                                                                        else if (weq group_1_prefix #242) then
-                                                                                          (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
-                                                                                             let counter : Bits #64
-                                                                                                 counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
-                                                                                             in let t'43'm : MS Bool
-                                                                                                    t'43'm =
-                                                                                                      if (weq counter #0) then
-                                                                                                        (retS {Bool} true)
-                                                                                                      else
-                                                                                                        (bindS {rflagsbits} {Bool} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                                                                                           retS {Bool} (weq (rflagsbits-zf rflags_var) #1)))
-                                                                                                in bindS {Bool} {Unit} t'43'm (λ t'43 →
-                                                                                                     if t'43 then
-                                                                                                       (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'44 →
-                                                                                                          write_iptr proc_mode' temp_rip))
-                                                                                                     else
-                                                                                                       (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte))))
-                                                                                        else
-                                                                                          (write_iptr proc_mode' temp_rip)
-                                                                                  in bindS {Unit} {Unit} t'49'm (λ t'49 →
-                                                                                       let t'53'm : MS Unit
-                                                                                           t'53'm =
-                                                                                             if (z-eq counter_addr_size (zpos #2)) then
-                                                                                               (write_rgfi_size #2 #6 (bv-zext #16 #64 (bv-trunc #49 #16 src_addr)) rex_byte)
-                                                                                             else if (z-eq counter_addr_size (zpos #4)) then
-                                                                                               (write_rgfi_size #4 #6 (bv-zext #32 #64 (bv-trunc #49 #32 src_addr)) rex_byte)
-                                                                                             else
-                                                                                               (write_rgfi (zpos #6) (bv-sext #49 #64 src_addr))
-                                                                                       in bindS {Unit} {Unit} t'53'm (λ t'53 →
-                                                                                            if (z-eq counter_addr_size (zpos #2)) then
-                                                                                              (write_rgfi_size #2 #7 (bv-zext #16 #64 (bv-trunc #49 #16 dst_addr)) rex_byte)
-                                                                                            else if (z-eq counter_addr_size (zpos #4)) then
-                                                                                              (write_rgfi_size #4 #7 (bv-zext #32 #64 (bv-trunc #49 #32 dst_addr)) rex_byte)
-                                                                                            else
-                                                                                              (write_rgfi (zpos #7) (bv-sext #49 #64 dst_addr)))))))))))))))))))))))
+                                              the (MS Unit)
+                                                (k'90 false) s'
+                               in λ s' →
+                                    if counter_addr_size_2_4? then
+                                      the (MS Unit)
+                                        (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #6 rex_byte) (λ t'6 →
+                                           k'93 (bv-zext #64 #65 t'6))) s'
+                                    else
+                                      the (MS Unit)
+                                        (bindS {Bits #64} {Unit} (rgfi (zpos #6)) (λ t'7 →
+                                           k'93 (bv-sext #64 #65 t'7))) s')))
+     in λ s' →
+          if (is_some {ZI} badlength?) then
+            the (MS Unit)
+              (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'1 →
+                 k'96 t'1)) s'
+          else
+            the (MS Unit)
+              (k'96 unit) s'
 x86_stos : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_stos proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text
@@ -387,128 +515,175 @@ x86_stos proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
       group_1_prefix = (prefixes-seg prefixes')
       badlength? : Option ZI
       badlength? = (check_instruction_length start_rip temp_rip #0)
-  in let t'2'm : MF Unit
-         t'2'm =
-           if (is_some {ZI} badlength?) then
-             (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-           else
-             (retF {Unit} unit)
-     in onS {Unit} {Unit} t'2'm (λ t'2 →
-          let p4? : Bool
-              p4? = (weq #103 (prefixes-adr prefixes'))
-          in bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-               let df : Bits #1
-                   df = (rflagsbits-df rflags_var)
-               in bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ counter_addr_size →
-                    let counter_addr_size_2_4? : Bool
-                        counter_addr_size_2_4? = (b-or (z-eq counter_addr_size (zpos #2)) (z-eq counter_addr_size (zpos #4)))
-                    in let dst_addr'm : MS (Bits #65)
-                           dst_addr'm =
-                             if counter_addr_size_2_4? then
-                               (bindS {Bits #64} {Bits #65} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #7 rex_byte) (λ t'5 →
-                                  retS {Bits #65} (bv-zext #64 #65 t'5)))
-                             else
-                               (bindS {Bits #64} {Bits #65} (rgfi (zpos #7)) (λ t'6 →
-                                  retS {Bits #65} (bv-sext #64 #65 t'6)))
-                       in bindS {Bits #65} {Unit} dst_addr'm (λ dst_addr →
-                            let t'9'm : MF Bool
-                                t'9'm =
-                                  if (b-not counter_addr_size_2_4?) then
-                                    (bindF {Bool} {Bool} (canonical_address_p (bv-signed #65 dst_addr)) (λ t'8 →
-                                       retF {Bool} (b-not t'8)))
-                                  else
-                                    (retF {Bool} false)
-                            in onS {Bool} {Unit} t'9'm (λ t'9 →
-                                 let t'11'm : MF Unit
-                                     t'11'm =
-                                       if t'9 then
-                                         (x86_model_error {Unit} #5580859941341845746228412710183705369804291241280749900)
+  in let k'67 : Unit → MS Unit
+         k'67 =
+           λ t'2 →
+             let p4? : Bool
+                 p4? = (weq #103 (prefixes-adr prefixes'))
+             in bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                  let df : Bits #1
+                      df = (rflagsbits-df rflags_var)
+                  in bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ counter_addr_size →
+                       let counter_addr_size_2_4? : Bool
+                           counter_addr_size_2_4? = (b-or (z-eq counter_addr_size (zpos #2)) (z-eq counter_addr_size (zpos #4)))
+                       in let k'64 : (Bits #65) → MS Unit
+                              k'64 =
+                                λ dst_addr →
+                                  let k'61 : Bool → MS Unit
+                                      k'61 =
+                                        λ t'9 →
+                                          let k'58 : Unit → MS Unit
+                                              k'58 =
+                                                λ t'11 →
+                                                  let select_byte_operand : Bool
+                                                      select_byte_operand = (weq #170 opcode)
+                                                  in bindS {ZI} {Unit} (select_operand_size proc_mode' select_byte_operand rex_byte false prefixes' false false false) (λ operand_size →
+                                                       bindS {Bits #64} {Unit} (rgfi_size (bits_of_int operand_size (zpos #4)) #0 rex_byte) (λ rax_var →
+                                                         bindS {Bool} {Unit} alignment_checking_enabled_p (λ inst_ac? →
+                                                           bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'15 →
+                                                             bindS {Unit} {Unit} (wme_size proc_mode' t'15 operand_size (bv-trunc #65 #64 dst_addr) None (zpos #0) (bv-zext #64 #128 rax_var) inst_ac? false) (λ t'16 →
+                                                               let dst_addr : Bits #49
+                                                                   dst_addr =
+                                                                     if (z-eq operand_size (zpos #1)) then
+                                                                       (let t'17 : Bits #49
+                                                                            t'17 =
+                                                                              if (weq df #0) then
+                                                                                (bits_of_int (z-add (zpos #1) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
+                                                                              else
+                                                                                (bits_of_int (z-add (zneg #1) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
+                                                                        in t'17)
+                                                                     else if (z-eq operand_size (zpos #2)) then
+                                                                       (let t'18 : Bits #49
+                                                                            t'18 =
+                                                                              if (weq df #0) then
+                                                                                (bits_of_int (z-add (zpos #2) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
+                                                                              else
+                                                                                (bits_of_int (z-add (zneg #2) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
+                                                                        in t'18)
+                                                                     else if (z-eq operand_size (zpos #4)) then
+                                                                       (let t'19 : Bits #49
+                                                                            t'19 =
+                                                                              if (weq df #0) then
+                                                                                (bits_of_int (z-add (zpos #4) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
+                                                                              else
+                                                                                (bits_of_int (z-add (zneg #4) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
+                                                                        in t'19)
+                                                                     else
+                                                                       (let t'20 : Bits #49
+                                                                            t'20 =
+                                                                              if (weq df #0) then
+                                                                                (bits_of_int (z-add (zpos #8) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
+                                                                              else
+                                                                                (bits_of_int (z-add (zneg #8) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
+                                                                        in t'20)
+                                                               in let k'42 : Unit → MS Unit
+                                                                      k'42 =
+                                                                        λ t'37 →
+                                                                          λ s' →
+                                                                            if (z-eq counter_addr_size (zpos #2)) then
+                                                                              the (MS Unit)
+                                                                                (write_rgfi_size #2 #7 (bv-zext #16 #64 (bv-trunc #49 #16 dst_addr)) rex_byte) s'
+                                                                            else if (z-eq counter_addr_size (zpos #4)) then
+                                                                              the (MS Unit)
+                                                                                (write_rgfi_size #4 #7 (bv-zext #32 #64 (bv-trunc #49 #32 dst_addr)) rex_byte) s'
+                                                                            else
+                                                                              the (MS Unit)
+                                                                                (write_rgfi (zpos #7) (bv-sext #49 #64 dst_addr)) s'
+                                                                  in λ s' →
+                                                                       if (weq group_1_prefix #243) then
+                                                                         the (MS Unit)
+                                                                           (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
+                                                                              let counter : Bits #64
+                                                                                  counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
+                                                                              in let k'47 : Bool → MS Unit
+                                                                                     k'47 =
+                                                                                       λ t'24 →
+                                                                                         let k'44 : Unit → MS Unit
+                                                                                             k'44 =
+                                                                                               λ t'28 →
+                                                                                                 k'42 t'28
+                                                                                         in λ s' →
+                                                                                              if t'24 then
+                                                                                                the (MS Unit)
+                                                                                                  (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'25 →
+                                                                                                     k'44 t'25)) s'
+                                                                                              else
+                                                                                                the (MS Unit)
+                                                                                                  (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'26 →
+                                                                                                     bindS {Unit} {Unit} (write_iptr proc_mode' temp_rip) (λ t'27 →
+                                                                                                       k'44 t'27))) s'
+                                                                                 in λ s' →
+                                                                                      if (weq counter #0) then
+                                                                                        the (MS Unit)
+                                                                                          (k'47 true) s'
+                                                                                      else
+                                                                                        the (MS Unit)
+                                                                                          (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                                                                             k'47 (weq (rflagsbits-zf rflags_var) #0))) s')) s'
+                                                                       else if (weq group_1_prefix #242) then
+                                                                         the (MS Unit)
+                                                                           (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
+                                                                              let counter : Bits #64
+                                                                                  counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
+                                                                              in let k'54 : Bool → MS Unit
+                                                                                     k'54 =
+                                                                                       λ t'31 →
+                                                                                         let k'51 : Unit → MS Unit
+                                                                                             k'51 =
+                                                                                               λ t'35 →
+                                                                                                 k'42 t'35
+                                                                                         in λ s' →
+                                                                                              if t'31 then
+                                                                                                the (MS Unit)
+                                                                                                  (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'32 →
+                                                                                                     bindS {Unit} {Unit} (write_iptr proc_mode' temp_rip) (λ t'33 →
+                                                                                                       k'51 t'33))) s'
+                                                                                              else
+                                                                                                the (MS Unit)
+                                                                                                  (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'34 →
+                                                                                                     k'51 t'34)) s'
+                                                                                 in λ s' →
+                                                                                      if (weq counter #0) then
+                                                                                        the (MS Unit)
+                                                                                          (k'54 true) s'
+                                                                                      else
+                                                                                        the (MS Unit)
+                                                                                          (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                                                                             k'54 (weq (rflagsbits-zf rflags_var) #1))) s')) s'
+                                                                       else
+                                                                         the (MS Unit)
+                                                                           (bindS {Unit} {Unit} (write_iptr proc_mode' temp_rip) (λ t'36 →
+                                                                              k'42 t'36)) s')))))
+                                          in λ s' →
+                                               if t'9 then
+                                                 the (MS Unit)
+                                                   (onS {Unit} {Unit} (x86_model_error {Unit} #5580859941341845746228412710183705369804291241280749900) (λ t'10 →
+                                                      k'58 t'10)) s'
+                                               else
+                                                 the (MS Unit)
+                                                   (k'58 unit) s'
+                                  in λ s' →
+                                       if (b-not counter_addr_size_2_4?) then
+                                         the (MS Unit)
+                                           (onS {Bool} {Unit} (canonical_address_p (bv-signed #65 dst_addr)) (λ t'8 →
+                                              k'61 (b-not t'8))) s'
                                        else
-                                         (retF {Unit} unit)
-                                 in onS {Unit} {Unit} t'11'm (λ t'11 →
-                                      let select_byte_operand : Bool
-                                          select_byte_operand = (weq #170 opcode)
-                                      in bindS {ZI} {Unit} (select_operand_size proc_mode' select_byte_operand rex_byte false prefixes' false false false) (λ operand_size →
-                                           bindS {Bits #64} {Unit} (rgfi_size (bits_of_int operand_size (zpos #4)) #0 rex_byte) (λ rax_var →
-                                             bindS {Bool} {Unit} alignment_checking_enabled_p (λ inst_ac? →
-                                               bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'15 →
-                                                 bindS {Unit} {Unit} (wme_size proc_mode' t'15 operand_size (bv-trunc #65 #64 dst_addr) None (zpos #0) (bv-zext #64 #128 rax_var) inst_ac? false) (λ t'16 →
-                                                   let dst_addr : Bits #49
-                                                       dst_addr =
-                                                         if (z-eq operand_size (zpos #1)) then
-                                                           (let t'17 : Bits #49
-                                                                t'17 =
-                                                                  if (weq df #0) then
-                                                                    (bits_of_int (z-add (zpos #1) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
-                                                                  else
-                                                                    (bits_of_int (z-add (zneg #1) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
-                                                            in t'17)
-                                                         else if (z-eq operand_size (zpos #2)) then
-                                                           (let t'18 : Bits #49
-                                                                t'18 =
-                                                                  if (weq df #0) then
-                                                                    (bits_of_int (z-add (zpos #2) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
-                                                                  else
-                                                                    (bits_of_int (z-add (zneg #2) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
-                                                            in t'18)
-                                                         else if (z-eq operand_size (zpos #4)) then
-                                                           (let t'19 : Bits #49
-                                                                t'19 =
-                                                                  if (weq df #0) then
-                                                                    (bits_of_int (z-add (zpos #4) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
-                                                                  else
-                                                                    (bits_of_int (z-add (zneg #4) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
-                                                            in t'19)
-                                                         else
-                                                           (let t'20 : Bits #49
-                                                                t'20 =
-                                                                  if (weq df #0) then
-                                                                    (bits_of_int (z-add (zpos #8) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
-                                                                  else
-                                                                    (bits_of_int (z-add (zneg #8) (bv-signed #48 (bv-trunc #65 #48 dst_addr))) (zpos #49))
-                                                            in t'20)
-                                                   in let t'37'm : MS Unit
-                                                          t'37'm =
-                                                            if (weq group_1_prefix #243) then
-                                                              (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
-                                                                 let counter : Bits #64
-                                                                     counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
-                                                                 in let t'24'm : MS Bool
-                                                                        t'24'm =
-                                                                          if (weq counter #0) then
-                                                                            (retS {Bool} true)
-                                                                          else
-                                                                            (bindS {rflagsbits} {Bool} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                                                               retS {Bool} (weq (rflagsbits-zf rflags_var) #0)))
-                                                                    in bindS {Bool} {Unit} t'24'm (λ t'24 →
-                                                                         if t'24 then
-                                                                           (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte)
-                                                                         else
-                                                                           (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'26 →
-                                                                              write_iptr proc_mode' temp_rip)))))
-                                                            else if (weq group_1_prefix #242) then
-                                                              (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 rex_byte) (λ counter →
-                                                                 let counter : Bits #64
-                                                                     counter = (bv-mask #64 (trunc #64 counter_addr_size (bits_of_int (z-sub (bv-unsigned #64 counter) (zpos #1)) (zpos #64))))
-                                                                 in let t'31'm : MS Bool
-                                                                        t'31'm =
-                                                                          if (weq counter #0) then
-                                                                            (retS {Bool} true)
-                                                                          else
-                                                                            (bindS {rflagsbits} {Bool} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                                                               retS {Bool} (weq (rflagsbits-zf rflags_var) #1)))
-                                                                    in bindS {Bool} {Unit} t'31'm (λ t'31 →
-                                                                         if t'31 then
-                                                                           (bindS {Unit} {Unit} (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte) (λ t'32 →
-                                                                              write_iptr proc_mode' temp_rip))
-                                                                         else
-                                                                           (write_rgfi_size (bits_of_int counter_addr_size (zpos #4)) #1 counter rex_byte))))
-                                                            else
-                                                              (write_iptr proc_mode' temp_rip)
-                                                      in bindS {Unit} {Unit} t'37'm (λ t'37 →
-                                                           if (z-eq counter_addr_size (zpos #2)) then
-                                                             (write_rgfi_size #2 #7 (bv-zext #16 #64 (bv-trunc #49 #16 dst_addr)) rex_byte)
-                                                           else if (z-eq counter_addr_size (zpos #4)) then
-                                                             (write_rgfi_size #4 #7 (bv-zext #32 #64 (bv-trunc #49 #32 dst_addr)) rex_byte)
-                                                           else
-                                                             (write_rgfi (zpos #7) (bv-sext #49 #64 dst_addr))))))))))))))
+                                         the (MS Unit)
+                                           (k'61 false) s'
+                          in λ s' →
+                               if counter_addr_size_2_4? then
+                                 the (MS Unit)
+                                   (bindS {Bits #64} {Unit} (rgfi_size (bits_of_int counter_addr_size (zpos #4)) #7 rex_byte) (λ t'5 →
+                                      k'64 (bv-zext #64 #65 t'5))) s'
+                               else
+                                 the (MS Unit)
+                                   (bindS {Bits #64} {Unit} (rgfi (zpos #7)) (λ t'6 →
+                                      k'64 (bv-sext #64 #65 t'6))) s'))
+     in λ s' →
+          if (is_some {ZI} badlength?) then
+            the (MS Unit)
+              (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'1 →
+                 k'67 t'1)) s'
+          else
+            the (MS Unit)
+              (k'67 unit) s'

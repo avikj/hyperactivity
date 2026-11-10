@@ -50,33 +50,37 @@ x86_shufps_op_en_rmi proc_mode' start_rip temp_rip prefixes' rex_byte opcode mod
                             in bindS {Bits #48} {Unit} (add_to_iptr proc_mode' temp_rip #1) (λ temp_rip →
                                  let badlength? : Option ZI
                                      badlength? = (check_instruction_length start_rip temp_rip #0)
-                                 in let t'10'm : MF Unit
-                                        t'10'm =
-                                          if (is_some {ZI} badlength?) then
-                                            (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-                                          else
-                                            (retF {Unit} unit)
-                                    in onS {Unit} {Unit} t'10'm (λ t'10 →
-                                         let imm0 : Bits #2
-                                             imm0 = (bv-slice #8 imm' #1 #0)
-                                             imm1 : Bits #2
-                                             imm1 = (bv-slice #8 imm' #3 #2)
-                                             imm2 : Bits #2
-                                             imm2 = (bv-slice #8 imm' #5 #4)
-                                             imm3 : Bits #2
-                                             imm3 = (bv-slice #8 imm' #7 #6)
-                                             dword0 : Bits #32
-                                             dword0 = (extract_32_bits xmm imm0)
-                                             dword1 : Bits #32
-                                             dword1 = (extract_32_bits xmm imm1)
-                                             dword2 : Bits #32
-                                             dword2 = (extract_32_bits xmm_mem imm2)
-                                             dword3 : Bits #32
-                                             dword3 = (extract_32_bits xmm_mem imm3)
-                                             result' : Bits #128
-                                             result' = (bv-append #32 #96 dword3 (bv-append #32 #64 dword2 (bv-append #32 #32 dword1 dword0)))
-                                         in bindS {Unit} {Unit} (write_xmmi_size #16 xmm_index (bv-unsigned #128 result')) (λ t'11 →
-                                              write_iptr proc_mode' temp_rip))))))))))
+                                 in let k'13 : Unit → MS Unit
+                                        k'13 =
+                                          λ t'10 →
+                                            let imm0 : Bits #2
+                                                imm0 = (bv-slice #8 imm' #1 #0)
+                                                imm1 : Bits #2
+                                                imm1 = (bv-slice #8 imm' #3 #2)
+                                                imm2 : Bits #2
+                                                imm2 = (bv-slice #8 imm' #5 #4)
+                                                imm3 : Bits #2
+                                                imm3 = (bv-slice #8 imm' #7 #6)
+                                                dword0 : Bits #32
+                                                dword0 = (extract_32_bits xmm imm0)
+                                                dword1 : Bits #32
+                                                dword1 = (extract_32_bits xmm imm1)
+                                                dword2 : Bits #32
+                                                dword2 = (extract_32_bits xmm_mem imm2)
+                                                dword3 : Bits #32
+                                                dword3 = (extract_32_bits xmm_mem imm3)
+                                                result' : Bits #128
+                                                result' = (bv-append #32 #96 dword3 (bv-append #32 #64 dword2 (bv-append #32 #32 dword1 dword0)))
+                                            in bindS {Unit} {Unit} (write_xmmi_size #16 xmm_index (bv-unsigned #128 result')) (λ t'11 →
+                                                 write_iptr proc_mode' temp_rip)
+                                    in λ s' →
+                                         if (is_some {ZI} badlength?) then
+                                           the (MS Unit)
+                                             (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'9 →
+                                                k'13 t'9)) s'
+                                         else
+                                           the (MS Unit)
+                                             (k'13 unit) s'))))))))
 x86_shufpd_op_en_rmi : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_shufpd_op_en_rmi proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text
@@ -111,25 +115,29 @@ x86_shufpd_op_en_rmi proc_mode' start_rip temp_rip prefixes' rex_byte opcode mod
                             in bindS {Bits #48} {Unit} (add_to_iptr proc_mode' temp_rip #1) (λ temp_rip →
                                  let badlength? : Option ZI
                                      badlength? = (check_instruction_length start_rip temp_rip #0)
-                                 in let t'10'm : MF Unit
-                                        t'10'm =
-                                          if (is_some {ZI} badlength?) then
-                                            (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-                                          else
-                                            (retF {Unit} unit)
-                                    in onS {Unit} {Unit} t'10'm (λ t'10 →
-                                         let imm0 : Bits #1
-                                             imm0 = (logbit_bits #8 (zpos #0) imm')
-                                             imm1 : Bits #1
-                                             imm1 = (logbit_bits #8 (zpos #1) imm')
-                                             qword0 : Bits #64
-                                             qword0 = (extract_64_bits xmm (bv-unsigned #1 imm0))
-                                             qword1 : Bits #64
-                                             qword1 = (extract_64_bits xmm_mem (bv-unsigned #1 imm1))
-                                             result' : Bits #128
-                                             result' = (bv-append #64 #64 qword1 qword0)
-                                         in bindS {Unit} {Unit} (write_xmmi_size #16 xmm_index (bv-unsigned #128 result')) (λ t'11 →
-                                              write_iptr proc_mode' temp_rip))))))))))
+                                 in let k'13 : Unit → MS Unit
+                                        k'13 =
+                                          λ t'10 →
+                                            let imm0 : Bits #1
+                                                imm0 = (logbit_bits #8 (zpos #0) imm')
+                                                imm1 : Bits #1
+                                                imm1 = (logbit_bits #8 (zpos #1) imm')
+                                                qword0 : Bits #64
+                                                qword0 = (extract_64_bits xmm (bv-unsigned #1 imm0))
+                                                qword1 : Bits #64
+                                                qword1 = (extract_64_bits xmm_mem (bv-unsigned #1 imm1))
+                                                result' : Bits #128
+                                                result' = (bv-append #64 #64 qword1 qword0)
+                                            in bindS {Unit} {Unit} (write_xmmi_size #16 xmm_index (bv-unsigned #128 result')) (λ t'11 →
+                                                 write_iptr proc_mode' temp_rip)
+                                    in λ s' →
+                                         if (is_some {ZI} badlength?) then
+                                           the (MS Unit)
+                                             (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'9 →
+                                                k'13 t'9)) s'
+                                         else
+                                           the (MS Unit)
+                                             (k'13 unit) s'))))))))
 x86_unpck?ps_op_en_rm : (high_low : ZI) → (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_unpck?ps_op_en_rm high_low proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text
@@ -159,25 +167,29 @@ x86_unpck?ps_op_en_rm high_low proc_mode' start_rip temp_rip prefixes' rex_byte 
                    in bindS {Bits #48} {Unit} (add_to_iptr proc_mode' temp_rip (bits_of_int increment_rip_by (zpos #48))) (λ temp_rip →
                         let badlength? : Option ZI
                             badlength? = (check_instruction_length start_rip temp_rip #0)
-                        in let t'7'm : MF Unit
-                               t'7'm =
-                                 if (is_some {ZI} badlength?) then
-                                   (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-                                 else
-                                   (retF {Unit} unit)
-                           in onS {Unit} {Unit} t'7'm (λ t'7 →
-                                let dword0 : Bits #32
-                                    dword0 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm #95 #64) else (bv-slice #128 xmm #31 #0))
-                                    dword1 : Bits #32
-                                    dword1 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm_mem #95 #64) else (bv-slice #128 xmm_mem #31 #0))
-                                    dword2 : Bits #32
-                                    dword2 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm #127 #96) else (bv-slice #128 xmm #63 #32))
-                                    dword3 : Bits #32
-                                    dword3 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm_mem #127 #96) else (bv-slice #128 xmm_mem #63 #32))
-                                    result' : Bits #128
-                                    result' = (bv-append #32 #96 dword3 (bv-append #32 #64 dword2 (bv-append #32 #32 dword1 dword0)))
-                                in bindS {Unit} {Unit} (write_xmmi_size #16 xmm_index (bv-unsigned #128 result')) (λ t'8 →
-                                     write_iptr proc_mode' temp_rip)))))))
+                        in let k'10 : Unit → MS Unit
+                               k'10 =
+                                 λ t'7 →
+                                   let dword0 : Bits #32
+                                       dword0 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm #95 #64) else (bv-slice #128 xmm #31 #0))
+                                       dword1 : Bits #32
+                                       dword1 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm_mem #95 #64) else (bv-slice #128 xmm_mem #31 #0))
+                                       dword2 : Bits #32
+                                       dword2 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm #127 #96) else (bv-slice #128 xmm #63 #32))
+                                       dword3 : Bits #32
+                                       dword3 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm_mem #127 #96) else (bv-slice #128 xmm_mem #63 #32))
+                                       result' : Bits #128
+                                       result' = (bv-append #32 #96 dword3 (bv-append #32 #64 dword2 (bv-append #32 #32 dword1 dword0)))
+                                   in bindS {Unit} {Unit} (write_xmmi_size #16 xmm_index (bv-unsigned #128 result')) (λ t'8 →
+                                        write_iptr proc_mode' temp_rip)
+                           in λ s' →
+                                if (is_some {ZI} badlength?) then
+                                  the (MS Unit)
+                                    (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'6 →
+                                       k'10 t'6)) s'
+                                else
+                                  the (MS Unit)
+                                    (k'10 unit) s')))))
 x86_unpck?pd_op_en_rm : (high_low : ZI) → (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_unpck?pd_op_en_rm high_low proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text
@@ -207,18 +219,22 @@ x86_unpck?pd_op_en_rm high_low proc_mode' start_rip temp_rip prefixes' rex_byte 
                    in bindS {Bits #48} {Unit} (add_to_iptr proc_mode' temp_rip (bits_of_int increment_rip_by (zpos #48))) (λ temp_rip →
                         let badlength? : Option ZI
                             badlength? = (check_instruction_length start_rip temp_rip #0)
-                        in let t'7'm : MF Unit
-                               t'7'm =
-                                 if (is_some {ZI} badlength?) then
-                                   (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-                                 else
-                                   (retF {Unit} unit)
-                           in onS {Unit} {Unit} t'7'm (λ t'7 →
-                                let qword0 : Bits #64
-                                    qword0 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm #127 #64) else (bv-slice #128 xmm #63 #0))
-                                    qword1 : Bits #64
-                                    qword1 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm_mem #127 #64) else (bv-slice #128 xmm_mem #63 #0))
-                                    result' : Bits #128
-                                    result' = (bv-append #64 #64 qword1 qword0)
-                                in bindS {Unit} {Unit} (write_xmmi_size #16 xmm_index (bv-unsigned #128 result')) (λ t'8 →
-                                     write_iptr proc_mode' temp_rip)))))))
+                        in let k'10 : Unit → MS Unit
+                               k'10 =
+                                 λ t'7 →
+                                   let qword0 : Bits #64
+                                       qword0 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm #127 #64) else (bv-slice #128 xmm #63 #0))
+                                       qword1 : Bits #64
+                                       qword1 = (if (z-eq high_low (zpos #1)) then (bv-slice #128 xmm_mem #127 #64) else (bv-slice #128 xmm_mem #63 #0))
+                                       result' : Bits #128
+                                       result' = (bv-append #64 #64 qword1 qword0)
+                                   in bindS {Unit} {Unit} (write_xmmi_size #16 xmm_index (bv-unsigned #128 result')) (λ t'8 →
+                                        write_iptr proc_mode' temp_rip)
+                           in λ s' →
+                                if (is_some {ZI} badlength?) then
+                                  the (MS Unit)
+                                    (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'6 →
+                                       k'10 t'6)) s'
+                                else
+                                  the (MS Unit)
+                                    (k'10 unit) s')))))

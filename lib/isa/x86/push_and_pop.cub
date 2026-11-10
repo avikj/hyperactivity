@@ -13,18 +13,22 @@ x86_push_general_register proc_mode' start_rip temp_rip prefixes' rex_byte opcod
                 bindS {Bits #64} {Unit} (rgfi_size (bits_of_int operand_size (zpos #4)) t'4 rex_byte) (λ sailval →
                   let badlength? : Option ZI
                       badlength? = (check_instruction_length start_rip temp_rip #0)
-                  in let t'7'm : MF Unit
-                         t'7'm =
-                           if (is_some {ZI} badlength?) then
-                             (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-                           else
-                             (retF {Unit} unit)
-                     in onS {Unit} {Unit} t'7'm (λ t'7 →
-                          bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'8 →
-                            bindS {Bool} {Unit} alignment_checking_enabled_p (λ t'9 →
-                              bindS {Unit} {Unit} (wme_size proc_mode' t'8 operand_size (bv-sext #48 #64 (bv-trunc #64 #48 new_rsp)) None (zpos #2) (bv-zext #64 #128 sailval) t'9 false) (λ t'10 →
-                                bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'11 →
-                                  write_iptr proc_mode' temp_rip))))))))))
+                  in let k'13 : Unit → MS Unit
+                         k'13 =
+                           λ t'7 →
+                             bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'8 →
+                               bindS {Bool} {Unit} alignment_checking_enabled_p (λ t'9 →
+                                 bindS {Unit} {Unit} (wme_size proc_mode' t'8 operand_size (bv-sext #48 #64 (bv-trunc #64 #48 new_rsp)) None (zpos #2) (bv-zext #64 #128 sailval) t'9 false) (λ t'10 →
+                                   bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'11 →
+                                     write_iptr proc_mode' temp_rip))))
+                     in λ s' →
+                          if (is_some {ZI} badlength?) then
+                            the (MS Unit)
+                              (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'6 →
+                                 k'13 t'6)) s'
+                          else
+                            the (MS Unit)
+                              (k'13 unit) s')))))
 x86_push_ev : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_push_ev proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text
@@ -55,18 +59,22 @@ x86_push_ev proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib'
                in bindS {Bits #48} {Unit} (add_to_iptr proc_mode' temp_rip (bv-zext #3 #48 increment_rip_by)) (λ temp_rip →
                     let badlength? : Option ZI
                         badlength? = (check_instruction_length start_rip temp_rip #0)
-                    in let t'8'm : MF Unit
-                           t'8'm =
-                             if (is_some {ZI} badlength?) then
-                               (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-                             else
-                               (retF {Unit} unit)
-                       in onS {Unit} {Unit} t'8'm (λ t'8 →
-                            bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'9 →
-                              bindS {Bool} {Unit} alignment_checking_enabled_p (λ t'10 →
-                                bindS {Unit} {Unit} (wme_size proc_mode' t'9 operand_size (bv-sext #48 #64 (bv-trunc #64 #48 new_rsp)) None (zpos #2) e' t'10 false) (λ t'11 →
-                                  bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'12 →
-                                    write_iptr proc_mode' temp_rip)))))))))))
+                    in let k'14 : Unit → MS Unit
+                           k'14 =
+                             λ t'8 →
+                               bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'9 →
+                                 bindS {Bool} {Unit} alignment_checking_enabled_p (λ t'10 →
+                                   bindS {Unit} {Unit} (wme_size proc_mode' t'9 operand_size (bv-sext #48 #64 (bv-trunc #64 #48 new_rsp)) None (zpos #2) e' t'10 false) (λ t'11 →
+                                     bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'12 →
+                                       write_iptr proc_mode' temp_rip))))
+                       in λ s' →
+                            if (is_some {ZI} badlength?) then
+                              the (MS Unit)
+                                (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'7 →
+                                   k'14 t'7)) s'
+                            else
+                              the (MS Unit)
+                                (k'14 unit) s'))))))
 x86_push_i : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_push_i proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text
@@ -84,18 +92,22 @@ x86_push_i proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' 
                  in bindS {Bits #48} {Unit} (add_to_iptr proc_mode' temp_rip (bits_of_int imm_size (zpos #48))) (λ temp_rip →
                       let badlength? : Option ZI
                           badlength? = (check_instruction_length start_rip temp_rip #0)
-                      in let t'9'm : MF Unit
-                             t'9'm =
-                               if (is_some {ZI} badlength?) then
-                                 (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-                               else
-                                 (retF {Unit} unit)
-                         in onS {Unit} {Unit} t'9'm (λ t'9 →
-                              bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'10 →
-                                bindS {Bool} {Unit} alignment_checking_enabled_p (λ t'11 →
-                                  bindS {Unit} {Unit} (wme_size proc_mode' t'10 operand_size new_rsp None (zpos #2) (bits_of_int (loghead_int (ash_left_int operand_size (zpos #3)) (bv-signed #32 imm')) (zpos #128)) t'11 false) (λ t'12 →
-                                    bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'13 →
-                                      write_iptr proc_mode' temp_rip))))))))))))
+                      in let k'15 : Unit → MS Unit
+                             k'15 =
+                               λ t'9 →
+                                 bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'10 →
+                                   bindS {Bool} {Unit} alignment_checking_enabled_p (λ t'11 →
+                                     bindS {Unit} {Unit} (wme_size proc_mode' t'10 operand_size new_rsp None (zpos #2) (bits_of_int (loghead_int (ash_left_int operand_size (zpos #3)) (bv-signed #32 imm')) (zpos #128)) t'11 false) (λ t'12 →
+                                       bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'13 →
+                                         write_iptr proc_mode' temp_rip))))
+                         in λ s' →
+                              if (is_some {ZI} badlength?) then
+                                the (MS Unit)
+                                  (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'8 →
+                                     k'15 t'8)) s'
+                              else
+                                the (MS Unit)
+                                  (k'15 unit) s')))))))
 x86_push_segment_register : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_push_segment_register proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text
@@ -139,17 +151,21 @@ x86_pop_general_register proc_mode' start_rip temp_rip prefixes' rex_byte opcode
                      reg' = (bv-and #8 opcode #7)
                      badlength? : Option ZI
                      badlength? = (check_instruction_length start_rip temp_rip #0)
-                 in let t'8'm : MF Unit
-                        t'8'm =
-                          if (is_some {ZI} badlength?) then
-                            (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-                          else
-                            (retF {Unit} unit)
-                    in onS {Unit} {Unit} t'8'm (λ t'8 →
-                         bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'9 →
-                           onS {Bits #4} {Unit} (reg_index (bv-trunc #8 #3 reg') rex_byte #0) (λ t'10 →
-                             bindS {Unit} {Unit} (write_rgfi_size (bits_of_int operand_size (zpos #4)) t'10 (bv-trunc #128 #64 sailval) rex_byte) (λ t'11 →
-                               write_iptr proc_mode' temp_rip))))))))))
+                 in let k'13 : Unit → MS Unit
+                        k'13 =
+                          λ t'8 →
+                            bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'9 →
+                              onS {Bits #4} {Unit} (reg_index (bv-trunc #8 #3 reg') rex_byte #0) (λ t'10 →
+                                bindS {Unit} {Unit} (write_rgfi_size (bits_of_int operand_size (zpos #4)) t'10 (bv-trunc #128 #64 sailval) rex_byte) (λ t'11 →
+                                  write_iptr proc_mode' temp_rip)))
+                    in λ s' →
+                         if (is_some {ZI} badlength?) then
+                           the (MS Unit)
+                             (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'7 →
+                                k'13 t'7)) s'
+                         else
+                           the (MS Unit)
+                             (k'13 unit) s'))))))
 x86_pop_ev : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_pop_ev proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text
@@ -170,33 +186,41 @@ x86_pop_ev proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' 
            bindS {Bool} {Unit} alignment_checking_enabled_p (λ check_alignment? →
              bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'5 →
                bindS {Bits #128} {Unit} (rme_size proc_mode' t'5 operand_size rsp_var None (zpos #2) #14930 check_alignment? false) (λ sailval →
-                 let t'8'm : MS ((Bits #64) × ZI)
-                     t'8'm =
-                       if (weq mod_var #3) then
-                         (retS {((Bits #64) × ZI)} (#0 , (zpos #0)))
-                       else
-                         (x86_effective_addr proc_mode' prefixes' temp_rip rex_byte r_m mod_var sib' #0)
-                 in bindS {((Bits #64) × ZI)} {Unit} t'8'm (λ t'8 →
-                      let addr : Bits #64
-                          addr = (fst t'8)
-                          increment_rip_by : ZI
-                          increment_rip_by = (snd t'8)
-                          increment_rip_by : Bits #3
-                          increment_rip_by = (bits_of_int increment_rip_by (zpos #3))
-                      in bindS {ZI} {Unit} (select_segment_register proc_mode' prefixes' mod_var r_m sib') (λ seg_reg →
-                           bindS {Bits #48} {Unit} (add_to_iptr proc_mode' temp_rip (bv-zext #3 #48 increment_rip_by)) (λ temp_rip →
-                             let badlength? : Option ZI
-                                 badlength? = (check_instruction_length start_rip temp_rip #0)
-                             in let t'12'm : MF Unit
-                                    t'12'm =
-                                      if (is_some {ZI} badlength?) then
-                                        (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689)
-                                      else
-                                        (retF {Unit} unit)
-                                in onS {Unit} {Unit} t'12'm (λ t'12 →
-                                     bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'13 →
-                                       bindS {Unit} {Unit} (x86_operand_to_reg_mem proc_mode' operand_size check_alignment? false sailval seg_reg addr prefixes' rex_byte r_m mod_var sib') (λ t'14 →
-                                         write_iptr proc_mode' temp_rip))))))))))))
+                 let k'19 : ((Bits #64) × ZI) → MS Unit
+                     k'19 =
+                       λ t'8 →
+                         let addr : Bits #64
+                             addr = (fst t'8)
+                             increment_rip_by : ZI
+                             increment_rip_by = (snd t'8)
+                             increment_rip_by : Bits #3
+                             increment_rip_by = (bits_of_int increment_rip_by (zpos #3))
+                         in bindS {ZI} {Unit} (select_segment_register proc_mode' prefixes' mod_var r_m sib') (λ seg_reg →
+                              bindS {Bits #48} {Unit} (add_to_iptr proc_mode' temp_rip (bv-zext #3 #48 increment_rip_by)) (λ temp_rip →
+                                let badlength? : Option ZI
+                                    badlength? = (check_instruction_length start_rip temp_rip #0)
+                                in let k'16 : Unit → MS Unit
+                                       k'16 =
+                                         λ t'12 →
+                                           bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'13 →
+                                             bindS {Unit} {Unit} (x86_operand_to_reg_mem proc_mode' operand_size check_alignment? false sailval seg_reg addr prefixes' rex_byte r_m mod_var sib') (λ t'14 →
+                                               write_iptr proc_mode' temp_rip))
+                                   in λ s' →
+                                        if (is_some {ZI} badlength?) then
+                                          the (MS Unit)
+                                            (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'11 →
+                                               k'16 t'11)) s'
+                                        else
+                                          the (MS Unit)
+                                            (k'16 unit) s'))
+                 in λ s' →
+                      if (weq mod_var #3) then
+                        the (MS Unit)
+                          (k'19 (#0 , (zpos #0))) s'
+                      else
+                        the (MS Unit)
+                          (bindS {((Bits #64) × ZI)} {Unit} (x86_effective_addr proc_mode' prefixes' temp_rip rex_byte r_m mod_var sib' #0) (λ t'7 →
+                             k'19 t'7)) s'))))))
 x86_pushf : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_pushf proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text
@@ -229,38 +253,41 @@ x86_popf proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
                  let sailval : Bits #32
                      sailval = (bv-or #32 #2 (bv-trunc #128 #32 (bv-and #128 #4161495 sailval)))
                  in bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'7 →
-                      let t'20'm : MS Unit
-                          t'20'm =
-                            if (z-eq operand_size (zpos #2)) then
-                              (bindS {Unit} {Unit} (putS (x86-set-rflags sailval)) (λ _ →
-                                 retS {Unit} unit))
-                            else
-                              (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                 let rf : Bits #1
-                                     rf = (rflagsbits-rf rflags_var)
-                                 in bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                      let vm : Bits #1
-                                          vm = (rflagsbits-vm rflags_var)
-                                      in bindS {Unit} {Unit} (putS (x86-set-rflags sailval)) (λ _ →
-                                           bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                             let new_rflags : rflagsbits
-                                                 new_rflags = (rflagsbits-set-rf rflags_var rf)
-                                             in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
-                                                  bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                                    let new_rflags : rflagsbits
-                                                        new_rflags = (rflagsbits-set-vm rflags_var vm)
-                                                    in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
-                                                         bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                                           let new_rflags : rflagsbits
-                                                               new_rflags = (rflagsbits-set-vip rflags_var #0)
-                                                           in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
-                                                                bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
-                                                                  let new_rflags : rflagsbits
-                                                                      new_rflags = (rflagsbits-set-vif rflags_var #0)
-                                                                  in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
-                                                                       retS {Unit} unit))))))))))))
-                      in bindS {Unit} {Unit} t'20'm (λ t'20 →
-                           write_iptr proc_mode' temp_rip))))))))
+                      let k'22 : Unit → MS Unit
+                          k'22 =
+                            λ t'20 →
+                              write_iptr proc_mode' temp_rip
+                      in λ s' →
+                           if (z-eq operand_size (zpos #2)) then
+                             the (MS Unit)
+                               (bindS {Unit} {Unit} (putS (x86-set-rflags sailval)) (λ _ →
+                                  k'22 unit)) s'
+                           else
+                             the (MS Unit)
+                               (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                  let rf : Bits #1
+                                      rf = (rflagsbits-rf rflags_var)
+                                  in bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                       let vm : Bits #1
+                                           vm = (rflagsbits-vm rflags_var)
+                                       in bindS {Unit} {Unit} (putS (x86-set-rflags sailval)) (λ _ →
+                                            bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                              let new_rflags : rflagsbits
+                                                  new_rflags = (rflagsbits-set-rf rflags_var rf)
+                                              in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
+                                                   bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                                     let new_rflags : rflagsbits
+                                                         new_rflags = (rflagsbits-set-vm rflags_var vm)
+                                                     in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
+                                                          bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                                            let new_rflags : rflagsbits
+                                                                new_rflags = (rflagsbits-set-vip rflags_var #0)
+                                                            in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
+                                                                 bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
+                                                                   let new_rflags : rflagsbits
+                                                                       new_rflags = (rflagsbits-set-vif rflags_var #0)
+                                                                   in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
+                                                                        k'22 unit)))))))))))) s')))))))
 x86_pusha : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_pusha proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text

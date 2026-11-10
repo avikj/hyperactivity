@@ -16,12 +16,15 @@ rr08 : (reg' : Bits #4) → (rex : Bits #8) → MS (Bits #8)
 rr08 reg' rex =
   let reg' : ZI
       reg' = (bv-unsigned #4 reg')
-  in if (b-or (b-not (weq rex #0)) (z-lt reg' (zpos #4))) then
-       (bindS {Bits #64} {Bits #8} (rgfi reg') (λ qword →
-          retS {Bits #8} (bv-trunc #64 #8 qword)))
-     else
-       (bindS {Bits #64} {Bits #8} (rgfi (bv-unsigned #4 (bits_of_int (z-sub reg' (zpos #4)) (zpos #4)))) (λ qword →
-          retS {Bits #8} (bv-slice #64 qword #15 #8)))
+  in λ s' →
+       if (b-or (b-not (weq rex #0)) (z-lt reg' (zpos #4))) then
+         the (MS (Bits #8))
+           (bindS {Bits #64} {Bits #8} (rgfi reg') (λ qword →
+              retS {Bits #8} (bv-trunc #64 #8 qword))) s'
+       else
+         the (MS (Bits #8))
+           (bindS {Bits #64} {Bits #8} (rgfi (bv-unsigned #4 (bits_of_int (z-sub reg' (zpos #4)) (zpos #4)))) (λ qword →
+              retS {Bits #8} (bv-slice #64 qword #15 #8))) s'
 rr16 : (reg' : Bits #4) → MS (Bits #16)
 rr16 reg' =
   bindS {Bits #64} {Bits #16} (rgfi (bv-unsigned #4 reg')) (λ t'1 →
@@ -35,19 +38,25 @@ rr64 reg' =
   rgfi (bv-unsigned #4 reg')
 rgfi_size : (nbytes : Bits #4) → (index' : Bits #4) → (rex : Bits #8) → MS (Bits #64)
 rgfi_size nbytes index' rex =
-  if (weq nbytes #1) then
-    (bindS {Bits #8} {Bits #64} (rr08 index' rex) (λ t'1 →
-       retS {Bits #64} (bv-zext #8 #64 t'1)))
-  else if (weq nbytes #2) then
-    (bindS {Bits #16} {Bits #64} (rr16 index') (λ t'2 →
-       retS {Bits #64} (bv-zext #16 #64 t'2)))
-  else if (weq nbytes #4) then
-    (bindS {Bits #32} {Bits #64} (rr32 index') (λ t'3 →
-       retS {Bits #64} (bv-zext #32 #64 t'3)))
-  else if (weq nbytes #8) then
-    (rr64 index')
-  else
-    (retS {Bits #64} #0)
+  λ s' →
+    if (weq nbytes #1) then
+      the (MS (Bits #64))
+        (bindS {Bits #8} {Bits #64} (rr08 index' rex) (λ t'1 →
+           retS {Bits #64} (bv-zext #8 #64 t'1))) s'
+    else if (weq nbytes #2) then
+      the (MS (Bits #64))
+        (bindS {Bits #16} {Bits #64} (rr16 index') (λ t'2 →
+           retS {Bits #64} (bv-zext #16 #64 t'2))) s'
+    else if (weq nbytes #4) then
+      the (MS (Bits #64))
+        (bindS {Bits #32} {Bits #64} (rr32 index') (λ t'3 →
+           retS {Bits #64} (bv-zext #32 #64 t'3))) s'
+    else if (weq nbytes #8) then
+      the (MS (Bits #64))
+        (rr64 index') s'
+    else
+      the (MS (Bits #64))
+        (retS {Bits #64} #0) s'
 rz32 : (reg' : Bits #5) → MS (Bits #32)
 rz32 reg' =
   bindS {List (Bits #512)} {Bits #32} (getS {List (Bits #512)} x86-zmms) (λ zmms'1 →
@@ -134,26 +143,36 @@ wx128 reg' sailval =
   wz128 (bv-zext #4 #5 reg') sailval (struct_wz128-mk (zpos #1))
 xmmi_size : (nbytes : Bits #5) → (index' : Bits #4) → MS (Bits #128)
 xmmi_size nbytes index' =
-  if (weq nbytes #4) then
-    (bindS {Bits #32} {Bits #128} (rx32 index') (λ t'1 →
-       retS {Bits #128} (bv-zext #32 #128 t'1)))
-  else if (weq nbytes #8) then
-    (bindS {Bits #64} {Bits #128} (rx64 index') (λ t'2 →
-       retS {Bits #128} (bv-zext #64 #128 t'2)))
-  else if (weq nbytes #16) then
-    (rx128 index')
-  else
-    (retS {Bits #128} #0)
+  λ s' →
+    if (weq nbytes #4) then
+      the (MS (Bits #128))
+        (bindS {Bits #32} {Bits #128} (rx32 index') (λ t'1 →
+           retS {Bits #128} (bv-zext #32 #128 t'1))) s'
+    else if (weq nbytes #8) then
+      the (MS (Bits #128))
+        (bindS {Bits #64} {Bits #128} (rx64 index') (λ t'2 →
+           retS {Bits #128} (bv-zext #64 #128 t'2))) s'
+    else if (weq nbytes #16) then
+      the (MS (Bits #128))
+        (rx128 index') s'
+    else
+      the (MS (Bits #128))
+        (retS {Bits #128} #0) s'
 write_xmmi_size : (nbytes : Bits #5) → (index' : Bits #4) → (sailval : ZI) → MS Unit
 write_xmmi_size nbytes index' sailval =
-  if (weq nbytes #4) then
-    (wx32 index' (bits_of_int sailval (zpos #32)))
-  else if (weq nbytes #8) then
-    (wx64 index' (bits_of_int sailval (zpos #64)))
-  else if (weq nbytes #16) then
-    (wx128 index' (bits_of_int sailval (zpos #128)))
-  else
-    (retS {Unit} unit)
+  λ s' →
+    if (weq nbytes #4) then
+      the (MS Unit)
+        (wx32 index' (bits_of_int sailval (zpos #32))) s'
+    else if (weq nbytes #8) then
+      the (MS Unit)
+        (wx64 index' (bits_of_int sailval (zpos #64))) s'
+    else if (weq nbytes #16) then
+      the (MS Unit)
+        (wx128 index' (bits_of_int sailval (zpos #128))) s'
+    else
+      the (MS Unit)
+        (retS {Unit} unit) s'
 undef_read : ZI
 undef_read =
   undef_read_logic

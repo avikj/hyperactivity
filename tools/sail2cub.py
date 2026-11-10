@@ -812,8 +812,9 @@ class Bind:
     """Something that happens before an expression's value is read: a let (cls L), an
     outcome (F: code : Outc exception T), a state step (S: code : MS T)."""
 
-    def __init__(self, cls, var, ty, code):
+    def __init__(self, cls, var, ty, code, cond=None):
         self.cls, self.var, self.ty, self.code = cls, var, ty, code  # code: lines
+        self.cond = cond  # an effectful conditional: (kind, head, arms, default), arms not yet code
 
 
 class X:
@@ -1169,21 +1170,71 @@ class Translator(Importer):
         return '%s {%s} %s' % ('retF' if cls == 'F' else 'retS', self.cty(T), code)
 
     # ---- wrap: an expression with what runs before it, as code of class cls and type T
+    # An effectful conditional is not bound like a call: what follows it is a function k (a
+    # let, written once) applied at the end of every branch, and in state code the state is
+    # passed into the branches. So a test on a variable leaves a tree whose leaves have run
+    # to their end on the state they had, instead of everything after it run on an unknown state.
+    def render_cond(self, cond, cls, T, armfn):
+        kind, head, arms, default = cond
+        sfx = " s'" if cls == 'S' else ''
+
+        def arm(x):
+            d = paren(armfn(x))
+            if sfx:  # the branch at its type (an applied term's head has no expected type), then the state
+                d = ['the (%s)' % self.mty('S', T)] + ind(d, 2)  # (on its own line: × and → before a block would shift its column)
+                d[-1] += sfx
+            return d
+        if kind == 'if':
+            arms = list(arms)
+            while True:  # else if: one chain
+                lx = arms[-1][1]
+                if len(lx.pre) == 1 and lx.pre[0].cond and lx.pre[0].cond[0] == 'if' and lx.pre[0].var == lx.code:
+                    arms = arms[:-1] + list(lx.pre[0].cond[2])
+                else:
+                    break
+            lines = []
+            for k, (c, x) in enumerate(arms):
+                if c is None:
+                    lines.append('else')
+                else:
+                    lines.append(('if %s then' if k == 0 else 'else if %s then') % c)
+                lines.extend(ind(arm(x), 2))
+        elif kind == 'case':
+            lines = ['case %s of' % head]
+            for pt, x in arms:
+                d = arm(x)
+                if len(d) == 1 and len(d[0]) < 120:
+                    lines.append('  %s → %s' % (pt, d[0]))
+                else:
+                    lines.append('  %s →' % pt)
+                    lines.extend(ind(d, 4))
+        else:  # 'tree': arms sorted (key, X); head (eq format, lt format)
+            eq, lt = head
+            dflt = arm(default)
+
+            def build(items):
+                if len(items) == 1:
+                    kv, x = items[0]
+                    return ['if %s then' % (eq % kv)] + ind(arm(x), 2) + ['else'] + ind(dflt, 2)
+                mid = len(items) // 2
+                return ['if %s then' % (lt % items[mid][0])] + ind(paren(build(items[:mid])), 2) + ['else'] + ind(paren(build(items[mid:])), 2)
+            lines = build(arms)
+        if cls == 'S':
+            lines = ["λ s' →"] + ind(lines, 2)
+        return lines
+
     def wrap(self, x, cls, T):
         pre = list(x.pre)
         tail = None
         tyT = self.cty(T)
         if pre and pre[-1].cls in ('F', 'S') and pre[-1].var == x.code:
             last = pre.pop()
-            if last.cls == cls:
+            if last.cond:
+                tail = self.render_cond(last.cond, cls, T, lambda a: self.wrap(a, cls, T))
+            elif last.cls == cls:
                 tail = last.code
             elif last.cls == 'F' and cls == 'S':
-                if len(last.code) == 1:
-                    tail = ['liftS {%s} %s' % (tyT, paren(last.code)[0])]
-                else:
-                    m = last.var + "'m"
-                    tail = ['let %s : MF %s' % (m, self.cty_a(T)), '    %s =' % m] + ind(last.code, 6) + \
-                           ['in liftS {%s} %s' % (tyT, m)]
+                tail = ['liftS {%s} %s' % (tyT, paren(last.code)[0])]
             else:
                 raise SailError('class %s code inside a class %s function' % (last.cls, cls))
         if tail is None:
@@ -1200,24 +1251,25 @@ class Translator(Importer):
                 continue
             if cls == 'P':
                 raise SailError('class %s code inside a pure function' % b.cls)
-            if b.cls == 'S':
-                op = 'bindS'
-                if cls != 'S':
-                    raise SailError('state code inside a class F function')
-            else:
-                op = 'bindF' if cls == 'F' else 'onS'
+            if b.cls == 'S' and cls != 'S':
+                raise SailError('state code inside a class F function')
             A = self.cty(b.ty)
             v = '_' if b.var.startswith('_') else b.var
-            if len(b.code) == 1:
+            if b.cond:
+                k = self.fresh('k')
+
+                def then_k(a, k=k):
+                    t = self.fresh()
+                    return self.wrap(X(t, T, a.pre + [Bind(cls, t, T, ['%s %s' % (k, a.code)])]), cls, T)
+                body = self.render_cond(b.cond, cls, T, then_k)
+                tail = self.let_block([(k, '%s → %s' % (self.cty_a(b.ty), self.mty(cls, T)), ['λ %s →' % v] + ind(tail, 2))], body)
+            else:
+                op = 'bindS' if b.cls == 'S' else 'bindF' if cls == 'F' else 'onS'
+                if len(b.code) != 1:
+                    raise SailError('a multi-line effect that is not a conditional')
                 head = '%s {%s} {%s} %s (λ %s →' % (op, A, tyT, paren(b.code)[0], v)
                 tail = [head] + ind(tail, 2)
                 tail[-1] += ')'
-            else:
-                m = (b.var if not b.var.startswith('_') else self.fresh('m')) + "'m"
-                mt = '%s %s' % ('MF' if b.cls == 'F' else 'MS', self.cty_a(b.ty))
-                body = ['%s {%s} {%s} %s (λ %s →' % (op, A, tyT, m, v)] + ind(tail, 2)
-                body[-1] += ')'
-                tail = self.let_block([(m, mt, b.code)], body)
             i -= 1
         return tail
 
@@ -1261,21 +1313,11 @@ class Translator(Importer):
             for c, x in reversed(arms[:-1]):
                 code = '(if %s then %s else %s)' % (c, x.code, code)
             return X(code, T, pre, bot=bot)
-        lines = []
-        for k, (c, x) in enumerate(arms):
-            doc = self.wrap(x, cls, T)
-            if c is None:
-                if doc[0].startswith('if ') and k > 0:
-                    lines.append('else ' + doc[0])
-                    lines.extend(doc[1:])
-                else:
-                    lines.append('else')
-                    lines.extend(ind(paren(doc), 2))
-            else:
-                lines.append(('if %s then' if k == 0 else 'else if %s then') % c)
-                lines.extend(ind(paren(doc), 2))
         v = self.fresh()
-        return X(v, T, pre + [Bind('L' if cls == 'P' else cls, v, T, lines)], bot=bot)
+        cond = ('if', None, arms, None)
+        if cls == 'P':
+            return X(v, T, pre + [Bind('L', v, T, self.render_cond(cond, 'P', T, lambda a: self.wrap(a, 'P', T)))], bot=bot)
+        return X(v, T, pre + [Bind(cls, v, T, None, cond)], bot=bot)
 
     def case_result(self, pre, scrut, alts, T, bot):
         """alts [(pattern text, X)] of a `case scrut of`."""
@@ -1284,16 +1326,11 @@ class Translator(Importer):
             cls = cmax(cls, x.cls)
         if cls == 'P' and all(not x.pre for _, x in alts) and sum(len(x.code) + len(p) for p, x in alts) < 100:
             return X('(case %s of %s)' % (scrut, '; '.join('%s → %s' % (p, x.code) for p, x in alts)), T, pre, bot=bot)
-        lines = ['case %s of' % scrut]
-        for p, x in alts:
-            doc = paren(self.wrap(x, cls, T))
-            if len(doc) == 1 and len(doc[0]) < 120:
-                lines.append('  %s → %s' % (p, doc[0]))
-            else:
-                lines.append('  %s →' % p)
-                lines.extend(ind(doc, 4))
         v = self.fresh()
-        return X(v, T, pre + [Bind('L' if cls == 'P' else cls, v, T, lines)], bot=bot)
+        cond = ('case', scrut, alts, None)
+        if cls == 'P':
+            return X(v, T, pre + [Bind('L', v, T, self.render_cond(cond, 'P', T, lambda a: self.wrap(a, 'P', T)))], bot=bot)
+        return X(v, T, pre + [Bind(cls, v, T, None, cond)], bot=bot)
 
     # ---- the expression forms
     def tr(self, e, env, exp=None, tail=False, nested=True):
@@ -1754,20 +1791,15 @@ class Translator(Importer):
         cls = default.cls
         for _, x in keyed:
             cls = cmax(cls, x.cls)
-        dflt = paren(self.wrap(default, cls, RT))
         if T[0] == 'int':
-            eq, lt = '(z-eq %s (zpos #%%d))' % s.code, '(z-lt %s (zpos #%%d))' % s.code
+            head = ('(z-eq %s (zpos #%%d))' % s.code, '(z-lt %s (zpos #%%d))' % s.code)
         else:
-            eq, lt = '(weq %s #%%d)' % s.code, '(wlt %s #%%d)' % s.code
-
-        def build(items):
-            if len(items) == 1:
-                kv, x = items[0]
-                return ['if %s then' % (eq % kv)] + ind(paren(self.wrap(x, cls, RT)), 2) + ['else'] + ind(dflt, 2)
-            mid = len(items) // 2
-            return ['if %s then' % (lt % items[mid][0])] + ind(paren(build(items[:mid])), 2) + ['else'] + ind(paren(build(items[mid:])), 2)
+            head = ('(weq %s #%%d)' % s.code, '(wlt %s #%%d)' % s.code)
         v = self.fresh()
-        return X(v, RT, s.pre + [Bind('L' if cls == 'P' else cls, v, RT, build(keyed))], bot=bot)
+        cond = ('tree', head, keyed, default)
+        if cls == 'P':
+            return X(v, RT, s.pre + [Bind('L', v, RT, self.render_cond(cond, 'P', RT, lambda a: self.wrap(a, 'P', RT)))], bot=bot)
+        return X(v, RT, s.pre + [Bind(cls, v, RT, None, cond)], bot=bot)
 
     def sub_binds(self, p, code, T):
         while p.k == 'ptyped':

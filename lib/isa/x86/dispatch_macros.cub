@@ -2,38 +2,55 @@
 -- rems-project/sail-x86-from-acl2 at 0c6c023dccc7c20d8d9dbfc481f01d9bb49d62bf. Do not edit: regenerate.
 chk_exc_fn : (decode_context : Text) → (type_id : Text) → (feature_flags : List Text) → (proc_mode' : proc_mode) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 chk_exc_fn decode_context type_id feature_flags proc_mode' prefixes' rex_byte opcode modr_m' sib' =
-  if (b-and (str-eq decode_context #978732376) (b-or (b-or (weq #243 (prefixes-rep prefixes')) (weq #242 (prefixes-rep prefixes'))) (b-or (weq #102 (prefixes-opr prefixes')) (b-or (b-not (weq rex_byte #0)) (b-not (b-or (in_64bit_mode proc_mode') (b-or (in_compatibility_mode proc_mode') (in_protected_mode proc_mode')))))))) then
-    (liftS {Unit} (x86_fault {Unit} #172779463721))
-  else if (str-eq type_id #4621338140115681113677278695506) then
-    (let t'3'm : MF Unit
-         t'3'm =
-           if (z-eq (feature_flags_fn feature_flags) (zpos #0)) then
-             (x86_fault {Unit} #172779463721)
-           else
-             (retF {Unit} unit)
-     in onS {Unit} {Unit} t'3'm (λ t'3 →
-          retS {Unit} unit))
-  else
-    (bindS {List (Bits #64)} {Unit} (getS {List (Bits #64)} x86-ctrs) (λ ctrs'4 →
-       if (weq (cr0bits-ts (loghead_bits #64 (zpos #32) (vec-get {Bits #64} #0 ctrs'4 #0))) #1) then
-         (liftS {Unit} (x86_fault {Unit} #172779007273))
-       else
-         (let t'7'm : MS Bool
-              t'7'm =
-                if (b-not (in_list type_id (cons #275453218228558955162935 (cons #275453218228558955162936 (cons #275453218228558955162937 nil))))) then
-                  (bindS {List (Bits #64)} {Bool} (getS {List (Bits #64)} x86-ctrs) (λ ctrs'6 →
-                     retS {Bool} (weq (cr4bits-osfxsr (loghead_bits #64 (zpos #22) (vec-get {Bits #64} #0 ctrs'6 #4))) #0)))
-                else
-                  (retS {Bool} false)
-          in bindS {Bool} {Unit} t'7'm (λ t'7 →
-               if t'7 then
-                 (liftS {Unit} (x86_fault {Unit} #172779463721))
-               else
-                 (bindS {List (Bits #64)} {Unit} (getS {List (Bits #64)} x86-ctrs) (λ ctrs'9 →
-                    let t'11'm : MF Unit
-                        t'11'm =
-                          if (b-or (weq (cr0bits-em (loghead_bits #64 (zpos #32) (vec-get {Bits #64} #0 ctrs'9 #0))) #1) (b-or (weq #240 (prefixes-lck prefixes')) (z-eq (feature_flags_fn feature_flags) (zpos #0)))) then
-                            (x86_fault {Unit} #172779463721)
-                          else
-                            (retF {Unit} unit)
-                    in liftS {Unit} t'11'm))))))
+  λ s' →
+    if (b-and (str-eq decode_context #978732376) (b-or (b-or (weq #243 (prefixes-rep prefixes')) (weq #242 (prefixes-rep prefixes'))) (b-or (weq #102 (prefixes-opr prefixes')) (b-or (b-not (weq rex_byte #0)) (b-not (b-or (in_64bit_mode proc_mode') (b-or (in_compatibility_mode proc_mode') (in_protected_mode proc_mode')))))))) then
+      the (MS Unit)
+        (liftS {Unit} (x86_fault {Unit} #172779463721)) s'
+    else if (str-eq type_id #4621338140115681113677278695506) then
+      the (MS Unit)
+        (let k'16 : Unit → MS Unit
+             k'16 =
+               λ t'3 →
+                 retS {Unit} unit
+         in λ s' →
+              if (z-eq (feature_flags_fn feature_flags) (zpos #0)) then
+                the (MS Unit)
+                  (onS {Unit} {Unit} (x86_fault {Unit} #172779463721) (λ t'2 →
+                     k'16 t'2)) s'
+              else
+                the (MS Unit)
+                  (k'16 unit) s') s'
+    else
+      the (MS Unit)
+        (bindS {List (Bits #64)} {Unit} (getS {List (Bits #64)} x86-ctrs) (λ ctrs'4 →
+           λ s' →
+             if (weq (cr0bits-ts (loghead_bits #64 (zpos #32) (vec-get {Bits #64} #0 ctrs'4 #0))) #1) then
+               the (MS Unit)
+                 (liftS {Unit} (x86_fault {Unit} #172779007273)) s'
+             else
+               the (MS Unit)
+                 (let k'19 : Bool → MS Unit
+                      k'19 =
+                        λ t'7 →
+                          λ s' →
+                            if t'7 then
+                              the (MS Unit)
+                                (liftS {Unit} (x86_fault {Unit} #172779463721)) s'
+                            else
+                              the (MS Unit)
+                                (bindS {List (Bits #64)} {Unit} (getS {List (Bits #64)} x86-ctrs) (λ ctrs'9 →
+                                   λ s' →
+                                     if (b-or (weq (cr0bits-em (loghead_bits #64 (zpos #32) (vec-get {Bits #64} #0 ctrs'9 #0))) #1) (b-or (weq #240 (prefixes-lck prefixes')) (z-eq (feature_flags_fn feature_flags) (zpos #0)))) then
+                                       the (MS Unit)
+                                         (liftS {Unit} (x86_fault {Unit} #172779463721)) s'
+                                     else
+                                       the (MS Unit)
+                                         (retS {Unit} unit) s')) s'
+                  in λ s' →
+                       if (b-not (in_list type_id (cons #275453218228558955162935 (cons #275453218228558955162936 (cons #275453218228558955162937 nil))))) then
+                         the (MS Unit)
+                           (bindS {List (Bits #64)} {Unit} (getS {List (Bits #64)} x86-ctrs) (λ ctrs'6 →
+                              k'19 (weq (cr4bits-osfxsr (loghead_bits #64 (zpos #22) (vec-get {Bits #64} #0 ctrs'6 #4))) #0))) s'
+                       else
+                         the (MS Unit)
+                           (k'19 false) s') s')) s'

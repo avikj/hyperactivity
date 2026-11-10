@@ -45,114 +45,123 @@ paging_entry_no_page_fault_p structure_type lin_addr entry u_s_acc r_w_acc x_d_a
       entry = (loghead_bits #64 (zpos #64) entry)
       page_present_var : Bits #1
       page_present_var = (page_present entry)
-  in if (weq page_present_var #0) then
-       (let err_no : ZI
-            err_no = (page_fault_err_no page_present_var r_w_x cpl #0 smep #1 nxe)
-        in page_fault_exception lin_addr err_no)
-     else
-       (let read_write : Bits #1
-            read_write = (page_read_write entry)
-            r_w_all : Bits #1
-            r_w_all = (bv-and #1 read_write r_w_acc)
-            user_supervisor : Bits #1
-            user_supervisor = (page_user_supervisor entry)
-            u_s_all : Bits #1
-            u_s_all = (bv-and #1 user_supervisor u_s_acc)
-            execute_disable : Bits #1
-            execute_disable = (page_execute_disable entry)
-            x_d_all : Bits #1
-            x_d_all = (bv-and #1 execute_disable x_d_acc)
-            page_size_var : Bits #1
-            page_size_var = (page_size entry)
-            t'2 : Bool
-            t'2 =
-              if (weq structure_type #1) then
-                (b-not (weq (bv-slice #64 entry #20 #13) #0))
-              else
-                (b-not (weq (bv-slice #64 entry #29 #13) #0))
-            rsvd : ZI
-            rsvd =
-              if (b-or (b-and (weq structure_type #3) (weq page_size_var #1)) (b-or (b-and (b-not (weq structure_type #0)) (b-and (b-not (weq structure_type #3)) (b-and (weq page_size_var #1) t'2))) (b-and (weq nxe #0) (b-not (weq execute_disable #0))))) then
-                (zpos #1)
-              else
-                (zpos #0)
-        in if (z-eq rsvd (zpos #1)) then
-             (let err_no : ZI
-                  err_no = (page_fault_err_no page_present_var r_w_x cpl (bits_of_int rsvd (zpos #1)) smep #1 nxe)
-              in page_fault_exception lin_addr err_no)
-           else
-             (let t'7 : Bool
-                  t'7 =
-                    if (z-lt (bv-unsigned #2 cpl) (zpos #3)) then
-                      (let t'6 : Bool
-                           t'6 =
-                             if (weq u_s_all #0) then
-                               false
-                             else
-                               (let t'5 : Bool
-                                    t'5 =
-                                      if (weq smap' #0) then
-                                        false
-                                      else
-                                        (b-or (z-eq (struct_paging_entry_no_page_fault_p-supervisor_mode_access_type keywords) (zpos #1)) (weq ac #0))
-                                in t'5)
-                       in t'6)
-                    else
-                      (weq u_s_all #0)
-                  t'13 : Bool
-                  t'13 =
-                    if (z-lt (bv-unsigned #2 cpl) (zpos #3)) then
-                      (let t'12 : Bool
-                           t'12 =
-                             if (weq u_s_all #0) then
-                               (b-and (weq wp #1) (weq r_w_all #0))
-                             else
-                               (let t'11 : Bool
-                                    t'11 =
-                                      if (weq wp #0) then
-                                        (let t'8 : Bool
-                                             t'8 =
-                                               if (weq smap' #0) then
-                                                 false
-                                               else
-                                                 (b-or (z-eq (struct_paging_entry_no_page_fault_p-supervisor_mode_access_type keywords) (zpos #1)) (weq ac #0))
-                                         in t'8)
-                                      else
-                                        (let t'10 : Bool
-                                             t'10 =
-                                               if (weq smap' #0) then
-                                                 (weq r_w_all #0)
-                                               else
-                                                 (let t'9 : Bool
-                                                      t'9 =
-                                                        if (b-and (z-eq (struct_paging_entry_no_page_fault_p-supervisor_mode_access_type keywords) (zpos #0)) (weq ac #1)) then
-                                                          (weq r_w_all #0)
-                                                        else
-                                                          true
-                                                  in t'9)
-                                         in t'10)
-                                in t'11)
-                       in t'12)
-                    else
-                      (b-or (weq u_s_all #0) (weq r_w_all #0))
-                  t'15 : Bool
-                  t'15 =
-                    if (z-lt (bv-unsigned #2 cpl) (zpos #3)) then
-                      (let t'14 : Bool
-                           t'14 =
-                             if (weq u_s_all #0) then
-                               (if (weq nxe #0) then false else (weq x_d_all #1))
-                             else
-                               (if (weq smep #0) then (if (weq nxe #0) then false else (weq x_d_all #1)) else true)
-                       in t'14)
-                    else
-                      (b-or (weq u_s_all #0) (b-and (weq nxe #1) (weq x_d_all #1)))
-              in if (b-or (b-and (str-eq r_w_x #14930) t'7) (b-or (b-and (str-eq r_w_x #14935) t'13) (b-and (str-eq r_w_x #14936) t'15))) then
-                   (let err_no : ZI
-                        err_no = (page_fault_err_no page_present_var r_w_x cpl (bits_of_int rsvd (zpos #1)) smep #1 nxe)
-                    in page_fault_exception lin_addr err_no)
+  in λ s' →
+       if (weq page_present_var #0) then
+         the (MS (Bool × ZI))
+           (let err_no : ZI
+                err_no = (page_fault_err_no page_present_var r_w_x cpl #0 smep #1 nxe)
+            in page_fault_exception lin_addr err_no) s'
+       else
+         the (MS (Bool × ZI))
+           (let read_write : Bits #1
+                read_write = (page_read_write entry)
+                r_w_all : Bits #1
+                r_w_all = (bv-and #1 read_write r_w_acc)
+                user_supervisor : Bits #1
+                user_supervisor = (page_user_supervisor entry)
+                u_s_all : Bits #1
+                u_s_all = (bv-and #1 user_supervisor u_s_acc)
+                execute_disable : Bits #1
+                execute_disable = (page_execute_disable entry)
+                x_d_all : Bits #1
+                x_d_all = (bv-and #1 execute_disable x_d_acc)
+                page_size_var : Bits #1
+                page_size_var = (page_size entry)
+                t'2 : Bool
+                t'2 =
+                  if (weq structure_type #1) then
+                    (b-not (weq (bv-slice #64 entry #20 #13) #0))
+                  else
+                    (b-not (weq (bv-slice #64 entry #29 #13) #0))
+                rsvd : ZI
+                rsvd =
+                  if (b-or (b-and (weq structure_type #3) (weq page_size_var #1)) (b-or (b-and (b-not (weq structure_type #0)) (b-and (b-not (weq structure_type #3)) (b-and (weq page_size_var #1) t'2))) (b-and (weq nxe #0) (b-not (weq execute_disable #0))))) then
+                    (zpos #1)
+                  else
+                    (zpos #0)
+            in λ s' →
+                 if (z-eq rsvd (zpos #1)) then
+                   the (MS (Bool × ZI))
+                     (let err_no : ZI
+                          err_no = (page_fault_err_no page_present_var r_w_x cpl (bits_of_int rsvd (zpos #1)) smep #1 nxe)
+                      in page_fault_exception lin_addr err_no) s'
                  else
-                   (retS {(Bool × ZI)} (false , (zpos #0)))))
+                   the (MS (Bool × ZI))
+                     (let t'7 : Bool
+                          t'7 =
+                            if (z-lt (bv-unsigned #2 cpl) (zpos #3)) then
+                              (let t'6 : Bool
+                                   t'6 =
+                                     if (weq u_s_all #0) then
+                                       false
+                                     else
+                                       (let t'5 : Bool
+                                            t'5 =
+                                              if (weq smap' #0) then
+                                                false
+                                              else
+                                                (b-or (z-eq (struct_paging_entry_no_page_fault_p-supervisor_mode_access_type keywords) (zpos #1)) (weq ac #0))
+                                        in t'5)
+                               in t'6)
+                            else
+                              (weq u_s_all #0)
+                          t'13 : Bool
+                          t'13 =
+                            if (z-lt (bv-unsigned #2 cpl) (zpos #3)) then
+                              (let t'12 : Bool
+                                   t'12 =
+                                     if (weq u_s_all #0) then
+                                       (b-and (weq wp #1) (weq r_w_all #0))
+                                     else
+                                       (let t'11 : Bool
+                                            t'11 =
+                                              if (weq wp #0) then
+                                                (let t'8 : Bool
+                                                     t'8 =
+                                                       if (weq smap' #0) then
+                                                         false
+                                                       else
+                                                         (b-or (z-eq (struct_paging_entry_no_page_fault_p-supervisor_mode_access_type keywords) (zpos #1)) (weq ac #0))
+                                                 in t'8)
+                                              else
+                                                (let t'10 : Bool
+                                                     t'10 =
+                                                       if (weq smap' #0) then
+                                                         (weq r_w_all #0)
+                                                       else
+                                                         (let t'9 : Bool
+                                                              t'9 =
+                                                                if (b-and (z-eq (struct_paging_entry_no_page_fault_p-supervisor_mode_access_type keywords) (zpos #0)) (weq ac #1)) then
+                                                                  (weq r_w_all #0)
+                                                                else
+                                                                  true
+                                                          in t'9)
+                                                 in t'10)
+                                        in t'11)
+                               in t'12)
+                            else
+                              (b-or (weq u_s_all #0) (weq r_w_all #0))
+                          t'15 : Bool
+                          t'15 =
+                            if (z-lt (bv-unsigned #2 cpl) (zpos #3)) then
+                              (let t'14 : Bool
+                                   t'14 =
+                                     if (weq u_s_all #0) then
+                                       (if (weq nxe #0) then false else (weq x_d_all #1))
+                                     else
+                                       (if (weq smep #0) then (if (weq nxe #0) then false else (weq x_d_all #1)) else true)
+                               in t'14)
+                            else
+                              (b-or (weq u_s_all #0) (b-and (weq nxe #1) (weq x_d_all #1)))
+                      in λ s' →
+                           if (b-or (b-and (str-eq r_w_x #14930) t'7) (b-or (b-and (str-eq r_w_x #14935) t'13) (b-and (str-eq r_w_x #14936) t'15))) then
+                             the (MS (Bool × ZI))
+                               (let err_no : ZI
+                                    err_no = (page_fault_err_no page_present_var r_w_x cpl (bits_of_int rsvd (zpos #1)) smep #1 nxe)
+                                in page_fault_exception lin_addr err_no) s'
+                           else
+                             the (MS (Bool × ZI))
+                               (retS {(Bool × ZI)} (false , (zpos #0))) s') s') s'
 dirty_bit : (entry : Bits #64) → Bits #1
 dirty_bit entry =
   (ia32e_page_tablesbits-d entry)

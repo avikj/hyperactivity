@@ -1,0 +1,186 @@
+-- experiments/isa/classes.cub — one instruction of each class lib/x86.cub's template table
+-- emits, under the imported model, the data operands variables. Loaded after add.cub's files.
+-- Written by a script from the byte lists in the comments; the numerals are those bytes,
+-- lowest address lowest. The state: the bytes at 0x400000 (a ret at 0x400010), rip there,
+-- rsp = rbp = 0x7fff0000 with the stack's 16 bytes below rbp holding the variables p and q,
+-- rax = a, rcx = c, rdx = d.
+cls-base : Word → Word → Word → Word → Word → X86
+cls-base a c d p q =
+  x86-set-rax a (x86-set-rcx c (x86-set-rdx d (x86-set-rsp #2147418112 (x86-set-rbp #2147418112
+    (x86-set-rip #4194304 (x86-poke #8 #2147418104 p (x86-poke #8 #2147418096 q (x86-poke #1 #4194320 #195 x86-user64))))))))
+cls-at : (n : Word) → Word → X86 → X86
+cls-at n bytes s = x86-poke n #4194304 bytes s
+cls-m8 : X86 → Word
+cls-m8 s = x86-read-mem #8 #2147418104 s
+-- mov-rcx-rax: mov rcx, rax   (48 89 C1)
+cls-mov-rcx-rax : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-mov-rcx-rax a c d p q = x86-run #1 (cls-at #3 #12683592 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-mov-rcx-rax a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-mov-rcx-rax a c d p q))
+#show λ (a c d p q : Word) → x86-rcx (snd (cls-mov-rcx-rax a c d p q))
+-- mov-rax-imm: mov rax, 0x0807060504030201   (48 B8 01 02 03 04 05 06 07 08)
+cls-mov-rax-imm : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-mov-rax-imm a c d p q = x86-run #1 (cls-at #10 #37908492828823204771912 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-mov-rax-imm a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-mov-rax-imm a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-mov-rax-imm a c d p q))
+-- ld-rbp: mov rax, [rbp-8]   (48 8B 85 F8 FF FF FF)
+cls-ld-rbp : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-ld-rbp a c d p q = x86-run #1 (cls-at #7 #72057593912462152 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-ld-rbp a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-ld-rbp a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-ld-rbp a c d p q))
+-- st-rbp: mov [rbp-8], rax   (48 89 85 F8 FF FF FF)
+cls-st-rbp : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-st-rbp a c d p q = x86-run #1 (cls-at #7 #72057593912461640 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-st-rbp a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-st-rbp a c d p q))
+#show λ (a c d p q : Word) → cls-m8 (snd (cls-st-rbp a c d p q))
+-- lea-rbp: lea rax, [rbp-8]   (48 8D 85 F8 FF FF FF)
+cls-lea-rbp : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-lea-rbp a c d p q = x86-run #1 (cls-at #7 #72057593912462664 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-lea-rbp a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-lea-rbp a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-lea-rbp a c d p q))
+-- ld8: movzx eax, byte [rax+8]   (0F B6 40 08)
+cls-ld8 : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-ld8 a c d p q = x86-run #1 (cls-at #4 #138458639 (cls-base #2147418096 c d p q))
+#show λ (a c d p q : Word) → fst (cls-ld8 a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-ld8 a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-ld8 a c d p q))
+-- st8: mov [rax+8], dl   (88 50 08)
+cls-st8 : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-st8 a c d p q = x86-run #1 (cls-at #3 #544904 (cls-base #2147418096 c d p q))
+#show λ (a c d p q : Word) → fst (cls-st8 a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-st8 a c d p q))
+#show λ (a c d p q : Word) → x86-read-mem #8 #2147418104 (snd (cls-st8 a c d p q))
+-- sub: sub rax, rcx   (48 29 C8)
+cls-sub : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-sub a c d p q = x86-run #1 (cls-at #3 #13117768 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-sub a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-sub a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-sub a c d p q))
+-- imul: imul rax, rcx   (48 0F AF C1)
+cls-imul : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-imul a c d p q = x86-run #1 (cls-at #4 #3249475400 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-imul a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-imul a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-imul a c d p q))
+-- and: and rax, rcx   (48 21 C8)
+cls-and : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-and a c d p q = x86-run #1 (cls-at #3 #13115720 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-and a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-and a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-and a c d p q))
+-- or: or rax, rcx   (48 09 C8)
+cls-or : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-or a c d p q = x86-run #1 (cls-at #3 #13109576 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-or a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-or a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-or a c d p q))
+-- xor: xor rax, rcx   (48 31 C8)
+cls-xor : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-xor a c d p q = x86-run #1 (cls-at #3 #13119816 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-xor a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-xor a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-xor a c d p q))
+-- shl: shl rax, cl   (48 D3 E0)
+cls-shl : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-shl a c d p q = x86-run #1 (cls-at #3 #14734152 (cls-base a #5 d p q))
+#show λ (a c d p q : Word) → fst (cls-shl a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-shl a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-shl a c d p q))
+-- shr: shr rax, cl   (48 D3 E8)
+cls-shr : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-shr a c d p q = x86-run #1 (cls-at #3 #15258440 (cls-base a #5 d p q))
+#show λ (a c d p q : Word) → fst (cls-shr a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-shr a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-shr a c d p q))
+-- sar: sar rax, cl   (48 D3 F8)
+cls-sar : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-sar a c d p q = x86-run #1 (cls-at #3 #16307016 (cls-base a #5 d p q))
+#show λ (a c d p q : Word) → fst (cls-sar a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-sar a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-sar a c d p q))
+-- cmp-jb: cmp rax, rcx; jb +16   (48 39 C8 0F 82 10 00 00 00)
+cls-cmp-jb : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-cmp-jb a c d p q = x86-run #2 (cls-at #9 #18150796573000 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-cmp-jb a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-cmp-jb a c d p q))
+-- cmp-setb: cmp rax, rcx; setb al; movzx eax, al   (48 39 C8 0F 92 C0 0F B6 C0)
+cls-cmp-setb : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-cmp-setb a c d p q = x86-run #3 (cls-at #9 #3554893778125349992776 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-cmp-setb a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-cmp-setb a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-cmp-setb a c d p q))
+-- cmovb: cmp rax, rcx; cmovb rax, rcx   (48 39 C8 48 0F 42 C1)
+cls-cmovb : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-cmovb a c d p q = x86-run #2 (cls-at #7 #54397303918180680 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-cmovb a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-cmovb a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-cmovb a c d p q))
+-- push-pop: push rax; pop rcx   (50 59)
+cls-push-pop : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-push-pop a c d p q = x86-run #2 (cls-at #2 #22864 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-push-pop a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-push-pop a c d p q))
+#show λ (a c d p q : Word) → x86-rcx (snd (cls-push-pop a c d p q))
+#show λ (a c d p q : Word) → x86-rsp (snd (cls-push-pop a c d p q))
+-- call-ret: call rax (rax = 0x400010, where a ret is)   (FF D0)
+cls-call-ret : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-call-ret a c d p q = x86-run #2 (cls-at #2 #53503 (cls-base #4194320 c d p q))
+#show λ (a c d p q : Word) → fst (cls-call-ret a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-call-ret a c d p q))
+#show λ (a c d p q : Word) → x86-rsp (snd (cls-call-ret a c d p q))
+-- jmp: jmp +16   (E9 10 00 00 00)
+cls-jmp : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-jmp a c d p q = x86-run #1 (cls-at #5 #4329 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-jmp a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-jmp a c d p q))
+-- cqo-idiv: cqo; idiv rcx   (48 99 48 F7 F9)
+cls-cqo-idiv : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-cqo-idiv a c d p q = x86-run #2 (cls-at #5 #1073595586888 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-cqo-idiv a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-cqo-idiv a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-cqo-idiv a c d p q))
+#show λ (a c d p q : Word) → x86-rdx (snd (cls-cqo-idiv a c d p q))
+-- div: xor edx, edx; div rcx   (31 D2 48 F7 F1)
+cls-div : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-div a c d p q = x86-run #2 (cls-at #5 #1039235863089 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-div a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-div a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-div a c d p q))
+#show λ (a c d p q : Word) → x86-rdx (snd (cls-div a c d p q))
+-- neg: neg rax   (48 F7 D8)
+cls-neg : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-neg a c d p q = x86-run #1 (cls-at #3 #14219080 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-neg a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-neg a c d p q))
+#show λ (a c d p q : Word) → x86-rax (snd (cls-neg a c d p q))
+-- rep-movsb: rep movsb   (F3 A4)
+cls-rep-movsb : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-rep-movsb a c d p q = x86-run #1 (x86-set-rsi #2147418096 (x86-set-rdi #2147418104 (cls-at #2 #42227 (cls-base a #3 d p q))))
+#show λ (a c d p q : Word) → fst (cls-rep-movsb a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-rep-movsb a c d p q))
+#show λ (a c d p q : Word) → x86-rcx (snd (cls-rep-movsb a c d p q))
+#show λ (a c d p q : Word) → x86-rsi (snd (cls-rep-movsb a c d p q))
+#show λ (a c d p q : Word) → x86-rdi (snd (cls-rep-movsb a c d p q))
+#show λ (a c d p q : Word) → x86-read-mem #8 #2147418104 (snd (cls-rep-movsb a c d p q))
+-- rep-stosb: rep stosb   (F3 AA)
+cls-rep-stosb : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-rep-stosb a c d p q = x86-run #1 (x86-set-rsi #2147418096 (x86-set-rdi #2147418104 (cls-at #2 #43763 (cls-base a #3 d p q))))
+#show λ (a c d p q : Word) → fst (cls-rep-stosb a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-rep-stosb a c d p q))
+#show λ (a c d p q : Word) → x86-rcx (snd (cls-rep-stosb a c d p q))
+#show λ (a c d p q : Word) → x86-rdi (snd (cls-rep-stosb a c d p q))
+#show λ (a c d p q : Word) → x86-read-mem #8 #2147418104 (snd (cls-rep-stosb a c d p q))
+-- syscall: syscall   (0F 05)
+cls-syscall : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-syscall a c d p q = x86-run #1 (cls-at #2 #1295 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-syscall a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-syscall a c d p q))
+-- ud2: ud2   (0F 0B)
+cls-ud2 : Word → Word → Word → Word → Word → Outc exception Unit × X86
+cls-ud2 a c d p q = x86-run #1 (cls-at #2 #2831 (cls-base a c d p q))
+#show λ (a c d p q : Word) → fst (cls-ud2 a c d p q)
+#show λ (a c d p q : Word) → x86-rip (snd (cls-ud2 a c d p q))
