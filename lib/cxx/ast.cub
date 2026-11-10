@@ -121,6 +121,7 @@ data CCastKind =
   | ck-FloatingToIntegral
   | ck-FloatingCast
   | ck-BaseToDerived
+  | ck-Dynamic
 -- CUnOp: unary operators met
 data CUnOp =
     uo-post-inc
@@ -165,6 +166,15 @@ data CConstructKind = cck-complete | cck-non-virtual-base | cck-delegating | cck
 data CStorageDuration = csd-full-expression | csd-automatic | csd-static
 -- CTraitKind: sizeof, alignof
 data CTraitKind = ctk-sizeof | ctk-alignof
+-- CAtomicOp: the operation of an AtomicExpr, by Clang's builtin name
+data CAtomicOp =
+    cao-atomic-load
+  | cao-atomic-load-n
+  | cao-atomic-store-n
+  | cao-atomic-exchange-n
+  | cao-atomic-compare-exchange-n
+  | cao-atomic-fetch-add
+  | cao-atomic-fetch-sub
 -- CNewInit: the initializer style of a new-expression
 data CNewInit = cni-none | cni-parens | cni-braces
 -- CExpr: an expression; every node has its type and value category. One constructor per Clang Expr kind met; ce-nil/ce-cons build argument and initializer lists
@@ -206,6 +216,12 @@ data CExpr =
   | ce-unary-or-type-trait (t : CType) (vc : CValCat) (k : CTraitKind) (arg-type : CType) (arg : CExpr)
   | ce-subst-nttp (t : CType) (vc : CValCat) (e : CExpr)
   | ce-rewritten-binary (t : CType) (vc : CValCat) (e : CExpr)
+  | ce-throw (t : CType) (vc : CValCat) (e : CExpr)
+  | ce-bind-temporary (t : CType) (vc : CValCat) (dtor : Word) (e : CExpr)
+  | ce-dynamic-cast (t : CType) (vc : CValCat) (k : CCastKind) (path : List Word) (e : CExpr)
+  | ce-typeid (t : CType) (vc : CValCat) (arg-type : CType) (arg : CExpr)
+  | ce-noexcept (t : CType) (vc : CValCat) (e : CExpr)
+  | ce-atomic (t : CType) (vc : CValCat) (op : CAtomicOp) (args : CExpr)
   | ce-std-initializer-list (t : CType) (vc : CValCat) (e : CExpr)
   | ce-new (t : CType) (vc : CValCat) (global : Bool) (array : Bool) (operator-new : COptId) (init-style : CNewInit) (array-size : CExpr) (placement : CExpr) (init : CExpr)
   | ce-delete (t : CType) (vc : CValCat) (global : Bool) (array : Bool) (operator-delete : COptId) (e : CExpr)
@@ -227,7 +243,7 @@ data CAlign = cal-none | cal-bytes (n : Word) | cal-type (t : CType)
 data CVar =
     cv-var (id : Word) (name : CStr) (t : CType) (storage : CStorage) (align : CAlign) (constexpr : Bool) (nrvo : Bool) (init : CVarInit)
   | cv-parm (id : Word) (name : CStr) (t : CType) (default : CExpr)
--- CStmt: a statement. One constructor per Clang Stmt kind met; cs-expr is an expression in statement position; cs-none an absent child; cs-nil/cs-cons the children of cs-compound
+-- CStmt: a statement. One constructor per Clang Stmt kind met; cs-expr is an expression in statement position; cs-none an absent child; cs-nil/cs-cons the children of cs-compound and the handlers of cs-try (each a cs-catch, whose var is empty for catch (...))
 data CStmt =
     cs-compound (ss : CStmt)
   | cs-decl (vars : List CVar)
@@ -244,6 +260,10 @@ data CStmt =
   | cs-switch (init : CStmt) (cond-var : CStmt) (cond : CExpr) (body : CStmt)
   | cs-case (value : CExpr) (s : CStmt)
   | cs-default (s : CStmt)
+  | cs-try (body : CStmt) (handlers : CStmt)
+  | cs-catch (var : List CVar) (body : CStmt)
+  | cs-goto (label : Word)
+  | cs-label (id : Word) (name : CStr) (s : CStmt)
   | cs-null
   | cs-none
   | cs-nil
@@ -283,7 +303,7 @@ data CCtorVTable =
     cctor-vtable (base : Word) (offset : Word) (address-points : List CVAddrPoint) (entries : List CVTEntry)
 -- CVTTEntry: an entry of the VTT: a slot index in the class's own vtable, or in the construction vtable of the base at that offset
 data CVTTEntry = cvtt-own (index : Word) | cvtt-construction (base : Word) (offset : Word) (index : Word)
--- CVTable: a record's vtable. cvtable: the slots and the one index the object's vtable pointer addresses, for a vtable this unit emits that has one address point and no thunks. cvtable-full: every other vtable: whether this unit emits it (false: its key function is defined in another unit, or nothing here refers to it), its address points, slots, virtual base offset offsets, VTT, construction vtables
+-- CVTable: a record's vtable. cvtable: the slots and the one index the object's vtable pointer addresses, for a vtable this unit emits that has one address point and no thunks. cvtable-full: every other vtable: whether this unit emits it (false: its key function is defined in another unit, or nothing here refers to it), its address points, slots, virtual base offset offsets, VTT, construction vtables; with no slots at all: a polymorphic class Clang laid out no vtable for in this unit (nothing here constructs it or calls a virtual function of it)
 data CVTable =
     cvt-none
   | cvtable (address-point : Word) (entries : List CVTEntry)
@@ -311,7 +331,7 @@ data CCtorInit =
 -- CFunction: what every function declaration has
 data CFunction =
     cfunction (id : Word) (name : CStr) (mangled : CStr) (t : CType) (params : List CVar) (storage : CStorage) (inline : Bool) (constexpr : Bool) (implicit : Bool) (body : CBody)
--- CDecl: a declaration of the unit. One constructor per Clang Decl kind met at the top level (members are listed flat, with the id of their class)
+-- CDecl: a declaration of the unit. One constructor per Clang Decl kind met at the top level (members are listed flat, with the id of their class). cd-var-dynamic is a variable of static storage that the unit's start-up code initializes (Clang did not make its initializer a constant), in the order of the unit's `statics`
 data CDecl =
     cd-function (f : CFunction)
   | cd-method (parent : Word) (virtual : Bool) (f : CFunction)
@@ -322,6 +342,7 @@ data CDecl =
   | cd-class-template-specialization (args : List CTArg) (r : CRecord)
   | cd-enum (id : Word) (name : CStr) (underlying : CType) (scoped : Bool) (enumerators : List CEnumerator)
   | cd-var (mangled : CStr) (v : CVar)
+  | cd-var-dynamic (mangled : CStr) (v : CVar)
   | cd-var-template-specialization (args : List CTArg) (mangled : CStr) (v : CVar)
 -- CTU: the translation unit: its name, the target, the ids of its roots, the ids of its variables of static storage in the order of their definitions, its declarations
 data CTU = ctu (name : CStr) (target : CStr) (roots : List Word) (statics : List Word) (decls : List CDecl)

@@ -112,6 +112,7 @@ SCHEMA = [
         ('ck-ConstructorConversion', []), ('ck-PointerToBoolean', []),
         ('ck-NullToMemberPointer', []), ('ck-UserDefinedConversion', []),
         ('ck-IntegralToFloating', []), ('ck-FloatingToIntegral', []), ('ck-FloatingCast', []), ('ck-BaseToDerived', []),
+        ('ck-Dynamic', []),
     ]),
     ('CUnOp', 'unary operators met', [
         ('uo-post-inc', []), ('uo-post-dec', []), ('uo-pre-inc', []), ('uo-pre-dec', []),
@@ -138,6 +139,11 @@ SCHEMA = [
     ]),
     ('CTraitKind', 'sizeof, alignof', [
         ('ctk-sizeof', []), ('ctk-alignof', []),
+    ]),
+    ('CAtomicOp', "the operation of an AtomicExpr, by Clang's builtin name", [
+        ('cao-atomic-load', []), ('cao-atomic-load-n', []), ('cao-atomic-store-n', []),
+        ('cao-atomic-exchange-n', []), ('cao-atomic-compare-exchange-n', []),
+        ('cao-atomic-fetch-add', []), ('cao-atomic-fetch-sub', []),
     ]),
     ('CNewInit', 'the initializer style of a new-expression', [
         ('cni-none', []), ('cni-parens', []), ('cni-braces', []),
@@ -203,6 +209,13 @@ SCHEMA = [
                                     ('arg-type', 'CType'), ('arg', 'CExpr')]),
         ('ce-subst-nttp', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
         ('ce-rewritten-binary', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
+        ('ce-throw', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
+        ('ce-bind-temporary', [('t', 'CType'), ('vc', 'CValCat'), ('dtor', 'Word'), ('e', 'CExpr')]),
+        ('ce-dynamic-cast', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CCastKind'),
+                             ('path', 'List Word'), ('e', 'CExpr')]),
+        ('ce-typeid', [('t', 'CType'), ('vc', 'CValCat'), ('arg-type', 'CType'), ('arg', 'CExpr')]),
+        ('ce-noexcept', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
+        ('ce-atomic', [('t', 'CType'), ('vc', 'CValCat'), ('op', 'CAtomicOp'), ('args', 'CExpr')]),
         ('ce-std-initializer-list', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
         ('ce-new', [('t', 'CType'), ('vc', 'CValCat'), ('global', 'Bool'), ('array', 'Bool'),
                     ('operator-new', 'COptId'), ('init-style', 'CNewInit'),
@@ -235,7 +248,8 @@ SCHEMA = [
     ]),
     ('CStmt', 'a statement. One constructor per Clang Stmt kind met; cs-expr is an expression '
               'in statement position; cs-none an absent child; cs-nil/cs-cons the children of '
-              'cs-compound', [
+              'cs-compound and the handlers of cs-try (each a cs-catch, whose var is empty for '
+              'catch (...))', [
         ('cs-compound', [('ss', 'CStmt')]),
         ('cs-decl', [('vars', 'List CVar')]),
         ('cs-expr', [('e', 'CExpr')]),
@@ -257,6 +271,10 @@ SCHEMA = [
                        ('body', 'CStmt')]),
         ('cs-case', [('value', 'CExpr'), ('s', 'CStmt')]),
         ('cs-default', [('s', 'CStmt')]),
+        ('cs-try', [('body', 'CStmt'), ('handlers', 'CStmt')]),
+        ('cs-catch', [('var', 'List CVar'), ('body', 'CStmt')]),
+        ('cs-goto', [('label', 'Word')]),
+        ('cs-label', [('id', 'Word'), ('name', 'CStr'), ('s', 'CStmt')]),
         ('cs-null', []),
         ('cs-none', []),
         ('cs-nil', []),
@@ -334,7 +352,9 @@ SCHEMA = [
                 'pointer addresses, for a vtable this unit emits that has one address point and '
                 'no thunks. cvtable-full: every other vtable: whether this unit emits it (false: '
                 'its key function is defined in another unit, or nothing here refers to it), its '
-                'address points, slots, virtual base offset offsets, VTT, construction vtables', [
+                'address points, slots, virtual base offset offsets, VTT, construction vtables; '
+                'with no slots at all: a polymorphic class Clang laid out no vtable for in this '
+                'unit (nothing here constructs it or calls a virtual function of it)', [
         ('cvt-none', []),
         ('cvtable', [('address-point', 'Word'), ('entries', 'List CVTEntry')]),
         ('cvtable-full', [('emitted', 'Bool'), ('address-points', 'List CVAddrPoint'),
@@ -381,7 +401,9 @@ SCHEMA = [
                        ('constexpr', 'Bool'), ('implicit', 'Bool'), ('body', 'CBody')]),
     ]),
     ('CDecl', 'a declaration of the unit. One constructor per Clang Decl kind met at the top '
-              'level (members are listed flat, with the id of their class)', [
+              'level (members are listed flat, with the id of their class). cd-var-dynamic is a '
+              "variable of static storage that the unit's start-up code initializes (Clang did "
+              "not make its initializer a constant), in the order of the unit's `statics`", [
         ('cd-function', [('f', 'CFunction')]),
         ('cd-method', [('parent', 'Word'), ('virtual', 'Bool'), ('f', 'CFunction')]),
         ('cd-constructor', [('parent', 'Word'), ('inits', 'List CCtorInit'), ('f', 'CFunction')]),
@@ -392,6 +414,7 @@ SCHEMA = [
         ('cd-enum', [('id', 'Word'), ('name', 'CStr'), ('underlying', 'CType'),
                      ('scoped', 'Bool'), ('enumerators', 'List CEnumerator')]),
         ('cd-var', [('mangled', 'CStr'), ('v', 'CVar')]),
+        ('cd-var-dynamic', [('mangled', 'CStr'), ('v', 'CVar')]),
         ('cd-var-template-specialization', [('args', 'List CTArg'), ('mangled', 'CStr'), ('v', 'CVar')]),
     ]),
     ('CTU', 'the translation unit: its name, the target, the ids of its roots, the ids of its '
@@ -898,6 +921,10 @@ class TypeParser:
                     elif k == 'id' and x == 'throw' and self.at('(', 1) and self.at(')', 2):
                         self.i += 2
                         noex = True
+                    elif k == 'id' and x == '__attribute__' and [self.peek(j) for j in (1, 2, 3, 4, 5)] == \
+                            [('p', '('), ('p', '('), ('id', 'noreturn'), ('p', ')'), ('p', ')')]:
+                        self.i += 5
+                        self.u.type_attrs.add('__attribute__((noreturn)) in a function type')
                     elif (k, x) == ('p', '->'):
                         self.i += 1
                         ret = self.type()
@@ -997,6 +1024,7 @@ REFKINDS = {'FunctionDecl': 'function', 'CXXMethodDecl': 'method', 'VarDecl': 'v
             'CXXConversionDecl': 'method', 'CXXDestructorDecl': 'method',
             'CXXConstructorDecl': 'method'}
 CAST_NODES = {'ImplicitCastExpr': 'ce-implicit-cast', 'CXXStaticCastExpr': 'ce-static-cast',
+              'CXXDynamicCastExpr': 'ce-dynamic-cast',
               'CXXReinterpretCastExpr': 'ce-reinterpret-cast',
               'CXXFunctionalCastExpr': 'ce-functional-cast', 'CStyleCastExpr': 'ce-cstyle-cast'}
 
@@ -1032,7 +1060,8 @@ class Unit:
                 stop('clang failed on %s:\n%s' % (self.path, p.stderr[-2000:]))
             self.vtable_text = p.stdout
             with open(ir.name) as fh:
-                self.ir_globals = [l for l in fh if l.startswith('@')]
+                self.ir_text = fh.read()
+            self.ir_globals = [l for l in self.ir_text.splitlines() if l.startswith('@')]
         p = subprocess.run(base + ['-fsyntax-only', '-Xclang', '-ast-dump', self.path],
                            capture_output=True, text=True)
         if p.returncode != 0:
@@ -1161,13 +1190,16 @@ class Unit:
         self.global_memo = {}
         self.probes, self.fn_type_memo = {}, {}
         self.sources, self.stubs = {}, []
+        self._dynamic = None
+        self.type_attrs = set()
+        self.lazy_inits = set()
 
     def is_definition(self, n):
         k = n['kind']
         if k in RECORD_KINDS or k == 'EnumDecl':
             return bool(n.get('completeDefinition')) or k == 'EnumDecl' and 'inner' in n
         if k in FUNCTION_KINDS:
-            return any(c.get('kind') == 'CompoundStmt' for c in n.get('inner', [])) or \
+            return any(c.get('kind') in ('CompoundStmt', 'CXXTryStmt') for c in n.get('inner', [])) or \
                 'explicitlyDefaulted' in n
         if k in ('VarDecl', 'VarTemplateSpecializationDecl'):
             return 'init' in n or n.get('storageClass') != 'extern'
@@ -1273,7 +1305,8 @@ class Unit:
                     t.setdefault(tg['name'], []).append(tg)
             elif k == 'UsingDirectiveDecl':
                 t.setdefault('', []).append(c)
-            elif k in TYPE_ENTITY_KINDS and c.get('name') and k != 'ClassTemplateSpecializationDecl':
+            elif k in TYPE_ENTITY_KINDS and c.get('name') and k not in ('ClassTemplateSpecializationDecl',
+                                                                       'ClassTemplatePartialSpecializationDecl'):
                 # (an explicit specialization is found through its template, not by its name)
                 t.setdefault(c['name'], []).append(self.nodes[c['id']])
         if n.get('kind') in FUNCTION_KINDS:
@@ -1904,6 +1937,8 @@ class Unit:
             elif text.endswith('vbtable pointer)'):
                 stop('record layout of %s: %r: no rule yet' % (rec.get('name'), text))
             else:
+                if off.endswith(':-'):
+                    continue            # a zero-width bit-field: it only aligns what follows
                 if ':' in off:
                     byte, bits = off.split(':')
                     fields.append((int(byte) * 8 + int(bits.split('-')[0]), text))
@@ -2140,9 +2175,9 @@ class Unit:
             qt = m['type']['qualType']
             cut = self.param_paren(qt)
             ret, rest = qt[:cut].strip(), qt[cut:]
+            rest = re.sub(r'\s*(noexcept(\(.*\))?|throw\(\))$', '', rest)     # the dump prints no exception specification
             if m['kind'] == 'CXXDestructorDecl':
                 ret = ''
-                rest = re.sub(r'\s*noexcept$', '', rest)
             head, tail = ret.replace(' ', ''), ('::' + m['name'] + rest).replace(' ', '')
             if not (ns.startswith(head) and ns.endswith(tail) and len(ns) > len(head) + len(tail)):
                 continue
@@ -2491,7 +2526,7 @@ class Unit:
         return T(con, *self.head(n), T(ck), path, self.expr(sub))
 
     e_ImplicitCastExpr = e_CXXStaticCastExpr = e_CXXReinterpretCastExpr = cast
-    e_CXXFunctionalCastExpr = e_CStyleCastExpr = cast
+    e_CXXFunctionalCastExpr = e_CStyleCastExpr = e_CXXDynamicCastExpr = cast
 
     def e_UnaryOperator(self, n):
         key = (n['opcode'], bool(n.get('isPostfix')))
@@ -2571,6 +2606,10 @@ class Unit:
                 fid = slots[i]
         else:
             stop('a default member initializer under %s at %s: no rule yet' % (p.get('kind'), self.where(n)))
+        f = self.node(fid)
+        if not [c for c in f.get('inner', []) if not c.get('kind', '').endswith('Attr') and
+                not (f.get('isBitfield') and c is f['inner'][0])]:
+            stop('the default member initializer of %s is used at %s and the dump has no expression for it' % (f.get('name'), self.where(n)))
         return T('ce-default-init', *self.head(n), W(self.need(fid)))
 
     def e_CXXThisExpr(self, n):
@@ -2626,6 +2665,35 @@ class Unit:
         if parm.get('kind') != 'NonTypeTemplateParmDecl':
             stop('a SubstNonTypeTemplateParmExpr of an unexpected shape at %s' % self.where(n))
         return T('ce-subst-nttp', *self.head(n), self.expr(sub))
+
+    def e_CXXThrowExpr(self, n):
+        ks = self.kids(n)
+        return T('ce-throw', *self.head(n), self.expr(ks[0]) if ks else T('ce-nil'))
+
+    def e_CXXBindTemporaryExpr(self, n):
+        sub, = self.kids(n)
+        return T('ce-bind-temporary', *self.head(n), W(self.need(n['dtor']['id'])), self.expr(sub))
+
+    def e_CXXTypeidExpr(self, n):
+        ks = self.kids(n)
+        if 'typeArg' in n:
+            at, arg = self.ty(self.type_at(n['typeArg'], n)), T('ce-nil')
+        else:
+            at, arg = self.tyof(ks[0]), self.expr(ks[0])
+        return T('ce-typeid', *self.head(n), at, arg)
+
+    def e_CXXNoexceptExpr(self, n):
+        # the value Sema computed is in neither dump: the operand (unevaluated) is what there is
+        sub, = self.kids(n)
+        return T('ce-noexcept', *self.head(n), self.expr(sub))
+
+    def e_AtomicExpr(self, n):
+        con = 'cao-' + n.get('name', '').lstrip('_').replace('_', '-')
+        if con not in CTORS:
+            stop('an atomic operation no unit has met before: %s at %s (add %s to CAtomicOp)' % (n.get('name'), self.where(n), con))
+        # the arguments are in Clang's order for the node: pointer, order, then the operation's
+        # values (for compare-exchange: pointer, success order, expected, failure order, desired, weak)
+        return T('ce-atomic', *self.head(n), T(con), self.exprs(self.kids(n)))
 
     def e_CXXRewrittenBinaryOperator(self, n):
         sub, = self.kids(n)
@@ -2759,6 +2827,34 @@ class Unit:
             stop('a GNU case range at %s: no rule yet' % self.where(n))
         value, sub = self.kids(n)
         return T('cs-case', self.expr(value), self.stmt(sub))
+
+    def s_CXXTryStmt(self, n):
+        ks = self.kids(n)
+        if any(c.get('kind') != 'CXXCatchStmt' for c in ks[1:]):
+            stop('a CXXTryStmt of an unexpected shape at %s' % self.where(n))
+        return T('cs-try', self.stmt(ks[0]), inlist('CStmt', [self.stmt(c) for c in ks[1:]]))
+
+    def s_CXXCatchStmt(self, n):
+        var, body = self.kids(n)
+        # catch (...) has no variable: the JSON prints a null declaration there
+        return T('cs-catch', [self.var(var)] if var.get('kind') else [], self.stmt(body))
+
+    def label(self, clang_id, name=None):
+        """The id of a label (the dump has no node for a LabelDecl, only its id)."""
+        if clang_id not in self.nodes:
+            stub = {'id': clang_id, 'kind': 'LabelDecl', 'name': name}
+            self.nodes[clang_id] = stub
+            self.parent[id(stub)] = self.tu
+        return self.idof(clang_id)
+
+    def s_GotoStmt(self, n):
+        return T('cs-goto', W(self.label(n['targetLabelDeclId'])))
+
+    def s_LabelStmt(self, n):
+        sub, = self.kids(n)
+        w = self.label(n['declId'])
+        self.defined.add(w)
+        return T('cs-label', W(w), S(n.get('name', '')), self.stmt(sub))
 
     def s_DefaultStmt(self, n):
         sub, = self.kids(n)
@@ -2941,8 +3037,8 @@ class Unit:
             ck = c.get('kind')
             if ck == 'ParmVarDecl':
                 params.append(self.parm(c, n, len(params)))
-            elif ck == 'CompoundStmt':
-                body = c
+            elif ck in ('CompoundStmt', 'CXXTryStmt'):
+                body = c                    # (a function-try-block is the body)
             elif ck == 'CXXCtorInitializer':
                 inits.append(c)
             elif ck == 'TemplateArgument':
@@ -3063,7 +3159,11 @@ class Unit:
                 width = T('cbw-bits', W(self.bit_width(c)))
                 ks = ks[1:]
             init = T('ce-nil')
-            if c.get('hasInClassInitializer'):
+            if c.get('hasInClassInitializer') and not ks:
+                # a default member initializer of a class template's member that nothing
+                # instantiated: there is no expression (a CXXDefaultInitExpr for it would stop)
+                self.lazy_inits.add(c['id'])
+            elif c.get('hasInClassInitializer'):
                 if len(ks) != 1:
                     stop('the default member initializer of %s::%s is not one expression' % (n.get('name'), c.get('name')))
                 init = self.expr(ks[0])
@@ -3074,8 +3174,11 @@ class Unit:
         vt = self.vtable_of(n)
         if vt is None:
             if vptr is not None or any(self.layout_of(self.nodes[b[0]])[1] is not None for b in lbases + lvbases):
-                stop('the class %s has a vtable pointer and the vtable dump has no vtable for it: no rule yet' % n.get('name'))
-            vtable = T('cvt-none')
+                # polymorphic, and Clang laid out no vtable for it in this unit: nothing here
+                # constructs it or calls a virtual function of it (std::type_info under typeid)
+                vtable = T('cvtable-full', False, [], [], [], [], [])
+            else:
+                vtable = T('cvt-none')
         else:
             simple = vt['emitted'] and len(set(p[2] for p in vt['points'])) == 1 and not vt['vbo'] and not vt['ctor'] and \
                 not vt['vtt'] and all(e[0] not in ('thunk', 'vbase-offset', 'vcall-offset') for e in vt['entries'])
@@ -3261,7 +3364,48 @@ class Unit:
     def d_VarDecl(self, n):
         v = self.var(n)
         self.met['VarDecl'] -= 1
-        return T('cd-var', S(n.get('mangledName', '')), v)
+        return T('cd-var-dynamic' if n['id'] in self.dynamic_vars() else 'cd-var', S(n.get('mangledName', '')), v)
+
+    def dynamic_vars(self):
+        """The ids of the variables the unit initializes at start-up. The dumps do not say which
+        initializers Clang made constants; the IR does: each `__cxx_global_var_init` function
+        initializes one variable, in the order of the definitions. The variable of each is one of
+        those it refers to, and the choice must be the only one that keeps the order."""
+        if self._dynamic is not None:
+            return self._dynamic
+        by_mangled = {}
+        for vs in self.var_by_name.values():
+            for v in vs:
+                if v.get('mangledName'):
+                    by_mangled.setdefault(v['mangledName'], self.node(v['id']))
+        fns = re.findall(r'^define [^\n]*@(__cxx_global_var_init(?:\.\d+)?)\(\)[^\n]*\{\n(.*?)^\}', self.ir_text, re.M | re.S)
+        refs = []
+        for name, body in fns:
+            vs = {}
+            for sym in re.findall(r'@("[^"]+"|[A-Za-z0-9_.$]+)', body):
+                v = by_mangled.get(sym.strip('"'))
+                if v is not None:
+                    vs[v['id']] = v
+            refs.append(sorted(vs.values(), key=lambda v: v['_order']))
+        sols = []
+
+        def go(k, last, acc):
+            if len(sols) > 1:
+                return
+            if k == len(refs):
+                sols.append(list(acc))
+                return
+            for v in refs[k]:
+                if v['_order'] > last:
+                    acc.append(v['id'])
+                    go(k + 1, v['_order'], acc)
+                    acc.pop()
+        go(0, -1, [])
+        if len(sols) != 1:
+            stop('the %d start-up initialization functions of the unit do not determine their variables (%d ways): no rule yet'
+                 % (len(refs), len(sols)))
+        self._dynamic = set(sols[0])
+        return self._dynamic
 
     def d_VarTemplateSpecializationDecl(self, n):
         v = self.var(n)
@@ -3349,6 +3493,7 @@ class Unit:
         r.append('cast kinds met (%d): %s' % (len(self.met_casts), ', '.join('%s %d' % kv for kv in sorted(self.met_casts.items()))))
         r.append('met and not written as nodes (%d): %s' % (len(self.elided), '; '.join(
             '%s %d (%s)' % (k, c, why) for k, (c, why) in sorted(self.elided.items()))))
+        r.append('read in type strings and not written (%d): %s' % (len(self.type_attrs), '; '.join(sorted(self.type_attrs))))
         r.append('asked of Clang by a probe (%d): %s' % (len(self.probes), '; '.join(
             '%s = %s' % kv for kv in sorted(self.probes.items()))))
         r.append('names resolved from the scope of use that name other types elsewhere in the unit (%d): %s'

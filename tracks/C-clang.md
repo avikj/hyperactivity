@@ -360,6 +360,35 @@ against the earlier file needs new cases only:
   `cstr-is s bytes`, over `primitive cstr-get` (`%load8`), so `lib/cxx/machine.cub`'s own
   `cx-byte` can go. Checked: the full library with the five units, 2269 passed, 0 failed.
 
+- `experiments/cxx/sixth.cpp` (item 5, all of it but coroutines) imports and checks, with
+  exceptions and RTTI on: `python3 tools/clang2cub.py experiments/cxx/sixth.cpp
+  --flags=-std=c++20 -o experiments/cxx/sixth.cub` (the `=` is needed; the flags are in the
+  generated header). 3037 nodes, 83 declarations, 100 shared types, 14 records with layouts
+  of 14. New constructors: `cs-try body handlers` (CXXTryStmt; also the body of a
+  function-try-block), `cs-catch var body` (CXXCatchStmt; `var` empty for `catch (...)`),
+  `ce-throw` (CXXThrowExpr; `ce-nil` inside for a rethrow), `ce-bind-temporary dtor e`
+  (CXXBindTemporaryExpr: a temporary whose destructor `dtor` must run, at the end of the full
+  expression or on unwinding), `ce-dynamic-cast` with cast kind `ck-Dynamic`, `ce-typeid
+  arg-type arg`, `ce-noexcept e` (CXXNoexceptExpr: the value Sema computed is in neither
+  dump, the unevaluated operand is), `ce-atomic op args` (AtomicExpr, `CAtomicOp` =
+  `__atomic_load`, `_load_n`, `_store_n`, `_exchange_n`, `_compare_exchange_n`, `_fetch_add`,
+  `_fetch_sub`; arguments in Clang's order for the node: pointer, order, then values),
+  `cs-goto label`, `cs-label id name s` (labels get ids like every declaration),
+  `cd-var-dynamic` (a variable of static storage that the unit's start-up code initializes;
+  `statics` gives the order).
+  Where destructors run on unwinding is not in Clang's AST at all: what is there, and is
+  written, is every object's declaration in its scope, `ce-with-cleanups` at each full
+  expression that has temporaries to destroy, `ce-bind-temporary` on each such temporary with
+  its destructor, and the destructors themselves. Which variables are dynamically initialized
+  is not in the dumps either; it is read from the IR (`__cxx_global_var_init` functions, one
+  per variable, in definition order: the assignment of variables to them must be unique).
+  Also in the unit and needing no new rule: `volatile` (a qualifier in the types), a union
+  with non-trivial members (its members' constructors and destructors are ordinary calls:
+  placement new, `u.text.~Text()`), bit-fields with an unnamed zero-width one (the layout's
+  `2:-` line), a pointer to data member (`ct-member-pointer`, `cbo-ptr-mem-d`), noexcept in
+  function types. `std::type_info` shows the third kind of vtable: a polymorphic class Clang
+  lays out no vtable for in the unit (`cvtable-full false` with no slots).
+
 ## Found
 
 In the machine:
