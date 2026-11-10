@@ -36,14 +36,17 @@ Files you own: `lib/isa/tso.cub`, `lib/mem/atomics.cub`, `experiments/tso/**`, t
 
 ## Needs from track A
 
-Nothing yet.
+- `Makefile`: append `lib/isa/tso.cub lib/mem/atomics.cub` to `LIB` (after `lib/world.cub`'s
+  dependents; they need only `lib/proc.cub`, `lib/world.cub`, and `tso.cub` before
+  `atomics.cub`), so `make library` checks them: +134 checks, +568,491 steps. Not blocking:
+  everything here is checked by naming the files after `$LIBS`.
 
 ## Done
 
 How to check (cached library, one file after another; the last line must read `N passed, 0 failed`):
 `LIBS=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p'); (ulimit -v 2500000; timeout 600 ./build/cubical $LIBS lib/isa/tso.cub)`
 
-- `lib/isa/tso.cub`, operational part (58 definitions check; the file alone is 264k steps):
+- `lib/isa/tso.cub`, operational part:
   instructions `TsoI` (load, store, xchg, lock cmpxchg, mfence) with signature `TsoIS`; machine
   commands `TsoC` (`tso-do t i`, `tso-flush t`) with signature `TsoS`; state `TsoSt` (memory,
   last flushed write id per address, per-thread buffers newest first, next event id, trace of
@@ -66,11 +69,11 @@ How to check (cached library, one file after another; the last line must read `N
   ((1,1) absent), 20 finished schedules, 0 cut, 30,140 steps.
 - **IRIW** (`experiments/tso/iriw.cub`), `#show tso-outcomes 8 iriw`: 15 of the 16 tuples
   (r0,r1,r2,r3), exactly (1,0,1,0) absent, 2,520 finished schedules (= 8!/(2!)^4), 0 cut,
-  7,642,250 steps, 3.4 s for the five files after the cached library.
+  7,642,250 steps, 3.4 s for `tso.cub` and the four litmus files after the cached library.
   The four files load together: `./build/cubical $LIBS lib/isa/tso.cub experiments/tso/{sb,mp,lb,iriw}.cub`
   ends `830 passed, 0 failed`.
 
-- `lib/isa/tso.cub`, axiomatic part and the relation (file now 112 definitions; all check):
+- `lib/isa/tso.cub`, axiomatic part and the relation:
   events `TsoEv` (id, thread, kind `k-R/k-W/k-L/k-F`, address, value read, value written),
   candidate `TsoX` (events, rf as (reader id, write id or #0 = initial memory), co as the list
   of writer ids in order); `tso-consistent m0 x : Bool` = `tso-wf` (ids distinct, exactly the
@@ -152,8 +155,20 @@ How to check (cached library, one file after another; the last line must read `N
   | SB seq_cst as xchg (locked events) | 8 | 6 | no (0,0) | 87,587 |
   | SB seq_cst as store+mfence (mfence events) | 8 | 6 | no (0,0) | 145,351 |
   So on these six programs the operational and the axiomatic outcome sets are the same list
-  (both directions, by computation). `lib/isa/tso.cub` is 138 definitions.
+  (both directions, by computation).
   All eight files after the cached library: `967 passed, 0 failed`.
+
+- **Final measurement** (at main `08d47a97` + rebase, 2 shared cores under load ~2.7):
+  `make library`: `845 passed, 0 failed; 21,745,292 steps`, 26 s.
+  Library and all eight files of this track, uncached, one run
+  (`CUBICAL_NOCACHE=1 ./build/cubical $LIBS lib/isa/tso.cub experiments/tso/{sb,mp,lb,iriw}.cub
+  lib/mem/atomics.cub experiments/tso/{atomics-sb,spinlock}.cub`, under `ulimit -v 2500000`):
+  `1042 passed, 0 failed; 155,954,917 steps`, 90 s wall; so 197 checks and 134.2M steps are
+  this track's (of which `iriw-sound` 69.5M and `spin-mutex-8` 27.5M). Counted from that
+  run's log: `lib/isa/tso.cub` is 113 checks, 504,758 steps; `lib/mem/atomics.cub` 21 checks,
+  63,733 steps; the six experiment files 63 checks.
+  Acceptance: line 1 met (this entry); line 2 met (SB, MP, LB, IRIW entries above, sets with
+  steps); line 3 met (the spin-lock entry, `SpinMutex`).
 
 ## Found
 
@@ -194,9 +209,16 @@ How to check (cached library, one file after another; the last line must read `N
 
 ## Next step
 
-Every item of "What is built" and every Acceptance line has an entry under Done. Remaining:
-1. Final measurement: `make library`, then every file of mine uncached in one run
-   (`CUBICAL_NOCACHE=1 ./build/cubical $LIBS lib/isa/tso.cub experiments/tso/{sb,mp,lb,iriw}.cub
-   lib/mem/atomics.cub experiments/tso/{atomics-sb,spinlock}.cub`); record both under Done.
-2. Then the open items under Limits, in this order: the general proof of `TsoSound` (the
-   invariant on `TsoSt`), per-location enumeration in `tso-perms`.
+The track's specification and acceptance are complete; nothing is in progress. What a
+continuation would do is exactly the open items under Limits, in this order:
+1. The general proof of `TsoSound` in `lib/isa/tso.cub`: an invariant on `TsoSt` (each event's
+   stamp is its position in the trace, a write's stamp its flush; every `tso-ghb` and
+   `tso-loc` edge between events of the log increases the stamp) preserved by `tso-instr` and
+   `tso-flush1`, then "a relation that increases a stamp is `tso-acyclic`".
+2. `tso-perms` per location instead of over all writers, then the spin-lock's axiomatic set.
+3. When track B's instruction model emits memory events (PLAN Phase 2 item 4, "integrated with
+   the instruction model's memory events"): a handler from B's memory accesses to `TsoIS`, so a
+   lifted binary's threads are `TsoThread`s. Nothing of B's is used here yet; `lib/isa/tso.cub`
+   depends only on `lib/proc.cub` and `lib/world.cub`.
+To load after the library, in this order: `lib/isa/tso.cub`, then `lib/mem/atomics.cub`
+(neither is in the Makefile's `LIB`; see "Needs from track A").
