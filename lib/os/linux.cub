@@ -130,8 +130,18 @@ Linux = (LinuxCmd , lx-resp)
 -- a command as a process, and the sequencing of calls that may fail (the first error ends it)
 lx : {l : Level} → (c : LinuxCmd) → Proc {l} Linux (lx-resp c)
 lx {l} c = cmd {l} {Linux} c
+-- A case whose branches are processes is written with the interpretation inside the branches
+-- (lx-sum, lx-if): a process is a function of its interpretation, and a case on a response that
+-- is applied to the interpretation from outside is stuck until the response is known, which
+-- keeps the handler it is applied to in the compiled code as a value, every command dispatched
+-- through it at run time (tracks/D-os.md, Found, item 7). With the application inside, each
+-- branch is a process the specializer runs through the handler now
+lx-sum : {l : Level} {S : Sig} {A B C : Type} → Sum A B → (A → Proc {l} S C) → (B → Proc {l} S C) → Proc {l} S C
+lx-sum {l} {S} {A} {B} {C} s f g = λ R k h → case s of inl a → f a R k h; inr b → g b R k h
+lx-if : {l : Level} {S : Sig} {C : Type} → Bool → Proc {l} S C → Proc {l} S C → Proc {l} S C
+lx-if {l} {S} {C} b t e = λ R k h → case b of true → t R k h; false → e R k h
 lx-then : {l : Level} {A B : Type} → Proc {l} Linux (Sum Errno A) → (A → Proc {l} Linux (Sum Errno B)) → Proc {l} Linux (Sum Errno B)
-lx-then {l} {A} {B} p f = bind {l} {Linux} {Sum Errno A} {Sum Errno B} p (λ r → case r of inl e → ret {l} {Linux} {Sum Errno B} (inl e); inr a → f a)
+lx-then {l} {A} {B} p f = bind {l} {Linux} {Sum Errno A} {Sum Errno B} p (λ r → lx-sum {l} {Linux} {Errno} {A} {Sum Errno B} r (λ e → ret {l} {Linux} {Sum Errno B} (inl e)) f)
 -- ---------------------------------------------------------------- the handler
 lx-bw : {A B : Type} → Proc {lzero} W A → (A → Proc {lzero} W B) → Proc {lzero} W B
 lx-bw {A} {B} p f = bind {lzero} {W} {A} {B} p f
@@ -170,11 +180,9 @@ linux-on-w : (pf : Platform) → LittleEndian pf → Word → Handler Linux W
 linux-on-w pf le sc c = case c return (λ x → Proc {lzero} W (lx-resp x)) of
   lx-clock-gettime →
     lx-bw {Sum Errno Word} {Sum Errno Timespec} (lx-sys pf sys-clock-gettime (pf-clock pf) (%wadd sc #24) #0 #0 #0 #0) (λ r →
-      case r of
-        inl e → lx-rw {Sum Errno Timespec} (inl e)
-        inr z → lx-bw {Word} {Sum Errno Timespec} (load-at (%wadd sc #24)) (λ s →
-                lx-bw {Word} {Sum Errno Timespec} (load-at (%wadd sc #32)) (λ ns →
-                  lx-rw {Sum Errno Timespec} (inr (Timespec { ts-sec = s ; ts-nsec = ns })))))
+    lx-bw {Word} {Sum Errno Timespec} (load-at (%wadd sc #24)) (λ s →
+    lx-bw {Word} {Sum Errno Timespec} (load-at (%wadd sc #32)) (λ ns →
+      lx-rw {Sum Errno Timespec} (case r of inl e → inl e; inr z → inr (Timespec { ts-sec = s ; ts-nsec = ns })))))
   lx-nanosleep t →
     lx-bw {Unit} {Sum Errno Unit} (store-at (%wadd sc #24) (ts-sec t)) (λ u →
     lx-bw {Unit} {Sum Errno Unit} (store-at (%wadd sc #32) (ts-nsec t)) (λ u2 →
@@ -193,19 +201,16 @@ linux-on-w pf le sc c = case c return (λ x → Proc {lzero} W (lx-resp x)) of
   lx-accept4 fd flags →
     lx-bw {Unit} {Sum Errno (Word × SockAddr)} (lx-clear-addr sc) (λ u →
     lx-bw {Sum Errno Word} {Sum Errno (Word × SockAddr)} (lx-sys pf sys-accept4 fd sc (%wadd sc #16) flags #0 #0) (λ r →
-      case r of
-        inl e → lx-rw {Sum Errno (Word × SockAddr)} (inl e)
-        inr nfd → lx-bw {SockAddr} {Sum Errno (Word × SockAddr)} (lx-get-addr sc) (λ a → lx-rw {Sum Errno (Word × SockAddr)} (inr (nfd , a)))))
+    lx-bw {SockAddr} {Sum Errno (Word × SockAddr)} (lx-get-addr sc) (λ a →
+      lx-rw {Sum Errno (Word × SockAddr)} (case r of inl e → inl e; inr nfd → inr (nfd , a)))))
   lx-connect fd a →
     lx-bw {Unit} {Sum Errno Unit} (lx-put-addr sc a) (λ u → lx-unit (lx-sys pf sys-connect fd sc #16 #0 #0 #0))
   lx-recvfrom fd buf len flags →
     lx-bw {Unit} {Sum Errno (Upto len × SockAddr)} (lx-clear-addr sc) (λ u →
     lx-bw {Sum Errno Word} {Sum Errno (Upto len × SockAddr)} (lx-sys pf sys-recvfrom fd buf len (%wand flags #4294967263) sc (%wadd sc #16)) (λ r →
-      case r of
-        inl e → lx-rw {Sum Errno (Upto len × SockAddr)} (inl e)
-        inr n → (case lx-upto len n of
-                   inl e2 → lx-rw {Sum Errno (Upto len × SockAddr)} (inl e2)
-                   inr k → lx-bw {SockAddr} {Sum Errno (Upto len × SockAddr)} (lx-get-addr sc) (λ a → lx-rw {Sum Errno (Upto len × SockAddr)} (inr (k , a))))))
+    lx-bw {SockAddr} {Sum Errno (Upto len × SockAddr)} (lx-get-addr sc) (λ a →
+      lx-rw {Sum Errno (Upto len × SockAddr)}
+        (case r of inl e → inl e; inr n → (case lx-upto len n of inl e2 → inl e2; inr k → inr (k , a))))))
   lx-sendto fd buf len flags a →
     lx-bw {Unit} {Sum Errno (Upto len)} (lx-put-addr sc a) (λ u → lx-count len (lx-sys pf sys-sendto fd buf len flags sc #16))
   lx-setsockopt fd level name val →
@@ -217,12 +222,9 @@ linux-on-w pf le sc c = case c return (λ x → Proc {lzero} W (lx-resp x)) of
       lx-unit (lx-sys pf sys-epoll-ctl ep op fd (%wadd sc #48) #0 #0)))
   lx-epoll-wait ep max timeout →
     lx-bw {Sum Errno Word} {Sum Errno (Upto max × List EpollEvent)} (lx-sys pf sys-epoll-wait ep (%wadd sc #64) (lx-clamp max) timeout #0 #0) (λ r →
-      case r of
-        inl e → lx-rw {Sum Errno (Upto max × List EpollEvent)} (inl e)
-        inr n → (case lx-upto max n of
-                   inl e2 → lx-rw {Sum Errno (Upto max × List EpollEvent)} (inl e2)
-                   inr k → lx-bw {List EpollEvent} {Sum Errno (Upto max × List EpollEvent)} (lx-events pf (%wadd sc #64) (if %wlt lx-max-events n then lx-max-events else n)) (λ evs →
-                             lx-rw {Sum Errno (Upto max × List EpollEvent)} (inr (k , evs)))))
+    lx-bw {List EpollEvent} {Sum Errno (Upto max × List EpollEvent)} (lx-events pf (%wadd sc #64) (lx-clamp (case r of inl e → #0; inr n → n))) (λ evs →
+      lx-rw {Sum Errno (Upto max × List EpollEvent)}
+        (case r of inl e → inl e; inr n → (case lx-upto max n of inl e2 → inl e2; inr k → inr (k , evs)))))
   lx-futex-wait addr val → lx-unit (lx-sys pf sys-futex addr #0 val #0 #0 #0)
   lx-futex-wake addr n → lx-count n (lx-sys pf sys-futex addr #1 n #0 #0 #0)
   lx-getpid → sys-call (pf-sysnr pf sys-getpid) #0 #0 #0 #0 #0 #0
@@ -235,3 +237,10 @@ linux-on-w pf le sc c = case c return (λ x → Proc {lzero} W (lx-resp x)) of
 -- a process over Linux as a process of the drivers: the scratch area taken once, then the handler
 linux-run : {A : Type} → (pf : Platform) → LittleEndian pf → Proc {lsuc lzero} Linux A → Proc {lzero} W A
 linux-run {A} pf le p = lx-bw {Word} {A} (alloc-bytes lx-scratch) (λ sc → handle {Linux} {W} {A} (linux-on-w pf le sc) p)
+-- the same as a tree of steps, directly: the process interpreted at the type of steps, each
+-- command's handler run at it too. to-step (linux-run pf le p) is this up to moving the
+-- drivers' interpretation into the branches of every case on a response; here it is there from
+-- the start, a step is data, and the specialized code has no function chosen at run time
+linux-step : {A : Type} → (pf : Platform) → LittleEndian pf → Proc {lzero} Linux A → Step W A
+linux-step {A} pf le p =
+  scmd (w-alloc lx-scratch) (λ sc → p (Step W A) (λ a → sdone a) (λ c k → linux-on-w pf le sc c (Step W A) k (λ c2 k2 → scmd c2 k2)))

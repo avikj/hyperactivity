@@ -156,6 +156,11 @@ linux-run-rec : {A : Type} → (pf : Platform) → LittleEndian pf → Word → 
 linux-run-rec {A} pf le logfd p =
   lx-bw {Word} {A} (alloc-bytes lx-scratch) (λ sc →
   lx-bw {Word} {A} (alloc-bytes #2048) (λ area → handle {Linux} {W} {A} (linux-on-w-rec pf le sc area logfd) p))
+-- the same directly as a tree of steps (lib/os/linux.cub's linux-step)
+linux-step-rec : {A : Type} → (pf : Platform) → LittleEndian pf → Word → Proc {lzero} Linux A → Step W A
+linux-step-rec {A} pf le logfd p =
+  scmd (w-alloc lx-scratch) (λ sc → scmd (w-alloc #2048) (λ area →
+    p (Step W A) (λ a → sdone a) (λ c k → linux-on-w-rec pf le sc area logfd c (Step W A) k (λ c2 k2 → scmd c2 k2))))
 -- ---------------------------------------------------------------- replaying a log read from a descriptor
 -- the words as responses: a count, that many words, again (the list itself bounds the rounds)
 lx-split-go : List Word → List Word → LxLog
@@ -163,7 +168,9 @@ lx-split-go nil ws = nil
 lx-split-go (cons f fuel) ws = case ws of nil → nil; cons k rest → cons (k-take {Word} k rest) (lx-split-go fuel (k-drop {Word} k rest))
 lx-split : List Word → LxLog
 lx-split ws = lx-split-go ws ws
--- up to cap bytes read into buf until the descriptor ends (at most 4096 reads): the count
+-- up to cap bytes read into buf until the descriptor ends (at most 4096 reads): the count.
+-- (The case on the read's result is left applied from outside, not written with lx-sum: the
+-- bound is a literal, and a case the specializer can enter would be unrolled 4096 deep.)
 lx-read-all : Platform → Word → Word → Word → Proc {lzero} W Word
 lx-read-all pf fd buf cap =
   %welimP (λ v → Word → Proc {lzero} W Word) #4096 (λ off → lx-rw {Word} off)

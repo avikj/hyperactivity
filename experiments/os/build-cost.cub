@@ -16,6 +16,15 @@ bc-s7 : Step W (Sum Errno Word)
 bc-s7 = to-step (linux-run {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lsuc lzero} 7 #3))
 bc-s10 : Step W (Sum Errno Word)
 bc-s10 = to-step (linux-run {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lsuc lzero} 10 #3))
+-- the same processes through linux-step (the interpretation at the type of steps)
+bc-d3 : Step W (Sum Errno Word)
+bc-d3 = linux-step {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lzero} 3 #3)
+bc-d5 : Step W (Sum Errno Word)
+bc-d5 = linux-step {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lzero} 5 #3)
+bc-d7 : Step W (Sum Errno Word)
+bc-d7 = linux-step {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lzero} 7 #3)
+bc-d10 : Step W (Sum Errno Word)
+bc-d10 = linux-step {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lzero} 10 #3)
 -- the stages (untyped, as lib/elf.cub's are)
 bc-g c = case c of cglob g → g; _ → #0
 bc-unf g = case unfold g of some c → c; none → cwlit #0
@@ -36,3 +45,12 @@ bc-rev l acc = case l of lnil → acc; lcons x r → bc-rev r (lcons x acc)
 -- the same with the definitions visited in the opposite order
 bc-rel-rev g defs0 = let ars = x-arities defs0 in bc-passes #64 (x-root-params (lcons g lnil) ars lnil) ars (bc-rev defs0 lnil) #0
 bc-params defs = case defs of lnil → #0; lcons e r → %wadd (fst (snd e)) (bc-params r)
+-- the applications whose head is a stuck case or eliminator (a function chosen at run time: what
+-- it is applied to stays in the code as a value), counted over a code
+bc-stuck c = case c of
+  capp f a → (case f of
+                celim d P B x → %wsucc (bc-stuck-l (code-kids c))
+                ccase d B x → %wsucc (bc-stuck-l (code-kids c))
+                _ → bc-stuck-l (code-kids c))
+  _ → bc-stuck-l (code-kids c)
+bc-stuck-l l = case l of lnil → #0; lcons x r → %wadd (bc-stuck x) (bc-stuck-l r)

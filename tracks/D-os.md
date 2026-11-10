@@ -72,6 +72,42 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   result recorded here.
 - Item 7: the table (stage × number of commands → steps, sizes) under Found.
 
+5. **`lib/x86.cub`, the erasure's fixed point (item 7, cause 2; measurements under Found).**
+   Exact change, in `x-erase-roots`:
+   ```
+   x-rev l acc = case l of lnil → acc; lcons x r → x-rev r (lcons x acc)
+   x-param-count ars = case ars of lnil → #0; lcons e r → %wadd (snd e) (x-param-count r)
+   x-erase-roots roots defs0 =
+     let ars = x-arities defs0
+         R = x-rel-fix (%wsucc (x-param-count ars)) (x-root-params roots ars lnil) ars (x-rev defs0 lnil)
+         defs1 = x-er-defs R ars defs0
+     in x-keep (x-reach defs1 roots lnil) defs1
+   ```
+   (a) the definitions reversed for the fixed point only (callees before callers: 2 passes
+   instead of 6–41 on every program measured, same set); (b) the fuel the number of parameters
+   plus one, which no run can exhaust (every pass but the last adds a parameter), instead of
+   `#64`, which the tour reaches 41 of — and when exhausted erases needed arguments silently.
+   If a bound is kept for another reason, exhausting it must be a `not-fo` verdict, not a
+   result. Expected on `os-tour-step`: `#build` from 555 M steps to about 35 M. A further
+   factor, not needed for that: the needed set as one bit mask per definition kept with its
+   arity (one lookup per call instead of `x-look` + one `x-pmem` scan per argument).
+6. **`lib/elf.cub` / `lib/x86.cub`, a verdict for cause 1.** A process written with a `case`
+   on a response at a process type compiles to a correct but ~10× larger and slower binary,
+   silently. `experiments/os/build-cost.cub`'s `bc-stuck` counts the applications whose head
+   is a stuck `ccase`/`celim` (12 lines); `#build` and `#jit` printing that count beside the
+   bytes (`…, 3 stuck applications`) makes it visible. The general remedy inside
+   `lib/specialize.cub` would be the commuting conversion `(case x of cᵢ ys → tᵢ) a ⟶ case x
+   of cᵢ ys → tᵢ a`; it is not a definitional equality, so `build-plan`'s `conv` would refuse
+   the result unless the specializer also returned its path (by case on `x`, `refl` in each
+   branch, under the binders by `funExt`): the rule mechanism `specialize` already has
+   (`rules`, the path it returns). I did not write it: it is in files this track may not edit.
+7. **`lib/proc.cub`**: `lx-sum`/`lx-if` (in `lib/os/linux.cub`) are not about Linux: they are
+   the case and the conditional on processes of any signature. They belong beside `bind` as
+   `proc-sum`/`proc-if`, and `lib/world.cub` wants the analogue of `linux-step` for any
+   handler (`handle-step : Handler S W → Proc {lzero} S A → Step W A`,
+   `handle-step hd p = p (Step W A) sdone (λ c k → hd c (Step W A) k scmd)`), which is
+   `to-step (handle hd p)` with no function-typed case left.
+
 ## Limits
 
 (filled by item 6)
@@ -196,6 +232,18 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   tour-model,tcp}.cub` (NOCACHE): 1028 passed, 0 failed, 23,821,936 steps. Loaded after
   `lib/bits.cub lib/obs.cub lib/net.cub lib/fleet.cub` as well: 1179 passed, 0 failed (no name
   of `lib/os` clashes with the other tracks' files).
+- **Item 7** (diagnosis; details and tables under Found, the compiler-side changes under
+  Needs 5–7). In this track's own files: `lib/os/linux.cub` gains `lx-sum`, `lx-if`,
+  `linux-step`; `lx-then` and four handler cases rewritten; `lib/os/replay.cub` gains
+  `linux-step-rec`; the experiments' steps are built by `linux-step`. Re-measured after the
+  change (all on the kernel again): echo on the net `run: done (inr #12)   [1743 steps]`
+  (was 1,871); `build/udp-echo` 15,178 bytes, 3,216,994 steps to build, its calls under
+  `strace` unchanged (socket, bind, recvfrom, sendto, close) and python gets `hello, world`
+  back; `build/udp-echo-rec` 53,065 bytes, its log replayed: `run: done (pair (done (inr #12))
+  #0)   [3405 steps]`; `build/os-tour` 47,205 bytes, 555,372,003 steps, the same 20 calls and
+  status 0; tour on the net `[5243 steps]` with the same 12 observations; tcp prints `ping`,
+  status 7; the model runs unchanged (`done (inr #12)`, the tour's record). `make library`:
+  1135 passed, 0 failed (24,825,019 steps).
 
 ## Found
 
@@ -237,39 +285,116 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   nil → …; cons d r2 → … f r2` is refused as non-structural; the nested pattern `f (cons e
   (cons d r2)) = … f r2` is accepted.
 
-- **Item 7, where `#build`'s steps go (interim; the table is being completed).**
-  `experiments/os/build-cost.cub` + `build-cost-{3,5,7,10}.cub`: the stages of `build-plan`
-  on `bc-chain n` (n closes over `Linux` through `linux-run`), cumulative steps per `#show`:
+- **Item 7: where `#build`'s steps go, and why** (complete; for track N as well). Files:
+  `experiments/os/build-cost.cub` (the stages of `lib/elf.cub`'s `build-plan` called one at a
+  time; `bc-chain n` = n `close`s over `Linux`), `build-cost-{3,5,7,10}.cub`,
+  `build-cost-direct.cub`, `build-cost-passes.cub`, `build-cost-stuck.cub`. Every number is the
+  steps of one `#show`, cumulative from `unfold` (a `#show` starts from nothing).
 
-  | stage (cumulative) | n = 3 | n = 5 | n = 7 |
-  |---|---|---|---|
-  | `unfold` (code nodes) | 320,118 (4,101) | 361,654 (4,695) | 402,885 (5,289) |
-  | `specialize` (code nodes) | 770,870 (4,101) | 867,742 (4,695) | 964,015 (5,289) |
-  | `conv` | 898,571 | 992,495 | 1,085,801 |
-  | `program-of` (definitions) | 839,861 (1) | — (1) | 1,051,830 (1) |
-  | `x-forms-all` (nodes, definitions) | 2,153,090 (2,404; 129) | 2,552,960 (2,462; 133) | 3,079,944 (2,520; 137) |
-  | `x-erase` | 31,836,231 | 34,353,194 | 37,070,974 |
-  | `x-verdict` | 32,970,432 | 35,605,009 | 38,440,109 |
-  | `encode-proc` (bytes) | 33,870,456 (50,439) | 36,433,769 (51,523) | 39,198,235 (52,607) |
+  **Table 1 — the stages, `bc-chain n`, with `lib/os/linux.cub` as it was at `38428f57`:**
 
-  Two facts so far. (a) `x-erase` is ~93% of the steps at every n. (b) The cost is not in the
-  number of commands: a process of 3 closes is already 129 definitions and 50 KB, and each
-  further command adds 2 definitions, 542 bytes and 1.4 M steps. The fixed part is the whole
-  handler: the unfolded code's first command is reduced (`w-sys #3 #3 …`), but its
-  continuation is `(case r of inl e → …; inr a → …) R k h` — a `case` on the response, at a
-  function type (`Proc`), applied to the interpretation — which is stuck, so `handle`'s
-  `λ c k → bind (linux-on-w … c) k` stays in the code as a value with all 29 cases (the errno
-  threshold literal occurs 23 times in the code of three closes) and commands are dispatched
-  through it at run time. Cause and fix are being confirmed (passes of the fixed point, the
-  tour's numbers, and the same processes with the case commuted by hand in `lib/os/linux.cub`).
+  | stage (cumulative steps; size) | n = 3 | n = 5 | n = 7 | n = 10 |
+  |---|---|---|---|---|
+  | `unfold` (code nodes) | 320,118 (4,101) | 361,654 (4,695) | 402,885 (5,289) | 464,079 (6,180) |
+  | `specialize` (code nodes) | 770,870 (4,101) | 867,742 (4,695) | 964,015 (5,289) | — |
+  | `conv` | 898,571 | 992,495 | 1,085,801 | — |
+  | `program-of` (definitions) | 839,861 (1) | — (1) | 1,051,830 (1) | — |
+  | `x-forms-all` (nodes; definitions) | 2,153,090 (2,404; 129) | 2,552,960 (2,462; 133) | 3,079,944 (2,520; 137) | 6,571,145 (2,607; 143) |
+  | `x-erase` | 31,836,231 | 34,353,194 | 37,070,974 | 41,516,832 |
+  | `x-verdict` | 32,970,432 | 35,605,009 | 38,440,109 | — |
+  | `encode-proc` (blob bytes) | 33,870,456 (50,439) | 36,433,769 (51,523) | 39,198,235 (52,607) | 43,737,966 (54,233) |
+
+  (`conv` and `program-of` are separate `#show`s over `specialize`, not over each other; "—" not
+  run.) Reading: `x-erase` is 85–93% of the steps at every n; and the cost is not in the number
+  of commands: three closes are already 129 definitions and 50 KB, each further command adds 2
+  definitions, 542 bytes and ~1.4 M steps.
+
+  **Cause 1 (size; in the process's text, fixed here): the handler stayed in the code.**
+  `lx-then` was `bind p (λ r → case r of inl e → ret (inl e); inr a → f a)`: a `case` on a
+  response whose branches are processes, i.e. functions of the interpretation, applied to the
+  interpretation from outside. It is stuck until the response is known, so what it is applied
+  to — `handle`'s `λ c k → bind (linux-on-w pf le sc c) k`, all 29 cases — stays in the
+  specialized code as a value and every later command is dispatched through it at run time
+  (in the code of three closes the errno threshold literal occurs 23 times). Fixed in
+  `lib/os/linux.cub` without touching the compiler, in two steps, both measured:
+  (i) `lx-sum`/`lx-if`: the case written with the interpretation inside its branches
+  (`λ R k h → case s of inl a → f a R k h; inr b → g b R k h`), `lx-then` by it, and the
+  handler's own cases on a response (clock_gettime, accept4, recvfrom, epoll_wait) made cases on
+  values; (ii) `linux-step : … → Proc {lzero} Linux A → Step W A`, the process interpreted at
+  the type of steps directly (the drivers' interpretation is then inside every branch too: a
+  step is data, no case in the code returns a function).
+
+  **Table 2 — the same processes after each step (`encode-proc` cumulative steps; blob bytes;
+  definitions after lifting; code nodes; applications whose head is a stuck case):**
+
+  | | n = 3 | n = 5 | n = 7 | n = 10 |
+  |---|---|---|---|---|
+  | before | 33,870,456; 50,439 B; 129; 4,101 | 36,433,769; 51,523 B; 133; 4,695 | 39,198,235; 52,607 B; 137; 5,289 | 43,737,966; 54,233 B; 143; 6,180 |
+  | (i) `to-step (linux-run …)` with `lx-sum` | 372,627; 5,753 B; 15; 239; 3 stuck | 648,281; 8,263 B; 21; 353 | 979,307; 10,773 B; 27; 467 | 1,580,576; 14,538 B; 36; 638 |
+  | (ii) `linux-step` | 255,216; 4,861 B; 11; 133; 0 stuck | 427,427; 7,187 B; 17; 217; 0 | 635,297; 9,513 B; 23; 301; 0 | 997,532; 13,002 B; 32; 427; 0 |
+
+  After: 3 definitions and 1,163 bytes per `close`, steps growing a little faster than n
+  (255 k, 427 k, 635 k, 998 k: `x-erase` again, cause 2). The real programs, rebuilt through
+  `linux-step`: `build/udp-echo` 52,133 B / 42,415,757 steps → **15,178 B / 3,216,994 steps**
+  (code 4,709 → 581 nodes, 0 stuck); `build/udp-echo-rec` 97,011 B / 122,343,903 →
+  53,065 B / 63,683,157 (3,052 nodes; 5 stuck applications left, all loops over a list or a
+  count known only at run time: `lx-store-words`); `build/os-tour` 66,049 B / 1,209,198,335 →
+  47,205 B / 555,372,003 (code 9,131 → 1,876 nodes, 166 → 114 definitions, 0 stuck).
+
+  **Cause 2 (steps; in `lib/x86.cub`, not fixed here: Needs 5): the erasure's fixed point visits
+  the definitions in the order that needs the most passes.** `x-rel-fix` iterates `x-rel-step`
+  (one pass over all definitions, the needed set threaded through) until the set stops growing.
+  A parameter is needed because of its uses in its own definition's body, and that makes
+  arguments at the call sites in *callers* needed: need flows from callee to caller. Lifted
+  definitions are listed callers first, so one pass moves need one call-link up, and the
+  number of passes is the depth of the chain of continuations. Table 3
+  (`build-cost-passes.cub`: `bc-passes` is `x-rel-fix` with the passes counted; "reversed" is
+  the same `x-rel-step` over the reversed list):
+
+  | program (library version) | definitions | parameters | passes, order as is | steps | passes, reversed | steps | needed set |
+  |---|---|---|---|---|---|---|---|
+  | `bc-s3` (before) | 129 | 412 | 6 | 28,471,060 | 2 | 9,681,013 | 367 either way |
+  | `udp-echo-step` (before) | 133 | 442 | 6 | 32,511,652 | 2 | 11,096,076 | 392 |
+  | `os-tour-step` (before) | 166 | — | 38 | 1,175,304,827 | 2 | 37,892,946 | 750 |
+  | `udp-echo-step` (i) | 38 | 136 | 7 | 4,173,741 | 2 | 1,472,752 | 127 |
+  | `os-tour-step` (i) | 114 | 655 | 41 | 861,561,178 | 2 | 22,536,442 | 636 |
+
+  (steps include `x-forms-all`: 12.2 M for the tour (i), 4–5 M for the others before.) So the
+  tour's 1.2 × 10⁹ steps are 38 passes at ~30 M each; in the reversed order the same set is
+  reached in 2 passes: 31× fewer steps for the tour before, 38× after (i). A pass costs
+  (code nodes) × (a list lookup of the arity, `x-look`, plus a list scan of the needed set,
+  `x-pmem`, per argument of every call), which is why steps per pass grow with the product of
+  code size and parameters.
+
+  **Cause 2 has a correctness side.** `x-erase-roots` calls `x-rel-fix #64`: when the fuel runs
+  out the set reached so far is returned (`if %weq fuel #0 then R`), and `x-er-args` then
+  replaces every argument not in it by `cwlit #0`. A set cut short is a subset of the fixed
+  point, so a needed argument is erased and the binary computes with 0 in its place, with no
+  verdict. The tour needs 38 passes (41 after (i)) of the 64; a process whose continuation
+  chain is about 1.6× the tour's depth passes the bound. Not demonstrated by a failing binary
+  (a 64-pass build is ~2 × 10⁹ steps here); read from the code and the measured pass counts.
+
+- **A loop with a literal bound is unrolled by specialization once its body's case can be
+  entered.** `lx-read-all` (`lib/os/replay.cub`) is `%welimP … #4096 …` with a case on each
+  read's result; written with `lx-sum` the specializer would enter the case and unroll 4096
+  levels at `#build`. It is left with the case applied from outside (stuck, so the loop stays a
+  loop), with a comment. There is no way in the source to say "this recursion is a loop, keep
+  it" short of a bound known only at run time; `sched-holds` exists in `lib/specialize.cub`
+  but `build-plan` passes `sched-default` (no holds).
 
 ## Next step
 
-Item 7 in progress. Running: `build-cost-passes.cub` (the erasure's fixed-point passes for
-`bc-s3`, `udp-echo-step`, `os-tour-step`, in both definition orders) and `build-cost-10.cub`;
-put their numbers in the table under Found. Then in `lib/os/linux.cub`: `lx-then` and every
-`case`/`if` whose result is a process written with the interpretation's arguments inside the
-branches (`λ R k h → case r of inl e → k (inl e); inr a → f a R k h`), the handler's cases on a
-response made cases on values; re-run the table; write the compiler-side fix (the commuting
-conversion in `normalize-held`) under Needs. Then item 5 (eventfd/timerfd, sendmsg/recvmsg,
-io_uring, clone), then item 6 (`lib/os/packet.cub`).
+Everything under "What is built" and every acceptance line is met, and PLAN Phase 3's replay
+acceptance with it. What is left is not this track's to do:
+1. Track A appends `lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub`
+   to `LIB` (Needs 3). Then run `make library` and replace the 845 above with the new count
+   (expected: 845 + 148 from the four files).
+2. Not built here, and in PLAN Phase 3: kernel-bypass interfaces (ef_vi, DPDK) as worlds, and
+   `sendmsg`/`recvmsg`/`io_uring` in `Linux` (this track's command list did not have them). To
+   add a call: a constructor at the end of `LinuxCmd`, its line in `lx-resp`, `linux-on-w`,
+   `linux-model`, `lx-enc`, `lx-dec`, and its number in `Sys` / `x86-64-sysnr`
+   (`lib/os/platform.cub`); no change to `W`, the drivers or the ELF loop is needed (`w-sys`
+   carries any call of up to six arguments).
+3. The model's subset (see `lib/os/contract.cub`'s header) refuses files, TCP, and waits that
+   nothing in the state ends; a process using them ends `stopped` against it (`os-tcp` does).
+   Extending it is the same file, `linux-model`'s cases.
