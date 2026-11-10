@@ -54,12 +54,43 @@ takes the implementation-defined choices as a **parameter** (PLAN §5.1), never 
   specialized code still contains that should have been computed away (that list is the input
   to the binding-time design). Also a `#show` of an out-of-bounds load giving `undefined`.
 
+## How to check (every file of this track)
+
+```
+LIB=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p')
+(ulimit -v 2500000; timeout 600 ./build/cubical $LIB lib/mem/target.cub lib/mem/scalar.cub lib/mem/memory.cub lib/mem/layout.cub lib/mem/monad.cub | tail -3)
+```
+The files load in that order (each needs the ones before it). Names are prefixed (`tg-`, `ck-`,
+`sk-`, `sv-`, `ub-`, …) because `Res`, `ok`, `refused`, `Mem`, `Opt` are taken by the library:
+the result type of this layer is `MRes`, not `Res`.
+
 ## Needs from track A
+
+(nothing yet)
+
 ## Done
+
+- `lib/mem/target.cub`: `Endian`, `CK` (the ten scalar kinds C leaves open), `PtrInt`
+  (`pi-refused | pi-flat`), record `Target` (`tg-endian`, `tg-size`, `tg-align`,
+  `tg-char-signed`, `tg-ptr-int`, `tg-alloc-align`, `tg-base`), and three values: `x86-64-sysv`,
+  `i386-sysv` (ILP32, no 128-bit integer), `s390x-elf` (big-endian, char unsigned). Loads after
+  the cached library: 785 passed, 0 failed (18 new checks, 23,789 steps).
+
 ## Found
+
+- `u64 w` (and `%u64ofw`) on a `Word` literal ≥ 2⁶⁴ does not reduce: `#show u64 #18446744073709551617`
+  prints `%u64ofw #18446744073709551617`. A conversion from `Word` must reduce modulo 2⁶⁴ first.
+- `u64shl`/`u64shr` take the count modulo 64 (`u64shl (u64 #1) (u64 #64)` is `#u64:1`), so a
+  shift by 64 or more must be handled by the caller (it matters for the 128-bit kinds).
+
 ## Limits
+
+(none recorded yet)
 
 ## Next step
 
-Read the files named above, then write `lib/mem/target.cub` and `lib/mem/scalar.cub`
-(conversions first), commit when they check.
+Write `lib/mem/scalar.cub`: `IW`, `SK`, `MPtr`, `SV`, `UB`, `Stop`, `MRes`; the 64-bit helpers
+(masks, sign extension), the 128-bit arithmetic on pairs of `UInt64`; `sv-conv` (integer
+conversions between every pair of kinds) first; then arithmetic, shifts, comparisons, floats;
+then the C types `CTy` with promotions and the usual arithmetic conversions as functions of
+`Target`. Check with the command above, commit when it ends `N passed, 0 failed`.
