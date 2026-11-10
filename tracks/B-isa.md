@@ -78,10 +78,41 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
   `let x : int : int = …` (a doubled annotation), an annotation binding as an atom
   (`[false, …] : vector(256, dec, bool)[unsigned(opcode)]`), `foreach`, `try`/`catch`.
 
+- **`lib/bits.cub`** (checks after the library: `850 passed, 0 failed` with it loaded; 20 new
+  definitions' worth of probes agree with Sail's meaning, e.g. `bv-signed #8 #200 = zneg #56`,
+  `bv-of-int #9 (zneg #56) #0 = #456`, and the open term
+  `λ a c → bv-trunc #65 #64 (bv-of-int #65 (z-add (bv-unsigned #64 a) (bv-unsigned #64 c)) #0)`
+  normalizes to `%wand (%wand (%wshr (%wadd a c) #0) (2⁶⁵−1)) (2⁶⁴−1)` in 43 steps). Contents:
+  `Bits n = Word` and `bv-*` (mask, add, sub, mul, and/or/xor/not, eq, bit, slice, update,
+  append, zext/trunc/sext, shl/shr/sar, replicate); `ZI` (`zpos`/`zneg`) and `z-*` (add, sub, mul,
+  eq, lt, le, abs, tdiv, tmod, pow2, shl, shr, nat, set-slice); `bv-unsigned`, `bv-signed`,
+  `bv-of-int` (= `get_slice_int`), `bv-add-int`; `Text = Word` (a string is its bytes base 256)
+  with `str-len`, `str-cat`, `str-eq`; `Option` (`None`/`Some`), `is_some`; vectors as `List`
+  with `vec-get`/`vec-set`; `ByteMap` (memory: a binary trie of bytes over the 64 address bits,
+  lowest bit first, `mem-load`/`mem-store`, unwritten = 0); `Outc E A = out-val a | out-throw e
+  | out-abort why`; `fl-bind`/`fl-assert`/`fl-try` (outcome only) and `State S E A = S → Outc E A × S`
+  with `st-ret`, `st-lift`, `st-bind`, `st-try`, `st-foreach`.
+  Measured: one `mem-store` or `mem-load` is about 1 400 steps (64 levels × ~20); two stores and
+  a load, 4 187 steps.
+
 ## Decisions (what the generated code is, so far)
 
-- Names. `Res`, `ok`, `fault` are taken by `lib/check.cub`; the outcome type is named in
-  `lib/bits.cub` when it is written (see Next step).
+- Memory: a trie rather than a write list over `Bytes n`, because `Bytes n`'s loads need a
+  `Nat` offset with a proof of fitting (not available for a computed address) and a list read
+  costs its length; the trie reads any address in 64 levels whatever was written, and a write
+  of a variable byte at a known address is an ordinary constructor.
+- Three effect classes, not two: a function that only asserts or throws (no register, no
+  memory) is `args → Outc exception A` (so Sail's `assert` keeps its outcome without threading
+  the state through the flag specifications); one that reads or writes registers or memory is
+  `args → X86 → Outc exception A × X86`; the rest are pure.
+- The outcome type carries the model's own `exception` union (`Emsg`, `Syscall`), not a bare
+  `Word`: `out-throw e`. `out-abort why` is a failed `assert` (Sail aborts) or a recursion that
+  passed its stated bound.
+
+- Names. `Res`, `ok`, `fault` are taken by `lib/check.cub`, so the outcome type is `Outc` with
+  `out-val`/`out-throw`/`out-abort` (also taken, so not used: `Str`, `Memory`, `Outcome`, `Opt`,
+  `none`/`some`, `St`, `mem-write`). Hand-written names use hyphens and a prefix (`bv-`, `z-`,
+  `str-`, `vec-`, `mem-`, `fl-`, `st-`); names from Sail keep their underscores.
 - Cub facts the emitter relies on (probed): a `let` binding needs a signature line when its value
   has no inferable type (`let x : T` newline `x = e`); a `let` binds a name, not a pattern (tuples
   are taken apart with `fst`/`snd`); a later `let` of the same name shadows; identifiers may
@@ -96,9 +127,7 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
 
 ## Next step
 
-1. Write `lib/bits.cub` (`Bits`, `ZI`, the outcome type, the state monad's bind) against
-   `wand wor wxor wshl wshr wquot wrem` of `lib/prim.cub`.
-2. In `tools/sail2cub.py` add, after `Model`: the type pass (every expression gets its Sail type;
+1. In `tools/sail2cub.py` add, after `Model`: the type pass (every expression gets its Sail type;
    bit widths are either a Python int or a cub term of type `Word` built from the function's
    `int('n)` arguments), overload resolution by argument types, the effect fixed point over the
    call graph, and the emitter (`--out lib/isa/x86`). First target: `lib/isa/x86/add_spec.cub`
