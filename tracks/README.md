@@ -43,6 +43,12 @@ anywhere else: not in a chat, not in an agent's memory.
 | B | `B-isa.md` | `lib/bits.cub`, `tools/sail2cub.py`, the x86 model in `lib/isa/x86/`, state and loader | — |
 | C | `C-clang.md` | `tools/clang2cub`, `lib/cxx/ast.cub`, the sample C++ unit as checked data with layouts | — |
 | D | `D-os.md` | `lib/os/linux.cub`: syscalls as a typed world with contracts over one raw syscall command | — |
+| M | `M-mem.md` | `lib/mem/`: targets, scalars, memory, layouts, the evaluation monad every language reader targets | — |
+| G | `G-memmodel.md` | x86-TSO (operational and axiomatic), language atomics, litmus outcome sets | — |
+| H | `H-obs.md` | `lib/obs.cub`: observation, bisimulation, the quotient, cross-language equality | — |
+| I | `I-fleet.md` | network world, fleets, property types, the kv fleet, `deploy` | D for the last step |
+| N | `N-machine.md` | no crash on any input; asan/tsan; compile-cost profiles | — |
+| R | `R-rust.md` | `tools/mir2cub.py`, `lib/lang/rust/ast.cub`, the Rust twin of the C++ sample | C's sample |
 | E | `E-lemmas.md` (opens when B lands) | the template lemmas, the encoder's path | B |
 | F | `F-cxx.md` (opens when C lands and A fixes the object-model interface) | `lib/cxx/machine.cub`, `lib/cxx/read.cub` | C |
 

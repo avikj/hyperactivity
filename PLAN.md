@@ -78,8 +78,8 @@ path. Bottom to top:
 8. **Deployment.** `deploy : Corpus → Config → Fleet` is a term; a box's binary is the corpus
    specialized to its configuration and role and compiled by layer 3; deploying is checking it.
 
-The trading fleet is the first full instance because every layer appears in it and its standard
-(hand-written C++ latency, exact behaviour) is unforgiving.
+The plan names no particular application. Each phase's acceptance is a small complete program
+of the kind that phase is for, in `experiments/`.
 
 ## 2. The core (unchanged across revisions)
 
@@ -382,9 +382,10 @@ Built:
 5. **Lifting Clang itself** by `#lift` of its binary (Phase 2 item 7); then the Sema oracle is
    removed (the AST is the lifted Clang's computation on the source).
 
-Acceptance: a trading codec, order book and session layer written in C++ are read, compiled by
-our compiler, and run with the latency of the same code compiled by Clang (within a stated
-factor, measured), every assumption listed by `#trusted`.
+Acceptance: a real hot-path translation unit (`experiments/cxx/book.cpp`: a wire codec, a
+template container with methods, one virtual call) is read, compiled by our compiler, and run
+against the same unit compiled by Clang, the latency ratio measured, every assumption listed by
+`#trusted`.
 
 ### Phase 5 — Every major language
 
@@ -423,9 +424,8 @@ Built:
    path-free data), equality is decided by computing it. Program equivalence in general is not
    decided, and nothing pretends it is.
 
-Acceptance: a C++ and a Rust implementation of the same order book shown equal under the
-exchange-facing observation, and the trading strategy's properties transported from one to the
-other.
+Acceptance: a C++ and a Rust implementation of the same component shown equal under an
+observation signature, and a property proved of one transported to the other.
 
 ### Phase 7 — Systems: nodes, networks, fleets
 
@@ -433,7 +433,7 @@ Built:
 1. **The network world**: delivery, loss, reordering, duplication, delay, partition, with the
    scheduling model as responses.
 2. **Fleets**: a fleet is the parallel composition of node processes under the network world,
-   itself a process over the residual world (clients, exchanges, clocks, the adversary).
+   itself a process over the residual world (clients, peers, clocks, the adversary).
 3. **Property types**: safety as an invariant over every response sequence; liveness under a
    fairness predicate on responses; refinement to a sequential specification as a path in the
    quotient; replica convergence by defining replica state as a function of the *set* of
@@ -441,12 +441,12 @@ Built:
    of worlds; protocol conformance by projection from a choreography under its realizability
    conditions (`lib/choreo.cub` is the start).
 
-Fleet acceptance: the trading fleet (market data handlers, strategies, order gateways, risk,
-drop copy, recovery) as a term; stated and checked: no order is sent that risk has not
-admitted (safety); every acknowledged order reaches a terminal state under fair delivery
-(liveness); the gateway refines the exchange's sequential order protocol (refinement); the
-position kept by risk equals the sum of fills from the drop copy (convergence); replay of a
-day's recorded responses reproduces the day's orders exactly.
+Fleet acceptance (`experiments/fleet/`): a replicated key-value service of three nodes with a
+client, as a term. Stated and checked: no node applies a write it has not logged (safety);
+every acknowledged write is eventually applied by every node under fair delivery (liveness);
+the service refines a single sequential map (refinement); the replicas' states are equal once
+they have received the same set of writes (convergence); replay of a recorded response
+sequence reproduces the run exactly.
 
 ### Phase 8 — Deployment as a checked term
 
@@ -463,9 +463,9 @@ Built:
 4. **Distribution by keys**: machines exchange content keys and fetch what they lack; a key
    names a closed definition and nothing more (not attestation, not authority).
 
-Acceptance: the trading fleet deployed from one corpus and one configuration value, every
-binary produced by `deploy`, the deployment's checks passing, and an upgrade carried out as a
-checked transition.
+Acceptance: the fleet above deployed from one corpus and one configuration value, every binary
+produced by `deploy`, the deployment's checks passing, and an upgrade carried out as a checked
+transition.
 
 ## 6.9 Deliverables, sizes and order
 
@@ -484,7 +484,7 @@ minutes; new files: 1,200+ lines an hour), not assumed.
 Not grounded in a measurement yet, and marked as such: getting all 33k generated lines of the
 x86 model to check (2 h assumed), and bringing the C++ reader up on a real unit (3 h assumed).
 Not covered: how fast a specialized production interpreter runs (its meaning is by
-construction, its speed depends on the interpreter), and the trading system's own code.
+construction, its speed depends on the interpreter).
 
 ## 7. The trusted base, exactly (revision 9)
 
