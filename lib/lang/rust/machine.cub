@@ -239,16 +239,20 @@ rm-unsized (rty-slice t) = true
 rm-unsized (rty-dyn tr) = true
 rm-unsized t = false
 -- how a value of a (closed) type is held
-data RClass = cl-scalar (k : SK) | cl-fat | cl-unit | cl-mem
+-- (cl-fat: the kind of the metadata, a length or a vtable pointer)
+data RClass = cl-scalar (k : SK) | cl-fat (mk : SK) | cl-unit | cl-mem
+rm-meta-sk : Target → RTy → SK
+rm-meta-sk t (rty-dyn tr) = sk-ptr
+rm-meta-sk t ty = rm-usize t
 rm-class : Target → RTy → RSt RClass
 rm-class t rty-bool = sr-ok (cl-scalar sk-bool)
 rm-class t (rty-int k) = sr-ok (cl-scalar (rm-ik t k))
 rm-class t rty-never = sr-ok cl-unit
 rm-class t (rty-ref m p) = case rm-unsized p of
-  true → sr-ok cl-fat
+  true → sr-ok (cl-fat (rm-meta-sk t p))
   false → sr-ok (cl-scalar sk-ptr)
 rm-class t (rty-ptr m p) = case rm-unsized p of
-  true → sr-ok cl-fat
+  true → sr-ok (cl-fat (rm-meta-sk t p))
   false → sr-ok (cl-scalar sk-ptr)
 rm-class t (rty-array e n) = sr-ok cl-mem
 rm-class t (rty-tuple ts) = case ts of
@@ -311,6 +315,8 @@ rm-align t ls rty-never = sr-ok #1
 rm-align t ls (rty-ref m p) = sr-ok (tg-align t ck-ptr)
 rm-align t ls (rty-ptr m p) = sr-ok (tg-align t ck-ptr)
 rm-align t ls (rty-array e n) = rm-align t ls e
+rm-align t ls (rty-slice e) = rm-align t ls e
+rm-align t ls (rty-dyn tr) = sr-ok #1
 rm-align t ls (rty-tuple ts) = case ts of
   rtys-nil → sr-ok #1
   _ → sr-map ly-align-of (rm-lay ls (rty-tuple ts))
@@ -334,3 +340,32 @@ rm-int-sv k n = case k of
     _ → sr-ok (sv-i (uq-cn sg w (rm-uq n))))
   sk-bool → sr-ok (sv-b (not (uq-iszero (rm-uq n))))
   _ → sr-ill ri-operand-class
+
+-- ---------------------------------------------------------------- decided before the frame
+-- a static result continued into something that waits for run-time values (R is a function
+-- type: the failure is the function that throws)
+sr-on : {A : Type} {R : Type (lsuc lzero)} → RSt A → (RExc → R) → (A → R) → R
+sr-on r g f = case r of
+  sr-ok a → f a
+  sr-no e → g e
+-- the pointee of a pointer or reference type
+rm-pointee : RTy → RSt RTy
+rm-pointee (rty-ref m p) = sr-ok p
+rm-pointee (rty-ptr m p) = sr-ok p
+rm-pointee ty = sr-ill (ri-place ty)
+-- the element type of an array or slice type
+rm-elem : RTy → RSt RTy
+rm-elem (rty-array e n) = sr-ok e
+rm-elem (rty-slice e) = sr-ok e
+rm-elem ty = sr-ill (ri-place ty)
+-- the unsigned kind of a tag of a size
+rm-tag-sk : Word → RSt SK
+rm-tag-sk n = case weq n #1 of
+  true → sr-ok (sk-int false iw8)
+  false → (case weq n #2 of
+    true → sr-ok (sk-int false iw16)
+    false → (case weq n #4 of
+      true → sr-ok (sk-int false iw32)
+      false → (case weq n #8 of
+        true → sr-ok (sk-int false iw64)
+        false → sr-unsup rz-wide-128)))
