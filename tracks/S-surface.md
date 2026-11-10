@@ -226,14 +226,23 @@ the loaded machine) — the next commit states the result.
 
 ## Next step
 
-1. Run A's commands (`tracks/A-compiler.md`, "How to verify") on this commit; record.
-2. The workarounds in `lib/os/contract.cub` (`k-take-go`, `k-autobind`, `k-wait`, `k-deliver`,
-   `lx-replaying` in replay.cub) and `lib/isa/tso.cub` (`tso-go`, `tso-quiet`, `tso-choices` put
-   the list first): they are D's and G's files; the direct forms now check (the inputs in
-   `experiments/surface/` are those forms). Write a "From track S" line in neither file unless
-   asked; list here which could be rewritten.
-3. Item 13 (keywords as field names: the parser of `data` fields, `p_decl_in` under `data`),
-   item 14 (byte-string literal), item 15 (G's `g7-d`), then 11, 12 (positivity is in
-   lib/check.cub: search `E-positive`/`strictly`; nested positivity needs the checker changed,
-   a shared file), then 9, 10 (guarded recursion: `guard_on` in `clauses_typed`, `%gcall`,
-   `tick_lift`).
+**Halted by the coordinator (2026-11-09): no implementation until the mathematical specification
+of what the elaborator accepts (recursion forms, positivity) is written and reviewed.** State:
+
+- Pushed and measured (`make library` 1482 passed, 0 failed; brunerie −2; the files in
+  `experiments/surface/`): items 1, 2, 3, 4, 5, 6, 7, 8. Nothing of items 9–15 is in `src/`.
+- **Not measured for the last commit (`48b48ce8`): A's `#jit`/`#build` commands** ("How to
+  verify" in `tracks/A-compiler.md`). They were 33 / three ok lines / `A` 65 / `5 2` at item 1's
+  commit (`0aa36444`); the re-run was stopped by the halt before its first line. First thing to
+  do on resuming: run them.
+- What needs the specification before it is relied on (each is in Done with the term it
+  produces): item 1's reordering (`perm_next`), item 2's clause split of a case
+  (`lift_clauses`) and sibling revert (`ih_type`), item 4's unfolding (`sig_unfold`). Each only
+  changes which `elim` term is handed to the checker; none is trusted.
+- Started and reverted (not in the repository): item 13, allowing a reserved word as a data
+  field's name in `p_binders` under a flag set by `p_data_ctor`; `(then : S)` and `(else : S)`
+  parsed, `(case of : Nat)` did not (`unexpected of`: the check for two names in one binder
+  looks one token ahead only).
+- Not started: the workarounds in `lib/os/contract.cub`, `lib/os/replay.cub`, `lib/isa/tso.cub`
+  (D's and G's files; the direct forms are the inputs in `experiments/surface/` and check),
+  items 9, 10, 11, 12, 14, 15, and the "From track S" lines in H's and C's track files.
