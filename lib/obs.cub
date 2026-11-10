@@ -230,3 +230,105 @@ o-TrEq {S} {A} t u = (x : o-Tr S A) → o-traces t x ≡ o-traces u x
 -- the traces of a Church process are its tree's
 o-ptraces : {S : Sig} {A : Type} → Proc {lzero} S A → o-Tr S A → Type
 o-ptraces p x = o-traces (to-step p) x
+-- ---------------------------------------------------------------- bisimulation on trees
+-- path induction, by transport along the contraction of the singleton
+o-J : {l m : Level} {A : Type l} {x : A} → (P : (y : A) → x ≡ y → Type m) → P x (λ i → x) → (y : A) → (p : x ≡ y) → P y p
+o-J P d y p = comp (λ i → P (p i) (λ j → p (i /\ j))) (λ i → []) d
+-- t and u are bisimilar up to Q on results: both end, in results related by Q; or both issue
+-- the same command and, given the same response, continue bisimilar. "The same" is a path
+-- between the commands and a path over it between the responses
+o-BisimR : {S : Sig} {A B : Type} → (A → B → Type) → Step S A → Step S B → Type
+o-BisimR Q (sdone a) (sdone b) = Q a b
+o-BisimR Q (sdone a) (scmd c2 k2) = Empty
+o-BisimR Q (scmd c k) (sdone b) = Empty
+o-BisimR {S} {A} {B} Q (scmd c k) (scmd c2 k2) =
+  (e : c ≡ c2) × ((r : Resp S c) → (r2 : Resp S c2) → PathP (λ i → Resp S (e i)) r r2 → o-BisimR Q (k r) (k2 r2))
+o-Bisim : {S : Sig} {A : Type} → Step S A → Step S A → Type
+o-Bisim {S} {A} t u = o-BisimR {S} {A} {A} (λ a b → a ≡ b) t u
+o-bisim-refl : {S : Sig} {A : Type} → (t : Step S A) → o-Bisim t t
+o-bisim-refl (sdone a) = λ i → a
+o-bisim-refl {S} {A} (scmd c k) =
+  ((λ i → c) , λ r r2 pr → comp (λ i → o-Bisim (k r) (k (pr i))) (λ i → []) (o-bisim-refl (k r)))
+-- bisimilarity is path equality of trees: each gives the other
+o-path-bisim : {S : Sig} {A : Type} → (t u : Step S A) → t ≡ u → o-Bisim t u
+o-path-bisim t u e = comp (λ i → o-Bisim t (e i)) (λ i → []) (o-bisim-refl t)
+o-bisim-path : {S : Sig} {A : Type} → (t u : Step S A) → o-Bisim t u → t ≡ u
+o-bisim-path (sdone a) (sdone b) e = λ i → sdone (e i)
+o-bisim-path (sdone a) (scmd c2 k2) e = Empty-rec e
+o-bisim-path (scmd c k) (sdone b) e = Empty-rec e
+o-bisim-path {S} {A} (scmd c k) (scmd c2 k2) b =
+  o-J {lzero} {lzero} {Cmd S} {c}
+    (λ y e → (k3 : Resp S y → Step S A) → ((r : Resp S c) → (r2 : Resp S y) → PathP (λ i → Resp S (e i)) r r2 → o-Bisim (k r) (k3 r2)) →
+             Path (Step S A) (scmd c k) (scmd y k3))
+    (λ k3 f i → scmd c (λ r → o-bisim-path (k r) (k3 r) (f r r (λ j → r)) i))
+    c2 (fst b) k2 (snd b)
+o-bisim-sym : {S : Sig} {A : Type} → (t u : Step S A) → o-Bisim t u → o-Bisim u t
+o-bisim-sym t u b = o-path-bisim u t (sym (o-bisim-path t u b))
+o-bisim-trans : {S : Sig} {A : Type} → (t u v : Step S A) → o-Bisim t u → o-Bisim u v → o-Bisim t v
+o-bisim-trans t u v b1 b2 = comp (λ i → o-Bisim t (o-bisim-path u v b2 i)) (λ i → []) b1
+-- bisimilar trees have equal traces
+o-bisim-traces : {S : Sig} {A : Type} → (t u : Step S A) → o-Bisim t u → o-TrEq t u
+o-bisim-traces t u b = λ x i → o-traces (o-bisim-path t u b i) x
+-- the relational form: symmetry, transitivity, monotonicity, each by the same recursion
+o-bisimR-sym : {S : Sig} {A B : Type} → (Q : A → B → Type) → (t : Step S A) → (u : Step S B) →
+               o-BisimR Q t u → o-BisimR {S} {B} {A} (λ b a → Q a b) u t
+o-bisimR-sym Q (sdone a) (sdone b) h = h
+o-bisimR-sym Q (sdone a) (scmd c2 k2) h = h
+o-bisimR-sym Q (scmd c k) (sdone b) h = h
+o-bisimR-sym Q (scmd c k) (scmd c2 k2) h =
+  ((λ i → fst h (~ i)) , λ r2 r pr → o-bisimR-sym Q (k r) (k2 r2) (snd h r r2 (λ i → pr (~ i))))
+o-bisimR-mono : {S : Sig} {A B : Type} → (Q Q2 : A → B → Type) → ((a : A) → (b : B) → Q a b → Q2 a b) →
+                (t : Step S A) → (u : Step S B) → o-BisimR Q t u → o-BisimR Q2 t u
+o-bisimR-mono Q Q2 m (sdone a) (sdone b) h = m a b h
+o-bisimR-mono Q Q2 m (sdone a) (scmd c2 k2) h = Empty-rec h
+o-bisimR-mono Q Q2 m (scmd c k) (sdone b) h = Empty-rec h
+o-bisimR-mono Q Q2 m (scmd c k) (scmd c2 k2) h =
+  (fst h , λ r r2 pr → o-bisimR-mono Q Q2 m (k r) (k2 r2) (snd h r r2 pr))
+o-RelComp : {A B C : Type} → (A → B → Type) → (B → C → Type) → A → C → Type
+o-RelComp {A} {B} {C} Q Q2 a c = (b : B) × (Q a b × Q2 b c)
+o-bisimR-trans : {S : Sig} {A B C : Type} → (Q : A → B → Type) → (Q2 : B → C → Type) →
+                 (t : Step S A) → (u : Step S B) → (v : Step S C) →
+                 o-BisimR Q t u → o-BisimR Q2 u v → o-BisimR (o-RelComp Q Q2) t v
+o-bisimR-trans Q Q2 (sdone a) (sdone b) (sdone c) h1 h2 = (b , (h1 , h2))
+o-bisimR-trans Q Q2 (sdone a) (sdone b) (scmd c3 k3) h1 h2 = Empty-rec h2
+o-bisimR-trans Q Q2 (sdone a) (scmd c2 k2) v h1 h2 = Empty-rec h1
+o-bisimR-trans Q Q2 (scmd c k) (sdone b) v h1 h2 = Empty-rec h1
+o-bisimR-trans Q Q2 (scmd c k) (scmd c2 k2) (sdone x) h1 h2 = Empty-rec h2
+o-bisimR-trans {S} {A} {B} {C} Q Q2 (scmd c k) (scmd c2 k2) (scmd c3 k3) h1 h2 =
+  o-J {lzero} {lzero} {Cmd S} {c}
+    (λ y e → (k4 : Resp S y → Step S B) →
+             ((r : Resp S c) → (r2 : Resp S y) → PathP (λ i → Resp S (e i)) r r2 → o-BisimR Q (k r) (k4 r2)) →
+             (e2 : y ≡ c3) →
+             ((r2 : Resp S y) → (r3 : Resp S c3) → PathP (λ i → Resp S (e2 i)) r2 r3 → o-BisimR Q2 (k4 r2) (k3 r3)) →
+             o-BisimR (o-RelComp Q Q2) (scmd c k) (scmd c3 k3))
+    (λ k4 f e2 g → (e2 , λ r r3 pr → o-bisimR-trans Q Q2 (k r) (k4 r) (k3 r3) (f r r (λ j → r)) (g r r3 pr)))
+    c2 (fst h1) k2 (snd h1) (fst h2) (snd h2)
+-- bisimilarity is a proposition when commands and results are sets, so trees are then a set
+-- (a reflexive proposition-valued relation that implies equality: the shape of std's
+-- Discrete→isSet, with the decision's path replaced by the path the bisimulation gives)
+o-isPropΣ : {A : Type} {B : A → Type} → isProp A → ((a : A) → isProp (B a)) → isProp ((a : A) × B a)
+o-isPropΣ {A} {B} pa pb = λ u v i →
+  (pa (fst u) (fst v) i , isProp→PathP (λ j → B (pa (fst u) (fst v) j)) (pb (fst v)) (snd u) (snd v) i)
+o-isProp-bisimR : {S : Sig} {A B : Type} → (Q : A → B → Type) → isSet (Cmd S) → ((a : A) → (b : B) → isProp (Q a b)) →
+                  (t : Step S A) → (u : Step S B) → isProp (o-BisimR Q t u)
+o-isProp-bisimR Q sc pq (sdone a) (sdone b) = pq a b
+o-isProp-bisimR Q sc pq (sdone a) (scmd c2 k2) = λ x y → Empty-rec x
+o-isProp-bisimR Q sc pq (scmd c k) (sdone b) = λ x y → Empty-rec x
+o-isProp-bisimR {S} {A} {B} Q sc pq (scmd c k) (scmd c2 k2) =
+  o-isPropΣ {c ≡ c2} {λ e → (r : Resp S c) → (r2 : Resp S c2) → PathP (λ i → Resp S (e i)) r r2 → o-BisimR Q (k r) (k2 r2)}
+    (sc c c2)
+    (λ e → isPropPi {Resp S c} {λ r → (r2 : Resp S c2) → PathP (λ i → Resp S (e i)) r r2 → o-BisimR Q (k r) (k2 r2)}
+      (λ r → isPropPi {Resp S c2} {λ r2 → PathP (λ i → Resp S (e i)) r r2 → o-BisimR Q (k r) (k2 r2)}
+        (λ r2 → isPropPi {PathP (λ i → Resp S (e i)) r r2} {λ pr → o-BisimR Q (k r) (k2 r2)}
+          (λ pr → o-isProp-bisimR Q sc pq (k r) (k2 r2)))))
+o-isProp-bisim : {S : Sig} {A : Type} → isSet (Cmd S) → isSet A → (t u : Step S A) → isProp (o-Bisim t u)
+o-isProp-bisim {S} {A} sc sa t u = o-isProp-bisimR {S} {A} {A} (λ a b → a ≡ b) sc (λ a b → sa a b) t u
+o-pconst : {S : Sig} {A : Type} → (t u : Step S A) → t ≡ u → t ≡ u
+o-pconst t u p = o-bisim-path t u (o-path-bisim t u p)
+o-isSet-step : {S : Sig} {A : Type} → isSet (Cmd S) → isSet A → isSet (Step S A)
+o-isSet-step {S} {A} sc sa t u p q = λ j i →
+  comp (λ k → Step S A)
+    (λ k → [ i = 0 ↦ o-pconst t t (λ m → t) k
+           , i = 1 ↦ o-bisim-path t u (o-isProp-bisim sc sa t u (o-path-bisim t u p) (o-path-bisim t u q) j) k
+           , j = 0 ↦ o-pconst t (p i) (λ m → p (m /\ i)) k
+           , j = 1 ↦ o-pconst t (q i) (λ m → q (m /\ i)) k ]) t

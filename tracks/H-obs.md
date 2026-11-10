@@ -79,6 +79,13 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   `o-SumS`, `o-RWorld`, `o-split`, `o-inl`, `o-inr`, `o-split-section`; traces `o-Tr`, `o-traces`,
   `o-TrEq`, `o-ptraces`.
 
+- Item 3, tree half (821 passed 0 failed, 15.6M steps): `o-J`; `o-BisimR Q` and `o-Bisim`;
+  `o-bisim-refl/sym/trans`; bisimilarity is path equality of trees (`o-bisim-path`,
+  `o-path-bisim`); `o-bisim-traces` (bisimilar ⇒ equal traces); the relational form's
+  `o-bisimR-sym/mono/trans`; `o-isProp-bisimR`, `o-isProp-bisim` (commands and results sets) and
+  `o-isSet-step` (trees over a set of commands with a set of results are a set; nothing is asked
+  of the response types).
+
 ## Found
 
 - `lib/std.cub` has no set quotient `_/_` and no truncations (the track text says it has); the
@@ -88,12 +95,12 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
 ## Next step
 
 In `lib/obs.cub`, append in this order, checking and committing after each:
-1. item 3: `o-BisimR Q` (bisimulation with a relation `Q` on results; `o-Bisim` is it at `≡`) by
-   recursion on both trees, the response clause in PathP form
-   `(e : c ≡ c2) × ((r)(r2) → PathP (λ i → Resp S (e i)) r r2 → o-BisimR Q (k r) (k2 r2))`;
-   refl/sym/trans (eliminate `e` with a J, `o-J`), `o-bisim-path`/`o-path-bisim`, isProp of it and
-   `isSet (Step S A)` (std's `Discrete→isSet` proof shape with `hconst` replaced), bisimilar ⇒
-   equal traces; then the guarded form (`GProc`).
-2. item 4 (`o-Quot`, `o-Beh`, `o-beh`, `≈`, the normal form `o-nf : Beh → Step`, congruences),
-   item 6 (up to bind: `o-bisimR-bind`; up to context: `o-run` of one context under two
-   observations related per command), then `experiments/obs/counter.cub` (item 5, acceptance).
+1. item 4: the set quotient `o-Quot A R` (HIT: `o-qin`, `o-qeq`, `o-qsquash`) with its recursor
+   into a set; `o-PBisim p q = o-Bisim (to-step p) (to-step q)`; `o-Beh O A = o-Quot (Proc O A) o-PBisim`;
+   `o-beh`; `≈`; the normal form `o-nf : o-Beh O A → Step O A` (by `o-isSet-step`), effectiveness
+   (`≈` ⇒ equal trees), congruence under bind and handlers, transport of predicates.
+2. item 6 (up to bind: `o-bisimR-bind`; up to context: one context run under two observations
+   related per command by a relation on states).
+3. `experiments/obs/counter.cub` (item 5 and the acceptance property).
+4. the guarded form (`GProc`): bisimulation by guarded recursion, its laws, guarded traces, and
+   where it differs from path equality (item 3, second half; item 2's coinductive traces).
