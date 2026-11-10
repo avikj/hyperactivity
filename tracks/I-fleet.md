@@ -78,6 +78,19 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
   `proc-view` (state = `Step (NetSig M) A`).
 
 ## Needs from track A
+
+1. **`#build-loop` for a machine whose state holds lists.** A deployed node is
+   `init : St` and `step : St → Step W St` (one command of the machine handled into `W`) with
+   `St` = `KvSt` of `experiments/fleet/kv/kv.cub` (records of `List (Word × Word)`, a data type
+   `KvPend`, a `Hist` of dependent pairs) plus the socket and buffer words. Today
+   `#build-loop` wants a hand-written `copy` with `copy-id` and refuses byte strings; A's own
+   next step 1 (derive `copy`/`copy-id` from the data table) is what is needed here, for
+   lists and nested records. Until then nodes are built by `#build` with a run-time bound of
+   100000 machine steps (Found 6). Smallest input: `experiments/fleet/kv/build0.cub`.
+2. **`#build` cost.** `kv-node0` is 145 M steps (70–100 s) for a replica of ~40 lines; four
+   nodes are four such builds. Same cause as track D's item 7 (the handler stays in the code
+   behind a stuck case). Nothing is blocked on it.
+
 ## Done
 
 - `lib/net.cub` (49 definitions): signature, state, `Adv`, `EnvS`, `resolve` with `resolve-spec`,
@@ -137,6 +150,23 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
   Measured: library + net, fleet, kv, liveness: 1033 passed, 0 failed, 3,457,330 steps, 27 s
   uncached (`kvl-owe` 446,906 steps is the largest).
 
+- `lib/deploy.cub`: `handle-l` (handle at any level), `Wire` (four words), `Codec`, `NodeCfg`,
+  `ConfigData`, `Config` (the data with the platform's little-endian fact), `Corpus` (view and
+  initial state by role, codec, exit status), `net-on-linux` (the node signature as Linux
+  commands on a bound UDP socket: `dp-send`, `dp-recv`, `dp-now`), `dp-node` (socket, bind,
+  buffer, the role's machine by `mach-proc-w` through `handle-l net-on-linux`, `exit_group` with
+  the corpus's status), `Fleet`, `deploy : Corpus M St → Config → Fleet M St` (behaviour, initial
+  state, and each node's `Step W` through `linux-run`).
+- `experiments/fleet/kv/deploy.cub`: `kv-enc`/`kv-dec` with `kv-dec-enc`, `kv-corpus prog` (role 0
+  replica, role 1 the sequential client), `kv-config` (four nodes on 127.0.0.1:47600–47603,
+  `x86-64-linux #2`, fuel 100000), `kv-fleet = deploy (kv-corpus kv-prog) kv-config`.
+- **`#build` of node 0** (`experiments/fleet/kv/build0.cub`): `ok: build kv-node0 [build/kv-node0,
+  107132 bytes, the checker's conversion, 144854613 steps]` (69–100 s). Run alone and driven
+  from python bound to 127.0.0.1:47603 (node 3's address): three puts acknowledged
+  (`(1,1,10,0)`, `(1,2,20,0)`, `(1,1,11,0)`), `get 1 → (3,7,11,0)`, `get 2 → (3,8,20,0)`,
+  `get 5 → (3,9,0,0)`; under `strace` its calls are `mmap` ×3, `socket`, `bind 127.0.0.1:47600`,
+  then one `recvfrom`/`sendto` pair per request.
+
 ## Found
 
 1. **Conversion misses a refined scrutinee (checker incompleteness).** With `f` defined by
@@ -161,6 +191,16 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
    (the measure premise written directly over `fleet-at`) exhausted 2.5 GB after 60 s; the same
    two `subst`s as a lemma over three list variables (`kvl-len-lt`) applied to the run's lists
    check in 33,745 steps.
+6. **`#build` unfolds a loop bound it knows; a large bound at run time exits 3.** With
+   `cf-fuel` a literal reaching `mach-proc-w` (`%welimP` on `#1000000000000`), `#build` of
+   node 0 ran out of 2.5 GB in 45 s; with the literal `#2` it did not finish in 600 s. With the
+   bound written to memory and read back (`lx-poke64`/`lx-peek64`, so a run-time value) the
+   build takes 145 M steps; the binary with bound 10¹² then leaves with status 3 right after
+   its start (strace: `socket`, `bind`, `mmap`, `exit_group(3)`), with bound 100000 it serves.
+   So a `%welimP` loop costs memory in its bound before its first round. A node that runs
+   for ever needs `#build-loop` (see Needs).
+7. `k-put` (mine, a constructor of `KvCmd`) clashed with `lib/os/contract.cub`'s `k-put` once
+   `lib/os` joined `LIB`: mine are now `kc-put`, `kc-get`.
 4. A type alias that hides a Π (`Beh M St`, `LocalInv P beh`) cannot be the signature of a
    definition by clauses (`a dimension is matched only by a variable`): the Π is written out.
 

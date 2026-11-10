@@ -1,0 +1,51 @@
+-- experiments/fleet/kv/deploy.cub — the kv fleet deployed from one corpus and one configuration
+-- (loaded after lib/deploy.cub and kv.cub).
+-- ---------------------------------------------------------------- the wire form of the messages
+kv-enc : KvMsg → Wire
+kv-enc m = case m of
+  m-put w → (#0 , (fst w , (snd w , #0)))
+  m-ack w → (#1 , (fst w , (snd w , #0)))
+  m-get k rid → (#2 , (k , (rid , #0)))
+  m-val rid v → (#3 , (rid , (v , #0)))
+kv-dec : Wire → KvMsg
+kv-dec w =
+  case weq (fst w) #0 of
+    true → m-put (fst (snd w) , fst (snd (snd w)))
+    false → (case weq (fst w) #1 of
+      true → m-ack (fst (snd w) , fst (snd (snd w)))
+      false → (case weq (fst w) #2 of
+        true → m-get (fst (snd w)) (fst (snd (snd w)))
+        false → m-val (fst (snd w)) (fst (snd (snd w)))))
+kv-dec-enc : (m : KvMsg) → kv-dec (kv-enc m) ≡ m
+kv-dec-enc (m-put w) = λ i → m-put w
+kv-dec-enc (m-ack w) = λ i → m-ack w
+kv-dec-enc (m-get k rid) = λ i → m-get k rid
+kv-dec-enc (m-val rid v) = λ i → m-val rid v
+kv-codec : Codec KvMsg
+kv-codec = Codec { cd-enc = kv-enc ; cd-dec = kv-dec }
+-- ---------------------------------------------------------------- the corpus: replica (role 0) and client (role 1)
+kv-role-view : Word → KvSt → NView KvMsg KvSt
+kv-role-view role st = case weq role #0 of
+  true → nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd st)) (kv-rep-view (fst st))
+  false → kv-seq-view st
+kv-entry-val : (c : KvCmd) → kv-resp c → Word
+kv-entry-val c = case c return (λ x → kv-resp x → Word) of kc-put w → λ u → #0; kc-get k → λ v → v
+-- the status a node leaves with: the value of the last request answered (a get's value)
+kv-exit : KvSt → Word
+kv-exit st = case c-hist (snd st) of nil → #0; cons e r → kv-entry-val (fst e) (snd e)
+kv-corpus : List KvCmd → Corpus KvMsg KvSt
+kv-corpus prog = Corpus { cp-view = kv-role-view ; cp-init = λ role → (kv-rep-init , kv-seq-cli prog) ; cp-codec = kv-codec ; cp-exit = kv-exit }
+-- ---------------------------------------------------------------- the configuration: four boxes on the loopback
+kv-addr : Word → SockAddr
+kv-addr port = SockAddr { sa-port = port ; sa-ip = #2130706433 }
+kv-config-data : ConfigData
+kv-config-data = ConfigData { cf-platform = x86-64-linux #2
+  ; cf-nodes = cons (NodeCfg { nc-role = #0 ; nc-addr = kv-addr #47600 }) (cons (NodeCfg { nc-role = #0 ; nc-addr = kv-addr #47601 })
+              (cons (NodeCfg { nc-role = #0 ; nc-addr = kv-addr #47602 }) (cons (NodeCfg { nc-role = #1 ; nc-addr = kv-addr #47603 }) nil)))
+  ; cf-fuel = #100000 }
+kv-config : Config
+kv-config = (kv-config-data , x86-64-linux-le #2)
+kv-prog : List KvCmd
+kv-prog = cons (kc-put (#1 , #10)) (cons (kc-put (#2 , #20)) (cons (kc-put (#1 , #11)) (cons (kc-get #1) nil)))
+kv-fleet : Fleet KvMsg KvSt
+kv-fleet = deploy {KvMsg} {KvSt} (kv-corpus kv-prog) kv-config

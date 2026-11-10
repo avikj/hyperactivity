@@ -3,7 +3,7 @@
 -- replica 0 away for a while, lets time pass, duplicates the first write to replica 1 (both
 -- copies are delivered), and drops replica 1's first acknowledgement.
 kvr-prog : List KvCmd
-kvr-prog = cons (k-put (#1 , #10)) (cons (k-put (#2 , #20)) (cons (k-put (#1 , #11)) (cons (k-get #1) nil)))
+kvr-prog = cons (kc-put (#1 , #10)) (cons (kc-put (#2 , #20)) (cons (kc-put (#1 , #11)) (cons (kc-get #1) nil)))
 kvr-init : FState KvMsg KvSt
 kvr-init = kv-init (kv-seq-cli kvr-prog)
 kvr-ch1 : List Adv
@@ -77,5 +77,5 @@ kvr-replay-eq chs e = fleet-replay {KvMsg} {KvSt} kv-seq-beh chs kvr-choices kvr
 -- the client's observed history is the sequential map's: what the refinement statement says of
 -- every reachable state, here by computation
 kvr-hist : Path (Hist KvS) (c-hist (snd (fst kvr-final 3)))
-                (cons (k-get #1 , #11) (cons (k-put (#1 , #11) , unit) (cons (k-put (#2 , #20) , unit) (cons (k-put (#1 , #10) , unit) nil))))
+                (cons (kc-get #1 , #11) (cons (kc-put (#1 , #11) , unit) (cons (kc-put (#2 , #20) , unit) (cons (kc-put (#1 , #10) , unit) nil))))
 kvr-hist = λ i → c-hist (snd (fst kvr-final 3))

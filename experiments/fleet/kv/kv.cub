@@ -42,9 +42,9 @@ kv-rep-init : KvRep
 kv-rep-init = KvRep { r-log = nil ; r-app = nil ; r-pend = kp-none }
 -- ---------------------------------------------------------------- the client's signature and state
 -- what a client asks of the service: put a write, get a key's value
-data KvCmd = k-put (w : KvWrite) | k-get (k : Word)
+data KvCmd = kc-put (w : KvWrite) | kc-get (k : Word)
 kv-resp : KvCmd → Type
-kv-resp c = case c of k-put w → Unit; k-get k → Word
+kv-resp c = case c of kc-put w → Unit; kc-get k → Word
 KvS : Sig
 KvS = (KvCmd , kv-resp)
 -- the sequential client's phase: done; in a put (n < 3: about to send to replica n; n ≥ 3:
@@ -148,14 +148,14 @@ kv-bcast ws = case ws of nil → nil; cons w r → cons (0 , w) (cons (1 , w) (c
 kv-start : List KvCmd → KvPhase × List KvCmd
 kv-start todo = case todo of
   nil → (ph-done , nil)
-  cons c r → (case c of k-put w → (ph-put w zero , r); k-get k → (ph-get-send k , r))
+  cons c r → (case c of kc-put w → (ph-put w zero , r); kc-get k → (ph-get-send k , r))
 kv-set-ph : KvCli → KvPhase → KvCli
 kv-set-ph c ph = KvCli { c-hist = c-hist c ; c-conf = c-conf c ; c-idx = c-idx c ; c-todo = c-todo c ; c-ph = ph ; c-out = c-out c }
 kv-adv-put : KvCli → KvWrite → KvCli
-kv-adv-put c w = KvCli { c-hist = cons (k-put w , unit) (c-hist c) ; c-conf = cons w (c-conf c) ; c-idx = %wsucc (c-idx c)
+kv-adv-put c w = KvCli { c-hist = cons (kc-put w , unit) (c-hist c) ; c-conf = cons w (c-conf c) ; c-idx = %wsucc (c-idx c)
                        ; c-todo = snd (kv-start (c-todo c)) ; c-ph = fst (kv-start (c-todo c)) ; c-out = c-out c }
 kv-adv-get : KvCli → Word → Word → KvCli
-kv-adv-get c k v = KvCli { c-hist = cons (k-get k , v) (c-hist c) ; c-conf = c-conf c ; c-idx = %wsucc (c-idx c)
+kv-adv-get c k v = KvCli { c-hist = cons (kc-get k , v) (c-hist c) ; c-conf = c-conf c ; c-idx = %wsucc (c-idx c)
                          ; c-todo = snd (kv-start (c-todo c)) ; c-ph = fst (kv-start (c-todo c)) ; c-out = c-out c }
 kv-weq2 : KvWrite → KvWrite → Bool
 kv-weq2 a b = andB (weq (fst a) (fst b)) (weq (snd a) (snd b))
