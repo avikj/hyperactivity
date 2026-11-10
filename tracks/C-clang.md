@@ -44,6 +44,34 @@ Files you own: `tools/clang2cub.py`, `lib/cxx/ast.cub`, `experiments/cxx/**`, th
    (the generator prints the kinds it met; an unmet kind is not a constructor yet). Keep the
    constructor names prefixed (`ce-`, `cs-`, `cd-`, `ct-`) so they collide with nothing.
 
+4. **Every construct the importer stopped on by design, closed** (added by the coordinator
+   after items 1–3 were accepted; nothing the importer stops on is optional). Each by a
+   checked-in unit that uses it (`experiments/cxx/fourth.cpp`, `fifth.cpp`, …), the rule, and
+   the constructors: `std::span` and `CXXRewrittenBinaryOperator`; enumerations without a
+   fixed underlying type (the underlying type from a dump or from a generated probe unit
+   compiled alongside: say which); anonymous struct/union members; init-captures; alias
+   templates; `decltype(expr)`/`noexcept(expr)` in type strings; `float`, `long double`,
+   wide/UTF literals; `thread_local`; `if constexpr`; `std::initializer_list`; multiple and
+   virtual inheritance (base offsets, virtual base offsets, vtable layout including thunks,
+   VTTs, from `-fdump-vtable-layouts`); a polymorphic class whose vtable is emitted in another
+   unit.
+5. **What `-fno-exceptions -fno-rtti` and scope kept out**, as data only (semantics is track
+   F's), each in a checked-in unit that imports and checks: a unit compiled with exceptions
+   and RTTI: try/catch/throw (`CXXTryStmt`, `CXXCatchStmt`, `CXXThrowExpr`, the implicit
+   cleanups: `ExprWithCleanups` objects, and where destructors run on unwinding), `noexcept`,
+   `dynamic_cast`, `typeid`; coroutines (`CoroutineBodyStmt` and its sub-statements,
+   `co_await`/`co_yield`/`co_return` as Clang desugars them); `std::atomic` operations (the
+   builtin/atomic expression nodes Clang produces), `volatile`; `goto`/labels; unions with
+   non-trivial members; bit-field layouts; pointer to data member; statics with dynamic
+   initialization and their order (the unit's global initialization function).
+6. **Multi-unit programs**: two translation units that refer to each other (extern functions
+   and variables, an inline function and a template instantiated in both, a class with its
+   key function in one), declaration identity across units by mangled name (`mangledName` of
+   the JSON), as one program value (`CProg` = units + a symbol table), checked. And the list,
+   per unit, of every function it refers to whose body is not in the unit: a header inline
+   that can be imported, or an out-of-line libstdc++/libc symbol to be lifted from the library
+   binary later (input for the binary-lifting track).
+
 ## Acceptance
 
 - `python3 tools/clang2cub.py experiments/cxx/book.cpp -o experiments/cxx/book.cub` runs, and
@@ -56,6 +84,15 @@ Files you own: `tools/clang2cub.py`, `lib/cxx/ast.cub`, `experiments/cxx/**`, th
   `union`, bit-fields, a `do`/`while`, `goto`-free `break`/`continue`, `sizeof`/`alignof`,
   compound assignment and `?:`, a C array of structs, string literal, `std::span` or pointer
   arithmetic, 128-bit multiply via `__int128` or `__builtin_mul_overflow`.
+
+- Item 4: each construct of the list appears in a checked-in unit under `experiments/cxx/`
+  that imports without a stop and whose `.cub` checks; the "stops by design" list under Next
+  step is empty of them; the kind lists below name the new kinds.
+- Item 5: likewise for each construct of item 5; the unit with exceptions and RTTI is imported
+  with those flags (recorded in its header).
+- Item 6: `experiments/cxx/prog/` holds two units and the program value; loading the library
+  and it ends `0 failed` with `…-prog : CProg` checked; the list of out-of-unit functions is in
+  this file.
 
 ## Needs from track A
 
@@ -287,6 +324,10 @@ In the machine:
    steps per node. An earlier binary failed at once with `error: unbound name %wmul` after a
    `git pull` changed `src/`: rebuild (`make build/cubical`) after every pull.
 
+Forwarded (by the coordinator, 2026-11-10): items 1 and 5 to track S (mutual data, `List D`
+in `data D`, keywords as field names); item 6 to track N (the cost of checking a data
+declaration that mentions large types). Items 2–4 stand as recorded.
+
 In Clang 18.1.3 (the oracle):
 
 8. `-Xclang -fdump-record-layouts-complete` (the flag the track specification names)
@@ -313,21 +354,17 @@ In Clang 18.1.3 (the oracle):
 
 ## Next step
 
-The track's acceptance is met; there is no unfinished item under "What is built". What
-remains is what the importer stops on by design, found by probing with scratch files; each is
-closed by writing the construct into a checked-in unit, importing, and adding the rule and
-constructor the stop message names (then `--emit-ast`, re-import all units, re-run the
-acceptance commands, update the lists above). In the order real code will hit them:
+Items 1–3 are accepted and `lib/cxx/ast.cub` is in `LIB` (track A, `4d04760c`); track F reads
+it (`tracks/F-cxx.md`: a request under "Needs from track C" there takes priority over the
+list below). Items 4–6 are open. Do them in this order, one checked-in unit at a time, each
+commit regenerating `lib/cxx/ast.cub` and every unit and recording the new kinds here:
 
-1. `std::span`: a template argument printed as the name of a constant
-   (`__extent_storage<dynamic_extent>`; the layout dump prints the same class with the value,
-   which can identify it), and `CXXRewrittenBinaryOperator` (C++20 `!=` from `==`).
-2. Enumerations without a fixed underlying type (the dump does not give the type Sema chose).
-3. Anonymous struct/union members (`IndirectFieldDecl`), init-captures, alias templates and
-   `decltype(expr)`/`noexcept(expr)` in type strings, `float`/`long double`/wide literals,
-   `thread_local`, `if constexpr`/`consteval`, `std::initializer_list`, GNU case ranges.
-4. Multiple and virtual inheritance (several vtable address points, thunks, vbase offsets), a
-   polymorphic class whose vtable is laid out in another unit, a class used only incomplete.
-5. Any other node kind: the import stops with `… kind with no rule yet: K (at file:line)`.
-
-When track A applies "Needs from track A" items 2 or 3, make the change described there.
+1. `experiments/cxx/fourth.cpp`: the first group of item 4 (`std::span`,
+   `CXXRewrittenBinaryOperator`, enums without a fixed underlying type, anonymous
+   struct/union members, init-captures, alias templates, `decltype`/`noexcept` in type
+   strings, `float`/`long double`/wide and UTF literals, `thread_local`, `if constexpr`,
+   `std::initializer_list`). Run `python3 tools/clang2cub.py experiments/cxx/fourth.cpp -o
+   experiments/cxx/fourth.cub`; each stop names the rule to add.
+2. `experiments/cxx/fifth.cpp` (+ a second file for the key function): multiple and virtual
+   inheritance, thunks, VTTs, a vtable emitted elsewhere.
+3. Item 5 units, then item 6.
