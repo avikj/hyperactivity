@@ -69,6 +69,16 @@ Files you own: `tools/clang2cub.py`, `lib/cxx/ast.cub`, `experiments/cxx/**`, th
   ~25% execute, 0.1% reset, prices 994..1006) the reference binary answers `sum -11432484` at
   about 71 ns/message on this (shared, 2-core) machine.
 
+- `tools/clang2cub.py` written and `lib/cxx/ast.cub` generated from its schema
+  (`python3 tools/clang2cub.py --emit-ast > lib/cxx/ast.cub`; the schema in the tool is the one
+  description of the constructors). First import of `book.cpp` checks:
+  `CUBICAL_NOCACHE=1 ./build/cubical <library> lib/cxx/ast.cub experiments/cxx/book.cub` ends
+  `1061 passed, 0 failed` in 34 s with `ok: checks book-tu`. Steps: library 21,707,727 (830
+  definitions); `ast.cub` adds 30,462,743 (40 definitions; `data CDecl` alone 10.2M);
+  `book.cub` adds 1,600,065 (191 definitions). 3365 nodes, 62 declarations, 98 shared types,
+  8 records with layouts of 8. (Numbers are superseded by the acceptance record below when the
+  work is complete.)
+
 ## Found
 
 - The checker has no mutual `data` (`mutual` followed by `data`: "unexpected data") and rejects a
@@ -90,6 +100,7 @@ Files you own: `tools/clang2cub.py`, `lib/cxx/ast.cub`, `experiments/cxx/**`, th
 
 ## Next step
 
-Dump the JSON once (`clang++ -std=c++20 -fno-exceptions -fno-rtti -fsyntax-only -Xclang
--ast-dump=json experiments/cxx/book.cpp`), list the node kinds reachable from `on_message`,
-and commit that list here before writing the importer (`tools/clang2cub.py`).
+Review `experiments/cxx/book.cub` against the JSON for anything read wrongly, then write the
+second unit `experiments/cxx/second.cpp` (the list under Acceptance), import it, and add a
+rule for each kind it stops on. Then prune schema constructors neither unit uses, regenerate
+`lib/cxx/ast.cub`, and record the acceptance numbers and the full kind lists here.

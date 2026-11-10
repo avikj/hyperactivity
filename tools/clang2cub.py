@@ -1,0 +1,2595 @@
+#!/usr/bin/env python3
+"""clang2cub — a C++ translation unit, after Clang's semantic analysis, as a checked value.
+
+    python3 tools/clang2cub.py unit.cpp -o unit.cub      the unit as `<unit>-tu : CTU`
+    python3 tools/clang2cub.py --emit-ast > lib/cxx/ast.cub   the AST type itself
+
+Sources (Clang 18; no Clang headers or bindings are used):
+  1. clang++ <flags> -fsyntax-only -Xclang -ast-dump=json -Xclang -fdump-record-layouts
+     one process: the record layouts Sema computed, then the AST as JSON.
+  2. clang++ <flags> -emit-llvm -S -o /dev/null -Xclang -fdump-vtable-layouts
+     the vtables of the unit (only code generation lays them out).
+
+What is written is the AST after Sema: names are declaration ids, overloads are chosen,
+templates are their instantiations, implicit casts and constructor calls are nodes, constant
+expressions carry their values. Only declarations reachable from the unit's roots are written.
+Types are structured; a type string the parser cannot read, a name it cannot resolve, or a node
+kind without a rule stops the import with a message naming it. There is no "unknown" node.
+
+The AST type (SCHEMA below) is the single description of the constructors: `--emit-ast` prints
+it as lib/cxx/ast.cub, and every term written is built against it.
+"""
+import json
+import os
+import re
+import struct
+import subprocess
+import sys
+
+CLANG_FLAGS = ['-std=c++20', '-fno-exceptions', '-fno-rtti']
+
+
+class Stop(Exception):
+    pass
+
+
+class Dependent(Exception):
+    """A name that is a template parameter, or a type that only exists uninstantiated."""
+
+
+def stop(msg):
+    raise Stop(msg)
+
+
+# ============================================================================ the AST type
+# (type, [(constructor, [(field, field type)])]) in dependency order. A field type is a schema
+# type, `Word`, `Bool`, `CStr`, or `List T` for T declared earlier. The checker has no mutual
+# data and no `List D` inside `data D` (tracks/C-clang.md, Found), so CType, CExpr and CStmt
+# carry their own list constructors (`ct-nil`/`ct-cons`, `ce-nil`/`ce-cons`, `cs-nil`/`cs-cons`):
+# a field holding "a list of expressions" has type CExpr and is built from those two.
+INLIST = {'CType': 'ct', 'CExpr': 'ce', 'CStmt': 'cs'}
+
+SCHEMA = [
+    ('CInt', 'an integer value: its magnitude and sign (the type beside it gives the width)', [
+        ('cint-pos', [('n', 'Word')]),
+        ('cint-neg', [('n', 'Word')]),
+    ]),
+    ('COptId', 'a declaration id that may be absent', [
+        ('coi-none', []),
+        ('coi-some', [('id', 'Word')]),
+    ]),
+    ('CBuiltin', "Clang's BuiltinType kinds met", [
+        ('ctb-void', []), ('ctb-bool', []), ('ctb-char', []), ('ctb-schar', []), ('ctb-uchar', []),
+        ('ctb-short', []), ('ctb-ushort', []), ('ctb-int', []), ('ctb-uint', []), ('ctb-long', []),
+        ('ctb-ulong', []), ('ctb-llong', []), ('ctb-ullong', []), ('ctb-int128', []),
+        ('ctb-uint128', []), ('ctb-double', []), ('ctb-nullptr', []),
+        ('ctb-bound-member', []), ('ctb-builtin-fn', []),
+    ]),
+    ('CRefQual', 'the ref-qualifier of a function type', [
+        ('crq-none', []), ('crq-lvalue', []), ('crq-rvalue', []),
+    ]),
+    ('CType', 'a type, structured; ct-nil/ct-cons build the parameter list of ct-function', [
+        ('ct-builtin', [('b', 'CBuiltin')]),
+        ('ct-pointer', [('t', 'CType')]),
+        ('ct-lref', [('t', 'CType')]),
+        ('ct-rref', [('t', 'CType')]),
+        ('ct-array', [('t', 'CType'), ('n', 'Word')]),
+        ('ct-record', [('id', 'Word')]),
+        ('ct-enum', [('id', 'Word')]),
+        ('ct-function', [('ret', 'CType'), ('params', 'CType'), ('variadic', 'Bool'),
+                         ('const', 'Bool'), ('volatile', 'Bool'), ('ref', 'CRefQual'),
+                         ('noexcept', 'Bool')]),
+        ('ct-member-pointer', [('class', 'Word'), ('t', 'CType')]),
+        ('ct-qual', [('const', 'Bool'), ('volatile', 'Bool'), ('restrict', 'Bool'), ('t', 'CType')]),
+        ('ct-nil', []),
+        ('ct-cons', [('x', 'CType'), ('xs', 'CType')]),
+    ]),
+    ('CValCat', 'value categories', [
+        ('vc-prvalue', []), ('vc-lvalue', []), ('vc-xvalue', []),
+    ]),
+    ('CCastKind', "Clang's cast kinds met", [
+        ('ck-LValueToRValue', []), ('ck-NoOp', []), ('ck-FunctionToPointerDecay', []),
+        ('ck-ArrayToPointerDecay', []), ('ck-IntegralCast', []), ('ck-IntegralToBoolean', []),
+        ('ck-BitCast', []), ('ck-DerivedToBase', []), ('ck-UncheckedDerivedToBase', []),
+        ('ck-NullToPointer', []), ('ck-ToVoid', []), ('ck-BuiltinFnToFnPtr', []),
+        ('ck-ConstructorConversion', []), ('ck-PointerToBoolean', []),
+        ('ck-NullToMemberPointer', []), ('ck-UserDefinedConversion', []),
+        ('ck-IntegralToFloating', []), ('ck-FloatingToIntegral', []),
+    ]),
+    ('CUnOp', 'unary operators met', [
+        ('uo-post-inc', []), ('uo-post-dec', []), ('uo-pre-inc', []), ('uo-pre-dec', []),
+        ('uo-addr-of', []), ('uo-deref', []), ('uo-plus', []), ('uo-minus', []), ('uo-not', []),
+        ('uo-lnot', []),
+    ]),
+    ('CBinOp', 'binary operators met (a compound assignment names the operator applied)', [
+        ('bo-mul', []), ('bo-div', []), ('bo-rem', []), ('bo-add', []), ('bo-sub', []),
+        ('bo-shl', []), ('bo-shr', []), ('bo-lt', []), ('bo-gt', []), ('bo-le', []), ('bo-ge', []),
+        ('bo-eq', []), ('bo-ne', []), ('bo-and', []), ('bo-xor', []), ('bo-or', []),
+        ('bo-land', []), ('bo-lor', []), ('bo-assign', []), ('bo-comma', []),
+        ('bo-ptr-mem-d', []), ('bo-ptr-mem-i', []),
+    ]),
+    ('CRefKind', 'the kind of declaration a reference names', [
+        ('crk-function', []), ('crk-method', []), ('crk-var', []), ('crk-parm', []),
+        ('crk-enum-constant', []), ('crk-field', []),
+    ]),
+    ('CConstructKind', 'what a constructor call constructs', [
+        ('cck-complete', []), ('cck-non-virtual-base', []), ('cck-delegating', []),
+    ]),
+    ('CStorageDuration', 'the storage duration of a materialized temporary', [
+        ('csd-full-expression', []), ('csd-automatic', []), ('csd-static', []),
+    ]),
+    ('CTraitKind', 'sizeof, alignof', [
+        ('ctk-sizeof', []), ('ctk-alignof', []),
+    ]),
+    ('CNewInit', 'the initializer style of a new-expression', [
+        ('cni-none', []), ('cni-parens', []), ('cni-braces', []),
+    ]),
+    ('CExpr', 'an expression; every node has its type and value category. One constructor '
+              'per Clang Expr kind met; ce-nil/ce-cons build argument and initializer lists', [
+        ('ce-integer-literal', [('t', 'CType'), ('vc', 'CValCat'), ('v', 'Word')]),
+        ('ce-character-literal', [('t', 'CType'), ('vc', 'CValCat'), ('v', 'Word')]),
+        ('ce-bool-literal', [('t', 'CType'), ('vc', 'CValCat'), ('v', 'Bool')]),
+        ('ce-floating-literal', [('t', 'CType'), ('vc', 'CValCat'), ('bits', 'Word')]),
+        ('ce-string-literal', [('t', 'CType'), ('vc', 'CValCat'), ('s', 'CStr')]),
+        ('ce-nullptr-literal', [('t', 'CType'), ('vc', 'CValCat')]),
+        ('ce-declref', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CRefKind'), ('id', 'Word')]),
+        ('ce-member', [('t', 'CType'), ('vc', 'CValCat'), ('base', 'CExpr'), ('arrow', 'Bool'),
+                       ('k', 'CRefKind'), ('id', 'Word')]),
+        ('ce-call', [('t', 'CType'), ('vc', 'CValCat'), ('callee', 'CExpr'), ('args', 'CExpr')]),
+        ('ce-member-call', [('t', 'CType'), ('vc', 'CValCat'), ('callee', 'CExpr'),
+                            ('args', 'CExpr')]),
+        ('ce-operator-call', [('t', 'CType'), ('vc', 'CValCat'), ('callee', 'CExpr'),
+                              ('args', 'CExpr')]),
+        ('ce-construct', [('t', 'CType'), ('vc', 'CValCat'), ('ctor', 'Word'),
+                          ('k', 'CConstructKind'), ('elidable', 'Bool'), ('list', 'Bool'),
+                          ('zeroing', 'Bool'), ('args', 'CExpr')]),
+        ('ce-temporary-object', [('t', 'CType'), ('vc', 'CValCat'), ('ctor', 'Word'),
+                                 ('k', 'CConstructKind'), ('elidable', 'Bool'), ('list', 'Bool'),
+                                 ('zeroing', 'Bool'), ('args', 'CExpr')]),
+        ('ce-implicit-cast', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CCastKind'),
+                              ('path', 'List Word'), ('e', 'CExpr')]),
+        ('ce-static-cast', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CCastKind'),
+                            ('path', 'List Word'), ('e', 'CExpr')]),
+        ('ce-reinterpret-cast', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CCastKind'),
+                                 ('path', 'List Word'), ('e', 'CExpr')]),
+        ('ce-functional-cast', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CCastKind'),
+                                ('path', 'List Word'), ('e', 'CExpr')]),
+        ('ce-cstyle-cast', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CCastKind'),
+                            ('path', 'List Word'), ('e', 'CExpr')]),
+        ('ce-unary', [('t', 'CType'), ('vc', 'CValCat'), ('op', 'CUnOp'), ('e', 'CExpr')]),
+        ('ce-binary', [('t', 'CType'), ('vc', 'CValCat'), ('op', 'CBinOp'), ('l', 'CExpr'),
+                       ('r', 'CExpr')]),
+        ('ce-compound-assign', [('t', 'CType'), ('vc', 'CValCat'), ('op', 'CBinOp'),
+                                ('lhs-type', 'CType'), ('result-type', 'CType'), ('l', 'CExpr'),
+                                ('r', 'CExpr')]),
+        ('ce-conditional', [('t', 'CType'), ('vc', 'CValCat'), ('c', 'CExpr'), ('a', 'CExpr'),
+                            ('b', 'CExpr')]),
+        ('ce-paren', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
+        ('ce-array-subscript', [('t', 'CType'), ('vc', 'CValCat'), ('base', 'CExpr'),
+                                ('index', 'CExpr')]),
+        ('ce-init-list', [('t', 'CType'), ('vc', 'CValCat'), ('union-field', 'COptId'),
+                          ('filler', 'CExpr'), ('inits', 'CExpr')]),
+        ('ce-implicit-value-init', [('t', 'CType'), ('vc', 'CValCat')]),
+        ('ce-default-init', [('t', 'CType'), ('vc', 'CValCat'), ('field', 'Word')]),
+        ('ce-this', [('t', 'CType'), ('vc', 'CValCat')]),
+        ('ce-materialize-temporary', [('t', 'CType'), ('vc', 'CValCat'),
+                                      ('sd', 'CStorageDuration'), ('extending', 'COptId'),
+                                      ('e', 'CExpr')]),
+        ('ce-with-cleanups', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
+        ('ce-constant', [('t', 'CType'), ('vc', 'CValCat'), ('v', 'CInt'), ('e', 'CExpr')]),
+        ('ce-lambda', [('t', 'CType'), ('vc', 'CValCat'), ('closure', 'Word'),
+                       ('captures', 'CExpr')]),
+        ('ce-unary-or-type-trait', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CTraitKind'),
+                                    ('arg-type', 'CType'), ('arg', 'CExpr')]),
+        ('ce-subst-nttp', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
+        ('ce-new', [('t', 'CType'), ('vc', 'CValCat'), ('global', 'Bool'), ('array', 'Bool'),
+                    ('operator-new', 'COptId'), ('init-style', 'CNewInit'),
+                    ('array-size', 'CExpr'), ('placement', 'CExpr'), ('init', 'CExpr')]),
+        ('ce-delete', [('t', 'CType'), ('vc', 'CValCat'), ('global', 'Bool'), ('array', 'Bool'),
+                       ('operator-delete', 'COptId'), ('e', 'CExpr')]),
+        ('ce-nil', []),
+        ('ce-cons', [('x', 'CExpr'), ('xs', 'CExpr')]),
+    ]),
+    ('CStorage', 'storage class as written', [
+        ('cst-none', []), ('cst-static', []), ('cst-extern', []),
+    ]),
+    ('CVarInit', 'the initializer of a variable, by its style', [
+        ('cvi-none', []),
+        ('cvi-c', [('e', 'CExpr')]),
+        ('cvi-call', [('e', 'CExpr')]),
+        ('cvi-list', [('e', 'CExpr')]),
+    ]),
+    ('CVar', 'VarDecl and ParmVarDecl', [
+        ('cv-var', [('id', 'Word'), ('name', 'CStr'), ('t', 'CType'), ('storage', 'CStorage'),
+                    ('constexpr', 'Bool'), ('nrvo', 'Bool'), ('init', 'CVarInit')]),
+        ('cv-parm', [('id', 'Word'), ('name', 'CStr'), ('t', 'CType')]),
+    ]),
+    ('CStmt', 'a statement. One constructor per Clang Stmt kind met; cs-expr is an expression '
+              'in statement position; cs-none an absent child; cs-nil/cs-cons the children of '
+              'cs-compound', [
+        ('cs-compound', [('ss', 'CStmt')]),
+        ('cs-decl', [('vars', 'List CVar')]),
+        ('cs-expr', [('e', 'CExpr')]),
+        ('cs-if', [('init', 'CStmt'), ('cond-var', 'CStmt'), ('cond', 'CExpr'), ('then-s', 'CStmt'),
+                   ('else-s', 'CStmt')]),
+        ('cs-while', [('cond-var', 'CStmt'), ('cond', 'CExpr'), ('body', 'CStmt')]),
+        ('cs-do', [('body', 'CStmt'), ('cond', 'CExpr')]),
+        ('cs-for', [('init', 'CStmt'), ('cond-var', 'CStmt'), ('cond', 'CExpr'), ('inc', 'CExpr'),
+                    ('body', 'CStmt')]),
+        ('cs-for-range', [('init', 'CStmt'), ('range', 'CStmt'), ('begin', 'CStmt'),
+                          ('end', 'CStmt'), ('cond', 'CExpr'), ('inc', 'CExpr'),
+                          ('loop-var', 'CStmt'), ('body', 'CStmt')]),
+        ('cs-return', [('e', 'CExpr')]),
+        ('cs-break', []),
+        ('cs-continue', []),
+        ('cs-switch', [('init', 'CStmt'), ('cond-var', 'CStmt'), ('cond', 'CExpr'),
+                       ('body', 'CStmt')]),
+        ('cs-case', [('value', 'CExpr'), ('s', 'CStmt')]),
+        ('cs-default', [('s', 'CStmt')]),
+        ('cs-null', []),
+        ('cs-none', []),
+        ('cs-nil', []),
+        ('cs-cons', [('x', 'CStmt'), ('xs', 'CStmt')]),
+    ]),
+    ('CTag', 'struct, class, union', [
+        ('ctg-struct', []), ('ctg-class', []), ('ctg-union', []),
+    ]),
+    ('CBitWidth', 'a bit-field width', [
+        ('cbw-none', []),
+        ('cbw-bits', [('n', 'Word')]),
+    ]),
+    ('CField', 'FieldDecl: offset in bits from the record layout; the default member '
+               'initializer (ce-nil when absent)', [
+        ('cfield', [('id', 'Word'), ('name', 'CStr'), ('t', 'CType'), ('offset-bits', 'Word'),
+                    ('width', 'CBitWidth'), ('mutable', 'Bool'), ('init', 'CExpr')]),
+    ]),
+    ('CBase', 'a direct base class with its offset in bytes from the record layout', [
+        ('cbase', [('base', 'Word'), ('offset', 'Word'), ('primary', 'Bool'),
+                   ('virtual', 'Bool')]),
+    ]),
+    ('CVPtr', "the vtable pointer's offset in bytes, when the record has its own", [
+        ('cvp-none', []),
+        ('cvp-at', [('offset', 'Word')]),
+    ]),
+    ('CVTEntry', 'one vtable slot, as the target ABI lays it out', [
+        ('cvt-offset-to-top', [('v', 'CInt')]),
+        ('cvt-rtti', []),
+        ('cvt-method', [('id', 'Word')]),
+        ('cvt-pure', [('id', 'Word')]),
+        ('cvt-complete-dtor', [('id', 'Word')]),
+        ('cvt-deleting-dtor', [('id', 'Word')]),
+    ]),
+    ('CVTable', "a record's vtable: the slots, and the index the object's vtable pointer "
+                'addresses', [
+        ('cvt-none', []),
+        ('cvtable', [('address-point', 'Word'), ('entries', 'List CVTEntry')]),
+    ]),
+    ('CLayout', "the record's layout on the target, in bytes: the implementation parameters of "
+                'PLAN 5.1', [
+        ('clayout', [('size', 'Word'), ('align', 'Word'), ('dsize', 'Word'), ('nvsize', 'Word'),
+                     ('nvalign', 'Word'), ('vptr', 'CVPtr')]),
+    ]),
+    ('CRecord', 'the definition of a class', [
+        ('crecord', [('id', 'Word'), ('name', 'CStr'), ('tag', 'CTag'), ('lambda', 'Bool'),
+                     ('bases', 'List CBase'), ('fields', 'List CField'), ('layout', 'CLayout'),
+                     ('vtable', 'CVTable')]),
+    ]),
+    ('CTArg', 'a template argument of a specialization', [
+        ('cta-type', [('t', 'CType')]),
+        ('cta-integral', [('v', 'CInt')]),
+    ]),
+    ('CEnumerator', 'EnumConstantDecl with its value', [
+        ('cenumerator', [('id', 'Word'), ('name', 'CStr'), ('v', 'CInt')]),
+    ]),
+    ('CBody', 'the body of a function', [
+        ('cfb-none', []),
+        ('cfb-defaulted', []),
+        ('cfb-pure', []),
+        ('cfb-stmt', [('s', 'CStmt')]),
+    ]),
+    ('CCtorInit', 'CXXCtorInitializer, in the order of initialization', [
+        ('cci-field', [('field', 'Word'), ('e', 'CExpr')]),
+        ('cci-base', [('t', 'CType'), ('e', 'CExpr')]),
+    ]),
+    ('CFunction', 'what every function declaration has', [
+        ('cfunction', [('id', 'Word'), ('name', 'CStr'), ('mangled', 'CStr'), ('t', 'CType'),
+                       ('params', 'List CVar'), ('storage', 'CStorage'), ('inline', 'Bool'),
+                       ('constexpr', 'Bool'), ('implicit', 'Bool'), ('body', 'CBody')]),
+    ]),
+    ('CDecl', 'a declaration of the unit. One constructor per Clang Decl kind met at the top '
+              'level (members are listed flat, with the id of their class)', [
+        ('cd-function', [('f', 'CFunction')]),
+        ('cd-method', [('parent', 'Word'), ('virtual', 'Bool'), ('f', 'CFunction')]),
+        ('cd-constructor', [('parent', 'Word'), ('inits', 'List CCtorInit'), ('f', 'CFunction')]),
+        ('cd-destructor', [('parent', 'Word'), ('virtual', 'Bool'), ('f', 'CFunction')]),
+        ('cd-record', [('r', 'CRecord')]),
+        ('cd-class-template-specialization', [('args', 'List CTArg'), ('r', 'CRecord')]),
+        ('cd-enum', [('id', 'Word'), ('name', 'CStr'), ('underlying', 'CType'),
+                     ('scoped', 'Bool'), ('enumerators', 'List CEnumerator')]),
+        ('cd-var', [('mangled', 'CStr'), ('v', 'CVar')]),
+    ]),
+    ('CTU', 'the translation unit: its name, the target, the ids of its roots, the ids of its '
+            'variables of static storage in the order of their definitions, its declarations', [
+        ('ctu', [('name', 'CStr'), ('target', 'CStr'), ('roots', 'List Word'),
+                 ('statics', 'List Word'), ('decls', 'List CDecl')]),
+    ]),
+]
+
+CTORS = {}       # constructor -> (type, [(field, field type)])
+for _t, _doc, _cs in SCHEMA:
+    for _c, _fs in _cs:
+        assert _c not in CTORS, _c
+        CTORS[_c] = (_t, _fs)
+
+AST_PRELUDE = '''-- lib/cxx/ast.cub — Clang's AST after semantic analysis, as plain first-order data (PLAN §6
+-- Phase 4 item 2; tracks/C-clang.md). GENERATED by `python3 tools/clang2cub.py --emit-ast`: the
+-- schema in that file is the one description of these constructors, and every unit it writes
+-- (experiments/cxx/*.cub) is a value of CTU built against it. Loaded after lib/prim.cub.
+--
+-- A constructor exists for each Clang node kind, cast kind, operator and builtin type the
+-- importer has met in the units imported so far; an unmet kind stops the import, and the
+-- constructor is added then. Declaration ids are Words, unique within a unit. Clang's Sema is
+-- the oracle for a value of this type: "the AST written is the AST Sema produced" is trusted.
+--
+-- The checker has no mutual data and rejects `List D` as a field of `data D`, so the three
+-- recursive types carry their own list constructors (ct-nil/ct-cons, ce-nil/ce-cons,
+-- cs-nil/cs-cons): a field documented as a list of expressions is a CExpr built from those two,
+-- and one function recursing structurally over CExpr reads both nodes and lists. An absent
+-- expression child is ce-nil, an absent statement child cs-none.
+
+-- ---------------------------------------------------------------- strings
+-- A string is its length and its bytes. There is no byte-string literal: cstr builds one from
+-- the list of its bytes. cstr-put is %store8 (bounds-checked by the machine: a store outside
+-- the string leaves it unchanged), trusted like the stores of lib/prim.cub.
+primitive cstr-put : (n : Nat) → Bytes n → Word → Word → Bytes n = λ n b off v → %store8 b off (%u32ofw v)
+CStr : Type
+CStr = (n : Nat) × Bytes n
+cstr-fill : (n : Nat) → List Word → Word → Bytes n → Bytes n
+cstr-fill n nil off b = b
+cstr-fill n (cons c cs) off b = cstr-fill n cs (wadd off #1) (cstr-put n b off c)
+cstr-len : List Word → Nat
+cstr-len nil = zero
+cstr-len (cons c cs) = suc (cstr-len cs)
+cstr : List Word → CStr
+cstr cs = (cstr-len cs , cstr-fill (cstr-len cs) cs #0 (bytes (cstr-len cs)))
+
+-- ---------------------------------------------------------------- the AST
+'''
+
+
+def emit_ast(out):
+    out.write(AST_PRELUDE)
+    for t, doc, cs in SCHEMA:
+        out.write('-- %s: %s\n' % (t, doc))
+        parts = []
+        for c, fs in cs:
+            parts.append(c + ''.join(' (%s : %s)' % (f, ft) for f, ft in fs))
+        if len(' | '.join(parts)) < 100:
+            out.write('data %s = %s\n' % (t, ' | '.join(parts)))
+        else:
+            out.write('data %s =\n    %s\n' % (t, '\n  | '.join(parts)))
+
+
+# ============================================================================ terms
+class T:
+    """A constructor applied to its fields, checked against the schema as it is built."""
+    __slots__ = ('con', 'args', 'size')
+
+    def __init__(self, con, *args):
+        if con not in CTORS:
+            stop('internal: no constructor %s in the schema' % con)
+        fs = CTORS[con][1]
+        if len(fs) != len(args):
+            stop('internal: %s takes %d fields, given %d' % (con, len(fs), len(args)))
+        for (f, ft), a in zip(fs, args):
+            check_field(con, f, ft, a)
+        self.con, self.args = con, args
+        self.size = 1 + sum(term_size(a) for a in args)
+
+
+class Ref:
+    """A reference to a top-level definition of the unit (a shared type, a hoisted subterm)."""
+    __slots__ = ('name', 'sort')
+    size = 1
+
+    def __init__(self, name, sort):
+        self.name, self.sort = name, sort
+
+
+class W:
+    """A Word literal."""
+    __slots__ = ('n',)
+    size = 1
+
+    def __init__(self, n):
+        if not isinstance(n, int) or n < 0:
+            stop('internal: a Word is a natural number, given %r' % (n,))
+        self.n = n
+
+
+class S:
+    """A string: its bytes."""
+    __slots__ = ('b', 'size')
+
+    def __init__(self, b):
+        if isinstance(b, str):
+            b = b.encode('utf-8')
+        self.b = b
+        self.size = 2 + 2 * len(b)
+
+
+def term_size(a):
+    if isinstance(a, list):
+        return 1 + sum(term_size(x) for x in a)
+    if isinstance(a, bool):
+        return 1
+    return a.size
+
+
+def sort_of(a):
+    if isinstance(a, T):
+        return CTORS[a.con][0]
+    if isinstance(a, Ref):
+        return a.sort
+    if isinstance(a, W):
+        return 'Word'
+    if isinstance(a, S):
+        return 'CStr'
+    if isinstance(a, bool):
+        return 'Bool'
+    return None
+
+
+def check_field(con, f, ft, a):
+    if ft.startswith('List '):
+        if not isinstance(a, list):
+            stop('internal: %s.%s is a %s, given %r' % (con, f, ft, a))
+        for x in a:
+            check_field(con, f, ft[5:], x)
+        return
+    if sort_of(a) != ft:
+        stop('internal: %s.%s is a %s, given a %s' % (con, f, ft, sort_of(a)))
+
+
+def inlist(sort, items):
+    p = INLIST[sort]
+    r = T(p + '-nil')
+    for x in reversed(items):
+        r = T(p + '-cons', x, r)
+    return r
+
+
+def cint(v):
+    return T('cint-pos', W(v)) if v >= 0 else T('cint-neg', W(-v))
+
+
+def optid(v):
+    return T('coi-none') if v is None else T('coi-some', W(v))
+
+
+# ============================================================================ type strings
+BUILTIN_KW = {'void', 'bool', 'char', 'short', 'int', 'long', 'signed', 'unsigned', 'float',
+              'double', '__int128', 'char8_t', 'char16_t', 'char32_t', 'wchar_t', '_Bool'}
+BUILTINS = {
+    ('void',): 'void', ('bool',): 'bool', ('_Bool',): 'bool', ('char',): 'char',
+    ('char', 'signed'): 'schar', ('char', 'unsigned'): 'uchar',
+    ('short',): 'short', ('short', 'unsigned'): 'ushort', ('int', 'short'): 'short',
+    ('int',): 'int', ('unsigned',): 'uint', ('int', 'unsigned'): 'uint', ('signed',): 'int',
+    ('long',): 'long', ('long', 'unsigned'): 'ulong', ('int', 'long'): 'long',
+    ('long', 'long'): 'llong', ('long', 'long', 'unsigned'): 'ullong',
+    ('__int128',): 'int128', ('__int128', 'unsigned'): 'uint128',
+    ('float',): 'float', ('double',): 'double', ('double', 'long'): 'ldouble',
+    ('char8_t',): 'char8', ('char16_t',): 'char16', ('char32_t',): 'char32',
+    ('wchar_t',): 'wchar',
+}
+PLACEHOLDERS = {'<bound member function type>': 'bound-member', '<builtin fn type>': 'builtin-fn'}
+TOKEN = re.compile(r"\s*(?:([A-Za-z_$][A-Za-z0-9_$]*)|(\d+)[uUlL]*|(::|->|&&|\.\.\.|'(?:[^'\\]|\\.)+'|.))")
+SPECIAL = ('(lambda at ', '(anonymous ', '(unnamed ')
+
+
+def tokenize(s):
+    toks, i = [], 0
+    while i < len(s):
+        if s[i].isspace():
+            i += 1
+            continue
+        if s.startswith(SPECIAL, i):
+            depth, j = 0, i
+            while True:
+                if j >= len(s):
+                    stop('type string: unclosed parenthesis in %r' % s)
+                if s[j] == '(':
+                    depth += 1
+                elif s[j] == ')':
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            toks.append(('special', s[i:j + 1]))
+            i = j + 1
+            continue
+        m = TOKEN.match(s, i)
+        if m.group(1):
+            toks.append(('id', m.group(1)))
+        elif m.group(2):
+            toks.append(('num', int(m.group(2))))
+        else:
+            toks.append(('p', m.group(3)))
+        i = m.end()
+    toks.append(('end', None))
+    return toks
+
+
+def qual(t, c=False, v=False, r=False):
+    """t with qualifiers added (qualifiers on an array are its elements')."""
+    if not (c or v or r):
+        return t
+    if t[0] == 'array':
+        return ('array', qual(t[1], c, v, r), t[2])
+    if t[0] == 'qual':
+        return ('qual', t[1] or c, t[2] or v, t[3] or r, t[4])
+    return ('qual', c, v, r, t)
+
+
+def unqual(t):
+    return t[4] if t[0] == 'qual' else t
+
+
+class TypeParser:
+    def __init__(self, unit, s, scope, hint):
+        self.u, self.s, self.scope, self.hint = unit, s, scope, hint
+        self.toks = tokenize(s)
+        self.i = 0
+
+    def peek(self, k=0):
+        return self.toks[min(self.i + k, len(self.toks) - 1)]
+
+    def next(self):
+        t = self.toks[self.i]
+        self.i += 1
+        return t
+
+    def at(self, p, k=0):
+        return self.peek(k) == ('p', p)
+
+    def expect(self, p):
+        if not self.at(p):
+            self.fail('expected %r' % p)
+        self.i += 1
+
+    def fail(self, why):
+        stop('type string not read: %r (%s, at token %d %r)' % (self.s, why, self.i, self.peek()))
+
+    def whole(self):
+        t = self.type()
+        if self.peek()[0] != 'end':
+            self.fail('trailing text')
+        if has_auto(t):
+            raise Dependent('auto in %r' % self.s)
+        return t
+
+    def type(self):
+        base = self.declspec()
+        return self.declarator()(base)
+
+    # ---- declaration specifiers: qualifiers, a builtin or one (qualified, templated) name
+    def declspec(self):
+        c = v = False
+        kws, base = [], None
+        while True:
+            k, x = self.peek()
+            if k == 'id' and x == 'const':
+                c = True
+            elif k == 'id' and x == 'volatile':
+                v = True
+            elif k == 'id' and x in ('struct', 'class', 'union', 'enum', 'typename'):
+                pass
+            elif k == 'id' and x in BUILTIN_KW and base is None:
+                kws.append(x)
+            elif k == 'id' and x == 'decltype' and base is None and not kws:
+                if [self.peek(j) for j in (1, 2, 3)] == [('p', '('), ('id', 'nullptr'), ('p', ')')]:
+                    self.i += 3
+                    base = ('builtin', 'nullptr')
+                else:
+                    raise Dependent('decltype in %r' % self.s)
+            elif k == 'id' and x == 'auto' and base is None and not kws:
+                base = ('auto',)        # stands only before a trailing return type
+            elif (k in ('id', 'special') or (k, x) == ('p', '::')) and base is None and not kws:
+                base = self.u.resolve_name(self.name(), self.scope, self.hint, self.s)
+                continue
+            else:
+                break
+            self.i += 1
+        if kws:
+            key = tuple(sorted(kws))
+            if key not in BUILTINS:
+                self.fail('builtin type %r' % ' '.join(kws))
+            base = ('builtin', BUILTINS[key])
+        if base is None:
+            self.fail('no type specifier')
+        return qual(base, c, v)
+
+    def name(self):
+        """A qualified name: [(identifier or special text, template arguments or None)]."""
+        comps = []
+        if self.at('::'):
+            self.i += 1
+            comps.append(('', None))
+        while True:
+            k, x = self.next()
+            if k not in ('id', 'special'):
+                self.i -= 1
+                self.fail('a name')
+            args = None
+            if self.at('<'):
+                self.i += 1
+                args = []
+                while not self.at('>'):
+                    args.append(self.targ())
+                    if self.at(','):
+                        self.i += 1
+                    elif not self.at('>'):
+                        self.fail('template arguments')
+                self.i += 1
+            comps.append((x, args))
+            if self.at('::') and not self.at('*', 1):
+                self.i += 1
+                continue
+            return comps
+
+    def targ(self):
+        k, x = self.peek()
+        if k == 'num':
+            self.i += 1
+            return ('int', x)
+        if (k, x) == ('p', '-') and self.peek(1)[0] == 'num':
+            self.i += 2
+            return ('int', -self.toks[self.i - 1][1])
+        if k == 'id' and x in ('true', 'false'):
+            self.i += 1
+            return ('int', 1 if x == 'true' else 0)
+        if k == 'p' and x.startswith("'"):
+            self.i += 1
+            return ('int', ord(eval(x)))
+        return ('type', self.type())
+
+    # ---- abstract declarators, read inside out
+    def memptr_ahead(self):
+        """Is a `C::*` next?  (a name followed by ::*)"""
+        j = self.i
+        if self.toks[j][0] != 'id' or self.toks[j][1] in ('const', 'volatile', 'noexcept'):
+            return False
+        depth = 0
+        while j < len(self.toks):
+            k, x = self.toks[j]
+            if (k, x) == ('p', '<'):
+                depth += 1
+            elif (k, x) == ('p', '>'):
+                depth -= 1
+            elif depth == 0:
+                if (k, x) == ('p', '::') and self.toks[j + 1] == ('p', '*'):
+                    return True
+                if k != 'id' and (k, x) != ('p', '::'):
+                    return False
+            if k == 'end':
+                return False
+            j += 1
+        return False
+
+    def cv_after(self):
+        c = v = r = False
+        while self.peek()[0] == 'id' and self.peek()[1] in ('const', 'volatile', 'restrict', '__restrict'):
+            x = self.next()[1]
+            c, v, r = c or x == 'const', v or x == 'volatile', r or x in ('restrict', '__restrict')
+        return c, v, r
+
+    def declarator(self):
+        ops = []
+        while True:
+            if self.at('*'):
+                self.i += 1
+                ops.append(('ptr',) + self.cv_after())
+            elif self.at('&'):
+                self.i += 1
+                ops.append(('lref',))
+            elif self.at('&&'):
+                self.i += 1
+                ops.append(('rref',))
+            elif self.memptr_ahead():
+                cls = self.u.resolve_name(self.name(), self.scope, None, self.s)
+                self.expect('::')
+                self.expect('*')
+                ops.append(('memptr', cls) + self.cv_after())
+            else:
+                break
+        direct = self.direct()
+
+        def build(t):
+            for op in ops:
+                if op[0] == 'ptr':
+                    t = qual(('ptr', t), *op[1:])
+                elif op[0] == 'memptr':
+                    if op[1][0] != 'record':
+                        self.fail('member pointer into a non-class')
+                    t = qual(('memptr', op[1][1], t), *op[2:])
+                else:
+                    t = (op[0], t)
+            return direct(t)
+        return build
+
+    def direct(self):
+        inner = None
+        if self.at('(') and (self.peek(1) in (('p', '*'), ('p', '&'), ('p', '&&'), ('p', '('))
+                             or (self.peek(1)[0] == 'id' and self._group_memptr())):
+            self.i += 1
+            inner = self.declarator()
+            self.expect(')')
+        sufs = []
+        while True:
+            if self.at('['):
+                self.i += 1
+                if self.at(']'):
+                    self.fail('array of unknown bound')
+                k, n = self.next()
+                if k != 'num':
+                    self.fail('array bound')
+                self.expect(']')
+                sufs.append(('array', n))
+            elif self.at('('):
+                self.i += 1
+                params, variadic = [], False
+                while not self.at(')'):
+                    if self.at('...'):
+                        self.i += 1
+                        variadic = True
+                    else:
+                        params.append(self.type())
+                    if self.at(','):
+                        self.i += 1
+                    elif not self.at(')'):
+                        self.fail('parameter list')
+                self.i += 1
+                c = v = False
+                ref, noex, ret = 'none', False, None
+                while True:
+                    k, x = self.peek()
+                    if k == 'id' and x == 'const':
+                        c = True
+                    elif k == 'id' and x == 'volatile':
+                        v = True
+                    elif (k, x) == ('p', '&'):
+                        ref = 'lvalue'
+                    elif (k, x) == ('p', '&&'):
+                        ref = 'rvalue'
+                    elif k == 'id' and x == 'noexcept':
+                        noex = True
+                        if self.at('(', 1):
+                            if self.peek(2) == ('id', 'true') and self.at(')', 3):
+                                self.i += 3
+                            elif self.peek(2) == ('id', 'false') and self.at(')', 3):
+                                self.i += 3
+                                noex = False
+                            else:
+                                raise Dependent('noexcept(expression) in %r' % self.s)
+                    elif k == 'id' and x == 'throw' and self.at('(', 1) and self.at(')', 2):
+                        self.i += 2
+                        noex = True
+                    elif (k, x) == ('p', '->'):
+                        self.i += 1
+                        ret = self.type()
+                        break
+                    else:
+                        break
+                    self.i += 1
+                sufs.append(('func', tuple(params), variadic, c, v, ref, noex, ret))
+            else:
+                break
+
+        def build(t):
+            for suf in reversed(sufs):
+                if suf[0] == 'array':
+                    t = ('array', t, suf[1])
+                else:
+                    t = ('func', suf[7] if suf[7] is not None else t) + suf[1:7]
+            return inner(t) if inner else t
+        return build
+
+    def _group_memptr(self):
+        self.i += 1
+        r = self.memptr_ahead()
+        self.i -= 1
+        return r
+
+
+def has_auto(t):
+    return t == ('auto',) or any(has_auto(x) for x in t if isinstance(x, tuple))
+
+
+def type_str(t):
+    k = t[0]
+    if k == 'builtin':
+        return t[1]
+    if k in ('ptr', 'lref', 'rref'):
+        return '%s(%s)' % (k, type_str(t[1]))
+    if k == 'array':
+        return '%s[%d]' % (type_str(t[1]), t[2])
+    if k == 'func':
+        return 'fn(%s)->%s' % (','.join(type_str(p) for p in t[2]), type_str(t[1]))
+    if k == 'qual':
+        return 'q%d%d%d %s' % (t[1], t[2], t[3], type_str(t[4]))
+    return '%s#%s' % (k, t[1])
+
+
+# ============================================================================ the unit
+RECORD_KINDS = ('CXXRecordDecl', 'ClassTemplateSpecializationDecl')
+FUNCTION_KINDS = ('FunctionDecl', 'CXXMethodDecl', 'CXXConstructorDecl', 'CXXDestructorDecl',
+                  'CXXConversionDecl')
+TEMPLATE_KINDS = ('ClassTemplateDecl', 'FunctionTemplateDecl', 'TypeAliasTemplateDecl',
+                  'ClassTemplatePartialSpecializationDecl', 'VarTemplateDecl',
+                  'VarTemplatePartialSpecializationDecl', 'TemplateTemplateParmDecl',
+                  'ConceptDecl', 'CXXDeductionGuideDecl')
+TYPE_ENTITY_KINDS = RECORD_KINDS + ('EnumDecl', 'TypedefDecl', 'TypeAliasDecl', 'ClassTemplateDecl',
+                                    'TypeAliasTemplateDecl', 'NamespaceDecl', 'NamespaceAliasDecl',
+                                    'ClassTemplatePartialSpecializationDecl')
+SCOPE_KINDS = RECORD_KINDS + FUNCTION_KINDS + ('NamespaceDecl', 'TranslationUnitDecl',
+                                               'ClassTemplatePartialSpecializationDecl')
+# Attributes with no node of their own in the AST written: what each one does is already in
+# what is written (a layout, a chosen overload) or holds only at compile time.
+ATTRS_CARRIED_ELSEWHERE = {
+    'PackedAttr': 'in the record layout', 'AlignedAttr': 'in the record layout',
+    'FinalAttr': 'compile time', 'OverrideAttr': 'compile time',
+    'OwnerAttr': 'a lifetime-analysis hint', 'PointerAttr': 'a lifetime-analysis hint',
+    'NoThrowAttr': 'in the function type', 'NonNullAttr': 'a diagnostic and optimizer hint',
+    'BuiltinAttr': 'the name is the builtin', 'ConstAttr': 'an optimizer hint',
+    'PureAttr': 'an optimizer hint', 'AlwaysInlineAttr': 'an optimizer hint',
+    'VisibilityAttr': 'linkage, outside the unit', 'AsmLabelAttr': 'in the mangled name',
+    'NoDiscardAttr': 'a diagnostic', 'WarnUnusedResultAttr': 'a diagnostic',
+    'DeprecatedAttr': 'a diagnostic', 'ArtificialAttr': 'a debugger hint',
+    'AbiTagAttr': 'in the mangled name', 'GNUInlineAttr': 'an inlining hint',
+    'ReturnsNonNullAttr': 'an optimizer hint', 'AllocSizeAttr': 'an optimizer hint',
+    'AllocAlignAttr': 'an optimizer hint', 'RestrictAttr': 'an optimizer hint',
+    'UnusedAttr': 'a diagnostic', 'NoInlineAttr': 'an optimizer hint',
+    'FormatAttr': 'a diagnostic', 'ReturnsTwiceAttr': 'an optimizer hint',
+    'ColdAttr': 'an optimizer hint', 'MaybeUnusedAttr': 'a diagnostic',
+    'CXX11NoReturnAttr': 'an optimizer hint', 'NoReturnAttr': 'an optimizer hint',
+    'LeafAttr': 'an optimizer hint',
+}
+# Declarations inside a function body that leave nothing to run: the names they introduce were
+# resolved by Sema (a local class or enum that is used is written with the unit's declarations).
+LOCAL_DECLS_COMPILE_TIME = ('TypedefDecl', 'TypeAliasDecl', 'UsingDecl', 'UsingDirectiveDecl',
+                            'StaticAssertDecl', 'CXXRecordDecl', 'EnumDecl', 'UsingShadowDecl')
+
+UNOPS = {('++', True): 'post-inc', ('--', True): 'post-dec', ('++', False): 'pre-inc',
+         ('--', False): 'pre-dec', ('&', False): 'addr-of', ('*', False): 'deref',
+         ('+', False): 'plus', ('-', False): 'minus', ('~', False): 'not', ('!', False): 'lnot'}
+BINOPS = {'*': 'mul', '/': 'div', '%': 'rem', '+': 'add', '-': 'sub', '<<': 'shl', '>>': 'shr',
+          '<': 'lt', '>': 'gt', '<=': 'le', '>=': 'ge', '==': 'eq', '!=': 'ne', '&': 'and',
+          '^': 'xor', '|': 'or', '&&': 'land', '||': 'lor', '=': 'assign', ',': 'comma',
+          '.*': 'ptr-mem-d', '->*': 'ptr-mem-i'}
+REFKINDS = {'FunctionDecl': 'function', 'CXXMethodDecl': 'method', 'VarDecl': 'var',
+            'ParmVarDecl': 'parm', 'EnumConstantDecl': 'enum-constant', 'FieldDecl': 'field',
+            'CXXConversionDecl': 'method', 'CXXDestructorDecl': 'method',
+            'CXXConstructorDecl': 'method'}
+CAST_NODES = {'ImplicitCastExpr': 'ce-implicit-cast', 'CXXStaticCastExpr': 'ce-static-cast',
+              'CXXReinterpretCastExpr': 'ce-reinterpret-cast',
+              'CXXFunctionalCastExpr': 'ce-functional-cast', 'CStyleCastExpr': 'ce-cstyle-cast'}
+
+
+class Unit:
+    def __init__(self, path, name):
+        self.path, self.name = path, name
+        self.met = {}            # node kind -> count, for the kinds written
+        self.met_casts = {}
+        self.elided = {}         # kind -> (count, reason)
+        self.scope_dependent = set()
+
+    # ------------------------------------------------------------------ running Clang
+    def run_clang(self):
+        base = ['clang++'] + CLANG_FLAGS
+        p = subprocess.run(base + ['-fsyntax-only', '-Xclang', '-ast-dump=json', '-Xclang',
+                                   '-fdump-record-layouts', self.path],
+                           capture_output=True, text=True)
+        if p.returncode != 0:
+            stop('clang failed on %s:\n%s' % (self.path, p.stderr[-2000:]))
+        cut = p.stdout.find('\n{\n')
+        if p.stdout.startswith('{\n'):
+            cut = -1
+        self.layout_text = p.stdout[:cut + 1]
+        self.tu = json.loads(p.stdout[cut + 1:])
+        p = subprocess.run(base + ['-emit-llvm', '-S', '-o', os.devnull, '-Xclang',
+                                   '-fdump-vtable-layouts', self.path],
+                           capture_output=True, text=True)
+        if p.returncode != 0:
+            stop('clang failed on %s:\n%s' % (self.path, p.stderr[-2000:]))
+        self.vtable_text = p.stdout
+        p = subprocess.run(base + ['-print-target-triple'], capture_output=True, text=True)
+        self.target = p.stdout.strip()
+        p = subprocess.run(['clang++', '--version'], capture_output=True, text=True)
+        self.clang_version = p.stdout.splitlines()[0].strip()
+
+    # ------------------------------------------------------------------ the index
+    def index(self):
+        self.nodes, self.parent = {}, {}
+        self.by_name = {}                   # identifier -> type entities anywhere in the unit
+        self.lambdas = {}                   # "(lambda at ...)" -> closure records
+        self.ns_nodes = {}                  # qualified namespace name -> its NamespaceDecls
+        self.redecl = {}                    # id -> id of the previous declaration
+        last = {'file': None, 'line': None}
+
+        def locs(o):
+            for k, v in o.items():
+                if k == 'file':
+                    last['file'] = v
+                elif k == 'line':
+                    last['line'] = v
+                elif isinstance(v, dict):
+                    locs(v)
+
+        stack = [(self.tu, None)]
+        while stack:
+            n, par = stack.pop()
+            if 'loc' in n:
+                locs(n['loc'])
+                n['_file'], n['_line'] = last['file'], last['line']
+                if 'col' in n['loc']:
+                    n['_col'] = n['loc']['col']
+                elif 'expansionLoc' in n['loc']:
+                    n['_col'] = n['loc']['expansionLoc'].get('col')
+            if 'range' in n:
+                locs(n['range'])
+            if 'id' in n:
+                self.nodes[n['id']] = n
+            self.parent[id(n)] = par
+            k = n.get('kind')
+            if k in TYPE_ENTITY_KINDS and n.get('name'):
+                self.by_name.setdefault(n['name'], []).append(n)
+            if k == 'LambdaExpr':
+                self.lambdas.setdefault(n['type']['qualType'], []).append(n['inner'][0])
+            if 'previousDecl' in n:
+                self.redecl[n['id']] = n['previousDecl']
+            inner = n.get('inner')
+            if inner:
+                for c in reversed(inner):
+                    if c:
+                        stack.append((c, n))
+        for n in self.nodes.values():
+            if n.get('kind') == 'NamespaceDecl':
+                self.ns_nodes.setdefault(self.ns_key(n), []).append(n)
+        # redeclaration chains: every declaration of an entity -> its defining declaration
+        groups = {}
+        for i in self.nodes:
+            r = i
+            while r in self.redecl and self.redecl[r] in self.nodes:
+                r = self.redecl[r]
+            groups.setdefault(r, []).append(i)
+        self.canon = {}
+        for r, ids in groups.items():
+            if len(ids) == 1:
+                continue
+            d = [i for i in ids if self.is_definition(self.nodes[i])]
+            c = d[0] if d else r
+            for i in ids:
+                self.canon[i] = c
+        self.type_memo, self.typedef_memo, self.table_memo, self.spec_memo = {}, {}, {}, {}
+        self.global_memo = {}
+
+    def is_definition(self, n):
+        k = n['kind']
+        if k in RECORD_KINDS or k == 'EnumDecl':
+            return bool(n.get('completeDefinition')) or k == 'EnumDecl' and 'inner' in n
+        if k in FUNCTION_KINDS:
+            return any(c.get('kind') == 'CompoundStmt' for c in n.get('inner', [])) or \
+                'explicitlyDefaulted' in n
+        if k == 'VarDecl':
+            return 'init' in n or n.get('storageClass') != 'extern'
+        return False
+
+    def node(self, i):
+        if i not in self.nodes:
+            stop('a declaration id the dump does not contain: %s' % i)
+        return self.nodes[self.canon.get(i, i)]
+
+    def ns_key(self, n):
+        parts = []
+        while n is not None and n.get('kind') != 'TranslationUnitDecl':
+            if n.get('kind') == 'NamespaceDecl':
+                parts.append(n.get('name', '(anonymous namespace)'))
+            n = self.parent[id(n)]
+        return '::'.join(reversed(parts))
+
+    def qualified_name(self, n):
+        parts = []
+        while n is not None and n.get('kind') != 'TranslationUnitDecl':
+            if n.get('kind') in SCOPE_KINDS and n.get('kind') not in FUNCTION_KINDS:
+                parts.append(n.get('name', '(anonymous)'))
+            sem = n.get('parentDeclContextId')
+            n = self.nodes[sem] if sem in self.nodes and parts == [] else self.parent[id(n)]
+        return '::'.join(reversed(parts))
+
+    def where(self, n):
+        while n is not None and '_file' not in n:
+            n = self.parent[id(n)]
+        return '%s:%s' % (n.get('_file'), n.get('_line')) if n else '?'
+
+    # ------------------------------------------------------------------ name lookup
+    def scope_chain(self, n):
+        """The contexts a name used at n is looked up in, innermost first."""
+        while n is not None:
+            k = n.get('kind')
+            if k in TEMPLATE_KINDS:
+                yield ('template', n)
+            if k in SCOPE_KINDS:
+                yield ('ns', self.ns_key(n)) if k == 'NamespaceDecl' else ('decl', n)
+            sem = n.get('parentDeclContextId')
+            if sem in self.nodes and self.nodes[sem].get('kind') in RECORD_KINDS and k in FUNCTION_KINDS + ('VarDecl',):
+                m = self.nodes[sem]
+                while m is not None and m.get('kind') in RECORD_KINDS:
+                    yield ('decl', self.node(m['id']))
+                    m = self.parent[id(m)]
+            n = self.parent[id(n)]
+
+    def members(self, n):
+        """name -> type entities declared directly in the declaration context n."""
+        t = self.table_memo.get(id(n))
+        if t is not None:
+            return t
+        t = {}
+        self.table_memo[id(n)] = t
+
+        def add(c):
+            k = c.get('kind')
+            if k in ('LinkageSpecDecl', 'ExportDecl') or (k == 'NamespaceDecl' and (c.get('isInline') or 'name' not in c)):
+                for d in c.get('inner', []):
+                    add(d)
+            if k == 'UsingShadowDecl':
+                tg = self.nodes.get(c['target']['id'])
+                if tg is not None and tg.get('kind') in TYPE_ENTITY_KINDS and tg.get('name'):
+                    t.setdefault(tg['name'], []).append(tg)
+            elif k == 'UsingDirectiveDecl':
+                t.setdefault('', []).append(c)
+            elif k in TYPE_ENTITY_KINDS and c.get('name'):
+                t.setdefault(c['name'], []).append(c)
+        if n.get('kind') in FUNCTION_KINDS:
+            # local types: anywhere in the body
+            stack = list(n.get('inner', []))
+            while stack:
+                c = stack.pop()
+                if c.get('kind') in ('TypedefDecl', 'TypeAliasDecl', 'EnumDecl') or \
+                        (c.get('kind') == 'CXXRecordDecl' and c.get('name')):
+                    t.setdefault(c['name'], []).append(c)
+                elif c.get('kind') not in ('LambdaExpr',) + RECORD_KINDS:
+                    stack.extend(x for x in c.get('inner', []) if x)
+        else:
+            for c in n.get('inner', []):
+                add(c)
+        return t
+
+    def lookup_ctx(self, ctx, ident, seen=None):
+        kind, x = ctx
+        if kind == 'template':
+            for c in x.get('inner', []):
+                if c.get('kind', '').endswith('ParmDecl') and c.get('name') == ident:
+                    raise Dependent('template parameter %s' % ident)
+            return []
+        if kind == 'ns':
+            seen = seen if seen is not None else set()
+            if x in seen:
+                return []
+            seen.add(x)
+            out = []
+            for n in self.ns_nodes.get(x, []) if x else [self.tu]:
+                m = self.members(n)
+                out += m.get(ident, [])
+            if not out:
+                for n in self.ns_nodes.get(x, []) if x else [self.tu]:
+                    for d in self.members(n).get('', []):
+                        nn = self.nodes[d['nominatedNamespace']['id']]
+                        out += self.lookup_ctx(('ns', self.ns_key(nn)), ident, seen)
+            return out
+        n = x
+        if n.get('kind') == 'TranslationUnitDecl':
+            return self.lookup_ctx(('ns', ''), ident)
+        out = list(self.members(n).get(ident, []))
+        if not out and n.get('kind') in RECORD_KINDS + ('ClassTemplatePartialSpecializationDecl',):
+            for b in n.get('bases', []):
+                bt = self.base_type(n, b)
+                out += self.lookup_ctx(('decl', self.nodes[bt[1]]), ident)
+        return out
+
+    def base_type(self, rec, b):
+        """The class a base specifier of rec names (read in the scope the class is declared in:
+        the class's own members are not in scope in its base clause)."""
+        bt = unqual(self.resolve_type(b['type'], self.parent[id(rec)]))
+        if bt[0] != 'record':
+            stop('a base class that is not a class: %r of %s' % (b['type'], rec.get('name')))
+        return bt
+
+    def entity_key(self, e):
+        if e.get('kind') == 'NamespaceDecl':
+            return ('ns', self.ns_key(e))
+        if e.get('kind') == 'CXXRecordDecl' and e.get('isImplicit'):
+            p = self.parent[id(e)]
+            if p.get('kind') in RECORD_KINDS + ('ClassTemplatePartialSpecializationDecl',) and p.get('name') == e.get('name'):
+                e = p                                  # the injected class name
+        return ('decl', self.canon.get(e['id'], e['id']))
+
+    def resolve_name(self, comps, scope, hint, whole):
+        """A qualified name used at scope -> the type it names."""
+        first, args = comps[0]
+        if first.startswith('(lambda at '):
+            if len(comps) != 1:
+                stop('a member of a lambda named in a type: %r' % whole)
+            return ('record', self.lambda_record(first, scope)['id'])
+        if first.startswith('('):
+            stop('type string not read: %r (an unnamed entity %r: no rule yet)' % (whole, first))
+        if hint is not None and len(comps) >= 1 and comps[-1] == (hint.get('name'), None):
+            return self.typedef_type(hint)
+        if first == '':
+            ents, rest = [('ns', '')], comps[1:]
+            via_scope = False
+        else:
+            found = []
+            for ctx in self.scope_chain(scope):
+                found = self.lookup_ctx(ctx, first)
+                if found:
+                    break
+            via_scope = bool(found)
+            if not found:
+                found = self.by_name.get(first, [])
+                if not found:
+                    stop('a name in a type is not declared anywhere in the unit: %r in %r (used at %s)'
+                         % (first, whole, self.where(scope)))
+            ents, rest = sorted(set(self.entity_key(e) for e in found)), comps
+        results = set()
+        errors = []
+        for ent in ents:
+            try:
+                results.add(self.resolve_from(ent, rest, scope, whole, entity_given=(first != '')))
+            except Dependent as e:
+                errors.append(str(e))
+        if len(results) != 1:
+            if not results:
+                raise Dependent('%r in %r: %s' % (first, whole, '; '.join(errors)))
+            stop('a name in a type has several meanings and the scope does not choose: %r in %r (used at %s): %s'
+                 % (first, whole, self.where(scope), sorted(type_str(r) for r in results)))
+        if via_scope and first not in ('std',):
+            self.note_scope_dependence(first)
+        return results.pop()
+
+    def note_scope_dependence(self, ident):
+        """Record the identifiers that name different types in different scopes of the unit:
+        for these the answer rests on this file's lookup following C++'s from the place of use."""
+        if ident in self.global_memo:
+            return
+        keys = set(self.entity_key(e) for e in self.by_name.get(ident, []))
+        keys = set(k for k in keys if self.nodes.get(k[1], {}).get('kind') != 'ClassTemplatePartialSpecializationDecl')
+        self.global_memo[ident] = len(keys)
+        if len(keys) > 1:
+            self.scope_dependent.add(ident)
+
+    def resolve_from(self, ent, comps, scope, whole, entity_given):
+        """ent is what the first component names (or the global namespace, entity_given False)."""
+        i = 0
+        cur = ent
+        if entity_given:
+            cur = self.apply_args(cur, comps[0][1], scope, whole)
+            i = 1
+        while i < len(comps):
+            ident, args = comps[i]
+            if cur[0] == 'ns':
+                found = self.lookup_ctx(cur, ident)
+            else:
+                t = self.entity_type(cur, whole)
+                if t[0] != 'record':
+                    stop('type string not read: %r (%r is not a class or namespace)' % (whole, comps[i - 1][0]))
+                found = self.lookup_ctx(('decl', self.nodes[t[1]]), ident)
+            keys = sorted(set(self.entity_key(e) for e in found))
+            if len(keys) != 1:
+                if not keys:
+                    raise Dependent('no member %r in %r' % (ident, whole))
+                stop('type string not read: %r (%r names %d things)' % (whole, ident, len(keys)))
+            cur = self.apply_args(keys[0], args, scope, whole)
+            i += 1
+        return self.entity_type(cur, whole)
+
+    def apply_args(self, ent, args, scope, whole):
+        if args is None:
+            return ent
+        if ent[0] != 'decl':
+            stop('type string not read: %r (template arguments on a namespace)' % whole)
+        n = self.nodes[ent[1]]
+        if n['kind'] == 'TypeAliasTemplateDecl':
+            raise Dependent('alias template %s in %r' % (n.get('name'), whole))
+        if n['kind'] != 'ClassTemplateDecl':
+            stop('type string not read: %r (%s is a %s, not a class template)' % (whole, n.get('name'), n['kind']))
+        return ('decl', self.specialization(n, args, whole)['id'])
+
+    def entity_type(self, ent, whole):
+        if ent[0] == 'ns':
+            stop('type string not read: %r (a namespace where a type is expected)' % whole)
+        n = self.nodes[ent[1]]
+        k = n['kind']
+        if k in RECORD_KINDS:
+            return ('record', n['id'])
+        if k == 'EnumDecl':
+            return ('enum', n['id'])
+        if k in ('TypedefDecl', 'TypeAliasDecl'):
+            return self.typedef_type(n)
+        raise Dependent('%s %s used as a type in %r' % (k, n.get('name'), whole))
+
+    def typedef_type(self, n):
+        i = n['id']
+        if i not in self.typedef_memo:
+            self.typedef_memo[i] = None
+            self.typedef_memo[i] = self.resolve_type(n['type'], n)
+        if self.typedef_memo[i] is None:
+            stop('a typedef defined through itself: %s' % n.get('name'))
+        return self.typedef_memo[i]
+
+    def lambda_record(self, text, scope):
+        cands = self.lambdas.get(text, [])
+        if not cands:
+            stop('a lambda type with no LambdaExpr in the unit: %s' % text)
+        if len(cands) == 1:
+            return cands[0]
+        # the same lambda in a template and in its instantiations: the one in the function
+        # (or the instantiation) the type is used in
+        anc = {}
+        for c in cands:
+            n, d = c, 0
+            while n is not None:
+                anc.setdefault(id(n), []).append((d, c))
+                n, d = self.parent[id(n)], d + 1
+        n = scope
+        while n is not None:
+            if id(n) in anc:
+                best = sorted(anc[id(n)], key=lambda p: p[0])
+                if len(best) > 1 and best[0][0] == best[1][0] or n.get('kind') in ('TranslationUnitDecl', 'NamespaceDecl') and len(best) > 1:
+                    stop('a lambda type that several LambdaExprs share, used outside them: %s at %s' % (text, self.where(scope)))
+                return best[0][1]
+            n = self.parent[id(n)]
+        stop('lambda not found: %s' % text)
+
+    def template_args(self, spec):
+        """The arguments of a specialization: ('type', T) / ('int', n), packs flattened."""
+        out = []
+
+        def one(a):
+            if a.get('isPack'):
+                for b in a.get('inner', []):
+                    one(b)
+            elif 'type' in a:
+                out.append(('type', self.resolve_type(a['type'], self.tu)))
+            elif 'value' in a:
+                v = a['value']
+                out.append(('int', int(v) if not isinstance(v, bool) else int(v)))
+            else:
+                raise Dependent('a template argument that is neither a type nor an integer')
+        for c in spec.get('inner', []):
+            if c.get('kind') == 'TemplateArgument':
+                one(c)
+        return tuple(out)
+
+    def specialization(self, tmpl, args, whole):
+        key = (tmpl['id'], tuple(args))
+        if key in self.spec_memo:
+            return self.spec_memo[key]
+        root = tmpl['id']
+        chain = [n for n in self.nodes.values() if n.get('kind') == 'ClassTemplateDecl' and
+                 self.redecl_root(n['id']) == self.redecl_root(root)]
+        exact, prefix = [], []
+        for t in chain:
+            for s in t.get('inner', []):
+                if s.get('kind') != 'ClassTemplateSpecializationDecl':
+                    continue
+                try:
+                    sa = self.template_args(s)
+                except Dependent:
+                    continue
+                s = self.node(s['id'])
+                if sa == tuple(args):
+                    exact.append(s)
+                elif sa[:len(args)] == tuple(args):
+                    prefix.append(s)
+        # explicit specializations are declared beside the template, not under it
+        for s in self.by_name.get(tmpl['name'], []):
+            if s.get('kind') == 'ClassTemplateSpecializationDecl' and self.parent[id(s)].get('kind') != 'ClassTemplateDecl':
+                try:
+                    sa = self.template_args(s)
+                except Dependent:
+                    continue
+                if sa == tuple(args) and self.same_scope(s, tmpl):
+                    exact.append(self.node(s['id']))
+        cands = {s['id']: s for s in (exact or prefix)}
+        if len(cands) != 1:
+            if not cands:
+                raise Dependent('no specialization of %s with the arguments in %r' % (tmpl.get('name'), whole))
+            stop('type string not read: %r (%d specializations of %s share the arguments printed; the defaults are not printed)'
+                 % (whole, len(cands), tmpl.get('name')))
+        r = list(cands.values())[0]
+        self.spec_memo[key] = r
+        return r
+
+    def redecl_root(self, i):
+        while i in self.redecl and self.redecl[i] in self.nodes:
+            i = self.redecl[i]
+        return i
+
+    def same_scope(self, a, b):
+        return self.qualified_name(self.parent[id(a)]) == self.qualified_name(self.parent[id(b)])
+
+    # ------------------------------------------------------------------ types
+    def resolve_type(self, tobj, scope):
+        """A JSON type object, used at the node `scope` -> the structured type."""
+        hint_id = tobj.get('typeAliasDeclId')
+        if hint_id is not None:
+            s = tobj['qualType']
+        else:
+            s = tobj.get('desugaredQualType', tobj['qualType'])
+        if s in PLACEHOLDERS:
+            return ('builtin', PLACEHOLDERS[s])
+        if s.startswith('<') or s == 'NULL TYPE':
+            raise Dependent('the type %r' % s)
+        ctx = scope
+        while ctx is not None and ctx.get('kind') not in SCOPE_KINDS:
+            ctx = self.parent[id(ctx)]
+        key = (s, hint_id, id(ctx))
+        if key not in self.type_memo:
+            hint = self.nodes.get(hint_id) if hint_id else None
+            if hint is not None and hint.get('kind') not in ('TypedefDecl', 'TypeAliasDecl'):
+                hint = None
+            self.type_memo[key] = TypeParser(self, s, scope, hint).whole()
+        return self.type_memo[key]
+
+    # ------------------------------------------------------------------ layouts
+    def read_layouts(self):
+        """Blocks of the record-layout dump, by the record's printed name."""
+        self.layout_blocks = {}
+        cur = None
+        for line in self.layout_text.splitlines():
+            if line.startswith('*** Dumping AST Record Layout'):
+                cur = []
+                continue
+            if cur is None or '|' not in line:
+                continue
+            left, right = line.split('|', 1)
+            if right.lstrip().startswith('[sizeof=') or (cur and cur[-1][0] == 'tail'):
+                if cur and cur[-1][0] == 'tail':
+                    cur[-1] = ('tail', cur[-1][1] + right)
+                else:
+                    cur.append(('tail', right))
+                if ']' in right:
+                    head = cur[0][2]
+                    name = re.sub(r'^(struct|class|union) ', '', head)
+                    name = re.sub(r' \(empty\)$', '', name)
+                    self.layout_blocks.setdefault(name, []).append(cur)
+                    cur = None
+                continue
+            depth = (len(right) - len(right.lstrip(' ')) - 1) // 2
+            cur.append((left.strip(), depth, right.strip()))
+        self.layout_memo = {}
+
+    def layout_of(self, rec):
+        """(sizes, vptr offset, [base (record id, offset, primary)], [field offsets in bits])."""
+        if rec['id'] in self.layout_memo:
+            return self.layout_memo[rec['id']]
+        if self.is_lambda(rec):
+            name = [k for k, v in self.lambdas.items() if any(x is rec for x in v)][0]
+            blocks = self.layout_blocks.get(name, [])
+        else:
+            blocks = []
+            for name, bs in self.layout_blocks.items():
+                if name.split('<')[0].split('::')[-1].strip() != rec.get('name'):
+                    continue
+                try:
+                    t = TypeParser(self, name, self.tu, None).whole()
+                except (Dependent, Stop):
+                    continue
+                if t == ('record', rec['id']):
+                    blocks += bs
+        if not blocks:
+            stop('no layout in the record-layout dump for %s (declared at %s)'
+                 % (self.qualified_name(rec) or rec.get('name'), self.where(rec)))
+        if any(b != blocks[0] for b in blocks[1:]):
+            stop('several different layouts are printed under the name of %s' % rec.get('name'))
+        b = blocks[0]
+        tail = b[-1][1]
+        sizes = {}
+        for k in ('sizeof', 'dsize', 'align', 'nvsize', 'nvalign'):
+            m = re.search(r'\b%s=(\d+)' % k, tail)
+            if not m:
+                stop('record layout of %s: no %s in %r' % (rec.get('name'), k, tail))
+            sizes[k] = int(m.group(1))
+        vptr, bases, fields = None, [], []
+        for off, depth, text in b[1:-1]:
+            if depth != 1:
+                continue
+            if text.endswith('vtable pointer)'):
+                vptr = int(off)
+            elif re.search(r' \((primary )?(virtual )?base\)( \(empty\))?$', text):
+                if '(virtual base)' in text or 'virtual ' in text.split('(')[-1]:
+                    stop('record layout of %s: a virtual base (%r): no rule yet' % (rec.get('name'), text))
+                nm = re.sub(r' \((primary )?base\)( \(empty\))?$', '', text)
+                nm = re.sub(r'^(struct|class|union) ', '', nm)
+                bt = TypeParser(self, nm, self.tu, None).whole()
+                bases.append((bt[1], int(off), '(primary base)' in text))
+            elif text.endswith('vbtable pointer)'):
+                stop('record layout of %s: %r: no rule yet' % (rec.get('name'), text))
+            else:
+                if ':' in off:
+                    byte, bits = off.split(':')
+                    fields.append((int(byte) * 8 + int(bits.split('-')[0]), text))
+                else:
+                    fields.append((int(off) * 8, text))
+        r = (sizes, vptr, bases, fields)
+        self.layout_memo[rec['id']] = r
+        return r
+
+    def is_lambda(self, rec):
+        return bool(rec.get('definitionData', {}).get('isLambda'))
+
+    def read_vtables(self):
+        """'Vtable for' blocks of the vtable dump: printed class name -> entry lines."""
+        self.vtable_blocks = {}
+        cur = None
+        for line in self.vtable_text.splitlines():
+            m = re.match(r"Vtable for '(.*)' \((\d+) entr", line)
+            if m:
+                cur = []
+                self.vtable_blocks.setdefault(m.group(1), []).append(cur)
+                continue
+            if cur is None:
+                continue
+            if not line.strip() or line.startswith('VTable indices') or line.startswith('***'):
+                cur = None
+                continue
+            cur.append(line)
+        self.vtable_memo = {}
+
+    def vtable_of(self, rec):
+        """None, or (address point, [(entry kind, method node or value)])."""
+        if rec['id'] in self.vtable_memo:
+            return self.vtable_memo[rec['id']]
+        blocks = []
+        for name, bs in self.vtable_blocks.items():
+            if name.split('<')[0].split('::')[-1].strip() != rec.get('name'):
+                continue
+            try:
+                t = TypeParser(self, name, self.tu, None).whole()
+            except (Dependent, Stop):
+                continue
+            if t == ('record', rec['id']):
+                blocks += bs
+        if not blocks:
+            self.vtable_memo[rec['id']] = None
+            return None
+        if any(b != blocks[0] for b in blocks[1:]):
+            stop('several different vtables are printed under the name of %s' % rec.get('name'))
+        methods = self.virtual_candidates(rec)
+        entries, points = [], []
+        for line in blocks[0]:
+            s = line.strip()
+            m = re.match(r'-- \((.*), (\d+)\) vtable address --$', s)
+            if m:
+                points.append(len(entries))
+                continue
+            m = re.match(r'(\d+) \| (.*)$', s)
+            if not m:
+                stop('vtable of %s: line not read: %r' % (rec.get('name'), line))
+            if int(m.group(1)) != len(entries):
+                stop('vtable of %s: entries out of order at %r' % (rec.get('name'), line))
+            e = m.group(2)
+            m2 = re.match(r'offset_to_top \((-?\d+)\)$', e)
+            if m2:
+                entries.append(('offset-to-top', int(m2.group(1))))
+            elif e.endswith(' RTTI'):
+                entries.append(('rtti', None))
+            elif e.startswith(('vcall_offset', 'vbase_offset')) or e.startswith('['):
+                stop('vtable of %s: %r: no rule yet (virtual bases, thunks)' % (rec.get('name'), e))
+            else:
+                flags = re.findall(r' \[([a-z ]+)\]', e)
+                sig = re.sub(r' \[[a-z ]+\]', '', e)
+                meth = self.match_method(sig, methods, rec)
+                kind = 'method'
+                for f in flags:
+                    if f == 'pure':
+                        kind = 'pure'
+                    elif f == 'complete':
+                        kind = 'complete-dtor'
+                    elif f == 'deleting':
+                        kind = 'deleting-dtor'
+                    else:
+                        stop('vtable of %s: entry flag %r: no rule yet' % (rec.get('name'), f))
+                entries.append((kind, meth))
+        if len(set(points)) != 1:
+            stop('vtable of %s: %d address points: no rule yet (multiple inheritance)' % (rec.get('name'), len(set(points))))
+        r = (points[0], entries)
+        self.vtable_memo[rec['id']] = r
+        return r
+
+    def all_bases(self, rec):
+        out = [rec]
+        for b in rec.get('bases', []):
+            bt = self.base_type(rec, b)
+            out += self.all_bases(self.nodes[bt[1]])
+        return out
+
+    def virtual_candidates(self, rec):
+        out = []
+        for r in self.all_bases(rec):
+            for c in r.get('inner', []):
+                if c.get('kind') in ('CXXMethodDecl', 'CXXDestructorDecl', 'CXXConversionDecl'):
+                    out.append((r, self.node(c['id'])))
+        return out
+
+    def match_method(self, sig, methods, rec):
+        """A method as the vtable dump prints it -> its declaration."""
+        ns = sig.replace(' ', '')
+        hits = []
+        for r, m in methods:
+            qt = m['type']['qualType']
+            cut = self.param_paren(qt)
+            ret, rest = qt[:cut].strip(), qt[cut:]
+            if m['kind'] == 'CXXDestructorDecl':
+                ret = ''
+                rest = re.sub(r'\s*noexcept$', '', rest)
+            head, tail = ret.replace(' ', ''), ('::' + m['name'] + rest).replace(' ', '')
+            if not (ns.startswith(head) and ns.endswith(tail) and len(ns) > len(head) + len(tail)):
+                continue
+            cls = ns[len(head):len(ns) - len(tail)]
+            try:
+                ct = TypeParser(self, cls, self.tu, None).whole()
+            except (Dependent, Stop):
+                continue
+            if ct == ('record', r['id']):
+                hits.append(m)
+        ids = set(h['id'] for h in hits)
+        if len(ids) != 1:
+            stop('vtable of %s: the entry %r matches %d methods' % (rec.get('name'), sig, len(ids)))
+        return hits[0]
+
+    @staticmethod
+    def param_paren(qt):
+        """Index of the parenthesis opening the parameter list of a function type string."""
+        depth = 0
+        for i, ch in enumerate(qt):
+            if ch == '<':
+                depth += 1
+            elif ch == '>':
+                depth -= 1
+            elif ch == '(' and depth == 0 and not qt.startswith(SPECIAL, i):
+                if qt[i + 1] in '*&':
+                    stop('function type string not read: %r' % qt)
+                return i
+        stop('function type string not read: %r' % qt)
+
+    # ------------------------------------------------------------------ ids and the worklist
+    def start(self):
+        self.ids = {}            # canonical Clang id -> Word
+        self.defined = set()     # Words given a declaration in the output
+        self.queue = []
+        self.decls = []          # (Word, term) in the order written
+        self.labels = []         # a comment for each: kind, qualified name, type as Clang prints it
+        self.types = {}          # structured type -> (Ref, term)
+        self.type_defs = []
+        self.nrecords = self.nlayouts = 0
+
+    def idof(self, clang_id):
+        c = self.canon.get(clang_id, clang_id)
+        if c not in self.nodes:
+            stop('a declaration id the dump does not contain: %s' % clang_id)
+        if c not in self.ids:
+            self.ids[c] = len(self.ids) + 1
+        return self.ids[c]
+
+    def need(self, clang_id):
+        """The declaration is used: number it, and queue it if it is written at the top level."""
+        n = self.node(clang_id)
+        k = n['kind']
+        fresh = n['id'] not in self.ids
+        w = self.idof(n['id'])
+        if not fresh:
+            return w
+        if k in RECORD_KINDS or k in FUNCTION_KINDS or k == 'EnumDecl':
+            self.queue.append(n)
+            if k in FUNCTION_KINDS and k != 'FunctionDecl':
+                self.need(self.record_of_member(n)['id'])
+        elif k == 'VarDecl':
+            if self.is_local(n):
+                pass
+            else:
+                self.queue.append(n)
+        elif k == 'FieldDecl':
+            self.need(self.record_of_member(n)['id'])
+        elif k == 'EnumConstantDecl':
+            self.need(self.parent[id(n)]['id'])
+        elif k == 'ParmVarDecl':
+            pass
+        else:
+            stop('a reference to a %s (%s, at %s): no rule yet' % (k, n.get('name'), self.where(n)))
+        return w
+
+    def is_local(self, n):
+        p = self.parent[id(n)]
+        return p.get('kind') in ('DeclStmt', 'CXXForRangeStmt', 'IfStmt', 'WhileStmt', 'SwitchStmt', 'ForStmt') or p.get('kind') in FUNCTION_KINDS
+
+    def record_of_member(self, n):
+        sem = n.get('parentDeclContextId')
+        p = self.nodes[sem] if sem in self.nodes else self.parent[id(n)]
+        while p is not None and p.get('kind') not in RECORD_KINDS:
+            if p.get('kind') in ('FriendDecl',):
+                stop('internal: a friend treated as a member: %s' % n.get('name'))
+            p = self.parent[id(p)]
+        if p is None:
+            stop('a member outside any class: %s at %s' % (n.get('name'), self.where(n)))
+        return self.node(p['id'])
+
+    def count(self, kind):
+        self.met[kind] = self.met.get(kind, 0) + 1
+
+    def elide(self, kind, why):
+        c, _ = self.elided.get(kind, (0, why))
+        self.elided[kind] = (c + 1, why)
+
+    # ------------------------------------------------------------------ types as terms
+    def ty(self, t):
+        """The structured type as a term: a reference to a definition shared by the unit."""
+        if t in self.types:
+            return self.types[t][0]
+        k = t[0]
+        if k == 'builtin':
+            con = 'ctb-' + t[1]
+            if con not in CTORS:
+                stop('a builtin type no unit has met before: %s (add %s to CBuiltin)' % (t[1], con))
+            term = T('ct-builtin', T(con))
+        elif k == 'ptr':
+            term = T('ct-pointer', self.ty(t[1]))
+        elif k == 'lref':
+            term = T('ct-lref', self.ty(t[1]))
+        elif k == 'rref':
+            term = T('ct-rref', self.ty(t[1]))
+        elif k == 'array':
+            term = T('ct-array', self.ty(t[1]), W(t[2]))
+        elif k == 'record':
+            term = T('ct-record', W(self.need(t[1])))
+        elif k == 'enum':
+            term = T('ct-enum', W(self.need(t[1])))
+        elif k == 'func':
+            term = T('ct-function', self.ty(t[1]), inlist('CType', [self.ty(p) for p in t[2]]),
+                     t[3], t[4], t[5], T('crq-' + t[6]), t[7])
+        elif k == 'memptr':
+            term = T('ct-member-pointer', W(self.need(t[1])), self.ty(t[2]))
+        elif k == 'qual':
+            term = T('ct-qual', t[1], t[2], t[3], self.ty(t[4]))
+        else:
+            stop('internal: type %r' % (t,))
+        ref = Ref('%s-t%d' % (self.name, len(self.types) + 1), 'CType')
+        self.types[t] = (ref, term)
+        self.type_defs.append((ref, term))
+        return ref
+
+    def type_at(self, tobj, scope):
+        try:
+            return self.resolve_type(tobj, scope)
+        except Dependent as e:
+            stop('a type that is not instantiated reached the output: %r at %s (%s)'
+                 % (tobj.get('qualType'), self.where(scope), e))
+
+    def expr_type(self, n):
+        """The type of an expression or declaration node. Two forms are read from the
+        declaration rather than from the string printed at the use: a reference to a function
+        has the function's type, whose string was written in the function's scope (it may name
+        member typedefs of its class that are not in scope at the use), and the decay of a
+        function is the pointer to that."""
+        k = n.get('kind')
+        if k == 'DeclRefExpr':
+            d = self.node(n['referencedDecl']['id'])
+            if d['kind'] in FUNCTION_KINDS:
+                return self.type_at(d['type'], d)
+        if k == 'ImplicitCastExpr' and n.get('castKind') == 'FunctionToPointerDecay':
+            return ('ptr', self.expr_type(n['inner'][0]))
+        return self.type_at(n['type'], n)
+
+    def tyof(self, n):
+        return self.ty(self.expr_type(n))
+
+    # ------------------------------------------------------------------ expressions
+    def kids(self, n):
+        return [c for c in n.get('inner', [])]
+
+    def head(self, n):
+        """The two fields every expression starts with."""
+        vc = n.get('valueCategory')
+        if vc not in ('prvalue', 'lvalue', 'xvalue'):
+            stop('%s at %s: value category %r' % (n['kind'], self.where(n), vc))
+        return self.tyof(n), T('vc-' + vc)
+
+    def exprs(self, ns):
+        return inlist('CExpr', [self.expr(c) for c in ns])
+
+    def opt_expr(self, n):
+        return self.expr(n) if n else T('ce-nil')
+
+    def expr(self, n):
+        k = n.get('kind')
+        if not k:
+            stop('an absent expression where one is required, under %s' % self.where(n))
+        f = getattr(self, 'e_' + k, None)
+        if f is None:
+            stop('expression kind with no rule yet: %s (at %s)' % (k, self.where(n)))
+        self.count(k)
+        return f(n)
+
+    def e_IntegerLiteral(self, n):
+        return T('ce-integer-literal', *self.head(n), W(int(n['value'])))
+
+    def e_CharacterLiteral(self, n):
+        return T('ce-character-literal', *self.head(n), W(int(n['value'])))
+
+    def e_CXXBoolLiteralExpr(self, n):
+        return T('ce-bool-literal', *self.head(n), bool(n['value']))
+
+    def e_CXXNullPtrLiteralExpr(self, n):
+        return T('ce-nullptr-literal', *self.head(n))
+
+    def e_FloatingLiteral(self, n):
+        t = self.type_at(n['type'], n)
+        if unqual(t) != ('builtin', 'double'):
+            stop('floating literal of type %s at %s: no rule yet' % (type_str(t), self.where(n)))
+        bits = struct.unpack('<Q', struct.pack('<d', float(n['value'])))[0]
+        return T('ce-floating-literal', *self.head(n), W(bits))
+
+    def e_StringLiteral(self, n):
+        t = self.type_at(n['type'], n)
+        v = n['value']
+        if not (v.startswith('"') and v.endswith('"')) or unqual(t)[0] != 'array' or \
+                unqual(unqual(t)[1]) != ('builtin', 'char'):
+            stop('string literal %r of type %s at %s: no rule yet' % (v, type_str(t), self.where(n)))
+        b = c_unescape(v[1:-1])
+        size = unqual(t)[2]
+        if len(b) > size:
+            stop('string literal longer than its array: %r' % v)
+        return T('ce-string-literal', *self.head(n), S(b + bytes(size - len(b))))
+
+    def ref(self, clang_id):
+        n = self.node(clang_id)
+        if n['kind'] not in REFKINDS:
+            stop('a reference to a %s (%s): no rule yet' % (n['kind'], n.get('name')))
+        return T('crk-' + REFKINDS[n['kind']]), W(self.need(n['id']))
+
+    def e_DeclRefExpr(self, n):
+        return T('ce-declref', *self.head(n), *self.ref(n['referencedDecl']['id']))
+
+    def e_MemberExpr(self, n):
+        base, = self.kids(n)
+        return T('ce-member', *self.head(n), self.expr(base), bool(n['isArrow']),
+                 *self.ref(n['referencedMemberDecl']))
+
+    def call(self, con, n):
+        ks = self.kids(n)
+        return T(con, *self.head(n), self.expr(ks[0]), self.exprs(ks[1:]))
+
+    def e_CallExpr(self, n):
+        return self.call('ce-call', n)
+
+    def e_CXXMemberCallExpr(self, n):
+        return self.call('ce-member-call', n)
+
+    def e_CXXOperatorCallExpr(self, n):
+        return self.call('ce-operator-call', n)
+
+    def constructor_of(self, n):
+        """The constructor a CXXConstructExpr calls: the JSON gives its type, not its id."""
+        t = unqual(self.type_at(n['type'], n))
+        while t[0] == 'array':
+            t = unqual(t[1])
+        if t[0] != 'record':
+            stop('a constructor call of a non-class type at %s' % self.where(n))
+        rec = self.nodes[t[1]]
+        want = n['ctorType']['qualType']
+        hits = [c for c in rec.get('inner', []) if c.get('kind') == 'CXXConstructorDecl' and
+                c['type']['qualType'] == want]
+        if len(hits) != 1:
+            # the same signature spelled through different sugar: compare the types themselves
+            wt = self.type_at(n['ctorType'], rec)
+            hits = [c for c in rec.get('inner', []) if c.get('kind') == 'CXXConstructorDecl' and
+                    self.try_type(c['type'], c) == wt]
+        if len(hits) != 1:
+            stop('the constructor %r of %s called at %s is not found once among its constructors (%d)'
+                 % (want, rec.get('name'), self.where(n), len(hits)))
+        return hits[0]
+
+    def try_type(self, tobj, scope):
+        try:
+            return self.resolve_type(tobj, scope)
+        except Dependent:
+            return None
+
+    def construct(self, con, n):
+        ctor = self.constructor_of(n)
+        ck = n.get('constructionKind')
+        kinds = {'complete': 'complete', 'non-virtual base': 'non-virtual-base', 'delegating': 'delegating'}
+        if ck not in kinds:
+            stop('construction kind %r at %s: no rule yet' % (ck, self.where(n)))
+        if n.get('initializer_list'):
+            stop('std::initializer_list construction at %s: no rule yet' % self.where(n))
+        return T(con, *self.head(n), W(self.need(ctor['id'])), T('cck-' + kinds[ck]),
+                 bool(n.get('elidable')), bool(n.get('list')), bool(n.get('zeroing')),
+                 self.exprs(self.kids(n)))
+
+    def e_CXXConstructExpr(self, n):
+        return self.construct('ce-construct', n)
+
+    def e_CXXTemporaryObjectExpr(self, n):
+        return self.construct('ce-temporary-object', n)
+
+    def cast(self, n):
+        con = CAST_NODES[n['kind']]
+        ck = 'ck-' + n['castKind']
+        if ck not in CTORS:
+            stop('a cast kind no unit has met before: %s at %s (add %s to CCastKind)'
+                 % (n['castKind'], self.where(n), ck))
+        self.met_casts[n['castKind']] = self.met_casts.get(n['castKind'], 0) + 1
+        sub, = self.kids(n)
+        path = []
+        if 'path' in n:
+            t = unqual(self.type_at(sub['type'], sub))
+            if t[0] == 'ptr':
+                t = unqual(t[1])
+            for step in n['path']:
+                if t[0] != 'record':
+                    stop('a base path from a non-class at %s' % self.where(n))
+                hits = []
+                for b in self.nodes[t[1]].get('bases', []):
+                    bt = self.base_type(self.nodes[t[1]], b)
+                    if self.nodes[bt[1]].get('name') == step['name']:
+                        hits.append(bt)
+                if len(hits) != 1:
+                    stop('base path step %r at %s matches %d bases' % (step['name'], self.where(n), len(hits)))
+                t = hits[0]
+                path.append(W(self.need(t[1])))
+        if 'conversionFunc' in n:
+            self.need(n['conversionFunc']['id'])
+        return T(con, *self.head(n), T(ck), path, self.expr(sub))
+
+    e_ImplicitCastExpr = e_CXXStaticCastExpr = e_CXXReinterpretCastExpr = cast
+    e_CXXFunctionalCastExpr = e_CStyleCastExpr = cast
+
+    def e_UnaryOperator(self, n):
+        key = (n['opcode'], bool(n.get('isPostfix')))
+        if key not in UNOPS or 'uo-' + UNOPS[key] not in CTORS:
+            stop('unary operator %r at %s: no rule yet' % (key, self.where(n)))
+        sub, = self.kids(n)
+        return T('ce-unary', *self.head(n), T('uo-' + UNOPS[key]), self.expr(sub))
+
+    def binop(self, op, n):
+        if op not in BINOPS or 'bo-' + BINOPS[op] not in CTORS:
+            stop('binary operator %r at %s: no rule yet' % (op, self.where(n)))
+        return T('bo-' + BINOPS[op])
+
+    def e_BinaryOperator(self, n):
+        l, r = self.kids(n)
+        return T('ce-binary', *self.head(n), self.binop(n['opcode'], n), self.expr(l), self.expr(r))
+
+    def e_CompoundAssignOperator(self, n):
+        l, r = self.kids(n)
+        op = n['opcode']
+        if not op.endswith('='):
+            stop('compound assignment %r' % op)
+        return T('ce-compound-assign', *self.head(n), self.binop(op[:-1], n),
+                 self.ty(self.type_at(n['computeLHSType'], n)),
+                 self.ty(self.type_at(n['computeResultType'], n)), self.expr(l), self.expr(r))
+
+    def e_ConditionalOperator(self, n):
+        c, a, b = self.kids(n)
+        return T('ce-conditional', *self.head(n), self.expr(c), self.expr(a), self.expr(b))
+
+    def e_ParenExpr(self, n):
+        sub, = self.kids(n)
+        return T('ce-paren', *self.head(n), self.expr(sub))
+
+    def e_ArraySubscriptExpr(self, n):
+        b, i = self.kids(n)
+        return T('ce-array-subscript', *self.head(n), self.expr(b), self.expr(i))
+
+    def e_InitListExpr(self, n):
+        field = None
+        if 'field' in n:
+            field = self.need(n['field']['id'])
+        filler = T('ce-nil')
+        if 'array_filler' in n:
+            fl = [c for c in n['array_filler']]
+            # the filler is printed first, then the explicit initializers
+            filler = self.expr(fl[0])
+            inits = fl[1:]
+        else:
+            inits = self.kids(n)
+        return T('ce-init-list', *self.head(n), optid(field), filler, self.exprs(inits))
+
+    def e_ImplicitValueInitExpr(self, n):
+        return T('ce-implicit-value-init', *self.head(n))
+
+    def e_CXXDefaultInitExpr(self, n):
+        """The field whose default member initializer this is: the JSON does not say, the
+        position does (the initializer of a constructor, or the i-th element of an aggregate's
+        initializer list: bases first, then the fields in order, unnamed bit-fields skipped)."""
+        p = self.parent[id(n)]
+        if p.get('kind') == 'CXXCtorInitializer' and 'anyInit' in p:
+            fid = p['anyInit']['id']
+        elif p.get('kind') == 'InitListExpr':
+            t = unqual(self.type_at(p['type'], p))
+            if t[0] != 'record':
+                stop('a default member initializer in the initializer list of a non-class at %s' % self.where(n))
+            rec = self.nodes[t[1]]
+            if rec.get('tagUsed') == 'union':
+                fid = p['field']['id']
+            else:
+                slots = [None] * len(rec.get('bases', [])) + \
+                    [c['id'] for c in rec.get('inner', []) if c.get('kind') == 'FieldDecl' and
+                     not (c.get('isBitfield') and 'name' not in c)]
+                i = [id(c) for c in p['inner']].index(id(n))
+                if i >= len(slots) or slots[i] is None:
+                    stop('a default member initializer at position %d of %s at %s' % (i, rec.get('name'), self.where(n)))
+                fid = slots[i]
+        else:
+            stop('a default member initializer under %s at %s: no rule yet' % (p.get('kind'), self.where(n)))
+        return T('ce-default-init', *self.head(n), W(self.need(fid)))
+
+    def e_CXXThisExpr(self, n):
+        return T('ce-this', *self.head(n))
+
+    def e_MaterializeTemporaryExpr(self, n):
+        sd = n.get('storageDuration')
+        kinds = {'full expression': 'full-expression', 'automatic': 'automatic', 'static': 'static'}
+        if sd not in kinds:
+            stop('storage duration %r at %s: no rule yet' % (sd, self.where(n)))
+        ext = None
+        if 'extendingDecl' in n:
+            ext = self.idof(n['extendingDecl']['id'])
+        sub, = self.kids(n)
+        return T('ce-materialize-temporary', *self.head(n), T('csd-' + kinds[sd]), optid(ext), self.expr(sub))
+
+    def e_ExprWithCleanups(self, n):
+        sub, = self.kids(n)
+        return T('ce-with-cleanups', *self.head(n), self.expr(sub))
+
+    def e_ConstantExpr(self, n):
+        v = n.get('value')
+        if v in ('true', 'false'):
+            v = 1 if v == 'true' else 0
+        else:
+            try:
+                v = int(v)
+            except (TypeError, ValueError):
+                stop('a constant expression whose value is not an integer: %r at %s: no rule yet' % (v, self.where(n)))
+        sub, = self.kids(n)
+        return T('ce-constant', *self.head(n), cint(v), self.expr(sub))
+
+    def e_LambdaExpr(self, n):
+        ks = self.kids(n)
+        rec, body = ks[0], ks[-1]
+        if rec.get('kind') != 'CXXRecordDecl' or body.get('kind') != 'CompoundStmt':
+            stop('a LambdaExpr of an unexpected shape at %s' % self.where(n))
+        return T('ce-lambda', *self.head(n), W(self.need(rec['id'])), self.exprs(ks[1:-1]))
+
+    def e_UnaryExprOrTypeTraitExpr(self, n):
+        kinds = {'sizeof': 'sizeof', 'alignof': 'alignof'}
+        if n.get('name') not in kinds:
+            stop('type trait %r at %s: no rule yet' % (n.get('name'), self.where(n)))
+        ks = self.kids(n)
+        if 'argType' in n:
+            at, arg = self.ty(self.type_at(n['argType'], n)), T('ce-nil')
+        else:
+            at, arg = self.tyof(ks[0]), self.expr(ks[0])
+        return T('ce-unary-or-type-trait', *self.head(n), T('ctk-' + kinds[n['name']]), at, arg)
+
+    def e_SubstNonTypeTemplateParmExpr(self, n):
+        parm, sub = self.kids(n)
+        if parm.get('kind') != 'NonTypeTemplateParmDecl':
+            stop('a SubstNonTypeTemplateParmExpr of an unexpected shape at %s' % self.where(n))
+        return T('ce-subst-nttp', *self.head(n), self.expr(sub))
+
+    def e_CXXNewExpr(self, n):
+        ks = self.kids(n)
+        size = placement = init = None
+        style = {None: 'none', 'call': 'parens', 'list': 'braces'}.get(n.get('initStyle'), '?')
+        if style == '?':
+            stop('new-expression initializer style %r at %s' % (n.get('initStyle'), self.where(n)))
+        rest = list(ks)
+        if n.get('isArray'):
+            size, rest = rest[0], rest[1:]
+        if style != 'none' or (rest and not n.get('isPlacement')):
+            init, rest = rest[-1], rest[:-1]
+        if rest and not n.get('isPlacement'):
+            stop('a new-expression with children this rule does not place, at %s' % self.where(n))
+        opnew = None
+        if 'operatorNewDecl' in n:
+            opnew = self.need(n['operatorNewDecl']['id'])
+        if 'operatorDeleteDecl' in n:
+            self.need(n['operatorDeleteDecl']['id'])
+        return T('ce-new', *self.head(n), bool(n.get('isGlobal')), bool(n.get('isArray')),
+                 optid(opnew), T('cni-' + style), self.opt_expr(size), self.exprs(rest), self.opt_expr(init))
+
+    def e_CXXDeleteExpr(self, n):
+        sub, = self.kids(n)
+        opdel = None
+        if 'operatorDeleteDecl' in n:
+            opdel = self.need(n['operatorDeleteDecl']['id'])
+        return T('ce-delete', *self.head(n), bool(n.get('isGlobal')), bool(n.get('isArray')),
+                 optid(opdel), self.expr(sub))
+
+    # ------------------------------------------------------------------ statements
+    def stmt(self, n):
+        k = n.get('kind')
+        if not k:
+            return T('cs-none')
+        f = getattr(self, 's_' + k, None)
+        if f is not None:
+            self.count(k)
+            return f(n)
+        if hasattr(self, 'e_' + k):
+            return T('cs-expr', self.expr(n))
+        stop('statement kind with no rule yet: %s (at %s)' % (k, self.where(n)))
+
+    def s_CompoundStmt(self, n):
+        return T('cs-compound', inlist('CStmt', [self.stmt(c) for c in self.kids(n)]))
+
+    def s_DeclStmt(self, n):
+        vs = []
+        for c in self.kids(n):
+            k = c.get('kind')
+            if k == 'VarDecl':
+                vs.append(self.var(c))
+            elif k in LOCAL_DECLS_COMPILE_TIME:
+                self.elide(k, 'a local declaration with nothing to run; its name was resolved by Sema')
+            else:
+                stop('a %s in a declaration statement at %s: no rule yet' % (k, self.where(c)))
+        return T('cs-decl', vs)
+
+    def flagged(self, n, flags):
+        """Children of a statement whose optional leading children are announced by flags."""
+        ks = self.kids(n)
+        out = []
+        for f in flags:
+            out.append(ks.pop(0) if n.get(f) else {})
+        return out, ks
+
+    def s_IfStmt(self, n):
+        if n.get('isConsteval') or n.get('isConstexpr'):
+            stop('if consteval / if constexpr at %s: no rule yet' % self.where(n))
+        (init, var), ks = self.flagged(n, ('hasInit', 'hasVar'))
+        if len(ks) != (3 if n.get('hasElse') else 2):
+            stop('an IfStmt of an unexpected shape at %s' % self.where(n))
+        return T('cs-if', self.stmt(init), self.stmt(var), self.expr(ks[0]), self.stmt(ks[1]),
+                 self.stmt(ks[2]) if n.get('hasElse') else T('cs-none'))
+
+    def s_WhileStmt(self, n):
+        (var,), ks = self.flagged(n, ('hasVar',))
+        cond, body = ks
+        return T('cs-while', self.stmt(var), self.expr(cond), self.stmt(body))
+
+    def s_DoStmt(self, n):
+        body, cond = self.kids(n)
+        return T('cs-do', self.stmt(body), self.expr(cond))
+
+    def s_ForStmt(self, n):
+        init, var, cond, inc, body = self.kids(n)
+        return T('cs-for', self.stmt(init), self.stmt(var), self.opt_expr(cond), self.opt_expr(inc), self.stmt(body))
+
+    def s_CXXForRangeStmt(self, n):
+        init, rng, begin, end, cond, inc, var, body = self.kids(n)
+        return T('cs-for-range', self.stmt(init), self.stmt(rng), self.stmt(begin), self.stmt(end),
+                 self.expr(cond), self.expr(inc), self.stmt(var), self.stmt(body))
+
+    def s_ReturnStmt(self, n):
+        ks = self.kids(n)
+        return T('cs-return', self.expr(ks[0]) if ks else T('ce-nil'))
+
+    def s_BreakStmt(self, n):
+        return T('cs-break')
+
+    def s_ContinueStmt(self, n):
+        return T('cs-continue')
+
+    def s_NullStmt(self, n):
+        return T('cs-null')
+
+    def s_SwitchStmt(self, n):
+        (init, var), ks = self.flagged(n, ('hasInit', 'hasVar'))
+        cond, body = ks
+        return T('cs-switch', self.stmt(init), self.stmt(var), self.expr(cond), self.stmt(body))
+
+    def s_CaseStmt(self, n):
+        if n.get('isGNURange'):
+            stop('a GNU case range at %s: no rule yet' % self.where(n))
+        value, sub = self.kids(n)
+        return T('cs-case', self.expr(value), self.stmt(sub))
+
+    def s_DefaultStmt(self, n):
+        sub, = self.kids(n)
+        return T('cs-default', self.stmt(sub))
+
+    # ------------------------------------------------------------------ variables
+    def storage(self, n):
+        sc = n.get('storageClass')
+        if sc not in (None, 'static', 'extern'):
+            stop('storage class %r at %s: no rule yet' % (sc, self.where(n)))
+        if n.get('tls'):
+            stop('thread-local storage at %s: no rule yet' % self.where(n))
+        return T('cst-' + (sc or 'none'))
+
+    def attrs(self, n):
+        """The children of a declaration that are attributes; each is accounted for."""
+        rest = []
+        for c in self.kids(n):
+            k = c.get('kind', '')
+            if k.endswith('Attr'):
+                if k not in ATTRS_CARRIED_ELSEWHERE:
+                    stop('attribute with no rule yet: %s on %s at %s' % (k, n.get('name'), self.where(n)))
+                self.elide(k, ATTRS_CARRIED_ELSEWHERE[k])
+            else:
+                rest.append(c)
+        return rest
+
+    def var(self, n):
+        self.count('VarDecl')
+        w = self.idof(n['id'])
+        self.defined.add(w)
+        ks = self.attrs(n)
+        style = n.get('init')
+        if style is None:
+            if ks:
+                stop('a VarDecl with children and no initializer at %s' % self.where(n))
+            init = T('cvi-none')
+        else:
+            if style not in ('c', 'call', 'list') or len(ks) != 1:
+                stop('a VarDecl with initializer style %r and %d children at %s' % (style, len(ks), self.where(n)))
+            init = T('cvi-' + style, self.expr(ks[0]))
+        return T('cv-var', W(w), S(n.get('name', '')), self.tyof(n), self.storage(n),
+                 bool(n.get('constexpr')), bool(n.get('nrvo')), init)
+
+    def parm(self, n):
+        self.count('ParmVarDecl')
+        w = self.idof(n['id'])
+        self.defined.add(w)
+        if self.attrs(n):
+            # a default argument: every call that uses it has it as a CXXDefaultArgExpr
+            stop('a parameter with a default argument at %s: no rule yet' % self.where(n))
+        return T('cv-parm', W(w), S(n.get('name', '')), self.tyof(n))
+
+    # ------------------------------------------------------------------ declarations
+    def run(self):
+        roots, statics = self.roots()
+        root_ids = [W(self.need(r['id'])) for r in roots]
+        qi = 0
+        while qi < len(self.queue):
+            n = self.queue[qi]
+            qi += 1
+            w = self.ids[n['id']]
+            self.defined.add(w)
+            self.decls.append((w, self.decl(n)))
+            q = self.qualified_name(self.parent[id(n)] if n['kind'] not in FUNCTION_KINDS or 'parentDeclContextId' not in n
+                                    else self.nodes[n['parentDeclContextId']])
+            self.labels.append('%s %s%s%s' % (n['kind'], q + '::' if q else '', n.get('name', '(unnamed)'),
+                                              ' : ' + n['type']['qualType'] if 'type' in n else ''))
+        static_ids = [W(self.ids[s['id']]) for s in statics if s['id'] in self.ids]
+        missing = sorted(set(self.ids.values()) - self.defined)
+        if missing:
+            names = [self.nodes[c].get('name') for c, w in self.ids.items() if w in missing]
+            stop('declarations referred to and never written: %s' % names[:20])
+        self.tu_term = T('ctu', S(os.path.basename(self.path)), S(self.target), root_ids, static_ids,
+                         [Ref('%s-d%d' % (self.name, w), 'CDecl') for w, _ in self.decls])
+
+    def roots(self):
+        """What the unit must provide: the functions defined in the main file that another unit
+        can call (external linkage, not inline, not a template), and every variable of static
+        storage defined in it (its initialization runs whether or not it is referred to)."""
+        roots, statics = [], []
+
+        def scan(n, internal):
+            for c in n.get('inner', []):
+                k = c.get('kind')
+                if k in ('LinkageSpecDecl',):
+                    scan(c, internal)
+                elif k == 'NamespaceDecl':
+                    scan(c, internal or 'name' not in c)
+                elif c.get('_file') != self.path or c.get('isImplicit'):
+                    continue
+                elif k == 'FunctionDecl':
+                    if self.is_definition(c) and not internal and not c.get('inline') and \
+                            c.get('storageClass') != 'static' and not c.get('constexpr') and \
+                            'explicitlyDeleted' not in c:
+                        roots.append(self.node(c['id']))
+                elif k == 'VarDecl':
+                    if self.is_definition(c):
+                        statics.append(self.node(c['id']))
+                        roots.append(self.node(c['id']))
+        scan(self.tu, False)
+        if not roots:
+            stop('%s defines nothing another unit can use: no roots' % self.path)
+        return roots, statics
+
+    def decl(self, n):
+        k = n['kind']
+        f = getattr(self, 'd_' + k, None)
+        if f is None:
+            stop('declaration kind with no rule yet: %s (%s at %s)' % (k, n.get('name'), self.where(n)))
+        self.count(k)
+        return f(n)
+
+    def function(self, n):
+        ks = self.attrs(n)
+        params, body, inits = [], None, []
+        for c in ks:
+            ck = c.get('kind')
+            if ck == 'ParmVarDecl':
+                params.append(self.parm(c))
+            elif ck == 'CompoundStmt':
+                body = c
+            elif ck == 'CXXCtorInitializer':
+                inits.append(c)
+            elif ck == 'TemplateArgument':
+                self.elide('TemplateArgument (of a function)', 'the specialization is written already substituted')
+            else:
+                stop('a %s under the function %s at %s: no rule yet' % (ck, n.get('name'), self.where(n)))
+        if 'explicitlyDeleted' in n:
+            stop('a deleted function is referred to: %s at %s' % (n.get('name'), self.where(n)))
+        if body is not None:
+            b = T('cfb-stmt', self.stmt(body))
+            self.count('CompoundStmt (function bodies)')
+        elif n.get('pure'):
+            b = T('cfb-pure')
+        elif 'explicitlyDefaulted' in n or (n.get('isImplicit') and k_is_special_member(n)):
+            b = T('cfb-defaulted')
+        else:
+            b = T('cfb-none')
+        if n.get('variadic') is not None and not isinstance(n.get('variadic'), bool):
+            stop('variadic flag %r' % n.get('variadic'))
+        t = self.type_at(n['type'], n)
+        fn = T('cfunction', W(self.ids[n['id']]), S(n.get('name', '')), S(n.get('mangledName', '')),
+               self.ty(t), params, self.storage(n), bool(n.get('inline')), bool(n.get('constexpr')),
+               bool(n.get('isImplicit')), b)
+        return fn, inits
+
+    def d_FunctionDecl(self, n):
+        fn, inits = self.function(n)
+        return T('cd-function', fn)
+
+    def is_virtual(self, n, rec):
+        vt = self.vtable_of(rec)
+        return bool(n.get('virtual')) or (vt is not None and any(m is n for k, m in vt[1] if k not in ('offset-to-top', 'rtti')))
+
+    def d_CXXMethodDecl(self, n):
+        rec = self.record_of_member(n)
+        fn, inits = self.function(n)
+        return T('cd-method', W(self.need(rec['id'])), self.is_virtual(n, rec), fn)
+
+    d_CXXConversionDecl = d_CXXMethodDecl
+
+    def d_CXXDestructorDecl(self, n):
+        rec = self.record_of_member(n)
+        fn, inits = self.function(n)
+        return T('cd-destructor', W(self.need(rec['id'])), self.is_virtual(n, rec), fn)
+
+    def d_CXXConstructorDecl(self, n):
+        rec = self.record_of_member(n)
+        fn, inits = self.function(n)
+        out = []
+        for c in inits:
+            self.count('CXXCtorInitializer')
+            e, = self.kids(c)
+            if 'anyInit' in c:
+                out.append(T('cci-field', W(self.need(c['anyInit']['id'])), self.expr(e)))
+            elif 'baseInit' in c:
+                out.append(T('cci-base', self.ty(self.type_at(c['baseInit'], n)), self.expr(e)))
+            else:
+                stop('a constructor initializer that is neither a member nor a base at %s: no rule yet' % self.where(n))
+        return T('cd-constructor', W(self.need(rec['id'])), out, fn)
+
+    def record(self, n):
+        if not n.get('completeDefinition'):
+            stop('a class used and never defined in the unit: %s (at %s): no rule yet' % (n.get('name'), self.where(n)))
+        self.nrecords += 1
+        tag = n.get('tagUsed')
+        if tag not in ('struct', 'class', 'union'):
+            stop('record tag %r' % tag)
+        sizes, vptr, lbases, lfields = self.layout_of(n)
+        self.nlayouts += 1
+        # bases, in declaration order, with their offsets from the layout
+        bases = []
+        offs = {}
+        for rid, off, primary in lbases:
+            offs[rid] = (off, primary)
+        for b in n.get('bases', []):
+            bt = self.base_type(n, b)
+            if b.get('isVirtual'):
+                stop('a virtual base of %s: no rule yet' % n.get('name'))
+            if bt[1] not in offs:
+                stop('the layout of %s does not place its base %s' % (n.get('name'), self.nodes[bt[1]].get('name')))
+            bases.append(T('cbase', W(self.need(bt[1])), W(offs[bt[1]][0]), offs[bt[1]][1], False))
+        if len(bases) != len(lbases):
+            stop('the layout of %s lists %d bases, the class %d' % (n.get('name'), len(lbases), len(bases)))
+        fields = []
+        fdecls = [c for c in self.attrs(n) if c.get('kind') == 'FieldDecl']
+        placed = [c for c in fdecls if not (c.get('isBitfield') and 'name' not in c and self.bit_width(c) == 0)]
+        if len(placed) != len(lfields):
+            stop('the layout of %s lists %d fields, the class %d' % (n.get('name'), len(lfields), len(placed)))
+        offsets = {}
+        for c, (off, text) in zip(placed, lfields):
+            if c.get('name') and not text.endswith(' ' + c['name']) and text != c['name']:
+                stop('the layout of %s names %r where the class has the field %s' % (n.get('name'), text, c['name']))
+            offsets[c['id']] = off
+        for c in fdecls:
+            if c['id'] not in offsets:
+                continue        # a zero-width unnamed bit-field: alignment only, in the layout
+            self.count('FieldDecl')
+            w = self.idof(c['id'])
+            self.defined.add(w)
+            ks = self.attrs(c)
+            width = T('cbw-none')
+            if c.get('isBitfield'):
+                width = T('cbw-bits', W(self.bit_width(c)))
+                ks = ks[1:]
+            init = T('ce-nil')
+            if c.get('hasInClassInitializer'):
+                if len(ks) != 1:
+                    stop('the default member initializer of %s::%s is not one expression' % (n.get('name'), c.get('name')))
+                init = self.expr(ks[0])
+            elif ks:
+                stop('a field with children this rule does not place: %s::%s' % (n.get('name'), c.get('name')))
+            fields.append(T('cfield', W(w), S(c.get('name', '')), self.tyof(c), W(offsets[c['id']]),
+                            width, bool(c.get('mutable')), init))
+        vt = self.vtable_of(n)
+        if vt is None:
+            if vptr is not None or any(self.layout_of(self.nodes[b[0]])[1] is not None for b in lbases):
+                # polymorphic, and its vtable is not laid out in this unit
+                if not self.is_abstract_unused(n):
+                    stop('the class %s has a vtable pointer and the vtable dump has no vtable for it: no rule yet' % n.get('name'))
+            vtable = T('cvt-none')
+        else:
+            es = []
+            for kind, x in vt[1]:
+                if kind == 'offset-to-top':
+                    es.append(T('cvt-offset-to-top', cint(x)))
+                elif kind == 'rtti':
+                    es.append(T('cvt-rtti'))
+                else:
+                    es.append(T('cvt-' + kind, W(self.need(x['id']))))
+            vtable = T('cvtable', W(vt[0]), es)
+        # a destructor that is declared runs whenever an object of the class dies
+        for c in n.get('inner', []):
+            if c.get('kind') == 'CXXDestructorDecl' and 'explicitlyDeleted' not in c:
+                self.need(c['id'])
+        for c in n.get('inner', []):
+            k = c.get('kind')
+            if k in ('FieldDecl', 'CXXDestructorDecl') or k.endswith('Attr'):
+                continue
+            if k in FUNCTION_KINDS or k in ('AccessSpecDecl', 'FriendDecl', 'TemplateArgument', 'TypedefDecl',
+                                            'TypeAliasDecl', 'UsingDecl', 'UsingShadowDecl', 'StaticAssertDecl',
+                                            'FunctionTemplateDecl', 'CXXRecordDecl', 'ClassTemplateDecl', 'EnumDecl',
+                                            'VarDecl', 'TypeAliasTemplateDecl', 'ClassTemplateSpecializationDecl',
+                                            'ClassTemplatePartialSpecializationDecl', 'VarTemplateDecl',
+                                            'CXXDeductionGuideDecl', 'ConstructorUsingShadowDecl'):
+                continue        # members: written when referred to; the rest hold at compile time
+            if k == 'IndirectFieldDecl':
+                stop('an anonymous struct or union member in %s: no rule yet' % n.get('name'))
+            stop('a %s in the class %s: no rule yet' % (k, n.get('name')))
+        name = n.get('name') or ''
+        lay = T('clayout', W(sizes['sizeof']), W(sizes['align']), W(sizes['dsize']), W(sizes['nvsize']),
+                W(sizes['nvalign']), T('cvp-none') if vptr is None else T('cvp-at', W(vptr)))
+        return T('crecord', W(self.ids[n['id']]), S(name), T('ctg-' + tag), self.is_lambda(n), bases, fields, lay, vtable)
+
+    def is_abstract_unused(self, n):
+        return False
+
+    def bit_width(self, c):
+        ks = [x for x in c.get('inner', []) if not x.get('kind', '').endswith('Attr')]
+        if not ks or ks[0].get('kind') != 'ConstantExpr':
+            stop('a bit-field whose width is not a constant expression: %s' % c.get('name'))
+        return int(ks[0]['value'])
+
+    def d_CXXRecordDecl(self, n):
+        return T('cd-record', self.record(n))
+
+    def d_ClassTemplateSpecializationDecl(self, n):
+        args = []
+        for kind, x in self.template_args_or_stop(n):
+            args.append(T('cta-type', self.ty(x)) if kind == 'type' else T('cta-integral', cint(x)))
+            self.count('TemplateArgument')
+        return T('cd-class-template-specialization', args, self.record(n))
+
+    def template_args_or_stop(self, n):
+        try:
+            return self.template_args(n)
+        except Dependent as e:
+            stop('template arguments of %s at %s: %s: no rule yet' % (n.get('name'), self.where(n), e))
+
+    def d_EnumDecl(self, n):
+        if 'fixedUnderlyingType' not in n:
+            stop('the enumeration %s (at %s) has no fixed underlying type; the dump does not give the one Sema chose: no rule yet'
+                 % (n.get('name'), self.where(n)))
+        es, nxt = [], 0
+        for c in self.attrs(n):
+            if c.get('kind') != 'EnumConstantDecl':
+                stop('a %s in the enumeration %s' % (c.get('kind'), n.get('name')))
+            self.count('EnumConstantDecl')
+            ks = self.attrs(c)
+            if ks:
+                # the initializer, evaluated by Sema
+                e = ks[0]
+                while e.get('kind') != 'ConstantExpr':
+                    if e.get('kind') != 'ImplicitCastExpr':
+                        stop('the enumerator %s::%s has an initializer without a constant value' % (n.get('name'), c.get('name')))
+                    e = e['inner'][0]
+                nxt = int(e['value'])
+            # an enumerator without an initializer is the previous one plus one ([dcl.enum]/2)
+            w = self.idof(c['id'])
+            self.defined.add(w)
+            es.append(T('cenumerator', W(w), S(c['name']), cint(nxt)))
+            nxt += 1
+        return T('cd-enum', W(self.ids[n['id']]), S(n.get('name', '')),
+                 self.ty(self.type_at(n['fixedUnderlyingType'], n)), 'scopedEnumTag' in n, es)
+
+    def d_VarDecl(self, n):
+        v = self.var(n)
+        self.met['VarDecl'] -= 1
+        return T('cd-var', S(n.get('mangledName', '')), v)
+
+    # ------------------------------------------------------------------ writing
+    def write(self, out, limit):
+        """One definition per shared type and per declaration; a subterm larger than `limit`
+        nodes becomes a definition of its own, so that no definition is an enormous literal."""
+        self.hoisted = []
+        self.nnodes = 0
+        lines = []
+
+        def render(a, top=False):
+            if isinstance(a, bool):
+                return 'true' if a else 'false'
+            if isinstance(a, W):
+                return '#%d' % a.n
+            if isinstance(a, Ref):
+                return a.name
+            if isinstance(a, S):
+                r = 'nil'
+                for b in reversed(a.b):
+                    r = 'cons #%d (%s)' % (b, r) if r != 'nil' else 'cons #%d nil' % b
+                return '(cstr %s)' % (r if r == 'nil' else '(%s)' % r)
+            if isinstance(a, list):
+                r = 'nil'
+                for x in reversed(a):
+                    r = 'cons %s %s' % (render(x), r if r == 'nil' else '(%s)' % r)
+                return r if r == 'nil' else '(%s)' % r
+            self.nnodes += 1
+            if not a.args:
+                return a.con
+            parts = [a.con]
+            for x in a.args:
+                if isinstance(x, T) and x.args and x.size > limit:
+                    parts.append(hoist(x))
+                else:
+                    parts.append(render(x))
+            s = ' '.join(parts)
+            return s if top else '(%s)' % s
+
+        def hoist(x):
+            name = '%s-n%d' % (self.name, len(self.hoisted) + 1)
+            self.hoisted.append(name)
+            body = render(x, top=True)
+            lines.append('%s : %s\n%s = %s\n' % (name, CTORS[x.con][0], name, body))
+            return name
+
+        for ref, term in self.type_defs:
+            lines.append('%s : CType\n%s = %s\n' % (ref.name, ref.name, render(term, top=True)))
+        for (w, term), label in zip(self.decls, self.labels):
+            name = '%s-d%d' % (self.name, w)
+            body = render(term, top=True)
+            lines.append('-- %s: %s\n%s : CDecl\n%s = %s\n' % (name, label, name, name, body))
+        body = render(self.tu_term, top=True)
+        lines.append('%s-tu : CTU\n%s-tu = %s\n' % (self.name, self.name, body))
+        out.write(self.header())
+        out.write(''.join(lines))
+
+    def header(self):
+        h = ['-- %s.cub — %s as a value of CTU (lib/cxx/ast.cub), after Clang\'s semantic analysis.' % (self.name, self.path),
+             '-- GENERATED by tools/clang2cub.py from %s, %s, flags %s.' % (self.clang_version, self.target, ' '.join(CLANG_FLAGS)),
+             '-- Load after the library and lib/cxx/ast.cub. %s-tu is the unit; %s-dN the declaration with id N;' % (self.name, self.name),
+             '-- %s-tN a type shared by the nodes that have it; %s-nN a subterm written apart to keep definitions small.' % (self.name, self.name),
+             '--']
+        h += ['-- ' + l for l in self.report().splitlines()]
+        return '\n'.join(h) + '\n'
+
+    def report(self):
+        r = []
+        r.append('nodes written: %d; declarations: %d; shared types: %d; records with layouts: %d of %d'
+                 % (self.nnodes, len(self.decls), len(self.type_defs), self.nlayouts, self.nrecords))
+        r.append('node kinds met (%d): %s' % (len(self.met), ', '.join('%s %d' % kv for kv in sorted(self.met.items()))))
+        r.append('cast kinds met (%d): %s' % (len(self.met_casts), ', '.join('%s %d' % kv for kv in sorted(self.met_casts.items()))))
+        r.append('met and not written as nodes (%d): %s' % (len(self.elided), '; '.join(
+            '%s %d (%s)' % (k, c, why) for k, (c, why) in sorted(self.elided.items()))))
+        r.append('names resolved from the scope of use that name other types elsewhere in the unit (%d): %s'
+                 % (len(self.scope_dependent), ', '.join(sorted(self.scope_dependent))))
+        return '\n'.join(textwrap_lines(r, 110))
+
+
+def textwrap_lines(paras, width):
+    out = []
+    for p in paras:
+        line = ''
+        for word in p.split(' '):
+            if line and len(line) + 1 + len(word) > width:
+                out.append(line)
+                line = '  ' + word
+            else:
+                line = word if not line else line + ' ' + word
+        out.append(line)
+    return out
+
+
+def k_is_special_member(n):
+    return n['kind'] in ('CXXConstructorDecl', 'CXXDestructorDecl') or n.get('name') == 'operator='
+
+
+def c_unescape(s):
+    """The bytes of a C string literal's text as Clang prints it."""
+    out, i = bytearray(), 0
+    simple = {'n': 10, 't': 9, 'r': 13, '0': 0, '\\': 92, '"': 34, "'": 39, 'a': 7, 'b': 8, 'f': 12, 'v': 11}
+    while i < len(s):
+        ch = s[i]
+        if ch != '\\':
+            out += ch.encode('utf-8')
+            i += 1
+            continue
+        nx = s[i + 1]
+        if nx == 'x':
+            j = i + 2
+            while j < len(s) and s[j] in '0123456789abcdefABCDEF':
+                j += 1
+            out.append(int(s[i + 2:j], 16))
+            i = j
+        elif nx in '01234567':
+            j = i + 1
+            while j < len(s) and j < i + 4 and s[j] in '01234567':
+                j += 1
+            out.append(int(s[i + 1:j], 8))
+            i = j
+        elif nx in simple:
+            out.append(simple[nx])
+            i += 2
+        else:
+            stop('string literal escape not read: \\%s in %r' % (nx, s))
+    return bytes(out)
+
+
+def main(argv):
+    if argv[1:] == ['--emit-ast']:
+        emit_ast(sys.stdout)
+        return 0
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    ap.add_argument('source')
+    ap.add_argument('-o', '--output', required=True)
+    ap.add_argument('--limit', type=int, default=400,
+                    help='nodes in one definition before a subterm is written apart (default 400)')
+    a = ap.parse_args(argv[1:])
+    name = os.path.splitext(os.path.basename(a.output))[0]
+    u = Unit(a.source, name)
+    try:
+        u.run_clang()
+        u.index()
+        u.read_layouts()
+        u.read_vtables()
+        u.start()
+        u.run()
+        with open(a.output, 'w') as out:
+            u.write(out, a.limit)
+    except Stop as e:
+        sys.stderr.write('clang2cub: %s\n' % e)
+        return 1
+    print(u.report())
+    return 0
+
+
+if __name__ == '__main__':
+    sys.setrecursionlimit(100000)
+    sys.exit(main(sys.argv))
