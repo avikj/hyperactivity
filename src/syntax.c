@@ -763,10 +763,8 @@ static Node *x_rename(Node *t, const char *x, const char *y) {
         Node *a = t->it[i];
         if (cs && i >= from && a->list && a->n == 2) {
             /* an alternative: its pattern binds */
-            Node *pat = a->it[0]; bool binds = false;
-            if (pat->list) { for (int q = 1; q < pat->n; q++) if (!strcmp(pat->it[q]->s, x)) binds = true; }
-            else if (!strcmp(pat->s, x)) binds = true;
-            r->it[i] = binds ? a : lst(2, pat, x_rename(a->it[1], x, y));
+            Node *pat = a->it[0];
+            r->it[i] = pat_binds(pat, x) ? a : lst(2, pat, x_rename(a->it[1], x, y));
             continue;
         }
         r->it[i] = (!strcmp(k, "=") && i == 2) ? a : x_rename(a, x, y);
@@ -988,9 +986,7 @@ static void free_syms(Node *t, Names *bound, Names *out) {
             for (int i = 1; i < from && i < t->n; i++) free_syms(t->it[i], bound, out);
             for (int i = from; i < t->n; i++) {
                 Node *a = t->it[i]; if (!a->list || a->n != 2) continue;
-                int save = bound->n;
-                if (a->it[0]->list) for (int q = 1; q < a->it[0]->n; q++) names_add(bound, a->it[0]->it[q]->s);
-                else names_add(bound, a->it[0]->s);
+                int save = bound->n; pat_bind(a->it[0], bound);
                 free_syms(a->it[1], bound, out); bound->n = save;
             }
             return;
@@ -1029,9 +1025,7 @@ static const char *imp_misuse(Node *t, Names *bound) {
             for (int i = 1; i < from && i < t->n; i++) { const char *r = imp_misuse(t->it[i], bound); if (r) return r; }
             for (int i = from; i < t->n; i++) {
                 Node *a = t->it[i]; if (!a->list || a->n != 2) continue;
-                int save = bound->n;
-                if (a->it[0]->list) for (int q = 1; q < a->it[0]->n; q++) { if (!a->it[0]->it[q]->list) names_add(bound, a->it[0]->it[q]->s); }
-                else names_add(bound, a->it[0]->s);
+                int save = bound->n; pat_bind(a->it[0], bound);
                 const char *r = imp_misuse(a->it[1], bound); bound->n = save; if (r) return r;
             }
             return NULL;
@@ -1974,6 +1968,16 @@ static bool rigid_mentions(Node *t, const char *x) {
         if ((!strcmp(k, "Pi") || !strcmp(k, "Sigma")) && t->n == 4 && !t->it[1]->list)
             return rigid_mentions(t->it[2], x) || (strcmp(t->it[1]->s, x) && rigid_mentions(t->it[3], x));
         if (!strcmp(k, "lam") || !strcmp(k, "plam") || !strcmp(k, "let") || !strcmp(k, "forall")) return mentions_name(t, x);
+        int from = alts_from(t);
+        if (from) {
+            for (int i = 1; i < from && i < t->n; i++) if (rigid_mentions(t->it[i], x)) return true;
+            for (int i = from; i < t->n; i++) {
+                Node *a = t->it[i];
+                if (a->list && a->n == 2) { if (!pat_binds(a->it[0], x) && rigid_mentions(a->it[1], x)) return true; }
+                else if (rigid_mentions(a, x)) return true;
+            }
+            return false;
+        }
     }
     for (int i = 0; i < t->n; i++) if (rigid_mentions(t->it[i], x)) return true;
     return false;
@@ -3364,7 +3368,18 @@ static bool dim_use(Node *t, const char *x) {
     Node *h = t->it[0];
     if (!h->list) {
         const char *k = h->s;
-        if (((!strcmp(k, "lam") || !strcmp(k, "plam") || !strcmp(k, "%lam") || !strcmp(k, "forall")) && t->n == 3 && !strcmp(t->it[1]->s, x))) return false;
+        if (((!strcmp(k, "lam") || !strcmp(k, "plam") || !strcmp(k, "%lam") || !strcmp(k, "forall")) && t->n == 3 && !t->it[1]->list && !strcmp(t->it[1]->s, x))) return false;
+        if ((!strcmp(k, "Pi") || !strcmp(k, "Sigma") || !strcmp(k, "let")) && t->n == 4 && !t->it[1]->list && !strcmp(t->it[1]->s, x)) return dim_use(t->it[2], x);
+        int from = alts_from(t);
+        if (from) {
+            for (int i = 1; i < from && i < t->n; i++) if (dim_use(t->it[i], x)) return true;
+            for (int i = from; i < t->n; i++) {
+                Node *a = t->it[i];
+                if (a->list && a->n == 2) { if (!pat_binds(a->it[0], x) && dim_use(a->it[1], x)) return true; }
+                else if (dim_use(a, x)) return true;
+            }
+            return false;
+        }
         bool iv_all = !strcmp(k, "~") || !strcmp(k, "/\\") || !strcmp(k, "\\/");
         for (int i = 1; i < t->n; i++) {
             Node *a = t->it[i];
@@ -4146,10 +4161,16 @@ static Node **field_types(int c, Node *T, Node **fv) {
 static int gp_of(const char *v) { for (int i = ncdefs - 1; i >= 0; i--) if (!strcmp(cdefs[i].v, v)) return cdefs[i].gp; for (int i = 0; i < tsig.np; i++) if (!strcmp(tsig.pn[i]->s, v)) return i; return -1; }
 static Node *subst_sym(Node *t, const char *x, Node *e) {
     if (!t->list) return !strcmp(t->s, x) ? e : t;
-    if (t->n >= 3 && !t->it[0]->list && (is(t->it[0], "lam") || is(t->it[0], "plam") || is(t->it[0], "%lam")) && !strcmp(t->it[1]->s, x)) return t;
-    if (t->n == 4 && !t->it[0]->list && is(t->it[0], "let") && !strcmp(t->it[1]->s, x)) return sym4("let", t->it[1], subst_sym(t->it[2], x, e), t->it[3]);
+    if (t->n >= 3 && !t->it[0]->list && (is(t->it[0], "lam") || is(t->it[0], "plam") || is(t->it[0], "%lam") || is(t->it[0], "forall")) && !t->it[1]->list && !strcmp(t->it[1]->s, x)) return t;
+    if (t->n == 4 && !t->it[0]->list && (is(t->it[0], "let") || is(t->it[0], "Pi") || is(t->it[0], "Sigma")) && !t->it[1]->list && !strcmp(t->it[1]->s, x))
+        return sym4(t->it[0]->s, t->it[1], subst_sym(t->it[2], x, e), t->it[3]);
     Node *r = nlist(t->n);
-    for (int i = 0; i < t->n; i++) r->it[i] = subst_sym(t->it[i], x, e);
+    int from = alts_from(t);
+    for (int i = 0; i < t->n; i++) {
+        Node *a = t->it[i];
+        if (from && i >= from && a->list && a->n == 2) { r->it[i] = pat_binds(a->it[0], x) ? a : lst(2, a->it[0], subst_sym(a->it[1], x, e)); continue; }
+        r->it[i] = subst_sym(a, x, e);
+    }
     return r;
 }
 /* an expression with the rebuilt variables replaced by what they are */
@@ -4875,6 +4896,17 @@ static void free_in_sig(Node *t, Names *bound, Names *out, Names *lvl, bool unde
         if (!strcmp(k, "U") && t->n == 2) { free_in_sig(t->it[1], bound, out, lvl, true); return; }
         if (!strcmp(k, "%num")) return;
         if (!strcmp(k, "=") && t->n == 3) { free_in_sig(t->it[1], bound, out, lvl, false); return; }
+        int from = alts_from(t);
+        if (from) {
+            /* an alternative's pattern binds its variables in its body; its constructor is not free */
+            for (int i = 1; i < from && i < t->n; i++) free_in_sig(t->it[i], bound, out, lvl, false);
+            for (int i = from; i < t->n; i++) {
+                Node *a = t->it[i];
+                if (!a->list || a->n != 2) { free_in_sig(a, bound, out, lvl, false); continue; }
+                int save = bound->n; pat_bind(a->it[0], bound); free_in_sig(a->it[1], bound, out, lvl, false); bound->n = save;
+            }
+            return;
+        }
         for (int i = 1; i < t->n; i++) free_in_sig(t->it[i], bound, out, lvl, false);
         return;
     }
@@ -5041,10 +5073,7 @@ static bool uniform_in(Node *e, const char *f, int q, Node *pat) {
  * (case i return (λ x → (R x → T) → W) of c a → λ k → f (k v)) kk, is f (kk v)). The clauses that
  * result are compiled as written clauses are: the recursion is accepted only as a field's (or a
  * field's field's) of a nested pattern, and the term is checked. */
-static bool lf_binds(Node *pat, const char *x) {
-    if (pat->list) { for (int q = 1; q < pat->n; q++) if (!pat->it[q]->list && !strcmp(pat->it[q]->s, x)) return true; return false; }
-    return !strcmp(pat->s, x);
-}
+static bool lf_binds(Node *pat, const char *x) { return pat_binds(pat, x); }
 /* e with the free name x replaced by the expression v */
 static Node *lf_subst(Node *t, const char *x, Node *v) {
     if (!t->list) return !strcmp(t->s, x) ? v : t;

@@ -73,10 +73,6 @@ are given per row below.
 to do, by the owner's ordering.
 
 **Known defects** (each with its place):
-- `syntax.c` `free_in_sig` (about line 4863) has no case for `case`/`elim` alternatives, so a
-  `case` written inside a signature turns its pattern variables into implicit parameters.
-  `lib/net.cub`'s `take-at-spec` checks only when `lib/eqproof.cub` is loaded first, because
-  that file happens to declare a constructor named `pr`.
 - A numeral is `suc` applied n times; 10^6 overflows the C stack in `ds`.
 - `synkey` is called at every node by `build_m`: quadratic on deep terms.
 - `net_start` does not check `pthread_create`.
@@ -116,12 +112,13 @@ All **check** in `make library` unless a load is named.
 | `world.cub` | 83 | the commands a process can issue to the real world (`WCmd`), and step trees. New commands must be appended: `elf.cub` dispatches on constructor index | proc |
 | `session.cub`, `choreo.cub` | 103 | guarded session types; guarded choreographies with endpoint projection | proc |
 | `obs.cub` | 747 | **behaviour of a process as a tree; bisimilarity is path equality; one program under two handlers gives equal behaviour from one obligation per command.** No untyped definition | proc, world |
-| `net.cub` | 194 | a network with an adversary (drop, duplicate, reorder, partition). Loaded with `fleet`; see the `syntax.c` defect above | proc, **eqproof (by accident)** |
+| `net.cub` | 194 | a network with an adversary (drop, duplicate, reorder, partition) | proc |
 | `fleet.cub` | 451 | nodes over that network; `Safe`, `Live`, `Refines`, `Converges` stated of the processes that run | net, proc |
 | `deploy.cub` | 120 | wire format, codec, node configuration (definitions) | fleet |
 | `bits.cub` | 312 | bit-vector operations the imported x86 semantics calls | std, prim |
 
 Loads run: fleet + KV experiment 931 passed, 3 failed (the 3 are `eqproof`'s refused helpers);
+net + fleet + `experiments/fleet/ping.cub` without `eqproof` 683 passed, 0 failed;
 obs + its two experiments 683 passed, 0 failed.
 
 **Why it stays:** this is "fully general computation" and the vocabulary every semantics below
@@ -228,16 +225,14 @@ src/  ──►  prelude, code, match, nav, cost, lin, check  ──►  std  �
 ## Everything that is not right, in one place
 
 1. The compiler's last stretch has no types (§5).
-2. `free_in_sig` auto-binds pattern variables of a `case` in a signature (§1); the fleet's
-   lemmas pass by a name collision.
-3. The x86 step function does not check: one binder in `sail2cub.py` (§4).
-4. The C++ and Rust readers do not check against the current `lib/mem` (§4).
-5. `x-rel-fix` gives up silently at 64 rounds (§5).
-6. Unary numerals; quadratic `synkey`; unchecked `pthread_create` (§1).
-7. Switched off by the refusal and still referenced: `deriving eq`, the `brunerie` Makefile
+2. The x86 step function does not check: one binder in `sail2cub.py` (§4).
+3. The C++ and Rust readers do not check against the current `lib/mem` (§4).
+4. `x-rel-fix` gives up silently at 64 rounds (§5).
+5. Unary numerals; quadratic `synkey`; unchecked `pthread_create` (§1).
+6. Switched off by the refusal and still referenced: `deriving eq`, the `brunerie` Makefile
    target, `experiments/os/build-cost*`, `experiments/jit`, `experiments/native`.
-8. Stale: `playground/README.md`, `experiments/cxx/sem/gen/`, `experiments/os/item5-wip.patch`,
+7. Stale: `playground/README.md`, `experiments/cxx/sem/gen/`, `experiments/os/item5-wip.patch`,
    four `#show` lines in `lib/mem/target.cub`, removed-back-end handlers in `lang.c`, status
    lines in `tracks/F-cxx.md` and `tracks/R-rust.md`.
-9. Trusted without statement: `prim.cub`'s byte and array laws; a primitive's computation
+8. Trusted without statement: `prim.cub`'s byte and array laws; a primitive's computation
    against its type; the importers; `rc11`'s one unproved statement.

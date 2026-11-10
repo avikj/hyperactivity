@@ -388,6 +388,25 @@ typedef struct Names { const char **v; int n, cap; } Names;   /* interned names:
 static bool names_has_i(const Names *s, const char *x) { for (int i = 0; i < s->n; i++) if (s->v[i] == x) return true; return false; }   /* x interned */
 static bool names_has(const Names *s, const char *x) { return names_has_i(s, intern(x)); }
 static void names_add(Names *s, const char *x) { x = intern(x); for (int i = 0; i < s->n; i++) if (s->v[i] == x) return; if (s->n == s->cap) { s->cap = s->cap ? s->cap * 2 : 8; s->v = realloc(s->v, (size_t)s->cap * sizeof(char *)); } s->v[s->n++] = x; }
+/* the variables a case alternative's pattern binds, in surface syntax: a name, or a constructor
+ * applied to sub-patterns (nested); a numeral and a wildcard bind nothing. Every walker over
+ * surface terms that tracks binders takes an alternative's variables from here */
+static void pat_bind(Node *p, Names *b) {
+    if (!p->list) { if (strcmp(p->s, "_") && strcmp(p->s, "%hole")) names_add(b, p->s); return; }
+    if (p->n == 0 || (!p->it[0]->list && !strcmp(p->it[0]->s, "%num"))) return;
+    for (int q = 1; q < p->n; q++) pat_bind(p->it[q], b);
+}
+static bool pat_binds(Node *p, const char *x) {
+    if (!p->list) return !strcmp(p->s, x);
+    if (p->n == 0 || (!p->it[0]->list && !strcmp(p->it[0]->s, "%num"))) return false;
+    for (int q = 1; q < p->n; q++) if (pat_binds(p->it[q], x)) return true;
+    return false;
+}
+/* the first alternative of a surface (case x alts…) or (elim P x alts…); 0 when t is neither */
+static int alts_from(Node *t) {
+    if (!t->list || t->n == 0 || t->it[0]->list) return 0;
+    return !strcmp(t->it[0]->s, "elim") ? 3 : !strcmp(t->it[0]->s, "case") ? 2 : 0;
+}
 /* the free names of t in order of first occurrence, found once per node (fv) from its parts'
  * sets: a term nested in several case branches is walked once, not once per enclosing case.
  * Names bound inside t are left out; which free names a binder outside t covers is the caller's
@@ -449,7 +468,18 @@ static bool mentions_name(Node *t, const char *x) {
             for (int i = 1; i < t->n - 1; i++) if (!strcmp(param_name(t->it[i])->s, x)) return false;
             return mentions_name(t->it[t->n - 1], x);
         }
-        if (!strcmp(k, "let") && t->n == 4) return mentions_name(t->it[2], x) || (strcmp(t->it[1]->s, x) && mentions_name(t->it[3], x));
+        if ((!strcmp(k, "let") || !strcmp(k, "Pi") || !strcmp(k, "Sigma")) && t->n == 4 && !t->it[1]->list)
+            return mentions_name(t->it[2], x) || (strcmp(t->it[1]->s, x) && mentions_name(t->it[3], x));
+        int from = alts_from(t);
+        if (from) {
+            for (int i = 1; i < from && i < t->n; i++) if (mentions_name(t->it[i], x)) return true;
+            for (int i = from; i < t->n; i++) {
+                Node *a = t->it[i];
+                if (a->list && a->n == 2) { if (!pat_binds(a->it[0], x) && mentions_name(a->it[1], x)) return true; }
+                else if (mentions_name(a, x)) return true;
+            }
+            return false;
+        }
     }
     for (int i = 0; i < t->n; i++) if (mentions_name(t->it[i], x)) return true;
     return false;
