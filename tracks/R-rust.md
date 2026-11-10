@@ -3,7 +3,11 @@
 Read `README.md` here (rules), `../PLAN.md` §5 and §6 Phase 5, and `tracks/C-clang.md` (the
 same job for C++; keep the two ASTs alike where the languages are).
 
-Files you own: `tools/mir2cub.py`, `lib/lang/rust/ast.cub`, `experiments/rust/**`, this file.
+Files you own: `tools/mir2cub.py`, `lib/lang/rust/ast.cub`, `lib/lang/rust/read*.cub`,
+`lib/lang/rust/machine.cub`, `experiments/rust/**` (with `experiments/rust/sem/**`), this file.
+
+Items 1–3 (the import) are done. Items 4–7 (the semantics; the Rust twin of `tracks/F-cxx.md`,
+assigned by track A after the import was integrated) are below "What is built".
 
 `rustc` and `cargo` are installed (`/root/.cargo/bin`); no network for crates, so the sample
 uses `core`/`std` only. Find which MIR output this toolchain gives (`rustc --emit=mir`, or
@@ -36,9 +40,46 @@ uses `core`/`std` only. Find which MIR output this toolchain gives (`rustc --emi
 3. **`lib/lang/rust/ast.cub`**: the MIR as plain first-order `data` (`RTy`, `RPlace`,
    `ROperand`, `RRvalue`, `RStmt`, `RTerm`, `RBody`, `RCrate`), constructor names prefixed `r`.
 
+4. **`read` for MIR over `lib/mem`** (`lib/lang/rust/machine.cub`, `lib/lang/rust/read*.cub`): the
+   meaning of an imported crate in `lib/mem/monad.cub`'s `Ev`, at a `Target`. Structural on the
+   imported data (bodies, blocks, statements, rvalues, terminators, places with projections,
+   operands, constants, the substitutions of generic instances, vtables for `dyn` calls,
+   statics); the run-time content of the terms it produces is only loads, stores, scalar
+   operations and control (everything the MIR decides is consumed by case on it). Control
+   between basic blocks and calls by a `Word` fuel that is a parameter of the meaning
+   (out-of-fuel is `mstop st-fuel`, distinct from undefined behaviour and from abort). A failed
+   `Assert` (`BoundsCheck`, `Overflow`, `DivisionByZero`, `RemainderByZero`; `-Cpanic=abort`) is an
+   **abort** outcome, not undefined behaviour. Every kind in the two lists under Done (book.rs
+   and more.rs) is written; a constructor of the AST not written is an explicit `unsupported`
+   outcome naming it, and Limits is empty for what the samples use.
+5. **On the net**: `rust-entry book-crate on_message` on each of 1,000 generated messages gives
+   the value the rustc-built binary prints, for every message (steps per message recorded);
+   the same for more.rs's `more_entry`.
+6. **Compiled**: `#jit`/`#build` of the entry specialized at the crate: whether it compiles, its
+   size, time per message against `rustc -O` on 10⁶ messages; what the residual still
+   interprets is listed with its cause and removed (binding-time work). Compiler refusals go
+   under "Needs from track A" with the smallest input.
+7. **The cross-language statement** (PLAN Phase 6; `lib/obs.cub` has the quotient; track F
+   produces the C++ side as `cxx-entry book-tu on_message`): `on_message` in Rust and in C++
+   equal as functions from message bytes and prior state to outcome, under the observation
+   that keeps Rust's abort on a bounds check and C++'s undefined behaviour apart (equal on the
+   inputs where the C++ one is defined; with the precondition that makes that all inputs,
+   given wrapping vs undefined subtraction). Proved now on the Rust side: the entry's outcome
+   as a closed-form function of the book state for each message kind. The final equality
+   waits for F's term and is the track's last open item until F lands.
+
 ## Acceptance
 
-- `python3 tools/mir2cub.py experiments/rust/book.rs -o experiments/rust/book.cub` runs; the
+- (item 4) the library, `lib/mem/*.cub`, `lib/lang/rust/ast.cub`, `lib/lang/rust/machine.cub`,
+  `lib/lang/rust/read*.cub` load with `N passed, 0 failed`, no postulates.
+- (item 5) for book.rs and more.rs: 1,000 inputs each, every outcome `ok v` with `v` the value
+  the rustc-built binary prints; steps per message recorded. Any `undefined`/`unsupported`/
+  `abort`/out-of-fuel outcome is a finding (the program's behaviour on that input, or a reader error).
+- (item 6) recorded: compiles or the refusal; size; ns/message against rustc -O; the residual's
+  interpretive content, empty when done.
+- (item 7) `experiments/rust/sem/props.cub` checks; the cross-language statement written against
+  F's names, proved when F's term exists.
+- (items 1–3) `python3 tools/mir2cub.py experiments/rust/book.rs -o experiments/rust/book.cub` runs; the
   library, `lib/lang/rust/ast.cub`, then `book.cub` load with `N passed, 0 failed` and
   `book-crate : RCrate` checked. Record: statement/rvalue/terminator kinds met, bodies, blocks,
   steps and seconds.
@@ -48,6 +89,14 @@ uses `core`/`std` only. Find which MIR output this toolchain gives (`rustc --emi
 
 ## Needs from track A
 
+- **String type: `CStr` is not used, and why.** Using track C's `CStr`/`cstr` means loading
+  `lib/cxx/ast.cub` before `lib/lang/rust/ast.cub`. That file cannot currently be loaded together
+  with `lib/mem/scalar.cub`, which the Rust reader needs: `./build/cubical $LIB lib/mem/target.cub
+  lib/mem/scalar.cub lib/mem/memory.cub lib/mem/layout.cub lib/mem/monad.cub lib/cxx/ast.cub`
+  stops with `error: declared again (a name is bound once): bo-mul` (both files define a
+  `BinOp`-like type with `bo-…` constructors; tracks C/F/M have to settle that, it is not this
+  track's file). Until `lib/cxx/ast.cub` loads after `lib/mem`, `RName = List Word`, which is
+  exactly `cstr`'s argument (`cstr name` converts).
 - Not blocking. One string type for both language ASTs: `lib/cxx/ast.cub` (generated by
   `tools/clang2cub.py --emit-ast`, track C) defines `cstr-put` (a `primitive` over `%store8`),
   `CStr = (n : Nat) × Bytes n` and `cstr : List Word → CStr`. If those five definitions move to a
