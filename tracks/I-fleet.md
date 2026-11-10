@@ -87,9 +87,14 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
    next step 1 (derive `copy`/`copy-id` from the data table) is what is needed here, for
    lists and nested records. Until then nodes are built by `#build` with a run-time bound of
    100000 machine steps (Found 6). Smallest input: `experiments/fleet/kv/build0.cub`.
-2. **`#build` cost.** `kv-node0` is 145 M steps (70–100 s) for a replica of ~40 lines; four
-   nodes are four such builds. Same cause as track D's item 7 (the handler stays in the code
-   behind a stuck case). Nothing is blocked on it.
+2. **`#build` cost; the client node does not build within the limit.** `kv-node0`, `kv-node1`,
+   `kv-node2` are 144.85 M steps each (70–110 s) for a replica of ~40 lines.
+   `experiments/fleet/kv/build3.cub` (`#build` of node 3, the sequential client: the same
+   `dp-node` with `kv-seq-view`, about three times the replica's code) did not finish in
+   `timeout 600` (no output after `ok: checks kv-node3`). Same cause as track D's item 7 (the
+   handler stays in the code behind a stuck case; `x-erase` dominates). Smallest input: the
+   command under "How to check" with `build3.cub` last. The client node is shown running by
+   `#run` instead (`run3.cub`, see Done).
 
 ## Done
 
@@ -167,6 +172,20 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
   `get 5 → (3,9,0,0)`; under `strace` its calls are `mmap` ×3, `socket`, `bind 127.0.0.1:47600`,
   then one `recvfrom`/`sendto` pair per request.
 
+- **Nodes 1 and 2 built** (`build1.cub`, `build2.cub`): `ok: build kv-node1 [build/kv-node1, 107132
+  bytes, …, 144853428 steps]`, `ok: build kv-node2 [… 107132 bytes, … 144854601 steps]`.
+- **Three node binaries as processes over UDP on localhost, serving a client** (Acceptance 3):
+  `for j in 0 1 2; do ./build/kv-node$j & done`, then a client bound to 127.0.0.1:47603 sending
+  the 32-byte wire form (python: `struct.pack('<4Q', tag, a, b, 0)`, tags put 0, ack 1, get 2,
+  val 3): puts `(1,10)`, `(2,20)`, `(1,11)` to the three ports, each acknowledged by each node
+  (nine `(1,k,v,0)` replies); then at every node `get 1 → (3,7,11,0)`, `get 2 → (3,8,20,0)`,
+  `get 5 → (3,9,0,0)`.
+- **The deployed client node against the three binaries** (`experiments/fleet/kv/run3.cub`,
+  `#run (fl-node kv-fleet 3)` with the three binaries running): the client puts the three
+  writes to the three replicas, awaits replica 0's acknowledgement of each, gets key 1 from
+  replica 0 and leaves by `exit_group` with the value: the machine's exit status is **11**
+  (13 s with the library cached).
+
 ## Found
 
 1. **Conversion misses a refined scrutinee (checker incompleteness).** With `f` defined by
@@ -206,12 +225,13 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
 
 ## Next step
 
-1. `lib/deploy.cub`, the node binary, the localhost run (see "What is built" 4 and Acceptance):
-   done before refinement because it may need track A.
-2. `experiments/fleet/kv/refine.cub`: `Refines kv-map-world (λ k → #0) (client history) kv-seq-beh
-   (kv-init (kv-seq-cli prog))` by `safe-by-events` with the invariant: applied₀ ⊆ issued,
-   acknowledged ⊆ applied₀, every `m-put` in flight issued, every `m-ack` from 0 applied at 0,
-   every `m-get`/`m-val`(from 0)/owed value with request id ≤ `c-idx` and, when equal, the
-   client waiting on that key and the value `kv-store conf k`; history is the map's. Write
-   every lemma over explicit fields (records have η) and pass intermediate results as
-   arguments (Found 2).
+1. `experiments/fleet/kv/refine.cub` is written (generators kept nowhere: the file is the
+   source) and being checked: first the lemmas over variables (`rf-shrink` … `rf-adv-get`),
+   then the state-level ones (`rf-run0` … `rf-step-net`), then `kv-seq-safe`, `kv-refines`.
+   If a state-level lemma fails to convert, restate it over variables and apply it (Found 2, 5).
+2. `experiments/fleet/kv/deploy.cub`: the deployment's checks (`fl-beh kv-fleet` is `kv-seq-beh`
+   pointwise; safety and refinement of the deployed fleet by transport).
+3. `lib/deploy.cub`: the upgrade (two corpora, `up`/`down` with `down (up m) ≡ m`, the mixed
+   fleet, `mixed-safe` from `safe-local`), and a kv instance (a second message type with a
+   batched put).
+4. `Refines` restated with track H's `≈` (`lib/obs.cub` has landed: read its `beh`, `≈`).
