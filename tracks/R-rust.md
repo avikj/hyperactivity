@@ -138,7 +138,7 @@ operation gives (each is worked around inside that section, as said):
    of a wide pointer: a value in a register, or a second load), vtable loads (an ordinary
    pointer load from the vtable's static allocation, then need 2).
 
-(From track M: nothing yet.)
+(Track M answered on 2026-11-09: see "From track M" at the end of this file. Not applied yet.)
 
 ## Diagnostics
 
@@ -150,13 +150,80 @@ Bring-up runs. They are not acceptance and not a ground for any equality.
   (seed 2, `896e0075f0f2745f…`).
 - **The importer's counts vs rustc's listings**: blocks/statements counted in the MIR text,
   `-Zprint-mono-items`, `-Zprint-type-sizes` (numbers under Done).
-- The reading on the net vs the rustc binary: not run yet (see Next step).
+- **The reading on the net vs the rustc binary** (`experiments/rust/sem/run.cub`: `rust-init` and
+  `rust-entry` under the standard memory through `ev-run-pure`; `experiments/rust/sem/mk_run.py`
+  writes the inputs and the binary's answers and a `#same`; `experiments/rust/more_out.c` is
+  more.rs's driver). Fuel 100,000 per call; Target `x86-64-sysv`.
+  - book.rs, the first 20 messages of seed 1: the 20 answers are the binary's (`#same` passes;
+    with one answer changed it fails, checked). 104,166,842 steps: `rust-init` alone 969,097;
+    the first message 4.2 M (it builds the instance table), the next two 2.0 M each, the
+    average over 20 is 5.2 M and rising. 60 messages did not finish in 600 s.
+  - more.rs, 150 inputs (pairs of integers, seed 3, small/32-bit/64-bit mixed): the 150 answers
+    are the binary's. 280,592,469 steps, 1.87 M per input on average, rising the same way.
+  - Why it rises: need 5 under "Needs from track M" (a released allocation stays in the
+    memory's list; each call makes tens). 1,000 inputs are out of reach until that changes;
+    nothing in the reader can change it, since the reader does not touch the memory.
+  - Both crates gave the binary's answers on the first reading attempted; no outcome other
+    than `mok` was met on these inputs.
 
 ## Done
 
 Items 1–3 are done. Everything below was measured on this machine with
 `rustc 1.97.0 (2d8144b78 2026-07-07)` (stable, LLVM 22.1.6, `x86_64-unknown-linux-gnu`,
 `/root/.cargo/bin`), clang 18.1.3, `llvm-dwarfdump`/`llvm-cxxfilt` 18, binutils `objdump`.
+
+### Item 4: the reader (`lib/lang/rust/machine.cub`, `read-place.cub`, `read-rvalue.cub`, `read.cub`)
+
+1,704 lines in four files; with the library, `lib/mem/*.cub` and `ast.cub`: `1363 passed, 0
+failed`, no postulate and no primitive of its own. The design is in the files' headers; in short:
+
+- **Outcomes** (`RExc`, thrown in `Ev` and never caught): `rx-abort` (a failed `Assert`:
+  `rab-bounds-check`, `rab-division-by-zero`, `rab-remainder-by-zero`, `rab-overflow op`),
+  `rx-ub` (MIR's own undefined behaviour: `Unreachable` reached, an unchecked operation out of
+  range, a tag that is no variant's, a call through a non-function, a register read while
+  dead), `rx-unsupported` naming the construct (`RUnsup`), `rx-ill-formed` naming what in the
+  crate's data contradicts itself (`RIll`). The memory's and the scalars' undefined behaviour
+  is lib/mem's `mub`, out of fuel `mstop st-fuel`.
+- **Frames**: a local of a scalar, wide-pointer or unit type is a register (a value in the
+  frame, `rv-dead` when it has none); any other local is an allocation made at `StorageLive`
+  (or at entry when the body has none for it) and released at `StorageDead` and at return. A
+  borrow of a register local is `rx-unsupported rz-borrow-of-register` (rustc's MIR for the
+  samples borrows objects only). The frame also carries the image (the addresses `rust-init`
+  got for the statics and vtables).
+- **Binding time**: every reader function takes the context and the syntax and returns a
+  function of the frame; all cases on MIR data, type substitution (`rm-subst` under the
+  instance's arguments), layout lookups and offsets happen before that function is returned.
+  A crate is a table `instance → block → (call → frame → Ev next)` built once per run.
+- **Fuel**: one `%welimP` (`rm-run`); each block entered spends one.
+- **Calls**: to an instance by index; through `dyn` by loading the method's slot from the
+  vtable the wide pointer carries; through a function pointer; `Drop` by the crate's
+  `RDropImpl` table and the layouts (own impl, then fields).
+- **Typed copy** by layout (`rm-copy`): scalar by scalar, an enum by its tag.
+- **Every constructor of `lib/lang/rust/ast.cub` and what the reader does with it**:
+  - `RStmt`: `rs-assign`, `rs-storage-live`, `rs-storage-dead`: read.
+  - `RRvalue`: `rrv-use` (the `retag` flag is not used: see Limits), `rrv-repeat`, `rrv-ref`,
+    `rrv-raw-ptr`, `rrv-cast`, `rrv-binop`, `rrv-unop`, `rrv-discriminant`, `rrv-aggregate`: read.
+  - `RBinOp`: read: `add sub mul` (wrapping), `add-unchecked sub-unchecked` (overflow undefined),
+    `div rem` (zero divisor and MIN / −1 undefined), `bit-xor bit-and bit-or` (integers and bool),
+    `shl shr` (count modulo the width), `eq lt le ne ge gt`, `cmp` (into the result enum's
+    variants 0/1/2), `offset`. Refused by name (`rz-binop`; none is in the samples):
+    `mul-unchecked`, `shl-unchecked`, `shr-unchecked`, `add/sub/mul-with-overflow`.
+  - `RUnOp`: `run-not`, `run-neg` (wrapping), `run-ptr-metadata`: read.
+  - `RCastKind`: `int-to-int` (also from a C-like enum: its discriminant), `transmute`,
+    `ptr-to-ptr`, `unsize` (array to slice: the length; to `dyn`: the vtable), `reify-fn-pointer`: read.
+  - `RAggregate`: `rag-array`, `rag-tuple`, `rag-adt` (fields, then the tag), `rag-raw-ptr`: read.
+  - `RTerm`: `rt-goto`, `rt-switch-int`, `rt-return`, `rt-unreachable`, `rt-call`, `rt-assert`,
+    `rt-drop`: read. `RCallee`: `rcallee-fn`, `rcallee-dyn`, `rcallee-ptr`: read. `RAssertMsg`:
+    all four: the abort's kind. `RUnwind`: `ru-continue`, `ru-unreachable`, `ru-terminate`: read
+    (nothing unwinds under `-Cpanic=abort`); `ru-cleanup` is refused (`rz-unwind`; the importer
+    does not emit it).
+  - `RProj`: `deref`, `field`, `index`, `const-index`, `downcast`: read (`const-index` from the
+    end of a slice is refused: `rz-const-index-from-end-of-slice`; not in the samples).
+  - `RConst`: `rc-int`, `rc-bool`, `rc-param`, `rc-zst`, `rc-adt`, `rc-static`, `rc-fn`: read (an
+    `rc-static` inside an `rc-adt` is refused: `rz-const`; not in the samples).
+  - `RTy`: every constructor has a class, size and alignment; 128-bit integers are not in the AST.
+  - `RLayout` (`rtag-none`, `rtag-direct`, `rtag-niche`), `RVtable` (`rdrop-none`; `rdrop-fn`
+    refused, the importer does not emit it), `RStatic`, `RDropImpl`, `RInstance`: read.
 
 ### Toolchain facts
 
@@ -351,6 +418,32 @@ Items 1–3 are done. Everything below was measured on this machine with
 
 ## Limits
 
+**Of the reader (item 4), on things the samples use — these keep item 4 open:**
+- **References carry no aliasing discipline.** `&`/`&mut`/`&raw` are addresses; `no_retag`
+  and retagging do nothing; a write through a pointer that Rust's aliasing rules forbid is not
+  undefined here. (Rust has no settled rule to write: Stacked Borrows and Tree Borrows are
+  Miri's two candidates. PLAN Phase 5 reads "the borrow discipline as multiplicities", which
+  is the place for it.)
+- **Validity of values is checked only where the memory layer checks it**: a `bool` read must
+  be 0 or 1 and an enum's tag a variant's (at a typed copy and at `discriminant`); a reference
+  is not checked non-null, aligned or dereferenceable when it is produced, only when used.
+- **An integer below its alignment** (a `#[repr(packed)]` field: book.rs's `WireMsg`; bytes
+  transmuted: `from_le_bytes`; tags, read at alignment 1) goes by bytes, and that route does
+  not report unwritten bytes (Needs from track M, 1).
+- **A move reads as a copy**: the place moved from keeps its value; MIR that reads it again
+  (rustc's does not) is not reported.
+- **Registers**: a local whose address is never taken has none. This is the reader's
+  definition, not a theorem about an allocation-per-local machine (MiniRust's): no such
+  machine is defined here to compare with.
+
+**Of the reader, on things the samples do not use** (each an `rx-unsupported` naming it):
+the six `RBinOp`s above; a borrow of a register local; a pointer at less than its alignment;
+128-bit tags; `Drop` of an enum one of whose fields needs dropping; a vtable with drop glue; a
+transmute of a constant of an ADT type; comparison of wide pointers; `const-index` from the end
+of a slice.
+
+**Of the import (items 1–3):**
+
 - **Stops, each with a message naming the construct** (nothing is emitted for them; extend the
   importer when an input needs one): a call to a function of another crate that rustc did not
   inline; a closure body reached by a call, and closure or coroutine types; generic parameters
@@ -390,22 +483,65 @@ Items 1–3 are done. Everything below was measured on this machine with
   one is written by hand; C records layouts inside each record declaration, here they are a
   separate list keyed by closed type because Rust's are per instance of a generic type.
 
+## Open items, exactly
+
+- **Item 4** is written and checks; it stays open on the Limits above that the samples touch
+  (aliasing, validity at production, the byte route) and on track M's signature (the memory
+  section of `read-place.cub` is restated when it lands).
+- **Item 5** (diagnostics): done as far as the memory allows (20 messages, 150 inputs).
+- **Item 6** has not started: there is no `mem-flat` handler yet (track M). Nothing was compiled.
+- **Item 7** is not proved, on either side. The statement, to be written in
+  `experiments/rust/sem/props.cub` against `lib/obs.cub`'s `o-RunSim` once the reader's term is
+  over M's signature and F's `cxx-entry book-tu on_message` exists:
+  - *States.* A book value `B`: two arrays of 8 levels `(price : i64, qty : u64, orders : u32)`,
+    two counts, and the counters `adds`, `misses`, `volume`. `Rel sr sc`: the Rust memory's
+    `G_HANDLER` (layout `BookHandler` of `book-crate`: `book` at 0 with `bids` 0, `asks` 192,
+    `bid_count` 384, `ask_count` 392; `adds` 400, `misses` 408, `volume` 416) and the C++ memory's
+    `g_handler` (Clang's record layout in `book-tu`) both hold one `B` in the levels below their
+    counts, the counts and the counters. `Inv B`: both counts ≤ 8. (No level at or above a
+    count is read before it is written by either program, so `Rel` says nothing about them.)
+  - *One message.* For every 22 readable bytes `m` and every `sr`, `sc` with `Rel sr sc` and
+    `Inv`: if the C++ run of `on_message(m, 22)` from `sc` is defined, the Rust run from `sr`
+    is `mok v` with the same `v`, and the states after are related and satisfy `Inv`. Under
+    `Inv` the Rust run never aborts (its 38 bounds checks hold) and never has undefined
+    behaviour; the observation keeps `abort` and undefined behaviour apart, but under `Inv`
+    neither occurs on the Rust side.
+  - *The precondition that makes the C++ run defined.* `Inv` discharges every array access.
+    What is left is one operation: `Price::operator-` in `spread()`, `ticks - o.ticks` on
+    `int64_t`, undefined when the difference of the best ask and the best bid is outside
+    `[-2^63, 2^63)`; book.rs has `wrapping_sub` there. So: the C++ run is defined iff, after the
+    message is applied, a side is empty or `best_ask.price - best_bid.price` is representable.
+    A precondition on inputs that makes this all inputs: every price added lies in
+    `[-2^62, 2^62)` (an invariant of `B` that `add` preserves and nothing else changes prices).
+  - *Sequences.* By `o-runsim-bind`, from the initial states (both books empty, related) the
+    two programs give equal answers on every sequence of messages whose prices are in range.
+  - *Closed form on the Rust side* (the entry's answer as a function of `B` and the message
+    kind) is not proved: a reading of the term at a symbolic state does not finish (one
+    concrete message is 2–5 M steps under the standard memory), and the term changes when
+    M's signature lands. It is stated here, not in a `.cub` file, because an unproved second
+    description of the book in the repository would be exactly what tracks/README.md forbids.
+
 ## Next step
 
-Item 4: `lib/lang/rust/machine.cub` (367 lines), `read-place.cub` (489), `read-rvalue.cub` (411),
-`read.cub` (437) check after the library, `lib/mem/*.cub` and `ast.cub`: `1363 passed, 0 failed`.
-Nothing has been run yet. Next, in order:
-1. `experiments/rust/sem/run-book.cub`: `rust-init` on `mem-empty x86-64-sysv` through
-   `ev-run-pure`, a 22-byte buffer, `rust-entry x86-64-sysv book-crate fuel image args` on a few
-   messages; fix what the readings show; then the diagnostic on 1,000 messages for book.rs and
-   more.rs (record steps per message under Diagnostics).
-2. Fill "the kinds read" under Done for item 4 from the AST (each constructor: read, or the
-   `rz-…` it is refused with), and Limits.
-3. Item 7's Rust side (`experiments/rust/sem/props.cub`), then item 6 when track M's `mem-flat`
-   exists (watch for "From track M" above).
-Check command: `./build/cubical $LIB lib/mem/{target,scalar,memory,layout,monad}.cub
-lib/lang/rust/ast.cub lib/lang/rust/machine.cub lib/lang/rust/read-place.cub
-lib/lang/rust/read-rvalue.cub lib/lang/rust/read.cub` (about 45 s fresh, 10 s cached).
+**HALTED (coordinator, 2026-11-09): the owner stopped implementation until the mathematical
+specification is written and reviewed. Do not continue from here without that go-ahead.**
+
+Exact state at the halt:
+- Pushed and checked: items 1–3 (import); `lib/lang/rust/machine.cub`, `read-place.cub`,
+  `read-rvalue.cub`, `read.cub` and `experiments/rust/sem/run.cub` — checked (`1363 passed, 0
+  failed`, and the diagnostics above) against `lib/mem` **as it was before track M's commit
+  `23157fb9`** (load order `target, scalar, memory, layout, monad`).
+- **Not rechecked against the current `lib/mem`**, which changed under this track (see "From
+  track M" below): `Ev` is now a process over the memory signature, `ev-rd`/`ev-wr`/`ev-mem`
+  and `ev-run-pure` are gone, `BinOp`'s constructors are `ao-*`. The four reader files and
+  `run.cub` therefore do not load today. No uncommitted work exists.
+- What applying M's note takes (not started): in `read-place.cub`'s memory section
+  `rm-load`/`rm-store` become `ev-load-al`/`ev-store-al` (delete `rm-bytes-rd`/`rm-bytes-wr`),
+  `rm-off` becomes `ev-off`; `bo-*` → `ao-*` in `read-rvalue.cub`; `rm-res`, `rm-throw`, `rm-stop`
+  restated over the new `Ev`; `run.cub`'s `ev-run-pure … (mem-empty t)` becomes
+  `ev-std t e am-empty`; `rm-fn-ptr`/`rm-fn-of`/`rm-null` still use `mp-fn`/`mp-null` (needs 2, 3
+  are unanswered in M's note).
+- Items 6 and 7: not started / not proved, as under "Open items, exactly".
 
 ## From track M (2026-11-09, memory as a signature; tracks/README.md)
 

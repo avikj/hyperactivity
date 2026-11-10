@@ -1,0 +1,41 @@
+-- experiments/rust/sem/run.cub — bring-up diagnostics (tracks/R-rust.md, "Diagnostics"): the
+-- reading of a crate's entry under the standard memory, on inputs written as data. Loaded
+-- after lib/lang/rust/read.cub and the crate. Nothing here is acceptance.
+--
+-- A message is the list of its bytes. The buffer is one static allocation; the image is
+-- rust-init's; each message is stored in the buffer and the entry called with (buffer, length);
+-- the memory goes on from one message to the next (the static handler keeps its book).
+rd-target : Target
+rd-target = x86-64-sysv
+-- the result of an entry returning an integer: its 64 bits
+rd-word : RSlot → REv Word
+rd-word s = case s of
+  sl-reg v → rm-bind (rm-as-s v) (λ x → rm-bind (rm-res (sv-as-i x)) (λ n → rm-ret (u64toWord n)))
+  sl-mem p → rm-throw (rx-ill-formed ri-operand-class)
+  sl-none → rm-throw (rx-ill-formed ri-operand-class)
+rd-msgs : List (List Word) → RCrate → Word → List RSlot → MPtr → REv (List Word)
+rd-msgs nil c fuel img p = rm-ret nil
+rd-msgs (cons bs ms) c fuel img p =
+  rm-then (rm-init-bytes bs rd-target p #0)
+ (rm-bind (rust-entry rd-target c fuel img
+             (cons (sl-reg (rv-s (sv-p p))) (cons (sl-reg (rv-s (sv-i (uq-of-word (rm-wlen bs))))) nil))) (λ r →
+  rm-bind (rd-word r) (λ w →
+  rm-bind (rd-msgs ms c fuel img p) (λ ws → rm-ret (cons w ws)))))
+-- the answers to a list of messages of a size, from a fresh program
+rd-run : RCrate → Word → Word → List (List Word) → MRes (Ctl RExc (List Word))
+rd-run c fuel size ms =
+  ev-value (ev-run-pure
+    (rm-bind (rust-init rd-target c) (λ img →
+     rm-bind (rm-alloc-static size #1) (λ p → rd-msgs ms c fuel img p)))
+    (mem-empty rd-target))
+-- the same for an entry of two 64-bit integers: an input is the pair of their bits
+rd-pairs : List (Word × Word) → RCrate → Word → List RSlot → REv (List Word)
+rd-pairs nil c fuel img = rm-ret nil
+rd-pairs (cons xy ps) c fuel img =
+  rm-bind (rust-entry rd-target c fuel img
+             (cons (sl-reg (rv-s (sv-i (uq-of-word (fst xy))))) (cons (sl-reg (rv-s (sv-i (uq-of-word (snd xy))))) nil))) (λ r →
+  rm-bind (rd-word r) (λ w →
+  rm-bind (rd-pairs ps c fuel img) (λ ws → rm-ret (cons w ws))))
+rd-run2 : RCrate → Word → List (Word × Word) → MRes (Ctl RExc (List Word))
+rd-run2 c fuel ps =
+  ev-value (ev-run-pure (rm-bind (rust-init rd-target c) (λ img → rd-pairs ps c fuel img)) (mem-empty rd-target))
