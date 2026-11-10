@@ -513,3 +513,12 @@ o-runsim-context Rel H1 H2 hd1 hd2 hc (sdone a) x y r = ((λ i → a) , r)
 o-runsim-context {O} {K} {S1} {S2} {A} {X} {Y} Rel H1 H2 hd1 hd2 hc (scmd c k) x y r =
   o-runsim-bind Rel H1 H2 (hd1 c) (hd2 c) (λ z → o-handle hd1 (k z)) (λ z → o-handle hd2 (k z)) x y (hc c x y r)
     (λ z x2 y2 r2 → o-runsim-context Rel H1 H2 hd1 hd2 hc (k z) x2 y2 r2)
+-- ---------------------------------------------------------------- trace inversion
+-- a trace of a command node is that command with some response, then a trace of the continuation
+o-traces-cons : {S : Sig} {A : Type} → (P : o-Tr S A → Type) → (c : Cmd S) → (k : Resp S c → Step S A) →
+                (c2 : Cmd S) → (r2 : Resp S c2) → (x : o-Tr S A) →
+                ((r : Resp S c) → o-traces (k r) x → P (o-tcons c r x)) →
+                o-traces (scmd c k) (o-tcons c2 r2 x) → P (o-tcons c2 r2 x)
+o-traces-cons {S} {A} P c k c2 r2 x h w =
+  o-J {lzero} {lzero} {(d : Cmd S) × Resp S d} {(c , fst w)}
+    (λ y e → P (o-tcons (fst y) (snd y) x)) (h (fst w) (snd (snd w))) (c2 , r2) (fst (snd w))

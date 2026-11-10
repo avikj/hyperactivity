@@ -100,6 +100,14 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   up to bind `o-bisimR-bind`; `o-StRel`, `o-RunSim Rel H1 t s1 H2 u s2`, `o-runsim-obs`,
   `o-runsim-obseq` (similar runs ⇒ `o-ObsEq`), `o-runsim-bind`, up to context `o-runsim-context`.
 
+- Item 5, first half (`experiments/obs/counter.cub`; with `lib/obs.cub` 884 passed 0 failed,
+  19.6M steps): observation signature `oc-Obs` (`oc-recv : oc-Req`, `oc-reply n : Unit`); the
+  cell machine `oc-S1 = o-SumS oc-Obs oc-CellS` with `oc-H1`, the state-passing machine
+  `oc-S2 = o-SumS oc-Obs oc-StS` with `oc-H2`; the service twice (`oc-svc1`, `oc-svc2`, Church
+  processes, bounded by a number of requests); `oc-sim` (`o-RunSim` at every pair of equal
+  states, by induction on the bound) and **`oc-equal : (n : Nat) → o-ObsEq oc-H1 (oc-svc1 n) zero oc-H2 (oc-svc2 n) zero`**.
+  Also `o-traces-cons` (trace inversion) in `lib/obs.cub`.
+
 ## Found
 
 - `lib/std.cub` has no set quotient `_/_` and no truncations (the track text says it has); the
@@ -112,14 +120,12 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
 
 ## Next step
 
-1. Write `experiments/obs/counter.cub` (item 5 and the acceptance property): observation
-   signature `oc-Obs` (`oc-req : Req` with `Req = inc | get | stop`, `oc-reply (n : Nat) : Unit`);
-   the cell machine `oc-CellS` (read/write of one `Nat` cell) and the state-passing machine
-   `oc-StS` (one command applying a function to the state); the service written twice as Church
-   processes with fuel; observations by `o-split`; `o-RunSim` by induction on the fuel with
-   `o-runsim-bind`; `o-ObsEq` by `o-runsim-obseq`; the property on traces (each reply to a `get`
-   is the number of `inc`s before it) proved of one and moved to the other with
-   `o-tree-transport` (needs `isSet` of the observation commands and of `Unit`).
+1. In `experiments/obs/counter.cub`, the acceptance property: `oc-ok : Nat → List Nat → o-Tr oc-Obs Unit → Type`
+   (count of `inc`s so far, queue of replies owed; a `reply v` must be the queue's head),
+   `oc-Good t = (x) → o-traces t x → oc-ok 0 nil x`; prove it of `o-obs oc-H2 (to-step (oc-svc2 n)) 0`
+   by induction on `n` (generalized over the state `s`, with `o-traces-cons`), then get it for
+   `oc-svc1` by `o-tree-transport` along `sym (oc-equal n)` (needs `isSet oc-OCmd` by
+   `Discrete→isSet`, and `isSet Unit`).
 2. In `lib/obs.cub`: the guarded form (`GProc`): bisimulation by guarded recursion, its laws,
    guarded traces, and where it differs from path equality (item 3, second half; item 2's
    coinductive traces).

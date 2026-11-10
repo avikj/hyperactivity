@@ -1,0 +1,94 @@
+-- experiments/obs/counter.cub — track H item 5: one counter service, written for two different
+-- abstract machines, equal by observation; and a property over the observation signature
+-- proved of one implementation and obtained for the other by transport along that equality.
+-- Loaded after the library and lib/obs.cub.
+-- ---------------------------------------------------------------- the observation signature
+-- what the environment sees: the service receives a request, and replies with a number
+data oc-Req = oc-inc | oc-get | oc-stop
+data oc-OCmd = oc-recv | oc-reply (n : Nat)
+oc-oresp : oc-OCmd → Type
+oc-oresp c = case c of oc-recv → oc-Req; oc-reply n → Unit
+oc-Obs : Sig
+oc-Obs = (oc-OCmd , oc-oresp)
+-- ---------------------------------------------------------------- machine 1: a mutable cell
+data oc-Cell = oc-rd | oc-wr (v : Nat)
+oc-cresp : oc-Cell → Type
+oc-cresp c = case c of oc-rd → Nat; oc-wr v → Unit
+oc-CellS : Sig
+oc-CellS = (oc-Cell , oc-cresp)
+oc-S1 : Sig
+oc-S1 = o-SumS oc-Obs oc-CellS
+oc-cell-w : o-RWorld oc-CellS Nat
+oc-cell-w c s = case c return (λ y → oc-cresp y × Nat) of oc-rd → (s , s); oc-wr v → (unit , v)
+oc-H1 : o-ObsOf oc-Obs oc-S1 Nat
+oc-H1 = o-split {oc-Obs} {oc-CellS} {Nat} oc-cell-w
+oc-recv1 : Proc {lzero} oc-S1 oc-Req
+oc-recv1 = cmd {lzero} {oc-S1} (inl oc-recv)
+oc-reply1 : Nat → Proc {lzero} oc-S1 Unit
+oc-reply1 v = cmd {lzero} {oc-S1} (inl (oc-reply v))
+oc-rd1 : Proc {lzero} oc-S1 Nat
+oc-rd1 = cmd {lzero} {oc-S1} (inr oc-rd)
+oc-wr1 : Nat → Proc {lzero} oc-S1 Unit
+oc-wr1 v = cmd {lzero} {oc-S1} (inr (oc-wr v))
+-- one request served, then the rest: inc reads the cell and writes its successor; get reads
+-- the cell and replies with it
+oc-on1 : Proc {lzero} oc-S1 Unit → oc-Req → Proc {lzero} oc-S1 Unit
+oc-on1 rest q = case q of
+  oc-inc → bind {lzero} {oc-S1} {Nat} {Unit} oc-rd1 (λ v → bind {lzero} {oc-S1} {Unit} {Unit} (oc-wr1 (suc v)) (λ u → rest))
+  oc-get → bind {lzero} {oc-S1} {Nat} {Unit} oc-rd1 (λ v → bind {lzero} {oc-S1} {Unit} {Unit} (oc-reply1 v) (λ u → rest))
+  oc-stop → ret {lzero} {oc-S1} {Unit} unit
+-- the service for at most n requests
+oc-svc1 : Nat → Proc {lzero} oc-S1 Unit
+oc-svc1 zero = ret {lzero} {oc-S1} {Unit} unit
+oc-svc1 (suc n) = bind {lzero} {oc-S1} {oc-Req} {Unit} oc-recv1 (oc-on1 (oc-svc1 n))
+-- ---------------------------------------------------------------- machine 2: state passing
+-- one command: a transition function applied to the state, its first component the response
+data oc-StC = oc-upd (f : Nat → Nat × Nat)
+oc-sresp : oc-StC → Type
+oc-sresp c = Nat
+oc-StS : Sig
+oc-StS = (oc-StC , oc-sresp)
+oc-S2 : Sig
+oc-S2 = o-SumS oc-Obs oc-StS
+oc-st-w : o-RWorld oc-StS Nat
+oc-st-w c s = case c return (λ y → oc-sresp y × Nat) of oc-upd f → f s
+oc-H2 : o-ObsOf oc-Obs oc-S2 Nat
+oc-H2 = o-split {oc-Obs} {oc-StS} {Nat} oc-st-w
+oc-recv2 : Proc {lzero} oc-S2 oc-Req
+oc-recv2 = cmd {lzero} {oc-S2} (inl oc-recv)
+oc-reply2 : Nat → Proc {lzero} oc-S2 Unit
+oc-reply2 v = cmd {lzero} {oc-S2} (inl (oc-reply v))
+oc-upd2 : (Nat → Nat × Nat) → Proc {lzero} oc-S2 Nat
+oc-upd2 f = cmd {lzero} {oc-S2} (inr (oc-upd f))
+oc-on2 : Proc {lzero} oc-S2 Unit → oc-Req → Proc {lzero} oc-S2 Unit
+oc-on2 rest q = case q of
+  oc-inc → bind {lzero} {oc-S2} {Nat} {Unit} (oc-upd2 (λ s → (s , suc s))) (λ v → rest)
+  oc-get → bind {lzero} {oc-S2} {Nat} {Unit} (oc-upd2 (λ s → (s , s))) (λ v → bind {lzero} {oc-S2} {Unit} {Unit} (oc-reply2 v) (λ u → rest))
+  oc-stop → ret {lzero} {oc-S2} {Unit} unit
+oc-svc2 : Nat → Proc {lzero} oc-S2 Unit
+oc-svc2 zero = ret {lzero} {oc-S2} {Unit} unit
+oc-svc2 (suc n) = bind {lzero} {oc-S2} {oc-Req} {Unit} oc-recv2 (oc-on2 (oc-svc2 n))
+-- ---------------------------------------------------------------- the two are equal by observation
+-- the relation on states: the cell holds what the state-passing machine carries
+oc-Rel : Nat → Nat → Type
+oc-Rel x y = x ≡ y
+oc-Sim : Proc {lzero} oc-S1 Unit → Proc {lzero} oc-S2 Unit → Type
+oc-Sim p1 p2 = (x y : Nat) → oc-Rel x y → o-RunSim {oc-Obs} {oc-S1} {oc-S2} {Unit} {Nat} {Nat} oc-Rel oc-H1 (to-step p1) x oc-H2 (to-step p2) y
+-- one request: similar rests give similar steps, for each request
+oc-sim-on : (p1 : Proc {lzero} oc-S1 Unit) → (p2 : Proc {lzero} oc-S2 Unit) → oc-Sim p1 p2 → (q : oc-Req) → oc-Sim (oc-on1 p1 q) (oc-on2 p2 q)
+oc-sim-on p1 p2 ih q =
+  case q return (λ z → oc-Sim (oc-on1 p1 z) (oc-on2 p2 z)) of
+    oc-inc → λ x y e → ih (suc x) (suc y) (λ i → suc (e i))
+    oc-get → λ x y e → ((λ i → oc-reply (e i)) , λ u u2 pu → ih x y e)
+    oc-stop → λ x y e → ((λ i → unit) , e)
+oc-sim : (n : Nat) → oc-Sim (oc-svc1 n) (oc-svc2 n)
+oc-sim zero = λ x y e → ((λ i → unit) , e)
+oc-sim (suc n) = λ x y e →
+  ((λ i → oc-recv) , λ r r2 pr →
+     comp (λ i → o-BisimR {oc-Obs} {Unit × Nat} {Unit × Nat} (o-StRel {Unit} {Nat} {Nat} oc-Rel)
+                   (o-run oc-H1 (to-step (oc-on1 (oc-svc1 n) r)) x) (o-run oc-H2 (to-step (oc-on2 (oc-svc2 n) (pr i))) y))
+       (λ i → []) (oc-sim-on (oc-svc1 n) (oc-svc2 n) (oc-sim n) r x y e))
+-- the statement of item 5: for every bound n, the cell implementation from a cell holding 0
+-- and the state-passing implementation from the state 0 are the same behaviour over oc-Obs
+oc-equal : (n : Nat) → o-ObsEq oc-H1 (oc-svc1 n) zero oc-H2 (oc-svc2 n) zero
+oc-equal n = o-runsim-obseq oc-Rel oc-H1 (oc-svc1 n) zero oc-H2 (oc-svc2 n) zero (oc-sim n zero zero (λ i → zero))
