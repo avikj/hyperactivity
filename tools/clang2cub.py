@@ -111,7 +111,7 @@ SCHEMA = [
         ('ck-NullToPointer', []), ('ck-ToVoid', []), ('ck-BuiltinFnToFnPtr', []),
         ('ck-ConstructorConversion', []), ('ck-PointerToBoolean', []),
         ('ck-NullToMemberPointer', []), ('ck-UserDefinedConversion', []),
-        ('ck-IntegralToFloating', []), ('ck-FloatingToIntegral', []), ('ck-FloatingCast', []),
+        ('ck-IntegralToFloating', []), ('ck-FloatingToIntegral', []), ('ck-FloatingCast', []), ('ck-BaseToDerived', []),
     ]),
     ('CUnOp', 'unary operators met', [
         ('uo-post-inc', []), ('uo-post-dec', []), ('uo-pre-inc', []), ('uo-pre-dec', []),
@@ -131,6 +131,7 @@ SCHEMA = [
     ]),
     ('CConstructKind', 'what a constructor call constructs', [
         ('cck-complete', []), ('cck-non-virtual-base', []), ('cck-delegating', []),
+        ('cck-virtual-base', []),
     ]),
     ('CStorageDuration', 'the storage duration of a materialized temporary', [
         ('csd-full-expression', []), ('csd-automatic', []), ('csd-static', []),
@@ -290,23 +291,66 @@ SCHEMA = [
         ('cvp-none', []),
         ('cvp-at', [('offset', 'Word')]),
     ]),
-    ('CVTEntry', 'one vtable slot, as the target ABI lays it out', [
+    ('COptInt', 'an integer that may be absent', [
+        ('coin-none', []),
+        ('coin-some', [('v', 'CInt')]),
+    ]),
+    ('CVTEntry', 'one vtable slot, as the target ABI lays it out. cvt-thunk is a slot that '
+                 'holds a thunk to the function of the entry inside: `this` adjusted by this-nv '
+                 'bytes and then, when this-vcall is there, by the vcall offset stored that many '
+                 'bytes from the vtable address; the result adjusted by ret-nv and, when '
+                 'ret-vbase is there, by the virtual base offset stored that many bytes from the '
+                 "result's vtable address", [
         ('cvt-offset-to-top', [('v', 'CInt')]),
         ('cvt-rtti', []),
         ('cvt-method', [('id', 'Word')]),
         ('cvt-pure', [('id', 'Word')]),
         ('cvt-complete-dtor', [('id', 'Word')]),
         ('cvt-deleting-dtor', [('id', 'Word')]),
+        ('cvt-vbase-offset', [('v', 'CInt')]),
+        ('cvt-vcall-offset', [('v', 'CInt')]),
+        ('cvt-thunk', [('e', 'CVTEntry'), ('this-nv', 'CInt'), ('this-vcall', 'COptInt'),
+                       ('ret-nv', 'CInt'), ('ret-vbase', 'COptInt')]),
     ]),
-    ('CVTable', "a record's vtable: the slots, and the index the object's vtable pointer "
-                'addresses', [
+    ('CVAddrPoint', 'an address point of a vtable: the vtable pointer of the base subobject '
+                    '`base` at `offset` bytes addresses the slot `index`', [
+        ('cvap', [('base', 'Word'), ('offset', 'Word'), ('index', 'Word')]),
+    ]),
+    ('CVBaseOffsetOffset', 'where a vtable holds the offset of a virtual base: `at` bytes from '
+                           'the address point', [
+        ('cvboo', [('vbase', 'Word'), ('at', 'CInt')]),
+    ]),
+    ('CCtorVTable', 'a construction vtable: the vtable of the base subobject `base` at `offset` '
+                    'while the complete object is under construction', [
+        ('cctor-vtable', [('base', 'Word'), ('offset', 'Word'), ('address-points', 'List CVAddrPoint'),
+                          ('entries', 'List CVTEntry')]),
+    ]),
+    ('CVTTEntry', "an entry of the VTT: a slot index in the class's own vtable, or in the "
+                  'construction vtable of the base at that offset', [
+        ('cvtt-own', [('index', 'Word')]),
+        ('cvtt-construction', [('base', 'Word'), ('offset', 'Word'), ('index', 'Word')]),
+    ]),
+    ('CVTable', "a record's vtable. cvtable: the slots and the one index the object's vtable "
+                'pointer addresses, for a vtable this unit emits that has one address point and '
+                'no thunks. cvtable-full: every other vtable: whether this unit emits it (false: '
+                'its key function is defined in another unit, or nothing here refers to it), its '
+                'address points, slots, virtual base offset offsets, VTT, construction vtables', [
         ('cvt-none', []),
         ('cvtable', [('address-point', 'Word'), ('entries', 'List CVTEntry')]),
+        ('cvtable-full', [('emitted', 'Bool'), ('address-points', 'List CVAddrPoint'),
+                          ('entries', 'List CVTEntry'), ('vbase-offsets', 'List CVBaseOffsetOffset'),
+                          ('vtt', 'List CVTTEntry'), ('construction', 'List CCtorVTable')]),
+    ]),
+    ('CVBase', 'a virtual base (direct or not) with its offset in bytes in an object whose '
+               'most derived class is this one', [
+        ('cvbase', [('base', 'Word'), ('offset', 'Word')]),
     ]),
     ('CLayout', "the record's layout on the target, in bytes: the implementation parameters of "
-                'PLAN 5.1', [
+                'PLAN 5.1. clayout-v is the layout of a class with virtual bases', [
         ('clayout', [('size', 'Word'), ('align', 'Word'), ('dsize', 'Word'), ('nvsize', 'Word'),
                      ('nvalign', 'Word'), ('vptr', 'CVPtr')]),
+        ('clayout-v', [('size', 'Word'), ('align', 'Word'), ('dsize', 'Word'), ('nvsize', 'Word'),
+                       ('nvalign', 'Word'), ('vptr', 'CVPtr'), ('vbases', 'List CVBase')]),
     ]),
     ('CRecord', 'the definition of a class', [
         ('crecord', [('id', 'Word'), ('name', 'CStr'), ('tag', 'CTag'), ('lambda', 'Bool'),
@@ -960,12 +1004,16 @@ class Unit:
             cut = -1
         self.layout_text = p.stdout[:cut + 1]
         self.tu = json.loads(p.stdout[cut + 1:])
-        p = subprocess.run(base + ['-emit-llvm', '-S', '-o', os.devnull, '-Xclang',
-                                   '-fdump-vtable-layouts', self.path],
-                           capture_output=True, text=True)
-        if p.returncode != 0:
-            stop('clang failed on %s:\n%s' % (self.path, p.stderr[-2000:]))
-        self.vtable_text = p.stdout
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.ll') as ir:
+            p = subprocess.run(base + ['-emit-llvm', '-S', '-o', ir.name, '-Xclang',
+                                       '-fdump-vtable-layouts', self.path],
+                               capture_output=True, text=True)
+            if p.returncode != 0:
+                stop('clang failed on %s:\n%s' % (self.path, p.stderr[-2000:]))
+            self.vtable_text = p.stdout
+            with open(ir.name) as fh:
+                self.ir_globals = [l for l in fh if l.startswith('@')]
         p = subprocess.run(base + ['-fsyntax-only', '-Xclang', '-ast-dump', self.path],
                            capture_output=True, text=True)
         if p.returncode != 0:
@@ -1798,7 +1846,8 @@ class Unit:
         self.layout_memo = {}
 
     def layout_of(self, rec):
-        """(sizes, vptr offset, [base (record id, offset, primary)], [field offsets in bits])."""
+        """(sizes, vptr offset, [base (record id, offset, primary)], [field offsets in bits],
+        [virtual base (record id, offset, primary)])."""
         if rec['id'] in self.layout_memo:
             return self.layout_memo[rec['id']]
         if self.is_lambda(rec):
@@ -1819,19 +1868,20 @@ class Unit:
             if not m:
                 stop('record layout of %s: no %s in %r' % (rec.get('name'), k, tail))
             sizes[k] = int(m.group(1))
-        vptr, bases, fields = None, [], []
+        vptr, bases, fields, vbases = None, [], [], []
         for off, depth, text in b[1:-1]:
             if depth != 1:
                 continue
             if text.endswith('vtable pointer)'):
                 vptr = int(off)
             elif re.search(r' \((primary )?(virtual )?base\)( \(empty\))?$', text):
-                if '(virtual base)' in text or 'virtual ' in text.split('(')[-1]:
-                    stop('record layout of %s: a virtual base (%r): no rule yet' % (rec.get('name'), text))
-                nm = re.sub(r' \((primary )?base\)( \(empty\))?$', '', text)
+                nm = re.sub(r' \((primary )?(virtual )?base\)( \(empty\))?$', '', text)
                 nm = re.sub(r'^(struct|class|union) ', '', nm)
                 bt = TypeParser(self, nm, self.tu, None).whole()
-                bases.append((bt[1], int(off), '(primary base)' in text))
+                if 'virtual base)' in text:
+                    vbases.append((bt[1], int(off), 'primary' in text))
+                else:
+                    bases.append((bt[1], int(off), '(primary base)' in text))
             elif text.endswith('vbtable pointer)'):
                 stop('record layout of %s: %r: no rule yet' % (rec.get('name'), text))
             else:
@@ -1840,7 +1890,7 @@ class Unit:
                     fields.append((int(byte) * 8 + int(bits.split('-')[0]), text))
                 else:
                     fields.append((int(off) * 8, text))
-        r = (sizes, vptr, bases, fields)
+        r = (sizes, vptr, bases, fields, vbases)
         self.layout_memo[rec['id']] = r
         return r
 
@@ -1865,40 +1915,103 @@ class Unit:
         return bool(rec.get('definitionData', {}).get('isLambda'))
 
     def read_vtables(self):
-        """'Vtable for' blocks of the vtable dump: printed class name -> entry lines."""
+        """The vtable dump, by printed class name: {'main': entry lines, 'vbo': virtual base
+        offset offset lines, 'ctor': [(base name, offset, entry lines)]}; and from the IR of the
+        same run, which vtables the unit emits and the VTTs (the dump has no VTT)."""
         self.vtable_blocks = {}
         cur = None
         for line in self.vtable_text.splitlines():
             m = re.match(r"Vtable for '(.*)' \((\d+) entr", line)
-            if m:
+            m2 = re.match(r"Construction vtable for \('(.*)', (\d+)\) in '(.*)' \((\d+) entr", line)
+            m3 = re.match(r"Virtual base offset offsets for '(.*)' \((\d+) entr", line)
+            if m or m2 or m3:
+                name = (m or m3).group(1) if not m2 else m2.group(3)
+                blk = self.vtable_blocks.setdefault(name, {'main': None, 'vbo': [], 'ctor': []})
                 cur = []
-                self.vtable_blocks.setdefault(m.group(1), []).append(cur)
+                if m:
+                    if blk['main'] is not None:
+                        cur = blk['dup'] = []
+                    else:
+                        blk['main'] = cur
+                elif m3:
+                    blk['vbo'] = cur
+                else:
+                    blk['ctor'].append((m2.group(1), int(m2.group(2)), cur))
                 continue
             if cur is None:
                 continue
-            if not line.strip() or line.startswith('VTable indices') or line.startswith('***'):
+            if not line.strip() or re.match(r'(VTable indices|Thunks for|\*\*\*)', line):
                 cur = None
                 continue
             cur.append(line)
+        for name, blk in self.vtable_blocks.items():
+            if 'dup' in blk and blk['dup'] != blk['main']:
+                stop('several different vtables are printed under the name %s' % name)
         self.vtable_memo = {}
+        # the IR: @_ZTV… (vtables), @_ZTT… (VTTs), @_ZTC… (construction vtables)
+        self.ir_vtables, self.ir_vtts = {}, {}
+        syms = {}
+        for line in self.ir_globals:
+            m = re.match(r'@(_ZT[VTC]\S+) = (.*)$', line)
+            if m:
+                syms[m.group(1)] = m.group(2)
+        if syms:
+            names = list(syms)
+            p = subprocess.run(['c++filt'] + names, capture_output=True, text=True)
+            dem = p.stdout.splitlines()
+            if p.returncode != 0 or len(dem) != len(names):
+                stop('c++filt did not demangle the vtable symbols of the unit')
+            self.ir_demangled = dict(zip(names, dem))
+            for sym, d in self.ir_demangled.items():
+                if d.startswith('vtable for '):
+                    self.ir_vtables[d[len('vtable for '):]] = (sym, not syms[sym].startswith('external '))
+                elif d.startswith('VTT for '):
+                    self.ir_vtts[d[len('VTT for '):]] = syms[sym]
+        else:
+            self.ir_demangled = {}
 
-    def vtable_of(self, rec):
-        """None, or (address point, [(entry kind, method node or value)])."""
-        if rec['id'] in self.vtable_memo:
-            return self.vtable_memo[rec['id']]
-        blocks = self.blocks_of(self.vtable_blocks, 'vtable').get(rec['id'], [])
-        if not blocks:
-            self.vtable_memo[rec['id']] = None
+    def class_named(self, name):
+        try:
+            t = TypeParser(self, name, self.tu, None).whole()
+        except (Dependent, Stop):
             return None
-        if any(b != blocks[0] for b in blocks[1:]):
-            stop('several different vtables are printed under the name of %s' % rec.get('name'))
+        return t[1] if t[0] == 'record' else None
+
+    def ir_of(self, table, rec):
+        """The entry of an IR table (by demangled class name) for the class rec."""
+        memo = self.__dict__.setdefault('_ir_memo', {})
+        if id(table) not in memo:
+            memo[id(table)] = {}
+            for name, v in table.items():
+                rid = self.class_named(name)
+                if rid is not None:
+                    memo[id(table)][rid] = v
+        return memo[id(table)].get(rec['id'])
+
+    def vtable_entries(self, lines, rec):
+        """Entry lines -> ([(base record id, offset, index)], [entry])."""
         methods = self.virtual_candidates(rec)
         entries, points = [], []
-        for line in blocks[0]:
+        for line in lines:
             s = line.strip()
             m = re.match(r'-- \((.*), (\d+)\) vtable address --$', s)
             if m:
-                points.append(len(entries))
+                rid = self.class_named(m.group(1))
+                if rid is None:
+                    stop('vtable of %s: the address point %r names no class of the unit' % (rec.get('name'), s))
+                points.append((rid, int(m.group(2)), len(entries)))
+                continue
+            m = re.match(r'\[(this|return) adjustment: (-?\d+) non-virtual(?:, (-?\d+) (vcall offset offset|vbase offset offset))?\]$', s)
+            if m:
+                if not entries or entries[-1][0] in ('offset-to-top', 'rtti', 'vbase-offset', 'vcall-offset'):
+                    stop('vtable of %s: an adjustment with no function before it: %r' % (rec.get('name'), s))
+                e = entries[-1]
+                adj = dict(e[2]) if e[0] == 'thunk' else {}
+                inner = e[1] if e[0] == 'thunk' else e
+                adj[m.group(1)] = (int(m.group(2)), int(m.group(3)) if m.group(3) is not None else None)
+                if m.group(3) is not None and (m.group(1) == 'this') != (m.group(4) == 'vcall offset offset'):
+                    stop('vtable of %s: adjustment not read: %r' % (rec.get('name'), s))
+                entries[-1] = ('thunk', inner, adj)
                 continue
             m = re.match(r'(\d+) \| (.*)$', s)
             if not m:
@@ -1906,13 +2019,11 @@ class Unit:
             if int(m.group(1)) != len(entries):
                 stop('vtable of %s: entries out of order at %r' % (rec.get('name'), line))
             e = m.group(2)
-            m2 = re.match(r'offset_to_top \((-?\d+)\)$', e)
+            m2 = re.match(r'(offset_to_top|vbase_offset|vcall_offset) \((-?\d+)\)$', e)
             if m2:
-                entries.append(('offset-to-top', int(m2.group(1))))
+                entries.append((m2.group(1).replace('_', '-'), int(m2.group(2))))
             elif e.endswith(' RTTI'):
                 entries.append(('rtti', None))
-            elif e.startswith(('vcall_offset', 'vbase_offset')) or e.startswith('['):
-                stop('vtable of %s: %r: no rule yet (virtual bases, thunks)' % (rec.get('name'), e))
             else:
                 flags = re.findall(r' \[([a-z ]+)\]', e)
                 sig = re.sub(r' \[[a-z ]+\]', '', e)
@@ -1928,9 +2039,62 @@ class Unit:
                     else:
                         stop('vtable of %s: entry flag %r: no rule yet' % (rec.get('name'), f))
                 entries.append((kind, meth))
-        if len(set(points)) != 1:
-            stop('vtable of %s: %d address points: no rule yet (multiple inheritance)' % (rec.get('name'), len(set(points))))
-        r = (points[0], entries)
+        return points, entries
+
+    def vtable_of(self, rec):
+        """None, or {'points', 'entries', 'vbo': [(vbase id, at)], 'ctor': [(base id, offset,
+        points, entries)], 'emitted': bool, 'vtt': [(None | (base id, offset), index)]}."""
+        if rec['id'] in self.vtable_memo:
+            return self.vtable_memo[rec['id']]
+        self.vtable_memo[rec['id']] = None
+        blk = None
+        for name, b in self.vtable_blocks.items():
+            if b['main'] is not None and self.class_named(name) == rec['id']:
+                if blk is not None and blk is not b:
+                    stop('several vtables are printed for %s' % rec.get('name'))
+                blk = b
+        if blk is None:
+            return None
+        points, entries = self.vtable_entries(blk['main'], rec)
+        vbo = []
+        for line in blk['vbo']:
+            m = re.match(r'\s*(.*) \| (-?\d+)$', line)
+            rid = self.class_named(m.group(1)) if m else None
+            if rid is None:
+                stop('vtable of %s: virtual base offset offset line not read: %r' % (rec.get('name'), line))
+            vbo.append((rid, int(m.group(2))))
+        ctor = []
+        for bname, off, lines in blk['ctor']:
+            rid = self.class_named(bname)
+            if rid is None:
+                stop('vtable of %s: the construction vtable for %r names no class of the unit' % (rec.get('name'), bname))
+            ps, es = self.vtable_entries(lines, self.nodes[rid])
+            ctor.append((rid, off, ps, es))
+        irv = self.ir_of(self.ir_vtables, rec)
+        vtt = []
+        irt = self.ir_of(self.ir_vtts, rec)
+        if irt is not None:
+            own = irv[0] if irv else None
+            body = irt[irt.index('['):]
+            elems = re.findall(r'ptr getelementptr inbounds \(\{ ([^}]*) \}, ptr @(\S+), i32 0, inrange i32 (\d+), i32 (\d+)\)', body)
+            m = re.match(r'.*constant \[(\d+) x ptr\]', irt)
+            if not m or int(m.group(1)) != len(elems):
+                stop('the VTT of %s in the IR is not read: %r' % (rec.get('name'), irt[:200]))
+            for arrays, sym, ai, ei in elems:
+                sizes = [int(x) for x in re.findall(r'\[(\d+) x ptr\]', arrays)]
+                flat = sum(sizes[:int(ai)]) + int(ei)
+                if sym == own:
+                    vtt.append((None, flat))
+                else:
+                    m = re.match(re.escape('_ZTC' + own[len('_ZTV'):]) + r'(\d+)_', sym) if own else None
+                    d = self.ir_demangled.get(sym, '')
+                    m2 = re.match(r'construction vtable for (.*)-in-', d)
+                    rid = self.class_named(m2.group(1)) if m2 else None
+                    if not m or rid is None:
+                        stop('the VTT of %s refers to %s (%s), which is not read' % (rec.get('name'), sym, d))
+                    vtt.append(((rid, int(m.group(1))), flat))
+        r = {'points': points, 'entries': entries, 'vbo': vbo, 'ctor': ctor,
+             'emitted': bool(irv and irv[1]), 'vtt': vtt}
         self.vtable_memo[rec['id']] = r
         return r
 
@@ -2259,7 +2423,8 @@ class Unit:
     def construct(self, con, n):
         ctor = self.constructor_of(n)
         ck = n.get('constructionKind')
-        kinds = {'complete': 'complete', 'non-virtual base': 'non-virtual-base', 'delegating': 'delegating'}
+        kinds = {'complete': 'complete', 'non-virtual base': 'non-virtual-base', 'delegating': 'delegating',
+                 'virtual base': 'virtual-base'}
         if ck not in kinds:
             stop('construction kind %r at %s: no rule yet' % (ck, self.where(n)))
         if n.get('initializer_list'):
@@ -2284,8 +2449,11 @@ class Unit:
         sub, = self.kids(n)
         path = []
         if 'path' in n:
-            t = unqual(self.type_at(sub['type'], sub))
-            if t[0] == 'ptr':
+            # the path runs from the derived class to the base: the operand's class for a cast
+            # to a base, the result's for a cast to a derived class
+            down = n['castKind'].startswith('BaseToDerived')
+            t = unqual(self.expr_type(n) if down else self.expr_type(sub))
+            if t[0] in ('ptr', 'lref', 'rref'):
                 t = unqual(t[1])
             for step in n['path']:
                 if t[0] != 'record':
@@ -2791,7 +2959,10 @@ class Unit:
 
     def is_virtual(self, n, rec):
         vt = self.vtable_of(rec)
-        return bool(n.get('virtual')) or (vt is not None and any(m is n for k, m in vt[1] if k not in ('offset-to-top', 'rtti')))
+        if n.get('virtual') or vt is None:
+            return bool(n.get('virtual'))
+        fns = [e[1] if e[0] == 'thunk' else e for e in vt['entries']]
+        return any(e[1] is n for e in fns if e[0] in ('method', 'pure', 'complete-dtor', 'deleting-dtor'))
 
     def d_CXXMethodDecl(self, n):
         rec = self.record_of_member(n)
@@ -2832,22 +3003,24 @@ class Unit:
         tag = n.get('tagUsed')
         if tag not in ('struct', 'class', 'union'):
             stop('record tag %r' % tag)
-        sizes, vptr, lbases, lfields = self.layout_of(n)
+        sizes, vptr, lbases, lfields, lvbases = self.layout_of(n)
         self.nlayouts += 1
         # bases, in declaration order, with their offsets from the layout
         bases = []
         offs = {}
         for rid, off, primary in lbases:
             offs[rid] = (off, primary)
+        voffs = {rid: (off, primary) for rid, off, primary in lvbases}
+        nv = 0
         for b in n.get('bases', []):
             bt = self.base_type(n, b)
-            if b.get('isVirtual'):
-                stop('a virtual base of %s: no rule yet' % n.get('name'))
-            if bt[1] not in offs:
+            where = voffs if b.get('isVirtual') else offs
+            if bt[1] not in where:
                 stop('the layout of %s does not place its base %s' % (n.get('name'), self.nodes[bt[1]].get('name')))
-            bases.append(T('cbase', W(self.need(bt[1])), W(offs[bt[1]][0]), offs[bt[1]][1], False))
-        if len(bases) != len(lbases):
-            stop('the layout of %s lists %d bases, the class %d' % (n.get('name'), len(lbases), len(bases)))
+            nv += not b.get('isVirtual')
+            bases.append(T('cbase', W(self.need(bt[1])), W(where[bt[1]][0]), where[bt[1]][1], bool(b.get('isVirtual'))))
+        if nv != len(lbases):
+            stop('the layout of %s lists %d non-virtual bases, the class %d' % (n.get('name'), len(lbases), nv))
         fields = []
         fdecls = [c for c in self.attrs(n) if c.get('kind') == 'FieldDecl']
         captures = self.captures(n, fdecls) if self.is_lambda(n) else {}
@@ -2881,21 +3054,22 @@ class Unit:
                             width, bool(c.get('mutable')), captures.get(c['id'], T('ccap-none')), init))
         vt = self.vtable_of(n)
         if vt is None:
-            if vptr is not None or any(self.layout_of(self.nodes[b[0]])[1] is not None for b in lbases):
-                # polymorphic, and its vtable is not laid out in this unit (its key function is
-                # defined in another): the slots of its virtual functions are not known here
+            if vptr is not None or any(self.layout_of(self.nodes[b[0]])[1] is not None for b in lbases + lvbases):
                 stop('the class %s has a vtable pointer and the vtable dump has no vtable for it: no rule yet' % n.get('name'))
             vtable = T('cvt-none')
         else:
-            es = []
-            for kind, x in vt[1]:
-                if kind == 'offset-to-top':
-                    es.append(T('cvt-offset-to-top', cint(x)))
-                elif kind == 'rtti':
-                    es.append(T('cvt-rtti'))
-                else:
-                    es.append(T('cvt-' + kind, W(self.need(x['id']))))
-            vtable = T('cvtable', W(vt[0]), es)
+            simple = vt['emitted'] and len(set(p[2] for p in vt['points'])) == 1 and not vt['vbo'] and not vt['ctor'] and \
+                not vt['vtt'] and all(e[0] not in ('thunk', 'vbase-offset', 'vcall-offset') for e in vt['entries'])
+            if simple:
+                vtable = T('cvtable', W(vt['points'][0][2]), [self.vt_entry(e) for e in vt['entries']])
+            else:
+                vtable = T('cvtable-full', vt['emitted'], self.vt_points(vt['points']),
+                           [self.vt_entry(e) for e in vt['entries']],
+                           [T('cvboo', W(self.need(rid)), cint(at)) for rid, at in vt['vbo']],
+                           [T('cvtt-own', W(i)) if c is None else T('cvtt-construction', W(self.need(c[0])), W(c[1]), W(i))
+                            for c, i in vt['vtt']],
+                           [T('cctor-vtable', W(self.need(rid)), W(off), self.vt_points(ps), [self.vt_entry(e) for e in es])
+                            for rid, off, ps, es in vt['ctor']])
         # a destructor that is declared runs whenever an object of the class dies
         for c in n.get('inner', []):
             if c.get('kind') == 'CXXDestructorDecl' and 'explicitlyDeleted' not in c:
@@ -2918,8 +3092,12 @@ class Unit:
                 continue
             stop('a %s in the class %s: no rule yet' % (k, n.get('name')))
         name = n.get('name') or ''
-        lay = T('clayout', W(sizes['sizeof']), W(sizes['align']), W(sizes['dsize']), W(sizes['nvsize']),
-                W(sizes['nvalign']), T('cvp-none') if vptr is None else T('cvp-at', W(vptr)))
+        lay = [W(sizes['sizeof']), W(sizes['align']), W(sizes['dsize']), W(sizes['nvsize']),
+               W(sizes['nvalign']), T('cvp-none') if vptr is None else T('cvp-at', W(vptr))]
+        if lvbases:
+            lay = T('clayout-v', *lay, [T('cvbase', W(self.need(rid)), W(off)) for rid, off, _ in lvbases])
+        else:
+            lay = T('clayout', *lay)
         return T('crecord', W(self.ids[n['id']]), S(name), T('ctg-' + tag), self.is_lambda(n), bases, fields, lay, vtable)
 
     def captures(self, rec, fdecls):
@@ -2990,6 +3168,22 @@ class Unit:
         if not m:
             stop('no identifier in the source at %s:%s:%s (the name of a lambda capture is read there)' % (f, line, col))
         return m.group(0)
+
+    def vt_points(self, points):
+        return [T('cvap', W(self.need(rid)), W(off), W(i)) for rid, off, i in points]
+
+    def vt_entry(self, e):
+        kind = e[0]
+        if kind in ('offset-to-top', 'vbase-offset', 'vcall-offset'):
+            return T('cvt-' + kind, cint(e[1]))
+        if kind == 'rtti':
+            return T('cvt-rtti')
+        if kind == 'thunk':
+            adj = e[2]
+            t, r = adj.get('this', (0, None)), adj.get('return', (0, None))
+            opt = lambda v: T('coin-none') if v is None else T('coin-some', cint(v))
+            return T('cvt-thunk', self.vt_entry(e[1]), cint(t[0]), opt(t[1]), cint(r[0]), opt(r[1]))
+        return T('cvt-' + kind, W(self.need(e[1]['id'])))
 
     def bit_width(self, c):
         ks = [x for x in c.get('inner', []) if not x.get('kind', '').endswith('Attr')]

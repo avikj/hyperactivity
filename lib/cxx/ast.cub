@@ -101,6 +101,7 @@ data CCastKind =
   | ck-IntegralToFloating
   | ck-FloatingToIntegral
   | ck-FloatingCast
+  | ck-BaseToDerived
 -- CUnOp: unary operators met
 data CUnOp =
     uo-post-inc
@@ -140,7 +141,7 @@ data CBinOp =
 -- CRefKind: the kind of declaration a reference names
 data CRefKind = crk-function | crk-method | crk-var | crk-parm | crk-enum-constant | crk-field
 -- CConstructKind: what a constructor call constructs
-data CConstructKind = cck-complete | cck-non-virtual-base | cck-delegating
+data CConstructKind = cck-complete | cck-non-virtual-base | cck-delegating | cck-virtual-base
 -- CStorageDuration: the storage duration of a materialized temporary
 data CStorageDuration = csd-full-expression | csd-automatic | csd-static
 -- CTraitKind: sizeof, alignof
@@ -241,7 +242,9 @@ data CField =
 data CBase = cbase (base : Word) (offset : Word) (primary : Bool) (virtual : Bool)
 -- CVPtr: the vtable pointer's offset in bytes, when the record has its own
 data CVPtr = cvp-none | cvp-at (offset : Word)
--- CVTEntry: one vtable slot, as the target ABI lays it out
+-- COptInt: an integer that may be absent
+data COptInt = coin-none | coin-some (v : CInt)
+-- CVTEntry: one vtable slot, as the target ABI lays it out. cvt-thunk is a slot that holds a thunk to the function of the entry inside: `this` adjusted by this-nv bytes and then, when this-vcall is there, by the vcall offset stored that many bytes from the vtable address; the result adjusted by ret-nv and, when ret-vbase is there, by the virtual base offset stored that many bytes from the result's vtable address
 data CVTEntry =
     cvt-offset-to-top (v : CInt)
   | cvt-rtti
@@ -249,10 +252,29 @@ data CVTEntry =
   | cvt-pure (id : Word)
   | cvt-complete-dtor (id : Word)
   | cvt-deleting-dtor (id : Word)
--- CVTable: a record's vtable: the slots, and the index the object's vtable pointer addresses
-data CVTable = cvt-none | cvtable (address-point : Word) (entries : List CVTEntry)
--- CLayout: the record's layout on the target, in bytes: the implementation parameters of PLAN 5.1
-data CLayout = clayout (size : Word) (align : Word) (dsize : Word) (nvsize : Word) (nvalign : Word) (vptr : CVPtr)
+  | cvt-vbase-offset (v : CInt)
+  | cvt-vcall-offset (v : CInt)
+  | cvt-thunk (e : CVTEntry) (this-nv : CInt) (this-vcall : COptInt) (ret-nv : CInt) (ret-vbase : COptInt)
+-- CVAddrPoint: an address point of a vtable: the vtable pointer of the base subobject `base` at `offset` bytes addresses the slot `index`
+data CVAddrPoint = cvap (base : Word) (offset : Word) (index : Word)
+-- CVBaseOffsetOffset: where a vtable holds the offset of a virtual base: `at` bytes from the address point
+data CVBaseOffsetOffset = cvboo (vbase : Word) (at : CInt)
+-- CCtorVTable: a construction vtable: the vtable of the base subobject `base` at `offset` while the complete object is under construction
+data CCtorVTable =
+    cctor-vtable (base : Word) (offset : Word) (address-points : List CVAddrPoint) (entries : List CVTEntry)
+-- CVTTEntry: an entry of the VTT: a slot index in the class's own vtable, or in the construction vtable of the base at that offset
+data CVTTEntry = cvtt-own (index : Word) | cvtt-construction (base : Word) (offset : Word) (index : Word)
+-- CVTable: a record's vtable. cvtable: the slots and the one index the object's vtable pointer addresses, for a vtable this unit emits that has one address point and no thunks. cvtable-full: every other vtable: whether this unit emits it (false: its key function is defined in another unit, or nothing here refers to it), its address points, slots, virtual base offset offsets, VTT, construction vtables
+data CVTable =
+    cvt-none
+  | cvtable (address-point : Word) (entries : List CVTEntry)
+  | cvtable-full (emitted : Bool) (address-points : List CVAddrPoint) (entries : List CVTEntry) (vbase-offsets : List CVBaseOffsetOffset) (vtt : List CVTTEntry) (construction : List CCtorVTable)
+-- CVBase: a virtual base (direct or not) with its offset in bytes in an object whose most derived class is this one
+data CVBase = cvbase (base : Word) (offset : Word)
+-- CLayout: the record's layout on the target, in bytes: the implementation parameters of PLAN 5.1. clayout-v is the layout of a class with virtual bases
+data CLayout =
+    clayout (size : Word) (align : Word) (dsize : Word) (nvsize : Word) (nvalign : Word) (vptr : CVPtr)
+  | clayout-v (size : Word) (align : Word) (dsize : Word) (nvsize : Word) (nvalign : Word) (vptr : CVPtr) (vbases : List CVBase)
 -- CRecord: the definition of a class
 data CRecord =
     crecord (id : Word) (name : CStr) (tag : CTag) (lambda : Bool) (bases : List CBase) (fields : List CField) (layout : CLayout) (vtable : CVTable)

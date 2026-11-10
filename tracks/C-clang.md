@@ -332,6 +332,26 @@ against the earlier file needs new cases only:
   field (`IndirectFieldDecl` is counted under "met and not written").
 - A requires-clause on a function is counted under "met and not written" (Sema checked it).
 
+- `experiments/cxx/fifth.cpp` (item 4, inheritance) imports and checks: 1270 nodes, 37
+  declarations, 51 shared types, 8 records with layouts of 8. Two interfaces on one class,
+  a diamond with a virtual base, a covariant return through a non-primary base, a class
+  whose key function is in another unit. New constructors: `clayout-v` (a layout with
+  `vbases : List CVBase`, every virtual base, direct or not, with its offset in a most-derived
+  object of the class; `cbase`'s `virtual` flag is now true for direct virtual bases, with
+  that offset); `cvtable-full emitted address-points entries vbase-offsets vtt construction`
+  for every vtable the old `cvtable` cannot say (the first three units keep `cvtable`,
+  byte for byte); entries `cvt-vbase-offset`, `cvt-vcall-offset`, `cvt-thunk e this-nv
+  this-vcall ret-nv ret-vbase`; `cvap`, `cvboo`, `cctor-vtable`, `cvtt-own`,
+  `cvtt-construction`; `cck-virtual-base`; cast kind `ck-BaseToDerived` (its path is read from
+  the derived class). Sources: the record-layout dump (`(virtual base)` lines), the vtable
+  dump (address points, `vbase_offset`/`vcall_offset` slots, `[this adjustment …]`/`[return
+  adjustment …]` lines, "Virtual base offset offsets", "Construction vtable for"). The vtable
+  dump has **no VTT** and does not say whether a vtable is emitted: both are read from the
+  LLVM IR of the same code-generation run (`@_ZTT…` initializers, whose `getelementptr`s give
+  vtable symbol and slot; `@_ZTV…` defined or `external`/absent), with `c++filt` naming the
+  classes. `emitted` false: the vtable is laid out here (calls use its slots) and defined
+  elsewhere, or nothing in the unit refers to it.
+
 ## Found
 
 In the machine:
@@ -402,6 +422,5 @@ commit regenerating `lib/cxx/ast.cub` and every unit and recording the new kinds
    each: a local enumeration without a fixed type; a constructor/destructor or hidden friend
    whose type has `noexcept(expr)`/`decltype(expr)`; `if consteval`; parameter packs or
    defaults in alias templates; GNU case ranges.
-2. `experiments/cxx/fifth.cpp` (+ a second file for the key function): multiple and virtual
-   inheritance, thunks, VTTs, a vtable emitted elsewhere.
+2. (done: `fifth.cpp`, see the log.)
 3. Item 5 units, then item 6.
