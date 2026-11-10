@@ -75,6 +75,40 @@ Files you own: `lib/isa/tso.cub`, `lib/mem/atomics.cub`, `experiments/tso/**`, t
   `atomics.cub`), so `make library` checks them: +134 checks, +568,491 steps. Not blocking:
   everything here is checked by naming the files after `$LIBS`.
 
+## Needs from track B
+
+For the imported x86 model's threads to run on the TSO machine (item 6), its memory accesses
+must be **commands of `MemEvS`** (`lib/isa/tso.cub`), not operations on a memory held in its
+state. Exactly:
+
+1. The generated functions that touch memory are parameterized by the memory interface: where
+   the emitter now threads `X86` with a `ByteMap` inside and calls `mem-load`/`mem-store`, the
+   two (or however many) lowest memory accessors of the model (read n bytes at an address;
+   write n bytes) issue `mev-read n a` (response: the value, little-endian in a `Word`) and
+   `mev-write n a v`. Concretely the effectful class becomes
+   `args → Regs → Step MemEvS (Outc exception A × Regs)` (registers threaded, memory as
+   events; `Step` is `lib/world.cub`'s tree, `scmd c k`), or the same in `Proc` form.
+   An instruction's n-byte access must be ONE event of n bytes, not n one-byte events: the
+   machine keeps an n-byte store whole in the buffer and reads n bytes in one transition.
+   Instruction fetch reads are `mev-read` too.
+2. A LOCK-prefixed instruction (and `xchg` with a memory operand, which locks implicitly)
+   issues ONE event `mev-rmw n a f` for its memory operand, where `f : Word → Word` is the
+   value written as a function of the value read (response: the value read); the flags and
+   register results are computed from the response after it. In the Sail source this is a
+   read of the destination, pure code, and a write to the same address; the importer must
+   emit the middle as `f`. (If that cannot be done for some instruction, say which: the
+   fallback is `lock`/`unlock` bracket commands, which need a lock holder in `TsoSt`; not
+   built.) `mfence` issues `mev-mfence`. `sfence`/`lfence` issue nothing.
+3. The single-processor meaning B has today is the handler of `MemEvS` into `ByteMap` state
+   (`mev-read` = `mem-load` of n bytes, `mev-write` = `mem-store`, `mev-rmw` = load, store of
+   `f`), which B writes once; nothing else in the model changes.
+4. Then one thread is `at-handle tso-of-mev (x86-run … regs)` (a `TsoThread` once its result is
+   a `List Word`), and `tso-sys`/`tso-world` over a list of them is the multiprocessor
+   semantics.
+Checked against what B has landed (`lib/bits.cub` only; no generated model, no `X86` state
+yet): nothing to adapt there; `ByteMap` (`mem-load`/`mem-store`) is the state the handler of
+point 3 targets.
+
 ## Done
 
 How to check (cached library, one file after another; the last line must read `N passed, 0 failed`):
@@ -212,7 +246,31 @@ How to check (cached library, one file after another; the last line must read `N
   **Spin-lock, axiomatic** (`experiments/tso/spinlock.cub`, one attempt each, read values in
   {0,1,2}): 1,322 candidates, 4 consistent, set `{(0,1),(1,0),(1,1)}`, 17,634,373 steps;
   `spin-ax` states it and `spin-op` states the operational set is the same `spin-set`.
-  The six experiment files after the library: `1125 passed, 0 failed`.
+  The six experiment files after the library: `1123 passed, 0 failed`.
+
+- **Item 6 done** (acceptance: signature and handler check; a program against the signature
+  runs with its outcome sets recorded; request to B written above).
+  Machine changes in `lib/isa/tso.cub`: three instructions `t-loadn a n`, `t-storen a n v`,
+  `t-rmwn a n f` (n cells from a as bytes, little-endian, one transition each); a buffer entry
+  is now the list of cell writes of one store (`buf : Word → List (List TsoB)`), flushed whole
+  by `tso-apply`; trace labels and events stay per cell (per byte). `MemEv`
+  (`mev-read n a`, `mev-write n a v`, `mev-rmw n a f`, `mev-mfence`), `MemEvS`,
+  `tso-of-mev : Handler MemEvS TsoIS`, `tso-of-mev-at t : Handler MemEvS TsoS`; the axiomatic
+  enumeration covers the three instructions.
+  `experiments/tso/bytes.cub` (threads against `MemEvS`, through `tso-of-mev`):
+  | program | outcome set | schedules | steps |
+  |---|---|---|---|
+  | 16-bit store of 513 ∥ 16-bit load | {0, 513} | 3 | 4,889 |
+  | two 8-bit stores (1, 2) ∥ 16-bit load | {0, 1, 513} | 10 | 19,247 |
+  | 16-bit store then own load of the high byte | {2} | 2 | 2,113 |
+  | `lock inc` ∥ `lock inc` (values seen) | {(0,1),(1,0)} | 2 | 5,769 |
+  | `inc` ∥ `inc` without lock | {(0,0),(0,1),(1,0)} | 20 | 55,360 |
+  Soundness instances: `by-sound-w2` 35,388 steps, `by-sound-inc` 328,855, `by-sound-inc-nolock`
+  11,345,303. The axiomatic set of the first program is {0, 1, 512, 513} (4 candidates, 4
+  consistent): see Limits.
+  After these machine changes every earlier statement rechecks: the seven experiment files
+  after the library, `1156 passed, 0 failed; 179,416,793 steps` (uncached proofs), 145 s under
+  load.
 
 ## Found
 
@@ -264,17 +322,29 @@ How to check (cached library, one file after another; the last line must read `N
 
 - `tso-ax-outcomes`'s `dom` must contain every value a read can return; that it does is the
   caller's claim, not checked.
+- The axiomatic form's events are per cell (byte) and it has no axiom that the bytes of one
+  n-byte store reach memory together (nor that an n-byte load is one point in the order), so
+  on programs with multi-byte accesses it allows torn reads the machine does not produce
+  (`by-w2`: axiomatic {0,1,512,513}, operational {0,513}). Soundness (machine ⊆ axiomatic) is
+  unaffected; the two outcome sets are equal only for single-cell programs. Closing it: an
+  "atomic group" relation on events (same store / same load) and the axiom that no other
+  thread's write to the group's cells is ordered between the group's members.
 - The converse of `TsoSound` (every consistent candidate of a program is some schedule's
   execution) is not stated as a type; what exists is the equality of the two outcome sets on
   the six programs above.
 
 ## Next step
 
-Items 1–3 and 7 are complete. Remaining, in this order: 6, 5, 4 (section "Continuation").
-Now: item 6. Read `tracks/B-isa.md` and what B has landed (`lib/bits.cub`, `lib/isa/x86/`) for
-how its model accesses memory; in `lib/isa/tso.cub` add the memory-event signature (`MemEv`:
-read n bytes at an address, write n bytes, each with a locked flag, mfence; thread id by
-tagging) with responses, the byte-granular handler onto `TsoIS` (one `TsoI` per byte for plain
-accesses; a locked access needs a multi-byte atomic instruction, see the item), and the
-"Needs from track B" section.
+Items 1–3, 6, 7 are complete. Remaining: 5 then 4 (section "Continuation").
+Now: item 5, computable part. New file `lib/mem/rc11.cub` (after `lib/mem/atomics.cub`):
+relations as lists of id pairs (`rc-compose`, `rc-plus` with duplicate-free insert,
+`rc-irreflexive`); language-level candidates = `TsoEv` events + a mode per event id
+(`List (Word × MOrd)`) + the `TsoX` witness shape (rf, mo as `co`); `rc11-consistent`
+(RC11 of Lahav–Vafeiadis–Kang–Hur–Dreyer 2017: hb = (sb ∪ sw)+, coherence irreflexive(hb;eco?),
+atomicity, SC acyclic(psc_base ∪ psc_F), no-thin-air acyclic(sb ∪ rf); an update is one event
+that reads and writes); `rc11-outcomes m0 dom ths` over `AtomThread`s (reusing `tso-step-fold`,
+`tso-ax-rfs`, `tso-ax-cos`). Then `experiments/tso/rc11.cub`: SB/MP/LB/IRIW at relaxed,
+release/acquire, seq_cst: the RC11 sets, and `isTrue (subset (TSO outcomes under each handler)
+(RC11 set))`.
+Then item 4 (plan under the item; start with `tso-acyclic` against path-freeness).
 `$LIBS` already contains `lib/isa/tso.cub lib/mem/atomics.cub`: name only experiment files.

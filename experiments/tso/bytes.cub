@@ -1,0 +1,51 @@
+-- experiments/tso/bytes.cub — threads written against the memory-event signature an instruction
+-- model issues (lib/isa/tso.cub `MemEvS`: n-byte reads and writes at byte addresses, a locked
+-- read-modify-write, mfence), run on the x86-TSO machine through `tso-of-mev`.
+MevThread : Type
+MevThread = Step MemEvS (List Word)
+mev-thread : MevThread → TsoThread
+mev-thread th = at-handle {MemEvS} {TsoIS} {List Word} tso-of-mev th
+mi-read : Word → Word → (Word → MevThread) → MevThread
+mi-read n a k = scmd (mev-read n a) k
+mi-write : Word → Word → Word → MevThread → MevThread
+mi-write n a v k = scmd (mev-write n a v) (λ u → k)
+mi-rmw : Word → Word → (Word → Word) → (Word → MevThread) → MevThread
+mi-rmw n a f k = scmd (mev-rmw n a f) k
+mi-ret : List Word → MevThread
+mi-ret r = sdone r
+-- 1. A two-byte store is not torn: thread 0 writes the 16-bit value 513 (bytes 1 , 2) at #16,
+--    thread 1 reads 16 bits at #16. The read is 0 or 513.
+by-w2 : List TsoThread
+by-w2 = cons (mev-thread (mi-write #2 #16 #513 (mi-ret nil))) (cons (mev-thread (mi-read #2 #16 (λ r → mi-ret (cons r nil)))) nil)
+#show tso-outcomes 3 by-w2
+--    The same value written as two one-byte stores can be seen half written (1), never as 512:
+by-w11 : List TsoThread
+by-w11 = cons (mev-thread (mi-write #1 #16 #1 (mi-write #1 #17 #2 (mi-ret nil)))) (cons (mev-thread (mi-read #2 #16 (λ r → mi-ret (cons r nil)))) nil)
+#show tso-outcomes 5 by-w11
+-- 2. A thread reads its own buffered bytes: after a 16-bit store of 513 at #16, the byte at #17
+--    is 2 on every schedule
+by-fwd : List TsoThread
+by-fwd = cons (mev-thread (mi-write #2 #16 #513 (mi-read #1 #17 (λ r → mi-ret (cons r nil))))) nil
+#show tso-outcomes 3 by-fwd
+-- 3. `lock inc qword [32]` in two threads (each answers the value it saw): the two increments
+--    never see the same value
+by-inc : List TsoThread
+by-inc = cons (mev-thread (mi-rmw #8 #32 (λ x → wadd x #1) (λ r → mi-ret (cons r nil)))) (cons (mev-thread (mi-rmw #8 #32 (λ x → wadd x #1) (λ r → mi-ret (cons r nil)))) nil)
+#show tso-outcomes 2 by-inc
+--    `inc qword [32]` without the prefix is a read and a write: both can see 0
+by-inc-nolock : List TsoThread
+by-inc-nolock = cons (mev-thread (mi-read #8 #32 (λ x → mi-write #8 #32 (wadd x #1) (mi-ret (cons x nil))))) (cons (mev-thread (mi-read #8 #32 (λ x → mi-write #8 #32 (wadd x #1) (mi-ret (cons x nil))))) nil)
+#show tso-outcomes 6 by-inc-nolock
+-- every schedule's execution is TSO-consistent (events are per byte)
+by-sound-w2 : isTrue (tso-sound-upto 3 by-w2)
+by-sound-w2 = unit
+by-sound-inc : isTrue (tso-sound-upto 2 by-inc)
+by-sound-inc = unit
+by-sound-inc-nolock : isTrue (tso-sound-upto 6 by-inc-nolock)
+by-sound-inc-nolock = unit
+-- the axiomatic form on the two-byte store (byte values in {0 , 1 , 2}): its events are per
+-- byte and it has no axiom that a store's bytes reach memory together, so it also allows the
+-- torn reads 1 and 512 (see Limits in tracks/G-memmodel.md)
+by-dom : List Word
+by-dom = cons #0 (cons #1 (cons #2 nil))
+#show tso-ax-outcomes (λ a → #0) by-dom by-w2
