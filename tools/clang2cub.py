@@ -9,6 +9,11 @@ Sources (Clang 18; no Clang headers or bindings are used):
      one process: the record layouts Sema computed, then the AST as JSON.
   2. clang++ <flags> -emit-llvm -S -o /dev/null -Xclang -fdump-vtable-layouts
      the vtables of the unit (only code generation lays them out).
+  3. clang++ <flags> -fsyntax-only -Xclang -ast-dump
+     the AST as text, for the one thing the JSON omits and the text has: whether a member is
+     named with a qualifier (`p->Base::f()`, a call that is not virtual). The two dumps list
+     the same nodes in the same order; the k-th MemberExpr of one is the k-th of the other,
+     and the import stops unless their counts, arrows and member names all agree.
 
 What is written is the AST after Sema: names are declaration ids, overloads are chosen,
 templates are their instantiations, implicit casts and constructor calls are nodes, constant
@@ -134,7 +139,7 @@ SCHEMA = [
         ('ce-nullptr-literal', [('t', 'CType'), ('vc', 'CValCat')]),
         ('ce-declref', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CRefKind'), ('id', 'Word')]),
         ('ce-member', [('t', 'CType'), ('vc', 'CValCat'), ('base', 'CExpr'), ('arrow', 'Bool'),
-                       ('k', 'CRefKind'), ('id', 'Word')]),
+                       ('qualified', 'Bool'), ('k', 'CRefKind'), ('id', 'Word')]),
         ('ce-call', [('t', 'CType'), ('vc', 'CValCat'), ('callee', 'CExpr'), ('args', 'CExpr')]),
         ('ce-member-call', [('t', 'CType'), ('vc', 'CValCat'), ('callee', 'CExpr'),
                             ('args', 'CExpr')]),
@@ -844,6 +849,7 @@ SCOPE_KINDS = RECORD_KINDS + FUNCTION_KINDS + ('NamespaceDecl', 'TranslationUnit
 # what is written (a layout, a chosen overload) or holds only at compile time.
 ATTRS_CARRIED_ELSEWHERE = {
     'PackedAttr': 'in the record layout', 'AlignedAttr': 'in the record layout',
+    'NoUniqueAddressAttr': 'in the record layout',
     'FinalAttr': 'compile time', 'OverrideAttr': 'compile time',
     'OwnerAttr': 'a lifetime-analysis hint', 'PointerAttr': 'a lifetime-analysis hint',
     'NoThrowAttr': 'in the function type', 'NonNullAttr': 'a diagnostic and optimizer hint',
@@ -909,6 +915,20 @@ class Unit:
         if p.returncode != 0:
             stop('clang failed on %s:\n%s' % (self.path, p.stderr[-2000:]))
         self.vtable_text = p.stdout
+        p = subprocess.run(base + ['-fsyntax-only', '-Xclang', '-ast-dump', self.path],
+                           capture_output=True, text=True)
+        if p.returncode != 0:
+            stop('clang failed on %s:\n%s' % (self.path, p.stderr[-2000:]))
+        self.member_lines = []
+        lines = p.stdout.splitlines()
+        for i, line in enumerate(lines):
+            m = re.match(r"^([|` -]*)MemberExpr 0x[0-9a-f]+ <.*?> '.*' (?:lvalue |xvalue |bitfield )*(->|\.)(.*?) ?0x[0-9a-f]+", line)
+            if m:
+                nxt = lines[i + 1] if i + 1 < len(lines) else ''
+                qualified = len(nxt) > len(m.group(1)) and nxt[len(m.group(1)):].lstrip('|` -').startswith('NestedNameSpecifier')
+                self.member_lines.append((m.group(2) == '->', m.group(3), qualified))
+            elif re.match(r'^[|` -]*MemberExpr 0x', line):
+                stop('the text dump has a MemberExpr line this file does not read: %r' % line)
         p = subprocess.run(base + ['-print-target-triple'], capture_output=True, text=True)
         self.target = p.stdout.strip()
         p = subprocess.run(['clang++', '--version'], capture_output=True, text=True)
@@ -930,9 +950,10 @@ class Unit:
                     last['file'] = v
                 elif k == 'line':
                     last['line'] = v
-                elif isinstance(v, dict):
+                elif isinstance(v, dict) and k != 'includedFrom':
                     locs(v)
 
+        members = []
         stack = [(self.tu, None)]
         while stack:
             n, par = stack.pop()
@@ -951,22 +972,37 @@ class Unit:
                     if n.get('kind') in RECORD_KINDS + ('EnumDecl',) and 'name' not in n and 'col' in b:
                         self.unnamed.setdefault('%s:%s:%s' % (last['file'], last['line'], b['col']), []).append(n)
                 locs(n['range'])
-            if 'id' in n:
+            # a declaration listed again elsewhere (an instantiation under another declaration
+            # of its template) is printed there as a stub: id, kind, name. The node is the full one.
+            stub = 'id' in n and not (set(n) - {'id', 'kind', 'name'})
+            if 'id' in n and not (stub and n['id'] in self.nodes):
                 self.nodes[n['id']] = n
                 n['_order'] = len(self.nodes)
             self.parent[id(n)] = par
             k = n.get('kind')
-            if k in TYPE_ENTITY_KINDS and n.get('name'):
+            if k in TYPE_ENTITY_KINDS and n.get('name') and not stub:
                 self.by_name.setdefault(n['name'], []).append(n)
             if k == 'LambdaExpr':
                 self.lambdas.setdefault(n['type']['qualType'], []).append(n['inner'][0])
+            if k == 'MemberExpr':
+                members.append(n)
             if 'previousDecl' in n:
                 self.redecl[n['id']] = n['previousDecl']
-            inner = n.get('inner')
-            if inner:
-                for c in reversed(inner):
-                    if c:
-                        stack.append((c, n))
+            # children: `inner`, or for an InitListExpr with a filler `array_filler` (the filler,
+            # then the initializers: the JSON puts them all under that label)
+            for c in reversed(n.get('inner', []) + n.get('array_filler', [])):
+                if c:
+                    stack.append((c, n))
+        if len(members) != len(self.member_lines):
+            stop('the JSON dump has %d MemberExprs and the text dump %d: the two do not list the same nodes'
+                 % (len(members), len(self.member_lines)))
+        for n, (arrow, name, qualified) in zip(members, self.member_lines):
+            # a member without a name is printed by the text dump as its unnamed type
+            same = n['name'] == name if n.get('name') else (name == '' or '(anonymous' in name or '(unnamed' in name)
+            if bool(n.get('isArrow')) != arrow or not same:
+                stop('the MemberExprs of the JSON and text dumps do not correspond: %r %r against %r %r'
+                     % (n.get('isArrow'), n.get('name'), arrow, name))
+            n['_qualified'] = qualified
         for n in self.nodes.values():
             if n.get('kind') == 'NamespaceDecl':
                 self.ns_nodes.setdefault(self.ns_key(n), []).append(n)
@@ -1100,7 +1136,7 @@ class Unit:
             elif k == 'UsingDirectiveDecl':
                 t.setdefault('', []).append(c)
             elif k in TYPE_ENTITY_KINDS and c.get('name'):
-                t.setdefault(c['name'], []).append(c)
+                t.setdefault(c['name'], []).append(self.nodes[c['id']])
         if n.get('kind') in FUNCTION_KINDS:
             # local types: anywhere in the body
             stack = list(n.get('inner', []))
@@ -1382,6 +1418,7 @@ class Unit:
             for s in t.get('inner', []):
                 if s.get('kind') != 'ClassTemplateSpecializationDecl':
                     continue
+                s = self.nodes[s['id']]
                 try:
                     sa = self.template_args(s)
                 except Dependent:
@@ -1863,7 +1900,7 @@ class Unit:
 
     def e_MemberExpr(self, n):
         base, = self.kids(n)
-        return T('ce-member', *self.head(n), self.expr(base), bool(n['isArrow']),
+        return T('ce-member', *self.head(n), self.expr(base), bool(n['isArrow']), n['_qualified'],
                  *self.ref(n['referencedMemberDecl']))
 
     def call(self, con, n):
@@ -1888,13 +1925,19 @@ class Unit:
             stop('a constructor call of a non-class type at %s' % self.where(n))
         rec = self.nodes[t[1]]
         want = n['ctorType']['qualType']
-        hits = [c for c in rec.get('inner', []) if c.get('kind') == 'CXXConstructorDecl' and
-                c['type']['qualType'] == want]
+        ctors = []
+        for c in rec.get('inner', []):
+            if c.get('kind') == 'CXXConstructorDecl':
+                ctors.append(c)
+            elif c.get('kind') == 'FunctionTemplateDecl':
+                # a constructor template: its instantiations (the ones with arguments)
+                ctors += [d for d in c.get('inner', []) if d.get('kind') == 'CXXConstructorDecl' and
+                          any(x.get('kind') == 'TemplateArgument' for x in d.get('inner', []))]
+        hits = [c for c in ctors if c['type']['qualType'] == want]
         if len(hits) != 1:
             # the same signature spelled through different sugar: compare the types themselves
             wt = self.type_at(n['ctorType'], rec)
-            hits = [c for c in rec.get('inner', []) if c.get('kind') == 'CXXConstructorDecl' and
-                    self.try_type(c['type'], c) == wt]
+            hits = [c for c in ctors if self.type_at(c['type'], c) == wt]
         if len(hits) != 1:
             stop('the constructor %r of %s called at %s is not found once among its constructors (%d)'
                  % (want, rec.get('name'), self.where(n), len(hits)))
@@ -2096,7 +2139,7 @@ class Unit:
         style = {None: 'none', 'call': 'parens', 'list': 'braces'}.get(n.get('initStyle'), '?')
         if style == '?':
             stop('new-expression initializer style %r at %s' % (n.get('initStyle'), self.where(n)))
-        # the children are: the array size (an array new), the placement arguments, the initializer
+        # the children are: the array size (an array new), the initializer, the placement arguments
         rest = list(ks)
         if n.get('isArray'):
             size, rest = rest[0], rest[1:]
@@ -2107,7 +2150,7 @@ class Unit:
             od = self.node(n['operatorNewDecl']['id'])
             nplace = len([c for c in od.get('inner', []) if c.get('kind') == 'ParmVarDecl']) - 1
         if len(rest) == nplace + 1:
-            init, rest = rest[-1], rest[:-1]
+            init, rest = rest[0], rest[1:]
         if len(rest) != nplace or (style != 'none' and init is None):
             stop('a new-expression with children this rule does not place, at %s' % self.where(n))
         opnew = None
