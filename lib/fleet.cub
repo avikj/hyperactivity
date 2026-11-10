@@ -1,0 +1,128 @@
+-- lib/fleet.cub — fleets: node processes composed under the network, and the types of their
+-- properties (PLAN Phase 7 items 2–3). Loaded after lib/net.cub.
+--
+-- A node is a state with a view: stopped, sending (the message and the state after), receiving
+-- (the state after each answer), reading the clock, or taking a silent step. A process over
+-- NetSig M is a node (its tree of steps is the state, proc-view), a guarded process at every
+-- clock is one (gview), and a machine with a first-order state is one directly. A fleet is the
+-- nodes' behaviour by node id (Beh) and a global state: every node's state and the network.
+-- One step is one choice of the adversary, resolved by lib/net.cub and answered by net-world.
+-- fleet-run folds a recorded list of choices; fleet-at follows an infinite sequence.
+--
+-- Property types (their inhabitants are proofs): Safe, Live, Refines, Converges, and replay.
+-- ---------------------------------------------------------------- nodes and the global state
+data NView (M : Type) (St : Type) = v-halt | v-send (to : NodeId) (m : M) (s : St) | v-recv (k : Rcv M → St) | v-now (kn : Word → St) | v-tau (s : St)
+Beh : Type → Type → Type
+Beh M St = NodeId → St → NView M St
+FState : Type → Type → Type
+FState M St = (NodeId → St) × Net M
+put-node : {St : Type} → NodeId → St → (NodeId → St) → NodeId → St
+put-node i s f j = case eqb j i of true → s; false → f j
+-- the answer of the network applied: the node continues with the response and the network is
+-- the one answered; a refusal leaves everything as it was
+fl-apply : {M St R : Type} → NodeId → FState M St → Sum (R × Net M) (Net M) → (R → St) → FState M St
+fl-apply i g r k = case r of inl x → (put-node i (k (fst x)) (fst g) , snd x); inr n → g
+-- node i with view v under event e: its command is put to the network as a world
+ns-go : {M St : Type} → NodeId → Ev M → FState M St → NView M St → FState M St
+ns-go {M} {St} i e g v = case v of
+  v-halt → g
+  v-send to m s → fl-apply {M} {St} {Unit} i g (net-world {M} i e (n-send to m) (snd g)) (λ u → s)
+  v-recv k → fl-apply {M} {St} {Rcv M} i g (net-world {M} i e n-recv (snd g)) k
+  v-now kn → fl-apply {M} {St} {Word} i g (net-world {M} i e n-now (snd g)) kn
+  v-tau s → (case e of ev-run → (put-node i s (fst g) , snd g); ev-deliver p rest → g)
+node-step : {M St : Type} → Beh M St → NodeId → Ev M → FState M St → FState M St
+node-step {M} {St} beh i e g = ns-go {M} {St} i e g (beh i (fst g i))
+fl-go : {M St : Type} → Beh M St → FState M St → Resolved M → FState M St
+fl-go {M} {St} beh g r = case r of res-node i e → node-step {M} {St} beh i e g; res-net n → (fst g , n)
+-- one step: the adversary's choice resolved against the network
+fleet-step : {M St : Type} → Beh M St → Adv → FState M St → FState M St
+fleet-step {M} {St} beh a g = fl-go {M} {St} beh g (resolve {M} a (snd g))
+-- a recorded list of choices, in order
+fleet-run : {M St : Type} → Beh M St → List Adv → FState M St → FState M St
+fleet-run {M} {St} beh chs g = (case chs return (λ x → FState M St → FState M St) of nil → λ g2 → g2; cons a r → λ g2 → rec r (fleet-step {M} {St} beh a g2)) g
+-- the state after t steps of an infinite sequence (by fuel)
+fleet-at : {M St : Type} → Beh M St → AdvSeq → FState M St → Nat → FState M St
+fleet-at {M} {St} beh chs g t = case t of zero → g; suc k → fleet-step {M} {St} beh (chs k) (rec k)
+-- the trace of a recorded run: what each choice resolved to
+fleet-trace : {M St : Type} → Beh M St → List Adv → FState M St → List (Resolved M)
+fleet-trace {M} {St} beh chs g = (case chs return (λ x → FState M St → List (Resolved M)) of nil → λ g2 → nil; cons a r → λ g2 → cons (resolve {M} a (snd g2)) (rec r (fleet-step {M} {St} beh a g2))) g
+-- the outcome of a recorded run of the n nodes: done with the final state when every node
+-- below n has stopped, stopped when the choices ran out first
+fl-halted : {M St : Type} → NView M St → Bool
+fl-halted v = case v of v-halt → true; v-send to m s → false; v-recv k → false; v-now kn → false; v-tau s → false
+fl-all-halted : {M St : Type} → Beh M St → Nat → (NodeId → St) → Bool
+fl-all-halted {M} {St} beh n f = case n of zero → true; suc k → andB (fl-halted {M} {St} (beh k (f k))) (rec k)
+fleet-outcome : {M St : Type} → Beh M St → Nat → List Adv → FState M St → Outcome (FState M St)
+fleet-outcome {M} {St} beh n chs g =
+  case fl-all-halted {M} {St} beh n (fst (fleet-run {M} {St} beh chs g)) of
+    true → done (fleet-run {M} {St} beh chs g)
+    false → stopped
+-- the fleet as a process over the environment's signature (PLAN: a process over the residual
+-- world): ask for the next choice, step, to the fuel
+fleet-proc : {M St : Type} → Beh M St → Nat → FState M St → Proc {lzero} EnvS (FState M St)
+fleet-proc {M} {St} beh fuel g =
+  (case fuel return (λ x → FState M St → Proc {lzero} EnvS (FState M St)) of
+     zero → λ g2 → ret {lzero} {EnvS} {FState M St} g2
+     suc f → λ g2 → bind {lzero} {EnvS} {Adv} {FState M St} (cmd {lzero} {EnvS} recv) (λ a → rec f (fleet-step {M} {St} beh a g2))) g
+-- ---------------------------------------------------------------- replay
+-- a run is a function of the recorded choices: equal choices, equal run
+fleet-replay : {M St : Type} → (beh : Beh M St) → (c1 c2 : List Adv) → (g : FState M St) → Path (List Adv) c1 c2 → Path (FState M St) (fleet-run {M} {St} beh c1 g) (fleet-run {M} {St} beh c2 g)
+fleet-replay {M} {St} beh c1 c2 g e = λ i → fleet-run {M} {St} beh (e i) g
+-- ---------------------------------------------------------------- safety
+-- inv holds in every state reachable under every choice sequence
+Safe : {M St : Type} → (FState M St → Type) → Beh M St → FState M St → Type
+Safe {M} {St} inv beh g = (chs : List Adv) → inv (fleet-run {M} {St} beh chs g)
+-- the induction principle: it holds initially and every step preserves it
+safe-ind : {M St : Type} → (inv : FState M St → Type) → (beh : Beh M St) → (g : FState M St) →
+           inv g → ((a : Adv) → (g2 : FState M St) → inv g2 → inv (fleet-step {M} {St} beh a g2)) → Safe {M} {St} inv beh g
+safe-ind {M} {St} inv beh g h0 hs chs =
+  (case chs return (λ x → (g2 : FState M St) → inv g2 → inv (fleet-run {M} {St} beh x g2)) of
+     nil → λ g2 h → h
+     cons a r → λ g2 h → rec r (fleet-step {M} {St} beh a g2) (hs a g2 h)) g h0
+-- the same along an infinite sequence
+safe-at : {M St : Type} → (inv : FState M St → Type) → (beh : Beh M St) → (g : FState M St) →
+          inv g → ((a : Adv) → (g2 : FState M St) → inv g2 → inv (fleet-step {M} {St} beh a g2)) →
+          (chs : AdvSeq) → (t : Nat) → inv (fleet-at {M} {St} beh chs g t)
+safe-at {M} {St} inv beh g h0 hs chs t =
+  case t return (λ x → inv (fleet-at {M} {St} beh chs g x)) of
+    zero → h0
+    suc k → hs (chs k) (fleet-at {M} {St} beh chs g k) (rec k)
+-- a step preserves inv when each kind of event does: a node run, a packet that was in flight
+-- delivered to its addressee (what stays in flight was in flight), and a change of the network
+-- that adds no packet (a drop, a duplicate, time, a partition)
+StepRun : {M St : Type} → (FState M St → Type) → Beh M St → Type
+StepRun {M} {St} inv beh = (g : FState M St) → (i : NodeId) → inv g → inv (node-step {M} {St} beh i ev-run g)
+StepDeliver : {M St : Type} → (FState M St → Type) → Beh M St → Type
+StepDeliver {M} {St} inv beh = (g : FState M St) → (p : Pkt M) → (rest : List (Pkt M)) → inv g → InL p (flight (snd g)) → SubL rest (flight (snd g)) →
+                               inv (node-step {M} {St} beh (p-to p) (ev-deliver p rest) g)
+StepNet : {M St : Type} → (FState M St → Type) → Type
+StepNet {M} {St} inv = (g : FState M St) → (n : Net M) → inv g → SubL (flight n) (flight (snd g)) → inv (fst g , n)
+step-go : {M St : Type} → (inv : FState M St → Type) → (beh : Beh M St) → StepRun {M} {St} inv beh → StepDeliver {M} {St} inv beh → StepNet {M} {St} inv →
+          (g : FState M St) → (r : Resolved M) → ResSpec {M} (snd g) r → inv g → inv (fl-go {M} {St} beh g r)
+step-go {M} {St} inv beh hr hd hn g (res-node i ev-run) sp h = hr g i h
+step-go {M} {St} inv beh hr hd hn g (res-node i (ev-deliver p rest)) sp h =
+  subst {lzero} {lzero} {NodeId} {λ j → inv (node-step {M} {St} beh j (ev-deliver p rest) g)} (sym (fst sp)) (hd g p rest h (fst (snd sp)) (snd (snd sp)))
+step-go {M} {St} inv beh hr hd hn g (res-net n) sp h = hn g n h sp
+step-by-events : {M St : Type} → (inv : FState M St → Type) → (beh : Beh M St) → StepRun {M} {St} inv beh → StepDeliver {M} {St} inv beh → StepNet {M} {St} inv →
+                 (a : Adv) → (g : FState M St) → inv g → inv (fleet-step {M} {St} beh a g)
+step-by-events {M} {St} inv beh hr hd hn a g h = step-go {M} {St} inv beh hr hd hn g (resolve {M} a (snd g)) (resolve-spec {M} a (snd g)) h
+safe-by-events : {M St : Type} → (inv : FState M St → Type) → (beh : Beh M St) → (g : FState M St) → inv g →
+                 StepRun {M} {St} inv beh → StepDeliver {M} {St} inv beh → StepNet {M} {St} inv → Safe {M} {St} inv beh g
+safe-by-events {M} {St} inv beh g h0 hr hd hn = safe-ind {M} {St} inv beh g h0 (step-by-events {M} {St} inv beh hr hd hn)
+-- ---------------------------------------------------------------- processes as nodes
+-- a process over NetSig M is a node: its state is its tree of steps
+proc-view : {M A : Type} → Step (NetSig M) A → NView M (Step (NetSig M) A)
+proc-view {M} {A} t = case t of
+  sdone a → v-halt
+  scmd c k → (case c return (λ x → (net-resp {M} x → Step (NetSig M) A) → NView M (Step (NetSig M) A)) of
+                n-send to m → λ k2 → v-send to m (k2 unit)
+                n-recv → λ k2 → v-recv k2
+                n-now → λ k2 → v-now k2) k
+proc-beh : {M A : Type} → Beh M (Step (NetSig M) A)
+proc-beh {M} {A} i t = proc-view {M} {A} t
+-- a fleet of processes by node id, on the empty network
+procs-init : {M A : Type} → (NodeId → Proc {lzero} (NetSig M) A) → FState M (Step (NetSig M) A)
+procs-init {M} {A} ps = ((λ i → to-step {NetSig M} {A} (ps i)) , net-empty {M})
+-- n processes indexed by Fin n: the ids from n on are stopped nodes
+fin-procs : {M : Type} → (n : Nat) → (Fin n → Proc {lzero} (NetSig M) Unit) → NodeId → Proc {lzero} (NetSig M) Unit
+fin-procs {M} n ps i = case trich i n of inl h → ps (i , h); inr o → ret {lzero} {NetSig M} {Unit} unit

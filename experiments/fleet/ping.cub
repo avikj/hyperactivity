@@ -1,0 +1,26 @@
+-- Two nodes exchanging one message (loaded after lib/net.cub and lib/fleet.cub). Node 0 sends 42
+-- to node 1 and stops; node 1 receives until a message arrives (at most three tries) and stops
+-- with it. The run is a recorded list of choices; the result is node 1's tree of steps, done
+-- with the message.
+ping-send : Proc {lzero} (NetSig Word) Word
+ping-send = bind {lzero} {NetSig Word} {Unit} {Word} (net-send {Word} 1 #42) (λ u → ret {lzero} {NetSig Word} {Word} #0)
+ping-recv : Nat → Proc {lzero} (NetSig Word) Word
+ping-recv n = case n of
+  zero → ret {lzero} {NetSig Word} {Word} #0
+  suc k → bind {lzero} {NetSig Word} {Rcv Word} {Word} (net-recv {Word}) (λ r → case r of r-timeout → rec k; r-msg f m → ret {lzero} {NetSig Word} {Word} m)
+ping-nodes : NodeId → Proc {lzero} (NetSig Word) Word
+ping-nodes i = case i of zero → ping-send; suc j → ping-recv 3
+ping-init : FState Word (Step (NetSig Word) Word)
+ping-init = procs-init {Word} {Word} ping-nodes
+ping-result : Step (NetSig Word) Word → Word
+ping-result t = case t of sdone a → a; scmd c k → #999
+-- node 1 times out once, node 0 sends, the packet is delivered
+ping-choices : List Adv
+ping-choices = cons (a-run 1) (cons (a-run 0) (cons (a-deliver 0) nil))
+ping-final : FState Word (Step (NetSig Word) Word)
+ping-final = fleet-run {Word} {Step (NetSig Word) Word} (proc-beh {Word} {Word}) ping-choices ping-init
+#show ping-result (fst ping-final 1)
+#show fleet-trace {Word} {Step (NetSig Word) Word} (proc-beh {Word} {Word}) ping-choices ping-init
+#show flight (snd ping-final)
+ping-delivered : ping-result (fst ping-final 1) ≡ #42
+ping-delivered = λ i → #42

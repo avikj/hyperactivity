@@ -50,11 +50,54 @@ Files you own: `lib/net.cub`, `lib/fleet.cub`, `lib/deploy.cub`, `experiments/fl
 - `#build` of one node of the kv fleet (through `W`) produces a binary; three of them run as
   processes connected by pipes or UDP on localhost and serve a client's writes and a read.
 
+## How to check (every command from `scoped-machine/`)
+
+```
+L=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p')
+(ulimit -v 2500000; timeout 600 ./build/cubical $L lib/net.cub lib/fleet.cub experiments/fleet/ping.cub | grep -v '^ok: \|^cached: ')
+```
+The library is read from the cache (about 1 s); the last line is `N passed, 0 failed`.
+
+## Design (fixed; everything below builds on it)
+
+- `lib/net.cub`. Node ids are `Nat`. `NetSig M` = `n-send to m` → `Unit`, `n-recv` → `Rcv M`
+  (`r-timeout | r-msg from m`), `n-now` → `Word`; `NetS = NetSig Msg`, `Msg = (n : Nat) × Bytes n`.
+  `Net M` = packets in flight (list of `Pkt M` = from, to, msg), clock, partition side. The
+  adversary's choice `Adv` = `a-run i | a-deliver k | a-drop k | a-dup k | a-tick d | a-part s`;
+  `EnvS = PushS Adv`. `resolve : Adv → Net M → Resolved M` = `res-node i e` (node `i` scheduled
+  with `e = ev-run | ev-deliver p rest`) or `res-net n`; `resolve-spec` says a delivered packet
+  was in flight and nothing is added. `net-world : NodeId → Ev M → World (NetSig M) (Net M)`.
+  Sets of packets are lists with `InL` (membership, a type) and `SubL` (inclusion).
+- `lib/fleet.cub`. A node is a state with a view `NView M St` (`v-halt | v-send to m s | v-recv k
+  | v-now k | v-tau s`); `Beh M St = NodeId → St → NView M St`; `FState M St = (NodeId → St) × Net M`.
+  `fleet-step beh a g = fl-go beh g (resolve a (snd g))`, `node-step beh i e g = ns-go i e g (beh i (fst g i))`
+  (state a lemma over an arbitrary `Resolved`/`NView` and apply it: that is how every proof
+  about a step is written). `fleet-run` (list of choices), `fleet-at` (infinite sequence, by
+  fuel), `fleet-trace`, `fleet-outcome`, `fleet-proc` (over `EnvS`). Processes are nodes by
+  `proc-view` (state = `Step (NetSig M) A`).
+
 ## Needs from track A
 ## Done
+
+- `lib/net.cub` (44 definitions): signature, state, `Adv`, `EnvS`, `resolve` with `resolve-spec`,
+  `net-world`, list-as-set lemmas, fairness predicates (`SchedFair`, `DeliveryFair`, bounded
+  `SchedFairB`/`DeliveryFairB`, `seq-of-str` for streams).
+- `lib/fleet.cub` so far: the step, the runs, `fleet-replay`, `Safe` with `safe-ind`, `safe-at`
+  and the per-event rule `safe-by-events` (`StepRun`, `StepDeliver`, `StepNet`), `proc-view`,
+  `procs-init`, `fin-procs`.
+- `experiments/fleet/ping.cub`: two processes exchanging one message; `#show` gives `#42`
+  (582 steps), the trace `run 1, run 0, deliver (0,1,#42)`, flight empty after.
+  Measured: library + the three files, 864 passed, 0 failed.
+
 ## Found
+
+(nothing yet)
 
 ## Next step
 
-Read `lib/proc.cub` and `lib/choreo.cub`; write `lib/net.cub` items (signature, state, the
-world under choices) and a `#show` of two nodes exchanging one message; commit.
+In `lib/fleet.cub`, in this order: (1) `Live` with `Fair` (`Took`, `Gone` from `dl-go` over a
+`Resolved`), the measure rule `live-measure`, and the waiting lemma (a node whose view is a
+send keeps its state until it is run); (2) `Converges` with the set-fold lemma for a
+commutative idempotent merge, and `wmax`'s laws through `maxw`; (3) `Refines` as trace
+inclusion against a `World` (`HistOk`); (4) the guarded instance `gview`, machines as
+processes (`mach-proc`). Then `experiments/fleet/kv/kv.cub`.
