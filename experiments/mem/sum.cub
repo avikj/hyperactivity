@@ -1,0 +1,60 @@
+-- experiments/mem/sum.cub — by hand, the meaning of
+--
+--   int sum(const int *p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }
+--
+-- as a term in lib/mem/monad.cub's Ev, at a Target, the way a reader would produce it: every
+-- local is an object in memory (allocated, written, read, released at the end of its block),
+-- every arithmetic step is the scalar layer's at the kind the Target gives `int`, every access
+-- through p is a pointer addition and a load, the loop is ev-for with a fuel.
+-- Loaded after the library and lib/mem/{target,scalar,memory,layout,monad}.cub.
+sum-c : {l : Level} {S : Sig} → Target → Word → MPtr → SV → Ev {l} S SV SV
+sum-c {l} {S} t fuel p n =
+  ev-bind {l} {S} {SV} {SK} {SV} (ev-res {l} {S} {SV} {SK} (ct-sk t ct-int)) (λ ik →
+  ev-fn {l} {S} {SV} (mub ub-no-return)
+    (ev-local {l} {S} {SV} {Unit} (ct-size t ct-int) (ct-align t ct-int) (λ s →
+     ev-local {l} {S} {SV} {Unit} (ct-size t ct-int) (ct-align t ct-int) (λ i →
+       ev-then {l} {S} {SV} {Unit} {Unit} (ev-store {l} {S} {SV} t ik s (sv-i uq0))
+      (ev-then {l} {S} {SV} {Unit} {Unit} (ev-store {l} {S} {SV} t ik i (sv-i uq0))
+      (ev-then {l} {S} {SV} {Unit} {Unit}
+         (ev-for {l} {S} {SV} fuel
+            (ev-bind {l} {S} {SV} {SV} {Bool} (ev-load {l} {S} {SV} t ik i) (λ iv →
+               ev-res {l} {S} {SV} {Bool} (sv-cmp co-lt ik iv n)))
+            (ev-bind {l} {S} {SV} {SV} {Unit} (ev-load {l} {S} {SV} t ik i) (λ iv →
+             ev-bind {l} {S} {SV} {SV} {Unit} (ev-res {l} {S} {SV} {SV} (sv-arith bo-add ik iv (sv-i uq1))) (λ j →
+               ev-store {l} {S} {SV} t ik i j)))
+            (ev-bind {l} {S} {SV} {SV} {Unit} (ev-load {l} {S} {SV} t ik i) (λ iv →
+             ev-bind {l} {S} {SV} {UInt64} {Unit} (ev-res {l} {S} {SV} {UInt64} (sv-as-i iv)) (λ ix →
+             ev-bind {l} {S} {SV} {MPtr} {Unit} (ev-ptr-add {l} {S} {SV} p (ct-size t ct-int) ix) (λ q →
+             ev-bind {l} {S} {SV} {SV} {Unit} (ev-load {l} {S} {SV} t ik q) (λ x →
+             ev-bind {l} {S} {SV} {SV} {Unit} (ev-load {l} {S} {SV} t ik s) (λ sv →
+             ev-bind {l} {S} {SV} {SV} {Unit} (ev-res {l} {S} {SV} {SV} (sv-arith bo-add ik sv x)) (λ r →
+               ev-store {l} {S} {SV} t ik s r))))))))
+         (ev-bind {l} {S} {SV} {SV} {Unit} (ev-load {l} {S} {SV} t ik s) (λ r →
+            ev-return {l} {S} {SV} {Unit} r))))))))
+
+-- ---------------------------------------------------------------- on the net
+-- a memory holding int a[4] = {a0, a1, a2, a3} as allocation 0, at a Target
+sum-mem4 : Target → UInt64 → UInt64 → UInt64 → UInt64 → MRes AMem
+sum-mem4 t a0 a1 a2 a3 =
+  mr-bind (mem-alloc ak-auto false (wmul (ct-size t ct-int) #4) (ct-align t ct-int) (mem-empty t)) (λ r →
+  mr-bind (ct-sk t ct-int) (λ ik →
+  mr-bind (mem-store t ik (mp-obj #0 #0) (sv-i a0) (snd r)) (λ m1 →
+  mr-bind (mem-store t ik (mp-obj #0 (ct-size t ct-int)) (sv-i a1) m1) (λ m2 →
+  mr-bind (mem-store t ik (mp-obj #0 (wmul (ct-size t ct-int) #2)) (sv-i a2) m2) (λ m3 →
+  mem-store t ik (mp-obj #0 (wmul (ct-size t ct-int) #3)) (sv-i a3) m3)))))
+-- the call's outcome: the control outcome without the memory
+sum-run : Target → Word → MRes AMem → UInt64 → MRes (Ctl SV SV)
+sum-run t fuel mm n = mr-bind mm (λ m → ev-value (ev-run-pure (sum-c {lzero} {NoS} t fuel (mp-obj #0 #0) (sv-i n)) m))
+-- sum of {1, 2, 3, 4}: 10, at a little-endian and at a big-endian Target
+#show sum-run x86-64-sysv #100 (sum-mem4 x86-64-sysv (u64 #1) (u64 #2) (u64 #3) (u64 #4)) (u64 #4)
+#show sum-run s390x-elf #100 (sum-mem4 s390x-elf (u64 #1) (u64 #2) (u64 #3) (u64 #4)) (u64 #4)
+-- n = 5 on int[4]: the fifth load is out of bounds: undefined
+#show sum-run x86-64-sysv #100 (sum-mem4 x86-64-sysv (u64 #1) (u64 #2) (u64 #3) (u64 #4)) (u64 #5)
+-- the out-of-bounds load alone
+#show mr-bind (sum-mem4 x86-64-sysv (u64 #1) (u64 #2) (u64 #3) (u64 #4)) (λ m → mem-load x86-64-sysv (sk-int true iw32) (mp-obj #0 #16) m)
+-- INT_MAX + 1 in the sum: signed overflow: undefined
+#show sum-run x86-64-sysv #100 (sum-mem4 x86-64-sysv (u64 #2147483647) (u64 #1) (u64 #0) (u64 #0)) (u64 #4)
+-- fuel 3 for a loop that tests its condition 5 times: the meaning stops
+#show sum-run x86-64-sysv #3 (sum-mem4 x86-64-sysv (u64 #1) (u64 #2) (u64 #3) (u64 #4)) (u64 #4)
+-- n = 0: no iteration, 0
+#show sum-run x86-64-sysv #100 (sum-mem4 x86-64-sysv (u64 #1) (u64 #2) (u64 #3) (u64 #4)) (u64 #0)

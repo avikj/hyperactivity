@@ -152,6 +152,21 @@ the result type of this layer is `MRes`, not `Res`.
   outcome), `ev-assoc` (from `ev-step-assoc`, likewise). 1077 passed, 0 failed with the four
   files before it (864,583 steps for monad.cub's 14 checks, nearly all in the two laws).
 
+- `lib/mem/monad.cub`, the rest: `ev-out`, `ev-res`, `ev-rd`, `ev-wr`, `ev-mem`, `ev-cmd` (a
+  world command of the signature parameter), `ev-ub`, `ev-stop`, `ev-return`, `ev-break`,
+  `ev-continue`, `ev-throw`; `ev-on` (a continuation that sees the control outcome), `ev-body`,
+  `ev-fn` (a call boundary), `ev-catch`, `ev-finally`; `ev-for`/`ev-while`/`ev-do-while` (a
+  `Word` fuel, `mstop st-fuel` when spent), `ev-for-n` (structural); `NoS`, `ev-run-pure`,
+  `ev-value`; `ev-load`, `ev-store`, `ev-alloc`, `ev-release`, `ev-ptr-add`, `ev-local`.
+  The five files after the cached library: `1107 passed, 0 failed`.
+- `experiments/mem/sum.cub`, on the net: `sum-c` is by hand the meaning of
+  `int sum(const int *p, int n) { int s = 0; for (int i = 0; i < n; i++) s += p[i]; return s; }`
+  in `Ev` at a Target (locals as automatic objects, `ev-for` with fuel). Read by `#show`:
+  {1,2,3,4}, n = 4 is `mok (c-val (sv-i #u64:10))` at x86-64 (33,770 steps) and at s390x
+  (37,993); n = 5 is `mub ub-out-of-bounds`; the out-of-bounds load alone
+  (`mem-load … (mp-obj #0 #16)`) is `mub ub-out-of-bounds`; {INT_MAX,1,0,0} is
+  `mub ub-signed-overflow`; fuel 3 is `mstop st-fuel`; n = 0 is 0.
+
 ## Measured
 
 - target.cub + scalar.cub + memory.cub after the cached library: `1017 passed, 0 failed`; with
@@ -231,8 +246,9 @@ the result type of this layer is `MRes`, not `Res`.
 
 ## Next step
 
-Continue `lib/mem/monad.cub` after `ev-assoc`: `ev-res`/`ev-rd`/`ev-wr`/`ev-mem` (lifting `MRes`
-and memory operations), `ev-cmd` (a world command), `ev-return`/`ev-break`/`ev-continue`/
-`ev-throw`/`ev-ub`/`ev-stop`, `ev-fn` (a call boundary: a return becomes the value),
-`ev-catch`, `ev-for` and `ev-while`/`ev-do-while` by `Word` fuel, `ev-for-n` (structural),
-`NoS` and `ev-run-pure`. Then `experiments/mem/sum.cub`.
+In `experiments/mem/sum.cub` add the `#jit` part: a definition whose parameters cross the
+compiler's boundary (`Bytes 24` for the array's allocation, a `Word` for n; `AMem` itself does
+not cross: it holds a dependent pair), which builds the one-allocation memory, runs `sum-c` at
+`x86-64-sysv` through `ev-run-pure` and returns a `Word`; `#jit` it; record whether it
+compiles, the bytes, and what the specialized code still contains (print the specialized code
+if `#jit` offers it; otherwise normalize the definition with `#show` on variables).

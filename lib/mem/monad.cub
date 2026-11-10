@@ -92,3 +92,132 @@ ev-assoc : {l : Level} {S : Sig} {V A B C : Type} → (e : Ev {l} S V A) → (f 
   ≡ ev-bind {l} {S} {V} {A} {C} e (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g)
 ev-assoc {l} {S} {V} {A} {B} {C} e f g =
   λ i m R k h → e m R (λ r → ev-step-assoc {l} {S} {V} {A} {B} {C} f g r i R k h) h
+
+-- ---------------------------------------------------------------- results, memory operations, commands
+-- an outcome as it is
+ev-out : {l : Level} {S : Sig} {V A : Type} → EvR V A → Ev {l} S V A
+ev-out {l} {S} {V} {A} r = λ m → ret {l} {S} {EvR V A} r
+-- a pure result (a scalar operation): its value, or its undefined behaviour or stop
+ev-res : {l : Level} {S : Sig} {V A : Type} → MRes A → Ev {l} S V A
+ev-res {l} {S} {V} {A} r = λ m → ret {l} {S} {EvR V A} (mr-map (λ a → (c-val a , m)) r)
+-- a read of the memory, a write of it, an operation that does both
+ev-rd : {l : Level} {S : Sig} {V A : Type} → (AMem → MRes A) → Ev {l} S V A
+ev-rd {l} {S} {V} {A} f = λ m → ret {l} {S} {EvR V A} (mr-map (λ a → (c-val a , m)) (f m))
+ev-wr : {l : Level} {S : Sig} {V : Type} → (AMem → MRes AMem) → Ev {l} S V Unit
+ev-wr {l} {S} {V} f = λ m → ret {l} {S} {EvR V Unit} (mr-map (λ m2 → (c-val unit , m2)) (f m))
+ev-mem : {l : Level} {S : Sig} {V A : Type} → (AMem → MRes (A × AMem)) → Ev {l} S V A
+ev-mem {l} {S} {V} {A} f = λ m → ret {l} {S} {EvR V A} (mr-map (λ r → (c-val (fst r) , snd r)) (f m))
+-- a command of the world: its response is the value, the memory is untouched
+ev-cmd : {l : Level} {S : Sig} {V : Type} → (c : Cmd S) → Ev {l} S V (Resp S c)
+ev-cmd {l} {S} {V} c = λ m →
+  bind {l} {S} {Resp S c} {EvR V (Resp S c)} (cmd {l} {S} c) (λ r → ret {l} {S} {EvR V (Resp S c)} (mok (c-val r , m)))
+-- leaving: undefined behaviour, a stop, and the control outcomes
+ev-ub : {l : Level} {S : Sig} {V A : Type} → UB → Ev {l} S V A
+ev-ub {l} {S} {V} {A} w = λ m → ret {l} {S} {EvR V A} (mub w)
+ev-stop : {l : Level} {S : Sig} {V A : Type} → Stop → Ev {l} S V A
+ev-stop {l} {S} {V} {A} w = λ m → ret {l} {S} {EvR V A} (mstop w)
+ev-return : {l : Level} {S : Sig} {V A : Type} → V → Ev {l} S V A
+ev-return {l} {S} {V} {A} v = λ m → ret {l} {S} {EvR V A} (mok (c-ret v , m))
+ev-break : {l : Level} {S : Sig} {V A : Type} → Ev {l} S V A
+ev-break {l} {S} {V} {A} = λ m → ret {l} {S} {EvR V A} (mok (c-break , m))
+ev-continue : {l : Level} {S : Sig} {V A : Type} → Ev {l} S V A
+ev-continue {l} {S} {V} {A} = λ m → ret {l} {S} {EvR V A} (mok (c-continue , m))
+ev-throw : {l : Level} {S : Sig} {V A : Type} → V → Ev {l} S V A
+ev-throw {l} {S} {V} {A} v = λ m → ret {l} {S} {EvR V A} (mok (c-throw v , m))
+
+-- ---------------------------------------------------------------- control: catching the outcomes
+-- every outcome of e handed to a continuation that sees the control outcome (ev-bind sees values only)
+ev-on : {l : Level} {S : Sig} {V A B : Type} → Ev {l} S V A → (Ctl V A → Ev {l} S V B) → Ev {l} S V B
+ev-on {l} {S} {V} {A} {B} e f = λ m →
+  bind {l} {S} {EvR V A} {EvR V B} (e m) (λ r → case r of
+    mok cm → f (fst cm) (snd cm)
+    mub w → ret {l} {S} {EvR V B} (mub w)
+    mstop w → ret {l} {S} {EvR V B} (mstop w))
+-- a loop body: true to go on (it ended, or continued), false to leave (it broke); a return or
+-- a throw passes through
+ev-body : {l : Level} {S : Sig} {V : Type} → Ev {l} S V Unit → Ev {l} S V Bool
+ev-body {l} {S} {V} e = ev-on {l} {S} {V} {Unit} {Bool} e (λ c → case c of
+  c-val u → ev-ret {l} {S} {V} {Bool} true
+  c-ret v → ev-return {l} {S} {V} {Bool} v
+  c-break → ev-ret {l} {S} {V} {Bool} false
+  c-continue → ev-ret {l} {S} {V} {Bool} true
+  c-throw v → ev-throw {l} {S} {V} {Bool} v)
+-- a function body at a call: a return is the call's value; falling off the end is the outcome
+-- given (the value of a void function, or ub-no-return); a break or continue cannot leave a
+-- function (a reader's error); a throw passes through to the caller
+ev-fn : {l : Level} {S : Sig} {V : Type} → MRes V → Ev {l} S V Unit → Ev {l} S V V
+ev-fn {l} {S} {V} off e = ev-on {l} {S} {V} {Unit} {V} e (λ c → case c of
+  c-val u → ev-res {l} {S} {V} {V} off
+  c-ret v → ev-ret {l} {S} {V} {V} v
+  c-break → ev-stop {l} {S} {V} {V} st-ill-typed
+  c-continue → ev-stop {l} {S} {V} {V} st-ill-typed
+  c-throw v → ev-throw {l} {S} {V} {V} v)
+-- try e, a thrown value handled (the handler may throw again)
+ev-catch : {l : Level} {S : Sig} {V A : Type} → Ev {l} S V A → (V → Ev {l} S V A) → Ev {l} S V A
+ev-catch {l} {S} {V} {A} e hd = ev-on {l} {S} {V} {A} {A} e (λ c → case c of
+  c-val a → ev-ret {l} {S} {V} {A} a
+  c-ret v → ev-return {l} {S} {V} {A} v
+  c-break → ev-break {l} {S} {V} {A}
+  c-continue → ev-continue {l} {S} {V} {A}
+  c-throw v → hd v)
+-- e, then fin whatever way e left (a destructor at scope exit, an unwinding step): fin's own
+-- leaving wins over e's; otherwise e's outcome stands
+ev-finally : {l : Level} {S : Sig} {V A : Type} → Ev {l} S V A → Ev {l} S V Unit → Ev {l} S V A
+ev-finally {l} {S} {V} {A} e fin = ev-on {l} {S} {V} {A} {A} e (λ c →
+  ev-bind {l} {S} {V} {Unit} {A} fin (λ u m → ret {l} {S} {EvR V A} (mok (c , m))))
+
+-- ---------------------------------------------------------------- loops
+-- for (; cond; step) body, with fuel: each test of the condition spends one; spent, the
+-- meaning stops. A continue in the body goes to the step.
+ev-for : {l : Level} {S : Sig} {V : Type} → Word → Ev {l} S V Bool → Ev {l} S V Unit → Ev {l} S V Unit → Ev {l} S V Unit
+ev-for {l} {S} {V} fuel cond step body =
+  %welimP (λ x → Ev {l} S V Unit) fuel (ev-stop {l} {S} {V} {Unit} st-fuel)
+    (λ k again → ev-bind {l} {S} {V} {Bool} {Unit} cond (λ go → case go of
+       false → ev-ret {l} {S} {V} {Unit} unit
+       true → ev-bind {l} {S} {V} {Bool} {Unit} (ev-body {l} {S} {V} body) (λ on → case on of
+         false → ev-ret {l} {S} {V} {Unit} unit
+         true → ev-then {l} {S} {V} {Unit} {Unit} step again)))
+ev-while : {l : Level} {S : Sig} {V : Type} → Word → Ev {l} S V Bool → Ev {l} S V Unit → Ev {l} S V Unit
+ev-while {l} {S} {V} fuel cond body = ev-for {l} {S} {V} fuel cond (ev-ret {l} {S} {V} {Unit} unit) body
+-- do body while (cond): the body once, then the loop (a break in the first run leaves)
+ev-do-while : {l : Level} {S : Sig} {V : Type} → Word → Ev {l} S V Unit → Ev {l} S V Bool → Ev {l} S V Unit
+ev-do-while {l} {S} {V} fuel body cond =
+  ev-bind {l} {S} {V} {Bool} {Unit} (ev-body {l} {S} {V} body) (λ on → case on of
+    false → ev-ret {l} {S} {V} {Unit} unit
+    true → ev-while {l} {S} {V} fuel cond body)
+-- a counted loop, structural (no fuel): body at 0, 1, …, n - 1; break and continue as in a loop
+ev-for-n : {l : Level} {S : Sig} {V : Type} → Word → (Word → Ev {l} S V Unit) → Ev {l} S V Unit
+ev-for-n {l} {S} {V} n body =
+  %welimP (λ x → Word → Ev {l} S V Unit) n (λ i → ev-ret {l} {S} {V} {Unit} unit)
+    (λ k rest i → ev-bind {l} {S} {V} {Bool} {Unit} (ev-body {l} {S} {V} (body i)) (λ on → case on of
+       false → ev-ret {l} {S} {V} {Unit} unit
+       true → rest (wadd i #1)))
+    #0
+
+-- ---------------------------------------------------------------- running without a world
+-- the signature with no commands, and a computation over it run to its outcome
+NoS : Sig
+NoS = (Empty , λ c → Empty)
+ev-run-pure : {V A : Type} → Ev {lzero} NoS V A → AMem → EvR V A
+ev-run-pure {V} {A} e m = e m (EvR V A) (λ r → r) (λ c k → Empty-rec c)
+-- the value of a computation that ended normally (anything else as it is)
+ev-value : {V A : Type} → EvR V A → MRes (Ctl V A)
+ev-value r = mr-map (λ cm → fst cm) r
+
+-- ---------------------------------------------------------------- the memory's operations as computations
+ev-load : {l : Level} {S : Sig} {V : Type} → Target → SK → MPtr → Ev {l} S V SV
+ev-load {l} {S} {V} t k p = ev-rd {l} {S} {V} {SV} (mem-load t k p)
+ev-store : {l : Level} {S : Sig} {V : Type} → Target → SK → MPtr → SV → Ev {l} S V Unit
+ev-store {l} {S} {V} t k p v = ev-wr {l} {S} {V} (mem-store t k p v)
+ev-alloc : {l : Level} {S : Sig} {V : Type} → AKind → Bool → Word → Word → Ev {l} S V MPtr
+ev-alloc {l} {S} {V} kd z size al = ev-mem {l} {S} {V} {MPtr} (mem-alloc kd z size al)
+ev-release : {l : Level} {S : Sig} {V : Type} → AKind → MPtr → Ev {l} S V Unit
+ev-release {l} {S} {V} kd p = ev-wr {l} {S} {V} (mem-release kd p)
+ev-ptr-add : {l : Level} {S : Sig} {V : Type} → MPtr → Word → UInt64 → Ev {l} S V MPtr
+ev-ptr-add {l} {S} {V} p sz i = ev-rd {l} {S} {V} {MPtr} (mem-ptr-add p sz i)
+-- a block's automatic object: allocated, the body run with its pointer, released however the
+-- body left
+ev-local : {l : Level} {S : Sig} {V A : Type} → Word → Word → (MPtr → Ev {l} S V A) → Ev {l} S V A
+ev-local {l} {S} {V} {A} size al body =
+  ev-bind {l} {S} {V} {MPtr} {A} (ev-alloc {l} {S} {V} ak-auto false size al) (λ p →
+    ev-finally {l} {S} {V} {A} (body p) (ev-release {l} {S} {V} ak-auto p))
