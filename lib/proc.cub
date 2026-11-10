@@ -44,54 +44,6 @@ runp p w st =
   p (St → Outcome A × St) (λ a s → (done a , s))
     (λ c k s → case w c s of inl r → k (fst r) (snd r); inr s2 → (stopped , s2))
     st
--- ---------------------------------------------------------------- readings: a key-value world
--- commands: get k, put k v; responses: a word for get, unit for put
-data KV = get (k : Word) | put (k : Word) (v : Word)
-kv-resp : KV → Type
-kv-resp c = case c of get k → Word; put k v → Unit
-KVS : Sig
-KVS = (KV , kv-resp)
--- the state: an association list, as a function from keys to words (absent keys 0); the world
--- refuses puts at key 0
-kv-world : World KVS (Word → Word)
-kv-world c st =
-  case c return (λ x → Sum (kv-resp x × (Word → Word)) (Word → Word)) of
-    get k → inl (st k , st)
-    put k v → (case weq k #0 of true → inr st; false → inl (unit , (λ j → case weq j k of true → v; false → st j)))
--- a process: put 1 := 5, put 2 := 7, then get 1 and get 2, returning their sum
-pr1 : {l : Level} → Proc {l} KVS Word
-pr1 {l} = bind {l} {KVS} {Unit} {Word} (cmd {l} {KVS} (put #1 #5)) (λ u →
-     bind {l} {KVS} {Unit} {Word} (cmd {l} {KVS} (put #2 #7)) (λ u2 →
-     bind {l} {KVS} {Word} {Word} (cmd {l} {KVS} (get #1)) (λ a →
-     bind {l} {KVS} {Word} {Word} (cmd {l} {KVS} (get #2)) (λ b → ret {l} {KVS} {Word} (%wadd a b)))))
-empty-st : Word → Word
-empty-st k = #0
--- a refused command stops the process; the state is the one at the refusal
-pr2 : {l : Level} → Proc {l} KVS Word
-pr2 {l} = bind {l} {KVS} {Unit} {Word} (cmd {l} {KVS} (put #1 #5)) (λ u →
-     bind {l} {KVS} {Unit} {Word} (cmd {l} {KVS} (put #0 #9)) (λ u2 → ret {l} {KVS} {Word} #1))
--- the monad laws hold by computation: bind (ret a) f = f a and bind p ret = p at the interpretation
--- ---------------------------------------------------------------- handlers
--- a logging handler into a signature with one more command: every put is also logged (cmd log k),
--- then performed; the handled process is run in a world that counts the logs in its state
-data KVL = kv (c : KV) | log (k : Word)
-kvl-resp : KVL → Type
-kvl-resp c = case c of kv c2 → kv-resp c2; log k → Unit
-KVLS : Sig
-KVLS = (KVL , kvl-resp)
-logging : Handler KVS KVLS
-logging c =
-  case c return (λ x → Proc {lzero} KVLS (kv-resp x)) of
-    get k → cmd {lzero} {KVLS} (kv (get k))
-    put k v → bind {lzero} {KVLS} {Unit} {Unit} (cmd {lzero} {KVLS} (log k)) (λ u → cmd {lzero} {KVLS} (kv (put k v)))
--- the world: the store and a log count
-kvl-world : World KVLS ((Word → Word) × Word)
-kvl-world c st =
-  case c return (λ x → Sum (kvl-resp x × ((Word → Word) × Word)) ((Word → Word) × Word)) of
-    kv c2 → (case kv-world c2 (fst st) of inl r → inl (fst r , (snd r , snd st)); inr s2 → inr (s2 , snd st))
-    log k → inl (unit , (fst st , %wsucc (snd st)))
-pr1-logged : Proc {lzero} KVLS Word
-pr1-logged = handle {KVS} {KVLS} {Word} logging (pr1 {lsuc lzero})
 -- ---------------------------------------------------------------- supervision (D25)
 -- a restart strategy: given the outcome and the number of runs so far, restart or give up
 data Action = restart | give-up
@@ -109,35 +61,6 @@ supervise fuel s p w st =
              restart → rec k (snd r) (suc n)
              give-up → (fst r , (snd r , suc n))))
   st zero
-lt3 : Nat → Action
-lt3 n = case n of zero → restart; suc k → (case k of zero → restart; suc k2 → (case k2 of zero → restart; suc k3 → give-up))
--- restart on stopped while fewer than three runs; never on done
-upto3 : {A : Type} → Strategy A
-upto3 o n = case o of done a → give-up; stopped → lt3 n; failed r → give-up
-lt2 : Nat → Bool
-lt2 n = case n of zero → true; suc k → (case k of zero → true; suc k2 → false)
-andb2 : Bool → Bool → Bool
-andb2 a b = case a of true → b; false → false
--- a world that refuses the first two puts at key 0, counting its refusals in its state
-flaky : World KVS ((Word → Word) × Nat)
-flaky c st =
-  case c return (λ x → Sum (kv-resp x × ((Word → Word) × Nat)) ((Word → Word) × Nat)) of
-    get k → inl (fst st k , st)
-    put k v →
-      (case andb2 (weq k #0) (lt2 (snd st)) of
-         true → inr (fst st , suc (snd st))
-         false → inl (unit , ((λ j → case weq j k of true → v; false → fst st j) , snd st)))
--- a process putting at key 0 then reading it: stopped twice, done on the third run, with the
--- world's refusal count at two
-pr3 : {l : Level} → Proc {l} KVS Word
-pr3 {l} = bind {l} {KVS} {Unit} {Word} (cmd {l} {KVS} (put #0 #9)) (λ u → bind {l} {KVS} {Word} {Word} (cmd {l} {KVS} (get #0)) (λ a → ret {l} {KVS} {Word} a))
-sup3 : Outcome Word × (((Word → Word) × Nat) × Nat)
-sup3 = supervise {KVS} {Word} {(Word → Word) × Nat} 5 (upto3 {Word}) (pr3 {lzero}) flaky (empty-st , zero)
--- a world that always refuses: three runs, then the strategy gives up, stopped
-always-refusing : World KVS Unit
-always-refusing c st = case c return (λ x → Sum (kv-resp x × Unit) Unit) of get k → inl (#0 , unit); put k v → inr unit
-sup-bad : Outcome Word × (Unit × Nat)
-sup-bad = supervise {KVS} {Word} {Unit} 5 (upto3 {Word}) (pr3 {lzero}) always-refusing unit
 -- ---------------------------------------------------------------- replay (7.3)
 -- a run is reproduced from the world's responses: a recording world keeps, beside its own state,
 -- the responses given (encoded as words by the signature's encoder), and a replaying world answers
@@ -156,18 +79,6 @@ recording {S} {St} enc w c st =
 -- the replaying world: the next recorded response, else a refusal
 replaying : {S : Sig} → Decoder S → World S (List Word)
 replaying {S} dec c log = case log of nil → inr nil; cons x rest → inl (dec c x , rest)
-rev-list : {A : Type} → List A → List A → List A
-rev-list l acc = (case l return (λ w → List A → List A) of nil → λ a → a; cons x r → λ a → rec r (cons x a)) acc
-kv-enc : Encoder KVS
-kv-enc c = case c return (λ x → kv-resp x → Word) of get k → λ w → w; put k v → λ u → #0
-kv-dec : Decoder KVS
-kv-dec c = case c return (λ x → Word → kv-resp x) of get k → λ w → w; put k v → λ w → unit
--- pr1 recorded under the key-value world, then replayed from the record alone: 12 both times
-rec1 : Outcome Word × ((Word → Word) × List Word)
-rec1 = runp {KVS} {Word} {(Word → Word) × List Word} (pr1 {lzero}) (recording {KVS} {Word → Word} kv-enc kv-world) (empty-st , nil)
-log1 : List Word
-log1 = rev-list (snd (snd rec1)) nil
--- a record cut short replays as a refusal where it ends
 -- ---------------------------------------------------------------- signature inclusion (7.1)
 -- an inclusion of S in T: each command of S is a command of T, with T's response read back as
 -- S's. A process of S is lifted to T by transport along it: the handler that issues the included

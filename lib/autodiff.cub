@@ -78,6 +78,9 @@ tf v d q = eadd v (eadd (emul vH d) (emul (emul vH vH) q))
 -- the constant: n = n + h·0 + h²·0
 tc-id2 : (n h : Nat) → n ≡ plus n (plus (times h zero) (times (times h h) zero))
 tc-id2 n h = ring-eq (λ v → nthv (ncons n (ncons zero (ncons zero (ncons zero (ncons zero (ncons zero (ncons h nnil))))))) v) vA (tf vA (ec zero) (ec zero)) (λ i → norm vA)
+-- the constant one, as an expression
+one : Ex
+one = ec (suc zero)
 -- the variable: x + h = x + h·1 + h²·0
 tx-id : (x h : Nat) → plus x h ≡ plus x (plus (times h (suc zero)) (times (times h h) zero))
 tx-id x h = ring-eq (λ v → nthv (ncons x (ncons zero (ncons zero (ncons zero (ncons zero (ncons zero (ncons h nnil))))))) v) (eadd vA vH) (tf vA one (ec zero)) (λ i → norm (eadd vA vH))
@@ -136,13 +139,6 @@ taylor p x h =
     kx → (zero , tx-id x h)
     kadd a b → taylor-add x h a b (rec a) (rec b)
     kmul a b → taylor-mul x h a b (rec a) (rec b)
--- ---------------------------------------------------------------- readings
--- p = x² + 3x + 1: p' = 2x + 3; at x = 2: p = 11, p' = 7, by both routes
-three : Pl
-three = kc (suc (suc (suc zero)))
-p1 : Pl
-p1 = kadd (kadd (kmul kx kx) (kmul three kx)) (kc (suc zero))
--- the remainder taylor computes for p1 at x = 2, h = 1: p(3) = 19 = 11 + 1·7 + 1·q, q = 1
 -- ---------------------------------------------------------------- D over codes (F31: D : Code → Code)
 -- a code of the fragment — the variable 0 under one λ, plus, times, Nat literals — read as a
 -- polynomial through lib/ring.cub's bridge (an expression in the variable 0), differentiated by
@@ -162,10 +158,3 @@ ex-of-pl p =
     kmul a b → emul (ex-of-pl a) (ex-of-pl b)
 -- D-code: the code of λ x → p (the body under one λ) to the code of λ x → p'
 D-code c = omap (λ p → clam (code-of-ex (ex-of-pl (D p)))) (obind (ex-of-code (lam-body c)) pl-of-ex)
--- x·x + 3·x + 1 as a source term: its derivative's code evaluates to 2x + 3 (at 2: 7), and the
--- derivative code is the code of what D says
-cp1 = code (λ x → plus (plus (times x x) (times 3 x)) 1)
--- outside the fragment (a second variable, a successor): none
--- (A typed mirror of the fragment's codes, PCode, with its evaluator cev and D-correct over it,
--- stood here until 2026-11-09. It was a copy of a fragment of Code with a theorem about the copy,
--- tied to Code by readings — the error PLAN section 17 records — and is removed.)

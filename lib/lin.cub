@@ -188,25 +188,3 @@ omega-cert hs a b =
             in if %weq (snd p) #0 then none
                else obind (divide-by (snd p) (fst p)) (λ cert →
                       if check-cert hs cert a b then some cert else none)))))
--- ---------------------------------------------------------------- readings
--- x + (1 + x) = 2x + 1 as codes (x is variable 0)
-e1 = cwop #2 (cvar #0) (cwsucc (cvar #0))
-e2 = cwop #2 (cwop #2 (cvar #0) (cvar #0)) (cwlit #1)
--- order: x + 4 ≤ x + 64 ; x + 4 ≤ y + 64 is not decided without a hypothesis
--- the decoder's obligation: off + 4 ≤ n from the hypotheses off ≤ i and i + 8 ≤ n (variables:
--- off 0, i 1, n 2), with multipliers 1 and 1:
---   off + 4 + (i + (i + 8)) ≤ n + (off + i)  pointwise? left: off + 2i + 12 ; right: off + i + n:
---   no. With the hypothesis i + 8 ≤ n alone (multiplier 1): off + 4 + n ≤ n + i + 8 needs off ≤ i;
---   both hypotheses, multipliers 1 and 1: off + 4 + i + n ≤ n + off + i + 8: yes (4 ≤ 8)
-hs1 = lcons (cvar #0 , cvar #1) (lcons (cwop #2 (cvar #1) (cwlit #8) , cvar #2) lnil)
--- a wrong certificate (too few multipliers) is refused
--- the search finds the certificate above, and finds none when the goal does not follow
--- the directed search finds the same certificate, and refutes the same goal
--- a problem enumeration would not reach: x ≤ y, y ≤ z, z ≤ w, w + 3 ≤ u (variables 0..4) gives
--- x + 2 ≤ u with multipliers 1,1,1,1
-lhyp2 = lcons (cvar #0 , cvar #1) (lcons (cvar #1 , cvar #2) (lcons (cvar #2 , cvar #3) (lcons (cwop #2 (cvar #3) (cwlit #3) , cvar #4) lnil)))
--- a multiplier above 1: 2x ≤ y and y + y ≤ z give 4x ≤ z (multipliers 2, 1)
-lhyp3 = lcons (cwop #2 (cvar #0) (cvar #0) , cvar #1) (lcons (cwop #2 (cvar #1) (cvar #1) , cvar #2) lnil)
--- the step specific to Nat: x + y ≤ 3 gives x ≤ 3 (y ≥ 0 is free), which rational elimination
--- alone would not find
-lhyp4 = lcons (cwop #2 (cvar #0) (cvar #1) , cwlit #3) lnil

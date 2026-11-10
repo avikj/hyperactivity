@@ -198,9 +198,6 @@ conglw : (e : Env) → {f g : LinT} → f ≡ g → lsem e f ≡ lsem e g
 conglw e p = λ i → lsem e (p i)
 same-norm-eq : (e : Env) (a b : LinCode) → lnorm a ≡ lnorm b → wev e a ≡ wev e b
 same-norm-eq e a b p = catw (symw (lnorm-sound e a)) (catw (conglw e p) (lnorm-sound e b))
--- readings: x + (1 + x) and (x + x) + 1 lnorm alike and so agree at any environment
-ex1 = lc-add (lc-var #0) (lc-suc (lc-var #0))
-ex2 = lc-add (lc-add (lc-var #0) (lc-var #0)) (lc-lit #1)
 -- ---------------------------------------------------------------- order
 -- a ≤ b: a witness d with a + d = b (as le on Nat in lib/std.cub)
 Lew : Word → Word → Type
@@ -365,6 +362,3 @@ cert-sound : (e : Env) (hs : Hyps) (ms : Mults) (a b : LinCode) → Holds e hs �
              cert-check hs ms a b ≡ true → Lew (wev e a) (wev e b)
 cert-sound e hs ms a b hh p =
   le-cancel (wev e a) (wev e b) (wev e (sum-l hs ms)) (wev e (sum-r hs ms)) (sum-le e hs ms hh) (code-le-sound e (lc-add a (sum-r hs ms)) (lc-add b (sum-l hs ms)) p)
--- readings: the decoder's obligation off + 4 ≤ n from off ≤ i and i + 8 ≤ n (multipliers 1, 1);
--- with the wrong multipliers it does not check; a ≤ b alone decided on normal forms
-hyp1 = hcons (lc-var #0) (lc-var #1) (hcons (lc-add (lc-var #1) (lc-lit #8)) (lc-var #2) hnil)

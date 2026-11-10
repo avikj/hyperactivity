@@ -55,10 +55,6 @@ bound-i4 i n h =
 -- a 4-byte field at i and an 8-byte field at i, from a message of n bytes with i + 8 ≤ n
 decode : (n : Nat) → Bytes n → (i : Nat) → le (plus i 8) n → UInt32 × Int64
 decode n b i h = (load32 n b i (bound-i4 i n h) , load64 n b i h)
--- readings: a 16-byte message with 258 stored at 4 (32 bits) and 7 at 4 (64 bits, overwriting), read
--- back at 4 with the bound 4 + 8 ≤ 16 given as (4 , refl)
-msg : Bytes 16
-msg = store64 16 (store32 16 (bytes 16) 4 (8 , λ i → 16) (u32 #258)) 4 (4 , λ i → 16) (i64 #7)
 -- ---------------------------------------------------------------- a loop over messages
 -- count messages of 16 bytes in n bytes (count·16 ≤ n): the 8-byte field of message k is at
 -- k·16, and its bound k·16 + 8 ≤ n follows from (k+1)·16 ≤ n, which is 16 + k·16 ≤ n by the
@@ -88,9 +84,6 @@ sum-msgs n b count h =
      zero → λ h → #0
      suc k → λ h → %wadd (i64toWord (load64 n b (times k 16) (bound-m (times k 16) n h))) (rec k (weaken-m (times k 16) n h)))
   h
--- readings: two messages of 16 bytes, fields 5 and 9 at 0 and 16; their sum
-msgs : Bytes 32
-msgs = store64 32 (store64 32 (bytes 32) 0 (24 , λ i → 32) (i64 #5)) 16 (8 , λ i → 32) (i64 #9)
 -- ---------------------------------------------------------------- a message with a type tag
 -- a 32-byte message: a 4-byte type at 0; type 1 carries a 64-bit price at 8, type 2 a 64-bit
 -- quantity at 16; the field read depends on the tag. Every bound is at a literal offset
@@ -99,7 +92,3 @@ decode-msg b =
   case weq (u32toWord (load32 32 b 0 (28 , λ i → 32))) #1 of
     true → i64toWord (load64 32 b 8 (16 , λ i → 32))
     false → i64toWord (load64 32 b 16 (8 , λ i → 32))
-m1 : Bytes 32
-m1 = store64 32 (store32 32 (bytes 32) 0 (28 , λ i → 32) (u32 #1)) 8 (16 , λ i → 32) (i64 #500)
-m2 : Bytes 32
-m2 = store64 32 (store32 32 (bytes 32) 0 (28 , λ i → 32) (u32 #2)) 16 (8 , λ i → 32) (i64 #7)

@@ -120,37 +120,3 @@ show-fields d ks n r j t =
                   else if %weq (fst k) #3 then c-cons (prim-to-word (snd k) f) c-nil
                   else capp (fromopt (derive-show (snd k)) c-nil) f)
       in c-app this (show-fields d kr n r (%wsucc j) (if %weq (fst k) #1 then %wsucc t else t))
--- ---------------------------------------------------------------- readings
--- equality on Nat, derived and evaluated
-eqNat = eval-g lnil (fromopt (derive-eq (didx (code Nat))) c-false)
--- on Bool
-eqBool = eval-g lnil (fromopt (derive-eq (didx (code Bool))) c-false)
--- on a type with word fields and two recursive fields, declared here
-data Tree = leaf (w : Word) | node (l : Tree) (r : Tree)
-eqTree = eval-g lnil (fromopt (derive-eq (didx (code Tree))) c-false)
--- a field of another data type: Nat inside
-data Box = box (n : Nat) (b : Bool)
-eqBox = eval-g lnil (fromopt (derive-eq (didx (code Box))) c-false)
--- a higher inductive type is not covered (its constructors have dimensions)
-data Circ = cbase | cloop (i : I) [ i = 0 ↦ cbase , i = 1 ↦ cbase ]
--- the derived function quotes back at its type (η-expanded by the quote) and runs again
-eqNat2 = eval-g lnil (fromopt (quote-top (Nat → Nat → Bool) eqNat) cword)
--- writing: Nat in unary, a tree in preorder with its words, a box through Nat's writing
-showNat = eval-g lnil (fromopt (derive-show (didx (code Nat))) c-nil)
-showTree = eval-g lnil (fromopt (derive-show (didx (code Tree))) c-nil)
-showBox = eval-g lnil (fromopt (derive-show (didx (code Box))) c-nil)
--- a writing is injective where the equality says so: equal writings, equal by derived equality
--- fields of primitive types (B12): compared and written by the machine's operations as cprim
--- codes (i64eq, f64eq; wofi64, a float through its Int64 part)
-data PrimRec = prec (a : Int64) (w : Word) | pflt (f : Float64)
-eqPrimRec = eval-g lnil (fromopt (derive-eq (didx (code PrimRec))) c-false)
-showPrimRec = eval-g lnil (fromopt (derive-show (didx (code PrimRec))) c-nil)
--- ---------------------------------------------------------------- deriving eq D [as name]: the derived code checked and
--- defined at D → D → Bool (D·eq by default)
-deriving eq Nat
-data Tree2 = leaf2 (w : Word) | node2 (l : Tree2) (r : Tree2)
-deriving eq Tree2 as eqTree2
--- a field of a primitive type: the derived code's cprim reads back as lib/prim.cub's checked
--- primitive, so the surface form checks it (deriving eq PI)
--- (PrimRec above has such fields)
-deriving eq PrimRec as eqPrimRec

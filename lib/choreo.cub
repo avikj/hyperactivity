@@ -17,9 +17,6 @@ chor-g (choice a l r) = gchoice a (next (chor-g l)) (next (chor-g r))
 -- a transfer from a to b of v, then again forever: a feed
 feed : Word → Word → Word → GChor κ
 feed a b v = gxfer a b v (λ α → feed a b v)
--- ping-pong: a sends 1 to b, b sends 2 to a, forever
-ping-pong : Word → Word → GChor κ
-ping-pong a b = gxfer a b #1 (λ α → gxfer b a #2 (λ β → ping-pong a b))
 -- ---------------------------------------------------------------- projection
 -- the endpoint projection to a role, by guarded recursion: a step the role is not part of is a
 -- silent tick (so that the projection stays productive and the roles' tick counts agree)
@@ -60,31 +57,3 @@ cut (suc n) g =
     inr s → (case s of inl c → choice (fst c) (cut n (unfold-k g)) (cut n (unfold-r g)); inr u → cend)
 projectable-to : Nat → GChorT → Bool
 projectable-to n g = projectable (cut n g)
--- ---------------------------------------------------------------- readings
--- ping-pong between 1 and 2, projected to each role and run under the scripted local world of
--- tests/proc.cub's kind (outgoing logged, incoming from a queue), to a budget of commands
-ppT : GChorT
-ppT κ = ping-pong {κ} #1 #2
-LocSt2 : Type
-LocSt2 = List Word × List Word
-loc-world2 : World LocS LocSt2
-loc-world2 c st =
-  case c return (λ x → Sum (loc-resp x × LocSt2) LocSt2) of
-    send t v → inl (unit , (cons v (fst st) , snd st))
-    recvf f → (case snd st of nil → inr st; cons w r → inl (w , (fst st , r)))
-    pick → inl (#0 , st)
-    tell l → inl (unit , (cons l (fst st) , snd st))
-    offer f → (case snd st of nil → inr st; cons w r → inl (w , (fst st , r)))
--- role 1 with two incoming 2s: sends 1, receives 2, sends 1, receives 2, sends 1, then is refused
--- (the queue is empty): three sends logged
-pp1 : Within (Outcome Unit × LocSt2)
-pp1 = grun-for {LocS} {Unit} {LocSt2} 10 loc-world2 (λ κ → gproject {κ} #1 (ping-pong {κ} #1 #2)) (nil , cons #2 (cons #2 nil))
--- a role not in the protocol only ticks: never refused, never done
--- a finite choreography embedded projects as before: tests/proc.cub's g1 for role 2 (receives 5,
--- picks 0, tells it, sends 7)
-g1g : Within (Outcome Unit × LocSt2)
-g1g = grun-for {LocS} {Unit} {LocSt2} 10 loc-world2 (λ κ → gproject {κ} #2 (chor-g {κ} (xfer #1 #2 #5 (choice #2 (xfer #2 #1 #7 cend) (xfer #2 #1 #8 cend))))) (nil , cons #5 nil)
--- a choice that is not projectable at any depth that reaches it: the chooser's branches differ
--- for role 1 without telling it
-bad-loop : GChor κ
-bad-loop = gchoice #2 (next (gxfer #1 #3 #7 (next gcend))) (next gcend)

@@ -217,31 +217,6 @@ congp : (e : Val) → {p q : Poly} → p ≡ q → pev e p ≡ pev e q
 congp e r = λ i → pev e (r i)
 ring-eq : (e : Val) (a b : Ex) → norm a ≡ norm b → xeval e a ≡ xeval e b
 ring-eq e a b r = transN (symN (norm-sound e a)) (transN (congp e r) (norm-sound e b))
--- ---------------------------------------------------------------- readings
--- (x + 1)² = x² + 2x + 1, as expressions over the variable 0
-one : Ex
-one = ec (suc zero)
-two : Ex
-two = ec (suc (suc zero))
-x0 : Ex
-x0 = ev #0
-sq1 : Ex
-sq1 = emul (eadd x0 one) (eadd x0 one)
-sq2 : Ex
-sq2 = eadd (eadd (emul x0 x0) (emul two x0)) one
--- the identity as a theorem at every valuation, by one evaluation of the normalizer: the proof
--- term is the constant path at the shared normal form
-sq-thm : (e : Val) → xeval e sq1 ≡ xeval e sq2
-sq-thm e = ring-eq e sq1 sq2 (λ i → norm sq1)
--- (x + y)·(x + y) = x·x + 2·x·y + y·y, in two variables; and a non-identity is not decided
-y0 : Ex
-y0 = ev #1
-sq3 : Ex
-sq3 = emul (eadd x0 y0) (eadd x0 y0)
-sq4 : Ex
-sq4 = eadd (eadd (emul x0 x0) (emul two (emul x0 y0))) (emul y0 y0)
-sq-thm2 : (e : Val) → xeval e sq3 ≡ xeval e sq4
-sq-thm2 e = ring-eq e sq3 sq4 (λ i → norm sq3)
 -- ---------------------------------------------------------------- the bridge from codes (unverified)
 -- a code of the fragment — applications of the globals plus and times, variables, Nat literals
 -- as constructor codes — read as an expression; a code outside the fragment reads as none. What
