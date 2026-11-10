@@ -27,8 +27,7 @@ coef-add cs ds =
            else lcons (fst p , %wadd (snd p) (snd q)) (coef-add cr dr))
 coef-scale c cs = if %weq c #0 then lnil else scale-go c cs
 scale-go c cs = case cs of lnil → lnil; lcons p r → lcons (fst p , wmulw c (snd p)) (scale-go c r)
--- multiplication of words by repeated addition (B12 brings %wmul); coefficients are small
-wmulw a b = %welim a #0 (λ n h → %wadd h b)
+wmulw a b = %wmul a b
 lin-add a b = case a of lin k cs → (case b of lin m ds → lin (%wadd k m) (coef-add cs ds))
 lin-scale c a = case a of lin k cs → lin (wmulw c k) (coef-scale c cs)
 lin-const k = lin k lnil
@@ -118,8 +117,8 @@ rev-onto l acc = case l of lnil → acc; lcons x xs → rev-onto xs (lcons x acc
 -- one the negated goal's); a constraint with no variables and a left constant above its right
 -- is the contradiction, and its multipliers, divided by the goal's, are the certificate, which
 -- check-cert then checks. Enumeration (find-cert) is for tiny problems; this is for small ones
-wdiv a b = if %wlt a b then #0 else %wsucc (wdiv (%wsub a b) b)
-wmod a b = %wsub a (wmulw (wdiv a b) b)
+wdiv a b = %wdiv a b
+wmod a b = %wmod a b
 wgcd a b = if %weq b #0 then a else wgcd b (wmod a b)
 -- coefficient of a variable in a form
 coef-of v cs = case cs of lnil → #0; lcons p r → if %weq (fst p) v then snd p else coef-of v r

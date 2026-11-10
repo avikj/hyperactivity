@@ -247,7 +247,7 @@ static bool node_eq(Node *a, Node *b) {
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "%delay", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
-    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
+    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr", "%i64div", "%i64mod", "%i64and", "%i64or", "%i64xor", "%i64shl", "%i64shr",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%u64ofw", "%wofu64", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
@@ -1015,8 +1015,8 @@ static Node *to_code(Node *t) {
     if (!strcmp(h, "%delay")) return capp1("cthunk", to_code(t->it[1]));
     /* words and levels */
     if (!strcmp(h, "%wsucc")) return capp1("cwsucc", to_code(t->it[1]));
-    { static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub" };
-      for (int q = 0; q < 5; q++) if (!strcmp(h, WO[q])) return capp3("cwop", word(q), to_code(t->it[1]), to_code(t->it[2])); }
+    { static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr" };
+      for (int q = 0; q < 13; q++) if (!strcmp(h, WO[q])) return capp3("cwop", word(q), to_code(t->it[1]), to_code(t->it[2])); }
     if (!strcmp(h, "%welimP") && t->n == 5) return capp4("cwelim", to_code(t->it[2]), to_code(t->it[3]), to_code(t->it[4]), capp1("some", to_code(t->it[1])));
     /* a primitive operation (B12): (cprim k args), k = class·256 + sub as lib/code.cub's prim-apply reads it */
     {
@@ -1329,7 +1329,7 @@ static NV ann(Node *t, Chain *C) {
         { "&", "tfand", 2 }, { "|", "tfor", 2 }, { "comp", "tcomp", 3 }, { "Glue", "tgluet", 2 }, { "glue", "tglue", 2 },
         { "unglue", "tunglue", 2 }, { "%hcompU", "thcompu", 2 }, { "%unglueU", "tunglueu", 2 }, { "hcompD", "thcomp", 2 }, { "force", "tforce", 1 }, { "%delay", "tthunk", 1 }, { NULL, NULL, 0 } };
     {
-        static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", NULL };
+        static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr", NULL };
         for (int q = 0; WO[q]; q++) if (!strcmp(h, WO[q])) {
             NV a = ann(t->it[1], C), b = ann(t->it[2], C);
             p[0] = word(q); p[1] = a.node; p[2] = b.node;
@@ -2132,6 +2132,7 @@ static bool reads(Node *t, const char *x) {
         || !strcmp(h, "%wsucc") || !strcmp(h, "%welim") || !strcmp(h, "%clauses") || !strcmp(h, "faceof"))
         return reads(t->it[1], x);
     if (!strcmp(h, "%weq") || !strcmp(h, "%wlt") || !strcmp(h, "%wadd") || !strcmp(h, "%wmax") || !strcmp(h, "%wsub")
+        || !strcmp(h, "%wmul") || !strcmp(h, "%wdiv") || !strcmp(h, "%wmod") || !strcmp(h, "%wand") || !strcmp(h, "%wor") || !strcmp(h, "%wxor") || !strcmp(h, "%wshl") || !strcmp(h, "%wshr")
         || !strcmp(h, "%ieq") || !strcmp(h, "%feq") || !strcmp(h, "%clos"))
         return reads(t->it[1], x) || reads(t->it[2], x);
     return false;
@@ -2387,7 +2388,7 @@ static Syn *compile(Node *t) {
     {
         static const struct { const char *name; int kind, n; } PR[] = { { "%view", O_VIEW, 1 }, { "%ieq", O_IEQ, 2 }, { "%feq", O_FEQL, 2 }, { "%clauses", O_CLAUSES, 1 }, { "%dnf", O_DNF, 1 }, { "%motive", O_MOTIVE, 1 },
             { "%restrict", O_RESTRICT, 2 }, { "%abs", O_ABS, 2 }, { "%branch", O_BRANCH, 3 }, { "%clos", O_CLOS, 2 }, { "%wsucc", O_WSUCC, 1 }, { "%weq", O_WEQ, 2 }, { "%wlt", O_WLT, 2 },
-            { "%wadd", O_WADD, 2 }, { "%wmax", O_WMAX, 2 }, { "%wsub", O_WSUB, 2 }, { "%welim", O_WELIM, 3 },
+            { "%wadd", O_WADD, 2 }, { "%wmax", O_WMAX, 2 }, { "%wsub", O_WSUB, 2 }, { "%wmul", O_WMUL, 2 }, { "%wdiv", O_WDIV, 2 }, { "%wmod", O_WMOD, 2 }, { "%wand", O_WAND, 2 }, { "%wor", O_WOR, 2 }, { "%wxor", O_WXOR, 2 }, { "%wshl", O_WSHL, 2 }, { "%wshr", O_WSHR, 2 }, { "%welim", O_WELIM, 3 },
             { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 }, { "%gsteps", O_GSTEPS, 1 }, { "%gcode", O_GCODE, 1 }, { "%dnidx", O_DNIDX, 1 },
             /* primitive types and values (B12) */
             { "%pty", O_PTY, 1 }, { "%bytesty", O_BYTESTY, 1 }, { "%pval", O_PVAL, 2 }, { "%bytes", O_BYTES, 1 }, { "%blen", O_BLEN, 1 }, { "%beq", O_BEQ, 2 }, { "%ptr-of", O_PTROF, 1 }, { "%region-at", O_REGAT, 2 }, { NULL, 0, 0 } };
@@ -2751,7 +2752,7 @@ static void rb_one(FILE *o, Port prov) {
         return;
     }
     case V_NWOP: {
-        static const char *nm[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub" };
+        static const char *nm[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr" };
         push_fields_to(o, nm[c->x - O_WEQ], c, 1, 3);
         return;
     }
@@ -3042,9 +3043,9 @@ static void pcode(FILE *o, Port p) {
     }
     else if (!strcmp(h, "cpty")) { long k = word_val(c->port[1]); if (k == PT_BYTES) { fputs("(%bytesty ", o); pcode(o, c->port[2]); fputc(')', o); } else fprintf(o, "(%%pty #%ld)", k); }
     else if (!strcmp(h, "cwop")) {
-        static const char *op[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub" };
+        static const char *op[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr" };
         long k = word_val(c->port[1]);
-        fprintf(o, "(%s ", k >= 0 && k < 5 ? op[k] : "?"); pcode(o, c->port[2]); fputc(' ', o); pcode(o, c->port[3]); fputc(')', o);
+        fprintf(o, "(%s ", k >= 0 && k < 13 ? op[k] : "?"); pcode(o, c->port[2]); fputc(' ', o); pcode(o, c->port[3]); fputc(')', o);
     }
     else {
         /* the rest print as their head and fields */

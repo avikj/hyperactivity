@@ -290,7 +290,7 @@ static const struct { const char *n; int lo, hi; } PRIM[] = {
     { "code", 1, 1 }, { "PathP", 3, 3 }, { "faceof", 1, 1 }, { "sysmap", 2, 2 }, { "sys+", 3, 3 }, { "comp", 3, 3 }, { "Glue", 2, 2 },
     { "glue", 2, 2 }, { "unglue", 2, 2 }, { "hcompD", 2, 2 }, { "%view", 1, 1 }, { "%ieq", 2, 2 }, { "%feq", 2, 2 }, { "%clauses", 1, 1 },
     { "%dnf", 1, 1 }, { "%motive", 1, 1 }, { "%restrict", 2, 2 }, { "%abs", 2, 2 }, { "%branch", 3, 3 }, { "%clos", 2, 2 },
-    { "%wsucc", 1, 1 }, { "%weq", 2, 2 }, { "%wlt", 2, 2 }, { "%wadd", 2, 2 }, { "%wmax", 2, 2 }, { "%wsub", 2, 2 }, { "%welim", 3, 3 },
+    { "%wsucc", 1, 1 }, { "%weq", 2, 2 }, { "%wlt", 2, 2 }, { "%wadd", 2, 2 }, { "%wmax", 2, 2 }, { "%wsub", 2, 2 }, { "%wmul", 2, 2 }, { "%wdiv", 2, 2 }, { "%wmod", 2, 2 }, { "%wand", 2, 2 }, { "%wor", 2, 2 }, { "%wxor", 2, 2 }, { "%wshl", 2, 2 }, { "%wshr", 2, 2 }, { "%welim", 3, 3 },
     { "%welimP", 4, 4 }, { "%box", 1, 1 }, { "%gval", 1, 1 }, { "%gty", 1, 1 }, { "%dtab", 1, 1 }, { "%dent", 1, 1 }, { "%dtrans", 1, 1 },
     { "%var", 1, 2 }, { "%dim", 0, 1 }, { "%@", 4, 4 }, { "%fand", 2, 2 }, { "%for", 2, 2 }, { "pair", 2, 2 }, { NULL, 0, 0 } };
 static int prim_ix(const char *s) { for (int i = 0; PRIM[i].n; i++) if (!strcmp(PRIM[i].n, s)) return i; return -1; }
@@ -2782,8 +2782,8 @@ static Node *cn(Node *c) {
     if (!strcmp(h, "cwlit") && c->n == 2 && !c->it[1]->list) return c->it[1];
     if (!strcmp(h, "cwsucc") && c->n == 2) { a = cn(c->it[1]); return a ? lst(2, nsym("%wsucc"), a) : NULL; }
     if (!strcmp(h, "cwop") && c->n == 4) {
-        static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub" };
-        long k = cn_word(c->it[1]); if (k < 0 || k > 4) return NULL;
+        static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr" };
+        long k = cn_word(c->it[1]); if (k < 0 || k > 12) return NULL;
         a = cn(c->it[2]); b = cn(c->it[3]); return a && b ? lst(3, nsym(WO[k]), a, b) : NULL;
     }
     if (!strcmp(h, "cwelim") && c->n == 5) {

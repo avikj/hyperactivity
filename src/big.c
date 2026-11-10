@@ -54,6 +54,61 @@ WN wn_sub(const WN *x, const WN *y) {
     }
     WN r = from_limbs(l, nx); free(l); return r;
 }
+/* x · y */
+WN wn_mul(const WN *x, const WN *y) {
+    uint32_t nx, ny; const uint64_t *a = limbs(x, &nx), *b = limbs(y, &ny);
+    if (!nx || !ny) return wn_small(0);
+    uint64_t *l = calloc((size_t)nx + ny, sizeof(uint64_t));
+    for (uint32_t i = 0; i < nx; i++) {
+        uint64_t c = 0;
+        for (uint32_t j = 0; j < ny; j++) {
+            unsigned __int128 t = (unsigned __int128)a[i] * b[j] + l[i + j] + c;
+            l[i + j] = (uint64_t)t; c = (uint64_t)(t >> 64);
+        }
+        l[i + ny] = c;
+    }
+    WN r = from_limbs(l, nx + ny); free(l); return r;
+}
+/* x shifted left or right by k bits */
+WN wn_shl(const WN *x, uint64_t k) {
+    uint32_t nx; const uint64_t *a = limbs(x, &nx);
+    if (!nx) return wn_small(0);
+    uint32_t w = (uint32_t)(k / 64), s = (uint32_t)(k % 64), n = nx + w + 1;
+    uint64_t *l = calloc(n, sizeof(uint64_t));
+    for (uint32_t i = 0; i < nx; i++) { l[i + w] |= a[i] << s; if (s) l[i + w + 1] |= a[i] >> (64 - s); }
+    WN r = from_limbs(l, n); free(l); return r;
+}
+WN wn_shr(const WN *x, uint64_t k) {
+    uint32_t nx; const uint64_t *a = limbs(x, &nx);
+    uint64_t w = k / 64; uint32_t s = (uint32_t)(k % 64);
+    if (w >= nx) return wn_small(0);
+    uint32_t n = nx - (uint32_t)w;
+    uint64_t *l = calloc(n, sizeof(uint64_t));
+    for (uint32_t i = 0; i < n; i++) { l[i] = a[i + w] >> s; if (s && i + w + 1 < nx) l[i] |= a[i + w + 1] << (64 - s); }
+    WN r = from_limbs(l, n); free(l); return r;
+}
+/* bitwise: op 0 and, 1 or, 2 xor */
+WN wn_bits(const WN *x, const WN *y, int op) {
+    uint32_t nx, ny; const uint64_t *a = limbs(x, &nx), *b = limbs(y, &ny);
+    uint32_t n = nx > ny ? nx : ny; if (!n) return wn_small(0);
+    uint64_t *l = calloc(n, sizeof(uint64_t));
+    for (uint32_t i = 0; i < n; i++) { uint64_t p = i < nx ? a[i] : 0, q = i < ny ? b[i] : 0; l[i] = op == 0 ? (p & q) : op == 1 ? (p | q) : (p ^ q); }
+    WN r = from_limbs(l, n); free(l); return r;
+}
+/* the quotient and the remainder of x by y (by 0: quotient 0, remainder x, as the 64-bit operations): binary long division */
+void wn_divmod(const WN *x, const WN *y, WN *q, WN *r) {
+    *q = wn_small(0); *r = wn_small(0);
+    if (wn_zero(y)) { *r = wn_copy(x); return; }
+    if (!x->b && !y->b) { q->s = x->s / y->s; r->s = x->s % y->s; return; }
+    uint32_t nx; const uint64_t *a = limbs(x, &nx);
+    uint64_t *ql = calloc(nx ? nx : 1, sizeof(uint64_t));
+    for (uint32_t i = nx; i-- > 0; ) for (int bit = 63; bit >= 0; bit--) {
+        WN t = wn_shl(r, 1); wn_drop(r); *r = t;
+        if ((a[i] >> bit) & 1) { WN one = wn_small(1); t = wn_add(r, &one); wn_drop(r); *r = t; }
+        if (wn_cmp(r, y) >= 0) { t = wn_sub(r, y); wn_drop(r); *r = t; ql[i] |= (uint64_t)1 << bit; }
+    }
+    *q = from_limbs(ql, nx); free(ql);
+}
 WN wn_succ(const WN *x) { WN one = wn_small(1); return wn_add(x, &one); }
 /* decimal digits */
 WN wn_parse(const char *s) {

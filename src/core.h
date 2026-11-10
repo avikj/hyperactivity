@@ -46,6 +46,7 @@ void wn_drop(WN *x);
 bool wn_zero(const WN *x);
 int wn_cmp(const WN *x, const WN *y);
 WN wn_add(const WN *x, const WN *y);
+WN wn_mul(const WN *x, const WN *y); WN wn_shl(const WN *x, uint64_t k); WN wn_shr(const WN *x, uint64_t k); WN wn_bits(const WN *x, const WN *y, int op); void wn_divmod(const WN *x, const WN *y, WN *q, WN *r);
 WN wn_sub(const WN *x, const WN *y);
 WN wn_succ(const WN *x);
 WN wn_parse(const char *s);
@@ -136,7 +137,7 @@ enum {
     V_THUNK,    /* p=Record (no parameter); 1..=environment: a subterm not yet built; an operation meeting
                  * it builds it, a duplicator holds it once (built in place on first read) */
     V_WPLUS,    /* a=k ≥ 1 (or p=Big); 1=a neutral word x: k successors of x */
-    V_NWOP,     /* x=the operation (O_WEQ..O_WSUB); 1=a 2=b: a word operation stuck on a neutral */
+    V_NWOP,     /* x=the operation (O_WEQ..O_WSHR); 1=a 2=b: a word operation stuck on a neutral */
     V_NWELIM,   /* 1=w 2=z 3=s: the elimination of a neutral word */
     V_NPRIM,    /* x=(class<<8)|sub: a primitive operation (B12) stuck on a neutral: 1..n=its arguments in order.
                  * class 1=%op1 (sub PO_*), 2=%op2 (sub PO_*), 3=load (sub width), 4=store (sub width), 5=blen, 6=bytes */
@@ -236,7 +237,8 @@ enum {
     O_FFI,      /* (%ffi k a1 .. an): x=the foreign table entry, 0..n-1=arguments, n=out; a=the arguments read so far, p=them (D27, trusted) */
     O_NATIVE,   /* (%native k g a1 .. an): x=the foreign table entry of a #jit definition, a=the definition g itself; 0..n-1=arguments, n=out;
                    p=the argument values read so far. Every argument crossing (by the entry's JT): the bytes are called; otherwise g is applied (plan 5.5) */
-    O_WEQ, O_WLT, O_WADD, O_WMAX, O_WSUB,  /* 0=a 1=b 2=out: on words; first a, then b. Equality,
+    O_WEQ, O_WLT, O_WADD, O_WMAX, O_WSUB, O_WMUL, O_WDIV, O_WMOD, O_WAND, O_WOR, O_WXOR, O_WSHL, O_WSHR,   /* the last eight compute on numerals only (x / 0 = 0, x mod 0 = x) */
+     /* 0=a 1=b 2=out: on words; first a, then b. Equality,
                  * order, max and truncated subtraction recurse on both (cancelling successors), addition
                  * on b; a word with a neutral part leaves the operation stuck (V_NWOP) */
     O_WOP2,     /* x=the operation; 0=b 1=a (its value) 2=out */

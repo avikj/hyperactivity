@@ -869,7 +869,7 @@ static bool defer_reads(const Cell *d, int k) {
     case O_PAPPR: return !d->x && k == 1;
     case O_BIN: return k == 1;
     case O_TRANSD1: return k == d->n - 2;
-    case O_WEQ: case O_WLT: case O_WADD: case O_WMAX: case O_WSUB: return k == 1;   /* as syn_reads */
+    case O_WEQ: case O_WLT: case O_WADD: case O_WMAX: case O_WSUB: case O_WMUL: case O_WDIV: case O_WMOD: case O_WAND: case O_WOR: case O_WXOR: case O_WSHL: case O_WSHR: return k == 1;   /* as syn_reads */
     case O_CALL: {
         Port g = d->port[1];
         if (!g || is_var(g) || PI(g) != 0 || PC(g)->kind != V_GLOBAL) return false;
@@ -2172,7 +2172,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_WLT] = "WLT",
     [O_WADD] = "WADD",
     [O_WMAX] = "WMAX",
-    [O_WSUB] = "WSUB",
+    [O_WSUB] = "WSUB", [O_WMUL] = "WMUL", [O_WDIV] = "WDIV", [O_WMOD] = "WMOD", [O_WAND] = "WAND", [O_WOR] = "WOR", [O_WXOR] = "WXOR", [O_WSHL] = "WSHL", [O_WSHR] = "WSHR",
     [O_WOP2] = "WOP2",
     [O_WELIM] = "WELIM",
     [O_PEND] = "PEND",
@@ -2950,7 +2950,7 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     case O_VIEW: rule_view(o, v); return;
-    case O_WEQ: case O_WLT: case O_WADD: case O_WMAX: case O_WSUB: {
+    case O_WEQ: case O_WLT: case O_WADD: case O_WMAX: case O_WSUB: case O_WMUL: case O_WDIV: case O_WMOD: case O_WAND: case O_WOR: case O_WXOR: case O_WSHL: case O_WSHR: {
         /* a is read: wait for b */
         Cell *c = cell(O_WOP2, 3); c->x = o->kind;
         mv(o, 1, P(c, 0)); link(P(v, 0), P(c, 1)); mv(o, 2, P(c, 2));
@@ -3409,7 +3409,15 @@ static void interact(Cell *o, Cell *v) {
         if (fb) cell_free(fb);
         int op = (int)o->x;
         Port r = 0;
-        if (!ba && !bb) {
+        if (op >= O_WMUL) {
+            /* multiplication, division, remainder, bitwise and shifts: on numerals; stuck otherwise */
+            if (ba || bb) r = wstuck(op, wplus(wn_copy(&ka), ba), wplus(wn_copy(&kb), bb));
+            else if (op == O_WMUL) r = word_wn(wn_mul(&ka, &kb));
+            else if (op == O_WDIV || op == O_WMOD) { WN q, m; wn_divmod(&ka, &kb, &q, &m); r = word_wn(op == O_WDIV ? q : m); wn_drop(op == O_WDIV ? &m : &q); }
+            else if (op == O_WSHR) r = word_wn(kb.b ? wn_small(0) : wn_shr(&ka, kb.s));
+            else if (op == O_WSHL) { if (kb.b || kb.s > ((uint64_t)1 << 32)) { fprintf(stderr, "%%wshl: a shift of more than 2^32 bits\n"); exit(2); } r = word_wn(wn_shl(&ka, kb.s)); }
+            else r = word_wn(wn_bits(&ka, &kb, op == O_WAND ? 0 : op == O_WOR ? 1 : 2));
+        } else if (!ba && !bb) {
             int c = wn_cmp(&ka, &kb);
             switch (op) {
             case O_WEQ: r = con_build(c == 0 ? B_TRUE : B_FALSE, NULL, NULL); break;
@@ -4062,7 +4070,7 @@ static bool syn_reads(Syn *t, int port) {
     case S_TRANSD: return port == t->n - 1;   /* the value transported: read, or the result itself where ψ holds */
     /* a word operation's second operand (it reads the first, then the second, unless the first is
      * neutral): built strict, not deferred */
-    case S_PRIM: return port == 1 && (t->x == O_WEQ || t->x == O_WLT || t->x == O_WADD || t->x == O_WMAX || t->x == O_WSUB);
+    case S_PRIM: return port == 1 && (t->x == O_WEQ || t->x == O_WLT || t->x == O_WADD || t->x == O_WMAX || (t->x >= O_WSUB && t->x <= O_WSHR));
     case S_CALL: { extern uint64_t global_strict(long g); int q = port - 1; return q < 64 && (global_strict((long)t->id) >> q & 1); }
     default: return false;
     }

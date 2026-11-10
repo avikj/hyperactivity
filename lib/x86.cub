@@ -474,7 +474,8 @@ x-ok defs c =
     cwlit n → fo c
     cplit k b → fo c
     cwsucc a → x-ok defs a
-    cwop k a b → x-ok2 defs a b c
+    -- a left shift of a word has no template yet (its overflow is the bits shifted out)
+    cwop k a b → (if %weq k #11 then not-fo reflect c else x-ok2 defs a b c)
     cprim k as → (if %wlt k #1792 then x-ok-l defs as c else not-fo reflect c)
     cwelim w z s mo → x-ok2b defs (x-ok2 defs w z c) (x-loop-body s) c
     _ → not-fo reflect c
@@ -519,13 +520,20 @@ cx tbl env d c =
 -- a binary operation: a pushed, b into rcx, a back into rax, the operation
 x-bin tbl env d a b op = xcat5 (cx tbl env d a) i-push-rax (cx tbl env (%wsucc d) b) (lapp i-mov-rcx-rax i-pop-rax) op
 -- the word operations (lib/code.cub cwop): eq, lt (Bool: true 0, false 1), add (overflow past
--- 2^64 leaves), max, truncated subtraction
+-- 2^64 leaves), max, truncated subtraction, mul, div, mod, and, or, xor, (shl: refused), shr
 x-wop k =
   if %weq k #0 then lapp i-cmp (i-set cc-ne)
   else if %weq k #1 then lapp i-cmp (i-set cc-ae)
   else if %weq k #2 then lapp i-add i-over-if-c
   else if %weq k #3 then lapp i-cmp i-cmovb
-  else xcat3 i-sub (i-jcc j-ae #2) i-xor-eax
+  else if %weq k #4 then xcat3 i-sub (i-jcc j-ae #2) i-xor-eax
+  -- mul rcx (the product in rdx:rax, carry when rdx ≠ 0: the overflow exit); x / 0 = 0, x mod 0 = x
+  else if %weq k #5 then lapp (xb3 #72 #247 #225) i-over-if-c
+  else if %weq k #6 then x-udiv false
+  else if %weq k #7 then x-udiv true
+  else if %weq k #8 then i-and else if %weq k #9 then i-or else if %weq k #10 then i-xor
+  -- shr: 0 when the count is 64 or more (cmp rcx, 63; jbe +4; xor eax, eax; jmp +3; shr rax, cl)
+  else xcat5 (xb4 #72 #131 #249 #63) (xb2 #118 #4) (xb2 #49 #192) (xb2 #235 #3) (xb3 #72 #211 #232)
 -- the primitive operations by their number (lib/code.cub prim-apply; src/core.h PO_*)
 x-prim tbl env d k as =
   if %wlt k #512 then x-un tbl env d (%wsub k #256) (cl-at as #0)

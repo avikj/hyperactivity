@@ -24,10 +24,10 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
      `bits_of_int`, equality, comparisons.
    - Sail `int` is `ZI` (a sign and a `Word` magnitude: `data ZI = zpos (n : Word) | zneg (n : Word)`
      with `zneg 0` never built), with add, sub, mul, compare, div/mod as the prelude needs.
-   - `Word` has today only `%wadd %wsub %wmul %weq %wlt %wmax %wsucc` (see `lib/prim.cub`).
-     **Track A is adding** `wand wor wxor wshl wshr wdiv wmod : Word → Word → Word` to
-     `lib/prim.cub` (total: shift by any count, division by 0 gives 0). Write `bits.cub`
-     against those names; until they land, start with the importer.
+   - `Word` arithmetic (`lib/prim.cub`, on numerals of any size, 3 net steps each): `wmul wand
+     wor wxor wshl wshr wquot wrem`, and `%wadd %wsub %weq %wlt %wmax %wsucc`; `x / 0 = 0`,
+     `x mod 0 = x`, `wshr` by any count, `wshl` by at most 2³² bits. (`wdiv`/`wmod` are
+     `lib/lin.cub`'s names for the same two.)
 3. **Machine state and effects.** Registers and memory are a state value threaded explicitly:
    `X86 = ` a record of the registers the model declares, and memory as a function-free map
    (a `List (Word × Word)` of bytes written over an initial image `Bytes n` at a base address
@@ -64,7 +64,7 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
 
 ## Needs from track A
 
-- `wand wor wxor wshl wshr wdiv wmod` on `Word` (requested above; A is doing it).
+(none: the Word operations landed, see item 2)
 
 ## Done
 
