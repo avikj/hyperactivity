@@ -133,8 +133,16 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   [build/os-tour, 66049 bytes, the checker's conversion, 1209198335 steps]`; under `strace` the
   binary makes exactly those 20 calls with those results (`epoll_ctl(4, EPOLL_CTL_ADD, 3,
   {events=EPOLLIN, data={u64=1003}}) = 0`, `epoll_wait(4, [{events=EPOLLIN, data=1003}], 8,
-  1000) = 1`, `futex(…, FUTEX_WAIT, 5, NULL) = -1 EAGAIN`, …) and exits 0. Not yet exercised
-  on the kernel: read, write, open, mprotect, listen, accept4, connect, exit_group, poke8.
+  1000) = 1`, `futex(…, FUTEX_WAIT, 5, NULL) = -1 EAGAIN`, …) and exits 0.
+- **The remaining calls on the kernel**: `experiments/os/tcp.cub` + `tcp-run.cub` (`os-tcp`:
+  open of `/dev/null` by a poked name, a TCP pair over loopback by listen / connect / accept4,
+  write, read, write to descriptor 1, mprotect ×2, poke8, exit_group). On the net it prints
+  `ping` and the machine leaves with status 7; under `strace`: `open("/dev/null", O_WRONLY) =
+  3`, `bind(3, 127.0.0.1:47476)`, `connect(4, …) = 0`, `write(4, "ping\n", 5) = 5`, `read(5,
+  "ping\n", 32) = 5`, `write(1, "ping\n", 5) = 5`, `mprotect(…, 4096, PROT_READ) = 0`,
+  `exit_group(7)`. With this every one of the 23 calls and 5 memory commands of `Linux` has
+  been performed on the kernel through `linux-on-w`. Against `linux-model` the same term ends
+  `stopped` (at `open`, which the model refuses: files and TCP are outside its subset).
 
 ## Found
 

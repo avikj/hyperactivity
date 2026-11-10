@@ -1,0 +1,37 @@
+-- experiments/os/tcp.cub — the remaining calls on the kernel (loaded after lib/os/linux.cub):
+-- open (/dev/null, its name poked a byte at a time), a TCP pair over loopback (listen on
+-- 127.0.0.1:47476, connect, accept4), write on one end and read on the other, the bytes read
+-- written to descriptor 1, mprotect, and exit_group with status 7 when everything was as
+-- expected (the peer's address is the loopback, 5 bytes arrived), else 1.
+-- tcp-run.cub performs it: it prints "ping" and the machine leaves with status 7.
+os-tcp-addr : SockAddr
+os-tcp-addr = SockAddr { sa-port = #47476 ; sa-ip = #2130706433 }
+os-poke-all : {l : Level} → Word → List Word → Proc {l} Linux Unit
+os-poke-all {l} a bs = (case bs return (λ x → Word → Proc {l} Linux Unit) of
+    nil → λ at → ret {l} {Linux} {Unit} unit
+    cons b r → λ at → bind {l} {Linux} {Unit} {Unit} (lx {l} (lx-poke8 at b)) (λ u → rec r (%wsucc at))) a
+os-tcp : {l : Level} → Proc {l} Linux (Sum Errno Unit)
+os-tcp {l} =
+  bind {l} {Linux} {Word} {Sum Errno Unit} (lx {l} (lx-alloc #4096)) (λ m →
+  bind {l} {Linux} {Unit} {Sum Errno Unit} (os-poke-all {l} m (cons #47 (cons #100 (cons #101 (cons #118 (cons #47 (cons #110 (cons #117 (cons #108 (cons #108 nil)))))))))) (λ u0 →
+  lx-then {l} {Word} {Unit} (lx {l} (lx-open m #1 #0)) (λ nul →
+  lx-then {l} {Unit} {Unit} (lx {l} (lx-close nul)) (λ u1 →
+  lx-then {l} {Word} {Unit} (lx {l} (lx-socket #2 #1 #0)) (λ ls →
+  lx-then {l} {Unit} {Unit} (lx {l} (lx-setsockopt ls #1 #2 #1)) (λ u2 →
+  lx-then {l} {Unit} {Unit} (lx {l} (lx-bind ls os-tcp-addr)) (λ u3 →
+  lx-then {l} {Unit} {Unit} (lx {l} (lx-listen ls #1)) (λ u4 →
+  lx-then {l} {Word} {Unit} (lx {l} (lx-socket #2 #1 #0)) (λ cs →
+  lx-then {l} {Unit} {Unit} (lx {l} (lx-connect cs os-tcp-addr)) (λ u5 →
+  lx-then {l} {Word × SockAddr} {Unit} (lx {l} (lx-accept4 ls #0)) (λ ac →
+  bind {l} {Linux} {Unit} {Sum Errno Unit} (os-poke-all {l} (%wadd m #64) (cons #112 (cons #105 (cons #110 (cons #103 (cons #10 nil)))))) (λ u6 →
+  lx-then {l} {Upto #5} {Unit} (lx {l} (lx-write cs (%wadd m #64) #5)) (λ w →
+  lx-then {l} {Upto #32} {Unit} (lx {l} (lx-read (fst ac) (%wadd m #128) #32)) (λ r →
+  lx-then {l} {Upto (fst r)} {Unit} (lx {l} (lx-write #1 (%wadd m #128) (fst r))) (λ w2 →
+  lx-then {l} {Word} {Unit} (lx {l} (lx-mmap #0 #4096 #3 #34 #18446744073709551615 #0)) (λ pg →
+  lx-then {l} {Unit} {Unit} (lx {l} (lx-mprotect pg #4096 #1)) (λ u7 →
+  lx-then {l} {Unit} {Unit} (lx {l} (lx-mprotect pg #4096 #3)) (λ u8 →
+  bind {l} {Linux} {Unit} {Sum Errno Unit} (lx {l} (lx-poke8 pg #1)) (λ u9 →
+  bind {l} {Linux} {Unit} {Sum Errno Unit} (lx {l} (lx-exit-group (if andB (%weq (sa-ip (snd ac)) #2130706433) (%weq (fst r) #5) then #7 else #1))) (λ u10 →
+  ret {l} {Linux} {Sum Errno Unit} (inr unit)))))))))))))))))))))
+os-tcp-step : Step W (Sum Errno Unit)
+os-tcp-step = to-step (linux-run {Sum Errno Unit} (x86-64-linux #2) (x86-64-linux-le #2) (os-tcp {lsuc lzero}))
