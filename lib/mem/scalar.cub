@@ -16,8 +16,9 @@ data UB = ub-signed-overflow | ub-div-zero | ub-div-overflow | ub-shift-count | 
 -- why a meaning stops without being undefined: the loop fuel ran out; the Target does not offer
 -- what was asked (a 128-bit integer on i386, a pointer↔integer conversion under pi-refused); an
 -- operation was applied at a kind it has no meaning at (a reader's error, not the program's:
--- adding pointers, a value whose constructor is not the kind's)
-data Stop = st-fuel | st-unsupported | st-ill-typed
+-- adding pointers, a value whose constructor is not the kind's); the standard leaves the result
+-- unspecified and no parameter here fixes it (an order between pointers into different allocations)
+data Stop = st-fuel | st-unsupported | st-ill-typed | st-unspecified
 data MRes (A : Type) = mok (a : A) | mub (why : UB) | mstop (why : Stop)
 mr-bind : {A B : Type} → MRes A → (A → MRes B) → MRes B
 mr-bind r f = case r of
@@ -489,3 +490,536 @@ int-cmp o sg w a b = case w of
   _ → mr-bind (sv-as-i a) (λ x → mr-bind (sv-as-i b) (λ y → mok (case sg of
     true → cmp-by o (u64eq x y) (uq-slt x y) (uq-slt y x)
     false → cmp-by o (u64eq x y) (u64lt x y) (u64lt y x))))
+
+-- ---------------------------------------------------------------- floats: bits
+-- The primitives give Float64 arithmetic and comparison, Float64 ↔ Int64, and the bits of both
+-- formats; there is no Float32 arithmetic and no conversion between the formats. Both are
+-- written here on the bits: fp-pack rounds an integer magnitude times a power of two to the
+-- nearest value of a format (ties to even), which is every conversion into a format; binary32
+-- arithmetic is then binary64's on the widened operands, narrowed (one rounding of the exact
+-- result, since 53 ≥ 2·24 + 2).
+uq-bl-step : UInt64 → DQ → DQ
+uq-bl-step k s = case uq-iszero (u64shr (fst s) k) of
+  true → s
+  false → (u64shr (fst s) k , u64add (snd s) k)
+-- the number of significant bits (0 for 0)
+uq-bitlen : UInt64 → UInt64
+uq-bitlen x =
+  let s = uq-bl-step uq1 (uq-bl-step (u64 #2) (uq-bl-step (u64 #4) (uq-bl-step (u64 #8) (uq-bl-step (u64 #16) (uq-bl-step (u64 #32) (x , uq0))))))
+  in u64add (snd s) (fst s)
+dq-bitlen : DQ → UInt64
+dq-bitlen a = case uq-iszero (snd a) of
+  true → uq-bitlen (fst a)
+  false → u64add (u64 #64) (uq-bitlen (snd a))
+-- a format: its precision p, the exponent of its smallest subnormal's unit (emin - (p - 1), kept
+-- negated), the all-ones exponent field, and the sign's position
+data FF = ff32 | ff64
+ff-p1 : FF → UInt64
+ff-p1 f = case f of
+  ff32 → u64 #23
+  ff64 → u64 #52
+ff-nqmin : FF → UInt64
+ff-nqmin f = case f of
+  ff32 → u64 #149
+  ff64 → u64 #1074
+ff-emax : FF → UInt64
+ff-emax f = case f of
+  ff32 → u64 #255
+  ff64 → u64 #2047
+ff-sign : FF → UInt64
+ff-sign f = case f of
+  ff32 → u64 #2147483648
+  ff64 → uq-top
+uq-smax : UInt64 → UInt64 → UInt64
+uq-smax a b = case uq-slt a b of
+  true → b
+  false → a
+-- M · 2^-sh (sh at least 1) rounded to the nearest integer, ties to even
+dq-round-shr : DQ → UInt64 → UInt64
+dq-round-shr m sh = case u64lt (u64 #127) sh of
+  true → uq-b (m-and (u64eq sh (u64 #128)) (dq-ult dq-min m))
+  false →
+    (let r0 = dq-shr m sh
+         rest = dq-sub m (dq-shl r0 sh)
+         half = dq-shl dq1 (u64sub sh uq1)
+     in case m-or (dq-ult half rest) (m-and (dq-eq half rest) (u64eq (u64and (fst r0) uq1) uq1)) of
+          true → u64add (fst r0) uq1
+          false → fst r0)
+-- the bits of the format's value nearest to (-1)^sign · m · 2^e (e a two's-complement exponent);
+-- beyond the largest finite value, the infinity. With x the exponent of m's top bit, the unit of
+-- the result is q = max (x - (p - 1)) qmin; the integer r = m · 2^(e - q) rounded has at most
+-- p + 1 bits, and the bits are ((q - qmin) << (p - 1)) + r: r's top bit is the exponent field's
+-- unit (a subnormal has none, a carry out of the rounding raises the exponent)
+fp-pack : FF → Bool → DQ → UInt64 → UInt64
+fp-pack f sign m e =
+  let sbit = (case sign of
+        true → ff-sign f
+        false → uq0)
+  in case dq-iszero m of
+       true → sbit
+       false →
+         (let x = u64add (u64sub (dq-bitlen m) uq1) e
+              q = uq-smax (u64sub x (ff-p1 f)) (uq-neg (ff-nqmin f))
+              sh = u64sub q e
+              r = (case uq-slt uq0 sh of
+                     true → dq-round-shr m sh
+                     false → fst (dq-shl m (uq-neg sh)))
+              ef = u64add q (ff-nqmin f)
+          in case u64lt ef (ff-emax f) of
+               false → u64or sbit (u64shl (ff-emax f) (ff-p1 f))
+               true → (let b = u64add (u64shl ef (ff-p1 f)) r
+                       in case u64lt (u64shr b (ff-p1 f)) (ff-emax f) of
+                            true → u64or sbit b
+                            false → u64or sbit (u64shl (ff-emax f) (ff-p1 f))))
+f64-bits : Float64 → UInt64
+f64-bits x = u64 (i64toWord (f64bits x))
+f64-of-bits : UInt64 → Float64
+f64-of-bits b = f64ofbits (i64 (u64toWord b))
+f32-bits : Float32 → UInt64
+f32-bits x = u64 (u32toWord (f32bits x))
+f32-of-bits : UInt64 → Float32
+f32-of-bits b = f32ofbits (u32 (u64toWord b))
+-- a format's bits taken apart: the sign, the exponent field, the fraction field
+ff-neg : FF → UInt64 → Bool
+ff-neg f b = not (uq-iszero (u64and b (ff-sign f)))
+ff-exp : FF → UInt64 → UInt64
+ff-exp f b = u64and (u64shr b (ff-p1 f)) (ff-emax f)
+ff-frac : FF → UInt64 → UInt64
+ff-frac f b = u64and b (u64sub (u64shl uq1 (ff-p1 f)) uq1)
+-- a finite value's magnitude as an integer and its exponent: m · 2^e
+ff-mant : FF → UInt64 → UInt64
+ff-mant f b = case uq-iszero (ff-exp f b) of
+  true → ff-frac f b
+  false → u64or (ff-frac f b) (u64shl uq1 (ff-p1 f))
+ff-e : FF → UInt64 → UInt64
+ff-e f b = u64sub (uq-smax (ff-exp f b) uq1) (u64add (ff-nqmin f) uq1)
+-- binary32 to binary64, exact; an infinity or a NaN keeps its sign and its payload's top bits
+f32-widen : Float32 → Float64
+f32-widen x =
+  let b = f32-bits x
+  in f64-of-bits (case u64eq (ff-exp ff32 b) (ff-emax ff32) of
+       true → u64or (u64shl (u64shr b (u64 #31)) (u64 #63))
+                (u64or (u64shl (ff-emax ff64) (u64 #52)) (u64shl (ff-frac ff32 b) (u64 #29)))
+       false → fp-pack ff64 (ff-neg ff32 b) (dq-zx (ff-mant ff32 b)) (ff-e ff32 b))
+-- binary64 to binary32, rounded to nearest (ties to even); a NaN becomes quiet with its payload's top bits
+f64-narrow : Float64 → Float32
+f64-narrow x =
+  let b = f64-bits x
+      s = u64shl (u64shr b (u64 #63)) (u64 #31)
+  in f32-of-bits (case u64eq (ff-exp ff64 b) (ff-emax ff64) of
+       true → (case uq-iszero (ff-frac ff64 b) of
+         true → u64or s (u64 #2139095040)
+         false → u64or s (u64or (u64 #2143289344) (u64shr (ff-frac ff64 b) (u64 #29))))
+       false → fp-pack ff32 (ff-neg ff64 b) (dq-zx (ff-mant ff64 b)) (ff-e ff64 b))
+
+-- ---------------------------------------------------------------- float arithmetic and comparison
+-- IEEE 754 (IEC 60559): no operation is undefined; a division by zero is an infinity or a NaN
+f64-op : BinOp → Float64 → Float64 → MRes Float64
+f64-op o a b = case o of
+  bo-add → mok (f64add a b)
+  bo-sub → mok (f64sub a b)
+  bo-mul → mok (f64mul a b)
+  bo-div → mok (f64div a b)
+  _ → mstop st-ill-typed
+f32-op : BinOp → Float32 → Float32 → MRes Float32
+f32-op o a b = mr-map f64-narrow (f64-op o (f32-widen a) (f32-widen b))
+-- negation is the sign bit (0 - x is wrong at +0)
+f64-neg : Float64 → Float64
+f64-neg x = f64-of-bits (u64xor (f64-bits x) uq-top)
+f32-neg : Float32 → Float32
+f32-neg x = f32-of-bits (u64xor (f32-bits x) (ff-sign ff32))
+f64-cmp : CmpOp → Float64 → Float64 → Bool
+f64-cmp o a b = cmp-by o (f64eq a b) (f64lt a b) (f64lt b a)
+f64-zero : Float64
+f64-zero = f64 #0
+
+-- ---------------------------------------------------------------- integer → float
+-- to binary64: the primitive's conversion at 64 bits and below (one rounding), fp-pack at 128;
+-- to binary32: through binary64 at 32 bits and below (exact, then one rounding), fp-pack above
+-- (through binary64 would round twice)
+dq-mag : Bool → DQ → DQ
+dq-mag sg a = case sg of
+  true → dq-abs a
+  false → a
+int-to-f64 : Bool → IW → SV → MRes Float64
+int-to-f64 sg w v = case w of
+  iw128 → mr-map (λ a → f64-of-bits (fp-pack ff64 (m-and sg (dq-isneg a)) (dq-mag sg a) uq0)) (sv-as-w v)
+  _ → mr-map (λ x → case sg of
+                 true → f64ofi64 (i64 (u64toWord x))
+                 false → f64 (u64toWord x)) (sv-as-i v)
+int-to-f32 : Bool → IW → SV → MRes Float32
+int-to-f32 sg w v = case w of
+  iw128 → mr-map (λ a → f32-of-bits (fp-pack ff32 (m-and sg (dq-isneg a)) (dq-mag sg a) uq0)) (sv-as-w v)
+  iw64 → mr-map (λ x → f32-of-bits (fp-pack ff32 (m-and sg (uq-isneg x))
+                                      (case m-and sg (uq-isneg x) of
+                                         true → (uq-neg x , uq0)
+                                         false → (x , uq0)) uq0)) (sv-as-i v)
+  _ → mr-map f64-narrow (int-to-f64 sg w v)
+
+-- ---------------------------------------------------------------- float → integer
+-- the value truncated toward zero; undefined when the truncated value is not the kind's (a NaN
+-- and the infinities included). At 64 bits and below: the range decided on the Float64 (every
+-- bound is exact), then the primitive's truncation; at 128: the bits shifted.
+f64-neg-of : Word → Float64
+f64-neg-of w = f64sub f64-zero (f64 w)
+fi-lo-ok : Bool → IW → Float64 → Bool
+fi-lo-ok sg w x = case sg of
+  false → f64lt (f64-neg-of #1) x
+  true → (case w of
+    iw8 → f64lt (f64-neg-of #129) x
+    iw16 → f64lt (f64-neg-of #32769) x
+    iw32 → f64lt (f64-neg-of #2147483649) x
+    _ → m-or (f64lt (f64-neg-of #9223372036854775808) x) (f64eq (f64-neg-of #9223372036854775808) x))
+fi-hi : Bool → IW → Float64
+fi-hi sg w = case sg of
+  true → (case w of
+    iw8 → f64 #128
+    iw16 → f64 #32768
+    iw32 → f64 #2147483648
+    _ → f64 #9223372036854775808)
+  false → (case w of
+    iw8 → f64 #256
+    iw16 → f64 #65536
+    iw32 → f64 #4294967296
+    _ → f64mul (f64 #4294967296) (f64 #4294967296))
+f64-trunc-uq : Float64 → UInt64
+f64-trunc-uq x = u64 (i64toWord (i64off64 x))
+-- the truncated magnitude t with the sign: in range of the 128-bit kind or undefined
+dq-signed-in : Bool → Bool → DQ → MRes DQ
+dq-signed-in sg neg t = case neg of
+  true → (case sg of
+    true → (case dq-ult dq-min t of
+      true → mub ub-float-int-range
+      false → mok (dq-neg t))
+    false → (case dq-iszero t of
+      true → mok dq0
+      false → mub ub-float-int-range))
+  false → (case m-and sg (not (dq-ult t dq-min)) of
+    true → mub ub-float-int-range
+    false → mok t)
+-- m · 2^e truncated: shifted right when e is negative (to 0 at 64 or more), left otherwise
+-- (m has at most 53 bits: beyond 75 the value is 2^128 or more)
+f64-mag-trunc : UInt64 → UInt64 → MRes DQ
+f64-mag-trunc m e = case uq-slt e uq0 of
+  true → (case u64lt (uq-neg e) (u64 #64) of
+    true → mok (u64shr m (uq-neg e) , uq0)
+    false → mok dq0)
+  false → (case u64lt (u64 #75) e of
+    true → mub ub-float-int-range
+    false → mok (dq-shl (m , uq0) e))
+f64-to-dq : Bool → Float64 → MRes DQ
+f64-to-dq sg x =
+  let b = f64-bits x
+  in case u64eq (ff-exp ff64 b) (ff-emax ff64) of
+       true → mub ub-float-int-range
+       false → mr-bind (f64-mag-trunc (ff-mant ff64 b) (ff-e ff64 b)) (dq-signed-in sg (ff-neg ff64 b))
+f64-to-int : Bool → IW → Float64 → MRes SV
+f64-to-int sg w x = case w of
+  iw128 → mr-map sv-of-dq (f64-to-dq sg x)
+  _ → (case m-and (fi-lo-ok sg w x) (f64lt x (fi-hi sg w)) of
+    false → mub ub-float-int-range
+    true → mok (sv-i (case m-and (not sg) (not (f64lt x (f64 #9223372036854775808))) of
+      true → u64add (f64-trunc-uq (f64sub x (f64 #9223372036854775808))) uq-top
+      false → f64-trunc-uq x)))
+
+-- ---------------------------------------------------------------- pointers
+mp-eq : MPtr → MPtr → Bool
+mp-eq p q = case p of
+  mp-null → (case q of
+    mp-null → true
+    _ → false)
+  mp-obj a o → (case q of
+    mp-obj b o2 → m-and (weq a b) (weq o o2)
+    _ → false)
+  mp-fn f → (case q of
+    mp-fn g → weq f g
+    _ → false)
+-- equality is decided for every pair (pointers into different allocations are different: a
+-- pointer one past the end of one allocation is not the start of another here). An order is
+-- given between equal pointers and between places of one allocation, by offset; any other is
+-- unspecified (lib/mem/memory.cub's order by address answers it under a flat address space)
+ptr-cmp : CmpOp → MPtr → MPtr → MRes Bool
+ptr-cmp o p q = case o of
+  co-eq → mok (mp-eq p q)
+  co-ne → mok (not (mp-eq p q))
+  _ → (case mp-eq p q of
+    true → mok (cmp-by o true false false)
+    false → (case p of
+      mp-obj a x → (case q of
+        mp-obj b y → (case weq a b of
+          true → mok (cmp-by o false (wlt x y) (wlt y x))
+          false → mstop st-unspecified)
+        _ → mstop st-unspecified)
+      _ → mstop st-unspecified))
+
+-- ---------------------------------------------------------------- the operations by kind
+-- conversion between every pair of kinds. Pointer ↔ integer needs the memory (an allocation's
+-- address) and the Target's choice: it is lib/mem/memory.cub's, and stops here
+sv-conv : SK → SK → SV → MRes SV
+sv-conv from to v = case from of
+  sk-int s1 w1 → (case to of
+    sk-int s2 w2 → mr-map (dq-to-int s2 w2) (sv-int-dq s1 w1 v)
+    sk-bool → mr-map (λ a → sv-b (not (dq-iszero a))) (sv-int-dq s1 w1 v)
+    sk-f32 → mr-map sv-f (int-to-f32 s1 w1 v)
+    sk-f64 → mr-map sv-d (int-to-f64 s1 w1 v)
+    sk-ptr → mstop st-ill-typed)
+  sk-bool → (case to of
+    sk-int s2 w2 → mr-map (λ b → dq-to-int s2 w2 (uq-b b , uq0)) (sv-as-b v)
+    sk-bool → mr-map sv-b (sv-as-b v)
+    sk-f32 → mr-map (λ b → sv-f (f64-narrow (f64 (u64toWord (uq-b b))))) (sv-as-b v)
+    sk-f64 → mr-map (λ b → sv-d (f64 (u64toWord (uq-b b)))) (sv-as-b v)
+    sk-ptr → mstop st-ill-typed)
+  sk-f32 → (case to of
+    sk-int s2 w2 → mr-bind (sv-as-f v) (λ x → f64-to-int s2 w2 (f32-widen x))
+    sk-bool → mr-map (λ x → sv-b (not (f64eq (f32-widen x) f64-zero))) (sv-as-f v)
+    sk-f32 → mr-map sv-f (sv-as-f v)
+    sk-f64 → mr-map (λ x → sv-d (f32-widen x)) (sv-as-f v)
+    sk-ptr → mstop st-ill-typed)
+  sk-f64 → (case to of
+    sk-int s2 w2 → mr-bind (sv-as-d v) (λ x → f64-to-int s2 w2 x)
+    sk-bool → mr-map (λ x → sv-b (not (f64eq x f64-zero))) (sv-as-d v)
+    sk-f32 → mr-map (λ x → sv-f (f64-narrow x)) (sv-as-d v)
+    sk-f64 → mr-map sv-d (sv-as-d v)
+    sk-ptr → mstop st-ill-typed)
+  sk-ptr → (case to of
+    sk-bool → mr-map (λ p → sv-b (not (mp-eq p mp-null))) (sv-as-p v)
+    sk-ptr → mr-map sv-p (sv-as-p v)
+    _ → mstop st-ill-typed)
+-- a value as a condition (the conversion to bool, read)
+sv-truthy : SK → SV → MRes Bool
+sv-truthy k v = mr-bind (sv-conv k sk-bool v) sv-as-b
+-- + - * / % & | ^ at a kind (both operands of it: the reader has applied its language's
+-- conversions). Pointer arithmetic is the memory's
+sv-arith : BinOp → SK → SV → SV → MRes SV
+sv-arith o k a b = case k of
+  sk-int sg w → int-op o sg w a b
+  sk-f32 → mr-bind (sv-as-f a) (λ x → mr-bind (sv-as-f b) (λ y → mr-map sv-f (f32-op o x y)))
+  sk-f64 → mr-bind (sv-as-d a) (λ x → mr-bind (sv-as-d b) (λ y → mr-map sv-d (f64-op o x y)))
+  _ → mstop st-ill-typed
+sv-neg : SK → SV → MRes SV
+sv-neg k a = case k of
+  sk-int sg w → int-neg sg w a
+  sk-f32 → mr-map (λ x → sv-f (f32-neg x)) (sv-as-f a)
+  sk-f64 → mr-map (λ x → sv-d (f64-neg x)) (sv-as-d a)
+  _ → mstop st-ill-typed
+sv-not : SK → SV → MRes SV
+sv-not k a = case k of
+  sk-int sg w → int-not sg w a
+  sk-bool → mr-map (λ b → sv-b (not b)) (sv-as-b a)
+  _ → mstop st-ill-typed
+-- shifts: the shifted kind, the count's kind
+sv-shl : SK → SK → SV → SV → MRes SV
+sv-shl k kc a c = case k of
+  sk-int sg w → (case kc of
+    sk-int sgc wc → int-shl sg w sgc wc a c
+    _ → mstop st-ill-typed)
+  _ → mstop st-ill-typed
+sv-shl-c : SK → SK → SV → SV → MRes SV
+sv-shl-c k kc a c = case k of
+  sk-int sg w → (case kc of
+    sk-int sgc wc → int-shl-c sg w sgc wc a c
+    _ → mstop st-ill-typed)
+  _ → mstop st-ill-typed
+sv-shr : SK → SK → SV → SV → MRes SV
+sv-shr k kc a c = case k of
+  sk-int sg w → (case kc of
+    sk-int sgc wc → int-shr sg w sgc wc a c
+    _ → mstop st-ill-typed)
+  _ → mstop st-ill-typed
+sv-cmp : CmpOp → SK → SV → SV → MRes Bool
+sv-cmp o k a b = case k of
+  sk-int sg w → int-cmp o sg w a b
+  sk-bool → mr-bind (sv-as-b a) (λ x → mr-bind (sv-as-b b) (λ y →
+    mok (cmp-by o (u64eq (uq-b x) (uq-b y)) (u64lt (uq-b x) (uq-b y)) (u64lt (uq-b y) (uq-b x)))))
+  sk-f32 → mr-bind (sv-as-f a) (λ x → mr-bind (sv-as-f b) (λ y → mok (f64-cmp o (f32-widen x) (f32-widen y))))
+  sk-f64 → mr-bind (sv-as-d a) (λ x → mr-bind (sv-as-d b) (λ y → mok (f64-cmp o x y)))
+  sk-ptr → mr-bind (sv-as-p a) (λ x → mr-bind (sv-as-p b) (λ y → ptr-cmp o x y))
+
+-- ---------------------------------------------------------------- kinds in memory, by Target
+-- the size of a kind's representation, and the alignment its accesses need when the type
+-- naming it says nothing else (a C type's alignment is ct-align below: two types of one kind
+-- may differ, as long long and double do from their sizes on i386)
+sk-size : Target → SK → Word
+sk-size t k = case k of
+  sk-int sg w → iw-bytes w
+  sk-bool → tg-size t ck-bool
+  sk-f32 → #4
+  sk-f64 → #8
+  sk-ptr → tg-size t ck-ptr
+sk-align : Target → SK → Word
+sk-align t k = case k of
+  sk-int sg w → (case w of
+    iw8 → tg-align t ck-char
+    iw16 → tg-align t ck-short
+    iw32 → tg-align t ck-int
+    iw64 → tg-align t ck-llong
+    iw128 → tg-align t ck-int128)
+  sk-bool → tg-align t ck-bool
+  sk-f32 → tg-align t ck-float
+  sk-f64 → tg-align t ck-double
+  sk-ptr → tg-align t ck-ptr
+
+-- ---------------------------------------------------------------- the C family's arithmetic types
+-- C and C++ name scalar types whose kind is the implementation's: a type's kind, size and
+-- alignment are functions of the Target, and so are the integer promotions and the usual
+-- arithmetic conversions (C17 6.3.1.1, 6.3.1.8; C++20 [conv.prom], [expr.arith.conv]).
+-- (char8_t, char16_t, char32_t, wchar_t and enumerations are their underlying types: the
+-- reader names those. long double is not here: see the track's Limits.)
+data CTy = ct-bool | ct-char | ct-schar | ct-uchar | ct-short | ct-ushort | ct-int | ct-uint
+         | ct-long | ct-ulong | ct-llong | ct-ullong | ct-int128 | ct-uint128
+         | ct-float | ct-double | ct-ptr
+ct-ck : CTy → CK
+ct-ck c = case c of
+  ct-bool → ck-bool
+  ct-char → ck-char
+  ct-schar → ck-char
+  ct-uchar → ck-char
+  ct-short → ck-short
+  ct-ushort → ck-short
+  ct-int → ck-int
+  ct-uint → ck-int
+  ct-long → ck-long
+  ct-ulong → ck-long
+  ct-llong → ck-llong
+  ct-ullong → ck-llong
+  ct-int128 → ck-int128
+  ct-uint128 → ck-int128
+  ct-float → ck-float
+  ct-double → ck-double
+  ct-ptr → ck-ptr
+ct-size : Target → CTy → Word
+ct-size t c = tg-size t (ct-ck c)
+ct-align : Target → CTy → Word
+ct-align t c = tg-align t (ct-ck c)
+-- signed, for the integer types (bool and the others: false)
+ct-signed : Target → CTy → Bool
+ct-signed t c = case c of
+  ct-char → tg-char-signed t
+  ct-schar → true
+  ct-short → true
+  ct-int → true
+  ct-long → true
+  ct-llong → true
+  ct-int128 → true
+  _ → false
+-- the width of a size in bytes; a size no kind has (0: the type is not offered) stops
+iw-of-size : Word → MRes IW
+iw-of-size n = case weq n #1 of
+  true → mok iw8
+  false → (case weq n #2 of
+    true → mok iw16
+    false → (case weq n #4 of
+      true → mok iw32
+      false → (case weq n #8 of
+        true → mok iw64
+        false → (case weq n #16 of
+          true → mok iw128
+          false → mstop st-unsupported))))
+-- the kind of a C type at a Target
+ct-sk : Target → CTy → MRes SK
+ct-sk t c = case c of
+  ct-bool → mok sk-bool
+  ct-float → (case weq (ct-size t c) #4 of
+    true → mok sk-f32
+    false → mstop st-unsupported)
+  ct-double → (case weq (ct-size t c) #8 of
+    true → mok sk-f64
+    false → mstop st-unsupported)
+  ct-ptr → mok sk-ptr
+  _ → mr-map (sk-int (ct-signed t c)) (iw-of-size (ct-size t c))
+-- the conversion rank of an integer type (C17 6.3.1.1p1); the 128-bit types above long long
+ct-rank : CTy → Word
+ct-rank c = case c of
+  ct-bool → #0
+  ct-char → #1
+  ct-schar → #1
+  ct-uchar → #1
+  ct-short → #2
+  ct-ushort → #2
+  ct-int → #3
+  ct-uint → #3
+  ct-long → #4
+  ct-ulong → #4
+  ct-llong → #5
+  ct-ullong → #5
+  ct-int128 → #6
+  ct-uint128 → #6
+  _ → #7
+ct-unsigned-of : CTy → CTy
+ct-unsigned-of c = case c of
+  ct-int → ct-uint
+  ct-long → ct-ulong
+  ct-llong → ct-ullong
+  ct-int128 → ct-uint128
+  _ → c
+-- every value of type a is a value of the signed type b: a signed and no wider, or a unsigned and narrower
+ct-fits-signed : Target → CTy → CTy → Bool
+ct-fits-signed t a b = case ct-signed t a of
+  true → not (wlt (ct-size t b) (ct-size t a))
+  false → wlt (ct-size t a) (ct-size t b)
+-- integer promotion: a type of rank below int becomes int when int holds all its values, else
+-- unsigned int; every other type is unchanged
+ct-promote : Target → CTy → CTy
+ct-promote t c = case wlt (ct-rank c) #3 of
+  false → c
+  true → (case c of
+    ct-bool → ct-int
+    _ → (case ct-fits-signed t c ct-int of
+      true → ct-int
+      false → ct-uint))
+-- the usual arithmetic conversions: the common type of two arithmetic operands. double if either
+-- is, else float if either is, else on the promoted types: the same type; of two of one
+-- signedness the higher rank; else the unsigned one when its rank is at least the signed one's,
+-- else the signed one when it holds every value of the unsigned one, else the signed one's
+-- unsigned counterpart. A pointer has no common type with anything: the meaning stops
+ct-uac-int : Target → CTy → CTy → CTy
+ct-uac-int t a b = case ct-signed t a of
+  true → (case ct-signed t b of
+    true → (case wlt (ct-rank a) (ct-rank b) of
+      true → b
+      false → a)
+    false → (case wlt (ct-rank b) (ct-rank a) of
+      false → b
+      true → (case ct-fits-signed t b a of
+        true → a
+        false → ct-unsigned-of a)))
+  false → (case ct-signed t b of
+    false → (case wlt (ct-rank a) (ct-rank b) of
+      true → b
+      false → a)
+    true → (case wlt (ct-rank a) (ct-rank b) of
+      false → a
+      true → (case ct-fits-signed t a b of
+        true → b
+        false → ct-unsigned-of b)))
+ct-is : CTy → CTy → Bool
+ct-is a b = case a of
+  ct-double → (case b of
+    ct-double → true
+    _ → false)
+  ct-float → (case b of
+    ct-float → true
+    _ → false)
+  ct-ptr → (case b of
+    ct-ptr → true
+    _ → false)
+  _ → false
+ct-uac : Target → CTy → CTy → MRes CTy
+ct-uac t a b = case m-or (ct-is a ct-ptr) (ct-is b ct-ptr) of
+  true → mstop st-ill-typed
+  false → (case m-or (ct-is a ct-double) (ct-is b ct-double) of
+    true → mok ct-double
+    false → (case m-or (ct-is a ct-float) (ct-is b ct-float) of
+      true → mok ct-float
+      false → mok (ct-uac-int t (ct-promote t a) (ct-promote t b))))
+-- a binary arithmetic operation of C on operands of two types: both converted to the common
+-- type, the operation at its kind; the result with its type
+ct-arith : Target → BinOp → CTy → CTy → SV → SV → MRes (CTy × SV)
+ct-arith t o ta tb a b =
+  mr-bind (ct-uac t ta tb) (λ tc →
+  mr-bind (ct-sk t ta) (λ ka →
+  mr-bind (ct-sk t tb) (λ kb →
+  mr-bind (ct-sk t tc) (λ kc →
+  mr-bind (sv-conv ka kc a) (λ x →
+  mr-bind (sv-conv kb kc b) (λ y →
+  mr-map (λ r → (tc , r)) (sv-arith o kc x y)))))))

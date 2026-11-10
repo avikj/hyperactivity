@@ -66,7 +66,11 @@ the result type of this layer is `MRes`, not `Res`.
 
 ## Needs from track A
 
-(nothing yet)
+- (not blocking; cost only) primitives `f32add f32sub f32mul f32div f32eq f32lt : Float32 → …`,
+  `f64off32 : Float32 → Float64`, `f32off64 : Float64 → Float32` (SSE `addss … cvtss2sd
+  cvtsd2ss`), so that `f32-op`, `f32-widen`, `f64-narrow` of `lib/mem/scalar.cub` can be one
+  instruction each; with them, the three definitions become the primitives and `fp-pack` stays
+  for the integer conversions.
 
 ## Done
 
@@ -87,21 +91,62 @@ the result type of this layer is `MRes`, not `Res`.
   `mub ub-div-overflow`; 2^126·2 at i128 overflows; `1 << 32` at i32 is `mub ub-shift-count`;
   a 128-bit division is about 43,000 net steps.
 
+- `lib/mem/scalar.cub`, complete (target.cub + scalar.cub: see the count under "Measured").
+  Floats: `fp-pack` (an integer magnitude · 2^e rounded to nearest-even into binary32 or
+  binary64 bits, subnormals and overflow to infinity included), `f32-widen`, `f64-narrow`,
+  `f32-op` (binary64's operation on the widened operands, narrowed), `f64-op`, `f64-cmp`,
+  `int-to-f64`, `int-to-f32` (64- and 128-bit sources through `fp-pack`, so one rounding),
+  `f64-to-int` (`ub-float-int-range`; 128-bit targets from the bits). Pointers: `mp-eq`,
+  `ptr-cmp` (an order between different allocations is `mstop st-unspecified`). By kind:
+  `sv-conv` (every pair of kinds; pointer↔integer is memory.cub's), `sv-truthy`, `sv-arith`,
+  `sv-neg`, `sv-not`, `sv-shl`, `sv-shl-c`, `sv-shr`, `sv-cmp`. Kinds in memory: `sk-size`,
+  `sk-align`. The C family: `CTy`, `ct-sk`, `ct-size`, `ct-align`, `ct-rank`, `ct-promote`,
+  `ct-uac`, `ct-arith`. Read by `#show`, each equal to the IEEE/C answer computed
+  independently (Python's `struct` for the float bits): 1/3, 0.1, 2^24+1 (tie to even),
+  2^24+3, DBL→FLT overflow to infinity, the smallest subnormal, the smallest normal;
+  (int64)2^53+2^29+1 → float is 0x5a000001 (through double it would be 0x5a000000);
+  0.1f+0.2f is 0x3e99999a; (int)2147483648.0 is `mub ub-float-int-range` and
+  (int)-2147483648.5 is INT_MIN; `unsigned short` 65535·65535 at x86-64 is
+  `mub ub-signed-overflow` (promotion to int); `long + unsigned` is `long` at x86-64 and
+  `unsigned long` at i386.
+
+## Measured
+
+- target.cub + scalar.cub after the cached library: `949 passed, 0 failed` (the cached library alone is 767, so 182 checks are this track's).
+
 ## Found
 
 - `u64 w` (and `%u64ofw`) on a `Word` literal ≥ 2⁶⁴ does not reduce: `#show u64 #18446744073709551617`
   prints `%u64ofw #18446744073709551617`. A conversion from `Word` must reduce modulo 2⁶⁴ first.
 - `u64shl`/`u64shr` take the count modulo 64 (`u64shl (u64 #1) (u64 #64)` is `#u64:1`), so a
   shift by 64 or more must be handled by the caller (it matters for the 128-bit kinds).
+- The same for `f64`: `f64 #18446744073709551616` stays `%f64ofw #18446744073709551616`, and a
+  `case` on a comparison with it is stuck. Class: every `u64 #n`, `i64 #n`, `f64 #n` in lib/mem
+  has n < 2⁶⁴ (2⁶⁴ as a Float64 is `f64mul (f64 #4294967296) (f64 #4294967296)`).
+- Layout columns are counted in bytes, not characters: in `true → (let a = …` followed by a
+  second binding on the next line aligned under `a` by eye, the `→` (3 bytes) puts `a` two
+  columns right of where it looks, and the parser reports `expected in, found <name>`; a
+  multi-line `case` after `→ (let x = (case …` fails with `error: (case e branch...)` and no
+  position. Written around: a multi-binding `let` starts on its own line.
+- `rem` is not usable as a local name (`expected in, found rem`).
+- There is no `Float32` arithmetic and no `Float32`↔`Float64` conversion among the primitives
+  (only the bits). Both are written on the bits in scalar.cub, so nothing is missing from the
+  semantics; the compiled code for a `float` operation is therefore integer code (see "Needs").
 
 ## Limits
 
-(none recorded yet)
+- `long double` (x87 80-bit, or binary128) is not a kind: no primitive carries it, and `CTy`
+  has no constructor for it. Adding it means a 16-byte value (`DQ`) with its own `fp-pack`
+  format and arithmetic written on the bits.
+- Floating-point operations follow IEEE 754 with round-to-nearest-even and no exception flags;
+  the rounding mode and `fenv` are not state of the machine.
+- Pointer equality treats pointers into different allocations as different: "one past the end
+  of A equals the start of B" (unspecified in C++, possible on real hardware) never holds.
 
 ## Next step
 
-Continue `lib/mem/scalar.cub` after `int-cmp`: floats (`fp-pack`: an integer magnitude times a
-power of two rounded to nearest-even into binary32/binary64 bits; f32↔f64; f32 arithmetic through
-f64; float↔integer conversions with `ub-float-int-range`), then `sv-conv` (every pair of kinds),
-`sv-arith`/`sv-cmp`/`sv-shl`/`sv-shr`/`sv-neg`/`sv-not` by kind, pointer comparison, then the C
-types `CTy` with promotions and the usual arithmetic conversions as functions of `Target`.
+Write `lib/mem/memory.cub`: `Alloc` (size, alignment, live, kind, base address, `Bytes` data,
+`Bytes` initialized mask), `Memory` (a list of allocations and the next id/address), `mem-alloc`,
+`mem-free`, `mem-load t k p`, `mem-store t k p v` (byte order from the Target), `mem-memcpy`,
+`mem-memmove`, `mem-memset`, `ptr-add`, `ptr-diff`, `ptr-to-int`, `int-to-ptr`. Byte access goes
+through `load64`/`store64` of lib/prim.cub with the proof built from a decided bound.
