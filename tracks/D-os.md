@@ -86,13 +86,20 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   Linux W` (the `Word` a 4096-byte scratch area for the structures), `linux-run` (takes the
   scratch once, then `handle`), `lx` and `lx-then` for writing processes. A kernel answer
   outside a stated fact is returned as the error `os-breach` (0). Measured (NOCACHE, after the
-  library and platform.cub): 896 passed, 0 failed; `linux-on-w` checks (steps in the line above
-  this entry's commit message).
+  library and platform.cub): 896 passed, 0 failed; `linux-on-w` checks in 144,867 steps, `lx-events` 11,073.
 - **Acceptance, the echo on the net**: `experiments/os/udp-echo.cub` (`udp-echo`, a process over
   `Linux` at every level; `udp-echo-step` at `x86-64-linux #2`) and `udp-echo-run.cub` (`#run`).
   With `python3 -c "import socket;s=socket.socket(2,2);s.sendto(b'hello, world',('127.0.0.1',47474));print(s.recvfrom(99))"`
   from another shell: python prints `(b'hello, world', ('127.0.0.1', 47474))`, the machine
   `run: done (inr #12)   [1871 steps]`.
+- **Acceptance, the echo as a binary** (A's ELF driver, `6533fae9`): `udp-echo-build.cub` prints
+  `ok: build udp-echo-step   [build/udp-echo, 52133 bytes, the checker's conversion, 42415757
+  steps]` (12.7 s with the library cached). `build/udp-echo` under `strace`, sent
+  `hello, world` by the python line: its system calls are exactly `mmap` (the arena),
+  `socket(AF_INET, SOCK_DGRAM, 0) = 3`, `bind(3, 127.0.0.1:47474, 16) = 0`,
+  `recvfrom(3, "hello, world", 2048, 0, {127.0.0.1:58299}, [16]) = 12`,
+  `sendto(3, "hello, world", 12, 0, {127.0.0.1:58299}, 16) = 12`, `close(3) = 0`,
+  `exit_group(0)`; python prints `(b'hello, world', ('127.0.0.1', 47474))`.
 
 ## Found
 
@@ -108,10 +115,8 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
 
 ## Next step
 
-1. `#build` of the echo: `./build/cubical $(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p') lib/os/platform.cub lib/os/linux.cub experiments/os/udp-echo.cub experiments/os/udp-echo-build.cub`
-   (not yet run); run `build/udp-echo`, send it a datagram as above, record size and result.
-2. Item 3, `lib/os/contract.cub`: `KState` (byte memory, next address, descriptor table, pipes,
-   UDP sockets with their queues, outgoing datagrams, clock, pid) and
-   `linux-model : World Linux KState`; then in `experiments/os/udp-echo.cub`'s directory a
-   file `udp-echo-model.cub` with `runp` of `udp-echo {lzero}` against the model with one
-   queued datagram and a `#show` of the outcome and the outgoing queue.
+Item 3, `lib/os/contract.cub` (loaded after `lib/os/linux.cub`): `KState` (byte memory, next
+address, descriptor table, pipes, UDP sockets with their queues, outgoing datagrams, clock,
+pid) and `linux-model : World Linux KState`; then `experiments/os/udp-echo-model.cub` with
+`runp` of `udp-echo {lzero}` against the model with one queued datagram and a `#show` of the
+outcome and the outgoing queue. Then tell A (Needs 3) that the three files load.
