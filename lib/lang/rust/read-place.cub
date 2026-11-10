@@ -391,7 +391,8 @@ rm-const-into (rcs-cons c cs) cx ty0 fls = case fls of
     sr-on (cx-class cx (rf-ty f)) (λ e p → rm-throw e) (λ cl →
       let rest = rm-const-into cs cx ty0 fr
       in case cl of
-           cl-mem → (let one = rm-const-into c cx (rf-ty f) nil
+           cl-mem →
+                    (let one = rm-const-into c cx (rf-ty f) nil
                      in λ p → rm-bind (rm-off p (rf-off f)) (λ q → rm-then (one q) (rest p)))
            cl-unit → rest
            _ → sr-on (rm-const-rv cx c) (λ e p → rm-throw e) (λ v →
@@ -411,8 +412,10 @@ rm-opd-into cx op ty al =
     cl-mem → (case op of
       rop-copy pl → rm-copy-from cx pl ty al
       rop-move pl → rm-copy-from cx pl ty al
-      rop-const k → (let w = rm-const-into k cx ty nil
+      rop-const k →
+                    (let w = rm-const-into k cx ty nil
                      in λ fr p → w p))
     cl-unit → λ fr p → rm-ret unit
-    _ → (let ev = rm-opd-rv cx op
+    _ →
+        (let ev = rm-opd-rv cx op
          in λ fr p → rm-bind (ev fr) (λ v → rm-wr-at (cx-t cx) c al p v)))
