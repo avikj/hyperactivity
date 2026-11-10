@@ -1,0 +1,27 @@
+-- A process as a standalone binary (PLAN 4.4 item 5; loaded after the library). It reads a count
+-- (8 bytes), then that many 16-byte messages [side][quantity] from descriptor 0, keeps a book (the
+-- bid and ask totals), and after each message writes the 8-byte imbalance bid − ask to
+-- descriptor 1. #build writes the binary; #run performs the same process on the net.
+le8-16 : le 8 16
+le8-16 = (8 , λ i → 16)
+record Book = { bidq : Int64 ; askq : Int64 }
+book-upd : Book → Bytes 16 → Book
+book-upd bk m =
+  if i64eq (load64 16 m 0 le8-16) (i64 #0)
+    then Book { bidq = i64add (bidq bk) (load64 16 m 8 (le-refl 16)) ; askq = askq bk }
+    else Book { bidq = bidq bk ; askq = i64add (askq bk) (load64 16 m 8 (le-refl 16)) }
+book-out : Book → Bytes 8
+book-out bk = store64 8 (bytes 8) 0 (le-refl 8) (i64sub (bidq bk) (askq bk))
+-- the loop: as many rounds as the count the input begins with (8 bytes), by the word eliminator
+serve : Word → Book → Proc W Word
+serve n = %welimP (λ v → Book → Proc W Word) n (λ bk → ret {lzero} {W} {Word} #0)
+  (λ k go → λ bk →
+    bind {lzero} {W} {Word × Bytes 16} {Word} (read #0 16) (λ r →
+      if %wlt (fst r) #16 then ret {lzero} {W} {Word} #1
+      else bind {lzero} {W} {Word} {Word} (write #1 8 (book-out (book-upd bk (snd r)))) (λ w → go (book-upd bk (snd r)))))
+feed-proc : Proc W Word
+feed-proc = bind {lzero} {W} {Word × Bytes 8} {Word} (read #0 8) (λ h →
+  serve (i64toWord (load64 8 (snd h) 0 (le-refl 8))) (Book { bidq = i64 #0 ; askq = i64 #0 }))
+feed-step : Step W Word
+feed-step = to-step feed-proc
+#build feed-step "build/feed"

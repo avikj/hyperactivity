@@ -1,0 +1,18 @@
+-- Every memory and raw-syscall command of W in one standalone binary (loaded after the library):
+-- it writes "A" and exits with status 65 when the pid is positive, the byte round-trips, and the
+-- compare-and-swap saw the stored word.
+-- getpid by w-sys, a byte stored and loaded in allocated memory, the sum written as one byte
+sysp : Proc W Word
+sysp = bind {lzero} {W} {Word} {Word} (sys-call #39 #0 #0 #0 #0 #0 #0) (λ pid →
+       bind {lzero} {W} {Word} {Word} (alloc-bytes #16) (λ a →
+       bind {lzero} {W} {Unit} {Word} (cmd {lzero} {W} (w-store8 a #65)) (λ u →
+       bind {lzero} {W} {Word} {Word} (cmd {lzero} {W} (w-load8 a)) (λ v →
+       bind {lzero} {W} {Unit} {Word} (store-at (%wadd a #8) #1234567) (λ u2 →
+       bind {lzero} {W} {Word} {Word} (load-at (%wadd a #8)) (λ w →
+       bind {lzero} {W} {Word} {Word} (cas-at (%wadd a #8) #1234567 #7) (λ seen →
+       bind {lzero} {W} {Unit} {Word} fence (λ u3 →
+       bind {lzero} {W} {Word} {Word} (sys-call #1 #1 a #1 #0 #0 #0) (λ n →
+       bind {lzero} {W} {Unit} {Word} (exit (if %weq seen w then (if %wlt #0 pid then v else #1) else #2)) (λ u4 → ret {lzero} {W} {Word} #0))))))))))
+sysS : Step W Word
+sysS = to-step sysp
+#build sysS "build/sys"

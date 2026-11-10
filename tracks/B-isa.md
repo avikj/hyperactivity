@@ -58,7 +58,7 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
   add/sub/imul/and/or/xor/shl/shr/sar, cmp + jcc/setcc, push/pop, call/ret, lea, div/idiv,
   rep movsb/stosb, syscall).
 - `experiments/isa/hello.cub`: `x86-run` on the loader's state of the bytes of
-  `build/feed`-style binary `/tmp/hello.elf` (build it with `experiments/build/`; or load
+  `build/feed`-style binary `/tmp/hello.elf` (build it with `experiments/native/`; or load
   `lib/elf.cub`'s `elf-image` of a 3-instruction program) up to its first `syscall`: record
   the steps per instruction.
 

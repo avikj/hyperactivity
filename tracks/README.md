@@ -50,7 +50,7 @@ anywhere else: not in a chat, not in an agent's memory.
 
 | | Deliverable | Status |
 |---|---|---|
-| D1 | `#build`: a process as a standalone native binary | **done** (`experiments/build/feed.cub`, commit `856ab5a8`) |
+| D1 | `#build`: a process as a standalone native binary | **done** (`experiments/native/feed.cub`, commit `856ab5a8`) |
 | D2 | compiler checked against the x86 model | tracks B then E |
 | D3 | C++ through our compiler | tracks C then F |
 | D4 | properties of that C++ | after D3 |

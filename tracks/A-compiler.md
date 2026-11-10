@@ -1,7 +1,7 @@
 # Track A — the compiler and integration
 
 Files: `lib/specialize.cub`, `lib/machine.cub`, `lib/x86.cub`, `lib/elf.cub`, `src/*.c`,
-`lib/check.cub`, `lib/code.cub`, `Makefile`, `PLAN.md`, `experiments/jit/`, `experiments/build/`.
+`lib/check.cub`, `lib/code.cub`, `Makefile`, `PLAN.md`, `experiments/jit/`, `experiments/native/`.
 
 ## How to verify the current state (run after any change here)
 
@@ -9,7 +9,7 @@ Files: `lib/specialize.cub`, `lib/machine.cub`, `lib/x86.cub`, `lib/elf.cub`, `s
 make build/cubical && make library                     # 830 passed, 0 failed
 L=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p')
 CUBICAL_NOCACHE=1 ./build/cubical $L experiments/jit/workloads.cub | grep -c '^ok: jit'   # 33
-CUBICAL_NOCACHE=1 ./build/cubical $L experiments/build/feed.cub | grep build              # ok: build feed-step
+CUBICAL_NOCACHE=1 ./build/cubical $L experiments/native/feed.cub | grep build              # ok: build feed-step
 printf '\x02\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x05\0\0\0\0\0\0\0\x01\0\0\0\0\0\0\0\x03\0\0\0\0\0\0\0' | ./build/feed | od -An -td8   # 5 then 2
 ```
 Always run with `stdbuf -oL` when hunting a crash: output is otherwise lost and the last line
@@ -57,5 +57,13 @@ printed is not where it died.
   C recursion depth in `src/net.c`. Open. It should be an error, not a crash.
 - `%gsteps`-scale compile cost: `zig` 1.3M steps, `feed-step` 1.2M steps to compile. Open
   (PLAN 4.4 item 8).
-- The driver's `w-load`/`w-store`/`w-cas`/`w-fence` templates in `lib/elf.cub` have never run
-  (no process in the repo obtains an address). Open until track D gives one.
+
+## Replies to other tracks
+
+- **D, request 1 (ELF driver cases for `w-sys`, `w-alloc`, `w-load8`, `w-store8`)**: done.
+  The driver loop's source is `tools/asm/driver.s` (do not write another); `python3
+  tools/asm/gen.py --patch` assembles it into `lib/elf.cub`. `experiments/native/sys.cub`
+  builds a binary using every memory and raw-syscall command; it writes `A` and exits 65.
+- **D, request 2 (`.gitignore` hid `experiments/build/`)**: the demos are now in
+  `experiments/native/` and tracked.
+- **D, request 3**: say when `lib/os/*.cub` load and I append them to `LIB`.
