@@ -226,14 +226,14 @@ class Parser:
                         self.next()
                         kind = self.next().v
                     tvs.append((t.v, kind))
-            if self.opt(','):  # the constraint: skipped (Sail has proved it)
+            if self.opt(','):  # the constraint: Sail has proved it; kept for choosing overloads
                 depth = 0
                 while not (depth == 0 and self.at('.')):
                     if self.peek().v in ('(', '{', '{|'):
                         depth += 1
                     if self.peek().v in (')', '}', '|}'):
                         depth -= 1
-                    self.next()
+                    self.constraint.append(self.next().v)
             self.eat('.')
         return tvs, self.typ()
 
@@ -552,8 +552,9 @@ class Parser:
                     self.next()
                 ext = self.next().v[1:-1]
             self.eat(':')
+            self.constraint = []
             tvs, ty = self.typschm()
-            return N('val', t, name=name, tvs=tvs, typ=ty, ext=ext)
+            return N('val', t, name=name, tvs=tvs, typ=ty, ext=ext, constraint=self.constraint)
         if self.at('scattered'):
             self.next()
             self.eat('function')
@@ -818,8 +819,8 @@ class Bind:
 class X:
     """A translated expression: what runs first, the value's code (one line), its type."""
 
-    def __init__(self, code, ty, pre=None, nat=None, bot=False):
-        self.code, self.ty, self.pre, self.nat, self.bot = code, ty, pre or [], nat, bot
+    def __init__(self, code, ty, pre=None, nat=None, bot=False, lit=None):
+        self.code, self.ty, self.pre, self.nat, self.bot, self.lit = code, ty, pre or [], nat, bot, lit
 
     @property
     def cls(self):
@@ -836,7 +837,7 @@ class Importer:
         self.reserved = set(reserved) | CUB_KEYWORDS
         self.syn, self.bitfields, self.enums, self.enum_of = {}, {}, {}, {}
         self.unions, self.ctor, self.structs, self.registers = {}, {}, {}, {}
-        self.vals, self.funs, self.overloads = {}, {}, {}
+        self.vals, self.funs, self.overloads, self.constraints = {}, {}, {}, {}
         self.fun_order, self.file_of, self.decl_file = [], {}, {}
         self.notes = []          # what the importer decided, for the report
         self.undefined_uses = []
@@ -869,6 +870,7 @@ class Importer:
             self.registers[d.name] = d.typ
         elif k == 'val':
             self.vals[d.name] = (d.tvs, d.typ, d.ext)
+            self.constraints[d.name] = d.constraint
         elif k == 'function':
             if d.name not in self.funs:
                 self.funs[d.name] = []
@@ -1301,7 +1303,7 @@ class Translator(Importer):
         return m(e, env, exp, tail, nested)
 
     def tr_int(self, e, env, exp, tail, nested):
-        return X(z_lit(e.n), INT, nat=e.n if e.n >= 0 else None)
+        return X(z_lit(e.n), INT, nat=e.n if e.n >= 0 else None, lit=e.n)
 
     def tr_bitsl(self, e, env, exp, tail, nested):
         return X('#%d' % e.n, ('bits', e.w))
@@ -1935,28 +1937,55 @@ class Translator(Importer):
             return []
         return [a]
 
+    def violates(self, g, xs, strict):
+        """Does a call of g with these arguments break g's constraint on an int('n) parameter?
+        Strictly: a constraint on a value that is not a literal is not known to hold."""
+        toks = self.constraints.get(g) or []
+        formals = self.formals_of(g)
+        arg = {}
+        for f, x in zip(formals, xs):
+            if f.k == 'tapp' and f.name in ('int', 'atom', 'implicit') and len(f.args) == 1 and f.args[0].k == 'tvar':
+                arg[f.args[0].name] = x
+        i = 0
+        while i + 2 < len(toks):
+            v, op, k = toks[i], toks[i + 1], toks[i + 2]
+            if v in arg and op in ('>=', '>', '<=', '<') and re.fullmatch(r'-?\d+', k):
+                x, k = arg[v], int(k)
+                if x.lit is None:
+                    if strict:
+                        return True
+                elif not {'>=': x.lit >= k, '>': x.lit > k, '<=': x.lit <= k, '<': x.lit < k}[op]:
+                    return True
+            i += 1
+        return False
+
     def choose(self, names, xs, e):
-        """The first alternative of an overload whose parameter shapes fit the arguments."""
-        for g in names:
-            if g in BUILTIN_SHAPES:
-                shapes = BUILTIN_SHAPES[g]
-            elif g in self.vals and g in self.funs:
-                shapes = [self.ast_shape(f) for f in self.formals_of(g)]
-            elif g in self.BI:
-                return g
-            else:
-                continue
-            if len(shapes) != len(xs):
-                continue
-            ok = True
-            for s, x in zip(shapes, xs):
-                a = shape(x.ty)
-                if a == 'bitfield':
-                    a = 'bitfield:' + x.ty[1]
-                if not (s == 'any' or a == 'bot' or x.bot or s == a):
+        """The first alternative of an overload whose parameter shapes fit the arguments and
+        whose constraints hold: first among those whose constraints are known to hold (on
+        literals), then among those not known to fail."""
+        for strict in (True, False):
+            for g in names:
+                if g in BUILTIN_SHAPES:
+                    shapes = BUILTIN_SHAPES[g]
+                elif g in self.vals and g in self.funs:
+                    shapes = [self.ast_shape(f) for f in self.formals_of(g)]
+                elif g in self.BI:
+                    return g
+                else:
+                    continue
+                if len(shapes) != len(xs):
+                    continue
+                ok = True
+                for sh, x in zip(shapes, xs):
+                    a = shape(x.ty)
+                    if a == 'bitfield':
+                        a = 'bitfield:' + x.ty[1]
+                    if not (sh == 'any' or a == 'bot' or x.bot or sh == a):
+                        ok = False
+                if ok and g in self.funs and self.violates(g, xs, strict):
                     ok = False
-            if ok:
-                return g
+                if ok:
+                    return g
         self.err(e, 'no alternative of %s fits %s' % (names, [x.ty for x in xs]))
 
     def closed(self, T):
@@ -2467,6 +2496,16 @@ class Translator(Importer):
                     'x86-%s (x86-state %s) = %s' % (r, ' '.join(vs), vs[i]),
                     'x86-set-%s : %s → X86 → X86' % (r, t),
                     "x86-set-%s v' (x86-state %s) = x86-state %s" % (r, ' '.join(vs), ' '.join(vs[:i] + ["v'"] + vs[i + 1:]))]
+        zeros = []
+        for r, ast in self.registers.items():
+            T = self.reg_type(r)
+            if T[0] == 'vector':
+                zeros.append('(' + 'cons %s (' % self.default(T[1]) * (ast.args[0].n - 1) + 'cons %s nil' % self.default(T[1]) + ')' * (ast.args[0].n - 1) + ')')
+            else:
+                zeros.append(self.default(T))
+        out += ['-- every register zero (false), each vector at its declared length, nothing in memory',
+                'x86-reset : X86',
+                'x86-reset = x86-state mem-none ' + ' '.join(zeros)]
         out += ['-- Sail\'s __read_mem and __write_mem: n bytes at an address, lowest address lowest',
                 'x86-read-mem : (n : Word) → Bits #64 → X86 → Bits (wmul #8 n)',
                 'x86-read-mem n a s = mem-load-n (x86-mem s) n a',

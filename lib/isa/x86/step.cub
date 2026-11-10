@@ -28,7 +28,7 @@ get_prefixes-body self' proc_mode' start_rip prefixes' rex_byte cnt =
                 prefix_byte_group_code = (get_one_byte_prefix_array_code byte)
             in if (z-eq prefix_byte_group_code (zpos #0)) then
                  (let rex? : Bool
-                      rex? = (b-and (in_64bit_mode proc_mode') (weq (bits_of_int (ash_left_int (bv-unsigned #8 byte) (zneg #4)) (zpos #4)) #4))
+                      rex? = (b-and (in_64bit_mode proc_mode') (weq (bits_of_int (ash_int (bv-unsigned #8 byte) (zneg #4)) (zpos #4)) #4))
                   in if rex? then
                        (bindS {Bits #48} {(prefixes × (Bits #8))} (add_to_iptr proc_mode' start_rip #1) (λ next_rip →
                           onS {ZI} {(prefixes × (Bits #8))} (check_range (zpos #0) (zpos #15) (z-sub cnt (zpos #1))) (λ t'9 →

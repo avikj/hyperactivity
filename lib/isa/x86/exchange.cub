@@ -22,7 +22,7 @@ x86_xchg proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
              inst_ac? = true
          in let t'5'm : MS ((Bits #128) × ZI × (Bits #64))
                 t'5'm =
-                  if (z-eq (ash_left_int (bv-unsigned #8 opcode) (zneg #4)) (zpos #9)) then
+                  if (z-eq (ash_int (bv-unsigned #8 opcode) (zneg #4)) (zpos #9)) then
                     (bindS {Bits #64} {((Bits #128) × ZI × (Bits #64))} (rgfi_size (bits_of_int reg_mem_size (zpos #4)) #0 rex_byte) (λ t'3 →
                        retS {((Bits #128) × ZI × (Bits #64))} ((bv-zext #64 #128 t'3) , (zpos #0) , #0)))
                   else
@@ -50,7 +50,7 @@ x86_xchg proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
                                   rw_rd = (bv-trunc #8 #3 (bv-and #8 #7 opcode))
                               in let val2'm : MS (Bits #64)
                                      val2'm =
-                                       if (z-eq (ash_left_int (bv-unsigned #8 opcode) (zneg #4)) (zpos #9)) then
+                                       if (z-eq (ash_int (bv-unsigned #8 opcode) (zneg #4)) (zpos #9)) then
                                          (onS {Bits #4} {Bits #64} (reg_index rw_rd rex_byte #0) (λ t'9 →
                                             rgfi_size (bits_of_int reg_mem_size (zpos #4)) t'9 rex_byte))
                                        else
@@ -59,14 +59,14 @@ x86_xchg proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
                                  in bindS {Bits #64} {Unit} val2'm (λ val2 →
                                       let t'16'm : MS Unit
                                           t'16'm =
-                                            if (z-eq (ash_left_int (bv-unsigned #8 opcode) (zneg #4)) (zpos #9)) then
+                                            if (z-eq (ash_int (bv-unsigned #8 opcode) (zneg #4)) (zpos #9)) then
                                               (write_rgfi_size (bits_of_int reg_mem_size (zpos #4)) #0 val2 rex_byte)
                                             else
                                               (x86_operand_to_reg_mem proc_mode' reg_mem_size inst_ac? false (bv-zext #64 #128 val2) seg_reg addr prefixes' rex_byte r_m mod_var sib')
                                       in bindS {Unit} {Unit} t'16'm (λ t'16 →
                                            let t'21'm : MS Unit
                                                t'21'm =
-                                                 if (weq (bits_of_int (ash_left_int (bv-unsigned #8 opcode) (zneg #4)) (zpos #4)) #9) then
+                                                 if (weq (bits_of_int (ash_int (bv-unsigned #8 opcode) (zneg #4)) (zpos #4)) #9) then
                                                    (onS {Bits #4} {Unit} (reg_index rw_rd rex_byte #0) (λ t'17 →
                                                       write_rgfi_size (bits_of_int reg_mem_size (zpos #4)) t'17 (bv-trunc #128 #64 val1) rex_byte))
                                                  else

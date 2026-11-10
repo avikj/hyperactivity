@@ -1,0 +1,21 @@
+-- lib/isa/x86/run.cub — the model as a step function and a run (hand-written; PLAN Phase 2).
+-- Loaded after every file of lib/isa/x86/ORDER.
+--
+-- x86-step is the model's x86_fetch_decode_execute: one instruction fetched at rip, decoded
+-- and executed, as an outcome and the state after. x86-run n is n steps, stopping at the first
+-- step whose outcome is not a value (a fault the model throws as Emsg, the syscall instruction
+-- in the application view as Syscall, an abort).
+x86-step : X86 → Outc exception Unit × X86
+x86-step = x86_fetch_decode_execute
+x86-run : Word → X86 → Outc exception Unit × X86
+x86-run n =
+  %welimP (λ _ → X86 → Outc exception Unit × X86) n (λ s → (out-val unit , s))
+    (λ j h s → st-step {X86} {exception} {Unit} {Unit} (λ _ → h) (x86-step s))
+-- the state a user program starts from, before its image and registers: reset, then 64-bit
+-- mode as the model's main.sail sets it (IA32_EFER.LMA and CS.L), in the application view
+-- (linear addresses are the memory's addresses, no paging; syscall throws Syscall)
+x86-user64 : X86
+x86-user64 = x86-set-app_view true (snd (initialise_64_bit_mode x86-reset))
+-- n bytes of a little-endian value written at an address
+x86-poke : (n : Word) → Bits #64 → Word → X86 → X86
+x86-poke n a v s = x86-write-mem n a v s

@@ -1,0 +1,8 @@
+-- experiments/isa/add.cub — one instruction under the imported model, operands as variables.
+-- Loaded after the library, lib/bits.cub, lib/isa/x86/ORDER's files and lib/isa/x86/run.cub.
+-- 48 01 C8 = add rax, rcx at 0x400000.
+add-state : Word → Word → X86
+add-state a c = x86-set-rax a (x86-set-rcx c (x86-set-rip #4194304 (x86-poke #3 #4194304 #13107528 x86-user64)))
+#show λ (a c : Word) → x86-rip (snd (x86-step (add-state a c)))
+#show λ (a c : Word) → x86-rax (snd (x86-step (add-state a c)))
+#show λ (a c : Word) → fst (x86-step (add-state a c))

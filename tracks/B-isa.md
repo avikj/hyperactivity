@@ -106,6 +106,15 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
   `3574 passed, 0 failed` (the library's 830, `lib/bits.cub`, and 2 715 definitions of the
   model; no `postulate`, every definition has a signature).
 
+- **`lib/isa/x86/run.cub`** (hand-written): `x86-step = x86_fetch_decode_execute`,
+  `x86-run n` (by `%welimP`, stopping at the first outcome that is not a value), `x86-user64`
+  (reset, 64-bit mode as `main.sail`'s `initialise_64_bit_mode`, application view), `x86-poke`.
+  `state.cub` now also has `x86-reset` (every register zero, vectors at declared lengths).
+- **`experiments/isa/add.cub`**: `48 01 C8` at `0x400000`, `rax` and `rcx` λ-bound. `#show`:
+  `x86-rip` after the step `= #4194307` (29 584 steps); `x86-rax` `= λ x0 x1 → %wand (%wand (%wand
+  (%wshr (%wadd (%wand x0 (2⁶⁴−1)) x1) #0) (2⁶⁵−1)) (2⁶⁴−1)) (2⁶⁴−1)`, the 64-bit sum (28 925
+  steps); the outcome `out-val unit` (28 584 steps).
+
 ## Decisions (what the generated code is, so far)
 
 - Memory: a trie rather than a write list over `Bytes n`, because `Bytes n`'s loads need a
@@ -169,16 +178,22 @@ Files you own: `lib/bits.cub`, `tools/sail2cub.py`, `lib/isa/**`, `experiments/i
 - Found while checking: a definition the size of `two_byte_opcode_execute` as one term (4 000
   lines, a 256-deep `if` chain) exhausts 6 GB in the checker; hence the per-case definitions.
 
+- Overloads: an alternative is chosen by its parameters' shapes *and its constraint*: first
+  among alternatives whose constraints on `int('n)` arguments are known to hold (literals), then
+  among those not known to fail. (Without this `ash(x, -4)` took `ash_left_int`, `x · 2ⁿ` with
+  n ≥ 0 required, and the REX prefix was not recognized: `add rax, rcx` gave `#UD`.)
+
 ## Found
 
 (defects in the machine or the model you hit, with the input that shows them)
 
 ## Next step
 
-1. `lib/isa/x86/run.cub` (hand-written): `x86-step` = `x86_fetch_decode_execute`, `x86-run n`.
-   Then `experiments/isa/add.cub`: a state with `48 01 C8` at `rip` in memory (`mem-store-n`),
-   64-bit mode set as `main.sail`'s `initialise_64_bit_mode` does (`msrs[0]` bit 10 `lma`,
-   `seg_hidden_attrs[1]` bit `l`), `app_view = true`, `rax` and `rcx` λ-bound; `#show` the step.
-   Whatever does not reduce (a stuck test on a variable, a wrong built-in) is the next thing to fix.
-2. Then one instruction per class of `lib/x86.cub`'s template table, `sse.cub`, `loader.cub`,
-   `experiments/isa/hello.cub`.
+1. `experiments/isa/classes.cub`: one instruction of each class of `lib/x86.cub`'s template
+   table (mov forms, sub/imul/and/or/xor/shl/shr/sar, cmp + jcc/setcc, push/pop, call/ret, lea,
+   div/idiv, rep movsb/stosb, syscall), `#show` the registers each writes; record steps here.
+   A `#UD` or an `Emsg` from an instruction the encoder emits is a finding (the model lacks
+   it, or the importer is wrong): decode the message with
+   `python3 -c "n=…; print(n.to_bytes((n.bit_length()+7)//8,'big'))"`.
+2. `lib/isa/x86/sse.cub`, `lib/isa/loader.cub`, `experiments/isa/hello.cub`.
+3. Run `make library` and the full no-cache check once more and record the totals.
