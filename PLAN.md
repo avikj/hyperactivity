@@ -9,7 +9,7 @@ unless restated here.
 `#jit f` quotes a checked definition, specializes it, encodes the specialized normal form as
 x86-64 bytes by fixed templates, and binds `f` to the bytes only after the checker has accepted
 the specialized code as `f` (by conversion, or, when theorems were used, by checking the path
-along them as the definition `f·jit`). Twenty-eight workloads compile and run with the
+along them as the definition `f·jit`). Thirty workloads compile and run with the
 machine's answers. Everything that related a second description of the system to the first by
 comparing outputs is deleted: the native-C path, declared representations, layouts, handles,
 the old printers, the tests. The plan from here is one compiler, made trustworthy below
@@ -215,9 +215,13 @@ NaN comparisons; `Word`→`Float64` at and above 2⁶³; a store leaving its arg
 Each item is done when the workloads gain a definition exercising it, it compiles, the check
 passes, and its answers equal the machine's.
 
-1. **Functions as values.** A λ in a body and a call through a variable: a closure is an arena
-   cell `[code address][captured…]`, a call through it an indirect call. Removes `reflect` for
-   higher-order code.
+1. **Functions as values.** Built (revision 9): a λ that is a value is lifted to a definition
+   over its free variables; the value is that definition partially applied, a closure cell
+   `[code offset][arity][given][arguments…]`; applying a value goes through one fixed apply
+   routine in the blob (saturated: push the held arguments and the new one, call; otherwise a
+   new cell with one more). A definition applied to more arguments than its arity is the call,
+   then applications. Workloads `sumAdd` (a list of closures built and applied, 866 bytes) and
+   `pickF`.
 2. **Codata and records.** Projections (`cproj`) and copattern definitions observed to a known
    depth compile; an unobserved stuck head stays on the net.
 3. **Recursion beyond structural.** Definitions accepted by `decreasing by` (a measure) compile

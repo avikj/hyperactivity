@@ -167,6 +167,21 @@ i-exit = xcat4 (lapp (xb3 #65 #198 #69) (xb2 #0 #1)) (xb3 #72 #137 #220)
 -- a jump over the exit when the flag (carry, or r15 within r12) is clear
 i-over-if-c = lapp (i-jcc j-nc (xlen i-exit)) i-exit
 i-over-if-above = lapp (i-jcc j-be (xlen i-exit)) i-exit
+-- store imm32 (sign-extended) at [rax + disp32]
+i-st-rax-d-imm d v = lapp (xb3 #72 #199 #128) (lapp (ximm32 d) (ximm32 v))
+-- the apply routine (one per blob, called with the closure and then the argument pushed): a closure
+-- is a cell [code offset][arity][given][argument…]. Given one short of the arity, the arguments
+-- held and the new one are pushed and the code is called (base-relative, r14); otherwise a new cell
+-- with one more argument is taken from the arena (the overflow exit when it is full). Its lines, in
+-- order: push rbp; mov rbp, rsp; mov rax, [rbp+24]; mov rcx, [rax+16]; inc rcx; cmp rcx, [rax+8];
+-- jb partial; mov rsi, rax; xor edi, edi; l1: cmp rdi, [rsi+16]; jae d1; push [rsi+rdi*8+24];
+-- inc rdi; jmp l1; d1: push [rbp+16]; mov rax, [rsi]; add rax, r14; call rax; mov rsp, rbp; pop rbp;
+-- ret; partial: mov rsi, rax; mov rdi, rcx; lea rcx, [rdi*8+24]; mov rax, r15; add r15, rcx;
+-- cmp r15, r12; ja exit; copy [rsi], [rsi+8] to the new cell, store rdi at [rax+16]; copy the
+-- rdi−1 arguments held; store [rbp+16] after them; mov rsp, rbp; pop rbp; ret; exit: the overflow exit
+i-apply = lapp (lapp (xb4 #85 #72 #137 #229) (lapp (xb4 #72 #139 #69 #24) (lapp (xb4 #72 #139 #72 #16) (lapp (xb4 #72 #255 #193 #72) (lapp (xb4 #59 #72 #8 #114) (lapp (xb4 #36 #72 #137 #198) (lapp (xb4 #49 #255 #72 #59) (lapp (xb4 #126 #16 #115 #9) (lapp (xb4 #255 #116 #254 #24) (lapp (xb4 #72 #255 #199 #235) (lapp (xb4 #241 #255 #117 #16) (lapp (xb4 #72 #139 #6 #76) (lapp (xb4 #1 #240 #255 #208) (lapp (xb4 #72 #137 #236 #93) (lapp (xb4 #195 #72 #137 #198) (lapp (xb4 #72 #137 #207 #72) (lapp (xb4 #141 #12 #253 #24) (lapp (xb4 #0 #0 #0 #76) (lapp (xb4 #137 #248 #73 #1) (lapp (xb4 #207 #77 #57 #231) (lapp (xb4 #119 #58 #72 #139) (lapp (xb4 #22 #72 #137 #16) (lapp (xb4 #72 #139 #86 #8) (lapp (xb4 #72 #137 #80 #8) (lapp (xb4 #72 #137 #120 #16) (lapp (xb4 #49 #201 #76 #141) (lapp (xb4 #71 #255 #76 #57) (lapp (xb4 #193 #115 #15 #72) (lapp (xb4 #139 #84 #206 #24) (lapp (xb4 #72 #137 #84 #200) (lapp (xb4 #24 #72 #255 #193) (lapp (xb4 #235 #236 #72 #139) (lapp (xb4 #85 #16 #72 #137) (lapp (xb4 #84 #200 #24 #72) (xb4 #137 #236 #93 #195))))))))))))))))))))))))))))))))))) i-exit
+-- the key under which the routine's offset is in the table (no global or lifted definition has it)
+x-apply-key = #1099511627775
 -- the data type Nat, a word in compiled code (above)
 x-nat-d = didx (code Nat)
 -- ---------------------------------------------------------------- the forms a program is in
@@ -262,7 +277,7 @@ x-lift c st =
   case c of
     capp f a → x-lift-app c st
     celim dd P B x → x-lift-app c st
-    clam b → x-lift1 clam b st
+    clam b → x-lift-clo c st
     cfst p → x-lift1 cfst p st
     csnd p → x-lift1 csnd p st
     cwsucc a → x-lift1 cwsucc a st
@@ -272,10 +287,28 @@ x-lift c st =
     cwop k a b → x-lift2 (cwop k) a b st
     ccon dd k fs ds → (let r = x-lift-l fs st in (ccon dd k (fst r) ds , snd r))
     cprim k as → (let r = x-lift-l as st in (cprim k (fst r) , snd r))
-    ccase dd B x → (let r1 = x-lift-l B st in let r2 = x-lift x (snd r1) in (ccase dd (fst r1) (fst r2) , snd r2))
-    cwelim w z s mo → (let r1 = x-lift w st in let r2 = x-lift z (snd r1) in let r3 = x-lift s (snd r2) in (cwelim (fst r1) (fst r2) (fst r3) mo , snd r3))
+    ccase dd B x → (let r1 = x-lift-brs dd #0 B st in let r2 = x-lift x (snd r1) in (ccase dd (fst r1) (fst r2) , snd r2))
+    cwelim w z s mo → (let r1 = x-lift w st in let r2 = x-lift z (snd r1) in let r3 = x-lift-under #2 s (snd r2) in (cwelim (fst r1) (fst r2) (fst r3) mo , snd r3))
     _ → (c , st)
 x-lift1 k a st = let r = x-lift a st in (k (fst r) , snd r)
+-- a case's branches, each lifted under its fields' binders (not taken for closures)
+x-lift-brs dd k B st = case B of lnil → (lnil , st); lcons br r → (let r1 = x-lift-under (x-nf dd k) br st in let r2 = x-lift-brs dd (%wsucc k) r (snd r1) in (lcons (fst r1) (fst r2) , snd r2))
+x-lift-under n c st = let r = x-lift (x-strip n c) st in (x-lams n (fst r) , snd r)
+-- a λ that is a value (a closure): a new definition whose parameters are the λ's free variables
+-- then its own leading binders, and the value the definition applied to the free variables alone
+-- (a partial application, which encodes as a closure cell). λ-lifting: the definition applied to
+-- the free variables is the λ, which eval-g computes identically
+x-lift-clo c st =
+  let sp = x-split c
+      k = fst sp
+      fv = x-frees c
+      m = xlen fv
+      g = snd st
+      body = var-map-c (λ n d → let rel = %wsub n d in
+                                if %wlt rel k then cvar n
+                                else cvar (%wadd d (%wadd k (%wsub (%wsub m #1) (x-index (%wsub rel k) fv #0))))) #0 (snd sp)
+      def = (g , (%wadd m k , body))
+  in x-lift-made (x-apps (cglob g) (x-fv-vars fv) , (lcons def (fst st) , %wsucc g))
 x-lift2 k a b st = let r1 = x-lift a st in let r2 = x-lift b (snd r1) in (k (fst r1) (fst r2) , snd r2)
 x-lift-l l st = case l of lnil → (lnil , st); lcons x xs → (let r1 = x-lift x st in let r2 = x-lift-l xs (snd r1) in (lcons (fst r1) (fst r2) , snd r2))
 -- an application spine (or a bare elimination: zero arguments)
@@ -403,7 +436,7 @@ x-ok defs c =
   case c of
     cvar n → fo c
     cglob g → x-ok-call defs g lnil c
-    capp f a → (let sp = x-spine c in case fst sp of cglob g → x-ok-call defs g (snd sp) c; _ → not-fo reflect c)
+    capp f a → (let sp = x-spine c in case fst sp of cglob g → x-ok-call defs g (snd sp) c; clam b → not-fo reflect c; h → x-ok-l defs (lcons h (snd sp)) c)
     clet t b → x-ok2 defs t b c
     cpair a b → x-ok2 defs a b c
     cfst p → x-ok defs p
@@ -420,7 +453,8 @@ x-ok defs c =
 x-ok2 defs a b c = case x-ok defs a of fo q → x-ok defs b; not-fo w at → not-fo w at
 x-ok2b defs v b c = case v of fo q → x-ok defs b; not-fo w at → not-fo w at
 x-ok-l defs l c = case l of lnil → fo c; lcons x xs → (case x-ok defs x of fo q → x-ok-l defs xs c; not-fo w at → not-fo w at)
-x-ok-call defs g args c = case x-arity defs g of some n → (if %weq n (xlen args) then x-ok-l defs args c else not-fo reflect c); none → not-fo reflect c
+-- a known definition at any number of arguments: fewer is a closure, more is the call then applications
+x-ok-call defs g args c = case x-arity defs g of some n → x-ok-l defs args c; none → not-fo reflect c
 x-br-bodies dd k B = case B of lnil → lnil; lcons br r → lcons (x-strip (x-nf dd k) br) (x-br-bodies dd (%wsucc k) r)
 -- a loop's step under its two binders (the counter, then the state)
 x-loop-body s = case s of clam b → (case b of clam b2 → b2; _ → capp b (cvar #0)); _ → capp (capp (shift-code #0 #2 s) (cvar #1)) (cvar #0)
@@ -436,8 +470,8 @@ x-place env n = case env of lnil → (true , #0); lcons p r → (if %weq n #0 th
 cx tbl env d c =
   case c of
     cvar n → i-ld-rbp (x-disp (x-place env n))
-    cglob g → x-call tbl env d g lnil
-    capp f a → (let sp = x-spine c in case fst sp of cglob g → x-call tbl env d g (snd sp); _ → i-ud2)
+    cglob g → x-gref tbl env d g lnil
+    capp f a → (let sp = x-spine c in case fst sp of cglob g → x-gref tbl env d g (snd sp); h → x-applies tbl env d (cx tbl env d h) (snd sp))
     clet t b → xcat3 (cx tbl env d t) i-push-rax (lapp (cx tbl (lcons (x-slot d) env) (%wsucc d) b) (i-add-rsp #8))
     cann t T → cx tbl env d t
     cpair a b → x-cell tbl env d #0 (lcons a (lcons b lnil))
@@ -534,7 +568,33 @@ x-pop-fields n = if %weq n #0 then lnil else xcat3 i-pop-rcx (i-st-rax-rcx (xmul
 x-call tbl env d g args =
   let n = xlen args
   in xcat3 (x-push-all tbl env d args) (i-call-off (x-tbl tbl g)) (if %weq n #0 then lnil else i-add-rsp (xmul8 n))
-x-tbl tbl g = case tbl of lnil → #0; lcons e r → (if %weq (fst e) g then snd e else x-tbl r g)
+-- tbl: (arities , offsets), each a Lst of (g , n); the arities are known in the measuring pass too,
+-- so a definition's bytes do not depend on the offsets
+x-tbl tbl g = x-look (snd tbl) g
+x-ar tbl g = x-look (fst tbl) g
+x-look l g = case l of lnil → #0; lcons e r → (if %weq (fst e) g then snd e else x-look r g)
+-- definition g at its arguments: a call when they are as many as its arity; a closure cell when
+-- fewer; the call on the first ones, then the rest applied, when more
+x-gref tbl env d g args =
+  let a = x-ar tbl g
+      n = xlen args
+  in if %weq n a then x-call tbl env d g args
+     else if %wlt n a then x-clo tbl env d g a args
+     else x-applies tbl env d (x-call tbl env d g (x-take a args)) (x-drop a args)
+x-take n l = if %weq n #0 then lnil else (case l of lnil → lnil; lcons x r → lcons x (x-take (%wsub n #1) r))
+x-drop n l = if %weq n #0 then l else (case l of lnil → lnil; lcons x r → x-drop (%wsub n #1) r)
+-- a closure cell: the arguments pushed, a cell of 3 + n words, [offset][arity][n], the arguments
+x-clo tbl env d g a args =
+  let n = xlen args
+  in xcat6 (x-push-all tbl env d args) i-mov-rax-r15 (i-add-r15 (xmul8 (%wadd n #3))) (lapp i-cmp-r15-r12 i-over-if-above)
+           (xcat3 (i-st-rax-imm (x-tbl tbl g)) (i-st-rax-d-imm #8 a) (i-st-rax-d-imm #16 n)) (x-pop-at n)
+x-pop-at n = if %weq n #0 then lnil else xcat3 i-pop-rcx (i-st-rax-rcx (xmul8 (%wadd n #2))) (x-pop-at (%wsub n #1))
+-- the value code leaves in rax (a closure) applied to each argument in turn: the closure pushed,
+-- the argument pushed, the routine called, both dropped
+x-applies tbl env d bs args =
+  case args of
+    lnil → bs
+    lcons a r → x-applies tbl env d (xcat5 bs i-push-rax (cx tbl env (%wsucc d) a) i-push-rax (lapp (i-call-off (x-tbl tbl x-apply-key)) (i-add-rsp #16))) r
 -- a case: the scrutinee pushed (slot d); its index into rcx (an immediate below 4096 is the index,
 -- else the cell's first word); each branch compared in turn, its fields pushed from the cell
 x-case tbl env d dd B x =
@@ -625,14 +685,18 @@ x-stub n off0 =
 x-stub-pushes n i = if %weq i n then lnil else lapp (lapp (xb2 #255 #183) (ximm32 (xmul8 i))) (x-stub-pushes n (%wsucc i))
 -- offsets: the stub first, then each definition; every jump and call is a fixed-width encoding,
 -- so a definition's length does not depend on the offsets, and one pass with offsets 0 measures
-x-layout defs off = case defs of lnil → lnil; lcons e r → lcons (fst e , off) (x-layout r (%wadd off (xlen (x-fn lnil e))))
+x-layout ars defs off = case defs of lnil → lnil; lcons e r → lcons (fst e , off) (x-layout ars r (%wadd off (xlen (x-fn (ars , lnil) e))))
+x-arities defs = case defs of lnil → lnil; lcons e r → lcons (fst e , fst (snd e)) (x-arities r)
 x-fns tbl defs = case defs of lnil → lnil; lcons e r → lapp (x-fn tbl e) (x-fns tbl r)
 -- the blob of a program whose entry is definition m with n parameters
+-- the blob: the stub, the apply routine, the definitions
 encode-prog m defs =
   let n = case x-arity defs m of some k → k; none → #0
       slen = xlen (x-stub n #0)
-      tbl = x-layout defs slen
-  in lapp (x-stub n (x-tbl tbl m)) (x-fns tbl defs)
+      ars = x-arities defs
+      offs = lcons (x-apply-key , slen) (x-layout ars defs (%wadd slen (xlen i-apply)))
+      tbl = (ars , offs)
+  in lapp (x-stub n (x-tbl tbl m)) (lapp i-apply (x-fns tbl defs))
 -- ---------------------------------------------------------------- the plan of a #jit
 -- jit-plan g rules: for checked definition g, (verdict , (ok , (path , (code , bytes)))):
 --   verdict: fo when the program is compilable (lib/machine.cub's fragment, then x-check);

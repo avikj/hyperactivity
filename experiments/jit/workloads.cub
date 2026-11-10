@@ -68,6 +68,22 @@ pz : Nat → Nat
 pz x = plus x zero
 pzz : Nat → Nat
 pzz x = plus (plus x zero) zero
+adders : List Word → List (Word → Word)
+adders l = case l return (λ k → List (Word → Word)) of
+  nil → nil
+  cons k ks → cons (λ y → %wadd k y) (rec ks)
+applyAll : List (Word → Word) → Word → Word
+applyAll fs x = case fs return (λ k → Word) of
+  nil → #0
+  cons f gs → %wadd (f x) (rec gs)
+sumAdd : List Word → Word → Word
+sumAdd l x = applyAll (adders l) x
+twice : (Word → Word) → Word → Word
+twice f x = f (f x)
+pickF : Bool → Word → Word
+pickF b y = twice (case b return (λ k → Word → Word) of
+                     true → λ z → %wadd z #10
+                     false → λ z → %wadd z z) y
 #jit addw
 #jit powl
 #jit plusN
@@ -96,3 +112,5 @@ pzz x = plus (plus x zero) zero
 #jit eqN
 #jit pzz using plus-zero
 #jit pz using plus-zero
+#jit sumAdd
+#jit pickF
