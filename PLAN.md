@@ -177,6 +177,10 @@ result crosses is read off `f`'s checked type (`JT`, `src/net.c` `jit_in`/`jit_r
 a primitive, a value converted by its type (read whole first), or a proof parameter the code
 never reads (erased, not passed).
 
+Every compiled definition's prologue compares the stack pointer with a limit in the call's
+context and takes the overflow exit below it, so recursion deeper than the thread's stack
+leaves to the net instead of faulting (measured: a 300,000-deep sum on a 6 MB stack).
+
 Compiled code is pure: stores copy, the arena is private and discarded, and no command of the
 world is compiled. So an overflow can restore the stack and return, and the net computes the
 same call from the start (`run p f ≡ f` by cases). Processes and their commands run on the net;
@@ -222,8 +226,12 @@ passes, and its answers equal the machine's.
    new cell with one more). A definition applied to more arguments than its arity is the call,
    then applications. Workloads `sumAdd` (a list of closures built and applied, 866 bytes) and
    `pickF`.
-2. **Codata and records.** Projections (`cproj`) and copattern definitions observed to a known
-   depth compile; an unobserved stuck head stays on the net.
+2. **Codata and records.** Built in part (revision 9): a record of a codata type with no field
+   of the type itself is a cell and a projection a load; a copattern definition (its value is
+   its own stuck call) and a record with a field of its own type are refused with the reason
+   `infinite` and stay on the net. Still to build: compiling a copattern definition from its
+   clauses as a function returning the cell of its fields when the type is not recursive, and
+   lazily (a closure per field) when it is.
 3. **Recursion beyond structural.** Definitions accepted by `decreasing by` (a measure) compile
    as ordinary recursive calls; mutual recursion as a group of functions.
 4. **In-place stores under uniqueness.** When B11's computed usage shows a byte string is used

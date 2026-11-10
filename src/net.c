@@ -4,6 +4,7 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <pthread.h>
+extern int pthread_getattr_np(pthread_t th, pthread_attr_t *attr);   /* glibc; the thread's stack, for compiled code's stack limit */
 #include <time.h>
 #include <sched.h>
 
@@ -1283,7 +1284,7 @@ typedef struct { int c, nf, got; Port f[]; } DeepAcc;
  * definition's type. The arena is the calling thread's, reset at each call: compiled code allocates
  * nothing else and writes nothing outside it (stores copy), so a call that leaves through the
  * overflow exit is computed again on the net with nothing done twice. */
-typedef struct { uint64_t flag; unsigned char *cur, *end; } JitCtx;
+typedef struct { uint64_t flag; unsigned char *cur, *end; uintptr_t stack_lim; } JitCtx;   /* stack_lim: below it a compiled definition's prologue takes the overflow exit */
 static Port pair_of(Port a, Port b);
 static __thread unsigned char *jit_arena;
 static const size_t JIT_ARENA = (size_t)1 << 30;
@@ -1401,7 +1402,15 @@ static bool jit_call(const Ffi *e, Port *args, int n, Port *out) {
         jit_arena = mmap(NULL, JIT_ARENA, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
         if (jit_arena == MAP_FAILED) { jit_arena = NULL; return false; }
     }
-    JitCtx x = { 0, jit_arena, jit_arena + JIT_ARENA };
+    /* the lowest stack address compiled code may reach: the thread's stack bottom plus a margin
+     * (compiled code calls no C, so the margin only needs to cover one frame's pushes) */
+    static __thread uintptr_t stack_lim;
+    if (!stack_lim) {
+        pthread_attr_t at; void *lo = NULL; size_t sz = 0;
+        if (pthread_getattr_np(pthread_self(), &at) == 0) { pthread_attr_getstack(&at, &lo, &sz); pthread_attr_destroy(&at); }
+        stack_lim = lo ? (uintptr_t)lo + ((size_t)1 << 18) : (uintptr_t)__builtin_frame_address(0) - ((size_t)1 << 22);
+    }
+    JitCtx x = { 0, jit_arena, jit_arena + JIT_ARENA, stack_lim };
     uint64_t a[NATIVE_MAXW];
     for (int k = 0; k < n; k++) a[k] = e->jt[k]->k == JT_ERASED ? 0 : jit_in(cell_at(args[k]), e->jt[k], &x);
     if (x.flag) return false;

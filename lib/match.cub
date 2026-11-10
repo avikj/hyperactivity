@@ -9,33 +9,67 @@
 -- that occurs under b binders of the pattern binds a subterm that is then shifted by b when
 -- instantiated under different binders.
 -- ---------------------------------------------------------------- codes: shifting
+-- cmap f d c: c with each subterm p at binder depth d replaced by f p d where f gives one, every
+-- constructor of Code traversed (the leaves have no variables); the one traversal every
+-- index-changing operation below is defined by, so none can skip a construct
+cmap f d c =
+  case f c d of
+    some c2 → c2
+    none → cmap-in f d c
+cmap-in f d c =
+  case c of
+    clam b → clam (cmap f (%wsucc d) b)
+    capp a b → capp (cmap f d a) (cmap f d b)
+    cpair a b → cpair (cmap f d a) (cmap f d b)
+    cfst p → cfst (cmap f d p)
+    csnd p → csnd (cmap f d p)
+    cpi m A B → cpi m (cmap f d A) (cmap f (%wsucc d) B)
+    csigma A B → csigma (cmap f d A) (cmap f (%wsucc d) B)
+    cuniv l → cuniv (cmap f d l)
+    cpathp A a b → cpathp (cmap f d A) (cmap f d a) (cmap f d b)
+    cplam b → cplam (cmap f (%wsucc d) b)
+    cpapp p r → cpapp (cmap f d p) (cmap f d r)
+    cneg r → cneg (cmap f d r)
+    cmeet r s → cmeet (cmap f d r) (cmap f d s)
+    cjoin r s → cjoin (cmap f d r) (cmap f d s)
+    ceq0 r → ceq0 (cmap f d r)
+    ceq1 r → ceq1 (cmap f d r)
+    cfand a b → cfand (cmap f d a) (cmap f d b)
+    cfor a b → cfor (cmap f d a) (cmap f d b)
+    cforall b → cforall (cmap f (%wsucc d) b)
+    csysc a t r → csysc (cmap f d a) (cmap f d t) (cmap f d r)
+    ccomp A u a → ccomp (cmap f d A) (cmap f d u) (cmap f d a)
+    cgluet A S → cgluet (cmap f d A) (cmap f d S)
+    cglue S a → cglue (cmap f d S) (cmap f d a)
+    cunglue S b → cunglue (cmap f d S) (cmap f d b)
+    chcompu A S → chcompu (cmap f d A) (cmap f d S)
+    cunglueu S b → cunglueu (cmap f d S) (cmap f d b)
+    clet t b → clet (cmap f d t) (cmap f (%wsucc d) b)
+    cann t T → cann (cmap f d t) (cmap f d T)
+    cdata dd ps → cdata dd (cmap-l f d ps)
+    ccon dd k fs ds → ccon dd k (cmap-l f d fs) (cmap-l f d ds)
+    celim dd P B x → celim dd (cmap f d P) (cmap-l f d B) (cmap f d x)
+    ccase dd B x → ccase dd (cmap-l f d B) (cmap f d x)
+    chcomp u a → chcomp (cmap f d u) (cmap f d a)
+    cdlam b → cdlam (cmap f (%wsucc d) b)
+    cforce t → cforce (cmap f d t)
+    cthunk t → cthunk (cmap f d t)
+    clsuc l → clsuc (cmap f d l)
+    clmax a b → clmax (cmap f d a) (cmap f d b)
+    cpty k n → cpty k (cmap f d n)
+    cwsucc a → cwsucc (cmap f d a)
+    cwop k a b → cwop k (cmap f d a) (cmap f d b)
+    cwelim w z s mo → cwelim (cmap f d w) (cmap f d z) (cmap f d s) (omap (cmap f d) mo)
+    ctrans dd psi ls x → ctrans dd (cmap f d psi) (cmap-l f d ls) (cmap f d x)
+    cproj dd k x → cproj dd k (cmap f d x)
+    crec dd fs → crec dd (cmap-l f d fs)
+    ctick k → ctick (cmap f d k)
+    cprim k as → cprim k (cmap-l f d as)
+    _ → c
+cmap-l f d l = case l of lnil → lnil; lcons x xs → lcons (cmap f d x) (cmap-l f d xs)
 -- shift-code d k c: add k to every free variable of c that is ≥ d (variables bound inside c are
 -- below their binders' depth and untouched)
-shift-code d k c =
-  case c of
-    cvar n → if %wlt n d then c else cvar (%wadd n k)
-    clam b → clam (shift-code (%wsucc d) k b)
-    capp f a → capp (shift-code d k f) (shift-code d k a)
-    cpair a b → cpair (shift-code d k a) (shift-code d k b)
-    cfst p → cfst (shift-code d k p)
-    csnd p → csnd (shift-code d k p)
-    cpi m A B → cpi m (shift-code d k A) (shift-code (%wsucc d) k B)
-    csigma A B → csigma (shift-code d k A) (shift-code (%wsucc d) k B)
-    cpathp A a b → cpathp (shift-code d k A) (shift-code d k a) (shift-code d k b)
-    cplam b → cplam (shift-code (%wsucc d) k b)
-    cpapp p r → cpapp (shift-code d k p) (shift-code d k r)
-    clet t b → clet (shift-code d k t) (shift-code (%wsucc d) k b)
-    cann t T → cann (shift-code d k t) (shift-code d k T)
-    ccon dd c2 fs ds → ccon dd c2 (shift-list d k fs) (shift-list d k ds)
-    ccase dd B x → ccase dd (shift-list d k B) (shift-code d k x)
-    celim dd P B x → celim dd (shift-code d k P) (shift-list d k B) (shift-code d k x)
-    cforce x → cforce (shift-code d k x)
-    cthunk x → cthunk (shift-code d k x)
-    cdata dd ps → cdata dd (shift-list d k ps)
-    cwsucc a → cwsucc (shift-code d k a)
-    cwop o a b → cwop o (shift-code d k a) (shift-code d k b)
-    cwelim w z s mo → cwelim (shift-code d k w) (shift-code d k z) (shift-code d k s) (omap (shift-code d k) mo)
-    _ → c
+shift-code d k c = cmap (λ p e → case p of cvar n → some (if %wlt n e then p else cvar (%wadd n k)); _ → none) d c
 shift-list d k l = case l of lnil → lnil; lcons x xs → lcons (shift-code d k x) (shift-list d k xs)
 -- ---------------------------------------------------------------- substitutions
 -- a match: metavariable → code, as an association list; lookup, extension with a consistency
@@ -158,60 +192,16 @@ orb a b = case a of true → true; false → b
 notb a = case a of true → false; false → true
 -- shifting down by b: every free variable ≥ b becomes n − b (none below b is present, checked)
 unshift b t = unshift-at #0 b t
-unshift-at d b c =
-  case c of
-    cvar n → if %wlt n d then c else cvar (%wsub n b)
-    clam x → clam (unshift-at (%wsucc d) b x)
-    capp f x → capp (unshift-at d b f) (unshift-at d b x)
-    cpair x y → cpair (unshift-at d b x) (unshift-at d b y)
-    cfst x → cfst (unshift-at d b x)
-    csnd x → csnd (unshift-at d b x)
-    clet a x → clet (unshift-at d b a) (unshift-at (%wsucc d) b x)
-    ccon dd c2 fs ds → ccon dd c2 (unshift-list d b fs) (unshift-list d b ds)
-    ccase dd B x → ccase dd (unshift-list d b B) (unshift-at d b x)
-    celim dd P B x → celim dd (unshift-at d b P) (unshift-list d b B) (unshift-at d b x)
-    cforce x → cforce (unshift-at d b x)
-    cthunk x → cthunk (unshift-at d b x)
-    cdata dd ps → cdata dd (unshift-list d b ps)
-    cwsucc x → cwsucc (unshift-at d b x)
-    cwop o x y → cwop o (unshift-at d b x) (unshift-at d b y)
-    cwelim w z s mo → cwelim (unshift-at d b w) (unshift-at d b z) (unshift-at d b s) (omap (unshift-at d b) mo)
-    cann a T → cann (unshift-at d b a) (unshift-at d b T)
-    cpty q n → cpty q (unshift-at d b n)
-    cprim q as → cprim q (unshift-list d b as)
-    cpi m x y → cpi m (unshift-at d b x) (unshift-at (%wsucc d) b y)
-    csigma x y → csigma (unshift-at d b x) (unshift-at (%wsucc d) b y)
-    _ → c
+unshift-at d b c = cmap (λ p e → case p of cvar n → some (if %wlt n e then p else cvar (%wsub n b)); _ → none) d c
 unshift-list d b l = case l of lnil → lnil; lcons x xs → lcons (unshift-at d b x) (unshift-list d b xs)
 -- ---------------------------------------------------------------- instantiation
 -- inst k b s p: the pattern p with its metavariables replaced from s, each bound code shifted by
 -- the binders b it is placed under
 inst k b s p =
-  case p of
-    cvar n →
-      if %wlt n (%wadd k b) then p
-      else (case mlookup s (%wsub n (%wadd k b)) of some c → shift-code #0 b c; none → p)
-    clam x → clam (inst k (%wsucc b) s x)
-    capp f x → capp (inst k b s f) (inst k b s x)
-    cpair x y → cpair (inst k b s x) (inst k b s y)
-    cfst x → cfst (inst k b s x)
-    csnd x → csnd (inst k b s x)
-    clet a x → clet (inst k b s a) (inst k (%wsucc b) s x)
-    ccon d c fs ds → ccon d c (inst-list k b s fs) (inst-list k b s ds)
-    ccase d B x → ccase d (inst-list k b s B) (inst k b s x)
-    celim d P B x → celim d (inst k b s P) (inst-list k b s B) (inst k b s x)
-    cforce x → cforce (inst k b s x)
-    cthunk x → cthunk (inst k b s x)
-    cdata d ps → cdata d (inst-list k b s ps)
-    cwsucc x → cwsucc (inst k b s x)
-    cwop o x y → cwop o (inst k b s x) (inst k b s y)
-    cwelim w z st mo → cwelim (inst k b s w) (inst k b s z) (inst k b s st) (omap (inst k b s) mo)
-    cann a T → cann (inst k b s a) (inst k b s T)
-    cpty q n → cpty q (inst k b s n)
-    cprim q as → cprim q (inst-list k b s as)
-    cpi m x y → cpi m (inst k b s x) (inst k (%wsucc b) s y)
-    csigma x y → csigma (inst k b s x) (inst k (%wsucc b) s y)
-    _ → p
+  cmap (λ q e → case q of
+                  cvar n → (if %wlt n (%wadd k e) then some q
+                            else (case mlookup s (%wsub n (%wadd k e)) of some c → some (shift-code #0 e c); none → some q))
+                  _ → none) b p
 inst-list k b s l = case l of lnil → lnil; lcons x xs → lcons (inst k b s x) (inst-list k b s xs)
 -- ---------------------------------------------------------------- rules and positions
 -- a rule: k metavariable-bound pattern depth, left side, right side, and its justification: the

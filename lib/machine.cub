@@ -72,7 +72,10 @@ fragment d c =
     cunglueu S b → not-fo kan c
     chcomp u a → not-fo kan c
     ctrans dd psi ls x → not-fo kan c
-    crec dd fs → not-fo reflect c
+    -- a record of a codata type: its fields computed, a cell. A field of the type itself makes the
+    -- value infinite (a copattern definition unfolded field by field), which computing every field
+    -- would not finish: such a value stays on the net
+    crec dd fs → (if codata-rec dd then not-fo infinite c else frag-list d fs c)
     _ → not-fo reflect c
 frag-wrap v c = case v of fo x → fo c; not-fo r at → not-fo r at
 frag-both v w c = case v of fo x → (case w of fo y → fo c; not-fo r at → not-fo r at); not-fo r at → not-fo r at
@@ -80,6 +83,9 @@ frag-list d l c = case l of lnil → fo c; lcons x xs → frag-both (fragment d 
 -- a data type with a dimension in a constructor (a higher inductive type) is outside the fragment
 data-has-dims d = lany tel-has-dim (ctors-at d (snd (params-fresh (dtel (%dent d)) lnil)))
 is-fo c = case fragment #0 c of fo x → true; not-fo r at → false
+-- a codata type with a field of the type itself
+codata-rec d = co-tel-rec d (cofields-at d (fst (params-fresh (dtel (%dent d)) lnil)))
+co-tel-rec d tel = case tel of tx A nm r → orb (is-rec-ty d A) (co-tel-rec d (r (%var Uw) Uw)); _ → false
 -- ---------------------------------------------------------------- the program of a code
 -- A compiled program is a list of definitions (g , code): the entry (g = the entry's own index, m)
 -- and every checked definition it names, transitively, each the quote of the definition's value
@@ -101,7 +107,11 @@ program-defs fuel todo seen acc =
 program-defs-g fuel g rest seen acc =
   case unfold g of
     none → (not-fo reflect (cglob g) , acc)
-    some cd → program-defs-f fuel g cd rest seen acc (fragment #0 cd)
+    some cd → program-defs-f fuel g cd rest seen acc (if self-head g cd then not-fo infinite cd else fragment #0 cd)
+-- a definition whose value is its own stuck call (a copattern definition: observed field by field,
+-- its quote is the call itself) has no first-order body; compiled, it would call itself forever
+self-head g c = case c of clam b → self-head g b; _ → (case code-head c of cglob h → %weq g h; _ → false)
+code-head c = case c of capp f a → code-head f; _ → c
 program-defs-f fuel g cd rest seen acc v =
   case v of
     not-fo r at → (not-fo r at , acc)

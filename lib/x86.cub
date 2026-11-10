@@ -182,6 +182,9 @@ i-st-rax-d-imm d v = lapp (xb3 #72 #199 #128) (lapp (ximm32 d) (ximm32 v))
 i-apply = lapp (lapp (xb4 #85 #72 #137 #229) (lapp (xb4 #72 #139 #69 #24) (lapp (xb4 #72 #139 #72 #16) (lapp (xb4 #72 #255 #193 #72) (lapp (xb4 #59 #72 #8 #114) (lapp (xb4 #36 #72 #137 #198) (lapp (xb4 #49 #255 #72 #59) (lapp (xb4 #126 #16 #115 #9) (lapp (xb4 #255 #116 #254 #24) (lapp (xb4 #72 #255 #199 #235) (lapp (xb4 #241 #255 #117 #16) (lapp (xb4 #72 #139 #6 #76) (lapp (xb4 #1 #240 #255 #208) (lapp (xb4 #72 #137 #236 #93) (lapp (xb4 #195 #72 #137 #198) (lapp (xb4 #72 #137 #207 #72) (lapp (xb4 #141 #12 #253 #24) (lapp (xb4 #0 #0 #0 #76) (lapp (xb4 #137 #248 #73 #1) (lapp (xb4 #207 #77 #57 #231) (lapp (xb4 #119 #58 #72 #139) (lapp (xb4 #22 #72 #137 #16) (lapp (xb4 #72 #139 #86 #8) (lapp (xb4 #72 #137 #80 #8) (lapp (xb4 #72 #137 #120 #16) (lapp (xb4 #49 #201 #76 #141) (lapp (xb4 #71 #255 #76 #57) (lapp (xb4 #193 #115 #15 #72) (lapp (xb4 #139 #84 #206 #24) (lapp (xb4 #72 #137 #84 #200) (lapp (xb4 #24 #72 #255 #193) (lapp (xb4 #235 #236 #72 #139) (lapp (xb4 #85 #16 #72 #137) (lapp (xb4 #84 #200 #24 #72) (xb4 #137 #236 #93 #195))))))))))))))))))))))))))))))))))) i-exit
 -- the key under which the routine's offset is in the table (no global or lifted definition has it)
 x-apply-key = #1099511627775
+-- the stack check in every definition's prologue: below the context's limit ([r13+24]) the
+-- overflow exit (cmp rsp, [r13+24]; jae over the exit), so deep recursion leaves to the net
+i-stack-check = lapp (xb4 #73 #59 #101 #24) (lapp (i-jcc j-ae (xlen i-exit)) i-exit)
 -- the data type Nat, a word in compiled code (above)
 x-nat-d = didx (code Nat)
 -- ---------------------------------------------------------------- the forms a program is in
@@ -220,6 +223,8 @@ x-push c =
     cthunk t → x-push t
     cforce t → x-push t
     cpair a b → cpair (x-push a) (x-push b)
+    crec dd fs → crec dd (x-push-l fs)
+    cproj dd k p → cproj dd k (x-push p)
     cfst p → cfst (x-push p)
     csnd p → csnd (x-push p)
     ccon dd k fs ds → ccon dd k (x-push-l fs) ds
@@ -279,6 +284,8 @@ x-lift c st =
     celim dd P B x → x-lift-app c st
     clam b → x-lift-clo c st
     cfst p → x-lift1 cfst p st
+    cproj dd k p → x-lift1 (cproj dd k) p st
+    crec dd fs → (let r = x-lift-l fs st in (crec dd (fst r) , snd r))
     csnd p → x-lift1 csnd p st
     cwsucc a → x-lift1 cwsucc a st
     cann t T → x-lift t st
@@ -441,6 +448,8 @@ x-ok defs c =
     cpair a b → x-ok2 defs a b c
     cfst p → x-ok defs p
     csnd p → x-ok defs p
+    cproj dd k p → x-ok defs p
+    crec dd fs → x-ok-l defs fs c
     ccon dd k fs ds → x-ok-l defs fs c
     ccase dd B x → x-ok2b defs (x-ok-l defs (x-br-bodies dd #0 B) c) x c
     cwlit n → fo c
@@ -476,6 +485,8 @@ cx tbl env d c =
     cann t T → cx tbl env d t
     cpair a b → x-cell tbl env d #0 (lcons a (lcons b lnil))
     cfst p → lapp (cx tbl env d p) (i-ld-rax #8)
+    crec dd fs → x-cell tbl env d #0 fs
+    cproj dd k p → lapp (cx tbl env d p) (i-ld-rax (xmul8 (%wsucc k)))
     csnd p → lapp (cx tbl env d p) (i-ld-rax #16)
     ccon dd k fs ds → (if %weq dd x-nat-d then x-nat-con tbl env d k fs else (case fs of lnil → i-mov-rax-imm k; _ → x-cell tbl env d k fs))
     ccase dd B x → (if %weq dd x-nat-d then x-nat-case tbl env d B x else x-case tbl env d dd B x)
@@ -669,7 +680,7 @@ x-fresh tbl env d n =
         (xcat5 i-mov-rdi-rax (xb1 #80) (lapp (xb2 #49 #192) i-rep-stosb) (xb1 #88) (lapp i-pop-rcx (i-st-rax-rcx #0)))
 -- ---------------------------------------------------------------- the blob
 -- a definition: prologue, the body (arguments above rbp), epilogue
-x-fn tbl e = let n = fst (snd e) in xcat3 (lapp i-push-rbp i-mov-rbp-rsp) (cx tbl (x-arg-env n #0 lnil) #0 (snd (snd e))) (xcat3 i-mov-rsp-rbp i-pop-rbp i-ret)
+x-fn tbl e = let n = fst (snd e) in xcat3 (xcat3 i-push-rbp i-mov-rbp-rsp i-stack-check) (cx tbl (x-arg-env n #0 lnil) #0 (snd (snd e))) (xcat3 i-mov-rsp-rbp i-pop-rbp i-ret)
 x-arg-env n i acc = if %weq i n then acc else x-arg-env n (%wsucc i) (lcons (x-arg i n) acc)
 -- the entry stub, System V: jit(args, n, ctx) — rdi the arguments' array, rdx the context
 -- (overflow flag, arena next, arena end). Saves the callee-saved registers, sets r13 r15 r12 r14,
@@ -689,14 +700,28 @@ x-layout ars defs off = case defs of lnil → lnil; lcons e r → lcons (fst e ,
 x-arities defs = case defs of lnil → lnil; lcons e r → lcons (fst e , fst (snd e)) (x-arities r)
 x-fns tbl defs = case defs of lnil → lnil; lcons e r → lapp (x-fn tbl e) (x-fns tbl r)
 -- the blob of a program whose entry is definition m with n parameters
--- the blob: the stub, the apply routine, the definitions
+-- the blob: the stub, the apply routine when some definition makes or applies a closure, the
+-- definitions
 encode-prog m defs =
   let n = case x-arity defs m of some k → k; none → #0
       slen = xlen (x-stub n #0)
       ars = x-arities defs
-      offs = lcons (x-apply-key , slen) (x-layout ars defs (%wadd slen (xlen i-apply)))
+      ap = if x-needs-apply ars defs then i-apply else lnil
+      offs = lcons (x-apply-key , slen) (x-layout ars defs (%wadd slen (xlen ap)))
       tbl = (ars , offs)
-  in lapp (x-stub n (x-tbl tbl m)) (lapp i-apply (x-fns tbl defs))
+  in lapp (x-stub n (x-tbl tbl m)) (lapp ap (x-fns tbl defs))
+-- does a body make a closure (a definition at fewer arguments than its arity) or apply a value
+x-needs-apply ars defs = case defs of lnil → false; lcons e r → orb (x-na ars (snd (snd e))) (x-needs-apply ars r)
+x-na ars c =
+  case c of
+    cglob g → notb (%weq (x-look ars g) #0)
+    capp f a →
+      (let sp = x-spine c in
+       case fst sp of
+         cglob g → orb (notb (%weq (x-look ars g) (xlen (snd sp)))) (x-na-l ars (snd sp))
+         _ → true)
+    _ → x-na-l ars (code-kids c)
+x-na-l ars l = case l of lnil → false; lcons x r → orb (x-na ars x) (x-na-l ars r)
 -- ---------------------------------------------------------------- the plan of a #jit
 -- jit-plan g rules: for checked definition g, (verdict , (ok , (path , (code , bytes)))):
 --   verdict: fo when the program is compilable (lib/machine.cub's fragment, then x-check);
