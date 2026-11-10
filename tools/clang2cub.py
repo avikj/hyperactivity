@@ -11,9 +11,10 @@ Sources (Clang 18; no Clang headers or bindings are used):
      the vtables of the unit (only code generation lays them out).
   3. clang++ <flags> -fsyntax-only -Xclang -ast-dump
      the AST as text, for the one thing the JSON omits and the text has: whether a member is
-     named with a qualifier (`p->Base::f()`, a call that is not virtual). The two dumps list
-     the same nodes in the same order; the k-th MemberExpr of one is the k-th of the other,
-     and the import stops unless their counts, arrows and member names all agree.
+     named with a qualifier (`p->Base::f()`, a call that is not virtual), and the type of an
+     `alignas(type)`. The two dumps list the same nodes in the same order; the k-th
+     MemberExpr (AlignedAttr) of one is the k-th of the other, and the import stops unless
+     their counts, and the arrows and member names of the MemberExprs, all agree.
 
 What is written is the AST after Sema: names are declaration ids, overloads are chosen,
 templates are their instantiations, implicit casts and constructor calls are nodes, constant
@@ -204,9 +205,15 @@ SCHEMA = [
         ('cvi-call', [('e', 'CExpr')]),
         ('cvi-list', [('e', 'CExpr')]),
     ]),
+    ('CAlign', 'an alignment specifier on a variable: a number of bytes, or as of a type', [
+        ('cal-none', []),
+        ('cal-bytes', [('n', 'Word')]),
+        ('cal-type', [('t', 'CType')]),
+    ]),
     ('CVar', 'VarDecl and ParmVarDecl', [
         ('cv-var', [('id', 'Word'), ('name', 'CStr'), ('t', 'CType'), ('storage', 'CStorage'),
-                    ('constexpr', 'Bool'), ('nrvo', 'Bool'), ('init', 'CVarInit')]),
+                    ('align', 'CAlign'), ('constexpr', 'Bool'), ('nrvo', 'Bool'),
+                    ('init', 'CVarInit')]),
         ('cv-parm', [('id', 'Word'), ('name', 'CStr'), ('t', 'CType')]),
     ]),
     ('CStmt', 'a statement. One constructor per Clang Stmt kind met; cs-expr is an expression '
@@ -302,6 +309,7 @@ SCHEMA = [
     ('CCtorInit', 'CXXCtorInitializer, in the order of initialization', [
         ('cci-field', [('field', 'Word'), ('e', 'CExpr')]),
         ('cci-base', [('t', 'CType'), ('e', 'CExpr')]),
+        ('cci-delegating', [('e', 'CExpr')]),
     ]),
     ('CFunction', 'what every function declaration has', [
         ('cfunction', [('id', 'Word'), ('name', 'CStr'), ('mangled', 'CStr'), ('t', 'CType'),
@@ -314,6 +322,7 @@ SCHEMA = [
         ('cd-method', [('parent', 'Word'), ('virtual', 'Bool'), ('f', 'CFunction')]),
         ('cd-constructor', [('parent', 'Word'), ('inits', 'List CCtorInit'), ('f', 'CFunction')]),
         ('cd-destructor', [('parent', 'Word'), ('virtual', 'Bool'), ('f', 'CFunction')]),
+        ('cd-conversion', [('parent', 'Word'), ('virtual', 'Bool'), ('f', 'CFunction')]),
         ('cd-record', [('r', 'CRecord')]),
         ('cd-class-template-specialization', [('args', 'List CTArg'), ('r', 'CRecord')]),
         ('cd-enum', [('id', 'Word'), ('name', 'CStr'), ('underlying', 'CType'),
@@ -389,7 +398,8 @@ class T:
 
     def __init__(self, con, *args):
         if con not in CTORS:
-            stop('internal: no constructor %s in the schema' % con)
+            stop('%s: not met in any unit imported before; add the constructor to SCHEMA in tools/clang2cub.py '
+                 'and regenerate lib/cxx/ast.cub' % con)
         fs = CTORS[con][1]
         if len(fs) != len(args):
             stop('internal: %s takes %d fields, given %d' % (con, len(fs), len(args)))
@@ -919,7 +929,7 @@ class Unit:
                            capture_output=True, text=True)
         if p.returncode != 0:
             stop('clang failed on %s:\n%s' % (self.path, p.stderr[-2000:]))
-        self.member_lines = []
+        self.member_lines, self.aligned_lines = [], []
         lines = p.stdout.splitlines()
         for i, line in enumerate(lines):
             m = re.match(r"^([|` -]*)MemberExpr 0x[0-9a-f]+ <.*?> '.*' (?:lvalue |xvalue |bitfield )*(->|\.)(.*?) ?0x[0-9a-f]+", line)
@@ -929,6 +939,11 @@ class Unit:
                 self.member_lines.append((m.group(2) == '->', m.group(3), qualified))
             elif re.match(r'^[|` -]*MemberExpr 0x', line):
                 stop('the text dump has a MemberExpr line this file does not read: %r' % line)
+            m = re.match(r"^[|` -]*AlignedAttr 0x[0-9a-f]+ <.*?>(?: Implicit| Inherited)* (\w+)(?: '(.*?)'(?::'.*')?)?$", line)
+            if m:
+                self.aligned_lines.append(m.group(2))
+            elif re.match(r'^[|` -]*AlignedAttr 0x', line):
+                stop('the text dump has an AlignedAttr line this file does not read: %r' % line)
         p = subprocess.run(base + ['-print-target-triple'], capture_output=True, text=True)
         self.target = p.stdout.strip()
         p = subprocess.run(['clang++', '--version'], capture_output=True, text=True)
@@ -953,7 +968,7 @@ class Unit:
                 elif isinstance(v, dict) and k != 'includedFrom':
                     locs(v)
 
-        members = []
+        members, aligned = [], []
         stack = [(self.tu, None)]
         while stack:
             n, par = stack.pop()
@@ -986,6 +1001,8 @@ class Unit:
                 self.lambdas.setdefault(n['type']['qualType'], []).append(n['inner'][0])
             if k == 'MemberExpr':
                 members.append(n)
+            if k == 'AlignedAttr':
+                aligned.append(n)
             if 'previousDecl' in n:
                 self.redecl[n['id']] = n['previousDecl']
             # children: `inner`, or for an InitListExpr with a filler `array_filler` (the filler,
@@ -1003,6 +1020,13 @@ class Unit:
                 stop('the MemberExprs of the JSON and text dumps do not correspond: %r %r against %r %r'
                      % (n.get('isArrow'), n.get('name'), arrow, name))
             n['_qualified'] = qualified
+        if len(aligned) != len(self.aligned_lines):
+            stop('the JSON dump has %d AlignedAttrs and the text dump %d: the two do not list the same nodes'
+                 % (len(aligned), len(self.aligned_lines)))
+        for n, t in zip(aligned, self.aligned_lines):
+            if (t is None) != bool(n.get('inner')):
+                stop('the AlignedAttrs of the JSON and text dumps do not correspond (one has an expression, the other a type)')
+            n['_align_type'] = t
         for n in self.nodes.values():
             if n.get('kind') == 'NamespaceDecl':
                 self.ns_nodes.setdefault(self.ns_key(n), []).append(n)
@@ -1822,7 +1846,7 @@ class Unit:
         k = n.get('kind')
         if k == 'DeclRefExpr':
             d = self.node(n['referencedDecl']['id'])
-            if d['kind'] in FUNCTION_KINDS:
+            if d['kind'] in FUNCTION_KINDS and n['type']['qualType'] not in PLACEHOLDERS:
                 return self.type_at(d['type'], d)
         if k == 'ImplicitCastExpr' and n.get('castKind') == 'FunctionToPointerDecay':
             return ('ptr', self.expr_type(n['inner'][0]))
@@ -2274,6 +2298,8 @@ class Unit:
         rest = []
         for c in self.kids(n):
             k = c.get('kind', '')
+            if k == 'AlignedAttr' and n.get('kind') == 'VarDecl':
+                continue                    # written with the variable (cv-var's align)
             if k.endswith('Attr'):
                 if k not in ATTRS_CARRIED_ELSEWHERE:
                     stop('attribute with no rule yet: %s on %s at %s' % (k, n.get('name'), self.where(n)))
@@ -2286,6 +2312,19 @@ class Unit:
         self.count('VarDecl')
         w = self.idof(n['id'])
         self.defined.add(w)
+        align = T('cal-none')
+        for c in self.kids(n):
+            if c.get('kind') == 'AlignedAttr':
+                if align.con != 'cal-none':
+                    stop('two alignment specifiers on %s at %s: no rule yet' % (n.get('name'), self.where(n)))
+                self.count('AlignedAttr (on a variable)')
+                if c['_align_type'] is not None:
+                    align = T('cal-type', self.ty(self.type_at({'qualType': c['_align_type']}, n)))
+                else:
+                    e, = c['inner']
+                    if e.get('kind') != 'ConstantExpr':
+                        stop('an alignment that is not a constant expression at %s' % self.where(n))
+                    align = T('cal-bytes', W(int(e['value'])))
         ks = self.attrs(n)
         style = n.get('init')
         if style is None:
@@ -2296,7 +2335,7 @@ class Unit:
             if style not in ('c', 'call', 'list') or len(ks) != 1:
                 stop('a VarDecl with initializer style %r and %d children at %s' % (style, len(ks), self.where(n)))
             init = T('cvi-' + style, self.expr(ks[0]))
-        return T('cv-var', W(w), S(n.get('name', '')), self.tyof(n), self.storage(n),
+        return T('cv-var', W(w), S(n.get('name', '')), self.tyof(n), self.storage(n), align,
                  bool(n.get('constexpr')), bool(n.get('nrvo')), init)
 
     def parm(self, n):
@@ -2416,7 +2455,10 @@ class Unit:
         fn, inits = self.function(n)
         return T('cd-method', W(self.need(rec['id'])), self.is_virtual(n, rec), fn)
 
-    d_CXXConversionDecl = d_CXXMethodDecl
+    def d_CXXConversionDecl(self, n):
+        rec = self.record_of_member(n)
+        fn, inits = self.function(n)
+        return T('cd-conversion', W(self.need(rec['id'])), self.is_virtual(n, rec), fn)
 
     def d_CXXDestructorDecl(self, n):
         rec = self.record_of_member(n)
@@ -2434,6 +2476,8 @@ class Unit:
                 out.append(T('cci-field', W(self.need(c['anyInit']['id'])), self.expr(e)))
             elif 'baseInit' in c:
                 out.append(T('cci-base', self.ty(self.type_at(c['baseInit'], n)), self.expr(e)))
+            elif 'delegatingInit' in c:
+                out.append(T('cci-delegating', self.expr(e)))
             else:
                 stop('a constructor initializer that is neither a member nor a base at %s: no rule yet' % self.where(n))
         return T('cd-constructor', W(self.need(rec['id'])), out, fn)
@@ -2495,9 +2539,9 @@ class Unit:
         vt = self.vtable_of(n)
         if vt is None:
             if vptr is not None or any(self.layout_of(self.nodes[b[0]])[1] is not None for b in lbases):
-                # polymorphic, and its vtable is not laid out in this unit
-                if not self.is_abstract_unused(n):
-                    stop('the class %s has a vtable pointer and the vtable dump has no vtable for it: no rule yet' % n.get('name'))
+                # polymorphic, and its vtable is not laid out in this unit (its key function is
+                # defined in another): the slots of its virtual functions are not known here
+                stop('the class %s has a vtable pointer and the vtable dump has no vtable for it: no rule yet' % n.get('name'))
             vtable = T('cvt-none')
         else:
             es = []
@@ -2559,9 +2603,6 @@ class Unit:
             else:
                 stop('the lambda at %s has a capture initialized by a %s (an init-capture): no rule yet' % (self.where(rec), k))
         return out
-
-    def is_abstract_unused(self, n):
-        return False
 
     def bit_width(self, c):
         ks = [x for x in c.get('inner', []) if not x.get('kind', '').endswith('Attr')]

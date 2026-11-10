@@ -184,9 +184,11 @@ data CExpr =
 data CStorage = cst-none | cst-static | cst-extern
 -- CVarInit: the initializer of a variable, by its style
 data CVarInit = cvi-none | cvi-c (e : CExpr) | cvi-call (e : CExpr) | cvi-list (e : CExpr)
+-- CAlign: an alignment specifier on a variable: a number of bytes, or as of a type
+data CAlign = cal-none | cal-bytes (n : Word) | cal-type (t : CType)
 -- CVar: VarDecl and ParmVarDecl
 data CVar =
-    cv-var (id : Word) (name : CStr) (t : CType) (storage : CStorage) (constexpr : Bool) (nrvo : Bool) (init : CVarInit)
+    cv-var (id : Word) (name : CStr) (t : CType) (storage : CStorage) (align : CAlign) (constexpr : Bool) (nrvo : Bool) (init : CVarInit)
   | cv-parm (id : Word) (name : CStr) (t : CType)
 -- CStmt: a statement. One constructor per Clang Stmt kind met; cs-expr is an expression in statement position; cs-none an absent child; cs-nil/cs-cons the children of cs-compound
 data CStmt =
@@ -243,7 +245,10 @@ data CEnumerator = cenumerator (id : Word) (name : CStr) (v : CInt)
 -- CBody: the body of a function
 data CBody = cfb-none | cfb-defaulted | cfb-pure | cfb-stmt (s : CStmt)
 -- CCtorInit: CXXCtorInitializer, in the order of initialization
-data CCtorInit = cci-field (field : Word) (e : CExpr) | cci-base (t : CType) (e : CExpr)
+data CCtorInit =
+    cci-field (field : Word) (e : CExpr)
+  | cci-base (t : CType) (e : CExpr)
+  | cci-delegating (e : CExpr)
 -- CFunction: what every function declaration has
 data CFunction =
     cfunction (id : Word) (name : CStr) (mangled : CStr) (t : CType) (params : List CVar) (storage : CStorage) (inline : Bool) (constexpr : Bool) (implicit : Bool) (body : CBody)
@@ -253,6 +258,7 @@ data CDecl =
   | cd-method (parent : Word) (virtual : Bool) (f : CFunction)
   | cd-constructor (parent : Word) (inits : List CCtorInit) (f : CFunction)
   | cd-destructor (parent : Word) (virtual : Bool) (f : CFunction)
+  | cd-conversion (parent : Word) (virtual : Bool) (f : CFunction)
   | cd-record (r : CRecord)
   | cd-class-template-specialization (args : List CTArg) (r : CRecord)
   | cd-enum (id : Word) (name : CStr) (underlying : CType) (scoped : Bool) (enumerators : List CEnumerator)
