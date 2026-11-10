@@ -388,3 +388,51 @@ gview {M} {A} p = case p κ0 of
   gtau t → v-tau (g-force {M} {A} p r-timeout #0)
 gproc-beh : {M A : Type} → Beh M (GNode M A)
 gproc-beh {M} {A} i p = gview {M} {A} p
+-- ---------------------------------------------------------------- local invariants
+-- an invariant of each node's own state that the node's view preserves (whatever it is
+-- answered) holds in every reachable state: no other node and no choice of the adversary can
+-- break it
+VOk : {M St : Type} → (St → Type) → NView M St → Type
+VOk {M} {St} P v = case v of v-halt → Unit; v-send to m s → P s; v-recv k → (r : Rcv M) → P (k r); v-now kn → (w : Word) → P (kn w); v-tau s → P s
+put-node-same : {St : Type} → (i j : NodeId) → (s : St) → (f : NodeId → St) → eqb i j ≡ true → Path St (put-node {St} j s f i) s
+put-node-same {St} i j s f e = λ x → (case e x return (λ b → St) of true → s; false → f i)
+fl-apply-self : {M St R : Type} → (P : St → Type) → (i j : NodeId) → (g : FState M St) → (r : Sum (R × Net M) (Net M)) → (k : R → St) → eqb i j ≡ true →
+                P (fst g i) → ((x : R) → P (k x)) → P (fst (fl-apply {M} {St} {R} j g r k) i)
+fl-apply-self {M} {St} {R} P i j g (inl x) k e h hk = subst {lzero} {lzero} {St} {P} (sym (put-node-same {St} i j (k (fst x)) (fst g) e)) (hk (fst x))
+fl-apply-self {M} {St} {R} P i j g (inr n) k e h hk = h
+ns-self : {M St : Type} → (P : St → Type) → (i j : NodeId) → (e : Ev M) → (g : FState M St) → (v : NView M St) → eqb i j ≡ true →
+          P (fst g i) → VOk {M} {St} P v → P (fst (ns-go {M} {St} j e g v) i)
+ns-self {M} {St} P i j e g v-halt eq h hv = h
+ns-self {M} {St} P i j e g (v-send to m s) eq h hv = fl-apply-self {M} {St} {Unit} P i j g (net-world {M} j e (n-send to m) (snd g)) (λ u → s) eq h (λ u → hv)
+ns-self {M} {St} P i j e g (v-recv k) eq h hv = fl-apply-self {M} {St} {Rcv M} P i j g (net-world {M} j e n-recv (snd g)) k eq h hv
+ns-self {M} {St} P i j e g (v-now kn) eq h hv = fl-apply-self {M} {St} {Word} P i j g (net-world {M} j e n-now (snd g)) kn eq h hv
+ns-self {M} {St} P i j ev-run g (v-tau s) eq h hv = subst {lzero} {lzero} {St} {P} (sym (put-node-same {St} i j s (fst g) eq)) hv
+ns-self {M} {St} P i j (ev-deliver p rest) g (v-tau s) eq h hv = h
+LocalInv : {M St : Type} → (NodeId → St → Type) → Beh M St → Type
+LocalInv {M} {St} P beh = (i : NodeId) → (s : St) → P i s → VOk {M} {St} (P i) (beh i s)
+ns-local : {M St : Type} → (P : NodeId → St → Type) → (beh : Beh M St) → LocalInv {M} {St} P beh → (j : NodeId) → (e : Ev M) → (g : FState M St) →
+           ((i : NodeId) → P i (fst g i)) → (i : NodeId) → P i (fst (node-step {M} {St} beh j e g) i)
+ns-local {M} {St} P beh li j e g h i =
+  case nt-bdec (eqb i j) of
+    inr ef → subst {lzero} {lzero} {St} {P i} (sym (ns-other {M} {St} i j e g (beh j (fst g j)) ef)) (h i)
+    inl et → ns-self {M} {St} (P i) i j e g (beh j (fst g j)) et (h i)
+               (subst {lzero} {lzero} {NodeId} {λ y → VOk {M} {St} (P y) (beh j (fst g j))} (sym (eqb-sound {i} {j} (eq→isTrue {eqb i j} et))) (li j (fst g j) (h j)))
+safe-local : {M St : Type} → (P : NodeId → St → Type) → (beh : Beh M St) → LocalInv {M} {St} P beh → (g0 : FState M St) → ((i : NodeId) → P i (fst g0 i)) →
+             Safe {M} {St} (λ g → (i : NodeId) → P i (fst g i)) beh g0
+safe-local {M} {St} P beh li g0 h0 =
+  safe-by-events {M} {St} (λ g → (i : NodeId) → P i (fst g i)) beh g0 h0
+    (λ g i h → ns-local {M} {St} P beh li i ev-run g h)
+    (λ g p rest h m s → ns-local {M} {St} P beh li (p-to p) (ev-deliver p rest) g h)
+    (λ g n h s → h)
+-- ---------------------------------------------------------------- the recorded run as a replay
+-- the fleet as a process over EnvS, run against the recorded choices (lib/proc.cub's feed-world
+-- answers each request with the next), ends done with the state fleet-run computes and the
+-- record used up: the run is a function of the record
+nt-len : {A : Type} → List A → Nat
+nt-len l = case l of nil → zero; cons x r → suc (rec r)
+fleet-proc-run : {M St : Type} → (beh : Beh M St) → (chs : List Adv) → (g : FState M St) →
+                 Path (Outcome (FState M St) × List Adv)
+                      (runp {EnvS} {FState M St} {List Adv} (fleet-proc {M} {St} beh (nt-len {Adv} chs) g) (feed-world {Adv}) chs)
+                      (done (fleet-run {M} {St} beh chs g) , nil)
+fleet-proc-run {M} {St} beh nil g = λ i → (done g , nil)
+fleet-proc-run {M} {St} beh (cons a r) g = fleet-proc-run {M} {St} beh r (fleet-step {M} {St} beh a g)

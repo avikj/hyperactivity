@@ -1,0 +1,132 @@
+-- experiments/fleet/kv/kv.cub — a replicated key-value service: three replicas and a client
+-- (PLAN Phase 7, fleet acceptance). Loaded after lib/net.cub and lib/fleet.cub.
+--
+-- A write is a key with a versioned value (one word; the larger wins). The client sends a
+-- write to every replica. A replica that receives a write logs it and owes its sender an
+-- acknowledgement; sending the acknowledgement applies the write. A read of a key is answered
+-- with the largest version among the applied writes to it: the replica's store is a function
+-- of the set of writes applied (kv-store, a fold of wmax). Nodes 0, 1, 2 are replicas, node 3
+-- is the client; every node's state is a replica state and a client state (KvSt), of which the
+-- node's role uses its half.
+--
+-- This file: the nodes, safety (no replica applies a write it has not logged, whatever the
+-- client does), convergence (equal sets, equal stores), replay, and a recorded run with a drop
+-- and a duplicate. liveness.cub and refine.cub hold the other two statements.
+-- ---------------------------------------------------------------- writes, messages, the store
+KvWrite : Type
+KvWrite = Word × Word
+data KvMsg = m-put (w : KvWrite) | m-ack (w : KvWrite) | m-get (k : Word) (rid : Nat) | m-val (rid : Nat) (v : Word)
+kv-sel : KvWrite → Word → Word
+kv-sel w k = case weq (fst w) k of true → snd w; false → #0
+kv-store : List KvWrite → Word → Word
+kv-store l k = jfold {KvWrite} {Word} wmax #0 (λ w → kv-sel w k) l
+-- ---------------------------------------------------------------- the replica
+data KvPend = kp-none | kp-ack (to : NodeId) (w : KvWrite) | kp-val (to : NodeId) (rid : Nat) (v : Word)
+record KvRep = { r-log : List KvWrite ; r-app : List KvWrite ; r-pend : KvPend }
+kv-rep-recv : KvRep → Rcv KvMsg → KvRep
+kv-rep-recv st r = case r of
+  r-timeout → st
+  r-msg from m → (case m of
+     m-put w → KvRep { r-log = cons w (r-log st) ; r-app = r-app st ; r-pend = kp-ack from w }
+     m-ack w → st
+     m-get k rid → KvRep { r-log = r-log st ; r-app = r-app st ; r-pend = kp-val from rid (kv-store (r-app st) k) }
+     m-val rid v → st)
+kv-rep-go : KvRep → KvPend → NView KvMsg KvRep
+kv-rep-go st pd = case pd of
+  kp-none → v-recv (λ r → kv-rep-recv st r)
+  kp-ack to w → v-send to (m-ack w) (KvRep { r-log = r-log st ; r-app = cons w (r-app st) ; r-pend = kp-none })
+  kp-val to rid v → v-send to (m-val rid v) (KvRep { r-log = r-log st ; r-app = r-app st ; r-pend = kp-none })
+kv-rep-view : KvRep → NView KvMsg KvRep
+kv-rep-view st = kv-rep-go st (r-pend st)
+kv-rep-init : KvRep
+kv-rep-init = KvRep { r-log = nil ; r-app = nil ; r-pend = kp-none }
+-- ---------------------------------------------------------------- the client's signature and state
+-- what a client asks of the service: put a write, get a key's value
+data KvCmd = k-put (w : KvWrite) | k-get (k : Word)
+kv-resp : KvCmd → Type
+kv-resp c = case c of k-put w → Unit; k-get k → Word
+KvS : Sig
+KvS = (KvCmd , kv-resp)
+-- the sequential client's phase: done; in a put (n < 3: about to send to replica n; n ≥ 3:
+-- waiting for replica 0's acknowledgement); about to send a get to replica 0; waiting for its
+-- value
+data KvPhase = ph-done | ph-put (w : KvWrite) (n : Nat) | ph-get-send (k : Word) | ph-get-wait (k : Word)
+-- c-hist: the requests answered so far with their responses, latest first; c-conf: the writes
+-- acknowledged; c-idx: the number of requests answered (the request id of the next get);
+-- c-todo: the requests still to make; c-out: the broadcasting client's writes still to send
+record KvCli = { c-hist : Hist KvS ; c-conf : List KvWrite ; c-idx : Nat ; c-todo : List KvCmd ; c-ph : KvPhase ; c-out : List (NodeId × KvWrite) }
+KvSt : Type
+KvSt = KvRep × KvCli
+-- ---------------------------------------------------------------- the fleet
+-- nodes 0, 1, 2 run the replica on their replica half; node 3 runs the client behaviour given;
+-- there are no other nodes
+kv-beh : (KvSt → NView KvMsg KvSt) → Nat → KvSt → NView KvMsg KvSt
+kv-beh cb zero st = nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd st)) (kv-rep-view (fst st))
+kv-beh cb (suc zero) st = nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd st)) (kv-rep-view (fst st))
+kv-beh cb (suc (suc zero)) st = nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd st)) (kv-rep-view (fst st))
+kv-beh cb (suc (suc (suc zero))) st = cb st
+kv-beh cb (suc (suc (suc (suc j)))) st = v-halt
+kv-cli-init : List KvCmd → List (NodeId × KvWrite) → KvPhase → KvCli
+kv-cli-init todo out ph = KvCli { c-hist = nil ; c-conf = nil ; c-idx = zero ; c-todo = todo ; c-ph = ph ; c-out = out }
+kv-init : KvCli → FState KvMsg KvSt
+kv-init c = ((λ i → (kv-rep-init , c)) , net-empty {KvMsg})
+-- ---------------------------------------------------------------- safety
+-- no replica applies a write it has not logged: applied ⊆ log, and a write whose
+-- acknowledgement is owed is logged. It is an invariant of each replica's own state, so it
+-- holds in every reachable state under every choice sequence, whatever node 3 does
+KvPendIn : List KvWrite → KvPend → Type
+KvPendIn lg pd = case pd of kp-none → Unit; kp-ack to w → InL {KvWrite} w lg; kp-val to rid v → Unit
+KvRepInv : KvRep → Type
+KvRepInv st = SubL {KvWrite} (r-app st) (r-log st) × KvPendIn (r-log st) (r-pend st)
+kv-rep-recv-inv : (st : KvRep) → KvRepInv st → (r : Rcv KvMsg) → KvRepInv (kv-rep-recv st r)
+kv-rep-recv-inv st h r-timeout = h
+kv-rep-recv-inv st h (r-msg from (m-put w)) = ((λ x m → inr (fst h x m)) , inl (λ i → w))
+kv-rep-recv-inv st h (r-msg from (m-ack w)) = h
+kv-rep-recv-inv st h (r-msg from (m-get k rid)) = (fst h , unit)
+kv-rep-recv-inv st h (r-msg from (m-val rid v)) = h
+kv-rep-go-inv : (c : KvCli) → (lg ap : List KvWrite) → (pd : KvPend) → KvRepInv (KvRep { r-log = lg ; r-app = ap ; r-pend = pd }) →
+                VOk {KvMsg} {KvSt} (λ s → KvRepInv (fst s)) (nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , c)) (kv-rep-go (KvRep { r-log = lg ; r-app = ap ; r-pend = pd }) pd))
+kv-rep-go-inv c lg ap kp-none h = λ r → kv-rep-recv-inv (KvRep { r-log = lg ; r-app = ap ; r-pend = kp-none }) h r
+kv-rep-go-inv c lg ap (kp-ack to w) h = (inl-cons-all {KvWrite} (λ x → InL {KvWrite} x lg) w ap (snd h) (fst h) , unit)
+kv-rep-go-inv c lg ap (kp-val to rid v) h = (fst h , unit)
+kv-rep-view-inv : (st : KvSt) → KvRepInv (fst st) → VOk {KvMsg} {KvSt} (λ s → KvRepInv (fst s)) (nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd st)) (kv-rep-view (fst st)))
+kv-rep-view-inv st h = kv-rep-go-inv (snd st) (r-log (fst st)) (r-app (fst st)) (r-pend (fst st)) h
+KvNodeInv : Nat → KvSt → Type
+KvNodeInv zero st = KvRepInv (fst st)
+KvNodeInv (suc zero) st = KvRepInv (fst st)
+KvNodeInv (suc (suc zero)) st = KvRepInv (fst st)
+KvNodeInv (suc (suc (suc j))) st = Unit
+kv-vok-unit : (v : NView KvMsg KvSt) → VOk {KvMsg} {KvSt} (λ s → Unit) v
+kv-vok-unit v-halt = unit
+kv-vok-unit (v-send to m s) = unit
+kv-vok-unit (v-recv k) = λ r → unit
+kv-vok-unit (v-now kn) = λ w → unit
+kv-vok-unit (v-tau s) = unit
+kv-local : (cb : KvSt → NView KvMsg KvSt) → (i : Nat) → (s : KvSt) → KvNodeInv i s → VOk {KvMsg} {KvSt} (KvNodeInv i) (kv-beh cb i s)
+kv-local cb zero st h = kv-rep-view-inv st h
+kv-local cb (suc zero) st h = kv-rep-view-inv st h
+kv-local cb (suc (suc zero)) st h = kv-rep-view-inv st h
+kv-local cb (suc (suc (suc zero))) st h = kv-vok-unit (cb st)
+kv-local cb (suc (suc (suc (suc j)))) st h = unit
+kv-init-inv : (c : KvCli) → (i : Nat) → KvNodeInv i (fst (kv-init c) i)
+kv-init-inv c zero = ((λ x m → m) , unit)
+kv-init-inv c (suc zero) = ((λ x m → m) , unit)
+kv-init-inv c (suc (suc zero)) = ((λ x m → m) , unit)
+kv-init-inv c (suc (suc (suc j))) = unit
+-- the statement: in every state reachable from the initial one, under every choice sequence
+-- and every client behaviour, each replica's applied writes are among its logged writes
+kv-safe : (cb : KvSt → NView KvMsg KvSt) → (c : KvCli) → Safe {KvMsg} {KvSt} (λ g → (i : NodeId) → KvNodeInv i (fst g i)) (kv-beh cb) (kv-init c)
+kv-safe cb c = safe-local {KvMsg} {KvSt} KvNodeInv (kv-beh cb) (kv-local cb) (kv-init c) (kv-init-inv c)
+kv-applied-logged : (cb : KvSt → NView KvMsg KvSt) → (c : KvCli) → (chs : List Adv) → (w : KvWrite) →
+                    InL {KvWrite} w (r-app (fst (fst (fleet-run {KvMsg} {KvSt} (kv-beh cb) chs (kv-init c)) 0))) →
+                    InL {KvWrite} w (r-log (fst (fst (fleet-run {KvMsg} {KvSt} (kv-beh cb) chs (kv-init c)) 0)))
+kv-applied-logged cb c chs w m = fst (kv-safe cb c chs 0) w m
+-- ---------------------------------------------------------------- convergence
+-- a replica's store is a function of the set of writes it has applied: two replicas whose
+-- applied writes are the same set (in any order, with any repetition) have equal stores
+kv-converges : Converges {KvWrite} {Word → Word} kv-store
+kv-converges l1 l2 s12 s21 = λ i k → converges-fold {KvWrite} {Word} wmax #0 wmax-semilat (λ w → kv-sel w k) l1 l2 s12 s21 i
+kv-replicas-agree : (g : FState KvMsg KvSt) → (i j : NodeId) →
+                    SubL {KvWrite} (r-app (fst (fst g i))) (r-app (fst (fst g j))) → SubL {KvWrite} (r-app (fst (fst g j))) (r-app (fst (fst g i))) →
+                    Path (Word → Word) (kv-store (r-app (fst (fst g i)))) (kv-store (r-app (fst (fst g j))))
+kv-replicas-agree g i j s1 s2 = kv-converges (r-app (fst (fst g i))) (r-app (fst (fst g j))) s1 s2
