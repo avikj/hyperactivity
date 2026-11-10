@@ -4726,6 +4726,7 @@ static void load_file(const char *path, bool must) {
         free(marker);
         return;
     }
+    die("refused: a file of core forms is outside the type system; only .cub files load:", path);
     /* its imports first (they extend the running key before this file does) */
     {
         const char *saved = src; src = text;

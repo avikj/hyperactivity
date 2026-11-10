@@ -205,6 +205,27 @@ static char *op_name(const char *op) { char *r = malloc(strlen(op) + 3); sprintf
 static int xp;                    /* position in lt */
 static bool x_typed;              /* the checker is loaded: data fields are types, signatures check */
 static bool x_untyped_file;       /* converting a file that was loaded before the checker */
+/* What may exist outside the type system. Two fixed lists; neither is extended to admit new code.
+ * RAW: the files the checker is built from, loaded before it exists; only they may hold a
+ * definition without a checked signature. TRUSTED: the files that declare the type theory's own
+ * rules and the machine's word operations; only they may hold primitive, foreign or postulate.
+ * Everything else is checked at a stated type or is refused. */
+static const char *const BOOT_RAW[] = { "prelude", "code", "match", "nav", "cost", "lin", "check", NULL };
+static const char *const BOOT_TRUSTED[] = { "prim", "std", NULL };
+static bool boot_in(const char *const *names) {
+    if (!x_file) return false;
+    size_t l = strlen(x_file);
+    for (int i = 0; names[i]; i++) {
+        char suf[64]; int n = snprintf(suf, sizeof suf, "/lib/%s.cub", names[i]);
+        if (l >= (size_t)n && !strcmp(x_file + l - n, suf)) return true;
+    }
+    return false;
+}
+static void refuse_outside(const char *const *names, const char *what, const char *name) {
+    if (boot_in(names)) return;
+    char m[600]; snprintf(m, sizeof m, "%s: refused: %s exists only in the fixed bootstrap files; here every definition has a signature that checks, in %s:", x_file ? x_file : "?", what, x_file ? x_file : "?");
+    die(m, name);
+}
 static Tok *P0(void) { return &lt[xp]; }
 static Tok *P1(void) { return &lt[xp + 1 < nlt ? xp + 1 : nlt - 1]; }
 static Tok *P2(void) { return &lt[xp + 2 < nlt ? xp + 2 : nlt - 1]; }
@@ -1034,6 +1055,7 @@ static const char *imp_misuse(Node *t, Names *bound) {
 }
 static void def_untyped(const char *name, Node *body) {
     no_ctor_name(name);
+    refuse_outside(BOOT_RAW, "a definition without a signature", name);
     if (x_typed) {
         Names b = { 0 }; const char *bad = imp_misuse(body, &b); free(b.v);
         if (bad) {
@@ -1423,6 +1445,7 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "primitive")) {
+        refuse_outside(BOOT_TRUSTED, "a primitive", "primitive");
         /* primitive [tick] name : T [= t]: a rule of the type theory as a constant. T is checked to
          * be a type; t, its computation, is trusted (core terms, every argument explicit); without
          * t it is a constant with no computation. tick: its value is its stuck call, unfolding
@@ -1464,6 +1487,7 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "foreign")) {
+        refuse_outside(BOOT_TRUSTED, "a foreign function", "foreign");
         /* foreign name "symbol" : T (D27): a C function of the running program as a primitive at T,
          * a Π over arguments of primitive types (Int64, UInt32, Float64, Word, Bytes n; an argument
          * at multiplicity 0 is not passed) to a primitive type or Word; trusted (#trusted: foreign) */
@@ -1490,6 +1514,7 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "postulate")) {
+        refuse_outside(BOOT_TRUSTED, "a postulate", "postulate");
         NX();
         wantk(X_VO, "a block of postulates");
         while (P0()->k != X_VC) {
@@ -1517,7 +1542,7 @@ static void p_decl_in(void) {
             ck[i] = checked_index(fn[i]->s); if (ck[i] < 0) x_sem("#build-loop: not a checked definition:", fn[i]);
         }
         Tok *pt = NX(); if (pt->k != X_STR) x_err("#build-loop: the file to write, a string, expected after", fn[3]);
-        if (global_lookup("build-loop-plan") < 0) x_sem("#build-loop needs lib/elf.cub loaded, for", fn[0]);
+        if (checked_index("build-loop-plan") < 0) x_sem("#build-loop: refused: the compiler it calls (build-loop-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn[0]);
         if (!checked_type_plain(ck[0])) { failures++; printf("FAIL: build-loop %s: its type is not first-order data without byte strings\n", fn[0]->s); decl_end(); return; }
         long steps = 0;
         Node *call = nlist(5); call->it[0] = nsyml("%%build-loop-plan"); for (int i = 0; i < 4; i++) call->it[i + 1] = wordn(ck[i]);
@@ -1555,7 +1580,7 @@ static void p_decl_in(void) {
         NX(); Tok *fn = NX(); if (fn->k != X_ID) x_err("#build names a checked definition, found", fn);
         int ck = checked_index(fn->s); if (ck < 0) x_sem("#build: not a checked definition:", fn);
         Tok *pt = NX(); if (pt->k != X_STR) x_err("#build: the file to write, a string, expected after", fn);
-        if (global_lookup("build-plan") < 0) x_sem("#build needs lib/elf.cub loaded, for", fn);
+        if (checked_index("build-plan") < 0) x_sem("#build: refused: the compiler it calls (build-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn);
         long steps = 0;
         char *r = readback(nl2("%%build-plan", wordn(ck)), &steps);
         const char *saved = src; src = r; Node *rn = read_node(); src = saved;
@@ -1601,7 +1626,7 @@ static void p_decl_in(void) {
                 if (nth < 64) ths[nth++] = tk;
             }
         }
-        if (global_lookup("jit-plan") < 0) x_sem("#jit needs lib/x86.cub loaded, for", fn);
+        if (checked_index("jit-plan") < 0) x_sem("#jit: refused: the compiler it calls (jit-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/x86.cub loaded, for", fn);
         for (int attempt = 0; attempt < 2; attempt++) {
             int nt = attempt ? 0 : nth;
             Node *rl = nsym("lnil"); for (int i = nt - 1; i >= 0; i--) rl = lst(3, nsym("lcons"), wordn(ths[i]), rl);
@@ -1818,6 +1843,7 @@ static void load_surface(const char *text, const char *path, bool imports_only) 
     xp = 0;
     /* the declarations of a file loaded once the checker is are checked */
     x_typed = global_lookup("chk-def") >= 0 && !x_untyped_file;
+    if (!x_typed && !imports_only) refuse_outside(BOOT_RAW, "a file loaded without the checker", path);
     while (P0()->k != X_EOF) {
         while (P0()->k == X_VS || P0()->k == X_VC) NX();
         if (P0()->k == X_EOF) break;
