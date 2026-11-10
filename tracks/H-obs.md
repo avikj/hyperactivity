@@ -36,11 +36,55 @@ Files you own: `lib/obs.cub`, `experiments/obs/**`, this file.
 - The counter pair of item 5 proved `≈`, and a property (the reply to the n-th `get` is the
   number of `inc`s before it) proved of one and obtained for the other by transport.
 
+## How to check
+
+From `scoped-machine/` (library files are cached; do not set CUBICAL_NOCACHE):
+```
+L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.cub lib/check.cub lib/std.cub lib/sort.cub lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/autodiff.cub lib/intproof.cub lib/intlin.cub lib/prim.cub lib/derive.cub lib/decode.cub lib/fiber.cub lib/proc.cub lib/world.cub lib/session.cub lib/choreo.cub"
+(ulimit -v 2500000; timeout 600 ./build/cubical $L lib/obs.cub experiments/obs/*.cub | grep -v '^ok' | tail)
+```
+
+## Design (decided; read before continuing)
+
+- The Church `Proc` has no induction principle, so everything that needs induction is stated of
+  the tree `Step S A` (lib/world.cub; it is what `#run` walks). Church processes enter through
+  `to-step`. A Church term is *natural* (`o-Natural`, `o-NaturalAt` across levels) when each of its
+  interpretations is the fold of its tree; `ret`, `cmd`, `bind`, `o-reify` preserve it. Theorems
+  about Church `bind`/`handle` carry naturality hypotheses; nothing else can be proved
+  internally (no parametricity).
+- All names in `lib/obs.cub` are prefixed `o-` (trees) / `og-` (guarded form).
+- `_∙_` chains often fail to infer their implicit type; use `calc a ≡ b by p ≡ c by q` with the
+  folds' implicits written out (`o-fold {l} {S} {A} {R} …`).
+
 ## Needs from track A
+
+- Add `lib/obs.cub` to the `library` target's file list in `Makefile`, after `lib/choreo.cub`
+  (it needs `lib/proc.cub` and `lib/world.cub` only). Until then it is checked by the command above.
+
 ## Done
+
+- Item 1, stateless half (`lib/obs.cub`, 780 passed 0 failed with the library, 5.09M steps total):
+  `o-fold`, `o-reify` (+ `o-reify-step`), `o-bind`/`o-map` with the monad laws (`o-bind-ret`,
+  `o-bind-assoc`, `o-fold-bind`, `o-bind-fold`); naturality (`o-NaturalAt`, `o-Natural`,
+  `o-natural-ret/cmd/reify/bind`, `o-step-bind`, `o-natural-path`: natural processes with equal
+  trees are equal Church terms); signature morphisms as tree handlers `o-THandler`, `o-handle`,
+  functoriality `o-handle-id`, `o-handle-comp`, `o-handle-bind`; the Church `handle` is `o-handle`
+  on trees for natural arguments (`o-handle-step`); inclusions `o-incl`, `o-lift`, `o-lift-id`,
+  `o-lift-comp`.
+
 ## Found
+
+- `lib/std.cub` has no set quotient `_/_` and no truncations (the track text says it has); the
+  only truncations in the repo are `T2`/`T3`/`K2` in `experiments/brunerie/typed.cub`. The set
+  quotient is therefore defined in `lib/obs.cub` (`o-Quot`).
 
 ## Next step
 
-Read `lib/proc.cub` fully (Church `Proc`, `GProc`, `handle`, `World`, `runp`) and `lib/std.cub`'s
-quotient section; write items 1–2 and commit when they check.
+In `lib/obs.cub`, append in this order, checking and committing after each:
+1. stateful observation: `o-ObsOf Obs S St = (c : Cmd S) → St → Step Obs (Resp S c × St)`,
+   `o-run`, `o-obs = o-map fst ∘ o-run`, laws `o-run-bind`, `o-run-handle`, identity, composition;
+   the constructor from a sum signature and a pure handler of the rest.
+2. item 2: `o-Tr`, `o-traces` (by recursion on the tree), trace equality.
+3. item 3: `o-Bisim` by recursion on the trees (PathP form for responses), refl/sym/trans,
+   `o-bisim-path`/`o-path-bisim`, `isProp`/`isSet` results, bisimilar ⇒ equal traces; then `GProc`.
+4. items 4, 6, then `experiments/obs/counter.cub` (item 5 and the acceptance property).

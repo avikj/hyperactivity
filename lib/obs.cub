@@ -1,0 +1,136 @@
+-- lib/obs.cub — equality of behaviour by observation (PLAN Phase 6, track H). Loaded after
+-- lib/proc.cub and lib/world.cub (Step, to-step).
+--
+-- A process is a Church term (lib/proc.cub's Proc); what runs is its tree of steps (lib/world.cub's
+-- Step, the driver loop's input: #run (to-step p)). The tree is the free monad on the signature as
+-- an inductive type, so everything here that needs induction is stated of trees, and a Church
+-- process enters through to-step. A Church term is *natural* when every interpretation of it is
+-- the fold of its tree; ret, cmd and bind preserve that, and for natural processes equality of
+-- trees is equality of the Church terms (o-natural-path).
+-- ---------------------------------------------------------------- trees: the free monad
+o-fold : {l : Level} {S : Sig} {A : Type} {R : Type l} → (A → R) → ((c : Cmd S) → (Resp S c → R) → R) → Step S A → R
+o-fold kr h (sdone a) = kr a
+o-fold kr h (scmd c k) = h c (λ r → o-fold kr h (k r))
+-- a tree as a Church process at any level; to-step of it is the tree
+o-reify : {l : Level} {S : Sig} {A : Type} → Step S A → Proc {l} S A
+o-reify t = λ R kr h → o-fold kr h t
+o-reify-step : {S : Sig} {A : Type} → (t : Step S A) → to-step (o-reify t) ≡ t
+o-reify-step (sdone a) = λ i → sdone a
+o-reify-step (scmd c k) = λ i → scmd c (λ r → o-reify-step (k r) i)
+o-bind : {S : Sig} {A B : Type} → Step S A → (A → Step S B) → Step S B
+o-bind (sdone a) f = f a
+o-bind (scmd c k) f = scmd c (λ r → o-bind (k r) f)
+o-map : {S : Sig} {A B : Type} → (A → B) → Step S A → Step S B
+o-map f t = o-bind t (λ a → sdone (f a))
+o-issue : {S : Sig} → (c : Cmd S) → Step S (Resp S c)
+o-issue c = scmd c (λ r → sdone r)
+-- the monad laws, as paths (the left unit is by computation)
+o-bind-ret : {S : Sig} {A : Type} → (t : Step S A) → o-bind t (λ a → sdone a) ≡ t
+o-bind-ret (sdone a) = λ i → sdone a
+o-bind-ret (scmd c k) = λ i → scmd c (λ r → o-bind-ret (k r) i)
+o-bind-assoc : {S : Sig} {A B C : Type} → (t : Step S A) → (f : A → Step S B) → (g : B → Step S C) →
+               o-bind (o-bind t f) g ≡ o-bind t (λ a → o-bind (f a) g)
+o-bind-assoc (sdone a) f g = λ i → o-bind (f a) g
+o-bind-assoc (scmd c k) f g = λ i → scmd c (λ r → o-bind-assoc (k r) f g i)
+-- a fold after a bind is a fold whose leaves are folds
+o-fold-bind : {l : Level} {S : Sig} {A B : Type} {R : Type l} → (kr : B → R) → (h : (c : Cmd S) → (Resp S c → R) → R) →
+              (t : Step S A) → (f : A → Step S B) →
+              o-fold kr h (o-bind t f) ≡ o-fold (λ a → o-fold kr h (f a)) h t
+o-fold-bind kr h (sdone a) f = λ i → o-fold kr h (f a)
+o-fold-bind kr h (scmd c k) f = λ i → h c (λ r → o-fold-bind kr h (k r) f i)
+-- bind is the fold at the tree's own constructors
+o-bind-fold : {S : Sig} {A B : Type} → (t : Step S A) → (f : A → Step S B) → o-fold {lzero} {S} {A} {Step S B} f (λ c k → scmd c k) t ≡ o-bind t f
+o-bind-fold (sdone a) f = λ i → f a
+o-bind-fold (scmd c k) f = λ i → scmd c (λ r → o-bind-fold (k r) f i)
+-- ---------------------------------------------------------------- natural Church processes
+-- pl (the process at level l) is natural over p (the same process at level 0, whose tree is
+-- read): every interpretation of pl is the fold of p's tree. Stated across two levels because a
+-- handler interprets at level 1 (lib/proc.cub's handle) while the tree is read at level 0
+o-NaturalAt : {l : Level} {S : Sig} {A : Type} → Proc {lzero} S A → Proc {l} S A → Type (lsuc l)
+o-NaturalAt {l} {S} {A} p pl = (R : Type l) → (kr : A → R) → (h : (c : Cmd S) → (Resp S c → R) → R) → pl R kr h ≡ o-fold kr h (to-step p)
+o-Natural : {S : Sig} {A : Type} → Proc {lzero} S A → Type (lsuc lzero)
+o-Natural {S} {A} p = o-NaturalAt {lzero} {S} {A} p p
+o-natural-ret : {l : Level} {S : Sig} {A : Type} → (a : A) → o-NaturalAt {l} {S} {A} (ret a) (ret a)
+o-natural-ret a = λ R kr h i → kr a
+o-natural-cmd : {l : Level} {S : Sig} → (c : Cmd S) → o-NaturalAt {l} {S} {Resp S c} (cmd c) (cmd c)
+o-natural-cmd c = λ R kr h i → h c (λ r → kr r)
+o-natural-reify : {l : Level} {S : Sig} {A : Type} → (t : Step S A) → o-NaturalAt {l} {S} {A} (o-reify t) (o-reify t)
+o-natural-reify {l} {S} {A} t = λ R kr h i → o-fold kr h (o-reify-step t (~ i))
+-- the tree of a bind is the bind of the trees, for a natural first process
+o-step-bind : {S : Sig} {A B : Type} → (p : Proc {lzero} S A) → (f : A → Proc {lzero} S B) → o-Natural p →
+              to-step (bind p f) ≡ o-bind (to-step p) (λ a → to-step (f a))
+o-step-bind {S} {A} {B} p f np =
+  np (Step S B) (λ a → to-step (f a)) (λ c k → scmd c k) ∙ o-bind-fold (to-step p) (λ a → to-step (f a))
+o-natural-bind : {l : Level} {S : Sig} {A B : Type} → (p : Proc {lzero} S A) → (pl : Proc {l} S A) →
+                 (f : A → Proc {lzero} S B) → (fl : A → Proc {l} S B) →
+                 o-Natural p → o-NaturalAt {l} {S} {A} p pl → ((a : A) → o-NaturalAt {l} {S} {B} (f a) (fl a)) →
+                 o-NaturalAt {l} {S} {B} (bind p f) (bind pl fl)
+o-natural-bind {l} {S} {A} {B} p pl f fl np npl nf = λ R kr h →
+  calc pl R (λ a → fl a R kr h) h
+     ≡ o-fold {l} {S} {A} {R} (λ a → fl a R kr h) h (to-step p) by npl R (λ a → fl a R kr h) h
+     ≡ o-fold {l} {S} {A} {R} (λ a → o-fold {l} {S} {B} {R} kr h (to-step (f a))) h (to-step p) by (λ i → o-fold {l} {S} {A} {R} (λ a → nf a R kr h i) h (to-step p))
+     ≡ o-fold {l} {S} {B} {R} kr h (o-bind (to-step p) (λ a → to-step (f a))) by sym (o-fold-bind {l} {S} {A} {B} {R} kr h (to-step p) (λ a → to-step (f a)))
+     ≡ o-fold {l} {S} {B} {R} kr h (to-step (bind p f)) by (λ i → o-fold {l} {S} {B} {R} kr h (o-step-bind p f np (~ i)))
+-- natural processes with equal trees are equal Church terms: on them the tree decides
+o-natural-path : {S : Sig} {A : Type} → (p q : Proc {lzero} S A) → o-Natural p → o-Natural q → to-step p ≡ to-step q → p ≡ q
+o-natural-path {S} {A} p q np nq e = λ i R kr h →
+  (calc p R kr h
+      ≡ o-fold {lzero} {S} {A} {R} kr h (to-step p) by np R kr h
+      ≡ o-fold {lzero} {S} {A} {R} kr h (to-step q) by (λ j → o-fold {lzero} {S} {A} {R} kr h (e j))
+      ≡ q R kr h by sym (nq R kr h)) i
+-- ---------------------------------------------------------------- handlers on trees, functorially
+-- a signature morphism S → W: each command of S as a tree over W. Handling is the functor's
+-- action on processes; identity and composition are preserved, as paths
+o-THandler : Sig → Sig → Type
+o-THandler S W = (c : Cmd S) → Step W (Resp S c)
+o-handle : {S W : Sig} {A : Type} → o-THandler S W → Step S A → Step W A
+o-handle hd (sdone a) = sdone a
+o-handle hd (scmd c k) = o-bind (hd c) (λ r → o-handle hd (k r))
+o-handle-bind : {S W : Sig} {A B : Type} → (hd : o-THandler S W) → (t : Step S A) → (f : A → Step S B) →
+                o-handle hd (o-bind t f) ≡ o-bind (o-handle hd t) (λ a → o-handle hd (f a))
+o-handle-bind hd (sdone a) f = λ i → o-handle hd (f a)
+o-handle-bind hd (scmd c k) f =
+  (λ i → o-bind (hd c) (λ r → o-handle-bind hd (k r) f i))
+  ∙ sym (o-bind-assoc (hd c) (λ r → o-handle hd (k r)) (λ a → o-handle hd (f a)))
+o-idh : {S : Sig} → o-THandler S S
+o-idh c = o-issue c
+o-comph : {S T W : Sig} → o-THandler S T → o-THandler T W → o-THandler S W
+o-comph h1 h2 c = o-handle h2 (h1 c)
+o-handle-id : {S : Sig} {A : Type} → (t : Step S A) → o-handle (o-idh {S}) t ≡ t
+o-handle-id (sdone a) = λ i → sdone a
+o-handle-id (scmd c k) = λ i → scmd c (λ r → o-handle-id (k r) i)
+o-handle-comp : {S T W : Sig} {A : Type} → (h1 : o-THandler S T) → (h2 : o-THandler T W) → (t : Step S A) →
+                o-handle (o-comph h1 h2) t ≡ o-handle h2 (o-handle h1 t)
+o-handle-comp h1 h2 (sdone a) = λ i → sdone a
+o-handle-comp h1 h2 (scmd c k) =
+  (λ i → o-bind (o-handle h2 (h1 c)) (λ r → o-handle-comp h1 h2 (k r) i))
+  ∙ sym (o-handle-bind h2 (h1 c) (λ r → o-handle h1 (k r)))
+-- lib/proc.cub's handle (the Church form, at level 1) is o-handle on the trees, for natural
+-- handlers and a natural process
+o-handle-fold : {S W : Sig} {A : Type} → (hd : Handler S W) → ((c : Cmd S) → o-Natural (hd c)) → (t : Step S A) →
+                to-step (o-fold {lsuc lzero} {S} {A} {Proc {lzero} W A} (ret {lzero} {W} {A}) (λ c k → bind {lzero} {W} {Resp S c} {A} (hd c) k) t)
+                ≡ o-handle (λ c → to-step (hd c)) t
+o-handle-fold hd nh (sdone a) = λ i → sdone a
+o-handle-fold {S} {W} {A} hd nh (scmd c k) =
+  o-step-bind (hd c) (λ r → o-fold {lsuc lzero} {S} {A} {Proc {lzero} W A} (ret {lzero} {W} {A}) (λ c2 k2 → bind {lzero} {W} {Resp S c2} {A} (hd c2) k2) (k r)) (nh c)
+  ∙ (λ i → o-bind (to-step (hd c)) (λ r → o-handle-fold hd nh (k r) i))
+o-handle-step : {S W : Sig} {A : Type} → (hd : Handler S W) → ((c : Cmd S) → o-Natural (hd c)) →
+                (p : Proc {lzero} S A) → (p1 : Proc {lsuc lzero} S A) → o-NaturalAt {lsuc lzero} {S} {A} p p1 →
+                to-step (handle hd p1) ≡ o-handle (λ c → to-step (hd c)) (to-step p)
+o-handle-step {S} {W} {A} hd nh p p1 n =
+  (λ i → to-step (n (Proc {lzero} W A) (ret {lzero} {W} {A}) (λ c k → bind {lzero} {W} {Resp S c} {A} (hd c) k) i))
+  ∙ o-handle-fold hd nh (to-step p)
+-- inclusions of signatures (lib/proc.cub's Incl) are morphisms; lifting along one is handling
+o-incl : {S T : Sig} → Incl S T → o-THandler S T
+o-incl i c = scmd (fst i c) (λ r → sdone (snd i c r))
+o-lift : {S T : Sig} {A : Type} → Incl S T → Step S A → Step T A
+o-lift i t = o-handle (o-incl i) t
+o-incl-id : {S : Sig} → Incl S S
+o-incl-id = (λ c → c , λ c r → r)
+o-incl-comp : {S T W : Sig} → Incl S T → Incl T W → Incl S W
+o-incl-comp i j = (λ c → fst j (fst i c) , λ c r → snd i c (snd j (fst i c) r))
+o-lift-id : {S : Sig} {A : Type} → (t : Step S A) → o-lift (o-incl-id {S}) t ≡ t
+o-lift-id t = o-handle-id t
+o-lift-comp : {S T W : Sig} {A : Type} → (i : Incl S T) → (j : Incl T W) → (t : Step S A) →
+              o-lift (o-incl-comp i j) t ≡ o-lift j (o-lift i t)
+o-lift-comp i j t = o-handle-comp (o-incl i) (o-incl j) t
