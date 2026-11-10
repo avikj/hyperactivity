@@ -28,7 +28,12 @@ static const char *x_canon(const char *s) {
 }
 static bool x_delim(int c) { return c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' || c == ',' || c == ';' || c == '"'; }
 static bool x_identstart(unsigned char c) { return isalpha(c) || c == '_' || c >= 0x80 || c == '%'; }
+/* an error at a token. x_unreadable: the text could not be read (the lexer's, the layout's and the
+ * parser's errors), which ends the load; an error of a declaration that was read (x_sem) is that
+ * declaration's failure (p_decl) */
+static bool x_unreadable, x_sem_now;
 static void x_die(int line, int col, const char *m, const char *x) {
+    x_unreadable = !x_sem_now; x_sem_now = false;
     /* under --serve, the request ends and the machine stays (the parse error as `file:line:col:`) */
     if (die_jb) { char p[600]; snprintf(p, sizeof p, "%s:%d:%d: %s", x_file ? x_file : "?", line, col, m); die(p, x); }
     fprintf(stderr, "%s:%d:%d: %s%s%s\n", x_file ? x_file : "?", line, col, m, x ? " " : "", x ? x : "");
@@ -217,6 +222,7 @@ static int rec_retract(const char *name, char ***fn) {
 
 static Tok *NX(void) { Tok *t = &lt[xp]; if (t->k != X_EOF) xp++; return t; }
 static void x_err(const char *m, Tok *t) { x_die(t->line, t->col, m, t->k == X_VS ? "(at a new line)" : t->k == X_VC ? "(at the end of a block)" : t->k == X_VO ? "(at a new block)" : t->s); }
+static void x_sem(const char *m, Tok *t) { x_sem_now = true; x_err(m, t); }
 static bool at(const char *s) { return x_is(P0(), s); }
 /* a generalized variable (E28): its name and declared type */
 typedef struct { const char *name; Node *type; } GVar;
@@ -920,7 +926,7 @@ static void toplevel(Node *f);
 static void x_top(Node *f);
 static Node *core(Node *t) { return resolve(t, false); }
 static Node *resolve_keep(Node *t) { return t; }
-typedef struct { int np; Node **pn, **pty; bool *imp, *rev; Node *R; } TSig;
+typedef struct { int np; Node **pn, **pty; bool *imp, *rev; Node *R; int *ord; } TSig;   /* ord: when the parameters stand permuted (a recursion on a later one, clauses_typed), where the k-th argument of a call stands */
 /* does the implicit argument a ({p}, or {{p}} marked for an instance position) stand at parameter q? */
 static bool imp_at(Node *a, Node *pn) { return a->list && a->n == 2 && is(a->it[0], "%imp") && (!bnd_inst(a->it[0]) || bnd_inst(pn)); }
 static TSig tsig;
@@ -1213,7 +1219,45 @@ static void x_test(const char *h, Node *a, Node *b) {
 }
 static void p_decl(void);
 extern char decl_pos[512];
+static void p_decl_in(void);
+static void decl_reset(void);
+static const char *decl_name;   /* the declaration being handled, once its name is read */
+static bool x_collecting;
+/* A declaration. An error raised while it is handled (die, x_sem: in the clause compiler, the
+ * elaborator, the forms it becomes) is its failure: a FAIL line with the error's message (ok:
+ * rejected under #fail), the load going on at the next declaration. Text that cannot be read
+ * (x_unreadable) ends the load as before. */
 static void p_decl(void) {
+    jmp_buf jb; jmp_buf *outer = die_jb;
+    int depth0 = toplevel_depth, xp0 = xp;
+    bool fail = x_fail_next, coll = x_collecting, inst = pending_instance; Module *mod = cur_mod;
+    const char *name0 = decl_name;
+    decl_name = NULL;
+    if (setjmp(jb)) {
+        die_jb = outer;
+        if (x_unreadable) {
+            if (outer) die(die_msg, NULL);
+            fprintf(stderr, "%s\n", die_msg); exit(1);
+        }
+        toplevel_depth = depth0; x_collecting = coll; pending_instance = inst; cur_mod = mod; x_fail_next = false;
+        decl_reset();
+        char pos[512]; { int save = xp; xp = xp0; snprintf(pos, sizeof pos, "%s:%d", x_file ? x_file : "?", P0()->line); xp = save; }
+        if (fail) passes++; else failures++;
+        printf("%s: %s %s\n   reason: %s\n", fail ? "ok" : "FAIL", fail ? "rejected" : "checks", decl_name ? decl_name : pos, die_msg);
+        if (!fail) printf("   in: %s\n", pos);
+        fflush(stdout);
+        /* on at the next declaration of this block */
+        int d = 0; for (int i = xp0; i < xp && i < nlt; i++) { if (lt[i].k == X_VO) d++; else if (lt[i].k == X_VC) d--; }
+        while (P0()->k != X_EOF && !(d == 0 && (P0()->k == X_VS || P0()->k == X_VC))) { if (P0()->k == X_VO) d++; else if (P0()->k == X_VC) d--; NX(); }
+        if (P0()->k == X_VS) NX();
+        decl_name = name0;
+        return;
+    }
+    die_jb = &jb; x_unreadable = false;
+    p_decl_in();
+    die_jb = outer; decl_name = name0;
+}
+static void p_decl_in(void) {
     Tok *t = P0();
     snprintf(decl_pos, sizeof decl_pos, "%s:%d", x_file ? x_file : "?", t->line);
     bool fail = x_fail_next; x_fail_next = false;
@@ -1650,6 +1694,7 @@ static void p_decl(void) {
     want("=");
     Node *rhs = p_rhs();
     Lhs l0 = lhs_of(lhs);
+    decl_name = l0.f;
     Lhs *ls = malloc(sizeof(Lhs)); Node **rs = malloc(sizeof(Node *)); int n = 1;
     ls[0] = l0; rs[0] = rhs;
     for (;;) {
@@ -4037,12 +4082,21 @@ static Node *rec_by_shape(const char *sh, Node *want, Node *cand, Node *hyp) {
     const char *sp = sh;
     return rec_by_shape_walk(&sp, ops, nops - 1, hyp);
 }
+/* recursion on a parameter that is not the first while an earlier one changes: the split of that
+ * parameter is made outermost, the earlier parameters its motive's Πs (reverted as later ones are),
+ * so the hypothesis is applied to their new values. perm_p: the parameter tried (-1: the order as
+ * written); perm_next: the next candidate after p, a parameter some clause matches by constructor
+ * whose type lets it stand before an earlier one (in the order as written, perm0) */
+static int perm_p = -1, perm_np; static Node **perm_pty, **perm_pn; static bool *perm_imp, *perm_con;
+static int perm_dest(int p) { int d = 0; for (int q = 0; q < p; q++) if (mentions_name(perm_pty[p], perm_pn[q]->s)) d = q + 1; return d; }
+static int perm_next(int p) { for (int q = p < 0 ? 1 : p + 1; q < perm_np; q++) if (perm_con[q] && !perm_imp[q] && perm_dest(q) < q) return q; return -1; }
 static Deep *deep_of(const char *w) { for (int i = ndeeps - 1; i >= 0; i--) if (!strcmp(deeps[i].w, w)) return &deeps[i]; return NULL; }
 static Node *rec_xform(Node *e);
 static Node *rec_call(Node *e, Node **args, int n) {
     /* the call's arguments at the parameters' positions (implicit ones not given) */
     Node *at[256] = { 0 }; int i = 0;
-    for (int q = 0; q < tsig.np && i <= n; q++) {
+    for (int k = 0; k < tsig.np && i <= n; k++) {
+        int q = tsig.ord ? tsig.ord[k] : k;
         if (tsig.imp[q]) { if (i < n && imp_at(args[i], tsig.pn[q])) at[q] = args[i++]->it[1]; continue; }
         if (i < n) at[q] = args[i++];
     }
@@ -4124,6 +4178,7 @@ static Node *rec_call(Node *e, Node **args, int n) {
     (void)e;
     if (cov_armed && !guard_on && guard_q >= 0) longjmp(cov_jb, 2);   /* a clock: a guarded fixed point */
     if (cov_armed && !cov_on) longjmp(cov_jb, 1);   /* deeper than a field: again, with the values below */
+    if (cov_armed && !guard_on && perm_next(perm_p) >= 0) longjmp(cov_jb, 3);   /* on a later parameter while an earlier one changes: again, that parameter's split outermost */
     char m[256]; snprintf(m, sizeof m, "%s: a recursive call is not on a constructor field or a field's field from one of the definition's own matches (structural recursion), in", tfname);
     print_node(stderr, e); fputc('\n', stderr);
     die(m, tfname);
@@ -4706,6 +4761,7 @@ static bool uniform_in(Node *e, const char *f, int q, Node *pat) {
 /* the checked definition's body from its clauses */
 static Node *clauses_typed(const char *f, Lhs *ls, Node **rhs, int n) {
     tfname = f;
+    tsig.ord = NULL; perm_np = 0;
     /* the patterns at the parameters: implicit ones given as {p} or else the parameter itself; the
      * patterns past the parameters are dimensions (the result is a path) */
     int extra = -1;
@@ -4768,11 +4824,46 @@ static Node *clauses_typed(const char *f, Lhs *ls, Node **rhs, int n) {
     cov_on = false; cov_armed = true; guard_on = false;
     guard_q = -1;
     for (int q = 0; q < tsig.np; q++) if (!tsig.pty[q]->list && is(tsig.pty[q], "Clock")) { guard_q = q; break; }
-    { int how = setjmp(cov_jb); if (how == 1) cov_on = true; if (how == 2) guard_on = true; if (how) { ncdefs = 0; nframes = 0; ndeeps = 0; } }
+    /* the order as written, for a recursion on a later parameter (perm_p) */
+    int np = tsig.np;
+    Node **pn0 = tsig.pn, **pty0 = tsig.pty; bool *imp0 = tsig.imp, *rev0 = tsig.rev;
+    Node ***rp0 = calloc((size_t)n + 1, sizeof(Node **));
+    for (int i = 0; i < n; i++) rp0[i] = rows[i].p;
+    perm_p = -1; perm_np = np; perm_pn = pn0; perm_pty = pty0; perm_imp = imp0;
+    perm_con = calloc((size_t)np + 1, sizeof(bool));
+    for (int q = 0; q < np; q++) for (int i = 0; i < n; i++) if (!pat_wild(rows[i].p[q]) && pat_con(rows[i].p[q]) >= 0) perm_con[q] = true;
     bool *ru_saved = row_used; int rn_saved = row_n;   /* (a clause compiled inside another's) */
+    int nsg_in = nsg;
+    {
+        int how = setjmp(cov_jb);
+        if (how == 1) cov_on = true;
+        if (how == 2) guard_on = true;
+        if (how == 3) {
+            /* parameter p moved to stand before every earlier parameter its type does not mention */
+            int p = perm_next(perm_p), d = perm_dest(p);
+            perm_p = p; cov_on = false;
+            int *ord = calloc((size_t)np + 1, sizeof(int));
+            tsig.pn = calloc((size_t)np + 1, sizeof(Node *)); tsig.pty = calloc((size_t)np + 1, sizeof(Node *));
+            tsig.imp = calloc((size_t)np + 1, sizeof(bool)); tsig.rev = calloc((size_t)np + 1, sizeof(bool));
+            for (int k = 0; k < np; k++) ord[k] = k < d || k > p ? k : k == p ? d : k + 1;
+            for (int k = 0; k < np; k++) { int q = ord[k]; tsig.pn[q] = pn0[k]; tsig.pty[q] = pty0[k]; tsig.imp[q] = imp0[k]; tsig.rev[q] = rev0[k]; vars[q] = pn0[k]; }
+            /* (a moved parameter whose type mentions one now before it is reverted, as written ones are) */
+            for (int q = 0; q < np; q++) for (int r = 0; r < q; r++) if (mentions_name(tsig.pty[q], tsig.pn[r]->s)) tsig.rev[q] = true;
+            for (int i = 0; i < n; i++) {
+                Node **ps = calloc((size_t)np + (size_t)extra + 1, sizeof(Node *));
+                for (int k = 0; k < np; k++) ps[ord[k]] = rp0[i][k];
+                for (int k = 0; k < extra; k++) ps[np + k] = rp0[i][np + k];
+                rows[i].p = ps;
+            }
+            tsig.ord = ord;
+        }
+        if (how) { ncdefs = 0; nframes = 0; ndeeps = 0; nsg = nsg_in; }
+    }
     rows_track(n);
     Node *body = ccm_t(vars, tsig.np, rows, n);
     rows_check(f); row_used = ru_saved; row_n = rn_saved;
+    /* the parameters as written again: the definition's λs, and what the caller reads */
+    tsig.pn = pn0; tsig.pty = pty0; tsig.imp = imp0; tsig.ord = NULL; perm_np = 0;
     if (guard_on) {
         /* the fixed point over the parameters after the clock: fix {κ} {Π later → R} (λ %self → λ later → body) later */
         int q0 = guard_q;
@@ -5189,4 +5280,10 @@ static Node *x_solve_expr(Node *e) {
         if (!again) break;
     }
     return strip_marks(t);
+}
+
+/* a declaration left by an error (p_decl): the elaborator's state as before a declaration */
+static void decl_reset(void) {
+    neh = neg = 0; nbk = 0; nesc = 0; nwtick = 0; syn_expect = app_expect = NULL;
+    cov_armed = cov_on = guard_on = false; tsig.ord = NULL; perm_np = 0; nsg = 0;
 }

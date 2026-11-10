@@ -1,0 +1,36 @@
+-- Item 1: structural recursion on an argument that is not the first, an earlier argument changing.
+-- (tracks/G-memmodel.md and tracks/D-os.md, Found.)
+
+g1-a : Word → List Word → Word
+g1-a j nil = j
+g1-a j (cons x r) = g1-a (%wsucc j) r
+
+#same g1-a #0 (cons #7 (cons #8 (cons #9 nil))) = #3
+
+-- an implicit type before both, the matched argument last, two earlier arguments changing
+rp-rev : {A : Type} → List A → Nat → List A → List A
+rp-rev acc n nil = acc
+rp-rev acc n (cons x r) = rp-rev (cons x acc) (suc n) r
+
+#same rp-rev nil 0 (cons 1 (cons 2 (cons 3 nil))) = cons 3 (cons 2 (cons 1 nil))
+
+-- the earlier argument matched too, and changed
+rp-take : Nat → List Nat → List Nat
+rp-take n nil = nil
+rp-take zero (cons x r) = cons x (rp-take 5 r)
+rp-take (suc n) (cons x r) = rp-take n r
+
+-- a property by the same recursion: the hypothesis at the changed argument
+rp-len : Nat → List Nat → Nat
+rp-len n nil = n
+rp-len n (cons x r) = rp-len (suc n) r
+
+rp-len-suc : (n : Nat) (l : List Nat) → rp-len (suc n) l ≡ suc (rp-len n l)
+rp-len-suc n nil = λ i → suc n
+rp-len-suc n (cons x r) = rp-len-suc (suc n) r
+
+-- not structural on any argument: refused
+#fail
+rp-bad : Nat → List Nat → Nat
+rp-bad n nil = n
+rp-bad n (cons x r) = rp-bad (suc n) (cons x r)
