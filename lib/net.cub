@@ -59,12 +59,12 @@ Msg : Type
 Msg = (n : Nat) × Bytes n
 NetS : Sig
 NetS = NetSig Msg
-net-send : {M : Type} → NodeId → M → Proc {lzero} (NetSig M) Unit
-net-send {M} to m = cmd {lzero} {NetSig M} (n-send to m)
-net-recv : {M : Type} → Proc {lzero} (NetSig M) (Rcv M)
-net-recv {M} = cmd {lzero} {NetSig M} n-recv
-net-now : {M : Type} → Proc {lzero} (NetSig M) Word
-net-now {M} = cmd {lzero} {NetSig M} n-now
+net-send : {l : Level} {M : Type} → NodeId → M → Proc {l} (NetSig M) Unit
+net-send {l} {M} to m = cmd {l} {NetSig M} (n-send to m)
+net-recv : {l : Level} {M : Type} → Proc {l} (NetSig M) (Rcv M)
+net-recv {l} {M} = cmd {l} {NetSig M} n-recv
+net-now : {l : Level} {M : Type} → Proc {l} (NetSig M) Word
+net-now {l} {M} = cmd {l} {NetSig M} n-now
 -- ---------------------------------------------------------------- the network's state
 record Pkt (M : Type) = { p-from : NodeId ; p-to : NodeId ; p-msg : M }
 -- the packets in flight, the clock, and one side of the partition in force (nil: none)

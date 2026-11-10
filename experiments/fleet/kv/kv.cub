@@ -15,13 +15,13 @@
 -- ---------------------------------------------------------------- writes, messages, the store
 KvWrite : Type
 KvWrite = Word × Word
-data KvMsg = m-put (w : KvWrite) | m-ack (w : KvWrite) | m-get (k : Word) (rid : Nat) | m-val (rid : Nat) (v : Word)
+data KvMsg = m-put (w : KvWrite) | m-ack (w : KvWrite) | m-get (k : Word) (rid : Word) | m-val (rid : Word) (v : Word)
 kv-sel : KvWrite → Word → Word
 kv-sel w k = case weq (fst w) k of true → snd w; false → #0
 kv-store : List KvWrite → Word → Word
 kv-store l k = jfold {KvWrite} {Word} wmax #0 (λ w → kv-sel w k) l
 -- ---------------------------------------------------------------- the replica
-data KvPend = kp-none | kp-ack (to : NodeId) (w : KvWrite) | kp-val (to : NodeId) (rid : Nat) (v : Word)
+data KvPend = kp-none | kp-ack (to : NodeId) (w : KvWrite) | kp-val (to : NodeId) (rid : Word) (v : Word)
 record KvRep = { r-log : List KvWrite ; r-app : List KvWrite ; r-pend : KvPend }
 kv-rep-recv : KvRep → Rcv KvMsg → KvRep
 kv-rep-recv st r = case r of
@@ -54,7 +54,7 @@ data KvPhase = ph-done | ph-put (w : KvWrite) (n : Nat) | ph-get-send (k : Word)
 -- c-hist: the requests answered so far with their responses, latest first; c-conf: the writes
 -- acknowledged; c-idx: the number of requests answered (the request id of the next get);
 -- c-todo: the requests still to make; c-out: the broadcasting client's writes still to send
-record KvCli = { c-hist : Hist KvS ; c-conf : List KvWrite ; c-idx : Nat ; c-todo : List KvCmd ; c-ph : KvPhase ; c-out : List (NodeId × KvWrite) }
+record KvCli = { c-hist : Hist KvS ; c-conf : List KvWrite ; c-idx : Word ; c-todo : List KvCmd ; c-ph : KvPhase ; c-out : List (NodeId × KvWrite) }
 KvSt : Type
 KvSt = KvRep × KvCli
 -- ---------------------------------------------------------------- the fleet
@@ -67,7 +67,7 @@ kv-beh cb (suc (suc zero)) st = nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , 
 kv-beh cb (suc (suc (suc zero))) st = cb st
 kv-beh cb (suc (suc (suc (suc j)))) st = v-halt
 kv-cli-init : List KvCmd → List (NodeId × KvWrite) → KvPhase → KvCli
-kv-cli-init todo out ph = KvCli { c-hist = nil ; c-conf = nil ; c-idx = zero ; c-todo = todo ; c-ph = ph ; c-out = out }
+kv-cli-init todo out ph = KvCli { c-hist = nil ; c-conf = nil ; c-idx = #0 ; c-todo = todo ; c-ph = ph ; c-out = out }
 kv-init : KvCli → FState KvMsg KvSt
 kv-init c = ((λ i → (kv-rep-init , c)) , net-empty {KvMsg})
 -- ---------------------------------------------------------------- safety
@@ -152,10 +152,10 @@ kv-start todo = case todo of
 kv-set-ph : KvCli → KvPhase → KvCli
 kv-set-ph c ph = KvCli { c-hist = c-hist c ; c-conf = c-conf c ; c-idx = c-idx c ; c-todo = c-todo c ; c-ph = ph ; c-out = c-out c }
 kv-adv-put : KvCli → KvWrite → KvCli
-kv-adv-put c w = KvCli { c-hist = cons (k-put w , unit) (c-hist c) ; c-conf = cons w (c-conf c) ; c-idx = suc (c-idx c)
+kv-adv-put c w = KvCli { c-hist = cons (k-put w , unit) (c-hist c) ; c-conf = cons w (c-conf c) ; c-idx = %wsucc (c-idx c)
                        ; c-todo = snd (kv-start (c-todo c)) ; c-ph = fst (kv-start (c-todo c)) ; c-out = c-out c }
 kv-adv-get : KvCli → Word → Word → KvCli
-kv-adv-get c k v = KvCli { c-hist = cons (k-get k , v) (c-hist c) ; c-conf = c-conf c ; c-idx = suc (c-idx c)
+kv-adv-get c k v = KvCli { c-hist = cons (k-get k , v) (c-hist c) ; c-conf = c-conf c ; c-idx = %wsucc (c-idx c)
                          ; c-todo = snd (kv-start (c-todo c)) ; c-ph = fst (kv-start (c-todo c)) ; c-out = c-out c }
 kv-weq2 : KvWrite → KvWrite → Bool
 kv-weq2 a b = andB (weq (fst a) (fst b)) (weq (snd a) (snd b))
@@ -174,7 +174,7 @@ kv-seq-val c k r = case r of
      m-put w2 → c
      m-ack w2 → c
      m-get k2 rid → c
-     m-val rid v → (case andB (eqb from zero) (eqb rid (c-idx c)) of true → kv-adv-get c k v; false → c))
+     m-val rid v → (case andB (eqb from zero) (weq rid (c-idx c)) of true → kv-adv-get c k v; false → c))
 kv-put-view : KvCli → KvWrite → Nat → NView KvMsg KvCli
 kv-put-view c w zero = v-send 0 (m-put w) (kv-set-ph c (ph-put w 1))
 kv-put-view c w (suc zero) = v-send 1 (m-put w) (kv-set-ph c (ph-put w 2))

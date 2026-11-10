@@ -3,11 +3,11 @@
 -- with it. The run is a recorded list of choices; the result is node 1's tree of steps, done
 -- with the message.
 ping-send : Proc {lzero} (NetSig Word) Word
-ping-send = bind {lzero} {NetSig Word} {Unit} {Word} (net-send {Word} 1 #42) (λ u → ret {lzero} {NetSig Word} {Word} #0)
+ping-send = bind {lzero} {NetSig Word} {Unit} {Word} (net-send {lzero} {Word} 1 #42) (λ u → ret {lzero} {NetSig Word} {Word} #0)
 ping-recv : Nat → Proc {lzero} (NetSig Word) Word
 ping-recv n = case n of
   zero → ret {lzero} {NetSig Word} {Word} #0
-  suc k → bind {lzero} {NetSig Word} {Rcv Word} {Word} (net-recv {Word}) (λ r → case r of r-timeout → rec k; r-msg f m → ret {lzero} {NetSig Word} {Word} m)
+  suc k → bind {lzero} {NetSig Word} {Rcv Word} {Word} (net-recv {lzero} {Word}) (λ r → case r of r-timeout → rec k; r-msg f m → ret {lzero} {NetSig Word} {Word} m)
 ping-nodes : NodeId → Proc {lzero} (NetSig Word) Word
 ping-nodes i = case i of zero → ping-send; suc j → ping-recv 3
 ping-init : FState Word (Step (NetSig Word) Word)
