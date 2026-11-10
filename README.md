@@ -35,7 +35,7 @@ of a thing proved in place of the thing.
 
 ```
 make build/cubical          # the machine
-make library                # loads the LIB list of the Makefile: 1,684 passed, 406 failed
+make library                # loads the LIB list of the Makefile: 1,711 passed, 406 failed
 ```
 
 401 of the 406 are refused untyped definitions; the other 5 (`cstr-fill`, `cstr`, `cstr-at`,

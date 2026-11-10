@@ -244,6 +244,8 @@ enum {
     O_WOP2,     /* x=the operation; 0=b 1=a (its value) 2=out */
     O_WELIM,    /* (%welim w z s): 0=w 1=z 2=s 3=out: #0 ↦ z, #(n+1) ↦ s #n (the elimination of #n) */
     O_PEND,     /* p=Dnf r (0 or 1); 0=the type of p 1=p 2=out: p r, an endpoint when the type is a path type */
+    O_KEQ,      /* 0=u 1=v 2=out: true when both values carry one key (they are one term), else false */
+    O_KEQ2,     /* 0=v 1=u (its value) 2=out */
     O_CLOS,     /* 0=f 1=g 2=out */
     O_CLOS2,    /* 0=g 1=f 2=out: (csame pairs) when f, g are λs of one record, the pairs of their
                  * environments; else (cdiff f g), both untouched */
@@ -291,7 +293,7 @@ typedef struct Key {
     struct Key *c[];
 } Key;
 enum { K_WORD = 1, K_IV, K_FACE, K_VAR, K_GLOBAL, K_CON, K_DATA, K_LAM, K_PAIR, K_PI, K_SIGMA, K_PATHP, K_U,
-       K_APP, K_FST, K_SND, K_PAPP, K_CASE, K_FORCE, K_SUB, K_SUBST, K_DIM, K_TERM, K_WTY, K_UNFOLD };
+       K_APP, K_FST, K_SND, K_PAPP, K_CASE, K_FORCE, K_SUB, K_SUBST, K_DIM, K_TERM, K_WTY, K_UNFOLD, K_WOP, K_WELIM };
 Key *key_retain(Key *k);
 Key *key_global(long g);
 Key *key_con0(int c);              /* a constructor with no fields */

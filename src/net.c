@@ -744,6 +744,7 @@ long prof_odup[65536], prof_oera[65536], prof_rdup[256], prof_rera[256];
 long prof_pair[4][256];   /* CUBICAL_PROFILE: SUBST, ERA, DUP, PAPPP steps by the value kind met */
 /* a value held once: references copy the box; the last one erases the value */
 static void box_hold(Box *b);
+const char *kind_name(int k);
 static Key *key_of_port(Port p);
 static Box *box_new(Port val) {
     Box *b = malloc(sizeof(Box)); b->rc = 1; b->root = cell(O_ROOT, 1); b->e = NULL; b->in = 0; b->fd = NULL; b->fdtries = 0;
@@ -902,10 +903,11 @@ Port thunk_build(Cell *v) {
     cell_free(v);
     return memo_end(sh, bx, r);
 }
-static Port word_of(uint64_t n) { Cell *c = cell(V_WORD, 1); c->a = n; return P(c, 0); }
+/* a numeral is named by its value (so what is built on numerals has a name: the conversion's key test) */
+static Port word_of(uint64_t n) { Cell *c = cell(V_WORD, 1); c->a = n; c->key = key0(K_WORD, n, NULL); return P(c, 0); }
 /* the number a word cell holds (a copy), and a word cell holding a number (taking it) */
 static WN cell_wn(const Cell *c) { WN r = { c->a, c->p }; return wn_copy(&r); }
-static Port word_wn(WN k) { Cell *c = cell(V_WORD, 1); c->a = k.s; c->p = k.b; return P(c, 0); }
+static Port word_wn(WN k) { Cell *c = cell(V_WORD, 1); c->a = k.s; c->p = k.b; c->key = key0(K_WORD, k.s, k.b); return P(c, 0); }
 Port word_port(WN k) { return word_wn(k); }
 /* a reference reads its value under the substitution it carries (a=Subst or 0): the top cell
  * copied and substituted, each part a reference carrying the substitution on */
@@ -2034,14 +2036,24 @@ static Cell *wsplit(Cell *c, WN *k, Port *base) {
     *k = wn_small(0); *base = P(c, 0); return NULL;
 }
 /* k ⊕ base (taking k) */
+static Key *key_of_port(Port p);
 static Port wplus(WN k, Port base) {
     if (!base) return word_wn(k);
     if (wn_zero(&k)) return base;
-    Cell *w = cell(V_WPLUS, 2); w->a = k.s; w->p = k.b; link(base, P(w, 1));
+    Cell *w = cell(V_WPLUS, 2); w->a = k.s; w->p = k.b;
+    { Key *kb = key_of_port(base); if (kb) { Key *kn = key0(K_WORD, k.s, k.b); if (kn) { w->key = key2(K_WOP, 0xFFFF, NULL, kn, kb); key_release(kn); } key_release(kb); } }
+    link(base, P(w, 1));
     return P(w, 0);
 }
+static Key *key_of_port(Port p);
 static Port wstuck(int op, Port a, Port b) {
     Cell *n = cell(V_NWOP, 3); n->x = (uint32_t)op;
+    /* named by the operation over its operands' names, when they have them (so two of one term
+     * are found one by the conversion's key test) */
+    Key *ka = key_of_port(a), *kb = key_of_port(b);
+    if (ka && kb) { Key *c[2] = { ka, kb }; n->key = key(K_WOP, (uint64_t)op, NULL, 2, c); }
+    if (ka) key_release(ka);
+    if (kb) key_release(kb);
     link(a, P(n, 1)); link(b, P(n, 2));
     return P(n, 0);
 }
@@ -2176,6 +2188,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_WOP2] = "WOP2",
     [O_WELIM] = "WELIM",
     [O_PEND] = "PEND",
+    [O_KEQ] = "KEQ", [O_KEQ2] = "KEQ2",
     [O_CLOS] = "CLOS",
     [O_CLOS2] = "CLOS2",
     [O_BRANCH] = "BRANCH",
@@ -2288,7 +2301,7 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     int vk = v->kind;
-    if (vk == V_UNK && o->kind != O_VIEW && o->kind != O_CLOS && o->kind != O_CLOS2 && o->kind != O_PEND) {
+    if (vk == V_UNK && o->kind != O_VIEW && o->kind != O_CLOS && o->kind != O_CLOS2 && o->kind != O_KEQ && o->kind != O_KEQ2 && o->kind != O_PEND) {
         /* an eliminator of an unknown type gives an unknown type */
         for (int k = 1; k < o->n - 1; k++) era(o->port[k]);
         link(P(v, 0), out_of(o));
@@ -2938,6 +2951,16 @@ static void interact(Cell *o, Cell *v) {
             /* its motive, which types it, is built here from the environment */
             int nm = tb->motive ? 1 : 0;
             Cell *n = cell(V_NCASE, ne + 3 + nm); n->x = (uint32_t)nm; n->p = tb;
+            /* named by the case term it is the value of: the table over the scrutinee and the
+             * environment (as a branch's hypothesis is) */
+            if (o->key) n->key = key_retain(o->key);
+            else {
+                Key **ck = malloc(((size_t)ne + 2) * sizeof(Key *)); ck[0] = key_of_port(P(v, 0));
+                for (int e = 0; e < ne; e++) ck[1 + e] = key_of_port(o->port[e0 + e]);
+                n->key = key(K_CASE, 0, tb, ne + 1, ck);
+                for (int e = 0; e < ne + 1; e++) if (ck[e]) key_release(ck[e]);
+                free(ck);
+            }
             link(P(v, 0), P(n, 1)); link(unk(), P(n, n->n - 1));
             if (nm) {
                 Port me[ne + 1];
@@ -3385,6 +3408,14 @@ static void interact(Cell *o, Cell *v) {
         else if (wn_zero(&k)) {
             /* a neutral word: the elimination is stuck */
             Cell *e = cell(V_NWELIM, o->n);
+            {
+                Key *kc[4]; int nk = o->n - 1; bool all = true;
+                kc[0] = key_of_port(b);
+                for (int j = 1; j < nk; j++) kc[j] = key_of_port(o->port[j]);
+                for (int j = 0; j < nk; j++) if (!kc[j]) all = false;
+                if (all) e->key = key(K_WELIM, (uint64_t)nk, NULL, nk, kc);
+                for (int j = 0; j < nk; j++) if (kc[j]) key_release(kc[j]);
+            }
             link(b, P(e, 1)); mv(o, 1, P(e, 2)); mv(o, 2, P(e, 3)); if (hasP) mv(o, 3, P(e, 4)); link(P(e, 0), out);
         } else {
             /* s (k-1 ⊕ b) h, h the elimination of k-1 ⊕ b, computed when used */
@@ -3411,7 +3442,7 @@ static void interact(Cell *o, Cell *v) {
         Port r = 0;
         if (op >= O_WMUL) {
             /* multiplication, division, remainder, bitwise and shifts: on numerals; stuck otherwise */
-            if (ba || bb) r = wstuck(op, wplus(wn_copy(&ka), ba), wplus(wn_copy(&kb), bb));
+            if (ba || bb) { r = wstuck(op, wplus(wn_copy(&ka), ba), wplus(wn_copy(&kb), bb)); if (!PC(r)->key && o->key) PC(r)->key = key_retain(o->key); }
             else if (op == O_WMUL) r = word_wn(wn_mul(&ka, &kb));
             else if (op == O_WDIV || op == O_WMOD) { WN q, m; wn_divmod(&ka, &kb, &q, &m); r = word_wn(op == O_WDIV ? q : m); wn_drop(op == O_WDIV ? &m : &q); }
             else if (op == O_WSHR) r = word_wn(kb.b ? wn_small(0) : wn_shr(&ka, kb.s));
@@ -3578,6 +3609,35 @@ static void interact(Cell *o, Cell *v) {
         Cell *n = cell(V_NPAPP, 3); n->p = dnf_retain(o->p);
         mv(o, 1, P(n, 1)); link(unk(), P(n, 2)); link(P(n, 0), o->port[2]);
         cell_free(o); cell_free(v);
+        return;
+    }
+    case O_KEQ: {
+        /* (%keq u v): u's value is here; wait for v's */
+        Cell *c = cell(O_KEQ2, 3);
+        mv(o, 1, P(c, 0)); link(P(v, 0), P(c, 1)); mv(o, 2, P(c, 2));
+        cell_free(o);
+        return;
+    }
+    case O_KEQ2: {
+        /* both values: one term when their keys are one (keys are interned, so one pointer is one
+         * term compared structurally when it was made); a value with no key is not compared */
+        need_bool();
+        Cell *f = PC(o->port[1]);
+        bool same = PI(o->port[1]) == 0 && f->key && v->key && f->key == v->key;
+        if (getenv("CUBICAL_KEQSTAT")) {
+            static long st[4]; static long nok[512];
+            st[same ? 0 : (f->key && v->key) ? 1 : 2]++;
+            if (!f->key && f->kind < 512) nok[f->kind]++;
+            if (!v->key && v->kind < 512) nok[v->kind]++;
+            if ((st[0] + st[1] + st[2]) % 200000 == 0) {
+                fprintf(stderr, "keq: same %ld differ %ld unkeyed %ld;", st[0], st[1], st[2]);
+                for (int k = 0; k < 512; k++) if (nok[k] > 1000) fprintf(stderr, " %s:%ld", kind_name(k), nok[k]);
+                fprintf(stderr, "\n");
+            }
+        }
+        link(con_build(same ? B_TRUE : B_FALSE, NULL, NULL), o->port[2]);
+        era(o->port[1]); era(P(v, 0));
+        cell_free(o);
         return;
     }
     case O_CLOS: {

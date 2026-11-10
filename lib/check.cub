@@ -346,11 +346,13 @@ is-w l = case lvl-of l of lvw → true; _ → false
 -- conv T u v: u = v at type T. At Π, Σ and path types by eliminating both (η), the variable at
 -- its type; at a universe as types; at Glue by unglue and on the face the fibre; at a data type
 -- by constructors; otherwise without the type. uconv: without a type, types by their former,
--- neutrals by their spine, each argument at its type.
+-- neutrals by their spine, each argument at its type. Two values that are one term (one key) are
+-- equal without looking further.
 -- two λs of one record are equal when their environments are: neither is applied
 env-pairs ps = lall (λ p → uconv (fst p) (snd p)) ps
 conv-ty X Y = uconv X Y
 conv T u v =
+  if %keq u v then true else
   case %view T of
     wpi A B → 
       case %clos u v of
@@ -515,6 +517,7 @@ uconv-ww u wu v wv =
     wpair a b → if uconv (fst u) a then uconv (snd u) b else false
     _ → uconv-head u wu v wv
 uconv u v =
+  if %keq u v then true else
   case %view u of
     wsys bs → lall (λ b → let d = fst b in uconv (snd b) (%restrict d v)) bs
     wlam f → 

@@ -354,3 +354,82 @@ be-sound (be-shr a k) r =
 be-sound (be-add a b) r =
   (λ i → %wadd (be-sound a r i) (be-sound b r i)) ∙ w-add-bits (zz-bools (be-l a r)) (zz-bools (be-l b r))
   ∙ cong nbw (sym (zz-vars-ok (zl-add (zz-bools (be-l a r)) false (zz-bools (be-l b r)))))
+
+-- ---------------------------------------------------------------- bounds
+-- the order on Nat, as a test; the word order is it (the comparison computes on successors)
+nlt : Nat → Nat → Bool
+nlt zero zero = false
+nlt zero (suc n) = true
+nlt (suc m) zero = false
+nlt (suc m) (suc n) = nlt m n
+
+b2n : Bool → Nat
+b2n true = suc zero
+b2n false = zero
+
+wb-absurd : (A : Type) → false ≡ true → A
+wb-absurd A h = transport (λ i → case h i return (λ z → Type) of true → A; false → Unit) unit
+
+wn-lt0 : (y : Word) → %wlt #0 y ≡ nlt zero (toNat y)
+wn-lt0 y = %welimP (λ v → %wlt #0 v ≡ nlt zero (toNat v)) y refl (λ n h → refl)
+
+wn-lt : (x : Word) → (y : Word) → %wlt x y ≡ nlt (toNat x) (toNat y)
+wn-lt x = %welimP (λ v → (y : Word) → %wlt v y ≡ nlt (toNat v) (toNat y)) x wn-lt0
+  (λ a h y → %welimP (λ v → %wlt (%wsucc a) v ≡ nlt (toNat (%wsucc a)) (toNat v)) y refl (λ b g → h b))
+
+wn-add : (x : Word) → (y : Word) → toNat (%wadd x y) ≡ plus (toNat x) (toNat y)
+wn-add x y = %welimP (λ v → toNat (%wadd x v) ≡ plus (toNat x) (toNat v)) y (sym (plus-zero (toNat x)))
+  (λ n h → cong suc h ∙ sym (plus-suc (toNat x) (toNat n)))
+
+wn-b2w : (b : Bool) → toNat (b2w b) ≡ b2n b
+wn-b2w true = refl
+wn-b2w false = refl
+
+-- m < n: 2m + b < 2n
+nlt-dbl : (m : Nat) → (n : Nat) → nlt m n ≡ true → (b : Bool) → nlt (plus (plus m m) (b2n b)) (plus n n) ≡ true
+nlt-dbl zero zero h b = wb-absurd (nlt (plus (plus zero zero) (b2n b)) (plus zero zero) ≡ true) h
+nlt-dbl zero (suc n) h false = refl
+nlt-dbl zero (suc n) h true = cong (λ z → nlt zero z) (plus-suc n n)
+nlt-dbl (suc m) zero h b = wb-absurd (nlt (plus (plus (suc m) (suc m)) (b2n b)) (plus zero zero) ≡ true) h
+nlt-dbl (suc m) (suc n) h b =
+  (λ i → nlt (plus (plus-suc m m i) (b2n b)) (plus-suc n n i)) ∙ nlt-dbl m n h b
+
+zl-len : List Bool → Nat
+zl-len nil = zero
+zl-len (cons x r) = suc (zl-len r)
+
+-- a word of k bits is below 2^k
+nbw-fits : (l : List Bool) → WFits (nbw l) (zl-len l)
+nbw-fits nil = refl
+nbw-fits (cons b r) =
+  wn-lt (%wadd (%wmul (nbw r) #2) (b2w b)) (%wmul (wpow2 (zl-len r)) #2)
+  ∙ (λ i → nlt ((wn-add (%wmul (nbw r) #2) (b2w b) ∙ (λ j → plus (toNat (w-dbl (nbw r) j)) (wn-b2w b j)) ∙ cong (λ z → plus z (b2n b)) (wn-add (nbw r) (nbw r))) i)
+               ((cong toNat (w-dbl (wpow2 (zl-len r))) ∙ wn-add (wpow2 (zl-len r)) (wpow2 (zl-len r))) i))
+  ∙ nlt-dbl (toNat (nbw r)) (toNat (wpow2 (zl-len r))) (sym (wn-lt (nbw r) (wpow2 (zl-len r))) ∙ nbw-fits r) b
+
+-- the bitwise operations keep words of 64 bits
+w-fits-op : (e : BE) → (x : Word) → (y : Word) → WFits x 64 → WFits y 64 →
+            be-w e (cons (wbits 64 x) (cons (wbits 64 y) nil)) ≡ nbw (zz-bools (be-l e (cons (wbits 64 x) (cons (wbits 64 y) nil)))) →
+            WFits (nbw (zz-bools (be-l e (cons (wbits 64 x) (cons (wbits 64 y) nil))))) 64 → WFits (be-w e (cons (wbits 64 x) (cons (wbits 64 y) nil))) 64
+w-fits-op e x y hx hy p f = transport (λ i → WFits (p (~ i)) 64) f
+
+w-fits-and : (x : Word) → (y : Word) → WFits x 64 → WFits y 64 → WFits (%wand x y) 64
+w-fits-and x y hx hy =
+  transport (λ i → WFits (%wand (w-of-bits 64 x hx i) (w-of-bits 64 y hy i)) 64)
+    (w-fits-op (be-and (be-var 0) (be-var (suc zero))) x y hx hy
+       (be-sound (be-and (be-var 0) (be-var (suc zero))) (cons (wbits 64 x) (cons (wbits 64 y) nil)))
+       (nbw-fits (zz-bools (be-l (be-and (be-var 0) (be-var (suc zero))) (cons (wbits 64 x) (cons (wbits 64 y) nil))))))
+
+w-fits-or : (x : Word) → (y : Word) → WFits x 64 → WFits y 64 → WFits (%wor x y) 64
+w-fits-or x y hx hy =
+  transport (λ i → WFits (%wor (w-of-bits 64 x hx i) (w-of-bits 64 y hy i)) 64)
+    (w-fits-op (be-or (be-var 0) (be-var (suc zero))) x y hx hy
+       (be-sound (be-or (be-var 0) (be-var (suc zero))) (cons (wbits 64 x) (cons (wbits 64 y) nil)))
+       (nbw-fits (zz-bools (be-l (be-or (be-var 0) (be-var (suc zero))) (cons (wbits 64 x) (cons (wbits 64 y) nil))))))
+
+w-fits-xor : (x : Word) → (y : Word) → WFits x 64 → WFits y 64 → WFits (%wxor x y) 64
+w-fits-xor x y hx hy =
+  transport (λ i → WFits (%wxor (w-of-bits 64 x hx i) (w-of-bits 64 y hy i)) 64)
+    (w-fits-op (be-xor (be-var 0) (be-var (suc zero))) x y hx hy
+       (be-sound (be-xor (be-var 0) (be-var (suc zero))) (cons (wbits 64 x) (cons (wbits 64 y) nil)))
+       (nbw-fits (zz-bools (be-l (be-xor (be-var 0) (be-var (suc zero))) (cons (wbits 64 x) (cons (wbits 64 y) nil))))))
