@@ -110,7 +110,7 @@ Both acceptance lines are met. Everything below was measured on this machine wit
   `RStatic`, `RDropImpl`, `RInstance`, `RCrate`. Conventions are in the file's header: ids are
   positions in the crate's lists; an integer is `RInt`, sign and magnitude (the shape of track
   C's `CInt`), in constants, switch arms and `discr`; names are byte lists.
-- `tools/mir2cub.py` (2,182 lines). `python3 tools/mir2cub.py SRC.rs -o OUT.cub [--entry NAME]`
+- `tools/mir2cub.py` (2,175 lines). `python3 tools/mir2cub.py SRC.rs -o OUT.cub [--entry NAME]`
   (default entry `on_message`; definitions are prefixed with OUT's stem). About 1 s. It prints
   the counts and kinds it met on stderr. Where each part comes from:
   - bodies: `rustc --edition=2021 --crate-type=lib -O -Cpanic=abort --emit=mir`; only bodies
