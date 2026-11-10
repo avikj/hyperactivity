@@ -179,6 +179,23 @@ outcomes and the loops. Needed and **not named yet** (each is written once in th
   `cx-fn-ptr`, `cx-fn-of` = Needs from track M 1–4; `cx-local`, `cx-sub`, `cx-super` over them);
   literal values (`cx-lit`, `cx-cint`); the environment (`CxBind`, `CxG`, `CxEnv`, `CxCall`).
 
+- `lib/cxx/read-expr.cub` (about 1,180 lines, every definition checks after machine.cub):
+  `cx-expr : CExpr → CxH → CxU → CxEnv → CxMode → CxK → CxEv CxR`, one structural recursion with
+  a clause for each of the 39 `CExpr` constructors, none of them a refusal by default (what
+  each clause refuses is listed under Limits). Rules below it: scalar objects (`cx-ld`,
+  `cx-st`), bit-fields (`cx-bf-load`, `cx-bf-store`), pointers to member functions in memory
+  (`cx-mfp-load/store`), `cx-lv-load`/`cx-lv-store`, zero values, conversions (`cx-cv`),
+  bases and vtables (`cx-path-off`, `cx-vptr-off`, `cx-slot`, `cx-virtual`), destruction
+  (`cx-destroy`), the built-in operators (`cx-binop`, `cx-incdec`, `cx-cassign`, `cx-unop`,
+  `cx-ptr-mem`, `cx-subscript`), references to declarations (`cx-declref`, `cx-member`,
+  `cx-this`), result objects and temporaries (`cx-with-dest`, `cx-materialize`, `cx-cut`),
+  initializer slots (`cx-init-slot`, `cx-rec-slots`, `cx-init-list`, `cx-lambda`), calls
+  (`cx-arg`, `cx-call-fn`, `cx-apply`, `cx-call`, `cx-mcall`, `cx-opcall`, `cx-construct`,
+  operator sequencing `cx-op-ltr`), the functions without a body (`cx-builtin`: memcpy,
+  operator new/new[]/delete/delete[] and placement new, `__builtin_{add,mul}_overflow`),
+  casts by kind (`cx-cast`: all 18 kinds), `cx-new`, `cx-delete`, `cx-trait`, `cx-string`.
+  Not yet run on any unit (statements and functions are next).
+
 ## Found
 
 1. `lib/cxx/ast.cub` (track C) and `lib/mem/scalar.cub` (track M) both bind `bo-add bo-sub
@@ -210,15 +227,40 @@ outcomes and the loops. Needed and **not named yet** (each is written once in th
 
 ## Limits
 
-(Constructors of the AST not yet read are every one: the expression, statement and unit
-readers are not written yet.)
+Refusals `cx-expr` can give for a constructor it reads (forms no sample unit uses unless
+said), each named in the outcome:
+- `cxw-form #1`: `==`/`!=` of pointers to member functions.
+- `cxw-form #2`: a constructor call whose type is an array of classes.
+- `cxw-form #3`: `delete[]` of an array whose element type has a destructor to run (needs the
+  element count `new[]` kept; no array cookie is written).
+- `cxw-form #4`: `new` with a user-defined allocation function (one with a body).
+- `cxw-form #5`: a string literal of a character type wider than one byte.
+- `cxw-builtin id`: a function without a body other than the eight named above.
+- `mstop st-unsupported`: a bit-field on a big-endian Target or spanning more than 8 bytes; a
+  128-bit array index; a negative array-new bound (std::bad_array_new_length needs
+  exceptions); a virtual base on a cast path.
+- Value-initialization of a class without a constructor zeroes its bytes: a pointer to data
+  member inside it then reads as offset 0, not null (-1, Itanium ABI): [dcl.init]/6 wants
+  each member zero-initialized.
+- Unsequenced conflicting side effects on a scalar ([intro.execution]/10) are not detected as
+  undefined: operands are evaluated in the order `cxu-ltr` gives.
+- Reading an uninitialized bit-field is not undefined here (lib/mem allows uninitialized reads
+  at 8-bit kinds, which the bit-field's bytes are read at).
+- A virtual call does not adjust `this` (the importer admits only single inheritance with the
+  polymorphic base primary at offset 0, so no thunk exists in the units).
+Statements, functions, static initialization: not written yet, so no unit is read yet.
 
 ## Next step
 
-Write `lib/cxx/read-expr.cub`: `cx-expr : CExpr → CxCall → CxU → CxEnv → CxMode → CxK → CxEv CxR`,
-one structural recursion over `CExpr` (nodes and `ce-nil`/`ce-cons` lists), each case a call
-of a non-recursive helper that takes the sub-expressions' meanings; modes `cxm-get` (value or
-glvalue by category), `cxm-init p` (initialize the object at p: class and array prvalues),
-`cxm-args` (an argument list against parameter types). Then `lib/cxx/read-stmt.cub`
-(`cx-stmt`), `lib/cxx/read.cub` (`cx-fun` by call fuel, static initialization, `cxx-entry`),
-then `experiments/cxx/sem/sum.cpp`.
+Write `lib/cxx/read-stmt.cub`: `cx-stmt : CStmt → CxH → CxU → CxEnv → (CxEnv → CxEv Unit) → CxEv Unit`
+(a declaration extends the environment for the rest of its block: the continuation is the rest
+of the block; locals by `cx-local` with destructors by `cx-finally`; `cxr-ext` answers taken
+off at the declaration; loops by `ev-for` with `cxu-loop-fuel`; switch by a first pass that
+finds the case and a second that runs from it). Then `lib/cxx/read.cub`: `cx-fun` by
+`%welimP` on `cxu-call-fuel` (constructors: bases, members, vptr; destructors: body, members,
+bases; defaulted assignment; deleting destructor = id + `cx-deleting`), the default member
+initializer hook, static initialization (`cx-init`: allocate statics and vtables, constant
+then dynamic initialization), `cxx-entry`. Then run `on_message` on one message
+(`experiments/cxx/sem/book-run.cub`). The parts of read-expr.cub were developed against a
+`--serve` session (one declaration per request); a full from-scratch load of machine.cub +
+read-expr.cub must be run and its `N passed, 0 failed` recorded here.
