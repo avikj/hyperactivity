@@ -9,7 +9,7 @@
 -- (to a slice or a dyn Trait: address and metadata) or zero-sized-unit is a REGISTER: its slot
 -- holds the value, or rv-dead between StorageDead and the next assignment. Every other local
 -- (an ADT, a tuple, an array) is an OBJECT: its slot holds the pointer to an allocation of
--- lib/mem's memory, made at StorageLive (or at entry when the body has no storage statement
+-- the memory, made at StorageLive (or at entry when the body has no storage statement
 -- for it) and released at StorageDead and at return. A register has no address: a place
 -- expression rooted at a register local is the register itself or goes through its value
 -- (a deref). rustc's MIR borrows only objects in the two samples; a borrow of a register local
@@ -34,6 +34,7 @@ data RUnsup = rz-binop (o : RBinOp) | rz-unop (o : RUnOp) | rz-cast (k : RCastKi
             | rz-borrow-of-register | rz-type (t : RTy) | rz-const-index-from-end-of-slice
             | rz-drop-of-enum (t : RTy) | rz-wide-128 | rz-transmute (from : RTy) (to : RTy)
             | rz-const (c : RConst) | rz-switch-on (t : RTy) | rz-unwind (u : RUnwind)
+            | rz-unaligned (k : SK)
 data RIll = ri-no-layout (t : RTy) | ri-no-local (i : Word) | ri-no-block (i : Word) | ri-no-body (i : Word)
           | ri-no-instance (body : Word) (args : RTy) | ri-no-field (t : RTy) (i : Word) | ri-no-variant (t : RTy) (i : Word)
           | ri-no-vtable (t : RTy) (trait : Word) | ri-no-static (i : Word) | ri-open-type (t : RTy)
@@ -70,12 +71,6 @@ rm-throw : {A : Type} → RExc → REv A
 rm-throw {A} e = ev-throw {lzero} {NoS} {RExc} {A} e
 rm-stop : {A : Type} → Stop → REv A
 rm-stop {A} w = ev-stop {lzero} {NoS} {RExc} {A} w
-rm-rd : {A : Type} → (AMem → MRes A) → REv A
-rm-rd {A} f = ev-rd {lzero} {NoS} {RExc} {A} f
-rm-wr : (AMem → MRes AMem) → REv Unit
-rm-wr f = ev-wr {lzero} {NoS} {RExc} f
-rm-mem : {A : Type} → (AMem → MRes (A × AMem)) → REv A
-rm-mem {A} f = ev-mem {lzero} {NoS} {RExc} {A} f
 -- a static result continued into a computation
 rm-st : {A B : Type} → RSt A → (A → REv B) → REv B
 rm-st r f = case r of
@@ -84,7 +79,8 @@ rm-st r f = case r of
 
 -- ---------------------------------------------------------------- values, slots, frames
 data RV = rv-s (v : SV) | rv-fat (p : SV) (m : SV) | rv-unit | rv-dead
-data RSlot = sl-reg (v : RV) | sl-mem (p : MPtr)
+-- (sl-none: an object local that has no storage now)
+data RSlot = sl-reg (v : RV) | sl-mem (p : MPtr) | sl-none
 RFrame : Type
 RFrame = List RSlot
 data RNext = rn-goto (fr : RFrame) (bb : Word) | rn-ret (v : RSlot)

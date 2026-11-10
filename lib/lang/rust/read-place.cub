@@ -8,18 +8,70 @@
 -- function is returned, so a block read once is a closure whose applications do only loads,
 -- stores, scalar operations and frame accesses.
 
--- ---------------------------------------------------------------- memory operations
-rm-load : Target → SK → Word → MPtr → REv SV
-rm-load t k al p = rm-rd (mem-load-al t k al p)
-rm-store : Target → SK → Word → MPtr → SV → REv Unit
-rm-store t k al p v = rm-wr (mem-store-al t k al p v)
--- a pointer advanced by a number of bytes
-rm-off : MPtr → Word → REv MPtr
-rm-off p n = rm-rd (mem-ptr-add p #1 (uq-of-word n))
+-- ---------------------------------------------------------------- the memory commands the reader uses
+-- The reader never holds a memory: these are all the ways it reaches one, each a named
+-- operation of lib/mem/monad.cub, and a pointer is only ever a value they return or take.
+-- (tracks/README.md, "Memory is a signature"; when track M's signature of memory commands
+-- lands, this section is restated over its commands and nothing else in the reader changes.
+-- What is missing from the named operations today is under "Needs from track M" in
+-- tracks/R-rust.md.)
 rm-alloc : Word → Word → REv MPtr
-rm-alloc size al = rm-mem (mem-alloc ak-auto false size al)
+rm-alloc size al = ev-alloc {lzero} {NoS} {RExc} ak-auto false size al
+rm-alloc-static : Word → Word → REv MPtr
+rm-alloc-static size al = ev-alloc {lzero} {NoS} {RExc} ak-static false size al
 rm-release : MPtr → REv Unit
-rm-release p = rm-wr (mem-release ak-auto p)
+rm-release p = ev-release {lzero} {NoS} {RExc} ak-auto p
+-- a pointer advanced by a number of elements of a size, and by a number of bytes
+rm-elem-ptr : MPtr → Word → UInt64 → REv MPtr
+rm-elem-ptr p es ix = ev-ptr-add {lzero} {NoS} {RExc} p es ix
+rm-off : MPtr → Word → REv MPtr
+rm-off p n = rm-elem-ptr p #1 (uq-of-word n)
+-- the null pointer, a function as a pointer (an instance's index), and the function a pointer is
+rm-null : SV
+rm-null = sv-p mp-null
+rm-fn-ptr : Word → SV
+rm-fn-ptr j = sv-p (mp-fn j)
+rm-fn-of : SV → REv Word
+rm-fn-of v = rm-bind (rm-res (sv-as-p v)) (λ p → case p of
+  mp-fn j → rm-ret j
+  _ → rm-throw (rx-ub rub-bad-fn-pointer))
+-- An integer of 2, 4 or 8 bytes at an alignment below its kind's (a field of a packed struct,
+-- an array of bytes transmuted): the monad's load and store are at the kind's own alignment,
+-- so it is read and written as its bytes in the Target's order.
+rm-bytes-rd : Word → Target → MPtr → REv UInt64
+rm-bytes-rd n t p =
+  %welimP (λ x → REv UInt64) n (rm-ret uq0)
+    (λ j acc → rm-bind acc (λ hi →
+       rm-bind (rm-off p (case tg-endian t of
+                            en-little → wsub (wsub n #1) j
+                            en-big → j)) (λ q →
+       rm-bind (ev-load {lzero} {NoS} {RExc} t (sk-int false iw8) q) (λ b →
+       rm-bind (rm-res (sv-as-i b)) (λ x → rm-ret (u64or (u64shl hi (u64 #8)) x))))))
+rm-bytes-wr : Word → Target → MPtr → UInt64 → REv Unit
+rm-bytes-wr n t p v =
+  %welimP (λ x → REv Unit) n (rm-ret unit)
+    (λ j acc → rm-then acc
+       (rm-bind (rm-off p (case tg-endian t of
+                             en-little → j
+                             en-big → wsub (wsub n #1) j)) (λ q →
+        ev-store {lzero} {NoS} {RExc} t (sk-int false iw8) q
+          (sv-i (u64and (u64shr v (u64 (wmul j #8))) (u64 #255))))))
+rm-load : Target → SK → Word → MPtr → REv SV
+rm-load t k al p = case wlt al (sk-align t k) of
+  false → ev-load {lzero} {NoS} {RExc} t k p
+  true → (case k of
+    sk-int sg w → (case w of
+      iw128 → rm-throw (rx-unsupported (rz-unaligned k))
+      _ → rm-bind (rm-bytes-rd (iw-bytes w) t p) (λ x → rm-ret (sv-i (uq-cn sg w x))))
+    _ → rm-throw (rx-unsupported (rz-unaligned k)))
+rm-store : Target → SK → Word → MPtr → SV → REv Unit
+rm-store t k al p v = case wlt al (sk-align t k) of
+  false → ev-store {lzero} {NoS} {RExc} t k p v
+  true → (case k of
+    sk-int sg w → (case w of
+      iw128 → rm-throw (rx-unsupported (rz-unaligned k))
+      _ → rm-bind (rm-res (sv-as-i v)) (λ x → rm-bytes-wr (iw-bytes w) t p (uq-zx w x)))
+    _ → rm-throw (rx-unsupported (rz-unaligned k)))
 
 -- a value of a register class read from and written to memory at an alignment
 rm-rd-at : Target → RClass → Word → MPtr → REv RV
@@ -215,7 +267,8 @@ rm-reg-int fr l = rm-bind (fr-get fr l) (λ s → case s of
     rv-s x → rm-res (sv-as-i x)
     rv-dead → rm-throw (rx-ub rub-dead-local)
     _ → rm-throw (rx-ill-formed ri-operand-class))
-  sl-mem p → rm-throw (rx-ill-formed ri-operand-class))
+  sl-mem p → rm-throw (rx-ill-formed ri-operand-class)
+  sl-none → rm-throw (rx-ill-formed ri-operand-class))
 -- the pointer a register holds (the address part of a wide one)
 rm-slot-ptr : RSlot → REv MPtr
 rm-slot-ptr s = case s of
@@ -225,6 +278,7 @@ rm-slot-ptr s = case s of
     rv-dead → rm-throw (rx-ub rub-dead-local)
     rv-unit → rm-throw (rx-ill-formed ri-operand-class))
   sl-mem p → rm-throw (rx-ill-formed ri-operand-class)
+  sl-none → rm-throw (rx-ill-formed ri-operand-class)
 -- the projections applied to a pointer: rm-proj-go projs cx type variant alignment frame pointer
 rm-proj-go : List RProj → RCx → RTy → Word → Word → RFrame → MPtr → REv MPtr
 rm-proj-go nil cx ty var al = λ fr p → rm-ret p
@@ -246,7 +300,7 @@ rm-proj-go (cons pr ps) cx ty var al = case pr of
     sr-on (cx-align cx et) (λ e fr p → rm-throw e) (λ ea →
       let rest = rm-proj-go ps cx et #0 (rm-wmin al ea)
       in λ fr p → rm-bind (rm-reg-int fr l) (λ ix →
-                  rm-bind (rm-rd (mem-ptr-add p es ix)) (λ q → rest fr q)))))
+                  rm-bind (rm-elem-ptr p es ix) (λ q → rest fr q)))))
   rproj-const-index o n fe →
     sr-on (rm-elem ty) (λ e fr p → rm-throw e) (λ et →
     sr-on (cx-size cx et) (λ e fr p → rm-throw e) (λ es →
@@ -270,6 +324,7 @@ rm-place-addr cx (rplace l ps) =
       let go = rm-proj-go ps cx lt #0 la
       in λ fr → rm-bind (fr-get fr l) (λ s → case s of
            sl-mem p → go fr p
+           sl-none → rm-throw (rx-ub rub-dead-local)
            sl-reg v → rm-throw (rx-ill-formed ri-operand-class)))
     cl-unit → λ fr → rm-throw (rx-unsupported rz-borrow-of-register)
     _ → (case ps of
@@ -305,7 +360,8 @@ rm-place-rv cx pl =
         rv-fat a m → rm-ret (rv-fat a m)
         rv-unit → rm-ret rv-unit
         rv-dead → rm-throw (rx-ub rub-dead-local))
-      sl-mem p → rm-throw (rx-ill-formed ri-operand-class))
+      sl-mem p → rm-throw (rx-ill-formed ri-operand-class)
+      sl-none → rm-throw (rx-ill-formed ri-operand-class))
     false →
       sr-on (rm-place-ty cx pl) (λ e fr → rm-throw e) (λ ty →
       sr-on (cx-class cx ty) (λ e fr → rm-throw e) (λ c →
@@ -346,8 +402,18 @@ rm-const-ty cx c = case c of
   rc-fn b a → sr-ok (rty-fn-ptr rtys-nil rty-never)
   rcs-nil → sr-ill ri-operand-class
   rcs-cons x xs → sr-ill ri-operand-class
--- a constant of a register class: its value (decided before run time). A static's address is
--- the allocation rust-init gave it: allocation i for static i.
+-- The addresses of the statics and of the vtables are run-time values (rust-init's
+-- allocations): a frame carries them after its locals, statics first.
+cx-static-slot : RCx → Word → Word
+cx-static-slot cx i = wadd (rm-len (cx-locals cx)) i
+cx-vtable-slot : RCx → Word → Word
+cx-vtable-slot cx j = wadd (rm-len (cx-locals cx)) (wadd (rm-len (cr-statics (cx-crate cx))) j)
+rm-image-rv : RFrame → Word → REv RV
+rm-image-rv fr i = rm-bind (fr-get fr i) (λ s → case s of
+  sl-reg v → rm-ret v
+  sl-mem p → rm-throw (rx-ill-formed ri-operand-class)
+  sl-none → rm-throw (rx-ill-formed ri-operand-class))
+-- a constant of a register class other than a static's address: its value, decided before run time
 rm-const-rv : RCx → RConst → RSt RV
 rm-const-rv cx c = case c of
   rc-int v k → sr-map rv-s (rm-int-sv (rm-ik (cx-t cx) k) v)
@@ -357,8 +423,8 @@ rm-const-rv cx c = case c of
     _ → sr-ill (ri-open-type (rty-const-param i)))
   rc-zst ty → sr-ok rv-unit
   rc-adt ty v fs → sr-ill ri-operand-class
-  rc-static i ty → sr-ok (rv-s (sv-p (mp-obj i #0)))
-  rc-fn b a → sr-map (λ j → rv-s (sv-p (mp-fn j))) (cx-inst cx b a)
+  rc-static i ty → sr-unsup (rz-const c)
+  rc-fn b a → sr-map (λ j → rv-s (rm-fn-ptr j)) (cx-inst cx b a)
   rcs-nil → sr-ill ri-operand-class
   rcs-cons x xs → sr-ill ri-operand-class
 rm-opd-ty : RCx → ROperand → RSt RTy
@@ -372,7 +438,9 @@ rm-opd-rv : RCx → ROperand → RFrame → REv RV
 rm-opd-rv cx op = case op of
   rop-copy p → rm-place-rv cx p
   rop-move p → rm-place-rv cx p
-  rop-const c → sr-on (rm-const-rv cx c) (λ e fr → rm-throw e) (λ v → λ fr → rm-ret v)
+  rop-const c → (case c of
+    rc-static i ty → λ fr → rm-image-rv fr (cx-static-slot cx i)
+    _ → sr-on (rm-const-rv cx c) (λ e fr → rm-throw e) (λ v → λ fr → rm-ret v))
 -- a constant of an ADT type written at a pointer: rm-const-into c cx type fields. At an
 -- rc-adt node the type is the constant's own; at a list of field constants (rcs-cons) the
 -- fields are the layouts of the fields they fill.

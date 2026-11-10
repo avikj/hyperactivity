@@ -124,10 +124,8 @@ rm-vt-index (cons v vs) ty tr n = case v of
   rvtable t2 tr2 sz al dr ms → (case m-and (weq tr tr2) (rm-ty-eq ty t2) of
     true → sr-ok n
     false → rm-vt-index vs ty tr (wadd n #1))
--- the pointer to a vtable: rust-init allocates the statics first, then the vtables, in order
-cx-vtable : RCx → RTy → Word → RSt MPtr
-cx-vtable cx ty tr =
-  sr-map (λ j → mp-obj (wadd (rm-len (cr-statics (cx-crate cx))) j) #0) (rm-vt-index (cr-vtables (cx-crate cx)) ty tr #0)
+cx-vtable : RCx → RTy → Word → RSt Word
+cx-vtable cx ty tr = sr-map (cx-vtable-slot cx) (rm-vt-index (cr-vtables (cx-crate cx)) ty tr #0)
 -- the discriminant of an enum operand converted to an integer kind (a cast of a C-like enum)
 rm-cast-enum : RCx → RPlace → RTy → SK → RFrame → REv RV
 rm-cast-enum cx pl sty kd =
@@ -160,8 +158,9 @@ rm-cast-unsize cx op sty dty =
                                   rm-ret (rv-fat x (sv-i (uq-of-word c)))))
              _ → λ fr → rm-throw (rx-ill-formed (ri-open-type sp)))
            _ → λ fr → rm-throw (rx-unsupported (rz-cast rcast-unsize)))
-         rty-dyn tr → sr-on (cx-vtable cx sp tr) (λ e fr → rm-throw e) (λ vt →
-           λ fr → rm-bind (ev fr) (λ v → rm-bind (rm-as-s v) (λ x → rm-ret (rv-fat x (sv-p vt)))))
+         rty-dyn tr → sr-on (cx-vtable cx sp tr) (λ e fr → rm-throw e) (λ vi →
+           λ fr → rm-bind (ev fr) (λ v → rm-bind (rm-as-s v) (λ x →
+                  rm-bind (rm-image-rv fr vi) (λ vt → rm-bind (rm-as-s vt) (λ y → rm-ret (rv-fat x y))))))
          _ → λ fr → rm-throw (rx-unsupported (rz-cast rcast-unsize))))
 rm-transmute-tmp : RCx → ROperand → RTy → RClass → RClass → RFrame → REv RV
 rm-transmute-tmp cx op sty sc dc =
@@ -169,9 +168,15 @@ rm-transmute-tmp cx op sty sc dc =
     let ev = rm-opd-rv cx op
     in λ fr → rm-bind (ev fr) (λ v →
               rm-bind (rm-alloc sz #8) (λ tp →
-              rm-then (rm-wr-at (cx-t cx) sc #1 tp v)
-             (rm-bind (rm-rd-at (cx-t cx) dc #1 tp) (λ r →
+              rm-then (rm-wr-at (cx-t cx) sc #8 tp v)
+             (rm-bind (rm-rd-at (cx-t cx) dc #8 tp) (λ r →
               rm-then (rm-release tp) (rm-ret r))))))
+-- an object read at a register class, at the alignment of the place it is in
+rm-transmute-rd : RCx → RPlace → RClass → RFrame → REv RV
+rm-transmute-rd cx pl dc =
+  sr-on (rm-place-al cx pl) (λ e fr → rm-throw e) (λ sa →
+    let addr = rm-place-addr cx pl
+    in λ fr → rm-bind (addr fr) (λ p → rm-rd-at (cx-t cx) dc sa p))
 -- a transmute whose result is of a register class: the bytes of the operand read at the
 -- result's class. An object operand is read where it is; a register operand of the same kind
 -- is the value; otherwise its bytes are written to a temporary and read back.
@@ -179,12 +184,8 @@ rm-cast-transmute : RCx → ROperand → RTy → RClass → RTy → RClass → R
 rm-cast-transmute cx op sty sc dty dc = case sc of
   cl-mem → (case op of
     rop-const c → λ fr → rm-throw (rx-unsupported (rz-transmute sty dty))
-    rop-copy pl →
-                  (let addr = rm-place-addr cx pl
-                   in λ fr → rm-bind (addr fr) (λ p → rm-rd-at (cx-t cx) dc #1 p))
-    rop-move pl →
-                  (let addr = rm-place-addr cx pl
-                   in λ fr → rm-bind (addr fr) (λ p → rm-rd-at (cx-t cx) dc #1 p)))
+    rop-copy pl → rm-transmute-rd cx pl dc
+    rop-move pl → rm-transmute-rd cx pl dc)
   cl-scalar ks → (case dc of
     cl-scalar kd → (case rm-sk-same ks kd of
       true → rm-opd-rv cx op
@@ -227,7 +228,7 @@ rm-binop-rv cx o a b =
              λ fr → rm-bind (ea fr) (λ va → rm-bind (eb fr) (λ vb →
                     rm-bind (rm-as-s va) (λ x → rm-bind (rm-as-s vb) (λ y →
                     rm-bind (rm-res (sv-as-p x)) (λ p → rm-bind (rm-res (sv-as-i y)) (λ ix →
-                    rm-bind (rm-rd (mem-ptr-add p es ix)) (λ q → rm-ret (rv-s (sv-p q)))))))))))
+                    rm-bind (rm-elem-ptr p es ix) (λ q → rm-ret (rv-s (sv-p q)))))))))))
          rbin-cmp → λ fr → rm-throw (rx-ill-formed ri-operand-class)
          _ → (case ac of
            cl-scalar k →
@@ -341,6 +342,12 @@ rm-agg-mem cx k ops dty al = case k of
           tag = rm-set-tag (cx-t cx) l dty v
       in λ fr p → rm-then (body fr p) (tag p)))
   rag-raw-ptr pt m → λ fr p → rm-throw (rx-ill-formed ri-operand-class)
+rm-transmute-cp : RCx → RPlace → RTy → Word → RFrame → MPtr → REv Unit
+rm-transmute-cp cx pl dty al =
+  sr-on (rm-place-al cx pl) (λ e fr p → rm-throw e) (λ sa →
+    let addr = rm-place-addr cx pl
+        cp = cx-copy cx dty al sa
+    in λ fr p → rm-bind (addr fr) (λ s → cp p s))
 -- a transmute into memory: an object operand copied at the destination's type from where it
 -- is; a register operand's value written
 rm-transmute-mem : RCx → ROperand → RTy → Word → RFrame → MPtr → REv Unit
@@ -349,17 +356,11 @@ rm-transmute-mem cx op dty al =
   sr-on (cx-class cx sty) (λ e fr p → rm-throw e) (λ sc → case sc of
     cl-mem → (case op of
       rop-const c → λ fr p → rm-throw (rx-unsupported (rz-transmute sty dty))
-      rop-copy pl →
-                    (let addr = rm-place-addr cx pl
-                         cp = cx-copy cx dty al #1
-                     in λ fr p → rm-bind (addr fr) (λ s → cp p s))
-      rop-move pl →
-                    (let addr = rm-place-addr cx pl
-                         cp = cx-copy cx dty al #1
-                     in λ fr p → rm-bind (addr fr) (λ s → cp p s)))
+      rop-copy pl → rm-transmute-cp cx pl dty al
+      rop-move pl → rm-transmute-cp cx pl dty al)
     _ →
         (let ev = rm-opd-rv cx op
-         in λ fr p → rm-bind (ev fr) (λ v → rm-wr-at (cx-t cx) sc #1 p v))))
+         in λ fr p → rm-bind (ev fr) (λ v → rm-wr-at (cx-t cx) sc al p v))))
 -- the three-way comparison: the variant Less, Equal or Greater (0, 1, 2) of the result's enum
 rm-cmp3-into : RCx → ROperand → ROperand → RTy → RFrame → MPtr → REv Unit
 rm-cmp3-into cx a b dty =
