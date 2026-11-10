@@ -521,9 +521,11 @@ data CxBind = cxb-obj (p : MPtr) (al : Word) | cxb-ref (p : MPtr)
 record CxG = { cxg-vars : List (Word × CxBind) ; cxg-guards : List (Word × MPtr) ; cxg-vts : List (Word × MPtr) }
 -- a function's activation: its locals and parameters by id; this; the closure class when the
 -- function is a lambda's call operator (0 otherwise: a captured variable, and this, are then
--- members of *this, tracks/C-clang.md); the result object of a function returning a class
+-- members of *this, tracks/C-clang.md); the result object of a function returning a class;
+-- the object whose members are being initialized (a constructor's *this, or the aggregate of
+-- an initializer list: what `this` means in a default member initializer, [class.mem]/11)
 record CxEnv = { cxe-g : CxG ; cxe-locals : List (Word × CxBind) ; cxe-this : MPtr
-               ; cxe-closure : Word ; cxe-result : MPtr }
+               ; cxe-closure : Word ; cxe-result : MPtr ; cxe-agg : MPtr }
 cx-lookup : List (Word × CxBind) → Word → MRes CxBind
 cx-lookup nil i = mstop st-ill-typed
 cx-lookup (cons b bs) i = case weq (fst b) i of
@@ -541,7 +543,10 @@ cx-lookup-ptr (cons b bs) i = case weq (fst b) i of
   false → cx-lookup-ptr bs i
 cx-env-bind : CxEnv → Word → CxBind → CxEnv
 cx-env-bind e i b = CxEnv { cxe-g = cxe-g e ; cxe-locals = cons (i , b) (cxe-locals e) ; cxe-this = cxe-this e
-                          ; cxe-closure = cxe-closure e ; cxe-result = cxe-result e }
+                          ; cxe-closure = cxe-closure e ; cxe-result = cxe-result e ; cxe-agg = cxe-agg e }
+cx-env-agg : CxEnv → MPtr → CxEnv
+cx-env-agg e p = CxEnv { cxe-g = cxe-g e ; cxe-locals = cxe-locals e ; cxe-this = cxe-this e
+                       ; cxe-closure = cxe-closure e ; cxe-result = cxe-result e ; cxe-agg = p }
 -- calling a function of the unit: its id (for a destructor through a deleting slot, see
 -- read.cub), the object for a member, the parameter objects, the result object
 CxCall : Type 1
