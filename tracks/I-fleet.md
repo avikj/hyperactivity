@@ -55,7 +55,8 @@ Files you own: `lib/net.cub`, `lib/fleet.cub`, `lib/deploy.cub`, `experiments/fl
 ```
 L=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p')
 (ulimit -v 2500000; timeout 600 ./build/cubical $L lib/net.cub lib/fleet.cub experiments/fleet/ping.cub \
-  experiments/fleet/kv/kv.cub experiments/fleet/kv/run.cub experiments/fleet/kv/liveness.cub | grep -v '^ok: \|^cached: ')
+  experiments/fleet/kv/kv.cub experiments/fleet/kv/run.cub experiments/fleet/kv/liveness.cub \
+  experiments/fleet/kv/refine.cub | grep -v '^ok: \|^cached: ')
 ```
 The library is read from the cache (about 1 s); the last line is `N passed, 0 failed`.
 
@@ -186,6 +187,22 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
   replica 0 and leaves by `exit_group` with the value: the machine's exit status is **11**
   (13 s with the library cached).
 
+- `experiments/fleet/kv/refine.cub`: **Refinement** `kv-refines : (prog : List KvCmd) → Refines
+  kv-map-world (λ k → #0) (λ g → c-hist (snd (fst g 3))) kv-seq-beh (kv-init (kv-seq-cli prog))`:
+  for every program of the sequential client and every choice sequence, the history the client
+  has observed (each request with its response) is a history of the single sequential map
+  (`kv-map-world`: a put keeps the larger version, a get reads the key) from the empty map.
+  By `safe-by-events` with `RfInv` (`kv-seq-safe`): applied₀ ⊆ issued, acknowledged ⊆ applied₀,
+  every put in flight issued, every acknowledgement from replica 0 applied there, every get /
+  value from replica 0 / owed value with a request id ≤ the client's index and, when equal,
+  the client waiting on that key and the value the map's (`rf-val-now`, by `kv-converges`:
+  applied₀ and the acknowledged writes are the same set while the client waits).
+  Measured: library + net, fleet, kv, refine: 1680 passed, 0 failed (`kv-seq-safe` 100,282
+  steps, `rf-run-2` 130,239; the file's 60 definitions about 2 M steps).
+- **The five statements of the fleet acceptance are checked**: safety `kv-safe`, liveness
+  `kv-live`, refinement `kv-refines`, convergence `kv-converges`, replay `kvr-replay` /
+  `fleet-replay` (and `fleet-proc-run` in general).
+
 ## Found
 
 1. **Conversion misses a refined scrutinee (checker incompleteness).** With `f` defined by
@@ -220,18 +237,21 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
    for ever needs `#build-loop` (see Needs).
 7. `k-put` (mine, a constructor of `KvCmd`) clashed with `lib/os/contract.cub`'s `k-put` once
    `lib/os` joined `LIB`: mine are now `kc-put`, `kc-get`.
+8. **An implicit endpoint solved from a type in which it does not occur.** `subst {B = λ x → RfCore … x …} e h`
+   at an expected type `RfCore … (ph-put w zero) …` (where the phase's number has computed
+   away) fails with `expected … (ph-put w %f3556)  actual … (ph-put w zero)` at `e`: the
+   endpoint was taken from the expected type, leaving a hole, instead of from `e`. Giving both
+   endpoints (`subst … {x} {y} e h`) checks.
 4. A type alias that hides a Π (`Beh M St`, `LocalInv P beh`) cannot be the signature of a
    definition by clauses (`a dimension is matched only by a variable`): the Π is written out.
 
 ## Next step
 
-1. `experiments/fleet/kv/refine.cub` is written (generators kept nowhere: the file is the
-   source) and being checked: first the lemmas over variables (`rf-shrink` … `rf-adv-get`),
-   then the state-level ones (`rf-run0` … `rf-step-net`), then `kv-seq-safe`, `kv-refines`.
-   If a state-level lemma fails to convert, restate it over variables and apply it (Found 2, 5).
-2. `experiments/fleet/kv/deploy.cub`: the deployment's checks (`fl-beh kv-fleet` is `kv-seq-beh`
+1. `experiments/fleet/kv/deploy.cub`: the deployment's checks (`fl-beh kv-fleet` is `kv-seq-beh`
    pointwise; safety and refinement of the deployed fleet by transport).
-3. `lib/deploy.cub`: the upgrade (two corpora, `up`/`down` with `down (up m) ≡ m`, the mixed
+2. `lib/deploy.cub`: the upgrade (two corpora, `up`/`down` with `down (up m) ≡ m`, the mixed
    fleet, `mixed-safe` from `safe-local`), and a kv instance (a second message type with a
    batched put).
-4. `Refines` restated with track H's `≈` (`lib/obs.cub` has landed: read its `beh`, `≈`).
+3. `Refines` restated with track H's `≈` (`lib/obs.cub` has landed: read its `beh`, `≈`).
+4. The process fleet against the machine fleet beyond one step (`mach-step` is the one-step
+   lemma): either the run-level statement or the exact gap under Found.

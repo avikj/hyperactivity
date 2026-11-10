@@ -1,0 +1,311 @@
+-- experiments/fleet/kv/refine.cub — the kv service refines a single sequential map (loaded
+-- after kv.cub). The specification is kv-map-world: a map from keys to versioned values where
+-- a put keeps the larger version and a get reads the key. The sequential client records each
+-- request it has had answered with the response (c-hist). Statement kv-refines: in every
+-- state reachable under every choice sequence (drops, duplicates, reordering, partitions), the
+-- client's history is a history of the map: the map, asked the same requests in the same
+-- order, gives the same responses. Proved by safe-by-events with the invariant RfInv below.
+kv-map-world : World KvS (Word → Word)
+kv-map-world c m = case c return (λ x → Sum (kv-resp x × (Word → Word)) (Word → Word)) of
+  kc-put w → inl (unit , (λ j → wmax (kv-sel w j) (m j)))
+  kc-get k → inl (m k , m)
+RfG : Type
+RfG = FState KvMsg KvSt
+-- ---------------------------------------------------------------- the invariant
+-- the writes the client has issued: those acknowledged, and the one it is putting
+rf-issued : List KvWrite → KvPhase → List KvWrite
+rf-issued conf ph = case ph of ph-done → conf; ph-put w n → cons w conf; ph-get-send k → conf; ph-get-wait k → conf
+-- the client is waiting for the value of key k; the value v is the map's for the key waited on
+RfGetNow : KvPhase → Word → Type
+RfGetNow ph k = case ph of ph-done → Empty; ph-put w n → Empty; ph-get-send k2 → Empty; ph-get-wait k2 → Path Word k k2
+RfValNow : List KvWrite → KvPhase → Word → Type
+RfValNow conf ph v = case ph of ph-done → Empty; ph-put w n → Empty; ph-get-send k2 → Empty; ph-get-wait k2 → Path Word v (kv-store conf k2)
+-- a request id in the system is at most the client's index; one equal to it belongs to the
+-- request the client is waiting on
+RfRid : Word → Word → Type
+RfRid idx rid = toNat rid < suc (toNat idx)
+RfGetOk : KvPhase → Word → Word → Word → Type
+RfGetOk ph idx k rid = RfRid idx rid × (Path Word rid idx → RfGetNow ph k)
+RfValOk : List KvWrite → KvPhase → Word → Word → Word → Type
+RfValOk conf ph idx rid v = RfRid idx rid × (Path Word rid idx → RfValNow conf ph v)
+RfFrom0 : Bool → Type → Type
+RfFrom0 b X = case b return (λ x → Type) of true → X; false → Unit
+-- a message in flight: a put is of an issued write; an acknowledgement from replica 0 is of a
+-- write replica 0 has applied; a get and a value from replica 0 carry a request id as above
+RfMsg : List KvWrite → KvPhase → Word → List KvWrite → Nat → KvMsg → Type
+RfMsg conf ph idx app0 from m = case m of
+  m-put w → InL {KvWrite} w (rf-issued conf ph)
+  m-ack w → RfFrom0 (eqb from zero) (InL {KvWrite} w app0)
+  m-get k rid → RfGetOk ph idx k rid
+  m-val rid v → RfFrom0 (eqb from zero) (RfValOk conf ph idx rid v)
+RfPend : List KvWrite → KvPhase → Word → KvPend → Type
+RfPend conf ph idx pd = case pd of kp-none → Unit; kp-ack to w → InL {KvWrite} w (rf-issued conf ph); kp-val to rid v → RfValOk conf ph idx rid v
+-- over replica 0's applied writes and owed reply, the client's history, acknowledged writes,
+-- index and phase, and the packets in flight: applied ⊆ issued; acknowledged ⊆ applied; the
+-- owed reply and every packet as above; the history is the map's, ending in the store of the
+-- acknowledged writes
+RfCore : List KvWrite → KvPend → Hist KvS → List KvWrite → Word → KvPhase → List (Pkt KvMsg) → Type
+RfCore app0 pd0 hist conf idx ph fl =
+  SubL {KvWrite} app0 (rf-issued conf ph) × (SubL {KvWrite} conf app0 × (RfPend conf ph idx pd0 ×
+  (((p : Pkt KvMsg) → InL {Pkt KvMsg} p fl → RfMsg conf ph idx app0 (p-from p) (p-msg p)) × HistTo {KvS} {Word → Word} kv-map-world (λ k → #0) hist (kv-store conf))))
+RfInv : RfG → Type
+RfInv g = RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g))
+-- ---------------------------------------------------------------- arithmetic of request ids
+rf-lt-weak : (b a : Nat) → above b a → above (suc b) a
+rf-lt-weak zero a h = Empty-rec h
+rf-lt-weak (suc b) zero h = unit
+rf-lt-weak (suc b) (suc a) h = rf-lt-weak b a h
+rf-lt-irrefl : (n : Nat) → above n n → Empty
+rf-lt-irrefl zero h = h
+rf-lt-irrefl (suc n) h = rf-lt-irrefl n h
+rf-rid-suc : (idx rid : Word) → RfRid idx rid → RfRid (%wsucc idx) rid
+rf-rid-suc idx rid h = rf-lt-weak (suc (toNat idx)) (toNat rid) h
+rf-rid-ne : (idx rid : Word) → RfRid idx rid → Path Word rid (%wsucc idx) → Empty
+rf-rid-ne idx rid h e = rf-lt-irrefl (suc (toNat idx)) (subst {lzero} {lzero} {Word} {λ x → above (suc (toNat idx)) (toNat x)} e h)
+rf-and-l : (a b : Bool) → andB a b ≡ true → a ≡ true
+rf-and-l true b e = λ i → true
+rf-and-l false b e = e
+rf-and-r : (a b : Bool) → andB a b ≡ true → b ≡ true
+rf-and-r true b e = e
+rf-and-r false b e = Empty-rec (true≢false (sym e))
+rf-weq2-sound : (a b : KvWrite) → kv-weq2 a b ≡ true → Path KvWrite a b
+rf-weq2-sound a b e = λ i → (weq-sound (fst a) (fst b) (rf-and-l (weq (fst a) (fst b)) (weq (snd a) (snd b)) e) i , weq-sound (snd a) (snd b) (rf-and-r (weq (fst a) (fst b)) (weq (snd a) (snd b)) e) i)
+rf-from0-map : (b : Bool) → (X Y : Type) → (X → Y) → RfFrom0 b X → RfFrom0 b Y
+rf-from0-map true X Y f h = f h
+rf-from0-map false X Y f h = unit
+rf-from0-get : (b : Bool) → (X : Type) → b ≡ true → RfFrom0 b X → X
+rf-from0-get b X e h = subst {lzero} {lzero} {Bool} {λ x → RfFrom0 x X} e h
+-- ---------------------------------------------------------------- how the parts move
+-- fewer packets
+rf-shrink : (app0 : List KvWrite) → (pd0 : KvPend) → (hist : Hist KvS) → (conf : List KvWrite) → (idx : Word) → (ph : KvPhase) → (fl fl2 : List (Pkt KvMsg)) →
+            SubL {Pkt KvMsg} fl2 fl → RfCore app0 pd0 hist conf idx ph fl → RfCore app0 pd0 hist conf idx ph fl2
+rf-shrink app0 pd0 hist conf idx ph fl fl2 s h = (fst h , (fst (snd h) , (fst (snd (snd h)) , ((λ p m → fst (snd (snd (snd h))) p (s p m)) , snd (snd (snd (snd h)))))))
+-- one more packet that is as it should be
+rf-add-pkt : (app0 : List KvWrite) → (pd0 : KvPend) → (hist : Hist KvS) → (conf : List KvWrite) → (idx : Word) → (ph : KvPhase) → (fl : List (Pkt KvMsg)) → (pk : Pkt KvMsg) →
+             RfMsg conf ph idx app0 (p-from pk) (p-msg pk) → RfCore app0 pd0 hist conf idx ph fl → RfCore app0 pd0 hist conf idx ph (cons pk fl)
+rf-add-pkt app0 pd0 hist conf idx ph fl pk hm h =
+  (fst h , (fst (snd h) , (fst (snd (snd h)) ,
+   (inl-cons-all {Pkt KvMsg} (λ p → RfMsg conf ph idx app0 (p-from p) (p-msg p)) pk fl hm (fst (snd (snd (snd h)))) , snd (snd (snd (snd h)))))))
+-- the owed reply replaced
+rf-set-pend : (app0 : List KvWrite) → (pd0 pd1 : KvPend) → (hist : Hist KvS) → (conf : List KvWrite) → (idx : Word) → (ph : KvPhase) → (fl : List (Pkt KvMsg)) →
+              RfPend conf ph idx pd1 → RfCore app0 pd0 hist conf idx ph fl → RfCore app0 pd1 hist conf idx ph fl
+rf-set-pend app0 pd0 pd1 hist conf idx ph fl hp h = (fst h , (fst (snd h) , (hp , snd (snd (snd h)))))
+-- replica 0 applies an issued write
+rf-msg-mono : (conf : List KvWrite) → (ph : KvPhase) → (idx : Word) → (app0 app1 : List KvWrite) → SubL {KvWrite} app0 app1 → (from : Nat) → (m : KvMsg) →
+              RfMsg conf ph idx app0 from m → RfMsg conf ph idx app1 from m
+rf-msg-mono conf ph idx app0 app1 s from (m-put w) h = h
+rf-msg-mono conf ph idx app0 app1 s from (m-ack w) h = rf-from0-map (eqb from zero) (InL {KvWrite} w app0) (InL {KvWrite} w app1) (s w) h
+rf-msg-mono conf ph idx app0 app1 s from (m-get k rid) h = h
+rf-msg-mono conf ph idx app0 app1 s from (m-val rid v) h = h
+rf-apply : (app0 : List KvWrite) → (pd0 : KvPend) → (hist : Hist KvS) → (conf : List KvWrite) → (idx : Word) → (ph : KvPhase) → (fl : List (Pkt KvMsg)) → (w : KvWrite) →
+           InL {KvWrite} w (rf-issued conf ph) → RfCore app0 pd0 hist conf idx ph fl → RfCore (cons w app0) kp-none hist conf idx ph fl
+rf-apply app0 pd0 hist conf idx ph fl w hw h =
+  (inl-cons-all {KvWrite} (λ x → InL {KvWrite} x (rf-issued conf ph)) w app0 hw (fst h) ,
+   ((λ x m → inr (fst (snd h) x m)) , (unit ,
+    ((λ p m → rf-msg-mono conf ph idx app0 (cons w app0) (λ x m2 → inr m2) (p-from p) (p-msg p) (fst (snd (snd (snd h))) p m)) , snd (snd (snd (snd h)))))))
+-- the client's phase within a put, and from sending a get to waiting for its value
+rf-pend-put : (conf : List KvWrite) → (idx : Word) → (w : KvWrite) → (n n2 : Nat) → (pd : KvPend) → RfPend conf (ph-put w n) idx pd → RfPend conf (ph-put w n2) idx pd
+rf-pend-put conf idx w n n2 kp-none h = unit
+rf-pend-put conf idx w n n2 (kp-ack to w2) h = h
+rf-pend-put conf idx w n n2 (kp-val to rid v) h = (fst h , (λ e → Empty-rec (snd h e)))
+rf-msg-put : (conf : List KvWrite) → (idx : Word) → (app0 : List KvWrite) → (w : KvWrite) → (n n2 : Nat) → (from : Nat) → (m : KvMsg) →
+             RfMsg conf (ph-put w n) idx app0 from m → RfMsg conf (ph-put w n2) idx app0 from m
+rf-msg-put conf idx app0 w n n2 from (m-put w2) h = h
+rf-msg-put conf idx app0 w n n2 from (m-ack w2) h = h
+rf-msg-put conf idx app0 w n n2 from (m-get k rid) h = (fst h , (λ e → Empty-rec (snd h e)))
+rf-msg-put conf idx app0 w n n2 from (m-val rid v) h =
+  rf-from0-map (eqb from zero) (RfValOk conf (ph-put w n) idx rid v) (RfValOk conf (ph-put w n2) idx rid v) (λ x → (fst x , (λ e → Empty-rec (snd x e)))) h
+rf-put-sent : (app0 : List KvWrite) → (pd0 : KvPend) → (hist : Hist KvS) → (conf : List KvWrite) → (idx : Word) → (fl : List (Pkt KvMsg)) → (w : KvWrite) → (n n2 to : Nat) →
+              RfCore app0 pd0 hist conf idx (ph-put w n) fl → RfCore app0 pd0 hist conf idx (ph-put w n2) (cons (Pkt { p-from = 3 ; p-to = to ; p-msg = m-put w }) fl)
+rf-put-sent app0 pd0 hist conf idx fl w n n2 to h =
+  (fst h , (fst (snd h) , (rf-pend-put conf idx w n n2 pd0 (fst (snd (snd h))) ,
+   (inl-cons-all {Pkt KvMsg} (λ p → RfMsg conf (ph-put w n2) idx app0 (p-from p) (p-msg p)) (Pkt { p-from = 3 ; p-to = to ; p-msg = m-put w }) fl (inl (λ i → w))
+      (λ p m → rf-msg-put conf idx app0 w n n2 (p-from p) (p-msg p) (fst (snd (snd (snd h))) p m)) , snd (snd (snd (snd h)))))))
+rf-pend-gs : (conf : List KvWrite) → (idx : Word) → (k : Word) → (pd : KvPend) → RfPend conf (ph-get-send k) idx pd → RfPend conf (ph-get-wait k) idx pd
+rf-pend-gs conf idx k kp-none h = unit
+rf-pend-gs conf idx k (kp-ack to w2) h = h
+rf-pend-gs conf idx k (kp-val to rid v) h = (fst h , (λ e → Empty-rec (snd h e)))
+rf-msg-gs : (conf : List KvWrite) → (idx : Word) → (app0 : List KvWrite) → (k : Word) → (from : Nat) → (m : KvMsg) →
+            RfMsg conf (ph-get-send k) idx app0 from m → RfMsg conf (ph-get-wait k) idx app0 from m
+rf-msg-gs conf idx app0 k from (m-put w2) h = h
+rf-msg-gs conf idx app0 k from (m-ack w2) h = h
+rf-msg-gs conf idx app0 k from (m-get k2 rid) h = (fst h , (λ e → Empty-rec (snd h e)))
+rf-msg-gs conf idx app0 k from (m-val rid v) h =
+  rf-from0-map (eqb from zero) (RfValOk conf (ph-get-send k) idx rid v) (RfValOk conf (ph-get-wait k) idx rid v) (λ x → (fst x , (λ e → Empty-rec (snd x e)))) h
+rf-get-sent : (app0 : List KvWrite) → (pd0 : KvPend) → (hist : Hist KvS) → (conf : List KvWrite) → (idx : Word) → (fl : List (Pkt KvMsg)) → (k : Word) →
+              RfCore app0 pd0 hist conf idx (ph-get-send k) fl → RfCore app0 pd0 hist conf idx (ph-get-wait k) (cons (Pkt { p-from = 3 ; p-to = zero ; p-msg = m-get k idx }) fl)
+rf-get-sent app0 pd0 hist conf idx fl k h =
+  (fst h , (fst (snd h) , (rf-pend-gs conf idx k pd0 (fst (snd (snd h))) ,
+   (inl-cons-all {Pkt KvMsg} (λ p → RfMsg conf (ph-get-wait k) idx app0 (p-from p) (p-msg p)) (Pkt { p-from = 3 ; p-to = zero ; p-msg = m-get k idx }) fl
+      (<-suc-self (toNat idx) , (λ e i → k))
+      (λ p m → rf-msg-gs conf idx app0 k (p-from p) (p-msg p) (fst (snd (snd (snd h))) p m)) , snd (snd (snd (snd h)))))))
+-- replica 0 answers a get of the request the client is waiting on with the map's value: its
+-- applied writes and the acknowledged ones are the same set
+rf-val-now : (conf app0 : List KvWrite) → (ph : KvPhase) → (k : Word) → RfGetNow ph k → SubL {KvWrite} app0 (rf-issued conf ph) → SubL {KvWrite} conf app0 → RfValNow conf ph (kv-store app0 k)
+rf-val-now conf app0 ph-done k hg s1 s2 = Empty-rec hg
+rf-val-now conf app0 (ph-put w n) k hg s1 s2 = Empty-rec hg
+rf-val-now conf app0 (ph-get-send k2) k hg s1 s2 = Empty-rec hg
+rf-val-now conf app0 (ph-get-wait k2) k hg s1 s2 = λ i → kv-converges app0 conf s1 s2 i (hg i)
+-- the client moves on to its next request: the index grows, so no request id in the system is
+-- the new one
+rf-issued-sup : (conf : List KvWrite) → (ph2 : KvPhase) → SubL {KvWrite} conf (rf-issued conf ph2)
+rf-issued-sup conf ph-done x m = m
+rf-issued-sup conf (ph-put w n) x m = inr m
+rf-issued-sup conf (ph-get-send k) x m = m
+rf-issued-sup conf (ph-get-wait k) x m = m
+rf-valok-adv : (conf conf2 : List KvWrite) → (ph ph2 : KvPhase) → (idx rid v : Word) → RfValOk conf ph idx rid v → RfValOk conf2 ph2 (%wsucc idx) rid v
+rf-valok-adv conf conf2 ph ph2 idx rid v h = (rf-rid-suc idx rid (fst h) , (λ e → Empty-rec (rf-rid-ne idx rid (fst h) e)))
+rf-msg-adv : (conf conf2 : List KvWrite) → (ph ph2 : KvPhase) → (idx : Word) → (app0 : List KvWrite) → SubL {KvWrite} (rf-issued conf ph) (rf-issued conf2 ph2) → (from : Nat) → (m : KvMsg) →
+             RfMsg conf ph idx app0 from m → RfMsg conf2 ph2 (%wsucc idx) app0 from m
+rf-msg-adv conf conf2 ph ph2 idx app0 s from (m-put w) h = s w h
+rf-msg-adv conf conf2 ph ph2 idx app0 s from (m-ack w) h = h
+rf-msg-adv conf conf2 ph ph2 idx app0 s from (m-get k rid) h = (rf-rid-suc idx rid (fst h) , (λ e → Empty-rec (rf-rid-ne idx rid (fst h) e)))
+rf-msg-adv conf conf2 ph ph2 idx app0 s from (m-val rid v) h =
+  rf-from0-map (eqb from zero) (RfValOk conf ph idx rid v) (RfValOk conf2 ph2 (%wsucc idx) rid v) (rf-valok-adv conf conf2 ph ph2 idx rid v) h
+rf-pend-adv : (conf conf2 : List KvWrite) → (ph ph2 : KvPhase) → (idx : Word) → SubL {KvWrite} (rf-issued conf ph) (rf-issued conf2 ph2) → (pd : KvPend) →
+              RfPend conf ph idx pd → RfPend conf2 ph2 (%wsucc idx) pd
+rf-pend-adv conf conf2 ph ph2 idx s kp-none h = unit
+rf-pend-adv conf conf2 ph ph2 idx s (kp-ack to w) h = s w h
+rf-pend-adv conf conf2 ph ph2 idx s (kp-val to rid v) h = rf-valok-adv conf conf2 ph ph2 idx rid v h
+rf-adv-put : (app0 : List KvWrite) → (pd0 : KvPend) → (hist : Hist KvS) → (conf : List KvWrite) → (idx : Word) → (fl rest : List (Pkt KvMsg)) → (w : KvWrite) → (n : Nat) → (ph2 : KvPhase) →
+             RfCore app0 pd0 hist conf idx (ph-put w n) fl → InL {KvWrite} w app0 → SubL {Pkt KvMsg} rest fl →
+             RfCore app0 pd0 (cons (kc-put w , unit) hist) (cons w conf) (%wsucc idx) ph2 rest
+rf-adv-put app0 pd0 hist conf idx fl rest w n ph2 h hw s =
+  ((λ x m → rf-issued-sup (cons w conf) ph2 x (fst h x m)) ,
+   (inl-cons-all {KvWrite} (λ x → InL {KvWrite} x app0) w conf hw (fst (snd h)) ,
+    (rf-pend-adv conf (cons w conf) (ph-put w n) ph2 idx (rf-issued-sup (cons w conf) ph2) pd0 (fst (snd (snd h))) ,
+     ((λ p m → rf-msg-adv conf (cons w conf) (ph-put w n) ph2 idx app0 (rf-issued-sup (cons w conf) ph2) (p-from p) (p-msg p) (fst (snd (snd (snd h))) p (s p m))) ,
+      (kv-store conf , (snd (snd (snd (snd h))) , ((λ i → unit) , (λ i → kv-store (cons w conf)))))))))
+rf-adv-get : (app0 : List KvWrite) → (pd0 : KvPend) → (hist : Hist KvS) → (conf : List KvWrite) → (idx : Word) → (fl rest : List (Pkt KvMsg)) → (k v : Word) → (ph2 : KvPhase) →
+             RfCore app0 pd0 hist conf idx (ph-get-wait k) fl → Path Word v (kv-store conf k) → SubL {Pkt KvMsg} rest fl →
+             RfCore app0 pd0 (cons (kc-get k , v) hist) conf (%wsucc idx) ph2 rest
+rf-adv-get app0 pd0 hist conf idx fl rest k v ph2 h hv s =
+  ((λ x m → rf-issued-sup conf ph2 x (fst h x m)) ,
+   (fst (snd h) ,
+    (rf-pend-adv conf conf (ph-get-wait k) ph2 idx (rf-issued-sup conf ph2) pd0 (fst (snd (snd h))) ,
+     ((λ p m → rf-msg-adv conf conf (ph-get-wait k) ph2 idx app0 (rf-issued-sup conf ph2) (p-from p) (p-msg p) (fst (snd (snd (snd h))) p (s p m))) ,
+      (kv-store conf , (snd (snd (snd (snd h))) , (hv , (λ i → kv-store conf))))))))
+-- replica 0 sends what it owes
+rf-ack-sent : (app0 : List KvWrite) → (hist : Hist KvS) → (conf : List KvWrite) → (idx : Word) → (ph : KvPhase) → (fl : List (Pkt KvMsg)) → (to : Nat) → (w : KvWrite) →
+              RfCore app0 (kp-ack to w) hist conf idx ph fl → RfCore (cons w app0) kp-none hist conf idx ph (cons (Pkt { p-from = zero ; p-to = to ; p-msg = m-ack w }) fl)
+rf-ack-sent app0 hist conf idx ph fl to w h =
+  rf-add-pkt (cons w app0) kp-none hist conf idx ph fl (Pkt { p-from = zero ; p-to = to ; p-msg = m-ack w }) (inl (λ i → w))
+    (rf-apply app0 (kp-ack to w) hist conf idx ph fl w (fst (snd (snd h))) h)
+rf-val-sent : (app0 : List KvWrite) → (hist : Hist KvS) → (conf : List KvWrite) → (idx : Word) → (ph : KvPhase) → (fl : List (Pkt KvMsg)) → (to : Nat) → (rid v : Word) →
+              RfCore app0 (kp-val to rid v) hist conf idx ph fl → RfCore app0 kp-none hist conf idx ph (cons (Pkt { p-from = zero ; p-to = to ; p-msg = m-val rid v }) fl)
+rf-val-sent app0 hist conf idx ph fl to rid v h =
+  rf-add-pkt app0 kp-none hist conf idx ph fl (Pkt { p-from = zero ; p-to = to ; p-msg = m-val rid v }) (fst (snd (snd h)))
+    (rf-set-pend app0 (kp-val to rid v) kp-none hist conf idx ph fl unit h)
+-- ---------------------------------------------------------------- a node is run
+rf-run0 : (g : RfG) → (pd : KvPend) → Path KvPend (r-pend (fst (fst g 0))) pd → RfInv g → RfInv (ns-go {KvMsg} {KvSt} zero ev-run g (nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd (fst g zero))) (kv-rep-go (fst (fst g zero)) pd)))
+rf-run0 g kp-none e h = h
+rf-run0 g (kp-ack to w) e h = rf-ack-sent (r-app (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) to w (subst {lzero} {lzero} {KvPend} {λ x → RfCore (r-app (fst (fst g 0))) x (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g))} {(r-pend (fst (fst g 0)))} {kp-ack to w} e h)
+rf-run0 g (kp-val to rid v) e h = rf-val-sent (r-app (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) to rid v (subst {lzero} {lzero} {KvPend} {λ x → RfCore (r-app (fst (fst g 0))) x (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g))} {(r-pend (fst (fst g 0)))} {kp-val to rid v} e h)
+rf-run-1 : (g : RfG) → (pd : KvPend) → RfInv g → RfInv (ns-go {KvMsg} {KvSt} (suc zero) ev-run g (nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd (fst g (suc zero)))) (kv-rep-go (fst (fst g (suc zero))) pd)))
+rf-run-1 g kp-none h = h
+rf-run-1 g (kp-ack to w) h = rf-add-pkt (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) (Pkt { p-from = (suc zero) ; p-to = to ; p-msg = m-ack w }) unit h
+rf-run-1 g (kp-val to rid v) h = rf-add-pkt (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) (Pkt { p-from = (suc zero) ; p-to = to ; p-msg = m-val rid v }) unit h
+rf-run-2 : (g : RfG) → (pd : KvPend) → RfInv g → RfInv (ns-go {KvMsg} {KvSt} (suc (suc zero)) ev-run g (nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd (fst g (suc (suc zero))))) (kv-rep-go (fst (fst g (suc (suc zero)))) pd)))
+rf-run-2 g kp-none h = h
+rf-run-2 g (kp-ack to w) h = rf-add-pkt (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) (Pkt { p-from = (suc (suc zero)) ; p-to = to ; p-msg = m-ack w }) unit h
+rf-run-2 g (kp-val to rid v) h = rf-add-pkt (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) (Pkt { p-from = (suc (suc zero)) ; p-to = to ; p-msg = m-val rid v }) unit h
+rf-run3 : (g : RfG) → (ph : KvPhase) → Path KvPhase (c-ph (snd (fst g 3))) ph → RfInv g → RfInv (ns-go {KvMsg} {KvSt} 3 ev-run g (nview-map {KvMsg} {KvCli} {KvSt} (λ c → (fst (fst g 3) , c)) (kv-seq-go (snd (fst g 3)) ph)))
+rf-run3 g ph-done e h = h
+rf-run3 g (ph-put w zero) e h = rf-put-sent (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (flight (snd g)) w zero 1 zero (subst {lzero} {lzero} {KvPhase} {λ x → RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) x (flight (snd g))} {(c-ph (snd (fst g 3)))} {ph-put w zero} e h)
+rf-run3 g (ph-put w (suc zero)) e h = rf-put-sent (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (flight (snd g)) w 1 2 1 (subst {lzero} {lzero} {KvPhase} {λ x → RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) x (flight (snd g))} {(c-ph (snd (fst g 3)))} {ph-put w (suc zero)} e h)
+rf-run3 g (ph-put w (suc (suc zero))) e h = rf-put-sent (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (flight (snd g)) w 2 3 2 (subst {lzero} {lzero} {KvPhase} {λ x → RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) x (flight (snd g))} {(c-ph (snd (fst g 3)))} {ph-put w (suc (suc zero))} e h)
+rf-run3 g (ph-put w (suc (suc (suc j)))) e h = h
+rf-run3 g (ph-get-send k) e h = rf-get-sent (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (flight (snd g)) k (subst {lzero} {lzero} {KvPhase} {λ x → RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) x (flight (snd g))} {(c-ph (snd (fst g 3)))} {ph-get-send k} e h)
+rf-run3 g (ph-get-wait k) e h = h
+rf-step-run : (g : RfG) → (i : Nat) → RfInv g → RfInv (node-step {KvMsg} {KvSt} kv-seq-beh i ev-run g)
+rf-step-run g zero h = rf-run0 g (r-pend (fst (fst g 0))) (λ i → (r-pend (fst (fst g 0)))) h
+rf-step-run g (suc zero) h = rf-run-1 g (r-pend (fst (fst g 1))) h
+rf-step-run g (suc (suc zero)) h = rf-run-2 g (r-pend (fst (fst g 2))) h
+rf-step-run g (suc (suc (suc zero))) h = rf-run3 g (c-ph (snd (fst g 3))) (λ i → (c-ph (snd (fst g 3)))) h
+rf-step-run g (suc (suc (suc (suc j)))) h = h
+-- ---------------------------------------------------------------- a packet is delivered
+rf-del0 : (g : RfG) → (from : Nat) → (rest : List (Pkt KvMsg)) → (pd : KvPend) → (m : KvMsg) → Path KvPend (r-pend (fst (fst g 0))) pd → RfInv g → RfMsg (c-conf (snd (fst g 3))) (c-ph (snd (fst g 3))) (c-idx (snd (fst g 3))) (r-app (fst (fst g 0))) from m →
+          SubL {Pkt KvMsg} rest (flight (snd g)) → RfInv (ns-go {KvMsg} {KvSt} zero (ev-deliver (Pkt { p-from = from ; p-to = zero ; p-msg = m }) rest) g (nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd (fst g zero))) (kv-rep-go (fst (fst g zero)) pd)))
+rf-del0 g from rest (kp-ack to w) m e h hm s = h
+rf-del0 g from rest (kp-val to rid v) m e h hm s = h
+rf-del0 g from rest kp-none (m-put w) e h hm s = rf-set-pend (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (kp-ack from w) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) rest hm (rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h)
+rf-del0 g from rest kp-none (m-ack w) e h hm s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del0 g from rest kp-none (m-get k rid) e h hm s =
+  rf-set-pend (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (kp-val from rid (kv-store (r-app (fst (fst g 0))) k)) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) rest
+    (fst hm , (λ e2 → rf-val-now (c-conf (snd (fst g 3))) (r-app (fst (fst g 0))) (c-ph (snd (fst g 3))) k (snd hm e2) (fst h) (fst (snd h)))) (rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h)
+rf-del0 g from rest kp-none (m-val rid v) e h hm s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del-1 : (g : RfG) → (from : Nat) → (rest : List (Pkt KvMsg)) → (pd : KvPend) → (m : KvMsg) → RfInv g → SubL {Pkt KvMsg} rest (flight (snd g)) →
+           RfInv (ns-go {KvMsg} {KvSt} (suc zero) (ev-deliver (Pkt { p-from = from ; p-to = (suc zero) ; p-msg = m }) rest) g (nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd (fst g (suc zero)))) (kv-rep-go (fst (fst g (suc zero))) pd)))
+rf-del-1 g from rest kp-none m h s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del-1 g from rest (kp-ack to w) m h s = h
+rf-del-1 g from rest (kp-val to rid v) m h s = h
+rf-del-2 : (g : RfG) → (from : Nat) → (rest : List (Pkt KvMsg)) → (pd : KvPend) → (m : KvMsg) → RfInv g → SubL {Pkt KvMsg} rest (flight (snd g)) →
+           RfInv (ns-go {KvMsg} {KvSt} (suc (suc zero)) (ev-deliver (Pkt { p-from = from ; p-to = (suc (suc zero)) ; p-msg = m }) rest) g (nview-map {KvMsg} {KvRep} {KvSt} (λ r → (r , snd (fst g (suc (suc zero))))) (kv-rep-go (fst (fst g (suc (suc zero)))) pd)))
+rf-del-2 g from rest kp-none m h s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del-2 g from rest (kp-ack to w) m h s = h
+rf-del-2 g from rest (kp-val to rid v) m h s = h
+-- the client takes the acknowledgement it waits for: the write is applied at replica 0
+rf-ack-true : (g : RfG) → (from : Nat) → (rest : List (Pkt KvMsg)) → (w w2 : KvWrite) → (n : Nat) → Path KvPhase (c-ph (snd (fst g 3))) (ph-put w n) → RfInv g →
+              RfFrom0 (eqb from zero) (InL {KvWrite} w2 (r-app (fst (fst g 0)))) → SubL {Pkt KvMsg} rest (flight (snd g)) → eqb from zero ≡ true → Path KvWrite w w2 → RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (kv-adv-put (snd (fst g 3)) w)) (c-conf (kv-adv-put (snd (fst g 3)) w)) (c-idx (kv-adv-put (snd (fst g 3)) w)) (c-ph (kv-adv-put (snd (fst g 3)) w)) rest
+rf-ack-true g from rest w w2 n e h hm s f0 ew =
+  rf-adv-put (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (flight (snd g)) rest w n (fst (kv-start (c-todo (snd (fst g 3))))) (subst {lzero} {lzero} {KvPhase} {λ x → RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) x (flight (snd g))} {(c-ph (snd (fst g 3)))} {ph-put w n} e h)
+    (subst {lzero} {lzero} {KvWrite} {λ x → InL {KvWrite} x (r-app (fst (fst g 0)))} (sym ew) (rf-from0-get (eqb from zero) (InL {KvWrite} w2 (r-app (fst (fst g 0)))) f0 hm)) s
+rf-ack-b : (g : RfG) → (from : Nat) → (rest : List (Pkt KvMsg)) → (w w2 : KvWrite) → (n : Nat) → (b : Bool) → Path Bool (andB (eqb from zero) (kv-weq2 w w2)) b →
+           Path KvPhase (c-ph (snd (fst g 3))) (ph-put w n) → RfInv g → RfFrom0 (eqb from zero) (InL {KvWrite} w2 (r-app (fst (fst g 0)))) → SubL {Pkt KvMsg} rest (flight (snd g)) →
+           RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (case b return (λ x → KvCli) of true → kv-adv-put (snd (fst g 3)) w; false → (snd (fst g 3)))) (c-conf (case b return (λ x → KvCli) of true → kv-adv-put (snd (fst g 3)) w; false → (snd (fst g 3)))) (c-idx (case b return (λ x → KvCli) of true → kv-adv-put (snd (fst g 3)) w; false → (snd (fst g 3)))) (c-ph (case b return (λ x → KvCli) of true → kv-adv-put (snd (fst g 3)) w; false → (snd (fst g 3)))) rest
+rf-ack-b g from rest w w2 n true eb e h hm s =
+  rf-ack-true g from rest w w2 n e h hm s (rf-and-l (eqb from zero) (kv-weq2 w w2) eb) (rf-weq2-sound w w2 (rf-and-r (eqb from zero) (kv-weq2 w w2) eb))
+rf-ack-b g from rest w w2 n false eb e h hm s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+-- the client takes the value it waits for: it is the map's
+rf-val-true : (g : RfG) → (from : Nat) → (rest : List (Pkt KvMsg)) → (k rid v : Word) → Path KvPhase (c-ph (snd (fst g 3))) (ph-get-wait k) → RfInv g →
+              RfFrom0 (eqb from zero) (RfValOk (c-conf (snd (fst g 3))) (c-ph (snd (fst g 3))) (c-idx (snd (fst g 3))) rid v) → SubL {Pkt KvMsg} rest (flight (snd g)) → eqb from zero ≡ true → Path Word rid (c-idx (snd (fst g 3))) → RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (kv-adv-get (snd (fst g 3)) k v)) (c-conf (kv-adv-get (snd (fst g 3)) k v)) (c-idx (kv-adv-get (snd (fst g 3)) k v)) (c-ph (kv-adv-get (snd (fst g 3)) k v)) rest
+rf-val-true g from rest k rid v e h hm s f0 er =
+  rf-adv-get (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (flight (snd g)) rest k v (fst (kv-start (c-todo (snd (fst g 3))))) (subst {lzero} {lzero} {KvPhase} {λ x → RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) x (flight (snd g))} {(c-ph (snd (fst g 3)))} {ph-get-wait k} e h)
+    (snd (rf-from0-get (eqb from zero) (RfValOk (c-conf (snd (fst g 3))) (ph-get-wait k) (c-idx (snd (fst g 3))) rid v) f0
+            (subst {lzero} {lzero} {KvPhase} {λ x → RfFrom0 (eqb from zero) (RfValOk (c-conf (snd (fst g 3))) x (c-idx (snd (fst g 3))) rid v)} {(c-ph (snd (fst g 3)))} {ph-get-wait k} e hm)) er) s
+rf-val-b : (g : RfG) → (from : Nat) → (rest : List (Pkt KvMsg)) → (k rid v : Word) → (b : Bool) → Path Bool (andB (eqb from zero) (weq rid (c-idx (snd (fst g 3))))) b →
+           Path KvPhase (c-ph (snd (fst g 3))) (ph-get-wait k) → RfInv g → RfFrom0 (eqb from zero) (RfValOk (c-conf (snd (fst g 3))) (c-ph (snd (fst g 3))) (c-idx (snd (fst g 3))) rid v) → SubL {Pkt KvMsg} rest (flight (snd g)) →
+           RfCore (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (case b return (λ x → KvCli) of true → kv-adv-get (snd (fst g 3)) k v; false → (snd (fst g 3)))) (c-conf (case b return (λ x → KvCli) of true → kv-adv-get (snd (fst g 3)) k v; false → (snd (fst g 3)))) (c-idx (case b return (λ x → KvCli) of true → kv-adv-get (snd (fst g 3)) k v; false → (snd (fst g 3)))) (c-ph (case b return (λ x → KvCli) of true → kv-adv-get (snd (fst g 3)) k v; false → (snd (fst g 3)))) rest
+rf-val-b g from rest k rid v true eb e h hm s =
+  rf-val-true g from rest k rid v e h hm s (rf-and-l (eqb from zero) (weq rid (c-idx (snd (fst g 3)))) eb) (weq-sound rid (c-idx (snd (fst g 3))) (rf-and-r (eqb from zero) (weq rid (c-idx (snd (fst g 3)))) eb))
+rf-val-b g from rest k rid v false eb e h hm s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del3 : (g : RfG) → (from : Nat) → (rest : List (Pkt KvMsg)) → (ph : KvPhase) → (m : KvMsg) → Path KvPhase (c-ph (snd (fst g 3))) ph → RfInv g → RfMsg (c-conf (snd (fst g 3))) (c-ph (snd (fst g 3))) (c-idx (snd (fst g 3))) (r-app (fst (fst g 0))) from m →
+          SubL {Pkt KvMsg} rest (flight (snd g)) → RfInv (ns-go {KvMsg} {KvSt} 3 (ev-deliver (Pkt { p-from = from ; p-to = 3 ; p-msg = m }) rest) g (nview-map {KvMsg} {KvCli} {KvSt} (λ c → (fst (fst g 3) , c)) (kv-seq-go (snd (fst g 3)) ph)))
+rf-del3 g from rest ph-done m e h hm s = h
+rf-del3 g from rest (ph-put w zero) m e h hm s = h
+rf-del3 g from rest (ph-put w (suc zero)) m e h hm s = h
+rf-del3 g from rest (ph-put w (suc (suc zero))) m e h hm s = h
+rf-del3 g from rest (ph-put w (suc (suc (suc j)))) (m-put w2) e h hm s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del3 g from rest (ph-put w (suc (suc (suc j)))) (m-ack w2) e h hm s =
+  rf-ack-b g from rest w w2 (suc (suc (suc j))) (andB (eqb from zero) (kv-weq2 w w2)) (λ i → andB (eqb from zero) (kv-weq2 w w2)) e h hm s
+rf-del3 g from rest (ph-put w (suc (suc (suc j)))) (m-get k rid) e h hm s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del3 g from rest (ph-put w (suc (suc (suc j)))) (m-val rid v) e h hm s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del3 g from rest (ph-get-send k) m e h hm s = h
+rf-del3 g from rest (ph-get-wait k) (m-put w2) e h hm s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del3 g from rest (ph-get-wait k) (m-ack w2) e h hm s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del3 g from rest (ph-get-wait k) (m-get k2 rid) e h hm s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) rest s h
+rf-del3 g from rest (ph-get-wait k) (m-val rid v) e h hm s =
+  rf-val-b g from rest k rid v (andB (eqb from zero) (weq rid (c-idx (snd (fst g 3))))) (λ i → andB (eqb from zero) (weq rid (c-idx (snd (fst g 3))))) e h hm s
+rf-del-to : (g : RfG) → (to from : Nat) → (m : KvMsg) → (rest : List (Pkt KvMsg)) → RfInv g → RfMsg (c-conf (snd (fst g 3))) (c-ph (snd (fst g 3))) (c-idx (snd (fst g 3))) (r-app (fst (fst g 0))) from m → SubL {Pkt KvMsg} rest (flight (snd g)) →
+            RfInv (node-step {KvMsg} {KvSt} kv-seq-beh to (ev-deliver (Pkt { p-from = from ; p-to = to ; p-msg = m }) rest) g)
+rf-del-to g zero from m rest h hm s = rf-del0 g from rest (r-pend (fst (fst g 0))) m (λ i → (r-pend (fst (fst g 0)))) h hm s
+rf-del-to g (suc zero) from m rest h hm s = rf-del-1 g from rest (r-pend (fst (fst g 1))) m h s
+rf-del-to g (suc (suc zero)) from m rest h hm s = rf-del-2 g from rest (r-pend (fst (fst g 2))) m h s
+rf-del-to g (suc (suc (suc zero))) from m rest h hm s = rf-del3 g from rest (c-ph (snd (fst g 3))) m (λ i → (c-ph (snd (fst g 3)))) h hm s
+rf-del-to g (suc (suc (suc (suc j)))) from m rest h hm s = h
+rf-step-del : (g : RfG) → (p : Pkt KvMsg) → (rest : List (Pkt KvMsg)) → RfInv g → InL {Pkt KvMsg} p (flight (snd g)) → SubL {Pkt KvMsg} rest (flight (snd g)) →
+              RfInv (node-step {KvMsg} {KvSt} kv-seq-beh (p-to p) (ev-deliver p rest) g)
+rf-step-del g p rest h m s = rf-del-to g (p-to p) (p-from p) (p-msg p) rest h (fst (snd (snd (snd h))) p m) s
+rf-step-net : (g : RfG) → (n : Net KvMsg) → RfInv g → SubL {Pkt KvMsg} (flight n) (flight (snd g)) → RfInv (fst g , n)
+rf-step-net g n h s = rf-shrink (r-app (fst (fst g 0))) (r-pend (fst (fst g 0))) (c-hist (snd (fst g 3))) (c-conf (snd (fst g 3))) (c-idx (snd (fst g 3))) (c-ph (snd (fst g 3))) (flight (snd g)) (flight n) s h
+-- ---------------------------------------------------------------- the statements
+rf-init : (prog : List KvCmd) → RfInv (kv-init (kv-seq-cli prog))
+rf-init prog = ((λ x m → Empty-rec m) , ((λ x m → m) , (unit , ((λ p m → Empty-rec m) , (λ i k → #0)))))
+kv-seq-safe : (prog : List KvCmd) → Safe {KvMsg} {KvSt} RfInv kv-seq-beh (kv-init (kv-seq-cli prog))
+kv-seq-safe prog = safe-by-events {KvMsg} {KvSt} RfInv kv-seq-beh (kv-init (kv-seq-cli prog)) (rf-init prog) rf-step-run rf-step-del rf-step-net
+-- the service refines the single sequential map: for every program of the sequential client and
+-- every choice sequence, the history the client has observed is a history of kv-map-world
+-- from the empty map
+kv-refines : (prog : List KvCmd) → Refines {KvS} {Word → Word} {KvMsg} {KvSt} kv-map-world (λ k → #0) (λ g → c-hist (snd (fst g 3))) kv-seq-beh (kv-init (kv-seq-cli prog))
+kv-refines prog chs =
+  (kv-store (c-conf (snd (fst (fleet-run {KvMsg} {KvSt} kv-seq-beh chs (kv-init (kv-seq-cli prog))) 3))) , snd (snd (snd (snd (kv-seq-safe prog chs)))))
