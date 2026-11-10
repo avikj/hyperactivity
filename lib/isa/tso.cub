@@ -444,3 +444,80 @@ tso-every n ths p =
 -- the trace of a state, earliest first
 tso-trace : TsoSt → List TsoL
 tso-trace s = tso-rev (ts-log s) nil
+-- ---------------------------------------------------------------- the axiomatic form's outcomes
+-- The axiomatic form computes outcomes without the machine: a thread alone, with each value it
+-- reads taken from a finite domain, gives its events and its result; a choice of such a run
+-- per thread gives the events of a candidate; every rf (each reader to the initial memory or to
+-- a writer of its value at its address) and every order of the writers gives the witnesses;
+-- the candidates that are TSO-consistent give the outcomes.
+-- (The domain must contain every value a read can return: the initial values and the values
+-- written. For a program writing constants that is a finite list the caller gives.)
+tso-over-w : {R : Type} → List Word → (Word → R → R) → R → R
+tso-over-w nil f acc = acc
+tso-over-w (cons x r) f acc = tso-over-w r f (f x acc)
+-- a process in tree form at an interpretation of its results and commands
+tso-step-fold : {S : Sig} {A : Type} {R : Type} → (A → R) → ((c : Cmd S) → (Resp S c → R) → R) → Step S A → R
+tso-step-fold r h (sdone a) = r a
+tso-step-fold r h (scmd c k) = h c (λ x → tso-step-fold r h (k x))
+-- the runs of thread t alone, each given to k with the next id, the events (latest first) and
+-- the thread's result; a run is a function of the next id, the events so far and the fold's value
+TsoAxRun : Type → Type
+TsoAxRun R = Word → List TsoEv → R → R
+tso-ax-instr : {R : Type} → List Word → Word → (i : TsoI) → (tsoi-resp i → TsoAxRun R) → TsoAxRun R
+tso-ax-instr dom t i =
+  case i return (λ x → (tsoi-resp x → TsoAxRun R) → TsoAxRun R) of
+    t-load a → λ k nx es acc → tso-over-w dom (λ v acc2 → k v (%wsucc nx) (cons (tso-ev nx t k-R a v #0) es) acc2) acc
+    t-store a v → λ k nx es acc → k unit (%wsucc nx) (cons (tso-ev nx t k-W a #0 v) es) acc
+    t-xchg a v → λ k nx es acc → tso-over-w dom (λ vr acc2 → k vr (%wsucc nx) (cons (tso-ev nx t k-L a vr v) es) acc2) acc
+    t-cmpxchg a o n → λ k nx es acc → tso-over-w dom (λ vr acc2 → k vr (%wsucc nx) (cons (tso-ev nx t k-L a vr (if weq vr o then n else vr)) es) acc2) acc
+    t-mfence → λ k nx es acc → k unit (%wsucc nx) (cons (tso-ev nx t k-F #0 #0 #0) es) acc
+tso-ax-thread : {R : Type} → List Word → Word → (List Word → TsoAxRun R) → TsoThread → TsoAxRun R
+tso-ax-thread dom t k th = tso-step-fold {TsoIS} {List Word} {TsoAxRun R} k (tso-ax-instr dom t) th
+-- a run per thread (ids from t), each combination given to k with the events (latest first)
+-- and the results in thread order
+tso-ax-threads : {R : Type} → List TsoThread → List Word → Word → (List TsoEv → List Word → R → R) → List Word → TsoAxRun R
+tso-ax-threads nil dom t k outs nx es acc = k es outs acc
+tso-ax-threads (cons th r) dom t k outs nx es acc =
+  tso-ax-thread dom t (λ out nx2 es2 acc2 → tso-ax-threads r dom (%wsucc t) k (app-w outs out) nx2 es2 acc2) th nx es acc
+-- every rf for the readers among rs (events), given the candidate's events es
+tso-ax-srcs : Memory → List TsoEv → TsoEv → List Word
+tso-ax-srcs m0 es e =
+  case e of
+    tso-ev id tid k a vr vw →
+      (let ws = tso-map tso-ev-id (tso-keep (λ w → case w of tso-ev id2 tid2 k2 a2 vr2 vw2 → andB (tso-k-writes k2) (andB (weq a2 a) (andB (weq vw2 vr) (tso-not (weq id2 id))))) es)
+       in if weq vr (m0 a) then cons #0 ws else ws)
+tso-ev-reads : TsoEv → Bool
+tso-ev-reads e = case e of tso-ev id tid k a vr vw → tso-k-reads k
+tso-ev-writes : TsoEv → Bool
+tso-ev-writes e = case e of tso-ev id tid k a vr vw → tso-k-writes k
+tso-ax-rfs : {R : Type} → List TsoEv → Memory → List TsoEv → (List (Word × Word) → R → R) → List (Word × Word) → R → R
+tso-ax-rfs nil m0 es k rf acc = k rf acc
+tso-ax-rfs (cons e r) m0 es k rf acc =
+  if tso-ev-reads e
+  then tso-over-w (tso-ax-srcs m0 es e) (λ src acc2 → tso-ax-rfs r m0 es k (cons (tso-ev-id e , src) rf) acc2) acc
+  else tso-ax-rfs r m0 es k rf acc
+-- every order of the words in a list (n its length)
+tso-without : List Word → Word → List Word
+tso-without nil x = nil
+tso-without (cons y r) x = if weq x y then r else cons y (tso-without r x)
+tso-perms : {R : Type} → Nat → List Word → (List Word → R → R) → List Word → R → R
+tso-perms zero rest k chosen acc = k chosen acc
+tso-perms (suc n) rest k chosen acc = tso-over-w rest (λ x acc2 → tso-perms n (tso-without rest x) k (cons x chosen) acc2) acc
+-- what the axiomatic enumeration reports: the set of results of consistent candidates, the
+-- number of candidates, the number consistent
+data TsoAx = tso-ax (outs : List (List Word)) (cands : Word) (ok : Word)
+tso-ax-outs : TsoAx → List (List Word)
+tso-ax-outs (tso-ax os c k) = os
+tso-ax-tally : Memory → List TsoEv → List Word → List (Word × Word) → List Word → TsoAx → TsoAx
+tso-ax-tally m0 es out rf co (tso-ax os c k) =
+  if tso-consistent m0 (tso-x es rf co) then tso-ax (tso-ins out os) (%wsucc c) (%wsucc k) else tso-ax os (%wsucc c) k
+tso-ax-outcomes : Memory → List Word → List TsoThread → TsoAx
+tso-ax-outcomes m0 dom ths =
+  tso-ax-threads ths dom #0
+    (λ es out acc →
+       tso-ax-rfs es m0 es
+         (λ rf acc2 →
+            (let ws = tso-map tso-ev-id (tso-keep tso-ev-writes es)
+             in tso-perms (tso-len ws) ws (λ co acc3 → tso-ax-tally m0 es out rf co acc3) nil acc2))
+         nil acc)
+    nil #1 nil (tso-ax nil #0 #0)

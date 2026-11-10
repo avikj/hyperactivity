@@ -136,6 +136,25 @@ How to check (cached library, one file after another; the last line must read `N
   `tso.cub`, `atomics.cub`, `spinlock.cub` after the cached library: `905 passed, 0 failed;
   39,023,549 steps`, 16 s.
 
+- **The axiomatic form's own outcome sets** (`lib/isa/tso.cub`, `tso-ax-outcomes m0 dom ths :
+  TsoAx` = set of results, candidates, consistent candidates): each thread alone with read
+  values from `dom` (`tso-step-fold`, `tso-ax-instr`, `tso-ax-thread(s)`), every rf
+  (`tso-ax-rfs`: a reader to m0 or to a same-address same-value writer), every order of the
+  writers (`tso-perms`), kept when `tso-consistent`. No machine state, buffer or schedule is
+  involved. Readings, each also a checked path `x-ax : tso-ax-outcomes … ≡ tso-ax x-set #c #k`
+  against the same `x-set` the operational `x-exact` uses:
+  | program | candidates | consistent | set | steps (#show) |
+  |---|---|---|---|---|
+  | SB | 8 | 8 | all four | 70,161 |
+  | MP | 8 | 6 | no (1,0) | 68,945 |
+  | LB | 8 | 6 | no (1,1) | 68,615 |
+  | IRIW | 32 | 30 | no (1,0,1,0) | 672,234 |
+  | SB seq_cst as xchg (locked events) | 8 | 6 | no (0,0) | 87,587 |
+  | SB seq_cst as store+mfence (mfence events) | 8 | 6 | no (0,0) | 145,351 |
+  So on these six programs the operational and the axiomatic outcome sets are the same list
+  (both directions, by computation). `lib/isa/tso.cub` is 138 definitions.
+  All eight files after the cached library: `967 passed, 0 failed`.
+
 ## Found
 
 - **Elaborator refuses a structural recursion when an argument before the matched one changes.**
@@ -164,13 +183,20 @@ How to check (cached library, one file after another; the last line must read `N
 - Acyclicity is the decision procedure (peel sources n times); no proof relates it to the
   absence of a path from a node to itself.
 
+- `tso-ax-outcomes` enumerates every permutation of all writers (n!), so it is for litmus-sized
+  programs (the spin-lock's axiomatic set is not computed: up to 6 writers × 25 thread-run
+  combinations). Only the per-location order enters `tso-consistent`; enumerating per location
+  would remove the factor and is not done. Its `dom` must contain every value a read can
+  return; that it does is the caller's claim, not checked.
+- The converse of `TsoSound` (every consistent candidate of a program is some schedule's
+  execution) is not stated as a type; what exists is the equality of the two outcome sets on
+  the six programs above.
+
 ## Next step
 
-Acceptance lines 2 and 3 are met; line 1 (`make library`, then all my files uncached) is to be
-re-measured and recorded at the end. Remaining, in order:
-1. The axiomatic side of the litmus sets, in `lib/isa/tso.cub` after `tso-trace`: an
-   enumeration of all candidates (`tso-ax-outcomes`: per thread the local runs over read values
-   from a finite domain, every rf and every order on writes, kept when `tso-consistent`), so
-   each litmus's axiomatic outcome set is computed and stated equal to the operational one
-   (`x-ax : tso-ax-outcomes … ≡ x-set` in each `experiments/tso/x.cub`).
-2. Final: `make library`; every file of mine uncached in one run; record both under Done.
+Every item of "What is built" and every Acceptance line has an entry under Done. Remaining:
+1. Final measurement: `make library`, then every file of mine uncached in one run
+   (`CUBICAL_NOCACHE=1 ./build/cubical $LIBS lib/isa/tso.cub experiments/tso/{sb,mp,lb,iriw}.cub
+   lib/mem/atomics.cub experiments/tso/{atomics-sb,spinlock}.cub`); record both under Done.
+2. Then the open items under Limits, in this order: the general proof of `TsoSound` (the
+   invariant on `TsoSt`), per-location enumeration in `tso-perms`.

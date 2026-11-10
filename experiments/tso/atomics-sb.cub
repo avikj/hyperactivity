@@ -31,3 +31,13 @@ asb-sound-xchg : isTrue (tso-sound-upto 4 (asb atom-x86-xchg mo-seq-cst))
 asb-sound-xchg = unit
 asb-sound-mfence : isTrue (tso-sound-upto 8 (asb atom-x86-mfence mo-seq-cst))
 asb-sound-mfence = unit
+-- the axiomatic form on the seq_cst programs: candidates with locked events (xchg) and with
+-- mfence events; the consistent ones give the same three outcomes
+asb-dom : List Word
+asb-dom = cons #0 (cons #1 nil)
+#show tso-ax-outcomes (λ a → #0) asb-dom (asb atom-x86-xchg mo-seq-cst)
+#show tso-ax-outcomes (λ a → #0) asb-dom (asb atom-x86-mfence mo-seq-cst)
+asb-ax-xchg : tso-ax-outs (tso-ax-outcomes (λ a → #0) asb-dom (asb atom-x86-xchg mo-seq-cst)) ≡ asb-sc-set
+asb-ax-xchg = λ i → asb-sc-set
+asb-ax-mfence : tso-ax-outs (tso-ax-outcomes (λ a → #0) asb-dom (asb atom-x86-mfence mo-seq-cst)) ≡ asb-sc-set
+asb-ax-mfence = λ i → asb-sc-set
