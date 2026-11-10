@@ -17,7 +17,8 @@ Where each part comes from (rustc 1.97.0; nothing here is computed by a second r
              self type) is read from the source text at that span, and a call
              (`Book::<8>::add`, `<T as Trait>::m`) is connected to its body by matching the
              header's self type against the call's.
-  instances  walked from the entry: each call's generic arguments under the caller's.
+  instances  walked from the entry: each call's generic arguments under the caller's. The list is
+             refused unless every instance is in rustc's own `-Zprint-mono-items` list.
   layouts    a copy of the source with one function per needed type appended is compiled with
              `-g -Copt-level=0`, and `llvm-dwarfdump --debug-info` is read: size, alignment, fields with
              offsets and types, variants with their tag values.
@@ -1302,7 +1303,44 @@ class Import:
             self.drain()
             if len(self.instances) == n and set(self.needed_types()) <= self.obj_types:
                 break
+        self.check_instances()
         self.paths.origin = 'object'
+
+    def check_instances(self):
+        """Refuse an instance list rustc's own does not contain: `-Zprint-mono-items` (an
+        unstable flag, hence RUSTC_BOOTSTRAP) prints every function instance the compiler
+        generates code for with the MIR's flags; each (body, arguments) found by the walk must
+        be one of them. (rustc's list may have more: public functions the entry does not reach.)"""
+        r = subprocess.run([RUSTC] + RUSTC_FLAGS + ['-Zprint-mono-items=yes', '--emit=obj', self.src, '-o', os.path.join(self.tmp, 'mono.o')],
+                           capture_output=True, text=True, env=dict(os.environ, RUSTC_BOOTSTRAP='1'))
+        if r.returncode != 0:
+            sys.stderr.write(r.stderr)
+            raise SystemExit('mir2cub: rustc -Zprint-mono-items failed')
+        theirs, self.mono_items = set(), 0
+        for l in r.stdout.split('\n'):
+            m = re.match(r'MONO_ITEM fn (.*?) @@ ', l)
+            if not m:
+                continue
+            self.mono_items += 1
+            name = m.group(1)
+            if ' - shim(' in name:
+                continue
+            try:
+                p = P(name)
+                bp = BodyParser.__new__(BodyParser)
+                bp.mir, bp.tp = self.mir, TypeParser(self.paths)
+                c = bp.callee(p)
+                if not p.end():
+                    continue
+                c = self.resolve_callee(c, lookup_only=True)
+            except Unhandled:
+                continue   # an instance of another crate's function, or of a body the walk never parsed
+            if c is not None:
+                theirs.add((c[1], c[2]))
+        for (b, args) in self.instances:
+            if (b, args) not in theirs:
+                stop('instance (reached by the importer\'s walk but not in rustc\'s -Zprint-mono-items list)',
+                     '%s at <%s>' % (self.bodies[b].name, ', '.join(show_ty(a) for a in args)))
 
     def drop_glue(self, t):
         """what dropping a value of the closed type t runs: the Drop impl of each ADT in it that
@@ -1370,7 +1408,12 @@ class Import:
             stop('call (two impls match)', '%s::%s' % (show_ty(self_ty), method))
         return found[0] if found else None
 
-    def resolve_callee(self, c):
+    def known_body(self, it, lookup_only):
+        if lookup_only and it not in self.bodies:
+            stop('instance (of a body the walk did not reach)', it.name)
+        return self.body_id(it)
+
+    def resolve_callee(self, c, lookup_only=False):
         """→ ('fn', body id, args in the caller's parameters) | ('dyn', trait, method name) | ('ptr', operand)"""
         if c[0] == 'ptr':
             return c
@@ -1384,11 +1427,11 @@ class Import:
             if f is None:
                 stop('call (no body in this crate: a function of another crate that rustc did not inline)',
                      '<%s as %s>::%s' % (show_ty(t), trait, method))
-            return ('fn', self.body_id(f[0]), f[1])
+            return ('fn', self.known_body(f[0], lookup_only), f[1])
         _, segs, args, argseg = c
         it = self.find_free(segs)
         if it is not None:
-            b = self.body_id(it)
+            b = self.known_body(it, lookup_only)
             if len(args) != len(it.generics) or (args and argseg != len(segs) - 1):
                 stop('call (generic arguments do not match the function\'s parameters)', '::'.join(segs))
             return ('fn', b, tuple(args))
@@ -1396,7 +1439,7 @@ class Import:
             self_ty = ('adt', self.paths.note(segs[:-1]), tuple(args))
             f = self.find_method(self_ty, None, segs[-1])
             if f is not None:
-                return ('fn', self.body_id(f[0]), f[1])
+                return ('fn', self.known_body(f[0], lookup_only), f[1])
         stop('call (no body in this crate: a function of another crate that rustc did not inline)', '::'.join(segs))
 
     def walk_from_entry(self):
@@ -2117,6 +2160,7 @@ def main():
     shutil.rmtree(imp.tmp)
     rep = sys.stderr
     rep.write('mir2cub: %s → %s (%d bytes, %d lines)\n' % (imp.src, a.output, len(text), text.count('\n')))
+    rep.write('  instances all among the %d function instances rustc -Zprint-mono-items lists\n' % imp.mono_items)
     rep.write('  bodies %d, instances %d, blocks %d, statements %d, locals %d, definitions %d\n' % (
         len(imp.bodies), len(imp.instances), em.count.get('blocks', 0), em.count.get('statements', 0),
         em.count.get('locals', 0), em.count['definitions']))

@@ -66,7 +66,8 @@ Both acceptance lines are met. Everything below was measured on this machine wit
 
 - `--emit=mir` works on stable and is what the importer uses. `-Z` flags (`-Zunpretty=mir`,
   `-Zprint-type-sizes`, `-Zprint-mono-items`) are refused on stable unless `RUSTC_BOOTSTRAP=1`;
-  the importer does not use them (they were used once, by hand, to compare: see below).
+  the importer uses only `-Zprint-mono-items`, to check its instance list (below);
+  `-Zprint-type-sizes` was used once, by hand, to compare sizes.
 - The MIR text is **pre-monomorphization**: `Book<N>::add` is printed once with `const N` and
   `[Level; N]`; callers name the instance (`Book::<8>::add(..)`). The importer keeps bodies
   generic and carries the substitutions as data (below).
@@ -109,7 +110,7 @@ Both acceptance lines are met. Everything below was measured on this machine wit
   `RStatic`, `RDropImpl`, `RInstance`, `RCrate`. Conventions are in the file's header: ids are
   positions in the crate's lists; an integer is `RInt`, sign and magnitude (the shape of track
   C's `CInt`), in constants, switch arms and `discr`; names are byte lists.
-- `tools/mir2cub.py` (2,131 lines). `python3 tools/mir2cub.py SRC.rs -o OUT.cub [--entry NAME]`
+- `tools/mir2cub.py` (2,182 lines). `python3 tools/mir2cub.py SRC.rs -o OUT.cub [--entry NAME]`
   (default entry `on_message`; definitions are prefixed with OUT's stem). About 1 s. It prints
   the counts and kinds it met on stderr. Where each part comes from:
   - bodies: `rustc --edition=2021 --crate-type=lib -O -Cpanic=abort --emit=mir`; only bodies
@@ -117,7 +118,10 @@ Both acceptance lines are met. Everything below was measured on this machine wit
   - generics as data: `RBody.generics`; inside a body `rty-param i` / `rty-const-param i` /
     `rc-param i`; `rcallee-fn body args`, `rc-fn body args`, `rty-adt adt args`; and
     `RCrate.instances`, every (body, closed arguments) reached from the entry by walking calls,
-    function-item casts, vtables and Drop impls.
+    function-item casts, vtables and Drop impls. The importer then runs rustc with
+    `-Zprint-mono-items=yes` (`RUSTC_BOOTSTRAP=1`, the one unstable flag it uses) and refuses to
+    write the file unless every instance it found is in rustc's list (book.rs: 10 of rustc's 10;
+    more.rs: 12 of 13, the other being the `drop_glue::<Tally>` shim).
   - impl headers (generics, trait, self type) are read from the source at the span rustc
     names the impl by; a derive's span is the trait name and its type the next item. A free
     function's generic parameters are read from its `fn` declaration in the source. A call is
