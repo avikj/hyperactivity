@@ -1,0 +1,13 @@
+-- experiments/tso/mp.cub — message passing (MP) on the operational x86-TSO machine.
+-- x at #0, y at #1, both initially 0.
+--   thread 0: x := 1; y := 1         thread 1: r0 := y; r1 := x
+-- The outcome is (r0 , r1). x86-TSO forbids (1 , 0): a buffer is FIFO, so y's write reaches
+-- memory after x's.
+mp-t0 : TsoThread
+mp-t0 = ti-store #0 #1 (ti-store #1 #1 (ti-ret nil))
+mp-t1 : TsoThread
+mp-t1 = ti-load #1 (λ r0 → ti-load #0 (λ r1 → ti-ret (cons r0 (cons r1 nil))))
+mp : List TsoThread
+mp = cons mp-t0 (cons mp-t1 nil)
+-- 6 transitions finish every schedule (2 stores, 2 flushes, 2 loads)
+#show tso-outcomes 6 mp

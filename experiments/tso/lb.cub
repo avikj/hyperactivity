@@ -1,0 +1,12 @@
+-- experiments/tso/lb.cub — load buffering (LB) on the operational x86-TSO machine.
+-- x at #0, y at #1, both initially 0.
+--   thread 0: r0 := x; y := 1        thread 1: r1 := y; x := 1
+-- The outcome is (r0 , r1). x86-TSO forbids (1 , 1): a load is not delayed past a later store.
+lb-t0 : TsoThread
+lb-t0 = ti-load #0 (λ r → ti-store #1 #1 (ti-ret (cons r nil)))
+lb-t1 : TsoThread
+lb-t1 = ti-load #1 (λ r → ti-store #0 #1 (ti-ret (cons r nil)))
+lb : List TsoThread
+lb = cons lb-t0 (cons lb-t1 nil)
+-- 6 transitions finish every schedule (2 loads, 2 stores, 2 flushes)
+#show tso-outcomes 6 lb

@@ -60,6 +60,16 @@ How to check (cached library, one file after another; the last line must read `N
   set `{(0,0),(0,1),(1,0),(1,1)}`, 80 finished schedules, 0 cut by the bound, 108,147 steps.
   (80 = C(6,3)·2·2: each thread's load and flush in either order after its store.)
 
+- **MP** (`experiments/tso/mp.cub`), `#show tso-outcomes 6 mp`: set `{(0,0),(0,1),(1,1)}`
+  ((1,0) absent), 30 finished schedules, 0 cut, 47,793 steps.
+- **LB** (`experiments/tso/lb.cub`), `#show tso-outcomes 6 lb`: set `{(0,0),(0,1),(1,0)}`
+  ((1,1) absent), 20 finished schedules, 0 cut, 30,140 steps.
+- **IRIW** (`experiments/tso/iriw.cub`), `#show tso-outcomes 8 iriw`: 15 of the 16 tuples
+  (r0,r1,r2,r3), exactly (1,0,1,0) absent, 2,520 finished schedules (= 8!/(2!)^4), 0 cut,
+  7,642,250 steps, 3.4 s for the five files after the cached library.
+  The four files load together: `./build/cubical $LIBS lib/isa/tso.cub experiments/tso/{sb,mp,lb,iriw}.cub`
+  ends `830 passed, 0 failed`.
+
 ## Found
 
 - **Elaborator refuses a structural recursion when an argument before the matched one changes.**
