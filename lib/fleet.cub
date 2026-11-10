@@ -436,3 +436,16 @@ fleet-proc-run : {M St : Type} → (beh : Beh M St) → (chs : List Adv) → (g 
                       (done (fleet-run {M} {St} beh chs g) , nil)
 fleet-proc-run {M} {St} beh nil g = λ i → (done g , nil)
 fleet-proc-run {M} {St} beh (cons a r) g = fleet-proc-run {M} {St} beh r (fleet-step {M} {St} beh a g)
+-- ---------------------------------------------------------------- using a delivery
+-- what follows from Took: to show Q of the state after a step that delivered p to its
+-- addressee, show it of the addressee's step under the delivery of p, the addressee receiving
+took-elim : {M St : Type} → (beh : Beh M St) → (p : Pkt M) → (g : FState M St) → (Q : FState M St → Type) →
+            ((rest : List (Pkt M)) → IsRecvV {M} {St} (beh (p-to p) (fst g (p-to p))) → Q (node-step {M} {St} beh (p-to p) (ev-deliver p rest) g)) →
+            (x : Resolved M) → dl-go {M} {St} beh p g x → Q (fl-go {M} {St} beh g x)
+took-elim {M} {St} beh p g Q f (res-net n) d = Empty-rec d
+took-elim {M} {St} beh p g Q f (res-node i ev-run) d = Empty-rec d
+took-elim {M} {St} beh p g Q f (res-node i (ev-deliver q rest)) d =
+  subst {lzero} {lzero} {NodeId} {λ j → IsRecvV {M} {St} (beh j (fst g j)) → Q (node-step {M} {St} beh j (ev-deliver q rest) g)} (sym (fst d))
+    (subst {lzero} {lzero} {Pkt M} {λ q2 → IsRecvV {M} {St} (beh (p-to p) (fst g (p-to p))) → Q (node-step {M} {St} beh (p-to p) (ev-deliver q2 rest) g)} (sym (fst (snd d)))
+       (f rest))
+    (snd (snd d))

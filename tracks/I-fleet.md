@@ -55,7 +55,7 @@ Files you own: `lib/net.cub`, `lib/fleet.cub`, `lib/deploy.cub`, `experiments/fl
 ```
 L=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p')
 (ulimit -v 2500000; timeout 600 ./build/cubical $L lib/net.cub lib/fleet.cub experiments/fleet/ping.cub \
-  experiments/fleet/kv/kv.cub experiments/fleet/kv/run.cub | grep -v '^ok: \|^cached: ')
+  experiments/fleet/kv/kv.cub experiments/fleet/kv/run.cub experiments/fleet/kv/liveness.cub | grep -v '^ok: \|^cached: ')
 ```
 The library is read from the cache (about 1 s); the last line is `N passed, 0 failed`.
 
@@ -123,24 +123,50 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
     `done kvr-final , nil`, by `fleet-proc-run`), `kvr-replay-eq` (equal choices, equal run).
   Measured: library + net, fleet, ping, kv, run: 996 passed, 0 failed.
 
+- `experiments/fleet/kv/liveness.cub`: **Liveness** `kv-live : (c0 : KvCli) → KvAllRep (c-out c0) →
+  Live 4 (KvAllApp (c-out c0)) kv-bc-beh (kv-init c0)`: for the broadcasting client with any
+  finite list of (replica, write) still to send, under every `Fair 4` sequence there is a time
+  at which every write is applied by the replica it was addressed to; `kv-live-bcast ws` for
+  `kv-bcast ws` (every write to every replica). No bound on the number of writes or of packets
+  in flight is needed. Proof: `kvl-client` (scheduling fairness, `wait-run`, `step-run-eq`),
+  `kvl-deliver` (delivery fairness, `took-elim`, a replica never halts), `kvl-replica`,
+  `kv-app-later` (applied stays applied, `ns-local` + `stable-later`), `kvl-claim` (induction on
+  the list, times merged by `nt-later-comm`). `lib/fleet.cub` gained `took-elim`.
+  Measured: library + net, fleet, kv, liveness: 1028 passed, 0 failed, 3,407,100 steps, 24 s
+  uncached (`kvl-owe` 446,906 steps is the largest).
+
 ## Found
 
-(nothing yet)
+1. **Conversion misses a refined scrutinee (checker incompleteness).** With `f` defined by
+   clauses on a `Nat` (`kv-beh cb zero st = …st…`), the type `P (f j (h j))` written under a
+   binder of `j` (a `subst` motive `λ j → …`, or the last clause `(suc (suc (suc j)))` of a
+   definition whose type mentions `kv-bc-beh r (fst g r)`) reads back with `j` replaced by the
+   constructor inside the branch (`case j of zero → … (fst g zero)`), while the same type
+   reached by unfolding a definition applied to `j` keeps `fst g j` in the branch; the two are
+   reported as a type mismatch (`expected … fst g i …  actual … fst g zero …`). Seen in
+   `kvl-took` and `kvl-owe` (first versions, commit history of `liveness.cub`). Worked around by
+   stating the transport over a variable behaviour (`took-elim` in `lib/fleet.cub`) and by
+   splitting the absurd clause as the function's own clauses split.
+2. **Out of memory on a `let` of a large Σ used several times.** `kvl-client` written as
+   `let ev = fst fair t 3 unit in let wr = wait-run … (fst ev) t (snd ev) … in (suc (fst wr) , subst … (step-run-eq … (fst (snd wr))) (kvl-sent … (concat (λ i → c-out (snd (snd (snd wr) i))) e)))`
+   exhausted `ulimit -v 2500000` after 40 s; the same proof with the Σ passed as an argument
+   to a helper (`kvl-client-k`) checks in 199,177 + ~30,000 steps. Every lemma of
+   `liveness.cub` is therefore written with intermediate results as arguments, never `let`.
+3. A signature must be followed at once by its clauses (`kvl-claim :` followed by another
+   signature is a parse error `expected =, found :`), and a multi-binding `let` inside
+   parentheses is not laid out (`expected in`): one `let … in` per binding.
+4. A type alias that hides a Π (`Beh M St`, `LocalInv P beh`) cannot be the signature of a
+   definition by clauses (`a dimension is matched only by a variable`): the Π is written out.
 
 ## Next step
 
-1. `experiments/fleet/kv/liveness.cub` (after `kv.cub`): for the broadcasting client
-   (`kv-bc-beh`, `c-out = kv-bcast ws`), under every `Fair 4` sequence there is a time at which
-   every replica has applied every write. Proof plan: (a) `InL w (r-app …r)` is stable
-   (`step-by-events`, then `stable-later`); (b) client at `cons (r , w) U`: `SchedFair` + `wait-run`
-   + `step-run-eq` give a time after which the packet `(3, r, m-put w)` is in flight and
-   `c-out = U`; (c) `DeliveryFair` on that packet: `Took` (a lemma over `Resolved` turns `dl-go`
-   into: after the step replica r owes `kp-ack 3 w`) — `Gone` is impossible for a replica;
-   (d) `SchedFair` + `wait-run` on r: after its run `w` is applied; (e) induction on `c-out`,
-   merging times with `nt-later-comm` and (a).
+1. `experiments/fleet/kv/liveness.cub`: add `kv-client-finishes` by `live-measure` (measure:
+   the length of `c-out`; premise from `kvl-client`).
 2. `experiments/fleet/kv/refine.cub`: `Refines kv-map-world (λ k → #0) (client history) kv-seq-beh
    (kv-init (kv-seq-cli prog))` by `safe-by-events` with the invariant: applied₀ ⊆ issued,
    acknowledged ⊆ applied₀, every `m-put` in flight issued, every `m-ack` from 0 applied at 0,
    every `m-get`/`m-val`(from 0)/owed value with request id ≤ `c-idx` and, when equal, the
-   client waiting on that key and the value `kv-store conf k`; history is the map's.
+   client waiting on that key and the value `kv-store conf k`; history is the map's. Write
+   every lemma over explicit fields (records have η) and pass intermediate results as
+   arguments (Found 2).
 3. `lib/deploy.cub`, the node binary, the localhost run (see "What is built" 4 and Acceptance).

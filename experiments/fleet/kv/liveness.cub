@@ -1,0 +1,205 @@
+-- experiments/fleet/kv/liveness.cub — liveness of the kv fleet under fairness (loaded after
+-- kv.cub). The client broadcasts: its state holds the writes still to send, each with the
+-- replica it goes to. Under every fair choice sequence (every node scheduled again and again,
+-- every packet in flight later taken by its addressee) there is a time at which every replica
+-- has applied every write addressed to it: kv-live. The proof follows one write: the client's
+-- run puts it in flight (scheduling fairness and wait-run), its delivery makes the replica
+-- log it and owe the acknowledgement (delivery fairness; a replica never stops), the replica's
+-- run applies it (scheduling fairness again); applied writes stay applied, so the times merge.
+-- The measure rule is used for kv-client-finishes: the writes still to send decrease.
+KvG : Type
+KvG = FState KvMsg KvSt
+kv-out : KvG → List (NodeId × KvWrite)
+kv-out g = c-out (snd (fst g 3))
+kv-app : Nat → KvG → List KvWrite
+kv-app r g = r-app (fst (fst g r))
+kv-pkt : Nat → KvWrite → Pkt KvMsg
+kv-pkt r w = Pkt { p-from = 3 ; p-to = r ; p-msg = m-put w }
+-- ---------------------------------------------------------------- applied writes stay applied
+kvl-rep-mono-recv : (w : KvWrite) → (st : KvRep) → InL {KvWrite} w (r-app st) → (r : Rcv KvMsg) → InL {KvWrite} w (r-app (kv-rep-recv st r))
+kvl-rep-mono-recv w st h r-timeout = h
+kvl-rep-mono-recv w st h (r-msg from (m-put w2)) = h
+kvl-rep-mono-recv w st h (r-msg from (m-ack w2)) = h
+kvl-rep-mono-recv w st h (r-msg from (m-get k rid)) = h
+kvl-rep-mono-recv w st h (r-msg from (m-val rid v)) = h
+kvl-rep-mono : (w : KvWrite) → (c : KvCli) → (st : KvRep) → (pd : KvPend) → InL {KvWrite} w (r-app st) →
+               VOk {KvMsg} {KvSt} (λ s → InL {KvWrite} w (r-app (fst s))) (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , c)) (kv-rep-go st pd))
+kvl-rep-mono w c st kp-none h = λ r → kvl-rep-mono-recv w st h r
+kvl-rep-mono w c st (kp-ack to w2) h = inr h
+kvl-rep-mono w c st (kp-val to rid v) h = h
+kvl-vok-imp : (X : Type) → (P : KvSt → Type) → (v : NView KvMsg KvSt) → (X → VOk {KvMsg} {KvSt} P v) → VOk {KvMsg} {KvSt} (λ s → X → P s) v
+kvl-vok-imp X P v-halt f = unit
+kvl-vok-imp X P (v-send to m s) f = f
+kvl-vok-imp X P (v-recv k) f = λ r x → f x r
+kvl-vok-imp X P (v-now kn) f = λ w x → f x w
+kvl-vok-imp X P (v-tau s) f = f
+KvAppF : Nat → KvWrite → Nat → KvSt → Type
+KvAppF r w i s = Path Nat i r → InL {KvWrite} w (r-app (fst s))
+kvl-bc-mono : (r : Nat) → (w : KvWrite) → (st : KvSt) → (out : List (NodeId × KvWrite)) → KvAppF r w 3 st → VOk {KvMsg} {KvSt} (KvAppF r w 3) (kv-bc-go st out)
+kvl-bc-mono r w st nil h = unit
+kvl-bc-mono r w st (cons e u) h = h
+kvl-app-local : (r : Nat) → (w : KvWrite) → (i : Nat) → (s : KvSt) → KvAppF r w i s → VOk {KvMsg} {KvSt} (KvAppF r w i) (kv-bc-beh i s)
+kvl-app-local r w zero s h = kvl-vok-imp (Path Nat zero r) (λ s2 → InL {KvWrite} w (r-app (fst s2))) (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd s)) (kv-rep-view (fst s))) (λ e → kvl-rep-mono w (snd s) (fst s) (r-pend (fst s)) (h e))
+kvl-app-local r w (suc zero) s h = kvl-vok-imp (Path Nat (suc zero) r) (λ s2 → InL {KvWrite} w (r-app (fst s2))) (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd s)) (kv-rep-view (fst s))) (λ e → kvl-rep-mono w (snd s) (fst s) (r-pend (fst s)) (h e))
+kvl-app-local r w (suc (suc zero)) s h = kvl-vok-imp (Path Nat (suc (suc zero)) r) (λ s2 → InL {KvWrite} w (r-app (fst s2))) (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd s)) (kv-rep-view (fst s))) (λ e → kvl-rep-mono w (snd s) (fst s) (r-pend (fst s)) (h e))
+kvl-app-local r w (suc (suc (suc zero))) s h = kvl-bc-mono r w s (c-out (snd s)) h
+kvl-app-local r w (suc (suc (suc (suc j)))) s h = unit
+kv-app-step : (r : Nat) → (w : KvWrite) → (a : Adv) → (g : KvG) → InL {KvWrite} w (kv-app r g) → InL {KvWrite} w (kv-app r (fleet-step {KvMsg} {KvSt} kv-bc-beh a g))
+kv-app-step r w a g h =
+  step-by-events {KvMsg} {KvSt} (λ g2 → (i : NodeId) → KvAppF r w i (fst g2 i)) kv-bc-beh
+    (λ g2 i h2 → ns-local {KvMsg} {KvSt} (KvAppF r w) kv-bc-beh (kvl-app-local r w) i ev-run g2 h2)
+    (λ g2 p rest h2 m s → ns-local {KvMsg} {KvSt} (KvAppF r w) kv-bc-beh (kvl-app-local r w) (p-to p) (ev-deliver p rest) g2 h2)
+    (λ g2 n h2 s → h2)
+    a g (λ i e → subst {lzero} {lzero} {Nat} {λ j → InL {KvWrite} w (r-app (fst (fst g j)))} (sym e) h) r (λ i → r)
+kv-app-later : (r : Nat) → (w : KvWrite) → (chs : AdvSeq) → (g0 : KvG) → (k t : Nat) → InL {KvWrite} w (kv-app r (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)) → InL {KvWrite} w (kv-app r (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 (nt-later k t)))
+kv-app-later r w chs g0 k t h = stable-later {KvMsg} {KvSt} (λ g → InL {KvWrite} w (kv-app r g)) kv-bc-beh (kv-app-step r w) chs g0 k t h
+-- ---------------------------------------------------------------- the client's run puts the write in flight
+kvl-bc-norecv : (st : KvSt) → (out : List (NodeId × KvWrite)) → IsRecvV {KvMsg} {KvSt} (kv-bc-go st out) → Empty
+kvl-bc-norecv st nil h = h
+kvl-bc-norecv st (cons e u) h = h
+KvSent : Nat → KvWrite → List (NodeId × KvWrite) → KvG → Type
+KvSent r w u g = Path (List (NodeId × KvWrite)) (kv-out g) u × InL {Pkt KvMsg} (kv-pkt r w) (flight (snd g))
+kvl-sent : (g : KvG) → (r : Nat) → (w : KvWrite) → (u : List (NodeId × KvWrite)) → (out : List (NodeId × KvWrite)) → Path (List (NodeId × KvWrite)) out (cons (r , w) u) →
+           KvSent r w u (ns-go {KvMsg} {KvSt} 3 ev-run g (kv-bc-go (fst g 3) out))
+kvl-sent g r w u out e =
+  subst {lzero} {lzero} {List (NodeId × KvWrite)} {λ o → KvSent r w u (ns-go {KvMsg} {KvSt} 3 ev-run g (kv-bc-go (fst g 3) o))} (sym e)
+    ((λ i → u) , inl (λ i → kv-pkt r w))
+kvl-client-go : (chs : AdvSeq) → (g0 : KvG) → (r : Nat) → (w : KvWrite) → (u : List (NodeId × KvWrite)) → (t2 : Nat) → isTrue (adv-is-run 3 (chs t2)) →
+                Path (List (NodeId × KvWrite)) (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t2)) (cons (r , w) u) → KvSent r w u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 (suc t2))
+kvl-client-go chs g0 r w u t2 hr e =
+  subst {lzero} {lzero} {KvG} {KvSent r w u} (sym (step-run-eq {KvMsg} {KvSt} kv-bc-beh (chs t2) (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t2) 3 hr))
+    (kvl-sent (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t2) r w u (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t2)) e)
+kvl-client-k : (chs : AdvSeq) → (g0 : KvG) → (t r : Nat) → (w : KvWrite) → (u : (List (NodeId × KvWrite))) →
+               Path (List (NodeId × KvWrite)) (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)) (cons (r , w) u) →
+               (wr : (t2 : Nat) × (isTrue (adv-is-run 3 (chs t2)) × Path KvSt (fst (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t2) 3) (fst (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t) 3))) →
+               (t1 : Nat) × KvSent r w u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t1)
+kvl-client-k chs g0 t r w u e wr =
+  (suc (fst wr) , kvl-client-go chs g0 r w u (fst wr) (fst (snd wr))
+     (concat {lzero} {(List (NodeId × KvWrite))} {kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 (fst wr))} {kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)} {cons (r , w) u} (λ i → c-out (snd (snd (snd wr) i))) e))
+kvl-client : (chs : AdvSeq) → (g0 : KvG) → Fair {KvMsg} {KvSt} 4 kv-bc-beh chs g0 → (t r : Nat) → (w : KvWrite) → (u : (List (NodeId × KvWrite))) →
+             Path (List (NodeId × KvWrite)) (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)) (cons (r , w) u) → (t1 : Nat) × KvSent r w u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t1)
+kvl-client chs g0 fair t r w u e =
+  kvl-client-k chs g0 t r w u e
+    (wait-run {KvMsg} {KvSt} kv-bc-beh chs g0 3 (fst (fst fair t 3 unit)) t (snd (fst fair t 3 unit)) (kvl-bc-norecv (fst (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t) 3) (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t))))
+-- ---------------------------------------------------------------- its delivery makes the replica owe the acknowledgement
+kvl-rep-nohalt-go : (c : KvCli) → (st : KvRep) → (pd : KvPend) → IsHaltV {KvMsg} {KvSt} (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , c)) (kv-rep-go st pd)) → Empty
+kvl-rep-nohalt-go c st kp-none h = h
+kvl-rep-nohalt-go c st (kp-ack to w) h = h
+kvl-rep-nohalt-go c st (kp-val to rid v) h = h
+kvl-rep-nohalt : (r : Nat) → r < 3 → (st : KvSt) → IsHaltV {KvMsg} {KvSt} (kv-bc-beh r st) → Empty
+kvl-rep-nohalt zero h st x = kvl-rep-nohalt-go (snd st) (fst st) (r-pend (fst st)) x
+kvl-rep-nohalt (suc zero) h st x = kvl-rep-nohalt-go (snd st) (fst st) (r-pend (fst st)) x
+kvl-rep-nohalt (suc (suc zero)) h st x = kvl-rep-nohalt-go (snd st) (fst st) (r-pend (fst st)) x
+kvl-rep-nohalt (suc (suc (suc j))) h st x = Empty-rec h
+kvl-owe-0 : (g : KvG) → (w : KvWrite) → (rest : List (Pkt KvMsg)) → (pd : KvPend) → IsRecvV {KvMsg} {KvSt} (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd (fst g zero))) (kv-rep-go (fst (fst g zero)) pd)) →
+            Path KvPend (r-pend (fst (fst (ns-go {KvMsg} {KvSt} zero (ev-deliver (kv-pkt zero w) rest) g (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd (fst g zero))) (kv-rep-go (fst (fst g zero)) pd))) zero))) (kp-ack 3 w)
+kvl-owe-0 g w rest kp-none hv = λ i → kp-ack 3 w
+kvl-owe-0 g w rest (kp-ack to w2) hv = Empty-rec hv
+kvl-owe-0 g w rest (kp-val to rid v) hv = Empty-rec hv
+kvl-owe-1 : (g : KvG) → (w : KvWrite) → (rest : List (Pkt KvMsg)) → (pd : KvPend) → IsRecvV {KvMsg} {KvSt} (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd (fst g (suc zero)))) (kv-rep-go (fst (fst g (suc zero))) pd)) →
+            Path KvPend (r-pend (fst (fst (ns-go {KvMsg} {KvSt} (suc zero) (ev-deliver (kv-pkt (suc zero) w) rest) g (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd (fst g (suc zero)))) (kv-rep-go (fst (fst g (suc zero))) pd))) (suc zero)))) (kp-ack 3 w)
+kvl-owe-1 g w rest kp-none hv = λ i → kp-ack 3 w
+kvl-owe-1 g w rest (kp-ack to w2) hv = Empty-rec hv
+kvl-owe-1 g w rest (kp-val to rid v) hv = Empty-rec hv
+kvl-owe-2 : (g : KvG) → (w : KvWrite) → (rest : List (Pkt KvMsg)) → (pd : KvPend) → IsRecvV {KvMsg} {KvSt} (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd (fst g (suc (suc zero))))) (kv-rep-go (fst (fst g (suc (suc zero)))) pd)) →
+            Path KvPend (r-pend (fst (fst (ns-go {KvMsg} {KvSt} (suc (suc zero)) (ev-deliver (kv-pkt (suc (suc zero)) w) rest) g (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd (fst g (suc (suc zero))))) (kv-rep-go (fst (fst g (suc (suc zero)))) pd))) (suc (suc zero))))) (kp-ack 3 w)
+kvl-owe-2 g w rest kp-none hv = λ i → kp-ack 3 w
+kvl-owe-2 g w rest (kp-ack to w2) hv = Empty-rec hv
+kvl-owe-2 g w rest (kp-val to rid v) hv = Empty-rec hv
+KvOwes : Nat → KvWrite → KvG → Type
+KvOwes r w g = Path KvPend (r-pend (fst (fst g r))) (kp-ack 3 w)
+kvl-owe : (r : Nat) → r < 3 → (g : KvG) → (w : KvWrite) → (rest : List (Pkt KvMsg)) → IsRecvV {KvMsg} {KvSt} (kv-bc-beh r (fst g r)) →
+          KvOwes r w (node-step {KvMsg} {KvSt} kv-bc-beh r (ev-deliver (kv-pkt r w) rest) g)
+kvl-owe zero h g w rest hv = kvl-owe-0 g w rest (r-pend (fst (fst g zero))) hv
+kvl-owe (suc zero) h g w rest hv = kvl-owe-1 g w rest (r-pend (fst (fst g (suc zero)))) hv
+kvl-owe (suc (suc zero)) h g w rest hv = kvl-owe-2 g w rest (r-pend (fst (fst g (suc (suc zero))))) hv
+kvl-owe (suc (suc (suc zero))) h g w rest hv = Empty-rec h
+kvl-owe (suc (suc (suc (suc j)))) h g w rest hv = Empty-rec h
+kvl-took : (r : Nat) → r < 3 → (w : KvWrite) → (g : KvG) → (x : Resolved KvMsg) → dl-go {KvMsg} {KvSt} kv-bc-beh (kv-pkt r w) g x → KvOwes r w (fl-go {KvMsg} {KvSt} kv-bc-beh g x)
+kvl-took r h w g x d = took-elim {KvMsg} {KvSt} kv-bc-beh (kv-pkt r w) g (KvOwes r w) (λ rest hv → kvl-owe r h g w rest hv) x d
+kvl-deliver-k : (chs : AdvSeq) → (g0 : KvG) → (r : Nat) → r < 3 → (w : KvWrite) → (s0 : Nat) →
+                Sum (Took {KvMsg} {KvSt} kv-bc-beh chs g0 s0 (kv-pkt r w)) (Gone {KvMsg} {KvSt} kv-bc-beh chs g0 s0 r) → (s : Nat) × KvOwes r w (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s)
+kvl-deliver-k chs g0 r h w s0 (inl tk) = (suc s0 , kvl-took r h w (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s0) (resolve {KvMsg} (chs s0) (snd (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s0))) tk)
+kvl-deliver-k chs g0 r h w s0 (inr gn) = Empty-rec (kvl-rep-nohalt r h (fst (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s0) r) gn)
+kvl-deliver : (chs : AdvSeq) → (g0 : KvG) → Fair {KvMsg} {KvSt} 4 kv-bc-beh chs g0 → (r : Nat) → r < 3 → (w : KvWrite) → (t1 : Nat) →
+              InL {Pkt KvMsg} (kv-pkt r w) (flight (snd (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t1))) → (s : Nat) × KvOwes r w (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s)
+kvl-deliver chs g0 fair r h w t1 m =
+  kvl-deliver-k chs g0 r h w (nt-later (fst (snd fair t1 (kv-pkt r w) m)) t1) (snd (snd fair t1 (kv-pkt r w) m))
+-- ---------------------------------------------------------------- the replica's run applies it
+kvl-norecv : (r : Nat) → r < 3 → (w : KvWrite) → (st : KvSt) → Path KvPend (r-pend (fst st)) (kp-ack 3 w) → IsRecvV {KvMsg} {KvSt} (kv-bc-beh r st) → Empty
+kvl-norecv zero h w st e = subst {lzero} {lzero} {KvPend} {λ pd → IsRecvV {KvMsg} {KvSt} (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd st)) (kv-rep-go (fst st) pd)) → Empty} (sym e) (λ x → x)
+kvl-norecv (suc zero) h w st e = subst {lzero} {lzero} {KvPend} {λ pd → IsRecvV {KvMsg} {KvSt} (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd st)) (kv-rep-go (fst st) pd)) → Empty} (sym e) (λ x → x)
+kvl-norecv (suc (suc zero)) h w st e = subst {lzero} {lzero} {KvPend} {λ pd → IsRecvV {KvMsg} {KvSt} (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd st)) (kv-rep-go (fst st) pd)) → Empty} (sym e) (λ x → x)
+kvl-norecv (suc (suc (suc zero))) h w st e = Empty-rec h
+kvl-norecv (suc (suc (suc (suc j)))) h w st e = Empty-rec h
+kvl-apply : (r : Nat) → r < 3 → (w : KvWrite) → (g : KvG) → KvOwes r w g → InL {KvWrite} w (kv-app r (node-step {KvMsg} {KvSt} kv-bc-beh r ev-run g))
+kvl-apply zero h w g e = subst {lzero} {lzero} {KvPend} {λ pd → InL {KvWrite} w (r-app (fst (fst (ns-go {KvMsg} {KvSt} zero ev-run g (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd (fst g zero))) (kv-rep-go (fst (fst g zero)) pd))) zero)))} (sym e) (inl (λ i → w))
+kvl-apply (suc zero) h w g e = subst {lzero} {lzero} {KvPend} {λ pd → InL {KvWrite} w (r-app (fst (fst (ns-go {KvMsg} {KvSt} (suc zero) ev-run g (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd (fst g (suc zero)))) (kv-rep-go (fst (fst g (suc zero))) pd))) (suc zero))))} (sym e) (inl (λ i → w))
+kvl-apply (suc (suc zero)) h w g e = subst {lzero} {lzero} {KvPend} {λ pd → InL {KvWrite} w (r-app (fst (fst (ns-go {KvMsg} {KvSt} (suc (suc zero)) ev-run g (nview-map {KvMsg} {KvRep} {KvSt} (λ x → (x , snd (fst g (suc (suc zero))))) (kv-rep-go (fst (fst g (suc (suc zero)))) pd))) (suc (suc zero)))))} (sym e) (inl (λ i → w))
+kvl-apply (suc (suc (suc zero))) h w g e = Empty-rec h
+kvl-apply (suc (suc (suc (suc j)))) h w g e = Empty-rec h
+kvl-lt4 : (r : Nat) → r < 3 → r < 4
+kvl-lt4 zero h = unit
+kvl-lt4 (suc zero) h = unit
+kvl-lt4 (suc (suc zero)) h = unit
+kvl-lt4 (suc (suc (suc j))) h = Empty-rec h
+kvl-replica-go : (chs : AdvSeq) → (g0 : KvG) → (r : Nat) → r < 3 → (w : KvWrite) → (t2 : Nat) → isTrue (adv-is-run r (chs t2)) →
+                 KvOwes r w (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t2) → InL {KvWrite} w (kv-app r (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 (suc t2)))
+kvl-replica-go chs g0 r h w t2 hr e =
+  subst {lzero} {lzero} {KvG} {λ g → InL {KvWrite} w (kv-app r g)} (sym (step-run-eq {KvMsg} {KvSt} kv-bc-beh (chs t2) (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t2) r hr))
+    (kvl-apply r h w (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t2) e)
+kvl-replica-k : (chs : AdvSeq) → (g0 : KvG) → (r : Nat) → r < 3 → (w : KvWrite) → (s : Nat) → KvOwes r w (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s) →
+                (wr : (t2 : Nat) × (isTrue (adv-is-run r (chs t2)) × Path KvSt (fst (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t2) r) (fst (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s) r))) →
+                (T : Nat) × InL {KvWrite} w (kv-app r (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T))
+kvl-replica-k chs g0 r h w s e wr =
+  (suc (fst wr) , kvl-replica-go chs g0 r h w (fst wr) (fst (snd wr))
+     (concat {lzero} {KvPend} {r-pend (fst (fst (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 (fst wr)) r))} {r-pend (fst (fst (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s) r))} {kp-ack 3 w} (λ i → r-pend (fst (snd (snd wr) i))) e))
+kvl-replica : (chs : AdvSeq) → (g0 : KvG) → Fair {KvMsg} {KvSt} 4 kv-bc-beh chs g0 → (r : Nat) → r < 3 → (w : KvWrite) → (s : Nat) →
+              KvOwes r w (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s) → (T : Nat) × InL {KvWrite} w (kv-app r (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T))
+kvl-replica chs g0 fair r h w s e =
+  kvl-replica-k chs g0 r h w s e
+    (wait-run {KvMsg} {KvSt} kv-bc-beh chs g0 r (fst (fst fair s r (kvl-lt4 r h))) s (snd (fst fair s r (kvl-lt4 r h))) (kvl-norecv r h w (fst (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s) r) e))
+-- ---------------------------------------------------------------- every write, every replica
+KvAllRep : List (NodeId × KvWrite) → Type
+KvAllRep u = case u of nil → Unit; cons e r → (fst e < 3) × rec r
+KvAllApp : List (NodeId × KvWrite) → KvG → Type
+KvAllApp u g = (case u return (λ x → Type) of nil → Unit; cons e r → InL {KvWrite} (snd e) (kv-app (fst e) g) × rec r)
+kvl-all-later : (u : List (NodeId × KvWrite)) → (chs : AdvSeq) → (g0 : KvG) → (k t : Nat) → KvAllApp u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t) → KvAllApp u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 (nt-later k t))
+kvl-all-later nil chs g0 k t h = unit
+kvl-all-later (cons e r) chs g0 k t h = (kv-app-later (fst e) (snd e) chs g0 k t (fst h) , kvl-all-later r chs g0 k t (snd h))
+kvl-merge : (x : NodeId × KvWrite) → (u : (List (NodeId × KvWrite))) → (chs : AdvSeq) → (g0 : KvG) →
+            (a : (T : Nat) × InL {KvWrite} (snd x) (kv-app (fst x) (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T))) → (ih : (T : Nat) × KvAllApp u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T)) →
+            (T : Nat) × KvAllApp (cons x u) (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T)
+kvl-merge x u chs g0 a ih =
+  (nt-later (fst ih) (fst a) ,
+   (kv-app-later (fst x) (snd x) chs g0 (fst ih) (fst a) (snd a) ,
+    subst {lzero} {lzero} {Nat} {λ T → KvAllApp u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T)} (nt-later-comm (fst a) (fst ih)) (kvl-all-later u chs g0 (fst a) (fst ih) (snd ih))))
+kvl-chain-2 : (chs : AdvSeq) → (g0 : KvG) → Fair {KvMsg} {KvSt} 4 kv-bc-beh chs g0 → (r : Nat) → r < 3 → (w : KvWrite) →
+              (d : (s : Nat) × KvOwes r w (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 s)) → (T : Nat) × InL {KvWrite} w (kv-app r (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T))
+kvl-chain-2 chs g0 fair r h w d = kvl-replica chs g0 fair r h w (fst d) (snd d)
+kvl-chain : (chs : AdvSeq) → (g0 : KvG) → Fair {KvMsg} {KvSt} 4 kv-bc-beh chs g0 → (r : Nat) → r < 3 → (w : KvWrite) → (u : (List (NodeId × KvWrite))) →
+            (c1 : (t1 : Nat) × KvSent r w u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t1)) → (T : Nat) × InL {KvWrite} w (kv-app r (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T))
+kvl-chain chs g0 fair r h w u c1 = kvl-chain-2 chs g0 fair r h w (kvl-deliver chs g0 fair r h w (fst c1) (snd (snd c1)))
+kvl-claim-k : (x : NodeId × KvWrite) → (u : (List (NodeId × KvWrite))) → (chs : AdvSeq) → (g0 : KvG) → Fair {KvMsg} {KvSt} 4 kv-bc-beh chs g0 → (fst x < 3) →
+              (c1 : (t1 : Nat) × KvSent (fst x) (snd x) u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t1)) → (ih : (T : Nat) × KvAllApp u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T)) → (T : Nat) × KvAllApp (cons x u) (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T)
+kvl-claim-k x u chs g0 fair h c1 ih = kvl-merge x u chs g0 (kvl-chain chs g0 fair (fst x) h (snd x) u c1) ih
+kvl-claim-c : (x : NodeId × KvWrite) → (u : (List (NodeId × KvWrite))) → (chs : AdvSeq) → (g0 : KvG) → Fair {KvMsg} {KvSt} 4 kv-bc-beh chs g0 → (fst x < 3) →
+              (c1 : (t1 : Nat) × KvSent (fst x) (snd x) u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t1)) →
+              ((t : Nat) → Path (List (NodeId × KvWrite)) (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)) u → (T : Nat) × KvAllApp u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T)) → (T : Nat) × KvAllApp (cons x u) (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T)
+kvl-claim-c x u chs g0 fair h c1 rec1 = kvl-claim-k x u chs g0 fair h c1 (rec1 (fst c1) (fst (snd c1)))
+kvl-claim : (u : (List (NodeId × KvWrite))) → (chs : AdvSeq) → (g0 : KvG) → Fair {KvMsg} {KvSt} 4 kv-bc-beh chs g0 → KvAllRep u → (t : Nat) →
+            Path (List (NodeId × KvWrite)) (kv-out (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 t)) u → (T : Nat) × KvAllApp u (fleet-at {KvMsg} {KvSt} kv-bc-beh chs g0 T)
+kvl-claim nil chs g0 fair ar t e = (t , unit)
+kvl-claim (cons x u) chs g0 fair ar t e =
+  kvl-claim-c x u chs g0 fair (fst ar) (kvl-client chs g0 fair t (fst x) (snd x) u e) (λ t2 e2 → kvl-claim u chs g0 fair (snd ar) t2 e2)
+-- the statement: from the initial state with any client state whose writes all go to
+-- replicas, under every fair sequence there is a time at which each of them is applied by the
+-- replica it was addressed to
+kv-live : (c0 : KvCli) → KvAllRep (c-out c0) → Live {KvMsg} {KvSt} 4 (KvAllApp (c-out c0)) kv-bc-beh (kv-init c0)
+kv-live c0 ar chs fair = kvl-claim (c-out c0) chs (kv-init c0) fair ar zero (λ i → c-out c0)
+-- for a broadcast of the writes ws: every write is applied by every replica
+kvl-bcast-rep : (ws : List KvWrite) → KvAllRep (kv-bcast ws)
+kvl-bcast-rep nil = unit
+kvl-bcast-rep (cons w r) = (unit , (unit , (unit , kvl-bcast-rep r)))
+kv-live-bcast : (ws : List KvWrite) → Live {KvMsg} {KvSt} 4 (KvAllApp (kv-bcast ws)) kv-bc-beh (kv-init (kv-cli-init nil (kv-bcast ws) ph-done))
+kv-live-bcast ws = kv-live (kv-cli-init nil (kv-bcast ws) ph-done) (kvl-bcast-rep ws)
