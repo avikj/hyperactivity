@@ -403,3 +403,113 @@ o-tree-transport : {O S1 S2 : Sig} {A X Y : Type} → isSet (Cmd O) → isSet A 
                    (H1 : o-ObsOf O S1 X) → (p : Proc {lzero} S1 A) → (s1 : X) → (H2 : o-ObsOf O S2 Y) → (q : Proc {lzero} S2 A) → (s2 : Y) →
                    o-ObsEq H1 p s1 H2 q s2 → P (o-obs H1 (to-step p) s1) → P (o-obs H2 (to-step q) s2)
 o-tree-transport sc sa P H1 p s1 H2 q s2 e h = comp (λ i → P (o-obseq-tree sc sa H1 p s1 H2 q s2 e i)) (λ i → []) h
+-- the quotient's eliminator into a family of propositions
+o-qelimP : {l : Level} {A : Type (lsuc lzero)} {R : A → A → Type} → (P : o-Quot A R → Type l) → ((x : o-Quot A R) → isProp (P x)) →
+           ((a : A) → P (o-qin a)) → (x : o-Quot A R) → P x
+o-qelimP {l} {A} {R} P pp f x = case x return (λ w → P w) of
+    o-qin a → f a
+    o-qeq a b r i → isProp→PathP (λ m → P (o-qeq a b r m)) (pp (o-qin b)) (f a) (f b) i
+    o-qsquash x1 y1 p q i j →
+      comp (λ k → P (o-qsquash x1 y1 p q i j))
+        (λ k → [ i = 0 ↦ pp (p j) (comp (λ m → P (o-qsquash x1 y1 p q (i /\ m) (j /\ m))) (λ m → []) (rec x1)) (rec p j) k
+               , i = 1 ↦ pp (q j) (comp (λ m → P (o-qsquash x1 y1 p q (i /\ m) (j /\ m))) (λ m → []) (rec x1)) (rec q j) k
+               , j = 0 ↦ pp x1 (comp (λ m → P (o-qsquash x1 y1 p q (i /\ m) (j /\ m))) (λ m → []) (rec x1)) (rec x1) k
+               , j = 1 ↦ pp y1 (comp (λ m → P (o-qsquash x1 y1 p q (i /\ m) (j /\ m))) (λ m → []) (rec x1)) (rec y1) k ])
+        (comp (λ m → P (o-qsquash x1 y1 p q (i /\ m) (j /\ m))) (λ m → []) (rec x1))
+-- for sets the quotient is encoded in path-free data: o-nf and the class of a tree are inverse
+o-nf-sec : {O : Sig} {A : Type} → (sc : isSet (Cmd O)) → (sa : isSet A) → (t : Step O A) → o-nf sc sa (o-qin (o-reify {lzero} {O} {A} t)) ≡ t
+o-nf-sec sc sa t = o-reify-step t
+o-nf-ret : {O : Sig} {A : Type} → (sc : isSet (Cmd O)) → (sa : isSet A) → (x : o-Beh O A) →
+           Path (o-Beh O A) (o-qin (o-reify {lzero} {O} {A} (o-nf sc sa x))) x
+o-nf-ret {O} {A} sc sa x =
+  o-qelimP {lsuc lzero} {Proc {lzero} O A} {o-PBisim {O} {A}}
+    (λ y → Path (o-Beh O A) (o-qin (o-reify {lzero} {O} {A} (o-nf sc sa y))) y)
+    (λ y → o-qset {Proc {lzero} O A} {o-PBisim {O} {A}} (o-qin (o-reify {lzero} {O} {A} (o-nf sc sa y))) y)
+    (λ p i → o-qeq (o-reify {lzero} {O} {A} (to-step p)) p
+               (o-path-bisim (to-step (o-reify {lzero} {O} {A} (to-step p))) (to-step p) (o-reify-step (to-step p))) i)
+    x
+-- ---------------------------------------------------------------- congruence
+-- on trees bisimilarity is a path, so every operation respects it
+o-bisim-bind : {S : Sig} {A B : Type} → (t u : Step S A) → (f g : A → Step S B) → o-Bisim t u → ((a : A) → o-Bisim (f a) (g a)) →
+               o-Bisim (o-bind t f) (o-bind u g)
+o-bisim-bind t u f g b h =
+  o-path-bisim (o-bind t f) (o-bind u g) (λ i → o-bind (o-bisim-path t u b i) (λ a → o-bisim-path (f a) (g a) (h a) i))
+o-bisim-handle : {S W : Sig} {A : Type} → (h1 h2 : o-THandler S W) → ((c : Cmd S) → o-Bisim (h1 c) (h2 c)) → (t u : Step S A) → o-Bisim t u →
+                 o-Bisim (o-handle h1 t) (o-handle h2 u)
+o-bisim-handle {S} {W} {A} h1 h2 hb t u b =
+  o-path-bisim (o-handle h1 t) (o-handle h2 u)
+    (λ i → o-handle {S} {W} {A} (λ c → o-bisim-path (h1 c) (h2 c) (hb c) i) (o-bisim-path t u b i))
+o-bisim-obs : {O S : Sig} {A St : Type} → (H : o-ObsOf O S St) → (t u : Step S A) → (s : St) → o-Bisim t u → o-Bisim (o-obs H t s) (o-obs H u s)
+o-bisim-obs H t u s b = o-path-bisim (o-obs H t s) (o-obs H u s) (λ i → o-obs H (o-bisim-path t u b i) s)
+-- on Church processes: under bind for natural first processes, under lib/proc.cub's handle for
+-- natural handlers and processes
+o-pbisim-bind : {S : Sig} {A B : Type} → (p q : Proc {lzero} S A) → (f g : A → Proc {lzero} S B) → o-Natural p → o-Natural q →
+                o-PBisim p q → ((a : A) → o-PBisim (f a) (g a)) → o-PBisim (bind p f) (bind q g)
+o-pbisim-bind {S} {A} {B} p q f g np nq b h =
+  o-path-bisim (to-step (bind p f)) (to-step (bind q g))
+    (calc to-step (bind p f)
+        ≡ o-bind (to-step p) (λ a → to-step (f a)) by o-step-bind p f np
+        ≡ o-bind (to-step q) (λ a → to-step (g a)) by (λ i → o-bind (o-bisim-path (to-step p) (to-step q) b i) (λ a → o-bisim-path (to-step (f a)) (to-step (g a)) (h a) i))
+        ≡ to-step (bind q g) by sym (o-step-bind q g nq))
+o-pbisim-handle : {S W : Sig} {A : Type} → (hd : Handler S W) → ((c : Cmd S) → o-Natural (hd c)) →
+                  (p q : Proc {lzero} S A) → (p1 q1 : Proc {lsuc lzero} S A) →
+                  o-NaturalAt {lsuc lzero} {S} {A} p p1 → o-NaturalAt {lsuc lzero} {S} {A} q q1 →
+                  o-PBisim p q → o-PBisim (handle hd p1) (handle hd q1)
+o-pbisim-handle {S} {W} {A} hd nh p q p1 q1 np nq b =
+  o-path-bisim (to-step (handle hd p1)) (to-step (handle hd q1))
+    (calc to-step (handle hd p1)
+        ≡ o-handle {S} {W} {A} (λ c → to-step (hd c)) (to-step p) by o-handle-step hd nh p p1 np
+        ≡ o-handle {S} {W} {A} (λ c → to-step (hd c)) (to-step q) by (λ i → o-handle {S} {W} {A} (λ c → to-step (hd c)) (o-bisim-path (to-step p) (to-step q) b i))
+        ≡ to-step (handle hd q1) by sym (o-handle-step hd nh q q1 nq))
+-- ---------------------------------------------------------------- up-to techniques
+-- up to bind: related first parts and continuations related on related results give related binds
+o-bisimR-bind : {S : Sig} {A B C D : Type} → (Q : A → B → Type) → (Q2 : C → D → Type) →
+                (t : Step S A) → (u : Step S B) → (f : A → Step S C) → (g : B → Step S D) →
+                o-BisimR Q t u → ((a : A) → (b : B) → Q a b → o-BisimR Q2 (f a) (g b)) → o-BisimR Q2 (o-bind t f) (o-bind u g)
+o-bisimR-bind Q Q2 (sdone a) (sdone b) f g h hk = hk a b h
+o-bisimR-bind Q Q2 (sdone a) (scmd c2 k2) f g h hk = Empty-rec h
+o-bisimR-bind Q Q2 (scmd c k) (sdone b) f g h hk = Empty-rec h
+o-bisimR-bind Q Q2 (scmd c k) (scmd c2 k2) f g h hk =
+  (fst h , λ r r2 pr → o-bisimR-bind Q Q2 (k r) (k2 r2) f g (snd h r r2 pr) hk)
+-- two runs (two signatures, two observations of the same O, two states) are similar up to a
+-- relation on states: the observed trees are bisimilar, ending in equal results and related states
+o-StRel : {A X Y : Type} → (X → Y → Type) → A × X → A × Y → Type
+o-StRel Rel x y = (fst x ≡ fst y) × Rel (snd x) (snd y)
+o-RunSim : {O S1 S2 : Sig} {A X Y : Type} → (X → Y → Type) → o-ObsOf O S1 X → Step S1 A → X → o-ObsOf O S2 Y → Step S2 A → Y → Type
+o-RunSim {O} {S1} {S2} {A} {X} {Y} Rel H1 t s1 H2 u s2 = o-BisimR {O} {A × X} {A × Y} (o-StRel {A} {X} {Y} Rel) (o-run H1 t s1) (o-run H2 u s2)
+-- similar runs observe bisimilar, hence are equal behaviours
+o-runsim-obs : {O S1 S2 : Sig} {A X Y : Type} → (Rel : X → Y → Type) → (H1 : o-ObsOf O S1 X) → (t : Step S1 A) → (s1 : X) →
+               (H2 : o-ObsOf O S2 Y) → (u : Step S2 A) → (s2 : Y) →
+               o-RunSim Rel H1 t s1 H2 u s2 → o-Bisim (o-obs H1 t s1) (o-obs H2 u s2)
+o-runsim-obs {O} {S1} {S2} {A} {X} {Y} Rel H1 t s1 H2 u s2 h =
+  o-bisimR-bind {O} {A × X} {A × Y} {A} {A} (o-StRel {A} {X} {Y} Rel) (λ a b → a ≡ b) (o-run H1 t s1) (o-run H2 u s2)
+    (λ x → sdone (fst x)) (λ y → sdone (fst y)) h (λ x y q → fst q)
+o-runsim-obseq : {O S1 S2 : Sig} {A X Y : Type} → (Rel : X → Y → Type) → (H1 : o-ObsOf O S1 X) → (p : Proc {lzero} S1 A) → (s1 : X) →
+                 (H2 : o-ObsOf O S2 Y) → (q : Proc {lzero} S2 A) → (s2 : Y) →
+                 o-RunSim Rel H1 (to-step p) s1 H2 (to-step q) s2 → o-ObsEq H1 p s1 H2 q s2
+o-runsim-obseq Rel H1 p s1 H2 q s2 h =
+  o-tbeh-eq H1 (to-step p) s1 H2 (to-step q) s2 (o-runsim-obs Rel H1 (to-step p) s1 H2 (to-step q) s2 h)
+-- up to bind, for runs: similar first parts, and continuations similar from related states
+o-runsim-bind : {O S1 S2 : Sig} {A B X Y : Type} → (Rel : X → Y → Type) → (H1 : o-ObsOf O S1 X) → (H2 : o-ObsOf O S2 Y) →
+                (t : Step S1 A) → (u : Step S2 A) → (f : A → Step S1 B) → (g : A → Step S2 B) → (s1 : X) → (s2 : Y) →
+                o-RunSim Rel H1 t s1 H2 u s2 →
+                ((a : A) → (x : X) → (y : Y) → Rel x y → o-RunSim Rel H1 (f a) x H2 (g a) y) →
+                o-RunSim Rel H1 (o-bind t f) s1 H2 (o-bind u g) s2
+o-runsim-bind {O} {S1} {S2} {A} {B} {X} {Y} Rel H1 H2 t u f g s1 s2 h hk =
+  comp (λ i → o-BisimR {O} {B × X} {B × Y} (o-StRel {B} {X} {Y} Rel) (o-run-bind H1 t f s1 (~ i)) (o-run-bind H2 u g s2 (~ i))) (λ i → [])
+    (o-bisimR-bind {O} {A × X} {A × Y} {B × X} {B × Y} (o-StRel {A} {X} {Y} Rel) (o-StRel {B} {X} {Y} Rel)
+       (o-run H1 t s1) (o-run H2 u s2)
+       (λ x → o-run H1 (f (fst x)) (snd x)) (λ y → o-run H2 (g (fst y)) (snd y)) h
+       (λ x y q → comp (λ i → o-BisimR {O} {B × X} {B × Y} (o-StRel {B} {X} {Y} Rel) (o-run H1 (f (fst x)) (snd x)) (o-run H2 (g (fst q i)) (snd y))) (λ i → [])
+                    (hk (fst x) (snd x) (snd y) (snd q))))
+-- up to context: one program C over a signature K, handled into S1 by hd1 and into S2 by hd2.
+-- If each command of K is handled similarly from related states, C is: a proof of ≈ for the
+-- two handled programs is the relation on states and one obligation per command
+o-runsim-context : {O K S1 S2 : Sig} {A X Y : Type} → (Rel : X → Y → Type) → (H1 : o-ObsOf O S1 X) → (H2 : o-ObsOf O S2 Y) →
+                   (hd1 : o-THandler K S1) → (hd2 : o-THandler K S2) →
+                   ((c : Cmd K) → (x : X) → (y : Y) → Rel x y → o-RunSim Rel H1 (hd1 c) x H2 (hd2 c) y) →
+                   (C : Step K A) → (x : X) → (y : Y) → Rel x y → o-RunSim Rel H1 (o-handle hd1 C) x H2 (o-handle hd2 C) y
+o-runsim-context Rel H1 H2 hd1 hd2 hc (sdone a) x y r = ((λ i → a) , r)
+o-runsim-context {O} {K} {S1} {S2} {A} {X} {Y} Rel H1 H2 hd1 hd2 hc (scmd c k) x y r =
+  o-runsim-bind Rel H1 H2 (hd1 c) (hd2 c) (λ z → o-handle hd1 (k z)) (λ z → o-handle hd2 (k z)) x y (hc c x y r)
+    (λ z x2 y2 r2 → o-runsim-context Rel H1 H2 hd1 hd2 hc (k z) x2 y2 r2)

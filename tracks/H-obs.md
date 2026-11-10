@@ -93,6 +93,13 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   with `o-nf-tbeh`; effectiveness `o-obseq-tree`; transport of predicates `o-beh-transport`,
   `o-tree-transport`.
 
+- Item 4, rest, and item 6 (851 passed 0 failed, 19.7M steps): `o-qelimP` (eliminator into
+  propositions, any level); `o-nf-sec`, `o-nf-ret` (for sets, `o-Beh O A` and `Step O A` are
+  inverse to each other: the quotient encoded in path-free data); congruences `o-bisim-bind`,
+  `o-bisim-handle`, `o-bisim-obs` (trees), `o-pbisim-bind`, `o-pbisim-handle` (Church, natural);
+  up to bind `o-bisimR-bind`; `o-StRel`, `o-RunSim Rel H1 t s1 H2 u s2`, `o-runsim-obs`,
+  `o-runsim-obseq` (similar runs ⇒ `o-ObsEq`), `o-runsim-bind`, up to context `o-runsim-context`.
+
 ## Found
 
 - `lib/std.cub` has no set quotient `_/_` and no truncations (the track text says it has); the
@@ -105,14 +112,14 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
 
 ## Next step
 
-In `lib/obs.cub`, append in this order, checking and committing after each:
-1. item 4, rest: `o-qelimP` (the quotient's eliminator into propositions) and with it
-   `o-Beh O A ≃ Step O A` for sets (`o-nf` and `λ t → o-qin (o-reify t)` inverse); congruences:
-   `o-bisim-bind`, `o-bisim-handle`, `o-bisim-obs` on trees (through paths), `o-pbisim-bind` and
-   `o-pbisim-handle` for natural Church processes.
-2. item 6: `o-bisimR-bind` (up to bind); `o-RunSim Rel H1 t s1 H2 u s2 = o-BisimR (≡ on results × Rel on states) (o-run …) (o-run …)`,
-   `o-runsim-bind`, `o-runsim-obs` (⇒ `o-Bisim` of the `o-obs`), up to context
-   (`o-runsim-context`: one tree over K handled into S1 and S2, related per command).
-3. `experiments/obs/counter.cub` (item 5 and the acceptance property).
-4. the guarded form (`GProc`): bisimulation by guarded recursion, its laws, guarded traces, and
-   where it differs from path equality (item 3, second half; item 2's coinductive traces).
+1. Write `experiments/obs/counter.cub` (item 5 and the acceptance property): observation
+   signature `oc-Obs` (`oc-req : Req` with `Req = inc | get | stop`, `oc-reply (n : Nat) : Unit`);
+   the cell machine `oc-CellS` (read/write of one `Nat` cell) and the state-passing machine
+   `oc-StS` (one command applying a function to the state); the service written twice as Church
+   processes with fuel; observations by `o-split`; `o-RunSim` by induction on the fuel with
+   `o-runsim-bind`; `o-ObsEq` by `o-runsim-obseq`; the property on traces (each reply to a `get`
+   is the number of `inc`s before it) proved of one and moved to the other with
+   `o-tree-transport` (needs `isSet` of the observation commands and of `Unit`).
+2. In `lib/obs.cub`: the guarded form (`GProc`): bisimulation by guarded recursion, its laws,
+   guarded traces, and where it differs from path equality (item 3, second half; item 2's
+   coinductive traces).
