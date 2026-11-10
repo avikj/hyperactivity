@@ -430,3 +430,17 @@ tso-sound-upto n ths =
                tso-blocked → b
                tso-nofuel s → andB (tso-state-ok ths s) b)
     (tso-sys n ths tso-init) true
+-- ---------------------------------------------------------------- properties over every schedule
+-- p holds of the results and the final state of every schedule, and no schedule is cut by the
+-- bound n (so "every schedule" is of the system, not of its first n transitions)
+tso-every : Nat → List TsoThread → (List Word → TsoSt → Bool) → Bool
+tso-every n ths p =
+  tso-fold (tso-choices ths #0) (λ c b → b)
+    (λ e b → case e of
+               tso-finished out s → andB (p out s) b
+               tso-blocked → b
+               tso-nofuel s → false)
+    (tso-sys n ths tso-init) true
+-- the trace of a state, earliest first
+tso-trace : TsoSt → List TsoL
+tso-trace s = tso-rev (ts-log s) nil

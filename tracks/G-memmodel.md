@@ -111,6 +111,31 @@ How to check (cached library, one file after another; the last line must read `N
   All seven files after the cached library: `921 passed, 0 failed; 91,412,925 steps`, 17 s:
   `./build/cubical $LIBS lib/isa/tso.cub experiments/tso/{sb,mp,lb,iriw}.cub lib/mem/atomics.cub experiments/tso/atomics-sb.cub`
 
+- `lib/isa/tso.cub` gained `tso-every n ths p` (p at every finished end, false if any schedule
+  is cut by the bound), `tso-trace`, `tso-sum-outs`, `tso-sum-cut`.
+- **Spin-lock** (`experiments/tso/spinlock.cub`), written against the atomics
+  (`lock.exchange(1, acquire)` up to k times, then `c = counter.load; counter.store(c+1);
+  lock.store(0, release)`), run under `atom-x86-xchg`. `spin-ok` at a schedule's end:
+  `spin-mutex` over the trace (no acquisition while another thread holds, between its
+  successful locked event and its releasing store entering the buffer; no release without
+  holding; no access to the counter without holding) ∧ lock free ∧ counter = number of
+  threads that entered. **Mutual exclusion as a type over every schedule**:
+  `SpinMutex k n = isTrue (tso-every n (spin-sys k) spin-ok)`, inhabited by `unit` and checked:
+  | k (attempts) | bound n = 2k+10 | finished schedules | steps of the check |
+  |---|---|---|---|
+  | 1 | 12 | 28 | 72,808 |
+  | 2 | 14 | 108 | 292,424 |
+  | 4 | 18 | (not shown) | 2,155,961 |
+  | 8 | 26 | 8,316 | 27,503,546 |
+  Outcome sets (who entered): k=1 and k=2 `{(0,1),(1,0),(1,1)}`, 0 cut. Three threads, one
+  attempt each (`spin-mutex3-1`, bound 18): 468 schedules, all 7 outcomes except (0,0,0),
+  1,766,430 steps. `spin-sound-2`: TsoSound at the k=2 lock, 5,063,870 steps.
+  Contrast recorded in the file: acquisition by load-then-store instead of exchange gives
+  `tso-every 14 bad-sys spin-ok = false` (50,642 steps) and a lost increment (`= false`,
+  179,301 steps).
+  `tso.cub`, `atomics.cub`, `spinlock.cub` after the cached library: `905 passed, 0 failed;
+  39,023,549 steps`, 16 s.
+
 ## Found
 
 - **Elaborator refuses a structural recursion when an argument before the matched one changes.**
@@ -141,13 +166,11 @@ How to check (cached library, one file after another; the last line must read `N
 
 ## Next step
 
-1. `experiments/tso/spinlock.cub`: two threads, xchg-based spin-lock with a bounded number of
-   attempts (lock at #0, a counter at #1 incremented non-atomically inside), mutual exclusion
-   as `isTrue (…)` over every schedule up to the bound: over each end's trace, no thread's
-   successful acquisition (`l-locked t _ #0 0 _ 1`) while another holds (between its
-   acquisition and its releasing store's `l-write`), and the final counter equals the number
-   of acquirers.
-2. The axiomatic side of the litmus sets: an enumeration of all candidates
-   (`tso-ax-outcomes`: per thread the local runs over read values from a finite domain, every
-   rf and every order on writes, kept when `tso-consistent`) so the axiomatic outcome set of
-   each litmus is computed and stated equal to the operational one.
+Acceptance lines 2 and 3 are met; line 1 (`make library`, then all my files uncached) is to be
+re-measured and recorded at the end. Remaining, in order:
+1. The axiomatic side of the litmus sets, in `lib/isa/tso.cub` after `tso-trace`: an
+   enumeration of all candidates (`tso-ax-outcomes`: per thread the local runs over read values
+   from a finite domain, every rf and every order on writes, kept when `tso-consistent`), so
+   each litmus's axiomatic outcome set is computed and stated equal to the operational one
+   (`x-ax : tso-ax-outcomes … ≡ x-set` in each `experiments/tso/x.cub`).
+2. Final: `make library`; every file of mine uncached in one run; record both under Done.

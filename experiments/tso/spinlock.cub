@@ -1,0 +1,81 @@
+-- experiments/tso/spinlock.cub — a two-thread spin-lock by exchange, on the x86-TSO machine.
+-- Written against the language-level atomics (lib/mem/atomics.cub) and run under the x86
+-- handler, where the exchange is a locked xchg and the release a plain store:
+--
+--   lock at #0 (0 free, 1 held), a counter at #1.
+--   each thread:  up to k times: if lock.exchange(1, acquire) == 0 then enter
+--                 entered:   c = counter.load(relaxed); counter.store(c + 1, relaxed);
+--                            lock.store(0, release); result 1
+--                 never entered after k attempts: result 0   (the bound on spinning)
+--
+-- The counter is read and written non-atomically: only mutual exclusion makes it count.
+spin-acquire : Nat → AtomThread → AtomThread → AtomThread
+spin-acquire zero crit giveup = giveup
+spin-acquire (suc n) crit giveup = ai-xchg mo-acquire #0 #1 (λ r → if weq r #0 then crit else spin-acquire n crit giveup)
+spin-crit : AtomThread
+spin-crit = ai-load mo-relaxed #1 (λ c → ai-store mo-relaxed #1 (wadd c #1) (ai-store mo-release #0 #0 (ai-ret (cons #1 nil))))
+spin-thread : Nat → AtomThread
+spin-thread k = spin-acquire k spin-crit (ai-ret (cons #0 nil))
+spin-sys : Nat → List TsoThread
+spin-sys k = cons (at-thread atom-x86-xchg (spin-thread k)) (cons (at-thread atom-x86-xchg (spin-thread k)) nil)
+-- mutual exclusion, over a trace (earliest first). A thread holds the lock from its successful
+-- exchange (a locked event on #0 reading 0 and writing 1) until it executes the releasing
+-- store (a write event of 0 to #0: its entering the buffer, before it reaches memory).
+-- `holder` is #0 when no thread holds, t + 1 when thread t does. The trace is refused when a
+-- thread acquires while one holds, releases without holding, or touches the counter (#1)
+-- without holding
+spin-mutex : List TsoL → Word → Bool
+spin-mutex nil holder = true
+spin-mutex (cons l r) holder =
+  (case l of
+     l-read t id a v src → if weq a #1 then (if weq holder (%wsucc t) then spin-mutex r holder else false) else spin-mutex r holder
+     l-write t id a v →
+       if weq a #1 then (if weq holder (%wsucc t) then spin-mutex r holder else false)
+       else if weq a #0 then (if weq holder (%wsucc t) then spin-mutex r #0 else false)
+       else spin-mutex r holder
+     l-flush t id a v → spin-mutex r holder
+     l-locked t id a vr src vw →
+       if andB (weq a #0) (andB (weq vr #0) (weq vw #1))
+       then (if weq holder #0 then spin-mutex r (%wsucc t) else false)
+       else spin-mutex r holder
+     l-fence t id → spin-mutex r holder)
+spin-sum : List Word → Word
+spin-sum nil = #0
+spin-sum (cons x r) = wadd x (spin-sum r)
+-- at the end of a schedule: the trace is mutually exclusive, the lock is free, and the counter
+-- is the number of threads that entered (no increment lost)
+spin-ok : List Word → TsoSt → Bool
+spin-ok out s = andB (spin-mutex (tso-trace s) #0) (andB (weq (ts-mem s #0) #0) (weq (ts-mem s #1) (spin-sum out)))
+-- A thread makes at most k + 5 transitions (k exchanges, a load, two stores, two flushes), so
+-- 2k + 10 bound every schedule of two threads. The outcomes (who entered), k = 1 and k = 2:
+#show tso-outcomes 12 (spin-sys 1)
+#show tso-outcomes 14 (spin-sys 2)
+-- MUTUAL EXCLUSION over every schedule, for each spin bound k: every schedule finishes within
+-- 2k + 10 transitions and its trace is mutually exclusive with the counter exact
+SpinMutex : Nat → Nat → Type
+SpinMutex k n = isTrue (tso-every n (spin-sys k) spin-ok)
+spin-mutex-1 : SpinMutex 1 12
+spin-mutex-1 = unit
+spin-mutex-2 : SpinMutex 2 14
+spin-mutex-2 = unit
+spin-mutex-4 : SpinMutex 4 18
+spin-mutex-4 = unit
+spin-mutex-8 : SpinMutex 8 26
+spin-mutex-8 = unit
+-- three threads, one attempt each (3 · 6 transitions)
+spin-sys3 : Nat → List TsoThread
+spin-sys3 k = cons (at-thread atom-x86-xchg (spin-thread k)) (spin-sys k)
+#show tso-outcomes 18 (spin-sys3 1)
+spin-mutex3-1 : isTrue (tso-every 18 (spin-sys3 1) spin-ok)
+spin-mutex3-1 = unit
+-- the executions are TSO-consistent (TsoSound at the two-thread lock, k = 2)
+spin-sound-2 : isTrue (tso-sound-upto 14 (spin-sys 2))
+spin-sound-2 = unit
+-- for contrast, the same lock with the exchange replaced by a load and then a store (test,
+-- then set): the property is false over the schedules, as it must be
+bad-acquire : AtomThread → AtomThread → AtomThread
+bad-acquire crit giveup = ai-load mo-seq-cst #0 (λ r → if weq r #0 then ai-store mo-seq-cst #0 #1 crit else giveup)
+bad-sys : List TsoThread
+bad-sys = cons (at-thread atom-x86-xchg (bad-acquire spin-crit (ai-ret (cons #0 nil)))) (cons (at-thread atom-x86-xchg (bad-acquire spin-crit (ai-ret (cons #0 nil)))) nil)
+#show tso-every 14 bad-sys spin-ok
+#show tso-every 14 bad-sys (λ out s → weq (ts-mem s #1) (spin-sum out))
