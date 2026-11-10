@@ -223,8 +223,8 @@ x-push c =
     cthunk t → x-push t
     cforce t → x-push t
     cpair a b → cpair (x-push a) (x-push b)
-    crec dd fs → crec dd (x-push-l fs)
-    cproj dd k p → cproj dd k (x-push p)
+    crec dd fs → crec dd (x-delay (co-recs dd) (x-push-l fs))
+    cproj dd k p → (if cl-at (co-recs dd) k then capp (cproj dd k (x-push p)) (cwlit #0) else cproj dd k (x-push p))
     cfst p → cfst (x-push p)
     csnd p → csnd (x-push p)
     ccon dd k fs ds → ccon dd k (x-push-l fs) ds
@@ -236,6 +236,10 @@ x-push c =
     cwelim w z s mo → cwelim (x-push w) (x-push z) (x-push s) mo
     _ → c
 x-push-l l = case l of lnil → lnil; lcons x xs → lcons (x-push x) (x-push-l xs)
+-- a codata record's fields of the type itself are delayed: stored as a function of one unused
+-- argument (a closure), and their projection applies it. The value is the same; only what is
+-- computed when differs, which is what makes an infinite value finite to build
+x-delay recs fs = case fs of lnil → lnil; lcons f r → lcons (case recs of lcons b rr → (if b then clam (shift-code #0 #1 f) else f); lnil → f) (x-delay (case recs of lcons b rr → rr; lnil → lnil) r)
 -- f a with f and a already pushed
 x-push-app f a =
   case f of

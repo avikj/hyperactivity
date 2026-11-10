@@ -84,6 +84,34 @@ pickF : Bool → Word → Word
 pickF b y = twice (case b return (λ k → Word → Word) of
                      true → λ z → %wadd z #10
                      false → λ z → %wadd z z) y
+codata Pr where
+  pa : Word
+  pb : Word
+mkPr : Word → Pr
+(mkPr w).pa = %wadd w #1
+(mkPr w).pb = %wadd w #2
+prs : List Word → List Pr
+prs l = case l return (λ k → List Pr) of
+  nil → nil
+  cons x xs → cons (mkPr x) (rec xs)
+sumPr : List Pr → Word
+sumPr l = case l return (λ k → Word) of
+  nil → #0
+  cons p ps → %wadd (%wadd (p .pa) (p .pb)) (rec ps)
+usePrs : List Word → Word
+usePrs l = sumPr (prs l)
+codata Stm where
+  hd : Word
+  tl : Stm
+from : Word → Stm
+(from n).hd = n
+(from n).tl = from (%wsucc n)
+nthS : Nat → Stm → Word
+nthS n = case n return (λ k → Stm → Word) of
+  zero → λ s → s .hd
+  suc k → λ s → rec k (s .tl)
+nthFrom : Nat → Word → Word
+nthFrom n w = nthS n (from w)
 #jit addw
 #jit powl
 #jit plusN
@@ -114,3 +142,5 @@ pickF b y = twice (case b return (λ k → Word → Word) of
 #jit pz using plus-zero
 #jit sumAdd
 #jit pickF
+#jit usePrs
+#jit nthFrom
