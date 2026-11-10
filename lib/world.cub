@@ -13,6 +13,14 @@ data WCmd = w-now | w-write (fd : Word) (n : Nat) (b : Bytes n) | w-read (fd : W
   -- the model named: load acquire, store release, cas acquire-release (the value seen), fence
   -- sequentially consistent
   | w-load (a : Word) | w-store (a : Word) (v : Word) | w-cas (a : Word) (old : Word) (new : Word) | w-fence
+  -- the raw system call (Phase 3; lib/os/linux.cub is the typed world over it): the number and six
+  -- arguments as the syscall instruction takes them (rax; rdi rsi rdx r10 r8 r9), the response what
+  -- it leaves in rax as a 64-bit word (an error is the two's complement of its errno). Buffers are
+  -- addresses: w-alloc n is the address of n fresh zero bytes that stay valid for the process's
+  -- life; w-load8/w-store8 are one byte at an address (the value's low 8 bits stored). New
+  -- commands are added here, at the end: lib/elf.cub dispatches on the constructors' indices
+  | w-sys (nr : Word) (a1 : Word) (a2 : Word) (a3 : Word) (a4 : Word) (a5 : Word) (a6 : Word)
+  | w-alloc (n : Word) | w-load8 (a : Word) | w-store8 (a : Word) (v : Word)
 w-resp : WCmd → Type
 w-resp c = case c return (λ _ → Type) of
   w-now → Word
@@ -26,6 +34,10 @@ w-resp c = case c return (λ _ → Type) of
   w-store a v → Unit
   w-cas a o nw → Word
   w-fence → Unit
+  w-sys nr a1 a2 a3 a4 a5 a6 → Word
+  w-alloc n → Word
+  w-load8 a → Word
+  w-store8 a v → Unit
 W : Sig
 W = (WCmd , w-resp)
 -- a process as a tree of steps: done with its answer, or a command with its continuation (a
@@ -59,3 +71,13 @@ cas-at : Word → Word → Word → Proc W Word
 cas-at a o n = cmd {lzero} {W} (w-cas a o n)
 fence : Proc W Unit
 fence = cmd {lzero} {W} w-fence
+
+-- the raw system call and the memory a process names by address
+sys-call : (nr a1 a2 a3 a4 a5 a6 : Word) → Proc W Word
+sys-call nr a1 a2 a3 a4 a5 a6 = cmd {lzero} {W} (w-sys nr a1 a2 a3 a4 a5 a6)
+alloc-bytes : Word → Proc W Word
+alloc-bytes n = cmd {lzero} {W} (w-alloc n)
+load8-at : Word → Proc W Word
+load8-at a = cmd {lzero} {W} (w-load8 a)
+store8-at : Word → Word → Proc W Unit
+store8-at a v = cmd {lzero} {W} (w-store8 a v)

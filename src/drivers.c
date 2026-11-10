@@ -6,13 +6,20 @@
  * as a value and applies the continuation k to it, then reads again. Reading a field is an
  * observation of the net (synchronous: the process blocks on the command, as D26 says). The
  * commands: w-now (nanoseconds since the epoch, a word), w-write fd n b (the count written),
- * w-read fd n (the count read and a buffer of n bytes), w-sleep ns (unit), w-exit code. */
+ * w-read fd n (the count read and a buffer of n bytes), w-sleep ns (unit), w-exit code.
+ * w-sys nr a1..a6 is the raw system call (the typed world over it is lib/os/linux.cub): the
+ * response is the kernel's return value as a 64-bit word, an error the two's complement of its
+ * errno, what the syscall instruction leaves in rax (libc's syscall(2) answers -1 with errno,
+ * which is put back). w-alloc n is the address of n fresh zero bytes, never freed; w-load8 and
+ * w-store8 are one byte at an address. */
 #include <time.h>
+#include <errno.h>
 /* unistd.h's link(2) clashes with the net's link(): the two system calls are declared here */
 extern long read(int, void *, unsigned long);
 extern long write(int, const void *, unsigned long);
 extern int open(const char *, int, ...);
 extern int close(int);
+extern long syscall(long, ...);
 static int drv_con(const char *name) { int c = con_lookup(name); if (c < 0) die("run: lib/world.cub is not loaded (missing constructor)", name); return c; }
 /* a word field read: the value must be a literal word */
 static uint64_t drv_word(Port p, const char *what) {
@@ -46,6 +53,7 @@ static void drivers_run(Node *t) {
     int c_now = drv_con("w-now"), c_write = drv_con("w-write"), c_read = drv_con("w-read"), c_sleep = drv_con("w-sleep"), c_exit = drv_con("w-exit");
     int c_open = drv_con("w-open"), c_close = drv_con("w-close");
     int c_load = drv_con("w-load"), c_store = drv_con("w-store"), c_cas = drv_con("w-cas"), c_fence = drv_con("w-fence");
+    int c_sys = drv_con("w-sys"), c_alloc = drv_con("w-alloc"), c_load8 = drv_con("w-load8"), c_store8 = drv_con("w-store8");
     Port p = build_top(t);
     long steps = 0, s0 = stat_steps;
     for (;;) {
@@ -117,6 +125,25 @@ static void drivers_run(Node *t) {
             resp = drv_word_of(seen);
         } else if (c == c_fence) {
             __atomic_thread_fence(__ATOMIC_SEQ_CST);
+            resp = con_build(c_unit, NULL, NULL);
+        } else if (c == c_sys) {
+            uint64_t a[7];
+            for (int i = 0; i < 7; i++) a[i] = drv_word(cm->port[1 + i], "w-sys's number and arguments");
+            fflush(stdout);
+            errno = 0;
+            long r = syscall((long)a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
+            resp = drv_word_of(r == -1 && errno ? (uint64_t)-(int64_t)errno : (uint64_t)r);
+        } else if (c == c_alloc) {
+            uint64_t n = drv_word(cm->port[1], "w-alloc's size");
+            void *m = calloc(n ? (size_t)n : 1, 1);
+            if (!m) die("run: w-alloc: out of memory", NULL);
+            resp = drv_word_of((uint64_t)(uintptr_t)m);
+        } else if (c == c_load8) {
+            uint64_t a = drv_word(cm->port[1], "w-load8's address");
+            resp = drv_word_of(*(volatile uint8_t *)(uintptr_t)a);
+        } else if (c == c_store8) {
+            uint64_t a = drv_word(cm->port[1], "w-store8's address"), v = drv_word(cm->port[2], "w-store8's value");
+            *(volatile uint8_t *)(uintptr_t)a = (uint8_t)v;
             resp = con_build(c_unit, NULL, NULL);
         } else die("run: not a command of W:", CON[c].name);
         Cell *ap = cell(O_APP, 3);

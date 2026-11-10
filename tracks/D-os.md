@@ -50,16 +50,56 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
 
 ## Needs from track A
 
-(fill in with item 1's ELF driver additions)
+1. **ELF driver cases for the four new commands** (`lib/elf.cub`, `i-driver-loop`). The exact
+   bytes are being produced as an assembly source of the whole loop in `experiments/os/`
+   (next step below); until that lands, the statement of each case, in the loop's own
+   conventions (`rsi` the command's cell `[index][fields]`, every `Word` field a raw 64-bit
+   value, the response left in `rax` before the jump to `resp`, `r15`/`r12` the arena's next
+   and end, the overflow exit the first byte after the loop):
+   - index 11, `w-sys nr a1 a2 a3 a4 a5 a6` (fields at `[rsi+8]`…`[rsi+56]`): `rax=nr, rdi=a1,
+     rsi=a2, rdx=a3, r10=a4, r8=a5, r9=a6; syscall`; response `rax` unchanged (no sign
+     extension, no clamping to 0).
+   - index 12, `w-alloc n` (`[rsi+8]`): `rax = r15; r15 += (n+7) & ~7`; overflow exit when the
+     sum carries or passes `r12`; response the old `r15` (arena memory is fresh, zero, and
+     never reused).
+   - index 13, `w-load8 a`: response `movzx eax, byte [a]`.
+   - index 14, `w-store8 a v`: `mov [a], v's low byte`; response unit (`xor eax, eax`).
+   - the dispatch chain today sends every index above 8 to `w-cas` (index 9): it needs
+     `cmp rcx, 9 / je cas` and the four new comparisons.
+2. **`.gitignore` hides `experiments/build/`** (see Found): `feed.cub` is not in the repository.
+3. Append `lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub` to `LIB` in the `Makefile`
+   when they land (not yet written).
 
 ## Done
 
-(nothing yet)
+- **Item 1, the raw command** (this commit; the one commit that touches `lib/world.cub` and
+  `src/drivers.c`). `WCmd` gains, at the end (indices 11–14, the first eleven unmoved):
+  `w-sys nr a1..a6 → Word`, `w-alloc n → Word`, `w-load8 a → Word`, `w-store8 a v → Unit`, with
+  the processes `sys-call`, `alloc-bytes`, `load8-at`, `store8-at`. `src/drivers.c`: `w-sys` is
+  `syscall(2)` with libc's `-1`/`errno` put back as the two's complement of the errno (what
+  the instruction leaves in `rax`); `w-alloc` is `calloc` (never freed); byte load and store.
+  Measured: `make library` 834 passed, 0 failed, 21,734,081 steps (22 s);
+  `experiments/os/getpid.cub` (`#run` of `sys-call #39 …`) prints `run: done #4821   [20 steps]`
+  (the process id); `experiments/build/feed.cub` (from track A's checkout, see Found) still
+  builds: `ok: build feed-step [build/feed, 8064 bytes, the checker's conversion, 1216718
+  steps]` and the binary answers 5, 3, 13 on three messages (bid 5, ask 2, bid 10).
 
 ## Found
 
+- `experiments/build/feed.cub` is named by PLAN, the tracks table and commit `856ab5a8`, and is
+  not in the repository: the root `.gitignore` has the pattern `build/`, which matches
+  `scoped-machine/experiments/build/`. The file exists only in `/home/claude/avikj/math`
+  (untracked). Fix (track A / owner): `git add -f scoped-machine/experiments/build/feed.cub`
+  or add `!scoped-machine/experiments/build/` after the `build/` line.
+- The ELF driver loop's dispatch sends every command index above 8 to the `w-cas` code and
+  every field-less command other than index 0 to `mfence`: a new command reaching an old
+  binary's loop is performed as a compare-and-swap on its first field. Closed by the dispatch
+  in Needs 1.
+
 ## Next step
 
-Item 1: `w-sys`, `w-alloc` in `lib/world.cub` and `src/drivers.c`, then a `#run` of a process
-that calls `getpid` through `w-sys` and writes nothing else; commit; write the ELF driver
-request under "Needs from track A".
+Write `experiments/os/driver-loop.s`: the whole ELF driver loop as assembly (the existing 523
+bytes reproduced exactly when the new cases are left out, checked with `as` + `objcopy` +
+`cmp` against the bytes in `lib/elf.cub`), with the four new cases; put the resulting bytes
+and the replacement `i-driver-loop` line under Needs 1. Then item 4 (`lib/os/platform.cub`),
+item 2 (`lib/os/linux.cub`), `experiments/os/udp-echo.cub`, item 3 (`lib/os/contract.cub`).
