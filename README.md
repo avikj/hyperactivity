@@ -5,9 +5,9 @@ by local rewrites. Programs, proofs, the type checker, data structures and the r
 all run on that one mechanism.
 
 ```
-make test       # all suites; the same output with 0, 1, 2, 4, 8, 16 workers; again under ASan/UBSan
-make library    # tests/boxes.cub, tests/sort.cub, tests/memo.cub
-./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub FILE.cub
+make library    # checks every library file in order (lib/), 0 failures expected
+make brunerie   # Brunerie's number, -2, with 0 and with 4 workers
+./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.cub lib/check.cub lib/std.cub FILE.cub
 ```
 
 Code: `src/net.c` (cells, rewrite rules, parallel scheduler), `src/dnf.c` (intervals, faces,
@@ -15,9 +15,9 @@ substitutions), `src/big.c` (exact naturals), `src/lang.c` (core forms, compiler
 readback, top-level forms, modules), `src/syntax.c` (the surface language: layout, parsing,
 elaboration, clause compilation, printing). Language files: `lib/prelude.cub` (core data types,
 composition clauses), `lib/code.cub` (codes, `View`), `lib/check.cub` (the type checker),
-`lib/std.cub` (checked library), `lib/sort.cub` (9.15 over any ordered type; `tests/sort.cub`
-instantiates and runs it). Coinduction: §7, `tests/codata.cub`; guarded recursion: §8,
-`tests/guarded.cub`. Earlier plans and specs: `archive/`.
+`lib/std.cub` (checked library), `lib/sort.cub` (9.15 over any ordered type). The compiler:
+`lib/specialize.cub`, `lib/machine.cub`, `lib/x86.cub` (§9). The plan and status: `PLAN.md`;
+earlier plans, specs and contracts: `archive/`.
 
 ## 0. The language
 
@@ -118,27 +118,11 @@ linear wherever they are bound, and its constructors are applied only in a `prim
 prints a checked definition's binder usages (the back end erases the binders at 0, annotated or
 not).
 
-**Representations.** `lib/prim.cub` declares the machine's fixed-width numbers and byte strings as
-primitives (`Int64`, `UInt32`, `Float64`, `Float32`, `Bytes n`, their operations, `load32`/`store32`
-with the proof that the access fits) and `represent Nat by Word`. A representation of a data type
-`T` by a type `R` (plan B12) is declared as
-`represent T by R where to : T → R = …; from : R → T = …; to-from : … = …; from-to : … = …;
-op f : A = native by law = proof`: each line is a checked definition (`T·R·to`, …, `T·R·op·f`,
-`T·R·op·f·by`), and the first declared is the type's entry in the table the back end reads
-(`%rtab d`). `#layout T` prints a type's layout (`lib/code.cub`'s `Layout`): by its
-representation, else the automatic one, a union of its constructors' structs of the fields not at
-`:0`, a recursive field a pointer; `#layout T as R` the layout of `R`. `#trusted` lists every
-postulate and primitive in scope.
 
-**The first-order criterion.** `lib/stage.cub` (plan B13) decides, for a code at a type, whether
-the region may be printed as native code: `first-order T c` is `fo` or `not-fo reason at`, the
-reasons `dim` (an interval binder or variable, a path abstraction), `dep-type` (a type at the
-boundary depending on an input other than through an erased `:0` binder), `higher` (a type with
-path constructors and no representation, a Glue or `%hcompU` type, a universe at the boundary),
-`kan` (a composition or transport in the region), `reflect`, `mult`. `#fo f` and `#fo (the T t)`
-run it on the normal form at the type (the specializer's normalization), so a closed transport
-has reduced. The parts of a schedule (`Stage`, `Strictness`, …) are declared in `lib/code.cub` (`Sched` itself in `lib/specialize.cub`)
-for the specializer to read.
+**Primitive types.** `lib/prim.cub` declares the machine's fixed-width numbers and byte strings as
+primitives (`Int64`, `UInt32`, `UInt64`, `Float64`, `Float32`, `Bytes n`, their operations,
+`load32`/`store32` with the proof that the access fits). `#trusted` lists every postulate and
+primitive in scope.
 
 **Instance arguments.** A binder `{{e : C A}}` is an implicit argument found by instance search
 (plan E28): among the `instance` declarations in scope (`instance eqNat : Eq Nat` before a
@@ -180,21 +164,18 @@ variable is a neutral the checker views (`wprim k args`) and compares argument b
 such laws follow by unfolding (an operation stuck on a variable used to be an unknown value).
 `Fin→Array n : Equiv (Fin n → Int64) (Array n)` is the interface (item 22): a program written
 against functions uses application and `fin-set n f p v`, and under `atab` they are `index` and
-`update` (`apply-by`, `fin-set-by`). Byte strings convert by their contents (`%beq`). (The in-place
-store of a uniquely held buffer in compiled code returns with PLAN §5's reader, as the
-uniqueness the net already tracks structurally; the earlier first-order pass is removed.)
+`update` (`apply-by`, `fin-set-by`). Byte strings convert by their contents (`%beq`).
 Other element types: `UInt32` on the 4-byte layer (`Array32`, `index32`/`update32`, `Fin→Array32`,
 its two laws trusted like the 8-byte ones), and any `A` with an equivalence to `Int64` on the 8-byte
 layer (`indexV`/`updateV`/`Fin→ArrayV A to from ft tf n`): `Float64` by its bits (`f64bits`,
-`f64ofbits`, trusted inverse), a type represented by `Int64` by its representation's `to`/`from`;
-the same on the 4-byte layer for any `A ≃ UInt32` (`Fin→ArrayV32`): `Float32` by its bits
+`f64ofbits`, trusted inverse); the same on the 4-byte layer for any `A ≃ UInt32` (`Fin→ArrayV32`): `Float32` by its bits
 (`f32bits`, `f32ofbits`; `Fin→ArrayF32`).
 
 **Regions as state.** `lib/region.cub` threads a region, `Bytes n`, through a program as
 state: `RM n A = Region n → Region n × A`, pointers as offsets with their proof (`Ptr n`),
 `rd`/`wr`/`rmodify` the byte layer's accesses, `run-fresh n m`, `enter-at a n m` for memory the
 program does not own; `rd-wr` and `rd-wr-disj` are its laws. The region is unique along the
-thread, so a specialized region program stores in place. A byte string quotes as a code (the
+thread. A byte string quotes as a code (the
 fresh string, then a store per nonzero word).
 
 **Memory the program does not own.** `ptr-of n b` is the address of a byte string and
@@ -232,47 +213,22 @@ Indices are unified at a split as Agda does: a case whose indices clash may be l
 (`vhead (vcons m x xs) = x` on `Vec A (suc n)`), a field determined by the indices is solved
 (`vzip (vcons m x xs) (vcons m2 y ys) = vcons m (x , y) (vzip xs ys)` with `ys : Vec B m`), and
 a missing clause is covered when a later argument's type is empty (`vlookup` needs no `vnil`
-clause: `Fin zero` has no constructor). `tests/elab.cub`.
+clause: `Fin zero` has no constructor).
 
-**Running processes and calling native code.** `lib/world.cub` is the drivers' signature `W`
-(`time-now`, `write fd n b`, `read fd n`, `sleep ns`, `exit c` as processes of `lib/proc.cub`)
-and `to-step p` a process as a tree of steps; `#run (to-step p)` performs it against the
-operating system (plan D26, `src/drivers.c`), ending with `run: done a`. `#native f n = prog`
-over emitted C is removed at revision 8 with the back end (its compiled code carried no path
-to `f`); the call boundary returns with PLAN §5.5, the compiled bytes entered through the
-machine's executable memory and `foreign`'s call families with the path checked.
-`#native f n from "lib.c" "sym"` enters a hand-written C file's function: a `void *`
-result is a handle of type `Native` (`lib/prim.cub`), held by the net without being read, passed
-to that library's `void *` parameters, printed `(%handle #k)`, compared by identity through
-`%view` (`wnative id k`), and finalized by the library's `cubical_release` when its last copy is
-erased (`tests/native/handle.c`). The entries are trusted to treat a handle as read-only: the
-net shares a handle among its readers. A parameter or result whose type has a declared
-representation crosses as the representation (`Nat` as a `uint64_t`: converted by `to` before the
-call and `from` after it, the fallback the definition over the representations); a record of such
-fields crosses as its C struct by value (through a trampoline the machine appends), and a `#native`
-specialization is cached by key: its expression with each checked definition by its codebase key,
-the values written in it, the checker's version and the libraries before the file name it before
-it is computed, and a hit (`specialization cached by key, 0 steps`) runs neither the specializer
-nor the C compiler. `#native f n at k = P` specializes while the program runs: on the first call
-with each value of f's first k word arguments the net computes `P v…` (the residual's C), which is
-compiled, entered and kept under the values (and in the cache by key across runs); at most
-`CUBICAL_NATIVE_AT_MAX` (default 16) are kept per entry, the least recently called evicted, and the
-table is safe with workers. The other direction is `build/libcubical.a` with
-`src/libcubical.h`: a C program loads libraries with `cubical_init` and calls checked
-definitions on words with `cubical_call_w` (and the emitted C's boxed form, `cubical_call`), on
-boxed data with `cubical_call_data`, and on records as C structs (`"struct D"`, `cubical_call_data_r`);
-`tests/native/main.c`. A record crosses `#native` and the C calls as its C struct by value: one
-constructor its fields; several a `uint64_t` tag and a union of one struct per constructor; a field
-that is itself a record inline; a word (or a type represented by `Word`) `uint64_t`, `UInt32`
-`uint32_t`, `Int64` `int64_t`, `Float32` `float`, `Float64` `double` (the emitted program's `T<di>`, or
-a hand-written file's `struct D`, `tests/native/rec.c`); in the emitted program each such field is held
-at its width and read into the program's word (a float by its bits). `%gsteps n` is the steps checked definition `n` took to check, from the
-run or the store's `ok` line.
+**Running processes.** `lib/world.cub` is the drivers' signature `W` (`time-now`, `write fd n b`,
+`read fd n`, `sleep ns`, `exit c` as processes of `lib/proc.cub`) and `to-step p` a process as a
+tree of steps; `#run (to-step p)` performs it against the operating system (`src/drivers.c`),
+ending with `run: done a`. The machine as a library: `build/libcubical.a` with `src/libcubical.h`,
+a C program loads libraries with `cubical_init` and calls checked definitions on words with
+`cubical_call_w`. `%gsteps n` is the steps checked definition `n` took to check, from the run or
+the store's `ok` line.
 
 **Commands.** `#check e : T`, `#same a = b` (equal readings, at a type when either side has one),
-`#show e`, `#observe n e` (a codata value unfolded n levels), `#usage f`, `#layout T [as R]`,
-`#trusted`, `#safe f`, `#fo e`, `#key d`, `#names K`, `#history d`, `#unbind d`, `#gc`, `#run s`, `#native f n [keep] = prog`, `#native f n from "file.c" "sym"`, `#input x` and `#supply x = e` (§6), `#fail` before a declaration or command
-(it must be rejected). `import "file.cub"` loads a module
+`#show e`, `#observe n e` (a codata value unfolded n levels), `#usage f`, `#trusted`, `#safe f`,
+`#jit f [using t…]` (§9), `#key d`, `#names K`, `#history d`, `#unbind d`, `#gc`, `#run s`,
+`#input x` and `#supply x = e` (§6), `#fail` before a declaration or command (it must be
+rejected). A name is bound once: a second definition, data type or constructor of the same name
+is refused, and so is a clause no case reaches. `import "file.cub"` loads a module
 once. Results and failures print in the surface syntax, a failed check with its declaration's
 `file:line` and the term at fault. `--serve` after the files reads blocks of declarations from
 the standard input, each ended by a line `.`, and answers each as a file would be answered,
@@ -281,10 +237,8 @@ the checked definition `f` (or a data, codata or record type with its constructo
 projections) so the name can be declared again; what was checked against the old one keeps it (a
 global is referenced by its index), later declarations see the new one. `#type e` prints the type
 the checker infers for `e`, `#scope` the names in scope, `#where f` where `f` was declared.
-`tools/lsp.py` is a language server over `--serve`: diagnostics, re-checking by retraction, hover
-by `#type`, completion, go-to-definition, incremental sync.
-`tools/lsp.py` is a language server over `--serve` (diagnostics, re-checking what follows a
-changed declaration, hover with the written signature); an editor runs `python3 tools/lsp.py
+`tools/lsp.py` is a language server over `--serve` (diagnostics, re-checking by retraction, hover
+by `#type`, completion, go-to-definition, incremental sync); an editor runs `python3 tools/lsp.py
 --root scoped-machine` as its server for `.cub` files. `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to
 (`(lam x b)`, `(elim P e ((c x) b))`, …) are still read from files of other extensions, and
 `--print FILE` prints such a file in the surface syntax.
@@ -296,7 +250,7 @@ consults an environment or context. Being under a face such as `i = 0` is a subs
 dimension by the endpoint. Applying a dimension binder puts a substitution cell on its body, and
 that substitution re-activates exactly the stuck values it unblocks: `p @ i` under `i := 0` becomes
 the left endpoint of `p`. The step count is fixed by the term: identical with any number of worker
-threads (`make test` compares every suite's output at 0, 1, 2, 4, 8 and 16). Reading a stored value
+threads. Reading a stored value
 costs the same whether or not the value has arrived: a read that arrives first waits on the wire
 and is served the same one-level copy, and waiting is not a step. Every reading is taken over the
 complete normalization of what was posed. A worker locks the active pair and the cells it rewires,
@@ -343,19 +297,7 @@ A `glue` value's base is held unbuilt. Where the system is total (on the end's f
 composition through a Glue type or a composition of types, the usual case) the value is the face's
 element and the base is never read; built, it is a further composition whose tube carries the
 fibre paths, and those compose generically one level down, so each level of nesting would pay for
-every level below it. Transport along the double cover of the circle over a composite of `n`
-loops (`tests/codata.cub`, the composites defined one on another):
-
-| loops | composed on the left | composed on the right |
-|---|---|---|
-| 4 | 4.2k steps | 5.1k |
-| 8 | 9.1k | 12.0k |
-| 16 | 19.0k | 27.0k |
-| 64 | 78.4k | 146k |
-
-With compositions of types encoded as Glue types over transported identity equivalences and the
-base built (commit 04f761c and before) the same transports took 20.5k, 46.9k and 99.8k steps on
-the left and 51.9k, 340k and 2.49M on the right at 4, 8 and 16 loops.
+every level below it.
 
 **Data types.** One mechanism serves every declared data type, with nothing written per type:
 - moving a constructor value along a line of data types (e.g. `List A(i)`) moves each of its
@@ -402,8 +344,8 @@ its value goes into a box held by the entry, and the other reads the box instead
 (waiting on the wire, uncounted, if the value has not arrived). Retention is reachability: an
 entry lives exactly while a producer is pending or a reader holds the box; the table holds nothing
 on its own, and two boxes with equal values but different origins are not identified (a numeral
-computed by `add` and the same numeral written out are two values). Naive Fibonacci is the test
-(`tests/memo.cub`): `fib (n+2)` demands `fib (n+1)`, which demands `fib n` while the outer `fib n`
+computed by `add` and the same numeral written out are two values). Naive Fibonacci shows it:
+`fib (n+2)` demands `fib (n+1)`, which demands `fib n` while the outer `fib n`
 is pending, so every `fib k` is computed once and the work is linear in the calls (unary addition
 dominates the count), whether the argument is a numeral the machine computed or one written out.
 
@@ -421,8 +363,8 @@ A reading reports its steps, and with them the memo hits (values found instead o
 the values shared. The steps are the work this reading did, given what earlier readings left held
 and the order the rewrites ran in: a term's second reading can cost less than its first, and with
 workers a reading can find a value shared that it would have computed alone. Without the memo
-(`CUBICAL_NOMEMO=1`) the count is a property of the term; `make test` checks that it does not
-depend on the number of workers, and that with the memo the answers do not.
+(`CUBICAL_NOMEMO=1`) the count is a property of the term, the same at any number of workers;
+with the memo the answers are.
 
 ## 4. Open terms normalize, with types
 
@@ -444,7 +386,7 @@ eliminated), whose type is not known there; reached at a known type, its branche
 type. A stuck word elimination carries no motive, so its branches are read without types: the
 type `T = P w` it is quoted at does not determine an arbitrary motive `P`, so reading them at `T`
 would be unsound (a motiveless case can be read at `T` because its motive is constant). The
-code satisfies two laws, checked in `tests/quote.cub`: evaluating it (`eval-g`) gives a value
+code satisfies two laws: evaluating it (`eval-g`) gives a value
 convertible with the original, and quoting that value gives the same code. A failure report
 prints its types (expected and actual, a type that was eliminated) the same way.
 
@@ -509,9 +451,8 @@ type, the group's calls at their declared types. A guarded call is productive, s
 every depth. At a path type the boundary is checked field by field (a record is compared with a
 value by its fields), so it holds at every depth. Two stuck calls are convertible when their
 definitions and arguments are; there is no η for codata, so two definitions whose unfoldings are
-bisimilar are not convertible. Their equality is a path, and a path between orbits is a
-bisimulation: `tests/codata.cub` proves `(x ≡ y) ≃ (x ≈ y)` by four corecursive definitions
-(`punaragamana/Orbit.agda`), and proves `mapO id o ≡ o` by a corecursive bisimulation.
+bisimilar are not convertible. Their equality is a path, and a path between two values of a
+codata type is a bisimulation.
 
 Composition in a codata type is a copattern definition generated from the declaration (`%comp-D`):
 each field composed along its type, at the parameters' lines and each earlier field's filler. A
@@ -558,7 +499,7 @@ too: at `⋄` both its ends are `fix f`, and it computes there, `pfix f i ⋄ = 
 (the tick-unfolding definitions count path parameters among theirs). So transport along `pfix`
 computes once `forceκ` gives the tick, and a guarded recursive type, a fixed point in the universe
 such as `G κ = fix (λ X → Nat × ((α : Tick κ) → X α))`, can be unfolded and folded by transport
-along `pfix` and still read canonical numerals (`tests/guarded.cub`). `pfix` being a path rather
+along `pfix` and still read canonical numerals. `pfix` being a path rather
 than a judgmental equality is a property of the theory (`dfix f` at a tick variable must not
 unfold, or normalization fails); the path computes wherever the equality would.
 Normalization terminates because the only unfolding fires on `⋄`, which only `forceκ` gives.
@@ -583,47 +524,50 @@ determines is the one clock in scope. A recursive call needed now is reported wh
 
 The plan and status document is `PLAN.md` (the single one; a fresh agent starts there).
 
-## 9. Programs about programs: matching, navigation, certificates; compilation at revision 8
+## 9. Programs about programs, and the compiler
 
 Programs about programs are definitions over codes (`lib/code.cub`), and their outputs carry
-paths: a rewrite carries `ap` of the theorem it applied, a compiled program carries `⟦p⟧ ≡ f`.
-The libraries that stand: **`lib/match.cub`** (first-order matching and rewriting over codes,
-capture-safe under binders), **`lib/rules.cub`** (the store's theorems as rewrite rules read
+paths, so a wrong one produces output that does not check. **`lib/match.cub`** (first-order
+matching and rewriting over codes, capture-safe under binders; each rewrite step's path is the
+theorem's instance in context), **`lib/rules.cub`** (the store's theorems as rewrite rules read
 from their types), **`lib/nav.cub`** and **`lib/cost.cub`** (navigation over established
-identities, choice by cost and purpose), **`lib/specialize.cub`** (normalize, then rewrite
-along the rules under a terminating discipline), **`lib/derive.cub`** (decidable equality as a
-code read off the data table), the verified certificate checkers (`lib/lin.cub`,
-`lib/linproof.cub`, `lib/eqproof.cub`, `lib/ring.cub`, `lib/intproof.cub`: search unverified,
-the checker a verified term, the verdict decided by the checker's own normalization), and
-`lib/autodiff.cub`'s typed theorems.
+identities), **`lib/specialize.cub`** (normalize with held definitions abstracted, then rewrite
+along the rules under a terminating discipline, composing the steps' paths), **`lib/derive.cub`**
+(decidable equality as a code read off the data table), the certificate checkers (`lib/lin.cub`,
+`lib/linproof.cub`, `lib/eqproof.cub`, `lib/ring.cub`, `lib/intproof.cub`: search unverified, the
+verdict decided by the checker), and `lib/autodiff.cub`'s typed theorems.
 
-**Compilation.** The back end that stood here until 2026-11-09 — a first-order form with its
-own evaluator, lowering into it, and printers to C, C++ and x86 related to the machine by
-comparing answers — is removed: a compiled program never carried a path to its term, and the
-printers asserted in a table that the machine's unbounded `Word` is `uint64_t`, which was
-false. What replaces it is specified in `PLAN.md` section 5: a structured machine program `M`
-whose meaning `⟦_⟧` is defined construct by construct, a reader from the checker's quoted
-normal form into `M` whose path `⟦read c⟧ ≡ eval-g c` holds by construction, `encode` to bytes
-by fifteen trusted templates (PLAN §13), and `compile f : Σ (p : Bytes), ⟦p⟧ ≡ f` checked by
-the checker. At this revision nothing compiles to native code; PLAN §12's queue item 1 is the
-first compiled program.
+**The compiler.** `#jit f` compiles a checked definition to x86-64 and binds `f` to the bytes:
+
+```
+plusN : Nat → Nat → Nat
+plusN a b = case a return (λ k → Nat) of
+  zero → b
+  suc k → suc (rec k)
+#jit plusN
+-- ok: jit plusN   [250 bytes, the checker's conversion, 15744 steps]
+```
+
+The checker's code for `f` is specialized (`lib/specialize.cub`), the result is accepted by the
+checker as `f` (its conversion with `f`, or with `#jit f using t…` the path along the theorems
+`t`, checked as the definition `f·jit`), and only then encoded by fixed templates
+(`lib/machine.cub` decides the fragment, `lib/x86.cub` encodes) and mapped executable. A
+definition outside the fragment (dimensions, composition, higher constructors, types at run
+time) is reported with the reason and stays on the net. A call whose arguments are values of
+the parameter types runs the bytes; any other call, and a `Word` result past 2⁶⁴ (the overflow
+exit: compiled code is pure, so the net recomputes the call), runs `f` on the net. The
+acceptance workloads are `experiments/jit/workloads.cub`; what is trusted (the templates, until
+the x86 model is imported) is listed in `PLAN.md` §7.
 
 ## Measurements
 
-Every reading reports the steps taken. The sorted list of 9.15 reads in 1.6k steps (eight words).
-The library (`lib/std.cub`, elaborated and checked) loads in 1.4M steps, and with the paper's terms
-(`tests/boxes.cub`) in 3.1M; elaboration runs the checker again when it has solved holes, and a
-case given a motive from its expected type carries it at run time. Naive `fib` of a computed 20
-reads in 36k steps, of 25 in 278k, and of 20 written out in 36k; the iterative `fib` reads 21k and
-226k (`tests/memo.cub`; without the memo, naive `fib` takes 294k and 3.8M). `CUBICAL_KEYS=1` traces
-the keys registered, fired and hit on stderr, and the entries left at the end. The development of
-`Orbit.agda` (the codata types, `unfold`, `mapO`, the four corecursive maps between paths and
-bisimulations, and `(x ≡ y) ≃ (x ≈ y)`) checks in 60k steps, `iso1` (a corecursive square) in 13k.
+Every reading reports the steps taken. `make library` checks the library (793 definitions) in
+18.3M steps, about 15 s on one thread. `CUBICAL_KEYS=1` traces the keys registered, fired and hit
+on stderr, and the entries left at the end.
 
 Brunerie's number, by an untyped port of Ljungström's `brunerie'` from agda/cubical
-(`experiments/brunerie/`), reads `negsuc (suc zero)`, that is -2, in 1.26M
-steps: 0.4 s for the reading, 1.1 s to load the cached library (one thread; the library
-elaborated, compiled and its checks skipped); `make test` checks it with one and four workers. The port has no
+(`experiments/brunerie/`), reads `negsuc (suc zero)`, that is -2, in 233,628
+steps (one thread, uncached, at revision 9); `make brunerie` reads it with zero and four workers. The port has no
 placeholders: isSetℤ is Hedberg's theorem in the library, and the 4-truncation case of the Hopf
 H-space structure is a checked filler over families of sets. The pipeline
 eliminates the circle and S² into truncations, the Hopf fibration and `Code` into the universe,
