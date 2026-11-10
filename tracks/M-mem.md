@@ -145,10 +145,17 @@ the result type of this layer is `MRes`, not `Res`.
   40 bytes; `t.s.a[2] = 9` then reading `t.s.a[2]` is 9, `t.s.a[1]` is `mub ub-uninit`,
   `&t.s.a[7]` is `mub ub-ptr-arith`; a layout with two ints at offset 0 is not `lay-ok`.
 
+- `lib/mem/monad.cub`, core and laws: `Ctl V A` (`c-val | c-ret | c-break | c-continue |
+  c-throw`), `EvR V A = MRes (Ctl V A × AMem)`, `Ev {l} S V A = AMem → Proc {l} S (EvR V A)`,
+  `ev-ret`, `ev-step`, `ev-bind`, `ev-then`; the laws checked as paths: `ev-left-id` (by
+  computation), `ev-right-id` (from `ev-step-ret`, by cases on the result and the control
+  outcome), `ev-assoc` (from `ev-step-assoc`, likewise). 1077 passed, 0 failed with the four
+  files before it (864,583 steps for monad.cub's 14 checks, nearly all in the two laws).
+
 ## Measured
 
 - target.cub + scalar.cub + memory.cub after the cached library: `1017 passed, 0 failed`; with
-  layout.cub `1055 passed, 0 failed` (the cached library alone is 767, so 288 checks are this
+  layout.cub `1063 passed, 0 failed` (the cached library alone is 767, so 296 checks are this
   track's).
 - Net steps of single operations: a load about 600, a store about 800, an 8-byte memcpy about
   9,000 (each byte is a window read and a window write, and a write copies the allocation's
@@ -224,8 +231,8 @@ the result type of this layer is `MRes`, not `Res`.
 
 ## Next step
 
-Write `lib/mem/monad.cub`: `Ctl V A` (normal a | returned v | broke | continued | thrown v),
-`Ev S V A = AMem → Proc S (MRes (Ctl V A × AMem))` over lib/proc.cub's `Proc` at a signature
-parameter `S`; `ev-ret`, `ev-bind`, lifting of `MRes` operations and of memory operations,
-`ev-cmd` (a world command), `ev-while` with a `Word` fuel (`mstop st-fuel`), `ev-for-n`
-(structural), `ev-catch-break/continue/return`, and the three monad laws as checked paths.
+Continue `lib/mem/monad.cub` after `ev-assoc`: `ev-res`/`ev-rd`/`ev-wr`/`ev-mem` (lifting `MRes`
+and memory operations), `ev-cmd` (a world command), `ev-return`/`ev-break`/`ev-continue`/
+`ev-throw`/`ev-ub`/`ev-stop`, `ev-fn` (a call boundary: a return becomes the value),
+`ev-catch`, `ev-for` and `ev-while`/`ev-do-while` by `Word` fuel, `ev-for-n` (structural),
+`NoS` and `ev-run-pure`. Then `experiments/mem/sum.cub`.

@@ -1,0 +1,94 @@
+-- lib/mem/monad.cub — the evaluation monad every language reader targets. Loaded after
+-- lib/mem/layout.cub (and lib/proc.cub, in the library).
+--
+-- A computation of the abstract machine takes the memory and is a process over a signature of
+-- world commands (lib/proc.cub's Proc at a signature parameter S: I/O, the allocator, threads
+-- are commands a world answers) ending in: undefined behaviour with its reason, a stop, or the
+-- memory after it together with how control left it: normally with a value, by a return, a
+-- break, a continue, or a thrown value. V is the reader's type of returned and thrown values.
+--   Ev S V A = AMem → Proc S (MRes (Ctl V A × AMem))
+-- Loops: a counted loop is structural (ev-for-n); an unbounded loop takes a Word of fuel, a
+-- parameter of the meaning, and stops (mstop st-fuel) when it is spent, so the meaning of a
+-- program is a function of the fuel and "runs forever" is "stops at every fuel".
+--
+-- Binding time (PLAN §5.4): ev-bind's dispatch is on the control outcome of a run-time result,
+-- and nothing here inspects program data; a reader's cases on its syntax happen outside, so
+-- specializing at a program leaves the binds of that program's loads, stores and arithmetic.
+data Ctl (V : Type) (A : Type) = c-val (a : A) | c-ret (v : V) | c-break | c-continue | c-throw (v : V)
+EvR : Type → Type → Type
+EvR V A = MRes (Ctl V A × AMem)
+Ev : {l : Level} → Sig → Type → Type → Type (lsuc l)
+Ev {l} S V A = AMem → Proc {l} S (EvR V A)
+ev-ret : {l : Level} {S : Sig} {V A : Type} → A → Ev {l} S V A
+ev-ret {l} {S} {V} {A} a = λ m → ret {l} {S} {EvR V A} (mok (c-val a , m))
+-- what follows a result: the continuation on a value, the same outcome otherwise
+ev-step : {l : Level} {S : Sig} {V A B : Type} → (A → Ev {l} S V B) → EvR V A → Proc {l} S (EvR V B)
+ev-step {l} {S} {V} {A} {B} f r = case r of
+  mok cm → (case fst cm of
+    c-val a → f a (snd cm)
+    c-ret v → ret {l} {S} {EvR V B} (mok (c-ret v , snd cm))
+    c-break → ret {l} {S} {EvR V B} (mok (c-break , snd cm))
+    c-continue → ret {l} {S} {EvR V B} (mok (c-continue , snd cm))
+    c-throw v → ret {l} {S} {EvR V B} (mok (c-throw v , snd cm)))
+  mub w → ret {l} {S} {EvR V B} (mub w)
+  mstop w → ret {l} {S} {EvR V B} (mstop w)
+ev-bind : {l : Level} {S : Sig} {V A B : Type} → Ev {l} S V A → (A → Ev {l} S V B) → Ev {l} S V B
+ev-bind {l} {S} {V} {A} {B} e f = λ m → bind {l} {S} {EvR V A} {EvR V B} (e m) (ev-step {l} {S} {V} {A} {B} f)
+ev-then : {l : Level} {S : Sig} {V A B : Type} → Ev {l} S V A → Ev {l} S V B → Ev {l} S V B
+ev-then {l} {S} {V} {A} {B} e e2 = ev-bind {l} {S} {V} {A} {B} e (λ a → e2)
+
+-- ---------------------------------------------------------------- the laws, as checked paths
+-- left identity: by computation (Proc's bind on ret is the continuation, η)
+ev-left-id : {l : Level} {S : Sig} {V A B : Type} → (a : A) → (f : A → Ev {l} S V B) →
+  ev-bind {l} {S} {V} {A} {B} (ev-ret {l} {S} {V} {A} a) f ≡ f a
+ev-left-id a f = λ i → f a
+-- continuing with ev-ret rebuilds the result: by cases on the control outcome
+ev-step-ret-c : {l : Level} {S : Sig} {V A : Type} → (c : Ctl V A) → (m : AMem) →
+  ev-step {l} {S} {V} {A} {A} (ev-ret {l} {S} {V} {A}) (mok (c , m)) ≡ ret {l} {S} {EvR V A} (mok (c , m))
+ev-step-ret-c {l} {S} {V} {A} c m =
+  case c return (λ x → ev-step {l} {S} {V} {A} {A} (ev-ret {l} {S} {V} {A}) (mok (x , m)) ≡ ret {l} {S} {EvR V A} (mok (x , m))) of
+    c-val a → λ i → ret {l} {S} {EvR V A} (mok (c-val a , m))
+    c-ret v → λ i → ret {l} {S} {EvR V A} (mok (c-ret v , m))
+    c-break → λ i → ret {l} {S} {EvR V A} (mok (c-break , m))
+    c-continue → λ i → ret {l} {S} {EvR V A} (mok (c-continue , m))
+    c-throw v → λ i → ret {l} {S} {EvR V A} (mok (c-throw v , m))
+ev-step-ret : {l : Level} {S : Sig} {V A : Type} → (r : EvR V A) →
+  ev-step {l} {S} {V} {A} {A} (ev-ret {l} {S} {V} {A}) r ≡ ret {l} {S} {EvR V A} r
+ev-step-ret {l} {S} {V} {A} r =
+  case r return (λ x → ev-step {l} {S} {V} {A} {A} (ev-ret {l} {S} {V} {A}) x ≡ ret {l} {S} {EvR V A} x) of
+    mok cm → ev-step-ret-c {l} {S} {V} {A} (fst cm) (snd cm)
+    mub w → λ i → ret {l} {S} {EvR V A} (mub w)
+    mstop w → λ i → ret {l} {S} {EvR V A} (mstop w)
+-- right identity
+ev-right-id : {l : Level} {S : Sig} {V A : Type} → (e : Ev {l} S V A) →
+  ev-bind {l} {S} {V} {A} {A} e (ev-ret {l} {S} {V} {A}) ≡ e
+ev-right-id {l} {S} {V} {A} e = λ i m R k h → e m R (λ r → ev-step-ret {l} {S} {V} {A} r i R k h) h
+-- binding after a step is a step of the bound continuation: by cases
+ev-step-assoc-c : {l : Level} {S : Sig} {V A B C : Type} → (f : A → Ev {l} S V B) → (g : B → Ev {l} S V C) →
+  (c : Ctl V A) → (m : AMem) →
+  bind {l} {S} {EvR V B} {EvR V C} (ev-step {l} {S} {V} {A} {B} f (mok (c , m))) (ev-step {l} {S} {V} {B} {C} g)
+  ≡ ev-step {l} {S} {V} {A} {C} (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g) (mok (c , m))
+ev-step-assoc-c {l} {S} {V} {A} {B} {C} f g c m =
+  case c return (λ x → bind {l} {S} {EvR V B} {EvR V C} (ev-step {l} {S} {V} {A} {B} f (mok (x , m))) (ev-step {l} {S} {V} {B} {C} g)
+                       ≡ ev-step {l} {S} {V} {A} {C} (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g) (mok (x , m))) of
+    c-val a → λ i → ev-bind {l} {S} {V} {B} {C} (f a) g m
+    c-ret v → λ i → ret {l} {S} {EvR V C} (mok (c-ret v , m))
+    c-break → λ i → ret {l} {S} {EvR V C} (mok (c-break , m))
+    c-continue → λ i → ret {l} {S} {EvR V C} (mok (c-continue , m))
+    c-throw v → λ i → ret {l} {S} {EvR V C} (mok (c-throw v , m))
+ev-step-assoc : {l : Level} {S : Sig} {V A B C : Type} → (f : A → Ev {l} S V B) → (g : B → Ev {l} S V C) →
+  (r : EvR V A) →
+  bind {l} {S} {EvR V B} {EvR V C} (ev-step {l} {S} {V} {A} {B} f r) (ev-step {l} {S} {V} {B} {C} g)
+  ≡ ev-step {l} {S} {V} {A} {C} (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g) r
+ev-step-assoc {l} {S} {V} {A} {B} {C} f g r =
+  case r return (λ x → bind {l} {S} {EvR V B} {EvR V C} (ev-step {l} {S} {V} {A} {B} f x) (ev-step {l} {S} {V} {B} {C} g)
+                       ≡ ev-step {l} {S} {V} {A} {C} (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g) x) of
+    mok cm → ev-step-assoc-c {l} {S} {V} {A} {B} {C} f g (fst cm) (snd cm)
+    mub w → λ i → ret {l} {S} {EvR V C} (mub w)
+    mstop w → λ i → ret {l} {S} {EvR V C} (mstop w)
+-- associativity
+ev-assoc : {l : Level} {S : Sig} {V A B C : Type} → (e : Ev {l} S V A) → (f : A → Ev {l} S V B) → (g : B → Ev {l} S V C) →
+  ev-bind {l} {S} {V} {B} {C} (ev-bind {l} {S} {V} {A} {B} e f) g
+  ≡ ev-bind {l} {S} {V} {A} {C} e (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g)
+ev-assoc {l} {S} {V} {A} {B} {C} e f g =
+  λ i m R k h → e m R (λ r → ev-step-assoc {l} {S} {V} {A} {B} {C} f g r i R k h) h
