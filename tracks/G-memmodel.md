@@ -92,6 +92,25 @@ How to check (cached library, one file after another; the last line must read `N
   (A file that has not changed is `cached:` and its `#show`s are not printed again; to see the
   readings again run with `CUBICAL_NOCACHE=1`, which also rechecks the library, ~20 s more.)
 
+- Each litmus set is also a checked statement `x-exact : tso-outcomes n x ≡ tso-sum x-set #count #0`
+  (the set, the number of finished schedules, zero cut), by `λ i → …`: `sb-exact` 119,424
+  steps, `mp-exact` 56,853, `lb-exact` 38,982, `iriw-exact` 7,755,380.
+- `lib/mem/atomics.cub` (21 definitions check): `MOrd` (`mo-relaxed/mo-acquire/mo-release/
+  mo-acq-rel/mo-seq-cst`), `Atom` (`at-load o a`, `at-store o a v`, `at-xchg o a v`, `at-cas so
+  fo a old new` answering `Bool × Word`, `at-fence o`), `AtomS`, `atom-valid` (the orderings
+  the languages allow per operation), handlers `atom-x86-xchg` (seq_cst store = locked xchg)
+  and `atom-x86-mfence` (seq_cst store = store; mfence) `: Handler AtomS TsoIS` (every load a
+  plain load, weaker stores plain stores, only the seq_cst fence emits mfence), `at-handle`
+  (a handler applied to a `Step`), `AtomThread`, `at-thread`, writers `ai-*`.
+- `experiments/tso/atomics-sb.cub`: SB through the atomics. Relaxed: all four outcomes, 80
+  schedules, 111,663 steps; release/acquire: all four, 80, 111,641; seq_cst as xchg:
+  `{(0,1),(1,0),(1,1)}`, 6 schedules, 8,964 steps; seq_cst as store+mfence: the same set, 70
+  schedules, 136,133 steps. `asb-sc-xchg`, `asb-sc-mfence` state the seq_cst sets as paths;
+  `asb-sound-xchg` (103,303 steps) and `asb-sound-mfence` (2,317,931) are TsoSound at these
+  (executions with locked and mfence events).
+  All seven files after the cached library: `921 passed, 0 failed; 91,412,925 steps`, 17 s:
+  `./build/cubical $LIBS lib/isa/tso.cub experiments/tso/{sb,mp,lb,iriw}.cub lib/mem/atomics.cub experiments/tso/atomics-sb.cub`
+
 ## Found
 
 - **Elaborator refuses a structural recursion when an argument before the matched one changes.**
@@ -122,13 +141,13 @@ How to check (cached library, one file after another; the last line must read `N
 
 ## Next step
 
-1. `lib/mem/atomics.cub` (loaded after `lib/isa/tso.cub`): `data MOrd` (five orderings),
-   `data Atom` (load/store/compare-exchange/fence with orderings), `AtomS`, the handler(s)
-   `Handler AtomS TsoIS` (seq_cst store as xchg, and as store+mfence), `step-handle` to apply a
-   handler to a `Step`; `experiments/tso/atomics-sb.cub`: SB with relaxed stores (allows 0,0)
-   and with seq_cst stores (forbids 0,0), each a `#show tso-outcomes`.
-2. `experiments/tso/spinlock.cub`: two threads, xchg-based spin-lock with a bounded number of
-   attempts, mutual exclusion as `isTrue (…)` over every schedule up to the bound.
-3. The axiomatic side of the litmus sets: for each forbidden outcome, `tso-consistent` of its
-   candidates is `false`; then an enumeration of all candidates (`tso-ax-outcomes`) so the two
-   outcome sets are compared as equal lists per litmus.
+1. `experiments/tso/spinlock.cub`: two threads, xchg-based spin-lock with a bounded number of
+   attempts (lock at #0, a counter at #1 incremented non-atomically inside), mutual exclusion
+   as `isTrue (…)` over every schedule up to the bound: over each end's trace, no thread's
+   successful acquisition (`l-locked t _ #0 0 _ 1`) while another holds (between its
+   acquisition and its releasing store's `l-write`), and the final counter equals the number
+   of acquirers.
+2. The axiomatic side of the litmus sets: an enumeration of all candidates
+   (`tso-ax-outcomes`: per thread the local runs over read values from a finite domain, every
+   rf and every order on writes, kept when `tso-consistent`) so the axiomatic outcome set of
+   each litmus is computed and stated equal to the operational one.

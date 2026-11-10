@@ -16,3 +16,9 @@ sb = cons sb-t0 (cons sb-t1 nil)
 #show tso-sound-upto 6 sb
 sb-sound : isTrue (tso-sound-upto 6 sb)
 sb-sound = unit
+-- the reading as a statement: the set over every schedule is exactly the x86-TSO set
+-- (all four outcomes, the relaxed (0 , 0) among them), from 80 finished schedules, none cut by the bound
+sb-set : List (List Word)
+sb-set = cons (cons #0 (cons #0 nil)) (cons (cons #0 (cons #1 nil)) (cons (cons #1 (cons #0 nil)) (cons (cons #1 (cons #1 nil)) nil)))
+sb-exact : tso-outcomes 6 sb ≡ tso-sum sb-set #80 #0
+sb-exact = λ i → tso-sum sb-set #80 #0

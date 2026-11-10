@@ -1,0 +1,33 @@
+-- experiments/tso/atomics-sb.cub — store buffering written against the language-level atomics
+-- (lib/mem/atomics.cub) and run on the x86-TSO machine under each handler.
+--   thread 0: x.store(1, o); r0 = y.load(o)      thread 1: y.store(1, o); r1 = x.load(o)
+-- With relaxed (or release/acquire) orderings the outcome (0 , 0) is allowed; with seq_cst
+-- it is forbidden, under either way of emitting a seq_cst store.
+asb-t0 : MOrd → AtomThread
+asb-t0 o = ai-store o #0 #1 (ai-load o #1 (λ r → ai-ret (cons r nil)))
+asb-t1 : MOrd → AtomThread
+asb-t1 o = ai-store o #1 #1 (ai-load o #0 (λ r → ai-ret (cons r nil)))
+asb : Handler AtomS TsoIS → MOrd → List TsoThread
+asb hd o = cons (at-thread hd (asb-t0 o)) (cons (at-thread hd (asb-t1 o)) nil)
+#show tso-outcomes 6 (asb atom-x86-xchg mo-relaxed)
+-- store release, load acquire
+asb-ra : Handler AtomS TsoIS → List TsoThread
+asb-ra hd = cons (at-thread hd (ai-store mo-release #0 #1 (ai-load mo-acquire #1 (λ r → ai-ret (cons r nil)))))
+           (cons (at-thread hd (ai-store mo-release #1 #1 (ai-load mo-acquire #0 (λ r → ai-ret (cons r nil))))) nil)
+#show tso-outcomes 6 (asb-ra atom-x86-xchg)
+-- seq_cst, the store as xchg: 4 transitions (2 xchg, 2 loads)
+#show tso-outcomes 4 (asb atom-x86-xchg mo-seq-cst)
+-- seq_cst, the store as store; mfence: 8 transitions (2 stores, 2 flushes, 2 mfences, 2 loads)
+#show tso-outcomes 8 (asb atom-x86-mfence mo-seq-cst)
+-- seq_cst forbids (0 , 0): the set is the three others, under both handlers
+asb-sc-set : List (List Word)
+asb-sc-set = cons (cons #0 (cons #1 nil)) (cons (cons #1 (cons #0 nil)) (cons (cons #1 (cons #1 nil)) nil))
+asb-sc-xchg : tso-sum-outs (tso-outcomes 4 (asb atom-x86-xchg mo-seq-cst)) ≡ asb-sc-set
+asb-sc-xchg = λ i → asb-sc-set
+asb-sc-mfence : tso-sum-outs (tso-outcomes 8 (asb atom-x86-mfence mo-seq-cst)) ≡ asb-sc-set
+asb-sc-mfence = λ i → asb-sc-set
+-- and every schedule's execution is TSO-consistent (locked events and mfence events appear)
+asb-sound-xchg : isTrue (tso-sound-upto 4 (asb atom-x86-xchg mo-seq-cst))
+asb-sound-xchg = unit
+asb-sound-mfence : isTrue (tso-sound-upto 8 (asb atom-x86-mfence mo-seq-cst))
+asb-sound-mfence = unit
