@@ -6,9 +6,7 @@
 -- question about the evaluator is a term.
 data Lst = lnil | lcons x xs
 data Opt = none | some x
--- a layout (plan B12): first-order data the checker computes for a type and the back end reads;
--- a struct's fields and a union's alternatives are chains in the type itself, ending in lnone
--- binding times (a schedule's stages, lib/specialize.cub) and the reader's verdict (plan 5.4, lib/m.cub):
+-- binding times (a schedule's stages, lib/specialize.cub) and the reader's verdict (plan 5.4, lib/machine.cub):
 -- a first-order machine program, or the construct that has none and why
 data Stage = st-now | st-build | st-run-known | st-run
 -- a schedule (plan 5.7): the rewrite bound, the binding-time stages, the held definitions and the
@@ -16,7 +14,6 @@ data Stage = st-now | st-build | st-run-known | st-run
 data Sched = sched (rewrites : Word) (stages : Lst) (holds : Lst) (regs : Lst)
 data Reason = dim | dep-type | higher | kan | reflect | mult | copy
 data Verdict = fo m | not-fo reason at
-data Layout = lword | lbytes n | lptr target | larray n elem | lstruct fields | lunion alts | lnone | lfield name layout align rest | lalt layout rest
 data Code
   = cvar n
   | cglob n
@@ -130,9 +127,6 @@ data View
   | wtick0
   -- a primitive operation (B12) stuck on a neutral: the operation's number and its arguments
   | wprim k as
-  -- a handle kept native (B18, V_NATIVE): its identity (a serial number, unique for the run) and
-  -- the entry that made it
-  | wnative i k
 -- two λs of one record (%clos): the pairs of (copies of) their environments, and the λs; else
 -- both, untouched
 data CloCmp = csame ps f g | cdiff f g

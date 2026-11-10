@@ -10,7 +10,6 @@ data Level = lzero | lsuc (l : Level) | lmax (a : Level) (b : Level) | lomega
 -- checker takes them as the domains of Π types only (▸ κ A = (α : Tick κ) → A)
 data Clock = κ0
 data Tick (k : Clock) = ⋄
-refl x = λ (i : I) → x
 -- fill^i A [φ ↦ u] a0 (r) = comp^j A(r∧j) [φ ↦ u(r∧j), (r=0) ↦ a0] a0
 fill A u a0 r =
   comp (λ (j : I) → A @ (r /\ j))
@@ -20,14 +19,7 @@ hcomp A u a0 = comp (λ (i : I) → A) u a0
 -- equivalences (§15)
 Contr X = (c : X) × ((x : X) → PathP (λ (i : I) → X) c x)
 fib X Y f y = (x : X) × PathP (λ (i : I) → Y) (f x) y
-Equiv X Y = (f : X → Y) × ((y : Y) → Contr (fib X Y f y))
-idequiv X =
-  (λ x → x
-  , λ y →
-      ((y , λ (i : I) → y)
-      , λ z (i : I) → (%@ (snd z) (~ i) (fst z) y , λ (j : I) → %@ (snd z) (~ i \/ j) (fst z) y)))
--- univalence (§17)
-ua A B e = λ (i : I) → Glue B [ i = 0 ↦ (A , e) , i = 1 ↦ (B , idequiv B) ]
+%Equiv X Y = (f : X → Y) × ((y : Y) → Contr (fib X Y f y))
 -- composition clauses (§14, §16, §17)
 %comp-pi D E u f0 x1 =
   let vl = λ (k : I) → fill (λ (j : I) → D @ ~ j) [] x1 (~ k)
@@ -114,7 +106,6 @@ ua A B e = λ (i : I) → Glue B [ i = 0 ↦ (A , e) , i = 1 ↦ (B , idequiv B)
     (sysmap (λ %w (%i : I) → f (%w @ %i)) u) (f u0)
 -- data types
 data Bool = true | false
-not b = if b then false else true
 and a b = if a then b else false
 data Nat = zero | suc (n : Nat)
 add m n = case m of zero → n; suc k → suc (add k n)

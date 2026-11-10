@@ -13,6 +13,7 @@
 extern int access(const char *, int);
 #include <sys/resource.h>
 #include <limits.h>
+extern int execv(const char *path, char *const argv[]);   /* <unistd.h>, whose link(2) the net's link shadows */
 #include <stdarg.h>
 extern int dup(int); extern int dup2(int, int); extern int close(int); extern FILE *fdopen(int, const char *);
 
@@ -107,7 +108,6 @@ static void mem_report(const char *name) {
             name, rss / 1024, hwm / 1024, stat_cells, sl * 64 / 1024, ks, stat_payloads, au >> 20, as >> 20,
             mi.uordblks >> 20, mi.fordblks >> 20, mi.hblkhd >> 20, stat_syn_bytes >> 20, stat_perm_bytes >> 20, stat_rec_bytes >> 20);
 }
-static char *ar_strdup(const char *s) { size_t l = strlen(s) + 1; char *r = ar_alloc(l); memcpy(r, s, l); return r; }
 /* Symbols are interned: one copy of each spelling, kept for the run, so names compare by
  * pointer (the binder lookups, the name sets of free_vars and local_free) */
 static size_t kw_hash(const char *s);
@@ -247,7 +247,7 @@ static bool node_eq(Node *a, Node *b) {
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "%delay", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
-    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%rlaws", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
+    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr", "%i64div", "%i64mod", "%i64and", "%i64or", "%i64xor", "%i64shl", "%i64shr",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%u64ofw", "%wofu64", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
@@ -737,49 +737,14 @@ int data_checked_index(int d) { return chk_index(d); }
 /* the trusted surface (B12): every postulate and every primitive declared, in order; #trusted lists it */
 /* the foreign table (D27) */
 Ffi *FFI; int nffi; static size_t capffi;
-/* an entry's prototype read: the result's and each parameter's type text (up to its name) */
-static int proto_types(const char *text, const char *epat, char rt[64], char pt[NATIVE_MAXW][64]) {
-    const char *e = NULL;
-    for (const char *q = text; (q = strstr(q, epat)); q++) {
-        if (q > text && (isalnum((unsigned char)q[-1]) || q[-1] == '_')) continue;
-        const char *close = strchr(q, ')'); if (!close) break;
-        const char *b = close + 1; while (*b == ' ' || *b == '\n' || *b == '\t') b++;
-        if (*b == '{') { e = q; break; }
-    }
-    if (!e) return -1;
-    const char *q = e; while (q > text && q[-1] != '\n') q--;
-    while (*q == ' ' || *q == '\t') q++;
-    if (!strncmp(q, "static ", 7)) q += 7;
-    size_t rl = (size_t)(e - q); while (rl && q[rl - 1] == ' ') rl--; if (rl > 63) rl = 63;
-    memcpy(rt, q, rl); rt[rl] = 0;
-    const char *a = e + strlen(epat); int n = 0;
-    while (*a && *a != ')' && n < NATIVE_MAXW) {
-        while (*a == ' ' || *a == ',') a++;
-        const char *s0 = a; while (*a && *a != ',' && *a != ')') a++;
-        const char *s1 = a; while (s1 > s0 && s1[-1] == ' ') s1--;
-        const char *nm = s1; while (nm > s0 && (isalnum((unsigned char)nm[-1]) || nm[-1] == '_')) nm--;
-        size_t tl = (size_t)(nm - s0); while (tl && s0[tl - 1] == ' ') tl--; if (tl > 63) tl = 63;
-        memcpy(pt[n], s0, tl); pt[n][tl] = 0;
-        if (tl == 4 && !strncmp(s0, "void", 4)) break;
-        n++;
-    }
-    return n;
-}
-/* records by value (B18, item 18): a data type's C struct (crec_of, after the checker's tables) */
-typedef struct CRec CRec;
-static CRec *crec_of(int d);
-static int ctype_data(const char *ty, char tag[64]);
-static bool cr_tw(FILE *m, const char *text, const CRec *r, const char *ty, const char *lv, int o, bool out);
-static int crec_words(const CRec *r);
-static void native_structs(const char *nm, int n, int k, const CRec **sr, const CRec *rr, int nexp);
 int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret) {
     /* "sym" in the running program (its C library, and the math library), or "lib.so:sym" in that
      * shared library, opened */
-    void *fn = NULL, *lib_h = NULL; const char *colon = strchr(sym, ':');
+    void *fn = NULL; const char *colon = strchr(sym, ':');
     if (colon) {
         char *lib = strndup(sym, (size_t)(colon - sym)); void *h = dlopen(lib, RTLD_NOW | RTLD_GLOBAL);
         if (!h) die("foreign: cannot open the library of", sym);
-        fn = dlsym(h, colon + 1); free(lib); sym = colon + 1; lib_h = h;
+        fn = dlsym(h, colon + 1); free(lib); sym = colon + 1;
     } else {
         static void *self, *libm; if (!self) self = dlopen(NULL, RTLD_LAZY);
         fn = self ? dlsym(self, sym) : NULL;
@@ -787,9 +752,7 @@ int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret
     }
     if (!fn) die("foreign: no such symbol in the running program or its libraries (write \"lib.so:sym\" for another):", sym);
     GROW(FFI, capffi, (size_t)nffi + 1);
-    FFI[nffi] = (Ffi){ strdup(sym), fn, n, { 0 }, ret, -1, lib_h, NULL, 0, NULL, -1, 0, -1 };
-    /* a library's handles are finalized by its cubical_release, when it has one */
-    if (lib_h) FFI[nffi].fin = (void (*)(void *))dlsym(lib_h, "cubical_release");
+    FFI[nffi] = (Ffi){ strdup(sym), fn, n, { 0 }, ret, NULL };
     memcpy(FFI[nffi].kind, kind, (size_t)n);
     return nffi++;
 }
@@ -815,8 +778,7 @@ static void gsteps_set(long k, long steps) {
 }
 /* the desugared term of each checked definition, kept (a copy outside the arena) for (%gcode n):
  * its code as written, the globals it names kept as cglob — the back end's view of a definition
- * before normalization unfolds the definitions it calls (an operation a representation replaces,
- * B12 §6, is a call there) */
+ * before normalization unfolds the definitions it calls */
 static Node **CHKSRC; static size_t capchksrc;
 static long stat_perm_bytes, stat_rec_bytes;   /* CUBICAL_MEMDEF */
 static Node *perm_copy(Node *t) {
@@ -829,40 +791,14 @@ static void chksrc_set(long ck, Node *dt) {
     { size_t o_ = capchksrc; GROW(CHKSRC, capchksrc, (size_t)ck + 1); if (capchksrc > o_) memset(CHKSRC + o_, 0, (capchksrc - o_) * sizeof *CHKSRC); }   /* (GROW leaves the new entries unset; a definition never given one reads NULL) */
     CHKSRC[ck] = perm_copy(dt);
 }
-/* and its type, desugared (B18's boundary reads a represented parameter or result off it) */
+/* and its type, desugared (#jit reads the parameters' and the result's types off it: jt_of) */
 static Node **CHKTY; static size_t capchkty;
 static void chkty_set(long ck, Node *dT) {
     if (ck < 0) return;
     { size_t o_ = capchkty; GROW(CHKTY, capchkty, (size_t)ck + 1); if (capchkty > o_) memset(CHKTY + o_, 0, (capchkty - o_) * sizeof *CHKTY); }   /* (GROW leaves the new entries unset; a definition never given one reads NULL) */
     CHKTY[ck] = perm_copy(dT);
 }
-/* a data type's representation's conversions (repops), by checked data index: to and from as
- * checked definition indices, -1 none */
-static long *REPTO, *REPFROM; static size_t caprepto, caprepfrom;
-static void rep_conv_set(int di, long to, long from) {
-    size_t o1 = caprepto, o2 = caprepfrom;
-    GROW(REPTO, caprepto, (size_t)di + 1); GROW(REPFROM, caprepfrom, (size_t)di + 1);
-    for (size_t i = o1; i < caprepto; i++) REPTO[i] = -1;
-    for (size_t i = o2; i < caprepfrom; i++) REPFROM[i] = -1;
-    REPTO[di] = to; REPFROM[di] = from;
-}
-/* the checked data types whose representation is the induced one (src/syntax.c x_rep_induce) */
-static bool *REPIND; static size_t caprepind;
-static bool rep_induced(long ck) { return ck >= 0 && (size_t)ck < caprepind && REPIND[ck]; }
-static void rep_induced_set(long ck, bool v) {
-    if ((size_t)ck >= caprepind) { size_t o = caprepind; GROW(REPIND, caprepind, (size_t)ck + 1); memset(REPIND + o, 0, caprepind - o); }
-    REPIND[ck] = v;
-}
-/* the representation of a type term (its head a checked data type with a declared one): the data
- * type's checked index, else -1 */
 static int chk_index(int d);
-static int type_rep(Node *A) {
-    while (A->list && A->n >= 2 && (is(A->it[0], "app") || is(A->it[0], "%raw"))) A = A->it[1];
-    if (A->list && A->n >= 1 && !A->it[0]->list && !is(A->it[0], "Pi")) A = A->it[0];
-    if (A->list) return -1;
-    int d = data_lookup(A->s), di = d >= 0 ? chk_index(d) : -1;
-    return di >= 0 && (size_t)di < caprepto && REPTO[di] >= 0 ? di : -1;
-}
 /* the domains of a desugared Π chain (up to n) and its codomain */
 static int pi_parts(Node *T, Node **doms, int n, Node **cod) {
     int k = 0;
@@ -896,7 +832,7 @@ int checked_data(long k) { return k >= 0 && k < nchkdata ? CHKDATA[k] : -1; }
 static long *TABLE[TB_N]; static size_t TABCAP[TB_N]; static long TABN[TB_N];
 static void table_set(int t, long i, long g) {
     if ((size_t)i >= TABCAP[t]) { size_t nc = TABCAP[t] ? TABCAP[t] * 2 : 64; while (nc <= (size_t)i) nc *= 2; TABLE[t] = realloc(TABLE[t], nc * sizeof(long)); TABCAP[t] = nc; }
-    for (long k = TABN[t]; k < i; k++) TABLE[t][k] = -1;   /* a sparse table (TB_REP): the entries skipped are empty */
+    for (long k = TABN[t]; k < i; k++) TABLE[t][k] = -1;   /* the entries skipped are empty */
     TABLE[t][i] = g; if (i >= TABN[t]) TABN[t] = i + 1;
 }
 long table_global(int t, long i) { return t >= 0 && t < TB_N && i >= 0 && i < TABN[t] ? TABLE[t][i] : -1; }
@@ -1538,7 +1474,7 @@ static bool syn_walk(const Syn *t, long *calls, int *nc, int cap) {
     return false;
 }
 /* Tarjan over globals */
-static long *TJ_idx, *TJ_low, *TJ_stk; static signed char *TJ_on; static long tj_cap, tj_n, tj_sp, tj_counter;
+static long *TJ_idx, *TJ_low, *TJ_stk; static signed char *TJ_on; static long tj_cap, tj_sp, tj_counter;
 static void tj_grow(long g) {
     if (g < tj_cap) return;
     long nc = tj_cap ? tj_cap : 1024; while (nc <= g) nc *= 2;
@@ -1659,6 +1595,19 @@ static long add_global(const char *name, int kind) {
     nG++;
     gh_put(name, nG - 1);
     return nG - 1;
+}
+/* a name the source binds is bound once (E28: a second binding would silently rebind the references
+ * of everything after it). x_surface: the form being run came from the source (x_top), not from the
+ * system (emit: a data type's generated definitions, #jit's rebinding of f to its bytes). A name
+ * #retract hid may be bound again */
+static bool x_surface;
+static int chk_index(int d);
+static void decl_fresh(const char *name) {
+    if (!x_surface || name[0] == '%') return;
+    long g = global_lookup(name);
+    bool bound = (g >= 0 && !(G[g].kind == G_INPUT && !G[g].res->port[0])) || data_lookup(name) >= 0 || con_lookup(name) >= 0;
+    if (bound) { int ck = checked_index(name); if (ck >= 0 && CHKHIDE[ck]) return; }
+    if (bound) die("declared again (a name is bound once):", name);
 }
 Port global_copy(long g, Key *as) {
     Cell *r = G[g].res;
@@ -2474,14 +2423,9 @@ static Syn *compile(Node *t) {
             Syn *s = compile_n(S_PRIM, t, 2, t->n - 2); s->x = O_FFI; s->id = atoi(t->it[1]->s + 1); return s;
         }
         if (IS(h, "%native")) {
-            /* (%native k g a1 .. an): the compiled definition g (foreign entry k) called on words, g itself otherwise (B18) */
+            /* (%native k g a1 .. an): the #jit definition g (foreign entry k) by its bytes, g itself otherwise (plan 5.5) */
             if (t->n < 4 || t->it[1]->list || t->it[1]->s[0] != '#' || t->it[2]->list || t->it[2]->s[0] != '#') die("(%native k g a...)", NULL);
             Syn *s = compile_n(S_PRIM, t, 3, t->n - 3); s->x = O_NATIVE; s->id = atoi(t->it[1]->s + 1); s->slot = atoi(t->it[2]->s + 1); return s;
-        }
-        if (IS(h, "%natrep")) {
-            /* (%natrep cv g a1 .. an): cv on closed arguments, g on any with a neutral part (B18) */
-            if (t->n < 4 || t->it[1]->list || t->it[1]->s[0] != '#' || t->it[2]->list || t->it[2]->s[0] != '#') die("(%natrep cv g a...)", NULL);
-            Syn *s = compile_n(S_PRIM, t, 3, t->n - 3); s->x = O_NATREP; s->id = atoi(t->it[1]->s + 1); s->slot = atoi(t->it[2]->s + 1); return s;
         }
         if (IS(h, "%welimP")) {
             /* (%welimP P w z s): the elimination of a word with its motive, which is for the
@@ -2509,7 +2453,7 @@ static Syn *compile(Node *t) {
             Syn *s = compile_n(S_PRIM, t, 1, PR[q].n); s->x = (uint32_t)PR[q].kind; return s;
         }
         if (IS(h, "%box")) { if (t->n != 2) die("(%box v)", NULL); Syn *s = syn(S_BOX, 1); s->k[0] = compile(t->it[1]); return s; }
-        static const char *TBN[TB_N] = { "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%rtab", "%rops", "%rlaws" };
+        static const char *TBN[TB_N] = { "%gval", "%gty", "%dtab", "%dent", "%dtrans" };
         for (int q = 0; q < TB_N; q++) if (!strcmp(h, TBN[q])) {
             if (t->n != 2) die("wrong number of operands in", h);
             Syn *s = syn(S_GLOBTAB, 1); s->x = (uint32_t)q; s->k[0] = compile(t->it[1]); return s;
@@ -2782,7 +2726,7 @@ static void rb_one(FILE *o, Port prov) {
     case V_WTY: fputs("Word", o); return;
     case V_PTY:
         if (c->a == PT_BYTES) { fputs("(Bytes ", o); push_str(")"); push_field(c, 1); return; }
-        fputs(c->a == PT_I64 ? "Int64" : c->a == PT_U32 ? "UInt32" : c->a == PT_F64 ? "Float64" : c->a == PT_NATIVE ? "Native" : c->a == PT_U64 ? "UInt64" : "Float32", o); return;
+        fputs(c->a == PT_I64 ? "Int64" : c->a == PT_U32 ? "UInt32" : c->a == PT_F64 ? "Float64" : c->a == PT_U64 ? "UInt64" : "Float32", o); return;
     case V_PVAL: {
         /* a primitive value: #i64:n, #u32:n, #f64:x */
         if (c->x == PT_I64) fprintf(o, "#i64:%lld", (long long)(int64_t)c->a);
@@ -2826,15 +2770,6 @@ static void rb_one(FILE *o, Port prov) {
         return;
     }
     case V_WSUSP: { extern Port wsusp_force(Cell *c); push_port(wsusp_force(c)); return; }
-    case V_NATIVE: {
-        /* a value kept native: a boxed value read as its cells; a handle as the entry that made it
-         * (its identity, an address, is for %view: a reading is the same at any schedule) */
-        NObj *nb = c->p;
-        if (nb->d != -1) { push_port(native_unbox(c)); return; }
-        fprintf(o, "(%%handle #%d)", nb->k);
-        { extern void native_drop(Cell *c); native_drop(c); }
-        return;
-    }
     case V_REF: { extern Port ref_copy(Cell *c); push_port(ref_copy(c)); return; }
     case V_SUSP:
         /* an unforced induction hypothesis */
@@ -3289,7 +3224,7 @@ static void explain(const char *r, Node *q) {
     const char *saved = src; src = r;
     Node *n = read_node();
     src = saved;
-    if (!n || !n->list || n->n != 5 || !is(n->it[0], "no")) { printf("   reason: %s\n", r); return; }
+    if (!n || !n->list || n->n != 5 || !is(n->it[0], "refused")) { printf("   reason: %s\n", r); return; }
     int why = n->it[2]->list ? -1 : atoi(n->it[2]->s + 1);
     bool known = why >= 0 && why < (int)(sizeof M / sizeof *M);
     if (!is(n->it[1], "opq")) {
@@ -3310,7 +3245,7 @@ static void explain(const char *r, Node *q) {
     if (q && known && (slot_is_type(why, 0) || slot_is_type(why, 1))) {
         net_drain();
         Cell *c = obs_val(build_top(q));
-        if (c && !strcmp(con_of(c), "no"))
+        if (c && !strcmp(con_of(c), "refused"))
             for (int k = 0; k < 2; k++) if (slot_is_type(why, k)) {
                 Cell *a = cell(O_APP, 3);
                 link(build_top(nsym("%%quote-ty")), P(a, 0)); link(c->port[3 + k], P(a, 1));
@@ -3333,11 +3268,11 @@ static void toplevel(Node *f);
 /* top-level forms written by the system (a data declaration's definitions) */
 static void emit(const char *text) {
     if (getenv("CUBICAL_SHOW_EMIT")) fprintf(stderr, "%s\n", text);
-    const char *saved = src;
-    src = text;
+    const char *saved = src; bool sv = x_surface;
+    src = text; x_surface = false;
     Node *f;
     while ((f = read_node())) toplevel(f);
-    src = saved;
+    src = saved; x_surface = sv;
 }
 static char **watch_name; static Cell **watch_root; static size_t capwn, capwr; static int nwatch;
 static void load_file(const char *path, bool must);
@@ -3378,34 +3313,8 @@ static void rec_digest(const Record *r, unsigned char out[32]) {
     syn_digest(&h, r->body);
     sha256_final(&h, out);
 }
-static Sha256 lib_before; static bool lib_before_on;
-/* the text a specialization is keyed by (item 17): the expression with each checked definition and
- * data type named by its codebase key, everything else (literals, constructors, bound names) as
- * written */
-static bool spec_cur;   /* the expression names an unchecked definition of the file being loaded */
-static void spec_key_term(FILE *o, Node *t) {
-    if (t->list) { fputc('(', o); for (int i = 0; i < t->n; i++) { if (i) fputc(' ', o); spec_key_term(o, t->it[i]); } fputc(')', o); return; }
-    int ck = checked_index(t->s);
-    if (ck >= 0) { fprintf(o, "@%s", ckey_of(ck)); return; }
-    int d = data_lookup(t->s), di = d >= 0 ? chk_index(d) : -1;
-    if (di >= 0) { fprintf(o, "@d%s", dkey_of(di)); return; }
-    long g = global_lookup(t->s);
-    if (g >= 0 && G[g].file == cur_file) spec_cur = true;
-    /* the binder of a non-dependent → or × (the elaborator's fresh %_N, never referenced) is keyed
-     * as %_: two writings of one type (a program's type, as program-rep and lower take it) key alike */
-    if (t->s[0] == '%' && t->s[1] == '_' && t->s[2] >= '0' && t->s[2] <= '9') { fputs("%_", o); return; }
-    fputs(t->s, o);
-}
 /* an unchecked definition (a library printer, the specializer) has no key: the libraries loaded
  * before the file stand for it (an unchecked definition of the file itself: the file's text too) */
-static void spec_key_text(FILE *o, Node *t) {
-    spec_cur = false;
-    spec_key_term(o, t);
-    unsigned char dg[32]; char hx[65];
-    Sha256 h = lib_before; if (!lib_before_on) sha256_init(&h);
-    sha256_final(&h, dg); sha256_hex(dg, hx); fprintf(o, " libs %s", hx);
-    if (spec_cur) { h = lib_hash; if (!lib_hash_on) sha256_init(&h); sha256_final(&h, dg); sha256_hex(dg, hx); fprintf(o, " file %s", hx); }
-}
 /* a copattern definition: λs and lines over a record (desugared) */
 static bool copattern_body(Node *b) {
     for (;;) {
@@ -3658,589 +3567,6 @@ static bool cc_rdef(long g) {
     G[g].body = b; G[g].nslots = ns; G[g].uses = u; G[g].nparams = np; G[g].strict = st; G[g].nary = nary;
     return true;
 }
-typedef struct { uint64_t tag, n; void *f[]; } VBox;
-/* ---- B18, records by value (item 18): a data type's C struct ----
- * A data type with no parameters, no path constructors and no recursive field, each field a word
- * (Word, or a type represented by Word: the representation), a primitive of B12's layouts (UInt32,
- * Int64, Float32, Float64) or such a record itself (a type represented by one: the representation),
- * crosses as a C struct: one constructor its fields in order; several a tag word and a union of one
- * struct per constructor (C: struct D { uint64_t tag; union { struct { … } c0; struct { … } c1; } u; },
- * any member names). A nested record is inline. Between the net and C the value is a run of slots:
- * the tag when there are several constructors, then the constructor's fields (a nested record its own
- * slots), padded to the widest constructor; each slot a word (a UInt32 or Float32 its 32 bits, an
- * Int64 or Float64 its 64). Laid out in memory (from C, cubical_call_data) as C lays it out: a field
- * at its width and alignment (4 for UInt32 and Float32, 8 otherwise, a record its widest), the union
- * after the tag. */
-enum { CK_U64, CK_U32, CK_I64, CK_F32, CK_F64, CK_REC };
-typedef struct CRec CRec;
-typedef struct { int kind; long to, from; CRec *sub; size_t off; } CFld;   /* to/from: a represented field's conversions (checked indices), -1 */
-struct CRec { int d, ncons, words; int *nf; CFld **f; size_t size, align; };   /* nf, f: per constructor (no fixed bound: a record crosses while its slots fit NATIVE_MAXW) */
-static CRec **CRECS; static unsigned char *CRECST; static size_t capcrec, capcrecst;   /* per data type: 0 not yet, 1 being made, 2 made, 3 none */
-/* the head symbol of field k of constructor c of d, or NULL */
-static const char *field_head(int d, int c, int k) {
-    Node *dd = DATA[d].decl; if (!dd || c < 0 || c >= DATA[d].ncons) return NULL;
-    Node *cd = dd->it[2 + c]; if (!cd->list || k + 1 >= cd->n) return NULL;
-    Node *f = cd->it[k + 1]; if (!f->list || f->n != 2) return NULL;
-    Node *A = f->it[1]; Node *h = A->list && A->n == 1 ? A->it[0] : A;
-    return h->list ? NULL : h->s;
-}
-/* a represented type's representation: -2 Word, a data type, or -1 */
-static int rep_target(int di) {
-    long t = REPTO[di]; if (t < 0 || (size_t)t >= capchkty || !CHKTY[t]) return -1;
-    Node *doms[1], *cod; if (pi_parts(CHKTY[t], doms, 1, &cod) != 1) return -1;
-    Node *A = cod;
-    while (A->list && A->n >= 2 && (is(A->it[0], "app") || is(A->it[0], "%raw"))) A = A->it[1];
-    if (A->list && A->n == 1) A = A->it[0];
-    if (A->list) return -1;
-    if (!strcmp(A->s, "Word")) return -2;
-    return data_lookup(A->s);
-}
-/* the representations of the checked data type di followed (item 15: a type represented by a record
- * that has its own, RBox by RPt by RPt·W): c[0] = di, c[1], … each one's representation the next's
- * data type, until the data type d is reached (d ≥ 0), or while each has one (d < 0, to the end; Word
- * ends it); the number of conversions, -1 when d is not on the chain (0: di is d itself) */
-static int rep_chain(int di, int d, int *c, int max) {
-    int n = 0, cur = di;
-    while (cur >= 0 && n < max) {
-        if (d >= 0 && checked_data(cur) == d) return n;
-        if ((size_t)cur >= caprepto || REPTO[cur] < 0) return d < 0 ? n : -1;
-        c[n++] = cur;
-        int t = rep_target(cur);
-        if (t == -2) return d < 0 ? n : -1;
-        if (t < 0) return -1;
-        cur = chk_index(t);
-    }
-    return d < 0 && cur < 0 ? n : -1;
-}
-/* along the chain: to (the type's value to the chain's end, c[0]'s to innermost) or from (back,
- * c[0]'s from outermost) opened before a term; the parentheses to close after it */
-static int rep_conv_open(FILE *m, const int *c, int n, bool to) {
-    if (to) for (int k = n - 1; k >= 0; k--) fprintf(m, "(app %s ", CHECKED[REPTO[c[k]]]);
-    else for (int k = 0; k < n; k++) fprintf(m, "(app %s ", CHECKED[REPFROM[c[k]]]);
-    return n;
-}
-static void rep_conv_close(FILE *m, int n) { for (int k = 0; k < n; k++) fputc(')', m); }
-static size_t cr_round(size_t x, size_t a) { return a ? (x + a - 1) / a * a : x; }
-static CRec *crec_of(int d) {
-    if (d < 0 || d >= ndata) return NULL;
-    if ((size_t)d >= capcrecst) {   /* (GROW leaves the new entries unset) */
-        size_t o1 = capcrec, o2 = capcrecst;
-        GROW(CRECS, capcrec, (size_t)d + 1); GROW(CRECST, capcrecst, (size_t)d + 1);
-        memset(CRECS + o1, 0, (capcrec - o1) * sizeof *CRECS); memset(CRECST + o2, 0, capcrecst - o2);
-    }
-    if (CRECST[d] == 2) return CRECS[d];
-    if (CRECST[d]) return NULL;   /* none, or recursive through its fields */
-    CRECST[d] = 1;
-    DataInfo *D = &DATA[d]; CRec *r = calloc(1, sizeof *r); r->d = d; r->ncons = D->ncons;
-    bool ok = D->nparams == 0 && D->ncons >= 1;
-    if (ok) { r->nf = calloc((size_t)D->ncons, sizeof(int)); r->f = calloc((size_t)D->ncons, sizeof(CFld *)); }
-    size_t ualign = 1, usize = 0; int maxw = 0;
-    for (int c = 0; ok && c < D->ncons; c++) {
-        ConInfo *C = &CON[D->cons[c]];
-        if (C->ndims || C->nrec) { ok = false; break; }
-        r->nf[c] = C->nfields; r->f[c] = calloc((size_t)(C->nfields ? C->nfields : 1), sizeof(CFld)); int w = 0; size_t off = 0, al = 1;
-        for (int j = 0; ok && j < C->nfields; j++) {
-            CFld *f = &r->f[c][j]; f->to = f->from = -1;
-            if (C->fmult[j] == 0) { ok = false; break; }
-            const char *h = field_head(d, c, j); if (!h) { ok = false; break; }
-            if (!strcmp(h, "Word")) f->kind = CK_U64;
-            else if (!strcmp(h, "UInt32")) f->kind = CK_U32;
-            else if (!strcmp(h, "Int64")) f->kind = CK_I64;
-            else if (!strcmp(h, "Float32")) f->kind = CK_F32;
-            else if (!strcmp(h, "Float64")) f->kind = CK_F64;
-            else {
-                int fd = data_lookup(h); if (fd < 0) { ok = false; break; }
-                int di = chk_index(fd);
-                if (di >= 0 && (size_t)di < caprepto && REPTO[di] >= 0) {
-                    int t = rep_target(di);
-                    f->to = REPTO[di]; f->from = REPFROM[di];
-                    if (t == -2) f->kind = CK_U64;
-                    else if (t >= 0 && (f->sub = crec_of(t))) f->kind = CK_REC;
-                    else { ok = false; break; }
-                } else if ((f->sub = crec_of(fd))) f->kind = CK_REC;
-                else { ok = false; break; }
-            }
-            size_t fs = f->kind == CK_REC ? f->sub->size : f->kind == CK_U32 || f->kind == CK_F32 ? 4 : 8;
-            size_t fa = f->kind == CK_REC ? f->sub->align : fs;
-            off = cr_round(off, fa); f->off = off; off += fs; if (fa > al) al = fa;
-            w += f->kind == CK_REC ? f->sub->words : 1;
-        }
-        if (w > maxw) maxw = w;
-        if (al > ualign) ualign = al;
-        if (off > usize) usize = off;
-    }
-    if (ok && 1 + maxw > NATIVE_MAXW) ok = false;   /* more slots than a call carries: not by value */
-    if (!ok) { CRECST[d] = 3; if (r->f) for (int c = 0; c < r->ncons; c++) free(r->f[c]); free(r->f); free(r->nf); free(r); return NULL; }
-    if (r->ncons == 1) { r->words = maxw; r->align = ualign; r->size = cr_round(usize, ualign); }
-    else { r->words = 1 + maxw; r->align = ualign > 8 ? ualign : 8; r->size = cr_round(cr_round(8, ualign) + usize, r->align); }
-    CRECS[d] = r; CRECST[d] = 2; return r;
-}
-/* the surface terms over slots: a scalar field to its slot word and back */
-static void cr_to(FILE *m, const CFld *f, const char *v) {
-    switch (f->kind) {
-    case CK_U64: if (f->to >= 0) fprintf(m, "(app %s %s)", CHECKED[f->to], v); else fputs(v, m); break;
-    case CK_U32: fprintf(m, "(%%wofu32 %s)", v); break;
-    case CK_I64: fprintf(m, "(%%wofi64 %s)", v); break;
-    case CK_F32: fprintf(m, "(%%wofu32 (%%f32bits %s))", v); break;
-    case CK_F64: fprintf(m, "(%%wofi64 (%%f64bits %s))", v); break;
-    }
-}
-static void cr_from(FILE *m, const CFld *f, const char *v) {
-    switch (f->kind) {
-    case CK_U64: if (f->from >= 0) fprintf(m, "(app %s %s)", CHECKED[f->from], v); else fputs(v, m); break;
-    case CK_U32: fprintf(m, "(%%u32ofw %s)", v); break;
-    case CK_I64: fprintf(m, "(%%i64ofw %s)", v); break;
-    case CK_F32: fprintf(m, "(%%f32ofbits (%%u32ofw %s))", v); break;
-    case CK_F64: fprintf(m, "(%%f64ofbits (%%i64ofw %s))", v); break;
-    }
-}
-static int cr_var;
-/* the record from its slots s[o …] (the fallback's and cubical_call_data's): one constructor built;
- * several, a branch on the tag slot */
-static void cr_rebuild(FILE *m, const CRec *r, char **s, int o) {
-    int base = o + (r->ncons > 1);
-    for (int c = 0; c < r->ncons; c++) {
-        if (c < r->ncons - 1) fprintf(m, "(if (%%weq %s #%d) ", s[o], c);
-        for (int j = 0; j < r->nf[c]; j++) fprintf(m, "(app ");
-        fputs(CON[DATA[r->d].cons[c]].name, m);
-        int k = base;
-        for (int j = 0; j < r->nf[c]; j++) {
-            const CFld *f = &r->f[c][j]; fputc(' ', m);
-            if (f->kind == CK_REC) {
-                if (f->from >= 0) fprintf(m, "(app %s ", CHECKED[f->from]);
-                cr_rebuild(m, f->sub, s, k); k += f->sub->words;
-                if (f->from >= 0) fputc(')', m);
-            } else cr_from(m, f, s[k++]);
-            fputc(')', m);
-        }
-        if (c < r->ncons - 1) fputc(' ', m);
-    }
-    for (int c = 0; c < r->ncons - 1; c++) fputc(')', m);
-}
-/* the raw form of a record (each scalar field its slot word, a nested record raw), and back: the
- * native's result is built raw (crec_result), and the fallback answers raw */
-static void cr_raw(FILE *m, const CRec *r, const char *e, bool of) {
-    fprintf(m, "(case %s", e);
-    for (int c = 0; c < r->ncons; c++) {
-        int b = cr_var; cr_var += r->nf[c];
-        const char *cn = CON[DATA[r->d].cons[c]].name;
-        fprintf(m, " ((%s", cn); for (int j = 0; j < r->nf[c]; j++) fprintf(m, " %%crv%d", b + j); fputs(") ", m);
-        for (int j = 0; j < r->nf[c]; j++) fprintf(m, "(app ");
-        fputs(cn, m);
-        for (int j = 0; j < r->nf[c]; j++) {
-            const CFld *f = &r->f[c][j]; char v[32]; snprintf(v, sizeof v, "%%crv%d", b + j); fputc(' ', m);
-            if (f->kind == CK_REC) {
-                if (of) {
-                    if (f->from >= 0) fprintf(m, "(app %s ", CHECKED[f->from]);
-                    cr_raw(m, f->sub, v, true);
-                    if (f->from >= 0) fputc(')', m);
-                } else if (f->to >= 0) { char w[64]; snprintf(w, sizeof w, "(app %s %s)", CHECKED[f->to], v); cr_raw(m, f->sub, w, false); }
-                else cr_raw(m, f->sub, v, false);
-            } else if (of) cr_from(m, f, v); else cr_to(m, f, v);
-            fputc(')', m);
-        }
-        fputc(')', m);
-    }
-    fputc(')', m);
-}
-/* the records opened into their slots, then fin: a case per record (a branch per constructor, its tag
- * a literal, its fields each to its word, the rest of the widest constructor #0) */
-typedef struct { char *e; const CRec *r; int o; } CrPend;
-typedef void (*CrFin)(FILE *, char **, int, void *);
-static void cr_open(FILE *m, const CrPend *pend, int np, char **slot, int ns, CrFin fin, void *ctx) {
-    if (np == 0) { fin(m, slot, ns, ctx); return; }
-    const CrPend *p = &pend[0]; const CRec *r = p->r;
-    fprintf(m, "(case %s", p->e);
-    for (int c = 0; c < r->ncons; c++) {
-        int b = cr_var; cr_var += r->nf[c];
-        fprintf(m, " ((%s", CON[DATA[r->d].cons[c]].name); for (int j = 0; j < r->nf[c]; j++) fprintf(m, " %%cro%d", b + j); fputs(") ", m);
-        char **s2 = malloc(sizeof(char *) * (size_t)ns); memcpy(s2, slot, sizeof(char *) * (size_t)ns);
-        CrPend *p2 = malloc(sizeof(CrPend) * (size_t)(np + r->nf[c] + 1)); int n2 = 0;
-        for (int i = 1; i < np; i++) p2[n2++] = pend[i];
-        int k = p->o;
-        if (r->ncons > 1) { char t[16]; snprintf(t, sizeof t, "#%d", c); s2[k++] = strdup(t); }
-        for (int j = 0; j < r->nf[c]; j++) {
-            const CFld *f = &r->f[c][j]; char v[32]; snprintf(v, sizeof v, "%%cro%d", b + j);
-            char *sb; size_t sl; FILE *sm = open_memstream(&sb, &sl);
-            if (f->kind == CK_REC) {
-                if (f->to >= 0) fprintf(sm, "(app %s %s)", CHECKED[f->to], v); else fputs(v, sm);
-                fclose(sm); p2[n2++] = (CrPend){ sb, f->sub, k }; k += f->sub->words;
-            } else { cr_to(sm, f, v); fclose(sm); s2[k++] = sb; }
-        }
-        for (; k < p->o + r->words; k++) s2[k] = "#0";
-        cr_open(m, p2, n2, s2, ns, fin, ctx);
-        free(s2); free(p2);
-        fputc(')', m);
-    }
-    fputc(')', m);
-}
-/* the native's raw result built from its slots (net.c, through the trampoline) */
-static Port crec_build(const CRec *r, const uint64_t *rb, int o) {
-    int c = 0, k = o;
-    if (r->ncons > 1) {
-        if (rb[o] >= (uint64_t)r->ncons) die("native: a struct result's tag names no constructor of", DATA[r->d].name);
-        c = (int)rb[o]; k++;
-    }
-    Port f[NATIVE_MAXW];
-    for (int j = 0; j < r->nf[c]; j++) {
-        const CFld *fl = &r->f[c][j];
-        if (fl->kind == CK_REC) { f[j] = crec_build(fl->sub, rb, k); k += fl->sub->words; }
-        else { Cell *w = cell(V_WORD, 1); w->a = rb[k++]; f[j] = P(w, 0); }
-    }
-    return con_build(DATA[r->d].cons[c], f, NULL);
-}
-Port crec_result(const void *rrec, const uint64_t *rb) { return crec_build(rrec, rb, 0); }
-static int crec_words(const CRec *r) { return r->words; }
-/* the slots of a record laid out in C memory, and a raw boxed record written so */
-static bool crec_read(const CRec *r, const unsigned char *p, uint64_t *s, int o) {
-    int c = 0, k = o; size_t base = 0;
-    if (r->ncons > 1) { uint64_t t; memcpy(&t, p, 8); if (t >= (uint64_t)r->ncons) return false; s[k++] = t; c = (int)t; base = 8; }
-    for (int j = 0; j < r->nf[c]; j++) {
-        const CFld *f = &r->f[c][j]; const unsigned char *q = p + base + f->off;
-        uint32_t u32; uint64_t u64;
-        switch (f->kind) {
-        case CK_REC: if (!crec_read(f->sub, q, s, k)) return false; k += f->sub->words; continue;
-        case CK_U32: case CK_F32: memcpy(&u32, q, 4); s[k++] = u32; break;
-        default: memcpy(&u64, q, 8); s[k++] = u64; break;
-        }
-    }
-    for (int e = o + r->words; k < e; k++) s[k] = 0;
-    return true;
-}
-static bool crec_write(const CRec *r, const VBox *v, unsigned char *p) {
-    if (!v || v->tag < 1 || v->tag > (uint64_t)r->ncons) return false;
-    int c = (int)v->tag - 1; size_t base = 0;
-    if (v->n != (uint64_t)r->nf[c]) return false;
-    if (r->ncons > 1) { uint64_t t = (uint64_t)c; memcpy(p, &t, 8); base = 8; }
-    for (int j = 0; j < r->nf[c]; j++) {
-        const CFld *f = &r->f[c][j]; const VBox *x = v->f[j]; unsigned char *q = p + base + f->off;
-        if (f->kind == CK_REC) { if (!crec_write(f->sub, x, q)) return false; continue; }
-        if (!x || x->tag != 0) return false;
-        if (f->kind == CK_U32 || f->kind == CK_F32) { uint32_t u = (uint32_t)x->n; memcpy(q, &u, 4); }
-        else memcpy(q, &x->n, 8);
-    }
-    return true;
-}
-/* ---- the C side: the struct's text read, for the trampoline ---- */
-typedef struct CMem { char ty[64], name[40]; int nsub; struct CMem *sub; } CMem;   /* ty "{": an anonymous struct or union, sub its members */
-static const char *cm_ws(const char *p) {
-    for (;;) {
-        while (*p == ' ' || *p == '\n' || *p == '\t' || *p == '\r') p++;
-        if (p[0] == '/' && p[1] == '*') { const char *e = strstr(p + 2, "*/"); p = e ? e + 2 : p + strlen(p); continue; }
-        if (p[0] == '/' && p[1] == '/') { while (*p && *p != '\n') p++; continue; }
-        return p;
-    }
-}
-/* members up to the closing brace; the text after it, or NULL */
-static const char *cm_members(const char *p, CMem **out, int *n) {
-    int cap = 8; *out = malloc(sizeof(CMem) * (size_t)cap); *n = 0;
-    for (;;) {
-        p = cm_ws(p);
-        if (!*p) return NULL;
-        if (*p == '}') return p + 1;
-        if (*n + 4 > cap) { cap *= 2; *out = realloc(*out, sizeof(CMem) * (size_t)cap); }
-        CMem *mm = &(*out)[*n]; memset(mm, 0, sizeof *mm);
-        const char *q = p;
-        if (!strncmp(q, "union", 5) || !strncmp(q, "struct", 6)) {
-            const char *b = cm_ws(q + (q[0] == 'u' ? 5 : 6));
-            if (*b == '{') {
-                strcpy(mm->ty, "{");
-                p = cm_members(b + 1, &mm->sub, &mm->nsub); if (!p) return NULL;
-                p = cm_ws(p); int l = 0;
-                while ((isalnum((unsigned char)*p) || *p == '_') && l < 39) mm->name[l++] = *p++;
-                mm->name[l] = 0; p = cm_ws(p); if (*p != ';') return NULL;
-                p++; (*n)++; continue;
-            }
-        }
-        /* TYPE name [, name …]; */
-        const char *e = strchr(q, ';'); if (!e) return NULL;
-        char decl[256]; size_t dl = (size_t)(e - q); if (dl > 255) dl = 255; memcpy(decl, q, dl); decl[dl] = 0;
-        char *comma = strchr(decl, ',');
-        char *first_end = comma ? comma : decl + strlen(decl);
-        char *ne = first_end; while (ne > decl && ne[-1] == ' ') ne--;
-        char *nb = ne; while (nb > decl && (isalnum((unsigned char)nb[-1]) || nb[-1] == '_')) nb--;
-        char ty[64]; size_t tl = (size_t)(nb - decl); while (tl && (decl[tl - 1] == ' ' || decl[tl - 1] == '\n' || decl[tl - 1] == '\t')) tl--;
-        if (tl > 63) tl = 63; memcpy(ty, decl, tl); ty[tl] = 0;
-        size_t nl = (size_t)(ne - nb); if (nl > 39) nl = 39;
-        strcpy(mm->ty, ty); memcpy(mm->name, nb, nl); mm->name[nl] = 0; (*n)++;
-        while (comma) {
-            char *s0 = comma + 1; while (*s0 == ' ') s0++;
-            char *s1 = s0; while (isalnum((unsigned char)*s1) || *s1 == '_') s1++;
-            comma = strchr(s1, ',');
-            if (*n + 1 > cap) { cap *= 2; *out = realloc(*out, sizeof(CMem) * (size_t)cap); }
-            CMem *m2 = &(*out)[*n]; memset(m2, 0, sizeof *m2); strcpy(m2->ty, ty);
-            size_t l2 = (size_t)(s1 - s0); if (l2 > 39) l2 = 39; memcpy(m2->name, s0, l2); m2->name[l2] = 0; (*n)++;
-        }
-        p = e + 1;
-    }
-}
-/* a C type's struct tag (struct D, D, T<di>), and the data type it names (machine index), or -1 */
-static int ctype_data(const char *ty, char tag[64]) {
-    const char *s = ty; if (!strncmp(s, "const ", 6)) s += 6;
-    if (!strncmp(s, "struct ", 7)) s += 7;
-    while (*s == ' ') s++;
-    if (strchr(s, '*')) return -1;
-    size_t l = strlen(s); while (l && s[l - 1] == ' ') l--; if (l == 0 || l > 63) return -1;
-    memcpy(tag, s, l); tag[l] = 0;
-    for (size_t i = 0; i < l; i++) if (!isalnum((unsigned char)tag[i]) && tag[i] != '_') return -1;
-    if (tag[0] == 'T' && l > 1) { bool dig = true; for (size_t i = 1; i < l; i++) if (!isdigit((unsigned char)tag[i])) dig = false; if (dig) return checked_data(atoi(tag + 1)); }
-    return data_lookup(tag);
-}
-/* the members of struct tag's definition in the text */
-static bool cstruct_members(const char *text, const char *tag, CMem **ms, int *n) {
-    char pat[80]; snprintf(pat, sizeof pat, "struct %s", tag); size_t pl = strlen(pat);
-    for (const char *q = text; (q = strstr(q, pat)); q++) {
-        if (q > text && (isalnum((unsigned char)q[-1]) || q[-1] == '_')) continue;
-        const char *b = q + pl; if (isalnum((unsigned char)*b) || *b == '_') continue;
-        b = cm_ws(b); if (*b != '{') continue;
-        return cm_members(b + 1, ms, n) != NULL;
-    }
-    return false;
-}
-static bool cr_scalar_ok(int kind, const char *ty) {
-    switch (kind) {
-    case CK_U64: return !strcmp(ty, "uint64_t") || !strcmp(ty, "unsigned long") || !strcmp(ty, "unsigned long long");
-    case CK_U32: return !strcmp(ty, "uint32_t") || !strcmp(ty, "unsigned") || !strcmp(ty, "unsigned int");
-    case CK_I64: return !strcmp(ty, "int64_t") || !strcmp(ty, "long") || !strcmp(ty, "long long");
-    case CK_F32: return !strcmp(ty, "float");
-    case CK_F64: return !strcmp(ty, "double");
-    }
-    return false;
-}
-/* the trampoline's statements moving a record between its slots and the C value lv of type ty (in: from
- * a[] into lv; out: from lv into r[]); false when the C struct does not match the data type */
-static bool cr_fields_tw(FILE *m, const char *text, const CRec *r, int c, const CMem *ms, int nm, const char *lv, int k, bool out);
-static bool cr_tw(FILE *m, const char *text, const CRec *r, const char *ty, const char *lv, int o, bool out) {
-    /* the struct of r's data type, or of a type whose induced representation it is (struct Pt for
-     * Pt·W: the same constructors and fields, each field its representation's slot) */
-    char tag[64]; int d = ctype_data(ty, tag);
-    if (d != r->d) { int ck = d >= 0 ? chk_index(d) : -1; if (!(rep_induced(ck) && (size_t)ck < caprepto && REPTO[ck] >= 0 && rep_target(ck) == r->d)) return false; }
-    CMem *ms; int n; if (!cstruct_members(text, tag, &ms, &n)) return false;
-    bool tagged = n == 2 && cr_scalar_ok(CK_U64, ms[0].ty) && !strcmp(ms[1].ty, "{") && ms[1].nsub == r->ncons;
-    for (int c = 0; tagged && c < r->ncons; c++) if (strcmp(ms[1].sub[c].ty, "{")) tagged = false;
-    if (tagged) {
-        int base = o + (r->ncons > 1);
-        if (r->ncons > 1) {
-            if (out) fprintf(m, " r[%d] = %s.%s; switch (%s.%s) {", o, lv, ms[0].name, lv, ms[0].name);
-            else fprintf(m, " %s.%s = a[%d]; switch (a[%d]) {", lv, ms[0].name, o, o);
-        } else if (!out) fprintf(m, " %s.%s = 0;", lv, ms[0].name);
-        for (int c = 0; c < r->ncons; c++) {
-            if (r->ncons > 1) fprintf(m, " case %d: {", c);
-            char sub[256]; snprintf(sub, sizeof sub, "%s.%s.%s", lv, ms[1].name, ms[1].sub[c].name);
-            if (!cr_fields_tw(m, text, r, c, ms[1].sub[c].sub, ms[1].sub[c].nsub, sub, base, out)) return false;
-            if (r->ncons > 1) fprintf(m, " break; }");
-        }
-        if (r->ncons > 1) fprintf(m, " }");
-        return true;
-    }
-    if (r->ncons != 1) return false;
-    return cr_fields_tw(m, text, r, 0, ms, n, lv, o, out);
-}
-static bool cr_fields_tw(FILE *m, const char *text, const CRec *r, int c, const CMem *ms, int nm, const char *lv, int k, bool out) {
-    if (nm != r->nf[c]) return false;
-    for (int j = 0; j < nm; j++) {
-        const CFld *f = &r->f[c][j]; char L[320]; snprintf(L, sizeof L, "%s.%s", lv, ms[j].name);
-        if (f->kind == CK_REC) {
-            if (!strcmp(ms[j].ty, "{") || !cr_tw(m, text, f->sub, ms[j].ty, L, k, out)) return false;
-            k += f->sub->words; continue;
-        }
-        if (!cr_scalar_ok(f->kind, ms[j].ty)) return false;
-        switch (f->kind) {
-        case CK_U64: case CK_I64: if (out) fprintf(m, " r[%d] = (uint64_t)%s;", k, L); else fprintf(m, " %s = a[%d];", L, k); break;
-        case CK_U32: if (out) fprintf(m, " r[%d] = (uint32_t)%s;", k, L); else fprintf(m, " %s = (uint32_t)a[%d];", L, k); break;
-        case CK_F32: if (out) fprintf(m, " { uint32_t b_; __builtin_memcpy(&b_, &%s, 4); r[%d] = b_; }", L, k); else fprintf(m, " { uint32_t b_ = (uint32_t)a[%d]; __builtin_memcpy(&%s, &b_, 4); }", k, L); break;
-        case CK_F64: if (out) fprintf(m, " __builtin_memcpy(&r[%d], &%s, 8);", k, L); else fprintf(m, " __builtin_memcpy(&%s, &a[%d], 8);", L, k); break;
-        }
-        k++;
-    }
-    return true;
-}
-/* name over records by value: each record parameter opened into its slots (cr_open), the native
- * called on them through the trampoline, its raw result back (cr_raw); the fallback takes the same
- * slots, rebuilds the records (branching on the tag), applies the definition and answers raw */
-typedef struct { int k; long fb; int n; const CRec **sr; } CrNat;
-static void cr_fin_native(FILE *m, char **s, int ns, void *ctx) {
-    CrNat *c = ctx; fprintf(m, "(%%native #%d #%ld", c->k, c->fb);
-    for (int i = 0; i < ns; i++) fprintf(m, " %s", s[i]);
-    fputc(')', m);
-}
-static void native_structs(const char *nm, int n, int k, const CRec **sr, const CRec *rr, int nexp) {
-    /* each parameter's and the result's conversions: its type's representations followed to the
-     * struct's data type (a record parameter: T<Pt·W> from Pt by Pt's to; struct Pt itself, none), or
-     * to the end of the chain (a word, a boxed value) */
-    static int rcin[NATIVE_MAXW][16], rcout[16]; int rin[NATIVE_MAXW], rout = 0;
-    for (int i = 0; i < NATIVE_MAXW; i++) rin[i] = 0;
-    int ck0 = checked_index(nm);
-    if (ck0 >= 0 && (size_t)ck0 < capchkty && CHKTY[ck0]) {
-        Node *doms[NATIVE_MAXW], *cod; int got = pi_parts(CHKTY[ck0], doms, n, &cod);
-        for (int i = 0; i < got; i++) { int di = type_rep(doms[i]); rin[i] = di < 0 ? 0 : rep_chain(di, sr[i] ? sr[i]->d : -1, rcin[i], 16); if (rin[i] < 0) die("native: a parameter's struct is neither its type's nor its representation's:", nm); }
-        if (got == n) { int di = type_rep(cod); rout = di < 0 ? 0 : rep_chain(di, rr ? rr->d : -1, rcout, 16); if (rout < 0) die("native: the result's struct is neither its type's nor its representation's:", nm); }
-    }
-    /* the slots' names: %s<i>_<j> for a record parameter's, %r<i> for another's */
-    char **sl = malloc(sizeof(char *) * (size_t)(nexp ? nexp : 1)); int o = 0, off[NATIVE_MAXW];
-    for (int i = 0; i < n; i++) {
-        off[i] = o;
-        if (sr[i]) for (int j = 0; j < sr[i]->words; j++) { char b[32]; snprintf(b, sizeof b, "%%s%d_%d", i, j); sl[o++] = strdup(b); }
-        else { char b[32]; snprintf(b, sizeof b, "%%r%d", i); sl[o++] = strdup(b); }
-    }
-    static int nfb; char fbn[64]; snprintf(fbn, sizeof fbn, "%%natsfb%d", nfb++);
-    char *call; size_t cl; FILE *cm = open_memstream(&call, &cl);
-    rep_conv_open(cm, rcout, rout, true);
-    for (int i = 0; i < n; i++) fprintf(cm, "(app ");
-    fputs(nm, cm);
-    for (int i = 0; i < n; i++) {
-        fputc(' ', cm);
-        rep_conv_open(cm, rcin[i], rin[i], false);
-        if (sr[i]) cr_rebuild(cm, sr[i], sl, off[i]); else fputs(sl[off[i]], cm);
-        rep_conv_close(cm, rin[i]);
-        fputc(')', cm);
-    }
-    rep_conv_close(cm, rout);
-    fclose(cm);
-    char *fbuf; size_t fl; FILE *fm = open_memstream(&fbuf, &fl);
-    fprintf(fm, "(def %s (lam", fbn); for (int i = 0; i < nexp; i++) fprintf(fm, " %s", sl[i]); fputc(' ', fm);
-    if (rr) cr_raw(fm, rr, call, false); else fputs(call, fm);
-    fprintf(fm, "))"); fclose(fm); emit(fbuf); free(fbuf); free(call);
-    long fb = global_lookup(fbn);
-    /* name: the records opened, the native called on the slots */
-    char **s0 = malloc(sizeof(char *) * (size_t)(nexp ? nexp : 1)); CrPend pend[NATIVE_MAXW]; int np = 0;
-    for (int i = 0; i < n; i++) {
-        char b[1024]; { FILE *bm2 = fmemopen(b, sizeof b, "w"); int c_ = rep_conv_open(bm2, rcin[i], rin[i], true); fprintf(bm2, "%%a%d", i); rep_conv_close(bm2, c_); fputc(0, bm2); fclose(bm2); }
-        if (sr[i]) { pend[np++] = (CrPend){ strdup(b), sr[i], off[i] }; for (int j = 0; j < sr[i]->words; j++) s0[off[i] + j] = "#0"; }
-        else s0[off[i]] = strdup(b);
-    }
-    CrNat ctx = { k, fb, n, sr };
-    char *body; size_t bl; FILE *bm = open_memstream(&body, &bl);
-    cr_open(bm, pend, np, s0, nexp, cr_fin_native, &ctx); fclose(bm);
-    char *buf; size_t bl2; FILE *m = open_memstream(&buf, &bl2);
-    fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
-    fputc(' ', m);
-    rep_conv_open(m, rcout, rout, false);
-    if (rr) cr_raw(m, rr, body, true); else fputs(body, m);
-    rep_conv_close(m, rout);
-    fprintf(m, "))");
-    fclose(m); emit(buf); free(buf); free(body);
-    free(sl); free(s0);
-}
-/* item 17's re-entry: #native f n at k = P — f's first k arguments become known only while the program
- * runs. f is (lam a… (%native #e #g a…)) over an entry e with no code yet; the first call whose first
- * k arguments are words v1..vk computes P v1 … vk then (the C of the residual over the other n − k
- * word arguments, emit-lib-u's), compiles it, enters it and keeps it under the values: a later call
- * with the same values calls it at once, another value is another specialization, and across runs the
- * specialization cache by key (P's key text with the values) skips the specializer and the compiler.
- * A call whose arguments are not all words is f's own definition on the net */
-/* Kept specializations are bounded and safe with workers (CUBICAL_WORKERS > 0): each entry keeps at
- * most natat_max() of them (CUBICAL_NATIVE_AT_MAX, 1 to 256, default 16) in foreign-table slots
- * reserved when the entry is declared, so the foreign table never grows (or moves) while the program
- * runs. The table is read and changed under one lock; a call copies its slot's entry under the lock
- * and calls the copy outside it, counting itself in the slot's in-flight count. When every slot is
- * kept, a new specialization evicts the least recently called one that no call is in (its library
- * closed: dlclose, the count of its dlopens down by one) — `native at run: f evicts f at #v` — and an
- * evicted value is specialized again on its next call (from the cache by key: no compiler). When all
- * slots are in calls, the new specialization is called once without being kept (opened, called,
- * closed). A builder's compile happens under the lock (one compile at a time) */
-typedef struct { char *name, *prog, *key; int n, k, cap; uint64_t (*vals)[8]; int *ffi; int *use; unsigned long *stamp; bool *live; unsigned long tick; long build; } NatAt;
-static NatAt *NATAT; static int nnatat; static size_t capnatat;
-static pthread_mutex_t natat_mu = PTHREAD_MUTEX_INITIALIZER;
-static int natat_max(void) {
-    const char *s = getenv("CUBICAL_NATIVE_AT_MAX"); int m = s ? atoi(s) : 16;
-    return m < 1 ? 1 : m > 256 ? 256 : m;
-}
-uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n);
-/* the key of the specialization at the values: P's key text and the values */
-static void natat_key(NatAt *t, const uint64_t *a, char sk[65]) {
-    char *kb; size_t kl; FILE *km = open_memstream(&kb, &kl); fprintf(km, "%s at", t->key);
-    for (int i = 0; i < t->k; i++) fprintf(km, " #%llu", (unsigned long long)a[i]);
-    fclose(km); key_hash(kb, kl, sk); free(kb);
-}
-static int natat_find(NatAt *t, const uint64_t *a) {
-    for (int i = 0; i < t->cap; i++) if (t->live[i] && !memcmp(t->vals[i], a, sizeof(uint64_t) * (size_t)t->k)) return i;
-    return -1;
-}
-/* the library so opened into an entry of the foreign table (not added: written into *out) */
-static void natat_open(NatAt *t, const char *so, Ffi *out) {
-    char sym[760]; snprintf(sym, sizeof sym, "%s:cubical_entry", so);
-    void *h = dlopen(so, RTLD_NOW | RTLD_GLOBAL); if (!h) die("native at run: cannot open", so);
-    void *fn = dlsym(h, "cubical_entry"); if (!fn) die("native at run: no cubical_entry in", so);
-    *out = (Ffi){ strdup(sym), fn, t->n - t->k, { 4, 4, 4, 4, 4, 4, 4, 4 }, 4, -1, h, NULL, 0, NULL, -1, 0, -1 };
-}
-/* under the lock: the library so kept under the values, in a free slot or the least recently called
- * one with no call in it; -1 when every slot is in a call (*tmp then holds an entry to call once) */
-static int natat_enter(int at, const uint64_t *a, const char *so, bool spec_hit, size_t len, Ffi *tmp) {
-    NatAt *t = &NATAT[at]; int s = -1;
-    for (int i = 0; i < t->cap && s < 0; i++) if (!t->live[i]) s = i;
-    if (s < 0) for (int i = 0; i < t->cap; i++) if (t->use[i] == 0 && (s < 0 || t->stamp[i] < t->stamp[s])) s = i;
-    printf("native at run: %s at", t->name); for (int i = 0; i < t->k; i++) printf(" #%llu", (unsigned long long)a[i]);
-    if (spec_hit) printf("   [specialization cached by key]"); else printf("   [specialized now, %zu bytes of C]", len);
-    if (s < 0) { printf("   [every kept one in a call: called once, not kept]\n"); natat_open(t, so, tmp); return -1; }
-    if (t->live[s]) {
-        Ffi *old = &FFI[t->ffi[s]];
-        printf("   [evicts %s at", t->name); for (int i = 0; i < t->k; i++) printf(" #%llu", (unsigned long long)t->vals[s][i]); printf("]");
-        if (old->lib) dlclose(old->lib);
-        free((char *)old->sym); old->sym = NULL; old->fn = NULL; old->lib = NULL; t->live[s] = false;
-    }
-    printf("\n");
-    natat_open(t, so, &FFI[t->ffi[s]]);
-    memcpy(t->vals[s], a, sizeof(uint64_t) * (size_t)t->k); t->live[s] = true;
-    return s;
-}
-/* the call of slot s (or of tmp when s < 0), the lock held on entry and released for the call */
-static uint64_t natat_invoke(NatAt *t, int s, Ffi *tmp, const uint64_t *a) {
-    Ffi e;
-    if (s >= 0) { t->use[s]++; t->stamp[s] = ++t->tick; e = FFI[t->ffi[s]]; } else e = *tmp;
-    pthread_mutex_unlock(&natat_mu);
-    uint64_t r = ffi_invoke(&e, a + t->k, t->n - t->k);
-    pthread_mutex_lock(&natat_mu);
-    if (s >= 0) t->use[s]--; else { dlclose(tmp->lib); free((char *)tmp->sym); }
-    pthread_mutex_unlock(&natat_mu);
-    return r;
-}
-/* a call with words a: 1 and *r when a specialization at a's first k is kept (in this run, or in the
- * specialization cache by key from an earlier one), 0 when there is none yet (the call is then the
- * builder's: the net computes P at the values and native_at_build compiles it) */
-int native_at_call(int at, const uint64_t *a, uint64_t *r) {
-    pthread_mutex_lock(&natat_mu);
-    NatAt *t = &NATAT[at]; Ffi tmp; int hit = natat_find(t, a);
-    if (hit < 0) {
-        char sk[65], dir[512], spath[640], hx[80] = "", so[700]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
-        natat_key(t, a, sk); snprintf(spath, sizeof spath, "%s/spec-%s", dir, sk);
-        FILE *sf = fopen(spath, "r"); if (!sf) { pthread_mutex_unlock(&natat_mu); return 0; }
-        if (fscanf(sf, "%64s", hx) != 1) hx[0] = 0; fclose(sf);
-        snprintf(so, sizeof so, "%s/%s.so", dir, hx);
-        if (!hx[0] || access(so, 4) != 0) { pthread_mutex_unlock(&natat_mu); return 0; }
-        hit = natat_enter(at, a, so, true, 0, &tmp);
-    }
-    *r = natat_invoke(t, hit, &tmp, a);
-    return 1;
-}
-long native_at_builder(int at) { return NATAT[at].build; }
-/* the builder's call: c the C program the net computed (len bytes), a the n words: compiled (once per
- * text, as #native's), entered, kept, called; -1 when the program is not over n − k words */
-int native_at_build(int at, const char *c, size_t len, const uint64_t *a, uint64_t *r) {
-    pthread_mutex_lock(&natat_mu);
-    NatAt *t = &NATAT[at];
-    char *txt = malloc(len + 1); memcpy(txt, c, len); txt[len] = 0;
-    char rt[64], pt[NATIVE_MAXW][64]; int np = proto_types(txt, "cubical_entry(", rt, pt);
-    bool ok = np == t->n - t->k && !strcmp(rt, "uint64_t");
-    for (int i = 0; i < np && ok; i++) if (strcmp(pt[i], "uint64_t")) ok = false;
-    if (!ok) { printf("FAIL: native %s at run: the program's entry is not over %d words\n", t->name, t->n - t->k); failures++; free(txt); pthread_mutex_unlock(&natat_mu); return -1; }
-    char sk[65], dir[512], spath[640], hx[65], so[700], cpath[700]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
-    mkdir(cache_dir(), 0755); mkdir(dir, 0755);
-    key_hash(txt, strlen(txt), hx);
-    snprintf(cpath, sizeof cpath, "%s/%s.c", dir, hx); snprintf(so, sizeof so, "%s/%s.so", dir, hx);
-    if (access(so, 4) != 0) {
-        FILE *cf = fopen(cpath, "w"); if (!cf) { free(txt); pthread_mutex_unlock(&natat_mu); return -1; } fputs(txt, cf); fclose(cf);
-        char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -Wl,-Bsymbolic -o %s %s", so, cpath);
-        if (system(cmd) != 0) { printf("FAIL: native %s at run   (the C compiler rejected %s)\n", t->name, cpath); failures++; free(txt); pthread_mutex_unlock(&natat_mu); return -1; }
-    }
-    free(txt);
-    natat_key(t, a, sk); snprintf(spath, sizeof spath, "%s/spec-%s", dir, sk);
-    FILE *sf = fopen(spath, "w"); if (sf) { fprintf(sf, "%s\n", hx); fclose(sf); }
-    Ffi tmp; int hit = natat_find(t, a);
-    if (hit < 0) hit = natat_enter(at, a, so, false, len, &tmp);
-    *r = natat_invoke(t, hit, &tmp, a);
-    return 0;
-}
 static void toplevel_in(Node *f);
 /* a top-level form; once the outermost one is handled, compiled code nothing reaches is swept */
 static void toplevel(Node *f) {
@@ -4274,7 +3600,7 @@ static void toplevel_in(Node *f) {
             /* its compiled form is cached: made without desugaring or compiling */
             long g = global_lookup(f->it[1]->s);
             bool fill_decl = g >= 0 && G[g].kind == G_INPUT && !G[g].res->port[0];
-            if (fill_decl) G[g].kind = G_DEF; else g = add_global(f->it[1]->s, G_DEF);
+            if (fill_decl) G[g].kind = G_DEF; else { decl_fresh(f->it[1]->s); g = add_global(f->it[1]->s, G_DEF); }
             prof_enter(f->it[1]->s);
             if (cc_rdef(g)) {
                 prof_cur = 0;
@@ -4292,6 +3618,7 @@ static void toplevel_in(Node *f) {
         if (!plain_def && copattern_body(dsb)) {
             /* a copattern definition: its value is its stuck head */
             ar_release(dm);
+            decl_fresh(f->it[1]->s);
             long g = cofix_declare(f->it[1]->s, -1);
             cofix_body(g, f->it[2]);
             return;
@@ -4299,7 +3626,7 @@ static void toplevel_in(Node *f) {
         /* a name declared earlier (forward reference, mutual recursion) is filled */
         long g = global_lookup(f->it[1]->s);
         bool fill_decl = g >= 0 && G[g].kind == G_INPUT && !G[g].res->port[0];
-        if (fill_decl) G[g].kind = G_DEF; else g = add_global(f->it[1]->s, G_DEF);
+        if (fill_decl) G[g].kind = G_DEF; else { decl_fresh(f->it[1]->s); g = add_global(f->it[1]->s, G_DEF); }
         int ns; int *u;
         prof_enter(f->it[1]->s);
         {
@@ -4698,6 +4025,7 @@ static void toplevel_in(Node *f) {
         int np = hd->list ? hd->n - 1 : 0, nf = f->n - 2;
         const char **pn = calloc((size_t)np + 1, sizeof(char *));
         for (int k = 0; k < np; k++) pn[k] = param_name(hd->it[k + 1])->s;
+        decl_fresh(D);
         GROW(DATA, capdata, (size_t)ndata + 1);
         int d = ndata++;
         GROW(DATAPOS, capdatapos, (size_t)ndata); DATAPOS[d] = decl_pos[0] ? strdup(decl_pos) : NULL;
@@ -4791,6 +4119,7 @@ static void toplevel_in(Node *f) {
         int np = hd->list ? hd->n - 1 : 0, nc = f->n - 2;
         const char **pn = calloc((size_t)np + 1, sizeof(char *));
         for (int k = 0; k < np; k++) pn[k] = param_name(hd->it[k + 1])->s;
+        decl_fresh(D);
         GROW(DATA, capdata, (size_t)ndata + 1);
         int d = ndata++;
         GROW(DATAPOS, capdatapos, (size_t)ndata); DATAPOS[d] = decl_pos[0] ? strdup(decl_pos) : NULL;
@@ -4824,6 +4153,7 @@ static void toplevel_in(Node *f) {
             }
             if (x->nb && !x->nd) die("a boundary needs dimensions in", cd->it[0]->s);
             GROW(CON, capcon, (size_t)ncon + 1);
+            decl_fresh(cd->it[0]->s);
             DATA[d].cons[ci] = ncon;
             /* a field of type D itself, or of a path line into D (at any dimension), is recursive:
              * its branch may take its induction hypothesis (18.17) */
@@ -5077,373 +4407,10 @@ static void toplevel_in(Node *f) {
 #undef PN
         for (int ci = 0; ci < nc; ci++) { free(cs[ci].fn); free(cs[ci].ft); free(cs[ci].dn); free(cs[ci].bf); free(cs[ci].be); }
         free(cs); free(pn);
-    } else if (!strcmp(h, "represent")) {
-        /* (represent T R): the data type T is represented by the type R (a core term): the table's
-         * entry, the first declared, is what the back end reads; its laws and operations are the
-         * checked definitions T·R·to, T·R·from, T·R·to-from, T·R·from-to, T·R·op·f, T·R·op·f·by */
-        if (f->n != 3 || f->it[1]->list) die("(represent T R)", NULL);
-        int d = data_lookup(f->it[1]->s);
-        if (d < 0) die("represent: not a data type:", f->it[1]->s);
-        int ck = chk_index(d);
-        if (ck < 0) die("represent: the data type is not checked:", f->it[1]->s);
-        static int nrep;
-        char nm[64]; snprintf(nm, sizeof nm, "%%rep%d", nrep++);
-        Node *dd = nlist(3); dd->it[0] = nsym("def"); dd->it[1] = nsym(nm); dd->it[2] = f->it[2];
-        toplevel(dd);
-        if (table_global(TB_REP, ck) < 0 || rep_induced(ck)) table_set(TB_REP, ck, global_lookup(nm));
-    } else if (!strcmp(h, "rep-induced")) {
-        /* (rep-induced T): T's representation so far is its induced one (src/syntax.c x_rep_induce,
-         * item 15): a representation declared for T later replaces it in every table */
-        if (f->n != 2 || f->it[1]->list) die("(rep-induced T)", NULL);
-        int d = data_lookup(f->it[1]->s), ck = d < 0 ? -1 : chk_index(d);
-        if (ck < 0) die("rep-induced: not a checked data type:", f->it[1]->s);
-        rep_induced_set(ck, true);
-    } else if (!strcmp(h, "repops")) {
-        /* (repops T to from (op native) …): the representation's table for the back end (B12 §6,
-         * B14): the checked indices of to, from and each op's source operation and native
-         * counterpart, as data, (%rops d) = some (to , (from , ops)), the first representation's */
-        if (f->n < 4 || f->it[1]->list) die("(repops T to from (op native) ...)", NULL);
-        int d = data_lookup(f->it[1]->s);
-        int ck = d < 0 ? -1 : chk_index(d);
-        if (ck < 0) die("repops: not a checked data type:", f->it[1]->s);
-        if (table_global(TB_ROPS, ck) >= 0 && !rep_induced(ck)) return;
-        long gto = checked_index(f->it[2]->s), gfr = checked_index(f->it[3]->s);
-        if (gto < 0 || gfr < 0) die("repops: to/from not checked:", f->it[2]->s);
-        Node *ops = nsym("lnil");
-        for (int q = f->n - 1; q >= 4; q--) {
-            Node *o = f->it[q];
-            long a = o->list && o->n == 2 ? checked_index(o->it[0]->s) : -1, b = o->list && o->n == 2 ? checked_index(o->it[1]->s) : -1;
-            if (a < 0 || b < 0) continue;   /* an op whose source is not a checked definition: nothing to replace */
-            ops = nl3("lcons", nl3("pair", word(a), word(b)), ops);
-        }
-        static int nro;
-        char nm[64]; snprintf(nm, sizeof nm, "%%rops%d", nro++);
-        Node *dd = nlist(3); dd->it[0] = nsym("def"); dd->it[1] = nsym(nm); dd->it[2] = nl3("pair", word(gto), nl3("pair", word(gfr), ops));
-        toplevel(dd);
-        table_set(TB_ROPS, ck, global_lookup(nm));
-        rep_conv_set(ck, gto, gfr);
-    } else if (!strcmp(h, "replaws")) {
-        /* (replaws T to-from from-to opby …): the representation's laws as data for the specializer
-         * (item 15, 2026-11-09), (%rlaws d) = some (to-from , (from-to , [op·f·by …])), the checked
-         * indices of the paths it rewrites along when it consumes the representation in the term */
-        if (f->n < 4 || f->it[1]->list) die("(replaws T to-from from-to opby ...)", NULL);
-        int d = data_lookup(f->it[1]->s);
-        int ck = d < 0 ? -1 : chk_index(d);
-        if (ck < 0) die("replaws: not a checked data type:", f->it[1]->s);
-        if (table_global(TB_RLAWS, ck) >= 0 && !rep_induced(ck)) return;
-        long gtf = checked_index(f->it[2]->s), gft = checked_index(f->it[3]->s);
-        if (gtf < 0 || gft < 0) die("replaws: the laws are not checked:", f->it[2]->s);
-        Node *ls = nsym("lnil");
-        for (int q = f->n - 1; q >= 4; q--) { long a = f->it[q]->list ? -1 : checked_index(f->it[q]->s); if (a >= 0) ls = nl3("lcons", word(a), ls); }
-        static int nrl;
-        char nm[64]; snprintf(nm, sizeof nm, "%%rlaws%d", nrl++);
-        Node *dd = nlist(3); dd->it[0] = nsym("def"); dd->it[1] = nsym(nm); dd->it[2] = nl3("pair", word(gtf), nl3("pair", word(gft), ls));
-        toplevel(dd);
-        table_set(TB_RLAWS, ck, global_lookup(nm));
-        rep_induced_set(ck, false);   /* (a declared representation's laws are its last form) */
     } else if (!strcmp(h, "run")) {
         /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c, D26) */
         if (f->n != 2) die("(run step)", NULL);
         drivers_run(f->it[1]);
-    } else if (!strcmp(h, "native-at")) {
-        /* (native-at name n k prog): item 17's re-entry (native_at_call) */
-        if (f->n != 5 || f->it[1]->list || f->it[2]->list || f->it[3]->list || f->it[2]->s[0] != '#' || f->it[3]->s[0] != '#') die("(native-at name n k prog)", NULL);
-        const char *nm = f->it[1]->s; int n = atoi(f->it[2]->s + 1), k = atoi(f->it[3]->s + 1);
-        long g = global_lookup(nm); if (g < 0) die("native: not a definition:", nm);
-        if (k < 1 || k >= n || n > 8 || n - k > 6) die("native … at k: one to six arguments after the first k, k at least one:", nm);
-        GROW(NATAT, capnatat, (size_t)nnatat + 1);
-        NatAt *t = &NATAT[nnatat]; memset(t, 0, sizeof *t);
-        t->name = strdup(nm); t->n = n; t->k = k; t->cap = natat_max();
-        t->vals = calloc((size_t)t->cap, sizeof *t->vals); t->ffi = calloc((size_t)t->cap, sizeof(int)); t->use = calloc((size_t)t->cap, sizeof(int));
-        t->stamp = calloc((size_t)t->cap, sizeof(unsigned long)); t->live = calloc((size_t)t->cap, sizeof(bool));
-        /* the slots of the kept specializations, reserved now: the foreign table does not move while the program runs */
-        GROW(FFI, capffi, (size_t)nffi + (size_t)t->cap);
-        for (int i = 0; i < t->cap; i++) { FFI[nffi] = (Ffi){ NULL, NULL, n - k, { 4, 4, 4, 4, 4, 4, 4, 4 }, 4, -1, NULL, NULL, 0, NULL, -1, 0, -1 }; t->ffi[i] = nffi++; }
-        { char *pb; size_t pl; FILE *pm = open_memstream(&pb, &pl); print_node(pm, f->it[4]); fclose(pm); t->prog = pb; }
-        { char *kb; size_t kl; FILE *km = open_memstream(&kb, &kl); fprintf(km, "spec-at %s %d %d ", chk_salt, n, k); spec_key_text(km, f->it[4]); fclose(km); t->key = kb; }
-        int at = nnatat++;
-        if (global_lookup("bytes-of-list") < 0) die("native … at: needs lib/emitu.cub's bytes-of-list", NULL);
-        /* two entries: the lookup (n words: a kept specialization called, else the builder) and the
-         * builder (the program as a byte string the net computed, then the n words) */
-        GROW(FFI, capffi, (size_t)nffi + 2);
-        FFI[nffi] = (Ffi){ strdup(nm), NULL, n, { 4, 4, 4, 4, 4, 4, 4, 4 }, 4, -1, NULL, NULL, 0, NULL, -1, 0, at };
-        int e = nffi++;
-        FFI[nffi] = (Ffi){ strdup(nm), NULL, n + 1, { 6, 4, 4, 4, 4, 4, 4, 4 }, 4, -1, NULL, NULL, 0, NULL, -1, 0, -2 - at };
-        int eb = nffi++;
-        static int nnb; char bn[64], bfn[64]; snprintf(bn, sizeof bn, "%%natbuild%d", nnb); snprintf(bfn, sizeof bfn, "%%natbfb%d", nnb++);
-        char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
-        /* the builder's fallback: the definition itself on the words (the program ignored) */
-        fprintf(m, "(def %%natorig%d %s)", nnb - 1, nm); fclose(m); emit(buf); free(buf);
-        m = open_memstream(&buf, &bl);
-        fprintf(m, "(def %s (lam %%p", bfn); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i); fprintf(m, " ");
-        for (int i = 0; i < n; i++) fprintf(m, "(app "); fprintf(m, "%%natorig%d", nnb - 1); for (int i = 0; i < n; i++) fprintf(m, " %%a%d)", i);
-        fprintf(m, "))"); fclose(m); emit(buf); free(buf);
-        long gbf = global_lookup(bfn);
-        m = open_memstream(&buf, &bl);
-        fprintf(m, "(def %s (lam", bn); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
-        fprintf(m, " (%%native #%d #%ld (app bytes-of-list ", eb, gbf);
-        for (int i = 0; i < k; i++) fprintf(m, "(app "); fputs(t->prog, m); for (int i = 0; i < k; i++) fprintf(m, " %%a%d)", i);
-        fprintf(m, ")"); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i); fprintf(m, ")))");
-        fclose(m); emit(buf); free(buf);
-        NATAT[at].build = global_lookup(bn);
-        m = open_memstream(&buf, &bl);
-        fprintf(m, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
-        fprintf(m, " (%%native #%d #%ld", e, g); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i); fprintf(m, ")))");
-        fclose(m); emit(buf); free(buf);
-        passes++; printf("ok: native %s at %d   [specialized while the program runs, on the first call with each value]\n", nm, k);
-    } else if (!strcmp(h, "native") || !strcmp(h, "native-c")) {
-        /* (native name n prog [keep]): the C program prog (a list of bytes printed by lib/emitu.cub's
-         * emit-lib-u: its definition 0 the function at arity n, exported as cubical_entry) compiled
-         * as a shared library and entered; name is then the compiled code on arguments it can take
-         * and itself on any other (B18, net → native). keep: a boxed result stays native (V_NATIVE)
-         * until something other than compiled code reads it.
-         * (native-c name n "file.c" "sym" [keep]): the C file's function sym entered so (a library
-         * written by hand: a `void *` result is an opaque handle of type Native, a `void *`
-         * parameter takes the handles this library made; cubical_release, when the file defines
-         * it, finalizes a handle when its last copy is erased) */
-        bool cfile = !strcmp(h, "native-c"), spec_hit = false;
-        if ((cfile ? f->n < 5 || f->n > 6 : f->n < 4 || f->n > 5) || f->it[1]->list || f->it[2]->list || f->it[2]->s[0] != '#') die(cfile ? "(native-c name n file sym [keep])" : "(native name n prog [keep])", NULL);
-        bool keep = f->n == (cfile ? 6 : 5) && !f->it[f->n - 1]->list && !strcmp(f->it[f->n - 1]->s, "keep");
-        if (f->n == (cfile ? 6 : 5) && !keep) die("native: the last word is keep", NULL);
-        const char *nm = f->it[1]->s; int n = atoi(f->it[2]->s + 1);
-        long g = global_lookup(nm); if (g < 0) die("native: not a definition:", nm);
-        if (n < 1 || n > NATIVE_MAXW) die("native: one to thirty-two arguments:", nm);
-        long steps = 0; size_t len = 0; char *r; const char *entry = "cubical_entry";
-        /* item 17: the specialization is named before it is computed — by the program's expression
-         * with every checked definition and data type it names replaced by its codebase key (F34:
-         * the key covers what the definition depends on), the arity, the values written in it (the
-         * run-known values: literals and constructors are part of the expression) and the checker
-         * (cv) — so the same specialization of the same definitions at the same values, in this run
-         * or a later one, is read from the cache without running the specializer or the C compiler */
-        char sk[65] = "", spath[640] = "";
-        if (!cfile) {
-            char *kb; size_t kl; FILE *km = open_memstream(&kb, &kl);
-            fprintf(km, "spec %s %d %s ", chk_salt, n, keep ? "keep" : "");
-            spec_key_text(km, f->it[3]);
-            fclose(km); key_hash(kb, kl, sk); free(kb);
-            char sdir[512]; snprintf(sdir, sizeof sdir, "%s/native", cache_dir());
-            snprintf(spath, sizeof spath, "%s/spec-%s", sdir, sk);
-            FILE *sf = fopen(spath, "r");
-            if (sf) {
-                /* a hit: the spec entry names the library's hash; its C text is read back for the
-                 * prototype (no specialization, no compiler) */
-                char hx0[80] = ""; if (fscanf(sf, "%64s", hx0) != 1) hx0[0] = 0; fclose(sf);
-                char cp0[700]; snprintf(cp0, sizeof cp0, "%s/%s.c", sdir, hx0);
-                FILE *cf = hx0[0] ? fopen(cp0, "r") : NULL;
-                if (cf) {
-                    fseek(cf, 0, SEEK_END); long tl = ftell(cf); fseek(cf, 0, SEEK_SET);
-                    r = malloc((size_t)tl + 1); len = fread(r, 1, (size_t)tl, cf); r[len] = 0; fclose(cf);
-                    spec_hit = true;
-                    goto have_program;
-                }
-            }
-        }
-        if (cfile) {
-            /* the file's text, and the entry's name (strings: read without their quotes) */
-            char path[600]; snprintf(path, sizeof path, "%s", f->it[3]->s); size_t pl = strlen(path);
-            if (pl >= 2 && path[0] == '"') { memmove(path, path + 1, pl - 2); path[pl - 2] = 0; }
-            static char esym[256]; snprintf(esym, sizeof esym, "%s", f->it[4]->s); size_t el = strlen(esym);
-            if (el >= 2 && esym[0] == '"') { memmove(esym, esym + 1, el - 2); esym[el - 2] = 0; }
-            entry = esym;
-            FILE *cf = fopen(path, "r"); if (!cf) die("native: cannot read", path);
-            fseek(cf, 0, SEEK_END); long tl = ftell(cf); fseek(cf, 0, SEEK_SET);
-            r = malloc((size_t)tl + 1); len = fread(r, 1, (size_t)tl, cf); r[len] = 0; fclose(cf);
-        } else {
-            r = readback(f->it[3], &steps);
-            /* the program's bytes */
-            size_t cap = strlen(r); char *c = malloc(cap + 512);
-            for (const char *q = r; (q = strchr(q, '#')); ) { q++; if (*q < '0' || *q > '9') continue; c[len++] = (char)atoi(q); }
-            c[len] = 0; free(r); r = c;
-        }
-    have_program:;
-        char epat[300]; snprintf(epat, sizeof epat, "%s(", entry);
-        if (!strstr(r, epat)) die(cfile ? "native: the file does not define the entry:" : "native: the program exports no cubical_entry (print it with emit-lib-u):", cfile ? entry : nm);
-        /* B18, records by value (item 18): a parameter or the result a C struct of a data type that
-         * crosses (crec_of: one constructor or several as a tag and a union, nested records inline,
-         * word, UInt32, Int64, Float32 and Float64 fields) — the entry takes and returns it by value,
-         * in the emitted program (T<di>) or a C file (struct D, D the data type's name); the machine
-         * calls it through a trampoline appended to the program (slots in, slots out) and passes such
-         * a parameter as its slots */
-        const CRec *sr[NATIVE_MAXW] = { 0 }, *rr = NULL; int nexp = 0; bool structs = false;
-        {
-            char rt[64], pt[NATIVE_MAXW][64], tg[64]; int np = proto_types(r, epat, rt, pt);
-            if (np == n) {
-                for (int i = 0; i < n; i++) { int d = ctype_data(pt[i], tg); if (d >= 0 && (sr[i] = crec_of(d))) structs = true; }
-                { int d = ctype_data(rt, tg); if (d >= 0 && (rr = crec_of(d))) structs = true; }
-                for (int i = 0; i < n; i++) nexp += sr[i] ? crec_words(sr[i]) : 1;
-                /* more than six parameters: through the trampoline too (a direct call covers at most six words) */
-                if (n > 6) structs = true;
-                if (structs && (nexp > NATIVE_MAXW || (rr && crec_words(rr) > NATIVE_MAXW))) die("native: a call with more than thirty-two words of arguments or of result:", nm);
-            } else if (n > 6) die("native: the entry's prototype is not readable, and more than six parameters need the trampoline:", nm);
-            char twp[300]; snprintf(twp, sizeof twp, "void %s__tw(", entry);
-            if (structs && !strstr(r, twp)) {   /* (a specialization read back from the cache has it already) */
-                char *tb; size_t tl; FILE *tm = open_memstream(&tb, &tl);
-                fprintf(tm, "%s\nvoid %s__tw(const uint64_t *a, uint64_t *r) {", r, entry);
-                int o = 0;
-                for (int i = 0; i < n; i++) {
-                    fprintf(tm, " %s p%d; __builtin_memset(&p%d, 0, sizeof p%d);", pt[i], i, i, i);
-                    if (sr[i]) {
-                        char lv[16]; snprintf(lv, sizeof lv, "p%d", i);
-                        if (!cr_tw(tm, r, sr[i], pt[i], lv, o, false)) die("native: a parameter's C struct does not lay out its data type's fields (UInt32 uint32_t, Int64 int64_t, Float32 float, Float64 double, a word uint64_t, several constructors a uint64_t tag and a union of structs):", nm);
-                        o += crec_words(sr[i]);
-                    } else { fprintf(tm, " __builtin_memcpy(&p%d, &a[%d], sizeof p%d);", i, o, i); o++; }
-                }
-                fprintf(tm, " %s x = %s(", rt, entry);
-                for (int i = 0; i < n; i++) fprintf(tm, "%sp%d", i ? ", " : "", i);
-                fprintf(tm, ");");
-                if (rr) { if (!cr_tw(tm, r, rr, rt, "x", 0, true)) die("native: the result's C struct does not lay out its data type's fields:", nm); }
-                else fprintf(tm, " __builtin_memcpy(r, &x, sizeof x);");
-                fprintf(tm, " }\n");
-                fclose(tm); free(r); r = tb; len = tl;
-            }
-        }
-        /* the library is named by the program's hash (item 17: a specialization cached by key): the
-         * same C text is compiled once across runs */
-        char dir[512], cpath[600], so[600], hx[65]; snprintf(dir, sizeof dir, "%s/native", cache_dir());
-        key_hash(r, strlen(r), hx);
-        mkdir(cache_dir(), 0755); mkdir(dir, 0755);
-        snprintf(cpath, sizeof cpath, "%s/%s.c", dir, hx); snprintf(so, sizeof so, "%s/%s.so", dir, hx);
-        bool cached = access(so, 4) == 0;
-        if (!cached) {
-            FILE *cf = fopen(cpath, "w"); if (!cf) die("native: cannot write", cpath); fputs(r, cf); fclose(cf);
-            char cmd[2048]; snprintf(cmd, sizeof cmd, "cc -O2 -w -shared -fPIC -Wl,-Bsymbolic -o %s %s", so, cpath);   /* -Bsymbolic: a library's calls of its own exports (the trampoline's of cubical_entry) stay in it, every library exporting the same names */
-            if (system(cmd) != 0) { printf("FAIL: native %s   (the C compiler rejected %s)\n", nm, cpath); failures++; free(r); return; }
-        }
-        if (spath[0] && !spec_hit) { FILE *sf = fopen(spath, "w"); if (sf) { fprintf(sf, "%s\n", hx); fclose(sf); } }
-        if (spec_hit && access(cpath, 4) != 0) { FILE *cf = fopen(cpath, "w"); if (cf) { fputs(r, cf); fclose(cf); } }
-        char sym[700]; snprintf(sym, sizeof sym, "%s:%s", so, entry);
-        /* the entry's prototype decides the marshaling: uint64_t a word (kind 4), V * a boxed value
-         * (kind 6: bytes or a constructor, as the emitted runtime's V), void * a handle (kind 7) */
-        unsigned char kind[NATIVE_MAXW]; for (int i = 0; i < NATIVE_MAXW; i++) kind[i] = 4; unsigned char ret = 4; int rdata = -1;
-        {
-            /* the definition, not a declaration: the occurrence followed by a body */
-            char *e = NULL;
-            for (char *q = r; (q = strstr(q, epat)); q++) {
-                if (q > r && (isalnum((unsigned char)q[-1]) || q[-1] == '_')) continue;
-                char *close = strchr(q, ')'); if (!close) break;
-                char *b = close + 1; while (*b == ' ' || *b == '\n' || *b == '\t') b++;
-                if (*b == '{') { e = q; break; }
-            }
-            if (e) {
-                const char *q = e; while (q > r && q[-1] != '\n') q--;
-                while (*q == ' ' || *q == '\t') q++;
-                if (!strncmp(q, "static ", 7)) q += 7;
-                if (!strncmp(q, "V *", 3)) ret = 6;
-                else if (!strncmp(q, "void *", 6)) ret = 7;
-                char *args = e + strlen(epat); int i = 0;
-                while (*args && *args != ')' && i < n) {
-                    while (*args == ' ' || *args == ',') args++;
-                    if (!strncmp(args, "const ", 6)) args += 6;
-                    if (!strncmp(args, "V *", 3)) kind[i] = 6; else if (!strncmp(args, "void *", 6)) kind[i] = 7;
-                    i++; while (*args && *args != ',' && *args != ')') args++;
-                }
-                /* a boxed result of a data type: box<d>( in the entry's body names the data type (the checker's index) */
-                char *b = strstr(e, "return box");
-                if (b && ret == 6) { int di = atoi(b + strlen("return box")); rdata = checked_data(di); }
-            }
-        }
-        free(r);
-        if (structs) {
-            /* the call is of the slots through the trampoline */
-            /* a record's slots are words; another parameter keeps its kind (a V * boxed, a void * a handle), as the result */
-            unsigned char kw[NATIVE_MAXW]; for (int i = 0; i < NATIVE_MAXW; i++) kw[i] = 4;
-            { int o = 0; for (int i = 0; i < n; i++) { if (sr[i]) o += crec_words(sr[i]); else kw[o++] = kind[i]; } }
-            int k = ffi_add(sym, nexp, kw, rr ? 4 : ret);
-            if (!rr) FFI[k].rdata = rdata;
-            FFI[k].keep = keep;
-            char tws[760]; snprintf(tws, sizeof tws, "%s__tw", entry);
-            FFI[k].tw = dlsym(FFI[k].lib, tws);
-            if (!FFI[k].tw) die("native: the trampoline is missing from", so);
-            FFI[k].rsd = rr ? rr->d : -1; FFI[k].rnf = rr ? crec_words(rr) : 0; FFI[k].rrec = (void *)rr;
-            native_structs(nm, n, k, sr, rr, nexp);
-            passes++; printf("ok: native %s   [%s%ld steps, %zu bytes of C%s, records by value as C structs]\n", nm, spec_hit ? "specialization cached by key, " : "", steps, len, cached ? ", cached" : "");
-            return;
-        }
-        int k = ffi_add(sym, n, kind, ret);
-        FFI[k].rdata = rdata; FFI[k].keep = keep;
-        /* B18, represented values by their layout: a parameter or result of a type with a declared
-         * representation crosses as the representation (the compiled program computes over it,
-         * lib/repr.cub's program-rep): the argument is converted by to before the call, the result
-         * by from after it, and the definition the call falls back to is the one over the
-         * representations (to ∘ name ∘ from), so both paths agree */
-        /* (each followed to the end of its chain of representations: RBox by RPt by RPt·W) */
-        static int rcin[NATIVE_MAXW][16], rcout[16]; int rin[NATIVE_MAXW], rout = 0; bool anyrep = false;
-        for (int i = 0; i < NATIVE_MAXW; i++) rin[i] = 0;
-        {
-            int ck0 = checked_index(nm);
-            if (ck0 >= 0 && (size_t)ck0 < capchkty && CHKTY[ck0]) {
-                Node *doms[NATIVE_MAXW], *cod; int got = pi_parts(CHKTY[ck0], doms, n, &cod);
-                for (int i = 0; i < got; i++) { int di = type_rep(doms[i]); if (di >= 0 && (rin[i] = rep_chain(di, -1, rcin[i], 16)) > 0) anyrep = true; else rin[i] = 0; }
-                if (got == n) { int di = type_rep(cod); if (di >= 0 && (rout = rep_chain(di, -1, rcout, 16)) > 0) anyrep = true; else rout = 0; }
-            }
-        }
-        long fb = g;
-        if (anyrep) {
-            static int nfb; char fbn[64]; snprintf(fbn, sizeof fbn, "%%natfb%d", nfb++);
-            char *fbuf; size_t fl; FILE *fm = open_memstream(&fbuf, &fl);
-            fprintf(fm, "(def %s (lam", fbn); for (int i = 0; i < n; i++) fprintf(fm, " %%r%d", i); fprintf(fm, " ");
-            rep_conv_open(fm, rcout, rout, true);
-            for (int i = n - 1; i >= 0; i--) fprintf(fm, "(app ");
-            fprintf(fm, "%s", nm);
-            for (int i = 0; i < n; i++) { fputc(' ', fm); rep_conv_open(fm, rcin[i], rin[i], false); fprintf(fm, "%%r%d", i); rep_conv_close(fm, rin[i]); fputc(')', fm); }
-            rep_conv_close(fm, rout);
-            fprintf(fm, "))"); fclose(fm); emit(fbuf); free(fbuf);
-            fb = global_lookup(fbn);
-        }
-        /* name is now (lam a1..an (%native k g a1..an)); references compiled before keep the definition.
-         * Over represented values the converting call is its own definition (%natcv), and name is
-         * (lam a… (%natrep cv g a…)): closed arguments take the converting call, an argument with a
-         * neutral part (under a binder) the definition itself, so an open term reads as g does, not as
-         * from (to …) of it */
-        static int ncv; char cvn[64]; snprintf(cvn, sizeof cvn, "%%natcv%d", ncv++);
-        char *buf; size_t bl; FILE *m = open_memstream(&buf, &bl);
-        fprintf(m, "(def %s (lam", anyrep ? cvn : nm); for (int i = 0; i < n; i++) fprintf(m, " %%a%d", i);
-        fprintf(m, " ");
-        rep_conv_open(m, rcout, rout, false);
-        fprintf(m, "(%%native #%d #%ld", k, fb);
-        for (int i = 0; i < n; i++) { fputc(' ', m); rep_conv_open(m, rcin[i], rin[i], true); fprintf(m, "%%a%d", i); rep_conv_close(m, rin[i]); }
-        fprintf(m, ")"); rep_conv_close(m, rout);
-        fprintf(m, "))");
-        fclose(m); emit(buf); free(buf);
-        if (anyrep) {
-            long cv = global_lookup(cvn);
-            char *nb; size_t nl; FILE *nm2 = open_memstream(&nb, &nl);
-            fprintf(nm2, "(def %s (lam", nm); for (int i = 0; i < n; i++) fprintf(nm2, " %%a%d", i);
-            fprintf(nm2, " (%%natrep #%ld #%ld", cv, g); for (int i = 0; i < n; i++) fprintf(nm2, " %%a%d", i);
-            fprintf(nm2, ")))"); fclose(nm2); emit(nb); free(nb);
-        }
-        int nrep = rout > 0; for (int i = 0; i < n; i++) nrep += rin[i] > 0;
-        passes++; printf("ok: native %s   [%s%ld steps, %zu bytes of C%s%s%s]\n", nm, spec_hit ? "specialization cached by key, " : "", steps, len, cached ? ", cached" : "", keep ? ", results kept native" : "", nrep ? ", represented values by their representation" : "");
-    } else if (!strcmp(h, "layout")) {
-        /* #layout T [as R]: by the checker's layout function (lib/check.cub) */
-        if (f->n < 2 || f->it[1]->list) die("(layout T [R])", NULL);
-        int d = data_lookup(f->it[1]->s), ck = d >= 0 ? chk_index(d) : -1;
-        if (ck < 0) { printf("layout %s: not a checked data type\n", f->it[1]->s); return; }
-        long steps = 0;
-        char *r = readback(f->n == 3 ? nl2("%%layout-ty", f->it[2]) : nl2("%%layout", word(ck)), &steps);
-        /* field names are source-name words: shown as the names */
-        const char *saved = src; src = r; Node *l = read_node(); src = saved;
-        if (l) {
-            Node **st = NULL; size_t cap = 0; int n = 0; GROW(st, cap, 1); st[n++] = l;
-            while (n) {
-                Node *x = st[--n]; if (!x->list) continue;
-                if (x->n == 5 && is(x->it[0], "lfield") && !x->it[1]->list && x->it[1]->s[0] == '#') x->it[1] = nsym(srcname_of(atoi(x->it[1]->s + 1)));
-                for (int i = 0; i < x->n; i++) if (x->it[i]->list) { GROW(st, cap, (size_t)n + 1); st[n++] = x->it[i]; }
-            }
-            free(st);
-        }
-        printf("layout %s", f->it[1]->s); if (f->n == 3) { printf(" as "); out_term(f->it[2]); }
-        printf("\n  = "); if (l) out_term(l); else out_str(r); printf("\n");
-        free(r);
-    } else if (!strcmp(h, "fo")) {
-        /* #fo f, #fo (the T t): the first-order criterion (lib/stage.cub) on the normal form at the type */
-        Node *T = reading_type(f->it[1]);
-        if (!T) { printf("fo: a checked definition, or (the T t)\n"); return; }
-        Node *t = f->it[1]->list ? f->it[1]->it[2] : f->it[1];
-        long steps = 0;
-        char *r = readback(nl3("%%fo-normal", T, nl2("code", t)), &steps);
-        printf("fo "); out_term(f->it[1]); printf("\n  = "); out_str(r); printf("   [%ld steps]\n", steps);
-        free(r);
     } else if (!strcmp(h, "trusted")) {
         /* #trusted: the postulates and primitives in scope */
         printf("trusted:");
@@ -5545,7 +4512,7 @@ static JT *jt_app(Node *h, Node **args, int na, const char **pn, JT **pv, int np
         for (int i = 0; P[i].n; i++) if (!strcmp(h->s, P[i].n)) { JT *t = jt_new(JT_PRIM); t->pt = P[i].pt; return t; }
     }
     if (!strcmp(h->s, "Bytes") || !strcmp(h->s, "%bytesty")) return jt_new(JT_BYTES);
-    /* Nat by Word (its declared representation): a numeral crosses as the word it counts */
+    /* a Nat crosses as the count of its successors, a word (lib/x86.cub's encoding) */
     if (na == 0 && !strcmp(h->s, "Nat") && data_lookup("Nat") >= 0) { JT *t = jt_new(JT_NAT); t->d = data_lookup("Nat"); return t; }
     int d = data_lookup(h->s);
     if (d < 0 || DATA[d].nparams != na || DATA[d].co) return jt_new(JT_NO);
@@ -5635,7 +4602,7 @@ static int jit_bind(const char *name, int ck, const unsigned char *b, size_t len
     for (int i = 0; i < n; i++) kind[i] = jt[i]->k == JT_WORD ? 4 : jt[i]->k == JT_PRIM ? 5 : jt[i]->k == JT_ERASED ? 9 : 8;   /* 8: converted by type (jit_in); 9: not read */
     GROW(FFI, capffi, (size_t)nffi + 1);
     char sym[300]; snprintf(sym, sizeof sym, "jit:%s", name);
-    FFI[nffi] = (Ffi){ strdup(sym), m, n, { 0 }, 4, -1, NULL, NULL, 0, NULL, -1, 0, -1, NULL, jt };
+    FFI[nffi] = (Ffi){ strdup(sym), m, n, { 0 }, 4, jt };
     memcpy(FFI[nffi].kind, kind, (size_t)n);
     int k = nffi++;
     long g = global_lookup(name);
@@ -5662,13 +4629,6 @@ static void key_mix(const char *b, size_t n) {
     }
 }
 static const char *cache_dir(void) { const char *d = getenv("CUBICAL_CACHE"); return d ? d : ".cubical-cache"; }
-static void load_text(const char *text) {
-    const char *saved = src;
-    src = text;
-    Node *f;
-    while ((f = read_node())) toplevel(f);
-    src = saved;
-}
 static void load_file(const char *path, bool must) {
     char *rp = realpath(path, NULL);
     if (!rp) die("cannot open", path);
@@ -5683,7 +4643,7 @@ static void load_file(const char *path, bool must) {
         cur_dir = dir;
         load_surface(text, rp, true);
         /* the libraries before this file (item 17's specialization keys): its own text mixed after */
-        lib_before = lib_hash; lib_before_on = lib_hash_on; cur_file = ++file_serial;
+        cur_file = ++file_serial;
         key_mix(text, strlen(text)); lib_mix(text);
         char key[40]; snprintf(key, sizeof key, "%016llx%016llx", (unsigned long long)run_key[0], (unsigned long long)run_key[1]);
         char *marker = malloc(strlen(cache_dir()) + 48); sprintf(marker, "%s/%s", cache_dir(), key);
@@ -5763,11 +4723,11 @@ static void load_file(const char *path, bool must) {
 }
 static void prof_print(void);
 static void prof_signal(int sig) { (void)sig; fflush(stdout); prof_print(); _Exit(3); }
-/* ---------------- the call boundary, native → net (B18) ----------------
+/* ---------------- the machine as a library (build/libcubical.a, src/libcubical.h) ----------------
  * A C program linked with libcubical.a loads the libraries it needs with cubical_init, then calls
  * cubical_call_w(name, args, n, &out): the definition applied to the word arguments, read to its normal
  * form by the net (synchronous), the result a word in out. Returns 0, or -1 when the result is not
- * a word (its text is then in cubical_last_text). Words only: representations are not marshaled yet */
+ * a word (its text is then in cubical_last_text) */
 static char *last_text;
 const char *cubical_last_text(void) { return last_text ? last_text : ""; }
 int cubical_init(int nfiles, const char *const *files) {
@@ -5823,126 +4783,6 @@ static void serve(void) {
         memcpy(buf + len, line, l); len += l;
     }
 }
-/* the boxed form of lib/emitc.cub's programs (typedef struct V { uint64_t tag; uint64_t n; struct V *f[]; }):
- * tag 0 a word in n; tag c+1 a constructor c with n fields. cubical_call(k, n, args): the checked
- * definition k (its index in the checker's signature, as `gidx (code f)` gives it) applied to the
- * arguments, read back by the net, the result boxed. Words both ways in this revision: a
- * constructor argument or result needs its data type to be marshaled by its layout (B18, open),
- * and is refused (NULL) */
-typedef struct CubV { uint64_t tag; uint64_t n; struct CubV *f[]; } CubV;
-CubV *cubical_call_v(uint64_t k, uint64_t nargs, CubV **args) {
-    if (nargs > 8 || (long)k >= nchecked) return NULL;
-    uint64_t a[8];
-    for (uint64_t i = 0; i < nargs; i++) { if (!args[i] || args[i]->tag != 0) return NULL; a[i] = args[i]->n; }
-    uint64_t out;
-    if (cubical_call_w(CHECKED[k], a, (int)nargs, &out)) return NULL;
-    CubV *r = malloc(sizeof(CubV)); r->tag = 0; r->n = out;
-    return r;
-}
-long cubical_index(const char *name) { return checked_index(name); }
-/* the general boxed call: name applied to boxed arguments whose types are named (Word, Bytes, or a
- * data type's name), the result read to a value and boxed deeply (every field forced); NULL when a
- * type is unknown or the result is not a word, a byte string or a constructor of such */
-/* (VBox: declared with the records by value) */
-static VBox *box_deep(Port p) {
-    Cell *c = obs_val(p);
-    if (!c) return NULL;
-    if ((c->kind == V_WORD && !c->p) || c->kind == V_PVAL) { VBox *v = calloc(1, sizeof(VBox)); v->tag = 0; v->n = c->a; return v; }   /* a primitive value: a word of its bits */
-    if (c->kind == V_BYTES) { Bytes *b = c->p; size_t bn = b ? b->n : 0; VBox *v = calloc(1, sizeof(VBox) + bn); v->tag = 2; v->n = bn; if (bn) memcpy(v->f, b->b, bn); return v; }
-    if (c->kind == V_CON && !CON[c->a].ndims) {
-        int nf = CON[c->a].nfields;
-        VBox *v = calloc(1, sizeof(VBox) + (size_t)nf * sizeof(void *)); v->tag = (uint64_t)CON[c->a].index + 1; v->n = (uint64_t)nf;
-        for (int j = 0; j < nf; j++) { v->f[j] = box_deep(c->port[1 + j]); if (!v->f[j]) return NULL; }
-        return v;
-    }
-    return NULL;
-}
-/* B18 from C, records by value: a type named "struct D" (D a data type that crosses, crec_of) is the C
- * struct of D as C lays it out — one constructor its fields; several a uint64_t tag and a union of a
- * struct per constructor; a nested record inline; a word (or a type represented by Word) uint64_t,
- * UInt32 uint32_t, Int64 int64_t, Float32 float, Float64 double: the argument points to it, a result
- * is returned in a malloc'd one. The conversions are two definitions made on first use, over the
- * record's slots (crec_read): %recin_D (lam s… the record rebuilt, branching on the tag) and
- * %recout_D (lam x the record raw: each scalar field its word) */
-static long rec_conv(int d, bool in) {
-    char nmb[160]; snprintf(nmb, sizeof nmb, "%%rec%s_%s", in ? "in" : "out", DATA[d].name);
-    long g = global_lookup(nmb); if (g >= 0) return g;
-    const CRec *r = crec_of(d);
-    char *b; size_t bl; FILE *m = open_memstream(&b, &bl);
-    if (in) {
-        char **sl = malloc(sizeof(char *) * (size_t)(r->words ? r->words : 1));
-        fprintf(m, "(def %s (lam", nmb);
-        for (int j = 0; j < r->words; j++) { char t[24]; snprintf(t, sizeof t, "%%rs%d", j); sl[j] = strdup(t); fprintf(m, " %s", t); }
-        if (r->words == 0) fprintf(m, " %%rs");
-        fputc(' ', m); cr_rebuild(m, r, sl, 0); fprintf(m, "))");
-        for (int j = 0; j < r->words; j++) free(sl[j]); free(sl);
-    } else { fprintf(m, "(def %s (lam %%x ", nmb); cr_raw(m, r, "%x", false); fprintf(m, "))"); }
-    fclose(m); emit(b); free(b);
-    return global_lookup(nmb);
-}
-static int rec_type(const char *ty) {
-    if (strncmp(ty, "struct ", 7)) return -1;
-    int d = data_lookup(ty + 7);
-    return d >= 0 && crec_of(d) && crec_of(d)->words <= 64 ? d : -1;
-}
-void *cubical_call_data_r(const char *name, uint64_t nargs, void **args, const char *const *types, const char *rtype);
-void *cubical_call_data(const char *name, uint64_t nargs, void **args, const char *const *types) { return cubical_call_data_r(name, nargs, args, types, NULL); }
-void *cubical_call_data_r(const char *name, uint64_t nargs, void **args, const char *const *types, const char *rtype) {
-    long g = global_lookup(name); if (g < 0 || nargs > 64) return NULL;
-    int rrd = -1;
-    if (rtype) { rrd = rec_type(rtype); if (rrd < 0) return NULL; }
-    Port *ps = calloc(nargs + 1, sizeof(Port));
-    for (uint64_t i = 0; i < nargs; i++) {
-        if (!strncmp(types[i], "struct ", 7)) {
-            int d = rec_type(types[i]); if (d < 0) { free(ps); return NULL; }
-            const CRec *rc = crec_of(d); uint64_t w[64];
-            if (!crec_read(rc, args[i], w, 0)) { free(ps); return NULL; }
-            Port fs[64]; for (int j = 0; j < rc->words; j++) { struct { uint64_t tag, n; } wb = { 0, w[j] }; fs[j] = unbox_value((VB *)&wb, -2); }
-            if (rc->words == 0) { struct { uint64_t tag, n; } wb = { 0, 0 }; fs[0] = unbox_value((VB *)&wb, -2); }
-            ps[i] = apply_gid(rec_conv(d, true), fs, rc->words ? rc->words : 1);
-            continue;
-        }
-        int d = !strcmp(types[i], "Word") ? -2 : !strcmp(types[i], "Bytes") ? -3 : data_lookup(types[i]);
-        if (d == -1) { free(ps); return NULL; }
-        /* a type with a declared representation crosses as it (B18 by layout): the C value is the
-         * representation's (a word for Nat as Word), read into the net by from */
-        int di = d >= 0 ? chk_index(d) : -1;
-        int ch[16], nch = di >= 0 && (size_t)di < caprepto && REPTO[di] >= 0 ? rep_chain(di, -1, ch, 16) : 0;
-        if (nch > 0) {
-            /* (the end of the chain: a word, or a boxed record's representation, RBox by RPt by RPt·W) */
-            int t = rep_target(ch[nch - 1]);
-            Port w = unbox_value((VB *)args[i], t == -2 ? -2 : t);
-            for (int k = nch - 1; k >= 0; k--) { long gf = table_global(TB_VAL, REPFROM[ch[k]]); w = apply_gid(gf, &w, 1); }
-            ps[i] = w;
-        } else ps[i] = unbox_value((VB *)args[i], d);
-    }
-    Port r = nargs ? apply_gid(g, ps, (int)nargs) : global_copy(g, NULL);
-    free(ps);
-    /* a represented result: read out as the representation, by to */
-    {
-        int ck = checked_index(name);
-        if (ck >= 0 && (size_t)ck < capchkty && CHKTY[ck]) {
-            Node *doms[64], *cod; int got = pi_parts(CHKTY[ck], doms, (int)nargs, &cod);
-            /* along the chain to the struct's data type (struct Pt: none), or to its end */
-            int ro = got == (int)nargs ? type_rep(cod) : -1, ch[16];
-            int nch = ro >= 0 ? rep_chain(ro, rrd, ch, 16) : 0;
-            for (int k = 0; k < nch; k++) { long gt = table_global(TB_VAL, REPTO[ch[k]]); r = apply_gid(gt, &r, 1); }
-        }
-    }
-    if (rrd >= 0) {
-        /* the record raw (each scalar field its word), written as C lays it out */
-        r = apply_gid(rec_conv(rrd, false), &r, 1);
-        VBox *v = box_deep(r);
-        net_drain();
-        const CRec *rc = crec_of(rrd);
-        unsigned char *o = calloc(1, rc->size ? rc->size : 1);
-        if (!crec_write(rc, v, o)) { free(o); return NULL; }
-        return o;
-    }
-    VBox *v = box_deep(r);
-    net_drain();
-    return v;
-}
 static void memend_report(void) {
     if (!getenv("CUBICAL_MEMEND")) return;
     /* what a sweep now would keep whole, keep named only, free (bytes of record bodies, shallow) */
@@ -5959,8 +4799,6 @@ static void memend_report(void) {
             gb >> 20, nn[0], nb[0] >> 20, nn[1], nb[1] >> 20, ngone, nn[2], nb[2] >> 20, stat_sweeps, stat_swept_recs, stat_dropped_recs, stat_rec_revived, stat_swept_tabs);
 }
 #ifdef CUBICAL_LIB
-/* the name the emitted C calls (lib/emitc.cub's fnet: cubical_call(key, n, (V *[]){…})) */
-void *cubical_call(uint64_t k, uint64_t nargs, void **args) { return cubical_call_v(k, nargs, (CubV **)args); }
 int cubical_main(int argc, char **argv)
 #else
 int main(int argc, char **argv)

@@ -146,10 +146,8 @@ tval c =
     tclock0 → κ0
     ttick0 → ⋄
 -- ---------------------------------------------------------------- basics
--- Lst, Opt, View, CloCmp and DTab are declared in code.cub
-andb a b = if a then b else false
-orb a b = if a then true else b
-notb a = if a then false else true
+-- Lst, Opt, View, CloCmp and DTab are declared in code.cub; andb, orb, notb, omap in match.cub,
+-- obind in lin.cub
 wle a b = notb (%wlt b a)
 isnil lnil = true
 isnil _ = false
@@ -441,7 +439,7 @@ conv-glue-sys A S S2 =
               let te = %restrict d S
                   te2 = %restrict d S2
               in if conv-ty (fst te) (fst te2)
-                   then conv (Equiv (fst te) (%restrict d A)) (snd te) (snd te2)
+                   then conv (%Equiv (fst te) (%restrict d A)) (snd te) (snd te2)
                    else false) (%clauses (faceof S))
     else false
 -- the faces of two compositions of types: the same face, the same lines
@@ -505,8 +503,6 @@ uconv-head u wu v wv =
     wplit k b → (case wv of wplit k2 b2 → andb (%weq k k2) (%weq b b2); _ → false)
     -- byte strings: by contents (a neutral one is not known equal)
     wbytes n → (case wv of wbytes m → (if %weq n m then %beq u v else false); _ → false)
-    -- two handles are the same value when they are the same C object
-    wnative i k → (case wv of wnative j k2 → %weq i j; _ → false)
     wwplus k x → (case wv of wwplus j y → if %weq k j then uconv x y else false; _ → false)
     wother → false
     _ → (case convneu wu wv of some X → true; none → false)
@@ -676,12 +672,12 @@ convneu wu wv =
         _ → none
     _ → none
 -- ---------------------------------------------------------------- typing
--- A judgment's normal form is ok (check), (yes T) (infer), or (no v why A B): the subterm whose
+-- A judgment's normal form is ok (check), (typed T) (infer), or (refused v why A B): the subterm whose
 -- value is v fails for the reason numbered why (named in src/lang.c), A and B the values it
 -- concerns (the expected and the actual type, the two sides that differ, ...).
 -- (elab ds): the implicit arguments found, each (k , code), the term to be checked again with them;
 -- (redo k): the guess k was the wrong kind
-data Res = ok | yes T | no v why A B | elab ds | redo k
+data Res = ok | typed T | refused v why A B | elab ds | redo k
 -- where an error is: the term's own shape as a code (its variables free, so it prints as written),
 -- not its value, whose normal form may be large or unbounded (a proof applied to variables)
 tsrc c =
@@ -717,7 +713,7 @@ tsrc c =
     tspine t V → tsrc t
     thole k V → cfree V
     _ → cfree (tval c)
-err c why A B = no (tsrc c) why A B
+err c why A B = refused (tsrc c) why A B
 and-then r k = case r of ok → k; _ → r
 -- the branches of a split are checked against goals of their own, so implicit arguments found in
 -- one hold whatever the others hold: an elaboration in a branch does not stop the rest, and the
@@ -727,7 +723,7 @@ and-br r k = case r of ok → k; elab ds → (case k of elab ds2 → elab (lapp 
 chk b r = if b then ok else r
 rall f lnil = ok
 rall f (lcons x xs) = and-then (f x) (rall f xs)
-is-ok r = case r of ok → true; yes T → true; _ → false
+is-ok r = case r of ok → true; typed T → true; _ → false
 -- reasons
 E-mismatch = #0
 E-notfun = #1
@@ -774,13 +770,13 @@ E-linear-intro = #40
 -- a type's universe level (not ω), and a type's sort (a universe, U ω for types over levels)
 infer-level A =
   case infer A of
-    yes T → 
+    typed T → 
       case %view T of
-        wu l → if is-w l then err A E-omega T opq else yes l
+        wu l → if is-w l then err A E-omega T opq else typed l
         _ → err A E-nottype T opq
     r → r
 infer-sort A =
-  case infer A of yes T → (case %view T of wu l → yes (Type l); _ → err A E-nottype T opq); r → r
+  case infer A of typed T → (case %view T of wu l → typed (Type l); _ → err A E-nottype T opq); r → r
 sort-max s1 s2 =
   case %view s1 of wu l1 → (case %view s2 of wu l2 → Type (lmax l1 l2); _ → Uw); _ → Uw
 -- a system's branches: (pair face-code thunk-of-term-code)
@@ -811,7 +807,7 @@ check-sys s T =
                    (λ d →
                       let v1 = tval (br-at d b1)
                           v2 = tval (br-at d b2)
-                      in chk (conv (%restrict d T) v1 v2) (no V E-sysdis v1 v2))
+                      in chk (conv (%restrict d T) v1 v2) (refused V E-sysdis v1 v2))
                    (%clauses (%fand (tval (fst b1)) (tval (fst b2))))) (lpairs bs))
     _ → err s E-notsys opq opq
 -- the faces of a composition of types: lines of types in Type l from A, agreeing on overlaps
@@ -836,7 +832,7 @@ check-lines s A l =
                    (λ d →
                       let v1 = tval (br-at d b1)
                           v2 = tval (br-at d b2)
-                      in chk (let i = %dim in conv-ty (v1 @ i) (v2 @ i)) (no V E-sysdis v1 v2))
+                      in chk (let i = %dim in conv-ty (v1 @ i) (v2 @ i)) (refused V E-sysdis v1 v2))
                    (%clauses (%fand (tval (fst b1)) (tval (fst b2))))) (lpairs bs))
     _ → err s E-notsys opq opq
 -- a constructor telescope with a dimension: a path constructor
@@ -867,10 +863,10 @@ tube-ok i Wi L0 Li av =
                          (λ d →
                             let w = tval (br-at d (fst b , %restrict z (snd b)))
                                 a = %restrict d av
-                            in chk (conv (%restrict d L0) w a) (no w E-tube a w))
+                            in chk (conv (%restrict d L0) w a) (refused w E-tube a w))
                          (%clauses (%restrict z (tval (fst b))))) (sys-bs Wi)))
        else and-then (check Wi Li)
-              (let w = %restrict z (tval Wi) in chk (conv L0 w av) (no w E-tube av w))
+              (let w = %restrict z (tval Wi) in chk (conv L0 w av) (refused w E-tube av w))
 -- comp A u a: A a line of types, u a line of systems (faces free of the line) or a total line,
 -- a at 0 agreeing with u at 0; the result is at A 1
 check-comp c A u a =
@@ -884,60 +880,60 @@ check-comp c A u a =
           _ → check-comp1 c A u a
 comp-hole-line c k a =
   case infer a of
-    yes Ta → (case const-line Ta of some cl → elab (lcons (k , some cl) lnil); none → err c E-implicit opq opq)
+    typed Ta → (case const-line Ta of some cl → elab (lcons (k , some cl) lnil); none → err c E-implicit opq opq)
     r → r
 check-comp1 c A u a =
   case A of
     tplam nX X LV → 
       let i = %dim nX
       in case infer-level (X i) of
-           yes l → 
+           typed l → 
              case u of
                tplam nW W UV → 
                  let L0 = LV @ 0
                  in and-then (check a L0)
-                      (and-then (tube-ok i (W i) L0 (LV @ i) (tval a)) (yes (LV @ 1)))
+                      (and-then (tube-ok i (W i) L0 (LV @ i) (tval a)) (typed (LV @ 1)))
                _ → err u E-notline opq opq
            r → r
     _ → err A E-notline opq opq
 infer c =
   case c of
-    tv x T → yes T
-    tg n V → yes (%gty n)
+    tv x T → typed T
+    tg n V → typed (%gty n)
     tguess k g t V → guess-infer k g t
     thole k V → err c E-implicit opq opq
     tspine t V → solve-spine t none
     tapp f a V → 
       case infer f of
-        yes T → 
+        typed T → 
           case %view T of
-            wpi A B → and-then (tick-arg A a) (and-then (check a A) (yes (B (tval a))))
+            wpi A B → and-then (tick-arg A a) (and-then (check a A) (typed (B (tval a))))
             _ → err f E-notfun T opq
         r → r
     tclock → err c E-clocktype opq opq
     ttick k V → err c E-clocktype opq opq
-    tclock0 → yes Clock
+    tclock0 → typed Clock
     ttick0 → err c E-tickarg opq opq
     tfst p V → 
       case infer p of
-        yes T → (case %view T of wsigma A B → yes A; _ → err p E-notpair T opq)
+        typed T → (case %view T of wsigma A B → typed A; _ → err p E-notpair T opq)
         r → r
     tsnd p V → 
       case infer p of
-        yes T → (case %view T of wsigma A B → yes (B (fst (tval p))); _ → err p E-notpair T opq)
+        typed T → (case %view T of wsigma A B → typed (B (fst (tval p))); _ → err p E-notpair T opq)
         r → r
     tpapp p r V → 
       case infer p of
-        yes T → 
+        typed T → 
           case %view T of
-            wpath L a b → if check-iv r then yes (L @ tval r) else err r E-notiv opq opq
+            wpath L a b → if check-iv r then typed (L @ tval r) else err r E-notiv opq opq
             _ → err p E-notpath T opq
         r2 → r2
-    tuniv l V → and-then (check l Level) (yes (Type (lsuc (tval l))))
-    tlevel → yes Uw
-    tlzero → yes Level
-    tlsuc l V → and-then (check l Level) (yes Level)
-    tlmax a b V → and-then (check a Level) (and-then (check b Level) (yes Level))
+    tuniv l V → and-then (check l Level) (typed (Type (lsuc (tval l))))
+    tlevel → typed Uw
+    tlzero → typed Level
+    tlsuc l V → and-then (check l Level) (typed Level)
+    tlmax a b V → and-then (check a Level) (and-then (check b Level) (typed Level))
     tpi A nm b V → infer-pi A nm b
     tsigma A nm b V → infer-binder A nm b
     tpathp A a b V → 
@@ -947,85 +943,85 @@ infer c =
         tplam nX X LV → 
           let i = %dim nX
           in case infer-level (X i) of
-               yes l → and-then (check a (LV @ 0)) (and-then (check b (LV @ 1)) (yes (Type l)))
+               typed l → and-then (check a (LV @ 0)) (and-then (check b (LV @ 1)) (typed (Type l)))
                r → r
         -- a line of types given as a term: a path in a universe
         _ → 
           case infer A of
-            yes TA → 
+            typed TA → 
               case %view TA of
                 wpath L T0 T1 → 
                   case %view (L @ %dim) of
                     wu l → 
                       let Lv = tval A
-                      in and-then (check a (Lv @ 0)) (and-then (check b (Lv @ 1)) (yes (Type l)))
+                      in and-then (check a (Lv @ 0)) (and-then (check b (Lv @ 1)) (typed (Type l)))
                     _ → err A E-notline TA opq
                 _ → err A E-notline TA opq
             r → r
     tgluet A S V → 
       case infer-level A of
-        yes l → 
-          let Av = tval A in and-then (check-sys S ((T : Type l) × Equiv T Av)) (yes (Type l))
+        typed l → 
+          let Av = tval A in and-then (check-sys S ((T : Type l) × %Equiv T Av)) (typed (Type l))
         r → r
     tunglue S b V → 
       case infer b of
-        yes T → (case %view T of wglue A S2 → yes A; _ → err b E-notglue T opq)
+        typed T → (case %view T of wglue A S2 → typed A; _ → err b E-notglue T opq)
         r → r
     thcompu A S V → 
       case infer-level A of
-        yes l → let Av = tval A in and-then (check-lines S Av l) (yes (Type l))
+        typed l → let Av = tval A in and-then (check-lines S Av l) (typed (Type l))
         r → r
     tunglueu S b V → 
       case infer b of
-        yes T → (case %view T of whcompu A S2 → yes A; _ → err b E-notglue T opq)
+        typed T → (case %view T of whcompu A S2 → typed A; _ → err b E-notglue T opq)
         r → r
     tcomp A u a V → check-comp c A u a
     tlet t nm b V → 
       case infer t of
-        yes T → (case %view T of wtick k → err t E-tickarg T opq; _ → infer (b (tval t) T))
+        typed T → (case %view T of wtick k → err t E-tickarg T opq; _ → infer (b (tval t) T))
         r → r
     tann t T V → 
-      case infer-sort T of yes s → let Tv = tval T in and-then (check t Tv) (yes Tv); r → r
-    tdata d ps V → let de = %dent d in and-then (check-tele c (dtel de) ps) (yes (Type (dlvl de)))
+      case infer-sort T of typed s → let Tv = tval T in and-then (check t Tv) (typed Tv); r → r
+    tdata d ps V → let de = %dent d in and-then (check-tele c (dtel de) ps) (typed (Type (dlvl de)))
     -- a constructor of a data type without parameters infers that type (a scrutinee rebuilt from a
     -- branch's fields, let k = C x… in …, is such an application)
     tcon d c2 fs ds V →
       (case fst (params-fresh (dtel (%dent d)) lnil) of
-         lnil → let D = mkdata d lnil in and-then (check c D) (yes D)
+         lnil → let D = mkdata d lnil in and-then (check c D) (typed D)
          _ → err c E-noinfer opq opq)
     telim d P B x F V → 
       case infer x of
-        yes T → 
+        typed T → 
           case %view T of
             wdata d2 ps → 
               if %weq d d2
                 then case motive-level-d d ps P of
-                       yes s → 
+                       typed s → 
                          let Pv = tval P
-                         in and-then (check-brs c d Pv (hyp-motive d ps P Pv) F (ctors-at d ps) B #0) (yes (Pv (tval x)))
+                         in and-then (check-brs c d Pv (hyp-motive d ps P Pv) F (ctors-at d ps) B #0) (typed (Pv (tval x)))
                        r → r
                 else err x E-notdata T opq
             _ → err x E-notdata T opq
         r → r
     thcomp u a V → 
       case infer a of
-        yes T → 
+        typed T → 
           case %view T of
             wdata d ps → 
               if orb (is-hit d ps) (tube-covers u)
-                then let Tv = mkdata d ps in and-then (check-hcomp Tv u a) (yes Tv)
+                then let Tv = mkdata d ps in and-then (check-hcomp Tv u a) (typed Tv)
                 else err c E-hcompset T opq
             _ → err a E-notdata T opq
         r → r
     -- a case without a motive: the type of a branch without hypotheses, every branch checked at it
     tcase d B x F V → 
       case infer x of
-        yes X → 
+        typed X → 
           case %view X of
             wdata d2 ps → 
               if %weq d d2
                 then case case-type d (ctors-at d ps) B of
-                       yes R → and-then (check-branches c d ps (λ y → R) F B) (yes R)
+                       typed R → and-then (check-branches c d ps (λ y → R) F B) (typed R)
                        _ → err c E-noinfer opq opq
                 else err x E-notdata X opq
             _ → err x E-notdata X opq
@@ -1033,23 +1029,23 @@ infer c =
     tforce t V → infer t
     -- a delayed term has the type of the term (a thunk is transparent to typing, as force is)
     tthunk t V → infer t
-    trec d fs V → no opq E-literal opq opq
+    trec d fs V → refused opq E-literal opq opq
     -- a field of a value of a codata type: its type at the type's parameters and the value's fields
     tproj d k x V → 
       case infer x of
-        yes T → 
+        typed T → 
           case %view T of
             wdata d2 ps → 
               if andb (%weq d d2) (is-codata d)
-                then yes (cofield-ty d ps (tval x) k)
+                then typed (cofield-ty d ps (tval x) k)
                 else err x E-notcodata T opq
             _ → err x E-notcodata T opq
         r → r
-    tword → yes Type
-    tlit V → yes Word
-    twsucc a V → and-then (check a Word) (yes Word)
+    tword → typed Type
+    tlit V → typed Word
+    twsucc a V → and-then (check a Word) (typed Word)
     twop k a b V → 
-      and-then (check a Word) (and-then (check b Word) (yes (if %wlt k #2 then Bool else Word)))
+      and-then (check a Word) (and-then (check b Word) (typed (if %wlt k #2 then Bool else Word)))
     -- the elimination of a word: P #0 at zero, P n → P (n+1) at a successor
     twelim P w z s V →
       and-then (check w Word)
@@ -1058,7 +1054,7 @@ infer c =
            -- zero case's type, the common non-dependent case
            thole k V2 →
              (case infer z of
-                yes Z →
+                typed Z →
                   let x = %var Word
                   in (case qty (lcons (qv (var-level x)) lnil) Z of
                         some cz → elab (lcons (k , some (clam cz)) lnil)
@@ -1066,15 +1062,15 @@ infer c =
                 r → r)
            _ →
              (case motive-level Word P of
-                yes l → 
+                typed l → 
                   let Pv = tval P
                   in and-then (check z (Pv #0))
-                       (and-then (check s ((n : Word) → Pv n → Pv (%wsucc n))) (yes (Pv (tval w))))
+                       (and-then (check s ((n : Word) → Pv n → Pv (%wsucc n))) (typed (Pv (tval w))))
                 r → r))
     -- a line: its type is the path of its body's types between its ends
     tplam nm b V → 
       let i = %dim nm
-      in case infer (b i) of yes Ti → yes (PathP (%abs i Ti) (V @ 0) (V @ 1)); r → r
+      in case infer (b i) of typed Ti → typed (PathP (%abs i Ti) (V @ 0) (V @ 1)); r → r
     _ → err c E-noinfer opq opq
 -- the type of a branch's body at fresh fields and dimensions (no hypotheses)
 br-infer tel b =
@@ -1106,11 +1102,11 @@ motive-level T P =
     tlam nm b V → infer-sort (b (%var nm T) T)
     _ → 
       case infer P of
-        yes Pt → 
+        typed Pt → 
           case %view Pt of
             wpi A B → 
               if conv-ty A T
-                then case %view (B (%var A)) of wu l → yes (Type l); _ → err P E-motive Pt T
+                then case %view (B (%var A)) of wu l → typed (Type l); _ → err P E-motive Pt T
                 else err P E-motive Pt T
             _ → err P E-motive Pt T
         r → r
@@ -1176,7 +1172,7 @@ branch-boundary Pv F t bs =
                   w = snd br
                   v1 = %restrict cl bodyv
                   v2 = %restrict cl (F w)
-              in chk (conv (%restrict cl (Pv w)) v1 v2) (no bodyv E-boundary v2 v1)) bl
+              in chk (conv (%restrict cl (Pv w)) v1 v2) (refused bodyv E-boundary v2 v1)) bl
     _ → ok
 branch-dims e d Pv F c tel b fs ds =
   case tel of
@@ -1230,21 +1226,21 @@ check-con c tel fs ds =
     tz b → chk (andb (isnil fs) (isnil ds)) (err c E-ctor opq opq)
 infer-binder A nm b =
   case infer-sort A of
-    yes s1 → 
+    typed s1 → 
       let Av = tval A
-      in case infer-sort (b (%var nm Av) Av) of yes s2 → yes (sort-max s1 s2); r → r
+      in case infer-sort (b (%var nm Av) Av) of typed s2 → typed (sort-max s1 s2); r → r
     r → r
 -- a Π type's domain may also be the clocks or the ticks of a clock (no universe holds them)
 infer-dom A =
   case A of
-    tclock → yes (Type lzero)
-    ttick k V → and-then (check k Clock) (yes (Type lzero))
+    tclock → typed (Type lzero)
+    ttick k V → and-then (check k Clock) (typed (Type lzero))
     _ → infer-sort A
 infer-pi A nm b =
   case infer-dom A of
-    yes s1 → 
+    typed s1 → 
       let Av = tval A
-      in case infer-sort (b (%var nm Av) Av) of yes s2 → yes (sort-max s1 s2); r → r
+      in case infer-sort (b (%var nm Av) Av) of typed s2 → typed (sort-max s1 s2); r → r
     r → r
 -- an argument of a tick type is a tick variable (a tick is only bound, never computed)
 tick-arg A a =
@@ -1332,7 +1328,7 @@ check c T =
     tcomp A u a V →
       (case line-hole A of
          some k → (case const-line T of some cl → elab (lcons (k , some cl) lnil); none → err c E-implicit opq opq)
-         none → (case infer c of yes T2 → chk (conv-ty T2 T) (err c E-mismatch T T2); r → r))
+         none → (case infer c of typed T2 → chk (conv-ty T2 T) (err c E-mismatch T T2); r → r))
     tlam nm b V → 
       case %view T of
         wpi A B → 
@@ -1388,7 +1384,7 @@ check c T =
         _ → err c E-mismatch T opq
     tlet t nm b V → 
       case infer t of
-        yes Ty → (case %view Ty of wtick k → err t E-tickarg Ty opq; _ → check (b (tval t) Ty) T)
+        typed Ty → (case %view Ty of wtick k → err t E-tickarg Ty opq; _ → check (b (tval t) Ty) T)
         r → r
     tcon d c2 fs ds V → 
       case %view T of
@@ -1406,15 +1402,15 @@ check c T =
         _ → err c E-mismatch T opq
     tcase d B x F V → 
       case infer x of
-        yes X → 
+        typed X → 
           case %view X of
             wdata d2 ps → 
               if %weq d d2 then check-branches c d ps (λ y → T) F B else err x E-notdata X opq
             _ → err x E-notdata X opq
         r → r
     -- a record stands only as a copattern definition's body (check-codef)
-    trec d fs V → no opq E-literal opq opq
-    _ → (case infer c of yes T2 → chk (conv-ty T2 T) (err c E-mismatch T T2); r → r)
+    trec d fs V → refused opq E-literal opq opq
+    _ → (case infer c of typed T2 → chk (conv-ty T2 T) (err c E-mismatch T T2); r → r)
 check-recfields c tel fs =
   case tel of
     tx A nm r → 
@@ -1465,7 +1461,7 @@ linear-ty A = case %view A of wdata d ps → %linear d; _ → false
 -- head consumes it: its Π's, when written; 1 for a linear domain; a checked definition's computed
 -- usage of that parameter (%gusage); else ω. The head's type is a variable's own, a definition's
 -- from the table, or inferred
-head-type h = case h of tv y T → some T; tg n V → some (%gty n); _ → (case infer h of yes T → some T; _ → none)
+head-type h = case h of tv y T → some T; tg n V → some (%gty n); _ → (case infer h of typed T → some T; _ → none)
 amult h k A m = if notb (%weq m #2) then m else if linear-ty A then #1 else (case h of tg n V → %gusage n k; _ → #2)
 uargs xs h T lnil k = v0 xs
 uargs xs h T (lcons a r) k =
@@ -1536,16 +1532,16 @@ lusage xs c =
     _ → v* #2 (usage xs c)
 lusage-ps xs lnil = v0 xs
 lusage-ps xs (lcons p r) =
-  v+ (case infer p of yes T → (case %view T of wu l → lusage xs p; _ → v* #2 (usage xs p)); _ → v* #2 (usage xs p))
+  v+ (case infer p of typed T → (case %view T of wu l → lusage xs p; _ → v* #2 (usage xs p)); _ → v* #2 (usage xs p))
      (lusage-ps xs r)
 -- a λ's binder against its Π's multiplicity (a linear domain is 1 when the Π says nothing)
 mult-ok x body A m =
   let m2 = if %weq m #2 then (if linear-ty A then #1 else #2) else m
   in if %weq m2 #2 then ok
      else let u = lhead (usage (lcons x lnil) body)
-          in if %weq m2 #0 then chk (%weq u #0) (no (cfree x) E-erased-used opq opq)
-             else if %weq u #0 then no (cfree x) E-linear-dropped opq opq
-             else if %weq u #2 then no (cfree x) E-linear-dup opq opq
+          in if %weq m2 #0 then chk (%weq u #0) (refused (cfree x) E-erased-used opq opq)
+             else if %weq u #0 then refused (cfree x) E-linear-dropped opq opq
+             else if %weq u #2 then refused (cfree x) E-linear-dup opq opq
              else ok
 -- the usages of a checked definition's parameters: (name , usage) along its λs and its type's Πs,
 -- in one walk of the body
@@ -1557,45 +1553,16 @@ usages-of c T xs nms =
          _ → lmap2 (λ nm u → (nm , u)) nms (usage xs c))
     _ → lmap2 (λ nm u → (nm , u)) nms (usage xs c)
 usages cT ct = usages-of ct (tval cT) lnil lnil
--- ---------------------------------------------------------------- layouts (B12)
--- The layout of a value of a type, by the type's view: a primitive type its width; Word a word; a
--- data type its first representation's layout when it has one (%rtab), else the automatic one: a
--- union of its constructors, each a struct of its fields not at multiplicity 0, a field of the type
--- itself a pointer; a type with path constructors has none (lnone); anything else (a function, a
--- universe, a pair) a pointer. A field's alignment is its layout's.
-layout-ty v = layout-tyd v #0
-layout-tyd v depth =
-  case %view v of
-    wword → lword
-    wpty k n → (if %weq k #4 then lbytes n else lbytes (if %weq k #1 then 4 else if %weq k #3 then 4 else 8))
-    wdata d ps → (if %wlt #4 depth then lptr lnone else layout-d d ps depth)
-    _ → lptr lnone
-layout-d d ps depth = case %rtab d of some R → layout-tyd R (%wsucc depth); none → layout-cs d (ctors-at d ps) depth
-layout-cs d cs depth = if lany tel-has-dims cs then lnone else lunion (layout-alts d cs #0 depth)
-tel-has-dims tel = case tel of tx A nm r → tel-has-dims (r (%var Uw) Uw); ty nm r → true; _ → false
-layout-alts d lnil c depth = lnone
-layout-alts d (lcons tel r) c depth = lalt (lstruct (layout-fields d c tel #0 depth)) (layout-alts d r (%wsucc c) depth)
-layout-fields d c tel k depth =
-  case tel of
-    tx A nm r →
-      let Av = tval A
-          x = %var nm Av
-          rest = layout-fields d c (r x Av) (%wsucc k) depth
-      in if %weq (%fmult d c k) #0 then rest
-         else (let l = if is-rec-ty d A then lptr lnone else layout-tyd Av (%wsucc depth) in lfield nm l (align-of l) rest)
-    _ → lnone
-align-of l = case l of lbytes n → (if %wlt n #8 then n else 8); _ → 8
-layout d = case %rtab d of some R → layout-tyd R #1; none → layout-cs d (snd (params-fresh (dtel (%dent d)) lnil)) #0
-chk-def cT ct = case infer-sort cT of yes s → check ct (tval cT); r → r
+chk-def cT ct = case infer-sort cT of typed s → check ct (tval cT); r → r
 -- a primitive: its type is a type
-chk-type cT = case infer-sort cT of yes s → ok; r → r
+chk-type cT = case infer-sort cT of typed s → ok; r → r
 -- a term's type inferred (the elaborator's run over a term to read: its implicit arguments found)
-infer-ok ct = case infer ct of yes T → ok; r → r
+infer-ok ct = case infer ct of typed T → ok; r → r
 -- a term's inferred type as a code (#type: none when it has none)
-type-of ct = case infer ct of yes T → quote-ty T; r → none
+type-of ct = case infer ct of typed T → quote-ty T; r → none
 -- a copattern definition's body against its type, its own calls a variable of that type (the
 -- elaborator's dry run: its implicit arguments and kinds settled before it is declared)
-chk-codef-dry cT ct = case infer-sort cT of yes s → check-codef ct (tval cT); r → r
+chk-codef-dry cT ct = case infer-sort cT of typed s → check-codef ct (tval cT); r → r
 -- the type of a checked definition, as the table holds it
 sig-type cT = tval cT
 -- a data declaration: parameter types are types; each field type a type, strictly positive (D
@@ -1692,7 +1659,7 @@ earlier-only d c bdy =
 check-ptys tel =
   case tel of
     tx A nm r → 
-      case infer-dom A of yes s → let Av = tval A in check-ptys (r (%var nm Av) Av); r2 → r2
+      case infer-dom A of typed s → let Av = tval A in check-ptys (r (%var nm Av) Av); r2 → r2
     _ → ok
 check-ctor-dims d pvs c tel =
   case tel of
@@ -1706,14 +1673,14 @@ check-ctor-fields d pvs c tel =
     tx A nm r → 
       and-then (chk (positive d pvs A) (err A E-positive opq opq))
         (case infer-level A of
-           yes l → let Av = tval A in check-ctor-fields d pvs c (r (%var nm Av) Av)
+           typed l → let Av = tval A in check-ctor-fields d pvs c (r (%var nm Av) Av)
            r2 → r2)
     _ → check-ctor-dims d pvs c tel
 check-ctors d pvs lnil c = ok
 check-ctors d pvs (lcons tel rest) c =
   and-then (check-ctor-fields d pvs c tel) (check-ctors d pvs rest (%wsucc c))
 -- the level of a data type: the largest of its fields' (a field of type D itself counted at lzero)
-level-of r = case r of yes l → l; _ → lzero
+level-of r = case r of typed l → l; _ → lzero
 field-levels d tel =
   case tel of
     tx A nm r → 
@@ -1741,10 +1708,10 @@ chk-data d ent =
   case ent of
     dent tel l → 
       let lv = data-level d tel
-      in and-then (chk (lvl-closed (lvl-of lv)) (no lv E-openlevel opq opq))
+      in and-then (chk (lvl-closed (lvl-of lv)) (refused lv E-openlevel opq opq))
            (and-then (check-ptys tel)
               (let pc = params-fresh tel lnil in check-ctors d (fst pc) (snd pc) #0))
-    _ → no opq E-notdata opq opq
+    _ → refused opq E-notdata opq opq
 -- ---------------------------------------------------------------- codata
 -- A codata declaration: parameter types are types; each field type a type, strictly positive in D
 -- (D at any parameters not mentioning D, under Π codomains and Σ components, or not mentioning
@@ -1761,7 +1728,7 @@ check-cofields d tel =
     tx A nm r → 
       and-then (chk (copositive d A) (err A E-copositive opq opq))
         (case infer-level A of
-           yes l → let Av = tval A in check-cofields d (r (%var nm Av) Av)
+           typed l → let Av = tval A in check-cofields d (r (%var nm Av) Av)
            r2 → r2)
     _ → ok
 codata-level d tel = lfold-lmax (field-levels d (snd (params-fresh tel lnil)))
@@ -1771,9 +1738,9 @@ chk-codata d ent =
   case ent of
     dcoent tel l → 
       let lv = codata-level d tel
-      in and-then (chk (lvl-closed (lvl-of lv)) (no lv E-openlevel opq opq))
+      in and-then (chk (lvl-closed (lvl-of lv)) (refused lv E-openlevel opq opq))
            (and-then (check-ptys tel) (let pc = params-fresh tel lnil in check-cofields d (snd pc)))
-    _ → no opq E-notcodata opq opq
+    _ → refused opq E-notcodata opq opq
 -- A copattern definition (alone, or with others of a mutual group grp, a list of signature
 -- indices) is λs and lines over a record. Each field's term is guarded: a definition of the group
 -- stands only as the head of a call (applied to arguments not mentioning the group, at any
@@ -1813,17 +1780,17 @@ guarded grp c =
              lall (λ b → andb (notb (mentions grp (fst b))) (guarded grp (force (snd b)))) bs
            tann t T V → andb (guarded grp t) (notb (mentions grp T))
            _ → spine-call grp c
--- the fields of the record: (no opq E-unguarded d k) names the field k of codata type d
+-- the fields of the record: (refused opq E-unguarded d k) names the field k of codata type d
 codef-fields grp d lnil k = ok
 codef-fields grp d (lcons f r) k =
-  and-then (chk (guarded grp f) (no opq E-unguarded d k)) (codef-fields grp d r (%wsucc k))
+  and-then (chk (guarded grp f) (refused opq E-unguarded d k)) (codef-fields grp d r (%wsucc k))
 codef-ok grp c =
   case c of
     tguess k g t V → codef-ok grp t
     tlam nm b V → codef-ok grp (b (%var Uw) Uw)
     tplam nm b V → codef-ok grp (b (%dim))
     trec d fs V → codef-fields grp d fs #0
-    _ → no opq E-literal opq opq
+    _ → refused opq E-literal opq opq
 -- the body at its type: λs and lines as check takes them (a line's ends compared with the type's,
 -- a record with a value field by field), then the record, each field at its type, the earlier
 -- fields the record's own
@@ -1854,9 +1821,9 @@ check-codef c T =
             then check-recfields c (cofields-at d ps) fs
             else err c E-mismatch T opq
         _ → err c E-mismatch T opq
-    _ → no opq E-literal opq opq
+    _ → refused opq E-literal opq opq
 chk-codef grp cT ct =
-  case infer-sort cT of yes s → and-then (codef-ok grp ct) (check-codef ct (tval cT)); r → r
+  case infer-sort cT of typed s → and-then (codef-ok grp ct) (check-codef ct (tval cT)); r → r
 -- ---------------------------------------------------------------- quoting values into codes
 -- quote bs T v: the code (lib/code.cub) of v's normal form at type T. At Π it is applied to a
 -- fresh variable of the domain, at Σ read by its projections, at a path type at a fresh
@@ -1867,10 +1834,6 @@ chk-codef grp cT ct =
 -- indices over one list of the binders entered, innermost first; one of an outer context is
 -- (cfree x). An induction hypothesis is a suspended elimination, so its uses are forced (cforce),
 -- as (code t) writes them. A value with no code (of a data type that was not checked) gives none.
-obind none k = none
-obind (some x) k = k x
-omap f none = none
-omap f (some x) = some (f x)
 oseq lnil = some lnil
 oseq (lcons o r) = obind o (λ x → omap (λ xs → lcons x xs) (oseq r))
 var-level x = case %view x of wvar l T → l; _ → #0
@@ -1938,7 +1901,7 @@ q-line bs T u = let i = %dim in omap cplam (quote (lcons (qd i) bs) T (u @ i))
 q-tyline bs L = let i = %dim in omap cplam (qty (lcons (qd i) bs) (L @ i))
 q-linein bs L u = let i = %dim in omap cplam (quote (lcons (qd i) bs) (L @ i) (u @ i))
 -- a Glue type's system, over A: each branch a type with an equivalence to A
-q-gsys bs A b = q-sys bs (λ d → some ((X : Uw) × Equiv X (%restrict d A))) b
+q-gsys bs A b = q-sys bs (λ d → some ((X : Uw) × %Equiv X (%restrict d A))) b
 quote bs T v =
   case %view T of
     wpi A B → let x = %var A in omap clam (quote (lcons (qv (var-level x)) bs) (B x) (v x))
@@ -2175,12 +2138,12 @@ prim-ty k =
           in if %weq sb #35 then %pty #0 else if %weq sb #36 then Word else if %weq sb #37 then %pty #1
              else if %weq sb #38 then Word else if %weq sb #39 then %pty #2 else if %weq sb #40 then %pty #2
              else if %weq sb #41 then %pty #0 else if %weq sb #42 then %pty #0 else if %weq sb #43 then %pty #2
-             else if %weq sb #44 then %pty #1 else if %weq sb #45 then %pty #3 else if %weq sb #46 then %pty #6 else Word)
+             else if %weq sb #44 then %pty #1 else if %weq sb #45 then %pty #3 else if %weq sb #46 then %pty #5 else Word)
     else if %wlt k #768
       then (let sb = %wsub k #512
             in if %wlt sb #3 then %pty #0 else if %wlt sb #5 then Bool else if %wlt sb #8 then %pty #1
                else if %wlt sb #10 then Bool else if %wlt sb #14 then %pty #2 else if %wlt sb #16 then Bool
-               else if %wlt sb #19 then %pty #6 else if %wlt sb #21 then Bool else if %wlt sb #28 then %pty #6 else %pty #0)
+               else if %wlt sb #19 then %pty #5 else if %wlt sb #21 then Bool else if %wlt sb #28 then %pty #5 else %pty #0)
       else if %wlt k #1024 then (if %weq (%wsub k #768) #8 then %pty #0 else %pty #1)
       else if %wlt k #1280 then opq else if %wlt k #1536 then Word else opq
 -- a stuck elimination: each branch at fresh fields (typed by the constructor's telescope at the
@@ -2238,7 +2201,7 @@ quote-ty A = qty lnil A
 
 -- ---------------------------------------------------------------- elaboration
 -- check by inferring the type and comparing
-check-by-infer c T = case infer c of yes T2 → chk (conv-ty T2 T) (err c E-mismatch T T2); r → r
+check-by-infer c T = case infer c of typed T2 → chk (conv-ty T2 T) (err c E-mismatch T T2); r → r
 -- A guessed λ or application: the type tells which it is; the wrong kind is redone.
 guess-check k g t T =
   if %weq g #0 then (case %view T of wpath L a b → redo k; _ → check t T)
@@ -2249,11 +2212,11 @@ guess-infer k g t =
   if %weq g #0 then redo k
   else if %weq g #2 then
     (case t of
-       tapp f a V → (case infer f of yes T → (case %view T of wpath L a0 a1 → redo k; _ → infer t); r → r)
+       tapp f a V → (case infer f of typed T → (case %view T of wpath L a0 a1 → redo k; _ → infer t); r → r)
        _ → infer t)
   else if %weq g #3 then
     (case t of
-       tpapp p r V → (case infer p of yes T → (case %view T of wpi A B → redo k; _ → infer t); r2 → r2)
+       tpapp p r V → (case infer p of typed T → (case %view T of wpi A B → redo k; _ → infer t); r2 → r2)
        _ → infer t)
   else infer t
 -- A spine with holes (implicit arguments) is solved where it stands: the head's type is walked
@@ -2350,7 +2313,7 @@ level-close hs sg =
 solve-spine c oE =
   let sp = spine-of c lnil
   in case infer (fst sp) of
-       yes T → spine-walk c T (snd sp) lnil lnil oE
+       typed T → spine-walk c T (snd sp) lnil lnil oE
        r → r
 spine-walk c T args hs sg oE =
   case args of
@@ -2365,13 +2328,13 @@ spine-walk c T args hs sg oE =
             _ →
               if inferable a then
                 (case infer a of
-                   yes Ta → spine-walk c (B (tval a)) rest hs (vmatch hs A Ta sg) oE
+                   typed Ta → spine-walk c (B (tval a)) rest hs (vmatch hs A Ta sg) oE
                    elab ds → elab ds
                    redo k → redo k
                    _ → spine-walk c (B (tval a)) rest hs sg oE)
               else
                 (case lam-arg hs A B (unguess a) sg of
-                   yes sg2 → spine-walk c (B (tval a)) rest hs sg2 oE
+                   typed sg2 → spine-walk c (B (tval a)) rest hs sg2 oE
                    elab ds → elab ds
                    redo k → redo k
                    _ → spine-walk c (B (tval a)) rest hs sg oE)
@@ -2379,28 +2342,28 @@ spine-walk c T args hs sg oE =
 -- a λ given where a function of type A is due, A's domain known: its body's type, under the binder,
 -- against A's codomain (a hole there, applied to the binder, is solved as a pattern)
 unguess a = case a of tguess k g t V → t; _ → a
--- (yes: the solutions so far, added to; a guess to redo or an elaboration passes up)
+-- (typed: the solutions so far, added to; a guess to redo or an elaboration passes up)
 lam-arg hs A B a sg =
   case a of
     tlam nm b V →
       (case %view A of
          wpi A1 B1 →
            (case hole-of hs A1 of
-              some k → yes sg
+              some k → typed sg
               none →
                 let x = %var nm A1
                 in case infer (b x A1) of
-                     yes Tb → yes (vmatch hs (B1 x) Tb sg)
+                     typed Tb → typed (vmatch hs (B1 x) Tb sg)
                      elab ds → elab ds
                      redo k → redo k
-                     _ → yes sg)
-         _ → yes sg)
+                     _ → typed sg)
+         _ → typed sg)
     -- a line where a path is due: its ends against the path type's
     tplam nm b V →
       (case %view A of
-         wpath L a0 a1 → yes (vmatch hs a1 (V @ 1) (vmatch hs a0 (V @ 0) sg))
-         _ → yes sg)
-    _ → yes sg
+         wpath L a0 a1 → typed (vmatch hs a1 (V @ 1) (vmatch hs a0 (V @ 0) sg))
+         _ → typed sg)
+    _ → typed sg
 -- a solution as a code, at the hole's type when it is known
 quote-sol hs s =
   let sv = snd s
@@ -2415,5 +2378,5 @@ spine-done c hs sg =
   if isnil sg
   then (case level-hole hs of
           some k → elab (lcons (k , some clzero) lnil)
-          none → (case hs of lcons h r → no (tval c) E-implicit (snd (snd h)) opq; lnil → err c E-implicit opq opq))
+          none → (case hs of lcons h r → refused (tval c) E-implicit (snd (snd h)) opq; lnil → err c E-implicit opq opq))
   else elab (lmap (λ s → (fst s , quote-sol hs s)) sg)

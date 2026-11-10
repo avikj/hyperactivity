@@ -20,7 +20,7 @@ static uint64_t drv_word(Port p, const char *what) {
     if (!c || c->kind != V_WORD || c->p) die("run: a word was expected for", what);
     return c->a;
 }
-/* a Nat field read: successors counted down to zero (represented values are not expected here) */
+/* a Nat field read: successors counted down to zero */
 static uint64_t drv_nat(Port p, const char *what) {
     uint64_t n = 0;
     for (;;) {

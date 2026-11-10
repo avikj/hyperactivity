@@ -11,13 +11,9 @@ primitive UInt32 : Type = %pty #1
 primitive Float64 : Type = %pty #2
 primitive Float32 : Type = %pty #3
 primitive Bytes : Nat → Type = λ n → %bytesty n
--- a handle to a C object a native library made (B18: a `void *` result of an entry entered by
--- #native … from): passed to that library's entries, read by nothing else, finalized by the
--- library's cubical_release when its last copy is erased
-primitive Native : Type = %pty #5
 -- the modular 64-bit unsigned type (plan 5.3): U64 arithmetic is what the hardware's 64-bit registers
 -- compute; Word is the unbounded natural, and nothing prints one as the other
-primitive UInt64 : Type = %pty #6
+primitive UInt64 : Type = %pty #5
 
 -- ---------------------------------------------------------------- integers, modular (two's complement)
 primitive i64 : Word → Int64 = λ w → %i64ofw w
@@ -141,9 +137,7 @@ index-update n a i h v = load64-store64 (times n 8) a (times i 8) (index-fits n 
 -- 8-byte spans are disjoint; two arrays equal at every index are equal), then the arithmetic
 -- (le is a proposition; below suc m is below m or equal; trichotomy), then Fin n, tabulate over
 -- Fin n (atab) and index over Fin n (aindex) with the laws index-tabulate, tabulate-index, and
--- index-update-eq/ne/if; so Fin n → Int64 ≃ Array n (Fin→Array), the representation of
--- functions out of Fin n by arrays, stated as an equivalence (represent takes a data type on
--- the left). Then two dimensions, row-major (mdspan's layout_right)
+-- index-update-eq/ne/if; so Fin n → Int64 ≃ Array n (Fin→Array). Then two dimensions, row-major (mdspan's layout_right)
 -- the byte layer's second law, trusted: a load at an offset disjoint from a store reads what was
 -- there (the stored 8 bytes end before the load begins, or the loaded ones before the store)
 primitive load64-store64-disj : (n : Nat) → (b : Bytes n) → (o1 o2 : Nat) → (h1 : le (plus o1 8) n) → (h2 : le (plus o2 8) n) → (v : Int64) → Sum (le (plus o1 8) o2) (le (plus o2 8) o1) → PathP (λ (i : I) → Int64) (load64 n (store64 n b o1 h1 v) o2 h2) (load64 n b o2 h2) = λ n b o1 o2 h1 h2 v d i → %load64 b o2
@@ -227,14 +221,12 @@ index-update-if n a i j hi hj v =
                 inr m → (case m of
                            inl q → Empty-rec (subst {lzero} {lzero} {Bool} {isTrue} {eqb i j} {false} e (eqb-complete {i} {j} q))
                            inr l → inr l)))
--- arrays as functions out of Fin n: the equivalence the representation states (represent takes a data
--- type on the left, so a function type's representation is stated as a library equivalence)
+-- arrays as functions out of Fin n
 Fin→Array : (n : Nat) → Equiv (Fin n → Int64) (Array n)
 Fin→Array n = isoToEquiv {lzero} {Fin n → Int64} {Array n} (atab n) (aindex n) (tabulate-index n) (λ f → funExt {lzero} {lzero} {Fin n} {Int64} {aindex n (atab n f)} {f} (index-tabulate n f))
 -- the interface carried across the equivalence (item 22): a program written against Fin n → Int64
 -- uses application and the functional update fin-set; under atab they are index and update, so a
--- program on functions is the program on arrays (the paths below are the representation's `by`
--- laws), and the array program's update stores in place when the buffer is unique (C21, lib/fo.cub)
+-- program on functions is the program on arrays along the paths below
 fin-set : (n : Nat) → (Fin n → Int64) → Fin n → Int64 → Fin n → Int64
 fin-set n f p v = λ q → if eqb (fst p) (fst q) then v else f q
 -- application is index
@@ -366,9 +358,8 @@ fin-set-by32 n f i h v = array32-ext n (atab32 n (fin-set32 n f (i , h) v)) (upd
 tabulate-by32 : (n : Nat) → (a : Array32 n) → atab32 n (aindex32 n a) ≡ a
 tabulate-by32 n a = tabulate-index32 n a
 -- A stored by the Int64 layer through an equivalence A ≃ Int64, given as its maps and their laws:
--- Float64 by its bits (f64bits, f64ofbits); a type represented by Int64 by its representation's
--- to/from (tests/prim.cub's Cents). Arrays of A are Arrays; index is from after index, update is
--- update at to (store64, so in place when the buffer is unique); every law carried from Int64's
+-- Float64 by its bits (f64bits, f64ofbits). Arrays of A are Arrays; index is from after index, update is
+-- update at to (store64); every law carried from Int64's
 if-map : (A B : Type) → (g : A → B) → (b : Bool) → (x y : A) → g (if b then x else y) ≡ (if b then g x else g y)
 if-map A B g b x y = case b return (λ c → g (if c then x else y) ≡ (if c then g x else g y)) of
     true → λ i → g x
@@ -488,20 +479,13 @@ fin-set-byF32 n f i h v = fin-set-byV32 Float32 f32bits n f i h v
 
 -- Layouts (data Layout, lib/code.cub) are computed by the checker: #layout T, or #layout T as R.
 
--- ---------------------------------------------------------------- Nat by Word: the numerals' mechanism as a
--- representation (plan B12 2.2): addition on words is addition on numbers across the equivalence
+-- ---------------------------------------------------------------- Nat and Word: addition on words is addition
+-- on numbers across the equivalence (fromNat, toNat)
 toNat-plusw : (a b : Nat) → toNat (plusw (fromNat a) (fromNat b)) ≡ plus a b
 toNat-plusw a b = case b return (λ y → toNat (plusw (fromNat a) (fromNat y)) ≡ plus a y) of
     zero → concat (toNat-fromNat a) (sym (plus-zero a))
     suc k → concat (λ i → suc (rec k i)) (sym (plus-suc a k))
--- the op line's native is wadd, whose body is the machine's addition, so the normal form of the
--- transported program holds cwop 2 where it held plus (item 15, 2026-11-09: the law read right to left
--- is a rule of the specializer; plusw, a recursion, would have needed plusw≡wadd as a further rule)
+-- read right to left it is a rule of the specializer (#jit … using toNat-wadd): plus becomes wadd,
+-- the machine's addition, along the path
 toNat-wadd : (a b : Nat) → toNat (wadd (fromNat a) (fromNat b)) ≡ plus a b
 toNat-wadd a b = concat (λ i → toNat (plusw≡wadd (fromNat a) (fromNat b) (~ i))) (toNat-plusw a b)
-represent Nat by Word where
-  to : Nat → Word = fromNat
-  from : Word → Nat = toNat
-  to-from : (w : Word) → to (from w) ≡ w = fromNat-toNat
-  from-to : (n : Nat) → from (to n) ≡ n = toNat-fromNat
-  op plus : Word → Word → Word = wadd by (a b : Nat) → from (wadd (to a) (to b)) ≡ plus a b = toNat-wadd

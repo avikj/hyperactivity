@@ -224,7 +224,7 @@ static GVar *GVAR; static int ngvar; static size_t capgvar;
 static void want(const char *s) { if (!at(s)) { char m[64]; snprintf(m, sizeof m, "expected %s, found", s); x_err(m, P0()); } NX(); }
 static void wantk(int k, const char *what) { if (P0()->k != k) { char m[64]; snprintf(m, sizeof m, "expected %s, found", what); x_err(m, P0()); } NX(); }
 static const char *RESERVED[] = { "=", ":", "→", "λ", "↦", "|", "of", "where", "let", "in", "if", "then", "else", "case", "return",
-    "data", "codata", "record", "mutual", "postulate", "import", "infix", "infixl", "infixr", "by", "calc", "∀", "decreasing", "using", "▸", "primitive", ":0", ":1", "represent", "instance", "module", "open", "deriving", "foreign", "variable", NULL };
+    "data", "codata", "record", "mutual", "postulate", "import", "infix", "infixl", "infixr", "by", "calc", "∀", "decreasing", "using", "▸", "primitive", ":0", ":1", "instance", "module", "open", "deriving", "foreign", "variable", NULL };
 static bool reserved(const char *s) { for (int i = 0; RESERVED[i]; i++) if (!strcmp(RESERVED[i], s)) return true; return false; }
 static int nfresh_x;
 static Node *xfresh(const char *p) { char b[32]; snprintf(b, sizeof b, "%%%s%d", p, nfresh_x++); return nsym(b); }
@@ -752,7 +752,16 @@ static Node *x_rename(Node *t, const char *x, const char *y) {
  * keeps its name; a split column is cased on, constructor by constructor: the clauses with that
  * constructor (its field patterns as new columns) and those with a variable there (renamed to the
  * scrutinee); the constructors no clause names share one default alternative. */
-typedef struct { Node **p; Node *rhs; } Row;
+typedef struct { Node **p; Node *rhs; int id; } Row;   /* id: the clause it came from (-1: made by the compiler) */
+/* the clauses a match reached (a clause no case reaches is refused: written twice, or after one
+ * that covers it) */
+static bool *row_used; static int row_n;
+static void rows_track(int n) { row_used = calloc((size_t)n + 1, sizeof(bool)); row_n = n; }
+static void rows_check(const char *f) {
+    for (int i = 0; i < row_n; i++) if (!row_used[i]) { char m[96]; snprintf(m, sizeof m, "clause %d is reached by no case (written twice, or after one covering it), in", i + 1); die(m, f); }
+    free(row_used); row_used = NULL; row_n = 0;
+}
+static void row_reached(const Row *r) { if (row_used && r->id >= 0 && r->id < row_n) row_used[r->id] = true; }
 static bool pat_wild(Node *p) { return !p->list && (!strcmp(p->s, "%hole") || !strcmp(p->s, "_")); }
 /* a pattern's constructor: (c p...), or a constructor without fields (a name of a constructor with
  * fields, alone, is a variable) */
@@ -789,7 +798,7 @@ static Node *cc_match(Node **vars, int nv, Row *rows, int nr, const char *fname)
         }
     }
     if (j < 0) {
-        Node *e = rows[0].rhs;
+        Node *e = rows[0].rhs; row_reached(&rows[0]);
         for (int q = 0; q < nv; q++) if (!pat_wild(rows[0].p[q]) && strcmp(rows[0].p[q]->s, vars[q]->s)) e = x_rename(e, rows[0].p[q]->s, vars[q]->s);
         return e;
     }
@@ -827,7 +836,7 @@ static Node *cc_match(Node **vars, int nv, Row *rows, int nr, const char *fname)
             Node *p = rows[r].p[j];
             int pc = pat_con(p);
             if (!pat_wild(p) && pc >= 0 && pc != c) continue;
-            Row x; x.p = calloc((size_t)nv2 + 1, sizeof(Node *)); x.rhs = rows[r].rhs;
+            Row x; x.p = calloc((size_t)nv2 + 1, sizeof(Node *)); x.rhs = rows[r].rhs; x.id = rows[r].id;
             for (int q = 0; q < j; q++) x.p[q] = rows[r].p[q];
             for (int q = j + 1; q < nv; q++) x.p[q - 1 + nf] = rows[r].p[q];
             if (pc == c) {
@@ -897,8 +906,11 @@ static Node *clauses_untyped(const char *f, Lhs *ls, Node **rhs, int n) {
         vars[q] = same && nm && !dup ? nsym(nm) : xfresh("a");
     }
     Row *rows = calloc((size_t)n + 1, sizeof(Row));
-    for (int i = 0; i < n; i++) rows[i] = (Row){ ls[i].ps, rhs[i] };
+    for (int i = 0; i < n; i++) rows[i] = (Row){ ls[i].ps, rhs[i], i };
+    bool *ru_saved = row_used; int rn_saved = row_n;   /* (a clause compiled inside another's) */
+    rows_track(n);
     Node *body = cc_match(vars, np, rows, n, f);
+    rows_check(f); row_used = ru_saved; row_n = rn_saved;
     for (int q = np - 1; q >= 0; q--) body = sym3("lam", vars[q], body);
     return body;
 }
@@ -1200,107 +1212,6 @@ static void x_test(const char *h, Node *a, Node *b) {
     x_top(f);
 }
 static void p_decl(void);
-/* the representations declared so far, by the represented type's name (the first one each; a
- * declared one replaces an induced one): the representation's text and its four definitions'
- * names. Read when a data type is declared, for its induced representation (x_rep_induce) */
-typedef struct { const char *T, *R, *to, *from, *tf, *ft; bool induced; } XRep;
-static XRep *XREPS; static size_t capxreps; static int nxreps;
-static XRep *xrep_of(const char *T) { for (int i = 0; i < nxreps; i++) if (!strcmp(XREPS[i].T, T)) return &XREPS[i]; return NULL; }
-static void xrep_add(const char *T, const char *R, const char *to, const char *from, const char *tf, const char *ft, bool induced) {
-    XRep *e = xrep_of(T);
-    if (e && !e->induced) return;
-    if (!e) { GROW(XREPS, capxreps, (size_t)nxreps + 1); e = &XREPS[nxreps++]; }
-    *e = (XRep){ strdup(T), strdup(R), strdup(to), strdup(from), strdup(tf), strdup(ft), induced };
-}
-static void load_surface(const char *text, const char *path, bool imports_only);
-static char *pr_flat(Node *t, int prec);
-/* The induced representation of a data type whose fields have representations (item 15): for
- * data D = c (x : A) … with no parameters, indices, path constructors or recursive fields, at least
- * one field's type a represented type T (named), and every field unerased, the data type D·W with
- * the same constructors (c·W) and each such field at T's representation, and the equivalence D ≃ D·W
- * built field by field from the fields' equivalences: to and from convert each field by its type's,
- * to-from and from-to are the fields' paths side by side (functoriality). It is declared as
- * `represent D by D·W`, so it is checked like a written one and goes into the same tables; a
- * representation declared for D later replaces it. Generated, never written per record. */
-static bool x_names(Node *t, const char *x) {
-    if (!t->list) return !strcmp(t->s, x);
-    for (int i = 0; i < t->n; i++) if (x_names(t->it[i], x)) return true;
-    return false;
-}
-static void x_rep_induce(Node *d) {
-    if (!d->list || d->n < 2 || d->it[1]->list) return;   /* parameters or indices: none */
-    const char *D = d->it[1]->s; int nc = d->n - 2;
-    if (nc < 1 || xrep_of(D)) return;
-    bool any = false;
-    for (int c = 0; c < nc; c++) {
-        Node *k = d->it[2 + c];
-        if (!k->list || k->n < 1 || k->it[0]->list) return;
-        for (int j = 1; j < k->n; j++) {
-            Node *f = k->it[j];
-            if (!f->list || f->n != 2 || f->it[0]->list) return;   /* dimensions, a boundary */
-            if (is(f->it[0], "dims")) return;
-            if (bnd_mult(f->it[0]) != 2) return;
-            Node *A = f->it[1];
-            if (!A->list && !strcmp(A->s, D)) return;   /* recursive */
-            if (!A->list && xrep_of(A->s)) {
-                any = true;
-                /* a later field's type naming this field (w-write's b : Bytes n): at the
-                 * representation the dependent type is not the same family, so no field-wise
-                 * equivalence; none induced */
-                for (int l = j + 1; l < k->n; l++)
-                    if (k->it[l]->list && k->it[l]->n == 2 && x_names(k->it[l]->it[1], f->it[0]->s)) return;
-            }
-        }
-    }
-    if (!any) return;
-    char *t; size_t tl; FILE *m = open_memstream(&t, &tl);
-    /* the data type */
-    fprintf(m, "data %s·W =", D);
-    for (int c = 0; c < nc; c++) {
-        Node *k = d->it[2 + c];
-        fprintf(m, "%s %s·W", c ? " |" : "", k->it[0]->s);
-        for (int j = 1; j < k->n; j++) {
-            Node *A = k->it[j]->it[1]; XRep *e = !A->list ? xrep_of(A->s) : NULL;
-            if (e) fprintf(m, " (%s : %s)", k->it[j]->it[0]->s, e->R);
-            else { char *s = pr_flat(A, 0); fprintf(m, " (%s : %s)", k->it[j]->it[0]->s, s); free(s); }
-        }
-    }
-    fprintf(m, "\nrepresent %s by %s·W where\n", D, D);
-    /* to, from: a case per constructor, each field by its type's conversion; the laws: a case per
-     * constructor (on the motive's family), each field's path at i */
-    for (int w = 0; w < 4; w++) {
-        bool on_w = w == 1 || w == 2;   /* the case is on D·W's constructors */
-        if (w == 0) fprintf(m, "  to : %s → %s·W = λ p → case p of", D, D);
-        else if (w == 1) fprintf(m, "  from : %s·W → %s = λ p → case p of", D, D);
-        else if (w == 2) fprintf(m, "  to-from : (p : %s·W) → to (from p) ≡ p = λ p → case p return (λ q → to (from q) ≡ q) of", D);
-        else fprintf(m, "  from-to : (p : %s) → from (to p) ≡ p = λ p → case p return (λ q → from (to q) ≡ q) of", D);
-        for (int c = 0; c < nc; c++) {
-            Node *k = d->it[2 + c]; const char *cn = k->it[0]->s;
-            fprintf(m, "%s %s%s", c ? ";" : "", cn, on_w ? "·W" : "");
-            for (int j = 1; j < k->n; j++) fprintf(m, " x%d", j - 1);
-            fprintf(m, " → ");
-            if (w >= 2) fprintf(m, "(λ i → ");
-            fprintf(m, "%s%s", cn, w == 0 || w == 2 ? "·W" : "");   /* the result: D·W's constructor for to and to-from */
-            for (int j = 1; j < k->n; j++) {
-                Node *A = k->it[j]->it[1]; XRep *e = !A->list ? xrep_of(A->s) : NULL;
-                if (!e) fprintf(m, " x%d", j - 1);
-                else fprintf(m, " (%s x%d%s)", w == 0 ? e->to : w == 1 ? e->from : w == 2 ? e->tf : e->ft, j - 1, w >= 2 ? " i" : "");
-            }
-            if (w >= 2) fputc(')', m);
-        }
-        fputc('\n', m);
-    }
-    fclose(m);
-    char path[512]; snprintf(path, sizeof path, "%s (%s·W, induced)", x_file ? x_file : "?", D);
-    load_surface(t, strdup(path), false);
-    free(t);
-    XRep *e = xrep_of(D); if (e) { e->induced = true; x_top(sym2("rep-induced", nsym(D))); }
-}
-static void p_decls_block(void) {
-    wantk(X_VO, "a block");
-    while (P0()->k != X_VC && P0()->k != X_EOF) { p_decl(); }
-    if (P0()->k == X_VC) NX();
-}
 extern char decl_pos[512];
 static void p_decl(void) {
     Tok *t = P0();
@@ -1403,7 +1314,6 @@ static void p_decl(void) {
         Node *d = p_data();
         if (x_typed) x_top(sym2(fail ? "checked-data-fail" : "checked-data", d));
         else x_top(d);
-        if (x_typed && !fail) x_rep_induce(d);
         decl_end(); return;
     }
     if (x_is(t, "codata") || x_is(t, "record")) {
@@ -1517,75 +1427,6 @@ static void p_decl(void) {
         Tok *st = NX(); if (st->k != X_STR) x_err("foreign: the C symbol, a string, found", st);
         want(":"); Node *sig = p_expr(0);
         x_foreign(nm, st, sig, nt);
-        decl_end(); return;
-    }
-    if (x_is(t, "represent")) {
-        /* represent T by R where ... (plan B12): a representation of the data type T by the type R: the
-         * equivalence (to, from, to-from, from-to) and, per operation on T to run natively, op f : A
-         * = native by law = proof. Each line is a checked definition named T·R·name (to and from are
-         * so renamed in the later lines); the table's entry is (represent T R). `represent T by auto`
-         * states that the automatic layout is meant: no definitions */
-        NX();
-        Tok *tn = NX(); if (tn->k != X_ID) x_err("represent names a data type, found", tn);
-        const char *T = strdup(tn->s);
-        while (P0()->k == X_ID && !x_is(P0(), "by")) NX();   /* the data type's parameters, named for reading */
-        want("by");
-        if (x_is(P0(), "auto")) { NX(); decl_end(); return; }
-        int r0 = xp;
-        Node *R = p_expr(0);
-        char *Rtext; { size_t rl; FILE *rm = open_memstream(&Rtext, &rl); for (int q = r0; q < xp; q++) fprintf(rm, "%s%s", q > r0 ? " " : "", lt[q].s); fclose(rm); }
-        Node *Rh = R; while (Rh->list && Rh->n > 0) Rh = Rh->it[0];
-        char pre[256]; snprintf(pre, sizeof pre, "%s·%s·", T, Rh->s);
-        bool have[4] = { false, false, false, false }; static const char *LAWS[4] = { "to", "from", "to-from", "from-to" };
-        const char *qto = NULL, *qfrom = NULL;
-        Node *ropl[64]; int nrop = 0;   /* (operation native) per op line: the back end's table (repops) */
-        char *qtf = NULL, *qft = NULL; char *qby[64]; int nby = 0;   /* the laws, for the specializer (replaws) */
-        if (!x_typed) x_err("represent needs the checker (the laws are checked):", tn);
-        int fail0 = failures, pass0 = passes;   /* under #fail: some definition of the block is rejected */
-        if (x_is(P0(), "where")) {
-            NX(); wantk(X_VO, "a block of definitions");
-            while (P0()->k != X_VC) {
-                bool op = x_is(P0(), "op"); if (op) NX();
-                Tok *fn = NX(); if (fn->k != X_ID) x_err("a representation's definition names something, found", fn);
-                char *qn = malloc(strlen(pre) + strlen(fn->s) + 8); sprintf(qn, "%s%s%s", pre, op ? "op·" : "", fn->s);
-                want(":"); Node *sig = p_expr(0); want("="); Node *body = p_expr(0);
-                if (qto) { sig = x_rename(sig, "to", qto); body = x_rename(body, "to", qto); }
-                if (qfrom) { sig = x_rename(sig, "from", qfrom); body = x_rename(body, "from", qfrom); }
-                tsig.np = 0; x_checked(qn, sig, body, true, 0, 0);
-                if (op && nrop < 64) ropl[nrop++] = lst(2, nsym(fn->s), nsym(qn));
-                if (op) {
-                    if (!x_is(P0(), "by")) x_err("an op needs its law, by ... = ...: in", fn);
-                    NX(); Node *law = p_expr(0); want("="); Node *prf = p_expr(0);
-                    if (qto) { law = x_rename(law, "to", qto); prf = x_rename(prf, "to", qto); }
-                    if (qfrom) { law = x_rename(law, "from", qfrom); prf = x_rename(prf, "from", qfrom); }
-                    char *qb = malloc(strlen(qn) + 8); sprintf(qb, "%s·by", qn);
-                    tsig.np = 0; x_checked(qb, law, prf, true, 0, 0);
-                    if (nby < 64) qby[nby++] = qb;
-                } else {
-                    for (int k = 0; k < 4; k++) if (!strcmp(fn->s, LAWS[k])) have[k] = true;
-                    if (!strcmp(fn->s, "to")) qto = qn; else if (!strcmp(fn->s, "from")) qfrom = qn;
-                    else if (!strcmp(fn->s, "to-from")) qtf = qn; else if (!strcmp(fn->s, "from-to")) qft = qn;
-                }
-                if (P0()->k == X_VS || P0()->k == X_SEMI) NX(); else if (P0()->k != X_VC) x_err("expected a new definition of the representation, found", P0());
-            }
-            NX();
-        }
-        for (int k = 0; k < 4; k++) if (!have[k]) { char m[128]; snprintf(m, sizeof m, "a representation gives %s (the equivalence and its two laws), missing in", LAWS[k]); x_err(m, tn); }
-        if (fail) {
-            bool rejected = failures > fail0;
-            failures = fail0; passes = pass0;
-            if (rejected) passes++; else failures++;
-            printf("%s: rejected represent %s by %s\n", rejected ? "ok" : "FAIL", T, Rh->s);
-        } else {
-            x_top(sym3("represent", nsym(T), core(R)));
-            Node *ro = nlist(4 + nrop); ro->it[0] = nsym("repops"); ro->it[1] = nsym(T); ro->it[2] = nsym(qto); ro->it[3] = nsym(qfrom);
-            for (int q = 0; q < nrop; q++) ro->it[4 + q] = ropl[q];
-            x_top(ro);
-            Node *rl = nlist(4 + nby); rl->it[0] = nsym("replaws"); rl->it[1] = nsym(T); rl->it[2] = nsym(qtf); rl->it[3] = nsym(qft);
-            for (int q = 0; q < nby; q++) rl->it[4 + q] = nsym(qby[q]);
-            x_top(rl);
-            xrep_add(T, Rtext, qto, qfrom, qtf, qft, false);
-        }
         decl_end(); return;
     }
     if (x_is(t, "variable")) {
@@ -1705,44 +1546,7 @@ static void p_decl(void) {
     if (x_is(t, "#gc")) { NX(); x_top(lst(1, nsym("gc"))); decl_end(); return; }
     if (x_is(t, "#scope")) { NX(); x_top(lst(1, nsym("scope"))); decl_end(); return; }
     if (x_is(t, "#where")) { NX(); Tok *n = NX(); x_top(sym2("where", nsym(n->s))); decl_end(); return; }
-    if (x_is(t, "#fo")) { NX(); x_top(sym2("fo", x_solve_expr(p_expr(0)))); decl_end(); return; }
     if (x_is(t, "#run")) { NX(); x_top(sym2("run", x_solve_expr(p_expr(0)))); decl_end(); return; }
-    if (x_is(t, "#native")) {
-        /* #native name n = prog: name's compiled form (prog the C program's bytes, name's arity n over
-         * words) entered; name then calls it on words (B18) */
-        /* #native name n [keep] = prog; #native name n from "file.c" "sym" [keep]: a C file written by
-         * hand, its function sym the entry (B18: void * results are handles of type Native) */
-        NX(); Tok *n = NX(); if (n->k != X_ID) x_err("#native names a definition, found", n);
-        Tok *ar = NX();
-        char w[32]; snprintf(w, sizeof w, "#%s", ar->s);
-        if (x_is(P0(), "from")) {
-            NX(); Tok *fl = NX(); if (fl->k != X_STR) x_err("#native … from: the C file, a string, found", fl);
-            Tok *sy = NX(); if (sy->k != X_STR) x_err("#native … from: the entry's name, a string, found", sy);
-            bool keep = x_is(P0(), "keep"); if (keep) NX();
-            Node *f = nlist(keep ? 6 : 5); f->it[0] = nsym("native-c"); f->it[1] = nsym(n->s); f->it[2] = nsym(w); f->it[3] = nsym(fl->s); f->it[4] = nsym(sy->s);
-            if (keep) f->it[5] = nsym("keep");
-            x_top(f); decl_end(); return;
-        }
-        if (x_is(P0(), "at")) {
-            /* #native name n at k = P: specialized while the program runs on its first k arguments (item 17) */
-            NX(); Tok *kt = NX(); char kw[32]; snprintf(kw, sizeof kw, "#%s", kt->s);
-            want("=");
-            Node *f = nlist(5); f->it[0] = nsym("native-at"); f->it[1] = nsym(n->s); f->it[2] = nsym(w); f->it[3] = nsym(kw); f->it[4] = x_solve_expr(p_expr(0));
-            x_top(f); decl_end(); return;
-        }
-        bool keep = x_is(P0(), "keep"); if (keep) NX();
-        want("=");
-        if (keep) { Node *f = nlist(5); f->it[0] = nsym("native"); f->it[1] = nsym(n->s); f->it[2] = nsym(w); f->it[3] = x_solve_expr(p_expr(0)); f->it[4] = nsym("keep"); x_top(f); }
-        else x_top(sym4("native", nsym(n->s), nsym(w), x_solve_expr(p_expr(0))));
-        decl_end(); return;
-    }
-    if (x_is(t, "#layout")) {
-        /* #layout T [as R]: the layout of a type by its first representation, or by the named one */
-        NX(); Tok *n = NX(); Node *r = NULL;
-        if (x_is(P0(), "as")) { NX(); r = p_expr(0); }
-        x_top(r ? sym3("layout", nsym(n->s), core(r)) : sym2("layout", nsym(n->s)));
-        decl_end(); return;
-    }
     if (x_is(t, "#observe")) { NX(); Tok *n = NX(); x_test("observe", nsym(n->s), x_solve_expr(p_expr(0))); decl_end(); return; }
     if (x_is(t, "#same")) { NX(); Node *a = p_expr(0); want("="); Node *b = p_expr(0); x_test("same", x_solve_expr(a), x_solve_expr(b)); decl_end(); return; }
     if (x_is(t, "#check")) {
@@ -1936,7 +1740,6 @@ static char *surface_str(Node *t) {
 }
 static char *pr_flat(Node *t, int prec) { int w = pr_width; pr_width = 1 << 30; char *s = pr_str(t, prec, 1); pr_width = w; return s; }
 static void lost(Node *t) { if (t->cmt) { bput(&pr_lost, t->cmt); t->cmt = NULL; } }
-static bool is_face(Node *t) { return t->list && t->n >= 1 && !t->it[0]->list && (is(t->it[0], "=") || is(t->it[0], "&") || is(t->it[0], "|") || is(t->it[0], "forall")); }
 static bool face_has_eq(Node *t) {
     if (!t->list || t->n < 1 || t->it[0]->list) return false;
     if (is(t->it[0], "=")) return true;
@@ -2751,7 +2554,7 @@ static void x_top(Node *f) {
         ixrep++;
     }
     shadow_decl(f);
-    toplevel(f);
+    { bool sv = x_surface; x_surface = true; toplevel(f); x_surface = sv; }
     /* the record's extra forms after this one (a checked definition's usages) */
     if (xrep) while (ixrep < nxrep && xrep[ixrep]->list && xrep[ixrep]->n >= 2 && is(xrep[ixrep]->it[0], "usages")) toplevel(xrep[ixrep++]);
 }
@@ -2886,7 +2689,7 @@ static Node *cn(Node *c) {
     if (!strcmp(h, "cpty") && c->n == 3) {
         /* a primitive type: lib/prim.cub's name for it (Bytes at its size) where loaded */
         long k = cn_word(c->it[1]);
-        static const char *TN[] = { "Int64", "UInt32", "Float64", "Float32", "Bytes", "Native", "UInt64" };
+        static const char *TN[] = { "Int64", "UInt32", "Float64", "Float32", "Bytes", "UInt64" };
         if (k < 0 || k > 5) return NULL;
         if (k == 4) { Node *n = cn(c->it[2]); if (!n) return NULL; return global_lookup("Bytes") >= 0 ? lst(2, nsym("Bytes"), n) : lst(2, nsym("%bytesty"), n); }
         return global_lookup(TN[k]) >= 0 ? nsym(TN[k]) : lst(2, nsym("%pty"), wordn(k));
@@ -3804,7 +3607,6 @@ static Node *el_alts(Node *t, int from) {
     }
     return r;
 }
-static bool rt_is_path(Node *R);
 /* ---- by-lin (F32, item 32): the elaborator calling the certificate search on a hole. The goal
  * `Lew a b` and the hypotheses `h : Lew l r` in scope are read as linear codes over their atoms
  * (plusw, %wsucc, word literals; any other subterm an atom), lib/lin.cub's omega-cert finds the
@@ -4041,10 +3843,6 @@ static Node *el(Node *t) {
     Node *r = nlist(t->n); r->it[0] = h;
     for (int i = 1; i < t->n; i++) r->it[i] = el(t->it[i]);
     return r;
-}
-static bool rt_is_path(Node *R) {
-    if (!R->list || R->n < 1 || R->it[0]->list) return false;
-    return is(R->it[0], "PathP") || is(R->it[0], "_≡_");
 }
 
 /* ---------------- checked definitions by clauses ----------------
@@ -4362,7 +4160,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         }
     }
     if (j < 0) {
-        Node *e = rows[0].rhs;
+        Node *e = rows[0].rhs; row_reached(&rows[0]);
         for (int q = 0; q < nv; q++) if (!pat_wild(rows[0].p[q]) && strcmp(rows[0].p[q]->s, vars[q]->s)) e = x_rename(e, rows[0].p[q]->s, vars[q]->s);
         return rec_xform(sg_apply(e));
     }
@@ -4480,7 +4278,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
                 if (fe && p->n - 1 == nf) for (int q = nf - fe->nidx; q < nf; q++) if (!pat_wild(p->it[q + 1]) || strcmp(p->it[q + 1]->s, "_")) eq_named = true;
             }
             if (!pat_wild(p) && pc >= 0 && pc != c) continue;
-            Row x; x.p = calloc((size_t)nv2 + 1, sizeof(Node *)); x.rhs = rows[r].rhs;
+            Row x; x.p = calloc((size_t)nv2 + 1, sizeof(Node *)); x.rhs = rows[r].rhs; x.id = rows[r].id;
             for (int q = 0; q < j; q++) x.p[q] = rows[r].p[q];
             for (int q = j + 1; q < nv; q++) x.p[q - 1 + nf] = rows[r].p[q];
             if (pc == c) {
@@ -4602,7 +4400,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
                 for (int q = 0; q < nv2; q++) sr[ci2].p[q] = nsym("_");
                 Node *pp = nsym(CON[c3].name);
                 if (nf3) { pp = nlist(nf3 + 1); pp->it[0] = nsym(CON[c3].name); for (int z = 0; z < nf3; z++) pp->it[z + 1] = nsym("_"); }
-                sr[ci2].p[col] = pp; sr[ci2].rhs = nsym("%unreachable");
+                sr[ci2].p[col] = pp; sr[ci2].rhs = nsym("%unreachable"); sr[ci2].id = -1;
             }
             body = ccm_t(v2, nv2, sr, DATA[dq].ncons);
         } else body = ccm_t(v2, nv2, r2, n2);
@@ -4857,7 +4655,7 @@ static Node *clauses_typed(const char *f, Lhs *ls, Node **rhs, int n) {
         int ex = ls[i].np - k;
         if (extra < 0) extra = ex; else if (extra != ex) die("clauses with different numbers of patterns:", f);
         for (int q = 0; q < ex; q++) ps[tsig.np + q] = ls[i].ps[k + q];
-        rows[i] = (Row){ ps, rhs[i] };
+        rows[i] = (Row){ ps, rhs[i], i };
     }
     if (extra < 0) extra = 0;
     /* a parameter whose patterns are all one variable is named by it, when the signature does not
@@ -4893,7 +4691,10 @@ static Node *clauses_typed(const char *f, Lhs *ls, Node **rhs, int n) {
     guard_q = -1;
     for (int q = 0; q < tsig.np; q++) if (!tsig.pty[q]->list && is(tsig.pty[q], "Clock")) { guard_q = q; break; }
     { int how = setjmp(cov_jb); if (how == 1) cov_on = true; if (how == 2) guard_on = true; if (how) { ncdefs = 0; nframes = 0; ndeeps = 0; } }
+    bool *ru_saved = row_used; int rn_saved = row_n;   /* (a clause compiled inside another's) */
+    rows_track(n);
     Node *body = ccm_t(vars, tsig.np, rows, n);
+    rows_check(f); row_used = ru_saved; row_n = rn_saved;
     if (guard_on) {
         /* the fixed point over the parameters after the clock: fix {κ} {Π later → R} (λ %self → λ later → body) later */
         int q0 = guard_q;

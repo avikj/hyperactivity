@@ -144,11 +144,6 @@ enum {
                  * elimination of a recursive field, computed when forced */
     V_REC,      /* a=codata type; 1..n=fields (held unbuilt): a copattern definition's body, met only by
                  * the projection that unfolded it (and by the checker, at its own definition) */
-    V_NATIVE,   /* p=NObj: a value kept native (B18). An opaque handle (d = -1), of the primitive type
-                 * Native: passed to the native entries of the library that made it, read otherwise only
-                 * as itself (%view: wnative), its finalizer run once when the last copy is erased. Or the
-                 * emitted runtime's boxed value of data type d (#native … keep): passed to compiled code
-                 * as it is, unboxed into cells when anything else reads it */
     V_DEFER,    /* ty=an operation's kind, x, a, p its own; 1..=its inputs (its ports 0..): an operation not yet
                  * run, an unbuilt value (A8): a reader runs it (defer_build), a duplicator holds it once, a
                  * substitution waits on a reference to it. Made where a rule would otherwise build one
@@ -239,8 +234,8 @@ enum {
     O_REGAT,    /* (%region-at n a): 0=n 1=a 2=out, the n bytes at address a, copied (C20, trusted) */
     O_REGATA,   /* its second step: 0=a 1=out, a = n */
     O_FFI,      /* (%ffi k a1 .. an): x=the foreign table entry, 0..n-1=arguments, n=out; a=the arguments read so far, p=them (D27, trusted) */
-    O_NATIVE,   /* (%native k g a1 .. an): x=the foreign table entry of a compiled definition, a=the definition g itself; 0..n-1=arguments, n=out;
-                   p=the argument values read so far. All words: the compiled code is called; otherwise g is applied (B18) */
+    O_NATIVE,   /* (%native k g a1 .. an): x=the foreign table entry of a #jit definition, a=the definition g itself; 0..n-1=arguments, n=out;
+                   p=the argument values read so far. Every argument crossing (by the entry's JT): the bytes are called; otherwise g is applied (plan 5.5) */
     O_WEQ, O_WLT, O_WADD, O_WMAX, O_WSUB,  /* 0=a 1=b 2=out: on words; first a, then b. Equality,
                  * order, max and truncated subtraction recurse on both (cancelling successors), addition
                  * on b; a word with a neutral part leaves the operation stuck (V_NWOP) */
@@ -268,16 +263,11 @@ enum {
     O_TICKAPP,  /* 0=an argument 1=a stuck call of a tick-unfolding definition, short of that argument
                  * 2=out: given the tick constant ⋄ the call unfolds (the body applied to its
                  * arguments and ⋄); given anything else it stays a stuck application */
-    O_DEEP,     /* 0=a value 1=out: the value with every constructor field below it a value too (B18: a
-                 * boxed argument of a compiled definition read whole before the call); a constructor's
+    O_DEEP,     /* 0=a value 1=out: the value with every constructor field below it a value too (a #jit
+                 * definition's argument converted by its type, read whole before the call); a constructor's
                  * fields forced in turn through O_DEEPC, anything else delivered as it is */
     O_DEEPC,    /* a=the constructor, p=DeepAcc (the fields' values so far); 0=the next field's value,
                  * 1..=the fields after it (unforced), last=out */
-    O_NATREP,   /* (%natrep cv g a1 .. an): x=cv, a=g; 0..n-1=arguments, n=out; p=the arguments read so far.
-                 * A compiled definition over represented values (B18): the arguments read whole (O_DEEP);
-                 * every one closed data (constructors of words, primitive values, byte strings, native
-                 * values all the way down) — cv, the converting call (from (native (to a…))); any neutral
-                 * part — g, the definition itself, so an open term reads as the definition does */
     K_END
 };
 enum { B_MEET, B_JOIN, B_FAND, B_FOR };
@@ -364,7 +354,7 @@ typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; v
  * comp its composition, a copattern definition */
 typedef struct { char *name; int data, index; long fty; int mult; } FldInfo;
 /* primitive types (B12) */
-enum { PT_I64, PT_U32, PT_F64, PT_F32, PT_BYTES, PT_NATIVE, PT_U64, PT_N };
+enum { PT_I64, PT_U32, PT_F64, PT_F32, PT_BYTES, PT_U64, PT_N };
 typedef struct { long rc; size_t n; unsigned char b[]; } Bytes;
 /* the primitive operations of O_POP1/O_POP2, by x */
 enum { PO_I64ADD, PO_I64SUB, PO_I64MUL, PO_I64EQ, PO_I64LT, PO_U32ADD, PO_U32SUB, PO_U32MUL, PO_U32EQ, PO_U32LT,
@@ -390,7 +380,7 @@ int checked_data(long k);   /* the data type of checked index k, or -1 */
 long global_steps(long n);        /* the steps checked definition n took to check; 0 unknown */
 int global_usage(long n, long k);   /* the computed usage of parameter k of checked definition n (0, 1, 2); 2 unknown */     /* a data type's index in the checker's signature, or -1 */
 int con_index(const char *name);   /* a constructor by name, or -1 */
-enum { TB_VAL, TB_TY, TB_DTAB, TB_DENT, TB_TRANS, TB_REP, TB_ROPS, TB_RLAWS, TB_N };   /* TB_TRANS: a data type's transport as a function; TB_REP: a checked data type's first representation (B12), a type; TB_ROPS: that representation's table (to , (from , ops)), ops a Lst of (operation , native), checked indices */
+enum { TB_VAL, TB_TY, TB_DTAB, TB_DENT, TB_TRANS, TB_N };   /* TB_TRANS: a data type's transport as a function */
 long table_global(int table, long i);  /* the global holding entry i of a checker table, or -1 */
 /* copattern definitions: the body a head unfolds to; a global's index in the checker's signature (or -1) */
 long global_unfold(long g);
@@ -472,10 +462,10 @@ Port top_build(Syn *body, int nslots, const int *uses);
 /* globals: each definition's net is built once; a use copies its value */
 Port global_copy(long g, Key *as); /* 0 when the global is an unsupplied input; as: the key the copy carries (the name of the cell that referred to it; NULL: the definition's) */
 void global_park(long g, Cell *op, Cell *glob);
-/* foreign functions (D27): a C symbol at a primitive type; the arguments' kinds (PT_*, or 4 a word), its result's */
-/* at: an entry specialized when the program runs (item 17, #native f n at k): its index in lang.c's table, -1 otherwise */
-/* the most argument words a compiled definition is called with (#native: its parameters, a record's
- * slots counted one per word); above six the call goes through the entry's trampoline */
+/* foreign functions (D27): a C symbol at a primitive type; the arguments' kinds (PT_*, or 4 a word), its result's.
+ * The same table holds the #jit entries (plan 5.5): fn the bytes, jt the parameters' and the result's types
+ * (n of them, then the result), each argument's kind 4 a word, 5 a primitive value, 8 converted by its type,
+ * 9 not read */
 #define NATIVE_MAXW 32
 /* #jit (plan 5.5): the type of a compiled definition's parameter or result, read off its checked type,
  * which decides how a value crosses (src/net.c jit_in, jit_read). A data type's fields are found by
@@ -483,19 +473,7 @@ void global_park(long g, Cell *op, Cell *glob);
 typedef struct JT { int k, pt, d, np; struct JT *a, *b; struct JT **ps; struct JT ***fl; } JT;
 enum { JT_NO, JT_WORD, JT_PRIM, JT_BYTES, JT_DATA, JT_PAIR, JT_NAT, JT_ERASED };
 JT *jt_field(JT *t, int c, int j);   /* lang.c */
-typedef struct { const char *sym; void *fn; int n; unsigned char kind[NATIVE_MAXW]; unsigned char ret; int rdata;
-    void *lib; void (*fin)(void *); unsigned char keep;
-    void *tw; int rsd, rnf; int at; void *rrec; struct JT **jt; } Ffi;   /* tw: the entry's trampoline (slots in, slots out) when a parameter or the result is a C struct by value (B18); rsd/rnf: the result's data type (machine index) and slot count, -1 when not a struct; rrec: its record description (lang.c's CRec, read by crec_result) */   /* lib: the library's handle (dlopen); fin: its cubical_release, the finalizer of its handles; keep: a boxed result stays native */
-/* a value kept native (V_NATIVE): refcounted; d -1 an opaque handle (ptr the C object, fin its
- * finalizer, lib the library that made it, k its foreign entry), else the boxed value (ptr a VB
- * the cell owns) of data type d (-2 a word, -3 bytes) */
-typedef struct { long rc; int d; int k; void *ptr; void (*fin)(void *); void *lib; uint64_t id; } NObj;   /* id: the handle's serial number, its identity (an address may be reused once a handle is finalized) */
-Port native_unbox(Cell *c);
-/* kind/ret: PT_* for primitive values, 4 a word, 6 a boxed value (the emitted runtime's V: tag 0 a word in n, tag 2 bytes,
- * tag c+1 constructor c with its fields; B18's #native), 7 an opaque handle (void *, V_NATIVE); rdata: the data type (machine index) of a boxed result, or -1 */
-int data_field_type(int d, int c, int k);
-Port crec_result(const void *rrec, const uint64_t *rb);   /* a struct result's slots as the raw record (B18, records by value) */
-typedef struct VB VB; Port unbox_value(VB *v, int d);   /* a boxed value (B18) into cells: d -2 a word, -3 bytes, a data type's machine index, -1 unknown */   /* the data type of field k of constructor c of data type d: the machine index, -2 a word, -3 bytes, -1 other */
+typedef struct { const char *sym; void *fn; int n; unsigned char kind[NATIVE_MAXW]; unsigned char ret; struct JT **jt; } Ffi;
 uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n);
 extern Ffi *FFI; extern int nffi;
 int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret);
