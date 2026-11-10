@@ -56,34 +56,42 @@ overload choices are all consumed by case on the AST.
 
 ## Acceptance
 
-- `make library` passes; `lib/cxx/*.cub` load after it with `N passed, 0 failed`, no postulates.
-- **On the net**: `cxx-entry book-tu on_message` applied to the bytes of each of 1,000
-  messages (generated as `experiments/cxx/book_main.c`'s driver does; `experiments/rust/
-  gen_messages.py` writes them) gives the outcome `ok v` with `v` the value the Clang-built
-  binary prints, for every message. This is a reading of the term on recorded inputs,
-  recorded with steps per message. Any `undefined`/`unsupported`/`out-of-fuel` outcome is a
-  finding: either the unit has undefined behaviour on that input (say which rule) or the
-  reader is wrong.
-- Same for `second.cpp` and `third.cpp`'s entry points on their drivers' inputs.
-- **Compiled (D3)**: `#jit` (or `#build` with a driver process reading messages) of
-  `cxx-entry book-tu on_message` specialized at the unit: record whether it compiles, its
-  size, and its time per message against the Clang -O2 binary on 10⁶ messages. What the
-  specialized code still interprets (AST cases, environment lookups, layout arithmetic left
-  at run time) is listed with its cause: that list is the binding-time work, and it is done
-  when the residual has none of it. Compiler refusals go under "Needs from track A" with the
-  smallest input.
-- **Properties (D4)**, each a checked statement about the read term in
-  `experiments/cxx/sem/props.cub`: `on_message` never has undefined behaviour on any
-  well-sized input (state the precondition; prove by the structure of the code, bounded over
-  message kinds if the book's state space forces a bound, and say the bound); encoding then
-  decoding a message is the identity; after any sequence of add/cancel/execute the book's
-  best bid is the maximum of live bids.
+(Restated after track A's correction of 2026-11-09, tracks/README.md "What is evidence here" and
+"Memory is a signature": `read` is the definition of the meaning; agreement with a Clang-built
+binary on sample inputs is not evidence and is recorded under Diagnostics.)
+
+- `lib/cxx/*.cub` load after the library with `N passed, 0 failed`, no postulates.
+- Every AST constructor the three units use is read: Limits is empty for them. A constructor
+  not read is a refusal naming it (`cxo-unsupported`), never mapped to something else.
+- The reader never touches a memory value: its term is over the memory operations only
+  (pointers abstract). Its reading under track M's `mem-std` handler is the meaning; the same
+  term under `mem-flat` is what is compiled.
+- **Compiled (D3)**: `cxx-entry book-tu on_message` specialized at the unit, under `mem-flat`,
+  compiles through `#jit`/`#build` with a residual free of interpretation (no AST cases, no
+  environment lookups, no layout arithmetic at run time). What the residual still interprets is
+  listed with its cause until there is none. Compiler refusals: "Needs from track A".
+- **Properties (D4)**: checked theorems about the read term under `mem-std` in
+  `experiments/cxx/sem/props.cub`, each including "no undefined behaviour" (the hypothesis of
+  track M's theorem, by which they hold of the binary): `on_message` has no undefined behaviour
+  on any well-sized input (the precondition stated; any bound stated); encoding then decoding a
+  message is the identity; after any sequence of add/cancel/execute the best bid is the
+  maximum of live bids.
+- The latency of the compiled entry against the Clang -O2 binary on 10⁶ messages is a
+  measurement, recorded.
+
+## Diagnostics (bring-up only; not acceptance, not evidence)
+
+Readings of `cxx-entry` under `mem-std` on recorded inputs, beside what the Clang-built binary
+prints for the same inputs: `on_message` on the messages of `experiments/rust/gen_messages.py`,
+and `second.cpp`'s and `third.cpp`'s entries on inputs of drivers in `experiments/cxx/sem/`. A
+disagreement, or an `undefined`/`unsupported`/`out-of-fuel` outcome, is a bug in `read` or
+undefined behaviour in the unit: find which. Recorded with steps per input.
 
 ## How to check (every file of this track)
 
 ```
 ./experiments/cxx/sem/regen.sh        # the AST and the units with CBinOp renamed (Found 1)
-LIB=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p')
+LIB=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p' | sed 's| lib/cxx/ast.cub||')   # Found 1
 MEM="lib/mem/target.cub lib/mem/scalar.cub lib/mem/memory.cub lib/mem/layout.cub lib/mem/monad.cub"
 (ulimit -v 3000000; timeout 900 ./build/cubical $LIB $MEM experiments/cxx/sem/gen/ast.cub lib/cxx/machine.cub | tail -3)
 ```
@@ -131,38 +139,60 @@ of readings from `experiments/cxx/sem/`. Names of this track are prefixed `cx-`/
 
 ## Needs from track M
 
-1. `mem-release`/`mem-free` keep the dead allocation in `mem-allocs` for ever and `al-find`
-   walks the list, so every access costs steps in proportion to the number of allocations ever
-   made (a function call makes several). Request: take an allocation off the list when its
-   storage ends and report an id below `mem-count` that the list lacks as `ub-dead` in
-   `mem-at` (ids are never reused, so nothing is lost; `mem-addr`/`al-of-addr` of a pointer
-   into an ended allocation then need a rule: [basic.stc.general]/4 makes any other use of an
-   invalid pointer value implementation-defined). Worked around in `lib/cxx/machine.cub`
-   (`cx-release`, `cx-free` drop the allocation; `cx-dead` turns lib/mem's "no such
-   allocation" stop into `ub-dead` for an id below the count), so in this track's readings a
-   pointer into an ended allocation that was stored in memory and loaded again decodes as
-   `mp-addr` and an access through it is `ub-out-of-bounds` rather than `ub-dead`.
+The reader uses only the operations of the section "memory: the commands the reader uses" of
+`lib/cxx/machine.cub`. Named in `lib/mem/monad.cub` today and used as they are: `ev-load`,
+`ev-store`, `ev-alloc`, `ev-release`, `ev-ptr-add`, `ev-bind`, `ev-finally`, the control
+outcomes and the loops. Needed and **not named yet** (each is written once in that section over
+`lib/mem/memory.cub`'s function with `ev-rd`/`ev-wr`, and becomes the command when it exists):
+
+1. `load`/`store` at a given alignment (`mem-load-al`, `mem-store-al`): a member of a packed
+   record is accessed at less than its kind's alignment.
+2. `free` (`mem-free`: null is a no-op), `memmove`, `memcpy`, `memset`.
+3. `ptr-diff`, `ptr-cmp` (`mem-ptr-cmp`), and the scalar conversion that may involve a pointer
+   (`mem-conv`: pointer ↔ integer by the Target).
+4. Pointer values as abstract constants and a destructor: the null pointer, the pointer to
+   function number f, and "the function a pointer is to" (undefined when it is to none): an
+   indirect or virtual call needs it. (`cx-null`, `cx-fn-ptr`, `cx-fn-of`.)
+5. A refusal carrying data: `Stop`'s `st-unsupported` names nothing. The reader's signature
+   `CxS` has the refusal as its one command (response `Empty`); when `Ev` becomes a process
+   over memory commands, the reader's signature must be the sum of the memory commands and
+   this one (or the memory signature has a refusal command carrying a reader's value).
+6. (cost, a matter of the `mem-std` handler) `mem-release`/`mem-free` keep the ended allocation
+   in `mem-allocs` for ever and `al-find` walks the list, so an access costs steps in
+   proportion to the number of allocations ever made; every call makes several. Request: take
+   an allocation off the list when its storage ends and report an id below `mem-count` that the
+   list lacks as `ub-dead` (ids are never reused).
 
 ## Done
 
 - `experiments/cxx/sem/regen.sh` and `experiments/cxx/sem/gen/{ast,book,second,third}.cub`
   (Found 1).
-- `lib/cxx/machine.cub` (572 lines; loads after the library, lib/mem and the renamed AST with
+- `lib/cxx/machine.cub` (about 560 lines; loads after the library, lib/mem and the renamed AST with
   0 failed): outcomes and the refusal signature (`CxWhat`, `CxS`, `CxR`, `CxEv`, `CxK`,
   `CxOut`, `cx-run`); names (`cx-byte`, `cx-name-is`); the unit's tables (`cx-find-fn`,
   `cx-find-dtor`, `cx-find-rec`, `cx-find-field`, `cx-field-any`, `cx-cap-var`, `cx-cap-this`,
   `cx-enum-under`, `cx-enumerator`, `cx-find-var`); types (`cx-strip`, `cx-tc`, `cx-mty :
   CType → MTy`, `cx-layenv` the unit's layouts as a `LayEnv`, `CxU`, `cx-unit`, `cx-size`,
-  `cx-align`, `cx-scalar`); memory accesses with ended allocations dropped (`cx-load`,
-  `cx-store`, `cx-alloc`, `cx-release`, `cx-free`, `cx-memmove`, `cx-memcpy`, `cx-memset`,
-  `cx-ptr-add`, `cx-ptr-diff`, `cx-ptr-cmp`, `cx-conv`, `cx-local`, `cx-sub`, `cx-super`);
+  `cx-align`, `cx-scalar`); the memory operations the reader is confined to (`cx-load`, `cx-store`,
+  `cx-alloc`, `cx-release`, `cx-ptr-add` = the monad's; `cx-load-al`, `cx-store-al`, `cx-free`,
+  `cx-memmove`, `cx-memcpy`, `cx-memset`, `cx-ptr-diff`, `cx-ptr-cmp`, `cx-conv`, `cx-null`,
+  `cx-fn-ptr`, `cx-fn-of` = Needs from track M 1–4; `cx-local`, `cx-sub`, `cx-super` over them);
   literal values (`cx-lit`, `cx-cint`); the environment (`CxBind`, `CxG`, `CxEnv`, `CxCall`).
 
 ## Found
 
 1. `lib/cxx/ast.cub` (track C) and `lib/mem/scalar.cub` (track M) both bind `bo-add bo-sub
-   bo-mul bo-div bo-rem bo-and bo-or bo-xor`; loaded together the second is refused. See
-   "Needs from track C" 1.
+   bo-mul bo-div bo-rem bo-and bo-or bo-xor`; loaded together the second is refused. Since
+   `lib/cxx/ast.cub` joined `make library`'s list (commit 26c6a2df or before), `lib/mem/scalar.cub`
+   no longer loads after "the library" at all (`error: declared again … bo-add`): this track's
+   load line removes `lib/cxx/ast.cub` from the list and loads the renamed copy after lib/mem.
+   See "Needs from track C" 1.
+0. (the specification, as track A asked to be told) Besides the comparison with the Clang
+   binary, the original "Next step" asked that `read` of a scratch `sum.cpp` be "equal (a
+   checked path or equal readings on 10 inputs)" to `experiments/mem/sum.cub`'s hand-written
+   meaning: equal readings between two descriptions is the first form of README's audit. It is
+   treated as a diagnostic (the hand-written term is not a second definition of anything: only
+   `read`'s term is the meaning).
 2. `data List (A : Type)` is at level 0 only and a `data` declaration with a field of a
    `Type 1` type (`data T = c (f : Ev {lzero} S V A)`) fails with `error: unbound name %imp`:
    computations cannot be stored in data. The reader therefore never builds a list of

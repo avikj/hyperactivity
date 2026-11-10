@@ -412,96 +412,72 @@ cx-scalar u ty = mr-bind (cx-mty (cxu-t u) (cxu-ds u) ty) (ty-scalar (cxu-t u))
 cx-sk : CxU → CType → MRes SK
 cx-sk u ty = mr-map (λ ka → fst ka) (cx-scalar u ty)
 
--- ---------------------------------------------------------------- memory
--- lib/mem/memory.cub keeps an allocation whose storage has ended in its list for ever, and
--- finds an allocation by walking the list: a program that runs long walks ever further. Here
--- an allocation is taken off the list when its storage ends (cx-release, cx-free); ids are
--- given in increasing order and never again, so an id below the count that the list does not
--- hold is an allocation that has ended, and an access through a pointer into it is the
--- undefined behaviour ub-dead that lib/mem reports for a dead allocation it still holds
--- (tracks/F-cxx.md, Needs from track M 1).
-cx-al-has : Word → List Alloc → Bool
-cx-al-has i nil = false
-cx-al-has i (cons a as) = case weq (al-id a) i of
-  true → true
-  false → cx-al-has i as
-cx-al-drop : Word → List Alloc → List Alloc
-cx-al-drop i nil = nil
-cx-al-drop i (cons a as) = case weq (al-id a) i of
-  true → as
-  false → cons a (cx-al-drop i as)
-cx-mem-drop : MPtr → AMem → AMem
-cx-mem-drop p m = case p of
-  mp-obj i o → AMem { mem-allocs = cx-al-drop i (mem-allocs m) ; mem-count = mem-count m ; mem-next = mem-next m }
-  mp-null → m
-  mp-fn f → m
-  mp-addr x → m
-cx-gone : MPtr → AMem → Bool
-cx-gone p m = case p of
-  mp-obj i o → (case wlt i (mem-count m) of
-    true → not (cx-al-has i (mem-allocs m))
-    false → false)
-  _ → false
--- a result of lib/mem at a pointer: its "no such allocation" is ub-dead when the allocation ended
-cx-dead : {A : Type} → MPtr → AMem → MRes A → MRes A
-cx-dead {A} p m r = case r of
-  mok a → mok a
-  mub w → mub w
-  mstop w → (case w of
-    st-ill-typed → (case cx-gone p m of
-      true → mub ub-dead
-      false → mstop st-ill-typed)
-    st-fuel → mstop st-fuel
-    st-unsupported → mstop st-unsupported
-    st-unspecified → mstop st-unspecified)
-cx-load : CxU → SK → Word → MPtr → CxEv SV
-cx-load u k al p = ev-rd {lzero} {CxS} {CxR} {SV} (λ m → cx-dead {SV} p m (mem-load-al (cxu-t u) k al p m))
-cx-store : CxU → SK → Word → MPtr → SV → CxEv Unit
-cx-store u k al p v = ev-wr {lzero} {CxS} {CxR} (λ m → cx-dead {AMem} p m (mem-store-al (cxu-t u) k al p v m))
+-- ---------------------------------------------------------------- memory: the commands the reader uses
+-- The reader never touches a memory value (tracks/README.md, "Memory is a signature"): every
+-- access is one of the operations of this section and a pointer is abstract outside it. The
+-- first group are lib/mem/monad.cub's named operations as they are. The second group are
+-- operations the reader needs that the monad does not name yet: each is written here once over
+-- lib/mem/memory.cub's function of the same meaning and is listed in tracks/F-cxx.md under
+-- "Needs from track M"; when track M's signature of memory commands lands, each becomes that
+-- command and nothing outside this section changes.
+cx-load : CxU → SK → MPtr → CxEv SV
+cx-load u k p = ev-load {lzero} {CxS} {CxR} (cxu-t u) k p
+cx-store : CxU → SK → MPtr → SV → CxEv Unit
+cx-store u k p v = ev-store {lzero} {CxS} {CxR} (cxu-t u) k p v
 cx-alloc : AKind → Bool → Word → Word → CxEv MPtr
 cx-alloc kd z size al = ev-alloc {lzero} {CxS} {CxR} kd z size al
 cx-release : AKind → MPtr → CxEv Unit
-cx-release kd p = ev-wr {lzero} {CxS} {CxR} (λ m → mr-map (cx-mem-drop p) (cx-dead {AMem} p m (mem-release kd p m)))
-cx-free : MPtr → CxEv Unit
-cx-free p = ev-wr {lzero} {CxS} {CxR} (λ m → mr-map (cx-mem-drop p) (cx-dead {AMem} p m (mem-free p m)))
-cx-memmove : MPtr → MPtr → Word → CxEv Unit
-cx-memmove dst src n = ev-wr {lzero} {CxS} {CxR} (λ m → cx-dead {AMem} dst m (cx-dead {AMem} src m (mem-memmove dst src n m)))
-cx-memcpy : MPtr → MPtr → Word → CxEv Unit
-cx-memcpy dst src n = ev-wr {lzero} {CxS} {CxR} (λ m → cx-dead {AMem} dst m (cx-dead {AMem} src m (mem-memcpy dst src n m)))
-cx-memset : MPtr → UInt64 → Word → CxEv Unit
-cx-memset dst v n = ev-wr {lzero} {CxS} {CxR} (λ m → cx-dead {AMem} dst m (mem-memset dst v n m))
+cx-release kd p = ev-release {lzero} {CxS} {CxR} kd p
 cx-ptr-add : MPtr → Word → UInt64 → CxEv MPtr
-cx-ptr-add p size i = ev-rd {lzero} {CxS} {CxR} {MPtr} (λ m → cx-dead {MPtr} p m (mem-ptr-add p size i m))
+cx-ptr-add p size i = ev-ptr-add {lzero} {CxS} {CxR} p size i
+-- (second group: to become commands)
+-- a load and a store at an alignment less than the kind's own (a member of a packed record)
+cx-load-al : CxU → SK → Word → MPtr → CxEv SV
+cx-load-al u k al p = ev-rd {lzero} {CxS} {CxR} {SV} (mem-load-al (cxu-t u) k al p)
+cx-store-al : CxU → SK → Word → MPtr → SV → CxEv Unit
+cx-store-al u k al p v = ev-wr {lzero} {CxS} {CxR} (mem-store-al (cxu-t u) k al p v)
+-- the end of dynamic storage (a null pointer: nothing)
+cx-free : MPtr → CxEv Unit
+cx-free p = ev-wr {lzero} {CxS} {CxR} (mem-free p)
+cx-memmove : MPtr → MPtr → Word → CxEv Unit
+cx-memmove dst src n = ev-wr {lzero} {CxS} {CxR} (mem-memmove dst src n)
+cx-memcpy : MPtr → MPtr → Word → CxEv Unit
+cx-memcpy dst src n = ev-wr {lzero} {CxS} {CxR} (mem-memcpy dst src n)
+cx-memset : MPtr → UInt64 → Word → CxEv Unit
+cx-memset dst v n = ev-wr {lzero} {CxS} {CxR} (mem-memset dst v n)
 cx-ptr-diff : MPtr → MPtr → Word → CxEv UInt64
-cx-ptr-diff p q size = ev-rd {lzero} {CxS} {CxR} {UInt64} (λ m → cx-dead {UInt64} p m (mem-ptr-diff p q size m))
+cx-ptr-diff p q size = ev-rd {lzero} {CxS} {CxR} {UInt64} (mem-ptr-diff p q size)
 cx-ptr-cmp : CxU → CmpOp → MPtr → MPtr → CxEv Bool
-cx-ptr-cmp u o p q = ev-rd {lzero} {CxS} {CxR} {Bool} (λ m → cx-dead {Bool} p m (cx-dead {Bool} q m (mem-ptr-cmp (cxu-t u) o p q m)))
+cx-ptr-cmp u o p q = ev-rd {lzero} {CxS} {CxR} {Bool} (mem-ptr-cmp (cxu-t u) o p q)
 -- a conversion between scalar kinds (pointer ↔ integer as the Target allows)
 cx-conv : CxU → SK → SK → SV → CxEv SV
-cx-conv u from to v = ev-rd {lzero} {CxS} {CxR} {SV} (λ m → mem-conv (cxu-t u) from to v m)
+cx-conv u from to v = ev-rd {lzero} {CxS} {CxR} {SV} (mem-conv (cxu-t u) from to v)
+-- the null pointer, the pointer to a function of the unit, and the function a pointer is to
+-- (a call through a pointer that is not to a function is undefined)
+cx-null : MPtr
+cx-null = mp-null
+cx-fn-ptr : Word → MPtr
+cx-fn-ptr f = mp-fn f
+cx-fn-of : MPtr → CxEv Word
+cx-fn-of p = case p of
+  mp-fn f → cx-ret {Word} f
+  mp-null → cx-ub {Word} ub-null
+  mp-obj a o → cx-ub {Word} ub-fn-as-object
+  mp-addr x → cx-ub {Word} ub-fn-as-object
+-- (end of the section: nothing below names a constructor of MPtr or a field of the memory)
+cx-is-null : CxU → MPtr → CxEv Bool
+cx-is-null u p = cx-ptr-cmp u co-eq p cx-null
 -- an automatic object of a size and alignment for the extent of a computation
 cx-local : {A : Type} → Word → Word → (MPtr → CxEv A) → CxEv A
 cx-local {A} size al body =
   cx-bind {MPtr} {A} (cx-alloc ak-auto false size al) (λ p →
     cx-finally {A} (body p) (cx-release ak-auto p))
--- the subobject at a byte offset of the object at a pointer (a member, a base). The object
--- expression of a member access must denote an object: through a null pointer it is undefined
--- ([expr.ref]/2 with [expr.unary.op]/1); no access is made here, so nothing else is checked
+-- the subobject at a byte offset of the object at a pointer (a member, a base), and back from
+-- a base subobject to the object it is in: pointer arithmetic in bytes
 cx-sub : MPtr → Word → CxEv MPtr
-cx-sub p off = case p of
-  mp-null → cx-ub {MPtr} ub-null
-  mp-obj a o → cx-ret {MPtr} (mp-obj a (wadd o off))
-  mp-fn f → cx-stop {MPtr} st-ill-typed
-  mp-addr x → cx-ret {MPtr} (mp-addr (wadd x off))
--- back from a base subobject to the object it is in (a cast to a derived class)
+cx-sub p off = cx-ptr-add p #1 (uq-of-word off)
 cx-super : MPtr → Word → CxEv MPtr
-cx-super p off = case p of
-  mp-null → cx-ret {MPtr} mp-null
-  mp-obj a o → (case wlt o off of
-    true → cx-ub {MPtr} ub-ptr-arith
-    false → cx-ret {MPtr} (mp-obj a (wsub o off)))
-  mp-fn f → cx-stop {MPtr} st-ill-typed
-  mp-addr x → cx-ret {MPtr} (mp-addr (wsub x off))
+cx-super p off = cx-ptr-add p #1 (uq-neg (uq-of-word off))
 
 -- ---------------------------------------------------------------- values
 -- an integer written in the unit (a literal's magnitude, a constant's sign and magnitude) at a kind
