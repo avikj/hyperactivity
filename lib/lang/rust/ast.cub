@@ -39,7 +39,6 @@ data RTy
   | rty-slice (t : RTy)
   | rty-tuple (ts : RTy)                   -- ts a list; the unit type is rty-tuple rtys-nil
   | rty-adt (adt : Word) (args : RTy)      -- args a list of types and constants
-  | rty-closure (body : Word) (args : RTy) -- the closure whose code is that body; args are the enclosing item's
   | rty-dyn (trait : Word)
   | rty-fn-ptr (params : RTy) (ret : RTy)
   | rty-param (i : Word)                   -- a type parameter of the enclosing body
@@ -66,7 +65,6 @@ data RConst
   | rc-zst (ty : RTy)                      -- the one value of a zero-sized type
   | rc-adt (ty : RTy) (variant : Word) (fields : RConst)
   | rc-static (id : Word) (ty : RTy)       -- the address of a static, at pointer type ty
-  | rc-promoted (body : Word) (ty : RTy)   -- the value a promoted body computes
   | rcs-nil
   | rcs-cons (c : RConst) (cs : RConst)
 
@@ -91,10 +89,9 @@ data RCastKind
 data RBorrow = rborrow-shared | rborrow-mut
 
 data RAggregate
-  = rag-array (elem : RTy)
+  = rag-array
   | rag-tuple
   | rag-adt (adt : Word) (variant : Word) (args : RTy)
-  | rag-closure (body : Word) (args : RTy)
   | rag-raw-ptr (pointee : RTy) (m : RMut)  -- a pointer from (address, metadata)
 
 data RRvalue
@@ -135,14 +132,13 @@ data RTerm
 
 data RBlock = rblock (stmts : List RStmt) (term : RTerm)
 
-data RLocal = rlocal (ty : RTy) (m : RMut)
+-- An argument's mutability is not printed in the MIR text, so an argument is rlocal-arg.
+data RLocal = rlocal (ty : RTy) (m : RMut) | rlocal-arg (ty : RTy)
 
 data RGeneric = rgen-type (name : RName) | rgen-const (name : RName)
 
-data RBodyKind = rbk-fn | rbk-closure | rbk-promoted
-
 -- A body: local 0 is the return place, locals 1..argc the arguments.
-data RBody = rbody (name : RName) (kind : RBodyKind) (generics : List RGeneric) (argc : Word)
+data RBody = rbody (name : RName) (generics : List RGeneric) (argc : Word)
                    (locals : List RLocal) (blocks : List RBlock)
 
 data RAdtKind = radt-struct | radt-enum

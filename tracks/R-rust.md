@@ -120,11 +120,10 @@ uses `core`/`std` only. Find which MIR output this toolchain gives (`rustc --emi
 
 ## Next step
 
-Write `tools/mir2cub.py` (nothing of it exists yet): (1) run `rustc --edition=2021 --crate-type=lib
--O -Cpanic=abort --emit=mir`; (2) parse bodies (types, places, operands, rvalues, statements,
-terminators; stop on anything unhandled); (3) resolve calls to bodies through impl headers read
-at the spans, walk instances from `on_message`; (4) compile the copy with `-g
--Csymbol-mangling-version=v0 --emit=obj`, read layouts with `llvm-dwarfdump --debug-info` and the
-vtable with `objdump -r -s` + `llvm-cxxfilt`; (5) write `experiments/rust/book.cub` as many small
-definitions (one per block, type, body) ending in `book-crate : RCrate`; check with
-`./build/cubical $(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p') lib/lang/rust/ast.cub experiments/rust/book.cub`.
+`tools/mir2cub.py` exists and `python3 tools/mir2cub.py experiments/rust/book.rs -o experiments/rust/book.cub`
+runs (10 bodies, 157 blocks, 707 statements, 346 definitions; library + `ast.cub` + `book.cub`:
+`1155 passed, 0 failed`, 4.2 s, `book-crate` 7,104 steps). Not yet done, in order: (1) read
+`book.cub` against the MIR text body by body and the layouts against `-Zprint-type-sizes`
+(nothing has been compared yet); (2) compare the instance list with `-Zprint-mono-items`;
+(3) record the kinds met and the measurements under Done; (4) fill Limits (debug scopes are
+not imported; fn-level generics, closures reached by a call, unions, drop glue stop the import).
