@@ -5,12 +5,16 @@ Revision 9, 2026-11-09. Repo avikj/math, `scoped-machine` on `main` (revision 9 
 whole. Revision 8 and everything before it are in git history; nothing in them is in force
 unless restated here.
 
+**To pick up the work cold:** read this file, then `tracks/README.md`. The work is split into
+tracks; each track's file (`tracks/<X>-….md`) holds its specification, acceptance, what is done
+with measurements, and its exact next step, and is updated in every commit of that track.
+
 **Revision 9 in one paragraph.** The compiler exists and its output is checked by the checker:
 `#jit f` quotes a checked definition, specializes it, encodes the specialized normal form as
 x86-64 bytes by fixed templates, and binds `f` to the bytes only after the checker has accepted
 the specialized code as `f` (by conversion, or, when theorems were used, by checking the path
-along them as the definition `f·jit`). Thirty workloads compile and run with the
-machine's answers. Everything that related a second description of the system to the first by
+along them as the definition `f·jit`). Thirty-three workloads compile and run with the
+machine's answers, and a process builds to a standalone binary (`#build`). Everything that related a second description of the system to the first by
 comparing outputs is deleted: the native-C path, declared representations, layouts, handles,
 the old printers, the tests. The plan from here is one compiler, made trustworthy below
 (Phase 2: the encoder's templates become equations under an imported x86 model) and pointed
@@ -463,14 +467,24 @@ Acceptance: the trading fleet deployed from one corpus and one configuration val
 binary produced by `deploy`, the deployment's checks passing, and an upgrade carried out as a
 checked transition.
 
-## 6.9 Size of what remains
+## 6.9 Deliverables, sizes and order
 
-New code that must check, by phase (lines; hours of building at this repo's measured rate):
-Phase 1 remainder 2,500 / 7; Phase 2 9,200 / 20; Phase 3 1,500 / 3; Phase 4 35,000 / 60;
-Phase 5 46,000 / 75; Phase 6 2,500 / 5; Phase 7 6,000 / 12; Phase 8 3,000 / 6. About 106,000
-lines and 190 hours, plus machine time for checks. Not covered by these: how fast a
-specialized production interpreter runs (its meaning is by construction, its speed depends on
-the interpreter), and the trading system's own code.
+Rates are measured on this repository's commits (a compiler feature with its checks: 5–15
+minutes; new files: 1,200+ lines an hour), not assumed.
+
+| | Deliverable | What it is | Work | Tracks |
+|---|---|---|---|---|
+| D1 | `#build` | a process as a standalone native binary | **done**: `experiments/native/feed.cub`, 8 KB binary, 1M messages in 1.07 s (C at -O2: 0.91 s), output byte-equal | A |
+| D2 | compiler checked against the x86 model | model imported, template lemmas, encoder returns its path, `#lift` | 12 h | B, then E |
+| D3 | C++ through our compiler | a real hot-path unit read from Clang's AST, compiled by our compiler, measured against Clang | 9 h | C, then F |
+| D4 | properties of that C++ | round trip, book invariants, replay, checked on the read term | 3 h | F |
+| D5 | a small fleet as a term | three nodes over the network world, safety and replay statements, `deploy` | 6 h | D, A |
+| tail | the rest of C++; the quotient; Rust, Go, OCaml, Haskell, Swift; six lifted interpreters | | 35 h | |
+
+Not grounded in a measurement yet, and marked as such: getting all 33k generated lines of the
+x86 model to check (2 h assumed), and bringing the C++ reader up on a real unit (3 h assumed).
+Not covered: how fast a specialized production interpreter runs (its meaning is by
+construction, its speed depends on the interpreter), and the trading system's own code.
 
 ## 7. The trusted base, exactly (revision 9)
 
