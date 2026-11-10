@@ -217,7 +217,7 @@ x-apps h args = case args of lnil → h; lcons a r → x-apps (capp h a) r
 x-push c =
   case c of
     capp f a → x-push-app (x-push f) (x-push a)
-    clam b → clam (x-push b)
+    clam b → x-eta (x-push b)
     clet t b → clet (x-push t) (x-push b)
     cann t T → x-push t
     cthunk t → x-push t
@@ -228,14 +228,29 @@ x-push c =
     cfst p → cfst (x-push p)
     csnd p → csnd (x-push p)
     ccon dd k fs ds → ccon dd k (x-push-l fs) ds
-    ccase dd B x → ccase dd (x-push-l B) (x-push x)
-    celim dd P B x → celim dd P (x-push-l B) (x-push x)
+    ccase dd B x → ccase dd (x-push-brs B) (x-push x)
+    celim dd P B x → celim dd P (x-push-brs B) (x-push x)
     cwsucc a → cwsucc (x-push a)
     cwop k a b → cwop k (x-push a) (x-push b)
     cprim k as → cprim k (x-push-l as)
-    cwelim w z s mo → cwelim (x-push w) (x-push z) (x-push s) mo
+    cwelim w z s mo → cwelim (x-push w) (x-push z) (x-push-lams s) mo
+    -- a type as a value (an argument instantiating a polymorphic function, a process at its
+    -- answer type): nothing in the fragment reads one (only composition does, which is refused;
+    -- motives are not computed), so it is the word 0
+    cword → cwlit #0
+    cpty k n → cwlit #0
+    cpi m A B → cwlit #0
+    csigma A B → cwlit #0
+    cuniv l → cwlit #0
+    cdata dd ps → cwlit #0
     _ → c
 x-push-l l = case l of lnil → lnil; lcons x xs → lcons (x-push x) (x-push-l xs)
+-- a branch's and a loop step's leading λs bind its fields and hypotheses: they stay
+x-push-brs l = case l of lnil → lnil; lcons x xs → lcons (x-push-lams x) (x-push-brs xs)
+x-push-lams c = case c of clam b → clam (x-push-lams b); _ → x-push c
+-- λ x → f x with x not in f is f (η, which the theory has; a quoted normal form is η-long, so a
+-- function passed along a recursion would otherwise gain a wrapper each time round)
+x-eta b = case b of capp f a → (case a of cvar n → (if andb (%weq n #0) (notb (lmem #0 (x-frees f))) then unshift-at #0 #1 f else clam b); _ → clam b); _ → clam b
 -- a codata record's fields of the type itself are delayed: stored as a function of one unused
 -- argument (a closure), and their projection applies it. The value is the same; only what is
 -- computed when differs, which is what makes an infinite value finite to build
@@ -426,7 +441,7 @@ x-forms-acc prog st =
   case prog of
     lnil → fst st
     lcons e rest →
-      (let sp = x-split (x-push (snd e))
+      (let sp = x-split (x-push-lams (snd e))
            r = x-lift (snd sp) st
        in lcons (fst e , (fst sp , fst r)) (x-forms-acc rest (snd r)))
 -- the definitions made by lifting are in the state; x-forms returns them after the program's own
@@ -435,7 +450,7 @@ x-forms-all-acc prog st acc =
   case prog of
     lnil → lapp acc (x-aux-forms (fst st))
     lcons e rest →
-      (let sp = x-split (x-push (snd e))
+      (let sp = x-split (x-push-lams (snd e))
            r = x-lift (snd sp) st
        in x-forms-all-acc rest (snd r) (lapp acc (lcons (fst e , (fst sp , fst r)) lnil)))
 x-aux-forms l = case l of lnil → lnil; lcons e r → lcons e (x-aux-forms r)
@@ -798,4 +813,8 @@ jit-plan g rules =
               defs = x-erase g (x-forms-all (snd p))
           in case x-verdict (fst p) defs of
                not-fo w at → (not-fo w at , (ok , (snd s , (cs , lnil))))
-               fo q2 → (fo cs , (ok , (snd s , (cs , encode-prog g defs)))))
+               -- the entry's arity in the blob is the code's leading λs, which is what the boundary
+               -- passes (src/syntax.c counts them): a pass that changed it is refused here
+               fo q2 → (if x-arity-is defs g (fst (x-split cs)) then (fo cs , (ok , (snd s , (cs , encode-prog g defs))))
+                        else (not-fo reflect cs , (ok , (snd s , (cs , lnil))))))
+x-arity-is defs g n = case x-arity defs g of some k → %weq k n; none → false

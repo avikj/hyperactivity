@@ -1460,6 +1460,42 @@ static void p_decl(void) {
         NX();
         decl_end(); return;
     }
+    if (x_is(t, "#build")) {
+        /* #build s "file" (PLAN 4.4 item 5): s : Step W A, a process as a tree of steps, written as a
+         * standalone static ELF64 executable (lib/elf.cub build-plan): the specialized code is checked
+         * by the checker's conversion against s, then encoded with the driver loop as machine code.
+         * Nothing is written unless the program compiles and the check holds */
+        NX(); Tok *fn = NX(); if (fn->k != X_ID) x_err("#build names a checked definition, found", fn);
+        int ck = checked_index(fn->s); if (ck < 0) x_err("#build: not a checked definition:", fn);
+        Tok *pt = NX(); if (pt->k != X_STR) x_err("#build: the file to write, a string, expected after", fn);
+        if (global_lookup("build-plan") < 0) x_err("#build needs lib/elf.cub loaded, for", fn);
+        long steps = 0;
+        char *r = readback(nl2("%%build-plan", wordn(ck)), &steps);
+        const char *saved = src; src = r; Node *rn = read_node(); src = saved;
+        Node *grp[3]; int ng = 0;
+        for (Node *cur = rn; ng < 3; ) {
+            if (ng == 2) { grp[ng++] = cur; break; }
+            if (!cur || !cur->list || cur->n != 3 || !is(cur->it[0], "pair")) break;
+            grp[ng++] = cur->it[1]; cur = cur->it[2];
+        }
+        free(r);
+        if (ng != 3) x_err("#build: the plan did not read back, for", fn);
+        Node *v = grp[0];
+        if (v->list && v->n >= 2 && !v->it[0]->list && !strcmp(v->it[0]->s, "not-fo")) {
+            failures++; printf("FAIL: build %s: not compilable: %s   [%ld steps]\n", fn->s, v->it[1]->list ? "?" : v->it[1]->s, steps);
+            decl_end(); return;
+        }
+        if (grp[1]->list || strcmp(grp[1]->s, "true")) {
+            failures++; printf("FAIL: build %s: the specialized code does not convert with %s   [%ld steps]\n", fn->s, fn->s, steps);
+            decl_end(); return;
+        }
+        FILE *o = fopen(pt->s, "wb"); if (!o) x_err("#build: the file cannot be written:", pt);
+        size_t len = 0;
+        for (Node *cur = grp[2]; cur->list && cur->n == 3 && !cur->it[0]->list && !strcmp(cur->it[0]->s, "lcons"); cur = cur->it[2]) { fputc((int)atol(cur->it[1]->s + 1), o); len++; }
+        fclose(o); chmod(pt->s, 0755);
+        passes++; printf("ok: build %s   [%s, %zu bytes, the checker's conversion, %ld steps]\n", fn->s, pt->s, len, steps);
+        decl_end(); return;
+    }
     if (x_is(t, "#jit")) {
         /* #jit f [using t1 t2 …] (plan 5.4, 5.5): f compiled to x86-64 and bound to the bytes. The
          * library computes the plan (lib/x86.cub jit-plan): the specialized code (rewritten along the
