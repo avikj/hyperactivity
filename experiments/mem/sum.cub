@@ -58,3 +58,50 @@ sum-run t fuel mm n = mr-bind mm (λ m → ev-value (ev-run-pure (sum-c {lzero} 
 #show sum-run x86-64-sysv #3 (sum-mem4 x86-64-sysv (u64 #1) (u64 #2) (u64 #3) (u64 #4)) (u64 #4)
 -- n = 0: no iteration, 0
 #show sum-run x86-64-sysv #100 (sum-mem4 x86-64-sysv (u64 #1) (u64 #2) (u64 #3) (u64 #4)) (u64 #0)
+
+-- ---------------------------------------------------------------- through the compiler
+-- #jit compiles a definition whose parameters cross its boundary (words, byte strings); AMem
+-- does not cross (an allocation is a dependent pair: its bytes' length is its size's), so the
+-- compiled definition takes the array's bytes, n and the fuel, builds the memory with the one
+-- allocation int a[4] (16 bytes, alignment 4, base 65536; stored as 24 bytes: the last window's
+-- 8 more), runs sum-c at x86-64-sysv with p = &a[0], and returns (status , value): 0 and the
+-- sum; 1 undefined behaviour; 2 a stop; 3 any other way out.
+-- The fuel is a parameter on purpose: at a literal fuel the specializer unrolls the loop that
+-- many times (the recursion is on the fuel), so the fuel must be a run-time value.
+sum-mem-of : Bytes 24 → AMem
+sum-mem-of b =
+  AMem { mem-allocs = cons (Alloc { al-id = #0 ; al-size = #16 ; al-align = #4 ; al-live = true
+                                  ; al-kind = ak-auto ; al-base = #65536 ; al-zeroed = true
+                                  ; al-data = b ; al-init = bytes 24 }) nil
+       ; mem-count = #1 ; mem-next = #65553 }
+sum-at : Bytes 24 → Word → Word → Word × Word
+sum-at b n fuel =
+  case ev-run-pure (sum-c {lzero} {NoS} x86-64-sysv fuel (mp-obj #0 #0) (sv-i (u64 n))) (sum-mem-of b) of
+    mok cm → (case fst cm of
+      c-val v → (case v of
+        sv-i x → (#0 , u64toWord x)
+        _ → (#3 , #0))
+      _ → (#3 , #0))
+    mub w → (#1 , #0)
+    mstop w → (#2 , #0)
+-- int a[4] = {1, 2, 3, 4} and {2147483647, 1, 0, 0} as the allocation's bytes
+sum-bytes4 : UInt32 → UInt32 → UInt32 → UInt32 → Bytes 24
+sum-bytes4 a0 a1 a2 a3 =
+  store32 24 (store32 24 (store32 24 (store32 24 (bytes 24) 0 (20 , λ i → 24) a0) 4 (16 , λ i → 24) a1) 8 (12 , λ i → 24) a2) 12 (8 , λ i → 24) a3
+sum-b1234 : Bytes 24
+sum-b1234 = sum-bytes4 (u32 #1) (u32 #2) (u32 #3) (u32 #4)
+sum-bmax : Bytes 24
+sum-bmax = sum-bytes4 (u32 #2147483647) (u32 #1) (u32 #0) (u32 #0)
+-- on the net, before compiling
+#show sum-at sum-b1234 #4 #100
+#show sum-at sum-b1234 #5 #100
+-- the residual the compiler is given: sum-at normalized at open arguments (what specialization
+-- at the fixed program and the fixed layout leaves; the track file lists what is in it)
+#show λ (b : Bytes 24) (n : Word) (fuel : Word) → sum-at b n fuel
+#jit sum-at
+-- through the bytes: the sum; out of bounds; signed overflow; fuel spent; n = 0
+#show sum-at sum-b1234 #4 #100
+#show sum-at sum-b1234 #5 #100
+#show sum-at sum-bmax #4 #100
+#show sum-at sum-b1234 #4 #3
+#show sum-at sum-b1234 #0 #100

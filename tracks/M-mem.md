@@ -66,6 +66,19 @@ the result type of this layer is `MRes`, not `Res`.
 
 ## Needs from track A
 
+- (not blocking; cost of the compiler) `#jit sum-at` of `experiments/mem/sum.cub` takes
+  645,757,892 net steps for 283,927 bytes: 2,274 steps a byte, against 40 to 60 for the
+  workloads of PLAN §4.3 (`st8`: 22,489 steps, 414 bytes). The residual it is given normalizes
+  in 41,126 steps (14,806 cells), so the cost is in `jit-plan` after normalization (the
+  conversion check, `program-of`, `x-erase`, `x-lift`, the encoder), and it is not linear in
+  the code's size. The input reproduces it: load the five `lib/mem` files and
+  `experiments/mem/sum.cub`.
+- (not blocking; needed for section "What the specialized code still contains") the items
+  under A need case-of-case in the specializer; 9 needs `load64`/`store64` at a `Word` (or
+  `UInt64`) offset in lib/prim.cub, with the bound stated on words (`Lew`), so that
+  `by-fit`'s conversion to `Nat` and `toNat off` disappear; 13 needs `load64u`/`store64u` at
+  `UInt64` (or `u64`↔`i64` casts as primitives that are no code); 12 needs a process over a
+  signature with no commands to specialize to its answer (`ev-run-pure` under a loop).
 - (not blocking; cost only) primitives `f32add f32sub f32mul f32div f32eq f32lt : Float32 → …`,
   `f64off32 : Float32 → Float64`, `f32off64 : Float64 → Float32` (SSE `addss … cvtss2sd
   cvtsd2ss`), so that `f32-op`, `f32-widen`, `f64-narrow` of `lib/mem/scalar.cub` can be one
@@ -167,6 +180,71 @@ the result type of this layer is `MRes`, not `Res`.
   (`mem-load … (mp-obj #0 #16)`) is `mub ub-out-of-bounds`; {INT_MAX,1,0,0} is
   `mub ub-signed-overflow`; fuel 3 is `mstop st-fuel`; n = 0 is 0.
 
+- `experiments/mem/sum.cub`, through the compiler. **It compiles**:
+  `ok: jit sum-at   [283927 bytes, the checker's conversion, 645757892 steps]`.
+  `sum-at : Bytes 24 → Word → Word → Word × Word` takes the bytes of `int a[4]`'s allocation,
+  n and the fuel, builds the one-allocation memory, runs `sum-c` at `x86-64-sysv` and returns
+  (status, value). Through the bytes (8 net steps a call): {1,2,3,4}, n = 4 is `(#0 , #10)`;
+  n = 5 is `(#1 , #0)` (out of bounds); {INT_MAX,1,0,0} is `(#1 , #0)` (signed overflow);
+  fuel 3 is `(#2 , #0)`; n = 0 is `(#0 , #0)`: the same answers as on the net (28,990 steps a
+  call there). The file also prints the residual (`#show λ b n fuel → sum-at b n fuel`):
+  41,126 steps to normalize, 14,806 cells. Whole file: 2 m 46 s CPU (9 m 10 s wall on the
+  loaded machine, inside `timeout 600` with little to spare; cached afterwards).
+
+## What the specialized code still contains (the input to the binding-time design)
+
+The residual of `sum-at` (the program, the Target and the layout fixed; the array's bytes, n
+and the fuel open) has 194 `case`s, 16 `%load64`, 4 `%store64`, 289 `%welim`, and compiles to
+283,927 bytes for a loop a C compiler emits in about ten instructions. Everything below
+depends only on the program and the layout, and is still there:
+
+A. Left because normalization does not commute a case over a case (in each non-error branch
+   the scrutinee's constructor is known, but the outer case is stuck, so the inner one stays):
+   1. the `MRes` dispatch after every fallible step (`mok` 231, `mub` 202, `mstop` 208
+      occurrences);
+   2. the `Ctl` dispatch after every bind in the loop (35 to 40 occurrences of each of
+      `c-val c-ret c-break c-continue c-throw`), though nothing in this loop returns, breaks,
+      continues or throws;
+   3. the `SV` constructor check (`sv-as-i` on a value `sv-decode` has just built as `sv-i`):
+      8 six-way cases.
+B. Left because inside the loop the memory is a run-time value (it is an argument of the
+   loop's induction hypothesis), though its shape (three allocations, their ids, sizes,
+   alignments, liveness) is the program's:
+   4. the allocation looked up by id on every access (`al-find`: a list walk comparing
+      `al-id` with the literals 0, 1, 2; 15 recursive references);
+   5. per access: the liveness test, the zeroed test, the alignment test
+      `%weq (%wmod (%wadd base off) #4) #0` (8), the bounds equation with the size read from
+      the allocation;
+   6. the written marks: every scalar load reads a second window (`al-init`) and compares a
+      mask; every store writes one (16 `%load64` for 6 scalar loads and 2 stores, 4
+      `%store64` for 2 stores);
+   7. at every store the allocation's record rebuilt field by field and the allocation list
+      rebuilt (`al-replace`), and the stored bytes copied (the primitive store is pure);
+   8. the locals `s` and `i` are objects in memory whose address never escapes: 5 of the 6
+      loads and both stores of an iteration are theirs (`i` is loaded three times an
+      iteration, as C's semantics reads it).
+C. Left by the representation:
+   9. `toNat` of every offset, `%welim off zero (λ k h → suc h)`: `load64`/`store64` take a
+      unary `Nat` offset, so each access counts its offset up from zero;
+   10. types: each case's motive carries `Bytes (suc (suc … (%welim size zero …)))` (`by-cap`
+       of a run-time size): 268 occurrences of `Bytes (` and 2,432 `suc`. The compiler erases
+       them, but they are most of the term it processes;
+   11. the access proof's plumbing: at each access a `λ h → …` applied to a path
+       `λ (i : I) → …` (16), the proof itself erased;
+   12. the Church encoding of `Proc` across the loop: the loop's step is
+       `λ k again m R ret h → …`, every exit is a closure `λ R ret h → ret (…)`, and the answer
+       type `R` and the handler `h` of a signature with no commands (`NoS`) are passed at run
+       time;
+   13. primitive conversions by way of `Word`: `%u64ofw (%wofi64 (%load64 …))` at each window
+       (17) and `%i64ofw (%wofu64 …)` at each store (4), because the byte layer is `Int64`
+       and the scalar layer `UInt64`.
+D. A constraint found: the fuel must be a run-time value. At a literal fuel the specializer
+   unrolls the loop that many times (the recursion is on the fuel).
+
+What is genuinely run-time and stays: the loads of `p[i]`, the sign extension
+`((x & 0xffffffff) ^ 0x80000000) − 0x80000000`, the additions with their overflow tests, the
+comparison `i < n`, the bounds test of `p[i]` against the array, the fuel's count.
+
 ## Measured
 
 - target.cub + scalar.cub + memory.cub after the cached library: `1017 passed, 0 failed`; with
@@ -200,6 +278,8 @@ the result type of this layer is `MRes`, not `Res`.
   "no inferable type here: annotate it"; written out per constructor it checks.
 - A record literal bound by `let` without a signature (`let a = Alloc { … }`) fails the same
   way; `a : Alloc` on its own line before it fixes it.
+- `#show uq-sx` (a definition by `case` on a data type, applied to nothing) prints
+  `λ x0 x1 → <cprim>`: the printer has no form for what is inside.
 - `rem` is not usable as a local name (`expected in, found rem`).
 - There is no `Float32` arithmetic and no `Float32`↔`Float64` conversion among the primitives
   (only the bits). Both are written on the bits in scalar.cub, so nothing is missing from the
@@ -246,9 +326,13 @@ the result type of this layer is `MRes`, not `Res`.
 
 ## Next step
 
-In `experiments/mem/sum.cub` add the `#jit` part: a definition whose parameters cross the
-compiler's boundary (`Bytes 24` for the array's allocation, a `Word` for n; `AMem` itself does
-not cross: it holds a dependent pair), which builds the one-allocation memory, runs `sum-c` at
-`x86-64-sysv` through `ev-run-pure` and returns a `Word`; `#jit` it; record whether it
-compiles, the bytes, and what the specialized code still contains (print the specialized code
-if `#jit` offers it; otherwise normalize the definition with `#show` on variables).
+Every acceptance line is met; nothing is in progress. Final measurement to repeat after any
+change to a library file: `make library`, then the "How to check" command without the cache
+(`CUBICAL_NOCACHE=1`), then `experiments/mem/sum.cub` after the five files (about 3 minutes of
+CPU for its `#jit`). If the track continues, the order of value is: (1) with track A, the
+items of "What the specialized code still contains" (A needs case-of-case; B needs the memory's
+shape static in loops, e.g. allocations addressed by position in a known list or locals held
+outside the memory when their address does not escape; C needs the primitives named under
+"Needs"); (2) the Limits, in the order: effective types (which subsumes the union's active
+member), indeterminate values, subobject bounds, C++ base-class layout computation,
+`long double`.
