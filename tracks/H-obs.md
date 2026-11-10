@@ -127,6 +127,21 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   path equality (`og-bisim-path` by a guarded fixed point, `og-path-bisim`); `og-Tr` (traces
   with later tails and silent steps), `og-traces`, `og-TrEq`, `og-bisim-traces`.
 
+- "Where the guarded form differs", and the Church-level statements (`lib/obs.cub` 913 passed
+  0 failed, 22.4M steps; with `counter.cub` see the line printed by the command under "How to
+  check"): `og-tau-ne`, `og-tau-ne-path` (a silent step is seen by bisimilarity and by path
+  equality); `og-embed` (trees as guarded processes), `og-embed-guarded` (it is `to-guarded`
+  on natural processes), `og-embed-bisim`; `og-ghandle-id-ne` (lib/proc.cub's `ghandle` at the
+  identity handler is not the identity: on `PushS E` against `feed-world` the handled `recv`
+  is `pending` after 1 tick, `og-recv-handled-run1`, where `recv` has arrived, `og-recv-run`;
+  it arrives after 2, `og-recv-handled-run2`); `og-GT`, `og-Sees`, `og-WeakEq` (same outcome
+  against every world within some budget) with `og-weak-refl/sym/trans`, `og-bisim-weak`,
+  `og-tau-weak` (a silent step in front is weakly equal). Church level: `o-pobs`,
+  `o-pobs-step`, `o-pobs-natural`; `o-obs-comp` (obs through `H1` then `H2` is obs through
+  `o-compo H1 H2`: with `o-obs-id`, functoriality of obs as paths); `o-pbisim-refl/sym/trans`,
+  `o-path-pbisim`, `o-pbisim-path` (natural), `o-pbisim-traces`; congruence of equality in the
+  quotient: `o-class-tree`, `o-class-eq`, `o-class-bind`, `o-class-handle`, `o-class-obs`.
+
 ## Found
 
 - `lib/std.cub` has no set quotient `_/_` and no truncations (the track text says it has); the
@@ -178,18 +193,27 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   fails with `wrong endpoint at 1` (the left side holds `dfix F α f (t α)`, the right
   `F (dfix F) f (t α)`).
 
+- Stated exactly, for the guarded form. Proved: strong bisimilarity (silent steps counted) is
+  path equality at each clock, as for trees; it is strictly finer than what an observer sees
+  (`og-tau-ne` against `og-tau-weak`), and `ghandle` does not preserve identities
+  (`og-ghandle-id-ne`) where `o-handle` does (`o-handle-id`). Not proved: that `ghandle` by the
+  identity handler is *weakly* equal to the process for every process, and congruence of
+  `og-WeakEq` under `gbind`/`ghandle`. Why: both need the unfolding of `gbind`, `ghandle` and
+  `grun` at a tick variable, i.e. `pfix` at their functionals, which have no names (previous
+  entry). The track's items do not ask for an observation quotient of `GProc`; `og-WeakEq` is
+  the relation such a quotient would be taken by.
+- `≈` (`o-ObsEq`) across two observations is not a congruence for sequencing by itself: equal
+  observed behaviour says nothing about the final hidden states, which the continuation
+  starts from. The congruence that holds is on runs with a relation on states
+  (`o-runsim-bind`), and on classes of processes over the observation signature itself
+  (`o-class-bind`).
+
 ## Next step
 
-In `lib/obs.cub`, "where the guarded form differs", each as a checked statement:
-1. `og-tau-ne`: `gtau (next (gret a))` is not bisimilar (so not equal) to `gret a`.
-2. `og-embed : Step S A → GProc κ S A`, equal to `to-guarded p` for natural `p`; tree
-   bisimilarity gives guarded bisimilarity of the embeddings.
-3. lib/proc.cub's `ghandle` at the identity handler is not the identity (it inserts a silent
-   step per command), unlike `o-handle-id`: needs `ghandle`'s unfolding at a tick, which is
-   `pfix` at the elaborated functional written out by hand (see Found).
-4. `og-WeakEq` on `(κ : Clock) → GProc κ S A`: the same outcome against every world within some
-   budget (`grun-for`), an equivalence that ignores silent steps: reflexive, symmetric,
-   transitive, implied by bisimilarity at every clock, and `gtau (next p)` weakly equal to `p`.
-Then re-read the track's six items against Done and close any gap; final check of everything
-with the command under "How to check", plus `make library` (one run, ~10 min) to confirm the
-library itself is unaffected.
+1. `experiments/obs/context.cub`: up to context used on a real shape: one source signature
+   `ok-K` (recv, reply, incr, read) compiled by two tree handlers into `oc-S1` (cell) and
+   `oc-S2` (state passing); the four per-command `o-RunSim` obligations; by
+   `o-runsim-context` every program over `ok-K` has equal behaviour under the two compilations.
+2. Final pass: re-read the six items against Done; run the command under "How to check" once
+   with `CUBICAL_NOCACHE=1` (whole library uncached, to rule out a stale store) and record the
+   totals; make sure the track file's status is final.

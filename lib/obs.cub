@@ -599,3 +599,149 @@ og-TrEq : {κ : Clock} {S : Sig} {A : Type} → GProc κ S A → GProc κ S A �
 og-TrEq {κ} {S} {A} p q = (x : og-Tr κ S A) → og-traces p x ≡ og-traces q x
 og-bisim-traces : {κ : Clock} {S : Sig} {A : Type} → (p q : GProc κ S A) → og-Bisim p q → og-TrEq p q
 og-bisim-traces p q b = λ x i → og-traces (og-bisim-path p q b i) x
+-- ---------------------------------------------------------------- where the guarded form differs
+-- (1) a silent step is seen by bisimilarity, hence by path equality
+og-tau-ne : {κ : Clock} {S : Sig} {A : Type} → (a : A) → og-Bisim {κ} {S} {A} (gtau (next (gret a))) (gret a) → Empty
+og-tau-ne a e = e
+og-tau-ne-path : {κ : Clock} {S : Sig} {A : Type} → (a : A) → Path (GProc κ S A) (gtau (next (gret a))) (gret a) → Empty
+og-tau-ne-path {κ} {S} {A} a e = og-tau-ne {κ} {S} {A} a (og-path-bisim (gtau (next (gret a))) (gret a) e)
+-- (2) a tree is a guarded process with no silent step, at every clock; for a natural Church
+-- process this is lib/proc.cub's to-guarded; bisimilar trees embed to bisimilar guarded processes
+og-embed : {κ : Clock} {S : Sig} {A : Type} → Step S A → GProc κ S A
+og-embed {κ} {S} {A} t = o-fold {lzero} {S} {A} {GProc κ S A} (λ a → gret a) (λ c k → gcmd c (λ r → next (k r))) t
+og-embed-guarded : {κ : Clock} {S : Sig} {A : Type} → (p : Proc {lzero} S A) → o-Natural p → to-guarded {κ} {S} {A} p ≡ og-embed (to-step p)
+og-embed-guarded {κ} {S} {A} p np = np (GProc κ S A) (λ a → gret a) (λ c k → gcmd c (λ r → next (k r)))
+og-embed-bisim : {κ : Clock} {S : Sig} {A : Type} → (t u : Step S A) → o-Bisim t u → og-Bisim {κ} {S} {A} (og-embed t) (og-embed u)
+og-embed-bisim {κ} {S} {A} t u b = og-path-bisim (og-embed t) (og-embed u) (λ i → og-embed {κ} {S} {A} (o-bisim-path t u b i))
+-- (4) the equivalence that ignores silent steps: on processes given at every clock, the same
+-- outcome against every world within some budget of ticks
+og-GT : Sig → Type → Type
+og-GT S A = (κ : Clock) → GProc κ S A
+og-Sees : {S : Sig} {A : Type} → og-GT S A → og-GT S A → Type (lsuc lzero)
+og-Sees {S} {A} p q = (St : Type) → (w : World S St) → (st : St) → (n : Nat) → (x : Outcome A × St) →
+                      grun-for n w p st ≡ arrived x → (m : Nat) × (grun-for m w q st ≡ arrived x)
+og-WeakEq : {S : Sig} {A : Type} → og-GT S A → og-GT S A → Type (lsuc lzero)
+og-WeakEq p q = og-Sees p q × og-Sees q p
+og-sees-refl : {S : Sig} {A : Type} → (p : og-GT S A) → og-Sees p p
+og-sees-refl p = λ St w st n x e → (n , e)
+og-sees-trans : {S : Sig} {A : Type} → (p q r : og-GT S A) → og-Sees p q → og-Sees q r → og-Sees p r
+og-sees-trans p q r h1 h2 = λ St w st n x e → h2 St w st (fst (h1 St w st n x e)) x (snd (h1 St w st n x e))
+og-weak-refl : {S : Sig} {A : Type} → (p : og-GT S A) → og-WeakEq p p
+og-weak-refl p = (og-sees-refl p , og-sees-refl p)
+og-weak-sym : {S : Sig} {A : Type} → (p q : og-GT S A) → og-WeakEq p q → og-WeakEq q p
+og-weak-sym p q h = (snd h , fst h)
+og-weak-trans : {S : Sig} {A : Type} → (p q r : og-GT S A) → og-WeakEq p q → og-WeakEq q r → og-WeakEq p r
+og-weak-trans p q r h1 h2 = (og-sees-trans p q r (fst h1) (fst h2) , og-sees-trans r q p (snd h2) (snd h1))
+-- bisimilar at every clock is equal, so weakly equal
+og-bisim-gt-path : {S : Sig} {A : Type} → (p q : og-GT S A) → ((κ : Clock) → og-Bisim (p κ) (q κ)) → p ≡ q
+og-bisim-gt-path p q h = λ i κ → og-bisim-path (p κ) (q κ) (h κ) i
+og-path-weak : {S : Sig} {A : Type} → (p q : og-GT S A) → p ≡ q → og-WeakEq p q
+og-path-weak {S} {A} p q e = comp (λ i → og-WeakEq p (e i)) (λ i → []) (og-weak-refl p)
+og-bisim-weak : {S : Sig} {A : Type} → (p q : og-GT S A) → ((κ : Clock) → og-Bisim (p κ) (q κ)) → og-WeakEq p q
+og-bisim-weak p q h = og-path-weak p q (og-bisim-gt-path p q h)
+-- a silent step in front changes nothing for it: one more tick of budget
+og-is-arrived : {X : Type} → Within X → Type
+og-is-arrived w = case w of arrived x → Unit; pending → Empty
+og-tau : {S : Sig} {A : Type} → og-GT S A → og-GT S A
+og-tau {S} {A} p = λ κ → gtau (next {lzero} {κ} {GProc κ S A} (p κ))
+og-tau-sees : {S : Sig} {A : Type} → (p : og-GT S A) → og-Sees (og-tau p) p
+og-tau-sees {S} {A} p = λ St w st n → case n return (λ z → (x : Outcome A × St) → grun-for z w (og-tau p) st ≡ arrived x → (m : Nat) × (grun-for m w p st ≡ arrived x)) of
+  zero → λ x e → Empty-rec (comp (λ i → og-is-arrived (e (~ i))) (λ i → []) unit)
+  suc k → λ x e → (k , e)
+og-sees-tau : {S : Sig} {A : Type} → (p : og-GT S A) → og-Sees p (og-tau p)
+og-sees-tau p = λ St w st n x e → (suc n , e)
+og-tau-weak : {S : Sig} {A : Type} → (p : og-GT S A) → og-WeakEq (og-tau p) p
+og-tau-weak p = (og-tau-sees p , og-sees-tau p)
+-- (3) lib/proc.cub's ghandle inserts a silent step for each command it handles, so handling by
+-- the identity handler is not the identity (on trees it is: o-handle-id). Shown on the push
+-- signature against lib/proc.cub's feed-world: the handled process needs one more tick
+og-idh : {S : Sig} → Handler S S
+og-idh {S} c = cmd {lzero} {S} c
+og-recv : {E : Type} → og-GT (PushS E) E
+og-recv {E} = λ κ → gissue {κ} {PushS E} recv
+og-recv-handled : {E : Type} → og-GT (PushS E) E
+og-recv-handled {E} = λ κ → ghandle {κ} {PushS E} {PushS E} {E} (og-idh {PushS E}) (gissue {κ} {PushS E} recv)
+og-recv-run : {E : Type} → (e : E) → Path (Within (Outcome E × List E)) (grun-for 1 (feed-world {E}) (og-recv {E}) (cons e nil)) (arrived (done e , nil))
+og-recv-run e = λ i → arrived (done e , nil)
+og-recv-handled-run1 : {E : Type} → (e : E) → Path (Within (Outcome E × List E)) (grun-for 1 (feed-world {E}) (og-recv-handled {E}) (cons e nil)) pending
+og-recv-handled-run1 e = λ i → pending
+og-recv-handled-run2 : {E : Type} → (e : E) → Path (Within (Outcome E × List E)) (grun-for 2 (feed-world {E}) (og-recv-handled {E}) (cons e nil)) (arrived (done e , nil))
+og-recv-handled-run2 e = λ i → arrived (done e , nil)
+og-ghandle-id-ne : {E : Type} → (e : E) → Path (og-GT (PushS E) E) (og-recv-handled {E}) (og-recv {E}) → Empty
+og-ghandle-id-ne {E} e h =
+  comp (λ i → og-is-arrived {Outcome E × List E} (grun-for {PushS E} {E} {List E} 1 (feed-world {E}) (h (~ i)) (cons e nil))) (λ i → []) unit
+-- ---------------------------------------------------------------- the Church form's statements
+-- obs on a Church process: the observed tree as a process again (at any level); its tree is
+-- the observed tree, and it is natural
+o-pobs : {l : Level} {O S : Sig} {A St : Type} → o-ObsOf O S St → Proc {lzero} S A → St → Proc {l} O A
+o-pobs {l} {O} {S} {A} {St} H p s = o-reify {l} {O} {A} (o-obs H (to-step p) s)
+o-pobs-step : {O S : Sig} {A St : Type} → (H : o-ObsOf O S St) → (p : Proc {lzero} S A) → (s : St) →
+              to-step (o-pobs {lzero} {O} {S} {A} {St} H p s) ≡ o-obs H (to-step p) s
+o-pobs-step H p s = o-reify-step (o-obs H (to-step p) s)
+o-pobs-natural : {O S : Sig} {A St : Type} → (H : o-ObsOf O S St) → (p : Proc {lzero} S A) → (s : St) →
+                 o-Natural (o-pobs {lzero} {O} {S} {A} {St} H p s)
+o-pobs-natural {O} {S} {A} {St} H p s = o-natural-reify {lzero} {O} {A} (o-obs H (to-step p) s)
+-- functoriality of obs itself: the identity observation is the identity, and observing through
+-- H1 then H2 is observing through their composite
+o-obs-comp-l : {O T S : Sig} {A X Y : Type} → (H1 : o-ObsOf T S X) → (H2 : o-ObsOf O T Y) → (t : Step S A) → (s1 : X) → (s2 : Y) →
+               o-obs (o-compo H1 H2) t (s1 , s2) ≡ o-bind {O} {(A × X) × Y} {A} (o-run {O} {T} {A × X} {Y} H2 (o-run H1 t s1) s2) (λ x → sdone (fst (fst x)))
+o-obs-comp-l {O} {T} {S} {A} {X} {Y} H1 H2 t s1 s2 =
+  calc o-obs (o-compo H1 H2) t (s1 , s2)
+     ≡ o-map {O} {A × (X × Y)} {A} (λ x → fst x) (o-map {O} {(A × X) × Y} {A × (X × Y)} (λ x → o-assoc x) (o-run {O} {T} {A × X} {Y} H2 (o-run H1 t s1) s2))
+         by (λ i → o-map {O} {A × (X × Y)} {A} (λ x → fst x) (o-run-comp H1 H2 t s1 s2 i))
+     ≡ o-bind {O} {(A × X) × Y} {A} (o-run {O} {T} {A × X} {Y} H2 (o-run H1 t s1) s2) (λ x → sdone (fst (fst x)))
+         by o-bind-assoc {O} {(A × X) × Y} {A × (X × Y)} {A} (o-run {O} {T} {A × X} {Y} H2 (o-run H1 t s1) s2) (λ x → sdone (o-assoc x)) (λ x → sdone (fst x))
+o-obs-comp-r : {O T : Sig} {A X Y : Type} → (H2 : o-ObsOf O T Y) → (u : Step T (A × X)) → (s2 : Y) →
+               o-obs {O} {T} {A} {Y} H2 (o-map {T} {A × X} {A} (λ x → fst x) u) s2 ≡ o-bind {O} {(A × X) × Y} {A} (o-run H2 u s2) (λ x → sdone (fst (fst x)))
+o-obs-comp-r {O} {T} {A} {X} {Y} H2 u s2 =
+  calc o-obs {O} {T} {A} {Y} H2 (o-map {T} {A × X} {A} (λ x → fst x) u) s2
+     ≡ o-map {O} {A × Y} {A} (λ x → fst x) (o-bind {O} {(A × X) × Y} {A × Y} (o-run H2 u s2) (λ x → sdone (fst (fst x) , snd x)))
+         by (λ i → o-map {O} {A × Y} {A} (λ x → fst x) (o-run-bind {O} {T} {A × X} {A} {Y} H2 u (λ x → sdone (fst x)) s2 i))
+     ≡ o-bind {O} {(A × X) × Y} {A} (o-run H2 u s2) (λ x → sdone (fst (fst x)))
+         by o-bind-assoc {O} {(A × X) × Y} {A × Y} {A} (o-run H2 u s2) (λ x → sdone (fst (fst x) , snd x)) (λ x → sdone (fst x))
+o-obs-comp : {O T S : Sig} {A X Y : Type} → (H1 : o-ObsOf T S X) → (H2 : o-ObsOf O T Y) → (t : Step S A) → (s1 : X) → (s2 : Y) →
+             o-obs (o-compo H1 H2) t (s1 , s2) ≡ o-obs H2 (o-obs H1 t s1) s2
+o-obs-comp {O} {T} {S} {A} {X} {Y} H1 H2 t s1 s2 =
+  calc o-obs (o-compo H1 H2) t (s1 , s2)
+     ≡ o-bind {O} {(A × X) × Y} {A} (o-run {O} {T} {A × X} {Y} H2 (o-run H1 t s1) s2) (λ x → sdone (fst (fst x))) by o-obs-comp-l H1 H2 t s1 s2
+     ≡ o-obs {O} {T} {A} {Y} H2 (o-obs H1 t s1) s2 by sym (o-obs-comp-r {O} {T} {A} {X} {Y} H2 (o-run H1 t s1) s2)
+-- bisimilarity of Church processes: an equivalence relation; implied by path equality, and it
+-- implies path equality exactly where the processes are natural
+o-pbisim-refl : {S : Sig} {A : Type} → (p : Proc {lzero} S A) → o-PBisim p p
+o-pbisim-refl p = o-bisim-refl (to-step p)
+o-pbisim-sym : {S : Sig} {A : Type} → (p q : Proc {lzero} S A) → o-PBisim p q → o-PBisim q p
+o-pbisim-sym p q b = o-bisim-sym (to-step p) (to-step q) b
+o-pbisim-trans : {S : Sig} {A : Type} → (p q r : Proc {lzero} S A) → o-PBisim p q → o-PBisim q r → o-PBisim p r
+o-pbisim-trans p q r b1 b2 = o-bisim-trans (to-step p) (to-step q) (to-step r) b1 b2
+o-path-pbisim : {S : Sig} {A : Type} → (p q : Proc {lzero} S A) → p ≡ q → o-PBisim p q
+o-path-pbisim p q e = o-path-bisim (to-step p) (to-step q) (λ i → to-step (e i))
+o-pbisim-path : {S : Sig} {A : Type} → (p q : Proc {lzero} S A) → o-Natural p → o-Natural q → o-PBisim p q → p ≡ q
+o-pbisim-path p q np nq b = o-natural-path p q np nq (o-bisim-path (to-step p) (to-step q) b)
+o-pbisim-traces : {S : Sig} {A : Type} → (p q : Proc {lzero} S A) → o-PBisim p q → (x : o-Tr S A) → o-ptraces p x ≡ o-ptraces q x
+o-pbisim-traces p q b = o-bisim-traces (to-step p) (to-step q) b
+-- ---------------------------------------------------------------- congruence of equality in the quotient
+-- for processes over the observation signature itself (sets of commands and results): equal
+-- classes stay equal under bind, under lib/proc.cub's handle, and under a further observation
+o-class-tree : {O : Sig} {A : Type} → isSet (Cmd O) → isSet A → (p q : Proc {lzero} O A) → o-class p ≡ o-class q → to-step p ≡ to-step q
+o-class-tree sc sa p q e = λ i → o-nf sc sa (e i)
+o-class-eq : {O : Sig} {A : Type} → (p q : Proc {lzero} O A) → to-step p ≡ to-step q → o-class p ≡ o-class q
+o-class-eq p q e = λ i → o-qeq p q (o-path-bisim (to-step p) (to-step q) e) i
+o-class-bind : {O : Sig} {A B : Type} → isSet (Cmd O) → isSet A → isSet B → (p q : Proc {lzero} O A) → (f g : A → Proc {lzero} O B) →
+               o-Natural p → o-Natural q → o-class p ≡ o-class q → ((a : A) → o-class (f a) ≡ o-class (g a)) →
+               o-class (bind p f) ≡ o-class (bind q g)
+o-class-bind sc sa sb p q f g np nq e h =
+  o-class-eq (bind p f) (bind q g)
+    (o-bisim-path (to-step (bind p f)) (to-step (bind q g))
+       (o-pbisim-bind p q f g np nq (o-path-bisim (to-step p) (to-step q) (o-class-tree sc sa p q e))
+          (λ a → o-path-bisim (to-step (f a)) (to-step (g a)) (o-class-tree sc sb (f a) (g a) (h a)))))
+o-class-handle : {S W : Sig} {A : Type} → isSet (Cmd S) → isSet A → (hd : Handler S W) → ((c : Cmd S) → o-Natural (hd c)) →
+                 (p q : Proc {lzero} S A) → (p1 q1 : Proc {lsuc lzero} S A) →
+                 o-NaturalAt {lsuc lzero} {S} {A} p p1 → o-NaturalAt {lsuc lzero} {S} {A} q q1 →
+                 o-class p ≡ o-class q → o-class (handle hd p1) ≡ o-class (handle hd q1)
+o-class-handle sc sa hd nh p q p1 q1 np nq e =
+  o-class-eq (handle hd p1) (handle hd q1)
+    (o-bisim-path (to-step (handle hd p1)) (to-step (handle hd q1))
+       (o-pbisim-handle hd nh p q p1 q1 np nq (o-path-bisim (to-step p) (to-step q) (o-class-tree sc sa p q e))))
+o-class-obs : {O S : Sig} {A St : Type} → isSet (Cmd S) → isSet A → (H : o-ObsOf O S St) → (p q : Proc {lzero} S A) → (s : St) →
+              o-class p ≡ o-class q → o-beh H p s ≡ o-beh H q s
+o-class-obs {O} {S} {A} {St} sc sa H p q s e = λ i → o-tbeh H (o-class-tree sc sa p q e i) s
