@@ -1639,6 +1639,7 @@ static void subst_level(Cell *o, Cell *v) {
         link(r, out);
         break;
     }
+    case V_SEL: { Cell *a = cell(O_SELC, 4); link(sub(v->port[1], s), P(a, 0)); link(sub(v->port[2], s), P(a, 1)); link(sub(v->port[3], s), P(a, 2)); link(P(a, 3), out); break; }
     case V_NWOP: { Cell *a = cell((int)v->x, 3); link(sub(v->port[1], s), P(a, 0)); link(sub(v->port[2], s), P(a, 1)); link(P(a, 2), out); break; }
     case V_NWELIM: { Cell *a = cell(O_WELIM, v->n); for (int k = 1; k < v->n; k++) link(sub(v->port[k], s), P(a, k - 1)); link(P(a, v->n - 1), out); break; }
     case V_NPRIM: {
@@ -1875,11 +1876,11 @@ static void neutral_proj(Cell *o, Cell *v) {
 enum { W_LAM, W_PAIR, W_PI, W_SIGMA, W_U, W_PATH, W_PLAM, W_IV, W_FACE, W_SYS, W_GLUE, W_GLUEV, W_DATA, W_CON,
        W_HCOMP, W_VAR, W_APP, W_FST, W_SND, W_PAPP, W_COMP, W_UNGLUE, W_ELIM, W_TRANS, W_LEVEL, W_OTHER,
        W_WORD, W_WLIT, W_WPLUS, W_WOP, W_WELIM, W_COFIX, W_PROJ, W_REC, W_CLOCK, W_TICK, W_CLOCK0, W_TICK0, W_HCOMPU, W_UNGLUEU,
-       W_PTY, W_PLIT, W_BYTES, W_PRIM, W_BITS, W_BOP, W_N };
+       W_PTY, W_PLIT, W_BYTES, W_PRIM, W_BITS, W_BOP, W_SEL, W_N };
 static const char *WNAME[W_N] = { "wlam", "wpair", "wpi", "wsigma", "wu", "wpath", "wplam", "wiv", "wface", "wsys", "wglue",
     "wgluev", "wdata", "wcon", "whcomp", "wvar", "wapp", "wfst", "wsnd", "wpapp", "wcomp", "wunglue", "welim", "wtrans",
     "wlevel", "wother", "wword", "wwlit", "wwplus", "wwop", "wwelim", "wcofix", "wproj", "wrec", "wclock", "wtick",
-    "wclock0", "wtick0", "whcompu", "wunglueu", "wpty", "wplit", "wbytes", "wprim", "wbitv", "wbopv" };
+    "wclock0", "wtick0", "whcompu", "wunglueu", "wpty", "wplit", "wbytes", "wprim", "wbitv", "wbopv", "wselv" };
 static int WC[W_N], C_LNIL = -1, C_LCONS, C_TRUE, C_FALSE, C_NONE, C_SOME;
 static int B_TRUE = -1, B_FALSE;
 static void need_bool(void) {
@@ -2172,6 +2173,116 @@ static Port nbop(int k, Port a, Port b) {
     link(a, P(n, 1)); if (b) link(b, P(n, 2));
     return P(n, 0);
 }
+/* ---------------- conditional values ----------------
+ * case c of true → a; false → b, with c a computed bit (a Boolean not true or false): both branches
+ * are computed, and an elimination of the conditional is the conditional of the eliminations (Bool's
+ * η: the branches are the case's own at true and at false, so in each the elimination is the same).
+ * Where both branches are words they are one word, each bit (c ∧ a) ∨ (¬c ∧ b); where both are one
+ * constructor, the constructor of the fields' conditionals; where both are one term, that term. */
+static Port sel_build(Port c, Port a, Port b) {
+    Key *ka = key_of_port(a), *kb = key_of_port(b);
+    bool same = ka && ka == kb;
+    if (ka) key_release(ka);
+    if (kb) key_release(kb);
+    if (same) { era(c); era(b); return a; }
+    Cell *s = cell(O_SEL, 4);
+    link(a, P(s, 0)); link(c, P(s, 1)); link(b, P(s, 2));
+    return P(s, 3);
+}
+static Bit bit_mux(Bit c, Bit a, Bit b) {
+    if (a.t < 2 && b.t < 2) {
+        if (a.t == b.t) { bit_era(c); return a; }
+        return a.t ? c : bit_not(c);
+    }
+    if (bit_same(a, b)) { bit_era(c); bit_era(b); return a; }
+    Bit c1, c2; bit_dup(c, &c1, &c2);
+    return bit_or(bit_and(c1, a), bit_and(bit_not(c2), b));
+}
+static bool sel_ops(int k) {
+    switch (k) {
+    case O_APP: case O_FST: case O_SND: case O_PROJ: case O_CASE: case O_WSUCC: case O_WELIM: case O_WOP2:
+    case O_WEQ: case O_WLT: case O_WADD: case O_WMAX: case O_WSUB: case O_WMUL: case O_WDIV: case O_WMOD:
+    case O_WAND: case O_WOR: case O_WXOR: case O_WSHL: case O_WSHR:
+    case O_BOP: case O_BOP2: case O_WBIT: case O_FORCE: case O_UNFOLD: return true;
+    default: return false;
+    }
+}
+/* the operation o (its principal port waiting) at x and at y, the conditional of c between them:
+ * o's other operands shared; o freed */
+static void sel_split(Cell *o, Port c, Port x, Port y) {
+    Cell *o1 = clone(o), *o2 = clone(o);
+    if (o1->key) { key_release(o1->key); o1->key = NULL; }
+    if (o2->key) { key_release(o2->key); o2->key = NULL; }
+    for (int k = 1; k < o->n - 1; k++) { Port p1, p2; split2(o->port[k], &p1, &p2); link(p1, P(o1, k)); link(p2, P(o2, k)); }
+    Port out = o->port[o->n - 1];
+    Port r1 = P(o1, o->n - 1), r2 = P(o2, o->n - 1);
+    link(x, P(o1, 0)); link(y, P(o2, 0));
+    link(sel_build(c, r1, r2), out);
+    cell_free(o);
+}
+static void sel_distribute(Cell *o, Cell *v) {
+    Port c = v->port[1], a = v->port[2], b = v->port[3];
+    cell_free(v);
+    sel_split(o, c, a, b);
+}
+/* a word operation's first operand (held at port 1) a conditional: the operation on each branch */
+static void sel_wop_left(Cell *o, Cell *v) {
+    Cell *s = PC(o->port[1]);
+    Port c = s->port[1], a = s->port[2], b = s->port[3];
+    cell_free(s);
+    Port v1, v2; split2(P(v, 0), &v1, &v2);
+    Cell *w1 = cell((int)o->x, 3), *w2 = cell((int)o->x, 3);
+    link(a, P(w1, 0)); link(v1, P(w1, 1)); link(b, P(w2, 0)); link(v2, P(w2, 1));
+    link(sel_build(c, P(w1, 2), P(w2, 2)), o->port[2]);
+    cell_free(o);
+}
+static void rule_sel2(Cell *o, Cell *v) {
+    Port c = o->port[1], a = o->port[2], out = o->port[3];
+    Cell *A = PC(a), *B = v;
+    cell_free(o);
+    if (A->key && A->key == B->key) { era(c); era(P(B, 0)); link(a, out); return; }
+    bool wa = (A->kind == V_WORD) || A->kind == V_BITS, wb = (B->kind == V_WORD) || B->kind == V_BITS;
+    if (wa && wb) {
+        BVec x = bvec_take(A), y = bvec_take(B);
+        uint32_t n = x.n > y.n ? x.n : y.n;
+        Bit *r = malloc(((size_t)n + 1) * sizeof(Bit)), cb = bvar(c);
+        for (uint32_t i = 0; i < n; i++) { Bit c1, c2; bit_dup(cb, &c1, &c2); cb = c2; r[i] = bit_mux(c1, bvec_at(&x, i), bvec_at(&y, i)); }
+        bit_era(cb);
+        link(bvec_build(r, n), out);
+        free(r); free(x.b); free(y.b);
+        return;
+    }
+    if (A->kind == V_CON && B->kind == V_CON && A->a == B->a && CON[A->a].ndims == 0) {
+        int nf = CON[A->a].nfields, ci = (int)A->a;
+        Port *f = malloc(((size_t)nf + 1) * sizeof(Port));
+        Port cr = c;
+        for (int j = 0; j < nf; j++) {
+            Port c1 = cr;
+            if (j < nf - 1) split2(cr, &c1, &cr);
+            f[j] = sel_build(c1, A->port[1 + j], B->port[1 + j]);
+        }
+        if (!nf) era(c);
+        cell_free(A); cell_free(B);
+        link(con_build(ci, f, NULL), out);
+        free(f);
+        return;
+    }
+    if (A->kind == V_PAIR && B->kind == V_PAIR) {
+        Port c1, c2; split2(c, &c1, &c2);
+        Port x = sel_build(c1, A->port[1], B->port[1]), y = sel_build(c2, A->port[2], B->port[2]);
+        cell_free(A); cell_free(B);
+        link(pair_of(x, y), out);
+        return;
+    }
+    Cell *s = cell(V_SEL, 4);
+    {
+        Key *kc[3] = { key_of_port(c), A->key ? key_retain(A->key) : NULL, B->key ? key_retain(B->key) : NULL };
+        if (kc[0] && kc[1] && kc[2]) s->key = key(K_SEL, 0, NULL, 3, kc);
+        for (int j = 0; j < 3; j++) if (kc[j]) key_release(kc[j]);
+    }
+    link(c, P(s, 1)); link(a, P(s, 2)); link(P(B, 0), P(s, 3));
+    link(P(s, 0), out);
+}
 static void rule_view(Cell *o, Cell *v) {
     need_cons();
     Port out = o->port[1], r = 0;
@@ -2199,6 +2310,7 @@ static void rule_view(Cell *o, Cell *v) {
         break;
     }
     case V_NBOP: r = mk(WC[W_BOP], word_of((uint64_t)v->x), list_of(&v->port[1], v->n - 1), 0, 0); break;
+    case V_SEL: r = mk(WC[W_SEL], v->port[1], v->port[2], v->port[3], 0); break;
     case V_NWELIM: {
         /* the motive, when the elimination was written with one (%welimP): some P, else none (the
          * quote reads it: lib/check.cub's qneu gives cwelim its motive, the loop's state type) */
@@ -2415,7 +2527,7 @@ static const char *const KIND_NAME[K_END] = {
     [V_THUNK] = "THUNK", [V_DEFER] = "DEFER",
     [V_WPLUS] = "WPLUS",
     [V_NWOP] = "NWOP",
-    [V_BITS] = "BITS", [V_NBOP] = "NBOP",
+    [V_BITS] = "BITS", [V_NBOP] = "NBOP", [V_SEL] = "SEL",
     [V_NPRIM] = "NPRIM",
     [V_NWELIM] = "NWELIM",
     [V_SUSP] = "SUSP",
@@ -2482,7 +2594,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_WOP2] = "WOP2",
     [O_WELIM] = "WELIM",
     [O_PEND] = "PEND",
-    [O_BOP] = "BOP", [O_BOP2] = "BOP2", [O_WBIT] = "WBIT",
+    [O_BOP] = "BOP", [O_BOP2] = "BOP2", [O_WBIT] = "WBIT", [O_SEL] = "SEL", [O_SEL2] = "SEL2", [O_SELC] = "SELC",
     [O_KEQ] = "KEQ", [O_KEQ2] = "KEQ2",
     [O_CLOS] = "CLOS",
     [O_CLOS2] = "CLOS2",
@@ -2603,7 +2715,24 @@ static void interact(Cell *o, Cell *v) {
         cell_free(o);
         return;
     }
+    if (vk == V_SEL && sel_ops(o->kind)) { sel_distribute(o, v); return; }
     switch (o->kind) {
+    case O_SEL: {
+        Cell *c = cell(O_SEL2, 4);
+        mv(o, 2, P(c, 0)); mv(o, 1, P(c, 1)); link(P(v, 0), P(c, 2)); mv(o, 3, P(c, 3));
+        cell_free(o);
+        return;
+    }
+    case O_SEL2: rule_sel2(o, v); return;
+    case O_SELC: {
+        need_bool();
+        if (vk == V_CON && ((int)v->a == B_TRUE || (int)v->a == B_FALSE)) {
+            bool t = (int)v->a == B_TRUE; cell_free(v);
+            if (t) { link(o->port[1], o->port[3]); era(o->port[2]); } else { link(o->port[2], o->port[3]); era(o->port[1]); }
+        } else link(sel_build(P(v, 0), o->port[1], o->port[2]), o->port[3]);
+        cell_free(o);
+        return;
+    }
     case O_APP:
         if (vk == V_CASEF) {
             /* the elimination as a function, applied: the case on the argument */
@@ -3273,6 +3402,9 @@ static void interact(Cell *o, Cell *v) {
                     return;
                 }
             }
+            /* a case on a computed bit otherwise: the conditional of the bit between the case at
+             * true and at false */
+            if (vk == V_NBOP) { sel_split(o, P(v, 0), con_build(B_TRUE, NULL, NULL), con_build(B_FALSE, NULL, NULL)); return; }
             /* stuck: a neutral elimination, of type the motive at the scrutinee */
             /* 1=scrutinee [2=motive] then the environment, type */
             /* its motive, which types it, is built here from the environment */
@@ -3762,6 +3894,7 @@ static void interact(Cell *o, Cell *v) {
     case O_WOP2: {
         need_bool();
         Cell *ac = PC(o->port[1]);
+        if (ac->kind == V_SEL) { sel_wop_left(o, v); return; }
         if (ac->kind != V_WORD || vk != V_WORD) {
             WN t1, t0;
             bool ab = ac->kind == V_BITS || bitcase_nums(ac, &t1, &t0), vb = vk == V_BITS || bitcase_nums(v, &t1, &t0);

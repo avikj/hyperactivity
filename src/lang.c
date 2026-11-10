@@ -2819,6 +2819,7 @@ static void rb_one(FILE *o, Port prov) {
     case V_NWELIM: push_fields_to(o, "%welim", c, 1, 4); return;
     case V_BITS: { extern void bits_pattern(const Cell *, char *, size_t); char nm[1100]; bits_pattern(c, nm, sizeof nm); push_fields(o, nm, c, 1); return; }
     case V_NBOP: { static const char *bn[] = { "%bnot", "%band", "%bor", "%bxor" }; push_fields(o, bn[c->x & 3], c, 1); return; }
+    case V_SEL: push_fields(o, "%sel", c, 1); return;
     case V_NPRIM: {
         /* a primitive operation stuck on a neutral: the operation at its arguments */
         static const char *PO1[] = { "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
