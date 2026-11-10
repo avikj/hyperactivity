@@ -34,9 +34,43 @@ Files you own: `lib/isa/tso.cub`, `lib/mem/atomics.cub`, `experiments/tso/**`, t
 - A two-thread spin-lock (xchg-based) as a term with mutual exclusion stated as a type over
   every schedule up to a bound and checked.
 
+## Continuation (items 4–7, assigned by the coordinator after items 1–3 were accepted)
+
+4. **`TsoSound` proved in general**, in `lib/isa/tso.cub` (or `lib/isa/tso-sound.cub` loaded
+   after it): by induction on the schedule with an invariant relating buffers and memory to
+   the witness built so far; lemmas about lists/orders written where used. If the rf/co form
+   makes the invariant awkward, restate in the memory-order form (Owens–Sarkar–Sewell) and
+   prove the two equivalent or replace one. Also: the acyclicity decision procedure proved
+   correct against path-freeness; the converse (completeness) stated and proved, or the exact
+   obstacle recorded.
+   *Acceptance*: a term `tso-sound : TsoSound` checks; a term relating `tso-acyclic` to
+   "no path from a node to itself" checks; `TsoComplete` is a type with a term, or its
+   obstacle is under Limits with the precise missing step; no "stated, not proved" entry for
+   soundness remains under Limits.
+5. **The language-level model**, `lib/mem/rc11.cub`: the C++ (RC11-style) consistency
+   predicate for the five orderings over `TsoEv`/`TsoX`-shaped candidates; its outcome sets on
+   the litmus programs per ordering choice; as checked paths on those programs through both
+   handlers, "outcomes on TSO ⊆ outcomes the language model allows"; that inclusion stated in
+   general and proved from `TsoSound` plus "TSO-consistent executions of handled programs are
+   RC11-consistent".
+   *Acceptance*: the per-ordering outcome sets recorded with steps; the inclusion paths check
+   for SB/MP/LB/IRIW × orderings × both handlers; the general inclusion has a term, or exactly
+   which lemma is missing is recorded.
+6. **Events from real instructions**: in `lib/isa/tso.cub`, the memory-event signature track
+   B's model must meet (read/write of n bytes at an address, locked prefix, mfence, thread id)
+   and the handler from it onto `TsoS`; a "Needs from track B" section with the exact request;
+   checked against whatever B has landed.
+   *Acceptance*: the signature and handler check; one program written against the signature
+   runs over `tso-world` with its outcome set recorded; the request to B is written.
+7. **`tso-ax-outcomes` orders only writes to one address** (n! → product of per-address
+   factorials), and the spin-lock's axiomatic set is computed.
+   *Acceptance*: the six `x-ax` paths still check (candidate counts restated); the spin-lock's
+   axiomatic set recorded with steps and stated equal to the operational one.
+
 ## Needs from track A
 
-- `Makefile`: append `lib/isa/tso.cub lib/mem/atomics.cub` to `LIB` (after `lib/world.cub`'s
+- DONE by track A (commit `a30e0b2b`): both files are in `LIB`. The request was:
+  `Makefile`: append `lib/isa/tso.cub lib/mem/atomics.cub` to `LIB` (after `lib/world.cub`'s
   dependents; they need only `lib/proc.cub`, `lib/world.cub`, and `tso.cub` before
   `atomics.cub`), so `make library` checks them: +134 checks, +568,491 steps. Not blocking:
   everything here is checked by naming the files after `$LIBS`.
@@ -180,6 +214,26 @@ How to check (cached library, one file after another; the last line must read `N
   with the list as the first parameter, it checks. Every such definition in my files puts the
   matched argument first (`tso-go`, `tso-quiet`, `tso-choices`). The error is fatal for the
   load (later files are not read), unlike a `FAIL:` line.
+- **Elaborator refuses a recursion through a continuation rebound by a dependent case** (now
+  track S's, `tracks/S-surface.md`). Smallest input (after the library, which has `TsoIS`):
+  ```
+  g5-f : Step TsoIS Word → Word
+  g5-f (sdone a) = a
+  g5-f (scmd i kk) =
+    (case i return (λ x → (tsoi-resp x → Step TsoIS Word) → Word) of
+       t-load a → λ k2 → g5-f (k2 #0)
+       t-store a v → λ k2 → g5-f (k2 unit)
+       t-xchg a v → λ k2 → g5-f (k2 #0)
+       t-cmpxchg a o n → λ k2 → g5-f (k2 #0)
+       t-mfence → λ k2 → g5-f (k2 unit)) kk
+  ```
+  gives `error: g5-f: a recursive call is not on a constructor field or a field's field from
+  one of the definition's own matches (structural recursion)` (fatal for the load). `k2` is
+  `kk`, the matched constructor's field, passed through the case's motive so its domain
+  `tsoi-resp i` computes in each branch; the call `g5-f (k2 v)` is on that field applied.
+  The non-dependent form `g (scmd c k) = h c (λ x → g (k x))` is accepted (`tso-step-fold`,
+  `at-handle`), which is the way round used here.
+- An unchanged file is `cached:` and its `#show` readings are not printed again.
 - A data constructor takes no implicit arguments: `scmd {S} {A} c k` is `FAIL … an implicit
   argument {..} applied to something without implicit arguments`; write `scmd c k`.
 - `append`, `map`, `length` of `lib/prelude.cub` are not checked definitions (`error: code: not a
@@ -209,16 +263,11 @@ How to check (cached library, one file after another; the last line must read `N
 
 ## Next step
 
-The track's specification and acceptance are complete; nothing is in progress. What a
-continuation would do is exactly the open items under Limits, in this order:
-1. The general proof of `TsoSound` in `lib/isa/tso.cub`: an invariant on `TsoSt` (each event's
-   stamp is its position in the trace, a write's stamp its flush; every `tso-ghb` and
-   `tso-loc` edge between events of the log increases the stamp) preserved by `tso-instr` and
-   `tso-flush1`, then "a relation that increases a stamp is `tso-acyclic`".
-2. `tso-perms` per location instead of over all writers, then the spin-lock's axiomatic set.
-3. When track B's instruction model emits memory events (PLAN Phase 2 item 4, "integrated with
-   the instruction model's memory events"): a handler from B's memory accesses to `TsoIS`, so a
-   lifted binary's threads are `TsoThread`s. Nothing of B's is used here yet; `lib/isa/tso.cub`
-   depends only on `lib/proc.cub` and `lib/world.cub`.
-To load after the library, in this order: `lib/isa/tso.cub`, then `lib/mem/atomics.cub`
-(neither is in the Makefile's `LIB`; see "Needs from track A").
+Items 1–3 are complete. Items 4–7 (section "Continuation") in this order: 7, 6, 5, 4.
+Now: item 7. In `lib/isa/tso.cub` replace the use of `tso-perms` over all writers in
+`tso-ax-outcomes` by per-address orders (group the writer ids by address, enumerate each
+group's permutations, concatenate the groups: `tso-consistent` reads only same-address
+positions), re-run the six `x-ax` paths (candidate counts change), then add the spin-lock's
+axiomatic set to `experiments/tso/spinlock.cub`.
+Note `$LIBS` now already contains `lib/isa/tso.cub lib/mem/atomics.cub`: name only the
+experiment files after it.
