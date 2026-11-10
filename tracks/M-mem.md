@@ -110,9 +110,35 @@ the result type of this layer is `MRes`, not `Res`.
   `mub ub-signed-overflow` (promotion to int); `long + unsigned` is `long` at x86-64 and
   `unsigned long` at i386.
 
+- `lib/mem/memory.cub` (the memory type is `AMem`: `Mem` and `Memory` are lib/proc.cub's):
+  `AKind`, record `Alloc` (id, size, alignment, live, kind, base address, zeroed, `al-data` and
+  `al-init : Bytes (by-cap al-size)`, the allocation's bytes and one written-mark byte per
+  byte), `AMem` (allocations, next id, next address). Access proofs: `by-chk s size` (a word
+  equation), `by-lew`, `by-drop`, `by-fit : Lew s size → le (plus (toNat s) 8) (by-cap size)`:
+  the proof `load64`/`store64` need is made from the bounds check that reports
+  `ub-out-of-bounds`, so there is one check per access and no unproved access. Operations:
+  `mem-alloc`, `mem-release` (kind-checked end of storage), `mem-free` (`ub-double-free`,
+  `ub-free-not-dynamic`, `ub-free-interior`), `mem-load[-al]`, `mem-store[-al]`
+  (`ub-out-of-bounds`, `ub-dead`, `ub-misaligned`, `ub-uninit` except at 8-bit kinds,
+  `ub-null`, `ub-bad-bool`; byte order from the Target), `mem-memmove`, `mem-memcpy`
+  (`ub-overlap`), `mem-memset`, `mem-ptr-add` (one past the end allowed), `mem-ptr-diff`,
+  `mem-addr`, `mem-ptr-of-addr`, `mem-conv` (pointer↔integer under `tg-ptr-int`),
+  `mem-ptr-cmp` (order by address under `pi-flat`). Read by `#show` on a 12-byte and a 16-byte
+  allocation: a fresh int load is `mub ub-uninit`; store −2 then load is −2, its byte 3 is 255
+  at x86-64, and byte 3 of 258 stored at s390x is 2; offset 12 is `ub-out-of-bounds`, offset 2
+  `ub-misaligned`; load after free `ub-dead`, second free `ub-double-free`; a pointer stored
+  and loaded is the same pointer; memcpy of 12 bytes of which 8 were written leaves the copy's
+  last int `ub-uninit`; `p+3` of `int[3]` is one past the end and `p+4` is `ub-ptr-arith`;
+  `(uintptr_t)` of allocation 1 offset 4 is 65556, 65548 converts back to allocation 0 offset
+  12 and 65549 (the gap) to `mp-addr #65549`.
+
 ## Measured
 
-- target.cub + scalar.cub after the cached library: `949 passed, 0 failed` (the cached library alone is 767, so 182 checks are this track's).
+- target.cub + scalar.cub + memory.cub after the cached library: `1001 passed, 0 failed` (the
+  cached library alone is 767, so 234 checks are this track's).
+- Net steps of single operations: a load about 600, a store about 800, an 8-byte memcpy about
+  9,000 (each byte is a window read and a window write, and a write copies the allocation's
+  bytes: stores are pure).
 
 ## Found
 
@@ -128,6 +154,16 @@ the result type of this layer is `MRes`, not `Res`.
   columns right of where it looks, and the parser reports `expected in, found <name>`; a
   multi-line `case` after `→ (let x = (case …` fails with `error: (case e branch...)` and no
   position. Written around: a multi-binding `let` starts on its own line.
+- Structural recursion is accepted only in one shape, and the messages do not say which:
+  `f o n (cons b bs) a = … f o (wsub n #1) bs …` (an argument before the matched one changes)
+  is refused with "a recursive call is not on a constructor field or a field's field", though
+  `bs` is a field; a partial application `f bs o n` passed as a function is refused with "a
+  recursive call must give every argument after the one it recurses on". Accepted: the matched
+  argument first, the call fully applied (under a λ is fine).
+- A catch-all branch that returns its scrutinee (`case r of mstop w → …; r2 → r2`) fails with
+  "no inferable type here: annotate it"; written out per constructor it checks.
+- A record literal bound by `let` without a signature (`let a = Alloc { … }`) fails the same
+  way; `a : Alloc` on its own line before it fixes it.
 - `rem` is not usable as a local name (`expected in, found rem`).
 - There is no `Float32` arithmetic and no `Float32`↔`Float64` conversion among the primitives
   (only the bits). Both are written on the bits in scalar.cub, so nothing is missing from the
@@ -140,13 +176,31 @@ the result type of this layer is `MRes`, not `Res`.
   format and arithmetic written on the bits.
 - Floating-point operations follow IEEE 754 with round-to-nearest-even and no exception flags;
   the rounding mode and `fenv` are not state of the machine.
+- `load64`/`store64` are the host's: lib/prim.cub does not state their byte order. memory.cub
+  reads the 8-byte window as a little-endian number (x86-64); on a big-endian host the same
+  file would give `mem-load` at 1, 2 and 4 bytes the wrong bytes. A Target's byte order is
+  independent of this and is honoured (`en-fix`).
+- Types of objects in memory are not tracked: there is no effective type, so strict-aliasing
+  violations are not undefined here (a `float` stored and an `int` loaded gives the bits). It
+  would add a per-byte type tag to `Alloc` and a check in `mem-load-al`.
+- An indeterminate value is not a value: an 8-bit load of a byte never written returns the
+  byte the allocation holds (0 for a fresh one) instead of an indeterminate byte that would
+  make later arithmetic on it undefined. It would add an `sv-indet` constructor to `SV`.
+- Allocation never fails and addresses are never reused; the address space is unbounded
+  (`Word`), except that a pointer stored at a 4-byte pointer size must have an address below
+  2^32 (else `mstop st-unsupported`).
+- A function pointer's address is its id + 1 and must be below `tg-base` (65536 in the three
+  Targets), which bounds the number of functions.
+- A memory operation costs a walk of the allocation list (`al-find`), and a store copies the
+  allocation's bytes (the primitive store is pure).
 - Pointer equality treats pointers into different allocations as different: "one past the end
   of A equals the start of B" (unspecified in C++, possible on real hardware) never holds.
 
 ## Next step
 
-Write `lib/mem/memory.cub`: `Alloc` (size, alignment, live, kind, base address, `Bytes` data,
-`Bytes` initialized mask), `Memory` (a list of allocations and the next id/address), `mem-alloc`,
-`mem-free`, `mem-load t k p`, `mem-store t k p v` (byte order from the Target), `mem-memcpy`,
-`mem-memmove`, `mem-memset`, `ptr-add`, `ptr-diff`, `ptr-to-int`, `int-to-ptr`. Byte access goes
-through `load64`/`store64` of lib/prim.cub with the proof built from a decided bound.
+Write `lib/mem/layout.cub`: record layouts as data (`Field`: name id, offset, type; `Layout`:
+size, alignment, fields, bases, vptr offset), a type language `MTy` (scalar at a C type or a
+kind, array, record by layout), `lay-struct` computing offsets from member types by the
+Target's sizes and alignments (the Itanium/SysV rule: each member at the next multiple of its
+alignment, size rounded to the record's alignment), and typed access (`fld-ptr`, `elem-ptr`,
+`obj-load`, `obj-store`) through `mem-ptr-add`/`mem-load-al`/`mem-store-al`.

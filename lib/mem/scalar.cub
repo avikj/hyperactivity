@@ -35,8 +35,10 @@ mr-map f r = case r of
 -- integer widths; a kind: an integer (signed or not) of a width, bool, the two binary floats, a pointer
 data IW = iw8 | iw16 | iw32 | iw64 | iw128
 data SK = sk-int (sg : Bool) (w : IW) | sk-bool | sk-f32 | sk-f64 | sk-ptr
--- a pointer: null, a place in an allocation (its id and a byte offset), or a function (its id)
-data MPtr = mp-null | mp-obj (a : Word) (off : Word) | mp-fn (f : Word)
+-- a pointer: null, a place in an allocation (its id and a byte offset), a function (its id), or
+-- an address that is in no allocation (what an integer converted to a pointer may be: it
+-- converts back to the integer, and every access through it is undefined)
+data MPtr = mp-null | mp-obj (a : Word) (off : Word) | mp-fn (f : Word) | mp-addr (x : Word)
 -- a value. An integer of at most 64 bits is sv-i of its value extended to 64 bits (by its sign
 -- when the kind is signed, by zeros otherwise): the canonical form every operation keeps. A
 -- 128-bit integer is its two halves.
@@ -733,6 +735,9 @@ mp-eq p q = case p of
     _ → false)
   mp-fn f → (case q of
     mp-fn g → weq f g
+    _ → false)
+  mp-addr x → (case q of
+    mp-addr y → weq x y
     _ → false)
 -- equality is decided for every pair (pointers into different allocations are different: a
 -- pointer one past the end of one allocation is not the start of another here). An order is

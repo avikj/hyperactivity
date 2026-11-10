@@ -1,0 +1,411 @@
+-- lib/mem/memory.cub — the memory of an abstract machine as a value. Loaded after
+-- lib/mem/scalar.cub. A memory is a list of allocations; an allocation has an id, a size, an
+-- alignment, a liveness, a storage kind, a base address, its bytes and, byte for byte, whether
+-- each has been written. A pointer names an allocation by id and a byte offset in it (MPtr of
+-- scalar.cub). Every operation is a pure function of the memory into MRes: out of bounds, a
+-- dead allocation, a misaligned access, an uninitialized read and a wrong free are undefined
+-- behaviour with their reason.
+--
+-- The bytes are lib/prim.cub's Bytes, read and written 8 at a time by load64/store64 with the
+-- proof that the access fits: an allocation of size s holds s + 8 bytes, so the 8-byte window
+-- at any offset o ≤ s fits, and the proof is made from the bounds check itself (the check is
+-- an equation between words, decided by one evaluation; by-fit turns it into the proof).
+-- The window is read as a little-endian word: load64 is the host's, x86-64's (lib/prim.cub does
+-- not state its byte order; see the track's Limits).
+
+-- ---------------------------------------------------------------- the access proof from the bounds check
+by-cap : Word → Nat
+by-cap size = toNat (wadd size #8)
+-- s ≤ size, decided: s + (size - s) = size with truncated subtraction
+by-chk : Word → Word → Bool
+by-chk s size = weq (wadd s (wsub size s)) size
+by-lew : (s size : Word) → by-chk s size ≡ true → Lew s size
+by-lew s size h = (wsub size s , catw (plusw≡wadd s (wsub size s)) (weq-sound (wadd s (wsub size s)) size h))
+-- o + k ≤ size gives o ≤ size
+by-drop : (o k size : Word) → Lew (wadd o k) size → Lew o size
+by-drop o k size l =
+  (plusw k (fst l) , catw (symw (plusw-assoc o k (fst l))) (catw (congw (λ z → plusw z (fst l)) (plusw≡wadd o k)) (snd l)))
+-- o ≤ size gives the window's bound in the allocation's bytes
+by-fit : (s size : Word) → Lew s size → le (plus (toNat s) 8) (by-cap size)
+by-fit s size l =
+  lew-to-le (plus (toNat s) 8) (by-cap size)
+    (le-transport (fromNat (plus (toNat s) 8)) (fromNat (by-cap size)) (plusw s #8) (plusw size #8)
+       (symw (catw (fromNat-plus (toNat s) 8) (congw (λ z → plusw z #8) (fromNat-toNat s))))
+       (catw (plusw≡wadd size #8) (symw (fromNat-toNat (wadd size #8))))
+       (le-add s size #8 #8 l (lew-refl #8)))
+
+-- ---------------------------------------------------------------- allocations
+data AKind = ak-auto | ak-static | ak-dynamic
+-- al-zeroed: every byte not yet written reads as an initialized zero (static storage, calloc)
+record Alloc = { al-id : Word ; al-size : Word ; al-align : Word ; al-live : Bool ; al-kind : AKind
+               ; al-base : Word ; al-zeroed : Bool
+               ; al-data : Bytes (by-cap al-size) ; al-init : Bytes (by-cap al-size) }
+uq-of-i64 : Int64 → UInt64
+uq-of-i64 x = u64 (i64toWord x)
+i64-of-uq : UInt64 → Int64
+i64-of-uq x = i64 (u64toWord x)
+-- a Word below 2^64 as a UInt64 (u64 is stuck on a larger one: the low 64 bits are taken)
+uq-of-word : Word → UInt64
+uq-of-word w = u64 (wand w #18446744073709551615)
+-- the 8-byte windows at o of the bytes and of the written marks
+al-win : (a : Alloc) → (o : Word) → Lew o (al-size a) → DQ
+al-win a o l =
+  ( uq-of-i64 (load64 (by-cap (al-size a)) (al-data a) (toNat o) (by-fit o (al-size a) l))
+  , uq-of-i64 (load64 (by-cap (al-size a)) (al-init a) (toNat o) (by-fit o (al-size a) l)) )
+al-put : (a : Alloc) → (o : Word) → Lew o (al-size a) → DQ → Alloc
+al-put a o l w =
+  Alloc { al-id = al-id a ; al-size = al-size a ; al-align = al-align a ; al-live = al-live a
+        ; al-kind = al-kind a ; al-base = al-base a ; al-zeroed = al-zeroed a
+        ; al-data = store64 (by-cap (al-size a)) (al-data a) (toNat o) (by-fit o (al-size a) l) (i64-of-uq (fst w))
+        ; al-init = store64 (by-cap (al-size a)) (al-init a) (toNat o) (by-fit o (al-size a) l) (i64-of-uq (snd w)) }
+al-set-live : Alloc → Bool → Alloc
+al-set-live a b =
+  Alloc { al-id = al-id a ; al-size = al-size a ; al-align = al-align a ; al-live = b
+        ; al-kind = al-kind a ; al-base = al-base a ; al-zeroed = al-zeroed a
+        ; al-data = al-data a ; al-init = al-init a }
+-- the mask of the low k bytes of a window (k from 1 to 8)
+by-mask : Word → UInt64
+by-mask k = case weq k #8 of
+  true → uq-ones
+  false → u64sub (u64shl uq1 (u64 (wmul k #8))) uq1
+-- k bytes at o (k at most 8), as a little-endian number: out of bounds when o + k exceeds the
+-- size; uninitialized when a byte was never written, unless the read allows it (un)
+al-rd : Bool → Alloc → Word → Word → MRes UInt64
+al-rd un a o k =
+  (case by-chk (wadd o k) (al-size a) return (λ b → by-chk (wadd o k) (al-size a) ≡ b → MRes UInt64) of
+     true → λ h →
+       (let w = al-win a o (by-drop o k (al-size a) (by-lew (wadd o k) (al-size a) h))
+        in case m-or (m-or un (al-zeroed a)) (u64eq (u64and (snd w) (by-mask k)) (by-mask k)) of
+             true → mok (u64and (fst w) (by-mask k))
+             false → mub ub-uninit)
+     false → λ h → mub ub-out-of-bounds)
+  (λ i → by-chk (wadd o k) (al-size a))
+-- k bytes at o with their written marks, whatever they are (a copy moves both)
+al-rd-raw : Alloc → Word → Word → MRes DQ
+al-rd-raw a o k =
+  (case by-chk (wadd o k) (al-size a) return (λ b → by-chk (wadd o k) (al-size a) ≡ b → MRes DQ) of
+     true → λ h →
+       (let w = al-win a o (by-drop o k (al-size a) (by-lew (wadd o k) (al-size a) h))
+        in mok (u64and (fst w) (by-mask k) , u64and (snd w) (by-mask k)))
+     false → λ h → mub ub-out-of-bounds)
+  (λ i → by-chk (wadd o k) (al-size a))
+-- the low k bytes of v written at o, with the marks given (all ones: written)
+al-wr : Alloc → Word → Word → UInt64 → UInt64 → MRes Alloc
+al-wr a o k v mk =
+  (case by-chk (wadd o k) (al-size a) return (λ b → by-chk (wadd o k) (al-size a) ≡ b → MRes Alloc) of
+     true → λ h →
+       (let l = by-drop o k (al-size a) (by-lew (wadd o k) (al-size a) h)
+            w = al-win a o l
+            keep = uq-not (by-mask k)
+        in mok (al-put a o l ( u64or (u64and (fst w) keep) (u64and v (by-mask k))
+                             , u64or (u64and (snd w) keep) (u64and mk (by-mask k)) )))
+     false → λ h → mub ub-out-of-bounds)
+  (λ i → by-chk (wadd o k) (al-size a))
+
+-- ---------------------------------------------------------------- the memory
+-- the allocations (latest first), the next id, the next free address
+record AMem = { mem-allocs : List Alloc ; mem-count : Word ; mem-next : Word }
+mem-empty : Target → AMem
+mem-empty t = AMem { mem-allocs = nil ; mem-count = #0 ; mem-next = tg-base t }
+-- an id no allocation has is a reader's error (ids are made by mem-alloc only)
+al-find : Word → List Alloc → MRes Alloc
+al-find i nil = mstop st-ill-typed
+al-find i (cons a as) = case weq (al-id a) i of
+  true → mok a
+  false → al-find i as
+al-replace : Alloc → List Alloc → List Alloc
+al-replace b nil = nil
+al-replace b (cons a as) = case weq (al-id a) (al-id b) of
+  true → cons b as
+  false → cons a (al-replace b as)
+mem-put : AMem → Alloc → AMem
+mem-put m a = AMem { mem-allocs = al-replace a (mem-allocs m) ; mem-count = mem-count m ; mem-next = mem-next m }
+-- a new allocation of a size and an alignment (a power of two; 0 is a reader's error). Its base
+-- is the next free address rounded up to the alignment; one byte is left after it, so no
+-- allocation starts where another ends and every address is in at most one allocation's span
+-- (one past the end included). zeroed: static storage and calloc. Allocation does not fail
+-- here: an allocator's failure is a response of the world (lib/mem/monad.cub's commands).
+mem-alloc : AKind → Bool → Word → Word → AMem → MRes (MPtr × AMem)
+mem-alloc kd zeroed size align m = case weq align #0 of
+  true → mstop st-ill-typed
+  false →
+    (let base = wmul (wquot (wadd (mem-next m) (wsub align #1)) align) align
+         a : Alloc
+         a = Alloc { al-id = mem-count m ; al-size = size ; al-align = align ; al-live = true
+                   ; al-kind = kd ; al-base = base ; al-zeroed = zeroed
+                   ; al-data = bytes (by-cap size) ; al-init = bytes (by-cap size) }
+     in mok ( mp-obj (mem-count m) #0
+            , AMem { mem-allocs = cons a (mem-allocs m) ; mem-count = wadd (mem-count m) #1
+                     ; mem-next = wadd (wadd base size) #1 } ))
+-- the live allocation a pointer is into, and the offset: null, a function, an address in no
+-- allocation and a dead allocation are undefined
+mem-at : AMem → MPtr → MRes (Alloc × Word)
+mem-at m p = case p of
+  mp-null → mub ub-null
+  mp-fn f → mub ub-fn-as-object
+  mp-addr x → mub ub-out-of-bounds
+  mp-obj i o → mr-bind (al-find i (mem-allocs m)) (λ a → case al-live a of
+    true → mok (a , o)
+    false → mub ub-dead)
+ak-same : AKind → AKind → Bool
+ak-same a b = case a of
+  ak-auto → (case b of
+    ak-auto → true
+    _ → false)
+  ak-static → (case b of
+    ak-static → true
+    _ → false)
+  ak-dynamic → (case b of
+    ak-dynamic → true
+    _ → false)
+-- the end of an allocation of a storage kind: the pointer must be to its start, it must be
+-- live (else a double free) and of that kind
+mem-release : AKind → MPtr → AMem → MRes AMem
+mem-release kd p m = case p of
+  mp-null → mub ub-null
+  mp-fn f → mub ub-fn-as-object
+  mp-addr x → mub ub-out-of-bounds
+  mp-obj i o → mr-bind (al-find i (mem-allocs m)) (λ a → case al-live a of
+    false → mub ub-double-free
+    true → (case ak-same (al-kind a) kd of
+      false → mub ub-free-not-dynamic
+      true → (case weq o #0 of
+        false → mub ub-free-interior
+        true → mok (mem-put m (al-set-live a false)))))
+-- free: of a null pointer, nothing; else the end of a dynamic allocation
+mem-free : MPtr → AMem → MRes AMem
+mem-free p m = case p of
+  mp-null → mok m
+  _ → mem-release ak-dynamic p m
+
+-- ---------------------------------------------------------------- byte order
+bswap16 : UInt64 → UInt64
+bswap16 x = u64or (u64shl (u64and x (u64 #255)) (u64 #8)) (u64and (u64shr x (u64 #8)) (u64 #255))
+bswap32 : UInt64 → UInt64
+bswap32 x = u64or (u64shl (bswap16 (u64and x (u64 #65535))) (u64 #16)) (bswap16 (u64and (u64shr x (u64 #16)) (u64 #65535)))
+bswap64 : UInt64 → UInt64
+bswap64 x = u64or (u64shl (bswap32 (u64and x (u64 #4294967295))) (u64 #32)) (bswap32 (u64shr x (u64 #32)))
+-- the k low bytes of a number in the Target's order, as the window's little-endian number (and back: the same)
+en-fix : Endian → Word → UInt64 → UInt64
+en-fix e k x = case e of
+  en-little → x
+  en-big → (case weq k #1 of
+    true → x
+    false → (case weq k #2 of
+      true → bswap16 x
+      false → (case weq k #4 of
+        true → bswap32 x
+        false → bswap64 x)))
+
+-- ---------------------------------------------------------------- addresses
+-- a pointer's address: 0 for null; base + offset in an allocation (live or not); a function's
+-- is its id + 1 and must be below the Target's first base; an address is itself
+mem-addr : Target → AMem → MPtr → MRes Word
+mem-addr t m p = case p of
+  mp-null → mok #0
+  mp-obj i o → mr-map (λ a → wadd (al-base a) o) (al-find i (mem-allocs m))
+  mp-fn f → (case wlt (wadd f #1) (tg-base t) of
+    true → mok (wadd f #1)
+    false → mstop st-unsupported)
+  mp-addr x → mok x
+-- the pointer of an address: the allocation whose span (one past the end included) holds it
+al-of-addr : Word → List Alloc → MPtr
+al-of-addr x nil = mp-addr x
+al-of-addr x (cons a as) = case m-and (not (wlt x (al-base a))) (not (wlt (wadd (al-base a) (al-size a)) x)) of
+  true → mp-obj (al-id a) (wsub x (al-base a))
+  false → al-of-addr x as
+mem-ptr-of-addr : Target → AMem → Word → MPtr
+mem-ptr-of-addr t m x = case weq x #0 of
+  true → mp-null
+  false → (case wlt x (tg-base t) of
+    true → mp-fn (wsub x #1)
+    false → al-of-addr x (mem-allocs m))
+
+-- ---------------------------------------------------------------- scalars in bytes
+-- a value's representation as a number of the kind's size (two halves; the high one 0 below 16 bytes)
+sv-encode : Target → AMem → SK → SV → MRes DQ
+sv-encode t m k v = case k of
+  sk-int sg w → (case w of
+    iw128 → sv-as-w v
+    _ → mr-map (λ x → (uq-zx w x , uq0)) (sv-as-i v))
+  sk-bool → mr-map (λ b → (uq-b b , uq0)) (sv-as-b v)
+  sk-f32 → mr-map (λ x → (f32-bits x , uq0)) (sv-as-f v)
+  sk-f64 → mr-map (λ x → (f64-bits x , uq0)) (sv-as-d v)
+  sk-ptr → mr-bind (sv-as-p v) (λ p → mr-bind (mem-addr t m p) (λ x →
+    case m-or (weq (tg-size t ck-ptr) #8) (wlt x #4294967296) of
+      true → mok (uq-of-word x , uq0)
+      false → mstop st-unsupported))
+-- a bool whose representation is neither 0 nor 1 is undefined to read
+sv-decode : Target → AMem → SK → DQ → MRes SV
+sv-decode t m k r = case k of
+  sk-int sg w → (case w of
+    iw128 → mok (sv-of-dq r)
+    _ → mok (sv-i (uq-cn sg w (fst r))))
+  sk-bool → (case uq-iszero (fst r) of
+    true → mok (sv-b false)
+    false → (case u64eq (fst r) uq1 of
+      true → mok (sv-b true)
+      false → mub ub-bad-bool))
+  sk-f32 → mok (sv-f (f32-of-bits (fst r)))
+  sk-f64 → mok (sv-d (f64-of-bits (fst r)))
+  sk-ptr → mok (sv-p (mem-ptr-of-addr t m (u64toWord (fst r))))
+-- reading uninitialized bytes is allowed at the 8-bit integer kinds only (the character types)
+sk-char-like : SK → Bool
+sk-char-like k = case k of
+  sk-int sg w → (case w of
+    iw8 → true
+    _ → false)
+  _ → false
+al-aligned : Alloc → Word → Word → Bool
+al-aligned a o al = weq (wrem (wadd (al-base a) o) al) #0
+-- size bytes at offset o of an allocation as a number in the Target's order (16 bytes: two windows)
+al-rd-num : Bool → Endian → Alloc → Word → Word → MRes DQ
+al-rd-num un e a o size = case weq size #16 of
+  false → mr-map (λ x → (en-fix e size x , uq0)) (al-rd un a o size)
+  true → mr-bind (al-rd un a o #8) (λ x → mr-bind (al-rd un a (wadd o #8) #8) (λ y → case e of
+    en-little → mok (x , y)
+    en-big → mok (bswap64 y , bswap64 x)))
+al-wr-num : Endian → Alloc → Word → Word → DQ → MRes Alloc
+al-wr-num e a o size r = case weq size #16 of
+  false → al-wr a o size (en-fix e size (fst r)) uq-ones
+  true → (case e of
+    en-little → mr-bind (al-wr a o #8 (fst r) uq-ones) (λ a2 → al-wr a2 (wadd o #8) #8 (snd r) uq-ones)
+    en-big → mr-bind (al-wr a o #8 (bswap64 (snd r)) uq-ones) (λ a2 → al-wr a2 (wadd o #8) #8 (bswap64 (fst r)) uq-ones))
+
+-- ---------------------------------------------------------------- load and store
+-- at an alignment given (a type's: ct-align), or the kind's own
+mem-load-al : Target → SK → Word → MPtr → AMem → MRes SV
+mem-load-al t k al p m = mr-bind (mem-at m p) (λ ao → case al-aligned (fst ao) (snd ao) al of
+  false → mub ub-misaligned
+  true → mr-bind (al-rd-num (sk-char-like k) (tg-endian t) (fst ao) (snd ao) (sk-size t k)) (sv-decode t m k))
+mem-load : Target → SK → MPtr → AMem → MRes SV
+mem-load t k p m = mem-load-al t k (sk-align t k) p m
+mem-store-al : Target → SK → Word → MPtr → SV → AMem → MRes AMem
+mem-store-al t k al p v m = mr-bind (mem-at m p) (λ ao → case al-aligned (fst ao) (snd ao) al of
+  false → mub ub-misaligned
+  true → mr-bind (sv-encode t m k v) (λ r →
+    mr-map (mem-put m) (al-wr-num (tg-endian t) (fst ao) (snd ao) (sk-size t k) r)))
+mem-store : Target → SK → MPtr → SV → AMem → MRes AMem
+mem-store t k p v m = mem-store-al t k (sk-align t k) p v m
+
+-- ---------------------------------------------------------------- copies and fills
+-- n bytes from offset o, each with its written mark, last byte first
+al-bytes-rev : Alloc → Word → Word → MRes (List DQ)
+al-bytes-rev a o n =
+  %welimP (λ v → MRes (List DQ)) n (mok nil)
+    (λ j acc → mr-bind acc (λ bs → mr-map (λ b → cons b bs) (al-rd-raw a (wadd o j) #1)))
+-- such a list written back so that its head lands at o + n - 1
+al-bytes-put : List DQ → Word → Word → Alloc → MRes Alloc
+al-bytes-put nil o n a = mok a
+al-bytes-put (cons b bs) o n a =
+  mr-bind (al-wr a (wadd o (wsub n #1)) #1 (fst b) (snd b)) (λ a2 → al-bytes-put bs o (wsub n #1) a2)
+-- the range [o , o + n) is inside the allocation
+al-in : Alloc → Word → Word → Bool
+al-in a o n = by-chk (wadd o n) (al-size a)
+-- memmove: n bytes from src to dst, the source read whole before the destination is written
+-- (so the ranges may overlap); both ranges must be inside live allocations. The written marks
+-- move with the bytes: copying an object with padding or unwritten members is defined, and the
+-- copy's unwritten bytes stay unwritten.
+mem-memmove : MPtr → MPtr → Word → AMem → MRes AMem
+mem-memmove dst src n m =
+  mr-bind (mem-at m src) (λ s → case al-in (fst s) (snd s) n of
+    false → mub ub-out-of-bounds
+    true → mr-bind (al-bytes-rev (fst s) (snd s) n) (λ bs →
+      mr-bind (mem-at m dst) (λ d → case al-in (fst d) (snd d) n of
+        false → mub ub-out-of-bounds
+        true → mr-map (mem-put m) (al-bytes-put bs (snd d) n (fst d)))))
+-- memcpy: memmove, and undefined when the ranges overlap
+mp-overlap : MPtr → MPtr → Word → Bool
+mp-overlap p q n = case p of
+  mp-obj a x → (case q of
+    mp-obj b y → m-and (weq a b) (m-and (wlt x (wadd y n)) (wlt y (wadd x n)))
+    _ → false)
+  _ → false
+mem-memcpy : MPtr → MPtr → Word → AMem → MRes AMem
+mem-memcpy dst src n m = case mp-overlap dst src n of
+  true → mub ub-overlap
+  false → mem-memmove dst src n m
+-- memset: n bytes at dst set to the low 8 bits of a value
+al-fill : Alloc → Word → Word → UInt64 → MRes Alloc
+al-fill a o n v =
+  %welimP (λ x → MRes Alloc) n (mok a)
+    (λ j acc → mr-bind acc (λ a2 → al-wr a2 (wadd o j) #1 v uq-ones))
+mem-memset : MPtr → UInt64 → Word → AMem → MRes AMem
+mem-memset dst v n m =
+  mr-bind (mem-at m dst) (λ d → case al-in (fst d) (snd d) n of
+    false → mub ub-out-of-bounds
+    true → mr-map (mem-put m) (al-fill (fst d) (snd d) n v))
+
+-- ---------------------------------------------------------------- pointer arithmetic
+-- p + i elements of a size (i a signed 64-bit number): the result must be inside the live
+-- allocation or one past its end; anything beyond is undefined. Null + 0 is null (C++);
+-- arithmetic on a function pointer is a reader's error.
+mem-ptr-add : MPtr → Word → UInt64 → AMem → MRes MPtr
+mem-ptr-add p elsize i m = case p of
+  mp-null → (case uq-iszero i of
+    true → mok mp-null
+    false → mub ub-ptr-arith)
+  mp-fn f → mstop st-ill-typed
+  mp-addr x → mub ub-ptr-arith
+  mp-obj a o → mr-bind (mem-at m p) (λ ao → case uq-isneg i of
+    false →
+      (let o2 = wadd o (wmul (u64toWord i) elsize)
+       in case wlt (al-size (fst ao)) o2 of
+            true → mub ub-ptr-arith
+            false → mok (mp-obj a o2))
+    true →
+      (let d = wmul (u64toWord (uq-neg i)) elsize
+       in case wlt o d of
+            true → mub ub-ptr-arith
+            false → mok (mp-obj a (wsub o d))))
+-- p - q in elements of a size: both in one live allocation (or both null), the distance a
+-- multiple of the size; the result a signed 64-bit number
+mem-ptr-diff : MPtr → MPtr → Word → AMem → MRes UInt64
+mem-ptr-diff p q elsize m = case weq elsize #0 of
+  true → mstop st-ill-typed
+  false → (case p of
+    mp-null → (case q of
+      mp-null → mok uq0
+      _ → mub ub-ptr-sub)
+    mp-obj a x → (case q of
+      mp-obj b y → (case weq a b of
+        false → mub ub-ptr-sub
+        true → mr-bind (mem-at m p) (λ ao → case wlt x y of
+          false → (case weq (wrem (wsub x y) elsize) #0 of
+            true → mok (uq-of-word (wquot (wsub x y) elsize))
+            false → mub ub-ptr-sub)
+          true → (case weq (wrem (wsub y x) elsize) #0 of
+            true → mok (uq-neg (uq-of-word (wquot (wsub y x) elsize)))
+            false → mub ub-ptr-sub)))
+      _ → mub ub-ptr-sub)
+    _ → mub ub-ptr-sub)
+
+-- ---------------------------------------------------------------- pointers and integers, as the Target allows
+-- every conversion between kinds with the memory at hand: pointer → integer is the address
+-- wrapped to the kind, integer → pointer the pointer of the value as an address (of the
+-- pointer's size); both stop when the Target does not offer them. The rest is sv-conv.
+mem-conv : Target → SK → SK → SV → AMem → MRes SV
+mem-conv t from to v m = case from of
+  sk-ptr → (case to of
+    sk-int s w → (case tg-ptr-int t of
+      pi-refused → mstop st-unsupported
+      pi-flat → mr-bind (sv-as-p v) (λ p → mr-map (λ x → dq-to-int s w (uq-of-word x , uq0)) (mem-addr t m p)))
+    _ → sv-conv from to v)
+  sk-int s w → (case to of
+    sk-ptr → (case tg-ptr-int t of
+      pi-refused → mstop st-unsupported
+      pi-flat → mr-map (λ a → sv-p (mem-ptr-of-addr t m (case weq (tg-size t ck-ptr) #8 of
+                   true → u64toWord (fst a)
+                   false → u64toWord (u64and (fst a) (u64 #4294967295))))) (sv-int-dq s w v))
+    _ → sv-conv from to v)
+  _ → sv-conv from to v
+-- comparison of pointers with the memory at hand: where ptr-cmp leaves the order unspecified,
+-- a flat address space orders by address (the total order std::less promises)
+mem-ptr-cmp : Target → CmpOp → MPtr → MPtr → AMem → MRes Bool
+mem-ptr-cmp t o p q m = case ptr-cmp o p q of
+  mstop w → (case tg-ptr-int t of
+    pi-refused → mstop w
+    pi-flat → mr-bind (mem-addr t m p) (λ x → mr-bind (mem-addr t m q) (λ y →
+      mok (cmp-by o (weq x y) (wlt x y) (wlt y x)))))
+  mok b → mok b
+  mub w → mub w
