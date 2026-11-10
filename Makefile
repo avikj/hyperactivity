@@ -29,7 +29,7 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 # There are no tests: the checker is the evidence (PLAN.md section 1, "Every piece's output is
 # checkable"). The one measurement kept is Brunerie's number (PLAN item 8, 18.16).
 CORE := lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.cub lib/check.cub lib/std.cub
-LIB  := $(CORE) lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/autodiff.cub lib/intproof.cub lib/intlin.cub \
+LIB  := $(CORE) lib/sort.cub lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/autodiff.cub lib/intproof.cub lib/intlin.cub \
         lib/prim.cub lib/derive.cub lib/decode.cub lib/fiber.cub lib/proc.cub lib/world.cub lib/session.cub \
         lib/choreo.cub lib/region.cub lib/specialize.cub lib/rules.cub lib/machine.cub lib/x86.cub
 

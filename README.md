@@ -561,8 +561,8 @@ the x86 model is imported) is listed in `PLAN.md` §7.
 
 ## Measurements
 
-Every reading reports the steps taken. `make library` checks the library (793 definitions) in
-18.3M steps, about 15 s on one thread. `CUBICAL_KEYS=1` traces the keys registered, fired and hit
+Every reading reports the steps taken. `make library` checks the library (830 definitions) in
+21.7M steps, about 17 s on one thread. `CUBICAL_KEYS=1` traces the keys registered, fired and hit
 on stderr, and the entries left at the end.
 
 Brunerie's number, by an untyped port of Ljungström's `brunerie'` from agda/cubical

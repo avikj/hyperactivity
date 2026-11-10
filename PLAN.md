@@ -114,7 +114,7 @@ constructor by the source is refused, as is a clause no case reaches. (System-ge
 `#jit`'s rebinding of `f` to its bytes, and `#retract` are the exceptions.) Turning this on
 found and removed nine silent rebindings in the library and one in the Brunerie port.
 
-**Loading.** `make library` checks every file in order: 793 checks, 0 failures, 18.3M steps,
+**Loading.** `make library` checks every file in order: 830 checks, 0 failures, 21.7M steps,
 about 15 s. `make brunerie` reads Brunerie's number, −2, with 0 and with 4 workers.
 
 **Deleted at revision 9** (in git history; none of it returns): `#native` (C emitted and
