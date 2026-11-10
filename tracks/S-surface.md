@@ -1,6 +1,6 @@
 # Track S — the elaborator accepts what the tracks had to work around
 
-Read `README.md` here (rules), `../README.md` §1–§3 (surface language, clauses, structural
+Read `README.md` here (rules), `../LANGUAGE.md` §1–§3 (surface language, clauses, structural
 recursion, `decreasing by`), and in `src/syntax.c` the clause compiler (`cc_match`, `ccm_t`,
 `clauses_typed`, the recursion check that prints "not on a constructor field") and
 `x_checked`.

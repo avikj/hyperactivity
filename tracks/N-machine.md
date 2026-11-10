@@ -1,6 +1,6 @@
 # Track N — the machine: no crash on any input, and the cost of programs about programs
 
-Read `README.md` here (rules), `../README.md` (the machine), `../PLAN.md` §2, §3 "Measured",
+Read `README.md` here (rules), `../LANGUAGE.md` (the machine), `../PLAN.md` §2, §3 "Measured",
 §4.4 item 8, and skim `src/net.c` (the rules), `src/lang.c` (build, readback, store).
 
 Files you own: `src/net.c`, `src/big.c`, `src/drivers.c` is NOT yours; `experiments/machine/**`,

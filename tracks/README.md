@@ -27,7 +27,7 @@ anywhere else: not in a chat, not in an agent's memory.
    `make library` passing and the commands under your track's Acceptance.
 6. **No network installs** (pip/npm/apt are off). `git clone` from GitHub works. Use what is
    installed: python3, gcc, clang, binutils.
-7. Language notes for writing `.cub`: read `README.md` §1–§3 and two library files close to
+7. Language notes for writing `.cub`: read `../LANGUAGE.md` §1–§3 and two library files close to
    what you write (`lib/prim.cub`, `lib/decode.cub`, `lib/world.cub`). Names are bound once
    (a second definition of a name is an error); `code`, `one`, `feed`, `step`, `count`,
    `total`, `yes`, `no` and every constructor name in the library are taken. Check a file with
