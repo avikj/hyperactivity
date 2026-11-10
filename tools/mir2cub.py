@@ -526,7 +526,6 @@ class Mir:
         it.name = r.group(1)
         it.arg_texts = [a.split(': ', 1)[1] for a in split_top(r.group(2))] if r.group(2) else []
         it.ret_text = r.group(3)
-        it.parsed = False
         it.impl = None
         r = re.match(r'<impl at (.*?:\d+:\d+: \d+:\d+)>::(.*)$', it.name)
         if r:
@@ -565,7 +564,7 @@ class BodyParser:
         for i, a in enumerate(it.arg_texts):
             locals_[i + 1] = ('arg', self.ty_text(a))
         it.argc = len(it.arg_texts)
-        blocks, cur, depth_scope = {}, None, 0
+        blocks, cur = {}, None
         for raw in it.lines:
             l = raw.strip()
             if not l:
@@ -605,7 +604,6 @@ class BodyParser:
             ls = blocks[b]
             stmts = [self.stmt(x) for x in ls[:-1]]
             it.blocks.append((stmts, self.term(ls[-1])))
-        it.parsed = True
 
     # places, operands, constants
 
@@ -1852,7 +1850,7 @@ class Emit:
             for x in reversed(chunks[0] if chunks else []):
                 first = '(cons %s %s)' % (x, first)
             n = '%s-bb%d' % (px, i)
-            self.define(n, 'RBlock', 'rblock %s %s' % (first if first.startswith('(') or first == 'nil' else first, tm))
+            self.define(n, 'RBlock', 'rblock %s %s' % (first, tm))
             names.append(n)
         self.count['blocks'] = self.count.get('blocks', 0) + len(names)
         gens = self.lst(['(rgen-%s %s)' % (k, self.name(n)) for (k, n) in it.generics])
