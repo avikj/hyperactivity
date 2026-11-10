@@ -564,3 +564,15 @@ fromZ2-toZ2 z =
   case z return (λ w → fromZ2 (toZ2 w) ≡ w) of
     pos n → λ i → pos (toNat-fromNat n i)
     negsuc n → λ i → negsuc (toNat-fromNat n i)
+
+-- the list functions lib/prelude.cub has without types (map, length, append are helpers of the
+-- files loaded before the checker and cannot be used in a checked definition), checked
+list-map : {A B : Type} → (A → B) → List A → List B
+list-map f nil = nil
+list-map f (cons x r) = cons (f x) (list-map f r)
+list-length : {A : Type} → List A → Nat
+list-length nil = zero
+list-length (cons x r) = suc (list-length r)
+list-append : {A : Type} → List A → List A → List A
+list-append nil ys = ys
+list-append (cons x r) ys = cons x (list-append r ys)

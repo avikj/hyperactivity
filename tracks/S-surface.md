@@ -69,6 +69,11 @@ remove a workaround after its cause is fixed (then say which, and keep `make lib
    definition (through "Needs from track S" in C's file). After 11–12: a "From track S" line in
    `tracks/C-clang.md`.
 
+15. (from track G, `tracks/G-memmodel.md` Found) **A lemma whose type contains `isTrue (case l of …)`
+   applied at a non-variable list** fails with "an implicit argument is not determined", with
+   every implicit written out; the same proof with the case inlined checks (input: `g7-nn`,
+   `g7-d` there).
+
 ## Acceptance
 
 - `experiments/surface/*.cub`: one small file per item, each loading with `N passed, 0 failed`
@@ -98,8 +103,8 @@ Nothing.
   of the data type with `rec` on a recursive field, which the checker checks as it does every
   other clause definition; nothing is trusted. `rp-bad` (a call on the whole argument) is still
   refused.
-- **Item 5** (`experiments/surface/fail-one.cub`: `159 passed, 1 failed`;
-  `experiments/surface/fail-local.cub`: five FAIL lines, `160 passed, 5 failed`, the definitions
+- **Item 5** (`experiments/surface/fail-one.cub`: `164 passed, 1 failed`;
+  `experiments/surface/fail-local.cub`: five FAIL lines, `166 passed, 5 failed`, the definitions
   after each still checked). `p_decl` (src/syntax.c) handles every declaration under a `die_jb`
   of its own (`p_decl_in` is the old body). An error raised while a declaration is handled is
   printed as `FAIL: checks NAME` / `reason: <the same message>` / `in: file:line`, counted in
@@ -139,9 +144,70 @@ Nothing.
   to split. Patterns that are all variables are left as before (the result's own λs: `isPropNeg
   f g = …` in lib/std.cub is one).
 
-Measured: `make library` 1127 passed, 0 failed, 24715925 steps before and after item 1; after
-items 4 and 5 at main `a2f2c04d`+ (more library files): 1398 passed, 0 failed; `make brunerie` −2 with 0 and 4 workers; A's commands: 33 jit, three
-`ok: build` lines, `A` then 65, 5 then 2.
+- **Item 3** (`experiments/surface/scrut.cub`: 171 passed, 0 failed). The cause: lang.c's `ds`
+  rebuilds the scrutinee variable in a branch as `let b = (C x…)`, the checker infers a let's
+  value, and a constructor of a data type with parameters infers nothing. `el_alts`
+  (src/syntax.c) now writes the rebuilt value itself, at the variable's type as the scope has
+  it: `(let b (the (Sum Nat Unit) (%rebuilt (inr u))) body)`, for a variable scrutinee of a
+  parameterized data type whose branch mentions it; `ds` (src/lang.c, 4 lines) leaves a branch
+  that starts with that let alone. The elaboration of `let` annotates a value that infers no
+  type when its parts' signatures give one: a pair of two typed parts at their Σ, a constructor
+  of a parameterized type at `syn_type`'s answer. Every such form failed before (`no inferable
+  type here`), so nothing that checked is elaborated differently. Not covered: a `let` whose
+  value is a call with an implicit type argument nothing determines (D's third form) — the
+  hole is the checker's to solve and it has no type to solve it from.
+- **Item 2** (`experiments/surface/rec-case.cub`: 173 passed, 0 failed). Two changes, both used
+  only after the recursion was refused as written (and after course-of-values and item 1's
+  reordering were tried), so no definition that compiled before compiles differently:
+  - `lift_clauses` (src/syntax.c): a `case` (or `case … return`) in a clause's right side whose
+    scrutinee is one of the clause's own pattern variables, not rebound on the way, every
+    constructor of its type covered by an alternative or the default, no path constructor, no
+    index: the clause becomes one clause per constructor with the variable's pattern refined
+    (`f (cons e r) = C[case r of nil → a; cons d r2 → b]` is `f (cons e nil) = C[a]`,
+    `f (cons e (cons d r2)) = C[b]`), the variable replaced by the constructor form elsewhere
+    in `C`; a selected alternative that is a λ applied to a variable is its body at the
+    variable. The clauses that result go through the clause compiler as written ones do: the
+    call is accepted only as a field's or a field's field's (course-of-values, `Below`).
+  - sibling revert in `ccm_t` (`srv`, `ih_type`, `rec_of_field`): a split of a field `v` now
+    reverts the fields in scope whose types mention `v`, and with each recursive one its
+    hypothesis, as Πs of the split's motive: `rc-run (rc-cmd i kk) = (case i return … of
+    rc-ask → λ k2 → rc-run (k2 5) …) kk` becomes
+    `(elim (λ i → Π kk (rc-resp i → RcStep) → Π ih ((a : rc-resp i) → Nat) → Nat) i (rc-ask → λ kk ih → ih 5) …) kk (rec kk)`.
+    The hypothesis's type is built only through Π codomains to the data type (the frame's
+    motive at the field applied); another shape (a path, a Σ) leaves the split as it was.
+  Forms accepted, exactly: a call on a pattern's field; on a field's field at any depth reached
+  by nested patterns or by such cases; on a function-typed field applied (`f (k x)`), the field
+  possibly rebound through a dependent case on an earlier field. Each ends as `elim` with `rec`
+  on a field (or `Below`), checked by the checker. `rc-bad` (a call on a rebuilt larger list)
+  is refused. G's `g5-f` is `rc-run` with G's types.
+- **Item 6** (`experiments/surface/prelude-names.cub`: 165 passed, 2 failed, the two that use
+  `append` and `length`/`map`). Decision: the prelude cannot state their types — it is loaded
+  before the checker (`a signature, before the checker is loaded`), and the checker's own files
+  use them untyped. So (a) the error (`die_unchecked`, src/lang.c) now reads `code: append is a
+  helper defined before the checker was loaded (lib/prelude.cub and the checker's files): it
+  has no type, so a checked definition cannot use it. Checked ones in lib/std.cub: list-map,
+  list-length, list-append (for map, length, append), plus, times (for add, mul)`, and is that
+  definition's failure (item 5); (b) `lib/std.cub` gained `list-map`, `list-length`,
+  `list-append` (12 lines at its end; a shared file, the edit the spec's "use std's Y" needs:
+  std had no list functions). `make library` counts 3 more for them.
+- **Item 7** (`experiments/surface/show-cache.cub`: loaded twice with one `CUBICAL_CACHE`, the
+  second load prints `cached:` and the same three readings). `x_top` (src/syntax.c) holds what
+  a `#show`, `#observe`, `#type` or `#usage` prints while its module is being recorded and
+  writes it after the form as `(shown x<hex>…)`; a cached module prints it from there.
+  The `passed` count of a cached load is still smaller than an uncached one's (a cached module's
+  `#same` and checks are not run: by design of the cache, not changed).
+- **Item 8** (`experiments/surface/type-data.cub`: `type: Td1 : Type → Type`, `Td2 : Type`,
+  `Td3 Nat : Type → Type`, `List : Type → Type`; `#type no-such-name` is one FAIL and the load
+  goes on: 165 passed, 1 failed). `#type` of a data type's name applied to fewer arguments than
+  its parameters asks the checker about `the ((ps…) → Type l) (λ ps → D ps)` for l = 0, 1, 2, 3
+  and prints the first it accepts (`(type term shown-as)`, src/lang.c 2 lines). A type former
+  whose universe depends on a level parameter is not found this way (the command fails).
+
+Measured at this commit (main at `98692012`+): `make library` 1482 passed, 0 failed (3 of them
+`list-map`, `list-length`, `list-append`); brunerie −2 with 0 and 4 workers; the surface files as
+stated above (uncached, after the eight core files). A's `#jit`/`#build` commands: 33, three ok
+lines, `A` 65, `5 2` as of item 1's commit; being re-run for this one (they take 10 minutes on
+the loaded machine) — the next commit states the result.
 
 ## Found
 
@@ -153,16 +219,21 @@ items 4 and 5 at main `a2f2c04d`+ (more library files): 1398 passed, 0 failed; `
 - A definition of a name already bound prints `ok: checks f` and then `FAIL: checks f` /
   `declared again (a name is bound once)` (lang.c checks before it refuses the binding): counted
   once as passed and once as failed. The earlier binding stays.
+- The module cache's reading capture must give stdout back when the reading fails: `x_cap_end`
+  is called from `decl_reset` (found when `#type no-such-name` made the rest of the output vanish).
 - `clauses_typed` saved `row_used` after its `setjmp`, so a retry (course-of-values) restored the
   retry's own table, not the enclosing clause's: fixed with item 1 (saved before the `setjmp`).
 
 ## Next step
 
-Item 3 (the scrutinee variable in a branch: `no inferable type here`). Reproduce in
-`experiments/surface/scrut.cub` with `case b of inl x → …; inr u → f b` at `b : Sum A Unit` and
-`case evs of cons x xs → …; nil → (k , evs)`; find where a `case` branch replaces the scrutinee
-variable by the constructor form (src/syntax.c, the elaboration of `case`, search `cfree` in
-lib/check.cub for where the error is raised) and annotate the replacement with the variable's
-type (`the T (c fields)`). Then items 2, 6, 7, 8, 13, 14, 11, 12, 9, 10 in that order. After each:
-`make build/cubical && make library` (0 failed), `make brunerie` (run the 4-worker half without
-`ulimit -v`, see Found), `/tmp/S-verify.sh`-style run of A's commands.
+1. Run A's commands (`tracks/A-compiler.md`, "How to verify") on this commit; record.
+2. The workarounds in `lib/os/contract.cub` (`k-take-go`, `k-autobind`, `k-wait`, `k-deliver`,
+   `lx-replaying` in replay.cub) and `lib/isa/tso.cub` (`tso-go`, `tso-quiet`, `tso-choices` put
+   the list first): they are D's and G's files; the direct forms now check (the inputs in
+   `experiments/surface/` are those forms). Write a "From track S" line in neither file unless
+   asked; list here which could be rewritten.
+3. Item 13 (keywords as field names: the parser of `data` fields, `p_decl_in` under `data`),
+   item 14 (byte-string literal), item 15 (G's `g7-d`), then 11, 12 (positivity is in
+   lib/check.cub: search `E-positive`/`strictly`; nested positivity needs the checker changed,
+   a shared file), then 9, 10 (guarded recursion: `guard_on` in `clauses_typed`, `%gcall`,
+   `tick_lift`).

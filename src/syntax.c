@@ -1240,8 +1240,8 @@ static void p_decl(void) {
             if (outer) die(die_msg, NULL);
             fprintf(stderr, "%s\n", die_msg); exit(1);
         }
-        toplevel_depth = depth0; x_collecting = coll; pending_instance = inst; cur_mod = mod; x_fail_next = false;
         decl_reset();
+        toplevel_depth = depth0; x_collecting = coll; pending_instance = inst; cur_mod = mod; x_fail_next = false;
         char pos[512]; { int save = xp; xp = xp0; snprintf(pos, sizeof pos, "%s:%d", x_file ? x_file : "?", P0()->line); xp = save; }
         if (fail) passes++; else failures++;
         printf("%s: %s %s\n   reason: %s\n", fail ? "ok" : "FAIL", fail ? "rejected" : "checks", decl_name ? decl_name : pos, die_msg);
@@ -1661,7 +1661,43 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "#show")) { NX(); x_test("show", x_solve_expr(p_expr(0)), NULL); decl_end(); return; }
-    if (x_is(t, "#type")) { NX(); x_top(sym2("type", x_solve_expr(p_expr(0)))); decl_end(); return; }
+    if (x_is(t, "#type")) {
+        NX(); Node *e = p_expr(0);
+        /* a data type's name, or one applied to fewer arguments than its parameters: the type
+         * former as a function, λ ps → D ps at (ps…) → _, the result's universe the checker's to find */
+        Node *hd = e->list && e->n ? e->it[0] : e;
+        int d = !hd->list ? data_lookup(hd->s) : -1, given = e->list ? e->n - 1 : 0;
+        if (d >= 0 && DATA[d].decl && given < DATA[d].nparams) {
+            Node *dcl = DATA[d].decl; Node *dh = dcl->it[1]; int np = DATA[d].nparams;
+            Node *app = nlist(np + 1); app->it[0] = hd;
+            for (int k = 0; k < given; k++) app->it[k + 1] = e->it[k + 1];
+            Node *xs[64], *ts[64]; int nx = 0; bool ok = np <= 64;
+            for (int k = given; ok && k < np; k++) {
+                Node *pm = dh->it[k + 1];
+                if (!pm->list || pm->n != 2) { ok = false; break; }
+                Node *T = pm->it[1];
+                for (int z = 0; z < k; z++) T = subst_sym(T, param_name(dh->it[z + 1])->s, app->it[z + 1]);
+                xs[nx] = xfresh("p"); ts[nx++] = T; app->it[k + 1] = xs[nx - 1];
+            }
+            if (ok) {
+                /* the result's universe: the first of Type, Type 1, Type 2, Type 3 the checker
+                 * accepts the function at (a type former into a universe that depends on a level
+                 * parameter is not found this way: the command's failure) */
+                Node *b = app, *lv = nsym("lzero"), *q = NULL;
+                for (int k = nx - 1; k >= 0; k--) b = sym3("lam", xs[k], b);
+                for (int l = 0; l < 4; l++, lv = sym2("lsuc", lv)) {
+                    Node *T = l ? sym2("U", lv) : nsym("U");
+                    for (int k = nx - 1; k >= 0; k--) T = sym4("Pi", xs[k], ts[k], T);
+                    q = x_solve_expr(sym3("the", T, b));
+                    long steps; char *r = readback(nl2("%%infer-ok", nl2("%raw", aclosed(ds(q)))), &steps);
+                    bool fine = !strcmp(r, "ok"); free(r);
+                    if (fine) break;
+                }
+                x_top(lst(3, nsym("type"), q, e)); decl_end(); return;
+            }
+        }
+        x_top(sym2("type", x_solve_expr(e))); decl_end(); return;
+    }
     if (x_is(t, "#usage")) { NX(); Tok *n = NX(); x_top(sym2("usage", nsym(n->s))); decl_end(); return; }
     if (x_is(t, "#trusted")) { NX(); x_top(lst(1, nsym("trusted"))); decl_end(); return; }
     /* the store (F34): #key d, #names K, #history name, #unbind name, #gc */
@@ -2670,6 +2706,28 @@ static bool x_same_decl(Node *a, Node *b) {
     return true;
 }
 static void x_rec_extra(Node *f) { if (xrec) x_rec_form(f); }
+/* a reading's output held while it is made (x_top): given back to stdout, and recorded after the
+ * reading's form when it ended (not when an error left it: p_decl's decl_reset ends it then) */
+static FILE *x_cap; static int x_cap_so = -1;
+static void x_cap_end(bool record) {
+    if (!x_cap) return;
+    fflush(stdout); dup2(x_cap_so, 1); close(x_cap_so); x_cap_so = -1;
+    FILE *cap = x_cap; x_cap = NULL;
+    long len = ftell(cap); if (len < 0) len = 0; rewind(cap);
+    char *b = malloc((size_t)len + 1); size_t got = fread(b, 1, (size_t)len, cap); b[got] = 0; fclose(cap);
+    fwrite(b, 1, got, stdout);
+    if (record && xrec) {
+        int nch = (int)((got + 99) / 100);
+        Node *sh = nlist(nch + 1); sh->it[0] = nsym("shown");
+        for (int k = 0; k < nch; k++) {
+            char hx[204]; hx[0] = 'x'; size_t m = got - (size_t)k * 100 < 100 ? got - (size_t)k * 100 : 100;
+            for (size_t z = 0; z < m; z++) snprintf(hx + 1 + 2 * z, 3, "%02x", (unsigned char)b[(size_t)k * 100 + z]);
+            sh->it[k + 1] = nsym(hx);
+        }
+        x_rec_form(sh);
+    }
+    free(b);
+}
 static void x_top(Node *f) {
     if (x_collecting) { GROW(xcollect, capxcollect, (size_t)nxcollect + 1); xcollect[nxcollect++] = f; return; }
     if (xrec) x_rec_form(f);
@@ -2679,9 +2737,22 @@ static void x_top(Node *f) {
         ixrep++;
     }
     shadow_decl(f);
+    /* a reading (#show, #observe, #type, #usage) of a module being recorded: what it prints is
+     * recorded after the form, (shown hex…), and a cached module prints it from there (the form
+     * itself is not run in a cached module), so a load's readings do not depend on the cache */
+    bool reading = f->list && f->n >= 1 && !f->it[0]->list && (is(f->it[0], "show") || is(f->it[0], "observe") || is(f->it[0], "type") || is(f->it[0], "usage"));
+    if (reading && xrec && !xrep && !x_cap) {
+        x_cap = tmpfile();
+        if (x_cap) { fflush(stdout); x_cap_so = dup(1); if (x_cap_so < 0 || dup2(fileno(x_cap), 1) < 0) { if (x_cap_so >= 0) close(x_cap_so); fclose(x_cap); x_cap = NULL; x_cap_so = -1; } }
+    }
     { bool sv = x_surface; x_surface = true; toplevel(f); x_surface = sv; }
-    /* the record's extra forms after this one (a checked definition's usages) */
-    if (xrep) while (ixrep < nxrep && xrep[ixrep]->list && xrep[ixrep]->n >= 2 && is(xrep[ixrep]->it[0], "usages")) toplevel(xrep[ixrep++]);
+    x_cap_end(true);
+    /* the record's extra forms after this one (a checked definition's usages, a reading's text) */
+    if (xrep) while (ixrep < nxrep && xrep[ixrep]->list && xrep[ixrep]->n >= 1 && (is(xrep[ixrep]->it[0], "shown") || (xrep[ixrep]->n >= 2 && is(xrep[ixrep]->it[0], "usages")))) {
+        Node *x = xrep[ixrep++];
+        if (!is(x->it[0], "shown")) { toplevel(x); continue; }
+        for (int k = 1; k < x->n; k++) { const char *h = x->it[k]->list ? "" : x->it[k]->s; for (size_t z = 1; h[0] && h[z] && h[z + 1]; z += 2) { unsigned v = 0; sscanf(h + z, "%2x", &v); putchar((int)v); } }
+    }
 }
 /* print a file of core forms in the surface language; with check, each form's printing is parsed
  * back and compared with it (desugared, up to the names of bound variables) as the form is loaded */
@@ -3727,7 +3798,27 @@ static Node *el_alts(Node *t, int from) {
                 if (cv) { const char *w = P->it[1]->s; syn_expect = lamP ? subst_multi(P->it[2], &w, &cv, 1) : subst_multi(lst(2, P, cv), NULL, NULL, 0); }
             }
         }
-        r->it[i] = lst(2, p, el(a->it[1]));
+        Node *bd = el(a->it[1]);
+        /* the scrutinee variable inside the branch is the constructor at the branch's fields, at the
+         * variable's type: a constructor of a type with parameters infers no type, so the value the
+         * branch rebuilds (lang.c's ds would write the bare constructor) is annotated with it */
+        {
+            Node *sc = t->it[from - 1];
+            int c = p->list && !p->it[0]->list ? con_lookup(p->it[0]->s) : -1;
+            if (!sc->list && sty && c >= 0 && DATA[CON[c].data].nparams > 0 && CON[c].ndims == 0 && p->n - 1 == CON[c].nfields
+                && e_find(sc->s) && !e_find(sc->s)->dim && mentions_name(a->it[1], sc->s)) {
+                Node *hd = sty->list ? sty->it[0] : sty;
+                bool ok = !hd->list && !strcmp(hd->s, DATA[CON[c].data].name);
+                for (int q = 1; q < p->n && ok; q++) if (p->it[q]->list || !strcmp(p->it[q]->s, sc->s)) ok = false;
+                if (ok) {
+                    Node *p2 = nlist(p->n), *cv = nlist(p->n); p2->it[0] = p->it[0]; cv->it[0] = p->it[0];
+                    for (int q = 1; q < p->n; q++) { Node *x = p->it[q]; if (pat_wild(x)) x = xfresh("sc"); p2->it[q] = x; cv->it[q] = x; }
+                    Node *val = sym3("the", el(sty), sym2("%rebuilt", p->n > 1 ? cv : p->it[0]));
+                    p = p2; bd = sym4("let", sc, val, bd);
+                }
+            }
+        }
+        r->it[i] = lst(2, p, bd);
         nesc = save;
     }
     return r;
@@ -3929,7 +4020,19 @@ static Node *el(Node *t) {
     }
     if (!strcmp(k, "let") && t->n == 4) {
         Node *lt = syn_type(t->it[2], 0);
-        Node *e = el(t->it[2]); int save = nesc; if (lt) e_pusht(t->it[1]->s, lt); else e_push(t->it[1]->s, false);
+        /* a value that infers no type (a pair, a constructor of a type with parameters) whose type
+         * its parts' signatures give: annotated with it (the checker infers a let's value) */
+        Node *lv = t->it[2]; bool ann = false;
+        if (lv->list && lv->n == 3 && !lv->it[0]->list && is(lv->it[0], "pair") && !e_find("pair")) {
+            Node *A = syn_type(lv->it[1], 0), *B = syn_type(lv->it[2], 0);
+            if (A && B) { lt = sym4("Sigma", xfresh("_"), A, B); ann = true; }
+        } else if (lt) {
+            Node *hd = lv->list && lv->n ? lv->it[0] : lv;
+            int c = !hd->list && !e_find(hd->s) ? con_lookup(hd->s) : -1;
+            if (c >= 0 && DATA[CON[c].data].nparams > 0) ann = true;
+        }
+        Node *e = el(t->it[2]); if (ann) e = sym3("the", el(lt), e);
+        int save = nesc; if (lt) e_pusht(t->it[1]->s, lt); else e_push(t->it[1]->s, false);
         syn_expect = ex; Node *b = el(t->it[3]); nesc = save; return sym4("let", t->it[1], e, b);
     }
     if (!strcmp(k, "the") && t->n == 3) { Node *T = el(t->it[1]); syn_expect = t->it[1]; Node *e = el(t->it[2]); return sym3("the", T, e); }
@@ -3979,7 +4082,7 @@ static Node *el(Node *t) {
  * a recursive field of a split is that split's induction hypothesis (rec x), applied to the later
  * parameters. */
 typedef struct { const char *v; Node *def; int gp; Node *ty; } CVar;   /* a variable rebuilt by a let, its type */
-typedef struct { const char *v; int gp; Node *E; Node **rf; int nrf; const char **rs; } Frame;   /* a split's IH: the recursive fields and their shapes (ConInfo.rsh) */
+typedef struct { const char *v; int gp; Node *E; Node **rf; int nrf; const char **rs; Node *M; } Frame;   /* a split's IH: the recursive fields and their shapes (ConInfo.rsh) */
 static CVar *cdefs; static int ncdefs, capcdefs;
 static Frame *frames; static int nframes, capframes;
 static Node *subst_sym(Node *t, const char *x, Node *e);
@@ -4089,9 +4192,27 @@ static Node *rec_by_shape(const char *sh, Node *want, Node *cand, Node *hyp) {
  * so the hypothesis is applied to their new values. perm_p: the parameter tried (-1: the order as
  * written); perm_next: the next candidate after p, a parameter some clause matches by constructor
  * whose type lets it stand before an earlier one (in the order as written, perm0) */
+static bool lift_armed; static jmp_buf lift_jb;
 static int perm_p = -1, perm_np; static Node **perm_pty, **perm_pn; static bool *perm_imp, *perm_con;
 static int perm_dest(int p) { int d = 0; for (int q = 0; q < p; q++) if (mentions_name(perm_pty[p], perm_pn[q]->s)) d = q + 1; return d; }
 static int perm_next(int p) { for (int q = p < 0 ? 1 : p + 1; q < perm_np; q++) if (perm_con[q] && !perm_imp[q] && perm_dest(q) < q) return q; return -1; }
+/* a recursive field's hypothesis rebound: a split of a field v reverts the fields after it whose
+ * types mention v, and with each its hypothesis (whose type mentions v too); below the split the
+ * hypothesis of such a field is the variable the branch binds */
+static const char *ROV[64]; static Node *ROVH[64]; static int nrov;
+static Node *rec_of_field(Node *f) { for (int i = nrov - 1; i >= 0; i--) if (!strcmp(ROV[i], f->s)) return ROVH[i]; return lst(2, nsym("rec"), f); }
+/* the type of the hypothesis of a field x : T, the field of a split with motive λ w → Mb: through
+ * Π codomains to the data type itself; NULL for another shape */
+static Node *ih_type(Node *T, Node *x, const char *w, Node *Mb, const char *dname) {
+    if (T->list && T->n == 4 && !T->it[0]->list && is(T->it[0], "Pi") && !T->it[1]->list) {
+        Node *a = xfresh("a");
+        Node *B = ih_type(subst_sym(T->it[3], T->it[1]->s, a), lst(2, x, a), w, Mb, dname);
+        return B ? sym4("Pi", a, T->it[2], B) : NULL;
+    }
+    Node *hd = T->list && T->n ? T->it[0] : T;
+    if (hd->list || strcmp(hd->s, dname)) return NULL;
+    return subst_sym(Mb, w, x);
+}
 static Deep *deep_of(const char *w) { for (int i = ndeeps - 1; i >= 0; i--) if (!strcmp(deeps[i].w, w)) return &deeps[i]; return NULL; }
 static Node *rec_xform(Node *e);
 static Node *rec_call(Node *e, Node **args, int n) {
@@ -4157,7 +4278,7 @@ static Node *rec_call(Node *e, Node **args, int n) {
         for (int r = 0; r < f->nrf; r++) {
             Node *cand = expand(subst_sym(f->E, f->v, f->rf[r]));
             bool whole = node_eq(cand, want);
-            Node *call = lst(2, nsym("rec"), f->rf[r]);
+            Node *call = rec_of_field(f->rf[r]);
             if (!whole && !(ndm && node_eq(cand, head))) {
                 /* under Π codomains and Σ components (18.18): by the field's shape */
                 if (!f->rs[r]) continue;
@@ -4181,6 +4302,7 @@ static Node *rec_call(Node *e, Node **args, int n) {
     if (cov_armed && !guard_on && guard_q >= 0) longjmp(cov_jb, 2);   /* a clock: a guarded fixed point */
     if (cov_armed && !cov_on) longjmp(cov_jb, 1);   /* deeper than a field: again, with the values below */
     if (cov_armed && !guard_on && perm_next(perm_p) >= 0) longjmp(cov_jb, 3);   /* on a later parameter while an earlier one changes: again, that parameter's split outermost */
+    if (lift_armed) { lift_armed = false; longjmp(lift_jb, 1); }   /* through a case on a pattern's variable: again, that case a split of the clause */
     char m[256]; snprintf(m, sizeof m, "%s: a recursive call is not on a constructor field or a field's field from one of the definition's own matches (structural recursion), in", tfname);
     print_node(stderr, e); fputc('\n', stderr);
     die(m, tfname);
@@ -4323,6 +4445,34 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     }
     Node *mot = later_pi(gp);
     Node *Mlam = NULL, *Bllam = NULL, *ihv = NULL;
+    /* v a field: the fields in scope whose types mention it (or one of these), reverted with their
+     * hypotheses (ih_type); given up (the split as before) when a hypothesis has another shape */
+    const char *srv[16]; Node *srT[16], *srih[16], *srihT[16]; int srn = 0;
+    if (!cov && !dv && strcmp(tsig.pn[gp]->s, v)) {
+        bool isfield = false;
+        for (int i = ncdefs - 1; i >= 0; i--) if (!strcmp(cdefs[i].v, v)) { isfield = !cdefs[i].def; break; }
+        bool bad = false;
+        for (int i = 0; isfield && i < ncdefs && !bad; i++) {
+            if (cdefs[i].def || !cdefs[i].ty || !strcmp(cdefs[i].v, v)) continue;
+            bool latest = true; for (int z = i + 1; z < ncdefs; z++) if (!strcmp(cdefs[z].v, cdefs[i].v)) latest = false;
+            if (!latest) continue;
+            Node *T = sg_apply(cdefs[i].ty);
+            bool m = mentions_name(T, v);
+            for (int k = 0; k < srn && !m; k++) if (mentions_name(T, srv[k])) m = true;
+            if (!m) continue;
+            if (srn == 16) { bad = true; break; }
+            srv[srn] = cdefs[i].v; srT[srn] = T; srih[srn] = NULL; srihT[srn] = NULL;
+            for (int fz = nframes - 1; fz >= 0 && !srih[srn]; fz--) for (int r = 0; r < frames[fz].nrf; r++) if (!strcmp(frames[fz].rf[r]->s, cdefs[i].v)) {
+                Frame *fr = &frames[fz];
+                Node *vt = ty_of(fr->v); Node *hd = vt ? (vt->list && vt->n ? vt->it[0] : vt) : NULL;
+                Node *iT = fr->M && hd && !hd->list ? ih_type(T, nsym(cdefs[i].v), fr->M->it[1]->s, fr->M->it[2], hd->s) : NULL;
+                if (!iT) bad = true; else { srih[srn] = xfresh("ih"); srihT[srn] = iT; }
+                break;
+            }
+            srn++;
+        }
+        if (bad) srn = 0;
+    }
     if (cov) {
         /* M v: the value's type; Below v: by elimination into types */
         Node *Mv = mot;
@@ -4347,6 +4497,10 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         mot = sym4("Sigma", xfresh("_"), Mv, ba);
         mot = sym3("%lam", nsym(v), mot);
     } else {
+        if (!dv && srn) {
+            for (int k = srn - 1; k >= 0; k--) if (srih[k]) mot = sym4("Pi", srih[k], srihT[k], mot);
+            for (int k = srn - 1; k >= 0; k--) mot = sym4("Pi", nsym(srv[k]), srT[k], mot);
+        }
         if (dv) {
             /* the pair of v reverted */
             const char *vv = dv->v; Node *vn = nsym(v);
@@ -4482,7 +4636,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
                 if (!tuple) tuple = nsym("unit");
             }
         } else {
-            Frame fr = { v, gp, E, calloc((size_t)nf + 1, sizeof(Node *)), 0, calloc((size_t)nf + 1, sizeof(char *)) };
+            Frame fr = { v, gp, E, calloc((size_t)nf + 1, sizeof(Node *)), 0, calloc((size_t)nf + 1, sizeof(char *)), motx == mot ? mot : NULL };
             for (int q = 0; q < CON[c].nfields; q++) if (CON[c].recmask >> q & 1) { fr.rs[fr.nrf] = CON[c].rsh[q]; fr.rf[fr.nrf++] = fv[q]; }
             GROW(frames, capframes, (size_t)nframes + 1); frames[nframes++] = fr;
         }
@@ -4496,6 +4650,8 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             for (int q = 0; q < ixk; q++) sg_push(ixv[q], subst_multi(fdr0->idx[q], fx, fvv, nfx));
         }
         for (int w = 0; w < us.nsol; w++) sg_push(fv[us.sol[w].k]->s, us.sol[w].val);
+        int rov0 = nrov;
+        for (int k = 0; k < srn; k++) if (srih[k] && nrov < 64) { ROV[nrov] = srv[k]; ROVH[nrov++] = srih[k]; }
         Node *body;
         Node *G = sg_apply(tsig.R);
         if (us.clash) {
@@ -4588,6 +4744,11 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         /* the field entries are scoping only */
         ncdefs = save_defs;
         body = later_lam(gp, body);
+        nrov = rov0;
+        if (srn) {
+            for (int k = srn - 1; k >= 0; k--) if (srih[k]) body = lam_t(srih[k], subst_sym(srihT[k], v, cv), body);
+            for (int k = srn - 1; k >= 0; k--) body = lam_t(nsym(srv[k]), subst_sym(srT[k], v, cv), body);
+        }
         nsg = sg0;
         if (cov) body = sym3("pair", body, tuple);
         if (dv) {
@@ -4627,11 +4788,19 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     bool dep_mot = mentions_name(mot->it[2], v) || cov || dv;
     for (int q = gp + 1; q < tsig.np; q++) if (tsig.rev[q]) dep_mot = true;   /* applied to the reverted: inferred, so with its motive */
     if (motx != mot) dep_mot = true;
+    if (srn) dep_mot = true;
     Node *el_ = nlist(na + (dep_mot ? 3 : 2)); int k0 = 0;
     el_->it[k0++] = nsym(dep_mot ? "elim" : "case"); if (dep_mot) el_->it[k0++] = motx; el_->it[k0++] = nsym(v);
     for (int i = 0; i < na; i++) el_->it[k0++] = alts[i];
     if (cov) el_ = sym2("fst", el_);
     if (dv) el_ = lst(2, el_, dv->e);
+    if (srn) {
+        int ni = 0; for (int k = 0; k < srn; k++) if (srih[k]) ni++;
+        Node *ap = nlist(srn + ni + 1); int k1 = 0; ap->it[k1++] = el_;
+        for (int k = 0; k < srn; k++) ap->it[k1++] = nsym(srv[k]);
+        for (int k = 0; k < srn; k++) if (srih[k]) ap->it[k1++] = rec_of_field(nsym(srv[k]));
+        el_ = ap;
+    }
     return later_app(gp, el_);
 }
 /* free names of a signature not bound anywhere: its implicit type (and level) parameters */
@@ -4837,7 +5006,196 @@ static bool uniform_in(Node *e, const char *f, int q, Node *pat) {
     return true;
 }
 /* the checked definition's body from its clauses */
+/* A case inside a clause's right side on one of the clause's own pattern variables, as a split of
+ * the clause (used when the recursion is not structural as written: clauses_typed):
+ *     f (cons e r) = C[case r of nil → a; cons d r2 → b]
+ * is the clauses  f (cons e nil) = C[a]  and  f (cons e (cons d r2)) = C[b]  (r replaced by the
+ * constructor at the fields elsewhere in C; a selected alternative that is a λ applied to a
+ * variable is that λ's body at the variable, so a continuation passed through a dependent case,
+ * (case i return (λ x → (R x → T) → W) of c a → λ k → f (k v)) kk, is f (kk v)). The clauses that
+ * result are compiled as written clauses are: the recursion is accepted only as a field's (or a
+ * field's field's) of a nested pattern, and the term is checked. */
+static bool lf_binds(Node *pat, const char *x) {
+    if (pat->list) { for (int q = 1; q < pat->n; q++) if (!pat->it[q]->list && !strcmp(pat->it[q]->s, x)) return true; return false; }
+    return !strcmp(pat->s, x);
+}
+/* e with the free name x replaced by the expression v */
+static Node *lf_subst(Node *t, const char *x, Node *v) {
+    if (!t->list) return !strcmp(t->s, x) ? v : t;
+    if (t->n == 0 || t->it[0]->list) { Node *r = nlist(t->n); for (int i = 0; i < t->n; i++) r->it[i] = lf_subst(t->it[i], x, v); return r; }
+    const char *k = t->it[0]->s;
+    if ((!strcmp(k, "lam") || !strcmp(k, "plam") || !strcmp(k, "%lam") || !strcmp(k, "forall")) && t->n == 3 && !t->it[1]->list && !strcmp(t->it[1]->s, x)) return t;
+    if ((!strcmp(k, "Pi") || !strcmp(k, "Sigma") || !strcmp(k, "let")) && t->n == 4 && !t->it[1]->list && !strcmp(t->it[1]->s, x)) return sym4(k, t->it[1], lf_subst(t->it[2], x, v), t->it[3]);
+    Node *r = nlist(t->n); r->it[0] = !strcmp(k, x) ? v : t->it[0];
+    bool cs = !strcmp(k, "case") || !strcmp(k, "elim");
+    int from = !strcmp(k, "elim") ? 3 : 2;
+    for (int i = 1; i < t->n; i++) {
+        Node *a = t->it[i];
+        if (cs && i >= from && a->list && a->n == 2) { r->it[i] = lf_binds(a->it[0], x) ? a : lst(2, a->it[0], lf_subst(a->it[1], x, v)); continue; }
+        r->it[i] = lf_subst(a, x, v);
+    }
+    return r;
+}
+static bool lf_is_case(Node *t, const char *v) {
+    if (!t->list || t->n < 3 || t->it[0]->list) return false;
+    int from = is(t->it[0], "elim") ? 3 : is(t->it[0], "case") ? 2 : 0;
+    return from && t->n > from && !t->it[from - 1]->list && !strcmp(t->it[from - 1]->s, v);
+}
+/* the alternative of (case v …) for constructor c at the fields fs, or its default; NULL: none */
+static Node *lf_select(Node *t, int c, Node **fs, Node *ce) {
+    int from = is(t->it[0], "elim") ? 3 : 2;
+    for (int i = from; i < t->n; i++) {
+        Node *a = t->it[i]; if (!a->list || a->n != 2) return NULL;
+        Node *pat = a->it[0];
+        int pc = pat_con(pat);
+        if (pc == c) {
+            Node *b = a->it[1];
+            int nf = pat->list ? pat->n - 1 : 0;
+            if (nf != CON[c].nfields) return NULL;
+            for (int q = 0; q < nf; q++) { Node *x = pat->it[q + 1]; if (x->list) return NULL; if (!pat_wild(x)) b = x_rename(b, x->s, fs[q]->s); }
+            return b;
+        }
+        if (pc < 0 && !pat->list) return pat_wild(pat) ? a->it[1] : lf_subst(a->it[1], pat->s, ce);
+    }
+    return NULL;
+}
+/* e at v = c fs: v replaced, its cases selected */
+static Node *lf_at(Node *t, const char *v, int c, Node **fs, Node *ce) {
+    if (!t->list) return !strcmp(t->s, v) ? ce : t;
+    if (t->n == 0) return t;
+    if (lf_is_case(t, v)) { Node *b = lf_select(t, c, fs, ce); if (b) return lf_at(b, v, c, fs, ce); }
+    if (t->it[0]->list) {
+        Node *r = nlist(t->n); for (int i = 0; i < t->n; i++) r->it[i] = lf_at(t->it[i], v, c, fs, ce);
+        /* a selected λ applied to a variable: its body at the variable */
+        while (lf_is_case(t->it[0], v) && r->n >= 2 && r->it[0]->list && r->it[0]->n == 3 && !r->it[0]->it[0]->list && is(r->it[0]->it[0], "lam") && !r->it[0]->it[1]->list && !r->it[1]->list) {
+            Node *b = lf_subst(r->it[0]->it[2], r->it[0]->it[1]->s, r->it[1]);
+            if (r->n == 2) return b;
+            Node *r2 = nlist(r->n - 1); r2->it[0] = b; for (int i = 2; i < r->n; i++) r2->it[i - 1] = r->it[i];
+            r = r2;
+            if (!(r->it[0]->list && r->it[0]->n == 3)) break;
+        }
+        return r;
+    }
+    const char *k = t->it[0]->s;
+    if ((!strcmp(k, "lam") || !strcmp(k, "plam") || !strcmp(k, "%lam") || !strcmp(k, "forall")) && t->n == 3 && !t->it[1]->list && !strcmp(t->it[1]->s, v)) return t;
+    if ((!strcmp(k, "Pi") || !strcmp(k, "Sigma") || !strcmp(k, "let")) && t->n == 4 && !t->it[1]->list && !strcmp(t->it[1]->s, v)) return sym4(k, t->it[1], lf_at(t->it[2], v, c, fs, ce), t->it[3]);
+    Node *r = nlist(t->n); r->it[0] = !strcmp(k, v) ? ce : t->it[0];
+    bool cs = !strcmp(k, "case") || !strcmp(k, "elim");
+    int from = !strcmp(k, "elim") ? 3 : 2;
+    for (int i = 1; i < t->n; i++) {
+        Node *a = t->it[i];
+        if (cs && i >= from && a->list && a->n == 2) { r->it[i] = lf_binds(a->it[0], v) ? a : lst(2, a->it[0], lf_at(a->it[1], v, c, fs, ce)); continue; }
+        r->it[i] = lf_at(a, v, c, fs, ce);
+    }
+    return r;
+}
+/* a case in e on one of the names vs (not rebound on the way) that can be made a split: every
+ * constructor of its type (no path constructor, no index) has an alternative or the default */
+static bool lf_find(Node *t, const char **vs, int nv, const char **v, int *d) {
+    if (!t->list || t->n == 0) return false;
+    const char *k = t->it[0]->list ? "" : t->it[0]->s;
+    int from = !strcmp(k, "elim") ? 3 : !strcmp(k, "case") ? 2 : 0;
+    if (from && t->n > from && !t->it[from - 1]->list) {
+        const char *x = t->it[from - 1]->s; bool mine = false;
+        for (int i = 0; i < nv; i++) if (vs[i] && !strcmp(vs[i], x)) mine = true;
+        int dd = -1; bool dflt = false, ok = mine;
+        for (int i = from; i < t->n && ok; i++) {
+            Node *a = t->it[i]; if (!a->list || a->n != 2) { ok = false; break; }
+            int pc = pat_con(a->it[0]);
+            if (pc >= 0) {
+                if (dd < 0) dd = CON[pc].data; else if (dd != CON[pc].data) ok = false;
+                if (ford_of(CON[pc].name) || (a->it[0]->list ? a->it[0]->n - 1 : 0) != CON[pc].nfields) ok = false;
+                for (int q = 1; ok && a->it[0]->list && q < a->it[0]->n; q++) if (a->it[0]->it[q]->list) ok = false;
+            } else if (!a->it[0]->list) dflt = true; else ok = false;
+        }
+        if (ok && dd >= 0) {
+            for (int ci = 0; ci < DATA[dd].ncons && ok; ci++) {
+                int c = DATA[dd].cons[ci]; if (CON[c].ndims || ford_of(CON[c].name)) ok = false;
+                bool has = dflt; for (int i = from; i < t->n && !has; i++) if (pat_con(t->it[i]->it[0]) == c) has = true;
+                if (!has) ok = false;
+            }
+            if (ok) { *v = x; *d = dd; return true; }
+        }
+    }
+    /* below, with the names a binder takes removed */
+    const char *vs2[64]; if (nv > 64) nv = 64;
+    for (int i = 1; i < t->n || (i == 1 && t->it[0]->list); i++) {
+        if (i >= t->n) break;
+        Node *a = t->it[i];
+        for (int z = 0; z < nv; z++) vs2[z] = vs[z];
+        bool binder3 = (!strcmp(k, "lam") || !strcmp(k, "plam") || !strcmp(k, "%lam") || !strcmp(k, "forall")) && t->n == 3 && i == 2;
+        bool binder4 = (!strcmp(k, "Pi") || !strcmp(k, "Sigma") || !strcmp(k, "let")) && t->n == 4 && i == 3;
+        if ((binder3 || binder4) && !t->it[1]->list) for (int z = 0; z < nv; z++) if (vs2[z] && !strcmp(vs2[z], t->it[1]->s)) vs2[z] = NULL;
+        if (from && i >= from && a->list && a->n == 2) {
+            for (int z = 0; z < nv; z++) if (vs2[z] && lf_binds(a->it[0], vs2[z])) vs2[z] = NULL;
+            if (lf_find(a->it[1], vs2, nv, v, d)) return true;
+            continue;
+        }
+        if (lf_find(a, vs2, nv, v, d)) return true;
+    }
+    if (t->it[0]->list && lf_find(t->it[0], vs, nv, v, d)) return true;
+    return false;
+}
+static void lf_pvars(Node *p, const char **vs, int *nv) {
+    if (!p->list) { if (!pat_wild(p) && pat_con(p) < 0 && *nv < 64) vs[(*nv)++] = p->s; return; }
+    if (p->n == 2 && !p->it[0]->list && is(p->it[0], "%num")) return;
+    for (int q = 1; q < p->n; q++) lf_pvars(p->it[q], vs, nv);
+}
+static Node *lf_pat(Node *p, const char *v, Node *cp) {
+    if (!p->list) return !strcmp(p->s, v) && pat_con(p) < 0 ? cp : p;
+    if (p->n == 2 && !p->it[0]->list && is(p->it[0], "%num")) return p;
+    Node *r = nlist(p->n); r->it[0] = p->it[0]; for (int q = 1; q < p->n; q++) r->it[q] = lf_pat(p->it[q], v, cp);
+    return r;
+}
+/* every such case of every clause made a split; false when there is none */
+static bool lift_clauses(Lhs **pls, Node ***prhs, int *pn) {
+    Lhs *ls = *pls; Node **rhs = *prhs; int n = *pn; bool any = false;
+    for (int round = 0; round < 64; round++) {
+        int at = -1; const char *v = NULL; int d = -1;
+        for (int i = 0; i < n && at < 0; i++) {
+            const char *vs[64]; int nv = 0;
+            for (int k = 0; k < ls[i].np; k++) lf_pvars(ls[i].ps[k], vs, &nv);
+            if (lf_find(rhs[i], vs, nv, &v, &d)) at = i;
+        }
+        if (at < 0 || n + DATA[d].ncons > 512) break;
+        int N = DATA[d].ncons;
+        Lhs *ls2 = calloc((size_t)n + N + 1, sizeof(Lhs)); Node **rhs2 = calloc((size_t)n + N + 1, sizeof(Node *)); int m = 0;
+        for (int i = 0; i < n; i++) {
+            if (i != at) { ls2[m] = ls[i]; rhs2[m++] = rhs[i]; continue; }
+            for (int ci = 0; ci < N; ci++) {
+                int c = DATA[d].cons[ci], nf = CON[c].nfields;
+                Node *fs[64]; if (nf > 64) return any;
+                Node *ce = nsym(CON[c].name);
+                if (nf) { ce = nlist(nf + 1); ce->it[0] = nsym(CON[c].name); for (int q = 0; q < nf; q++) { fs[q] = xfresh("f"); ce->it[q + 1] = fs[q]; } }
+                Lhs l = ls[i]; l.ps = calloc((size_t)l.np + 1, sizeof(Node *));
+                for (int k = 0; k < l.np; k++) l.ps[k] = lf_pat(ls[i].ps[k], v, ce);
+                ls2[m] = l; rhs2[m++] = lf_at(rhs[i], v, c, fs, ce);
+            }
+        }
+        ls = ls2; rhs = rhs2; n = m; any = true;
+    }
+    *pls = ls; *prhs = rhs; *pn = n;
+    return any;
+}
+static Node *clauses_typed_in(const char *f, Lhs *ls, Node **rhs, int n);
 static Node *clauses_typed(const char *f, Lhs *ls, Node **rhs, int n) {
+    TSig t0 = tsig; int np0 = tsig.np;
+    Node **pn0 = calloc((size_t)np0 + 1, sizeof(Node *)); for (int q = 0; q < np0; q++) pn0[q] = tsig.pn[q];
+    jmp_buf outer; memcpy(&outer, &lift_jb, sizeof outer); bool armed0 = lift_armed;
+    Lhs *ls2 = ls; Node **rhs2 = rhs; int n2 = n;
+    Node *r;
+    if (!setjmp(lift_jb)) { lift_armed = true; r = clauses_typed_in(f, ls, rhs, n); }
+    else {
+        lift_armed = false;
+        /* the signature as it was read; the clauses with their cases made splits */
+        tsig = t0; for (int q = 0; q < np0; q++) tsig.pn[q] = pn0[q];
+        if (!lift_clauses(&ls2, &rhs2, &n2)) r = clauses_typed_in(f, ls, rhs, n);   /* (none: the refusal, as it was) */
+        else r = clauses_typed_in(f, ls2, rhs2, n2);
+    }
+    memcpy(&lift_jb, &outer, sizeof outer); lift_armed = armed0;
+    return r;
+}
+static Node *clauses_typed_in(const char *f, Lhs *ls, Node **rhs, int n) {
     tfname = f;
     tsig.ord = NULL; perm_np = 0;
     /* the patterns at the parameters: implicit ones given as {p} or else the parameter itself; the
@@ -4935,7 +5293,7 @@ static Node *clauses_typed(const char *f, Lhs *ls, Node **rhs, int n) {
             }
             tsig.ord = ord;
         }
-        if (how) { ncdefs = 0; nframes = 0; ndeeps = 0; nsg = nsg_in; }
+        if (how) { ncdefs = 0; nframes = 0; ndeeps = 0; nsg = nsg_in; nrov = 0; }
     }
     rows_track(n);
     Node *body = ccm_t(vars, tsig.np, rows, n);
@@ -5363,6 +5721,7 @@ static Node *x_solve_expr(Node *e) {
 
 /* a declaration left by an error (p_decl): the elaborator's state as before a declaration */
 static void decl_reset(void) {
+    x_cap_end(false);
     neh = neg = 0; nbk = 0; nesc = 0; nwtick = 0; syn_expect = app_expect = NULL;
-    cov_armed = cov_on = guard_on = false; tsig.ord = NULL; perm_np = 0; nsg = 0;
+    cov_armed = cov_on = guard_on = lift_armed = false; nrov = 0; tsig.ord = NULL; perm_np = 0; nsg = 0;
 }

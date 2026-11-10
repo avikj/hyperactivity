@@ -575,6 +575,10 @@ static Node *ds(Node *t) {
                 Node *scr = t->it[first - 1];
                 if (body && !scr->list && !dname && mentions_name(body, scr->s)) {
                     bool shadow = false;
+                    /* (the elaborator has rebuilt it already, at its type: let scr = the T (%rebuilt (C x…))) */
+                    if (body->list && body->n == 4 && !body->it[0]->list && !strcmp(body->it[0]->s, "let") && !body->it[1]->list && !strcmp(body->it[1]->s, scr->s)
+                        && body->it[2]->list && body->it[2]->n == 3 && !body->it[2]->it[0]->list && !strcmp(body->it[2]->it[0]->s, "the")
+                        && body->it[2]->it[2]->list && body->it[2]->it[2]->n == 2 && !body->it[2]->it[2]->it[0]->list && !strcmp(body->it[2]->it[2]->it[0]->s, "%rebuilt")) shadow = true;
                     for (int q = 1; pat && q < pat->n; q++) if (!pat->it[q]->list && !strcmp(pat->it[q]->s, scr->s)) shadow = true;
                     if (!shadow) {
                         static int nsc;
@@ -732,6 +736,16 @@ static char **CHKPOS; static size_t capchkpos;   /* where each checked definitio
 extern char decl_pos[512];
 static char **DATAPOS; static size_t capdatapos;
 static int checked_index(const char *s) { for (int i = nchecked - 1; i >= 0; i--) if (!CHKHIDE[i] && (CHECKED[i] == s || !strcmp(CHECKED[i], s))) return i; return -1; }
+/* a name a checked term cannot use. A definition of a file loaded before the checker (lib/prelude.cub's
+ * map, length, append, add, mul, and, iszero; the checker's own helpers) has no type and cannot be
+ * given one there (a signature needs the checker): the message says so and names the checked ones */
+static void die_unchecked(const char *s) {
+    if (global_lookup(s) >= 0) {
+        char m[512]; snprintf(m, sizeof m, "code: %s is a helper defined before the checker was loaded (lib/prelude.cub and the checker's files): it has no type, so a checked definition cannot use it. Checked ones in lib/std.cub: list-map, list-length, list-append (for map, length, append), plus, times (for add, mul)", s);
+        die(m, NULL);
+    }
+    die("code: not a bound variable or checked definition:", s);
+}
 static int chk_index(int d) { for (int i = 0; i < nchkdata; i++) if (CHKDATA[i] == d) return i; return -1; }
 int data_checked_index(int d) { return chk_index(d); }
 /* the trusted surface (B12): every postulate and every primitive declared, in order; #trusted lists it */
@@ -954,7 +968,7 @@ static Node *to_code(Node *t) {
         if (s[0] == '#' && s[1] >= '0' && s[1] <= '9') return capp1("cwlit", t);   /* a word literal */
         for (int i = ncscope - 1; i >= 0; i--) if (!strcmp(cscope[i], s)) return capp1("cvar", word(ncscope - 1 - i));
         for (int i = 0; i < nchecked; i++) if (!CHKHIDE[i] && !strcmp(CHECKED[i], s)) return capp1("cglob", word(i));
-        die("code: not a bound variable or checked definition:", s);
+        die_unchecked(s);
     }
     const char *h = t->it[0]->s;
     if (!strcmp(h, "%guess")) return to_code(t->it[3]);
@@ -1253,7 +1267,7 @@ static NV ann(Node *t, Chain *C) {
         if (a) { NV r; r.val = t; r.node = a->ty ? kapp("tv", t, a->ty) : kapp("ti", t, NULL); return r; }
         int i = checked_index(s);
         if (i >= 0) { p[0] = word(i); return anode(C, "tg", p, 1, nl2("%gval", word(i))); }
-        die("code: not a bound variable or checked definition:", s);
+        die_unchecked(s);
     }
     const char *h = t->it[0]->s;
     if (!strcmp(h, "lam") || !strcmp(h, "plam") || !strcmp(h, "forall")) {
@@ -3832,10 +3846,10 @@ static void toplevel_in(Node *f) {
     } else if (!strcmp(h, "type")) {
         /* #type e (item 30): e's type as the checker infers it, one line `type: e : T` on stdout (the
          * editor protocol's hover reads it); a term with no inferable type gets the reason */
-        if (f->n != 2) die("(type term)", NULL);
+        if (f->n != 2 && f->n != 3) die("(type term [shown-as])", NULL);
         Node *ct = nl2("%raw", aclosed(ds(f->it[1])));
         long st = 0; char *r = readback(nl2("%%infer-ok", ct), &st);
-        printf("type: "); out_term(f->it[1]);
+        printf("type: "); out_term(f->it[f->n - 1]);   /* (a data type's name stands for its type former written as a function) */
         if (strcmp(r, "ok")) { printf(" : ?\n"); explain(r, NULL); free(r); return; }
         free(r);
         net_drain();

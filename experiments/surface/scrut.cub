@@ -1,0 +1,42 @@
+-- Item 3: the matched variable used inside a branch (tracks/D-os.md, Found).
+
+sc-f : Sum Nat Unit → Nat
+sc-f s = 0
+
+sc-a : Sum Nat Unit → Nat
+sc-a b = case b of
+  inl x → x
+  inr u → sc-f b
+
+sc-b : Nat → List Nat → Nat × List Nat
+sc-b k evs = case evs of
+  cons x xs → (x , xs)
+  nil → (k , evs)
+
+#same sc-b 4 nil = (4 , nil)
+
+-- a let whose value is a pair, used in a branch
+sc-c : Nat → List Nat → Nat × List Nat
+sc-c k evs =
+  let p = (k , evs) in
+  case evs of
+    cons x xs → (x , xs)
+    nil → p
+
+-- the variable at a dependent motive: in the branch it is the constructor
+sc-d : (l : List Nat) → l ≡ l
+sc-d l = case l return (λ m → m ≡ m) of
+  nil → λ i → l
+  cons x xs → λ i → l
+
+-- a let whose value is a constructor of a type with parameters
+sc-e : Nat → List Nat
+sc-e n =
+  let l = cons n nil in
+  case n of
+    zero → l
+    suc m → cons m l
+
+#same sc-e 2 = cons 1 (cons 2 nil)
+#same sc-c 4 nil = (4 , nil)
+#same sc-a (inr unit) = 0

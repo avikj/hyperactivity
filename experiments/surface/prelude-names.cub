@@ -1,0 +1,19 @@
+-- Item 6: lib/prelude.cub's helpers (map, length, append, add, mul) have no types: the prelude is
+-- loaded before the checker, where a signature cannot be stated. A checked definition that uses
+-- one fails with a message naming lib/std.cub's checked ones; the load goes on.
+-- Last line after the eight core files: 2 failed (pn-bad1, pn-bad2), the rest passed.
+
+pn-bad1 : List Nat → List Nat
+pn-bad1 l = append l l
+
+pn-bad2 : List Nat → Nat
+pn-bad2 l = length (map suc l)
+
+pn-a : List Nat → List Nat
+pn-a l = list-append l l
+
+pn-b : List Nat → Nat
+pn-b l = list-length (list-map suc l)
+
+#same pn-a (cons 1 nil) = cons 1 (cons 1 nil)
+#same pn-b (cons 1 (cons 2 nil)) = 2

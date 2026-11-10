@@ -1,0 +1,55 @@
+-- Item 2: structural recursion through a nested case on a field of the matched argument
+-- (tracks/D-os.md, Found), and through a continuation rebound by a dependent case
+-- (tracks/G-memmodel.md, Found: g5-f).
+
+rc-f : List Nat → Nat
+rc-f nil = 0
+rc-f (cons e r) = case r of
+  nil → e
+  cons d r2 → plus e (rc-f r2)
+
+#same rc-f (cons 1 (cons 2 (cons 3 (cons 4 (cons 5 nil))))) = 9
+
+-- the case inside an application, the matched variable used beside it
+rc-g : List Nat → List Nat
+rc-g nil = nil
+rc-g (cons e r) = cons e (case r of
+  nil → r
+  cons d r2 → rc-g r2)
+
+#same rc-g (cons 1 (cons 2 (cons 3 nil))) = cons 1 (cons 3 nil)
+
+-- a case on the case's own field, two levels down, with a default alternative
+rc-h : Nat → Nat
+rc-h zero = 0
+rc-h (suc n) = case n of
+  zero → 1
+  suc m → case m of
+    suc k → suc (rc-h k)
+    _ → 2
+
+#same rc-h 7 = 3
+
+-- a continuation rebound by a dependent case: the call is on the matched field applied
+data RcCmd = rc-ask | rc-tell (n : Nat)
+rc-resp : RcCmd → Type
+rc-resp rc-ask = Nat
+rc-resp (rc-tell n) = Unit
+data RcStep = rc-done (a : Nat) | rc-cmd (c : RcCmd) (k : rc-resp c → RcStep)
+
+rc-run : RcStep → Nat
+rc-run (rc-done a) = a
+rc-run (rc-cmd i kk) =
+  (case i return (λ x → (rc-resp x → RcStep) → Nat) of
+     rc-ask → λ k2 → rc-run (k2 5)
+     rc-tell n → λ k2 → plus n (rc-run (k2 unit))) kk
+
+#same rc-run (rc-cmd (rc-tell 2) (λ u → rc-cmd rc-ask (λ n → rc-done n))) = 7
+
+-- the call on something that is not below the matched argument: refused
+#fail
+rc-bad : List Nat → Nat
+rc-bad nil = 0
+rc-bad (cons e r) = case r of
+  nil → e
+  cons d r2 → rc-bad (cons d (cons e r2))
