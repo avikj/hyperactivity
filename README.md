@@ -172,6 +172,22 @@ layout, calling convention, pass order, encodings. It is deleted when the typed 
 Also refused: `lib/derive.cub` (122 lines; `deriving eq` in the surface language is off with
 it) and `lib/intlin.cub` (20).
 
+## 5a. The typed compiler — `lib/compile/` (checks, in progress)
+
+| file | lines | status | what it is |
+|---|---|---|---|
+| `tm.cub` | 197 | checks | source terms (`JTm`: words, booleans, naturals, pairs, sums, functions, `let`, `if`, `case`, recursion on Nat, loops on Word) at types `JTy`, and their meaning `jev` at every type, written with the language's own eliminators so a definition and its term can be shown equal by `refl` |
+| `stack.cub` | 924 | checks (281, no store, ~1 min) | a stack machine of 64-bit words (`JCode`, `jrun`); values of first-order types flattened onto it (a pair its parts, a sum its tag and both payload areas); the compiler `jcx`; and `jcx-ok`: from any stack where the context's values are placed, the code ends as its continuation run on the value's words, or leaves (`jout`: a result past 2^64, or a function, which this level does not compile) |
+
+Each instruction of the machine is one or a few of `lib/x86.cub`'s templates (push imm, push
+[rsp+d], pop/op/push, a slide of the top words). Proved: every term form except `jlam`/`japp`
+(those compile to `kfail`, the run leaves — never a wrong answer).
+
+**Next:** closures (`jlam`/`japp`, with a heap); the x86 level — each instruction's bytes stepped
+by `lib/isa/x86`'s semantics to the same stack (needs word lemmas: masks, bounds below 2^64;
+memory byte round trips); the blob and ELF layout; then `#jit`/`#build` use it and `lib/x86.cub`'s
+unchecked stretch is deleted.
+
 ## 6. Importers and tools — `tools/` (Python, trusted)
 
 | file | lines | what it is | produces |
@@ -224,7 +240,8 @@ src/  ──►  prelude, code, match, nav, cost, lin, check  ──►  std  �
 
 ## Everything that is not right, in one place
 
-1. The compiler's last stretch has no types (§5).
+1. The compiler's last stretch has no types (§5); its typed replacement (§5a) reaches a proved
+   stack machine for first-order terms, not yet closures or bytes.
 2. The C++ and Rust readers do not check against the current `lib/mem` (§4).
 3. `x-rel-fix` gives up silently at 64 rounds (§5).
 4. Unary numerals; quadratic `synkey`; unchecked `pthread_create` (§1).

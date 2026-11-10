@@ -139,6 +139,11 @@ jnatrec-ev : {c : Type} → c → (Nat → c → c) → Nat → c
 jnatrec-ev z s zero = z
 jnatrec-ev z s (suc n) = s n (jnatrec-ev z s n)
 
+-- a sum's elimination, as a definition of its own so that a statement about a case can name it
+jsumel : (A : Type) → (B : Type) → (C : Type) → Sum A B → (A → C) → (B → C) → C
+jsumel A B C (inl x) f h = f x
+jsumel A B C (inr y) f h = h y
+
 jloop-ev : {c : Type} → Word → c → (Word → c → c) → c
 jloop-ev b x s = %welimP (λ v → c) b x s
 
@@ -185,9 +190,7 @@ jev (jinr y) g a r = case a return (λ z → JEl z) of
   jn → jdef jn
   jprod a1 a2 → jdef (jprod a1 a2)
   jarr a1 a2 → jdef (jarr a1 a2)
-jev (jcase b1 b2 s l m) g a r = case jev s g (jsum b1 b2) r of
-  inl x → jev l (cons b1 g) a (x , r)
-  inr y → jev m (cons b2 g) a (y , r)
+jev (jcase b1 b2 s l m) g a r = jsumel (JEl b1) (JEl b2) (JEl a) (jev s g (jsum b1 b2) r) (λ x → jev l (cons b1 g) a (x , r)) (λ y → jev m (cons b2 g) a (y , r))
 jev jzero g a r = jcast jn a zero
 jev (jsuc n) g a r = jcast jn a (suc (jev n g jn r))
 jev (jnatrec z s n) g a r = jnatrec-ev (jev z g a r) (λ k h → jev s (cons a (cons jn g)) a (h , (k , r))) (jev n g jn r)

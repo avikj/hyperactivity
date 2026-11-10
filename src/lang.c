@@ -1973,11 +1973,22 @@ static CaseTab *tab_intern(CaseTab *t) {
  *    later gets a fresh pointer, which nothing compares against the old one.
  * Run once the compiled code made since the last sweep has grown past a quarter of what that
  * sweep kept, and 32 MB (CUBICAL_NOSWEEP: never; CUBICAL_SWEEPALL: after every top-level form) */
-typedef struct { void **v; size_t cap; } PSet;
+typedef struct { void **v; size_t cap, n; } PSet;
 static size_t ps_slot(const PSet *s, const void *p) { return (size_t)(((uintptr_t)p >> 4) * 0x9E3779B97F4A7C15ull) & (s->cap - 1); }
-static void ps_init(PSet *s, size_t n) { s->cap = 64; while (s->cap < 2 * n + 2) s->cap *= 2; s->v = calloc(s->cap, sizeof(void *)); }
+static void ps_init(PSet *s, size_t n) { s->cap = 64; while (s->cap < 2 * n + 2) s->cap *= 2; s->v = calloc(s->cap, sizeof(void *)); s->n = 0; }
 static bool ps_has(const PSet *s, const void *p) { for (size_t i = ps_slot(s, p); s->v[i]; i = (i + 1) & (s->cap - 1)) if (s->v[i] == p) return true; return false; }
-static bool ps_add(PSet *s, void *p) { size_t i = ps_slot(s, p); for (; s->v[i]; i = (i + 1) & (s->cap - 1)) if (s->v[i] == p) return false; s->v[i] = p; return true; }
+/* a set sized for what it was made for grows past half full (a body's records were counted at 16:
+ * a full table is probed forever) */
+static bool ps_add(PSet *s, void *p) {
+    size_t i = ps_slot(s, p); for (; s->v[i]; i = (i + 1) & (s->cap - 1)) if (s->v[i] == p) return false;
+    if (2 * (s->n + 1) > s->cap) {
+        void **old = s->v; size_t oc = s->cap; s->cap *= 2; s->v = calloc(s->cap, sizeof(void *));
+        for (size_t j = 0; j < oc; j++) if (old[j]) { size_t q = ps_slot(s, old[j]); while (s->v[q]) q = (q + 1) & (s->cap - 1); s->v[q] = old[j]; }
+        free(old);
+        for (i = ps_slot(s, p); s->v[i]; i = (i + 1) & (s->cap - 1)) ;
+    }
+    s->v[i] = p; s->n++; return true;
+}
 /* the interned ones; those built from (sw_live*); those named (sw_name*, a superset) */
 static PSet sw_recs, sw_tabs, sw_liver, sw_livet, sw_namer, sw_namet;
 static PSet *sw_mr, *sw_mt;   /* the sets being marked */
@@ -2015,8 +2026,11 @@ static void sw_cell_payload(void *p) {
 static void sw_key_payload(void *p) { sw_cell_payload(p); }
 /* a body's records and tables, each once, for a record about to lose it */
 static PSet sw_seen; static Record **sw_gr; static size_t sw_grn, sw_grcap; static CaseTab **sw_gt; static size_t sw_gtn, sw_gtcap;
+/* code is shared (one subterm under many parents): each node is walked once, or a walk is
+ * exponential in the nesting */
+static PSet sw_synseen;
 static void sw_gone_walk(const Syn *t) {
-    if (!t) return;
+    if (!t || !ps_add(&sw_synseen, (void *)t)) return;
     if (t->rec && ps_add(&sw_seen, t->rec)) { GROW(sw_gr, sw_grcap, sw_grn + 1); sw_gr[sw_grn++] = t->rec; }
     if (t->tab && ps_add(&sw_seen, t->tab)) { GROW(sw_gt, sw_gtcap, sw_gtn + 1); sw_gt[sw_gtn++] = t->tab; }
     for (int i = 0; i < t->n; i++) sw_gone_walk(t->k[i]);
@@ -2024,9 +2038,9 @@ static void sw_gone_walk(const Syn *t) {
 static void rec_drop_body(Record *r) {
     RecGone *g = calloc(1, sizeof(RecGone));
     rec_hash(r); rec_digest(r, g->dig);
-    ps_init(&sw_seen, 16); sw_grn = sw_gtn = 0;
+    ps_init(&sw_seen, 16); ps_init(&sw_synseen, 16); sw_grn = sw_gtn = 0;
     sw_gone_walk(r->body);
-    free(sw_seen.v);
+    free(sw_seen.v); free(sw_synseen.v);
     if (sw_grn) { g->rec = malloc(sw_grn * sizeof(Record *)); memcpy(g->rec, sw_gr, sw_grn * sizeof(Record *)); g->nrec = (int)sw_grn; }
     if (sw_gtn) { g->tab = malloc(sw_gtn * sizeof(CaseTab *)); memcpy(g->tab, sw_gt, sw_gtn * sizeof(CaseTab *)); g->ntab = (int)sw_gtn; }
     syn_free(r->body); free(r->uses); r->body = NULL; r->uses = NULL; r->gone = g;
