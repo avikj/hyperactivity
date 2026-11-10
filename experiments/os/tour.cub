@@ -1,0 +1,45 @@
+-- experiments/os/tour.cub — one process over Linux through the calls the echo does not make
+-- (loaded after lib/os/contract.cub): the clock, an anonymous mapping with words and bytes
+-- stored and read, a UDP socket with an option set and bound on 127.0.0.1:47475, an epoll
+-- instance watching it (nothing ready; then, after a datagram sent to itself, one event), the
+-- receive, a futex wake (nobody waits) and wait (the word differs: EAGAIN), a sleep of a
+-- millisecond, the clock again, the pid, and everything released. The answer is what was seen.
+-- tour-run.cub performs it on the net, tour-build.cub writes build/os-tour, tour-model.cub runs
+-- it against the contract.
+record Tour = { tour-ready0 : Word ; tour-ready1 : Word ; tour-events : List EpollEvent
+              ; tour-sent : Word ; tour-got : Word ; tour-from : SockAddr ; tour-word : Word ; tour-byte : Word
+              ; tour-woken : Word ; tour-wait : Sum Errno Unit ; tour-later : Bool ; tour-pid-pos : Bool }
+tour-ns : Timespec → Word
+tour-ns t = %wadd (%wmul (ts-sec t) #1000000000) (ts-nsec t)
+tour-addr : SockAddr
+tour-addr = SockAddr { sa-port = #47475 ; sa-ip = #2130706433 }
+os-tour : {l : Level} → Proc {l} Linux (Sum Errno Tour)
+os-tour {l} =
+  lx-then {l} {Timespec} {Tour} (lx {l} lx-clock-gettime) (λ t0 →
+  lx-then {l} {Word} {Tour} (lx {l} (lx-mmap #0 #4096 #3 #34 #18446744073709551615 #0)) (λ m →
+  bind {l} {Linux} {Unit} {Sum Errno Tour} (lx {l} (lx-poke64 m #1234605616436508552)) (λ u0 →
+  bind {l} {Linux} {Word} {Sum Errno Tour} (lx {l} (lx-peek8 (%wadd m #1))) (λ byte →
+  lx-then {l} {Word} {Tour} (lx {l} (lx-socket #2 #2 #0)) (λ fd →
+  lx-then {l} {Unit} {Tour} (lx {l} (lx-setsockopt fd #1 #2 #1)) (λ u1 →
+  lx-then {l} {Unit} {Tour} (lx {l} (lx-bind fd tour-addr)) (λ u2 →
+  lx-then {l} {Word} {Tour} (lx {l} (lx-epoll-create1 #0)) (λ ep →
+  lx-then {l} {Unit} {Tour} (lx {l} (lx-epoll-ctl ep #1 fd (EpollEvent { ev-events = #1 ; ev-data = %wadd fd #1000 }))) (λ u3 →
+  lx-then {l} {Upto #8 × List EpollEvent} {Tour} (lx {l} (lx-epoll-wait ep #8 #0)) (λ w0 →
+  lx-then {l} {Upto #8} {Tour} (lx {l} (lx-sendto fd m #8 #0 tour-addr)) (λ s →
+  lx-then {l} {Upto #8 × List EpollEvent} {Tour} (lx {l} (lx-epoll-wait ep #8 #1000)) (λ w1 →
+  lx-then {l} {Upto #64 × SockAddr} {Tour} (lx {l} (lx-recvfrom fd (%wadd m #16) #64 #0)) (λ r →
+  bind {l} {Linux} {Word} {Sum Errno Tour} (lx {l} (lx-peek64 (%wadd m #16))) (λ word →
+  lx-then {l} {Upto #1} {Tour} (lx {l} (lx-futex-wake m #1)) (λ fw →
+  bind {l} {Linux} {Sum Errno Unit} {Sum Errno Tour} (lx {l} (lx-futex-wait m #5)) (λ fx →
+  lx-then {l} {Unit} {Tour} (lx {l} (lx-nanosleep (Timespec { ts-sec = #0 ; ts-nsec = #1000000 }))) (λ u4 →
+  lx-then {l} {Timespec} {Tour} (lx {l} lx-clock-gettime) (λ t1 →
+  bind {l} {Linux} {Word} {Sum Errno Tour} (lx {l} lx-getpid) (λ pid →
+  lx-then {l} {Unit} {Tour} (lx {l} (lx-munmap m #4096)) (λ u5 →
+  lx-then {l} {Unit} {Tour} (lx {l} (lx-close ep)) (λ u6 →
+  lx-then {l} {Unit} {Tour} (lx {l} (lx-close fd)) (λ u7 →
+  ret {l} {Linux} {Sum Errno Tour} (inr (Tour
+    { tour-ready0 = fst (fst w0) ; tour-ready1 = fst (fst w1) ; tour-events = snd w1
+    ; tour-sent = fst s ; tour-got = fst (fst r) ; tour-from = snd r ; tour-word = word ; tour-byte = byte
+    ; tour-woken = fst fw ; tour-wait = fx ; tour-later = %wlt (%wadd (tour-ns t0) #999999) (tour-ns t1) ; tour-pid-pos = %wlt #0 pid }))))))))))))))))))))))))
+os-tour-step : Step W (Sum Errno Tour)
+os-tour-step = to-step (linux-run {Sum Errno Tour} (x86-64-linux #2) (x86-64-linux-le #2) (os-tour {lsuc lzero}))

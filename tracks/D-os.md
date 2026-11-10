@@ -118,6 +118,23 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   `udp-echo-echoes` (the outgoing queue is exactly the datagram turned round, 9,078 steps) and
   `udp-echo-done : IsDone …`. (The statement `k-sent … ≡ nil` in its place is rejected:
   `FAIL: checks udp-echo-wrong`.)
+- **The calls the echo does not make, on the kernel, in a binary, and in the model**:
+  `experiments/os/tour.cub` (`os-tour`: clock_gettime, mmap, poke64/peek8/peek64, socket,
+  setsockopt, bind, epoll_create1, epoll_ctl, epoll_wait ×2, sendto to itself, recvfrom,
+  futex wake and wait, nanosleep, getpid, munmap, close ×2; its answer the record `Tour` of what
+  was seen). `tour-run.cub` on the net: `run: done (inr (#0, #1, [(#1, #1003)], #8, #8,
+  (#47475, #2130706433), #1234605616436508552, #119, #0, inl #11, true, true))   [5512 steps]`
+  (no event ready, then one `EPOLLIN` with the data given, 8 sent, 8 received from itself, the
+  word and the byte read back, 0 woken, `EAGAIN`, the clock at least a millisecond later, a
+  positive pid). `tour-model.cub`, `runp` in `linux-model`: `done (inr (#0 , #1 , cons (#1 ,
+  #1003) nil , #8 , #8 , (#47475 , #2130706433) , #1234605616436508552 , #119 , #0 , inl #11 ,
+  true , true))` (10,146 steps), no region left mapped, descriptors 0–2 left, the clock at
+  1,001,000,002 ns (two readings and the sleep). `tour-build.cub`: `ok: build os-tour-step
+  [build/os-tour, 66049 bytes, the checker's conversion, 1209198335 steps]`; under `strace` the
+  binary makes exactly those 20 calls with those results (`epoll_ctl(4, EPOLL_CTL_ADD, 3,
+  {events=EPOLLIN, data={u64=1003}}) = 0`, `epoll_wait(4, [{events=EPOLLIN, data=1003}], 8,
+  1000) = 1`, `futex(…, FUTEX_WAIT, 5, NULL) = -1 EAGAIN`, …) and exits 0. Not yet exercised
+  on the kernel: read, write, open, mprotect, listen, accept4, connect, exit_group, poke8.
 
 ## Found
 
@@ -146,10 +163,12 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   constructor field …`) although `xs` is a field of the match; `k-take-go (cons x xs) n = …
   k-take-go xs (%wsub n #1)` is accepted. With the other argument unchanged (`k-find fd (cons e
   r) = … k-find fd r`) either order is accepted.
-- **Size of a small process's binary.** `build/udp-echo` is 52,133 bytes and its `#build` takes
-  42,415,757 steps for a process of five system calls (`build/feed` is 8,064 bytes, 1.2 M
-  steps). The handler's 29 cases are not what is big (only the used ones remain after
-  specialization); not investigated further here: it is the compiler's (track A).
+- **`#build` cost grows much faster than the process** (track A's; measured here, cause not
+  investigated). `udp-echo` (7 commands of `Linux`): 52,133 bytes, 42,415,757 steps, 12.7 s.
+  `os-tour` (22 commands): 66,049 bytes, 1,209,198,335 steps, 3 min 39 s. `build/feed` (track
+  A's, straight over `W`): 8,064 bytes, 1.2 M steps. Both binaries are correct (their system
+  calls under `strace` are listed under Done). Reproduce:
+  `./build/cubical <library> lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub experiments/os/tour.cub experiments/os/tour-build.cub`.
 
 ## Next step
 
