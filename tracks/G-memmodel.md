@@ -70,6 +70,28 @@ How to check (cached library, one file after another; the last line must read `N
   The four files load together: `./build/cubical $LIBS lib/isa/tso.cub experiments/tso/{sb,mp,lb,iriw}.cub`
   ends `830 passed, 0 failed`.
 
+- `lib/isa/tso.cub`, axiomatic part and the relation (file now 112 definitions; all check):
+  events `TsoEv` (id, thread, kind `k-R/k-W/k-L/k-F`, address, value read, value written),
+  candidate `TsoX` (events, rf as (reader id, write id or #0 = initial memory), co as the list
+  of writer ids in order); `tso-consistent m0 x : Bool` = `tso-wf` (ids distinct, exactly the
+  readers have one rf entry to a same-address same-value writer or to m0, co lists exactly the
+  writers once) ∧ `tso-acyclic tso-ghb` (po minus plain-W→plain-R, rf across threads, co, fr;
+  mfence and locked events are nodes, so W→mfence→R and W→locked stay ordered; atomicity of a
+  locked event is the 2-cycle fr;co) ∧ `tso-acyclic tso-loc` (po on one location, rf, co, fr);
+  `TsoConsistent` the type. `tso-exec s` is the candidate a state's trace yields.
+  `TsoSound : Type` is the general statement (every schedule from `tso-init`, buffers empty
+  afterwards ⇒ consistent); **no term of it exists** (see Limits). `tso-sound-upto n ths : Bool`
+  checks `tso-state-ok` at every state the scheduler is asked at and at every end, over every
+  schedule of ≤ n transitions. The scheduler's command is now `sched-pick ths s` (it shows the
+  state), so one fold (`tso-fold`) serves outcome sets and soundness.
+- Soundness instances, each a definition `x-sound : isTrue (tso-sound-upto n x)` `= unit` that
+  checks: SB 961,848 steps (`#show … = true`; the definition 963,306); MP 369,590; LB 228,444;
+  IRIW 69,471,296 steps (13 s). With 0 cut by the bound in each, these are TsoSound at these
+  four programs for schedules of every length.
+  All five files, uncached: `881 passed, 0 failed; 77,191,500 steps`, 20.5 s wall.
+  (A file that has not changed is `cached:` and its `#show`s are not printed again; to see the
+  readings again run with `CUBICAL_NOCACHE=1`, which also rechecks the library, ~20 s more.)
+
 ## Found
 
 - **Elaborator refuses a structural recursion when an argument before the matched one changes.**
@@ -85,12 +107,28 @@ How to check (cached library, one file after another; the last line must read `N
 - `append`, `map`, `length` of `lib/prelude.cub` are not checked definitions (`error: code: not a
   bound variable or checked definition: append`, fatal); `app-w` (proc.cub) is.
 
+## Limits
+
+- `TsoSound` in general (all programs, all schedules) is stated and not proved. Proved: its
+  instances at SB, MP, LB, IRIW over every schedule, by computation. A general proof is an
+  invariant on `TsoSt` (every edge of `tso-ghb` and `tso-loc` goes forward in the trace when a
+  write is placed at its flush) carried through `tso-step`; it has not been written.
+- The consistency predicate is the rf/co ("global happens-before") formulation of x86-TSO
+  (Owens–Sarkar–Sewell's model as rendered by Alglave–Maranget–Tautschnig's `x86tso.cat`), not
+  OSS's own memory-order-with-reads formulation; the two are equivalent in the literature, and
+  that equivalence is not a term here.
+- Acyclicity is the decision procedure (peel sources n times); no proof relates it to the
+  absence of a path from a node to itself.
+
 ## Next step
 
-In `lib/isa/tso.cub`, after `tso-outcomes`: the axiomatic part. Events `TsoEv` (id, thread, kind
-R/W/L(locked)/F(mfence), address, value read, value written), witness `TsoX` (events, rf as
-(read id, write id or #0), co as the list of write ids in order), `tso-exec-of` a trace (the
-reversed `ts-log`), `tso-consistent : TsoX → Bool` (well-formedness; acyclic(po∖(W×R) ∪ rfe ∪ co
-∪ fr) over R/W/L/F nodes; acyclic(po-loc ∪ rf ∪ co ∪ fr)), `TsoSound : Type` (general statement,
-not inhabited), and a fold `tso-all-consistent n ths : Bool` over every schedule. Then
-`experiments/tso/{mp,lb,iriw}.cub`, `lib/mem/atomics.cub`, `experiments/tso/spinlock.cub`.
+1. `lib/mem/atomics.cub` (loaded after `lib/isa/tso.cub`): `data MOrd` (five orderings),
+   `data Atom` (load/store/compare-exchange/fence with orderings), `AtomS`, the handler(s)
+   `Handler AtomS TsoIS` (seq_cst store as xchg, and as store+mfence), `step-handle` to apply a
+   handler to a `Step`; `experiments/tso/atomics-sb.cub`: SB with relaxed stores (allows 0,0)
+   and with seq_cst stores (forbids 0,0), each a `#show tso-outcomes`.
+2. `experiments/tso/spinlock.cub`: two threads, xchg-based spin-lock with a bounded number of
+   attempts, mutual exclusion as `isTrue (…)` over every schedule up to the bound.
+3. The axiomatic side of the litmus sets: for each forbidden outcome, `tso-consistent` of its
+   candidates is `false`; then an enumeration of all candidates (`tso-ax-outcomes`) so the two
+   outcome sets are compared as equal lists per litmus.

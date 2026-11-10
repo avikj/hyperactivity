@@ -10,3 +10,9 @@ sb : List TsoThread
 sb = cons sb-t0 (cons sb-t1 nil)
 -- 6 transitions finish every schedule (2 stores, 2 flushes, 2 loads)
 #show tso-outcomes 6 sb
+-- the execution of one schedule (both stores, both loads, both flushes): the relaxed outcome
+#show tso-exec (snd (tso-run (cons (ch-go #0) (cons (ch-go #1) (cons (ch-go #0) (cons (ch-go #1) (cons (ch-flush #0) (cons (ch-flush #1) nil)))))) sb tso-init))
+-- every schedule's execution is TSO-consistent (TsoSound at SB, by computation)
+#show tso-sound-upto 6 sb
+sb-sound : isTrue (tso-sound-upto 6 sb)
+sb-sound = unit

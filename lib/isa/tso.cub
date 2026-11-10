@@ -140,10 +140,11 @@ ti-mfence : TsoThread → TsoThread
 ti-mfence k = scmd t-mfence (λ u → k)
 ti-ret : List Word → TsoThread
 ti-ret r = sdone r
--- the scheduler's signature: one command, "which transition next"; the response is the choice
--- (the next instruction of thread t, or a flush of t's buffer)
+-- the scheduler's signature: one command, "which transition next", showing the scheduler the
+-- threads and the state; the response is the choice (the next instruction of thread t, or a
+-- flush of t's buffer)
 data TsoCh = ch-go (t : Word) | ch-flush (t : Word)
-data TsoSchedC = sched-pick
+data TsoSchedC = sched-pick (ths : List TsoThread) (s : TsoSt)
 tso-sched-resp : TsoSchedC → Type
 tso-sched-resp c = TsoCh
 TsoSchedS : Sig
@@ -194,7 +195,7 @@ tso-sys zero ths s =
 tso-sys (suc n) ths s =
   (case tso-final ths s of
      inl out → sdone (tso-finished out s)
-     inr u → scmd sched-pick (λ ch →
+     inr u → scmd (sched-pick ths s) (λ ch →
                case tso-step ch ths s of
                  inl p → tso-sys n (fst p) (snd p)
                  inr u2 → sdone tso-blocked))
@@ -206,10 +207,11 @@ tso-choices (cons th r) j = cons (ch-go j) (cons (ch-flush j) (tso-choices r (%w
 tso-over : {R : Type} → List TsoCh → (TsoCh → R → R) → R → R
 tso-over nil f acc = acc
 tso-over (cons ch r) f acc = tso-over r f (f ch acc)
--- the fold of the tree over every response in chs at every command: every schedule's end
-tso-fold : {R : Type} → List TsoCh → (TsoEnd → R → R) → Step TsoSchedS TsoEnd → R → R
-tso-fold chs f (sdone e) acc = f e acc
-tso-fold chs f (scmd c k) acc = tso-over chs (λ ch a → tso-fold chs f (k ch) a) acc
+-- the fold of the tree over every response in chs at every command: g at every state where the
+-- scheduler is asked, f at every schedule's end
+tso-fold : {R : Type} → List TsoCh → (TsoSchedC → R → R) → (TsoEnd → R → R) → Step TsoSchedS TsoEnd → R → R
+tso-fold chs g f (sdone e) acc = f e acc
+tso-fold chs g f (scmd c k) acc = tso-over chs (λ ch a → tso-fold chs g f (k ch) a) (g c acc)
 -- a set of outcomes: a list of results, sorted and without repeats
 tso-weq-l : List Word → List Word → Bool
 tso-weq-l nil ys = (case ys of nil → true; cons y r → false)
@@ -231,4 +233,196 @@ tso-tally e (tso-sum os f c) =
     tso-blocked → tso-sum os f c
     tso-nofuel s → tso-sum os f (%wsucc c)
 tso-outcomes : Nat → List TsoThread → TsoSum
-tso-outcomes n ths = tso-fold (tso-choices ths #0) tso-tally (tso-sys n ths tso-init) (tso-sum nil #0 #0)
+tso-outcomes n ths = tso-fold (tso-choices ths #0) (λ c a → a) tso-tally (tso-sys n ths tso-init) (tso-sum nil #0 #0)
+-- ---------------------------------------------------------------- the axiomatic form
+-- an event: its id, its thread, its kind (a read, a write, a locked read-modify-write, an
+-- mfence), the address, the value read and the value written (those that apply). Program
+-- order is the order of ids within a thread
+data TsoK = k-R | k-W | k-L | k-F
+data TsoEv = tso-ev (id : Word) (tid : Word) (k : TsoK) (a : Word) (vr : Word) (vw : Word)
+-- a candidate execution: the events, and the witness: rf as pairs (reading event, the write
+-- event read from, #0 for the initial memory), and the total order on writes as the list of
+-- the writing events' ids, earliest first
+data TsoX = tso-x (evs : List TsoEv) (rf : List (Word × Word)) (co : List Word)
+tso-k-reads : TsoK → Bool
+tso-k-reads k = case k of k-R → true; k-W → false; k-L → true; k-F → false
+tso-k-writes : TsoK → Bool
+tso-k-writes k = case k of k-R → false; k-W → true; k-L → true; k-F → false
+tso-k-isR : TsoK → Bool
+tso-k-isR k = case k of k-R → true; k-W → false; k-L → false; k-F → false
+tso-k-isW : TsoK → Bool
+tso-k-isW k = case k of k-R → false; k-W → true; k-L → false; k-F → false
+tso-k-isF : TsoK → Bool
+tso-k-isF k = case k of k-R → false; k-W → false; k-L → false; k-F → true
+tso-not : Bool → Bool
+tso-not b = if b then false else true
+tso-all : {A : Type} → (A → Bool) → List A → Bool
+tso-all p nil = true
+tso-all p (cons x r) = if p x then tso-all p r else false
+tso-any : {A : Type} → (A → Bool) → List A → Bool
+tso-any p nil = false
+tso-any p (cons x r) = if p x then true else tso-any p r
+tso-keep : {A : Type} → (A → Bool) → List A → List A
+tso-keep p nil = nil
+tso-keep p (cons x r) = if p x then cons x (tso-keep p r) else tso-keep p r
+tso-map : {A B : Type} → (A → B) → List A → List B
+tso-map f nil = nil
+tso-map f (cons x r) = cons (f x) (tso-map f r)
+tso-len : {A : Type} → List A → Nat
+tso-len nil = zero
+tso-len (cons x r) = suc (tso-len r)
+-- how many times a word occurs in a list
+tso-count : List Word → Word → Word
+tso-count nil x = #0
+tso-count (cons y r) x = if weq x y then %wsucc (tso-count r x) else tso-count r x
+-- the position of a word in a list counting from j (#0 when absent, for j from #1)
+tso-pos : List Word → Word → Word → Word
+tso-pos nil x j = #0
+tso-pos (cons y r) x j = if weq x y then j else tso-pos r x (%wsucc j)
+-- the write a reading event reads from by the witness (#0 also when it has no entry: that a
+-- reading event has exactly one entry is part of well-formedness)
+tso-src : List (Word × Word) → Word → Word
+tso-src nil x = #0
+tso-src (cons e r) x = if weq x (fst e) then snd e else tso-src r x
+-- an acyclic relation on a finite list of nodes: removing, as many times as there are nodes,
+-- every node with no predecessor among those left, leaves none
+tso-peel : {A : Type} → (A → A → Bool) → List A → List A
+tso-peel rel ns = tso-keep (λ x → tso-any (λ y → rel y x) ns) ns
+tso-peels : {A : Type} → Nat → (A → A → Bool) → List A → List A
+tso-peels zero rel ns = ns
+tso-peels (suc n) rel ns = tso-peels n rel (tso-peel rel ns)
+tso-acyclic : {A : Type} → (A → A → Bool) → List A → Bool
+tso-acyclic rel ns = (case tso-peels (tso-len ns) rel ns of nil → true; cons x r → false)
+-- an event with what the witness says of it: the write it reads from (src), its position in
+-- the order on writes (cp, from #1; #0 when it is not there), and the position of the write
+-- it reads from (scp; #0 for the initial memory)
+data TsoN = tso-n (id : Word) (tid : Word) (k : TsoK) (a : Word) (vr : Word) (vw : Word) (src : Word) (cp : Word) (scp : Word)
+tso-annot : List (Word × Word) → List Word → TsoEv → TsoN
+tso-annot rf co e =
+  case e of
+    tso-ev id tid k a vr vw → tso-n id tid k a vr vw (tso-src rf id) (tso-pos co id #1) (tso-pos co (tso-src rf id) #1)
+-- program order: same thread, earlier id
+tso-po : TsoN → TsoN → Bool
+tso-po (tso-n id1 t1 k1 a1 vr1 vw1 s1 c1 sc1) (tso-n id2 t2 k2 a2 vr2 vw2 s2 c2 sc2) =
+  andB (weq t1 t2) (wlt id1 id2)
+-- the order on writes, per location
+tso-co : TsoN → TsoN → Bool
+tso-co (tso-n id1 t1 k1 a1 vr1 vw1 s1 c1 sc1) (tso-n id2 t2 k2 a2 vr2 vw2 s2 c2 sc2) =
+  andB (andB (tso-k-writes k1) (tso-k-writes k2)) (andB (weq a1 a2) (wlt c1 c2))
+-- reads-from: e2 reads from the write e1
+tso-rf : TsoN → TsoN → Bool
+tso-rf (tso-n id1 t1 k1 a1 vr1 vw1 s1 c1 sc1) (tso-n id2 t2 k2 a2 vr2 vw2 s2 c2 sc2) =
+  andB (tso-k-reads k2) (weq s2 id1)
+-- from-read: e1 reads from a write (or the initial memory) that the other write e2 to the same
+-- location follows in the order on writes
+tso-fr : TsoN → TsoN → Bool
+tso-fr (tso-n id1 t1 k1 a1 vr1 vw1 s1 c1 sc1) (tso-n id2 t2 k2 a2 vr2 vw2 s2 c2 sc2) =
+  andB (andB (tso-k-reads k1) (tso-k-writes k2)) (andB (weq a1 a2) (andB (tso-not (weq id1 id2)) (wlt sc1 c2)))
+tso-same-thread : TsoN → TsoN → Bool
+tso-same-thread (tso-n id1 t1 k1 a1 vr1 vw1 s1 c1 sc1) (tso-n id2 t2 k2 a2 vr2 vw2 s2 c2 sc2) =
+  weq t1 t2
+-- a plain write followed in program order by a plain read: the one pair TSO does not order
+tso-wr : TsoN → TsoN → Bool
+tso-wr (tso-n id1 t1 k1 a1 vr1 vw1 s1 c1 sc1) (tso-n id2 t2 k2 a2 vr2 vw2 s2 c2 sc2) =
+  andB (tso-k-isW k1) (tso-k-isR k2)
+-- two events on one location (an mfence has none)
+tso-same-loc : TsoN → TsoN → Bool
+tso-same-loc (tso-n id1 t1 k1 a1 vr1 vw1 s1 c1 sc1) (tso-n id2 t2 k2 a2 vr2 vw2 s2 c2 sc2) =
+  andB (weq a1 a2) (andB (tso-not (tso-k-isF k1)) (tso-not (tso-k-isF k2)))
+-- the global-happens-before relation of TSO: program order except plain write to plain read
+-- (pairs through an mfence or a locked event stay ordered, since those are nodes and their
+-- program-order edges are kept), reads-from across threads, the order on writes, from-read
+tso-ghb : TsoN → TsoN → Bool
+tso-ghb e1 e2 =
+  orB (andB (tso-po e1 e2) (tso-not (tso-wr e1 e2)))
+      (orB (andB (tso-rf e1 e2) (tso-not (tso-same-thread e1 e2)))
+           (orB (tso-co e1 e2) (tso-fr e1 e2)))
+-- per location, all of program order counts (a thread sees its own writes in order)
+tso-loc : TsoN → TsoN → Bool
+tso-loc e1 e2 =
+  orB (andB (tso-po e1 e2) (tso-same-loc e1 e2))
+      (orB (tso-rf e1 e2) (orB (tso-co e1 e2) (tso-fr e1 e2)))
+-- well-formedness of a candidate over the initial memory m0: event ids are distinct and not
+-- #0; exactly the reading events have an rf entry, one each, naming the initial memory (and
+-- then the value read is m0's) or a writing event on the same address whose value written is
+-- the value read; the order on writes lists exactly the writing events, once each
+tso-ev-id : TsoEv → Word
+tso-ev-id e = case e of tso-ev id tid k a vr vw → id
+tso-rf-ok : Memory → List TsoEv → TsoEv → Word → Bool
+tso-rf-ok m0 es e src =
+  case e of
+    tso-ev id tid k a vr vw →
+      if weq src #0 then weq vr (m0 a)
+      else tso-any (λ w → case w of tso-ev id2 tid2 k2 a2 vr2 vw2 → andB (weq id2 src) (andB (tso-k-writes k2) (andB (weq a2 a) (weq vw2 vr)))) es
+tso-ev-ok : Memory → List TsoEv → List Word → List (Word × Word) → List Word → TsoEv → Bool
+tso-ev-ok m0 es ids rf co e =
+  case e of
+    tso-ev id tid k a vr vw →
+      andB (andB (tso-not (weq id #0)) (weq (tso-count ids id) #1))
+        (andB (weq (tso-count (tso-map (λ p → fst p) rf) id) (if tso-k-reads k then #1 else #0))
+          (andB (weq (tso-count co id) (if tso-k-writes k then #1 else #0))
+                (if tso-k-reads k then tso-rf-ok m0 es e (tso-src rf id) else true)))
+tso-wf : Memory → TsoX → Bool
+tso-wf m0 x =
+  case x of
+    tso-x es rf co →
+      (let ids = tso-map tso-ev-id es
+       in andB (tso-all (tso-ev-ok m0 es ids rf co) es)
+            (andB (tso-all (λ p → weq (tso-count ids (fst p)) #1) rf)
+                  (tso-all (λ c → weq (tso-count ids c) #1) co)))
+-- TSO consistency of a candidate execution: well-formed, the global-happens-before relation
+-- acyclic, and per-location order acyclic. (A locked event is one node that reads and writes,
+-- so atomicity, no write to its location between the write it reads and its own, is the
+-- absence of the two-cycle fr;co through it in the first relation.)
+tso-consistent : Memory → TsoX → Bool
+tso-consistent m0 x =
+  case x of
+    tso-x es rf co →
+      (let ns = tso-map (tso-annot rf co) es
+       in andB (tso-wf m0 x) (andB (tso-acyclic tso-ghb ns) (tso-acyclic tso-loc ns)))
+TsoConsistent : Memory → TsoX → Type
+TsoConsistent m0 x = isTrue (tso-consistent m0 x)
+-- ---------------------------------------------------------------- from a trace to an execution
+-- the candidate execution a trace yields (the trace earliest first): an event per instruction,
+-- rf as the machine recorded each read's source, the order on writes as the order in which
+-- writes reached memory (flushes and locked instructions)
+tso-exec-of : List TsoL → TsoX
+tso-exec-of nil = tso-x nil nil nil
+tso-exec-of (cons l r) =
+  (case tso-exec-of r of
+     tso-x es rf co →
+       (case l of
+          l-read t id a v src → tso-x (cons (tso-ev id t k-R a v #0) es) (cons (id , src) rf) co
+          l-write t id a v → tso-x (cons (tso-ev id t k-W a #0 v) es) rf co
+          l-flush t id a v → tso-x es rf (cons id co)
+          l-locked t id a vr src vw → tso-x (cons (tso-ev id t k-L a vr vw) es) (cons (id , src) rf) (cons id co)
+          l-fence t id → tso-x (cons (tso-ev id t k-F #0 #0 #0) es) rf co))
+tso-rev : List TsoL → List TsoL → List TsoL
+tso-rev nil acc = acc
+tso-rev (cons x r) acc = tso-rev r (cons x acc)
+tso-exec : TsoSt → TsoX
+tso-exec s = tso-exec-of (tso-rev (ts-log s) nil)
+-- ---------------------------------------------------------------- the relation of the two forms
+-- a schedule applied from a state (a choice that is not enabled is skipped)
+tso-run : List TsoCh → List TsoThread → TsoSt → List TsoThread × TsoSt
+tso-run nil ths s = (ths , s)
+tso-run (cons ch r) ths s = (case tso-step ch ths s of inl p → tso-run r (fst p) (snd p); inr u → tso-run r ths s)
+-- the state is quiet (no buffered write) implies its trace's execution is consistent
+tso-state-ok : List TsoThread → TsoSt → Bool
+tso-state-ok ths s = if tso-quiet ths #0 (ts-buf s) then tso-consistent (λ a → #0) (tso-exec s) else true
+-- THE STATEMENT, in general: for every system of threads and every schedule, when the buffers
+-- are empty afterwards, the trace's execution is TSO-consistent. This type is the statement; no
+-- term of it is given here (nothing is postulated). What is proved is its instances by
+-- computation: `tso-sound-upto n ths`, over every schedule of at most n transitions
+TsoSound : Type
+TsoSound = (ths : List TsoThread) → (sch : List TsoCh) → isTrue (tso-state-ok (fst (tso-run sch ths tso-init)) (snd (tso-run sch ths tso-init)))
+-- every state the scheduler can reach within n transitions, and every end, is tso-state-ok
+tso-sound-upto : Nat → List TsoThread → Bool
+tso-sound-upto n ths =
+  tso-fold (tso-choices ths #0)
+    (λ c b → case c of sched-pick ths2 s → andB (tso-state-ok ths2 s) b)
+    (λ e b → case e of
+               tso-finished out s → andB (tso-state-ok ths s) b
+               tso-blocked → b
+               tso-nofuel s → andB (tso-state-ok ths s) b)
+    (tso-sys n ths tso-init) true
