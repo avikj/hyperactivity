@@ -126,3 +126,187 @@ procs-init {M} {A} ps = ((λ i → to-step {NetSig M} {A} (ps i)) , net-empty {M
 -- n processes indexed by Fin n: the ids from n on are stopped nodes
 fin-procs : {M : Type} → (n : Nat) → (Fin n → Proc {lzero} (NetSig M) Unit) → NodeId → Proc {lzero} (NetSig M) Unit
 fin-procs {M} n ps i = case trich i n of inl h → ps (i , h); inr o → ret {lzero} {NetSig M} {Unit} unit
+-- ---------------------------------------------------------------- liveness
+IsRecvV : {M St : Type} → NView M St → Type
+IsRecvV v = case v of v-halt → Empty; v-send to m s → Empty; v-recv k → Unit; v-now kn → Empty; v-tau s → Empty
+IsHaltV : {M St : Type} → NView M St → Type
+IsHaltV v = case v of v-halt → Unit; v-send to m s → Empty; v-recv k → Empty; v-now kn → Empty; v-tau s → Empty
+-- the resolved choice delivers packet p and its addressee takes it
+dl-go : {M St : Type} → Beh M St → Pkt M → FState M St → Resolved M → Type
+dl-go {M} {St} beh p g r = case r of
+  res-node i e → (case e of ev-run → Empty; ev-deliver q rest → Path NodeId i (p-to p) × (Path (Pkt M) q p × IsRecvV {M} {St} (beh i (fst g i))))
+  res-net n → Empty
+Took : {M St : Type} → Beh M St → AdvSeq → FState M St → Nat → Pkt M → Type
+Took {M} {St} beh chs g0 s p = dl-go {M} {St} beh p (fleet-at {M} {St} beh chs g0 s) (resolve {M} (chs s) (snd (fleet-at {M} {St} beh chs g0 s)))
+Gone : {M St : Type} → Beh M St → AdvSeq → FState M St → Nat → NodeId → Type
+Gone {M} {St} beh chs g0 s j = IsHaltV {M} {St} (beh j (fst (fleet-at {M} {St} beh chs g0 s) j))
+-- a fair sequence for the fleet of n nodes from g0: every node below n is scheduled again and
+-- again, and every packet in flight at any time is later taken by its addressee unless the
+-- addressee has stopped (so no packet is lost for good and no partition lasts for ever)
+Fair : {M St : Type} → Nat → Beh M St → AdvSeq → FState M St → Type
+Fair {M} {St} n beh chs g0 = SchedFair n chs × DeliveryFair {M} (λ t → snd (fleet-at {M} {St} beh chs g0 t)) (Took {M} {St} beh chs g0) (Gone {M} {St} beh chs g0)
+FairB : {M St : Type} → Nat → Nat → Beh M St → AdvSeq → FState M St → Type
+FairB {M} {St} b n beh chs g0 = SchedFairB b n chs × DeliveryFairB {M} b (λ t → snd (fleet-at {M} {St} beh chs g0 t)) (Took {M} {St} beh chs g0) (Gone {M} {St} beh chs g0)
+-- under every fair sequence the goal is reached
+Live : {M St : Type} → Nat → (FState M St → Type) → Beh M St → FState M St → Type
+Live {M} {St} n goal beh g0 = (chs : AdvSeq) → Fair {M} {St} n beh chs g0 → (T : Nat) × goal (fleet-at {M} {St} beh chs g0 T)
+-- the proof rule: a measure into Nat such that at every time the goal holds or the measure is
+-- smaller at some time (which is what fairness is used to show)
+lm-go : {M St : Type} → (goal : FState M St → Type) → (beh : Beh M St) → (g0 : FState M St) → (chs : AdvSeq) → (mu : FState M St → Nat) →
+        ((t : Nat) → Sum (goal (fleet-at {M} {St} beh chs g0 t)) ((s : Nat) × (mu (fleet-at {M} {St} beh chs g0 s) < mu (fleet-at {M} {St} beh chs g0 t)))) →
+        (n : Nat) → (t : Nat) → mu (fleet-at {M} {St} beh chs g0 t) < n → (T : Nat) × goal (fleet-at {M} {St} beh chs g0 T)
+lm-go {M} {St} goal beh g0 chs mu prem zero t h = Empty-rec h
+lm-go {M} {St} goal beh g0 chs mu prem (suc n) t h =
+  case prem t of
+    inl gl → (t , gl)
+    inr d → lm-go {M} {St} goal beh g0 chs mu prem n (fst d) (<-step (mu (fleet-at {M} {St} beh chs g0 (fst d))) (mu (fleet-at {M} {St} beh chs g0 t)) n (snd d) h)
+live-measure : {M St : Type} → (goal : FState M St → Type) → (beh : Beh M St) → (g0 : FState M St) → (chs : AdvSeq) → (mu : FState M St → Nat) →
+        ((t : Nat) → Sum (goal (fleet-at {M} {St} beh chs g0 t)) ((s : Nat) × (mu (fleet-at {M} {St} beh chs g0 s) < mu (fleet-at {M} {St} beh chs g0 t)))) →
+        (T : Nat) × goal (fleet-at {M} {St} beh chs g0 T)
+live-measure {M} {St} goal beh g0 chs mu prem = lm-go {M} {St} goal beh g0 chs mu prem (suc (mu g0)) zero (<-suc-self (mu g0))
+-- what holds at a time and is preserved by every step holds at every later time
+stable-later : {M St : Type} → (inv : FState M St → Type) → (beh : Beh M St) → ((a : Adv) → (g : FState M St) → inv g → inv (fleet-step {M} {St} beh a g)) →
+               (chs : AdvSeq) → (g0 : FState M St) → (k t : Nat) → inv (fleet-at {M} {St} beh chs g0 t) → inv (fleet-at {M} {St} beh chs g0 (nt-later k t))
+stable-later {M} {St} inv beh hs chs g0 zero t h = h
+stable-later {M} {St} inv beh hs chs g0 (suc k) t h = stable-later {M} {St} inv beh hs chs g0 k (suc t) (hs (chs t) (fleet-at {M} {St} beh chs g0 t) h)
+-- a node that is not receiving keeps its state under every choice but its own run
+nt-bdec : (b : Bool) → Sum (b ≡ true) (b ≡ false)
+nt-bdec true = inl (λ i → true)
+nt-bdec false = inr (λ i → false)
+put-node-other : {St : Type} → (i j : NodeId) → (s : St) → (f : NodeId → St) → eqb i j ≡ false → Path St (put-node {St} j s f i) (f i)
+put-node-other {St} i j s f e = λ x → (case e x return (λ b → St) of true → s; false → f i)
+fl-apply-other : {M St R : Type} → (i j : NodeId) → (g : FState M St) → (r : Sum (R × Net M) (Net M)) → (k : R → St) → eqb i j ≡ false →
+                 Path St (fst (fl-apply {M} {St} {R} j g r k) i) (fst g i)
+fl-apply-other {M} {St} {R} i j g (inl x) k e = put-node-other {St} i j (k (fst x)) (fst g) e
+fl-apply-other {M} {St} {R} i j g (inr n) k e = λ x → fst g i
+ns-other : {M St : Type} → (i j : NodeId) → (e : Ev M) → (g : FState M St) → (v : NView M St) → eqb i j ≡ false → Path St (fst (ns-go {M} {St} j e g v) i) (fst g i)
+ns-other {M} {St} i j e g v-halt h = λ x → fst g i
+ns-other {M} {St} i j e g (v-send to m s) h = fl-apply-other {M} {St} {Unit} i j g (net-world {M} j e (n-send to m) (snd g)) (λ u → s) h
+ns-other {M} {St} i j e g (v-recv k) h = fl-apply-other {M} {St} {Rcv M} i j g (net-world {M} j e n-recv (snd g)) k h
+ns-other {M} {St} i j e g (v-now kn) h = fl-apply-other {M} {St} {Word} i j g (net-world {M} j e n-now (snd g)) kn h
+ns-other {M} {St} i j ev-run g (v-tau s) h = put-node-other {St} i j s (fst g) h
+ns-other {M} {St} i j (ev-deliver p rest) g (v-tau s) h = λ x → fst g i
+ns-deliver-norecv : {M St : Type} → (j : NodeId) → (p : Pkt M) → (rest : List (Pkt M)) → (g : FState M St) → (v : NView M St) → (IsRecvV {M} {St} v → Empty) →
+                    Path (FState M St) (ns-go {M} {St} j (ev-deliver p rest) g v) g
+ns-deliver-norecv {M} {St} j p rest g v-halt h = λ x → g
+ns-deliver-norecv {M} {St} j p rest g (v-send to m s) h = λ x → g
+ns-deliver-norecv {M} {St} j p rest g (v-recv k) h = Empty-rec (h unit)
+ns-deliver-norecv {M} {St} j p rest g (v-now kn) h = λ x → g
+ns-deliver-norecv {M} {St} j p rest g (v-tau s) h = λ x → g
+deliver-other : {M St : Type} → (beh : Beh M St) → (i : NodeId) → (g : FState M St) → (j : NodeId) → (p : Pkt M) → (rest : List (Pkt M)) →
+                (IsRecvV {M} {St} (beh i (fst g i)) → Empty) → Path St (fst (node-step {M} {St} beh j (ev-deliver p rest) g) i) (fst g i)
+deliver-other {M} {St} beh i g j p rest h =
+  case nt-bdec (eqb i j) of
+    inr e → ns-other {M} {St} i j (ev-deliver p rest) g (beh j (fst g j)) e
+    inl e → (λ x → fst (ns-deliver-norecv {M} {St} j p rest g (beh j (fst g j))
+                          (subst {lzero} {lzero} {NodeId} {λ y → IsRecvV {M} {St} (beh y (fst g y)) → Empty} (eqb-sound {i} {j} (eq→isTrue {eqb i j} e)) h) x) i)
+res-deliver-other : {M St : Type} → (beh : Beh M St) → (i : NodeId) → (g : FState M St) → (s : Sum (Pkt M × List (Pkt M)) Unit) →
+                    (IsRecvV {M} {St} (beh i (fst g i)) → Empty) → Path St (fst (fl-go {M} {St} beh g (res-deliver {M} (snd g) s)) i) (fst g i)
+res-deliver-other {M} {St} beh i g (inr u) h = λ x → fst g i
+res-deliver-other {M} {St} beh i g (inl pr) h =
+  case net-blocked {M} (cutset (snd g)) (fst pr) return (λ b → Path St (fst (fl-go {M} {St} beh g (case b of true → res-net (snd g); false → res-node (p-to (fst pr)) (ev-deliver (fst pr) (snd pr)))) i) (fst g i)) of
+    true → λ x → fst g i
+    false → deliver-other {M} {St} beh i g (p-to (fst pr)) (fst pr) (snd pr) h
+step-other : {M St : Type} → (beh : Beh M St) → (a : Adv) → (g : FState M St) → (i : NodeId) → adv-is-run i a ≡ false →
+             (IsRecvV {M} {St} (beh i (fst g i)) → Empty) → Path St (fst (fleet-step {M} {St} beh a g) i) (fst g i)
+step-other {M} {St} beh (a-run j) g i e h = ns-other {M} {St} i j ev-run g (beh j (fst g j)) e
+step-other {M} {St} beh (a-deliver k) g i e h = res-deliver-other {M} {St} beh i g (take-at {Pkt M} k (flight (snd g))) h
+step-other {M} {St} beh (a-drop k) g i e h = λ x → fst g i
+step-other {M} {St} beh (a-dup k) g i e h = λ x → fst g i
+step-other {M} {St} beh (a-tick d) g i e h = λ x → fst g i
+step-other {M} {St} beh (a-part s) g i e h = λ x → fst g i
+-- so, when node i is run k steps after t, there is a time at which it is run with the state it
+-- had at t (the first of its runs from t on)
+wait-run : {M St : Type} → (beh : Beh M St) → (chs : AdvSeq) → (g0 : FState M St) → (i : NodeId) → (k t : Nat) →
+           isTrue (adv-is-run i (chs (nt-later k t))) → (IsRecvV {M} {St} (beh i (fst (fleet-at {M} {St} beh chs g0 t) i)) → Empty) →
+           (t2 : Nat) × (isTrue (adv-is-run i (chs t2)) × Path St (fst (fleet-at {M} {St} beh chs g0 t2) i) (fst (fleet-at {M} {St} beh chs g0 t) i))
+wait-run {M} {St} beh chs g0 i zero t h hn = (t , (h , (λ x → fst (fleet-at {M} {St} beh chs g0 t) i)))
+wait-run {M} {St} beh chs g0 i (suc k) t h hn =
+  case nt-bdec (adv-is-run i (chs t)) of
+    inl e → (t , (eq→isTrue {adv-is-run i (chs t)} e , (λ x → fst (fleet-at {M} {St} beh chs g0 t) i)))
+    inr e → (let p = step-other {M} {St} beh (chs t) (fleet-at {M} {St} beh chs g0 t) i e hn
+             in let r = wait-run {M} {St} beh chs g0 i k (suc t) h (subst {lzero} {lzero} {St} {λ y → IsRecvV {M} {St} (beh i y) → Empty} (sym p) hn)
+             in (fst r , (fst (snd r) , concat (snd (snd r)) p)))
+-- a choice that runs node i is node i's step under the run event
+step-run-eq : {M St : Type} → (beh : Beh M St) → (a : Adv) → (g : FState M St) → (i : NodeId) → isTrue (adv-is-run i a) →
+              Path (FState M St) (fleet-step {M} {St} beh a g) (node-step {M} {St} beh i ev-run g)
+step-run-eq {M} {St} beh (a-run j) g i h = λ x → node-step {M} {St} beh (eqb-sound {i} {j} h (~ x)) ev-run g
+step-run-eq {M} {St} beh (a-deliver k) g i h = Empty-rec h
+step-run-eq {M} {St} beh (a-drop k) g i h = Empty-rec h
+step-run-eq {M} {St} beh (a-dup k) g i h = Empty-rec h
+step-run-eq {M} {St} beh (a-tick d) g i h = Empty-rec h
+step-run-eq {M} {St} beh (a-part s) g i h = Empty-rec h
+-- ---------------------------------------------------------------- convergence
+-- replica state as a function of the set of updates received: a fold of a merge that is
+-- commutative, associative and idempotent with a unit. Such a fold does not see order or
+-- repetition, so two replicas that have received the same set (as lists, each included in the
+-- other) are in the same state
+SemiLat : {A : Type} → (A → A → A) → A → Type
+SemiLat {A} j bot = ((a b : A) → Path A (j a b) (j b a)) × (((a b c : A) → Path A (j (j a b) c) (j a (j b c))) × (((a : A) → Path A (j a a) a) × ((a : A) → Path A (j bot a) a)))
+jfold : {Upd A : Type} → (A → A → A) → A → (Upd → A) → List Upd → A
+jfold j bot f l = case l of nil → bot; cons x r → j (f x) (rec r)
+jf-mem : {Upd A : Type} → (j : A → A → A) → (bot : A) → SemiLat {A} j bot → (f : Upd → A) → (x : Upd) → (l : List Upd) → InL {Upd} x l →
+         Path A (j (f x) (jfold {Upd} {A} j bot f l)) (jfold {Upd} {A} j bot f l)
+jf-mem {Upd} {A} j bot sl f x nil m = Empty-rec m
+jf-mem {Upd} {A} j bot sl f x (cons y r) (inl e) =
+  concat (λ i → j (f (e i)) (j (f y) (jfold {Upd} {A} j bot f r)))
+    (concat (sym (fst (snd sl) (f y) (f y) (jfold {Upd} {A} j bot f r))) (λ i → j (fst (snd (snd sl)) (f y) i) (jfold {Upd} {A} j bot f r)))
+jf-mem {Upd} {A} j bot sl f x (cons y r) (inr m) =
+  concat (sym (fst (snd sl) (f x) (f y) (jfold {Upd} {A} j bot f r)))
+    (concat (λ i → j (fst sl (f x) (f y) i) (jfold {Upd} {A} j bot f r))
+      (concat (fst (snd sl) (f y) (f x) (jfold {Upd} {A} j bot f r)) (λ i → j (f y) (jf-mem {Upd} {A} j bot sl f x r m i))))
+jf-ub : {Upd A : Type} → (j : A → A → A) → (bot : A) → SemiLat {A} j bot → (f : Upd → A) → (b : A) → (l : List Upd) →
+        ((x : Upd) → InL {Upd} x l → Path A (j (f x) b) b) → Path A (j (jfold {Upd} {A} j bot f l) b) b
+jf-ub {Upd} {A} j bot sl f b nil h = snd (snd (snd sl)) b
+jf-ub {Upd} {A} j bot sl f b (cons y r) h =
+  concat (fst (snd sl) (f y) (jfold {Upd} {A} j bot f r) b)
+    (concat (λ i → j (f y) (jf-ub {Upd} {A} j bot sl f b r (λ x m → h x (inr m)) i)) (h y (inl (λ i → y))))
+jf-sub : {Upd A : Type} → (j : A → A → A) → (bot : A) → SemiLat {A} j bot → (f : Upd → A) → (l1 l2 : List Upd) → SubL {Upd} l1 l2 →
+         Path A (j (jfold {Upd} {A} j bot f l1) (jfold {Upd} {A} j bot f l2)) (jfold {Upd} {A} j bot f l2)
+jf-sub {Upd} {A} j bot sl f l1 l2 s = jf-ub {Upd} {A} j bot sl f (jfold {Upd} {A} j bot f l2) l1 (λ x m → jf-mem {Upd} {A} j bot sl f x l2 (s x m))
+Converges : {Upd S : Type} → (List Upd → S) → Type
+Converges {Upd} {S} state = (l1 l2 : List Upd) → SubL {Upd} l1 l2 → SubL {Upd} l2 l1 → Path S (state l1) (state l2)
+converges-fold : {Upd A : Type} → (j : A → A → A) → (bot : A) → SemiLat {A} j bot → (f : Upd → A) → Converges {Upd} {A} (jfold {Upd} {A} j bot f)
+converges-fold {Upd} {A} j bot sl f l1 l2 s12 s21 =
+  concat (sym (jf-sub {Upd} {A} j bot sl f l2 l1 s21))
+    (concat (fst sl (jfold {Upd} {A} j bot f l2) (jfold {Upd} {A} j bot f l1)) (jf-sub {Upd} {A} j bot sl f l1 l2 s12))
+-- the maximum of words is such a merge (lib/std.cub's maxw, the definition by induction, then
+-- the machine's wmax along maxw≡wmax)
+nt-maxw-comm : (a b : Word) → maxw a b ≡ maxw b a
+nt-maxw-comm a b =
+  %welimP (λ v → (b : Word) → maxw v b ≡ maxw b v) a
+    (λ b → %welimP (λ v → maxw #0 v ≡ maxw v #0) b (λ i → #0) (λ m g i → %wsucc m))
+    (λ n h b → %welimP (λ v → maxw (%wsucc n) v ≡ maxw v (%wsucc n)) b (λ i → %wsucc n) (λ m g i → %wsucc (h m i))) b
+nt-maxw-assoc : (a b c : Word) → maxw (maxw a b) c ≡ maxw a (maxw b c)
+nt-maxw-assoc a b c =
+  %welimP (λ v → (b c : Word) → maxw (maxw v b) c ≡ maxw v (maxw b c)) a
+    (λ b c i → maxw b c)
+    (λ n h b → %welimP (λ v → (c : Word) → maxw (maxw (%wsucc n) v) c ≡ maxw (%wsucc n) (maxw v c)) b
+       (λ c i → maxw (%wsucc n) c)
+       (λ m g c → %welimP (λ v → maxw (maxw (%wsucc n) (%wsucc m)) v ≡ maxw (%wsucc n) (maxw (%wsucc m) v)) c
+          (λ i → %wsucc (maxw n m))
+          (λ p q i → %wsucc (h m p i)))) b c
+nt-maxw-idem : (a : Word) → maxw a a ≡ a
+nt-maxw-idem a = %welimP (λ v → maxw v v ≡ v) a (λ i → #0) (λ n h i → %wsucc (h i))
+maxw-semilat : SemiLat {Word} maxw #0
+maxw-semilat = (nt-maxw-comm , (nt-maxw-assoc , (nt-maxw-idem , (λ a i → a))))
+nt-maxw-is-wmax : Path (Word → Word → Word) maxw wmax
+nt-maxw-is-wmax = λ i a b → maxw≡wmax a b i
+wmax-semilat : SemiLat {Word} wmax #0
+wmax-semilat = subst {lzero} {lzero} {Word → Word → Word} {λ f → SemiLat {Word} f #0} nt-maxw-is-wmax maxw-semilat
+-- ---------------------------------------------------------------- refinement
+-- the specification is a sequential world w from a state st0 over a client signature S. A
+-- history (the commands with their responses, latest first) is one of the specification's when
+-- the world, asked the same commands in that order, gives the same responses: HistTo says so
+-- and names the state the world ends in. A fleet refines the specification through obs (the
+-- history its clients have observed) when every reachable state's history is one of the
+-- specification's: trace inclusion. (To be restated with track H's ≈ over lib/obs.cub.)
+HistTo : {S : Sig} {St : Type} → World S St → St → Hist S → St → Type
+HistTo {S} {St} w st0 h =
+  case h return (λ x → St → Type) of
+    nil → λ s → Path St st0 s
+    cons e r → λ s → (s1 : St) × (rec r s1 × (case w (fst e) s1 return (λ x → Type) of inl a → Path (Resp S (fst e)) (snd e) (fst a) × Path St (snd a) s; inr s2 → Empty))
+HistOk : {S : Sig} {St : Type} → World S St → St → Hist S → Type
+HistOk {S} {St} w st0 h = (s : St) × HistTo {S} {St} w st0 h s
+Refines : {S : Sig} {Sp M St : Type} → World S Sp → Sp → (FState M St → Hist S) → Beh M St → FState M St → Type
+Refines {S} {Sp} {M} {St} w st0 obs beh g0 = Safe {M} {St} (λ g → HistOk {S} {Sp} w st0 (obs g)) beh g0

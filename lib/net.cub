@@ -157,12 +157,22 @@ AdvSeq = Nat → Adv
 seq-of-str : Str Adv → AdvSeq
 seq-of-str s t = nth t s
 -- eventually and always over time; eventually within a bound
+-- k steps after t (the successor moved onto the time, so that an induction on k that advances
+-- the time is by computation)
+nt-later : Nat → Nat → Nat
+nt-later zero t = t
+nt-later (suc k) t = nt-later k (suc t)
+nt-later-plus : (k t : Nat) → nt-later k t ≡ plus k t
+nt-later-plus zero t = λ i → t
+nt-later-plus (suc k) t = transN (nt-later-plus k (suc t)) (plus-suc k t)
+nt-later-comm : (a b : Nat) → nt-later a b ≡ nt-later b a
+nt-later-comm a b = transN (nt-later-plus a b) (transN (plus-comm a b) (symN (nt-later-plus b a)))
 Eventually : (Nat → Type) → Nat → Type
-Eventually P t = (k : Nat) × P (plus k t)
+Eventually P t = (k : Nat) × P (nt-later k t)
 Always : (Nat → Type) → Nat → Type
-Always P t = (k : Nat) → P (plus k t)
+Always P t = (k : Nat) → P (nt-later k t)
 WithinB : Nat → (Nat → Type) → Nat → Type
-WithinB b P t = (k : Nat) × ((k < b) × P (plus k t))
+WithinB b P t = (k : Nat) × ((k < b) × P (nt-later k t))
 within-eventually : (b : Nat) → (P : Nat → Type) → (t : Nat) → WithinB b P t → Eventually P t
 within-eventually b P t w = (fst w , snd (snd w))
 adv-is-run : NodeId → Adv → Bool
