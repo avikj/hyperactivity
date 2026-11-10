@@ -1,0 +1,339 @@
+diff --git a/scoped-machine/lib/os/linux.cub b/scoped-machine/lib/os/linux.cub
+index 111299bde..5bd642c75 100644
+--- a/scoped-machine/lib/os/linux.cub
++++ b/scoped-machine/lib/os/linux.cub
+@@ -54,6 +54,44 @@ word-sockaddr w = SockAddr { sa-port = os-swap16 (%wmod (%wdiv w #65536) #65536)
+ -- The scratch area (4096 bytes, lx-scratch): the sockaddr at 0, its length (a word, 4 bytes used)
+ -- at 16, a timespec at 24, an int option value at 40, one epoll_event at 48, the events
+ -- epoll_wait fills from 64 (at most lx-max-events of them: 64 × 16 bytes fit)
++-- Further layouts (items of the scratch area from 1280 on): struct itimerspec, 32 bytes
++-- (it_interval then it_value, a timespec each), the new one at 1280 and the old at 1312; struct
++-- msghdr, 56 bytes at 1344 (msg_name 0, msg_namelen 8 (4 bytes), msg_iov 16, msg_iovlen 24,
++-- msg_control 32, msg_controllen 40, msg_flags 48 (4 bytes)); the struct iovec array at 1408
++-- (iov_base 0, iov_len 8; at most lx-max-iov entries); struct io_uring_params, 120 bytes at 1600
++-- (sq_entries 0, cq_entries 4, flags 8, features 20, sq_off at 40: head 0, tail 4, ring_mask 8,
++-- ring_entries 12, array 24; cq_off at 80: head 0, tail 4, ring_mask 8, ring_entries 12, cqes
++-- 20; all 4 bytes); a wait status at 1728.
++lx-max-iov : Word
++lx-max-iov = #8
++-- an io_uring instance: its descriptor, the three mappings (the submission ring at file offset
++-- 0, the completion ring at 0x8000000, the submission entries at 0x10000000) with their lengths,
++-- and where the ring's fields are: addresses of the heads and tails (4 bytes each), of the
++-- index array and the completion entries, the masks and the entry counts as values
++record Uring = { ur-fd : Word ; ur-sq-map : Word ; ur-sq-len : Word ; ur-cq-map : Word ; ur-cq-len : Word
++               ; ur-sqes : Word ; ur-sqes-len : Word
++               ; ur-sq-head : Word ; ur-sq-tail : Word ; ur-sq-mask : Word ; ur-sq-array : Word ; ur-sq-entries : Word
++               ; ur-cq-head : Word ; ur-cq-tail : Word ; ur-cq-mask : Word ; ur-cqes : Word ; ur-cq-entries : Word }
++-- a submission: struct io_uring_sqe, 64 bytes: opcode (1 byte) at 0, fd (4) at 4, off (8) at 8,
++-- addr (8) at 16, len (4) at 24, the operation's flags (4) at 28, user_data (8) at 32, the rest
++-- zero. The opcodes: NOP 0, READ 22, WRITE 23, SEND 26, RECV 27
++data UringOp = uop-nop (ud : Word)
++  | uop-read (fd : Word) (buf : Word) (len : Word) (off : Word) (ud : Word)
++  | uop-write (fd : Word) (buf : Word) (len : Word) (off : Word) (ud : Word)
++  | uop-send (fd : Word) (buf : Word) (len : Word) (flags : Word) (ud : Word)
++  | uop-recv (fd : Word) (buf : Word) (len : Word) (flags : Word) (ud : Word)
++-- a completion: struct io_uring_cqe, 16 bytes: user_data (8), res (4, signed: a negative errno),
++-- flags (4)
++record UringCqe = { cq-user : Word ; cq-res : Sum Errno Word ; cq-flags : Word }
++-- a 4-byte result: 2^32 − 4095 and above is the two's complement of an errno
++lx-decode32 : Word → Sum Errno Word
++lx-decode32 r = if %wlt r #4294963201 then inr r else inl (%wsub #4294967296 r)
++lx-iov-total : List (Word × Word) → Word
++lx-iov-total nil = #0
++lx-iov-total (cons v r) = %wadd (snd v) (lx-iov-total r)
++lx-count-of : {A : Type} → List A → Word
++lx-count-of nil = #0
++lx-count-of (cons x r) = %wsucc (lx-count-of r)
+ lx-scratch : Word
+ lx-scratch = #4096
+ lx-max-events : Word
+@@ -85,6 +123,17 @@ data LinuxCmd =
+   | lx-getpid
+   | lx-exit-group (ec : Word)
+   | lx-alloc (n : Word) | lx-peek8 (a : Word) | lx-poke8 (a : Word) (v : Word) | lx-peek64 (a : Word) | lx-poke64 (a : Word) (v : Word)
++  -- (item 5)
++  | lx-eventfd (init : Word) (flags : Word)
++  | lx-timerfd-create (clock : Word) (flags : Word)
++  | lx-timerfd-settime (fd : Word) (flags : Word) (interval : Timespec) (value : Timespec)
++  | lx-sendmsg (fd : Word) (to : Sum SockAddr Unit) (iov : List (Word × Word)) (flags : Word)
++  | lx-recvmsg (fd : Word) (iov : List (Word × Word)) (flags : Word)
++  | lx-uring-setup (entries : Word)
++  | lx-uring-submit (u : Uring) (ops : List UringOp) (wait : Word)
++  | lx-uring-reap (u : Uring) (max : Word)
++  | lx-fork
++  | lx-wait4 (pid : Word)
+ -- What each answers. The time is the platform's clock. read, write, recvfrom, sendto: the count,
+ -- at most the count asked (recvfrom is performed without MSG_TRUNC, under which the kernel
+ -- answers the datagram's length instead); recvfrom and accept4 also the peer. open (the path the
+@@ -93,7 +142,25 @@ data LinuxCmd =
+ -- max, and that many events in the kernel's order (max above lx-max-events is asked as
+ -- lx-max-events). futex-wait: woken (EAGAIN, 11, when the word at addr was not val); futex-wake:
+ -- the waiters woken, at most n. getpid cannot fail. exit-group does not return: its response is
+--- never given. The memory commands: n fresh zero bytes; a byte or a word at an address
++-- never given. The memory commands: n fresh zero bytes; a byte or a word at an address.
++-- eventfd (eventfd2) and timerfd-create: the descriptor (an eventfd's counter and a timer's
++-- expirations are read and written as 8 bytes by lx-read and lx-write). timerfd-settime: the
++-- timer armed (value zero disarms; flags 1 is an absolute time), the setting it replaces as
++-- (interval , value). sendmsg and recvmsg: the buffers as a list of (address , length), at most
++-- lx-max-iov of them (more is answered EMSGSIZE, 90, without a call); no control data; the
++-- count, at most the lengths' sum; recvmsg also the peer and msg_flags (MSG_TRUNC, 32, when the
++-- datagram was longer), and like recvfrom is performed without MSG_TRUNC in its own flags.
++-- uring-setup: io_uring_setup with no flags and the three mappings, as a Uring. uring-submit:
++-- the operations written to the submission ring in order and io_uring_enter called for them,
++-- waiting for `wait` completions (0: none): the count the kernel took, at most the count given
++-- (more operations than the ring has entries is answered EINVAL, 22, without a call).
++-- uring-reap: no system call: up to max completions taken from the completion ring, in order,
++-- each the user data given, the result (a count, or the operation's errno) and the flags (it
++-- has no error of its own: its Sum is only for a count outside the fact).
++-- fork is clone with SIGCHLD and no shared memory: 0 in the child, the child's pid in the
++-- parent, both continuing this process's text (a thread, clone with CLONE_VM on a new stack,
++-- cannot be started through w-sys: tracks/D-os.md, Limits). wait4: the child that ended and
++-- its wait status
+ lx-resp : LinuxCmd → Type
+ lx-resp c = case c return (λ _ → Type) of
+   lx-clock-gettime → Sum Errno Timespec
+@@ -125,6 +192,16 @@ lx-resp c = case c return (λ _ → Type) of
+   lx-poke8 a v → Unit
+   lx-peek64 a → Word
+   lx-poke64 a v → Unit
++  lx-eventfd init flags → Sum Errno Word
++  lx-timerfd-create clock flags → Sum Errno Word
++  lx-timerfd-settime fd flags interval value → Sum Errno (Timespec × Timespec)
++  lx-sendmsg fd to iov flags → Sum Errno (Upto (lx-iov-total iov))
++  lx-recvmsg fd iov flags → Sum Errno ((Upto (lx-iov-total iov) × SockAddr) × Word)
++  lx-uring-setup entries → Sum Errno Uring
++  lx-uring-submit u ops wait → Sum Errno (Upto (lx-count-of {UringOp} ops))
++  lx-uring-reap u max → Sum Errno (Upto max × List UringCqe)
++  lx-fork → Sum Errno Word
++  lx-wait4 pid → Sum Errno (Word × Word)
+ Linux : Sig
+ Linux = (LinuxCmd , lx-resp)
+ -- a command as a process, and the sequencing of calls that may fail (the first error ends it)
+@@ -176,6 +253,133 @@ lx-events pf base n =
+     nil
+ lx-clamp : Word → Word
+ lx-clamp max = if %wlt lx-max-events max then lx-max-events else max
++-- ---------------------------------------------------------------- helpers of the later calls
++-- the sequencing of the drivers' calls that may fail
++lx-tryw : {A B : Type} → Proc {lzero} W (Sum Errno A) → (A → Proc {lzero} W (Sum Errno B)) → Proc {lzero} W (Sum Errno B)
++lx-tryw {A} {B} p f = lx-bw {Sum Errno A} {Sum Errno B} p (λ r → lx-sum {lzero} {W} {Errno} {A} {Sum Errno B} r (λ e → lx-rw {Sum Errno B} (inl e)) f)
++-- a 4-byte field at an address that is a multiple of 4: read from, and written within, the
++-- aligned 8-byte word that holds it (the drivers load and store words). The write is a
++-- compare-and-swap of the whole word, retried while the other half changed under it (the
++-- kernel writes the neighbouring field of a shared ring): at most fuel times
++lx-al : Word → Word
++lx-al a = %wsub a (%wmod a #8)
++lx-load32 : Word → Proc {lzero} W Word
++lx-load32 a = lx-bw {Word} {Word} (load-at (lx-al a)) (λ w → lx-rw {Word} (if %weq (%wmod a #8) #0 then %wmod w #4294967296 else %wdiv w #4294967296))
++lx-put32 : Word → Word → Word → Word
++lx-put32 a w v = if %weq (%wmod a #8) #0 then %wadd (%wmul (%wdiv w #4294967296) #4294967296) v else %wadd (%wmod w #4294967296) (%wmul v #4294967296)
++lx-store32 : Word → Word → Word → Proc {lzero} W Unit
++lx-store32 fuel a v =
++  %welimP (λ x → Proc {lzero} W Unit) fuel (lx-rw {Unit} unit)
++    (λ k go → lx-bw {Word} {Unit} (load-at (lx-al a)) (λ w →
++              lx-bw {Word} {Unit} (cas-at (lx-al a) w (lx-put32 a w v)) (λ seen →
++                lx-if {lzero} {W} {Unit} (%weq seen w) (lx-rw {Unit} unit) go)))
++-- n words of zero from an address
++lx-zero : Nat → Word → Proc {lzero} W Unit
++lx-zero zero at = lx-rw {Unit} unit
++lx-zero (suc n) at = lx-bw {Unit} {Unit} (store-at at #0) (λ u → lx-zero n (%wadd at #8))
++-- the iovec array
++lx-put-iov : List (Word × Word) → Word → Proc {lzero} W Unit
++lx-put-iov nil at = lx-rw {Unit} unit
++lx-put-iov (cons v r) at =
++  lx-bw {Unit} {Unit} (store-at at (fst v)) (λ u →
++  lx-bw {Unit} {Unit} (store-at (%wadd at #8) (snd v)) (λ u2 → lx-put-iov r (%wadd at #16)))
++-- the msghdr at 1344 over the iovec array at 1408: the name's address and length given
++lx-put-msg : Word → Word → Word → List (Word × Word) → Proc {lzero} W Unit
++lx-put-msg sc name namelen iov =
++  lx-bw {Unit} {Unit} (lx-put-iov iov (%wadd sc #1408)) (λ u0 →
++  lx-bw {Unit} {Unit} (store-at (%wadd sc #1344) name) (λ u1 →
++  lx-bw {Unit} {Unit} (store-at (%wadd sc #1352) namelen) (λ u2 →
++  lx-bw {Unit} {Unit} (store-at (%wadd sc #1360) (%wadd sc #1408)) (λ u3 →
++  lx-bw {Unit} {Unit} (store-at (%wadd sc #1368) (lx-count-of {Word × Word} iov)) (λ u4 →
++  lx-bw {Unit} {Unit} (store-at (%wadd sc #1376) #0) (λ u5 →
++  lx-bw {Unit} {Unit} (store-at (%wadd sc #1384) #0) (λ u6 → store-at (%wadd sc #1392) #0)))))))
++-- an operation's submission entry, by words: opcode and fd; off; addr; len and flags; user data
++uop-w0 : UringOp → Word
++uop-w0 o = case o of
++  uop-nop ud → #0
++  uop-read fd buf len off ud → %wadd #22 (%wmul fd #4294967296)
++  uop-write fd buf len off ud → %wadd #23 (%wmul fd #4294967296)
++  uop-send fd buf len flags ud → %wadd #26 (%wmul fd #4294967296)
++  uop-recv fd buf len flags ud → %wadd #27 (%wmul fd #4294967296)
++uop-off : UringOp → Word
++uop-off o = case o of
++  uop-nop ud → #0
++  uop-read fd buf len off ud → off
++  uop-write fd buf len off ud → off
++  uop-send fd buf len flags ud → #0
++  uop-recv fd buf len flags ud → #0
++uop-addr : UringOp → Word
++uop-addr o = case o of
++  uop-nop ud → #0
++  uop-read fd buf len off ud → buf
++  uop-write fd buf len off ud → buf
++  uop-send fd buf len flags ud → buf
++  uop-recv fd buf len flags ud → buf
++uop-w3 : UringOp → Word
++uop-w3 o = case o of
++  uop-nop ud → #0
++  uop-read fd buf len off ud → len
++  uop-write fd buf len off ud → len
++  uop-send fd buf len flags ud → %wadd len (%wmul flags #4294967296)
++  uop-recv fd buf len flags ud → %wadd len (%wmul flags #4294967296)
++uop-ud : UringOp → Word
++uop-ud o = case o of
++  uop-nop ud → ud
++  uop-read fd buf len off ud → ud
++  uop-write fd buf len off ud → ud
++  uop-send fd buf len flags ud → ud
++  uop-recv fd buf len flags ud → ud
++-- the operations written from the ring's position t on: each entry at index (t + i) and mask,
++-- and that index in the array at the same position
++lx-put-ops : Uring → List UringOp → Word → Proc {lzero} W Unit
++lx-put-ops u nil t = lx-rw {Unit} unit
++lx-put-ops u (cons o r) t =
++  lx-bw {Unit} {Unit} (store-at (%wadd (ur-sqes u) (%wmul (%wand t (ur-sq-mask u)) #64)) (uop-w0 o)) (λ u0 →
++  lx-bw {Unit} {Unit} (store-at (%wadd (%wadd (ur-sqes u) (%wmul (%wand t (ur-sq-mask u)) #64)) #8) (uop-off o)) (λ u1 →
++  lx-bw {Unit} {Unit} (store-at (%wadd (%wadd (ur-sqes u) (%wmul (%wand t (ur-sq-mask u)) #64)) #16) (uop-addr o)) (λ u2 →
++  lx-bw {Unit} {Unit} (store-at (%wadd (%wadd (ur-sqes u) (%wmul (%wand t (ur-sq-mask u)) #64)) #24) (uop-w3 o)) (λ u3 →
++  lx-bw {Unit} {Unit} (store-at (%wadd (%wadd (ur-sqes u) (%wmul (%wand t (ur-sq-mask u)) #64)) #32) (uop-ud o)) (λ u4 →
++  lx-bw {Unit} {Unit} (lx-zero 3 (%wadd (%wadd (ur-sqes u) (%wmul (%wand t (ur-sq-mask u)) #64)) #40)) (λ u5 →
++  lx-bw {Unit} {Unit} (lx-store32 #2 (%wadd (ur-sq-array u) (%wmul (%wand t (ur-sq-mask u)) #4)) (%wand t (ur-sq-mask u))) (λ u6 →
++    lx-put-ops u r (%wmod (%wsucc t) #4294967296))))))))
++-- the first n completions from the ring's position h, in order
++lx-cqes : Uring → Word → Word → Proc {lzero} W (List UringCqe)
++lx-cqes u h n =
++  %welimP (λ v → List UringCqe → Proc {lzero} W (List UringCqe)) n (λ acc → lx-rw {List UringCqe} acc)
++    (λ k go → λ acc →
++      lx-bw {Word} {List UringCqe} (load-at (%wadd (ur-cqes u) (%wmul (%wand (%wadd h k) (ur-cq-mask u)) #16))) (λ ud →
++      lx-bw {Word} {List UringCqe} (load-at (%wadd (%wadd (ur-cqes u) (%wmul (%wand (%wadd h k) (ur-cq-mask u)) #16)) #8)) (λ w →
++        go (cons (UringCqe { cq-user = ud ; cq-res = lx-decode32 (%wmod w #4294967296) ; cq-flags = %wdiv w #4294967296 }) acc))))
++    nil
++-- io_uring_setup and the three mappings; on a failure after the descriptor exists it is closed
++lx-uring-make : Platform → Word → Word → Proc {lzero} W (Sum Errno Uring)
++lx-uring-make pf sc entries =
++  lx-bw {Unit} {Sum Errno Uring} (lx-zero 15 (%wadd sc #1600)) (λ u0 →
++  lx-tryw {Word} {Uring} (lx-sys pf sys-io-uring-setup entries (%wadd sc #1600) #0 #0 #0 #0) (λ fd →
++  lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd sc #1600)) (λ sqn →
++  lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd sc #1604)) (λ cqn →
++  lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd sc #1640)) (λ sqh →
++  lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd sc #1644)) (λ sqt →
++  lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd sc #1648)) (λ sqm →
++  lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd sc #1664)) (λ sqa →
++  lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd sc #1680)) (λ cqh →
++  lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd sc #1684)) (λ cqt →
++  lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd sc #1688)) (λ cqm →
++  lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd sc #1700)) (λ cqe →
++  lx-bw {Sum Errno Uring} {Sum Errno Uring}
++    (lx-tryw {Word} {Uring} (lx-sys pf sys-mmap #0 (%wadd sqa (%wmul sqn #4)) #3 #32769 fd #0) (λ m1 →
++     lx-tryw {Word} {Uring} (lx-sys pf sys-mmap #0 (%wadd cqe (%wmul cqn #16)) #3 #32769 fd #134217728) (λ m2 →
++     lx-tryw {Word} {Uring} (lx-sys pf sys-mmap #0 (%wmul sqn #64) #3 #32769 fd #268435456) (λ m3 →
++     lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd m1 sqm)) (λ sqmask →
++     lx-bw {Word} {Sum Errno Uring} (lx-load32 (%wadd m2 cqm)) (λ cqmask →
++       lx-rw {Sum Errno Uring} (inr (Uring
++         { ur-fd = fd ; ur-sq-map = m1 ; ur-sq-len = %wadd sqa (%wmul sqn #4) ; ur-cq-map = m2 ; ur-cq-len = %wadd cqe (%wmul cqn #16)
++         ; ur-sqes = m3 ; ur-sqes-len = %wmul sqn #64
++         ; ur-sq-head = %wadd m1 sqh ; ur-sq-tail = %wadd m1 sqt ; ur-sq-mask = sqmask ; ur-sq-array = %wadd m1 sqa ; ur-sq-entries = sqn
++         ; ur-cq-head = %wadd m2 cqh ; ur-cq-tail = %wadd m2 cqt ; ur-cq-mask = cqmask ; ur-cqes = %wadd m2 cqe ; ur-cq-entries = cqn }))))))))
++    (λ made → lx-sum {lzero} {W} {Errno} {Uring} {Sum Errno Uring} made
++       (λ e → lx-bw {Sum Errno Word} {Sum Errno Uring} (lx-sys pf sys-close fd #0 #0 #0 #0 #0) (λ c → lx-rw {Sum Errno Uring} (inl e)))
++       (λ ok → lx-rw {Sum Errno Uring} (inr ok)))))))))))))))
+ linux-on-w : (pf : Platform) → LittleEndian pf → Word → Handler Linux W
+ linux-on-w pf le sc c = case c return (λ x → Proc {lzero} W (lx-resp x)) of
+   lx-clock-gettime →
+@@ -234,6 +438,64 @@ linux-on-w pf le sc c = case c return (λ x → Proc {lzero} W (lx-resp x)) of
+   lx-poke8 a v → store8-at a v
+   lx-peek64 a → load-at a
+   lx-poke64 a v → store-at a v
++  lx-eventfd init flags → lx-sys pf sys-eventfd2 init flags #0 #0 #0 #0
++  lx-timerfd-create clock flags → lx-sys pf sys-timerfd-create clock flags #0 #0 #0 #0
++  lx-timerfd-settime fd flags interval value →
++    lx-bw {Unit} {Sum Errno (Timespec × Timespec)} (store-at (%wadd sc #1280) (ts-sec interval)) (λ u0 →
++    lx-bw {Unit} {Sum Errno (Timespec × Timespec)} (store-at (%wadd sc #1288) (ts-nsec interval)) (λ u1 →
++    lx-bw {Unit} {Sum Errno (Timespec × Timespec)} (store-at (%wadd sc #1296) (ts-sec value)) (λ u2 →
++    lx-bw {Unit} {Sum Errno (Timespec × Timespec)} (store-at (%wadd sc #1304) (ts-nsec value)) (λ u3 →
++    lx-bw {Unit} {Sum Errno (Timespec × Timespec)} (lx-zero 4 (%wadd sc #1312)) (λ u4 →
++    lx-bw {Sum Errno Word} {Sum Errno (Timespec × Timespec)} (lx-sys pf sys-timerfd-settime fd flags (%wadd sc #1280) (%wadd sc #1312) #0 #0) (λ r →
++    lx-bw {Word} {Sum Errno (Timespec × Timespec)} (load-at (%wadd sc #1312)) (λ is →
++    lx-bw {Word} {Sum Errno (Timespec × Timespec)} (load-at (%wadd sc #1320)) (λ ins →
++    lx-bw {Word} {Sum Errno (Timespec × Timespec)} (load-at (%wadd sc #1328)) (λ vs →
++    lx-bw {Word} {Sum Errno (Timespec × Timespec)} (load-at (%wadd sc #1336)) (λ vns →
++      lx-rw {Sum Errno (Timespec × Timespec)}
++        (case r of inl e → inl e; inr z → inr (Timespec { ts-sec = is ; ts-nsec = ins } , Timespec { ts-sec = vs ; ts-nsec = vns })))))))))))))
++  lx-sendmsg fd to iov flags →
++    lx-if {lzero} {W} {Sum Errno (Upto (lx-iov-total iov))} (%wlt lx-max-iov (lx-count-of {Word × Word} iov))
++      (lx-rw {Sum Errno (Upto (lx-iov-total iov))} (inl #90))
++      (lx-bw {Unit} {Sum Errno (Upto (lx-iov-total iov))} (lx-put-addr sc (case to of inl a → a; inr u → SockAddr { sa-port = #0 ; sa-ip = #0 })) (λ u0 →
++       lx-bw {Unit} {Sum Errno (Upto (lx-iov-total iov))} (lx-put-msg sc (case to of inl a → sc; inr u → #0) (case to of inl a → #16; inr u → #0) iov) (λ u1 →
++         lx-count (lx-iov-total iov) (lx-sys pf sys-sendmsg fd (%wadd sc #1344) flags #0 #0 #0))))
++  lx-recvmsg fd iov flags →
++    lx-if {lzero} {W} {Sum Errno ((Upto (lx-iov-total iov) × SockAddr) × Word)} (%wlt lx-max-iov (lx-count-of {Word × Word} iov))
++      (lx-rw {Sum Errno ((Upto (lx-iov-total iov) × SockAddr) × Word)} (inl #90))
++      (lx-bw {Unit} {Sum Errno ((Upto (lx-iov-total iov) × SockAddr) × Word)} (lx-clear-addr sc) (λ u0 →
++       lx-bw {Unit} {Sum Errno ((Upto (lx-iov-total iov) × SockAddr) × Word)} (lx-put-msg sc sc #16 iov) (λ u1 →
++       lx-bw {Sum Errno Word} {Sum Errno ((Upto (lx-iov-total iov) × SockAddr) × Word)} (lx-sys pf sys-recvmsg fd (%wadd sc #1344) (%wand flags #4294967263) #0 #0 #0) (λ r →
++       lx-bw {SockAddr} {Sum Errno ((Upto (lx-iov-total iov) × SockAddr) × Word)} (lx-get-addr sc) (λ a →
++       lx-bw {Word} {Sum Errno ((Upto (lx-iov-total iov) × SockAddr) × Word)} (load-at (%wadd sc #1392)) (λ mf →
++         lx-rw {Sum Errno ((Upto (lx-iov-total iov) × SockAddr) × Word)}
++           (case r of inl e → inl e; inr n → (case lx-upto (lx-iov-total iov) n of inl e2 → inl e2; inr k → inr ((k , a) , %wmod mf #4294967296)))))))))
++  lx-uring-setup entries → lx-uring-make pf sc entries
++  lx-uring-submit u ops wait →
++    lx-if {lzero} {W} {Sum Errno (Upto (lx-count-of {UringOp} ops))} (%wlt (ur-sq-entries u) (lx-count-of {UringOp} ops))
++      (lx-rw {Sum Errno (Upto (lx-count-of {UringOp} ops))} (inl #22))
++      (lx-bw {Word} {Sum Errno (Upto (lx-count-of {UringOp} ops))} (lx-load32 (ur-sq-tail u)) (λ t →
++       lx-bw {Unit} {Sum Errno (Upto (lx-count-of {UringOp} ops))} (lx-put-ops u ops t) (λ u0 →
++       lx-bw {Unit} {Sum Errno (Upto (lx-count-of {UringOp} ops))} (lx-store32 (%wsucc (ur-sq-entries u)) (ur-sq-tail u) (%wmod (%wadd t (lx-count-of {UringOp} ops)) #4294967296)) (λ u1 →
++         lx-count (lx-count-of {UringOp} ops)
++           (lx-sys pf sys-io-uring-enter (ur-fd u) (lx-count-of {UringOp} ops) wait (if %weq wait #0 then #0 else #1) #0 #0)))))
++  lx-uring-reap u max →
++    lx-bw {Word} {Sum Errno (Upto max × List UringCqe)} (lx-load32 (ur-cq-head u)) (λ h →
++    lx-bw {Word} {Sum Errno (Upto max × List UringCqe)} (lx-load32 (ur-cq-tail u)) (λ t →
++    lx-bw {List UringCqe} {Sum Errno (Upto max × List UringCqe)}
++      (lx-cqes u h (if %wlt (%wmod (%wsub (%wadd t #4294967296) h) #4294967296) max then %wmod (%wsub (%wadd t #4294967296) h) #4294967296 else max)) (λ evs →
++    lx-bw {Unit} {Sum Errno (Upto max × List UringCqe)}
++      (lx-store32 (%wsucc (ur-cq-entries u)) (ur-cq-head u)
++        (%wmod (%wadd h (if %wlt (%wmod (%wsub (%wadd t #4294967296) h) #4294967296) max then %wmod (%wsub (%wadd t #4294967296) h) #4294967296 else max)) #4294967296)) (λ u0 →
++      lx-rw {Sum Errno (Upto max × List UringCqe)}
++        (case lx-upto max (if %wlt (%wmod (%wsub (%wadd t #4294967296) h) #4294967296) max then %wmod (%wsub (%wadd t #4294967296) h) #4294967296 else max) of
++           inl e → inl e
++           inr k → inr (k , evs))))))
++  lx-fork → lx-sys pf sys-clone #17 #0 #0 #0 #0 #0
++  lx-wait4 pid →
++    lx-bw {Unit} {Sum Errno (Word × Word)} (store-at (%wadd sc #1728) #0) (λ u0 →
++    lx-bw {Sum Errno Word} {Sum Errno (Word × Word)} (lx-sys pf sys-wait4 pid (%wadd sc #1728) #0 #0 #0 #0) (λ r →
++    lx-bw {Word} {Sum Errno (Word × Word)} (load-at (%wadd sc #1728)) (λ st →
++      lx-rw {Sum Errno (Word × Word)} (case r of inl e → inl e; inr p → inr (p , %wmod st #4294967296)))))
+ -- a process over Linux as a process of the drivers: the scratch area taken once, then the handler
+ linux-run : {A : Type} → (pf : Platform) → LittleEndian pf → Proc {lsuc lzero} Linux A → Proc {lzero} W A
+ linux-run {A} pf le p = lx-bw {Word} {A} (alloc-bytes lx-scratch) (λ sc → handle {Linux} {W} {A} (linux-on-w pf le sc) p)
+diff --git a/scoped-machine/lib/os/platform.cub b/scoped-machine/lib/os/platform.cub
+index 0cff0c4fe..73e7d8519 100644
+--- a/scoped-machine/lib/os/platform.cub
++++ b/scoped-machine/lib/os/platform.cub
+@@ -12,6 +12,8 @@ data Sys = sys-read | sys-write | sys-open | sys-close | sys-mmap | sys-mprotect
+   | sys-nanosleep | sys-getpid | sys-socket | sys-connect | sys-sendto | sys-recvfrom | sys-bind
+   | sys-listen | sys-setsockopt | sys-futex | sys-clock-gettime | sys-exit-group | sys-epoll-wait
+   | sys-epoll-ctl | sys-accept4 | sys-epoll-create1
++  | sys-sendmsg | sys-recvmsg | sys-eventfd2 | sys-timerfd-create | sys-timerfd-settime
++  | sys-io-uring-setup | sys-io-uring-enter | sys-clone | sys-wait4
+ record Platform = { pf-page : Word ; pf-cache-line : Word ; pf-cores : Word ; pf-clock : Word
+                   ; pf-little-endian : Bool ; pf-sysnr : Sys → Word
+                   ; pf-epoll-event-size : Word ; pf-epoll-data-off : Word }
+@@ -47,6 +49,15 @@ x86-64-sysnr s = case s of
+   sys-epoll-ctl → #233
+   sys-accept4 → #288
+   sys-epoll-create1 → #291
++  sys-sendmsg → #46
++  sys-recvmsg → #47
++  sys-eventfd2 → #290
++  sys-timerfd-create → #283
++  sys-timerfd-settime → #286
++  sys-io-uring-setup → #425
++  sys-io-uring-enter → #426
++  sys-clone → #56
++  sys-wait4 → #61
+ -- 4 KiB pages, 64-byte lines, CLOCK_REALTIME (0); the cores are the machine's, given
+ x86-64-linux : Word → Platform
+ x86-64-linux cores = Platform { pf-page = #4096 ; pf-cache-line = #64 ; pf-cores = cores ; pf-clock = #0

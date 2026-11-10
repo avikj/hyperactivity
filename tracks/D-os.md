@@ -384,17 +384,41 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
 
 ## Next step
 
-Everything under "What is built" and every acceptance line is met, and PLAN Phase 3's replay
-acceptance with it. What is left is not this track's to do:
-1. Track A appends `lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub`
-   to `LIB` (Needs 3). Then run `make library` and replace the 845 above with the new count
-   (expected: 845 + 148 from the four files).
-2. Not built here, and in PLAN Phase 3: kernel-bypass interfaces (ef_vi, DPDK) as worlds, and
-   `sendmsg`/`recvmsg`/`io_uring` in `Linux` (this track's command list did not have them). To
-   add a call: a constructor at the end of `LinuxCmd`, its line in `lx-resp`, `linux-on-w`,
-   `linux-model`, `lx-enc`, `lx-dec`, and its number in `Sys` / `x86-64-sysnr`
-   (`lib/os/platform.cub`); no change to `W`, the drivers or the ELF loop is needed (`w-sys`
-   carries any call of up to six arguments).
-3. The model's subset (see `lib/os/contract.cub`'s header) refuses files, TCP, and waits that
-   nothing in the state ends; a process using them ends `stopped` against it (`os-tcp` does).
-   Extending it is the same file, `linux-model`'s cases.
+**Halted 2026-11-10 by the coordinator** (implementation stops until the mathematical
+specification is written and reviewed). Nothing below is to be started before that.
+
+State at the halt:
+- Items 1–4 and 7 are done and pushed; every acceptance line of items 1–4 is met (Done). The
+  `#build` cost tables are under Found (item 7, tables 1–3); the compiler-side changes are
+  Needs 5–7 (the erasure's pass order and its fuel in `lib/x86.cub`, which also has a
+  correctness side; a verdict for stuck applications; `proc-sum`/`handle-step` in the shared
+  library). `make library` at the last library change of this track: 1135 passed, 0 failed.
+- Item 5 is **not done**. Work in progress that does **not check** is kept, unapplied, as
+  `experiments/os/item5-wip.patch` (a `git diff` of `lib/os/platform.cub` and
+  `lib/os/linux.cub`; apply with `git apply scoped-machine/experiments/os/item5-wip.patch`
+  from the repository root). It holds: the nine new entries of `Sys` with their x86-64
+  numbers; the records `Uring`, `UringCqe`, the type `UringOp`; ten commands at the end of
+  `LinuxCmd` (`lx-eventfd`, `lx-timerfd-create`, `lx-timerfd-settime`, `lx-sendmsg`,
+  `lx-recvmsg`, `lx-uring-setup`, `lx-uring-submit`, `lx-uring-reap`, `lx-fork`, `lx-wait4`)
+  with their lines in `lx-resp`, the layouts (itimerspec, msghdr, iovec, io_uring_params, sqe,
+  cqe) as comments, the handler helpers and the ten cases of `linux-on-w`. Its state: the
+  first load stopped at `error: case misses constructor lx-sendmsg` (some case over
+  `LinuxCmd` in `linux.cub` does not yet list the new constructors, or the inserted handler
+  cases did not land in `linux-on-w`: the insertion anchored on the text
+  `lx-poke64 a v → store-at a v`); nothing after that point has been checked, and none of it
+  has run on the kernel. Not written at all: the ten cases in `linux-model`
+  (`lib/os/contract.cub`), in `lx-enc`/`lx-dec` (`lib/os/replay.cub`), and the experiments
+  `evtimer`, `msg`, `uring`, `thread`. The three files must change in one commit (the model
+  and the encoders are total over `LinuxCmd`).
+- Decided for item 5 and recorded here so it is not rediscovered: a thread (`clone` with
+  `CLONE_VM` on a new stack) is **not expressible through `w-sys`**: the call returns in the
+  child on the new, empty stack, while the continuation of the driver loop is on the old one
+  (`pop rcx` at `resp` in `tools/asm/driver.s`; libc's `syscall` returning, on the net). It
+  needs a driver command that starts a step tree on a new stack with its own arena (`r15`/`r12`
+  are per thread). What is expressible is `clone(SIGCHLD)` (a process, `lx-fork`), with futex
+  wait/wake across a `MAP_SHARED` page. 4-byte ring fields are read and written through the
+  aligned 8-byte word (`w-load`, and `w-cas` retried for the write, since the kernel writes the
+  neighbouring field); `w-load32`/`w-store32` in `W` would be the direct form.
+- Item 6 is **not started**. Probed on this machine: `AF_PACKET` with `PACKET_RX_RING` and
+  `PACKET_TX_RING` on `lo`, `AF_XDP` sockets, `io_uring_setup`, `eventfd2`, `timerfd_create`
+  all succeed (kernel 6.18, root).
