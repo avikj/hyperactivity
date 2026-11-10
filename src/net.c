@@ -3241,6 +3241,38 @@ static void interact(Cell *o, Cell *v) {
             cell_free(o); cell_free(v);
         } else if (vk == V_SYS) distribute(o, v);
         else {
+            /* a case on a Boolean operation (a bit of a word by its bits) whose branches are the
+             * Booleans or numerals is that bit, its negation, or the word of that bit */
+            need_bool();
+            if (vk == V_NBOP && CON[B_TRUE].data == tb->d) {
+                Record *rt = tb->br[CON[B_TRUE].index], *rf = tb->br[CON[B_FALSE].index];
+                Syn *bt = rt ? rt->body : NULL, *bf = rf ? rf->body : NULL;
+                bool cons = bt && bf && bt->tag == S_CON && bf->tag == S_CON && bt->n == 0 && bf->n == 0
+                            && ((bt->id == B_TRUE && bf->id == B_FALSE) || (bt->id == B_FALSE && bf->id == B_TRUE));
+                bool nums = bt && bf && bt->tag == S_WORD && bf->tag == S_WORD;
+                if (cons || nums) {
+                    if (mb) era(o->port[1]);
+                    for (int e = 0; e < ne; e++) era(o->port[e0 + e]);
+                    Port r;
+                    if (cons) r = bt->id == B_TRUE ? P(v, 0) : bop_cell(BO_NOT, P(v, 0), 0);
+                    else {
+                        WN n1 = { (uint64_t)bt->id, bt->big }, n0 = { (uint64_t)bf->id, bf->big };
+                        uint32_t l1 = wn_len(&n1), l0 = wn_len(&n0), len = l1 > l0 ? l1 : l0;
+                        Bit *b = malloc(((size_t)len + 1) * sizeof(Bit)); Bit sc = bvar(P(v, 0));
+                        for (uint32_t i = 0; i < len; i++) {
+                            int x1 = wn_bit(&n1, i), x0 = wn_bit(&n0, i);
+                            if (x1 == x0) { b[i] = bk(x1); continue; }
+                            Bit c1, c2; bit_dup(sc, &c1, &c2); sc = c2;
+                            b[i] = x1 ? c1 : bit_not(c1);
+                        }
+                        bit_era(sc);
+                        r = bvec_build(b, len); free(b);
+                    }
+                    link(r, o->port[o->n - 1]);
+                    cell_free(o);
+                    return;
+                }
+            }
             /* stuck: a neutral elimination, of type the motive at the scrutinee */
             /* 1=scrutinee [2=motive] then the environment, type */
             /* its motive, which types it, is built here from the environment */
