@@ -2,21 +2,21 @@
 -- rems-project/sail-x86-from-acl2 at 0c6c023dccc7c20d8d9dbfc481f01d9bb49d62bf. Do not edit: regenerate.
 segment_base_and_bounds : (proc_mode' : proc_mode) → (seg_reg : ZI) → MS ((Bits #64) × ZI × (Bits #32))
 segment_base_and_bounds proc_mode' seg_reg =
-  λ s' →
+  λ σ →
     if (in_64bit_mode proc_mode') then
       the (MS ((Bits #64) × ZI × (Bits #32)))
-        (λ s' →
+        (λ σ →
            if (z-eq seg_reg (zpos #4)) then
              the (MS ((Bits #64) × ZI × (Bits #32)))
                (bindS {Bits #64} {((Bits #64) × ZI × (Bits #32))} (read_msr (zpos #1)) (λ t'1 →
-                  retS {((Bits #64) × ZI × (Bits #32))} (t'1 , (zpos #0) , #0))) s'
+                  retS {((Bits #64) × ZI × (Bits #32))} (t'1 , (zpos #0) , #0))) σ
            else if (z-eq seg_reg (zpos #5)) then
              the (MS ((Bits #64) × ZI × (Bits #32)))
                (bindS {Bits #64} {((Bits #64) × ZI × (Bits #32))} (read_msr (zpos #2)) (λ t'2 →
-                  retS {((Bits #64) × ZI × (Bits #32))} (t'2 , (zpos #0) , #0))) s'
+                  retS {((Bits #64) × ZI × (Bits #32))} (t'2 , (zpos #0) , #0))) σ
            else
              the (MS ((Bits #64) × ZI × (Bits #32)))
-               (retS {((Bits #64) × ZI × (Bits #32))} (#0 , (zpos #0) , #0)) s') s'
+               (retS {((Bits #64) × ZI × (Bits #32))} (#0 , (zpos #0) , #0)) σ) σ
     else if (in_compatibility_mode proc_mode') then
       the (MS ((Bits #64) × ZI × (Bits #32)))
         (bindS {List (Bits #64)} {((Bits #64) × ZI × (Bits #32))} (getS {List (Bits #64)} x86-seg_hidden_bases) (λ seg_hidden_bases'5 →
@@ -40,10 +40,10 @@ segment_base_and_bounds proc_mode' seg_reg =
                          lower = (if (weq e' #1) then (z-add (zpos #1) (bv-unsigned #32 limit)) else (zpos #0))
                          upper : Bits #32
                          upper = (if (weq e' #1) then (if (weq d_b #1) then #4294967295 else #65535) else limit)
-                     in retS {((Bits #64) × ZI × (Bits #32))} ((bv-zext #32 #64 (bv-trunc #64 #32 base')) , lower , upper))))) s'
+                     in retS {((Bits #64) × ZI × (Bits #32))} ((bv-zext #32 #64 (bv-trunc #64 #32 base')) , lower , upper))))) σ
     else
       the (MS ((Bits #64) × ZI × (Bits #32)))
-        (retS {((Bits #64) × ZI × (Bits #32))} (#0 , (zpos #0) , #0)) s'
+        (retS {((Bits #64) × ZI × (Bits #32))} (#0 , (zpos #0) , #0)) σ
 ia32e_valid_code_segment_descriptor_p : (descriptor : Bits #64) → (Bool × (Text × (Bits #64)))
 ia32e_valid_code_segment_descriptor_p descriptor =
   let t'5 : (Bool × (Text × (Bits #64)))

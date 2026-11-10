@@ -20,10 +20,10 @@ select_address_size proc_mode' prefixes' =
                  prefixes' = v'1
              in (weq #103 (prefixes-adr prefixes')))
           None → false
-  in λ s' →
+  in λ σ →
        if (in_64bit_mode proc_mode') then
          the (MS ZI)
-           (retS {ZI} (if p4? then (zpos #4) else (zpos #8))) s'
+           (retS {ZI} (if p4? then (zpos #4) else (zpos #8))) σ
        else
          the (MS ZI)
            (bindS {List (Bits #16)} {ZI} (getS {List (Bits #16)} x86-seg_hidden_attrs) (λ seg_hidden_attrs'3 →
@@ -31,7 +31,7 @@ select_address_size proc_mode' prefixes' =
                   cs_attr = (vec-get {Bits #16} #0 seg_hidden_attrs'3 #1)
                   cs_d : Bits #1
                   cs_d = (code_segment_descriptor_attributesbits-d cs_attr)
-              in retS {ZI} (if (weq cs_d #1) then (if p4? then (zpos #2) else (zpos #4)) else (if p4? then (zpos #4) else (zpos #2))))) s'
+              in retS {ZI} (if (weq cs_d #1) then (if p4? then (zpos #2) else (zpos #4)) else (if p4? then (zpos #4) else (zpos #2))))) σ
 select_moffset_size : (proc_mode' : proc_mode) → (prefixes' : Option prefixes) → MS ZI
 select_moffset_size proc_mode' prefixes' =
   select_address_size proc_mode' prefixes'
@@ -39,25 +39,25 @@ select_segment_register : (proc_mode' : proc_mode) → (prefixes' : prefixes) �
 select_segment_register proc_mode' prefixes' mod_var r_m sib' =
   let m'1 : Bits #8
       m'1 = (prefixes-seg prefixes')
-  in λ s' →
+  in λ σ →
        if (weq m'1 #46) then
          the (MS ZI)
-           (retS {ZI} (zpos #1)) s'
+           (retS {ZI} (zpos #1)) σ
        else if (weq m'1 #54) then
          the (MS ZI)
-           (retS {ZI} (zpos #2)) s'
+           (retS {ZI} (zpos #2)) σ
        else if (weq m'1 #62) then
          the (MS ZI)
-           (retS {ZI} (zpos #3)) s'
+           (retS {ZI} (zpos #3)) σ
        else if (weq m'1 #38) then
          the (MS ZI)
-           (retS {ZI} (zpos #0)) s'
+           (retS {ZI} (zpos #0)) σ
        else if (weq m'1 #100) then
          the (MS ZI)
-           (retS {ZI} (zpos #4)) s'
+           (retS {ZI} (zpos #4)) σ
        else if (weq m'1 #101) then
          the (MS ZI)
-           (retS {ZI} (zpos #5)) s'
+           (retS {ZI} (zpos #5)) σ
        else
          the (MS ZI)
            (bindS {ZI} {ZI} (select_address_size proc_mode' (Some prefixes')) (λ addr_size →
@@ -73,4 +73,4 @@ select_segment_register proc_mode' prefixes' mod_var r_m sib' =
                              else
                                (zpos #3)
                        in t'3)
-              in retS {ZI} t'4)) s'
+              in retS {ZI} t'4)) σ

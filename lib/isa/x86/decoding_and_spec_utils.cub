@@ -3,10 +3,10 @@
 read_iptr : (proc_mode' : proc_mode) → MS (Bits #48)
 read_iptr proc_mode' =
   bindS {Bits #48} {Bits #48} read_rip (λ iptr →
-    λ s' →
+    λ σ →
       if (in_64bit_mode proc_mode') then
         the (MS (Bits #48))
-          (retS {Bits #48} iptr) s'
+          (retS {Bits #48} iptr) σ
       else if (in_compatibility_mode proc_mode') then
         the (MS (Bits #48))
           (bindS {List (Bits #16)} {Bits #48} (getS {List (Bits #16)} x86-seg_hidden_attrs) (λ seg_hidden_attrs'2 →
@@ -20,46 +20,46 @@ read_iptr proc_mode' =
                      (bv-zext #32 #48 (bv-trunc #48 #32 iptr))
                    else
                      (bv-zext #32 #48 (bv-zext #16 #32 (bv-trunc #48 #16 iptr)))
-             in retS {Bits #48} t'3)) s'
+             in retS {Bits #48} t'3)) σ
       else
         the (MS (Bits #48))
-          (retS {Bits #48} #0) s')
+          (retS {Bits #48} #0) σ)
 add_to_iptr : (proc_mode' : proc_mode) → (iptr : Bits #48) → (delta' : Bits #48) → MS (Bits #48)
 add_to_iptr proc_mode' iptr delta' =
   let iptr_plus_delta : Bits #49
       iptr_plus_delta = (bits_of_int (z-add (bv-signed #48 iptr) (bv-signed #48 delta')) (zpos #49))
-  in λ s' →
+  in λ σ →
        if (in_64bit_mode proc_mode') then
          the (MS (Bits #48))
            (onS {Bool} {Bits #48} (canonical_address_p (bv-signed #49 iptr_plus_delta)) (λ t'1 →
-              λ s' →
+              λ σ →
                 if t'1 then
                   the (MS (Bits #48))
-                    (retS {Bits #48} (bv-trunc #49 #48 iptr_plus_delta)) s'
+                    (retS {Bits #48} (bv-trunc #49 #48 iptr_plus_delta)) σ
                 else
                   the (MS (Bits #48))
-                    (liftS {Bits #48} (x86_model_error {Bits #48} #1728348594797682443196891025455363607367087007122150466909842308027891024550708562)) s')) s'
+                    (liftS {Bits #48} (x86_model_error {Bits #48} #1728348594797682443196891025455363607367087007122150466909842308027891024550708562)) σ)) σ
        else if (in_compatibility_mode proc_mode') then
          the (MS (Bits #48))
            (bindS {List (Bits #32)} {Bits #48} (getS {List (Bits #32)} x86-seg_hidden_limits) (λ seg_hidden_limits'4 →
               let cs_limit : Bits #32
                   cs_limit = (loghead_bits #32 (zpos #32) (vec-get {Bits #32} #0 seg_hidden_limits'4 #1))
-              in λ s' →
+              in λ σ →
                    if (b-and (z-le (zpos #0) (bv-signed #49 iptr_plus_delta)) (z-le (bv-signed #49 iptr_plus_delta) (bv-unsigned #32 cs_limit))) then
                      the (MS (Bits #48))
-                       (retS {Bits #48} (bv-trunc #49 #48 (bv-zext #32 #49 (bv-trunc #49 #32 iptr_plus_delta)))) s'
+                       (retS {Bits #48} (bv-trunc #49 #48 (bv-zext #32 #49 (bv-trunc #49 #32 iptr_plus_delta)))) σ
                    else
                      the (MS (Bits #48))
-                       (liftS {Bits #48} (x86_model_error {Bits #48} #442487580509546926083423635617153970140593258236178230209383788100787920631902782802)) s')) s'
+                       (liftS {Bits #48} (x86_model_error {Bits #48} #442487580509546926083423635617153970140593258236178230209383788100787920631902782802)) σ)) σ
        else
          the (MS (Bits #48))
-           (liftS {Bits #48} (x86_model_error {Bits #48} #1430326534880091636827201117228958513375655924002173436997)) s'
+           (liftS {Bits #48} (x86_model_error {Bits #48} #1430326534880091636827201117228958513375655924002173436997)) σ
 write_iptr : (proc_mode' : proc_mode) → (iptr : Bits #48) → MS Unit
 write_iptr proc_mode' iptr =
-  λ s' →
+  λ σ →
     if (in_64bit_mode proc_mode') then
       the (MS Unit)
-        (write_rip iptr) s'
+        (write_rip iptr) σ
     else if (in_compatibility_mode proc_mode') then
       the (MS Unit)
         (bindS {List (Bits #16)} {Unit} (getS {List (Bits #16)} x86-seg_hidden_attrs) (λ seg_hidden_attrs'2 →
@@ -67,26 +67,26 @@ write_iptr proc_mode' iptr =
                cs_attr = (vec-get {Bits #16} #0 seg_hidden_attrs'2 #1)
                cs_d : Bits #1
                cs_d = (code_segment_descriptor_attributesbits-d cs_attr)
-           in λ s' →
+           in λ σ →
                 if (weq cs_d #1) then
                   the (MS Unit)
-                    (write_rip (bv-zext #32 #48 (bv-trunc #48 #32 iptr))) s'
+                    (write_rip (bv-zext #32 #48 (bv-trunc #48 #32 iptr))) σ
                 else
                   the (MS Unit)
                     (bindS {Bits #48} {Unit} read_rip (λ rip_var →
                        let rip_new : Bits #48
                            rip_new = (changeSlice_bits #48 rip_var (zpos #0) (zpos #16) (bv-trunc #48 #16 iptr))
-                       in write_rip rip_new)) s')) s'
+                       in write_rip rip_new)) σ)) σ
     else
       the (MS Unit)
-        (retS {Unit} unit) s'
+        (retS {Unit} unit) σ
 read_sptr : (proc_mode' : proc_mode) → MS (Bits #64)
 read_sptr proc_mode' =
   bindS {Bits #64} {Bits #64} (rgfi (zpos #4)) (λ sptr →
-    λ s' →
+    λ σ →
       if (in_64bit_mode proc_mode') then
         the (MS (Bits #64))
-          (retS {Bits #64} sptr) s'
+          (retS {Bits #64} sptr) σ
       else if (in_compatibility_mode proc_mode') then
         the (MS (Bits #64))
           (bindS {List (Bits #16)} {Bits #64} (getS {List (Bits #16)} x86-seg_hidden_attrs) (λ seg_hidden_attrs'2 →
@@ -100,27 +100,27 @@ read_sptr proc_mode' =
                      (bv-zext #32 #64 (bv-trunc #64 #32 sptr))
                    else
                      (bv-zext #32 #64 (bv-zext #16 #32 (bv-trunc #64 #16 sptr)))
-             in retS {Bits #64} t'3)) s'
+             in retS {Bits #64} t'3)) σ
       else
         the (MS (Bits #64))
-          (retS {Bits #64} #0) s')
+          (retS {Bits #64} #0) σ)
 add_to_sptr : (proc_mode' : proc_mode) → (sptr : Bits #64) → (delta' : Bits #64) → MS (Bits #64)
 add_to_sptr proc_mode' sptr delta' =
   let sptr_plus_delta : Bits #65
       sptr_plus_delta = (bits_of_int (z-add (bv-signed #64 sptr) (bv-signed #64 delta')) (zpos #65))
-  in λ s' →
+  in λ σ →
        if (in_64bit_mode proc_mode') then
          the (MS (Bits #64))
            (let sptr_plus_delta : Bits #64
                 sptr_plus_delta = (bv-trunc #65 #64 sptr_plus_delta)
             in onS {Bool} {Bits #64} (canonical_address_p (bv-signed #64 sptr_plus_delta)) (λ t'1 →
-                 λ s' →
+                 λ σ →
                    if t'1 then
                      the (MS (Bits #64))
-                       (retS {Bits #64} sptr_plus_delta) s'
+                       (retS {Bits #64} sptr_plus_delta) σ
                    else
                      the (MS (Bits #64))
-                       (liftS {Bits #64} (x86_model_error {Bits #64} #6140327694473350715032079795660151005132160353761638364606630286163)) s')) s'
+                       (liftS {Bits #64} (x86_model_error {Bits #64} #6140327694473350715032079795660151005132160353761638364606630286163)) σ)) σ
        else if (in_compatibility_mode proc_mode') then
          the (MS (Bits #64))
            (bindS {List (Bits #32)} {Bits #64} (getS {List (Bits #32)} x86-seg_hidden_limits) (λ seg_hidden_limits'4 →
@@ -143,23 +143,23 @@ add_to_sptr proc_mode' sptr delta' =
                           k'11 =
                             λ t'7 →
                               retS {Bits #64} (bv-zext #32 #64 sptr_plus_delta)
-                      in λ s' →
+                      in λ σ →
                            if (b-not (b-and (z-le ss_lower (bv-unsigned #32 sptr_plus_delta)) (z-le (bv-unsigned #32 sptr_plus_delta) (bv-unsigned #32 ss_upper)))) then
                              the (MS (Bits #64))
                                (onS {Unit} {Bits #64} (x86_model_error {Unit} #1572031679975605293305646752405216553472715127576586585289089396069203) (λ t'6 →
-                                  k'11 t'6)) s'
+                                  k'11 t'6)) σ
                            else
                              the (MS (Bits #64))
-                               (k'11 unit) s'))) s'
+                               (k'11 unit) σ))) σ
        else
          the (MS (Bits #64))
-           (liftS {Bits #64} (x86_model_error {Bits #64} #1430326534880091636827201117228958513375655924002173436997)) s'
+           (liftS {Bits #64} (x86_model_error {Bits #64} #1430326534880091636827201117228958513375655924002173436997)) σ
 write_sptr : (proc_mode' : proc_mode) → (sptr : Bits #64) → MS Unit
 write_sptr proc_mode' sptr =
-  λ s' →
+  λ σ →
     if (in_64bit_mode proc_mode') then
       the (MS Unit)
-        (write_rgfi (zpos #4) sptr) s'
+        (write_rgfi (zpos #4) sptr) σ
     else if (in_compatibility_mode proc_mode') then
       the (MS Unit)
         (bindS {List (Bits #16)} {Unit} (getS {List (Bits #16)} x86-seg_hidden_attrs) (λ seg_hidden_attrs'2 →
@@ -167,19 +167,19 @@ write_sptr proc_mode' sptr =
                ss_attr = (vec-get {Bits #16} #0 seg_hidden_attrs'2 #2)
                ss_b : Bits #1
                ss_b = (data_segment_descriptor_attributesbits-d_b ss_attr)
-           in λ s' →
+           in λ σ →
                 if (weq ss_b #1) then
                   the (MS Unit)
-                    (write_rgfi (zpos #4) (bv-zext #32 #64 (bv-trunc #64 #32 sptr))) s'
+                    (write_rgfi (zpos #4) (bv-zext #32 #64 (bv-trunc #64 #32 sptr))) σ
                 else
                   the (MS Unit)
                     (bindS {Bits #64} {Unit} (rgfi (zpos #4)) (λ rsp_var →
                        let rsp_new : Bits #64
                            rsp_new = (changeSlice_bits #64 rsp_var (zpos #0) (zpos #16) (bv-trunc #64 #16 sptr))
-                       in write_rgfi (zpos #4) rsp_new)) s')) s'
+                       in write_rgfi (zpos #4) rsp_new)) σ)) σ
     else
       the (MS Unit)
-        (retS {Unit} unit) s'
+        (retS {Unit} unit) σ
 x86_effective_addr_from_sib : (proc_mode' : proc_mode) → (temp_rip : Bits #48) → (rex_byte : Bits #8) → (mod_var : Bits #2) → (sib' : sib) → MS (ZI × (Bits #64) × ZI)
 x86_effective_addr_from_sib proc_mode' temp_rip rex_byte mod_var sib' =
   let b' : Bits #3
@@ -206,47 +206,47 @@ x86_effective_addr_from_sib proc_mode' temp_rip rex_byte mod_var sib' =
                               effective_addr : ZI
                               effective_addr = (z-add (bv-signed #64 base') scaled_index)
                           in retS {(ZI × (Bits #64) × ZI)} (effective_addr , displacement , nrip_bytes)
-                  in λ s' →
+                  in λ σ →
                        if (weq ix #4) then
                          the (MS (ZI × (Bits #64) × ZI))
-                           (k'27 #0) s'
+                           (k'27 #0) σ
                        else if (in_64bit_mode proc_mode') then
                          the (MS (ZI × (Bits #64) × ZI))
                            (bindS {Bits #64} {(ZI × (Bits #64) × ZI)} (rgfi (bv-unsigned #4 ix)) (λ t'23 →
-                              k'27 t'23)) s'
+                              k'27 t'23)) σ
                        else
                          the (MS (ZI × (Bits #64) × ZI))
                            (bindS {Bits #64} {(ZI × (Bits #64) × ZI)} (rgfi (bv-unsigned #4 ix)) (λ t'24 →
-                              k'27 (bv-sext #32 #64 (bv-trunc #64 #32 t'24)))) s')
-     in λ s' →
+                              k'27 (bv-sext #32 #64 (bv-trunc #64 #32 t'24)))) σ)
+     in λ σ →
           if (weq mod_var #0) then
             the (MS (ZI × (Bits #64) × ZI))
               (let k'33 : ((Bits #64) × (Bits #64) × ZI) → MS (ZI × (Bits #64) × ZI)
                    k'33 =
                      λ t'7 →
                        k'31 t'7
-               in λ s' →
+               in λ σ →
                     if (weq b' #5) then
                       the (MS (ZI × (Bits #64) × ZI))
                         (bindS {ZI} {(ZI × (Bits #64) × ZI)} (select_address_size proc_mode' None) (λ t'1 →
                            bindS {Bits #64} {(ZI × (Bits #64) × ZI)} (rime_size proc_mode' t'1 (zpos #4) (bv-sext #48 #64 temp_rip) None (zpos #1) #14936 check_alignment? false) (λ dword →
-                             k'33 (#0 , dword , (zpos #4))))) s'
+                             k'33 (#0 , dword , (zpos #4))))) σ
                     else
                       the (MS (ZI × (Bits #64) × ZI))
                         (let k'36 : (Bits #64) → MS (ZI × (Bits #64) × ZI)
                              k'36 =
                                λ t'6 →
                                  k'33 (t'6 , #0 , (zpos #0))
-                         in λ s' →
+                         in λ σ →
                               if (in_64bit_mode proc_mode') then
                                 the (MS (ZI × (Bits #64) × ZI))
                                   (onS {Bits #4} {(ZI × (Bits #64) × ZI)} (reg_index b' rex_byte #0) (λ t'3 →
                                      bindS {Bits #64} {(ZI × (Bits #64) × ZI)} (rgfi (bv-unsigned #4 t'3)) (λ t'4 →
-                                       k'36 t'4))) s'
+                                       k'36 t'4))) σ
                               else
                                 the (MS (ZI × (Bits #64) × ZI))
                                   (bindS {Bits #32} {(ZI × (Bits #64) × ZI)} (rr32 (bv-zext #3 #4 b')) (λ t'5 →
-                                     k'36 (bv-zext #32 #64 t'5))) s') s') s'
+                                     k'36 (bv-zext #32 #64 t'5))) σ) σ) σ
           else if (weq mod_var #1) then
             the (MS (ZI × (Bits #64) × ZI))
               (bindS {ZI} {(ZI × (Bits #64) × ZI)} (select_address_size proc_mode' None) (λ t'8 →
@@ -255,16 +255,16 @@ x86_effective_addr_from_sib proc_mode' temp_rip rex_byte mod_var sib' =
                        k'40 =
                          λ t'13 →
                            k'31 (t'13 , byte , (zpos #1))
-                   in λ s' →
+                   in λ σ →
                         if (in_64bit_mode proc_mode') then
                           the (MS (ZI × (Bits #64) × ZI))
                             (onS {Bits #4} {(ZI × (Bits #64) × ZI)} (reg_index b' rex_byte #0) (λ t'10 →
                                bindS {Bits #64} {(ZI × (Bits #64) × ZI)} (rgfi (bv-unsigned #4 t'10)) (λ t'11 →
-                                 k'40 t'11))) s'
+                                 k'40 t'11))) σ
                         else
                           the (MS (ZI × (Bits #64) × ZI))
                             (bindS {Bits #32} {(ZI × (Bits #64) × ZI)} (rr32 (bv-zext #3 #4 b')) (λ t'12 →
-                               k'40 (bv-zext #32 #64 t'12))) s'))) s'
+                               k'40 (bv-zext #32 #64 t'12))) σ))) σ
           else if (weq mod_var #2) then
             the (MS (ZI × (Bits #64) × ZI))
               (bindS {ZI} {(ZI × (Bits #64) × ZI)} (select_address_size proc_mode' None) (λ t'14 →
@@ -273,39 +273,39 @@ x86_effective_addr_from_sib proc_mode' temp_rip rex_byte mod_var sib' =
                        k'44 =
                          λ t'19 →
                            k'31 (t'19 , dword , (zpos #4))
-                   in λ s' →
+                   in λ σ →
                         if (in_64bit_mode proc_mode') then
                           the (MS (ZI × (Bits #64) × ZI))
                             (onS {Bits #4} {(ZI × (Bits #64) × ZI)} (reg_index b' rex_byte #0) (λ t'16 →
                                bindS {Bits #64} {(ZI × (Bits #64) × ZI)} (rgfi (bv-unsigned #4 t'16)) (λ t'17 →
-                                 k'44 t'17))) s'
+                                 k'44 t'17))) σ
                         else
                           the (MS (ZI × (Bits #64) × ZI))
                             (bindS {Bits #32} {(ZI × (Bits #64) × ZI)} (rr32 (bv-zext #3 #4 b')) (λ t'18 →
-                               k'44 (bv-zext #32 #64 t'18))) s'))) s'
+                               k'44 (bv-zext #32 #64 t'18))) σ))) σ
           else
             the (MS (ZI × (Bits #64) × ZI))
               (onS {((Bits #64) × (Bits #64) × ZI)} {(ZI × (Bits #64) × ZI)} (x86_model_error {((Bits #64) × (Bits #64) × ZI)} #15319171241108152325239130745627522150552987599271167403965025398780742728370067442246247603205718551858) (λ t'20 →
-                 k'31 t'20)) s'
+                 k'31 t'20)) σ
 x86_effective_addr_16_disp : (proc_mode' : proc_mode) → (temp_rip : Bits #48) → (mod_var : Bits #2) → MS ((Bits #64) × ZI)
 x86_effective_addr_16_disp proc_mode' temp_rip mod_var =
-  λ s' →
+  λ σ →
     if (weq mod_var #0) then
       the (MS ((Bits #64) × ZI))
-        (retS {((Bits #64) × ZI)} (#0 , (zpos #0))) s'
+        (retS {((Bits #64) × ZI)} (#0 , (zpos #0))) σ
     else if (weq mod_var #1) then
       the (MS ((Bits #64) × ZI))
         (bindS {ZI} {((Bits #64) × ZI)} (select_address_size proc_mode' None) (λ t'1 →
            bindS {Bits #64} {((Bits #64) × ZI)} (rime_size proc_mode' t'1 (zpos #1) (bv-sext #48 #64 temp_rip) None (zpos #1) #14936 false false) (λ byte →
-             retS {((Bits #64) × ZI)} (byte , (zpos #1))))) s'
+             retS {((Bits #64) × ZI)} (byte , (zpos #1))))) σ
     else if (weq mod_var #2) then
       the (MS ((Bits #64) × ZI))
         (bindS {ZI} {((Bits #64) × ZI)} (select_address_size proc_mode' None) (λ t'3 →
            bindS {Bits #64} {((Bits #64) × ZI)} (rime_size proc_mode' t'3 (zpos #2) (bv-sext #48 #64 temp_rip) None (zpos #1) #14936 false false) (λ word →
-             retS {((Bits #64) × ZI)} (word , (zpos #2))))) s'
+             retS {((Bits #64) × ZI)} (word , (zpos #2))))) σ
     else
       the (MS ((Bits #64) × ZI))
-        (liftS {((Bits #64) × ZI)} (x86_model_error {((Bits #64) × ZI)} #568219641932491732292111716750159463)) s'
+        (liftS {((Bits #64) × ZI)} (x86_model_error {((Bits #64) × ZI)} #568219641932491732292111716750159463)) σ
 x86_effective_addr_16-case1 : (proc_mode' : proc_mode) → (temp_rip : Bits #48) → (mod_var : Bits #2) → MS ((Bits #16) × ZI)
 x86_effective_addr_16-case1 proc_mode' temp_rip mod_var =
   bindS {Bits #16} {((Bits #16) × ZI)} (rr16 #3) (λ bx' →
@@ -366,12 +366,12 @@ x86_effective_addr_16-case6 proc_mode' temp_rip mod_var =
       in retS {((Bits #16) × ZI)} ((bits_of_int (z-add (bv-unsigned #16 di) (bv-signed #64 disp)) (zpos #16)) , increment_rip_by)))
 x86_effective_addr_16-case7 : (proc_mode' : proc_mode) → (temp_rip : Bits #48) → (mod_var : Bits #2) → MS ((Bits #16) × ZI)
 x86_effective_addr_16-case7 proc_mode' temp_rip mod_var =
-  λ s' →
+  λ σ →
     if (weq mod_var #0) then
       the (MS ((Bits #16) × ZI))
         (bindS {ZI} {((Bits #16) × ZI)} (select_address_size proc_mode' None) (λ t'17 →
            bindS {Bits #64} {((Bits #16) × ZI)} (rime_size proc_mode' t'17 (zpos #2) (bv-sext #48 #64 temp_rip) None (zpos #1) #14936 false false) (λ disp →
-             retS {((Bits #16) × ZI)} ((bv-trunc #64 #16 disp) , (zpos #2))))) s'
+             retS {((Bits #16) × ZI)} ((bv-trunc #64 #16 disp) , (zpos #2))))) σ
     else
       the (MS ((Bits #16) × ZI))
         (bindS {Bits #16} {((Bits #16) × ZI)} (rr16 #5) (λ bp →
@@ -380,7 +380,7 @@ x86_effective_addr_16-case7 proc_mode' temp_rip mod_var =
                  disp = (fst t'20)
                  increment_rip_by : ZI
                  increment_rip_by = (snd t'20)
-             in retS {((Bits #16) × ZI)} ((bits_of_int (z-add (bv-unsigned #16 bp) (bv-signed #64 disp)) (zpos #16)) , increment_rip_by)))) s'
+             in retS {((Bits #16) × ZI)} ((bits_of_int (z-add (bv-unsigned #16 bp) (bv-signed #64 disp)) (zpos #16)) , increment_rip_by)))) σ
 x86_effective_addr_16-case8 : (proc_mode' : proc_mode) → (temp_rip : Bits #48) → (mod_var : Bits #2) → MS ((Bits #16) × ZI)
 x86_effective_addr_16-case8 proc_mode' temp_rip mod_var =
   bindS {Bits #16} {((Bits #16) × ZI)} (rr16 #3) (λ bx' →
@@ -395,69 +395,69 @@ x86_effective_addr_16-case9 =
   x86_model_error {((Bits #16) × ZI)} #19845619580356504385658052030245752424261
 x86_effective_addr_16 : (proc_mode' : proc_mode) → (temp_rip : Bits #48) → (r_m : Bits #3) → (mod_var : Bits #2) → MS ((Bits #16) × ZI)
 x86_effective_addr_16 proc_mode' temp_rip r_m mod_var =
-  λ s' →
+  λ σ →
     if (wlt r_m #4) then
       (if (wlt r_m #2) then
          (if (wlt r_m #1) then
             (if (weq r_m #0) then
                the (MS ((Bits #16) × ZI))
-                 (x86_effective_addr_16-case1 proc_mode' temp_rip mod_var) s'
+                 (x86_effective_addr_16-case1 proc_mode' temp_rip mod_var) σ
              else
                the (MS ((Bits #16) × ZI))
-                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) s')
+                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) σ)
           else
             (if (weq r_m #1) then
                the (MS ((Bits #16) × ZI))
-                 (x86_effective_addr_16-case2 proc_mode' temp_rip mod_var) s'
+                 (x86_effective_addr_16-case2 proc_mode' temp_rip mod_var) σ
              else
                the (MS ((Bits #16) × ZI))
-                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) s'))
+                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) σ))
        else
          (if (wlt r_m #3) then
             (if (weq r_m #2) then
                the (MS ((Bits #16) × ZI))
-                 (x86_effective_addr_16-case3 proc_mode' temp_rip mod_var) s'
+                 (x86_effective_addr_16-case3 proc_mode' temp_rip mod_var) σ
              else
                the (MS ((Bits #16) × ZI))
-                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) s')
+                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) σ)
           else
             (if (weq r_m #3) then
                the (MS ((Bits #16) × ZI))
-                 (x86_effective_addr_16-case4 proc_mode' temp_rip mod_var) s'
+                 (x86_effective_addr_16-case4 proc_mode' temp_rip mod_var) σ
              else
                the (MS ((Bits #16) × ZI))
-                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) s')))
+                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) σ)))
     else
       (if (wlt r_m #6) then
          (if (wlt r_m #5) then
             (if (weq r_m #4) then
                the (MS ((Bits #16) × ZI))
-                 (x86_effective_addr_16-case5 proc_mode' temp_rip mod_var) s'
+                 (x86_effective_addr_16-case5 proc_mode' temp_rip mod_var) σ
              else
                the (MS ((Bits #16) × ZI))
-                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) s')
+                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) σ)
           else
             (if (weq r_m #5) then
                the (MS ((Bits #16) × ZI))
-                 (x86_effective_addr_16-case6 proc_mode' temp_rip mod_var) s'
+                 (x86_effective_addr_16-case6 proc_mode' temp_rip mod_var) σ
              else
                the (MS ((Bits #16) × ZI))
-                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) s'))
+                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) σ))
        else
          (if (wlt r_m #7) then
             (if (weq r_m #6) then
                the (MS ((Bits #16) × ZI))
-                 (x86_effective_addr_16-case7 proc_mode' temp_rip mod_var) s'
+                 (x86_effective_addr_16-case7 proc_mode' temp_rip mod_var) σ
              else
                the (MS ((Bits #16) × ZI))
-                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) s')
+                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) σ)
           else
             (if (weq r_m #7) then
                the (MS ((Bits #16) × ZI))
-                 (x86_effective_addr_16-case8 proc_mode' temp_rip mod_var) s'
+                 (x86_effective_addr_16-case8 proc_mode' temp_rip mod_var) σ
              else
                the (MS ((Bits #16) × ZI))
-                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) s')))
+                 (liftS {((Bits #16) × ZI)} x86_effective_addr_16-case9) σ)))
 x86_effective_addr_32_64 : (proc_mode' : proc_mode) → (p4 : Bool) → (temp_rip : Bits #48) → (rex_byte : Bits #8) → (r_m : Bits #3) → (mod_var : Bits #2) → (sib' : sib) → (num_imm_bytes : Bits #3) → MS ((Bits #64) × ZI)
 x86_effective_addr_32_64 proc_mode' p4 temp_rip rex_byte r_m mod_var sib' num_imm_bytes =
   let k'32 : (ZI × (Bits #64) × ZI) → MS ((Bits #64) × ZI)
@@ -478,63 +478,63 @@ x86_effective_addr_32_64 proc_mode' p4 temp_rip rex_byte r_m mod_var sib' num_im
                 else
                   (bv-zext #32 #64 (bits_of_int dst_base (zpos #32)))
           in retS {((Bits #64) × ZI)} (dst_base , increment_rip_by)
-  in λ s' →
+  in λ σ →
        if (weq mod_var #0) then
          the (MS ((Bits #64) × ZI))
            (let k'34 : (ZI × (Bits #64) × ZI) → MS ((Bits #64) × ZI)
                 k'34 =
                   λ t'12 →
                     k'32 t'12
-            in λ s' →
+            in λ σ →
                  if (weq r_m #4) then
                    the (MS ((Bits #64) × ZI))
                      (bindS {(ZI × (Bits #64) × ZI)} {((Bits #64) × ZI)} (x86_effective_addr_from_sib proc_mode' temp_rip rex_byte mod_var sib') (λ t'1 →
-                        k'34 t'1)) s'
+                        k'34 t'1)) σ
                  else if (weq r_m #5) then
                    the (MS ((Bits #64) × ZI))
                      (let k'37 : (ZI × (Bits #64) × ZI) → MS ((Bits #64) × ZI)
                           k'37 =
                             λ t'7 →
                               k'34 t'7
-                      in λ s' →
+                      in λ σ →
                            if (in_64bit_mode proc_mode') then
                              the (MS ((Bits #64) × ZI))
                                (bindS {ZI} {((Bits #64) × ZI)} (select_address_size proc_mode' None) (λ t'2 →
                                   bindS {Bits #64} {((Bits #64) × ZI)} (rime_size Mode_64bit t'2 (zpos #4) (bv-sext #48 #64 temp_rip) None (zpos #1) #14936 false false) (λ dword →
                                     bindS {Bits #48} {((Bits #64) × ZI)} (add_to_iptr Mode_64bit temp_rip (bits_of_int (z-add (zpos #4) (bv-unsigned #3 num_imm_bytes)) (zpos #48))) (λ next_rip →
-                                      k'37 ((bv-signed #48 next_rip) , dword , (zpos #4)))))) s'
+                                      k'37 ((bv-signed #48 next_rip) , dword , (zpos #4)))))) σ
                            else
                              the (MS ((Bits #64) × ZI))
                                (bindS {ZI} {((Bits #64) × ZI)} (select_address_size proc_mode' None) (λ t'5 →
                                   bindS {Bits #64} {((Bits #64) × ZI)} (rime_size proc_mode' t'5 (zpos #4) (bv-sext #48 #64 temp_rip) None (zpos #1) #14936 false false) (λ dword →
-                                    k'37 ((bv-signed #48 #0) , dword , (zpos #4))))) s') s'
+                                    k'37 ((bv-signed #48 #0) , dword , (zpos #4))))) σ) σ
                  else
                    the (MS ((Bits #64) × ZI))
                      (let k'41 : ZI → MS ((Bits #64) × ZI)
                           k'41 =
                             λ t'11 →
                               k'34 (t'11 , #0 , (zpos #0))
-                      in λ s' →
+                      in λ σ →
                            if (in_64bit_mode proc_mode') then
                              the (MS ((Bits #64) × ZI))
                                (onS {Bits #4} {((Bits #64) × ZI)} (reg_index r_m rex_byte #0) (λ t'8 →
                                   bindS {Bits #64} {((Bits #64) × ZI)} (rgfi (bv-unsigned #4 t'8)) (λ t'9 →
-                                    k'41 (bv-signed #64 t'9)))) s'
+                                    k'41 (bv-signed #64 t'9)))) σ
                            else
                              the (MS ((Bits #64) × ZI))
                                (bindS {Bits #32} {((Bits #64) × ZI)} (rr32 (bv-zext #3 #4 r_m)) (λ t'10 →
-                                  k'41 (bv-signed #64 (bv-zext #32 #64 t'10)))) s') s') s'
+                                  k'41 (bv-signed #64 (bv-zext #32 #64 t'10)))) σ) σ) σ
        else if (weq mod_var #1) then
          the (MS ((Bits #64) × ZI))
            (let k'45 : (ZI × (Bits #64) × ZI) → MS ((Bits #64) × ZI)
                 k'45 =
                   λ t'20 →
                     k'32 t'20
-            in λ s' →
+            in λ σ →
                  if (weq r_m #4) then
                    the (MS ((Bits #64) × ZI))
                      (bindS {(ZI × (Bits #64) × ZI)} {((Bits #64) × ZI)} (x86_effective_addr_from_sib proc_mode' temp_rip rex_byte mod_var sib') (λ t'13 →
-                        k'45 t'13)) s'
+                        k'45 t'13)) σ
                  else
                    the (MS ((Bits #64) × ZI))
                      (bindS {ZI} {((Bits #64) × ZI)} (select_address_size proc_mode' None) (λ t'14 →
@@ -543,27 +543,27 @@ x86_effective_addr_32_64 proc_mode' p4 temp_rip rex_byte r_m mod_var sib' num_im
                               k'48 =
                                 λ reg' →
                                   k'45 ((bv-signed #64 reg') , byte2 , (zpos #1))
-                          in λ s' →
+                          in λ σ →
                                if (in_64bit_mode proc_mode') then
                                  the (MS ((Bits #64) × ZI))
                                    (onS {Bits #4} {((Bits #64) × ZI)} (reg_index r_m rex_byte #0) (λ t'16 →
                                       bindS {Bits #64} {((Bits #64) × ZI)} (rgfi (bv-unsigned #4 t'16)) (λ t'17 →
-                                        k'48 t'17))) s'
+                                        k'48 t'17))) σ
                                else
                                  the (MS ((Bits #64) × ZI))
                                    (bindS {Bits #32} {((Bits #64) × ZI)} (rr32 (bv-zext #3 #4 r_m)) (λ t'18 →
-                                      k'48 (bv-zext #32 #64 t'18))) s'))) s') s'
+                                      k'48 (bv-zext #32 #64 t'18))) σ))) σ) σ
        else if (weq mod_var #2) then
          the (MS ((Bits #64) × ZI))
            (let k'52 : (ZI × (Bits #64) × ZI) → MS ((Bits #64) × ZI)
                 k'52 =
                   λ t'28 →
                     k'32 t'28
-            in λ s' →
+            in λ σ →
                  if (weq r_m #4) then
                    the (MS ((Bits #64) × ZI))
                      (bindS {(ZI × (Bits #64) × ZI)} {((Bits #64) × ZI)} (x86_effective_addr_from_sib proc_mode' temp_rip rex_byte mod_var sib') (λ t'21 →
-                        k'52 t'21)) s'
+                        k'52 t'21)) σ
                  else
                    the (MS ((Bits #64) × ZI))
                      (bindS {ZI} {((Bits #64) × ZI)} (select_address_size proc_mode' None) (λ t'22 →
@@ -572,26 +572,26 @@ x86_effective_addr_32_64 proc_mode' p4 temp_rip rex_byte r_m mod_var sib' num_im
                               k'55 =
                                 λ reg' →
                                   k'52 ((bv-signed #64 reg') , dword , (zpos #4))
-                          in λ s' →
+                          in λ σ →
                                if (in_64bit_mode proc_mode') then
                                  the (MS ((Bits #64) × ZI))
                                    (onS {Bits #4} {((Bits #64) × ZI)} (reg_index r_m rex_byte #0) (λ t'24 →
                                       bindS {Bits #64} {((Bits #64) × ZI)} (rgfi (bv-unsigned #4 t'24)) (λ t'25 →
-                                        k'55 t'25))) s'
+                                        k'55 t'25))) σ
                                else
                                  the (MS ((Bits #64) × ZI))
                                    (bindS {Bits #32} {((Bits #64) × ZI)} (rr32 (bv-zext #3 #4 r_m)) (λ t'26 →
-                                      k'55 (bv-zext #32 #64 t'26))) s'))) s') s'
+                                      k'55 (bv-zext #32 #64 t'26))) σ))) σ) σ
        else
          the (MS ((Bits #64) × ZI))
            (onS {(ZI × (Bits #64) × ZI)} {((Bits #64) × ZI)} (x86_model_error {(ZI × (Bits #64) × ZI)} #568219641932491732292111716750159463) (λ t'29 →
-              k'32 t'29)) s'
+              k'32 t'29)) σ
 x86_effective_addr : (proc_mode' : proc_mode) → (prefixes' : prefixes) → (temp_rip : Bits #48) → (rex_byte : Bits #8) → (r_m : Bits #3) → (mod_var : Bits #2) → (sib' : sib) → (num_imm_bytes : Bits #3) → MS ((Bits #64) × ZI)
 x86_effective_addr proc_mode' prefixes' temp_rip rex_byte r_m mod_var sib' num_imm_bytes =
   let p4 : Bool
       p4 = (weq #103 (prefixes-adr prefixes'))
   in bindS {ZI} {((Bits #64) × ZI)} (select_address_size proc_mode' (Some prefixes')) (λ t'1 →
-       λ s' →
+       λ σ →
          if (z-eq (zpos #2) t'1) then
            the (MS ((Bits #64) × ZI))
              (bindS {((Bits #16) × ZI)} {((Bits #64) × ZI)} (x86_effective_addr_16 proc_mode' temp_rip r_m mod_var) (λ t'2 →
@@ -599,10 +599,10 @@ x86_effective_addr proc_mode' prefixes' temp_rip rex_byte r_m mod_var sib' num_i
                     elem1 = (fst t'2)
                     elem2 : ZI
                     elem2 = (snd t'2)
-                in retS {((Bits #64) × ZI)} ((bv-zext #16 #64 elem1) , elem2))) s'
+                in retS {((Bits #64) × ZI)} ((bv-zext #16 #64 elem1) , elem2))) σ
          else
            the (MS ((Bits #64) × ZI))
-             (x86_effective_addr_32_64 proc_mode' p4 temp_rip rex_byte r_m mod_var sib' num_imm_bytes) s')
+             (x86_effective_addr_32_64 proc_mode' p4 temp_rip rex_byte r_m mod_var sib' num_imm_bytes) σ)
 alignment_checking_enabled_p : MS Bool
 alignment_checking_enabled_p =
   bindS {List (Bits #64)} {Bool} (getS {List (Bits #64)} x86-ctrs) (λ ctrs'1 →
@@ -630,24 +630,24 @@ x86_operand_from_modr_m_and_sib_bytes proc_mode' reg_type operand_size inst_ac? 
                  k'13 =
                    λ operand →
                      retS {((Bits #128) × ZI × (Bits #64))} (operand , increment_rip_by , addr)
-             in λ s' →
+             in λ σ →
                   if (weq mod_var #3) then
                     the (MS ((Bits #128) × ZI × (Bits #64)))
                       (let k'15 : (Bits #128) → MS ((Bits #128) × ZI × (Bits #64))
                            k'15 =
                              λ t'7 →
                                k'13 t'7
-                       in λ s' →
+                       in λ σ →
                             if (weq reg_type #0) then
                               the (MS ((Bits #128) × ZI × (Bits #64)))
                                 (onS {Bits #4} {((Bits #128) × ZI × (Bits #64))} (reg_index r_m rex_byte #0) (λ t'3 →
                                    bindS {Bits #64} {((Bits #128) × ZI × (Bits #64))} (rgfi_size (bits_of_int operand_size (zpos #4)) t'3 rex_byte) (λ t'4 →
-                                     k'15 (bv-zext #64 #128 t'4)))) s'
+                                     k'15 (bv-zext #64 #128 t'4)))) σ
                             else
                               the (MS ((Bits #128) × ZI × (Bits #64)))
                                 (onS {Bits #4} {((Bits #128) × ZI × (Bits #64))} (reg_index r_m rex_byte #0) (λ t'5 →
                                    bindS {Bits #128} {((Bits #128) × ZI × (Bits #64))} (xmmi_size (bits_of_int operand_size (zpos #5)) t'5) (λ t'6 →
-                                     k'15 t'6))) s') s'
+                                     k'15 t'6))) σ) σ
                   else
                     the (MS ((Bits #128) × ZI × (Bits #64)))
                       (let k'19 : Bool → MS ((Bits #128) × ZI × (Bits #64))
@@ -658,29 +658,29 @@ x86_operand_from_modr_m_and_sib_bytes proc_mode' reg_type operand_size inst_ac? 
                                      base_reg = (select_base_register proc_mode' rex_byte r_m mod_var sib')
                                  in bindS {Bits #128} {((Bits #128) × ZI × (Bits #64))} (rme_size proc_mode' addr_size operand_size addr base_reg seg_reg #14930 check_alignment? memory_ptr?) (λ t'11 →
                                       k'13 t'11))
-                       in λ s' →
+                       in λ σ →
                             if inst_ac? then
                               the (MS ((Bits #128) × ZI × (Bits #64)))
                                 (bindS {Bool} {((Bits #128) × ZI × (Bits #64))} alignment_checking_enabled_p (λ t'8 →
-                                   k'19 t'8)) s'
+                                   k'19 t'8)) σ
                             else
                               the (MS ((Bits #128) × ZI × (Bits #64)))
-                                (k'19 false) s') s'
-  in λ s' →
+                                (k'19 false) σ) σ
+  in λ σ →
        if (weq mod_var #3) then
          the (MS ((Bits #128) × ZI × (Bits #64)))
-           (k'22 (#0 , (zpos #0))) s'
+           (k'22 (#0 , (zpos #0))) σ
        else
          the (MS ((Bits #128) × ZI × (Bits #64)))
            (bindS {((Bits #64) × ZI)} {((Bits #128) × ZI × (Bits #64))} (x86_effective_addr proc_mode' prefixes' temp_rip rex_byte r_m mod_var sib' num_imm_bytes) (λ t'1 →
-              k'22 t'1)) s'
+              k'22 t'1)) σ
 x86_operand_to_reg_mem : (proc_mode' : proc_mode) → (operand_size : ZI) → (inst_ac? : Bool) → (memory_ptr? : Bool) → (operand : Bits #128) → (seg_reg : ZI) → (addr : Bits #64) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (r_m : Bits #3) → (mod_var : Bits #2) → (sib' : sib) → MS Unit
 x86_operand_to_reg_mem proc_mode' operand_size inst_ac? memory_ptr? operand seg_reg addr prefixes' rex_byte r_m mod_var sib' =
-  λ s' →
+  λ σ →
     if (weq mod_var #3) then
       the (MS Unit)
         (onS {Bits #4} {Unit} (reg_index r_m rex_byte #0) (λ t'1 →
-           write_rgfi_size (bits_of_int operand_size (zpos #4)) t'1 (bv-trunc #128 #64 operand) rex_byte)) s'
+           write_rgfi_size (bits_of_int operand_size (zpos #4)) t'1 (bv-trunc #128 #64 operand) rex_byte)) σ
     else
       the (MS Unit)
         (let k'8 : Bool → MS Unit
@@ -690,21 +690,21 @@ x86_operand_to_reg_mem proc_mode' operand_size inst_ac? memory_ptr? operand seg_
                    let base_reg : Option ZI
                        base_reg = (select_base_register proc_mode' rex_byte r_m mod_var sib')
                    in wme_size proc_mode' addr_size operand_size addr base_reg seg_reg operand check_alignment? memory_ptr?)
-         in λ s' →
+         in λ σ →
               if inst_ac? then
                 the (MS Unit)
                   (bindS {Bool} {Unit} alignment_checking_enabled_p (λ t'3 →
-                     k'8 t'3)) s'
+                     k'8 t'3)) σ
               else
                 the (MS Unit)
-                  (k'8 false) s') s'
+                  (k'8 false) σ) σ
 x86_operand_to_xmm_mem : (proc_mode' : proc_mode) → (operand_size : ZI) → (inst_ac? : Bool) → (operand : Bits #128) → (seg_reg : ZI) → (addr : Bits #64) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (r_m : Bits #3) → (mod_var : Bits #2) → (sib' : sib) → MS Unit
 x86_operand_to_xmm_mem proc_mode' operand_size inst_ac? operand seg_reg addr prefixes' rex_byte r_m mod_var sib' =
-  λ s' →
+  λ σ →
     if (weq mod_var #3) then
       the (MS Unit)
         (onS {Bits #4} {Unit} (reg_index r_m rex_byte #0) (λ t'1 →
-           write_xmmi_size (bits_of_int operand_size (zpos #5)) t'1 (bv-unsigned #128 operand))) s'
+           write_xmmi_size (bits_of_int operand_size (zpos #5)) t'1 (bv-unsigned #128 operand))) σ
     else
       the (MS Unit)
         (let k'8 : Bool → MS Unit
@@ -714,20 +714,20 @@ x86_operand_to_xmm_mem proc_mode' operand_size inst_ac? operand seg_reg addr pre
                    let base_reg : Option ZI
                        base_reg = (select_base_register proc_mode' rex_byte r_m mod_var sib')
                    in wme_size proc_mode' addr_size operand_size addr base_reg seg_reg operand check_alignment? false)
-         in λ s' →
+         in λ σ →
               if inst_ac? then
                 the (MS Unit)
                   (bindS {Bool} {Unit} alignment_checking_enabled_p (λ t'3 →
-                     k'8 t'3)) s'
+                     k'8 t'3)) σ
               else
                 the (MS Unit)
-                  (k'8 false) s') s'
+                  (k'8 false) σ) σ
 select_operand_size : (proc_mode' : proc_mode) → (byte_operand? : Bool) → (rex_byte : Bits #8) → (imm? : Bool) → (prefixes' : prefixes) → (default64? : Bool) → (ignore_rex? : Bool) → (ignore_p3_64? : Bool) → MS ZI
 select_operand_size proc_mode' byte_operand? rex_byte imm? prefixes' default64? ignore_rex? ignore_p3_64? =
-  λ s' →
+  λ σ →
     if byte_operand? then
       the (MS ZI)
-        (retS {ZI} (zpos #1)) s'
+        (retS {ZI} (zpos #1)) σ
     else if (in_64bit_mode proc_mode') then
       the (MS ZI)
         (let t'2 : ZI
@@ -742,7 +742,7 @@ select_operand_size proc_mode' byte_operand? rex_byte imm? prefixes' default64? 
                         else
                           (if default64? then (zpos #8) else (zpos #4))
                   in t'1)
-         in retS {ZI} t'2) s'
+         in retS {ZI} t'2) σ
     else
       the (MS ZI)
         (bindS {List (Bits #16)} {ZI} (getS {List (Bits #16)} x86-seg_hidden_attrs) (λ seg_hidden_attrs'3 →
@@ -752,7 +752,7 @@ select_operand_size proc_mode' byte_operand? rex_byte imm? prefixes' default64? 
                cs_d = (code_segment_descriptor_attributesbits-d cs_attr)
                p3? : Bool
                p3? = (weq #102 (prefixes-opr prefixes'))
-           in retS {ZI} (if (weq cs_d #1) then (if p3? then (zpos #2) else (zpos #4)) else (if p3? then (zpos #4) else (zpos #2))))) s'
+           in retS {ZI} (if (weq cs_d #1) then (if p3? then (zpos #2) else (zpos #4)) else (if p3? then (zpos #4) else (zpos #2))))) σ
 check_instruction_length : (start_rip : Bits #48) → (temp_rip : Bits #48) → (delta_rip : Bits #3) → Option ZI
 check_instruction_length start_rip temp_rip delta_rip =
   let start_rip : ZI

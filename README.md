@@ -132,7 +132,7 @@ is written in.
 | `lib/isa/tso.cub`, `tso-acyclic.cub` | 884 | checks | x86-TSO, operational and axiomatic, with the acyclicity theorems | proc |
 | `lib/mem/atomics.cub`, `rc11.cub` | 285 | checks | C/C++ atomics and the RC11 axiomatic model. `rc11` has one statement without a proof | tso |
 | `lib/mem/` (`target`, `scalar`, `sig`, `flat`, `memory`, `layout`, `monad`) | 2,185 | checks (own load, with `obs`) | **C/C++-level memory**: targets (x86-64, i386, s390x), scalar values and 21 kinds of undefined behaviour, memory as a signature of commands, an abstract memory and a flat byte memory, record layout, the evaluation monad with its laws. `mem-sound` is proved: both memories agree for every process. `target.cub` has four `#show` lines left in it | obs, prim |
-| `lib/isa/x86/` | 73,906 | **fails**: 3,145 passed, 14 failed | generated. The x86-64 instruction semantics from the Sail model `rems-project/sail-x86-from-acl2` at `0c6c023d`; `run.cub` (21 lines, hand-written) is the step function. The 14 failures are one cause: `sail2cub.py` emits a state binder `s'` that captures a model variable at `jump_and_loop.cub:176`, and `x86_fetch_decode_execute`, so `x86-step`, do not check. Integer instructions have semantics; x87, most SSE/MMX, and every VEX and EVEX instruction end in a fault or "unimplemented" | bits |
+| `lib/isa/x86/` | 73,906 | checks: 3,156 passed, 0 failed (with `run.cub` and `experiments/isa/add.cub`, 4 m 44 s) | generated. The x86-64 instruction semantics from the Sail model `rems-project/sail-x86-from-acl2` at `0c6c023d`; `run.cub` (21 lines, hand-written) is the step function. `add rax, rcx` with both operands as variables steps to the 64-bit sum (28,111 steps). Integer instructions have semantics; x87, most SSE/MMX, and every VEX and EVEX instruction end in a fault or "unimplemented" | bits |
 | `lib/cxx/ast.cub` | 354 | checks except its 2 refused primitives and the 5 definitions that use them | generated. The C++ syntax tree as data | prim |
 | `lib/cxx/machine.cub`, `read-expr.cub` | 1,845 | **fails**: 46 | the meaning of C++ expressions over `lib/mem`. Written against an earlier `lib/mem` and an earlier elaborator; not in `make library` | mem, cxx/ast |
 | `lib/lang/rust/` (5 files) | 1,897 | `ast` checks; readers **fail**: 75 | Rust MIR as data and its meaning over `lib/mem`. Refers to `cx-align` in `lib/cxx/machine.cub` and to older operator names in `mem/scalar` | mem, cxx/machine |
@@ -199,7 +199,7 @@ fuel bound returns a default, Sail's constraints are not checked.
 | `mem/` | 1 | — | `int sum(const int*, int)` given its meaning by hand, with its undefined-behaviour cases |
 | `cxx/` | 20 | generated data checks; needs the readers of §4 to mean anything | seven C++ programs (order book, member pointers, virtual inheritance, exceptions, coroutines) and their imports. `sem/gen/` is a stale copy of four of them |
 | `rust/` | 9 | same | two Rust programs and their MIR imports |
-| `isa/` | 2 | fails with the x86 step function | one instruction stepped with symbolic operands; the instruction classes the compiler emits |
+| `isa/` | 2 | `add.cub` checks (above) | one instruction stepped with symbolic operands; the instruction classes the compiler emits |
 | `jit/`, `native/` | 4 | need the compiler | compiled workloads; processes built to ELF |
 | `surface/` | 9 | checks | inputs for elaborator items 1–8 of track S |
 | `machine/`, `agda/` | 2 | — | the 10^6 numeral; a script timing Agda on Brunerie (reads outside this directory) |
@@ -225,14 +225,13 @@ src/  ──►  prelude, code, match, nav, cost, lin, check  ──►  std  �
 ## Everything that is not right, in one place
 
 1. The compiler's last stretch has no types (§5).
-2. The x86 step function does not check: one binder in `sail2cub.py` (§4).
-3. The C++ and Rust readers do not check against the current `lib/mem` (§4).
-4. `x-rel-fix` gives up silently at 64 rounds (§5).
-5. Unary numerals; quadratic `synkey`; unchecked `pthread_create` (§1).
-6. Switched off by the refusal and still referenced: `deriving eq`, the `brunerie` Makefile
+2. The C++ and Rust readers do not check against the current `lib/mem` (§4).
+3. `x-rel-fix` gives up silently at 64 rounds (§5).
+4. Unary numerals; quadratic `synkey`; unchecked `pthread_create` (§1).
+5. Switched off by the refusal and still referenced: `deriving eq`, the `brunerie` Makefile
    target, `experiments/os/build-cost*`, `experiments/jit`, `experiments/native`.
-7. Stale: `playground/README.md`, `experiments/cxx/sem/gen/`, `experiments/os/item5-wip.patch`,
+6. Stale: `playground/README.md`, `experiments/cxx/sem/gen/`, `experiments/os/item5-wip.patch`,
    four `#show` lines in `lib/mem/target.cub`, removed-back-end handlers in `lang.c`, status
    lines in `tracks/F-cxx.md` and `tracks/R-rust.md`.
-8. Trusted without statement: `prim.cub`'s byte and array laws; a primitive's computation
+7. Trusted without statement: `prim.cub`'s byte and array laws; a primitive's computation
    against its type; the importers; `rc11`'s one unproved statement.

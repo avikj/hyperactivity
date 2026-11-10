@@ -27,22 +27,22 @@ rb_ w_addr_width n' addr access_kind =
                                       let result' : Bits (wmul #8 (z-nat n'))
                                           result' = (bv-update (wmul #8 (z-nat n')) result' (z-nat (z-add (z-mul (zpos #8) offset) (zpos #7))) (z-nat (z-mul (zpos #8) offset)) t'8)
                                       in retS {Bits (wmul #8 (z-nat n'))} result')
-                            in λ s' →
+                            in λ σ →
                                  if app_view'5 then
                                    the (MS (Bits (wmul #8 (z-nat n'))))
-                                     (k'9 (sail_mask_signed #48 (zpos #52) lin_addr)) s'
+                                     (k'9 (sail_mask_signed #48 (zpos #52) lin_addr)) σ
                                  else
                                    the (MS (Bits (wmul #8 (z-nat n'))))
                                      (bindS {Bits #52} {Bits (wmul #8 (z-nat n'))} (ia32e_la_to_pa lin_addr access_kind) (λ t'6 →
-                                        k'9 t'6)) s')
-               in λ s' →
+                                        k'9 t'6)) σ)
+               in λ σ →
                     if (b-not t'2) then
                       the (MS (Bits (wmul #8 (z-nat n'))))
                         (onS {Unit} {Bits (wmul #8 (z-nat n'))} (x86_model_error {Unit} #717998118272517707786857072657670767819716897003551439811443) (λ t'3 →
-                           k'12 t'3)) s'
+                           k'12 t'3)) σ
                     else
                       the (MS (Bits (wmul #8 (z-nat n'))))
-                        (k'12 unit) s')
+                        (k'12 unit) σ)
   in bindS {Bits (wmul #8 (z-nat n'))} {Bits (wmul #8 (z-nat n'))} (foreachS {Bits (wmul #8 (z-nat n'))} (zpos #0) (z-sub n' (zpos #1)) result' loop'15) (λ acc'16 →
        let result'17 : Bits (wmul #8 (z-nat n'))
            result'17 = acc'16
@@ -65,15 +65,15 @@ wb w_addr_width n' addr access_kind value =
                                λ phys_addr →
                                  bindS {Unit} {Unit} (bang_memi #52 phys_addr (bv-slice (wmul #8 (z-nat n')) value (z-nat (z-add (z-mul (zpos #8) offset) (zpos #7))) (z-nat (z-mul (zpos #8) offset)))) (λ t'9 →
                                    retS {Unit} unit)
-                         in λ s' →
+                         in λ σ →
                               if app_view'6 then
                                 the (MS Unit)
-                                  (k'10 (sail_mask_signed #48 (zpos #52) lin_addr)) s'
+                                  (k'10 (sail_mask_signed #48 (zpos #52) lin_addr)) σ
                               else
                                 the (MS Unit)
                                   (bindS {Bits #52} {Unit} (ia32e_la_to_pa lin_addr access_kind) (λ t'7 →
-                                     k'10 t'7)) s')
-            in λ s' →
+                                     k'10 t'7)) σ)
+            in λ σ →
                  if (b-not t'2) then
                    the (MS Unit)
                      (let t'3 : Unit
@@ -83,10 +83,10 @@ wb w_addr_width n' addr access_kind value =
                             else
                               unit
                       in onS {Unit} {Unit} (x86_model_error {Unit} #749383626949451111606036019773709099900228674225871612375923) (λ t'4 →
-                           k'13 t'4)) s'
+                           k'13 t'4)) σ
                  else
                    the (MS Unit)
-                     (k'13 unit) s')
+                     (k'13 unit) σ)
   in bindS {Unit} {Unit} (foreachS {Unit} (zpos #0) (z-sub n' (zpos #1)) unit loop'16) (λ acc'17 →
        let dummy : Unit
            dummy = (observe_mem_write (sail_mask_signed w_addr_width (zpos #48) addr) n')
@@ -100,14 +100,14 @@ la_to_pa lin_addr r_w_x =
           λ t'3 →
             onS {Unit} {Bits #52} (fl-assert {exception} t'3 #583512835017589007664157297346884145) (λ _ →
               ia32e_la_to_pa lin_addr r_w_x)
-    in λ s' →
+    in λ σ →
          if t'1 then
            the (MS (Bits #52))
              (bindS {Bool} {Bits #52} (getS {Bool} x86-app_view) (λ app_view'2 →
-                k'6 (b-not app_view'2))) s'
+                k'6 (b-not app_view'2))) σ
          else
            the (MS (Bits #52))
-             (k'6 false) s')
+             (k'6 false) σ)
 -- rml08: from linear_memory.sail (it calls what is defined after it there)
 rml08 : (lin_addr : Bits #48) → (r_x : Text) → MS (Bits #8)
 rml08 lin_addr r_x =
@@ -130,13 +130,13 @@ rml16 lin_addr r_x =
   let one__plus_lin_addr : Bits #49
       one__plus_lin_addr = (bits_of_int (z-add (zpos #1) (bv-signed #48 lin_addr)) (zpos #49))
   in onS {Bool} {Bits #16} (canonical_address_p (bv-signed #49 one__plus_lin_addr)) (λ t'1 →
-       λ s' →
+       λ σ →
          if t'1 then
            the (MS (Bits #16))
-             (rb_ #48 (zpos #2) lin_addr r_x) s'
+             (rb_ #48 (zpos #2) lin_addr r_x) σ
          else
            the (MS (Bits #16))
-             (liftS {Bits #16} (x86_model_error {Bits #16} #491462078774)) s')
+             (liftS {Bits #16} (x86_model_error {Bits #16} #491462078774)) σ)
 -- riml16: from linear_memory.sail (it calls what is defined after it there)
 riml16 : (lin_addr : Bits #48) → (r_x : Text) → MS (Bits #16)
 riml16 lin_addr r_x =
@@ -149,13 +149,13 @@ wml16 lin_addr sailval =
       let one__plus_lin_addr : Bits #49
           one__plus_lin_addr = (bits_of_int (z-add (zpos #1) (bv-signed #48 lin_addr)) (zpos #49))
       in onS {Bool} {Unit} (canonical_address_p (bv-signed #49 one__plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS Unit)
-                 (wb #48 (zpos #2) lin_addr #14935 sailval) s'
+                 (wb #48 (zpos #2) lin_addr #14935 sailval) σ
              else
                the (MS Unit)
-                 (liftS {Unit} (x86_model_error {Unit} #512936915254)) s')))
+                 (liftS {Unit} (x86_model_error {Unit} #512936915254)) σ)))
 -- wiml16: from linear_memory.sail (it calls what is defined after it there)
 wiml16 : (lin_addr : Bits #48) → (sailval : Bits #16) → MS Unit
 wiml16 lin_addr sailval =
@@ -168,13 +168,13 @@ rml32 lin_addr r_x =
       let three__plus_lin_addr : Bits #49
           three__plus_lin_addr = (bits_of_int (z-add (zpos #3) (bv-signed #48 lin_addr)) (zpos #49))
       in onS {Bool} {Bits #32} (canonical_address_p (bv-signed #49 three__plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS (Bits #32))
-                 (rb_ #48 (zpos #4) lin_addr r_x) s'
+                 (rb_ #48 (zpos #4) lin_addr r_x) σ
              else
                the (MS (Bits #32))
-                 (liftS {Bits #32} (x86_model_error {Bits #32} #491462079282)) s')))
+                 (liftS {Bits #32} (x86_model_error {Bits #32} #491462079282)) σ)))
 -- riml32: from linear_memory.sail (it calls what is defined after it there)
 riml32 : (lin_addr : Bits #48) → (r_x : Text) → MS (Bits #32)
 riml32 lin_addr r_x =
@@ -187,13 +187,13 @@ wml32 lin_addr sailval =
       let three__plus_lin_addr : Bits #49
           three__plus_lin_addr = (bits_of_int (z-add (zpos #3) (bv-signed #48 lin_addr)) (zpos #49))
       in onS {Bool} {Unit} (canonical_address_p (bv-signed #49 three__plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS Unit)
-                 (wb #48 (zpos #4) lin_addr #14935 sailval) s'
+                 (wb #48 (zpos #4) lin_addr #14935 sailval) σ
              else
                the (MS Unit)
-                 (liftS {Unit} (x86_model_error {Unit} #512936915762)) s')))
+                 (liftS {Unit} (x86_model_error {Unit} #512936915762)) σ)))
 -- wiml32: from linear_memory.sail (it calls what is defined after it there)
 wiml32 : (lin_addr : Bits #48) → (sailval : Bits #32) → MS Unit
 wiml32 lin_addr sailval =
@@ -206,13 +206,13 @@ rml48 lin_addr r_x =
       let five__plus_lin_addr : Bits #49
           five__plus_lin_addr = (bits_of_int (z-add (zpos #5) (bv-signed #48 lin_addr)) (zpos #49))
       in onS {Bool} {Bits #48} (canonical_address_p (bv-signed #49 five__plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS (Bits #48))
-                 (rb_ #48 (zpos #6) lin_addr r_x) s'
+                 (rb_ #48 (zpos #6) lin_addr r_x) σ
              else
                the (MS (Bits #48))
-                 (liftS {Bits #48} (x86_model_error {Bits #48} #491462079544)) s')))
+                 (liftS {Bits #48} (x86_model_error {Bits #48} #491462079544)) σ)))
 -- wml48: from linear_memory.sail (it calls what is defined after it there)
 wml48 : (lin_addr : Bits #48) → (sailval : Bits #48) → MS Unit
 wml48 lin_addr sailval =
@@ -221,13 +221,13 @@ wml48 lin_addr sailval =
       let five__plus_lin_addr : Bits #49
           five__plus_lin_addr = (bits_of_int (z-add (zpos #5) (bv-signed #48 lin_addr)) (zpos #49))
       in onS {Bool} {Unit} (canonical_address_p (bv-signed #49 five__plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS Unit)
-                 (wb #48 (zpos #6) lin_addr #14935 sailval) s'
+                 (wb #48 (zpos #6) lin_addr #14935 sailval) σ
              else
                the (MS Unit)
-                 (liftS {Unit} (x86_model_error {Unit} #512936916024)) s')))
+                 (liftS {Unit} (x86_model_error {Unit} #512936916024)) σ)))
 -- rml64: from linear_memory.sail (it calls what is defined after it there)
 rml64 : (lin_addr : Bits #48) → (r_x : Text) → MS (Bits #64)
 rml64 lin_addr r_x =
@@ -236,13 +236,13 @@ rml64 lin_addr r_x =
       let seven__plus_lin_addr : Bits #49
           seven__plus_lin_addr = (bits_of_int (z-add (zpos #7) (bv-signed #48 lin_addr)) (zpos #49))
       in onS {Bool} {Bits #64} (canonical_address_p (bv-signed #49 seven__plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS (Bits #64))
-                 (rb_ #48 (zpos #8) lin_addr r_x) s'
+                 (rb_ #48 (zpos #8) lin_addr r_x) σ
              else
                the (MS (Bits #64))
-                 (liftS {Bits #64} (x86_model_error {Bits #64} #491462080052)) s')))
+                 (liftS {Bits #64} (x86_model_error {Bits #64} #491462080052)) σ)))
 -- riml64: from linear_memory.sail (it calls what is defined after it there)
 riml64 : (lin_addr : Bits #48) → (r_x : Text) → MS (Bits #64)
 riml64 lin_addr r_x =
@@ -255,13 +255,13 @@ wml64 lin_addr sailval =
       let seven__plus_lin_addr : Bits #50
           seven__plus_lin_addr = (bits_of_int (z-add (zpos #7) (bv-signed #48 lin_addr)) (zpos #50))
       in onS {Bool} {Unit} (canonical_address_p (bv-signed #50 seven__plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS Unit)
-                 (wb #48 (zpos #8) lin_addr #14935 sailval) s'
+                 (wb #48 (zpos #8) lin_addr #14935 sailval) σ
              else
                the (MS Unit)
-                 (liftS {Unit} (x86_model_error {Unit} #512936916532)) s')))
+                 (liftS {Unit} (x86_model_error {Unit} #512936916532)) σ)))
 -- wiml64: from linear_memory.sail (it calls what is defined after it there)
 wiml64 : (lin_addr : Bits #48) → (sailval : Bits #64) → MS Unit
 wiml64 lin_addr sailval =
@@ -274,13 +274,13 @@ rml80 lin_addr r_x =
       let nine__plus_lin_addr : Bits #49
           nine__plus_lin_addr = (bits_of_int (z-add (zpos #9) (bv-signed #48 lin_addr)) (zpos #49))
       in onS {Bool} {Bits #80} (canonical_address_p (bv-signed #49 nine__plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS (Bits #80))
-                 (rb_ #48 (zpos #10) lin_addr r_x) s'
+                 (rb_ #48 (zpos #10) lin_addr r_x) σ
              else
                the (MS (Bits #80))
-                 (liftS {Bits #80} (x86_model_error {Bits #80} #491462080560)) s')))
+                 (liftS {Bits #80} (x86_model_error {Bits #80} #491462080560)) σ)))
 -- wml80: from linear_memory.sail (it calls what is defined after it there)
 wml80 : (lin_addr : Bits #48) → (sailval : Bits #80) → MS Unit
 wml80 lin_addr sailval =
@@ -289,13 +289,13 @@ wml80 lin_addr sailval =
       let nine__plus_lin_addr : Bits #49
           nine__plus_lin_addr = (bits_of_int (z-add (zpos #9) (bv-signed #48 lin_addr)) (zpos #49))
       in onS {Bool} {Unit} (canonical_address_p (bv-signed #49 nine__plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS Unit)
-                 (wb #48 (zpos #10) lin_addr #14935 sailval) s'
+                 (wb #48 (zpos #10) lin_addr #14935 sailval) σ
              else
                the (MS Unit)
-                 (liftS {Unit} (x86_model_error {Unit} #512936917040)) s')))
+                 (liftS {Unit} (x86_model_error {Unit} #512936917040)) σ)))
 -- rml128: from linear_memory.sail (it calls what is defined after it there)
 rml128 : (lin_addr : Bits #48) → (r_x : Text) → MS (Bits #128)
 rml128 lin_addr r_x =
@@ -304,14 +304,14 @@ rml128 lin_addr r_x =
       let one_5_plus_lin_addr : Bits #49
           one_5_plus_lin_addr = (bits_of_int (z-add (zpos #15) (bv-signed #48 lin_addr)) (zpos #49))
       in onS {Bool} {Bits #128} (canonical_address_p (bv-signed #49 one_5_plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS (Bits #128))
                  (bindS {Bool} {Bits #128} (getS {Bool} x86-app_view) (λ app_view'4 →
-                    λ s' →
+                    λ σ →
                       if app_view'4 then
                         the (MS (Bits #128))
-                          (rb_ #48 (zpos #16) lin_addr r_x) s'
+                          (rb_ #48 (zpos #16) lin_addr r_x) σ
                       else
                         the (MS (Bits #128))
                           (bindS {Bits #52} {Bits #128} (la_to_pa lin_addr r_x) (λ p_addr0 →
@@ -379,10 +379,10 @@ rml128 lin_addr r_x =
                                                                                                                                         let oword : Bits #128
                                                                                                                                             oword =
                                                                                                                                               (bv-append #8 #120 byte15 (bv-append #8 #112 byte14 (bv-append #8 #104 byte13 (bv-append #8 #96 byte12 (bv-append #8 #88 byte11 (bv-append #8 #80 byte10 (bv-append #8 #72 byte9 (bv-append #8 #64 byte8 (bv-append #8 #56 byte7 (bv-append #8 #48 byte6 (bv-append #8 #40 byte5 (bv-append #8 #32 byte4 (bv-append #8 #24 byte3 (bv-append #8 #16 byte2 (bv-append #8 #8 byte1 byte0)))))))))))))))
-                                                                                                                                        in retS {Bits #128} oword))))))))))))))))))))))))))))))))) s')) s'
+                                                                                                                                        in retS {Bits #128} oword))))))))))))))))))))))))))))))))) σ)) σ
              else
                the (MS (Bits #128))
-                 (liftS {Bits #128} (x86_model_error {Bits #128} #125814292165176)) s')))
+                 (liftS {Bits #128} (x86_model_error {Bits #128} #125814292165176)) σ)))
 -- wml128: from linear_memory.sail (it calls what is defined after it there)
 wml128 : (lin_addr : Bits #48) → (sailval : Bits #128) → MS Unit
 wml128 lin_addr sailval =
@@ -391,14 +391,14 @@ wml128 lin_addr sailval =
       let one_5_plus_lin_addr : Bits #49
           one_5_plus_lin_addr = (bits_of_int (z-add (zpos #15) (bv-signed #48 lin_addr)) (zpos #49))
       in onS {Bool} {Unit} (canonical_address_p (bv-signed #49 one_5_plus_lin_addr)) (λ t'3 →
-           λ s' →
+           λ σ →
              if t'3 then
                the (MS Unit)
                  (bindS {Bool} {Unit} (getS {Bool} x86-app_view) (λ app_view'4 →
-                    λ s' →
+                    λ σ →
                       if app_view'4 then
                         the (MS Unit)
-                          (wb #48 (zpos #16) lin_addr #14935 sailval) s'
+                          (wb #48 (zpos #16) lin_addr #14935 sailval) σ
                       else
                         the (MS Unit)
                           (bindS {Bits #52} {Unit} (la_to_pa lin_addr #14935) (λ p_addr0 →
@@ -494,10 +494,10 @@ wml128 lin_addr sailval =
                                                                                                                                    bindS {Unit} {Unit} (bang_memi #64 (bv-zext #52 #64 p_addr12) byte12) (λ t'34 →
                                                                                                                                      bindS {Unit} {Unit} (bang_memi #64 (bv-zext #52 #64 p_addr13) byte13) (λ t'35 →
                                                                                                                                        bindS {Unit} {Unit} (bang_memi #64 (bv-zext #52 #64 p_addr14) byte14) (λ t'36 →
-                                                                                                                                         bang_memi #64 (bv-zext #52 #64 p_addr15) byte15)))))))))))))))))))))))))))))))) s')) s'
+                                                                                                                                         bang_memi #64 (bv-zext #52 #64 p_addr15) byte15)))))))))))))))))))))))))))))))) σ)) σ
              else
                the (MS Unit)
-                 (liftS {Unit} (x86_model_error {Unit} #131311850304056)) s')))
+                 (liftS {Unit} (x86_model_error {Unit} #131311850304056)) σ)))
 -- rml_size: from linear_memory.sail (it calls what is defined after it there)
 rml_size-case1 : (addr : Bits #48) → (r_x : Text) → MS (Bits #128)
 rml_size-case1 addr r_x =
@@ -529,93 +529,93 @@ rml_size-case7 addr r_x =
 rml_size-case8 : (nbytes : ZI) → (addr : Bits #48) → (r_x : Text) → MS (Bits #128)
 rml_size-case8 nbytes addr r_x =
   onS {Bool} {Bits #128} (canonical_address_p (z-add (zneg #1) (z-add nbytes (bv-signed #48 addr)))) (λ t'8 →
-    λ s' →
+    λ σ →
       if t'8 then
         the (MS (Bits #128))
           (bindS {Bits (wmul #8 (z-nat nbytes))} {Bits #128} (rb_ #48 nbytes addr r_x) (λ t'9 →
-             retS {Bits #128} (bv-mask #128 t'9))) s'
+             retS {Bits #128} (bv-mask #128 t'9))) σ
       else
         the (MS (Bits #128))
-          (liftS {Bits #128} (x86_model_error {Bits #128} #8245365435250866789)) s')
+          (liftS {Bits #128} (x86_model_error {Bits #128} #8245365435250866789)) σ)
 rml_size : (nbytes : ZI) → (addr : Bits #48) → (r_x : Text) → MS (Bits #128)
 rml_size nbytes addr r_x =
-  λ s' →
+  λ σ →
     if (z-lt nbytes (zpos #6)) then
       (if (z-lt nbytes (zpos #2)) then
          (if (z-eq nbytes (zpos #1)) then
             the (MS (Bits #128))
-              (rml_size-case1 addr r_x) s'
+              (rml_size-case1 addr r_x) σ
           else
             the (MS (Bits #128))
-              (rml_size-case8 nbytes addr r_x) s')
+              (rml_size-case8 nbytes addr r_x) σ)
        else
          (if (z-lt nbytes (zpos #4)) then
             (if (z-eq nbytes (zpos #2)) then
                the (MS (Bits #128))
-                 (rml_size-case2 addr r_x) s'
+                 (rml_size-case2 addr r_x) σ
              else
                the (MS (Bits #128))
-                 (rml_size-case8 nbytes addr r_x) s')
+                 (rml_size-case8 nbytes addr r_x) σ)
           else
             (if (z-eq nbytes (zpos #4)) then
                the (MS (Bits #128))
-                 (rml_size-case3 addr r_x) s'
+                 (rml_size-case3 addr r_x) σ
              else
                the (MS (Bits #128))
-                 (rml_size-case8 nbytes addr r_x) s')))
+                 (rml_size-case8 nbytes addr r_x) σ)))
     else
       (if (z-lt nbytes (zpos #10)) then
          (if (z-lt nbytes (zpos #8)) then
             (if (z-eq nbytes (zpos #6)) then
                the (MS (Bits #128))
-                 (rml_size-case4 addr r_x) s'
+                 (rml_size-case4 addr r_x) σ
              else
                the (MS (Bits #128))
-                 (rml_size-case8 nbytes addr r_x) s')
+                 (rml_size-case8 nbytes addr r_x) σ)
           else
             (if (z-eq nbytes (zpos #8)) then
                the (MS (Bits #128))
-                 (rml_size-case5 addr r_x) s'
+                 (rml_size-case5 addr r_x) σ
              else
                the (MS (Bits #128))
-                 (rml_size-case8 nbytes addr r_x) s'))
+                 (rml_size-case8 nbytes addr r_x) σ))
        else
          (if (z-lt nbytes (zpos #16)) then
             (if (z-eq nbytes (zpos #10)) then
                the (MS (Bits #128))
-                 (rml_size-case6 addr r_x) s'
+                 (rml_size-case6 addr r_x) σ
              else
                the (MS (Bits #128))
-                 (rml_size-case8 nbytes addr r_x) s')
+                 (rml_size-case8 nbytes addr r_x) σ)
           else
             (if (z-eq nbytes (zpos #16)) then
                the (MS (Bits #128))
-                 (rml_size-case7 addr r_x) s'
+                 (rml_size-case7 addr r_x) σ
              else
                the (MS (Bits #128))
-                 (rml_size-case8 nbytes addr r_x) s')))
+                 (rml_size-case8 nbytes addr r_x) σ)))
 -- riml_size: from linear_memory.sail (it calls what is defined after it there)
 riml_size : (nbytes : ZI) → (addr : Bits #48) → (r_x : Text) → MS (Bits #64)
 riml_size nbytes addr r_x =
-  λ s' →
+  λ σ →
     if (z-eq nbytes (zpos #1)) then
       the (MS (Bits #64))
         (bindS {Bits #8} {Bits #64} (riml08 addr r_x) (λ t'1 →
-           retS {Bits #64} (bv-sext #8 #64 t'1))) s'
+           retS {Bits #64} (bv-sext #8 #64 t'1))) σ
     else if (z-eq nbytes (zpos #2)) then
       the (MS (Bits #64))
         (bindS {Bits #16} {Bits #64} (riml16 addr r_x) (λ t'2 →
-           retS {Bits #64} (bv-sext #16 #64 t'2))) s'
+           retS {Bits #64} (bv-sext #16 #64 t'2))) σ
     else if (z-eq nbytes (zpos #4)) then
       the (MS (Bits #64))
         (bindS {Bits #32} {Bits #64} (riml32 addr r_x) (λ t'3 →
-           retS {Bits #64} (bv-sext #32 #64 t'3))) s'
+           retS {Bits #64} (bv-sext #32 #64 t'3))) σ
     else if (z-eq nbytes (zpos #8)) then
       the (MS (Bits #64))
-        (riml64 addr r_x) s'
+        (riml64 addr r_x) σ
     else
       the (MS (Bits #64))
-        (liftS {Bits #64} (x86_model_error {Bits #64} #2110525671491798399589)) s'
+        (liftS {Bits #64} (x86_model_error {Bits #64} #2110525671491798399589)) σ
 -- wml_size: from linear_memory.sail (it calls what is defined after it there)
 wml_size-case1 : (addr : Bits #48) → (sailval : ZI) → MS Unit
 wml_size-case1 addr sailval =
@@ -641,89 +641,89 @@ wml_size-case7 addr sailval =
 wml_size-case8 : (nbytes : ZI) → (addr : Bits #48) → (sailval : ZI) → MS Unit
 wml_size-case8 nbytes addr sailval =
   onS {Bool} {Unit} (canonical_address_p (z-add (zneg #1) (z-add nbytes (bv-signed #48 addr)))) (λ t'8 →
-    λ s' →
+    λ σ →
       if t'8 then
         the (MS Unit)
-          (wb #48 nbytes addr #14935 (bits_of_int sailval (z-mul (zpos #8) nbytes))) s'
+          (wb #48 nbytes addr #14935 (bits_of_int sailval (z-mul (zpos #8) nbytes))) σ
       else
         the (MS Unit)
-          (liftS {Unit} (x86_model_error {Unit} #8605653405440506469)) s')
+          (liftS {Unit} (x86_model_error {Unit} #8605653405440506469)) σ)
 wml_size : (nbytes : ZI) → (addr : Bits #48) → (sailval : ZI) → MS Unit
 wml_size nbytes addr sailval =
-  λ s' →
+  λ σ →
     if (z-lt nbytes (zpos #6)) then
       (if (z-lt nbytes (zpos #2)) then
          (if (z-eq nbytes (zpos #1)) then
             the (MS Unit)
-              (wml_size-case1 addr sailval) s'
+              (wml_size-case1 addr sailval) σ
           else
             the (MS Unit)
-              (wml_size-case8 nbytes addr sailval) s')
+              (wml_size-case8 nbytes addr sailval) σ)
        else
          (if (z-lt nbytes (zpos #4)) then
             (if (z-eq nbytes (zpos #2)) then
                the (MS Unit)
-                 (wml_size-case2 addr sailval) s'
+                 (wml_size-case2 addr sailval) σ
              else
                the (MS Unit)
-                 (wml_size-case8 nbytes addr sailval) s')
+                 (wml_size-case8 nbytes addr sailval) σ)
           else
             (if (z-eq nbytes (zpos #4)) then
                the (MS Unit)
-                 (wml_size-case3 addr sailval) s'
+                 (wml_size-case3 addr sailval) σ
              else
                the (MS Unit)
-                 (wml_size-case8 nbytes addr sailval) s')))
+                 (wml_size-case8 nbytes addr sailval) σ)))
     else
       (if (z-lt nbytes (zpos #10)) then
          (if (z-lt nbytes (zpos #8)) then
             (if (z-eq nbytes (zpos #6)) then
                the (MS Unit)
-                 (wml_size-case4 addr sailval) s'
+                 (wml_size-case4 addr sailval) σ
              else
                the (MS Unit)
-                 (wml_size-case8 nbytes addr sailval) s')
+                 (wml_size-case8 nbytes addr sailval) σ)
           else
             (if (z-eq nbytes (zpos #8)) then
                the (MS Unit)
-                 (wml_size-case5 addr sailval) s'
+                 (wml_size-case5 addr sailval) σ
              else
                the (MS Unit)
-                 (wml_size-case8 nbytes addr sailval) s'))
+                 (wml_size-case8 nbytes addr sailval) σ))
        else
          (if (z-lt nbytes (zpos #16)) then
             (if (z-eq nbytes (zpos #10)) then
                the (MS Unit)
-                 (wml_size-case6 addr sailval) s'
+                 (wml_size-case6 addr sailval) σ
              else
                the (MS Unit)
-                 (wml_size-case8 nbytes addr sailval) s')
+                 (wml_size-case8 nbytes addr sailval) σ)
           else
             (if (z-eq nbytes (zpos #16)) then
                the (MS Unit)
-                 (wml_size-case7 addr sailval) s'
+                 (wml_size-case7 addr sailval) σ
              else
                the (MS Unit)
-                 (wml_size-case8 nbytes addr sailval) s')))
+                 (wml_size-case8 nbytes addr sailval) σ)))
 -- wiml_size: from linear_memory.sail (it calls what is defined after it there)
 wiml_size : (nbytes : ZI) → (addr : Bits #48) → (sailval : ZI) → MS Unit
 wiml_size nbytes addr sailval =
-  λ s' →
+  λ σ →
     if (z-eq nbytes (zpos #1)) then
       the (MS Unit)
-        (wiml08 addr (bits_of_int sailval (zpos #8))) s'
+        (wiml08 addr (bits_of_int sailval (zpos #8))) σ
     else if (z-eq nbytes (zpos #2)) then
       the (MS Unit)
-        (wiml16 addr (bits_of_int sailval (zpos #16))) s'
+        (wiml16 addr (bits_of_int sailval (zpos #16))) σ
     else if (z-eq nbytes (zpos #4)) then
       the (MS Unit)
-        (wiml32 addr (bits_of_int sailval (zpos #32))) s'
+        (wiml32 addr (bits_of_int sailval (zpos #32))) σ
     else if (z-eq nbytes (zpos #8)) then
       the (MS Unit)
-        (wiml64 addr (bits_of_int sailval (zpos #64))) s'
+        (wiml64 addr (bits_of_int sailval (zpos #64))) σ
     else
       the (MS Unit)
-        (liftS {Unit} (x86_model_error {Unit} #2202759391860346157669)) s'
+        (liftS {Unit} (x86_model_error {Unit} #2202759391860346157669)) σ
 -- write_canonical_address_to_memory_user_exec: from linear_memory.sail (it calls what is defined after it there)
 write_canonical_address_to_memory_user_exec : (lin_addr : Bits #48) → (canonical_address : Bits #48) → MS (Option Text)
 write_canonical_address_to_memory_user_exec lin_addr canonical_address =
@@ -745,48 +745,48 @@ write_canonical_address_to_memory_user_exec lin_addr canonical_address =
                               λ t'8 →
                                 bindS {Unit} {Option Text} (wiml32 (bv-trunc #49 #48 next_addr) canonical_address_high_int) (λ t'9 →
                                   retS {Option Text} None)
-                        in λ s' →
+                        in λ σ →
                              if (b-not t'6) then
                                the (MS (Option Text))
                                  (onS {Unit} {Option Text} (x86_model_error {Unit} #13828751913320199246556594881107544403501396661828919873077629972568094064338295) (λ t'7 →
-                                    k'10 t'7)) s'
+                                    k'10 t'7)) σ
                              else
                                the (MS (Option Text))
-                                 (k'10 unit) s')))
-    in λ s' →
+                                 (k'10 unit) σ)))
+    in λ σ →
          if app_view'1 then
            the (MS (Option Text))
              (onS {Bool} {Option Text} (canonical_address_p (z-add (zpos #7) (bv-signed #48 lin_addr))) (λ t'2 →
-                k'13 t'2)) s'
+                k'13 t'2)) σ
          else
            the (MS (Option Text))
-             (k'13 false) s')
+             (k'13 false) σ)
 -- write_canonical_address_to_memory: from linear_memory.sail (it calls what is defined after it there)
 write_canonical_address_to_memory : (lin_addr : Bits #48) → (canonical_address : Bits #48) → MS Unit
 write_canonical_address_to_memory lin_addr canonical_address =
   let seven__plus_lin_addr : Bits #50
       seven__plus_lin_addr = (bits_of_int (z-add (zpos #7) (bv-signed #48 lin_addr)) (zpos #50))
   in onS {Bool} {Unit} (canonical_address_p (bv-signed #50 seven__plus_lin_addr)) (λ t'1 →
-       λ s' →
+       λ σ →
          if t'1 then
            the (MS Unit)
              (bindS {Bool} {Unit} (getS {Bool} x86-app_view) (λ app_view'2 →
-                λ s' →
+                λ σ →
                   if app_view'2 then
                     the (MS Unit)
-                      (wb #48 (zpos #8) lin_addr #14935 (loghead_bits #48 (zpos #64) canonical_address)) s'
+                      (wb #48 (zpos #8) lin_addr #14935 (loghead_bits #48 (zpos #64) canonical_address)) σ
                   else
                     the (MS Unit)
                       (let canonical_address_unsigned_val : Bits #64
                            canonical_address_unsigned_val = (loghead_bits #48 (zpos #64) canonical_address)
-                       in wml64 lin_addr canonical_address_unsigned_val) s')) s'
+                       in wml64 lin_addr canonical_address_unsigned_val) σ)) σ
          else
            the (MS Unit)
-             (liftS {Unit} (x86_model_error {Unit} #3893082825329448266142030917680592375096772677027779301794281916473054010626051375143853387634)) s')
+             (liftS {Unit} (x86_model_error {Unit} #3893082825329448266142030917680592375096772677027779301794281916473054010626051375143853387634)) σ)
 -- ea_to_la: from segmentation.sail (it calls what is defined after it there)
 ea_to_la : (proc_mode' : proc_mode) → (eff_addr : Bits #64) → (seg_reg : ZI) → (nbytes : ZI) → MS (Bits #64)
 ea_to_la proc_mode' eff_addr seg_reg nbytes =
-  λ s' →
+  λ σ →
     if (in_64bit_mode proc_mode') then
       the (MS (Bits #64))
         (let k'20 : (Bits #64) → MS (Bits #64)
@@ -797,15 +797,15 @@ ea_to_la proc_mode' eff_addr seg_reg nbytes =
                        k'17 =
                          λ t'5 →
                            retS {Bits #64} lin_addr
-                   in λ s' →
+                   in λ σ →
                         if (b-not t'3) then
                           the (MS (Bits #64))
                             (onS {Unit} {Bits #64} (x86_model_error {Unit} #21814826192473016117759527061750727496662368899126099) (λ t'4 →
-                               k'17 t'4)) s'
+                               k'17 t'4)) σ
                         else
                           the (MS (Bits #64))
-                            (k'17 unit) s')
-         in λ s' →
+                            (k'17 unit) σ)
+         in λ σ →
               if (b-or (z-eq seg_reg (zpos #4)) (z-eq seg_reg (zpos #5))) then
                 the (MS (Bits #64))
                   (bindS {((Bits #64) × ZI × (Bits #32))} {Bits #64} (segment_base_and_bounds Mode_64bit seg_reg) (λ t'1 →
@@ -813,10 +813,10 @@ ea_to_la proc_mode' eff_addr seg_reg nbytes =
                          base' = (fst t'1)
                          lin_addr : Bits #64
                          lin_addr = (bits_of_int (z-add (bv-unsigned #64 base') (bv-unsigned #64 eff_addr)) (zpos #64))
-                     in k'20 lin_addr)) s'
+                     in k'20 lin_addr)) σ
               else
                 the (MS (Bits #64))
-                  (k'20 eff_addr) s') s'
+                  (k'20 eff_addr) σ) σ
     else if (in_compatibility_mode proc_mode') then
       the (MS (Bits #64))
         (let k'29 : Bool → MS (Bits #64)
@@ -846,60 +846,60 @@ ea_to_la proc_mode' eff_addr seg_reg nbytes =
                                       let lin_addr : Bits #32
                                           lin_addr = (bits_of_int (z-add (bv-unsigned #32 base') (bv-unsigned #32 (bv-trunc #64 #32 eff_addr))) (zpos #32))
                                       in retS {Bits #64} (bv-zext #32 #64 lin_addr)
-                              in λ s' →
+                              in λ σ →
                                    if (b-not (b-and (z-le (bv-unsigned #33 lower_bound) (bv-signed #64 first_addr)) (z-le last_addr (bv-unsigned #32 upper_bound)))) then
                                      the (MS (Bits #64))
                                        (onS {Unit} {Bits #64} (x86_model_error {Unit} #1300697115506830038381759936674696651557914956) (λ t'12 →
-                                          k'23 t'12)) s'
+                                          k'23 t'12)) σ
                                    else
                                      the (MS (Bits #64))
-                                       (k'23 unit) s')
-                 in λ s' →
+                                       (k'23 unit) σ)
+                 in λ σ →
                       if t'8 then
                         the (MS (Bits #64))
                           (onS {Unit} {Bits #64} (x86_model_error {Unit} #21814860404509169194758645849519540950299536998551378) (λ t'9 →
-                             k'26 t'9)) s'
+                             k'26 t'9)) σ
                       else
                         the (MS (Bits #64))
-                          (k'26 unit) s'
-         in λ s' →
+                          (k'26 unit) σ
+         in λ σ →
               if (b-not (z-eq seg_reg (zpos #1))) then
                 the (MS (Bits #64))
                   (let k'31 : Bool → MS (Bits #64)
                        k'31 =
                          λ t'7 →
                            k'29 t'7
-                   in λ s' →
+                   in λ σ →
                         if (b-not (z-eq seg_reg (zpos #2))) then
                           the (MS (Bits #64))
                             (bindS {List (Bits #16)} {Bits #64} (getS {List (Bits #16)} x86-seg_visibles) (λ seg_visibles'6 →
-                               k'31 (z-lt (bv-unsigned #16 (vec-get {Bits #16} #0 seg_visibles'6 (z-nat seg_reg))) (zpos #4)))) s'
+                               k'31 (z-lt (bv-unsigned #16 (vec-get {Bits #16} #0 seg_visibles'6 (z-nat seg_reg))) (zpos #4)))) σ
                         else
                           the (MS (Bits #64))
-                            (k'31 false) s') s'
+                            (k'31 false) σ) σ
               else
                 the (MS (Bits #64))
-                  (k'29 false) s') s'
+                  (k'29 false) σ) σ
     else
       the (MS (Bits #64))
-        (liftS {Bits #64} (x86_model_error {Bits #64} #1430326534880091636827201117228958513375655924002173436997)) s'
+        (liftS {Bits #64} (x86_model_error {Bits #64} #1430326534880091636827201117228958513375655924002173436997)) σ
 rvm08 : (addr : Bits #48) → MS (Bits #8)
 rvm08 addr =
   onS {Bool} {Bits #8} (canonical_address_p (bv-signed #48 addr)) (λ t'1 →
-    λ s' →
+    λ σ →
       if t'1 then
         the (MS (Bits #8))
-          (memi #64 (bv-zext #48 #64 addr)) s'
+          (memi #64 (bv-zext #48 #64 addr)) σ
       else
         the (MS (Bits #8))
-          (liftS {Bits #8} (x86_model_error {Bits #8} #491613139000)) s')
+          (liftS {Bits #8} (x86_model_error {Bits #8} #491613139000)) σ)
 wvm08 : (addr : Bits #48) → (sailval : Bits #8) → MS Unit
 wvm08 addr sailval =
   onS {Bool} {Unit} (canonical_address_p (bv-signed #48 addr)) (λ t'1 →
-    λ s' →
+    λ σ →
       if t'1 then
         the (MS Unit)
-          (bang_memi #64 (bv-zext #48 #64 addr) sailval) s'
+          (bang_memi #64 (bv-zext #48 #64 addr) sailval) σ
       else
         the (MS Unit)
-          (liftS {Unit} (x86_model_error {Unit} #513087975480)) s')
+          (liftS {Unit} (x86_model_error {Unit} #513087975480)) σ)

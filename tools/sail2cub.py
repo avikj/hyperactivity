@@ -1176,7 +1176,9 @@ class Translator(Importer):
     # to their end on the state they had, instead of everything after it run on an unknown state.
     def render_cond(self, cond, cls, T, armfn):
         kind, head, arms, default = cond
-        sfx = " s'" if cls == 'S' else ''
+        # the state's name: σ, which no Sail identifier can be (they are ASCII), so it never captures
+        # a model variable (a Sail local s is s' here)
+        sfx = " σ" if cls == 'S' else ''
 
         def arm(x):
             d = paren(armfn(x))
@@ -1220,7 +1222,7 @@ class Translator(Importer):
                 return ['if %s then' % (lt % items[mid][0])] + ind(paren(build(items[:mid])), 2) + ['else'] + ind(paren(build(items[mid:])), 2)
             lines = build(arms)
         if cls == 'S':
-            lines = ["λ s' →"] + ind(lines, 2)
+            lines = ["λ σ →"] + ind(lines, 2)
         return lines
 
     def wrap(self, x, cls, T):

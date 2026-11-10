@@ -14,7 +14,7 @@ x86_cmc_clc_stc_cld_std proc_mode' start_rip temp_rip prefixes' rex_byte opcode 
          k'14 =
            λ t'12 →
              write_iptr proc_mode' temp_rip
-     in λ s' →
+     in λ σ →
           if (weq opcode #245) then
             the (MS Unit)
               (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
@@ -26,35 +26,35 @@ x86_cmc_clc_stc_cld_std proc_mode' start_rip temp_rip prefixes' rex_byte opcode 
                       let new_rflags : rflagsbits
                           new_rflags = (rflagsbits-set-cf rflags_var (bits_of_int not_cf (zpos #1)))
                       in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
-                           k'14 unit)))) s'
+                           k'14 unit)))) σ
           else if (weq opcode #248) then
             the (MS Unit)
               (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
                  let new_rflags : rflagsbits
                      new_rflags = (rflagsbits-set-cf rflags_var #0)
                  in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
-                      k'14 unit))) s'
+                      k'14 unit))) σ
           else if (weq opcode #249) then
             the (MS Unit)
               (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
                  let new_rflags : rflagsbits
                      new_rflags = (rflagsbits-set-cf rflags_var #1)
                  in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
-                      k'14 unit))) s'
+                      k'14 unit))) σ
           else if (weq opcode #252) then
             the (MS Unit)
               (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
                  let new_rflags : rflagsbits
                      new_rflags = (rflagsbits-set-df rflags_var #0)
                  in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
-                      k'14 unit))) s'
+                      k'14 unit))) σ
           else
             the (MS Unit)
               (bindS {rflagsbits} {Unit} (getS {rflagsbits} x86-rflags) (λ rflags_var →
                  let new_rflags : rflagsbits
                      new_rflags = (rflagsbits-set-df rflags_var #1)
                  in bindS {Unit} {Unit} (putS (x86-set-rflags new_rflags)) (λ _ →
-                      k'14 unit))) s'
+                      k'14 unit))) σ
 x86_sahf : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_sahf proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =
   let ctx' : Text

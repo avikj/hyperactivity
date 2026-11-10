@@ -11,8 +11,8 @@ x86_cbw_cwd_cdqe proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m'
                src = (bv-trunc #64 #32 t'3)
            in onS {ZI} {Unit} (check_range (zpos #0) (zpos #32) (ash_left_int src_size (zpos #3))) (λ t'4 →
                 onS {ZI} {Unit} (check_range (zpos #0) (zpos #32) (z-sub t'4 (zpos #1))) (λ t'5 →
-                  let dst : Bits #64
-                      dst =
+                  let dst' : Bits #64
+                      dst' =
                         if (logbitp_bits #32 t'5 src) then
                           (let t'6 : Bits #32
                                t'6 =
@@ -25,7 +25,7 @@ x86_cbw_cwd_cdqe proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m'
                            in (bv-mask #64 (trunc_signed #32 register_size t'6)))
                         else
                           (bv-zext #32 #64 src)
-                  in bindS {Unit} {Unit} (write_rgfi_size (bits_of_int register_size (zpos #4)) #0 dst rex_byte) (λ t'8 →
+                  in bindS {Unit} {Unit} (write_rgfi_size (bits_of_int register_size (zpos #4)) #0 dst' rex_byte) (λ t'8 →
                        write_iptr proc_mode' temp_rip))))))
 x86_cwd_cdq_cqo : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) → (opcode : Bits #8) → (modr_m' : modr_m) → (sib' : sib) → MS Unit
 x86_cwd_cdq_cqo proc_mode' start_rip temp_rip prefixes' rex_byte opcode modr_m' sib' =

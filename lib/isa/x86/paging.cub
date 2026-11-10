@@ -45,12 +45,12 @@ paging_entry_no_page_fault_p structure_type lin_addr entry u_s_acc r_w_acc x_d_a
       entry = (loghead_bits #64 (zpos #64) entry)
       page_present_var : Bits #1
       page_present_var = (page_present entry)
-  in λ s' →
+  in λ σ →
        if (weq page_present_var #0) then
          the (MS (Bool × ZI))
            (let err_no : ZI
                 err_no = (page_fault_err_no page_present_var r_w_x cpl #0 smep #1 nxe)
-            in page_fault_exception lin_addr err_no) s'
+            in page_fault_exception lin_addr err_no) σ
        else
          the (MS (Bool × ZI))
            (let read_write : Bits #1
@@ -79,12 +79,12 @@ paging_entry_no_page_fault_p structure_type lin_addr entry u_s_acc r_w_acc x_d_a
                     (zpos #1)
                   else
                     (zpos #0)
-            in λ s' →
+            in λ σ →
                  if (z-eq rsvd (zpos #1)) then
                    the (MS (Bool × ZI))
                      (let err_no : ZI
                           err_no = (page_fault_err_no page_present_var r_w_x cpl (bits_of_int rsvd (zpos #1)) smep #1 nxe)
-                      in page_fault_exception lin_addr err_no) s'
+                      in page_fault_exception lin_addr err_no) σ
                  else
                    the (MS (Bool × ZI))
                      (let t'7 : Bool
@@ -153,15 +153,15 @@ paging_entry_no_page_fault_p structure_type lin_addr entry u_s_acc r_w_acc x_d_a
                                in t'14)
                             else
                               (b-or (weq u_s_all #0) (b-and (weq nxe #1) (weq x_d_all #1)))
-                      in λ s' →
+                      in λ σ →
                            if (b-or (b-and (str-eq r_w_x #14930) t'7) (b-or (b-and (str-eq r_w_x #14935) t'13) (b-and (str-eq r_w_x #14936) t'15))) then
                              the (MS (Bool × ZI))
                                (let err_no : ZI
                                     err_no = (page_fault_err_no page_present_var r_w_x cpl (bits_of_int rsvd (zpos #1)) smep #1 nxe)
-                                in page_fault_exception lin_addr err_no) s'
+                                in page_fault_exception lin_addr err_no) σ
                            else
                              the (MS (Bool × ZI))
-                               (retS {(Bool × ZI)} (false , (zpos #0))) s') s') s'
+                               (retS {(Bool × ZI)} (false , (zpos #0))) σ) σ) σ
 dirty_bit : (entry : Bits #64) → Bits #1
 dirty_bit entry =
   (ia32e_page_tablesbits-d entry)
