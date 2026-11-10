@@ -58,8 +58,29 @@ and Rust AST types added to LIB): **re-baseline after pulling before the first C
 
 ## Done
 
-Nothing changed in C yet. Measured and diagnosed (see Found); the scratch verification script
-is `experiments/machine/verify.sh`.
+Committed in `src/`: nothing yet. Written in the working copy `/home/claude/work-N`, built
+and verified next (step 2 of "Next step" describes it exactly, so it can be rewritten from this
+file if that copy is lost):
+
+- `src/core.h` (end of file): prototypes `net_malloc`, `net_calloc`, `net_realloc`,
+  `net_aligned_alloc`, `net_strdup`, `net_exhausted(what)`, `extern const char *net_doing[2]`,
+  and macros mapping `malloc`/`calloc`/`realloc`/`aligned_alloc`/`strdup` onto them.
+- `src/net.c` before `net_start`: the wrappers (end the run by `net_exhausted("memory")`),
+  `net_exhausted` (writes `error: out of <what> in <form> <name> (file:line)` to stderr and,
+  after flushing, to stdout when it is another file; `_exit(2)`), `net_fault` (SIGSEGV/SIGBUS
+  on an alternate stack: a fault within 16 MB of the context's stack pointer is
+  `net_exhausted("stack")`; any other prints `internal: fault … in <form>` and returns with
+  the default action restored), `net_guard` (per thread: `sigaltstack` + `sigaction`),
+  `net_start` creating workers with a 256 MB stack attribute and checking `pthread_create`
+  (fewer workers and a note on stderr when one cannot be made). `jit_call`: the stack bottom
+  compiled code may reach is clamped to 1 GB below the stack's top (as it was when the
+  stack was 1 GB).
+- `src/lang.c` `main`: `RLIMIT_STACK` raised to the hard limit (unlimited where allowed)
+  instead of 1 GB before the existing re-exec; `toplevel`: sets `net_doing` to the form's
+  head and name, restores it after.
+
+Baseline after the LIB additions (pulled 21:05): `make library` 1398 passed, 0 failed,
+95,683,095 steps.
 
 ## Found
 
@@ -116,8 +137,8 @@ is `experiments/machine/verify.sh`.
 
 ## Next step
 
-1. `git pull`, `make build/cubical`, run `experiments/machine/verify.sh`, record the new
-   baseline above.
+1. `git pull`, `make build/cubical`, run the commands of `tracks/A-compiler.md` "How to
+   verify" and `make brunerie`; record the remaining baseline numbers (workloads, feed) above.
 2. In `src/net.c` after `net_start`: add `net_doing[2]`, the SIGSEGV handler
    (`sigaltstack`, `SA_ONSTACK|SA_SIGINFO`, compare `si_addr` with the context's `RSP`), the
    checked allocators, `pthread_attr_setstacksize(64 MB)` and a checked `pthread_create`
@@ -125,8 +146,10 @@ is `experiments/machine/verify.sh`.
    `main`: `want = RLIM_INFINITY` when `rl.rlim_max` allows; in `toplevel`: set `net_doing`.
    Verify (library, workloads, feed, brunerie 0 and 4 under `ulimit -v 3000000`), commit.
 3. `build_m`/`synkey` (src/net.c:3970–4200): return each built child's key to its parent
-   instead of recomputing; check by a temporary assertion that the passed key is the pointer
-   `synkey` returns, over the library and Brunerie; steps must be identical. Record seconds
+   instead of recomputing (a `let` passes none up: its body's keys were made under the bound
+   value's key, its own under the bound term's). The ground is the argument in the comment
+   (a child's free slots are bound before it is built and never rebound); the library's and
+   Brunerie's step and memo-hit counts staying identical is the bring-up diagnostic. Record seconds
    for n = 2·10⁴, 4·10⁴, 10⁵ before and after.
 4. Then the numeral at 10⁵, 10⁶, 10⁷ and a 10⁶ list literal, fixing each stop as found; then
    item 2 (asan, tsan), item 3 (profiles; findings 5 and 6), item 4 (g8).
