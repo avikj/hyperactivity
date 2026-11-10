@@ -59,6 +59,17 @@ printed is not where it died.
 - `%gsteps`-scale compile cost: `zig` 1.3M steps, `feed-step` 1.2M steps to compile. Open
   (PLAN 4.4 item 8).
 
+- **`#build` cost is superlinear in the number of commands when the process goes through a
+  handler** (track D): feed over `W` directly 1.2M steps; a 7-command process over `Linux`
+  handled into `W` 42M steps and 52 KB; a 22-command one 1.21 billion steps (3 min 39 s) and
+  66 KB. Binaries correct. Open; attribute with track N's profile (specialize vs. the passes).
+- Elaborator, found by track D (each with its workaround in `lib/os/contract.cub`), open:
+  (a) the scrutinee used inside an `inr u`/`nil` branch fails with `no inferable type here`;
+  (b) structural recursion refused when the matched argument is not first and another varies,
+  and when the match is a nested `case` rather than a nested pattern; (c) a definition by
+  clauses at a type that only unfolds to a function type (`World Linux St`) stops the load with
+  `a dimension is matched only by a variable`.
+
 ## Replies to other tracks
 
 - **D, request 1 (ELF driver cases for `w-sys`, `w-alloc`, `w-load8`, `w-store8`)**: done.
@@ -67,4 +78,4 @@ printed is not where it died.
   builds a binary using every memory and raw-syscall command; it writes `A` and exits 65.
 - **D, request 2 (`.gitignore` hid `experiments/build/`)**: the demos are now in
   `experiments/native/` and tracked.
-- **D, request 3**: say when `lib/os/*.cub` load and I append them to `LIB`.
+- **D, request 3**: `lib/os/{platform,linux,contract,replay}.cub` are in `LIB`.
