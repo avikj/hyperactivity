@@ -1,0 +1,200 @@
+-- lib/mem/flat.cub — the memory signature in the machine's memory: what is compiled. Loaded
+-- after lib/mem/sig.cub. A pointer is an address: mem-flat handles each command of MemSig into
+-- lib/world.cub's commands (w-alloc, w-load, w-store, w-load8, w-store8) with no check at
+-- all, and pointer arithmetic, comparison and conversion are arithmetic on the address.
+-- Second half: the model of the machine's memory the theorem is stated against (an
+-- assumption about the world, PLAN §7: the memory is a map from addresses to bytes, w-load and
+-- w-store are 8 bytes little-endian, w-alloc's response is not interpreted).
+--
+-- Choices stated: free and release do nothing (w-alloc's memory is never reclaimed); an
+-- allocation asks the world for size + align bytes and rounds the address up; a scalar of 8
+-- bytes is one w-load/w-store, of 16 two, of 1 one w-load8/w-store8, of 2 and 4 that many
+-- w-load8/w-store8 (the world has no 16- and 32-bit commands: the track's Needs).
+
+-- ---------------------------------------------------------------- pointers as addresses
+-- null is 0; a function's address is its id + 1 (below the Target's first base); mp-obj a o,
+-- which no handler produces, is a + o
+mp-address : MPtr → Word
+mp-address p = case p of
+  mp-null → #0
+  mp-obj a o → wadd a o
+  mp-fn f → wadd f #1
+  mp-addr x → x
+mp-of-address : Target → Word → MPtr
+mp-of-address t x = case weq x #0 of
+  true → mp-null
+  false → (case wlt x (tg-base t) of
+    true → mp-fn (wsub x #1)
+    false → mp-addr x)
+uq-of-word : Word → UInt64
+uq-of-word w = u64 (wand w #18446744073709551615)
+fl-ptr-add : MPtr → Word → UInt64 → MPtr
+fl-ptr-add p elsize i = case p of
+  mp-null → mp-null
+  mp-fn f → mp-fn f
+  _ → (case uq-isneg i of
+    false → mp-addr (wadd (mp-address p) (wmul (u64toWord i) elsize))
+    true → mp-addr (wsub (mp-address p) (wmul (u64toWord (uq-neg i)) elsize)))
+fl-ptr-diff : MPtr → MPtr → Word → UInt64
+fl-ptr-diff p q elsize = case wlt (mp-address p) (mp-address q) of
+  false → uq-of-word (wquot (wsub (mp-address p) (mp-address q)) elsize)
+  true → uq-neg (uq-of-word (wquot (wsub (mp-address q) (mp-address p)) elsize))
+fl-ptr-cmp : CmpOp → MPtr → MPtr → Bool
+fl-ptr-cmp o p q = cmp-by o (weq (mp-address p) (mp-address q)) (wlt (mp-address p) (mp-address q)) (wlt (mp-address q) (mp-address p))
+fl-ptr-int : Bool → IW → MPtr → SV
+fl-ptr-int sg w p = dq-to-int sg w (uq-of-word (mp-address p) , uq0)
+fl-int-ptr : Target → Bool → IW → SV → MPtr
+fl-int-ptr t sg w v = case sv-int-dq sg w v of
+  mok a → mp-of-address t (case weq (tg-size t ck-ptr) #8 of
+    true → u64toWord (fst a)
+    false → u64toWord (u64and (fst a) (u64 #4294967295)))
+  mub x → mp-null
+  mstop x → mp-null
+
+-- ---------------------------------------------------------------- scalars as numbers of their size
+bswap16 : UInt64 → UInt64
+bswap16 x = u64or (u64shl (u64and x (u64 #255)) (u64 #8)) (u64and (u64shr x (u64 #8)) (u64 #255))
+bswap32 : UInt64 → UInt64
+bswap32 x = u64or (u64shl (bswap16 (u64and x (u64 #65535))) (u64 #16)) (bswap16 (u64and (u64shr x (u64 #16)) (u64 #65535)))
+bswap64 : UInt64 → UInt64
+bswap64 x = u64or (u64shl (bswap32 (u64and x (u64 #4294967295))) (u64 #32)) (bswap32 (u64shr x (u64 #32)))
+-- a number of size bytes between the Target's byte order and the little-endian one read and written
+dq-en : Endian → Word → DQ → DQ
+dq-en e size r = case e of
+  en-little → r
+  en-big → (case weq size #16 of
+    true → (bswap64 (snd r) , bswap64 (fst r))
+    false → (case weq size #8 of
+      true → (bswap64 (fst r) , uq0)
+      false → (case weq size #4 of
+        true → (bswap32 (fst r) , uq0)
+        false → (case weq size #2 of
+          true → (bswap16 (fst r) , uq0)
+          false → r))))
+sv-enc : SK → SV → MRes DQ
+sv-enc k v = case k of
+  sk-int sg w → (case w of
+    iw128 → sv-as-w v
+    _ → mr-map (λ x → (uq-zx w x , uq0)) (sv-as-i v))
+  sk-bool → mr-map (λ b → (uq-b b , uq0)) (sv-as-b v)
+  sk-f32 → mr-map (λ x → (f32-bits x , uq0)) (sv-as-f v)
+  sk-f64 → mr-map (λ x → (f64-bits x , uq0)) (sv-as-d v)
+  sk-ptr → mr-map (λ p → (uq-of-word (mp-address p) , uq0)) (sv-as-p v)
+-- total: a bool is "not zero" here (the abstract memory refuses a bool that is neither 0 nor 1
+-- before this is asked)
+sv-dec : Target → SK → DQ → SV
+sv-dec t k r = case k of
+  sk-int sg w → (case w of
+    iw128 → sv-of-dq r
+    _ → sv-i (uq-cn sg w (fst r)))
+  sk-bool → sv-b (not (uq-iszero (fst r)))
+  sk-f32 → sv-f (f32-of-bits (u64and (fst r) (u64 #4294967295)))
+  sk-f64 → sv-d (f64-of-bits (fst r))
+  sk-ptr → sv-p (mp-of-address t (u64toWord (fst r)))
+
+-- ---------------------------------------------------------------- reading and writing through the world
+-- n bytes at a, little-endian, by w-load8 / w-store8
+fl-rd-n : Nat → Word → Step W Word
+fl-rd-n zero a = sdone #0
+fl-rd-n (suc n) a = scmd (w-load8 a) (λ b → o-map {W} {Word} {Word} (λ r → wor (wand b #255) (wshl r #8)) (fl-rd-n n (wadd a #1)))
+fl-wr-n : Nat → Word → Word → Step W Unit
+fl-wr-n zero a v = sdone unit
+fl-wr-n (suc n) a v = scmd (w-store8 a (wand v #255)) (λ u → fl-wr-n n (wadd a #1) (wshr v #8))
+fl-small : Word → Nat
+fl-small size = case weq size #1 of
+  true → 1
+  false → (case weq size #2 of
+    true → 2
+    false → 4)
+fl-rd : Word → Word → Step W DQ
+fl-rd a size = case weq size #16 of
+  true → scmd (w-load a) (λ x → scmd (w-load (wadd a #8)) (λ y → sdone (uq-of-word x , uq-of-word y)))
+  false → (case weq size #8 of
+    true → scmd (w-load a) (λ x → sdone (uq-of-word x , uq0))
+    false → o-map {W} {Word} {DQ} (λ x → (uq-of-word x , uq0)) (fl-rd-n (fl-small size) a))
+fl-wr : Word → Word → DQ → Step W Unit
+fl-wr a size r = case weq size #16 of
+  true → scmd (w-store a (u64toWord (fst r))) (λ u → scmd (w-store (wadd a #8) (u64toWord (snd r))) (λ u2 → sdone unit))
+  false → (case weq size #8 of
+    true → scmd (w-store a (u64toWord (fst r))) (λ u → sdone unit)
+    false → fl-wr-n (fl-small size) a (u64toWord (fst r)))
+-- n bytes from a, last first; such a list written so that its head lands at a + n - 1; n bytes set
+fl-bytes-rev : Word → Word → Step W (List Word)
+fl-bytes-rev a n =
+  %welimP (λ x → Step W (List Word)) n (sdone nil)
+    (λ j acc → o-bind {W} {List Word} {List Word} acc (λ bs → scmd (w-load8 (wadd a j)) (λ b → sdone (cons b bs))))
+fl-bytes-put : List Word → Word → Word → Step W Unit
+fl-bytes-put nil a n = sdone unit
+fl-bytes-put (cons b bs) a n = scmd (w-store8 (wadd a (wsub n #1)) b) (λ u → fl-bytes-put bs a (wsub n #1))
+fl-fill : Word → Word → Word → Step W Unit
+fl-fill a n v =
+  %welimP (λ x → Step W Unit) n (sdone unit)
+    (λ j acc → o-bind {W} {Unit} {Unit} acc (λ u → scmd (w-store8 (wadd a j) v) (λ u2 → sdone unit)))
+w-roundup : Word → Word → Word
+w-roundup x al = wmul (wquot (wadd x (wsub al #1)) al) al
+
+-- ---------------------------------------------------------------- the handler
+mem-flat : Target → (c : MemC) → Step W (m-resp c)
+mem-flat t c = case c return (λ y → Step W (m-resp y)) of
+  m-alloc kd z size al → scmd (w-alloc (wadd size al)) (λ a → case z of
+    true → o-bind {W} {Unit} {MPtr} (fl-fill (w-roundup a al) size #0) (λ u → sdone (mp-addr (w-roundup a al)))
+    false → sdone (mp-addr (w-roundup a al)))
+  m-release kd p → sdone unit
+  m-free p → sdone unit
+  m-load k al p → o-map {W} {DQ} {SV} (λ r → sv-dec t k (dq-en (tg-endian t) (sk-size t k) r)) (fl-rd (mp-address p) (sk-size t k))
+  m-store k al p v → (case sv-enc k v of
+    mok r → fl-wr (mp-address p) (sk-size t k) (dq-en (tg-endian t) (sk-size t k) r)
+    mub w → sdone unit
+    mstop w → sdone unit)
+  m-ptr-add p e i → sdone (fl-ptr-add p e i)
+  m-ptr-diff p q e → sdone (fl-ptr-diff p q e)
+  m-ptr-cmp o p q → sdone (fl-ptr-cmp o p q)
+  m-ptr-int sg w p → sdone (fl-ptr-int sg w p)
+  m-int-ptr sg w v → sdone (fl-int-ptr t sg w v)
+  m-memmove d s n → o-bind {W} {List Word} {Unit} (fl-bytes-rev (mp-address s) n) (λ bs → fl-bytes-put bs (mp-address d) n)
+  m-memcpy d s n → o-bind {W} {List Word} {Unit} (fl-bytes-rev (mp-address s) n) (λ bs → fl-bytes-put bs (mp-address d) n)
+  m-memset d v n → fl-fill (mp-address d) n (u64toWord (u64and v (u64 #255)))
+-- a reader's process over MemSig + S as a process over S + W: memory commands by mem-flat, the
+-- reader's world's commands as they are
+mem-flat-k : {S : Sig} → Target → o-THandler (MK S) (MT S)
+mem-flat-k {S} t c = case c return (λ y → Step (MT S) (Resp (MK S) y)) of
+  inl m → o-lift {W} {MT S} {m-resp m} (o-inr {S} {W}) (mem-flat t m)
+  inr s → scmd (inl s) (λ r → sdone r)
+
+-- ---------------------------------------------------------------- the model of the machine's memory
+-- a map from addresses to bytes; w-load8/w-store8 read and write one, w-load/w-store eight,
+-- little-endian. Every other command of the world, w-alloc among them, is observed: issued
+-- as it is, its response passed on.
+FM : Type
+FM = Word → Word
+fm-get-n : Nat → FM → Word → Word
+fm-get-n zero fm a = #0
+fm-get-n (suc n) fm a = wor (wand (fm a) #255) (wshl (fm-get-n n fm (wadd a #1)) #8)
+fm-set : FM → Word → Word → FM
+fm-set fm a v = λ x → case weq x a of
+  true → wand v #255
+  false → fm x
+fm-set-n : Nat → FM → Word → Word → FM
+fm-set-n zero fm a v = fm
+fm-set-n (suc n) fm a v = fm-set-n n (fm-set fm a v) (wadd a #1) (wshr v #8)
+fm-pass : {S : Sig} → (w : WCmd) → FM → Step (MT S) (w-resp w × FM)
+fm-pass {S} w fm = scmd (inr w) (λ r → sdone (r , fm))
+fm-obs : {S : Sig} → o-ObsOf (MT S) (MT S) FM
+fm-obs {S} c fm = case c return (λ y → Step (MT S) (Resp (MT S) y × FM)) of
+  inl s → scmd (inl s) (λ r → sdone (r , fm))
+  inr w → (case w return (λ y → Step (MT S) (w-resp y × FM)) of
+    w-now → fm-pass {S} w-now fm
+    w-write fd n b → fm-pass {S} (w-write fd n b) fm
+    w-read fd n → fm-pass {S} (w-read fd n) fm
+    w-sleep ns → fm-pass {S} (w-sleep ns) fm
+    w-exit ec → fm-pass {S} (w-exit ec) fm
+    w-open n p f m → fm-pass {S} (w-open n p f m) fm
+    w-close fd → fm-pass {S} (w-close fd) fm
+    w-load a → sdone (fm-get-n 8 fm a , fm)
+    w-store a v → sdone (unit , fm-set-n 8 fm a v)
+    w-cas a o n → fm-pass {S} (w-cas a o n) fm
+    w-fence → fm-pass {S} w-fence fm
+    w-sys nr a1 a2 a3 a4 a5 a6 → fm-pass {S} (w-sys nr a1 a2 a3 a4 a5 a6) fm
+    w-alloc n → fm-pass {S} (w-alloc n) fm
+    w-load8 a → sdone (fm-get-n 1 fm a , fm)
+    w-store8 a v → sdone (unit , fm-set fm a v))
