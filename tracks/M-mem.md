@@ -132,10 +132,24 @@ the result type of this layer is `MRes`, not `Res`.
   `(uintptr_t)` of allocation 1 offset 4 is 65556, 65548 converts back to allocation 0 offset
   12 and 65549 (the gap) to `mp-addr #65549`.
 
+- `lib/mem/layout.cub`: `MTy` (`ty-sk` a kind with its alignment, `ty-c` a C type, `ty-arr`,
+  `ty-rec` a record by id), records `Field`, `Base`, `Layout` (id, size, alignment, union,
+  fields, bases, vtable-pointer offset), `LayEnv` the table; `ty-size`, `ty-align`,
+  `ty-scalar`; `lay-struct` and `lay-union` (the C rule from member types and the Target);
+  `lay-ok` (a layout given as data is well formed: offsets aligned, fields inside the size and,
+  in a struct, pairwise disjoint; bases and the vtable pointer inside); typed access
+  `obj-alloc`, `obj-field`, `obj-base`, `obj-derived`, `obj-elem`, `obj-load`, `obj-store`,
+  `obj-copy`, `obj-vptr`, `obj-set-vptr`. Read by `#show`:
+  `struct S { char c; double d; int a[3]; short s; }` is offsets 0, 8, 16, 28, size 32, align 8
+  at x86-64 and 0, 4, 12, 24, size 28, align 4 at i386 (gcc's); `struct T { S s; char z; }` is
+  40 bytes; `t.s.a[2] = 9` then reading `t.s.a[2]` is 9, `t.s.a[1]` is `mub ub-uninit`,
+  `&t.s.a[7]` is `mub ub-ptr-arith`; a layout with two ints at offset 0 is not `lay-ok`.
+
 ## Measured
 
-- target.cub + scalar.cub + memory.cub after the cached library: `1001 passed, 0 failed` (the
-  cached library alone is 767, so 234 checks are this track's).
+- target.cub + scalar.cub + memory.cub after the cached library: `1017 passed, 0 failed`; with
+  layout.cub `1055 passed, 0 failed` (the cached library alone is 767, so 288 checks are this
+  track's).
 - Net steps of single operations: a load about 600, a store about 800, an 8-byte memcpy about
   9,000 (each byte is a window read and a window write, and a write copies the allocation's
   bytes: stores are pure).
@@ -180,6 +194,18 @@ the result type of this layer is `MRes`, not `Res`.
   reads the 8-byte window as a little-endian number (x86-64); on a big-endian host the same
   file would give `mem-load` at 1, 2 and 4 bytes the wrong bytes. A Target's byte order is
   independent of this and is honoured (`en-fix`).
+- Unions: every member is at offset 0 and the active member is NOT tracked (v1): reading a
+  member other than the one last written gives the bytes reinterpreted (C's rule) instead of
+  C++'s undefined behaviour. Tracking it would add to `Alloc` a map from a union object's
+  offset to the name of its active member, set by `obj-store` through a union field and
+  checked by `obj-load`; the per-byte type tag below would subsume it.
+- Subobject bounds are not enforced: `mem-ptr-add` checks against the whole allocation, so a
+  pointer walked past the end of a member array into the next member is not reported. It
+  would need the pointer to carry the subobject's span (two more words in `mp-obj`).
+- `lay-struct` is C's rule only: no bit-fields, no C++ base-class layout (empty-base
+  optimization, tail-padding reuse, virtual bases), no `[[no_unique_address]]`, no packed or
+  over-aligned members. Such layouts are given as data (Clang's) and judged by `lay-ok`;
+  virtual bases have no representation in `Layout` (their offset is in the vtable).
 - Types of objects in memory are not tracked: there is no effective type, so strict-aliasing
   violations are not undefined here (a `float` stored and an `int` loaded gives the bits). It
   would add a per-byte type tag to `Alloc` and a check in `mem-load-al`.
@@ -198,9 +224,8 @@ the result type of this layer is `MRes`, not `Res`.
 
 ## Next step
 
-Write `lib/mem/layout.cub`: record layouts as data (`Field`: name id, offset, type; `Layout`:
-size, alignment, fields, bases, vptr offset), a type language `MTy` (scalar at a C type or a
-kind, array, record by layout), `lay-struct` computing offsets from member types by the
-Target's sizes and alignments (the Itanium/SysV rule: each member at the next multiple of its
-alignment, size rounded to the record's alignment), and typed access (`fld-ptr`, `elem-ptr`,
-`obj-load`, `obj-store`) through `mem-ptr-add`/`mem-load-al`/`mem-store-al`.
+Write `lib/mem/monad.cub`: `Ctl V A` (normal a | returned v | broke | continued | thrown v),
+`Ev S V A = AMem → Proc S (MRes (Ctl V A × AMem))` over lib/proc.cub's `Proc` at a signature
+parameter `S`; `ev-ret`, `ev-bind`, lifting of `MRes` operations and of memory operations,
+`ev-cmd` (a world command), `ev-while` with a `Word` fuel (`mstop st-fuel`), `ev-for-n`
+(structural), `ev-catch-break/continue/return`, and the three monad laws as checked paths.
