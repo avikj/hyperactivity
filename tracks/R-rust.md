@@ -78,7 +78,36 @@ uses `core`/`std` only. Find which MIR output this toolchain gives (`rustc --emi
   passed (`book_out_* 21`) both answer `-3` 100,000 times; 1,000,000 messages (seed 2) also
   byte-identical, sha256 `896e0075f0f2745f…`.
 
+- **`lib/lang/rust/ast.cub`** (first version): `RTy` (with its own list constructors), `RProj`,
+  `RPlace`, `RConst`, `ROperand`, `RBinOp`, `RUnOp`, `RCastKind`, `RAggregate`, `RRvalue`, `RStmt`,
+  `RUnwind`, `RCallee`, `RAssertMsg`, `RTerm`, `RBlock`, `RLocal`, `RBody`, `RAdt`, `RLayout` (fields,
+  variants, tag), `RTrait`, `RVtable`, `RStatic`, `RInstance`, `RCrate`. Loads after the cached
+  library in 2.2 s, every `data` checked (`data RCrate` 71,652 steps); a trial `RBody` value checks.
+
 ## Found
+
+- (design facts measured before writing the importer, all on rustc 1.97.0)
+  - `--emit=mir` prints **pre-monomorphization** MIR: `Book<N>::add` once, with `const N` and
+    `[Level; N]` in it; callers name the instance in the call (`Book::<8>::add(..)`).
+  - With `-O` the MIR inliner brings every `core` function the sample uses into the crate's own
+    bodies (`slice::IterMut::next`, `from_raw_parts`, `checked_sub`, `from_le_bytes`, the derived
+    comparisons): the calls left in the 2,680-line dump are all to bodies of the crate or
+    through `dyn Handler`. Without `-O` they are calls to `core` bodies rustc does not print.
+  - Bodies in impls are named by span (`<impl at book.rs:63:1: 63:29>::add`), calls by path
+    (`Book::<8>::add`, `<dyn Handler as Handler>::on_add`); the importer reads the impl header at
+    the span from the source to connect them.
+  - `-g` debug information (read with `llvm-dwarfdump`) has, for every monomorphic type it
+    describes, size, alignment, field names/types/offsets, enumerator values, and for data
+    enums the tag's place and each variant's tag value (the untagged variant of a niche
+    encoding has none). `-Zprint-type-sizes` lacks tag values and field types, so the
+    debug information is the layout source. It omits types no variable has
+    (`Option<&mut Level>`, `NonNull<[Level]>` here), so the importer compiles a copy of the
+    source with one function per needed type appended to make rustc describe it.
+  - The vtable is a `.data.rel.ro` section of the object file: size and align words, then one
+    relocation per method to a v0-mangled symbol (`llvm-cxxfilt` gives
+    `<book::BookHandler as book::Handler>::on_add`); `drop_in_place` is 0 for a type without drop glue.
+  - A static's evaluated initial bytes are printed after the bodies (`alloc7 (static: G_HANDLER,
+    size: 424, align: 8)`, `__` for padding).
 
 ## Limits
 
@@ -91,8 +120,11 @@ uses `core`/`std` only. Find which MIR output this toolchain gives (`rustc --emi
 
 ## Next step
 
-Write `lib/lang/rust/ast.cub` (`RTy`, `RPlace`, `ROperand`, `RRvalue`, `RStmt`, `RTerm`, `RBody`,
-`RCrate`; lists as own constructors, since `List D` inside `data D` and mutual data are refused:
-see C-clang.md Found), check it after the library, then `tools/mir2cub.py`: run
-`rustc --edition=2021 --crate-type=lib -O -Cpanic=abort --emit=mir experiments/rust/book.rs`,
-parse every body reachable from `on_message`, stop on anything unhandled.
+Write `tools/mir2cub.py` (nothing of it exists yet): (1) run `rustc --edition=2021 --crate-type=lib
+-O -Cpanic=abort --emit=mir`; (2) parse bodies (types, places, operands, rvalues, statements,
+terminators; stop on anything unhandled); (3) resolve calls to bodies through impl headers read
+at the spans, walk instances from `on_message`; (4) compile the copy with `-g
+-Csymbol-mangling-version=v0 --emit=obj`, read layouts with `llvm-dwarfdump --debug-info` and the
+vtable with `objdump -r -s` + `llvm-cxxfilt`; (5) write `experiments/rust/book.cub` as many small
+definitions (one per block, type, body) ending in `book-crate : RCrate`; check with
+`./build/cubical $(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p') lib/lang/rust/ast.cub experiments/rust/book.cub`.
