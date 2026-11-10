@@ -35,6 +35,48 @@ anywhere else: not in a chat, not in an agent's memory.
    and read the last lines; a line `N passed, 0 failed` ends a clean load. A segfault or a
    kill is a finding: record the input that caused it in your track file under "Found".
 
+## What is evidence here, and the forms the earlier failure took (audit of 2026-11-09 21:10)
+
+The project lost a week to work that looked like progress and contradicted its one rule. Every
+track checks itself against these before each commit. If your spec (written by track A) asks
+for one of them, the spec is wrong: say so under "Found" and do the right thing.
+
+1. **A second description tied to the first by agreement of outputs.** Two definitions of one
+   thing are related by a checked path or theorem, or one of them is deleted. Runs that agree
+   (our reading vs. Clang's binary, rustc's vs. clang's output, the net vs. a kernel model vs.
+   `strace`) are **bring-up diagnostics**: record them as such; they are never an acceptance
+   line and never the ground for calling two things equal.
+2. **A meaning that is not the meaning of what runs.** If properties are proved of a term and a
+   different term is compiled, there must be a checked path between them, or the property is
+   about nothing. This is why memory is a signature (below).
+3. **Assumptions passed off as facts.** A model of something outside the system (the kernel,
+   the hardware's memory ordering, Clang's Sema, an imported ISA model) is an *assumption*:
+   it is named in PLAN §7 and every theorem that uses it has it as a hypothesis or parameter.
+4. **Proof bulk.** A proof that is not a path by construction, a rewrite along a theorem the
+   code needed anyway, or one lemma per construct of a fixed finite signature, means the
+   design is wrong: stop and write the problem under "Found".
+5. **Deferral.** "Not modelled", "v1", "later" are allowed only under "Limits" with what is
+   missing; a Limit on something the track's samples use keeps the track open.
+
+### Memory is a signature (decision; binds tracks M, F, R and every later language)
+
+A language reader produces a process over a **signature of memory commands** (`alloc`, `free`,
+`load k p`, `store k p v`, pointer arithmetic and comparison, …) and never touches a memory
+value. There are then two handlers of that one signature, and one theorem:
+
+- `mem-std`: into the standard's abstract memory (`lib/mem/memory.cub`'s `AMem`: allocations,
+  bounds, liveness, initialization; undefined behaviour as an outcome). The reader's term
+  under this handler **is** the language's meaning; properties are stated of it.
+- `mem-flat`: into the machine's memory (addresses are words; `load`/`store` are the world's
+  `w-load`/`w-store`, which the compiler encodes as one instruction). The reader's term under
+  this handler is what `#jit`/`#build` compile.
+- **Once, for the signature** (one lemma per command, composed by `lib/obs.cub`'s up-to-context
+  rule, the same shape as `experiments/obs/two-compilers.cub`): for every process `p`, if
+  `p` under `mem-std` ends without undefined behaviour, then `p` under `mem-flat` gives the
+  same observations, for any placement of allocations at disjoint addresses. Nothing per
+  program. Without it, compiled C++ would be either an interpreter of `AMem` or a term nobody
+  proved anything about.
+
 ## The tracks
 
 | Track | File | Delivers | Depends on |

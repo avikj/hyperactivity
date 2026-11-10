@@ -295,6 +295,15 @@ passes, and its answers equal the machine's.
    an intermediate language would need its own meaning and its own check, and the hardware
    model is the meaning that matters.
 
+6. **The standard's memory and the machine's memory are two handlers of one signature.** A
+   language's meaning needs allocations, bounds and lifetimes to say what is undefined; the
+   machine has addresses. A reader therefore produces a process over a signature of memory
+   commands; `mem-std` (into the abstract memory, undefined behaviour an outcome) gives the
+   meaning, `mem-flat` (into addresses, one instruction per access) gives what is compiled,
+   and one theorem about the signature — a lemma per command — says the second agrees with
+   the first on every run that is defined. Proved once; nothing per program. Properties are
+   proved of the first and hold of the binary by that theorem.
+
 ## 6. Phases 2–8: everything that will be built
 
 ### Phase 2 — The ISA model, and the encoder leaves the trusted base
@@ -505,6 +514,11 @@ What a reader of `ok: jit f` must believe, and when each item leaves:
 | guarded recursion's `dfix`, `pfix`, `forceκ` | `lib/std.cub` | never (rules of the theory, stated as primitives) |
 | the drivers and `foreign` symbols | `src/drivers.c`, each `foreign` line | Phase 3 contracts; Phase 4/5 when the C is lifted |
 | Clang's Sema as AST oracle | Phase 4 | Phase 4 step 5 |
+| the importers as transcriptions: `tools/sail2cub.py` (54k generated lines), `tools/clang2cub.py` (incl. facts Clang's JSON omits, recovered from the text dump by position), `tools/mir2cub.py` | `tools/` | each when its source is a lifted computation (Phase 4 step 5 for Clang; the Sail model is the root of trust for x86) |
+| scalar SSE instruction semantics written by hand | `lib/isa/x86/sse.cub` | when imported from the ACL2 originals |
+| the kernel's contract (`linux-model`) — an assumption every theorem about a process over `Linux` carries as its world | `lib/os/contract.cub` | when the kernel is lifted |
+| x86-TSO as the hardware's memory ordering — an assumption | `lib/isa/tso.cub` | never (it is a claim about hardware), but its two forms are related by proof |
+| `cstr-put` (byte-string construction) | `lib/cxx/ast.cub` | track S item 14 |
 
 Nothing else. A definition whose check used none of these beyond the first three reports
 nothing under `#safe f`.
