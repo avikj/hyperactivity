@@ -1,0 +1,98 @@
+-- The acceptance workloads of the compiler (PLAN.md Phase 1): each #jit is the compiler run on a
+-- checked definition, its result checked by the checker (the conversion of the specialized code with
+-- the definition, or, with theorems, the path along them checked as the definition f·jit) before the
+-- bytes are bound. Loaded after the library (make library's files, then this one).
+addw : Word → Word → Word
+addw a b = %wadd a b
+powl : Word → Word
+powl n = %welimP (λ v → Word) n #1 (λ k acc → %wadd acc acc)
+plusN : Nat → Nat → Nat
+plusN a b = case a return (λ k → Nat) of
+  zero → b
+  suc k → suc (rec k)
+isZ : Nat → Bool
+isZ n = case n of
+  zero → true
+  suc k → false
+data Pt = mkpt (x : Word) (y : Word)
+swapPt : Pt → Pt
+swapPt p = case p of
+  mkpt a b → mkpt b a
+sumL : List Word → Word
+sumL l = case l return (λ k → Word) of
+  nil → #0
+  cons x xs → %wadd x (rec xs)
+upto : Word → List Word
+upto n = %welimP (λ v → List Word) n nil (λ k acc → cons k acc)
+mix : Int64 → Int64 → Int64
+mix a b = i64add (i64mul a b) (i64div a b)
+umix : UInt64 → UInt64 → UInt64
+umix a b = u64xor (u64shl a b) (u64mod a b)
+fmix : Float64 → Float64 → Float64
+fmix a b = f64add (f64mul a b) (f64div a b)
+pairUp : Word → Word × Word
+pairUp n = (n , %wadd n #1)
+sdiv : Int64 → Int64 → Int64
+sdiv a b = i64div a b
+smod : Int64 → Int64 → Int64
+smod a b = i64mod a b
+udiv : UInt64 → UInt64 → UInt64
+udiv a b = u64div a b
+umod : UInt64 → UInt64 → UInt64
+umod a b = u64mod a b
+sar : Int64 → Int64 → Int64
+sar a b = i64shr a b
+u32w : UInt32 → UInt32 → UInt32
+u32w a b = u32add a b
+u32l : UInt32 → UInt32 → Bool
+u32l a b = u32lt a b
+i64l : Int64 → Int64 → Bool
+i64l a b = i64lt a b
+feq : Float64 → Float64 → Bool
+feq a b = f64eq a b
+flt : Float64 → Float64 → Bool
+flt a b = f64lt a b
+w2f : Word → Float64
+w2f w = f64 w
+f2i : Float64 → Int64
+f2i x = i64off64 x
+st8 : Bytes 16 → Int64 → Bytes 16
+st8 b v = store64 16 b 8 (0 , λ i → 16) v
+eqN : Nat → Nat → Bool
+eqN a = case a return (λ k → Nat → Bool) of
+  zero → λ m → isZ m
+  suc k → λ m → case m of
+    zero → false
+    suc j → rec k j
+pz : Nat → Nat
+pz x = plus x zero
+pzz : Nat → Nat
+pzz x = plus (plus x zero) zero
+#jit addw
+#jit powl
+#jit plusN
+#jit isZ
+#jit swapPt
+#jit sumL
+#jit upto
+#jit mix
+#jit umix
+#jit fmix
+#jit pairUp
+#jit decode
+#jit sdiv
+#jit smod
+#jit udiv
+#jit umod
+#jit sar
+#jit u32w
+#jit u32l
+#jit i64l
+#jit feq
+#jit flt
+#jit w2f
+#jit f2i
+#jit st8
+#jit eqN
+#jit pzz using plus-zero
+#jit pz using plus-zero

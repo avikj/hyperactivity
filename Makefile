@@ -31,14 +31,14 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 CORE := lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.cub lib/check.cub lib/std.cub
 LIB  := $(CORE) lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/autodiff.cub lib/intproof.cub lib/intlin.cub \
         lib/prim.cub lib/derive.cub lib/decode.cub lib/fiber.cub lib/proc.cub lib/world.cub lib/session.cub \
-        lib/choreo.cub lib/region.cub lib/specialize.cub lib/rules.cub lib/m.cub lib/x86.cub lib/jit.cub
+        lib/choreo.cub lib/region.cub lib/specialize.cub lib/rules.cub lib/machine.cub lib/x86.cub
 
 library: build/cubical
 	CUBICAL_NOCACHE=1 ./build/cubical $(LIB)
 
 # Brunerie's number (Ljungström's brunerie', an untyped port): -2, with one and with four workers
 brunerie: build/cubical
-	for w in 0 4; do CUBICAL_WORKERS=$$w ./build/cubical $(CORE) \
+	for w in 0 4; do CUBICAL_NOCACHE=1 CUBICAL_WORKERS=$$w ./build/cubical $(CORE) \
 	  experiments/brunerie/brunerie.cub experiments/brunerie/run-brunerie.cub | grep -A1 -x brunerie | grep -q "= negsuc (suc zero)" \
 	  || { echo "brunerie: not -2 with $$w workers"; exit 1; }; done; echo "brunerie = negsuc (suc zero)"
 

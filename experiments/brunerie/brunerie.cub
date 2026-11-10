@@ -24,13 +24,13 @@ isPropFamS1 P pP b0 = λ (i : I) →
   pP (loop i) (comp (λ (j : I) → P (loop (i /\ j))) [ i = 0 ↦ λ (j : I) → b0 ] b0)
               (comp (λ (j : I) → P (loop (i \/ ~ j))) [ i = 1 ↦ λ (j : I) → b0 ] b0) @ i
 rotIsEquiv a = case a return λ x → isEquivS1 (λ z → mulS1 x z) of
-    base → snd (idequiv S1)
-    loop i → isPropFamS1 (λ x → isEquivS1 (λ z → mulS1 x z)) (λ x → isPropIsEquiv lzero lzero S1 S1 (λ z → mulS1 x z)) (snd (idequiv S1)) @ i
+    base → snd (idEquiv lzero S1)
+    loop i → isPropFamS1 (λ x → isEquivS1 (λ z → mulS1 x z)) (λ x → isPropIsEquiv lzero lzero S1 S1 (λ z → mulS1 x z)) (snd (idEquiv lzero S1)) @ i
 
 -- the Hopf fibration over S²
 HopfS2 x = case x return λ y → Type of
     base2 → S1
-    surf i j → Glue S1 [ i = 0 ↦ (S1 , idequiv S1) , i = 1 ↦ (S1 , idequiv S1) , j = 0 ↦ (S1 , idequiv S1) , j = 1 ↦ (S1 , (λ z → mulS1 (loop i) z , rotIsEquiv (loop i))) ]
+    surf i j → Glue S1 [ i = 0 ↦ (S1 , idEquiv lzero S1) , i = 1 ↦ (S1 , idEquiv lzero S1) , j = 0 ↦ (S1 , idEquiv lzero S1) , j = 1 ↦ (S1 , (λ z → mulS1 (loop i) z , rotIsEquiv (loop i))) ]
 
 -- ---------------------------------------------------------------- truncations
 data T2 (A : Type) = t2inc (a : A)
@@ -130,7 +130,7 @@ tE P i =
   ( λ x → comp (λ (j : I) → P @ (i \/ j)) [ i = 1 ↦ λ (j : I) → x ] x
   , comp (λ (k : I) → isEqvT (P @ i) (P @ (i \/ k))
                         (λ x → comp (λ (j : I) → P @ (i \/ (k /\ j))) [ i = 1 ↦ λ (j : I) → x , k = 0 ↦ λ (j : I) → x ] x))
-      [ i = 1 ↦ λ (k : I) → snd (idequiv (P @ 1)) ] (snd (idequiv (P @ i))) )
+      [ i = 1 ↦ λ (k : I) → snd (idEquiv lzero (P @ 1)) ] (snd (idEquiv lzero (P @ i))) )
 -- (an interval literal given as an ordinary argument reads as the numeral: bound with λ (a : I) and @)
 pE P = (λ (a : I) → tE P a) @ 0
 uaeta X Y P = λ (i : I) (j : I) →
@@ -204,13 +204,13 @@ plus2 x = rec4 (K2 → K2) P4
 isEquivK f = (y : K2) → Contr (fib K2 K2 f y)
 help a = S2SetElimG (λ x → isEquivK (λ y → plus2 (tinc x) y))
   (λ x → propToSet (isEquivK (λ y → plus2 (tinc x) y)) (isPropIsEquiv lzero lzero K2 K2 (λ y → plus2 (tinc x) y)))
-  (snd (idequiv K2)) a
+  (snd (idEquiv lzero K2)) a
 K2eq a = (λ y → plus2 (tinc a) y , help a)
-Code z = case z return λ w → Type of
+CodeK2 z = case z return λ w → Type of
     N → K2
     S → K2
     merid a i → ua lzero K2 K2 (K2eq a) @ i
-f7 q = transp (λ (k : I) → Code (q @ k)) (tinc base2)
+f7 q = transp (λ (k : I) → CodeK2 (q @ k)) (tinc base2)
 
 -- ---------------------------------------------------------------- η₃ and the encode chain
 s11 x y = case x return λ w → S2 of base → base2 ; loop i → (case y return λ w → S2 of base → base2 ; loop j → surf i j)
