@@ -133,6 +133,31 @@ the result type of this layer is `MRes`, not `Res`.
   The `Bytes n`-with-proofs representation of memory.cub is deleted with this: no law of
   lib/prim.cub relates overlapping 8-byte windows (`load64` at o and at o+1), so "bytes agree"
   could not have been proved of it (Found).
+- Item 9 done: `lib/mem/flat.cub`. `mem-flat : Target → (c : MemC) → Step W (m-resp c)` (and
+  `mem-flat-k` for `MemSig + S` into `S + W`): no check; alloc is `w-alloc (size + align)`
+  rounded up (and a `w-store8` loop of zeros when zeroed); free and release do nothing
+  (`w-alloc` memory is never reclaimed); a scalar of 8 bytes is one `w-load`/`w-store`, of 16
+  two, of 1, 2, 4 that many `w-load8`/`w-store8`; pointer arithmetic, difference, comparison
+  and integer conversion are arithmetic on the address; memmove/memcpy/memset are byte loops.
+  The model of the machine's memory (an assumption, to be listed in PLAN §7 by track A):
+  `FM = Word → Word`, `fm-obs` (w-load8/w-store8 one byte of the map, w-load/w-store eight,
+  little-endian; every other world command, `w-alloc` included, observed as it is).
+- Items 8 and 10 done: `lib/mem/memory.cub` rewritten. `ARec`, `AMem` (table, written marks,
+  bytes), the checks `std-pre` (every undefined case of the old file: null, function, out of
+  bounds, dead, misaligned, unwritten, bad bool, double free, wrong kind, interior free,
+  pointer arithmetic out of the allocation, difference/order across allocations, overlap), the
+  bookkeeping `std-post` (a placement touching an allocation is `mstop st-unsupported`),
+  `mem-std`, `std-step`, `std-run`, `flat-run`. **The theorem checks, with no postulate**:
+  `mem-sound : (C : Step (MK S) A) → am-data s ≡ fm → m-Ref MRel (std-run t C s) (flat-run t C fm)`
+  for every process C, by `std-mem2-ref` (one lemma for the whole signature: the flat tree
+  followed by bookkeeping refines the flat tree) and `m-ref-bind` with lib/obs.cub's
+  `o-run-bind`; and `mem-sound-nofail`: if `m-NoFail (std-run t C s)` then
+  `o-BisimR (MOk MRel) (std-run t C s) (flat-run t C (am-data s))`: the same commands of the
+  world with the same responses, the same result, the same bytes.
+  Library + target, scalar, sig, flat, memory: `1678 passed, 0 failed`.
+- **Broken until the next two commits**: `lib/mem/layout.cub` (its access part) and
+  `lib/mem/monad.cub` still name the deleted `mem-ptr-add`, `mem-load-al`, `AMem` as state;
+  `experiments/mem/sum.cub` likewise. Readers (tracks R, F) break with them, as decided.
 - Renames forced by the library as it now is: `lib/cxx/ast.cub` (in `make library` since
   `4d04760c`) binds `bo-add bo-sub bo-mul bo-div bo-rem bo-and bo-or bo-xor`, so scalar.cub's
   `BinOp` constructors are now `ao-add … ao-xor`. Readers using `bo-*` as `BinOp` must rename.
@@ -403,10 +428,13 @@ comparison `i < n`, the bounds test of `p[i]` against the array, the fuel's coun
 
 ## Next step
 
-Write `lib/mem/flat.cub` (after sig.cub): pure pointer functions (`mp-address`, `fl-ptr-add`,
-…), `sv-enc`/`sv-dec`, the flat handler `mem-flat : Target → (c : MemC) → Step W (m-resp c)`,
-the model of the machine's memory `FM = Word → Word` with `fm-obs : o-ObsOf (MT S) (MT S) FM`
-(w-load/w-store/w-load8/w-store8 on the map, everything else observed). Then rewrite
-`lib/mem/memory.cub` (`AMem`, the checks, `mem-std`, `std-ref`, `mem-sound`), then
-layout.cub's access part as pure offsets, monad.cub over `MK S`, the "From track M" line in
-tracks/R-rust.md, and experiments/mem/sum.cub.
+1. `lib/mem/layout.cub`: replace the section "typed access" by pure offsets
+   (`fld-off : LayEnv → id → name → MRes (Word × MTy)`, `base-off`, `vptr-off`), keep the
+   rest; check after memory.cub.
+2. `lib/mem/monad.cub`: `Ev {l} S V A = Proc {l} (MK S) (MRes (Ctl V A))`; `ev-load`,
+   `ev-store`, `ev-alloc`, `ev-release`, `ev-ptr-add`, … issue `MemC` commands; `ev-rd`,
+   `ev-wr`, `ev-mem` deleted; laws re-proved; runners `ev-std` (to-step then `std-run`) and
+   `ev-flat` (`handle` by `mem-flat`).
+3. The "From track M" line in tracks/R-rust.md.
+4. `experiments/mem/sum.cub` on the new `Ev`: under `std-run` on the net (answering `w-alloc`
+   by a bump allocator), under `mem-flat` through `#build`.
