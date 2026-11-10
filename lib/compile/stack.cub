@@ -20,6 +20,8 @@ data JCode = kdone
            | kop (o : JWop) (k : JCode)
            | kcmp (o : JWcmp) (k : JCode)
            | kif (t : JCode) (e : JCode) (k : JCode)
+           | kinc (k : JCode)
+           | kloop (b : JCode) (k : JCode)
            | kfail
 
 -- the 64-bit bound
@@ -36,17 +38,39 @@ jthen : JRes JM → (JM → JRes JM) → JRes JM
 jthen jout f = jout
 jthen (jgot m) f = f m
 
+-- a loop: the counter on top of the stack, the bound below it, the state in rax. While the counter
+-- is below the bound the state is pushed, the body run (it leaves the next state, the stack as it
+-- was), the state dropped and the counter stepped; then counter and bound are dropped. The fuel is
+-- the bound, taken when the loop starts (one more round than any loop from 0 needs)
+jlp : (JM → JRes JM) → Nat → JM → JRes JM
+jlp f zero m = jout
+jlp f (suc n) m = case jm-stk m return (λ z → JRes JM) of
+  nil → jout
+  cons i rest → case rest return (λ z → JRes JM) of
+    nil → jout
+    cons b rest2 →
+      if %wlt i b
+        then jthen (f (JM { jm-rax = jm-rax m ; jm-rcx = jm-rcx m ; jm-stk = cons (jm-rax m) (jm-stk m) }))
+                   (λ m2 → case jm-stk m2 return (λ z → JRes JM) of
+                             nil → jout
+                             cons x r2 → case r2 return (λ z → JRes JM) of
+                               nil → jout
+                               cons i2 r3 → case r3 return (λ z → JRes JM) of
+                                 nil → jout
+                                 cons b2 r4 → jlp f n (JM { jm-rax = jm-rax m2 ; jm-rcx = jm-rcx m2 ; jm-stk = cons (%wsucc i2) (cons b2 r4) }))
+        else jgot (JM { jm-rax = jm-rax m ; jm-rcx = jm-rcx m ; jm-stk = rest2 })
+
 jrun : JCode → JM → JRes JM
 jrun kdone m = jgot m
 jrun (kimm w k) m = if %wlt w jw64 then jrun k (JM { jm-rax = w ; jm-rcx = jm-rcx m ; jm-stk = jm-stk m }) else jout
-jrun (kld n k) m = case jnth (jm-stk m) n of
+jrun (kld n k) m = case jnth (jm-stk m) n return (λ z → JRes JM) of
   jout → jout
   jgot x → jrun k (JM { jm-rax = x ; jm-rcx = jm-rcx m ; jm-stk = jm-stk m })
 jrun (kpush k) m = jrun k (JM { jm-rax = jm-rax m ; jm-rcx = jm-rcx m ; jm-stk = cons (jm-rax m) (jm-stk m) })
-jrun (kpop k) m = case jm-stk m of
+jrun (kpop k) m = case jm-stk m return (λ z → JRes JM) of
   nil → jout
   cons x xs → jrun k (JM { jm-rax = x ; jm-rcx = jm-rcx m ; jm-stk = xs })
-jrun (kdrop k) m = case jm-stk m of
+jrun (kdrop k) m = case jm-stk m return (λ z → JRes JM) of
   nil → jout
   cons x xs → jrun k (JM { jm-rax = jm-rax m ; jm-rcx = jm-rcx m ; jm-stk = xs })
 jrun (kmovc k) m = jrun k (JM { jm-rax = jm-rax m ; jm-rcx = jm-rax m ; jm-stk = jm-stk m })
@@ -55,15 +79,22 @@ jrun (kop o k) m = if %wlt (jwop o (jm-rax m) (jm-rcx m)) jw64
   else jout
 jrun (kcmp o k) m = jrun k (JM { jm-rax = (if jwcmp o (jm-rax m) (jm-rcx m) then #0 else #1) ; jm-rcx = jm-rcx m ; jm-stk = jm-stk m })
 jrun (kif t e k) m = jthen (if %weq (jm-rax m) #0 then jrun t m else jrun e m) (λ m2 → jrun k m2)
+jrun (kinc k) m = if %wlt (%wsucc (jm-rax m)) jw64 then jrun k (JM { jm-rax = %wsucc (jm-rax m) ; jm-rcx = jm-rcx m ; jm-stk = jm-stk m }) else jout
+jrun (kloop b k) m = jthen (case jm-stk m return (λ z → JRes JM) of
+                              nil → jout
+                              cons i rest → case rest return (λ z → JRes JM) of
+                                nil → jout
+                                cons bb rest2 → jlp (λ m2 → jrun b m2) (suc (toNat bb)) m)
+                           (λ m2 → jrun k m2)
 jrun kfail m = jout
 
--- a value as the word that holds it: a word itself, true 0 and false 1 (lib/x86.cub's Bool); at
--- this level nothing else is compiled (its terms are kfail), so #0 stands for the rest. Every
--- type's jdef is held by #0
+-- a value as the word that holds it: a word itself, true 0 and false 1 (lib/x86.cub's Bool), a
+-- natural number its count (lib/x86.cub's Nat by Word); at this level pairs, sums and functions
+-- are not compiled (their terms are kfail), so #0 stands for them. Every type's jdef is held by #0
 jenc : (a : JTy) → JEl a → Word
 jenc jw x = x
 jenc jb x = if x then #0 else #1
-jenc jn x = #0
+jenc jn x = fromNat x
 jenc (jprod a b) x = #0
 jenc (jsum a b) x = #0
 jenc (jarr a b) x = #0
@@ -146,10 +177,14 @@ jcx (jsnd b q) g a p k = kfail
 jcx (jinl x) g a p k = kfail
 jcx (jinr y) g a p k = kfail
 jcx (jcase b1 b2 q l m) g a p k = kfail
-jcx jzero g a p k = kfail
-jcx (jsuc n) g a p k = kfail
-jcx (jnatrec z q n) g a p k = kfail
-jcx (jloop b z q) g a p k = kfail
+jcx jzero g a p k = kimm #0 (jcoerce jn a k)
+jcx (jsuc n) g a p k = jcx n g jn p (kinc (jcoerce jn a k))
+jcx (jnatrec z q n) g a p k =
+  jcx n g jn p (kpush (kimm #0 (kpush (jcx z g a (jpsh g (jpsh g p))
+    (kloop (jcx q (cons a (cons jn g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k)))))
+jcx (jloop b z q) g a p k =
+  jcx b g jw p (kpush (kimm #0 (kpush (jcx z g a (jpsh g (jpsh g p))
+    (kloop (jcx q (cons a (cons jw g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k)))))
 
 -- ---------------------------------------------------------------- the compiler is right
 -- The environment is in the stack where the placement says
@@ -244,12 +279,22 @@ jvar-ok (jgot d) b a x k m h =
             (jcoerce-ok b a x k (jm-rcx m) (jm-stk m))
 
 
+jaft-pre2 : (x : JRes JM) → (y : JRes JM) → (k : JCode) → (v : Word) → (s : List Word) → x ≡ y → JAfter y k v s → JAfter x k v s
+jaft-pre2 x y k v s e h = case h of inl e2 → inl (e ∙ e2); inr q → inr (fst q , e ∙ snd q)
+
 -- code then more code: what the first leaves in rax is what the second starts from
 jaft-seq : (X : JRes JM) → (K1 : JCode) → (k : JCode) → (v1 : Word) → (v2 : Word) → (s : List Word) →
            JAfter X K1 v1 s → ((c : Word) → JAfter (jrun K1 (JM { jm-rax = v1 ; jm-rcx = c ; jm-stk = s })) k v2 s) → JAfter X k v2 s
 jaft-seq X K1 k v1 v2 s h1 h2 = case h1 of
   inl e → inl e
   inr q → jaft-pre (snd q) (h2 (fst q))
+
+-- the same where the first part's stack is not the end's
+jaft-seqs : (X : JRes JM) → (K1 : JCode) → (k : JCode) → (v1 : Word) → (v2 : Word) → (s1 : List Word) → (s2 : List Word) →
+            JAfter X K1 v1 s1 → ((c : Word) → JAfter (jrun K1 (JM { jm-rax = v1 ; jm-rcx = c ; jm-stk = s1 })) k v2 s2) → JAfter X k v2 s2
+jaft-seqs X K1 k v1 v2 s1 s2 h1 h2 = case h1 of
+  inl e → inl e
+  inr q → jaft-pre2 X (jrun K1 (JM { jm-rax = v1 ; jm-rcx = fst q ; jm-stk = s1 })) k v2 s2 (snd q) (h2 (fst q))
 
 jaft-drop : (X : JRes JM) → (k : JCode) → (v : Word) → (w : Word) → (s : List Word) → JAfter X (kdrop k) v (cons w s) → JAfter X k v s
 jaft-drop X k v w s h = case h of
@@ -270,6 +315,121 @@ jaft-cmpk : (Y : JRes JM) → (o : JWcmp) → (K3 : JCode) → (k : JCode) → (
 jaft-cmpk Y o K3 k V vx vy s h h2 = case h of
   inl e → inl e
   inr q → jaft-pre (snd q) (h2 vy)
+
+-- ---------------------------------------------------------------- loops
+-- the loop run upward: j more rounds from the counter c
+jup : {X : Type} → (Nat → X → X) → Nat → Nat → X → X
+jup S zero c h = h
+jup S (suc j) c h = jup S j (suc c) (S c h)
+
+-- upward from the value at c is the recursion's value at c + j (the eliminators recurse downward)
+jup-down : {X : Type} → (D : Nat → X) → (S : Nat → X → X) → ((c : Nat) → D (suc c) ≡ S c (D c)) →
+           (j : Nat) → (c : Nat) → jup S j c (D c) ≡ D (plus c j)
+jup-down D S hD zero c = sym (cong D (plus-zero c))
+jup-down D S hD (suc j) c = cong (jup S j (suc c)) (sym (hD c)) ∙ (jup-down D S hD j (suc c) ∙ sym (cong D (plus-suc c j)))
+
+-- the comparisons a loop from 0 makes
+jlt-more : (c : Nat) → (j : Nat) → %wlt (fromNat c) (fromNat (plus c (suc j))) ≡ true
+jlt-more zero j = sym (ltw≡wlt #0 (fromNat (suc j)))
+jlt-more (suc c) j = sym (ltw≡wlt (fromNat (suc c)) (fromNat (plus (suc c) (suc j)))) ∙ (ltw≡wlt (fromNat c) (fromNat (plus c (suc j))) ∙ jlt-more c j)
+
+jlt-end : (c : Nat) → %wlt (fromNat c) (fromNat (plus c zero)) ≡ false
+jlt-end zero = sym (ltw≡wlt #0 #0)
+jlt-end (suc c) = sym (ltw≡wlt (fromNat (suc c)) (fromNat (plus (suc c) zero))) ∙ (ltw≡wlt (fromNat c) (fromNat (plus c zero)) ∙ jlt-end c)
+
+jaft-iff : (bb : Bool) → bb ≡ false → (X : JRes JM) → (Y : JRes JM) → (k : JCode) → (v : Word) → (s : List Word) →
+           JAfter Y k v s → JAfter (if bb then X else Y) k v s
+jaft-iff bb e X Y k v s h = transport (λ i → JAfter (if e (~ i) then X else Y) k v s) h
+
+jaft-ift : (bb : Bool) → bb ≡ true → (X : JRes JM) → (Y : JRes JM) → (k : JCode) → (v : Word) → (s : List Word) →
+           JAfter X k v s → JAfter (if bb then X else Y) k v s
+jaft-ift bb e X Y k v s h = transport (λ i → JAfter (if e (~ i) then X else Y) k v s) h
+
+-- after the body's round: the next round's state
+jlp-k : (JM → JRes JM) → Nat → JM → JRes JM
+jlp-k f n m2 = case jm-stk m2 return (λ z → JRes JM) of
+  nil → jout
+  cons x r2 → case r2 return (λ z → JRes JM) of
+    nil → jout
+    cons i2 r3 → case r3 return (λ z → JRes JM) of
+      nil → jout
+      cons b2 r4 → jlp f n (JM { jm-rax = jm-rax m2 ; jm-rcx = jm-rcx m2 ; jm-stk = cons (%wsucc i2) (cons b2 r4) })
+
+-- the body is right for every round (counter c, state hx), whatever the bound below
+JBodyOk : (a : JTy) → (S : Nat → JEl a → JEl a) → (JM → JRes JM) → List Word → Type
+JBodyOk a S f s0 = (c : Nat) → (hx : JEl a) → (cr : Word) → (bd : Word) →
+  JAfter (f (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = cons (jenc a hx) (cons (fromNat c) (cons bd s0)) }))
+         kdone (jenc a (S c hx)) (cons (jenc a hx) (cons (fromNat c) (cons bd s0)))
+
+-- the loop is right: j rounds left from counter c, the bound c + j, any fuel past j
+jlp-ok : (a : JTy) → (S : Nat → JEl a → JEl a) → (f : JM → JRes JM) → (s0 : List Word) → JBodyOk a S f s0 →
+         (j : Nat) → (c : Nat) → (e : Nat) → (hx : JEl a) → (cr : Word) →
+         JAfter (jlp f (suc (plus j e)) (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = cons (fromNat c) (cons (fromNat (plus c j)) s0) }))
+                kdone (jenc a (jup S j c hx)) s0
+jlp-ok a S f s0 body zero c e hx cr =
+  jaft-iff (%wlt (fromNat c) (fromNat (plus c zero))) (jlt-end c)
+    (jthen (f (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = cons (jenc a hx) (cons (fromNat c) (cons (fromNat (plus c zero)) s0)) }))
+           (λ m2 → jlp-k f e m2))
+    (jgot (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = s0 })) kdone (jenc a hx) s0
+    (inr (cr , refl))
+jlp-ok a S f s0 body (suc j) c e hx cr =
+  jaft-ift (%wlt (fromNat c) (fromNat (plus c (suc j)))) (jlt-more c j)
+    (jthen (f (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = cons (jenc a hx) (cons (fromNat c) (cons (fromNat (plus c (suc j))) s0)) }))
+           (λ m2 → jlp-k f (suc (plus j e)) m2))
+    (jgot (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = s0 })) kdone (jenc a (jup S (suc j) c hx)) s0
+    (case body c hx cr (fromNat (plus c (suc j))) of
+       inl e1 → inl (cong (λ z → jthen z (λ m2 → jlp-k f (suc (plus j e)) m2)) e1)
+       inr q → jaft-pre2 (jthen (f (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = cons (jenc a hx) (cons (fromNat c) (cons (fromNat (plus c (suc j))) s0)) }))
+                                (λ m2 → jlp-k f (suc (plus j e)) m2))
+                          (jlp f (suc (plus j e)) (JM { jm-rax = jenc a (S c hx) ; jm-rcx = fst q ;
+                                                        jm-stk = cons (fromNat (suc c)) (cons (fromNat (plus c (suc j))) s0) }))
+                          kdone (jenc a (jup S j (suc c) (S c hx))) s0
+                          (cong (λ z → jthen z (λ m2 → jlp-k f (suc (plus j e)) m2)) (snd q))
+                 (transport (λ i → JAfter (jlp f (suc (plus j e)) (JM { jm-rax = jenc a (S c hx) ; jm-rcx = fst q ;
+                                                                          jm-stk = cons (fromNat (suc c)) (cons (fromNat (plus-suc c j (~ i))) s0) }))
+                                          kdone (jenc a (jup S j (suc c) (S c hx))) s0)
+                            (jlp-ok a S f s0 body j (suc c) e (S c hx) (fst q))))
+
+-- the loop's entry: the bound fromNat n, the counter 0, the fuel the bound's count
+jlp-entry : (a : JTy) → (S : Nat → JEl a → JEl a) → (f : JM → JRes JM) → (s0 : List Word) → JBodyOk a S f s0 →
+            (n : Nat) → (hx : JEl a) → (cr : Word) →
+            JAfter (jlp f (suc (toNat (fromNat n))) (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = cons #0 (cons (fromNat n) s0) }))
+                   kdone (jenc a (jup S n zero hx)) s0
+jlp-entry a S f s0 body n hx cr =
+  transport (λ i → JAfter (jlp f (suc ((toNat-fromNat n ∙ sym (plus-zero n)) (~ i))) (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = cons #0 (cons (fromNat n) s0) }))
+                          kdone (jenc a (jup S n zero hx)) s0)
+            (jlp-ok a S f s0 body n zero zero hx cr)
+
+-- a loop's code after its bound (fromNat n) and counter (0) are pushed and the initial state is in
+-- rax: the recursion's value. For Nat (the step at each predecessor) and for Word (at each
+-- predecessor as a word, the bound any word)
+jaft-val : (X : JRes JM) → (k : JCode) → (v : Word) → (v2 : Word) → (s : List Word) → v ≡ v2 → JAfter X k v s → JAfter X k v2 s
+jaft-val X k v v2 s e h = transport (λ i → JAfter X k (e i) s) h
+
+jloop-nat : (a : JTy) → (Z : JEl a) → (S : Nat → JEl a → JEl a) → (body : JCode) → (k : JCode) → (s : List Word) →
+            JBodyOk a S (λ m → jrun body m) s → (n : Nat) → (c2 : Word) →
+            JAfter (jrun (kloop body k) (JM { jm-rax = jenc a Z ; jm-rcx = c2 ; jm-stk = cons #0 (cons (fromNat n) s) })) k (jenc a (jnatrec-ev Z S n)) s
+jloop-nat a Z S body k s bok n c2 =
+  jaft-val (jrun (kloop body k) (JM { jm-rax = jenc a Z ; jm-rcx = c2 ; jm-stk = cons #0 (cons (fromNat n) s) })) k
+           (jenc a (jup S n zero Z)) (jenc a (jnatrec-ev Z S n)) s
+           (cong (jenc a) (jup-down (λ c → jnatrec-ev Z S c) S (λ c → refl) n zero))
+           (jaft-then k (jlp-entry a S (λ m → jrun body m) s bok n Z c2))
+
+jloop-word : (a : JTy) → (Z : JEl a) → (Sw : Word → JEl a → JEl a) → (body : JCode) → (k : JCode) → (s : List Word) →
+             JBodyOk a (λ c hx → Sw (fromNat c) hx) (λ m → jrun body m) s → (w : Word) → (c2 : Word) →
+             JAfter (jrun (kloop body k) (JM { jm-rax = jenc a Z ; jm-rcx = c2 ; jm-stk = cons #0 (cons w s) })) k (jenc a (jloop-ev w Z Sw)) s
+jloop-word a Z Sw body k s bok w c2 =
+  transport (λ i → JAfter (jrun (kloop body k) (JM { jm-rax = jenc a Z ; jm-rcx = c2 ; jm-stk = cons #0 (cons (fromNat-toNat w i) s) }))
+                          k (jenc a (jloop-ev (fromNat-toNat w i) Z Sw)) s)
+            (jaft-val (jrun (kloop body k) (JM { jm-rax = jenc a Z ; jm-rcx = c2 ; jm-stk = cons #0 (cons (fromNat (toNat w)) s) })) k
+                      (jenc a (jup (λ c hx → Sw (fromNat c) hx) (toNat w) zero Z)) (jenc a (jloop-ev (fromNat (toNat w)) Z Sw)) s
+                      (cong (jenc a) (jup-down (λ c → jloop-ev (fromNat c) Z Sw) (λ c hx → Sw (fromNat c) hx) (λ c → refl) (toNat w) zero))
+                      (jaft-then k (jlp-entry a (λ c hx → Sw (fromNat c) hx) (λ m → jrun body m) s bok (toNat w) Z c2)))
+
+-- the body's placement: the state, the counter, the bound, then the context three deeper
+jpl-body : (g : List JTy) → (p : JPl g) → (r : JEnv g) → (s : List Word) → JPlaced g p r s → (x : Word) → (i : Word) → (bd : Word) →
+           JPlaced g (jpsh g (jpsh g (jpsh g p))) r (cons x (cons i (cons bd s)))
+jpl-body g p r s h x i bd = jpl-push g (jpsh g (jpsh g p)) r (cons i (cons bd s)) x (jpl-push g (jpsh g p) r (cons bd s) i (jpl-push g p r s bd h))
 
 -- the theorem: for every term, type, placement, environment placed in the stack, and rest of code
 jcx-ok : (t : JTm) → (g : List JTy) → (a : JTy) → (p : JPl g) → (r : JEnv g) → (k : JCode) → (m : JM) →
@@ -328,7 +488,47 @@ jcx-ok (jsnd b q) g a p r k m h = inl refl
 jcx-ok (jinl x) g a p r k m h = inl refl
 jcx-ok (jinr y) g a p r k m h = inl refl
 jcx-ok (jcase b1 b2 q l n) g a p r k m h = inl refl
-jcx-ok jzero g a p r k m h = inl refl
-jcx-ok (jsuc n) g a p r k m h = inl refl
-jcx-ok (jnatrec z q n) g a p r k m h = inl refl
-jcx-ok (jloop b z q) g a p r k m h = inl refl
+jcx-ok jzero g a p r k m h = jcoerce-ok jn a zero k (jm-rcx m) (jm-stk m)
+jcx-ok (jsuc n) g a p r k m h =
+  jaft-seq (jrun (jcx n g jn p (kinc (jcoerce jn a k))) m) (kinc (jcoerce jn a k)) k
+           (fromNat (jev n g jn r)) (jenc a (jcast jn a (suc (jev n g jn r)))) (jm-stk m)
+           (jcx-ok n g jn p r (kinc (jcoerce jn a k)) m h)
+           (λ c1 → jaft-if (%wlt (%wsucc (fromNat (jev n g jn r))) jw64) (jcoerce-ok jn a (suc (jev n g jn r)) k c1 (jm-stk m)))
+jcx-ok (jnatrec z q n) g a p r k m h =
+  jaft-seq (jrun (jcx n g jn p (kpush (kimm #0 (kpush (jcx z g a (jpsh g (jpsh g p)) (kloop (jcx q (cons a (cons jn g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k)))))) m)
+           (kpush (kimm #0 (kpush (jcx z g a (jpsh g (jpsh g p)) (kloop (jcx q (cons a (cons jn g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k)))))
+           k (fromNat (jev n g jn r)) (jenc a (jev (jnatrec z q n) g a r)) (jm-stk m)
+           (jcx-ok n g jn p r (kpush (kimm #0 (kpush (jcx z g a (jpsh g (jpsh g p)) (kloop (jcx q (cons a (cons jn g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k))))) m h)
+           (λ c1 → jaft-seqs (jrun (jcx z g a (jpsh g (jpsh g p)) (kloop (jcx q (cons a (cons jn g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k))
+                                    (JM { jm-rax = #0 ; jm-rcx = c1 ; jm-stk = cons #0 (cons (fromNat (jev n g jn r)) (jm-stk m)) }))
+                              (kloop (jcx q (cons a (cons jn g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k) k
+                              (jenc a (jev z g a r)) (jenc a (jev (jnatrec z q n) g a r))
+                              (cons #0 (cons (fromNat (jev n g jn r)) (jm-stk m))) (jm-stk m)
+                              (jcx-ok z g a (jpsh g (jpsh g p)) r (kloop (jcx q (cons a (cons jn g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k)
+                                      (JM { jm-rax = #0 ; jm-rcx = c1 ; jm-stk = cons #0 (cons (fromNat (jev n g jn r)) (jm-stk m)) })
+                                      (jpl-push g (jpsh g p) r (cons (fromNat (jev n g jn r)) (jm-stk m)) #0 (jpl-push g p r (jm-stk m) (fromNat (jev n g jn r)) h)))
+                              (λ c2 → jloop-nat a (jev z g a r) (λ c hx → jev q (cons a (cons jn g)) a (hx , (c , r)))
+                                         (jcx q (cons a (cons jn g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k (jm-stk m)
+                                         (λ c hx cr bd → jcx-ok q (cons a (cons jn g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) (hx , (c , r)) kdone
+                                                            (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = cons (jenc a hx) (cons (fromNat c) (cons bd (jm-stk m))) })
+                                                            (refl , (refl , jpl-body g p r (jm-stk m) h (jenc a hx) (fromNat c) bd)))
+                                         (jev n g jn r) c2))
+jcx-ok (jloop b z q) g a p r k m h =
+  jaft-seq (jrun (jcx b g jw p (kpush (kimm #0 (kpush (jcx z g a (jpsh g (jpsh g p)) (kloop (jcx q (cons a (cons jw g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k)))))) m)
+           (kpush (kimm #0 (kpush (jcx z g a (jpsh g (jpsh g p)) (kloop (jcx q (cons a (cons jw g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k)))))
+           k (jev b g jw r) (jenc a (jev (jloop b z q) g a r)) (jm-stk m)
+           (jcx-ok b g jw p r (kpush (kimm #0 (kpush (jcx z g a (jpsh g (jpsh g p)) (kloop (jcx q (cons a (cons jw g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k))))) m h)
+           (λ c1 → jaft-seqs (jrun (jcx z g a (jpsh g (jpsh g p)) (kloop (jcx q (cons a (cons jw g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k))
+                                    (JM { jm-rax = #0 ; jm-rcx = c1 ; jm-stk = cons #0 (cons (jev b g jw r) (jm-stk m)) }))
+                              (kloop (jcx q (cons a (cons jw g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k) k
+                              (jenc a (jev z g a r)) (jenc a (jev (jloop b z q) g a r))
+                              (cons #0 (cons (jev b g jw r) (jm-stk m))) (jm-stk m)
+                              (jcx-ok z g a (jpsh g (jpsh g p)) r (kloop (jcx q (cons a (cons jw g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k)
+                                      (JM { jm-rax = #0 ; jm-rcx = c1 ; jm-stk = cons #0 (cons (jev b g jw r) (jm-stk m)) })
+                                      (jpl-push g (jpsh g p) r (cons (jev b g jw r) (jm-stk m)) #0 (jpl-push g p r (jm-stk m) (jev b g jw r) h)))
+                              (λ c2 → jloop-word a (jev z g a r) (λ i hx → jev q (cons a (cons jw g)) a (hx , (i , r)))
+                                         (jcx q (cons a (cons jw g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) kdone) k (jm-stk m)
+                                         (λ c hx cr bd → jcx-ok q (cons a (cons jw g)) a (zero , (suc zero , jpsh g (jpsh g (jpsh g p)))) (hx , (fromNat c , r)) kdone
+                                                            (JM { jm-rax = jenc a hx ; jm-rcx = cr ; jm-stk = cons (jenc a hx) (cons (fromNat c) (cons bd (jm-stk m))) })
+                                                            (refl , (refl , jpl-body g p r (jm-stk m) h (jenc a hx) (fromNat c) bd)))
+                                         (jev b g jw r) c2))

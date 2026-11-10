@@ -112,8 +112,8 @@ jwcmp jeq x y = %weq x y
 jwcmp jlt x y = %wlt x y
 
 -- terms. natrec: z, and s under the predecessor and the hypothesis (hypothesis innermost); loop:
--- a bound, the initial state, and the step under the counter and the state (state innermost),
--- run for the counter 0, 1, …, bound − 1
+-- the same on a word (lib/code.cub cwelim): its value at b is s (b−1) (… (s 0 z)), the step run for
+-- the counter 0, 1, …, b − 1
 data JTm = jvar (n : Nat)
          | jlit (w : Word)
          | jop (o : JWop) (x : JTm) (y : JTm)
@@ -132,17 +132,15 @@ data JTm = jvar (n : Nat)
          | jnatrec (z : JTm) (s : JTm) (n : JTm)
          | jloop (b : JTm) (z : JTm) (s : JTm)
 
--- primitive recursion and the word loop as the language's own functions
+-- primitive recursion on Nat and on Word, as the language's own eliminators (Nat's elimination,
+-- and %welimP, which lib/std.cub's toNat and plusw are written with): the step gets the
+-- predecessor and the value there. So a definition written with either means the same term.
 jnatrec-ev : {c : Type} → c → (Nat → c → c) → Nat → c
 jnatrec-ev z s zero = z
 jnatrec-ev z s (suc n) = s n (jnatrec-ev z s n)
 
-jloop-go : {c : Type} → Word → (Word → c → c) → Nat → Word → c → c
-jloop-go b s zero i x = x
-jloop-go b s (suc k) i x = if %wlt i b then jloop-go b s k (%wsucc i) (s i x) else x
-
 jloop-ev : {c : Type} → Word → c → (Word → c → c) → c
-jloop-ev b x s = jloop-go b s (toNat b) #0 x
+jloop-ev b x s = %welimP (λ v → c) b x s
 
 -- the meaning of t at type a in context g. Each form reads the type expected and, where it does
 -- not fit, is jdef; the cases on the type are written as functions of it (jev-…), each a
