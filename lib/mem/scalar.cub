@@ -398,27 +398,27 @@ wi-rem sg a b = case dq-iszero b of
       false → mok (dq-srem a b)))
 
 -- ---------------------------------------------------------------- the binary operations on integers
-data BinOp = bo-add | bo-sub | bo-mul | bo-div | bo-rem | bo-and | bo-or | bo-xor
+data BinOp = ao-add | ao-sub | ao-mul | ao-div | ao-rem | ao-and | ao-or | ao-xor
 ni-op : BinOp → Bool → IW → UInt64 → UInt64 → MRes UInt64
 ni-op o sg w a b = case o of
-  bo-add → ni-add sg w a b
-  bo-sub → ni-sub sg w a b
-  bo-mul → ni-mul sg w a b
-  bo-div → ni-div sg w a b
-  bo-rem → ni-rem sg w a b
-  bo-and → mok (u64and a b)
-  bo-or → mok (u64or a b)
-  bo-xor → mok (u64xor a b)
+  ao-add → ni-add sg w a b
+  ao-sub → ni-sub sg w a b
+  ao-mul → ni-mul sg w a b
+  ao-div → ni-div sg w a b
+  ao-rem → ni-rem sg w a b
+  ao-and → mok (u64and a b)
+  ao-or → mok (u64or a b)
+  ao-xor → mok (u64xor a b)
 wi-op : BinOp → Bool → DQ → DQ → MRes DQ
 wi-op o sg a b = case o of
-  bo-add → wi-add sg a b
-  bo-sub → wi-sub sg a b
-  bo-mul → wi-mul sg a b
-  bo-div → wi-div sg a b
-  bo-rem → wi-rem sg a b
-  bo-and → mok (dq-and a b)
-  bo-or → mok (dq-or a b)
-  bo-xor → mok (dq-xor a b)
+  ao-add → wi-add sg a b
+  ao-sub → wi-sub sg a b
+  ao-mul → wi-mul sg a b
+  ao-div → wi-div sg a b
+  ao-rem → wi-rem sg a b
+  ao-and → mok (dq-and a b)
+  ao-or → mok (dq-or a b)
+  ao-xor → mok (dq-xor a b)
 int-op : BinOp → Bool → IW → SV → SV → MRes SV
 int-op o sg w a b = case w of
   iw128 → mr-bind (sv-as-w a) (λ x → mr-bind (sv-as-w b) (λ y → mr-map sv-of-dq (wi-op o sg x y)))
@@ -618,10 +618,10 @@ f64-narrow x =
 -- IEEE 754 (IEC 60559): no operation is undefined; a division by zero is an infinity or a NaN
 f64-op : BinOp → Float64 → Float64 → MRes Float64
 f64-op o a b = case o of
-  bo-add → mok (f64add a b)
-  bo-sub → mok (f64sub a b)
-  bo-mul → mok (f64mul a b)
-  bo-div → mok (f64div a b)
+  ao-add → mok (f64add a b)
+  ao-sub → mok (f64sub a b)
+  ao-mul → mok (f64mul a b)
+  ao-div → mok (f64div a b)
   _ → mstop st-ill-typed
 f32-op : BinOp → Float32 → Float32 → MRes Float32
 f32-op o a b = mr-map f64-narrow (f64-op o (f32-widen a) (f32-widen b))

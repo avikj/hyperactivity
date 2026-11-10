@@ -109,6 +109,34 @@ The files load in that order (each needs the ones before it). Names are prefixed
 `sk-`, `sv-`, `ub-`, …) because `Res`, `ok`, `refused`, `Mem`, `Opt` are taken by the library:
 the result type of this layer is `MRes`, not `Res`.
 
+## Redesign log (items 6 to 11)
+
+- Item 6 done in part: `lib/mem/sig.cub` checks (library + target + scalar + sig:
+  `1585 passed, 0 failed`). It has `AKind`; `MemC` (13 commands: `m-alloc m-release m-free
+  m-load m-store m-ptr-add m-ptr-diff m-ptr-cmp m-ptr-int m-int-ptr m-memmove m-memcpy
+  m-memset`) with `m-resp`; the signature is named `MemSig` (`MemS` is lib/proc.cub's);
+  `MK S = MemSig + S` (what a reader's process is over) and `MT S = S + W` (what the flat
+  handler's is over, and what is observed); `r-bind` (runs ending in `MRes`); the refinement
+  relation `m-Ref Q t u` (t a run of the meaning ending in `MRes`, u a run of the machine:
+  where t fails u is unconstrained, otherwise same commands, equal responses, results related
+  by Q) with `m-ref-bind` (up to bind), `m-ref-refl`, and `m-NoFail`.
+- Design fixed for the rest (the reason for each choice is the theorem of item 10):
+  a pointer is an address on both sides (`mp-null`, `mp-addr x`, `mp-fn f`; readers never look
+  inside), so the two handlers give equal responses and lib/obs.cub's context rule shape
+  applies; an allocation's address is the response of the world's `w-alloc`, observed on both
+  sides; the abstract memory `AMem` is an allocation table (base, size, alignment, live, kind),
+  a map of written marks, and the byte map `Word → Word`; `mem-std c` is: a check on the table
+  and marks (failing with the undefined behaviour), then **the flat handler's own tree for c
+  run on the byte map**, then the bookkeeping (failing if the world's placement overlaps an
+  allocation). The relation between an abstract memory and a flat one is then `am-data s ≡ fm`,
+  each command's lemma is one generic lemma (`std-ref`), and the theorem is the context rule.
+  The `Bytes n`-with-proofs representation of memory.cub is deleted with this: no law of
+  lib/prim.cub relates overlapping 8-byte windows (`load64` at o and at o+1), so "bytes agree"
+  could not have been proved of it (Found).
+- Renames forced by the library as it now is: `lib/cxx/ast.cub` (in `make library` since
+  `4d04760c`) binds `bo-add bo-sub bo-mul bo-div bo-rem bo-and bo-or bo-xor`, so scalar.cub's
+  `BinOp` constructors are now `ao-add … ao-xor`. Readers using `bo-*` as `BinOp` must rename.
+
 ## Needs from track A
 
 - (not blocking; cost of the compiler) `#jit sum-at` of `experiments/mem/sum.cub` takes
@@ -375,9 +403,10 @@ comparison `i < n`, the bounds test of `p[i]` against the array, the fuel's coun
 
 ## Next step
 
-Item 6: read `lib/obs.cub`, `experiments/obs/two-compilers.cub`, and how tracks R and F use
-`ev-*` (`grep -n "ev-" lib/lang/rust/*.cub lib/cxx/*.cub`); then write `lib/mem/sig.cub`
-(`MemS` with the pointer type a parameter), check it after memory.cub/layout.cub, commit. Then
-items 7 to 11 in order. (`experiments/mem/sum.cub` as committed is the superseded design's
-experiment; an uncommitted edit making its `n` total, `uq-sx iw32 (uq-of-word n)`, was being
-re-measured when the correction arrived: commit it only with its numbers.)
+Write `lib/mem/flat.cub` (after sig.cub): pure pointer functions (`mp-address`, `fl-ptr-add`,
+…), `sv-enc`/`sv-dec`, the flat handler `mem-flat : Target → (c : MemC) → Step W (m-resp c)`,
+the model of the machine's memory `FM = Word → Word` with `fm-obs : o-ObsOf (MT S) (MT S) FM`
+(w-load/w-store/w-load8/w-store8 on the map, everything else observed). Then rewrite
+`lib/mem/memory.cub` (`AMem`, the checks, `mem-std`, `std-ref`, `mem-sound`), then
+layout.cub's access part as pure offsets, monad.cub over `MK S`, the "From track M" line in
+tracks/R-rust.md, and experiments/mem/sum.cub.
