@@ -79,6 +79,19 @@ Files you own: `tools/clang2cub.py`, `lib/cxx/ast.cub`, `experiments/cxx/**`, th
   8 records with layouts of 8. (Numbers are superseded by the acceptance record below when the
   work is complete.)
 
+- `experiments/cxx/second.cpp` (the second acceptance unit: `Ring<T, N>` instantiated as
+  `Ring<Order, 16>` and `Ring<std::uint32_t, 4>`, member initializer lists, a destructor,
+  `new`/`delete`, a call through a pointer to member function from a C array of structs, a
+  union with an unnamed struct member, bit-fields, `do`/`while`, `break`/`continue`,
+  `sizeof`/`alignof`, compound assignment, `?:`, a string literal, pointer arithmetic,
+  `__int128` and `__builtin_mul_overflow`) compiles clean and imports; `second.cub` checks
+  together with `book.cub` (3136 nodes, 43 declarations, 8 records with layouts).
+- Lambda captures: a closure class's fields say what each holds (`ccap-var id` / `ccap-this`),
+  read from the LambdaExpr's capture initializers (the JSON marks neither the captures nor
+  the references to captured variables inside the body).
+- Name resolution is strict: a candidate declaration that cannot be read is never skipped
+  (only declarations inside uninstantiated templates are excluded as candidates).
+
 ## Found
 
 - The checker has no mutual `data` (`mutual` followed by `data`: "unexpected data") and rejects a
@@ -100,7 +113,6 @@ Files you own: `tools/clang2cub.py`, `lib/cxx/ast.cub`, `experiments/cxx/**`, th
 
 ## Next step
 
-Review `experiments/cxx/book.cub` against the JSON for anything read wrongly, then write the
-second unit `experiments/cxx/second.cpp` (the list under Acceptance), import it, and add a
-rule for each kind it stops on. Then prune schema constructors neither unit uses, regenerate
-`lib/cxx/ast.cub`, and record the acceptance numbers and the full kind lists here.
+Prune schema constructors neither unit uses (the rule: a constructor exists only for a kind
+met), regenerate `lib/cxx/ast.cub`, re-import both units, run the acceptance command with the
+full library and `CUBICAL_NOCACHE=1`, and record the numbers and the full kind lists here.

@@ -238,10 +238,17 @@ SCHEMA = [
         ('cbw-none', []),
         ('cbw-bits', [('n', 'Word')]),
     ]),
+    ('CCapture', "what a field of a lambda's closure class holds: inside the lambda's body a "
+                 'reference to that variable of the enclosing function, or `this`, is this field', [
+        ('ccap-none', []),
+        ('ccap-var', [('id', 'Word')]),
+        ('ccap-this', []),
+    ]),
     ('CField', 'FieldDecl: offset in bits from the record layout; the default member '
                'initializer (ce-nil when absent)', [
         ('cfield', [('id', 'Word'), ('name', 'CStr'), ('t', 'CType'), ('offset-bits', 'Word'),
-                    ('width', 'CBitWidth'), ('mutable', 'Bool'), ('init', 'CExpr')]),
+                    ('width', 'CBitWidth'), ('mutable', 'Bool'), ('capture', 'CCapture'),
+                    ('init', 'CExpr')]),
     ]),
     ('CBase', 'a direct base class with its offset in bytes from the record layout', [
         ('cbase', [('base', 'Word'), ('offset', 'Word'), ('primary', 'Bool'),
@@ -591,7 +598,7 @@ class TypeParser:
                     self.i += 3
                     base = ('builtin', 'nullptr')
                 else:
-                    raise Dependent('decltype in %r' % self.s)
+                    self.fail('decltype of an expression: no rule yet')
             elif k == 'id' and x == 'auto' and base is None and not kws:
                 base = ('auto',)        # stands only before a trailing return type
             elif (k in ('id', 'special') or (k, x) == ('p', '::')) and base is None and not kws:
@@ -770,7 +777,7 @@ class TypeParser:
                                 self.i += 3
                                 noex = False
                             else:
-                                raise Dependent('noexcept(expression) in %r' % self.s)
+                                self.fail('noexcept of an expression: no rule yet')
                     elif k == 'id' and x == 'throw' and self.at('(', 1) and self.at(')', 2):
                         self.i += 2
                         noex = True
@@ -912,6 +919,7 @@ class Unit:
         self.nodes, self.parent = {}, {}
         self.by_name = {}                   # identifier -> type entities anywhere in the unit
         self.lambdas = {}                   # "(lambda at ...)" -> closure records
+        self.unnamed = {}                   # "file:line:col" -> the unnamed classes and enums there
         self.ns_nodes = {}                  # qualified namespace name -> its NamespaceDecls
         self.redecl = {}                    # id -> id of the previous declaration
         last = {'file': None, 'line': None}
@@ -936,9 +944,16 @@ class Unit:
                 elif 'expansionLoc' in n['loc']:
                     n['_col'] = n['loc']['expansionLoc'].get('col')
             if 'range' in n:
+                if 'begin' in n['range']:
+                    locs(n['range']['begin'])
+                    b = n['range']['begin']
+                    b = b.get('expansionLoc', b)
+                    if n.get('kind') in RECORD_KINDS + ('EnumDecl',) and 'name' not in n and 'col' in b:
+                        self.unnamed.setdefault('%s:%s:%s' % (last['file'], last['line'], b['col']), []).append(n)
                 locs(n['range'])
             if 'id' in n:
                 self.nodes[n['id']] = n
+                n['_order'] = len(self.nodes)
             self.parent[id(n)] = par
             k = n.get('kind')
             if k in TYPE_ENTITY_KINDS and n.get('name'):
@@ -1005,6 +1020,43 @@ class Unit:
             sem = n.get('parentDeclContextId')
             n = self.nodes[sem] if sem in self.nodes and parts == [] else self.parent[id(n)]
         return '::'.join(reversed(parts))
+
+    def display_name(self, n):
+        """A name for the comments of the output (nothing is resolved by it)."""
+        parts = []
+        while n is not None and n.get('kind') != 'TranslationUnitDecl':
+            k = n.get('kind')
+            if k in SCOPE_KINDS or not parts:
+                nm = n.get('name') or ('(lambda)' if self.is_lambda(n) else '(unnamed)')
+                if k == 'ClassTemplateSpecializationDecl':
+                    try:
+                        nm += '<%s>' % ', '.join(self.show_type(x) if kd == 'type' else str(x) for kd, x in self.template_args(n))
+                    except (Dependent, Stop):
+                        nm += '<...>'
+                parts.append(nm)
+            sem = n.get('parentDeclContextId')
+            n = self.nodes[sem] if sem in self.nodes and len(parts) == 1 else self.parent[id(n)]
+        return '::'.join(reversed(parts))
+
+    def show_type(self, t):
+        k = t[0]
+        if k == 'builtin':
+            return t[1]
+        if k in ('record', 'enum'):
+            return self.display_name(self.nodes[t[1]])
+        if k == 'ptr':
+            return self.show_type(t[1]) + ' *'
+        if k == 'lref':
+            return self.show_type(t[1]) + ' &'
+        if k == 'rref':
+            return self.show_type(t[1]) + ' &&'
+        if k == 'array':
+            return '%s[%d]' % (self.show_type(t[1]), t[2])
+        if k == 'qual':
+            return ' '.join(q for q, on in zip(('const', 'volatile', 'restrict'), t[1:4]) if on) + ' ' + self.show_type(t[4])
+        if k == 'func':
+            return '%s (%s)' % (self.show_type(t[1]), ', '.join(self.show_type(p) for p in t[2]))
+        return type_str(t)
 
     def where(self, n):
         while n is not None and '_file' not in n:
@@ -1120,6 +1172,10 @@ class Unit:
             if len(comps) != 1:
                 stop('a member of a lambda named in a type: %r' % whole)
             return ('record', self.lambda_record(first, scope)['id'])
+        if comps[-1][0].startswith(('(unnamed ', '(anonymous ')) and comps[-1][0] != '(anonymous namespace)':
+            return self.unnamed_type(comps, scope, whole)
+        if first == '(anonymous namespace)':
+            return self.resolve_from(('ns', first), comps[1:], scope, whole, entity_given=False)
         if first.startswith('('):
             stop('type string not read: %r (an unnamed entity %r: no rule yet)' % (whole, first))
         if hint is not None and len(comps) >= 1 and comps[-1] == (hint.get('name'), None):
@@ -1135,36 +1191,76 @@ class Unit:
                     break
             via_scope = bool(found)
             if not found:
+                # not in scope where the type is used: the string was written elsewhere (a
+                # member typedef named in a signature). Every declaration of the name in the
+                # unit is a candidate, and they must all mean the same type.
                 found = self.by_name.get(first, [])
-                if not found:
-                    stop('a name in a type is not declared anywhere in the unit: %r in %r (used at %s)'
-                         % (first, whole, self.where(scope)))
+            # a declaration inside a template that is not instantiated is never what a name in
+            # instantiated code means
+            found = [e for e in found if not self.is_pattern(e)]
+            if not found:
+                stop('a name in a type is not declared anywhere in the unit outside templates: %r in %r (used at %s)'
+                     % (first, whole, self.where(scope)))
             ents, rest = sorted(set(self.entity_key(e) for e in found)), comps
         results = set()
-        errors = []
         for ent in ents:
-            try:
-                results.add(self.resolve_from(ent, rest, scope, whole, entity_given=(first != '')))
-            except Dependent as e:
-                errors.append(str(e))
+            results.add(self.resolve_from(ent, rest, scope, whole, entity_given=(first != '')))
         if len(results) != 1:
-            if not results:
-                raise Dependent('%r in %r: %s' % (first, whole, '; '.join(errors)))
             stop('a name in a type has several meanings and the scope does not choose: %r in %r (used at %s): %s'
                  % (first, whole, self.where(scope), sorted(type_str(r) for r in results)))
-        if via_scope and first not in ('std',):
+        if via_scope:
             self.note_scope_dependence(first)
         return results.pop()
+
+    def unnamed_type(self, comps, scope, whole):
+        """`(unnamed struct at file:line:col)`, possibly qualified: the class or enum declared
+        there. A template and its instantiations declare one each at the same place; the
+        qualifier says which."""
+        m = re.match(r'\((?:unnamed|anonymous)(?: (struct|class|union|enum))? at (.*)\)$', comps[-1][0])
+        if not m:
+            stop('type string not read: %r (%r)' % (whole, comps[-1][0]))
+        cands = [c for c in self.unnamed.get(m.group(2), []) if not self.is_pattern(c)]
+        if len(cands) > 1 and len(comps) > 1:
+            outer = self.resolve_name(comps[:-1], scope, None, whole)
+            if outer[0] == 'record':
+                cands = [c for c in cands if self.parent[id(c)] is self.nodes[outer[1]]]
+        if len(cands) != 1:
+            stop('type string not read: %r (%d unnamed declarations at that place)' % (whole, len(cands)))
+        c = self.node(cands[0]['id'])
+        return ('enum' if c['kind'] == 'EnumDecl' else 'record', c['id'])
+
+    def is_pattern(self, e):
+        """Is the declaration inside a template that is not instantiated (or a partial
+        specialization)? An instantiation is listed under its template; that is not inside."""
+        if e.get('kind') == 'ClassTemplatePartialSpecializationDecl':
+            return True
+        prev, n = e, self.parent[id(e)]
+        while n is not None:
+            if n.get('kind') in TEMPLATE_KINDS:
+                inst = prev.get('kind') == 'ClassTemplateSpecializationDecl' or (
+                    prev.get('kind') in FUNCTION_KINDS and any(c.get('kind') == 'TemplateArgument' for c in prev.get('inner', [])))
+                if not inst and not (prev is e and e.get('kind') in ('TypeAliasDecl',) and False):
+                    return True
+            prev, n = n, self.parent[id(n)]
+        return False
 
     def note_scope_dependence(self, ident):
         """Record the identifiers that name different types in different scopes of the unit:
         for these the answer rests on this file's lookup following C++'s from the place of use."""
         if ident in self.global_memo:
             return
-        keys = set(self.entity_key(e) for e in self.by_name.get(ident, []))
-        keys = set(k for k in keys if self.nodes.get(k[1], {}).get('kind') != 'ClassTemplatePartialSpecializationDecl')
-        self.global_memo[ident] = len(keys)
-        if len(keys) > 1:
+        self.global_memo[ident] = None
+        types = set()
+        for e in self.by_name.get(ident, []):
+            if self.is_pattern(e):
+                continue
+            key = self.entity_key(e)
+            try:
+                types.add(key if key[0] == 'ns' or self.nodes[key[1]]['kind'] in ('ClassTemplateDecl', 'TypeAliasTemplateDecl')
+                          else self.entity_type(key, ident))
+            except (Dependent, Stop) as x:
+                types.add(('unread', str(x)))
+        if len(types) > 1:
             self.scope_dependent.add(ident)
 
     def resolve_from(self, ent, comps, scope, whole, entity_given):
@@ -1176,6 +1272,10 @@ class Unit:
             i = 1
         while i < len(comps):
             ident, args = comps[i]
+            if cur[0] == 'ns' and ident == '(anonymous namespace)':
+                cur = ('ns', (cur[1] + '::' if cur[1] else '') + ident)
+                i += 1
+                continue
             if cur[0] == 'ns':
                 found = self.lookup_ctx(cur, ident)
             else:
@@ -1186,7 +1286,7 @@ class Unit:
             keys = sorted(set(self.entity_key(e) for e in found))
             if len(keys) != 1:
                 if not keys:
-                    raise Dependent('no member %r in %r' % (ident, whole))
+                    stop('type string not read: %r (no type member %r)' % (whole, ident))
                 stop('type string not read: %r (%r names %d things)' % (whole, ident, len(keys)))
             cur = self.apply_args(keys[0], args, scope, whole)
             i += 1
@@ -1199,7 +1299,7 @@ class Unit:
             stop('type string not read: %r (template arguments on a namespace)' % whole)
         n = self.nodes[ent[1]]
         if n['kind'] == 'TypeAliasTemplateDecl':
-            raise Dependent('alias template %s in %r' % (n.get('name'), whole))
+            stop('type string not read: %r (the alias template %s: no rule yet)' % (whole, n.get('name')))
         if n['kind'] != 'ClassTemplateDecl':
             stop('type string not read: %r (%s is a %s, not a class template)' % (whole, n.get('name'), n['kind']))
         return ('decl', self.specialization(n, args, whole)['id'])
@@ -1215,7 +1315,7 @@ class Unit:
             return ('enum', n['id'])
         if k in ('TypedefDecl', 'TypeAliasDecl'):
             return self.typedef_type(n)
-        raise Dependent('%s %s used as a type in %r' % (k, n.get('name'), whole))
+        stop('type string not read: %r (the %s %s where a type is expected)' % (whole, k, n.get('name')))
 
     def typedef_type(self, n):
         i = n['id']
@@ -1303,7 +1403,7 @@ class Unit:
         cands = {s['id']: s for s in (exact or prefix)}
         if len(cands) != 1:
             if not cands:
-                raise Dependent('no specialization of %s with the arguments in %r' % (tmpl.get('name'), whole))
+                stop('type string not read: %r (no specialization of %s with these arguments is in the unit)' % (whole, tmpl.get('name')))
             stop('type string not read: %r (%d specializations of %s share the arguments printed; the defaults are not printed)'
                  % (whole, len(cands), tmpl.get('name')))
         r = list(cands.values())[0]
@@ -1326,6 +1426,8 @@ class Unit:
             s = tobj['qualType']
         else:
             s = tobj.get('desugaredQualType', tobj['qualType'])
+        if tobj.get('desugaredQualType') == 'std::nullptr_t':
+            return ('builtin', 'nullptr')       # how Clang prints the builtin type of nullptr
         if s in PLACEHOLDERS:
             return ('builtin', PLACEHOLDERS[s])
         if s.startswith('<') or s == 'NULL TYPE':
@@ -1377,16 +1479,7 @@ class Unit:
             name = [k for k, v in self.lambdas.items() if any(x is rec for x in v)][0]
             blocks = self.layout_blocks.get(name, [])
         else:
-            blocks = []
-            for name, bs in self.layout_blocks.items():
-                if name.split('<')[0].split('::')[-1].strip() != rec.get('name'):
-                    continue
-                try:
-                    t = TypeParser(self, name, self.tu, None).whole()
-                except (Dependent, Stop):
-                    continue
-                if t == ('record', rec['id']):
-                    blocks += bs
+            blocks = self.blocks_of(self.layout_blocks, 'layout').get(rec['id'], [])
         if not blocks:
             stop('no layout in the record-layout dump for %s (declared at %s)'
                  % (self.qualified_name(rec) or rec.get('name'), self.where(rec)))
@@ -1425,6 +1518,23 @@ class Unit:
         self.layout_memo[rec['id']] = r
         return r
 
+    def blocks_of(self, by_name, what):
+        """The blocks of a dump by the class each is headed with. A heading that does not read
+        as a class of the unit (a template printed with its parameters) heads no class; a class
+        that is written and finds no block stops the import where it is needed."""
+        memo = self.__dict__.setdefault('_blocks_' + what, None)
+        if memo is None:
+            memo = {}
+            for name, bs in by_name.items():
+                try:
+                    t = TypeParser(self, name, self.tu, None).whole()
+                except (Dependent, Stop):
+                    continue
+                if t[0] == 'record':
+                    memo.setdefault(t[1], []).extend(bs)
+            self.__dict__['_blocks_' + what] = memo
+        return memo
+
     def is_lambda(self, rec):
         return bool(rec.get('definitionData', {}).get('isLambda'))
 
@@ -1450,16 +1560,7 @@ class Unit:
         """None, or (address point, [(entry kind, method node or value)])."""
         if rec['id'] in self.vtable_memo:
             return self.vtable_memo[rec['id']]
-        blocks = []
-        for name, bs in self.vtable_blocks.items():
-            if name.split('<')[0].split('::')[-1].strip() != rec.get('name'):
-                continue
-            try:
-                t = TypeParser(self, name, self.tu, None).whole()
-            except (Dependent, Stop):
-                continue
-            if t == ('record', rec['id']):
-                blocks += bs
+        blocks = self.blocks_of(self.vtable_blocks, 'vtable').get(rec['id'], [])
         if not blocks:
             self.vtable_memo[rec['id']] = None
             return None
@@ -1995,12 +2096,19 @@ class Unit:
         style = {None: 'none', 'call': 'parens', 'list': 'braces'}.get(n.get('initStyle'), '?')
         if style == '?':
             stop('new-expression initializer style %r at %s' % (n.get('initStyle'), self.where(n)))
+        # the children are: the array size (an array new), the placement arguments, the initializer
         rest = list(ks)
         if n.get('isArray'):
             size, rest = rest[0], rest[1:]
-        if style != 'none' or (rest and not n.get('isPlacement')):
+        nplace = 0
+        if n.get('isPlacement'):
+            if 'operatorNewDecl' not in n:
+                stop('a placement new without its operator new, at %s' % self.where(n))
+            od = self.node(n['operatorNewDecl']['id'])
+            nplace = len([c for c in od.get('inner', []) if c.get('kind') == 'ParmVarDecl']) - 1
+        if len(rest) == nplace + 1:
             init, rest = rest[-1], rest[:-1]
-        if rest and not n.get('isPlacement'):
+        if len(rest) != nplace or (style != 'none' and init is None):
             stop('a new-expression with children this rule does not place, at %s' % self.where(n))
         opnew = None
         if 'operatorNewDecl' in n:
@@ -2168,11 +2276,10 @@ class Unit:
             w = self.ids[n['id']]
             self.defined.add(w)
             self.decls.append((w, self.decl(n)))
-            q = self.qualified_name(self.parent[id(n)] if n['kind'] not in FUNCTION_KINDS or 'parentDeclContextId' not in n
-                                    else self.nodes[n['parentDeclContextId']])
-            self.labels.append('%s %s%s%s' % (n['kind'], q + '::' if q else '', n.get('name', '(unnamed)'),
-                                              ' : ' + n['type']['qualType'] if 'type' in n else ''))
-        static_ids = [W(self.ids[s['id']]) for s in statics if s['id'] in self.ids]
+            self.labels.append('%s %s%s' % (n['kind'], self.display_name(n),
+                                            ' : ' + n['type']['qualType'] if 'type' in n else ''))
+        written = [n for n in self.queue if n['kind'] == 'VarDecl']
+        static_ids = [W(self.ids[n['id']]) for n in sorted(written, key=lambda n: n['_order'])]
         missing = sorted(set(self.ids.values()) - self.defined)
         if missing:
             names = [self.nodes[c].get('name') for c, w in self.ids.items() if w in missing]
@@ -2183,7 +2290,9 @@ class Unit:
     def roots(self):
         """What the unit must provide: the functions defined in the main file that another unit
         can call (external linkage, not inline, not a template), and every variable of static
-        storage defined in it (its initialization runs whether or not it is referred to)."""
+        storage defined in it (its initialization runs whether or not it is referred to).
+        The unit's `statics` are all variables of static storage written, these and the ones
+        reached in headers, in the order of their definitions."""
         roots, statics = [], []
 
         def scan(n, internal):
@@ -2311,6 +2420,7 @@ class Unit:
             stop('the layout of %s lists %d bases, the class %d' % (n.get('name'), len(lbases), len(bases)))
         fields = []
         fdecls = [c for c in self.attrs(n) if c.get('kind') == 'FieldDecl']
+        captures = self.captures(n, fdecls) if self.is_lambda(n) else {}
         placed = [c for c in fdecls if not (c.get('isBitfield') and 'name' not in c and self.bit_width(c) == 0)]
         if len(placed) != len(lfields):
             stop('the layout of %s lists %d fields, the class %d' % (n.get('name'), len(lfields), len(placed)))
@@ -2338,7 +2448,7 @@ class Unit:
             elif ks:
                 stop('a field with children this rule does not place: %s::%s' % (n.get('name'), c.get('name')))
             fields.append(T('cfield', W(w), S(c.get('name', '')), self.tyof(c), W(offsets[c['id']]),
-                            width, bool(c.get('mutable')), init))
+                            width, bool(c.get('mutable')), captures.get(c['id'], T('ccap-none')), init))
         vt = self.vtable_of(n)
         if vt is None:
             if vptr is not None or any(self.layout_of(self.nodes[b[0]])[1] is not None for b in lbases):
@@ -2378,6 +2488,34 @@ class Unit:
         lay = T('clayout', W(sizes['sizeof']), W(sizes['align']), W(sizes['dsize']), W(sizes['nvsize']),
                 W(sizes['nvalign']), T('cvp-none') if vptr is None else T('cvp-at', W(vptr)))
         return T('crecord', W(self.ids[n['id']]), S(name), T('ctg-' + tag), self.is_lambda(n), bases, fields, lay, vtable)
+
+    def captures(self, rec, fdecls):
+        """For a closure class: field id -> what it captures. The JSON lists the captures only
+        as their initializers in the LambdaExpr, one per field in order; a capture of a
+        variable is initialized from a reference to it (through the copy of a by-value
+        capture), a capture of `this` from `this`."""
+        lam = self.parent[id(rec)]
+        if lam.get('kind') != 'LambdaExpr':
+            stop('a closure class outside a LambdaExpr: at %s' % self.where(rec))
+        inits = lam['inner'][1:-1]
+        if len(inits) != len(fdecls):
+            stop('the lambda at %s has %d captures and %d fields' % (self.where(rec), len(inits), len(fdecls)))
+        out = {}
+        for f, e in zip(fdecls, inits):
+            while True:
+                k = e.get('kind')
+                if k in ('ImplicitCastExpr', 'ParenExpr') or (k == 'CXXConstructExpr' and len(e.get('inner', [])) == 1) or \
+                        (k == 'UnaryOperator' and e.get('opcode') == '*' and e['inner'][0].get('kind') == 'CXXThisExpr'):
+                    e = e['inner'][0]
+                else:
+                    break
+            if k == 'CXXThisExpr':
+                out[f['id']] = T('ccap-this')
+            elif k == 'DeclRefExpr' and e['referencedDecl']['kind'] in ('VarDecl', 'ParmVarDecl'):
+                out[f['id']] = T('ccap-var', W(self.idof(e['referencedDecl']['id'])))
+            else:
+                stop('the lambda at %s has a capture initialized by a %s (an init-capture): no rule yet' % (self.where(rec), k))
+        return out
 
     def is_abstract_unused(self, n):
         return False

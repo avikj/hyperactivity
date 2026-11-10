@@ -212,9 +212,11 @@ data CStmt =
 data CTag = ctg-struct | ctg-class | ctg-union
 -- CBitWidth: a bit-field width
 data CBitWidth = cbw-none | cbw-bits (n : Word)
+-- CCapture: what a field of a lambda's closure class holds: inside the lambda's body a reference to that variable of the enclosing function, or `this`, is this field
+data CCapture = ccap-none | ccap-var (id : Word) | ccap-this
 -- CField: FieldDecl: offset in bits from the record layout; the default member initializer (ce-nil when absent)
 data CField =
-    cfield (id : Word) (name : CStr) (t : CType) (offset-bits : Word) (width : CBitWidth) (mutable : Bool) (init : CExpr)
+    cfield (id : Word) (name : CStr) (t : CType) (offset-bits : Word) (width : CBitWidth) (mutable : Bool) (capture : CCapture) (init : CExpr)
 -- CBase: a direct base class with its offset in bytes from the record layout
 data CBase = cbase (base : Word) (offset : Word) (primary : Bool) (virtual : Bool)
 -- CVPtr: the vtable pointer's offset in bytes, when the record has its own
