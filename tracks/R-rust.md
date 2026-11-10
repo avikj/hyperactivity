@@ -47,11 +47,52 @@ uses `core`/`std` only. Find which MIR output this toolchain gives (`rustc --emi
   ground for calling them the same component).
 
 ## Needs from track A
+
+(none)
+
 ## Done
+
+- **Toolchain** (recorded): `rustc 1.97.0 (2d8144b78 2026-07-07)`, stable, LLVM 22.1.6, host
+  `x86_64-unknown-linux-gnu`, in `/root/.cargo/bin`. `--emit=mir` works on stable and is what is
+  used. `-Z` flags (`-Zunpretty=mir`, `-Zprint-type-sizes`, `-Zprint-mono-items`) are refused
+  on stable unless `RUSTC_BOOTSTRAP=1` is set; with it they work. No `rust-src`: the MIR of
+  `core`/`std` functions is not available as separate bodies, so the dump is taken with `-O`
+  (MIR inlining brings the `core` bodies into the crate's own; see Limits).
+- **`experiments/rust/book.rs`** (245 lines), the twin of `experiments/cxx/book.cpp`: `#[repr(u8)]
+  enum Side`, `Price` with derived comparisons and `impl Sub`, `#[repr(C, packed)] WireMsg`
+  decoded from `&[u8]`, `Book<const N: usize>` with `[Level; N]` and add/reduce/reset, a closure,
+  `iter_mut` loops, `checked_sub` and `wrapping_add`/`wrapping_sub`, `match` on a byte and on
+  enums, `trait Handler` called through `&mut dyn Handler`, a `static mut` handler,
+  `#[no_mangle] pub extern "C" fn on_message(p: *const u8, n: usize) -> i64`.
+- **The pair is the same function on the recorded inputs.** `experiments/rust/book_out.c` prints
+  every answer; `experiments/rust/gen_messages.py COUNT SEED` writes the messages. Commands
+  (from `experiments/rust`, outputs in a scratch directory `$B`):
+  `rustc --edition=2021 --crate-type=staticlib -O -Cpanic=abort book.rs -o $B/libbook.a;
+  clang -O2 book_out.c $B/libbook.a -o $B/book_out_rs;
+  clang++ -std=c++20 -O2 -fno-exceptions -fno-rtti -c ../cxx/book.cpp -o $B/book.o;
+  clang -O2 book_out.c $B/book.o -o $B/book_out_cxx;
+  python3 gen_messages.py 100000 1 > $B/m1.bin;
+  $B/book_out_rs < $B/m1.bin | sha256sum; $B/book_out_cxx < $B/m1.bin | sha256sum`.
+  Result (clang 18.1.3, rustc 1.97.0): 100,000 messages (seed 1), the two outputs byte-identical,
+  sha256 `1422f7495869b550…` (3,983 answers `-2`, the rest spreads and `-1`); with `n = 21`
+  passed (`book_out_* 21`) both answer `-3` 100,000 times; 1,000,000 messages (seed 2) also
+  byte-identical, sha256 `896e0075f0f2745f…`.
+
 ## Found
+
 ## Limits
+
+- Signed subtraction of prices: `book.cpp` computes `ticks - o.ticks` on `int64_t` (undefined on
+  overflow in C++), `book.rs` uses `wrapping_sub`. The binaries agree on all inputs run
+  (including random 64-bit prices) because clang emits a plain `sub`; at the level of the two
+  standards the C++ one is defined on fewer inputs.
+- Out-of-range indices: `book.rs` has bounds checks that abort (`-Cpanic=abort`); `book.cpp`
+  has none. No input reaches them (indices are below `N` by construction).
 
 ## Next step
 
-Record `rustc --version` and which MIR flags work; write `book.rs` once track C's `book.cpp`
-is in the repo (pull; it is at `experiments/cxx/book.cpp`); commit.
+Write `lib/lang/rust/ast.cub` (`RTy`, `RPlace`, `ROperand`, `RRvalue`, `RStmt`, `RTerm`, `RBody`,
+`RCrate`; lists as own constructors, since `List D` inside `data D` and mutual data are refused:
+see C-clang.md Found), check it after the library, then `tools/mir2cub.py`: run
+`rustc --edition=2021 --crate-type=lib -O -Cpanic=abort --emit=mir experiments/rust/book.rs`,
+parse every body reachable from `on_message`, stop on anything unhandled.
