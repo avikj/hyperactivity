@@ -59,60 +59,270 @@ Files you own: `tools/clang2cub.py`, `lib/cxx/ast.cub`, `experiments/cxx/**`, th
 
 ## Needs from track A
 
-(none yet)
+1. `Makefile`: add `lib/cxx/ast.cub` to `LIB` so `make library` checks it. It needs only
+   `lib/prelude.cub` … `lib/std.cub` and `lib/prim.cub` (it uses `List`, `Word`, `wadd`, `Bytes`,
+   `bytes`), so it can stand anywhere after `lib/prim.cub`; at the end is simplest:
+   `... lib/x86.cub lib/elf.cub lib/cxx/ast.cub`. Cost measured: 35.1M steps, about 25 s (see
+   Found 6 — most of it is the checker re-walking the types a `data` mentions).
+2. Mutual `data` and/or `List D` as a field of `data D` (Found 1). With either, the in-type
+   list constructors (`ct-nil`/`ct-cons`, `ce-nil`/`ce-cons`, `cs-nil`/`cs-cons`) become the
+   library's `List`; the change in `tools/clang2cub.py` is `INLIST`, `inlist()` and the field
+   types in `SCHEMA`, nothing else.
+3. A byte-string literal, or `store8` in `lib/prim.cub` (Found 2). `lib/cxx/ast.cub` declares
+   its own `primitive cstr-put` (`%store8`) meanwhile; it is one more line in `#trusted`.
 
 ## Done
 
-- `experiments/cxx/book.cpp` (207 lines) and `experiments/cxx/book_main.c` written. Builds clean with
-  `clang++ -std=c++20 -O2 -fno-exceptions -fno-rtti -Wall -Wextra -c book.cpp` (clang 18.1.3) and
-  `clang -O2 book_main.c book.o`. On 1,000,000 random 22-byte messages (50% add, 25% cancel,
-  ~25% execute, 0.1% reset, prices 994..1006) the reference binary answers `sum -11432484` at
-  about 71 ns/message on this (shared, 2-core) machine.
+Everything under "What is built" is built and both acceptance lines are met. Commands, from
+`scoped-machine/` (L is the library list, `make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p'`):
 
-- `tools/clang2cub.py` written and `lib/cxx/ast.cub` generated from its schema
-  (`python3 tools/clang2cub.py --emit-ast > lib/cxx/ast.cub`; the schema in the tool is the one
-  description of the constructors). First import of `book.cpp` checks:
-  `CUBICAL_NOCACHE=1 ./build/cubical <library> lib/cxx/ast.cub experiments/cxx/book.cub` ends
-  `1061 passed, 0 failed` in 34 s with `ok: checks book-tu`. Steps: library 21,707,727 (830
-  definitions); `ast.cub` adds 30,462,743 (40 definitions; `data CDecl` alone 10.2M);
-  `book.cub` adds 1,600,065 (191 definitions). 3365 nodes, 62 declarations, 98 shared types,
-  8 records with layouts of 8. (Numbers are superseded by the acceptance record below when the
-  work is complete.)
+```
+python3 tools/clang2cub.py --emit-ast > lib/cxx/ast.cub
+python3 tools/clang2cub.py experiments/cxx/book.cpp   -o experiments/cxx/book.cub
+python3 tools/clang2cub.py experiments/cxx/second.cpp -o experiments/cxx/second.cub
+python3 tools/clang2cub.py experiments/cxx/third.cpp  -o experiments/cxx/third.cub
+CUBICAL_NOCACHE=1 ./build/cubical $L lib/cxx/ast.cub experiments/cxx/book.cub     # likewise second, third
+```
 
-- `experiments/cxx/second.cpp` (the second acceptance unit: `Ring<T, N>` instantiated as
-  `Ring<Order, 16>` and `Ring<std::uint32_t, 4>`, member initializer lists, a destructor,
-  `new`/`delete`, a call through a pointer to member function from a C array of structs, a
-  union with an unnamed struct member, bit-fields, `do`/`while`, `break`/`continue`,
-  `sizeof`/`alignof`, compound assignment, `?:`, a string literal, pointer arithmetic,
-  `__int128` and `__builtin_mul_overflow`) compiles clean and imports; `second.cub` checks
-  together with `book.cub` (3136 nodes, 43 declarations, 8 records with layouts).
-- Lambda captures: a closure class's fields say what each holds (`ccap-var id` / `ccap-this`),
-  read from the LambdaExpr's capture initializers (the JSON marks neither the captures nor
-  the references to captured variables inside the body).
-- Name resolution is strict: a candidate declaration that cannot be read is never skipped
-  (only declarations inside uninstantiated templates are excluded as candidates).
+The generated files are committed; regenerating them gives the same bytes (checked).
+
+### Acceptance record (clang 18.1.3, x86_64-pc-linux-gnu; machine shared, times vary ±30%)
+
+| run | result | steps (this file's share) | wall |
+|---|---|---|---|
+| library | 845 passed, 0 failed | 21,745,292 | 27 s |
+| + `lib/cxx/ast.cub` | 887 passed, 0 failed | 56,866,695 (35,121,403; 42 definitions) | 57 s |
+| + `book.cub` | 1079 passed, 0 failed, `ok: checks book-tu` | 58,484,080 (1,617,385; 192 definitions) | 69 s |
+| + `second.cub` (instead) | 1048 passed, 0 failed, `ok: checks second-tu` | 58,179,993 (1,313,298; 161 definitions) | 51 s |
+| + `third.cub` (instead) | 1058 passed, 0 failed, `ok: checks third-tu` | 57,854,040 (987,345; 171 definitions) | 58 s |
+
+| unit | source lines | nodes written | declarations | shared types | records with layouts | import |
+|---|---|---|---|---|---|---|
+| `book.cpp` | 207 | 3408 | 62 | 98 | 8 of 8 | 5.4 s |
+| `second.cpp` | 195 | 3161 | 43 | 90 | 8 of 8 | 0.7 s |
+| `third.cpp` | 158 | 2274 | 45 | 86 | 8 of 8 | 0.8 s |
+
+(`book.cpp` pulls in `<array>`: the JSON dump is 45.6 MB, of which the 62 declarations
+reachable from the roots are written.) Reference binary for the latency comparison:
+`clang++ -std=c++20 -O2 -fno-exceptions -fno-rtti -c book.cpp; clang -O2 book_main.c book.o`
+answers `sum -11432484` on 1,000,000 random 22-byte messages (50% add, 25% cancel, ~25%
+execute, 0.1% reset, prices 994..1006, seed 1) at about 71 ns/message here.
+
+### What each piece is
+
+- `experiments/cxx/book.cpp`, `book_main.c`: the D3 acceptance input and its reference driver.
+- `experiments/cxx/second.cpp`: the second acceptance unit (every item of the list).
+- `experiments/cxx/third.cpp`: a third unit, added so that what probing showed real code
+  reaches immediately is met in a checked-in unit rather than left as constructors nobody
+  exercised: virtual destructors (complete and deleting vtable slots), placement new, array
+  new/delete, an array initializer with a filler, a qualified (non-virtual) member call,
+  `double`, a static data member, a static local, a function template instantiated twice, a
+  conversion function, a lambda capturing `this`, one name declared in two namespaces, a
+  delegating constructor, ref-qualified methods, lifetime-extended temporaries (automatic and
+  static), `alignas` on variables, C-style and `reinterpret_cast`, the remaining integer
+  types, operators and cast kinds.
+- `tools/clang2cub.py`: three Clang runs per unit (JSON AST + record layouts in one process;
+  vtable layouts from a code-generation run; the text AST for two facts the JSON omits), a
+  parser for Clang's type strings with scoped name lookup, a worklist from the unit's roots,
+  one rule per node kind, and a writer that shares types (`<unit>-tN`), writes one definition
+  per declaration (`<unit>-dN`, N the declaration's id) and hoists any subterm over 400 nodes
+  into its own definition (`<unit>-nN`; `--limit` changes the 400). `SCHEMA` in the tool is the
+  one description of the AST; `--emit-ast` prints it as `lib/cxx/ast.cub`, and every term is
+  validated against it as it is built. The header of each generated file repeats the unit's
+  own counts and kind lists.
+- `lib/cxx/ast.cub`: 37 data types, 219 constructors, plus `CStr`/`cstr`.
+
+### The AST: what the next track reads (conventions)
+
+- Ids are `Word`s, unique within a unit; every `VarDecl`, `ParmVarDecl`, `FieldDecl`,
+  `EnumConstantDecl`, function, class and enum has one. `<unit>-dN` is the declaration with id N.
+- `ctu name target roots statics decls`. Roots: the functions defined in the main file that
+  another unit can call (external linkage, not inline, not a template) and every variable of
+  static storage defined in it. `statics`: all variables of static storage written, in the
+  order of their definitions (the order of initialization). Members are flat in `decls`, each
+  with the id of its class.
+- Every expression starts with its type and value category. A list of expressions (arguments,
+  initializers, captures) is a `CExpr` built from `ce-nil`/`ce-cons`; an absent expression
+  child is `ce-nil`; an absent statement child is `cs-none`; `cs-expr` is an expression in
+  statement position.
+- `ct-qual const volatile restrict T` wraps a qualified type; qualifiers on an array are on
+  its element type. `ct-function ret params variadic const volatile ref noexcept`.
+- `ce-member … arrow qualified kind id`: `qualified` true means the member was named with a
+  nested-name-specifier (`Future::margin(qty)`): a call through it is not virtual.
+- `ce-construct`/`ce-temporary-object` carry the id of the constructor chosen (found among the
+  class's constructors by the type Clang prints; the JSON has no id there).
+- `ce-default-init … field`: the field whose default member initializer is meant; the
+  initializer itself is the `init` of that `cfield`.
+- `ce-init-list … union-field filler inits`: for a class, `inits` are bases then fields in
+  order; `filler` (or `ce-nil`) initializes the array elements `inits` does not reach.
+- `ce-lambda … closure captures`: `closure` is the id of the closure class (a `cd-record`
+  with `lambda` true), `captures` initialize its fields in order. Each `cfield` of a closure
+  says what it holds (`ccap-var id` / `ccap-this`): inside the body (the class's `operator()`,
+  a `cd-method`) a `ce-declref` to that variable, or `ce-this`, means that field. Clang marks
+  neither in the JSON.
+- `ce-new … global array operator-new init-style array-size placement init`.
+- Implicit special members that Sema defined have bodies (`Level::operator=` is its
+  memberwise assignments); the ones it left trivial are `cfb-defaulted`. Destructor calls at
+  scope exit are not nodes (Clang's AST has none); `ce-with-cleanups`, lifetime-extended
+  `ce-materialize-temporary` and the declared destructors (written for every class that has
+  one) are what the semantics has to work from.
+- Layout (`clayout size align dsize nvsize nvalign vptr`, bytes), `cfield`'s `offset-bits`,
+  `cbase … offset primary virtual`, and `cvtable address-point entries` are Clang's for this
+  target: the implementation parameters of PLAN §5.1. A method is virtual (`cd-method`'s
+  flag) when it is written `virtual` or occupies a vtable slot.
+- `sizeof`/`alignof` (`ce-unary-or-type-trait`) carry the type or expression, not the value,
+  unless Sema wrapped them in a `ce-constant`.
+
+### Node kinds the three units use (the next track writes the semantics for exactly these)
+
+Counts are book/second/third.
+
+Declarations: CXXRecordDecl 6/6/8, ClassTemplateSpecializationDecl 2/2/0 (TemplateArgument
+3/4/0), FieldDecl 19/30/11, EnumDecl 2/0/0, EnumConstantDecl 6/0/0, FunctionDecl 8/8/11,
+CXXMethodDecl 27/12/8, CXXConstructorDecl 9/6/6 (CXXCtorInitializer 16/12/10),
+CXXDestructorDecl 7/7/7, CXXConversionDecl 0/0/1, VarDecl 24/23/27, ParmVarDecl 54/27/26,
+AlignedAttr on a variable 0/0/2.
+
+Statements: CompoundStmt 43/26/26 (and 39/23/25 as function bodies), DeclStmt 23/22/24, IfStmt
+11/15/1, ForStmt 3/3/1, CXXForRangeStmt 2/1/0, WhileStmt 1/1/1, DoStmt 0/1/0, SwitchStmt 1/0/1,
+CaseStmt 4/0/2, DefaultStmt 1/0/1, BreakStmt 1/1/1, ContinueStmt 1/2/0, ReturnStmt 38/29/16,
+NullStmt 2/0/0.
+
+Expressions: IntegerLiteral 38/71/46, CharacterLiteral 0/4/0, CXXBoolLiteralExpr 6/12/0,
+FloatingLiteral 0/0/2, StringLiteral 0/1/0, CXXNullPtrLiteralExpr 0/1/2, DeclRefExpr
+190/123/108, MemberExpr 99/106/31, CallExpr 4/6/9, CXXMemberCallExpr 23/11/10,
+CXXOperatorCallExpr 28/2/1, CXXConstructExpr 19/7/7, CXXTemporaryObjectExpr 0/0/2,
+ImplicitCastExpr 186/205/161, CXXStaticCastExpr 9/12/6, CXXFunctionalCastExpr 6/0/1,
+CXXReinterpretCastExpr 0/0/1, CStyleCastExpr 0/0/2, UnaryOperator 25/27/15, BinaryOperator
+50/82/39, CompoundAssignOperator 4/9/12, ConditionalOperator 8/4/2, ParenExpr 1/11/2,
+ArraySubscriptExpr 2/14/10, InitListExpr 3/6/8, ImplicitValueInitExpr 0/8/5,
+CXXDefaultInitExpr 11/0/4, CXXThisExpr 49/50/15, MaterializeTemporaryExpr 3/0/3,
+ExprWithCleanups 3/0/3, ConstantExpr 4/0/2, LambdaExpr 1/0/1, UnaryExprOrTypeTraitExpr 2/6/0,
+SubstNonTypeTemplateParmExpr 5/6/0, CXXNewExpr 0/1/3, CXXDeleteExpr 0/1/2.
+
+Cast kinds (18): LValueToRValue 93/107/84, NoOp 30/19/16, IntegralCast 39/74/34,
+FunctionToPointerDecay 32/6/10, ArrayToPointerDecay 3/8/8, BitCast 2/0/6, DerivedToBase 1/0/3,
+UncheckedDerivedToBase 0/0/2, ConstructorConversion 1/0/0, UserDefinedConversion 0/0/1,
+BuiltinFnToFnPtr 0/2/0, NullToPointer 0/1/0, NullToMemberPointer 0/0/2, IntegralToBoolean
+0/0/1, PointerToBoolean 0/0/1, IntegralToFloating 0/0/1, FloatingToIntegral 0/0/1, ToVoid
+0/0/1.
+
+Unary operators: `x++ x-- ++x --x & * + - ~ !`. Binary: `* / % + - << >> < > <= >= == != & ^ |
+&& || = , .* ->*`; compound assignment names the operator applied.
+
+Builtin types: void bool char schar uchar short ushort int uint long ulong llong ullong
+int128 uint128 double nullptr, and Clang's two placeholders bound-member (the type of
+`obj.method` before the call) and builtin-fn (the type of `__builtin_mul_overflow` before its
+BuiltinFnToFnPtr cast). Other type forms: pointer, lvalue and rvalue reference, array, record,
+enum, function, member pointer, qualifiers.
+
+Functions without a body in the units (the semantics supplies them): `memcpy`, `operator
+new`, `operator new[]`, placement `operator new`, `operator delete`, `operator delete[]`,
+`__builtin_mul_overflow`, `__builtin_add_overflow`.
+
+Met and deliberately not written as nodes (each is counted in the generated file's header):
+attributes whose effect is already in what is written or holds only at compile time (Packed,
+Aligned on a field or class: in the layout; Final, Override; NoThrow: in the function type;
+AlwaysInline, Const, NonNull, AllocSize, ReturnsNonNull, WarnUnusedResult, Owner, Visibility,
+Builtin), local `using`/`static_assert`/typedef declarations, and the template arguments of
+function specializations (the body is written substituted). Also not carried: source
+locations, `isUsed`/`isReferenced`, `hadMultipleCandidates`, `canOverflow`, `adl`,
+`nonOdrUseReason`, a class's `definitionData` flags, `inline` on variables.
+
+### Trusted, exactly
+
+- "The AST dumped is the AST Sema produced" (PLAN Phase 4 item 2).
+- Clang prints types as strings; nested names in them are as written. The importer resolves a
+  name by C++ lookup from the place of use (function, class and its bases, enclosing
+  namespaces with inline/anonymous namespaces and using-directives), and when the name is not
+  in scope there, accepts it only if every declaration of that name in the unit (outside
+  uninstantiated templates) means the same type. A candidate it cannot read is never skipped.
+  Names that had to be chosen by scope and mean something else elsewhere in the unit are
+  listed in each generated file's header (book: `iterator pointer reference value_type`, each
+  inside `std::array<Level, 8>`; second: `Ring`; third: `Quote`). This lookup following
+  Clang's is the one place the importer re-derives something Sema decided.
+- Three correspondences the JSON leaves implicit, each checked as far as the dumps allow and
+  stopping the import otherwise: constructor by printed signature (exactly one match);
+  layout and vtable blocks by printed class name (parsed and resolved; several blocks must be
+  identical); the k-th `MemberExpr`/`AlignedAttr` of the text dump with the k-th of the JSON
+  (counts, arrows and member names must all agree).
+- An enumerator without an initializer is the previous one plus one (the dump has no value
+  for it).
 
 ## Found
 
-- The checker has no mutual `data` (`mutual` followed by `data`: "unexpected data") and rejects a
-  field `List D` inside `data D` ("the field type is not strictly positive (the type itself at
-  its own parameters, or not mentioning it)"). So `CExpr`/`CStmt`/`CDecl` cannot be mutually
-  recursive and a node's children cannot be a `List` of the same type. `mutual` over functions
-  is for codata only ("a definition of a corecursive group is λs and lines over a record").
-  What does check (measured on a trial file): a type that carries its own list constructors
-  (`te-nil | te-cons (x : TE) (xs : TE)`), and one function recursing structurally through
-  both the node and the list constructors.
-- There is no byte-string literal and no `store8` in `lib/prim.cub`. `%store8 b off v` with a
-  `Word` offset and a `UInt32` value works inside a `primitive` and is bounds-checked by the
-  net (an out-of-range store is a no-op), so a string can be built from a list of byte words.
-- A definition `f : (n : Nat) → Bytes n → Word → List Word → Bytes n` recursing on the list in
-  the fourth position was rejected as not structural; with the list second (before the
-  arguments that change) it checks.
-- `length` of `lib/prelude.cub` is "not a bound variable or checked definition" for a
-  definition loaded after the library (prelude definitions are not in the checked table).
+In the machine:
+
+1. No mutual `data` (`mutual` followed by `data`: "unexpected data"), and `List D` as a field
+   of `data D` is rejected ("the field type is not strictly positive (the type itself at its
+   own parameters, or not mentioning it)"). `mutual` over functions is for codata only ("a
+   definition of a corecursive group is λs and lines over a record"). What does check: a type
+   carrying its own list constructors, and one function recursing structurally through both
+   node and list constructors (tried: `te-size`, `ts-size` on a trial type).
+2. No byte-string literal and no `store8` in `lib/prim.cub`. `%store8 b off v` with a `Word`
+   offset and a `%u32ofw` value works inside a `primitive` and is bounds-checked by the net.
+3. `f : (n : Nat) → Bytes n → Word → List Word → Bytes n` recursing on the list in the fourth
+   position: "a recursive call is not on a constructor field or a field's field from one of
+   the definition's own matches". With the list second (before the arguments that change) it
+   checks. The position of the matched argument should not matter.
+4. `length` of `lib/prelude.cub` is "not a bound variable or checked definition" for a
+   definition loaded after the library.
+5. Field names `then`, `else`, `record` in a `data` declaration are syntax errors ("unexpected
+   then"): keywords are not allowed as field names. (Renamed `then-s`, `else-s`, `base`.)
+6. Checking a `data` declaration costs steps in proportion to everything the types it mentions
+   contain, again for each mention: `CExpr` (43 constructors) 221,911 steps; `CVarInit` (three
+   fields of type `CExpr`) 634,883; `CStmt` 2,654,940; `CBody` (one field of type `CStmt`)
+   2,946,936; `CFunction` 3,150,346; `CDecl` (8 constructors) 12,462,605; `CTU` (one
+   constructor, one field `List CDecl`) 11,252,811. `ast.cub` is 35.1M steps, 62% of them
+   those last two. A declaration's check should not re-walk the declarations it names.
+7. No hang, kill or segfault met: the largest generated file is 103 KB / 3408 nodes in 192
+   definitions (largest single definition about 400 nodes, 81k steps); a unit costs about 475
+   steps per node. An earlier binary failed at once with `error: unbound name %wmul` after a
+   `git pull` changed `src/`: rebuild (`make build/cubical`) after every pull.
+
+In Clang 18.1.3 (the oracle):
+
+8. `-Xclang -fdump-record-layouts-complete` (the flag the track specification names)
+   segfaults in `ASTContext::getASTRecordLayout` on libstdc++'s `<type_traits>` (it lays out
+   dependent classes). `-fdump-record-layouts` is used; with `-fsyntax-only` it printed the
+   layout of every class the three units write, the lambda closures included. A class with no
+   block stops the import.
+9. Vtable layouts are printed only by a code-generation run (`-emit-llvm`), so there is a
+   second process; class names tie the two.
+10. The JSON omits: the constructor's id in `CXXConstructExpr` (only `ctorType`); the field of
+    a `CXXDefaultInitExpr`; a lambda's captures and which references in its body are to
+    captured variables; whether a `MemberExpr` has a qualifier; the type of `alignas(type)`;
+    the values of enumerators without initializers; the underlying type of an enumeration
+    without a fixed one; the value of `sizeof`. Each has a rule above or stops the import.
+11. JSON shapes that are easy to misread: a declaration listed a second time is a stub of
+    `id`/`kind`/`name` only (taking the last node seen for an id loses the definition); an
+    `InitListExpr` with a filler has no `inner`, its children are all under `array_filler`
+    (filler first); `loc.includedFrom.file` is the including file, not the node's; `file` and
+    `line` are printed only when they change from the previous location printed; a
+    `CXXNewExpr`'s children are array size, initializer, placement arguments in that order;
+    `virtual` is true only where written (an overrider without the keyword has no flag).
+    Type strings are desugared one level at most (`iterator` → `value_type *`), and a
+    signature printed at a use names member typedefs that are not in scope there.
 
 ## Next step
 
-Prune schema constructors neither unit uses (the rule: a constructor exists only for a kind
-met), regenerate `lib/cxx/ast.cub`, re-import both units, run the acceptance command with the
-full library and `CUBICAL_NOCACHE=1`, and record the numbers and the full kind lists here.
+The track's acceptance is met; there is no unfinished item under "What is built". What
+remains is what the importer stops on by design, found by probing with scratch files; each is
+closed by writing the construct into a checked-in unit, importing, and adding the rule and
+constructor the stop message names (then `--emit-ast`, re-import all units, re-run the
+acceptance commands, update the lists above). In the order real code will hit them:
+
+1. Default arguments (`ParmVarDecl` with an initializer; `CXXDefaultArgExpr`, whose parameter
+   the JSON does not name: take it from the callee's declaration and the argument's position).
+2. `std::span`: a template argument printed as the name of a constant
+   (`__extent_storage<dynamic_extent>`; the layout dump prints the same class with the value,
+   which can identify it), and `CXXRewrittenBinaryOperator` (C++20 `!=` from `==`).
+3. Enumerations without a fixed underlying type (the dump does not give the type Sema chose).
+4. Anonymous struct/union members (`IndirectFieldDecl`), init-captures, alias templates and
+   `decltype(expr)`/`noexcept(expr)` in type strings, `float`/`long double`/wide literals,
+   `thread_local`, `if constexpr`/`consteval`, `std::initializer_list`, GNU case ranges.
+5. Multiple and virtual inheritance (several vtable address points, thunks, vbase offsets), a
+   polymorphic class whose vtable is laid out in another unit, a class used only incomplete.
+6. Any other node kind: the import stops with `… kind with no rule yet: K (at file:line)`.
+
+When track A applies "Needs from track A" items 2 or 3, make the change described there.
