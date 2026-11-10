@@ -1,0 +1,334 @@
+-- lib/compile/stack.cub — the first machine the typed compiler targets, and the compiler into it
+-- with the statement that it is right. The machine is the one lib/x86.cub's templates run: an
+-- accumulator (rax), a scratch register (rcx), and a stack of 64-bit words; each instruction here
+-- is one template there. Its run either ends, or leaves (jout): a result past 2^64, or a construct
+-- this level does not compile, is computed on the net instead (run p f ≡ f), never answered wrongly.
+
+data JRes (A : Type) = jout | jgot (x : A)
+
+-- the machine's state: rax, rcx, the stack (its top first)
+record JM = { jm-rax : Word ; jm-rcx : Word ; jm-stk : List Word }
+
+-- the code, each step followed by the rest (an if's branches rejoin before the rest)
+data JCode = kdone
+           | kimm (w : Word) (k : JCode)
+           | kld (n : Nat) (k : JCode)
+           | kpush (k : JCode)
+           | kpop (k : JCode)
+           | kdrop (k : JCode)
+           | kmovc (k : JCode)
+           | kop (o : JWop) (k : JCode)
+           | kcmp (o : JWcmp) (k : JCode)
+           | kif (t : JCode) (e : JCode) (k : JCode)
+           | kfail
+
+-- the 64-bit bound
+jw64 : Word
+jw64 = #18446744073709551616
+
+jnth : List Word → Nat → JRes Word
+jnth nil n = jout
+jnth (cons x xs) zero = jgot x
+jnth (cons x xs) (suc n) = jnth xs n
+
+-- a step's result: the next state, or out
+jthen : JRes JM → (JM → JRes JM) → JRes JM
+jthen jout f = jout
+jthen (jgot m) f = f m
+
+jrun : JCode → JM → JRes JM
+jrun kdone m = jgot m
+jrun (kimm w k) m = if %wlt w jw64 then jrun k (JM { jm-rax = w ; jm-rcx = jm-rcx m ; jm-stk = jm-stk m }) else jout
+jrun (kld n k) m = case jnth (jm-stk m) n of
+  jout → jout
+  jgot x → jrun k (JM { jm-rax = x ; jm-rcx = jm-rcx m ; jm-stk = jm-stk m })
+jrun (kpush k) m = jrun k (JM { jm-rax = jm-rax m ; jm-rcx = jm-rcx m ; jm-stk = cons (jm-rax m) (jm-stk m) })
+jrun (kpop k) m = case jm-stk m of
+  nil → jout
+  cons x xs → jrun k (JM { jm-rax = x ; jm-rcx = jm-rcx m ; jm-stk = xs })
+jrun (kdrop k) m = case jm-stk m of
+  nil → jout
+  cons x xs → jrun k (JM { jm-rax = jm-rax m ; jm-rcx = jm-rcx m ; jm-stk = xs })
+jrun (kmovc k) m = jrun k (JM { jm-rax = jm-rax m ; jm-rcx = jm-rax m ; jm-stk = jm-stk m })
+jrun (kop o k) m = if %wlt (jwop o (jm-rax m) (jm-rcx m)) jw64
+  then jrun k (JM { jm-rax = jwop o (jm-rax m) (jm-rcx m) ; jm-rcx = jm-rcx m ; jm-stk = jm-stk m })
+  else jout
+jrun (kcmp o k) m = jrun k (JM { jm-rax = (if jwcmp o (jm-rax m) (jm-rcx m) then #0 else #1) ; jm-rcx = jm-rcx m ; jm-stk = jm-stk m })
+jrun (kif t e k) m = jthen (if %weq (jm-rax m) #0 then jrun t m else jrun e m) (λ m2 → jrun k m2)
+jrun kfail m = jout
+
+-- a value as the word that holds it: a word itself, true 0 and false 1 (lib/x86.cub's Bool); at
+-- this level nothing else is compiled (its terms are kfail), so #0 stands for the rest. Every
+-- type's jdef is held by #0
+jenc : (a : JTy) → JEl a → Word
+jenc jw x = x
+jenc jb x = if x then #0 else #1
+jenc jn x = #0
+jenc (jprod a b) x = #0
+jenc (jsum a b) x = #0
+jenc (jarr a b) x = #0
+
+-- where each variable is: its depth in the stack, from the top
+JPl : List JTy → Type
+JPl nil = Unit
+JPl (cons a g) = Nat × JPl g
+
+-- a variable's depth; past the context's end, none (the variable is not there: kfail)
+jplook : (g : List JTy) → Nat → JPl g → JRes Nat
+jplook nil n p = jout
+jplook (cons a g) zero p = jgot (fst p)
+jplook (cons a g) (suc n) p = jplook g n (snd p)
+
+-- after a push every variable is one deeper
+jpsh : (g : List JTy) → JPl g → JPl g
+jpsh nil p = unit
+jpsh (cons a g) p = (suc (fst p) , jpsh g (snd p))
+
+-- rax holds a value of type b; the code that makes it hold the value cast to a: nothing when the
+-- types have the same form (the cast is the value, or both are held by #0), else #0 (jdef)
+jcoerce : (b : JTy) → (a : JTy) → JCode → JCode
+jcoerce jw jw k = k
+jcoerce jw jb k = kimm #0 k
+jcoerce jw jn k = kimm #0 k
+jcoerce jw (jprod a1 a2) k = kimm #0 k
+jcoerce jw (jsum a1 a2) k = kimm #0 k
+jcoerce jw (jarr a1 a2) k = kimm #0 k
+jcoerce jb jw k = kimm #0 k
+jcoerce jb jb k = k
+jcoerce jb jn k = kimm #0 k
+jcoerce jb (jprod a1 a2) k = kimm #0 k
+jcoerce jb (jsum a1 a2) k = kimm #0 k
+jcoerce jb (jarr a1 a2) k = kimm #0 k
+jcoerce jn jw k = kimm #0 k
+jcoerce jn jb k = kimm #0 k
+jcoerce jn jn k = k
+jcoerce jn (jprod a1 a2) k = kimm #0 k
+jcoerce jn (jsum a1 a2) k = kimm #0 k
+jcoerce jn (jarr a1 a2) k = kimm #0 k
+jcoerce (jprod b1 b2) jw k = kimm #0 k
+jcoerce (jprod b1 b2) jb k = kimm #0 k
+jcoerce (jprod b1 b2) jn k = kimm #0 k
+jcoerce (jprod b1 b2) (jprod a1 a2) k = k
+jcoerce (jprod b1 b2) (jsum a1 a2) k = kimm #0 k
+jcoerce (jprod b1 b2) (jarr a1 a2) k = kimm #0 k
+jcoerce (jsum b1 b2) jw k = kimm #0 k
+jcoerce (jsum b1 b2) jb k = kimm #0 k
+jcoerce (jsum b1 b2) jn k = kimm #0 k
+jcoerce (jsum b1 b2) (jprod a1 a2) k = kimm #0 k
+jcoerce (jsum b1 b2) (jsum a1 a2) k = k
+jcoerce (jsum b1 b2) (jarr a1 a2) k = kimm #0 k
+jcoerce (jarr b1 b2) jw k = kimm #0 k
+jcoerce (jarr b1 b2) jb k = kimm #0 k
+jcoerce (jarr b1 b2) jn k = kimm #0 k
+jcoerce (jarr b1 b2) (jprod a1 a2) k = kimm #0 k
+jcoerce (jarr b1 b2) (jsum a1 a2) k = kimm #0 k
+jcoerce (jarr b1 b2) (jarr a1 a2) k = k
+
+jvar-code : JRes Nat → (b : JTy) → (a : JTy) → JCode → JCode
+jvar-code jout b a k = kfail
+jvar-code (jgot d) b a k = kld d (jcoerce b a k)
+
+-- the compiler: t's code at type a, then k, with t's value in rax and the stack as it was
+jcx : (t : JTm) → (g : List JTy) → (a : JTy) → JPl g → JCode → JCode
+jcx (jvar n) g a p k = jvar-code (jplook g n p) (jat g n) a k
+jcx (jlit w) g a p k = kimm w (jcoerce jw a k)
+jcx (jop o x y) g a p k = jcx x g jw p (kpush (jcx y g jw (jpsh g p) (kmovc (kpop (kop o (jcoerce jw a k))))))
+jcx (jcmp o x y) g a p k = jcx x g jw p (kpush (jcx y g jw (jpsh g p) (kmovc (kpop (kcmp o (jcoerce jb a k))))))
+jcx jtt g a p k = kimm #0 (jcoerce jb a k)
+jcx jff g a p k = kimm #1 (jcoerce jb a k)
+jcx (jif c t e) g a p k = jcx c g jb p (kif (jcx t g a p kdone) (jcx e g a p kdone) k)
+jcx (jlet b t u) g a p k = jcx t g b p (kpush (jcx u (cons b g) a (zero , jpsh g p) (kdrop k)))
+jcx (jlam u) g a p k = kfail
+jcx (japp b f x) g a p k = kfail
+jcx (jpair x y) g a p k = kfail
+jcx (jfst b q) g a p k = kfail
+jcx (jsnd b q) g a p k = kfail
+jcx (jinl x) g a p k = kfail
+jcx (jinr y) g a p k = kfail
+jcx (jcase b1 b2 q l m) g a p k = kfail
+jcx jzero g a p k = kfail
+jcx (jsuc n) g a p k = kfail
+jcx (jnatrec z q n) g a p k = kfail
+jcx (jloop b z q) g a p k = kfail
+
+-- ---------------------------------------------------------------- the compiler is right
+-- The environment is in the stack where the placement says
+JPlaced : (g : List JTy) → JPl g → JEnv g → List Word → Type
+JPlaced nil p r s = Unit
+JPlaced (cons a g) p r s = (jnth s (fst p) ≡ jgot (jenc a (fst r))) × JPlaced g (snd p) (snd r) s
+
+jpl-push : (g : List JTy) → (p : JPl g) → (r : JEnv g) → (s : List Word) → (w : Word) → JPlaced g p r s → JPlaced g (jpsh g p) r (cons w s)
+jpl-push nil p r s w h = unit
+jpl-push (cons a g) p r s w h = (fst h , jpl-push g (snd p) (snd r) s w (snd h))
+
+-- a variable that is there is where the placement says, holding its value
+JVarAt : JRes Nat → List Word → Word → Type
+JVarAt jout s v = Unit
+JVarAt (jgot d) s v = jnth s d ≡ jgot v
+
+jpl-var : (g : List JTy) → (n : Nat) → (p : JPl g) → (r : JEnv g) → (s : List Word) → JPlaced g p r s → JVarAt (jplook g n p) s (jenc (jat g n) (jlook g n r))
+jpl-var nil n p r s h = unit
+jpl-var (cons a g) zero p r s h = fst h
+jpl-var (cons a g) (suc n) p r s h = jpl-var g n (snd p) (snd r) s (snd h)
+
+-- what running t's code then k does: it leaves, or it is k run with t's value in rax and the
+-- stack as it was (rcx: whatever the code left there)
+JAfter : JRes JM → JCode → Word → List Word → Type
+JAfter x k v s = Sum (x ≡ jout) ((c : Word) × (x ≡ jrun k (JM { jm-rax = v ; jm-rcx = c ; jm-stk = s })))
+
+jaft-pre : {x y : JRes JM} → {k : JCode} → {v : Word} → {s : List Word} → x ≡ y → JAfter y k v s → JAfter x k v s
+jaft-pre e h = case h of inl e2 → inl (e ∙ e2); inr q → inr (fst q , e ∙ snd q)
+
+jaft-if : (b : Bool) → {x : JRes JM} → {k : JCode} → {v : Word} → {s : List Word} → JAfter x k v s → JAfter (if b then x else jout) k v s
+jaft-if true h = h
+jaft-if false h = inl refl
+
+jaft-then : {x : JRes JM} → (k : JCode) → {v : Word} → {s : List Word} → JAfter x kdone v s → JAfter (jthen x (λ m2 → jrun k m2)) k v s
+jaft-then k h = case h of
+  inl e → inl (cong (λ z → jthen z (λ m2 → jrun k m2)) e)
+  inr q → inr (fst q , cong (λ z → jthen z (λ m2 → jrun k m2)) (snd q))
+
+jaft-ifb : (a : JTy) → (b : Bool) → (x y : JEl a) → {X Y : JRes JM} → (k : JCode) → {s : List Word} →
+           JAfter X kdone (jenc a x) s → JAfter Y kdone (jenc a y) s →
+           JAfter (jthen (if %weq (jenc jb b) #0 then X else Y) (λ m2 → jrun k m2)) k (jenc a (if b then x else y)) s
+jaft-ifb a true x y k hx hy = jaft-then k hx
+jaft-ifb a false x y k hx hy = jaft-then k hy
+
+jcoerce-ok : (b : JTy) → (a : JTy) → (x : JEl b) → (k : JCode) → (c : Word) → (s : List Word) →
+             JAfter (jrun (jcoerce b a k) (JM { jm-rax = jenc b x ; jm-rcx = c ; jm-stk = s })) k (jenc a (jcast b a x)) s
+jcoerce-ok jw jw x k c s = inr (c , refl)
+jcoerce-ok jw jb x k c s = inr (c , refl)
+jcoerce-ok jw jn x k c s = inr (c , refl)
+jcoerce-ok jw (jprod a1 a2) x k c s = inr (c , refl)
+jcoerce-ok jw (jsum a1 a2) x k c s = inr (c , refl)
+jcoerce-ok jw (jarr a1 a2) x k c s = inr (c , refl)
+jcoerce-ok jb jw x k c s = inr (c , refl)
+jcoerce-ok jb jb x k c s = inr (c , refl)
+jcoerce-ok jb jn x k c s = inr (c , refl)
+jcoerce-ok jb (jprod a1 a2) x k c s = inr (c , refl)
+jcoerce-ok jb (jsum a1 a2) x k c s = inr (c , refl)
+jcoerce-ok jb (jarr a1 a2) x k c s = inr (c , refl)
+jcoerce-ok jn jw x k c s = inr (c , refl)
+jcoerce-ok jn jb x k c s = inr (c , refl)
+jcoerce-ok jn jn x k c s = inr (c , refl)
+jcoerce-ok jn (jprod a1 a2) x k c s = inr (c , refl)
+jcoerce-ok jn (jsum a1 a2) x k c s = inr (c , refl)
+jcoerce-ok jn (jarr a1 a2) x k c s = inr (c , refl)
+jcoerce-ok (jprod b1 b2) jw x k c s = inr (c , refl)
+jcoerce-ok (jprod b1 b2) jb x k c s = inr (c , refl)
+jcoerce-ok (jprod b1 b2) jn x k c s = inr (c , refl)
+jcoerce-ok (jprod b1 b2) (jprod a1 a2) x k c s = inr (c , refl)
+jcoerce-ok (jprod b1 b2) (jsum a1 a2) x k c s = inr (c , refl)
+jcoerce-ok (jprod b1 b2) (jarr a1 a2) x k c s = inr (c , refl)
+jcoerce-ok (jsum b1 b2) jw x k c s = inr (c , refl)
+jcoerce-ok (jsum b1 b2) jb x k c s = inr (c , refl)
+jcoerce-ok (jsum b1 b2) jn x k c s = inr (c , refl)
+jcoerce-ok (jsum b1 b2) (jprod a1 a2) x k c s = inr (c , refl)
+jcoerce-ok (jsum b1 b2) (jsum a1 a2) x k c s = inr (c , refl)
+jcoerce-ok (jsum b1 b2) (jarr a1 a2) x k c s = inr (c , refl)
+jcoerce-ok (jarr b1 b2) jw x k c s = inr (c , refl)
+jcoerce-ok (jarr b1 b2) jb x k c s = inr (c , refl)
+jcoerce-ok (jarr b1 b2) jn x k c s = inr (c , refl)
+jcoerce-ok (jarr b1 b2) (jprod a1 a2) x k c s = inr (c , refl)
+jcoerce-ok (jarr b1 b2) (jsum a1 a2) x k c s = inr (c , refl)
+jcoerce-ok (jarr b1 b2) (jarr a1 a2) x k c s = inr (c , refl)
+
+jvar-ok : (q : JRes Nat) → (b : JTy) → (a : JTy) → (x : JEl b) → (k : JCode) → (m : JM) → JVarAt q (jm-stk m) (jenc b x) →
+          JAfter (jrun (jvar-code q b a k) m) k (jenc a (jcast b a x)) (jm-stk m)
+jvar-ok jout b a x k m h = inl refl
+jvar-ok (jgot d) b a x k m h =
+  transport (λ i → JAfter (case sym h i of
+                             jout → jout
+                             jgot y → jrun (jcoerce b a k) (JM { jm-rax = y ; jm-rcx = jm-rcx m ; jm-stk = jm-stk m }))
+                          k (jenc a (jcast b a x)) (jm-stk m))
+            (jcoerce-ok b a x k (jm-rcx m) (jm-stk m))
+
+
+-- code then more code: what the first leaves in rax is what the second starts from
+jaft-seq : (X : JRes JM) → (K1 : JCode) → (k : JCode) → (v1 : Word) → (v2 : Word) → (s : List Word) →
+           JAfter X K1 v1 s → ((c : Word) → JAfter (jrun K1 (JM { jm-rax = v1 ; jm-rcx = c ; jm-stk = s })) k v2 s) → JAfter X k v2 s
+jaft-seq X K1 k v1 v2 s h1 h2 = case h1 of
+  inl e → inl e
+  inr q → jaft-pre (snd q) (h2 (fst q))
+
+jaft-drop : (X : JRes JM) → (k : JCode) → (v : Word) → (w : Word) → (s : List Word) → JAfter X (kdrop k) v (cons w s) → JAfter X k v s
+jaft-drop X k v w s h = case h of
+  inl e → inl e
+  inr q → inr q
+
+-- the second operand computed above the first: rcx ← it, rax ← the first, the operation
+jaft-opk : (Y : JRes JM) → (o : JWop) → (K3 : JCode) → (k : JCode) → (V : Word) → (vx : Word) → (vy : Word) → (s : List Word) →
+           JAfter Y (kmovc (kpop (kop o K3))) vy (cons vx s) →
+           ((c : Word) → JAfter (jrun K3 (JM { jm-rax = jwop o vx vy ; jm-rcx = c ; jm-stk = s })) k V s) → JAfter Y k V s
+jaft-opk Y o K3 k V vx vy s h h2 = case h of
+  inl e → inl e
+  inr q → jaft-pre (snd q) (jaft-if (%wlt (jwop o vx vy) jw64) (h2 vy))
+
+jaft-cmpk : (Y : JRes JM) → (o : JWcmp) → (K3 : JCode) → (k : JCode) → (V : Word) → (vx : Word) → (vy : Word) → (s : List Word) →
+            JAfter Y (kmovc (kpop (kcmp o K3))) vy (cons vx s) →
+            ((c : Word) → JAfter (jrun K3 (JM { jm-rax = jenc jb (jwcmp o vx vy) ; jm-rcx = c ; jm-stk = s })) k V s) → JAfter Y k V s
+jaft-cmpk Y o K3 k V vx vy s h h2 = case h of
+  inl e → inl e
+  inr q → jaft-pre (snd q) (h2 vy)
+
+-- the theorem: for every term, type, placement, environment placed in the stack, and rest of code
+jcx-ok : (t : JTm) → (g : List JTy) → (a : JTy) → (p : JPl g) → (r : JEnv g) → (k : JCode) → (m : JM) →
+         JPlaced g p r (jm-stk m) → JAfter (jrun (jcx t g a p k) m) k (jenc a (jev t g a r)) (jm-stk m)
+jcx-ok (jvar n) g a p r k m h = jvar-ok (jplook g n p) (jat g n) a (jlook g n r) k m (jpl-var g n p r (jm-stk m) h)
+jcx-ok (jlit w) g a p r k m h = jaft-if (%wlt w jw64) (jcoerce-ok jw a w k (jm-rcx m) (jm-stk m))
+jcx-ok (jop o x y) g a p r k m h =
+  jaft-seq (jrun (jcx x g jw p (kpush (jcx y g jw (jpsh g p) (kmovc (kpop (kop o (jcoerce jw a k))))))) m)
+           (kpush (jcx y g jw (jpsh g p) (kmovc (kpop (kop o (jcoerce jw a k)))))) k
+           (jev x g jw r) (jenc a (jcast jw a (jwop o (jev x g jw r) (jev y g jw r)))) (jm-stk m)
+           (jcx-ok x g jw p r (kpush (jcx y g jw (jpsh g p) (kmovc (kpop (kop o (jcoerce jw a k)))))) m h)
+           (λ c1 → jaft-opk (jrun (jcx y g jw (jpsh g p) (kmovc (kpop (kop o (jcoerce jw a k)))))
+                                  (JM { jm-rax = jev x g jw r ; jm-rcx = c1 ; jm-stk = cons (jev x g jw r) (jm-stk m) }))
+                            o (jcoerce jw a k) k (jenc a (jcast jw a (jwop o (jev x g jw r) (jev y g jw r)))) (jev x g jw r) (jev y g jw r) (jm-stk m)
+                            (jcx-ok y g jw (jpsh g p) r (kmovc (kpop (kop o (jcoerce jw a k))))
+                                    (JM { jm-rax = jev x g jw r ; jm-rcx = c1 ; jm-stk = cons (jev x g jw r) (jm-stk m) })
+                                    (jpl-push g p r (jm-stk m) (jev x g jw r) h))
+                            (λ c2 → jcoerce-ok jw a (jwop o (jev x g jw r) (jev y g jw r)) k c2 (jm-stk m)))
+jcx-ok (jcmp o x y) g a p r k m h =
+  jaft-seq (jrun (jcx x g jw p (kpush (jcx y g jw (jpsh g p) (kmovc (kpop (kcmp o (jcoerce jb a k))))))) m)
+           (kpush (jcx y g jw (jpsh g p) (kmovc (kpop (kcmp o (jcoerce jb a k)))))) k
+           (jev x g jw r) (jenc a (jcast jb a (jwcmp o (jev x g jw r) (jev y g jw r)))) (jm-stk m)
+           (jcx-ok x g jw p r (kpush (jcx y g jw (jpsh g p) (kmovc (kpop (kcmp o (jcoerce jb a k)))))) m h)
+           (λ c1 → jaft-cmpk (jrun (jcx y g jw (jpsh g p) (kmovc (kpop (kcmp o (jcoerce jb a k)))))
+                                   (JM { jm-rax = jev x g jw r ; jm-rcx = c1 ; jm-stk = cons (jev x g jw r) (jm-stk m) }))
+                             o (jcoerce jb a k) k (jenc a (jcast jb a (jwcmp o (jev x g jw r) (jev y g jw r)))) (jev x g jw r) (jev y g jw r) (jm-stk m)
+                             (jcx-ok y g jw (jpsh g p) r (kmovc (kpop (kcmp o (jcoerce jb a k))))
+                                     (JM { jm-rax = jev x g jw r ; jm-rcx = c1 ; jm-stk = cons (jev x g jw r) (jm-stk m) })
+                                     (jpl-push g p r (jm-stk m) (jev x g jw r) h))
+                             (λ c2 → jcoerce-ok jb a (jwcmp o (jev x g jw r) (jev y g jw r)) k c2 (jm-stk m)))
+jcx-ok jtt g a p r k m h = jcoerce-ok jb a true k (jm-rcx m) (jm-stk m)
+jcx-ok jff g a p r k m h = jcoerce-ok jb a false k (jm-rcx m) (jm-stk m)
+jcx-ok (jif c t e) g a p r k m h =
+  jaft-seq (jrun (jcx c g jb p (kif (jcx t g a p kdone) (jcx e g a p kdone) k)) m)
+           (kif (jcx t g a p kdone) (jcx e g a p kdone) k) k
+           (jenc jb (jev c g jb r)) (jenc a (if jev c g jb r then jev t g a r else jev e g a r)) (jm-stk m)
+           (jcx-ok c g jb p r (kif (jcx t g a p kdone) (jcx e g a p kdone) k) m h)
+           (λ c1 → jaft-ifb a (jev c g jb r) (jev t g a r) (jev e g a r) k
+                     (jcx-ok t g a p r kdone (JM { jm-rax = jenc jb (jev c g jb r) ; jm-rcx = c1 ; jm-stk = jm-stk m }) h)
+                     (jcx-ok e g a p r kdone (JM { jm-rax = jenc jb (jev c g jb r) ; jm-rcx = c1 ; jm-stk = jm-stk m }) h))
+jcx-ok (jlet b t u) g a p r k m h =
+  jaft-seq (jrun (jcx t g b p (kpush (jcx u (cons b g) a (zero , jpsh g p) (kdrop k)))) m)
+           (kpush (jcx u (cons b g) a (zero , jpsh g p) (kdrop k))) k
+           (jenc b (jev t g b r)) (jenc a (jev u (cons b g) a (jev t g b r , r))) (jm-stk m)
+           (jcx-ok t g b p r (kpush (jcx u (cons b g) a (zero , jpsh g p) (kdrop k))) m h)
+           (λ c1 → jaft-drop (jrun (jcx u (cons b g) a (zero , jpsh g p) (kdrop k)) (JM { jm-rax = jenc b (jev t g b r) ; jm-rcx = c1 ; jm-stk = cons (jenc b (jev t g b r)) (jm-stk m) }))
+                     k (jenc a (jev u (cons b g) a (jev t g b r , r))) (jenc b (jev t g b r)) (jm-stk m)
+                     (jcx-ok u (cons b g) a (zero , jpsh g p) (jev t g b r , r) (kdrop k)
+                         (JM { jm-rax = jenc b (jev t g b r) ; jm-rcx = c1 ; jm-stk = cons (jenc b (jev t g b r)) (jm-stk m) })
+                         (refl , jpl-push g p r (jm-stk m) (jenc b (jev t g b r)) h)))
+jcx-ok (jlam u) g a p r k m h = inl refl
+jcx-ok (japp b f x) g a p r k m h = inl refl
+jcx-ok (jpair x y) g a p r k m h = inl refl
+jcx-ok (jfst b q) g a p r k m h = inl refl
+jcx-ok (jsnd b q) g a p r k m h = inl refl
+jcx-ok (jinl x) g a p r k m h = inl refl
+jcx-ok (jinr y) g a p r k m h = inl refl
+jcx-ok (jcase b1 b2 q l n) g a p r k m h = inl refl
+jcx-ok jzero g a p r k m h = inl refl
+jcx-ok (jsuc n) g a p r k m h = inl refl
+jcx-ok (jnatrec z q n) g a p r k m h = inl refl
+jcx-ok (jloop b z q) g a p r k m h = inl refl

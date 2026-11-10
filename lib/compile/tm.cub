@@ -1,7 +1,16 @@
--- lib/compile/tm.cub — the source of compilation: terms indexed by their context and type, and
--- their meaning as a checked evaluator. A term of type JTm g a is well scoped and well typed by
--- construction; jev gives its value in an environment of values for g. What a compiled program
--- computes is stated against jev, so "the program means the term" is a type.
+-- lib/compile/tm.cub — the source of compilation: terms, and their meaning at a type as a checked
+-- evaluator. jev g a t r is what t computes at type a in the environment r of values for the
+-- context g; a compiled program is stated right against jev, so "the program means the term" is a
+-- type, and "the term means the definition" is a path the checker checks (refl, by computation).
+--
+-- A term is de Bruijn syntax with the types a reader of it cannot find from the type expected
+-- (a let's bound type, an application's argument type, the other side of a pair or a sum). Its
+-- meaning is defined at every type, every term: where the term does not fit the type expected
+-- the meaning is that type's fixed value jdef, and the compiler, which follows the same types,
+-- compiles no code for it (it leaves to the net). So nothing is assumed about a term, and the
+-- statement about the compiler holds of every term. (An inductive family of well-typed terms
+-- would say the same; the elaborator's index unification by transport does not yet carry proofs
+-- over one — tried 2026-11-10: a lemma on a variable's position in a context fails to elaborate.)
 
 -- the types of the fragment: machine words, booleans, naturals, pairs, sums, functions
 data JTy = jw | jb | jn | jprod (a : JTy) (b : JTy) | jsum (a : JTy) (b : JTy) | jarr (a : JTy) (b : JTy)
@@ -14,19 +23,73 @@ JEl (jprod a b) = JEl a × JEl b
 JEl (jsum a b) = Sum (JEl a) (JEl b)
 JEl (jarr a b) = JEl a → JEl b
 
+-- every type has a value: the meaning of a term that does not fit its type
+jdef : (a : JTy) → JEl a
+jdef jw = #0
+jdef jb = true
+jdef jn = zero
+jdef (jprod a b) = (jdef a , jdef b)
+jdef (jsum a b) = inl (jdef a)
+jdef (jarr a b) = λ x → jdef b
+
+-- the same type: the value itself (through functions, at both sides); another: jdef. Both
+-- directions at once, so that a function's argument (cast back) is a recursive call on a field
+jcast2 : (b : JTy) → (a : JTy) → (JEl b → JEl a) × (JEl a → JEl b)
+jcast2 jw jw = (λ x → x , λ x → x)
+jcast2 jw jb = (λ x → jdef jb , λ x → jdef jw)
+jcast2 jw jn = (λ x → jdef jn , λ x → jdef jw)
+jcast2 jw (jprod a1 a2) = (λ x → jdef (jprod a1 a2) , λ x → jdef jw)
+jcast2 jw (jsum a1 a2) = (λ x → jdef (jsum a1 a2) , λ x → jdef jw)
+jcast2 jw (jarr a1 a2) = (λ x → jdef (jarr a1 a2) , λ x → jdef jw)
+jcast2 jb jw = (λ x → jdef jw , λ x → jdef jb)
+jcast2 jb jb = (λ x → x , λ x → x)
+jcast2 jb jn = (λ x → jdef jn , λ x → jdef jb)
+jcast2 jb (jprod a1 a2) = (λ x → jdef (jprod a1 a2) , λ x → jdef jb)
+jcast2 jb (jsum a1 a2) = (λ x → jdef (jsum a1 a2) , λ x → jdef jb)
+jcast2 jb (jarr a1 a2) = (λ x → jdef (jarr a1 a2) , λ x → jdef jb)
+jcast2 jn jw = (λ x → jdef jw , λ x → jdef jn)
+jcast2 jn jb = (λ x → jdef jb , λ x → jdef jn)
+jcast2 jn jn = (λ x → x , λ x → x)
+jcast2 jn (jprod a1 a2) = (λ x → jdef (jprod a1 a2) , λ x → jdef jn)
+jcast2 jn (jsum a1 a2) = (λ x → jdef (jsum a1 a2) , λ x → jdef jn)
+jcast2 jn (jarr a1 a2) = (λ x → jdef (jarr a1 a2) , λ x → jdef jn)
+jcast2 (jprod b1 b2) jw = (λ x → jdef jw , λ x → jdef (jprod b1 b2))
+jcast2 (jprod b1 b2) jb = (λ x → jdef jb , λ x → jdef (jprod b1 b2))
+jcast2 (jprod b1 b2) jn = (λ x → jdef jn , λ x → jdef (jprod b1 b2))
+jcast2 (jprod b1 b2) (jprod a1 a2) = (λ x → (fst (jcast2 b1 a1) (fst x) , fst (jcast2 b2 a2) (snd x)) , λ x → (snd (jcast2 b1 a1) (fst x) , snd (jcast2 b2 a2) (snd x)))
+jcast2 (jprod b1 b2) (jsum a1 a2) = (λ x → jdef (jsum a1 a2) , λ x → jdef (jprod b1 b2))
+jcast2 (jprod b1 b2) (jarr a1 a2) = (λ x → jdef (jarr a1 a2) , λ x → jdef (jprod b1 b2))
+jcast2 (jsum b1 b2) jw = (λ x → jdef jw , λ x → jdef (jsum b1 b2))
+jcast2 (jsum b1 b2) jb = (λ x → jdef jb , λ x → jdef (jsum b1 b2))
+jcast2 (jsum b1 b2) jn = (λ x → jdef jn , λ x → jdef (jsum b1 b2))
+jcast2 (jsum b1 b2) (jprod a1 a2) = (λ x → jdef (jprod a1 a2) , λ x → jdef (jsum b1 b2))
+jcast2 (jsum b1 b2) (jsum a1 a2) = (λ x → (case x of inl y → inl (fst (jcast2 b1 a1) y); inr z → inr (fst (jcast2 b2 a2) z)) , λ x → (case x of inl y → inl (snd (jcast2 b1 a1) y); inr z → inr (snd (jcast2 b2 a2) z)))
+jcast2 (jsum b1 b2) (jarr a1 a2) = (λ x → jdef (jarr a1 a2) , λ x → jdef (jsum b1 b2))
+jcast2 (jarr b1 b2) jw = (λ x → jdef jw , λ x → jdef (jarr b1 b2))
+jcast2 (jarr b1 b2) jb = (λ x → jdef jb , λ x → jdef (jarr b1 b2))
+jcast2 (jarr b1 b2) jn = (λ x → jdef jn , λ x → jdef (jarr b1 b2))
+jcast2 (jarr b1 b2) (jprod a1 a2) = (λ x → jdef (jprod a1 a2) , λ x → jdef (jarr b1 b2))
+jcast2 (jarr b1 b2) (jsum a1 a2) = (λ x → jdef (jsum a1 a2) , λ x → jdef (jarr b1 b2))
+jcast2 (jarr b1 b2) (jarr a1 a2) = (λ x y → fst (jcast2 b2 a2) (x (snd (jcast2 b1 a1) y)) , λ x y → snd (jcast2 b2 a2) (x (fst (jcast2 b1 a1) y)))
+
+jcast : (b : JTy) → (a : JTy) → JEl b → JEl a
+jcast b a = fst (jcast2 b a)
+
+-- a context's type at a position (past its end: jw, whose value there is #0)
+jat : List JTy → Nat → JTy
+jat nil n = jw
+jat (cons a g) zero = a
+jat (cons a g) (suc n) = jat g n
+
 -- an environment: a value for each type of the context, innermost first
 JEnv : List JTy → Type
 JEnv nil = Unit
 JEnv (cons a g) = JEl a × JEnv g
 
--- a variable of type a in context g: its position
-data JVar : (g : List JTy) → (a : JTy) → Type where
-  jz : (a : JTy) → (g : List JTy) → JVar (cons a g) a
-  js : (a : JTy) → (b : JTy) → (g : List JTy) → JVar g a → JVar (cons b g) a
-
-jlook : {g : List JTy} → {a : JTy} → JVar g a → JEnv g → JEl a
-jlook (jz a g) r = fst r
-jlook (js a b g v) r = jlook v (snd r)
+jlook : (g : List JTy) → (n : Nat) → JEnv g → JEl (jat g n)
+jlook nil n r = #0
+jlook (cons a g) zero r = fst r
+jlook (cons a g) (suc n) r = jlook g n (snd r)
 
 -- the word operations the machine has (lib/code.cub cwop): arithmetic and comparisons
 data JWop = jadd | jsub | jmul | jdiv | jmod | jmax | jand | jor | jxor | jshr
@@ -48,29 +111,26 @@ jwcmp : JWcmp → Word → Word → Bool
 jwcmp jeq x y = %weq x y
 jwcmp jlt x y = %wlt x y
 
--- terms. natrec: z, and s under the predecessor and the hypothesis; loop: a bound, the initial
--- state, and the step under the counter and the state (counter from 0 below the bound)
-data JTm : (g : List JTy) → (a : JTy) → Type where
-  jvar : (g : List JTy) → (a : JTy) → JVar g a → JTm g a
-  jlit : (g : List JTy) → Word → JTm g jw
-  jop : (g : List JTy) → JWop → JTm g jw → JTm g jw → JTm g jw
-  jcmp : (g : List JTy) → JWcmp → JTm g jw → JTm g jw → JTm g jb
-  jtt : (g : List JTy) → JTm g jb
-  jff : (g : List JTy) → JTm g jb
-  jif : (g : List JTy) → (a : JTy) → JTm g jb → JTm g a → JTm g a → JTm g a
-  jlet : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g a → JTm (cons a g) b → JTm g b
-  jlam : (g : List JTy) → (a : JTy) → (b : JTy) → JTm (cons a g) b → JTm g (jarr a b)
-  japp : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g (jarr a b) → JTm g a → JTm g b
-  jpair : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g a → JTm g b → JTm g (jprod a b)
-  jfst : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g (jprod a b) → JTm g a
-  jsnd : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g (jprod a b) → JTm g b
-  jinl : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g a → JTm g (jsum a b)
-  jinr : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g b → JTm g (jsum a b)
-  jcase : (g : List JTy) → (a : JTy) → (b : JTy) → (c : JTy) → JTm g (jsum a b) → JTm (cons a g) c → JTm (cons b g) c → JTm g c
-  jzero : (g : List JTy) → JTm g jn
-  jsuc : (g : List JTy) → JTm g jn → JTm g jn
-  jnatrec : (g : List JTy) → (c : JTy) → JTm g c → JTm (cons c (cons jn g)) c → JTm g jn → JTm g c
-  jloop : (g : List JTy) → (c : JTy) → JTm g jw → JTm g c → JTm (cons c (cons jw g)) c → JTm g c
+-- terms. natrec: z, and s under the predecessor and the hypothesis (hypothesis innermost); loop:
+-- a bound, the initial state, and the step under the counter and the state (state innermost),
+-- run for the counter 0, 1, …, bound − 1
+data JTm = jvar (n : Nat)
+         | jlit (w : Word)
+         | jop (o : JWop) (x : JTm) (y : JTm)
+         | jcmp (o : JWcmp) (x : JTm) (y : JTm)
+         | jtt | jff
+         | jif (c : JTm) (t : JTm) (e : JTm)
+         | jlet (a : JTy) (t : JTm) (u : JTm)
+         | jlam (u : JTm)
+         | japp (a : JTy) (f : JTm) (x : JTm)
+         | jpair (x : JTm) (y : JTm)
+         | jfst (b : JTy) (p : JTm)
+         | jsnd (a : JTy) (p : JTm)
+         | jinl (x : JTm) | jinr (y : JTm)
+         | jcase (a : JTy) (b : JTy) (s : JTm) (l : JTm) (m : JTm)
+         | jzero | jsuc (n : JTm)
+         | jnatrec (z : JTm) (s : JTm) (n : JTm)
+         | jloop (b : JTm) (z : JTm) (s : JTm)
 
 -- primitive recursion and the word loop as the language's own functions
 jnatrec-ev : {c : Type} → c → (Nat → c → c) → Nat → c
@@ -81,29 +141,56 @@ jloop-go : {c : Type} → Word → (Word → c → c) → Nat → Word → c →
 jloop-go b s zero i x = x
 jloop-go b s (suc k) i x = if %wlt i b then jloop-go b s k (%wsucc i) (s i x) else x
 
--- the loop runs the step for the counter 0, 1, …, b − 1
 jloop-ev : {c : Type} → Word → c → (Word → c → c) → c
 jloop-ev b x s = jloop-go b s (toNat b) #0 x
 
--- the meaning of a term
-jev : {g : List JTy} → {a : JTy} → JTm g a → JEnv g → JEl a
-jev (jvar g a v) r = jlook v r
-jev (jlit g w) r = w
-jev (jop g o x y) r = jwop o (jev x r) (jev y r)
-jev (jcmp g o x y) r = jwcmp o (jev x r) (jev y r)
-jev (jtt g) r = true
-jev (jff g) r = false
-jev (jif g a c t e) r = if jev c r then jev t r else jev e r
-jev (jlet g a b t u) r = jev u (jev t r , r)
-jev (jlam g a b t) r = λ x → jev t (x , r)
-jev (japp g a b f x) r = jev f r (jev x r)
-jev (jpair g a b x y) r = (jev x r , jev y r)
-jev (jfst g a b p) r = fst (jev p r)
-jev (jsnd g a b p) r = snd (jev p r)
-jev (jinl g a b x) r = inl (jev x r)
-jev (jinr g a b y) r = inr (jev y r)
-jev (jcase g a b c s l m) r = case jev s r of inl x → jev l (x , r); inr y → jev m (y , r)
-jev (jzero g) r = zero
-jev (jsuc g n) r = suc (jev n r)
-jev (jnatrec g c z s n) r = jnatrec-ev (jev z r) (λ k h → jev s (h , (k , r))) (jev n r)
-jev (jloop g c b z s) r = jloop-ev (jev b r) (jev z r) (λ i x → jev s (x , (i , r)))
+-- the meaning of t at type a in context g. Each form reads the type expected and, where it does
+-- not fit, is jdef; the cases on the type are written as functions of it (jev-…), each a
+-- definition of its own so that a statement about jev can case on the type the same way
+jev : (t : JTm) → (g : List JTy) → (a : JTy) → JEnv g → JEl a
+jev (jvar n) g a r = jcast (jat g n) a (jlook g n r)
+jev (jlit w) g a r = jcast jw a w
+jev (jop o x y) g a r = jcast jw a (jwop o (jev x g jw r) (jev y g jw r))
+jev (jcmp o x y) g a r = jcast jb a (jwcmp o (jev x g jw r) (jev y g jw r))
+jev jtt g a r = jcast jb a true
+jev jff g a r = jcast jb a false
+jev (jif c t e) g a r = if jev c g jb r then jev t g a r else jev e g a r
+jev (jlet b t u) g a r = jev u (cons b g) a (jev t g b r , r)
+jev (jlam u) g a r = case a return (λ z → JEl z) of
+  jarr a1 a2 → λ x → jev u (cons a1 g) a2 (x , r)
+  jw → jdef jw
+  jb → jdef jb
+  jn → jdef jn
+  jprod a1 a2 → jdef (jprod a1 a2)
+  jsum a1 a2 → jdef (jsum a1 a2)
+jev (japp b f x) g a r = jev f g (jarr b a) r (jev x g b r)
+jev (jpair x y) g a r = case a return (λ z → JEl z) of
+  jprod a1 a2 → (jev x g a1 r , jev y g a2 r)
+  jw → jdef jw
+  jb → jdef jb
+  jn → jdef jn
+  jsum a1 a2 → jdef (jsum a1 a2)
+  jarr a1 a2 → jdef (jarr a1 a2)
+jev (jfst b p) g a r = fst (jev p g (jprod a b) r)
+jev (jsnd b p) g a r = snd (jev p g (jprod b a) r)
+jev (jinl x) g a r = case a return (λ z → JEl z) of
+  jsum a1 a2 → inl (jev x g a1 r)
+  jw → jdef jw
+  jb → jdef jb
+  jn → jdef jn
+  jprod a1 a2 → jdef (jprod a1 a2)
+  jarr a1 a2 → jdef (jarr a1 a2)
+jev (jinr y) g a r = case a return (λ z → JEl z) of
+  jsum a1 a2 → inr (jev y g a2 r)
+  jw → jdef jw
+  jb → jdef jb
+  jn → jdef jn
+  jprod a1 a2 → jdef (jprod a1 a2)
+  jarr a1 a2 → jdef (jarr a1 a2)
+jev (jcase b1 b2 s l m) g a r = case jev s g (jsum b1 b2) r of
+  inl x → jev l (cons b1 g) a (x , r)
+  inr y → jev m (cons b2 g) a (y , r)
+jev jzero g a r = jcast jn a zero
+jev (jsuc n) g a r = jcast jn a (suc (jev n g jn r))
+jev (jnatrec z s n) g a r = jnatrec-ev (jev z g a r) (λ k h → jev s (cons a (cons jn g)) a (h , (k , r))) (jev n g jn r)
+jev (jloop b z s) g a r = jloop-ev (jev b g jw r) (jev z g a r) (λ i x → jev s (cons a (cons jw g)) a (x , (i , r)))
