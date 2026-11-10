@@ -37,6 +37,21 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
    cores, clock source, endianness, syscall numbers table) and the x86-64 Linux value; the
    handler takes it as an argument, so a program's type names what it relies on.
 
+5. **The rest of Phase 3's calls** (added 2026-11-10 by the coordinator). Typed commands at
+   the end of `LinuxCmd` with contracts, the handler's case, the model's answer or explicit
+   refusal, the replay encoding: `sendmsg`/`recvmsg` (the `iovec` and `msghdr` layouts stated
+   once), `io_uring` (`io_uring_setup`, the mmap'd rings, submit and complete for read, write,
+   recv, send through `io_uring_enter`), `eventfd2`, `timerfd_create`/`timerfd_settime`, and
+   thread start by `clone` with futex wake if expressible through `w-sys`.
+6. **The kernel-bypass shape** (`lib/os/packet.cub`): a signature `Pkt` for a polled packet
+   interface (poll the rx ring → a packet or nothing, release it, submit on the tx ring) whose
+   handler is memory commands over mmap'd rings, with AF_PACKET + PACKET_MMAP (TPACKET_V2) on
+   `lo` as the instance that runs here; ef_vi and DPDK are other instances of the same
+   signature (hardware absent: stated under Limits).
+7. **Diagnosis of `#build`'s cost** (no edits to `lib/x86.cub`, `lib/elf.cub`,
+   `lib/specialize.cub`): the stages of `build-plan` measured separately at 3, 5, 7, 10
+   commands, the table and the cause under Found, the exact fix under Needs.
+
 ## Acceptance
 
 - `make library` passes with `lib/os/*.cub` appended to `LIB` (ask A to append; until then load
@@ -48,6 +63,19 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   queued datagram ends `done` with the datagram in the model's outgoing queue (a `#show`).
 - After A adds the ELF side: `#build` of the same process; the binary echoes a datagram.
 
+- Item 5: `experiments/os/msg.cub`, `uring.cub`, `evtimer.cub`, `thread.cub`, each with a
+  `-run.cub` whose `#run` on the kernel is recorded here with its `strace` lines; the model's
+  answer for each (a `#show` of `runp` against `linux-model`: `done …` or `stopped` where the
+  model refuses, as the header of `lib/os/contract.cub` lists).
+- Item 6: `experiments/os/packet.cub` + `packet-run.cub`: a frame submitted on the tx ring of
+  an AF_PACKET socket bound to `lo` is polled from the rx ring by the same process; the
+  result recorded here.
+- Item 7: the table (stage × number of commands → steps, sizes) under Found.
+
+## Limits
+
+(filled by item 6)
+
 ## Needs from track A
 
 1. ~~ELF driver cases for `w-sys` (11), `w-alloc` (12), `w-load8` (13), `w-store8` (14)~~ —
@@ -55,9 +83,7 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
    `experiments/native/sys.cub`). Any further command is requested here; no assembly source of
    the loop is kept in `experiments/os/`.
 2. ~~`.gitignore` hid `experiments/build/`~~ — **done by A**: the demos are `experiments/native/`.
-3. **Ready (track A, please do this):** append `lib/os/platform.cub lib/os/linux.cub
-   lib/os/contract.cub lib/os/replay.cub` (this order, after `lib/elf.cub`) to `LIB` in the `Makefile`. All four
-   load after the library with 0 failures (measurements under Done).
+3. ~~`lib/os` in `LIB`~~ — **done by A** in `5835b6db` (`make library` 993 passed).
 4. Checker (not blocking; worked around in `lib/os/contract.cub`): see Found, "a matched
    variable in a branch without type information".
 
@@ -213,17 +239,8 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
 
 ## Next step
 
-Everything under "What is built" and every acceptance line is met, and PLAN Phase 3's replay
-acceptance with it. What is left is not this track's to do:
-1. Track A appends `lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub`
-   to `LIB` (Needs 3). Then run `make library` and replace the 845 above with the new count
-   (expected: 845 + 148 from the four files).
-2. Not built here, and in PLAN Phase 3: kernel-bypass interfaces (ef_vi, DPDK) as worlds, and
-   `sendmsg`/`recvmsg`/`io_uring` in `Linux` (this track's command list did not have them). To
-   add a call: a constructor at the end of `LinuxCmd`, its line in `lx-resp`, `linux-on-w`,
-   `linux-model`, `lx-enc`, `lx-dec`, and its number in `Sys` / `x86-64-sysnr`
-   (`lib/os/platform.cub`); no change to `W`, the drivers or the ELF loop is needed (`w-sys`
-   carries any call of up to six arguments).
-3. The model's subset (see `lib/os/contract.cub`'s header) refuses files, TCP, and waits that
-   nothing in the state ends; a process using them ends `stopped` against it (`os-tcp` does).
-   Extending it is the same file, `linux-model`'s cases.
+Items 5–7 (above) are open; nothing of them is written yet. Order: item 7 first (a scratch
+file `experiments/os/build-cost.cub` calling `unfold`, `specialize`, `conv`, `program-of`,
+`x-forms-all`, `x-erase`, `x-verdict`, `encode-proc` of `lib/elf.cub`'s `build-plan` separately
+on processes of 3, 5, 7, 10 `Linux` commands, each under `#show` of a size), then item 5 call by
+call (eventfd/timerfd, sendmsg/recvmsg, io_uring, clone), then item 6.
