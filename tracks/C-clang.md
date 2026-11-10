@@ -293,6 +293,45 @@ locations, `isUsed`/`isReferenced`, `hadMultipleCandidates`, `canOverflow`, `adl
 - An enumerator without an initializer is the previous one plus one (the dump has no value
   for it).
 
+### Items 4–6: log (newest last; the lists above are rewritten when an item closes)
+
+Schema changes since `lib/cxx/ast.cub` entered `LIB` (`4d04760c`); all additive (new
+constructors, no field added to or removed from an existing one), so a reader written
+against the earlier file needs new cases only:
+
+- `experiments/cxx/fourth.cpp` (item 4, first group) imports and checks: 2059 nodes, 50
+  declarations, 106 shared types, 8 records with layouts of 8. New constructors: builtin
+  types `ctb-float ctb-ldouble ctb-wchar ctb-char8 ctb-char16 ctb-char32`; cast kind
+  `ck-FloatingCast`; `ce-string-literal-units` (a wide or UTF string as its array's code
+  units; `ce-string-literal` stays the bytes of a narrow one); `ce-rewritten-binary`
+  (CXXRewrittenBinaryOperator: its one child is the form Sema rewrote to);
+  `ce-std-initializer-list` (CXXStdInitializerListExpr over the materialized array);
+  `cs-if-constexpr` (IfStmt with `isConstexpr`: the condition is a `ce-constant`, the branch
+  not taken an empty `cs-compound`); storage classes `cst-thread-local`,
+  `cst-static-thread-local`, `cst-extern-thread-local`; `ccap-init id` (an init-capture: the
+  variable `id` exists only as this closure field; the capture's name is read from the source
+  at the field's location, the JSON has it nowhere); `cd-var-template-specialization`
+  (VarTemplateSpecializationDecl, e.g. `std::is_floating_point_v<double>`).
+  `ce-floating-literal`'s bits are now exact for `float` (32), `double` (64) and x86-64 `long
+  double` (the 80-bit x87 pattern), rounded from Clang's decimal by rational arithmetic.
+- **Probes.** What no dump says and Clang knows is asked of Clang: a generated one-line unit
+  (`using __c2c_probe = __c2c_canon<T>;` or `__c2c_val<(E)>`, compiled with `-include
+  <the unit>` and `-ast-dump-filter`), whose alias Clang prints canonically. Used for: the
+  underlying type of an enumeration without a fixed one (`__underlying_type(E)`, or of
+  `decltype(enumerator)` for an unnamed enumeration); the type of a function whose printed
+  type has `decltype(expr)` or `noexcept(expr)` (`decltype(&f)`); the value of a constant
+  named as a template argument (`std::dynamic_extent`). Every probe and its answer is listed
+  in the generated file's header (fourth: 7). Not reachable by a probe, so still stops: a
+  local enumeration without a fixed type, a constructor or destructor with `noexcept(expr)`,
+  a hidden friend with `decltype`/`noexcept(expr)` in its type.
+- Alias templates in type strings are applied (parameters bound to the arguments, the alias's
+  type read with them); parameter packs and defaulted arguments in an alias template stop.
+- Integral template arguments: the JSON prints them sign-extended from their own width (`true`
+  is -1, `std::size_t(-1)` is -1); they are read at the type of the template's parameter.
+- Anonymous struct/union members need no node: Sema writes every access through the unnamed
+  field (`IndirectFieldDecl` is counted under "met and not written").
+- A requires-clause on a function is counted under "met and not written" (Sema checked it).
+
 ## Found
 
 In the machine:
@@ -359,12 +398,10 @@ it (`tracks/F-cxx.md`: a request under "Needs from track C" there takes priority
 list below). Items 4–6 are open. Do them in this order, one checked-in unit at a time, each
 commit regenerating `lib/cxx/ast.cub` and every unit and recording the new kinds here:
 
-1. `experiments/cxx/fourth.cpp`: the first group of item 4 (`std::span`,
-   `CXXRewrittenBinaryOperator`, enums without a fixed underlying type, anonymous
-   struct/union members, init-captures, alias templates, `decltype`/`noexcept` in type
-   strings, `float`/`long double`/wide and UTF literals, `thread_local`, `if constexpr`,
-   `std::initializer_list`). Run `python3 tools/clang2cub.py experiments/cxx/fourth.cpp -o
-   experiments/cxx/fourth.cub`; each stop names the rule to add.
+1. (done: `fourth.cpp`, see the log.) Still stopping from that group, to close with a rule
+   each: a local enumeration without a fixed type; a constructor/destructor or hidden friend
+   whose type has `noexcept(expr)`/`decltype(expr)`; `if consteval`; parameter packs or
+   defaults in alias templates; GNU case ranges.
 2. `experiments/cxx/fifth.cpp` (+ a second file for the key function): multiple and virtual
    inheritance, thunks, VTTs, a vtable emitted elsewhere.
 3. Item 5 units, then item 6.

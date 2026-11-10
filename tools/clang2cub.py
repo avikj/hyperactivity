@@ -43,6 +43,15 @@ class Dependent(Exception):
     """A name that is a template parameter, or a type that only exists uninstantiated."""
 
 
+class NeedsProbe(Stop):
+    """A type string with a part only Clang can evaluate (decltype of an expression, noexcept
+    of an expression): the type is asked of Clang by a probe, where there is a way to ask."""
+
+
+class NotAType(Stop):
+    """A name in a type string that no type declaration of the unit has."""
+
+
 def stop(msg):
     raise Stop(msg)
 
@@ -68,7 +77,9 @@ SCHEMA = [
         ('ctb-void', []), ('ctb-bool', []), ('ctb-char', []), ('ctb-schar', []), ('ctb-uchar', []),
         ('ctb-short', []), ('ctb-ushort', []), ('ctb-int', []), ('ctb-uint', []), ('ctb-long', []),
         ('ctb-ulong', []), ('ctb-llong', []), ('ctb-ullong', []), ('ctb-int128', []),
-        ('ctb-uint128', []), ('ctb-double', []), ('ctb-nullptr', []),
+        ('ctb-uint128', []), ('ctb-float', []), ('ctb-double', []), ('ctb-ldouble', []),
+        ('ctb-wchar', []), ('ctb-char8', []), ('ctb-char16', []), ('ctb-char32', []),
+        ('ctb-nullptr', []),
         ('ctb-bound-member', []), ('ctb-builtin-fn', []),
     ]),
     ('CRefQual', 'the ref-qualifier of a function type', [
@@ -100,7 +111,7 @@ SCHEMA = [
         ('ck-NullToPointer', []), ('ck-ToVoid', []), ('ck-BuiltinFnToFnPtr', []),
         ('ck-ConstructorConversion', []), ('ck-PointerToBoolean', []),
         ('ck-NullToMemberPointer', []), ('ck-UserDefinedConversion', []),
-        ('ck-IntegralToFloating', []), ('ck-FloatingToIntegral', []),
+        ('ck-IntegralToFloating', []), ('ck-FloatingToIntegral', []), ('ck-FloatingCast', []),
     ]),
     ('CUnOp', 'unary operators met', [
         ('uo-post-inc', []), ('uo-post-dec', []), ('uo-pre-inc', []), ('uo-pre-dec', []),
@@ -137,6 +148,7 @@ SCHEMA = [
         ('ce-bool-literal', [('t', 'CType'), ('vc', 'CValCat'), ('v', 'Bool')]),
         ('ce-floating-literal', [('t', 'CType'), ('vc', 'CValCat'), ('bits', 'Word')]),
         ('ce-string-literal', [('t', 'CType'), ('vc', 'CValCat'), ('s', 'CStr')]),
+        ('ce-string-literal-units', [('t', 'CType'), ('vc', 'CValCat'), ('units', 'List Word')]),
         ('ce-nullptr-literal', [('t', 'CType'), ('vc', 'CValCat')]),
         ('ce-declref', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CRefKind'), ('id', 'Word')]),
         ('ce-member', [('t', 'CType'), ('vc', 'CValCat'), ('base', 'CExpr'), ('arrow', 'Bool'),
@@ -189,6 +201,8 @@ SCHEMA = [
         ('ce-unary-or-type-trait', [('t', 'CType'), ('vc', 'CValCat'), ('k', 'CTraitKind'),
                                     ('arg-type', 'CType'), ('arg', 'CExpr')]),
         ('ce-subst-nttp', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
+        ('ce-rewritten-binary', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
+        ('ce-std-initializer-list', [('t', 'CType'), ('vc', 'CValCat'), ('e', 'CExpr')]),
         ('ce-new', [('t', 'CType'), ('vc', 'CValCat'), ('global', 'Bool'), ('array', 'Bool'),
                     ('operator-new', 'COptId'), ('init-style', 'CNewInit'),
                     ('array-size', 'CExpr'), ('placement', 'CExpr'), ('init', 'CExpr')]),
@@ -199,6 +213,7 @@ SCHEMA = [
     ]),
     ('CStorage', 'storage class as written', [
         ('cst-none', []), ('cst-static', []), ('cst-extern', []),
+        ('cst-thread-local', []), ('cst-static-thread-local', []), ('cst-extern-thread-local', []),
     ]),
     ('CVarInit', 'the initializer of a variable, by its style', [
         ('cvi-none', []),
@@ -225,6 +240,8 @@ SCHEMA = [
         ('cs-expr', [('e', 'CExpr')]),
         ('cs-if', [('init', 'CStmt'), ('cond-var', 'CStmt'), ('cond', 'CExpr'), ('then-s', 'CStmt'),
                    ('else-s', 'CStmt')]),
+        ('cs-if-constexpr', [('init', 'CStmt'), ('cond-var', 'CStmt'), ('cond', 'CExpr'),
+                             ('then-s', 'CStmt'), ('else-s', 'CStmt')]),
         ('cs-while', [('cond-var', 'CStmt'), ('cond', 'CExpr'), ('body', 'CStmt')]),
         ('cs-do', [('body', 'CStmt'), ('cond', 'CExpr')]),
         ('cs-for', [('init', 'CStmt'), ('cond-var', 'CStmt'), ('cond', 'CExpr'), ('inc', 'CExpr'),
@@ -252,9 +269,11 @@ SCHEMA = [
         ('cbw-bits', [('n', 'Word')]),
     ]),
     ('CCapture', "what a field of a lambda's closure class holds: inside the lambda's body a "
-                 'reference to that variable of the enclosing function, or `this`, is this field', [
+                 'reference to that variable of the enclosing function, or `this`, is this field; '
+                 'ccap-init is an init-capture, whose variable (the id) exists only as this field', [
         ('ccap-none', []),
         ('ccap-var', [('id', 'Word')]),
+        ('ccap-init', [('id', 'Word')]),
         ('ccap-this', []),
     ]),
     ('CField', 'FieldDecl: offset in bits from the record layout; the default member '
@@ -329,6 +348,7 @@ SCHEMA = [
         ('cd-enum', [('id', 'Word'), ('name', 'CStr'), ('underlying', 'CType'),
                      ('scoped', 'Bool'), ('enumerators', 'List CEnumerator')]),
         ('cd-var', [('mangled', 'CStr'), ('v', 'CVar')]),
+        ('cd-var-template-specialization', [('args', 'List CTArg'), ('mangled', 'CStr'), ('v', 'CVar')]),
     ]),
     ('CTU', 'the translation unit: its name, the target, the ids of its roots, the ids of its '
             'variables of static storage in the order of their definitions, its declarations', [
@@ -505,6 +525,9 @@ BUILTINS = {
     ('char8_t',): 'char8', ('char16_t',): 'char16', ('char32_t',): 'char32',
     ('wchar_t',): 'wchar',
 }
+UNSIGNED_BITS = {'bool': 1, 'uchar': 8, 'char8': 8, 'ushort': 16, 'char16': 16, 'uint': 32, 'char32': 32,
+                 'ulong': 64, 'ullong': 64}       # x86-64 (the import stops elsewhere)
+SIGNED_KINDS = ('schar', 'short', 'int', 'long', 'llong', 'char', 'wchar', 'int128')
 PLACEHOLDERS = {'<bound member function type>': 'bound-member', '<builtin fn type>': 'builtin-fn'}
 TOKEN = re.compile(r"\s*(?:([A-Za-z_$][A-Za-z0-9_$]*)|(\d+)[uUlL]*|(::|->|&&|\.\.\.|'(?:[^'\\]|\\.)+'|.))")
 SPECIAL = ('(lambda at ', '(anonymous ', '(unnamed ')
@@ -559,8 +582,9 @@ def unqual(t):
 
 
 class TypeParser:
-    def __init__(self, unit, s, scope, hint):
+    def __init__(self, unit, s, scope, hint, env=None):
         self.u, self.s, self.scope, self.hint = unit, s, scope, hint
+        self.env = env or {}        # template parameter -> ('type', T) / ('int', n), in an alias template
         self.toks = tokenize(s)
         self.i = 0
 
@@ -614,11 +638,11 @@ class TypeParser:
                     self.i += 3
                     base = ('builtin', 'nullptr')
                 else:
-                    self.fail('decltype of an expression: no rule yet')
+                    raise NeedsProbe('type string not read: %r (decltype of an expression)' % self.s)
             elif k == 'id' and x == 'auto' and base is None and not kws:
                 base = ('auto',)        # stands only before a trailing return type
             elif (k in ('id', 'special') or (k, x) == ('p', '::')) and base is None and not kws:
-                base = self.u.resolve_name(self.name(), self.scope, self.hint, self.s)
+                base = self.u.resolve_name(self.name(), self.scope, self.hint, self.s, self.env)
                 continue
             else:
                 break
@@ -674,7 +698,19 @@ class TypeParser:
         if k == 'p' and x.startswith("'"):
             self.i += 1
             return ('int', ord(eval(x)))
-        return ('type', self.type())
+        if k == 'id' and self.env.get(x, ('type',))[0] == 'int' and self.peek(1) in (('p', ','), ('p', '>')):
+            self.i += 1
+            return self.env[x]
+        start = self.i
+        try:
+            return ('type', self.type())
+        except NotAType:
+            # not a type: the name of a constant (std::span's `dynamic_extent`)
+            self.i = start
+            comps = self.name()
+            if not (self.at(',') or self.at('>')) or any(a is not None for _, a in comps):
+                raise
+            return ('int', self.u.constant_value(comps, self.s))
 
     # ---- abstract declarators, read inside out
     def memptr_ahead(self):
@@ -719,7 +755,7 @@ class TypeParser:
                 self.i += 1
                 ops.append(('rref',))
             elif self.memptr_ahead():
-                cls = self.u.resolve_name(self.name(), self.scope, None, self.s)
+                cls = self.u.resolve_name(self.name(), self.scope, None, self.s, self.env)
                 self.expect('::')
                 self.expect('*')
                 ops.append(('memptr', cls) + self.cv_after())
@@ -754,6 +790,8 @@ class TypeParser:
                 if self.at(']'):
                     self.fail('array of unknown bound')
                 k, n = self.next()
+                if k == 'id' and self.env.get(n, ('type',))[0] == 'int':
+                    k, n = 'num', self.env[n][1]
                 if k != 'num':
                     self.fail('array bound')
                 self.expect(']')
@@ -793,7 +831,7 @@ class TypeParser:
                                 self.i += 3
                                 noex = False
                             else:
-                                self.fail('noexcept of an expression: no rule yet')
+                                raise NeedsProbe('type string not read: %r (noexcept of an expression)' % self.s)
                     elif k == 'id' and x == 'throw' and self.at('(', 1) and self.at(')', 2):
                         self.i += 2
                         noex = True
@@ -891,6 +929,7 @@ BINOPS = {'*': 'mul', '/': 'div', '%': 'rem', '+': 'add', '-': 'sub', '<<': 'shl
           '^': 'xor', '|': 'or', '&&': 'land', '||': 'lor', '=': 'assign', ',': 'comma',
           '.*': 'ptr-mem-d', '->*': 'ptr-mem-i'}
 REFKINDS = {'FunctionDecl': 'function', 'CXXMethodDecl': 'method', 'VarDecl': 'var',
+            'VarTemplateSpecializationDecl': 'var',
             'ParmVarDecl': 'parm', 'EnumConstantDecl': 'enum-constant', 'FieldDecl': 'field',
             'CXXConversionDecl': 'method', 'CXXDestructorDecl': 'method',
             'CXXConstructorDecl': 'method'}
@@ -900,8 +939,9 @@ CAST_NODES = {'ImplicitCastExpr': 'ce-implicit-cast', 'CXXStaticCastExpr': 'ce-s
 
 
 class Unit:
-    def __init__(self, path, name):
+    def __init__(self, path, name, flags=None):
         self.path, self.name = path, name
+        self.flags = list(flags if flags is not None else CLANG_FLAGS)
         self.met = {}            # node kind -> count, for the kinds written
         self.met_casts = {}
         self.elided = {}         # kind -> (count, reason)
@@ -909,7 +949,7 @@ class Unit:
 
     # ------------------------------------------------------------------ running Clang
     def run_clang(self):
-        base = ['clang++'] + CLANG_FLAGS
+        base = ['clang++'] + self.flags
         p = subprocess.run(base + ['-fsyntax-only', '-Xclang', '-ast-dump=json', '-Xclang',
                                    '-fdump-record-layouts', self.path],
                            capture_output=True, text=True)
@@ -956,6 +996,7 @@ class Unit:
         self.by_name = {}                   # identifier -> type entities anywhere in the unit
         self.lambdas = {}                   # "(lambda at ...)" -> closure records
         self.unnamed = {}                   # "file:line:col" -> the unnamed classes and enums there
+        self.var_by_name = {}
         self.ns_nodes = {}                  # qualified namespace name -> its NamespaceDecls
         self.redecl = {}                    # id -> id of the previous declaration
         last = {'file': None, 'line': None}
@@ -1000,6 +1041,8 @@ class Unit:
                 self.by_name.setdefault(n['name'], []).append(n)
             if k == 'LambdaExpr':
                 self.lambdas.setdefault(n['type']['qualType'], []).append(n['inner'][0])
+            if k == 'VarDecl' and n.get('name') and not stub:
+                self.var_by_name.setdefault(n['name'], []).append(n)
             if k == 'MemberExpr':
                 members.append(n)
             if k == 'AlignedAttr':
@@ -1049,6 +1092,8 @@ class Unit:
             self.redecls[c] = ids
         self.type_memo, self.typedef_memo, self.table_memo, self.spec_memo = {}, {}, {}, {}
         self.global_memo = {}
+        self.probes, self.fn_type_memo = {}, {}
+        self.sources, self.stubs = {}, []
 
     def is_definition(self, n):
         k = n['kind']
@@ -1057,7 +1102,7 @@ class Unit:
         if k in FUNCTION_KINDS:
             return any(c.get('kind') == 'CompoundStmt' for c in n.get('inner', [])) or \
                 'explicitlyDefaulted' in n
-        if k == 'VarDecl':
+        if k in ('VarDecl', 'VarTemplateSpecializationDecl'):
             return 'init' in n or n.get('storageClass') != 'extern'
         return False
 
@@ -1161,7 +1206,8 @@ class Unit:
                     t.setdefault(tg['name'], []).append(tg)
             elif k == 'UsingDirectiveDecl':
                 t.setdefault('', []).append(c)
-            elif k in TYPE_ENTITY_KINDS and c.get('name'):
+            elif k in TYPE_ENTITY_KINDS and c.get('name') and k != 'ClassTemplateSpecializationDecl':
+                # (an explicit specialization is found through its template, not by its name)
                 t.setdefault(c['name'], []).append(self.nodes[c['id']])
         if n.get('kind') in FUNCTION_KINDS:
             # local types: anywhere in the body
@@ -1227,9 +1273,13 @@ class Unit:
                 e = p                                  # the injected class name
         return ('decl', self.canon.get(e['id'], e['id']))
 
-    def resolve_name(self, comps, scope, hint, whole):
+    def resolve_name(self, comps, scope, hint, whole, env=None):
         """A qualified name used at scope -> the type it names."""
         first, args = comps[0]
+        if env and first in env and args is None:
+            if env[first][0] != 'type':
+                stop('type string not read: %r (the constant %s where a type is expected)' % (whole, first))
+            return self.resolve_from(('type', env[first][1]), comps[1:], scope, whole, False, env)
         if first.startswith('(lambda at '):
             if len(comps) != 1:
                 stop('a member of a lambda named in a type: %r' % whole)
@@ -1237,7 +1287,7 @@ class Unit:
         if comps[-1][0].startswith(('(unnamed ', '(anonymous ')) and comps[-1][0] != '(anonymous namespace)':
             return self.unnamed_type(comps, scope, whole)
         if first == '(anonymous namespace)':
-            return self.resolve_from(('ns', first), comps[1:], scope, whole, entity_given=False)
+            return self.resolve_from(('ns', first), comps[1:], scope, whole, False, env)
         if first.startswith('('):
             stop('type string not read: %r (an unnamed entity %r: no rule yet)' % (whole, first))
         if hint is not None and len(comps) >= 1 and comps[-1] == (hint.get('name'), None):
@@ -1256,17 +1306,17 @@ class Unit:
                 # not in scope where the type is used: the string was written elsewhere (a
                 # member typedef named in a signature). Every declaration of the name in the
                 # unit is a candidate, and they must all mean the same type.
-                found = self.by_name.get(first, [])
+                found = [e for e in self.by_name.get(first, []) if e.get('kind') != 'ClassTemplateSpecializationDecl']
             # a declaration inside a template that is not instantiated is never what a name in
             # instantiated code means
             found = [e for e in found if not self.is_pattern(e)]
             if not found:
-                stop('a name in a type is not declared anywhere in the unit outside templates: %r in %r (used at %s)'
-                     % (first, whole, self.where(scope)))
+                raise NotAType('a name in a type is not declared as a type anywhere in the unit outside templates: %r in %r (used at %s)'
+                               % (first, whole, self.where(scope)))
             ents, rest = sorted(set(self.entity_key(e) for e in found)), comps
         results = set()
         for ent in ents:
-            results.add(self.resolve_from(ent, rest, scope, whole, entity_given=(first != '')))
+            results.add(self.resolve_from(ent, rest, scope, whole, first != '', env))
         if len(results) != 1:
             stop('a name in a type has several meanings and the scope does not choose: %r in %r (used at %s): %s'
                  % (first, whole, self.where(scope), sorted(type_str(r) for r in results)))
@@ -1290,6 +1340,137 @@ class Unit:
             stop('type string not read: %r (%d unnamed declarations at that place)' % (whole, len(cands)))
         c = self.node(cands[0]['id'])
         return ('enum' if c['kind'] == 'EnumDecl' else 'record', c['id'])
+
+    def constant_value(self, comps, whole):
+        """A template argument printed as the name of a constant: its value. Every variable of
+        that name in the unit (outside templates) is a candidate and all must have the value;
+        a value Sema did not leave in the dump as a ConstantExpr is asked of Clang by a probe."""
+        name = comps[-1][0]
+        vals = set()
+        for v in self.var_by_name.get(name, []):
+            if self.is_pattern(v) or self.is_local(v):
+                continue
+            ks = [c for c in v.get('inner', []) if not c.get('kind', '').endswith('Attr')]
+            if ks and ks[0].get('kind') == 'ConstantExpr' and re.match(r'-?\d+$', str(ks[0].get('value'))):
+                vals.add(int(ks[0]['value']))
+            else:
+                vals.add(self.probe_value('(%s)' % self.spell_decl(v)))
+        if len(vals) != 1:
+            stop('type string not read: %r (the template argument %s names %d constants of different values)'
+                 % (whole, name, len(vals)))
+        return vals.pop()
+
+    # ------------------------------------------------------------------ probes
+    # What the dumps do not say and Clang knows is asked of Clang: a second translation unit
+    # that includes this one and declares one alias, whose canonical type the dump then prints.
+    PROBE = ('template <class T> struct __c2c_canon;\ntemplate <auto V> struct __c2c_val;\n'
+             'using __c2c_probe = %s;\n')
+
+    def probe(self, rhs):
+        if rhs in self.probes:
+            return self.probes[rhs]
+        p = subprocess.run(['clang++'] + self.flags + ['-fsyntax-only', '-Xclang', '-fno-access-control', '-Xclang',
+                            '-ast-dump=json', '-Xclang', '-ast-dump-filter=__c2c_probe', '-include', self.path,
+                            '-x', 'c++', '-'], input=self.PROBE % rhs, capture_output=True, text=True)
+        if p.returncode != 0 or '{' not in p.stdout:
+            stop('a probe of Clang failed: `using __c2c_probe = %s;` after %s:\n%s' % (rhs, self.path, p.stderr[-1500:]))
+        obj, _ = json.JSONDecoder().raw_decode(p.stdout[p.stdout.index('{'):])
+        if obj.get('name') != '__c2c_probe':
+            stop('a probe of Clang printed something else: %r' % obj.get('name'))
+        t = obj['type'].get('desugaredQualType', obj['type']['qualType'])
+        m = re.match(r'__c2c_(?:canon|val)<(.*)>$', t)
+        if not m:
+            stop('a probe of Clang answered %r' % t)
+        self.probes[rhs] = m.group(1)
+        return m.group(1)
+
+    def probe_type(self, cxx_type):
+        return TypeParser(self, self.probe('__c2c_canon<%s>' % cxx_type), self.tu, None).whole()
+
+    def probe_value(self, cxx_expr):
+        a = self.probe('__c2c_val<%s>' % cxx_expr)
+        m = re.match(r'(-?\d+)[uUlL]*$', a)
+        if m:
+            return int(m.group(1))
+        if a in ('true', 'false'):
+            return int(a == 'true')
+        stop('a probe of Clang for a value answered %r' % a)
+
+    def spell_scope(self, n):
+        """The C++ spelling, from the global namespace, of the context the declaration n is a
+        member of ('' for the global namespace), or None when it cannot be named from outside."""
+        sem = n.get('parentDeclContextId')
+        p = self.nodes[sem] if sem in self.nodes else self.parent[id(n)]
+        while p is not None and p.get('kind') in ('LinkageSpecDecl', 'FriendDecl', 'ClassTemplateDecl', 'FunctionTemplateDecl',
+                                                  'EnumDecl') and not (p.get('kind') == 'EnumDecl' and 'scopedEnumTag' in p):
+            p = self.parent[id(p)]
+        if p is None or p.get('kind') == 'TranslationUnitDecl':
+            return ''
+        k = p.get('kind')
+        outer = self.spell_scope(p)
+        if outer is None:
+            return None
+        if k == 'NamespaceDecl':
+            return outer if 'name' not in p else outer + '::' + p['name']
+        if k in RECORD_KINDS + ('EnumDecl',) and p.get('name'):
+            return outer + '::' + p['name'] + (self.spell_args(p) if k == 'ClassTemplateSpecializationDecl' else '')
+        return None
+
+    def spell_args(self, n):
+        if not any(c.get('kind') == 'TemplateArgument' for c in n.get('inner', [])):
+            return ''
+        out = []
+        types = iter([a for a in self.flat_targs(n) if 'type' in a])
+        for kind, x in self.template_args_or_stop(n):
+            if kind == 'type':
+                out.append(next(types)['type']['qualType'])     # Clang's canonical spelling
+            elif kind == 'int':
+                out.append(str(x))
+            else:
+                stop('a template argument of %s printed as %d whose type is not read: it cannot be spelled for a probe' % (n.get('name'), x))
+        return '<%s>' % ', '.join(out)
+
+    def flat_targs(self, n):
+        out = []
+
+        def one(a):
+            if a.get('isPack'):
+                for b in a.get('inner', []):
+                    one(b)
+            else:
+                out.append(a)
+        for c in n.get('inner', []):
+            if c.get('kind') == 'TemplateArgument':
+                one(c)
+        return out
+
+    def spell_decl(self, n):
+        sc = self.spell_scope(n)
+        if sc is None or not n.get('name'):
+            stop('%s (at %s) cannot be named from outside its scope, so Clang cannot be asked about it by a probe: no rule yet'
+                 % (n.get('name') or 'an unnamed declaration', self.where(n)))
+        return sc + '::' + n['name'] + (self.spell_args(n) if n['kind'] in FUNCTION_KINDS + ('ClassTemplateSpecializationDecl',) else '')
+
+    def function_type(self, d):
+        """The type of the function d. Its string is read in d's scope; when it has a part only
+        Clang can evaluate, Clang is asked for the type of `&d`."""
+        if d['id'] in self.fn_type_memo:
+            return self.fn_type_memo[d['id']]
+        try:
+            t = self.resolve_type(d['type'], d)
+        except NeedsProbe:
+            if d['kind'] in ('CXXConstructorDecl', 'CXXDestructorDecl'):
+                stop('the type of %s (at %s) has a noexcept that is an expression, and its address cannot be taken to ask Clang: no rule yet'
+                     % (d.get('name'), self.where(d)))
+            t = self.probe_type('decltype(&%s)' % self.spell_decl(d))
+            if t[0] == 'ptr' and t[1][0] == 'func':
+                t = t[1]
+            elif t[0] == 'memptr' and t[2][0] == 'func':
+                t = t[2]
+            else:
+                stop('a probe for the type of %s answered %s' % (d.get('name'), type_str(t)))
+        self.fn_type_memo[d['id']] = t
+        return t
 
     def is_pattern(self, e):
         """Is the declaration inside a template that is not instantiated (or a partial
@@ -1325,8 +1506,9 @@ class Unit:
         if len(types) > 1:
             self.scope_dependent.add(ident)
 
-    def resolve_from(self, ent, comps, scope, whole, entity_given):
-        """ent is what the first component names (or the global namespace, entity_given False)."""
+    def resolve_from(self, ent, comps, scope, whole, entity_given, env=None):
+        """ent is what the first component names (or a namespace or type to look the components
+        up in, entity_given False)."""
         i = 0
         cur = ent
         if entity_given:
@@ -1358,15 +1540,48 @@ class Unit:
         if args is None:
             return ent
         if ent[0] != 'decl':
-            stop('type string not read: %r (template arguments on a namespace)' % whole)
+            stop('type string not read: %r (template arguments on a namespace or a type)' % whole)
         n = self.nodes[ent[1]]
         if n['kind'] == 'TypeAliasTemplateDecl':
-            stop('type string not read: %r (the alias template %s: no rule yet)' % (whole, n.get('name')))
+            return ('type', self.alias_template(n, args, whole))
+        if n['kind'] == 'ClassTemplateSpecializationDecl':
+            # the injected class name with arguments names the template
+            t = self.parent[id(n)]
+            if t.get('kind') != 'ClassTemplateDecl':
+                cands = [x for x in self.by_name.get(n.get('name'), []) if x.get('kind') == 'ClassTemplateDecl' and self.same_scope(x, n)]
+                if len(cands) < 1:
+                    stop('type string not read: %r (the template of the specialization %s is not found)' % (whole, n.get('name')))
+                t = cands[0]
+            n = t
         if n['kind'] != 'ClassTemplateDecl':
             stop('type string not read: %r (%s is a %s, not a class template)' % (whole, n.get('name'), n['kind']))
         return ('decl', self.specialization(n, args, whole)['id'])
 
+    def alias_template(self, n, args, whole):
+        """An alias template applied: its type, with the arguments for its parameters."""
+        key = (n['id'], tuple(args))
+        if key in self.spec_memo:
+            return self.spec_memo[key]
+        params = [c for c in n.get('inner', []) if c.get('kind', '').endswith('ParmDecl')]
+        alias = [c for c in n.get('inner', []) if c.get('kind') == 'TypeAliasDecl']
+        if len(alias) != 1 or any(c.get('isParameterPack') or c['kind'] == 'TemplateTemplateParmDecl' for c in params):
+            stop('type string not read: %r (the alias template %s has a parameter pack or a template parameter: no rule yet)'
+                 % (whole, n.get('name')))
+        if len(params) != len(args):
+            stop('type string not read: %r (the alias template %s takes %d arguments, %d are printed: defaults, no rule yet)'
+                 % (whole, n.get('name'), len(params), len(args)))
+        env = {}
+        for c, (kind, x) in zip(params, args):
+            if (c['kind'] == 'TemplateTypeParmDecl') != (kind == 'type'):
+                stop('type string not read: %r (argument kinds of the alias template %s)' % (whole, n.get('name')))
+            env[c.get('name')] = (kind, x)
+        t = TypeParser(self, alias[0]['type']['qualType'], alias[0], None, env).whole()
+        self.spec_memo[key] = t
+        return t
+
     def entity_type(self, ent, whole):
+        if ent[0] == 'type':
+            return ent[1]
         if ent[0] == 'ns':
             stop('type string not read: %r (a namespace where a type is expected)' % whole)
         n = self.nodes[ent[1]]
@@ -1413,24 +1628,72 @@ class Unit:
         stop('lambda not found: %s' % text)
 
     def template_args(self, spec):
-        """The arguments of a specialization: ('type', T) / ('int', n), packs flattened."""
-        out = []
+        """The arguments of a specialization: ('type', T) / ('int', n), packs flattened.
+
+        The JSON prints an integral argument sign-extended from its own width: `true` is -1,
+        and std::size_t's maximum is -1. The value is read at the type of the template's
+        parameter (found with the earlier arguments bound). Where that type cannot be read and
+        the number printed is negative the argument is ('int?', n): it matches the values it
+        could stand for, and stops the import if it has to be written."""
+        raw = []
 
         def one(a):
             if a.get('isPack'):
                 for b in a.get('inner', []):
                     one(b)
             elif 'type' in a:
-                out.append(('type', self.resolve_type(a['type'], self.tu)))
+                raw.append(('type', self.resolve_type(a['type'], self.tu)))
             elif 'value' in a:
-                v = a['value']
-                out.append(('int', int(v) if not isinstance(v, bool) else int(v)))
+                raw.append(('int', int(a['value'])))
             else:
                 raise Dependent('a template argument that is neither a type nor an integer')
         for c in spec.get('inner', []):
             if c.get('kind') == 'TemplateArgument':
                 one(c)
+        params = self.template_params(spec)
+        env, out = {}, []
+        for i, (kind, x) in enumerate(raw):
+            p = params[min(i, len(params) - 1)] if params else None
+            if kind == 'int' and x < 0:
+                pt = None
+                if p is not None and p.get('kind') == 'NonTypeTemplateParmDecl':
+                    try:
+                        pt = unqual(TypeParser(self, p['type'].get('desugaredQualType', p['type']['qualType']), p, None, env).whole())
+                    except (Stop, Dependent):
+                        pt = None
+                if pt is not None and pt[0] == 'enum' and 'fixedUnderlyingType' in self.nodes[pt[1]]:
+                    pt = unqual(self.resolve_type(self.nodes[pt[1]]['fixedUnderlyingType'], self.nodes[pt[1]]))
+                if pt is not None and pt[0] == 'builtin' and pt[1] in UNSIGNED_BITS and self.target.startswith('x86_64'):
+                    x = x % (1 << UNSIGNED_BITS[pt[1]])
+                elif not (pt is not None and pt[0] == 'builtin' and pt[1] in SIGNED_KINDS):
+                    kind = 'int?'
+            out.append((kind, x))
+            if p is not None and p.get('name') and not p.get('isParameterPack') and kind != 'int?':
+                env[p['name']] = (kind, x)
         return tuple(out)
+
+    def template_params(self, spec):
+        """The parameters of the template a specialization is of, or None when not found."""
+        t = self.parent[id(spec)]
+        if t.get('kind') not in ('ClassTemplateDecl', 'FunctionTemplateDecl', 'VarTemplateDecl'):
+            cands = [x for x in self.by_name.get(spec.get('name'), []) if x.get('kind') == 'ClassTemplateDecl' and self.same_scope(x, spec)]
+            if not cands:
+                return None
+            t = cands[0]
+        return [c for c in t.get('inner', []) if c.get('kind', '').endswith('ParmDecl')]
+
+    @staticmethod
+    def args_match(have, want):
+        """Do a specialization's arguments equal the wanted ones (the first len(want) of them)?"""
+        if len(have) < len(want):
+            return False
+        for (hk, hx), (wk, wx) in zip(have, want):
+            if hk == 'int?':
+                if wk != 'int' or wx not in (hx, hx % (1 << 64), hx % (1 << 32), hx % (1 << 16), hx % (1 << 8), 1 if hx == -1 else hx):
+                    return False
+            elif (hk, hx) != (wk, wx):
+                return False
+        return True
 
     def specialization(self, tmpl, args, whole):
         key = (tmpl['id'], tuple(args))
@@ -1450,9 +1713,9 @@ class Unit:
                 except Dependent:
                     continue
                 s = self.node(s['id'])
-                if sa == tuple(args):
+                if len(sa) == len(args) and self.args_match(sa, args):
                     exact.append(s)
-                elif sa[:len(args)] == tuple(args):
+                elif self.args_match(sa, args):
                     prefix.append(s)
         # explicit specializations are declared beside the template, not under it
         for s in self.by_name.get(tmpl['name'], []):
@@ -1461,7 +1724,7 @@ class Unit:
                     sa = self.template_args(s)
                 except Dependent:
                     continue
-                if sa == tuple(args) and self.same_scope(s, tmpl):
+                if len(sa) == len(args) and self.args_match(sa, args) and self.same_scope(s, tmpl):
                     exact.append(self.node(s['id']))
         cands = {s['id']: s for s in (exact or prefix)}
         if len(cands) != 1:
@@ -1758,8 +2021,8 @@ class Unit:
             self.queue.append(n)
             if k in FUNCTION_KINDS and k != 'FunctionDecl':
                 self.need(self.record_of_member(n)['id'])
-        elif k == 'VarDecl':
-            if self.is_local(n):
+        elif k in ('VarDecl', 'VarTemplateSpecializationDecl'):
+            if self.is_local(n) or n.get('_init_capture'):
                 pass
             else:
                 self.queue.append(n)
@@ -1849,7 +2112,7 @@ class Unit:
         if k == 'DeclRefExpr':
             d = self.node(n['referencedDecl']['id'])
             if d['kind'] in FUNCTION_KINDS and n['type']['qualType'] not in PLACEHOLDERS:
-                return self.type_at(d['type'], d)
+                return self.function_type(d)
         if k == 'ImplicitCastExpr' and n.get('castKind') == 'FunctionToPointerDecay':
             return ('ptr', self.expr_type(n['inner'][0]))
         return self.type_at(n['type'], n)
@@ -1897,23 +2160,41 @@ class Unit:
         return T('ce-nullptr-literal', *self.head(n))
 
     def e_FloatingLiteral(self, n):
-        t = self.type_at(n['type'], n)
-        if unqual(t) != ('builtin', 'double'):
-            stop('floating literal of type %s at %s: no rule yet' % (type_str(t), self.where(n)))
-        bits = struct.unpack('<Q', struct.pack('<d', float(n['value'])))[0]
-        return T('ce-floating-literal', *self.head(n), W(bits))
+        t = unqual(self.type_at(n['type'], n))
+        formats = {'float': (24, 8, False), 'double': (53, 11, False)}
+        if self.target.startswith('x86_64'):
+            formats['ldouble'] = (64, 15, True)     # the x87 extended format, the integer bit explicit
+        if t[0] != 'builtin' or t[1] not in formats:
+            stop('floating literal of type %s for the target %s at %s: no rule yet' % (type_str(t), self.target, self.where(n)))
+        return T('ce-floating-literal', *self.head(n), W(ieee_bits(n['value'], *formats[t[1]])))
 
     def e_StringLiteral(self, n):
-        t = self.type_at(n['type'], n)
+        """A narrow string is its array's bytes. A wide or UTF string is its array's code units
+        (the element type gives their width; the bytes of a unit are the target's)."""
+        t = unqual(self.type_at(n['type'], n))
         v = n['value']
-        if not (v.startswith('"') and v.endswith('"')) or unqual(t)[0] != 'array' or \
-                unqual(unqual(t)[1]) != ('builtin', 'char'):
+        m = re.match(r'(L|u8|u|U|)"(.*)"$', v, re.S)
+        if not m or t[0] != 'array' or unqual(t[1])[0] != 'builtin':
             stop('string literal %r of type %s at %s: no rule yet' % (v, type_str(t), self.where(n)))
-        b = c_unescape(v[1:-1])
-        size = unqual(t)[2]
-        if len(b) > size:
-            stop('string literal longer than its array: %r' % v)
-        return T('ce-string-literal', *self.head(n), S(b + bytes(size - len(b))))
+        elem = unqual(t[1])[1]
+        want = {'': 'char', 'L': 'wchar', 'u8': 'char8', 'u': 'char16', 'U': 'char32'}[m.group(1)]
+        if elem != want:
+            stop('string literal %r with elements of type %s at %s' % (v, elem, self.where(n)))
+        items = c_unescape(m.group(2))
+        units = []
+        for kind, x in items:
+            if kind == 'raw' or elem in ('char32', 'wchar'):
+                units.append(x)
+            elif elem in ('char', 'char8'):
+                units += list(chr(x).encode('utf-8'))
+            else:
+                units += list(struct.unpack('<%dH' % (len(chr(x).encode('utf-16-le')) // 2), chr(x).encode('utf-16-le')))
+        if elem == 'wchar' and not self.target.startswith('x86_64') or len(units) > t[2]:
+            stop('string literal %r at %s: longer than its array, or wchar_t on a target this rule does not know' % (v, self.where(n)))
+        units += [0] * (t[2] - len(units))
+        if elem == 'char':
+            return T('ce-string-literal', *self.head(n), S(bytes(units)))
+        return T('ce-string-literal-units', *self.head(n), [W(u) for u in units])
 
     def ref(self, clang_id):
         n = self.node(clang_id)
@@ -2159,6 +2440,14 @@ class Unit:
             stop('a SubstNonTypeTemplateParmExpr of an unexpected shape at %s' % self.where(n))
         return T('ce-subst-nttp', *self.head(n), self.expr(sub))
 
+    def e_CXXRewrittenBinaryOperator(self, n):
+        sub, = self.kids(n)
+        return T('ce-rewritten-binary', *self.head(n), self.expr(sub))
+
+    def e_CXXStdInitializerListExpr(self, n):
+        sub, = self.kids(n)
+        return T('ce-std-initializer-list', *self.head(n), self.expr(sub))
+
     def e_CXXNewExpr(self, n):
         ks = self.kids(n)
         size = placement = init = None
@@ -2232,12 +2521,14 @@ class Unit:
         return out, ks
 
     def s_IfStmt(self, n):
-        if n.get('isConsteval') or n.get('isConstexpr'):
-            stop('if consteval / if constexpr at %s: no rule yet' % self.where(n))
+        if n.get('isConsteval'):
+            stop('if consteval at %s: no rule yet' % self.where(n))
         (init, var), ks = self.flagged(n, ('hasInit', 'hasVar'))
         if len(ks) != (3 if n.get('hasElse') else 2):
             stop('an IfStmt of an unexpected shape at %s' % self.where(n))
-        return T('cs-if', self.stmt(init), self.stmt(var), self.expr(ks[0]), self.stmt(ks[1]),
+        # if constexpr: the condition is a ConstantExpr with its value and the branch not taken
+        # is an empty compound statement (Sema discarded it)
+        return T('cs-if-constexpr' if n.get('isConstexpr') else 'cs-if', self.stmt(init), self.stmt(var), self.expr(ks[0]), self.stmt(ks[1]),
                  self.stmt(ks[2]) if n.get('hasElse') else T('cs-none'))
 
     def s_WhileStmt(self, n):
@@ -2291,8 +2582,10 @@ class Unit:
         sc = n.get('storageClass')
         if sc not in (None, 'static', 'extern'):
             stop('storage class %r at %s: no rule yet' % (sc, self.where(n)))
+        if n.get('tls') not in (None, 'dynamic'):
+            stop('thread-local storage of kind %r (not thread_local) at %s: no rule yet' % (n.get('tls'), self.where(n)))
         if n.get('tls'):
-            stop('thread-local storage at %s: no rule yet' % self.where(n))
+            return T('cst-' + (sc + '-' if sc else '') + 'thread-local')
         return T('cst-' + (sc or 'none'))
 
     def attrs(self, n):
@@ -2327,7 +2620,7 @@ class Unit:
                     if e.get('kind') != 'ConstantExpr':
                         stop('an alignment that is not a constant expression at %s' % self.where(n))
                     align = T('cal-bytes', W(int(e['value'])))
-        ks = self.attrs(n)
+        ks = [c for c in self.attrs(n) if c.get('kind') != 'TemplateArgument']
         style = n.get('init')
         if style is None:
             if ks:
@@ -2406,7 +2699,7 @@ class Unit:
             self.decls.append((w, self.decl(n)))
             self.labels.append('%s %s%s' % (n['kind'], self.display_name(n),
                                             ' : ' + n['type']['qualType'] if 'type' in n else ''))
-        written = [n for n in self.queue if n['kind'] == 'VarDecl']
+        written = [n for n in self.queue if n['kind'] in ('VarDecl', 'VarTemplateSpecializationDecl')]
         static_ids = [W(self.ids[n['id']]) for n in sorted(written, key=lambda n: n['_order'])]
         missing = sorted(set(self.ids.values()) - self.defined)
         if missing:
@@ -2467,6 +2760,10 @@ class Unit:
                 inits.append(c)
             elif ck == 'TemplateArgument':
                 self.elide('TemplateArgument (of a function)', 'the specialization is written already substituted')
+            elif ck in ('RequiresExpr', 'ConceptSpecializationExpr', 'BinaryOperator', 'UnaryOperator', 'ParenExpr',
+                        'CXXBoolLiteralExpr', 'CXXFoldExpr', 'DeclRefExpr', 'UnresolvedLookupExpr', 'TypeTraitExpr'):
+                # an expression that is a direct child of a function is its requires-clause
+                self.elide('requires-clause (%s)' % ck, 'a constraint: Sema checked it when it chose the function')
             else:
                 stop('a %s under the function %s at %s: no rule yet' % (ck, n.get('name'), self.where(n)))
         if 'explicitlyDeleted' in n:
@@ -2482,7 +2779,7 @@ class Unit:
             b = T('cfb-none')
         if n.get('variadic') is not None and not isinstance(n.get('variadic'), bool):
             stop('variadic flag %r' % n.get('variadic'))
-        t = self.type_at(n['type'], n)
+        t = self.function_type(n)
         fn = T('cfunction', W(self.ids[n['id']]), S(n.get('name', '')), S(n.get('mangledName', '')),
                self.ty(t), params, self.storage(n), bool(n.get('inline')), bool(n.get('constexpr')),
                bool(n.get('isImplicit')), b)
@@ -2615,7 +2912,10 @@ class Unit:
                                             'CXXDeductionGuideDecl', 'ConstructorUsingShadowDecl'):
                 continue        # members: written when referred to; the rest hold at compile time
             if k == 'IndirectFieldDecl':
-                stop('an anonymous struct or union member in %s: no rule yet' % n.get('name'))
+                # a member of an anonymous struct or union, named in the enclosing class: every
+                # access is written out by Sema through the unnamed field that holds it
+                self.elide(k, 'the access path through the unnamed member is explicit in every MemberExpr')
+                continue
             stop('a %s in the class %s: no rule yet' % (k, n.get('name')))
         name = n.get('name') or ''
         lay = T('clayout', W(sizes['sizeof']), W(sizes['align']), W(sizes['dsize']), W(sizes['nvsize']),
@@ -2644,11 +2944,52 @@ class Unit:
                     break
             if k == 'CXXThisExpr':
                 out[f['id']] = T('ccap-this')
-            elif k == 'DeclRefExpr' and e['referencedDecl']['kind'] in ('VarDecl', 'ParmVarDecl'):
+                continue
+            # the field's location is the capture's name in the source: a plain capture names
+            # the variable its initializer refers to; any other name is an init-capture's
+            name = self.source_identifier(f)
+            if k == 'DeclRefExpr' and e['referencedDecl']['kind'] in ('VarDecl', 'ParmVarDecl') and \
+                    e['referencedDecl'].get('name') == name and not self.init_capture_refs(rec, name):
                 out[f['id']] = T('ccap-var', W(self.idof(e['referencedDecl']['id'])))
-            else:
-                stop('the lambda at %s has a capture initialized by a %s (an init-capture): no rule yet' % (self.where(rec), k))
+                continue
+            refs = self.init_capture_refs(rec, name)
+            if len(refs) > 1:
+                stop('the lambda at %s refers to %d different undeclared variables named %s' % (self.where(rec), len(refs), name))
+            vid = refs.pop() if refs else 'init-capture:%s:%s' % (rec['id'], name)
+            stub = {'id': vid, 'kind': 'VarDecl', 'name': name, '_init_capture': True}
+            self.nodes[vid] = stub
+            self.parent[id(stub)] = rec
+            self.stubs.append(stub)
+            w = self.idof(vid)
+            self.defined.add(w)
+            out[f['id']] = T('ccap-init', W(w))
         return out
+
+    def init_capture_refs(self, rec, name):
+        """The ids of the variables named `name` that the lambda's body refers to and the dump
+        declares nowhere: an init-capture's variable is not dumped, only referred to."""
+        ids = set()
+        stack = [c for c in rec.get('inner', [])]
+        while stack:
+            c = stack.pop()
+            if c.get('kind') == 'DeclRefExpr':
+                r = c['referencedDecl']
+                if r.get('kind') == 'VarDecl' and r.get('name') == name and \
+                        (r['id'] not in self.nodes or self.nodes[r['id']].get('_init_capture')):
+                    ids.add(r['id'])
+            stack.extend(x for x in c.get('inner', []) + c.get('array_filler', []) if x)
+        return ids
+
+    def source_identifier(self, n):
+        """The identifier in the source at the location of n."""
+        f, line, col = n.get('_file'), n.get('_line'), n.get('_col')
+        if f not in self.sources:
+            with open(f, encoding='utf-8', errors='replace') as fh:
+                self.sources[f] = fh.read().split('\n')
+        m = re.match(r'[A-Za-z_][A-Za-z0-9_]*', self.sources[f][line - 1][col - 1:]) if col else None
+        if not m:
+            stop('no identifier in the source at %s:%s:%s (the name of a lambda capture is read there)' % (f, line, col))
+        return m.group(0)
 
     def bit_width(self, c):
         ks = [x for x in c.get('inner', []) if not x.get('kind', '').endswith('Attr')]
@@ -2660,11 +3001,7 @@ class Unit:
         return T('cd-record', self.record(n))
 
     def d_ClassTemplateSpecializationDecl(self, n):
-        args = []
-        for kind, x in self.template_args_or_stop(n):
-            args.append(T('cta-type', self.ty(x)) if kind == 'type' else T('cta-integral', cint(x)))
-            self.count('TemplateArgument')
-        return T('cd-class-template-specialization', args, self.record(n))
+        return T('cd-class-template-specialization', self.targs(n), self.record(n))
 
     def template_args_or_stop(self, n):
         try:
@@ -2673,9 +3010,19 @@ class Unit:
             stop('template arguments of %s at %s: %s: no rule yet' % (n.get('name'), self.where(n), e))
 
     def d_EnumDecl(self, n):
-        if 'fixedUnderlyingType' not in n:
-            stop('the enumeration %s (at %s) has no fixed underlying type; the dump does not give the one Sema chose: no rule yet'
-                 % (n.get('name'), self.where(n)))
+        if 'fixedUnderlyingType' in n:
+            underlying = self.type_at(n['fixedUnderlyingType'], n)
+        else:
+            # the type Sema chose is in no dump: Clang is asked for __underlying_type of the
+            # enumeration, named directly or as the type of one of its enumerators
+            first = [c for c in n.get('inner', []) if c.get('kind') == 'EnumConstantDecl']
+            if n.get('name'):
+                arg = self.spell_decl(n)
+            elif first:
+                arg = 'decltype(%s)' % self.spell_decl(first[0])
+            else:
+                stop('an enumeration with no name and no enumerators at %s' % self.where(n))
+            underlying = self.probe_type('__underlying_type(%s)' % arg)
         es, nxt = [], 0
         for c in self.attrs(n):
             if c.get('kind') != 'EnumConstantDecl':
@@ -2696,12 +3043,26 @@ class Unit:
             es.append(T('cenumerator', W(w), S(c['name']), cint(nxt)))
             nxt += 1
         return T('cd-enum', W(self.ids[n['id']]), S(n.get('name', '')),
-                 self.ty(self.type_at(n['fixedUnderlyingType'], n)), 'scopedEnumTag' in n, es)
+                 self.ty(underlying), 'scopedEnumTag' in n, es)
 
     def d_VarDecl(self, n):
         v = self.var(n)
         self.met['VarDecl'] -= 1
         return T('cd-var', S(n.get('mangledName', '')), v)
+
+    def d_VarTemplateSpecializationDecl(self, n):
+        v = self.var(n)
+        self.met['VarDecl'] -= 1
+        return T('cd-var-template-specialization', self.targs(n), S(n.get('mangledName', '')), v)
+
+    def targs(self, n):
+        args = []
+        for kind, x in self.template_args_or_stop(n):
+            if kind == 'int?':
+                stop('a template argument of %s is printed as %d and the type of its parameter is not read: no rule yet' % (n.get('name'), x))
+            args.append(T('cta-type', self.ty(x)) if kind == 'type' else T('cta-integral', cint(x)))
+            self.count('TemplateArgument')
+        return args
 
     # ------------------------------------------------------------------ writing
     def write(self, out, limit):
@@ -2760,7 +3121,7 @@ class Unit:
 
     def header(self):
         h = ['-- %s.cub — %s as a value of CTU (lib/cxx/ast.cub), after Clang\'s semantic analysis.' % (self.name, self.path),
-             '-- GENERATED by tools/clang2cub.py from %s, %s, flags %s.' % (self.clang_version, self.target, ' '.join(CLANG_FLAGS)),
+             '-- GENERATED by tools/clang2cub.py from %s, %s, flags %s.' % (self.clang_version, self.target, ' '.join(self.flags)),
              '-- Load after the library and lib/cxx/ast.cub. %s-tu is the unit; %s-dN the declaration with id N;' % (self.name, self.name),
              '-- %s-tN a type shared by the nodes that have it; %s-nN a subterm written apart to keep definitions small.' % (self.name, self.name),
              '--']
@@ -2775,6 +3136,8 @@ class Unit:
         r.append('cast kinds met (%d): %s' % (len(self.met_casts), ', '.join('%s %d' % kv for kv in sorted(self.met_casts.items()))))
         r.append('met and not written as nodes (%d): %s' % (len(self.elided), '; '.join(
             '%s %d (%s)' % (k, c, why) for k, (c, why) in sorted(self.elided.items()))))
+        r.append('asked of Clang by a probe (%d): %s' % (len(self.probes), '; '.join(
+            '%s = %s' % kv for kv in sorted(self.probes.items()))))
         r.append('names resolved from the scope of use that name other types elsewhere in the unit (%d): %s'
                  % (len(self.scope_dependent), ', '.join(sorted(self.scope_dependent))))
         return '\n'.join(textwrap_lines(r, 110))
@@ -2799,13 +3162,15 @@ def k_is_special_member(n):
 
 
 def c_unescape(s):
-    """The bytes of a C string literal's text as Clang prints it."""
-    out, i = bytearray(), 0
-    simple = {'n': 10, 't': 9, 'r': 13, '0': 0, '\\': 92, '"': 34, "'": 39, 'a': 7, 'b': 8, 'f': 12, 'v': 11}
+    """The text of a string literal as Clang prints it -> [('cp', code point) | ('raw', unit)]:
+    characters and \\u escapes are code points to be encoded, \\x and octal escapes are code
+    units as they stand."""
+    out, i = [], 0
+    simple = {'n': 10, 't': 9, 'r': 13, '\\': 92, '"': 34, "'": 39, 'a': 7, 'b': 8, 'f': 12, 'v': 11, '?': 63}
     while i < len(s):
         ch = s[i]
         if ch != '\\':
-            out += ch.encode('utf-8')
+            out.append(('cp', ord(ch)))
             i += 1
             continue
         nx = s[i + 1]
@@ -2813,20 +3178,58 @@ def c_unescape(s):
             j = i + 2
             while j < len(s) and s[j] in '0123456789abcdefABCDEF':
                 j += 1
-            out.append(int(s[i + 2:j], 16))
+            out.append(('raw', int(s[i + 2:j], 16)))
+            i = j
+        elif nx in 'uU':
+            j = i + 2 + (4 if nx == 'u' else 8)
+            out.append(('cp', int(s[i + 2:j], 16)))
             i = j
         elif nx in '01234567':
             j = i + 1
             while j < len(s) and j < i + 4 and s[j] in '01234567':
                 j += 1
-            out.append(int(s[i + 1:j], 8))
+            out.append(('raw', int(s[i + 1:j], 8)))
             i = j
         elif nx in simple:
-            out.append(simple[nx])
+            out.append(('cp', simple[nx]))
             i += 2
         else:
             stop('string literal escape not read: \\%s in %r' % (nx, s))
-    return bytes(out)
+    return out
+
+
+def ieee_bits(text, mant, expbits, explicit):
+    """The bit pattern of the decimal `text` rounded to nearest-even in a binary format of
+    `mant` significand bits (the leading one stored when `explicit`) and `expbits` exponent bits."""
+    from fractions import Fraction
+    m = re.match(r'(-?)(\d+(?:\.\d*)?|\.\d+)(?:[eE]([-+]?\d+))?$', text.strip())
+    if not m:
+        stop('floating literal not read: %r' % text)
+    neg = m.group(1) == '-'
+    v = Fraction(m.group(2)) * Fraction(10) ** int(m.group(3) or 0)
+    bias = (1 << (expbits - 1)) - 1
+    stored = mant if explicit else mant - 1
+    if v == 0:
+        return (1 << (stored + expbits)) if neg else 0
+    e = v.numerator.bit_length() - v.denominator.bit_length()
+    if Fraction(2) ** e > v:
+        e -= 1                              # 2^e <= v < 2^(e+1)
+    e = max(e, 1 - bias)                    # subnormals share the least exponent
+    scaled = v / Fraction(2) ** (e - (mant - 1))
+    q, r = divmod(scaled.numerator, scaled.denominator)
+    if 2 * r > scaled.denominator or (2 * r == scaled.denominator and q & 1):
+        q += 1
+    if q >> mant:
+        q >>= 1
+        e += 1
+    if e > bias:
+        stop('floating literal out of range: %r' % text)
+    if q >> (mant - 1):
+        field = e + bias
+    else:
+        field = 0                           # subnormal
+    frac = q if explicit else q & ((1 << (mant - 1)) - 1)
+    return (int(neg) << (stored + expbits)) | (field << stored) | frac
 
 
 def main(argv):
@@ -2837,11 +3240,13 @@ def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('source')
     ap.add_argument('-o', '--output', required=True)
+    ap.add_argument('--flags', default=None,
+                    help='the Clang flags of the unit, space separated (default: %s)' % ' '.join(CLANG_FLAGS))
     ap.add_argument('--limit', type=int, default=400,
                     help='nodes in one definition before a subterm is written apart (default 400)')
     a = ap.parse_args(argv[1:])
     name = os.path.splitext(os.path.basename(a.output))[0]
-    u = Unit(a.source, name)
+    u = Unit(a.source, name, a.flags.split() if a.flags is not None else None)
     try:
         u.run_clang()
         u.index()
