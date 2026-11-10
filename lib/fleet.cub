@@ -310,3 +310,81 @@ HistOk : {S : Sig} {St : Type} → World S St → St → Hist S → Type
 HistOk {S} {St} w st0 h = (s : St) × HistTo {S} {St} w st0 h s
 Refines : {S : Sig} {Sp M St : Type} → World S Sp → Sp → (FState M St → Hist S) → Beh M St → FState M St → Type
 Refines {S} {Sp} {M} {St} w st0 obs beh g0 = Safe {M} {St} (λ g → HistOk {S} {Sp} w st0 (obs g)) beh g0
+-- ---------------------------------------------------------------- machines as processes
+-- a machine is a state type with a view; its process issues the view's command and continues
+-- from the next state, to the fuel (a Nat, or a Word by the word eliminator for a binary that
+-- runs long); at every clock it is a guarded process that runs for ever
+mp-step : {M X : Type} → (X → Proc {lzero} (NetSig M) X) → X → NView M X → Proc {lzero} (NetSig M) X
+mp-step {M} {X} nx y vx = case vx of
+  v-halt → ret {lzero} {NetSig M} {X} y
+  v-send to m s → bind {lzero} {NetSig M} {Unit} {X} (net-send {M} to m) (λ u → nx s)
+  v-recv k → bind {lzero} {NetSig M} {Rcv M} {X} (net-recv {M}) (λ r → nx (k r))
+  v-now kn → bind {lzero} {NetSig M} {Word} {X} (net-now {M}) (λ w → nx (kn w))
+  v-tau s → nx s
+mach-proc : {M X : Type} → (X → NView M X) → Nat → X → Proc {lzero} (NetSig M) X
+mach-proc {M} {X} v fuel x =
+  (case fuel return (λ f → X → Proc {lzero} (NetSig M) X) of
+     zero → λ y → ret {lzero} {NetSig M} {X} y
+     suc f → λ y → mp-step {M} {X} (rec f) y (v y)) x
+mach-proc-w : {M X : Type} → (X → NView M X) → Word → X → Proc {lzero} (NetSig M) X
+mach-proc-w {M} {X} v fuel x =
+  %welimP (λ f → X → Proc {lzero} (NetSig M) X) fuel
+     (λ y → ret {lzero} {NetSig M} {X} y)
+     (λ f go → λ y → mp-step {M} {X} go y (v y)) x
+-- one step of the machine's process is one step of the machine: the view of its tree is the
+-- machine's view with the process of the next state in place of the state (a silent step is
+-- not a step of the process: it continues at once)
+nview-map : {M X Y : Type} → (X → Y) → NView M X → NView M Y
+nview-map f v = case v of v-halt → v-halt; v-send to m s → v-send to m (f s); v-recv k → v-recv (λ r → f (k r)); v-now kn → v-now (λ w → f (kn w)); v-tau s → v-tau (f s)
+MachStep : {M X : Type} → (X → Proc {lzero} (NetSig M) X) → X → NView M X → Type
+MachStep {M} {X} nx y vx = case vx of
+  v-tau s → Unit
+  _ → Path (NView M (Step (NetSig M) X)) (proc-view {M} {X} (to-step {NetSig M} {X} (mp-step {M} {X} nx y vx)))
+                                         (nview-map {M} {X} {Step (NetSig M) X} (λ z → to-step {NetSig M} {X} (nx z)) vx)
+mach-step : {M X : Type} → (nx : X → Proc {lzero} (NetSig M) X) → (y : X) → (vx : NView M X) → MachStep {M} {X} nx y vx
+mach-step {M} {X} nx y v-halt = λ i → v-halt
+mach-step {M} {X} nx y (v-send to m s) = λ i → v-send to m (to-step {NetSig M} {X} (nx s))
+mach-step {M} {X} nx y (v-recv k) = λ i → v-recv (λ r → to-step {NetSig M} {X} (nx (k r)))
+mach-step {M} {X} nx y (v-now kn) = λ i → v-now (λ w → to-step {NetSig M} {X} (nx (kn w)))
+mach-step {M} {X} nx y (v-tau s) = unit
+mach-proc-step : {M X : Type} → (v : X → NView M X) → (f : Nat) → (x : X) → MachStep {M} {X} (mach-proc {M} {X} v f) x (v x)
+mach-proc-step {M} {X} v f x = mach-step {M} {X} (mach-proc {M} {X} v f) x (v x)
+mach-proc-w-step : {M X : Type} → (v : X → NView M X) → (f : Word) → (x : X) → MachStep {M} {X} (mach-proc-w {M} {X} v f) x (v x)
+mach-proc-w-step {M} {X} v f x = mach-step {M} {X} (mach-proc-w {M} {X} v f) x (v x)
+mach-proc-suc : {M X : Type} → (v : X → NView M X) → (f : Nat) → (x : X) → Path (Proc {lzero} (NetSig M) X) (mach-proc {M} {X} v (suc f) x) (mp-step {M} {X} (mach-proc {M} {X} v f) x (v x))
+mach-proc-suc {M} {X} v f x = λ i → mp-step {M} {X} (mach-proc {M} {X} v f) x (v x)
+mach-proc-w-suc : {M X : Type} → (v : X → NView M X) → (f : Word) → (x : X) → Path (Proc {lzero} (NetSig M) X) (mach-proc-w {M} {X} v (%wsucc f) x) (mp-step {M} {X} (mach-proc-w {M} {X} v f) x (v x))
+mach-proc-w-suc {M} {X} v f x = λ i → mp-step {M} {X} (mach-proc-w {M} {X} v f) x (v x)
+-- the same machine as a guarded process
+mach-gproc : {M X : Type} → (X → NView M X) → X → GProc κ (NetSig M) X
+mach-gproc {κ} {M} {X} v x = case v x of
+  v-halt → gret x
+  v-send to m s → gcmd (n-send to m) (λ u → mach-gproc v s)
+  v-recv k → gcmd n-recv (λ r → mach-gproc v (k r))
+  v-now kn → gcmd n-now (λ w → mach-gproc v (kn w))
+  v-tau s → gtau (mach-gproc v s)
+-- ---------------------------------------------------------------- guarded processes as nodes
+-- a guarded process at every clock is a node: its view is its first step, and the state after
+-- a response is the process forced one tick on
+GNode : Type → Type → Type
+GNode M A = (κ : Clock) → GProc κ (NetSig M) A
+g-after : {M A : Type} → GProc κ (NetSig M) A → Rcv M → Word → ▸ κ (GProc κ (NetSig M) A)
+g-after {κ} {M} {A} (gret a) rm w = next (gret a)
+g-after {κ} {M} {A} (gcmd c k) rm w =
+  (case c return (λ x → (net-resp {M} x → ▸ κ (GProc κ (NetSig M) A)) → ▸ κ (GProc κ (NetSig M) A)) of
+     n-send to m → λ k2 → k2 unit
+     n-recv → λ k2 → k2 rm
+     n-now → λ k2 → k2 w) k
+g-after {κ} {M} {A} (gtau t) rm w = t
+g-force : {M A : Type} → GNode M A → Rcv M → Word → GNode M A
+g-force {M} {A} p rm w = forceκ {lzero} {λ κ → GProc κ (NetSig M) A} (λ κ → g-after {κ} {M} {A} (p κ) rm w)
+gview : {M A : Type} → GNode M A → NView M (GNode M A)
+gview {M} {A} p = case p κ0 of
+  gret a → v-halt
+  gcmd c k → (case c of
+                n-send to m → v-send to m (g-force {M} {A} p r-timeout #0)
+                n-recv → v-recv (λ r → g-force {M} {A} p r #0)
+                n-now → v-now (λ w → g-force {M} {A} p r-timeout w))
+  gtau t → v-tau (g-force {M} {A} p r-timeout #0)
+gproc-beh : {M A : Type} → Beh M (GNode M A)
+gproc-beh {M} {A} i p = gview {M} {A} p

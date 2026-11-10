@@ -24,3 +24,27 @@ ping-final = fleet-run {Word} {Step (NetSig Word) Word} (proc-beh {Word} {Word})
 #show flight (snd ping-final)
 ping-delivered : ping-result (fst ping-final 1) ≡ #42
 ping-delivered = λ i → #42
+-- the same exchange with nodes that run for ever, as guarded processes at every clock: a
+-- machine whose state is the sum of the words it has received (node 1), and one that sends its
+-- state to node 1 and adds one, again and again (node 0)
+ping-mach : NodeId → Word → NView Word Word
+ping-mach i s = case i of zero → v-send 1 s (%wsucc s); suc j → v-recv (λ r → case r of r-timeout → s; r-msg f m → wadd s m)
+ping-gnodes : NodeId → GNode Word Word
+ping-gnodes i = λ κ → mach-gproc {κ} {Word} {Word} (ping-mach i) #5
+ping-gfinal : FState Word (GNode Word Word)
+ping-gfinal = fleet-run {Word} {GNode Word Word} (gproc-beh {Word} {Word})
+                (cons (a-run 0) (cons (a-run 0) (cons (a-dup 0) (cons (a-deliver 0) (cons (a-deliver 0) (cons (a-deliver 0) nil))))))
+                (ping-gnodes , net-empty {Word})
+-- after the run node 1 is at a receive, and after a timeout it is at a command again (#1): the
+-- guarded process is unfolded only as far as the run observes it
+ping-gsum : NView Word (GNode Word Word) → Word
+ping-gsum v = case v of
+  v-recv k → (case k r-timeout κ0 of gret a → #0; gcmd c k2 → #1; gtau t → #2)
+  _ → #3
+#show ping-gsum (gview {Word} {Word} (fst ping-gfinal 1))
+-- the same machine run directly as a node (its state is the word): 5 + 6 + 6 + 5
+ping-mfinal : FState Word Word
+ping-mfinal = fleet-run {Word} {Word} ping-mach
+                (cons (a-run 0) (cons (a-run 0) (cons (a-dup 0) (cons (a-deliver 0) (cons (a-deliver 0) (cons (a-deliver 0) nil))))))
+                ((λ i → #5) , net-empty {Word})
+#show fst ping-mfinal 1

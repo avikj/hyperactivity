@@ -79,15 +79,27 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
 ## Needs from track A
 ## Done
 
-- `lib/net.cub` (44 definitions): signature, state, `Adv`, `EnvS`, `resolve` with `resolve-spec`,
-  `net-world`, list-as-set lemmas, fairness predicates (`SchedFair`, `DeliveryFair`, bounded
-  `SchedFairB`/`DeliveryFairB`, `seq-of-str` for streams).
-- `lib/fleet.cub` so far: the step, the runs, `fleet-replay`, `Safe` with `safe-ind`, `safe-at`
-  and the per-event rule `safe-by-events` (`StepRun`, `StepDeliver`, `StepNet`), `proc-view`,
-  `procs-init`, `fin-procs`.
-- `experiments/fleet/ping.cub`: two processes exchanging one message; `#show` gives `#42`
-  (582 steps), the trace `run 1, run 0, deliver (0,1,#42)`, flight empty after.
-  Measured: library + the three files, 864 passed, 0 failed.
+- `lib/net.cub` (49 definitions): signature, state, `Adv`, `EnvS`, `resolve` with `resolve-spec`,
+  `net-world`, list-as-set lemmas, time (`nt-later`, `Eventually`, `WithinB`), fairness
+  predicates (`SchedFair`, `DeliveryFair`, bounded `SchedFairB`/`DeliveryFairB`, `seq-of-str`).
+- `lib/fleet.cub` (the generic part, complete):
+  - the step, the runs, `fleet-replay`;
+  - `Safe` with `safe-ind`, `safe-at`, and the per-event rule `safe-by-events` / `step-by-events`
+    (`StepRun`, `StepDeliver`, `StepNet`);
+  - `Fair`/`FairB` (`Took`, `Gone`), `Live`, the measure rule `live-measure`, `stable-later`,
+    `step-other` (a node not receiving keeps its state under every choice but its own run),
+    `wait-run` (the first run of a node from a time on finds it in the state it had),
+    `step-run-eq`;
+  - `Converges` with `converges-fold` (a fold of a commutative, associative, idempotent merge
+    with unit over a list sees only the set), `maxw-semilat`, `wmax-semilat`;
+  - `Refines` as trace inclusion against a `World` (`HistTo`, `HistOk`);
+  - processes as nodes (`proc-view`, `procs-init`, `fin-procs`), machines as processes
+    (`mach-proc`, `mach-proc-w`, the one-step lemma `mach-step`), guarded processes as nodes
+    (`GNode`, `gview`, `gproc-beh`), `mach-gproc`.
+- `experiments/fleet/ping.cub`: two processes exchanging one message (`#42`, 582 steps; trace
+  `run 1, run 0, deliver (0,1,#42)`); the same with guarded nodes and with a machine under a
+  duplicate (`#22`, 974 steps).
+  Measured: library + the three files, 929 passed, 0 failed, 1.7 s from the cache.
 
 ## Found
 
@@ -95,9 +107,13 @@ The library is read from the cache (about 1 s); the last line is `N passed, 0 fa
 
 ## Next step
 
-In `lib/fleet.cub`, in this order: (1) `Live` with `Fair` (`Took`, `Gone` from `dl-go` over a
-`Resolved`), the measure rule `live-measure`, and the waiting lemma (a node whose view is a
-send keeps its state until it is run); (2) `Converges` with the set-fold lemma for a
-commutative idempotent merge, and `wmax`'s laws through `maxw`; (3) `Refines` as trace
-inclusion against a `World` (`HistOk`); (4) the guarded instance `gview`, machines as
-processes (`mach-proc`). Then `experiments/fleet/kv/kv.cub`.
+`experiments/fleet/kv/kv.cub` (loaded after `lib/net.cub lib/fleet.cub`). Design: a write is
+`(key , version) : Word × Word`; messages `m-put w | m-ack w | m-get k rid | m-val rid v`; node
+state `KvSt = Rep × Cli` for every node; nodes 0,1,2 are replicas (`log`, `applied`, pending
+reply), node 3 the client (behaviour a parameter). A replica on `m-put w` logs `w` and owes an
+ack; sending the ack applies `w`; on `m-get k rid` it owes `m-val rid (store-of applied k)`;
+`store-of l k = jfold wmax #0 (λ w → version if key = k else #0) l`. Statements: safety
+(`applied ⊆ log` for every client behaviour, by `safe-by-events`), convergence
+(`converges-fold`), replay, liveness for the broadcasting client (chain: client run →
+delivery → replica run, by `wait-run` and fairness), refinement to `kv-map-world` for the
+sequential client; then a `#show` of a run with a drop and a duplicate.
