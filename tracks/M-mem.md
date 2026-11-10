@@ -45,7 +45,52 @@ takes the implementation-defined choices as a **parameter** (PLAN §5.1), never 
    (kinds, layouts, offsets) must be computed by case on program data, so that specializing a
    reader at a fixed program leaves only loads, stores and arithmetic on run-time values.
 
+## Correction (track A, 2026-11-09; tracks/README.md "Memory is a signature")
+
+Item 5 of "What is built" as first specified was wrong: `Ev` passes `AMem` as state, so a
+reader's term interprets the abstract memory at run time, and compiling it compiles an
+interpreter of `AMem` (measured below: 283,927 bytes for a four-line loop) or else a different
+term nothing was proved about. The replacement, which is now the track's open work:
+
+6. **`lib/mem/sig.cub`**: the signature `MemS` of memory commands with response types: alloc
+   (kind, zeroed, size, align) → pointer; free; load k p → SV; store k p v; ptr-add, ptr-diff,
+   ptr-cmp, ptr-to-int, int-to-ptr as the Target allows; memcpy, memmove, memset. Field and
+   element addressing is pure offset arithmetic and stays a function. The pointer type is
+   abstract to readers (a parameter of the signature, or an opaque type both handlers
+   interpret).
+7. **`Ev` rebuilt** as a process over `MemS + S` with control outcomes as now; `ev-load`,
+   `ev-store`, `ev-alloc`, … are the commands. Names and types readers use are kept (tracks R
+   and F call `ev-load/ev-store/ev-alloc/ev-bind/ev-for/…`); `ev-rd`/`ev-wr`/`ev-mem` taking raw
+   functions on `AMem` leave the reader-facing API, and tracks/R-rust.md gets a "From track M"
+   line saying what replaces them in lib/lang/rust/machine.cub's three wrappers.
+8. **`mem-std`**: the handler of `MemS` into `AMem` state (memory.cub as it is: bounds,
+   liveness, initialization, undefined behaviour as outcome): the meaning. The monad laws
+   re-proved for the new `Ev`.
+9. **`mem-flat`**: the handler of `MemS` into lib/world.cub's commands (a pointer is a `Word`
+   address; load/store by `w-load`/`w-store`/`w-load8`/`w-store8` at the scalar's width; which
+   widths need new world commands and ELF driver cases goes under "Needs from track A"; alloc
+   from `w-alloc` or a bump region; free stated).
+10. **The theorem, once for the signature**: a relation between `AMem` states and flat
+    memories (an injective placement of live allocations at disjoint address ranges;
+    initialized bytes agree); one lemma per command of `MemS` (the handlers preserve it and
+    give related responses whenever `mem-std`'s is not undefined); from them, by lib/obs.cub's
+    run-simulation/up-to-context rules (`experiments/obs/two-compilers.cub`,
+    `o-runsim-context`), for every process p over `MemS + S`: if p under `mem-std` ends without
+    undefined behaviour then p under `mem-flat` gives the same observations on S. No
+    postulates; a lemma that cannot be proved is a finding under Found with the obstacle.
+11. **`experiments/mem/sum.cub` redone**: the hand-written sum as a process over `MemS`; under
+    `mem-std` on the net; under `mem-flat` compiled by `#jit`/`#build`; bytes recorded and what
+    the residual contains (it should be loads and adds, no `AMem`).
+
+Runs that agree are bring-up diagnostics, not evidence; the evidence is the checked theorem
+of item 10. Everything under "Done" below about `Ev` over `AMem` and about `sum-at` describes
+the superseded design; it stays as the measurement that motivated the correction.
+
 ## Acceptance
+
+(The first two lines are the original ones and are met by the superseded design; the track is
+open until items 6 to 11 above are done: `lib/mem/sig.cub` and the rebuilt `monad.cub` check,
+the theorem of item 10 checks with no postulate, and sum.cub compiles under `mem-flat`.)
 
 - `make library` passes, and `lib/mem/*.cub` loaded after it end `N passed, 0 failed`.
 - `experiments/mem/sum.cub`: by hand, the meaning of a C function summing an `int[n]` through a
@@ -247,12 +292,16 @@ comparison `i < n`, the bounds test of `p[i]` against the array, the fuel's coun
 
 ## Measured
 
-- target.cub + scalar.cub + memory.cub after the cached library: `1017 passed, 0 failed`; with
-  layout.cub `1063 passed, 0 failed` (the cached library alone is 767, so 296 checks are this
-  track's).
+- Without the cache, at main after commit `c9c13518`: `make library` is
+  `1149 passed, 0 failed; 25234107 interaction steps`; the library followed by the five
+  `lib/mem` files (`CUBICAL_NOCACHE=1`, the "How to check" command) is
+  `1486 passed, 0 failed; 30019497 interaction steps`: this track's five files are 337 passes
+  and 4,785,390 steps (29 s of CPU for the whole load).
 - Net steps of single operations: a load about 600, a store about 800, an 8-byte memcpy about
   9,000 (each byte is a window read and a window write, and a write copies the allocation's
-  bytes: stores are pure).
+  bytes: stores are pure); a 128-bit division about 43,000; a binary32 addition about 4,500;
+  `sum-c` on four ints 33,770.
+- `#jit sum-at`: 645.8 M steps, 283,927 bytes (numbers under Done).
 
 ## Found
 
@@ -326,13 +375,9 @@ comparison `i < n`, the bounds test of `p[i]` against the array, the fuel's coun
 
 ## Next step
 
-Every acceptance line is met; nothing is in progress. Final measurement to repeat after any
-change to a library file: `make library`, then the "How to check" command without the cache
-(`CUBICAL_NOCACHE=1`), then `experiments/mem/sum.cub` after the five files (about 3 minutes of
-CPU for its `#jit`). If the track continues, the order of value is: (1) with track A, the
-items of "What the specialized code still contains" (A needs case-of-case; B needs the memory's
-shape static in loops, e.g. allocations addressed by position in a known list or locals held
-outside the memory when their address does not escape; C needs the primitives named under
-"Needs"); (2) the Limits, in the order: effective types (which subsumes the union's active
-member), indeterminate values, subobject bounds, C++ base-class layout computation,
-`long double`.
+Item 6: read `lib/obs.cub`, `experiments/obs/two-compilers.cub`, and how tracks R and F use
+`ev-*` (`grep -n "ev-" lib/lang/rust/*.cub lib/cxx/*.cub`); then write `lib/mem/sig.cub`
+(`MemS` with the pointer type a parameter), check it after memory.cub/layout.cub, commit. Then
+items 7 to 11 in order. (`experiments/mem/sum.cub` as committed is the superseded design's
+experiment; an uncommitted edit making its `n` total, `uq-sx iw32 (uq-of-word n)`, was being
+re-measured when the correction arrived: commit it only with its numbers.)
