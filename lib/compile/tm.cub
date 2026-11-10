@@ -1,0 +1,109 @@
+-- lib/compile/tm.cub — the source of compilation: terms indexed by their context and type, and
+-- their meaning as a checked evaluator. A term of type JTm g a is well scoped and well typed by
+-- construction; jev gives its value in an environment of values for g. What a compiled program
+-- computes is stated against jev, so "the program means the term" is a type.
+
+-- the types of the fragment: machine words, booleans, naturals, pairs, sums, functions
+data JTy = jw | jb | jn | jprod (a : JTy) (b : JTy) | jsum (a : JTy) (b : JTy) | jarr (a : JTy) (b : JTy)
+
+JEl : JTy → Type
+JEl jw = Word
+JEl jb = Bool
+JEl jn = Nat
+JEl (jprod a b) = JEl a × JEl b
+JEl (jsum a b) = Sum (JEl a) (JEl b)
+JEl (jarr a b) = JEl a → JEl b
+
+-- an environment: a value for each type of the context, innermost first
+JEnv : List JTy → Type
+JEnv nil = Unit
+JEnv (cons a g) = JEl a × JEnv g
+
+-- a variable of type a in context g: its position
+data JVar : (g : List JTy) → (a : JTy) → Type where
+  jz : (a : JTy) → (g : List JTy) → JVar (cons a g) a
+  js : (a : JTy) → (b : JTy) → (g : List JTy) → JVar g a → JVar (cons b g) a
+
+jlook : {g : List JTy} → {a : JTy} → JVar g a → JEnv g → JEl a
+jlook (jz a g) r = fst r
+jlook (js a b g v) r = jlook v (snd r)
+
+-- the word operations the machine has (lib/code.cub cwop): arithmetic and comparisons
+data JWop = jadd | jsub | jmul | jdiv | jmod | jmax | jand | jor | jxor | jshr
+data JWcmp = jeq | jlt
+
+jwop : JWop → Word → Word → Word
+jwop jadd x y = %wadd x y
+jwop jsub x y = %wsub x y
+jwop jmul x y = %wmul x y
+jwop jdiv x y = %wdiv x y
+jwop jmod x y = %wmod x y
+jwop jmax x y = %wmax x y
+jwop jand x y = %wand x y
+jwop jor x y = %wor x y
+jwop jxor x y = %wxor x y
+jwop jshr x y = %wshr x y
+
+jwcmp : JWcmp → Word → Word → Bool
+jwcmp jeq x y = %weq x y
+jwcmp jlt x y = %wlt x y
+
+-- terms. natrec: z, and s under the predecessor and the hypothesis; loop: a bound, the initial
+-- state, and the step under the counter and the state (counter from 0 below the bound)
+data JTm : (g : List JTy) → (a : JTy) → Type where
+  jvar : (g : List JTy) → (a : JTy) → JVar g a → JTm g a
+  jlit : (g : List JTy) → Word → JTm g jw
+  jop : (g : List JTy) → JWop → JTm g jw → JTm g jw → JTm g jw
+  jcmp : (g : List JTy) → JWcmp → JTm g jw → JTm g jw → JTm g jb
+  jtt : (g : List JTy) → JTm g jb
+  jff : (g : List JTy) → JTm g jb
+  jif : (g : List JTy) → (a : JTy) → JTm g jb → JTm g a → JTm g a → JTm g a
+  jlet : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g a → JTm (cons a g) b → JTm g b
+  jlam : (g : List JTy) → (a : JTy) → (b : JTy) → JTm (cons a g) b → JTm g (jarr a b)
+  japp : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g (jarr a b) → JTm g a → JTm g b
+  jpair : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g a → JTm g b → JTm g (jprod a b)
+  jfst : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g (jprod a b) → JTm g a
+  jsnd : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g (jprod a b) → JTm g b
+  jinl : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g a → JTm g (jsum a b)
+  jinr : (g : List JTy) → (a : JTy) → (b : JTy) → JTm g b → JTm g (jsum a b)
+  jcase : (g : List JTy) → (a : JTy) → (b : JTy) → (c : JTy) → JTm g (jsum a b) → JTm (cons a g) c → JTm (cons b g) c → JTm g c
+  jzero : (g : List JTy) → JTm g jn
+  jsuc : (g : List JTy) → JTm g jn → JTm g jn
+  jnatrec : (g : List JTy) → (c : JTy) → JTm g c → JTm (cons c (cons jn g)) c → JTm g jn → JTm g c
+  jloop : (g : List JTy) → (c : JTy) → JTm g jw → JTm g c → JTm (cons c (cons jw g)) c → JTm g c
+
+-- primitive recursion and the word loop as the language's own functions
+jnatrec-ev : {c : Type} → c → (Nat → c → c) → Nat → c
+jnatrec-ev z s zero = z
+jnatrec-ev z s (suc n) = s n (jnatrec-ev z s n)
+
+jloop-go : {c : Type} → Word → (Word → c → c) → Nat → Word → c → c
+jloop-go b s zero i x = x
+jloop-go b s (suc k) i x = if %wlt i b then jloop-go b s k (%wsucc i) (s i x) else x
+
+-- the loop runs the step for the counter 0, 1, …, b − 1
+jloop-ev : {c : Type} → Word → c → (Word → c → c) → c
+jloop-ev b x s = jloop-go b s (toNat b) #0 x
+
+-- the meaning of a term
+jev : {g : List JTy} → {a : JTy} → JTm g a → JEnv g → JEl a
+jev (jvar g a v) r = jlook v r
+jev (jlit g w) r = w
+jev (jop g o x y) r = jwop o (jev x r) (jev y r)
+jev (jcmp g o x y) r = jwcmp o (jev x r) (jev y r)
+jev (jtt g) r = true
+jev (jff g) r = false
+jev (jif g a c t e) r = if jev c r then jev t r else jev e r
+jev (jlet g a b t u) r = jev u (jev t r , r)
+jev (jlam g a b t) r = λ x → jev t (x , r)
+jev (japp g a b f x) r = jev f r (jev x r)
+jev (jpair g a b x y) r = (jev x r , jev y r)
+jev (jfst g a b p) r = fst (jev p r)
+jev (jsnd g a b p) r = snd (jev p r)
+jev (jinl g a b x) r = inl (jev x r)
+jev (jinr g a b y) r = inr (jev y r)
+jev (jcase g a b c s l m) r = case jev s r of inl x → jev l (x , r); inr y → jev m (y , r)
+jev (jzero g) r = zero
+jev (jsuc g n) r = suc (jev n r)
+jev (jnatrec g c z s n) r = jnatrec-ev (jev z r) (λ k h → jev s (h , (k , r))) (jev n r)
+jev (jloop g c b z s) r = jloop-ev (jev b r) (jev z r) (λ i x → jev s (x , (i , r)))
