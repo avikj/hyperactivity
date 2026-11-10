@@ -1,0 +1,22 @@
+-- experiments/os/udp-echo-model.cub — the echo of udp-echo.cub run against the kernel's contract
+-- (loaded after lib/os/contract.cub and experiments/os/udp-echo.cub): the same process term,
+-- interpreted by runp in lib/os/contract.cub's linux-model from a state in which one datagram,
+-- "hello, world" from 10.0.0.7:5555 to 127.0.0.1:47474, will arrive.
+udp-echo-dgram : Dgram
+udp-echo-dgram = Dgram { dg-from = SockAddr { sa-port = #5555 ; sa-ip = #167772167 }
+                       ; dg-to = SockAddr { sa-port = udp-echo-port ; sa-ip = #2130706433 }
+                       ; dg-data = cons #104 (cons #101 (cons #108 (cons #108 (cons #111 (cons #44 (cons #32 (cons #119 (cons #111 (cons #114 (cons #108 (cons #100 nil))))))))))) }
+udp-echo-st0 : KState
+udp-echo-st0 = k-boot #4821 #1000000000 nil (cons udp-echo-dgram nil)
+udp-echo-model-run : Outcome (Sum Errno Word) × KState
+udp-echo-model-run = runp {Linux} {Sum Errno Word} {KState} (udp-echo {lzero}) linux-model udp-echo-st0
+-- the outcome; what left the host; what is still to arrive; the descriptors left open
+#show fst udp-echo-model-run
+#show k-sent (snd udp-echo-model-run)
+#show k-net (snd udp-echo-model-run)
+#show k-fds (snd udp-echo-model-run)
+-- the echo is the datagram turned round: a statement the checker decides by running the model
+udp-echo-echoes : k-sent (snd udp-echo-model-run) ≡ cons (Dgram { dg-from = dg-to udp-echo-dgram ; dg-to = dg-from udp-echo-dgram ; dg-data = dg-data udp-echo-dgram }) nil
+udp-echo-echoes = λ i → k-sent (snd udp-echo-model-run)
+udp-echo-done : IsDone {Sum Errno Word} (fst udp-echo-model-run)
+udp-echo-done = unit

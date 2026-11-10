@@ -55,9 +55,11 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
    `experiments/native/sys.cub`). Any further command is requested here; no assembly source of
    the loop is kept in `experiments/os/`.
 2. ~~`.gitignore` hid `experiments/build/`~~ — **done by A**: the demos are `experiments/native/`.
-3. Append `lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub` (this order) to `LIB` in
-   the `Makefile`. **Not yet**: only `platform.cub` exists; this line is rewritten to "ready"
-   when all three load.
+3. **Ready (track A, please do this):** append `lib/os/platform.cub lib/os/linux.cub
+   lib/os/contract.cub` (this order, after `lib/elf.cub`) to `LIB` in the `Makefile`. All three
+   load after the library with 0 failures (measurements under Done).
+4. Checker (not blocking; worked around in `lib/os/contract.cub`): see Found, "a matched
+   variable in a branch without type information".
 
 ## Done
 
@@ -100,6 +102,22 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   `recvfrom(3, "hello, world", 2048, 0, {127.0.0.1:58299}, [16]) = 12`,
   `sendto(3, "hello, world", 12, 0, {127.0.0.1:58299}, 16) = 12`, `close(3) = 0`,
   `exit_group(0)`; python prints `(b'hello, world', ('127.0.0.1', 47474))`.
+- **Item 3, the contract**: `lib/os/contract.cub`. `KState` (byte memory with the mapped
+  regions, the descriptor table with lowest-free allocation, pipe ends, UDP sockets, epoll
+  interest lists, `k-net` the datagrams that will arrive, `k-sent` those that left the host, a
+  clock, the next ephemeral port, the page size, the pid, the exit status), `k-boot`, and
+  `linux-model : World Linux KState`. Answered and refused commands are listed in the file's
+  header (refused: open, connect, and every wait nothing in the state ends). Loaded after
+  linux.cub: `linux-model` checks in 319,269 steps, `k-recv` 15,390; the library with the three
+  `lib/os` files and the echo files (NOCACHE): 967 passed, 0 failed, 23,188,122 steps.
+- **Acceptance, the echo against the model**: `experiments/os/udp-echo-model.cub`: `runp` of the
+  same `udp-echo` term in `linux-model` from `k-boot` with `hello, world` from 10.0.0.7:5555
+  arriving. `#show fst udp-echo-model-run = done (inr #12)` (2,016 steps); `#show k-sent … =
+  cons ((#47474 , #2130706433) , (#5555 , #167772167) , cons #104 (cons #101 … (cons #100 nil)))
+  nil` (1,651 steps); `k-net` is `nil`; the descriptors left are 0, 1, 2. Stated and checked:
+  `udp-echo-echoes` (the outgoing queue is exactly the datagram turned round, 9,078 steps) and
+  `udp-echo-done : IsDone …`. (The statement `k-sent … ≡ nil` in its place is rejected:
+  `FAIL: checks udp-echo-wrong`.)
 
 ## Found
 
@@ -113,10 +131,36 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   binary's loop is performed as a compare-and-swap on its first field. Closed by the dispatch
   in Needs 1.
 
+- **A matched variable in a branch without type information.** `case b of inl x → …; inr u → f b`
+  with `b : Sum SockAddr Unit`: in the `inr` branch the use of `b` is checked as `inr u` and
+  fails with `no inferable type here: annotate it with (the T t)` (`at: cfree (inr u)`); the
+  same for `case evs of cons x xs → …; nil → (k , evs)` (`at: nil`), and for a `let` whose
+  value is a record or a call with an implicit type argument, used in a branch. The variable has
+  a declared type; the refinement loses it. Inputs: the three forms, each in a definition with
+  a full signature (the first versions of `k-autobind`, `k-wait` and the `lx-sendto` case of
+  `linux-model`, in this file's history at the commit that adds `lib/os/contract.cub`, are the
+  working forms; the failing forms are the ones quoted here). Worked around by passing the
+  value as an argument and deciding by a `Bool`.
+- **Structural recursion wants the matched argument first when another argument varies.**
+  `k-take n (cons x xs) = … k-take (%wsub n #1) xs` is refused (`a recursive call is not on a
+  constructor field …`) although `xs` is a field of the match; `k-take-go (cons x xs) n = …
+  k-take-go xs (%wsub n #1)` is accepted. With the other argument unchanged (`k-find fd (cons e
+  r) = … k-find fd r`) either order is accepted.
+- **Size of a small process's binary.** `build/udp-echo` is 52,133 bytes and its `#build` takes
+  42,415,757 steps for a process of five system calls (`build/feed` is 8,064 bytes, 1.2 M
+  steps). The handler's 29 cases are not what is big (only the used ones remain after
+  specialization); not investigated further here: it is the compiler's (track A).
+
 ## Next step
 
-Item 3, `lib/os/contract.cub` (loaded after `lib/os/linux.cub`): `KState` (byte memory, next
-address, descriptor table, pipes, UDP sockets with their queues, outgoing datagrams, clock,
-pid) and `linux-model : World Linux KState`; then `experiments/os/udp-echo-model.cub` with
-`runp` of `udp-echo {lzero}` against the model with one queued datagram and a `#show` of the
-outcome and the outgoing queue. Then tell A (Needs 3) that the three files load.
+All four items and the three acceptance lines are met except `make library` with `lib/os/*.cub`
+in `LIB` (Needs 3, track A's edit of the `Makefile`). Remaining, in order:
+1. After A appends the files: run `make library`, record the count here.
+2. PLAN Phase 3's own acceptance goes one step past this track's: "the same outcome trace on
+   recorded inputs (replay)". `lib/proc.cub` has `recording`/`replaying` with an
+   `Encoder`/`Decoder` into one `Word` per response; `Linux`'s responses do not fit one word
+   (`Upto len × SockAddr`, `List EpollEvent`). The step is `lib/os/replay.cub`: an encoder of
+   each `lx-resp c` into `List Word` and its decoder, `recording`/`replaying` at that carrier
+   (they are 8 lines each in proc.cub, restated over `List Word`), and in
+   `experiments/os/udp-echo-model.cub` the echo replayed from the recorded responses with the
+   same outcome.
