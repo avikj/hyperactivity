@@ -1,5 +1,47 @@
 .intel_syntax noprefix
 .text
+# Two variants, by `as --defsym LOOP=1`:
+#   plain (lib/elf.cub i-driver-loop): entered with the first step in rax and [rbp-8] the apply
+#     routine's offset; `done` returns 0 to the stub.
+#   LOOP (i-driver-round, #build-loop): entered after the encoder's prologue has pushed the
+#     offsets of apply [rbp-8], copy [rbp-16], step [rbp-24], init [rbp-32]. The arena is split
+#     in two halves; each round the state is copied into the other half (by the program's own
+#     copy definition, which allocates there), the half just left is free again, and step runs
+#     on the copy; `done` (sdone s') starts the next round with s'.
+.ifdef LOOP
+  push r15                  # [rbp-40] base
+  mov rax, r12
+  sub rax, r15
+  shr rax, 1
+  and rax, -8
+  add rax, r15
+  push rax                  # [rbp-48] mid
+  push r12                  # [rbp-56] end
+  push 0                    # [rbp-64] the current half (0: base..mid)
+  mov r12, [rbp-48]
+  mov rax, [rbp-32]
+  add rax, r14
+  call rax                  # init: the first state
+round:
+  xor qword ptr [rbp-64], 1
+  jz to0
+  mov r15, [rbp-48]
+  mov r12, [rbp-56]
+  jmp flipped
+to0:
+  mov r15, [rbp-40]
+  mov r12, [rbp-48]
+flipped:
+  push rax
+  mov rax, [rbp-16]
+  add rax, r14
+  call rax                  # copy s, into the half just entered
+  mov [rsp], rax
+  mov rax, [rbp-24]
+  add rax, r14
+  call rax                  # step s
+  add rsp, 8
+.endif
 loop:
   mov rcx, [rax]
   test rcx, rcx
@@ -83,6 +125,13 @@ c_read:
   cmp r15, r12
   ja over
   mov [r8], rdx
+  # the buffer is n zero bytes (the arena's memory may have been used before)
+  push rdi
+  lea rdi, [r8+8]
+  mov rcx, rdx
+  xor eax, eax
+  rep stosb
+  pop rdi
   lea rsi, [r8+8]
   xor eax, eax
   test rdx, rdx
@@ -135,6 +184,7 @@ c_open:
   lea rsi, [r8+8]
   mov rcx, rdx
   rep movsb
+  mov byte ptr [rdi], 0
   pop rdi
   mov rsi, r9
   mov rdx, r10
@@ -175,14 +225,23 @@ c_sys:
   syscall
   jmp resp
 c_alloc:
-  mov rcx, [rsi+8]
-  add rcx, 7
+  # n fresh zero bytes valid for the process's life: its own mapping, not the arena (which a
+  # loop reuses): mmap(0, n rounded up to a page, read|write, private|anonymous, -1, 0)
+  mov rsi, [rsi+8]
+  add rsi, 4095
   jc over
-  and rcx, -8
-  mov rax, r15
-  add r15, rcx
-  jc over
-  cmp r15, r12
+  and rsi, -4096
+  jnz 4f
+  mov esi, 4096
+4:
+  mov eax, 9
+  xor edi, edi
+  mov edx, 3
+  mov r10d, 0x22
+  mov r8, -1
+  xor r9d, r9d
+  syscall
+  cmp rax, -4096
   ja over
   jmp resp
 c_load8:
@@ -204,8 +263,13 @@ resp:
   add rsp, 16
   jmp loop
 done:
+.ifdef LOOP
+  mov rax, [rax+8]
+  jmp round
+.else
   xor eax, eax
   mov rsp, rbp
   pop rbp
   ret
+.endif
 over:

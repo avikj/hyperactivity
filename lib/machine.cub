@@ -97,6 +97,10 @@ unfold g = quote-top (%gty g) (%gval g)
 -- the fragment is decided after the encoder's passes have removed what no result depends on
 -- (lib/x86.cub): a proof argument's code may use composition and never be computed
 program-of m c fuel = program-defs fuel (code-globals c) (lcons m lnil) (lcons (m , c) lnil) lnil
+-- the same for several entries, es a Lst of (g , code)
+program-of-all es fuel = program-defs fuel (entries-globals es lnil) (entries-names es) es lnil
+entries-globals es acc = case es of lnil → acc; lcons e r → entries-globals r (lapp2 acc (code-globals (snd e)))
+entries-names es = case es of lnil → lnil; lcons e r → lcons (fst e) (entries-names r)
 program-defs fuel todo seen acc bad =
   if %weq fuel #0 then (bad , acc) else
   (case todo of

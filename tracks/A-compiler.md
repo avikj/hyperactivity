@@ -9,7 +9,8 @@ Files: `lib/specialize.cub`, `lib/machine.cub`, `lib/x86.cub`, `lib/elf.cub`, `s
 make build/cubical && make library                     # 830 passed, 0 failed
 L=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p')
 CUBICAL_NOCACHE=1 ./build/cubical $L experiments/jit/workloads.cub | grep -c '^ok: jit'   # 33
-CUBICAL_NOCACHE=1 ./build/cubical $L experiments/native/feed.cub | grep build              # ok: build feed-step
+for f in feed feedloop sys; do CUBICAL_NOCACHE=1 ./build/cubical $L experiments/native/$f.cub | grep build; done   # three ok lines
+./build/sys; echo $?                                    # A, then 65
 printf '\x02\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x05\0\0\0\0\0\0\0\x01\0\0\0\0\0\0\0\x03\0\0\0\0\0\0\0' | ./build/feed | od -An -td8   # 5 then 2
 ```
 Always run with `stdbuf -oL` when hunting a crash: output is otherwise lost and the last line
@@ -25,20 +26,20 @@ printed is not where it died.
 - `#build s "file"` (`lib/elf.cub`): `s : Step W A` as a static ELF. The feed demo's output
   equals the expected bytes on 1M messages, 1.07 s against 0.91 s for the same loop in C.
 - The elaborator binds each name once; an unreachable clause is refused.
+- `#build-loop init step copy copy-id "file"`: a process that runs forever in bounded memory.
+  The arena is two halves; each round the state is copied into the other half by the program's
+  own `copy` (checked equal to the identity by `copy-id`), so the last round's memory is free.
+  `experiments/native/feedloop.cub`: 1M messages byte-equal to the expected output in 0.82 s;
+  20M messages, final value −2,364,566 (equal to an independent computation), resident memory
+  52 kB throughout. `w-alloc` is its own `mmap` (permanent); reused arena memory is zeroed where
+  a command promises zero bytes.
+- Word operations `wmul wquot wrem wand wor wxor wshl wshr` on numerals of any size.
 
 ## Next step
 
-1. **Arena reset for unbounded processes.** Today a `#build` binary never frees: 1 GB is enough
-   for ~10⁷ commands and then it exits 3. Design: `Step` gains nothing; the driver loop, after
-   applying the continuation, holds the only live value (the next step). Copy that value to the
-   other half of the arena (a two-space copy over cells: tag word, fields; closures
-   `[off][arity][given][args]`; bytes `[len][data]`; immediates < 4096 and words are
-   indistinguishable from pointers, so the copy must be **typed**: generate, per program, a
-   copy routine from the Step's continuation closure layouts) — or simpler and exact: make the
-   loop state explicit. Preferred: a second entry form `#build-loop init step`, with
-   `init : St` and `step : St → Step W St` for a first-order `St`; the driver copies `St` by
-   its type (the JT-style walk `jit_in` does, emitted as code), resets the arena, and loops.
-   Acceptance: feed over 10⁸ messages with constant memory.
+1. **Derive `copy` and `copy-id`** for `#build-loop` from the state's data table (`lib/derive.cub`
+   derives equality the same way), so the directive takes `init step "file"`; and a copying
+   identity for `Bytes n` fields (today a state holding byte strings is refused).
 2. **Registers.** Every value lives in the frame. `Sched.regs` is unused. Assign the first six
    let-bound values of a definition without calls in between to rbx/r8–r11 (caller-saved
    around calls); measure feed and `sumL` before and after.

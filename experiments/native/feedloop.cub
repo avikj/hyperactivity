@@ -1,0 +1,31 @@
+-- The feed handler as a process that runs until its input ends, in bounded memory (#build-loop;
+-- loaded after the library). Each round reads one 16-byte message [side][quantity], updates the
+-- book, writes the 8-byte imbalance; a short read ends the process with status 0. The state is
+-- the book and the number of messages seen (a data type, to show a copy by cases).
+le8-16L : le 8 16
+le8-16L = (8 , λ i → 16)
+data FeedSt = feed-st (bidq : Int64) (askq : Int64) (seen : UInt64)
+fl-upd : FeedSt → Bytes 16 → FeedSt
+fl-upd s m = case s of
+  feed-st b a n →
+    if i64eq (load64 16 m 0 le8-16L) (i64 #0)
+      then feed-st (i64add b (load64 16 m 8 (le-refl 16))) a (u64add n (u64 #1))
+      else feed-st b (i64add a (load64 16 m 8 (le-refl 16))) (u64add n (u64 #1))
+fl-out : FeedSt → Bytes 8
+fl-out s = case s of
+  feed-st b a n → store64 8 (bytes 8) 0 (le-refl 8) (i64sub b a)
+fl-init : FeedSt
+fl-init = feed-st (i64 #0) (i64 #0) (u64 #0)
+fl-step : FeedSt → Step W FeedSt
+fl-step s = to-step {W} {FeedSt}
+  (bind {lzero} {W} {Word × Bytes 16} {FeedSt} (read #0 16) (λ r →
+     if %wlt (fst r) #16
+       then bind {lzero} {W} {Unit} {FeedSt} (exit #0) (λ u → ret {lzero} {W} {FeedSt} s)
+       else bind {lzero} {W} {Word} {FeedSt} (write #1 8 (fl-out (fl-upd s (snd r)))) (λ w → ret {lzero} {W} {FeedSt} (fl-upd s (snd r)))))
+fl-copy : FeedSt → FeedSt
+fl-copy s = case s of
+  feed-st b a n → feed-st b a n
+fl-copy-id : (s : FeedSt) → fl-copy s ≡ s
+fl-copy-id s = case s return (λ t → fl-copy t ≡ t) of
+  feed-st b a n → λ i → feed-st b a n
+#build-loop fl-init fl-step fl-copy fl-copy-id "build/feedloop"

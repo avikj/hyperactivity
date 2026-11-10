@@ -4571,6 +4571,24 @@ static bool jt_crosses(JT *t, int depth) {
     default: return true;
     }
 }
+/* a first-order type whose values hold no byte strings (a #build-loop state: copied each round by
+ * a definition that rebuilds its cells; a byte string would be shared, not copied) */
+static bool jt_plain(JT *t, int depth) {
+    if (depth > 64) return true;
+    switch (t->k) {
+    case JT_NO: case JT_BYTES: return false;
+    case JT_PAIR: return jt_plain(t->a, depth + 1) && jt_plain(t->b, depth + 1);
+    case JT_DATA:
+        for (int c = 0; c < DATA[t->d].ncons; c++) {
+            ConInfo *k = &CON[DATA[t->d].cons[c]];
+            if (k->ndims) return false;
+            for (int j = 0; j < k->nfields; j++) { JT *f = jt_field(t, c, j); if (f->k == JT_NO) return false; if (f != t && !(f->k == JT_DATA && f->d == t->d) && !jt_plain(f, depth + 1)) return false; }
+        }
+        return true;
+    default: return true;
+    }
+}
+static bool checked_type_plain(int ck) { return (size_t)ck < capchkty && CHKTY[ck] && jt_plain(jt_of(CHKTY[ck], NULL, NULL, 0), 0); }
 /* does the code (its S-expression readback) under its leading λs read parameter i of n? depth counts
  * the binders entered since: λ, let's body, a path abstraction, ∀, a dimension λ, Π and Σ codomains */
 static bool code_reads(Node *c, long target, long depth) {

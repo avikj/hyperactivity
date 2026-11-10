@@ -248,8 +248,12 @@ passes, and its answers equal the machine's.
    static ELF64 with an entry stub that maps the arena and calls `main`. No overflow exit
    exists in a standalone binary: checked `Word` arithmetic there ends the process with the
    `overflow` outcome, which is in `main`'s type, and hot paths are written over `UInt64`.
-   Acceptance: a binary that reads bytes, decodes a message, updates a book, writes a reply,
-   run on recorded input, produces the outcome trace the net produces for `main`.
+   Built (revision 9): `#build s "file"` for a terminating process and `#build-loop init step
+   copy copy-id "file"` for one that runs forever in bounded memory (two half-arenas, the
+   state copied across each round by a definition proved to be the identity).
+   `experiments/native/`: feed (1M messages byte-equal to the expected output, 1.07 s; the
+   same loop in C at -O2 0.91 s), feedloop (20M messages, 52 kB resident), sys (every memory
+   and raw-syscall command).
 6. **Specialization when values arrive.** When an argument becomes known at run time, the term
    with it substituted is specialized, checked and compiled, and stored under the specialized
    term's content key, so a cache hit cannot be stale. This is the JIT proper; `#jit` at load is

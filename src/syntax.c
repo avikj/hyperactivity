@@ -1460,6 +1460,48 @@ static void p_decl(void) {
         NX();
         decl_end(); return;
     }
+    if (x_is(t, "#build-loop")) {
+        /* #build-loop init step copy copy-id "file" (lib/elf.cub build-loop-plan): a process that
+         * runs forever from a state, as a standalone ELF whose memory is bounded: init : St,
+         * step : St → Step W St, copy : St → St, copy-id : (s : St) → copy s ≡ s; St first-order
+         * with no byte strings. Nothing is written unless the types are these, each specialized
+         * code converts with its definition, and the program compiles */
+        NX(); Tok *fn[4]; int ck[4];
+        for (int i = 0; i < 4; i++) {
+            fn[i] = NX(); if (fn[i]->k != X_ID) x_err("#build-loop init step copy copy-id \"file\": a checked definition expected, found", fn[i]);
+            ck[i] = checked_index(fn[i]->s); if (ck[i] < 0) x_err("#build-loop: not a checked definition:", fn[i]);
+        }
+        Tok *pt = NX(); if (pt->k != X_STR) x_err("#build-loop: the file to write, a string, expected after", fn[3]);
+        if (global_lookup("build-loop-plan") < 0) x_err("#build-loop needs lib/elf.cub loaded, for", fn[0]);
+        if (!checked_type_plain(ck[0])) { failures++; printf("FAIL: build-loop %s: its type is not first-order data without byte strings\n", fn[0]->s); decl_end(); return; }
+        long steps = 0;
+        Node *call = nlist(5); call->it[0] = nsyml("%%build-loop-plan"); for (int i = 0; i < 4; i++) call->it[i + 1] = wordn(ck[i]);
+        char *r = readback(call, &steps);
+        const char *saved = src; src = r; Node *rn = read_node(); src = saved;
+        Node *grp[3]; int ng = 0;
+        for (Node *cur = rn; ng < 3; ) {
+            if (ng == 2) { grp[ng++] = cur; break; }
+            if (!cur || !cur->list || cur->n != 3 || !is(cur->it[0], "pair")) break;
+            grp[ng++] = cur->it[1]; cur = cur->it[2];
+        }
+        free(r);
+        if (ng != 3) x_err("#build-loop: the plan did not read back, for", fn[1]);
+        Node *v = grp[0];
+        if (v->list && v->n >= 2 && !v->it[0]->list && !strcmp(v->it[0]->s, "not-fo")) {
+            failures++; printf("FAIL: build-loop %s: not compilable: %s   [%ld steps]\n", fn[1]->s, v->it[1]->list ? "?" : v->it[1]->s, steps);
+            decl_end(); return;
+        }
+        if (grp[1]->list || strcmp(grp[1]->s, "true")) {
+            failures++; printf("FAIL: build-loop %s: the types are not init : St, step : St → Step W St, copy : St → St, copy-id : (s : St) → copy s ≡ s, or a specialized code does not convert with its definition   [%ld steps]\n", fn[1]->s, steps);
+            decl_end(); return;
+        }
+        FILE *o = fopen(pt->s, "wb"); if (!o) x_err("#build-loop: the file cannot be written:", pt);
+        size_t len = 0;
+        for (Node *cur = grp[2]; cur->list && cur->n == 3 && !cur->it[0]->list && !strcmp(cur->it[0]->s, "lcons"); cur = cur->it[2]) { fputc((int)atol(cur->it[1]->s + 1), o); len++; }
+        fclose(o); chmod(pt->s, 0755);
+        passes++; printf("ok: build-loop %s   [%s, %zu bytes, the checker's conversion, %ld steps]\n", fn[1]->s, pt->s, len, steps);
+        decl_end(); return;
+    }
     if (x_is(t, "#build")) {
         /* #build s "file" (PLAN 4.4 item 5): s : Step W A, a process as a tree of steps, written as a
          * standalone static ELF64 executable (lib/elf.cub build-plan): the specialized code is checked

@@ -790,11 +790,15 @@ x-er-defs R ars defs = case defs of lnil → lnil; lcons e r → lcons (fst e , 
 x-reach defs todo seen = case todo of lnil → seen; lcons g r → (if lmem g seen then x-reach defs r seen else x-reach defs (lapp2 r (case x-def defs g of some b → code-globals b; none → lnil)) (lcons g seen))
 x-def defs g = case defs of lnil → none; lcons e r → (if %weq (fst e) g then some (snd (snd e)) else x-def r g)
 x-keep keep defs = case defs of lnil → lnil; lcons e r → (if lmem (fst e) keep then lcons e (x-keep keep r) else x-keep keep r)
-x-erase m defs0 =
+x-erase m defs0 = x-erase-roots (lcons m lnil) defs0
+-- roots: the entries (their own parameters are passed from outside and all count as needed)
+x-erase-roots roots defs0 =
   let ars = x-arities defs0
-      R = x-rel-fix #64 lnil ars defs0
+      R = x-rel-fix #64 (x-root-params roots ars lnil) ars defs0
       defs1 = x-er-defs R ars defs0
-  in x-keep (x-reach defs1 (lcons m lnil) lnil) defs1
+  in x-keep (x-reach defs1 roots lnil) defs1
+x-root-params roots ars R = case roots of lnil → R; lcons g r → x-root-params r ars (x-all-params g (x-look ars g) R)
+x-all-params g n R = if %weq n #0 then R else x-all-params g (%wsub n #1) (lcons (g , %wsub n #1) R)
 -- the verdict of a program after erasure: a definition named that did not quote, a body outside
 -- the fragment (lib/machine.cub), a form the encoder has no template for
 x-verdict bad defs = case x-bad bad defs of some v → v; none → (case x-frag-defs defs of not-fo w at → not-fo w at; fo q → x-check defs)
