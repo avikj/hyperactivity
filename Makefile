@@ -32,7 +32,8 @@ CORE := lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/
 LIB  := $(CORE) lib/sort.cub lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/autodiff.cub lib/intproof.cub lib/intlin.cub \
         lib/prim.cub lib/derive.cub lib/decode.cub lib/fiber.cub lib/proc.cub lib/world.cub lib/session.cub \
         lib/choreo.cub lib/region.cub lib/specialize.cub lib/rules.cub lib/machine.cub lib/x86.cub lib/elf.cub \
-        lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub
+        lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub \
+        lib/isa/tso.cub lib/mem/atomics.cub
 
 library: build/cubical
 	CUBICAL_NOCACHE=1 ./build/cubical $(LIB)

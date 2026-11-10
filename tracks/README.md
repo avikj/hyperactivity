@@ -49,6 +49,7 @@ anywhere else: not in a chat, not in an agent's memory.
 | I | `I-fleet.md` | network world, fleets, property types, the kv fleet, `deploy` | D for the last step |
 | N | `N-machine.md` | no crash on any input; asan/tsan; compile-cost profiles | — |
 | R | `R-rust.md` | `tools/mir2cub.py`, `lib/lang/rust/ast.cub`, the Rust twin of the C++ sample | C's sample |
+| S | `S-surface.md` | the elaborator: recursion forms, branch typing, clause typing, non-fatal failures | — |
 | E | `E-lemmas.md` (opens when B lands) | the template lemmas, the encoder's path | B |
 | F | `F-cxx.md` (opens when C lands and A fixes the object-model interface) | `lib/cxx/machine.cub`, `lib/cxx/read.cub` | C |
 
