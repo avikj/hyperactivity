@@ -332,3 +332,74 @@ o-isSet-step {S} {A} sc sa t u p q = λ j i →
            , i = 1 ↦ o-bisim-path t u (o-isProp-bisim sc sa t u (o-path-bisim t u p) (o-path-bisim t u q) j) k
            , j = 0 ↦ o-pconst t (p i) (λ m → p (m /\ i)) k
            , j = 1 ↦ o-pconst t (q i) (λ m → q (m /\ i)) k ]) t
+-- ---------------------------------------------------------------- the quotient: behaviours
+-- the set quotient of a type by a relation (lib/std.cub has none; the carrier is at level 1
+-- because a Church process is)
+data o-Quot (A : Type (lsuc lzero)) (R : A → A → Type) =
+    o-qin (a : A)
+  | o-qeq (a : A) (b : A) (r : R a b) (i : I) [ i = 0 ↦ o-qin a , i = 1 ↦ o-qin b ]
+  | o-qsquash (x : o-Quot A R) (y : o-Quot A R) (p : PathP (λ (m : I) → o-Quot A R) x y) (q : PathP (λ (m : I) → o-Quot A R) x y) (i : I) (j : I)
+      [ i = 0 ↦ p @ j , i = 1 ↦ q @ j , j = 0 ↦ x , j = 1 ↦ y ]
+o-qrec : {l : Level} {A : Type (lsuc lzero)} {R : A → A → Type} {B : Type l} → isSet B → (f : A → B) → ((a b : A) → R a b → f a ≡ f b) → o-Quot A R → B
+o-qrec sb f fr x = case x return (λ w → B) of
+    o-qin a → f a
+    o-qeq a b r i → fr a b r i
+    o-qsquash x1 y1 p q i j → sb (rec x1) (rec y1) (rec p) (rec q) i j
+o-qset : {A : Type (lsuc lzero)} {R : A → A → Type} → isSet (o-Quot A R)
+o-qset x y p q = λ i j → o-qsquash x y p q i j
+-- two Church processes are bisimilar when their trees are
+o-PBisim : {S : Sig} {A : Type} → Proc {lzero} S A → Proc {lzero} S A → Type
+o-PBisim p q = o-Bisim (to-step p) (to-step q)
+-- the behaviours over an observation signature: processes over it up to bisimilarity
+o-Beh : Sig → Type → Type (lsuc lzero)
+o-Beh O A = o-Quot (Proc {lzero} O A) (o-PBisim {O} {A})
+o-class : {O : Sig} {A : Type} → Proc {lzero} O A → o-Beh O A
+o-class p = o-qin p
+-- the behaviour of a tree over S observed through H from the state s, and of a Church process
+o-tbeh : {O S : Sig} {A St : Type} → o-ObsOf O S St → Step S A → St → o-Beh O A
+o-tbeh {O} {S} {A} {St} H t s = o-qin (o-reify {lzero} {O} {A} (o-obs H t s))
+o-beh : {O S : Sig} {A St : Type} → o-ObsOf O S St → Proc {lzero} S A → St → o-Beh O A
+o-beh H p s = o-tbeh H (to-step p) s
+-- p observed through H1 from s1 behaves as q observed through H2 from s2 (the two may be over
+-- different signatures with different states): a path in the quotient
+o-ObsEq : {O S1 S2 : Sig} {A X Y : Type} → o-ObsOf O S1 X → Proc {lzero} S1 A → X → o-ObsOf O S2 Y → Proc {lzero} S2 A → Y → Type (lsuc lzero)
+o-ObsEq {O} {S1} {S2} {A} {X} {Y} H1 p s1 H2 q s2 = Path (o-Beh O A) (o-beh H1 p s1) (o-beh H2 q s2)
+-- bisimilar observed trees are equal behaviours (no hypothesis on the signature)
+o-tbeh-eq : {O S1 S2 : Sig} {A X Y : Type} → (H1 : o-ObsOf O S1 X) → (t : Step S1 A) → (s1 : X) → (H2 : o-ObsOf O S2 Y) → (u : Step S2 A) → (s2 : Y) →
+            o-Bisim (o-obs H1 t s1) (o-obs H2 u s2) → Path (o-Beh O A) (o-tbeh H1 t s1) (o-tbeh H2 u s2)
+o-tbeh-eq {O} {S1} {S2} {A} {X} {Y} H1 t s1 H2 u s2 b = λ i →
+  o-qeq (o-reify {lzero} {O} {A} (o-obs H1 t s1)) (o-reify {lzero} {O} {A} (o-obs H2 u s2))
+    (o-path-bisim (to-step (o-reify {lzero} {O} {A} (o-obs H1 t s1))) (to-step (o-reify {lzero} {O} {A} (o-obs H2 u s2)))
+       (calc to-step (o-reify {lzero} {O} {A} (o-obs H1 t s1))
+           ≡ o-obs H1 t s1 by o-reify-step (o-obs H1 t s1)
+           ≡ o-obs H2 u s2 by o-bisim-path (o-obs H1 t s1) (o-obs H2 u s2) b
+           ≡ to-step (o-reify {lzero} {O} {A} (o-obs H2 u s2)) by sym (o-reify-step (o-obs H2 u s2)))) i
+-- the normal form: over a set of commands with a set of results a behaviour is a tree, read
+-- off by the quotient's recursor (trees are a set; bisimilar processes have equal trees)
+o-nf : {O : Sig} {A : Type} → isSet (Cmd O) → isSet A → o-Beh O A → Step O A
+o-nf {O} {A} sc sa x =
+  o-qrec {lzero} {Proc {lzero} O A} {o-PBisim {O} {A}} {Step O A} (o-isSet-step sc sa) (λ p → to-step p)
+    (λ p q b → o-bisim-path (to-step p) (to-step q) b) x
+o-nf-tbeh : {O S : Sig} {A St : Type} → (sc : isSet (Cmd O)) → (sa : isSet A) → (H : o-ObsOf O S St) → (t : Step S A) → (s : St) →
+            o-nf sc sa (o-tbeh H t s) ≡ o-obs H t s
+o-nf-tbeh sc sa H t s = o-reify-step (o-obs H t s)
+-- effectiveness: equal behaviours have equal observed trees, so ≈ is decided by computing the
+-- two normal forms wherever they compute
+o-obseq-tree : {O S1 S2 : Sig} {A X Y : Type} → isSet (Cmd O) → isSet A →
+               (H1 : o-ObsOf O S1 X) → (p : Proc {lzero} S1 A) → (s1 : X) → (H2 : o-ObsOf O S2 Y) → (q : Proc {lzero} S2 A) → (s2 : Y) →
+               o-ObsEq H1 p s1 H2 q s2 → o-obs H1 (to-step p) s1 ≡ o-obs H2 (to-step q) s2
+o-obseq-tree {O} {S1} {S2} {A} {X} {Y} sc sa H1 p s1 H2 q s2 e =
+  calc o-obs H1 (to-step p) s1
+     ≡ o-nf sc sa (o-beh H1 p s1) by sym (o-nf-tbeh sc sa H1 (to-step p) s1)
+     ≡ o-nf sc sa (o-beh H2 q s2) by (λ i → o-nf sc sa (e i))
+     ≡ o-obs H2 (to-step q) s2 by o-nf-tbeh sc sa H2 (to-step q) s2
+-- a predicate on behaviours holds of q when it holds of p and the two are equal by observation;
+-- a predicate on observed trees is one on behaviours through the normal form
+o-beh-transport : {O S1 S2 : Sig} {A X Y : Type} → (P : o-Beh O A → Type) →
+                  (H1 : o-ObsOf O S1 X) → (p : Proc {lzero} S1 A) → (s1 : X) → (H2 : o-ObsOf O S2 Y) → (q : Proc {lzero} S2 A) → (s2 : Y) →
+                  o-ObsEq H1 p s1 H2 q s2 → P (o-beh H1 p s1) → P (o-beh H2 q s2)
+o-beh-transport P H1 p s1 H2 q s2 e h = comp (λ i → P (e i)) (λ i → []) h
+o-tree-transport : {O S1 S2 : Sig} {A X Y : Type} → isSet (Cmd O) → isSet A → (P : Step O A → Type) →
+                   (H1 : o-ObsOf O S1 X) → (p : Proc {lzero} S1 A) → (s1 : X) → (H2 : o-ObsOf O S2 Y) → (q : Proc {lzero} S2 A) → (s2 : Y) →
+                   o-ObsEq H1 p s1 H2 q s2 → P (o-obs H1 (to-step p) s1) → P (o-obs H2 (to-step q) s2)
+o-tree-transport sc sa P H1 p s1 H2 q s2 e h = comp (λ i → P (o-obseq-tree sc sa H1 p s1 H2 q s2 e i)) (λ i → []) h

@@ -86,21 +86,33 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   `o-isSet-step` (trees over a set of commands with a set of results are a set; nothing is asked
   of the response types).
 
+- Item 4, first half (836 passed 0 failed, 18.1M steps): the set quotient `o-Quot` (HIT with
+  `o-qin`, `o-qeq`, `o-qsquash`), `o-qrec`, `o-qset`; `o-PBisim`; `o-Beh O A`; `o-class`, `o-tbeh`,
+  `o-beh H p s`; `o-ObsEq H1 p s1 H2 q s2` (the `≈` across two signatures: a path in the
+  quotient); `o-tbeh-eq` (bisimilar observed trees ⇒ equal behaviours); the normal form `o-nf`
+  with `o-nf-tbeh`; effectiveness `o-obseq-tree`; transport of predicates `o-beh-transport`,
+  `o-tree-transport`.
+
 ## Found
 
 - `lib/std.cub` has no set quotient `_/_` and no truncations (the track text says it has); the
   only truncations in the repo are `T2`/`T3`/`K2` in `experiments/brunerie/typed.cub`. The set
   quotient is therefore defined in `lib/obs.cub` (`o-Quot`).
 
+- `#type D` for a data type `D` ends the run: input `data o-Q2 (A : Type) = o-q2in (a : A)` then
+  `#type o-Q2` prints `error: code: not a bound variable or checked definition: o-Q2` and exits 1
+  (the data type itself is fine; `#type` of a definition works).
+
 ## Next step
 
 In `lib/obs.cub`, append in this order, checking and committing after each:
-1. item 4: the set quotient `o-Quot A R` (HIT: `o-qin`, `o-qeq`, `o-qsquash`) with its recursor
-   into a set; `o-PBisim p q = o-Bisim (to-step p) (to-step q)`; `o-Beh O A = o-Quot (Proc O A) o-PBisim`;
-   `o-beh`; `≈`; the normal form `o-nf : o-Beh O A → Step O A` (by `o-isSet-step`), effectiveness
-   (`≈` ⇒ equal trees), congruence under bind and handlers, transport of predicates.
-2. item 6 (up to bind: `o-bisimR-bind`; up to context: one context run under two observations
-   related per command by a relation on states).
+1. item 4, rest: `o-qelimP` (the quotient's eliminator into propositions) and with it
+   `o-Beh O A ≃ Step O A` for sets (`o-nf` and `λ t → o-qin (o-reify t)` inverse); congruences:
+   `o-bisim-bind`, `o-bisim-handle`, `o-bisim-obs` on trees (through paths), `o-pbisim-bind` and
+   `o-pbisim-handle` for natural Church processes.
+2. item 6: `o-bisimR-bind` (up to bind); `o-RunSim Rel H1 t s1 H2 u s2 = o-BisimR (≡ on results × Rel on states) (o-run …) (o-run …)`,
+   `o-runsim-bind`, `o-runsim-obs` (⇒ `o-Bisim` of the `o-obs`), up to context
+   (`o-runsim-context`: one tree over K handled into S1 and S2, related per command).
 3. `experiments/obs/counter.cub` (item 5 and the acceptance property).
 4. the guarded form (`GProc`): bisimulation by guarded recursion, its laws, guarded traces, and
    where it differs from path equality (item 3, second half; item 2's coinductive traces).
