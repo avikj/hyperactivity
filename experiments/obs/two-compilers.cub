@@ -1,0 +1,55 @@
+-- experiments/obs/two-compilers.cub — track H item 6 used on the shape it is for: one source
+-- signature compiled into two machines. Every program over the source signature has the same
+-- behaviour under the two compilations; the proof is the relation on states and one obligation
+-- per source command (o-runsim-context). Loaded after lib/obs.cub and experiments/obs/counter.cub
+-- (the observation signature oc-Obs, the cell machine oc-S1/oc-H1, the state-passing machine
+-- oc-S2/oc-H2, the relation oc-Rel).
+-- ---------------------------------------------------------------- the source signature
+data ok-KC = ok-recv | ok-reply (n : Nat) | ok-incr | ok-read
+ok-kresp : ok-KC → Type
+ok-kresp c = case c of ok-recv → oc-Req; ok-reply n → Unit; ok-incr → Unit; ok-read → Nat
+ok-K : Sig
+ok-K = (ok-KC , ok-kresp)
+-- ---------------------------------------------------------------- its two compilations
+-- into the cell machine: incr is a read and a write of the successor, read is a read
+ok-hd1 : o-THandler ok-K oc-S1
+ok-hd1 c = case c return (λ y → Step oc-S1 (ok-kresp y)) of
+  ok-recv → scmd (inl oc-recv) (λ r → sdone r)
+  ok-reply n → scmd (inl (oc-reply n)) (λ r → sdone r)
+  ok-incr → scmd (inr oc-rd) (λ v → scmd (inr (oc-wr (suc v))) (λ u → sdone unit))
+  ok-read → scmd (inr oc-rd) (λ v → sdone v)
+-- into the state-passing machine: each is one transition
+ok-hd2 : o-THandler ok-K oc-S2
+ok-hd2 c = case c return (λ y → Step oc-S2 (ok-kresp y)) of
+  ok-recv → scmd (inl oc-recv) (λ r → sdone r)
+  ok-reply n → scmd (inl (oc-reply n)) (λ r → sdone r)
+  ok-incr → scmd (inr (oc-upd (λ s → (s , suc s)))) (λ v → sdone unit)
+  ok-read → scmd (inr (oc-upd (λ s → (s , s)))) (λ v → sdone v)
+-- ---------------------------------------------------------------- one obligation per command
+ok-cmd-sim : (c : ok-KC) → (x y : Nat) → oc-Rel x y →
+             o-RunSim {oc-Obs} {oc-S1} {oc-S2} {ok-kresp c} {Nat} {Nat} oc-Rel oc-H1 (ok-hd1 c) x oc-H2 (ok-hd2 c) y
+ok-cmd-sim c =
+  case c return (λ z → (x y : Nat) → oc-Rel x y → o-RunSim {oc-Obs} {oc-S1} {oc-S2} {ok-kresp z} {Nat} {Nat} oc-Rel oc-H1 (ok-hd1 z) x oc-H2 (ok-hd2 z) y) of
+    ok-recv → λ x y e → ((λ i → oc-recv) , λ r r2 pr → (pr , e))
+    ok-reply n → λ x y e → ((λ i → oc-reply n) , λ u u2 pu → (pu , e))
+    ok-incr → λ x y e → ((λ i → unit) , λ i → suc (e i))
+    ok-read → λ x y e → (e , e)
+-- ---------------------------------------------------------------- every program, both ways, one behaviour
+ok-compiled-equal : {A : Type} → (C : Step ok-K A) →
+                    Path (o-Beh oc-Obs A) (o-tbeh oc-H1 (o-handle ok-hd1 C) zero) (o-tbeh oc-H2 (o-handle ok-hd2 C) zero)
+ok-compiled-equal {A} C =
+  o-tbeh-eq oc-H1 (o-handle ok-hd1 C) zero oc-H2 (o-handle ok-hd2 C) zero
+    (o-runsim-obs oc-Rel oc-H1 (o-handle ok-hd1 C) zero oc-H2 (o-handle ok-hd2 C) zero
+       (o-runsim-context {oc-Obs} {ok-K} {oc-S1} {oc-S2} {A} {Nat} {Nat} oc-Rel oc-H1 oc-H2 ok-hd1 ok-hd2 ok-cmd-sim C zero zero (λ i → zero)))
+-- the counter service written once over the source signature (a Church process), and its two
+-- compilations equal by observation
+ok-on : Proc {lzero} ok-K Unit → oc-Req → Proc {lzero} ok-K Unit
+ok-on rest q = case q of
+  oc-inc → bind {lzero} {ok-K} {Unit} {Unit} (cmd {lzero} {ok-K} ok-incr) (λ u → rest)
+  oc-get → bind {lzero} {ok-K} {Nat} {Unit} (cmd {lzero} {ok-K} ok-read) (λ v → bind {lzero} {ok-K} {Unit} {Unit} (cmd {lzero} {ok-K} (ok-reply v)) (λ u → rest))
+  oc-stop → ret {lzero} {ok-K} {Unit} unit
+ok-svc : Nat → Proc {lzero} ok-K Unit
+ok-svc zero = ret {lzero} {ok-K} {Unit} unit
+ok-svc (suc n) = bind {lzero} {ok-K} {oc-Req} {Unit} (cmd {lzero} {ok-K} ok-recv) (ok-on (ok-svc n))
+ok-svc-equal : (n : Nat) → Path (o-Beh oc-Obs Unit) (o-tbeh oc-H1 (o-handle ok-hd1 (to-step (ok-svc n))) zero) (o-tbeh oc-H2 (o-handle ok-hd2 (to-step (ok-svc n))) zero)
+ok-svc-equal n = ok-compiled-equal {Unit} (to-step (ok-svc n))

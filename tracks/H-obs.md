@@ -41,7 +41,7 @@ Files you own: `lib/obs.cub`, `experiments/obs/**`, this file.
 From `scoped-machine/` (library files are cached; do not set CUBICAL_NOCACHE):
 ```
 L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.cub lib/check.cub lib/std.cub lib/sort.cub lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/autodiff.cub lib/intproof.cub lib/intlin.cub lib/prim.cub lib/derive.cub lib/decode.cub lib/fiber.cub lib/proc.cub lib/world.cub lib/session.cub lib/choreo.cub"
-(ulimit -v 2500000; timeout 600 ./build/cubical $L lib/obs.cub experiments/obs/*.cub | grep -v '^ok' | tail)
+(ulimit -v 2500000; timeout 600 ./build/cubical $L lib/obs.cub experiments/obs/counter.cub experiments/obs/two-compilers.cub | grep -v '^ok' | tail)
 ```
 
 ## Design (decided; read before continuing)
@@ -52,7 +52,9 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   interpretations is the fold of its tree; `ret`, `cmd`, `bind`, `o-reify` preserve it. Theorems
   about Church `bind`/`handle` carry naturality hypotheses; nothing else can be proved
   internally (no parametricity).
-- All names in `lib/obs.cub` are prefixed `o-` (trees) / `og-` (guarded form).
+- All names in `lib/obs.cub` are prefixed `o-` (trees) / `og-` (guarded form); `oc-` in
+  `experiments/obs/counter.cub`, `ok-` in `experiments/obs/two-compilers.cub` (which loads after
+  `counter.cub`).
 - `_∙_` chains often fail to infer their implicit type; use `calc a ≡ b by p ≡ c by q` with the
   folds' implicits written out (`o-fold {l} {S} {A} {R} …`).
 
@@ -142,6 +144,19 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
   `o-path-pbisim`, `o-pbisim-path` (natural), `o-pbisim-traces`; congruence of equality in the
   quotient: `o-class-tree`, `o-class-eq`, `o-class-bind`, `o-class-handle`, `o-class-obs`.
 
+- Item 6 on the shape it is for (`experiments/obs/two-compilers.cub`): source signature `ok-K`
+  (recv, reply, incr, read), its compilations `ok-hd1` into the cell machine and `ok-hd2` into
+  the state-passing machine, `ok-cmd-sim` (one `o-RunSim` obligation per source command),
+  `ok-compiled-equal : (C : Step ok-K A) → o-tbeh oc-H1 (o-handle ok-hd1 C) zero ≡ o-tbeh oc-H2 (o-handle ok-hd2 C) zero`
+  by `o-runsim-context`, and its instance `ok-svc-equal` for the counter service written once
+  over `ok-K`.
+- **Final measurement.** One uncached run (`CUBICAL_NOCACHE=1`) of the whole library list of
+  `make library` followed by `lib/obs.cub experiments/obs/counter.cub experiments/obs/two-compilers.cub`:
+  `1356 passed, 0 failed; 58239905 interaction steps`, 2m55s wall. Of these, track H's
+  definitions: `o-` 120 definitions 4,407,374 steps; `og-` 43 definitions 585,830 steps;
+  `oc-` 45 definitions 522,294 steps; `ok-` 9 definitions 129,898 steps. `#trusted` after
+  loading lists the library's primitives only; no `postulate` in the three files.
+
 ## Found
 
 - `lib/std.cub` has no set quotient `_/_` and no truncations (the track text says it has); the
@@ -210,10 +225,20 @@ L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.c
 
 ## Next step
 
-1. `experiments/obs/context.cub`: up to context used on a real shape: one source signature
-   `ok-K` (recv, reply, incr, read) compiled by two tree handlers into `oc-S1` (cell) and
-   `oc-S2` (state passing); the four per-command `o-RunSim` obligations; by
-   `o-runsim-context` every program over `ok-K` has equal behaviour under the two compilations.
-2. Final pass: re-read the six items against Done; run the command under "How to check" once
-   with `CUBICAL_NOCACHE=1` (whole library uncached, to rule out a stale store) and record the
-   totals; make sure the track file's status is final.
+Every item of "What is built" and both acceptance lines are met by what is under Done; nothing
+of the track's specification is open. What remains is outside this track's files:
+
+1. Track A: add `lib/obs.cub` to the `library` list in `Makefile` (see "Needs from track A");
+   until then `make library` does not load it and it is checked by the command under "How to
+   check".
+2. When track A names the functionals of the guarded definitions (second request under "Needs
+   from track A"), the two statements listed as not proved under Found become provable in
+   `lib/obs.cub`: `ghandle` by the identity handler weakly equal to the process (`og-WeakEq`),
+   and congruence of `og-WeakEq` under `gbind`/`ghandle`. First step then: write
+   `og-gbind-unfold : gbind (gtau t) f ≡ gtau (λ α → gbind (t α) f)` as `λ i → gtau (λ α → pfix gbind·F i α (t α) f)`.
+3. When tracks C/F and R deliver the C++ and Rust readers (Phase 6's acceptance proper), the
+   pair to prove is two `Proc`s over the two languages' machine signatures: give each an
+   `o-ObsOf Obs S St` (its machine's handler of everything outside `Obs`), find the relation on
+   the two machines' states, prove `o-RunSim` (by `o-runsim-bind` along the programs' structure,
+   or `o-runsim-context` when both come from one source), conclude with `o-runsim-obseq`, and
+   move properties with `o-tree-transport` — exactly as `experiments/obs/counter.cub` does.
