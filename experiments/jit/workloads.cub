@@ -112,6 +112,12 @@ nthS n = case n return (λ k → Stm → Word) of
   suc k → λ s → rec k (s .tl)
 nthFrom : Nat → Word → Word
 nthFrom n w = nthS n (from w)
+<-suc-eq : (a b : Nat) → a ≡ b → a < suc b
+<-suc-eq a b p = subst {lzero} {lzero} {Nat} {λ x → a < suc x} {a} {b} p (<-suc-self a)
+zig : (a b : Nat) → Nat
+zig zero b = b
+zig (suc a) b = suc (zig b a)
+decreasing by plus a b using <-suc-eq (plus b a) (plus a b) (plus-comm b a)
 #jit addw
 #jit powl
 #jit plusN
@@ -144,3 +150,4 @@ nthFrom n w = nthS n (from w)
 #jit pickF
 #jit usePrs
 #jit nthFrom
+#jit zig

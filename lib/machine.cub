@@ -92,46 +92,35 @@ co-tel-recs d tel = case tel of tx A nm r → lcons (is-rec-ty d A) (co-tel-recs
 -- stuck primitive) or whose code is outside the fragment keeps the program from compiling, and
 -- the verdict names it
 unfold g = quote-top (%gty g) (%gval g)
-program-of m c fuel =
-  case fragment #0 c of
-    not-fo r at → (not-fo r at , lnil)
-    fo x → program-defs fuel (code-globals c) (lcons m lnil) (lcons (m , c) lnil)
-program-defs fuel todo seen acc =
-  if %weq fuel #0 then (fo (cwlit #0) , acc) else
+-- program-of m c fuel: (bad , defs). defs: the entry and every definition reachable from it that
+-- quotes, each (g , code); bad: those that do not, each (g , verdict). Whether a definition is in
+-- the fragment is decided after the encoder's passes have removed what no result depends on
+-- (lib/x86.cub): a proof argument's code may use composition and never be computed
+program-of m c fuel = program-defs fuel (code-globals c) (lcons m lnil) (lcons (m , c) lnil) lnil
+program-defs fuel todo seen acc bad =
+  if %weq fuel #0 then (bad , acc) else
   (case todo of
-     lnil → (fo (cwlit #0) , acc)
+     lnil → (bad , acc)
      lcons g rest →
-       if lmem g seen then program-defs fuel rest seen acc
-       else program-defs-g fuel g rest seen acc)
-program-defs-g fuel g rest seen acc =
+       if lmem g seen then program-defs fuel rest seen acc bad
+       else program-defs-g fuel g rest seen acc bad)
+program-defs-g fuel g rest seen acc bad =
   case unfold g of
-    none → (not-fo reflect (cglob g) , acc)
+    none → program-defs (%wsub fuel #1) rest (lcons g seen) acc (lcons (g , not-fo reflect (cglob g)) bad)
     some cd →
       (if self-head g cd
          then (case %gcode g of
-                 some cw → (if is-rec-body cw then program-defs-f fuel g cw rest seen acc (fragment #0 cw) else (not-fo infinite cd , acc))
-                 none → (not-fo infinite cd , acc))
-         else program-defs-f fuel g cd rest seen acc (fragment #0 cd))
+                 some cw → (if is-rec-body cw then program-defs-f fuel g cw rest seen acc bad
+                            else program-defs (%wsub fuel #1) rest (lcons g seen) acc (lcons (g , not-fo infinite cd) bad))
+                 none → program-defs (%wsub fuel #1) rest (lcons g seen) acc (lcons (g , not-fo infinite cd) bad))
+         else program-defs-f fuel g cd rest seen acc bad)
 -- a definition whose value is its own stuck call is a copattern definition (observed field by
 -- field, its quote is the call itself): its program is its checked code as written (%gcode), the
 -- record of its clauses under its parameters
 is-rec-body c = case c of clam b → is-rec-body b; cann t T → is-rec-body t; crec dd fs → true; _ → false
 self-head g c = case c of clam b → self-head g b; _ → (case code-head c of cglob h → %weq g h; _ → false)
 code-head c = case c of capp f a → code-head f; _ → c
-program-defs-f fuel g cd rest seen acc v =
-  case v of
-    not-fo r at → (not-fo r at , acc)
-    fo x → program-defs (%wsub fuel #1) (lapp2 rest (code-globals cd)) (lcons g seen) (lapp2 acc (lcons (g , cd) lnil))
+program-defs-f fuel g cd rest seen acc bad =
+  program-defs (%wsub fuel #1) (lapp2 rest (code-globals cd)) (lcons g seen) (lapp2 acc (lcons (g , cd) lnil)) bad
 -- the definition g of a program
 prog-def prog g = case prog of lnil → none; lcons d r → if %weq (fst d) g then some (snd d) else prog-def r g
--- ---------------------------------------------------------------- compile
--- compile T sch rules m c: the code c at type T (the entry, numbered m), specialized with its path
--- (lib/specialize.cub), its program; the result is (verdict , program , path): the verdict fo when
--- every definition is in the fragment. The #jit directive (src/lang.c) checks the path at
--- eval-g lnil c' ≡ eval-g lnil c with the checker, encodes the program (lib/x86.cub) and binds the
--- entry to the bytes; it binds nothing when the verdict is not fo or the path does not check
-compile T sch rules m c =
-  let s = specialize T sch rules c
-      p = program-of m (fst s) #256
-  in (fst p , (snd p , snd s))
-compile-default T m c = compile T sched-default lnil m c
