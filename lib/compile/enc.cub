@@ -1,0 +1,100 @@
+-- lib/compile/enc.cub — the stack machine's code (lib/compile/stack.cub) as x86-64 bytes. Loaded
+-- after lib/compile/stack.cub.
+--
+-- The machine's stack is the process stack: its top word at [rsp], each word 8 bytes. Each
+-- instruction is a few x86 instructions; what this level does not yet encode (a branch, a loop,
+-- an operation that can overflow, a numeral past 2^64, a displacement past 2^31) is ud2, which
+-- faults: the run leaves (the machine's jout), never answers wrongly. That the bytes compute what
+-- the machine computes is proved by running them under lib/isa/x86 (experiments/isa/).
+
+-- n bytes of a word, lowest first
+enc-bytes : Nat → Word → List Word
+enc-bytes zero w = nil
+enc-bytes (suc n) w = cons (%wand w #255) (enc-bytes n (%wshr w #8))
+
+enc-ap : List Word → List Word → List Word
+enc-ap nil ys = ys
+enc-ap (cons x xs) ys = cons x (enc-ap xs ys)
+
+-- ud2
+enc-ud2 : List Word
+enc-ud2 = cons #15 (cons #11 nil)
+
+-- a displacement that fits a signed 32-bit field
+enc-fits32 : Nat → Bool
+enc-fits32 d = %wlt (fromNat d) #2147483648
+
+-- ModRM [rsp + disp32] with the reg field r, then SIB 24 and the displacement 8 d
+enc-rsp : Word → Nat → List Word
+enc-rsp r d = cons (%wadd #132 (%wmul r #8)) (cons #36 (enc-bytes 4 (%wmul (fromNat d) #8)))
+
+-- push qword [rsp + 8 d], n times (the n words at depth d copied, the deepest first: each push
+-- moves the rest one deeper)
+enc-gets : Nat → Nat → List Word
+enc-gets d zero = nil
+enc-gets d (suc n) = cons #255 (enc-ap (enc-rsp #6 (plus d n)) (enc-gets d n))
+
+-- the top n words moved m deeper (the deepest first), then rsp up by 8 m:
+-- mov rax, [rsp + 8 i]; mov [rsp + 8 (i + m)], rax; …; lea rsp, [rsp + 8 m]
+enc-moves : Nat → Nat → List Word
+enc-moves zero m = nil
+enc-moves (suc i) m =
+  cons #72 (cons #139 (enc-ap (enc-rsp #0 i) (cons #72 (cons #137 (enc-ap (enc-rsp #0 (plus i m)) (enc-moves i m))))))
+
+enc-slide : Nat → Nat → List Word
+enc-slide n zero = nil
+enc-slide n (suc m) = enc-ap (enc-moves n (suc m)) (cons #72 (cons #141 (enc-rsp #4 (suc m))))
+
+-- the operation on rax and rcx, those that cannot overflow
+enc-op : JWop → List Word
+enc-op jand = cons #72 (cons #33 (cons #200 nil))
+enc-op jor = cons #72 (cons #9 (cons #200 nil))
+enc-op jxor = cons #72 (cons #49 (cons #200 nil))
+enc-op jadd = enc-ud2
+enc-op jsub = enc-ud2
+enc-op jmul = enc-ud2
+enc-op jdiv = enc-ud2
+enc-op jmod = enc-ud2
+enc-op jmax = enc-ud2
+enc-op jshr = enc-ud2
+
+enc-op-ok : JWop → Bool
+enc-op-ok jand = true
+enc-op-ok jor = true
+enc-op-ok jxor = true
+enc-op-ok jadd = false
+enc-op-ok jsub = false
+enc-op-ok jmul = false
+enc-op-ok jdiv = false
+enc-op-ok jmod = false
+enc-op-ok jmax = false
+enc-op-ok jshr = false
+
+enc : JCode → List Word
+enc kdone = nil
+enc (kimm w k) = if %wlt w jw64 then cons #72 (cons #184 (enc-ap (enc-bytes 8 w) (cons #80 (enc k)))) else enc-ud2
+enc (kget d n k) = if enc-fits32 (plus d n) then enc-ap (enc-gets d n) (enc k) else enc-ud2
+enc (kop o k) = if enc-op-ok o then cons #89 (cons #88 (enc-ap (enc-op o) (cons #80 (enc k)))) else enc-ud2
+enc (kcmp o k) = enc-ud2
+enc (kinc k) = enc-ud2
+enc (kif t e k) = enc-ud2
+enc (kslide n m k) = if enc-fits32 (plus n m) then enc-ap (enc-slide n m) (enc k) else enc-ud2
+enc (kloop n b k) = enc-ud2
+enc kfail = enc-ud2
+
+enc-slide-steps : Nat → Nat → Nat
+enc-slide-steps n zero = zero
+enc-slide-steps n (suc m) = suc (plus n n)
+
+-- the x86 instructions the bytes run before they end (each ud2 counted as one, where it stops)
+enc-steps : JCode → Nat
+enc-steps kdone = zero
+enc-steps (kimm w k) = if %wlt w jw64 then suc (suc (enc-steps k)) else suc zero
+enc-steps (kget d n k) = if enc-fits32 (plus d n) then plus n (enc-steps k) else suc zero
+enc-steps (kop o k) = if enc-op-ok o then suc (suc (suc (suc (enc-steps k)))) else suc zero
+enc-steps (kcmp o k) = suc zero
+enc-steps (kinc k) = suc zero
+enc-steps (kif t e k) = suc zero
+enc-steps (kslide n m k) = if enc-fits32 (plus n m) then plus (enc-slide-steps n m) (enc-steps k) else suc zero
+enc-steps (kloop n b k) = suc zero
+enc-steps kfail = suc zero

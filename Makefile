@@ -34,7 +34,7 @@ LIB  := $(CORE) lib/sort.cub lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/a
         lib/choreo.cub lib/obs.cub lib/region.cub lib/specialize.cub lib/rules.cub lib/machine.cub lib/x86.cub lib/elf.cub \
         lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub \
         lib/isa/tso.cub lib/isa/tso-acyclic.cub lib/mem/atomics.cub lib/mem/rc11.cub lib/cxx/ast.cub lib/lang/rust/ast.cub \
-        lib/compile/tm.cub lib/compile/stack.cub
+        lib/compile/tm.cub lib/compile/stack.cub lib/compile/enc.cub
 
 library: build/cubical
 	CUBICAL_NOCACHE=1 ./build/cubical $(LIB)
