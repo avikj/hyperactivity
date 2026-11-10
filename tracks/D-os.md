@@ -56,7 +56,7 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
    the loop is kept in `experiments/os/`.
 2. ~~`.gitignore` hid `experiments/build/`~~ — **done by A**: the demos are `experiments/native/`.
 3. **Ready (track A, please do this):** append `lib/os/platform.cub lib/os/linux.cub
-   lib/os/contract.cub` (this order, after `lib/elf.cub`) to `LIB` in the `Makefile`. All three
+   lib/os/contract.cub lib/os/replay.cub` (this order, after `lib/elf.cub`) to `LIB` in the `Makefile`. All four
    load after the library with 0 failures (measurements under Done).
 4. Checker (not blocking; worked around in `lib/os/contract.cub`): see Found, "a matched
    variable in a branch without type information".
@@ -143,6 +143,20 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   `exit_group(7)`. With this every one of the 23 calls and 5 memory commands of `Linux` has
   been performed on the kernel through `linux-on-w`. Against `linux-model` the same term ends
   `stopped` (at `open`, which the model refuses: files and TCP are outside its subset).
+- **Replay (PLAN Phase 3's acceptance)**: `lib/os/replay.cub`. `lx-enc`/`lx-dec` (each response
+  of `Linux` as a list of words and back, the facts decided again on reading; 31,863 and 41,789
+  steps to check), `lx-recording`, `lx-replaying : World Linux LxLog`, `linux-on-w-rec` /
+  `linux-run-rec` (the kernel's responses also written to a descriptor), `lx-read-log` /
+  `lx-replay-run` (a log read from a descriptor, the process run by `runp` in `lx-replaying`).
+  The library with the four `lib/os` files (NOCACHE): 993 passed, 0 failed, 23,474,512 steps.
+  `experiments/os/udp-echo-replay.cub`: in the model, the recorded log is `[[1,3],[1],
+  [4294967296],[1,12,5555,167772167],[1,12],[1]]`, the replay from it `(done (inr #12) , nil)`,
+  and `udp-echo-replay-same : fst udp-echo-replayed ≡ fst udp-echo-model-run` checks (3,095
+  steps). On the kernel (`udp-echo-rec-run.cub` with `3>build/udp-echo.log`, the python
+  datagram): `run: done (inr #12)   [4283 steps]`, the log 15 words (`2 1 4 | 1 1 | 1 <addr> |
+  4 1 12 46303 2130706433 | 2 1 12 | 1 1`); then `udp-echo-replay-run.cub` with
+  `<build/udp-echo.log`: `run: done (pair (done (inr #12)) #0)   [3172 steps]` — the same
+  outcome from the responses alone, none left over.
 
 ## Found
 
@@ -178,16 +192,19 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
   calls under `strace` are listed under Done). Reproduce:
   `./build/cubical <library> lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub experiments/os/tour.cub experiments/os/tour-build.cub`.
 
+- **A clause definition at a type that only unfolds to a function type.** `lx-replaying : World
+  Linux LxLog` written by clauses `lx-replaying c nil = …; lx-replaying c (cons x rest) = …` is
+  refused with `error: a dimension is matched only by a variable in lx-replaying` (a fatal
+  error, not a FAIL: the load stops). Written `lx-replaying c log = case log of …` it checks.
+- **A nested `case` is not one of "the definition's own matches".** `f (cons e r) = case r of
+  nil → …; cons d r2 → … f r2` is refused as non-structural; the nested pattern `f (cons e
+  (cons d r2)) = … f r2` is accepted.
+
 ## Next step
 
-All four items and the three acceptance lines are met except `make library` with `lib/os/*.cub`
-in `LIB` (Needs 3, track A's edit of the `Makefile`). Remaining, in order:
-1. After A appends the files: run `make library`, record the count here.
-2. PLAN Phase 3's own acceptance goes one step past this track's: "the same outcome trace on
-   recorded inputs (replay)". `lib/proc.cub` has `recording`/`replaying` with an
-   `Encoder`/`Decoder` into one `Word` per response; `Linux`'s responses do not fit one word
-   (`Upto len × SockAddr`, `List EpollEvent`). The step is `lib/os/replay.cub`: an encoder of
-   each `lx-resp c` into `List Word` and its decoder, `recording`/`replaying` at that carrier
-   (they are 8 lines each in proc.cub, restated over `List Word`), and in
-   `experiments/os/udp-echo-model.cub` the echo replayed from the recorded responses with the
-   same outcome.
+1. `#build` of the recording echo (not yet run):
+   `./build/cubical <library> lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub experiments/os/udp-echo.cub experiments/os/udp-echo-model.cub experiments/os/udp-echo-replay.cub experiments/os/udp-echo-rec-build.cub`,
+   then `./build/udp-echo-rec 3>build/udp-echo.log` with the python datagram, then
+   `udp-echo-replay-run.cub <build/udp-echo.log`; record size, steps and the replayed outcome
+   (this is "compiled, against the real kernel, with the same outcome on recorded inputs").
+2. After A appends the four files to `LIB` (Needs 3): run `make library`, record the count.

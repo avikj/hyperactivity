@@ -1,0 +1,20 @@
+-- experiments/os/udp-echo-replay.cub — the echo reproduced from responses (loaded after
+-- lib/os/replay.cub, experiments/os/udp-echo.cub and udp-echo-model.cub).
+-- In the model: the run recorded (lx-recording linux-model), then run again in lx-replaying from
+-- the log alone; the two outcomes are the same, a statement the checker decides.
+udp-echo-recorded : Outcome (Sum Errno Word) × (KState × LxLog)
+udp-echo-recorded = runp {Linux} {Sum Errno Word} {KState × LxLog} (udp-echo {lzero}) (lx-recording {KState} linux-model) (udp-echo-st0 , nil)
+#show snd (snd udp-echo-recorded)
+udp-echo-replayed : Outcome (Sum Errno Word) × LxLog
+udp-echo-replayed = runp {Linux} {Sum Errno Word} {LxLog} (udp-echo {lzero}) lx-replaying (snd (snd udp-echo-recorded))
+#show udp-echo-replayed
+udp-echo-replay-same : fst udp-echo-replayed ≡ fst udp-echo-model-run
+udp-echo-replay-same = λ i → fst udp-echo-model-run
+-- On the kernel: the echo performed with its responses written to descriptor 3
+-- (udp-echo-rec-run.cub on the net, udp-echo-rec-build.cub as build/udp-echo-rec; run either
+-- with 3>build/udp-echo.log), and the process run again from that log on descriptor 0
+-- (udp-echo-replay-run.cub, with <build/udp-echo.log): the outcome and the responses left over
+udp-echo-rec-step : Step W (Sum Errno Word)
+udp-echo-rec-step = to-step (linux-run-rec {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) #3 (udp-echo {lsuc lzero}))
+udp-echo-replay-step : Step W (Outcome (Sum Errno Word) × Word)
+udp-echo-replay-step = to-step (lx-replay-run {Sum Errno Word} (x86-64-linux #2) #0 (udp-echo {lzero}))
