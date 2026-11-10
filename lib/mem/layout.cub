@@ -1,5 +1,6 @@
--- lib/mem/layout.cub — object types and record layouts as data, and typed access to the parts
--- of an object at a pointer. Loaded after lib/mem/memory.cub.
+-- lib/mem/layout.cub — object types and record layouts as data, and the addressing of the parts
+-- of an object: pure offset arithmetic (the accesses themselves are lib/mem/monad.cub's
+-- commands). Loaded after lib/mem/memory.cub.
 --
 -- A type is a scalar (a kind with its alignment, or a C type whose kind and alignment the
 -- Target gives), an array of a type, or a record named by an id. Records are named, not nested:
@@ -11,7 +12,7 @@
 --
 -- Binding time (PLAN §5.4): types, layouts and names are program data. Every function here is
 -- a case on them, so at a fixed program an access is a pointer addition by a literal and a
--- load or store at a literal size.
+-- load or store command at a literal size.
 data MTy = ty-sk (k : SK) (al : Word) | ty-c (c : CTy) | ty-arr (e : MTy) (n : Word) | ty-rec (id : Word)
 record Field = { fd-name : Word ; fd-off : Word ; fd-ty : MTy }
 record Base = { bs-id : Word ; bs-off : Word }
@@ -59,8 +60,6 @@ ty-scalar t ty = case ty of
   ty-rec i → mstop st-ill-typed
 
 -- ---------------------------------------------------------------- computing a layout (the C rule)
-w-roundup : Word → Word → Word
-w-roundup x al = wmul (wquot (wadd x (wsub al #1)) al) al
 -- members in order, each at the next multiple of its alignment: the fields, the end, the
 -- greatest alignment so far
 lay-go : List (Word × MTy) → Target → LayEnv → Word → Word → MRes (List Field × (Word × Word))
@@ -138,46 +137,16 @@ lay-ok t env l =
                               (not (wlt (ly-size l) (wadd (ly-vptr l) (tg-size t ck-ptr)))))))))
          (lay-ok-bases (ly-bases l) env (ly-size l) (ly-align l))))
 
--- ---------------------------------------------------------------- typed access
--- an object of a type: a new allocation of the type's size and alignment
-obj-alloc : Target → LayEnv → AKind → Bool → MTy → AMem → MRes (MPtr × AMem)
-obj-alloc t env kd zeroed ty m =
-  mr-bind (ty-size t env ty) (λ sz → mr-bind (ty-align t env ty) (λ al → mem-alloc kd zeroed sz al m))
--- the member of a record at a pointer: the pointer advanced by the field's offset, and the field's type
-obj-field : LayEnv → Word → Word → MPtr → AMem → MRes (MPtr × MTy)
-obj-field env id name p m =
-  mr-bind (lay-find env id) (λ l →
-  mr-bind (fld-find (ly-fields l) name) (λ f →
-  mr-map (λ q → (q , fd-ty f)) (mem-ptr-add p #1 (uq-of-word (fd-off f)) m)))
--- the base-class subobject of a record at a pointer, and back from the base to the record
-obj-base : LayEnv → Word → Word → MPtr → AMem → MRes MPtr
-obj-base env id base p m =
-  mr-bind (lay-find env id) (λ l →
-  mr-bind (base-find (ly-bases l) base) (λ b → mem-ptr-add p #1 (uq-of-word (bs-off b)) m))
-obj-derived : LayEnv → Word → Word → MPtr → AMem → MRes MPtr
-obj-derived env id base p m =
-  mr-bind (lay-find env id) (λ l →
-  mr-bind (base-find (ly-bases l) base) (λ b → mem-ptr-add p #1 (uq-neg (uq-of-word (bs-off b))) m))
--- element i (a signed index) of an array of a type at a pointer to an element
-obj-elem : Target → LayEnv → MTy → MPtr → UInt64 → AMem → MRes MPtr
-obj-elem t env ty p i m = mr-bind (ty-size t env ty) (λ sz → mem-ptr-add p sz i m)
--- a scalar object read and written at its type
-obj-load : Target → MTy → MPtr → AMem → MRes SV
-obj-load t ty p m = mr-bind (ty-scalar t ty) (λ ka → mem-load-al t (fst ka) (snd ka) p m)
-obj-store : Target → MTy → MPtr → SV → AMem → MRes AMem
-obj-store t ty p v m = mr-bind (ty-scalar t ty) (λ ka → mem-store-al t (fst ka) (snd ka) p v m)
--- an object of any type copied (assignment of an aggregate): its bytes moved
-obj-copy : Target → LayEnv → MTy → MPtr → MPtr → AMem → MRes AMem
-obj-copy t env ty dst src m = mr-bind (ty-size t env ty) (λ sz → mem-memmove dst src sz m)
--- the vtable pointer of an object of a record that has one
-obj-vptr : Target → LayEnv → Word → MPtr → AMem → MRes MPtr
-obj-vptr t env id p m =
-  mr-bind (lay-find env id) (λ l → case ly-has-vptr l of
-    false → mstop st-ill-typed
-    true → mr-bind (mem-ptr-add p #1 (uq-of-word (ly-vptr l)) m) (λ q →
-      mr-bind (mem-load t sk-ptr q m) sv-as-p))
-obj-set-vptr : Target → LayEnv → Word → MPtr → MPtr → AMem → MRes AMem
-obj-set-vptr t env id p vt m =
-  mr-bind (lay-find env id) (λ l → case ly-has-vptr l of
-    false → mstop st-ill-typed
-    true → mr-bind (mem-ptr-add p #1 (uq-of-word (ly-vptr l)) m) (λ q → mem-store t sk-ptr q (sv-p vt) m))
+-- ---------------------------------------------------------------- addressing: offsets
+-- the member of a record: its byte offset and its type
+fld-off : LayEnv → Word → Word → MRes (Word × MTy)
+fld-off env id name =
+  mr-bind (lay-find env id) (λ l → mr-map (λ f → (fd-off f , fd-ty f)) (fld-find (ly-fields l) name))
+-- the base-class subobject of a record: its byte offset (subtracted, it leads from the base to the record)
+base-off : LayEnv → Word → Word → MRes Word
+base-off env id base = mr-bind (lay-find env id) (λ l → mr-map bs-off (base-find (ly-bases l) base))
+-- where the vtable pointer of a record is
+vptr-off : LayEnv → Word → MRes Word
+vptr-off env id = mr-bind (lay-find env id) (λ l → case ly-has-vptr l of
+  false → mstop st-ill-typed
+  true → mok (ly-vptr l))

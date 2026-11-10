@@ -155,9 +155,21 @@ the result type of this layer is `MRes`, not `Res`.
   `o-BisimR (MOk MRel) (std-run t C s) (flat-run t C (am-data s))`: the same commands of the
   world with the same responses, the same result, the same bytes.
   Library + target, scalar, sig, flat, memory: `1678 passed, 0 failed`.
-- **Broken until the next two commits**: `lib/mem/layout.cub` (its access part) and
-  `lib/mem/monad.cub` still name the deleted `mem-ptr-add`, `mem-load-al`, `AMem` as state;
-  `experiments/mem/sum.cub` likewise. Readers (tracks R, F) break with them, as decided.
+- Item 7 done: `lib/mem/layout.cub`'s access part is pure offsets (`fld-off`, `base-off`,
+  `vptr-off`); `lib/mem/monad.cub` rewritten: `Ev {l} S V A = Proc {l} (MK S) (MRes (Ctl V A))`;
+  the three laws re-proved (`ev-left-id`, `ev-right-id`, `ev-assoc`); `ev-load[-al]`,
+  `ev-store[-al]`, `ev-alloc`, `ev-release`, `ev-free`, `ev-ptr-add`, `ev-ptr-diff`,
+  `ev-ptr-cmp`, `ev-ptr-int`, `ev-int-ptr`, `ev-memmove`, `ev-memcpy`, `ev-memset` are the
+  commands (`ev-memc`); `ev-rd`/`ev-wr`/`ev-mem`/`ev-run-pure` deleted; control and loops as
+  before; objects by layout (`ev-field`, `ev-base`, `ev-derived`, `ev-elem`, `ev-obj-alloc`,
+  `ev-obj-load`, `ev-obj-store`, `ev-obj-copy`, `ev-vptr`, `ev-set-vptr`); the two handlers
+  `ev-std`, `ev-flat`, and `ev-sound` (mem-sound at a computation). Library + the seven
+  files: `1787 passed, 0 failed`. The "From track M" section is in tracks/R-rust.md.
+- For track F (not written into its file: only R's was authorized): the same changes as R's
+  note, and lib/cxx/machine.cub's `cx-run` (applies a computation to an `AMem`), `cx-mem-drop`,
+  `cx-gone`, `cx-dead` (they take the old `AMem` apart) have no counterpart: a dead
+  allocation is `ub-dead` from `mem-std`'s check, so they are deleted, not ported.
+- `experiments/mem/sum.cub` is still the old design's file and does not load: next step.
 - Renames forced by the library as it now is: `lib/cxx/ast.cub` (in `make library` since
   `4d04760c`) binds `bo-add bo-sub bo-mul bo-div bo-rem bo-and bo-or bo-xor`, so scalar.cub's
   `BinOp` constructors are now `ao-add … ao-xor`. Readers using `bo-*` as `BinOp` must rename.
@@ -428,13 +440,12 @@ comparison `i < n`, the bounds test of `p[i]` against the array, the fuel's coun
 
 ## Next step
 
-1. `lib/mem/layout.cub`: replace the section "typed access" by pure offsets
-   (`fld-off : LayEnv → id → name → MRes (Word × MTy)`, `base-off`, `vptr-off`), keep the
-   rest; check after memory.cub.
-2. `lib/mem/monad.cub`: `Ev {l} S V A = Proc {l} (MK S) (MRes (Ctl V A))`; `ev-load`,
-   `ev-store`, `ev-alloc`, `ev-release`, `ev-ptr-add`, … issue `MemC` commands; `ev-rd`,
-   `ev-wr`, `ev-mem` deleted; laws re-proved; runners `ev-std` (to-step then `std-run`) and
-   `ev-flat` (`handle` by `mem-flat`).
-3. The "From track M" line in tracks/R-rust.md.
-4. `experiments/mem/sum.cub` on the new `Ev`: under `std-run` on the net (answering `w-alloc`
-   by a bump allocator), under `mem-flat` through `#build`.
+Item 11: rewrite `experiments/mem/sum.cub` on the new `Ev`: `sum-c` unchanged in shape (its
+`ev-*` calls keep their types); a `main` that allocates `int a[4]`, stores four ints, calls
+`sum-c`; under `ev-std` on the net with `w-alloc` answered by a bump allocator (a fold of the
+observed tree); under `ev-flat` + `mt-close` + `o-reify` as a `Proc W` given to `#build`
+(read experiments/native/feed.cub for `#build`'s form); record bytes and the residual.
+Then: `make library` + the seven files without the cache for the final numbers; rewrite the
+"What is built"/"Done" text of the old design into a short history; Limits re-read against the
+new memory (effective types, indeterminate values, subobject bounds still apply; "a store
+copies the allocation" and "host byte order of load64" no longer do).

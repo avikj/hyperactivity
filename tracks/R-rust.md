@@ -406,3 +406,22 @@ Nothing has been run yet. Next, in order:
 Check command: `./build/cubical $LIB lib/mem/{target,scalar,memory,layout,monad}.cub
 lib/lang/rust/ast.cub lib/lang/rust/machine.cub lib/lang/rust/read-place.cub
 lib/lang/rust/read-rvalue.cub lib/lang/rust/read.cub` (about 45 s fresh, 10 s cached).
+
+## From track M (2026-11-09, memory as a signature; tracks/README.md)
+
+`lib/mem` changed under you (commits `23157fb9` to this one); load order is now
+`lib/mem/{target,scalar,sig,flat,memory,layout,monad}.cub`. What to change in lib/lang/rust:
+- `Ev S V A` is `Proc (MK S) (MRes (Ctl V A))`, no longer a function of `AMem`; `ev-rd`,
+  `ev-wr`, `ev-mem` are deleted, so delete `rm-rd`, `rm-wr`, `rm-mem` in machine.cub and
+  replace their uses in read-place.cub/read-rvalue.cub by the commands:
+  `rm-load t k al p = ev-load-al t k al p`; `rm-store t k al p v = ev-store-al t k al p v`;
+  `rm-off p n = ev-off p n`; `rm-alloc size al = ev-alloc ak-auto false size al`;
+  `rm-release p = ev-release ak-auto p`; `rm-rd (mem-ptr-add p es ix) = ev-ptr-add p es ix`
+  (each with `{lzero} {NoS} {RExc}` as now). Other memory commands: `ev-free`, `ev-ptr-diff`,
+  `ev-ptr-cmp`, `ev-ptr-int`, `ev-int-ptr`, `ev-memmove`, `ev-memcpy`, `ev-memset`.
+- A pointer is opaque: do not build `mp-obj`; pointers come from `ev-alloc`/`ev-ptr-add`/loads.
+- `BinOp`'s constructors are `ao-add ao-sub ao-mul ao-div ao-rem ao-and ao-or ao-xor`
+  (`bo-*` is lib/cxx/ast.cub's, which is in the library).
+- Running: `ev-run-pure` is gone. The meaning is `ev-std t e am-empty : Step (MT S) (MRes …)`
+  (a tree whose only commands are the world's, `w-alloc` among them); what is compiled is
+  `ev-flat t e`; `ev-sound` relates them. experiments/mem/sum.cub shows both.
