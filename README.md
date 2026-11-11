@@ -35,11 +35,12 @@ of a thing proved in place of the thing.
 
 ```
 make build/cubical          # the machine
-make library                # loads the LIB list of the Makefile: 1,613 passed, 406 failed
+make library                # loads the LIB list of the Makefile: 1,884 passed, 52 failed (69 s)
 ```
 
-401 of the 406 are refused untyped definitions; the other 5 (`cstr-fill`, `cstr`, `cstr-at`,
-`cstr-from`, `cstr-is` in `lib/cxx/ast.cub`) depend on two refused primitives.
+The 52: untyped definitions refused in `derive` (24), `ring` (9), `intlin` (6), `eqproof` (3),
+`autodiff` (3), and `lib/cxx/ast.cub`'s 2 refused primitives with the 5 definitions that use them.
+The compiler files load with 0 failures.
 `make library` does **not** load `lib/net.cub`, `lib/fleet.cub`, `lib/deploy.cub`,
 `lib/bits.cub`, most of `lib/mem/`, `lib/isa/x86/`, or the C++ and Rust readers; their loads
 are given per row below.
@@ -140,53 +141,47 @@ is written in.
 **Why it stays:** this is "interpreting any other language or computational system". A
 semantics is definitions; that a file here has no theorems is not a defect.
 
-## 5. Machine code — the compiler (untyped, refused, worked)
+## 5. Machine code — the compiler (typed, loads, runs)
 
 | file | lines | what it is |
 |---|---|---|
-| `lib/specialize.cub` | 172 | normalization of a code at a type; rewriting along checked theorems, each step with its path |
-| `lib/rules.cub` | 17 | a checked theorem's type read as a rewrite rule |
-| `lib/machine.cub` | 130 | which codes are first-order (the fragment), and a definition unfolded into a program |
-| `lib/x86.cub` | 832 | the fragment to x86-64 bytes: the instruction table, the three passes (`x-push`, `x-lift`, erasure of unused arguments), the encoder, layout, `jit-plan` |
-| `lib/elf.cub` | 126 | a process as a standalone ELF binary (`#build`, `#build-loop`) |
+| `lib/codes.cub` | 123 | list and word helpers the compiler files share (`l-map`, `w-iter`, `code-kids`, `code-globals`, …) |
+| `lib/specialize.cub` | 165 | normalization of a code at a type; rewriting along checked theorems, each step with its path |
+| `lib/rules.cub` | 26 | a checked theorem's type read as a rewrite rule |
+| `lib/machine.cub` | 173 | which codes are compilable (the fragment), and a definition unfolded into a program |
+| `lib/x86.cub` | 1,164 | the program to x86-64 bytes: the instruction table, the passes (`x-push`, `x-lift`, erasure of unused arguments), the encoder, layout, `jit-plan` |
+| `lib/elf.cub` | 157 | a process as a standalone ELF binary (`#build`, `#build-loop`) |
 | `tools/asm/` | 406 | assembly sources of the closure-application routine, the start stub and the command loop, and the script that turns them into byte lists |
 
-Before the refusal this compiled closures, codata, word loops, floats and whole processes;
-the log records the built feed handler matching the C program on 1M messages, and 33 `#jit`
-workloads in `experiments/jit/`.
+Every definition has a signature and checks (`Code`'s fields are typed in `lib/code.cub`; the
+checker's services the compiler calls — a definition's code, conversion at a type, a
+constructor's field count — are typed primitives at the end of `lib/std.cub`). Recursion the
+checker cannot see as structural runs on fuel (`c-fuel = 2^14`) or `%welimP`.
 
-**What is already enforced by computation** (`jit-plan`, `lib/x86.cub:816–831`): the specialized
-code is compared, by the checker's own conversion, with the definition's value, and a rewrite
-along a theorem carries a path the checker is given.
+Exercised: the 33 `#jit` workloads in `experiments/jit/workloads.cub` pass (`ok: jit`, each
+checked by conversion or, with theorems, by the path checked as `f·jit`); `#build` of
+`experiments/native/sys.cub` and `feed.cub` and `#build-loop` of `feedloop.cub` give the same
+binaries as before, which run: `sys` writes `A` and exits 65; `feed` and `feedloop` print the
+book's imbalance per message.
 
-**What is not:** everything after that comparison — the unfolding into a program, `x-push`,
-`x-lift`, erasure, the encoder and its instruction table, layout, the ELF image. Nothing states
-that the bytes compute what the specialized code computes. That stretch is the missing types.
+**What is checked** (`jit-plan`, `build-plan`): the specialized code is compared, by the checker's
+own conversion, with the definition's value, and a rewrite along a theorem carries a path the
+checker is given.
 
-**Known behavioural defect:** `x-rel-fix` (`lib/x86.cub:778`) stops after 64 rounds and returns
-the set it has; arguments not yet found needed are then erased to 0.
+**What is not yet:** that the bytes compute what the specialized code computes. The statement:
+`⟦bs⟧ a` places `a` where the entry expects it, runs `lib/isa/x86` and reads `rax` (the overflow
+exit taken means the call is computed instead); correct is `f ≡ ⟦bs⟧`, checked per definition.
+The proof is built from one theorem per byte pattern of the instruction table (its effect from
+any frame state, by the model run on the literal bytes) as the encoder emits the bytes.
 
-**Why it stays:** it is the reference for every decision the typed compiler needs — value
-layout, calling convention, pass order, encodings. It is deleted when the typed one covers it.
+**Known behavioural defect:** `x-rel-fix` stops after 64 rounds and returns the set it has;
+arguments not yet found needed are then erased to 0.
 
-Also refused: `lib/derive.cub` (122 lines; `deriving eq` in the surface language is off with
-it) and `lib/intlin.cub` (20).
+Also refused (untyped): `lib/derive.cub` (122 lines; `deriving eq` in the surface language is off
+with it) and `lib/intlin.cub` (20).
 
-## 5a. The typed compiler — `lib/compile/` (checks, in progress)
-
-| file | lines | status | what it is |
-|---|---|---|---|
-| `tm.cub` | 197 | checks | source terms (`JTm`: words, booleans, naturals, pairs, sums, functions, `let`, `if`, `case`, recursion on Nat, loops on Word) at types `JTy`, and their meaning `jev` at every type, written with the language's own eliminators so a definition and its term can be shown equal by `refl` |
-| `stack.cub` | 924 | checks (281, no store, ~1 min) | a stack machine of 64-bit words (`JCode`, `jrun`); values of first-order types flattened onto it (a pair its parts, a sum its tag and both payload areas); the compiler `jcx`; and `jcx-ok`: from any stack where the context's values are placed, the code ends as its continuation run on the value's words, or leaves (`jout`: a result past 2^64, or a function, which this level does not compile) |
-
-Each instruction of the machine is one or a few of `lib/x86.cub`'s templates (push imm, push
-[rsp+d], pop/op/push, a slide of the top words). Proved: every term form except `jlam`/`japp`
-(those compile to `kfail`, the run leaves — never a wrong answer).
-
-**Next:** closures (`jlam`/`japp`, with a heap); the x86 level — each instruction's bytes stepped
-by `lib/isa/x86`'s semantics to the same stack, by checked code only (lib/compile/x86ok.cub has the run
-split and the store lemmas); the blob and ELF layout; then `#jit`/`#build` use it and `lib/x86.cub`'s
-unchecked stretch is deleted.
+`lib/compile/x86ok.cub` has lemmas about runs of the model (a run splits at any step; stores to
+distinct addresses commute) for the template theorems.
 
 ## 6. Importers and tools — `tools/` (Python, trusted)
 
