@@ -1,0 +1,15 @@
+-- experiments/isa/jit-run.cub — the compiler's bytes for a definition, run under the imported x86
+-- model as lib/compile/meaning.cub's ⟦bs⟧ runs them. Loaded after the compiler files
+-- (lib/codes … lib/x86.cub), lib/bits.cub, lib/isa/x86/ORDER's files, lib/isa/x86/run.cub and
+-- lib/compile/meaning.cub. addw 3 4 runs to 7; at 2^64 − 1 and 4 the overflow exit is taken.
+addw : Word → Word → Word
+addw a b = %wadd a b
+addw-g : Word
+addw-g = case code addw return (λ _ → Word) of
+  cglob g → g
+  _ → #0
+addw-bs : Lst Word
+addw-bs = snd (snd (snd (snd (jit-plan addw-g lnil))))
+#show l-count addw-bs
+#show mn-run addw-bs #300 (lcons #3 (lcons #4 lnil))
+#show mn-run addw-bs #300 (lcons #18446744073709551615 (lcons #4 lnil))

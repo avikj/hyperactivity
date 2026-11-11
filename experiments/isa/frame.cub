@@ -1,0 +1,9 @@
+-- experiments/isa/frame.cub — one instruction from a state whose memory, code address and data
+-- registers are all variables (loaded after add.cub's files). 48 01 C8 = add rax, rcx.
+fr-state : ByteMap → Word → Word → Word → X86
+fr-state m p a c = x86-set-rax a (x86-set-rcx c (x86-set-rip p (x86-set-mem (mem-store-n m #3 p #13107528) x86-user64)))
+fr-lit : ByteMap → Word → Word → X86
+fr-lit m a c = fr-state m #4194304 a c
+#show λ (m : ByteMap) (a c : Word) → x86-rip (snd (x86-run #1 (fr-lit m a c)))
+#show λ (m : ByteMap) (a c : Word) → x86-rax (snd (x86-run #1 (fr-lit m a c)))
+#show λ (m : ByteMap) (p a c : Word) → x86-rip (snd (x86-run #1 (fr-state m p a c)))

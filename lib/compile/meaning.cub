@@ -1,0 +1,72 @@
+-- lib/compile/meaning.cub — what it means for bytes to compute a definition. Loaded after
+-- lib/isa/x86/run.cub and lib/codes.cub.
+--
+-- ⟦bs⟧ is the model run on a call of the blob bs: bs at mn-code, the arguments' machine forms in
+-- an array at mn-args, the context (overflow flag, arena next, arena end, stack limit) at mn-ctx,
+-- rsp at mn-stack holding the return address mn-ret, rip at the blob's first byte (the entry
+-- stub: rdi the arguments, rsi their count, rdx the context, as lib/x86.cub's x-stub reads them).
+-- The run stops when rip reaches mn-ret; rax is then the result's machine form, unless the flag
+-- is set (the overflow exit: an arithmetic result past 2^64, the arena or the stack exhausted).
+-- A run that throws, aborts, does not reach mn-ret within its fuel, or sets the flag gives f's
+-- own value: the bytes are correct for f when every other run gives f's value too.
+
+-- the places of a call (literal: the model computes on literal addresses)
+mn-code : Word
+mn-code = #4194304
+mn-args : Word
+mn-args = #5242880
+mn-ctx : Word
+mn-ctx = #5308416
+mn-ret : Word
+mn-ret = #4190208
+mn-stack : Word
+mn-stack = #2147418112
+mn-heap : Word
+mn-heap = #268435456
+mn-heap-end : Word
+mn-heap-end = #536870912
+mn-stack-lim : Word
+mn-stack-lim = #2146369536
+-- memory holding bs at p and m elsewhere
+code-over : Word → Lst Word → ByteMap → ByteMap
+code-over p bs m x = if c-and (w-le p x) (wlt x (wadd p (l-count bs))) then l-at #0 bs (wsub x p) else m x
+-- words stored at consecutive 8-byte places
+mn-words : ByteMap → Word → Lst Word → ByteMap
+mn-words m a lnil = m
+mn-words m a (lcons w ws) = mn-words (mem-store-n m #8 a w) (wadd a #8) ws
+-- the state at the call
+mn-init : Lst Word → Lst Word → X86
+mn-init bs args =
+  let m0 = mn-words (mn-words (mn-words mem-none mn-args args) mn-ctx (lcons #0 (lcons mn-heap (lcons mn-heap-end (lcons mn-stack-lim lnil)))))
+                    mn-stack (lcons mn-ret lnil)
+  in x86-set-rdi mn-args (x86-set-rsi (l-count args) (x86-set-rdx mn-ctx (x86-set-rsp mn-stack
+       (x86-set-rip mn-code (x86-set-mem (code-over mn-code bs m0) x86-user64)))))
+-- after one step: on when its outcome is a value
+run-on : (X86 → Opt X86) → Outc exception Unit × X86 → Opt X86
+run-on h r = case fst r return (λ _ → Opt X86) of
+  out-val u → h (snd r)
+  out-throw e → none
+  out-abort w → none
+-- steps until rip is stop (checked before each step), at most n of them; none when a step's
+-- outcome is not a value or the fuel ends first
+run-to : (X86 → Outc exception Unit × X86) → Word → Word → X86 → Opt X86
+run-to stp n stop =
+  %welimP (λ _ → X86 → Opt X86) n (λ s → if weq (x86-rip s) stop then some s else none)
+    (λ j h s → if weq (x86-rip s) stop then some s else run-on h (stp s))
+-- the result of a run: rax when the run stopped at the return and the flag is clear
+mn-result : Opt X86 → Opt Word
+mn-result none = none
+mn-result (some s) = if weq (mem-load-n (x86-mem s) #8 mn-ctx) #0 then some (x86-rax s) else none
+-- ⟦bs⟧ on word arguments, with fuel n
+mn-run : Lst Word → Word → Lst Word → Opt Word
+mn-run bs n args = mn-result (run-to x86-step n mn-ret (mn-init bs args))
+-- the meaning of bs at a definition of words: the run's result, or f's value
+mn-call1 : Lst Word → (Word → Word) → Word → Word → Word
+mn-call1 bs f n a = opt-or (mn-run bs n (lcons a lnil)) (f a)
+mn-call2 : Lst Word → (Word → Word → Word) → Word → Word → Word → Word
+mn-call2 bs f n a b = opt-or (mn-run bs n (lcons a (lcons b lnil))) (f a b)
+-- bs is correct for f: whatever the fuel and the arguments, ⟦bs⟧ is f
+Correct1 : Lst Word → (Word → Word) → Type
+Correct1 bs f = (n a : Word) → mn-call1 bs f n a ≡ f a
+Correct2 : Lst Word → (Word → Word → Word) → Type
+Correct2 bs f = (n a b : Word) → mn-call2 bs f n a b ≡ f a b
