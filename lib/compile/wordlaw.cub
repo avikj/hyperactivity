@@ -1,0 +1,105 @@
+-- lib/compile/wordlaw.cub — arithmetic of words from the word operations' laws (lib/prim.cub):
+-- the ring laws of wadd and wmul, order as a difference, and the digit step a word's bytes rest
+-- on: the remainder by P plus the next base-256 digit times P is the remainder by 256·P.
+-- Loaded after lib/prim.cub and lib/linproof.cub. Induction is on the second operand, where
+-- wadd and the law wmul-suc recur.
+
+-- ---------------------------------------------------------------- addition
+wadd-zero-l : (b : Word) → wadd #0 b ≡ b
+wadd-zero-l b = %welimP (λ v → wadd #0 v ≡ v) b (λ i → #0) (λ n h i → %wsucc (h i))
+wadd-suc-l : (a b : Word) → wadd (%wsucc a) b ≡ %wsucc (wadd a b)
+wadd-suc-l a b = %welimP (λ v → wadd (%wsucc a) v ≡ %wsucc (wadd a v)) b (λ i → %wsucc a) (λ n h i → %wsucc (h i))
+wadd-comm-step : (b n : Word) → wadd n b ≡ wadd b n → wadd (%wsucc n) b ≡ wadd b (%wsucc n)
+wadd-comm-step b n h = catw (wadd-suc-l n b) (congw (λ z → %wsucc z) h)
+wadd-comm : (a b : Word) → wadd a b ≡ wadd b a
+wadd-comm a b = %welimP (λ v → wadd v b ≡ wadd b v) a (wadd-zero-l b) (λ n h → wadd-comm-step b n h)
+wadd-assoc : (a b c : Word) → wadd (wadd a b) c ≡ wadd a (wadd b c)
+wadd-assoc a b c = %welimP (λ v → wadd (wadd a b) v ≡ wadd a (wadd b v)) c (λ i → wadd a b) (λ n h i → %wsucc (h i))
+-- (a + b) + (c + d) = (a + c) + (b + d)
+wadd-swap : (a b c d : Word) → wadd (wadd a b) (wadd c d) ≡ wadd (wadd a c) (wadd b d)
+wadd-swap a b c d =
+  catw (wadd-assoc a b (wadd c d))
+    (catw (congw (λ z → wadd a z) (catw (symw (wadd-assoc b c d)) (catw (congw (λ z → wadd z d) (wadd-comm b c)) (wadd-assoc c b d))))
+      (symw (wadd-assoc a c (wadd b d))))
+
+-- ---------------------------------------------------------------- multiplication
+wmul-zero-l : (b : Word) → wmul #0 b ≡ #0
+wmul-zero-l b =
+  %welimP (λ v → wmul #0 v ≡ #0) b (wmul-zero #0) (λ n h → catw (wmul-suc #0 n) (congw (λ z → wadd z #0) h))
+-- a·(b + c) = a·b + a·c
+wmul-distl-step : (a b n : Word) → wmul a (wadd b n) ≡ wadd (wmul a b) (wmul a n) →
+                  wmul a (wadd b (%wsucc n)) ≡ wadd (wmul a b) (wmul a (%wsucc n))
+wmul-distl-step a b n h =
+  catw (wmul-suc a (wadd b n))
+    (catw (congw (λ z → wadd z a) h)
+      (catw (wadd-assoc (wmul a b) (wmul a n) a) (congw (λ z → wadd (wmul a b) z) (symw (wmul-suc a n)))))
+wmul-distl : (a b c : Word) → wmul a (wadd b c) ≡ wadd (wmul a b) (wmul a c)
+wmul-distl a b c =
+  %welimP (λ v → wmul a (wadd b v) ≡ wadd (wmul a b) (wmul a v)) c
+    (catw (congw (λ z → z) (λ i → wmul a b)) (symw (congw (λ z → wadd (wmul a b) z) (wmul-zero a))))
+    (λ n h → wmul-distl-step a b n h)
+-- (a + b)·c = a·c + b·c
+wmul-distr-step : (a b n : Word) → wmul (wadd a b) n ≡ wadd (wmul a n) (wmul b n) →
+                  wmul (wadd a b) (%wsucc n) ≡ wadd (wmul a (%wsucc n)) (wmul b (%wsucc n))
+wmul-distr-step a b n h =
+  catw (wmul-suc (wadd a b) n)
+    (catw (congw (λ z → wadd z (wadd a b)) h)
+      (catw (wadd-swap (wmul a n) (wmul b n) a b)
+        (cong2w (λ x y → wadd x y) (symw (wmul-suc a n)) (symw (wmul-suc b n)))))
+wmul-distr : (a b c : Word) → wmul (wadd a b) c ≡ wadd (wmul a c) (wmul b c)
+wmul-distr a b c =
+  %welimP (λ v → wmul (wadd a b) v ≡ wadd (wmul a v) (wmul b v)) c
+    (catw (wmul-zero (wadd a b)) (symw (cong2w (λ x y → wadd x y) (wmul-zero a) (wmul-zero b))))
+    (λ n h → wmul-distr-step a b n h)
+-- (a·b)·c = a·(b·c)
+wmul-assoc-step : (a b n : Word) → wmul (wmul a b) n ≡ wmul a (wmul b n) →
+                  wmul (wmul a b) (%wsucc n) ≡ wmul a (wmul b (%wsucc n))
+wmul-assoc-step a b n h =
+  catw (wmul-suc (wmul a b) n)
+    (catw (congw (λ z → wadd z (wmul a b)) h)
+      (catw (symw (wmul-distl a (wmul b n) b)) (congw (λ z → wmul a z) (symw (wmul-suc b n)))))
+wmul-assoc : (a b c : Word) → wmul (wmul a b) c ≡ wmul a (wmul b c)
+wmul-assoc a b c =
+  %welimP (λ v → wmul (wmul a b) v ≡ wmul a (wmul b v)) c
+    (catw (wmul-zero (wmul a b)) (symw (catw (congw (λ z → wmul a z) (wmul-zero b)) (wmul-zero a))))
+    (λ n h → wmul-assoc-step a b n h)
+-- 1·b = b
+wmul-one-l : (b : Word) → wmul #1 b ≡ b
+wmul-one-l b =
+  %welimP (λ v → wmul #1 v ≡ v) b (wmul-zero #1) (λ n h → catw (wmul-suc #1 n) (congw (λ z → %wsucc z) h))
+-- (a + 1)·c = a·c + c
+wmul-suc-l : (a c : Word) → wmul (%wsucc a) c ≡ wadd (wmul a c) c
+wmul-suc-l a c = catw (wmul-distr a #1 c) (congw (λ z → wadd (wmul a c) z) (wmul-one-l c))
+
+-- ---------------------------------------------------------------- order, as a difference
+ft-absurd : (T : Type) → false ≡ true → T
+ft-absurd T h = Empty-rec (transport (λ i → if h i then Empty else Unit) unit)
+catb : {x y z : Bool} → x ≡ y → y ≡ z → x ≡ z
+catb p q = λ i → comp (λ j → Bool) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
+-- a < b: b is a + 1 + d for some d
+Ltw : Word → Word → Type
+Ltw a b = (d : Word) × wadd (%wsucc a) d ≡ b
+-- from the machine's comparison
+ltw-lt-step : (n : Word) → ((b : Word) → ltw n b ≡ true → Ltw n b) → (b : Word) → ltw (%wsucc n) b ≡ true → Ltw (%wsucc n) b
+ltw-lt-step n ih b =
+  %welimP (λ v → ltw (%wsucc n) v ≡ true → Ltw (%wsucc n) v) b
+    (λ h → ft-absurd (Ltw (%wsucc n) #0) h)
+    (λ m g h → (fst (ih m h) , catw (wadd-suc-l (%wsucc n) (fst (ih m h))) (congw (λ z → %wsucc z) (snd (ih m h)))))
+ltw-lt : (a b : Word) → ltw a b ≡ true → Ltw a b
+ltw-lt a =
+  %welimP (λ v → (b : Word) → ltw v b ≡ true → Ltw v b) a
+    (λ b → %welimP (λ v → ltw #0 v ≡ true → Ltw #0 v) b
+             (λ h → ft-absurd (Ltw #0 #0) h)
+             (λ m g h → (m , wadd-suc-l #0 m ∙ congw (λ z → %wsucc z) (wadd-zero-l m))))
+    (λ n ih → ltw-lt-step n ih)
+wlt-lt : (a b : Word) → wlt a b ≡ true → Ltw a b
+wlt-lt a b h = ltw-lt a b (catb (ltw≡wlt a b) h)
+-- to the machine's comparison
+lt-ltw-step : (d n : Word) → ltw n (wadd (%wsucc n) d) ≡ true → ltw (%wsucc n) (wadd (%wsucc (%wsucc n)) d) ≡ true
+lt-ltw-step d n h = catb (λ i → ltw (%wsucc n) (wadd-suc-l (%wsucc n) d i)) h
+lt-ltw : (d a : Word) → ltw a (wadd (%wsucc a) d) ≡ true
+lt-ltw d a = %welimP (λ v → ltw v (wadd (%wsucc v) d) ≡ true) a
+  (λ i → ltw #0 (wadd-suc-l #0 d i))
+  (λ n h → lt-ltw-step d n h)
+lt-wlt : (a b : Word) → Ltw a b → wlt a b ≡ true
+lt-wlt a b h = catb (symb (ltw≡wlt a b)) (catb (λ i → ltw a (snd h (~ i))) (lt-ltw (fst h) a))
