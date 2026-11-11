@@ -127,6 +127,23 @@ primitive wor-zero : (a : Word) → PathP (λ (i : I) → Word) (wor a #0) a = �
 primitive wxor-zero : (a : Word) → PathP (λ (i : I) → Word) (wxor a #0) a = λ a i → a
 primitive wor-disj : (a b k : Word) → PathP (λ (i : I) → Bool) (wlt a (wshl #1 k)) true → PathP (λ (i : I) → Word) (wor a (wmul b (wshl #1 k))) (wadd a (wmul b (wshl #1 k))) = λ a b k h i → wadd a (wmul b (wshl #1 k))
 
+-- the bitwise operations bit by bit: bit i of x is x's base-2 digit i; and, or, xor act on each
+-- bit; a shift moves the bits; a word is determined by its bits
+bit-and : Bool → Bool → Bool
+bit-and a b = if a then b else false
+bit-or : Bool → Bool → Bool
+bit-or a b = if a then true else b
+bit-xor : Bool → Bool → Bool
+bit-xor a b = if a then (if b then false else true) else b
+wbit : Word → Word → Bool
+wbit x i = weq (wrem (wquot x (wshl #1 i)) #2) #1
+primitive wbit-and : (a b i : Word) → PathP (λ (j : I) → Bool) (wbit (wand a b) i) (bit-and (wbit a i) (wbit b i)) = λ a b i j → bit-and (wbit a i) (wbit b i)
+primitive wbit-or : (a b i : Word) → PathP (λ (j : I) → Bool) (wbit (wor a b) i) (bit-or (wbit a i) (wbit b i)) = λ a b i j → bit-or (wbit a i) (wbit b i)
+primitive wbit-xor : (a b i : Word) → PathP (λ (j : I) → Bool) (wbit (wxor a b) i) (bit-xor (wbit a i) (wbit b i)) = λ a b i j → bit-xor (wbit a i) (wbit b i)
+primitive wbit-shl : (a k i : Word) → PathP (λ (j : I) → Bool) (wbit (wshl a k) i) (if wlt i k then false else wbit a (wsub i k)) = λ a k i j → if wlt i k then false else wbit a (wsub i k)
+primitive wbit-shr : (a k i : Word) → PathP (λ (j : I) → Bool) (wbit (wshr a k) i) (wbit a (wadd i k)) = λ a k i j → wbit a (wadd i k)
+primitive wbit-ext : (a b : Word) → ((i : Word) → PathP (λ (j : I) → Bool) (wbit a i) (wbit b i)) → PathP (λ (j : I) → Word) a b = λ a b h j → a
+
 -- ---------------------------------------------------------------- the byte layer's laws, trusted: a load after a
 -- store at the same offset is the value stored. A primitive operation on a variable is a neutral
 -- (%view: wprim), so the laws of what is built over the byte layer follow by unfolding
