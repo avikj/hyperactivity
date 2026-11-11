@@ -1,0 +1,99 @@
+-- lib/compile/tmpl.cub — what the compiler's byte patterns do under lib/isa/x86, from any frame
+-- state (PLAN Phase 2 item 5). Loaded after lib/compile/meaning.cub.
+--
+-- A theorem here is an equation of the model's step at a state whose data registers, stack
+-- pointer and memory are variables; the code is at a literal address. The model checks every
+-- address it touches (canonical form); at a variable address that check is a Bool the evaluator
+-- cannot decide, so each theorem takes the check as a hypothesis, stated as the model's own
+-- check (canon), and the proof follows the model's evaluation: where it reaches the check, the
+-- hypothesis selects the branch (cong on the model's `if`), and the conversion checker unfolds the
+-- rest. A function of the model the proof goes through is stepped by bind-ok, its continuation
+-- written as the model writes it.
+
+-- ---------------------------------------------------------------- the monad
+bind-ok : {A B : Type} → (m : MS A) → (k : A → MS B) → (σ σ2 : X86) → (v : A) →
+          m σ ≡ the (MF A × X86) (out-val v , σ2) → bindS m k σ ≡ k v σ2
+bind-ok {A} {B} m k σ σ2 v h = cong (st-step k) h
+-- the model's canonical-address check of a 64-bit address, as a Bool
+mf-bool-of : MF Bool → Bool
+mf-bool-of (out-val b) = b
+mf-bool-of (out-throw e) = false
+mf-bool-of (out-abort w) = false
+canon : Word → Bool
+canon x = mf-bool-of (canonical_address_p (bv-signed #64 x))
+
+-- ---------------------------------------------------------------- addresses
+-- the stack segment's linear address of x is x, once x is canonical
+ea-ss : (x n : Word) → (σ : X86) → canon x ≡ true →
+        ea_to_la Mode_64bit x (zpos #2) (zpos n) σ ≡ the (MF Word × X86) (out-val x , σ)
+ea-ss x n σ h =
+  cong (λ b → if b-not b then onS {Unit} {Bits #64} (x86_model_error {Unit} #21814826192473016117759527061750727496662368899126099) (λ t → retS {Bits #64} x) σ
+              else the (MF Word × X86) (out-val x , σ)) h
+
+-- ---------------------------------------------------------------- frame states
+-- the state of a running compiled program: memory, rip, flags and the sixteen registers are
+-- variables; the rest is the user-mode 64-bit state (app view, segments, control registers)
+record FR = { f-mem : ByteMap ; f-rip : Word ; f-flags : Word
+            ; f-rax : Word ; f-rcx : Word ; f-rdx : Word ; f-rbx : Word ; f-rsp : Word ; f-rbp : Word ; f-rsi : Word ; f-rdi : Word
+            ; f-r8 : Word ; f-r9 : Word ; f-r10 : Word ; f-r11 : Word ; f-r12 : Word ; f-r13 : Word ; f-r14 : Word ; f-r15 : Word }
+fs : FR → X86
+fs f = x86-set-mem (f-mem f) (x86-set-rip (f-rip f) (x86-set-rflags (f-flags f)
+         (x86-set-rax (f-rax f) (x86-set-rcx (f-rcx f) (x86-set-rdx (f-rdx f) (x86-set-rbx (f-rbx f)
+         (x86-set-rsp (f-rsp f) (x86-set-rbp (f-rbp f) (x86-set-rsi (f-rsi f) (x86-set-rdi (f-rdi f)
+         (x86-set-r8 (f-r8 f) (x86-set-r9 (f-r9 f) (x86-set-r10 (f-r10 f) (x86-set-r11 (f-r11 f)
+         (x86-set-r12 (f-r12 f) (x86-set-r13 (f-r13 f) (x86-set-r14 (f-r14 f) (x86-set-r15 (f-r15 f) x86-user64))))))))))))))))))
+
+-- ---------------------------------------------------------------- one byte written (wb's loop)
+-- the model's canonical check of a linear address given as an integer
+canon-z : ZI → Bool
+canon-z z = mf-bool-of (canonical_address_p z)
+-- the physical address and the byte of wb's iteration at offset off, as the model computes them
+wb-phys : Word → Word → ZI → Word
+wb-phys w addr off = sail_mask_signed #48 (zpos #52) (bv-add-int #48 (sail_mask_signed w (zpos #48) addr) off)
+wb-byte : ZI → Word → ZI → Word
+wb-byte n value off = bv-slice (wmul #8 (z-nat n)) value (z-nat (z-add (z-mul (zpos #8) off) (zpos #7))) (z-nat (z-mul (zpos #8) off))
+-- wb's loop body (application_level_memory.cub, loop'16), as the model writes it
+wb-body : (w : Word) → (n' : ZI) → (addr : Bits w) → (access_kind : Text) → (value : Bits (wmul #8 (z-nat n'))) → ZI → Unit → MS Unit
+wb-body w n' addr access_kind value =
+  λ offset acc'1 →
+    onS {Bool} {Unit} (canonical_address_p (z-add (bv-signed w addr) offset)) (λ t'2 →
+      let k'13 : Unit → MS Unit
+          k'13 =
+            λ t'5 →
+              let lin_addr : Bits #48
+                  lin_addr = (bv-add-int #48 (sail_mask_signed w (zpos #48) addr) offset)
+              in bindS {Bool} {Unit} (getS {Bool} x86-app_view) (λ app_view'6 →
+                   let k'10 : (Bits #52) → MS Unit
+                       k'10 =
+                         λ phys_addr →
+                           bindS {Unit} {Unit} (bang_memi #52 phys_addr (bv-slice (wmul #8 (z-nat n')) value (z-nat (z-add (z-mul (zpos #8) offset) (zpos #7))) (z-nat (z-mul (zpos #8) offset)))) (λ t'9 →
+                             retS {Unit} unit)
+                   in λ σ →
+                        if app_view'6 then
+                          the (MS Unit)
+                            (k'10 (sail_mask_signed #48 (zpos #52) lin_addr)) σ
+                        else
+                          the (MS Unit)
+                            (bindS {Bits #52} {Unit} (ia32e_la_to_pa lin_addr access_kind) (λ t'7 →
+                               k'10 t'7)) σ)
+      in λ σ →
+           if (b-not t'2) then
+             the (MS Unit)
+               (let t'3 : Unit
+                    t'3 =
+                      if (b-not (z-eq offset (zpos #0))) then
+                        (observe_mem_write (sail_mask_signed w (zpos #48) addr) (z-sub offset (zpos #1)))
+                      else
+                        unit
+                in onS {Unit} {Unit} (x86_model_error {Unit} #749383626949451111606036019773709099900228674225871612375923) (λ t'4 →
+                     k'13 t'4)) σ
+           else
+             the (MS Unit)
+               (k'13 unit) σ)
+-- one iteration at a canonical address writes the byte
+wb-step : (w : Word) → (n : ZI) → (addr : Word) → (ak : Text) → (value : Word) → (off : ZI) → (f : FR) →
+          canon-z (z-add (bv-signed w addr) off) ≡ true →
+          wb-body w n addr ak value off unit (fs f) ≡ the (MF Unit × X86) (out-val unit , x86-write-mem #1 (bv-mask #64 (wb-phys w addr off)) (wb-byte n value off) (fs f))
+wb-step w n addr ak value off f h =
+  cong (λ b → if b-not b then the (MF Unit × X86) (out-throw (Emsg (str-cat #6135042721224082287861286713888 #749383626949451111606036019773709099900228674225871612375923)) , fs f)
+              else the (MF Unit × X86) (out-val unit , x86-write-mem #1 (bv-mask #64 (wb-phys w addr off)) (wb-byte n value off) (fs f))) h
