@@ -1,0 +1,165 @@
+-- lib/compile/runs.cub — runs of a step function as a relation, and the meaning of bytes
+-- (lib/compile/meaning.cub) reduced to one run. Loaded after lib/compile/meaning.cub.
+--
+-- Runs stp stop k s s2: k steps of stp lead from s to s2, each outcome a value, and none of the k
+-- steps is taken from a state whose rip is stop. Runs compose (runs-cat). run-to (meaning.cub)
+-- from s, whatever its fuel, either runs out or stops at s2 when a run reaches s2 at stop
+-- (run-to-runs). So bytes are correct for f at an argument as soon as one run from the call's
+-- state reaches the return with f's value (correct-at): every other fuel gives f's value too.
+-- Everything here is of a step function that is a variable; the model is not unfolded.
+
+Step : Type
+Step = X86 → Outc exception Unit × X86
+Runs : Step → Word → Word → X86 → X86 → Type
+Runs stp stop k =
+  %welimP (λ _ → X86 → X86 → Type) k (λ s s2 → s ≡ s2)
+    (λ j h s s2 → (weq (x86-rip s) stop ≡ false) × ((s1 : X86) × ((stp s ≡ the (Outc exception Unit × X86) (out-val unit , s1)) × h s1 s2)))
+-- one step, then a run
+runs-step : (stp : Step) → (stop k : Word) → (s s1 s2 : X86) → weq (x86-rip s) stop ≡ false →
+            stp s ≡ the (Outc exception Unit × X86) (out-val unit , s1) → Runs stp stop k s1 s2 → Runs stp stop (%wsucc k) s s2
+runs-step stp stop k s s1 s2 ne e r = (ne , (s1 , (e , r)))
+-- runs compose
+runs-cat-step : (stp : Step) → (stop k2 j : Word) →
+                ((s s1 s2 : X86) → Runs stp stop j s s1 → Runs stp stop k2 s1 s2 → Runs stp stop (%wadd k2 j) s s2) →
+                (s s1 s2 : X86) → Runs stp stop (%wsucc j) s s1 → Runs stp stop k2 s1 s2 → Runs stp stop (%wadd k2 (%wsucc j)) s s2
+runs-cat-step stp stop k2 j ih s s1 s2 r1 r2 = (fst r1 , (fst (snd r1) , (fst (snd (snd r1)) , ih (fst (snd r1)) s1 s2 (snd (snd (snd r1))) r2)))
+runs-cat : (stp : Step) → (stop k1 k2 : Word) → (s s1 s2 : X86) → Runs stp stop k1 s s1 → Runs stp stop k2 s1 s2 → Runs stp stop (%wadd k2 k1) s s2
+runs-cat stp stop k1 k2 =
+  %welimP (λ v → (s s1 s2 : X86) → Runs stp stop v s s1 → Runs stp stop k2 s1 s2 → Runs stp stop (%wadd k2 v) s s2) k1
+    (λ s s1 s2 p r2 → subst {lzero} {lzero} {X86} {λ x → Runs stp stop k2 x s2} (sym p) r2)
+    (λ j ih → runs-cat-step stp stop k2 j ih)
+
+-- run-to at a state whose rip is stop stops there, whatever the fuel
+at-stop : (stp : Step) → (stop : Word) → (s : X86) → weq (x86-rip s) stop ≡ true → (n : Word) → run-to stp n stop s ≡ some s
+at-stop stp stop s h n =
+  %welimP (λ v → run-to stp v stop s ≡ some s) n
+    (cong (λ b → if b then some s else none) h)
+    (λ j ih → cong (λ b → if b then some s else run-on (run-to stp j stop) (stp s)) h)
+-- what run-to from s gives, by its fuel: none, or s2
+RunTo : Opt X86 → X86 → Type
+RunTo o s2 = Sum (o ≡ none) (o ≡ some s2)
+runto-pre : {o1 o2 : Opt X86} → (s2 : X86) → o1 ≡ o2 → RunTo o2 s2 → RunTo o1 s2
+runto-pre {o1} {o2} s2 p (inl q) = inl (p ∙ q)
+runto-pre {o1} {o2} s2 p (inr q) = inr (p ∙ q)
+-- run-to over a run that ends at stop: none or its end
+run-to-runs-step : (stp : Step) → (stop j : Word) → (s2 : X86) →
+                   ((s : X86) → Runs stp stop j s s2 → (n : Word) → RunTo (run-to stp n stop s) s2) →
+                   (s : X86) → Runs stp stop (%wsucc j) s s2 → (n : Word) → RunTo (run-to stp n stop s) s2
+run-to-runs-step stp stop j s2 ih s r n =
+  %welimP (λ v → RunTo (run-to stp v stop s) s2) n
+    (inl (cong (λ b → if b then some s else none) (fst r)))
+    (λ m g → runto-pre s2
+       (cong (λ b → if b then some s else run-on (run-to stp m stop) (stp s)) (fst r)
+        ∙ cong (run-on (run-to stp m stop)) (fst (snd (snd r))))
+       (ih (fst (snd r)) (snd (snd (snd r))) m))
+run-to-runs : (stp : Step) → (stop k : Word) → (s2 : X86) → weq (x86-rip s2) stop ≡ true →
+              (s : X86) → Runs stp stop k s s2 → (n : Word) → RunTo (run-to stp n stop s) s2
+run-to-runs stp stop k s2 h =
+  %welimP (λ v → (s : X86) → Runs stp stop v s s2 → (n : Word) → RunTo (run-to stp n stop s) s2) k
+    (λ s p n → inr (subst {lzero} {lzero} {X86} {λ x → run-to stp n stop x ≡ some s2} (sym p) (at-stop stp stop s2 h n)))
+    (λ j ih → run-to-runs-step stp stop j s2 ih)
+
+-- ---------------------------------------------------------------- correct at an argument
+-- a run from the call's state to the return whose result is f's value (or the overflow exit)
+Reaches : Lst Word → Lst Word → Word → Type
+Reaches bs args v =
+  (k : Word) × ((s2 : X86) × (Runs x86-step mn-ret k (mn-init bs args) s2 × ((weq (x86-rip s2) mn-ret ≡ true) × (opt-or (mn-result (some s2)) v ≡ v))))
+-- then ⟦bs⟧ is v at those arguments for every fuel (stated of a state that is a variable: the
+-- call's state is not unfolded)
+reaches-gen : (stp : Step) → (s s2 : X86) → (v k : Word) → Runs stp mn-ret k s s2 → weq (x86-rip s2) mn-ret ≡ true →
+              opt-or (mn-result (some s2)) v ≡ v → (n : Word) → opt-or (mn-result (run-to stp n mn-ret s)) v ≡ v
+reaches-gen stp s s2 v k r h e n =
+  case run-to-runs stp mn-ret k s2 h s r n return (λ _ → opt-or (mn-result (run-to stp n mn-ret s)) v ≡ v) of
+    inl q → cong (λ o → opt-or (mn-result o) v) q
+    inr q → cong (λ o → opt-or (mn-result o) v) q ∙ e
+reaches-run : (bs args : Lst Word) → (v : Word) → Reaches bs args v → (n : Word) → opt-or (mn-run bs n args) v ≡ v
+reaches-run bs args v r n =
+  reaches-gen x86-step (mn-init bs args) (fst (snd r)) v (fst r) (fst (snd (snd r))) (fst (snd (snd (snd r)))) (snd (snd (snd (snd r)))) n
+correct2-at : (bs : Lst Word) → (f : Word → Word → Word) → (a b : Word) → Reaches bs (lcons a (lcons b lnil)) (f a b) →
+              (n : Word) → mn-call2 bs f n a b ≡ f a b
+correct2-at bs f a b r n = reaches-run bs (lcons a (lcons b lnil)) (f a b) r n
+correct1-at : (bs : Lst Word) → (f : Word → Word) → (a : Word) → Reaches bs (lcons a lnil) (f a) →
+              (n : Word) → mn-call1 bs f n a ≡ f a
+correct1-at bs f a r n = reaches-run bs (lcons a lnil) (f a) r n
+-- Correct from a run at every argument
+correct2 : (bs : Lst Word) → (f : Word → Word → Word) → ((a b : Word) → Reaches bs (lcons a (lcons b lnil)) (f a b)) → Correct2 bs f
+correct2 bs f h n a b = correct2-at bs f a b (h a b) n
+correct1 : (bs : Lst Word) → (f : Word → Word) → ((a : Word) → Reaches bs (lcons a lnil) (f a)) → Correct1 bs f
+correct1 bs f h n a = correct1-at bs f a (h a) n
+
+-- ---------------------------------------------------------------- a run found by computation
+-- k steps of stp from s, as a run when each outcome is a value and no state before the last is at
+-- stop: the run, to the state the steps compute
+RunFrom : Step → Word → Word → X86 → Type
+RunFrom stp stop k s = Opt ((s2 : X86) × Runs stp stop k s s2)
+runs-exec-val : (stp : Step) → (stop j : Word) → ((s1 : X86) → RunFrom stp stop j s1) → (s : X86) →
+                weq (x86-rip s) stop ≡ false → (r : Outc exception Unit × X86) → stp s ≡ r →
+                (o : Outc exception Unit) → fst r ≡ o → RunFrom stp stop (%wsucc j) s
+runs-exec-val stp stop j h s ne r er o eo =
+  case o return (λ o2 → fst r ≡ o2 → RunFrom stp stop (%wsucc j) s) of
+    out-val u → λ q →
+      (case u return (λ u2 → fst r ≡ out-val u2 → RunFrom stp stop (%wsucc j) s) of
+         unit → λ q2 →
+           (case h (snd r) return (λ _ → RunFrom stp stop (%wsucc j) s) of
+              none → none
+              some p → some (fst p , runs-step stp stop j s (snd r) (fst p) ne
+                                       (er ∙ (λ i → the (Outc exception Unit × X86) (q2 i , snd r))) (snd p))))
+      q
+    out-throw e → λ q → none
+    out-abort w → λ q → none
+  eo
+runs-exec-step : (stp : Step) → (stop j : Word) → ((s1 : X86) → RunFrom stp stop j s1) → (s : X86) →
+                 (b : Bool) → weq (x86-rip s) stop ≡ b → (r : Outc exception Unit × X86) → stp s ≡ r → RunFrom stp stop (%wsucc j) s
+runs-exec-step stp stop j h s b eb r er =
+  case b return (λ c → weq (x86-rip s) stop ≡ c → RunFrom stp stop (%wsucc j) s) of
+    true → λ e → none
+    false → λ e → runs-exec-val stp stop j h s e r er (fst r) refl
+  eb
+runs-exec : (stp : Step) → (stop k : Word) → (s : X86) → RunFrom stp stop k s
+runs-exec stp stop k =
+  %welimP (λ v → (s : X86) → RunFrom stp stop v s) k
+    (λ s → some (s , refl))
+    (λ j h s → runs-exec-step stp stop j h s (weq (x86-rip s) stop) refl (stp s) refl)
+-- the run's last obligations decided: at the return, and the result v (or the overflow exit)
+-- (a word result compared with v)
+res-word : (v x : Word) → (b : Bool) → weq x v ≡ b → Opt (opt-or (some x) v ≡ v)
+res-word v x b e =
+  case b return (λ c → weq x v ≡ c → Opt (opt-or (some x) v ≡ v)) of
+    true → λ q → some (weq-sound x v q)
+    false → λ q → none
+  e
+res-ok : (v : Word) → (o : Opt Word) → Opt (opt-or o v ≡ v)
+res-ok v none = some refl
+res-ok v (some x) = res-word v x (weq x v) refl
+at-ret : (s2 : X86) → (b : Bool) → weq (x86-rip s2) mn-ret ≡ b → Opt (weq (x86-rip s2) mn-ret ≡ true)
+at-ret s2 b e =
+  case b return (λ c → weq (x86-rip s2) mn-ret ≡ c → Opt (weq (x86-rip s2) mn-ret ≡ true)) of
+    true → λ q → some q
+    false → λ q → none
+  e
+-- k steps from the call's state, checked as a run that reaches the return with v
+reaches-exec : (bs args : Lst Word) → (v k : Word) → Opt (Reaches bs args v)
+reaches-exec bs args v k =
+  case runs-exec x86-step mn-ret k (mn-init bs args) return (λ _ → Opt (Reaches bs args v)) of
+    none → none
+    some p → (case at-ret (fst p) (weq (x86-rip (fst p)) mn-ret) refl return (λ _ → Opt (Reaches bs args v)) of
+                none → none
+                some h → (case res-ok v (mn-result (some (fst p))) return (λ _ → Opt (Reaches bs args v)) of
+                            none → none
+                            some e → some (k , (fst p , (snd p , (h , e))))))
+-- the number of steps from s to the first state at stop, within the fuel
+run-count : (stp : Step) → Word → Word → X86 → Opt Word
+run-count stp n stop =
+  %welimP (λ _ → X86 → Opt Word) n (λ s → if weq (x86-rip s) stop then some #0 else none)
+    (λ j h s → if weq (x86-rip s) stop then some #0 else
+       (case fst (stp s) return (λ _ → Opt Word) of
+          out-val u → opt-map (λ c → %wsucc c) (h (snd (stp s)))
+          out-throw e → none
+          out-abort w → none))
+-- an Opt known to hold a value, and the value
+IsSome : {A : Type} → Opt A → Type
+IsSome {A} none = Empty
+IsSome {A} (some x) = Unit
+the-some : {A : Type} → (o : Opt A) → IsSome o → A
+the-some {A} none h = Empty-rec h
+the-some {A} (some x) h = x

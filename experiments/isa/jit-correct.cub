@@ -1,0 +1,17 @@
+-- experiments/isa/jit-correct.cub — checked theorems at concrete arguments: for every fuel, ⟦bs⟧
+-- of the compiler's bytes is the definition's value. The run is found and checked by computation
+-- (lib/compile/runs.cub reaches-exec); the theorem is then for every fuel (correct2-at). Loaded as
+-- experiments/isa/jit-run.cub is, then lib/compile/x86ok.cub and lib/compile/runs.cub.
+addw : Word → Word → Word
+addw a b = %wadd a b
+addw-g : Word
+addw-g = case code addw return (λ _ → Word) of
+  cglob g → g
+  _ → #0
+addw-bs : Lst Word
+addw-bs = snd (snd (snd (snd (jit-plan addw-g lnil))))
+-- 38 steps to the return with 7; 36 to the overflow exit
+addw-3-4 : (n : Word) → mn-call2 addw-bs addw n #3 #4 ≡ addw #3 #4
+addw-3-4 = correct2-at addw-bs addw #3 #4 (the-some (reaches-exec addw-bs (lcons #3 (lcons #4 lnil)) (addw #3 #4) #38) unit)
+addw-max-4 : (n : Word) → mn-call2 addw-bs addw n #18446744073709551615 #4 ≡ addw #18446744073709551615 #4
+addw-max-4 = correct2-at addw-bs addw #18446744073709551615 #4 (the-some (reaches-exec addw-bs (lcons #18446744073709551615 (lcons #4 lnil)) (addw #18446744073709551615 #4) #36) unit)
