@@ -11,9 +11,8 @@ data Opt (A : Type) = none | some (x : A)
 data Stage = st-now | st-build | st-run-known | st-run
 -- a schedule (plan 5.7): the rewrite bound, the binding-time stages, the held definitions and the
 -- register assignment; its operations are in lib/specialize.cub
-data Sched = sched (rewrites : Word) (stages : Lst) (holds : Lst) (regs : Lst)
+data Sched = sched (rewrites : Word) (stages : Lst (Word × Stage)) (holds : Lst Word) (regs : Lst (Word × Word))
 data Reason = dim | dep-type | higher | kan | reflect | mult | copy | infinite
-data Verdict = fo m | not-fo reason at
 -- a value a code names as itself (cfree): a variable or a dimension of the checker's, which typed
 -- code passes along and never reads
 data CFree = cfree-opaque
@@ -81,6 +80,7 @@ data Code
   | cclock0
   | ctick0
   | cprim (k : Word) (as : Lst Code)
+data Verdict = fo (m : Code) | not-fo (reason : Reason) (at : Code)
 -- a value's head as data (%view, src/net.c): its parts are the value's own parts, values;
 -- data types, constructors and variables by words
 data View

@@ -232,6 +232,13 @@ is-rec-ty d c =
     tguess k g t V → is-rec-ty d t
     _ → false
 is-rec-line d L = case L of tplam nm b V → is-rec-ty d (b (%dim nm)); tguess k g t V → is-rec-line d t; _ → false
+-- a constructor's telescope (at fresh parameters): how many fields, and which are recursive, in
+-- order; a codata type's fields of the type itself. What programs over codes read of a data type
+-- (lib/std.cub gives them their types)
+tel-nfields tel = case tel of tx A nm r → %wsucc (tel-nfields (r (%var Uw) Uw)); _ → #0
+tel-recs d tel = case tel of tx A nm r → lcons (is-rec-ty d A) (tel-recs d (r (%var Uw) Uw)); _ → lnil
+con-tel d k = centry d k (fst (params-fresh (dtel (%dent d)) lnil))
+co-tel-recs d tel = case tel of tx A nm r → lcons (is-rec-ty d A) (co-tel-recs d (r (%var Uw) Uw)); _ → lnil
 -- the shape of a recursive field's type (18.18), the machine's ConInfo.rsh: D itself, a path line
 -- into one, a function (its domain not mentioning D and not a tick: a later D takes no hypothesis)
 -- into one, a pair with recursive components; sh-none when the field is not recursive

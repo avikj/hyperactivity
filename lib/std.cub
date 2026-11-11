@@ -25,6 +25,13 @@ Path A x y = PathP (λ i → A) x y
 #check-data Opt
 #check-data CFree
 #check-data Code
+#check-data Match
+#check-data Just
+#check-data Rule
+#check-data Stage
+#check-data Sched
+#check-data Reason
+#check-data Verdict
 data Empty
 data Unit = unit
 data Sum (A : Type) (B : Type) = inl (a : A) | inr (b : B)
@@ -580,3 +587,32 @@ list-length (cons x r) = suc (list-length r)
 list-append : {A : Type} → List A → List A → List A
 list-append nil ys = ys
 list-append (cons x r) ys = cons x (list-append r ys)
+
+-- ---------------------------------------------------------------- the checker's services, at their types
+-- The checker (lib/check.cub) and the code utilities beside it (lib/match.cub) are terms written
+-- before types exist. These give typed programs over codes (the specializer, the compiler) the
+-- services they read at the types they have. Trusted with the checker (PLAN §7).
+-- a checked definition's value quoted at its type (none when it does not quote), and its type's code
+primitive def-code : Word → Opt Code = λ g → quote-top (%gty g) (%gval g)
+primitive def-type-code : Word → Opt Code = λ g → quote-ty (%gty g)
+-- a definition as it was written (a copattern definition's clauses), when it has one
+primitive def-source : Word → Opt Code = λ g → %gcode g
+-- c normalized at the type T's code names (none when the value does not quote)
+primitive code-norm-at : Code → Code → Opt Code = λ T c → quote-top (eval-g lnil T) (eval-g lnil c)
+-- the checker's conversion of two codes' values at the type a code names
+primitive code-conv-at : Code → Code → Code → Bool = λ T a b → conv (eval-g lnil T) (eval-g lnil a) (eval-g lnil b)
+-- data type d's constructor k: its number of fields, which of them are recursive; d higher (a
+-- constructor with dimensions); a codata type's fields of the type itself; d's index of indices
+primitive con-nfields : Word → Word → Word = λ d k → tel-nfields (con-tel d k)
+primitive con-recs : Word → Word → Lst Bool = λ d k → tel-recs d (con-tel d k)
+primitive data-higher : Word → Bool = λ d → lany tel-has-dim (ctors-at d (snd (params-fresh (dtel (%dent d)) lnil)))
+primitive codata-recs : Word → Lst Bool = λ d → co-tel-recs d (cofields-at d (fst (params-fresh (dtel (%dent d)) lnil)))
+-- the traversal of codes (lib/match.cub cmap): f p d replaces a part p under d binders, or leaves
+-- it to be traversed; shifting free variables up and down
+primitive code-map : (Code → Word → Opt Code) → Word → Code → Code = λ f d c → cmap f d c
+primitive code-shift : Word → Word → Code → Code = λ d k c → shift-code d k c
+primitive code-unshift : Word → Word → Code → Code = λ d b c → unshift-at d b c
+-- rewriting (lib/match.cub): a rule's first application in a code, with its path's code; the rules
+-- split into those that shrink the code (run to a fixpoint) and the rest
+primitive rule-rewrite : Rule → Code → Opt (Code × Code) = λ r c → rewrite-first-path r c
+primitive rules-orient : Lst Rule → Lst Rule × Lst Rule = λ rs → orient-rules rs
