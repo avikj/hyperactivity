@@ -279,3 +279,21 @@ add64 A C hA hC hs =
       s2 = congw (λ z → wand (wand z #18446744073709551615) #18446744073709551615) (mask-small (wadd A C) #65 (lt-weak (wadd A C) #18446744073709551616 #18446744073709551616 hs))
       s3 = congw (λ z → wand z #18446744073709551615) (mask-small (wadd A C) #64 hs)
   in catw s1 (catw s2 (catw s3 (mask-small (wadd A C) #64 hs)))
+-- a word read back from bytes each shown to be its digit
+rd8-of : (V : Word) → {x0 x1 x2 x3 x4 x5 x6 x7 : Word} →
+         x0 ≡ dig V #1 → x1 ≡ dig V #256 → x2 ≡ dig V #65536 → x3 ≡ dig V #16777216 →
+         x4 ≡ dig V #4294967296 → x5 ≡ dig V #1099511627776 → x6 ≡ dig V #281474976710656 → x7 ≡ dig V #72057594037927936 →
+         wlt V #18446744073709551616 ≡ true → rd8 x0 x1 x2 x3 x4 x5 x6 x7 ≡ V
+rd8-of V p0 p1 p2 p3 p4 p5 p6 p7 h = catw (cong8 rd8 p0 p1 p2 p3 p4 p5 p6 p7) (rd8-dig V h)
+-- a byte masked twice after the shift (the model's push of a memory operand): the digit
+byte-dig2 : (V lo : Word) → wand (wand (wshr V lo) #255) #255 ≡ wrem (wquot V (wshl #1 lo)) #256
+byte-dig2 V lo =
+  catw (wand-mask (wand (wshr V lo) #255) #8)
+    (catw (congw (λ z → wrem z #256) (wand-mask (wshr V lo) #8))
+      (catw (wrem-small (wrem (wshr V lo) #256) #256 (wrem-lt (wshr V lo) #256 refl))
+        (congw (λ z → wrem z #256) (wshr-div V lo))))
+-- the bytes the model's push of a memory operand wrote, read back
+rd8-push-mem : (V : Word) → wlt V #18446744073709551616 ≡ true →
+  rd8 (wand (wand (wshr V #0) #255) #255) (wand (wand (wshr V #8) #255) #255) (wand (wand (wshr V #16) #255) #255) (wand (wand (wshr V #24) #255) #255)
+      (wand (wand (wshr V #32) #255) #255) (wand (wand (wshr V #40) #255) #255) (wand (wand (wshr V #48) #255) #255) (wand (wand (wshr V #56) #255) #255) ≡ V
+rd8-push-mem V h = rd8-of V (byte-dig2 V #0) (byte-dig2 V #8) (byte-dig2 V #16) (byte-dig2 V #24) (byte-dig2 V #32) (byte-dig2 V #40) (byte-dig2 V #48) (byte-dig2 V #56) h

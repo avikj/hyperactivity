@@ -1,5 +1,5 @@
 -- lib/compile/x86ok.cub — lemmas of runs of lib/isa/x86, for the template theorems: a run splits at
--- any step; a store to an address and to another commute. Loaded after lib/isa/x86/run.cub.
+-- any step; a store to an address and to another commute. Loaded after lib/isa/x86/run.cub and lib/linproof.cub (eqw-sound, weq-sound).
 -- Lemmas of runs are proved of a step function that is a variable (run-of): the model is never
 -- unfolded but where a statement is about a particular run, and there by computation.
 
@@ -37,14 +37,6 @@ x86-run-split = run-split x86-step
 -- ---------------------------------------------------------------- equality of words, as paths
 bool-ft : (T : Type) → false ≡ true → T
 bool-ft T h = Empty-rec (transport (λ i → if h i then Empty else Unit) unit)
-eqw-sound : (a b : Word) → eqw a b ≡ true → a ≡ b
-eqw-sound a =
-  %welimP (λ v → (b : Word) → eqw v b ≡ true → v ≡ b) a
-    (λ b → %welimP (λ v → eqw #0 v ≡ true → #0 ≡ v) b (λ h → refl) (λ m g h → bool-ft (#0 ≡ %wsucc m) h))
-    (λ n ih b → %welimP (λ v → eqw (%wsucc n) v ≡ true → %wsucc n ≡ v) b
-       (λ h → bool-ft (%wsucc n ≡ #0) h) (λ m g h → cong (λ x → %wsucc x) (ih m h)))
-weq-sound : (a b : Word) → weq a b ≡ true → a ≡ b
-weq-sound a b h = eqw-sound a b (eqw≡weq a b ∙ h)
 eqw-refl : (a : Word) → eqw a a ≡ true
 eqw-refl a = %welimP (λ v → eqw v v ≡ true) a refl (λ n h → h)
 weq-refl : (a : Word) → weq a a ≡ true
