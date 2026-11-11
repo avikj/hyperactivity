@@ -3496,6 +3496,16 @@ static void interact(Cell *o, Cell *v) {
         if (o->x == TB_VAL) {
             /* a checked definition's own value */
             Port val = global_copy(g, NULL);
+            long aty = val ? -2 : global_axiom_ty(g);
+            if (!val && aty != -2) {
+                /* a constant with no computation (a law stated as a primitive): its neutral, carrying
+                 * its type, as the elaborated term meets it (S_AXIOM): a path among them reads its
+                 * endpoints from that type */
+                Cell *c = cell(V_NVAR, 2); c->a = (uint64_t)g; c->key = key0(K_VAR, (uint64_t)g, NULL);
+                if (aty >= 0) { Cell *t = cell(V_GLOBAL, 1); t->a = (uint64_t)aty; link(P(t, 0), P(c, 1)); c->ty = 1; }
+                else link(unk(), P(c, 1));
+                val = P(c, 0);
+            }
             if (!val) { fprintf(stderr, "a checked definition without a value\n"); exit(2); }
             link(val, o->port[1]);
         } else { Cell *r = cell(V_GLOBAL, 1); r->a = (uint64_t)g; link(P(r, 0), o->port[1]); }

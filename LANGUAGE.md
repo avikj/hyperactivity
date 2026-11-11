@@ -70,7 +70,8 @@ fields by name, in any order), `record { f = a ; g = b }` or `(a , b)` a value o
 is `r` with the fields given replaced; `x.f` projects. `mutual` groups definitions that call each other;
 `postulate x y` declares names without values.
 
-**Recursion.** A call on a field of the matched argument is structural; a definition at a type with
+**Recursion.** A call on a field of the matched argument is structural, applied to all its later
+arguments or to fewer (a partial call is the function of the rest: `lapp (f k)` passes it); a definition at a type with
 a clock recurses through any functions where a later value is expected (§8). A call on a field's field,
 at any depth (`fib (suc (suc n)) = plus (fib n) (fib (suc n))`), is course-of-values: the split
 computes each value together with the values below it (a Σ of the value and `Below v`, `Below`
@@ -161,7 +162,9 @@ store at offset `times i 8` with the proof that the access fits, `tabulate n f` 
 every index, and `index-update` (a read after a write at the same index is the value written)
 is the byte layer's law `load64-store64` (trusted) unfolded. A primitive operation on a
 variable is a neutral the checker views (`wprim k args`) and compares argument by argument, so
-such laws follow by unfolding (an operation stuck on a variable used to be an unknown value).
+such laws follow by unfolding (an operation stuck on a variable used to be an unknown value). A law
+stated as a primitive has no computation (`primitive name : T`): it is a constant of its type, and
+a path among such constants reads its endpoints from that type, as any neutral path does.
 `Fin→Array n : Equiv (Fin n → Int64) (Array n)` is the interface (item 22): a program written
 against functions uses application and `fin-set n f p v`, and under `atab` they are `index` and
 `update` (`apply-by`, `fin-set-by`). Byte strings convert by their contents (`%beq`).

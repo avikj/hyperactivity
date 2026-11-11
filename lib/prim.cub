@@ -113,19 +113,19 @@ primitive region-at : Word → (n : Nat) → Bytes n = λ a n → %region-at n a
 -- remainder below a nonzero divisor, and those determine them); shifts as product and quotient by a power of two; and with
 -- a mask of k ones as the remainder; and, or of operands with disjoint bits as 0 and as their sum;
 -- xor with 0 the identity
-primitive wmul-zero : (a : Word) → PathP (λ (i : I) → Word) (wmul a #0) #0 = λ a i → #0
-primitive wmul-suc : (a b : Word) → PathP (λ (i : I) → Word) (wmul a (%wsucc b)) (wadd (wmul a b) a) = λ a b i → wadd (wmul a b) a
-primitive wdiv-unique : (q r n : Word) → PathP (λ (i : I) → Bool) (wlt r n) true → PathP (λ (i : I) → Word) (wquot (wadd (wmul q n) r) n) q = λ q r n h i → q
-primitive wmod-unique : (q r n : Word) → PathP (λ (i : I) → Bool) (wlt r n) true → PathP (λ (i : I) → Word) (wrem (wadd (wmul q n) r) n) r = λ q r n h i → r
-primitive wdiv-mod : (v n : Word) → PathP (λ (i : I) → Word) v (wadd (wmul (wquot v n) n) (wrem v n)) = λ v n i → v
-primitive wrem-lt : (v n : Word) → PathP (λ (i : I) → Bool) (wlt #0 n) true → PathP (λ (i : I) → Bool) (wlt (wrem v n) n) true = λ v n h i → true
-primitive wshl-mul : (a k : Word) → PathP (λ (i : I) → Word) (wshl a k) (wmul a (wshl #1 k)) = λ a k i → wmul a (wshl #1 k)
-primitive wshr-div : (a k : Word) → PathP (λ (i : I) → Word) (wshr a k) (wquot a (wshl #1 k)) = λ a k i → wquot a (wshl #1 k)
-primitive wand-mask : (a k : Word) → PathP (λ (i : I) → Word) (wand a (wsub (wshl #1 k) #1)) (wrem a (wshl #1 k)) = λ a k i → wrem a (wshl #1 k)
-primitive wand-disj : (a b k : Word) → PathP (λ (i : I) → Bool) (wlt a (wshl #1 k)) true → PathP (λ (i : I) → Word) (wand a (wmul b (wshl #1 k))) #0 = λ a b k h i → #0
-primitive wor-zero : (a : Word) → PathP (λ (i : I) → Word) (wor a #0) a = λ a i → a
-primitive wxor-zero : (a : Word) → PathP (λ (i : I) → Word) (wxor a #0) a = λ a i → a
-primitive wor-disj : (a b k : Word) → PathP (λ (i : I) → Bool) (wlt a (wshl #1 k)) true → PathP (λ (i : I) → Word) (wor a (wmul b (wshl #1 k))) (wadd a (wmul b (wshl #1 k))) = λ a b k h i → wadd a (wmul b (wshl #1 k))
+primitive wmul-zero : (a : Word) → PathP (λ (i : I) → Word) (wmul a #0) #0
+primitive wmul-suc : (a b : Word) → PathP (λ (i : I) → Word) (wmul a (%wsucc b)) (wadd (wmul a b) a)
+primitive wdiv-unique : (q r n : Word) → PathP (λ (i : I) → Bool) (wlt r n) true → PathP (λ (i : I) → Word) (wquot (wadd (wmul q n) r) n) q
+primitive wmod-unique : (q r n : Word) → PathP (λ (i : I) → Bool) (wlt r n) true → PathP (λ (i : I) → Word) (wrem (wadd (wmul q n) r) n) r
+primitive wdiv-mod : (v n : Word) → PathP (λ (i : I) → Word) v (wadd (wmul (wquot v n) n) (wrem v n))
+primitive wrem-lt : (v n : Word) → PathP (λ (i : I) → Bool) (wlt #0 n) true → PathP (λ (i : I) → Bool) (wlt (wrem v n) n) true
+primitive wshl-mul : (a k : Word) → PathP (λ (i : I) → Word) (wshl a k) (wmul a (wshl #1 k))
+primitive wshr-div : (a k : Word) → PathP (λ (i : I) → Word) (wshr a k) (wquot a (wshl #1 k))
+primitive wand-mask : (a k : Word) → PathP (λ (i : I) → Word) (wand a (wsub (wshl #1 k) #1)) (wrem a (wshl #1 k))
+primitive wand-disj : (a b k : Word) → PathP (λ (i : I) → Bool) (wlt a (wshl #1 k)) true → PathP (λ (i : I) → Word) (wand a (wmul b (wshl #1 k))) #0
+primitive wor-zero : (a : Word) → PathP (λ (i : I) → Word) (wor a #0) a
+primitive wxor-zero : (a : Word) → PathP (λ (i : I) → Word) (wxor a #0) a
+primitive wor-disj : (a b k : Word) → PathP (λ (i : I) → Bool) (wlt a (wshl #1 k)) true → PathP (λ (i : I) → Word) (wor a (wmul b (wshl #1 k))) (wadd a (wmul b (wshl #1 k)))
 
 -- the bitwise operations bit by bit: bit i of x is x's base-2 digit i; and, or, xor act on each
 -- bit; a shift moves the bits; a word is determined by its bits
@@ -137,23 +137,23 @@ bit-xor : Bool → Bool → Bool
 bit-xor a b = if a then (if b then false else true) else b
 wbit : Word → Word → Bool
 wbit x i = weq (wrem (wquot x (wshl #1 i)) #2) #1
-primitive wbit-and : (a b i : Word) → PathP (λ (j : I) → Bool) (wbit (wand a b) i) (bit-and (wbit a i) (wbit b i)) = λ a b i j → bit-and (wbit a i) (wbit b i)
-primitive wbit-or : (a b i : Word) → PathP (λ (j : I) → Bool) (wbit (wor a b) i) (bit-or (wbit a i) (wbit b i)) = λ a b i j → bit-or (wbit a i) (wbit b i)
-primitive wbit-xor : (a b i : Word) → PathP (λ (j : I) → Bool) (wbit (wxor a b) i) (bit-xor (wbit a i) (wbit b i)) = λ a b i j → bit-xor (wbit a i) (wbit b i)
-primitive wbit-shl : (a k i : Word) → PathP (λ (j : I) → Bool) (wbit (wshl a k) i) (if wlt i k then false else wbit a (wsub i k)) = λ a k i j → if wlt i k then false else wbit a (wsub i k)
-primitive wbit-shr : (a k i : Word) → PathP (λ (j : I) → Bool) (wbit (wshr a k) i) (wbit a (wadd i k)) = λ a k i j → wbit a (wadd i k)
-primitive wbit-ext : (a b : Word) → ((i : Word) → PathP (λ (j : I) → Bool) (wbit a i) (wbit b i)) → PathP (λ (j : I) → Word) a b = λ a b h j → a
+primitive wbit-and : (a b i : Word) → PathP (λ (j : I) → Bool) (wbit (wand a b) i) (bit-and (wbit a i) (wbit b i))
+primitive wbit-or : (a b i : Word) → PathP (λ (j : I) → Bool) (wbit (wor a b) i) (bit-or (wbit a i) (wbit b i))
+primitive wbit-xor : (a b i : Word) → PathP (λ (j : I) → Bool) (wbit (wxor a b) i) (bit-xor (wbit a i) (wbit b i))
+primitive wbit-shl : (a k i : Word) → PathP (λ (j : I) → Bool) (wbit (wshl a k) i) (if wlt i k then false else wbit a (wsub i k))
+primitive wbit-shr : (a k i : Word) → PathP (λ (j : I) → Bool) (wbit (wshr a k) i) (wbit a (wadd i k))
+primitive wbit-ext : (a b : Word) → ((i : Word) → PathP (λ (j : I) → Bool) (wbit a i) (wbit b i)) → PathP (λ (j : I) → Word) a b
 
 -- ---------------------------------------------------------------- the byte layer's laws, trusted: a load after a
 -- store at the same offset is the value stored. A primitive operation on a variable is a neutral
 -- (%view: wprim), so the laws of what is built over the byte layer follow by unfolding
-primitive load32-store32 : (n : Nat) → (b : Bytes n) → (off : Nat) → (h : le (plus off 4) n) → (v : UInt32) → PathP (λ (i : I) → UInt32) (load32 n (store32 n b off h v) off h) v = λ n b off h v i → v
-primitive load64-store64 : (n : Nat) → (b : Bytes n) → (off : Nat) → (h : le (plus off 8) n) → (v : Int64) → PathP (λ (i : I) → Int64) (load64 n (store64 n b off h v) off h) v = λ n b off h v i → v
+primitive load32-store32 : (n : Nat) → (b : Bytes n) → (off : Nat) → (h : le (plus off 4) n) → (v : UInt32) → PathP (λ (i : I) → UInt32) (load32 n (store32 n b off h v) off h) v
+primitive load64-store64 : (n : Nat) → (b : Bytes n) → (off : Nat) → (h : le (plus off 8) n) → (v : Int64) → PathP (λ (i : I) → Int64) (load64 n (store64 n b off h v) off h) v
 -- the bits are the value, trusted: a Float64 and its bits correspond one to one
-primitive f64ofbits-bits : (x : Float64) → PathP (λ (i : I) → Float64) (f64ofbits (f64bits x)) x = λ x i → x
-primitive f64bits-ofbits : (y : Int64) → PathP (λ (i : I) → Int64) (f64bits (f64ofbits y)) y = λ y i → y
-primitive f32ofbits-bits : (x : Float32) → PathP (λ (i : I) → Float32) (f32ofbits (f32bits x)) x = λ x i → x
-primitive f32bits-ofbits : (y : UInt32) → PathP (λ (i : I) → UInt32) (f32bits (f32ofbits y)) y = λ y i → y
+primitive f64ofbits-bits : (x : Float64) → PathP (λ (i : I) → Float64) (f64ofbits (f64bits x)) x
+primitive f64bits-ofbits : (y : Int64) → PathP (λ (i : I) → Int64) (f64bits (f64ofbits y)) y
+primitive f32ofbits-bits : (x : Float32) → PathP (λ (i : I) → Float32) (f32ofbits (f32bits x)) x
+primitive f32bits-ofbits : (y : UInt32) → PathP (λ (i : I) → UInt32) (f32bits (f32ofbits y)) y
 
 -- ---------------------------------------------------------------- arrays of Int64 over the byte layer (plan C22):
 -- Array n is Bytes (times n 8); an index with its proof of fitting (le (suc i) n) is a load or
@@ -196,9 +196,9 @@ index-update n a i h v = load64-store64 (times n 8) a (times i 8) (index-fits n 
 -- index-update-eq/ne/if; so Fin n → Int64 ≃ Array n (Fin→Array). Then two dimensions, row-major (mdspan's layout_right)
 -- the byte layer's second law, trusted: a load at an offset disjoint from a store reads what was
 -- there (the stored 8 bytes end before the load begins, or the loaded ones before the store)
-primitive load64-store64-disj : (n : Nat) → (b : Bytes n) → (o1 o2 : Nat) → (h1 : le (plus o1 8) n) → (h2 : le (plus o2 8) n) → (v : Int64) → Sum (le (plus o1 8) o2) (le (plus o2 8) o1) → PathP (λ (i : I) → Int64) (load64 n (store64 n b o1 h1 v) o2 h2) (load64 n b o2 h2) = λ n b o1 o2 h1 h2 v d i → %load64 b o2
+primitive load64-store64-disj : (n : Nat) → (b : Bytes n) → (o1 o2 : Nat) → (h1 : le (plus o1 8) n) → (h2 : le (plus o2 8) n) → (v : Int64) → Sum (le (plus o1 8) o2) (le (plus o2 8) o1) → PathP (λ (i : I) → Int64) (load64 n (store64 n b o1 h1 v) o2 h2) (load64 n b o2 h2)
 -- arrays are determined by their elements, trusted: two arrays equal at every index are equal
-primitive array-ext : (n : Nat) → (a b : Array n) → ((i : Nat) → (h : le (suc i) n) → PathP (λ (j : I) → Int64) (index n a i h) (index n b i h)) → PathP (λ (i : I) → Array n) a b = λ n a b f i → a
+primitive array-ext : (n : Nat) → (a b : Array n) → ((i : Nat) → (h : le (suc i) n) → PathP (λ (j : I) → Int64) (index n a i h) (index n b i h)) → PathP (λ (i : I) → Array n) a b
 -- ---------------------------------------------------------------- arithmetic on the order
 -- le is a proposition: its witness is determined (addition cancels) and Nat is a set
 isSetNat : isSet Nat
@@ -352,8 +352,8 @@ tabulate32 : (n : Nat) → (Nat → UInt32) → Array32 n
 tabulate32 n f = tab-go32 n f n (le-refl n) (anew32 n)
 index-update32 : (n : Nat) → (a : Array32 n) → (i : Nat) → (h : le (suc i) n) → (v : UInt32) → index32 n (update32 n a i h v) i h ≡ v
 index-update32 n a i h v = load32-store32 (times n 4) a (times i 4) (index-fits32 n i h) v
-primitive load32-store32-disj : (n : Nat) → (b : Bytes n) → (o1 o2 : Nat) → (h1 : le (plus o1 4) n) → (h2 : le (plus o2 4) n) → (v : UInt32) → Sum (le (plus o1 4) o2) (le (plus o2 4) o1) → PathP (λ (i : I) → UInt32) (load32 n (store32 n b o1 h1 v) o2 h2) (load32 n b o2 h2) = λ n b o1 o2 h1 h2 v d i → %load32 b o2
-primitive array32-ext : (n : Nat) → (a b : Array32 n) → ((i : Nat) → (h : le (suc i) n) → PathP (λ (j : I) → UInt32) (index32 n a i h) (index32 n b i h)) → PathP (λ (i : I) → Array32 n) a b = λ n a b f i → a
+primitive load32-store32-disj : (n : Nat) → (b : Bytes n) → (o1 o2 : Nat) → (h1 : le (plus o1 4) n) → (h2 : le (plus o2 4) n) → (v : UInt32) → Sum (le (plus o1 4) o2) (le (plus o2 4) o1) → PathP (λ (i : I) → UInt32) (load32 n (store32 n b o1 h1 v) o2 h2) (load32 n b o2 h2)
+primitive array32-ext : (n : Nat) → (a b : Array32 n) → ((i : Nat) → (h : le (suc i) n) → PathP (λ (j : I) → UInt32) (index32 n a i h) (index32 n b i h)) → PathP (λ (i : I) → Array32 n) a b
 aindex32 : (n : Nat) → Array32 n → Fin n → UInt32
 aindex32 n a p = index32 n a (fst p) (snd p)
 tabF-go32 : (n : Nat) → (Fin n → UInt32) → (m : Nat) → le m n → Array32 n → Array32 n

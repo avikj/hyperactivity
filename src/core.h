@@ -462,6 +462,7 @@ void port_split(Port prov, int m, Port *out);
 Port top_build(Syn *body, int nslots, const int *uses);
 
 /* globals: each definition's net is built once; a use copies its value */
+long global_axiom_ty(long g);   /* a constant with no computation: its type's global (or -1); else -2 */
 Port global_copy(long g, Key *as); /* 0 when the global is an unsupplied input; as: the key the copy carries (the name of the cell that referred to it; NULL: the definition's) */
 void global_park(long g, Cell *op, Cell *glob);
 /* foreign functions (D27): a C symbol at a primitive type; the arguments' kinds (PT_*, or 4 a word), its result's.

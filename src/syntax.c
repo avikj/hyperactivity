@@ -4262,6 +4262,26 @@ static Node *ih_type(Node *T, Node *x, const char *w, Node *Mb, const char *dnam
 }
 static Deep *deep_of(const char *w) { for (int i = ndeeps - 1; i >= 0; i--) if (!strcmp(deeps[i].w, w)) return &deeps[i]; return NULL; }
 static Node *rec_xform(Node *e);
+/* the hypothesis of a recursive call at the later parameters it varies over; an explicit one the
+ * call does not give (the call partially applied) is a λ around it: the call's value is the
+ * function of those arguments, as the definition applied to fewer arguments is */
+static Node *rec_hyp_apply(Node *call, Node **at, int p, int nl) {
+    static int eta_n = 0;
+    Node *ap = nlist(nl + 1); ap->it[0] = call; int k = 1;
+    Node *lams[64]; int nlam = 0;
+    for (int q = p + 1; q < tsig.np; q++) if (tsig.rev[q]) {
+        if (at[q]) ap->it[k++] = rec_xform(at[q]);
+        else if (tsig.imp[q]) ap->it[k++] = nsym("%hole");
+        else {
+            char nm[32]; snprintf(nm, sizeof nm, "%%eta%d", eta_n++);
+            if (nlam < 64) lams[nlam++] = nsym(nm);
+            ap->it[k++] = nsym(nm);
+        }
+    }
+    Node *r = ap;
+    for (int j = nlam - 1; j >= 0; j--) r = sym3("lam", lams[j], r);
+    return r;
+}
 static Node *rec_call(Node *e, Node **args, int n) {
     /* the call's arguments at the parameters' positions (implicit ones not given) */
     Node *at[256] = { 0 }; int i = 0;
@@ -4304,12 +4324,7 @@ static Node *rec_call(Node *e, Node **args, int n) {
         int nl = 0; for (int q = p + 1; q < tsig.np; q++) if (tsig.rev[q]) nl++;
         Node *call = sym2("fst", d->e);
         if (!nl) return call;
-        Node *ap = nlist(nl + 1); ap->it[0] = call; int k = 1;
-        for (int q = p + 1; q < tsig.np; q++) if (tsig.rev[q]) {
-            if (!at[q] && !tsig.imp[q]) die("a recursive call must give every argument after the one it recurses on:", tfname);
-            ap->it[k++] = at[q] ? rec_xform(at[q]) : nsym("%hole");
-        }
-        return ap;
+        return rec_hyp_apply(call, at, p, nl);
     }
     for (int s = nframes - 1; s >= 0; s--) {
         Frame *f = &frames[s];
@@ -4337,12 +4352,7 @@ static Node *rec_call(Node *e, Node **args, int n) {
             int nl = 0; for (int q = p + 1; q < tsig.np; q++) if (tsig.rev[q]) nl++;
             if (!whole) for (int k = ndm - 1; k >= 0; k--) call = sym3("@", call, dims[k]);
             if (!nl) return call;
-            Node *ap = nlist(nl + 1); ap->it[0] = call; int k = 1;
-            for (int q = p + 1; q < tsig.np; q++) if (tsig.rev[q]) {
-                if (!at[q] && !tsig.imp[q]) die("a recursive call must give every argument after the one it recurses on:", tfname);
-                ap->it[k++] = at[q] ? rec_xform(at[q]) : nsym("%hole");
-            }
-            return ap;
+            return rec_hyp_apply(call, at, p, nl);
         }
     }
     (void)e;
