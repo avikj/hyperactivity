@@ -1,5 +1,5 @@
--- experiments/isa/jit-runs.cub — the compiler's bytes for the workloads with word, Nat and Bool
--- interfaces, run under the imported x86 model (lib/compile/meaning.cub's ⟦bs⟧) on concrete
+-- experiments/isa/jit-runs.cub — the compiler's bytes for the workloads with word, Nat, Bool, list,
+-- pair and record interfaces, run under the imported x86 model (lib/compile/meaning.cub's ⟦bs⟧) on concrete
 -- arguments, beside the definition's own value. Loaded as experiments/isa/jit-run.cub is, with
 -- lib/decode.cub's prerequisites as experiments/jit/workloads.cub needs them.
 nat-w : Nat → Word
@@ -187,3 +187,26 @@ nthFrom-bs = blob-of (glob-of (code nthFrom))
 zig-bs : Lst Word
 zig-bs = blob-of (glob-of (code zig))
 #show the (Opt Word × Word) (mn-run zig-bs #200000 (lcons #3 (lcons #2 lnil)) , nat-w (zig 3 2))
+-- values in the arena: lists, pairs, a record-like data type
+mf-pt : MForm Pt
+mf-pt = ((λ p ar → case p return (λ _ → Word × Arena) of
+            mkpt x y → ar-cell (lcons #0 (lcons x (lcons y lnil))) ar) ,
+         (λ k m v → mkpt (ld8 m (wadd v #8)) (ld8 m (wadd v #16))))
+sumL-bs : Lst Word
+sumL-bs = blob-of (glob-of (code sumL))
+upto-bs : Lst Word
+upto-bs = blob-of (glob-of (code upto))
+pairUp-bs : Lst Word
+pairUp-bs = blob-of (glob-of (code pairUp))
+swapPt-bs : Lst Word
+swapPt-bs = blob-of (glob-of (code swapPt))
+usePrs-bs : Lst Word
+usePrs-bs = blob-of (glob-of (code usePrs))
+sumAdd-bs : Lst Word
+sumAdd-bs = blob-of (glob-of (code sumAdd))
+#show the (Opt Word × Word) (mn-run-mf sumL-bs mf-word #200000 (lcons (mf-put (mf-list mf-word) (cons #1 (cons #2 (cons #3 nil)))) lnil) , sumL (cons #1 (cons #2 (cons #3 nil))))
+#show the (Opt (List Word) × List Word) (mn-run-mf upto-bs (mf-list mf-word) #200000 (lcons (mf-put mf-word #4) lnil) , upto #4)
+#show the (Opt (Word × Word) × (Word × Word)) (mn-run-mf pairUp-bs (mf-pair mf-word mf-word) #200000 (lcons (mf-put mf-word #5) lnil) , pairUp #5)
+#show the (Opt Pt × Pt) (mn-run-mf swapPt-bs mf-pt #200000 (lcons (mf-put mf-pt (mkpt #1 #2)) lnil) , swapPt (mkpt #1 #2))
+#show the (Opt Word × Word) (mn-run-mf usePrs-bs mf-word #400000 (lcons (mf-put (mf-list mf-word) (cons #1 (cons #2 nil))) lnil) , usePrs (cons #1 (cons #2 nil)))
+#show the (Opt Word × Word) (mn-run-mf sumAdd-bs mf-word #400000 (lcons (mf-put (mf-list mf-word) (cons #1 (cons #2 nil))) (lcons (mf-put mf-word #10) lnil)) , sumAdd (cons #1 (cons #2 nil)) #10)

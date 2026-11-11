@@ -70,3 +70,77 @@ Correct1 : Lst Word → (Word → Word) → Type
 Correct1 bs f = (n a : Word) → mn-call1 bs f n a ≡ f a
 Correct2 : Lst Word → (Word → Word → Word) → Type
 Correct2 bs f = (n a b : Word) → mn-call2 bs f n a b ≡ f a b
+
+-- ---------------------------------------------------------------- values in memory, by their type
+-- A value's machine form, as src/net.c's jit_in places it and jit_read reads it: a word (and a
+-- primitive value) is its bits; a Nat its count; a constructor without fields its index; a
+-- constructor with fields a cell [index][fields…] in the arena; a pair a cell [0][a][b]. The arena
+-- is a memory and the next free address. Reading follows cells for at most the fuel's depth.
+Arena : Type
+Arena = ByteMap × Word
+-- n words in a fresh cell: its address and the arena after it
+ar-cell : Lst Word → Arena → Word × Arena
+ar-cell ws ar = (snd ar , (mn-words (fst ar) (snd ar) ws , wadd (snd ar) (wmul #8 (l-count ws))))
+MForm : Type → Type
+MForm A = (A → Arena → Word × Arena) × (Nat → ByteMap → Word → A)
+mf-put : {A : Type} → MForm A → A → Arena → Word × Arena
+mf-put {A} m = fst m
+mf-get : {A : Type} → MForm A → Nat → ByteMap → Word → A
+mf-get {A} m = snd m
+-- the word at an address
+ld8 : ByteMap → Word → Word
+ld8 m a = mem-load-n m #8 a
+mf-word : MForm Word
+mf-word = ((λ w ar → (w , ar)) , (λ k m v → v))
+nat-word : Nat → Word
+nat-word n = case n return (λ _ → Word) of
+  zero → #0
+  suc k → %wsucc (rec k)
+mf-nat-get : Word → Nat
+mf-nat-get v = %welimP (λ _ → Nat) v zero (λ j h → suc h)
+mf-nat : MForm Nat
+mf-nat = ((λ n ar → (nat-word n , ar)) , (λ k m v → mf-nat-get v))
+mf-bool : MForm Bool
+mf-bool = ((λ b ar → (if b then #0 else #1 , ar)) , (λ k m v → weq v #0))
+mf-pair-put : {A B : Type} → MForm A → MForm B → A × B → Arena → Word × Arena
+mf-pair-put {A} {B} ma mb p ar =
+  let ra = mf-put ma (fst p) ar
+      rb = mf-put mb (snd p) (snd ra)
+  in ar-cell (lcons #0 (lcons (fst ra) (lcons (fst rb) lnil))) (snd rb)
+mf-pair-get : {A B : Type} → MForm A → MForm B → Nat → ByteMap → Word → A × B
+mf-pair-get {A} {B} ma mb zero m v = (mf-get ma zero m #0 , mf-get mb zero m #0)
+mf-pair-get {A} {B} ma mb (suc k) m v = (mf-get ma k m (ld8 m (wadd v #8)) , mf-get mb k m (ld8 m (wadd v #16)))
+mf-pair : {A B : Type} → MForm A → MForm B → MForm (A × B)
+mf-pair {A} {B} ma mb = (mf-pair-put ma mb , mf-pair-get ma mb)
+mf-list-put : {A : Type} → MForm A → List A → Arena → Word × Arena
+mf-list-put {A} ma nil ar = (#0 , ar)
+mf-list-put {A} ma (cons x xs) ar =
+  let rx = mf-put ma x ar
+      rs = mf-list-put ma xs (snd rx)
+  in ar-cell (lcons #1 (lcons (fst rx) (lcons (fst rs) lnil))) (snd rs)
+mf-list-get : {A : Type} → MForm A → Nat → ByteMap → Word → List A
+mf-list-get {A} ma zero m v = nil
+mf-list-get {A} ma (suc k) m v =
+  if wlt v #4096 then nil else cons (mf-get ma k m (ld8 m (wadd v #8))) (mf-list-get ma k m (ld8 m (wadd v #16)))
+mf-list : {A : Type} → MForm A → MForm (List A)
+mf-list {A} ma = (mf-list-put ma , mf-list-get ma)
+-- the arguments placed in order: their words and the arena after them
+mf-args : Lst (Arena → Word × Arena) → Arena → Lst Word × Arena
+mf-args lnil ar = (lnil , ar)
+mf-args (lcons p ps) ar = (let r = p ar in let rs = mf-args ps (snd r) in (lcons (fst r) (fst rs) , snd rs))
+-- the state at a call whose arguments were placed in the arena ar (its next free address is the
+-- context's arena next)
+mn-init-ar : Lst Word → Lst Word → Arena → X86
+mn-init-ar bs args ar =
+  let m0 = mn-words (mn-words (mn-words (fst ar) mn-args args) mn-ctx (lcons #0 (lcons (snd ar) (lcons mn-heap-end (lcons mn-stack-lim lnil)))))
+                    mn-stack (lcons mn-ret lnil)
+  in x86-set-rdi mn-args (x86-set-rsi (l-count args) (x86-set-rdx mn-ctx (x86-set-rsp mn-stack
+       (x86-set-rip mn-code (x86-set-mem (code-over mn-code bs m0) x86-user64)))))
+-- ⟦bs⟧ on placed arguments, its result read at type B
+mn-run-mf : {B : Type} → Lst Word → MForm B → Word → Lst (Arena → Word × Arena) → Opt B
+mn-run-mf {B} bs mb n ps =
+  let pa = mf-args ps (mem-none , mn-heap)
+      s = run-to x86-step n mn-ret (mn-init-ar bs (fst pa) (snd pa))
+  in case s return (λ _ → Opt B) of
+       none → none
+       some s2 → (if weq (ld8 (x86-mem s2) mn-ctx) #0 then some (mf-get mb c-fuel (x86-mem s2) (x86-rax s2)) else none)
