@@ -570,16 +570,6 @@ x-elim dd B x args st =
 -- then its own leading binders, and the value the definition applied to the free variables alone
 -- (a partial application, which encodes as a closure cell). λ-lifting: the definition applied to
 -- the free variables is the λ, which the code's meaning computes identically
-x-lift-clo : Code → LS → Code × LS
-x-lift-clo c st =
-  let sp = x-split c
-      k = fst sp
-      fv = x-frees c
-      m = l-count fv
-      g = snd st
-      body = var-map-c (λ n d → if %wlt (%wsub n d) k then cvar n
-                                else cvar (%wadd d (%wadd k (%wsub (%wsub m #1) (x-index (%wsub (%wsub n d) k) fv #0))))) #0 (snd sp)
-  in (x-apps (cglob g) (x-fv-vars fv) , (lcons (g , (%wadd m k , body)) (fst st) , %wsucc g))
 -- the lifting of a list, and of branches under their fields' binders (not taken for closures)
 x-lift-l : (Code → LS → Code × LS) → Lst Code → LS → Lst Code × LS
 x-lift-l f lnil st = (lnil , st)
@@ -598,6 +588,16 @@ x-lift-made f r =
   case fst (snd r) return (λ _ → Code × LS) of
     lnil → r
     lcons e rest → (let rb = f (snd (snd e)) (rest , snd (snd r)) in (fst r , (lcons (fst e , (fst (snd e) , fst rb)) (fst (snd rb)) , snd (snd rb))))
+x-lift-clo : (Code → LS → Code × LS) → Code → LS → Code × LS
+x-lift-clo f c st =
+  let sp = x-split c
+      k = fst sp
+      fv = x-frees c
+      m = l-count fv
+      g = snd st
+      body = var-map-c (λ n d → if %wlt (%wsub n d) k then cvar n
+                                else cvar (%wadd d (%wadd k (%wsub (%wsub m #1) (x-index (%wsub (%wsub n d) k) fv #0))))) #0 (snd sp)
+  in x-lift-made f (x-apps (cglob g) (x-fv-vars fv) , (lcons (g , (%wadd m k , body)) (fst st) , %wsucc g))
 -- x-lift c st: (c' , st'), every elimination in c made a call
 x-lift-n : Nat → Code → LS → Code × LS
 x-lift-n zero c st = (c , st)
@@ -608,7 +608,7 @@ x-lift-n (suc k) (capp f a) st =
         celim dd P B x → (let rx = x-lift-n k x (snd ra) in x-lift-made (λ c2 st2 → x-lift-n k c2 st2) (x-elim dd B (fst rx) (fst ra) (snd rx)))
         h → (let rh = x-lift-n k h (snd ra) in (x-apps (fst rh) (fst ra) , snd rh)))
 x-lift-n (suc k) (celim dd P B x) st = (let rx = x-lift-n k x st in x-lift-made (λ c2 st2 → x-lift-n k c2 st2) (x-elim dd B (fst rx) lnil (snd rx)))
-x-lift-n (suc k) (clam b) st = x-lift-clo (clam b) st
+x-lift-n (suc k) (clam b) st = x-lift-clo (λ c2 st2 → x-lift-n k c2 st2) (clam b) st
 x-lift-n (suc k) (cfst p) st = (let r = x-lift-n k p st in (cfst (fst r) , snd r))
 x-lift-n (suc k) (csnd p) st = (let r = x-lift-n k p st in (csnd (fst r) , snd r))
 x-lift-n (suc k) (cproj dd j p) st = (let r = x-lift-n k p st in (cproj dd j (fst r) , snd r))
