@@ -9,7 +9,9 @@
 -- A Sail int is ZI: a sign and a magnitude, zneg #0 never built.
 -- A Sail string is the Word whose base-256 digits are its bytes, first byte highest.
 -- A Sail vector is a List with the element of index i at position i.
--- ByteMap is a binary trie of bytes on the 64 address bits, lowest bit first.
+-- ByteMap is the writes, latest first: a read is the latest write to its address, else 0. A read
+-- at an address computed from unknowns compares it with each write's address, so it is decided
+-- where the addresses are one term or differ in a bit (base + j and base + k, j ≠ k).
 -- An outcome is a value, an exception thrown, or an abort (an assertion that failed, a
 -- recursion that passed its bound); effects are functions of an explicit state.
 
@@ -228,33 +230,12 @@ vec-set (cons x xs) i y = if weq i #0 then cons y xs else cons x (vec-set xs (ws
 
 -- ---------------------------------------------------------------- memory
 -- a byte per 64-bit address; an address never written reads #0
-data ByteMap = mem-none | mem-byte (b : Word) | mem-node (z : ByteMap) (o : ByteMap)
-mem-zero-of : ByteMap → ByteMap
-mem-zero-of mem-none = mem-none
-mem-zero-of (mem-byte b) = mem-none
-mem-zero-of (mem-node z o) = z
-mem-one-of : ByteMap → ByteMap
-mem-one-of mem-none = mem-none
-mem-one-of (mem-byte b) = mem-none
-mem-one-of (mem-node z o) = o
-mem-leaf : ByteMap → Word
-mem-leaf mem-none = #0
-mem-leaf (mem-byte b) = b
-mem-leaf (mem-node z o) = #0
-mem-get : Nat → ByteMap → Word → Word
-mem-get zero m a = mem-leaf m
-mem-get (suc d) m a = mem-get d (if weq (wand a #1) #0 then mem-zero-of m else mem-one-of m) (wshr a #1)
-mem-put : Nat → ByteMap → Word → Word → ByteMap
-mem-put zero m a v = mem-byte v
-mem-put (suc d) m a v =
-  if weq (wand a #1) #0
-  then mem-node (mem-put d (mem-zero-of m) (wshr a #1) v) (mem-one-of m)
-  else mem-node (mem-zero-of m) (mem-put d (mem-one-of m) (wshr a #1) v)
+data ByteMap = mem-none | mem-wr (a : Word) (b : Word) (rest : ByteMap)
 mem-load : ByteMap → Bits #64 → Bits #8
-mem-load m a = mem-get 64 m a
+mem-load mem-none a = #0
+mem-load (mem-wr x b r) a = if weq a x then b else mem-load r a
 mem-store : ByteMap → Bits #64 → Bits #8 → ByteMap
-mem-store m a v = mem-put 64 m a v
--- n bytes from an address, the lowest address the lowest byte (the address wraps at 2⁶⁴)
+mem-store m a v = mem-wr a v m
 mem-load-n : ByteMap → (n : Word) → Bits #64 → Bits (wmul #8 n)
 mem-load-n m n a =
   %welimP (λ v → Word → Word) n (λ x → #0)

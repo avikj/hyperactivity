@@ -2173,6 +2173,167 @@ static Port nbop(int k, Port a, Port b) {
     link(a, P(n, 1)); if (b) link(b, P(n, 2));
     return P(n, 0);
 }
+/* ---------------- a computed bit that is constant ----------------
+ * A Boolean operation built on values that are not true or false may still be one of them for every
+ * value of what it is built on (x ⊕ ¬x, the bits of (a + 1) + 1 against those of a + 2). Read
+ * without consuming: the operations down to the values they are built on (each, by its name, an
+ * unknown), then the decision diagram of the whole (reduced, ordered: one diagram per function).
+ * Exact: a constant found is that constant; past a size, nothing is concluded. */
+#define BC_NODES (1 << 16)
+#define BC_BDD (1 << 20)
+typedef struct { int op, a, b; } BcNode;   /* op: BO_*, or -1 an unknown (a: its index), -2 false, -3 true */
+typedef struct {
+    BcNode *n; int nn;
+    const Cell **hk; int *hv; int hcap; int *hslot;   /* cell → node; the slot of each node */
+    Key **atom; int na, acap; Key **ak; int *av; int akcap;   /* key → unknown */
+    bool fail;
+} BcWalk;
+static Cell *bc_value(Port p) {
+    for (int guard = 0; guard < 64; guard++) {
+        p = peek(p);
+        if (!p || PI(p) != 0) return NULL;
+        Cell *c = PC(p);
+        if (c->kind == V_REF) { if (c->a) return NULL; Box *b = c->p; p = b->root->port[0]; continue; }
+        return c;
+    }
+    return NULL;
+}
+static inline uint32_t bc_hp(const void *x) { uint64_t h = (uint64_t)(uintptr_t)x * 0x9E3779B97F4A7C15ULL; return (uint32_t)(h >> 32); }
+static int bc_atom(BcWalk *w, Key *k) {
+    uint32_t m = (uint32_t)w->akcap - 1, i = bc_hp(k) & m;
+    while (w->ak[i]) { if (w->ak[i] == k) return w->av[i]; i = (i + 1) & m; }
+    if (w->na * 2 >= w->akcap || w->na >= w->acap) { w->fail = true; return -1; }
+    w->ak[i] = k; w->av[i] = w->na; w->atom[w->na] = key_retain(k);
+    return w->na++;
+}
+static int bc_node(BcWalk *w, Port p, int depth) {
+    if (w->fail) return -1;
+    if (depth > 100000) { w->fail = true; return -1; }
+    Cell *c = bc_value(p);
+    if (!c) { w->fail = true; return -1; }
+    uint32_t m = (uint32_t)w->hcap - 1, h = bc_hp(c) & m;
+    while (w->hk[h]) { if (w->hk[h] == c) return w->hv[h]; h = (h + 1) & m; }
+    BcNode nd;
+    if (c->kind == V_CON && ((int)c->a == B_TRUE || (int)c->a == B_FALSE)) { nd.op = (int)c->a == B_TRUE ? -3 : -2; nd.a = nd.b = 0; }
+    else if (c->kind == V_NBOP) {
+        nd.op = (int)c->x;
+        nd.a = bc_node(w, c->port[1], depth + 1);
+        nd.b = c->n == 3 ? bc_node(w, c->port[2], depth + 1) : 0;
+        if (w->fail) return -1;
+    } else {
+        Key *k = eff_key(c);
+        if (!k) { w->fail = true; return -1; }
+        nd.op = -1; nd.a = bc_atom(w, k);
+        key_release(k);
+        if (w->fail) return -1;
+    }
+    if (w->nn >= BC_NODES || w->nn * 2 >= w->hcap) { w->fail = true; return -1; }
+    /* the slot again: the recursion may have filled the table */
+    h = bc_hp(c) & m; while (w->hk[h]) h = (h + 1) & m;
+    int ix = w->nn++; w->n[ix] = nd;
+    w->hk[h] = c; w->hv[h] = ix; w->hslot[ix] = (int)h;
+    return ix;
+}
+/* the diagrams: 0 and 1 the constants; var INT32_MAX at them */
+typedef struct { int *var, *lo, *hi, *slot; int n, cap; int *ut; int utcap; int64_t *ck; int *cv; uint32_t *cg; uint32_t gen; int ckcap; bool full; } Bdd;
+static int bdd_mk(Bdd *d, int v, int l, int h) {
+    if (l == h) return l;
+    uint32_t m = (uint32_t)d->utcap - 1, i = (uint32_t)(((uint64_t)v * 0x9E3779B97F4A7C15ULL ^ (uint64_t)l * 0xC2B2AE3D27D4EB4FULL ^ (uint64_t)h * 0x165667B19E3779F9ULL) >> 20) & m;
+    while (d->ut[i] >= 0) { int x = d->ut[i]; if (d->var[x] == v && d->lo[x] == l && d->hi[x] == h) return x; i = (i + 1) & m; }
+    if (d->n >= d->cap || d->n * 2 >= d->utcap) { d->full = true; return 0; }
+    int x = d->n++; d->var[x] = v; d->lo[x] = l; d->hi[x] = h; d->ut[i] = x; d->slot[x] = (int)i;
+    return x;
+}
+static int bdd_op(Bdd *d, int op, int a, int b) {
+    if (d->full) return 0;
+    switch (op) {
+    case BO_AND: if (a == 0 || b == 0) return 0; if (a == 1) return b; if (b == 1 || a == b) return a; break;
+    case BO_OR: if (a == 1 || b == 1) return 1; if (a == 0) return b; if (b == 0 || a == b) return a; break;
+    case BO_XOR: if (a == 0) return b; if (b == 0) return a; if (a == b) return 0; break;
+    case BO_NOT: if (a < 2) return !a; break;
+    }
+    if (op != BO_NOT && a > b) { int t = a; a = b; b = t; }
+    int64_t key = ((int64_t)op << 60) ^ ((int64_t)a << 30) ^ (int64_t)b;
+    uint32_t ci = (uint32_t)(((uint64_t)key * 0x9E3779B97F4A7C15ULL) >> 40) & (uint32_t)(d->ckcap - 1);
+    if (d->cg[ci] == d->gen && d->ck[ci] == key) return d->cv[ci];
+    int va = d->var[a], vb = op == BO_NOT ? INT32_MAX : d->var[b], v = va < vb ? va : vb;
+    int a0 = va == v ? d->lo[a] : a, a1 = va == v ? d->hi[a] : a;
+    int r;
+    if (op == BO_NOT) r = bdd_mk(d, v, bdd_op(d, op, a0, 0), bdd_op(d, op, a1, 0));
+    else {
+        int b0 = vb == v ? d->lo[b] : b, b1 = vb == v ? d->hi[b] : b;
+        int l = bdd_op(d, op, a0, b0), h = bdd_op(d, op, a1, b1);
+        r = bdd_mk(d, v, l, h);
+    }
+    d->ck[ci] = key; d->cv[ci] = r; d->cg[ci] = d->gen;
+    return r;
+}
+/* 0 or 1 when the Boolean at p is that for every value of what it is built on; -1 otherwise. The
+ * tables are the thread's, emptied after each use by the entries made */
+static __thread BcWalk *bc_w;
+static __thread Bdd *bc_d;
+static long bc_calls, bc_walk, bc_bdd, bc_fail, bc_full, bc_hit;
+static void bc_report(void) { fprintf(stderr, "[bexpr] %ld calls, %ld walked, %ld diagram nodes, %ld walks failed, %ld full, %ld constant\n", bc_calls, bc_walk, bc_bdd, bc_fail, bc_full, bc_hit); }
+static int bexpr_const(Port p) {
+    need_bool();
+    static int stat = -1; if (stat < 0) { stat = getenv("CUBICAL_BCSTAT") != NULL; if (stat) atexit(bc_report); }
+    bc_calls++; if (stat && (bc_calls < 50 || bc_calls % 200 == 0)) bc_report();
+    if (!bc_w) {
+        BcWalk *w = calloc(1, sizeof(BcWalk));
+        w->n = malloc(BC_NODES * sizeof(BcNode)); w->hslot = malloc(BC_NODES * sizeof(int)); w->hcap = 2 * BC_NODES; w->hk = calloc((size_t)w->hcap, sizeof(Cell *)); w->hv = malloc((size_t)w->hcap * sizeof(int));
+        w->acap = 4096; w->atom = malloc((size_t)w->acap * sizeof(Key *)); w->akcap = 2 * w->acap; w->ak = calloc((size_t)w->akcap, sizeof(Key *)); w->av = malloc((size_t)w->akcap * sizeof(int));
+        bc_w = w;
+        Bdd *d = calloc(1, sizeof(Bdd)); d->cap = BC_BDD;
+        d->var = malloc((size_t)d->cap * sizeof(int)); d->lo = malloc((size_t)d->cap * sizeof(int)); d->hi = malloc((size_t)d->cap * sizeof(int)); d->slot = malloc((size_t)d->cap * sizeof(int));
+        d->utcap = 2 * BC_BDD; d->ut = malloc((size_t)d->utcap * sizeof(int)); memset(d->ut, 0xff, (size_t)d->utcap * sizeof(int));
+        d->ckcap = 1 << 18; d->ck = malloc((size_t)d->ckcap * sizeof(int64_t)); d->cv = malloc((size_t)d->ckcap * sizeof(int)); d->cg = calloc((size_t)d->ckcap, sizeof(uint32_t));
+        bc_d = d;
+    }
+    BcWalk *w = bc_w; Bdd *d = bc_d;
+    w->nn = 0; w->na = 0; w->fail = false;
+    int root = bc_node(w, p, 0), r = -1;
+    if (!w->fail && root >= 0) {
+        int *ord = malloc(((size_t)w->na + 1) * sizeof(int)), *rank = malloc(((size_t)w->na + 1) * sizeof(int));
+        for (int i = 0; i < w->na; i++) ord[i] = i;
+        /* the order the walk met them, depth first from the root: the two operands of a comparison
+         * bit by bit, interleaved (by when they were made, a word's bits before the other's: the
+         * diagram of a comparison of two words is exponential) */
+        for (int i = 0; i < w->na; i++) rank[ord[i]] = i;
+        d->gen++; if (!d->gen) { memset(d->cg, 0, (size_t)d->ckcap * sizeof(uint32_t)); d->gen = 1; }
+        d->var[0] = d->var[1] = INT32_MAX; d->lo[0] = d->hi[0] = 0; d->lo[1] = d->hi[1] = 1; d->n = 2; d->full = false;
+        int *f = malloc((size_t)w->nn * sizeof(int));
+        for (int i = 0; i < w->nn && !d->full; i++) {
+            BcNode *nd = &w->n[i];
+            switch (nd->op) {
+            case -3: f[i] = 1; break;
+            case -2: f[i] = 0; break;
+            case -1: f[i] = bdd_mk(d, rank[nd->a], 0, 1); break;
+            case BO_NOT: f[i] = bdd_op(d, BO_NOT, f[nd->a], 0); break;
+            default: f[i] = bdd_op(d, nd->op, f[nd->a], f[nd->b]); break;
+            }
+        }
+        if (!d->full && f[root] < 2) r = f[root];
+        bc_bdd += d->n; if (d->full) bc_full++; if (r >= 0) bc_hit++;
+        if (stat && d->n > 100000) {
+            fprintf(stderr, "[bexpr] large: %d nodes over %d unknowns, %d walked; root op %d;", d->n, w->na, w->nn, w->n[root].op);
+            int nv = 0; uint64_t lo = ~0ULL, hi = 0; for (int j = 0; j < w->na; j++) if (w->atom[j]->tag == K_VAR) { nv++; uint64_t a = w->atom[j]->a & 0xffffffffULL; if (a < lo) lo = a; if (a > hi) hi = a; } else fprintf(stderr, " tag%d", w->atom[j]->tag);
+            fprintf(stderr, " %d variables %llu..%llu\n", nv, (unsigned long long)lo, (unsigned long long)hi);
+            int cnt[8] = {0}; for (int i = 0; i < w->nn; i++) { int o = w->n[i].op; cnt[o < 0 ? 4 + (-o - 1) : o]++; }
+            fprintf(stderr, "   not %d and %d or %d xor %d unknown %d false %d true %d\n", cnt[0], cnt[1], cnt[2], cnt[3], cnt[4], cnt[5], cnt[6]);
+        }
+        for (int x = 2; x < d->n; x++) d->ut[d->slot[x]] = -1;
+        free(f); free(ord); free(rank);
+    }
+    bc_walk += w->nn; if (w->fail) bc_fail++;
+    /* the walk's tables emptied by the entries made */
+    for (int i = 0; i < w->nn; i++) w->hk[w->hslot[i]] = NULL;
+    {
+        uint32_t mk2 = (uint32_t)w->akcap - 1;
+        for (int j = 0; j < w->na; j++) { Key *k = w->atom[j]; uint32_t i = bc_hp(k) & mk2; while (w->ak[i] != k) i = (i + 1) & mk2; w->ak[i] = NULL; }
+        for (int j = 0; j < w->na; j++) key_release(w->atom[j]);
+    }
+    return r;
+}
 /* ---------------- conditional values ----------------
  * case c of true → a; false → b, with c a computed bit (a Boolean not true or false): both branches
  * are computed, and an elimination of the conditional is the conditional of the eliminations (Bool's
@@ -3410,6 +3571,10 @@ static void interact(Cell *o, Cell *v) {
             }
             /* a case on a computed bit otherwise: the conditional of the bit between the case at
              * true and at false */
+            if (vk == V_NBOP) {
+                int kc = bexpr_const(P(v, 0));
+                if (kc >= 0) { era(P(v, 0)); link(con_build(kc ? B_TRUE : B_FALSE, NULL, NULL), P(o, 0)); return; }
+            }
             if (vk == V_NBOP) {
                 /* on a negation, the conditional of its operand with the branches exchanged: one
                  * condition one name, so a conditional within a branch of the same is seen */
