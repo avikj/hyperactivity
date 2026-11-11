@@ -99,7 +99,12 @@ expected to have (a λ's binder from the Π expected, a branch's from the motive
 a definition's body from its signature), and from a solved argument's own type. What remains is
 solved by the checker, which is itself a term (`lib/check.cub`): it checks the elaborated term
 with its holes and its guesses (a λ or an application of unknown kind, function or path) and
-answers with solutions or a request to redo; an undetermined level is `lzero`. A case written
+answers with solutions or a request to redo; an undetermined level is `lzero`. The checker matches
+the values on both sides part by part: a case against a case (its scrutinee, then each branch at
+the same fresh fields), a word operation, a loop, a primitive operation, a λ, a pair; a hole
+applied to distinct variables against a value is the λ of those variables (a pattern). So a lemma
+`(if c then A else B) ≡ A` used where the goal evaluates to such a case finds B, and a lemma about
+`bindS m k σ` finds the continuation k from the goal. A case written
 where a type is expected takes that type as its motive, so its stuck values read back with their
 type. `{_}` asks for a hole where an argument must be given positionally. An implicit is found
 through a hypothesis whose type only reduces to the needed form (`h : P n` inside a `%welimP`

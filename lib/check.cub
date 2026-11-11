@@ -2306,24 +2306,58 @@ vmatch-w hs w X sg =
     wcon d c fs ds → (case %view X of wcon d2 c2 fs2 ds2 → (if andb (%weq d d2) (%weq c c2) then vmatch-l hs fs fs2 sg else sg); _ → sg)
     wu l → (case %view X of wu m → vmatch hs l m sg; _ → sg)
     wapp f a T →
-      case %view X of
-        wapp f2 a2 T2 → vmatch hs a a2 (vmatch hs f f2 sg)
-        _ →
-          -- a hole applied to a variable, against X: the hole is λ x → X, by quoting X under x
-          case hole-of hs f of
-            some k →
-              if solved sg k then sg
-              else (case var-name a of
-                      some l →
-                        (case %view (hole-type hs k) of
-                           wpi A B → (case quote (lcons (qv l) lnil) (B a) X of some c → lcons (k , (false , clam c)) sg; none → sg)
-                           _ → sg)
-                      none → sg)
-            none → sg
+      -- a hole applied to distinct variables, against X: the hole is λ x1 … xn → X, by quoting X
+      -- under them (a pattern); otherwise the applications part by part
+      case pat-spine hs f (lcons a lnil) of
+        some ka → (if solved sg (fst ka) then sg else pat-solve hs (fst ka) (snd ka) X sg)
+        none → (case %view X of wapp f2 a2 T2 → vmatch hs a a2 (vmatch hs f f2 sg); _ → sg)
     wfst p T → (case %view X of wfst p2 T2 → vmatch hs p p2 sg; _ → sg)
     wsnd p T → (case %view X of wsnd p2 T2 → vmatch hs p p2 sg; _ → sg)
     wpapp p r T → (case %view X of wpapp p2 r2 T2 → vmatch hs p p2 sg; _ → sg)
+    -- the evaluated forms on both sides, part by part: a case's scrutinee and each branch (at fresh
+    -- fields), a word operation's operands, a loop's parts, a primitive's arguments, a function's
+    -- and a pair's parts
+    welim d x f T → (case %view X of welim d2 x2 f2 T2 → (if %weq d d2 then vm-elims d f f2 (ctors-of d opq) #0 (vmatch hs x x2 sg) hs else sg); _ → sg)
+    wwop k a b → (case %view X of wwop j c e → (if %weq k j then vmatch hs b e (vmatch hs a c sg) else sg); _ → sg)
+    wwelim x z s mo → (case %view X of wwelim x2 z2 s2 mo2 → vmatch hs s s2 (vmatch hs z z2 (vmatch hs x x2 sg)); _ → sg)
+    wprim k as → (case %view X of wprim j bs → (if %weq k j then vmatch-l hs as bs sg else sg); _ → sg)
+    wlam f → (case %view X of wlam g → (let x = %var Uw in vmatch hs (f x) (g x) sg); _ → sg)
+    wpair a b → (case %view X of wpair c e → vmatch hs b e (vmatch hs a c sg); _ → sg)
     _ → sg
+-- an application's head and arguments, when the head is one of the holes
+pat-spine hs v args =
+  case %view v of
+    wapp f a T → pat-spine hs f (lcons a args)
+    _ → (case hole-of hs v of some k → some (k , args); none → none)
+pat-cod T args = case args of lnil → some T; lcons a r → (case %view T of wpi A B → pat-cod (B a) r; _ → none)
+pat-bs args bs = case args of lnil → some bs; lcons a r → (case var-name a of some l → pat-bs r (lcons (qv l) bs); none → none)
+pat-lams n c = if %weq n #0 then c else clam (pat-lams (%wsub n #1) c)
+pat-solve hs k args X sg =
+  case pat-bs args lnil of
+    some bs → (case pat-cod (hole-type hs k) args of
+                 some C → (case quote bs C X of some c → lcons (k , (false , pat-lams (llen-w args) c)) sg; none → sg)
+                 none → sg)
+    none → sg
+-- an elimination's branches against another's, at the same fresh fields (elim-fields' walk)
+vm-dims hs f g c tel prm sg =
+  case tel of
+    ty nm r → let i = %dim nm in vm-dims hs f g c (r i) (lsnoc prm i) sg
+    _ → vmatch hs (%branch f c prm) (%branch g c prm) sg
+vm-hyps hs f g c nr tel prm sg =
+  if %weq nr #0
+    then vm-dims hs f g c tel prm sg
+    else let h = %var Uw in vm-hyps hs f g c (%wsub nr #1) tel (lsnoc prm h) sg
+vm-fields hs d f g c tel nr prm sg =
+  case tel of
+    tx A nm r →
+      let Av = tval A
+          x = %var nm Av
+      in vm-fields hs d f g c (r x Av) (if has-hyp d A then %wsucc nr else nr) (lsnoc prm x) sg
+    _ → vm-hyps hs f g c nr tel prm sg
+vm-elims d f g tels c sg hs =
+  case tels of
+    lnil → sg
+    lcons tel rest → vm-elims d f g rest (%wsucc c) (vm-fields hs d f g c tel #0 lnil sg) hs
 -- the universe level of a type
 univ-level T = case %view T of wu l → l; _ → lzero
 type-level v =
