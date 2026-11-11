@@ -7,10 +7,14 @@
 -- in the application view as Syscall, an abort).
 x86-step : X86 → Outc exception Unit × X86
 x86-step = x86_fetch_decode_execute
-x86-run : Word → X86 → Outc exception Unit × X86
-x86-run n =
+-- (the run of any step function: what is proved of runs is proved once, of a step function that
+-- is a variable, never unfolding the model's)
+run-of : (X86 → Outc exception Unit × X86) → Word → X86 → Outc exception Unit × X86
+run-of stp n =
   %welimP (λ _ → X86 → Outc exception Unit × X86) n (λ s → (out-val unit , s))
-    (λ j h s → st-step {X86} {exception} {Unit} {Unit} (λ _ → h) (x86-step s))
+    (λ j h s → st-step {X86} {exception} {Unit} {Unit} (λ _ → h) (stp s))
+x86-run : Word → X86 → Outc exception Unit × X86
+x86-run = run-of x86-step
 -- the state a user program starts from, before its image and registers: reset, then 64-bit
 -- mode as the model's main.sail sets it (IA32_EFER.LMA and CS.L), in the application view
 -- (linear addresses are the memory's addresses, no paging; syscall throws Syscall)
