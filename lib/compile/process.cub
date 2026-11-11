@@ -1,0 +1,96 @@
+-- lib/compile/process.cub — a static ELF64 executable run as a process: its PT_LOAD segments
+-- loaded (as the kernel's loader does), rip at its entry, the model stepping; a syscall
+-- instruction (the model, in the application view, throws Syscall at it) is answered by a
+-- kernel given as a function of the registers and the memory, and the process goes on after the
+-- instruction's two bytes. Loaded after lib/compile/meaning.cub.
+--
+-- The kernel here (kn-step) is a small deterministic one, enough for the drivers' commands: mmap
+-- of anonymous memory (addresses from kn-map, zeros), getpid, write (the bytes appended to the
+-- output), read (from the input bytes), clock_gettime (0), nanosleep, exit_group (the status
+-- recorded, the process ended); any other number answers −ENOSYS. It is not lib/os/contract.cub's
+-- linux-model: that one answers the typed Linux commands; relating the two is the raw level's
+-- contract (PLAN Phase 3).
+
+-- ---------------------------------------------------------------- the image
+l-take : {A : Type} → Word → Lst A → Lst A
+l-take {A} n l = %welimP (λ _ → Lst A → Lst A) n (λ l2 → lnil) (λ j h l2 → case l2 return (λ _ → Lst A) of
+  lnil → lnil
+  lcons x r → lcons x (h r)) l
+-- the n bytes at off, little-endian
+le-at : Lst Word → Word → Word → Word
+le-at bs off n = w-fold-up n (λ j acc → wor acc (wshl (l-at #0 bs (wadd off j)) (wmul #8 j))) #0
+-- the PT_LOAD segments of the program headers from the j-th: each its file bytes at its address
+elf-segs : Lst Word → Word → Word → ByteMap → ByteMap
+elf-segs bs phoff n m =
+  w-fold-up n (λ j m2 →
+    let ph = wadd phoff (wmul j #56)
+    in if weq (le-at bs ph #4) #1
+         then code-over (le-at bs (wadd ph #16) #8) (l-take (le-at bs (wadd ph #32) #8) (l-drop (le-at bs (wadd ph #8) #8) bs)) m2
+         else m2) m
+-- the state at the entry: the segments loaded, rsp at a fixed address, and IA32_EFER.SCE set
+-- (the model's msr 0; Linux enables the syscall instruction, without it the model faults #UD)
+pr-stack : Word
+pr-stack = #140737488289792
+efer-sce : List Word → List Word
+efer-sce nil = nil
+efer-sce (cons x xs) = cons (wor x #1) xs
+elf-state : Lst Word → X86
+elf-state bs =
+  x86-set-rsp pr-stack (x86-set-rip (le-at bs #24 #8)
+    (x86-set-mem (elf-segs bs (le-at bs #32 #8) (le-at bs #56 #2) mem-none)
+      (x86-set-msrs (efer-sce (x86-msrs x86-user64)) x86-user64)))
+
+-- ---------------------------------------------------------------- the kernel
+-- the input still to be read, the output written, the next mapping's address, the exit status
+record KN = { kn-in : Lst Word ; kn-out : Lst Word ; kn-map : Word ; kn-exit : Opt Word }
+kn-init : Lst Word → KN
+kn-init input = KN { kn-in = input ; kn-out = lnil ; kn-map = #4294967296 ; kn-exit = none }
+-- n bytes of memory from a
+mem-bytes : ByteMap → Word → Word → Lst Word
+mem-bytes m a n = %welimP (λ _ → Word → Lst Word) n (λ x → lnil) (λ j h x → lcons (m x) (h (wadd x #1))) a
+-- bytes written at a
+mem-put : ByteMap → Word → Lst Word → ByteMap
+mem-put m a lnil = m
+mem-put m a (lcons b r) = mem-put (mem-store m a b) (wadd a #1) r
+-- the answer to a system call: the kernel after it, rax, the memory
+kn-ans : KN → Word → ByteMap → KN × (Word × ByteMap)
+kn-ans k r m = (k , (r , m))
+kn-step : KN → X86 → KN × (Word × ByteMap)
+kn-step k s =
+  let nr = x86-rax s
+      a1 = x86-rdi s
+      a2 = x86-rsi s
+      a3 = x86-rdx s
+      m = x86-mem s
+  in if weq nr #9 then kn-ans (KN { kn-in = kn-in k ; kn-out = kn-out k ; kn-map = wadd (kn-map k) (wand (wadd a2 #4095) #18446744073709547520) ; kn-exit = kn-exit k }) (kn-map k) m
+     else if weq nr #39 then kn-ans k #4242 m
+     else if weq nr #1 then kn-ans (KN { kn-in = kn-in k ; kn-out = l-app (kn-out k) (mem-bytes m a2 a3) ; kn-map = kn-map k ; kn-exit = kn-exit k }) a3 m
+     else if weq nr #0 then
+       (let got = l-take a3 (kn-in k) in
+        kn-ans (KN { kn-in = l-drop a3 (kn-in k) ; kn-out = kn-out k ; kn-map = kn-map k ; kn-exit = kn-exit k }) (l-count got) (mem-put m a2 got))
+     else if weq nr #228 then kn-ans k #0 (mem-put m a2 (lcons #0 (lcons #0 (lcons #0 (lcons #0 (lcons #0 (lcons #0 (lcons #0 (lcons #0
+                                          (lcons #0 (lcons #0 (lcons #0 (lcons #0 (lcons #0 (lcons #0 (lcons #0 (lcons #0 lnil)))))))))))))))))
+     else if weq nr #35 then kn-ans k #0 m
+     else if weq nr #231 then kn-ans (KN { kn-in = kn-in k ; kn-out = kn-out k ; kn-map = kn-map k ; kn-exit = some (wand a1 #255) }) #0 m
+     else kn-ans k #18446744073709551578 m
+
+-- ---------------------------------------------------------------- the process
+-- after one step: on, a system call answered, or the end (a fault, or the exit)
+PrRes : Type
+PrRes = KN × Opt X86
+pr-on : (KN → X86 → PrRes) → KN → Outc exception Unit × X86 → PrRes
+pr-on h k r = case fst r return (λ _ → PrRes) of
+  out-val u → h k (snd r)
+  out-throw e → (case e return (λ _ → PrRes) of
+                   Syscall → (let a = kn-step k (snd r) in
+                              case kn-exit (fst a) return (λ _ → PrRes) of
+                                some c → (fst a , none)
+                                none → h (fst a) (x86-set-rax (fst (snd a)) (x86-set-rip (wadd (x86-rip (snd r)) #2) (x86-set-mem (snd (snd a)) (snd r)))))
+                   Emsg t → (k , some (snd r)))
+  out-abort w → (k , some (snd r))
+-- n steps at most: the kernel at the end, and the state when the process did not end by exit
+pr-run : Word → KN → X86 → PrRes
+pr-run n = %welimP (λ _ → KN → X86 → PrRes) n (λ k s → (k , some s)) (λ j h k s → pr-on h k (x86-step s))
+-- the exit status and the output of an executable on an input, within n steps
+pr-result : Lst Word → Lst Word → Word → Opt Word × Lst Word
+pr-result elf input n = let r = pr-run n (kn-init input) (elf-state elf) in (kn-exit (fst r) , kn-out (fst r))

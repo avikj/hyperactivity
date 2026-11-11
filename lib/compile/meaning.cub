@@ -27,9 +27,34 @@ mn-heap-end : Word
 mn-heap-end = #536870912
 mn-stack-lim : Word
 mn-stack-lim = #2146369536
--- memory holding bs at p and m elsewhere
+nat-word : Nat → Word
+nat-word n = case n return (λ _ → Word) of
+  zero → #0
+  suc k → %wsucc (rec k)
+l-drop : {A : Type} → Word → Lst A → Lst A
+l-drop {A} n l = %welimP (λ _ → Lst A → Lst A) n (λ l2 → l2) (λ j h l2 → case l2 return (λ _ → Lst A) of
+  lnil → lnil
+  lcons x r → h r) l
+-- bytes as a balanced tree of depth d (2^d leaves; past the list's end, 0), read by index
+data BT = bt-leaf (b : Word) | bt-node (l : BT) (r : BT)
+bt-build : Nat → Lst Word → BT × Lst Word
+bt-build zero l = (bt-leaf (l-at #0 l #0) , l-drop #1 l)
+bt-build (suc d) l = (let a = bt-build d l in let b = bt-build d (snd a) in (bt-node (fst a) (fst b) , snd b))
+bt-get : Nat → BT → Word → Word
+bt-get zero t i = case t return (λ _ → Word) of
+  bt-leaf b → b
+  bt-node l r → #0
+bt-get (suc d) t i = case t return (λ _ → Word) of
+  bt-leaf b → #0
+  bt-node l r → (let h = wshl #1 (nat-word d) in if wlt i h then bt-get d l i else bt-get d r (wsub i h))
+-- the depth whose tree holds n bytes
+bt-depth : Word → Nat
+bt-depth n = w-iter #20 (λ k → if wlt (wshl #1 (nat-word k)) n then suc k else k) zero
+-- memory holding bs at p and m elsewhere (the bytes read through a tree built once)
+code-at : Word → Word → Nat → BT → ByteMap → ByteMap
+code-at p n d t m x = if c-and (w-le p x) (wlt x (wadd p n)) then bt-get d t (wsub x p) else m x
 code-over : Word → Lst Word → ByteMap → ByteMap
-code-over p bs m x = if c-and (w-le p x) (wlt x (wadd p (l-count bs))) then l-at #0 bs (wsub x p) else m x
+code-over p bs m = let d = bt-depth (l-count bs) in code-at p (l-count bs) d (fst (bt-build d bs)) m
 -- words stored at consecutive 8-byte places
 mn-words : ByteMap → Word → Lst Word → ByteMap
 mn-words m a lnil = m
@@ -92,10 +117,6 @@ ld8 : ByteMap → Word → Word
 ld8 m a = mem-load-n m #8 a
 mf-word : MForm Word
 mf-word = ((λ w ar → (w , ar)) , (λ k m v → v))
-nat-word : Nat → Word
-nat-word n = case n return (λ _ → Word) of
-  zero → #0
-  suc k → %wsucc (rec k)
 mf-nat-get : Word → Nat
 mf-nat-get v = %welimP (λ _ → Nat) v zero (λ j h → suc h)
 mf-nat : MForm Nat

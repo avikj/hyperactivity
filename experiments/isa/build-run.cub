@@ -1,0 +1,28 @@
+-- experiments/isa/build-run.cub — the #build binary of experiments/native/sys.cub run as a process
+-- under the imported x86 model (lib/compile/process.cub: ELF loader, the small kernel). Loaded after
+-- the library files #build needs (fiber, proc, world, the compiler files, elf), lib/bits.cub,
+-- lib/isa/x86/ORDER's files, lib/isa/x86/run.cub, lib/compile/meaning.cub, lib/compile/process.cub.
+-- Observed: the start code's mmap is answered, the blob runs (70M steps), and the run ends at
+-- 0x4001FA on mfence (0F AE F0, the driver loop's w-fence): the model has no translation of the
+-- two-byte opcode 0xAE ("Translation error: two-byte opcode 174 not translated"), an inventory gap
+-- of the import (PLAN Phase 2 item 2). feed.cub's binary does not finish within 28 minutes: the
+-- model's memory is a chain of stores, each read walks it.
+-- getpid by w-sys, a byte stored and loaded in allocated memory, the sum written as one byte
+sysp : Proc W Word
+sysp = bind {lzero} {W} {Word} {Word} (sys-call #39 #0 #0 #0 #0 #0 #0) (λ pid →
+       bind {lzero} {W} {Word} {Word} (alloc-bytes #16) (λ a →
+       bind {lzero} {W} {Unit} {Word} (cmd {lzero} {W} (w-store8 a #65)) (λ u →
+       bind {lzero} {W} {Word} {Word} (cmd {lzero} {W} (w-load8 a)) (λ v →
+       bind {lzero} {W} {Unit} {Word} (store-at (%wadd a #8) #1234567) (λ u2 →
+       bind {lzero} {W} {Word} {Word} (load-at (%wadd a #8)) (λ w →
+       bind {lzero} {W} {Word} {Word} (cas-at (%wadd a #8) #1234567 #7) (λ seen →
+       bind {lzero} {W} {Unit} {Word} fence (λ u3 →
+       bind {lzero} {W} {Word} {Word} (sys-call #1 #1 a #1 #0 #0 #0) (λ n →
+       bind {lzero} {W} {Unit} {Word} (exit (if %weq seen w then (if %wlt #0 pid then v else #1) else #2)) (λ u4 → ret {lzero} {W} {Word} #0))))))))))
+sysS : Step W Word
+sysS = to-step sysp
+sys-elf : Lst Word
+sys-elf = snd (snd (build-plan (case code sysS return (λ _ → Word) of
+  cglob g → g
+  _ → #0)))
+#show opt-map x86-rip (snd (pr-run #2000000 (kn-init lnil) (elf-state sys-elf)))
