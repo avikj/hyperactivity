@@ -163,3 +163,69 @@ IsSome {A} (some x) = Unit
 the-some : {A : Type} → (o : Opt A) → IsSome o → A
 the-some {A} none h = Empty-rec h
 the-some {A} (some x) h = x
+
+-- ---------------------------------------------------------------- a run computed, as a run
+-- k steps of stp from s each end in a value and start away from stop (decided by computing them)
+run-ok : Step → Word → Word → X86 → Bool
+run-ok stp stop k =
+  %welimP (λ _ → X86 → Bool) k (λ s → true)
+    (λ j h s → if weq (x86-rip s) stop then false else
+       (case fst (stp s) return (λ _ → Bool) of
+          out-val u → h (snd (stp s))
+          out-throw e → false
+          out-abort w → false))
+-- then they are a run, to the state they compute
+runs-run-tail : (stp : Step) → (stop j : Word) → (s : X86) → weq (x86-rip s) stop ≡ false → fst (stp s) ≡ out-val unit →
+                Runs stp stop j (snd (stp s)) (snd (run-of stp j (snd (stp s)))) →
+                Runs stp stop (%wsucc j) s (snd (run-of stp (%wsucc j) s))
+runs-run-tail stp stop j s ne q r =
+  (ne , (snd (stp s) , ((λ i → the (Outc exception Unit × X86) (q i , snd (stp s))) ,
+    subst {lzero} {lzero} {X86} {λ x → Runs stp stop j (snd (stp s)) x}
+      (sym (cong (λ o → snd (st-on {X86} {exception} {Unit} {Unit} o (λ _ → run-of stp j) (snd (stp s)))) q)) r)))
+runs-run-val : (stp : Step) → (stop j : Word) → ((s1 : X86) → run-ok stp stop j s1 ≡ true → Runs stp stop j s1 (snd (run-of stp j s1))) →
+               (s : X86) → weq (x86-rip s) stop ≡ false → (o : Outc exception Unit) → fst (stp s) ≡ o →
+               (case o return (λ _ → Bool) of
+                  out-val u → run-ok stp stop j (snd (stp s))
+                  out-throw e → false
+                  out-abort w → false) ≡ true →
+               Runs stp stop (%wsucc j) s (snd (run-of stp (%wsucc j) s))
+runs-run-val stp stop j ih s ne o eo =
+  case o return (λ o2 → fst (stp s) ≡ o2 → (case o2 return (λ _ → Bool) of
+                                              out-val u → run-ok stp stop j (snd (stp s))
+                                              out-throw e → false
+                                              out-abort w → false) ≡ true →
+                        Runs stp stop (%wsucc j) s (snd (run-of stp (%wsucc j) s))) of
+    out-val u → λ q h →
+      (case u return (λ u2 → fst (stp s) ≡ out-val u2 → Runs stp stop (%wsucc j) s (snd (run-of stp (%wsucc j) s))) of
+         unit → λ q2 → runs-run-tail stp stop j s ne q2 (ih (snd (stp s)) h))
+      q
+    out-throw e → λ q h → bool-ft (Runs stp stop (%wsucc j) s (snd (run-of stp (%wsucc j) s))) h
+    out-abort w → λ q h → bool-ft (Runs stp stop (%wsucc j) s (snd (run-of stp (%wsucc j) s))) h
+  eo
+runs-run-at : (stp : Step) → (stop j : Word) → ((s1 : X86) → run-ok stp stop j s1 ≡ true → Runs stp stop j s1 (snd (run-of stp j s1))) →
+              (s : X86) → (b : Bool) → weq (x86-rip s) stop ≡ b →
+              (if b then false else (case fst (stp s) return (λ _ → Bool) of
+                                       out-val u → run-ok stp stop j (snd (stp s))
+                                       out-throw e → false
+                                       out-abort w → false)) ≡ true →
+              Runs stp stop (%wsucc j) s (snd (run-of stp (%wsucc j) s))
+runs-run-at stp stop j ih s b eb =
+  case b return (λ c → weq (x86-rip s) stop ≡ c →
+                       (if c then false else (case fst (stp s) return (λ _ → Bool) of
+                                                out-val u → run-ok stp stop j (snd (stp s))
+                                                out-throw e → false
+                                                out-abort w → false)) ≡ true →
+                       Runs stp stop (%wsucc j) s (snd (run-of stp (%wsucc j) s))) of
+    true → λ e h → bool-ft (Runs stp stop (%wsucc j) s (snd (run-of stp (%wsucc j) s))) h
+    false → λ e h → runs-run-val stp stop j ih s e (fst (stp s)) refl h
+  eb
+runs-run : (stp : Step) → (stop k : Word) → (s : X86) → run-ok stp stop k s ≡ true → Runs stp stop k s (snd (run-of stp k s))
+runs-run stp stop k =
+  %welimP (λ v → (s : X86) → run-ok stp stop v s ≡ true → Runs stp stop v s (snd (run-of stp v s))) k
+    (λ s h → refl)
+    (λ j ih s h → runs-run-at stp stop j ih s (weq (x86-rip s) stop) refl h)
+-- Correct on the words a call passes, from a run at each
+correct2w : (bs : Lst Word) → (f : Word → Word → Word) → ((a b : Word) → W64 a → W64 b → Reaches bs (lcons a (lcons b lnil)) (f a b)) → Correct2w bs f
+correct2w bs f h n a b ha hb = correct2-at bs f a b (h a b ha hb) n
+correct1w : (bs : Lst Word) → (f : Word → Word) → ((a : Word) → W64 a → Reaches bs (lcons a lnil) (f a)) → Correct1w bs f
+correct1w bs f h n a ha = correct1-at bs f a (h a ha) n
