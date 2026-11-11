@@ -2289,7 +2289,8 @@ inferable a =
 vmatch hs P X sg =
   case hole-of hs P of
     some k → if solved sg k then sg else lcons (k , svv X) sg
-    none → vmatch-w hs (%view P) X sg
+    -- equal already (no hole in P where X differs): nothing to find, and no walk of a large value
+    none → if uconv P X then sg else vmatch-w hs (%view P) X sg
 vmatch-l hs ps qs sg =
   case ps of
     lnil → sg

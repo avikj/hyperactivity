@@ -259,3 +259,23 @@ rd8-wb V h =
     (catw (cong8 rd8 (byte-dig V #0) (byte-dig V #8) (byte-dig V #16) (byte-dig V #24)
                      (byte-dig V #32) (byte-dig V #40) (byte-dig V #48) (byte-dig V #56))
       (rd8-dig V h))
+
+-- ---------------------------------------------------------------- masks of small words, sums below 2^64
+W64w : Word → Type
+W64w a = wlt a #18446744073709551616 ≡ true
+-- below n is below n + m
+lt-weak : (x n m : Word) → wlt x n ≡ true → wlt x (wadd n m) ≡ true
+lt-weak x n m h =
+  lt-wlt x (wadd n m) (wadd (fst (wlt-lt x n h)) m ,
+    catw (symw (wadd-assoc (%wsucc x) (fst (wlt-lt x n h)) m)) (congw (λ z → wadd z m) (snd (wlt-lt x n h))))
+-- a word below 2^k under the mask of k ones
+mask-small : (x k : Word) → wlt x (wshl #1 k) ≡ true → wand x (wsub (wshl #1 k) #1) ≡ x
+mask-small x k h = catw (wand-mask x k) (wrem-small x (wshl #1 k) h)
+-- the model's 64-bit addition below 2^64: the masked operands, the 65-bit sum and its truncation
+add64 : (A C : Word) → W64w A → W64w C → wlt (wadd A C) #18446744073709551616 ≡ true →
+        wand (wand (wand (wadd (wand A #18446744073709551615) C) #36893488147419103231) #18446744073709551615) #18446744073709551615 ≡ wadd A C
+add64 A C hA hC hs =
+  let s1 = congw (λ z → wand (wand (wand (wadd z C) #36893488147419103231) #18446744073709551615) #18446744073709551615) (mask-small A #64 hA)
+      s2 = congw (λ z → wand (wand z #18446744073709551615) #18446744073709551615) (mask-small (wadd A C) #65 (lt-weak (wadd A C) #18446744073709551616 #18446744073709551616 hs))
+      s3 = congw (λ z → wand z #18446744073709551615) (mask-small (wadd A C) #64 hs)
+  in catw s1 (catw s2 (catw s3 (mask-small (wadd A C) #64 hs)))
