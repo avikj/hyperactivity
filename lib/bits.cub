@@ -9,9 +9,9 @@
 -- A Sail int is ZI: a sign and a magnitude, zneg #0 never built.
 -- A Sail string is the Word whose base-256 digits are its bytes, first byte highest.
 -- A Sail vector is a List with the element of index i at position i.
--- ByteMap is the writes, latest first: a read is the latest write to its address, else 0. A read
--- at an address computed from unknowns compares it with each write's address, so it is decided
--- where the addresses are one term or differ in a bit (base + j and base + k, j ≠ k).
+-- ByteMap is a function from addresses to bytes: a write is the function that compares its argument
+-- with the written address. Two memories that read alike are equal (function extensionality), so a
+-- statement about a run holds for every memory that reads as the one it was stated for.
 -- An outcome is a value, an exception thrown, or an abort (an assertion that failed, a
 -- recursion that passed its bound); effects are functions of an explicit state.
 
@@ -230,12 +230,14 @@ vec-set (cons x xs) i y = if weq i #0 then cons y xs else cons x (vec-set xs (ws
 
 -- ---------------------------------------------------------------- memory
 -- a byte per 64-bit address; an address never written reads #0
-data ByteMap = mem-none | mem-wr (a : Word) (b : Word) (rest : ByteMap)
+ByteMap : Type
+ByteMap = Word → Word
+mem-none : ByteMap
+mem-none a = #0
 mem-load : ByteMap → Bits #64 → Bits #8
-mem-load mem-none a = #0
-mem-load (mem-wr x b r) a = if weq a x then b else mem-load r a
+mem-load m a = m a
 mem-store : ByteMap → Bits #64 → Bits #8 → ByteMap
-mem-store m a v = mem-wr a v m
+mem-store m a v x = if weq x a then v else m x
 mem-load-n : ByteMap → (n : Word) → Bits #64 → Bits (wmul #8 n)
 mem-load-n m n a =
   %welimP (λ v → Word → Word) n (λ x → #0)
