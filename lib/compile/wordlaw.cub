@@ -197,3 +197,65 @@ rd8-dig V h =
     (catw (wand-mask (wrem V #18446744073709551616) #64)
       (catw (wrem-small (wrem V #18446744073709551616) #18446744073709551616 (wrem-lt V #18446744073709551616 refl))
         (wrem-small V #18446744073709551616 h)))
+
+-- ---------------------------------------------------------------- the bytes a store writes are the digits
+-- paths under a function of eight words (the endpoints from the signature: a law's path at an end
+-- is its type's end, not computed)
+cong8 : (f : Word → Word → Word → Word → Word → Word → Word → Word → Word) →
+        {a0 b0 a1 b1 a2 b2 a3 b3 a4 b4 a5 b5 a6 b6 a7 b7 : Word} →
+        a0 ≡ b0 → a1 ≡ b1 → a2 ≡ b2 → a3 ≡ b3 → a4 ≡ b4 → a5 ≡ b5 → a6 ≡ b6 → a7 ≡ b7 →
+        f a0 a1 a2 a3 a4 a5 a6 a7 ≡ f b0 b1 b2 b3 b4 b5 b6 b7
+cong8 f p0 p1 p2 p3 p4 p5 p6 p7 = λ i → f (p0 i) (p1 i) (p2 i) (p3 i) (p4 i) (p5 i) (p6 i) (p7 i)
+-- the quotient by 1
+quot-one : (V : Word) → wquot V #1 ≡ V
+quot-one V = catw (congw (λ z → wquot z #1) (symw (catw (wmul-suc V #0) (catw (congw (λ z → wadd z V) (wmul-zero V)) (wadd-zero-l V)))))
+                  (catw (congw (λ z → wquot z #1) (λ i → wadd (wmul V #1) #0)) (wdiv-unique V #0 #1 refl))
+-- a byte as a mask after a shift: the digit
+byte-dig : (V lo : Word) → wand (wshr V lo) #255 ≡ wrem (wquot V (wshl #1 lo)) #256
+byte-dig V lo = catw (wand-mask (wshr V lo) #8) (congw (λ z → wrem z #256) (wshr-div V lo))
+-- a word below 2^64 under the 64-bit mask
+mask64 : (V : Word) → wlt V #18446744073709551616 ≡ true → wand V #18446744073709551615 ≡ V
+mask64 V h = catw (wand-mask V #64) (wrem-small V #18446744073709551616 h)
+-- shifted right by 8, j times
+shr8 : Nat → Word → Word
+shr8 zero v = v
+shr8 (suc j) v = wshr (shr8 j v) #8
+-- the quotient by 256 after a quotient by P
+shr8-quot : (V P : Word) → wlt #0 P ≡ true → {y : Word} → y ≡ wquot V P → wshr y #8 ≡ wquot V (wmul #256 P)
+shr8-quot V P h0 {y} e = catw (wshr-div y #8) (catw (congw (λ z → wquot z #256) e) (quot-step V P h0))
+-- the bytes bits.cub's mem-store-n writes (the value shifted by 8 each byte, masked): the digits
+st-dig0 : (V : Word) → wand V #255 ≡ dig V #1
+st-dig0 V = catw (wand-mask V #8) (congw (λ z → wrem z #256) (symw (quot-one V)))
+st-dig : (V P : Word) → wlt #0 P ≡ true → {y : Word} → y ≡ wquot V P → wand (wshr y #8) #255 ≡ dig V (wmul #256 P)
+st-dig V P h0 {y} e = catw (wand-mask (wshr y #8) #8) (congw (λ z → wrem z #256) (shr8-quot V P h0 e))
+-- a word below 2^64 read back from the bytes mem-store-n wrote
+rd8-st : (V : Word) → wlt V #18446744073709551616 ≡ true →
+         rd8 (wand V #255) (wand (wshr V #8) #255) (wand (wshr (wshr V #8) #8) #255) (wand (wshr (wshr (wshr V #8) #8) #8) #255)
+             (wand (wshr (wshr (wshr (wshr V #8) #8) #8) #8) #255) (wand (wshr (wshr (wshr (wshr (wshr V #8) #8) #8) #8) #8) #255)
+             (wand (wshr (wshr (wshr (wshr (wshr (wshr V #8) #8) #8) #8) #8) #8) #255) (wand (wshr (wshr (wshr (wshr (wshr (wshr (wshr V #8) #8) #8) #8) #8) #8) #8) #255)
+         ≡ V
+rd8-st V h =
+  let q1 = shr8-quot V #1 refl (symw (quot-one V))
+      q2 = shr8-quot V #256 refl q1
+      q3 = shr8-quot V #65536 refl q2
+      q4 = shr8-quot V #16777216 refl q3
+      q5 = shr8-quot V #4294967296 refl q4
+      q6 = shr8-quot V #1099511627776 refl q5
+  in catw (cong8 rd8 (st-dig0 V) (st-dig V #1 refl (symw (quot-one V))) (st-dig V #256 refl q1) (st-dig V #65536 refl q2)
+                     (st-dig V #16777216 refl q3) (st-dig V #4294967296 refl q4) (st-dig V #1099511627776 refl q5) (st-dig V #281474976710656 refl q6))
+          (rd8-dig V h)
+-- a word below 2^64 read back from the bytes the model's wb wrote (bit lo of each byte at 8·k,
+-- the stored value the word under the 64-bit mask)
+rd8-wb : (V : Word) → wlt V #18446744073709551616 ≡ true →
+         rd8 (wand (wshr (wand V #18446744073709551615) #0) #255) (wand (wshr (wand V #18446744073709551615) #8) #255)
+             (wand (wshr (wand V #18446744073709551615) #16) #255) (wand (wshr (wand V #18446744073709551615) #24) #255)
+             (wand (wshr (wand V #18446744073709551615) #32) #255) (wand (wshr (wand V #18446744073709551615) #40) #255)
+             (wand (wshr (wand V #18446744073709551615) #48) #255) (wand (wshr (wand V #18446744073709551615) #56) #255)
+         ≡ V
+rd8-wb V h =
+  catw (cong8 (λ x0 x1 x2 x3 x4 x5 x6 x7 → rd8 (wand (wshr x0 #0) #255) (wand (wshr x1 #8) #255) (wand (wshr x2 #16) #255) (wand (wshr x3 #24) #255)
+                                                (wand (wshr x4 #32) #255) (wand (wshr x5 #40) #255) (wand (wshr x6 #48) #255) (wand (wshr x7 #56) #255))
+               (mask64 V h) (mask64 V h) (mask64 V h) (mask64 V h) (mask64 V h) (mask64 V h) (mask64 V h) (mask64 V h))
+    (catw (cong8 rd8 (byte-dig V #0) (byte-dig V #8) (byte-dig V #16) (byte-dig V #24)
+                     (byte-dig V #32) (byte-dig V #40) (byte-dig V #48) (byte-dig V #56))
+      (rd8-dig V h))
