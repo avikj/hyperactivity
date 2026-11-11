@@ -2177,8 +2177,11 @@ static Port nbop(int k, Port a, Port b) {
  * case c of true → a; false → b, with c a computed bit (a Boolean not true or false): both branches
  * are computed, and an elimination of the conditional is the conditional of the eliminations (Bool's
  * η: the branches are the case's own at true and at false, so in each the elimination is the same).
- * Where both branches are words they are one word, each bit (c ∧ a) ∨ (¬c ∧ b); where both are one
- * constructor, the constructor of the fields' conditionals; where both are one term, that term. */
+ * Where both branches are words they are one word, each bit (c ∧ a) ∨ (¬c ∧ b); true and false are
+ * c; one term is that term; a branch that is a conditional of c is its own branch on that side.
+ * Other values stay apart (the conditional is a value): merged field by field, a state's fields
+ * that agree would be read at addresses that do not, each read again splitting on c without
+ * knowing which side it is on. */
 static Port sel_build(Port c, Port a, Port b) {
     Key *ka = key_of_port(a), *kb = key_of_port(b);
     bool same = ka && ka == kb;
@@ -2241,6 +2244,22 @@ static void rule_sel2(Cell *o, Cell *v) {
     Cell *A = PC(a), *B = v;
     cell_free(o);
     if (A->key && A->key == B->key) { era(c); era(P(B, 0)); link(a, out); return; }
+    {
+        /* a branch that is a conditional of the same condition: in the true branch its true branch,
+         * in the false branch its false branch */
+        Key *kc = key_of_port(c), *ka = A->kind == V_SEL ? key_of_port(A->port[1]) : NULL, *kb = B->kind == V_SEL ? key_of_port(B->port[1]) : NULL;
+        bool sa = kc && ka == kc, sb = kc && kb == kc;
+        if (kc) key_release(kc);
+        if (ka) key_release(ka);
+        if (kb) key_release(kb);
+        if (sa || sb) {
+            Port x = a, y = P(B, 0);
+            if (sa) { era(A->port[1]); era(A->port[3]); x = A->port[2]; cell_free(A); }
+            if (sb) { era(B->port[1]); era(B->port[2]); y = B->port[3]; cell_free(B); }
+            link(sel_build(c, x, y), out);
+            return;
+        }
+    }
     bool wa = (A->kind == V_WORD) || A->kind == V_BITS, wb = (B->kind == V_WORD) || B->kind == V_BITS;
     if (wa && wb) {
         BVec x = bvec_take(A), y = bvec_take(B);
@@ -2252,26 +2271,12 @@ static void rule_sel2(Cell *o, Cell *v) {
         free(r); free(x.b); free(y.b);
         return;
     }
-    if (A->kind == V_CON && B->kind == V_CON && A->a == B->a && CON[A->a].ndims == 0) {
-        int nf = CON[A->a].nfields, ci = (int)A->a;
-        Port *f = malloc(((size_t)nf + 1) * sizeof(Port));
-        Port cr = c;
-        for (int j = 0; j < nf; j++) {
-            Port c1 = cr;
-            if (j < nf - 1) split2(cr, &c1, &cr);
-            f[j] = sel_build(c1, A->port[1 + j], B->port[1 + j]);
-        }
-        if (!nf) era(c);
-        cell_free(A); cell_free(B);
-        link(con_build(ci, f, NULL), out);
-        free(f);
-        return;
-    }
-    if (A->kind == V_PAIR && B->kind == V_PAIR) {
-        Port c1, c2; split2(c, &c1, &c2);
-        Port x = sel_build(c1, A->port[1], B->port[1]), y = sel_build(c2, A->port[2], B->port[2]);
-        cell_free(A); cell_free(B);
-        link(pair_of(x, y), out);
+    need_bool();
+    if (A->kind == V_CON && B->kind == V_CON && A->n == 1 && B->n == 1 && A->a != B->a
+        && ((A->a == B_TRUE && B->a == B_FALSE) || (A->a == B_FALSE && B->a == B_TRUE))) {
+        /* true and false: the bit, or its negation */
+        bool t = A->a == B_TRUE; cell_free(A); cell_free(B);
+        link(t ? c : bop_cell(BO_NOT, c, 0), out);
         return;
     }
     Cell *s = cell(V_SEL, 4);
@@ -2729,7 +2734,8 @@ static void interact(Cell *o, Cell *v) {
         if (vk == V_CON && ((int)v->a == B_TRUE || (int)v->a == B_FALSE)) {
             bool t = (int)v->a == B_TRUE; cell_free(v);
             if (t) { link(o->port[1], o->port[3]); era(o->port[2]); } else { link(o->port[2], o->port[3]); era(o->port[1]); }
-        } else link(sel_build(P(v, 0), o->port[1], o->port[2]), o->port[3]);
+        } else if (vk == V_NBOP && v->x == BO_NOT) { Port c = v->port[1]; cell_free(v); link(sel_build(c, o->port[2], o->port[1]), o->port[3]); }
+        else link(sel_build(P(v, 0), o->port[1], o->port[2]), o->port[3]);
         cell_free(o);
         return;
     }
@@ -3404,7 +3410,14 @@ static void interact(Cell *o, Cell *v) {
             }
             /* a case on a computed bit otherwise: the conditional of the bit between the case at
              * true and at false */
-            if (vk == V_NBOP) { sel_split(o, P(v, 0), con_build(B_TRUE, NULL, NULL), con_build(B_FALSE, NULL, NULL)); return; }
+            if (vk == V_NBOP) {
+                /* on a negation, the conditional of its operand with the branches exchanged: one
+                 * condition one name, so a conditional within a branch of the same is seen */
+                Port t = con_build(B_TRUE, NULL, NULL), f = con_build(B_FALSE, NULL, NULL);
+                if (v->x == BO_NOT) { Port c = v->port[1]; cell_free(v); sel_split(o, c, f, t); }
+                else sel_split(o, P(v, 0), t, f);
+                return;
+            }
             /* stuck: a neutral elimination, of type the motive at the scrutinee */
             /* 1=scrutinee [2=motive] then the environment, type */
             /* its motive, which types it, is built here from the environment */
@@ -4138,6 +4151,21 @@ static void interact(Cell *o, Cell *v) {
             if (same) {
                 if (k == BO_XOR) { era(a); era(P(v, 0)); link(con_build(B_FALSE, NULL, NULL), out); }
                 else { era(a); link(P(v, 0), out); }
+                cell_free(o);
+                return;
+            }
+            /* a term and its negation: x ∧ ¬x = false, x ∨ ¬x = x ⊕ ¬x = true */
+            Cell *ac = PI(a) == 0 && !is_var(a) ? PC(a) : NULL;
+            Key *kn1 = vk == V_NBOP && v->x == BO_NOT ? key_of_port(v->port[1]) : NULL;
+            Key *kn2 = ac && ac->kind == V_NBOP && ac->x == BO_NOT ? key_of_port(ac->port[1]) : NULL;
+            Key *ka2 = key_of_port(a);
+            bool comp = (kn1 && ka2 && kn1 == ka2) || (kn2 && kv && kn2 == kv);
+            if (kn1) key_release(kn1);
+            if (kn2) key_release(kn2);
+            if (ka2) key_release(ka2);
+            if (comp) {
+                era(a); era(P(v, 0));
+                link(con_build(k == BO_AND ? B_FALSE : B_TRUE, NULL, NULL), out);
                 cell_free(o);
                 return;
             }

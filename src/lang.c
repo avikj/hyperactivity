@@ -2684,8 +2684,14 @@ static char *dnf_string(const Dnf *d, bool face) {
     return buf;
 }
 static int obs_depth;
+bool rb_capped;
 long rb_nodes;   /* cells of the value read back: its size, reported beside the steps */
 static void rb_one(FILE *o, Port prov) {
+    /* CUBICAL_RBMAX=n: past n cells, the rest of the value is not read (shown …): a look at the head
+     * of a value too large to read */
+    static long rbmax = -1; if (rbmax < 0) { const char *e = getenv("CUBICAL_RBMAX"); rbmax = e ? atol(e) : 0; }
+    extern bool rb_capped;
+    if (rbmax && rb_capped && rb_nodes > rbmax) { fputs("…", o); return; }
     Cell *c = observe(prov);
     if (!c) { fputs("<pending>", o); return; }
     /* the size counts the value's cells, not the references and unbuilt subterms it is read through */

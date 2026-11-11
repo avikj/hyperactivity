@@ -1679,7 +1679,7 @@ static void p_decl_in(void) {
         }
         decl_end(); return;
     }
-    if (x_is(t, "#show")) { NX(); x_test("show", x_solve_expr(p_expr(0)), NULL); decl_end(); return; }
+    if (x_is(t, "#show")) { extern bool rb_capped; NX(); rb_capped = true; x_test("show", x_solve_expr(p_expr(0)), NULL); rb_capped = false; decl_end(); return; }
     if (x_is(t, "#type")) {
         NX(); Node *e = p_expr(0);
         /* a data type's name, or one applied to fewer arguments than its parameters: the type
