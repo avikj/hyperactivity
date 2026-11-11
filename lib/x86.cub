@@ -697,22 +697,22 @@ x-check defs = x-check-defs defs defs
 -- ---------------------------------------------------------------- encode
 -- env: the place of each variable, innermost first: (sign , magnitude) — true above rbp (an
 -- argument at [rbp + k]), false a slot (at [rbp − k]); disp: the 32-bit displacement
-Env : Type
-Env = Lst (Bool × Word)
+XEnv : Type
+XEnv = Lst (Bool × Word)
 -- tbl: (arities , offsets), each (g , n) pairs; the arities are known in the measuring pass too, so
 -- a definition's bytes do not depend on the offsets
 Tbl : Type
 Tbl = Lst (Word × Word) × Lst (Word × Word)
 -- the encoder of codes under an environment and a depth, given to the forms that contain codes
 Enc : Type
-Enc = Env → Word → Code → Lst Word
+Enc = XEnv → Word → Code → Lst Word
 x-disp : Bool × Word → Word
 x-disp p = if fst p then snd p else xneg32 (snd p)
 x-slot : Word → Bool × Word
 x-slot s = (false , xmul8 (%wsucc s))
 x-arg : Word → Word → Bool × Word
 x-arg i n = (true , %wadd #16 (xmul8 (%wsub (%wsub n #1) i)))
-x-place : Env → Word → Bool × Word
+x-place : XEnv → Word → Bool × Word
 x-place lnil n = (true , #0)
 x-place (lcons p r) n = if %weq n #0 then p else x-place r (%wsub n #1)
 x-look : Lst (Word × Word) → Word → Word
@@ -731,7 +731,7 @@ x-drop n l = %welimP (λ _ → Lst Code → Lst Code) n (λ l2 → l2) (λ j h l
   lnil → lnil
   lcons x r → h r) l
 -- a binary operation: a pushed, b into rcx, a back into rax, the operation
-x-bin : Enc → Env → Word → Code → Code → Lst Word → Lst Word
+x-bin : Enc → XEnv → Word → Code → Code → Lst Word → Lst Word
 x-bin ce env d a b op = xcat5 (ce env d a) i-push-rax (ce env (%wsucc d) b) (l-app i-mov-rcx-rax i-pop-rax) op
 -- unsigned division and remainder, total: by 0 the quotient is 0 and the remainder the dividend
 x-udiv : Bool → Lst Word
@@ -803,7 +803,7 @@ x-u2f =
       small = l-app i-cvtsi2sd (i-jmp (l-count big))
   in xcat5 i-test-rax (i-jcc j-s (l-count small)) small big i-movq-rax-x0
 -- the conversions (PO_I64OFW … PO_WOFU64, sub-numbered 35–47)
-x-un : Enc → Env → Word → Word → Code → Lst Word
+x-un : Enc → XEnv → Word → Word → Code → Lst Word
 x-un ce env d sb a =
   l-app (ce env d a)
     (if %weq sb #37 then i-zx32 else if %weq sb #44 then i-zx32 else if %weq sb #45 then i-zx32
@@ -823,19 +823,19 @@ x-copy-bytes =
 -- value stored in the copy, the copy the result. The original is never written: a buffer is shared
 -- whenever a variable naming it occurs again, and copying is what makes that true of the bytes (an
 -- in-place store needs ownership the checker tracks, B11's 1-linear resources, and is not done here)
-x-store : Enc → Env → Word → Word → Code → Code → Code → Lst Word
+x-store : Enc → XEnv → Word → Word → Code → Code → Code → Lst Word
 x-store ce env d w b off v =
   xcat6 (ce env d b) i-push-rax (ce env (%wsucc d) off) i-push-rax (ce env (%wadd d #2) v)
         (xcat5 i-mov-rdx-rax i-pop-rcx i-pop-rax x-copy-bytes
                (xcat4 i-push-rax i-add-rax-rcx (x-st w) i-pop-rax))
 -- fresh bytes of length n, zeroed: 8 + n rounded up to 8 from the arena, the length stored
-x-fresh : Enc → Env → Word → Code → Lst Word
+x-fresh : Enc → XEnv → Word → Code → Lst Word
 x-fresh ce env d n =
   xcat6 (ce env d n) i-push-rax (xb4 #72 #131 #192 #15) (xb4 #72 #131 #224 #248)
         (xcat4 i-mov-rcx-rax i-mov-rax-r15 i-add-r15-rcx (l-app i-cmp-r15-r12 i-over-if-above))
         (xcat5 i-mov-rdi-rax (xb1 #80) (l-app (xb2 #49 #192) i-rep-stosb) (xb1 #88) (l-app i-pop-rcx (i-st-rax-rcx #0)))
 -- the primitive operations by their number (lib/code.cub prim-apply; src/core.h PO_*)
-x-prim : Enc → Env → Word → Word → Lst Code → Lst Word
+x-prim : Enc → XEnv → Word → Word → Lst Code → Lst Word
 x-prim ce env d k as =
   if %wlt k #512 then x-un ce env d (%wsub k #256) (l-at (cwlit #0) as #0)
   else if %wlt k #768 then x-bin ce env d (l-at (cwlit #0) as #0) (l-at (cwlit #0) as #1) (x-op2 (%wsub k #512))
@@ -844,39 +844,39 @@ x-prim ce env d k as =
   else if %wlt k #1536 then l-app (ce env d (l-at (cwlit #0) as #0)) (i-ld-rax #0)
   else x-fresh ce env d (l-at (cwlit #0) as #0)
 -- the values of a list pushed in order (each one slot deeper)
-x-push-all : Enc → Env → Word → Lst Code → Lst Word
+x-push-all : Enc → XEnv → Word → Lst Code → Lst Word
 x-push-all ce env d lnil = lnil
 x-push-all ce env d (lcons a r) = xcat3 (ce env d a) i-push-rax (x-push-all ce env (%wsucc d) r)
 x-pop-fields : Word → Lst Word
 x-pop-fields n = %welimP (λ _ → Lst Word) n lnil (λ j h → xcat3 i-pop-rcx (i-st-rax-rcx (xmul8 (%wsucc j))) h)
 -- a cell of k fields: the fields pushed, the cell taken from the arena, the fields stored
-x-cell : Enc → Env → Word → Word → Lst Code → Lst Word
+x-cell : Enc → XEnv → Word → Word → Lst Code → Lst Word
 x-cell ce env d tag fs =
   let n = l-count fs
       sz = xmul8 (%wsucc n)
   in xcat6 (x-push-all ce env d fs) i-mov-rax-r15 (i-add-r15 sz) (l-app i-cmp-r15-r12 i-over-if-above)
            (i-st-rax-imm tag) (x-pop-fields n)
 -- a call: the arguments pushed in order, the call, the arguments dropped
-x-call : Enc → Tbl → Env → Word → Word → Lst Code → Lst Word
+x-call : Enc → Tbl → XEnv → Word → Word → Lst Code → Lst Word
 x-call ce tbl env d g args =
   xcat3 (x-push-all ce env d args) (i-call-off (x-tbl tbl g)) (if %weq (l-count args) #0 then lnil else i-add-rsp (xmul8 (l-count args)))
 x-pop-at : Word → Lst Word
 x-pop-at n = %welimP (λ _ → Lst Word) n lnil (λ j h → xcat3 i-pop-rcx (i-st-rax-rcx (xmul8 (%wadd (%wsucc j) #2))) h)
 -- a closure cell: the arguments pushed, a cell of 3 + n words, [offset][arity][n], the arguments
-x-clo : Enc → Tbl → Env → Word → Word → Word → Lst Code → Lst Word
+x-clo : Enc → Tbl → XEnv → Word → Word → Word → Lst Code → Lst Word
 x-clo ce tbl env d g a args =
   let n = l-count args
   in xcat6 (x-push-all ce env d args) i-mov-rax-r15 (i-add-r15 (xmul8 (%wadd n #3))) (l-app i-cmp-r15-r12 i-over-if-above)
            (xcat3 (i-st-rax-imm (x-tbl tbl g)) (i-st-rax-d-imm #8 a) (i-st-rax-d-imm #16 n)) (x-pop-at n)
 -- the value code leaves in rax (a closure) applied to each argument in turn: the closure pushed,
 -- the argument pushed, the routine called, both dropped
-x-applies : Enc → Tbl → Env → Word → Lst Word → Lst Code → Lst Word
+x-applies : Enc → Tbl → XEnv → Word → Lst Word → Lst Code → Lst Word
 x-applies ce tbl env d bs lnil = bs
 x-applies ce tbl env d bs (lcons a r) =
   x-applies ce tbl env d (xcat5 bs i-push-rax (ce env (%wsucc d) a) i-push-rax (l-app (i-call-off (x-tbl tbl x-apply-key)) (i-add-rsp #16))) r
 -- definition g at its arguments: a call when they are as many as its arity; a closure cell when
 -- fewer; the call on the first ones, then the rest applied, when more
-x-gref : Enc → Tbl → Env → Word → Word → Lst Code → Lst Word
+x-gref : Enc → Tbl → XEnv → Word → Word → Lst Code → Lst Word
 x-gref ce tbl env d g args =
   let a = x-ar tbl g
       n = l-count args
@@ -888,16 +888,16 @@ x-tag : Lst Word
 x-tag = let heap = i-mov-rcx-mrax
             imm = i-mov-rcx-rax
         in xcat4 (i-cmp-rax-imm #4096) (i-jcc j-ae (%wadd (l-count imm) #5)) (l-app imm (i-jmp (l-count heap))) heap
-x-field-env : Word → Word → Env → Env
-x-field-env d nf env = %welimP (λ _ → Env) nf env (λ j h → lcons (x-slot (%wadd d (%wsucc j))) h)
+x-field-env : Word → Word → XEnv → XEnv
+x-field-env d nf env = %welimP (λ _ → XEnv) nf env (λ j h → lcons (x-slot (%wadd d (%wsucc j))) h)
 x-load-fields : Word → Word → Lst Word
 x-load-fields d nf = w-fold-up nf (λ j acc → l-app acc (xcat3 (i-ld-rbp (x-disp (x-slot d))) (l-app (i-ld-rax (xmul8 (%wsucc j))) i-push-rax) lnil)) lnil
 -- a branch under nf fields: the cell reloaded from slot d, each field pushed (slots d+1 …)
-x-branch : Enc → Env → Word → Word → Code → Lst Word
+x-branch : Enc → XEnv → Word → Word → Code → Lst Word
 x-branch ce env d nf br =
   xcat3 (x-load-fields d nf) (ce (x-field-env d nf env) (%wadd d (%wsucc nf)) (x-strip nf br)) (if %weq nf #0 then lnil else i-add-rsp (xmul8 nf))
 -- the branches' bytes: (index , bytes) each
-x-case-brs : Enc → Env → Word → Word → Word → Lst Code → Lst (Word × Lst Word)
+x-case-brs : Enc → XEnv → Word → Word → Word → Lst Code → Lst (Word × Lst Word)
 x-case-brs ce env d dd k lnil = lnil
 x-case-brs ce env d dd k (lcons br r) = lcons (k , x-branch ce env d (x-nf dd k) br) (x-case-brs ce env d dd (%wsucc k) r)
 x-case-link : Word × Lst Word → Lst Word → Lst Word
@@ -909,15 +909,15 @@ x-case-chain (lcons e lnil) = snd e
 x-case-chain (lcons e (lcons e2 r)) = x-case-link e (x-case-chain (lcons e2 r))
 -- a case: the scrutinee pushed (slot d); its index into rcx; each branch compared in turn, its fields
 -- pushed from the cell
-x-case : Enc → Env → Word → Word → Lst Code → Code → Lst Word
+x-case : Enc → XEnv → Word → Word → Lst Code → Code → Lst Word
 x-case ce env d dd B x = xcat4 (ce env d x) i-push-rax x-tag (l-app (x-case-chain (x-case-brs ce env d dd #0 B)) (i-add-rsp #8))
 -- Nat by Word: zero is 0, suc k is k + 1 (the overflow exit past 2^64)
-x-nat-con : Enc → Env → Word → Lst Code → Lst Word
+x-nat-con : Enc → XEnv → Word → Lst Code → Lst Word
 x-nat-con ce env d (lcons a r) = xcat3 (ce env d a) i-add1 i-over-if-c
 x-nat-con ce env d lnil = i-mov-rax-imm #0
 -- a case on a Nat: the scrutinee pushed (slot d); 0 takes the zero branch, else the predecessor is
 -- pushed (slot d+1) as the suc branch's field
-x-nat-case : Enc → Env → Word → Lst Code → Code → Lst Word
+x-nat-case : Enc → XEnv → Word → Lst Code → Code → Lst Word
 x-nat-case ce env d B x =
   let bz = ce env (%wsucc d) (l-at (cwlit #0) B #0)
       bs = xcat3 (l-app (i-ld-rbp (x-disp (x-slot d))) (xb4 #72 #131 #232 #1)) i-push-rax
@@ -926,7 +926,7 @@ x-nat-case ce env d B x =
   in xcat5 (ce env d x) i-push-rax (l-app i-test-rax (i-jcc j-ne (l-count zpart))) (l-app zpart bs) (i-add-rsp #8)
 -- a word loop: the bound (slot d), the counter (slot d+1, from 0), the state (slot d+2); while the
 -- counter is below the bound the step computes the next state; then the state
-x-loop : Enc → Env → Word → Code → Code → Code → Lst Word
+x-loop : Enc → XEnv → Word → Code → Code → Code → Lst Word
 x-loop ce env d w z s =
   let bnd = x-slot d
       ctr = x-slot (%wsucc d)
@@ -940,7 +940,7 @@ x-loop ce env d w z s =
   in xcat5 head test (i-jcc j-ae (l-count body)) body (l-app (i-ld-rbp (x-disp acc)) (i-add-rsp #24))
 -- cx tbl env d c: the bytes leaving c's value in rax; d slots are pushed; tbl the definitions'
 -- offsets
-cx-n : Nat → Tbl → Env → Word → Code → Lst Word
+cx-n : Nat → Tbl → XEnv → Word → Code → Lst Word
 cx-n zero tbl env d c = i-ud2
 cx-n (suc k) tbl env d (cvar n) = i-ld-rbp (x-disp (x-place env n))
 cx-n (suc k) tbl env d (cglob g) = x-gref (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) tbl env d g lnil
@@ -967,10 +967,10 @@ cx-n (suc k) tbl env d (cwop j a b) = x-bin (λ e2 d2 c2 → cx-n k tbl e2 d2 c2
 cx-n (suc k) tbl env d (cprim j as) = x-prim (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d j as
 cx-n (suc k) tbl env d (cwelim w z s mo) = x-loop (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d w z s
 cx-n (suc k) tbl env d c = i-ud2
-cx : Tbl → Env → Word → Code → Lst Word
+cx : Tbl → XEnv → Word → Code → Lst Word
 cx tbl env d c = cx-n c-fuel tbl env d c
 -- ---------------------------------------------------------------- the blob
-x-arg-env : Word → Env
+x-arg-env : Word → XEnv
 x-arg-env n = w-fold-up n (λ i acc → lcons (x-arg i n) acc) lnil
 -- a definition: prologue, the body (arguments above rbp), epilogue
 x-fn : Tbl → Word × (Word × Code) → Lst Word
