@@ -30,7 +30,7 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 # checkable"). The one measurement kept is Brunerie's number (PLAN item 8, 18.16).
 CORE := lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.cub lib/check.cub lib/std.cub
 LIB  := $(CORE) lib/sort.cub lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/autodiff.cub lib/intproof.cub lib/intlin.cub \
-        lib/prim.cub lib/word.cub lib/derive.cub lib/decode.cub lib/fiber.cub lib/proc.cub lib/world.cub lib/session.cub \
+        lib/prim.cub lib/derive.cub lib/decode.cub lib/fiber.cub lib/proc.cub lib/world.cub lib/session.cub \
         lib/choreo.cub lib/obs.cub lib/region.cub lib/specialize.cub lib/rules.cub lib/machine.cub lib/x86.cub lib/elf.cub \
         lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub \
         lib/isa/tso.cub lib/isa/tso-acyclic.cub lib/mem/atomics.cub lib/mem/rc11.cub lib/cxx/ast.cub lib/lang/rust/ast.cub \

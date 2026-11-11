@@ -35,7 +35,7 @@ of a thing proved in place of the thing.
 
 ```
 make build/cubical          # the machine
-make library                # loads the LIB list of the Makefile: 1,711 passed, 406 failed
+make library                # loads the LIB list of the Makefile: 1,613 passed, 406 failed
 ```
 
 401 of the 406 are refused untyped definitions; the other 5 (`cstr-fill`, `cstr`, `cstr-at`,
@@ -105,7 +105,7 @@ All **check** in `make library` unless a load is named.
 | file | lines | what it is | depends on |
 |---|---|---|---|
 | `std.cub` | 578 | paths, equivalences, univalence (`ua`, `uaβ`), `Nat`, `Int`, Hedberg, `Word ≃ Nat` and `Word ≡ Nat`, machine word operations equal to their definitions, guarded recursion, streams | CORE |
-| `prim.cub` | 595 | `Int64`, `UInt32`, `UInt64`, `Float64`, `Float32`, `Bytes n` with proof-carrying loads and stores; arrays; `Fin n → A ≃ Array n`. 72 primitives; the load/store and array-extensionality laws are trusted; and what the bitwise word operations compute, stated: eight laws (multiplication by recursion; and, or, xor, shifts on a word written by its bits; a word below 2^k is its k lowest bits), each a constant with no computation | std |
+| `prim.cub` | 509 | `Int64`, `UInt32`, `UInt64`, `Float64`, `Float32`, `Bytes n` with proof-carrying loads and stores; arrays; `Fin n → A ≃ Array n`. 72 primitives; the load/store and array-extensionality laws are trusted | std |
 | `sort.cub`, `fiber.cub`, `decode.cub`, `region.cub` | 525 | sorting with its specification; fibres; a decoder with bounds discharged; regions as a state monad | std, prim, linproof |
 | `linproof.cub`, `eqproof.cub`, `ring.cub`, `intproof.cub`, `autodiff.cub` | 1,298 | decision procedures proved sound over their own typed codes (linear arithmetic, equational, ring, integer; forward-mode derivative). 15 untyped helper definitions at the ends of `eqproof`, `ring`, `autodiff` are refused | std |
 | `proc.cub` | 390 | signatures, processes (free monad), worlds, handlers, supervision, recording and replay, choreographies, guarded processes, transactions | std, prim |
@@ -115,7 +115,6 @@ All **check** in `make library` unless a load is named.
 | `net.cub` | 194 | a network with an adversary (drop, duplicate, reorder, partition) | proc |
 | `fleet.cub` | 451 | nodes over that network; `Safe`, `Live`, `Refines`, `Converges` stated of the processes that run | net, proc |
 | `deploy.cub` | 120 | wire format, codec, node configuration (definitions) | fleet |
-| `word.cub` | 356 | word laws proved from those: addition on bits (ripple carry), bits that are known or a variable, and reflected word expressions (`BE`) whose word is their bits' word (`be-sound`) — how a statement about the x86 semantics' bit arithmetic is proved | std, prim |
 | `bits.cub` | 312 | bit-vector operations the imported x86 semantics calls | std, prim |
 
 Loads run: fleet + KV experiment 931 passed, 3 failed (the 3 are `eqproof`'s refused helpers);
@@ -185,8 +184,8 @@ Each instruction of the machine is one or a few of `lib/x86.cub`'s templates (pu
 (those compile to `kfail`, the run leaves — never a wrong answer).
 
 **Next:** closures (`jlam`/`japp`, with a heap); the x86 level — each instruction's bytes stepped
-by `lib/isa/x86`'s semantics to the same stack (by computation, as `experiments/isa/e1.cub` does for one program;
-memory byte round trips); the blob and ELF layout; then `#jit`/`#build` use it and `lib/x86.cub`'s
+by `lib/isa/x86`'s semantics to the same stack, by checked code only (lib/compile/x86ok.cub has the run
+split and the store lemmas); the blob and ELF layout; then `#jit`/`#build` use it and `lib/x86.cub`'s
 unchecked stretch is deleted.
 
 ## 6. Importers and tools — `tools/` (Python, trusted)
@@ -216,7 +215,7 @@ fuel bound returns a default, Sail's constraints are not checked.
 | `mem/` | 1 | — | `int sum(const int*, int)` given its meaning by hand, with its undefined-behaviour cases |
 | `cxx/` | 20 | generated data checks; needs the readers of §4 to mean anything | seven C++ programs (order book, member pointers, virtual inheritance, exceptions, coroutines) and their imports. `sem/gen/` is a stale copy of four of them |
 | `rust/` | 9 | same | two Rust programs and their MIR imports |
-| `isa/` | 7 | `add.cub`, `pushpop.cub`, `e1.cub`, `flags.cub`, `anywhere.cub`, `template-xor.cub` check | one instruction stepped with symbolic operands; `push rax; pop rcx` returns every word below 2^64; a compiled program (`(x and 255) xor y`, `lib/compile/` to bytes) leaves `jev`'s value in rax for every two words below 2^64; `add; setc` leaves the carry in cl; `add; jc` leaves rip at one of two addresses chosen by the carry; and with an instruction on each side of the branch, three steps leave rip and rax as the carry decides. All by computation (refl): the evaluator computes bitwise operations, shifts, addition and comparisons on words given by their bits; a case on a computed bit computes both branches, words merging bit by bit and other values staying a conditional value that eliminations distribute over, a conditional on the same bit inside a branch taking that branch's side; a term and its negation fold (x ∧ ¬x, x ∨ ¬x); a computed bit that is the same for every value of what it is built on is that constant (its decision diagram, before a case splits on it). `anywhere.cub`: `push rax; pop rcx` with the code at any address below 2^44 and the stack anywhere in a zone above it. `template-xor.cub`: the compiler's xor template on a generic state (code and stack anywhere in their zones, any two top words, any memory below, any scratch registers and flags). Conversion compares computed bits as functions (`%bsame`: one decision diagram), so a sum computed one way equals the same sum computed another. Memory (`lib/bits.cub`) is a function from addresses to bytes, a write comparing its argument with the address written, so a read at a computed address is decided by comparing addresses and two memories that read alike are equal |
+| `isa/` | 2 | `add.cub` checks (above) | one instruction stepped with symbolic operands; the instruction classes the compiler emits |
 | `jit/`, `native/` | 4 | need the compiler | compiled workloads; processes built to ELF |
 | `surface/` | 9 | checks | inputs for elaborator items 1–8 of track S |
 | `machine/`, `agda/` | 2 | — | the 10^6 numeral; a script timing Agda on Brunerie (reads outside this directory) |

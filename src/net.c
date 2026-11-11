@@ -93,17 +93,11 @@ Cell *cell(int kind, int n) {
 static inline bool owns_dnf(int k) { switch (k) { case O_PEND: case V_IV: case V_FACE: case V_SYS: case V_NPAPP: case O_PAPPP: case O_BIN2: case O_SYSCONS2: case V_NTRANS: case O_TRANSD2: case V_TRANSH: case O_TRANSH: case O_IEQB: case O_FEQLB: return true; default: return false; } }
 static bool owns_subst(int k) { return k == O_SUBST; }
 static void box_release(Box *b);
-/* a word by its bits (V_BITS): t[i] 0, 1, or 2 (a Bool value: the cell's next port), lowest first */
-typedef struct { long rc; uint32_t len; uint8_t t[]; } BitsD;
-enum { BO_NOT, BO_AND, BO_OR, BO_XOR };
-typedef struct { int t; Port p; } Bit;   /* t: 0, 1, or 2 (p: a Bool's value) */
-static Bit bk(int v); static Bit bvar(Port p); static Port bop_cell(int k, Port a, Port b); static Port bvec_build(Bit *b, uint32_t n);
 static void payload_retain(Cell *c) {
     if (owns_dnf(c->kind)) dnf_retain(c->p); else if (owns_subst(c->kind)) subst_retain(c->p);
     else if (c->kind == V_REF) { rcl_inc(&((Box *)c->p)->rc); if (c->a) subst_retain((Subst *)(uintptr_t)c->a); }
     else if (c->kind == V_WORD || c->kind == V_WPLUS) big_retain(c->p);
     else if (c->kind == V_BYTES && c->p) rcl_inc(&((Bytes *)c->p)->rc);
-    else if (c->kind == V_BITS && c->p) rcl_inc(&((BitsD *)c->p)->rc);
     else if (c->kind == V_THUNK && c->a) subst_retain((Subst *)(uintptr_t)c->a);
     else if (c->kind == V_DEFER && c->p && owns_dnf((int)c->ty)) dnf_retain(c->p);
 }
@@ -112,7 +106,6 @@ static void payload_release(Cell *c) {
     else if (c->kind == V_REF && c->p) { box_release(c->p); if (c->a) subst_release((Subst *)(uintptr_t)c->a); c->a = 0; }
     else if (c->kind == V_WORD || c->kind == V_WPLUS) big_release(c->p);
     else if (c->kind == V_BYTES && c->p) { Bytes *b = c->p; if (rcl_dec(&b->rc) == 0) free(b); }
-    else if (c->kind == V_BITS && c->p) { BitsD *b = c->p; if (rcl_dec(&b->rc) == 0) free(b); }
     else if (c->kind == V_THUNK && c->a) { subst_release((Subst *)(uintptr_t)c->a); c->a = 0; }
     else if (c->kind == V_DEFER && c->p && owns_dnf((int)c->ty)) dnf_release(c->p);
     c->p = NULL;
@@ -751,7 +744,6 @@ long prof_odup[65536], prof_oera[65536], prof_rdup[256], prof_rera[256];
 long prof_pair[4][256];   /* CUBICAL_PROFILE: SUBST, ERA, DUP, PAPPP steps by the value kind met */
 /* a value held once: references copy the box; the last one erases the value */
 static void box_hold(Box *b);
-const char *kind_name(int k);
 static Key *key_of_port(Port p);
 static Box *box_new(Port val) {
     Box *b = malloc(sizeof(Box)); b->rc = 1; b->root = cell(O_ROOT, 1); b->e = NULL; b->in = 0; b->fd = NULL; b->fdtries = 0;
@@ -910,11 +902,10 @@ Port thunk_build(Cell *v) {
     cell_free(v);
     return memo_end(sh, bx, r);
 }
-/* a numeral is named by its value (so what is built on numerals has a name: the conversion's key test) */
-static Port word_of(uint64_t n) { Cell *c = cell(V_WORD, 1); c->a = n; c->key = key0(K_WORD, n, NULL); return P(c, 0); }
+static Port word_of(uint64_t n) { Cell *c = cell(V_WORD, 1); c->a = n; return P(c, 0); }
 /* the number a word cell holds (a copy), and a word cell holding a number (taking it) */
 static WN cell_wn(const Cell *c) { WN r = { c->a, c->p }; return wn_copy(&r); }
-static Port word_wn(WN k) { Cell *c = cell(V_WORD, 1); c->a = k.s; c->p = k.b; c->key = key0(K_WORD, k.s, k.b); return P(c, 0); }
+static Port word_wn(WN k) { Cell *c = cell(V_WORD, 1); c->a = k.s; c->p = k.b; return P(c, 0); }
 Port word_port(WN k) { return word_wn(k); }
 /* a reference reads its value under the substitution it carries (a=Subst or 0): the top cell
  * copied and substituted, each part a reference carrying the substitution on */
@@ -1623,23 +1614,6 @@ static void subst_level(Cell *o, Cell *v) {
         break;
     }
     case V_WPLUS: { Cell *a = cell(O_WADD, 3); link(sub(v->port[1], s), P(a, 0)); link(word_wn(cell_wn(v)), P(a, 1)); link(P(a, 2), out); break; }
-    case V_NBOP: {
-        Port r = bop_cell((int)v->x, sub(v->port[1], s), v->n == 3 ? sub(v->port[2], s) : 0);
-        /* the operation's name: this one's under the substitution */
-        if (v->key) { Cell *op = PC(r); if (!op->key) op->key = key_under(v->key, s); }
-        link(r, out); break;
-    }
-    case V_BITS: {
-        /* the bits again: a variable bit substituted may be known now (bvec_build reads only the
-         * pattern; the operations meeting the word decide by it) */
-        BitsD *d = v->p; Bit *b = malloc(((size_t)d->len + 1) * sizeof(Bit)); int k = 1;
-        for (uint32_t i = 0; i < d->len; i++) b[i] = d->t[i] == 2 ? bvar(sub(v->port[k++], s)) : bk(d->t[i]);
-        Port r = bvec_build(b, d->len); free(b);
-        if (v->key && PI(r) == 0 && !PC(r)->key) PC(r)->key = key_under(v->key, s);
-        link(r, out);
-        break;
-    }
-    case V_SEL: { Cell *a = cell(O_SELC, 4); link(sub(v->port[1], s), P(a, 0)); link(sub(v->port[2], s), P(a, 1)); link(sub(v->port[3], s), P(a, 2)); link(P(a, 3), out); break; }
     case V_NWOP: { Cell *a = cell((int)v->x, 3); link(sub(v->port[1], s), P(a, 0)); link(sub(v->port[2], s), P(a, 1)); link(P(a, 2), out); break; }
     case V_NWELIM: { Cell *a = cell(O_WELIM, v->n); for (int k = 1; k < v->n; k++) link(sub(v->port[k], s), P(a, k - 1)); link(P(a, v->n - 1), out); break; }
     case V_NPRIM: {
@@ -1876,11 +1850,11 @@ static void neutral_proj(Cell *o, Cell *v) {
 enum { W_LAM, W_PAIR, W_PI, W_SIGMA, W_U, W_PATH, W_PLAM, W_IV, W_FACE, W_SYS, W_GLUE, W_GLUEV, W_DATA, W_CON,
        W_HCOMP, W_VAR, W_APP, W_FST, W_SND, W_PAPP, W_COMP, W_UNGLUE, W_ELIM, W_TRANS, W_LEVEL, W_OTHER,
        W_WORD, W_WLIT, W_WPLUS, W_WOP, W_WELIM, W_COFIX, W_PROJ, W_REC, W_CLOCK, W_TICK, W_CLOCK0, W_TICK0, W_HCOMPU, W_UNGLUEU,
-       W_PTY, W_PLIT, W_BYTES, W_PRIM, W_BITS, W_BOP, W_SEL, W_N };
+       W_PTY, W_PLIT, W_BYTES, W_PRIM, W_N };
 static const char *WNAME[W_N] = { "wlam", "wpair", "wpi", "wsigma", "wu", "wpath", "wplam", "wiv", "wface", "wsys", "wglue",
     "wgluev", "wdata", "wcon", "whcomp", "wvar", "wapp", "wfst", "wsnd", "wpapp", "wcomp", "wunglue", "welim", "wtrans",
     "wlevel", "wother", "wword", "wwlit", "wwplus", "wwop", "wwelim", "wcofix", "wproj", "wrec", "wclock", "wtick",
-    "wclock0", "wtick0", "whcompu", "wunglueu", "wpty", "wplit", "wbytes", "wprim", "wbitv", "wbopv", "wselv" };
+    "wclock0", "wtick0", "whcompu", "wunglueu", "wpty", "wplit", "wbytes", "wprim" };
 static int WC[W_N], C_LNIL = -1, C_LCONS, C_TRUE, C_FALSE, C_NONE, C_SOME;
 static int B_TRUE = -1, B_FALSE;
 static void need_bool(void) {
@@ -1911,557 +1885,6 @@ static Port list_of(const Port *xs, int n) {
 }
 static Port pair_of(Port a, Port b) { Cell *c = cell(V_PAIR, 3); link(a, P(c, 1)); link(b, P(c, 2)); return P(c, 0); }
 static Port face_cell(Dnf *f);
-/* ---------------- words by their bits ----------------
- * lib/prim.cub states what the bitwise operations and shifts compute on a word written by its
- * bits; here that is computed. A word all of whose bits are known is a numeral; one with some
- * bits each a Boolean value (a variable, or a Boolean operation stuck on variables) is V_BITS.
- * The operations decide each bit by whichever side is known, so a mask, a numeral's bit or a
- * shift removes a variable or keeps it as it is: a Boolean operation is built only where two
- * variables meet. Addition is ripple carry; the comparisons are Boolean values of the bits. */
-static Bit bk(int v) { Bit b = { v, 0 }; return b; }
-static Bit bvar(Port p) { Bit b = { 2, p }; return b; }
-static void bit_era(Bit x) { if (x.t == 2) era(x.p); }
-static void bit_dup(Bit x, Bit *a, Bit *b) { *a = x; *b = x; if (x.t == 2) split2(x.p, &a->p, &b->p); }
-static Port bop_cell(int k, Port a, Port b) {
-    Cell *c = cell(O_BOP, k == BO_NOT ? 2 : 3); c->x = (uint32_t)k;
-    link(a, P(c, 0)); if (k != BO_NOT) link(b, P(c, 1));
-    return P(c, c->n - 1);
-}
-static Bit bit_not(Bit x) { if (x.t < 2) return bk(!x.t); return bvar(bop_cell(BO_NOT, x.p, 0)); }
-/* two variable bits that are one term (one key) */
-static Key *key_of_port(Port p);
-static bool bit_same(Bit x, Bit y) {
-    if (x.t != 2 || y.t != 2) return false;
-    Key *a = key_of_port(x.p), *b = key_of_port(y.p);
-    bool r = a && a == b;
-    if (a) key_release(a);
-    if (b) key_release(b);
-    return r;
-}
-static Bit bit_and(Bit x, Bit y) {
-    if (x.t == 0 || y.t == 0) { bit_era(x); bit_era(y); return bk(0); }
-    if (x.t == 1) return y;
-    if (y.t == 1) return x;
-    if (bit_same(x, y)) { bit_era(y); return x; }
-    return bvar(bop_cell(BO_AND, x.p, y.p));
-}
-static Bit bit_or(Bit x, Bit y) {
-    if (x.t == 1 || y.t == 1) { bit_era(x); bit_era(y); return bk(1); }
-    if (x.t == 0) return y;
-    if (y.t == 0) return x;
-    if (bit_same(x, y)) { bit_era(y); return x; }
-    return bvar(bop_cell(BO_OR, x.p, y.p));
-}
-static Bit bit_xor(Bit x, Bit y) {
-    if (x.t == 0) return y;
-    if (y.t == 0) return x;
-    if (x.t == 1) return bit_not(y);
-    if (y.t == 1) return bit_not(x);
-    if (bit_same(x, y)) { bit_era(x); bit_era(y); return bk(0); }
-    return bvar(bop_cell(BO_XOR, x.p, y.p));
-}
-typedef struct { uint32_t n; Bit *b; } BVec;
-static int wn_bit(const WN *x, uint64_t i) {
-    if (!x->b) return i < 64 ? (int)((x->s >> i) & 1) : 0;
-    uint64_t w = i / 64; return w < x->b->n ? (int)((x->b->l[w] >> (i % 64)) & 1) : 0;
-}
-static uint32_t wn_len(const WN *x) {
-    if (!x->b) { uint32_t n = 0; while (n < 64 && (x->s >> n)) n++; return n; }
-    for (int64_t w = (int64_t)x->b->n - 1; w >= 0; w--) if (x->b->l[w]) { uint32_t n = 0; while (n < 64 && (x->b->l[w] >> n)) n++; return (uint32_t)w * 64 + n; }
-    return 0;
-}
-/* a numeral or a V_BITS cell as bits (the cell's ports taken; the cell freed) */
-static BVec bvec_take(Cell *c) {
-    BVec v;
-    if (c->kind == V_WORD) {
-        WN w = { c->a, c->p };
-        v.n = wn_len(&w); v.b = malloc(((size_t)v.n + 1) * sizeof(Bit));
-        for (uint32_t i = 0; i < v.n; i++) v.b[i] = bk(wn_bit(&w, i));
-    } else {
-        BitsD *d = c->p; v.n = d->len; v.b = malloc(((size_t)v.n + 1) * sizeof(Bit));
-        int k = 1;
-        for (uint32_t i = 0; i < v.n; i++) v.b[i] = d->t[i] == 2 ? bvar(c->port[k++]) : bk(d->t[i]);
-    }
-    cell_free(c);
-    return v;
-}
-static Bit bvec_at(BVec *v, uint32_t i) { return i < v->n ? v->b[i] : bk(0); }
-/* the word of bits (they are taken): a numeral when every bit is known */
-static Port bvec_build(Bit *b, uint32_t n) {
-    while (n && b[n - 1].t == 0) n--;
-    uint32_t nv = 0; for (uint32_t i = 0; i < n; i++) if (b[i].t == 2) nv++;
-    if (!nv) {
-        if (n <= 64) { uint64_t s = 0; for (uint32_t i = 0; i < n; i++) if (b[i].t) s |= (uint64_t)1 << i; return word_of(s); }
-        WN acc = wn_small(0);
-        for (int64_t i = (int64_t)n - 1; i >= 0; i--) {
-            WN t = wn_shl(&acc, 1); wn_drop(&acc);
-            if (b[i].t) { WN one = wn_small(1); acc = wn_add(&t, &one); wn_drop(&t); } else acc = t;
-        }
-        return word_wn(acc);
-    }
-    Cell *c = cell(V_BITS, (int)nv + 1);
-    BitsD *d = malloc(sizeof(BitsD) + n); d->rc = 1; d->len = n; c->p = d;
-    /* named by its bits: a known bit by itself, a variable bit by its value's name */
-    Key **kc = malloc(((size_t)n + 1) * sizeof(Key *)); bool all = true;
-    for (uint32_t i = 0; i < n; i++) {
-        d->t[i] = (uint8_t)b[i].t;
-        kc[i] = b[i].t == 2 ? key_of_port(b[i].p) : key0(K_WORD, (uint64_t)b[i].t, NULL);
-        if (!kc[i]) all = false;
-    }
-    if (all) c->key = key(K_BITS, n, NULL, (int)n, kc);
-    for (uint32_t i = 0; i < n; i++) if (kc[i]) key_release(kc[i]);
-    free(kc);
-    int k = 1;
-    for (uint32_t i = 0; i < n; i++) if (b[i].t == 2) link(b[i].p, P(c, k++));
-    return P(c, 0);
-}
-/* x + y + c, ripple carry; taken. The carry out is the last bit */
-static Bit *bits_add(BVec *x, BVec *y, Bit c, uint32_t *rn) {
-    uint32_t n = (x->n > y->n ? x->n : y->n);
-    Bit *r = malloc(((size_t)n + 2) * sizeof(Bit));
-    for (uint32_t i = 0; i < n; i++) {
-        Bit a = bvec_at(x, i), b = bvec_at(y, i), a1, a2, b1, b2, c1, c2;
-        bit_dup(a, &a1, &a2); bit_dup(b, &b1, &b2); bit_dup(c, &c1, &c2);
-        Bit ab = bit_xor(a1, b1), ab1, ab2; bit_dup(ab, &ab1, &ab2);
-        r[i] = bit_xor(ab1, c1);
-        c = bit_or(bit_and(a2, b2), bit_and(c2, ab2));
-    }
-    r[n] = c; *rn = n + 1;
-    free(x->b); free(y->b); x->b = y->b = NULL;
-    return r;
-}
-/* the operation on two words by their bits (each a numeral or V_BITS, one of them V_BITS); 0 when
- * it has no rule here (the operation is then stuck as before). Taking both cells when it has */
-/* a case on a Boolean, stuck, whose branches are numerals (lib/prim.cub b2w and what is written like
- * it) is, to a word operation, the word of that one bit: each bit known where the numerals agree,
- * else the Boolean or its negation. Read so only where a word operation meets it beside a numeral
- * or a word by its bits; elsewhere it stays a case */
-static bool bitcase_nums(const Cell *c, WN *n1, WN *n0) {
-    if (c->kind != V_NCASE) return false;
-    need_bool();
-    CaseTab *tb = c->p;
-    if (CON[B_TRUE].data != tb->d) return false;
-    Record *rt = tb->br[CON[B_TRUE].index], *rf = tb->br[CON[B_FALSE].index];
-    if (!rt || !rf || !rt->body || !rf->body || rt->body->tag != S_WORD || rf->body->tag != S_WORD) return false;
-    n1->s = (uint64_t)rt->body->id; n1->b = rt->body->big; n0->s = (uint64_t)rf->body->id; n0->b = rf->body->big;
-    return true;
-}
-static bool bitsable(const Cell *c) { WN a, b; return c->kind == V_WORD || c->kind == V_BITS || bitcase_nums(c, &a, &b); }
-/* the case as a word by its bits (the case taken) */
-static Cell *bitcase_take(Cell *c) {
-    WN n1, n0; bitcase_nums(c, &n1, &n0);
-    int nm = (int)c->x;   /* 1=scrutinee [2=motive] environment, type */
-    uint32_t l1 = wn_len(&n1), l0 = wn_len(&n0), len = l1 > l0 ? l1 : l0;
-    Bit *b = malloc(((size_t)len + 1) * sizeof(Bit)); Bit sc = bvar(c->port[1]);
-    for (uint32_t i = 0; i < len; i++) {
-        int x1 = wn_bit(&n1, i), x0 = wn_bit(&n0, i);
-        if (x1 == x0) { b[i] = bk(x1); continue; }
-        Bit c1, c2; bit_dup(sc, &c1, &c2); sc = c2;
-        b[i] = x1 ? c1 : bit_not(c1);
-    }
-    bit_era(sc);
-    for (int k = 2; k < c->n; k++) era(c->port[k]);
-    (void)nm;
-    cell_free(c);
-    Port r = bvec_build(b, len); free(b);
-    /* a numeral when no bit depends on the Boolean: still a cell to read */
-    return PC(r);
-}
-static bool bits_handles(int op, Cell *a, Cell *b) {
-    BVec t;
-    switch (op) {
-    case O_WAND: case O_WOR: case O_WXOR: case O_WADD: case O_WSUB: case O_WEQ: case O_WLT: return true;
-    case O_WSHL: case O_WSHR: return b->kind == V_WORD && !b->p && b->a < ((uint64_t)1 << 32);
-    case O_WMUL: return (b->kind == V_WORD && !b->p && b->a && !(b->a & (b->a - 1))) || (a->kind == V_WORD && !a->p && a->a && !(a->a & (a->a - 1)));
-    case O_WDIV: case O_WMOD: return b->kind == V_WORD && !b->p && b->a && !(b->a & (b->a - 1));
-    default: (void)t; return false;
-    }
-}
-static int log2w(uint64_t x) { int k = 0; while (((uint64_t)1 << k) < x) k++; return k; }
-static Port bits_wop(int op, Cell *ac, Cell *bc) {
-    need_bool();
-    if (op == O_WMUL && !(bc->kind == V_WORD && !bc->p && bc->a && !(bc->a & (bc->a - 1)))) { Cell *t = ac; ac = bc; bc = t; }
-    if (op == O_WSHL || op == O_WSHR || op == O_WMUL || op == O_WDIV || op == O_WMOD) {
-        uint64_t k = bc->a; cell_free(bc);
-        if (op == O_WMUL || op == O_WDIV || op == O_WMOD) k = (uint64_t)log2w(k);
-        BVec x = bvec_take(ac);
-        Port r;
-        if (op == O_WSHL || op == O_WMUL) {
-            Bit *b = malloc(((size_t)x.n + k + 1) * sizeof(Bit));
-            for (uint64_t i = 0; i < k; i++) b[i] = bk(0);
-            for (uint32_t i = 0; i < x.n; i++) b[k + i] = x.b[i];
-            r = bvec_build(b, (uint32_t)(x.n + k)); free(b);
-        } else if (op == O_WMOD) {
-            for (uint32_t i = (uint32_t)k; i < x.n; i++) bit_era(x.b[i]);
-            r = bvec_build(x.b, x.n < k ? x.n : (uint32_t)k);
-        } else {
-            for (uint32_t i = 0; i < x.n && i < k; i++) bit_era(x.b[i]);
-            r = x.n > k ? bvec_build(x.b + k, (uint32_t)(x.n - k)) : word_of(0);
-        }
-        free(x.b);
-        return r;
-    }
-    BVec x = bvec_take(ac), y = bvec_take(bc);
-    uint32_t n = x.n > y.n ? x.n : y.n;
-    if (op == O_WAND || op == O_WOR || op == O_WXOR) {
-        Bit *b = malloc(((size_t)n + 1) * sizeof(Bit));
-        for (uint32_t i = 0; i < n; i++) {
-            Bit p = bvec_at(&x, i), q = bvec_at(&y, i);
-            b[i] = op == O_WAND ? bit_and(p, q) : op == O_WOR ? bit_or(p, q) : bit_xor(p, q);
-        }
-        free(x.b); free(y.b);
-        Port r = bvec_build(b, n); free(b); return r;
-    }
-    if (op == O_WADD) { uint32_t rn; Bit *b = bits_add(&x, &y, bk(0), &rn); Port r = bvec_build(b, rn); free(b); return r; }
-    if (op == O_WSUB) {
-        /* truncated: x + ~y + 1 over n + 1 bits; when it carries out x ≥ y and the low n bits are
-         * x − y, else 0 */
-        BVec ny; ny.n = n + 1; ny.b = malloc(((size_t)n + 2) * sizeof(Bit));
-        for (uint32_t i = 0; i <= n; i++) ny.b[i] = bit_not(bvec_at(&y, i));
-        free(y.b);
-        BVec xx; xx.n = n + 1; xx.b = malloc(((size_t)n + 2) * sizeof(Bit));
-        for (uint32_t i = 0; i <= n; i++) xx.b[i] = bvec_at(&x, i);
-        free(x.b);
-        uint32_t rn; Bit *d = bits_add(&xx, &ny, bk(1), &rn);
-        /* the sum is x − y + 2^(n+1): its carry out (the bit at 2^(n+1)) is set exactly when
-         * x ≥ y, and then bits 0 .. n − 1 are x − y (below 2^n) */
-        bit_era(d[n]);
-        Bit ge = d[rn - 1];
-        Bit *b = malloc(((size_t)n + 1) * sizeof(Bit));
-        for (uint32_t i = 0; i < n; i++) { Bit g1, g2; bit_dup(ge, &g1, &g2); b[i] = bit_and(d[i], g1); ge = g2; }
-        bit_era(ge);
-        Port r = bvec_build(b, n); free(b); free(d); return r;
-    }
-    /* comparisons: a Boolean */
-    Bit res;
-    if (op == O_WEQ) {
-        res = bk(1);
-        for (uint32_t i = 0; i < n; i++) res = bit_and(res, bit_not(bit_xor(bvec_at(&x, i), bvec_at(&y, i))));
-    } else {
-        /* x < y: from the lowest bit, lt = (¬x_i ∧ y_i) ∨ (¬(x_i ⊕ y_i) ∧ lt) */
-        res = bk(0);
-        for (uint32_t i = 0; i < n; i++) {
-            Bit p = bvec_at(&x, i), q = bvec_at(&y, i), p1, p2, q1, q2;
-            bit_dup(p, &p1, &p2); bit_dup(q, &q1, &q2);
-            res = bit_or(bit_and(bit_not(p1), q1), bit_and(bit_not(bit_xor(p2, q2)), res));
-        }
-    }
-    free(x.b); free(y.b);
-    if (res.t < 2) return con_build(res.t ? B_TRUE : B_FALSE, NULL, NULL);
-    return res.p;
-}
-static Port bits_succ(Cell *c) {
-    BVec x = bvec_take(c), one; one.n = 1; one.b = malloc(sizeof(Bit)); one.b[0] = bk(1);
-    uint32_t rn; Bit *b = bits_add(&x, &one, bk(0), &rn); Port r = bvec_build(b, rn); free(b); return r;
-}
-/* a word by its bits, as printed: %bits: then each bit lowest first, 0, 1 or v (the next field) */
-void bits_pattern(const Cell *c, char *out, size_t cap) {
-    const BitsD *d = c->p; size_t k = (size_t)snprintf(out, cap, "%%bits:");
-    for (uint32_t i = 0; i < d->len && k + 2 < cap; i++) out[k++] = d->t[i] == 2 ? 'v' : (char)('0' + d->t[i]);
-    out[k] = 0;
-}
-static Key *bop_key(int k, Port a, Port b) {
-    Key *ka = key_of_port(a), *kb = b ? key_of_port(b) : NULL, *r = NULL;
-    if (ka && (kb || !b)) { Key *c[2] = { ka, kb }; r = key(K_BOP, (uint64_t)k, NULL, b ? 2 : 1, c); }
-    if (ka) key_release(ka);
-    if (kb) key_release(kb);
-    return r;
-}
-static Port nbop(int k, Port a, Port b) {
-    Cell *n = cell(V_NBOP, b ? 3 : 2); n->x = (uint32_t)k;
-    n->key = bop_key(k, a, b);
-    link(a, P(n, 1)); if (b) link(b, P(n, 2));
-    return P(n, 0);
-}
-/* ---------------- a computed bit that is constant ----------------
- * A Boolean operation built on values that are not true or false may still be one of them for every
- * value of what it is built on (x ⊕ ¬x, the bits of (a + 1) + 1 against those of a + 2). Read
- * without consuming: the operations down to the values they are built on (each, by its name, an
- * unknown), then the decision diagram of the whole (reduced, ordered: one diagram per function).
- * Exact: a constant found is that constant; past a size, nothing is concluded. */
-#define BC_NODES (1 << 16)
-#define BC_BDD (1 << 20)
-typedef struct { int op, a, b; } BcNode;   /* op: BO_*, or -1 an unknown (a: its index), -2 false, -3 true */
-typedef struct {
-    BcNode *n; int nn;
-    const Cell **hk; int *hv; int hcap; int *hslot;   /* cell → node; the slot of each node */
-    Key **atom; int na, acap; Key **ak; int *av; int akcap;   /* key → unknown */
-    bool fail;
-} BcWalk;
-static Cell *bc_value(Port p) {
-    for (int guard = 0; guard < 64; guard++) {
-        p = peek(p);
-        if (!p || PI(p) != 0) return NULL;
-        Cell *c = PC(p);
-        if (c->kind == V_REF) { if (c->a) return NULL; Box *b = c->p; p = b->root->port[0]; continue; }
-        return c;
-    }
-    return NULL;
-}
-static inline uint32_t bc_hp(const void *x) { uint64_t h = (uint64_t)(uintptr_t)x * 0x9E3779B97F4A7C15ULL; return (uint32_t)(h >> 32); }
-static int bc_atom(BcWalk *w, Key *k) {
-    uint32_t m = (uint32_t)w->akcap - 1, i = bc_hp(k) & m;
-    while (w->ak[i]) { if (w->ak[i] == k) return w->av[i]; i = (i + 1) & m; }
-    if (w->na * 2 >= w->akcap || w->na >= w->acap) { w->fail = true; return -1; }
-    w->ak[i] = k; w->av[i] = w->na; w->atom[w->na] = key_retain(k);
-    return w->na++;
-}
-static int bc_node(BcWalk *w, Port p, int depth) {
-    if (w->fail) return -1;
-    if (depth > 100000) { w->fail = true; return -1; }
-    Cell *c = bc_value(p);
-    if (!c) { w->fail = true; return -1; }
-    uint32_t m = (uint32_t)w->hcap - 1, h = bc_hp(c) & m;
-    while (w->hk[h]) { if (w->hk[h] == c) return w->hv[h]; h = (h + 1) & m; }
-    BcNode nd;
-    if (c->kind == V_CON && ((int)c->a == B_TRUE || (int)c->a == B_FALSE)) { nd.op = (int)c->a == B_TRUE ? -3 : -2; nd.a = nd.b = 0; }
-    else if (c->kind == V_NBOP) {
-        nd.op = (int)c->x;
-        nd.a = bc_node(w, c->port[1], depth + 1);
-        nd.b = c->n == 3 ? bc_node(w, c->port[2], depth + 1) : 0;
-        if (w->fail) return -1;
-    } else {
-        Key *k = eff_key(c);
-        if (!k) { w->fail = true; return -1; }
-        nd.op = -1; nd.a = bc_atom(w, k);
-        key_release(k);
-        if (w->fail) return -1;
-    }
-    if (w->nn >= BC_NODES || w->nn * 2 >= w->hcap) { w->fail = true; return -1; }
-    /* the slot again: the recursion may have filled the table */
-    h = bc_hp(c) & m; while (w->hk[h]) h = (h + 1) & m;
-    int ix = w->nn++; w->n[ix] = nd;
-    w->hk[h] = c; w->hv[h] = ix; w->hslot[ix] = (int)h;
-    return ix;
-}
-/* the diagrams: 0 and 1 the constants; var INT32_MAX at them */
-typedef struct { int *var, *lo, *hi, *slot; int n, cap; int *ut; int utcap; int64_t *ck; int *cv; uint32_t *cg; uint32_t gen; int ckcap; bool full; } Bdd;
-static int bdd_mk(Bdd *d, int v, int l, int h) {
-    if (l == h) return l;
-    uint32_t m = (uint32_t)d->utcap - 1, i = (uint32_t)(((uint64_t)v * 0x9E3779B97F4A7C15ULL ^ (uint64_t)l * 0xC2B2AE3D27D4EB4FULL ^ (uint64_t)h * 0x165667B19E3779F9ULL) >> 20) & m;
-    while (d->ut[i] >= 0) { int x = d->ut[i]; if (d->var[x] == v && d->lo[x] == l && d->hi[x] == h) return x; i = (i + 1) & m; }
-    if (d->n >= d->cap || d->n * 2 >= d->utcap) { d->full = true; return 0; }
-    int x = d->n++; d->var[x] = v; d->lo[x] = l; d->hi[x] = h; d->ut[i] = x; d->slot[x] = (int)i;
-    return x;
-}
-static int bdd_op(Bdd *d, int op, int a, int b) {
-    if (d->full) return 0;
-    switch (op) {
-    case BO_AND: if (a == 0 || b == 0) return 0; if (a == 1) return b; if (b == 1 || a == b) return a; break;
-    case BO_OR: if (a == 1 || b == 1) return 1; if (a == 0) return b; if (b == 0 || a == b) return a; break;
-    case BO_XOR: if (a == 0) return b; if (b == 0) return a; if (a == b) return 0; break;
-    case BO_NOT: if (a < 2) return !a; break;
-    }
-    if (op != BO_NOT && a > b) { int t = a; a = b; b = t; }
-    int64_t key = ((int64_t)op << 60) ^ ((int64_t)a << 30) ^ (int64_t)b;
-    uint32_t ci = (uint32_t)(((uint64_t)key * 0x9E3779B97F4A7C15ULL) >> 40) & (uint32_t)(d->ckcap - 1);
-    if (d->cg[ci] == d->gen && d->ck[ci] == key) return d->cv[ci];
-    int va = d->var[a], vb = op == BO_NOT ? INT32_MAX : d->var[b], v = va < vb ? va : vb;
-    int a0 = va == v ? d->lo[a] : a, a1 = va == v ? d->hi[a] : a;
-    int r;
-    if (op == BO_NOT) r = bdd_mk(d, v, bdd_op(d, op, a0, 0), bdd_op(d, op, a1, 0));
-    else {
-        int b0 = vb == v ? d->lo[b] : b, b1 = vb == v ? d->hi[b] : b;
-        int l = bdd_op(d, op, a0, b0), h = bdd_op(d, op, a1, b1);
-        r = bdd_mk(d, v, l, h);
-    }
-    d->ck[ci] = key; d->cv[ci] = r; d->cg[ci] = d->gen;
-    return r;
-}
-/* 0 or 1 when the Boolean at p is that for every value of what it is built on; -1 otherwise. The
- * tables are the thread's, emptied after each use by the entries made */
-static __thread BcWalk *bc_w;
-static __thread Bdd *bc_d;
-static long bc_calls, bc_walk, bc_bdd, bc_fail, bc_full, bc_hit;
-static void bc_report(void) { fprintf(stderr, "[bexpr] %ld calls, %ld walked, %ld diagram nodes, %ld walks failed, %ld full, %ld constant\n", bc_calls, bc_walk, bc_bdd, bc_fail, bc_full, bc_hit); }
-static int bexpr_eval(Port p, Port q);
-static int bexpr_const(Port p) { return bexpr_eval(p, 0); }
-/* q given: 1 when p and q are one function of what they are built on, else -1 */
-static int bexpr_eval(Port p, Port q) {
-    need_bool();
-    static int stat = -1; if (stat < 0) { stat = getenv("CUBICAL_BCSTAT") != NULL; if (stat) atexit(bc_report); }
-    bc_calls++; if (stat && (bc_calls < 50 || bc_calls % 200 == 0)) bc_report();
-    if (!bc_w) {
-        BcWalk *w = calloc(1, sizeof(BcWalk));
-        w->n = malloc(BC_NODES * sizeof(BcNode)); w->hslot = malloc(BC_NODES * sizeof(int)); w->hcap = 2 * BC_NODES; w->hk = calloc((size_t)w->hcap, sizeof(Cell *)); w->hv = malloc((size_t)w->hcap * sizeof(int));
-        w->acap = 4096; w->atom = malloc((size_t)w->acap * sizeof(Key *)); w->akcap = 2 * w->acap; w->ak = calloc((size_t)w->akcap, sizeof(Key *)); w->av = malloc((size_t)w->akcap * sizeof(int));
-        bc_w = w;
-        Bdd *d = calloc(1, sizeof(Bdd)); d->cap = BC_BDD;
-        d->var = malloc((size_t)d->cap * sizeof(int)); d->lo = malloc((size_t)d->cap * sizeof(int)); d->hi = malloc((size_t)d->cap * sizeof(int)); d->slot = malloc((size_t)d->cap * sizeof(int));
-        d->utcap = 2 * BC_BDD; d->ut = malloc((size_t)d->utcap * sizeof(int)); memset(d->ut, 0xff, (size_t)d->utcap * sizeof(int));
-        d->ckcap = 1 << 18; d->ck = malloc((size_t)d->ckcap * sizeof(int64_t)); d->cv = malloc((size_t)d->ckcap * sizeof(int)); d->cg = calloc((size_t)d->ckcap, sizeof(uint32_t));
-        bc_d = d;
-    }
-    BcWalk *w = bc_w; Bdd *d = bc_d;
-    w->nn = 0; w->na = 0; w->fail = false;
-    int root = bc_node(w, p, 0), r = -1, root2 = q ? bc_node(w, q, 0) : -1;
-    if (q && root2 < 0) w->fail = true;
-    if (!w->fail && root >= 0) {
-        int *ord = malloc(((size_t)w->na + 1) * sizeof(int)), *rank = malloc(((size_t)w->na + 1) * sizeof(int));
-        for (int i = 0; i < w->na; i++) ord[i] = i;
-        /* the order the walk met them, depth first from the root: the two operands of a comparison
-         * bit by bit, interleaved (by when they were made, a word's bits before the other's: the
-         * diagram of a comparison of two words is exponential) */
-        for (int i = 0; i < w->na; i++) rank[ord[i]] = i;
-        d->gen++; if (!d->gen) { memset(d->cg, 0, (size_t)d->ckcap * sizeof(uint32_t)); d->gen = 1; }
-        d->var[0] = d->var[1] = INT32_MAX; d->lo[0] = d->hi[0] = 0; d->lo[1] = d->hi[1] = 1; d->n = 2; d->full = false;
-        int *f = malloc((size_t)w->nn * sizeof(int));
-        for (int i = 0; i < w->nn && !d->full; i++) {
-            BcNode *nd = &w->n[i];
-            switch (nd->op) {
-            case -3: f[i] = 1; break;
-            case -2: f[i] = 0; break;
-            case -1: f[i] = bdd_mk(d, rank[nd->a], 0, 1); break;
-            case BO_NOT: f[i] = bdd_op(d, BO_NOT, f[nd->a], 0); break;
-            default: f[i] = bdd_op(d, nd->op, f[nd->a], f[nd->b]); break;
-            }
-        }
-        if (!d->full) { if (q) r = f[root] == f[root2] ? 1 : -1; else if (f[root] < 2) r = f[root]; }
-        bc_bdd += d->n; if (d->full) bc_full++; if (r >= 0) bc_hit++;
-        if (stat && r < 0 && !d->full) {
-            /* not constant: its unknowns' numbers, and the diagram's size */
-            fprintf(stderr, "[bexpr] open: %d nodes, %d unknowns:", d->n, w->na);
-            for (int j = 0; j < w->na && j < 12; j++) fprintf(stderr, " %s%llu", w->atom[j]->tag == K_VAR ? "v" : "t", (unsigned long long)(w->atom[j]->tag == K_VAR ? (w->atom[j]->a & 0xffffffffULL) : w->atom[j]->tag));
-            fprintf(stderr, "\n");
-            if (getenv("CUBICAL_BCDUMP")) { static const char *on[] = { "not", "and", "or", "xor" }; int lim = w->nn < 4000 ? w->nn : 4000;
-                for (int i = 0; i < lim; i++) { BcNode *z = &w->n[i]; if (z->op == -1) fprintf(stderr, "  %d=u%d\n", i, z->a); else if (z->op < 0) fprintf(stderr, "  %d=%d\n", i, z->op == -3); else fprintf(stderr, "  %d=%s %d %d\n", i, on[z->op], z->a, z->b); }
-                fprintf(stderr, "  root %d\n", root); exit(3); }
-        }
-        if (stat && d->n > 100000) {
-            fprintf(stderr, "[bexpr] large: %d nodes over %d unknowns, %d walked; root op %d;", d->n, w->na, w->nn, w->n[root].op);
-            int nv = 0; uint64_t lo = ~0ULL, hi = 0; for (int j = 0; j < w->na; j++) if (w->atom[j]->tag == K_VAR) { nv++; uint64_t a = w->atom[j]->a & 0xffffffffULL; if (a < lo) lo = a; if (a > hi) hi = a; } else fprintf(stderr, " tag%d", w->atom[j]->tag);
-            fprintf(stderr, " %d variables %llu..%llu\n", nv, (unsigned long long)lo, (unsigned long long)hi);
-            int cnt[8] = {0}; for (int i = 0; i < w->nn; i++) { int o = w->n[i].op; cnt[o < 0 ? 4 + (-o - 1) : o]++; }
-            fprintf(stderr, "   not %d and %d or %d xor %d unknown %d false %d true %d\n", cnt[0], cnt[1], cnt[2], cnt[3], cnt[4], cnt[5], cnt[6]);
-        }
-        for (int x = 2; x < d->n; x++) d->ut[d->slot[x]] = -1;
-        free(f); free(ord); free(rank);
-    }
-    bc_walk += w->nn; if (w->fail) bc_fail++;
-    /* the walk's tables emptied by the entries made */
-    for (int i = 0; i < w->nn; i++) w->hk[w->hslot[i]] = NULL;
-    {
-        uint32_t mk2 = (uint32_t)w->akcap - 1;
-        for (int j = 0; j < w->na; j++) { Key *k = w->atom[j]; uint32_t i = bc_hp(k) & mk2; while (w->ak[i] != k) i = (i + 1) & mk2; w->ak[i] = NULL; }
-        for (int j = 0; j < w->na; j++) key_release(w->atom[j]);
-    }
-    return r;
-}
-/* ---------------- conditional values ----------------
- * case c of true → a; false → b, with c a computed bit (a Boolean not true or false): both branches
- * are computed, and an elimination of the conditional is the conditional of the eliminations (Bool's
- * η: the branches are the case's own at true and at false, so in each the elimination is the same).
- * Where both branches are words they are one word, each bit (c ∧ a) ∨ (¬c ∧ b); true and false are
- * c; one term is that term; a branch that is a conditional of c is its own branch on that side.
- * Other values stay apart (the conditional is a value): merged field by field, a state's fields
- * that agree would be read at addresses that do not, each read again splitting on c without
- * knowing which side it is on. */
-static Port sel_build(Port c, Port a, Port b) {
-    Key *ka = key_of_port(a), *kb = key_of_port(b);
-    bool same = ka && ka == kb;
-    if (ka) key_release(ka);
-    if (kb) key_release(kb);
-    if (same) { era(c); era(b); return a; }
-    Cell *s = cell(O_SEL, 4);
-    link(a, P(s, 0)); link(c, P(s, 1)); link(b, P(s, 2));
-    return P(s, 3);
-}
-static Bit bit_mux(Bit c, Bit a, Bit b) {
-    if (a.t < 2 && b.t < 2) {
-        if (a.t == b.t) { bit_era(c); return a; }
-        return a.t ? c : bit_not(c);
-    }
-    if (bit_same(a, b)) { bit_era(c); bit_era(b); return a; }
-    Bit c1, c2; bit_dup(c, &c1, &c2);
-    return bit_or(bit_and(c1, a), bit_and(bit_not(c2), b));
-}
-static bool sel_ops(int k) {
-    switch (k) {
-    case O_APP: case O_FST: case O_SND: case O_PROJ: case O_CASE: case O_WSUCC: case O_WELIM: case O_WOP2:
-    case O_WEQ: case O_WLT: case O_WADD: case O_WMAX: case O_WSUB: case O_WMUL: case O_WDIV: case O_WMOD:
-    case O_WAND: case O_WOR: case O_WXOR: case O_WSHL: case O_WSHR:
-    case O_BOP: case O_BOP2: case O_WBIT: case O_FORCE: case O_UNFOLD: return true;
-    default: return false;
-    }
-}
-/* the operation o (its principal port waiting) at x and at y, the conditional of c between them:
- * o's other operands shared; o freed */
-static void sel_split(Cell *o, Port c, Port x, Port y) {
-    Cell *o1 = clone(o), *o2 = clone(o);
-    if (o1->key) { key_release(o1->key); o1->key = NULL; }
-    if (o2->key) { key_release(o2->key); o2->key = NULL; }
-    for (int k = 1; k < o->n - 1; k++) { Port p1, p2; split2(o->port[k], &p1, &p2); link(p1, P(o1, k)); link(p2, P(o2, k)); }
-    Port out = o->port[o->n - 1];
-    Port r1 = P(o1, o->n - 1), r2 = P(o2, o->n - 1);
-    link(x, P(o1, 0)); link(y, P(o2, 0));
-    link(sel_build(c, r1, r2), out);
-    cell_free(o);
-}
-static void sel_distribute(Cell *o, Cell *v) {
-    Port c = v->port[1], a = v->port[2], b = v->port[3];
-    cell_free(v);
-    sel_split(o, c, a, b);
-}
-/* a word operation's first operand (held at port 1) a conditional: the operation on each branch */
-static void sel_wop_left(Cell *o, Cell *v) {
-    Cell *s = PC(o->port[1]);
-    Port c = s->port[1], a = s->port[2], b = s->port[3];
-    cell_free(s);
-    Port v1, v2; split2(P(v, 0), &v1, &v2);
-    Cell *w1 = cell((int)o->x, 3), *w2 = cell((int)o->x, 3);
-    link(a, P(w1, 0)); link(v1, P(w1, 1)); link(b, P(w2, 0)); link(v2, P(w2, 1));
-    link(sel_build(c, P(w1, 2), P(w2, 2)), o->port[2]);
-    cell_free(o);
-}
-static void rule_sel2(Cell *o, Cell *v) {
-    Port c = o->port[1], a = o->port[2], out = o->port[3];
-    Cell *A = PC(a), *B = v;
-    cell_free(o);
-    if (A->key && A->key == B->key) { era(c); era(P(B, 0)); link(a, out); return; }
-    {
-        /* a branch that is a conditional of the same condition: in the true branch its true branch,
-         * in the false branch its false branch */
-        Key *kc = key_of_port(c), *ka = A->kind == V_SEL ? key_of_port(A->port[1]) : NULL, *kb = B->kind == V_SEL ? key_of_port(B->port[1]) : NULL;
-        bool sa = kc && ka == kc, sb = kc && kb == kc;
-        if (kc) key_release(kc);
-        if (ka) key_release(ka);
-        if (kb) key_release(kb);
-        if (sa || sb) {
-            Port x = a, y = P(B, 0);
-            if (sa) { era(A->port[1]); era(A->port[3]); x = A->port[2]; cell_free(A); }
-            if (sb) { era(B->port[1]); era(B->port[2]); y = B->port[3]; cell_free(B); }
-            link(sel_build(c, x, y), out);
-            return;
-        }
-    }
-    bool wa = (A->kind == V_WORD) || A->kind == V_BITS, wb = (B->kind == V_WORD) || B->kind == V_BITS;
-    if (wa && wb) {
-        BVec x = bvec_take(A), y = bvec_take(B);
-        uint32_t n = x.n > y.n ? x.n : y.n;
-        Bit *r = malloc(((size_t)n + 1) * sizeof(Bit)), cb = bvar(c);
-        for (uint32_t i = 0; i < n; i++) { Bit c1, c2; bit_dup(cb, &c1, &c2); cb = c2; r[i] = bit_mux(c1, bvec_at(&x, i), bvec_at(&y, i)); }
-        bit_era(cb);
-        link(bvec_build(r, n), out);
-        free(r); free(x.b); free(y.b);
-        return;
-    }
-    need_bool();
-    if (A->kind == V_CON && B->kind == V_CON && A->n == 1 && B->n == 1 && A->a != B->a
-        && ((A->a == B_TRUE && B->a == B_FALSE) || (A->a == B_FALSE && B->a == B_TRUE))) {
-        /* true and false: the bit, or its negation */
-        bool t = A->a == B_TRUE; cell_free(A); cell_free(B);
-        link(t ? c : bop_cell(BO_NOT, c, 0), out);
-        return;
-    }
-    Cell *s = cell(V_SEL, 4);
-    {
-        Key *kc[3] = { key_of_port(c), A->key ? key_retain(A->key) : NULL, B->key ? key_retain(B->key) : NULL };
-        if (kc[0] && kc[1] && kc[2]) s->key = key(K_SEL, 0, NULL, 3, kc);
-        for (int j = 0; j < 3; j++) if (kc[j]) key_release(kc[j]);
-    }
-    link(c, P(s, 1)); link(a, P(s, 2)); link(P(B, 0), P(s, 3));
-    link(P(s, 0), out);
-}
 static void rule_view(Cell *o, Cell *v) {
     need_cons();
     Port out = o->port[1], r = 0;
@@ -2481,15 +1904,6 @@ static void rule_view(Cell *o, Cell *v) {
     case V_WPLUS: r = mk(WC[W_WPLUS], word_wn(cell_wn(v)), v->port[1], 0, 0); break;
     case V_NWOP: r = mk(WC[W_WOP], word_of((uint64_t)(v->x - O_WEQ)), v->port[1], v->port[2], 0); break;
     case V_NPRIM: r = mk(WC[W_PRIM], word_of((uint64_t)v->x), list_of(&v->port[1], v->n - 1), 0, 0); break;
-    case V_BITS: {
-        /* wbits bs: every bit, lowest first, as a Boolean (a known bit true or false) */
-        BitsD *d = v->p; Port *bs = malloc(((size_t)d->len + 1) * sizeof(Port)); int k = 1;
-        for (uint32_t i = 0; i < d->len; i++) bs[i] = d->t[i] == 2 ? v->port[k++] : con_build(d->t[i] ? C_TRUE : C_FALSE, NULL, NULL);
-        r = mk(WC[W_BITS], list_of(bs, (int)d->len), 0, 0, 0); free(bs);
-        break;
-    }
-    case V_NBOP: r = mk(WC[W_BOP], word_of((uint64_t)v->x), list_of(&v->port[1], v->n - 1), 0, 0); break;
-    case V_SEL: r = mk(WC[W_SEL], v->port[1], v->port[2], v->port[3], 0); break;
     case V_NWELIM: {
         /* the motive, when the elimination was written with one (%welimP): some P, else none (the
          * quote reads it: lib/check.cub's qneu gives cwelim its motive, the loop's state type) */
@@ -2620,24 +2034,14 @@ static Cell *wsplit(Cell *c, WN *k, Port *base) {
     *k = wn_small(0); *base = P(c, 0); return NULL;
 }
 /* k ⊕ base (taking k) */
-static Key *key_of_port(Port p);
 static Port wplus(WN k, Port base) {
     if (!base) return word_wn(k);
     if (wn_zero(&k)) return base;
-    Cell *w = cell(V_WPLUS, 2); w->a = k.s; w->p = k.b;
-    { Key *kb = key_of_port(base); if (kb) { Key *kn = key0(K_WORD, k.s, k.b); if (kn) { w->key = key2(K_WOP, 0xFFFF, NULL, kn, kb); key_release(kn); } key_release(kb); } }
-    link(base, P(w, 1));
+    Cell *w = cell(V_WPLUS, 2); w->a = k.s; w->p = k.b; link(base, P(w, 1));
     return P(w, 0);
 }
-static Key *key_of_port(Port p);
 static Port wstuck(int op, Port a, Port b) {
     Cell *n = cell(V_NWOP, 3); n->x = (uint32_t)op;
-    /* named by the operation over its operands' names, when they have them (so two of one term
-     * are found one by the conversion's key test) */
-    Key *ka = key_of_port(a), *kb = key_of_port(b);
-    if (ka && kb) { Key *c[2] = { ka, kb }; n->key = key(K_WOP, (uint64_t)op, NULL, 2, c); }
-    if (ka) key_release(ka);
-    if (kb) key_release(kb);
     link(a, P(n, 1)); link(b, P(n, 2));
     return P(n, 0);
 }
@@ -2706,7 +2110,6 @@ static const char *const KIND_NAME[K_END] = {
     [V_THUNK] = "THUNK", [V_DEFER] = "DEFER",
     [V_WPLUS] = "WPLUS",
     [V_NWOP] = "NWOP",
-    [V_BITS] = "BITS", [V_NBOP] = "NBOP", [V_SEL] = "SEL",
     [V_NPRIM] = "NPRIM",
     [V_NWELIM] = "NWELIM",
     [V_SUSP] = "SUSP",
@@ -2773,8 +2176,6 @@ static const char *const KIND_NAME[K_END] = {
     [O_WOP2] = "WOP2",
     [O_WELIM] = "WELIM",
     [O_PEND] = "PEND",
-    [O_BOP] = "BOP", [O_BOP2] = "BOP2", [O_WBIT] = "WBIT", [O_SEL] = "SEL", [O_SEL2] = "SEL2", [O_SELC] = "SELC",
-    [O_KEQ] = "KEQ", [O_KEQ2] = "KEQ2", [O_BSAME] = "BSAME", [O_BSAME2] = "BSAME2",
     [O_CLOS] = "CLOS",
     [O_CLOS2] = "CLOS2",
     [O_BRANCH] = "BRANCH",
@@ -2887,32 +2288,14 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     int vk = v->kind;
-    if (vk == V_UNK && o->kind != O_VIEW && o->kind != O_CLOS && o->kind != O_CLOS2 && o->kind != O_KEQ && o->kind != O_KEQ2 && o->kind != O_BSAME && o->kind != O_BSAME2 && o->kind != O_PEND) {
+    if (vk == V_UNK && o->kind != O_VIEW && o->kind != O_CLOS && o->kind != O_CLOS2 && o->kind != O_PEND) {
         /* an eliminator of an unknown type gives an unknown type */
         for (int k = 1; k < o->n - 1; k++) era(o->port[k]);
         link(P(v, 0), out_of(o));
         cell_free(o);
         return;
     }
-    if (vk == V_SEL && sel_ops(o->kind)) { sel_distribute(o, v); return; }
     switch (o->kind) {
-    case O_SEL: {
-        Cell *c = cell(O_SEL2, 4);
-        mv(o, 2, P(c, 0)); mv(o, 1, P(c, 1)); link(P(v, 0), P(c, 2)); mv(o, 3, P(c, 3));
-        cell_free(o);
-        return;
-    }
-    case O_SEL2: rule_sel2(o, v); return;
-    case O_SELC: {
-        need_bool();
-        if (vk == V_CON && ((int)v->a == B_TRUE || (int)v->a == B_FALSE)) {
-            bool t = (int)v->a == B_TRUE; cell_free(v);
-            if (t) { link(o->port[1], o->port[3]); era(o->port[2]); } else { link(o->port[2], o->port[3]); era(o->port[1]); }
-        } else if (vk == V_NBOP && v->x == BO_NOT) { Port c = v->port[1]; cell_free(v); link(sel_build(c, o->port[2], o->port[1]), o->port[3]); }
-        else link(sel_build(P(v, 0), o->port[1], o->port[2]), o->port[3]);
-        cell_free(o);
-        return;
-    }
     case O_APP:
         if (vk == V_CASEF) {
             /* the elimination as a function, applied: the case on the argument */
@@ -3550,67 +2933,11 @@ static void interact(Cell *o, Cell *v) {
             cell_free(o); cell_free(v);
         } else if (vk == V_SYS) distribute(o, v);
         else {
-            /* a case on a Boolean operation (a bit of a word by its bits) whose branches are the
-             * Booleans or numerals is that bit, its negation, or the word of that bit */
-            need_bool();
-            if (vk == V_NBOP && CON[B_TRUE].data == tb->d) {
-                Record *rt = tb->br[CON[B_TRUE].index], *rf = tb->br[CON[B_FALSE].index];
-                Syn *bt = rt ? rt->body : NULL, *bf = rf ? rf->body : NULL;
-                bool cons = bt && bf && bt->tag == S_CON && bf->tag == S_CON && bt->n == 0 && bf->n == 0
-                            && ((bt->id == B_TRUE && bf->id == B_FALSE) || (bt->id == B_FALSE && bf->id == B_TRUE));
-                bool nums = bt && bf && bt->tag == S_WORD && bf->tag == S_WORD;
-                if (cons || nums) {
-                    if (mb) era(o->port[1]);
-                    for (int e = 0; e < ne; e++) era(o->port[e0 + e]);
-                    Port r;
-                    if (cons) r = bt->id == B_TRUE ? P(v, 0) : bop_cell(BO_NOT, P(v, 0), 0);
-                    else {
-                        WN n1 = { (uint64_t)bt->id, bt->big }, n0 = { (uint64_t)bf->id, bf->big };
-                        uint32_t l1 = wn_len(&n1), l0 = wn_len(&n0), len = l1 > l0 ? l1 : l0;
-                        Bit *b = malloc(((size_t)len + 1) * sizeof(Bit)); Bit sc = bvar(P(v, 0));
-                        for (uint32_t i = 0; i < len; i++) {
-                            int x1 = wn_bit(&n1, i), x0 = wn_bit(&n0, i);
-                            if (x1 == x0) { b[i] = bk(x1); continue; }
-                            Bit c1, c2; bit_dup(sc, &c1, &c2); sc = c2;
-                            b[i] = x1 ? c1 : bit_not(c1);
-                        }
-                        bit_era(sc);
-                        r = bvec_build(b, len); free(b);
-                    }
-                    link(r, o->port[o->n - 1]);
-                    cell_free(o);
-                    return;
-                }
-            }
-            /* a case on a computed bit otherwise: the conditional of the bit between the case at
-             * true and at false */
-            if (vk == V_NBOP) {
-                int kc = bexpr_const(P(v, 0));
-                if (kc >= 0) { era(P(v, 0)); link(con_build(kc ? B_TRUE : B_FALSE, NULL, NULL), P(o, 0)); return; }
-            }
-            if (vk == V_NBOP) {
-                /* on a negation, the conditional of its operand with the branches exchanged: one
-                 * condition one name, so a conditional within a branch of the same is seen */
-                Port t = con_build(B_TRUE, NULL, NULL), f = con_build(B_FALSE, NULL, NULL);
-                if (v->x == BO_NOT) { Port c = v->port[1]; cell_free(v); sel_split(o, c, f, t); }
-                else sel_split(o, P(v, 0), t, f);
-                return;
-            }
             /* stuck: a neutral elimination, of type the motive at the scrutinee */
             /* 1=scrutinee [2=motive] then the environment, type */
             /* its motive, which types it, is built here from the environment */
             int nm = tb->motive ? 1 : 0;
             Cell *n = cell(V_NCASE, ne + 3 + nm); n->x = (uint32_t)nm; n->p = tb;
-            /* named by the case term it is the value of: the table over the scrutinee and the
-             * environment (as a branch's hypothesis is) */
-            if (o->key) n->key = key_retain(o->key);
-            else {
-                Key **ck = malloc(((size_t)ne + 2) * sizeof(Key *)); ck[0] = key_of_port(P(v, 0));
-                for (int e = 0; e < ne; e++) ck[1 + e] = key_of_port(o->port[e0 + e]);
-                n->key = key(K_CASE, 0, tb, ne + 1, ck);
-                for (int e = 0; e < ne + 1; e++) if (ck[e]) key_release(ck[e]);
-                free(ck);
-            }
             link(P(v, 0), P(n, 1)); link(unk(), P(n, n->n - 1));
             if (nm) {
                 Port me[ne + 1];
@@ -4041,7 +3368,6 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     case O_WSUCC: {
-        if (vk == V_BITS) { link(bits_succ(v), o->port[1]); cell_free(o); return; }
         WN k; Port b; Cell *fr = wsplit(v, &k, &b);
         WN k1 = wn_succ(&k); wn_drop(&k);
         link(wplus(k1, b), o->port[1]);
@@ -4059,14 +3385,6 @@ static void interact(Cell *o, Cell *v) {
         else if (wn_zero(&k)) {
             /* a neutral word: the elimination is stuck */
             Cell *e = cell(V_NWELIM, o->n);
-            {
-                Key *kc[4]; int nk = o->n - 1; bool all = true;
-                kc[0] = key_of_port(b);
-                for (int j = 1; j < nk; j++) kc[j] = key_of_port(o->port[j]);
-                for (int j = 0; j < nk; j++) if (!kc[j]) all = false;
-                if (all) e->key = key(K_WELIM, (uint64_t)nk, NULL, nk, kc);
-                for (int j = 0; j < nk; j++) if (kc[j]) key_release(kc[j]);
-            }
             link(b, P(e, 1)); mv(o, 1, P(e, 2)); mv(o, 2, P(e, 3)); if (hasP) mv(o, 3, P(e, 4)); link(P(e, 0), out);
         } else {
             /* s (k-1 ⊕ b) h, h the elimination of k-1 ⊕ b, computed when used */
@@ -4085,18 +3403,6 @@ static void interact(Cell *o, Cell *v) {
     case O_WOP2: {
         need_bool();
         Cell *ac = PC(o->port[1]);
-        if (ac->kind == V_SEL) { sel_wop_left(o, v); return; }
-        if (ac->kind != V_WORD || vk != V_WORD) {
-            WN t1, t0;
-            bool ab = ac->kind == V_BITS || bitcase_nums(ac, &t1, &t0), vb = vk == V_BITS || bitcase_nums(v, &t1, &t0);
-            if ((ab || vb) && bitsable(ac) && bitsable(v) && bits_handles((int)o->x, ac, v)) {
-                Cell *a2 = ac->kind == V_NCASE ? bitcase_take(ac) : ac, *v2 = vk == V_NCASE ? bitcase_take(v) : v;
-                link(bits_wop((int)o->x, a2, v2), o->port[2]);
-                cell_free(o);
-                return;
-            }
-        }
-
         WN ka, kb; Port ba, bb;
         Cell *fa = wsplit(ac, &ka, &ba), *fb = wsplit(v, &kb, &bb);
         if (fa) cell_free(fa);
@@ -4105,7 +3411,7 @@ static void interact(Cell *o, Cell *v) {
         Port r = 0;
         if (op >= O_WMUL) {
             /* multiplication, division, remainder, bitwise and shifts: on numerals; stuck otherwise */
-            if (ba || bb) { r = wstuck(op, wplus(wn_copy(&ka), ba), wplus(wn_copy(&kb), bb)); if (!PC(r)->key && o->key) PC(r)->key = key_retain(o->key); }
+            if (ba || bb) r = wstuck(op, wplus(wn_copy(&ka), ba), wplus(wn_copy(&kb), bb));
             else if (op == O_WMUL) r = word_wn(wn_mul(&ka, &kb));
             else if (op == O_WDIV || op == O_WMOD) { WN q, m; wn_divmod(&ka, &kb, &q, &m); r = word_wn(op == O_WDIV ? q : m); wn_drop(op == O_WDIV ? &m : &q); }
             else if (op == O_WSHR) r = word_wn(kb.b ? wn_small(0) : wn_shr(&ka, kb.s));
@@ -4190,17 +3496,7 @@ static void interact(Cell *o, Cell *v) {
         if (o->x == TB_VAL) {
             /* a checked definition's own value */
             Port val = global_copy(g, NULL);
-            if (!val) {
-                /* a constant with no computation (a law the machine is trusted with): its neutral,
-                 * as its syntax evaluates (S_AXIOM) */
-                extern long global_axiom_ty(long);
-                long ty = global_axiom_ty(g);
-                if (ty == -2) { fprintf(stderr, "a checked definition without a value\n"); exit(2); }
-                Cell *c = cell(V_NVAR, 2); c->a = (uint64_t)g; c->key = key0(K_VAR, (uint64_t)g, NULL);
-                if (ty >= 0) { Cell *t = cell(V_GLOBAL, 1); t->a = (uint64_t)ty; link(P(t, 0), P(c, 1)); c->ty = 1; }
-                else link(unk(), P(c, 1));
-                val = P(c, 0);
-            }
+            if (!val) { fprintf(stderr, "a checked definition without a value\n"); exit(2); }
             link(val, o->port[1]);
         } else { Cell *r = cell(V_GLOBAL, 1); r->a = (uint64_t)g; link(P(r, 0), o->port[1]); }
         cell_free(o); cell_free(v);
@@ -4272,134 +3568,6 @@ static void interact(Cell *o, Cell *v) {
         Cell *n = cell(V_NPAPP, 3); n->p = dnf_retain(o->p);
         mv(o, 1, P(n, 1)); link(unk(), P(n, 2)); link(P(n, 0), o->port[2]);
         cell_free(o); cell_free(v);
-        return;
-    }
-    case O_WBIT: {
-        /* (%wbit b), b2w: 1 or 0, or the word of the one bit b */
-        need_bool();
-        if (vk == V_CON && ((int)v->a == B_TRUE || (int)v->a == B_FALSE)) { link(word_of((int)v->a == B_TRUE ? 1 : 0), o->port[1]); cell_free(v); cell_free(o); return; }
-        Bit b = bvar(P(v, 0));
-        link(bvec_build(&b, 1), o->port[1]);
-        cell_free(o);
-        return;
-    }
-    case O_BOP: {
-        need_bool();
-        int k = (int)o->x;
-        bool isc = vk == V_CON && ((int)v->a == B_TRUE || (int)v->a == B_FALSE);
-        if (k == BO_NOT) {
-            if (isc) { link(con_build((int)v->a == B_TRUE ? B_FALSE : B_TRUE, NULL, NULL), o->port[1]); cell_free(v); }
-            else if (vk == V_NBOP && v->x == BO_NOT) { link(v->port[1], o->port[1]); cell_free(v); }
-            else { Port r = nbop(BO_NOT, P(v, 0), 0); if (!PC(r)->key && o->key) PC(r)->key = key_retain(o->key); link(r, o->port[1]); }
-            cell_free(o);
-            return;
-        }
-        if (isc) {
-            bool t = (int)v->a == B_TRUE; cell_free(v);
-            Port out = o->port[2], b = o->port[1];
-            if (k == BO_AND) { if (t) link(b, out); else { era(b); link(con_build(B_FALSE, NULL, NULL), out); } }
-            else if (k == BO_OR) { if (t) { era(b); link(con_build(B_TRUE, NULL, NULL), out); } else link(b, out); }
-            else { if (t) link(bop_cell(BO_NOT, b, 0), out); else link(b, out); }
-            cell_free(o);
-            return;
-        }
-        Cell *c = cell(O_BOP2, 3); c->x = (uint32_t)k; c->key = o->key; o->key = NULL;
-        mv(o, 1, P(c, 0)); link(P(v, 0), P(c, 1)); mv(o, 2, P(c, 2));
-        cell_free(o);
-        return;
-    }
-    case O_BOP2: {
-        /* b's value; a's at port 1 */
-        need_bool();
-        int k = (int)o->x;
-        Port a = o->port[1], out = o->port[2];
-        if (vk == V_CON && ((int)v->a == B_TRUE || (int)v->a == B_FALSE)) {
-            bool t = (int)v->a == B_TRUE; cell_free(v);
-            if (k == BO_AND) { if (t) link(a, out); else { era(a); link(con_build(B_FALSE, NULL, NULL), out); } }
-            else if (k == BO_OR) { if (t) { era(a); link(con_build(B_TRUE, NULL, NULL), out); } else link(a, out); }
-            else { if (t) link(bop_cell(BO_NOT, a, 0), out); else link(a, out); }
-            cell_free(o);
-            return;
-        }
-        {
-            /* one term on both sides: x ∧ x = x ∨ x = x, x ⊕ x = false */
-            Key *ka = key_of_port(a), *kv = v->key;
-            bool same = ka && ka == kv;
-            if (ka) key_release(ka);
-            if (same) {
-                if (k == BO_XOR) { era(a); era(P(v, 0)); link(con_build(B_FALSE, NULL, NULL), out); }
-                else { era(a); link(P(v, 0), out); }
-                cell_free(o);
-                return;
-            }
-            /* a term and its negation: x ∧ ¬x = false, x ∨ ¬x = x ⊕ ¬x = true */
-            Cell *ac = PI(a) == 0 && !is_var(a) ? PC(a) : NULL;
-            Key *kn1 = vk == V_NBOP && v->x == BO_NOT ? key_of_port(v->port[1]) : NULL;
-            Key *kn2 = ac && ac->kind == V_NBOP && ac->x == BO_NOT ? key_of_port(ac->port[1]) : NULL;
-            Key *ka2 = key_of_port(a);
-            bool comp = (kn1 && ka2 && kn1 == ka2) || (kn2 && kv && kn2 == kv);
-            if (kn1) key_release(kn1);
-            if (kn2) key_release(kn2);
-            if (ka2) key_release(ka2);
-            if (comp) {
-                era(a); era(P(v, 0));
-                link(con_build(k == BO_AND ? B_FALSE : B_TRUE, NULL, NULL), out);
-                cell_free(o);
-                return;
-            }
-        }
-        {
-            Port r = nbop(k, a, P(v, 0));
-            if (!PC(r)->key && o->key) PC(r)->key = key_retain(o->key);
-            link(r, out);
-        }
-        cell_free(o);
-        return;
-    }
-    case O_BSAME: {
-        Cell *c = cell(O_BSAME2, 3);
-        mv(o, 1, P(c, 0)); link(P(v, 0), P(c, 1)); mv(o, 2, P(c, 2));
-        cell_free(o);
-        return;
-    }
-    case O_BSAME2: {
-        /* (%bsame a b): true when the two Booleans are one function of what they are built on (their
-         * decision diagrams one), else false: false is no conclusion (past the bound, or another kind
-         * of value) */
-        need_bool();
-        bool same = PI(o->port[1]) == 0 && bexpr_eval(o->port[1], P(v, 0)) == 1;
-        link(con_build(same ? B_TRUE : B_FALSE, NULL, NULL), o->port[2]);
-        era(o->port[1]); era(P(v, 0));
-        cell_free(o);
-        return;
-    }
-    case O_KEQ: {
-        /* (%keq u v): u's value is here; wait for v's */
-        Cell *c = cell(O_KEQ2, 3);
-        mv(o, 1, P(c, 0)); link(P(v, 0), P(c, 1)); mv(o, 2, P(c, 2));
-        cell_free(o);
-        return;
-    }
-    case O_KEQ2: {
-        /* both values: one term when their keys are one (keys are interned, so one pointer is one
-         * term compared structurally when it was made); a value with no key is not compared */
-        need_bool();
-        Cell *f = PC(o->port[1]);
-        bool same = PI(o->port[1]) == 0 && f->key && v->key && f->key == v->key;
-        if (getenv("CUBICAL_KEQSTAT")) {
-            static long st[4]; static long nok[512];
-            st[same ? 0 : (f->key && v->key) ? 1 : 2]++;
-            if (!f->key && f->kind < 512) nok[f->kind]++;
-            if (!v->key && v->kind < 512) nok[v->kind]++;
-            if ((st[0] + st[1] + st[2]) % 200000 == 0) {
-                fprintf(stderr, "keq: same %ld differ %ld unkeyed %ld;", st[0], st[1], st[2]);
-                for (int k = 0; k < 512; k++) if (nok[k] > 1000) fprintf(stderr, " %s:%ld", kind_name(k), nok[k]);
-                fprintf(stderr, "\n");
-            }
-        }
-        link(con_build(same ? B_TRUE : B_FALSE, NULL, NULL), o->port[2]);
-        era(o->port[1]); era(P(v, 0));
-        cell_free(o);
         return;
     }
     case O_CLOS: {

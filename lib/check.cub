@@ -346,13 +346,11 @@ is-w l = case lvl-of l of lvw → true; _ → false
 -- conv T u v: u = v at type T. At Π, Σ and path types by eliminating both (η), the variable at
 -- its type; at a universe as types; at Glue by unglue and on the face the fibre; at a data type
 -- by constructors; otherwise without the type. uconv: without a type, types by their former,
--- neutrals by their spine, each argument at its type. Two values that are one term (one key) are
--- equal without looking further.
+-- neutrals by their spine, each argument at its type.
 -- two λs of one record are equal when their environments are: neither is applied
 env-pairs ps = lall (λ p → uconv (fst p) (snd p)) ps
 conv-ty X Y = uconv X Y
 conv T u v =
-  if %keq u v then true else
   case %view T of
     wpi A B → 
       case %clos u v of
@@ -515,18 +513,8 @@ uconv-ww u wu v wv =
     wlam g → let x = %var Uw in uconv (u x) (g x)
     wplam q → let i = %dim in uconv (u @ i) (q @ i)
     wpair a b → if uconv (fst u) a then uconv (snd u) b else false
-    _ → if uconv-head u wu v wv then true else (if is-bop wu then %bsame u v else (if is-bop wv then %bsame u v else false))
--- a computed Boolean (by its bits, a word's): two are equal when they are one function of what
--- they are built on, though written differently
-is-bop (wbopv k as) = true
-is-bop _ = false
-bit-same a b = if uconv a b then true else %bsame a b
-bits-same lnil lnil = true
-bits-same lnil (lcons c cs) = if bit-same false c then bits-same lnil cs else false
-bits-same (lcons b bs) lnil = if bit-same b false then bits-same bs lnil else false
-bits-same (lcons b bs) (lcons c cs) = if bit-same b c then bits-same bs cs else false
+    _ → uconv-head u wu v wv
 uconv u v =
-  if %keq u v then true else
   case %view u of
     wsys bs → lall (λ b → let d = fst b in uconv (snd b) (%restrict d v)) bs
     wlam f → 
@@ -668,18 +656,6 @@ convneu wu wv =
     wprim k as → 
       case wv of
         wprim j bs → if %weq k j then (if lall2 (λ a b → uconv a b) as bs then some opq else none) else none
-        _ → none
-    wbitv bs → 
-      case wv of
-        wbitv cs → if bits-same bs cs then some opq else none
-        _ → none
-    wbopv k as → 
-      case wv of
-        wbopv j cs → if %weq k j then (if lall2 (λ a b → uconv a b) as cs then some opq else none) else none
-        _ → none
-    wselv c a b → 
-      case wv of
-        wselv c2 a2 b2 → if uconv c c2 then (if uconv a a2 then (if uconv b b2 then some opq else none) else none) else none
         _ → none
     wtrans d psi ls x T → 
       case wv of
@@ -1907,9 +1883,6 @@ is-neu (wwplus k x) = true
 is-neu (wwop k a b) = true
 is-neu (wwelim x z s mo) = true
 is-neu (wprim k as) = true
-is-neu (wbitv bs) = true
-is-neu (wbopv k as) = true
-is-neu (wselv c a b) = true
 is-neu (wcofix n T) = true
 is-neu (wproj d k x T) = true
 is-neu _ = false
