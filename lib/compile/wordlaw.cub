@@ -103,3 +103,41 @@ lt-ltw d a = %welimP (λ v → ltw v (wadd (%wsucc v) d) ≡ true) a
   (λ n h → lt-ltw-step d n h)
 lt-wlt : (a b : Word) → Ltw a b → wlt a b ≡ true
 lt-wlt a b h = catb (symb (ltw≡wlt a b)) (catb (λ i → ltw a (snd h (~ i))) (lt-ltw (fst h) a))
+
+-- ---------------------------------------------------------------- the digit step
+-- D·P + R < 256·P when D < 256 and R < P
+lt-digit-path : (D R P d1 d2 : Word) → wadd (%wsucc D) d1 ≡ #256 → wadd (%wsucc R) d2 ≡ P →
+                wadd (%wsucc (wadd (wmul D P) R)) (wadd d2 (wmul d1 P)) ≡ wmul #256 P
+lt-digit-path D R P d1 d2 eD eR =
+  catw (wadd-assoc (wmul D P) (%wsucc R) (wadd d2 (wmul d1 P)))
+    (catw (congw (λ z → wadd (wmul D P) z) (symw (wadd-assoc (%wsucc R) d2 (wmul d1 P))))
+      (catw (symw (wadd-assoc (wmul D P) (wadd (%wsucc R) d2) (wmul d1 P)))
+        (catw (congw (λ z → wadd (wadd (wmul D P) z) (wmul d1 P)) eR)
+          (catw (congw (λ z → wadd z (wmul d1 P)) (symw (wmul-suc-l D P)))
+            (catw (symw (wmul-distr (%wsucc D) d1 P))
+              (congw (λ z → wmul z P) eD))))))
+lt-digit : (D R P : Word) → wlt D #256 ≡ true → wlt R P ≡ true → wlt (wadd (wmul D P) R) (wmul #256 P) ≡ true
+lt-digit D R P hD hR =
+  lt-wlt (wadd (wmul D P) R) (wmul #256 P)
+    (wadd (fst (wlt-lt R P hR)) (wmul (fst (wlt-lt D #256 hD)) P) ,
+     lt-digit-path D R P (fst (wlt-lt D #256 hD)) (fst (wlt-lt R P hR)) (snd (wlt-lt D #256 hD)) (snd (wlt-lt R P hR)))
+-- V = Q'·(256·P) + (D·P + R), Q and R V's quotient and remainder by P, Q' and D Q's by 256
+digit-split : (V P : Word) →
+  V ≡ wadd (wmul (wquot (wquot V P) #256) (wmul #256 P)) (wadd (wmul (wrem (wquot V P) #256) P) (wrem V P))
+digit-split V P =
+  catw (wdiv-mod V P)
+    (catw (congw (λ z → wadd (wmul z P) (wrem V P)) (wdiv-mod (wquot V P) #256))
+      (catw (congw (λ z → wadd z (wrem V P)) (wmul-distr (wmul (wquot (wquot V P) #256) #256) (wrem (wquot V P) #256) P))
+        (catw (wadd-assoc (wmul (wmul (wquot (wquot V P) #256) #256) P) (wmul (wrem (wquot V P) #256) P) (wrem V P))
+          (congw (λ z → wadd z (wadd (wmul (wrem (wquot V P) #256) P) (wrem V P))) (wmul-assoc (wquot (wquot V P) #256) #256 P)))))
+-- the remainder by P plus the next digit times P is the remainder by 256·P
+digit-step : (V P : Word) → wlt #0 P ≡ true → wadd (wrem V P) (wmul (wrem (wquot V P) #256) P) ≡ wrem V (wmul #256 P)
+digit-step V P h0 =
+  catw (wadd-comm (wrem V P) (wmul (wrem (wquot V P) #256) P))
+    (symw (catw (congw (λ z → wrem z (wmul #256 P)) (digit-split V P))
+            (wmod-unique (wquot (wquot V P) #256) (wadd (wmul (wrem (wquot V P) #256) P) (wrem V P)) (wmul #256 P)
+              (lt-digit (wrem (wquot V P) #256) (wrem V P) P (wrem-lt (wquot V P) #256 refl) (wrem-lt V P h0)))))
+-- a word below n is its own remainder by n
+wrem-small : (V n : Word) → wlt V n ≡ true → wrem V n ≡ V
+wrem-small V n h = catw (congw (λ z → wrem z n) (symw (catw (congw (λ z → wadd z V) (wmul-zero-l n)) (wadd-zero-l V))))
+                        (wmod-unique #0 V n h)
