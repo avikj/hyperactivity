@@ -515,7 +515,16 @@ uconv-ww u wu v wv =
     wlam g → let x = %var Uw in uconv (u x) (g x)
     wplam q → let i = %dim in uconv (u @ i) (q @ i)
     wpair a b → if uconv (fst u) a then uconv (snd u) b else false
-    _ → uconv-head u wu v wv
+    _ → if uconv-head u wu v wv then true else (if is-bop wu then %bsame u v else (if is-bop wv then %bsame u v else false))
+-- a computed Boolean (by its bits, a word's): two are equal when they are one function of what
+-- they are built on, though written differently
+is-bop (wbopv k as) = true
+is-bop _ = false
+bit-same a b = if uconv a b then true else %bsame a b
+bits-same lnil lnil = true
+bits-same lnil (lcons c cs) = if bit-same false c then bits-same lnil cs else false
+bits-same (lcons b bs) lnil = if bit-same b false then bits-same bs lnil else false
+bits-same (lcons b bs) (lcons c cs) = if bit-same b c then bits-same bs cs else false
 uconv u v =
   if %keq u v then true else
   case %view u of
@@ -662,7 +671,7 @@ convneu wu wv =
         _ → none
     wbitv bs → 
       case wv of
-        wbitv cs → if lall2 (λ a b → uconv a b) bs cs then some opq else none
+        wbitv cs → if bits-same bs cs then some opq else none
         _ → none
     wbopv k as → 
       case wv of

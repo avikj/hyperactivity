@@ -2274,7 +2274,10 @@ static __thread BcWalk *bc_w;
 static __thread Bdd *bc_d;
 static long bc_calls, bc_walk, bc_bdd, bc_fail, bc_full, bc_hit;
 static void bc_report(void) { fprintf(stderr, "[bexpr] %ld calls, %ld walked, %ld diagram nodes, %ld walks failed, %ld full, %ld constant\n", bc_calls, bc_walk, bc_bdd, bc_fail, bc_full, bc_hit); }
-static int bexpr_const(Port p) {
+static int bexpr_eval(Port p, Port q);
+static int bexpr_const(Port p) { return bexpr_eval(p, 0); }
+/* q given: 1 when p and q are one function of what they are built on, else -1 */
+static int bexpr_eval(Port p, Port q) {
     need_bool();
     static int stat = -1; if (stat < 0) { stat = getenv("CUBICAL_BCSTAT") != NULL; if (stat) atexit(bc_report); }
     bc_calls++; if (stat && (bc_calls < 50 || bc_calls % 200 == 0)) bc_report();
@@ -2291,7 +2294,8 @@ static int bexpr_const(Port p) {
     }
     BcWalk *w = bc_w; Bdd *d = bc_d;
     w->nn = 0; w->na = 0; w->fail = false;
-    int root = bc_node(w, p, 0), r = -1;
+    int root = bc_node(w, p, 0), r = -1, root2 = q ? bc_node(w, q, 0) : -1;
+    if (q && root2 < 0) w->fail = true;
     if (!w->fail && root >= 0) {
         int *ord = malloc(((size_t)w->na + 1) * sizeof(int)), *rank = malloc(((size_t)w->na + 1) * sizeof(int));
         for (int i = 0; i < w->na; i++) ord[i] = i;
@@ -2312,8 +2316,17 @@ static int bexpr_const(Port p) {
             default: f[i] = bdd_op(d, nd->op, f[nd->a], f[nd->b]); break;
             }
         }
-        if (!d->full && f[root] < 2) r = f[root];
+        if (!d->full) { if (q) r = f[root] == f[root2] ? 1 : -1; else if (f[root] < 2) r = f[root]; }
         bc_bdd += d->n; if (d->full) bc_full++; if (r >= 0) bc_hit++;
+        if (stat && r < 0 && !d->full) {
+            /* not constant: its unknowns' numbers, and the diagram's size */
+            fprintf(stderr, "[bexpr] open: %d nodes, %d unknowns:", d->n, w->na);
+            for (int j = 0; j < w->na && j < 12; j++) fprintf(stderr, " %s%llu", w->atom[j]->tag == K_VAR ? "v" : "t", (unsigned long long)(w->atom[j]->tag == K_VAR ? (w->atom[j]->a & 0xffffffffULL) : w->atom[j]->tag));
+            fprintf(stderr, "\n");
+            if (getenv("CUBICAL_BCDUMP")) { static const char *on[] = { "not", "and", "or", "xor" }; int lim = w->nn < 4000 ? w->nn : 4000;
+                for (int i = 0; i < lim; i++) { BcNode *z = &w->n[i]; if (z->op == -1) fprintf(stderr, "  %d=u%d\n", i, z->a); else if (z->op < 0) fprintf(stderr, "  %d=%d\n", i, z->op == -3); else fprintf(stderr, "  %d=%s %d %d\n", i, on[z->op], z->a, z->b); }
+                fprintf(stderr, "  root %d\n", root); exit(3); }
+        }
         if (stat && d->n > 100000) {
             fprintf(stderr, "[bexpr] large: %d nodes over %d unknowns, %d walked; root op %d;", d->n, w->na, w->nn, w->n[root].op);
             int nv = 0; uint64_t lo = ~0ULL, hi = 0; for (int j = 0; j < w->na; j++) if (w->atom[j]->tag == K_VAR) { nv++; uint64_t a = w->atom[j]->a & 0xffffffffULL; if (a < lo) lo = a; if (a > hi) hi = a; } else fprintf(stderr, " tag%d", w->atom[j]->tag);
@@ -2761,7 +2774,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_WELIM] = "WELIM",
     [O_PEND] = "PEND",
     [O_BOP] = "BOP", [O_BOP2] = "BOP2", [O_WBIT] = "WBIT", [O_SEL] = "SEL", [O_SEL2] = "SEL2", [O_SELC] = "SELC",
-    [O_KEQ] = "KEQ", [O_KEQ2] = "KEQ2",
+    [O_KEQ] = "KEQ", [O_KEQ2] = "KEQ2", [O_BSAME] = "BSAME", [O_BSAME2] = "BSAME2",
     [O_CLOS] = "CLOS",
     [O_CLOS2] = "CLOS2",
     [O_BRANCH] = "BRANCH",
@@ -2874,7 +2887,7 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     int vk = v->kind;
-    if (vk == V_UNK && o->kind != O_VIEW && o->kind != O_CLOS && o->kind != O_CLOS2 && o->kind != O_KEQ && o->kind != O_KEQ2 && o->kind != O_PEND) {
+    if (vk == V_UNK && o->kind != O_VIEW && o->kind != O_CLOS && o->kind != O_CLOS2 && o->kind != O_KEQ && o->kind != O_KEQ2 && o->kind != O_BSAME && o->kind != O_BSAME2 && o->kind != O_PEND) {
         /* an eliminator of an unknown type gives an unknown type */
         for (int k = 1; k < o->n - 1; k++) era(o->port[k]);
         link(P(v, 0), out_of(o));
@@ -4340,6 +4353,23 @@ static void interact(Cell *o, Cell *v) {
             if (!PC(r)->key && o->key) PC(r)->key = key_retain(o->key);
             link(r, out);
         }
+        cell_free(o);
+        return;
+    }
+    case O_BSAME: {
+        Cell *c = cell(O_BSAME2, 3);
+        mv(o, 1, P(c, 0)); link(P(v, 0), P(c, 1)); mv(o, 2, P(c, 2));
+        cell_free(o);
+        return;
+    }
+    case O_BSAME2: {
+        /* (%bsame a b): true when the two Booleans are one function of what they are built on (their
+         * decision diagrams one), else false: false is no conclusion (past the bound, or another kind
+         * of value) */
+        need_bool();
+        bool same = PI(o->port[1]) == 0 && bexpr_eval(o->port[1], P(v, 0)) == 1;
+        link(con_build(same ? B_TRUE : B_FALSE, NULL, NULL), o->port[2]);
+        era(o->port[1]); era(P(v, 0));
         cell_free(o);
         return;
     }

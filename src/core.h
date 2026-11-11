@@ -259,6 +259,8 @@ enum {
     O_SELC,     /* 0=c 1=a 2=b 3=out: c's value: true a, false b, else the conditional value */
     O_KEQ,      /* 0=u 1=v 2=out: true when both values carry one key (they are one term), else false */
     O_KEQ2,     /* 0=v 1=u (its value) 2=out */
+    O_BSAME,    /* 0=a 1=b 2=out: true when two Booleans are one function of the unknowns they are built on */
+    O_BSAME2,   /* 0=b 1=a (its value) 2=out */
     O_CLOS,     /* 0=f 1=g 2=out */
     O_CLOS2,    /* 0=g 1=f 2=out: (csame pairs) when f, g are λs of one record, the pairs of their
                  * environments; else (cdiff f g), both untouched */
