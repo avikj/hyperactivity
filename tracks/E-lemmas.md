@@ -78,12 +78,26 @@ combinators, `experiments/isa/addw-all.cub` (a lemma about one output of the unt
 
 ## Next step
 
-Measure the specializer on the model at one template's bytes from a symbolic frame state
-(`i-ld-rbp d`: `rbp`, `rip`, memory variables, the code bytes in memory at `rip`): steps, the
-residual's size, and the stuck points (expected: the canonical checks and the cross-region
-comparisons, nothing else). Then rules with decided premises in `lib/rules.cub`.
+The evaluator's word primitives on addresses (below, Found 2): the decision is the owner's
+(the C evaluator is the trusted core). With it, repeat the measurement; then rules with
+decided premises in `lib/rules.cub` for the canonical checks and cross-region comparisons.
 
 ## Found
 
 - `lib/compile/tmpl.cub` has the frame-state approach with the code at a literal address; it is
   the start of piece 2, moved to a variable address.
+
+- **Measured 2026-11-11: the model's step at a variable placement does not normalize.** One
+  instruction (`mov rax, [rbp+16]`, 7 bytes at `p`, `rbp` and memory variables) runs out of
+  memory in `normalize`. Cause, measured on the primitives: comparisons between addresses of
+  one region stay stuck though the constants determine them, and each stuck comparison in the
+  store chain splits the residual in two:
+  - `weq ((p+1) mod 2⁶⁴) p` stays `%weq (%wand (%wsucc p) M64) p` (false for every p);
+  - `weq ((p+1) mod 2⁶⁴) ((p+2) mod 2⁶⁴)` stays stuck (false for every p);
+  - `weq t t` for a compound `t` stays stuck (only a bare variable compared with itself folds);
+  - `((p+1) mod 2⁶⁴ + 2) mod 2⁶⁴` is not `(p+3) mod 2⁶⁴`.
+  Each is determined by the constants alone. What decides them: a normal form `(x + c) mod 2ⁿ`
+  for the word primitives' sums and masks over one variable, equality of two such forms with
+  the same `x` decided by `c₁ ≡ c₂ (mod 2ⁿ)`, and `weq t t` true for one term. The canonical
+  checks and cross-region comparisons are not determined by the constants and remain the
+  frame's hypotheses (rules with premises).
