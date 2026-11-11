@@ -180,6 +180,22 @@ arguments not yet found needed are then erased to 0.
 Also refused (untyped): `lib/derive.cub` (122 lines; `deriving eq` in the surface language is off
 with it) and `lib/intlin.cub` (20).
 
+`lib/compile/meaning.cub` (loaded after `lib/isa/x86/run.cub`) defines ⟦bs⟧: the blob at a fixed
+address, the arguments' machine forms (`MForm`: word, Nat, Bool, pairs, lists, as `jit_in` places
+them) in an array and the arena, the context and stack at fixed addresses; the model runs until
+rip reaches the return address; the flag set (overflow exit) gives f's value. `Correct1/2 bs f`:
+for every fuel and argument ⟦bs⟧ is f. `experiments/isa/jit-runs.cub` runs the compiler's bytes for
+22 workloads under the Sail model (27 runs: loops, Nat recursion, closures, codata, division edge
+cases, lists, pairs, records): every result equals the definition's (312M steps, ~2 min).
+
+Why the proof is not by running with variables: one instruction with variable data computes
+(`add`, `push`: 16–38k steps), but a word stored to memory is 8 bytes `(v >> 8k) & 255` and read
+back by or/shift, and with a variable `v` nothing reduces that to `v` — the evaluator does not use
+laws of `%wand`/`%wshr`/`%wor`; a variable address makes every canonical-address check a case on
+the address. A whole run with variable arguments runs out of 8 GB. The template theorems need
+those laws (trusted laws of the primitives, PLAN §7) and lemmas of the model's memory functions at
+a variable address.
+
 `lib/compile/x86ok.cub` has lemmas about runs of the model (a run splits at any step; stores to
 distinct addresses commute) for the template theorems.
 
