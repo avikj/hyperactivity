@@ -31,6 +31,19 @@ Files: `lib/compile/` (the template types, the combinators, the laws they use), 
 - *The overflow exit*: the flag set and the call's return taken, as §4.2 states; then the net
   computes the call (`run p f ≡ f`).
 
+**The form of the proofs** (forced): within a region every address is `base + c` (ℤ/2⁶⁴ is a
+torsor; comparisons of two such addresses are decided by the constants); across regions only
+by the frame's separation hypothesis; the model's canonical checks only by a hypothesis on the
+base with a margin. So conversion alone stops at every cross-region comparison and canonical
+check, and the proof is the model **specialized at the template's bytes** (Phase 2 item 7's
+`#lift`, the specializer returning its path) from a symbolic frame state, rewriting along a
+fixed set of conditional laws, each one law over its offsets with a side condition that
+computes on literals: the torsor laws, canonical-with-margin, region separation, the frame's
+memory contents. `lib/rules.cub` rules today are `Π x. l ≡ r`; rules with premises decided by
+computation are added (code in the language). Each template theorem is closed, proved once for
+all operands and frames; the combinators once, generically; `cx` assembles theorems by
+structural recursion, so checking a `#jit` evaluates no model and costs the code's size.
+
 **The pieces, each written at its type, never bytes first:**
 
 1. `Frame`, `Tmpl`, and the run-composition law (a run to the end of `a` then from there to the
@@ -65,10 +78,10 @@ combinators, `experiments/isa/addw-all.cub` (a lemma about one output of the unt
 
 ## Next step
 
-Piece 1 and the first template of piece 2, at a variable frame: `i-ld-rbp d` (load a slot) and
-the `add` template, with `rbp`, `r14`, the code's address and the memory variables. Measure
-steps; the form of the frame's memory is the one under which the model's reads at `rbp + d`
-compute. Record what was measured here.
+Measure the specializer on the model at one template's bytes from a symbolic frame state
+(`i-ld-rbp d`: `rbp`, `rip`, memory variables, the code bytes in memory at `rip`): steps, the
+residual's size, and the stuck points (expected: the canonical checks and the cross-region
+comparisons, nothing else). Then rules with decided premises in `lib/rules.cub`.
 
 ## Found
 
