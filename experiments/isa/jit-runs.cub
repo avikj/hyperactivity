@@ -1,0 +1,189 @@
+-- experiments/isa/jit-runs.cub — the compiler's bytes for the workloads with word, Nat and Bool
+-- interfaces, run under the imported x86 model (lib/compile/meaning.cub's ⟦bs⟧) on concrete
+-- arguments, beside the definition's own value. Loaded as experiments/isa/jit-run.cub is, with
+-- lib/decode.cub's prerequisites as experiments/jit/workloads.cub needs them.
+nat-w : Nat → Word
+nat-w n = case n return (λ _ → Word) of
+  zero → #0
+  suc k → %wsucc (rec k)
+bool-w : Bool → Word
+bool-w b = if b then #0 else #1
+glob-of : Code → Word
+glob-of c = case c return (λ _ → Word) of
+  cglob g → g
+  _ → #0
+blob-of : Word → Lst Word
+blob-of g = snd (snd (snd (snd (jit-plan g lnil))))
+addw : Word → Word → Word
+addw a b = %wadd a b
+powl : Word → Word
+powl n = %welimP (λ v → Word) n #1 (λ k acc → %wadd acc acc)
+plusN : Nat → Nat → Nat
+plusN a b = case a return (λ k → Nat) of
+  zero → b
+  suc k → suc (rec k)
+isZ : Nat → Bool
+isZ n = case n of
+  zero → true
+  suc k → false
+data Pt = mkpt (x : Word) (y : Word)
+swapPt : Pt → Pt
+swapPt p = case p of
+  mkpt a b → mkpt b a
+sumL : List Word → Word
+sumL l = case l return (λ k → Word) of
+  nil → #0
+  cons x xs → %wadd x (rec xs)
+upto : Word → List Word
+upto n = %welimP (λ v → List Word) n nil (λ k acc → cons k acc)
+mix : Int64 → Int64 → Int64
+mix a b = i64add (i64mul a b) (i64div a b)
+umix : UInt64 → UInt64 → UInt64
+umix a b = u64xor (u64shl a b) (u64mod a b)
+fmix : Float64 → Float64 → Float64
+fmix a b = f64add (f64mul a b) (f64div a b)
+pairUp : Word → Word × Word
+pairUp n = (n , %wadd n #1)
+sdiv : Int64 → Int64 → Int64
+sdiv a b = i64div a b
+smod : Int64 → Int64 → Int64
+smod a b = i64mod a b
+udiv : UInt64 → UInt64 → UInt64
+udiv a b = u64div a b
+umod : UInt64 → UInt64 → UInt64
+umod a b = u64mod a b
+sar : Int64 → Int64 → Int64
+sar a b = i64shr a b
+u32w : UInt32 → UInt32 → UInt32
+u32w a b = u32add a b
+u32l : UInt32 → UInt32 → Bool
+u32l a b = u32lt a b
+i64l : Int64 → Int64 → Bool
+i64l a b = i64lt a b
+feq : Float64 → Float64 → Bool
+feq a b = f64eq a b
+flt : Float64 → Float64 → Bool
+flt a b = f64lt a b
+w2f : Word → Float64
+w2f w = f64 w
+f2i : Float64 → Int64
+f2i x = i64off64 x
+st8 : Bytes 16 → Int64 → Bytes 16
+st8 b v = store64 16 b 8 (0 , λ i → 16) v
+eqN : Nat → Nat → Bool
+eqN a = case a return (λ k → Nat → Bool) of
+  zero → λ m → isZ m
+  suc k → λ m → case m of
+    zero → false
+    suc j → rec k j
+pz : Nat → Nat
+pz x = plus x zero
+pzz : Nat → Nat
+pzz x = plus (plus x zero) zero
+adders : List Word → List (Word → Word)
+adders l = case l return (λ k → List (Word → Word)) of
+  nil → nil
+  cons k ks → cons (λ y → %wadd k y) (rec ks)
+applyAll : List (Word → Word) → Word → Word
+applyAll fs x = case fs return (λ k → Word) of
+  nil → #0
+  cons f gs → %wadd (f x) (rec gs)
+sumAdd : List Word → Word → Word
+sumAdd l x = applyAll (adders l) x
+twice : (Word → Word) → Word → Word
+twice f x = f (f x)
+pickF : Bool → Word → Word
+pickF b y = twice (case b return (λ k → Word → Word) of
+                     true → λ z → %wadd z #10
+                     false → λ z → %wadd z z) y
+codata Pr where
+  pa : Word
+  pb : Word
+mkPr : Word → Pr
+(mkPr w).pa = %wadd w #1
+(mkPr w).pb = %wadd w #2
+prs : List Word → List Pr
+prs l = case l return (λ k → List Pr) of
+  nil → nil
+  cons x xs → cons (mkPr x) (rec xs)
+sumPr : List Pr → Word
+sumPr l = case l return (λ k → Word) of
+  nil → #0
+  cons p ps → %wadd (%wadd (p .pa) (p .pb)) (rec ps)
+usePrs : List Word → Word
+usePrs l = sumPr (prs l)
+codata Stm where
+  hd : Word
+  tl : Stm
+from : Word → Stm
+(from n).hd = n
+(from n).tl = from (%wsucc n)
+nthS : Nat → Stm → Word
+nthS n = case n return (λ k → Stm → Word) of
+  zero → λ s → s .hd
+  suc k → λ s → rec k (s .tl)
+nthFrom : Nat → Word → Word
+nthFrom n w = nthS n (from w)
+<-suc-eq : (a b : Nat) → a ≡ b → a < suc b
+<-suc-eq a b p = subst {lzero} {lzero} {Nat} {λ x → a < suc x} {a} {b} p (<-suc-self a)
+zig : (a b : Nat) → Nat
+zig zero b = b
+zig (suc a) b = suc (zig b a)
+decreasing by plus a b using <-suc-eq (plus b a) (plus a b) (plus-comm b a)
+addw-bs : Lst Word
+addw-bs = blob-of (glob-of (code addw))
+#show the (Opt Word × Word) (mn-run addw-bs #200000 (lcons #3 (lcons #4 lnil)) , addw #3 #4)
+powl-bs : Lst Word
+powl-bs = blob-of (glob-of (code powl))
+#show the (Opt Word × Word) (mn-run powl-bs #200000 (lcons #5 lnil) , powl #5)
+plusN-bs : Lst Word
+plusN-bs = blob-of (glob-of (code plusN))
+#show the (Opt Word × Word) (mn-run plusN-bs #200000 (lcons #3 (lcons #4 lnil)) , nat-w (plusN 3 4))
+isZ-bs : Lst Word
+isZ-bs = blob-of (glob-of (code isZ))
+#show the (Opt Word × Word) (mn-run isZ-bs #200000 (lcons #0 lnil) , bool-w (isZ 0))
+#show the (Opt Word × Word) (mn-run isZ-bs #200000 (lcons #2 lnil) , bool-w (isZ 2))
+mix-bs : Lst Word
+mix-bs = blob-of (glob-of (code mix))
+#show the (Opt Word × Word) (mn-run mix-bs #200000 (lcons #7 (lcons #2 lnil)) , i64toWord (mix (i64 #7) (i64 #2)))
+umix-bs : Lst Word
+umix-bs = blob-of (glob-of (code umix))
+#show the (Opt Word × Word) (mn-run umix-bs #200000 (lcons #7 (lcons #2 lnil)) , u64toWord (umix (u64 #7) (u64 #2)))
+sdiv-bs : Lst Word
+sdiv-bs = blob-of (glob-of (code sdiv))
+#show the (Opt Word × Word) (mn-run sdiv-bs #200000 (lcons #18446744073709551609 (lcons #2 lnil)) , i64toWord (sdiv (i64 #18446744073709551609) (i64 #2)))
+smod-bs : Lst Word
+smod-bs = blob-of (glob-of (code smod))
+#show the (Opt Word × Word) (mn-run smod-bs #200000 (lcons #18446744073709551609 (lcons #2 lnil)) , i64toWord (smod (i64 #18446744073709551609) (i64 #2)))
+udiv-bs : Lst Word
+udiv-bs = blob-of (glob-of (code udiv))
+#show the (Opt Word × Word) (mn-run udiv-bs #200000 (lcons #7 (lcons #0 lnil)) , u64toWord (udiv (u64 #7) (u64 #0)))
+umod-bs : Lst Word
+umod-bs = blob-of (glob-of (code umod))
+#show the (Opt Word × Word) (mn-run umod-bs #200000 (lcons #7 (lcons #0 lnil)) , u64toWord (umod (u64 #7) (u64 #0)))
+sar-bs : Lst Word
+sar-bs = blob-of (glob-of (code sar))
+#show the (Opt Word × Word) (mn-run sar-bs #200000 (lcons #18446744073709551600 (lcons #2 lnil)) , i64toWord (sar (i64 #18446744073709551600) (i64 #2)))
+u32w-bs : Lst Word
+u32w-bs = blob-of (glob-of (code u32w))
+#show the (Opt Word × Word) (mn-run u32w-bs #200000 (lcons #4294967295 (lcons #2 lnil)) , u32toWord (u32w (u32 #4294967295) (u32 #2)))
+i64l-bs : Lst Word
+i64l-bs = blob-of (glob-of (code i64l))
+#show the (Opt Word × Word) (mn-run i64l-bs #200000 (lcons #18446744073709551615 (lcons #2 lnil)) , bool-w (i64l (i64 #18446744073709551615) (i64 #2)))
+eqN-bs : Lst Word
+eqN-bs = blob-of (glob-of (code eqN))
+#show the (Opt Word × Word) (mn-run eqN-bs #200000 (lcons #3 (lcons #3 lnil)) , bool-w (eqN 3 3))
+#show the (Opt Word × Word) (mn-run eqN-bs #200000 (lcons #3 (lcons #4 lnil)) , bool-w (eqN 3 4))
+pzz-bs : Lst Word
+pzz-bs = blob-of (glob-of (code pzz))
+#show the (Opt Word × Word) (mn-run pzz-bs #200000 (lcons #6 lnil) , nat-w (pzz 6))
+pickF-bs : Lst Word
+pickF-bs = blob-of (glob-of (code pickF))
+#show the (Opt Word × Word) (mn-run pickF-bs #200000 (lcons #0 (lcons #5 lnil)) , pickF true #5)
+#show the (Opt Word × Word) (mn-run pickF-bs #200000 (lcons #1 (lcons #5 lnil)) , pickF false #5)
+nthFrom-bs : Lst Word
+nthFrom-bs = blob-of (glob-of (code nthFrom))
+#show the (Opt Word × Word) (mn-run nthFrom-bs #200000 (lcons #3 (lcons #10 lnil)) , nthFrom 3 #10)
+zig-bs : Lst Word
+zig-bs = blob-of (glob-of (code zig))
+#show the (Opt Word × Word) (mn-run zig-bs #200000 (lcons #3 (lcons #2 lnil)) , nat-w (zig 3 2))
