@@ -5,13 +5,22 @@
 -- reads it right to left. A view (nav.cub) is a list of such rules, so navigation runs over the
 -- theorems of the store, and the specializer rewrites along proved laws: the "marked theorems"
 -- of 18.6 are definitions, named.
-peel-pi c =
-  case c of
-    cpi m A B → peel-pi B
-    cpathp A l r → some (l , r)
-    _ → none
-rule-of g = case peel-pi (fromopt (quote-ty (%gty g)) cword) of some lr → some (rule #0 (fst lr) (snd lr) (thm g (pi-count (fromopt (quote-ty (%gty g)) cword)) false)); none → none
-rule-of-sym g = case peel-pi (fromopt (quote-ty (%gty g)) cword) of some lr → some (rule #0 (snd lr) (fst lr) (thm g (pi-count (fromopt (quote-ty (%gty g)) cword)) true)); none → none
+peel-pi : Code → Opt (Code × Code)
+peel-pi (cpi m A B) = peel-pi B
+peel-pi (cpathp A l r) = some (l , r)
+peel-pi c = none
 -- the number of Π binders before the identity: the theorem's variables, the rule's metavariables
-pi-count c = case c of cpi m A B → %wsucc (pi-count B); _ → #0
-view-of gs = case gs of lnil → lnil; lcons g rest → (case rule-of g of some r → lcons r (view-of rest); none → view-of rest)
+pi-count : Code → Word
+pi-count (cpi m A B) = %wsucc (pi-count B)
+pi-count c = #0
+thm-type : Word → Code
+thm-type g = opt-or (def-type-code g) cword
+rule-of : Word → Opt Rule
+rule-of g = opt-map (λ lr → rule #0 (fst lr) (snd lr) (thm g (pi-count (thm-type g)) false)) (peel-pi (thm-type g))
+rule-of-sym : Word → Opt Rule
+rule-of-sym g = opt-map (λ lr → rule #0 (snd lr) (fst lr) (thm g (pi-count (thm-type g)) true)) (peel-pi (thm-type g))
+view-of : Lst Word → Lst Rule
+view-of lnil = lnil
+view-of (lcons g rest) = case rule-of g return (λ _ → Lst Rule) of
+  some r → lcons r (view-of rest)
+  none → view-of rest
