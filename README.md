@@ -188,13 +188,13 @@ for every fuel and argument ⟦bs⟧ is f. `experiments/isa/jit-runs.cub` runs t
 22 workloads under the Sail model (27 runs: loops, Nat recursion, closures, codata, division edge
 cases, lists, pairs, records): every result equals the definition's (312M steps, ~2 min).
 
-Why the proof is not by running with variables: one instruction with variable data computes
-(`add`, `push`: 16–38k steps), but a word stored to memory is 8 bytes `(v >> 8k) & 255` and read
-back by or/shift, and with a variable `v` nothing reduces that to `v` — the evaluator does not use
-laws of `%wand`/`%wshr`/`%wor`; a variable address makes every canonical-address check a case on
-the address. A whole run with variable arguments runs out of 8 GB. The template theorems need
-those laws (trusted laws of the primitives, PLAN §7) and lemmas of the model's memory functions at
-a variable address.
+`experiments/isa/addw-all.cub` proves `Correct2w addw-bs addw`: addw's compiled bytes give
+`a + b` for every fuel and every pair of words below 2^64 (the words `net.c` passes). The run with
+variable arguments computes; where a register is read back from memory the bytes are proved to be
+the word (`lib/compile/wordlaw.cub`, from the primitives' laws in `lib/prim.cub`) and the run
+continues with the clean value (`lib/compile/runs.cub` `q-rax`), since the unreduced byte forms grow
+eightfold per round trip. At the `jae` the carry flag is the model's own `fits` test
+(`lib/compile/flags.cub`), and each branch runs to the return. Loading and checking: ~3 min.
 
 `lib/compile/x86ok.cub` has lemmas about runs of the model (a run splits at any step; stores to
 distinct addresses commute) for the template theorems.

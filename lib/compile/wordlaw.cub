@@ -297,3 +297,24 @@ rd8-push-mem : (V : Word) → wlt V #18446744073709551616 ≡ true →
   rd8 (wand (wand (wshr V #0) #255) #255) (wand (wand (wshr V #8) #255) #255) (wand (wand (wshr V #16) #255) #255) (wand (wand (wshr V #24) #255) #255)
       (wand (wand (wshr V #32) #255) #255) (wand (wand (wshr V #40) #255) #255) (wand (wand (wshr V #48) #255) #255) (wand (wand (wshr V #56) #255) #255) ≡ V
 rd8-push-mem V h = rd8-of V (byte-dig2 V #0) (byte-dig2 V #8) (byte-dig2 V #16) (byte-dig2 V #24) (byte-dig2 V #32) (byte-dig2 V #40) (byte-dig2 V #48) (byte-dig2 V #56) h
+-- a byte masked twice after the shift of a word under the 64-bit mask (the model's push of a register)
+byte-dig3 : (V lo : Word) → wlt V #18446744073709551616 ≡ true → wand (wand (wshr (wand V #18446744073709551615) lo) #255) #255 ≡ wrem (wquot V (wshl #1 lo)) #256
+byte-dig3 V lo h = catw (congw (λ z → wand (wand (wshr z lo) #255) #255) (mask64 V h)) (byte-dig2 V lo)
+rd8-push-reg : (V : Word) → wlt V #18446744073709551616 ≡ true →
+  rd8 (wand (wand (wshr (wand V #18446744073709551615) #0) #255) #255) (wand (wand (wshr (wand V #18446744073709551615) #8) #255) #255)
+      (wand (wand (wshr (wand V #18446744073709551615) #16) #255) #255) (wand (wand (wshr (wand V #18446744073709551615) #24) #255) #255)
+      (wand (wand (wshr (wand V #18446744073709551615) #32) #255) #255) (wand (wand (wshr (wand V #18446744073709551615) #40) #255) #255)
+      (wand (wand (wshr (wand V #18446744073709551615) #48) #255) #255) (wand (wand (wshr (wand V #18446744073709551615) #56) #255) #255) ≡ V
+rd8-push-reg V h = rd8-of V (byte-dig3 V #0 h) (byte-dig3 V #8 h) (byte-dig3 V #16 h) (byte-dig3 V #24 h) (byte-dig3 V #32 h) (byte-dig3 V #40 h) (byte-dig3 V #48 h) (byte-dig3 V #56 h) h
+-- sums of bounded words: x < n and y < m give x + y < n + m
+lt-add-path : (x y d e : Word) → wadd (%wsucc (wadd x y)) (%wsucc (wadd d e)) ≡ wadd (wadd (%wsucc x) d) (wadd (%wsucc y) e)
+lt-add-path x y d e =
+  symw (catw (congw (λ z → wadd (wadd (%wsucc x) d) z) (wadd-suc-l y e))
+         (congw (λ z → %wsucc z) (catw (wadd-swap (%wsucc x) d y e)
+           (congw (λ z → wadd z (wadd d e)) (wadd-suc-l x y)))))
+lt-add : (x y n m : Word) → wlt x n ≡ true → wlt y m ≡ true → wlt (wadd x y) (wadd n m) ≡ true
+lt-add x y n m hx hy =
+  lt-wlt (wadd x y) (wadd n m)
+    (%wsucc (wadd (fst (wlt-lt x n hx)) (fst (wlt-lt y m hy))) ,
+     catw (lt-add-path x y (fst (wlt-lt x n hx)) (fst (wlt-lt y m hy)))
+          (cong2w (λ p q → wadd p q) (snd (wlt-lt x n hx)) (snd (wlt-lt y m hy))))

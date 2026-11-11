@@ -298,3 +298,10 @@ q-run stp stop k Q q0 =
 -- the result read at every fuel is v
 RQ : Word → Opt X86 → Type
 RQ v o = opt-or (mn-result o) v ≡ v
+-- rax replaced by a value proved equal to it (eta: the state rebuilt with its own rax is itself,
+-- by computation where the state is concrete)
+q-rax : (stp : Step) → (stop : Word) → (Q : Opt X86 → Type) → (X : X86) → (v : Word) →
+        x86-rax X ≡ v → x86-set-rax (x86-rax X) X ≡ X → QAll stp stop Q (x86-set-rax v X) → QAll stp stop Q X
+q-rax stp stop Q X v p eta qa =
+  subst {lzero} {lzero} {X86} {QAll stp stop Q} eta
+    (subst {lzero} {lzero} {X86} {QAll stp stop Q} (cong (λ r → x86-set-rax r X) (sym p)) qa)

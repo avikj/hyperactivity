@@ -1,0 +1,144 @@
+-- experiments/isa/addw-all.cub — addw's compiled bytes are correct for every fuel and every pair of
+-- words below 2^64 (Correct2w). The run is cut where a register is read back from memory: the read is
+-- proved to be the argument (wordlaw's rd8 lemmas) and the state continues with the clean value
+-- (runs.cub q-rax). At the jae the carry flag is the model's own fits test (flags.cub); each branch
+-- runs to the return by computation. Loaded as experiments/isa/jit-run.cub is, then
+-- lib/compile/x86ok.cub, lib/compile/runs.cub and lib/compile/flags.cub.
+addw : Word → Word → Word
+addw a b = %wadd a b
+addw-bs : Lst Word
+addw-bs = snd (snd (snd (snd (jit-plan (case code addw return (λ _ → Word) of
+  cglob g → g
+  _ → #0) lnil))))
+s0 : Word → Word → X86
+s0 a b = mn-init addw-bs (lcons a (lcons b lnil))
+if-t : {T : Type} → {A B : T} → (c : Bool) → c ≡ true → (if c then A else B) ≡ A
+if-t {T} {A} {B} c h = cong (λ b → if b then A else B) h
+if-f : {T : Type} → {A B : T} → (c : Bool) → c ≡ false → (if c then A else B) ≡ B
+if-f {T} {A} {B} c h = cong (λ b → if b then A else B) h
+X21 : Word → Word → X86
+X21 a b = snd (run-of x86-step #21 (s0 a b))
+S21 : Word → Word → X86
+S21 a b = x86-set-rax a (X21 a b)
+X23 : Word → Word → X86
+X23 a b = snd (run-of x86-step #2 (S21 a b))
+S23 : Word → Word → X86
+S23 a b = x86-set-rax b (X23 a b)
+X25 : Word → Word → X86
+X25 a b = snd (run-of x86-step #2 (S23 a b))
+S25 : Word → Word → X86
+S25 a b = x86-set-rax a (X25 a b)
+X26 : Word → Word → X86
+X26 a b = snd (run-of x86-step #1 (S25 a b))
+nc26 : Word → Word → Bool
+nc26 a b = weq #0 (wand (x86-rflags (X26 a b)) #1)
+jae-c : (a b : Word) → nc26 a b ≡ false → x86-step (X26 a b) ≡ the (Outc exception Unit × X86) (out-val unit , x86-set-rip #4194432 (X26 a b))
+jae-c a b h = if-f {Outc exception Unit × X86} {the (Outc exception Unit × X86) (out-val unit , x86-set-rip #4194451 (X26 a b))} {the (Outc exception Unit × X86) (out-val unit , x86-set-rip #4194432 (X26 a b))} (nc26 a b) h
+r23' : (a b : Word) → W64w b → x86-rax (X23 a b) ≡ b
+r23' a b hb = rd8-push-mem (rd8 (wand b #255) (wand (wshr b #8) #255) (wand (wshr (wshr b #8) #8) #255) (wand (wshr (wshr (wshr b #8) #8) #8) #255)
+                         (wand (wshr (wshr (wshr (wshr b #8) #8) #8) #8) #255) (wand (wshr (wshr (wshr (wshr (wshr b #8) #8) #8) #8) #8) #255)
+                         (wand (wshr (wshr (wshr (wshr (wshr (wshr b #8) #8) #8) #8) #8) #8) #255) (wand (wshr (wshr (wshr (wshr (wshr (wshr (wshr b #8) #8) #8) #8) #8) #8) #8) #255))
+               (subst {lzero} {lzero} {Word} {λ z → wlt z #18446744073709551616 ≡ true} (symw (rd8-st b hb)) hb)
+             ∙ rd8-st b hb
+r25 : (a b : Word) → W64w a → x86-rax (X25 a b) ≡ a
+r25 a b ha = rd8-push-reg a ha
+-- the carry: the overflow exit sets the flag; the result read is the definition's
+addw-tail-c : (a b : Word) → nc26 a b ≡ false → QAll x86-step mn-ret (RQ (addw a b)) (X26 a b)
+addw-tail-c a b h =
+  q-step x86-step mn-ret (RQ (addw a b)) (X26 a b) (x86-set-rip #4194432 (X26 a b)) refl (jae-c a b h) refl
+    (q-run x86-step mn-ret #9 (RQ (addw a b)) refl (x86-set-rip #4194432 (X26 a b)) refl
+      (q-stop x86-step mn-ret (RQ (addw a b)) (snd (run-of x86-step #9 (x86-set-rip #4194432 (X26 a b)))) refl refl))
+-- the run up to the addition, with the three reads replaced by the arguments
+-- the addition's flags, named by the model's own functions (gpr_add_spec_8)
+mfv : MF Word → Word
+mfv (out-val w) = w
+mfv (out-throw e) = #0
+mfv (out-abort w) = #0
+mfb : MF Bool → Bool
+mfb (out-val w) = w
+mfb (out-throw e) = false
+mfb (out-abort w) = false
+opA : Word → Word
+opA a = wand a #18446744073709551615
+RAW : Word → Word → Word
+RAW a b = bits_of_int (z-add (bv-unsigned #64 (opA a)) (bv-unsigned #64 (opA b))) (zpos #65)
+RES : Word → Word → Word
+RES a b = bv-trunc #65 #64 (RAW a b)
+SRAW : Word → Word → Word
+SRAW a b = bits_of_int (z-add (bv-signed #64 (opA a)) (bv-signed #64 (opA b))) (zpos #65)
+fits : Word → Word → Bool
+fits a b = mfb (unsigned_byte_p_int (zpos #64) (bv-unsigned #65 (RAW a b)))
+U26 : Word → Word → Word
+U26 a b = flags6 (x86-rflags (S25 a b)) (bool_to_bits (b-not (fits a b))) (mfv (pf_spec64 (RES a b))) (add_af_spec64 (opA a) (opA b))
+               (zf_spec (bv-unsigned #64 (RES a b))) (sf_spec64 (RES a b)) (mfv (of_spec64 (SRAW a b)))
+-- CF clear is the sum fitting
+nc-fits : (a b : Word) → nc26 a b ≡ fits a b
+nc-fits a b =
+  bit0-zero (x86-rflags (X26 a b))
+  ∙ cong bnot (flags-of-cf (x86-rflags (S25 a b)) (U26 a b)
+               ∙ flags6-cf (x86-rflags (S25 a b)) (bool_to_bits (b-not (fits a b))) (mfv (pf_spec64 (RES a b))) (add_af_spec64 (opA a) (opA b))
+                           (zf_spec (bv-unsigned #64 (RES a b))) (sf_spec64 (RES a b)) (mfv (of_spec64 (SRAW a b)))
+               ∙ cf-bit (fits a b))
+  ∙ bnot-bnot (fits a b)
+
+ok21 : (a b : Word) → run-ok x86-step mn-ret #21 (s0 a b) ≡ true
+ok21 a b = refl
+eta21 : (a b : Word) → x86-set-rax (x86-rax (X21 a b)) (X21 a b) ≡ X21 a b
+eta21 a b = refl
+ok2 : (a b : Word) → run-ok x86-step mn-ret #2 (S21 a b) ≡ true
+ok2 a b = refl
+eta23 : (a b : Word) → x86-set-rax (x86-rax (X23 a b)) (X23 a b) ≡ X23 a b
+eta23 a b = refl
+
+r21' : (a b : Word) → W64w a → x86-rax (X21 a b) ≡ a
+r21' a b ha = rd8-push-mem (rd8 (wand a #255) (wand (wshr a #8) #255) (wand (wshr (wshr a #8) #8) #255) (wand (wshr (wshr (wshr a #8) #8) #8) #255)
+                         (wand (wshr (wshr (wshr (wshr a #8) #8) #8) #8) #255) (wand (wshr (wshr (wshr (wshr (wshr a #8) #8) #8) #8) #8) #255)
+                         (wand (wshr (wshr (wshr (wshr (wshr (wshr a #8) #8) #8) #8) #8) #8) #255) (wand (wshr (wshr (wshr (wshr (wshr (wshr (wshr a #8) #8) #8) #8) #8) #8) #8) #255))
+               (subst {lzero} {lzero} {Word} {λ z → wlt z #18446744073709551616 ≡ true} (symw (rd8-st a ha)) ha)
+             ∙ rd8-st a ha
+ok2' : (a b : Word) → run-ok x86-step mn-ret #2 (S23 a b) ≡ true
+ok2' a b = refl
+ok1 : (a b : Word) → run-ok x86-step mn-ret #1 (S25 a b) ≡ true
+ok1 a b = refl
+eta25 : (a b : Word) → x86-set-rax (x86-rax (X25 a b)) (X25 a b) ≡ X25 a b
+eta25 a b = refl
+h25 : (a b : Word) → W64w a → QAll x86-step mn-ret (RQ (addw a b)) (X26 a b) → QAll x86-step mn-ret (RQ (addw a b)) (X25 a b)
+h25 a b ha t = q-rax x86-step mn-ret (RQ (addw a b)) (X25 a b) a (r25 a b ha) (eta25 a b)
+                 (q-run x86-step mn-ret #1 (RQ (addw a b)) refl (S25 a b) (ok1 a b) t)
+h23 : (a b : Word) → W64w a → W64w b → QAll x86-step mn-ret (RQ (addw a b)) (X26 a b) → QAll x86-step mn-ret (RQ (addw a b)) (X23 a b)
+h23 a b ha hb t = q-rax x86-step mn-ret (RQ (addw a b)) (X23 a b) b (r23' a b hb) (eta23 a b)
+                 (q-run x86-step mn-ret #2 (RQ (addw a b)) refl (S23 a b) (ok2' a b) (h25 a b ha t))
+addw-head : (a b : Word) → W64w a → W64w b → QAll x86-step mn-ret (RQ (addw a b)) (X26 a b) → QAll x86-step mn-ret (RQ (addw a b)) (s0 a b)
+addw-head a b ha hb t =
+  q-run x86-step mn-ret #21 (RQ (addw a b)) refl (s0 a b) (ok21 a b)
+    (q-rax x86-step mn-ret (RQ (addw a b)) (X21 a b) a (r21' a b ha) (eta21 a b)
+      (q-run x86-step mn-ret #2 (RQ (addw a b)) refl (S21 a b) (ok2 a b) (h23 a b ha hb t)))
+-- the no-carry branch: the jump is taken to the result's write
+jae-n : (a b : Word) → nc26 a b ≡ true → x86-step (X26 a b) ≡ the (Outc exception Unit × X86) (out-val unit , x86-set-rip #4194451 (X26 a b))
+jae-n a b h = if-t {Outc exception Unit × X86} {the (Outc exception Unit × X86) (out-val unit , x86-set-rip #4194451 (X26 a b))} {the (Outc exception Unit × X86) (out-val unit , x86-set-rip #4194432 (X26 a b))} (nc26 a b) h
+Y : Word → Word → X86
+Y a b = snd (run-of x86-step #11 (x86-set-rip #4194451 (X26 a b)))
+-- the model's 65-bit sum of the 64-bit operands
+F : Word → Word → Word
+F a b = wand (wadd (wand a #18446744073709551615) (wand b #18446744073709551615)) #36893488147419103231
+F-eq : (a b : Word) → W64w a → W64w b → F a b ≡ wadd a b
+F-eq a b ha hb =
+  catw (cong2w (λ x y → wand (wadd x y) #36893488147419103231) (mask64 a ha) (mask64 b hb))
+       (catw (wand-mask (wadd a b) #65) (wrem-small (wadd a b) #36893488147419103232 (lt-add a b #18446744073709551616 #18446744073709551616 ha hb)))
+res-eq : (a b : Word) → W64w a → W64w b → wlt (F a b) #18446744073709551616 ≡ true → x86-rax (Y a b) ≡ addw a b
+res-eq a b ha hb hf = catw (congw (λ z → wand z #18446744073709551615) (mask64 (F a b) hf)) (catw (mask64 (F a b) hf) (F-eq a b ha hb))
+addw-tail-n : (a b : Word) → W64w a → W64w b → nc26 a b ≡ true → QAll x86-step mn-ret (RQ (addw a b)) (X26 a b)
+addw-tail-n a b ha hb h =
+  q-step x86-step mn-ret (RQ (addw a b)) (X26 a b) (x86-set-rip #4194451 (X26 a b)) refl (jae-n a b h) refl
+    (q-run x86-step mn-ret #11 (RQ (addw a b)) refl (x86-set-rip #4194451 (X26 a b)) refl
+      (q-stop x86-step mn-ret (RQ (addw a b)) (Y a b) refl
+        (res-eq a b ha hb (catw2 (λ i → nc-fits a b (~ i)) h))))
+bool-split : (c : Bool) → (P : Type) → (c ≡ true → P) → (c ≡ false → P) → P
+bool-split c P t f = (case c return (λ d → c ≡ d → P) of
+  true → t
+  false → f) refl
+addw-tail : (a b : Word) → W64w a → W64w b → QAll x86-step mn-ret (RQ (addw a b)) (X26 a b)
+addw-tail a b ha hb = bool-split (nc26 a b) (QAll x86-step mn-ret (RQ (addw a b)) (X26 a b)) (addw-tail-n a b ha hb) (addw-tail-c a b)
+-- addw's bytes compute addw for every fuel and every pair of words below 2^64
+addw-correct : Correct2w addw-bs addw
+addw-correct n a b ha hb = addw-head a b ha hb (addw-tail a b ha hb) n
