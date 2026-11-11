@@ -3411,7 +3411,29 @@ static void interact(Cell *o, Cell *v) {
         Port r = 0;
         if (op >= O_WMUL) {
             /* multiplication, division, remainder, bitwise and shifts: on numerals; stuck otherwise */
-            if (ba || bb) r = wstuck(op, wplus(wn_copy(&ka), ba), wplus(wn_copy(&kb), bb));
+            bool a0 = !ba && wn_zero(&ka), b0 = !bb && wn_zero(&kb);
+            bool a1 = !ba && !ka.b && ka.s == 1, b1 = !bb && !kb.b && kb.s == 1;
+            #define WOP_A() wplus(wn_copy(&ka), ba)
+            #define WOP_B() wplus(wn_copy(&kb), bb)
+            #define WOP_ERA_A() do { if (ba) era(ba); } while (0)
+            #define WOP_ERA_B() do { if (bb) era(bb); } while (0)
+            if (ba || bb) {
+                /* an operand a variable: the result where the other operand alone determines it (0
+                 * and 1 as the identities and absorbing elements they are), else stuck */
+                if (op == O_WMUL && (a0 || b0)) { WOP_ERA_A(); WOP_ERA_B(); r = word_of(0); }
+                else if (op == O_WMUL && b1) r = WOP_A();
+                else if (op == O_WMUL && a1) r = WOP_B();
+                else if (op == O_WDIV && b1) r = WOP_A();
+                else if (op == O_WDIV && (a0 || b0)) { WOP_ERA_A(); WOP_ERA_B(); r = word_of(0); }
+                else if (op == O_WMOD && (b1 || a0)) { WOP_ERA_A(); WOP_ERA_B(); r = word_of(0); }
+                else if (op == O_WMOD && b0) r = WOP_A();
+                else if (op == O_WAND && (a0 || b0)) { WOP_ERA_A(); WOP_ERA_B(); r = word_of(0); }
+                else if ((op == O_WOR || op == O_WXOR) && b0) r = WOP_A();
+                else if ((op == O_WOR || op == O_WXOR) && a0) r = WOP_B();
+                else if ((op == O_WSHL || op == O_WSHR) && b0) r = WOP_A();
+                else if ((op == O_WSHL || op == O_WSHR) && a0) { WOP_ERA_B(); r = word_of(0); }
+                else r = wstuck(op, WOP_A(), WOP_B());
+            }
             else if (op == O_WMUL) r = word_wn(wn_mul(&ka, &kb));
             else if (op == O_WDIV || op == O_WMOD) { WN q, m; wn_divmod(&ka, &kb, &q, &m); r = word_wn(op == O_WDIV ? q : m); wn_drop(op == O_WDIV ? &m : &q); }
             else if (op == O_WSHR) r = word_wn(kb.b ? wn_small(0) : wn_shr(&ka, kb.s));
@@ -3436,6 +3458,13 @@ static void interact(Cell *o, Cell *v) {
             WN a1 = wn_sub(&ka, &c), b1 = wn_sub(&kb, &c);
             bool za = wn_zero(&a1) && !ba, zb = wn_zero(&b1) && !bb;   /* literally zero */
             bool pa = !wn_zero(&a1), pb = !wn_zero(&b1);               /* a successor */
+            /* the same variable on both sides after the successors cancel (a variable is its name): equal */
+            bool same = ba && bb && !pa && !pb && PC(ba)->kind == V_NVAR && PC(bb)->kind == V_NVAR && PC(ba)->a == PC(bb)->a;
+            if (same && op == O_WEQ) { era(ba); era(bb); r = con_build(B_TRUE, NULL, NULL); }
+            else if (same && op == O_WLT) { era(ba); era(bb); r = con_build(B_FALSE, NULL, NULL); }
+            else if (same && op == O_WMAX) { era(bb); r = wplus(wn_copy(&c), ba); }
+            else if (same && op == O_WSUB) { era(ba); era(bb); r = word_of(0); }
+            else
             switch (op) {
             case O_WEQ:
                 if ((za && pb) || (zb && pa)) { r = con_build(B_FALSE, NULL, NULL); if (ba) era(ba); if (bb) era(bb); break; }
