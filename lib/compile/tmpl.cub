@@ -159,3 +159,67 @@ wme-ok8 : (a : Word) → (d : Word) → (f : FR) → canon a ≡ true → WbOk #
           wme_size Mode_64bit (zpos #8) (zpos #8) a None (zpos #2) d false false (fs f)
             ≡ the (MF Unit × X86) (out-val unit , fs (f-mem-set (wb-mem #64 (zpos #8) a (bv-trunc #128 #64 d) #8 (zpos #0) (f-mem f)) f))
 wme-ok8 a d f h1 h2 = sb-ok8 a (bv-trunc #128 #64 d) f h1 h2
+
+-- ---------------------------------------------------------------- the stack pointer moved
+-- sp + d as add_to_sptr computes it, and its canonical check
+sp-add : Word → Word → Word
+sp-add sp d = bv-trunc #65 #64 (bits_of_int (z-add (bv-signed #64 sp) (bv-signed #64 d)) (zpos #65))
+add-sp : (sp d : Word) → (σ : X86) → canon (sp-add sp d) ≡ true →
+         add_to_sptr Mode_64bit sp d σ ≡ the (MF Word × X86) (out-val (sp-add sp d) , σ)
+add-sp sp d σ h =
+  cong (λ b → if b then the (MF Word × X86) (out-val (sp-add sp d) , σ)
+              else the (MF Word × X86) (out-throw (Emsg (str-cat #6135042721224082287861286713888 #6140327694473350715032079795660151005132160353761638364606630286163)) , σ)) h
+
+-- ---------------------------------------------------------------- push r64 (50+r)
+-- x86_push_general_register after the new stack pointer (push_and_pop.cub), as the model writes it
+push-k1 : (proc_mode' : proc_mode) → (start_rip : Bits #48) → (temp_rip : Bits #48) → (prefixes' : prefixes) → (rex_byte : Bits #8) →
+          (opcode : Bits #8) → (operand_size : ZI) → Bits #64 → MS Unit
+push-k1 proc_mode' start_rip temp_rip prefixes' rex_byte opcode operand_size =
+  λ new_rsp →
+           let reg' : Bits #3
+               reg' = (loghead_bits #8 (zpos #3) opcode)
+           in onS {Bits #4} {Unit} (reg_index reg' rex_byte #0) (λ t'4 →
+                bindS {Bits #64} {Unit} (rgfi_size (bits_of_int operand_size (zpos #4)) t'4 rex_byte) (λ sailval →
+                  let badlength? : Option ZI
+                      badlength? = (check_instruction_length start_rip temp_rip #0)
+                  in let k'13 : Unit → MS Unit
+                         k'13 =
+                           λ t'7 →
+                             bindS {ZI} {Unit} (select_address_size proc_mode' (Some prefixes')) (λ t'8 →
+                               bindS {Bool} {Unit} alignment_checking_enabled_p (λ t'9 →
+                                 bindS {Unit} {Unit} (wme_size proc_mode' t'8 operand_size (bv-sext #48 #64 (bv-trunc #64 #48 new_rsp)) None (zpos #2) (bv-zext #64 #128 sailval) t'9 false) (λ t'10 →
+                                   bindS {Unit} {Unit} (write_sptr proc_mode' new_rsp) (λ t'11 →
+                                     write_iptr proc_mode' temp_rip))))
+                     in λ σ →
+                          if (is_some {ZI} badlength?) then
+                            the (MS Unit)
+                              (onS {Unit} {Unit} (x86_fault {Unit} #26527788633931292013587918063704349903878111884025584083023654650798916508749147338540209907045379711613433216615654445563689) (λ t'6 →
+                                 k'13 t'6)) σ
+                          else
+                            the (MS Unit)
+                              (k'13 unit) σ))
+-- the address push writes, from the new stack pointer
+push-addr : Word → Word
+push-addr nsp = bv-sext #48 #64 (bv-trunc #64 #48 nsp)
+-- the state after push rax at a frame: rsp − 8, rax's 8 bytes there, rip the next instruction
+push-post : Word → FR → X86
+push-post t f =
+  let nsp = sp-add (f-rsp f) #18446744073709551608
+  in snd (write_iptr Mode_64bit t (snd (write_sptr Mode_64bit nsp
+       (fs (f-mem-set (wb-mem #64 (zpos #8) (push-addr nsp) (bv-trunc #128 #64 (bv-zext #64 #128 (f-rax f))) #8 (zpos #0) (f-mem f)) f)))))
+-- push rax (50): decoded at the frame (the hypothesis dec, by computation where the bytes are
+-- literal), the stack pointer and the 8 bytes it writes canonical
+push-rax : (f : FR) →
+           x86-step (fs f) ≡ x86_push_general_register Mode_64bit #4194304 #4194305 #1407374883553280 #0 #80 #0 #0 (fs f) →
+           canon (sp-add (f-rsp f) #18446744073709551608) ≡ true →
+           canon (push-addr (sp-add (f-rsp f) #18446744073709551608)) ≡ true →
+           WbOk #64 (push-addr (sp-add (f-rsp f) #18446744073709551608)) #8 (zpos #0) →
+           x86-step (fs f) ≡ the (MF Unit × X86) (out-val unit , push-post #4194305 f)
+push-rax f dec h0 h1 h2 =
+  dec
+  ∙ bind-ok (add_to_sptr Mode_64bit (f-rsp f) #18446744073709551608) (push-k1 Mode_64bit #4194304 #4194305 #1407374883553280 #0 #80 (zpos #8))
+      (fs f) (fs f) (sp-add (f-rsp f) #18446744073709551608) (add-sp (f-rsp f) #18446744073709551608 (fs f) h0)
+  ∙ bind-ok (wme_size Mode_64bit (zpos #8) (zpos #8) (push-addr (sp-add (f-rsp f) #18446744073709551608)) None (zpos #2) (bv-zext #64 #128 (f-rax f)) false false)
+      (λ t'10 → bindS {Unit} {Unit} (write_sptr Mode_64bit (sp-add (f-rsp f) #18446744073709551608)) (λ t'11 → write_iptr Mode_64bit #4194305))
+      (fs f) (fs (f-mem-set (wb-mem #64 (zpos #8) (push-addr (sp-add (f-rsp f) #18446744073709551608)) (bv-trunc #128 #64 (bv-zext #64 #128 (f-rax f))) #8 (zpos #0) (f-mem f)) f)) unit
+      (wme-ok8 (push-addr (sp-add (f-rsp f) #18446744073709551608)) (bv-zext #64 #128 (f-rax f)) f h1 h2)
