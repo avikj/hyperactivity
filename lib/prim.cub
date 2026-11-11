@@ -109,15 +109,21 @@ primitive region-at : Word → (n : Nat) → Bytes n = λ a n → %region-at n a
 -- ---------------------------------------------------------------- the word operations' laws, trusted: what the
 -- C code (src/big.c) computes on every pair of numerals, stated for variables (the evaluator runs
 -- these operations only on numerals). Product by recursion on the second factor; division and
--- remainder by their defining property; shifts as product and quotient by a power of two; and with
--- a mask of k ones as the remainder; or of operands with disjoint bits as their sum
+-- remainder by their defining property (every word is quotient times divisor plus remainder, the
+-- remainder below a nonzero divisor, and those determine them); shifts as product and quotient by a power of two; and with
+-- a mask of k ones as the remainder; and, or of operands with disjoint bits as 0 and as their sum;
+-- xor with 0 the identity
 primitive wmul-zero : (a : Word) → PathP (λ (i : I) → Word) (wmul a #0) #0 = λ a i → #0
 primitive wmul-suc : (a b : Word) → PathP (λ (i : I) → Word) (wmul a (%wsucc b)) (wadd (wmul a b) a) = λ a b i → wadd (wmul a b) a
 primitive wdiv-unique : (q r n : Word) → PathP (λ (i : I) → Bool) (wlt r n) true → PathP (λ (i : I) → Word) (wquot (wadd (wmul q n) r) n) q = λ q r n h i → q
 primitive wmod-unique : (q r n : Word) → PathP (λ (i : I) → Bool) (wlt r n) true → PathP (λ (i : I) → Word) (wrem (wadd (wmul q n) r) n) r = λ q r n h i → r
+primitive wdiv-mod : (v n : Word) → PathP (λ (i : I) → Word) v (wadd (wmul (wquot v n) n) (wrem v n)) = λ v n i → v
+primitive wrem-lt : (v n : Word) → PathP (λ (i : I) → Bool) (wlt #0 n) true → PathP (λ (i : I) → Bool) (wlt (wrem v n) n) true = λ v n h i → true
 primitive wshl-mul : (a k : Word) → PathP (λ (i : I) → Word) (wshl a k) (wmul a (wshl #1 k)) = λ a k i → wmul a (wshl #1 k)
 primitive wshr-div : (a k : Word) → PathP (λ (i : I) → Word) (wshr a k) (wquot a (wshl #1 k)) = λ a k i → wquot a (wshl #1 k)
 primitive wand-mask : (a k : Word) → PathP (λ (i : I) → Word) (wand a (wsub (wshl #1 k) #1)) (wrem a (wshl #1 k)) = λ a k i → wrem a (wshl #1 k)
+primitive wand-disj : (a b k : Word) → PathP (λ (i : I) → Bool) (wlt a (wshl #1 k)) true → PathP (λ (i : I) → Word) (wand a (wmul b (wshl #1 k))) #0 = λ a b k h i → #0
+primitive wxor-zero : (a : Word) → PathP (λ (i : I) → Word) (wxor a #0) a = λ a i → a
 primitive wor-disj : (a b k : Word) → PathP (λ (i : I) → Bool) (wlt a (wshl #1 k)) true → PathP (λ (i : I) → Word) (wor a (wmul b (wshl #1 k))) (wadd a (wmul b (wshl #1 k))) = λ a b k h i → wadd a (wmul b (wshl #1 k))
 
 -- ---------------------------------------------------------------- the byte layer's laws, trusted: a load after a
