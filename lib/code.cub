@@ -4,8 +4,8 @@
 -- and their constructors indices into its data part. (code t) writes the code of
 -- a source term. eval maps a code to the value the machine gives the term; a
 -- question about the evaluator is a term.
-data Lst = lnil | lcons x xs
-data Opt = none | some x
+data Lst (A : Type) = lnil | lcons (x : A) (xs : Lst A)
+data Opt (A : Type) = none | some (x : A)
 -- binding times (a schedule's stages, lib/specialize.cub) and the reader's verdict (plan 5.4, lib/machine.cub):
 -- a first-order machine program, or the construct that has none and why
 data Stage = st-now | st-build | st-run-known | st-run
@@ -14,70 +14,73 @@ data Stage = st-now | st-build | st-run-known | st-run
 data Sched = sched (rewrites : Word) (stages : Lst) (holds : Lst) (regs : Lst)
 data Reason = dim | dep-type | higher | kan | reflect | mult | copy | infinite
 data Verdict = fo m | not-fo reason at
+-- a value a code names as itself (cfree): a variable or a dimension of the checker's, which typed
+-- code passes along and never reads
+data CFree = cfree-opaque
 data Code
-  = cvar n
-  | cglob n
-  | clam b
-  | capp f a
-  | cpair a b
-  | cfst p
-  | csnd p
-  | cpi m A B
-  | csigma A B
-  | cuniv l
-  | cpathp A a b
-  | cplam b
-  | cpapp p r
+  = cvar (n : Word)
+  | cglob (n : Word)
+  | clam (b : Code)
+  | capp (f : Code) (a : Code)
+  | cpair (a : Code) (b : Code)
+  | cfst (p : Code)
+  | csnd (p : Code)
+  | cpi (m : Word) (A : Code) (B : Code)
+  | csigma (A : Code) (B : Code)
+  | cuniv (l : Code)
+  | cpathp (A : Code) (a : Code) (b : Code)
+  | cplam (b : Code)
+  | cpapp (p : Code) (r : Code)
   | ci0
   | ci1
-  | cneg r
-  | cmeet r s
-  | cjoin r s
-  | ceq0 r
-  | ceq1 r
-  | cfand a b
-  | cfor a b
+  | cneg (r : Code)
+  | cmeet (r : Code) (s : Code)
+  | cjoin (r : Code) (s : Code)
+  | ceq0 (r : Code)
+  | ceq1 (r : Code)
+  | cfand (a : Code) (b : Code)
+  | cfor (a : Code) (b : Code)
   | cftt
   | cfff
-  | cforall b
+  | cforall (b : Code)
   | csys0
-  | csysc f t r
-  | ccomp A u a
-  | cgluet A S
-  | cglue S a
-  | cunglue S b
-  | chcompu A S
-  | cunglueu S b
-  | clet t b
-  | cann t T
-  | cdata d ps
-  | ccon d c fs ds
-  | celim d P B x
-  | ccase d B x
-  | chcomp u a
-  | cdlam b
-  | cforce t
-  | cthunk t
+  | csysc (f : Code) (t : Code) (r : Code)
+  | ccomp (A : Code) (u : Code) (a : Code)
+  | cgluet (A : Code) (S : Code)
+  | cglue (S : Code) (a : Code)
+  | cunglue (S : Code) (b : Code)
+  | chcompu (A : Code) (S : Code)
+  | cunglueu (S : Code) (b : Code)
+  | clet (t : Code) (b : Code)
+  | cann (t : Code) (T : Code)
+  | cdata (d : Word) (ps : Lst Code)
+  | ccon (d : Word) (c : Word) (fs : Lst Code) (ds : Lst Code)
+  | celim (d : Word) (P : Code) (B : Lst Code) (x : Code)
+  | ccase (d : Word) (B : Lst Code) (x : Code)
+  | chcomp (u : Code) (a : Code)
+  | cdlam (b : Code)
+  | cforce (t : Code)
+  | cthunk (t : Code)
   | clevel
   | clzero
-  | clsuc l
-  | clmax a b
+  | clsuc (l : Code)
+  | clmax (a : Code) (b : Code)
   | cword
-  | cwlit n
-  | cpty k n
-  | cplit k b
-  | cwsucc a
-  | cwop k a b
-  | cwelim w z s mo                         -- mo: some P, the motive's code (Word → U), or none
-  | ctrans d psi ls x
-  | cproj d k x
-  | crec d fs
-  | cfree x
+  | cwlit (n : Word)
+  | cpty (k : Word) (n : Code)
+  | cplit (k : Word) (b : Word)
+  | cwsucc (a : Code)
+  | cwop (k : Word) (a : Code) (b : Code)
+  | cwelim (w : Code) (z : Code) (s : Code) (mo : Opt Code)   -- mo: some P, the motive's code (Word → U), or none
+  | ctrans (d : Word) (psi : Code) (ls : Lst Code) (x : Code)
+  | cproj (d : Word) (k : Word) (x : Code)
+  | crec (d : Word) (fs : Lst Code)
+  | cfree (x : CFree)
   | cclock
-  | ctick k
+  | ctick (k : Code)
   | cclock0
   | ctick0
-  | cprim k as
+  | cprim (k : Word) (as : Lst Code)
 -- a value's head as data (%view, src/net.c): its parts are the value's own parts, values;
 -- data types, constructors and variables by words
 data View

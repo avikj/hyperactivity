@@ -1634,7 +1634,9 @@ positive d pvs A =
   orb (notb (cany (is-data-d d) A))
     (case A of
        tdata d2 ps V → 
-         andb (%weq d2 d) (andb (lall (λ q → notb (cany (is-data-d d) q)) ps) (uniform-at (uniform-params d ps) (uniform-params d pvs)))
+         if %weq d2 d
+           then andb (lall (λ q → notb (cany (is-data-d d) q)) ps) (uniform-at (uniform-params d ps) (uniform-params d pvs))
+           else nested-pos d pvs d2 ps
        -- a later D (guarded recursion): a field, not a recursive one (no hypothesis is taken); a
        -- function whose domain does not mention D: positive iff its codomain is (18.18)
        tpi B nm b V →
@@ -1647,6 +1649,36 @@ positive d pvs A =
        -- and its endpoints elements, D not among their types
        tpathp L x y V → 
          andb (notb (orb (cany (is-data-d d) x) (cany (is-data-d d) y))) (positive-line d pvs L)
+       _ → false)
+-- D inside a parameter of another data type d2 (a nested occurrence: a list of D's): positive when
+-- that argument is, d2 is an ordinary data type (no indices, no dimensions, not codata), and d2's
+-- parameter there occurs strictly positively in every constructor of d2 (itself recursively at its
+-- own parameters, or as a field, or in a codomain or a pair)
+nested-pos d pvs d2 ps =
+  andb (notb (is-codata d2))
+    (andb (%weq (%dnidx d2) #0)
+      (let pc = params-fresh (dtel (%dent d2)) lnil
+       in andb (notb (lany tel-has-dim (snd pc))) (nested-args d pvs d2 pc ps #0)))
+nested-args d pvs d2 pc ps j =
+  case ps of
+    lnil → true
+    lcons q rest →
+      andb (if cany (is-data-d d) q
+              then andb (positive d pvs q) (case lnth (fst pc) j of some v → lall (tel-pos-var d2 (fst pc) v) (snd pc); none → false)
+              else true)
+           (nested-args d pvs d2 pc rest (%wsucc j))
+is-var-v v c = case c of tv x T → same-var x v; _ → false
+tel-pos-var d2 pvs2 v tel =
+  case tel of
+    tx A nm r → let Av = tval A in andb (pos-var d2 pvs2 v A) (tel-pos-var d2 pvs2 v (r (%var nm Av) Av))
+    _ → true
+pos-var d2 pvs2 v A =
+  orb (notb (cany (is-var-v v) A))
+    (case A of
+       tv x T → same-var x v
+       tdata d3 ps V → andb (%weq d3 d2) (uniform-at ps pvs2)
+       tpi B nm b V → andb (notb (cany (is-var-v v) B)) (pos-var d2 pvs2 v (b (%var nm Uw) Uw))
+       tsigma B nm b V → andb (pos-var d2 pvs2 v B) (pos-var d2 pvs2 v (b (%var nm Uw) Uw))
        _ → false)
 positive-line d pvs L =
   case L of
@@ -1697,6 +1729,8 @@ field-level d A =
           tpi B nm b V → let Bv = tval B in lmax (field-level d B) (field-level d (b (%var nm Bv) Bv))
           tsigma B nm b V → let Bv = tval B in lmax (field-level d B) (field-level d (b (%var nm Bv) Bv))
           tguess k g t V → field-level d t
+          -- a nested occurrence (nested-pos): the other type's level and its arguments' (D's at lzero)
+          tdata d2 ps V → lmax (dlvl (%dent d2)) (lfold-lmax (lconcatmap (λ q → lcons (field-level d q) lnil) ps))
           _ → level-of (infer-level A))
 lfold-lmax lnil = lzero
 lfold-lmax (lcons x r) = lmax x (lfold-lmax r)
