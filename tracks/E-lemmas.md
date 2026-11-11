@@ -78,9 +78,11 @@ combinators, `experiments/isa/addw-all.cub` (a lemma about one output of the unt
 
 ## Next step
 
-The evaluator's word primitives on addresses (below, Found 2): the decision is the owner's
-(the C evaluator is the trusted core). With it, repeat the measurement; then rules with
-decided premises in `lib/rules.cub` for the canonical checks and cross-region comparisons.
+Finish reading before writing anything: `lib/specialize.cub` (held definitions: how a held call
+stays a neutral through normalization and is rewritten afterwards), `lib/match.cub` and
+`lib/rules.cub` (what a rule with premises needs), the model's fetch path from
+`x86_fetch_decode_execute` to `rb_`, `lib/x86.cub`'s encode section and blob, then write the
+complete design here (every law, every hold, every combinator, with its statement) before code.
 
 ## Found
 
@@ -101,3 +103,15 @@ decided premises in `lib/rules.cub` for the canonical checks and cross-region co
   the same `x` decided by `c₁ ≡ c₂ (mod 2ⁿ)`, and `weq t t` true for one term. The canonical
   checks and cross-region comparisons are not determined by the constants and remain the
   frame's hypotheses (rules with premises).
+
+- **Read 2026-11-11: the model's memory is reached a byte at a time.** `rb_`/`wb`
+  (`lib/isa/x86/application_level_memory.cub`) loop over the bytes; each byte: the canonical
+  check of `signed(addr) + offset` as an integer, the address through `sail_mask_signed`
+  64→48, the offset added at 48 bits, sign-extended to 52, `memi`, then `x86-read-mem #1`
+  (`logging.cub`) at the 64-bit mask. So a word in memory is always 8 byte writes and 8 byte
+  reads; no representation of `ByteMap` sees whole words. At a symbolic address the signed
+  reading (`bv-neg?`), the range test and the mask chain are decided only by the hypothesis
+  that the address is a user address; within a region, address equality by the torsor law.
+  Consequence for the form: during specialization `rb_` and `wb` are held, and their meaning
+  under the frame's hypotheses is two laws proved once by induction on the byte loop; the rest
+  of an instruction normalizes on the literal bytes.
