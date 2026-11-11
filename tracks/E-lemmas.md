@@ -31,18 +31,29 @@ Files: `lib/compile/` (the template types, the combinators, the laws they use), 
 - *The overflow exit*: the flag set and the call's return taken, as §4.2 states; then the net
   computes the call (`run p f ≡ f`).
 
-**The form of the proofs** (forced): within a region every address is `base + c` (ℤ/2⁶⁴ is a
-torsor; comparisons of two such addresses are decided by the constants); across regions only
-by the frame's separation hypothesis; the model's canonical checks only by a hypothesis on the
-base with a margin. So conversion alone stops at every cross-region comparison and canonical
-check, and the proof is the model **specialized at the template's bytes** (Phase 2 item 7's
-`#lift`, the specializer returning its path) from a symbolic frame state, rewriting along a
-fixed set of conditional laws, each one law over its offsets with a side condition that
-computes on literals: the torsor laws, canonical-with-margin, region separation, the frame's
-memory contents. `lib/rules.cub` rules today are `Π x. l ≡ r`; rules with premises decided by
-computation are added (code in the language). Each template theorem is closed, proved once for
-all operands and frames; the combinators once, generically; `cx` assembles theorems by
-structural recursion, so checking a `#jit` evaluates no model and costs the code's size.
+**The form of the proofs** (from the definitions; supersedes the specializer form recorded
+earlier, which cannot work):
+
+- Decode branches on the fetched bytes, so a fetched byte that is not a literal makes
+  normalization quote every opcode's branch. At a code address that is a variable, every fetch
+  passes points the constants do not decide: `add_to_iptr`'s check of the new rip,
+  `read_iptr`, and in `rb_` per byte the canonical check of `signed(addr) + offset`, the
+  sign-mask chain, and the lookup. The specializer rewrites only after normalizing, and a held
+  memory function's result still feeds decode, so neither normalization nor the specializer
+  can prove a template at a variable placement. Nothing in the language or the core decides
+  a range test on a variable from a hypothesis.
+- What works with neither a core change nor a fixed address: the checker's conversion is lazy
+  (it unfolds only what a comparison needs), so a proof is the model's own sequence of binds,
+  each step by `bind-ok` (`lib/compile/tmpl.cub`) with the equation of the step's action; the
+  only actions not decided by conversion are the address checks, and each is one of three
+  laws proved once: `iptr-ok` (`add_to_iptr`, `read_iptr` under rip's range hypothesis),
+  `rb-ok` and `wb-ok` (the byte loops under the access's range hypothesis, by induction on the
+  loop, giving `mem-load-n`/`mem-store-n` at the plain address). Between them conversion
+  computes on the literal bytes. An instruction lemma is then one `bind-ok` per fetch and per
+  data access, the continuations as the model writes them.
+- The frame's hypotheses are range facts on each region's base (user address, with the
+  region's length as margin) and separation of regions; same-region address equality is the
+  torsor law in `wordlaw.cub`.
 
 **The pieces, each written at its type, never bytes first:**
 
@@ -78,11 +89,9 @@ combinators, `experiments/isa/addw-all.cub` (a lemma about one output of the unt
 
 ## Next step
 
-Finish reading before writing anything: `lib/specialize.cub` (held definitions: how a held call
-stays a neutral through normalization and is rewritten afterwards), `lib/match.cub` and
-`lib/rules.cub` (what a rule with premises needs), the model's fetch path from
-`x86_fetch_decode_execute` to `rb_`, `lib/x86.cub`'s encode section and blob, then write the
-complete design here (every law, every hold, every combinator, with its statement) before code.
+`iptr-ok`, `rb-ok`, `wb-ok` in `lib/compile/tmpl.cub` (statements from `add_to_iptr`,
+`read_iptr`, `rb_`, `wb` in `lib/isa/x86/`), then the instruction lemma of `i-ld-rbp d` at a
+variable rip, rbp and memory as the first use; then the rest per the pieces.
 
 ## Found
 
