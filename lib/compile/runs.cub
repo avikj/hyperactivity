@@ -229,3 +229,72 @@ correct2w : (bs : Lst Word) → (f : Word → Word → Word) → ((a b : Word) �
 correct2w bs f h n a b ha hb = correct2-at bs f a b (h a b ha hb) n
 correct1w : (bs : Lst Word) → (f : Word → Word) → ((a : Word) → W64 a → Reaches bs (lcons a lnil) (f a)) → Correct1w bs f
 correct1w bs f h n a ha = correct1-at bs f a (h a ha) n
+
+-- ---------------------------------------------------------------- a property of every fuel's result
+-- Q of run-to at every fuel, from s; a computed stretch, one step given by an equation, or the stop
+QAll : Step → Word → (Opt X86 → Type) → X86 → Type
+QAll stp stop Q s = (n : Word) → Q (run-to stp n stop s)
+q-stop : (stp : Step) → (stop : Word) → (Q : Opt X86 → Type) → (s : X86) → weq (x86-rip s) stop ≡ true → Q (some s) → QAll stp stop Q s
+q-stop stp stop Q s h q n = subst {lzero} {lzero} {Opt X86} {Q} (sym (at-stop stp stop s h n)) q
+q-step : (stp : Step) → (stop : Word) → (Q : Opt X86 → Type) → (s s2 : X86) → weq (x86-rip s) stop ≡ false →
+         stp s ≡ the (Outc exception Unit × X86) (out-val unit , s2) → Q none → QAll stp stop Q s2 → QAll stp stop Q s
+q-step stp stop Q s s2 ne e q0 qa n =
+  %welimP (λ v → Q (run-to stp v stop s)) n
+    (subst {lzero} {lzero} {Opt X86} {Q} (sym (cong (λ b → if b then some s else none) ne)) q0)
+    (λ m g → subst {lzero} {lzero} {Opt X86} {Q}
+               (sym (cong (λ b → if b then some s else run-on (run-to stp m stop) (stp s)) ne ∙ cong (run-on (run-to stp m stop)) e))
+               (qa m))
+-- k computed steps: a step that is a value, then the rest
+q-run-val : (stp : Step) → (stop j : Word) → (Q : Opt X86 → Type) → Q none →
+            ((s1 : X86) → run-ok stp stop j s1 ≡ true → QAll stp stop Q (snd (run-of stp j s1)) → QAll stp stop Q s1) →
+            (s : X86) → weq (x86-rip s) stop ≡ false → (o : Outc exception Unit) → fst (stp s) ≡ o →
+            (case o return (λ _ → Bool) of
+               out-val u → run-ok stp stop j (snd (stp s))
+               out-throw e → false
+               out-abort w → false) ≡ true →
+            QAll stp stop Q (snd (run-of stp (%wsucc j) s)) → QAll stp stop Q s
+q-run-val stp stop j Q q0 ih s ne o eo =
+  case o return (λ o2 → fst (stp s) ≡ o2 → (case o2 return (λ _ → Bool) of
+                                              out-val u → run-ok stp stop j (snd (stp s))
+                                              out-throw e → false
+                                              out-abort w → false) ≡ true →
+                        QAll stp stop Q (snd (run-of stp (%wsucc j) s)) → QAll stp stop Q s) of
+    out-val u → λ q h qa →
+      (case u return (λ u2 → fst (stp s) ≡ out-val u2 → QAll stp stop Q s) of
+         unit → λ q2 →
+           q-step stp stop Q s (snd (stp s)) ne (λ i → the (Outc exception Unit × X86) (q2 i , snd (stp s))) q0
+             (ih (snd (stp s)) h
+                (subst {lzero} {lzero} {X86} {QAll stp stop Q}
+                   (cong (λ o3 → snd (st-on {X86} {exception} {Unit} {Unit} o3 (λ _ → run-of stp j) (snd (stp s)))) q2) qa)))
+      q
+    out-throw e → λ q h qa → bool-ft (QAll stp stop Q s) h
+    out-abort w → λ q h qa → bool-ft (QAll stp stop Q s) h
+  eo
+-- k computed steps
+q-run-at : (stp : Step) → (stop j : Word) → (Q : Opt X86 → Type) → Q none →
+           ((s1 : X86) → run-ok stp stop j s1 ≡ true → QAll stp stop Q (snd (run-of stp j s1)) → QAll stp stop Q s1) →
+           (s : X86) → (b : Bool) → weq (x86-rip s) stop ≡ b →
+           (if b then false else (case fst (stp s) return (λ _ → Bool) of
+                                    out-val u → run-ok stp stop j (snd (stp s))
+                                    out-throw e → false
+                                    out-abort w → false)) ≡ true →
+           QAll stp stop Q (snd (run-of stp (%wsucc j) s)) → QAll stp stop Q s
+q-run-at stp stop j Q q0 ih s b eb =
+  case b return (λ c → weq (x86-rip s) stop ≡ c →
+                       (if c then false else (case fst (stp s) return (λ _ → Bool) of
+                                                out-val u → run-ok stp stop j (snd (stp s))
+                                                out-throw e → false
+                                                out-abort w → false)) ≡ true →
+                       QAll stp stop Q (snd (run-of stp (%wsucc j) s)) → QAll stp stop Q s) of
+    true → λ e h qa → bool-ft (QAll stp stop Q s) h
+    false → λ e h qa → q-run-val stp stop j Q q0 ih s e (fst (stp s)) refl h qa
+  eb
+q-run : (stp : Step) → (stop k : Word) → (Q : Opt X86 → Type) → Q none → (s : X86) → run-ok stp stop k s ≡ true →
+        QAll stp stop Q (snd (run-of stp k s)) → QAll stp stop Q s
+q-run stp stop k Q q0 =
+  %welimP (λ v → (s : X86) → run-ok stp stop v s ≡ true → QAll stp stop Q (snd (run-of stp v s)) → QAll stp stop Q s) k
+    (λ s h qa → qa)
+    (λ j ih s h qa → q-run-at stp stop j Q q0 ih s (weq (x86-rip s) stop) refl h qa)
+-- the result read at every fuel is v
+RQ : Word → Opt X86 → Type
+RQ v o = opt-or (mn-result o) v ≡ v
