@@ -141,3 +141,59 @@ digit-step V P h0 =
 wrem-small : (V n : Word) → wlt V n ≡ true → wrem V n ≡ V
 wrem-small V n h = catw (congw (λ z → wrem z n) (symw (catw (congw (λ z → wadd z V) (wmul-zero-l n)) (wadd-zero-l V))))
                         (wmod-unique #0 V n h)
+
+-- ---------------------------------------------------------------- a word read back from its bytes
+-- a successor is not 0; a sum that is 0 has its left operand 0
+is-zero : Word → Type
+is-zero w = %welimP (λ _ → Type) w Unit (λ n h → Empty)
+suc-zero : (T : Type) → (x : Word) → %wsucc x ≡ #0 → T
+suc-zero T x p = Empty-rec (transport (λ i → is-zero (p (~ i))) unit)
+wadd-zero-inv : (r d : Word) → wadd r d ≡ #0 → r ≡ #0
+wadd-zero-inv r d = %welimP (λ v → wadd r v ≡ #0 → r ≡ #0) d (λ p → p) (λ n h p → suc-zero (r ≡ #0) (wadd r n) p)
+-- below 1 is 0
+lt-one : (r : Word) → Ltw r #1 → r ≡ #0
+lt-one r h = wadd-zero-inv r (fst h) (wsucc-inj (wadd r (fst h)) #0 (catw (symw (wadd-suc-l r (fst h))) (snd h)))
+-- the remainder by 1 is 0
+wrem-one : (V : Word) → wrem V #1 ≡ #0
+wrem-one V = lt-one (wrem V #1) (wlt-lt (wrem V #1) #1 (wrem-lt V #1 refl))
+-- the quotient by 256·P is the quotient by P, then by 256
+quot-step : (V P : Word) → wlt #0 P ≡ true → wquot (wquot V P) #256 ≡ wquot V (wmul #256 P)
+quot-step V P h0 =
+  symw (catw (congw (λ z → wquot z (wmul #256 P)) (digit-split V P))
+         (wdiv-unique (wquot (wquot V P) #256) (wadd (wmul (wrem (wquot V P) #256) P) (wrem V P)) (wmul #256 P)
+           (lt-digit (wrem (wquot V P) #256) (wrem V P) P (wrem-lt (wquot V P) #256 refl) (wrem-lt V P h0))))
+-- one step of the model's read (bv-update of the accumulated word at bits lo … lo+7): below
+-- 2^lo, the byte lands on top
+bu : Word → Word → Word → Word
+bu acc lo x = wor (wxor acc (wand acc (wshl #255 lo))) (wshl x lo)
+bu-step : (acc lo x : Word) → wlt acc (wshl #1 lo) ≡ true → bu acc lo x ≡ wadd acc (wmul x (wshl #1 lo))
+bu-step acc lo x h =
+  catw (congw (λ z → wor (wxor acc (wand acc z)) (wshl x lo)) (wshl-mul #255 lo))
+    (catw (congw (λ z → wor (wxor acc z) (wshl x lo)) (wand-disj acc #255 lo h))
+      (catw (congw (λ z → wor z (wshl x lo)) (wxor-zero acc))
+        (catw (congw (λ z → wor acc z) (wshl-mul x lo)) (wor-disj acc x lo h))))
+-- the accumulated word after a digit (as memi gives it: or-ed with 0): the remainder by the next power
+bu-dig : (V lo : Word) → {acc : Word} → acc ≡ wrem V (wshl #1 lo) → wlt #0 (wshl #1 lo) ≡ true →
+         bu acc lo (wor (wrem (wquot V (wshl #1 lo)) #256) #0) ≡ wrem V (wmul #256 (wshl #1 lo))
+bu-dig V lo {acc} e h0 =
+  catw (congw (λ z → bu acc lo z) (wor-zero (wrem (wquot V (wshl #1 lo)) #256)))
+    (catw (congw (λ z → bu z lo (wrem (wquot V (wshl #1 lo)) #256)) e)
+      (catw (bu-step (wrem V (wshl #1 lo)) lo (wrem (wquot V (wshl #1 lo)) #256) (wrem-lt V (wshl #1 lo) h0))
+        (digit-step V (wshl #1 lo) h0)))
+-- the model's 8-byte read: the bytes x0 … x7 (each as memi gives it, or-ed with 0), the result masked
+rd8 : Word → Word → Word → Word → Word → Word → Word → Word → Word
+rd8 x0 x1 x2 x3 x4 x5 x6 x7 =
+  wand (bu (bu (bu (bu (bu (bu (bu (bu #0 #0 (wor x0 #0)) #8 (wor x1 #0)) #16 (wor x2 #0)) #24 (wor x3 #0)) #32 (wor x4 #0)) #40 (wor x5 #0)) #48 (wor x6 #0)) #56 (wor x7 #0))
+       #18446744073709551615
+-- base-256 digit k of V (p = 256^k)
+dig : Word → Word → Word
+dig V p = wrem (wquot V p) #256
+-- a word below 2^64 read back from its digits is itself
+rd8-dig : (V : Word) → wlt V #18446744073709551616 ≡ true →
+          rd8 (dig V #1) (dig V #256) (dig V #65536) (dig V #16777216) (dig V #4294967296) (dig V #1099511627776) (dig V #281474976710656) (dig V #72057594037927936) ≡ V
+rd8-dig V h =
+  catw (congw (λ z → wand z #18446744073709551615)
+         (bu-dig V #56 (bu-dig V #48 (bu-dig V #40 (bu-dig V #32 (bu-dig V #24 (bu-dig V #16 (bu-dig V #8 (bu-dig V #0 (symw (wrem-one V)) refl) refl) refl) refl) refl) refl) refl) refl))
+    (catw (wand-mask (wrem V #18446744073709551616) #64)
+      (catw (wrem-small (wrem V #18446744073709551616) #18446744073709551616 (wrem-lt V #18446744073709551616 refl))
+        (wrem-small V #18446744073709551616 h)))
