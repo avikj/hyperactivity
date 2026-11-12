@@ -18,7 +18,9 @@ code a node of it with its reason computed (`tools/work.py why`, `unexplained`);
 elaboration and the checker's answer, accepted or refused, are kept in the store by content
 (t43, t61 in part), so a warm library check takes 4.6 s with the fresh run's output; the per-file
 cache is gone (t41); text is a term (t63); `declarations T` gives the work as a value and views are
-terms over it (`tools/work.py view`, t37; t62 in part); every file imports what it needs (t30).
+terms over it (`tools/work.py view`, t37; t62 in part); the files outside the library import what
+their own text says they need (t30; each being checked alone; the library's own files are ordered
+by lib/library.cub and import nothing).
 Pending: t60 (references keyed by content in the evaluator, so compiled records and results can be
 kept), t61 (the evaluator's results kept beyond the run), t62 (each declaration's code as a value),
 t44, and stating the reasons of the declarations no declaration with a reason uses. The order of
