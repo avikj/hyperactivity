@@ -68,6 +68,6 @@ brunerie: build/cubical
 # the record of the work (lib/work.cub, work/): the goals and tickets check; `python3 tools/work.py
 # check` also confirms every ticket record has its one text comment in the code
 work: build/cubical
-	CUBICAL_NOCACHE=1 ./build/cubical $(CORE) lib/work.cub work/graph.cub
+	CUBICAL_NOCACHE=1 ./build/cubical work/graph.cub
 
 .PHONY: all library brunerie work

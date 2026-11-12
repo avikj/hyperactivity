@@ -17,12 +17,11 @@ Every node in the graph is open; closing one removes it.
     python3 tools/work.py unexplained [FILE] the declarations with no reason, by file
 
 Every declaration of the code is a node of the same graph. Its reason is computed: something with
-a reason mentions it (the machine's reading `#uses`, over the library and the work's files), or the
+a reason mentions it (the machine's reading `#uses`, over every file), or the
 machine names it (src/), or it states one, in the comment above it: `(part of NODE)` or
 `(prerequisite to NODE)`, NODE a node of work/graph.cub. A node of work/graph.cub has a reason when
-it is a root or part of a node with one. The reading covers the library (lib/library.cub) and the
-work's files; files outside them are not read (t30), so a declaration used
-only from outside them shows here as having no reason.
+it is a root or part of a node with one. The first reading of a changed file runs the machine on
+each file no file imports (minutes when the x86 model is among them); the results are kept.
 
 Run from the repository root or anywhere inside it.
 """
@@ -263,7 +262,7 @@ def cmd_check(args):
     for n, l in list(after.items()) + list(speeds.items()):
         for m in [n] + l:
             if m not in g: print(f'{n}: names {m}, which is not a node'); bad += 1
-    cmd = [os.path.join(ROOT, 'build', 'cubical'), 'lib/core.cub', 'lib/work.cub', 'work/graph.cub']
+    cmd = [os.path.join(ROOT, 'build', 'cubical'), 'work/graph.cub']
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'))
     last = [l for l in r.stdout.split('\n') if l.strip()][-1:] or ['']
     fails = [l for l in r.stdout.split('\n') if l.startswith('FAIL')]
@@ -332,25 +331,72 @@ def cmd_next(args):
 STATED = re.compile(r'\((part of|prerequisite to) ([\w-]+)\)')
 
 
+IMPORT = re.compile(r'^import "([^"]+)"', re.M)
+READ_DIRS = ('lib', 'experiments', 'work')
+
+
+def cub_files():
+    out = []
+    for d in READ_DIRS:
+        for dp, _, fs in os.walk(os.path.join(ROOT, d)):
+            out += [os.path.relpath(os.path.join(dp, f), ROOT) for f in fs if f.endswith('.cub')]
+    return sorted(out)
+
+
+def imports_of(f):
+    try: s = open(os.path.join(ROOT, f), encoding='utf-8').read()
+    except OSError: return []
+    return [os.path.normpath(os.path.join(os.path.dirname(f), x)) for x in IMPORT.findall(s)]
+
+
+def closure(f, seen=None):
+    seen = [] if seen is None else seen
+    if f in seen: return seen
+    for g in imports_of(f): closure(g, seen)
+    seen.append(f)
+    return seen
+
+
 def reading():
-    """the machine's #uses over LIB and the work's files: [(file, line, names, [(file, line)])]"""
-    lib = ['lib/library.cub']
+    """the machine's #uses over every file: [(file, line, names, [(file, line)])]. A file another
+    file imports is read in that file's run; every file no file imports is loaded alone (its imports
+    with it) and read there. A run's result is kept under a key of the machine and of the texts it
+    loads (.cubical-store/uses/), so only what changed is read again."""
+    import hashlib
+    files = cub_files()
+    imported = {g for f in files for g in imports_of(f)}
+    leaves = [f for f in files if f not in imported]
+    binary = os.path.join(ROOT, 'build', 'cubical')
+    bh = hashlib.sha256(open(binary, 'rb').read()).hexdigest()
+    cache = os.path.join(ROOT, '.cubical-store', 'uses'); os.makedirs(cache, exist_ok=True)
     env = dict(os.environ)
     env.setdefault('CUBICAL_STORE', os.path.join(ROOT, '.cubical-store'))
-    r = subprocess.run([os.path.join(ROOT, 'build', 'cubical')] + lib + ['lib/work.cub', 'work/graph.cub', '--serve'],
-                       cwd=ROOT, input='#uses\n.\n', capture_output=True, text=True, env=env)
-    out = []
     def pos(x):
-        f, l = x.rsplit(':', 1)
-        return os.path.relpath(f, ROOT) if os.path.isabs(f) else f, int(l)
-    for ln in r.stdout.split('\n'):
-        if not ln.startswith('uses '): continue
-        w = ln.split()
-        i = w.index(':')
-        if w[1] == '?': continue
-        f, l = pos(w[1])
-        out.append((f, l, w[2:i], [pos(x) for x in w[i + 1:] if x != '?']))
-    return out
+        fl, l = x.rsplit(':', 1)
+        return os.path.relpath(fl, ROOT) if os.path.isabs(fl) else fl, int(l)
+    decls = {}
+    for f in leaves:
+        h = hashlib.sha256(bh.encode())
+        for g in closure(f):
+            h.update(g.encode()); h.update(open(os.path.join(ROOT, g), 'rb').read())
+        kp = os.path.join(cache, h.hexdigest())
+        if os.path.exists(kp): text = open(kp, encoding='utf-8').read()
+        else:
+            print(f'reading {f}', file=sys.stderr, flush=True)
+            r = subprocess.run([binary, f, '--serve'], cwd=ROOT, input='#uses\n.\n', capture_output=True,
+                               text=True, env=env)
+            text = '\n'.join(l for l in r.stdout.split('\n') if l.startswith('uses '))
+            open(kp, 'w', encoding='utf-8').write(text)
+        for ln in text.split('\n'):
+            if not ln.startswith('uses '): continue
+            w = ln.split(); i = w.index(':')
+            if w[1] == '?': continue
+            k = pos(w[1])
+            names, uses = decls.setdefault(k, ([], set()))
+            for n in w[2:i]:
+                if n not in names: names.append(n)
+            uses |= {pos(x) for x in w[i + 1:] if x != '?'}
+    return [(f, l, names, sorted(uses)) for (f, l), (names, uses) in decls.items()]
 
 
 def stated_reason(lines, l):
