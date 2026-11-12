@@ -1971,6 +1971,26 @@ static bool infer_looking(Node *t);
  * between `determined` below (a level parameter is counted as determined, "an undetermined one is
  * the least") and lib/check.cub's spine solving (level-hole: a level nothing determines is lzero).
  * lib/nbe.cub writes PathP or explicit levels at those sites. */
+/* t53 (2026-11-12): wrong. An implicit index of a function on an indexed family, left out where the
+ * function is passed unapplied to its last argument in the signature of a definition by clauses, is
+ * refused although the family argument's type determines it. Reproducer (after CORE):
+ *   data T53 : (P : Bool × Bool) → Type where
+ *     t53a : T53 (true , true)
+ *     t53b : (b₀ : Bool) → T53 (b₀ , b₀) → T53 (false , b₀)
+ *   t53f : {P : Bool × Bool} → T53 P → Bool → Bool
+ *   t53f t53a k = k
+ *   t53f (t53b b w) k = not (t53f w k)
+ *   Q53 : (Bool → Bool) → Type
+ *   Q53 r = r true ≡ r true
+ *   t53g : {P : Bool × Bool} (w : T53 P) → Q53 (t53f w)
+ *   t53g t53a = λ i → true
+ *   t53g (t53b b w) = λ i → not (t53f w true)
+ * is refused: "FAIL: checks t53g … at: λ x0 → x0 … reason: an implicit argument is not determined by
+ * the other arguments' types or the type expected … its type: Bool × Bool" (run 2026-11-12); the same
+ * signature with t53f w true ≡ t53f w true checks. Not yet located between `determined` below and
+ * lib/check.cub's spine solving (E-implicit). Workaround: the index given in braces (t53f {P} w).
+ * No site uses it now: experiments/nbe/p26-wip.cub's OPE, where it was met, is closed data (the
+ * reason at its definition). */
 /* is implicit parameter q of h found from an explicit argument whose type the checker infers (it
  * occurs in that argument's domain)? A level always is (an undetermined one is the least) */
 /* definitions that compute by cases on an argument: their arguments are not read back from a value of the type */
@@ -4437,6 +4457,25 @@ typedef struct { bool clash, stuck; UClash cl; int nsol; USol sol[16]; } UState;
  * snd (case fst Δ1 ...)) and without an odone clause "the clauses do not cover every case". Agda's
  * unifier decomposes pairs (η for Σ) and evaluates indices to weak head normal form first. lib/nbe.cub
  * defines variables by recursion on the skeleton and worlds as functions instead. */
+/* t54 (2026-11-12): wrong. A constructor pattern nested under an indexed family's constructor is
+ * refused, while the same clauses with a variable there check. Reproducer (after CORE):
+ *   data T54 : (P : Bool × Nat) → Type where
+ *     t54a : T54 (true , zero)
+ *     t54b : (b₀ : Bool) (n₀ : Nat) → T54 (b₀ , n₀) → T54 (b₀ , suc n₀)
+ *   F54 : Nat → Type
+ *   F54 zero = Bool
+ *   F54 (suc n) = Bool
+ *   t54f : {P : Bool × Nat} → T54 P → F54 (snd P) → F54 (snd P)
+ *   t54f t54a x = x
+ *   t54f (t54b true n w) x = x
+ *   t54f (t54b false n w) x = x
+ * is refused: "FAIL: checks t54f … at: cpair (cfree %f322) (cfree (suc n)) … reason: no inferable
+ * type here: annotate it with (the T t)" (run 2026-11-12); with the one clause t54f (t54b b n w) x = x
+ * it checks. With an index (lcons e sk' , sk) and the clause's entry matched as e-ty s, the error is
+ * "type mismatch" with the index not refined (snd P left in the expected type). Not yet located in
+ * the padding of an indexed constructor's pattern (fording) or u_con below. Workaround: a function by
+ * cases on the nested field, called from the clause with a variable there. No site uses it now
+ * (experiments/nbe/p26-wip.cub's OPE, where it was met, is closed data). */
 static int u_con(Node *t, Node **args, int *na) {
     *na = 0;
     if (!t->list) {

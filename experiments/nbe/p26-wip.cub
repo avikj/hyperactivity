@@ -1645,44 +1645,187 @@ mono-keep r h =
      (λ n → pcat0 Bool (wlt (%wsucc (r n)) #0) false (wlt (%wsucc n) #0) (wlt-s0 (r n)) (sym (wlt-s0 n)))
      (λ n m → pcat0 Bool (wlt (%wsucc (r n)) (%wsucc (r m))) (wlt n m) (wlt (%wsucc n) (%wsucc m))
         (snd (mono-succ r h) n m) (sym (wlt-ss n m))))
--- order-preserving embeddings of skeletons, sk into sk' (index (sk' , sk)): the variables of sk
--- among those of sk', in order; an embedding keeps or skips each entry of sk', newest first
--- constructor binders subscripted ₀: t46
-data OPE : (P : Lst Entry × Lst Entry) → Type where
-  wdone : OPE (lnil , lnil)
-  wskip : (e₀ : Entry) (sk'₀ sk₀ : Lst Entry) → OPE (sk'₀ , sk₀) → OPE (lcons e₀ sk'₀ , sk₀)
-  wkeep : (e₀ : Entry) (sk'₀ sk₀ : Lst Entry) → OPE (sk'₀ , sk₀) → OPE (lcons e₀ sk'₀ , lcons e₀ sk₀)
+-- order-preserving embeddings of skeletons, as closed data: an embedding keeps or skips each entry of
+-- the larger skeleton (ope-src), newest first; the kept ones are the smaller (ope-tgt). (Indexed by
+-- the two skeletons, its clauses at wdone carry fording's transports, which do not reduce without
+-- regularity, so ope-cube wdone would not be the identity judgmentally; tested 2026-11-12.)
+data OPE = wdone | wskip (e : Entry) (w : OPE) | wkeep (e : Entry) (w : OPE)
+ope-src : OPE → Lst Entry
+ope-src wdone = lnil
+ope-src (wskip e w) = lcons e (ope-src w)
+ope-src (wkeep e w) = lcons e (ope-src w)
+ope-tgt : OPE → Lst Entry
+ope-tgt wdone = lnil
+ope-tgt (wskip e w) = ope-tgt w
+ope-tgt (wkeep e w) = lcons e (ope-tgt w)
 -- its map of variable indices, a monotone injection
-ope-var : {P : Lst Entry × Lst Entry} → OPE P → Word → Word
+ope-var : OPE → Word → Word
 ope-var wdone k = k
-ope-var (wskip e sk' sk w) k = %wsucc (ope-var w k)
-ope-var (wkeep e sk' sk w) k = w-keep (ope-var w) k
--- t53 (2026-11-12): wrong. An implicit index of a function on an indexed family, left out where the
--- function is passed unapplied to its last argument in a signature of a definition by clauses, is
--- refused although the family argument's type determines it. Reproducer (after CORE):
---   data T53 : (P : Bool × Bool) → Type where
---     t53a : T53 (true , true)
---     t53b : (b₀ : Bool) → T53 (b₀ , b₀) → T53 (false , b₀)
---   t53f : {P : Bool × Bool} → T53 P → Bool → Bool
---   t53f t53a k = k
---   t53f (t53b b w) k = not (t53f w k)
---   Q53 : (Bool → Bool) → Type
---   Q53 r = r true ≡ r true
---   t53g : {P : Bool × Bool} (w : T53 P) → Q53 (t53f w)
---   t53g t53a = λ i → true
---   t53g (t53b b w) = λ i → not (t53f w true)
--- is refused: "FAIL: checks t53g … at: λ x0 → x0 … reason: an implicit argument is not determined by
--- the other arguments' types or the type expected … its type: Bool × Bool" (run 2026-11-12); the
--- same signature with t53f w true ≡ t53f w true checks. Not yet located. Workaround: the index given,
--- ope-var {P} w (here).
-ope-mono : {P : Lst Entry × Lst Entry} (w : OPE P) → MonoW (ope-var {P} w)
+ope-var (wskip e w) k = %wsucc (ope-var w k)
+ope-var (wkeep e w) k = w-keep (ope-var w) k
+ope-mono : (w : OPE) → MonoW (ope-var w)
 ope-mono wdone = mono-id
-ope-mono (wskip e sk' sk w) = mono-succ (ope-var w) (ope-mono w)
-ope-mono (wkeep e sk' sk w) = mono-keep (ope-var w) (ope-mono w)
+ope-mono (wskip e w) = mono-succ (ope-var w) (ope-mono w)
+ope-mono (wkeep e w) = mono-keep (ope-var w) (ope-mono w)
 -- renaming a form along an embedding; canonicity and non-constancy are kept
-dnf-ren : {P : Lst Entry × Lst Entry} → OPE P → DNF → DNF
+dnf-ren : OPE → DNF → DNF
 dnf-ren w f = dnf-r (ope-var w) f
-canon-ren : {P : Lst Entry × Lst Entry} (w : OPE P) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-canon (dnf-ren w f))
+canon-ren : (w : OPE) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-canon (dnf-ren w f))
 canon-ren w f c = subst {lzero} {lzero} {Bool} {isTrue} (sym (dnf-canon-r (ope-var w) (ope-mono w) f)) c
-nonconst-ren : {P : Lst Entry × Lst Entry} (w : OPE P) (f : DNF) → isTrue (dnf-nonconst f) → isTrue (dnf-nonconst (dnf-ren w f))
+nonconst-ren : (w : OPE) (f : DNF) → isTrue (dnf-nonconst f) → isTrue (dnf-nonconst (dnf-ren w f))
 nonconst-ren w f c = subst {lzero} {lzero} {Bool} {isTrue} (sym (dnf-nonconst-r (ope-var w) f)) c
+
+-- ---------------------------------------------------------------- P2.6e (4, first part): path application commutes with embeddings
+-- (2026-11-12, next definitions (4); the identity and embedding laws of (2) are its instances) The
+-- action of an embedding w : sk ⊆ sk' on cubes (ope-cube) is structural: a skipped dimension is a
+-- degeneracy, a kept one is kept. Path application at a variable k over sk (diag-sk) commutes with it
+-- at ope-var w k (diag-ren), by induction on w; the steps are diag-sk at a successor (diag-ty-s,
+-- diag-dim-s), its naturality in the base (diag-nat) and that of ope-cube (ope-nat).
+wsub-s1 : (a : Word) → wsub (%wsucc a) #1 ≡ a
+wsub-s1 a =
+  pcat0 Word (wsub (%wsucc a) #1) (subw a #0) a (sym (subw≡wsub (%wsucc a) #1))
+    (%welimP (λ v → subw v #0 ≡ v) a (λ i → #0) (λ n h i → %wsucc n))
+diag-ty-s : (sk : Lst Entry) (s : TyShape) (k : Word) (X : Type 1) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (dims sk) X) (diag-sk (lcons (e-ty s) sk) (%wsucc k) X c) (diag-sk sk k X c)
+diag-ty-s sk s k X c = λ i →
+  if weq-s0 k i then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (wsub-s1 k i) X c
+diag-dim-s : (sk : Lst Entry) (k : Word) (X : Type 1) (c : Cube (suc (dims (lcons e-dim sk))) X) →
+  PathP (λ i → Cube (suc (dims sk)) X) (diag-sk (lcons e-dim sk) (%wsucc k) X c)
+    (diag-sk sk k (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c))
+diag-dim-s sk k X c = λ i →
+  if weq-s0 k i then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+  else diag-sk sk (wsub-s1 k i) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+diag-nat : (sk : Lst Entry) (k : Word) (X Y : Type 1) (g : X → Y) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (dims sk) Y) (diag-sk sk k Y (cube-map (suc (dims sk)) X Y g c)) (cube-map (dims sk) X Y g (diag-sk sk k X c))
+diag-nat lnil k X Y g c = λ i → g (fst c)
+diag-nat (lcons (e-ty s) sk) k X Y g c =
+  bool-elim1 (λ b → PathP (λ i → Cube (dims sk) Y)
+                 (if b then cube-map (dims sk) (Line Y) Y (face0-l Y) (cube-map (dims sk) (Line X) (Line Y) (line-map X Y g) c)
+                  else diag-sk sk (%wsub k #1) Y (cube-map (dims sk) (Line X) (Line Y) (line-map X Y g) c))
+                 (cube-map (dims sk) X Y g (if b then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c)))
+    (cube-comp2 (dims sk) (Line X) (Line Y) X Y (face0-l Y) (line-map X Y g) g (face0-l X) c (λ i → cube-map (dims sk) (Line X) Y (λ L → g (fst L)) c))
+    (diag-nat sk (%wsub k #1) X Y g c) (weq k #0)
+diag-nat (lcons e-dim sk) k X Y g c =
+  bool-elim1 (λ b → PathP (λ i → Cube (suc (dims sk)) Y)
+                 (if b then cube-map (dims sk) (Line (Line Y)) (Line Y) (diag-l Y) (cube-map (dims sk) (Line (Line X)) (Line (Line Y)) (line-map (Line X) (Line Y) (line-map X Y g)) c)
+                  else diag-sk sk (%wsub k #1) (Line Y) (cube-map (dims sk) (Line (Line Y)) (Line (Line Y)) (exch-l Y)
+                         (cube-map (dims sk) (Line (Line X)) (Line (Line Y)) (line-map (Line X) (Line Y) (line-map X Y g)) c)))
+                 (cube-map (dims sk) (Line X) (Line Y) (line-map X Y g)
+                   (if b then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+                    else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c))))
+    (cube-comp2 (dims sk) (Line (Line X)) (Line (Line Y)) (Line X) (Line Y) (diag-l Y) (line-map (Line X) (Line Y) (line-map X Y g))
+       (line-map X Y g) (diag-l X) c (λ i → cube-map (dims sk) (Line (Line X)) (Line Y) (λ Q → line-map X Y g (diag-l X Q)) c))
+    (pcat (Cube (suc (dims sk)) Y)
+       (diag-sk sk (%wsub k #1) (Line Y) (cube-map (dims sk) (Line (Line Y)) (Line (Line Y)) (exch-l Y)
+          (cube-map (dims sk) (Line (Line X)) (Line (Line Y)) (line-map (Line X) (Line Y) (line-map X Y g)) c)))
+       (diag-sk sk (%wsub k #1) (Line Y) (cube-map (dims sk) (Line (Line X)) (Line (Line Y)) (line-map (Line X) (Line Y) (line-map X Y g))
+          (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+       (cube-map (dims sk) (Line X) (Line Y) (line-map X Y g) (diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+       (λ i → diag-sk sk (%wsub k #1) (Line Y)
+          (cube-comp2 (dims sk) (Line (Line X)) (Line (Line Y)) (Line (Line X)) (Line (Line Y)) (exch-l Y) (line-map (Line X) (Line Y) (line-map X Y g))
+             (line-map (Line X) (Line Y) (line-map X Y g)) (exch-l X) c
+             (λ j → cube-map (dims sk) (Line (Line X)) (Line (Line Y)) (λ Q → exch-l Y (line-map (Line X) (Line Y) (line-map X Y g) Q)) c) i))
+       (diag-nat sk (%wsub k #1) (Line X) (Line Y) (line-map X Y g) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+    (weq k #0)
+-- the action of an embedding on cubes: a skipped dimension degenerate, a kept one kept; one step,
+-- by cases on the entry, for any action f of the rest (skip-cube, keep-cube), so that each lemma
+-- below is one step for any f with the property, then an induction on the embedding
+skip-cube : (e : Entry) (sk' : Lst Entry) (X : Type 1) → Cube (dims sk') X → Cube (dims (lcons e sk')) X
+skip-cube (e-ty s) sk' X c = c
+skip-cube e-dim sk' X c = cube-map (dims sk') X (Line X) (degen-l X) c
+keep-cube : (e : Entry) (sk' sk : Lst Entry) → ((Y : Type 1) → Cube (dims sk) Y → Cube (dims sk') Y) →
+  (X : Type 1) → Cube (dims (lcons e sk)) X → Cube (dims (lcons e sk')) X
+keep-cube (e-ty s) sk' sk f X c = f X c
+keep-cube e-dim sk' sk f X c = f (Line X) c
+ope-cube : (w : OPE) (X : Type 1) → Cube (dims (ope-tgt w)) X → Cube (dims (ope-src w)) X
+ope-cube wdone X c = c
+ope-cube (wskip e w) X c = skip-cube e (ope-src w) X (ope-cube w X c)
+ope-cube (wkeep e w) X c = keep-cube e (ope-src w) (ope-tgt w) (λ Y → ope-cube w Y) X c
+-- naturality in the base, one step for an action f natural in it, then by induction on w
+CubeNat : (sk' sk : Lst Entry) → ((Y : Type 1) → Cube (dims sk) Y → Cube (dims sk') Y) → Type 2
+CubeNat sk' sk f = (X Y : Type 1) (g : X → Y) (c : Cube (dims sk) X) →
+  PathP (λ i → Cube (dims sk') Y) (f Y (cube-map (dims sk) X Y g c)) (cube-map (dims sk') X Y g (f X c))
+skip-nat : (e : Entry) (sk' sk : Lst Entry) (f : (Y : Type 1) → Cube (dims sk) Y → Cube (dims sk') Y) → CubeNat sk' sk f →
+  CubeNat (lcons e sk') sk (λ Y c → skip-cube e sk' Y (f Y c))
+skip-nat (e-ty s) sk' sk f fn X Y g c = fn X Y g c
+skip-nat e-dim sk' sk f fn X Y g c =
+  pcat (Cube (dims sk') (Line Y))
+    (cube-map (dims sk') Y (Line Y) (degen-l Y) (f Y (cube-map (dims sk) X Y g c)))
+    (cube-map (dims sk') Y (Line Y) (degen-l Y) (cube-map (dims sk') X Y g (f X c)))
+    (cube-map (dims sk') (Line X) (Line Y) (line-map X Y g) (cube-map (dims sk') X (Line X) (degen-l X) (f X c)))
+    (λ i → cube-map (dims sk') Y (Line Y) (degen-l Y) (fn X Y g c i))
+    (cube-comp2 (dims sk') X Y (Line X) (Line Y) (degen-l Y) g (line-map X Y g) (degen-l X) (f X c)
+       (λ i → cube-map (dims sk') X (Line Y) (λ x → degen-l Y (g x)) (f X c)))
+keep-nat : (e : Entry) (sk' sk : Lst Entry) (f : (Y : Type 1) → Cube (dims sk) Y → Cube (dims sk') Y) → CubeNat sk' sk f →
+  CubeNat (lcons e sk') (lcons e sk) (keep-cube e sk' sk f)
+keep-nat (e-ty s) sk' sk f fn X Y g c = fn X Y g c
+keep-nat e-dim sk' sk f fn X Y g c = fn (Line X) (Line Y) (line-map X Y g) c
+ope-nat : (w : OPE) → CubeNat (ope-src w) (ope-tgt w) (ope-cube w)
+ope-nat wdone X Y g c = λ i → g c
+ope-nat (wskip e w) X Y g c = skip-nat e (ope-src w) (ope-tgt w) (ope-cube w) (ope-nat w) X Y g c
+ope-nat (wkeep e w) X Y g c = keep-nat e (ope-src w) (ope-tgt w) (ope-cube w) (ope-nat w) X Y g c
+-- path application at a variable commutes with an embedding's action: one step for an action f
+-- natural in the base with variable map r, then by induction on w
+DiagRen : (sk' sk : Lst Entry) → (Word → Word) → ((Y : Type 1) → Cube (dims sk) Y → Cube (dims sk') Y) → Type 2
+DiagRen sk' sk r f = (k : Word) (X : Type 1) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (dims sk') X) (diag-sk sk' (r k) X (f (Line X) c)) (f X (diag-sk sk k X c))
+skip-diag : (e : Entry) (sk' sk : Lst Entry) (r : Word → Word) (f : (Y : Type 1) → Cube (dims sk) Y → Cube (dims sk') Y) →
+  DiagRen sk' sk r f → DiagRen (lcons e sk') sk (λ k → %wsucc (r k)) (λ Y c → skip-cube e sk' Y (f Y c))
+skip-diag (e-ty s) sk' sk r f ih k X c =
+  pcat (Cube (dims sk') X) (diag-sk (lcons (e-ty s) sk') (%wsucc (r k)) X (f (Line X) c))
+    (diag-sk sk' (r k) X (f (Line X) c)) (f X (diag-sk sk k X c))
+    (diag-ty-s sk' s (r k) X (f (Line X) c)) (ih k X c)
+skip-diag e-dim sk' sk r f ih k X c =
+  pcat (Cube (suc (dims sk')) X)
+    (diag-sk (lcons e-dim sk') (%wsucc (r k)) X (cube-map (dims sk') (Line X) (Line (Line X)) (degen-l (Line X)) (f (Line X) c)))
+    (diag-sk sk' (r k) (Line X) (cube-map (dims sk') (Line (Line X)) (Line (Line X)) (exch-l X)
+       (cube-map (dims sk') (Line X) (Line (Line X)) (degen-l (Line X)) (f (Line X) c))))
+    (cube-map (dims sk') X (Line X) (degen-l X) (f X (diag-sk sk k X c)))
+    (diag-dim-s sk' (r k) X (cube-map (dims sk') (Line X) (Line (Line X)) (degen-l (Line X)) (f (Line X) c)))
+    (pcat (Cube (suc (dims sk')) X)
+       (diag-sk sk' (r k) (Line X) (cube-map (dims sk') (Line (Line X)) (Line (Line X)) (exch-l X)
+          (cube-map (dims sk') (Line X) (Line (Line X)) (degen-l (Line X)) (f (Line X) c))))
+       (diag-sk sk' (r k) (Line X) (cube-map (dims sk') (Line X) (Line (Line X)) (line-map X (Line X) (degen-l X)) (f (Line X) c)))
+       (cube-map (dims sk') X (Line X) (degen-l X) (f X (diag-sk sk k X c)))
+       (λ i → diag-sk sk' (r k) (Line X)
+          (cube-comp (dims sk') (Line X) (Line (Line X)) (Line (Line X)) (exch-l X) (degen-l (Line X)) (f (Line X) c) i))
+       (pcat (Cube (suc (dims sk')) X)
+          (diag-sk sk' (r k) (Line X) (cube-map (dims sk') (Line X) (Line (Line X)) (line-map X (Line X) (degen-l X)) (f (Line X) c)))
+          (cube-map (dims sk') X (Line X) (degen-l X) (diag-sk sk' (r k) X (f (Line X) c)))
+          (cube-map (dims sk') X (Line X) (degen-l X) (f X (diag-sk sk k X c)))
+          (diag-nat sk' (r k) X (Line X) (degen-l X) (f (Line X) c))
+          (λ i → cube-map (dims sk') X (Line X) (degen-l X) (ih k X c i))))
+keep-diag : (e : Entry) (sk' sk : Lst Entry) (r : Word → Word) (f : (Y : Type 1) → Cube (dims sk) Y → Cube (dims sk') Y) →
+  CubeNat sk' sk f → DiagRen sk' sk r f → DiagRen (lcons e sk') (lcons e sk) (w-keep r) (keep-cube e sk' sk f)
+keep-diag (e-ty s) sk' sk r f fn ih k X c =
+  %welimP (λ v → PathP (λ i → Cube (dims sk') X) (diag-sk (lcons (e-ty s) sk') (w-keep r v) X (f (Line X) c))
+                    (f X (diag-sk (lcons (e-ty s) sk) v X c))) k
+    (psym (Cube (dims sk') X) (f X (cube-map (dims sk) (Line X) X (face0-l X) c))
+       (cube-map (dims sk') (Line X) X (face0-l X) (f (Line X) c)) (fn (Line X) X (face0-l X) c))
+    (λ n h → pcat (Cube (dims sk') X) (diag-sk (lcons (e-ty s) sk') (%wsucc (r n)) X (f (Line X) c))
+       (f X (diag-sk sk n X c)) (f X (diag-sk (lcons (e-ty s) sk) (%wsucc n) X c))
+       (skip-diag (e-ty s) sk' sk r f ih n X c)
+       (λ i → f X (diag-ty-s sk s n X c (~ i))))
+keep-diag e-dim sk' sk r f fn ih k X c =
+  %welimP (λ v → PathP (λ i → Cube (suc (dims sk')) X) (diag-sk (lcons e-dim sk') (w-keep r v) X (f (Line (Line X)) c))
+                    (f (Line X) (diag-sk (lcons e-dim sk) v X c))) k
+    (psym (Cube (suc (dims sk')) X) (f (Line X) (cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c))
+       (cube-map (dims sk') (Line (Line X)) (Line X) (diag-l X) (f (Line (Line X)) c)) (fn (Line (Line X)) (Line X) (diag-l X) c))
+    (λ n h → pcat (Cube (suc (dims sk')) X) (diag-sk (lcons e-dim sk') (%wsucc (r n)) X (f (Line (Line X)) c))
+       (f (Line X) (diag-sk sk n (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+       (f (Line X) (diag-sk (lcons e-dim sk) (%wsucc n) X c))
+       (pcat (Cube (suc (dims sk')) X) (diag-sk (lcons e-dim sk') (%wsucc (r n)) X (f (Line (Line X)) c))
+          (diag-sk sk' (r n) (Line X) (cube-map (dims sk') (Line (Line X)) (Line (Line X)) (exch-l X) (f (Line (Line X)) c)))
+          (f (Line X) (diag-sk sk n (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+          (diag-dim-s sk' (r n) X (f (Line (Line X)) c))
+          (pcat (Cube (suc (dims sk')) X)
+             (diag-sk sk' (r n) (Line X) (cube-map (dims sk') (Line (Line X)) (Line (Line X)) (exch-l X) (f (Line (Line X)) c)))
+             (diag-sk sk' (r n) (Line X) (f (Line (Line X)) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+             (f (Line X) (diag-sk sk n (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+             (λ i → diag-sk sk' (r n) (Line X) (fn (Line (Line X)) (Line (Line X)) (exch-l X) c (~ i)))
+             (ih n (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c))))
+       (λ i → f (Line X) (diag-dim-s sk n X c (~ i))))
+diag-ren : (w : OPE) → DiagRen (ope-src w) (ope-tgt w) (ope-var w) (ope-cube w)
+diag-ren wdone k X c = λ i → fst c
+diag-ren (wskip e w) k X c = skip-diag e (ope-src w) (ope-tgt w) (ope-var w) (ope-cube w) (diag-ren w) k X c
+diag-ren (wkeep e w) k X c = keep-diag e (ope-src w) (ope-tgt w) (ope-var w) (ope-cube w) (ope-nat w) (diag-ren w) k X c
