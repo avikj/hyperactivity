@@ -171,7 +171,8 @@
 --
 -- Next definitions (2026-11-12), in order (done: lines, cubes, generators, cube-comp, cube-id; P2.4
 -- entirely: canonical forms of interval codes and papp-cube; P2.2 entirely: skeletons of entries,
--- dims, CtxE/VarT/CompEnv/env-ren/var-comp/reflect-env with a dimension clause, ren-dim):
+-- dims, CtxE/VarT/CompEnv/env-ren/var-comp/reflect-env with a dimension clause, ren-dim; P2.1 DCube,
+-- dcube-map, dcube-of, dcube-map-of; P2.3's PathS/PathE, to be TyE's clause for the path shape):
 --   P2.1 DCube (a cube in a family over a cube) and cube-zip/unzip with their laws as paths.
 --   P2.2 Skeleton entries `data Entry = e-ty (s : TyShape) | e-dim`, dims : Lst Entry → Nat, CtxE with
 --        a dimension contributing nothing to a vertex environment, VarT stepping over e-dim.
@@ -931,3 +932,50 @@ papp-dnf-from sk X o c (lcons d ds) p =
 papp-cube : (sk : Lst Entry) (X : Type 1) (f : DNF) → Cube (suc (dims sk)) X → Cube (dims sk) X
 papp-cube sk X lnil p = cube-map (dims sk) (Line X) X (face0-l X) p
 papp-cube sk X (lcons c cs) p = papp-dnf-from sk X #0 c cs p
+
+-- ---------------------------------------------------------------- P2.1: cubes in a family over a cube
+-- (2026-11-12) A line over a line L of X in a family Y: a point over each end and a path over L; a
+-- cube over a cube likewise, one direction at a time (newest innermost, as Cube).
+LineO : (X : Type 1) (Y : X → Type 1) → Line X → Type 1
+-- binder names chosen not to collide: t46
+LineO X Y L = (ly0 : Y (fst L)) × (ly1 : Y (fst (snd L))) × PathP (λ i → Y (snd (snd L) i)) ly0 ly1
+DCube : (n : Nat) (X : Type 1) (Y : X → Type 1) → Cube n X → Type 1
+DCube zero X Y c = Y c
+DCube (suc n) X Y c = DCube n (Line X) (LineO X Y) c
+lineo-map : (X : Type 1) (Y : X → Type 1) (Z : Type 1) → ((x : X) → Y x → Z) → (L : Line X) → LineO X Y L → Line Z
+lineo-map X Y Z f L D = (f (fst L) (fst D) , f (fst (snd L)) (fst (snd D)) , λ i → f (snd (snd L) i) (snd (snd D) i))
+-- a map out of a cube with a cube over it
+dcube-map : (n : Nat) (X : Type 1) (Y : X → Type 1) (Z : Type 1) → ((x : X) → Y x → Z) → (c : Cube n X) → DCube n X Y c → Cube n Z
+dcube-map zero X Y Z f c d = f c d
+dcube-map (suc n) X Y Z f c d = dcube-map n (Line X) (LineO X Y) (Line Z) (lineo-map X Y Z f) c d
+-- the cube over a cube given by a section of the family
+lineo-of : (X : Type 1) (Y : X → Type 1) → ((x : X) → Y x) → (L : Line X) → LineO X Y L
+lineo-of X Y f L = (f (fst L) , f (fst (snd L)) , λ i → f (snd (snd L) i))
+dcube-of : (n : Nat) (X : Type 1) (Y : X → Type 1) → ((x : X) → Y x) → (c : Cube n X) → DCube n X Y c
+dcube-of zero X Y f c = f c
+dcube-of (suc n) X Y f c = dcube-of n (Line X) (LineO X Y) (lineo-of X Y f) c
+-- mapping out of a cube with the cube of a section is mapping out of the cube: a path by induction
+dcube-map-of : (n : Nat) (X : Type 1) (Y : X → Type 1) (Z : Type 1) (f : (x : X) → Y x → Z) (g : (x : X) → Y x) (c : Cube n X) →
+  PathP (λ i → Cube n Z) (dcube-map n X Y Z f c (dcube-of n X Y g c)) (cube-map n X Z (λ x → f x (g x)) c)
+dcube-map-of zero X Y Z f g c = λ i → f c (g c)
+dcube-map-of (suc n) X Y Z f g c = dcube-map-of n (Line X) (LineO X Y) (Line Z) (lineo-map X Y Z f) (lineo-of X Y g) c
+
+-- ---------------------------------------------------------------- P2.3: the semantic path type
+-- (2026-11-12) A semantic PathP type over semantic types X with meanings E: a line of semantic types
+-- and a point over each end; its meaning is the language's PathP over the line, judgmentally (the
+-- clause of TyE for the path shape is this pair, P2.6).
+PathS : (X : Type 1) (E : X → Type) → Type 1
+-- binder names chosen not to collide: t46
+PathS X E = (pL : Line X) × E (fst pL) × E (fst (snd pL))
+PathE : (X : Type 1) (E : X → Type) → PathS X E → Type
+PathE X E D = PathP (λ i → E (snd (snd (fst D)) i)) (fst (snd D)) (snd (snd D))
+pathE-pathp : (X : Type 1) (E : X → Type) (A0 A1 : X) (A : PathP (λ i → X) A0 A1) (a0 : E A0) (a1 : E A1) →
+  Path Type (PathE X E ((A0 , A1 , A) , a0 , a1)) (PathP (λ i → E (A i)) a0 a1)
+pathE-pathp X E A0 A1 A a0 a1 = refl
+-- a value of a path type is a line over its type's line, with the type's endpoints as its ends
+path-line : (X : Type 1) (E : X → Type) (D : PathS X E) → PathE X E D →
+  (y0 : E (fst (fst D))) × (y1 : E (fst (snd (fst D)))) × PathP (λ i → E (snd (snd (fst D)) i)) y0 y1
+path-line X E D p = (p 0 , p 1 , p)
+path-line-ends : (X : Type 1) (E : X → Type) (D : PathS X E) (p : PathE X E D) →
+  Path (E (fst (fst D))) (fst (path-line X E D p)) (fst (snd D))
+path-line-ends X E D p = refl
