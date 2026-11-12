@@ -3706,13 +3706,14 @@ static void toplevel(Node *f) {
 }
 /* ---- uses (2026-11-12, t64): every declaration as written (one per source position: its signature,
  * its equations and everything generated from it, the generator's output belonging to the declaration
- * that generated it), the names it declares, and the declarations it mentions. A mention is a symbol,
+ * that generated it; a command such as #show or a check is one too, named by its kind), the names
+ * it declares, and the declarations it mentions. A mention is a symbol,
  * in any core form the declaration elaborates to, naming an earlier declaration and not bound where it
  * occurs (the binders of lam, plam, Pi, Sigma, let, case branches and data fields are scoped; a
  * binder form not listed here would make a bound variable that shares a declaration's name read as a
  * use of it). #uses prints them; tools/work.py reads that to give every declaration of the code its
  * reason: a use by a declaration that has one, or a stated one. ---- */
-typedef struct { char *pos; const char **names; int nnames; int *uses; int nuses; } UDecl;
+typedef struct { char *pos; const char **names; int nnames; int *uses; int nuses; const char *cmd; } UDecl;
 static UDecl *UD; static int nud, capud;
 static struct { const char *name; int owner; } *UN; static size_t capun, nun;
 static int un_get(const char *s) {
@@ -3735,7 +3736,7 @@ static void un_put(const char *s, int owner) {
 }
 static int ud_new(const char *p) {
     if (nud == capud) { capud = capud ? 2 * capud : 1024; UD = realloc(UD, (size_t)capud * sizeof *UD); }
-    UD[nud] = (UDecl){ p ? strdup(p) : NULL, NULL, 0, NULL, 0 };
+    UD[nud] = (UDecl){ p ? strdup(p) : NULL, NULL, 0, NULL, 0, NULL };
     return nud++;
 }
 static int ud_owner = -1; static char ud_pos[512];
@@ -3807,7 +3808,18 @@ static void ud_form(Node *f) {
     const char *h = f->it[0]->s;
     bool decl = !strcmp(h, "def") || !strcmp(h, "declare") || !strcmp(h, "checked") || !strcmp(h, "primitive")
         || !strcmp(h, "primitive-tick") || !strcmp(h, "data") || !strcmp(h, "checked-data") || !strcmp(h, "check-data");
-    if (!decl || f->n < 2) return;
+    static const char *const cmds[] = { "check", "check-fail", "checked-fail", "checked-data-fail", "checked-codata-fail",
+        "mutual-fail", "same", "show", "same-watch", "observe", "layout", "fo", "native", "native-c", "native-at", "run", NULL };
+    if (!decl) {   /* a command: a declaration of the reading too, joining the definition at its position if any */
+        for (int i = 0; cmds[i]; i++) if (!strcmp(h, cmds[i])) {
+            int o = ud_cur(NULL);
+            if (!UD[o].cmd) UD[o].cmd = cmds[i];
+            for (int j = 1; j < f->n; j++) ud_walk(o, f->it[j]);
+            return;
+        }
+        return;
+    }
+    if (f->n < 2) return;
     Node *d = f;
     if (!strcmp(h, "checked-data") && f->it[1]->list) d = f->it[1];
     const char *nm = d->n >= 2 && !d->it[1]->list ? d->it[1]->s : NULL;
@@ -3818,7 +3830,7 @@ static void ud_form(Node *f) {
     int o = ud_cur(strcmp(h, "check-data") ? nm : NULL);
     if (nm) {
         if (strcmp(h, "check-data")) ud_name(o, nm);
-        else { int w = un_get(nm); if (w >= 0) ud_use(o, w); }
+        else { int w = un_get(nm); if (w >= 0) ud_use(w, o); }   /* #check-data X: what X's checked uses need, so X's declaration mentions it */
     }
     if (d->it[0]->list || strcmp(d->it[0]->s, "data") == 0)
         for (int i = 2; i < d->n; i++) if (d->it[i]->list && d->it[i]->n && !d->it[i]->it[0]->list) ud_name(o, d->it[i]->it[0]->s);
@@ -3831,6 +3843,7 @@ static void uses_cmd(void) {
         if (!u->pos) continue;   /* declared, never defined */
         printf("uses %s", u->pos);
         for (int i = 0; i < u->nnames; i++) printf(" %s", u->names[i]);
+        if (!u->nnames && u->cmd) printf(" #%s", u->cmd);   /* a command, named by its kind */
         printf(" :");
         for (int i = 0; i < u->nuses; i++) if (UD[u->uses[i]].pos) printf(" %s", UD[u->uses[i]].pos);
         printf("\n");
