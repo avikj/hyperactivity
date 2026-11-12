@@ -3072,3 +3072,72 @@ subM-of Δ Γ Z σ g =
           (λ j → carry (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ))) (snd (snd σ)) (cmap-d-of (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Z) g (snd Γ) j))
           (carry-of (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) g (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ))) (snd (snd σ))) i))
     (pull-of (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z) (FbE (fst Γ) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) g (snd Δ) (fst (snd σ)))
+-- ---------------------------------------------------------------- P2.6e (2s): worlds
+-- (2026-11-12, next definitions (2s); the decision at the head) A world Δ' → Δ: a renaming r of
+-- indices, monotone (canonicity and non-constancy of forms are kept: canon-ren's argument), sending
+-- dimensions to dimensions and term entries to term entries or past the end (DimPres: path
+-- application reads an index that names no dimension as the face at 0, on both sides of a renaming),
+-- the substitution whose dimension part is cmap-of r, and for each term variable of Δ one of Δ' at
+-- index r of its index, of the same shape and meaning (WVar, a path in ShM).
+isdim : Lst Entry → Word → Bool
+isdim lnil k = false
+isdim (lcons (e-ty s) sk) k = if weq k #0 then false else isdim sk (%wsub k #1)
+isdim (lcons e-dim sk) k = if weq k #0 then true else isdim sk (%wsub k #1)
+DimPres : Lst Entry → Lst Entry → (Word → Word) → Type
+DimPres sk' sk r = (k : Word) → isdim sk' (r k) ≡ isdim sk k
+ShM : CCtx → Type 1
+-- binder names chosen not to collide: t46
+ShM Δ = (shs : TyShape) × Mean Δ (TV shs)
+WSub : (Δ' Δ : CCtx) → (Word → Word) → Type 1
+-- binder names chosen not to collide: t46
+WSub Δ' Δ r = (wsS : DCube (dims (fst Δ')) (CtxV (fst Δ')) (SubF (fst Δ') (fst Δ)) (snd Δ')) ×
+  PathP (λ i → Cube (dims (fst Δ')) (CtxV (fst Δ))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) r) (CtxV (fst Δ)) (snd Δ)) (sub-base Δ' Δ wsS)
+WVar : (Δ' Δ : CCtx) → (Word → Word) → Sub Δ' Δ → Type 1
+-- binder names chosen not to collide: t46
+WVar Δ' Δ r σ = (wvv : VarP (fst Δ)) → (wvv' : VarP (fst Δ')) × (var-word (fst Δ') wvv' ≡ r (var-word (fst Δ) wvv)) ×
+  PathP (λ i → ShM Δ') (var-shape (fst Δ') wvv' , varCube Δ' wvv') (var-shape (fst Δ) wvv , subM Δ' Δ (TV (var-shape (fst Δ) wvv)) σ (varCube Δ wvv))
+World : CCtx → CCtx → Type 1
+-- binder names chosen not to collide: t46
+World Δ' Δ = (wr : Word → Word) × (wm : MonoW wr) × (wd : DimPres (fst Δ') (fst Δ) wr) × (ws : WSub Δ' Δ wr) ×
+  WVar Δ' Δ wr (cmap-of (fst Δ') (fst Δ) wr , ws)
+world-sub : (Δ' Δ : CCtx) → World Δ' Δ → Sub Δ' Δ
+world-sub Δ' Δ w = (cmap-of (fst Δ') (fst Δ) (fst w) , fst (snd (snd (snd w))))
+-- weakening by a type and by a dimension (r = succ; the substitutions sub-wk, sub-dwk; each variable's
+-- meaning by subM-of and fmap-of)
+world-wk : (Γ : CCtx) (a : TyShape) (Y : Type 1) (f : (γ : CtxV (fst Γ)) → (EnvV (fst Γ) γ → Y) → EnvV (fst Γ) γ → Sem a) (M : Mean Γ Y) →
+  World (extM Γ a Y f M) Γ
+world-wk Γ a Y f M =
+  (λ k → %wsucc k , mono-succ (λ k → k) mono-id ,
+   (λ k i → if weq-s0 k i then false else isdim (fst Γ) (wsub-s1 k i)) ,
+   snd (sub-wk Γ a Y f M) ,
+   λ v → (some v , (λ i → %wsucc (var-word (fst Γ) v)) ,
+          λ i → (var-shape (fst Γ) v ,
+                 psym (Mean (extM Γ a Y f M) (TV (var-shape (fst Γ) v)))
+                   (subM (extM Γ a Y f M) Γ (TV (var-shape (fst Γ) v)) (sub-wk Γ a Y f M) (varCube Γ v)) (varCube (extM Γ a Y f M) (some v))
+                   (pcat (Mean (extM Γ a Y f M) (TV (var-shape (fst Γ) v)))
+                      (subM (extM Γ a Y f M) Γ (TV (var-shape (fst Γ) v)) (sub-wk Γ a Y f M) (varCube Γ v))
+                      (dcube-fmap (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (SubF (lcons (e-ty a) (fst Γ)) (fst Γ)) (FbE (lcons (e-ty a) (fst Γ)) (TV (var-shape (fst Γ) v)))
+                         (λ γ' p ρ' → varM (fst Γ) v (fst p) (snd p ρ')) (snd (extM Γ a Y f M)) (fst (snd (sub-wk Γ a Y f M))))
+                      (varCube (extM Γ a Y f M) (some v))
+                      (subM-of (extM Γ a Y f M) Γ (TV (var-shape (fst Γ) v)) (sub-wk Γ a Y f M) (varM (fst Γ) v))
+                      (fmap-of (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (SubF (lcons (e-ty a) (fst Γ)) (fst Γ)) (FbE (lcons (e-ty a) (fst Γ)) (TV (var-shape (fst Γ) v)))
+                         (λ γ' → (fst γ' , λ ρ → fst ρ)) (λ γ' p ρ' → varM (fst Γ) v (fst p) (snd p ρ')) (snd (extM Γ a Y f M))))
+                   i)))
+world-dwk : (Γ : CCtx) → World (dext Γ) Γ
+world-dwk Γ =
+  (λ k → %wsucc k , mono-succ (λ k → k) mono-id ,
+   (λ k i → if weq-s0 k i then true else isdim (fst Γ) (wsub-s1 k i)) ,
+   snd (sub-dwk Γ) ,
+   λ v → (v , (λ i → %wsucc (var-word (fst Γ) v)) ,
+          λ i → (var-shape (fst Γ) v ,
+                 psym (Mean (dext Γ) (TV (var-shape (fst Γ) v)))
+                   (subM (dext Γ) Γ (TV (var-shape (fst Γ) v)) (sub-dwk Γ) (varCube Γ v)) (varCube (dext Γ) v)
+                   (pcat (Mean (dext Γ) (TV (var-shape (fst Γ) v)))
+                      (subM (dext Γ) Γ (TV (var-shape (fst Γ) v)) (sub-dwk Γ) (varCube Γ v))
+                      (dcube-fmap (suc (dims (fst Γ))) (CtxV (fst Γ)) (SubF (lcons e-dim (fst Γ)) (fst Γ)) (FbE (fst Γ) (TV (var-shape (fst Γ) v)))
+                         (λ γ' p ρ' → varM (fst Γ) v (fst p) (snd p ρ')) (snd (dext Γ)) (fst (snd (sub-dwk Γ))))
+                      (varCube (dext Γ) v)
+                      (subM-of (dext Γ) Γ (TV (var-shape (fst Γ) v)) (sub-dwk Γ) (varM (fst Γ) v))
+                      (fmap-of (suc (dims (fst Γ))) (CtxV (fst Γ)) (SubF (lcons e-dim (fst Γ)) (fst Γ)) (FbE (fst Γ) (TV (var-shape (fst Γ) v)))
+                         (λ γ → (γ , λ ρ → ρ)) (λ γ' p ρ' → varM (fst Γ) v (fst p) (snd p ρ')) (snd (dext Γ))))
+                   i)))
