@@ -391,6 +391,23 @@
 --       papp-cube-d, carry-fill, cmap-papp-d, cmap-nat-d, papp-deg-d, carry-uniq, (i), (ii); its
 --       dependent form is not needed (Mean is the fibre). ren-nn at npapp uses it with canon-r and
 --       nonconst-r (dnf-canon-r, dnf-nonconst-r at MonoW r).
+--       Answered (2026-11-12): the paths cannot be made to hold by refl at their definition, so the
+--       squares are required. Tested on p26-wip's prefix with CUBICAL_NOCACHE=1 (each statement
+--       written with refl as its proof): papp-deg sk X lnil G by refl at a variable skeleton:
+--       "FAIL: checks rt-deg-var … reason: wrong endpoint at 0"; cube-map fusion (cube-comp) by refl
+--       at a variable n: "FAIL: checks rt-fuse … reason: wrong endpoint at 0"; the dimension part's
+--       action on a constant cube (cmap-const) by refl at variable skeletons: "FAIL: checks
+--       rt-cmap-const … reason: wrong endpoint at 0"; and, as control, papp-deg at the closed skeleton
+--       of two dimensions and the form ~i1 ∧ i0 by refl: "ok: checks rt-deg-closed". The theoretical
+--       reason: Cube n X is defined by recursion on n, so every operation on cubes at a variable n
+--       (cube-map, papp-cube, cmap-cube) is a recursion stuck on n, and two stuck recursions are
+--       judgmentally equal only when their arguments are; composites (face0 ∘ degen, σ2 ∘ σ1) are
+--       different arguments from the identity or from the composite map, and the core has no rewrite
+--       rules. Path application at an older dimension reaches into the cube through the skeleton
+--       (diag-sk), so no reordering of the cube's directions makes degeneracy then path application
+--       reduce at a variable skeleton either. An action composing judgmentally needs cubes as
+--       functions out of a type of points (composition of functions), which needs a Π over the
+--       interval, and CCHM has none (recorded under P2's design). So (i)–(iii) stand as planned.
 --   (5) subM-comp for worlds (subM (world-comp w2 w1) M ≡ subM w2 (subM w1 M), by cmap-d-comp,
 --       carry-fill, pull-fmap and carry-uniq: wc-path is by construction the composite of the base
 --       paths the right side carries along (cmap-comp⁻¹, cco of w1's path, cmap-dmap at fst, w2's path

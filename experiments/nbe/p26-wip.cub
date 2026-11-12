@@ -4361,3 +4361,235 @@ cmap-papp-d sk' sk r dp (lcons cj cs) X F c d = cmap-papp-dnf-from-d sk' sk r r 
 carry-uniq : (n : Nat) (X : Type 1) (F : X → Type 1) (c0 c1 : Cube n X) (p : PathP (λ i → Cube n X) c0 c1) (d : DCube n X F c0) (e : DCube n X F c1) →
   PathP (λ i → DCube n X F (p i)) d e → PathP (λ i → DCube n X F c1) (carry n X F c0 c1 p d) e
 carry-uniq n X F c0 c1 p d e q = λ k → comp (λ i → DCube n X F (p i)) (λ i → [ k = 1 ↦ q i ]) d
+
+-- (2026-11-12, (5) toward cmap-d-pull) pulling back commutes with reindexing along a generator: given a
+-- cube E1 over the reindexed base and a dependent path P over dmap-gen's path from the reindexed e to
+-- E1, the reindexed pull is the pull of E1 (pull-gen; qF the pointwise statement, judgmental where
+-- used: λ x y e e1 P i → g1 … (P i)). Stated with the end and the dependent path given rather than as a
+-- carry, so that chains compose by pcat-d.
+pull-gen : (n : Nat) (X X' X1 X1' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (Y1 F1 : X1 → Type 1) (F1' : X1' → Type 1)
+  (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x) (f1 : (x : X1) → Y1 x → X1') (g1 : (x : X1) (y : Y1 x) → F1' (f1 x y) → F1 x)
+  (φ : X → X1) (φY : (x : X) → Y x → Y1 (φ x)) (φF : (x : X) → F x → F1 (φ x)) (φ' : X' → X1') (φF' : (x : X') → F' x → F1' (φ' x))
+  (q : PathP (λ i → (xq : X) (yq : Y xq) → X1') (λ xq yq → φ' (f xq yq)) (λ xq yq → f1 (φ xq) (φY xq yq)))
+  (qF : (x : X) (y : Y x) (e : F' (f x y)) (e1 : F1' (f1 (φ x) (φY x y))) → PathP (λ i → F1' (q i x y)) (φF' (f x y) e) e1 →
+     PathP (λ i → F1 (φ x)) (φF x (g x y e)) (g1 (φ x) (φY x y) e1))
+  (c : Cube n X) (d : DCube n X Y c) (e : DCube n X' F' (dcube-map n X Y X' f c d))
+  (E1 : DCube n X1' F1' (dcube-map n X1 Y1 X1' f1 (cube-map n X X1 φ c) (dcube-reidx n X X1 Y Y1 φ φY c d))) →
+  PathP (λ i → DCube n X1' F1' (dmap-gen n X X1 Y Y1 X' X1' φ φY φ' f f1 q c d i)) (dcube-reidx n X' X1' F' F1' φ' φF' (dcube-map n X Y X' f c d) e) E1 →
+  PathP (λ i → DCube n X1 F1 (cube-map n X X1 φ c)) (dcube-reidx n X X1 F F1 φ φF c (dcube-pull n X X' Y F F' f g c d e))
+    (dcube-pull n X1 X1' Y1 F1 F1' f1 g1 (cube-map n X X1 φ c) (dcube-reidx n X X1 Y Y1 φ φY c d) E1)
+pull-gen zero X X' X1 X1' Y F F' Y1 F1 F1' f g f1 g1 φ φY φF φ' φF' q qF c d e E1 P = qF c d e E1 P
+pull-gen (suc n) X X' X1 X1' Y F F' Y1 F1 F1' f g f1 g1 φ φY φF φ' φF' q qF c d e E1 P =
+  pull-gen n (Line X) (Line X') (Line X1) (Line X1') (LineO X Y) (LineO X F) (LineO X' F') (LineO X1 Y1) (LineO X1 F1) (LineO X1' F1')
+    (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g) (lineo-map X1 Y1 X1' f1) (lineo-pull X1 X1' Y1 F1 F1' f1 g1)
+    (line-map X X1 φ) (lineo-reidx X X1 Y Y1 φ φY) (lineo-reidx X X1 F F1 φ φF) (line-map X' X1' φ') (lineo-reidx X' X1' F' F1' φ' φF')
+    (λ i L D → (q i (fst L) (fst D) , q i (fst (snd L)) (fst (snd D)) , λ j → q i (snd (snd L) j) (snd (snd D) j)))
+    (λ L D E Ea Pa i →
+       (qF (fst L) (fst D) (fst E) (fst Ea) (λ k → fst (Pa k)) i ,
+        qF (fst (snd L)) (fst (snd D)) (fst (snd E)) (fst (snd Ea)) (λ k → fst (snd (Pa k))) i ,
+        λ j → qF (snd (snd L) j) (snd (snd D) j) (snd (snd E) j) (snd (snd Ea) j) (λ k → snd (snd (Pa k)) j) i))
+    c d e E1 P
+pull-genc : (n : Nat) (X X' X1 X1' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (Y1 F1 : X1 → Type 1) (F1' : X1' → Type 1)
+  (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x) (f1 : (x : X1) → Y1 x → X1') (g1 : (x : X1) (y : Y1 x) → F1' (f1 x y) → F1 x)
+  (φ : X → X1) (φY : (x : X) → Y x → Y1 (φ x)) (φF : (x : X) → F x → F1 (φ x)) (φ' : X' → X1') (φF' : (x : X') → F' x → F1' (φ' x))
+  (q : PathP (λ i → (xq : X) (yq : Y xq) → X1') (λ xq yq → φ' (f xq yq)) (λ xq yq → f1 (φ xq) (φY xq yq)))
+  (qF : (x : X) (y : Y x) (e : F' (f x y)) (e1 : F1' (f1 (φ x) (φY x y))) → PathP (λ i → F1' (q i x y)) (φF' (f x y) e) e1 →
+     PathP (λ i → F1 (φ x)) (φF x (g x y e)) (g1 (φ x) (φY x y) e1))
+  (c : Cube n X) (d : DCube n X Y c) (e : DCube n X' F' (dcube-map n X Y X' f c d)) →
+  PathP (λ i → DCube n X1 F1 (cube-map n X X1 φ c)) (dcube-reidx n X X1 F F1 φ φF c (dcube-pull n X X' Y F F' f g c d e))
+    (dcube-pull n X1 X1' Y1 F1 F1' f1 g1 (cube-map n X X1 φ c) (dcube-reidx n X X1 Y Y1 φ φY c d)
+       (carry n X1' F1' (cube-map n X' X1' φ' (dcube-map n X Y X' f c d)) (dcube-map n X1 Y1 X1' f1 (cube-map n X X1 φ c) (dcube-reidx n X X1 Y Y1 φ φY c d))
+          (dmap-gen n X X1 Y Y1 X' X1' φ φY φ' f f1 q c d) (dcube-reidx n X' X1' F' F1' φ' φF' (dcube-map n X Y X' f c d) e)))
+pull-genc n X X' X1 X1' Y F F' Y1 F1 F1' f g f1 g1 φ φY φF φ' φF' q qF c d e =
+  pull-gen n X X' X1 X1' Y F F' Y1 F1 F1' f g f1 g1 φ φY φF φ' φF' q qF c d e
+    (carry n X1' F1' (cube-map n X' X1' φ' (dcube-map n X Y X' f c d)) (dcube-map n X1 Y1 X1' f1 (cube-map n X X1 φ c) (dcube-reidx n X X1 Y Y1 φ φY c d))
+       (dmap-gen n X X1 Y Y1 X' X1' φ φY φ' f f1 q c d) (dcube-reidx n X' X1' F' F1' φ' φF' (dcube-map n X Y X' f c d) e))
+    (carry-fill n X1' F1' (cube-map n X' X1' φ' (dcube-map n X Y X' f c d)) (dcube-map n X1 Y1 X1' f1 (cube-map n X X1 φ c) (dcube-reidx n X X1 Y Y1 φ φY c d))
+       (dmap-gen n X X1 Y Y1 X' X1' φ φY φ' f f1 q c d) (dcube-reidx n X' X1' F' F1' φ' φF' (dcube-map n X Y X' f c d) e))
+-- carrying along a composite is carrying twice; carrying along the image of a path under a map of
+-- cubes with a map over it is mapping the carried cube (both by carry-uniq)
+carry-pcat : (n : Nat) (X : Type 1) (F : X → Type 1) (c0 c1 c2 : Cube n X) (p : PathP (λ i → Cube n X) c0 c1) (q : PathP (λ i → Cube n X) c1 c2) (a : DCube n X F c0) →
+  PathP (λ i → DCube n X F c2) (carry n X F c0 c2 (pcat (Cube n X) c0 c1 c2 p q) a) (carry n X F c1 c2 q (carry n X F c0 c1 p a))
+carry-pcat n X F c0 c1 c2 p q a =
+  carry-uniq n X F c0 c2 (pcat (Cube n X) c0 c1 c2 p q) a (carry n X F c1 c2 q (carry n X F c0 c1 p a))
+    (pcat-d (Cube n X) (DCube n X F) c0 c1 c2 p q a (carry n X F c0 c1 p a) (carry n X F c1 c2 q (carry n X F c0 c1 p a))
+       (carry-fill n X F c0 c1 p a) (carry-fill n X F c1 c2 q (carry n X F c0 c1 p a)))
+carry-nat : (m n : Nat) (X X' : Type 1) (F : X → Type 1) (F' : X' → Type 1) (h : Cube m X → Cube n X') (hd : (c : Cube m X) → DCube m X F c → DCube n X' F' (h c))
+  (c0 c1 : Cube m X) (p : PathP (λ i → Cube m X) c0 c1) (a : DCube m X F c0) →
+  PathP (λ i → DCube n X' F' (h c1)) (carry n X' F' (h c0) (h c1) (λ i → h (p i)) (hd c0 a)) (hd c1 (carry m X F c0 c1 p a))
+carry-nat m n X X' F F' h hd c0 c1 p a =
+  carry-uniq n X' F' (h c0) (h c1) (λ i → h (p i)) (hd c0 a) (hd c1 (carry m X F c0 c1 p a)) (λ i → hd (p i) (carry-fill m X F c0 c1 p a i))
+-- (2026-11-12, (5) toward cmap-d-pull) path application at a variable commutes with pulling back,
+-- over diag-dmap (diag-pull: the statement DPull, by the cases of diag-sk-d with the base path written
+-- as diag-dmap's own term; at each case's value of weq k #0 the clause is pull-genc at the generator,
+-- or the hypothesis after pull-genc at exch, with carry-pcat and carry-nat). The cases' bases, fibres
+-- and paths as functions of the boolean (dsk-ty … ddm-dim), which unfold to diag-sk's, diag-sk-d's and
+-- diag-dmap's clauses at weq k #0.
+DPull : (sk : Lst Entry) (k : Word) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X Y c) (e : DCube (suc (dims sk)) X' F' (dcube-map (suc (dims sk)) X Y X' f c d)) → Type 1
+DPull sk k X X' Y F F' f g c d e =
+  PathP (λ i → DCube (dims sk) X F (diag-sk sk k X c)) (diag-sk-d sk k X F c (dcube-pull (suc (dims sk)) X X' Y F F' f g c d e))
+    (dcube-pull (dims sk) X X' Y F F' f g (diag-sk sk k X c) (diag-sk-d sk k X Y c d)
+       (carry (dims sk) X' F' (diag-sk sk k X' (dcube-map (suc (dims sk)) X Y X' f c d)) (dcube-map (dims sk) X Y X' f (diag-sk sk k X c) (diag-sk-d sk k X Y c d))
+          (diag-dmap sk k X Y X' f c d) (diag-sk-d sk k X' F' (dcube-map (suc (dims sk)) X Y X' f c d) e)))
+dsk-ty : (sk : Lst Entry) (k : Word) (X : Type 1) → Cube (dims sk) (Line X) → Bool → Cube (dims sk) X
+dsk-ty sk k X c b = if b then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c
+dsd-ty : (sk : Lst Entry) (k : Word) (X : Type 1) (G : X → Type 1) (c : Cube (dims sk) (Line X)) → DCube (dims sk) (Line X) (LineO X G) c → (b : Bool) → DCube (dims sk) X G (dsk-ty sk k X c b)
+dsd-ty sk k X G c d b = bool-elim1 (λ b → DCube (dims sk) X G (dsk-ty sk k X c b)) (f0d (dims sk) X G c d) (diag-sk-d sk (%wsub k #1) X G c d) b
+ddm-ty : (sk : Lst Entry) (k : Word) (X : Type 1) (Y : X → Type 1) (Z : Type 1) (f : (x : X) → Y x → Z) (c : Cube (dims sk) (Line X)) (d : DCube (dims sk) (Line X) (LineO X Y) c) (b : Bool) →
+  PathP (λ i → Cube (dims sk) Z) (dsk-ty sk k Z (dcube-map (dims sk) (Line X) (LineO X Y) (Line Z) (lineo-map X Y Z f) c d) b) (dcube-map (dims sk) X Y Z f (dsk-ty sk k X c b) (dsd-ty sk k X Y c d b))
+ddm-ty sk k X Y Z f c d b =
+  bool-elim1 (λ b → PathP (λ i → Cube (dims sk) Z) (dsk-ty sk k Z (dcube-map (dims sk) (Line X) (LineO X Y) (Line Z) (lineo-map X Y Z f) c d) b) (dcube-map (dims sk) X Y Z f (dsk-ty sk k X c b) (dsd-ty sk k X Y c d b)))
+    (dmap-gen (dims sk) (Line X) X (LineO X Y) Y (Line Z) Z (face0-l X) (face0-o X Y) (face0-l Z) (lineo-map X Y Z f) f (λ i L D → f (fst L) (fst D)) c d)
+    (diag-dmap sk (%wsub k #1) X Y Z f c d) b
+mf2 : (X : Type 1) (Y : X → Type 1) (Z : Type 1) (f : (x : X) → Y x → Z) (Q : Line (Line X)) → LineO (Line X) (LineO X Y) Q → Line (Line Z)
+mf2 X Y Z f Q D = lineo-map (Line X) (LineO X Y) (Line Z) (lineo-map X Y Z f) Q D
+dm2 : (n : Nat) (X : Type 1) (Y : X → Type 1) (Z : Type 1) (f : (x : X) → Y x → Z) (c : Cube n (Line (Line X))) → DCube n (Line (Line X)) (LineO (Line X) (LineO X Y)) c → Cube n (Line (Line Z))
+dm2 n X Y Z f c d = dcube-map n (Line (Line X)) (LineO (Line X) (LineO X Y)) (Line (Line Z)) (mf2 X Y Z f) c d
+dsk-dim : (sk : Lst Entry) (k : Word) (X : Type 1) → Cube (dims sk) (Line (Line X)) → Bool → Cube (suc (dims sk)) X
+dsk-dim sk k X c b = if b then dgc (dims sk) X c else diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)
+dsd-dim : (sk : Lst Entry) (k : Word) (X : Type 1) (G : X → Type 1) (c : Cube (dims sk) (Line (Line X))) → DCube (dims sk) (Line (Line X)) (LineO (Line X) (LineO X G)) c → (b : Bool) → DCube (suc (dims sk)) X G (dsk-dim sk k X c b)
+dsd-dim sk k X G c d b =
+  bool-elim1 (λ b → DCube (suc (dims sk)) X G (dsk-dim sk k X c b)) (dgd (dims sk) X G c d)
+    (diag-sk-d sk (%wsub k #1) (Line X) (LineO X G) (exc (dims sk) X c) (exd (dims sk) X G c d)) b
+-- diag-dmap's clause at a dimension entry with k not 0: its two pieces (ddp1, ddp2)
+ddp1 : (sk : Lst Entry) (k : Word) (X : Type 1) (Y : X → Type 1) (Z : Type 1) (f : (x : X) → Y x → Z) (c : Cube (dims sk) (Line (Line X))) (d : DCube (dims sk) (Line (Line X)) (LineO (Line X) (LineO X Y)) c) →
+  PathP (λ i → Cube (suc (dims sk)) Z) (diag-sk sk (%wsub k #1) (Line Z) (exc (dims sk) Z (dm2 (dims sk) X Y Z f c d))) (diag-sk sk (%wsub k #1) (Line Z) (dm2 (dims sk) X Y Z f (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+ddp1 sk k X Y Z f c d = λ i → diag-sk sk (%wsub k #1) (Line Z)
+  (dmap-gen (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X Y)) (LineO (Line X) (LineO X Y)) (Line (Line Z)) (Line (Line Z))
+     (exch-l X) (exch-o X Y) (exch-l Z) (mf2 X Y Z f) (mf2 X Y Z f) (λ j Q D → exch-l Z (mf2 X Y Z f Q D)) c d i)
+ddp2 : (sk : Lst Entry) (k : Word) (X : Type 1) (Y : X → Type 1) (Z : Type 1) (f : (x : X) → Y x → Z) (c : Cube (dims sk) (Line (Line X))) (d : DCube (dims sk) (Line (Line X)) (LineO (Line X) (LineO X Y)) c) →
+  PathP (λ i → Cube (suc (dims sk)) Z) (diag-sk sk (%wsub k #1) (Line Z) (dm2 (dims sk) X Y Z f (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+    (dcube-map (suc (dims sk)) X Y Z f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+ddp2 sk k X Y Z f c d = diag-dmap sk (%wsub k #1) (Line X) (LineO X Y) (Line Z) (lineo-map X Y Z f) (exc (dims sk) X c) (exd (dims sk) X Y c d)
+ddm-dim : (sk : Lst Entry) (k : Word) (X : Type 1) (Y : X → Type 1) (Z : Type 1) (f : (x : X) → Y x → Z) (c : Cube (dims sk) (Line (Line X))) (d : DCube (dims sk) (Line (Line X)) (LineO (Line X) (LineO X Y)) c) (b : Bool) →
+  PathP (λ i → Cube (suc (dims sk)) Z) (dsk-dim sk k Z (dm2 (dims sk) X Y Z f c d) b) (dcube-map (suc (dims sk)) X Y Z f (dsk-dim sk k X c b) (dsd-dim sk k X Y c d b))
+ddm-dim sk k X Y Z f c d b =
+  bool-elim1 (λ b → PathP (λ i → Cube (suc (dims sk)) Z) (dsk-dim sk k Z (dm2 (dims sk) X Y Z f c d) b) (dcube-map (suc (dims sk)) X Y Z f (dsk-dim sk k X c b) (dsd-dim sk k X Y c d b)))
+    (dmap-gen (dims sk) (Line (Line X)) (Line X) (LineO (Line X) (LineO X Y)) (LineO X Y) (Line (Line Z)) (Line Z) (diag-l X) (diag-o X Y) (diag-l Z)
+       (mf2 X Y Z f) (lineo-map X Y Z f) (λ i Q D → diag-l Z (mf2 X Y Z f Q D)) c d)
+    (pcat (Cube (suc (dims sk)) Z)
+       (diag-sk sk (%wsub k #1) (Line Z) (exc (dims sk) Z (dm2 (dims sk) X Y Z f c d)))
+       (diag-sk sk (%wsub k #1) (Line Z) (dm2 (dims sk) X Y Z f (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (dcube-map (suc (dims sk)) X Y Z f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (ddp1 sk k X Y Z f c d) (ddp2 sk k X Y Z f c d)) b
+-- the abbreviations agree with the clauses judgmentally (checked here, used by diag-pull)
+ddm-ty-is : (s : TyShape) (sk : Lst Entry) (k : Word) (X : Type 1) (Y : X → Type 1) (Z : Type 1) (f : (x : X) → Y x → Z) (c : Cube (dims sk) (Line X)) (d : DCube (dims sk) (Line X) (LineO X Y) c) →
+  PathP (λ i → PathP (λ j → Cube (dims sk) Z) (diag-sk (lcons (e-ty s) sk) k Z (dcube-map (dims sk) (Line X) (LineO X Y) (Line Z) (lineo-map X Y Z f) c d)) (dcube-map (dims sk) X Y Z f (diag-sk (lcons (e-ty s) sk) k X c) (diag-sk-d (lcons (e-ty s) sk) k X Y c d)))
+    (diag-dmap (lcons (e-ty s) sk) k X Y Z f c d) (ddm-ty sk k X Y Z f c d (weq k #0))
+ddm-ty-is s sk k X Y Z f c d = λ i → diag-dmap (lcons (e-ty s) sk) k X Y Z f c d
+ddm-dim-is : (sk : Lst Entry) (k : Word) (X : Type 1) (Y : X → Type 1) (Z : Type 1) (f : (x : X) → Y x → Z) (c : Cube (dims sk) (Line (Line X))) (d : DCube (dims sk) (Line (Line X)) (LineO (Line X) (LineO X Y)) c) →
+  PathP (λ i → PathP (λ j → Cube (suc (dims sk)) Z) (diag-sk (lcons e-dim sk) k Z (dm2 (dims sk) X Y Z f c d)) (dcube-map (suc (dims sk)) X Y Z f (diag-sk (lcons e-dim sk) k X c) (diag-sk-d (lcons e-dim sk) k X Y c d)))
+    (diag-dmap (lcons e-dim sk) k X Y Z f c d) (ddm-dim sk k X Y Z f c d (weq k #0))
+ddm-dim-is sk k X Y Z f c d = λ i → diag-dmap (lcons e-dim sk) k X Y Z f c d
+DPTy : (sk : Lst Entry) (k : Word) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (dims sk) (Line X)) (d : DCube (dims sk) (Line X) (LineO X Y) c) (e : DCube (dims sk) (Line X') (LineO X' F') (dcube-map (dims sk) (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) c d)) → Bool → Type 1
+DPTy sk k X X' Y F F' f g c d e b =
+  PathP (λ i → DCube (dims sk) X F (dsk-ty sk k X c b))
+    (dsd-ty sk k X F c (dcube-pull (dims sk) (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g) c d e) b)
+    (dcube-pull (dims sk) X X' Y F F' f g (dsk-ty sk k X c b) (dsd-ty sk k X Y c d b)
+       (carry (dims sk) X' F' (dsk-ty sk k X' (dcube-map (dims sk) (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) c d) b) (dcube-map (dims sk) X Y X' f (dsk-ty sk k X c b) (dsd-ty sk k X Y c d b))
+          (ddm-ty sk k X Y X' f c d b) (dsd-ty sk k X' F' (dcube-map (dims sk) (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) c d) e b)))
+pl2 : (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x) (Q : Line (Line X)) (D : LineO (Line X) (LineO X Y) Q) →
+  LineO (Line X') (LineO X' F') (mf2 X Y X' f Q D) → LineO (Line X) (LineO X F) Q
+pl2 X X' Y F F' f g Q D E = lineo-pull (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g) Q D E
+DPDim : (sk : Lst Entry) (k : Word) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (dims sk) (Line (Line X))) (d : DCube (dims sk) (Line (Line X)) (LineO (Line X) (LineO X Y)) c) (e : DCube (dims sk) (Line (Line X')) (LineO (Line X') (LineO X' F')) (dm2 (dims sk) X Y X' f c d)) → Bool → Type 1
+DPDim sk k X X' Y F F' f g c d e b =
+  PathP (λ i → DCube (suc (dims sk)) X F (dsk-dim sk k X c b))
+    (dsd-dim sk k X F c (dcube-pull (dims sk) (Line (Line X)) (Line (Line X')) (LineO (Line X) (LineO X Y)) (LineO (Line X) (LineO X F)) (LineO (Line X') (LineO X' F')) (mf2 X Y X' f) (pl2 X X' Y F F' f g) c d e) b)
+    (dcube-pull (suc (dims sk)) X X' Y F F' f g (dsk-dim sk k X c b) (dsd-dim sk k X Y c d b)
+       (carry (suc (dims sk)) X' F' (dsk-dim sk k X' (dm2 (dims sk) X Y X' f c d) b) (dcube-map (suc (dims sk)) X Y X' f (dsk-dim sk k X c b) (dsd-dim sk k X Y c d b))
+          (ddm-dim sk k X Y X' f c d b) (dsd-dim sk k X' F' (dm2 (dims sk) X Y X' f c d) e b)))
+-- the exchange's base path (dmap-gen at exch) and the carried cube the hypothesis is taken at
+dpg : (sk : Lst Entry) (X X' : Type 1) (Y : X → Type 1) (f : (x : X) → Y x → X') (c : Cube (dims sk) (Line (Line X))) (d : DCube (dims sk) (Line (Line X)) (LineO (Line X) (LineO X Y)) c) →
+  PathP (λ i → Cube (dims sk) (Line (Line X'))) (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)) (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d))
+dpg sk X X' Y f c d =
+  dmap-gen (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X Y)) (LineO (Line X) (LineO X Y)) (Line (Line X')) (Line (Line X'))
+    (exch-l X) (exch-o X Y) (exch-l X') (mf2 X Y X' f) (mf2 X Y X' f) (λ j Q D → exch-l X' (mf2 X Y X' f Q D)) c d
+dpe1 : (sk : Lst Entry) (X X' : Type 1) (Y : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (c : Cube (dims sk) (Line (Line X))) (d : DCube (dims sk) (Line (Line X)) (LineO (Line X) (LineO X Y)) c)
+  (e : DCube (dims sk) (Line (Line X')) (LineO (Line X') (LineO X' F')) (dm2 (dims sk) X Y X' f c d)) →
+  DCube (dims sk) (Line (Line X')) (LineO (Line X') (LineO X' F')) (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d))
+dpe1 sk X X' Y F' f c d e =
+  carry (dims sk) (Line (Line X')) (LineO (Line X') (LineO X' F')) (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)) (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d))
+    (dpg sk X X' Y f c d) (exd (dims sk) X' F' (dm2 (dims sk) X Y X' f c d) e)
+-- carrying along diag-dmap's clause (k not 0) is carrying along its second piece after the first, which
+-- maps the carry along the exchange's path (carry-pcat, carry-nat)
+dp-cc : (sk : Lst Entry) (k : Word) (X X' : Type 1) (Y : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X')
+  (c : Cube (dims sk) (Line (Line X))) (d : DCube (dims sk) (Line (Line X)) (LineO (Line X) (LineO X Y)) c) (e : DCube (dims sk) (Line (Line X')) (LineO (Line X') (LineO X' F')) (dm2 (dims sk) X Y X' f c d)) →
+  PathP (λ i → DCube (suc (dims sk)) X' F' (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d))))
+    (carry (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)))
+       (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (ddm-dim sk k X Y X' f c d false) (diag-sk-d sk (%wsub k #1) (Line X') (LineO X' F') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)) (exd (dims sk) X' F' (dm2 (dims sk) X Y X' f c d) e)))
+    (carry (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (ddp2 sk k X Y X' f c d) (diag-sk-d sk (%wsub k #1) (Line X') (LineO X' F') (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)) (dpe1 sk X X' Y F' f c d e)))
+dp-cc sk k X X' Y F' f c d e =
+  pcat (DCube (suc (dims sk)) X' F' (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d))))
+    (carry (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)))
+       (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (ddm-dim sk k X Y X' f c d false) (diag-sk-d sk (%wsub k #1) (Line X') (LineO X' F') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)) (exd (dims sk) X' F' (dm2 (dims sk) X Y X' f c d) e)))
+    (carry (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (ddp2 sk k X Y X' f c d)
+       (carry (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d))) (diag-sk sk (%wsub k #1) (Line X') (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+          (ddp1 sk k X Y X' f c d) (diag-sk-d sk (%wsub k #1) (Line X') (LineO X' F') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)) (exd (dims sk) X' F' (dm2 (dims sk) X Y X' f c d) e))))
+    (carry (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (ddp2 sk k X Y X' f c d) (diag-sk-d sk (%wsub k #1) (Line X') (LineO X' F') (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)) (dpe1 sk X X' Y F' f c d e)))
+    (carry-pcat (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d))) (diag-sk sk (%wsub k #1) (Line X') (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (ddp1 sk k X Y X' f c d) (ddp2 sk k X Y X' f c d) (diag-sk-d sk (%wsub k #1) (Line X') (LineO X' F') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)) (exd (dims sk) X' F' (dm2 (dims sk) X Y X' f c d) e)))
+    (λ i → carry (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+       (ddp2 sk k X Y X' f c d)
+       (carry-nat (suc (dims sk)) (dims sk) (Line X') (Line X') (LineO X' F') (LineO X' F') (diag-sk sk (%wsub k #1) (Line X')) (diag-sk-d sk (%wsub k #1) (Line X') (LineO X' F'))
+          (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)) (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)) (dpg sk X X' Y f c d) (exd (dims sk) X' F' (dm2 (dims sk) X Y X' f c d) e) i))
+-- the clause at a dimension entry with k not 0, the hypothesis an argument
+dp-dim-f : (sk : Lst Entry) (k : Word) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (dims sk) (Line (Line X))) (d : DCube (dims sk) (Line (Line X)) (LineO (Line X) (LineO X Y)) c) (e : DCube (dims sk) (Line (Line X')) (LineO (Line X') (LineO X' F')) (dm2 (dims sk) X Y X' f c d)) →
+  DPull sk (%wsub k #1) (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g) (exc (dims sk) X c) (exd (dims sk) X Y c d) (dpe1 sk X X' Y F' f c d e) →
+  DPDim sk k X X' Y F F' f g c d e false
+dp-dim-f sk k X X' Y F F' f g c d e IH =
+  pcat (DCube (suc (dims sk)) X F (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)))
+    (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F) (exc (dims sk) X c) (exd (dims sk) X F c (dcube-pull (dims sk) (Line (Line X)) (Line (Line X')) (LineO (Line X) (LineO X Y)) (LineO (Line X) (LineO X F)) (LineO (Line X') (LineO X' F')) (mf2 X Y X' f) (pl2 X X' Y F F' f g) c d e)))
+    (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F) (exc (dims sk) X c) (dcube-pull (dims sk) (Line (Line X)) (Line (Line X')) (LineO (Line X) (LineO X Y)) (LineO (Line X) (LineO X F)) (LineO (Line X') (LineO X' F')) (mf2 X Y X' f) (pl2 X X' Y F F' f g) (exc (dims sk) X c) (exd (dims sk) X Y c d) (dpe1 sk X X' Y F' f c d e)))
+    (dcube-pull (suc (dims sk)) X X' Y F F' f g (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d))
+       (carry (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)))
+          (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+          (ddm-dim sk k X Y X' f c d false) (diag-sk-d sk (%wsub k #1) (Line X') (LineO X' F') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)) (exd (dims sk) X' F' (dm2 (dims sk) X Y X' f c d) e))))
+    (λ i → diag-sk-d sk (%wsub k #1) (Line X) (LineO X F) (exc (dims sk) X c)
+       (pull-genc (dims sk) (Line (Line X)) (Line (Line X')) (Line (Line X)) (Line (Line X')) (LineO (Line X) (LineO X Y)) (LineO (Line X) (LineO X F)) (LineO (Line X') (LineO X' F'))
+          (LineO (Line X) (LineO X Y)) (LineO (Line X) (LineO X F)) (LineO (Line X') (LineO X' F')) (mf2 X Y X' f) (pl2 X X' Y F F' f g) (mf2 X Y X' f) (pl2 X X' Y F F' f g)
+          (exch-l X) (exch-o X Y) (exch-o X F) (exch-l X') (exch-o X' F') (λ j Q D → exch-l X' (mf2 X Y X' f Q D))
+          (λ Q D E e1 P j → pl2 X X' Y F F' f g (exch-l X Q) (exch-o X Y Q D) (P j)) c d e i))
+    (pcat (DCube (suc (dims sk)) X F (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)))
+       (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F) (exc (dims sk) X c) (dcube-pull (dims sk) (Line (Line X)) (Line (Line X')) (LineO (Line X) (LineO X Y)) (LineO (Line X) (LineO X F)) (LineO (Line X') (LineO X' F')) (mf2 X Y X' f) (pl2 X X' Y F F' f g) (exc (dims sk) X c) (exd (dims sk) X Y c d) (dpe1 sk X X' Y F' f c d e)))
+       (dcube-pull (suc (dims sk)) X X' Y F F' f g (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d))
+          (carry (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+             (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+             (ddp2 sk k X Y X' f c d) (diag-sk-d sk (%wsub k #1) (Line X') (LineO X' F') (dm2 (dims sk) X Y X' f (exc (dims sk) X c) (exd (dims sk) X Y c d)) (dpe1 sk X X' Y F' f c d e))))
+       (dcube-pull (suc (dims sk)) X X' Y F F' f g (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d))
+          (carry (suc (dims sk)) X' F' (diag-sk sk (%wsub k #1) (Line X') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)))
+             (dcube-map (suc (dims sk)) X Y X' f (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d)))
+             (ddm-dim sk k X Y X' f c d false) (diag-sk-d sk (%wsub k #1) (Line X') (LineO X' F') (exc (dims sk) X' (dm2 (dims sk) X Y X' f c d)) (exd (dims sk) X' F' (dm2 (dims sk) X Y X' f c d) e))))
+       IH
+       (λ i → dcube-pull (suc (dims sk)) X X' Y F F' f g (diag-sk sk (%wsub k #1) (Line X) (exc (dims sk) X c)) (diag-sk-d sk (%wsub k #1) (Line X) (LineO X Y) (exc (dims sk) X c) (exd (dims sk) X Y c d))
+          (dp-cc sk k X X' Y F' f c d e (~ i))))
+diag-pull : (sk : Lst Entry) (k : Word) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X Y c) (e : DCube (suc (dims sk)) X' F' (dcube-map (suc (dims sk)) X Y X' f c d)) → DPull sk k X X' Y F F' f g c d e
+diag-pull lnil k X X' Y F F' f g c d e = λ i → g (fst c) (fst d) (carry-fill zero X' F' (f (fst c) (fst d)) (f (fst c) (fst d)) (λ j → f (fst c) (fst d)) (fst e) i)
+diag-pull (lcons (e-ty s) sk) k X X' Y F F' f g c d e =
+  bool-elim1 (DPTy sk k X X' Y F F' f g c d e)
+    (pull-genc (dims sk) (Line X) (Line X') X X' (LineO X Y) (LineO X F) (LineO X' F') Y F F' (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g) f g
+       (face0-l X) (face0-o X Y) (face0-o X F) (face0-l X') (face0-o X' F') (λ i L D → f (fst L) (fst D)) (λ L D E e1 P i → g (fst L) (fst D) (P i)) c d e)
+    (diag-pull sk (%wsub k #1) X X' Y F F' f g c d e) (weq k #0)
+diag-pull (lcons e-dim sk) k X X' Y F F' f g c d e =
+  bool-elim1 (DPDim sk k X X' Y F F' f g c d e)
+    (pull-genc (dims sk) (Line (Line X)) (Line (Line X')) (Line X) (Line X') (LineO (Line X) (LineO X Y)) (LineO (Line X) (LineO X F)) (LineO (Line X') (LineO X' F'))
+       (LineO X Y) (LineO X F) (LineO X' F') (mf2 X Y X' f) (pl2 X X' Y F F' f g) (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g)
+       (diag-l X) (diag-o X Y) (diag-o X F) (diag-l X') (diag-o X' F') (λ i Q D → diag-l X' (mf2 X Y X' f Q D))
+       (λ Q D E e1 P i → lineo-pull X X' Y F F' f g (diag-l X Q) (diag-o X Y Q D) (P i)) c d e)
+    (dp-dim-f sk k X X' Y F F' f g c d e
+       (diag-pull sk (%wsub k #1) (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g) (exc (dims sk) X c) (exd (dims sk) X Y c d) (dpe1 sk X X' Y F' f c d e)))
+    (weq k #0)
