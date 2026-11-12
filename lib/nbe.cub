@@ -363,3 +363,35 @@ ren-nn (npair Γ K a b g A B c1 v1 c2 v2 n1 n2) Δ r w =
       r2 = ren-nn n2 Δ r w
   in (cpair (fst r1) (fst r2) ,
       npair Δ K a b (λ ρ → g (r ρ)) A B (fst r1) (λ ρ → v1 (r ρ)) (fst r2) (λ ρ → v2 (r ρ)) (snd r1) (snd r2))
+
+-- ---------------------------------------------------------------- computability (the Kripke logical relation)
+-- the structures of shape s over K
+TyM : TyShape → Type → Type 1
+TyM s K = fst (TyE s K)
+-- CompS s K D Δ δ x: x, at world Δ, is computable at the type of shape s with structure D over K
+-- seen through δ. By recursion on the shape, so it computes at open worlds and environments.
+-- Bool: a normal form with meaning x. Π: at every later world, a computable argument gives a
+-- computable result. Σ: both components.
+CompS : (s : TyShape) (K : Type) (D : TyM s K) (Δ : Ctx) (δ : Env Δ → K) (x : (ρ : Env Δ) → snd (TyE s K) D (δ ρ)) → Type 1
+CompS s-bool K D Δ δ x = (c : Code) × NN (k-nf , (Δ , bool-cl (Env Δ) K δ D , c , x))
+CompS (s-pi a b) K D Δ δ x =
+  (Δ' : Ctx) (r : Env Δ' → Env Δ) → Ren Δ' Δ r →
+  (y : (ρ : Env Δ') → ElCU K (TyE a) (fst D) (δ (r ρ))) →
+  CompS a (fst (fst D)) (snd (snd (fst D))) Δ' (λ ρ → fst (snd (fst D)) (δ (r ρ))) y →
+  CompS b (fst (snd D)) (snd (snd (snd D))) Δ' (λ ρ → fst (snd (snd D)) (δ (r ρ) , y ρ)) (λ ρ → x (r ρ) (y ρ))
+CompS (s-sig a b) K D Δ δ x =
+  CompS a (fst (fst D)) (snd (snd (fst D))) Δ (λ ρ → fst (snd (fst D)) (δ ρ)) (λ ρ → fst (x ρ)) ×
+  CompS b (fst (snd D)) (snd (snd (snd D))) Δ (λ ρ → fst (snd (snd D)) (δ ρ , fst (x ρ))) (λ ρ → snd (x ρ))
+-- at a type over a context's environments
+Comp : (G : Type) (A : PTy G) (Δ : Ctx) (δ : Env Δ → G) (x : (ρ : Env Δ) → ElP G A (δ ρ)) → Type 1
+Comp G A Δ δ x = CompS (fst A) (fst (snd A)) (snd (snd (snd A))) Δ (λ ρ → fst (snd (snd A)) (δ ρ)) x
+-- monotonicity: computability is kept along a renaming
+comp-ren : (s : TyShape) (K : Type) (D : TyM s K) (Δ : Ctx) (δ : Env Δ → K) (x : (ρ : Env Δ) → snd (TyE s K) D (δ ρ)) →
+  CompS s K D Δ δ x → (Δ' : Ctx) (r : Env Δ' → Env Δ) → Ren Δ' Δ r → CompS s K D Δ' (λ ρ → δ (r ρ)) (λ ρ → x (r ρ))
+comp-ren s-bool K D Δ δ x cx Δ' r w =
+  ren-nn (snd cx) Δ' r w
+comp-ren (s-pi a b) K D Δ δ x cx Δ' r w =
+  λ Δ2 r2 w2 y cy → cx Δ2 (λ ρ → r (r2 ρ)) (ren-comp Δ2 Δ' Δ r r2 w w2) y cy
+comp-ren (s-sig a b) K D Δ δ x cx Δ' r w =
+  (comp-ren a (fst (fst D)) (snd (snd (fst D))) Δ (λ ρ → fst (snd (fst D)) (δ ρ)) (λ ρ → fst (x ρ)) (fst cx) Δ' r w ,
+   comp-ren b (fst (snd D)) (snd (snd (snd D))) Δ (λ ρ → fst (snd (snd D)) (δ ρ , fst (x ρ))) (λ ρ → snd (x ρ)) (snd cx) Δ' r w)
