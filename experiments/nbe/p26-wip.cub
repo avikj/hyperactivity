@@ -33,11 +33,14 @@
 -- entire; then (2026-11-12, latest) (4d) in part: RenAtC, renatc-0, renatc-keep (RenAt, renat-0,
 -- renat-keep their instances), dp-keep (used by world-dkeep), cco, pc4, cmap-papp-lit, cpcf-in,
 -- cmap-papp-conj-from, cmap-papp-conj, cpdf-in, cmap-papp-dnf-from, cmap-papp, ccd, CPL,
--- cmap-papp-lit-d … cmap-papp-d, carry-uniq.
--- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "660 passed, 0 failed").
+-- cmap-papp-lit-d … cmap-papp-d, carry-uniq; then (2026-11-12, latest) (5) but comp-ren: pull-gen, pull-genc,
+-- carry-pcat, carry-nat, diag-pull (DPull, dsk-ty … ddm-dim, dp-cc, dp-dim-f), PullT, pull-chain, revc …
+-- joing, plb, pld, plm, papp-lit-pull … papp-pull (pcf-pull-out, pdf-pull-out), const-pull, cmap-d-pull,
+-- pull-move, pull-pull, sc-* (sc-path, sc-carry), subM-comp.
+-- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "741 passed, 0 failed").
 -- What is next: (4d)(i)–(iii) as listed in lib/nbe.cub's head under "Remaining, in order" (the squares
--- cmap-papp-deg and dmap-papp-deg, which subM-papp needs for the stated reason, then subM-papp), (5)
--- (independent of them), (6), the swap of this file's families into lib/nbe.cub in place of P1's.
+-- cmap-papp-deg and dmap-papp-deg, which subM-papp needs for the stated reason, then subM-papp; the
+-- refl alternative was tested and is not available, recorded at the finding), (6) (comp-ren with CompS), the swap of this file's families into lib/nbe.cub in place of P1's.
 
 -- lib/nbe.cub — typed codes Code(Γ, A) = Σ c. Der(Γ, c, A) over the one representation of terms
 -- (lib/code.cub's Code), their evaluation, and normalization by evaluation with its soundness
@@ -4792,3 +4795,130 @@ cmap-d-pull sk' (lcons e-dim sk) σ X X' Y F F' f g c d e =
           (dcube-map (suc (dims sk')) X Y X' f (cmap-cube sk' sk (fst σ) (Line X) c) (cmap-d sk' sk (fst σ) (Line X) (LineO X Y) c d))
           (cmap-dmap sk' sk (fst σ) (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) c d)
           (cmap-d sk' sk (fst σ) (Line X') (LineO X' F') (dcube-map (suc (dims sk)) X Y X' f c d) e)))
+
+-- (2026-11-12, (5) toward subM-comp) carrying a pull along a path of its base with a path of its
+-- data over it is pulling the carried cube (pull-move, by carry-uniq); a pull along a pulled cube is two
+-- pulls (pull-pull, over map-pull: the matching lemma at map-pull; qF the pointwise statement,
+-- judgmental where used)
+pull-move : (n : Nat) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c0 c1 : Cube n X) (p : PathP (λ i → Cube n X) c0 c1) (K0 : DCube n X Y c0) (K1 : DCube n X Y c1) (Kp : PathP (λ i → DCube n X Y (p i)) K0 K1)
+  (E : DCube n X' F' (dcube-map n X Y X' f c0 K0)) →
+  PathP (λ i → DCube n X F c1) (carry n X F c0 c1 p (dcube-pull n X X' Y F F' f g c0 K0 E))
+    (dcube-pull n X X' Y F F' f g c1 K1 (carry n X' F' (dcube-map n X Y X' f c0 K0) (dcube-map n X Y X' f c1 K1) (λ i → dcube-map n X Y X' f (p i) (Kp i)) E))
+pull-move n X X' Y F F' f g c0 c1 p K0 K1 Kp E =
+  carry-uniq n X F c0 c1 p (dcube-pull n X X' Y F F' f g c0 K0 E)
+    (dcube-pull n X X' Y F F' f g c1 K1 (carry n X' F' (dcube-map n X Y X' f c0 K0) (dcube-map n X Y X' f c1 K1) (λ i → dcube-map n X Y X' f (p i) (Kp i)) E))
+    (λ i → dcube-pull n X X' Y F F' f g (p i) (Kp i)
+       (carry-fill n X' F' (dcube-map n X Y X' f c0 K0) (dcube-map n X Y X' f c1 K1) (λ i → dcube-map n X Y X' f (p i) (Kp i)) E i))
+pull-pull : (n : Nat) (X0 X1 X2 : Type 1) (Y0 F0 Yc : X0 → Type 1) (Y1 F1 : X1 → Type 1) (F2 : X2 → Type 1)
+  (f0 : (x : X0) → Y0 x → X1) (g0 : (x : X0) (y : Y0 x) → F1 (f0 x y) → F0 x) (f1 : (x : X1) → Y1 x → X2) (g1 : (x : X1) (y : Y1 x) → F2 (f1 x y) → F1 x)
+  (gc : (x : X0) (y : Y0 x) → Y1 (f0 x y) → Yc x) (fc : (x : X0) → Yc x → X2) (gcf : (x : X0) (y : Yc x) → F2 (fc x y) → F0 x)
+  (q : PathP (λ i → (x : X0) (y : Y0 x) → Y1 (f0 x y) → X2) (λ x y w → fc x (gc x y w)) (λ x y w → f1 (f0 x y) w))
+  (qF : (x : X0) (y : Y0 x) (w : Y1 (f0 x y)) (E0 : F2 (f1 (f0 x y) w)) (E1 : F2 (fc x (gc x y w))) → PathP (λ i → F2 (q (~ i) x y w)) E0 E1 →
+     PathP (λ i → F0 x) (gcf x (gc x y w) E1) (g0 x y (g1 (f0 x y) w E0)))
+  (c : Cube n X0) (d : DCube n X0 Y0 c) (W : DCube n X1 Y1 (dcube-map n X0 Y0 X1 f0 c d)) (E : DCube n X2 F2 (dcube-map n X1 Y1 X2 f1 (dcube-map n X0 Y0 X1 f0 c d) W)) →
+  PathP (λ i → DCube n X0 F0 c)
+    (dcube-pull n X0 X2 Yc F0 F2 fc gcf c (dcube-pull n X0 X1 Y0 Yc Y1 f0 gc c d W)
+       (carry n X2 F2 (dcube-map n X1 Y1 X2 f1 (dcube-map n X0 Y0 X1 f0 c d) W) (dcube-map n X0 Yc X2 fc c (dcube-pull n X0 X1 Y0 Yc Y1 f0 gc c d W))
+          (λ i → map-pull n X0 X1 Y0 Yc Y1 f0 gc X2 fc f1 q c d W (~ i)) E))
+    (dcube-pull n X0 X1 Y0 F0 F1 f0 g0 c d (dcube-pull n X1 X2 Y1 F1 F2 f1 g1 (dcube-map n X0 Y0 X1 f0 c d) W E))
+pull-pull zero X0 X1 X2 Y0 F0 Yc Y1 F1 F2 f0 g0 f1 g1 gc fc gcf q qF c d W E =
+  qF c d W E (carry zero X2 F2 (f1 (f0 c d) W) (fc c (gc c d W)) (λ i → q (~ i) c d W) E)
+    (carry-fill zero X2 F2 (f1 (f0 c d) W) (fc c (gc c d W)) (λ i → q (~ i) c d W) E)
+pull-pull (suc n) X0 X1 X2 Y0 F0 Yc Y1 F1 F2 f0 g0 f1 g1 gc fc gcf q qF c d W E =
+  pull-pull n (Line X0) (Line X1) (Line X2) (LineO X0 Y0) (LineO X0 F0) (LineO X0 Yc) (LineO X1 Y1) (LineO X1 F1) (LineO X2 F2)
+    (lineo-map X0 Y0 X1 f0) (lineo-pull X0 X1 Y0 F0 F1 f0 g0) (lineo-map X1 Y1 X2 f1) (lineo-pull X1 X2 Y1 F1 F2 f1 g1)
+    (lineo-pull X0 X1 Y0 Yc Y1 f0 gc) (lineo-map X0 Yc X2 fc) (lineo-pull X0 X2 Yc F0 F2 fc gcf)
+    (λ i L D V → (q i (fst L) (fst D) (fst V) , q i (fst (snd L)) (fst (snd D)) (fst (snd V)) , λ j → q i (snd (snd L) j) (snd (snd D) j) (snd (snd V) j)))
+    (λ L D V Ea Eb P i →
+       (qF (fst L) (fst D) (fst V) (fst Ea) (fst Eb) (λ k → fst (P k)) i ,
+        qF (fst (snd L)) (fst (snd D)) (fst (snd V)) (fst (snd Ea)) (fst (snd Eb)) (λ k → fst (snd (P k))) i ,
+        λ j → qF (snd (snd L) j) (snd (snd D) j) (snd (snd V) j) (snd (snd Ea) j) (snd (snd Eb) j) (λ k → snd (snd (P k)) j) i))
+    c d W E
+sc-x0 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))
+sc-x0 Δ2 Δ1 Δ w2 w1 = (cmap-cube (fst Δ2) (fst Δ) (cmap-of (fst Δ2) (fst Δ) (λ k → (fst w2) ((fst w1) k))) (CtxV (fst Δ)) (snd Δ))
+sc-cm1D : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (Cube (dims (fst Δ1)) (CtxV (fst Δ)))
+sc-cm1D Δ2 Δ1 Δ w2 w1 = (cmap-cube (fst Δ1) (fst Δ) (cmap-of (fst Δ1) (fst Δ) (fst w1)) (CtxV (fst Δ)) (snd Δ))
+sc-x1 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))
+sc-x1 Δ2 Δ1 Δ w2 w1 = (cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ)) (sc-cm1D Δ2 Δ1 Δ w2 w1))
+sc-sb1 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (Cube (dims (fst Δ1)) (CtxV (fst Δ)))
+sc-sb1 Δ2 Δ1 Δ w2 w1 = (sub-base Δ1 Δ (fst (fst (snd (snd (snd w1))))))
+sc-x2 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))
+sc-x2 Δ2 Δ1 Δ w2 w1 = (cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ)) (sc-sb1 Δ2 Δ1 Δ w2 w1))
+sc-bK : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (Cube (dims (fst Δ2)) (CtxV (fst Δ1)))
+sc-bK Δ2 Δ1 Δ w2 w1 = (cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (snd Δ1))
+sc-K : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (DCube (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (sc-bK Δ2 Δ1 Δ w2 w1))
+sc-K Δ2 Δ1 Δ w2 w1 = (cmap-d (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (snd Δ1) (fst (fst (snd (snd (snd w1))))))
+sc-x3 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))
+sc-x3 Δ2 Δ1 Δ w2 w1 = (dcube-map (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (CtxV (fst Δ)) (λ γ' p → fst p) (sc-bK Δ2 Δ1 Δ w2 w1) (sc-K Δ2 Δ1 Δ w2 w1))
+sc-sb2 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (Cube (dims (fst Δ2)) (CtxV (fst Δ1)))
+sc-sb2 Δ2 Δ1 Δ w2 w1 = (sub-base Δ2 Δ1 (fst (fst (snd (snd (snd w2))))))
+sc-WC : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (DCube (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (sc-sb2 Δ2 Δ1 Δ w2 w1))
+sc-WC Δ2 Δ1 Δ w2 w1 = (wc-car Δ2 Δ1 Δ w2 w1)
+sc-x4 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))
+sc-x4 Δ2 Δ1 Δ w2 w1 = (dcube-map (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (CtxV (fst Δ)) (λ γ' p → fst p) (sc-sb2 Δ2 Δ1 Δ w2 w1) (sc-WC Δ2 Δ1 Δ w2 w1))
+sc-x5 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))
+sc-x5 Δ2 Δ1 Δ w2 w1 = (sub-base Δ2 Δ (wc-S Δ2 Δ1 Δ w2 w1))
+sc-Q1 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (PathP (λ i → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x1 Δ2 Δ1 Δ w2 w1))
+sc-Q1 Δ2 Δ1 Δ w2 w1 = (λ i → cmap-comp (fst Δ2) (fst Δ1) (fst Δ) (fst w2) (fst w1) (fst (snd (snd w2))) (CtxV (fst Δ)) (snd Δ) (~ i))
+sc-Q2 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (PathP (λ i → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x2 Δ2 Δ1 Δ w2 w1))
+sc-Q2 Δ2 Δ1 Δ w2 w1 = (λ i → cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ)) ((snd (fst (snd (snd (snd w1))))) i))
+sc-Q3 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (PathP (λ i → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x3 Δ2 Δ1 Δ w2 w1))
+sc-Q3 Δ2 Δ1 Δ w2 w1 = (cmap-dmap (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (CtxV (fst Δ)) (λ γ' p → fst p) (snd Δ1) (fst (fst (snd (snd (snd w1))))))
+sc-Q4 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (PathP (λ i → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))) (sc-x3 Δ2 Δ1 Δ w2 w1) (sc-x4 Δ2 Δ1 Δ w2 w1))
+sc-Q4 Δ2 Δ1 Δ w2 w1 = (λ i → dcube-map (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (CtxV (fst Δ)) (λ γ' p → fst p) ((snd (fst (snd (snd (snd w2))))) i) (carry-fill (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (sc-bK Δ2 Δ1 Δ w2 w1) (sc-sb2 Δ2 Δ1 Δ w2 w1) (snd (fst (snd (snd (snd w2))))) (sc-K Δ2 Δ1 Δ w2 w1) i))
+sc-Q5 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (PathP (λ i → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1))
+sc-Q5 Δ2 Δ1 Δ w2 w1 = (λ i → map-pull (dims (fst Δ2)) (CtxV (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ2) (fst Δ1)) (SubF (fst Δ2) (fst Δ)) (SubF (fst Δ1) (fst Δ)) (λ γ' p → fst p) (λ γ2 p q → (fst q , λ ρ → snd q (snd p ρ))) (CtxV (fst Δ)) (λ γ' p → fst p) (λ γ' p → fst p) (λ i x y e → fst e) (snd Δ2) (fst (fst (snd (snd (snd w2))))) (sc-WC Δ2 Δ1 Δ w2 w1) (~ i))
+sc-R3 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (PathP (λ i → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))) (sc-x3 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1))
+sc-R3 Δ2 Δ1 Δ w2 w1 = (pcat (Cube (dims (fst Δ2)) (CtxV (fst Δ))) (sc-x3 Δ2 Δ1 Δ w2 w1) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q4 Δ2 Δ1 Δ w2 w1) (sc-Q5 Δ2 Δ1 Δ w2 w1))
+sc-R2 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (PathP (λ i → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1))
+sc-R2 Δ2 Δ1 Δ w2 w1 = (pcat (Cube (dims (fst Δ2)) (CtxV (fst Δ))) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x3 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q3 Δ2 Δ1 Δ w2 w1) (sc-R3 Δ2 Δ1 Δ w2 w1))
+sc-R1 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (PathP (λ i → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1))
+sc-R1 Δ2 Δ1 Δ w2 w1 = (pcat (Cube (dims (fst Δ2)) (CtxV (fst Δ))) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q2 Δ2 Δ1 Δ w2 w1) (sc-R2 Δ2 Δ1 Δ w2 w1))
+sc-WP : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → (PathP (λ i → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1))
+sc-WP Δ2 Δ1 Δ w2 w1 = (pcat (Cube (dims (fst Δ2)) (CtxV (fst Δ))) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q1 Δ2 Δ1 Δ w2 w1) (sc-R1 Δ2 Δ1 Δ w2 w1))
+sc-A : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) (Z : Type 1) (M : Mean Δ Z) → (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x0 Δ2 Δ1 Δ w2 w1))
+sc-A Δ2 Δ1 Δ w2 w1 Z M = (cmap-d (fst Δ2) (fst Δ) (cmap-of (fst Δ2) (fst Δ) (λ k → (fst w2) ((fst w1) k))) (CtxV (fst Δ)) (FbE (fst Δ) Z) (snd Δ) M)
+sc-cmd1M : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) (Z : Type 1) (M : Mean Δ Z) → (DCube (dims (fst Δ1)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-cm1D Δ2 Δ1 Δ w2 w1))
+sc-cmd1M Δ2 Δ1 Δ w2 w1 Z M = (cmap-d (fst Δ1) (fst Δ) (cmap-of (fst Δ1) (fst Δ) (fst w1)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (snd Δ) M)
+sc-A1 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) (Z : Type 1) (M : Mean Δ Z) → (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x1 Δ2 Δ1 Δ w2 w1))
+sc-A1 Δ2 Δ1 Δ w2 w1 Z M = (cmap-d (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-cm1D Δ2 Δ1 Δ w2 w1) (sc-cmd1M Δ2 Δ1 Δ w2 w1 Z M))
+sc-B1 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) (Z : Type 1) (M : Mean Δ Z) → (DCube (dims (fst Δ1)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-sb1 Δ2 Δ1 Δ w2 w1))
+sc-B1 Δ2 Δ1 Δ w2 w1 Z M = (carry (dims (fst Δ1)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-cm1D Δ2 Δ1 Δ w2 w1) (sc-sb1 Δ2 Δ1 Δ w2 w1) (snd (fst (snd (snd (snd w1))))) (sc-cmd1M Δ2 Δ1 Δ w2 w1 Z M))
+sc-A2 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) (Z : Type 1) (M : Mean Δ Z) → (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x2 Δ2 Δ1 Δ w2 w1))
+sc-A2 Δ2 Δ1 Δ w2 w1 Z M = (cmap-d (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-sb1 Δ2 Δ1 Δ w2 w1) (sc-B1 Δ2 Δ1 Δ w2 w1 Z M))
+sc-E3 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) (Z : Type 1) (M : Mean Δ Z) → (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x3 Δ2 Δ1 Δ w2 w1))
+sc-E3 Δ2 Δ1 Δ w2 w1 Z M = (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x3 Δ2 Δ1 Δ w2 w1) (sc-Q3 Δ2 Δ1 Δ w2 w1) (sc-A2 Δ2 Δ1 Δ w2 w1 Z M))
+sc-E4 : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) (Z : Type 1) (M : Mean Δ Z) → (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x4 Δ2 Δ1 Δ w2 w1))
+sc-E4 Δ2 Δ1 Δ w2 w1 Z M = (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x3 Δ2 Δ1 Δ w2 w1) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-Q4 Δ2 Δ1 Δ w2 w1) (sc-E3 Δ2 Δ1 Δ w2 w1 Z M))
+-- (2026-11-12, (5)) the base path of the composite world is the chain its parts carry along (sc-path
+-- checks wc-path against the named pieces by refl); carrying along it is carrying along each piece
+-- (sc-carry: carry-pcat at each joint, cmap-d-comp by carry-uniq at the first, carry-nat at the second);
+-- then subM-comp: the composite world's action is the two actions, by sc-carry, pull-pull (map-pull's
+-- piece), pull-move (w2's path with its carried vertex substitutions) and cmap-d-pull (cmap-dmap's piece)
+sc-path : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) → PathP (λ i → PathP (λ j → (Cube (dims (fst Δ2)) (CtxV (fst Δ)))) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1)) (wc-path Δ2 Δ1 Δ w2 w1) (sc-WP Δ2 Δ1 Δ w2 w1)
+sc-path Δ2 Δ1 Δ w2 w1 = λ i → wc-path Δ2 Δ1 Δ w2 w1
+sc-carry : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) (Z : Type 1) (M : Mean Δ Z) → PathP (λ i → (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x5 Δ2 Δ1 Δ w2 w1))) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-WP Δ2 Δ1 Δ w2 w1) (sc-A Δ2 Δ1 Δ w2 w1 Z M)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q5 Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M))
+sc-carry Δ2 Δ1 Δ w2 w1 Z M =
+  pcat (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x5 Δ2 Δ1 Δ w2 w1)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-WP Δ2 Δ1 Δ w2 w1) (sc-A Δ2 Δ1 Δ w2 w1 Z M)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R1 Δ2 Δ1 Δ w2 w1) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-Q1 Δ2 Δ1 Δ w2 w1) (sc-A Δ2 Δ1 Δ w2 w1 Z M))) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q5 Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M)) (carry-pcat (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q1 Δ2 Δ1 Δ w2 w1) (sc-R1 Δ2 Δ1 Δ w2 w1) (sc-A Δ2 Δ1 Δ w2 w1 Z M))
+  (pcat (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x5 Δ2 Δ1 Δ w2 w1)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R1 Δ2 Δ1 Δ w2 w1) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-Q1 Δ2 Δ1 Δ w2 w1) (sc-A Δ2 Δ1 Δ w2 w1 Z M))) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R1 Δ2 Δ1 Δ w2 w1) (sc-A1 Δ2 Δ1 Δ w2 w1 Z M)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q5 Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M))
+     (λ i → carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R1 Δ2 Δ1 Δ w2 w1)
+        (carry-uniq (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-Q1 Δ2 Δ1 Δ w2 w1) (sc-A Δ2 Δ1 Δ w2 w1 Z M) (sc-A1 Δ2 Δ1 Δ w2 w1 Z M) (λ j → cmap-d-comp (fst Δ2) (fst Δ1) (fst Δ) (fst w2) (fst w1) (fst (snd (snd w2))) (CtxV (fst Δ)) (FbE (fst Δ) Z) (snd Δ) M (~ j)) i))
+  (pcat (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x5 Δ2 Δ1 Δ w2 w1)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R1 Δ2 Δ1 Δ w2 w1) (sc-A1 Δ2 Δ1 Δ w2 w1 Z M)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R2 Δ2 Δ1 Δ w2 w1) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-Q2 Δ2 Δ1 Δ w2 w1) (sc-A1 Δ2 Δ1 Δ w2 w1 Z M))) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q5 Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M)) (carry-pcat (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q2 Δ2 Δ1 Δ w2 w1) (sc-R2 Δ2 Δ1 Δ w2 w1) (sc-A1 Δ2 Δ1 Δ w2 w1 Z M))
+  (pcat (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x5 Δ2 Δ1 Δ w2 w1)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R2 Δ2 Δ1 Δ w2 w1) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x1 Δ2 Δ1 Δ w2 w1) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-Q2 Δ2 Δ1 Δ w2 w1) (sc-A1 Δ2 Δ1 Δ w2 w1 Z M))) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R2 Δ2 Δ1 Δ w2 w1) (sc-A2 Δ2 Δ1 Δ w2 w1 Z M)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q5 Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M))
+     (λ i → carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R2 Δ2 Δ1 Δ w2 w1)
+        (carry-nat (dims (fst Δ1)) (dims (fst Δ2)) (CtxV (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (FbE (fst Δ) Z) (λ c → cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ)) c) (λ c d → cmap-d (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) c d) (sc-cm1D Δ2 Δ1 Δ w2 w1) (sc-sb1 Δ2 Δ1 Δ w2 w1) (snd (fst (snd (snd (snd w1))))) (sc-cmd1M Δ2 Δ1 Δ w2 w1 Z M) i))
+  (pcat (DCube (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x5 Δ2 Δ1 Δ w2 w1)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R2 Δ2 Δ1 Δ w2 w1) (sc-A2 Δ2 Δ1 Δ w2 w1 Z M)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x3 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-R3 Δ2 Δ1 Δ w2 w1) (sc-E3 Δ2 Δ1 Δ w2 w1 Z M)) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q5 Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M)) (carry-pcat (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x2 Δ2 Δ1 Δ w2 w1) (sc-x3 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q3 Δ2 Δ1 Δ w2 w1) (sc-R3 Δ2 Δ1 Δ w2 w1) (sc-A2 Δ2 Δ1 Δ w2 w1 Z M))
+     (carry-pcat (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x3 Δ2 Δ1 Δ w2 w1) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q4 Δ2 Δ1 Δ w2 w1) (sc-Q5 Δ2 Δ1 Δ w2 w1) (sc-E3 Δ2 Δ1 Δ w2 w1 Z M))))))
+subM-comp : (Δ2 Δ1 Δ : CCtx) (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) (Z : Type 1) (M : Mean Δ Z) →
+  PathP (λ i → (Mean Δ2 Z)) (subM Δ2 Δ Z (world-sub Δ2 Δ (world-comp Δ2 Δ1 Δ w2 w1)) M) (subM Δ2 Δ1 Z (world-sub Δ2 Δ1 w2) (subM Δ1 Δ Z (world-sub Δ1 Δ w1) M))
+subM-comp Δ2 Δ1 Δ w2 w1 Z M =
+  pcat (Mean Δ2 Z) (sub-pull Δ2 Δ Z (wc-S Δ2 Δ1 Δ w2 w1) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x0 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-WP Δ2 Δ1 Δ w2 w1) (sc-A Δ2 Δ1 Δ w2 w1 Z M))) (sub-pull Δ2 Δ Z (wc-S Δ2 Δ1 Δ w2 w1) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q5 Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M))) (sub-pull Δ2 Δ1 Z (fst (fst (snd (snd (snd w2))))) (carry (dims (fst Δ2)) (CtxV (fst Δ1)) (FbE (fst Δ1) Z) (sc-bK Δ2 Δ1 Δ w2 w1) (sc-sb2 Δ2 Δ1 Δ w2 w1) (snd (fst (snd (snd (snd w2))))) (cmap-d (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (FbE (fst Δ1) Z) (snd Δ1) (sub-pull Δ1 Δ Z (fst (fst (snd (snd (snd w1))))) (sc-B1 Δ2 Δ1 Δ w2 w1 Z M))))) (λ i → sub-pull Δ2 Δ Z (wc-S Δ2 Δ1 Δ w2 w1) (sc-carry Δ2 Δ1 Δ w2 w1 Z M i))
+  (pcat (Mean Δ2 Z) (sub-pull Δ2 Δ Z (wc-S Δ2 Δ1 Δ w2 w1) (carry (dims (fst Δ2)) (CtxV (fst Δ)) (FbE (fst Δ) Z) (sc-x4 Δ2 Δ1 Δ w2 w1) (sc-x5 Δ2 Δ1 Δ w2 w1) (sc-Q5 Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M))) (sub-pull Δ2 Δ1 Z (fst (fst (snd (snd (snd w2))))) (dcube-pull (dims (fst Δ2)) (CtxV (fst Δ1)) (CtxV (fst Δ)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) Z) (FbE (fst Δ) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (sc-sb2 Δ2 Δ1 Δ w2 w1) (sc-WC Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M))) (sub-pull Δ2 Δ1 Z (fst (fst (snd (snd (snd w2))))) (carry (dims (fst Δ2)) (CtxV (fst Δ1)) (FbE (fst Δ1) Z) (sc-bK Δ2 Δ1 Δ w2 w1) (sc-sb2 Δ2 Δ1 Δ w2 w1) (snd (fst (snd (snd (snd w2))))) (cmap-d (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (FbE (fst Δ1) Z) (snd Δ1) (sub-pull Δ1 Δ Z (fst (fst (snd (snd (snd w1))))) (sc-B1 Δ2 Δ1 Δ w2 w1 Z M)))))
+     (pull-pull (dims (fst Δ2)) (CtxV (fst Δ2)) (CtxV (fst Δ1)) (CtxV (fst Δ)) (SubF (fst Δ2) (fst Δ1)) (FbE (fst Δ2) Z) (SubF (fst Δ2) (fst Δ)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) Z) (FbE (fst Δ) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (λ γ2 p q → (fst q , λ ρ → snd q (snd p ρ))) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ))
+        (λ i x y w → fst w) (λ x y w E0 E1 P i ρ → P (~ i) (snd w (snd y ρ))) (snd Δ2) (fst (fst (snd (snd (snd w2))))) (sc-WC Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M))
+  (pcat (Mean Δ2 Z) (sub-pull Δ2 Δ1 Z (fst (fst (snd (snd (snd w2))))) (dcube-pull (dims (fst Δ2)) (CtxV (fst Δ1)) (CtxV (fst Δ)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) Z) (FbE (fst Δ) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (sc-sb2 Δ2 Δ1 Δ w2 w1) (sc-WC Δ2 Δ1 Δ w2 w1) (sc-E4 Δ2 Δ1 Δ w2 w1 Z M))) (sub-pull Δ2 Δ1 Z (fst (fst (snd (snd (snd w2))))) (carry (dims (fst Δ2)) (CtxV (fst Δ1)) (FbE (fst Δ1) Z) (sc-bK Δ2 Δ1 Δ w2 w1) (sc-sb2 Δ2 Δ1 Δ w2 w1) (snd (fst (snd (snd (snd w2))))) (dcube-pull (dims (fst Δ2)) (CtxV (fst Δ1)) (CtxV (fst Δ)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) Z) (FbE (fst Δ) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (sc-bK Δ2 Δ1 Δ w2 w1) (sc-K Δ2 Δ1 Δ w2 w1) (sc-E3 Δ2 Δ1 Δ w2 w1 Z M)))) (sub-pull Δ2 Δ1 Z (fst (fst (snd (snd (snd w2))))) (carry (dims (fst Δ2)) (CtxV (fst Δ1)) (FbE (fst Δ1) Z) (sc-bK Δ2 Δ1 Δ w2 w1) (sc-sb2 Δ2 Δ1 Δ w2 w1) (snd (fst (snd (snd (snd w2))))) (cmap-d (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (FbE (fst Δ1) Z) (snd Δ1) (sub-pull Δ1 Δ Z (fst (fst (snd (snd (snd w1))))) (sc-B1 Δ2 Δ1 Δ w2 w1 Z M)))))
+     (λ i → sub-pull Δ2 Δ1 Z (fst (fst (snd (snd (snd w2))))) (pull-move (dims (fst Δ2)) (CtxV (fst Δ1)) (CtxV (fst Δ)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) Z) (FbE (fst Δ) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (sc-bK Δ2 Δ1 Δ w2 w1) (sc-sb2 Δ2 Δ1 Δ w2 w1) (snd (fst (snd (snd (snd w2))))) (sc-K Δ2 Δ1 Δ w2 w1) (sc-WC Δ2 Δ1 Δ w2 w1)
+        (carry-fill (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (sc-bK Δ2 Δ1 Δ w2 w1) (sc-sb2 Δ2 Δ1 Δ w2 w1) (snd (fst (snd (snd (snd w2))))) (sc-K Δ2 Δ1 Δ w2 w1)) (sc-E3 Δ2 Δ1 Δ w2 w1 Z M) (~ i)))
+     (λ i → sub-pull Δ2 Δ1 Z (fst (fst (snd (snd (snd w2))))) (carry (dims (fst Δ2)) (CtxV (fst Δ1)) (FbE (fst Δ1) Z) (sc-bK Δ2 Δ1 Δ w2 w1) (sc-sb2 Δ2 Δ1 Δ w2 w1) (snd (fst (snd (snd (snd w2)))))
+        (cmap-d-pull (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (CtxV (fst Δ)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) Z) (FbE (fst Δ) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (snd Δ1) (fst (fst (snd (snd (snd w1))))) (sc-B1 Δ2 Δ1 Δ w2 w1 Z M) (~ i))))))
