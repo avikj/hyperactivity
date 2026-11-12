@@ -1855,16 +1855,26 @@ wadd-0 : (k : Word) → %wadd k #0 ≡ k
 wadd-0 k = sym (plusw≡wadd k #0)
 wadd-s : (k o : Word) → %wadd k (%wsucc o) ≡ %wsucc (%wadd k o)
 wadd-s k o = pcat0 Word (%wadd k (%wsucc o)) (%wsucc (plusw k o)) (%wsucc (%wadd k o)) (sym (plusw≡wadd k (%wsucc o))) (λ i → %wsucc (plusw≡wadd k o i))
+-- (2026-11-12, (4d)) the offset hypothesis for a renaming r of dimension variables (RenAtC: r at k
+-- offset by o is r0 at k offset by o), at offset 0 (renatc-0) and kept once more (renatc-keep);
+-- an embedding's is its renaming's (RenAt, renat-0, renat-keep, since ope-var (wkeep e w) is
+-- w-keep (ope-var w) judgmentally)
+RenAtC : (Word → Word) → (Word → Word) → Word → Type
+RenAtC r r0 o = (k : Word) → r (%wadd k o) ≡ %wadd (r0 k) o
+renatc-0 : (r : Word → Word) → RenAtC r r #0
+renatc-0 r k = pcat0 Word (r (%wadd k #0)) (r k) (%wadd (r k) #0) (λ i → r (wadd-0 k i)) (sym (wadd-0 (r k)))
+renatc-keep : (r r0 : Word → Word) (o : Word) → RenAtC r r0 o → RenAtC (w-keep r) r0 (%wsucc o)
+renatc-keep r r0 o hr k =
+  pcat0 Word (w-keep r (%wadd k (%wsucc o))) (%wsucc (%wadd (r0 k) o)) (%wadd (r0 k) (%wsucc o))
+    (pcat0 Word (w-keep r (%wadd k (%wsucc o))) (%wsucc (r (%wadd k o))) (%wsucc (%wadd (r0 k) o))
+       (λ i → w-keep r (wadd-s k o i)) (λ i → %wsucc (hr k i)))
+    (sym (wadd-s (r0 k) o))
 RenAt : OPE → (Word → Word) → Word → Type
-RenAt w r o = (k : Word) → ope-var w (%wadd k o) ≡ %wadd (r k) o
+RenAt w r o = RenAtC (ope-var w) r o
 renat-keep : (w : OPE) (r : Word → Word) (o : Word) → RenAt w r o → RenAt (wkeep e-dim w) r (%wsucc o)
-renat-keep w r o hr k =
-  pcat0 Word (w-keep (ope-var w) (%wadd k (%wsucc o))) (%wsucc (%wadd (r k) o)) (%wadd (r k) (%wsucc o))
-    (pcat0 Word (w-keep (ope-var w) (%wadd k (%wsucc o))) (%wsucc (ope-var w (%wadd k o))) (%wsucc (%wadd (r k) o))
-       (λ i → w-keep (ope-var w) (wadd-s k o i)) (λ i → %wsucc (hr k i)))
-    (sym (wadd-s (r k) o))
+renat-keep w r o hr = renatc-keep (ope-var w) r o hr
 renat-0 : (w : OPE) → RenAt w (ope-var w) #0
-renat-0 w k = pcat0 Word (ope-var w (%wadd k #0)) (ope-var w k) (%wadd (ope-var w k) #0) (λ i → ope-var w (wadd-0 k i)) (sym (wadd-0 (ope-var w k)))
+renat-0 w = renatc-0 (ope-var w)
 papp-lit-ren : (w : OPE) (r : Word → Word) (o : Word) → RenAt w r o → (l : Lit) (X : Type 1) (c : Cube (suc (dims (ope-tgt w))) X) →
   PathP (λ i → Cube (dims (ope-src w)) X) (papp-lit (ope-src w) X o (lit-r r l) (ope-cube w (Line X) c)) (ope-cube w X (papp-lit (ope-tgt w) X o l c))
 papp-lit-ren w r o hr l X c =
@@ -3089,6 +3099,13 @@ isdim (lcons (e-ty s) sk) k = if weq k #0 then false else isdim sk (%wsub k #1)
 isdim (lcons e-dim sk) k = if weq k #0 then true else isdim sk (%wsub k #1)
 DimPres : Lst Entry → Lst Entry → (Word → Word) → Type
 DimPres sk' sk r = (k : Word) → isdim sk' (r k) ≡ isdim sk k
+-- (2026-11-12, (4d)) a dimension-preserving renaming kept at a dimension entry is dimension-preserving
+dp-keep : (sk' sk : Lst Entry) (r : Word → Word) → DimPres sk' sk r → DimPres (lcons e-dim sk') (lcons e-dim sk) (w-keep r)
+dp-keep sk' sk r dp k =
+  %welimP (λ u → isdim (lcons e-dim sk') (w-keep r u) ≡ isdim (lcons e-dim sk) u) k (λ i → true)
+    (λ m hm → pcat0 Bool (isdim (lcons e-dim sk') (%wsucc (r m))) (isdim sk' (r m)) (isdim (lcons e-dim sk) (%wsucc m))
+       (λ i → if weq-s0 (r m) i then true else isdim sk' (wsub-s1 (r m) i))
+       (pcat0 Bool (isdim sk' (r m)) (isdim sk m) (isdim (lcons e-dim sk) (%wsucc m)) (dp m) (sym (λ i → if weq-s0 m i then true else isdim sk (wsub-s1 m i)))))
 ShM : CCtx → Type 1
 -- binder names chosen not to collide: t46
 ShM Δ = (shs : TyShape) × Mean Δ (TV shs)
@@ -3162,10 +3179,7 @@ dkeep-sub Δ' Δ w =
 world-dkeep : (Δ' Δ : CCtx) → World Δ' Δ → World (dext Δ') (dext Δ)
 world-dkeep Δ' Δ w =
   (w-keep (fst w) , mono-keep (fst w) (fst (snd w)) ,
-   (λ k → %welimP (λ u → isdim (lcons e-dim (fst Δ')) (w-keep (fst w) u) ≡ isdim (lcons e-dim (fst Δ)) u) k (λ i → true)
-      (λ m hm → pcat0 Bool (isdim (lcons e-dim (fst Δ')) (%wsucc ((fst w) m))) (isdim (fst Δ') ((fst w) m)) (isdim (lcons e-dim (fst Δ)) (%wsucc m))
-         (λ i → if weq-s0 ((fst w) m) i then true else isdim (fst Δ') (wsub-s1 ((fst w) m) i))
-         (pcat0 Bool (isdim (fst Δ') ((fst w) m)) (isdim (fst Δ) m) (isdim (lcons e-dim (fst Δ)) (%wsucc m)) ((fst (snd (snd w))) m) (sym (λ i → if weq-s0 m i then true else isdim (fst Δ) (wsub-s1 m i)))))) ,
+   dp-keep (fst Δ') (fst Δ) (fst w) (fst (snd (snd w))) ,
    snd (dkeep-sub Δ' Δ w) ,
    λ v → ((fst ((snd (snd (snd (snd w)))) v)) , (λ i → %wsucc (fst (snd ((snd (snd (snd (snd w)))) v)) i)) ,
      pcat (ShM (dext Δ')) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , varCube (dext Δ') (fst ((snd (snd (snd (snd w)))) v))) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , (dcube-reidx (dims (fst Δ')) (CtxV (fst Δ')) (Line (CtxV (fst Δ'))) (FbE (fst Δ') (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))))) (LineO (CtxV (fst Δ')) (FbE (fst Δ') (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))))) (degen-l (CtxV (fst Δ'))) (degen-o (CtxV (fst Δ')) (FbE (fst Δ') (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))))) (snd Δ') (varCube Δ' (fst ((snd (snd (snd (snd w)))) v))))) ((var-shape (fst Δ) v) , subM (dext Δ') (dext Δ) (TV (var-shape (fst Δ) v)) (dkeep-sub Δ' Δ w) (varCube (dext Δ) v)) (λ i → ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , reidx-of (dims (fst Δ')) (CtxV (fst Δ')) (Line (CtxV (fst Δ'))) (FbE (fst Δ') (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))))) (LineO (CtxV (fst Δ')) (FbE (fst Δ') (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))))) (degen-l (CtxV (fst Δ'))) (degen-o (CtxV (fst Δ')) (FbE (fst Δ') (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))))) (varM (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) (lineo-of (CtxV (fst Δ')) (FbE (fst Δ') (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))))) (varM (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (λ j x → degen-o (CtxV (fst Δ')) (FbE (fst Δ') (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))))) x (varM (fst Δ') (fst ((snd (snd (snd (snd w)))) v)) x)) (snd Δ') (~ i)))
@@ -4146,3 +4160,106 @@ cmap-d-comp sk2 sk1 (lcons e-dim sk) r2 r1 dp2 X F c d =
     (λ i → cmap-diag-d sk2 sk1 r2 dp2 (r1 #0) X F (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c) (cmap-d sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) (LineO X F) c d) (~ i))
     (λ i → diag-sk-d sk2 (r2 (r1 #0)) X F (cmap-comp sk2 sk1 sk r2 (λ k → r1 (%wsucc k)) dp2 (Line X) c i) (cmap-d-comp sk2 sk1 sk r2 (λ k → r1 (%wsucc k)) dp2 (Line X) (LineO X F) c d i))
     (λ i → papp-var-d sk2 X F (r2 (r1 #0)) (cmap-cube sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) c) (cmap-d sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) (LineO X F) c d) (~ i))
+
+-- ---------------------------------------------------------------- (4d) path application commutes with a dimension part
+-- (2026-11-12, (4d)) cmap-papp: the action of the dimension part of r (cco, an abbreviation of
+-- cmap-cube at cmap-of) commutes with path application at a canonical form, the form renamed by r;
+-- each clause is papp-ren's with ope-cube replaced by cco, ope-nat by cmap-nat, diag-ren by cmap-diag
+-- (r dimension-preserving), and at each connection the kept renaming w-keep r over the kept
+-- skeletons (dp-keep, renatc-keep), whose action is cco's at Line only up to cmap-keep e-dim
+-- (the inner chains cpcf-in, cpdf-in)
+cco : (sk' sk : Lst Entry) (r : Word → Word) (Y : Type 1) → Cube (dims sk) Y → Cube (dims sk') Y
+cco sk' sk r Y c = cmap-cube sk' sk (cmap-of sk' sk r) Y c
+pc4 : (A : Type 1) (x0 x1 x2 x3 x4 : A) → PathP (λ i → A) x0 x1 → PathP (λ i → A) x1 x2 → PathP (λ i → A) x2 x3 → PathP (λ i → A) x3 x4 → PathP (λ i → A) x0 x4
+pc4 A x0 x1 x2 x3 x4 p1 p2 p3 p4 = pcat A x0 x1 x4 p1 (pcat A x1 x2 x4 p2 (pcat A x2 x3 x4 p3 p4))
+cmap-papp-lit : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) → RenAtC r r0 o → DimPres sk' sk r → (l : Lit) (X : Type 1) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (dims sk') X) (papp-lit sk' X o (lit-r r0 l) (cco sk' sk r (Line X) c)) (cco sk' sk r X (papp-lit sk X o l c))
+cmap-papp-lit sk' sk r r0 o hr dp l X c =
+  bool-elim1 (λ b → PathP (λ i → Cube (dims sk') X)
+                 (if b then diag-sk sk' (%wadd (r0 (fst l)) o) X (cco sk' sk r (Line X) c)
+                  else diag-sk sk' (%wadd (r0 (fst l)) o) X (cube-map (dims sk') (Line X) (Line X) (rev-l X) (cco sk' sk r (Line X) c)))
+                 (cco sk' sk r X (if b then diag-sk sk (%wadd (fst l) o) X c
+                                  else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c))))
+    (pcat (Cube (dims sk') X) (diag-sk sk' (%wadd (r0 (fst l)) o) X (cco sk' sk r (Line X) c))
+       (diag-sk sk' (r (%wadd (fst l) o)) X (cco sk' sk r (Line X) c)) (cco sk' sk r X (diag-sk sk (%wadd (fst l) o) X c))
+       (λ i → diag-sk sk' (hr (fst l) (~ i)) X (cco sk' sk r (Line X) c)) (cmap-diag sk' sk r dp (%wadd (fst l) o) X c))
+    (pcat (Cube (dims sk') X)
+       (diag-sk sk' (%wadd (r0 (fst l)) o) X (cube-map (dims sk') (Line X) (Line X) (rev-l X) (cco sk' sk r (Line X) c)))
+       (diag-sk sk' (r (%wadd (fst l) o)) X (cco sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+       (cco sk' sk r X (diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+       (λ i → diag-sk sk' (hr (fst l) (~ i)) X (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line X) (rev-l X) c (~ i)))
+       (cmap-diag sk' sk r dp (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+    (snd l)
+-- the rest of a conjunction under the kept renaming: under cmap-nat (meet-l), cmap-keep at Line, the
+-- hypothesis ih (cmap-papp-conj-from at the kept renaming), cmap-keep
+cpcf-in : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (m : Lit) (ms : Conj) (X : Type 1) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (suc (dims sk')) X)
+    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+    (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))) →
+  PathP (λ i → Cube (suc (dims sk')) X)
+    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c)))
+    (cco sk' sk r (Line X) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+cpcf-in sk' sk r r0 o m ms X c ih =
+  pc4 (Cube (suc (dims sk')) X)
+    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c)))
+    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco sk' sk r (Line (Line X)) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+    (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+    (cco sk' sk r (Line X) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+    (λ j → papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line (Line X)) (meet-l X) c (~ j)))
+    (λ j → papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cmap-keep e-dim sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (~ j)))
+    ih
+    (cmap-keep e-dim sk' sk r X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+cmap-papp-conj-from : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) → RenAtC r r0 o → DimPres sk' sk r → (l : Lit) (ms : Conj) (X : Type 1) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (dims sk') X) (papp-conj-from sk' X o (lit-r r0 l) (conj-r r0 ms) (cco sk' sk r (Line X) c)) (cco sk' sk r X (papp-conj-from sk X o l ms c))
+cmap-papp-conj-from sk' sk r r0 o hr dp l lnil X c = cmap-papp-lit sk' sk r r0 o hr dp l X c
+cmap-papp-conj-from sk' sk r r0 o hr dp l (lcons m ms) X c =
+  pcat (Cube (dims sk') X)
+    (papp-lit sk' X o (lit-r r0 l) (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c))))
+    (papp-lit sk' X o (lit-r r0 l) (cco sk' sk r (Line X) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))))
+    (cco sk' sk r X (papp-conj-from sk X o l (lcons m ms) c))
+    (λ i → papp-lit sk' X o (lit-r r0 l) (cpcf-in sk' sk r r0 o m ms X c
+       (cmap-papp-conj-from (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) m ms X (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) i))
+    (cmap-papp-lit sk' sk r r0 o hr dp l X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+cmap-papp-conj : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) → RenAtC r r0 o → DimPres sk' sk r → (cj : Conj) (X : Type 1) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (dims sk') X) (papp-conj sk' X o (conj-r r0 cj) (cco sk' sk r (Line X) c)) (cco sk' sk r X (papp-conj sk X o cj c))
+cmap-papp-conj sk' sk r r0 o hr dp lnil X c =
+  psym (Cube (dims sk') X) (cco sk' sk r X (cube-map (dims sk) (Line X) X (face1-l X) c))
+    (cube-map (dims sk') (Line X) X (face1-l X) (cco sk' sk r (Line X) c)) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) X (face1-l X) c)
+cmap-papp-conj sk' sk r r0 o hr dp (lcons l ls) X c = cmap-papp-conj-from sk' sk r r0 o hr dp l ls X c
+-- the rest of a disjunction likewise (join-l)
+cpdf-in : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (d : Conj) (ds : DNF) (X : Type 1) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (suc (dims sk')) X)
+    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+    (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))) →
+  PathP (λ i → Cube (suc (dims sk')) X)
+    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c)))
+    (cco sk' sk r (Line X) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+cpdf-in sk' sk r r0 o d ds X c ih =
+  pc4 (Cube (suc (dims sk')) X)
+    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c)))
+    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cco sk' sk r (Line (Line X)) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+    (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+    (cco sk' sk r (Line X) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+    (λ j → papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line (Line X)) (join-l X) c (~ j)))
+    (λ j → papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cmap-keep e-dim sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (~ j)))
+    ih
+    (cmap-keep e-dim sk' sk r X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+cmap-papp-dnf-from : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) → RenAtC r r0 o → DimPres sk' sk r → (cj : Conj) (ds : DNF) (X : Type 1) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (dims sk') X) (papp-dnf-from sk' X o (conj-r r0 cj) (dnf-r r0 ds) (cco sk' sk r (Line X) c)) (cco sk' sk r X (papp-dnf-from sk X o cj ds c))
+cmap-papp-dnf-from sk' sk r r0 o hr dp cj lnil X c = cmap-papp-conj sk' sk r r0 o hr dp cj X c
+cmap-papp-dnf-from sk' sk r r0 o hr dp cj (lcons d ds) X c =
+  pcat (Cube (dims sk') X)
+    (papp-conj sk' X o (conj-r r0 cj) (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c))))
+    (papp-conj sk' X o (conj-r r0 cj) (cco sk' sk r (Line X) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))))
+    (cco sk' sk r X (papp-dnf-from sk X o cj (lcons d ds) c))
+    (λ i → papp-conj sk' X o (conj-r r0 cj) (cpdf-in sk' sk r r0 o d ds X c
+       (cmap-papp-dnf-from (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) d ds X (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) i))
+    (cmap-papp-conj sk' sk r r0 o hr dp cj X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+cmap-papp : (sk' sk : Lst Entry) (r : Word → Word) → DimPres sk' sk r → (f : DNF) (X : Type 1) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (dims sk') X) (papp-cube sk' X (dnf-r r f) (cco sk' sk r (Line X) c)) (cco sk' sk r X (papp-cube sk X f c))
+cmap-papp sk' sk r dp lnil X c =
+  psym (Cube (dims sk') X) (cco sk' sk r X (cube-map (dims sk) (Line X) X (face0-l X) c))
+    (cube-map (dims sk') (Line X) X (face0-l X) (cco sk' sk r (Line X) c)) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) X (face0-l X) c)
+cmap-papp sk' sk r dp (lcons cj cs) X c = cmap-papp-dnf-from sk' sk r r #0 (renatc-0 r) dp cj cs X c
