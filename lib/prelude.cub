@@ -3,11 +3,14 @@
 -- by its head, applies one of the %comp-* clauses below to the family's
 -- components as lines. A tube is a system of lines; transformations of a
 -- tube act branchwise with sysmap.
--- t23 (2026-11-12): needs-work. The %comp-* clauses below are the computation rules of composition
--- at Π, Σ, paths, universes and Glue, written as untyped terms: trusted as the rules of CCHM. To
--- be read clause by clause against the CCHM paper (Cohen, Coquand, Huber, Mörtberg 2018, and the
--- generalized composition and composition-of-types forms adopted on 2026-11-04) and each recorded
--- as matching or deviating.
+-- Read clause by clause on 2026-11-12 against CCHM (Cohen, Coquand, Huber, Mörtberg, TYPES 2015:
+-- fill §4.4, composition at Π, Σ and paths §4.5, transport §4.6, Glue §6.2 and appendix A), the
+-- HIT eliminator on hcomp (Coquand, Huber, Mörtberg, LICS 2018) and, for the universe, Cubical
+-- Agda (Vezzosi, Mörtberg, Abel). The papers are not in this repository and could not be fetched
+-- here; the reading is against their rules as the reader knows them, recorded at each clause.
+-- Result: fill, transp, hcomp, %comp-pi, %comp-sigma, %comp-path, %comp-glue and %case-hcomp are
+-- those rules; %comp-u, %unglue-line, %tproof and %comp-gluel follow Cubical Agda's composition of
+-- types as a type former instead of CCHM §7.1, see t40.
 --
 -- universe levels: U carries its level; lomega is the level of types quantifying over levels
 data Level = lzero | lsuc (l : Level) | lmax (a : Level) (b : Level) | lomega
@@ -17,6 +20,8 @@ data Level = lzero | lsuc (l : Level) | lmax (a : Level) (b : Level) | lomega
 data Clock = κ0
 data Tick (k : Clock) = ⋄
 -- fill^i A [φ ↦ u] a0 (r) = comp^j A(r∧j) [φ ↦ u(r∧j), (r=0) ↦ a0] a0
+-- (2026-11-12) matches CCHM §4.4: fill^i A [φ ↦ u] a0 = comp^j A(i∧j) [φ ↦ u(i∧j), (i=0) ↦ a0] a0,
+-- r for i.
 fill A u a0 r =
   comp (λ (j : I) → A @ (r /\ j))
     (sys+ (r = 0) (λ (j : I) → a0) (sysmap (λ w (j : I) → w @ (r /\ j)) u)) a0
@@ -27,12 +32,20 @@ Contr X = (c : X) × ((x : X) → PathP (λ (i : I) → X) c x)
 fib X Y f y = (x : X) × PathP (λ (i : I) → Y) (f x) y
 %Equiv X Y = (f : X → Y) × ((y : Y) → Contr (fib X Y f y))
 -- composition clauses (§14, §16, §17)
+-- (2026-11-12) matches CCHM §4.5 (Π): the argument x1 at the end is carried back along the domain
+-- by the filler of the reversed line (vl, with vl 1 = x1), and the composite is the composition of
+-- the applications at vl i.
 %comp-pi D E u f0 x1 =
   let vl = λ (k : I) → fill (λ (j : I) → D @ ~ j) [] x1 (~ k)
   in comp (λ (i : I) → (E @ i) (vl @ i)) (sysmap (λ w (i : I) → (w @ i) (vl @ i)) u) (f0 (vl @ 0))
+-- (2026-11-12) matches CCHM §4.5 (Σ): the first component is the filler of the first projections
+-- (its end is their composite: the face r = 0 is empty at r = 1), the second a composition over
+-- that filler.
 %comp-sigma D E u z0 =
   let al = λ (k : I) → fill D (sysmap (λ w (i : I) → fst (w @ i)) u) (fst z0) k
   in (al @ 1 , comp (λ (i : I) → (E @ i) (al @ i)) (sysmap (λ w (i : I) → snd (w @ i)) u) (snd z0))
+-- (2026-11-12) matches CCHM §4.5 (paths), for dependent paths: at each j, composition with the
+-- tube applied at j and the endpoint lines on the faces j = 0 and j = 1.
 %comp-path P l r u p0 =
   λ (j : I) →
     comp (λ (i : I) → P @ i @ j)
@@ -43,6 +56,15 @@ fib X Y f y = (x : X) × PathP (λ (i : I) → Y) (f x) y
 -- the tube's type lines from the base, with the complement of the tube's face on the base itself,
 -- so a closed composition of types is a type, never a formal one. Its elements are glue values;
 -- on a face unglue is transport back along that face's line
+-- t40 (2026-11-12): needs-work. CCHM §7.1 defines composition in the universe as a Glue type along
+-- the equivalences given by transport (comp^i U [φ ↦ E] A0 = Glue [φ ↦ (E(i1), equiv_i E(1−i))]
+-- A0). Here it is instead its own type former, %hcompU, with unglue on a face as transport back
+-- along that face's line (%unglue-line) and its own composition (%comp-gluel, %tproof): the design
+-- of Cubical Agda (Vezzosi, Mörtberg, Abel). The extra face ¬φ ↦ A0 is admissible (on ¬φ the tube
+-- is empty and the composite is A0; φ ∧ ¬φ is 0 in the face lattice), and makes a closed
+-- composition of types compute to a type. Not yet read against Cubical Agda's published rules for
+-- this type former, its unglue and its composition; until then these four clauses are trusted
+-- without a reference reading.
 %comp-u u A0 = %hcompU A0 (sys+ (%fneg (faceof u)) (λ (j : I) → A0) u)
 %unglue-line w b = comp (λ (j : I) → w @ ~ j) [] b
 -- the fibre of transport along L over b that extends the fibres (a , refl) given on the face of
@@ -71,6 +93,11 @@ fib X Y f y = (x : X) × PathP (λ (i : I) → Y) (f x) y
           (S @ 1)
   in glue (sysmap (λ e → fst e) tp)
        (hcomp (A @ 1) (sys+ (faceof tp) (sysmap (λ e (q : I) → (snd e) @ (~ q)) tp) (sysmap (λ w (q : I) → a1) u)) a1)
+-- (2026-11-12) matches CCHM §6.2 and appendix A, step for step: a1 the composite of the unglued
+-- tube (al its filler); on δ = ∀i.φ(i) the composite t1' in the face types and the path ω from its
+-- image to a1 (vpart, the pres construction); on φ(i1) the fibre (t1, α) given by contracting the
+-- fibre of the equivalence at a1, extended by vpart (tp); the base a1 composed along α back to f
+-- t1 on φ(i1) and constant on the tube's face; glued.
 %comp-glue A S u u0 =
   let a0 = unglue (S @ 0) u0
       al = λ (k : I) → fill A (sysmap (λ w (i : I) → unglue (S @ i) (w @ i)) u) a0 k
@@ -105,6 +132,8 @@ fib X Y f y = (x : X) × PathP (λ (i : I) → Y) (f x) y
 %ih-pair h1 h2 p = (h1 (fst p) , h2 (snd p))
 -- elimination of a higher inductive type on a formal hcomp (CHM):
 -- f (hcomp^i [φ ↦ u] u0) = comp^i P(hfill^i [φ ↦ u] u0) [φ ↦ f u] (f u0)
+-- (2026-11-12) matches the HIT eliminator on a formal composition (Coquand, Huber, Mörtberg 2018):
+-- comp over the motive at the hcomp filler, with f applied to the tube and the base.
 %case-hcomp P f u u0 =
   comp
     (λ (%i : I) →
