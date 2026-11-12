@@ -36,6 +36,17 @@
 -- located in src/syntax.c. Until fixed, lib/nbe.cub's constructor telescopes and type-level
 -- definitions use binder names that do not collide (subscript ₀, hatted letters).
 --
+-- t47 (2026-11-12): needs-work. The elaborator does not unify a computed index with a constructor's
+-- when matching an indexed family: with `data OPE : (W : (Δ : Ctx) × (Γ : Ctx) × (Env Δ → Env Γ)) →
+-- Type 1` (constructors odone, odrop, okeep, lib/nbe.cub at commit f71b1f3), the clause
+-- `ocomp (okeep Δ2 Δ1 r1 A w1) Δ r (odrop Δ3 Δ0 r0 B w2) = odrop Δ2 Δ (λ ρ → r0 (r1 ρ)) ...` is
+-- refused ("type mismatch ... expected snd (case fst Δ3 ...) actual snd (case fst Δ1 ...)") and
+-- without an odone clause "the clauses do not cover every case": the index ext Δ1 A = (lcons ..,
+-- (snd Δ1 , snd A)) is a computed pair, and the second argument's index is not unified with
+-- odrop's ext Δ3 B (Δ3 := Δ1, B := A), nor its clash with odone's lnil seen. Agda's unifier
+-- decomposes such pairs. lib/nbe.cub works around it (variables by recursion on the skeleton,
+-- worlds as functions). Site in src/syntax.c (the split's unification) not yet located.
+--
 t1 : Ticket Goal
 t1 = ticket wrong (cons core-correct nil) (closed #20261112)
 t2 : Ticket Goal
@@ -128,3 +139,5 @@ t45 : Ticket Goal
 t45 = ticket needs-work (cons typed-codes (cons core-correct nil)) (closed #20261112)
 t46 : Ticket Goal
 t46 = ticket wrong (cons core-correct (cons typed-codes nil)) opened
+t47 : Ticket Goal
+t47 = ticket needs-work (cons typed-codes nil) opened

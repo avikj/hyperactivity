@@ -61,9 +61,11 @@
 -- `CtxL (Lift0 Unit)` at `CtxL : Type 1 → Type 2` is refused, "actual: Type (lmax lzero lzero)").
 -- What lifting does not give is the round trip raise (lower x) ≡ x definitionally (the core has η
 -- for Π and Σ, none for a unit type), so El (π a b) ≡ Π (El a) (El b) between a lifted code and the
--- top-level Π holds as an equivalence, not judgmentally. P6 therefore interprets each universe as
--- codes (shape and closure, as below) decoded by shape recursion, and states El's commutation with
--- the type formers as paths used by an explicit conversion rule at universe-decoded types.
+-- top-level Π holds as an equivalence, not judgmentally if smaller meanings are lifted and lowered.
+-- P6 is not designed yet (2026-11-12, after P1): the design sought decodes a universe's codes
+-- directly at the top level by shape recursion, so that El of a code is the top-level type
+-- judgmentally and no conversion rule is reintroduced; if that is impossible, the precise reason is
+-- to be stated here first.
 --
 -- Finding (2026-11-12) that fixes the design below: transport along a constant line of a variable
 -- type does not reduce (CCHM has no regularity; `transport (λ i → A) a ≡ a` by refl is refused, while
@@ -89,14 +91,17 @@ one : One1
 one = one1 (λ X → X)
 -- a shape's structures over a base K and their meanings
 TyU : Type → Type 2
+-- binder names chosen not to collide: t46
 TyU K = (uM : Type 1) × (uM → K → Type)
 -- a closure over environments K: a base K', the map into it, a structure over K'
 CloU : (K : Type) → ((K' : Type) → TyU K') → Type 1
+-- binder names chosen not to collide: t46
 CloU K u = (cK : Type) × (K → cK) × fst (u cK)
 ElCU : (K : Type) → (u : (K' : Type) → TyU K') → CloU K u → K → Type
 ElCU K u A k = snd (u (fst A)) (snd (snd A)) (fst (snd A) k)
 -- by recursion on the shape: Π and Σ have a domain closure and a codomain closure over the
 -- environments extended by the domain
+-- binders hatted (Â ǩ D̂ k̂ x̂) because of t46 (telescope instantiation captures names)
 TyE : TyShape → (K : Type) → TyU K
 TyE s-bool K = (One1 , λ D̂ k̂ → Bool)
 TyE (s-pi a b) K =
@@ -114,6 +119,7 @@ ElC s K = ElCU K (TyE s)
 -- ---------------------------------------------------------------- types over a context's environments
 -- a type over environments G: a shape with a closure; its meaning; pulling back along f : H → G
 PTy : Type → Type 1
+-- binder names chosen not to collide: t46
 PTy G = (ps : TyShape) × Clo ps G
 ElP : (G : Type) → PTy G → G → Type
 ElP G A ρ = ElC (fst A) G (snd A) ρ
@@ -145,6 +151,7 @@ pi-meaning G K a b g A B ρ = refl
 -- a context over a skeleton (its entries' shapes, closed data): the entries' closures and the type of
 -- its environments, by recursion on the skeleton
 CtxU : Type 2
+-- binder names chosen not to collide: t46
 CtxU = (uM : Type 1) × (uM → Type)
 CtxE : Lst TyShape → CtxU
 CtxE lnil = (One1 , λ γ → Unit)
@@ -152,6 +159,7 @@ CtxE (lcons s sk) =
   ((γ : fst (CtxE sk)) × Clo s (snd (CtxE sk) γ) ,
    λ p → (ρ : snd (CtxE sk) (fst p)) × ElC s (snd (CtxE sk) (fst p)) (snd p) ρ)
 Ctx : Type 1
+-- binder names chosen not to collide: t46
 Ctx = (csk : Lst TyShape) × fst (CtxE csk)
 Env : Ctx → Type
 Env Γ = snd (CtxE (fst Γ)) (snd Γ)
@@ -171,10 +179,11 @@ bool-elim P t f false = f
 -- the four parts every judgment here is indexed by: a context, a type over its environments, a raw
 -- code and the code's meaning (the indices are one Σ: a family's indices may not depend on each other)
 Jdg : Type 1
+-- binder names chosen not to collide: t46
 Jdg = (jΓ : Ctx) × (jA : PTy (Env jΓ)) × Code × ((jρ : Env jΓ) → ElP (Env jΓ) jA jρ)
 -- the variable n of Γ, of type A, with meaning v (a projection out of the environment), by recursion
 -- on the skeleton (2026-11-12: an indexed family of variables cannot be matched inside an extended
--- context, since the elaborator does not unify the computed index ext Γ A with a constructor's; a
+-- context, since the elaborator does not unify the computed index ext Γ A with a constructor's (t47); a
 -- type computed on the closed skeleton is matched as a sum, and its equations are explicit paths)
 -- a type over Γ weakened to Γ extended by B
 wk : (Γ : Ctx) (B : PTy (Env Γ)) → PTy (Env Γ) → PTy (Env (ext Γ B))
@@ -183,6 +192,7 @@ data Sum1 (A : Type 1) (B : Type 1) = inl1 (a : A) | inr1 (b : B)
 Empty1 : Type 1
 Empty1 = Empty × One1
 VIx : Type → Type 1
+-- binder names chosen not to collide: t46
 VIx G = (vA : PTy G) × Word × ((vρ : G) → ElP G vA vρ)
 VarT : (sk : Lst TyShape) (γ : fst (CtxE sk)) → VIx (Env (sk , γ)) → Type 1
 VarT lnil γ X = Empty1
@@ -207,6 +217,7 @@ c-false : Code
 c-false = ccon #0 #1 lnil lnil
 c-case : Code → Code → Code → Code
 c-case t f x = ccase #0 (lcons t (lcons f lnil)) x
+-- constructor binders subscripted ₀: t46
 data NN : (KJ : NK × Jdg) → Type 1 where
   nvar : (Γ₀ : Ctx) (A₀ : PTy (Env Γ₀)) (n₀ : Word) (v₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) A₀ ρ₀) →
     Var Γ₀ A₀ n₀ v₀ → NN (k-ne , (Γ₀ , A₀ , cvar n₀ , v₀))
@@ -250,6 +261,7 @@ data NN : (KJ : NK × Jdg) → Type 1 where
 -- Der (Γ , A , c , v): c is a code of type A in Γ with meaning v. The object theory's conversion is
 -- the language's judgmental equality of meanings, so there is no conversion rule: a β-redex's
 -- meaning is already its contractum's.
+-- constructor binders subscripted ₀: t46
 data Der : (J : Jdg) → Type 1 where
   dvar : (Γ₀ : Ctx) (A₀ : PTy (Env Γ₀)) (n₀ : Word) (v₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) A₀ ρ₀) →
     Var Γ₀ A₀ n₀ v₀ → Der ((Γ₀ , A₀ , cvar n₀ , v₀))
