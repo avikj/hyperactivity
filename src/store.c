@@ -352,8 +352,33 @@ static void names_bind(const char *name, const char *key) {
     char *p = store_path("names", ""); FILE *f = fopen(p, "a"); free(p);
     if (f) { fputs(line, f); fclose(f); }
 }
-/* t43 (2026-11-12): the store records only acceptance (an ok line with steps per checker). A
- * refusal and its reason are not recorded, so what fails, and why, is known only by rerunning. */
+/* a refusal by the current checker, as a `no` line: the checker's answer (refused at code why ...),
+ * as it was read back (2026-11-12, t43: refusals were not recorded, so what fails, and why, was known
+ * only by rerunning). The answer names definitions by name, so after a rename its explanation can
+ * show the old name; the verdict is the key's. NULL when none. */
+static char *store_refused(const char *key) {
+    if (!chk_salt[0]) return NULL;
+    char *c = store_read(key, "check"); if (!c) return NULL;
+    char *hit = NULL; size_t sl = strlen(chk_salt);
+    for (char *l = c; *l && !hit; ) {
+        char *e = strchr(l, '\n'); if (e) *e = 0;
+        if (!strncmp(l, "no ", 3)) {
+            char *a = strchr(l + 3, ' ');
+            if (a && !strncmp(a + 1, chk_salt, sl) && a[1 + sl] == ' ') hit = strdup(a + 2 + sl);
+        }
+        l = e ? e + 1 : l + strlen(l);
+    }
+    free(c);
+    return hit;
+}
+static void store_refuse(const char *key, long steps, const char *r) {
+    if (!store_dir() || !chk_salt[0] || store_checked(key)) return;
+    char *old = store_refused(key); if (old) { free(old); return; }
+    size_t n = strlen(r) + 200; char *l = malloc(n);
+    snprintf(l, n, "no %ld %s %s\n", steps, chk_salt, r);
+    for (char *p = l; p[1]; p++) if (*p == '\n') *p = ' ';
+    store_write(key, "check", l, true); free(l);
+}
 /* a definition's entry: written when it is checked (or replayed as checked) */
 static void store_put(const char *name, const char *key, const char *code, const char *type, long steps, const char *usage) {
     if (!store_dir()) return;

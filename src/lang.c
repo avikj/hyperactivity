@@ -3306,6 +3306,7 @@ static void out_str(const char *r) {
 /* q: the judgment that failed, run again to read its type slots at their universe */
 /* the position of the declaration being processed (file:line, set by the surface parser; item 30) */
 char decl_pos[512];
+static bool has_hole(Node *t);
 static void explain(const char *r, Node *q) {
     if (decl_pos[0]) printf("   in: %s\n", decl_pos);
     /* reason, then what its two values are */
@@ -3522,6 +3523,25 @@ static void checked_group(Node **fs, int n, bool expect) {
         char **rs = calloc((size_t)n + 1, sizeof(char *)); Node **qs = calloc((size_t)n + 1, sizeof(Node *));
         /* every body guarded before any is checked: checking one may unfold another */
         int unguarded = -1; char *ug = NULL; Node *ugq = NULL;
+        /* refused before (t43): every member's answer remembered, ok or not, the group not run again */
+        bool replay = expect;
+        for (int i = 0; i < n && replay; i++) { rs[i] = store_checked(ks[i]) ? strdup("ok") : store_refused(ks[i]); if (!rs[i]) replay = false; }
+        if (replay) {
+            for (int i = 0; i < n; i++) if (strcmp(rs[i], "ok") && strcmp(rs[i], "unguarded") && unguarded < 0) { bool others = true; for (int j = 0; j < n; j++) if (j != i && strcmp(rs[j], "unguarded")) others = false; if (others && n > 1) unguarded = i; }
+            all = false;
+            for (int i = 0; i < n; i++) {
+                bool acc = !strcmp(rs[i], "ok");
+                qs[i] = nl4("%%chk-codef", grp, cT[i], nl2("%raw", aclosed(ds(fs[i]->it[3]))));
+                if (unguarded >= 0 && i != unguarded) continue;
+                if (acc) passes++; else failures++;
+                printf("%s: checks %s   [store]\n", acc ? "ok" : "FAIL", fs[i]->it[1]->s);
+                if (!acc) explain(rs[i], qs[i]);
+            }
+            for (int i = 0; i < n; i++) free(rs[i]);
+            free(rs); free(qs); rs = NULL;
+        }
+        else for (int i = 0; i < n; i++) { free(rs[i]); rs[i] = NULL; }
+        if (rs) {
         for (int i = 0; i < n && unguarded < 0; i++) {
             Node *q = nl3("%%codef-ok", grp, nl2("%raw", aclosed(ds(fs[i]->it[3]))));
             long steps = 0;
@@ -3552,8 +3572,12 @@ static void checked_group(Node **fs, int n, bool expect) {
             printf("%s: rejected %s   [%ld steps]\n", !all ? "ok" : "FAIL", fs[0]->it[1]->s, total);
             if (getenv("CUBICAL_WHY")) for (int i = 0; i < n; i++) if (strcmp(rs[i], "ok") && strcmp(rs[i], "unguarded")) explain(rs[i], qs[i]);
         }
+        /* a refused group's answers kept together (t43), each member's under its key, a member whose own
+         * answer is ok included: the group is not defined, so that ok is not an acceptance (no `ok` line) */
+        if (expect && !all) for (int i = 0; i < n; i++) store_refuse(ks[i], 0, rs[i]);
         for (int i = 0; i < n; i++) free(rs[i]);
         free(rs); free(qs);
+        }
     } else if (!expect) all = false;
     if (!all) for (int i = 0; i < n; i++) cofix_hide(gs[i], ix[i]);
     else if (!stored && expect) {
@@ -3967,11 +3991,15 @@ static void toplevel_in(Node *f) {
         /* its codebase key (F34): a definition the store holds as checked is not checked again */
         char key[65]; char *kcode = NULL, *ktype = NULL;
         key_def(dT, dt, key, &kcode, &ktype);
-        bool stored = define && expect && !trusted && (forced_result ? forced_steps < 0 : store_checked(key));
+        bool remembered = forced_result && forced_steps < 0;   /* the store's answer, acceptance or refusal */
+        bool stored = define && expect && !trusted && (forced_result ? remembered && !strcmp(forced_result, "ok") : store_checked(key));
         Node *cT = nl2("%raw", aclosed(dT)), *ct = trusted || stored ? NULL : nl2("%raw", aclosed(dt));
         long steps = 0;
-        char *r = trusted || stored ? strdup("ok") : forced_result ? strdup(forced_result) : readback(nl3("%%chk-def", cT, ct), &steps), *tr = strdup("ok");
+        char *rs = define && expect && !trusted && !stored && !forced_result ? store_refused(key) : NULL;   /* refused before (t43) */
+        char *r = trusted || stored ? strdup("ok") : rs ? rs : forced_result ? strdup(forced_result) : readback(nl3("%%chk-def", cT, ct), &steps), *tr = strdup("ok");
         if (forced_result) steps = forced_steps;
+        if (rs || remembered) stored = true;
+        else if (define && expect && !trusted && strcmp(r, tr) && !has_hole(dT) && !has_hole(dt)) store_refuse(key, steps, r);   /* a term with a hole is elaborated again, never looked up */
         bool accepted = !strcmp(r, tr), ok = accepted == expect;
         if (ok) passes++; else failures++;
         if (!trusted) {
@@ -4221,7 +4249,9 @@ static void toplevel_in(Node *f) {
         long steps = 0;
         char key[65]; char *kcode = NULL; key_decl(dd, key, &kcode);
         bool stored = expect && !trusted && store_checked(key);
-        char *r = trusted || stored ? strdup("ok") : readback(nl3("%%chk-data", word(di), ent), &steps), *tr = strdup("ok");
+        char *rs = expect && !trusted && !stored ? store_refused(key) : NULL;   /* refused before (t43) */
+        char *r = trusted || stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-data", word(di), ent), &steps), *tr = strdup("ok");
+        if (rs) stored = true; else if (expect && !trusted && strcmp(r, tr)) store_refuse(key, steps, r);
         bool accepted = !strcmp(r, tr), ok = accepted == expect;
         if (ok) passes++; else failures++;
         if (!trusted) { printf("%s: %s data %s   ", ok ? "ok" : "FAIL", expect ? "checks" : "rejected", DATA[d].name); if (stored) printf("[store]\n"); else printf("[%ld steps]\n", steps); }
@@ -4275,7 +4305,9 @@ static void toplevel_in(Node *f) {
         long steps = 0;
         char key[65]; char *kcode = NULL; key_decl(dd, key, &kcode);
         bool stored = expect && !trusted && store_checked(key);
-        char *r = trusted || stored ? strdup("ok") : readback(nl3("%%chk-codata", word(di), ent), &steps);
+        char *rs = expect && !trusted && !stored ? store_refused(key) : NULL;   /* refused before (t43) */
+        char *r = trusted || stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-codata", word(di), ent), &steps);
+        if (rs) stored = true; else if (expect && !trusted && strcmp(r, "ok")) store_refuse(key, steps, r);
         bool accepted = !strcmp(r, "ok"), ok = accepted == expect;
         if (ok) passes++; else failures++;
         if (!trusted) { printf("%s: %s codata %s   ", ok ? "ok" : "FAIL", expect ? "checks" : "rejected", D); if (stored) printf("[store]\n"); else printf("[%ld steps]\n", steps); }

@@ -5703,6 +5703,8 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
         if (name && expect && !copattern_body(dt) && !has_hole(T) && !has_hole(t)) {
             char key[65]; key_def(ds(strip_marks(T)), ds(strip_marks(t)), key, NULL, NULL);   /* as the definition will be recorded */
             if (store_checked(key)) { forced_result = strdup("ok"); forced_steps = -1; break; }
+            char *rf = store_refused(key);   /* refused by this checker before: its answer, not run again (t43) */
+            if (rf) { forced_result = rf; forced_steps = -1; break; }
         }
         Node *q;
         if (name && copattern_body(dt)) {
