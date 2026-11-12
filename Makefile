@@ -25,11 +25,12 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 	for f in $(SRC); do $(CC) $(CFLAGS) -DCUBICAL_LIB -c -o build/lib/$$(basename $$f .c).o $$f || exit 1; done
 	ar rcs $@ build/lib/*.o
 
-# t30 (2026-11-12): needs-work. Many files are checked by no target here: lib/mem/* other than
-# atomics and rc11 (they fail to load; cause not yet measured), lib/bits.cub, lib/net.cub, lib/fleet.cub, lib/deploy.cub,
-# lib/compile/*, lib/isa/x86/*, lib/cxx/machine.cub and read-expr.cub, lib/lang/rust/* other than
-# ast. Their state is known only when some experiment loads them. One command should check every
-# file meant to check, in dependency order, so the state of every file is measured.
+# t30 (2026-11-12): needs-work. Many files are checked by no target here: lib/mem/{target,scalar,
+# sig,flat,memory,layout,monad} (measured 2026-11-12: loaded after LIB they check, 385 definitions,
+# 0 failures), lib/bits.cub, lib/net.cub, lib/fleet.cub, lib/deploy.cub, lib/compile/*,
+# lib/isa/x86/*, lib/cxx/machine.cub and read-expr.cub, lib/lang/rust/* other than ast. Their state
+# is known only when someone loads them. One command should check every file meant to check, in
+# dependency order, so the state of every file is measured.
 #
 # the library, in dependency order: every definition is checked by the checker as it loads.
 # There are no tests: the checker is the evidence. The one measurement kept is Brunerie's number.
@@ -43,10 +44,12 @@ LIB  := $(CORE) lib/sort.cub lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/a
 library: build/cubical
 	CUBICAL_NOCACHE=1 ./build/cubical $(LIB)
 
-# Brunerie's number (Ljungström's brunerie', an untyped port): -2, with one and with four workers
+# Brunerie's number (Ljungström's brunerie', the typed port experiments/brunerie/typed.cub): -2, with one
+# and with four workers. (2026-11-12: switched from the untyped port, which the checker has refused
+# since 2026-11-09; the typed port computes -2 in 358,603 steps of the reading, 6.6 s end to end.)
 brunerie: build/cubical
 	for w in 0 4; do CUBICAL_NOCACHE=1 CUBICAL_WORKERS=$$w ./build/cubical $(CORE) \
-	  experiments/brunerie/brunerie.cub experiments/brunerie/run-brunerie.cub | grep -A1 -x brunerie | grep -q "= negsuc (suc zero)" \
+	  experiments/brunerie/typed.cub experiments/brunerie/run-typed.cub | grep -A1 -x brunerie | grep -q "= negsuc (suc zero)" \
 	  || { echo "brunerie: not -2 with $$w workers"; exit 1; }; done; echo "brunerie = negsuc (suc zero)"
 
 # the record of the work (lib/work.cub, work/): the goals and tickets check; `python3 tools/work.py

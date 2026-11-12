@@ -1,5 +1,7 @@
 # Brunerie number experiment
 
+(2026-11-12: `brunerie.cub` below is untyped and has been refused by the checker since 2026-11-09; the port that runs is `typed.cub`, every definition typed, which `make brunerie` reads: −2 in 358,603 steps, 6.6 s end to end with no cache.)
+
 `brunerie.cub` is an untyped port of Ljungström's `brunerie'` from agda/cubical
 (`Cubical/Homotopy/Group/Pi4S3/BrunerieExperiments.agda`). The file's comment says it computes in about 1 second in Agda.
 The pipeline is the same: `g10 (g9 (g8 λ i j → f7' (η₃ (push (loop i) (loop j)))))`.
