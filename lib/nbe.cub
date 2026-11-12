@@ -169,13 +169,26 @@ bool-elim P t f false = f
 -- code and the code's meaning (the indices are one Σ: a family's indices may not depend on each other)
 Jdg : Type 1
 Jdg = (Γ : Ctx) × (A : PTy (Env Γ)) × Code × ((ρ : Env Γ) → ElP (Env Γ) A ρ)
--- the variable n of Γ (its code cvar n), of type A, meaning v (a projection out of the environment)
+-- the variable n of Γ, of type A, with meaning v (a projection out of the environment), by recursion
+-- on the skeleton (2026-11-12: an indexed family of variables cannot be matched inside an extended
+-- context, since the elaborator does not unify the computed index ext Γ A with a constructor's; a
+-- type computed on the closed skeleton is matched as a sum, and its equations are explicit paths)
+-- a type over Γ weakened to Γ extended by B
 wk : (Γ : Ctx) (B : PTy (Env Γ)) → PTy (Env Γ) → PTy (Env (ext Γ B))
 wk Γ B A = pull (Env Γ) (Env (ext Γ B)) (λ ρ → fst ρ) A
-data Var : (J : Jdg) → Type 1 where
-  vz : (Γ : Ctx) (A : PTy (Env Γ)) → Var (ext Γ A , wk Γ A A , cvar #0 , λ ρ → snd ρ)
-  vs : (Γ : Ctx) (A B : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) →
-       Var (Γ , A , cvar n , v) → Var (ext Γ B , wk Γ B A , cvar (%wsucc n) , λ ρ → v (fst ρ))
+data Sum1 (A : Type 1) (B : Type 1) = inl1 (a : A) | inr1 (b : B)
+Empty1 : Type 1
+Empty1 = Empty × One1
+VIx : Type → Type 1
+VIx G = (A : PTy G) × Word × ((ρ : G) → ElP G A ρ)
+VarT : (sk : Lst TyShape) (γ : fst (CtxE sk)) → VIx (Env (sk , γ)) → Type 1
+VarT lnil γ X = Empty1
+VarT (lcons s sk) γ X =
+  Sum1 (Path (VIx (Env (lcons s sk , γ))) X (wk (sk , fst γ) (s , snd γ) (s , snd γ) , #0 , λ ρ → snd ρ))
+       ((Y : VIx (Env (sk , fst γ))) × VarT sk (fst γ) Y ×
+        Path (VIx (Env (lcons s sk , γ))) X (wk (sk , fst γ) (s , snd γ) (fst Y) , %wsucc (fst (snd Y)) , λ ρ → snd (snd Y) (fst ρ)))
+Var : (Γ : Ctx) (A : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) → Type 1
+Var Γ A n v = VarT (fst Γ) (snd Γ) (A , n , v)
 
 -- ---------------------------------------------------------------- neutral and normal forms
 -- one family for both (mutual data types are not available), the kind in the index. η-long: a
@@ -193,7 +206,7 @@ c-case : Code → Code → Code → Code
 c-case t f x = ccase #0 (lcons t (lcons f lnil)) x
 data NN : (KJ : NK × Jdg) → Type 1 where
   nvar : (Γ : Ctx) (A : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) →
-    Var (Γ , A , cvar n , v) → NN (k-ne , (Γ , A , cvar n , v))
+    Var Γ A n v → NN (k-ne , (Γ , A , cvar n , v))
   napp : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
     (f : Code) (vf : (ρ : Env Γ) → ElP (Env Γ) (pi-ty (Env Γ) K a b g A B) ρ)
     (c : Code) (va : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ) →
@@ -236,7 +249,7 @@ data NN : (KJ : NK × Jdg) → Type 1 where
 -- meaning is already its contractum's.
 data Der : (J : Jdg) → Type 1 where
   dvar : (Γ : Ctx) (A : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) →
-    Var (Γ , A , cvar n , v) → Der ((Γ , A , cvar n , v))
+    Var Γ A n v → Der ((Γ , A , cvar n , v))
   dapp : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
     (f : Code) (vf : (ρ : Env Γ) → ElP (Env Γ) (pi-ty (Env Γ) K a b g A B) ρ)
     (c : Code) (va : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ) →
@@ -277,17 +290,32 @@ TCode Γ A = (c : Code) × (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) × Der (Γ 
 teval : (Γ : Ctx) (A : PTy (Env Γ)) → TCode Γ A → (ρ : Env Γ) → ElP (Env Γ) A ρ
 teval Γ A t = fst (snd t)
 
--- ---------------------------------------------------------------- worlds: order-preserving embeddings
--- OPE (Δ , Γ , r): Δ is Γ with entries inserted; r is its meaning, the map of environments
-OIx : Type 1
-OIx = (Δ : Ctx) × (Γ : Ctx) × (Env Δ → Env Γ)
-data OPE : (W : OIx) → Type 1 where
-  -- (the empty context's structure is any value of One1, which has no η)
-  odone : (γ : One1) → OPE ((lnil , γ) , (lnil , γ) , λ ρ → ρ)
-  odrop : (Δ Γ : Ctx) (r : Env Δ → Env Γ) (B : PTy (Env Δ)) → OPE (Δ , Γ , r) → OPE (ext Δ B , Γ , λ ρ → r (fst ρ))
-  okeep : (Δ Γ : Ctx) (r : Env Δ → Env Γ) (A : PTy (Env Γ)) →
-    OPE (Δ , Γ , r) → OPE (ext Δ (pull (Env Γ) (Env Δ) r A) , ext Γ A , λ p → (r (fst p) , snd p))
--- the identity world, by recursion on the skeleton
-oid : (sk : Lst TyShape) (γ : fst (CtxE sk)) → OPE ((sk , γ) , (sk , γ) , λ ρ → ρ)
-oid lnil γ = odone γ
-oid (lcons s sk) γ = okeep (sk , fst γ) (sk , fst γ) (λ ρ → ρ) (s , snd γ) (oid sk (fst γ))
+
+-- ---------------------------------------------------------------- worlds: renamings
+-- Ren Δ Γ r: every variable of Γ is a variable of Δ, at the type pulled back along r and with the
+-- meaning precomposed with r (r is the renaming's meaning, a map of environments). Worlds are these
+-- functions, so identity and composition are definitional.
+Ren : (Δ Γ : Ctx) → (Env Δ → Env Γ) → Type 1
+Ren Δ Γ r = (A : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) →
+  Var Γ A n v → (m : Word) × Var Δ (pull (Env Γ) (Env Δ) r A) m (λ ρ → v (r ρ))
+ren-id : (Γ : Ctx) → Ren Γ Γ (λ ρ → ρ)
+ren-id Γ A n v x = (n , x)
+ren-comp : (Δ2 Δ1 Γ : Ctx) (r1 : Env Δ1 → Env Γ) (r2 : Env Δ2 → Env Δ1) →
+  Ren Δ1 Γ r1 → Ren Δ2 Δ1 r2 → Ren Δ2 Γ (λ ρ → r1 (r2 ρ))
+ren-comp Δ2 Δ1 Γ r1 r2 w1 w2 A n v x =
+  let y = w1 A n v x in w2 (pull (Env Γ) (Env Δ1) r1 A) (fst y) (λ ρ → v (r1 ρ)) (snd y)
+-- the world one entry larger
+ren-wk : (Γ : Ctx) (B : PTy (Env Γ)) → Ren (ext Γ B) Γ (λ ρ → fst ρ)
+ren-wk Γ B A n v x = (%wsucc n , inr1 ((A , n , v) , x , refl))
+-- a renaming under a binder
+ren-keep : (Δ Γ : Ctx) (r : Env Δ → Env Γ) (A : PTy (Env Γ)) → Ren Δ Γ r →
+  Ren (ext Δ (pull (Env Γ) (Env Δ) r A)) (ext Γ A) (λ p → (r (fst p) , snd p))
+ren-keep Δ Γ r A w X n v (inl1 p) =
+  (#0 , inl1 (λ i → (pull (Env (ext Γ A)) (Env (ext Δ (pull (Env Γ) (Env Δ) r A))) (λ q → (r (fst q) , snd q)) (fst (p i)) ,
+                     #0 , λ q → snd (snd (p i)) (r (fst q) , snd q))))
+ren-keep Δ Γ r A w X n v (inr1 y) =
+  let z = w (fst (fst y)) (fst (snd (fst y))) (snd (snd (fst y))) (fst (snd y))
+  in (%wsucc (fst z) ,
+      inr1 ((pull (Env Γ) (Env Δ) r (fst (fst y)) , fst z , λ ρ → snd (snd (fst y)) (r ρ)) , snd z ,
+            λ i → (pull (Env (ext Γ A)) (Env (ext Δ (pull (Env Γ) (Env Δ) r A))) (λ q → (r (fst q) , snd q)) (fst (snd (snd y) i)) ,
+                   %wsucc (fst z) , λ q → snd (snd (snd (snd y) i)) (r (fst q) , snd q))))
