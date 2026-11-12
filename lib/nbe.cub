@@ -337,39 +337,25 @@
 -- action cmap-cube, never ope-cube: ren-nn at npapp needs papp-mean along cmap-of r (subM-papp below),
 -- and no rule constructs an OPE; papp-ren and cmap-ope (kept, checked) relate the two actions only for
 -- a world that comes from an OPE, so a dependent form of papp-ren has no use.
+-- Done 2026-11-12 (later; checked, "584 passed, 0 failed"): world-keep (push-diag, push-of,
+-- pull-ignore; the kp-* names of keep-sub's parts; kp-lhs, kp-rhs, sub-var-tot, kp-wk, kp-some,
+-- kp-wv; the route stated below, with subM-wk replaced by push-of/push-diag over sub-tot, since both
+-- sides are carries of lifts of sub-tot along keep-base); (4r) on cubes (tf-empty, diag-nondim,
+-- diag-diag, diag-exch, dp-tail, cmap-diag: path application at a variable commutes with the action
+-- of a dimension-preserving renaming; cmap-const, cmap-comp); world-comp (mono-comp, wc-car, wc-S,
+-- wc-path, world-comp, its variables by subM-of, fmap-cmap, fmap-transp, pull-fmap, fmap-pull: no
+-- cmap-d-comp is needed there, since the composite's vertex substitutions are w1's acted on by w2's
+-- dimension part, carried and pulled back). Elaboration finding: an implicit whose solution contains
+-- a composition with a system is refused (t55), so path chains give their endpoints (pcat).
 -- Remaining, in order (each a closed statement):
---   (2s) the rest. Done (checked, "548 passed, 0 failed"): dcube-lift, map-lift, fmap-lift, of-lift,
---       dmap-fmap; ext-path (sub-ext now through it); keep-base, keep-S, keep-sub (the substitution
---       of world-keep, for an extension uniform in the vertex, f = λ γ e ρ → h (e ρ), h : Y → Sem a;
---       lam-ctx's lam-dom is one, h = λ t → fst (fst t)). Next: world-keep Δ' Δ a Y h M w : World
---       (extM Δ' a Y f (subM w M)) (extM Δ a Y f M) = (w-keep r , mono-keep , DimPres as
---       world-dkeep's with false , snd (keep-sub …) , WVar), WVar by cases: none ↦ none (word refl;
---       meaning, as a PathM from varCube at none: psym carry-of along keep-base, of-lift under carry,
---       psym fmap-lift under carry, psym fmap-transp, psym subM-of at keep-sub); some v ↦ some v1 with
---       v1 = fst (wv v) (word λ i → %wsucc (w's word path i); meaning: world-wk's WVar at v1 (from
---       varCube at some v1 to subM sub-wk of varCube Δ' v1), w's path lifted under subM sub-wk, then
---       subM-wk: subM (sub-wk Δ a Y f M) N ≡ wkM-style push of N (dcube-push of N over extM's base,
---       value ρ ↦ N's at fst ρ), by cmap-skip-d and cmap-id-d under carry, and pulling back along
---       sub-wk's S (a section: pull-of's argument with the base path dmap-fst); on both sides it
---       meets keep-sub's S at some v through fmap-transp and fmap-lift).
---       world-comp Δ2 Δ1 Δ (w2 : World Δ2 Δ1) (w1 : World Δ1 Δ) : World Δ2 Δ, r = r1 then r2; its
---       dimension part needs (4r).
---   (4r) The renaming case of the substitution lemma on cubes, for DimPres r: cmap-papp-lit
---       (cmap-cube sk' sk (cmap-of r) X (diag-sk sk k X c) ≡ diag-sk sk' (r k) X (cmap-cube sk' sk
---       (cmap-of r) (Line X) c)), by induction on sk: at an index naming no dimension both sides are
---       the face at 0 (diag-nondim: isdim sk k ≡ false gives diag-sk sk k X c ≡ cube-map face0-l c;
---       const-map at lnil), at a dimension entry with k = 0 two diagonals commute (diag-diag:
---       diag-sk j X (diag-sk j (Line X) D) ≡ diag-sk j X (cube-map diag-l D)), at k = succ m the
---       exchange commutes with diag-sk (diag-exch), each with its dependent form for cmap-d; then
---       cmap-comp (cmap-cube sk2 sk1 (cmap-of r2) X (cmap-cube sk1 sk (cmap-of r1) X c) ≡ cmap-cube
---       sk2 sk (cmap-of (λ k → r2 (r1 k))) X c, by induction on sk with cmap-papp-lit and cmap-nat)
---       and cmap-d-comp over it; the composite's S (w1's S pulled back along w2's: dcube-pull of
---       sub-carried along S2, as subM) and its path; its WVar by composing the two paths with
---       subM-comp on varCube.
+--   (4r-d) the dependent forms over cubes of diag-nondim, diag-diag, diag-exch, cmap-diag, cmap-const
+--       and cmap-comp (each over diag-sk-d, papp-cube-d, cmap-d, as diag-nat-d over diag-nat): needed by
+--       (5) (subM (world-comp w2 w1) M ≡ subM w2 (subM w1 M) for any M needs cmap-d-comp) and by (4d).
 --   (4d) subM-papp for worlds: papp-mean Δ' a (dnf-r r f) (subM w P) ≡ subM w (papp-mean Δ a f P),
 --       from cmap-papp (cmap-cube (cmap-of r) (papp-cube sk X f c) ≡ papp-cube sk' X (dnf-r r f)
 --       (cmap-cube (cmap-of r) (Line X) c)) by the recursion of papp-cube at offsets o (as papp-ren
---       with RenAt: literals by cmap-papp-lit, the connections by cmap-nat at meet-l and join-l), its
+--       with RenAt: a literal at offset o by cmap-diag at r kept o times (w-keep; its DimPres as world-dkeep's),
+--       ~i by cmap-nat at rev-l, the connections by cmap-nat at meet-l and join-l), its
 --       dependent form, and papp-deg's naturality; ren-nn at npapp uses it with canon-r/nonconst-r
 --       (dnf-canon-r, dnf-nonconst-r at MonoW r).
 --   (5) subM-comp for worlds (subM (world-comp w2 w1) M ≡ subM w2 (subM w1 M), by cmap-d-comp,
