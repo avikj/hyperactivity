@@ -24,6 +24,18 @@
 -- comments at the sites). Queries written in the language over the checked records (tickets by goal,
 -- the goals a goal transitively serves, what is open under a goal) are to follow, with the command
 -- evaluating them through the machine.
+-- t46 (2026-11-12): wrong. The elaborator's instantiation of a telescope is not capture-avoiding: an
+-- argument whose free variables share a name with a later binder of the telescope is captured by it.
+-- Reproduction (lib/nbe.cub as of this date, before its binders were renamed): with NN's
+-- constructor `nvar : (Γ : Ctx) (A : PTy (Env Γ)) (n : Word) ...`, the definition
+-- `var0 : (Δ : Ctx) (A : PTy (Env Δ)) → NN (...)`, `var0 Δ A = nvar (ext Δ A) (wk Δ A A) ...` is
+-- refused (type mismatch at wk Δ A A: expected PTy (Env Δ)), and accepted with its parameters named
+-- D0 and T0; likewise a variable x inside an index was given the type of the Π binder `x` of TyE's
+-- meaning of s-pi. The refusals are the checker catching wrongly elaborated terms (no unsound
+-- acceptance was seen), but whether a correct definition elaborates depends on binder names. Not yet
+-- located in src/syntax.c. Until fixed, lib/nbe.cub's constructor telescopes and type-level
+-- definitions use binder names that do not collide (subscript ₀, hatted letters).
+--
 t1 : Ticket Goal
 t1 = ticket wrong (cons core-correct nil) (closed #20261112)
 t2 : Ticket Goal
@@ -114,3 +126,5 @@ t44 : Ticket Goal
 t44 = ticket needs-work (cons core-correct (cons self-aware nil)) opened
 t45 : Ticket Goal
 t45 = ticket needs-work (cons typed-codes (cons core-correct nil)) (closed #20261112)
+t46 : Ticket Goal
+t46 = ticket wrong (cons core-correct (cons typed-codes nil)) opened

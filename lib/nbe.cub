@@ -89,22 +89,22 @@ one : One1
 one = one1 (λ X → X)
 -- a shape's structures over a base K and their meanings
 TyU : Type → Type 2
-TyU K = (M : Type 1) × (M → K → Type)
+TyU K = (uM : Type 1) × (uM → K → Type)
 -- a closure over environments K: a base K', the map into it, a structure over K'
 CloU : (K : Type) → ((K' : Type) → TyU K') → Type 1
-CloU K u = (K' : Type) × (K → K') × fst (u K')
+CloU K u = (cK : Type) × (K → cK) × fst (u cK)
 ElCU : (K : Type) → (u : (K' : Type) → TyU K') → CloU K u → K → Type
 ElCU K u A k = snd (u (fst A)) (snd (snd A)) (fst (snd A) k)
 -- by recursion on the shape: Π and Σ have a domain closure and a codomain closure over the
 -- environments extended by the domain
 TyE : TyShape → (K : Type) → TyU K
-TyE s-bool K = (One1 , λ D k → Bool)
+TyE s-bool K = (One1 , λ D̂ k̂ → Bool)
 TyE (s-pi a b) K =
-  ((A : CloU K (TyE a)) × CloU ((k : K) × ElCU K (TyE a) A k) (TyE b) ,
-   λ D k → (x : ElCU K (TyE a) (fst D) k) → ElCU ((k : K) × ElCU K (TyE a) (fst D) k) (TyE b) (snd D) (k , x))
+  ((Â : CloU K (TyE a)) × CloU ((ǩ : K) × ElCU K (TyE a) Â ǩ) (TyE b) ,
+   λ D̂ k̂ → (x̂ : ElCU K (TyE a) (fst D̂) k̂) → ElCU ((ǩ : K) × ElCU K (TyE a) (fst D̂) ǩ) (TyE b) (snd D̂) (k̂ , x̂))
 TyE (s-sig a b) K =
-  ((A : CloU K (TyE a)) × CloU ((k : K) × ElCU K (TyE a) A k) (TyE b) ,
-   λ D k → (x : ElCU K (TyE a) (fst D) k) × ElCU ((k : K) × ElCU K (TyE a) (fst D) k) (TyE b) (snd D) (k , x))
+  ((Â : CloU K (TyE a)) × CloU ((ǩ : K) × ElCU K (TyE a) Â ǩ) (TyE b) ,
+   λ D̂ k̂ → (x̂ : ElCU K (TyE a) (fst D̂) k̂) × ElCU ((ǩ : K) × ElCU K (TyE a) (fst D̂) ǩ) (TyE b) (snd D̂) (k̂ , x̂))
 -- a type of shape s over environments K, and its meaning
 Clo : TyShape → Type → Type 1
 Clo s K = CloU K (TyE s)
@@ -114,7 +114,7 @@ ElC s K = ElCU K (TyE s)
 -- ---------------------------------------------------------------- types over a context's environments
 -- a type over environments G: a shape with a closure; its meaning; pulling back along f : H → G
 PTy : Type → Type 1
-PTy G = (s : TyShape) × Clo s G
+PTy G = (ps : TyShape) × Clo ps G
 ElP : (G : Type) → PTy G → G → Type
 ElP G A ρ = ElC (fst A) G (snd A) ρ
 pull : (G H : Type) → (H → G) → PTy G → PTy H
@@ -145,14 +145,14 @@ pi-meaning G K a b g A B ρ = refl
 -- a context over a skeleton (its entries' shapes, closed data): the entries' closures and the type of
 -- its environments, by recursion on the skeleton
 CtxU : Type 2
-CtxU = (M : Type 1) × (M → Type)
+CtxU = (uM : Type 1) × (uM → Type)
 CtxE : Lst TyShape → CtxU
 CtxE lnil = (One1 , λ γ → Unit)
 CtxE (lcons s sk) =
   ((γ : fst (CtxE sk)) × Clo s (snd (CtxE sk) γ) ,
    λ p → (ρ : snd (CtxE sk) (fst p)) × ElC s (snd (CtxE sk) (fst p)) (snd p) ρ)
 Ctx : Type 1
-Ctx = (sk : Lst TyShape) × fst (CtxE sk)
+Ctx = (csk : Lst TyShape) × fst (CtxE csk)
 Env : Ctx → Type
 Env Γ = snd (CtxE (fst Γ)) (snd Γ)
 emp : Ctx
@@ -171,7 +171,7 @@ bool-elim P t f false = f
 -- the four parts every judgment here is indexed by: a context, a type over its environments, a raw
 -- code and the code's meaning (the indices are one Σ: a family's indices may not depend on each other)
 Jdg : Type 1
-Jdg = (Γ : Ctx) × (A : PTy (Env Γ)) × Code × ((ρ : Env Γ) → ElP (Env Γ) A ρ)
+Jdg = (jΓ : Ctx) × (jA : PTy (Env jΓ)) × Code × ((jρ : Env jΓ) → ElP (Env jΓ) jA jρ)
 -- the variable n of Γ, of type A, with meaning v (a projection out of the environment), by recursion
 -- on the skeleton (2026-11-12: an indexed family of variables cannot be matched inside an extended
 -- context, since the elaborator does not unify the computed index ext Γ A with a constructor's; a
@@ -183,7 +183,7 @@ data Sum1 (A : Type 1) (B : Type 1) = inl1 (a : A) | inr1 (b : B)
 Empty1 : Type 1
 Empty1 = Empty × One1
 VIx : Type → Type 1
-VIx G = (A : PTy G) × Word × ((ρ : G) → ElP G A ρ)
+VIx G = (vA : PTy G) × Word × ((vρ : G) → ElP G vA vρ)
 VarT : (sk : Lst TyShape) (γ : fst (CtxE sk)) → VIx (Env (sk , γ)) → Type 1
 VarT lnil γ X = Empty1
 VarT (lcons s sk) γ X =
@@ -208,84 +208,84 @@ c-false = ccon #0 #1 lnil lnil
 c-case : Code → Code → Code → Code
 c-case t f x = ccase #0 (lcons t (lcons f lnil)) x
 data NN : (KJ : NK × Jdg) → Type 1 where
-  nvar : (Γ : Ctx) (A : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) →
-    Var Γ A n v → NN (k-ne , (Γ , A , cvar n , v))
-  napp : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
-    (f : Code) (vf : (ρ : Env Γ) → ElP (Env Γ) (pi-ty (Env Γ) K a b g A B) ρ)
-    (c : Code) (va : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ) →
-    NN (k-ne , (Γ , pi-ty (Env Γ) K a b g A B , f , vf)) → NN (k-nf , (Γ , cl-dom (Env Γ) K a g A , c , va)) →
-    NN (k-ne , (Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) va (cl-cod (Env Γ) K a b g A B) , capp f c , λ ρ → vf ρ (va ρ)))
-  nfst : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
-    (p : Code) (vp : (ρ : Env Γ) → ElP (Env Γ) (sig-ty (Env Γ) K a b g A B) ρ) →
-    NN (k-ne , (Γ , sig-ty (Env Γ) K a b g A B , p , vp)) →
-    NN (k-ne , (Γ , cl-dom (Env Γ) K a g A , cfst p , λ ρ → fst (vp ρ)))
-  nsnd : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
-    (p : Code) (vp : (ρ : Env Γ) → ElP (Env Γ) (sig-ty (Env Γ) K a b g A B) ρ) →
-    NN (k-ne , (Γ , sig-ty (Env Γ) K a b g A B , p , vp)) →
-    NN (k-ne , (Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) (λ ρ → fst (vp ρ)) (cl-cod (Env Γ) K a b g A B) , csnd p , λ ρ → snd (vp ρ)))
-  ncase : (Γ : Ctx) (KB : Type) (gB : Env Γ → KB) (DB : One1) (P : PTy (Env (ext Γ (bool-cl (Env Γ) KB gB DB)))) (x : Code) (vx : (ρ : Env Γ) → Bool)
-    (t : Code) (vt : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → true) P) ρ)
-    (f : Code) (vf : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → false) P) ρ) →
-    NN (k-ne , (Γ , bool-cl (Env Γ) KB gB DB , x , vx)) →
-    NN (k-nf , (Γ , at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → true) P , t , vt)) →
-    NN (k-nf , (Γ , at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → false) P , f , vf)) →
-    NN (k-ne , (Γ , at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) vx P , c-case t f x ,
-                λ ρ → bool-elim (λ b → ElP (Env (ext Γ (bool-cl (Env Γ) KB gB DB))) P (ρ , b)) (vt ρ) (vf ρ) (vx ρ)))
-  nne : (Γ : Ctx) (KB : Type) (gB : Env Γ → KB) (DB : One1) (x : Code) (vx : (ρ : Env Γ) → Bool) →
-    NN (k-ne , (Γ , bool-cl (Env Γ) KB gB DB , x , vx)) → NN (k-nf , (Γ , bool-cl (Env Γ) KB gB DB , x , vx))
-  ntrue : (Γ : Ctx) (KB : Type) (gB : Env Γ → KB) (DB : One1) → NN (k-nf , (Γ , bool-cl (Env Γ) KB gB DB , c-true , λ ρ → true))
-  nfalse : (Γ : Ctx) (KB : Type) (gB : Env Γ → KB) (DB : One1) → NN (k-nf , (Γ , bool-cl (Env Γ) KB gB DB , c-false , λ ρ → false))
-  nlam : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
-    (c : Code) (vb : (ρ : Env (ext Γ (cl-dom (Env Γ) K a g A))) → ElP (Env (ext Γ (cl-dom (Env Γ) K a g A))) (cl-cod (Env Γ) K a b g A B) ρ) →
-    NN (k-nf , (ext Γ (cl-dom (Env Γ) K a g A) , cl-cod (Env Γ) K a b g A B , c , vb)) →
-    NN (k-nf , (Γ , pi-ty (Env Γ) K a b g A B , clam c , λ (ρ : Env Γ) (x : ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ) → vb (the (Env (ext Γ (cl-dom (Env Γ) K a g A))) (ρ , x))))
-  npair : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
-    (c1 : Code) (v1 : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ)
-    (c2 : Code) (v2 : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B)) ρ) →
-    NN (k-nf , (Γ , cl-dom (Env Γ) K a g A , c1 , v1)) →
-    NN (k-nf , (Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B) , c2 , v2)) →
-    NN (k-nf , (Γ , sig-ty (Env Γ) K a b g A B , cpair c1 c2 , λ ρ → (v1 ρ , v2 ρ)))
+  nvar : (Γ₀ : Ctx) (A₀ : PTy (Env Γ₀)) (n₀ : Word) (v₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) A₀ ρ₀) →
+    Var Γ₀ A₀ n₀ v₀ → NN (k-ne , (Γ₀ , A₀ , cvar n₀ , v₀))
+  napp : (Γ₀ : Ctx) (K₀ : Type) (a₀ b₀ : TyShape) (g₀ : Env Γ₀ → K₀) (A₀ : Clo a₀ K₀) (B₀ : Clo b₀ ((k₀ : K₀) × ElC a₀ K₀ A₀ k₀))
+    (f₀ : Code) (vf₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (pi-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) ρ₀)
+    (c₀ : Code) (va₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) ρ₀) →
+    NN (k-ne , (Γ₀ , pi-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , f₀ , vf₀)) → NN (k-nf , (Γ₀ , cl-dom (Env Γ₀) K₀ a₀ g₀ A₀ , c₀ , va₀)) →
+    NN (k-ne , (Γ₀ , at-last (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) va₀ (cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) , capp f₀ c₀ , λ ρ₀ → vf₀ ρ₀ (va₀ ρ₀)))
+  nfst : (Γ₀ : Ctx) (K₀ : Type) (a₀ b₀ : TyShape) (g₀ : Env Γ₀ → K₀) (A₀ : Clo a₀ K₀) (B₀ : Clo b₀ ((k₀ : K₀) × ElC a₀ K₀ A₀ k₀))
+    (p₀ : Code) (vp₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (sig-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) ρ₀) →
+    NN (k-ne , (Γ₀ , sig-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , p₀ , vp₀)) →
+    NN (k-ne , (Γ₀ , cl-dom (Env Γ₀) K₀ a₀ g₀ A₀ , cfst p₀ , λ ρ₀ → fst (vp₀ ρ₀)))
+  nsnd : (Γ₀ : Ctx) (K₀ : Type) (a₀ b₀ : TyShape) (g₀ : Env Γ₀ → K₀) (A₀ : Clo a₀ K₀) (B₀ : Clo b₀ ((k₀ : K₀) × ElC a₀ K₀ A₀ k₀))
+    (p₀ : Code) (vp₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (sig-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) ρ₀) →
+    NN (k-ne , (Γ₀ , sig-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , p₀ , vp₀)) →
+    NN (k-ne , (Γ₀ , at-last (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) (λ ρ₀ → fst (vp₀ ρ₀)) (cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) , csnd p₀ , λ ρ₀ → snd (vp₀ ρ₀)))
+  ncase : (Γ₀ : Ctx) (KB₀ : Type) (gB₀ : Env Γ₀ → KB₀) (DB₀ : One1) (P₀ : PTy (Env (ext Γ₀ (bool-cl (Env Γ₀) KB₀ gB₀ DB₀)))) (x₀ : Code) (vx₀ : (ρ₀ : Env Γ₀) → Bool)
+    (t₀ : Code) (vt₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (at-last (Env Γ₀) (bool-cl (Env Γ₀) KB₀ gB₀ DB₀) (λ ρ₀ → true) P₀) ρ₀)
+    (f₀ : Code) (vf₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (at-last (Env Γ₀) (bool-cl (Env Γ₀) KB₀ gB₀ DB₀) (λ ρ₀ → false) P₀) ρ₀) →
+    NN (k-ne , (Γ₀ , bool-cl (Env Γ₀) KB₀ gB₀ DB₀ , x₀ , vx₀)) →
+    NN (k-nf , (Γ₀ , at-last (Env Γ₀) (bool-cl (Env Γ₀) KB₀ gB₀ DB₀) (λ ρ₀ → true) P₀ , t₀ , vt₀)) →
+    NN (k-nf , (Γ₀ , at-last (Env Γ₀) (bool-cl (Env Γ₀) KB₀ gB₀ DB₀) (λ ρ₀ → false) P₀ , f₀ , vf₀)) →
+    NN (k-ne , (Γ₀ , at-last (Env Γ₀) (bool-cl (Env Γ₀) KB₀ gB₀ DB₀) vx₀ P₀ , c-case t₀ f₀ x₀ ,
+                λ ρ₀ → bool-elim (λ b₀ → ElP (Env (ext Γ₀ (bool-cl (Env Γ₀) KB₀ gB₀ DB₀))) P₀ (ρ₀ , b₀)) (vt₀ ρ₀) (vf₀ ρ₀) (vx₀ ρ₀)))
+  nne : (Γ₀ : Ctx) (KB₀ : Type) (gB₀ : Env Γ₀ → KB₀) (DB₀ : One1) (x₀ : Code) (vx₀ : (ρ₀ : Env Γ₀) → Bool) →
+    NN (k-ne , (Γ₀ , bool-cl (Env Γ₀) KB₀ gB₀ DB₀ , x₀ , vx₀)) → NN (k-nf , (Γ₀ , bool-cl (Env Γ₀) KB₀ gB₀ DB₀ , x₀ , vx₀))
+  ntrue : (Γ₀ : Ctx) (KB₀ : Type) (gB₀ : Env Γ₀ → KB₀) (DB₀ : One1) → NN (k-nf , (Γ₀ , bool-cl (Env Γ₀) KB₀ gB₀ DB₀ , c-true , λ ρ₀ → true))
+  nfalse : (Γ₀ : Ctx) (KB₀ : Type) (gB₀ : Env Γ₀ → KB₀) (DB₀ : One1) → NN (k-nf , (Γ₀ , bool-cl (Env Γ₀) KB₀ gB₀ DB₀ , c-false , λ ρ₀ → false))
+  nlam : (Γ₀ : Ctx) (K₀ : Type) (a₀ b₀ : TyShape) (g₀ : Env Γ₀ → K₀) (A₀ : Clo a₀ K₀) (B₀ : Clo b₀ ((k₀ : K₀) × ElC a₀ K₀ A₀ k₀))
+    (c₀ : Code) (vb₀ : (ρ₀ : Env (ext Γ₀ (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀))) → ElP (Env (ext Γ₀ (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀))) (cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) ρ₀) →
+    NN (k-nf , (ext Γ₀ (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) , cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , c₀ , vb₀)) →
+    NN (k-nf , (Γ₀ , pi-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , clam c₀ , λ (ρ₀ : Env Γ₀) (x₀ : ElP (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) ρ₀) → vb₀ (the (Env (ext Γ₀ (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀))) (ρ₀ , x₀))))
+  npair : (Γ₀ : Ctx) (K₀ : Type) (a₀ b₀ : TyShape) (g₀ : Env Γ₀ → K₀) (A₀ : Clo a₀ K₀) (B₀ : Clo b₀ ((k₀ : K₀) × ElC a₀ K₀ A₀ k₀))
+    (c1₀ : Code) (v1₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) ρ₀)
+    (c2₀ : Code) (v2₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (at-last (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) v1₀ (cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀)) ρ₀) →
+    NN (k-nf , (Γ₀ , cl-dom (Env Γ₀) K₀ a₀ g₀ A₀ , c1₀ , v1₀)) →
+    NN (k-nf , (Γ₀ , at-last (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) v1₀ (cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) , c2₀ , v2₀)) →
+    NN (k-nf , (Γ₀ , sig-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , cpair c1₀ c2₀ , λ ρ₀ → (v1₀ ρ₀ , v2₀ ρ₀)))
 
 -- ---------------------------------------------------------------- typing derivations, typed codes
 -- Der (Γ , A , c , v): c is a code of type A in Γ with meaning v. The object theory's conversion is
 -- the language's judgmental equality of meanings, so there is no conversion rule: a β-redex's
 -- meaning is already its contractum's.
 data Der : (J : Jdg) → Type 1 where
-  dvar : (Γ : Ctx) (A : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) →
-    Var Γ A n v → Der ((Γ , A , cvar n , v))
-  dapp : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
-    (f : Code) (vf : (ρ : Env Γ) → ElP (Env Γ) (pi-ty (Env Γ) K a b g A B) ρ)
-    (c : Code) (va : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ) →
-    Der ((Γ , pi-ty (Env Γ) K a b g A B , f , vf)) → Der ((Γ , cl-dom (Env Γ) K a g A , c , va)) →
-    Der ((Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) va (cl-cod (Env Γ) K a b g A B) , capp f c , λ ρ → vf ρ (va ρ)))
-  dfst : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
-    (p : Code) (vp : (ρ : Env Γ) → ElP (Env Γ) (sig-ty (Env Γ) K a b g A B) ρ) →
-    Der ((Γ , sig-ty (Env Γ) K a b g A B , p , vp)) →
-    Der ((Γ , cl-dom (Env Γ) K a g A , cfst p , λ ρ → fst (vp ρ)))
-  dsnd : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
-    (p : Code) (vp : (ρ : Env Γ) → ElP (Env Γ) (sig-ty (Env Γ) K a b g A B) ρ) →
-    Der ((Γ , sig-ty (Env Γ) K a b g A B , p , vp)) →
-    Der ((Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) (λ ρ → fst (vp ρ)) (cl-cod (Env Γ) K a b g A B) , csnd p , λ ρ → snd (vp ρ)))
-  dcase : (Γ : Ctx) (KB : Type) (gB : Env Γ → KB) (DB : One1) (P : PTy (Env (ext Γ (bool-cl (Env Γ) KB gB DB)))) (x : Code) (vx : (ρ : Env Γ) → Bool)
-    (t : Code) (vt : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → true) P) ρ)
-    (f : Code) (vf : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → false) P) ρ) →
-    Der ((Γ , bool-cl (Env Γ) KB gB DB , x , vx)) →
-    Der ((Γ , at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → true) P , t , vt)) →
-    Der ((Γ , at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → false) P , f , vf)) →
-    Der ((Γ , at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) vx P , c-case t f x ,
-                λ ρ → bool-elim (λ b → ElP (Env (ext Γ (bool-cl (Env Γ) KB gB DB))) P (ρ , b)) (vt ρ) (vf ρ) (vx ρ)))
-  dtrue : (Γ : Ctx) (KB : Type) (gB : Env Γ → KB) (DB : One1) → Der ((Γ , bool-cl (Env Γ) KB gB DB , c-true , λ ρ → true))
-  dfalse : (Γ : Ctx) (KB : Type) (gB : Env Γ → KB) (DB : One1) → Der ((Γ , bool-cl (Env Γ) KB gB DB , c-false , λ ρ → false))
-  dlam : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
-    (c : Code) (vb : (ρ : Env (ext Γ (cl-dom (Env Γ) K a g A))) → ElP (Env (ext Γ (cl-dom (Env Γ) K a g A))) (cl-cod (Env Γ) K a b g A B) ρ) →
-    Der ((ext Γ (cl-dom (Env Γ) K a g A) , cl-cod (Env Γ) K a b g A B , c , vb)) →
-    Der ((Γ , pi-ty (Env Γ) K a b g A B , clam c , λ (ρ : Env Γ) (x : ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ) → vb (the (Env (ext Γ (cl-dom (Env Γ) K a g A))) (ρ , x))))
-  dpair : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
-    (c1 : Code) (v1 : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ)
-    (c2 : Code) (v2 : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B)) ρ) →
-    Der ((Γ , cl-dom (Env Γ) K a g A , c1 , v1)) →
-    Der ((Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B) , c2 , v2)) →
-    Der ((Γ , sig-ty (Env Γ) K a b g A B , cpair c1 c2 , λ ρ → (v1 ρ , v2 ρ)))
+  dvar : (Γ₀ : Ctx) (A₀ : PTy (Env Γ₀)) (n₀ : Word) (v₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) A₀ ρ₀) →
+    Var Γ₀ A₀ n₀ v₀ → Der ((Γ₀ , A₀ , cvar n₀ , v₀))
+  dapp : (Γ₀ : Ctx) (K₀ : Type) (a₀ b₀ : TyShape) (g₀ : Env Γ₀ → K₀) (A₀ : Clo a₀ K₀) (B₀ : Clo b₀ ((k₀ : K₀) × ElC a₀ K₀ A₀ k₀))
+    (f₀ : Code) (vf₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (pi-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) ρ₀)
+    (c₀ : Code) (va₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) ρ₀) →
+    Der ((Γ₀ , pi-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , f₀ , vf₀)) → Der ((Γ₀ , cl-dom (Env Γ₀) K₀ a₀ g₀ A₀ , c₀ , va₀)) →
+    Der ((Γ₀ , at-last (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) va₀ (cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) , capp f₀ c₀ , λ ρ₀ → vf₀ ρ₀ (va₀ ρ₀)))
+  dfst : (Γ₀ : Ctx) (K₀ : Type) (a₀ b₀ : TyShape) (g₀ : Env Γ₀ → K₀) (A₀ : Clo a₀ K₀) (B₀ : Clo b₀ ((k₀ : K₀) × ElC a₀ K₀ A₀ k₀))
+    (p₀ : Code) (vp₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (sig-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) ρ₀) →
+    Der ((Γ₀ , sig-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , p₀ , vp₀)) →
+    Der ((Γ₀ , cl-dom (Env Γ₀) K₀ a₀ g₀ A₀ , cfst p₀ , λ ρ₀ → fst (vp₀ ρ₀)))
+  dsnd : (Γ₀ : Ctx) (K₀ : Type) (a₀ b₀ : TyShape) (g₀ : Env Γ₀ → K₀) (A₀ : Clo a₀ K₀) (B₀ : Clo b₀ ((k₀ : K₀) × ElC a₀ K₀ A₀ k₀))
+    (p₀ : Code) (vp₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (sig-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) ρ₀) →
+    Der ((Γ₀ , sig-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , p₀ , vp₀)) →
+    Der ((Γ₀ , at-last (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) (λ ρ₀ → fst (vp₀ ρ₀)) (cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) , csnd p₀ , λ ρ₀ → snd (vp₀ ρ₀)))
+  dcase : (Γ₀ : Ctx) (KB₀ : Type) (gB₀ : Env Γ₀ → KB₀) (DB₀ : One1) (P₀ : PTy (Env (ext Γ₀ (bool-cl (Env Γ₀) KB₀ gB₀ DB₀)))) (x₀ : Code) (vx₀ : (ρ₀ : Env Γ₀) → Bool)
+    (t₀ : Code) (vt₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (at-last (Env Γ₀) (bool-cl (Env Γ₀) KB₀ gB₀ DB₀) (λ ρ₀ → true) P₀) ρ₀)
+    (f₀ : Code) (vf₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (at-last (Env Γ₀) (bool-cl (Env Γ₀) KB₀ gB₀ DB₀) (λ ρ₀ → false) P₀) ρ₀) →
+    Der ((Γ₀ , bool-cl (Env Γ₀) KB₀ gB₀ DB₀ , x₀ , vx₀)) →
+    Der ((Γ₀ , at-last (Env Γ₀) (bool-cl (Env Γ₀) KB₀ gB₀ DB₀) (λ ρ₀ → true) P₀ , t₀ , vt₀)) →
+    Der ((Γ₀ , at-last (Env Γ₀) (bool-cl (Env Γ₀) KB₀ gB₀ DB₀) (λ ρ₀ → false) P₀ , f₀ , vf₀)) →
+    Der ((Γ₀ , at-last (Env Γ₀) (bool-cl (Env Γ₀) KB₀ gB₀ DB₀) vx₀ P₀ , c-case t₀ f₀ x₀ ,
+                λ ρ₀ → bool-elim (λ b₀ → ElP (Env (ext Γ₀ (bool-cl (Env Γ₀) KB₀ gB₀ DB₀))) P₀ (ρ₀ , b₀)) (vt₀ ρ₀) (vf₀ ρ₀) (vx₀ ρ₀)))
+  dtrue : (Γ₀ : Ctx) (KB₀ : Type) (gB₀ : Env Γ₀ → KB₀) (DB₀ : One1) → Der ((Γ₀ , bool-cl (Env Γ₀) KB₀ gB₀ DB₀ , c-true , λ ρ₀ → true))
+  dfalse : (Γ₀ : Ctx) (KB₀ : Type) (gB₀ : Env Γ₀ → KB₀) (DB₀ : One1) → Der ((Γ₀ , bool-cl (Env Γ₀) KB₀ gB₀ DB₀ , c-false , λ ρ₀ → false))
+  dlam : (Γ₀ : Ctx) (K₀ : Type) (a₀ b₀ : TyShape) (g₀ : Env Γ₀ → K₀) (A₀ : Clo a₀ K₀) (B₀ : Clo b₀ ((k₀ : K₀) × ElC a₀ K₀ A₀ k₀))
+    (c₀ : Code) (vb₀ : (ρ₀ : Env (ext Γ₀ (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀))) → ElP (Env (ext Γ₀ (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀))) (cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) ρ₀) →
+    Der ((ext Γ₀ (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) , cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , c₀ , vb₀)) →
+    Der ((Γ₀ , pi-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , clam c₀ , λ (ρ₀ : Env Γ₀) (x₀ : ElP (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) ρ₀) → vb₀ (the (Env (ext Γ₀ (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀))) (ρ₀ , x₀))))
+  dpair : (Γ₀ : Ctx) (K₀ : Type) (a₀ b₀ : TyShape) (g₀ : Env Γ₀ → K₀) (A₀ : Clo a₀ K₀) (B₀ : Clo b₀ ((k₀ : K₀) × ElC a₀ K₀ A₀ k₀))
+    (c1₀ : Code) (v1₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) ρ₀)
+    (c2₀ : Code) (v2₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) (at-last (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) v1₀ (cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀)) ρ₀) →
+    Der ((Γ₀ , cl-dom (Env Γ₀) K₀ a₀ g₀ A₀ , c1₀ , v1₀)) →
+    Der ((Γ₀ , at-last (Env Γ₀) (cl-dom (Env Γ₀) K₀ a₀ g₀ A₀) v1₀ (cl-cod (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀) , c2₀ , v2₀)) →
+    Der ((Γ₀ , sig-ty (Env Γ₀) K₀ a₀ b₀ g₀ A₀ B₀ , cpair c1₀ c2₀ , λ ρ₀ → (v1₀ ρ₀ , v2₀ ρ₀)))
 -- typed codes (paper §6.1): Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation
 TCode : (Γ : Ctx) → PTy (Env Γ) → Type 1
 TCode Γ A = (c : Code) × (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) × Der (Γ , A , c , v)
@@ -395,3 +395,61 @@ comp-ren (s-pi a b) K D Δ δ x cx Δ' r w =
 comp-ren (s-sig a b) K D Δ δ x cx Δ' r w =
   (comp-ren a (fst (fst D)) (snd (snd (fst D))) Δ (λ ρ → fst (snd (fst D)) (δ ρ)) (λ ρ → fst (x ρ)) (fst cx) Δ' r w ,
    comp-ren b (fst (snd D)) (snd (snd (snd D))) Δ (λ ρ → fst (snd (snd D)) (δ ρ , fst (x ρ))) (λ ρ → snd (x ρ)) (snd cx) Δ' r w)
+
+-- ---------------------------------------------------------------- reify and reflect (paper §6.1)
+-- reify reads a computable value back as a normal form whose meaning is exactly the value; reflect
+-- makes a neutral computable. Both by recursion on the shape, as one function (mutual definitions
+-- by clauses are not available); each shape's clauses take the components' pair as arguments. The
+-- Π clauses are the paper's Kripke clauses: reify applies the value, at the world one variable
+-- larger, to that variable reflected; reflect applies the neutral to the reified argument, at the
+-- later world.
+Reify : TyShape → Type 1
+Reify s = (K : Type) (D : TyM s K) (Δ : Ctx) (δ : Env Δ → K) (x : (ρ : Env Δ) → snd (TyE s K) D (δ ρ)) →
+  CompS s K D Δ δ x → (c : Code) × NN (k-nf , (Δ , (s , (K , δ , D)) , c , x))
+Reflect : TyShape → Type 1
+Reflect s = (K : Type) (D : TyM s K) (Δ : Ctx) (δ : Env Δ → K) (x : (ρ : Env Δ) → snd (TyE s K) D (δ ρ)) (c : Code) →
+  NN (k-ne , (Δ , (s , (K , δ , D)) , c , x)) → CompS s K D Δ δ x
+-- (the world one larger, its variable reflected, written out: let-bound values are not unfolded
+-- in the types of what follows, so these are separate definitions)
+pi-dom : (a b : TyShape) (K : Type) (D : TyM (s-pi a b) K) (Δ : Ctx) (δ : Env Δ → K) → PTy (Env Δ)
+pi-dom a b K D Δ δ = cl-dom (Env Δ) K a δ (fst D)
+vz : (Δ : Ctx) (A : PTy (Env Δ)) → Var (ext Δ A) (wk Δ A A) #0 (λ ρ → snd ρ)
+vz Δ A = inl1 refl
+var0 : (Δ : Ctx) (A : PTy (Env Δ)) → NN (k-ne , (ext Δ A , wk Δ A A , cvar #0 , λ ρ → snd ρ))
+var0 Δ A = nvar (ext Δ A) (wk Δ A A) #0 (λ ρ → snd ρ) (vz Δ A)
+reify-pi-body : (a b : TyShape) → Reify a × Reflect a → Reify b × Reflect b →
+  (K : Type) (D : TyM (s-pi a b) K) (Δ : Ctx) (δ : Env Δ → K) (x : (ρ : Env Δ) → snd (TyE (s-pi a b) K) D (δ ρ)) →
+  CompS (s-pi a b) K D Δ δ x →
+  (c : Code) × NN (k-nf , (ext Δ (pi-dom a b K D Δ δ) , cl-cod (Env Δ) K a b δ (fst D) (snd D) , c , λ ρ → x (fst ρ) (snd ρ)))
+reify-pi-body a b ra rb K D Δ δ x f =
+  fst rb (fst (snd D)) (snd (snd (snd D))) (ext Δ (pi-dom a b K D Δ δ)) (λ ρ → fst (snd (snd D)) (δ (fst ρ) , snd ρ)) (λ ρ → x (fst ρ) (snd ρ))
+    (f (ext Δ (pi-dom a b K D Δ δ)) (λ ρ → fst ρ) (ren-wk Δ (pi-dom a b K D Δ δ)) (λ ρ → snd ρ)
+       (snd ra (fst (fst D)) (snd (snd (fst D))) (ext Δ (pi-dom a b K D Δ δ)) (λ ρ → fst (snd (fst D)) (δ (fst ρ))) (λ ρ → snd ρ) (cvar #0)
+          (var0 Δ (pi-dom a b K D Δ δ))))
+reify-pi : (a b : TyShape) → Reify a × Reflect a → Reify b × Reflect b → Reify (s-pi a b)
+reify-pi a b ra rb K D Δ δ x f =
+  (clam (fst (reify-pi-body a b ra rb K D Δ δ x f)) ,
+   nlam Δ K a b δ (fst D) (snd D) (fst (reify-pi-body a b ra rb K D Δ δ x f)) (λ ρ → x (fst ρ) (snd ρ)) (snd (reify-pi-body a b ra rb K D Δ δ x f)))
+reflect-pi : (a b : TyShape) → Reify a × Reflect a → Reify b × Reflect b → Reflect (s-pi a b)
+reflect-pi a b ra rb K D Δ δ x c n Δ' r w y cy =
+  let rn = ren-nn n Δ' r w
+      rarg = fst ra (fst (fst D)) (snd (snd (fst D))) Δ' (λ ρ → fst (snd (fst D)) (δ (r ρ))) y cy
+  in snd rb (fst (snd D)) (snd (snd (snd D))) Δ' (λ ρ → fst (snd (snd D)) (δ (r ρ) , y ρ)) (λ ρ → x (r ρ) (y ρ))
+       (capp (fst rn) (fst rarg))
+       (napp Δ' K a b (λ ρ → δ (r ρ)) (fst D) (snd D) (fst rn) (λ ρ → x (r ρ)) (fst rarg) y (snd rn) (snd rarg))
+reify-sig : (a b : TyShape) → Reify a × Reflect a → Reify b × Reflect b → Reify (s-sig a b)
+reify-sig a b ra rb K D Δ δ x cx =
+  let c1 = fst ra (fst (fst D)) (snd (snd (fst D))) Δ (λ ρ → fst (snd (fst D)) (δ ρ)) (λ ρ → fst (x ρ)) (fst cx)
+      c2 = fst rb (fst (snd D)) (snd (snd (snd D))) Δ (λ ρ → fst (snd (snd D)) (δ ρ , fst (x ρ))) (λ ρ → snd (x ρ)) (snd cx)
+  in (cpair (fst c1) (fst c2) ,
+      npair Δ K a b δ (fst D) (snd D) (fst c1) (λ ρ → fst (x ρ)) (fst c2) (λ ρ → snd (x ρ)) (snd c1) (snd c2))
+reflect-sig : (a b : TyShape) → Reify a × Reflect a → Reify b × Reflect b → Reflect (s-sig a b)
+reflect-sig a b ra rb K D Δ δ x c n =
+  (snd ra (fst (fst D)) (snd (snd (fst D))) Δ (λ ρ → fst (snd (fst D)) (δ ρ)) (λ ρ → fst (x ρ)) (cfst c)
+     (nfst Δ K a b δ (fst D) (snd D) c x n) ,
+   snd rb (fst (snd D)) (snd (snd (snd D))) Δ (λ ρ → fst (snd (snd D)) (δ ρ , fst (x ρ))) (λ ρ → snd (x ρ)) (csnd c)
+     (nsnd Δ K a b δ (fst D) (snd D) c x n))
+rr : (s : TyShape) → Reify s × Reflect s
+rr s-bool = (λ K D Δ δ x cx → cx , λ K D Δ δ x c n → (c , nne Δ K δ D c x n))
+rr (s-pi a b) = (reify-pi a b (rr a) (rr b) , reflect-pi a b (rr a) (rr b))
+rr (s-sig a b) = (reify-sig a b (rr a) (rr b) , reflect-sig a b (rr a) (rr b))
