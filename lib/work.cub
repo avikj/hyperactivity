@@ -8,8 +8,13 @@
 -- a loop was opened and which root goal it serves) and no author. Facts the code determines (what
 -- loads, what is inhabited, what was refused and why) are never tickets: they are computed (t61,
 -- t62). Until then this record is used as it is, from 2026-11-12.
+-- One graph, not two (the user, 2026-11-12): reasons for existence and goals are the same thing, not
+-- separate pieces of work. Every top-level declaration of the work, code included, is a node of the
+-- one graph: its reason is that something with a reason uses it (computed, by key) or that it is
+-- required for a node (stated); a goal or a ticket is a node like any other. Rebuilding this record
+-- is rebuilding that graph, and point 1 below is part of it, not a separate ticket.
 -- The user's direction for the rebuild (2026-11-12), every point as given:
--- 1. Reasons for existence (t66). Every top-level object in the code is used somewhere or states its
+-- 1. Reasons for existence. Every top-level object in the code is used somewhere or states its
 --    purpose for being in the codebase: "what justifies you being here". Where use is implicit (the
 --    object is used by something else) nothing is written; otherwise the reason is stated, and the
 --    "why" data is required, so nothing exists without a documented reason indicating its payoff.
@@ -97,13 +102,6 @@
 -- stops it being started; among work for one all-of goal, what speeds other work comes first; the
 -- total time is the same in any order, so the order only moves when value lands.
 data Combine = all-of | each-of
--- t66 (2026-11-12): needs-work (the user's direction). Every top-level declaration either is used
--- by another (its reason is then that use, computed) or states why it exists: the goal or ticket it
--- serves, a reference like any relation here. Nothing exists without a reason that leads to a root;
--- a declaration with neither is reported, as an open ticket serving no goal is. Wanted for a
--- bird's-eye view of what is there and why. "Used" is a computed fact (references by key, the
--- store's dependency tables); "states why" is a declaration. Design not yet fixed: the form of the
--- reason, its check, and the treatment of roots of use (examples, readings, tests, entry points).
 data Kind = wrong | maybe-wrong | needs-work | question
 data Status = opened | closed (on : Word)
 record Ticket (G : Type) = { t-kind : Kind ; t-goals : List G ; t-status : Status }
