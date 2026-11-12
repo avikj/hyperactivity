@@ -1502,3 +1502,187 @@ subM-fmap Δ Γ Z Z' h σ M =
              (λ j → carry (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z') (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ)))
                 (snd (snd σ))
                 (fmap-cmap (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ)) (snd Γ) M j)) i)))
+
+-- ---------------------------------------------------------------- P2.6e (1): renaming interval forms
+-- (2026-11-12, next definitions (1)) A renaming of forms applies a map of variables to every literal,
+-- structurally (no normalization, so that path application at the renamed form is the renamed path
+-- application, (4)). A map r of variables that preserves weq and wlt (a monotone injection) commutes
+-- with every operation of dnf-norm, so it preserves canonicity; it preserves non-constancy
+-- structurally. The renamings are those of order-preserving embeddings of skeletons (OPE, below).
+lit-r : (Word → Word) → Lit → Lit
+lit-r r l = (r (fst l) , snd l)
+conj-r : (Word → Word) → Conj → Conj
+conj-r r lnil = lnil
+conj-r r (lcons l ls) = lcons (lit-r r l) (conj-r r ls)
+dnf-r : (Word → Word) → DNF → DNF
+dnf-r r lnil = lnil
+dnf-r r (lcons c cs) = lcons (conj-r r c) (dnf-r r cs)
+-- r preserves equality and order of variables
+MonoW : (Word → Word) → Type
+MonoW r = ((a b : Word) → weq (r a) (r b) ≡ weq a b) × ((a b : Word) → wlt (r a) (r b) ≡ wlt a b)
+-- composition of paths in a type of level 0, its points explicit
+pcat0 : (A : Type) (x y z : A) → x ≡ y → y ≡ z → x ≡ z
+pcat0 A x y z p q = concat p q
+-- a map out of a conditional (by cases on the condition)
+if-map : (A B : Type) (f : A → B) (b : Bool) (x y : A) → f (if b then x else y) ≡ (if b then f x else f y)
+if-map A B f b x y = bool-elim (λ c → f (if c then x else y) ≡ (if c then f x else f y)) (λ i → f x) (λ i → f y) b
+lit-eq-r : (r : Word → Word) (h : MonoW r) (l m : Lit) → lit-eq (lit-r r l) (lit-r r m) ≡ lit-eq l m
+lit-eq-r r h l m = λ i → andB (fst h (fst l) (fst m) i) (bool-eq (snd l) (snd m))
+lit-lt-r : (r : Word → Word) (h : MonoW r) (l m : Lit) → lit-lt (lit-r r l) (lit-r r m) ≡ lit-lt l m
+lit-lt-r r h l m = λ i →
+  if snd h (fst l) (fst m) i then true else (if fst h (fst l) (fst m) i then andB (not (snd l)) (snd m) else false)
+conj-ins-r : (r : Word → Word) (h : MonoW r) (l : Lit) (c : Conj) → conj-ins (lit-r r l) (conj-r r c) ≡ conj-r r (conj-ins l c)
+conj-ins-r r h l lnil = λ i → lcons (lit-r r l) lnil
+conj-ins-r r h l (lcons m ms) =
+  pcat0 Conj
+    (conj-ins (lit-r r l) (conj-r r (lcons m ms)))
+    (if lit-eq l m then lcons (lit-r r m) (conj-r r ms)
+     else (if lit-lt l m then lcons (lit-r r l) (lcons (lit-r r m) (conj-r r ms)) else lcons (lit-r r m) (conj-r r (conj-ins l ms))))
+    (conj-r r (conj-ins l (lcons m ms)))
+    (λ i → if lit-eq-r r h l m i then lcons (lit-r r m) (conj-r r ms)
+           else (if lit-lt-r r h l m i then lcons (lit-r r l) (lcons (lit-r r m) (conj-r r ms))
+                 else lcons (lit-r r m) (conj-ins-r r h l ms i)))
+    (pcat0 Conj
+       (if lit-eq l m then lcons (lit-r r m) (conj-r r ms)
+        else (if lit-lt l m then lcons (lit-r r l) (lcons (lit-r r m) (conj-r r ms)) else lcons (lit-r r m) (conj-r r (conj-ins l ms))))
+       (if lit-eq l m then conj-r r (lcons m ms) else conj-r r (if lit-lt l m then lcons l (lcons m ms) else lcons m (conj-ins l ms)))
+       (conj-r r (conj-ins l (lcons m ms)))
+       (λ i → if lit-eq l m then lcons (lit-r r m) (conj-r r ms)
+              else sym (if-map Conj Conj (conj-r r) (lit-lt l m) (lcons l (lcons m ms)) (lcons m (conj-ins l ms))) i)
+       (sym (if-map Conj Conj (conj-r r) (lit-eq l m) (lcons m ms)
+               (if lit-lt l m then lcons l (lcons m ms) else lcons m (conj-ins l ms)))))
+conj-meet-r : (r : Word → Word) (h : MonoW r) (c d : Conj) → conj-meet (conj-r r c) (conj-r r d) ≡ conj-r r (conj-meet c d)
+conj-meet-r r h lnil d = λ i → conj-r r d
+conj-meet-r r h (lcons l ls) d = cong (conj-ins (lit-r r l)) (conj-meet-r r h ls d) ∙ conj-ins-r r h l (conj-meet ls d)
+conj-has-r : (r : Word → Word) (h : MonoW r) (l : Lit) (c : Conj) → conj-has (lit-r r l) (conj-r r c) ≡ conj-has l c
+conj-has-r r h l lnil = λ i → false
+conj-has-r r h l (lcons m ms) = λ i → if lit-eq-r r h l m i then true else conj-has-r r h l ms i
+conj-sub-r : (r : Word → Word) (h : MonoW r) (c d : Conj) → conj-sub (conj-r r c) (conj-r r d) ≡ conj-sub c d
+conj-sub-r r h lnil d = λ i → true
+conj-sub-r r h (lcons l ls) d = λ i → andB (conj-has-r r h l d i) (conj-sub-r r h ls d i)
+conj-eq-r : (r : Word → Word) (h : MonoW r) (c d : Conj) → conj-eq (conj-r r c) (conj-r r d) ≡ conj-eq c d
+conj-eq-r r h lnil lnil = λ i → true
+conj-eq-r r h lnil (lcons m ms) = λ i → false
+conj-eq-r r h (lcons l ls) lnil = λ i → false
+conj-eq-r r h (lcons l ls) (lcons m ms) = λ i → andB (lit-eq-r r h l m i) (conj-eq-r r h ls ms i)
+conj-lt-r : (r : Word → Word) (h : MonoW r) (c d : Conj) → conj-lt (conj-r r c) (conj-r r d) ≡ conj-lt c d
+conj-lt-r r h lnil lnil = λ i → false
+conj-lt-r r h lnil (lcons m ms) = λ i → true
+conj-lt-r r h (lcons l ls) lnil = λ i → false
+conj-lt-r r h (lcons l ls) (lcons m ms) = λ i →
+  if lit-lt-r r h l m i then true else (if lit-eq-r r h l m i then conj-lt-r r h ls ms i else false)
+dnf-any-sub-r : (r : Word → Word) (h : MonoW r) (c : Conj) (f : DNF) → dnf-any-sub (conj-r r c) (dnf-r r f) ≡ dnf-any-sub c f
+dnf-any-sub-r r h c lnil = λ i → false
+dnf-any-sub-r r h c (lcons d ds) = λ i → if conj-sub-r r h d c i then true else dnf-any-sub-r r h c ds i
+dnf-drop-sup-r : (r : Word → Word) (h : MonoW r) (c : Conj) (f : DNF) → dnf-drop-sup (conj-r r c) (dnf-r r f) ≡ dnf-r r (dnf-drop-sup c f)
+dnf-drop-sup-r r h c lnil = λ i → lnil
+dnf-drop-sup-r r h c (lcons d ds) =
+  (λ i → if conj-sub-r r h c d i then dnf-drop-sup-r r h c ds i else lcons (conj-r r d) (dnf-drop-sup-r r h c ds i)) ∙
+  sym (if-map DNF DNF (dnf-r r) (conj-sub c d) (dnf-drop-sup c ds) (lcons d (dnf-drop-sup c ds)))
+dnf-insert-r : (r : Word → Word) (h : MonoW r) (c : Conj) (f : DNF) → dnf-insert (conj-r r c) (dnf-r r f) ≡ dnf-r r (dnf-insert c f)
+dnf-insert-r r h c lnil = λ i → lcons (conj-r r c) lnil
+dnf-insert-r r h c (lcons d ds) =
+  (λ i → if conj-lt-r r h c d i then lcons (conj-r r c) (lcons (conj-r r d) (dnf-r r ds)) else lcons (conj-r r d) (dnf-insert-r r h c ds i)) ∙
+  sym (if-map DNF DNF (dnf-r r) (conj-lt c d) (lcons c (lcons d ds)) (lcons d (dnf-insert c ds)))
+dnf-add-r : (r : Word → Word) (h : MonoW r) (c : Conj) (f : DNF) → dnf-add (conj-r r c) (dnf-r r f) ≡ dnf-r r (dnf-add c f)
+dnf-add-r r h c f =
+  (λ i → if dnf-any-sub-r r h c f i then dnf-r r f
+         else (cong (dnf-insert (conj-r r c)) (dnf-drop-sup-r r h c f) ∙ dnf-insert-r r h c (dnf-drop-sup c f)) i) ∙
+  sym (if-map DNF DNF (dnf-r r) (dnf-any-sub c f) f (dnf-insert c (dnf-drop-sup c f)))
+dnf-norm-r : (r : Word → Word) (h : MonoW r) (f : DNF) → dnf-norm (dnf-r r f) ≡ dnf-r r (dnf-norm f)
+dnf-norm-r r h lnil = λ i → lnil
+dnf-norm-r r h (lcons c cs) =
+  (λ i → dnf-add (conj-meet-r r h c lnil i) (dnf-norm-r r h cs i)) ∙ dnf-add-r r h (conj-meet c lnil) (dnf-norm cs)
+dnf-eq-r : (r : Word → Word) (h : MonoW r) (f g : DNF) → dnf-eq (dnf-r r f) (dnf-r r g) ≡ dnf-eq f g
+dnf-eq-r r h lnil lnil = λ i → true
+dnf-eq-r r h lnil (lcons d ds) = λ i → false
+dnf-eq-r r h (lcons c cs) lnil = λ i → false
+dnf-eq-r r h (lcons c cs) (lcons d ds) = λ i → andB (conj-eq-r r h c d i) (dnf-eq-r r h cs ds i)
+dnf-canon-r : (r : Word → Word) (h : MonoW r) (f : DNF) → dnf-canon (dnf-r r f) ≡ dnf-canon f
+dnf-canon-r r h f = (λ i → dnf-eq (dnf-norm-r r h f i) (dnf-r r f)) ∙ dnf-eq-r r h (dnf-norm f) f
+dnf-nonconst-r : (r : Word → Word) (f : DNF) → dnf-nonconst (dnf-r r f) ≡ dnf-nonconst f
+dnf-nonconst-r r lnil = λ i → false
+dnf-nonconst-r r (lcons lnil cs) = λ i → false
+dnf-nonconst-r r (lcons (lcons l ls) cs) = λ i → true
+-- equality and order of words at successors and zero (from their definitions by induction, std)
+weq-ss : (a b : Word) → weq (%wsucc a) (%wsucc b) ≡ weq a b
+weq-ss a b = pcat0 Bool (weq (%wsucc a) (%wsucc b)) (eqw a b) (weq a b) (sym (eqw≡weq (%wsucc a) (%wsucc b))) (eqw≡weq a b)
+weq-0s : (b : Word) → weq #0 (%wsucc b) ≡ false
+weq-0s b = sym (eqw≡weq #0 (%wsucc b))
+weq-s0 : (a : Word) → weq (%wsucc a) #0 ≡ false
+weq-s0 a = sym (eqw≡weq (%wsucc a) #0)
+wlt-ss : (a b : Word) → wlt (%wsucc a) (%wsucc b) ≡ wlt a b
+wlt-ss a b = pcat0 Bool (wlt (%wsucc a) (%wsucc b)) (ltw a b) (wlt a b) (sym (ltw≡wlt (%wsucc a) (%wsucc b))) (ltw≡wlt a b)
+wlt-0s : (b : Word) → wlt #0 (%wsucc b) ≡ true
+wlt-0s b = sym (ltw≡wlt #0 (%wsucc b))
+wlt-s0 : (a : Word) → wlt (%wsucc a) #0 ≡ false
+wlt-s0 a = sym (ltw≡wlt (%wsucc a) #0)
+-- the successor is a monotone injection; so is a map extended by 0 ↦ 0 and n+1 ↦ r n + 1
+mono-succ : (r : Word → Word) → MonoW r → MonoW (λ k → %wsucc (r k))
+mono-succ r h =
+  ((λ a b → pcat0 Bool (weq (%wsucc (r a)) (%wsucc (r b))) (weq (r a) (r b)) (weq a b) (weq-ss (r a) (r b)) (fst h a b)) ,
+   (λ a b → pcat0 Bool (wlt (%wsucc (r a)) (%wsucc (r b))) (wlt (r a) (r b)) (wlt a b) (wlt-ss (r a) (r b)) (snd h a b)))
+mono-id : MonoW (λ k → k)
+mono-id = ((λ a b i → weq a b) , (λ a b i → wlt a b))
+w-keep : (Word → Word) → Word → Word
+w-keep r k = %welimP (λ v → Word) k #0 (λ n g → %wsucc (r n))
+-- a property of a pair of words with its four cases at zero and successor
+w-cases2 : (P : Word → Word → Type) → P #0 #0 → ((m : Word) → P #0 (%wsucc m)) → ((n : Word) → P (%wsucc n) #0) →
+  ((n m : Word) → P (%wsucc n) (%wsucc m)) → (a b : Word) → P a b
+w-cases2 P z0 zs sz ss a b =
+  %welimP (λ v → (b : Word) → P v b) a
+    (λ b → %welimP (λ v → P #0 v) b z0 (λ m g → zs m))
+    (λ n g b → %welimP (λ v → P (%wsucc n) v) b (sz n) (λ m g' → ss n m)) b
+mono-keep : (r : Word → Word) → MonoW r → MonoW (w-keep r)
+mono-keep r h =
+  (w-cases2 (λ a b → weq (w-keep r a) (w-keep r b) ≡ weq a b) (λ i → weq #0 #0)
+     (λ m → pcat0 Bool (weq #0 (%wsucc (r m))) false (weq #0 (%wsucc m)) (weq-0s (r m)) (sym (weq-0s m)))
+     (λ n → pcat0 Bool (weq (%wsucc (r n)) #0) false (weq (%wsucc n) #0) (weq-s0 (r n)) (sym (weq-s0 n)))
+     (λ n m → pcat0 Bool (weq (%wsucc (r n)) (%wsucc (r m))) (weq n m) (weq (%wsucc n) (%wsucc m))
+        (fst (mono-succ r h) n m) (sym (weq-ss n m))) ,
+   w-cases2 (λ a b → wlt (w-keep r a) (w-keep r b) ≡ wlt a b) (λ i → wlt #0 #0)
+     (λ m → pcat0 Bool (wlt #0 (%wsucc (r m))) true (wlt #0 (%wsucc m)) (wlt-0s (r m)) (sym (wlt-0s m)))
+     (λ n → pcat0 Bool (wlt (%wsucc (r n)) #0) false (wlt (%wsucc n) #0) (wlt-s0 (r n)) (sym (wlt-s0 n)))
+     (λ n m → pcat0 Bool (wlt (%wsucc (r n)) (%wsucc (r m))) (wlt n m) (wlt (%wsucc n) (%wsucc m))
+        (snd (mono-succ r h) n m) (sym (wlt-ss n m))))
+-- order-preserving embeddings of skeletons, sk into sk' (index (sk' , sk)): the variables of sk
+-- among those of sk', in order; an embedding keeps or skips each entry of sk', newest first
+-- constructor binders subscripted ₀: t46
+data OPE : (P : Lst Entry × Lst Entry) → Type where
+  wdone : OPE (lnil , lnil)
+  wskip : (e₀ : Entry) (sk'₀ sk₀ : Lst Entry) → OPE (sk'₀ , sk₀) → OPE (lcons e₀ sk'₀ , sk₀)
+  wkeep : (e₀ : Entry) (sk'₀ sk₀ : Lst Entry) → OPE (sk'₀ , sk₀) → OPE (lcons e₀ sk'₀ , lcons e₀ sk₀)
+-- its map of variable indices, a monotone injection
+ope-var : {P : Lst Entry × Lst Entry} → OPE P → Word → Word
+ope-var wdone k = k
+ope-var (wskip e sk' sk w) k = %wsucc (ope-var w k)
+ope-var (wkeep e sk' sk w) k = w-keep (ope-var w) k
+-- t53 (2026-11-12): wrong. An implicit index of a function on an indexed family, left out where the
+-- function is passed unapplied to its last argument in a signature of a definition by clauses, is
+-- refused although the family argument's type determines it. Reproducer (after CORE):
+--   data T53 : (P : Bool × Bool) → Type where
+--     t53a : T53 (true , true)
+--     t53b : (b₀ : Bool) → T53 (b₀ , b₀) → T53 (false , b₀)
+--   t53f : {P : Bool × Bool} → T53 P → Bool → Bool
+--   t53f t53a k = k
+--   t53f (t53b b w) k = not (t53f w k)
+--   Q53 : (Bool → Bool) → Type
+--   Q53 r = r true ≡ r true
+--   t53g : {P : Bool × Bool} (w : T53 P) → Q53 (t53f w)
+--   t53g t53a = λ i → true
+--   t53g (t53b b w) = λ i → not (t53f w true)
+-- is refused: "FAIL: checks t53g … at: λ x0 → x0 … reason: an implicit argument is not determined by
+-- the other arguments' types or the type expected … its type: Bool × Bool" (run 2026-11-12); the
+-- same signature with t53f w true ≡ t53f w true checks. Not yet located. Workaround: the index given,
+-- ope-var {P} w (here).
+ope-mono : {P : Lst Entry × Lst Entry} (w : OPE P) → MonoW (ope-var {P} w)
+ope-mono wdone = mono-id
+ope-mono (wskip e sk' sk w) = mono-succ (ope-var w) (ope-mono w)
+ope-mono (wkeep e sk' sk w) = mono-keep (ope-var w) (ope-mono w)
+-- renaming a form along an embedding; canonicity and non-constancy are kept
+dnf-ren : {P : Lst Entry × Lst Entry} → OPE P → DNF → DNF
+dnf-ren w f = dnf-r (ope-var w) f
+canon-ren : {P : Lst Entry × Lst Entry} (w : OPE P) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-canon (dnf-ren w f))
+canon-ren w f c = subst {lzero} {lzero} {Bool} {isTrue} (sym (dnf-canon-r (ope-var w) (ope-mono w) f)) c
+nonconst-ren : {P : Lst Entry × Lst Entry} (w : OPE P) (f : DNF) → isTrue (dnf-nonconst f) → isTrue (dnf-nonconst (dnf-ren w f))
+nonconst-ren w f c = subst {lzero} {lzero} {Bool} {isTrue} (sym (dnf-nonconst-r (ope-var w) f)) c
