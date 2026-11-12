@@ -328,6 +328,16 @@ lvl-suc l =
 lvl-max l m =
   case l of lvl c ts → (case m of lvl d us → lvl (%wmax c d) (lapp ts us); lvw → lvw); lvw → lvw
 -- Level's constructors: lzero lsuc lmax lomega
+-- t51 (2026-11-12): wrong. A level value that is neither a constructor nor a variable (a call stuck
+-- on a variable, `g n` for `g : Nat → Level` defined by cases) falls to `_ → lv0` below and is read as
+-- lzero, so Type (g n) is Type and the hierarchy collapses: with `g51 zero = lzero; g51 (suc n) =
+-- lsuc (g51 n)`, `h51 : (n : Nat) → Type (g51 n) → Type; h51 n X = X` and `k51 : Type; k51 = h51 (suc
+-- zero) Type` are accepted (Type : Type), and so is `data D51 = mk51 (n : Nat) (X : Type (g51 n))`
+-- at Type 0, while `data E51 (l : Level) = mke51 (X : Type l)` is refused ("the data type's universe
+-- level depends on a parameter", the level read as the variable it is). Run 2026-11-12. A stuck
+-- level must be an atom of the level algebra like a variable (compared by uconv, never ≤ a closed
+-- level), so that a data field or a Σ whose universe is computed from a bound variable is refused.
+-- lib/nbe.cub's levels are closed in every field because of this (its plan, 2026-11-12).
 lvl-of v =
   case %view v of
     wcon d c fs ds → 
