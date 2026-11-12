@@ -8,6 +8,20 @@ read every file in full, measure what checks, and record for each file what it i
 connects, whether it is right against the specification, and whether it stays, is redundant, or
 is wrong. Nothing is built forward until that is done.
 
+**The paper must be read in full, end to end, before anything else.** A coding agent claiming to
+contribute to this work without end-to-end fluency in the paper is guaranteed to be destructive.
+This has happened repeatedly: agents told to read it fully read one page, or the first sentence
+of each paragraph, or `head -n100` of the text (under 3% of it), then say they read it, and admit
+the skim only when asked. The paper is 69 pages, about 30,000 words (`pdftotext -layout
+docs/Hyperactive_Final_Paper.pdf` gives ~3,800 lines); reading it takes reading all of them.
+Skimming it and proceeding is the failure this project has suffered most.
+
+The proof of reading is a written account, not a claim: before any other action, write
+`tracks/PAPER-READING.md` — for every section (1–11) and both appendices, in order, what it
+defines and states, with its equation numbers and its worked examples — and commit it. An agent
+that cannot write it has not read the paper and must not touch the code. If you are reading this
+and have not done so: stop here and do it.
+
 **The specification:** `docs/Hyperactive_Final_Paper.pdf` (2026-11-11), the owner's statement of
 the mathematical object. `LANGUAGE.md` is the language's reference. Every other document from
 before today is historical (`archive/2026-11-11/`: the old plan `PLAN-rev9.md`, the track files
@@ -28,7 +42,7 @@ without re-checking (several are measured false, below).
   previous agent's reading, to be re-checked file by file, not trusted.
 
 **Next steps for whoever picks this up:**
-1. Read the paper in full.
+1. Read the paper in full and commit `tracks/PAPER-READING.md` (above). No exceptions.
 2. Continue the reading in `tracks/STATE.md`'s order, one entry per file (what it is, its
    constructs, how it connects, conflicts with the paper or the owner's rules, verdict: stays /
    redundant / wrong, what is unverified), committing each entry. Update this section's
