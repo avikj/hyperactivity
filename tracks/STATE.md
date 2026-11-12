@@ -153,6 +153,12 @@ Verified against this session's reading: track E (fully); `lib/obs.cub` contains
 
 ## Next steps (in order)
 
-1. Repair the roots above, roots first, recounting after each.
+1. Repair the roots above, roots first, recounting after each. `derive.cub` first, and what it
+   needs: it reads the checker's own data (`Tel`, `DEnt`, values through `%view`), and those are
+   declared in `check.cub` without field types (`data Tel = tx A nm r | ty nm r | tz e`,
+   check.cub:85; `data DEnt = dent tel lvl | …`, :206), whereas `code.cub`'s `Code` (also a
+   bootstrap file) has field types (`cvar (n : Word)`, …, code.cub:19). So typing `derive.cub`
+   starts with giving `check.cub`'s data their field types as `Code` has, then the signatures of
+   `derive.cub`'s 24 definitions over them.
 2. Per track, check each "Done" claim against its files; mark verified or wrong here.
 3. Then the work per track E's next step.
