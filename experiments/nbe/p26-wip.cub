@@ -17,8 +17,8 @@
 -- data, canon-ren, nonconst-ren), item (4) on cubes (ope-cube, ope-nat, diag-ren, papp-ren) and item
 -- (2) on cubes (cmap-of, cmap-skip, cmap-keep, cmap-id, cmap-ope); then (2026-11-12, latest) (2d)
 -- entire (the dependent forms over cubes: pcat-d … cmap-ope-d) and (2s) in part (sub-id, sub-wk,
--- sub-dwk, papp-nat, cmap-nat, sub-form).
--- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "494 passed, 0 failed").
+-- sub-dwk, papp-nat, cmap-nat, sub-form, carry-fill, dmap-const-cube, map-pull).
+-- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "497 passed, 0 failed").
 -- What is next: the dated next-definitions list at the end of lib/nbe.cub's head (2026-11-12,
 -- "P2.6e from p26-wip"), then the swap of this file's families into lib/nbe.cub in place of P1's.
 
@@ -2656,3 +2656,24 @@ sub-form Δ Γ σ g =
         (λ i → papp-cube (fst Δ) (CtxV (fst Γ)) g (cmap-nat (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ) i))
         (papp-deg (fst Δ) (CtxV (fst Γ)) g (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ))))
      (snd (snd σ)))
+-- (2026-11-12, next definitions (2s), toward sub-ext) the filler of carry; a map out of a constant cube
+-- over a constant cube (dmap-const-cube); a map out of a cube pulled back along a pairing is a map out
+-- over the pushed base, when the two maps agree pointwise (map-pull, q judgmental where used: refl)
+carry-fill : (n : Nat) (X : Type 1) (F : X → Type 1) (c0 c1 : Cube n X) (p : PathP (λ i → Cube n X) c0 c1) (d : DCube n X F c0) →
+  PathP (λ i → DCube n X F (p i)) d (carry n X F c0 c1 p d)
+carry-fill n X F c0 c1 p d = λ i → comp (λ j → DCube n X F (p (i ∧ j))) (λ j → [ i = 0 ↦ d ]) d
+dmap-const-cube : (n : Nat) (X : Type 1) (F : X → Type 1) (Z : Type 1) (g : (x : X) → F x → Z) (x : X) (y : F x) →
+  PathP (λ i → Cube n Z) (dcube-map n X F Z g (cube-const n X x) (dcube-const n X F x y)) (cube-const n Z (g x y))
+dmap-const-cube zero X F Z g x y = λ i → g x y
+dmap-const-cube (suc n) X F Z g x y = dmap-const-cube n (Line X) (LineO X F) (Line Z) (lineo-map X F Z g) (degen-l X x) (degen-o X F x y)
+map-pull : (n : Nat) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (Z : Type 1) (k : (x : X) → F x → Z) (k' : (x' : X') → F' x' → Z)
+  (q : PathP (λ i → (x : X) (y : Y x) → F' (f x y) → Z) (λ x y e → k x (g x y e)) (λ x y e → k' (f x y) e))
+  (c : Cube n X) (d : DCube n X Y c) (e : DCube n X' F' (dcube-map n X Y X' f c d)) →
+  PathP (λ i → Cube n Z) (dcube-map n X F Z k c (dcube-pull n X X' Y F F' f g c d e)) (dcube-map n X' F' Z k' (dcube-map n X Y X' f c d) e)
+map-pull zero X X' Y F F' f g Z k k' q c d e = λ i → q i c d e
+map-pull (suc n) X X' Y F F' f g Z k k' q c d e =
+  map-pull n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g)
+    (Line Z) (lineo-map X F Z k) (lineo-map X' F' Z k')
+    (λ i L D E → (q i (fst L) (fst D) (fst E) , q i (fst (snd L)) (fst (snd D)) (fst (snd E)) , λ j → q i (snd (snd L) j) (snd (snd D) j) (snd (snd E) j)))
+    c d e
