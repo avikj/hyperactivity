@@ -229,3 +229,50 @@ data NN : (KJ : NK × Jdg) → Type 1 where
     NN (k-nf , (Γ , cl-dom (Env Γ) K a g A , c1 , v1)) →
     NN (k-nf , (Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B) , c2 , v2)) →
     NN (k-nf , (Γ , sig-ty (Env Γ) K a b g A B , cpair c1 c2 , λ ρ → (v1 ρ , v2 ρ)))
+
+-- ---------------------------------------------------------------- typing derivations, typed codes
+-- Der (Γ , A , c , v): c is a code of type A in Γ with meaning v. The object theory's conversion is
+-- the language's judgmental equality of meanings, so there is no conversion rule: a β-redex's
+-- meaning is already its contractum's.
+data Der : (J : Jdg) → Type 1 where
+  dvar : (Γ : Ctx) (A : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) →
+    Var (Γ , A , cvar n , v) → Der ((Γ , A , cvar n , v))
+  dapp : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
+    (f : Code) (vf : (ρ : Env Γ) → ElP (Env Γ) (pi-ty (Env Γ) K a b g A B) ρ)
+    (c : Code) (va : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ) →
+    Der ((Γ , pi-ty (Env Γ) K a b g A B , f , vf)) → Der ((Γ , cl-dom (Env Γ) K a g A , c , va)) →
+    Der ((Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) va (cl-cod (Env Γ) K a b g A B) , capp f c , λ ρ → vf ρ (va ρ)))
+  dfst : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
+    (p : Code) (vp : (ρ : Env Γ) → ElP (Env Γ) (sig-ty (Env Γ) K a b g A B) ρ) →
+    Der ((Γ , sig-ty (Env Γ) K a b g A B , p , vp)) →
+    Der ((Γ , cl-dom (Env Γ) K a g A , cfst p , λ ρ → fst (vp ρ)))
+  dsnd : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
+    (p : Code) (vp : (ρ : Env Γ) → ElP (Env Γ) (sig-ty (Env Γ) K a b g A B) ρ) →
+    Der ((Γ , sig-ty (Env Γ) K a b g A B , p , vp)) →
+    Der ((Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) (λ ρ → fst (vp ρ)) (cl-cod (Env Γ) K a b g A B) , csnd p , λ ρ → snd (vp ρ)))
+  dcase : (Γ : Ctx) (P : PTy (Env (ext Γ (bool-ty (Env Γ))))) (x : Code) (vx : (ρ : Env Γ) → Bool)
+    (t : Code) (vt : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (bool-ty (Env Γ)) (λ ρ → true) P) ρ)
+    (f : Code) (vf : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (bool-ty (Env Γ)) (λ ρ → false) P) ρ) →
+    Der ((Γ , bool-ty (Env Γ) , x , vx)) →
+    Der ((Γ , at-last (Env Γ) (bool-ty (Env Γ)) (λ ρ → true) P , t , vt)) →
+    Der ((Γ , at-last (Env Γ) (bool-ty (Env Γ)) (λ ρ → false) P , f , vf)) →
+    Der ((Γ , at-last (Env Γ) (bool-ty (Env Γ)) vx P , c-case t f x ,
+                λ ρ → bool-elim (λ b → ElP (Env (ext Γ (bool-ty (Env Γ)))) P (ρ , b)) (vt ρ) (vf ρ) (vx ρ)))
+  dtrue : (Γ : Ctx) → Der ((Γ , bool-ty (Env Γ) , c-true , λ ρ → true))
+  dfalse : (Γ : Ctx) → Der ((Γ , bool-ty (Env Γ) , c-false , λ ρ → false))
+  dlam : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
+    (c : Code) (vb : (ρ : Env (ext Γ (cl-dom (Env Γ) K a g A))) → ElP (Env (ext Γ (cl-dom (Env Γ) K a g A))) (cl-cod (Env Γ) K a b g A B) ρ) →
+    Der ((ext Γ (cl-dom (Env Γ) K a g A) , cl-cod (Env Γ) K a b g A B , c , vb)) →
+    Der ((Γ , pi-ty (Env Γ) K a b g A B , clam c , λ ρ x → vb (ρ , x)))
+  dpair : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
+    (c1 : Code) (v1 : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ)
+    (c2 : Code) (v2 : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B)) ρ) →
+    Der ((Γ , cl-dom (Env Γ) K a g A , c1 , v1)) →
+    Der ((Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B) , c2 , v2)) →
+    Der ((Γ , sig-ty (Env Γ) K a b g A B , cpair c1 c2 , λ ρ → (v1 ρ , v2 ρ)))
+-- typed codes (paper §6.1): Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation
+TCode : (Γ : Ctx) → PTy (Env Γ) → Type 1
+TCode Γ A = (c : Code) × (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) × Der (Γ , A , c , v)
+-- evaluation (6.1): eval_{Γ,A} : Code(Γ, A) → Π ρ : Env(Γ). ⟦A⟧ρ
+teval : (Γ : Ctx) (A : PTy (Env Γ)) → TCode Γ A → (ρ : Env Γ) → ElP (Env Γ) A ρ
+teval Γ A t = fst (snd t)
