@@ -3045,3 +3045,30 @@ cmap-d-of sk' (lcons e-dim sk) σ X F g c =
     (dcube-of (dims sk') X F g (cmap-cube sk' (lcons e-dim sk) σ X c))
     (λ i → papp-cube-d sk' X F (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c) (cmap-d-of sk' sk (fst σ) (Line X) (LineO X F) (lineo-of X F g) c i))
     (papp-of sk' X F g (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c))
+-- (2026-11-12, next definitions (2s), toward the worlds' variables) carrying a section's restriction
+-- along a path of bases is the restriction at the end (carry-of); pulling back a section is mapping
+-- its values into the fibres (pull-of); a fibrewise map of a section is a section (fmap-of); so a
+-- substitution acts on a section by reading it at each vertex's environment map (subM-of)
+carry-of : (n : Nat) (X : Type 1) (F : X → Type 1) (g : (x : X) → F x) (c0 c1 : Cube n X) (p : PathP (λ i → Cube n X) c0 c1) →
+  PathP (λ i → DCube n X F c1) (carry n X F c0 c1 p (dcube-of n X F g c0)) (dcube-of n X F g c1)
+carry-of n X F g c0 c1 p = λ k →
+  comp (λ j → DCube n X F (p j)) (λ j → [ k = 0 ↦ carry-fill n X F c0 c1 p (dcube-of n X F g c0) j , k = 1 ↦ dcube-of n X F g (p j) ]) (dcube-of n X F g c0)
+pull-of : (n : Nat) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (gp : (x : X) (y : Y x) → F' (f x y) → F x)
+  (g : (x' : X') → F' x') (c : Cube n X) (d : DCube n X Y c) →
+  PathP (λ i → DCube n X F c) (dcube-pull n X X' Y F F' f gp c d (dcube-of n X' F' g (dcube-map n X Y X' f c d))) (dcube-fmap n X Y F (λ x y → gp x y (g (f x y))) c d)
+pull-of zero X X' Y F F' f gp g c d = λ i → gp c d (g (f c d))
+pull-of (suc n) X X' Y F F' f gp g c d =
+  pull-of n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f gp) (lineo-of X' F' g) c d
+fmap-of : (n : Nat) (X : Type 1) (F F' : X → Type 1) (g : (x : X) → F x) (h : (x : X) → F x → F' x) (c : Cube n X) →
+  PathP (λ i → DCube n X F' c) (dcube-fmap n X F F' h c (dcube-of n X F g c)) (dcube-of n X F' (λ x → h x (g x)) c)
+fmap-of zero X F F' g h c = λ i → h c (g c)
+fmap-of (suc n) X F F' g h c = fmap-of n (Line X) (LineO X F) (LineO X F') (lineo-of X F g) (lineo-fmap X F F' h) c
+subM-of : (Δ Γ : CCtx) (Z : Type 1) (σ : Sub Δ Γ) (g : (γ : CtxV (fst Γ)) → EnvV (fst Γ) γ → Z) →
+  PathM Δ Z (subM Δ Γ Z σ (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) g (snd Γ))) (dcube-fmap (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z) (λ γ' p ρ' → g (fst p) (snd p ρ')) (snd Δ) (fst (snd σ)))
+subM-of Δ Γ Z σ g =
+  pcat (Mean Δ Z) (subM Δ Γ Z σ (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) g (snd Γ))) (sub-pull Δ Γ Z (fst (snd σ)) (dcube-of (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) g (sub-base Δ Γ (fst (snd σ))))) (dcube-fmap (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z) (λ γ' p ρ' → g (fst p) (snd p ρ')) (snd Δ) (fst (snd σ)))
+    (λ i → sub-pull Δ Γ Z (fst (snd σ))
+       (pcat (DCube (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (sub-base Δ Γ (fst (snd σ)))) (sub-carried Δ Γ Z σ (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) g (snd Γ))) (carry (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ))) (snd (snd σ)) (dcube-of (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) g (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)))) (dcube-of (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) g (sub-base Δ Γ (fst (snd σ))))
+          (λ j → carry (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ))) (snd (snd σ)) (cmap-d-of (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Z) g (snd Γ) j))
+          (carry-of (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) g (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ))) (snd (snd σ))) i))
+    (pull-of (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z) (FbE (fst Γ) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) g (snd Δ) (fst (snd σ)))
