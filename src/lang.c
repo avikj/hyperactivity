@@ -559,6 +559,18 @@ static Node *ds(Node *t) {
              * a λ over its fields and dimensions returning a thunk of the body */
             bool el = IS(k, "elim");
             int first = el ? 3 : 2;
+            /* t57 (2026-11-12): wrong. An implicit argument left to the elaborator is refused with
+             * "reason: (elim P e branch...)" (this die) where its solution contains an elimination with
+             * no branches (here Empty-rec applied in the expected type, inside a path over a
+             * bool-elim1 of a pcat). Reproducer: at commit 8af9a50, in experiments/nbe/p26-wip.cub's
+             * diag-nondim-d, (lcons e-dim sk) clause, replace `Empty-rec {lsuc lzero} {PathP …}
+             * (tf-empty hq)` by `Empty-rec {lsuc lzero} (tf-empty hq)` and check with CUBICAL_NOCACHE=1:
+             * "FAIL: checks diag-nondim-d / reason: (elim P e branch...)" (run 2026-11-12); with the
+             * type given it checks. Smaller cases (Empty-rec's type a stuck Empty-rec, or a path of it
+             * applied at a dimension, through an implicit) check, so it is not yet minimised; the same
+             * message met kp-lhs written with pcat-i (implicit endpoints containing carry). Not yet
+             * located where a solution is read back without its data type's name. Workaround: the
+             * implicit given (diag-nondim-d; kp-lhs with pcat). */
             if (t->n < first + 1) die(el ? "(elim P e branch...)" : "(case e branch...)", NULL);
             int d = -1; Node *dflt = NULL; Node *dname = NULL;
             if (t->n == first + 1 && !t->it[first]->list && data_lookup(t->it[first]->s) >= 0 && DATA[data_lookup(t->it[first]->s)].co)
