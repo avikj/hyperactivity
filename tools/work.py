@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
-"""work — the record of the work on this repository (2026-11-12).
+"""work — the work's graph (2026-11-12).
 
-The record is code: lib/work.cub (what a goal and a ticket are), work/goals.cub (the goals, each
-with its statement as the comment above its `serves` clause), work/tickets.cub (one checked
-definition `tN : Ticket Goal` per ticket: kind, goals, opened or closed #YYYYMMDD). A ticket's text
-is the one comment in the repository that begins `tN (YYYY-MM-DD):`, at the place it concerns.
+The graph is code: lib/work.cub (what a node is: its parts, its value, its breakdown; after; speeds),
+work/graph.cub (this work's nodes, each defined after the nodes it is part of; a goal's statement is
+the comment above its definition). A node opened for a specific piece of work is named tN, and its
+text is the one comment in the repository that begins `tN (YYYY-MM-DD):`, at the place it concerns.
+Every node in the graph is open; closing one removes it.
 
-    python3 tools/work.py list [--all | --closed] [--goal G] [--kind K]
-    python3 tools/work.py show tN ...         the text of each ticket, with its place
-    python3 tools/work.py goals               the goals as a tree, open/closed tickets under each
-    python3 tools/work.py check               records and comments correspond; the files check
-    python3 tools/work.py next                the next free ticket number
+    python3 tools/work.py tree               the graph from its roots, open tN under each node
+    python3 tools/work.py show NODE ...      a node's statement or text, place, parts, after, before
+    python3 tools/work.py list [--under N]   the tN nodes, with the first words of their text
+    python3 tools/work.py priority [K]       the tN nodes in the order the graph's relations imply
+    python3 tools/work.py check              graph and comments correspond; the graph checks
+    python3 tools/work.py next               the next tN number never used (the history included)
 
 Run from the repository root or anywhere inside it.
 """
-import os, re, subprocess, sys
+import os, re, signal, subprocess, sys
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP_DIRS = {'.git', 'build', 'archive', '__pycache__'}
@@ -92,59 +95,54 @@ def texts():
     return out
 
 
-def records():
-    """the ticket records of work/tickets.cub: number -> (kind, goals, status)"""
-    src = open(os.path.join(ROOT, 'work', 'tickets.cub'), encoding='utf-8').read()
-    out = {}
-    for m in re.finditer(r'^t(\d+) = ticket (\S+) (.*?) (opened|\(closed #(\d+)\))\s*$', src, re.M):
-        goals = [g for g in re.findall(r'[\w-]+', m.group(3)) if g not in ('cons', 'nil')]
-        out[int(m.group(1))] = (m.group(2), goals, 'open' if m.group(4) == 'opened' else 'closed ' + m.group(5))
-    return out
+GRAPH = os.path.join(ROOT, 'work', 'graph.cub')
+NODE = re.compile(r'^([\w-]+) = (node|leaf) #(\d+) (\(.*\)|nil)(?: (all-of|each-of) (sufficient|not-known))?\s*$', re.M)
 
 
-def afters():
-    """what each ticket waits on (lib/work.cub, After): number -> [numbers]"""
-    src = open(os.path.join(ROOT, 'work', 'tickets.cub'), encoding='utf-8').read()
-    return {int(m.group(1)): [int(x) for x in re.findall(r'\bt(\d+)\b', m.group(2))]
-            for m in re.finditer(r'^t(\d+)-after = (.*)$', src, re.M)}
+def names_in(s):
+    return [x for x in re.findall(r'[\w-]+', s) if x not in ('cons', 'nil')]
 
 
-def valuation():
-    """roots, value (all-of / each-of) and speeds of the goals (lib/work.cub, Value and priority)"""
-    src = open(os.path.join(ROOT, 'work', 'goals.cub'), encoding='utf-8').read()
-    m = re.search(r'^roots = (.*)$', src, re.M)
-    roots = [g for g in re.findall(r'[\w-]+', m.group(1)) if g not in ('cons', 'nil')] if m else []
-    value = {m.group(1): m.group(2) for m in re.finditer(r'^value ([\w-]+) = (all-of|each-of)\s*$', src, re.M)}
-    speeds = {m.group(1): [g for g in re.findall(r'[\w-]+', m.group(2)) if g not in ('cons', 'nil')]
-              for m in re.finditer(r'^speeds ([\w-]+) = (.*)$', src, re.M) if m.group(1) != 'g'}
-    tsrc = open(os.path.join(ROOT, 'work', 'tickets.cub'), encoding='utf-8').read()
-    tspeeds = {int(m.group(1)): m.group(2) for m in re.finditer(r'^t(\d+)-speeds = (.*)$', tsrc, re.M)}
-    return roots, value, speeds, tspeeds
-
-
-def goals():
-    """the goals: name -> (serves, statement)"""
-    src = open(os.path.join(ROOT, 'work', 'goals.cub'), encoding='utf-8').read()
-    names = re.search(r'^data Goal = (.*)$', src, re.M).group(1).split('|')
-    names = [n.strip() for n in names]
-    out = {}
+def graph():
+    """the nodes: name -> dict(id, parts, value, breakdown, statement), in definition order"""
+    src = open(GRAPH, encoding='utf-8').read()
     lines = src.split('\n')
-    for i, line in enumerate(lines):
-        m = re.match(r'^serves ([\w-]+) = (.*)$', line)
-        if not m:
-            continue
-        serv = [g for g in re.findall(r'[\w-]+', m.group(2)) if g not in ('cons', 'nil')]
-        k = i - 1
-        stmt = []
+    out = {}
+    for m in NODE.finditer(src):
+        name = m.group(1)
+        ln = src[:m.start()].count('\n')
+        k, stmt = ln - 2, []
         while k >= 0 and lines[k].startswith('--'):
             stmt.insert(0, lines[k][2:].strip())
-            if re.match(r'^-- ' + re.escape(m.group(1)) + r' \(', lines[k]):
+            if re.match(r'^-- ' + re.escape(name) + r' \(', lines[k]):
                 break
             k -= 1
-        out[m.group(1)] = (serv, ' '.join(stmt))
-    for n in names:
-        out.setdefault(n, ([], ''))
-    return names, out
+        if not (stmt and re.match(re.escape(name) + r' \(', stmt[0])):
+            stmt = []
+        out[name] = dict(id=int(m.group(3)), parts=names_in(m.group(4)), value=m.group(5) or 'all-of',
+                         breakdown=m.group(6) or 'not-known', statement=' '.join(stmt))
+    def pairs(key):
+        m = re.search(r'^' + key + r' = (.*)$', src, re.M)
+        res = {}
+        if m:
+            for a, b in re.findall(r'\(([\w-]+) , ((?:[^()]|\([^()]*\))*)\)', m.group(1)):
+                res[a] = names_in(b)
+        return res
+    m = re.search(r'^roots = (.*)$', src, re.M)
+    roots = names_in(m.group(1)) if m else []
+    return out, roots, pairs('after'), pairs('speeds')
+
+
+def kids_of(g):
+    k = {n: [] for n in g}
+    for n, d in g.items():
+        for p in d['parts']:
+            k.setdefault(p, []).append(n)
+    return k
+
+
+def is_t(n):
+    return re.fullmatch(r't\d+', n) is not None
 
 
 def first_sentence(t, width=110):
@@ -152,130 +150,112 @@ def first_sentence(t, width=110):
     return t if len(t) <= width else t[:width - 1] + '…'
 
 
-def cmd_list(args):
-    recs, txt = records(), texts()
-    want = 'open'
-    goal = kind = None
-    it = iter(args)
-    for a in it:
-        if a == '--all': want = None
-        elif a == '--closed': want = 'closed'
-        elif a == '--goal': goal = next(it)
-        elif a == '--kind': kind = next(it)
-        else: sys.exit('unknown argument ' + a)
-    for n in sorted(recs):
-        k, gs, st = recs[n]
-        if want == 'open' and st != 'open': continue
-        if want == 'closed' and st == 'open': continue
-        if goal and goal not in gs: continue
-        if kind and kind != k: continue
-        where, text = ('(no text)', '')
-        if n in txt:
-            f, l, d, text = txt[n][0]
-            where = f'{f}:{l}'
-        print(f't{n:<4} {st:<15} {k:<11} {",".join(gs) or "-":<32} {where}')
-        print(f'      {first_sentence(text)}')
+def rel_word(g, parent):
+    return 'prerequisite to' if g.get(parent, {}).get('value') == 'all-of' else 'part of'
 
 
 def cmd_show(args):
-    recs, txt = records(), texts()
+    g, roots, after, speeds = graph()
+    txt = texts()
     for a in args:
-        n = int(a.lstrip('t'))
-        k, gs, st = recs.get(n, ('?', [], 'no record'))
-        print(f't{n}  {k}  {st}  goals: {", ".join(gs) or "-"}')
-        aft, waits = afters(), [m for m, l in afters().items() if n in l]
-        if aft.get(n): print('  after: ' + ' '.join(f't{m}' for m in aft[n]))
-        if waits: print('  before: ' + ' '.join(f't{m}' for m in sorted(waits)))
-        for f, l, d, text in txt.get(n, []):
-            print(f'  {f}:{l}  ({d})')
-            words, line = text.split(), ''
+        if a not in g and re.fullmatch(r'\d+', a): a = 't' + a
+        d = g.get(a)
+        if not d:
+            print(f'{a}: no such node\n'); continue
+        rels = ', '.join(f'{rel_word(g, p)} {p}' for p in d['parts']) or ('a root' if a in roots else '-')
+        print(f'{a}  {rels}' + (f'  [{d["value"]}, breakdown {d["breakdown"]}]' if not is_t(a) else ''))
+        if after.get(a): print('  after: ' + ' '.join(after[a]))
+        waits = [m for m, l in after.items() if a in l]
+        if waits: print('  before: ' + ' '.join(waits))
+        if speeds.get(a): print('  speeds: ' + ' '.join(speeds[a]))
+        bodies = [(f, l, dt, t) for f, l, dt, t in txt.get(int(a[1:]), [])] if is_t(a) else []
+        if not is_t(a) and d['statement']: bodies = [('work/graph.cub', 0, '', d['statement'])]
+        for f, l, dt, t in bodies:
+            print(f'  {f}' + (f':{l}  ({dt})' if l else ''))
+            words, line = t.split(), ''
             for w in words:
                 if len(line) + len(w) + 1 > 96:
                     print('    ' + line); line = w
                 else:
                     line = (line + ' ' + w).strip()
             if line: print('    ' + line)
-        if n not in txt: print('  (no text comment found)')
+        if not bodies: print('  (no text)')
         print()
 
 
-def cmd_goals(args):
-    names, gl = goals()
-    recs = records()
-    kids = {n: [] for n in names}
-    for n, (serv, _) in gl.items():
-        for s in serv:
-            kids.setdefault(s, []).append(n)
-    def counts(g):
-        o = sum(1 for r in recs.values() if g in r[1] and r[2] == 'open')
-        c = sum(1 for r in recs.values() if g in r[1] and r[2] != 'open')
-        return o, c
+def under(g, kids, n):
+    out, st = set(), [n]
+    while st:
+        x = st.pop()
+        for k in kids.get(x, []):
+            if k not in out: out.add(k); st.append(k)
+    return out
+
+
+def cmd_list(args):
+    g, _, _, _ = graph()
+    sel = set(g)
+    if '--under' in args:
+        n = args[args.index('--under') + 1]
+        sel = under(g, kids_of(g), n)
+    txt = texts()
+    for n in [x for x in g if is_t(x) and x in sel]:
+        t = txt.get(int(n[1:]), [('', 0, '', '')])[0]
+        print(f'{n:<5} {",".join(g[n]["parts"]):<28} {first_sentence(t[3], 80)}')
+
+
+def cmd_tree(args):
+    g, roots, _, _ = graph()
+    kids = kids_of(g)
     seen = set()
-    def walk(g, depth):
-        o, c = counts(g)
-        also = [s for s in gl[g][0]][1:] if depth else []
-        print('  ' * depth + f'{g}  [{o} open, {c} closed]' + (f'  (also serves {", ".join(also)})' if also else ''))
-        if g in seen: return
-        seen.add(g)
-        for k in kids.get(g, []):
-            if gl[k][0] and gl[k][0][0] == g:
-                walk(k, depth + 1)
-    for g in names:
-        if not gl[g][0]:
-            walk(g, 0)
-    un = [n for n, r in recs.items() if not r[1] and r[2] == 'open']
-    if un: print('serving no goal yet: ' + ' '.join(f't{n}' for n in sorted(un)))
+    def walk(n, depth, via):
+        d = g[n]
+        k = kids.get(n, [])
+        nt = sum(1 for x in under(g, kids, n) if is_t(x))
+        if is_t(n): return
+        also = [p for p in d['parts'] if p != via]
+        print('  ' * depth + f'{n}  [{d["value"]}, breakdown {d["breakdown"]}; {nt} open under it]'
+              + (f'  (also {", ".join(also)})' if also and depth else ''))
+        if n in seen: return
+        seen.add(n)
+        direct = [x for x in k if is_t(x)]
+        if direct: print('  ' * (depth + 1) + ' '.join(sorted(direct, key=lambda x: int(x[1:]))))
+        for c in k:
+            if not is_t(c) and g[c]['parts'] and g[c]['parts'][0] == n:
+                walk(c, depth + 1, n)
+    for r in roots: walk(r, 0, None)
 
 
 def cmd_check(args):
-    recs, txt = records(), texts()
-    names, gl = goals()
+    g, roots, after, speeds = graph()
+    txt = texts()
     bad = 0
-    for n in sorted(set(recs) | set(txt)):
-        if n not in recs:
-            print(f't{n}: a text comment with no record ({txt[n][0][0]}:{txt[n][0][1]})'); bad += 1
-        elif n not in txt and recs[n][2] == 'open':
-            print(f't{n}: an open ticket with no text comment'); bad += 1
-        elif n in txt and len(txt[n]) > 1:
+    ts = {int(n[1:]) for n in g if is_t(n)}
+    for n in sorted(ts | set(txt)):
+        if n not in ts:
+            print(f't{n}: a text comment with no node ({txt[n][0][0]}:{txt[n][0][1]})'); bad += 1
+        elif n not in txt:
+            print(f't{n}: a node with no text comment'); bad += 1
+        elif len(txt[n]) > 1:
             print(f't{n}: {len(txt[n])} text comments: ' + ', '.join(f'{f}:{l}' for f, l, _, _ in txt[n])); bad += 1
-        elif n in txt and recs[n][2] != 'open':
-            print(f't{n}: closed, but its comment is still at {txt[n][0][0]}:{txt[n][0][1]}'); bad += 1
-        if n in recs:
-            for g in recs[n][1]:
-                if g not in names:
-                    print(f't{n}: unknown goal {g}'); bad += 1
-    for n, l in afters().items():
+    for n, d in g.items():
+        if is_t(n) and d['id'] != int(n[1:]):
+            print(f'{n}: id #{d["id"]} is not its number'); bad += 1
+        if not d['parts'] and n not in roots:
+            print(f'{n}: part of nothing and not declared a root'); bad += 1
+        if d['parts'] and n in roots:
+            print(f'{n}: declared a root but part of {", ".join(d["parts"])}'); bad += 1
+        if not is_t(n) and not d['statement']:
+            print(f'{n}: no statement'); bad += 1
+    ids = [d['id'] for d in g.values()]
+    if len(ids) != len(set(ids)):
+        print('two nodes share an id'); bad += 1
+    for n, l in list(after.items()) + list(speeds.items()):
         for m in [n] + l:
-            if m not in recs:
-                print(f't{n}-after: names t{m}, which has no record'); bad += 1
-        if n in recs and recs[n][2] != 'open' and any(recs.get(m, ('', [], 'open'))[2] == 'open' for m in l):
-            print(f't{n}: closed while what it waits on is open'); bad += 1
-    roots, value, _, _ = valuation()
-    for g in names:
-        if not gl[g][0] and g not in roots:
-            print(f'goal {g}: serves nothing and is not declared a root'); bad += 1
-        if gl[g][0] and g in roots:
-            print(f'goal {g}: declared a root but serves {", ".join(gl[g][0])}'); bad += 1
-        if g not in value:
-            print(f'goal {g}: no value (all-of or each-of)'); bad += 1
-    def cyc(g, path):
-        if g in path: return path[path.index(g):] + [g]
-        for p in gl[g][0]:
-            c = cyc(p, path + [g])
-            if c: return c
-        return None
-    for g in names:
-        c = cyc(g, [])
-        if c: print('goals serve each other in a cycle: ' + ' -> '.join(c)); bad += 1; break
-    for n, r in recs.items():
-        if r[2] == 'open' and not r[1]:
-            print(f't{n}: serves no goal'); bad += 1
-    for g in names:
-        if not gl[g][1]:
-            print(f'goal {g}: no statement'); bad += 1
+            if m not in g: print(f'{n}: names {m}, which is not a node'); bad += 1
     mk = open(os.path.join(ROOT, 'Makefile')).read()
     core = re.search(r'^CORE := (.*)$', mk, re.M).group(1).split()
-    cmd = [os.path.join(ROOT, 'build', 'cubical')] + core + ['lib/work.cub', 'work/goals.cub', 'work/tickets.cub']
+    cmd = [os.path.join(ROOT, 'build', 'cubical')] + core + ['lib/work.cub', 'work/graph.cub']
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'))
     last = [l for l in r.stdout.split('\n') if l.strip()][-1:] or ['']
     fails = [l for l in r.stdout.split('\n') if l.startswith('FAIL')]
@@ -283,64 +263,60 @@ def cmd_check(args):
     for f in fails: print('  ' + f)
     if r.returncode != 0 or fails:
         print(r.stderr.strip()[:2000]); bad += 1
-    print(f'{len(recs)} tickets ({sum(1 for r in recs.values() if r[2] == "open")} open), {len(names)} goals; '
+    print(f'{sum(1 for n in g if is_t(n))} open tN nodes, {sum(1 for n in g if not is_t(n))} other nodes; '
           + ('consistent' if not bad else f'{bad} problem(s)'))
     sys.exit(1 if bad else 0)
 
 
 def cmd_priority(args):
-    """the open tickets in the order the record's value relations imply (lib/work.cub, Value and
-    priority): a ticket's cost is the number of open tickets (and goals with none yet, each counted
-    once as unspecified work) that must complete before any value lands through it, at a root, along
-    its cheapest path; an all-of goal on the path adds everything under it. Not ready (an after still
-    open) comes last; then by cost; then by how many goals its goals speed. The count is a proxy for
-    effort, which the record does not hold."""
-    recs, aft = records(), afters()
-    names, gl = goals()
-    roots, value, speeds, _ = valuation()
-    kids = {n: [] for n in names}
-    for n, (serv, _) in gl.items():
-        for g in serv: kids.setdefault(g, []).append(n)
-    tick = {g: [n for n, r in recs.items() if g in r[1] and r[2] == 'open'] for g in names}
+    """the tN nodes in the order the graph implies: a node's cost is the number of open nodes that must
+    complete before any value lands through it, at a root, along its cheapest path (an all-of node on
+    the path adds everything under it; a node with nothing under it counts as one piece of unspecified
+    work). Not ready (an after still open) last; then by cost; then by how much its nodes speed. The
+    count is a proxy for effort, which the graph does not hold."""
+    g, roots, after, speeds = graph()
+    kids = kids_of(g)
     memo = {}
-    def under(g, seen=()):
-        """every open ticket (and unspecified goal) whose completion g's completion needs"""
-        if g in memo: return memo[g]
-        if g in seen: return frozenset()
-        out = set(f't{n}' for n in tick[g])
-        for k in kids.get(g, []): out |= under(k, seen + (g,))
-        if not out and not any(r[1] and g in r[1] for r in recs.values()) and not kids.get(g): out = {f'?{g}'}
-        memo[g] = frozenset(out); return memo[g]
-    def cost(g, carried, seen=()):
-        """the cheapest set of open work for value to land at a root from g, carrying what is needed so far"""
-        if g in seen: return None
-        need = carried | (under(g) if value.get(g) == 'all-of' else frozenset())
-        if g in roots: return need
+    def needed(n):
+        if n not in memo:
+            u = under(g, kids, n)
+            memo[n] = frozenset(x for x in u if is_t(x) or not kids.get(x)) or frozenset({n})
+        return memo[n]
+    def cost(n, carried, seen=()):
+        if n in seen: return None
+        need = carried | (needed(n) if g[n]['value'] == 'all-of' else frozenset())
+        if n in roots: return need
         best = None
-        for p in gl[g][0]:
-            c = cost(p, need, seen + (g,))
+        for p in g[n]['parts']:
+            c = cost(p, need, seen + (n,))
             if c is not None and (best is None or len(c) < len(best)): best = c
         return best
     rows = []
-    for n, (k, gs, st) in recs.items():
-        if st != 'open': continue
+    for n in g:
+        if not is_t(n): continue
         best = None
-        for g in gs:
-            c = cost(g, frozenset({f't{n}'}))
+        for p in g[n]['parts']:
+            c = cost(p, frozenset({n}))
             if c is not None and (best is None or len(c) < len(best)): best = c
-        ready = all(recs.get(m, ('', [], 'open'))[2] != 'open' for m in aft.get(n, []))
-        sp = sum(len(speeds.get(g, [])) for g in gs)
-        rows.append((not ready, len(best) if best else 10**6, -sp, n, gs))
+        ready = all(m not in g for m in after.get(n, []))
+        sp = sum(len(speeds.get(p, [])) for p in g[n]['parts'])
+        rows.append((not ready, len(best) if best else 10**6, -sp, int(n[1:]), n))
     rows.sort()
     txt = texts()
-    for blocked, c, sp, n, gs in rows[: int(args[0]) if args else len(rows)]:
-        first = txt[n][0][3] if n in txt else ''
-        print(f't{n:<3} cost {c:<4}' + (' speeds' if sp else '       ') + (' after-open' if blocked else '           ')
-              + f' {",".join(gs):<28} {first_sentence(first, 70)}')
+    for blocked, c, sp, _, n in rows[: int(args[0]) if args else len(rows)]:
+        first = txt.get(int(n[1:]), [('', 0, '', '')])[0][3]
+        print(f'{n:<4} cost {c:<4}' + (' speeds' if sp else '       ') + (' after-open' if blocked else '           ')
+              + f' {",".join(g[n]["parts"]):<28} {first_sentence(first, 70)}')
 
 
 def cmd_next(args):
-    used = set(records()) | set(texts())
+    used = {int(n[1:]) for n in graph()[0] if is_t(n)} | set(texts())
+    try:
+        log = subprocess.run(['git', 'log', '-p', '--all', '--', 'work', 'lib/work.cub'], cwd=ROOT,
+                             capture_output=True, text=True).stdout
+        used |= {int(x) for x in re.findall(r'\bt(\d+)\b', log)}
+    except OSError:
+        pass
     print(f't{max(used, default=0) + 1}')
 
 
@@ -348,8 +324,8 @@ def main():
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
         print(__doc__); return
     c, a = sys.argv[1], sys.argv[2:]
-    {'list': cmd_list, 'show': cmd_show, 'goals': cmd_goals, 'check': cmd_check, 'next': cmd_next, 'priority': cmd_priority}.get(
-        c, lambda _: sys.exit('unknown command ' + c))(a)
+    {'list': cmd_list, 'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'next': cmd_next,
+     'priority': cmd_priority}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
 
 
 if __name__ == '__main__':

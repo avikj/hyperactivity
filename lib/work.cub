@@ -1,13 +1,12 @@
--- lib/work.cub — the record of the work on a repository, as data of the language (2026-11-12).
--- Loaded after lib/prelude.cub (List). Nothing here is specific to this repository: the goals of a
--- particular piece of work are a data type that work declares (this repository's: work/goals.cub).
+-- lib/work.cub — the work's graph, as data of the language (2026-11-12). Loaded after lib/prelude.cub
+-- (List). Nothing here is specific to this repository: a particular work declares its nodes as a data
+-- type and the relations below over it (this repository's: work/graph.cub).
 --
--- t64 (2026-11-12): needs-work (goal work-object). This record is to be rebuilt on the work object
--- (work/goals.cub, work-object): tickets and goals are open loops, opened and closed by anyone, with
--- no kind enum (the user judged wrong / maybe-wrong / needs-work / question weak: what matters is why
--- a loop was opened and which root goal it serves) and no author. Facts the code determines (what
--- loads, what is inhabited, what was refused and why) are never tickets: they are computed (t61,
--- t62). Until then this record is used as it is, from 2026-11-12.
+-- t64 (2026-11-12): needs-work (part of work-object). The work as one graph of nodes. Done
+-- 2026-11-12: goals and tickets are one kind of node (work/graph.cub; no kind enum, no ticket
+-- record, closed nodes leave the state). Not yet done: every top-level declaration of the code as a
+-- node of the same graph (its reason a use, computed by key, or a stated part-of); the friction that
+-- makes attaching near the top cost what it costs (point 10); breakdown claims checked (point 11).
 -- One graph, not two (the user, 2026-11-12): reasons for existence and goals are the same thing, not
 -- separate pieces of work. Every top-level declaration of the work, code included, is a node of the
 -- one graph: its reason is that something with a reason uses it (computed, by key) or that it is
@@ -71,41 +70,31 @@
 -- to core-correct (efficiency of the knowledge system, not correctness of the core) and no longer
 -- are.
 --
--- A goal is a constructor of that data type, and the work's `serves : G → List G` lists the goals
--- each is instrumental to (a goal may serve several). A ticket is a checked definition
--- `tN : Ticket G`: its kind, the goals it serves, and whether it is open (`opened`; `open` is a
--- reserved word) or closed on a date (YYYYMMDD as a word). The ticket's text is not in the record. It is the one comment that begins
--- `tN (YYYY-MM-DD):`, written where in the code the ticket's subject is (any file, any comment
--- syntax), so a reader of that place sees it without knowing the ticket exists. tools/work.py lists,
--- shows and checks tickets: every record has exactly one such comment and every such comment a
--- record. Opening, closing and editing a ticket are changes to the code; the repository's history is
--- the succession of these states.
 --
--- Kinds: wrong (definitely incorrect, and why), maybe-wrong (possibly incorrect, and why), needs-work
--- (a specific piece of work or review is owed here), question (something not yet known).
--- After (2026-11-12): `tN-after : List (Ticket G)` names the tickets that must be closed before tN
--- can be: closing them closes tN or is what tN waits on. A reference by definition, as any relation
--- here is; written after every record it names. A ticket with no such definition waits on nothing.
--- Value and priority (2026-11-12). Priority is not stored: it is computed from what the record states
--- about how value depends on work (tools/work.py next, until it is a term, t37). The work states:
---   serves g        what g is for. A goal that serves nothing is a root, and is declared one (roots);
---                   a goal serving nothing that is not declared a root is an error, as is a ticket
---                   serving no goal. Roots render at one level, as the top priorities.
---   value g         how g's value depends on what serves it: all-of (nothing until every part is
---                   complete: a companion repository with half a core is not one) or each-of (every
---                   completed part delivers on its own).
---   tN-after        what must be complete before tN can be done (below).
---   speeds g        the goals whose work g makes faster when g's parts land (the knowledge system
---                   speeds all work), and tN-speeds likewise for a ticket.
--- From these: a piece of work's value lands when it and everything its value is gated on are
--- complete. Work whose value is gated on incomplete work comes after that work even when nothing
--- stops it being started; among work for one all-of goal, what speeds other work comes first; the
--- total time is the same in any order, so the order only moves when value lands.
+-- A node is `node id parts value breakdown`; `leaf id parts` is a node with no parts of its own. The
+-- id word is its identity (two nodes with the same parts are still two nodes) until text can be
+-- written as a term (t63) and a node's name can be its identity. The relations, and nothing else:
+--   part-of n    the nodes n is a part of. Where the whole is all-of, n is a prerequisite to it; where
+--                it is each-of, n is a part that delivers on its own. A node that is part of nothing
+--                is a root and is declared one (roots); a node part of nothing and not declared, and a
+--                cycle, are errors (tools/work.py check).
+--   value n      how n's value depends on its parts: all-of (nothing until every part is complete: a
+--                companion repository with half a core is not one) or each-of (each completed part
+--                delivers).
+--   breakdown n  whether n's parts are claimed to suffice for it: sufficient, or not-known. Claiming
+--                sufficient where it is not is the one invalid state; not-known is always valid.
+--   after        pairs (n , ms): what must be complete before n can be done.
+--   speeds       pairs (n , ms): the nodes whose work n makes faster when it lands.
+-- A node's text is its comment: a goal's above its part-of clause, a node opened for a specific piece
+-- of work (tN) at the place in the code it concerns, as `tN (YYYY-MM-DD):`. Every node in the state is
+-- open; closing one removes it, and the history keeps it.
+-- Priority is not stored: it is computed from these (tools/work.py priority, until it is a term,
+-- t37). A piece of work's value lands when it and everything its value is gated on are complete.
+-- Work whose value is gated on incomplete work comes after that work even when nothing stops it being
+-- started; among the parts of one all-of node, what speeds other work comes first; the total time is
+-- the same in any order, so the order only moves when value lands.
 data Combine = all-of | each-of
-data Kind = wrong | maybe-wrong | needs-work | question
-data Status = opened | closed (on : Word)
-record Ticket (G : Type) = { t-kind : Kind ; t-goals : List G ; t-status : Status }
-ticket : {G : Type} → Kind → List G → Status → Ticket G
-ticket {G} k gs s = Ticket { t-kind = k ; t-goals = gs ; t-status = s }
-is-open : {G : Type} → Ticket G → Bool
-is-open {G} t = case t-status {G} t of opened → true; closed d → false
+data Breakdown = sufficient | not-known
+data Node = node (id : Word) (part-of : List Node) (value : Combine) (breakdown : Breakdown)
+leaf : Word → List Node → Node
+leaf i ps = node i ps all-of not-known

@@ -7,7 +7,7 @@ section-by-section account of it, with what exists here of each construction). I
 
 ## What is happening now
 
-**The work object (2026-11-12, goal `work-object` in `work/goals.cub`, whose comment is the whole
+**The work object (2026-11-12, node `work-object` in `work/graph.cub`, whose comment is the whole
 construction).** The work is one sequence of declarations used continuously by agents and people:
 everything said is a declaration; open loops are closed (removed from the state, anything that
 matters folded in) by anyone once completely unnecessary; facts are evaluations, remembered under
@@ -57,19 +57,21 @@ postulates; normal forms redex-free; a fresh uncached check). Findings from it: 
 
 ## The work, as code
 
-- `lib/work.cub` — what a ticket and a goal are (general).
-- `work/goals.cub` — the goals; each goal's statement is the comment above its `serves` clause.
-- `work/tickets.cub` — one checked record per ticket: its kind (`wrong`, `maybe-wrong`,
-  `needs-work`, `question`), the goals it serves, `opened` or `(closed #YYYYMMDD)`.
-- A ticket's text is the one comment `tN (YYYY-MM-DD): ...` at the place in the code it concerns,
-  so a reader of that place sees it without knowing the ticket exists.
+- `lib/work.cub` — what a node is: the nodes it is part of, whether its value is all of its parts
+  or each of them, and whether its breakdown is claimed sufficient or not known; `after`, `speeds`.
+  Priority is computed from these, never stored.
+- `work/graph.cub` — this work's nodes, each defined after the nodes it is part of; the roots are
+  declared (`roots`). A node's statement is the comment above its definition. Every node there is
+  open: closing one removes it.
+- A node opened for a specific piece of work is named `tN`; its text is the one comment
+  `tN (YYYY-MM-DD): ...` at the place in the code it concerns, so a reader of that place sees it.
 
 ```
-python3 tools/work.py list            # open tickets: kind, goals, place, first line
-python3 tools/work.py show t6 t7      # full text and place
-python3 tools/work.py goals           # the goals as a tree, with ticket counts
-python3 tools/work.py check           # records and comments correspond; the work files check
-python3 tools/work.py next            # the next free ticket number
+python3 tools/work.py tree            # the graph from its roots, open tN under each node
+python3 tools/work.py show t6 core    # a node's text or statement, place, parts, after, before
+python3 tools/work.py priority 10     # the tN nodes in the order the relations imply
+python3 tools/work.py check           # graph and comments correspond; the graph checks
+python3 tools/work.py next            # the next tN number never used
 ```
 
 The rule: whenever anything in the code is seen to be wrong, possibly wrong, owed work, or not

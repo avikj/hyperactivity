@@ -1,0 +1,380 @@
+-- work/graph.cub — the work's graph (2026-11-12): every node of the work, one kind of node (lib/work.cub).
+-- A node's definition gives its identity, the nodes it is part of, how its value depends on its parts,
+-- and whether its parts are claimed to suffice; nodes are defined after the nodes they are part of.
+-- A goal's statement is the comment `name (date):` above its definition. A node opened for a specific
+-- piece of work (named tN) has its text as the one comment `tN (date):` at the place in the code it
+-- concerns (`python3 tools/work.py show tN`), or here below when it has no single place. Every node
+-- here is open: closing one removes it (and its text) and folds what matters into where it belongs;
+-- the history keeps it. Loaded after lib/work.cub.
+--
+-- t33 (2026-11-12): question. Not yet done: reading the evaluator's rule bodies (src/net.c's
+-- interaction cases, src/dnf.c's face algebra) side by side with the published rules, CCHM (Cohen,
+-- Coquand, Huber, Mörtberg, TYPES 2015, LIPIcs 69) and the clocked extension (Kristensen,
+-- Møgelberg, Vezzosi, arXiv:2102.01969), each rule recorded as matching or deviating at its site.
+-- The two papers are not in the repository; fetch them. Until this is done, conformance of the
+-- implementation to the calculus is not known.
+--
+-- t34 (2026-11-12): question. Not yet done: reading src/lang.c's translation of terms into the
+-- evaluator's graph for anything that can change a term's meaning (the strictness analysis that
+-- decides which operands are built eagerly, fully lazy lifting, sweeping of compiled code, the
+-- module cache, whose key is the build date and the files' texts and whose hits are trusted).
+--
+-- t35 (2026-11-12): question. Not yet done: reading lib/check.cub's typing clauses against the
+-- calculus's typing rules, each recorded as matching or deviating at its site.
+--
+-- t37 (2026-11-12): needs-work. tools/work.py reads tickets from the code's text (records here,
+-- comments at the sites). Queries written in the language over the checked records (tickets by goal,
+-- the goals a goal transitively serves, what is open under a goal) are to follow, with the command
+-- evaluating them through the machine.
+--
+-- t52 (2026-11-12): wrong. A PathP over a path λ in a data constructor's field is refused, while
+-- the same type is accepted in a definition's signature. Reproducer (after CORE):
+--   data T52b = t52d (x : Bool) (p : PathP (λ i → Bool) x true)
+-- is refused: "FAIL: checks data T52b … at: λ %q0 → Bool … reason: no inferable type here: annotate
+-- it with (the T t)" (run 2026-11-12; the same with an indexed family's constructor). Not yet located
+-- in the checking of constructor telescopes. Workaround: the PathP named by a definition (PathM in
+-- experiments/nbe/p26-wip.cub, used by npapp and dpapp).
+--
+-- unified-computing (2026-11-12, the root, in the user's words where they gave them). Unified
+-- computing: one program. One formal language and its reference implementation in which all
+-- computation, and all information about it, is one mathematical object: none of the existing
+-- languages should have had to exist, and the work is the language and system that replaces them. A
+-- cubical type theory whose normalization procedure and type check are terms of the language;
+-- expressing fully general computation (anything C++ can express, as a practical reference point);
+-- interpreting any other language or computational system, its syntax, semantics and executions
+-- being mathematical objects; projecting first-order terms (any term with no higher path data or free
+-- interval data) to machine code. Language, hardware and operating-system semantics as exact types; a
+-- lifted program has its exact meaning in its language, semantics are quotiented by what one chooses
+-- to observe, and programs in different languages are equal up to that quotient, both projections of
+-- one program. The type system proves whatever is wanted of a running system, with the
+-- implementation itself type-checkable. Correctness is carried by constructions, written with their
+-- reasons, never a separate model or proof activity. And the information environment is the same
+-- object: the codebase, its succession of states, the work's knowledge and everyone's use of it are
+-- one thing (work-object), the Hyperactive vision of synthetic synesthesia, with programming
+-- languages as the basis for putting all information into the right form. The tool is used to build
+-- the tool and everything built with it.
+unified-computing : Node
+unified-computing = node #1009 nil each-of not-known
+-- publish (2026-11-12): the paper (docs/Hyperactive_Final_Paper.pdf) is published with its companion
+-- repository, whose language core is complete: the formal language implemented exactly, the
+-- language's own procedures carrying their correctness in their types, partial evaluation with the
+-- Futamura projections, and realization as native code through C. Everything currently pursued
+-- serves this.
+publish : Node
+publish = node #1000 (cons unified-computing nil) all-of not-known
+-- self-aware (2026-11-12): an agent arriving with no context lands in a repository that states its
+-- own reality: what it is, what is checked, what is assumed and where, what is wrong or not yet
+-- known (open tickets, at the places concerned), and what is being done now (README.md, top).
+-- Reached when every file has been read against the paper and the published calculus, every finding
+-- is a ticket at its site, and the entry document says only what is true.
+self-aware : Node
+self-aware = node #1001 (cons publish nil) each-of not-known
+-- tooling (2026-11-12): the work's record is data of the language: goals and tickets checked
+-- definitions (lib/work.cub), each ticket's text at its site, tools/work.py to list, show and check
+-- them; queries written in the language itself follow. It serves the self-aware repository and is
+-- itself a demonstration of the language as an information environment.
+tooling : Node
+tooling = node #1002 (cons self-aware (cons publish nil)) each-of not-known
+-- languages (2026-11-12): lifting other languages: a language's entire syntax and semantics in the
+-- language, to the point of interpreting and compiling it, implementation details exact; built on
+-- prior work (existing compilers implement the semantics), not a semantics from scratch. Deployment
+-- of the core, to show its power and gain from what is lifted; after the core (publish).
+languages : Node
+languages = node #1011 (cons unified-computing nil) each-of not-known
+-- cxx (2026-11-12): the complete lifting of C++ at the source level: the whole semantics, every
+-- detail of memory and threading, templates and all compile-time machinery as terms, the abstract
+-- machine (the standard) distinct from any implementation at given flags. The first language lifted.
+cxx : Node
+cxx = node #1012 (cons languages nil) all-of not-known
+-- rust (2026-11-12): the lifting of Rust, as for C++.
+rust : Node
+rust = node #1013 (cons languages nil) all-of not-known
+-- hardware (2026-11-12): hardware semantics as exact types: instruction sets and memory models, the
+-- ground native code is stated over when the target is the machine rather than C. Secondary to
+-- realization through C, whose compilers and the hardware are trusted for now. (It served native
+-- until 2026-11-12; with the core serving the instruction set and memory models that made a cycle,
+-- and realization through C does not need it.)
+hardware : Node
+hardware = node #1014 (cons unified-computing nil) each-of not-known
+-- isa-x86 (2026-11-12): the x86-64 instruction set's semantics complete (the imported model,
+-- lib/isa/x86), every instruction translated.
+isa-x86 : Node
+isa-x86 = node #1015 (cons hardware nil) all-of not-known
+-- memory-models (2026-11-12): memory consistency models as exact types: x86-TSO (lib/isa/tso.cub)
+-- and the C/C++ model RC11 (lib/mem/rc11.cub), with what relates them (the standard mapping of C
+-- atomics to x86 correct).
+memory-models : Node
+memory-models = node #1016 (cons hardware (cons cxx nil)) all-of not-known
+-- os (2026-11-12): operating-system semantics as exact types (the kernel interface, lib/os), so a
+-- running program is a process whose system-call events are its interaction.
+os : Node
+os = node #1017 (cons unified-computing nil) all-of not-known
+-- core (2026-11-12): the complete language core, the paper's companion: the formal language
+-- implemented exactly (core-correct), partial evaluation with the Futamura projections
+-- (partial-evaluation), realization as native code through C (native). The user's short-term
+-- priority. Its value gates every lifting of other languages and systems: their semantics can be
+-- formalized now, but deliver only when the core they are stated in meets its stated properties
+-- (so the core serves each all-of goal of that work: a part of an each-of goal is not gated by it).
+core : Node
+core = node #1018 (cons publish (cons cxx (cons rust (cons isa-x86 (cons memory-models (cons os nil)))))) all-of sufficient
+-- core-correct (2026-11-12): the implementation is exactly the published calculus, CCHM (Cohen,
+-- Coquand, Huber, Mörtberg 2018) with clocked guarded computation (Kristensen, Møgelberg, Vezzosi
+-- 2022): every rule present, none added, and the part that must be trusted small and plainly those
+-- rules, with everything else (elaboration, sharing, memoization, specialization, translation)
+-- either checked by that part or unable by construction to change a result.
+core-correct : Node
+core-correct = node #1003 (cons core nil) all-of not-known
+-- partial-evaluation (2026-11-12): the specializer with its law in its type (6.6), the first, second
+-- and third Futamura projections (6.6–6.7), and specialization when values arrive at run time, the
+-- residual checked, realized and cached with its evidence (paper §9.3).
+partial-evaluation : Node
+partial-evaluation = node #1005 (cons core nil) all-of not-known
+-- native (2026-11-12): realization through C, emitting C that keeps the program's structure so the
+-- C compilers' optimizations apply: the translation returns the relation between running the C and
+-- the term's meaning; the evaluator substitutes native code only with that relation; a process
+-- becomes an executable whose system-call events are the process's interaction. The C compiler, the
+-- C library and the hardware are trusted.
+native : Node
+native = node #1006 (cons core nil) all-of not-known
+-- typed-checker (2026-11-12): the checker returns a typing derivation or a refusal, so it is sound by
+-- construction; then it is shown to decide derivability.
+typed-checker : Node
+typed-checker = node #1007 (cons core-correct nil) all-of not-known
+-- typed-codes (2026-11-12): the language's own terms as typed objects in it, Code(Γ, A) = Σ c.
+-- Der(Γ, c, A) (paper §6.1), over the one existing representation of terms; every definition
+-- reflects to one; normalization as a term with its soundness equation (6.5).
+typed-codes : Node
+typed-codes = node #1004 (cons partial-evaluation (cons native (cons typed-checker nil))) all-of not-known
+-- work-object (2026-11-12, worked out with the user in one session; this is its record, and it is in
+-- use from this commit on). The single knowledge interface to the work, used continuously by agents
+-- and people. The symptom it removes is active now: an agent's or a conversation's knowledge lives
+-- in an accumulating transcript that is lost or lossily summarised at every context reset and every
+-- hand-off, and the codebase, the project's record and a session's working memory are different
+-- things in different places.
+--
+-- The object. The work is one sequence of declarations in the language; the codebase is one region
+-- of it. Everything said by anyone, person or agent, is a declaration: a definition, raw text, a
+-- question, a decision, a correction, an answer. A conversation with the work is more declarations
+-- in the same sequence, so it is an ongoing conversation within the code. There is no second format
+-- and no separate store of notes. Files and directories are not its organisation: they are only how
+-- declarations are stored today.
+--
+-- Raw text is a term, not an outer layer: a statement parsed as far as it has been parsed. Parsing
+-- it further gives another statement ("this text says this"), as checkable as its form allows; the
+-- boundary between formal and informal moves as parsing improves and nothing else changes. A
+-- question parsed fully is a type, and it is settled by inhabiting or refuting it.
+--
+-- No imposed ontology. The base has no kinds of statement, no fixed relations, no notion of author,
+-- session, ticket, goal or settled. Ticket, goal, question are types the work defines for itself
+-- (lib/work.cub, this file). A relation is a reference one declaration makes to another by key, as a
+-- definition references a definition; reverse relations are computed. Who said something, if it
+-- matters, is itself a statement.
+--
+-- Open and closed loops. The current state of the work holds exactly what is live and worth
+-- keeping. Anything opened (a question, a side investigation, a plan item, a note) is closed when it
+-- is deemed completely unnecessary, at which point keeping it would only pollute the information
+-- space: it is removed from the state, and anything that matters from it (an answer, a fact, a
+-- correction) is folded into where it belongs. Anyone closes a loop; there is no owner. A loop may
+-- be settled by computation (its question is now inhabited, what it waited on now checks); settling
+-- obliges closing it, never leaving it hidden in place. Personal and collaborative loops are the
+-- same thing.
+--
+-- History. The sequence of states over time is itself a mathematical object, kept as history (as a
+-- repository's commits keep a deleted file): closing is reversible, but history is not content, and
+-- no view reads it unless a past state is asked for explicitly. Store entries no current state
+-- references are collected (#gc).
+--
+-- Identity and names. A declaration is identified by the content key of its canonical form (binders
+-- nameless, every reference replaced by the referenced definition's key), as the store already does
+-- for definitions. A binding is the statement that a name denotes a key; a name means its latest
+-- binding; what was checked against an earlier binding keeps that binding's key, its meaning having
+-- been fixed when it was checked. "Depends on a superseded binding" is computed; updating dependents
+-- is elaborating them again under the new binding, which is more declarations. In the machine
+-- today, replacing a binding is #retract followed by a new declaration (fixed by t56's close).
+--
+-- Merging. Declarations never change once written, so two histories merge by union, which always
+-- commutes: content never conflicts. The only disagreement is a name with two latest bindings: a
+-- computed fact, settled by a later declaration. This is why Pijul is not used: its theory of
+-- patches (order-independent merges, conflicts as recorded states) exists because files are lines
+-- edited in place; content identity gives the same properties here directly, and adopting it would
+-- mean leaving GitHub and versioning lines of a representation the work is leaving.
+--
+-- Derived facts, ambient. Every fact about the work is an evaluation by the evaluator: a type, a
+-- check, a refusal and its reason, a normal form, a cost, what depends on what and what depends on
+-- it, the trust footprint, whether a standing constraint holds, whether a question is settled, what
+-- a view shows. Inputs are identified by content, so a changed input has a different key and a
+-- remembered result never goes stale: nothing is invalidated and no dependency tracking is needed
+-- (the standard incremental-computation designs, Salsa, Adapton, build traces, track reads because
+-- their inputs are mutable; here they are not). The evaluator already keys every term by its
+-- structure and keeps one value per live key. What is needed: everything durable in canonical form
+-- (a reference is the referenced definition's content key; run positions and names are only the
+-- current state's rendering); the evaluator's key for a reference the content key (t60); results
+-- kept beyond the run, stored canonically and rendered through the current bindings when read, the
+-- same mechanism as the store's definitions (t61). Then the store's certificates are such kept
+-- results (the checker applied to a definition's key, giving ok); the elaborator's solving rounds
+-- are remembered; refusals are kept as acceptances are (t43); the checker's identity is the content
+-- keys of its own definitions (t42); the per-file cache and its second root of trust go (t41, t44).
+--
+-- Views. A view is a term of the language applied to the work (t62: the work as a value); its value
+-- is whatever its type says, presentation being separate. Codebase, project and session are the same
+-- object and mechanism at different time scales; they differ only in which declarations a view
+-- includes and how often it refreshes: the definitions reachable from what is wanted; the open goals
+-- and tickets with what they serve; what a session's aim still needs. A session is a view given an
+-- aim, which is a statement. The live working document of a session is its view: small, holding
+-- exactly the open loops. Its budget (a screen for a person, a context window for an agent) forces
+-- compression, and compression is refactoring: one declaration replacing several and saying so, as
+-- several definitions are generalised into one.
+--
+-- Use. Agents and people use the work continuously through the machine's serve mode (blocks of
+-- declarations and readings on standard input; a failing request does not stop it): declare, ask
+-- readings, read views. An agent reads its views at the start of each exchange, so what it works
+-- from is the work, not a transcript, and losing a conversation loses nothing. Many agents write
+-- through one machine, which serialises them. Lasting corrections are standing declarations, and
+-- whether a declaration respects them is a computed fact the moment it lands (what manual audits of
+-- agents imitate). People see the same views through every faculty an editor offers: hover a
+-- computed fact, go-to a reference, diagnostics refusals, outline a view, history the states, search
+-- a query. The conversation is one more rendering.
+--
+-- Trust. The trusted part stays the checker and the evaluator. Everything producing declarations is
+-- untrusted. Formal statements carry certificates; informal ones carry the statement of who said
+-- them, so the line between verified and said is visible on every statement.
+--
+-- Exists: content identity (src/store.c), the names log with history, certificates, readings
+-- (#type, #where, #scope, #key, #names, #history, #safe, #show), serve mode (src/lang.c, serve),
+-- #retract, goals and tickets as types, the evaluator's structural keys. Missing, about 500 lines:
+-- t60, t61, t62, t43, a way to write text as a term (t63), and the work record itself rebuilt on
+-- this (t64). Not part of it (each was proposed in the founding session and withdrawn as imposed):
+-- a program that calls a model and builds its context; an author field; fixed kinds of change; a
+-- fixed set of relations; views that must produce text; ordering by causal references; a driver
+-- script and session file; editor features and the moving of prose files as scheduled items; "keep
+-- everything said".
+work-object : Node
+work-object = node #1008 (cons unified-computing (cons tooling (cons self-aware (cons publish nil)))) each-of not-known
+-- interface (2026-11-12): how people and agents use the work: the protocol (declarations, readings,
+-- views through serve mode, today), and every faculty that presents the work to a person (an editor's
+-- hover, go-to, diagnostics, outline, history, search; a session's live working view; the
+-- conversation as one rendering). A continuing thread, improved as it is used: it is how all other
+-- work is done, so it serves everything, and it is value delivered in itself. The cause it answers:
+-- agents and people unable to keep a clear picture, define a plan, keep to it, revise it when a
+-- belief proves wrong, or know what is true, which is where agents working on wrong things came from.
+interface : Node
+interface = node #1010 (cons work-object (cons unified-computing nil)) each-of not-known
+t2 : Node
+t2 = leaf #2 (cons core-correct nil)
+t3 : Node
+t3 = leaf #3 (cons core-correct nil)
+t4 : Node
+t4 = leaf #4 (cons core-correct nil)
+t5 : Node
+t5 = leaf #5 (cons core-correct nil)
+t6 : Node
+t6 = leaf #6 (cons native nil)
+t7 : Node
+t7 = leaf #7 (cons native nil)
+t8 : Node
+t8 = leaf #8 (cons native nil)
+t9 : Node
+t9 = leaf #9 (cons native nil)
+t10 : Node
+t10 = leaf #10 (cons partial-evaluation nil)
+t11 : Node
+t11 = leaf #11 (cons partial-evaluation (cons typed-codes nil))
+t12 : Node
+t12 = leaf #12 (cons partial-evaluation nil)
+t14 : Node
+t14 = leaf #14 (cons native nil)
+t16 : Node
+t16 = leaf #16 (cons self-aware nil)
+t17 : Node
+t17 = leaf #17 (cons self-aware nil)
+t18 : Node
+t18 = leaf #18 (cons self-aware nil)
+t19 : Node
+t19 = leaf #19 (cons self-aware nil)
+t20 : Node
+t20 = leaf #20 (cons self-aware nil)
+t21 : Node
+t21 = leaf #21 (cons self-aware (cons cxx nil))
+t22 : Node
+t22 = leaf #22 (cons core-correct nil)
+t24 : Node
+t24 = leaf #24 (cons typed-checker nil)
+t25 : Node
+t25 = leaf #25 (cons typed-codes nil)
+t26 : Node
+t26 = leaf #26 (cons core-correct nil)
+t27 : Node
+t27 = leaf #27 (cons memory-models nil)
+t28 : Node
+t28 = leaf #28 (cons cxx nil)
+t29 : Node
+t29 = leaf #29 (cons native nil)
+t30 : Node
+t30 = leaf #30 (cons self-aware nil)
+t31 : Node
+t31 = leaf #31 (cons isa-x86 nil)
+t32 : Node
+t32 = leaf #32 (cons core-correct nil)
+t33 : Node
+t33 = leaf #33 (cons core-correct (cons self-aware nil))
+t34 : Node
+t34 = leaf #34 (cons core-correct (cons self-aware nil))
+t35 : Node
+t35 = leaf #35 (cons typed-checker (cons self-aware nil))
+t37 : Node
+t37 = leaf #37 (cons tooling nil)
+t38 : Node
+t38 = leaf #38 (cons cxx nil)
+t39 : Node
+t39 = leaf #39 (cons self-aware (cons rust nil))
+t40 : Node
+t40 = leaf #40 (cons core-correct nil)
+t41 : Node
+t41 = leaf #41 (cons work-object (cons core-correct (cons self-aware nil)))
+t42 : Node
+t42 = leaf #42 (cons work-object (cons self-aware nil))
+t43 : Node
+t43 = leaf #43 (cons work-object (cons self-aware nil))
+t44 : Node
+t44 = leaf #44 (cons work-object (cons self-aware nil))
+t46 : Node
+t46 = leaf #46 (cons core-correct (cons typed-codes nil))
+t47 : Node
+t47 = leaf #47 (cons typed-codes nil)
+t48 : Node
+t48 = leaf #48 (cons core-correct (cons typed-codes nil))
+t49 : Node
+t49 = leaf #49 (cons core-correct nil)
+t50 : Node
+t50 = leaf #50 (cons core-correct (cons typed-codes nil))
+t52 : Node
+t52 = leaf #52 (cons core-correct (cons typed-codes nil))
+t53 : Node
+t53 = leaf #53 (cons core-correct (cons typed-codes nil))
+t54 : Node
+t54 = leaf #54 (cons core-correct (cons typed-codes nil))
+t55 : Node
+t55 = leaf #55 (cons core-correct (cons typed-codes nil))
+t57 : Node
+t57 = leaf #57 (cons core-correct (cons typed-codes nil))
+t60 : Node
+t60 = leaf #60 (cons work-object nil)
+t61 : Node
+t61 = leaf #61 (cons work-object nil)
+t62 : Node
+t62 = leaf #62 (cons work-object nil)
+t63 : Node
+t63 = leaf #63 (cons work-object nil)
+t64 : Node
+t64 = leaf #64 (cons work-object nil)
+t65 : Node
+t65 = leaf #65 (cons work-object (cons core-correct nil))
+-- the roots: the nodes that are part of nothing, declared (lib/work.cub)
+roots : List Node
+roots = cons unified-computing nil
+-- what must be complete before a node can be done (lib/work.cub)
+after : List (Node × List Node)
+after = cons (t29 , cons t7 nil) (cons (t37 , cons t62 nil) (cons (t39 , cons t16 nil) (cons (t41 , cons t61 nil) (cons (t42 , cons t61 nil) (cons (t44 , cons t61 nil) (cons (t61 , cons t43 (cons t65 nil)) (cons (t64 , cons t61 (cons t62 nil)) nil)))))))
+-- what a node's landing speeds (lib/work.cub)
+speeds : List (Node × List Node)
+speeds = cons (work-object , cons core (cons publish (cons languages (cons hardware (cons os nil))))) (cons (interface , cons core (cons publish (cons languages (cons hardware (cons os nil))))) (cons (tooling , cons self-aware nil) nil))
