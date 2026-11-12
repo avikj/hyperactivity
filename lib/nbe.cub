@@ -6,8 +6,13 @@
 -- * Step 1 (levels) done and checked: P1 rebuilt with types as maps into semantic types (below), the
 --   semantic types and environments in Type 1 and the meanings of P1's shapes in Type, every level
 --   closed. normalize, reifySound and normalize-sound still hold by refl.
--- * Next: P2 (paths and the interval), then P3 (Kan operations), P4 (Glue), P6 (universes). The
---   exact next definitions are the dated list at the end of this head.
+-- * P2 (paths and the interval) in progress, checked so far: lines and cubes with the cube category's
+--   generators and their laws, cube-comp/cube-id/dcube-map-of as paths, dependent cubes, canonical
+--   forms of interval codes and path application on cubes at them, skeletons with dimension entries,
+--   the semantic PathP type. Not yet built: type derivations and their computability (P2.5), and
+--   the judgments, normal forms, derivations, computability and normalization over cubes (P2.6);
+--   then P3 (Kan operations), P4 (Glue), P6 (universes). The exact next definitions are the dated
+--   list at the end of this head.
 --
 -- Finding (2026-11-12) that replaces the level design "meanings in Type (lvl s)" (P6's design below,
 -- and step 1 as first stated), for a theoretical reason. The derivation and normal-form families
@@ -173,23 +178,44 @@
 -- entirely: canonical forms of interval codes and papp-cube; P2.2 entirely: skeletons of entries,
 -- dims, CtxE/VarT/CompEnv/env-ren/var-comp/reflect-env with a dimension clause, ren-dim; P2.1 DCube,
 -- dcube-map, dcube-of, dcube-map-of; P2.3's PathS/PathE, to be TyE's clause for the path shape):
---   P2.1 DCube (a cube in a family over a cube) and cube-zip/unzip with their laws as paths.
---   P2.2 Skeleton entries `data Entry = e-ty (s : TyShape) | e-dim`, dims : Lst Entry → Nat, CtxE with
---        a dimension contributing nothing to a vertex environment, VarT stepping over e-dim.
---   P2.3 The PathP shape s-path a: Sem = (L : Line (Sem a)) × El a (fst L) × El a (fst (snd L)), El =
---        PathP (λ i → El a (snd (snd (fst D)) i)) …, checked equal to the language's PathP by refl.
---   P2.4 Dimension expressions: De Morgan normal form on interval codes (ci0 ci1 cvar cneg cmeet
---        cjoin) with the predicate "normal and not constant"; the action of an interval code on the
---        newest dimension of a cube (papp-cube, by recursion on the code and the skeleton: faces,
---        reversal, connections, and the diagonal with the dimension it names, brought next to the
---        newest by exchanges).
---   P2.5 Type derivations DTy (codes of Bool, Π, Σ, PathP types) and CompTy.
---   P2.6 JV sk s, Jdg = (sk , s , code , Cube (dims sk) (JV sk s)); NN and Der over it, every P1 rule
---        with its index the cube-map of P1's index function, plus nplam/npapp, dplam/dpapp;
---        renamings with dimension weakening; ren-nn, CompS (PathP: Kripke over later worlds and their
---        non-constant normal interval codes, constants given by CompTy's endpoints), comp-ren, rr,
---        CompEnv, fund, fundTy, reflect-env, embed, normalize — with transports along cube-comp
---        where the constructed and required indices differ.
+--   P2.5 Type derivations with codes. TyShape gains s-path (a : TyShape), with TyE (s-path a) =
+--        (PathS (Sem a) (El a) , PathE (Sem a) (El a)) (P2.3). DTy : (Γ : Ctx) (A : PTy (Env Γ)) →
+--        Code → Type 1, constructors: Bool (cdata #0 lnil), Π and Σ (cpi #0 cA cB, csigma cA cB; the
+--        codomain's DTy over ext Γ (dom …)), PathP (cpathp (cplam cL) c0 c1: the line's DTy over the
+--        context one dimension larger, as a cube, and Der of both ends). CompTy s Δ T, by recursion on
+--        the shape: Bool One1; Π Kripke (every later world, every computable argument: CompTy of the
+--        codomain); Σ the domain's and, for every computable first component, the codomain's; PathP
+--        CompTy of the line (P2.6's cube form) and CompS of both ends. fundTy : DTy → CompEnv → CompTy.
+--   P2.6 Judgments over cubes. JV sk s = (γ : fst (CtxE sk)) × (T : Env (sk , γ) → Sem s) ×
+--        ((ρ : Env (sk , γ)) → El s (T ρ)); Jdg = (sk : Lst Entry) × (s : TyShape) × Code ×
+--        Cube (dims sk) (JV sk s). Each P1 constructor of NN and Der takes the cube of its
+--        conclusion's data and its premises' indices are named functions of it (one named function
+--        per rule, used by the constructor and by CompS/reify alike, so that their indices meet
+--        judgmentally; where two different compositions meet — renaming then applying against
+--        applying then renaming, and Kripke composition of worlds — the value is transported along
+--        cube-comp/dcube-map-of). New constructors: nplam/dplam (premise over lcons e-dim sk, its cube
+--        the conclusion's cube of path-lines with γ constant in the new direction; conclusion code
+--        cplam c), npapp/dpapp (fields: a canonical non-constant form f with isTrue (dnf-canon f) and
+--        isTrue (dnf-nonconst f) for npapp; code cpapp p (dnf-code f); meaning papp-cube sk … f of
+--        the premise's cube read as one direction more); dpapp at a constant form has as meaning the
+--        type's endpoint (face0/face1), and reify never produces npapp there. Worlds: renamings over
+--        skeletons with dimensions (Ren as now, ren-dim for a new dimension), acting on cubes by
+--        cube-map of the environment map, and degen for a new dimension. CompS s sk (X : Cube (dims
+--        sk) (JV sk s)) by recursion on s: Bool — X constantly true, constantly false, or a neutral
+--        NN at X; Π — Kripke over later worlds and computable argument cubes; Σ — componentwise;
+--        PathP — for every later world and every canonical form f over it (non-constant or not),
+--        CompS a of papp-cube at f (at a constant f this is the type's end, and CompTy supplies it).
+--        reify at PathP = cplam (reify at the world one dimension larger at the new dimension's form);
+--        reflect at PathP: at a constant f the end's computability from CompTy, else reflect of npapp.
+--        Then comp-ren, rr (taking CompTy), CompEnv, fund (dplam: the body at the world one
+--        dimension larger; dpapp: CompS(path) at the identity world and the code's form), fundTy,
+--        reflect-env, embed, normalize, reifySound and normalize-sound (refl, on TCode's stored
+--        meaning). Examples: ⟨i⟩ b normalizes to cplam (cvar #1); a path variable p to its η-long
+--        form cplam (cpapp (cvar #1) (cvar #0)); p @ 0 to the type's endpoint's normal form.
+--   P3, P4, P6 as in the plan above; P3 first extends worlds to the cube category (faces,
+--        degeneracies, connections, reversal: the generators above), with neutrals carrying the face
+--        on which they are unstable (Sterling–Angiuli), since systems substitute constants for a
+--        world's dimensions.
 
 -- ---------------------------------------------------------------- types: shapes and their semantic types
 -- (2026-11-12, step 1) A type of shape s over environments G is a map from G into Sem s, the semantic
