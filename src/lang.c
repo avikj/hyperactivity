@@ -4743,15 +4743,14 @@ static void load_file(const char *path, bool must) {
  *   resolves to) and the types of the definitions it references. Implicit arguments are holes,
  *   solved by running the checker (%chk-def / %infer-ok answer "elab" solutions) up to 400 rounds.
  *   The store's key is a function of the elaborated output, so it can only be consulted once
- *   every hole is solved. A warm store therefore still pays every solving round: that is the 29 s.
+ *   every hole is solved, so a warm store still pays every solving round (inferred to be most of
+ *   the 29 s, not measured).
  * - Compilation (compile_top) depends on the core term and the referenced globals.
  * - Checking (%chk-def) depends on the core term's key and the checker.
- * Each step is a function of identifiable inputs: the declaration's text, the keys of the
- * definitions it resolves to, and the identity of the elaborator, compiler and checker. Memoizing
- * each by those inputs' keys is the store's existing mechanism applied to every step: the
- * constructive traces of Mokhov, Mitchell and Peyton Jones, "Build systems à la carte" (2018), and
- * the query model of rust-analyzer's Salsa. That subsumes this cache. The trusted replay below
- * (trusted = true: nothing in the file is checked) is a second trust root beside the store's
+ * Observed in src/net.c the same day: the evaluator already keys every term by its structure and
+ * keeps one value per live key, but a reference to a definition is keyed by its index in the
+ * current run (key_global), and an entry lives only while something holds it. The trusted replay
+ * below (trusted = true: nothing in the file is checked) is a second trust root beside the store's
  * certificates. */
         /* the surface language: its imports first, then the running key, then its declarations */
         const char *saved_dir = cur_dir;
