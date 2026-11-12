@@ -51,6 +51,9 @@ static const char *kself;        /* a data declaration's own name */
 static int kgroup_base = -1;     /* a group: its members are the checked indices from here */
 static void kpush(const char *x) { GROW(kscope, capkscope, (size_t)nkscope + 1); kscope[nkscope++] = x; }
 static void canon(SBuf *o, Node *t);
+static bool kser_on;   /* a serialization, not a key: binder names kept (=name), for forms that are read back and checked by name (a branch's rec) */
+static bool kfresh_on; static const char **kfresh; static size_t capkfresh; static int nkfresh;
+static bool n_isfresh(const char *s) { size_t n = strlen(s); if (n < 3 || !isdigit((unsigned char)s[n - 1])) return false; size_t i = 1; while (i < n && (isalpha((unsigned char)s[i]) || s[i] == '_' || (unsigned char)s[i] >= 0x80)) i++; if (i == 1) return false; while (i < n && isdigit((unsigned char)s[i])) i++; return i == n; }
 static void canon_sym(SBuf *o, const char *s) {
     for (int i = nkscope - 1; i >= 0; i--) if (!strcmp(kscope[i], s)) { sb_fmt(o, "@%d", nkscope - 1 - i); return; }
     if (kself && !strcmp(s, kself)) { sb_put(o, "self"); return; }
@@ -70,12 +73,30 @@ static void canon_sym(SBuf *o, const char *s) {
         if (kself && !strcmp(DATA[dd].name, kself)) { sb_fmt(o, "Fself.%d", FLD[fl].index); return; }
         int di = chk_index(dd); if (di >= 0) { dep_add(-(di + 1)); sb_fmt(o, "F%s.%d", dkey_of(di), FLD[fl].index); return; }
     }
+    /* under kfresh_on (an elaboration's key and output): a generated name (%, letters, digits: xfresh,
+     * afresh), whose number depends on how much was elaborated before it in the run, is numbered by
+     * its first occurrence here, so the key does not depend on that (2026-11-12) */
+    if (kfresh_on && s[0] == '%' && n_isfresh(s) && global_lookup(s) < 0) {
+        int i; for (i = 0; i < nkfresh && strcmp(kfresh[i], s); i++) ;
+        if (i == nkfresh) { GROW(kfresh, capkfresh, (size_t)nkfresh + 1); kfresh[nkfresh++] = s; }
+        sb_fmt(o, "%%kf%d", i); return;
+    }
     sb_put(o, s);
 }
 static void canon_binder(SBuf *o, Node *x) {
     /* a binder: its multiplicity when not the default */
     int m = bnd_mult(x);
     if (m != 2) sb_fmt(o, ":%d", m);
+}
+/* a λ-like form's binder, readable back (decanon): %b, its multiplicity (:0, :1), ! for an instance
+ * binder; with the type written on it, (%b... T), T in the scope of the earlier binders */
+static void canon_lbinder(SBuf *o, Node *x) {
+    if (x->list) { sb_put(o, "(%bl "); canon(o, x); sb_put(o, ")"); return; }
+    Node *T = bnd_ty(x);
+    if (T) sb_put(o, "(");
+    sb_put(o, "%b"); canon_binder(o, x); if (bnd_inst(x)) sb_put(o, "!");
+    if (kser_on) { sb_put(o, "="); sb_put(o, x->s); }
+    if (T) { sb_put(o, " "); canon(o, T); sb_put(o, ")"); }
 }
 static void canon(SBuf *o, Node *t) {
     if (!t->list) { canon_sym(o, t->s); return; }
@@ -84,19 +105,21 @@ static void canon(SBuf *o, Node *t) {
     if (!h->list) {
         const char *k = h->s;
         if (!strcmp(k, "%guess") && t->n == 4) { canon(o, t->it[3]); return; }
-        if ((!strcmp(k, "%spine") || !strcmp(k, "%rebuilt")) && t->n == 2) { canon(o, t->it[1]); return; }
+        /* %rebuilt is kept: the compiler reads it (a scrutinee the elaborator rebuilt), so a form
+         * read back without it would compile differently (2026-11-12) */
+        if (!strcmp(k, "%spine") && t->n == 2) { canon(o, t->it[1]); return; }
         if ((!strcmp(k, "lam") || !strcmp(k, "plam") || !strcmp(k, "forall")) && t->n >= 3) {
             sb_put(o, "("); sb_put(o, k);
             int nb = t->n - 2;
-            for (int i = 1; i <= nb; i++) { if (!t->it[i]->list) canon_binder(o, t->it[i]); sb_put(o, " "); }
-            for (int i = 1; i <= nb; i++) kpush(t->it[i]->list ? "" : t->it[i]->s);
+            for (int i = 1; i <= nb; i++) { sb_put(o, " "); canon_lbinder(o, t->it[i]); kpush(t->it[i]->list ? "" : t->it[i]->s); }
+            sb_put(o, " ");
             canon(o, t->it[t->n - 1]);
             nkscope -= nb;
             sb_put(o, ")");
             return;
         }
         if (!strcmp(k, "let") && t->n == 4 && !t->it[1]->list) {
-            sb_put(o, "(let "); canon(o, t->it[2]); sb_put(o, " ");
+            sb_put(o, "(let "); if (kser_on) { sb_put(o, "="); sb_put(o, t->it[1]->s); sb_put(o, " "); } canon(o, t->it[2]); sb_put(o, " ");
             kpush(t->it[1]->s); canon(o, t->it[3]); nkscope--;
             sb_put(o, ")");
             return;
@@ -152,6 +175,68 @@ static void canon_decl(SBuf *o, Node *dd) {
     nkscope = base;
     sb_put(o, ")");
     kself = saved_self;
+}
+
+/* ---- reading a canonical form back (2026-11-12, t61): the inverse of canon for the forms canon
+ * keeps whole. Bound variables get fresh names; G<key>, D<key>, C<key>.i, F<key>.i are rendered
+ * through the current bindings (the unhidden checked definition, the checked data type with that
+ * key); any other symbol is itself. NULL when a key is bound to nothing now. ---- */
+static const char **dscope; static size_t capdscope; static int ndscope; static long dfresh;
+static bool dc_bad;
+static int data_of_dkey(const char *k) { for (int i = 0; i < nchkdata; i++) if (!strcmp(dkey_of(i), k)) return CHKDATA[i]; return -1; }
+static const char *dc_sym(const char *s) {
+    if (s[0] == '@' && s[1] >= '0' && s[1] <= '9') { int k = atoi(s + 1); if (k < ndscope) return dscope[ndscope - 1 - k]; dc_bad = true; return s; }
+    size_t n = strlen(s);
+    if (s[0] == 'G' && n == 65) { for (int i = nchecked - 1; i >= 0; i--) if (!CHKHIDE[i] && !strcmp(ckey_of(i), s + 1)) return CHECKED[i]; dc_bad = true; return s; }
+    if (s[0] == 'D' && n == 65) { int d = data_of_dkey(s + 1); if (d >= 0) return DATA[d].name; dc_bad = true; return s; }
+    if ((s[0] == 'C' || s[0] == 'F') && n > 66 && s[65] == '.') {
+        char k[65]; memcpy(k, s + 1, 64); k[64] = 0; int d = data_of_dkey(k), ix = atoi(s + 66);
+        if (d >= 0 && s[0] == 'C') for (int c = 0; c < ncon; c++) if (CON[c].data == d && CON[c].index == ix) return CON[c].name;
+        if (d >= 0 && s[0] == 'F') for (int f = 0; f < nfld; f++) if (FLD[f].data == d && FLD[f].index == ix) return FLD[f].name;
+        dc_bad = true; return s;
+    }
+    return s;
+}
+static Node *dc_node(Node *t);
+static Node *dc_binder(Node *b) {
+    /* %b[:m][!] or (%b[:m][!] T) or (%bl X) */
+    char nm[32]; snprintf(nm, sizeof nm, "%%d%ld", dfresh++);
+    if (b->list && b->n == 2 && is(b->it[0], "%bl")) { GROW(dscope, capdscope, (size_t)ndscope + 1); dscope[ndscope++] = ""; return dc_node(b->it[1]); }
+    Node *h = b->list ? (b->n >= 1 ? b->it[0] : NULL) : b;
+    if (!h || h->list || strncmp(h->s, "%b", 2)) { dc_bad = true; return b; }
+    const char *eq = strchr(h->s + 2, '=');
+    Node *x = nsym(eq ? eq + 1 : nm);
+    if (b->list && b->n == 2) bnd_set(x, dc_node(b->it[1]));
+    const char *f = h->s + 2;
+    if (f[0] == ':') { bnd_set_mult(x, f[1] - '0'); f += 2; }
+    if (f[0] == '!') bnd_set_inst(x);
+    GROW(dscope, capdscope, (size_t)ndscope + 1); dscope[ndscope++] = x->s;
+    return x;
+}
+static Node *dc_node(Node *t) {
+    if (!t->list) return nsym(dc_sym(t->s));
+    if (t->n == 0) return t;
+    Node *h = t->it[0];
+    if (!h->list && (!strcmp(h->s, "lam") || !strcmp(h->s, "plam") || !strcmp(h->s, "forall")) && t->n >= 3) {
+        Node *r = nlist(t->n); r->it[0] = h; int base = ndscope;
+        for (int i = 1; i < t->n - 1; i++) r->it[i] = dc_binder(t->it[i]);
+        r->it[t->n - 1] = dc_node(t->it[t->n - 1]); ndscope = base; return r;
+    }
+    if (!h->list && !strcmp(h->s, "let") && (t->n == 3 || (t->n == 4 && !t->it[1]->list && t->it[1]->s[0] == '='))) {
+        char nm[32]; snprintf(nm, sizeof nm, "%%d%ld", dfresh++);
+        int o = t->n - 3;
+        Node *r = nlist(4); r->it[0] = h; r->it[1] = nsym(o ? t->it[1]->s + 1 : nm); r->it[2] = dc_node(t->it[1 + o]);
+        GROW(dscope, capdscope, (size_t)ndscope + 1); dscope[ndscope++] = r->it[1]->s;
+        r->it[3] = dc_node(t->it[2 + o]); ndscope--; return r;
+    }
+    Node *r = nlist(t->n); for (int i = 0; i < t->n; i++) r->it[i] = dc_node(t->it[i]);
+    return r;
+}
+static Node *decanon(const char *text) {
+    const char *saved = src; src = text; Node *n = read_node(); src = saved;
+    if (!n) return NULL;
+    dc_bad = false; ndscope = 0; Node *r = dc_node(n);
+    return dc_bad ? NULL : r;
 }
 
 /* the checker's name: the hash of the library texts loaded up to the one defining %%chk-def
@@ -280,8 +365,14 @@ static void store_put(const char *name, const char *key, const char *code, const
 /* a checked definition: its type and term; the canonical forms are returned for the store */
 static void key_def(Node *T, Node *t, char out[65], char **code, char **type) {
     cur_deps.n = 0;
+    /* generated names numbered by first occurrence (kfresh_on): a definition whose elaborated form
+     * binds a generated name in a pattern (calc chains, clauses) otherwise had a different key in
+     * every run whose earlier elaborations differed, and its certificate never hit (2026-11-12,
+     * t66: lib/obs.cub's o-run-comp, 0.6M steps rechecked on every warm run) */
+    kfresh_on = true; nkfresh = 0;
     SBuf b = { 0 }; canon(&b, T); char *ty = b.b;
     SBuf c = { 0 }; if (t) canon(&c, t); char *cd = c.b ? c.b : strdup("");
+    kfresh_on = false;
     SBuf w = { 0 }; sb_put(&w, "def\ntype "); sb_put(&w, ty); sb_put(&w, "\nterm "); sb_put(&w, cd); sb_put(&w, "\n");
     key_hash(w.b, w.n, out); free(w.b);
     if (type) *type = ty; else free(ty);
@@ -289,16 +380,24 @@ static void key_def(Node *T, Node *t, char out[65], char **code, char **type) {
 }
 static void key_named(const char *kind, const char *name, Node *T, char out[65], char **type) {
     cur_deps.n = 0;
+    kfresh_on = true; nkfresh = 0;   /* as key_def: generated names by first occurrence */
     SBuf b = { 0 }; if (T) canon(&b, T); char *ty = b.b ? b.b : strdup("");
     SBuf w = { 0 }; sb_put(&w, kind); sb_put(&w, " "); sb_put(&w, name); sb_put(&w, "\ntype "); sb_put(&w, ty); sb_put(&w, "\n");
-    key_hash(w.b, w.n, out); free(w.b);
+    key_hash(w.b, w.n, out); free(w.b); kfresh_on = false;
     if (type) *type = ty; else free(ty);
 }
 static void key_decl(Node *dd, char out[65], char **code) {
     cur_deps.n = 0;
+    kfresh_on = true; nkfresh = 0;   /* as key_def: generated names by first occurrence */
     SBuf b = { 0 }; canon_decl(&b, dd);
-    SBuf w = { 0 }; sb_put(&w, "data\n"); sb_put(&w, b.b); sb_put(&w, "\n");
-    key_hash(w.b, w.n, out); free(w.b);
+    /* a data type is generative: two declarations of one content are two types to the checker (List
+     * and Lst in lib/prelude.cub and lib/code.cub), so the name it is declared under is part of its
+     * identity, as Unison's unique types carry a salt (2026-11-12; without it the store conflated
+     * them and a form read back named the wrong one) */
+    Node *hd = dd->it[1]; const char *dn = hd->list ? hd->it[0]->s : hd->s;
+    if (getenv("CUBICAL_KEYTEXT") && !strcmp(getenv("CUBICAL_KEYTEXT"), dn)) fprintf(stderr, "TEXT %s\n", b.b);
+    SBuf w = { 0 }; sb_put(&w, "data "); sb_put(&w, dn); sb_put(&w, "\n"); sb_put(&w, b.b); sb_put(&w, "\n");
+    key_hash(w.b, w.n, out); free(w.b); kfresh_on = false;
     if (code) *code = b.b; else free(b.b);
 }
 /* a group: the canonical forms of every type and body, members R<i>; a member's key the group's
@@ -306,9 +405,9 @@ static void key_decl(Node *dd, char out[65], char **code) {
 static void key_group(Node **Ts, Node **ts, int n, int base, SKey *out) {
     cur_deps.n = 0;
     SBuf w = { 0 }; sb_fmt(&w, "group %d\n", n);
-    int saved = kgroup_base; kgroup_base = base;
+    int saved = kgroup_base; kgroup_base = base; kfresh_on = true; nkfresh = 0;
     for (int i = 0; i < n; i++) { sb_put(&w, "type "); canon(&w, Ts[i]); sb_put(&w, "\nterm "); canon(&w, ts[i]); sb_put(&w, "\n"); }
-    kgroup_base = saved;
+    kgroup_base = saved; kfresh_on = false;
     char gk[65]; key_hash(w.b, w.n, gk); free(w.b);
     for (int i = 0; i < n; i++) { char m[96]; snprintf(m, sizeof m, "member %d of %s\n", i, gk); key_hash(m, strlen(m), out[i]); }
 }

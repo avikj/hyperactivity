@@ -3211,12 +3211,15 @@ static Node *reading_type(Node *t) {
  * cost is mostly not elaboration of remembered declarations; it is the declarations never
  * remembered, the 52 refused ones among them, rechecked every run (t43). Next: t43 first, then
  * the x-case-chain regression, before this is merged. */
+static const char *rbp_h[64]; static long rbp_s[64], rbp_n[64]; static int nrbp;
+static void rbp_dump(void) { for (int i = 0; i < nrbp; i++) fprintf(stderr, "PROF %s %ld steps %ld calls\n", rbp_h[i], rbp_s[i], rbp_n[i]); }
 static char *readback(Node *t, long *steps) {
     net_drain();
     long s0 = stat_steps;
     char *buf = read_port(build_top(t));
     net_drain();
     if (steps) *steps = stat_steps - s0;
+    if (getenv("CUBICAL_PROF")) { static bool reg; if (!reg) { atexit(rbp_dump); reg = true; } const char *h = t->list && t->n && !t->it[0]->list ? t->it[0]->s : "?"; int i; for (i = 0; i < nrbp && strcmp(rbp_h[i], h); i++) ; if (i == nrbp && nrbp < 64) rbp_h[nrbp++] = h; if (i < 64) { rbp_s[i] += stat_steps - s0; rbp_n[i]++; } }
     return buf;
 }
 /* a reading at a type T: the normal form at T (quote), whose length includes the quoting; a value
@@ -3965,6 +3968,11 @@ static void toplevel_in(Node *f) {
         /* its codebase key (F34): a definition the store holds as checked is not checked again */
         char key[65]; char *kcode = NULL, *ktype = NULL;
         key_def(dT, dt, key, &kcode, &ktype);
+        if (getenv("CUBICAL_KEYDUMP")) fprintf(stderr, "KEY %s %s %d\n", define ? f->it[1]->s : "(check)", key, store_checked(key));
+        if (getenv("CUBICAL_KEYTEXT") && define && !strcmp(getenv("CUBICAL_KEYTEXT"), f->it[1]->s)) fprintf(stderr, "TEXT %s\n%s\n", ktype, kcode);
+        /* CUBICAL_DCTEST: every checked definition's canonical forms read back and canonicalized again,
+         * reporting any that do not round-trip (2026-11-12: the library, 0) */
+        if (getenv("CUBICAL_DCTEST") && kcode && ktype) { Node *a = decanon(kcode), *b = decanon(ktype); if (!a || !b) printf("DC-UNREAD %s\n", f->it[1]->s); else { SBuf x = { 0 }, y = { 0 }; cur_deps.n = 0; canon(&x, a); canon(&y, b); if (strcmp(x.b ? x.b : "", kcode) || strcmp(y.b ? y.b : "", ktype)) printf("DC-DIFF %s\n", f->it[1]->s); free(x.b); free(y.b); } }
         bool stored = define && expect && !trusted && (forced_result ? forced_steps < 0 : store_checked(key));
         Node *cT = nl2("%raw", aclosed(dT)), *ct = trusted || stored ? NULL : nl2("%raw", aclosed(dt));
         long steps = 0;

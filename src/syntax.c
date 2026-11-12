@@ -958,6 +958,7 @@ static void tele(Node *sig);
 static void tele_more(Lhs *ls, int ncl);
 static Node *clauses_typed(const char *f, Lhs *ls, Node **rhs, int n);
 static Node *clauses_wf(const char *f, Lhs *ls, Node **rhs, int n, Node *m, Node *L);
+long eh_c[3]; void eh_dump(void) { fprintf(stderr, "ELAB hit %ld miss %ld skip %ld\n", eh_c[0], eh_c[1], eh_c[2]); }
 static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint64_t mask, int mlen);
 static Node *copattern_clauses(const char *f, Lhs *ls, Node **rhs, int n, bool typed);
 static Node *copattern_wrap(Node *b);
@@ -5635,7 +5636,10 @@ static void el_release(ElMark e) {
 static void no_ctor_name(const char *name) {
     if (name && con_lookup(name) >= 0) die("a definition may not reuse a constructor's name (the constructor would be read instead):", name);
 }
-static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint64_t mask, int mlen) {
+static void x_checked_(const char *name, Node *sig, Node *body, bool expect, uint64_t mask, int mlen);
+extern long stat_steps;
+static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint64_t mask, int mlen) { long s0 = stat_steps; x_checked_(name, sig, body, expect, mask, mlen); if (getenv("CUBICAL_PROF")) fprintf(stderr, "DECL %ld %s\n", stat_steps - s0, name ? name : "(check)"); }
+static void x_checked_(const char *name, Node *sig, Node *body, bool expect, uint64_t mask, int mlen) {
     no_ctor_name(name);
     neh = neg = 0; nbk = 0;
     /* its own calls (a copattern definition's) take implicit arguments as later uses do */
@@ -5670,7 +5674,30 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
         el_release(em);
         return;
     }
-    for (int round = 0; ; round++) {
+    /* t61 (2026-11-12): the whole elaboration remembered under its input's canonical key (the
+     * declaration's surface forms, every name as the key it denotes, the implicit mask, the
+     * machine and bootstrap identity chk_salt); its output, the solved T and t, stored canonically
+     * and read back through the current bindings. The solved forms still go through `checked`
+     * below, whose certificate check decides acceptance, so a remembered elaboration can only
+     * change which term is checked, never whether one is accepted. Environment it does not key:
+     * referenced definitions' surface signatures (implicitness) and instances, beyond their core
+     * keys: a change there can leave a stale elaboration, which is then checked as any term is. */
+    char ekey[65] = ""; bool ehit = false; static long eh_hit, eh_miss, eh_skip; static bool eh_reg; if (getenv("CUBICAL_PROF") && !eh_reg) { eh_reg = true; void eh_dump(void); atexit(eh_dump); }
+    if (name && expect && !trusted && store_dir() && chk_salt[0] && !copattern_body(body) && !getenv("CUBICAL_NOELABMEMO")) {
+        SBuf w = { 0 }; cur_deps.n = 0; kfresh_on = true; nkfresh = 0;
+        sb_fmt(&w, "elab\n%s\n%llx %d\n", chk_salt, (unsigned long long)mask, mlen);
+        canon(&w, sig); sb_put(&w, "\n"); canon(&w, body); sb_put(&w, "\n"); kfresh_on = false; if (getenv("CUBICAL_ELABKEY")) { FILE *df = fopen(getenv("CUBICAL_ELABKEY"), "a"); if (df) { fprintf(df, "== %s\n%s", name, w.b); fclose(df); } }
+        key_hash(w.b, w.n, ekey); free(w.b); cur_deps.n = 0;
+        char *et = store_read(ekey, "elab");
+        if (et) {
+            char *nl = strchr(et, '\n');
+            if (nl) { *nl = 0; Node *eT = decanon(et), *et2 = decanon(nl + 1); if (eT && et2) { T = eT; t = et2; ehit = true; forced_result = strdup("ok"); forced_steps = -1; } }
+            free(et);
+        }
+        if (ehit) eh_hit++; else { eh_miss++; if (getenv("CUBICAL_ELABMISS")) fprintf(stderr, "MISS %s %s\n", name, store_read(ekey, "elab") ? "present" : "absent"); }
+    } else eh_skip++;
+    { extern long eh_c[3]; eh_c[0] = eh_hit; eh_c[1] = eh_miss; eh_c[2] = eh_skip; }
+    for (int round = 0; !ehit; round++) {
         die_jb = &ejb;
         nesc = 0; T = core(el(sig));
         nesc = 0; syn_expect = sig; t = core(el(body)); syn_expect = NULL;
@@ -5721,6 +5748,14 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
     }
     /* settled: the elaboration's marks removed */
     if (!has_hole(T) && !has_hole(t)) { T = strip_marks(T); t = strip_marks(t); }
+    if (getenv("CUBICAL_ELABMISS") && ekey[0] && !ehit) fprintf(stderr, "END %s fr=%s holes=%d\n", name, forced_result ? forced_result : "(null)", has_hole(T) || has_hole(t));
+    if (ekey[0] && !ehit && forced_result && !strcmp(forced_result, "ok") && !has_hole(T) && !has_hole(t)) {
+        SBuf a = { 0 }, b = { 0 }; cur_deps.n = 0; kfresh_on = kser_on = true; nkfresh = 0; canon(&a, T); canon(&b, t); kfresh_on = kser_on = false; cur_deps.n = 0;
+        Node *rT = decanon(a.b), *rt = decanon(b.b);
+        if (getenv("CUBICAL_ELABMISS") && (!rT || !rt)) fprintf(stderr, "UNREAD %s\n T %.300s\n t %.300s\n", name, a.b, b.b);
+        if (rT && rt) { SBuf w = { 0 }; sb_put(&w, a.b); sb_put(&w, "\n"); sb_put(&w, b.b); store_write(ekey, "elab", w.b, false); free(w.b); }
+        free(a.b); free(b.b);
+    }
     if (getenv("CUBICAL_SHOW_ELAB")) { fprintf(stderr, "%s : ", name ? name : "(check)"); print_node(stderr, T); fprintf(stderr, "\n  = "); print_node(stderr, t); fprintf(stderr, "\n"); }
     if (em.on) { T = el_copy(T); t = el_copy(t); }
     el_release(em);
