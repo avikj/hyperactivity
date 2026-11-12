@@ -82,6 +82,10 @@ static void x_lex(const char *text) {
             continue;
         }
         int col = COL;
+        /* t63 (2026-11-12): needs-work (goal work-object). A quoted string is read here but is a
+         * term nowhere (only import paths and `world` take one), so raw text cannot be written as a
+         * declaration. It needs one surface form elaborating to the bytes the language already has
+         * (Bytes, lib/prim.cub); no rule is added to the core. */
         if (*p == '"') {
             const char *b = ++p; while (*p && *p != '"' && *p != '\n') p++;
             if (*p != '"') x_die(line, col, "unclosed string", NULL);

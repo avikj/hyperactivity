@@ -2,7 +2,7 @@
 -- lib/work.cub. Each goal's statement is the comment above its line in `serves`; a goal is reached
 -- when its statement holds, and the goals it serves are the reason it is pursued. The tickets that
 -- serve each goal are in work/tickets.cub (`python3 tools/work.py goals`).
-data Goal = publish | self-aware | tooling | core-correct | typed-codes | partial-evaluation | native | typed-checker
+data Goal = publish | self-aware | tooling | core-correct | typed-codes | partial-evaluation | native | typed-checker | work-object
 serves : Goal → List Goal
 -- publish (2026-11-12): the paper (docs/Hyperactive_Final_Paper.pdf) is published with its companion
 -- repository, whose language core is complete: the formal language implemented exactly, the
@@ -44,3 +44,107 @@ serves native = cons publish nil
 -- typed-checker (2026-11-12): the checker returns a typing derivation or a refusal, so it is sound by
 -- construction; then it is shown to decide derivability.
 serves typed-checker = cons core-correct nil
+-- work-object (2026-11-12, worked out with the user in one session; this is its record, and it is in
+-- use from this commit on). The single knowledge interface to the work, used continuously by agents
+-- and people. The symptom it removes is active now: an agent's or a conversation's knowledge lives
+-- in an accumulating transcript that is lost or lossily summarised at every context reset and every
+-- hand-off, and the codebase, the project's record and a session's working memory are different
+-- things in different places.
+--
+-- The object. The work is one sequence of declarations in the language; the codebase is one region
+-- of it. Everything said by anyone, person or agent, is a declaration: a definition, raw text, a
+-- question, a decision, a correction, an answer. A conversation with the work is more declarations
+-- in the same sequence, so it is an ongoing conversation within the code. There is no second format
+-- and no separate store of notes. Files and directories are not its organisation: they are only how
+-- declarations are stored today.
+--
+-- Raw text is a term, not an outer layer: a statement parsed as far as it has been parsed. Parsing
+-- it further gives another statement ("this text says this"), as checkable as its form allows; the
+-- boundary between formal and informal moves as parsing improves and nothing else changes. A
+-- question parsed fully is a type, and it is settled by inhabiting or refuting it.
+--
+-- No imposed ontology. The base has no kinds of statement, no fixed relations, no notion of author,
+-- session, ticket, goal or settled. Ticket, goal, question are types the work defines for itself
+-- (lib/work.cub, this file). A relation is a reference one declaration makes to another by key, as a
+-- definition references a definition; reverse relations are computed. Who said something, if it
+-- matters, is itself a statement.
+--
+-- Open and closed loops. The current state of the work holds exactly what is live and worth
+-- keeping. Anything opened (a question, a side investigation, a plan item, a note) is closed when it
+-- is deemed completely unnecessary, at which point keeping it would only pollute the information
+-- space: it is removed from the state, and anything that matters from it (an answer, a fact, a
+-- correction) is folded into where it belongs. Anyone closes a loop; there is no owner. A loop may
+-- be settled by computation (its question is now inhabited, what it waited on now checks); settling
+-- obliges closing it, never leaving it hidden in place. Personal and collaborative loops are the
+-- same thing.
+--
+-- History. The sequence of states over time is itself a mathematical object, kept as history (as a
+-- repository's commits keep a deleted file): closing is reversible, but history is not content, and
+-- no view reads it unless a past state is asked for explicitly. Store entries no current state
+-- references are collected (#gc).
+--
+-- Identity and names. A declaration is identified by the content key of its canonical form (binders
+-- nameless, every reference replaced by the referenced definition's key), as the store already does
+-- for definitions. A binding is the statement that a name denotes a key; a name means its latest
+-- binding; what was checked against an earlier binding keeps that binding's key, its meaning having
+-- been fixed when it was checked. "Depends on a superseded binding" is computed; updating dependents
+-- is elaborating them again under the new binding, which is more declarations. In the machine
+-- today, replacing a binding is #retract followed by a new declaration (fixed by t56's close).
+--
+-- Merging. Declarations never change once written, so two histories merge by union, which always
+-- commutes: content never conflicts. The only disagreement is a name with two latest bindings: a
+-- computed fact, settled by a later declaration. This is why Pijul is not used: its theory of
+-- patches (order-independent merges, conflicts as recorded states) exists because files are lines
+-- edited in place; content identity gives the same properties here directly, and adopting it would
+-- mean leaving GitHub and versioning lines of a representation the work is leaving.
+--
+-- Derived facts, ambient. Every fact about the work is an evaluation by the evaluator: a type, a
+-- check, a refusal and its reason, a normal form, a cost, what depends on what and what depends on
+-- it, the trust footprint, whether a standing constraint holds, whether a question is settled, what
+-- a view shows. Inputs are identified by content, so a changed input has a different key and a
+-- remembered result never goes stale: nothing is invalidated and no dependency tracking is needed
+-- (the standard incremental-computation designs, Salsa, Adapton, build traces, track reads because
+-- their inputs are mutable; here they are not). The evaluator already keys every term by its
+-- structure and keeps one value per live key. What is needed: everything durable in canonical form
+-- (a reference is the referenced definition's content key; run positions and names are only the
+-- current state's rendering); the evaluator's key for a reference the content key (t60); results
+-- kept beyond the run, stored canonically and rendered through the current bindings when read, the
+-- same mechanism as the store's definitions (t61). Then the store's certificates are such kept
+-- results (the checker applied to a definition's key, giving ok); the elaborator's solving rounds
+-- are remembered; refusals are kept as acceptances are (t43); the checker's identity is the content
+-- keys of its own definitions (t42); the per-file cache and its second root of trust go (t41, t44).
+--
+-- Views. A view is a term of the language applied to the work (t62: the work as a value); its value
+-- is whatever its type says, presentation being separate. Codebase, project and session are the same
+-- object and mechanism at different time scales; they differ only in which declarations a view
+-- includes and how often it refreshes: the definitions reachable from what is wanted; the open goals
+-- and tickets with what they serve; what a session's aim still needs. A session is a view given an
+-- aim, which is a statement. The live working document of a session is its view: small, holding
+-- exactly the open loops. Its budget (a screen for a person, a context window for an agent) forces
+-- compression, and compression is refactoring: one declaration replacing several and saying so, as
+-- several definitions are generalised into one.
+--
+-- Use. Agents and people use the work continuously through the machine's serve mode (blocks of
+-- declarations and readings on standard input; a failing request does not stop it): declare, ask
+-- readings, read views. An agent reads its views at the start of each exchange, so what it works
+-- from is the work, not a transcript, and losing a conversation loses nothing. Many agents write
+-- through one machine, which serialises them. Lasting corrections are standing declarations, and
+-- whether a declaration respects them is a computed fact the moment it lands (what manual audits of
+-- agents imitate). People see the same views through every faculty an editor offers: hover a
+-- computed fact, go-to a reference, diagnostics refusals, outline a view, history the states, search
+-- a query. The conversation is one more rendering.
+--
+-- Trust. The trusted part stays the checker and the evaluator. Everything producing declarations is
+-- untrusted. Formal statements carry certificates; informal ones carry the statement of who said
+-- them, so the line between verified and said is visible on every statement.
+--
+-- Exists: content identity (src/store.c), the names log with history, certificates, readings
+-- (#type, #where, #scope, #key, #names, #history, #safe, #show), serve mode (src/lang.c, serve),
+-- #retract, goals and tickets as types, the evaluator's structural keys. Missing, about 500 lines:
+-- t60, t61, t62, t43, a way to write text as a term (t63), and the work record itself rebuilt on
+-- this (t64). Not part of it (each was proposed in the founding session and withdrawn as imposed):
+-- a program that calls a model and builds its context; an author field; fixed kinds of change; a
+-- fixed set of relations; views that must produce text; ordering by causal references; a driver
+-- script and session file; editor features and the moving of prose files as scheduled items; "keep
+-- everything said".
+serves work-object = cons tooling (cons self-aware (cons publish nil))

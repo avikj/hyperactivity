@@ -7,6 +7,25 @@ is only a directory name.
 
 ## What is happening now
 
+**The work object (2026-11-12, goal `work-object` in `work/goals.cub`, whose comment is the whole
+construction).** The work is one sequence of declarations used continuously by agents and people:
+everything said is a declaration; open loops are closed (removed from the state, anything that
+matters folded in) by anyone once completely unnecessary; facts are evaluations, remembered under
+content keys; views are terms applied to the work. It is in use from now: knowledge from any session
+goes into the code as declarations and dated notes at their sites, never only into a conversation.
+Pending, in order: t60 (content keys for references in the evaluator), t61 (results kept
+canonically beyond the run), t62 (the work as a value; views), t43 (refusals kept), t63 (text as a
+term), t64 (the work record rebuilt on it). The coordinator's separate checkout for this is branch
+`claude/work-object` (worktree /tmp/wo); everything on it is merged into `claude/work-record` when
+it checks.
+
+**Checks are real only with `CUBICAL_NOCACHE=1`:** the per-file cache replays a file without
+checking it (t41), even with a fresh `CUBICAL_STORE`, and its counts differ.
+
+**Fixed 2026-11-12:** t51, the checker accepted Type : Type through a level computed by cases on a
+variable (a stuck level now is an atom); t56, `#retract` did not free the name.
+
+
 The immediate goal is that anyone arriving with no context finds a repository that states its own
 reality (goal `self-aware`). That means: every file read against the paper and the published
 calculus, every finding recorded as a ticket at the place it concerns, and this document saying
@@ -24,12 +43,15 @@ of the translation of terms into the evaluator's graph (t34). Until that is done
 implementation is exactly the calculus is not known.
 
 **Typed codes and normalization by evaluation (2026-11-12, `lib/nbe.cub`, goal `typed-codes`):**
-checked for the fragment Π, Σ, Bool with dependent case: typing derivations over the one code
-representation, indexed by meaning (paper §6.1, Code(Γ, A) = Σ c. Der); Kripke computability over
-renamings; reify/reflect; the fundamental lemma; normalize; reifySound (6.5), which holds by the
-indices. `experiments/nbe/examples.cub` runs it (a β-redex to `true`, a variable `f` to `λ x. f x`).
-Not yet built: PathP and the interval, Kan operations, Glue, universes (plan at the head of the
-file), and its use by the specializer (t11). Findings from it: t46, t47, t48.
+complete and checked for Π, Σ, Bool with dependent case (typed codes over the one code
+representation, derivations indexed by meaning, Kripke NbE, reifySound (6.5) by the indices;
+`experiments/nbe/examples.cub` runs it). Paths and the interval are being rebuilt over cubes in the
+working copy `experiments/nbe/p26-wip.cub` (loads in place of `lib/nbe.cub`; 571 passed, 0 failed at
+1b4df57), which replaces the families of `lib/nbe.cub` in place when done and is then deleted. The
+exact next definitions are the list at the head of `lib/nbe.cub`; Kan operations, Glue and universes
+follow. The work is carried by a chain of background agents, each continuing from that list and
+audited against its constraints (no code changes to src/, lib/check.cub, lib/prelude.cub; no
+postulates; normal forms redex-free; a fresh uncached check). Findings from it: t46–t50, t52–t55.
 
 ## The work, as code
 

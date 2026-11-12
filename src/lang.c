@@ -3163,6 +3163,14 @@ static Node *reading_type(Node *t) {
 /* A reading is taken over the complete normalization of what was posed
  * (5.13 concerns a normal form): pending pairs are reduced before and after,
  * so the counts do not depend on the schedule. */
+/* t61 (2026-11-12): needs-work (goal work-object). Every evaluator result read back here (checks,
+ * the elaborator's solving rounds via %chk-def / %infer-ok, usages, readings) lives only for this
+ * run. Each is to be kept beyond it in canonical form: the query identified by its canonical key
+ * (references as content keys, t60; the checker identified by its own definitions' keys, t42), the
+ * result stored with references as keys and rendered through the current bindings when read, the
+ * same mechanism as the store's definitions. The store's certificates are then such results; the
+ * per-file cache (t41) goes. Not yet read: whether %chk-def applied to two closed codes is a
+ * keyed (memoised) term in src/net.c, or needs its key formed here. */
 static char *readback(Node *t, long *steps) {
     net_drain();
     long s0 = stat_steps;
@@ -4893,6 +4901,10 @@ int cubical_call_w(const char *name, const uint64_t *args, int n, uint64_t *out)
  * the machine; each reply ends with a line holding '.'. A definition is declared once: an editor
  * sends new declarations and readings, and restarts the machine to redefine (there is no retraction).
  * Run with CUBICAL_WORKERS=0 unless the requests are independent of each other's errors */
+/* t62 (2026-11-12): needs-work (goal work-object). Serve mode is how agents and people use the work
+ * continuously. Missing: the work given to a term as a value (the declarations and their bindings,
+ * each declaration's code), so that views are terms of the language applied to it, and a reading
+ * that evaluates a view. Replacing a binding is #retract then a new declaration (t56, closed). */
 static void serve(void) {
     static char *buf; static size_t cap;
     size_t len = 0; char line[65536];

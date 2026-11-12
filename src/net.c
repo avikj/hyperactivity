@@ -530,6 +530,12 @@ static Key *key(int tag, uint64_t a, void *p, int n, Key *const *c) {
 static Key *key0(int tag, uint64_t a, void *p) { return key(tag, a, p, 0, NULL); }
 static Key *key1(int tag, uint64_t a, void *p, Key *x) { return key(tag, a, p, 1, &x); }
 static Key *key2(int tag, uint64_t a, void *p, Key *x, Key *y) { Key *c[2] = { x, y }; return key(tag, a, p, 2, c); }
+/* t60 (2026-11-12): needs-work (goal work-object). A reference to a definition is keyed by its
+ * index in the current run, so no key involving one means the same thing in another run, and no
+ * evaluator result mentioning a definition can be remembered beyond the run. The key of a reference
+ * is to be the definition's content key (src/store.c's key of its canonical form); equal content is
+ * equal meaning, so this is sound for values. Results that name definitions (readback text,
+ * elaboration solutions) are then stored canonically and rendered through current bindings (t61). */
 Key *key_global(long g) { return key0(K_GLOBAL, (uint64_t)g, NULL); }
 Key *key_con0(int c) { return key0(K_CON, (uint64_t)c, NULL); }
 /* a substitution as a key: its (dimension, interval) pairs, in order */
