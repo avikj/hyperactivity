@@ -159,3 +159,73 @@ ext : (Γ : Ctx) → PTy (Env Γ) → Ctx
 ext Γ A = (lcons (fst A) (fst Γ) , (snd Γ , snd A))
 ext-env : (Γ : Ctx) (A : PTy (Env Γ)) → Path Type (Env (ext Γ A)) ((ρ : Env Γ) × ElP (Env Γ) A ρ)
 ext-env Γ A = refl
+
+-- ---------------------------------------------------------------- variables
+-- the dependent eliminator of Bool, for the meanings of case
+bool-elim : (P : Bool → Type) → P true → P false → (b : Bool) → P b
+bool-elim P t f true = t
+bool-elim P t f false = f
+-- the four parts every judgment here is indexed by: a context, a type over its environments, a raw
+-- code and the code's meaning (the indices are one Σ: a family's indices may not depend on each other)
+Jdg : Type 1
+Jdg = (Γ : Ctx) × (A : PTy (Env Γ)) × Code × ((ρ : Env Γ) → ElP (Env Γ) A ρ)
+-- the variable n of Γ (its code cvar n), of type A, meaning v (a projection out of the environment)
+wk : (Γ : Ctx) (B : PTy (Env Γ)) → PTy (Env Γ) → PTy (Env (ext Γ B))
+wk Γ B A = pull (Env Γ) (Env (ext Γ B)) (λ ρ → fst ρ) A
+data Var : (J : Jdg) → Type 1 where
+  vz : (Γ : Ctx) (A : PTy (Env Γ)) → Var (ext Γ A , wk Γ A A , cvar #0 , λ ρ → snd ρ)
+  vs : (Γ : Ctx) (A B : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) →
+       Var (Γ , A , cvar n , v) → Var (ext Γ B , wk Γ B A , cvar (%wsucc n) , λ ρ → v (fst ρ))
+
+-- ---------------------------------------------------------------- neutral and normal forms
+-- one family for both (mutual data types are not available), the kind in the index. η-long: a
+-- neutral is normal only at Bool. The codes are the ones the language's (code t) writes: Bool is
+-- data #0, true and false its constructors #0 and #1, case on it ccase #0 with the two branches.
+data NK = k-ne | k-nf
+-- substituting a meaning for the last variable, and extending at the case's scrutinee
+at-last : (G : Type) (A : PTy G) (va : (ρ : G) → ElP G A ρ) → PTy ((ρ : G) × ElP G A ρ) → PTy G
+at-last G A va B = pull ((ρ : G) × ElP G A ρ) G (λ ρ → (ρ , va ρ)) B
+c-true : Code
+c-true = ccon #0 #0 lnil lnil
+c-false : Code
+c-false = ccon #0 #1 lnil lnil
+c-case : Code → Code → Code → Code
+c-case t f x = ccase #0 (lcons t (lcons f lnil)) x
+data NN : (KJ : NK × Jdg) → Type 1 where
+  nvar : (Γ : Ctx) (A : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) →
+    Var (Γ , A , cvar n , v) → NN (k-ne , (Γ , A , cvar n , v))
+  napp : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
+    (f : Code) (vf : (ρ : Env Γ) → ElP (Env Γ) (pi-ty (Env Γ) K a b g A B) ρ)
+    (c : Code) (va : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ) →
+    NN (k-ne , (Γ , pi-ty (Env Γ) K a b g A B , f , vf)) → NN (k-nf , (Γ , cl-dom (Env Γ) K a g A , c , va)) →
+    NN (k-ne , (Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) va (cl-cod (Env Γ) K a b g A B) , capp f c , λ ρ → vf ρ (va ρ)))
+  nfst : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
+    (p : Code) (vp : (ρ : Env Γ) → ElP (Env Γ) (sig-ty (Env Γ) K a b g A B) ρ) →
+    NN (k-ne , (Γ , sig-ty (Env Γ) K a b g A B , p , vp)) →
+    NN (k-ne , (Γ , cl-dom (Env Γ) K a g A , cfst p , λ ρ → fst (vp ρ)))
+  nsnd : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
+    (p : Code) (vp : (ρ : Env Γ) → ElP (Env Γ) (sig-ty (Env Γ) K a b g A B) ρ) →
+    NN (k-ne , (Γ , sig-ty (Env Γ) K a b g A B , p , vp)) →
+    NN (k-ne , (Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) (λ ρ → fst (vp ρ)) (cl-cod (Env Γ) K a b g A B) , csnd p , λ ρ → snd (vp ρ)))
+  ncase : (Γ : Ctx) (P : PTy (Env (ext Γ (bool-ty (Env Γ))))) (x : Code) (vx : (ρ : Env Γ) → Bool)
+    (t : Code) (vt : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (bool-ty (Env Γ)) (λ ρ → true) P) ρ)
+    (f : Code) (vf : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (bool-ty (Env Γ)) (λ ρ → false) P) ρ) →
+    NN (k-ne , (Γ , bool-ty (Env Γ) , x , vx)) →
+    NN (k-nf , (Γ , at-last (Env Γ) (bool-ty (Env Γ)) (λ ρ → true) P , t , vt)) →
+    NN (k-nf , (Γ , at-last (Env Γ) (bool-ty (Env Γ)) (λ ρ → false) P , f , vf)) →
+    NN (k-ne , (Γ , at-last (Env Γ) (bool-ty (Env Γ)) vx P , c-case t f x ,
+                λ ρ → bool-elim (λ b → ElP (Env (ext Γ (bool-ty (Env Γ)))) P (ρ , b)) (vt ρ) (vf ρ) (vx ρ)))
+  nne : (Γ : Ctx) (x : Code) (vx : (ρ : Env Γ) → Bool) →
+    NN (k-ne , (Γ , bool-ty (Env Γ) , x , vx)) → NN (k-nf , (Γ , bool-ty (Env Γ) , x , vx))
+  ntrue : (Γ : Ctx) → NN (k-nf , (Γ , bool-ty (Env Γ) , c-true , λ ρ → true))
+  nfalse : (Γ : Ctx) → NN (k-nf , (Γ , bool-ty (Env Γ) , c-false , λ ρ → false))
+  nlam : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
+    (c : Code) (vb : (ρ : Env (ext Γ (cl-dom (Env Γ) K a g A))) → ElP (Env (ext Γ (cl-dom (Env Γ) K a g A))) (cl-cod (Env Γ) K a b g A B) ρ) →
+    NN (k-nf , (ext Γ (cl-dom (Env Γ) K a g A) , cl-cod (Env Γ) K a b g A B , c , vb)) →
+    NN (k-nf , (Γ , pi-ty (Env Γ) K a b g A B , clam c , λ ρ x → vb (ρ , x)))
+  npair : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
+    (c1 : Code) (v1 : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ)
+    (c2 : Code) (v2 : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B)) ρ) →
+    NN (k-nf , (Γ , cl-dom (Env Γ) K a g A , c1 , v1)) →
+    NN (k-nf , (Γ , at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B) , c2 , v2)) →
+    NN (k-nf , (Γ , sig-ty (Env Γ) K a b g A B , cpair c1 c2 , λ ρ → (v1 ρ , v2 ρ)))
