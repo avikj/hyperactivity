@@ -539,3 +539,20 @@ case-comp Γ KB gB DB P vx vt vf Δ δ (inr1 (inr1 n)) ct cf =
        (snd n)
        (snd (fst (rr (fst P)) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , true)) (λ ρ → vt (δ ρ)) ct))
        (snd (fst (rr (fst P)) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , false)) (λ ρ → vf (δ ρ)) cf)))
+-- the fundamental lemma: a derivation's meaning is computable at every world under every
+-- computable environment (by recursion on the derivation; its binder case is the paper's
+-- weakening/application calculation)
+fund : {J : Jdg} → Der J → (Δ : Ctx) (δ : Env Δ → Env (fst J)) → CompEnv (fst (fst J)) (snd (fst J)) Δ δ →
+  Comp (Env (fst J)) (fst (snd J)) Δ δ (λ ρ → snd (snd (snd J)) (δ ρ))
+fund (dvar Γ A n v x) Δ δ e = var-comp (fst Γ) (snd Γ) (A , n , v) x Δ δ e
+fund (dapp Γ K a b g A B f vf c va df da) Δ δ e =
+  fund df Δ δ e Δ (λ ρ → ρ) (ren-id Δ) (λ ρ → va (δ ρ)) (fund da Δ δ e)
+fund (dfst Γ K a b g A B p vp dp) Δ δ e = fst (fund dp Δ δ e)
+fund (dsnd Γ K a b g A B p vp dp) Δ δ e = snd (fund dp Δ δ e)
+fund (dcase Γ KB gB DB P x vx t vt f vf dx dt df) Δ δ e =
+  case-comp Γ KB gB DB P vx vt vf Δ δ (fund dx Δ δ e) (fund dt Δ δ e) (fund df Δ δ e)
+fund (dtrue Γ KB gB DB) Δ δ e = inl1 (refl , one)
+fund (dfalse Γ KB gB DB) Δ δ e = inr1 (inl1 (refl , one))
+fund (dlam Γ K a b g A B c vb db) Δ δ e =
+  λ Δ' r w y cy → fund db Δ' (λ ρ → (δ (r ρ) , y ρ)) (env-ren (fst Γ) (snd Γ) Δ δ e Δ' r w , cy)
+fund (dpair Γ K a b g A B c1 v1 c2 v2 d1 d2) Δ δ e = (fund d1 Δ δ e , fund d2 Δ δ e)
