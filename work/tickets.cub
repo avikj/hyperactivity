@@ -47,6 +47,13 @@
 -- decomposes such pairs. lib/nbe.cub works around it (variables by recursion on the skeleton,
 -- worlds as functions). Site in src/syntax.c (the split's unification) not yet located.
 --
+-- t48 (2026-11-12): needs-work. Checking `reify-code s K D Δ δ x cx = (fst (fst (rr s) K D Δ δ x cx) , x ,
+-- embed (snd (fst (rr s) K D Δ δ x cx)))` (lib/nbe.cub, rr at a variable shape s) exhausted the
+-- machine's memory (7 GB, killed, exit 137), where the same term through a definition with a
+-- declared type, nf-code Δ (s , (K , δ , D)) x (fst (rr s) K D Δ δ x cx), checks in a few thousand
+-- steps. Presumably the implicit index of embed is solved by evaluating rr's body at the variable
+-- shape rather than from rr's type; not yet located (src/syntax.c hole solving, or lib/check.cub).
+--
 t1 : Ticket Goal
 t1 = ticket wrong (cons core-correct nil) (closed #20261112)
 t2 : Ticket Goal
@@ -141,3 +148,5 @@ t46 : Ticket Goal
 t46 = ticket wrong (cons core-correct (cons typed-codes nil)) opened
 t47 : Ticket Goal
 t47 = ticket needs-work (cons typed-codes nil) opened
+t48 : Ticket Goal
+t48 = ticket needs-work (cons core-correct (cons typed-codes nil)) opened

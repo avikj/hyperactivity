@@ -585,3 +585,18 @@ normalize-nf Γ A t =
 -- as a typed code (paper: normalize : Code(Γ, A) → Code(Γ, A))
 normalize : (Γ : Ctx) (A : PTy (Env Γ)) → TCode Γ A → TCode Γ A
 normalize Γ A t = (fst (normalize-nf Γ A t) , teval Γ A t , embed (snd (normalize-nf Γ A t)))
+-- reify as a map into typed codes, and its fundamental equation (6.5): for every computable value v
+-- at every world, eval (reify v) ρ ≡ v ρ, at every environment ρ; it holds by the indices
+-- a normal form packaged as a typed code (a separate definition because of t48)
+nf-code : (Γ : Ctx) (A : PTy (Env Γ)) (x : (ρ : Env Γ) → ElP (Env Γ) A ρ) → ((c : Code) × NN (k-nf , (Γ , A , c , x))) → TCode Γ A
+nf-code Γ A x p = (fst p , x , embed (snd p))
+reify-code : (s : TyShape) (K : Type) (D : TyM s K) (Δ : Ctx) (δ : Env Δ → K) (x : (ρ : Env Δ) → snd (TyE s K) D (δ ρ)) →
+  CompS s K D Δ δ x → TCode Δ (s , (K , δ , D))
+reify-code s K D Δ δ x cx = nf-code Δ (s , (K , δ , D)) x (fst (rr s) K D Δ δ x cx)
+reifySound : (s : TyShape) (K : Type) (D : TyM s K) (Δ : Ctx) (δ : Env Δ → K) (x : (ρ : Env Δ) → snd (TyE s K) D (δ ρ))
+  (cx : CompS s K D Δ δ x) (ρ : Env Δ) → Path (snd (TyE s K) D (δ ρ)) (teval Δ (s , (K , δ , D)) (reify-code s K D Δ δ x cx) ρ) (x ρ)
+reifySound s K D Δ δ x cx ρ = refl
+-- normalization preserves meaning
+normalize-sound : (Γ : Ctx) (A : PTy (Env Γ)) (t : TCode Γ A) (ρ : Env Γ) →
+  Path (ElP (Env Γ) A ρ) (teval Γ A (normalize Γ A t) ρ) (teval Γ A t ρ)
+normalize-sound Γ A t ρ = refl
