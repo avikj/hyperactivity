@@ -319,7 +319,8 @@ cofield-at d tel v k j =
     _ → opq
 cofield-ty d ps v k = cofield-at d (cofields-at d ps) v k #0
 -- ---------------------------------------------------------------- levels
--- max(c, a1+o1, ...) over level variables a (their names); lvw: the level of types over levels
+-- max(c, a1+o1, ...) over level atoms a: a level variable or a level stuck on a variable (the value
+-- itself, compared by uconv); lvw: the level of types over levels
 data Lvl = lvl c ts | lvw
 lv0 = lvl #0 lnil
 Uw = Type lomega
@@ -328,16 +329,13 @@ lvl-suc l =
 lvl-max l m =
   case l of lvl c ts → (case m of lvl d us → lvl (%wmax c d) (lapp ts us); lvw → lvw); lvw → lvw
 -- Level's constructors: lzero lsuc lmax lomega
--- t51 (2026-11-12): wrong. A level value that is neither a constructor nor a variable (a call stuck
--- on a variable, `g n` for `g : Nat → Level` defined by cases) falls to `_ → lv0` below and is read as
--- lzero, so Type (g n) is Type and the hierarchy collapses: with `g51 zero = lzero; g51 (suc n) =
--- lsuc (g51 n)`, `h51 : (n : Nat) → Type (g51 n) → Type; h51 n X = X` and `k51 : Type; k51 = h51 (suc
--- zero) Type` are accepted (Type : Type), and so is `data D51 = mk51 (n : Nat) (X : Type (g51 n))`
--- at Type 0, while `data E51 (l : Level) = mke51 (X : Type l)` is refused ("the data type's universe
--- level depends on a parameter", the level read as the variable it is). Run 2026-11-12. A stuck
--- level must be an atom of the level algebra like a variable (compared by uconv, never ≤ a closed
--- level), so that a data field or a Σ whose universe is computed from a bound variable is refused.
--- lib/nbe.cub's levels are closed in every field because of this (its plan, 2026-11-12).
+-- t51 (2026-11-12, closed 2026-11-12): a level stuck on a variable (`g n`, `g : Nat → Level` by
+-- cases) used to fall to `_ → lv0` and be read as lzero, which accepted Type : Type (`h51 : (n :
+-- Nat) → Type (g51 n) → Type; h51 n X = X` with `k51 = h51 (suc zero) Type`). Fixed: every level
+-- that is not a constructor is an atom, the value itself, compared by uconv in lvl-le; h51 is now
+-- refused ("expected: Type, actual: Type (case n …)"). Run 2026-11-12: library 1907 passed / 52
+-- failed, every definition's outcome identical to before the fix; lib/nbe.cub + examples 280/0;
+-- brunerie −2 at 4 workers; work files 247/0.
 lvl-of v =
   case %view v of
     wcon d c fs ds → 
@@ -348,8 +346,7 @@ lvl-of v =
                else if %weq c #2
                       then lvl-max (lvl-of (lhead fs)) (lvl-of (lhead (ltail fs)))
                       else lvw
-    wvar l T → lvl #0 (single (l , #0))
-    _ → lv0
+    _ → lvl #0 (single (v , #0))
 -- max(c, ts) ≤ max(d, us) for every value of the variables iff c ≤ d or c ≤ some offset of us,
 -- and each a+o of ts has a+o' in us with o ≤ o'
 lvl-le l m =
@@ -360,7 +357,7 @@ lvl-le l m =
         lvw → true
         lvl d us → 
           if orb (wle c d) (lany (λ q → wle c (snd q)) us)
-            then lall (λ p → lany (λ q → andb (%weq (fst p) (fst q)) (wle (snd p) (snd q))) us) ts
+            then lall (λ p → lany (λ q → andb (uconv (fst p) (fst q)) (wle (snd p) (snd q))) us) ts
             else false
 lvl-eq l m = if lvl-le l m then lvl-le m l else false
 lvl-closed l = case l of lvl c ts → isnil ts; lvw → false
