@@ -258,6 +258,8 @@ def cmd_check(args):
             print(f'{n}: part of nothing and not declared a root'); bad += 1
         if d['parts'] and n in roots:
             print(f'{n}: declared a root but part of {", ".join(d["parts"])}'); bad += 1
+        if d['breakdown'] == 'sufficient' and not any(n in e['parts'] for e in g.values()):
+            print(f'{n}: claims its parts suffice and has none'); bad += 1
         if not is_t(n) and not d['statement']:
             print(f'{n}: no statement'); bad += 1
     ids = [d['id'] for d in g.values()]
@@ -525,6 +527,13 @@ def cmd_open(args):
             print('is usually far below it (python3 tools/work.py tree).')
             if not sys.stdin.isatty() or input(f'attach it directly to {n}? [y/N] ').strip().lower() != 'y':
                 sys.exit('not opened')
+    refuted = [x for x in nodes if g[x]['breakdown'] == 'sufficient']
+    for x in refuted:
+        print(f'{x} claims its parts suffice; a new part refutes that claim, and the missed requirement is a')
+        print(f'class: {x} becomes not-known, and "determine everything {x} requires and fill every gap" is')
+        print(f'opened as a part of it beside this one.')
+        if not sys.stdin.isatty() or input(f'open a new part of {x}? [y/N] ').strip().lower() != 'y':
+            sys.exit('not opened')
     used = {int(x[1:]) for x in g if is_t(x)} | set(texts())
     try:
         log = subprocess.run(['git', 'log', '-p', '--all', '--', 'work', 'lib/work.cub'], cwd=ROOT,
@@ -546,8 +555,19 @@ def cmd_open(args):
     last = list(re.finditer(r'^t\d+ = leaf #\d+ .*\n', gs, re.M))[-1]
     parts = ''.join(f'(cons {x} ' for x in nodes) + 'nil' + ')' * len(nodes)
     gs = gs[:last.end()] + f't{n} : Node\nt{n} = leaf #{n} {parts}\n' + gs[last.end():]
+    for x in refuted:
+        n2 = n + 1 + refuted.index(x)
+        gs = re.sub(r'^(' + re.escape(x) + r' = node #\d+ .*) sufficient$', r'\1 not-known', gs, flags=re.M)
+        last = list(re.finditer(r'^t\d+ = leaf #\d+ .*\n', gs, re.M))[-1]
+        gs = gs[:last.end()] + f't{n2} : Node\nt{n2} = leaf #{n2} (cons {x} nil)\n' + gs[last.end():]
+        gl = gs.split('\n'); at = next(k for k, l in enumerate(gl) if l.startswith(x + ' : Node'))
+        gl[at:at] = ['-- ' + b for b in textwrap.wrap(f't{n2} ({today}): determine everything {x} requires and fill '
+                     f'every gap: t{n} was a missed requirement of {x}, whose breakdown was claimed sufficient, so that '
+                     f'claim is refuted ({x} is now not-known) and the missed requirement is a class.', 97)]
+        gs = '\n'.join(gl)
     open(gp, 'w', encoding='utf-8').write(gs)
     print(f't{n} opened, part of {", ".join(nodes)}, at {f}:{line}')
+    for x in refuted: print(f't{n + 1 + refuted.index(x)} opened, part of {x}: determine everything {x} requires')
 
 
 def main():
