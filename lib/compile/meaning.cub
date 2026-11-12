@@ -77,8 +77,8 @@ mn-init bs args =
   in x86-set-rdi mn-args (x86-set-rsi (l-count args) (x86-set-rdx mn-ctx (x86-set-rsp mn-stack
        (x86-set-rip mn-code (x86-set-mem (code-over mn-code bs m0) x86-user64)))))
 -- after one step: on when its outcome is a value
-run-on : (X86 → Opt X86) → Outc exception Unit × X86 → Opt X86
-run-on h r = case fst r return (λ _ → Opt X86) of
+x86-run-on : (X86 → Opt X86) → Outc exception Unit × X86 → Opt X86
+x86-run-on h r = case fst r return (λ _ → Opt X86) of
   out-val u → h (snd r)
   out-throw e → none
   out-abort w → none
@@ -87,7 +87,7 @@ run-on h r = case fst r return (λ _ → Opt X86) of
 run-to : (X86 → Outc exception Unit × X86) → Word → Word → X86 → Opt X86
 run-to stp n stop =
   %welimP (λ _ → X86 → Opt X86) n (λ s → if weq (x86-rip s) stop then some s else none)
-    (λ j h s → if weq (x86-rip s) stop then some s else run-on h (stp s))
+    (λ j h s → if weq (x86-rip s) stop then some s else x86-run-on h (stp s))
 -- the result of a run: rax when the run stopped at the return and the flag is clear
 mn-result : Opt X86 → Opt Word
 mn-result none = none
