@@ -24,6 +24,22 @@
 -- After (2026-11-12): `tN-after : List (Ticket G)` names the tickets that must be closed before tN
 -- can be: closing them closes tN or is what tN waits on. A reference by definition, as any relation
 -- here is; written after every record it names. A ticket with no such definition waits on nothing.
+-- Value and priority (2026-11-12). Priority is not stored: it is computed from what the record states
+-- about how value depends on work (tools/work.py next, until it is a term, t37). The work states:
+--   serves g        what g is for. A goal that serves nothing is a root, and is declared one (roots);
+--                   a goal serving nothing that is not declared a root is an error, as is a ticket
+--                   serving no goal. Roots render at one level, as the top priorities.
+--   value g         how g's value depends on what serves it: all-of (nothing until every part is
+--                   complete: a companion repository with half a core is not one) or each-of (every
+--                   completed part delivers on its own).
+--   tN-after        what must be complete before tN can be done (below).
+--   speeds g        the goals whose work g makes faster when g's parts land (the knowledge system
+--                   speeds all work), and tN-speeds likewise for a ticket.
+-- From these: a piece of work's value lands when it and everything its value is gated on are
+-- complete. Work whose value is gated on incomplete work comes after that work even when nothing
+-- stops it being started; among work for one all-of goal, what speeds other work comes first; the
+-- total time is the same in any order, so the order only moves when value lands.
+data Combine = all-of | each-of
 data Kind = wrong | maybe-wrong | needs-work | question
 data Status = opened | closed (on : Word)
 record Ticket (G : Type) = { t-kind : Kind ; t-goals : List G ; t-status : Status }

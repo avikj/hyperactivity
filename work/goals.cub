@@ -5,7 +5,7 @@
 -- 2026-11-12: every goal of the work lives here, until the end of the work: goals pursued later than
 -- others are still goals, and anything found that serves one is recorded against it. unified-computing
 -- is the root; publish and work-object are its present priorities.
-data Goal = publish | self-aware | tooling | core-correct | typed-codes | partial-evaluation | native | typed-checker | work-object | unified-computing | interface | languages | cxx | rust | hardware | isa-x86 | memory-models | os
+data Goal = publish | self-aware | tooling | core-correct | typed-codes | partial-evaluation | native | typed-checker | work-object | unified-computing | interface | languages | cxx | rust | hardware | isa-x86 | memory-models | os | core
 serves : Goal → List Goal
 -- publish (2026-11-12): the paper (docs/Hyperactive_Final_Paper.pdf) is published with its companion
 -- repository, whose language core is complete: the formal language implemented exactly, the
@@ -29,7 +29,7 @@ serves tooling = cons self-aware (cons publish nil)
 -- 2022): every rule present, none added, and the part that must be trusted small and plainly those
 -- rules, with everything else (elaboration, sharing, memoization, specialization, translation)
 -- either checked by that part or unable by construction to change a result.
-serves core-correct = cons publish nil
+serves core-correct = cons core nil
 -- typed-codes (2026-11-12): the language's own terms as typed objects in it, Code(Γ, A) = Σ c.
 -- Der(Γ, c, A) (paper §6.1), over the one existing representation of terms; every definition
 -- reflects to one; normalization as a term with its soundness equation (6.5).
@@ -37,13 +37,13 @@ serves typed-codes = cons partial-evaluation (cons native (cons typed-checker ni
 -- partial-evaluation (2026-11-12): the specializer with its law in its type (6.6), the first, second
 -- and third Futamura projections (6.6–6.7), and specialization when values arrive at run time, the
 -- residual checked, realized and cached with its evidence (paper §9.3).
-serves partial-evaluation = cons publish nil
+serves partial-evaluation = cons core nil
 -- native (2026-11-12): realization through C, emitting C that keeps the program's structure so the
 -- C compilers' optimizations apply: the translation returns the relation between running the C and
 -- the term's meaning; the evaluator substitutes native code only with that relation; a process
 -- becomes an executable whose system-call events are the process's interaction. The C compiler, the
 -- C library and the hardware are trusted.
-serves native = cons publish nil
+serves native = cons core nil
 -- typed-checker (2026-11-12): the checker returns a typing derivation or a refusal, so it is sound by
 -- construction; then it is shown to decide derivability.
 serves typed-checker = cons core-correct nil
@@ -191,8 +191,10 @@ serves cxx = cons languages nil
 serves rust = cons languages nil
 -- hardware (2026-11-12): hardware semantics as exact types: instruction sets and memory models, the
 -- ground native code is stated over when the target is the machine rather than C. Secondary to
--- realization through C, whose compilers and the hardware are trusted for now.
-serves hardware = cons unified-computing (cons native nil)
+-- realization through C, whose compilers and the hardware are trusted for now. (It served native
+-- until 2026-11-12; with the core serving the instruction set and memory models that made a cycle,
+-- and realization through C does not need it.)
+serves hardware = cons unified-computing nil
 -- isa-x86 (2026-11-12): the x86-64 instruction set's semantics complete (the imported model,
 -- lib/isa/x86), every instruction translated.
 serves isa-x86 = cons hardware nil
@@ -202,4 +204,42 @@ serves isa-x86 = cons hardware nil
 serves memory-models = cons hardware (cons cxx nil)
 -- os (2026-11-12): operating-system semantics as exact types (the kernel interface, lib/os), so a
 -- running program is a process whose system-call events are its interaction.
-serves os = cons unified-computing (cons native nil)
+serves os = cons unified-computing nil
+-- core (2026-11-12): the complete language core, the paper's companion: the formal language
+-- implemented exactly (core-correct), partial evaluation with the Futamura projections
+-- (partial-evaluation), realization as native code through C (native). The user's short-term
+-- priority. Its value gates every lifting of other languages and systems: their semantics can be
+-- formalized now, but deliver only when the core they are stated in meets its stated properties
+-- (so the core serves each all-of goal of that work: a part of an each-of goal is not gated by it).
+serves core = cons publish (cons cxx (cons rust (cons isa-x86 (cons memory-models (cons os nil)))))
+-- the roots: the goals that serve nothing, declared (lib/work.cub, Value and priority)
+roots : List Goal
+roots = cons unified-computing nil
+-- how each goal's value depends on what serves it (lib/work.cub, Value and priority)
+value : Goal → Combine
+value unified-computing = each-of
+value publish = all-of
+value core = all-of
+value self-aware = each-of
+value tooling = each-of
+value core-correct = all-of
+value typed-codes = all-of
+value partial-evaluation = all-of
+value native = all-of
+value typed-checker = all-of
+value work-object = each-of
+value interface = each-of
+value languages = each-of
+value cxx = all-of
+value rust = all-of
+value hardware = each-of
+value isa-x86 = all-of
+value memory-models = all-of
+value os = all-of
+-- what each goal's landing speeds (lib/work.cub, Value and priority): the knowledge system and its
+-- interface speed all work; typed codes speed the specializer and the checker's typing
+speeds : Goal → List Goal
+speeds work-object = cons core (cons publish (cons languages (cons hardware (cons os nil))))
+speeds interface = cons core (cons publish (cons languages (cons hardware (cons os nil))))
+speeds tooling = cons self-aware nil
+speeds g = nil

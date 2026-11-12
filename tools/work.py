@@ -109,6 +109,19 @@ def afters():
             for m in re.finditer(r'^t(\d+)-after = (.*)$', src, re.M)}
 
 
+def valuation():
+    """roots, value (all-of / each-of) and speeds of the goals (lib/work.cub, Value and priority)"""
+    src = open(os.path.join(ROOT, 'work', 'goals.cub'), encoding='utf-8').read()
+    m = re.search(r'^roots = (.*)$', src, re.M)
+    roots = [g for g in re.findall(r'[\w-]+', m.group(1)) if g not in ('cons', 'nil')] if m else []
+    value = {m.group(1): m.group(2) for m in re.finditer(r'^value ([\w-]+) = (all-of|each-of)\s*$', src, re.M)}
+    speeds = {m.group(1): [g for g in re.findall(r'[\w-]+', m.group(2)) if g not in ('cons', 'nil')]
+              for m in re.finditer(r'^speeds ([\w-]+) = (.*)$', src, re.M) if m.group(1) != 'g'}
+    tsrc = open(os.path.join(ROOT, 'work', 'tickets.cub'), encoding='utf-8').read()
+    tspeeds = {int(m.group(1)): m.group(2) for m in re.finditer(r'^t(\d+)-speeds = (.*)$', tsrc, re.M)}
+    return roots, value, speeds, tspeeds
+
+
 def goals():
     """the goals: name -> (serves, statement)"""
     src = open(os.path.join(ROOT, 'work', 'goals.cub'), encoding='utf-8').read()
@@ -237,6 +250,26 @@ def cmd_check(args):
                 print(f't{n}-after: names t{m}, which has no record'); bad += 1
         if n in recs and recs[n][2] != 'open' and any(recs.get(m, ('', [], 'open'))[2] == 'open' for m in l):
             print(f't{n}: closed while what it waits on is open'); bad += 1
+    roots, value, _, _ = valuation()
+    for g in names:
+        if not gl[g][0] and g not in roots:
+            print(f'goal {g}: serves nothing and is not declared a root'); bad += 1
+        if gl[g][0] and g in roots:
+            print(f'goal {g}: declared a root but serves {", ".join(gl[g][0])}'); bad += 1
+        if g not in value:
+            print(f'goal {g}: no value (all-of or each-of)'); bad += 1
+    def cyc(g, path):
+        if g in path: return path[path.index(g):] + [g]
+        for p in gl[g][0]:
+            c = cyc(p, path + [g])
+            if c: return c
+        return None
+    for g in names:
+        c = cyc(g, [])
+        if c: print('goals serve each other in a cycle: ' + ' -> '.join(c)); bad += 1; break
+    for n, r in recs.items():
+        if r[2] == 'open' and not r[1]:
+            print(f't{n}: serves no goal'); bad += 1
     for g in names:
         if not gl[g][1]:
             print(f'goal {g}: no statement'); bad += 1
@@ -255,6 +288,57 @@ def cmd_check(args):
     sys.exit(1 if bad else 0)
 
 
+def cmd_priority(args):
+    """the open tickets in the order the record's value relations imply (lib/work.cub, Value and
+    priority): a ticket's cost is the number of open tickets (and goals with none yet, each counted
+    once as unspecified work) that must complete before any value lands through it, at a root, along
+    its cheapest path; an all-of goal on the path adds everything under it. Not ready (an after still
+    open) comes last; then by cost; then by how many goals its goals speed. The count is a proxy for
+    effort, which the record does not hold."""
+    recs, aft = records(), afters()
+    names, gl = goals()
+    roots, value, speeds, _ = valuation()
+    kids = {n: [] for n in names}
+    for n, (serv, _) in gl.items():
+        for g in serv: kids.setdefault(g, []).append(n)
+    tick = {g: [n for n, r in recs.items() if g in r[1] and r[2] == 'open'] for g in names}
+    memo = {}
+    def under(g, seen=()):
+        """every open ticket (and unspecified goal) whose completion g's completion needs"""
+        if g in memo: return memo[g]
+        if g in seen: return frozenset()
+        out = set(f't{n}' for n in tick[g])
+        for k in kids.get(g, []): out |= under(k, seen + (g,))
+        if not out and not any(r[1] and g in r[1] for r in recs.values()) and not kids.get(g): out = {f'?{g}'}
+        memo[g] = frozenset(out); return memo[g]
+    def cost(g, carried, seen=()):
+        """the cheapest set of open work for value to land at a root from g, carrying what is needed so far"""
+        if g in seen: return None
+        need = carried | (under(g) if value.get(g) == 'all-of' else frozenset())
+        if g in roots: return need
+        best = None
+        for p in gl[g][0]:
+            c = cost(p, need, seen + (g,))
+            if c is not None and (best is None or len(c) < len(best)): best = c
+        return best
+    rows = []
+    for n, (k, gs, st) in recs.items():
+        if st != 'open': continue
+        best = None
+        for g in gs:
+            c = cost(g, frozenset({f't{n}'}))
+            if c is not None and (best is None or len(c) < len(best)): best = c
+        ready = all(recs.get(m, ('', [], 'open'))[2] != 'open' for m in aft.get(n, []))
+        sp = sum(len(speeds.get(g, [])) for g in gs)
+        rows.append((not ready, len(best) if best else 10**6, -sp, n, gs))
+    rows.sort()
+    txt = texts()
+    for blocked, c, sp, n, gs in rows[: int(args[0]) if args else len(rows)]:
+        first = txt[n][0][3] if n in txt else ''
+        print(f't{n:<3} cost {c:<4}' + (' speeds' if sp else '       ') + (' after-open' if blocked else '           ')
+              + f' {",".join(gs):<28} {first_sentence(first, 70)}')
+
+
 def cmd_next(args):
     used = set(records()) | set(texts())
     print(f't{max(used, default=0) + 1}')
@@ -264,7 +348,7 @@ def main():
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
         print(__doc__); return
     c, a = sys.argv[1], sys.argv[2:]
-    {'list': cmd_list, 'show': cmd_show, 'goals': cmd_goals, 'check': cmd_check, 'next': cmd_next}.get(
+    {'list': cmd_list, 'show': cmd_show, 'goals': cmd_goals, 'check': cmd_check, 'next': cmd_next, 'priority': cmd_priority}.get(
         c, lambda _: sys.exit('unknown command ' + c))(a)
 
 
