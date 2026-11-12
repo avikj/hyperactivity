@@ -1,5 +1,4 @@
--- lib/deploy.cub — deployment as a term (PLAN Phase 8). Loaded after the library (lib/os/platform.cub,
--- lib/os/linux.cub) and lib/net.cub, lib/fleet.cub.
+-- lib/deploy.cub — deployment as a term (PLAN Phase 8).
 --
 -- A corpus is the node programs by role: for each role a machine (a state type with a view over
 -- the node signature), its initial state, the wire form of its messages, and what the process
@@ -12,6 +11,9 @@
 -- ---------------------------------------------------------------- handlers at any level
 -- lib/proc.cub's handle with the level free: the node's process is interpreted into Linux, and
 -- that into W, so the first interpretation is at the level above
+import "library.cub"
+import "net.cub"
+import "fleet.cub"
 handle-l : {l : Level} {S T : Sig} {A : Type} → ((c : Cmd S) → Proc {l} T (Resp S c)) → Proc {lsuc l} S A → Proc {l} T A
 handle-l {l} {S} {T} {A} hd p = p (Proc {l} T A) (ret {l} {T} {A}) (λ c k → bind {l} {T} {Resp S c} {A} (hd c) k)
 -- ---------------------------------------------------------------- the wire and the configuration

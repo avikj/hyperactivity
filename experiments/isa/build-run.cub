@@ -1,7 +1,5 @@
 -- experiments/isa/build-run.cub — the #build binary of experiments/native/sys.cub run as a process
--- under the imported x86 model (lib/compile/process.cub: ELF loader, the small kernel). Loaded after
--- the library files #build needs (fiber, proc, world, the compiler files, elf), lib/bits.cub,
--- lib/isa/x86/ORDER's files, lib/isa/x86/run.cub, lib/compile/meaning.cub, lib/compile/process.cub.
+-- under the imported x86 model (lib/compile/process.cub: ELF loader, the small kernel).
 -- Observed: the start code's mmap is answered, the blob runs (70M steps), and the run ends at
 -- 0x4001FA on mfence (0F AE F0, the driver loop's w-fence): the model has no translation of the
 -- two-byte opcode 0xAE ("Translation error: two-byte opcode 174 not translated"), an inventory gap
@@ -12,6 +10,7 @@
 -- there under the model.
 --
 -- getpid by w-sys, a byte stored and loaded in allocated memory, the sum written as one byte
+import "../../lib/compile/process.cub"
 sysp : Proc W Word
 sysp = bind {lzero} {W} {Word} {Word} (sys-call #39 #0 #0 #0 #0 #0 #0) (λ pid →
        bind {lzero} {W} {Word} {Word} (alloc-bytes #16) (λ a →

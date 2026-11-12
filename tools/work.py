@@ -20,8 +20,8 @@ Every declaration of the code is a node of the same graph. Its reason is compute
 a reason mentions it (the machine's reading `#uses`, over the library and the work's files), or the
 machine names it (src/), or it states one, in the comment above it: `(part of NODE)` or
 `(prerequisite to NODE)`, NODE a node of work/graph.cub. A node of work/graph.cub has a reason when
-it is a root or part of a node with one. The reading covers the files the library target loads
-(Makefile LIB) and the work's files; files outside them are not read (t30), so a declaration used
+it is a root or part of a node with one. The reading covers the library (lib/library.cub) and the
+work's files; files outside them are not read (t30), so a declaration used
 only from outside them shows here as having no reason.
 
 Run from the repository root or anywhere inside it.
@@ -263,9 +263,7 @@ def cmd_check(args):
     for n, l in list(after.items()) + list(speeds.items()):
         for m in [n] + l:
             if m not in g: print(f'{n}: names {m}, which is not a node'); bad += 1
-    mk = open(os.path.join(ROOT, 'Makefile')).read()
-    core = re.search(r'^CORE := (.*)$', mk, re.M).group(1).split()
-    cmd = [os.path.join(ROOT, 'build', 'cubical')] + core + ['lib/work.cub', 'work/graph.cub']
+    cmd = [os.path.join(ROOT, 'build', 'cubical'), 'lib/core.cub', 'lib/work.cub', 'work/graph.cub']
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'))
     last = [l for l in r.stdout.split('\n') if l.strip()][-1:] or ['']
     fails = [l for l in r.stdout.split('\n') if l.startswith('FAIL')]
@@ -336,9 +334,7 @@ STATED = re.compile(r'\((part of|prerequisite to) ([\w-]+)\)')
 
 def reading():
     """the machine's #uses over LIB and the work's files: [(file, line, names, [(file, line)])]"""
-    mk = open(os.path.join(ROOT, 'Makefile')).read().replace('\\\n', ' ')
-    var = dict(re.findall(r'^(\w+)\s*:=\s*(.*)$', mk, re.M))
-    lib = [w for x in var['LIB'].split() for w in (var['CORE'].split() if x == '$(CORE)' else [x])]
+    lib = ['lib/library.cub']
     env = dict(os.environ)
     env.setdefault('CUBICAL_STORE', os.path.join(ROOT, '.cubical-store'))
     r = subprocess.run([os.path.join(ROOT, 'build', 'cubical')] + lib + ['lib/work.cub', 'work/graph.cub', '--serve'],

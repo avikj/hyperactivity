@@ -49,15 +49,11 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 # store warm, elaboration and compilation still run for every definition (29 s), so incremental
 # checking reaches only the checker's run, not the rest of the work done per definition.
 #
-# the library, in dependency order: every definition is checked by the checker as it loads.
-# There are no tests: the checker is the evidence. The one measurement kept is Brunerie's number.
-CORE := lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.cub lib/check.cub lib/std.cub
-LIB  := $(CORE) lib/sort.cub lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/autodiff.cub lib/intproof.cub lib/intlin.cub \
-        lib/prim.cub lib/derive.cub lib/decode.cub lib/fiber.cub lib/proc.cub lib/world.cub lib/session.cub \
-        lib/choreo.cub lib/obs.cub lib/region.cub lib/codes.cub lib/specialize.cub lib/rules.cub lib/machine.cub lib/x86.cub lib/elf.cub \
-        lib/os/platform.cub lib/os/linux.cub lib/os/contract.cub lib/os/replay.cub \
-        lib/isa/tso.cub lib/isa/tso-acyclic.cub lib/mem/atomics.cub lib/mem/rc11.cub lib/cxx/ast.cub lib/lang/rust/ast.cub
-
+# the core and the library, in dependency order (lib/core.cub, lib/library.cub: each a file of
+# imports): every definition is checked by the checker as it loads. There are no tests: the checker
+# is the evidence. The one measurement kept is Brunerie's number.
+CORE := lib/core.cub
+LIB  := lib/library.cub
 library: build/cubical
 	CUBICAL_NOCACHE=1 ./build/cubical $(LIB)
 

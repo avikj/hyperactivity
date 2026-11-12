@@ -1,10 +1,11 @@
--- experiments/os/build-cost.cub — where #build's steps go (track D item 7; loaded after the
--- library). bc-chain n is a process of n commands of Linux (n closes, the first error ending
+-- experiments/os/build-cost.cub — where #build's steps go (track D item 7).
+-- bc-chain n is a process of n commands of Linux (n closes, the first error ending
 -- it, as real code over Linux is written); bc-s3 … bc-s10 are its steps at n = 3, 5, 7, 10.
 -- The stages of lib/elf.cub's build-plan are called one at a time, each under a #show of a
 -- size, so the steps of each line are that stage's and everything before it (a #show starts
 -- from nothing: the difference of two lines is one stage). build-cost-N.cub hold the #show
 -- lines for one N each, so that a run can be bounded.
+import "../../lib/library.cub"
 bc-chain : {l : Level} → Nat → Word → Proc {l} Linux (Sum Errno Word)
 bc-chain {l} zero acc = ret {l} {Linux} {Sum Errno Word} (inr acc)
 bc-chain {l} (suc n) acc = lx-then {l} {Unit} {Word} (lx {l} (lx-close acc)) (λ u → bc-chain {l} n (%wsucc acc))

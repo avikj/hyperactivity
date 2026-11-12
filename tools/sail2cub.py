@@ -2,7 +2,7 @@
 """sail2cub: the Sail x86 model (rems-project/sail-x86-from-acl2, model/) read into .cub.
 
   python3 tools/sail2cub.py MODEL_DIR --parse          per-file counts of what was parsed
-  python3 tools/sail2cub.py MODEL_DIR --out lib/isa/x86   write one .cub per .sail and ORDER
+  python3 tools/sail2cub.py MODEL_DIR --out lib/isa/x86   write one .cub per .sail and all.cub
 
 The Sail subset is the one the model uses (it is generated from ACL2's x86isa): val, function
 (clauses, scattered), type synonyms, bitfield, union, enum, struct, register, overload, let, if,
@@ -2600,8 +2600,10 @@ class Translator(Importer):
             with open(os.path.join(outdir, base), 'w') as o:
                 o.write(text)
             names.append(base)
-        with open(os.path.join(outdir, 'ORDER'), 'w') as o:
-            o.write('\n'.join(names) + '\n')
+        with open(os.path.join(outdir, 'all.cub'), 'w') as o:   # the model, imported in include order
+            o.write('-- lib/isa/x86/all.cub — the files of the Sail x86 model, in the order the model includes them,\n'
+                    '-- written by tools/sail2cub.py with them. Importing it loads the model.\n'
+                    'import "../../bits.cub"\n' + ''.join('import "%s"\n' % n for n in names))
         print('functions: %d translated (%d pure, %d outcome, %d state), %d not translated' % (
             sum(counts.values()), counts['P'], counts['F'], counts['S'], len(failures)))
         print('moved to a later file: %d' % len(moved))

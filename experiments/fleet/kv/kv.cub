@@ -1,5 +1,5 @@
 -- experiments/fleet/kv/kv.cub — a replicated key-value service: three replicas and a client
--- (PLAN Phase 7, fleet acceptance). Loaded after lib/net.cub and lib/fleet.cub.
+-- (PLAN Phase 7, fleet acceptance).
 --
 -- A write is a key with a versioned value (one word; the larger wins). The client sends a
 -- write to every replica. A replica that receives a write logs it and owes its sender an
@@ -13,6 +13,7 @@
 -- client does), convergence (equal sets, equal stores), replay, and a recorded run with a drop
 -- and a duplicate. liveness.cub and refine.cub hold the other two statements.
 -- ---------------------------------------------------------------- writes, messages, the store
+import "../../../lib/fleet.cub"
 KvWrite : Type
 KvWrite = Word × Word
 data KvMsg = m-put (w : KvWrite) | m-ack (w : KvWrite) | m-get (k : Word) (rid : Word) | m-val (rid : Word) (v : Word)

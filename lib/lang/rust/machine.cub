@@ -1,8 +1,7 @@
 -- lib/lang/rust/machine.cub — what the reading of MIR (lib/lang/rust/read.cub) stands on: the
 -- outcomes special to Rust, values and frames, and everything about a crate that is decided
 -- before any run-time value exists (types under an instance's generic arguments, their class,
--- size and alignment, layouts, the tables of the crate). Loaded after the library,
--- lib/mem/{target,scalar,memory,layout,monad}.cub and lib/lang/rust/ast.cub.
+-- size and alignment, layouts, the tables of the crate).
 --
 -- The abstract machine. A body runs in a frame: one slot per local. A local whose type is a
 -- scalar (bool, an integer, a thin pointer or reference, a function pointer), a wide pointer
@@ -22,6 +21,8 @@
 -- MIR that the lower layers do not have), rx-unsupported (a construct the reader does not
 -- give a meaning to, named), rx-ill-formed (the crate's data contradicts itself: an importer's
 -- error, named).
+import "../../library.cub"
+import "../../mem/monad.cub"
 
 -- ---------------------------------------------------------------- outcomes
 data RAbort = rab-bounds-check | rab-division-by-zero | rab-remainder-by-zero | rab-overflow (o : RBinOp)
