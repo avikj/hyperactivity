@@ -235,7 +235,7 @@ data NN : (KJ : NK × Jdg) → Type 1 where
   nlam : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
     (c : Code) (vb : (ρ : Env (ext Γ (cl-dom (Env Γ) K a g A))) → ElP (Env (ext Γ (cl-dom (Env Γ) K a g A))) (cl-cod (Env Γ) K a b g A B) ρ) →
     NN (k-nf , (ext Γ (cl-dom (Env Γ) K a g A) , cl-cod (Env Γ) K a b g A B , c , vb)) →
-    NN (k-nf , (Γ , pi-ty (Env Γ) K a b g A B , clam c , λ ρ x → vb (ρ , x)))
+    NN (k-nf , (Γ , pi-ty (Env Γ) K a b g A B , clam c , λ (ρ : Env Γ) (x : ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ) → vb (the (Env (ext Γ (cl-dom (Env Γ) K a g A))) (ρ , x))))
   npair : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
     (c1 : Code) (v1 : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ)
     (c2 : Code) (v2 : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B)) ρ) →
@@ -276,7 +276,7 @@ data Der : (J : Jdg) → Type 1 where
   dlam : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
     (c : Code) (vb : (ρ : Env (ext Γ (cl-dom (Env Γ) K a g A))) → ElP (Env (ext Γ (cl-dom (Env Γ) K a g A))) (cl-cod (Env Γ) K a b g A B) ρ) →
     Der ((ext Γ (cl-dom (Env Γ) K a g A) , cl-cod (Env Γ) K a b g A B , c , vb)) →
-    Der ((Γ , pi-ty (Env Γ) K a b g A B , clam c , λ ρ x → vb (ρ , x)))
+    Der ((Γ , pi-ty (Env Γ) K a b g A B , clam c , λ (ρ : Env Γ) (x : ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ) → vb (the (Env (ext Γ (cl-dom (Env Γ) K a g A))) (ρ , x))))
   dpair : (Γ : Ctx) (K : Type) (a b : TyShape) (g : Env Γ → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k))
     (c1 : Code) (v1 : (ρ : Env Γ) → ElP (Env Γ) (cl-dom (Env Γ) K a g A) ρ)
     (c2 : Code) (v2 : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (cl-dom (Env Γ) K a g A) v1 (cl-cod (Env Γ) K a b g A B)) ρ) →
@@ -319,3 +319,43 @@ ren-keep Δ Γ r A w X n v (inr1 y) =
       inr1 ((pull (Env Γ) (Env Δ) r (fst (fst y)) , fst z , λ ρ → snd (snd (fst y)) (r ρ)) , snd z ,
             λ i → (pull (Env (ext Γ A)) (Env (ext Δ (pull (Env Γ) (Env Δ) r A))) (λ q → (r (fst q) , snd q)) (fst (snd (snd y) i)) ,
                    %wsucc (fst z) , λ q → snd (snd (snd (snd y) i)) (r (fst q) , snd q))))
+
+-- ---------------------------------------------------------------- renaming normal forms
+-- a judgment pulled back along a renaming (its code left to be computed)
+NNat : NK → (Δ Γ : Ctx) (r : Env Δ → Env Γ) (A : PTy (Env Γ)) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) → Type 1
+NNat k Δ Γ r A v = (c : Code) × NN (k , (Δ , pull (Env Γ) (Env Δ) r A , c , λ ρ → v (r ρ)))
+ren-nn : {KJ : NK × Jdg} → NN KJ → (Δ : Ctx) (r : Env Δ → Env (fst (snd KJ))) → Ren Δ (fst (snd KJ)) r →
+  NNat (fst KJ) Δ (fst (snd KJ)) r (fst (snd (snd KJ))) (snd (snd (snd (snd KJ))))
+ren-nn (nvar Γ A n v x) Δ r w =
+  let y = w A n v x in (cvar (fst y) , nvar Δ (pull (Env Γ) (Env Δ) r A) (fst y) (λ ρ → v (r ρ)) (snd y))
+ren-nn (napp Γ K a b g A B f vf c va nf na) Δ r w =
+  let rf = ren-nn nf Δ r w
+      ra = ren-nn na Δ r w
+  in (capp (fst rf) (fst ra) ,
+      napp Δ K a b (λ ρ → g (r ρ)) A B (fst rf) (λ ρ → vf (r ρ)) (fst ra) (λ ρ → va (r ρ)) (snd rf) (snd ra))
+ren-nn (nfst Γ K a b g A B p vp np) Δ r w =
+  let rp = ren-nn np Δ r w
+  in (cfst (fst rp) , nfst Δ K a b (λ ρ → g (r ρ)) A B (fst rp) (λ ρ → vp (r ρ)) (snd rp))
+ren-nn (nsnd Γ K a b g A B p vp np) Δ r w =
+  let rp = ren-nn np Δ r w
+  in (csnd (fst rp) , nsnd Δ K a b (λ ρ → g (r ρ)) A B (fst rp) (λ ρ → vp (r ρ)) (snd rp))
+ren-nn (ncase Γ P x vx t vt f vf nx nt nf) Δ r w =
+  let rx = ren-nn nx Δ r w
+      rt = ren-nn nt Δ r w
+      rf = ren-nn nf Δ r w
+  in (c-case (fst rt) (fst rf) (fst rx) ,
+      ncase Δ (pull (Env (ext Γ (bool-ty (Env Γ)))) (Env (ext Δ (bool-ty (Env Δ)))) (λ p → (r (fst p) , snd p)) P)
+        (fst rx) (λ ρ → vx (r ρ)) (fst rt) (λ ρ → vt (r ρ)) (fst rf) (λ ρ → vf (r ρ)) (snd rx) (snd rt) (snd rf))
+ren-nn (nne Γ x vx nx) Δ r w =
+  let rx = ren-nn nx Δ r w in (fst rx , nne Δ (fst rx) (λ ρ → vx (r ρ)) (snd rx))
+ren-nn (ntrue Γ) Δ r w = (c-true , ntrue Δ)
+ren-nn (nfalse Γ) Δ r w = (c-false , nfalse Δ)
+ren-nn (nlam Γ K a b g A B c vb nb) Δ r w =
+  let rb = ren-nn nb (ext Δ (cl-dom (Env Δ) K a (λ ρ → g (r ρ)) A)) (λ p → (r (fst p) , snd p))
+             (ren-keep Δ Γ r (cl-dom (Env Γ) K a g A) w)
+  in (clam (fst rb) , nlam Δ K a b (λ ρ → g (r ρ)) A B (fst rb) (λ p → vb (r (fst p) , snd p)) (snd rb))
+ren-nn (npair Γ K a b g A B c1 v1 c2 v2 n1 n2) Δ r w =
+  let r1 = ren-nn n1 Δ r w
+      r2 = ren-nn n2 Δ r w
+  in (cpair (fst r1) (fst r2) ,
+      npair Δ K a b (λ ρ → g (r ρ)) A B (fst r1) (λ ρ → v1 (r ρ)) (fst r2) (λ ρ → v2 (r ρ)) (snd r1) (snd r2))
