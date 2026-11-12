@@ -18,12 +18,14 @@
 --    Raw     the existing Code (lib/code.cub); normal forms here use cvar, clam, capp, cpair, cfst,
 --            csnd, ccase #0 (Bool), ccon #0 k, cplam, cpapp — the codes the language's own (code t)
 --            writes for the same terms.
---    TyD G T structure of an object type whose meaning is T : G → Type, over environments G:
---            Bool, Π, Σ, then PathP. Meanings only: no raw type code appears in a normal term of
---            this fragment (lam, pair and case carry no annotation).
---    reix    reindexing a type structure along a map of environments (weakening and substitution are
---            both instances); one operation, with its composition law as a path.
---    Ctx G   a context: a telescope of type structures, G the type of its environments.
+--    Types   (revised 2026-11-12, see the finding below) a type is a shape (TyShape, closed data)
+--            with a closure: a base K, a map from the environment into K, and the shape's structure
+--            over K, whose components are again closures (Clo, ElC). Its meaning ElC is computed by
+--            recursion on the shape, so it is definitional at open environments; pulling a type
+--            back along a map of environments (weakening, substitution) composes the map and is
+--            definitional; no reindexing operation or law is needed.
+--    Ctx     a context: a skeleton (list of shapes, closed data) with a closure per entry; its
+--            environment type is computed by recursion on the skeleton.
 --    Var, Der  variables and typing derivations, Der Γ D c v: c is a derivation-checked raw code
 --            of type D in Γ with meaning v : (ρ : G) → T ρ.
 --    Code Γ D = Σ c. Σ v. Der Γ D c v; eval = the meaning v (paper (6.1)).
@@ -39,25 +41,72 @@
 --    normalize d = reify (fund d (reflected identity environment)); the result is a Code with the
 --            same meaning index, so reifySound (6.5) is refl: eval (reify v) ρ ≡ denote v ρ.
 --
--- 2. Phases. P1 the fragment Π, Σ, Bool (with dependent case): TyD, reix with its laws, Ctx, Var,
---    Der, Code, eval, Ne, Nf, embed, OPE and actions, Comp with its monotonicity and reindexing
---    laws, reify/reflect, fund, normalize, reifySound. P2 PathP and the interval: worlds with
+-- 2. Phases. P1 the fragment Π, Σ, Bool (with dependent case): shapes and closures, Ctx, Var,
+--    Der, Code, eval, Ne, Nf, embed, OPE and actions, Comp with its monotonicity (renaming)
+--    law, reify/reflect, fund, normalize, reifySound. P2 PathP and the interval: worlds with
 --    dimension variables and face restrictions (Comp at a path type is computability of every
 --    dimension instance, with the boundary). P3 Kan operations, transp and hcomp, at Π, Σ, Bool,
 --    PathP: Sterling–Angiuli's stabilization (neutrals carry the face on which they are unstable).
 --    P4 Glue. P5 the specializer over Code (lib/specialize.cub's normalize, t11) — needs each
 --    definition reflected into Der, which is the typed checker's output (goal typed-checker).
---    P6 universes — blocked, t45.
+--    P6 universes: codes decoded by shape recursion at a fixed top level, smaller levels lifted
+--    (see the correction below).
 --
--- t45 (2026-11-12): needs-work. The object theory's universes cannot be internalized in this core as
--- it is. A universe U_0 in the object needs its small types' meanings (in Type) and the meaning of U_0
--- itself (in Type 1) to be indices of one family of type structures; that needs cumulativity
--- (Type ⊆ Type 1), a data type whose level depends on a parameter, or (large) induction–recursion,
--- and the language has none of them. Evidence, run 2026-11-12 against CORE: `Ctx Unit` with
--- `Ctx : Type 1 → Type 2` is refused, "expected: Type (lsuc lzero), actual: Type" (no cumulativity);
--- `data LBox (l : Level) (A : Type l) = lbox (x : A)` is refused, "the data type's universe level
--- depends on a parameter" (lib/check.cub chk-data, lvl-closed); `data` inside `mutual` is a parse
--- error, "unexpected data" (no mutual or inductive–recursive types). Sterling–Angiuli's metatheory
--- has cumulative universes; Agda's internal developments use level-polymorphic data or
--- induction–recursion. Deciding which of the three the calculus is to have is a question about the
--- core (goal core-correct), not something to add here; the fragments without universes are built.
+-- Correction (2026-11-12, replaces t45, closed): universes are not blocked and need nothing added to
+-- the core. The object hierarchy U_0..U_k is finite, so it is interpreted at a fixed top meta level
+-- (the Gödel stratification): one type-structure family at that level, smaller meanings lifted to
+-- it. A lift is a Σ with a field at the target level filled by one fixed constant (Lift1 A = A ×
+-- (Type → Type), checked); a `data ... : Type 1` annotation does not raise a level (a data type's
+-- level is its fields' largest: `data Lift0 (A : Type) : Type 1 = lift0 (x : A)` is accepted but
+-- `CtxL (Lift0 Unit)` at `CtxL : Type 1 → Type 2` is refused, "actual: Type (lmax lzero lzero)").
+-- What lifting does not give is the round trip raise (lower x) ≡ x definitionally (the core has η
+-- for Π and Σ, none for a unit type), so El (π a b) ≡ Π (El a) (El b) between a lifted code and the
+-- top-level Π holds as an equivalence, not judgmentally. P6 therefore interprets each universe as
+-- codes (shape and closure, as below) decoded by shape recursion, and states El's commutation with
+-- the type formers as paths used by an explicit conversion rule at universe-decoded types.
+--
+-- Finding (2026-11-12) that fixes the design below: transport along a constant line of a variable
+-- type does not reduce (CCHM has no regularity; `transport (λ i → A) a ≡ a` by refl is refused, while
+-- at Bool it is accepted). The language's indexed families are forded (each index an equation field),
+-- so a function defined by recursion over one computes its clauses only up to such transports when
+-- the index involves variable types: `K (ty-bool G) D δ x` came out with `comp (λ i → D) [] ρ` in its
+-- body. Everything whose clauses must compute inside types (the meaning of a type, computability,
+-- environments of a context) is therefore defined by recursion on closed first-order skeletons
+-- (TyShape, lists of shapes), where clauses compute definitionally; indexed families (derivations,
+-- normal forms, renamings) are only ever the arguments of functions whose result types are fixed by
+-- their signatures, so the transports inside their results are harmless (their indices, the
+-- meanings, are fixed by the types).
+--
+-- Elaborator quirk found 2026-11-12: in a structural recursion, an implicit binder after the recursive
+-- argument is not abstracted in the induction hypothesis (the inner call gets the outer value, and an
+-- explicit {..} is ignored); such parameters are taken explicitly here.
+
+-- ---------------------------------------------------------------- types: shapes and closures
+data TyShape = s-bool | s-pi (a : TyShape) (b : TyShape) | s-sig (a : TyShape) (b : TyShape)
+-- the structure of a Bool type: nothing; One1 is a type at level 1 with the one value `one`
+data One1 = one1 (pad : Type → Type)
+one : One1
+one = one1 (λ X → X)
+-- a shape's structures over a base K and their meanings
+TyU : Type → Type 2
+TyU K = (M : Type 1) × (M → K → Type)
+-- a closure over environments K: a base K', the map into it, a structure over K'
+CloU : (K : Type) → ((K' : Type) → TyU K') → Type 1
+CloU K u = (K' : Type) × (K → K') × fst (u K')
+ElCU : (K : Type) → (u : (K' : Type) → TyU K') → CloU K u → K → Type
+ElCU K u A k = snd (u (fst A)) (snd (snd A)) (fst (snd A) k)
+-- by recursion on the shape: Π and Σ have a domain closure and a codomain closure over the
+-- environments extended by the domain
+TyE : TyShape → (K : Type) → TyU K
+TyE s-bool K = (One1 , λ D k → Bool)
+TyE (s-pi a b) K =
+  ((A : CloU K (TyE a)) × CloU ((k : K) × ElCU K (TyE a) A k) (TyE b) ,
+   λ D k → (x : ElCU K (TyE a) (fst D) k) → ElCU ((k : K) × ElCU K (TyE a) (fst D) k) (TyE b) (snd D) (k , x))
+TyE (s-sig a b) K =
+  ((A : CloU K (TyE a)) × CloU ((k : K) × ElCU K (TyE a) A k) (TyE b) ,
+   λ D k → (x : ElCU K (TyE a) (fst D) k) × ElCU ((k : K) × ElCU K (TyE a) (fst D) k) (TyE b) (snd D) (k , x))
+-- a type of shape s over environments K, and its meaning
+Clo : TyShape → Type → Type 1
+Clo s K = CloU K (TyE s)
+ElC : (s : TyShape) → (K : Type) → Clo s K → K → Type
+ElC s K = ElCU K (TyE s)
