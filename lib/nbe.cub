@@ -502,3 +502,40 @@ var-comp (lcons s sk) γ X (inl1 p) Δ δ e =
 var-comp (lcons s sk) γ X (inr1 y) Δ δ e =
   transport (λ i → Comp (Env (lcons s sk , γ)) (fst (snd (snd y) (~ i))) Δ δ (λ ρ → snd (snd (snd (snd y) (~ i))) (δ ρ)))
     (var-comp sk (fst γ) (fst y) (fst (snd y)) Δ (λ ρ → fst (δ ρ)) (fst e))
+
+-- ---------------------------------------------------------------- the fundamental lemma
+-- case on a computable Bool: true and false by their equations, a neutral by the neutral case
+-- with its branches reified (the meaning is the language's own dependent case, so where the
+-- scrutinee is a constant the branch's computability is the result's definitionally)
+case-comp : (Γ : Ctx) (KB : Type) (gB : Env Γ → KB) (DB : One1) (P : PTy (Env (ext Γ (bool-cl (Env Γ) KB gB DB))))
+  (vx : (ρ : Env Γ) → Bool)
+  (vt : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → true) P) ρ)
+  (vf : (ρ : Env Γ) → ElP (Env Γ) (at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → false) P) ρ)
+  (Δ : Ctx) (δ : Env Δ → Env Γ) →
+  CompS s-bool KB DB Δ (λ ρ → gB (δ ρ)) (λ ρ → vx (δ ρ)) →
+  Comp (Env Γ) (at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → true) P) Δ δ (λ ρ → vt (δ ρ)) →
+  Comp (Env Γ) (at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) (λ ρ → false) P) Δ δ (λ ρ → vf (δ ρ)) →
+  Comp (Env Γ) (at-last (Env Γ) (bool-cl (Env Γ) KB gB DB) vx P) Δ δ
+    (λ ρ → bool-elim (λ b → ElP (Env (ext Γ (bool-cl (Env Γ) KB gB DB))) P (δ ρ , b)) (vt (δ ρ)) (vf (δ ρ)) (vx (δ ρ)))
+case-comp Γ KB gB DB P vx vt vf Δ δ (inl1 p) ct cf =
+  transport (λ i → CompS (fst P) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , fst p (~ i) ρ))
+                     (λ ρ → bool-elim (λ b → ElP (Env (ext Γ (bool-cl (Env Γ) KB gB DB))) P (δ ρ , b)) (vt (δ ρ)) (vf (δ ρ)) (fst p (~ i) ρ)))
+    ct
+case-comp Γ KB gB DB P vx vt vf Δ δ (inr1 (inl1 p)) ct cf =
+  transport (λ i → CompS (fst P) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , fst p (~ i) ρ))
+                     (λ ρ → bool-elim (λ b → ElP (Env (ext Γ (bool-cl (Env Γ) KB gB DB))) P (δ ρ , b)) (vt (δ ρ)) (vf (δ ρ)) (fst p (~ i) ρ)))
+    cf
+case-comp Γ KB gB DB P vx vt vf Δ δ (inr1 (inr1 n)) ct cf =
+  snd (rr (fst P)) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , vx (δ ρ)))
+    (λ ρ → bool-elim (λ b → ElP (Env (ext Γ (bool-cl (Env Γ) KB gB DB))) P (δ ρ , b)) (vt (δ ρ)) (vf (δ ρ)) (vx (δ ρ)))
+    (c-case (fst (fst (rr (fst P)) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , true)) (λ ρ → vt (δ ρ)) ct))
+            (fst (fst (rr (fst P)) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , false)) (λ ρ → vf (δ ρ)) cf))
+            (fst n))
+    (ncase Δ KB (λ ρ → gB (δ ρ)) DB
+       (pull (Env (ext Γ (bool-cl (Env Γ) KB gB DB))) (Env (ext Δ (bool-cl (Env Δ) KB (λ ρ → gB (δ ρ)) DB))) (λ q → (δ (fst q) , snd q)) P)
+       (fst n) (λ ρ → vx (δ ρ))
+       (fst (fst (rr (fst P)) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , true)) (λ ρ → vt (δ ρ)) ct)) (λ ρ → vt (δ ρ))
+       (fst (fst (rr (fst P)) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , false)) (λ ρ → vf (δ ρ)) cf)) (λ ρ → vf (δ ρ))
+       (snd n)
+       (snd (fst (rr (fst P)) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , true)) (λ ρ → vt (δ ρ)) ct))
+       (snd (fst (rr (fst P)) (fst (snd P)) (snd (snd (snd P))) Δ (λ ρ → fst (snd (snd P)) (δ ρ , false)) (λ ρ → vf (δ ρ)) cf)))
