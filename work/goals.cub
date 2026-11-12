@@ -2,14 +2,17 @@
 -- lib/work.cub. Each goal's statement is the comment above its line in `serves`; a goal is reached
 -- when its statement holds, and the goals it serves are the reason it is pursued. The tickets that
 -- serve each goal are in work/tickets.cub (`python3 tools/work.py goals`).
-data Goal = publish | self-aware | tooling | core-correct | typed-codes | partial-evaluation | native | typed-checker | work-object
+-- 2026-11-12: every goal of the work lives here, until the end of the work: goals pursued later than
+-- others are still goals, and anything found that serves one is recorded against it. unified-computing
+-- is the root; publish and work-object are its present priorities.
+data Goal = publish | self-aware | tooling | core-correct | typed-codes | partial-evaluation | native | typed-checker | work-object | unified-computing | interface | languages | cxx | rust | hardware | isa-x86 | memory-models | os
 serves : Goal → List Goal
 -- publish (2026-11-12): the paper (docs/Hyperactive_Final_Paper.pdf) is published with its companion
 -- repository, whose language core is complete: the formal language implemented exactly, the
 -- language's own procedures carrying their correctness in their types, partial evaluation with the
 -- Futamura projections, and realization as native code through C. Everything currently pursued
 -- serves this.
-serves publish = nil
+serves publish = cons unified-computing nil
 -- self-aware (2026-11-12): an agent arriving with no context lands in a repository that states its
 -- own reality: what it is, what is checked, what is assumed and where, what is wrong or not yet
 -- known (open tickets, at the places concerned), and what is being done now (README.md, top).
@@ -147,4 +150,56 @@ serves typed-checker = cons core-correct nil
 -- fixed set of relations; views that must produce text; ordering by causal references; a driver
 -- script and session file; editor features and the moving of prose files as scheduled items; "keep
 -- everything said".
-serves work-object = cons tooling (cons self-aware (cons publish nil))
+serves work-object = cons unified-computing (cons tooling (cons self-aware (cons publish nil)))
+-- unified-computing (2026-11-12, the root, in the user's words where they gave them). Unified
+-- computing: one program. One formal language and its reference implementation in which all
+-- computation, and all information about it, is one mathematical object: none of the existing
+-- languages should have had to exist, and the work is the language and system that replaces them. A
+-- cubical type theory whose normalization procedure and type check are terms of the language;
+-- expressing fully general computation (anything C++ can express, as a practical reference point);
+-- interpreting any other language or computational system, its syntax, semantics and executions
+-- being mathematical objects; projecting first-order terms (any term with no higher path data or free
+-- interval data) to machine code. Language, hardware and operating-system semantics as exact types; a
+-- lifted program has its exact meaning in its language, semantics are quotiented by what one chooses
+-- to observe, and programs in different languages are equal up to that quotient, both projections of
+-- one program. The type system proves whatever is wanted of a running system, with the
+-- implementation itself type-checkable. Correctness is carried by constructions, written with their
+-- reasons, never a separate model or proof activity. And the information environment is the same
+-- object: the codebase, its succession of states, the work's knowledge and everyone's use of it are
+-- one thing (work-object), the Hyperactive vision of synthetic synesthesia, with programming
+-- languages as the basis for putting all information into the right form. The tool is used to build
+-- the tool and everything built with it.
+serves unified-computing = nil
+-- interface (2026-11-12): how people and agents use the work: the protocol (declarations, readings,
+-- views through serve mode, today), and every faculty that presents the work to a person (an editor's
+-- hover, go-to, diagnostics, outline, history, search; a session's live working view; the
+-- conversation as one rendering). A continuing thread, improved as it is used: it is how all other
+-- work is done, so it serves everything, and it is value delivered in itself. The cause it answers:
+-- agents and people unable to keep a clear picture, define a plan, keep to it, revise it when a
+-- belief proves wrong, or know what is true, which is where agents working on wrong things came from.
+serves interface = cons work-object (cons unified-computing nil)
+-- languages (2026-11-12): lifting other languages: a language's entire syntax and semantics in the
+-- language, to the point of interpreting and compiling it, implementation details exact; built on
+-- prior work (existing compilers implement the semantics), not a semantics from scratch. Deployment
+-- of the core, to show its power and gain from what is lifted; after the core (publish).
+serves languages = cons unified-computing nil
+-- cxx (2026-11-12): the complete lifting of C++ at the source level: the whole semantics, every
+-- detail of memory and threading, templates and all compile-time machinery as terms, the abstract
+-- machine (the standard) distinct from any implementation at given flags. The first language lifted.
+serves cxx = cons languages nil
+-- rust (2026-11-12): the lifting of Rust, as for C++.
+serves rust = cons languages nil
+-- hardware (2026-11-12): hardware semantics as exact types: instruction sets and memory models, the
+-- ground native code is stated over when the target is the machine rather than C. Secondary to
+-- realization through C, whose compilers and the hardware are trusted for now.
+serves hardware = cons unified-computing (cons native nil)
+-- isa-x86 (2026-11-12): the x86-64 instruction set's semantics complete (the imported model,
+-- lib/isa/x86), every instruction translated.
+serves isa-x86 = cons hardware nil
+-- memory-models (2026-11-12): memory consistency models as exact types: x86-TSO (lib/isa/tso.cub)
+-- and the C/C++ model RC11 (lib/mem/rc11.cub), with what relates them (the standard mapping of C
+-- atomics to x86 correct).
+serves memory-models = cons hardware (cons cxx nil)
+-- os (2026-11-12): operating-system semantics as exact types (the kernel interface, lib/os), so a
+-- running program is a process whose system-call events are its interaction.
+serves os = cons unified-computing (cons native nil)
