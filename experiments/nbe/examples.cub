@@ -32,3 +32,10 @@ not-der = dcase Γb (λ ρ → one) bP (cvar #0) (λ ρ → snd ρ) c-false (λ 
   (dvar Γb (s-bool , λ ρ → one) #0 (λ ρ → snd ρ) (vz emp (s-bool , λ ρ → one)))
   (dfalse Γb (λ ρ → one)) (dtrue Γb (λ ρ → one))
 #same fst (normalize-nf Γb (s-bool , λ ρ → one) (c-case c-false c-true (cvar #0) , (λ ρ → bool-elim (λ b → Bool) false true (snd ρ)) , not-der)) = c-case c-false c-true (cvar #0)
+-- ---------------------------------------------------------------- P2: interval expressions in normal form
+-- (i ∧ ~j) ∨ (~j ∧ i) ∨ i is i; ~(i ∨ j) is ~i ∧ ~j; i ∧ ~i stays (the algebra is not Boolean); i ∨ 1 is 1
+#same dnf-code (case dnf-of (cjoin (cmeet (cvar #0) (cneg (cvar #1))) (cjoin (cmeet (cneg (cvar #1)) (cvar #0)) (cvar #0))) of none → ci0; some f → f) = cvar #0
+#same dnf-code (case dnf-of (cneg (cjoin (cvar #0) (cvar #1))) of none → ci0; some f → f) = cmeet (cneg (cvar #0)) (cneg (cvar #1))
+#same dnf-code (case dnf-of (cmeet (cvar #0) (cneg (cvar #0))) of none → ci0; some f → f) = cmeet (cneg (cvar #0)) (cvar #0)
+#same dnf-code (case dnf-of (cjoin (cvar #2) ci1) of none → ci0; some f → f) = ci1
+#same dnf-canon (lcons (lcons (#0 , true) lnil) (lcons (lcons (#0 , true) (lcons (#1 , true) lnil)) lnil)) = false

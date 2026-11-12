@@ -169,7 +169,8 @@
 -- argument is not abstracted in the induction hypothesis (the inner call gets the outer value, and an
 -- explicit {..} is ignored); such parameters are taken explicitly here.
 --
--- Next definitions (2026-11-12), in order (done: lines, cubes, generators, cube-comp, cube-id):
+-- Next definitions (2026-11-12), in order (done: lines, cubes, generators, cube-comp, cube-id; the
+-- canonical forms of interval codes of P2.4):
 --   P2.1 DCube (a cube in a family over a cube) and cube-zip/unzip with their laws as paths.
 --   P2.2 Skeleton entries `data Entry = e-ty (s : TyShape) | e-dim`, dims : Lst Entry → Nat, CtxE with
 --        a dimension contributing nothing to a vertex environment, VarT stepping over e-dim.
@@ -739,3 +740,130 @@ cube-comp (suc n) X Y Z f g c = cube-comp n (Line X) (Line Y) (Line Z) (line-map
 cube-id : (n : Nat) (X : Type 1) (c : Cube n X) → PathP (λ i → Cube n X) (cube-map n X X (λ x → x) c) c
 cube-id zero X c = λ i → c
 cube-id (suc n) X c = cube-id n (Line X) c
+
+-- ---------------------------------------------------------------- P2: interval expressions, De Morgan normal forms
+-- (2026-11-12) The interval of CCHM is the free De Morgan algebra on the dimension variables, which is
+-- the free distributive lattice (with 0, 1) on the literals i and ~i; an element's canonical form is
+-- an antichain of conjunctions of literals (a DNF with absorption), each conjunction a set of
+-- literals. Interval expressions are the codes ci0, ci1, cvar k, cneg, cmeet, cjoin (the one code
+-- representation); dnf-of reads one to its canonical form and dnf-code writes the form back. A
+-- neutral path application is formed at a canonical, non-constant form only (P2.6), so that no normal
+-- form applies a neutral path at an endpoint or at two spellings of one interval element.
+-- a literal: a dimension variable and its polarity (true: i, false: ~i); ordered by variable, then ~i
+-- before i
+Lit : Type
+Lit = Word × Bool
+bool-eq : Bool → Bool → Bool
+bool-eq true b = b
+bool-eq false b = not b
+lit-eq : Lit → Lit → Bool
+lit-eq a b = andB (weq (fst a) (fst b)) (bool-eq (snd a) (snd b))
+lit-lt : Lit → Lit → Bool
+lit-lt a b = if wlt (fst a) (fst b) then true else (if weq (fst a) (fst b) then andB (not (snd a)) (snd b) else false)
+-- a conjunction: a strictly increasing list of literals; a form: a list of conjunctions
+Conj : Type
+Conj = Lst Lit
+DNF : Type
+DNF = Lst Conj
+-- the conjunction of two conjunctions (their union, as an ordered merge); by recursion on the first,
+-- the second inserted literal by literal
+conj-ins : Lit → Conj → Conj
+conj-ins l lnil = lcons l lnil
+conj-ins l (lcons m ms) = if lit-eq l m then lcons m ms else (if lit-lt l m then lcons l (lcons m ms) else lcons m (conj-ins l ms))
+conj-meet : Conj → Conj → Conj
+conj-meet lnil d = d
+conj-meet (lcons l ls) d = conj-ins l (conj-meet ls d)
+-- membership and inclusion
+conj-has : Lit → Conj → Bool
+conj-has l lnil = false
+conj-has l (lcons m ms) = if lit-eq l m then true else conj-has l ms
+conj-sub : Conj → Conj → Bool
+conj-sub lnil d = true
+conj-sub (lcons l ls) d = andB (conj-has l d) (conj-sub ls d)
+-- equality of conjunctions as lists (a canonical conjunction is ordered, so this is set equality there)
+conj-eq : Conj → Conj → Bool
+conj-eq lnil lnil = true
+conj-eq lnil (lcons m ms) = false
+conj-eq (lcons l ls) lnil = false
+conj-eq (lcons l ls) (lcons m ms) = andB (lit-eq l m) (conj-eq ls ms)
+-- the order of conjunctions in a canonical form: shorter first, then by their first differing literal
+conj-lt : Conj → Conj → Bool
+conj-lt lnil lnil = false
+conj-lt lnil (lcons m ms) = true
+conj-lt (lcons l ls) lnil = false
+conj-lt (lcons l ls) (lcons m ms) = if lit-lt l m then true else (if lit-eq l m then conj-lt ls ms else false)
+-- adding a conjunction to a canonical form: dropped if some conjunction there is included in it
+-- (absorption), else the ones that include it removed and it inserted in order
+dnf-any-sub : Conj → DNF → Bool
+dnf-any-sub c lnil = false
+dnf-any-sub c (lcons d ds) = if conj-sub d c then true else dnf-any-sub c ds
+dnf-drop-sup : Conj → DNF → DNF
+dnf-drop-sup c lnil = lnil
+dnf-drop-sup c (lcons d ds) = if conj-sub c d then dnf-drop-sup c ds else lcons d (dnf-drop-sup c ds)
+dnf-insert : Conj → DNF → DNF
+dnf-insert c lnil = lcons c lnil
+dnf-insert c (lcons d ds) = if conj-lt c d then lcons c (lcons d ds) else lcons d (dnf-insert c ds)
+dnf-add : Conj → DNF → DNF
+dnf-add c f = if dnf-any-sub c f then f else dnf-insert c (dnf-drop-sup c f)
+-- the lattice operations and De Morgan negation on canonical forms
+dnf-join : DNF → DNF → DNF
+dnf-join lnil g = g
+dnf-join (lcons c cs) g = dnf-add c (dnf-join cs g)
+dnf-meet-c : Conj → DNF → DNF
+dnf-meet-c c lnil = lnil
+dnf-meet-c c (lcons d ds) = dnf-add (conj-meet c d) (dnf-meet-c c ds)
+dnf-meet : DNF → DNF → DNF
+dnf-meet lnil g = lnil
+dnf-meet (lcons c cs) g = dnf-join (dnf-meet-c c g) (dnf-meet cs g)
+dnf-zero : DNF
+dnf-zero = lnil
+dnf-one : DNF
+dnf-one = lcons lnil lnil
+-- ~(l1 ∧ … ∧ lk) = ~l1 ∨ … ∨ ~lk, and ~(c1 ∨ … ∨ cm) = ~c1 ∧ … ∧ ~cm
+neg-conj : Conj → DNF
+neg-conj lnil = dnf-zero
+neg-conj (lcons l ls) = dnf-add (lcons (fst l , not (snd l)) lnil) (neg-conj ls)
+dnf-neg : DNF → DNF
+dnf-neg lnil = dnf-one
+dnf-neg (lcons c cs) = dnf-meet (neg-conj c) (dnf-neg cs)
+-- an interval code's canonical form (none for a code that is not an interval expression)
+dnf-of : Code → Opt DNF
+dnf-of ci0 = some dnf-zero
+dnf-of ci1 = some dnf-one
+dnf-of (cvar k) = some (lcons (lcons (k , true) lnil) lnil)
+dnf-of (cneg r) = case dnf-of r of none → none; some f → some (dnf-neg f)
+dnf-of (cmeet r s) = case dnf-of r of none → none; some f → (case dnf-of s of none → none; some g → some (dnf-meet f g))
+dnf-of (cjoin r s) = case dnf-of r of none → none; some f → (case dnf-of s of none → none; some g → some (dnf-join f g))
+dnf-of c = none
+-- a canonical form written as a code
+lit-code : Lit → Code
+lit-code l = if snd l then cvar (fst l) else cneg (cvar (fst l))
+conj-code-from : Lit → Conj → Code
+conj-code-from l lnil = lit-code l
+conj-code-from l (lcons m ms) = cmeet (lit-code l) (conj-code-from m ms)
+conj-code : Conj → Code
+conj-code lnil = ci1
+conj-code (lcons l ls) = conj-code-from l ls
+dnf-code-from : Conj → DNF → Code
+dnf-code-from c lnil = conj-code c
+dnf-code-from c (lcons d ds) = cjoin (conj-code c) (dnf-code-from d ds)
+dnf-code : DNF → Code
+dnf-code lnil = ci0
+dnf-code (lcons c cs) = dnf-code-from c cs
+-- a form is canonical when it is its own normal form, and
+-- constant when it is 0 or 1
+dnf-eq : DNF → DNF → Bool
+dnf-eq lnil lnil = true
+dnf-eq lnil (lcons d ds) = false
+dnf-eq (lcons c cs) lnil = false
+dnf-eq (lcons c cs) (lcons d ds) = andB (conj-eq c d) (dnf-eq cs ds)
+-- the normal form of any list of conjunctions: each conjunction ordered, then all added
+dnf-norm : DNF → DNF
+dnf-norm lnil = lnil
+dnf-norm (lcons c cs) = dnf-add (conj-meet c lnil) (dnf-norm cs)
+dnf-canon : DNF → Bool
+dnf-canon f = dnf-eq (dnf-norm f) f
+dnf-nonconst : DNF → Bool
+dnf-nonconst lnil = false
+dnf-nonconst (lcons lnil cs) = false
+dnf-nonconst (lcons (lcons l ls) cs) = true
