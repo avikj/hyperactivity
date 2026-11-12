@@ -276,3 +276,18 @@ TCode Γ A = (c : Code) × (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) × Der (Γ 
 -- evaluation (6.1): eval_{Γ,A} : Code(Γ, A) → Π ρ : Env(Γ). ⟦A⟧ρ
 teval : (Γ : Ctx) (A : PTy (Env Γ)) → TCode Γ A → (ρ : Env Γ) → ElP (Env Γ) A ρ
 teval Γ A t = fst (snd t)
+
+-- ---------------------------------------------------------------- worlds: order-preserving embeddings
+-- OPE (Δ , Γ , r): Δ is Γ with entries inserted; r is its meaning, the map of environments
+OIx : Type 1
+OIx = (Δ : Ctx) × (Γ : Ctx) × (Env Δ → Env Γ)
+data OPE : (W : OIx) → Type 1 where
+  -- (the empty context's structure is any value of One1, which has no η)
+  odone : (γ : One1) → OPE ((lnil , γ) , (lnil , γ) , λ ρ → ρ)
+  odrop : (Δ Γ : Ctx) (r : Env Δ → Env Γ) (B : PTy (Env Δ)) → OPE (Δ , Γ , r) → OPE (ext Δ B , Γ , λ ρ → r (fst ρ))
+  okeep : (Δ Γ : Ctx) (r : Env Δ → Env Γ) (A : PTy (Env Γ)) →
+    OPE (Δ , Γ , r) → OPE (ext Δ (pull (Env Γ) (Env Δ) r A) , ext Γ A , λ p → (r (fst p) , snd p))
+-- the identity world, by recursion on the skeleton
+oid : (sk : Lst TyShape) (γ : fst (CtxE sk)) → OPE ((sk , γ) , (sk , γ) , λ ρ → ρ)
+oid lnil γ = odone γ
+oid (lcons s sk) γ = okeep (sk , fst γ) (sk , fst γ) (λ ρ → ρ) (s , snd γ) (oid sk (fst γ))
