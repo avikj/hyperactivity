@@ -1,0 +1,23 @@
+-- lib/work.cub — the record of the work on a repository, as data of the language (2026-11-12).
+-- Loaded after lib/prelude.cub (List). Nothing here is specific to this repository: the goals of a
+-- particular piece of work are a data type that work declares (this repository's: work/goals.cub).
+--
+-- A goal is a constructor of that data type, and the work's `serves : G → List G` lists the goals
+-- each is instrumental to (a goal may serve several). A ticket is a checked definition
+-- `tN : Ticket G`: its kind, the goals it serves, and whether it is open (`opened`; `open` is a
+-- reserved word) or closed on a date (YYYYMMDD as a word). The ticket's text is not in the record. It is the one comment that begins
+-- `tN (YYYY-MM-DD):`, written where in the code the ticket's subject is (any file, any comment
+-- syntax), so a reader of that place sees it without knowing the ticket exists. tools/work.py lists,
+-- shows and checks tickets: every record has exactly one such comment and every such comment a
+-- record. Opening, closing and editing a ticket are changes to the code; the repository's history is
+-- the succession of these states.
+--
+-- Kinds: wrong (definitely incorrect, and why), maybe-wrong (possibly incorrect, and why), needs-work
+-- (a specific piece of work or review is owed here), question (something not yet known).
+data Kind = wrong | maybe-wrong | needs-work | question
+data Status = opened | closed (on : Word)
+record Ticket (G : Type) = { t-kind : Kind ; t-goals : List G ; t-status : Status }
+ticket : {G : Type} → Kind → List G → Status → Ticket G
+ticket {G} k gs s = Ticket { t-kind = k ; t-goals = gs ; t-status = s }
+is-open : {G : Type} → Ticket G → Bool
+is-open {G} t = case t-status {G} t of opened → true; closed d → false

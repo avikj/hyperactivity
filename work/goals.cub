@@ -1,0 +1,46 @@
+-- work/goals.cub — the goals of the work on this repository (2026-11-12). Loaded after
+-- lib/work.cub. Each goal's statement is the comment above its line in `serves`; a goal is reached
+-- when its statement holds, and the goals it serves are the reason it is pursued. The tickets that
+-- serve each goal are in work/tickets.cub (`python3 tools/work.py goals`).
+data Goal = publish | self-aware | tooling | core-correct | typed-codes | partial-evaluation | native | typed-checker
+serves : Goal → List Goal
+-- publish (2026-11-12): the paper (docs/Hyperactive_Final_Paper.pdf) is published with its companion
+-- repository, whose language core is complete: the formal language implemented exactly, the
+-- language's own procedures carrying their correctness in their types, partial evaluation with the
+-- Futamura projections, and realization as native code through C. Everything currently pursued
+-- serves this.
+serves publish = nil
+-- self-aware (2026-11-12): an agent arriving with no context lands in a repository that states its
+-- own reality: what it is, what is checked, what is assumed and where, what is wrong or not yet
+-- known (open tickets, at the places concerned), and what is being done now (README.md, top).
+-- Reached when every file has been read against the paper and the published calculus, every finding
+-- is a ticket at its site, and the entry document says only what is true.
+serves self-aware = cons publish nil
+-- tooling (2026-11-12): the work's record is data of the language: goals and tickets checked
+-- definitions (lib/work.cub), each ticket's text at its site, tools/work.py to list, show and check
+-- them; queries written in the language itself follow. It serves the self-aware repository and is
+-- itself a demonstration of the language as an information environment.
+serves tooling = cons self-aware (cons publish nil)
+-- core-correct (2026-11-12): the implementation is exactly the published calculus, CCHM (Cohen,
+-- Coquand, Huber, Mörtberg 2018) with clocked guarded computation (Kristensen, Møgelberg, Vezzosi
+-- 2022): every rule present, none added, and the part that must be trusted small and plainly those
+-- rules, with everything else (elaboration, sharing, memoization, specialization, translation)
+-- either checked by that part or unable by construction to change a result.
+serves core-correct = cons publish nil
+-- typed-codes (2026-11-12): the language's own terms as typed objects in it, Code(Γ, A) = Σ c.
+-- Der(Γ, c, A) (paper §6.1), over the one existing representation of terms; every definition
+-- reflects to one; normalization as a term with its soundness equation (6.5).
+serves typed-codes = cons partial-evaluation (cons native (cons typed-checker nil))
+-- partial-evaluation (2026-11-12): the specializer with its law in its type (6.6), the first, second
+-- and third Futamura projections (6.6–6.7), and specialization when values arrive at run time, the
+-- residual checked, realized and cached with its evidence (paper §9.3).
+serves partial-evaluation = cons publish nil
+-- native (2026-11-12): realization through C, emitting C that keeps the program's structure so the
+-- C compilers' optimizations apply: the translation returns the relation between running the C and
+-- the term's meaning; the evaluator substitutes native code only with that relation; a process
+-- becomes an executable whose system-call events are the process's interaction. The C compiler, the
+-- C library and the hardware are trusted.
+serves native = cons publish nil
+-- typed-checker (2026-11-12): the checker returns a typing derivation or a refusal, so it is sound by
+-- construction; then it is shown to decide derivability.
+serves typed-checker = cons core-correct nil
