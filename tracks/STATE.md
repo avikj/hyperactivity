@@ -43,6 +43,46 @@ tracks/              16 files    5165 lines
   experiments/tso/               8 files
 ```
 
+## The map: each part of the paper and the plan, and the files that are it (from each file's header)
+
+- **The core and its evaluation** (paper §1, §3; C): `src/` (net, syntax, lang, drivers; 16.7k
+  lines). Bootstrap files, the only ones allowed definitions without signatures
+  (`src/syntax.c` BOOT_RAW): `prelude code match nav cost lin check`; the only ones allowed
+  primitives (BOOT_TRUSTED): `prim std`.
+- **Codes, the evaluator and the checker as terms** (paper §6.1–6.2): `code.cub` (codes, `eval-g`),
+  `check.cub` (the checker, 2.5k lines, untyped bootstrap), `match.cub` (matching, rewriting),
+  `nav.cub`, `cost.cub`, `lin.cub`.
+- **Mathematics and certified decision procedures** (paper §2–4, App. A): `std.cub` (data, paths,
+  equivalences, univalence), `prim.cub` (machine numbers, laws), `fiber.cub`, `sort.cub`,
+  `intproof.cub`, `linproof.cub`; untyped and refused: `ring.cub`, `intlin.cub`, `eqproof.cub`,
+  `autodiff.cub`, `derive.cub`.
+- **Specialization and rewriting** (paper §6.2): `codes.cub`, `specialize.cub`, `rules.cub`.
+- **Processes, worlds, observation** (paper §5.5, §7.3, §7.6, §10): `proc.cub`, `world.cub`,
+  `session.cub`, `choreo.cub`, `obs.cub` (handlers, naturality, observations), `region.cub`,
+  `decode.cub` (byte decoder with access certificates; paper §8.6's kind of example).
+- **Compiling** (paper §9; PLAN layer 3): `machine.cub` (the fragment that compiles), `x86.cub`
+  (the untyped-in-content encoder, trusted), `elf.cub` (`#build`); `lib/compile/` (this week;
+  wrong form except the law files — see `E-lemmas.md`).
+- **The machine** (paper §7, §9; PLAN layer 1): `lib/isa/x86/` (66 files, 73.9k lines, the Sail
+  model imported), `bits.cub` (what it is written against), `isa/tso.cub`, `isa/tso-acyclic.cub`.
+- **The OS** (paper §7.5; PLAN Phase 3): `os/linux.cub` (syscalls as a typed world),
+  `os/contract.cub` (the kernel's contract, `linux-model`), `os/platform.cub`, `os/replay.cub`.
+- **Memory and the languages' common ground** (paper §7.1, §8.5; PLAN §5): `mem/target.cub`,
+  `mem/scalar.cub`, `mem/sig.cub` (memory as a signature), `mem/layout.cub`, `mem/flat.cub`,
+  `mem/monad.cub` (the monad every reader targets), `mem/memory.cub` (abstract memory, `mem-std`),
+  `mem/atomics.cub`, `mem/rc11.cub`.
+- **Existing languages** (paper §5, §8; PLAN Phase 4–5): C++ — `cxx/ast.cub` (Clang AST as data),
+  `cxx/machine.cub`, `cxx/read-expr.cub`; Rust — `lang/rust/{ast,machine,read-place,read-rvalue,
+  read}.cub`.
+- **Distribution and deployment** (paper §10; PLAN Phase 7–8): `net.cub` (network as a world),
+  `fleet.cub`, `deploy.cub`.
+- **Tools**: `tools/` (sail2cub.py, clang2cub.py, tree.py, …); **experiments**: 13 directories
+  (see the tree); **docs**: the paper.
+
+Not present by name (paper constructions): `record Language` (5.5), `Adequate`/`StdDeriv`
+(5.12–5.13), checked `Code_ℓ`/`Der`/`reify` (6.1), `Block`/`seq`/compiler algebra (9.12–9.16),
+`realize_M`, `Maintained` (§10).
+
 ## What `make library` checks (measured)
 
 Files, in order (`make -s -n library`): prelude code match nav cost lin check std sort linproof
