@@ -54,6 +54,20 @@ static void canon(SBuf *o, Node *t);
 static bool kser_on;   /* a serialization, not a key: binder names kept (=name), for forms that are read back and checked by name (a branch's rec) */
 static bool kfresh_on; static const char **kfresh; static size_t capkfresh; static int nkfresh;
 static bool n_isfresh(const char *s) { size_t n = strlen(s); if (n < 3 || !isdigit((unsigned char)s[n - 1])) return false; size_t i = 1; while (i < n && (isalpha((unsigned char)s[i]) || s[i] == '_' || (unsigned char)s[i] >= 0x80)) i++; if (i == 1) return false; while (i < n && isdigit((unsigned char)s[i])) i++; return i == n; }
+static void canon_sym(SBuf *o, const char *s);
+/* a binder's name kept in a serialization (kser_on): a generated name renumbered as every other
+ * occurrence of it is (kfresh), so a name the elaborator uses both as a branch's field and as a
+ * binder inside it (a rebuilt scrutinee's let, which `rec` resolves by the field's name) stays one
+ * name when read back (2026-11-12: x-case-chain failed warm, "rec of a name that is not a recursive
+ * field of its branch", the pattern's %f5221 renumbered and the let's written raw) */
+static void kser_name(SBuf *o, const char *s) {
+    if (kfresh_on && s[0] == '%' && n_isfresh(s) && global_lookup(s) < 0) {
+        int i; for (i = 0; i < nkfresh && strcmp(kfresh[i], s); i++) ;
+        if (i == nkfresh) { GROW(kfresh, capkfresh, (size_t)nkfresh + 1); kfresh[nkfresh++] = s; }
+        sb_fmt(o, "%%kf%d", i); return;
+    }
+    sb_put(o, s);
+}
 static void canon_sym(SBuf *o, const char *s) {
     for (int i = nkscope - 1; i >= 0; i--) if (!strcmp(kscope[i], s)) { sb_fmt(o, "@%d", nkscope - 1 - i); return; }
     if (kself && !strcmp(s, kself)) { sb_put(o, "self"); return; }
@@ -76,12 +90,7 @@ static void canon_sym(SBuf *o, const char *s) {
     /* under kfresh_on (an elaboration's key and output): a generated name (%, letters, digits: xfresh,
      * afresh), whose number depends on how much was elaborated before it in the run, is numbered by
      * its first occurrence here, so the key does not depend on that (2026-11-12) */
-    if (kfresh_on && s[0] == '%' && n_isfresh(s) && global_lookup(s) < 0) {
-        int i; for (i = 0; i < nkfresh && strcmp(kfresh[i], s); i++) ;
-        if (i == nkfresh) { GROW(kfresh, capkfresh, (size_t)nkfresh + 1); kfresh[nkfresh++] = s; }
-        sb_fmt(o, "%%kf%d", i); return;
-    }
-    sb_put(o, s);
+    kser_name(o, s);
 }
 static void canon_binder(SBuf *o, Node *x) {
     /* a binder: its multiplicity when not the default */
@@ -95,7 +104,7 @@ static void canon_lbinder(SBuf *o, Node *x) {
     Node *T = bnd_ty(x);
     if (T) sb_put(o, "(");
     sb_put(o, "%b"); canon_binder(o, x); if (bnd_inst(x)) sb_put(o, "!");
-    if (kser_on) { sb_put(o, "="); sb_put(o, x->s); }
+    if (kser_on) { sb_put(o, "="); kser_name(o, x->s); }
     if (T) { sb_put(o, " "); canon(o, T); sb_put(o, ")"); }
 }
 static void canon(SBuf *o, Node *t) {
@@ -119,7 +128,7 @@ static void canon(SBuf *o, Node *t) {
             return;
         }
         if (!strcmp(k, "let") && t->n == 4 && !t->it[1]->list) {
-            sb_put(o, "(let "); if (kser_on) { sb_put(o, "="); sb_put(o, t->it[1]->s); sb_put(o, " "); } canon(o, t->it[2]); sb_put(o, " ");
+            sb_put(o, "(let "); if (kser_on) { sb_put(o, "="); kser_name(o, t->it[1]->s); sb_put(o, " "); } canon(o, t->it[2]); sb_put(o, " ");
             kpush(t->it[1]->s); canon(o, t->it[3]); nkscope--;
             sb_put(o, ")");
             return;
@@ -355,12 +364,9 @@ static void store_put(const char *name, const char *key, const char *code, const
     if (name) names_bind(name, key);
 }
 
-/* t65 (2026-11-12): wrong. A data type's key is the canonical form of its declaration without its
- * name, so two declarations of one content are one key: List (lib/prelude.cub) and Lst
- * (lib/code.cub) are. To the checker they are two types (data types are generative), and a form read
- * back through the key names whichever comes first, the wrong one. Certificates are unaffected (the
- * checker's verdict does not depend on the name). Fixed on branch claude/work-object by putting the
- * declared name in the key, as Unison's unique types carry a salt. */
+/* A data type's key includes its declared name: two declarations of one content (List in
+ * lib/prelude.cub, Lst in lib/code.cub) are two types to the checker (data types are generative), so
+ * they are two keys, as Unison's unique types carry a salt (2026-11-12, t65). */
 /* ---- keys of the kinds of entry ---- */
 /* a checked definition: its type and term; the canonical forms are returned for the store */
 static void key_def(Node *T, Node *t, char out[65], char **code, char **type) {
@@ -395,7 +401,6 @@ static void key_decl(Node *dd, char out[65], char **code) {
      * identity, as Unison's unique types carry a salt (2026-11-12; without it the store conflated
      * them and a form read back named the wrong one) */
     Node *hd = dd->it[1]; const char *dn = hd->list ? hd->it[0]->s : hd->s;
-    if (getenv("CUBICAL_KEYTEXT") && !strcmp(getenv("CUBICAL_KEYTEXT"), dn)) fprintf(stderr, "TEXT %s\n", b.b);
     SBuf w = { 0 }; sb_put(&w, "data "); sb_put(&w, dn); sb_put(&w, "\n"); sb_put(&w, b.b); sb_put(&w, "\n");
     key_hash(w.b, w.n, out); free(w.b); kfresh_on = false;
     if (code) *code = b.b; else free(b.b);

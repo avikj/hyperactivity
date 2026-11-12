@@ -3190,6 +3190,8 @@ static Node *reading_type(Node *t) {
  * records keyed by their content (t60). The first step can be taken here: the query's key formed as
  * the store forms a definition's (its canonical form, references as content keys, plus the
  * checker's identity), and the result stored canonically.
+ * 2026-11-12: one kind of result is kept so: a declaration's whole elaboration (src/syntax.c,
+ * x_checked; below, done). The evaluator's own results, %chk-def's and the readings', are not yet.
  * Read 2026-11-12, for the elaborator's case (src/syntax.c x_checked, the round loop): the right unit
  * is the whole elaboration of a declaration, its input the declaration's surface forms (sig, body)
  * with every name resolved to the key it denotes, its output the solved core forms T and t. The
@@ -3201,25 +3203,22 @@ static Node *reading_type(Node *t) {
  * read back. The store needs one canonical form that is both the key and readable back (references
  * as keys, binders nameless but counted, binder types and flags kept), rendered through the current
  * bindings when read; with it canon is that form's hash and nothing is duplicated.
- * Built 2026-11-12 on branch claude/work-object (d0d0a51, not merged): canon's binders readable back
- * and decanon (every library definition round-trips, CUBICAL_DCTEST); generated names numbered by
- * first occurrence in an elaboration's key; data keys nominal (t65); the elaboration remembered.
- * Measured (library, store warm, CUBICAL_PROF counting readback steps by query): without it 30.7 s,
- * 32M steps; with it 27 s, with %%chk-def still about 830 calls and 28M steps, and 15 definitions
- * that pass cold failing warm (x-case-chain: "rec of a name that is not a recursive field of its
- * branch", a form read back that the elaborator's own bookkeeping no longer matches). So the warm
- * cost is mostly not elaboration of remembered declarations; it is the declarations never
- * remembered, the 52 refused ones among them, rechecked every run (t43). Next: t43 first, then
- * the x-case-chain regression, before this is merged. */
-static const char *rbp_h[64]; static long rbp_s[64], rbp_n[64]; static int nrbp;
-static void rbp_dump(void) { for (int i = 0; i < nrbp; i++) fprintf(stderr, "PROF %s %ld steps %ld calls\n", rbp_h[i], rbp_s[i], rbp_n[i]); }
+ * Done 2026-11-12 (branch work-object, merged): canon's binders readable back and decanon (every
+ * library definition round-trips); generated names numbered by first occurrence in an elaboration's
+ * key and in its stored form, binders' kept names included (x-case-chain had failed warm, "rec of a
+ * name that is not a recursive field of its branch", its pattern's field renumbered while the
+ * rebuilt scrutinee's let kept the raw name that `rec` resolves); data keys nominal (t65, closed);
+ * the elaboration remembered. Acceptance is not remembered with it: a remembered elaboration is a
+ * term like any other, accepted by its own key's certificate or by the checker (the first version
+ * marked a hit as already checked, which would have accepted a stale elaboration unchecked).
+ * Measured, the library with the store warm and the per-file cache cold: 4.2 s of CPU, no
+ * evaluator step, the same 1907 passed and 52 failed as cold (29 s before, t44). */
 static char *readback(Node *t, long *steps) {
     net_drain();
     long s0 = stat_steps;
     char *buf = read_port(build_top(t));
     net_drain();
     if (steps) *steps = stat_steps - s0;
-    if (getenv("CUBICAL_PROF")) { static bool reg; if (!reg) { atexit(rbp_dump); reg = true; } const char *h = t->list && t->n && !t->it[0]->list ? t->it[0]->s : "?"; int i; for (i = 0; i < nrbp && strcmp(rbp_h[i], h); i++) ; if (i == nrbp && nrbp < 64) rbp_h[nrbp++] = h; if (i < 64) { rbp_s[i] += stat_steps - s0; rbp_n[i]++; } }
     return buf;
 }
 /* a reading at a type T: the normal form at T (quote), whose length includes the quoting; a value
@@ -3968,11 +3967,6 @@ static void toplevel_in(Node *f) {
         /* its codebase key (F34): a definition the store holds as checked is not checked again */
         char key[65]; char *kcode = NULL, *ktype = NULL;
         key_def(dT, dt, key, &kcode, &ktype);
-        if (getenv("CUBICAL_KEYDUMP")) fprintf(stderr, "KEY %s %s %d\n", define ? f->it[1]->s : "(check)", key, store_checked(key));
-        if (getenv("CUBICAL_KEYTEXT") && define && !strcmp(getenv("CUBICAL_KEYTEXT"), f->it[1]->s)) fprintf(stderr, "TEXT %s\n%s\n", ktype, kcode);
-        /* CUBICAL_DCTEST: every checked definition's canonical forms read back and canonicalized again,
-         * reporting any that do not round-trip (2026-11-12: the library, 0) */
-        if (getenv("CUBICAL_DCTEST") && kcode && ktype) { Node *a = decanon(kcode), *b = decanon(ktype); if (!a || !b) printf("DC-UNREAD %s\n", f->it[1]->s); else { SBuf x = { 0 }, y = { 0 }; cur_deps.n = 0; canon(&x, a); canon(&y, b); if (strcmp(x.b ? x.b : "", kcode) || strcmp(y.b ? y.b : "", ktype)) printf("DC-DIFF %s\n", f->it[1]->s); free(x.b); free(y.b); } }
         bool stored = define && expect && !trusted && (forced_result ? forced_steps < 0 : store_checked(key));
         Node *cT = nl2("%raw", aclosed(dT)), *ct = trusted || stored ? NULL : nl2("%raw", aclosed(dt));
         long steps = 0;
