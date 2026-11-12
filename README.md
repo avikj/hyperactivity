@@ -75,6 +75,8 @@ python3 tools/work.py show t6 core    # a node's text or statement, place, parts
 python3 tools/work.py priority 10     # the tN nodes in the order the relations imply
 python3 tools/work.py check           # graph and comments correspond; the graph checks
 python3 tools/work.py next            # the next tN number never used
+python3 tools/work.py open lib/x.cub:12 core-correct 'what is wrong, measured how'
+                                      # open the next tN there, part of the node (y/N near the top)
 python3 tools/work.py why refl        # why a declaration exists: its chain of reasons to a root
 python3 tools/work.py unexplained     # the declarations with no reason, by file
 ```

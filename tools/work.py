@@ -13,6 +13,10 @@ Every node in the graph is open; closing one removes it.
     python3 tools/work.py priority [K]       the tN nodes in the order the graph's relations imply
     python3 tools/work.py check              graph and comments correspond; the graph checks
     python3 tools/work.py next               the next tN number never used (the history included)
+    python3 tools/work.py open FILE:LINE NODE [NODE ...] TEXT
+                                             open the next tN, part of the NODEs, its text the
+                                             comment `tN (date): TEXT` written above FILE:LINE;
+                                             a part of the root or of a root's part asks y/N
     python3 tools/work.py why NAME ...       why a declaration of the code exists: the chain to a root
     python3 tools/work.py unexplained [FILE] the declarations with no reason, by file
 
@@ -498,12 +502,60 @@ def cmd_unexplained(args):
     print(f'{total} of {len(decls)} declarations read have no reason')
 
 
+
+def depth(g, roots, n, seen=()):
+    """the node's least distance below a root"""
+    if n in roots: return 0
+    ds = [depth(g, roots, p, seen + (n,)) for p in g.get(n, {}).get('parts', []) if p not in seen]
+    ds = [d for d in ds if d is not None]
+    return 1 + min(ds) if ds else None
+
+
+def cmd_open(args):
+    import datetime, textwrap
+    if len(args) < 3: sys.exit('open FILE:LINE NODE [NODE ...] TEXT')
+    site, nodes, text = args[0], args[1:-1], args[-1]
+    f, line = site.rsplit(':', 1); line = int(line)
+    g, roots, _, _ = graph()
+    for n in nodes:
+        if n not in g: sys.exit(f'{n}: not a node of work/graph.cub')
+        d = depth(g, roots, n)
+        if d is not None and d <= 1:
+            print(f'{n} is {"a root" if d == 0 else "a part of the root"}: the most specific node a piece of work is part of')
+            print('is usually far below it (python3 tools/work.py tree).')
+            if not sys.stdin.isatty() or input(f'attach it directly to {n}? [y/N] ').strip().lower() != 'y':
+                sys.exit('not opened')
+    used = {int(x[1:]) for x in g if is_t(x)} | set(texts())
+    try:
+        log = subprocess.run(['git', 'log', '-p', '--all', '--', 'work', 'lib/work.cub'], cwd=ROOT,
+                             capture_output=True, text=True).stdout
+        used |= {int(x) for x in re.findall(r'\bt(\d+)\b', log)}
+    except OSError: pass
+    n = max(used, default=0) + 1
+    today = datetime.date.today().isoformat()
+    path = os.path.join(ROOT, f)
+    ls = open(path, encoding='utf-8').read().split('\n')
+    c = f.endswith(('.c', '.h'))
+    ind = re.match(r'\s*', ls[line - 1]).group(0) if line - 1 < len(ls) else ''
+    body = textwrap.wrap(f't{n} ({today}): {text}', 100 - len(ind) - 3)
+    if c: com = [ind + '/* ' + body[0]] + [ind + ' * ' + b for b in body[1:]]; com[-1] += ' */'
+    else: com = [ind + '-- ' + b for b in body]
+    ls[line - 1:line - 1] = com
+    open(path, 'w', encoding='utf-8').write('\n'.join(ls))
+    gp = GRAPH; gs = open(gp, encoding='utf-8').read()
+    last = list(re.finditer(r'^t\d+ = leaf #\d+ .*\n', gs, re.M))[-1]
+    parts = ''.join(f'(cons {x} ' for x in nodes) + 'nil' + ')' * len(nodes)
+    gs = gs[:last.end()] + f't{n} : Node\nt{n} = leaf #{n} {parts}\n' + gs[last.end():]
+    open(gp, 'w', encoding='utf-8').write(gs)
+    print(f't{n} opened, part of {", ".join(nodes)}, at {f}:{line}')
+
+
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
         print(__doc__); return
     c, a = sys.argv[1], sys.argv[2:]
     {'list': cmd_list, 'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'next': cmd_next,
-     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
+     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained, 'open': cmd_open}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
 
 
 if __name__ == '__main__':
