@@ -102,6 +102,13 @@ def records():
     return out
 
 
+def afters():
+    """what each ticket waits on (lib/work.cub, After): number -> [numbers]"""
+    src = open(os.path.join(ROOT, 'work', 'tickets.cub'), encoding='utf-8').read()
+    return {int(m.group(1)): [int(x) for x in re.findall(r'\bt(\d+)\b', m.group(2))]
+            for m in re.finditer(r'^t(\d+)-after = (.*)$', src, re.M)}
+
+
 def goals():
     """the goals: name -> (serves, statement)"""
     src = open(os.path.join(ROOT, 'work', 'goals.cub'), encoding='utf-8').read()
@@ -163,6 +170,9 @@ def cmd_show(args):
         n = int(a.lstrip('t'))
         k, gs, st = recs.get(n, ('?', [], 'no record'))
         print(f't{n}  {k}  {st}  goals: {", ".join(gs) or "-"}')
+        aft, waits = afters(), [m for m, l in afters().items() if n in l]
+        if aft.get(n): print('  after: ' + ' '.join(f't{m}' for m in aft[n]))
+        if waits: print('  before: ' + ' '.join(f't{m}' for m in sorted(waits)))
         for f, l, d, text in txt.get(n, []):
             print(f'  {f}:{l}  ({d})')
             words, line = text.split(), ''
@@ -221,6 +231,12 @@ def cmd_check(args):
             for g in recs[n][1]:
                 if g not in names:
                     print(f't{n}: unknown goal {g}'); bad += 1
+    for n, l in afters().items():
+        for m in [n] + l:
+            if m not in recs:
+                print(f't{n}-after: names t{m}, which has no record'); bad += 1
+        if n in recs and recs[n][2] != 'open' and any(recs.get(m, ('', [], 'open'))[2] == 'open' for m in l):
+            print(f't{n}: closed while what it waits on is open'); bad += 1
     for g in names:
         if not gl[g][1]:
             print(f'goal {g}: no statement'); bad += 1
