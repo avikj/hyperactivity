@@ -2499,3 +2499,62 @@ cmap-ope-d (wkeep e w) X F c d =
     (ope-cube-d (wkeep e w) X F c d)
     (cmap-keep-d e (ope-src w) (ope-tgt w) (ope-var w) X F c d)
     (λ i → keep-d e (ope-src w) (ope-tgt w) (λ Y d → cmap-ope w Y d i) (λ Y G c d → cmap-ope-d w Y G c d i) X F c d)
+
+-- ---------------------------------------------------------------- P2.6e (2s): substitutions
+-- (2026-11-12, next definitions (2s)) The identity, weakening by a type and by a dimension, each with
+-- its path from the dimension part's action on Γ's cube to its cube's base (cmap-id, cmap-skip, and the
+-- base of a cube of sections, dcube-map-of); mapping the base of a cube after mapping out of a cube
+-- over it is one map out (dmap-map), and the first projection out of a cube over it is the cube
+-- (dmap-fst).
+dmap-map : (n : Nat) (X : Type 1) (Y : X → Type 1) (Z W : Type 1) (g : (x : X) → Y x → Z) (h : Z → W) (c : Cube n X) (d : DCube n X Y c) →
+  PathP (λ i → Cube n W) (cube-map n Z W h (dcube-map n X Y Z g c d)) (dcube-map n X Y W (λ x y → h (g x y)) c d)
+dmap-map zero X Y Z W g h c d = λ i → h (g c d)
+dmap-map (suc n) X Y Z W g h c d = dmap-map n (Line X) (LineO X Y) (Line Z) (Line W) (lineo-map X Y Z g) (line-map Z W h) c d
+dmap-fst : (n : Nat) (X : Type 1) (Y : X → Type 1) (c : Cube n X) (d : DCube n X Y c) → PathP (λ i → Cube n X) (dcube-map n X Y X (λ x y → x) c d) c
+dmap-fst zero X Y c d = λ i → c
+dmap-fst (suc n) X Y c d = dmap-fst n (Line X) (LineO X Y) c d
+sub-id : (Γ : CCtx) → Sub Γ Γ
+sub-id Γ =
+  (cmap-of (fst Γ) (fst Γ) (λ k → k) ,
+   dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (SubF (fst Γ) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (snd Γ) ,
+   pcat (Cube (dims (fst Γ)) (CtxV (fst Γ))) (cmap-cube (fst Γ) (fst Γ) (cmap-of (fst Γ) (fst Γ) (λ k → k)) (CtxV (fst Γ)) (snd Γ)) (snd Γ)
+     (sub-base Γ Γ (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (SubF (fst Γ) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (snd Γ)))
+     (cmap-id (fst Γ) (CtxV (fst Γ)) (snd Γ))
+     (psym (Cube (dims (fst Γ)) (CtxV (fst Γ))) (sub-base Γ Γ (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (SubF (fst Γ) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (snd Γ))) (snd Γ)
+        (pcat (Cube (dims (fst Γ)) (CtxV (fst Γ))) (sub-base Γ Γ (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (SubF (fst Γ) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (snd Γ)))
+           (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (fst Γ)) (λ x → x) (snd Γ)) (snd Γ)
+           (dcube-map-of (dims (fst Γ)) (CtxV (fst Γ)) (SubF (fst Γ) (fst Γ)) (CtxV (fst Γ)) (λ γ' p → fst p) (λ γ → (γ , λ ρ → ρ)) (snd Γ))
+           (cube-id (dims (fst Γ)) (CtxV (fst Γ)) (snd Γ)))))
+sub-wk : (Γ : CCtx) (a : TyShape) (Y : Type 1) (f : (γ : CtxV (fst Γ)) → (EnvV (fst Γ) γ → Y) → EnvV (fst Γ) γ → Sem a) (M : Mean Γ Y) →
+  Sub (extM Γ a Y f M) Γ
+sub-wk Γ a Y f M =
+  (cmap-of (lcons (e-ty a) (fst Γ)) (fst Γ) (λ k → %wsucc k) ,
+   dcube-of (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (SubF (lcons (e-ty a) (fst Γ)) (fst Γ)) (λ γ' → (fst γ' , λ ρ → fst ρ)) (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M) ,
+   pcat (Cube (dims (fst Γ)) (CtxV (fst Γ))) (cmap-cube (lcons (e-ty a) (fst Γ)) (fst Γ) (cmap-of (lcons (e-ty a) (fst Γ)) (fst Γ) (λ k → %wsucc k)) (CtxV (fst Γ)) (snd Γ)) (snd Γ)
+     (sub-base (extM Γ a Y f M) Γ (dcube-of (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (SubF (lcons (e-ty a) (fst Γ)) (fst Γ)) (λ γ' → (fst γ' , λ ρ → fst ρ)) (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M)))
+     (pcat (Cube (dims (fst Γ)) (CtxV (fst Γ))) (cmap-cube (lcons (e-ty a) (fst Γ)) (fst Γ) (cmap-of (lcons (e-ty a) (fst Γ)) (fst Γ) (λ k → %wsucc k)) (CtxV (fst Γ)) (snd Γ))
+        (cmap-cube (fst Γ) (fst Γ) (cmap-of (fst Γ) (fst Γ) (λ k → k)) (CtxV (fst Γ)) (snd Γ)) (snd Γ)
+        (cmap-skip (e-ty a) (fst Γ) (fst Γ) (λ k → k) (CtxV (fst Γ)) (snd Γ)) (cmap-id (fst Γ) (CtxV (fst Γ)) (snd Γ)))
+     (psym (Cube (dims (fst Γ)) (CtxV (fst Γ))) (sub-base (extM Γ a Y f M) Γ (dcube-of (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (SubF (lcons (e-ty a) (fst Γ)) (fst Γ)) (λ γ' → (fst γ' , λ ρ → fst ρ)) (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M))) (snd Γ)
+        (pcat (Cube (dims (fst Γ)) (CtxV (fst Γ))) (sub-base (extM Γ a Y f M) Γ (dcube-of (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (SubF (lcons (e-ty a) (fst Γ)) (fst Γ)) (λ γ' → (fst γ' , λ ρ → fst ρ)) (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M)))
+           (cube-map (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (CtxV (fst Γ)) (λ x → fst x) (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M)) (snd Γ)
+           (dcube-map-of (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (SubF (lcons (e-ty a) (fst Γ)) (fst Γ)) (CtxV (fst Γ)) (λ γ' p → fst p) (λ γ' → (fst γ' , λ ρ → fst ρ)) (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M))
+           (pcat (Cube (dims (fst Γ)) (CtxV (fst Γ))) (cube-map (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (CtxV (fst Γ)) (λ x → fst x) (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M))
+              (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (fst Γ)) (λ γ e → γ) (snd Γ) M) (snd Γ)
+              (dmap-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (CtxV (fst Γ)) (λ γ e → (γ , f γ e)) (λ x → fst x) (snd Γ) M)
+              (dmap-fst (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (snd Γ) M)))))
+sub-dwk : (Γ : CCtx) → Sub (dext Γ) Γ
+sub-dwk Γ =
+  (cmap-of (lcons e-dim (fst Γ)) (fst Γ) (λ k → %wsucc k) ,
+   dcube-of (suc (dims (fst Γ))) (CtxV (fst Γ)) (SubF (lcons e-dim (fst Γ)) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ)) ,
+   pcat (Cube (suc (dims (fst Γ))) (CtxV (fst Γ))) (cmap-cube (lcons e-dim (fst Γ)) (fst Γ) (cmap-of (lcons e-dim (fst Γ)) (fst Γ) (λ k → %wsucc k)) (CtxV (fst Γ)) (snd Γ)) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))
+     (sub-base (dext Γ) Γ (dcube-of (suc (dims (fst Γ))) (CtxV (fst Γ)) (SubF (lcons e-dim (fst Γ)) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))))
+     (pcat (Cube (suc (dims (fst Γ))) (CtxV (fst Γ))) (cmap-cube (lcons e-dim (fst Γ)) (fst Γ) (cmap-of (lcons e-dim (fst Γ)) (fst Γ) (λ k → %wsucc k)) (CtxV (fst Γ)) (snd Γ))
+        (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (cmap-cube (fst Γ) (fst Γ) (cmap-of (fst Γ) (fst Γ) (λ k → k)) (CtxV (fst Γ)) (snd Γ))) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))
+        (cmap-skip e-dim (fst Γ) (fst Γ) (λ k → k) (CtxV (fst Γ)) (snd Γ))
+        (λ i → cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (cmap-id (fst Γ) (CtxV (fst Γ)) (snd Γ) i)))
+     (psym (Cube (suc (dims (fst Γ))) (CtxV (fst Γ))) (sub-base (dext Γ) Γ (dcube-of (suc (dims (fst Γ))) (CtxV (fst Γ)) (SubF (lcons e-dim (fst Γ)) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ)))) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))
+        (pcat (Cube (suc (dims (fst Γ))) (CtxV (fst Γ))) (sub-base (dext Γ) Γ (dcube-of (suc (dims (fst Γ))) (CtxV (fst Γ)) (SubF (lcons e-dim (fst Γ)) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))))
+           (cube-map (suc (dims (fst Γ))) (CtxV (fst Γ)) (CtxV (fst Γ)) (λ x → x) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))
+           (dcube-map-of (suc (dims (fst Γ))) (CtxV (fst Γ)) (SubF (lcons e-dim (fst Γ)) (fst Γ)) (CtxV (fst Γ)) (λ γ' p → fst p) (λ γ → (γ , λ ρ → ρ)) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ)))
+           (cube-id (suc (dims (fst Γ))) (CtxV (fst Γ)) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))))))
