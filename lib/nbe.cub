@@ -556,3 +556,24 @@ fund (dfalse Γ KB gB DB) Δ δ e = inr1 (inl1 (refl , one))
 fund (dlam Γ K a b g A B c vb db) Δ δ e =
   λ Δ' r w y cy → fund db Δ' (λ ρ → (δ (r ρ) , y ρ)) (env-ren (fst Γ) (snd Γ) Δ δ e Δ' r w , cy)
 fund (dpair Γ K a b g A B c1 v1 c2 v2 d1 d2) Δ δ e = (fund d1 Δ δ e , fund d2 Δ δ e)
+
+-- ---------------------------------------------------------------- normalization, reifySound (6.5)
+-- the identity environment with every variable reflected (paper: reflectContext)
+reflect-env : (sk : Lst TyShape) (γ : fst (CtxE sk)) → CompEnv sk γ (sk , γ) (λ ρ → ρ)
+reflect-env lnil γ = one
+reflect-env (lcons s sk) γ =
+  (env-ren sk (fst γ) (sk , fst γ) (λ ρ → ρ) (reflect-env sk (fst γ)) (lcons s sk , γ) (λ ρ → fst ρ) (ren-wk (sk , fst γ) (s , snd γ)) ,
+   snd (rr s) (fst (snd γ)) (snd (snd (snd γ))) (lcons s sk , γ) (λ ρ → fst (snd (snd γ)) (fst ρ)) (λ ρ → snd ρ) (cvar #0)
+     (var0 (sk , fst γ) (s , snd γ)))
+-- normal and neutral forms are derivations, with the same code and meaning
+embed : {KJ : NK × Jdg} → NN KJ → Der (snd KJ)
+embed (nvar Γ A n v x) = dvar Γ A n v x
+embed (napp Γ K a b g A B f vf c va nf na) = dapp Γ K a b g A B f vf c va (embed nf) (embed na)
+embed (nfst Γ K a b g A B p vp np) = dfst Γ K a b g A B p vp (embed np)
+embed (nsnd Γ K a b g A B p vp np) = dsnd Γ K a b g A B p vp (embed np)
+embed (ncase Γ KB gB DB P x vx t vt f vf nx nt nf) = dcase Γ KB gB DB P x vx t vt f vf (embed nx) (embed nt) (embed nf)
+embed (nne Γ KB gB DB x vx nx) = embed nx
+embed (ntrue Γ KB gB DB) = dtrue Γ KB gB DB
+embed (nfalse Γ KB gB DB) = dfalse Γ KB gB DB
+embed (nlam Γ K a b g A B c vb nb) = dlam Γ K a b g A B c vb (embed nb)
+embed (npair Γ K a b g A B c1 v1 c2 v2 n1 n2) = dpair Γ K a b g A B c1 v1 c2 v2 (embed n1) (embed n2)
