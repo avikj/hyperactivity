@@ -30,11 +30,14 @@
 -- pc3-d, pc4-d, pc5-d, pc8-d, DexD, dexd-*, dex-c*; cmap-nat-d with PLN, papp-lit-nat-d …
 -- papp-nat-d, pcf-in, pdf-in; cmap-diag-d with CDD, pc6-d; diag-deg-d, papp-deg-d with PLD,
 -- papp-lit-deg-d … papp-dnf-from-deg-d, pcf-deg-in, pdf-deg-in; cmap-const-d; cmap-d-comp): (4r-d)
--- entire.
--- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "637 passed, 0 failed").
--- What is next: (4d), its next definitions as listed in lib/nbe.cub's head under "Remaining, in
--- order" (RenAtC, renatc-0, renatc-keep, dp-keep, cmap-papp-lit … cmap-papp, their dependent forms,
--- subM-papp), then (5), (6), the swap of this file's families into lib/nbe.cub in place of P1's.
+-- entire; then (2026-11-12, latest) (4d) in part: RenAtC, renatc-0, renatc-keep (RenAt, renat-0,
+-- renat-keep their instances), dp-keep (used by world-dkeep), cco, pc4, cmap-papp-lit, cpcf-in,
+-- cmap-papp-conj-from, cmap-papp-conj, cpdf-in, cmap-papp-dnf-from, cmap-papp, ccd, CPL,
+-- cmap-papp-lit-d … cmap-papp-d, carry-uniq.
+-- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "660 passed, 0 failed").
+-- What is next: (4d)(i)–(iii) as listed in lib/nbe.cub's head under "Remaining, in order" (the squares
+-- cmap-papp-deg and dmap-papp-deg, which subM-papp needs for the stated reason, then subM-papp), (5)
+-- (independent of them), (6), the swap of this file's families into lib/nbe.cub in place of P1's.
 
 -- lib/nbe.cub — typed codes Code(Γ, A) = Σ c. Der(Γ, c, A) over the one representation of terms
 -- (lib/code.cub's Code), their evaluation, and normalization by evaluation with its soundness
@@ -4352,3 +4355,9 @@ cmap-papp-d sk' sk r dp lnil X F c d =
     (dcube-reidx (dims sk') (Line X) X (LineO X F) F (face0-l X) (face0-o X F) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d))
     (cmap-nat-d sk' sk (cmap-of sk' sk r) (Line X) X (LineO X F) F (face0-l X) (face0-o X F) c d)
 cmap-papp-d sk' sk r dp (lcons cj cs) X F c d = cmap-papp-dnf-from-d sk' sk r r #0 (renatc-0 r) dp cj cs X F c d
+-- (2026-11-12, (4d)) lifts over one base path from one start have one end (the uniqueness of
+-- carry: any dependent path over p from d ends at carry p d); with it, two meanings reached from one
+-- meaning along the same base path are equal, which subM-papp and subM-comp use
+carry-uniq : (n : Nat) (X : Type 1) (F : X → Type 1) (c0 c1 : Cube n X) (p : PathP (λ i → Cube n X) c0 c1) (d : DCube n X F c0) (e : DCube n X F c1) →
+  PathP (λ i → DCube n X F (p i)) d e → PathP (λ i → DCube n X F c1) (carry n X F c0 c1 p d) e
+carry-uniq n X F c0 c1 p d e q = λ k → comp (λ i → DCube n X F (p i)) (λ i → [ k = 1 ↦ q i ]) d

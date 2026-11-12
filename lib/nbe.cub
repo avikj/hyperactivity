@@ -360,30 +360,41 @@
 --       papp-conj-from-nat-d … papp-nat-d, inner chains pcf-in, pdf-in); cmap-diag-d (CDD; pc6-d); diag-deg-d,
 --       papp-deg-d (PLD, papp-lit-deg-d … papp-dnf-from-deg-d, pcf-deg-in, pdf-deg-in), cmap-const-d.
 --       cmap-d-comp sk2 sk1 sk r2 r1 dp2 X F c d (over cmap-comp; needed by (5) and by (4d)).
---   (4d) Next definitions, in order (2026-11-12, decided from papp-ren's form): RenAtC r r0 o :=
---       (k : Word) → r (%wadd k o) ≡ %wadd (r0 k) o (RenAt with ope-var w replaced by the world's r),
---       renatc-0 r : RenAtC r r #0 (as renat-0), renatc-keep r r0 o : RenAtC r r0 o → RenAtC (w-keep r)
---       r0 (%wsucc o) (as renat-keep); dp-keep sk' sk r : DimPres sk' sk r → DimPres (lcons e-dim sk')
---       (lcons e-dim sk) (w-keep r) (world-dkeep's third component, named); then cmap-papp-lit,
---       cmap-papp-conj-from, cmap-papp-conj, cmap-papp-dnf-from, cmap-papp sk' sk r dp f X c :
---       PathP (λ i → Cube (dims sk') X) (papp-cube sk' X (dnf-r r f) (cmap-cube sk' sk (cmap-of sk'
---       sk r) (Line X) c)) (cmap-cube sk' sk (cmap-of sk' sk r) X (papp-cube sk X f c)), each the
---       papp-ren clause with ope-cube w Y := cmap-cube sk' sk (cmap-of sk' sk r) Y, ope-nat := cmap-nat,
---       diag-ren := cmap-diag sk' sk r dp, hr from RenAtC, and at each connection the kept world
---       (lcons e-dim sk', lcons e-dim sk, w-keep r, dp-keep) whose action is the kept action only up
---       to cmap-keep e-dim (a path, where ope-cube (wkeep e-dim w) is judgmental), so each connection
---       step has one more pcat: cmap-keep; then their dependent forms (cmap-papp-lit-d … cmap-papp-d,
---       by the same factoring as (4r-d): a statement type per lemma, bool-elim1 on snd l through
---       (fst l , b), inner chains named; needs cmap-keep-d, in the file); then subM-papp below.
---   (4d) subM-papp for worlds: papp-mean Δ' a (dnf-r r f) (subM w P) ≡ subM w (papp-mean Δ a f P),
---       from cmap-papp (cmap-cube (cmap-of r) (papp-cube sk X f c) ≡ papp-cube sk' X (dnf-r r f)
---       (cmap-cube (cmap-of r) (Line X) c)) by the recursion of papp-cube at offsets o (as papp-ren
---       with RenAt: a literal at offset o by cmap-diag at r kept o times (w-keep; its DimPres as world-dkeep's),
---       ~i by cmap-nat at rev-l, the connections by cmap-nat at meet-l and join-l), its
---       dependent form, and papp-deg's naturality; ren-nn at npapp uses it with canon-r/nonconst-r
---       (dnf-canon-r, dnf-nonconst-r at MonoW r).
+--   (4d) Done (2026-11-12, checked, "659 passed, 0 failed" plus carry-uniq): RenAtC, renatc-0, renatc-keep
+--       (RenAt, renat-0, renat-keep are now their instances at ope-var), dp-keep (world-dkeep's third
+--       component is now dp-keep), cco (cmap-cube at cmap-of, an abbreviation), pc4, cmap-papp-lit,
+--       cpcf-in, cmap-papp-conj-from, cmap-papp-conj, cpdf-in, cmap-papp-dnf-from, cmap-papp
+--       (cco (papp-cube sk X f c) against papp-cube sk' X (dnf-r r f) (cco (Line X) c), r
+--       dimension-preserving), their dependent forms (ccd, CPL, cmap-papp-lit-d … cmap-papp-d), and
+--       carry-uniq (a dependent path over p from d ends at carry p d).
+--   (4d) Finding (2026-11-12) for subM-papp, with its theoretical reason. Both sides are meanings
+--       over snd Δ', each obtained from P by carrying along a base path: the left along papp-deg sk' at
+--       Δ''s cube (papp-mean at Δ'), after the pull along w's vertex substitutions S; the right along
+--       ph (w's path), cco of papp-deg sk at Δ's cube, and the inverse of cmap-papp and cmap-nat (the
+--       dependent forms connect the two starting meanings over these). Lifts over one base path agree
+--       (carry-uniq), but these are two different base paths between the same cubes of contexts, and
+--       carrying along their loop is the identity only if the loop is trivial: contexts of semantic
+--       types are not a set (One1 has a field in Type → Type; P6's universe has Type itself), so no
+--       truncation makes it so. The loop is trivial at every closed skeleton (each structural path
+--       reduces to refl there), so the needed 2-cells hold, by induction on the skeleton and the form,
+--       and are required: subM-papp is not provable from cmap-papp-d, papp-deg-d and carry-uniq alone.
+--       Next definitions, in order: (i) cmap-papp-deg sk' sk r dp f X G: a square (PathP over PathP)
+--       between papp-deg sk' X (dnf-r r f) (cco X G) and the composite of (λ i → papp-cube sk' X (dnf-r
+--       r f) (cmap-nat … (degen-l X) G (~ i))), cmap-papp sk' sk r dp f X (degen G) and (λ i → cco X
+--       (papp-deg sk X f G i)), by the recursion of cmap-papp; it needs at its leaves the like squares of
+--       cmap-nat against cube-comp and cube-id (lnil, face1), and of cmap-diag against diag-deg (a
+--       literal); cmap-diag's own square then needs, by its clauses, diag-nondim, diag-diag and diag-exch
+--       at degenerate input against diag-deg. The exact list below (i) is derived clause by clause and
+--       is not yet known in full. (ii) dmap-papp-deg: the like square of papp-deg against papp-dmap at a
+--       dcube-map (the pull's base, dcube-map fst of papp-deg-d at S). (iii) subM-papp: papp-mean Δ' a
+--       (dnf-r (fst w) f) (subM w P) ≡ subM w (papp-mean Δ a f P), by pull-commutation with plam-body and
+--       papp-cube-d, carry-fill, cmap-papp-d, cmap-nat-d, papp-deg-d, carry-uniq, (i), (ii); its
+--       dependent form is not needed (Mean is the fibre). ren-nn at npapp uses it with canon-r and
+--       nonconst-r (dnf-canon-r, dnf-nonconst-r at MonoW r).
 --   (5) subM-comp for worlds (subM (world-comp w2 w1) M ≡ subM w2 (subM w1 M), by cmap-d-comp,
---       carry-fill and pull-fmap); comp-ren.
+--       carry-fill, pull-fmap and carry-uniq: wc-path is by construction the composite of the base
+--       paths the right side carries along, so no square is expected; not yet confirmed term by term);
+--       comp-ren. (5) does not depend on (4d)(i)–(iii).
 --   (6) ren-nn (along worlds, transported along (3), (4d)); CompS by recursion on the shape with the
 --       PathP clause; comp-ren; rr; CompEnv over a substitution; fund; reflect-env; normalize;
 --       reifySound and normalize-sound by refl; the swap into this file in place of P1's families;
