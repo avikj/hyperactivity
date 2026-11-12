@@ -270,6 +270,12 @@ static void store_put(const char *name, const char *key, const char *code, const
     if (name) names_bind(name, key);
 }
 
+/* t65 (2026-11-12): wrong. A data type's key is the canonical form of its declaration without its
+ * name, so two declarations of one content are one key: List (lib/prelude.cub) and Lst
+ * (lib/code.cub) are. To the checker they are two types (data types are generative), and a form read
+ * back through the key names whichever comes first, the wrong one. Certificates are unaffected (the
+ * checker's verdict does not depend on the name). Fixed on branch claude/work-object by putting the
+ * declared name in the key, as Unison's unique types carry a salt. */
 /* ---- keys of the kinds of entry ---- */
 /* a checked definition: its type and term; the canonical forms are returned for the store */
 static void key_def(Node *T, Node *t, char out[65], char **code, char **type) {

@@ -3200,7 +3200,17 @@ static Node *reading_type(Node *t) {
  * the name node), instance flags and binder names, and prints a λ's binders so their count cannot be
  * read back. The store needs one canonical form that is both the key and readable back (references
  * as keys, binders nameless but counted, binder types and flags kept), rendered through the current
- * bindings when read; with it canon is that form's hash and nothing is duplicated. */
+ * bindings when read; with it canon is that form's hash and nothing is duplicated.
+ * Built 2026-11-12 on branch claude/work-object (d0d0a51, not merged): canon's binders readable back
+ * and decanon (every library definition round-trips, CUBICAL_DCTEST); generated names numbered by
+ * first occurrence in an elaboration's key; data keys nominal (t65); the elaboration remembered.
+ * Measured (library, store warm, CUBICAL_PROF counting readback steps by query): without it 30.7 s,
+ * 32M steps; with it 27 s, with %%chk-def still about 830 calls and 28M steps, and 15 definitions
+ * that pass cold failing warm (x-case-chain: "rec of a name that is not a recursive field of its
+ * branch", a form read back that the elaborator's own bookkeeping no longer matches). So the warm
+ * cost is mostly not elaboration of remembered declarations; it is the declarations never
+ * remembered, the 52 refused ones among them, rechecked every run (t43). Next: t43 first, then
+ * the x-case-chain regression, before this is merged. */
 static char *readback(Node *t, long *steps) {
     net_drain();
     long s0 = stat_steps;
@@ -4801,7 +4811,7 @@ static void load_file(const char *path, bool must) {
  *   solved by running the checker (%chk-def / %infer-ok answer "elab" solutions) up to 400 rounds.
  *   The store's key is a function of the elaborated output, so it can only be consulted once
  *   every hole is solved, so a warm store still pays every solving round (inferred to be most of
- *   the 29 s, not measured).
+ *   the 29 s; measured later the same day, that inference was wrong: see t61).
  * - Compilation (compile_top) depends on the core term and the referenced globals.
  * - Checking (%chk-def) depends on the core term's key and the checker.
  * Observed in src/net.c the same day: the evaluator already keys every term by its structure and
