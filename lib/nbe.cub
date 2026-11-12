@@ -382,10 +382,14 @@ TyM : TyShape → Type → Type 1
 TyM s K = fst (TyE s K)
 -- CompS s K D Δ δ x: x, at world Δ, is computable at the type of shape s with structure D over K
 -- seen through δ. By recursion on the shape, so it computes at open worlds and environments.
--- Bool: a normal form with meaning x. Π: at every later world, a computable argument gives a
+-- Bool: x is true, or false, or a neutral (a closed sum with explicit equations, so that case
+-- analysis needs no matching of an indexed family at a computed index, t47). Π: at every later world, a computable argument gives a
 -- computable result. Σ: both components.
 CompS : (s : TyShape) (K : Type) (D : TyM s K) (Δ : Ctx) (δ : Env Δ → K) (x : (ρ : Env Δ) → snd (TyE s K) D (δ ρ)) → Type 1
-CompS s-bool K D Δ δ x = (c : Code) × NN (k-nf , (Δ , bool-cl (Env Δ) K δ D , c , x))
+CompS s-bool K D Δ δ x =
+  Sum1 (Path ((ρ : Env Δ) → Bool) x (λ ρ → true) × One1)
+       (Sum1 (Path ((ρ : Env Δ) → Bool) x (λ ρ → false) × One1)
+             ((c : Code) × NN (k-ne , (Δ , bool-cl (Env Δ) K δ D , c , x))))
 CompS (s-pi a b) K D Δ δ x =
   (Δ' : Ctx) (r : Env Δ' → Env Δ) → Ren Δ' Δ r →
   (y : (ρ : Env Δ') → ElCU K (TyE a) (fst D) (δ (r ρ))) →
@@ -400,8 +404,9 @@ Comp G A Δ δ x = CompS (fst A) (fst (snd A)) (snd (snd (snd A))) Δ (λ ρ →
 -- monotonicity: computability is kept along a renaming
 comp-ren : (s : TyShape) (K : Type) (D : TyM s K) (Δ : Ctx) (δ : Env Δ → K) (x : (ρ : Env Δ) → snd (TyE s K) D (δ ρ)) →
   CompS s K D Δ δ x → (Δ' : Ctx) (r : Env Δ' → Env Δ) → Ren Δ' Δ r → CompS s K D Δ' (λ ρ → δ (r ρ)) (λ ρ → x (r ρ))
-comp-ren s-bool K D Δ δ x cx Δ' r w =
-  ren-nn (snd cx) Δ' r w
+comp-ren s-bool K D Δ δ x (inl1 p) Δ' r w = inl1 ((λ i ρ → fst p i (r ρ)) , one)
+comp-ren s-bool K D Δ δ x (inr1 (inl1 p)) Δ' r w = inr1 (inl1 ((λ i ρ → fst p i (r ρ)) , one))
+comp-ren s-bool K D Δ δ x (inr1 (inr1 n)) Δ' r w = inr1 (inr1 (ren-nn (snd n) Δ' r w))
 comp-ren (s-pi a b) K D Δ δ x cx Δ' r w =
   λ Δ2 r2 w2 y cy → cx Δ2 (λ ρ → r (r2 ρ)) (ren-comp Δ2 Δ' Δ r r2 w w2) y cy
 comp-ren (s-sig a b) K D Δ δ x cx Δ' r w =
@@ -438,6 +443,13 @@ reify-pi-body a b ra rb K D Δ δ x f =
     (f (ext Δ (pi-dom a b K D Δ δ)) (λ ρ → fst ρ) (ren-wk Δ (pi-dom a b K D Δ δ)) (λ ρ → snd ρ)
        (snd ra (fst (fst D)) (snd (snd (fst D))) (ext Δ (pi-dom a b K D Δ δ)) (λ ρ → fst (snd (fst D)) (δ (fst ρ))) (λ ρ → snd ρ) (cvar #0)
           (var0 Δ (pi-dom a b K D Δ δ))))
+-- at Bool: true and false by their equations, a neutral as itself
+reify-bool : Reify s-bool
+reify-bool K D Δ δ x (inl1 p) =
+  (c-true , transport (λ i → NN (k-nf , (Δ , bool-cl (Env Δ) K δ D , c-true , fst p (~ i)))) (ntrue Δ K δ D))
+reify-bool K D Δ δ x (inr1 (inl1 p)) =
+  (c-false , transport (λ i → NN (k-nf , (Δ , bool-cl (Env Δ) K δ D , c-false , fst p (~ i)))) (nfalse Δ K δ D))
+reify-bool K D Δ δ x (inr1 (inr1 n)) = (fst n , nne Δ K δ D (fst n) x (snd n))
 reify-pi : (a b : TyShape) → Reify a × Reflect a → Reify b × Reflect b → Reify (s-pi a b)
 reify-pi a b ra rb K D Δ δ x f =
   (clam (fst (reify-pi-body a b ra rb K D Δ δ x f)) ,
@@ -462,6 +474,6 @@ reflect-sig a b ra rb K D Δ δ x c n =
    snd rb (fst (snd D)) (snd (snd (snd D))) Δ (λ ρ → fst (snd (snd D)) (δ ρ , fst (x ρ))) (λ ρ → snd (x ρ)) (csnd c)
      (nsnd Δ K a b δ (fst D) (snd D) c x n))
 rr : (s : TyShape) → Reify s × Reflect s
-rr s-bool = (λ K D Δ δ x cx → cx , λ K D Δ δ x c n → (c , nne Δ K δ D c x n))
+rr s-bool = (reify-bool , λ K D Δ δ x c n → inr1 (inr1 (c , n)))
 rr (s-pi a b) = (reify-pi a b (rr a) (rr b) , reflect-pi a b (rr a) (rr b))
 rr (s-sig a b) = (reify-sig a b (rr a) (rr b) , reflect-sig a b (rr a) (rr b))
