@@ -1663,6 +1663,12 @@ static long add_global(const char *name, int kind) {
  * #retract hid may be bound again */
 static bool x_surface;
 static int chk_index(int d);
+/* t56 (2026-11-12): wrong. #retract (item 30) is meant to let a name be declared again, with what
+ * was checked against it keeping the definition it saw. It does not: under --serve, after
+ *   g : Bool / g = true   then   #retract g   then   g : Bool / g = false
+ * the new g checks ("ok: checks g") and is then refused here, "declared again (a name is bound
+ * once): g", because checked_index finds the new, unhidden entry; #show g still gives true. Run
+ * 2026-11-12. Retracting and declaring again is how a binding is replaced and a loop closed. */
 static void decl_fresh(const char *name) {
     if (!x_surface || name[0] == '%') return;
     long g = global_lookup(name);
