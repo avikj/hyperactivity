@@ -10,25 +10,33 @@
 --   exact next definitions are the dated list at the end of this head.
 --
 -- Finding (2026-11-12) that replaces the level design "meanings in Type (lvl s)" (P6's design below,
--- and step 1 as first stated). The checker reads a level that is neither a constructor nor a variable
--- (a call stuck on a variable, lvl s at a variable shape s) as lzero: t51 (lib/check.cub, lvl-of),
--- with Type : Type accepted. So it cannot confirm any definition whose levels are computed from a
--- variable, and read soundly (a stuck level an atom) such definitions are refused for a theoretical
--- reason: the derivation and normal-form families quantify, in their constructors, over shapes
--- whose meanings' levels vary (application quantifies over the domain's shape, whose meaning may be
--- in Type 1 while the result's is in Type), and the Kripke clause of computability quantifies over
--- all contexts, whose environments' levels vary with their entries; a type containing such a
--- quantification lives at no finite level (Agda puts it in Setω; the core has neither Setω data nor
--- cumulativity, and data at a level depending on a variable is refused, E-openlevel). The design
--- that holds in the core, with nothing lifted (El of a code still the top-level type judgmentally):
--- every level closed. Environments and semantic types are in one fixed universe, Type 1 (the empty
--- environment is One1); the meanings of a shape are in a closed universe fixed by its stratum: P1's
--- shapes (TyShape) mean types in Type; P6 adds a second data type of shapes whose meanings are in
--- Type 1 (the universe U_0, whose El is Type; Π, Σ, PathP with at least one component of that
--- stratum, one constructor per combination of the components' strata, since a field's level must be
--- closed), with its own Sem, El, CompS and reify/reflect clauses calling level-polymorphic helpers,
--- and a context entry of either stratum (CtxE gets one clause per stratum; Env stays in Type 1
--- because lmax 1 0 and lmax 1 1 are closed). A second universe U_1 is a third stratum, the same way.
+-- and step 1 as first stated), for a theoretical reason. The derivation and normal-form families
+-- quantify, in their constructors, over shapes whose meanings' levels vary (application quantifies
+-- over the domain's shape, whose meaning may be in Type 1 while the result's is in Type), and the
+-- Kripke clause of computability quantifies over all contexts, whose environments' levels vary with
+-- their entries. A type containing such a quantification lives at no finite level: it needs a
+-- universe above all levels (Agda's Setω) or cumulativity, and the core has neither (data at a level
+-- depending on a variable is refused, E-openlevel). (While this was found the checker read a stuck
+-- level as lzero and so would have accepted the design; that was t51, closed 2026-11-12 by the
+-- coordinator: a stuck level is now an atom.) The design that holds in the core, with nothing lifted
+-- (El of a code still the top-level type judgmentally): every level a field or a Kripke
+-- quantification mentions is closed. Environments and semantic types are in one fixed universe,
+-- Type 1 (the empty environment is One1); the meanings of a shape are in a closed universe fixed by
+-- its stratum: P1's shapes mean types in Type; P6 adds the stratum whose meanings are in Type 1 (the
+-- universe U_0, whose El is Type). What must be repeated per stratum, and why, is exactly: (i) a data
+-- constructor (of shapes, normal forms, derivations) for each closed combination of the strata of the
+-- meanings its fields mention, because a data type's fields must have closed levels and a meaning's
+-- level is closed only when its stratum is (Π of a stratum-0 domain and a stratum-1 codomain has
+-- meanings in lmax 0 1, which is closed; Π of shapes a, b of unknown strata has lmax (lvl a) (lvl b),
+-- which is not); (ii) the clause of each shape-recursive function (Sem, El, CompS, rr, fund) at those
+-- constructors. Each such constructor's type and each such clause is a one-line instance, at closed
+-- levels, of one helper abstracted over level variables (which the checker treats as atoms): the rule
+-- (its premises and conclusion as functions of the meanings) is written once. Everything else —
+-- contexts (CtxE gets one clause per entry stratum, Env stays in Type 1 since lmax 1 0 and lmax 1 1
+-- are closed), worlds, renaming, environments, the Kripke structure — is written once. Not yet
+-- tested: whether a constructor's type may be given as a defined rule type applied to closed levels
+-- (else each constructor's telescope is written out, still one line per combination over the
+-- helpers). A second universe U_1 is a further stratum, the same way.
 --
 -- Decision (2026-11-12, step 1): a type of shape s over environments G is a map T : G → Sem s into
 -- the semantic types of shape s (Sem s-bool = One1, Sem (Π a b) = Sem (Σ a b) = Fam a b = (A : Sem a)
@@ -61,6 +69,32 @@
 -- on cubes are defined by recursion on n applied to `p i` under a path λ (a function cannot take an
 -- interval point, but it can be applied to the cube p i), so faces, degeneracies, reversal,
 -- connections, exchange and the diagonal at any depth are functions Cube n X → Cube m X.
+--
+-- Finding (2026-11-12, P2): compositions of cube operations at a variable dimension are not
+-- judgmental. `cube-map n f (cube-map n g c)` against `cube-map n (λ x → f (g x)) c` by refl is refused
+-- at a variable n ("wrong endpoint at 0": cube-map is stuck on n); it holds as a path by induction
+-- (cube-comp below). So in a cube-indexed family the index a constructor computes and the one a
+-- generic definition (reify, renaming, fund) needs agree only up to such paths, and the value is
+-- transported along them (a forded family's transport computes on constructors). The meaning of a
+-- typed code is stored apart from its derivation (TCode's v), so reifySound and normalize-sound stay
+-- refl; what is lost beyond n = 0 is only that a normal form's index is its input's by construction.
+-- Ruled out, with reasons: (a) meanings as functions of lines of environments (a λ after a dimension
+-- needs its body pointwise, which a function of a whole line cannot give); (b) derivations in a
+-- context with a dimension as host paths of P1 derivations (a neutral p @ i is neutral inside and its
+-- endpoint's normal form at the boundary, which a uniform path λ cannot be, and the code's dimension
+-- index would not be tied to the host's dimension); (c) a fixed base cube with pointwise maps (the
+-- free functor form, where composition is judgmental): a dimension-dependent term such as p @ j is
+-- not a function of the point, so bases change at it and zips at a variable dimension return.
+-- Needed by P2 and absent from P1: type derivations with codes (a PathP type has endpoint terms;
+-- reflecting a neutral of path type at a constant dimension needs the endpoints' computability, and
+-- P3's neutral comp contains the normal form of a line of types), so computability of types (CompTy,
+-- by recursion on the shape) with reify/reflect taking it. Worlds in P2 are renamings including
+-- weakening by a dimension: no P2 rule substitutes a constant or a compound expression for a world's
+-- dimension (path application interprets its expression by the cube operations below, and
+-- computability at PathP is Kripke over the dimension expressions of later worlds, so a neutral p @ r
+-- is formed only at a non-constant r in normal form). Faces, connections and reversal as world maps
+-- enter with systems in P3, with Sterling–Angiuli's stabilization; as operations on meanings they
+-- are below.
 --
 -- P6's design (2026-11-12; its level part is replaced by the finding above, its universe part
 -- stands). A universe's shape means Type ℓ; a type given by an element t of a universe has the shape
@@ -135,19 +169,31 @@
 -- argument is not abstracted in the induction hypothesis (the inner call gets the outer value, and an
 -- explicit {..} is ignored); such parameters are taken explicitly here.
 --
--- Next definitions (2026-11-12), in order:
---   P2: Cube/DCube operations (map, dependent map, faces, degeneracy, reversal, connections, exchange,
---   diagonal) with their endpoint laws by refl; the PathP shape (Sem (s-path a) = a line of semantic
---   types with its endpoints' values; El = the language's PathP); skeleton entries for dimensions;
---   JV sk s and Jdg over Cube n (JV sk s); NN, Der, ren-nn, CompS, comp-ren, rr, CompEnv, fund,
---   reflect-env, embed, normalize at every n with P1's clauses as the cube maps of P1's index
---   functions; dplam/dpapp/npapp; computability at PathP.
+-- Next definitions (2026-11-12), in order (done: lines, cubes, generators, cube-comp, cube-id):
+--   P2.1 DCube (a cube in a family over a cube) and cube-zip/unzip with their laws as paths.
+--   P2.2 Skeleton entries `data Entry = e-ty (s : TyShape) | e-dim`, dims : Lst Entry → Nat, CtxE with
+--        a dimension contributing nothing to a vertex environment, VarT stepping over e-dim.
+--   P2.3 The PathP shape s-path a: Sem = (L : Line (Sem a)) × El a (fst L) × El a (fst (snd L)), El =
+--        PathP (λ i → El a (snd (snd (fst D)) i)) …, checked equal to the language's PathP by refl.
+--   P2.4 Dimension expressions: De Morgan normal form on interval codes (ci0 ci1 cvar cneg cmeet
+--        cjoin) with the predicate "normal and not constant"; the action of an interval code on the
+--        newest dimension of a cube (papp-cube, by recursion on the code and the skeleton: faces,
+--        reversal, connections, and the diagonal with the dimension it names, brought next to the
+--        newest by exchanges).
+--   P2.5 Type derivations DTy (codes of Bool, Π, Σ, PathP types) and CompTy.
+--   P2.6 JV sk s, Jdg = (sk , s , code , Cube (dims sk) (JV sk s)); NN and Der over it, every P1 rule
+--        with its index the cube-map of P1's index function, plus nplam/npapp, dplam/dpapp;
+--        renamings with dimension weakening; ren-nn, CompS (PathP: Kripke over later worlds and their
+--        non-constant normal interval codes, constants given by CompTy's endpoints), comp-ren, rr,
+--        CompEnv, fund, fundTy, reflect-env, embed, normalize — with transports along cube-comp
+--        where the constructed and required indices differ.
 
 -- ---------------------------------------------------------------- types: shapes and their semantic types
 -- (2026-11-12, step 1) A type of shape s over environments G is a map from G into Sem s, the semantic
 -- types of shape s; its meaning at ρ is El s (T ρ). Sem and El are defined together by recursion on
 -- the closed shape (one pair, TyE, since mutual definitions by clauses are not available), so El of
--- an open semantic type computes by its shape's clause. Levels are closed everywhere (t51): El s is
+-- an open semantic type computes by its shape's clause. Levels are closed everywhere (the finding at
+-- the head): El s is
 -- in Type (the stratum of P1's shapes; P6 adds the stratum whose meanings are in Type 1), Sem s and
 -- environments are in Type 1, so a semantic type may contain a Type (the universe's El, P6) and an
 -- environment may contain a type, with nothing lifted.
@@ -629,30 +675,67 @@ normalize-sound : (Γ : Ctx) (A : PTy (Env Γ)) (t : TCode Γ A) (ρ : Env Γ) �
   Path (ElP (Env Γ) A ρ) (teval Γ A (normalize Γ A t) ρ) (teval Γ A t ρ)
 normalize-sound Γ A t ρ = refl
 
--- ---------------------------------------------------------------- P2: cubes
--- an n-cube in X: two (n-1)-cubes and a path between them (the interval enters only through PathP)
+-- ---------------------------------------------------------------- P2: lines and cubes
+-- (2026-11-12) A line in X: two points and a path between them; its endpoints are the path's own
+-- judgmentally (p 0 ≡ x0). An n-cube: an (n-1)-cube of lines, so the newest dimension is the
+-- innermost and an n-cube of lines is literally an (n+1)-cube (a path λ's body, a PathP's meaning).
+-- The interval enters only through PathP; operations are functions applied to `p i` under a path λ.
+Line : Type 1 → Type 1
+-- binder names chosen not to collide: t46
+Line X = (lx0 : X) × (lx1 : X) × PathP (λ i → X) lx0 lx1
 Cube : Nat → Type 1 → Type 1
 Cube zero X = X
-Cube (suc n) X = (c0 : Cube n X) × (c1 : Cube n X) × PathP (λ i → Cube n X) c0 c1
--- a section of a cube of types
-Sec : (n : Nat) → Cube n Type → Type
-Sec zero T = T
-Sec (suc n) T = (s0 : Sec n (fst T)) × (s1 : Sec n (fst (snd T))) × PathP (λ i → Sec n (snd (snd T) i)) s0 s1
-sec1-pathp : (A0 A1 : Type) (A : PathP (λ i → Type) A0 A1) (s : Sec (suc zero) (A0 , A1 , A)) →
-  Path Type (PathP (λ i → Sec zero (A i)) (fst s) (fst (snd s))) (PathP (λ i → A i) (fst s) (fst (snd s)))
-sec1-pathp A0 A1 A s = refl
--- the two faces of the newest dimension, and the degenerate cube (constant in it)
--- the laws are stated with PathP (λ i → Cube n X), not Path: t50
-face0 : (n : Nat) (X : Type 1) → Cube (suc n) X → Cube n X
-face0 n X c = fst c
-face1 : (n : Nat) (X : Type 1) → Cube (suc n) X → Cube n X
-face1 n X c = fst (snd c)
-degen : (n : Nat) (X : Type 1) → Cube n X → Cube (suc n) X
-degen n X c = (c , c , λ i → c)
-face0-degen : (n : Nat) (X : Type 1) (c : Cube n X) → PathP (λ i → Cube n X) (face0 n X (degen n X c)) c
-face0-degen n X c = λ i → c
-face1-degen : (n : Nat) (X : Type 1) (c : Cube n X) → PathP (λ i → Cube n X) (face1 n X (degen n X c)) c
-face1-degen n X c = λ i → c
--- the newest dimension of a cube, as the line it is
-line-at : (n : Nat) (X : Type 1) (c : Cube (suc n) X) → PathP (λ i → Cube n X) (snd (snd c) 0) (face0 n X c)
-line-at n X c = λ i → fst c
+Cube (suc n) X = Cube n (Line X)
+line-map : (X Y : Type 1) → (X → Y) → Line X → Line Y
+line-map X Y f L = (f (fst L) , f (fst (snd L)) , λ i → f (snd (snd L) i))
+cube-map : (n : Nat) (X Y : Type 1) → (X → Y) → Cube n X → Cube n Y
+cube-map zero X Y f c = f c
+cube-map (suc n) X Y f c = cube-map n (Line X) (Line Y) (line-map X Y f) c
+-- the generators of the cube category at the newest dimension, on lines (an n-cube's are their
+-- cube-maps): the two faces, the degeneracy, reversal, the connections ∧ and ∨, exchange of the two
+-- newest dimensions and their diagonal
+face0-l : (X : Type 1) → Line X → X
+face0-l X L = fst L
+face1-l : (X : Type 1) → Line X → X
+face1-l X L = fst (snd L)
+degen-l : (X : Type 1) → X → Line X
+degen-l X x = (x , x , λ i → x)
+rev-l : (X : Type 1) → Line X → Line X
+rev-l X L = (fst (snd L) , fst L , λ i → snd (snd L) (~ i))
+-- λ i j → p (i ∧ j) and λ i j → p (i ∨ j) (j the newer)
+meet-l : (X : Type 1) → Line X → Line (Line X)
+meet-l X L = ((fst L , fst L , λ j → fst L) , L , λ i → (fst L , snd (snd L) i , λ j → snd (snd L) (i ∧ j)))
+join-l : (X : Type 1) → Line X → Line (Line X)
+join-l X L = (L , (fst (snd L) , fst (snd L) , λ j → fst (snd L)) , λ i → (snd (snd L) i , fst (snd L) , λ j → snd (snd L) (i ∨ j)))
+-- λ i j → q j i
+exch-l : (X : Type 1) → Line (Line X) → Line (Line X)
+exch-l X Q =
+  ((fst (fst Q) , fst (fst (snd Q)) , λ i → fst (snd (snd Q) i)) ,
+   (fst (snd (fst Q)) , fst (snd (fst (snd Q))) , λ i → fst (snd (snd (snd Q) i))) ,
+   λ j → (snd (snd (fst Q)) j , snd (snd (fst (snd Q))) j , λ i → snd (snd (snd (snd Q) i)) j))
+-- λ i → q i i
+diag-l : (X : Type 1) → Line (Line X) → Line X
+diag-l X Q = (fst (fst Q) , fst (snd (fst (snd Q))) , λ i → snd (snd (snd (snd Q) i)) i)
+-- their laws hold by refl (the endpoints of a path are its own judgmentally); the type is a line,
+-- so the laws are PathPs (t50)
+face0-degen : (X : Type 1) (x : X) → PathP (λ i → X) (face0-l X (degen-l X x)) x
+face0-degen X x = λ i → x
+rev-rev : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (rev-l X (rev-l X L)) L
+rev-rev X L = λ i → L
+exch-exch : (X : Type 1) (Q : Line (Line X)) → PathP (λ i → Line (Line X)) (exch-l X (exch-l X Q)) Q
+exch-exch X Q = λ i → Q
+diag-degen : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (diag-l X (degen-l (Line X) L)) L
+diag-degen X L = λ i → L
+diag-meet : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (diag-l X (meet-l X L)) L
+diag-meet X L = λ i → L
+face1-meet : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (face1-l (Line X) (meet-l X L)) L
+face1-meet X L = λ i → L
+-- composition of cube maps: at a variable dimension it does not hold by refl (refused, "wrong
+-- endpoint at 0", 2026-11-12: cube-map is stuck on n); it holds as a path, by induction
+cube-comp : (n : Nat) (X Y Z : Type 1) (f : Y → Z) (g : X → Y) (c : Cube n X) →
+  PathP (λ i → Cube n Z) (cube-map n Y Z f (cube-map n X Y g c)) (cube-map n X Z (λ x → f (g x)) c)
+cube-comp zero X Y Z f g c = λ i → f (g c)
+cube-comp (suc n) X Y Z f g c = cube-comp n (Line X) (Line Y) (Line Z) (line-map Y Z f) (line-map X Y g) c
+cube-id : (n : Nat) (X : Type 1) (c : Cube n X) → PathP (λ i → Cube n X) (cube-map n X X (λ x → x) c) c
+cube-id zero X c = λ i → c
+cube-id (suc n) X c = cube-id n (Line X) c
