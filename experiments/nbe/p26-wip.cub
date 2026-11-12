@@ -3332,3 +3332,59 @@ kp-rhs Δ' Δ a Y h M w v' =
           (dcube-fmap (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')))
              (var-at (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) v') (snd (kp-ctx Δ' Δ a Y h M w)) (keep-S Δ' Δ a Y h M w))
           (subM-of (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varM (lcons (e-ty a) (fst Δ)) v'))))
+-- a substitution's action on a variable, as a fibrewise map of sub-tot (subM-of, fmap-pull,
+-- pull-ignore)
+sub-var-tot : (Δ' Δ : CCtx) (Y : Type 1) (M : Mean Δ Y) (σ : Sub Δ' Δ) (v : VarP (fst Δ)) →
+  PathM Δ' (TV (var-shape (fst Δ) v)) (subM Δ' Δ (TV (var-shape (fst Δ) v)) σ (varCube Δ v))
+    (dcube-fmap (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (λ x t → var-at (fst Δ') (fst Δ) v x (fst t)) (snd Δ') (sub-tot Δ' Δ Y σ M))
+sub-var-tot Δ' Δ Y M σ v =
+  pcat (Mean Δ' (TV (var-shape (fst Δ) v))) (subM Δ' Δ (TV (var-shape (fst Δ) v)) σ (varCube Δ v))
+    (dcube-fmap (dims (fst Δ')) (CtxV (fst Δ')) (SubF (fst Δ') (fst Δ)) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (var-at (fst Δ') (fst Δ) v) (snd Δ') (fst (snd σ)))
+    (dcube-fmap (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (λ x t → var-at (fst Δ') (fst Δ) v x (fst t)) (snd Δ') (sub-tot Δ' Δ Y σ M))
+    (subM-of Δ' Δ (TV (var-shape (fst Δ) v)) σ (varM (fst Δ) v))
+    (psym (Mean Δ' (TV (var-shape (fst Δ) v)))
+       (dcube-fmap (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (λ x t → var-at (fst Δ') (fst Δ) v x (fst t)) (snd Δ') (sub-tot Δ' Δ Y σ M))
+       (dcube-fmap (dims (fst Δ')) (CtxV (fst Δ')) (SubF (fst Δ') (fst Δ)) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (var-at (fst Δ') (fst Δ) v) (snd Δ') (fst (snd σ)))
+       (pcat (Mean Δ' (TV (var-shape (fst Δ) v)))
+          (dcube-fmap (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (λ x t → var-at (fst Δ') (fst Δ) v x (fst t)) (snd Δ') (sub-tot Δ' Δ Y σ M))
+          (dcube-pull (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (fst Δ)) (SubF (fst Δ') (fst Δ)) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (FbE (fst Δ) Y) (λ γ' p → fst p) (λ x y z → var-at (fst Δ') (fst Δ) v x y) (snd Δ') (fst (snd σ)) (sub-carried Δ' Δ Y σ M))
+          (dcube-fmap (dims (fst Δ')) (CtxV (fst Δ')) (SubF (fst Δ') (fst Δ)) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (var-at (fst Δ') (fst Δ) v) (snd Δ') (fst (snd σ)))
+          (fmap-pull (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (fst Δ)) (SubF (fst Δ') (fst Δ)) (SubT (fst Δ') (fst Δ) Y) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (FbE (fst Δ) Y)
+             (λ γ' p → fst p) (λ γ' p e → (p , e)) (λ x t → var-at (fst Δ') (fst Δ) v x (fst t)) (snd Δ') (fst (snd σ)) (sub-carried Δ' Δ Y σ M))
+          (pull-ignore (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (fst Δ)) (SubF (fst Δ') (fst Δ)) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (FbE (fst Δ) Y)
+             (λ γ' p → fst p) (var-at (fst Δ') (fst Δ) v) (snd Δ') (fst (snd σ)) (sub-carried Δ' Δ Y σ M))))
+-- weakening a shaped meaning along sub-tot, carried to the kept context
+kp-wk : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) → ShM Δ' → ShM (kp-ctx Δ' Δ a Y h M w)
+kp-wk Δ' Δ a Y h M w q = (fst q , (kp-carry Δ' Δ a Y h M w (TV (fst q)) (kp-push Δ' Δ a Y h M w (TV (fst q)) (snd q))))
+-- the meaning part of world-keep at an older variable: from the kept context's variable to the
+-- weakening of the world's variable path (push-of), along it and sub-var-tot (kp-wk), to the lift
+-- that kp-rhs starts from (push-diag)
+kp-some : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (v : VarP (fst Δ)) →
+  PathP (λ i → ShM (kp-ctx Δ' Δ a Y h M w)) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (λ x t → varM (lcons (e-ty a) (fst Δ')) (some (fst ((snd (snd (snd (snd w)))) v))) ((kp-f (fst Δ') (fst Δ) a Y h) x t))))) ((var-shape (fst Δ) v) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (λ x t ρ'' → var-at (fst Δ') (fst Δ) v x (fst t) (fst ρ'')))))
+kp-some Δ' Δ a Y h M w v =
+  pcat (ShM (kp-ctx Δ' Δ a Y h M w)) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (λ x t → varM (lcons (e-ty a) (fst Δ')) (some (fst ((snd (snd (snd (snd w)))) v))) ((kp-f (fst Δ') (fst Δ) a Y h) x t))))) (kp-wk Δ' Δ a Y h M w ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , varCube Δ' (fst ((snd (snd (snd (snd w)))) v)))) ((var-shape (fst Δ) v) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (λ x t ρ'' → var-at (fst Δ') (fst Δ) v x (fst t) (fst ρ'')))))
+    (λ i → ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (push-of (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (FbE (fst Δ') (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))))) (FbE (lcons (e-ty a) (fst Δ')) (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))))) (kp-f (fst Δ') (fst Δ) a Y h) (λ x t e ρ'' → e (fst ρ'')) (varM (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) (snd Δ') (kp-tot Δ' Δ Y M w) (~ i)))))
+    (pcat (ShM (kp-ctx Δ' Δ a Y h M w)) (kp-wk Δ' Δ a Y h M w ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , varCube Δ' (fst ((snd (snd (snd (snd w)))) v)))) (kp-wk Δ' Δ a Y h M w ((var-shape (fst Δ) v) , (dcube-fmap (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (λ x t → var-at (fst Δ') (fst Δ) v x (fst t)) (snd Δ') (kp-tot Δ' Δ Y M w)))) ((var-shape (fst Δ) v) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (λ x t ρ'' → var-at (fst Δ') (fst Δ) v x (fst t) (fst ρ'')))))
+       (λ i → kp-wk Δ' Δ a Y h M w ((pcat (ShM Δ') ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , varCube Δ' (fst ((snd (snd (snd (snd w)))) v))) ((var-shape (fst Δ) v) , subM Δ' Δ (TV (var-shape (fst Δ) v)) (world-sub Δ' Δ w) (varCube Δ v)) ((var-shape (fst Δ) v) , (dcube-fmap (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (λ x t → var-at (fst Δ') (fst Δ) v x (fst t)) (snd Δ') (kp-tot Δ' Δ Y M w))) (snd (snd ((snd (snd (snd (snd w)))) v))) (λ i → ((var-shape (fst Δ) v) , sub-var-tot Δ' Δ Y M (world-sub Δ' Δ w) v i))) i))
+       (λ i → ((var-shape (fst Δ) v) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (push-diag (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (FbE (lcons (e-ty a) (fst Δ')) (TV (var-shape (fst Δ) v))) (kp-f (fst Δ') (fst Δ) a Y h) (λ x t e ρ'' → e (fst ρ'')) (λ x t → var-at (fst Δ') (fst Δ) v x (fst t)) (snd Δ') (kp-tot Δ' Δ Y M w) i)))))
+-- world-keep's variables: the newest by kp-lhs and kp-rhs (their middles agree judgmentally), an
+-- older one through kp-some
+kp-wv : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (v' : Opt (VarP (fst Δ))) →
+  (wvv' : VarP (lcons (e-ty a) (fst Δ'))) × (var-word (lcons (e-ty a) (fst Δ')) wvv' ≡ w-keep (fst w) (var-word (lcons (e-ty a) (fst Δ)) v')) ×
+  PathP (λ i → ShM (kp-ctx Δ' Δ a Y h M w)) (var-shape (lcons (e-ty a) (fst Δ')) wvv' , varCube (kp-ctx Δ' Δ a Y h M w) wvv') (var-shape (lcons (e-ty a) (fst Δ)) v' , subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) v'))
+kp-wv Δ' Δ a Y h M w none =
+  (none , (λ i → #0) , λ i → (a , pcat (Mean (kp-ctx Δ' Δ a Y h M w) (TV a)) (varCube (kp-ctx Δ' Δ a Y h M w) none) (kp-carry Δ' Δ a Y h M w (TV a) (kp-lift Δ' Δ a Y h M w (TV a) (λ x t → varM (lcons (e-ty a) (fst Δ')) none ((kp-f (fst Δ') (fst Δ) a Y h) x t)))) (subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV a) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) none))
+     (kp-lhs Δ' Δ a Y h M w none) (kp-rhs Δ' Δ a Y h M w none) i))
+kp-wv Δ' Δ a Y h M w (some v) =
+  (some (fst ((snd (snd (snd (snd w)))) v)) , (λ i → %wsucc (fst (snd ((snd (snd (snd (snd w)))) v)) i)) ,
+   pcat (ShM (kp-ctx Δ' Δ a Y h M w)) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , varCube (kp-ctx Δ' Δ a Y h M w) (some (fst ((snd (snd (snd (snd w)))) v)))) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (λ x t → varM (lcons (e-ty a) (fst Δ')) (some (fst ((snd (snd (snd (snd w)))) v))) ((kp-f (fst Δ') (fst Δ) a Y h) x t))))) (var-shape (lcons (e-ty a) (fst Δ)) (some v) , subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) (some v))) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) (some v)))
+     (λ i → ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , kp-lhs Δ' Δ a Y h M w (some (fst ((snd (snd (snd (snd w)))) v))) i))
+     (pcat (ShM (kp-ctx Δ' Δ a Y h M w)) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (λ x t → varM (lcons (e-ty a) (fst Δ')) (some (fst ((snd (snd (snd (snd w)))) v))) ((kp-f (fst Δ') (fst Δ) a Y h) x t))))) ((var-shape (fst Δ) v) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (λ x t ρ'' → var-at (fst Δ') (fst Δ) v x (fst t) (fst ρ''))))) (var-shape (lcons (e-ty a) (fst Δ)) (some v) , subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) (some v))) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) (some v))) (kp-some Δ' Δ a Y h M w v) (λ i → ((var-shape (fst Δ) v) , kp-rhs Δ' Δ a Y h M w (some v) i))))
+world-keep : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) → World (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M)
+world-keep Δ' Δ a Y h M w =
+  (w-keep (fst w) , mono-keep (fst w) (fst (snd w)) ,
+   (λ k → %welimP (λ u → isdim (lcons (e-ty a) (fst Δ')) (w-keep (fst w) u) ≡ isdim (lcons (e-ty a) (fst Δ)) u) k (λ i → false)
+      (λ m hm → pcat0 Bool (isdim (lcons (e-ty a) (fst Δ')) (%wsucc ((fst w) m))) (isdim (fst Δ') ((fst w) m)) (isdim (lcons (e-ty a) (fst Δ)) (%wsucc m))
+         (λ i → if weq-s0 ((fst w) m) i then false else isdim (fst Δ') (wsub-s1 ((fst w) m) i))
+         (pcat0 Bool (isdim (fst Δ') ((fst w) m)) (isdim (fst Δ) m) (isdim (lcons (e-ty a) (fst Δ)) (%wsucc m)) ((fst (snd (snd w))) m) (sym (λ i → if weq-s0 m i then false else isdim (fst Δ) (wsub-s1 m i)))))) ,
+   snd (keep-sub Δ' Δ a Y h M w) , kp-wv Δ' Δ a Y h M w)
