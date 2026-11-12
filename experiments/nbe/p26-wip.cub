@@ -2677,3 +2677,194 @@ map-pull (suc n) X X' Y F F' f g Z k k' q c d e =
     (Line Z) (lineo-map X F Z k) (lineo-map X' F' Z k')
     (λ i L D E → (q i (fst L) (fst D) (fst E) , q i (fst (snd L)) (fst (snd D)) (fst (snd E)) , λ j → q i (snd (snd L) j) (snd (snd D) j) (snd (snd E) j)))
     c d e
+
+-- (2026-11-12, next definitions (2s), toward sub-ext) a map out of a cube over a cube commutes with the
+-- cube category's generators: mapping the base after mapping out is mapping out of the reindexed cube,
+-- when the two maps agree pointwise (dmap-gen, q judgmental where used); so path application, by the
+-- recursion of papp-cube (diag-dmap at each literal), and the action of a dimension part (cmap-dmap)
+dmap-gen : (n : Nat) (X X' : Type 1) (F : X → Type 1) (F' : X' → Type 1) (Z Z' : Type 1) (f : X → X') (fo : (x : X) → F x → F' (f x))
+  (h : Z → Z') (g : (x : X) → F x → Z) (g' : (x' : X') → F' x' → Z')
+  (q : PathP (λ i → (xq : X) (yq : F xq) → Z') (λ xq yq → h (g xq yq)) (λ xq yq → g' (f xq) (fo xq yq))) (c : Cube n X) (d : DCube n X F c) →
+  PathP (λ i → Cube n Z') (cube-map n Z Z' h (dcube-map n X F Z g c d)) (dcube-map n X' F' Z' g' (cube-map n X X' f c) (dcube-reidx n X X' F F' f fo c d))
+dmap-gen zero X X' F F' Z Z' f fo h g g' q c d = λ i → q i c d
+dmap-gen (suc n) X X' F F' Z Z' f fo h g g' q c d =
+  dmap-gen n (Line X) (Line X') (LineO X F) (LineO X' F') (Line Z) (Line Z') (line-map X X' f) (lineo-reidx X X' F F' f fo)
+    (line-map Z Z' h) (lineo-map X F Z g) (lineo-map X' F' Z' g')
+    (λ i L D → (q i (fst L) (fst D) , q i (fst (snd L)) (fst (snd D)) , λ j → q i (snd (snd L) j) (snd (snd D) j))) c d
+diag-dmap : (sk : Lst Entry) (k : Word) (X : Type 1) (F : X → Type 1) (Z : Type 1) (g : (x : X) → F x → Z)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → Cube (dims sk) Z) (diag-sk sk k Z (dcube-map (suc (dims sk)) X F Z g c d)) (dcube-map (dims sk) X F Z g (diag-sk sk k X c) (diag-sk-d sk k X F c d))
+diag-dmap lnil k X F Z g c d = λ i → g (fst c) (fst d)
+diag-dmap (lcons (e-ty s) sk) k X F Z g c d =
+  bool-elim1 (λ b → PathP (λ i → Cube (dims sk) Z)
+                 (if b then cube-map (dims sk) (Line Z) Z (face0-l Z) (dcube-map (dims sk) (Line X) (LineO X F) (Line Z) (lineo-map X F Z g) c d)
+                  else diag-sk sk (%wsub k #1) Z (dcube-map (dims sk) (Line X) (LineO X F) (Line Z) (lineo-map X F Z g) c d))
+                 (dcube-map (dims sk) X F Z g (if b then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c)
+                    (bool-elim1 (λ b → DCube (dims sk) X F (if b then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c))
+                       (dcube-reidx (dims sk) (Line X) X (LineO X F) F (face0-l X) (face0-o X F) c d)
+                       (diag-sk-d sk (%wsub k #1) X F c d) b)))
+    (dmap-gen (dims sk) (Line X) X (LineO X F) F (Line Z) Z (face0-l X) (face0-o X F) (face0-l Z) (lineo-map X F Z g) g (λ i L D → g (fst L) (fst D)) c d)
+    (diag-dmap sk (%wsub k #1) X F Z g c d) (weq k #0)
+diag-dmap (lcons e-dim sk) k X F Z g c d =
+  bool-elim1 (λ b → PathP (λ i → Cube (suc (dims sk)) Z)
+                 (if b then cube-map (dims sk) (Line (Line Z)) (Line Z) (diag-l Z)
+                              (dcube-map (dims sk) (Line (Line X)) (LineO (Line X) (LineO X F)) (Line (Line Z)) (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g)) c d)
+                  else diag-sk sk (%wsub k #1) (Line Z) (cube-map (dims sk) (Line (Line Z)) (Line (Line Z)) (exch-l Z)
+                              (dcube-map (dims sk) (Line (Line X)) (LineO (Line X) (LineO X F)) (Line (Line Z)) (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g)) c d)))
+                 (dcube-map (suc (dims sk)) X F Z g
+                    (if b then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+                     else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c))
+                    (bool-elim1 (λ b → DCube (suc (dims sk)) X F
+                                   (if b then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+                                    else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+                       (dcube-reidx (dims sk) (Line (Line X)) (Line X) (LineO (Line X) (LineO X F)) (LineO X F) (diag-l X) (diag-o X F) c d)
+                       (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+                          (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F)) (exch-l X) (exch-o X F) c d))
+                       b)))
+    (dmap-gen (dims sk) (Line (Line X)) (Line X) (LineO (Line X) (LineO X F)) (LineO X F) (Line (Line Z)) (Line Z) (diag-l X) (diag-o X F) (diag-l Z)
+       (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g)) (lineo-map X F Z g)
+       (λ i Q D → diag-l Z (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g) Q D)) c d)
+    (pcat (Cube (suc (dims sk)) Z)
+       (diag-sk sk (%wsub k #1) (Line Z) (cube-map (dims sk) (Line (Line Z)) (Line (Line Z)) (exch-l Z)
+          (dcube-map (dims sk) (Line (Line X)) (LineO (Line X) (LineO X F)) (Line (Line Z)) (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g)) c d)))
+       (diag-sk sk (%wsub k #1) (Line Z)
+          (dcube-map (dims sk) (Line (Line X)) (LineO (Line X) (LineO X F)) (Line (Line Z)) (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g))
+             (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+             (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F)) (exch-l X) (exch-o X F) c d)))
+       (dcube-map (suc (dims sk)) X F Z g
+          (diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c))
+          (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+             (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F)) (exch-l X) (exch-o X F) c d)))
+       (λ i → diag-sk sk (%wsub k #1) (Line Z)
+          (dmap-gen (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F)) (Line (Line Z)) (Line (Line Z))
+             (exch-l X) (exch-o X F) (exch-l Z)
+             (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g)) (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g))
+             (λ j Q D → exch-l Z (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g) Q D)) c d i))
+       (diag-dmap sk (%wsub k #1) (Line X) (LineO X F) (Line Z) (lineo-map X F Z g) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+          (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F)) (exch-l X) (exch-o X F) c d)))
+    (weq k #0)
+papp-lit-dmap : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (Z : Type 1) (g : (x : X) → F x → Z) (o : Word) (l : Lit)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → Cube (dims sk) Z) (papp-lit sk Z o l (dcube-map (suc (dims sk)) X F Z g c d)) (dcube-map (dims sk) X F Z g (papp-lit sk X o l c) (papp-lit-d sk X F o l c d))
+papp-lit-dmap sk X F Z g o l c d =
+  bool-elim1 (λ b → PathP (λ i → Cube (dims sk) Z)
+                 (if b then diag-sk sk (%wadd (fst l) o) Z (dcube-map (suc (dims sk)) X F Z g c d)
+                  else diag-sk sk (%wadd (fst l) o) Z (cube-map (dims sk) (Line Z) (Line Z) (rev-l Z) (dcube-map (suc (dims sk)) X F Z g c d)))
+                 (dcube-map (dims sk) X F Z g
+                    (if b then diag-sk sk (%wadd (fst l) o) X c
+                     else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c))
+                    (bool-elim1 (λ b → DCube (dims sk) X F
+                                   (if b then diag-sk sk (%wadd (fst l) o) X c
+                                    else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+                       (diag-sk-d sk (%wadd (fst l) o) X F c d)
+                       (diag-sk-d sk (%wadd (fst l) o) X F (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+                          (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d))
+                       b)))
+    (diag-dmap sk (%wadd (fst l) o) X F Z g c d)
+    (pcat (Cube (dims sk) Z)
+       (diag-sk sk (%wadd (fst l) o) Z (cube-map (dims sk) (Line Z) (Line Z) (rev-l Z) (dcube-map (suc (dims sk)) X F Z g c d)))
+       (diag-sk sk (%wadd (fst l) o) Z (dcube-map (suc (dims sk)) X F Z g (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+          (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d)))
+       (dcube-map (dims sk) X F Z g (diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c))
+          (diag-sk-d sk (%wadd (fst l) o) X F (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d)))
+       (λ i → diag-sk sk (%wadd (fst l) o) Z
+          (dmap-gen (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (Line Z) (Line Z) (rev-l X) (rev-o X F) (rev-l Z)
+             (lineo-map X F Z g) (lineo-map X F Z g) (λ j L D → rev-l Z (lineo-map X F Z g L D)) c d i))
+       (diag-dmap sk (%wadd (fst l) o) X F Z g (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+          (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d)))
+    (snd l)
+papp-conj-from-dmap : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (Z : Type 1) (g : (x : X) → F x → Z) (o : Word) (l : Lit) (ms : Conj)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → Cube (dims sk) Z) (papp-conj-from sk Z o l ms (dcube-map (suc (dims sk)) X F Z g c d))
+    (dcube-map (dims sk) X F Z g (papp-conj-from sk X o l ms c) (papp-conj-from-d sk X F o l ms c d))
+papp-conj-from-dmap sk X F Z g o l lnil c d = papp-lit-dmap sk X F Z g o l c d
+papp-conj-from-dmap sk X F Z g o l (lcons m ms) c d =
+  pcat (Cube (dims sk) Z)
+    (papp-lit sk Z o l (papp-conj-from (lcons e-dim sk) Z (%wsucc o) m ms
+       (cube-map (dims sk) (Line Z) (Line (Line Z)) (meet-l Z) (dcube-map (suc (dims sk)) X F Z g c d))))
+    (papp-lit sk Z o l (dcube-map (suc (dims sk)) X F Z g
+       (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+       (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+          (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d))))
+    (dcube-map (dims sk) X F Z g (papp-conj-from sk X o l (lcons m ms) c) (papp-conj-from-d sk X F o l (lcons m ms) c d))
+    (λ i → papp-lit sk Z o l
+       (pcat (Cube (suc (dims sk)) Z)
+          (papp-conj-from (lcons e-dim sk) Z (%wsucc o) m ms (cube-map (dims sk) (Line Z) (Line (Line Z)) (meet-l Z) (dcube-map (suc (dims sk)) X F Z g c d)))
+          (papp-conj-from (lcons e-dim sk) Z (%wsucc o) m ms (dcube-map (suc (suc (dims sk))) X F Z g
+             (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
+          (dcube-map (suc (dims sk)) X F Z g
+             (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+             (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+                (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
+          (λ j → papp-conj-from (lcons e-dim sk) Z (%wsucc o) m ms
+             (dmap-gen (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (Line Z) (Line (Line Z)) (meet-l X) (meet-o X F) (meet-l Z)
+                (lineo-map X F Z g) (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g))
+                (λ k L D → meet-l Z (lineo-map X F Z g L D)) c d j))
+          (papp-conj-from-dmap (lcons e-dim sk) X F Z g (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)) i))
+    (papp-lit-dmap sk X F Z g o l
+       (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+       (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+          (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
+papp-conj-dmap : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (Z : Type 1) (g : (x : X) → F x → Z) (o : Word) (cj : Conj)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → Cube (dims sk) Z) (papp-conj sk Z o cj (dcube-map (suc (dims sk)) X F Z g c d)) (dcube-map (dims sk) X F Z g (papp-conj sk X o cj c) (papp-conj-d sk X F o cj c d))
+papp-conj-dmap sk X F Z g o lnil c d =
+  dmap-gen (dims sk) (Line X) X (LineO X F) F (Line Z) Z (face1-l X) (face1-o X F) (face1-l Z) (lineo-map X F Z g) g (λ i L D → g (fst (snd L)) (fst (snd D))) c d
+papp-conj-dmap sk X F Z g o (lcons l ls) c d = papp-conj-from-dmap sk X F Z g o l ls c d
+papp-dnf-from-dmap : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (Z : Type 1) (g : (x : X) → F x → Z) (o : Word) (cj : Conj) (ds : DNF)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → Cube (dims sk) Z) (papp-dnf-from sk Z o cj ds (dcube-map (suc (dims sk)) X F Z g c d))
+    (dcube-map (dims sk) X F Z g (papp-dnf-from sk X o cj ds c) (papp-dnf-from-d sk X F o cj ds c d))
+papp-dnf-from-dmap sk X F Z g o cj lnil c d = papp-conj-dmap sk X F Z g o cj c d
+papp-dnf-from-dmap sk X F Z g o cj (lcons e es) c d =
+  pcat (Cube (dims sk) Z)
+    (papp-conj sk Z o cj (papp-dnf-from (lcons e-dim sk) Z (%wsucc o) e es
+       (cube-map (dims sk) (Line Z) (Line (Line Z)) (join-l Z) (dcube-map (suc (dims sk)) X F Z g c d))))
+    (papp-conj sk Z o cj (dcube-map (suc (dims sk)) X F Z g
+       (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))
+       (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+          (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d))))
+    (dcube-map (dims sk) X F Z g (papp-dnf-from sk X o cj (lcons e es) c) (papp-dnf-from-d sk X F o cj (lcons e es) c d))
+    (λ i → papp-conj sk Z o cj
+       (pcat (Cube (suc (dims sk)) Z)
+          (papp-dnf-from (lcons e-dim sk) Z (%wsucc o) e es (cube-map (dims sk) (Line Z) (Line (Line Z)) (join-l Z) (dcube-map (suc (dims sk)) X F Z g c d)))
+          (papp-dnf-from (lcons e-dim sk) Z (%wsucc o) e es (dcube-map (suc (suc (dims sk))) X F Z g
+             (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
+          (dcube-map (suc (dims sk)) X F Z g
+             (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))
+             (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+                (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
+          (λ j → papp-dnf-from (lcons e-dim sk) Z (%wsucc o) e es
+             (dmap-gen (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (Line Z) (Line (Line Z)) (join-l X) (join-o X F) (join-l Z)
+                (lineo-map X F Z g) (lineo-map (Line X) (LineO X F) (Line Z) (lineo-map X F Z g))
+                (λ k L D → join-l Z (lineo-map X F Z g L D)) c d j))
+          (papp-dnf-from-dmap (lcons e-dim sk) X F Z g (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)) i))
+    (papp-conj-dmap sk X F Z g o cj
+       (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))
+       (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+          (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
+papp-dmap : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (Z : Type 1) (g : (x : X) → F x → Z) (f : DNF)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → Cube (dims sk) Z) (papp-cube sk Z f (dcube-map (suc (dims sk)) X F Z g c d)) (dcube-map (dims sk) X F Z g (papp-cube sk X f c) (papp-cube-d sk X F f c d))
+papp-dmap sk X F Z g lnil c d =
+  dmap-gen (dims sk) (Line X) X (LineO X F) F (Line Z) Z (face0-l X) (face0-o X F) (face0-l Z) (lineo-map X F Z g) g (λ i L D → g (fst L) (fst D)) c d
+papp-dmap sk X F Z g (lcons cj cs) c d = papp-dnf-from-dmap sk X F Z g #0 cj cs c d
+cmap-dmap : (sk' sk : Lst Entry) (σ : CMap sk' sk) (X : Type 1) (F : X → Type 1) (Z : Type 1) (g : (x : X) → F x → Z)
+  (c : Cube (dims sk) X) (d : DCube (dims sk) X F c) →
+  PathP (λ i → Cube (dims sk') Z) (cmap-cube sk' sk σ Z (dcube-map (dims sk) X F Z g c d)) (dcube-map (dims sk') X F Z g (cmap-cube sk' sk σ X c) (cmap-d sk' sk σ X F c d))
+cmap-dmap sk' lnil σ X F Z g c d =
+  psym (Cube (dims sk') Z) (dcube-map (dims sk') X F Z g (cube-const (dims sk') X c) (dcube-const (dims sk') X F c d)) (cube-const (dims sk') Z (g c d))
+    (dmap-const-cube (dims sk') X F Z g c d)
+cmap-dmap sk' (lcons (e-ty a) sk) σ X F Z g c d = cmap-dmap sk' sk σ X F Z g c d
+cmap-dmap sk' (lcons e-dim sk) σ X F Z g c d =
+  pcat (Cube (dims sk') Z)
+    (papp-cube sk' Z (snd σ) (cmap-cube sk' sk (fst σ) (Line Z) (dcube-map (suc (dims sk)) X F Z g c d)))
+    (papp-cube sk' Z (snd σ) (dcube-map (suc (dims sk')) X F Z g (cmap-cube sk' sk (fst σ) (Line X) c) (cmap-d sk' sk (fst σ) (Line X) (LineO X F) c d)))
+    (dcube-map (dims sk') X F Z g (cmap-cube sk' (lcons e-dim sk) σ X c) (cmap-d sk' (lcons e-dim sk) σ X F c d))
+    (λ i → papp-cube sk' Z (snd σ) (cmap-dmap sk' sk (fst σ) (Line X) (LineO X F) (Line Z) (lineo-map X F Z g) c d i))
+    (papp-dmap sk' X F Z g (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c) (cmap-d sk' sk (fst σ) (Line X) (LineO X F) c d))
