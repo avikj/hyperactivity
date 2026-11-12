@@ -99,11 +99,20 @@ another name may exist — absence **unverified**): `record Language`, `Block`, 
 `mem-std`, `AMem` (`lib/mem/memory.cub`; `AMem` also in `lib/cxx/machine.cub` — a C++ machine
 exists in some form, **unread**), `linux-model` (`lib/os/contract.cub`).
 
+## Library state (measured 2026-11-11, `make library`)
+
+1,907 passed, 52 failed (same count as recorded at `ace6fec0`). Every failure is the mechanical
+refusal of untyped code (in place since 2026-11-09) or follows from one: definitions without a
+signature in `lib/derive.cub` (24), `lib/ring.cub` (9), `lib/intlin.cub` (6), `lib/eqproof.cub`
+(3), `lib/autodiff.cub` (3); in `lib/cxx/ast.cub` (7) two primitives outside the bootstrap files
+and four uses of the refused `cstr-fill`/`cstr-from`/`cstr-get`/`cstr-put`. These files need
+their types; no failure is a wrong result.
+
 ## Next step
 
 1. Read before writing anything: `lib/cxx/`, `lib/mem/`, `lib/obs.cub`, `lib/fleet.cub`,
    `lib/os/`, `lib/compile/process.cub` in full, the other `tracks/` files, the two C commits'
-   diffs; run `make library` and record the count here.
+   diffs.
 2. Then, in `lib/compile/`: `ExecTo` over `x86-step`, the frame `P` from `lib/x86.cub`'s
    conventions, `Block`, the model lemmas above, the instruction lemmas of the forms the encoder
    emits (start: load/store of a frame slot, `add`), `seq`; then branch, loop, call, allocation;
