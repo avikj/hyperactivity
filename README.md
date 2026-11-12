@@ -13,16 +13,16 @@ everything said is a declaration; open loops are closed (removed from the state,
 matters folded in) by anyone once completely unnecessary; facts are evaluations, remembered under
 content keys; views are terms applied to the work. It is in use from now: knowledge from any session
 goes into the code as declarations and dated notes at their sites, never only into a conversation.
-Pending, in order: t60 (content keys for references in the evaluator), t61 (results kept
-canonically beyond the run), t62 (the work as a value; views), t43 (refusals kept), t63 (text as a
-term), t64 (the work record rebuilt on it). Work in progress on t43/t61/t65 is branch `work-object` (not
-merged): keys that number generated names by first occurrence, plus remembered elaborations, bring
-a warm check of the library from 31 s to 5 s with 0 interaction steps, but 15 definitions that pass
-cold fail warm (x-case-chain); its last commit message has the measurements and what to remove
-before merging. The order of work is computed, not stored: `python3 tools/work.py priority`.
-
-**Checks are real only with `CUBICAL_NOCACHE=1`:** the per-file cache replays a file without
-checking it (t41), even with a fresh `CUBICAL_STORE`, and its counts differ.
+Done 2026-11-12: the work is one graph of nodes (`work/graph.cub`, t64), every declaration of the
+code a node of it with its reason computed (`tools/work.py why`, `unexplained`); a declaration's
+elaboration and the checker's answer, accepted or refused, are kept in the store by content
+(t43, t61 in part), so a warm library check takes 4.6 s with the fresh run's output; the per-file
+cache is gone (t41); text is a term (t63); `declarations T` gives the work as a value and views are
+terms over it (`tools/work.py view`, t37; t62 in part); every file imports what it needs (t30).
+Pending: t60 (references keyed by content in the evaluator, so compiled records and results can be
+kept), t61 (the evaluator's results kept beyond the run), t62 (each declaration's code as a value),
+t44, and stating the reasons of the declarations no declaration with a reason uses. The order of
+work is computed, not stored: `python3 tools/work.py priority`.
 
 **Fixed 2026-11-12:** t51, the checker accepted Type : Type through a level computed by cases on a
 variable (a stuck level now is an atom); t56, `#retract` did not free the name.
@@ -149,7 +149,7 @@ make brunerie           # Brunerie's number
 make work               # the goals and tickets
 ```
 
-Every reading prints its steps; `CUBICAL_NOCACHE=1` checks without the module cache.
+Every reading prints its steps; `CUBICAL_NOCACHE=1` checks without the store (nothing remembered).
 
 ## Working rules
 

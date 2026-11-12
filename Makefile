@@ -45,7 +45,7 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 # of every declaration's uses (#uses, tools/work.py) cover the repository.
 #
 # t44 (2026-11-12): every target sets CUBICAL_NOCACHE=1, so the standard commands never use the
-# store or the module cache and recheck everything from nothing (64 s for the library). With the
+# store and recheck everything from nothing (64 s for the library). With the
 # store warm, elaboration and compilation still run for every definition (29 s), so incremental
 # checking reaches only the checker's run, not the rest of the work done per definition.
 # Measured again 2026-11-12, the elaboration and the checker's answers (accepted or refused) kept in
