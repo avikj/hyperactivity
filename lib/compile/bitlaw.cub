@@ -20,6 +20,11 @@ bit-and-true true = refl
 bit-and-true false = refl
 cong2 : {A B C : Type} → (f : A → B → C) → {a a2 : A} → {b b2 : B} → a ≡ a2 → b ≡ b2 → f a b ≡ f a2 b2
 cong2 {A} {B} {C} f p q = λ i → f (p i) (q i)
+-- t68 (2026-11-12): wrong. bu-bit0-other and bu-bit0 do not check (measured with the file loaded
+-- alone after its imports, --read): their proofs expect lib/bits.cub's bv-update to mask with (wshl
+-- #1 j); bv-update now masks with (wshl (wsub (wshl #1 (wsucc (wsub j j))) #1) j), and in bu-bit0
+-- the update's value with (wshl v #0) where the proof has v. lib/bits.cub changed after these
+-- lemmas were written (5629aae and later); the lemmas are stated against the old form.
 -- bit 0 after an update of bit j ≥ 1 (j literal where it is used: the hypotheses compute)
 bu-bit0-other : (x v j : Word) → wbit (wshl #1 j) #0 ≡ false → wlt #0 j ≡ true → wbit (bv-update #32 x j j v) #0 ≡ wbit x #0
 bu-bit0-other x v j h1 h2 =

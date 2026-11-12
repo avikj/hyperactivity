@@ -6,6 +6,11 @@
 -- from nothing: the difference of two lines is one stage). build-cost-N.cub hold the #show
 -- lines for one N each, so that a run can be bounded.
 import "../../lib/library.cub"
+-- t69 (2026-11-12): needs-work. 18 definitions here are untyped and refused ("a definition without
+-- a signature exists only in the fixed bootstrap files"), measured with the file loaded alone after
+-- its imports (--read), so the build-cost-N, build-cost-direct, -passes and -stuck files that use
+-- them fail on the names (bc-unf and others) as well. Refused since the checker became mandatory
+-- (2026-11-09), as t16-t21 are in the library.
 bc-chain : {l : Level} → Nat → Word → Proc {l} Linux (Sum Errno Word)
 bc-chain {l} zero acc = ret {l} {Linux} {Sum Errno Word} (inr acc)
 bc-chain {l} (suc n) acc = lx-then {l} {Unit} {Word} (lx {l} (lx-close acc)) (λ u → bc-chain {l} n (%wsucc acc))
