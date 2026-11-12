@@ -44,7 +44,9 @@ Application is juxtaposition; structure is indentation (a block opens after `whe
 `mutual`, `postulate`; `;` separates items on one line). `(x : A) → B`, `{x : A} → B` (implicit),
 `(x : A) × B`, `A → B`, `A × B`, `λ x y → e`, `(a , b)`, `let x = e in b`, `if b then t else e`,
 `case e of c x → t; d → u`, `case e return P of ...`, `e where` a block of definitions, `Type`,
-`Type l` (`Level`, `lzero`, `lsuc`, `lmax`, or a numeral). Numerals are natural numbers. Every
+`Type l` (`Level`, `lzero`, `lsuc`, `lmax`, or a numeral). Numerals are natural numbers. A quoted
+string `"…"` is the list of its bytes (UTF-8, as written): `"ab"` is `cons #97 (cons #98 nil)`, a
+`List Word`. Every
 Unicode symbol has an ASCII spelling: `->` `\` `|->` `==` `/\` `\/` `**` `forall`, `Nat` for `ℕ`,
 `S1` for `S¹`, `Empty` for `⊥`, `Unit` for `⊤`. Operators are declared: `infix 4 ≡`, `infixr 5 ∙`,
 and defined as `_≡_` or by an equation `x ≡ y = ...`. A name used in a signature and bound nowhere

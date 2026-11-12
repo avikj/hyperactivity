@@ -82,10 +82,6 @@ static void x_lex(const char *text) {
             continue;
         }
         int col = COL;
-        /* t63 (2026-11-12): needs-work (goal work-object). A quoted string is read here but is a
-         * term nowhere (only import paths and `world` take one), so raw text cannot be written as a
-         * declaration. It needs one surface form elaborating to the bytes the language already has
-         * (Bytes, lib/prim.cub); no rule is added to the core. */
         if (*p == '"') {
             const char *b = ++p; while (*p && *p != '"' && *p != '\n') p++;
             if (*p != '"') x_die(line, col, "unclosed string", NULL);
@@ -490,6 +486,15 @@ static Node *p_atom(void) {
         return r;
     }
     if (t->k == X_NUM) { NX(); return sym2("%num", nsym(t->s)); }
+    if (t->k == X_STR) {
+        /* "text": the list of its bytes (UTF-8, as written), cons #b0 (cons #b1 … nil) : List Word;
+         * text is data of the core, with no rule of its own (2026-11-12, t63) */
+        NX();
+        const unsigned char *b = (const unsigned char *)t->s; size_t n = strlen(t->s);
+        Node *r = nsym("nil");
+        for (size_t i = n; i-- > 0; ) { char w[8]; snprintf(w, sizeof w, "#%u", b[i]); r = lst(3, nsym("cons"), nsym(w), r); }
+        return r;
+    }
     if (t->k == X_LB) return p_system();
     if (t->k == X_LP) {
         if (group_has_eq()) { NX(); Node *f = p_face(); wantk(X_RP, ")"); return f; }
