@@ -2763,73 +2763,10 @@ static void shadow_decl(Node *f) {
         imask_set(nm->s, 0, 0); sig_set(nm->s, NULL);
     }
 }
-/* The cache of a module holds its elaborated core forms, in order: a cached (trusted) module is
- * elaborated again only for the surface's own bookkeeping, and each form it produces is replaced by
- * the recorded one, so it runs as the checked program did (its implicit arguments solved, its
- * guesses decided) without running the checker. xrec: where an unchecked module's forms are
- * recorded; xrep: a cached module's recorded forms. */
-static FILE *xrec; static bool xrec_bad;
-static Node **xrep; static int nxrep, ixrep; static bool xrep_bad;
-static void x_rec_form(Node *f) {
-    char *b; size_t l; FILE *m = open_memstream(&b, &l); print_node(m, f); fclose(m);
-    const char *saved = src; src = b; Node *g = read_node(); bool more = g && (skip(), *src != 0); src = saved;
-    if (!g || more || !node_eq(f, g)) xrec_bad = true;   /* a form that does not read back: the module is not cached */
-    fputs(b, xrec); fputc('\n', xrec); free(b);
-}
-static bool x_same_decl(Node *a, Node *b) {
-    if (a->list != b->list || !a->list || a->n < 1 || b->n < 1) return false;
-    if (!is(a->it[0], b->it[0]->list ? "" : b->it[0]->s)) return false;
-    if (a->n > 1 && b->n > 1 && !a->it[1]->list && !b->it[1]->list) return !strcmp(a->it[1]->s, b->it[1]->s);
-    return true;
-}
-static void x_rec_extra(Node *f) { if (xrec) x_rec_form(f); }
-/* a reading's output held while it is made (x_top): given back to stdout, and recorded after the
- * reading's form when it ended (not when an error left it: p_decl's decl_reset ends it then) */
-static FILE *x_cap; static int x_cap_so = -1;
-static void x_cap_end(bool record) {
-    if (!x_cap) return;
-    fflush(stdout); dup2(x_cap_so, 1); close(x_cap_so); x_cap_so = -1;
-    FILE *cap = x_cap; x_cap = NULL;
-    long len = ftell(cap); if (len < 0) len = 0; rewind(cap);
-    char *b = malloc((size_t)len + 1); size_t got = fread(b, 1, (size_t)len, cap); b[got] = 0; fclose(cap);
-    fwrite(b, 1, got, stdout);
-    if (record && xrec) {
-        int nch = (int)((got + 99) / 100);
-        Node *sh = nlist(nch + 1); sh->it[0] = nsym("shown");
-        for (int k = 0; k < nch; k++) {
-            char hx[204]; hx[0] = 'x'; size_t m = got - (size_t)k * 100 < 100 ? got - (size_t)k * 100 : 100;
-            for (size_t z = 0; z < m; z++) snprintf(hx + 1 + 2 * z, 3, "%02x", (unsigned char)b[(size_t)k * 100 + z]);
-            sh->it[k + 1] = nsym(hx);
-        }
-        x_rec_form(sh);
-    }
-    free(b);
-}
 static void x_top(Node *f) {
     if (x_collecting) { GROW(xcollect, capxcollect, (size_t)nxcollect + 1); xcollect[nxcollect++] = f; return; }
-    if (xrec) x_rec_form(f);
-    if (xrep) {
-        if (ixrep < nxrep && x_same_decl(xrep[ixrep], f)) f = xrep[ixrep];
-        else xrep_bad = true;
-        ixrep++;
-    }
     shadow_decl(f);
-    /* a reading (#show, #observe, #type, #usage) of a module being recorded: what it prints is
-     * recorded after the form, (shown hex…), and a cached module prints it from there (the form
-     * itself is not run in a cached module), so a load's readings do not depend on the cache */
-    bool reading = f->list && f->n >= 1 && !f->it[0]->list && (is(f->it[0], "show") || is(f->it[0], "observe") || is(f->it[0], "type") || is(f->it[0], "usage"));
-    if (reading && xrec && !xrep && !x_cap) {
-        x_cap = tmpfile();
-        if (x_cap) { fflush(stdout); x_cap_so = dup(1); if (x_cap_so < 0 || dup2(fileno(x_cap), 1) < 0) { if (x_cap_so >= 0) close(x_cap_so); fclose(x_cap); x_cap = NULL; x_cap_so = -1; } }
-    }
     { bool sv = x_surface; x_surface = true; toplevel(f); x_surface = sv; }
-    x_cap_end(true);
-    /* the record's extra forms after this one (a checked definition's usages, a reading's text) */
-    if (xrep) while (ixrep < nxrep && xrep[ixrep]->list && xrep[ixrep]->n >= 1 && (is(xrep[ixrep]->it[0], "shown") || (xrep[ixrep]->n >= 2 && is(xrep[ixrep]->it[0], "usages")))) {
-        Node *x = xrep[ixrep++];
-        if (!is(x->it[0], "shown")) { toplevel(x); continue; }
-        for (int k = 1; k < x->n; k++) { const char *h = x->it[k]->list ? "" : x->it[k]->s; for (size_t z = 1; h[0] && h[z] && h[z + 1]; z += 2) { unsigned v = 0; sscanf(h + z, "%2x", &v); putchar((int)v); } }
-    }
 }
 /* print a file of core forms in the surface language; with check, each form's printing is parsed
  * back and compared with it (desugared, up to the names of bound variables) as the form is loaded */
@@ -5703,7 +5640,7 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
      * referenced definitions' surface signatures (implicitness) and instances, beyond their core
      * keys: a change there can leave a stale elaboration, which is then checked as any term is. */
     char ekey[65] = ""; bool ehit = false;
-    if (name && expect && !trusted && store_dir() && chk_salt[0] && !copattern_body(body)) {
+    if (name && expect && store_dir() && chk_salt[0] && !copattern_body(body)) {
         SBuf w = { 0 }; cur_deps.n = 0; kfresh_on = true; nkfresh = 0;
         sb_fmt(&w, "elab\n%s\n%llx %d\n", chk_salt, (unsigned long long)mask, mlen);
         canon(&w, sig); sb_put(&w, "\n"); canon(&w, body); sb_put(&w, "\n"); kfresh_on = false;
@@ -5720,7 +5657,6 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
         nesc = 0; T = core(el(sig));
         nesc = 0; syn_expect = sig; t = core(el(body)); syn_expect = NULL;
         die_jb = outer_jb;
-        if (trusted) break;
         if (getenv("CUBICAL_SHOW_ELAB") && !round) { fprintf(stderr, "[elab] %s : ", name ? name : "(check)"); print_node(stderr, T); fprintf(stderr, "\n  = "); print_node(stderr, t); fprintf(stderr, "\n"); }
         Node *dT = ds(T), *dt = ds(t);
         /* a definition the store holds as checked (F34): its key found, the checker is not run */
@@ -5918,7 +5854,6 @@ static Node *x_solve_expr(Node *e) {
 
 /* a declaration left by an error (p_decl): the elaborator's state as before a declaration */
 static void decl_reset(void) {
-    x_cap_end(false);
     neh = neg = 0; nbk = 0; nesc = 0; nwtick = 0; syn_expect = app_expect = NULL;
     cov_armed = cov_on = guard_on = lift_armed = false; nrov = 0; tsig.ord = NULL; perm_np = 0; nsg = 0;
 }

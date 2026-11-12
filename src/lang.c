@@ -1504,7 +1504,6 @@ static void prim_uses(Node *t, const char *x, int under, int *c, int *direct) {
     for (int i = 0; i < t->n; i++) prim_uses(t->it[i], x, head && i > 0, c, direct);
 }
 static void toplevel(Node *f);
-static void x_rec_extra(Node *f);   /* syntax.c: a form added to a module's record */
 static Node *cn(Node *c); static int ncn;   /* syntax.c: a code as a surface term */
 static size_t name_hash(const char *s);
 /* ---------------- definitions ---------------- */
@@ -3181,7 +3180,7 @@ static Node *reading_type(Node *t) {
  * (references as content keys, t60; the checker identified by its own definitions' keys, t42), the
  * result stored with references as keys and rendered through the current bindings when read, the
  * same mechanism as the store's definitions. The store's certificates are then such results; the
- * per-file cache (t41) goes. Read 2026-11-12: the query built here (build_top) is keyed in
+ * per-file cache goes (gone 2026-11-12). Read 2026-11-12: the query built here (build_top) is keyed in
  * src/net.c by synkey, but that key's leaves are run-local: a definition by its global index
  * (key_global), a λ or thunk by the address of its compiled record (K_LAM over t->rec), and the
  * codes passed name checked definitions by their index (cglob i). So the evaluator's key of a query
@@ -3237,7 +3236,6 @@ static char *readback_at(Node *T, Node *t, long *steps) {
 /* modules: a file is loaded once; a running key hashes the machine's build and every file loaded so
  * far, in order; a file whose key has a marker in the cache directory passed all its checks
  * before, and its checks are not rerun */
-static bool trusted;
 static const char *cur_dir;
 /* a checked definition whose check the elaborator already ran: its result and length */
 static const char *forced_result; static long forced_steps;
@@ -3407,7 +3405,6 @@ static void emit(const char *text) {
 }
 static char **watch_name; static Cell **watch_root; static size_t capwn, capwr; static int nwatch;
 static void load_file(const char *path, bool must);
-static const char *cache_dir(void);
 static void drivers_run(Node *t);
 /* ---------------- signature entries, copattern definitions ---------------- */
 /* an entry of the checker's signature: its value's global, its type's global */
@@ -3510,12 +3507,12 @@ static void checked_group(Node **fs, int n, bool expect) {
       for (int i = 0; i < n; i++) { Ts[i] = ds(fs[i]->it[2]); ts[i] = ds(fs[i]->it[3]); }
       key_group(Ts, ts, n, ix[0], ks); free(Ts); free(ts); }
     for (int i = 0; i < n; i++) { ckey_set(ix[i], ks[i]); if (i == 0) deps_take(&CDEPS, &capcdeps, ix[0]); else { if ((size_t)ix[i] >= capcdeps) { size_t o = capcdeps; GROW(CDEPS, capcdeps, (size_t)ix[i] + 1); memset(CDEPS + o, 0, (capcdeps - o) * sizeof(Deps)); } CDEPS[ix[i]].d = malloc(sizeof(int)); CDEPS[ix[i]].d[0] = ix[0]; CDEPS[ix[i]].n = 1; } }
-    bool stored = expect && !trusted;
+    bool stored = expect;
     for (int i = 0; i < n && stored; i++) if (!store_checked(ks[i])) stored = false;
     bool all = true;
     if (stored) {
         for (int i = 0; i < n; i++) { passes++; printf("ok: checks %s   [store]\n", fs[i]->it[1]->s); names_bind(fs[i]->it[1]->s, ks[i]); }
-    } else if (!trusted) {
+    } else {
         Node **ws = calloc((size_t)n + 1, sizeof(Node *));
         for (int i = 0; i < n; i++) ws[i] = word(ix[i]);
         Node *grp = nl2("%raw", alist(ws, n)); free(ws);
@@ -3578,13 +3575,13 @@ static void checked_group(Node **fs, int n, bool expect) {
         for (int i = 0; i < n; i++) free(rs[i]);
         free(rs); free(qs);
         }
-    } else if (!expect) all = false;
+    }
     if (!all) for (int i = 0; i < n; i++) cofix_hide(gs[i], ix[i]);
     else if (!stored && expect) {
         int saved = kgroup_base; kgroup_base = ix[0];
         for (int i = 0; i < n; i++) {
             SBuf c = { 0 }, y = { 0 }; canon(&c, ds(fs[i]->it[3])); canon(&y, ds(fs[i]->it[2]));
-            store_put(fs[i]->it[1]->s, ks[i], c.b, y.b, 0, trusted ? NULL : "");
+            store_put(fs[i]->it[1]->s, ks[i], c.b, y.b, 0, "");
             free(c.b); free(y.b);
         }
         kgroup_base = saved;
@@ -3617,110 +3614,6 @@ static Node *atel_coparams(Node *dd, int d, int k) {
     return kapp("tz", atel_cofields(dd, 2), NULL);
 }
 
-/* ---------------- the compiled-form cache ----------------
- * A module whose checks are cached (load_file) replays its recorded core forms; compiling them was
- * most of a cached load. So a module's compiled forms are kept too, beside its recorded forms,
- * in the order its definitions are made: the Syn, records and case tables of each plain
- * definition, with its slot count, uses, parameter count, strictness and n-ary record. Globals,
- * constructors and data types are referred to by index, which the replay reproduces. A module
- * read from this store compiles nothing; on any mismatch (an entry that is not the definition
- * being made) the rest of the module compiles as before. */
-static FILE *cc_out;                                   /* recording */
-static const unsigned char *cc_in, *cc_end; static bool cc_bad;   /* replaying */
-static void cc_w(const void *p, size_t n) { fwrite(p, 1, n, cc_out); }
-static void cc_wu8(unsigned v) { unsigned char b = (unsigned char)v; cc_w(&b, 1); }
-static void cc_wi32(int32_t v) { cc_w(&v, 4); }
-static void cc_wu64(uint64_t v) { cc_w(&v, 8); }
-static void cc_wstr(const char *x) { uint32_t n = (uint32_t)strlen(x); cc_w(&n, 4); cc_w(x, n); }
-static bool cc_r(void *p, size_t n) { if (cc_bad || (size_t)(cc_end - cc_in) < n) { cc_bad = true; return false; } memcpy(p, cc_in, n); cc_in += n; return true; }
-static unsigned cc_ru8(void) { unsigned char b = 0; cc_r(&b, 1); return b; }
-static int32_t cc_ri32(void) { int32_t v = 0; cc_r(&v, 4); return v; }
-static uint64_t cc_ru64(void) { uint64_t v = 0; cc_r(&v, 8); return v; }
-static char *cc_rstr(void) { uint32_t n = 0; if (!cc_r(&n, 4) || (size_t)(cc_end - cc_in) < n) { cc_bad = true; return NULL; } char *x = malloc(n + 1); memcpy(x, cc_in, n); x[n] = 0; cc_in += n; return x; }
-static void cc_wrec(const Record *r);
-static Record *cc_rrec(void);
-static void cc_wsyn(const Syn *t) {
-    if (!t) { cc_wu8(0xFF); return; }
-    cc_wu8((unsigned)t->tag); cc_wi32(t->n); cc_wi32(t->slot); cc_wi32((int32_t)t->x); cc_wu64((uint64_t)t->id);
-    if (t->tag == S_WORD && t->big) { cc_wu8(1); char *b; size_t l; FILE *m = open_memstream(&b, &l); WN w = { (uint64_t)t->id, t->big }; wn_print(m, &w); fclose(m); cc_wstr(b); free(b); }
-    else cc_wu8(0);
-    if (t->rec) { cc_wu8(1); cc_wrec(t->rec); } else cc_wu8(0);
-    if (t->tab) {
-        CaseTab *tb = t->tab; int N = DATA[tb->d].ncons;
-        cc_wu8(1); cc_wi32(tb->d); cc_wi32(tb->nenv); cc_wu64(tb->mask);
-        for (int i = 0; i < N; i++) cc_wrec(tb->br[i]);
-        if (tb->motive) { cc_wu8(1); cc_wrec(tb->motive); } else cc_wu8(0);
-    } else cc_wu8(0);
-    for (int i = 0; i < t->n; i++) cc_wsyn(t->k[i]);
-}
-static Syn *cc_rsyn(void) {
-    unsigned tag = cc_ru8();
-    if (cc_bad || tag == 0xFF) return NULL;
-    int32_t n = cc_ri32(); if (cc_bad || n < 0 || n > 100000) { cc_bad = true; return NULL; }
-    Syn *t = syn((int)tag, n);
-    t->slot = cc_ri32(); t->x = (uint32_t)cc_ri32(); t->id = (long)cc_ru64();
-    if (cc_ru8()) { char *b = cc_rstr(); if (b) { WN w = wn_parse(b); t->id = (long)w.s; t->big = w.b; free(b); } }
-    if (cc_ru8()) t->rec = cc_rrec();
-    if (cc_ru8()) {
-        CaseTab *tb = calloc(1, sizeof(CaseTab));
-        tb->d = cc_ri32(); tb->nenv = cc_ri32(); tb->mask = cc_ru64();
-        if (cc_bad || tb->d < 0 || tb->d >= ndata) { cc_bad = true; free(tb); return t; }
-        int N = DATA[tb->d].ncons;
-        tb->br = calloc((size_t)N + 1, sizeof(Record *));
-        for (int i = 0; i < N && !cc_bad; i++) tb->br[i] = cc_rrec();
-        if (cc_ru8()) tb->motive = cc_rrec();
-        if (!cc_bad) t->tab = tab_intern(tb);
-    }
-    for (int i = 0; i < n && !cc_bad; i++) t->k[i] = cc_rsyn();
-    return t;
-}
-static void cc_wrec(const Record *r) {
-    cc_wi32(r->nparam); cc_wi32(r->nslots); cc_wi32(r->nenv);
-    for (int i = 0; i < r->nenv; i++) cc_wi32(r->env_slot[i]);
-    for (int i = 0; i < r->nslots; i++) cc_wi32(r->uses[i]);
-    cc_wsyn(r->body);
-}
-static Record *cc_rrec(void) {
-    Record *r = calloc(1, sizeof(Record));
-    r->nparam = cc_ri32(); r->nslots = cc_ri32(); r->nenv = cc_ri32();
-    if (cc_bad || r->nslots < 0 || r->nenv < 0 || r->nslots > 1000000 || r->nenv > 1000000) { cc_bad = true; free(r); return NULL; }
-    r->env_slot = calloc((size_t)r->nenv + 1, sizeof(int)); r->uses = calloc((size_t)r->nslots + 1, sizeof(int));
-    for (int i = 0; i < r->nenv; i++) r->env_slot[i] = cc_ri32();
-    for (int i = 0; i < r->nslots; i++) r->uses[i] = cc_ri32();
-    r->body = cc_rsyn(); r->where = prof_cur;
-    if (cc_bad) return NULL;
-    return rec_intern(r);
-}
-#define CC_DEF 0xD1
-static void cc_wdef(long g) {
-    cc_wu8(CC_DEF); cc_wstr(G[g].name);
-    cc_wi32(G[g].nslots); for (int i = 0; i < G[g].nslots; i++) cc_wi32(G[g].uses[i]);
-    cc_wsyn(G[g].body);
-    cc_wi32(G[g].nparams); cc_wu64(G[g].strict);
-    if (G[g].nary) { cc_wu8(1); cc_wrec(G[g].nary); } else cc_wu8(0);
-}
-/* whether the next entry is the definition of this name (the entry is left in place) */
-static bool cc_next_is(const char *name) {
-    if (!cc_in || cc_bad || cc_in >= cc_end) return false;
-    const unsigned char *at = cc_in;
-    bool ok = cc_ru8() == CC_DEF;
-    char *nm = ok ? cc_rstr() : NULL;
-    ok = ok && nm && !strcmp(nm, name);
-    free(nm);
-    cc_in = at; cc_bad = false;
-    return ok;
-}
-static bool cc_rdef(long g) {
-    cc_ru8(); free(cc_rstr());
-    int32_t ns = cc_ri32(); if (cc_bad || ns < 0 || ns > 1000000) { cc_bad = true; return false; }
-    int *u = calloc((size_t)ns + 1, sizeof(int)); for (int i = 0; i < ns; i++) u[i] = cc_ri32();
-    Syn *b = cc_rsyn();
-    int32_t np = cc_ri32(); uint64_t st = cc_ru64();
-    Record *nary = cc_ru8() ? cc_rrec() : NULL;
-    if (cc_bad || !b) return false;
-    G[g].body = b; G[g].nslots = ns; G[g].uses = u; G[g].nparams = np; G[g].strict = st; G[g].nary = nary;
-    return true;
-}
 static void toplevel_in(Node *f);
 /* a top-level form; once the outermost one is handled, compiled code nothing reaches is swept */
 static void toplevel(Node *f) {
@@ -3892,28 +3785,9 @@ static void toplevel_in(Node *f) {
         return;
     }
     /* a module whose checks are cached: its definitions are made, its judgments and tests not rerun */
-    if (trusted && (!strcmp(h, "check") || !strcmp(h, "check-fail") || !strcmp(h, "checked-data-fail") || !strcmp(h, "checked-fail")
-        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "uses") || !strcmp(h, "native") || !strcmp(h, "native-c") || !strcmp(h, "native-at") || !strcmp(h, "run") || !strcmp(h, "type") || !strcmp(h, "scope") || !strcmp(h, "where"))) return;
     if (!strcmp(h, "def")) {
         if (f->n != 3) die("(def name term)", NULL);
         if (!chk_salt[0] && !f->it[1]->list && !strcmp(f->it[1]->s, "chk-def")) chk_salt_set();   /* the checker (%%chk-def) is defined here: its name (F34) */
-        if (cc_next_is(f->it[1]->s)) {
-            /* its compiled form is cached: made without desugaring or compiling */
-            long g = global_lookup(f->it[1]->s);
-            bool fill_decl = g >= 0 && G[g].kind == G_INPUT && !G[g].res->port[0];
-            if (fill_decl) G[g].kind = G_DEF; else { decl_fresh(f->it[1]->s); g = add_global(f->it[1]->s, G_DEF); }
-            prof_enter(f->it[1]->s);
-            if (cc_rdef(g)) {
-                prof_cur = 0;
-                link(top_build(G[g].body, G[g].nslots, G[g].uses), P(G[g].res, 0));
-                if (!strcmp(G[g].name, "%case-hcomp")) case_hcomp_global = g;
-                if (fill_decl) { for (int i = 0; i < G[g].npark; i++) net_push(G[g].park_o[i], G[g].park_v[i]); G[g].npark = 0; }
-                return;
-            }
-            /* a bad entry: the module compiles from here on, this definition included */
-            cc_in = NULL; cc_bad = true; prof_cur = 0;
-            if (!fill_decl) { G[g].kind = G_INPUT; }   /* made again below by the ordinary path (same index: the name is known) */
-        }
         ArMark dm = ar_mark();
         Node *dsb = ds(f->it[2]);   /* desugared once: the copattern test, the strictness analysis, the body and its n-ary form read it */
         if (!plain_def && copattern_body(dsb)) {
@@ -3963,7 +3837,6 @@ static void toplevel_in(Node *f) {
             }
         }
         ar_release(dm);
-        if (cc_out) cc_wdef(g);
         prof_cur = 0;
         link(top_build(s, ns, u), P(G[g].res, 0));
         if (!strcmp(G[g].name, "%case-hcomp")) case_hcomp_global = g;
@@ -3992,17 +3865,17 @@ static void toplevel_in(Node *f) {
         char key[65]; char *kcode = NULL, *ktype = NULL;
         key_def(dT, dt, key, &kcode, &ktype);
         bool remembered = forced_result && forced_steps < 0;   /* the store's answer, acceptance or refusal */
-        bool stored = define && expect && !trusted && (forced_result ? remembered && !strcmp(forced_result, "ok") : store_checked(key));
-        Node *cT = nl2("%raw", aclosed(dT)), *ct = trusted || stored ? NULL : nl2("%raw", aclosed(dt));
+        bool stored = define && expect && (forced_result ? remembered && !strcmp(forced_result, "ok") : store_checked(key));
+        Node *cT = nl2("%raw", aclosed(dT)), *ct = stored ? NULL : nl2("%raw", aclosed(dt));
         long steps = 0;
-        char *rs = define && expect && !trusted && !stored && !forced_result ? store_refused(key) : NULL;   /* refused before (t43) */
-        char *r = trusted || stored ? strdup("ok") : rs ? rs : forced_result ? strdup(forced_result) : readback(nl3("%%chk-def", cT, ct), &steps), *tr = strdup("ok");
+        char *rs = define && expect && !stored && !forced_result ? store_refused(key) : NULL;   /* refused before (t43) */
+        char *r = stored ? strdup("ok") : rs ? rs : forced_result ? strdup(forced_result) : readback(nl3("%%chk-def", cT, ct), &steps), *tr = strdup("ok");
         if (forced_result) steps = forced_steps;
         if (rs || remembered) stored = true;
-        else if (define && expect && !trusted && strcmp(r, tr) && !has_hole(dT) && !has_hole(dt)) store_refuse(key, steps, r);   /* a term with a hole is elaborated again, never looked up */
+        else if (define && expect && strcmp(r, tr) && !has_hole(dT) && !has_hole(dt)) store_refuse(key, steps, r);   /* a term with a hole is elaborated again, never looked up */
         bool accepted = !strcmp(r, tr), ok = accepted == expect;
         if (ok) passes++; else failures++;
-        if (!trusted) {
+        {
             printf("%s: %s ", ok ? "ok" : "FAIL", expect ? "checks" : "rejected");
             if (define) printf("%s", f->it[1]->s); else out_term(t);
             if (stored) printf("   [store]\n"); else printf("   [%ld steps]\n", steps);
@@ -4023,7 +3896,7 @@ static void toplevel_in(Node *f) {
             ckey_set(ck, key); deps_take(&CDEPS, &capcdeps, ck);
             /* the parameters' computed usages (B11): asked of the checker (or read from the store),
              * kept, and recorded with the module's forms so a cached load has them */
-            if (!trusted) {
+            {
                 const char *nm[256]; unsigned char u[256]; int n = 0;
                 char *su = stored ? store_read(key, "usage") : NULL;
                 if (su) {
@@ -4046,10 +3919,7 @@ static void toplevel_in(Node *f) {
                 }
                 usage_set(ck, n, nm, u);
                 { SBuf ub = { 0 }; for (int i = 0; i < n; i++) sb_fmt(&ub, "%s %d\n", nm[i], u[i]); store_put(f->it[1]->s, key, kcode, ktype, steps, ub.b ? ub.b : ""); free(ub.b); }
-                Node *rec = nlist(2 + 2 * n); rec->it[0] = nsym("usages"); rec->it[1] = f->it[1];
-                for (int i = 0; i < n; i++) { char b[32]; rec->it[2 + 2 * i] = nsym(nm[i]); snprintf(b, sizeof b, "#%d", u[i]); rec->it[3 + 2 * i] = nsym(b); }
-                x_rec_extra(rec);
-            } else store_put(f->it[1]->s, key, kcode, ktype, 0, NULL);
+            }
         }
         free(kcode); free(ktype);
         if (!nochk) ar_release(cm);
@@ -4165,8 +4035,8 @@ static void toplevel_in(Node *f) {
         trusted_add(nm, !strcmp(h, "foreign") ? "foreign" : f->n == 3 ? "primitive, no computation" : !strcmp(h, "primitive-tick") ? "primitive, tick" : "primitive");
         Node *cT = nl2("%raw", aclosed(ds(f->it[2])));
         char key[65]; char *ktype = NULL; key_named("primitive", nm, ds(f->it[2]), key, &ktype);
-        if (!trusted && store_checked(key)) { passes++; printf("ok: checks %s   [store]\n", nm); }
-        else if (!trusted) {
+        if (store_checked(key)) { passes++; printf("ok: checks %s   [store]\n", nm); }
+        else {
             long steps = 0;
             char *r = readback(nl2("%%chk-type", cT), &steps);
             bool acc = !strcmp(r, "ok");
@@ -4248,13 +4118,13 @@ static void toplevel_in(Node *f) {
         table_set(TB_TRANS, di, global_lookup(trn));
         long steps = 0;
         char key[65]; char *kcode = NULL; key_decl(dd, key, &kcode);
-        bool stored = expect && !trusted && store_checked(key);
-        char *rs = expect && !trusted && !stored ? store_refused(key) : NULL;   /* refused before (t43) */
-        char *r = trusted || stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-data", word(di), ent), &steps), *tr = strdup("ok");
-        if (rs) stored = true; else if (expect && !trusted && strcmp(r, tr)) store_refuse(key, steps, r);
+        bool stored = expect && store_checked(key);
+        char *rs = expect && !stored ? store_refused(key) : NULL;   /* refused before (t43) */
+        char *r = stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-data", word(di), ent), &steps), *tr = strdup("ok");
+        if (rs) stored = true; else if (expect && strcmp(r, tr)) store_refuse(key, steps, r);
         bool accepted = !strcmp(r, tr), ok = accepted == expect;
         if (ok) passes++; else failures++;
-        if (!trusted) { printf("%s: %s data %s   ", ok ? "ok" : "FAIL", expect ? "checks" : "rejected", DATA[d].name); if (stored) printf("[store]\n"); else printf("[%ld steps]\n", steps); }
+        { printf("%s: %s data %s   ", ok ? "ok" : "FAIL", expect ? "checks" : "rejected", DATA[d].name); if (stored) printf("[store]\n"); else printf("[%ld steps]\n", steps); }
         if (!accepted && (expect || getenv("CUBICAL_WHY"))) explain(r, nl3("%%chk-data", word(di), ent));
         free(r); free(tr);
         if (!accepted) { nchkdata--; free(kcode); return; }
@@ -4304,13 +4174,13 @@ static void toplevel_in(Node *f) {
         table_set(TB_TRANS, di, global_lookup(cp));
         long steps = 0;
         char key[65]; char *kcode = NULL; key_decl(dd, key, &kcode);
-        bool stored = expect && !trusted && store_checked(key);
-        char *rs = expect && !trusted && !stored ? store_refused(key) : NULL;   /* refused before (t43) */
-        char *r = trusted || stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-codata", word(di), ent), &steps);
-        if (rs) stored = true; else if (expect && !trusted && strcmp(r, "ok")) store_refuse(key, steps, r);
+        bool stored = expect && store_checked(key);
+        char *rs = expect && !stored ? store_refused(key) : NULL;   /* refused before (t43) */
+        char *r = stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-codata", word(di), ent), &steps);
+        if (rs) stored = true; else if (expect && strcmp(r, "ok")) store_refuse(key, steps, r);
         bool accepted = !strcmp(r, "ok"), ok = accepted == expect;
         if (ok) passes++; else failures++;
-        if (!trusted) { printf("%s: %s codata %s   ", ok ? "ok" : "FAIL", expect ? "checks" : "rejected", D); if (stored) printf("[store]\n"); else printf("[%ld steps]\n", steps); }
+        { printf("%s: %s codata %s   ", ok ? "ok" : "FAIL", expect ? "checks" : "rejected", D); if (stored) printf("[store]\n"); else printf("[%ld steps]\n", steps); }
         if (!accepted && (expect || getenv("CUBICAL_WHY"))) explain(r, nl3("%%chk-codata", word(di), ent));
         free(r);
         if (!accepted) { nchkdata--; free(kcode); return; }
@@ -4969,122 +4839,30 @@ static void key_mix(const char *b, size_t n) {
         run_key[1] = (run_key[1] ^ (unsigned char)b[i]) * 0x1000193ull + (run_key[1] >> 29);
     }
 }
-static const char *cache_dir(void) { const char *d = getenv("CUBICAL_CACHE"); return d ? d : ".cubical-cache"; }
 static void load_file(const char *path, bool must) {
     char *rp = realpath(path, NULL);
     if (!rp) die("cannot open", path);
     for (int i = 0; i < nloaded; i++) if (!strcmp(loaded[i], rp)) { free(rp); return; }
     GROW(loaded, caploaded, (size_t)nloaded + 1); loaded[nloaded++] = rp;
-    char *text = slurp(rp);
     size_t pl = strlen(rp);
-    if (pl > 4 && !strcmp(rp + pl - 4, ".cub")) {
-/* t41 (2026-11-12): two incremental mechanisms overlap. This per-file cache replays a file's
- * elaborated and compiled forms when the hash of every text loaded so far is unchanged, so editing
- * a comment in any earlier file invalidates every later file. The store (src/store.c) already
- * identifies each checked definition by the content of its canonical form, independent of names,
- * files and positions, and skips checking a definition it holds a certificate for. Measured on the
- * library: cold 64 s; store warm, this cache off 29 s; both warm 4.7 s. With this cache warm the
- * run also reports 1,799 passed instead of 1,907, so its reporting differs from a full run's. One
- * mechanism keyed by content at the granularity of a definition, covering elaboration and
- * compilation as well as checking, would subsume both.
- * 2026-11-12, what each per-definition step depends on (read in src/syntax.c and here):
- * - Elaboration of a declaration (syntax.c, the round loop near x_solve_expr and the
- *   definition's): its text, the scope (which global, constructor, field or fixity each name
- *   resolves to) and the types of the definitions it references. Implicit arguments are holes,
- *   solved by running the checker (%chk-def / %infer-ok answer "elab" solutions) up to 400 rounds.
- *   The store's key is a function of the elaborated output, so it can only be consulted once
- *   every hole is solved, so a warm store still pays every solving round (inferred to be most of
- *   the 29 s; measured later the same day, that inference was wrong: see t61).
- * - Compilation (compile_top) depends on the core term and the referenced globals.
- * - Checking (%chk-def) depends on the core term's key and the checker.
- * Observed in src/net.c the same day: the evaluator already keys every term by its structure and
- * keeps one value per live key, but a reference to a definition is keyed by its index in the
- * current run (key_global), and an entry lives only while something holds it. The trusted replay
- * below (trusted = true: nothing in the file is checked) is a second trust root beside the store's
- * certificates. */
-        /* the surface language: its imports first, then the running key, then its declarations */
-        const char *saved_dir = cur_dir;
-        char *dir = strdup(rp); char *sl = strrchr(dir, '/'); if (sl) *sl = 0;
-        cur_dir = dir;
-        load_surface(text, rp, true);
-        /* the libraries before this file (item 17's specialization keys): its own text mixed after */
-        cur_file = ++file_serial;
-        key_mix(text, strlen(text)); lib_mix(text);
-        char key[40]; snprintf(key, sizeof key, "%016llx%016llx", (unsigned long long)run_key[0], (unsigned long long)run_key[1]);
-        char *marker = malloc(strlen(cache_dir()) + 48); sprintf(marker, "%s/%s", cache_dir(), key);
-        bool saved_trusted = trusted;
-        char *cached = NULL;
-        { FILE *mf = getenv("CUBICAL_NOCACHE") ? NULL : fopen(marker, "r"); trusted = mf != NULL; if (mf) fclose(mf); }
-        if (trusted) cached = slurp(marker);
-        /* this module's recorded forms: read (cached) or recorded (checked now) */
-        FILE *s_rec = xrec; bool s_recbad = xrec_bad; Node **s_rep = xrep; int s_nrep = nxrep, s_irep = ixrep; bool s_repbad = xrep_bad;
-        FILE *s_ccout = cc_out; const unsigned char *s_ccin = cc_in, *s_ccend = cc_end; bool s_ccbad = cc_bad;
-        char *recbuf = NULL; size_t reclen = 0, cclen = 0; char *ccbuf = NULL; unsigned char *ccblob = NULL;
-        char *ccpath = malloc(strlen(marker) + 4); sprintf(ccpath, "%s.c", marker);   /* the compiled forms, beside the recorded ones */
-        xrec = NULL; xrec_bad = false; xrep = NULL; nxrep = ixrep = 0; xrep_bad = false;
-        cc_out = NULL; cc_in = cc_end = NULL; cc_bad = false;
-        if (cached) {
-            const char *saved = src; src = strchr(cached, '\n'); src = src ? src + 1 : cached + strlen(cached);
-            Node *f; size_t cap = 0; xrep = NULL;
-            while ((f = read_node())) { GROW(xrep, cap, (size_t)nxrep + 1); xrep[nxrep++] = f; }
-            src = saved;
-            if (!xrep) { xrep = malloc(sizeof(Node *)); }   /* no forms recorded: every form a mismatch */
-            FILE *cf = fopen(ccpath, "rb");
-            if (cf) {
-                fseek(cf, 0, SEEK_END); long n = ftell(cf); fseek(cf, 0, SEEK_SET);
-                if (n > 0) { ccblob = malloc((size_t)n); if (fread(ccblob, 1, (size_t)n, cf) == (size_t)n) { cc_in = ccblob; cc_end = ccblob + n; } }
-                fclose(cf);
-            }
-        } else if (!getenv("CUBICAL_NOCACHE")) { xrec = open_memstream(&recbuf, &reclen); cc_out = open_memstream(&ccbuf, &cclen); }
-        int f0 = failures;
-        bool saved_os = out_surface; out_surface = !getenv("CUBICAL_CORE_OUT");
-        load_surface(text, rp, false);
-        out_surface = saved_os;
-        if (xrec) fclose(xrec);
-        if (cc_out) fclose(cc_out);
-        if (trusted) {
-            printf("cached: %s\n", path);
-            if (xrep_bad || ixrep != nxrep) printf("warning: the cache of %s does not match its forms; elaborated forms used where they differ\n", path);
-            if (cc_bad) printf("warning: the compiled forms of %s do not match; compiled again where they differ\n", path);
-        } else if (failures == f0 && !getenv("CUBICAL_NOCACHE") && !xrec_bad) {
-            mkdir(cache_dir(), 0777);
-            FILE *mk = fopen(marker, "w"); if (mk) { fputs(rp, mk); fputc('\n', mk); if (recbuf) fputs(recbuf, mk); fclose(mk); }
-            if (ccbuf) { FILE *cf = fopen(ccpath, "wb"); if (cf) { fwrite(ccbuf, 1, cclen, cf); fclose(cf); } }
-        }
-        free(recbuf); free(ccbuf); free(ccblob); free(ccpath); free(cached); free(xrep);
-        xrec = s_rec; xrec_bad = s_recbad; xrep = s_rep; nxrep = s_nrep; ixrep = s_irep; xrep_bad = s_repbad;
-        cc_out = s_ccout; cc_in = s_ccin; cc_end = s_ccend; cc_bad = s_ccbad;
-        trusted = saved_trusted; cur_dir = saved_dir;
-        free(marker);
-        return;
-    }
-    die("refused: a file of core forms is outside the type system; only .cub files load:", path);
-    /* its imports first (they extend the running key before this file does) */
-    {
-        const char *saved = src; src = text;
-        Node *f; Node **fs = NULL; size_t capfs = 0; int nf = 0;
-        while ((f = read_node())) { GROW(fs, capfs, (size_t)nf + 1); fs[nf++] = f; }
-        src = saved;
-        const char *saved_dir = cur_dir;
-        char *dir = strdup(rp); char *sl = strrchr(dir, '/'); if (sl) *sl = 0;
-        cur_dir = dir;
-        for (int i = 0; i < nf; i++) if (fs[i]->list && fs[i]->n >= 1 && is(fs[i]->it[0], "import")) toplevel(fs[i]);
-        key_mix(text, strlen(text)); lib_mix(text);
-        char key[40]; snprintf(key, sizeof key, "%016llx%016llx", (unsigned long long)run_key[0], (unsigned long long)run_key[1]);
-        char *marker = malloc(strlen(cache_dir()) + 48); sprintf(marker, "%s/%s", cache_dir(), key);
-        bool saved_trusted = trusted;
-        { FILE *mf = getenv("CUBICAL_NOCACHE") ? NULL : fopen(marker, "r"); trusted = mf != NULL; if (mf) fclose(mf); }
-        int f0 = failures;
-        for (int i = 0; i < nf; i++) if (!(fs[i]->list && fs[i]->n >= 1 && is(fs[i]->it[0], "import"))) toplevel(fs[i]);
-        if (trusted) printf("cached: %s\n", path);
-        else if (failures == f0 && !getenv("CUBICAL_NOCACHE")) {
-            mkdir(cache_dir(), 0777);
-            FILE *mk = fopen(marker, "w"); if (mk) { fputs(rp, mk); fputc('\n', mk); fclose(mk); }
-        }
-        trusted = saved_trusted;
-        cur_dir = saved_dir;
-        free(marker); free(fs);
-    }
+    if (pl <= 4 || strcmp(rp + pl - 4, ".cub")) die("refused: a file of core forms is outside the type system; only .cub files load:", path);
+    char *text = slurp(rp);
+    /* the surface language: its imports first, then the running key, then its declarations. What is
+     * remembered between runs is the store's, per definition and by content (src/store.c): the
+     * elaboration, the checker's answer, accepted or refused (2026-11-12: the per-file cache that
+     * replayed a file's forms when every text before it was unchanged, a second trust root that
+     * reported 1,799 passed for the library's 1,907, is gone) */
+    const char *saved_dir = cur_dir;
+    char *dir = strdup(rp); char *sl = strrchr(dir, '/'); if (sl) *sl = 0;
+    cur_dir = dir;
+    load_surface(text, rp, true);
+    /* the libraries before this file (item 17's specialization keys): its own text mixed after */
+    cur_file = ++file_serial;
+    key_mix(text, strlen(text)); lib_mix(text);
+    bool saved_os = out_surface; out_surface = !getenv("CUBICAL_CORE_OUT");
+    load_surface(text, rp, false);
+    out_surface = saved_os;
+    cur_dir = saved_dir;
     (void)must;
 }
 static void prof_print(void);
