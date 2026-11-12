@@ -96,7 +96,7 @@ def records():
     """the ticket records of work/tickets.cub: number -> (kind, goals, status)"""
     src = open(os.path.join(ROOT, 'work', 'tickets.cub'), encoding='utf-8').read()
     out = {}
-    for m in re.finditer(r'^t(\d+) = ticket (\S+) (.*?) (opened|closed #(\d+))\s*$', src, re.M):
+    for m in re.finditer(r'^t(\d+) = ticket (\S+) (.*?) (opened|\(closed #(\d+)\))\s*$', src, re.M):
         goals = [g for g in re.findall(r'[\w-]+', m.group(3)) if g not in ('cons', 'nil')]
         out[int(m.group(1))] = (m.group(2), goals, 'open' if m.group(4) == 'opened' else 'closed ' + m.group(5))
     return out

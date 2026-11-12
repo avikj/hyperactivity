@@ -28,7 +28,7 @@ implementation is exactly the calculus is not known.
 - `lib/work.cub` — what a ticket and a goal are (general).
 - `work/goals.cub` — the goals; each goal's statement is the comment above its `serves` clause.
 - `work/tickets.cub` — one checked record per ticket: its kind (`wrong`, `maybe-wrong`,
-  `needs-work`, `question`), the goals it serves, `opened` or `closed #YYYYMMDD`.
+  `needs-work`, `question`), the goals it serves, `opened` or `(closed #YYYYMMDD)`.
 - A ticket's text is the one comment `tN (YYYY-MM-DD): ...` at the place in the code it concerns,
   so a reader of that place sees it without knowing the ticket exists.
 
@@ -42,7 +42,7 @@ python3 tools/work.py next            # the next free ticket number
 
 The rule: whenever anything in the code is seen to be wrong, possibly wrong, owed work, or not
 known, it becomes a ticket at once, its dated text at the site. Closing one: fix it, delete the
-comment, set the record `closed #date`, in one commit.
+comment, set the record `(closed #date)`, in one commit.
 
 ## Status of knowledge (measured 2026-11-12 unless dated)
 
