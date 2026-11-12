@@ -389,7 +389,7 @@ def reading():
         if os.path.exists(kp): text = open(kp, encoding='utf-8').read()
         else:
             print(f'reading {f}', file=sys.stderr, flush=True)
-            r = subprocess.run([binary, f, '--serve'], cwd=ROOT, input='#uses\n.\n', capture_output=True,
+            r = subprocess.run([binary, '--read', f, '--serve'], cwd=ROOT, input='#uses\n.\n', capture_output=True,
                                text=True, env=env)
             text = '\n'.join(l for l in r.stdout.split('\n') if l.startswith('uses '))
             open(kp, 'w', encoding='utf-8').write(text)

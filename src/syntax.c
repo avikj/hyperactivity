@@ -1552,6 +1552,10 @@ static void p_decl_in(void) {
             ck[i] = checked_index(fn[i]->s); if (ck[i] < 0) x_sem("#build-loop: not a checked definition:", fn[i]);
         }
         Tok *pt = NX(); if (pt->k != X_STR) x_err("#build-loop: the file to write, a string, expected after", fn[3]);
+        if (read_only) {   /* read, not performed: its uses recorded */
+            Node *b = nlist(5); b->it[0] = nsym("build"); for (int i = 0; i < 4; i++) b->it[i + 1] = nsym(fn[i]->s);
+            ud_form(b); printf("build-loop %s: not performed (--read)\n", fn[0]->s); decl_end(); return;
+        }
         if (checked_index("build-loop-plan") < 0) x_sem("#build-loop: refused: the compiler it calls (build-loop-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn[0]);
         if (!checked_type_plain(ck[0])) { failures++; printf("FAIL: build-loop %s: its type is not first-order data without byte strings\n", fn[0]->s); decl_end(); return; }
         long steps = 0;
@@ -1590,6 +1594,7 @@ static void p_decl_in(void) {
         NX(); Tok *fn = NX(); if (fn->k != X_ID) x_err("#build names a checked definition, found", fn);
         int ck = checked_index(fn->s); if (ck < 0) x_sem("#build: not a checked definition:", fn);
         Tok *pt = NX(); if (pt->k != X_STR) x_err("#build: the file to write, a string, expected after", fn);
+        if (read_only) { ud_form(lst(2, nsym("build"), nsym(fn->s))); printf("build %s: not performed (--read)\n", fn->s); decl_end(); return; }   /* read, not performed */
         if (checked_index("build-plan") < 0) x_sem("#build: refused: the compiler it calls (build-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn);
         long steps = 0;
         char *r = readback(nl2("%%build-plan", wordn(ck)), &steps);

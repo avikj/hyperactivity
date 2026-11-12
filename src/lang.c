@@ -3659,6 +3659,10 @@ static int ud_new(const char *p) {
     return nud++;
 }
 static int ud_owner = -1; static char ud_pos[512];
+/* --read: what is declared is read and checked; commands that act on the world (#run, #build,
+ * #build-loop) are read, not performed (a check of every file and the reading of every
+ * declaration's uses do not perform a program's effects) */
+static bool read_only;
 /* the declaration a form belongs to: the one already holding the name it defines (its signature, or
  * a `declare` emitted where it was used before being defined), else the one at the form's position */
 static int ud_cur(const char *defines) {
@@ -3728,7 +3732,7 @@ static void ud_form(Node *f) {
     bool decl = !strcmp(h, "def") || !strcmp(h, "declare") || !strcmp(h, "checked") || !strcmp(h, "primitive")
         || !strcmp(h, "primitive-tick") || !strcmp(h, "data") || !strcmp(h, "checked-data") || !strcmp(h, "check-data");
     static const char *const cmds[] = { "check", "check-fail", "checked-fail", "checked-data-fail", "checked-codata-fail",
-        "mutual-fail", "same", "show", "same-watch", "observe", "layout", "fo", "native", "native-c", "native-at", "run", NULL };
+        "mutual-fail", "same", "show", "same-watch", "observe", "layout", "fo", "native", "native-c", "native-at", "run", "build", NULL };
     if (!decl) {   /* a command: a declaration of the reading too, joining the definition at its position if any */
         for (int i = 0; cmds[i]; i++) if (!strcmp(h, cmds[i])) {
             int o = ud_cur(NULL);
@@ -4597,6 +4601,7 @@ static void toplevel_in(Node *f) {
     } else if (!strcmp(h, "run")) {
         /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c, D26) */
         if (f->n != 2) die("(run step)", NULL);
+        if (read_only) { printf("run: not performed (--read)\n"); return; }
         drivers_run(f->it[1]);
     } else if (!strcmp(h, "trusted")) {
         /* #trusted: the postulates and primitives in scope */
@@ -4980,12 +4985,14 @@ int main(int argc, char **argv)
         fflush(stdout); int so = dup(1); conv_out = fdopen(so, "w");
         FILE *nul = fopen("/dev/null", "w"); dup2(fileno(nul), 1);
     }
+    for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--read")) read_only = true;
     for (int i = 1; i < argc; i++) {
         /* --print f: f's core forms in the surface language; --roundtrip f: each printed form parsed
          * back and compared, while f is loaded */
         if (!strcmp(argv[i], "--print") && i + 1 < argc) { convert_file(argv[++i], false); fflush(stdout); _Exit(0); }
         if (!strcmp(argv[i], "--roundtrip") && i + 1 < argc) { convert_file(argv[++i], true); continue; }
         if (!strcmp(argv[i], "--serve")) continue;
+        if (!strcmp(argv[i], "--read")) continue;
         load_file(argv[i], true);
     }
     for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--serve")) serve();
