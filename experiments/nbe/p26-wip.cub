@@ -31,16 +31,19 @@
 -- papp-nat-d, pcf-in, pdf-in; cmap-diag-d with CDD, pc6-d; diag-deg-d, papp-deg-d with PLD,
 -- papp-lit-deg-d … papp-dnf-from-deg-d, pcf-deg-in, pdf-deg-in; cmap-const-d; cmap-d-comp): (4r-d)
 -- entire; then (2026-11-12, latest) (4d) in part: RenAtC, renatc-0, renatc-keep (RenAt, renat-0,
--- renat-keep their instances), dp-keep (used by world-dkeep), cco, pc4, cmap-papp-lit, cpcf-in,
--- cmap-papp-conj-from, cmap-papp-conj, cpdf-in, cmap-papp-dnf-from, cmap-papp, ccd, CPL,
--- cmap-papp-lit-d … cmap-papp-d, carry-uniq; then (2026-11-12, latest) (5) but comp-ren: pull-gen, pull-genc,
+-- renat-keep their instances), dp-keep (used by world-dkeep), cco, ccd, carry-uniq; then (2026-11-12, latest) (5) but comp-ren: pull-gen, pull-genc,
 -- carry-pcat, carry-nat, diag-pull (DPull, dsk-ty … ddm-dim, dp-cc, dp-dim-f), PullT, pull-chain, revc …
 -- joing, plb, pld, plm, papp-lit-pull … papp-pull (pcf-pull-out, pdf-pull-out), const-pull, cmap-d-pull,
--- pull-move, pull-pull, sc-* (sc-path, sc-carry), subM-comp.
--- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "741 passed, 0 failed").
--- What is next: (4d)(i)–(iii) as listed in lib/nbe.cub's head under "Remaining, in order" (the squares
--- cmap-papp-deg and dmap-papp-deg, which subM-papp needs for the stated reason, then subM-papp; the
--- refl alternative was tested and is not available, recorded at the finding), (6) (comp-ren with CompS), the swap of this file's families into lib/nbe.cub in place of P1's.
+-- pull-move, pull-pull, sc-* (sc-path, sc-carry), subM-comp; then (2026-11-12, latest) (4d) re-planned
+-- (lib/nbe.cub's head, the (4d) findings): papp-mean is path application over degenerate lines
+-- (dcube-unreidx, DL, diag-dd, papp-lit-dd, ddR, ddU, ddconn, papp-conj-from-dd … papp-dd, after
+-- papp-cube-d), with no base path; its commutation with pulls (pdl, pull-sw, DDPull, diag-dd-pull, pc5,
+-- upull, dd-conn-pull, papp-lit-dd-pull … papp-dd-pull, after carry-nat); cmap-papp and its dependent
+-- forms deleted (built for the dropped route; nothing used them).
+-- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "748 passed, 0 failed").
+-- What is next: (4d) as listed in lib/nbe.cub's head under "Remaining, in order": the steps of dd-cmap
+-- (cmap-d commutes with papp-dd), then subM-papp; then (6) (comp-ren with CompS), the swap of this
+-- file's families into lib/nbe.cub in place of P1's.
 
 -- lib/nbe.cub — typed codes Code(Γ, A) = Σ c. Der(Γ, c, A) over the one representation of terms
 -- (lib/code.cub's Code), their evaluation, and normalization by evaluation with its soundness
@@ -901,6 +904,67 @@ papp-cube-d : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (f : DNF) (c : Cu
   DCube (suc (dims sk)) X F c → DCube (dims sk) X F (papp-cube sk X f c)
 papp-cube-d sk X F lnil c d = dcube-reidx (dims sk) (Line X) X (LineO X F) F (face0-l X) (face0-o X F) c d
 papp-cube-d sk X F (lcons cj cs) c d = papp-dnf-from-d sk X F #0 cj cs c d
+-- (2026-11-12, (4d)) path application on a cube over a cube whose base is degenerate in the applied
+-- direction (a path λ's body: dext's cube), landing over the base itself with no base path. The fibre
+-- over a degenerate line degen-l x is a line in the fibre (DL); each generator applied fibrewise to
+-- such lines is again over a degenerate line judgmentally (diag-l and exch-l of line-map degen-l L are
+-- L and degen-l L, rev-l and meet-l, join-l of degen-l x are degen-l x and degen-l (degen-l x), by
+-- projections), so the recursion of papp-cube-d runs with the base fixed; the connections pass through
+-- the skeleton with the new dimension by reindexing along the degeneracy and back (dcube-unreidx, the
+-- inverse direction of dcube-reidx, by recursion on n with no path). papp-mean is papp-dd.
+dcube-unreidx : (n : Nat) (X X' : Type 1) (F' : X' → Type 1) (f : X → X') (c : Cube n X) →
+  DCube n X' F' (cube-map n X X' f c) → DCube n X (λ x → F' (f x)) c
+dcube-unreidx zero X X' F' f c d = d
+dcube-unreidx (suc n) X X' F' f c d = dcube-unreidx n (Line X) (Line X') (LineO X' F') (line-map X X' f) c d
+DL : (X : Type 1) (F : X → Type 1) → X → Type 1
+DL X F x = LineO X F (degen-l X x)
+diag-dd : (sk : Lst Entry) (k : Word) (X : Type 1) (F : X → Type 1) (G : Cube (dims sk) X) → DCube (dims sk) X (DL X F) G → DCube (dims sk) X F G
+diag-dd lnil k X F G d = fst d
+diag-dd (lcons (e-ty s) sk) k X F G d =
+  bool-elim1 (λ b → DCube (dims sk) X F G)
+    (dcube-fmap (dims sk) X (DL X F) F (λ x q → fst q) G d)
+    (diag-dd sk (%wsub k #1) X F G d) (weq k #0)
+diag-dd (lcons e-dim sk) k X F G d =
+  bool-elim1 (λ b → DCube (dims sk) (Line X) (LineO X F) G)
+    (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (LineO X F) (λ L q → diag-o X F (line-map X (Line X) (degen-l X) L) q) G d)
+    (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (λ L q → exch-o X F (line-map X (Line X) (degen-l X) L) q) G d))
+    (weq k #0)
+papp-lit-dd : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (o : Word) (l : Lit) (G : Cube (dims sk) X) → DCube (dims sk) X (DL X F) G → DCube (dims sk) X F G
+papp-lit-dd sk X F o l G d =
+  bool-elim1 (λ b → DCube (dims sk) X F G)
+    (diag-dd sk (%wadd (fst l) o) X F G d)
+    (diag-dd sk (%wadd (fst l) o) X F G (dcube-fmap (dims sk) X (DL X F) (DL X F) (λ x q → rev-o X F (degen-l X x) q) G d))
+    (snd l)
+-- the connections: the generator gen (meet-o, join-o) applied to each fibre line, reindexed along the
+-- degeneracy into the skeleton with the connection's dimension in front (ddR), the operation there
+-- (inner), back (ddU), and the operation at the rest (outer)
+ddR : (n : Nat) (X : Type 1) (F : X → Type 1) (gen : (x : X) → DL X F x → LineO X (DL X F) (degen-l X x)) (G : Cube n X) →
+  DCube n X (DL X F) G → DCube (suc n) X (DL X F) (cube-map n X (Line X) (degen-l X) G)
+ddR n X F gen G d = dcube-reidx n X (Line X) (DL X F) (LineO X (DL X F)) (degen-l X) gen G d
+ddU : (n : Nat) (X : Type 1) (F : X → Type 1) (G : Cube n X) → DCube (suc n) X F (cube-map n X (Line X) (degen-l X) G) → DCube n X (DL X F) G
+ddU n X F G d = dcube-unreidx n X (Line X) (LineO X F) (degen-l X) G d
+ddconn : (n : Nat) (gen : (Z : Type 1) (H : Z → Type 1) (x : Z) → DL Z H x → LineO Z (DL Z H) (degen-l Z x))
+  (outer : (Z : Type 1) (H : Z → Type 1) (G : Cube n Z) → DCube n Z (DL Z H) G → DCube n Z H G)
+  (inner : (Z : Type 1) (H : Z → Type 1) (G : Cube (suc n) Z) → DCube (suc n) Z (DL Z H) G → DCube (suc n) Z H G)
+  (X : Type 1) (F : X → Type 1) (G : Cube n X) → DCube n X (DL X F) G → DCube n X F G
+ddconn n gen outer inner X F G d = outer X F G (ddU n X F G (inner X F (cube-map n X (Line X) (degen-l X) G) (ddR n X F (gen X F) G d)))
+papp-conj-from-dd : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (o : Word) (l : Lit) (ms : Conj) (G : Cube (dims sk) X) → DCube (dims sk) X (DL X F) G → DCube (dims sk) X F G
+papp-conj-from-dd sk X F o l lnil G d = papp-lit-dd sk X F o l G d
+papp-conj-from-dd sk X F o l (lcons m ms) G d =
+  ddconn (dims sk) (λ Z H x q → meet-o Z H (degen-l Z x) q) (λ Z H G' q → papp-lit-dd sk Z H o l G' q)
+    (λ Z H G' q → papp-conj-from-dd (lcons e-dim sk) Z H (%wsucc o) m ms G' q) X F G d
+papp-conj-dd : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (o : Word) (cj : Conj) (G : Cube (dims sk) X) → DCube (dims sk) X (DL X F) G → DCube (dims sk) X F G
+papp-conj-dd sk X F o lnil G d = dcube-fmap (dims sk) X (DL X F) F (λ x q → fst (snd q)) G d
+papp-conj-dd sk X F o (lcons l ls) G d = papp-conj-from-dd sk X F o l ls G d
+papp-dnf-from-dd : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (o : Word) (cj : Conj) (ds : DNF) (G : Cube (dims sk) X) → DCube (dims sk) X (DL X F) G → DCube (dims sk) X F G
+papp-dnf-from-dd sk X F o cj lnil G d = papp-conj-dd sk X F o cj G d
+papp-dnf-from-dd sk X F o cj (lcons e es) G d =
+  ddconn (dims sk) (λ Z H x q → join-o Z H (degen-l Z x) q) (λ Z H G' q → papp-conj-dd sk Z H o cj G' q)
+    (λ Z H G' q → papp-dnf-from-dd (lcons e-dim sk) Z H (%wsucc o) e es G' q) X F G d
+papp-dd : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (f : DNF) (G : Cube (dims sk) X) → DCube (dims sk) X (DL X F) G → DCube (dims sk) X F G
+papp-dd sk X F lnil G d = dcube-fmap (dims sk) X (DL X F) F (λ x q → fst q) G d
+papp-dd sk X F (lcons cj cs) G d = papp-dnf-from-dd sk X F #0 cj cs G d
 
 -- ---------------------------------------------------------------- P2.6a: contexts and meanings over cubes
 -- (2026-11-12) A context over a skeleton is a cube of the skeleton's contexts, one direction per
@@ -1302,13 +1366,13 @@ plam-body Γ a X =
 -- carrying a cube over a base along a path of bases (the form fmap-transp is about)
 carry : (n : Nat) (X : Type 1) (F : X → Type 1) (c0 c1 : Cube n X) → PathP (λ i → Cube n X) c0 c1 → DCube n X F c0 → DCube n X F c1
 carry n X F c0 c1 p d = comp (λ i → DCube n X F (p i)) (λ i → []) d
--- the meaning of a path applied at a canonical form f: the path's body over dext Γ applied at f
--- (papp-cube-d), carried back over Γ along papp-deg
+-- the meaning of a path applied at a canonical form f: each vertex's path read as a line over the
+-- degenerate line of its context (plam-line), then path application over degenerate lines (papp-dd),
+-- over Γ's own cube
 papp-mean : (Γ : CCtx) (a : TyShape) (f : DNF) → Mean Γ (TV (s-path a)) → Mean Γ (TV a)
 papp-mean Γ a f P =
-  carry (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV a))
-    (papp-cube (fst Γ) (CtxV (fst Γ)) f (snd (dext Γ))) (snd Γ) (papp-deg (fst Γ) (CtxV (fst Γ)) f (snd Γ))
-    (papp-cube-d (fst Γ) (CtxV (fst Γ)) (FbE (fst Γ) (TV a)) f (snd (dext Γ)) (plam-body Γ a P))
+  papp-dd (fst Γ) (CtxV (fst Γ)) (FbE (fst Γ) (TV a)) f (snd Γ)
+    (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV (s-path a))) (DL (CtxV (fst Γ)) (FbE (fst Γ) (TV a))) (plam-line (fst Γ) a) (snd Γ) P)
 -- a path between meanings, as a named type: a PathP over a path λ in a constructor's field is refused
 -- (t52; workaround: this definition, used by npapp and dpapp)
 PathM : (Γ : CCtx) (Z : Type 1) → Mean Γ Z → Mean Γ Z → Type 1
@@ -4167,197 +4231,14 @@ cmap-d-comp sk2 sk1 (lcons e-dim sk) r2 r1 dp2 X F c d =
     (λ i → diag-sk-d sk2 (r2 (r1 #0)) X F (cmap-comp sk2 sk1 sk r2 (λ k → r1 (%wsucc k)) dp2 (Line X) c i) (cmap-d-comp sk2 sk1 sk r2 (λ k → r1 (%wsucc k)) dp2 (Line X) (LineO X F) c d i))
     (λ i → papp-var-d sk2 X F (r2 (r1 #0)) (cmap-cube sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) c) (cmap-d sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) (LineO X F) c d) (~ i))
 
--- ---------------------------------------------------------------- (4d) path application commutes with a dimension part
--- (2026-11-12, (4d)) cmap-papp: the action of the dimension part of r (cco, an abbreviation of
--- cmap-cube at cmap-of) commutes with path application at a canonical form, the form renamed by r;
--- each clause is papp-ren's with ope-cube replaced by cco, ope-nat by cmap-nat, diag-ren by cmap-diag
--- (r dimension-preserving), and at each connection the kept renaming w-keep r over the kept
--- skeletons (dp-keep, renatc-keep), whose action is cco's at Line only up to cmap-keep e-dim
--- (the inner chains cpcf-in, cpdf-in)
+-- ---------------------------------------------------------------- (4d) the action of a dimension part of a renaming
+-- (2026-11-12, (4d)) cco and ccd: the actions of the dimension part of r (cmap-of) on cubes and on cubes
+-- over cubes, abbreviations; kept for dd-cmap (next under "Remaining, in order": cmap-d commutes with
+-- papp-dd)
 cco : (sk' sk : Lst Entry) (r : Word → Word) (Y : Type 1) → Cube (dims sk) Y → Cube (dims sk') Y
 cco sk' sk r Y c = cmap-cube sk' sk (cmap-of sk' sk r) Y c
-pc4 : (A : Type 1) (x0 x1 x2 x3 x4 : A) → PathP (λ i → A) x0 x1 → PathP (λ i → A) x1 x2 → PathP (λ i → A) x2 x3 → PathP (λ i → A) x3 x4 → PathP (λ i → A) x0 x4
-pc4 A x0 x1 x2 x3 x4 p1 p2 p3 p4 = pcat A x0 x1 x4 p1 (pcat A x1 x2 x4 p2 (pcat A x2 x3 x4 p3 p4))
-cmap-papp-lit : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) → RenAtC r r0 o → DimPres sk' sk r → (l : Lit) (X : Type 1) (c : Cube (suc (dims sk)) X) →
-  PathP (λ i → Cube (dims sk') X) (papp-lit sk' X o (lit-r r0 l) (cco sk' sk r (Line X) c)) (cco sk' sk r X (papp-lit sk X o l c))
-cmap-papp-lit sk' sk r r0 o hr dp l X c =
-  bool-elim1 (λ b → PathP (λ i → Cube (dims sk') X)
-                 (if b then diag-sk sk' (%wadd (r0 (fst l)) o) X (cco sk' sk r (Line X) c)
-                  else diag-sk sk' (%wadd (r0 (fst l)) o) X (cube-map (dims sk') (Line X) (Line X) (rev-l X) (cco sk' sk r (Line X) c)))
-                 (cco sk' sk r X (if b then diag-sk sk (%wadd (fst l) o) X c
-                                  else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c))))
-    (pcat (Cube (dims sk') X) (diag-sk sk' (%wadd (r0 (fst l)) o) X (cco sk' sk r (Line X) c))
-       (diag-sk sk' (r (%wadd (fst l) o)) X (cco sk' sk r (Line X) c)) (cco sk' sk r X (diag-sk sk (%wadd (fst l) o) X c))
-       (λ i → diag-sk sk' (hr (fst l) (~ i)) X (cco sk' sk r (Line X) c)) (cmap-diag sk' sk r dp (%wadd (fst l) o) X c))
-    (pcat (Cube (dims sk') X)
-       (diag-sk sk' (%wadd (r0 (fst l)) o) X (cube-map (dims sk') (Line X) (Line X) (rev-l X) (cco sk' sk r (Line X) c)))
-       (diag-sk sk' (r (%wadd (fst l) o)) X (cco sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
-       (cco sk' sk r X (diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
-       (λ i → diag-sk sk' (hr (fst l) (~ i)) X (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line X) (rev-l X) c (~ i)))
-       (cmap-diag sk' sk r dp (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
-    (snd l)
--- the rest of a conjunction under the kept renaming: under cmap-nat (meet-l), cmap-keep at Line, the
--- hypothesis ih (cmap-papp-conj-from at the kept renaming), cmap-keep
-cpcf-in : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (m : Lit) (ms : Conj) (X : Type 1) (c : Cube (suc (dims sk)) X) →
-  PathP (λ i → Cube (suc (dims sk')) X)
-    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-    (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))) →
-  PathP (λ i → Cube (suc (dims sk')) X)
-    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c)))
-    (cco sk' sk r (Line X) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-cpcf-in sk' sk r r0 o m ms X c ih =
-  pc4 (Cube (suc (dims sk')) X)
-    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c)))
-    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco sk' sk r (Line (Line X)) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-    (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-    (cco sk' sk r (Line X) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-    (λ j → papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line (Line X)) (meet-l X) c (~ j)))
-    (λ j → papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cmap-keep e-dim sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (~ j)))
-    ih
-    (cmap-keep e-dim sk' sk r X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-cmap-papp-conj-from : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) → RenAtC r r0 o → DimPres sk' sk r → (l : Lit) (ms : Conj) (X : Type 1) (c : Cube (suc (dims sk)) X) →
-  PathP (λ i → Cube (dims sk') X) (papp-conj-from sk' X o (lit-r r0 l) (conj-r r0 ms) (cco sk' sk r (Line X) c)) (cco sk' sk r X (papp-conj-from sk X o l ms c))
-cmap-papp-conj-from sk' sk r r0 o hr dp l lnil X c = cmap-papp-lit sk' sk r r0 o hr dp l X c
-cmap-papp-conj-from sk' sk r r0 o hr dp l (lcons m ms) X c =
-  pcat (Cube (dims sk') X)
-    (papp-lit sk' X o (lit-r r0 l) (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c))))
-    (papp-lit sk' X o (lit-r r0 l) (cco sk' sk r (Line X) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))))
-    (cco sk' sk r X (papp-conj-from sk X o l (lcons m ms) c))
-    (λ i → papp-lit sk' X o (lit-r r0 l) (cpcf-in sk' sk r r0 o m ms X c
-       (cmap-papp-conj-from (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) m ms X (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) i))
-    (cmap-papp-lit sk' sk r r0 o hr dp l X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-cmap-papp-conj : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) → RenAtC r r0 o → DimPres sk' sk r → (cj : Conj) (X : Type 1) (c : Cube (suc (dims sk)) X) →
-  PathP (λ i → Cube (dims sk') X) (papp-conj sk' X o (conj-r r0 cj) (cco sk' sk r (Line X) c)) (cco sk' sk r X (papp-conj sk X o cj c))
-cmap-papp-conj sk' sk r r0 o hr dp lnil X c =
-  psym (Cube (dims sk') X) (cco sk' sk r X (cube-map (dims sk) (Line X) X (face1-l X) c))
-    (cube-map (dims sk') (Line X) X (face1-l X) (cco sk' sk r (Line X) c)) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) X (face1-l X) c)
-cmap-papp-conj sk' sk r r0 o hr dp (lcons l ls) X c = cmap-papp-conj-from sk' sk r r0 o hr dp l ls X c
--- the rest of a disjunction likewise (join-l)
-cpdf-in : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (d : Conj) (ds : DNF) (X : Type 1) (c : Cube (suc (dims sk)) X) →
-  PathP (λ i → Cube (suc (dims sk')) X)
-    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-    (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))) →
-  PathP (λ i → Cube (suc (dims sk')) X)
-    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c)))
-    (cco sk' sk r (Line X) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-cpdf-in sk' sk r r0 o d ds X c ih =
-  pc4 (Cube (suc (dims sk')) X)
-    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c)))
-    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cco sk' sk r (Line (Line X)) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-    (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-    (cco sk' sk r (Line X) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-    (λ j → papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line (Line X)) (join-l X) c (~ j)))
-    (λ j → papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cmap-keep e-dim sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (~ j)))
-    ih
-    (cmap-keep e-dim sk' sk r X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-cmap-papp-dnf-from : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) → RenAtC r r0 o → DimPres sk' sk r → (cj : Conj) (ds : DNF) (X : Type 1) (c : Cube (suc (dims sk)) X) →
-  PathP (λ i → Cube (dims sk') X) (papp-dnf-from sk' X o (conj-r r0 cj) (dnf-r r0 ds) (cco sk' sk r (Line X) c)) (cco sk' sk r X (papp-dnf-from sk X o cj ds c))
-cmap-papp-dnf-from sk' sk r r0 o hr dp cj lnil X c = cmap-papp-conj sk' sk r r0 o hr dp cj X c
-cmap-papp-dnf-from sk' sk r r0 o hr dp cj (lcons d ds) X c =
-  pcat (Cube (dims sk') X)
-    (papp-conj sk' X o (conj-r r0 cj) (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 d) (dnf-r r0 ds) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c))))
-    (papp-conj sk' X o (conj-r r0 cj) (cco sk' sk r (Line X) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))))
-    (cco sk' sk r X (papp-dnf-from sk X o cj (lcons d ds) c))
-    (λ i → papp-conj sk' X o (conj-r r0 cj) (cpdf-in sk' sk r r0 o d ds X c
-       (cmap-papp-dnf-from (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) d ds X (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) i))
-    (cmap-papp-conj sk' sk r r0 o hr dp cj X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-cmap-papp : (sk' sk : Lst Entry) (r : Word → Word) → DimPres sk' sk r → (f : DNF) (X : Type 1) (c : Cube (suc (dims sk)) X) →
-  PathP (λ i → Cube (dims sk') X) (papp-cube sk' X (dnf-r r f) (cco sk' sk r (Line X) c)) (cco sk' sk r X (papp-cube sk X f c))
-cmap-papp sk' sk r dp lnil X c =
-  psym (Cube (dims sk') X) (cco sk' sk r X (cube-map (dims sk) (Line X) X (face0-l X) c))
-    (cube-map (dims sk') (Line X) X (face0-l X) (cco sk' sk r (Line X) c)) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) X (face0-l X) c)
-cmap-papp sk' sk r dp (lcons cj cs) X c = cmap-papp-dnf-from sk' sk r r #0 (renatc-0 r) dp cj cs X c
 ccd : (sk' sk : Lst Entry) (r : Word → Word) (Y : Type 1) (G : Y → Type 1) (c : Cube (dims sk) Y) → DCube (dims sk) Y G c → DCube (dims sk') Y G (cco sk' sk r Y c)
 ccd sk' sk r Y G c d = cmap-d sk' sk (cmap-of sk' sk r) Y G c d
--- the dependent forms (cmap-papp-lit-d … cmap-papp-d), each over its base lemma, by the same cases
-CPL : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (hr : RenAtC r r0 o) (dp : DimPres sk' sk r) (l : Lit) (X : Type 1) (F : X → Type 1) (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) → Type 1
-CPL sk' sk r r0 o hr dp l X F c d = PathP (λ i → DCube (dims sk') X F (cmap-papp-lit sk' sk r r0 o hr dp l X c i))
-  (papp-lit-d sk' X F o (lit-r r0 l) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)) (ccd sk' sk r X F (papp-lit sk X o l c) (papp-lit-d sk X F o l c d))
-cmap-papp-lit-d : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (hr : RenAtC r r0 o) (dp : DimPres sk' sk r) (l : Lit) (X : Type 1) (F : X → Type 1) (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) → CPL sk' sk r r0 o hr dp l X F c d
-cmap-papp-lit-d sk' sk r r0 o hr dp l X F c d =
-  bool-elim1 (λ b → CPL sk' sk r r0 o hr dp (fst l , b) X F c d)
-    (pcat-d (Cube (dims sk') X) (DCube (dims sk') X F)
-       (diag-sk sk' (%wadd (r0 (fst l)) o) X (cco sk' sk r (Line X) c)) (diag-sk sk' (r (%wadd (fst l) o)) X (cco sk' sk r (Line X) c)) (cco sk' sk r X (diag-sk sk (%wadd (fst l) o) X c))
-       (λ i → diag-sk sk' (hr (fst l) (~ i)) X (cco sk' sk r (Line X) c)) (cmap-diag sk' sk r dp (%wadd (fst l) o) X c)
-       (diag-sk-d sk' (%wadd (r0 (fst l)) o) X F (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)) (diag-sk-d sk' (r (%wadd (fst l) o)) X F (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)) (ccd sk' sk r X F (diag-sk sk (%wadd (fst l) o) X c) (diag-sk-d sk (%wadd (fst l) o) X F c d))
-       (λ i → diag-sk-d sk' (hr (fst l) (~ i)) X F (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)) (cmap-diag-d sk' sk r dp (%wadd (fst l) o) X F c d))
-    (pcat-d (Cube (dims sk') X) (DCube (dims sk') X F)
-       (diag-sk sk' (%wadd (r0 (fst l)) o) X (cube-map (dims sk') (Line X) (Line X) (rev-l X) (cco sk' sk r (Line X) c))) (diag-sk sk' (r (%wadd (fst l) o)) X (cco sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line X) (rev-l X) c))) (cco sk' sk r X (diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
-       (λ i → diag-sk sk' (hr (fst l) (~ i)) X (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line X) (rev-l X) c (~ i))) (cmap-diag sk' sk r dp (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c))
-       (diag-sk-d sk' (%wadd (r0 (fst l)) o) X F (cube-map (dims sk') (Line X) (Line X) (rev-l X) (cco sk' sk r (Line X) c)) (dcube-reidx (dims sk') (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)))
-       (diag-sk-d sk' (r (%wadd (fst l) o)) X F (cco sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)) (ccd sk' sk r (Line X) (LineO X F) (cube-map (dims sk) (Line X) (Line X) (rev-l X) c) (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d)))
-       (ccd sk' sk r X F (diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)) (diag-sk-d sk (%wadd (fst l) o) X F (cube-map (dims sk) (Line X) (Line X) (rev-l X) c) (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d)))
-       (λ i → diag-sk-d sk' (hr (fst l) (~ i)) X F (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line X) (rev-l X) c (~ i)) (cmap-nat-d sk' sk (cmap-of sk' sk r) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d (~ i)))
-       (cmap-diag-d sk' sk r dp (%wadd (fst l) o) X F (cube-map (dims sk) (Line X) (Line X) (rev-l X) c) (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d)))
-    (snd l)
-cpcf-in-d : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (m : Lit) (ms : Conj) (X : Type 1) (F : X → Type 1) (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c)
-  (ih : PathP (λ i → Cube (suc (dims sk')) X) (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))) →
-  PathP (λ i → DCube (suc (dims sk')) X F (ih i)) (papp-conj-from-d (lcons e-dim sk') X F (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (ccd (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (LineO X F) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d))) (ccd (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X F (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d))) →
-  PathP (λ i → DCube (suc (dims sk')) X F (cpcf-in sk' sk r r0 o m ms X c ih i)) (papp-conj-from-d (lcons e-dim sk') X F (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c)) (dcube-reidx (dims sk') (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d))) (ccd sk' sk r (Line X) (LineO X F) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
-cpcf-in-d sk' sk r r0 o m ms X F c d ih ihd =
-  pc4-d (Cube (suc (dims sk')) X) (DCube (suc (dims sk')) X F)
-    (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c))) (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco sk' sk r (Line (Line X)) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))) (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))) (cco sk' sk r (Line X) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-    (λ j → papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line (Line X)) (meet-l X) c (~ j))) (λ j → papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cmap-keep e-dim sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (~ j))) ih (cmap-keep e-dim sk' sk r X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-    (papp-conj-from-d (lcons e-dim sk') X F (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c)) (dcube-reidx (dims sk') (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d))) (papp-conj-from-d (lcons e-dim sk') X F (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco sk' sk r (Line (Line X)) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (ccd sk' sk r (Line (Line X)) (LineO (Line X) (LineO X F)) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
-    (papp-conj-from-d (lcons e-dim sk') X F (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (ccd (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (LineO X F) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d))) (ccd (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X F (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d))) (ccd sk' sk r (Line X) (LineO X F) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
-    (λ j → papp-conj-from-d (lcons e-dim sk') X F (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line (Line X)) (meet-l X) c (~ j)) (cmap-nat-d sk' sk (cmap-of sk' sk r) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d (~ j)))
-    (λ j → papp-conj-from-d (lcons e-dim sk') X F (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cmap-keep e-dim sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (~ j)) (cmap-keep-d e-dim sk' sk r (Line X) (LineO X F) (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d) (~ j)))
-    ihd (cmap-keep-d e-dim sk' sk r X F (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
-cmap-papp-conj-from-d : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (hr : RenAtC r r0 o) (dp : DimPres sk' sk r) (l : Lit) (ms : Conj) (X : Type 1) (F : X → Type 1) (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
-  PathP (λ i → DCube (dims sk') X F (cmap-papp-conj-from sk' sk r r0 o hr dp l ms X c i)) (papp-conj-from-d sk' X F o (lit-r r0 l) (conj-r r0 ms) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)) (ccd sk' sk r X F (papp-conj-from sk X o l ms c) (papp-conj-from-d sk X F o l ms c d))
-cmap-papp-conj-from-d sk' sk r r0 o hr dp l lnil X F c d = cmap-papp-lit-d sk' sk r r0 o hr dp l X F c d
-cmap-papp-conj-from-d sk' sk r r0 o hr dp l (lcons m ms) X F c d =
-  pcat-d (Cube (dims sk') X) (DCube (dims sk') X F)
-    (papp-lit sk' X o (lit-r r0 l) (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c)))) (papp-lit sk' X o (lit-r r0 l) (cco sk' sk r (Line X) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))) (cco sk' sk r X (papp-conj-from sk X o l (lcons m ms) c))
-    (λ i → papp-lit sk' X o (lit-r r0 l) (cpcf-in sk' sk r r0 o m ms X c (cmap-papp-conj-from (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) m ms X (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) i)) (cmap-papp-lit sk' sk r r0 o hr dp l X (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
-    (papp-lit-d sk' X F o (lit-r r0 l) (papp-conj-from (lcons e-dim sk') X (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c))) (papp-conj-from-d (lcons e-dim sk') X F (%wsucc o) (lit-r r0 m) (conj-r r0 ms) (cube-map (dims sk') (Line X) (Line (Line X)) (meet-l X) (cco sk' sk r (Line X) c)) (dcube-reidx (dims sk') (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)))) (papp-lit-d sk' X F o (lit-r r0 l) (cco sk' sk r (Line X) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))) (ccd sk' sk r (Line X) (LineO X F) (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d))))
-    (ccd sk' sk r X F (papp-conj-from sk X o l (lcons m ms) c) (papp-conj-from-d sk X F o l (lcons m ms) c d))
-    (λ i → papp-lit-d sk' X F o (lit-r r0 l) (cpcf-in sk' sk r r0 o m ms X c (cmap-papp-conj-from (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) m ms X (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) i) (cpcf-in-d sk' sk r r0 o m ms X F c d (cmap-papp-conj-from (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) m ms X (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (cmap-papp-conj-from-d (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) m ms X F (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)) i))
-    (cmap-papp-lit-d sk' sk r r0 o hr dp l X F (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
-cmap-papp-conj-d : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (hr : RenAtC r r0 o) (dp : DimPres sk' sk r) (cj : Conj) (X : Type 1) (F : X → Type 1) (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
-  PathP (λ i → DCube (dims sk') X F (cmap-papp-conj sk' sk r r0 o hr dp cj X c i)) (papp-conj-d sk' X F o (conj-r r0 cj) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)) (ccd sk' sk r X F (papp-conj sk X o cj c) (papp-conj-d sk X F o cj c d))
-cmap-papp-conj-d sk' sk r r0 o hr dp lnil X F c d =
-  psym-d (Cube (dims sk') X) (DCube (dims sk') X F) (cco sk' sk r X (cube-map (dims sk) (Line X) X (face1-l X) c)) (cube-map (dims sk') (Line X) X (face1-l X) (cco sk' sk r (Line X) c))
-    (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) X (face1-l X) c)
-    (ccd sk' sk r X F (cube-map (dims sk) (Line X) X (face1-l X) c) (dcube-reidx (dims sk) (Line X) X (LineO X F) F (face1-l X) (face1-o X F) c d))
-    (dcube-reidx (dims sk') (Line X) X (LineO X F) F (face1-l X) (face1-o X F) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d))
-    (cmap-nat-d sk' sk (cmap-of sk' sk r) (Line X) X (LineO X F) F (face1-l X) (face1-o X F) c d)
-cmap-papp-conj-d sk' sk r r0 o hr dp (lcons l ls) X F c d = cmap-papp-conj-from-d sk' sk r r0 o hr dp l ls X F c d
-cpdf-in-d : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (e : Conj) (es : DNF) (X : Type 1) (F : X → Type 1) (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c)
-  (ih : PathP (λ i → Cube (suc (dims sk')) X) (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))) →
-  PathP (λ i → DCube (suc (dims sk')) X F (ih i)) (papp-dnf-from-d (lcons e-dim sk') X F (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (ccd (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (LineO X F) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d))) (ccd (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X F (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d))) →
-  PathP (λ i → DCube (suc (dims sk')) X F (cpdf-in sk' sk r r0 o e es X c ih i)) (papp-dnf-from-d (lcons e-dim sk') X F (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c)) (dcube-reidx (dims sk') (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d))) (ccd sk' sk r (Line X) (LineO X F) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
-cpdf-in-d sk' sk r r0 o e es X F c d ih ihd =
-  pc4-d (Cube (suc (dims sk')) X) (DCube (suc (dims sk')) X F)
-    (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c))) (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cco sk' sk r (Line (Line X)) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))) (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))) (cco sk' sk r (Line X) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-    (λ j → papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line (Line X)) (join-l X) c (~ j))) (λ j → papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cmap-keep e-dim sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (~ j))) ih (cmap-keep e-dim sk' sk r X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-    (papp-dnf-from-d (lcons e-dim sk') X F (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c)) (dcube-reidx (dims sk') (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d))) (papp-dnf-from-d (lcons e-dim sk') X F (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cco sk' sk r (Line (Line X)) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (ccd sk' sk r (Line (Line X)) (LineO (Line X) (LineO X F)) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
-    (papp-dnf-from-d (lcons e-dim sk') X F (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cco (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (ccd (lcons e-dim sk') (lcons e-dim sk) (w-keep r) (Line X) (LineO X F) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d))) (ccd (lcons e-dim sk') (lcons e-dim sk) (w-keep r) X F (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d))) (ccd sk' sk r (Line X) (LineO X F) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
-    (λ j → papp-dnf-from-d (lcons e-dim sk') X F (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) (Line (Line X)) (join-l X) c (~ j)) (cmap-nat-d sk' sk (cmap-of sk' sk r) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d (~ j)))
-    (λ j → papp-dnf-from-d (lcons e-dim sk') X F (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cmap-keep e-dim sk' sk r (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (~ j)) (cmap-keep-d e-dim sk' sk r (Line X) (LineO X F) (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d) (~ j)))
-    ihd (cmap-keep-d e-dim sk' sk r X F (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
-cmap-papp-dnf-from-d : (sk' sk : Lst Entry) (r r0 : Word → Word) (o : Word) (hr : RenAtC r r0 o) (dp : DimPres sk' sk r) (cj : Conj) (ds : DNF) (X : Type 1) (F : X → Type 1) (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
-  PathP (λ i → DCube (dims sk') X F (cmap-papp-dnf-from sk' sk r r0 o hr dp cj ds X c i)) (papp-dnf-from-d sk' X F o (conj-r r0 cj) (dnf-r r0 ds) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)) (ccd sk' sk r X F (papp-dnf-from sk X o cj ds c) (papp-dnf-from-d sk X F o cj ds c d))
-cmap-papp-dnf-from-d sk' sk r r0 o hr dp cj lnil X F c d = cmap-papp-conj-d sk' sk r r0 o hr dp cj X F c d
-cmap-papp-dnf-from-d sk' sk r r0 o hr dp cj (lcons e es) X F c d =
-  pcat-d (Cube (dims sk') X) (DCube (dims sk') X F)
-    (papp-conj sk' X o (conj-r r0 cj) (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c)))) (papp-conj sk' X o (conj-r r0 cj) (cco sk' sk r (Line X) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))) (cco sk' sk r X (papp-dnf-from sk X o cj (lcons e es) c))
-    (λ i → papp-conj sk' X o (conj-r r0 cj) (cpdf-in sk' sk r r0 o e es X c (cmap-papp-dnf-from (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) e es X (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) i)) (cmap-papp-conj sk' sk r r0 o hr dp cj X (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
-    (papp-conj-d sk' X F o (conj-r r0 cj) (papp-dnf-from (lcons e-dim sk') X (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c))) (papp-dnf-from-d (lcons e-dim sk') X F (%wsucc o) (conj-r r0 e) (dnf-r r0 es) (cube-map (dims sk') (Line X) (Line (Line X)) (join-l X) (cco sk' sk r (Line X) c)) (dcube-reidx (dims sk') (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)))) (papp-conj-d sk' X F o (conj-r r0 cj) (cco sk' sk r (Line X) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))) (ccd sk' sk r (Line X) (LineO X F) (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d))))
-    (ccd sk' sk r X F (papp-dnf-from sk X o cj (lcons e es) c) (papp-dnf-from-d sk X F o cj (lcons e es) c d))
-    (λ i → papp-conj-d sk' X F o (conj-r r0 cj) (cpdf-in sk' sk r r0 o e es X c (cmap-papp-dnf-from (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) e es X (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) i) (cpdf-in-d sk' sk r r0 o e es X F c d (cmap-papp-dnf-from (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) e es X (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (cmap-papp-dnf-from-d (lcons e-dim sk') (lcons e-dim sk) (w-keep r) r0 (%wsucc o) (renatc-keep r r0 o hr) (dp-keep sk' sk r dp) e es X F (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)) i))
-    (cmap-papp-conj-d sk' sk r r0 o hr dp cj X F (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c) (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
-cmap-papp-d : (sk' sk : Lst Entry) (r : Word → Word) (dp : DimPres sk' sk r) (f : DNF) (X : Type 1) (F : X → Type 1) (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
-  PathP (λ i → DCube (dims sk') X F (cmap-papp sk' sk r dp f X c i)) (papp-cube-d sk' X F (dnf-r r f) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d)) (ccd sk' sk r X F (papp-cube sk X f c) (papp-cube-d sk X F f c d))
-cmap-papp-d sk' sk r dp lnil X F c d =
-  psym-d (Cube (dims sk') X) (DCube (dims sk') X F) (cco sk' sk r X (cube-map (dims sk) (Line X) X (face0-l X) c)) (cube-map (dims sk') (Line X) X (face0-l X) (cco sk' sk r (Line X) c))
-    (cmap-nat sk' sk (cmap-of sk' sk r) (Line X) X (face0-l X) c)
-    (ccd sk' sk r X F (cube-map (dims sk) (Line X) X (face0-l X) c) (dcube-reidx (dims sk) (Line X) X (LineO X F) F (face0-l X) (face0-o X F) c d))
-    (dcube-reidx (dims sk') (Line X) X (LineO X F) F (face0-l X) (face0-o X F) (cco sk' sk r (Line X) c) (ccd sk' sk r (Line X) (LineO X F) c d))
-    (cmap-nat-d sk' sk (cmap-of sk' sk r) (Line X) X (LineO X F) F (face0-l X) (face0-o X F) c d)
-cmap-papp-d sk' sk r dp (lcons cj cs) X F c d = cmap-papp-dnf-from-d sk' sk r r #0 (renatc-0 r) dp cj cs X F c d
 -- (2026-11-12, (4d)) lifts over one base path from one start have one end (the uniqueness of
 -- carry: any dependent path over p from d ends at carry p d); with it, two meanings reached from one
 -- meaning along the same base path are equal, which subM-papp and subM-comp use
@@ -4422,6 +4303,229 @@ carry-nat : (m n : Nat) (X X' : Type 1) (F : X → Type 1) (F' : X' → Type 1) 
   PathP (λ i → DCube n X' F' (h c1)) (carry n X' F' (h c0) (h c1) (λ i → h (p i)) (hd c0 a)) (hd c1 (carry m X F c0 c1 p a))
 carry-nat m n X X' F F' h hd c0 c1 p a =
   carry-uniq n X' F' (h c0) (h c1) (λ i → h (p i)) (hd c0 a) (hd c1 (carry m X F c0 c1 p a)) (λ i → hd (p i) (carry-fill m X F c0 c1 p a i))
+-- (2026-11-12, (4d) toward subM-papp) path application over degenerate lines commutes with pulling
+-- back (papp-dd-pull, by the recursion of papp-dd): fibrewise maps commute with a pull (pull-sw); at
+-- each connection pull-genc at the generator, the hypothesis at the inner skeleton, carry-nat, and
+-- upull (unreindexing commutes with a pull, over dmap-gen, as pull-gen) at the degeneracy
+-- (dd-conn-pull). The statement for an operation op: DDPull.
+pdl : (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x) →
+  (x : X) (y : Y x) → DL X' F' (f x y) → DL X F x
+pdl X X' Y F F' f g x y = lineo-pull X X' Y F F' f g (degen-l X x) (degen-o X Y x y)
+-- a fibrewise map commutes with a pull when the fibre maps do (q, judgmental where used: refl)
+pull-sw : (n : Nat) (X X' : Type 1) (Y F1 F2 : X → Type 1) (F1' F2' : X' → Type 1) (f : (x : X) → Y x → X')
+  (g1 : (x : X) (y : Y x) → F1' (f x y) → F1 x) (g2 : (x : X) (y : Y x) → F2' (f x y) → F2 x) (h : (x : X) → F1 x → F2 x) (h' : (x : X') → F1' x → F2' x)
+  (q : PathP (λ i → (xq : X) (yq : Y xq) → F1' (f xq yq) → F2 xq) (λ xq yq zq → h xq (g1 xq yq zq)) (λ xq yq zq → g2 xq yq (h' (f xq yq) zq)))
+  (c : Cube n X) (d : DCube n X Y c) (e : DCube n X' F1' (dcube-map n X Y X' f c d)) →
+  PathP (λ i → DCube n X F2 c) (dcube-fmap n X F1 F2 h c (dcube-pull n X X' Y F1 F1' f g1 c d e))
+    (dcube-pull n X X' Y F2 F2' f g2 c d (dcube-fmap n X' F1' F2' h' (dcube-map n X Y X' f c d) e))
+pull-sw n X X' Y F1 F2 F1' F2' f g1 g2 h h' q c d e =
+  pcat (DCube n X F2 c) (dcube-fmap n X F1 F2 h c (dcube-pull n X X' Y F1 F1' f g1 c d e))
+    (dcube-pull n X X' Y F2 F1' f (λ x y z → h x (g1 x y z)) c d e)
+    (dcube-pull n X X' Y F2 F2' f g2 c d (dcube-fmap n X' F1' F2' h' (dcube-map n X Y X' f c d) e))
+    (fmap-pull n X X' Y F1 F2 F1' f g1 h c d e)
+    (pcat (DCube n X F2 c) (dcube-pull n X X' Y F2 F1' f (λ x y z → h x (g1 x y z)) c d e)
+       (dcube-pull n X X' Y F2 F1' f (λ x y z → g2 x y (h' (f x y) z)) c d e)
+       (dcube-pull n X X' Y F2 F2' f g2 c d (dcube-fmap n X' F1' F2' h' (dcube-map n X Y X' f c d) e))
+       (λ i → dcube-pull n X X' Y F2 F1' f (q i) c d e)
+       (psym (DCube n X F2 c) (dcube-pull n X X' Y F2 F2' f g2 c d (dcube-fmap n X' F1' F2' h' (dcube-map n X Y X' f c d) e))
+          (dcube-pull n X X' Y F2 F1' f (λ x y z → g2 x y (h' (f x y) z)) c d e)
+          (pull-fmap n X X' Y F2 F1' F2' f h' g2 c d e)))
+-- an operation on cubes of lines over degenerate lines commutes with pulling back (the statement)
+DDPull : (n : Nat) (op : (Z : Type 1) (H : Z → Type 1) (G : Cube n Z) → DCube n Z (DL Z H) G → DCube n Z H G)
+  (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube n X) (d : DCube n X Y c) (e : DCube n X' (DL X' F') (dcube-map n X Y X' f c d)) → Type 1
+DDPull n op X X' Y F F' f g c d e =
+  PathP (λ i → DCube n X F c) (op X F c (dcube-pull n X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g) c d e))
+    (dcube-pull n X X' Y F F' f g c d (op X' F' (dcube-map n X Y X' f c d) e))
+diag-dd-pull : (sk : Lst Entry) (k : Word) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (dims sk) X) (d : DCube (dims sk) X Y c) (e : DCube (dims sk) X' (DL X' F') (dcube-map (dims sk) X Y X' f c d)) →
+  DDPull (dims sk) (λ Z H G q → diag-dd sk k Z H G q) X X' Y F F' f g c d e
+diag-dd-pull lnil k X X' Y F F' f g c d e = λ i → g c d (fst e)
+diag-dd-pull (lcons (e-ty s) sk) k X X' Y F F' f g c d e =
+  bool-elim1 (λ b → DDPull (dims sk) (λ Z H G q → bool-elim1 (λ b' → DCube (dims sk) Z H G) (dcube-fmap (dims sk) Z (DL Z H) H (λ x q' → fst q') G q) (diag-dd sk (%wsub k #1) Z H G q) b) X X' Y F F' f g c d e)
+    (pull-sw (dims sk) X X' Y (DL X F) F (DL X' F') F' f (pdl X X' Y F F' f g) g (λ x q → fst q) (λ x q → fst q) (λ t x y z → g x y (fst z)) c d e)
+    (diag-dd-pull sk (%wsub k #1) X X' Y F F' f g c d e) (weq k #0)
+diag-dd-pull (lcons e-dim sk) k X X' Y F F' f g c d e =
+  bool-elim1 (λ b → DDPull (suc (dims sk)) (λ Z H G q → bool-elim1 (λ b' → DCube (dims sk) (Line Z) (LineO Z H) G)
+                     (dcube-fmap (dims sk) (Line Z) (LineO Z (DL Z H)) (LineO Z H) (λ L q' → diag-o Z H (line-map Z (Line Z) (degen-l Z) L) q') G q)
+                     (diag-dd sk (%wsub k #1) (Line Z) (LineO Z H) G
+                        (dcube-fmap (dims sk) (Line Z) (LineO Z (DL Z H)) (DL (Line Z) (LineO Z H)) (λ L q' → exch-o Z H (line-map Z (Line Z) (degen-l Z) L) q') G q)) b)
+                   X X' Y F F' f g c d e)
+    (pull-sw (dims sk) (Line X) (Line X') (LineO X Y) (LineO X (DL X F)) (LineO X F) (LineO X' (DL X' F')) (LineO X' F') (lineo-map X Y X' f)
+       (lineo-pull X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g)) (lineo-pull X X' Y F F' f g)
+       (λ L q → diag-o X F (line-map X (Line X) (degen-l X) L) q) (λ L q → diag-o X' F' (line-map X' (Line X') (degen-l X') L) q)
+       (λ t L D z → lineo-pull X X' Y F F' f g L D (diag-o X' F' (line-map X' (Line X') (degen-l X') (lineo-map X Y X' f L D)) z)) c d e)
+    (pcat (DCube (dims sk) (Line X) (LineO X F) c)
+       (diag-dd sk (%wsub k #1) (Line X) (LineO X F) c
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (λ L q → exch-o X F (line-map X (Line X) (degen-l X) L) q) c
+             (dcube-pull (dims sk) (Line X) (Line X') (LineO X Y) (LineO X (DL X F)) (LineO X' (DL X' F')) (lineo-map X Y X' f) (lineo-pull X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g)) c d e)))
+       (diag-dd sk (%wsub k #1) (Line X) (LineO X F) c
+          (dcube-pull (dims sk) (Line X) (Line X') (LineO X Y) (DL (Line X) (LineO X F)) (DL (Line X') (LineO X' F')) (lineo-map X Y X' f)
+             (pdl (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g)) c d
+             (dcube-fmap (dims sk) (Line X') (LineO X' (DL X' F')) (DL (Line X') (LineO X' F')) (λ L q → exch-o X' F' (line-map X' (Line X') (degen-l X') L) q) (dcube-map (dims sk) (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) c d) e)))
+       (dcube-pull (dims sk) (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g) c d
+          (diag-dd sk (%wsub k #1) (Line X') (LineO X' F') (dcube-map (dims sk) (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) c d)
+             (dcube-fmap (dims sk) (Line X') (LineO X' (DL X' F')) (DL (Line X') (LineO X' F')) (λ L q → exch-o X' F' (line-map X' (Line X') (degen-l X') L) q) (dcube-map (dims sk) (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) c d) e)))
+       (λ i → diag-dd sk (%wsub k #1) (Line X) (LineO X F) c
+          (pull-sw (dims sk) (Line X) (Line X') (LineO X Y) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (LineO X' (DL X' F')) (DL (Line X') (LineO X' F')) (lineo-map X Y X' f)
+             (lineo-pull X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g)) (pdl (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g))
+             (λ L q → exch-o X F (line-map X (Line X) (degen-l X) L) q) (λ L q → exch-o X' F' (line-map X' (Line X') (degen-l X') L) q)
+             (λ t L D z → pdl (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g) L D (exch-o X' F' (line-map X' (Line X') (degen-l X') (lineo-map X Y X' f L D)) z)) c d e i))
+       (diag-dd-pull sk (%wsub k #1) (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g) c d
+          (dcube-fmap (dims sk) (Line X') (LineO X' (DL X' F')) (DL (Line X') (LineO X' F')) (λ L q → exch-o X' F' (line-map X' (Line X') (degen-l X') L) q) (dcube-map (dims sk) (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) c d) e)))
+    (weq k #0)
+pc5 : (A : Type 1) (x0 x1 x2 x3 x4 x5 : A) → PathP (λ i → A) x0 x1 → PathP (λ i → A) x1 x2 → PathP (λ i → A) x2 x3 →
+  PathP (λ i → A) x3 x4 → PathP (λ i → A) x4 x5 → PathP (λ i → A) x0 x5
+pc5 A x0 x1 x2 x3 x4 x5 p1 p2 p3 p4 p5 = pcat A x0 x1 x5 p1 (pcat A x1 x2 x5 p2 (pcat A x2 x3 x5 p3 (pcat A x3 x4 x5 p4 p5)))
+-- unreindexing commutes with pulling back, over dmap-gen (as pull-gen: the end E1 and a dependent path
+-- over dmap-gen's path given)
+upull : (n : Nat) (X X' X1 X1' : Type 1) (Y : X → Type 1) (Y1 F1 : X1 → Type 1) (F1' : X1' → Type 1)
+  (f : (x : X) → Y x → X') (f1 : (x : X1) → Y1 x → X1') (φ : X → X1) (φY : (x : X) → Y x → Y1 (φ x)) (φ' : X' → X1')
+  (g : (x : X) (y : Y x) → F1' (φ' (f x y)) → F1 (φ x)) (g1 : (x : X1) (y : Y1 x) → F1' (f1 x y) → F1 x)
+  (q : PathP (λ i → (xq : X) (yq : Y xq) → X1') (λ xq yq → φ' (f xq yq)) (λ xq yq → f1 (φ xq) (φY xq yq)))
+  (qF : (x : X) (y : Y x) (e : F1' (φ' (f x y))) (e1 : F1' (f1 (φ x) (φY x y))) → PathP (λ i → F1' (q i x y)) e e1 →
+     PathP (λ i → F1 (φ x)) (g x y e) (g1 (φ x) (φY x y) e1))
+  (c : Cube n X) (d : DCube n X Y c) (W : DCube n X1' F1' (cube-map n X' X1' φ' (dcube-map n X Y X' f c d)))
+  (E1 : DCube n X1' F1' (dcube-map n X1 Y1 X1' f1 (cube-map n X X1 φ c) (dcube-reidx n X X1 Y Y1 φ φY c d))) →
+  PathP (λ i → DCube n X1' F1' (dmap-gen n X X1 Y Y1 X' X1' φ φY φ' f f1 q c d i)) W E1 →
+  PathP (λ i → DCube n X (λ x → F1 (φ x)) c)
+    (dcube-pull n X X' Y (λ x → F1 (φ x)) (λ x' → F1' (φ' x')) f g c d (dcube-unreidx n X' X1' F1' φ' (dcube-map n X Y X' f c d) W))
+    (dcube-unreidx n X X1 F1 φ c (dcube-pull n X1 X1' Y1 F1 F1' f1 g1 (cube-map n X X1 φ c) (dcube-reidx n X X1 Y Y1 φ φY c d) E1))
+upull zero X X' X1 X1' Y Y1 F1 F1' f f1 φ φY φ' g g1 q qF c d W E1 P = qF c d W E1 P
+upull (suc n) X X' X1 X1' Y Y1 F1 F1' f f1 φ φY φ' g g1 q qF c d W E1 P =
+  upull n (Line X) (Line X') (Line X1) (Line X1') (LineO X Y) (LineO X1 Y1) (LineO X1 F1) (LineO X1' F1')
+    (lineo-map X Y X' f) (lineo-map X1 Y1 X1' f1) (line-map X X1 φ) (lineo-reidx X X1 Y Y1 φ φY) (line-map X' X1' φ')
+    (lineo-pull X X' Y (λ x → F1 (φ x)) (λ x' → F1' (φ' x')) f g) (lineo-pull X1 X1' Y1 F1 F1' f1 g1)
+    (λ i L D → (q i (fst L) (fst D) , q i (fst (snd L)) (fst (snd D)) , λ j → q i (snd (snd L) j) (snd (snd D) j)))
+    (λ L D E Ea Pa i →
+       (qF (fst L) (fst D) (fst E) (fst Ea) (λ k → fst (Pa k)) i ,
+        qF (fst (snd L)) (fst (snd D)) (fst (snd E)) (fst (snd Ea)) (λ k → fst (snd (Pa k))) i ,
+        λ j → qF (snd (snd L) j) (snd (snd D) j) (snd (snd E) j) (snd (snd Ea) j) (λ k → snd (snd (Pa k)) j) i))
+    c d W E1 P
+-- the connections commute with pulling back, given that the outer and inner operations do: pull-genc
+-- at the generator, the inner hypothesis, carry-nat, upull at the degeneracy, the outer hypothesis
+dd-conn-pull : (n : Nat) (gen : (Z : Type 1) (H : Z → Type 1) (x : Z) → DL Z H x → LineO Z (DL Z H) (degen-l Z x))
+  (outer : (Z : Type 1) (H : Z → Type 1) (G : Cube n Z) → DCube n Z (DL Z H) G → DCube n Z H G)
+  (inner : (Z : Type 1) (H : Z → Type 1) (G : Cube (suc n) Z) → DCube (suc n) Z (DL Z H) G → DCube (suc n) Z H G)
+  (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (gq : (x : X) (y : Y x) (e : DL X' F' (f x y)) (e1 : LineO X' (DL X' F') (degen-l X' (f x y))) →
+     PathP (λ i → LineO X' (DL X' F') (degen-l X' (f x y))) (gen X' F' (f x y) e) e1 →
+     PathP (λ i → LineO X (DL X F) (degen-l X x)) (gen X F x (pdl X X' Y F F' f g x y e))
+       (lineo-pull X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g) (degen-l X x) (degen-o X Y x y) e1))
+  (ho : (c : Cube n X) (d : DCube n X Y c) (e : DCube n X' (DL X' F') (dcube-map n X Y X' f c d)) → DDPull n outer X X' Y F F' f g c d e)
+  (hi : (c : Cube (suc n) X) (d : DCube (suc n) X Y c) (e : DCube (suc n) X' (DL X' F') (dcube-map (suc n) X Y X' f c d)) → DDPull (suc n) inner X X' Y F F' f g c d e)
+  (c : Cube n X) (d : DCube n X Y c) (e : DCube n X' (DL X' F') (dcube-map n X Y X' f c d)) →
+  DDPull n (ddconn n gen outer inner) X X' Y F F' f g c d e
+dd-conn-pull n gen outer inner X X' Y F F' f g gq ho hi c d e =
+  pc5 (DCube n X F c)
+    (outer X F c (ddU n X F c (inner X F (cube-map n X (Line X) (degen-l X) c)
+       (ddR n X F (gen X F) c (dcube-pull n X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g) c d e)))))
+    (outer X F c (ddU n X F c (inner X F (cube-map n X (Line X) (degen-l X) c)
+       (dcube-pull (suc n) X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g) (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d)
+          (carry (suc n) X' (DL X' F') (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d))
+             (dcube-map n (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d))
+             (dmap-gen n X (Line X) Y (LineO X Y) X' (Line X') (degen-l X) (degen-o X Y) (degen-l X') f (lineo-map X Y X' f) (λ k x y → degen-l X' (f x y)) c d)
+             (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e))))))
+    (outer X F c (ddU n X F c
+       (dcube-pull (suc n) X X' Y F F' f g (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d)
+          (inner X' F' (dcube-map n (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d))
+             (carry (suc n) X' (DL X' F') (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d))
+                (dcube-map n (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d))
+                (dmap-gen n X (Line X) Y (LineO X Y) X' (Line X') (degen-l X) (degen-o X Y) (degen-l X') f (lineo-map X Y X' f) (λ k x y → degen-l X' (f x y)) c d)
+                (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e))))))
+    (outer X F c (ddU n X F c
+       (dcube-pull (suc n) X X' Y F F' f g (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d)
+          (carry (suc n) X' F' (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d))
+             (dcube-map n (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d))
+             (dmap-gen n X (Line X) Y (LineO X Y) X' (Line X') (degen-l X) (degen-o X Y) (degen-l X') f (lineo-map X Y X' f) (λ k x y → degen-l X' (f x y)) c d)
+             (inner X' F' (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d)) (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e))))))
+    (outer X F c (dcube-pull n X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g) c d
+       (ddU n X' F' (dcube-map n X Y X' f c d) (inner X' F' (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d)) (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e)))))
+    (dcube-pull n X X' Y F F' f g c d (outer X' F' (dcube-map n X Y X' f c d)
+       (ddU n X' F' (dcube-map n X Y X' f c d) (inner X' F' (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d)) (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e)))))
+    (λ i → outer X F c (ddU n X F c (inner X F (cube-map n X (Line X) (degen-l X) c)
+       (pull-genc n X X' (Line X) (Line X') Y (DL X F) (DL X' F') (LineO X Y) (LineO X (DL X F)) (LineO X' (DL X' F')) f (pdl X X' Y F F' f g)
+          (lineo-map X Y X' f) (lineo-pull X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g)) (degen-l X) (degen-o X Y) (gen X F) (degen-l X') (gen X' F')
+          (λ k x y → degen-l X' (f x y)) gq c d e i))))
+    (λ i → outer X F c (ddU n X F c
+       (hi (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d)
+          (carry (suc n) X' (DL X' F') (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d))
+             (dcube-map n (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d))
+             (dmap-gen n X (Line X) Y (LineO X Y) X' (Line X') (degen-l X) (degen-o X Y) (degen-l X') f (lineo-map X Y X' f) (λ k x y → degen-l X' (f x y)) c d)
+             (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e)) i)))
+    (λ i → outer X F c (ddU n X F c
+       (dcube-pull (suc n) X X' Y F F' f g (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d)
+          (carry-nat (suc n) (suc n) X' X' (DL X' F') F' (λ c' → c') (λ c' a → inner X' F' c' a)
+             (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d))
+             (dcube-map n (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d))
+             (dmap-gen n X (Line X) Y (LineO X Y) X' (Line X') (degen-l X) (degen-o X Y) (degen-l X') f (lineo-map X Y X' f) (λ k x y → degen-l X' (f x y)) c d)
+             (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e) (~ i)))))
+    (λ i → outer X F c
+       (upull n X X' (Line X) (Line X') Y (LineO X Y) (LineO X F) (LineO X' F') f (lineo-map X Y X' f) (degen-l X) (degen-o X Y) (degen-l X')
+          (pdl X X' Y F F' f g) (lineo-pull X X' Y F F' f g) (λ k x y → degen-l X' (f x y))
+          (λ x y e0 e1 P k → lineo-pull X X' Y F F' f g (degen-l X x) (degen-o X Y x y) (P k)) c d
+          (inner X' F' (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d)) (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e))
+          (carry (suc n) X' F' (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d))
+             (dcube-map n (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d))
+             (dmap-gen n X (Line X) Y (LineO X Y) X' (Line X') (degen-l X) (degen-o X Y) (degen-l X') f (lineo-map X Y X' f) (λ k x y → degen-l X' (f x y)) c d)
+             (inner X' F' (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d)) (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e)))
+          (carry-fill (suc n) X' F' (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d))
+             (dcube-map n (Line X) (LineO X Y) (Line X') (lineo-map X Y X' f) (cube-map n X (Line X) (degen-l X) c) (dcube-reidx n X (Line X) Y (LineO X Y) (degen-l X) (degen-o X Y) c d))
+             (dmap-gen n X (Line X) Y (LineO X Y) X' (Line X') (degen-l X) (degen-o X Y) (degen-l X') f (lineo-map X Y X' f) (λ k x y → degen-l X' (f x y)) c d)
+             (inner X' F' (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d)) (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e))) (~ i)))
+    (ho c d (ddU n X' F' (dcube-map n X Y X' f c d) (inner X' F' (cube-map n X' (Line X') (degen-l X') (dcube-map n X Y X' f c d)) (ddR n X' F' (gen X' F') (dcube-map n X Y X' f c d) e))))
+papp-lit-dd-pull : (sk : Lst Entry) (o : Word) (l : Lit) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (dims sk) X) (d : DCube (dims sk) X Y c) (e : DCube (dims sk) X' (DL X' F') (dcube-map (dims sk) X Y X' f c d)) →
+  DDPull (dims sk) (λ Z H G q → papp-lit-dd sk Z H o l G q) X X' Y F F' f g c d e
+papp-lit-dd-pull sk o l X X' Y F F' f g c d e =
+  bool-elim1 (λ b → DDPull (dims sk) (λ Z H G q → bool-elim1 (λ b' → DCube (dims sk) Z H G) (diag-dd sk (%wadd (fst l) o) Z H G q)
+                        (diag-dd sk (%wadd (fst l) o) Z H G (dcube-fmap (dims sk) Z (DL Z H) (DL Z H) (λ x q' → rev-o Z H (degen-l Z x) q') G q)) b) X X' Y F F' f g c d e)
+    (diag-dd-pull sk (%wadd (fst l) o) X X' Y F F' f g c d e)
+    (pcat (DCube (dims sk) X F c)
+       (diag-dd sk (%wadd (fst l) o) X F c (dcube-fmap (dims sk) X (DL X F) (DL X F) (λ x q → rev-o X F (degen-l X x) q) c
+          (dcube-pull (dims sk) X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g) c d e)))
+       (diag-dd sk (%wadd (fst l) o) X F c (dcube-pull (dims sk) X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g) c d
+          (dcube-fmap (dims sk) X' (DL X' F') (DL X' F') (λ x q → rev-o X' F' (degen-l X' x) q) (dcube-map (dims sk) X Y X' f c d) e)))
+       (dcube-pull (dims sk) X X' Y F F' f g c d (diag-dd sk (%wadd (fst l) o) X' F' (dcube-map (dims sk) X Y X' f c d)
+          (dcube-fmap (dims sk) X' (DL X' F') (DL X' F') (λ x q → rev-o X' F' (degen-l X' x) q) (dcube-map (dims sk) X Y X' f c d) e)))
+       (λ i → diag-dd sk (%wadd (fst l) o) X F c
+          (pull-sw (dims sk) X X' Y (DL X F) (DL X F) (DL X' F') (DL X' F') f (pdl X X' Y F F' f g) (pdl X X' Y F F' f g)
+             (λ x q → rev-o X F (degen-l X x) q) (λ x q → rev-o X' F' (degen-l X' x) q) (λ t x y z → pdl X X' Y F F' f g x y (rev-o X' F' (degen-l X' (f x y)) z)) c d e i))
+       (diag-dd-pull sk (%wadd (fst l) o) X X' Y F F' f g c d
+          (dcube-fmap (dims sk) X' (DL X' F') (DL X' F') (λ x q → rev-o X' F' (degen-l X' x) q) (dcube-map (dims sk) X Y X' f c d) e)))
+    (snd l)
+papp-conj-from-dd-pull : (sk : Lst Entry) (o : Word) (l : Lit) (ms : Conj) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (dims sk) X) (d : DCube (dims sk) X Y c) (e : DCube (dims sk) X' (DL X' F') (dcube-map (dims sk) X Y X' f c d)) →
+  DDPull (dims sk) (λ Z H G q → papp-conj-from-dd sk Z H o l ms G q) X X' Y F F' f g c d e
+papp-conj-from-dd-pull sk o l lnil X X' Y F F' f g c d e = papp-lit-dd-pull sk o l X X' Y F F' f g c d e
+papp-conj-from-dd-pull sk o l (lcons m ms) X X' Y F F' f g c d e =
+  dd-conn-pull (dims sk) (λ Z H x q → meet-o Z H (degen-l Z x) q) (λ Z H G' q → papp-lit-dd sk Z H o l G' q)
+    (λ Z H G' q → papp-conj-from-dd (lcons e-dim sk) Z H (%wsucc o) m ms G' q) X X' Y F F' f g
+    (λ x y e0 e1 P k → lineo-pull X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g) (degen-l X x) (degen-o X Y x y) (P k))
+    (λ c' d' e' → papp-lit-dd-pull sk o l X X' Y F F' f g c' d' e')
+    (λ c' d' e' → papp-conj-from-dd-pull (lcons e-dim sk) (%wsucc o) m ms X X' Y F F' f g c' d' e') c d e
+papp-conj-dd-pull : (sk : Lst Entry) (o : Word) (cj : Conj) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (dims sk) X) (d : DCube (dims sk) X Y c) (e : DCube (dims sk) X' (DL X' F') (dcube-map (dims sk) X Y X' f c d)) →
+  DDPull (dims sk) (λ Z H G q → papp-conj-dd sk Z H o cj G q) X X' Y F F' f g c d e
+papp-conj-dd-pull sk o lnil X X' Y F F' f g c d e =
+  pull-sw (dims sk) X X' Y (DL X F) F (DL X' F') F' f (pdl X X' Y F F' f g) g (λ x q → fst (snd q)) (λ x q → fst (snd q)) (λ t x y z → g x y (fst (snd z))) c d e
+papp-conj-dd-pull sk o (lcons l ls) X X' Y F F' f g c d e = papp-conj-from-dd-pull sk o l ls X X' Y F F' f g c d e
+papp-dnf-from-dd-pull : (sk : Lst Entry) (o : Word) (cj : Conj) (ds : DNF) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (dims sk) X) (d : DCube (dims sk) X Y c) (e : DCube (dims sk) X' (DL X' F') (dcube-map (dims sk) X Y X' f c d)) →
+  DDPull (dims sk) (λ Z H G q → papp-dnf-from-dd sk Z H o cj ds G q) X X' Y F F' f g c d e
+papp-dnf-from-dd-pull sk o cj lnil X X' Y F F' f g c d e = papp-conj-dd-pull sk o cj X X' Y F F' f g c d e
+papp-dnf-from-dd-pull sk o cj (lcons dj ds) X X' Y F F' f g c d e =
+  dd-conn-pull (dims sk) (λ Z H x q → join-o Z H (degen-l Z x) q) (λ Z H G' q → papp-conj-dd sk Z H o cj G' q)
+    (λ Z H G' q → papp-dnf-from-dd (lcons e-dim sk) Z H (%wsucc o) dj ds G' q) X X' Y F F' f g
+    (λ x y e0 e1 P k → lineo-pull X X' Y (DL X F) (DL X' F') f (pdl X X' Y F F' f g) (degen-l X x) (degen-o X Y x y) (P k))
+    (λ c' d' e' → papp-conj-dd-pull sk o cj X X' Y F F' f g c' d' e')
+    (λ c' d' e' → papp-dnf-from-dd-pull (lcons e-dim sk) (%wsucc o) dj ds X X' Y F F' f g c' d' e') c d e
+papp-dd-pull : (sk : Lst Entry) (fm : DNF) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (g : (x : X) (y : Y x) → F' (f x y) → F x)
+  (c : Cube (dims sk) X) (d : DCube (dims sk) X Y c) (e : DCube (dims sk) X' (DL X' F') (dcube-map (dims sk) X Y X' f c d)) →
+  DDPull (dims sk) (λ Z H G q → papp-dd sk Z H fm G q) X X' Y F F' f g c d e
+papp-dd-pull sk lnil X X' Y F F' f g c d e =
+  pull-sw (dims sk) X X' Y (DL X F) F (DL X' F') F' f (pdl X X' Y F F' f g) g (λ x q → fst q) (λ x q → fst q) (λ t x y z → g x y (fst z)) c d e
+papp-dd-pull sk (lcons cj cs) X X' Y F F' f g c d e = papp-dnf-from-dd-pull sk #0 cj cs X X' Y F F' f g c d e
 -- (2026-11-12, (5) toward cmap-d-pull) path application at a variable commutes with pulling back,
 -- over diag-dmap (diag-pull: the statement DPull, by the cases of diag-sk-d with the base path written
 -- as diag-dmap's own term; at each case's value of weq k #0 the clause is pull-genc at the generator,
