@@ -3189,7 +3189,18 @@ static Node *reading_type(Node *t) {
  * the store's (canonical forms, content keys). The end state is one: every key canonical, compiled
  * records keyed by their content (t60). The first step can be taken here: the query's key formed as
  * the store forms a definition's (its canonical form, references as content keys, plus the
- * checker's identity), and the result stored canonically. */
+ * checker's identity), and the result stored canonically.
+ * Read 2026-11-12, for the elaborator's case (src/syntax.c x_checked, the round loop): the right unit
+ * is the whole elaboration of a declaration, its input the declaration's surface forms (sig, body)
+ * with every name resolved to the key it denotes, its output the solved core forms T and t. The
+ * final forms then go through `checked` as now, so the certificate check (key_def, store_checked)
+ * still decides acceptance: a remembered elaboration can only change which term is checked, never
+ * whether a term is accepted. What is missing is a faithful canonical serialization: canon (src/
+ * store.c) is a key, not a serialization. It drops the type written on a λ's binder (bnd_ty, kept on
+ * the name node), instance flags and binder names, and prints a λ's binders so their count cannot be
+ * read back. The store needs one canonical form that is both the key and readable back (references
+ * as keys, binders nameless but counted, binder types and flags kept), rendered through the current
+ * bindings when read; with it canon is that form's hash and nothing is duplicated. */
 static char *readback(Node *t, long *steps) {
     net_drain();
     long s0 = stat_steps;
