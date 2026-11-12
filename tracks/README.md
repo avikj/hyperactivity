@@ -6,6 +6,8 @@ log, and its **next step**. A fresh agent (or a person) continues a track by rea
 top to bottom and doing what "Next step" says. Nothing about the state of the work lives
 anywhere else: not in a chat, not in an agent's memory.
 
+**Whole-work state: `STATE.md` (sourced; reading file by file); index: `TREE.md`.**
+
 ## Rules for every track
 
 1. **Own clone.** Work in your own clone so builds and the git index never collide:
@@ -102,7 +104,7 @@ value. There are then two handlers of that one signature, and one theorem:
 | N | `N-machine.md` | no crash on any input; asan/tsan; compile-cost profiles | — |
 | R | `R-rust.md` | `tools/mir2cub.py`, `lib/lang/rust/ast.cub`, the Rust twin of the C++ sample | C's sample |
 | S | `S-surface.md` | the elaborator: recursion forms, branch typing, clause typing, non-fatal failures | — |
-| E | `E-lemmas.md` (opens when B lands) | the template lemmas, the encoder's path | B |
+| E | `E-lemmas.md` (open; handoff 2026-11-11) | the compiler at its type (paper §9.3) | B |
 | F | `F-cxx.md` | `lib/cxx/machine.cub`, `read-expr`, `read-stmt`, `read`: C++ read into terms, run, compiled, properties | C, M |
 
 ## Deliverables and where they stand

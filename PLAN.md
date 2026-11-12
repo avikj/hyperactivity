@@ -5,6 +5,22 @@ Revision 9, 2026-11-09. Repo avikj/math, `scoped-machine` on `main` (revision 9 
 whole. Revision 8 and everything before it are in git history; nothing in them is in force
 unless restated here.
 
+**Start here (2026-11-11, supersedes the line below where they differ).** In this order:
+1. `docs/Hyperactive_Final_Paper.pdf`, in full. It states the mathematical object; where it is
+   more exact than this file it governs (e.g. §9.3's `Block`/`seq`/compiler algebra is this
+   file's `Tmpl`; §9.4 describes `lib/compile/meaning.cub`'s `Correct1` and its holes).
+2. `tracks/STATE.md`: the governing documents, the map from the paper to the files, what is
+   measured to check and what fails (with roots), and **"Reading, file by file"** — sourced
+   entries for files read in full. `tracks/TREE.md` (generated, `python3 tools/tree.py`) lists
+   every file and construct: it is the index of what to read, not understanding.
+3. `tracks/E-lemmas.md`: the compiler at its type, this week's work classified (wrong form, with
+   reasons; usable lemmas), the C changes to audit.
+The work, in order: (a) continue the reading — every file in full, one sourced entry per file in
+`STATE.md` (what it does, how it connects, where it conflicts with the paper or the owner's
+rules, what is unverified), committed per entry; the order is in `STATE.md`; (b) the repairs,
+roots first (`STATE.md`); (c) track E. Never state anything not read or measured; mark it
+unverified.
+
 **To pick up the work cold:** read this file, then `tracks/README.md`. The work is split into
 tracks; each track's file (`tracks/<X>-….md`) holds its specification, acceptance, what is done
 with measurements, and its exact next step, and is updated in every commit of that track.

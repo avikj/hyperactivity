@@ -188,13 +188,11 @@ for every fuel and argument ⟦bs⟧ is f. `experiments/isa/jit-runs.cub` runs t
 22 workloads under the Sail model (27 runs: loops, Nat recursion, closures, codata, division edge
 cases, lists, pairs, records): every result equals the definition's (312M steps, ~2 min).
 
-`experiments/isa/addw-all.cub` proves `Correct2w addw-bs addw`: addw's compiled bytes give
-`a + b` for every fuel and every pair of words below 2^64 (the words `net.c` passes). The run with
-variable arguments computes; where a register is read back from memory the bytes are proved to be
-the word (`lib/compile/wordlaw.cub`, from the primitives' laws in `lib/prim.cub`) and the run
-continues with the clean value (`lib/compile/runs.cub` `q-rax`), since the unreduced byte forms grow
-eightfold per round trip. At the `jae` the carry flag is the model's own `fits` test
-(`lib/compile/flags.cub`), and each branch runs to the return. Loading and checking: ~3 min.
+`experiments/isa/addw-all.cub` is a proof about one output of the untyped encoder at one fixed
+placement, in the form PLAN and `tracks/README.md` forbid ("bytes with a lemma owed"); it is
+superseded by the compiler at its type (paper §9.3; `tracks/E-lemmas.md`) and is to be deleted
+when that checks. Its law files (`lib/compile/wordlaw.cub`, `bitlaw.cub`, `flags.cub`) are
+usable.
 
 `lib/compile/x86ok.cub` has lemmas about runs of the model (a run splits at any step; stores to
 distinct addresses commute) for the template theorems.
