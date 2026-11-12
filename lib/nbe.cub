@@ -477,3 +477,28 @@ rr : (s : TyShape) → Reify s × Reflect s
 rr s-bool = (reify-bool , λ K D Δ δ x c n → inr1 (inr1 (c , n)))
 rr (s-pi a b) = (reify-pi a b (rr a) (rr b) , reflect-pi a b (rr a) (rr b))
 rr (s-sig a b) = (reify-sig a b (rr a) (rr b) , reflect-sig a b (rr a) (rr b))
+
+-- ---------------------------------------------------------------- computable environments
+-- CompEnv sk γ Δ δ: every entry of the environment δ (seen at world Δ) is computable at its type;
+-- by recursion on the skeleton
+CompEnv : (sk : Lst TyShape) (γ : fst (CtxE sk)) (Δ : Ctx) → (Env Δ → Env (sk , γ)) → Type 1
+CompEnv lnil γ Δ δ = One1
+CompEnv (lcons s sk) γ Δ δ =
+  CompEnv sk (fst γ) Δ (λ ρ → fst (δ ρ)) ×
+  CompS s (fst (snd γ)) (snd (snd (snd γ))) Δ (λ ρ → fst (snd (snd γ)) (fst (δ ρ))) (λ ρ → snd (δ ρ))
+env-ren : (sk : Lst TyShape) (γ : fst (CtxE sk)) (Δ : Ctx) (δ : Env Δ → Env (sk , γ)) → CompEnv sk γ Δ δ →
+  (Δ' : Ctx) (r : Env Δ' → Env Δ) → Ren Δ' Δ r → CompEnv sk γ Δ' (λ ρ → δ (r ρ))
+env-ren lnil γ Δ δ e Δ' r w = e
+env-ren (lcons s sk) γ Δ δ e Δ' r w =
+  (env-ren sk (fst γ) Δ (λ ρ → fst (δ ρ)) (fst e) Δ' r w ,
+   comp-ren s (fst (snd γ)) (snd (snd (snd γ))) Δ (λ ρ → fst (snd (snd γ)) (fst (δ ρ))) (λ ρ → snd (δ ρ)) (snd e) Δ' r w)
+-- a variable's value in a computable environment is computable
+var-comp : (sk : Lst TyShape) (γ : fst (CtxE sk)) (X : VIx (Env (sk , γ))) → VarT sk γ X →
+  (Δ : Ctx) (δ : Env Δ → Env (sk , γ)) → CompEnv sk γ Δ δ →
+  Comp (Env (sk , γ)) (fst X) Δ δ (λ ρ → snd (snd X) (δ ρ))
+var-comp lnil γ X x Δ δ e = Empty-rec (fst x)
+var-comp (lcons s sk) γ X (inl1 p) Δ δ e =
+  transport (λ i → Comp (Env (lcons s sk , γ)) (fst (p (~ i))) Δ δ (λ ρ → snd (snd (p (~ i))) (δ ρ))) (snd e)
+var-comp (lcons s sk) γ X (inr1 y) Δ δ e =
+  transport (λ i → Comp (Env (lcons s sk , γ)) (fst (snd (snd y) (~ i))) Δ δ (λ ρ → snd (snd (snd (snd y) (~ i))) (δ ρ)))
+    (var-comp sk (fst γ) (fst y) (fst (snd y)) Δ (λ ρ → fst (δ ρ)) (fst e))
