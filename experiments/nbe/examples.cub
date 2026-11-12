@@ -39,3 +39,32 @@ not-der = dcase Γb (λ ρ → one) bP (cvar #0) (λ ρ → snd ρ) c-false (λ 
 #same dnf-code (case dnf-of (cmeet (cvar #0) (cneg (cvar #0))) of none → ci0; some f → f) = cmeet (cneg (cvar #0)) (cvar #0)
 #same dnf-code (case dnf-of (cjoin (cvar #2) ci1) of none → ci0; some f → f) = ci1
 #same dnf-canon (lcons (lcons (#0 , true) lnil) (lcons (lcons (#0 , true) (lcons (#1 , true) lnil)) lnil)) = false
+-- ---------------------------------------------------------------- P2: path application on cubes
+-- in a context with one dimension i: a line L applied at i is L itself (diagonal of i with the line's
+-- direction, the line degenerate in i); at ~i its reversal; at i ∧ ~i the diagonal of the connection
+pa-i : (X : Type 1) (L : Line X) →
+  PathP (λ k → Line X) (papp-cube (lcons e-dim lnil) X (lcons (lcons (#0 , true) lnil) lnil) (degen-l (Line X) L)) L
+pa-i X L = λ k → L
+pa-ni : (X : Type 1) (L : Line X) →
+  PathP (λ k → Line X) (papp-cube (lcons e-dim lnil) X (lcons (lcons (#0 , false) lnil) lnil) (degen-l (Line X) L)) (rev-l X L)
+pa-ni X L = λ k → rev-l X L
+-- in the empty context, at 0 and at 1: the endpoints
+pa-0 : (X : Type 1) (L : Line X) → PathP (λ k → X) (papp-cube lnil X dnf-zero L) (fst L)
+pa-0 X L = λ k → fst L
+pa-1 : (X : Type 1) (L : Line X) → PathP (λ k → X) (papp-cube lnil X dnf-one L) (fst (snd L))
+pa-1 X L = λ k → fst (snd L)
+-- in a context i, j (j newest, index #0; i index #1): a line L degenerate in both, at i is λ i j → L i,
+-- at j is λ i j → L j, at i ∧ j is λ i j → L (i ∧ j)
+pa-2 : Lst Entry
+pa-2 = lcons e-dim (lcons e-dim lnil)
+pa-c : (X : Type 1) → Line X → Cube (suc (dims pa-2)) X
+pa-c X L = degen-l (Line (Line X)) (degen-l (Line X) L)
+pa-at-i : (X : Type 1) (L : Line X) →
+  PathP (λ k → Line (Line X)) (papp-cube pa-2 X (lcons (lcons (#1 , true) lnil) lnil) (pa-c X L)) (line-map X (Line X) (degen-l X) L)
+pa-at-i X L = λ k → line-map X (Line X) (degen-l X) L
+pa-at-j : (X : Type 1) (L : Line X) →
+  PathP (λ k → Line (Line X)) (papp-cube pa-2 X (lcons (lcons (#0 , true) lnil) lnil) (pa-c X L)) (degen-l (Line X) L)
+pa-at-j X L = λ k → degen-l (Line X) L
+pa-at-ij : (X : Type 1) (L : Line X) →
+  PathP (λ k → Line (Line X)) (papp-cube pa-2 X (lcons (lcons (#0 , true) (lcons (#1 , true) lnil)) lnil) (pa-c X L)) (meet-l X L)
+pa-at-ij X L = λ k → meet-l X L

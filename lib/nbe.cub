@@ -169,8 +169,8 @@
 -- argument is not abstracted in the induction hypothesis (the inner call gets the outer value, and an
 -- explicit {..} is ignored); such parameters are taken explicitly here.
 --
--- Next definitions (2026-11-12), in order (done: lines, cubes, generators, cube-comp, cube-id; the
--- canonical forms of interval codes of P2.4):
+-- Next definitions (2026-11-12), in order (done: lines, cubes, generators, cube-comp, cube-id; P2.4
+-- entirely: canonical forms of interval codes and papp-cube; of P2.2 the Entry type and dims):
 --   P2.1 DCube (a cube in a family over a cube) and cube-zip/unzip with their laws as paths.
 --   P2.2 Skeleton entries `data Entry = e-ty (s : TyShape) | e-dim`, dims : Lst Entry → Nat, CtxE with
 --        a dimension contributing nothing to a vertex environment, VarT stepping over e-dim.
@@ -867,3 +867,49 @@ dnf-nonconst : DNF → Bool
 dnf-nonconst lnil = false
 dnf-nonconst (lcons lnil cs) = false
 dnf-nonconst (lcons (lcons l ls) cs) = true
+
+-- ---------------------------------------------------------------- P2: skeletons with dimensions, and path application on cubes
+-- (2026-11-12) A context's skeleton lists its entries, newest first: a type's shape or a dimension.
+-- Codes count both (de Bruijn indices over one context of term and dimension variables, lib/code.cub);
+-- a dimension contributes a direction to the cube of the judgments over the context and nothing to a
+-- vertex's environment.
+data Entry = e-ty (s : TyShape) | e-dim
+dims : Lst Entry → Nat
+dims lnil = zero
+dims (lcons (e-ty s) sk) = dims sk
+dims (lcons e-dim sk) = suc (dims sk)
+-- the diagonal of the newest direction of a cube over sk with the dimension that index k of sk names
+-- (exchanging the newest direction outward past each nearer dimension); an index that names a term
+-- entry or nothing has no dimension, and gives the face at 0 (the side condition of a neutral path
+-- application excludes it, P2.6)
+diag-sk : (sk : Lst Entry) (k : Word) (X : Type 1) → Cube (suc (dims sk)) X → Cube (dims sk) X
+diag-sk lnil k X c = face0-l X c
+diag-sk (lcons (e-ty s) sk) k X c =
+  if weq k #0 then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c
+diag-sk (lcons e-dim sk) k X c =
+  if weq k #0 then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+  else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+-- the newest direction at a literal (i or ~i), the index shifted by o (the dimensions a connection
+-- has put in front of the skeleton)
+papp-lit : (sk : Lst Entry) (X : Type 1) (o : Word) (l : Lit) → Cube (suc (dims sk)) X → Cube (dims sk) X
+papp-lit sk X o l c =
+  if snd l then diag-sk sk (%wadd (fst l) o) X c
+  else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+-- at a conjunction l ∧ m ∧ …: the connection λ i j → p (i ∧ j), then j at the rest (over the skeleton
+-- with i in front, indices one further), then i at l; the empty conjunction is 1
+papp-conj-from : (sk : Lst Entry) (X : Type 1) (o : Word) (l : Lit) (ms : Conj) → Cube (suc (dims sk)) X → Cube (dims sk) X
+papp-conj-from sk X o l lnil c = papp-lit sk X o l c
+papp-conj-from sk X o l (lcons m ms) c =
+  papp-lit sk X o l (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+papp-conj : (sk : Lst Entry) (X : Type 1) (o : Word) (c : Conj) → Cube (suc (dims sk)) X → Cube (dims sk) X
+papp-conj sk X o lnil c = cube-map (dims sk) (Line X) X (face1-l X) c
+papp-conj sk X o (lcons l ls) c = papp-conj-from sk X o l ls c
+-- at a disjunction: the connection λ i j → p (i ∨ j), likewise; the empty disjunction is 0
+papp-dnf-from : (sk : Lst Entry) (X : Type 1) (o : Word) (c : Conj) (ds : DNF) → Cube (suc (dims sk)) X → Cube (dims sk) X
+papp-dnf-from sk X o c lnil p = papp-conj sk X o c p
+papp-dnf-from sk X o c (lcons d ds) p =
+  papp-conj sk X o c (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) p))
+-- a cube over sk with one more (newest) direction, at an interval element in canonical form over sk
+papp-cube : (sk : Lst Entry) (X : Type 1) (f : DNF) → Cube (suc (dims sk)) X → Cube (dims sk) X
+papp-cube sk X lnil p = cube-map (dims sk) (Line X) X (face0-l X) p
+papp-cube sk X (lcons c cs) p = papp-dnf-from sk X #0 c cs p
