@@ -94,8 +94,8 @@ cost and stack defects recorded on 2026-11-09 (t4, t5); specialization cost thro
 6. **Translators from outside artifacts** — `tools/` (Sail, Clang, MIR, Agda importers; editor
    server; `work.py`).
 7. **Text** — this file, `LANGUAGE.md` (the language reference), `tracks/PAPER-READING.md`;
-   `tracks/STATE.md`, `tracks/E-lemmas.md`, `tracks/TREE.md` (index of files) are older and to be
-   folded in (t36); `archive/` is history.
+   `archive/` is history (earlier plans and track logs; nothing there is in force).
+   `python3 tools/tree.py` prints an index of every file and its top-level constructs.
 
 ## How to run
 

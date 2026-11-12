@@ -53,6 +53,13 @@ cx-ub : {A : Type} → UB → CxEv A
 cx-ub {A} w = ev-ub {lzero} {CxS} {CxR} {A} w
 cx-stop : {A : Type} → Stop → CxEv A
 cx-stop {A} w = ev-stop {lzero} {CxS} {CxR} {A} w
+-- t38 (2026-11-12): wrong. Measured 2026-11-11 (memory files, then this file and read-expr.cub,
+-- after the library): this file 21 failures, read-expr.cub 70. Roots: cx-unsupported (here) and
+-- cx-run (below) do not check against CxEv's type; the primitive cx-byte is refused (primitives
+-- exist only in the bootstrap files); the rest follow from these (cx-sk, cx-size undefined;
+-- implicit arguments applied to functions without them). The C++ reading does not check as it
+-- stands.
+--
 cx-unsupported : {A : Type} → CxWhat → CxEv A
 cx-unsupported {A} w = λ m R k h → h w (λ x → Empty-rec x)
 cx-finally : {A : Type} → CxEv A → CxEv Unit → CxEv A

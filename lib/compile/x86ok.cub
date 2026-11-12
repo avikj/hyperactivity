@@ -2,6 +2,20 @@
 -- any step; a store to an address and to another commute. Loaded after lib/isa/x86/run.cub and lib/linproof.cub (eqw-sound, weq-sound).
 -- Lemmas of runs are proved of a step function that is a variable (run-of): the model is never
 -- unfolded but where a statement is about a particular run, and there by computation.
+--
+-- (2026-11-12, from tracks/E-lemmas.md, now removed) For x86 as a later target, the form the paper
+-- fixes (§9.3): a block is bytes with, for every frame state meeting its precondition, a finite
+-- trace of the model's transition to its exit address meeting its postcondition (Block, 9.12);
+-- blocks compose by seq under prefix stability and relocation (9.13); the compiler is the fold of
+-- one block per constructor (9.15–9.16). The facts about the imported model such proofs need: it
+-- reaches memory a byte at a time (application_level_memory's rb_/wb loops, each with the
+-- canonical check of the signed address plus offset, the address through sail_mask_signed 64→48,
+-- sign-extension to 52, then x86-read-mem); fetch reads the instruction bytes through read_iptr,
+-- get_prefixes and add_to_iptr. Under a frame precondition (each region's base a user address with
+-- its length as margin, regions separated) these give: fetch returns the block's bytes, a read or
+-- write in a region is the plain byte load or store, rip advances by the instruction length.
+-- Proofs follow the model's own evaluation step by step, not what normalization happens to
+-- compute.
 
 -- a run of m steps that ends in a value, then n more, is a run of n + m steps
 oc-thrown : {E A : Type} → Outc E A → Type
