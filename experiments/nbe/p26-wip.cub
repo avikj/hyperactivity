@@ -29,8 +29,9 @@
 -- wc-path, world-comp), (4r-d) begun (diag-nondim-d, diag-diag-d, diag-exch-d with exc … f0d,
 -- pc3-d, pc4-d, pc5-d, pc8-d, DexD, dexd-*, dex-c*; cmap-nat-d with PLN, papp-lit-nat-d …
 -- papp-nat-d, pcf-in, pdf-in; cmap-diag-d with CDD, pc6-d; diag-deg-d, papp-deg-d with PLD,
--- papp-lit-deg-d … papp-dnf-from-deg-d, pcf-deg-in, pdf-deg-in; cmap-const-d).
--- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "636 passed, 0 failed").
+-- papp-lit-deg-d … papp-dnf-from-deg-d, pcf-deg-in, pdf-deg-in; cmap-const-d; cmap-d-comp): (4r-d)
+-- entire.
+-- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "637 passed, 0 failed").
 -- What is next: the dated next-definitions list at the end of lib/nbe.cub's head (2026-11-12,
 -- "P2.6e from p26-wip"), then the swap of this file's families into lib/nbe.cub in place of P1's.
 
@@ -4122,3 +4123,25 @@ cmap-const-d sk2 (lcons e-dim sk1) σ X F x y =
     (λ i → papp-cube-d sk2 X F (snd σ) (cmap-const sk2 sk1 (fst σ) (Line X) (degen-l X x) i) (cmap-const-d sk2 sk1 (fst σ) (Line X) (LineO X F) (degen-l X x) (degen-o X F x y) i))
     (λ i → papp-cube-d sk2 X F (snd σ) (const-map (dims sk2) X (Line X) (degen-l X) x (~ i)) (const-map-d (dims sk2) X (Line X) F (LineO X F) (degen-l X) (degen-o X F) x y (~ i)))
     (papp-deg-d sk2 X F (snd σ) (cube-const (dims sk2) X x) (dcube-const (dims sk2) X F x y))
+-- (2026-11-12, (4r-d)) the action of composite renamings on cubes over cubes is the composite of the
+-- actions (over cmap-comp, by its cases: cmap-const-d; papp-var-d, cmap-diag-d at each dimension entry)
+cmap-d-comp : (sk2 sk1 sk : Lst Entry) (r2 r1 : Word → Word) (dp2 : DimPres sk2 sk1 r2) (X : Type 1) (F : X → Type 1) (c : Cube (dims sk) X) (d : DCube (dims sk) X F c) →
+  PathP (λ i → DCube (dims sk2) X F (cmap-comp sk2 sk1 sk r2 r1 dp2 X c i)) (cmap-d sk2 sk1 (cmap-of sk2 sk1 r2) X F (cmap-cube sk1 sk (cmap-of sk1 sk r1) X c) (cmap-d sk1 sk (cmap-of sk1 sk r1) X F c d)) (cmap-d sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 k))) X F c d)
+cmap-d-comp sk2 sk1 lnil r2 r1 dp2 X F c d = cmap-const-d sk2 sk1 (cmap-of sk2 sk1 r2) X F c d
+cmap-d-comp sk2 sk1 (lcons (e-ty a) sk) r2 r1 dp2 X F c d = cmap-d-comp sk2 sk1 sk r2 (λ k → r1 (%wsucc k)) dp2 X F c d
+cmap-d-comp sk2 sk1 (lcons e-dim sk) r2 r1 dp2 X F c d =
+  pc4-d (Cube (dims sk2) X) (DCube (dims sk2) X F)
+    (cmap-cube sk2 sk1 (cmap-of sk2 sk1 r2) X (papp-cube sk1 X (lcons (lcons (r1 #0 , true) lnil) lnil) (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c))) (cmap-cube sk2 sk1 (cmap-of sk2 sk1 r2) X (diag-sk sk1 (r1 #0) X (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c))) (diag-sk sk2 (r2 (r1 #0)) X (cmap-cube sk2 sk1 (cmap-of sk2 sk1 r2) (Line X) (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c))) (diag-sk sk2 (r2 (r1 #0)) X (cmap-cube sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) c)) (papp-cube sk2 X (lcons (lcons (r2 (r1 #0) , true) lnil) lnil) (cmap-cube sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) c))
+    (λ i → cmap-cube sk2 sk1 (cmap-of sk2 sk1 r2) X (papp-var sk1 X (r1 #0) (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c) i))
+    (λ i → cmap-diag sk2 sk1 r2 dp2 (r1 #0) X (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c) (~ i))
+    (λ i → diag-sk sk2 (r2 (r1 #0)) X (cmap-comp sk2 sk1 sk r2 (λ k → r1 (%wsucc k)) dp2 (Line X) c i))
+    (λ i → papp-var sk2 X (r2 (r1 #0)) (cmap-cube sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) c) (~ i))
+    (cmap-d sk2 sk1 (cmap-of sk2 sk1 r2) X F (papp-cube sk1 X (lcons (lcons (r1 #0 , true) lnil) lnil) (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c)) (papp-cube-d sk1 X F (lcons (lcons (r1 #0 , true) lnil) lnil) (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c) (cmap-d sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) (LineO X F) c d)))
+    (cmap-d sk2 sk1 (cmap-of sk2 sk1 r2) X F (diag-sk sk1 (r1 #0) X (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c)) (diag-sk-d sk1 (r1 #0) X F (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c) (cmap-d sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) (LineO X F) c d)))
+    (diag-sk-d sk2 (r2 (r1 #0)) X F (cmap-cube sk2 sk1 (cmap-of sk2 sk1 r2) (Line X) (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c)) (cmap-d sk2 sk1 (cmap-of sk2 sk1 r2) (Line X) (LineO X F) (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c) (cmap-d sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) (LineO X F) c d)))
+    (diag-sk-d sk2 (r2 (r1 #0)) X F (cmap-cube sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) c) (cmap-d sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) (LineO X F) c d))
+    (papp-cube-d sk2 X F (lcons (lcons (r2 (r1 #0) , true) lnil) lnil) (cmap-cube sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) c) (cmap-d sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) (LineO X F) c d))
+    (λ i → cmap-d sk2 sk1 (cmap-of sk2 sk1 r2) X F (papp-var sk1 X (r1 #0) (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c) i) (papp-var-d sk1 X F (r1 #0) (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c) (cmap-d sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) (LineO X F) c d) i))
+    (λ i → cmap-diag-d sk2 sk1 r2 dp2 (r1 #0) X F (cmap-cube sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) c) (cmap-d sk1 sk (cmap-of sk1 sk (λ k → r1 (%wsucc k))) (Line X) (LineO X F) c d) (~ i))
+    (λ i → diag-sk-d sk2 (r2 (r1 #0)) X F (cmap-comp sk2 sk1 sk r2 (λ k → r1 (%wsucc k)) dp2 (Line X) c i) (cmap-d-comp sk2 sk1 sk r2 (λ k → r1 (%wsucc k)) dp2 (Line X) (LineO X F) c d i))
+    (λ i → papp-var-d sk2 X F (r2 (r1 #0)) (cmap-cube sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) c) (cmap-d sk2 sk (cmap-of sk2 sk (λ k → r2 (r1 (%wsucc k)))) (Line X) (LineO X F) c d) (~ i))
