@@ -4,15 +4,35 @@
 --
 -- Status (2026-11-12): P1 is built and checked, every definition below; experiments/nbe/examples.cub
 -- runs normalize on derivations. Next: P2.
--- P2's first question (2026-11-12, not yet settled): a context with a dimension variable has no
--- type of environments here, since the interval is not a type (the checker takes I only as a Π
--- domain), and every meaning in P1 is a function of an environment ρ : Env Γ. Two routes, to be
--- decided before P2's definitions: (a) meanings as curried telescopes computed on the skeleton (an
--- entry may be (i : I) →), with pull-back and renaming then defined on the telescope rather than as
--- precomposition; (b) dimension entries as elements of the interval as a higher inductive type
--- (seg i), which needs the connections and reversal of I to be matched by operations on it
--- judgmentally where path application reads them. Neither is yet shown to keep the judgmental
--- computation P1 relies on.
+-- P2's design (2026-11-12, decided by the criterion that meanings are the language's own types
+-- judgmentally, with no conversion paths). The interval as a higher inductive type is ruled out:
+-- its paths are maps out of that type, equivalent to PathP only up to paths. A dimension entry
+-- contributing "(i : I) → …" to curried meanings is not available either, and for a theoretical
+-- reason: CCHM has no Π over the interval (I is not a type, and its only abstraction is PathP); the
+-- implementation agrees (`fI : (i : I) → Bool` is refused, "code: not a bound variable or checked
+-- definition: I", run 2026-11-12). So a dimension contributes a PathP whose endpoints are bound in a
+-- Σ: an n-dimensional judgment is a cube (Cube n X: two (n-1)-cubes and a PathP between them) and
+-- its meaning a section (Sec n T); checked below (sec1-pathp: a 1-section's path is the language's
+-- PathP, by refl). The endpoints are redundant but judgmentally equal to the path's own (p 0 ≡ c0).
+-- What P2 then is: P1's Jdg, NN, Der, Comp, rr and fund over cubes of contexts and types, P1 being
+-- the case n = 0 (one construction, refactored, not a second copy); dimension expressions (0, 1,
+-- the n bound dimensions, ~, ∧, ∨) acting on sections by recursion on n inside PathP-λ; the Kripke
+-- worlds extended from renamings to the cube category's maps (faces, degeneracies, connections,
+-- reversal), which is Sterling–Angiuli's setting. Not yet built beyond the cubes and their faces and
+-- degeneracies below.
+--
+-- P6's design (2026-11-12). The meaning of a type is at the level its shape computes (lvl s :
+-- Level), so no meaning is lifted: checked with a stand-alone shape type (Sh6, El6 : (s : Sh6) → Type
+-- (lv6 s), El6 (u-pi u-univ u-univ) ≡ (Type → Type) by refl at Type 1). A universe's shape means
+-- Type ℓ; a type given by an element t of a universe has the shape s-el whose meaning is t's meaning
+-- itself (El t is the top-level type judgmentally). Reify at a universe needs a code for a value
+-- that is a Type, which cannot be inspected, so computability at U_ℓ carries one (as in
+-- Sterling–Angiuli's glued universe): a code of level ℓ, its normal form, and a path in Type ℓ from
+-- its meaning to the value; computability at s-el is computability at that code, transported along
+-- the path (a predicate on values, not a conversion rule of the object theory). Its recursion is on
+-- the level first, then the shape (an s-el at level ℓ+1 names a code of level ℓ), all on closed
+-- skeletons. This requires P1's TyE to take its codomain Type (lvl s); P1 is then refactored, not
+-- duplicated.
 --
 -- Plan (2026-11-12). The whole construction, in the order it is built.
 --
@@ -612,3 +632,37 @@ reifySound s K D Δ δ x cx ρ = refl
 normalize-sound : (Γ : Ctx) (A : PTy (Env Γ)) (t : TCode Γ A) (ρ : Env Γ) →
   Path (ElP (Env Γ) A ρ) (teval Γ A (normalize Γ A t) ρ) (teval Γ A t ρ)
 normalize-sound Γ A t ρ = refl
+
+-- ---------------------------------------------------------------- P2: cubes
+-- an n-cube in X: two (n-1)-cubes and a path between them (the interval enters only through PathP)
+Cube : Nat → Type 1 → Type 1
+Cube zero X = X
+Cube (suc n) X = (c0 : Cube n X) × (c1 : Cube n X) × PathP (λ i → Cube n X) c0 c1
+-- a section of a cube of types
+Sec : (n : Nat) → Cube n Type → Type
+Sec zero T = T
+Sec (suc n) T = (s0 : Sec n (fst T)) × (s1 : Sec n (fst (snd T))) × PathP (λ i → Sec n (snd (snd T) i)) s0 s1
+sec1-pathp : (A0 A1 : Type) (A : PathP (λ i → Type) A0 A1) (s : Sec (suc zero) (A0 , A1 , A)) →
+  Path Type (PathP (λ i → Sec zero (A i)) (fst s) (fst (snd s))) (PathP (λ i → A i) (fst s) (fst (snd s)))
+sec1-pathp A0 A1 A s = refl
+-- the two faces of the newest dimension, and the degenerate cube (constant in it)
+-- t50 (2026-11-12): needs-work. The laws below are stated with PathP (λ i → Cube n X) because `Path
+-- {lsuc lzero} (Cube n X) (face0 n X (degen n X c)) c` with `face0-degen n X c = refl` is refused
+-- (type mismatch at Cube n X unfolded to its case on n: "expected: Type, actual: Type (lsuc
+-- lzero)"), with or without the explicit level, while `Path {lsuc lzero} X c c` for X : Type 1 is
+-- accepted. Path's level is taken as lzero when its type argument is a definition by cases on a
+-- variable, the explicit {lsuc lzero} notwithstanding. Not yet located (src/syntax.c implicit
+-- arguments, or lib/check.cub's level of a case).
+face0 : (n : Nat) (X : Type 1) → Cube (suc n) X → Cube n X
+face0 n X c = fst c
+face1 : (n : Nat) (X : Type 1) → Cube (suc n) X → Cube n X
+face1 n X c = fst (snd c)
+degen : (n : Nat) (X : Type 1) → Cube n X → Cube (suc n) X
+degen n X c = (c , c , λ i → c)
+face0-degen : (n : Nat) (X : Type 1) (c : Cube n X) → PathP (λ i → Cube n X) (face0 n X (degen n X c)) c
+face0-degen n X c = λ i → c
+face1-degen : (n : Nat) (X : Type 1) (c : Cube n X) → PathP (λ i → Cube n X) (face1 n X (degen n X c)) c
+face1-degen n X c = λ i → c
+-- the newest dimension of a cube, as the line it is
+line-at : (n : Nat) (X : Type 1) (c : Cube (suc n) X) → PathP (λ i → Cube n X) (snd (snd c) 0) (face0 n X c)
+line-at n X c = λ i → fst c
