@@ -13,6 +13,16 @@ Every node in the graph is open; closing one removes it.
     python3 tools/work.py priority [K]       the tN nodes in the order the graph's relations imply
     python3 tools/work.py check              graph and comments correspond; the graph checks
     python3 tools/work.py next               the next tN number never used (the history included)
+    python3 tools/work.py why NAME ...       why a declaration of the code exists: the chain to a root
+    python3 tools/work.py unexplained [FILE] the declarations with no reason, by file
+
+Every declaration of the code is a node of the same graph. Its reason is computed: something with
+a reason mentions it (the machine's reading `#uses`, over the library and the work's files), or the
+machine names it (src/), or it states one, in the comment above it: `(part of NODE)` or
+`(prerequisite to NODE)`, NODE a node of work/graph.cub. A node of work/graph.cub has a reason when
+it is a root or part of a node with one. The reading covers the files the library target loads
+(Makefile LIB) and the work's files; files outside them are not read (t30), so a declaration used
+only from outside them shows here as having no reason.
 
 Run from the repository root or anywhere inside it.
 """
@@ -320,12 +330,137 @@ def cmd_next(args):
     print(f't{max(used, default=0) + 1}')
 
 
+
+STATED = re.compile(r'\((part of|prerequisite to) ([\w-]+)\)')
+
+
+def reading():
+    """the machine's #uses over LIB and the work's files: [(file, line, names, [(file, line)])]"""
+    mk = open(os.path.join(ROOT, 'Makefile')).read().replace('\\\n', ' ')
+    var = dict(re.findall(r'^(\w+)\s*:=\s*(.*)$', mk, re.M))
+    lib = [w for x in var['LIB'].split() for w in (var['CORE'].split() if x == '$(CORE)' else [x])]
+    env = dict(os.environ)
+    env.setdefault('CUBICAL_STORE', os.path.join(ROOT, '.cubical-store'))
+    r = subprocess.run([os.path.join(ROOT, 'build', 'cubical')] + lib + ['lib/work.cub', 'work/graph.cub', '--serve'],
+                       cwd=ROOT, input='#uses\n.\n', capture_output=True, text=True, env=env)
+    out = []
+    def pos(x):
+        f, l = x.rsplit(':', 1)
+        return os.path.relpath(f, ROOT) if os.path.isabs(f) else f, int(l)
+    for ln in r.stdout.split('\n'):
+        if not ln.startswith('uses '): continue
+        w = ln.split()
+        i = w.index(':')
+        if w[1] == '?': continue
+        f, l = pos(w[1])
+        out.append((f, l, w[2:i], [pos(x) for x in w[i + 1:] if x != '?']))
+    return out
+
+
+def stated_reason(lines, l):
+    """the stated reason in the comment block directly above line l (1-based), or None"""
+    k = l - 2
+    while 0 <= k < len(lines) and lines[k].lstrip().startswith('--'):
+        m = STATED.search(lines[k])
+        if m: return m.group(1), m.group(2)
+        k -= 1
+    return None
+
+
+def reasons():
+    """(decls, why): decls by (file, line); why[(file, line)] = (how, what) for those with a reason"""
+    rd = reading()
+    g, roots, _, _ = graph()
+    src = ''.join(open(os.path.join(ROOT, 'src', f), encoding='utf-8', errors='replace').read()
+                  for f in os.listdir(os.path.join(ROOT, 'src')) if f.endswith(('.c', '.h')))
+    machine_names = set(re.findall(r'"([^"\s]+)"', src))
+    decls = {(f, l): (names, uses) for f, l, names, uses in rd}
+    node_at = {}
+    for f, l, names, _ in rd:
+        if f == 'work/graph.cub':
+            for n in names:
+                if n in g: node_at[n] = (f, l)
+    files = {}
+    def lines_of(f):
+        if f not in files:
+            try: files[f] = open(os.path.join(ROOT, f), encoding='utf-8').read().split('\n')
+            except OSError: files[f] = []
+        return files[f]
+    why = {}
+    for n in roots:
+        if n in node_at: why[node_at[n]] = ('a root', None)
+    stated = {}
+    for k, (names, _) in decls.items():
+        if k[0] == 'work/graph.cub' and any(n in g for n in names): continue
+        st = stated_reason(lines_of(k[0]), k[1])
+        if st: stated[k] = st
+        elif any(n in machine_names for n in names): why[k] = ('named by the machine (src/)', None)
+    changed = True
+    while changed:
+        changed = False
+        for n, d in g.items():
+            k = node_at.get(n)
+            if k and k not in why:
+                for p in d['parts']:
+                    if node_at.get(p) in why:
+                        why[k] = (rel_word(g, p), node_at[p]); changed = True; break
+        for k, (how, node) in stated.items():
+            if k not in why and node_at.get(node) in why:
+                why[k] = (how, node_at[node]); changed = True
+        for k, (names, uses) in decls.items():
+            if k in why:
+                for u in uses:
+                    if u in decls and u not in why:
+                        why[u] = ('used by', k); changed = True
+    return decls, why, stated, g, node_at
+
+
+def label(decls, k):
+    names = [n for n in decls.get(k, ([], []))[0] if '%' not in n]
+    return f'{" ".join(names) or "(generated)"}  {k[0]}:{k[1]}'
+
+
+def cmd_why(args):
+    decls, why, _, _, _ = reasons()
+    for a in args:
+        ks = [k for k, (names, _) in decls.items() if a in names or f'{k[0]}:{k[1]}' == a]
+        if not ks: print(f'{a}: no such declaration in the reading\n'); continue
+        for k in ks:
+            seen = set()
+            print(label(decls, k))
+            while k in why and k not in seen:
+                seen.add(k)
+                how, nxt = why[k]
+                print(f'  {how}' + (f' {label(decls, nxt)}' if nxt else ''))
+                if not nxt: break
+                k = nxt
+            if k not in why: print('  no reason')
+            print()
+
+
+def cmd_unexplained(args):
+    decls, why, stated, g, node_at = reasons()
+    bad = [k for k, (n, _) in stated.items() if n not in g]
+    for k in bad:
+        print(f'{k[0]}:{k[1]}: states a reason, {stated[k][1]}, which is not a node of work/graph.cub')
+    by = {}
+    for k in decls:
+        if k not in why and (not args or k[0] in args or any(k[0].startswith(a) for a in args)):
+            by.setdefault(k[0], []).append(k)
+    total = sum(len(v) for v in by.values())
+    for f in sorted(by):
+        print(f'{f}  ({len(by[f])})')
+        for k in sorted(by[f], key=lambda k: k[1]):
+            print(f'  {k[1]:<5} ' + ' '.join(n for n in decls[k][0] if '%' not in n))
+    print(f'{total} of {len(decls)} declarations read have no reason')
+
+
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
         print(__doc__); return
     c, a = sys.argv[1], sys.argv[2:]
     {'list': cmd_list, 'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'next': cmd_next,
-     'priority': cmd_priority}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
+     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
 
 
 if __name__ == '__main__':

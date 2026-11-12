@@ -65,6 +65,9 @@ postulates; normal forms redex-free; a fresh uncached check). Findings from it: 
   open: closing one removes it.
 - A node opened for a specific piece of work is named `tN`; its text is the one comment
   `tN (YYYY-MM-DD): ...` at the place in the code it concerns, so a reader of that place sees it.
+- Every declaration of the code is a node of the same graph. Its reason is computed: a declaration
+  with a reason mentions it (`#uses`), or the machine names it, or the comment above it states
+  `(part of NODE)` or `(prerequisite to NODE)`.
 
 ```
 python3 tools/work.py tree            # the graph from its roots, open tN under each node
@@ -72,6 +75,8 @@ python3 tools/work.py show t6 core    # a node's text or statement, place, parts
 python3 tools/work.py priority 10     # the tN nodes in the order the relations imply
 python3 tools/work.py check           # graph and comments correspond; the graph checks
 python3 tools/work.py next            # the next tN number never used
+python3 tools/work.py why refl        # why a declaration exists: its chain of reasons to a root
+python3 tools/work.py unexplained     # the declarations with no reason, by file
 ```
 
 The rule: whenever anything in the code is seen to be wrong, possibly wrong, owed work, or not

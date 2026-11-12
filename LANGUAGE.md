@@ -245,6 +245,9 @@ the checked definition `f` (or a data, codata or record type with its constructo
 projections) so the name can be declared again; what was checked against the old one keeps it (a
 global is referenced by its index), later declarations see the new one. `#type e` prints the type
 the checker infers for `e`, `#scope` the names in scope, `#where f` where `f` was declared.
+`#uses` prints every declaration read so far, one line each: its position, the names it declares
+(those generated from it included) and the positions of the declarations it mentions
+(`tools/work.py why` and `unexplained` read it).
 `tools/lsp.py` is a language server over `--serve` (diagnostics, re-checking by retraction, hover
 by `#type`, completion, go-to-definition, incremental sync); an editor runs `python3 tools/lsp.py
 --root .` as its server for `.cub` files. `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to

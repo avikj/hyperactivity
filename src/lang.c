@@ -3704,9 +3704,128 @@ static void toplevel(Node *f) {
     static int every = -1; if (every < 0) every = getenv("CUBICAL_SWEEPALL") != NULL;   /* a sweep after every form: to test */
     if (!toplevel_depth) records_sweep(every);
 }
+/* ---- uses (2026-11-12, t64): every declaration as written (one per source position: its signature,
+ * its equations and everything generated from it, the generator's output belonging to the declaration
+ * that generated it), the names it declares, and the declarations it mentions. A mention is a symbol,
+ * in any core form the declaration elaborates to, naming an earlier declaration and not bound where it
+ * occurs (the binders of lam, plam, Pi, Sigma, let, case branches and data fields are scoped; a
+ * binder form not listed here would make a bound variable that shares a declaration's name read as a
+ * use of it). #uses prints them; tools/work.py reads that to give every declaration of the code its
+ * reason: a use by a declaration that has one, or a stated one. ---- */
+typedef struct { char *pos; const char **names; int nnames; int *uses; int nuses; } UDecl;
+static UDecl *UD; static int nud, capud;
+static struct { const char *name; int owner; } *UN; static size_t capun, nun;
+static int un_get(const char *s) {
+    if (!capun) return -1;
+    size_t h = (size_t)kw_hash(s) & (capun - 1);
+    while (UN[h].name) { if (!strcmp(UN[h].name, s)) return UN[h].owner; h = (h + 1) & (capun - 1); }
+    return -1;
+}
+static void un_put(const char *s, int owner) {
+    if (2 * (nun + 1) > capun) {
+        size_t oc = capun; void *old = UN; capun = capun ? capun * 2 : 4096;
+        UN = calloc(capun, sizeof *UN); nun = 0;
+        for (size_t i = 0; i < oc; i++) if (((typeof(UN))old)[i].name) un_put(((typeof(UN))old)[i].name, ((typeof(UN))old)[i].owner);
+        free(old);
+    }
+    size_t h = (size_t)kw_hash(s) & (capun - 1);
+    while (UN[h].name && strcmp(UN[h].name, s)) h = (h + 1) & (capun - 1);
+    if (!UN[h].name) { UN[h].name = s; nun++; }
+    UN[h].owner = owner;
+}
+static int ud_cur(void) {
+    const char *p = decl_pos[0] ? decl_pos : "?";
+    if (nud && !strcmp(UD[nud - 1].pos, p)) return nud - 1;
+    if (nud == capud) { capud = capud ? 2 * capud : 1024; UD = realloc(UD, (size_t)capud * sizeof *UD); }
+    UD[nud] = (UDecl){ strdup(p), NULL, 0, NULL, 0 };
+    return nud++;
+}
+static void ud_name(int o, const char *s) {
+    UDecl *u = &UD[o];
+    for (int i = 0; i < u->nnames; i++) if (!strcmp(u->names[i], s)) return;
+    u->names = realloc(u->names, (size_t)(u->nnames + 1) * sizeof(char *)); u->names[u->nnames++] = strdup(s);
+    un_put(u->names[u->nnames - 1], o);
+}
+static void ud_use(int o, int t) {
+    UDecl *u = &UD[o]; if (t == o) return;
+    for (int i = 0; i < u->nuses; i++) if (u->uses[i] == t) return;
+    u->uses = realloc(u->uses, (size_t)(u->nuses + 1) * sizeof(int)); u->uses[u->nuses++] = t;
+}
+static const char **usc; static int nusc, capusc;
+static void usc_push(const char *x) { if (nusc == capusc) { capusc = capusc ? 2 * capusc : 64; usc = realloc(usc, (size_t)capusc * sizeof *usc); } usc[nusc++] = x; }
+static void ud_walk(int o, Node *t) {
+    if (!t) return;
+    if (!t->list) {
+        for (int i = nusc - 1; i >= 0; i--) if (!strcmp(usc[i], t->s)) return;
+        int w = un_get(t->s); if (w >= 0) ud_use(o, w);
+        return;
+    }
+    if (!t->n) return;
+    const char *h = t->it[0]->list ? NULL : t->it[0]->s;
+    int base = nusc;
+    if (h && (!strcmp(h, "lam") || !strcmp(h, "plam")) && t->n >= 3) {
+        for (int i = 1; i < t->n - 1; i++) if (!t->it[i]->list) usc_push(t->it[i]->s);
+        ud_walk(o, t->it[t->n - 1]);
+    } else if (h && (!strcmp(h, "Pi") || !strcmp(h, "Sigma") || !strcmp(h, "let")) && t->n == 4 && !t->it[1]->list) {
+        ud_walk(o, t->it[2]); usc_push(t->it[1]->s); ud_walk(o, t->it[3]);
+    } else if (h && !strcmp(h, "case") && t->n >= 2) {
+        ud_walk(o, t->it[1]);
+        for (int i = 2; i < t->n; i++) {
+            Node *b = t->it[i];
+            if (b->list && b->n == 2 && b->it[0]->list && b->it[0]->n >= 1) {
+                Node *pt = b->it[0]; int bb = nusc;
+                ud_walk(o, pt->it[0]);
+                for (int j = 1; j < pt->n; j++) if (!pt->it[j]->list) usc_push(pt->it[j]->s); else ud_walk(o, pt->it[j]);
+                ud_walk(o, b->it[1]); nusc = bb;
+            } else ud_walk(o, b);
+        }
+    } else if (h && !strcmp(h, "data") && t->n >= 2) {
+        for (int i = 2; i < t->n; i++) {
+            Node *c = t->it[i]; if (!c->list || !c->n) continue;
+            int bb = nusc;
+            for (int j = 1; j < c->n; j++) {
+                Node *fd = c->it[j];
+                if (fd->list && fd->n == 2 && !fd->it[0]->list) { ud_walk(o, fd->it[1]); usc_push(fd->it[0]->s); }
+                else ud_walk(o, fd);
+            }
+            nusc = bb;
+        }
+    } else for (int i = 0; i < t->n; i++) ud_walk(o, t->it[i]);   /* the head too: an applied declaration */
+    nusc = base;
+}
+/* a top-level form: the names it declares, then what it mentions */
+static void ud_form(Node *f) {
+    const char *h = f->it[0]->s;
+    bool decl = !strcmp(h, "def") || !strcmp(h, "declare") || !strcmp(h, "checked") || !strcmp(h, "primitive")
+        || !strcmp(h, "primitive-tick") || !strcmp(h, "data") || !strcmp(h, "checked-data") || !strcmp(h, "check-data");
+    if (!decl || f->n < 2) return;
+    int o = ud_cur();
+    Node *d = f;
+    if (!strcmp(h, "checked-data") && f->it[1]->list) d = f->it[1];
+    if (d->n >= 2 && !d->it[1]->list) {
+        if (strcmp(h, "check-data")) ud_name(o, d->it[1]->s);
+        else { int w = un_get(d->it[1]->s); if (w >= 0) ud_use(o, w); }
+    }
+    if (d->it[0]->list || strcmp(d->it[0]->s, "data") == 0)
+        for (int i = 2; i < d->n; i++) if (d->it[i]->list && d->it[i]->n && !d->it[i]->it[0]->list) ud_name(o, d->it[i]->it[0]->s);
+    for (int i = 2; i < f->n; i++) ud_walk(o, f->it[i]);
+    if (d != f) for (int i = 2; i < d->n; i++) ud_walk(o, d->it[i]);
+}
+static void uses_cmd(void) {
+    for (int o = 0; o < nud; o++) {
+        UDecl *u = &UD[o];
+        printf("uses %s", u->pos);
+        for (int i = 0; i < u->nnames; i++) printf(" %s", u->names[i]);
+        printf(" :");
+        for (int i = 0; i < u->nuses; i++) printf(" %s", UD[u->uses[i]].pos);
+        printf("\n");
+    }
+}
+
 static void toplevel_in(Node *f) {
     if (!f->list || f->n == 0 || f->it[0]->list) die("top-level form expected", NULL);
     const char *h = f->it[0]->s;
+    ud_form(f);
     if (!strcmp(h, "import")) {
         /* (import "file"): loaded once, relative to the importing file */
         if (f->n != 2 || f->it[1]->list) die("(import \"file\")", NULL);
@@ -3720,7 +3839,7 @@ static void toplevel_in(Node *f) {
     }
     /* a module whose checks are cached: its definitions are made, its judgments and tests not rerun */
     if (trusted && (!strcmp(h, "check") || !strcmp(h, "check-fail") || !strcmp(h, "checked-data-fail") || !strcmp(h, "checked-fail")
-        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "native") || !strcmp(h, "native-c") || !strcmp(h, "native-at") || !strcmp(h, "run") || !strcmp(h, "type") || !strcmp(h, "scope") || !strcmp(h, "where"))) return;
+        || !strcmp(h, "checked-codata-fail") || !strcmp(h, "mutual-fail") || !strcmp(h, "same") || !strcmp(h, "show") || !strcmp(h, "same-watch") || !strcmp(h, "observe") || !strcmp(h, "usage") || !strcmp(h, "trusted") || !strcmp(h, "layout") || !strcmp(h, "fo") || !strcmp(h, "key") || !strcmp(h, "names") || !strcmp(h, "history") || !strcmp(h, "gc") || !strcmp(h, "safe") || !strcmp(h, "uses") || !strcmp(h, "native") || !strcmp(h, "native-c") || !strcmp(h, "native-at") || !strcmp(h, "run") || !strcmp(h, "type") || !strcmp(h, "scope") || !strcmp(h, "where"))) return;
     if (!strcmp(h, "def")) {
         if (f->n != 3) die("(def name term)", NULL);
         if (!chk_salt[0] && !f->it[1]->list && !strcmp(f->it[1]->s, "chk-def")) chk_salt_set();   /* the checker (%%chk-def) is defined here: its name (F34) */
@@ -3953,6 +4072,8 @@ static void toplevel_in(Node *f) {
         printf("where: %s %s\n", nm, pos ? pos : "?");
     } else if (!strcmp(h, "gc")) {
         store_gc_cmd();
+    } else if (!strcmp(h, "uses")) {
+        uses_cmd();
     } else if (!strcmp(h, "safe")) {
         if (f->n != 2 || f->it[1]->list) die("(safe name)", NULL);
         store_safe_cmd(f->it[1]->s);
