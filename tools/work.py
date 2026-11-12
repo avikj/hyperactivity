@@ -109,7 +109,7 @@ def texts():
 
 
 GRAPH = os.path.join(ROOT, 'work', 'graph.cub')
-NODE = re.compile(r'^([\w-]+) = (node|leaf) #(\d+) (\(.*\)|nil)(?: (all-of|each-of) (sufficient|not-known))?\s*$', re.M)
+NODE = re.compile(r'^([\w-]+) = (node|leaf) "([^"]*)" (\(.*\)|nil)(?: (all-of|each-of) (sufficient|not-known))?\s*$', re.M)
 
 
 def names_in(s):
@@ -132,7 +132,7 @@ def graph():
             k -= 1
         if not (stmt and re.match(re.escape(name) + r' \(', stmt[0])):
             stmt = []
-        out[name] = dict(id=int(m.group(3)), parts=names_in(m.group(4)), value=m.group(5) or 'all-of',
+        out[name] = dict(id=m.group(3), parts=names_in(m.group(4)), value=m.group(5) or 'all-of',
                          breakdown=m.group(6) or 'not-known', statement=' '.join(stmt))
     def pairs(key):
         m = re.search(r'^' + key + r' = (.*)$', src, re.M)
@@ -252,8 +252,8 @@ def cmd_check(args):
         elif len(txt[n]) > 1:
             print(f't{n}: {len(txt[n])} text comments: ' + ', '.join(f'{f}:{l}' for f, l, _, _ in txt[n])); bad += 1
     for n, d in g.items():
-        if is_t(n) and d['id'] != int(n[1:]):
-            print(f'{n}: id #{d["id"]} is not its number'); bad += 1
+        if d['id'] != n:
+            print(f'{n}: its name is "{d["id"]}", not its declaration\'s'); bad += 1
         if not d['parts'] and n not in roots:
             print(f'{n}: part of nothing and not declared a root'); bad += 1
         if d['parts'] and n in roots:
@@ -262,9 +262,6 @@ def cmd_check(args):
             print(f'{n}: claims its parts suffice and has none'); bad += 1
         if not is_t(n) and not d['statement']:
             print(f'{n}: no statement'); bad += 1
-    ids = [d['id'] for d in g.values()]
-    if len(ids) != len(set(ids)):
-        print('two nodes share an id'); bad += 1
     for n, l in list(after.items()) + list(speeds.items()):
         for m in [n] + l:
             if m not in g: print(f'{n}: names {m}, which is not a node'); bad += 1
@@ -552,14 +549,14 @@ def cmd_open(args):
     ls[line - 1:line - 1] = com
     open(path, 'w', encoding='utf-8').write('\n'.join(ls))
     gp = GRAPH; gs = open(gp, encoding='utf-8').read()
-    last = list(re.finditer(r'^t\d+ = leaf #\d+ .*\n', gs, re.M))[-1]
+    last = list(re.finditer(r'^t\d+ = leaf "t\d+" .*\n', gs, re.M))[-1]
     parts = ''.join(f'(cons {x} ' for x in nodes) + 'nil' + ')' * len(nodes)
-    gs = gs[:last.end()] + f't{n} : Node\nt{n} = leaf #{n} {parts}\n' + gs[last.end():]
+    gs = gs[:last.end()] + f't{n} : Node\nt{n} = leaf "t{n}" {parts}\n' + gs[last.end():]
     for x in refuted:
         n2 = n + 1 + refuted.index(x)
-        gs = re.sub(r'^(' + re.escape(x) + r' = node #\d+ .*) sufficient$', r'\1 not-known', gs, flags=re.M)
-        last = list(re.finditer(r'^t\d+ = leaf #\d+ .*\n', gs, re.M))[-1]
-        gs = gs[:last.end()] + f't{n2} : Node\nt{n2} = leaf #{n2} (cons {x} nil)\n' + gs[last.end():]
+        gs = re.sub(r'^(' + re.escape(x) + r' = node "[^"]*" .*) sufficient$', r'\1 not-known', gs, flags=re.M)
+        last = list(re.finditer(r'^t\d+ = leaf "t\d+" .*\n', gs, re.M))[-1]
+        gs = gs[:last.end()] + f't{n2} : Node\nt{n2} = leaf "t{n2}" (cons {x} nil)\n' + gs[last.end():]
         gl = gs.split('\n'); at = next(k for k, l in enumerate(gl) if l.startswith(x + ' : Node'))
         gl[at:at] = ['-- ' + b for b in textwrap.wrap(f't{n2} ({today}): determine everything {x} requires and fill '
                      f'every gap: t{n} was a missed requirement of {x}, whose breakdown was claimed sufficient, so that '
