@@ -165,6 +165,15 @@ Verified against this session's reading: track E (fully); `lib/obs.cub` contains
 
 ## Reading, file by file (each entry from reading the file in full)
 
+Order (what the compile work rests on first): `lib/x86.cub`, `specialize.cub`, `codes.cub`,
+`code.cub`, `check.cub`, `rules.cub`, `match.cub`, `elf.cub`, `world.cub`, `proc.cub`, `obs.cub`,
+`std.cub`, `prim.cub`, then the rest of `lib/` by the map above, `src/` (net.c, syntax.c, lang.c,
+drivers.c, core.h first), `tools/`, `experiments/`; `lib/isa/x86/` by structure and the
+functions the compiler uses (`x86_fetch_decode_execute` in step.cub, `rb_`/`wb` in
+application_level_memory.cub, the instructions `lib/x86.cub` emits). Each entry: what the file is,
+its constructs, how it connects, conflicts with the paper or the owner's rules (cited), what is
+unverified. Read: `machine.cub`.
+
 ### `lib/machine.cub` (173 lines, read 2026-11-11)
 What it is: the test of which codes compile (`fragment-n : Nat → Word → Code → Verdict`, one
 clause per `Code` constructor, :24–90) and the collection of a program's definitions
