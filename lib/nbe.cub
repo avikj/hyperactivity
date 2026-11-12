@@ -1269,3 +1269,70 @@ papp-cube-d : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (f : DNF) (c : Cu
   DCube (suc (dims sk)) X F c → DCube (dims sk) X F (papp-cube sk X f c)
 papp-cube-d sk X F lnil c d = dcube-reidx (dims sk) (Line X) X (LineO X F) F (face0-l X) (face0-o X F) c d
 papp-cube-d sk X F (lcons cj cs) c d = papp-dnf-from-d sk X F #0 cj cs c d
+
+-- ---------------------------------------------------------------- P2.6a: contexts and meanings over cubes
+-- (2026-11-12) A context over a skeleton is a cube of the skeleton's contexts, one direction per
+-- dimension entry; a meaning over it with values in Z is a cube over that cube of maps from each
+-- vertex's environments into Z. A term's values are TV s, a semantic type of shape s with an element.
+CtxV : Lst Entry → Type 1
+CtxV sk = fst (CtxE sk)
+EnvV : (sk : Lst Entry) → CtxV sk → Type 1
+EnvV sk γ = snd (CtxE sk) γ
+FbE : (sk : Lst Entry) (Z : Type 1) → CtxV sk → Type 1
+FbE sk Z γ = EnvV sk γ → Z
+CCtx : Type 1
+-- binder names chosen not to collide: t46
+CCtx = (ccsk : Lst Entry) × Cube (dims ccsk) (CtxV ccsk)
+Mean : CCtx → Type 1 → Type 1
+Mean Γ Z = DCube (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (snd Γ)
+fmapM : (Γ : CCtx) (Z Z' : Type 1) → (Z → Z') → Mean Γ Z → Mean Γ Z'
+fmapM Γ Z Z' h M = dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ)) (snd Γ) M
+TV : TyShape → Type 1
+-- binder names chosen not to collide: t46
+TV s = (tvA : Sem s) × El s tvA
+-- Γ extended by a type that a meaning M over Γ gives at each vertex (f reads the type off M's value;
+-- a λ's body's context is this at the λ's own conclusion, so no path is needed between them)
+extM : (Γ : CCtx) (a : TyShape) (Y : Type 1) (f : (γ : CtxV (fst Γ)) → (EnvV (fst Γ) γ → Y) → EnvV (fst Γ) γ → Sem a) → Mean Γ Y → CCtx
+extM Γ a Y f M =
+  (lcons (e-ty a) (fst Γ) ,
+   dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M)
+-- Γ extended by a dimension: its cube degenerate in the new (newest) direction
+dext : CCtx → CCtx
+dext Γ = (lcons e-dim (fst Γ) , cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))
+-- weakening a meaning to the extended contexts
+wkM : (Γ : CCtx) (a : TyShape) (Y : Type 1) (f : (γ : CtxV (fst Γ)) → (EnvV (fst Γ) γ → Y) → EnvV (fst Γ) γ → Sem a) (M : Mean Γ Y)
+  (Z : Type 1) → Mean Γ Z → Mean (extM Γ a Y f M) Z
+wkM Γ a Y f M Z N =
+  dcube-push (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y) (FbE (fst Γ) Z) (FbE (lcons (e-ty a) (fst Γ)) Z)
+    (λ γ e → (γ , f γ e)) (λ γ e N' ρ → N' (fst ρ)) (snd Γ) M N
+dwkM : (Γ : CCtx) (Z : Type 1) → Mean Γ Z → Mean (dext Γ) Z
+dwkM Γ Z N =
+  dcube-reidx (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (FbE (fst Γ) Z) (LineO (CtxV (fst Γ)) (FbE (fst Γ) Z))
+    (degen-l (CtxV (fst Γ))) (degen-o (CtxV (fst Γ)) (FbE (fst Γ) Z)) (snd Γ) N
+
+-- ---------------------------------------------------------------- P2.6c: variables over cubes
+-- (2026-11-12) A variable of a skeleton: one of its term entries, by recursion on the skeleton (none:
+-- the newest entry; some: one below it; a dimension entry is skipped). Its code's de Bruijn index
+-- counts every entry; its shape and its meaning (a projection out of each vertex's environment) are
+-- computed from it, so a variable judgment's meaning is the cube of that projection over the context.
+VarP : Lst Entry → Type
+VarP lnil = Empty
+VarP (lcons e-dim sk) = VarP sk
+VarP (lcons (e-ty a) sk) = Opt (VarP sk)
+var-shape : (sk : Lst Entry) → VarP sk → TyShape
+var-shape lnil v = Empty-rec v
+var-shape (lcons e-dim sk) v = var-shape sk v
+var-shape (lcons (e-ty a) sk) none = a
+var-shape (lcons (e-ty a) sk) (some v) = var-shape sk v
+var-word : (sk : Lst Entry) → VarP sk → Word
+var-word lnil v = Empty-rec v
+var-word (lcons e-dim sk) v = %wsucc (var-word sk v)
+var-word (lcons (e-ty a) sk) none = #0
+var-word (lcons (e-ty a) sk) (some v) = %wsucc (var-word sk v)
+varM : (sk : Lst Entry) (v : VarP sk) (γ : CtxV sk) → EnvV sk γ → TV (var-shape sk v)
+varM lnil v γ ρ = Empty-rec v
+varM (lcons e-dim sk) v γ ρ = varM sk v γ ρ
+varM (lcons (e-ty a) sk) none γ ρ = (snd γ (fst ρ) , snd ρ)
+varM (lcons (e-ty a) sk) (some v) γ ρ = varM sk v (fst γ) (fst ρ)
+varCube : (Γ : CCtx) (v : VarP (fst Γ)) → Mean Γ (TV (var-shape (fst Γ) v))
+varCube Γ v = dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV (var-shape (fst Γ) v))) (varM (fst Γ) v) (snd Γ)
