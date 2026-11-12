@@ -162,3 +162,37 @@ Verified against this session's reading: track E (fully); `lib/obs.cub` contains
    `derive.cub`'s 24 definitions over them.
 2. Per track, check each "Done" claim against its files; mark verified or wrong here.
 3. Then the work per track E's next step.
+
+## Reading, file by file (each entry from reading the file in full)
+
+### `lib/machine.cub` (173 lines, read 2026-11-11)
+What it is: the test of which codes compile (`fragment-n : Nat → Word → Code → Verdict`, one
+clause per `Code` constructor, :24–90) and the collection of a program's definitions
+(`program-of`, :152–168: the entry and every definition it names, transitively, each the quote of
+its value; refused ones reported with their verdict).
+- Compiles: variables, globals, λ, application, pairs and projections, let, annotations (dropped),
+  thunks/forces (a thunk compiles as its value, :35–38: "checked terms terminate and compiled code
+  writes nothing outside its arena"), constructors/cases/eliminations of data without
+  dimensions, codata records (`crec`, recursive fields delayed in the encoder, :87–89), word
+  literals below 2^64, word and primitive operations, word elimination.
+- Refused: word literals ≥ 2^64 (`not-fo mult`, :52); every type as a value (`dep-type`, :57–62;
+  erased earlier by the encoder's pass, :154–156); every dimension construct, path type, path
+  λ/application, face and interval (`dim`, :63–77); composition, Glue, hcomp, transport (`kan`,
+  :78–87); a constructor with dimensions (`higher`, :40–47); anything else, including clocks and
+  ticks, by the last clause (`reflect`, :90).
+- Against the owner's rule (2026-11-10: what compiles is any term with no higher path data or free
+  interval data, not "first-order only"): the content admits λ and closures, but the file and
+  its functions call it "the first-order fragment" (`is-fo`, `fo`, header :1). Whether refusing
+  every closed path construct matches the rule depends on the specializer having normalized
+  closed path terms away first — **unverified**. Clocks and ticks are refused, so a process by
+  guarded recursion does not compile through this test; `#build-loop` (track A) uses a separate
+  mechanism (the arena's two halves and a checked `copy`). Literals ≥ 2^64 are refused: compiled
+  words are 64-bit; the language's words are unbounded (PLAN §4.2's overflow exit covers results,
+  this covers literals).
+- Typed: every definition has a signature (`frag-wrap`, `frag-both`, `frag-list`, `fragment-n`,
+  `fragment`, `is-fo`, `co-recs`, `unfold`, `is-rec-body`, `code-head`, `self-head`, `Prog`,
+  `prog-add`, `prog-bad`, `prog-def`, `drop-seen`, `prog-step`, `prog-run`, `program-of`,
+  `entries-globals`, `entries-names`, `program-of-all`, `prog-def-of`).
+- In the plan: PLAN 5.3–5.4; paper §9.4 ("the byte encoder then maps the supported fragment").
+  Under the paper's compiler algebra (9.15–9.16), this file's clauses are the list of constructors
+  the algebra must have a block and a congruence for.
