@@ -11,6 +11,12 @@
 -- the value's parts: application, projection, composition, Glue, transport and the endpoints of
 -- a path variable are the machine's own steps. Checked definitions, their types and the data
 -- types are reached through the tables %gval, %gty, %dtab and %dent (words index them).
+-- t24 (2026-11-12): needs-work. The checker is an untyped term with no statement of what it
+-- accepts; it is trusted. Paper §6.1: the theorem that it accepts exactly the derivable judgments
+-- is separate from its definition. A checker returning a typing derivation (Der) or a refusal is
+-- sound by construction; deciding derivability is then its completeness (work/goals.cub,
+-- typed-checker).
+--
 -- ---------------------------------------------------------------- codes
 data Tm
   = tv x T
@@ -2307,6 +2313,14 @@ vmatch-w hs w X sg =
     wcon d c fs ds → (case %view X of wcon d2 c2 fs2 ds2 → (if andb (%weq d d2) (%weq c c2) then vmatch-l hs fs fs2 sg else sg); _ → sg)
     wu l → (case %view X of wu m → vmatch hs l m sg; _ → sg)
     wapp f a T →
+      -- t26 (2026-11-12): needs-work. This matching (holes applied to distinct variables solved as their
+      -- λ; cases, word operations, loops, primitives, λs and pairs matched part by part) was added on
+      -- 2026-11-11 (commit c049f1b) so that lemmas about the imported x86 model, which are to be
+      -- deleted, would find branches and continuations by themselves. Pattern unification is standard;
+      -- matching through cases and loops is a heuristic. It adds no definitional equality only if every
+      -- solution found here is checked afterwards like a written argument: confirm that, then keep what
+      -- is standard and remove what exists only for those lemmas.
+      --
       -- a hole applied to distinct variables, against X: the hole is λ x1 … xn → X, by quoting X
       -- under them (a pattern); otherwise the applications part by part
       case pat-spine hs f (lcons a lnil) of

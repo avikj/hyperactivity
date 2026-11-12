@@ -2209,6 +2209,17 @@ static void trace_step(Cell *o, Cell *v) {
 }
 /* ---------------- the rules ---------------- */
 const char *kind_name(int k) { return k >= 0 && k < K_END && KIND_NAME[k] ? KIND_NAME[k] : "?"; }
+/* t3 (2026-11-12): needs-work. The calculus's rules are the cases of this function (application,
+ * projections, path application, composition, Glue, interval and faces, systems, higher-constructor
+ * boundaries, hcomp, transport, case: about 650 lines), the face algebra (src/dnf.c), the
+ * composition clauses for the type formers (lib/prelude.cub) and the composition code generated per
+ * data type (generated in src/lang.c, t22). But the rule bodies also make sharing, deferral and memoization
+ * decisions inline (V_DEFER, boxes and references, A8 free-dimension cuts), and what a value is
+ * depends on the lazy-copy and substitution machinery above being right. So the part that must be
+ * trusted is in effect this whole file. To make the implementation's conformance to the published
+ * rules checkable by reading: the rules alone determine results, and the machinery is confined to
+ * scheduling, sharing and identity, where by construction (strong confluence of interaction nets;
+ * memo keys that are the full content of a deterministic computation) it cannot change a result. */
 static void interact(Cell *o, Cell *v) {
     if (o->kind == O_FWD) {
         /* a read waiting for its value (lazy_copy): not a step of its own. An unbuilt value is
@@ -3418,6 +3429,13 @@ static void interact(Cell *o, Cell *v) {
             #define WOP_ERA_A() do { if (ba) era(ba); } while (0)
             #define WOP_ERA_B() do { if (bb) era(bb); } while (0)
             if (ba || bb) {
+                /* t1 (2026-11-12): wrong. These cases, and the `same` cases below, were added on
+                 * 2026-11-11 (commit d9c71c2) so that proofs about x86 bytes would go through by
+                 * conversion. They are definitional equalities on unknown words (x·0 = 0, x·1 = x,
+                 * x = x is true, x − x = 0, ...) that the calculus does not have: word operations
+                 * are definitions by recursion (proved equal to their inductive forms in lib/std.cub),
+                 * and on an unknown operand such an operation is stuck. Laws like these are proved as
+                 * paths, never added to the evaluator. To be reverted to "stuck otherwise". */
                 /* an operand a variable: the result where the other operand alone determines it (0
                  * and 1 as the identities and absorbing elements they are), else stuck */
                 if (op == O_WMUL && (a0 || b0)) { WOP_ERA_A(); WOP_ERA_B(); r = word_of(0); }
@@ -3437,6 +3455,11 @@ static void interact(Cell *o, Cell *v) {
             else if (op == O_WMUL) r = word_wn(wn_mul(&ka, &kb));
             else if (op == O_WDIV || op == O_WMOD) { WN q, m; wn_divmod(&ka, &kb, &q, &m); r = word_wn(op == O_WDIV ? q : m); wn_drop(op == O_WDIV ? &m : &q); }
             else if (op == O_WSHR) r = word_wn(kb.b ? wn_small(0) : wn_shr(&ka, kb.s));
+            /* t2 (2026-11-12): wrong. A left shift of a numeral by more than 2^32 bits ends the
+             * whole process (exit 2) instead of computing or failing as a value: a well-typed
+             * closed term then has no normal form here although %wshl is total. Either compute it
+             * (the result is a numeral, however large) or make it an explicit, typed resource
+             * failure; never a process exit from inside a rule. */
             else if (op == O_WSHL) { if (kb.b || kb.s > ((uint64_t)1 << 32)) { fprintf(stderr, "%%wshl: a shift of more than 2^32 bits\n"); exit(2); } r = word_wn(wn_shl(&ka, kb.s)); }
             else r = word_wn(wn_bits(&ka, &kb, op == O_WAND ? 0 : op == O_WOR ? 1 : 2));
         } else if (!ba && !bb) {
@@ -3458,6 +3481,7 @@ static void interact(Cell *o, Cell *v) {
             WN a1 = wn_sub(&ka, &c), b1 = wn_sub(&kb, &c);
             bool za = wn_zero(&a1) && !ba, zb = wn_zero(&b1) && !bb;   /* literally zero */
             bool pa = !wn_zero(&a1), pb = !wn_zero(&b1);               /* a successor */
+            /* (see t1 above: the four `same` cases below are added equalities, to be removed) */
             /* the same variable on both sides after the successors cancel (a variable is its name): equal */
             bool same = ba && bb && !pa && !pb && PC(ba)->kind == V_NVAR && PC(bb)->kind == V_NVAR && PC(ba)->a == PC(bb)->a;
             if (same && op == O_WEQ) { era(ba); era(bb); r = con_build(B_TRUE, NULL, NULL); }
@@ -3904,6 +3928,10 @@ void net_start(int n) {
     nworkers = n;
     net_solo = n == 0;
     workers = calloc((size_t)n + 1, sizeof(pthread_t));
+    /* t4 (2026-11-12): maybe-wrong. pthread_create's result is not checked: when a worker cannot be
+     * created (each gets the process's stack size, 1 GB when main raised it; recorded on 2026-11-09
+     * with 4 workers under a 3 GB address-space cap), the loop below waits forever for a worker that
+     * does not exist. Not re-measured since; the fix written then was never committed. */
     for (int i = 0; i < n; i++) pthread_create(&workers[i], NULL, worker, (void *)(intptr_t)(i + 1));
     pthread_mutex_lock(&wmu);
     while (parked < nworkers) pthread_cond_wait(&pcv, &wmu);
@@ -4006,6 +4034,11 @@ static void bind_dim(Frame *f, int slot, Dim i) {
     Dnf *at = iv_atom(i); s->key = key0(K_IV, 0, at); dnf_release(at);
     for (int k = 0; k < u; k++) s->sup[k] = iv_cell(iv_atom(i));
 }
+/* t5 (2026-11-12): question. Measured 2026-11-09: build_m calls synkey at every node it builds and
+ * synkey walks the whole subterm, so building a term of depth d costs d^2 key computations (a unary
+ * numeral of 4*10^4 did not print in 260 s), and deep right-nested terms (a numeral of 10^6) overflow
+ * the C stack in several recursive functions of this file and src/lang.c. Not re-measured since;
+ * whether both still hold is not known. */
 /* the key of a compiled term in a frame, without building it: the term with its slots' keys.
  * NULL where a part has no key or the form is not keyed. The caller owns the result */
 static Key *synkey(Syn *t, Frame *f) {

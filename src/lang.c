@@ -4168,6 +4168,12 @@ static void toplevel_in(Node *f) {
             add_global(f->it[i]->s, G_INPUT);
         }
     } else if (!strcmp(h, "data")) {
+/* t22 (2026-11-12): needs-work. For every data declaration this generates, as untyped source text,
+ * the type's composition (%comp-D), its homogeneous composition, and transport on each constructor
+ * and on formal compositions. That text is never checked: it is trusted as CCHM's rules for the
+ * declared type, written once in C per declaration rather than as the single schematic rule CCHM
+ * gives for inductive and higher inductive types. Show it is exactly that rule, or replace the
+ * per-declaration generation by the schematic rule. */
         /* (data D ctor...) or (data (D z...) ctor...); ctor = (c field... [(dims i...) (φ e)...]),
          * field = x or (x A). Generates the type former D, the constructors, each path
          * constructor's boundary %bdy-c, and from CHM's equations the composition
@@ -4661,6 +4667,12 @@ static bool code_reads(Node *c, long target, long depth) {
     for (int i = 1; i < c->n; i++) if (code_reads(c->it[i], target, depth)) return true;
     return false;
 }
+/* t6 (2026-11-12): wrong, against the paper (§9.3, "native substitution"): the evaluator may replace
+ * a definition by native code only once a target-correctness witness relating the code's execution
+ * to the definition exists. Here the bytes are bound after the only check made, that the
+ * specialized term converts with the definition (lib/x86.cub jit-plan); the translation from that
+ * term to bytes (x-push, x-lift, x-erase, the templates, this boundary's marshaling) carries no
+ * relation, so a wrong translation would answer wrongly with nothing to catch it. */
 /* the bytes into executable memory, an entry over them, and name rebound to (%native k g a…): the
  * call on closed data runs the bytes, anything else (and an overflow) runs g, the definition */
 static int jit_bind(const char *name, int ck, const unsigned char *b, size_t len, int arity, const bool *used) {

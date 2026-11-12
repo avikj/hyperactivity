@@ -5,6 +5,15 @@
 -- A primitive value prints as #i64:n, #u32:n, #f64:x, #bytes:n:..., and is made only by these
 -- operations (there are no literals): i64 #5 is the Int64 5.
 
+-- t32 (2026-11-12): needs-work. Of the 91 primitives here, the laws of word multiplication,
+-- division, remainder and the bitwise operations, the wbit-* bit laws, the byte load/store laws,
+-- array extensionality and the bit round trips are postulated, though words are unbounded naturals
+-- and these laws are provable from the inductive definitions (lib/std.cub already proves addition,
+-- equality, order, maximum and subtraction equal to theirs). The fixed-width arithmetic (Int64,
+-- UInt32, UInt64) has no specification at all, and floating point is wholly trusted. Paper §8.5: a
+-- native primitive implements its definition under a checked theorem or a named assumption. Prove
+-- what is provable; define U_w = Fin(2^w) with its modular operations and relate each fixed-width
+-- primitive to it or name the assumption; name IEEE binary64 as an assumption.
 -- ---------------------------------------------------------------- the types
 primitive Int64 : Type = %pty #0
 primitive UInt32 : Type = %pty #1
@@ -533,6 +542,9 @@ fin-set-byF32 : (n : Nat) → (f : Fin n → Float32) → (i : Nat) → (h : le 
   atabF32 n (fin-setA Float32 n f (i , h) v) ≡ updateF32 n (atabF32 n f) i h v
 fin-set-byF32 n f i h v = fin-set-byV32 Float32 f32bits n f i h v
 
+-- t15 (2026-11-12): wrong. The line below refers to layouts and a #layout directive that were
+-- deleted on 2026-11-09 (commit 241a584); neither exists. Delete the line.
+--
 -- Layouts (data Layout, lib/code.cub) are computed by the checker: #layout T, or #layout T as R.
 
 -- ---------------------------------------------------------------- Nat and Word: addition on words is addition

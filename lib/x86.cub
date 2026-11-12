@@ -6,6 +6,14 @@
 -- so a wrong pass produces a program whose path does not check or whose bytes the template table
 -- does not cover (ud2), never a program that answers wrongly.
 --
+-- t7 (2026-11-12): wrong. The paragraph above claims a wrong pass yields a program that does not
+-- check or hits ud2, never a wrong answer. That holds only for specialization, whose result is
+-- checked by conversion or a path (jit-plan's ok). The passes after it (x-push, x-lift, x-erase),
+-- the templates, the layout and the value representation carry no relation to the specialized
+-- code, and their output is bound and run (t6). The value representation and calling convention
+-- here are also trusted with the templates. This translator is to be replaced by realization
+-- through C whose type carries the relation (work/goals.cub, native).
+--
 -- Values in compiled code, uniformly 64 bits, so no pass needs a type:
 --   a word, a primitive value (Int64, UInt32, UInt64, Float64 by its bits): the bits;
 --   a constructor with no fields: its index (below 4096, never an address);
@@ -1070,6 +1078,11 @@ x-rel-add g n (lcons v r) R =
 x-rel-step : Lst (Word × Word) → Defs → Rel → Rel
 x-rel-step ars lnil R = R
 x-rel-step ars (lcons e r) R = x-rel-step ars r (x-rel-add (fst e) (fst (snd e)) (x-nd-n c-fuel R ars #0 (snd (snd e)) lnil) R)
+-- t8 (2026-11-12): wrong. The needed-parameter set is iterated a fixed 64 rounds, not to its fixed
+-- point; when 64 rounds do not reach it, parameters not yet found needed are erased to 0, and the
+-- compiled code computes with 0 in place of a needed argument (recorded in README.md since
+-- 2026-11-10). Iterate to the fixed point (the set only grows and is bounded by the parameters, so
+-- the count of parameters plus one rounds suffices).
 x-rel-fix : Word → Rel → Lst (Word × Word) → Defs → Rel
 x-rel-fix fuel R ars defs = w-iter fuel (x-rel-step ars defs) R
 -- an argument outside R, and the scrutinee of an empty case, replaced by 0

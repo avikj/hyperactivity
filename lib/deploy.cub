@@ -10,6 +10,10 @@
 -- box — the machine's process handled into Linux commands over UDP (net-on-linux) and those
 -- into the drivers' signature W (linux-run), a Step W that #build writes as a binary.
 --
+-- t13 (2026-11-12): wrong. The paragraph below describes upgrades and mixed-version fleets;
+-- nothing in this file implements them (the file ends at deploy). It states an intention as if it
+-- were content.
+--
 -- Change: an upgrade is two corpora with a translation between their message types, the old a
 -- retract of the new; a mixed fleet runs each node at either version, the old ones through the
 -- translation, and keeps every invariant of the nodes' own states that both versions keep.
@@ -111,6 +115,11 @@ dp-role-init cp n = case n of inl nc → cp-init cp (nc-role nc); inr u → cp-i
 -- the fleet value: its size, the behaviour and initial state the properties are stated of, the
 -- configuration it was placed by, and each node's process over W
 record Fleet (M : Type) (St : Type) = { fl-size : Nat ; fl-beh : NodeId → St → NView M St ; fl-init : FState M St ; fl-config : ConfigData ; fl-node : NodeId → Step W (Sum Errno Word) }
+-- t14 (2026-11-12): needs-work. fl-beh (what lib/fleet.cub's properties are stated of) and fl-node
+-- (the process each binary runs) are both built from cp-view, but nothing relates them: the
+-- properties proved of the behaviour are not shown to hold of the binaries. The relation comes
+-- from processes realized as executables with their system-call events equal to the process's
+-- interaction (work/goals.cub, native), applied here; nothing specific to this file is owed.
 deploy : {M St : Type} → Corpus M St → Config → Fleet M St
 deploy {M} {St} cp cfg =
   Fleet { fl-size = dp-len {NodeCfg} (cf-nodes (fst cfg))

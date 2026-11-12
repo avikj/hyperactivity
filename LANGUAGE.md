@@ -564,8 +564,10 @@ definition outside the fragment (dimensions, composition, higher constructors, t
 time) is reported with the reason and stays on the net. A call whose arguments are values of
 the parameter types runs the bytes; any other call, and a `Word` result past 2⁶⁴ (the overflow
 exit: compiled code is pure, so the net recomputes the call), runs `f` on the net. The
-acceptance workloads are `experiments/jit/workloads.cub`; what is trusted (the templates, until
-the x86 model is imported) is listed in `PLAN.md` §7.
+acceptance workloads are `experiments/jit/workloads.cub`. (2026-11-12: only the specialized code
+is checked against `f`; the translation to bytes after it, its passes and templates and the
+boundary's marshaling, is trusted and carries no relation to the code, tickets t6–t8. It is to be
+replaced by realization through C whose type carries that relation; see README.md.)
 
 ## Measurements
 

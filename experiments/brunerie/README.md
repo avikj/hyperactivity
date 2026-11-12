@@ -40,7 +40,7 @@ compositions of types as a type former, generalized composition) and with the gl
 unbuilt; before these, on a 7 GB machine, the square and the number ran out of memory and the cube
 did not finish.
 
-The parser reads a literal `0` or `1` given as an interval argument (a constructor's, or an ordinary function's) as Nat `zero`. Bind the interval with `λ (a : I)` and apply it with `@` instead. `pE P = tE P 0` had this error: the face `i = 1` in `tE` met the numeral, and the number read as `?`.
+(2026-11-12: not reproduced. A literal `0` is accepted as a path constructor's dimension argument and in path application, `lp 0` and `p @ 0` both checking and computing; a function over the interval is not a Π type here, so the case below cannot arise as written. Kept for the record.) The parser reads a literal `0` or `1` given as an interval argument (a constructor's, or an ordinary function's) as Nat `zero`. Bind the interval with `λ (a : I)` and apply it with `@` instead. `pE P = tE P 0` had this error: the face `i = 1` in `tE` met the numeral, and the number read as `?`.
 
 `empty-hcomp-experiment.patch`, made against c5aab2d, makes `hcompD` with an empty system reduce to its base in every data type.
 It is a stand-in for measuring only, and it is not coherent for higher inductive types: eliminating into the universe gives `Glue A []`, not `A`.
