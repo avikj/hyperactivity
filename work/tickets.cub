@@ -24,6 +24,14 @@
 -- comments at the sites). Queries written in the language over the checked records (tickets by goal,
 -- the goals a goal transitively serves, what is open under a goal) are to follow, with the command
 -- evaluating them through the machine.
+--
+-- t52 (2026-11-12): wrong. A PathP over a path λ in a data constructor's field is refused, while
+-- the same type is accepted in a definition's signature. Reproducer (after CORE):
+--   data T52b = t52d (x : Bool) (p : PathP (λ i → Bool) x true)
+-- is refused: "FAIL: checks data T52b … at: λ %q0 → Bool … reason: no inferable type here: annotate
+-- it with (the T t)" (run 2026-11-12; the same with an indexed family's constructor). Not yet located
+-- in the checking of constructor telescopes. Workaround: the PathP named by a definition (PathM in
+-- experiments/nbe/p26-wip.cub, used by npapp and dpapp).
 t1 : Ticket Goal
 t1 = ticket wrong (cons core-correct nil) (closed #20261112)
 t2 : Ticket Goal
@@ -126,3 +134,5 @@ t50 : Ticket Goal
 t50 = ticket needs-work (cons core-correct (cons typed-codes nil)) opened
 t51 : Ticket Goal
 t51 = ticket wrong (cons core-correct (cons typed-codes nil)) (closed #20261112)
+t52 : Ticket Goal
+t52 = ticket wrong (cons core-correct (cons typed-codes nil)) opened

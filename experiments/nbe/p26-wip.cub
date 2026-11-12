@@ -1,0 +1,1426 @@
+-- experiments/nbe/p26-wip.cub — work in progress (2026-11-12): the rebuild of lib/nbe.cub's judgments
+-- over cubes (P2.6d, P2.6e begun), as a working copy of lib/nbe.cub. Load in place of lib/nbe.cub:
+--   ./build/cubical lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.cub
+--     lib/check.cub lib/std.cub experiments/nbe/p26-wip.cub
+-- (not with lib/nbe.cub, whose names it reuses; experiments/nbe/examples.cub does not load on it).
+-- What it contains: lib/nbe.cub at d307c8a with P1's families and everything built on them removed
+-- (PTy, Ctx/Env/ext, Jdg, VarT/Var, NN, Der, TCode, Ren, ren-nn, CompS, Comp, comp-ren, reify/reflect,
+-- rr, CompEnv, env-ren, var-comp, case-comp, fund, reflect-env, embed, normalize, reifySound,
+-- normalize-sound), the shape s-path added to TyShape (TyE's clause is PathS/PathE written out), and
+-- appended: P2.6d (sem-path; Jdg over CCtx; the rule data AppV, CaseV and their projections app-f,
+-- app-a, app-r, sig-1, sig-2, case-x, case-t, case-f, case-r, bool-v; lam-dom, lam-ctx, lam-body;
+-- plam-line, plam-body; carry; papp-mean; PathM (t52); NN with nvar, napp, nfst, nsnd, ncase, nne,
+-- ntrue, nfalse, nlam, npair, nplam, npapp; Der likewise with dpapp; TCode, teval, embed) and P2.6e
+-- begun (cube-const, dcube-const, CMap, cmap-cube, cmap-d, SubF, sub-base, Sub, subM, cmap-zero).
+-- What checks: all of it (run 2026-11-12: "358 passed, 0 failed", CORE files cached).
+-- What is next: the dated next-definitions list at the end of lib/nbe.cub's head (2026-11-12,
+-- "P2.6e from p26-wip"), then the swap of this file's families into lib/nbe.cub in place of P1's.
+
+-- lib/nbe.cub — typed codes Code(Γ, A) = Σ c. Der(Γ, c, A) over the one representation of terms
+-- (lib/code.cub's Code), their evaluation, and normalization by evaluation with its soundness
+-- equation (paper §6.1, (6.1) and (6.5)). Loaded after lib/std.cub.
+--
+-- Status (2026-11-12, latest first).
+-- * Step 1 (levels) done and checked: P1 rebuilt with types as maps into semantic types (below), the
+--   semantic types and environments in Type 1 and the meanings of P1's shapes in Type, every level
+--   closed. normalize, reifySound and normalize-sound still hold by refl.
+-- * P2 (paths and the interval) in progress, checked so far: lines and cubes with the cube category's
+--   generators and their laws, cube-comp/cube-id/dcube-map-of as paths, dependent cubes, canonical
+--   forms of interval codes and path application on cubes at them, skeletons with dimension entries,
+--   the semantic PathP type, and (P2.6 foundation) the structural maps of cubes over cubes, path
+--   application on them, and papp-deg. Not yet built: the judgments, normal forms, derivations,
+--   computability and normalization over cubes (P2.6a–e), which type derivations and their
+--   computability (P2.5) need first; then P3 (Kan operations), P4 (Glue), P6 (universes). The exact
+--   next definitions are the dated list at the end of this head.
+--
+-- Finding (2026-11-12) that replaces the level design "meanings in Type (lvl s)" (P6's design below,
+-- and step 1 as first stated), for a theoretical reason. The derivation and normal-form families
+-- quantify, in their constructors, over shapes whose meanings' levels vary (application quantifies
+-- over the domain's shape, whose meaning may be in Type 1 while the result's is in Type), and the
+-- Kripke clause of computability quantifies over all contexts, whose environments' levels vary with
+-- their entries. A type containing such a quantification lives at no finite level: it needs a
+-- universe above all levels (Agda's Setω) or cumulativity, and the core has neither (data at a level
+-- depending on a variable is refused, E-openlevel). (While this was found the checker read a stuck
+-- level as lzero and so would have accepted the design; that was t51, closed 2026-11-12 by the
+-- coordinator: a stuck level is now an atom.) The design that holds in the core, with nothing lifted
+-- (El of a code still the top-level type judgmentally): every level a field or a Kripke
+-- quantification mentions is closed. Environments and semantic types are in one fixed universe,
+-- Type 1 (the empty environment is One1); the meanings of a shape are in a closed universe fixed by
+-- its stratum: P1's shapes mean types in Type; P6 adds the stratum whose meanings are in Type 1 (the
+-- universe U_0, whose El is Type). What must be repeated per stratum, and why, is exactly: (i) a data
+-- constructor (of shapes, normal forms, derivations) for each closed combination of the strata of the
+-- meanings its fields mention, because a data type's fields must have closed levels and a meaning's
+-- level is closed only when its stratum is (Π of a stratum-0 domain and a stratum-1 codomain has
+-- meanings in lmax 0 1, which is closed; Π of shapes a, b of unknown strata has lmax (lvl a) (lvl b),
+-- which is not); (ii) the clause of each shape-recursive function (Sem, El, CompS, rr, fund) at those
+-- constructors. Each such constructor's type and each such clause is a one-line instance, at closed
+-- levels, of one helper abstracted over level variables (which the checker treats as atoms): the rule
+-- (its premises and conclusion as functions of the meanings) is written once. Everything else —
+-- contexts (CtxE gets one clause per entry stratum, Env stays in Type 1 since lmax 1 0 and lmax 1 1
+-- are closed), worlds, renaming, environments, the Kripke structure — is written once. Not yet
+-- tested: whether a constructor's type may be given as a defined rule type applied to closed levels
+-- (else each constructor's telescope is written out, still one line per combination over the
+-- helpers). A second universe U_1 is a further stratum, the same way.
+--
+-- Decision (2026-11-12, step 1): a type of shape s over environments G is a map T : G → Sem s into
+-- the semantic types of shape s (Sem s-bool = One1, Sem (Π a b) = Sem (Σ a b) = Fam a b = (A : Sem a)
+-- × (El a A → Sem b)), its meaning El s (T ρ), Sem and El one pair by recursion on the closed shape.
+-- This replaces the closures (a base K, a map into it, a structure over K): pulling back is still
+-- composition and the meanings still compute at open environments by the shape's clause, but a type
+-- is one map instead of a base, a map and a structure, so every rule takes one argument T where it
+-- took K, g, A, B.
+--
+-- P2's design (2026-11-12, decided by the criterion that meanings are the language's own types
+-- judgmentally, with no conversion paths). The interval as a higher inductive type is ruled out:
+-- its paths are maps out of that type, equivalent to PathP only up to paths. A dimension entry
+-- contributing "(i : I) → …" to curried meanings is not available either, and for a theoretical
+-- reason: CCHM has no Π over the interval (I is not a type, and its only abstraction is PathP); the
+-- implementation agrees (`fI : (i : I) → Bool` is refused, "code: not a bound variable or checked
+-- definition: I", run 2026-11-12). So a dimension contributes a PathP whose endpoints are bound in a
+-- Σ: an n-dimensional judgment is a cube (Cube n X: two (n-1)-cubes and a PathP between them) and
+-- its meaning a section (Sec n T); checked below (sec1-pathp: a 1-section's path is the language's
+-- PathP, by refl). The endpoints are redundant but judgmentally equal to the path's own (p 0 ≡ c0).
+-- What P2 then is: P1's Jdg, NN, Der, Comp, rr and fund over cubes of contexts and types, P1 being
+-- the case n = 0 (one construction, refactored, not a second copy); dimension expressions (0, 1,
+-- the n bound dimensions, ~, ∧, ∨) acting on sections by recursion on n inside PathP-λ; the Kripke
+-- worlds extended from renamings to the cube category's maps (faces, degeneracies, connections,
+-- reversal), which is Sterling–Angiuli's setting.
+-- Refinement (2026-11-12): what varies along a dimension is the context's entries' types, the type
+-- and the meaning (γ, T, v); the skeleton, the shape and the code do not, and must not be inside the
+-- cube: a path in a closed data type (Lst Entry, TyShape, Code) is not judgmentally constant, so
+-- CtxE and TyE would be stuck along it. So the cube is Cube n (JV sk s) for the fixed skeleton sk,
+-- shape s and code, JV sk s = (γ : fst (CtxE sk)) × (T : Env (sk , γ) → Sem s) × meanings. Operations
+-- on cubes are defined by recursion on n applied to `p i` under a path λ (a function cannot take an
+-- interval point, but it can be applied to the cube p i), so faces, degeneracies, reversal,
+-- connections, exchange and the diagonal at any depth are functions Cube n X → Cube m X.
+--
+-- Finding (2026-11-12, P2): compositions of cube operations at a variable dimension are not
+-- judgmental. `cube-map n f (cube-map n g c)` against `cube-map n (λ x → f (g x)) c` by refl is refused
+-- at a variable n ("wrong endpoint at 0": cube-map is stuck on n); it holds as a path by induction
+-- (cube-comp below). So in a cube-indexed family the index a constructor computes and the one a
+-- generic definition (reify, renaming, fund) needs agree only up to such paths, and the value is
+-- transported along them (a forded family's transport computes on constructors). The meaning of a
+-- typed code is stored apart from its derivation (TCode's v), so reifySound and normalize-sound stay
+-- refl; what is lost beyond n = 0 is only that a normal form's index is its input's by construction.
+-- Ruled out, with reasons: (a) meanings as functions of lines of environments (a λ after a dimension
+-- needs its body pointwise, which a function of a whole line cannot give); (b) derivations in a
+-- context with a dimension as host paths of P1 derivations (a neutral p @ i is neutral inside and its
+-- endpoint's normal form at the boundary, which a uniform path λ cannot be, and the code's dimension
+-- index would not be tied to the host's dimension); (c) a fixed base cube with pointwise maps (the
+-- free functor form, where composition is judgmental): a dimension-dependent term such as p @ j is
+-- not a function of the point, so bases change at it and zips at a variable dimension return.
+-- Needed by P2 and absent from P1: type derivations with codes (a PathP type has endpoint terms;
+-- reflecting a neutral of path type at a constant dimension needs the endpoints' computability, and
+-- P3's neutral comp contains the normal form of a line of types), so computability of types (CompTy,
+-- by recursion on the shape) with reify/reflect taking it. Worlds in P2 are renamings including
+-- weakening by a dimension: no P2 rule substitutes a constant or a compound expression for a world's
+-- dimension (path application interprets its expression by the cube operations below, and
+-- computability at PathP is Kripke over the dimension expressions of later worlds, so a neutral p @ r
+-- is formed only at a non-constant r in normal form). Faces, connections and reversal as world maps
+-- enter with systems in P3, with Sterling–Angiuli's stabilization; as operations on meanings they
+-- are below.
+--
+-- P6's design (2026-11-12; its level part is replaced by the finding above, its universe part
+-- stands). A universe's shape means Type ℓ; a type given by an element t of a universe has the shape
+-- s-el whose meaning is t's meaning itself (El t is the top-level type judgmentally). Reify at a
+-- universe needs a code for a value that is a Type, which cannot be inspected, so computability at
+-- U_ℓ carries one (as in Sterling–Angiuli's glued universe): a code of level ℓ, its normal form, and a
+-- path in Type ℓ from its meaning to the value; computability at s-el is computability at that code,
+-- transported along the path (a predicate on values, not a conversion rule of the object theory). Its
+-- recursion is on the level first (the strata), then the shape (an s-el at level ℓ+1 names a code of
+-- level ℓ), all on closed skeletons.
+--
+-- Plan (2026-11-12). The whole construction, in the order it is built.
+--
+-- 0. Source of the method. Kripke normalization by evaluation for dependent types with a logical
+--    relation (computability) over the category of contexts and order-preserving renamings: the
+--    method of Altenkirch–Kaposi (LMCS 2017) and Coquand ("Canonicity and normalization for
+--    dependent type theory", TCS 2019), and for the cubical part Sterling–Angiuli (LICS 2021).
+--    The derivations are indexed by their meaning (McBride, "Outrageous but meaningful
+--    coincidences", 2010): a derivation of c : A in Γ carries, as an index, the meaning of c as a
+--    function of the environment. So eval is that index, the object theory's conversion is the
+--    language's own judgmental equality on meanings (no conversion rule, nothing to make coherent),
+--    and (6.5) holds by the indices.
+--
+-- 1. Objects, each defined once.
+--    Raw     the existing Code (lib/code.cub); normal forms here use cvar, clam, capp, cpair, cfst,
+--            csnd, ccase #0 (Bool), ccon #0 k, cplam, cpapp — the codes the language's own (code t)
+--            writes for the same terms.
+--    Types   a shape (TyShape, closed data) and a map from the environments into Sem of the shape
+--            (step 1, above).
+--    Ctx     a context: a skeleton (list of shapes, closed data) with each entry's type; its
+--            environment type is computed by recursion on the skeleton.
+--    Var, Der  variables and typing derivations, Der Γ D c v: c is a derivation-checked raw code
+--            of type D in Γ with meaning v : (ρ : G) → T ρ.
+--    Code Γ D = Σ c. Σ v. Der Γ D c v; eval = the meaning v (paper (6.1)).
+--    Ne, Nf  neutral and normal derivations, same indices; embed : Nf → Der keeps c and v.
+--    Worlds  renamings Δ → Γ (functions on variables with their meaning map), with actions on Ne, Nf.
+--    Comp s Δ T x  the computability of x : (ρ : Env Δ) → El s (T ρ) at world Δ, by recursion on s:
+--            Bool — true, false or a neutral; Π — Kripke: at every later world, computable
+--            arguments give computable results; Σ — componentwise.
+--    reify/reflect  mutually by recursion on the shape: reify : Comp → Σ c. Nf with meaning exactly
+--            x; reflect : Ne → Comp. The Π clauses are the paper's Kripke clauses (§6.1).
+--    fund    the fundamental lemma, by recursion on Der: a derivation's meaning is computable at
+--            every world under every computable environment.
+--    normalize d = reify (fund d (reflected identity environment)); the result is a Code with the
+--            same meaning index, so reifySound (6.5) is refl: eval (reify v) ρ ≡ denote v ρ.
+--
+-- 2. Phases. P1 the fragment Π, Σ, Bool (with dependent case): done. Step 1 (closed levels, types
+--    as maps into semantic types): done. P2 PathP and the interval: worlds with dimension variables
+--    and face restrictions (Comp at a path type is computability of every dimension instance, with
+--    the boundary). P3 Kan operations, transp and hcomp, at Π, Σ, Bool, PathP: Sterling–Angiuli's
+--    stabilization (neutrals carry the face on which they are unstable). P4 Glue. P5 the
+--    specializer over Code (lib/specialize.cub's normalize, t11) — needs each definition reflected
+--    into Der, which is the typed checker's output (goal typed-checker). P6 universes (above).
+--
+-- Correction (2026-11-12, replaces t45, closed; its lifting is in turn replaced by the finding at
+-- the top): universes are not blocked and need nothing added to the core. The object hierarchy
+-- U_0..U_k is finite. A `data ... : Type 1` annotation does not raise a level (a data type's level is
+-- its fields' largest, t49).
+--
+-- Finding (2026-11-12) that fixes the design below: transport along a constant line of a variable
+-- type does not reduce (CCHM has no regularity; `transport (λ i → A) a ≡ a` by refl is refused, while
+-- at Bool it is accepted). The language's indexed families are forded (each index an equation field),
+-- so a function defined by recursion over one computes its clauses only up to such transports when
+-- the index involves variable types. Everything whose clauses must compute inside types (the meaning
+-- of a type, computability, environments of a context) is therefore defined by recursion on closed
+-- first-order skeletons (TyShape, lists of shapes), where clauses compute definitionally; indexed
+-- families (derivations, normal forms) are only ever the arguments of functions whose result types
+-- are fixed by their signatures, so the transports inside their results are harmless (their
+-- indices, the meanings, are fixed by the types).
+--
+-- Elaborator quirk found 2026-11-12: in a structural recursion, an implicit binder after the recursive
+-- argument is not abstracted in the induction hypothesis (the inner call gets the outer value, and an
+-- explicit {..} is ignored); such parameters are taken explicitly here.
+--
+-- Decision (2026-11-12, P2.6, refines the cube form of judgments below): a judgment's cube is split
+-- into a cube of contexts G : Cube (dims sk) (CtxV sk) and a cube over G of meanings, M : DCube
+-- (dims sk) (CtxV sk) (λ γ → EnvV sk γ → Z) G (Z = TV s = (A : Sem s) × El s A for a term; a rule's
+-- data for a rule). Reason: the plan's single cube of (γ, T, v) needs zips at a variable dimension
+-- wherever two judgments over one context meet (weakening a judgment by a type that another judgment
+-- supplies, reify Π's world), and zips agree with projections only up to paths; over one base cube G,
+-- the maps between cubes over cubes (fmap, zip, reidx, push, pull, the generators' lifts, papp-cube-d,
+-- below) are structural, with no path. What remains up to paths: composites of these maps (the
+-- naturality lemmas listed below), and carrying a cube over a base along a path of bases (papp-deg;
+-- a substitution's base equation).
+-- Finding (2026-11-12, P2.6): the fundamental lemma needs substitutions with explicit environment
+-- maps, not worlds given as functions on cubes (P1's Ren style). In fund (dlam) the substitution for
+-- the body is the given one, then the Kripke world, extended by the argument cube Y; acting on a
+-- meaning over the body's context needs each vertex's environment map, which a function on cubes
+-- hides. So a substitution from Γ = (sk, G) to Δ = (sk', G') is a dimension part (a composite of
+-- degeneracies, natural in the base type: Cube (dims sk) X → Cube (dims sk') X), a cube over G' of
+-- pairs (γ : CtxV sk) × (EnvV sk' γ' → EnvV sk γ), and a path from the dimension part of G to that
+-- cube's first projection; its action on meanings is reidx, then transport along the path, then
+-- dcube-pull. Renamings (worlds) are the substitutions whose entries are variables; their action on
+-- normal forms is ren-nn as in P1, transported along the action's naturality.
+--
+-- Next definitions (2026-11-12, latest), in order. Done and checked: lines, cubes, generators,
+-- cube-comp, cube-id; P2.4 (canonical interval forms, papp-cube); P2.2 (skeletons with dimension
+-- entries, dims, CtxE/VarT/CompEnv/env-ren/var-comp/reflect-env with a dimension clause, ren-dim);
+-- P2.1 (DCube, dcube-map, dcube-of, dcube-map-of); P2.3 (PathS/PathE); P2.6 foundation (bool-elim1,
+-- pcat, psym, dcube-fmap/zip/reidx/push/pull, the generators over their images, papp-deg with
+-- diag-deg … papp-dnf-from-deg, cube-comp2, papp-cube-d); P2.6a (CtxV, EnvV, FbE, CCtx, Mean, fmapM,
+-- TV, extM, dext, wkM, dwkM); P2.6c (VarP, var-shape, var-word, varM, varCube: a variable is a
+-- closed index into the skeleton, not P1's VarT); P2.6b (fmap-fmap, fmap-reidx, reidx-fmap,
+-- fmap-push, push-fmap, fmap-pull, fmap-transp, and fmap∘papp-cube-d: fmap-gen, fmap-diag-sk …
+-- fmap-papp).
+-- (2026-11-12) P2.6d and P2.6e land in one commit: changing Jdg changes the index of NN and Der, so
+-- ren-nn, CompS, rr, fund, embed, normalize and the P1 examples change with them, and building the
+-- new families beside the old would be a second copy (not allowed). Rule data for P2.6d, each a
+-- closed Type 1 read pointwise per environment, with the named projections shared by NN, Der, CompS
+-- and reify: AppV a b = (T : Fam a b) × El (s-pi a b) T × El a (fst T), app-f q = (fst q , fst (snd
+-- q)), app-a q = (fst (fst q) , snd (snd q)), app-r q = (snd (fst q) (snd (snd q)) , fst (snd q)
+-- (snd (snd q))); for Σ, sig-1 (T , v) = (fst T , fst v) and sig-2 (T , v) = (snd T (fst v) , snd v)
+-- (the premises of pair, the conclusions of fst and snd); CaseV sP = (B : One1) × (P : Bool → Sem
+-- sP) × (x : Bool) × El sP (P true) × El sP (P false), scrutinee (B , x), branches (P true , t) and
+-- (P false , f), result (P x , bool-elim (λ b → El sP (P b)) t f x); true/false: a cube B : Mean Γ
+-- One1 and fmapM (λ u → (u , true)); var: varCube Γ v; lam: the conclusion X : Mean Γ (TV (s-pi a
+-- b)), the body over extM Γ a (TV (s-pi a b)) (λ γ e ρ → fst (fst (e ρ))) X with meaning dcube-push
+-- of X over X at (ρ , x) ↦ (snd (fst (e ρ)) x , snd (e ρ) x); plam: the conclusion X : Mean Γ (TV
+-- (s-path a)), the body over dext Γ with meaning dcube-reidx at degen-l, each vertex's e read as the
+-- line λ i ρ → (snd (snd (fst (fst (e ρ)))) i , snd (e ρ) i) with its two ends.
+-- Tested 2026-11-12 (scratch file, not kept): a family indexed by (Γ : CCtx) × TyShape × Code × Mean Γ
+-- (TV s), with a variable constructor at varCube and a projection constructor at fmapM, and
+-- functions matching on it with the implicit index (as ren-nn and embed), check (0 failed).
+--   P2.6a Contexts and meanings over cubes. CtxV sk = fst (CtxE sk), EnvV sk γ = snd (CtxE sk) γ;
+--        CCtx = (sk : Lst Entry) × Cube (dims sk) (CtxV sk); Mean (Γ : CCtx) (Z : Type 1) = DCube
+--        (dims (fst Γ)) (CtxV (fst Γ)) (λ γ → EnvV (fst Γ) γ → Z) (snd Γ); fmapM Γ Z Z' (h : Z → Z')
+--        = dcube-fmap at λ γ e ρ → h (e ρ); TV s = (A : Sem s) × El s A. Extensions: by a type
+--        given as a cube over G, extM Γ Y (f : (γ : CtxV sk) → (EnvV sk γ → Y) → EnvV sk γ → Sem a)
+--        (M : Mean Γ Y) = (lcons (e-ty a) sk , dcube-map … (λ γ e → (γ , f γ e)) G M) (the context of a
+--        λ's body is extM at its own conclusion cube, f the domain: no path); by a dimension, dext Γ
+--        = (lcons e-dim sk , cube-map (dims sk) _ _ (degen-l _) G). Weakening of meanings: by
+--        dcube-push (to extM) and dcube-reidx at degen-o (to dext).
+--   P2.6b Naturality lemmas (paths, by induction on n): fmap∘fmap, fmap∘reidx, fmap∘push, fmap∘pull,
+--        fmap∘papp-cube-d, and fmap commuting with transport along a path of bases (by a filler).
+--   P2.6c Variables: VarS sk k s (index k names a term entry of shape s; closed, by recursion on sk)
+--        and varM sk k p : (γ : CtxV sk) → EnvV sk γ → TV s; a variable's meaning is dcube-of of it.
+--   P2.6d Judgments Jdg = (Γ : CCtx) × (s : TyShape) × Code × Mean Γ (TV s). NN and Der rebuilt
+--        (replacing P1's, P1 the case dims = 0): each rule takes a cube R : Mean Γ (rule data) and
+--        its premises' and conclusion's meanings are fmapM of named functions of the rule data (one
+--        per rule, shared with CompS and reify). New: nplam/dplam (premise over dext Γ, meaning the
+--        conclusion's reindexed at degen with the path read pointwise), npapp/dpapp (premise p over
+--        Γ at a path type; fields a canonical form f, isTrue (dnf-canon f), and for npapp isTrue
+--        (dnf-nonconst f); code cpapp p (dnf-code f); conclusion meaning Y with an equation field:
+--        papp-cube-d at f of p's meaning reindexed at degen, carried along papp-deg G, is Y).
+--   P2.5 (needs P2.6a–d) s-path in TyShape, TyE (s-path a) = (PathS (Sem a) (El a) , PathE (Sem a)
+--        (El a)); DTy (Γ : CCtx) (s) (Code) (Mean Γ (Sem s)) with Bool, Π, Σ, PathP (line over dext
+--        Γ, Der of both ends); CompTy by recursion on the shape (Bool One1; Π Kripke over
+--        substitutions; Σ; PathP: CompTy of the line and CompS of both ends); fundTy.
+--   P2.6e Substitutions Sub Δ Γ (the finding above), their action subM on meanings, the identity,
+--        weakening by a type, by a dimension, extension by a cube of values; CompS s Δ x by recursion
+--        on s (Bool: constantly true, constantly false (paths of meanings), or a neutral; Π: for
+--        every renaming w : Δ' → Δ and Y : Mean Δ' (AppV a b) with a path from fmapM of its function
+--        part to subM w x, CompS of its argument part gives CompS of its result; Σ componentwise;
+--        PathP: for every renaming and every canonical form f over its target, CompS a of the path
+--        applied at f, carried along papp-deg); comp-ren; rr (taking CompTy); CompEnv over a
+--        substitution; fund; reflect-env; embed; normalize; reifySound and normalize-sound (refl on
+--        TCode's stored meaning). Examples: ⟨i⟩ b to cplam (cvar #1); a path variable p to cplam
+--        (cpapp (cvar #1) (cvar #0)); p @ 0 to the type's endpoint's normal form; P1's examples
+--        unchanged.
+--   P3, P4, P6 as in the plan above; P3 first extends worlds to the cube category (faces,
+--        degeneracies, connections, reversal: the generators above), with neutrals carrying the face
+--        on which they are unstable (Sterling–Angiuli), since systems substitute constants for a
+--        world's dimensions.
+
+-- ---------------------------------------------------------------- types: shapes and their semantic types
+-- (2026-11-12, step 1) A type of shape s over environments G is a map from G into Sem s, the semantic
+-- types of shape s; its meaning at ρ is El s (T ρ). Sem and El are defined together by recursion on
+-- the closed shape (one pair, TyE, since mutual definitions by clauses are not available), so El of
+-- an open semantic type computes by its shape's clause. Levels are closed everywhere (the finding at
+-- the head): El s is
+-- in Type (the stratum of P1's shapes; P6 adds the stratum whose meanings are in Type 1), Sem s and
+-- environments are in Type 1, so a semantic type may contain a Type (the universe's El, P6) and an
+-- environment may contain a type, with nothing lifted.
+data TyShape = s-bool | s-pi (a : TyShape) (b : TyShape) | s-sig (a : TyShape) (b : TyShape) | s-path (a : TyShape)
+-- the semantic Bool type: nothing; One1 is a type at level 1 with the one value `one`
+data One1 = one1 (pad : Type → Type)
+one : One1
+one = one1 (λ X → X)
+TyU : Type 2
+-- binder names chosen not to collide: t46
+TyU = (uM : Type 1) × (uM → Type)
+-- binders hatted (Â D̂ x̂) because of t46 (telescope instantiation captures names)
+TyE : TyShape → TyU
+TyE s-bool = (One1 , λ D̂ → Bool)
+TyE (s-pi a b) =
+  ((Â : fst (TyE a)) × (snd (TyE a) Â → fst (TyE b)) ,
+   λ D̂ → (x̂ : snd (TyE a) (fst D̂)) → snd (TyE b) (snd D̂ x̂))
+TyE (s-sig a b) =
+  ((Â : fst (TyE a)) × (snd (TyE a) Â → fst (TyE b)) ,
+   λ D̂ → (x̂ : snd (TyE a) (fst D̂)) × snd (TyE b) (snd D̂ x̂))
+-- (2026-11-12, P2.6d) the path shape: PathS/PathE (P2.3, below) written out, since TyE precedes them
+-- (sem-path checks that they agree judgmentally)
+TyE (s-path a) =
+  ((pL̂ : (Â0 : fst (TyE a)) × (Â1 : fst (TyE a)) × PathP (λ i → fst (TyE a)) Â0 Â1) × snd (TyE a) (fst pL̂) × snd (TyE a) (fst (snd pL̂)) ,
+   λ D̂ → PathP (λ i → snd (TyE a) (snd (snd (fst D̂)) i)) (fst (snd D̂)) (snd (snd D̂)))
+Sem : TyShape → Type 1
+Sem s = fst (TyE s)
+El : (s : TyShape) → Sem s → Type
+El s = snd (TyE s)
+-- the semantic types of Π and Σ: a domain and a family over it (the same for both)
+Fam : TyShape → TyShape → Type 1
+Fam a b = (A : Sem a) × (El a A → Sem b)
+
+-- ---------------------------------------------------------------- contexts
+-- a context over a skeleton (its entries' shapes, closed data): the entries' types and the type of
+-- its environments, by recursion on the skeleton; environments are in Type 1 (the empty one is One1)
+-- (P2.2, 2026-11-12) A skeleton's entries are types' shapes or dimensions, newest first. A dimension
+-- contributes nothing to a vertex's environment (its direction is the cube's, P2.6); codes count it
+-- among the de Bruijn indices.
+data Entry = e-ty (s : TyShape) | e-dim
+dims : Lst Entry → Nat
+dims lnil = zero
+dims (lcons (e-ty s) sk) = dims sk
+dims (lcons e-dim sk) = suc (dims sk)
+CtxU : Type 2
+-- binder names chosen not to collide: t46
+CtxU = (uM : Type 1) × (uM → Type 1)
+CtxE : Lst Entry → CtxU
+CtxE lnil = (One1 , λ γ → One1)
+CtxE (lcons e-dim sk) = CtxE sk
+CtxE (lcons (e-ty s) sk) =
+  ((γ : fst (CtxE sk)) × (snd (CtxE sk) γ → Sem s) ,
+   λ p → (ρ : snd (CtxE sk) (fst p)) × El s (snd p ρ))
+-- ---------------------------------------------------------------- variables
+-- the dependent eliminator of Bool, for the meanings of case
+bool-elim : (P : Bool → Type) → P true → P false → (b : Bool) → P b
+bool-elim P t f true = t
+bool-elim P t f false = f
+
+-- the kinds of the one family of neutral and normal forms; the codes of Bool's constructors and case
+data NK = k-ne | k-nf
+c-true : Code
+c-true = ccon #0 #0 lnil lnil
+c-false : Code
+c-false = ccon #0 #1 lnil lnil
+c-case : Code → Code → Code → Code
+c-case t f x = ccase #0 (lcons t (lcons f lnil)) x
+
+-- ---------------------------------------------------------------- P2: lines and cubes
+-- (2026-11-12) A line in X: two points and a path between them; its endpoints are the path's own
+-- judgmentally (p 0 ≡ x0). An n-cube: an (n-1)-cube of lines, so the newest dimension is the
+-- innermost and an n-cube of lines is literally an (n+1)-cube (a path λ's body, a PathP's meaning).
+-- The interval enters only through PathP; operations are functions applied to `p i` under a path λ.
+Line : Type 1 → Type 1
+-- binder names chosen not to collide: t46
+Line X = (lx0 : X) × (lx1 : X) × PathP (λ i → X) lx0 lx1
+Cube : Nat → Type 1 → Type 1
+Cube zero X = X
+Cube (suc n) X = Cube n (Line X)
+line-map : (X Y : Type 1) → (X → Y) → Line X → Line Y
+line-map X Y f L = (f (fst L) , f (fst (snd L)) , λ i → f (snd (snd L) i))
+cube-map : (n : Nat) (X Y : Type 1) → (X → Y) → Cube n X → Cube n Y
+cube-map zero X Y f c = f c
+cube-map (suc n) X Y f c = cube-map n (Line X) (Line Y) (line-map X Y f) c
+-- the generators of the cube category at the newest dimension, on lines (an n-cube's are their
+-- cube-maps): the two faces, the degeneracy, reversal, the connections ∧ and ∨, exchange of the two
+-- newest dimensions and their diagonal
+face0-l : (X : Type 1) → Line X → X
+face0-l X L = fst L
+face1-l : (X : Type 1) → Line X → X
+face1-l X L = fst (snd L)
+degen-l : (X : Type 1) → X → Line X
+degen-l X x = (x , x , λ i → x)
+rev-l : (X : Type 1) → Line X → Line X
+rev-l X L = (fst (snd L) , fst L , λ i → snd (snd L) (~ i))
+-- λ i j → p (i ∧ j) and λ i j → p (i ∨ j) (j the newer)
+meet-l : (X : Type 1) → Line X → Line (Line X)
+meet-l X L = ((fst L , fst L , λ j → fst L) , L , λ i → (fst L , snd (snd L) i , λ j → snd (snd L) (i ∧ j)))
+join-l : (X : Type 1) → Line X → Line (Line X)
+join-l X L = (L , (fst (snd L) , fst (snd L) , λ j → fst (snd L)) , λ i → (snd (snd L) i , fst (snd L) , λ j → snd (snd L) (i ∨ j)))
+-- λ i j → q j i
+exch-l : (X : Type 1) → Line (Line X) → Line (Line X)
+exch-l X Q =
+  ((fst (fst Q) , fst (fst (snd Q)) , λ i → fst (snd (snd Q) i)) ,
+   (fst (snd (fst Q)) , fst (snd (fst (snd Q))) , λ i → fst (snd (snd (snd Q) i))) ,
+   λ j → (snd (snd (fst Q)) j , snd (snd (fst (snd Q))) j , λ i → snd (snd (snd (snd Q) i)) j))
+-- λ i → q i i
+diag-l : (X : Type 1) → Line (Line X) → Line X
+diag-l X Q = (fst (fst Q) , fst (snd (fst (snd Q))) , λ i → snd (snd (snd (snd Q) i)) i)
+-- their laws hold by refl (the endpoints of a path are its own judgmentally); the type is a line,
+-- so the laws are PathPs (t50)
+face0-degen : (X : Type 1) (x : X) → PathP (λ i → X) (face0-l X (degen-l X x)) x
+face0-degen X x = λ i → x
+rev-rev : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (rev-l X (rev-l X L)) L
+rev-rev X L = λ i → L
+exch-exch : (X : Type 1) (Q : Line (Line X)) → PathP (λ i → Line (Line X)) (exch-l X (exch-l X Q)) Q
+exch-exch X Q = λ i → Q
+diag-degen : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (diag-l X (degen-l (Line X) L)) L
+diag-degen X L = λ i → L
+diag-meet : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (diag-l X (meet-l X L)) L
+diag-meet X L = λ i → L
+face1-meet : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (face1-l (Line X) (meet-l X L)) L
+face1-meet X L = λ i → L
+-- composition of cube maps: at a variable dimension it does not hold by refl (refused, "wrong
+-- endpoint at 0", 2026-11-12: cube-map is stuck on n); it holds as a path, by induction
+cube-comp : (n : Nat) (X Y Z : Type 1) (f : Y → Z) (g : X → Y) (c : Cube n X) →
+  PathP (λ i → Cube n Z) (cube-map n Y Z f (cube-map n X Y g c)) (cube-map n X Z (λ x → f (g x)) c)
+cube-comp zero X Y Z f g c = λ i → f (g c)
+cube-comp (suc n) X Y Z f g c = cube-comp n (Line X) (Line Y) (Line Z) (line-map Y Z f) (line-map X Y g) c
+cube-id : (n : Nat) (X : Type 1) (c : Cube n X) → PathP (λ i → Cube n X) (cube-map n X X (λ x → x) c) c
+cube-id zero X c = λ i → c
+cube-id (suc n) X c = cube-id n (Line X) c
+
+-- ---------------------------------------------------------------- P2: interval expressions, De Morgan normal forms
+-- (2026-11-12) The interval of CCHM is the free De Morgan algebra on the dimension variables, which is
+-- the free distributive lattice (with 0, 1) on the literals i and ~i; an element's canonical form is
+-- an antichain of conjunctions of literals (a DNF with absorption), each conjunction a set of
+-- literals. Interval expressions are the codes ci0, ci1, cvar k, cneg, cmeet, cjoin (the one code
+-- representation); dnf-of reads one to its canonical form and dnf-code writes the form back. A
+-- neutral path application is formed at a canonical, non-constant form only (P2.6), so that no normal
+-- form applies a neutral path at an endpoint or at two spellings of one interval element.
+-- a literal: a dimension variable and its polarity (true: i, false: ~i); ordered by variable, then ~i
+-- before i
+Lit : Type
+Lit = Word × Bool
+bool-eq : Bool → Bool → Bool
+bool-eq true b = b
+bool-eq false b = not b
+lit-eq : Lit → Lit → Bool
+lit-eq a b = andB (weq (fst a) (fst b)) (bool-eq (snd a) (snd b))
+lit-lt : Lit → Lit → Bool
+lit-lt a b = if wlt (fst a) (fst b) then true else (if weq (fst a) (fst b) then andB (not (snd a)) (snd b) else false)
+-- a conjunction: a strictly increasing list of literals; a form: a list of conjunctions
+Conj : Type
+Conj = Lst Lit
+DNF : Type
+DNF = Lst Conj
+-- the conjunction of two conjunctions (their union, as an ordered merge); by recursion on the first,
+-- the second inserted literal by literal
+conj-ins : Lit → Conj → Conj
+conj-ins l lnil = lcons l lnil
+conj-ins l (lcons m ms) = if lit-eq l m then lcons m ms else (if lit-lt l m then lcons l (lcons m ms) else lcons m (conj-ins l ms))
+conj-meet : Conj → Conj → Conj
+conj-meet lnil d = d
+conj-meet (lcons l ls) d = conj-ins l (conj-meet ls d)
+-- membership and inclusion
+conj-has : Lit → Conj → Bool
+conj-has l lnil = false
+conj-has l (lcons m ms) = if lit-eq l m then true else conj-has l ms
+conj-sub : Conj → Conj → Bool
+conj-sub lnil d = true
+conj-sub (lcons l ls) d = andB (conj-has l d) (conj-sub ls d)
+-- equality of conjunctions as lists (a canonical conjunction is ordered, so this is set equality there)
+conj-eq : Conj → Conj → Bool
+conj-eq lnil lnil = true
+conj-eq lnil (lcons m ms) = false
+conj-eq (lcons l ls) lnil = false
+conj-eq (lcons l ls) (lcons m ms) = andB (lit-eq l m) (conj-eq ls ms)
+-- the order of conjunctions in a canonical form: shorter first, then by their first differing literal
+conj-lt : Conj → Conj → Bool
+conj-lt lnil lnil = false
+conj-lt lnil (lcons m ms) = true
+conj-lt (lcons l ls) lnil = false
+conj-lt (lcons l ls) (lcons m ms) = if lit-lt l m then true else (if lit-eq l m then conj-lt ls ms else false)
+-- adding a conjunction to a canonical form: dropped if some conjunction there is included in it
+-- (absorption), else the ones that include it removed and it inserted in order
+dnf-any-sub : Conj → DNF → Bool
+dnf-any-sub c lnil = false
+dnf-any-sub c (lcons d ds) = if conj-sub d c then true else dnf-any-sub c ds
+dnf-drop-sup : Conj → DNF → DNF
+dnf-drop-sup c lnil = lnil
+dnf-drop-sup c (lcons d ds) = if conj-sub c d then dnf-drop-sup c ds else lcons d (dnf-drop-sup c ds)
+dnf-insert : Conj → DNF → DNF
+dnf-insert c lnil = lcons c lnil
+dnf-insert c (lcons d ds) = if conj-lt c d then lcons c (lcons d ds) else lcons d (dnf-insert c ds)
+dnf-add : Conj → DNF → DNF
+dnf-add c f = if dnf-any-sub c f then f else dnf-insert c (dnf-drop-sup c f)
+-- the lattice operations and De Morgan negation on canonical forms
+dnf-join : DNF → DNF → DNF
+dnf-join lnil g = g
+dnf-join (lcons c cs) g = dnf-add c (dnf-join cs g)
+dnf-meet-c : Conj → DNF → DNF
+dnf-meet-c c lnil = lnil
+dnf-meet-c c (lcons d ds) = dnf-add (conj-meet c d) (dnf-meet-c c ds)
+dnf-meet : DNF → DNF → DNF
+dnf-meet lnil g = lnil
+dnf-meet (lcons c cs) g = dnf-join (dnf-meet-c c g) (dnf-meet cs g)
+dnf-zero : DNF
+dnf-zero = lnil
+dnf-one : DNF
+dnf-one = lcons lnil lnil
+-- ~(l1 ∧ … ∧ lk) = ~l1 ∨ … ∨ ~lk, and ~(c1 ∨ … ∨ cm) = ~c1 ∧ … ∧ ~cm
+neg-conj : Conj → DNF
+neg-conj lnil = dnf-zero
+neg-conj (lcons l ls) = dnf-add (lcons (fst l , not (snd l)) lnil) (neg-conj ls)
+dnf-neg : DNF → DNF
+dnf-neg lnil = dnf-one
+dnf-neg (lcons c cs) = dnf-meet (neg-conj c) (dnf-neg cs)
+-- an interval code's canonical form (none for a code that is not an interval expression)
+dnf-of : Code → Opt DNF
+dnf-of ci0 = some dnf-zero
+dnf-of ci1 = some dnf-one
+dnf-of (cvar k) = some (lcons (lcons (k , true) lnil) lnil)
+dnf-of (cneg r) = case dnf-of r of none → none; some f → some (dnf-neg f)
+dnf-of (cmeet r s) = case dnf-of r of none → none; some f → (case dnf-of s of none → none; some g → some (dnf-meet f g))
+dnf-of (cjoin r s) = case dnf-of r of none → none; some f → (case dnf-of s of none → none; some g → some (dnf-join f g))
+dnf-of c = none
+-- a canonical form written as a code
+lit-code : Lit → Code
+lit-code l = if snd l then cvar (fst l) else cneg (cvar (fst l))
+conj-code-from : Lit → Conj → Code
+conj-code-from l lnil = lit-code l
+conj-code-from l (lcons m ms) = cmeet (lit-code l) (conj-code-from m ms)
+conj-code : Conj → Code
+conj-code lnil = ci1
+conj-code (lcons l ls) = conj-code-from l ls
+dnf-code-from : Conj → DNF → Code
+dnf-code-from c lnil = conj-code c
+dnf-code-from c (lcons d ds) = cjoin (conj-code c) (dnf-code-from d ds)
+dnf-code : DNF → Code
+dnf-code lnil = ci0
+dnf-code (lcons c cs) = dnf-code-from c cs
+-- a form is canonical when it is its own normal form, and
+-- constant when it is 0 or 1
+dnf-eq : DNF → DNF → Bool
+dnf-eq lnil lnil = true
+dnf-eq lnil (lcons d ds) = false
+dnf-eq (lcons c cs) lnil = false
+dnf-eq (lcons c cs) (lcons d ds) = andB (conj-eq c d) (dnf-eq cs ds)
+-- the normal form of any list of conjunctions: each conjunction ordered, then all added
+dnf-norm : DNF → DNF
+dnf-norm lnil = lnil
+dnf-norm (lcons c cs) = dnf-add (conj-meet c lnil) (dnf-norm cs)
+dnf-canon : DNF → Bool
+dnf-canon f = dnf-eq (dnf-norm f) f
+dnf-nonconst : DNF → Bool
+dnf-nonconst lnil = false
+dnf-nonconst (lcons lnil cs) = false
+dnf-nonconst (lcons (lcons l ls) cs) = true
+
+-- ---------------------------------------------------------------- P2: skeletons with dimensions, and path application on cubes
+-- (2026-11-12) A context's skeleton lists its entries, newest first: a type's shape or a dimension.
+-- Codes count both (de Bruijn indices over one context of term and dimension variables, lib/code.cub);
+-- a dimension contributes a direction to the cube of the judgments over the context and nothing to a
+-- vertex's environment.
+-- (Entry and dims are defined with the contexts, above)
+-- the diagonal of the newest direction of a cube over sk with the dimension that index k of sk names
+-- (exchanging the newest direction outward past each nearer dimension); an index that names a term
+-- entry or nothing has no dimension, and gives the face at 0 (the side condition of a neutral path
+-- application excludes it, P2.6)
+diag-sk : (sk : Lst Entry) (k : Word) (X : Type 1) → Cube (suc (dims sk)) X → Cube (dims sk) X
+diag-sk lnil k X c = face0-l X c
+diag-sk (lcons (e-ty s) sk) k X c =
+  if weq k #0 then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c
+diag-sk (lcons e-dim sk) k X c =
+  if weq k #0 then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+  else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+-- the newest direction at a literal (i or ~i), the index shifted by o (the dimensions a connection
+-- has put in front of the skeleton)
+papp-lit : (sk : Lst Entry) (X : Type 1) (o : Word) (l : Lit) → Cube (suc (dims sk)) X → Cube (dims sk) X
+papp-lit sk X o l c =
+  if snd l then diag-sk sk (%wadd (fst l) o) X c
+  else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+-- at a conjunction l ∧ m ∧ …: the connection λ i j → p (i ∧ j), then j at the rest (over the skeleton
+-- with i in front, indices one further), then i at l; the empty conjunction is 1
+papp-conj-from : (sk : Lst Entry) (X : Type 1) (o : Word) (l : Lit) (ms : Conj) → Cube (suc (dims sk)) X → Cube (dims sk) X
+papp-conj-from sk X o l lnil c = papp-lit sk X o l c
+papp-conj-from sk X o l (lcons m ms) c =
+  papp-lit sk X o l (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+papp-conj : (sk : Lst Entry) (X : Type 1) (o : Word) (c : Conj) → Cube (suc (dims sk)) X → Cube (dims sk) X
+papp-conj sk X o lnil c = cube-map (dims sk) (Line X) X (face1-l X) c
+papp-conj sk X o (lcons l ls) c = papp-conj-from sk X o l ls c
+-- at a disjunction: the connection λ i j → p (i ∨ j), likewise; the empty disjunction is 0
+papp-dnf-from : (sk : Lst Entry) (X : Type 1) (o : Word) (c : Conj) (ds : DNF) → Cube (suc (dims sk)) X → Cube (dims sk) X
+papp-dnf-from sk X o c lnil p = papp-conj sk X o c p
+papp-dnf-from sk X o c (lcons d ds) p =
+  papp-conj sk X o c (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) p))
+-- a cube over sk with one more (newest) direction, at an interval element in canonical form over sk
+papp-cube : (sk : Lst Entry) (X : Type 1) (f : DNF) → Cube (suc (dims sk)) X → Cube (dims sk) X
+papp-cube sk X lnil p = cube-map (dims sk) (Line X) X (face0-l X) p
+papp-cube sk X (lcons c cs) p = papp-dnf-from sk X #0 c cs p
+
+-- ---------------------------------------------------------------- P2.1: cubes in a family over a cube
+-- (2026-11-12) A line over a line L of X in a family Y: a point over each end and a path over L; a
+-- cube over a cube likewise, one direction at a time (newest innermost, as Cube).
+LineO : (X : Type 1) (Y : X → Type 1) → Line X → Type 1
+-- binder names chosen not to collide: t46
+LineO X Y L = (ly0 : Y (fst L)) × (ly1 : Y (fst (snd L))) × PathP (λ i → Y (snd (snd L) i)) ly0 ly1
+DCube : (n : Nat) (X : Type 1) (Y : X → Type 1) → Cube n X → Type 1
+DCube zero X Y c = Y c
+DCube (suc n) X Y c = DCube n (Line X) (LineO X Y) c
+lineo-map : (X : Type 1) (Y : X → Type 1) (Z : Type 1) → ((x : X) → Y x → Z) → (L : Line X) → LineO X Y L → Line Z
+lineo-map X Y Z f L D = (f (fst L) (fst D) , f (fst (snd L)) (fst (snd D)) , λ i → f (snd (snd L) i) (snd (snd D) i))
+-- a map out of a cube with a cube over it
+dcube-map : (n : Nat) (X : Type 1) (Y : X → Type 1) (Z : Type 1) → ((x : X) → Y x → Z) → (c : Cube n X) → DCube n X Y c → Cube n Z
+dcube-map zero X Y Z f c d = f c d
+dcube-map (suc n) X Y Z f c d = dcube-map n (Line X) (LineO X Y) (Line Z) (lineo-map X Y Z f) c d
+-- the cube over a cube given by a section of the family
+lineo-of : (X : Type 1) (Y : X → Type 1) → ((x : X) → Y x) → (L : Line X) → LineO X Y L
+lineo-of X Y f L = (f (fst L) , f (fst (snd L)) , λ i → f (snd (snd L) i))
+dcube-of : (n : Nat) (X : Type 1) (Y : X → Type 1) → ((x : X) → Y x) → (c : Cube n X) → DCube n X Y c
+dcube-of zero X Y f c = f c
+dcube-of (suc n) X Y f c = dcube-of n (Line X) (LineO X Y) (lineo-of X Y f) c
+-- mapping out of a cube with the cube of a section is mapping out of the cube: a path by induction
+dcube-map-of : (n : Nat) (X : Type 1) (Y : X → Type 1) (Z : Type 1) (f : (x : X) → Y x → Z) (g : (x : X) → Y x) (c : Cube n X) →
+  PathP (λ i → Cube n Z) (dcube-map n X Y Z f c (dcube-of n X Y g c)) (cube-map n X Z (λ x → f x (g x)) c)
+dcube-map-of zero X Y Z f g c = λ i → f c (g c)
+dcube-map-of (suc n) X Y Z f g c = dcube-map-of n (Line X) (LineO X Y) (Line Z) (lineo-map X Y Z f) (lineo-of X Y g) c
+
+-- ---------------------------------------------------------------- P2.3: the semantic path type
+-- (2026-11-12) A semantic PathP type over semantic types X with meanings E: a line of semantic types
+-- and a point over each end; its meaning is the language's PathP over the line, judgmentally (the
+-- clause of TyE for the path shape is this pair, P2.6).
+PathS : (X : Type 1) (E : X → Type) → Type 1
+-- binder names chosen not to collide: t46
+PathS X E = (pL : Line X) × E (fst pL) × E (fst (snd pL))
+PathE : (X : Type 1) (E : X → Type) → PathS X E → Type
+PathE X E D = PathP (λ i → E (snd (snd (fst D)) i)) (fst (snd D)) (snd (snd D))
+pathE-pathp : (X : Type 1) (E : X → Type) (A0 A1 : X) (A : PathP (λ i → X) A0 A1) (a0 : E A0) (a1 : E A1) →
+  Path Type (PathE X E ((A0 , A1 , A) , a0 , a1)) (PathP (λ i → E (A i)) a0 a1)
+pathE-pathp X E A0 A1 A a0 a1 = refl
+-- a value of a path type is a line over its type's line, with the type's endpoints as its ends
+path-line : (X : Type 1) (E : X → Type) (D : PathS X E) → PathE X E D →
+  (y0 : E (fst (fst D))) × (y1 : E (fst (snd (fst D)))) × PathP (λ i → E (snd (snd (fst D)) i)) y0 y1
+path-line X E D p = (p 0 , p 1 , p)
+path-line-ends : (X : Type 1) (E : X → Type) (D : PathS X E) (p : PathE X E D) →
+  Path (E (fst (fst D))) (fst (path-line X E D p)) (fst (snd D))
+path-line-ends X E D p = refl
+
+-- ---------------------------------------------------------------- P2.6 foundation: maps of cubes over cubes
+-- (2026-11-12) A judgment over a context with dimensions is a cube of contexts G and a cube over G of
+-- meanings (the head's decision of this date); these are the structural maps between such cubes, each
+-- by recursion on the dimension through its line version, so each computes on constructors with no
+-- path. Their composites agree only up to paths (as cube-comp).
+-- the dependent eliminator of Bool into Type 1
+bool-elim1 : (P : Bool → Type 1) → P true → P false → (b : Bool) → P b
+bool-elim1 P t f true = t
+bool-elim1 P t f false = f
+-- composition and inversion of paths in a type at level 1 (PathP: t50)
+pcat : (A : Type 1) (x y z : A) → PathP (λ i → A) x y → PathP (λ i → A) y z → PathP (λ i → A) x z
+pcat A x y z p q = λ i → comp (λ j → A) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
+psym : (A : Type 1) (x y : A) → PathP (λ i → A) x y → PathP (λ i → A) y x
+psym A x y p = λ i → p (~ i)
+-- a fibrewise map
+lineo-fmap : (X : Type 1) (F F' : X → Type 1) → ((x : X) → F x → F' x) → (L : Line X) → LineO X F L → LineO X F' L
+lineo-fmap X F F' h L D = (h (fst L) (fst D) , h (fst (snd L)) (fst (snd D)) , λ i → h (snd (snd L) i) (snd (snd D) i))
+dcube-fmap : (n : Nat) (X : Type 1) (F F' : X → Type 1) → ((x : X) → F x → F' x) → (c : Cube n X) → DCube n X F c → DCube n X F' c
+dcube-fmap zero X F F' h c d = h c d
+dcube-fmap (suc n) X F F' h c d = dcube-fmap n (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h) c d
+-- two cubes over one base combined fibrewise
+lineo-zip : (X : Type 1) (F F' F2 : X → Type 1) → ((x : X) → F x → F' x → F2 x) → (L : Line X) → LineO X F L → LineO X F' L → LineO X F2 L
+lineo-zip X F F' F2 h L D E =
+  (h (fst L) (fst D) (fst E) , h (fst (snd L)) (fst (snd D)) (fst (snd E)) , λ i → h (snd (snd L) i) (snd (snd D) i) (snd (snd E) i))
+dcube-zip : (n : Nat) (X : Type 1) (F F' F2 : X → Type 1) → ((x : X) → F x → F' x → F2 x) → (c : Cube n X) →
+  DCube n X F c → DCube n X F' c → DCube n X F2 c
+dcube-zip zero X F F' F2 h c d e = h c d e
+dcube-zip (suc n) X F F' F2 h c d e = dcube-zip n (Line X) (LineO X F) (LineO X F') (LineO X F2) (lineo-zip X F F' F2 h) c d e
+-- reindexing along a map of the base
+lineo-reidx : (X X' : Type 1) (F : X → Type 1) (F' : X' → Type 1) (f : X → X') → ((x : X) → F x → F' (f x)) →
+  (L : Line X) → LineO X F L → LineO X' F' (line-map X X' f L)
+lineo-reidx X X' F F' f g L D = (g (fst L) (fst D) , g (fst (snd L)) (fst (snd D)) , λ i → g (snd (snd L) i) (snd (snd D) i))
+dcube-reidx : (n : Nat) (X X' : Type 1) (F : X → Type 1) (F' : X' → Type 1) (f : X → X') → ((x : X) → F x → F' (f x)) →
+  (c : Cube n X) → DCube n X F c → DCube n X' F' (cube-map n X X' f c)
+dcube-reidx zero X X' F F' f g c d = g c d
+dcube-reidx (suc n) X X' F F' f g c d =
+  dcube-reidx n (Line X) (Line X') (LineO X F) (LineO X' F') (line-map X X' f) (lineo-reidx X X' F F' f g) c d
+-- onto a base extended by a cube over it (weakening: the new base is dcube-map f c d)
+lineo-push : (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') →
+  ((x : X) (y : Y x) → F x → F' (f x y)) → (L : Line X) (D : LineO X Y L) → LineO X F L → LineO X' F' (lineo-map X Y X' f L D)
+lineo-push X X' Y F F' f g L D E =
+  (g (fst L) (fst D) (fst E) , g (fst (snd L)) (fst (snd D)) (fst (snd E)) , λ i → g (snd (snd L) i) (snd (snd D) i) (snd (snd E) i))
+dcube-push : (n : Nat) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') →
+  ((x : X) (y : Y x) → F x → F' (f x y)) → (c : Cube n X) (d : DCube n X Y c) → DCube n X F c → DCube n X' F' (dcube-map n X Y X' f c d)
+dcube-push zero X X' Y F F' f g c d e = g c d e
+dcube-push (suc n) X X' Y F F' f g c d e =
+  dcube-push n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-push X X' Y F F' f g) c d e
+-- back from such an extended base (substitution: the old base's fibres from the new one's)
+lineo-pull : (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') →
+  ((x : X) (y : Y x) → F' (f x y) → F x) → (L : Line X) (D : LineO X Y L) → LineO X' F' (lineo-map X Y X' f L D) → LineO X F L
+lineo-pull X X' Y F F' f g L D E =
+  (g (fst L) (fst D) (fst E) , g (fst (snd L)) (fst (snd D)) (fst (snd E)) , λ i → g (snd (snd L) i) (snd (snd D) i) (snd (snd E) i))
+dcube-pull : (n : Nat) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') →
+  ((x : X) (y : Y x) → F' (f x y) → F x) → (c : Cube n X) (d : DCube n X Y c) → DCube n X' F' (dcube-map n X Y X' f c d) → DCube n X F c
+dcube-pull zero X X' Y F F' f g c d e = g c d e
+dcube-pull (suc n) X X' Y F F' f g c d e =
+  dcube-pull n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g) c d e
+-- the cube category's generators over their images on the base (face0-l … diag-l above)
+face0-o : (X : Type 1) (F : X → Type 1) (L : Line X) → LineO X F L → F (face0-l X L)
+face0-o X F L D = fst D
+face1-o : (X : Type 1) (F : X → Type 1) (L : Line X) → LineO X F L → F (face1-l X L)
+face1-o X F L D = fst (snd D)
+degen-o : (X : Type 1) (F : X → Type 1) (x : X) → F x → LineO X F (degen-l X x)
+degen-o X F x y = (y , y , λ i → y)
+rev-o : (X : Type 1) (F : X → Type 1) (L : Line X) → LineO X F L → LineO X F (rev-l X L)
+rev-o X F L D = (fst (snd D) , fst D , λ i → snd (snd D) (~ i))
+meet-o : (X : Type 1) (F : X → Type 1) (L : Line X) → LineO X F L → LineO (Line X) (LineO X F) (meet-l X L)
+meet-o X F L D = ((fst D , fst D , λ j → fst D) , D , λ i → (fst D , snd (snd D) i , λ j → snd (snd D) (i ∧ j)))
+join-o : (X : Type 1) (F : X → Type 1) (L : Line X) → LineO X F L → LineO (Line X) (LineO X F) (join-l X L)
+join-o X F L D = (D , (fst (snd D) , fst (snd D) , λ j → fst (snd D)) , λ i → (snd (snd D) i , fst (snd D) , λ j → snd (snd D) (i ∨ j)))
+exch-o : (X : Type 1) (F : X → Type 1) (Q : Line (Line X)) → LineO (Line X) (LineO X F) Q → LineO (Line X) (LineO X F) (exch-l X Q)
+exch-o X F Q D =
+  ((fst (fst D) , fst (fst (snd D)) , λ i → fst (snd (snd D) i)) ,
+   (fst (snd (fst D)) , fst (snd (fst (snd D))) , λ i → fst (snd (snd (snd D) i))) ,
+   λ j → (snd (snd (fst D)) j , snd (snd (fst (snd D))) j , λ i → snd (snd (snd (snd D) i)) j))
+diag-o : (X : Type 1) (F : X → Type 1) (Q : Line (Line X)) → LineO (Line X) (LineO X F) Q → LineO X F (diag-l X Q)
+diag-o X F Q D = (fst (fst D) , fst (snd (fst (snd D))) , λ i → snd (snd (snd (snd D) i)) i)
+-- path application at any interval form to a cube degenerate in its newest direction gives the cube
+-- back (a path, by induction: each generator composed with the degeneracy is judgmentally the identity
+-- or a degeneracy, and composites of cube maps are cube-comp). A context's cube is degenerate in the
+-- direction a path λ binds, so this carries a dpapp's meaning back over its context (P2.6).
+diag-deg : (sk : Lst Entry) (k : Word) (X : Type 1) (G : Cube (dims sk) X) →
+  PathP (λ i → Cube (dims sk) X) (diag-sk sk k X (cube-map (dims sk) X (Line X) (degen-l X) G)) G
+diag-deg lnil k X G = λ i → G
+diag-deg (lcons (e-ty s) sk) k X G =
+  bool-elim1 (λ b → PathP (λ i → Cube (dims sk) X)
+                 (if b then cube-map (dims sk) (Line X) X (face0-l X) (cube-map (dims sk) X (Line X) (degen-l X) G)
+                  else diag-sk sk (%wsub k #1) X (cube-map (dims sk) X (Line X) (degen-l X) G)) G)
+    (pcat (Cube (dims sk) X) (cube-map (dims sk) (Line X) X (face0-l X) (cube-map (dims sk) X (Line X) (degen-l X) G))
+          (cube-map (dims sk) X X (λ x → x) G) G
+          (cube-comp (dims sk) X (Line X) X (face0-l X) (degen-l X) G) (cube-id (dims sk) X G))
+    (diag-deg sk (%wsub k #1) X G) (weq k #0)
+diag-deg (lcons e-dim sk) k X G =
+  bool-elim1 (λ b → PathP (λ i → Cube (suc (dims sk)) X)
+                 (if b then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) (cube-map (dims sk) (Line X) (Line (Line X)) (line-map X (Line X) (degen-l X)) G)
+                  else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X)
+                         (cube-map (dims sk) (Line X) (Line (Line X)) (line-map X (Line X) (degen-l X)) G))) G)
+    (pcat (Cube (dims sk) (Line X)) (cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) (cube-map (dims sk) (Line X) (Line (Line X)) (line-map X (Line X) (degen-l X)) G))
+          (cube-map (dims sk) (Line X) (Line X) (λ x → x) G) G
+          (cube-comp (dims sk) (Line X) (Line (Line X)) (Line X) (diag-l X) (line-map X (Line X) (degen-l X)) G) (cube-id (dims sk) (Line X) G))
+    (pcat (Cube (dims sk) (Line X))
+          (diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X)
+             (cube-map (dims sk) (Line X) (Line (Line X)) (line-map X (Line X) (degen-l X)) G)))
+          (diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line X) (Line (Line X)) (degen-l (Line X)) G)) G
+          (λ i → diag-sk sk (%wsub k #1) (Line X)
+                   (cube-comp (dims sk) (Line X) (Line (Line X)) (Line (Line X)) (exch-l X) (line-map X (Line X) (degen-l X)) G i))
+          (diag-deg sk (%wsub k #1) (Line X) G))
+    (weq k #0)
+-- a path between cube maps whose functions agree judgmentally after composition with the degeneracy
+-- (the two composites of cube maps meeting at one cube map)
+cube-comp2 : (n : Nat) (X Y Y' Z : Type 1) (f : Y → Z) (g : X → Y) (f' : Y' → Z) (g' : X → Y') (c : Cube n X) →
+  PathP (λ i → Cube n Z) (cube-map n X Z (λ x → f (g x)) c) (cube-map n X Z (λ x → f' (g' x)) c) →
+  PathP (λ i → Cube n Z) (cube-map n Y Z f (cube-map n X Y g c)) (cube-map n Y' Z f' (cube-map n X Y' g' c))
+cube-comp2 n X Y Y' Z f g f' g' c p =
+  pcat (Cube n Z) (cube-map n Y Z f (cube-map n X Y g c)) (cube-map n X Z (λ x → f' (g' x)) c) (cube-map n Y' Z f' (cube-map n X Y' g' c))
+    (pcat (Cube n Z) (cube-map n Y Z f (cube-map n X Y g c)) (cube-map n X Z (λ x → f (g x)) c) (cube-map n X Z (λ x → f' (g' x)) c)
+       (cube-comp n X Y Z f g c) p)
+    (psym (Cube n Z) (cube-map n Y' Z f' (cube-map n X Y' g' c)) (cube-map n X Z (λ x → f' (g' x)) c) (cube-comp n X Y' Z f' g' c))
+papp-lit-deg : (sk : Lst Entry) (X : Type 1) (o : Word) (l : Lit) (G : Cube (dims sk) X) →
+  PathP (λ i → Cube (dims sk) X) (papp-lit sk X o l (cube-map (dims sk) X (Line X) (degen-l X) G)) G
+papp-lit-deg sk X o l G =
+  bool-elim1 (λ b → PathP (λ i → Cube (dims sk) X)
+                 (if b then diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) X (Line X) (degen-l X) G)
+                  else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) (cube-map (dims sk) X (Line X) (degen-l X) G))) G)
+    (diag-deg sk (%wadd (fst l) o) X G)
+    (pcat (Cube (dims sk) X)
+       (diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) (cube-map (dims sk) X (Line X) (degen-l X) G)))
+       (diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) X (Line X) (degen-l X) G)) G
+       (λ i → diag-sk sk (%wadd (fst l) o) X (cube-comp (dims sk) X (Line X) (Line X) (rev-l X) (degen-l X) G i))
+       (diag-deg sk (%wadd (fst l) o) X G))
+    (snd l)
+-- (the connections composed with the degeneracy are the double degeneracy, which is the newer
+-- skeleton's degeneracy of the degenerate cube: cube-comp2 at a judgmental pointwise equation)
+papp-conj-from-deg : (sk : Lst Entry) (X : Type 1) (o : Word) (l : Lit) (ms : Conj) (G : Cube (dims sk) X) →
+  PathP (λ i → Cube (dims sk) X) (papp-conj-from sk X o l ms (cube-map (dims sk) X (Line X) (degen-l X) G)) G
+papp-conj-from-deg sk X o l lnil G = papp-lit-deg sk X o l G
+papp-conj-from-deg sk X o l (lcons m ms) G =
+  pcat (Cube (dims sk) X)
+    (papp-lit sk X o l (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms
+       (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) (cube-map (dims sk) X (Line X) (degen-l X) G))))
+    (papp-lit sk X o l (cube-map (dims sk) X (Line X) (degen-l X) G)) G
+    (λ i → papp-lit sk X o l
+       (pcat (Cube (dims sk) (Line X))
+          (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms
+             (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) (cube-map (dims sk) X (Line X) (degen-l X) G)))
+          (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms
+             (cube-map (suc (dims sk)) X (Line X) (degen-l X) (cube-map (dims sk) X (Line X) (degen-l X) G)))
+          (cube-map (dims sk) X (Line X) (degen-l X) G)
+          (λ j → papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms
+             (cube-comp2 (dims sk) X (Line X) (Line X) (Line (Line X)) (meet-l X) (degen-l X) (line-map X (Line X) (degen-l X)) (degen-l X) G
+                (λ k → cube-map (dims sk) X (Line (Line X)) (λ x → degen-l (Line X) (degen-l X x)) G) j))
+          (papp-conj-from-deg (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) X (Line X) (degen-l X) G)) i))
+    (papp-lit-deg sk X o l G)
+papp-conj-deg : (sk : Lst Entry) (X : Type 1) (o : Word) (c : Conj) (G : Cube (dims sk) X) →
+  PathP (λ i → Cube (dims sk) X) (papp-conj sk X o c (cube-map (dims sk) X (Line X) (degen-l X) G)) G
+papp-conj-deg sk X o lnil G =
+  pcat (Cube (dims sk) X) (cube-map (dims sk) (Line X) X (face1-l X) (cube-map (dims sk) X (Line X) (degen-l X) G))
+    (cube-map (dims sk) X X (λ x → x) G) G
+    (cube-comp (dims sk) X (Line X) X (face1-l X) (degen-l X) G) (cube-id (dims sk) X G)
+papp-conj-deg sk X o (lcons l ls) G = papp-conj-from-deg sk X o l ls G
+papp-dnf-from-deg : (sk : Lst Entry) (X : Type 1) (o : Word) (c : Conj) (ds : DNF) (G : Cube (dims sk) X) →
+  PathP (λ i → Cube (dims sk) X) (papp-dnf-from sk X o c ds (cube-map (dims sk) X (Line X) (degen-l X) G)) G
+papp-dnf-from-deg sk X o c lnil G = papp-conj-deg sk X o c G
+papp-dnf-from-deg sk X o c (lcons d ds) G =
+  pcat (Cube (dims sk) X)
+    (papp-conj sk X o c (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds
+       (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) (cube-map (dims sk) X (Line X) (degen-l X) G))))
+    (papp-conj sk X o c (cube-map (dims sk) X (Line X) (degen-l X) G)) G
+    (λ i → papp-conj sk X o c
+       (pcat (Cube (dims sk) (Line X))
+          (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds
+             (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) (cube-map (dims sk) X (Line X) (degen-l X) G)))
+          (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds
+             (cube-map (suc (dims sk)) X (Line X) (degen-l X) (cube-map (dims sk) X (Line X) (degen-l X) G)))
+          (cube-map (dims sk) X (Line X) (degen-l X) G)
+          (λ j → papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds
+             (cube-comp2 (dims sk) X (Line X) (Line X) (Line (Line X)) (join-l X) (degen-l X) (line-map X (Line X) (degen-l X)) (degen-l X) G
+                (λ k → cube-map (dims sk) X (Line (Line X)) (λ x → degen-l (Line X) (degen-l X x)) G) j))
+          (papp-dnf-from-deg (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) X (Line X) (degen-l X) G)) i))
+    (papp-conj-deg sk X o c G)
+papp-deg : (sk : Lst Entry) (X : Type 1) (f : DNF) (G : Cube (dims sk) X) →
+  PathP (λ i → Cube (dims sk) X) (papp-cube sk X f (cube-map (dims sk) X (Line X) (degen-l X) G)) G
+papp-deg sk X lnil G =
+  pcat (Cube (dims sk) X) (cube-map (dims sk) (Line X) X (face0-l X) (cube-map (dims sk) X (Line X) (degen-l X) G))
+    (cube-map (dims sk) X X (λ x → x) G) G
+    (cube-comp (dims sk) X (Line X) X (face0-l X) (degen-l X) G) (cube-id (dims sk) X G)
+papp-deg sk X (lcons c cs) G = papp-dnf-from-deg sk X #0 c cs G
+-- path application on cubes over cubes: the same composite of generators as papp-cube, on the fibres
+-- over the base's image (the case on a variable index is the dependent eliminator, since the base's
+-- image is computed by the same case)
+diag-sk-d : (sk : Lst Entry) (k : Word) (X : Type 1) (F : X → Type 1) (c : Cube (suc (dims sk)) X) →
+  DCube (suc (dims sk)) X F c → DCube (dims sk) X F (diag-sk sk k X c)
+diag-sk-d lnil k X F c d = face0-o X F c d
+diag-sk-d (lcons (e-ty s) sk) k X F c d =
+  bool-elim1 (λ b → DCube (dims sk) X F (if b then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c))
+    (dcube-reidx (dims sk) (Line X) X (LineO X F) F (face0-l X) (face0-o X F) c d)
+    (diag-sk-d sk (%wsub k #1) X F c d) (weq k #0)
+diag-sk-d (lcons e-dim sk) k X F c d =
+  bool-elim1 (λ b → DCube (suc (dims sk)) X F
+                 (if b then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+                  else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+    (dcube-reidx (dims sk) (Line (Line X)) (Line X) (LineO (Line X) (LineO X F)) (LineO X F) (diag-l X) (diag-o X F) c d)
+    (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+       (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F)) (exch-l X) (exch-o X F) c d))
+    (weq k #0)
+papp-lit-d : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (o : Word) (l : Lit) (c : Cube (suc (dims sk)) X) →
+  DCube (suc (dims sk)) X F c → DCube (dims sk) X F (papp-lit sk X o l c)
+papp-lit-d sk X F o l c d =
+  bool-elim1 (λ b → DCube (dims sk) X F
+                 (if b then diag-sk sk (%wadd (fst l) o) X c
+                  else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+    (diag-sk-d sk (%wadd (fst l) o) X F c d)
+    (diag-sk-d sk (%wadd (fst l) o) X F (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+       (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d))
+    (snd l)
+papp-conj-from-d : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (o : Word) (l : Lit) (ms : Conj) (c : Cube (suc (dims sk)) X) →
+  DCube (suc (dims sk)) X F c → DCube (dims sk) X F (papp-conj-from sk X o l ms c)
+papp-conj-from-d sk X F o l lnil c d = papp-lit-d sk X F o l c d
+papp-conj-from-d sk X F o l (lcons m ms) c d =
+  papp-lit-d sk X F o l (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+    (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+       (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d))
+papp-conj-d : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (o : Word) (cj : Conj) (c : Cube (suc (dims sk)) X) →
+  DCube (suc (dims sk)) X F c → DCube (dims sk) X F (papp-conj sk X o cj c)
+papp-conj-d sk X F o lnil c d = dcube-reidx (dims sk) (Line X) X (LineO X F) F (face1-l X) (face1-o X F) c d
+papp-conj-d sk X F o (lcons l ls) c d = papp-conj-from-d sk X F o l ls c d
+papp-dnf-from-d : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (o : Word) (cj : Conj) (ds : DNF) (c : Cube (suc (dims sk)) X) →
+  DCube (suc (dims sk)) X F c → DCube (dims sk) X F (papp-dnf-from sk X o cj ds c)
+papp-dnf-from-d sk X F o cj lnil c d = papp-conj-d sk X F o cj c d
+papp-dnf-from-d sk X F o cj (lcons e es) c d =
+  papp-conj-d sk X F o cj (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))
+    (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+       (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d))
+papp-cube-d : (sk : Lst Entry) (X : Type 1) (F : X → Type 1) (f : DNF) (c : Cube (suc (dims sk)) X) →
+  DCube (suc (dims sk)) X F c → DCube (dims sk) X F (papp-cube sk X f c)
+papp-cube-d sk X F lnil c d = dcube-reidx (dims sk) (Line X) X (LineO X F) F (face0-l X) (face0-o X F) c d
+papp-cube-d sk X F (lcons cj cs) c d = papp-dnf-from-d sk X F #0 cj cs c d
+
+-- ---------------------------------------------------------------- P2.6a: contexts and meanings over cubes
+-- (2026-11-12) A context over a skeleton is a cube of the skeleton's contexts, one direction per
+-- dimension entry; a meaning over it with values in Z is a cube over that cube of maps from each
+-- vertex's environments into Z. A term's values are TV s, a semantic type of shape s with an element.
+CtxV : Lst Entry → Type 1
+CtxV sk = fst (CtxE sk)
+EnvV : (sk : Lst Entry) → CtxV sk → Type 1
+EnvV sk γ = snd (CtxE sk) γ
+FbE : (sk : Lst Entry) (Z : Type 1) → CtxV sk → Type 1
+FbE sk Z γ = EnvV sk γ → Z
+CCtx : Type 1
+-- binder names chosen not to collide: t46
+CCtx = (ccsk : Lst Entry) × Cube (dims ccsk) (CtxV ccsk)
+Mean : CCtx → Type 1 → Type 1
+Mean Γ Z = DCube (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (snd Γ)
+fmapM : (Γ : CCtx) (Z Z' : Type 1) → (Z → Z') → Mean Γ Z → Mean Γ Z'
+fmapM Γ Z Z' h M = dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ)) (snd Γ) M
+TV : TyShape → Type 1
+-- binder names chosen not to collide: t46
+TV s = (tvA : Sem s) × El s tvA
+-- Γ extended by a type that a meaning M over Γ gives at each vertex (f reads the type off M's value;
+-- a λ's body's context is this at the λ's own conclusion, so no path is needed between them)
+extM : (Γ : CCtx) (a : TyShape) (Y : Type 1) (f : (γ : CtxV (fst Γ)) → (EnvV (fst Γ) γ → Y) → EnvV (fst Γ) γ → Sem a) → Mean Γ Y → CCtx
+extM Γ a Y f M =
+  (lcons (e-ty a) (fst Γ) ,
+   dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M)
+-- Γ extended by a dimension: its cube degenerate in the new (newest) direction
+dext : CCtx → CCtx
+dext Γ = (lcons e-dim (fst Γ) , cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))
+-- weakening a meaning to the extended contexts
+wkM : (Γ : CCtx) (a : TyShape) (Y : Type 1) (f : (γ : CtxV (fst Γ)) → (EnvV (fst Γ) γ → Y) → EnvV (fst Γ) γ → Sem a) (M : Mean Γ Y)
+  (Z : Type 1) → Mean Γ Z → Mean (extM Γ a Y f M) Z
+wkM Γ a Y f M Z N =
+  dcube-push (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y) (FbE (fst Γ) Z) (FbE (lcons (e-ty a) (fst Γ)) Z)
+    (λ γ e → (γ , f γ e)) (λ γ e N' ρ → N' (fst ρ)) (snd Γ) M N
+dwkM : (Γ : CCtx) (Z : Type 1) → Mean Γ Z → Mean (dext Γ) Z
+dwkM Γ Z N =
+  dcube-reidx (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (FbE (fst Γ) Z) (LineO (CtxV (fst Γ)) (FbE (fst Γ) Z))
+    (degen-l (CtxV (fst Γ))) (degen-o (CtxV (fst Γ)) (FbE (fst Γ) Z)) (snd Γ) N
+
+-- ---------------------------------------------------------------- P2.6c: variables over cubes
+-- (2026-11-12) A variable of a skeleton: one of its term entries, by recursion on the skeleton (none:
+-- the newest entry; some: one below it; a dimension entry is skipped). Its code's de Bruijn index
+-- counts every entry; its shape and its meaning (a projection out of each vertex's environment) are
+-- computed from it, so a variable judgment's meaning is the cube of that projection over the context.
+VarP : Lst Entry → Type
+VarP lnil = Empty
+VarP (lcons e-dim sk) = VarP sk
+VarP (lcons (e-ty a) sk) = Opt (VarP sk)
+var-shape : (sk : Lst Entry) → VarP sk → TyShape
+var-shape lnil v = Empty-rec v
+var-shape (lcons e-dim sk) v = var-shape sk v
+var-shape (lcons (e-ty a) sk) none = a
+var-shape (lcons (e-ty a) sk) (some v) = var-shape sk v
+var-word : (sk : Lst Entry) → VarP sk → Word
+var-word lnil v = Empty-rec v
+var-word (lcons e-dim sk) v = %wsucc (var-word sk v)
+var-word (lcons (e-ty a) sk) none = #0
+var-word (lcons (e-ty a) sk) (some v) = %wsucc (var-word sk v)
+varM : (sk : Lst Entry) (v : VarP sk) (γ : CtxV sk) → EnvV sk γ → TV (var-shape sk v)
+varM lnil v γ ρ = Empty-rec v
+varM (lcons e-dim sk) v γ ρ = varM sk v γ ρ
+varM (lcons (e-ty a) sk) none γ ρ = (snd γ (fst ρ) , snd ρ)
+varM (lcons (e-ty a) sk) (some v) γ ρ = varM sk v (fst γ) (fst ρ)
+varCube : (Γ : CCtx) (v : VarP (fst Γ)) → Mean Γ (TV (var-shape (fst Γ) v))
+varCube Γ v = dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV (var-shape (fst Γ) v))) (varM (fst Γ) v) (snd Γ)
+
+-- ---------------------------------------------------------------- P2.6b: naturality of the maps of cubes over cubes
+-- (2026-11-12) Composites of the structural maps agree with the map of the composite: paths, by
+-- induction on the dimension (each line version composes judgmentally).
+fmap-fmap : (n : Nat) (X : Type 1) (F F' F2 : X → Type 1) (h : (x : X) → F x → F' x) (h' : (x : X) → F' x → F2 x) (c : Cube n X) (d : DCube n X F c) →
+  PathP (λ i → DCube n X F2 c) (dcube-fmap n X F' F2 h' c (dcube-fmap n X F F' h c d)) (dcube-fmap n X F F2 (λ x y → h' x (h x y)) c d)
+fmap-fmap zero X F F' F2 h h' c d = λ i → h' c (h c d)
+fmap-fmap (suc n) X F F' F2 h h' c d =
+  fmap-fmap n (Line X) (LineO X F) (LineO X F') (LineO X F2) (lineo-fmap X F F' h) (lineo-fmap X F' F2 h') c d
+fmap-reidx : (n : Nat) (X X' : Type 1) (F : X → Type 1) (F' F2 : X' → Type 1) (f : X → X') (g : (x : X) → F x → F' (f x))
+  (h : (x : X') → F' x → F2 x) (c : Cube n X) (d : DCube n X F c) →
+  PathP (λ i → DCube n X' F2 (cube-map n X X' f c))
+    (dcube-fmap n X' F' F2 h (cube-map n X X' f c) (dcube-reidx n X X' F F' f g c d)) (dcube-reidx n X X' F F2 f (λ x y → h (f x) (g x y)) c d)
+fmap-reidx zero X X' F F' F2 f g h c d = λ i → h (f c) (g c d)
+fmap-reidx (suc n) X X' F F' F2 f g h c d =
+  fmap-reidx n (Line X) (Line X') (LineO X F) (LineO X' F') (LineO X' F2) (line-map X X' f) (lineo-reidx X X' F F' f g) (lineo-fmap X' F' F2 h) c d
+reidx-fmap : (n : Nat) (X X' : Type 1) (F F2 : X → Type 1) (F' : X' → Type 1) (h : (x : X) → F x → F2 x) (f : X → X')
+  (g : (x : X) → F2 x → F' (f x)) (c : Cube n X) (d : DCube n X F c) →
+  PathP (λ i → DCube n X' F' (cube-map n X X' f c))
+    (dcube-reidx n X X' F2 F' f g c (dcube-fmap n X F F2 h c d)) (dcube-reidx n X X' F F' f (λ x y → g x (h x y)) c d)
+reidx-fmap zero X X' F F2 F' h f g c d = λ i → g c (h c d)
+reidx-fmap (suc n) X X' F F2 F' h f g c d =
+  reidx-fmap n (Line X) (Line X') (LineO X F) (LineO X F2) (LineO X' F') (lineo-fmap X F F2 h) (line-map X X' f) (lineo-reidx X X' F2 F' f g) c d
+fmap-push : (n : Nat) (X X' : Type 1) (Y F : X → Type 1) (F' F2 : X' → Type 1) (f : (x : X) → Y x → X')
+  (g : (x : X) (y : Y x) → F x → F' (f x y)) (h : (x : X') → F' x → F2 x) (c : Cube n X) (d : DCube n X Y c) (e : DCube n X F c) →
+  PathP (λ i → DCube n X' F2 (dcube-map n X Y X' f c d))
+    (dcube-fmap n X' F' F2 h (dcube-map n X Y X' f c d) (dcube-push n X X' Y F F' f g c d e))
+    (dcube-push n X X' Y F F2 f (λ x y z → h (f x y) (g x y z)) c d e)
+fmap-push zero X X' Y F F' F2 f g h c d e = λ i → h (f c d) (g c d e)
+fmap-push (suc n) X X' Y F F' F2 f g h c d e =
+  fmap-push n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (LineO X' F2) (lineo-map X Y X' f) (lineo-push X X' Y F F' f g)
+    (lineo-fmap X' F' F2 h) c d e
+push-fmap : (n : Nat) (X X' : Type 1) (Y F F2 : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (h : (x : X) → F x → F2 x)
+  (g : (x : X) (y : Y x) → F2 x → F' (f x y)) (c : Cube n X) (d : DCube n X Y c) (e : DCube n X F c) →
+  PathP (λ i → DCube n X' F' (dcube-map n X Y X' f c d))
+    (dcube-push n X X' Y F2 F' f g c d (dcube-fmap n X F F2 h c e)) (dcube-push n X X' Y F F' f (λ x y z → g x y (h x z)) c d e)
+push-fmap zero X X' Y F F2 F' f h g c d e = λ i → g c d (h c e)
+push-fmap (suc n) X X' Y F F2 F' f h g c d e =
+  push-fmap n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X F2) (LineO X' F') (lineo-map X Y X' f) (lineo-fmap X F F2 h)
+    (lineo-push X X' Y F2 F' f g) c d e
+fmap-pull : (n : Nat) (X X' : Type 1) (Y F F2 : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X')
+  (g : (x : X) (y : Y x) → F' (f x y) → F x) (h : (x : X) → F x → F2 x) (c : Cube n X) (d : DCube n X Y c) (e : DCube n X' F' (dcube-map n X Y X' f c d)) →
+  PathP (λ i → DCube n X F2 c)
+    (dcube-fmap n X F F2 h c (dcube-pull n X X' Y F F' f g c d e)) (dcube-pull n X X' Y F2 F' f (λ x y z → h x (g x y z)) c d e)
+fmap-pull zero X X' Y F F2 F' f g h c d e = λ i → h c (g c d e)
+fmap-pull (suc n) X X' Y F F2 F' f g h c d e =
+  fmap-pull n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X F2) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g)
+    (lineo-fmap X F F2 h) c d e
+-- a fibrewise map commutes with carrying a cube over a base along a path of bases (by the filler of
+-- the transport)
+fmap-transp : (n : Nat) (X : Type 1) (F F' : X → Type 1) (h : (x : X) → F x → F' x) (c0 c1 : Cube n X) (p : PathP (λ i → Cube n X) c0 c1)
+  (d : DCube n X F c0) →
+  PathP (λ j → DCube n X F' c1)
+    (dcube-fmap n X F F' h c1 (comp (λ i → DCube n X F (p i)) (λ i → []) d))
+    (comp (λ i → DCube n X F' (p i)) (λ i → []) (dcube-fmap n X F F' h c0 d))
+fmap-transp n X F F' h c0 c1 p d =
+  λ j → comp (λ i → DCube n X F' (p i))
+    (λ i → [ j = 0 ↦ dcube-fmap n X F F' h (p i) (comp (λ k → DCube n X F (p (i ∧ k))) (λ k → [ i = 0 ↦ d ]) d) ])
+    (dcube-fmap n X F F' h c0 d)
+-- (2026-11-12) a fibrewise map commutes with reindexing along a map of the base whose fibre maps
+-- commute with it pointwise (q, judgmental at each generator below: refl)
+fmap-gen : (n : Nat) (X X' : Type 1) (F F' : X → Type 1) (G G' : X' → Type 1) (f : X → X')
+  (g : (x : X) → F x → G (f x)) (g' : (x : X) → F' x → G' (f x)) (h : (x : X) → F x → F' x) (h2 : (x : X') → G x → G' x)
+  (q : PathP (λ i → (x : X) → F x → G' (f x)) (λ x y → h2 (f x) (g x y)) (λ x y → g' x (h x y))) (c : Cube n X) (d : DCube n X F c) →
+  PathP (λ i → DCube n X' G' (cube-map n X X' f c))
+    (dcube-fmap n X' G G' h2 (cube-map n X X' f c) (dcube-reidx n X X' F G f g c d))
+    (dcube-reidx n X X' F' G' f g' c (dcube-fmap n X F F' h c d))
+fmap-gen n X X' F F' G G' f g g' h h2 q c d =
+  pcat (DCube n X' G' (cube-map n X X' f c))
+    (dcube-fmap n X' G G' h2 (cube-map n X X' f c) (dcube-reidx n X X' F G f g c d))
+    (dcube-reidx n X X' F G' f (λ x y → h2 (f x) (g x y)) c d)
+    (dcube-reidx n X X' F' G' f g' c (dcube-fmap n X F F' h c d))
+    (fmap-reidx n X X' F G G' f g h2 c d)
+    (pcat (DCube n X' G' (cube-map n X X' f c))
+       (dcube-reidx n X X' F G' f (λ x y → h2 (f x) (g x y)) c d)
+       (dcube-reidx n X X' F G' f (λ x y → g' x (h x y)) c d)
+       (dcube-reidx n X X' F' G' f g' c (dcube-fmap n X F F' h c d))
+       (λ i → dcube-reidx n X X' F G' f (q i) c d)
+       (psym (DCube n X' G' (cube-map n X X' f c))
+          (dcube-reidx n X X' F' G' f g' c (dcube-fmap n X F F' h c d)) (dcube-reidx n X X' F G' f (λ x y → g' x (h x y)) c d)
+          (reidx-fmap n X X' F F' G' h f g' c d)))
+-- a fibrewise map commutes with path application on cubes over cubes (by the recursion of
+-- papp-cube-d, each generator by fmap-gen)
+fmap-diag-sk : (sk : Lst Entry) (k : Word) (X : Type 1) (F F' : X → Type 1) (h : (x : X) → F x → F' x)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → DCube (dims sk) X F' (diag-sk sk k X c))
+    (dcube-fmap (dims sk) X F F' h (diag-sk sk k X c) (diag-sk-d sk k X F c d))
+    (diag-sk-d sk k X F' c (dcube-fmap (suc (dims sk)) X F F' h c d))
+fmap-diag-sk lnil k X F F' h c d = λ i → h (fst c) (fst d)
+fmap-diag-sk (lcons (e-ty s) sk) k X F F' h c d =
+  bool-elim1 (λ b → PathP (λ i → DCube (dims sk) X F' (if b then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c))
+                 (dcube-fmap (dims sk) X F F' h (if b then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c)
+                    (bool-elim1 (λ b → DCube (dims sk) X F (if b then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c))
+                       (dcube-reidx (dims sk) (Line X) X (LineO X F) F (face0-l X) (face0-o X F) c d)
+                       (diag-sk-d sk (%wsub k #1) X F c d) b))
+                 (bool-elim1 (λ b → DCube (dims sk) X F' (if b then cube-map (dims sk) (Line X) X (face0-l X) c else diag-sk sk (%wsub k #1) X c))
+                    (dcube-reidx (dims sk) (Line X) X (LineO X F') F' (face0-l X) (face0-o X F') c (dcube-fmap (suc (dims sk)) X F F' h c d))
+                    (diag-sk-d sk (%wsub k #1) X F' c (dcube-fmap (suc (dims sk)) X F F' h c d)) b))
+    (fmap-gen (dims sk) (Line X) X (LineO X F) (LineO X F') F F' (face0-l X) (face0-o X F) (face0-o X F') (lineo-fmap X F F' h) h
+       (λ i L D → h (fst L) (fst D)) c d)
+    (fmap-diag-sk sk (%wsub k #1) X F F' h c d) (weq k #0)
+fmap-diag-sk (lcons e-dim sk) k X F F' h c d =
+  bool-elim1 (λ b → PathP (λ i → DCube (suc (dims sk)) X F'
+                    (if b then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+                     else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+                 (dcube-fmap (suc (dims sk)) X F F' h
+                    (if b then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+                     else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c))
+                    (bool-elim1 (λ b → DCube (suc (dims sk)) X F
+                                   (if b then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+                                    else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+                       (dcube-reidx (dims sk) (Line (Line X)) (Line X) (LineO (Line X) (LineO X F)) (LineO X F) (diag-l X) (diag-o X F) c d)
+                       (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+                          (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F)) (exch-l X) (exch-o X F) c d))
+                       b))
+                 (bool-elim1 (λ b → DCube (suc (dims sk)) X F'
+                                (if b then cube-map (dims sk) (Line (Line X)) (Line X) (diag-l X) c
+                                 else diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+                    (dcube-reidx (dims sk) (Line (Line X)) (Line X) (LineO (Line X) (LineO X F')) (LineO X F') (diag-l X) (diag-o X F') c
+                       (dcube-fmap (suc (suc (dims sk))) X F F' h c d))
+                    (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F') (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+                       (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F')) (LineO (Line X) (LineO X F')) (exch-l X) (exch-o X F') c
+                          (dcube-fmap (suc (suc (dims sk))) X F F' h c d)))
+                    b))
+    (fmap-gen (dims sk) (Line (Line X)) (Line X) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F')) (LineO X F) (LineO X F')
+       (diag-l X) (diag-o X F) (diag-o X F') (lineo-fmap (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h)) (lineo-fmap X F F' h)
+       (λ i Q D → lineo-fmap X F F' h (diag-l X Q) (diag-o X F Q D)) c d)
+    (pcat (DCube (dims sk) (Line X) (LineO X F') (diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)))
+       (dcube-fmap (dims sk) (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h)
+          (diag-sk sk (%wsub k #1) (Line X) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c))
+          (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+             (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F)) (exch-l X) (exch-o X F) c d)))
+       (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F') (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+          (dcube-fmap (suc (dims sk)) (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+             (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F)) (exch-l X) (exch-o X F) c d)))
+       (diag-sk-d sk (%wsub k #1) (Line X) (LineO X F') (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+          (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F')) (LineO (Line X) (LineO X F')) (exch-l X) (exch-o X F') c
+             (dcube-fmap (suc (suc (dims sk))) X F F' h c d)))
+       (fmap-diag-sk sk (%wsub k #1) (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h) (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+          (dcube-reidx (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F)) (exch-l X) (exch-o X F) c d))
+       (λ i → diag-sk-d sk (%wsub k #1) (Line X) (LineO X F') (cube-map (dims sk) (Line (Line X)) (Line (Line X)) (exch-l X) c)
+          (fmap-gen (dims sk) (Line (Line X)) (Line (Line X)) (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F'))
+             (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F')) (exch-l X) (exch-o X F) (exch-o X F')
+             (lineo-fmap (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h)) (lineo-fmap (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h))
+             (λ j Q D → lineo-fmap (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h) (exch-l X Q) (exch-o X F Q D)) c d i)))
+    (weq k #0)
+fmap-papp-lit : (sk : Lst Entry) (X : Type 1) (F F' : X → Type 1) (h : (x : X) → F x → F' x) (o : Word) (l : Lit)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → DCube (dims sk) X F' (papp-lit sk X o l c))
+    (dcube-fmap (dims sk) X F F' h (papp-lit sk X o l c) (papp-lit-d sk X F o l c d))
+    (papp-lit-d sk X F' o l c (dcube-fmap (suc (dims sk)) X F F' h c d))
+fmap-papp-lit sk X F F' h o l c d =
+  bool-elim1 (λ b → PathP (λ i → DCube (dims sk) X F'
+                    (if b then diag-sk sk (%wadd (fst l) o) X c else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+                 (dcube-fmap (dims sk) X F F'  h
+                    (if b then diag-sk sk (%wadd (fst l) o) X c else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c))
+                    (bool-elim1 (λ b → DCube (dims sk) X F
+                                   (if b then diag-sk sk (%wadd (fst l) o) X c else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+                       (diag-sk-d sk (%wadd (fst l) o) X F c d)
+                       (diag-sk-d sk (%wadd (fst l) o) X F (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+                          (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d)) b))
+                 (bool-elim1 (λ b → DCube (dims sk) X F'
+                                (if b then diag-sk sk (%wadd (fst l) o) X c else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+                    (diag-sk-d sk (%wadd (fst l) o) X F' c (dcube-fmap (suc (dims sk)) X F F' h c d))
+                    (diag-sk-d sk (%wadd (fst l) o) X F' (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+                       (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F') (LineO X F') (rev-l X) (rev-o X F') c (dcube-fmap (suc (dims sk)) X F F' h c d))) b))
+    (fmap-diag-sk sk (%wadd (fst l) o) X F F' h c d)
+    (pcat (DCube (dims sk) X F' (diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+       (dcube-fmap (dims sk) X F F' h (diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c))
+          (diag-sk-d sk (%wadd (fst l) o) X F (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d)))
+       (diag-sk-d sk (%wadd (fst l) o) X F' (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+          (dcube-fmap (suc (dims sk)) X F F' h (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d)))
+       (diag-sk-d sk (%wadd (fst l) o) X F' (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+          (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F') (LineO X F') (rev-l X) (rev-o X F') c (dcube-fmap (suc (dims sk)) X F F' h c d)))
+       (fmap-diag-sk sk (%wadd (fst l) o) X F F' h (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+          (dcube-reidx (dims sk) (Line X) (Line X) (LineO X F) (LineO X F) (rev-l X) (rev-o X F) c d))
+       (λ i → diag-sk-d sk (%wadd (fst l) o) X F' (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)
+          (fmap-gen (dims sk) (Line X) (Line X) (LineO X F) (LineO X F') (LineO X F) (LineO X F') (rev-l X) (rev-o X F) (rev-o X F')
+             (lineo-fmap X F F' h) (lineo-fmap X F F' h) (λ j L D → lineo-fmap X F F' h (rev-l X L) (rev-o X F L D)) c d i)))
+    (snd l)
+fmap-papp-conj-from : (sk : Lst Entry) (X : Type 1) (F F' : X → Type 1) (h : (x : X) → F x → F' x) (o : Word) (l : Lit) (ms : Conj)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → DCube (dims sk) X F' (papp-conj-from sk X o l ms c))
+    (dcube-fmap (dims sk) X F F' h (papp-conj-from sk X o l ms c) (papp-conj-from-d sk X F o l ms c d))
+    (papp-conj-from-d sk X F' o l ms c (dcube-fmap (suc (dims sk)) X F F' h c d))
+fmap-papp-conj-from sk X F F' h o l lnil c d = fmap-papp-lit sk X F F' h o l c d
+fmap-papp-conj-from sk X F F' h o l (lcons m ms) c d =
+  pcat (DCube (dims sk) X F' (papp-conj-from sk X o l (lcons m ms) c))
+    (dcube-fmap (dims sk) X F F' h (papp-conj-from sk X o l (lcons m ms) c) (papp-conj-from-d sk X F o l (lcons m ms) c d))
+    (papp-lit-d sk X F' o l (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+       (dcube-fmap (suc (dims sk)) X F F' h (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+          (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d))))
+    (papp-conj-from-d sk X F' o l (lcons m ms) c (dcube-fmap (suc (dims sk)) X F F' h c d))
+    (fmap-papp-lit sk X F F' h o l (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+       (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+          (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
+    (λ i → papp-lit-d sk X F' o l (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+       (pcat (DCube (suc (dims sk)) X F' (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+          (dcube-fmap (suc (dims sk)) X F F' h (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))
+             (papp-conj-from-d (lcons e-dim sk) X F (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+                (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
+          (papp-conj-from-d (lcons e-dim sk) X F' (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+             (dcube-fmap (suc (suc (dims sk))) X F F' h (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+                (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d)))
+          (papp-conj-from-d (lcons e-dim sk) X F' (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F') (LineO (Line X) (LineO X F')) (meet-l X) (meet-o X F') c
+                (dcube-fmap (suc (dims sk)) X F F' h c d)))
+          (fmap-papp-conj-from (lcons e-dim sk) X F F' h (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (meet-l X) (meet-o X F) c d))
+          (λ j → papp-conj-from-d (lcons e-dim sk) X F' (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)
+             (fmap-gen (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO X F') (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F'))
+                (meet-l X) (meet-o X F) (meet-o X F') (lineo-fmap X F F' h) (lineo-fmap (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h))
+                (λ k L D → lineo-fmap (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h) (meet-l X L) (meet-o X F L D)) c d j)) i))
+fmap-papp-conj : (sk : Lst Entry) (X : Type 1) (F F' : X → Type 1) (h : (x : X) → F x → F' x) (o : Word) (cj : Conj)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → DCube (dims sk) X F' (papp-conj sk X o cj c))
+    (dcube-fmap (dims sk) X F F' h (papp-conj sk X o cj c) (papp-conj-d sk X F o cj c d))
+    (papp-conj-d sk X F' o cj c (dcube-fmap (suc (dims sk)) X F F' h c d))
+fmap-papp-conj sk X F F' h o lnil c d =
+  fmap-gen (dims sk) (Line X) X (LineO X F) (LineO X F') F F' (face1-l X) (face1-o X F) (face1-o X F') (lineo-fmap X F F' h) h
+    (λ i L D → h (fst (snd L)) (fst (snd D))) c d
+fmap-papp-conj sk X F F' h o (lcons l ls) c d = fmap-papp-conj-from sk X F F' h o l ls c d
+fmap-papp-dnf-from : (sk : Lst Entry) (X : Type 1) (F F' : X → Type 1) (h : (x : X) → F x → F' x) (o : Word) (cj : Conj) (ds : DNF)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → DCube (dims sk) X F' (papp-dnf-from sk X o cj ds c))
+    (dcube-fmap (dims sk) X F F' h (papp-dnf-from sk X o cj ds c) (papp-dnf-from-d sk X F o cj ds c d))
+    (papp-dnf-from-d sk X F' o cj ds c (dcube-fmap (suc (dims sk)) X F F' h c d))
+fmap-papp-dnf-from sk X F F' h o cj lnil c d = fmap-papp-conj sk X F F' h o cj c d
+fmap-papp-dnf-from sk X F F' h o cj (lcons e es) c d =
+  pcat (DCube (dims sk) X F' (papp-dnf-from sk X o cj (lcons e es) c))
+    (dcube-fmap (dims sk) X F F' h (papp-dnf-from sk X o cj (lcons e es) c) (papp-dnf-from-d sk X F o cj (lcons e es) c d))
+    (papp-conj-d sk X F' o cj (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))
+       (dcube-fmap (suc (dims sk)) X F F' h (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))
+          (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d))))
+    (papp-dnf-from-d sk X F' o cj (lcons e es) c (dcube-fmap (suc (dims sk)) X F F' h c d))
+    (fmap-papp-conj sk X F F' h o cj (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))
+       (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+          (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
+    (λ i → papp-conj-d sk X F' o cj (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))
+       (pcat (DCube (suc (dims sk)) X F' (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+          (dcube-fmap (suc (dims sk)) X F F' h (papp-dnf-from (lcons e-dim sk) X (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))
+             (papp-dnf-from-d (lcons e-dim sk) X F (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+                (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
+          (papp-dnf-from-d (lcons e-dim sk) X F' (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+             (dcube-fmap (suc (suc (dims sk))) X F F' h (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+                (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d)))
+          (papp-dnf-from-d (lcons e-dim sk) X F' (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F') (LineO (Line X) (LineO X F')) (join-l X) (join-o X F') c
+                (dcube-fmap (suc (dims sk)) X F F' h c d)))
+          (fmap-papp-dnf-from (lcons e-dim sk) X F F' h (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+             (dcube-reidx (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO (Line X) (LineO X F)) (join-l X) (join-o X F) c d))
+          (λ j → papp-dnf-from-d (lcons e-dim sk) X F' (%wsucc o) e es (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)
+             (fmap-gen (dims sk) (Line X) (Line (Line X)) (LineO X F) (LineO X F') (LineO (Line X) (LineO X F)) (LineO (Line X) (LineO X F'))
+                (join-l X) (join-o X F) (join-o X F') (lineo-fmap X F F' h) (lineo-fmap (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h))
+                (λ k L D → lineo-fmap (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h) (join-l X L) (join-o X F L D)) c d j)) i))
+fmap-papp : (sk : Lst Entry) (X : Type 1) (F F' : X → Type 1) (h : (x : X) → F x → F' x) (f : DNF)
+  (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) →
+  PathP (λ i → DCube (dims sk) X F' (papp-cube sk X f c))
+    (dcube-fmap (dims sk) X F F' h (papp-cube sk X f c) (papp-cube-d sk X F f c d))
+    (papp-cube-d sk X F' f c (dcube-fmap (suc (dims sk)) X F F' h c d))
+fmap-papp sk X F F' h lnil c d =
+  fmap-gen (dims sk) (Line X) X (LineO X F) (LineO X F') F F' (face0-l X) (face0-o X F) (face0-o X F') (lineo-fmap X F F' h) h
+    (λ i L D → h (fst L) (fst D)) c d
+fmap-papp sk X F F' h (lcons cj cs) c d = fmap-papp-dnf-from sk X F F' h #0 cj cs c d
+
+-- ---------------------------------------------------------------- P2.6d: judgments, normal forms and derivations over cubes
+-- (2026-11-12) the path shape's semantic types are P2.3's, judgmentally (t50: PathP at Type 1)
+sem-path : (a : TyShape) → PathP (λ i → Type 1) (Sem (s-path a)) (PathS (Sem a) (El a))
+sem-path a = λ i → PathS (Sem a) (El a)
+-- a judgment: a context over cubes, a shape, a raw code and a meaning over the context (each vertex's
+-- environments to a semantic type of the shape with an element)
+Jdg : Type 1
+-- binder names chosen not to collide: t46
+Jdg = (jΓ : CCtx) × (js : TyShape) × Code × Mean jΓ (TV js)
+-- the rules' data, read pointwise, and the named projections that give their premises' and
+-- conclusions' meanings (shared by NN, Der, CompS and reify)
+AppV : TyShape → TyShape → Type 1
+-- binder names chosen not to collide: t46
+AppV a b = (avT : Fam a b) × El (s-pi a b) avT × El a (fst avT)
+app-f : (a b : TyShape) → AppV a b → TV (s-pi a b)
+app-f a b q = (fst q , fst (snd q))
+app-a : (a b : TyShape) → AppV a b → TV a
+app-a a b q = (fst (fst q) , snd (snd q))
+app-r : (a b : TyShape) → AppV a b → TV b
+app-r a b q = (snd (fst q) (snd (snd q)) , fst (snd q) (snd (snd q)))
+sig-1 : (a b : TyShape) → TV (s-sig a b) → TV a
+sig-1 a b q = (fst (fst q) , fst (snd q))
+sig-2 : (a b : TyShape) → TV (s-sig a b) → TV b
+sig-2 a b q = (snd (fst q) (fst (snd q)) , snd (snd q))
+CaseV : TyShape → Type 1
+-- binder names chosen not to collide: t46
+CaseV sP = (cvB : One1) × (cvP : Bool → Sem sP) × (cvx : Bool) × El sP (cvP true) × El sP (cvP false)
+case-x : (sP : TyShape) → CaseV sP → TV s-bool
+case-x sP q = (fst q , fst (snd (snd q)))
+case-t : (sP : TyShape) → CaseV sP → TV sP
+case-t sP q = (fst (snd q) true , fst (snd (snd (snd q))))
+case-f : (sP : TyShape) → CaseV sP → TV sP
+case-f sP q = (fst (snd q) false , snd (snd (snd (snd q))))
+case-r : (sP : TyShape) → CaseV sP → TV sP
+case-r sP q =
+  (fst (snd q) (fst (snd (snd q))) ,
+   bool-elim (λ b → El sP (fst (snd q) b)) (fst (snd (snd (snd q)))) (snd (snd (snd (snd q)))) (fst (snd (snd q))))
+bool-v : Bool → One1 → TV s-bool
+bool-v b u = (u , b)
+-- a λ's body: its context is extM at the λ's own conclusion X (the domain read off X), its meaning X
+-- pushed over X, applied to the new variable
+lam-dom : (sk : Lst Entry) (a b : TyShape) (γ : CtxV sk) → (EnvV sk γ → TV (s-pi a b)) → EnvV sk γ → Sem a
+lam-dom sk a b γ e ρ = fst (fst (e ρ))
+lam-ctx : (Γ : CCtx) (a b : TyShape) → Mean Γ (TV (s-pi a b)) → CCtx
+lam-ctx Γ a b X = extM Γ a (TV (s-pi a b)) (lam-dom (fst Γ) a b) X
+lam-body : (Γ : CCtx) (a b : TyShape) (X : Mean Γ (TV (s-pi a b))) → Mean (lam-ctx Γ a b X) (TV b)
+lam-body Γ a b X =
+  dcube-push (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b)))
+    (FbE (lcons (e-ty a) (fst Γ)) (TV b)) (λ γ e → (γ , lam-dom (fst Γ) a b γ e))
+    (λ γ e e2 ρ → (snd (fst (e (fst ρ))) (snd ρ) , snd (e (fst ρ)) (snd ρ))) (snd Γ) X X
+-- a path λ's body: over dext Γ, the conclusion X reindexed at the degeneracy, each vertex's path read
+-- as the line of its (type, value) pairs (its ends are the path type's endpoints judgmentally)
+plam-line : (sk : Lst Entry) (a : TyShape) (γ : CtxV sk) (e : EnvV sk γ → TV (s-path a)) →
+  LineO (CtxV sk) (FbE sk (TV a)) (degen-l (CtxV sk) γ)
+plam-line sk a γ e =
+  ((λ ρ → (fst (fst (fst (e ρ))) , fst (snd (fst (e ρ))))) ,
+   (λ ρ → (fst (snd (fst (fst (e ρ)))) , snd (snd (fst (e ρ))))) ,
+   λ i ρ → (snd (snd (fst (fst (e ρ)))) i , snd (e ρ) i))
+plam-body : (Γ : CCtx) (a : TyShape) → Mean Γ (TV (s-path a)) → Mean (dext Γ) (TV a)
+plam-body Γ a X =
+  dcube-reidx (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (FbE (fst Γ) (TV (s-path a))) (LineO (CtxV (fst Γ)) (FbE (fst Γ) (TV a)))
+    (degen-l (CtxV (fst Γ))) (plam-line (fst Γ) a) (snd Γ) X
+-- carrying a cube over a base along a path of bases (the form fmap-transp is about)
+carry : (n : Nat) (X : Type 1) (F : X → Type 1) (c0 c1 : Cube n X) → PathP (λ i → Cube n X) c0 c1 → DCube n X F c0 → DCube n X F c1
+carry n X F c0 c1 p d = comp (λ i → DCube n X F (p i)) (λ i → []) d
+-- the meaning of a path applied at a canonical form f: the path's body over dext Γ applied at f
+-- (papp-cube-d), carried back over Γ along papp-deg
+papp-mean : (Γ : CCtx) (a : TyShape) (f : DNF) → Mean Γ (TV (s-path a)) → Mean Γ (TV a)
+papp-mean Γ a f P =
+  carry (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV a))
+    (papp-cube (fst Γ) (CtxV (fst Γ)) f (snd (dext Γ))) (snd Γ) (papp-deg (fst Γ) (CtxV (fst Γ)) f (snd Γ))
+    (papp-cube-d (fst Γ) (CtxV (fst Γ)) (FbE (fst Γ) (TV a)) f (snd (dext Γ)) (plam-body Γ a P))
+-- a path between meanings, as a named type: a PathP over a path λ in a constructor's field is refused
+-- (t52; workaround: this definition, used by npapp and dpapp)
+PathM : (Γ : CCtx) (Z : Type 1) → Mean Γ Z → Mean Γ Z → Type 1
+PathM Γ Z M N = PathP (λ i → Mean Γ Z) M N
+-- neutral and normal forms, one family (the kind in the index), η-long and redex-free: a neutral is
+-- normal only at Bool; a path application is neutral only at a canonical non-constant form
+-- constructor binders subscripted ₀: t46
+data NN : (KJ : NK × Jdg) → Type 1 where
+  nvar : (Γ₀ : CCtx) (v₀ : VarP (fst Γ₀)) →
+    NN (k-ne , (Γ₀ , var-shape (fst Γ₀) v₀ , cvar (var-word (fst Γ₀) v₀) , varCube Γ₀ v₀))
+  napp : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (AppV a₀ b₀)) (f₀ c₀ : Code) →
+    NN (k-ne , (Γ₀ , s-pi a₀ b₀ , f₀ , fmapM Γ₀ (AppV a₀ b₀) (TV (s-pi a₀ b₀)) (app-f a₀ b₀) R₀)) →
+    NN (k-nf , (Γ₀ , a₀ , c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV a₀) (app-a a₀ b₀) R₀)) →
+    NN (k-ne , (Γ₀ , b₀ , capp f₀ c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV b₀) (app-r a₀ b₀) R₀))
+  nfst : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (p₀ : Code) →
+    NN (k-ne , (Γ₀ , s-sig a₀ b₀ , p₀ , R₀)) →
+    NN (k-ne , (Γ₀ , a₀ , cfst p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀))
+  nsnd : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (p₀ : Code) →
+    NN (k-ne , (Γ₀ , s-sig a₀ b₀ , p₀ , R₀)) →
+    NN (k-ne , (Γ₀ , b₀ , csnd p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀))
+  ncase : (Γ₀ : CCtx) (s₀ : TyShape) (R₀ : Mean Γ₀ (CaseV s₀)) (x₀ t₀ f₀ : Code) →
+    NN (k-ne , (Γ₀ , s-bool , x₀ , fmapM Γ₀ (CaseV s₀) (TV s-bool) (case-x s₀) R₀)) →
+    NN (k-nf , (Γ₀ , s₀ , t₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-t s₀) R₀)) →
+    NN (k-nf , (Γ₀ , s₀ , f₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-f s₀) R₀)) →
+    NN (k-ne , (Γ₀ , s₀ , c-case t₀ f₀ x₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-r s₀) R₀))
+  nne : (Γ₀ : CCtx) (R₀ : Mean Γ₀ (TV s-bool)) (x₀ : Code) →
+    NN (k-ne , (Γ₀ , s-bool , x₀ , R₀)) → NN (k-nf , (Γ₀ , s-bool , x₀ , R₀))
+  ntrue : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (Γ₀ , s-bool , c-true , fmapM Γ₀ One1 (TV s-bool) (bool-v true) B₀))
+  nfalse : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (Γ₀ , s-bool , c-false , fmapM Γ₀ One1 (TV s-bool) (bool-v false) B₀))
+  nlam : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-pi a₀ b₀))) (c₀ : Code) →
+    NN (k-nf , (lam-ctx Γ₀ a₀ b₀ X₀ , b₀ , c₀ , lam-body Γ₀ a₀ b₀ X₀)) → NN (k-nf , (Γ₀ , s-pi a₀ b₀ , clam c₀ , X₀))
+  npair : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (c1₀ c2₀ : Code) →
+    NN (k-nf , (Γ₀ , a₀ , c1₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀)) →
+    NN (k-nf , (Γ₀ , b₀ , c2₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀)) →
+    NN (k-nf , (Γ₀ , s-sig a₀ b₀ , cpair c1₀ c2₀ , R₀))
+  nplam : (Γ₀ : CCtx) (a₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-path a₀))) (c₀ : Code) →
+    NN (k-nf , (dext Γ₀ , a₀ , c₀ , plam-body Γ₀ a₀ X₀)) → NN (k-nf , (Γ₀ , s-path a₀ , cplam c₀ , X₀))
+  npapp : (Γ₀ : CCtx) (a₀ : TyShape) (P₀ : Mean Γ₀ (TV (s-path a₀))) (p₀ : Code) (f₀ : DNF) →
+    isTrue (dnf-canon f₀) → isTrue (dnf-nonconst f₀) →
+    (Y₀ : Mean Γ₀ (TV a₀)) → PathM Γ₀ (TV a₀) (papp-mean Γ₀ a₀ f₀ P₀) Y₀ →
+    NN (k-ne , (Γ₀ , s-path a₀ , p₀ , P₀)) → NN (k-ne , (Γ₀ , a₀ , cpapp p₀ (dnf-code f₀) , Y₀))
+-- typing derivations, the same rules without the kinds; path application at any canonical form
+-- constructor binders subscripted ₀: t46
+data Der : (J : Jdg) → Type 1 where
+  dvar : (Γ₀ : CCtx) (v₀ : VarP (fst Γ₀)) →
+    Der (Γ₀ , var-shape (fst Γ₀) v₀ , cvar (var-word (fst Γ₀) v₀) , varCube Γ₀ v₀)
+  dapp : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (AppV a₀ b₀)) (f₀ c₀ : Code) →
+    Der (Γ₀ , s-pi a₀ b₀ , f₀ , fmapM Γ₀ (AppV a₀ b₀) (TV (s-pi a₀ b₀)) (app-f a₀ b₀) R₀) →
+    Der (Γ₀ , a₀ , c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV a₀) (app-a a₀ b₀) R₀) →
+    Der (Γ₀ , b₀ , capp f₀ c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV b₀) (app-r a₀ b₀) R₀)
+  dfst : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (p₀ : Code) →
+    Der (Γ₀ , s-sig a₀ b₀ , p₀ , R₀) → Der (Γ₀ , a₀ , cfst p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀)
+  dsnd : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (p₀ : Code) →
+    Der (Γ₀ , s-sig a₀ b₀ , p₀ , R₀) → Der (Γ₀ , b₀ , csnd p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀)
+  dcase : (Γ₀ : CCtx) (s₀ : TyShape) (R₀ : Mean Γ₀ (CaseV s₀)) (x₀ t₀ f₀ : Code) →
+    Der (Γ₀ , s-bool , x₀ , fmapM Γ₀ (CaseV s₀) (TV s-bool) (case-x s₀) R₀) →
+    Der (Γ₀ , s₀ , t₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-t s₀) R₀) →
+    Der (Γ₀ , s₀ , f₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-f s₀) R₀) →
+    Der (Γ₀ , s₀ , c-case t₀ f₀ x₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-r s₀) R₀)
+  dtrue : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (Γ₀ , s-bool , c-true , fmapM Γ₀ One1 (TV s-bool) (bool-v true) B₀)
+  dfalse : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (Γ₀ , s-bool , c-false , fmapM Γ₀ One1 (TV s-bool) (bool-v false) B₀)
+  dlam : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-pi a₀ b₀))) (c₀ : Code) →
+    Der (lam-ctx Γ₀ a₀ b₀ X₀ , b₀ , c₀ , lam-body Γ₀ a₀ b₀ X₀) → Der (Γ₀ , s-pi a₀ b₀ , clam c₀ , X₀)
+  dpair : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (c1₀ c2₀ : Code) →
+    Der (Γ₀ , a₀ , c1₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀) →
+    Der (Γ₀ , b₀ , c2₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀) →
+    Der (Γ₀ , s-sig a₀ b₀ , cpair c1₀ c2₀ , R₀)
+  dplam : (Γ₀ : CCtx) (a₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-path a₀))) (c₀ : Code) →
+    Der (dext Γ₀ , a₀ , c₀ , plam-body Γ₀ a₀ X₀) → Der (Γ₀ , s-path a₀ , cplam c₀ , X₀)
+  dpapp : (Γ₀ : CCtx) (a₀ : TyShape) (P₀ : Mean Γ₀ (TV (s-path a₀))) (p₀ : Code) (f₀ : DNF) →
+    isTrue (dnf-canon f₀) →
+    (Y₀ : Mean Γ₀ (TV a₀)) → PathM Γ₀ (TV a₀) (papp-mean Γ₀ a₀ f₀ P₀) Y₀ →
+    Der (Γ₀ , s-path a₀ , p₀ , P₀) → Der (Γ₀ , a₀ , cpapp p₀ (dnf-code f₀) , Y₀)
+-- typed codes (paper §6.1): Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation;
+-- evaluation (6.1) is that meaning
+TCode : CCtx → TyShape → Type 1
+TCode Γ s = (c : Code) × (v : Mean Γ (TV s)) × Der (Γ , s , c , v)
+teval : (Γ : CCtx) (s : TyShape) → TCode Γ s → Mean Γ (TV s)
+teval Γ s t = fst (snd t)
+-- normal and neutral forms are derivations, with the same code and meaning
+embed : {KJ : NK × Jdg} → NN KJ → Der (snd KJ)
+embed (nvar Γ v) = dvar Γ v
+embed (napp Γ a b R f c nf na) = dapp Γ a b R f c (embed nf) (embed na)
+embed (nfst Γ a b R p np) = dfst Γ a b R p (embed np)
+embed (nsnd Γ a b R p np) = dsnd Γ a b R p (embed np)
+embed (ncase Γ s R x t f nx nt nf) = dcase Γ s R x t f (embed nx) (embed nt) (embed nf)
+embed (nne Γ R x nx) = embed nx
+embed (ntrue Γ B) = dtrue Γ B
+embed (nfalse Γ B) = dfalse Γ B
+embed (nlam Γ a b X c nb) = dlam Γ a b X c (embed nb)
+embed (npair Γ a b R c1 c2 n1 n2) = dpair Γ a b R c1 c2 (embed n1) (embed n2)
+embed (nplam Γ a X c nb) = dplam Γ a X c (embed nb)
+embed (npapp Γ a P p f cf nc Y q np) = dpapp Γ a P p f cf Y q (embed np)
+
+-- ---------------------------------------------------------------- P2.6e (begun): substitutions over cubes
+-- (2026-11-12) The dimension part of a substitution Δ → Γ is a map of the cube category given, as in
+-- CCHM, by an interval form over Δ's skeleton for each dimension of Γ's (CMap; a world's forms are
+-- variables). Its action on cubes: the constant cube at no dimension, then path application at each
+-- form (papp-cube), newest innermost; on cubes over cubes likewise (papp-cube-d).
+cube-const : (n : Nat) (X : Type 1) → X → Cube n X
+cube-const zero X x = x
+cube-const (suc n) X x = cube-const n (Line X) (degen-l X x)
+dcube-const : (n : Nat) (X : Type 1) (F : X → Type 1) (x : X) → F x → DCube n X F (cube-const n X x)
+dcube-const zero X F x y = y
+dcube-const (suc n) X F x y = dcube-const n (Line X) (LineO X F) (degen-l X x) (degen-o X F x y)
+CMap : Lst Entry → Lst Entry → Type
+CMap sk' lnil = Unit
+CMap sk' (lcons (e-ty a) sk) = CMap sk' sk
+CMap sk' (lcons e-dim sk) = CMap sk' sk × DNF
+cmap-cube : (sk' sk : Lst Entry) → CMap sk' sk → (X : Type 1) → Cube (dims sk) X → Cube (dims sk') X
+cmap-cube sk' lnil σ X c = cube-const (dims sk') X c
+cmap-cube sk' (lcons (e-ty a) sk) σ X c = cmap-cube sk' sk σ X c
+cmap-cube sk' (lcons e-dim sk) σ X c = papp-cube sk' X (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c)
+cmap-d : (sk' sk : Lst Entry) (σ : CMap sk' sk) (X : Type 1) (F : X → Type 1) (c : Cube (dims sk) X) →
+  DCube (dims sk) X F c → DCube (dims sk') X F (cmap-cube sk' sk σ X c)
+cmap-d sk' lnil σ X F c d = dcube-const (dims sk') X F c d
+cmap-d sk' (lcons (e-ty a) sk) σ X F c d = cmap-d sk' sk σ X F c d
+cmap-d sk' (lcons e-dim sk) σ X F c d =
+  papp-cube-d sk' X F (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c) (cmap-d sk' sk (fst σ) (Line X) (LineO X F) c d)
+-- a substitution Δ → Γ: its dimension part, a cube over Δ's context cube of Γ's vertex contexts with
+-- environment maps, and a path from the dimension part of Γ's cube to that cube's first projection
+SubF : (sk' sk : Lst Entry) → CtxV sk' → Type 1
+-- binder names chosen not to collide: t46
+SubF sk' sk γ' = (sfγ : CtxV sk) × (EnvV sk' γ' → EnvV sk sfγ)
+sub-base : (Δ Γ : CCtx) → DCube (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (fst Γ)) (snd Δ) → Cube (dims (fst Δ)) (CtxV (fst Γ))
+sub-base Δ Γ S = dcube-map (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (fst Γ)) (CtxV (fst Γ)) (λ γ' p → fst p) (snd Δ) S
+Sub : CCtx → CCtx → Type 1
+-- binder names chosen not to collide: t46
+Sub Δ Γ = (sbd : CMap (fst Δ) (fst Γ)) × (sbS : DCube (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (fst Γ)) (snd Δ)) ×
+  PathP (λ i → Cube (dims (fst Δ)) (CtxV (fst Γ))) (cmap-cube (fst Δ) (fst Γ) sbd (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ sbS)
+-- its action on meanings: the dimension part, carried along the path, then pulled back along the
+-- environment maps
+subM : (Δ Γ : CCtx) (Z : Type 1) → Sub Δ Γ → Mean Γ Z → Mean Δ Z
+subM Δ Γ Z σ M =
+  dcube-pull (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z) (FbE (fst Γ) Z)
+    (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (snd Δ) (fst (snd σ))
+    (carry (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ)))
+       (snd (snd σ)) (cmap-d (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Z) (snd Γ) M))
+-- at no dimension, the dimension part is the identity judgmentally (P1's case)
+cmap-zero : (sk' : Lst Entry) (X : Type 1) (x : X) → PathP (λ i → Cube (dims sk') X) (cmap-cube sk' lnil unit X x) (cube-const (dims sk') X x)
+cmap-zero sk' X x = λ i → cube-const (dims sk') X x
