@@ -1751,6 +1751,8 @@ data-level d tel = lfold-lmax (lconcatmap (field-levels d) (snd (params-fresh te
 data-entry d ent =
   case ent of dent tel l → dent tel (data-level d tel); dcoent tel l → dcoent tel l
 -- a data type's level is closed: no field's universe depends on a parameter
+-- (2026-11-12) the level is the fields' largest only; a declared universe is never seen here, since
+-- src/syntax.c drops it (t49, at the site).
 chk-data d ent =
   case ent of
     dent tel l → 
@@ -2266,6 +2268,13 @@ guess-infer k g t =
        tpapp p r V → (case infer p of typed T → (case %view T of wpi A B → redo k; _ → infer t); r2 → r2)
        _ → infer t)
   else infer t
+-- t48 (2026-11-12): needs-work. Solving one implicit argument exhausted the machine's memory (7 GB,
+-- killed, exit 137): lib/nbe.cub's `reify-code s K D Δ δ x cx = (fst (fst (rr s) K D Δ δ x cx) , x ,
+-- embed (snd (fst (rr s) K D Δ δ x cx)))`, where embed's implicit index {KJ} is to be found from its
+-- argument's type, at a variable shape s. The same term through a definition with a declared type
+-- (nf-code Δ (s , (K , δ , D)) x (fst (rr s) K D Δ δ x cx)) checks in a few thousand steps. Not yet
+-- known whether the cost is here (inferring the argument's type by evaluating rr's clauses at the
+-- variable s, rather than reading rr's signature) or in the elaborator's syntactic solving.
 -- A spine with holes (implicit arguments) is solved where it stands: the head's type is walked
 -- along the arguments, a hole standing as a fresh variable, each explicit argument's inferred type
 -- matched against its domain, then the result type against the expected one; the universe of a

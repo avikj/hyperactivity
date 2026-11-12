@@ -24,36 +24,6 @@
 -- comments at the sites). Queries written in the language over the checked records (tickets by goal,
 -- the goals a goal transitively serves, what is open under a goal) are to follow, with the command
 -- evaluating them through the machine.
--- t46 (2026-11-12): wrong. The elaborator's instantiation of a telescope is not capture-avoiding: an
--- argument whose free variables share a name with a later binder of the telescope is captured by it.
--- Reproduction (lib/nbe.cub as of this date, before its binders were renamed): with NN's
--- constructor `nvar : (Γ : Ctx) (A : PTy (Env Γ)) (n : Word) ...`, the definition
--- `var0 : (Δ : Ctx) (A : PTy (Env Δ)) → NN (...)`, `var0 Δ A = nvar (ext Δ A) (wk Δ A A) ...` is
--- refused (type mismatch at wk Δ A A: expected PTy (Env Δ)), and accepted with its parameters named
--- D0 and T0; likewise a variable x inside an index was given the type of the Π binder `x` of TyE's
--- meaning of s-pi. The refusals are the checker catching wrongly elaborated terms (no unsound
--- acceptance was seen), but whether a correct definition elaborates depends on binder names. Not yet
--- located in src/syntax.c. Until fixed, lib/nbe.cub's constructor telescopes and type-level
--- definitions use binder names that do not collide (subscript ₀, hatted letters).
---
--- t47 (2026-11-12): needs-work. The elaborator does not unify a computed index with a constructor's
--- when matching an indexed family: with `data OPE : (W : (Δ : Ctx) × (Γ : Ctx) × (Env Δ → Env Γ)) →
--- Type 1` (constructors odone, odrop, okeep, lib/nbe.cub at commit f71b1f3), the clause
--- `ocomp (okeep Δ2 Δ1 r1 A w1) Δ r (odrop Δ3 Δ0 r0 B w2) = odrop Δ2 Δ (λ ρ → r0 (r1 ρ)) ...` is
--- refused ("type mismatch ... expected snd (case fst Δ3 ...) actual snd (case fst Δ1 ...)") and
--- without an odone clause "the clauses do not cover every case": the index ext Δ1 A = (lcons ..,
--- (snd Δ1 , snd A)) is a computed pair, and the second argument's index is not unified with
--- odrop's ext Δ3 B (Δ3 := Δ1, B := A), nor its clash with odone's lnil seen. Agda's unifier
--- decomposes such pairs. lib/nbe.cub works around it (variables by recursion on the skeleton,
--- worlds as functions). Site in src/syntax.c (the split's unification) not yet located.
---
--- t48 (2026-11-12): needs-work. Checking `reify-code s K D Δ δ x cx = (fst (fst (rr s) K D Δ δ x cx) , x ,
--- embed (snd (fst (rr s) K D Δ δ x cx)))` (lib/nbe.cub, rr at a variable shape s) exhausted the
--- machine's memory (7 GB, killed, exit 137), where the same term through a definition with a
--- declared type, nf-code Δ (s , (K , δ , D)) x (fst (rr s) K D Δ δ x cx), checks in a few thousand
--- steps. Presumably the implicit index of embed is solved by evaluating rr's body at the variable
--- shape rather than from rr's type; not yet located (src/syntax.c hole solving, or lib/check.cub).
---
 t1 : Ticket Goal
 t1 = ticket wrong (cons core-correct nil) (closed #20261112)
 t2 : Ticket Goal
@@ -150,3 +120,5 @@ t47 : Ticket Goal
 t47 = ticket needs-work (cons typed-codes nil) opened
 t48 : Ticket Goal
 t48 = ticket needs-work (cons core-correct (cons typed-codes nil)) opened
+t49 : Ticket Goal
+t49 = ticket wrong (cons core-correct nil) opened

@@ -1189,6 +1189,13 @@ static Node *p_data(void) {
             ty = x_rename(ty->it[3], ty->it[1]->s, nm);
             data_nidx++;
         }
+        /* t49 (2026-11-12): wrong. What remains of the annotation here, the declared universe (`Type 1`
+         * in `data D ps : … → Type 1`), is dropped: the data type's level is computed from its fields
+         * (lib/check.cub data-level) and the annotation is neither checked nor used. So `data Lift49 (A
+         * : Type) : Type 1 = lift49 (x : A)` is accepted, and `F49 : Type 1 → Type 1; F49 X = X; t49 :
+         * Type 1; t49 = F49 (Lift49 Bool)` is refused: "expected: Type (lsuc lzero), actual: Type (lmax
+         * lzero lzero)". An accepted annotation that does not hold is wrong: either the declared level is
+         * the type's level (checked to be at least the fields') or the annotation is refused. */
     }
     Node *head = nsym(d->s);
     if (np) { head = nlist(np + 1); head->it[0] = nsym(d->s); for (int i = 0; i < np; i++) head->it[i + 1] = ps[i]; }
@@ -3721,6 +3728,15 @@ static Node *el_app(Node *t, Node *h, Node **args, int n) {
                 for (int i = 0; i < n; i++) a2[i] = args[i];
                 for (int q = 0; q < fd->nidx; q++) {
                     Node *e = fd->idx[q];
+                    /* t46 (2026-11-12): wrong. The fields are substituted into the index expression one at a
+                     * time, so an argument mentioning a later field's name is captured by that field's
+                     * substitution: `data T46 : (J : Nat × Nat) → Type where mk46 : (a : Nat) (b : Nat) → T46
+                     * (a , b)` and `f46 : (b : Nat) → T46 (plus b b , suc b); f46 b = mk46 (plus b b) (suc b)`
+                     * is refused (wrong endpoint at 0: expected (plus b b , suc b), actual (plus (suc b) (suc
+                     * b) , suc b)); the same with the variable named c is accepted. The substitution must be
+                     * simultaneous (subst_multi with every field at once). field_types, below, substitutes
+                     * parameters and earlier fields the same sequential way (subst_sym). lib/nbe.cub renames
+                     * binders around it. */
                     for (int i = 0; i < n; i++) e = subst_sym(e, fd->fields[i], args[i]);
                     a2[n + q] = sym3("plam", xfresh("i"), e);
                 }
@@ -4402,6 +4418,15 @@ typedef struct { int q, depth, ca; UStep path[16]; } UClash;
 typedef struct { int k, q, depth; Node *val; UStep path[16]; } USol;
 typedef struct { bool clash, stuck; UClash cl; int nsol; USol sol[16]; } UState;
 /* a constructor application (a numeral of a type with zero and suc read as one), its arguments */
+/* t47 (2026-11-12): needs-work. Only constructor applications are decomposed (u_con): an index that is
+ * a pair, or a definition applied that computes to one or to a constructor (lib/nbe.cub's ext Γ A =
+ * (lcons (fst A) (fst Γ) , (snd Γ , snd A))), leaves the unification stuck. So a clause matching an
+ * indexed family whose index is computed is refused or not seen to cover: with `data OPE : (W : (Δ :
+ * Ctx) × (Γ : Ctx) × (Env Δ → Env Γ)) → Type 1` (lib/nbe.cub at commit f71b1f3), `ocomp (okeep Δ2 Δ1
+ * r1 A w1) Δ r (odrop Δ3 Δ0 r0 B w2) = ...` is refused (type mismatch, snd (case fst Δ3 ...) against
+ * snd (case fst Δ1 ...)) and without an odone clause "the clauses do not cover every case". Agda's
+ * unifier decomposes pairs (η for Σ) and evaluates indices to weak head normal form first. lib/nbe.cub
+ * defines variables by recursion on the skeleton and worlds as functions instead. */
 static int u_con(Node *t, Node **args, int *na) {
     *na = 0;
     if (!t->list) {
