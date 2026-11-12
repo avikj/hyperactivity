@@ -2,8 +2,8 @@
 
 Handoff written 2026-11-11 by the session that did this week's compile work. Every claim below
 cites what it rests on; anything not verified is marked **unverified**. Read in this order:
-`docs/Hyperactive_Final_Paper.pdf` (§9 fully, then §5–§7), `../PLAN.md` §0, §4.2, §6 Phase 2,
-`README.md` here, `lib/x86.cub`'s header.
+`docs/Hyperactive_Final_Paper.pdf` (§9 fully, then §5–§7), `../archive/2026-11-11/PLAN-rev9.md` §0, §4.2, §6 Phase 2,
+`archive/2026-11-11/README.md`, `lib/x86.cub`'s header.
 
 ## What governs this work
 
@@ -34,7 +34,7 @@ cites what it rests on; anything not verified is marked **unverified**. Read in 
 - **PLAN §4.2**: the overflow exit is designed and sound — compiled code is pure, its arena is
   discarded, an overflow restores the stack and returns, the net computes the call (`run p f ≡ f`);
   in a standalone binary it is an abort outcome in `main`'s type.
-- **`tracks/README.md`** item 4: a template is `Σ bytes . ⟦x86⟧ bytes ≡ meaning`, never bytes with
+- **`archive/2026-11-11/README.md` (old tracks index)** item 4: a template is `Σ bytes . ⟦x86⟧ bytes ≡ meaning`, never bytes with
   a lemma owed afterwards.
 
 ## The proof method (from the paper, not from what the evaluator happens to compute)
