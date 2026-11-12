@@ -291,29 +291,53 @@
 -- cubes: cmap-of sk' sk r (dimension k to the variable r k), cmap-skip (weakening by a type is the
 -- same cube, by a dimension the degenerate one), cmap-keep, cmap-id, cmap-ope (= ope-cube). Tickets
 -- t53, t54 (elaborator; neither workaround is in use).
+-- (2026-11-12, latest) Done since, checked in p26-wip ("494 passed, 0 failed", no cache): (2d) entire:
+-- pcat-d/psym-d (a path over a composite of base paths, by the filler of the base pcat), reidx-comp,
+-- reidx-id, cube-comp2-d; skip-d, keep-d, ope-cube-d, ope-nat-d; diag-ty-s-d, diag-dim-s-d,
+-- diag-nat-d, skip-diag-d, keep-diag-d, diag-ren-d; const-map-d, skip-const-d, papp-var-d,
+-- cmap-skip-d, cmap-keep-d, cmap-id-d, cmap-ope-d (each a PathP over its law on the base). (2s) in
+-- part: sub-id, sub-wk (by a type), sub-dwk (by a dimension), with dmap-map, dmap-fst; papp-nat
+-- (path application natural in the base, through papp-lit-nat … papp-dnf-from-nat), cmap-nat;
+-- sub-form (σ extended by a form g over Δ for Γ's new dimension: Sub Δ (dext Γ); its path is
+-- cmap-nat at the degeneracy, papp-deg, then σ's own).
+-- Settled (2026-11-12, by the coordinator, checked): the evaluator identifies interval expressions up
+-- to the De Morgan laws judgmentally; each of these checks by refl: Path (x ≡ y) (λ i → p (i ∨ (i ∧
+-- i))) p; Path (x ≡ y) (λ i → p (~ (~ i))) p; Path (y ≡ x) (λ i → p (~ (i ∧ i))) (λ i → p (~ i));
+-- Path (x ≡ y) (λ i → p (i ∨ (i ∧ (~ i)))) p. So (4d)'s first step is answered: path application is a
+-- homomorphism for meet, join and negation by refl on lines, and by induction on n on cubes.
+-- Decision (2026-11-12, theoretical): a world into Δ is stated over fst Δ' and fst Δ directly, not as
+-- an OPE w with an equation ope-tgt w ≡ fst Δ. Δ is a variable context in CompS's Kripke clause, so
+-- such an equation is a path between a computed skeleton and a variable one, and transports of cubes
+-- along it do not reduce (the reason OPE is closed data, above); cmap-of (fst Δ') (fst Δ) r needs no
+-- equation. A world Δ' → Δ: r : Word → Word with MonoW r (so canon-ren's argument applies: dnf-r r
+-- keeps canonicity, nonconst-ren non-constancy) sending each dimension index of fst Δ to a dimension
+-- index of fst Δ' (so a renamed cpapp's form names dimensions); the Sub (cmap-of (fst Δ') (fst Δ) r ,
+-- S , path); and P1's Ren over cubes for term variables (each v : VarP (fst Δ) to a v' : VarP (fst
+-- Δ') with var-word and a PathM from subM of varCube Δ v to varCube Δ' v'). Weakening by a type is
+-- r = succ (sub-wk), by a dimension likewise (sub-dwk), keeping is w-keep r, composition is r2 ∘ r1.
+-- ren-nn at npapp needs subM along the world of papp-mean at f to be papp-mean at dnf-r r f of subM:
+-- this is subM-papp (4d) at cmap-of r, with dnf-sub (cmap-of r) f ≡ dnf-r r f for canonical f and
+-- monotone r (dnf-canon-r's argument). The OPE forms of (1), (4), (2d) (ope-cube, papp-ren, cmap-ope
+-- and their dependent forms) are the case r = ope-var w with matching skeletons.
 -- Remaining, in order (each a closed statement):
---   (2d) the dependent forms on cubes over cubes, needed because subM acts by cmap-d: skip-d/keep-d/
---       ope-cube-d (a skipped dimension degen-o, a kept one kept), ope-nat-d, diag-ren-d, cmap-skip-d,
---       cmap-keep-d, cmap-id-d, cmap-ope-d, each a PathP over its non-dependent law, by the same
---       recursion (fmap-diag-sk's pattern: dcube-reidx at each generator, fmap-gen for the steps).
---   (2s) Sub: sub-id Γ (cmap-of (fst Γ) (fst Γ) id, S = dcube-of (λ γ → (γ , λ ρ → ρ)) (snd Γ), path
---       cmap-id then dcube-map-of); weakening by a type (extM; cmap-of with succ, path cmap-skip and
---       the first projection of extM's cube) and by a dimension (dext; cmap-skip at e-dim); extension
---       by a cube of values; the dimension part extended by a form (CMap's pair); worlds: a Sub whose
---       dimension part is cmap-of (ope-src w) (ope-tgt w) (ope-var w), and their composition
---       (ope-comp, ope-var and ope-cube of a composite).
---   (3) done (subM-fmap).
---   (4d) papp-ren-d (papp-cube-d at dnf-ren w f over papp-ren), then papp-mean along a world (ren-nn
---       at npapp). subM-papp, planned: dnf-sub σ f replaces a literal (k , b) by σ's form for k (dnf-neg
---       of it when b is false), a conjunction by dnf-meet, a disjunction by dnf-join; by the recursion
---       of papp-cube, a literal by the induction on sk that cmap-cube's newest form is snd σ, the
---       connections by papp-cube being a homomorphism of the De Morgan operations (papp-cube at
---       dnf-meet f g is papp at f of meet-l then papp at g; join, neg likewise; absorption and order
---       inside dnf-add). First step: test whether the evaluator identifies interval expressions up to
---       the De Morgan laws (λ i → p (i ∨ (i ∧ j)) against λ i → p i, by refl); if it does, these hold
---       by refl on lines and by induction on n on cubes; if not, by paths on lines built from them.
+--   (2s) the rest: extension by a cube of values, sub-ext Δ Γ a Y f M σ V : Sub Δ (extM Γ a Y f M),
+--       V a cube over the total of Q = dcube-pull of sub-carried σ M along σ's S (fibre (p : SubF) ×
+--       FbE (fst Γ) Y (fst p)) with fibre ρ' ↦ El a (f (fst p) e (snd p ρ')); S' = dcube-pull of V
+--       at ((γ , f γ e) , λ ρ' → (em ρ' , v ρ')); its path: cmap-dmap (cmap-cube of a dcube-map is
+--       dcube-map over cmap-cube and cmap-d, through papp-dmap: papp-cube of a dcube-map is dcube-map
+--       of papp-cube and papp-cube-d, by papp-nat's recursion; dmap-const-cube at lnil), the filler
+--       of sub-carried's carry, map-pull (dcube-map out of a dcube-pull along a pairing is dcube-map
+--       over the pushed base), dmap-map, and dcube-map-of. Worlds as decided above (World, world-sub,
+--       world-wk, world-dwk, world-keep, world-comp).
+--   (4d) papp-ren-d (papp-cube-d at dnf-ren w f over papp-ren, by papp-ren's recursion with
+--       diag-ren-d and ope-nat-d), then subM-papp: dnf-sub σ f replaces a literal (k , b) by σ's
+--       form for k (dnf-neg of it when b is false), a conjunction by dnf-meet, a disjunction by
+--       dnf-join; by the recursion of papp-cube, a literal by the induction on sk that cmap-cube's
+--       newest form is snd σ, the connections by the De Morgan laws holding judgmentally (above);
+--       then dnf-sub (cmap-of r) f ≡ dnf-r r f (f canonical, r monotone), and papp-mean along a
+--       world (ren-nn at npapp).
 --   (5) subM-comp for worlds: comp-ren.
---   (6) ren-nn (along worlds, transported along (3), (4)); CompS by recursion on the shape with the
+--   (6) ren-nn (along worlds, transported along (3), (4d)); CompS by recursion on the shape with the
 --       PathP clause; comp-ren; rr; CompEnv over a substitution; fund; reflect-env; normalize;
 --       reifySound and normalize-sound by refl; the swap into this file in place of P1's families;
 --       experiments/nbe/examples.cub rewritten over the new families (P1's examples with the same
