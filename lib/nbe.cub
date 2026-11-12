@@ -1336,3 +1336,62 @@ varM (lcons (e-ty a) sk) none γ ρ = (snd γ (fst ρ) , snd ρ)
 varM (lcons (e-ty a) sk) (some v) γ ρ = varM sk v (fst γ) (fst ρ)
 varCube : (Γ : CCtx) (v : VarP (fst Γ)) → Mean Γ (TV (var-shape (fst Γ) v))
 varCube Γ v = dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV (var-shape (fst Γ) v))) (varM (fst Γ) v) (snd Γ)
+
+-- ---------------------------------------------------------------- P2.6b: naturality of the maps of cubes over cubes
+-- (2026-11-12) Composites of the structural maps agree with the map of the composite: paths, by
+-- induction on the dimension (each line version composes judgmentally).
+fmap-fmap : (n : Nat) (X : Type 1) (F F' F2 : X → Type 1) (h : (x : X) → F x → F' x) (h' : (x : X) → F' x → F2 x) (c : Cube n X) (d : DCube n X F c) →
+  PathP (λ i → DCube n X F2 c) (dcube-fmap n X F' F2 h' c (dcube-fmap n X F F' h c d)) (dcube-fmap n X F F2 (λ x y → h' x (h x y)) c d)
+fmap-fmap zero X F F' F2 h h' c d = λ i → h' c (h c d)
+fmap-fmap (suc n) X F F' F2 h h' c d =
+  fmap-fmap n (Line X) (LineO X F) (LineO X F') (LineO X F2) (lineo-fmap X F F' h) (lineo-fmap X F' F2 h') c d
+fmap-reidx : (n : Nat) (X X' : Type 1) (F : X → Type 1) (F' F2 : X' → Type 1) (f : X → X') (g : (x : X) → F x → F' (f x))
+  (h : (x : X') → F' x → F2 x) (c : Cube n X) (d : DCube n X F c) →
+  PathP (λ i → DCube n X' F2 (cube-map n X X' f c))
+    (dcube-fmap n X' F' F2 h (cube-map n X X' f c) (dcube-reidx n X X' F F' f g c d)) (dcube-reidx n X X' F F2 f (λ x y → h (f x) (g x y)) c d)
+fmap-reidx zero X X' F F' F2 f g h c d = λ i → h (f c) (g c d)
+fmap-reidx (suc n) X X' F F' F2 f g h c d =
+  fmap-reidx n (Line X) (Line X') (LineO X F) (LineO X' F') (LineO X' F2) (line-map X X' f) (lineo-reidx X X' F F' f g) (lineo-fmap X' F' F2 h) c d
+reidx-fmap : (n : Nat) (X X' : Type 1) (F F2 : X → Type 1) (F' : X' → Type 1) (h : (x : X) → F x → F2 x) (f : X → X')
+  (g : (x : X) → F2 x → F' (f x)) (c : Cube n X) (d : DCube n X F c) →
+  PathP (λ i → DCube n X' F' (cube-map n X X' f c))
+    (dcube-reidx n X X' F2 F' f g c (dcube-fmap n X F F2 h c d)) (dcube-reidx n X X' F F' f (λ x y → g x (h x y)) c d)
+reidx-fmap zero X X' F F2 F' h f g c d = λ i → g c (h c d)
+reidx-fmap (suc n) X X' F F2 F' h f g c d =
+  reidx-fmap n (Line X) (Line X') (LineO X F) (LineO X F2) (LineO X' F') (lineo-fmap X F F2 h) (line-map X X' f) (lineo-reidx X X' F2 F' f g) c d
+fmap-push : (n : Nat) (X X' : Type 1) (Y F : X → Type 1) (F' F2 : X' → Type 1) (f : (x : X) → Y x → X')
+  (g : (x : X) (y : Y x) → F x → F' (f x y)) (h : (x : X') → F' x → F2 x) (c : Cube n X) (d : DCube n X Y c) (e : DCube n X F c) →
+  PathP (λ i → DCube n X' F2 (dcube-map n X Y X' f c d))
+    (dcube-fmap n X' F' F2 h (dcube-map n X Y X' f c d) (dcube-push n X X' Y F F' f g c d e))
+    (dcube-push n X X' Y F F2 f (λ x y z → h (f x y) (g x y z)) c d e)
+fmap-push zero X X' Y F F' F2 f g h c d e = λ i → h (f c d) (g c d e)
+fmap-push (suc n) X X' Y F F' F2 f g h c d e =
+  fmap-push n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (LineO X' F2) (lineo-map X Y X' f) (lineo-push X X' Y F F' f g)
+    (lineo-fmap X' F' F2 h) c d e
+push-fmap : (n : Nat) (X X' : Type 1) (Y F F2 : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') (h : (x : X) → F x → F2 x)
+  (g : (x : X) (y : Y x) → F2 x → F' (f x y)) (c : Cube n X) (d : DCube n X Y c) (e : DCube n X F c) →
+  PathP (λ i → DCube n X' F' (dcube-map n X Y X' f c d))
+    (dcube-push n X X' Y F2 F' f g c d (dcube-fmap n X F F2 h c e)) (dcube-push n X X' Y F F' f (λ x y z → g x y (h x z)) c d e)
+push-fmap zero X X' Y F F2 F' f h g c d e = λ i → g c d (h c e)
+push-fmap (suc n) X X' Y F F2 F' f h g c d e =
+  push-fmap n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X F2) (LineO X' F') (lineo-map X Y X' f) (lineo-fmap X F F2 h)
+    (lineo-push X X' Y F2 F' f g) c d e
+fmap-pull : (n : Nat) (X X' : Type 1) (Y F F2 : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X')
+  (g : (x : X) (y : Y x) → F' (f x y) → F x) (h : (x : X) → F x → F2 x) (c : Cube n X) (d : DCube n X Y c) (e : DCube n X' F' (dcube-map n X Y X' f c d)) →
+  PathP (λ i → DCube n X F2 c)
+    (dcube-fmap n X F F2 h c (dcube-pull n X X' Y F F' f g c d e)) (dcube-pull n X X' Y F2 F' f (λ x y z → h x (g x y z)) c d e)
+fmap-pull zero X X' Y F F2 F' f g h c d e = λ i → h c (g c d e)
+fmap-pull (suc n) X X' Y F F2 F' f g h c d e =
+  fmap-pull n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X F2) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g)
+    (lineo-fmap X F F2 h) c d e
+-- a fibrewise map commutes with carrying a cube over a base along a path of bases (by the filler of
+-- the transport)
+fmap-transp : (n : Nat) (X : Type 1) (F F' : X → Type 1) (h : (x : X) → F x → F' x) (c0 c1 : Cube n X) (p : PathP (λ i → Cube n X) c0 c1)
+  (d : DCube n X F c0) →
+  PathP (λ j → DCube n X F' c1)
+    (dcube-fmap n X F F' h c1 (comp (λ i → DCube n X F (p i)) (λ i → []) d))
+    (comp (λ i → DCube n X F' (p i)) (λ i → []) (dcube-fmap n X F F' h c0 d))
+fmap-transp n X F F' h c0 c1 p d =
+  λ j → comp (λ i → DCube n X F' (p i))
+    (λ i → [ j = 0 ↦ dcube-fmap n X F F' h (p i) (comp (λ k → DCube n X F (p (i ∧ k))) (λ k → [ i = 0 ↦ d ]) d) ])
+    (dcube-fmap n X F F' h c0 d)
