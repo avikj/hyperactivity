@@ -29,6 +29,33 @@ signature (or a primitive outside the bootstrap files), or a use of one: `derive
 `lib/lang/rust/{machine,read,read-place,read-rvalue}.cub`; `lib/compile/*`. Their track files
 record them loading "after the library"; whether each still loads at this commit is **unverified**.
 
+## The files `make library` does not check, loaded after it (measured)
+
+Counts include the library's own 52 (above); the difference is the file's.
+- `net.cub fleet.cub`: 1,954/52 — 0 new failures. (`fleet.cub` alone does not load: it needs
+  `net.cub` first.)
+- `net.cub fleet.cub deploy.cub`: 1,992/52 — 0 new. (`deploy.cub` alone: `n-send` not a
+  constructor, i.e. needs `net.cub`.)
+- `mem/{target,scalar,sig,layout,flat,monad,memory}` in that order: 2,179/57 — 5 new, 3 in
+  `layout.cub`: `w-roundup` is defined in `flat.cub:133`, which loads after it (an order error).
+- the memory files then `cxx/machine.cub cxx/read-expr.cub`: 2,340/157 — `machine.cub` 21,
+  `read-expr.cub` 70. Roots: `cx-unsupported` (machine.cub:56) and `cx-run` (:70) type
+  mismatches; a primitive at machine.cub:79 refused (outside the bootstrap files); the rest
+  follow (`cx-sk`, `cx-size` undefined because refused; 11 "an implicit argument {..} applied to
+  something without implicit arguments").
+- the memory files then `lang/rust/{machine,read-place,read-rvalue,read}.cub`: 2,319/132 —
+  machine 6, read-place 21, read-rvalue 26, read 22. Root: `machine.cub:135–136` "deriving needs
+  lib/derive.cub loaded" — `derive.cub`'s own definitions are refused (untyped), so deriving
+  fails, and the rest follow (`rm-ik-eq`, `rm-opd-rv`, `rm-lay`, `rm-place-al` undefined).
+- not yet run: `bits.cub`, the imported model `lib/isa/x86/*` and `lib/compile/*` (they loaded
+  this week in the order in `E-lemmas.md`).
+
+So the track files' "loads with 0 failed" for C++ (F), memory (M) and Rust (R) no longer hold at
+this commit: the refusal of untyped code (2026-11-09) and an ordering error break them. Repairs
+needed, roots first: types for `derive.cub` (then Rust's deriving works), `ring.cub`,
+`intlin.cub`, `eqproof.cub`, `autodiff.cub`; the two primitives in `cxx/ast.cub` and the one at
+`cxx/machine.cub:79`; `cx-unsupported`/`cx-run`'s mismatches; `layout.cub`'s order.
+
 ## Per track: the track file's own status (unverified unless marked)
 
 | track | file, last change | its "Done" says |
@@ -54,6 +81,6 @@ Verified against this session's reading: track E (fully); `lib/obs.cub` contains
 
 ## Next steps (in order)
 
-1. Load each file not in `make library` after it, record pass/fail here per file.
+1. Repair the roots above, roots first, recounting after each.
 2. Per track, check each "Done" claim against its files; mark verified or wrong here.
 3. Then the work per track E's next step.
