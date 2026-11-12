@@ -46,7 +46,8 @@ Application is juxtaposition; structure is indentation (a block opens after `whe
 `case e of c x → t; d → u`, `case e return P of ...`, `e where` a block of definitions, `Type`,
 `Type l` (`Level`, `lzero`, `lsuc`, `lmax`, or a numeral). Numerals are natural numbers. A quoted
 string `"…"` is the list of its bytes (UTF-8, as written): `"ab"` is `cons #97 (cons #98 nil)`, a
-`List Word`. Every
+`List Word`. `declarations T` is the list of every checked definition in scope whose type is T, in
+the order declared (`declarations Node` is the work's every node, lib/work.cub). Every
 Unicode symbol has an ASCII spelling: `->` `\` `|->` `==` `/\` `\/` `**` `forall`, `Nat` for `ℕ`,
 `S1` for `S¹`, `Empty` for `⊥`, `Unit` for `⊤`. Operators are declared: `infix 4 ≡`, `infixr 5 ∙`,
 and defined as `_≡_` or by an equation `x ≡ y = ...`. A name used in a signature and bound nowhere

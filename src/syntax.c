@@ -4038,9 +4038,28 @@ static Node *by_lin(Node *ex, Node *at) {
     for (int z = 0; z < nh; z++) hp[z] = nsym(hn[z]);
     return lin_core(ex, at, ex->it[1], ex->it[2], hl, hr, hp, nh);
 }
+/* `declarations T` (2026-11-12, t62): every checked definition in scope whose type is T (equal
+ * canonical forms), in the order declared, as the list cons d1 (cons d2 … nil) : List T. The work
+ * read as a value of the language: a view of it is a term over such lists (lib/work.cub). */
+static Node *el_declarations(Node *Ts) {
+    Node *T = ds(strip_marks(core(el(Ts))));
+    SBuf a = { 0 }; cur_deps.n = 0; canon(&a, T); cur_deps.n = 0;
+    Node *r = nsym("nil");
+    for (int k = nchecked - 1; k >= 0; k--) {
+        if (CHKHIDE[k] || CHECKED[k][0] == '%' || (size_t)k >= capchkty || !CHKTY[k]) continue;
+        SBuf b = { 0 }; canon(&b, CHKTY[k]); cur_deps.n = 0;
+        if (a.b && b.b && !strcmp(a.b, b.b)) r = lst(3, nsym("cons"), nsym(CHECKED[k]), r);
+        free(b.b);
+    }
+    free(a.b);
+    return r;
+}
 static Node *el(Node *t) {
     Node *ex = syn_expect; syn_expect = NULL;
     bool tickpos = tick_pos || (ex && is_later(ex)); tick_pos = false;
+    if (t->list && t->n == 2 && !t->it[0]->list && !strcmp(t->it[0]->s, "declarations") && !e_find("declarations") && global_lookup("declarations") < 0) {
+        Node *r = el_declarations(t->it[1]); syn_expect = ex; return el(r);
+    }
     if (t->list && t->n > 0 && (t->it[0]->list || !e_head_kw(t->it[0]->s))) { app_expect = ex; return el_app(t, t->it[0], t->it + 1, t->n - 1); }
     if (!t->list) {
         if (!strcmp(t->s, "%hole")) { bool p = false; Node *h = hole_or_sol(t, 0, &p); return p ? sym2("%spine", h) : h; }

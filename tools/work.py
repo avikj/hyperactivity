@@ -17,6 +17,9 @@ Every node in the graph is open; closing one removes it.
                                              open the next tN, part of the NODEs, its text the
                                              comment `tN (date): TEXT` written above FILE:LINE;
                                              a part of the root or of a root's part asks y/N
+    python3 tools/work.py view TERM          a view: a term over the work (lib/work.cub's views over
+                                             `declarations Node`) evaluated by the machine, shown by
+                                             its type (a List Word as text)
     python3 tools/work.py why NAME ...       why a declaration of the code exists: the chain to a root
     python3 tools/work.py unexplained [FILE] the declarations with no reason, by file
 
@@ -502,6 +505,58 @@ def cmd_unexplained(args):
 
 
 
+
+def cmd_view(args):
+    term = ' '.join(args)
+    env = dict(os.environ); env.setdefault('CUBICAL_STORE', os.path.join(ROOT, '.cubical-store'))
+    r = subprocess.run([os.path.join(ROOT, 'build', 'cubical'), 'work/graph.cub', '--serve'], cwd=ROOT,
+                       input=f'#type ({term})\n.\n#show {term}\n.\n', capture_output=True, text=True, env=env)
+    ty = next((l.rsplit(' : ', 1)[1] for l in r.stdout.split('\n') if l.startswith('type: ') and ' : ' in l), None)
+    val = next((l.split('  = ', 1)[1].rsplit('   [', 1)[0] for l in r.stdout.split('\n') if l.startswith('  = ')), None)
+    if ty is None or val is None:
+        sys.exit('\n'.join(l for l in r.stdout.split('\n') if l.startswith(('FAIL', '   ', 'error'))) or r.stdout[-2000:])
+    toks = re.findall(r'\(|\)|[^\s()]+', val)
+    def parse(i):
+        if toks[i] == '(':
+            items, i = [], i + 1
+            while toks[i] != ')':
+                x, i = parse(i); items.append(x)
+            return items, i + 1
+        return toks[i], i + 1
+    def app(i):   # an application: the head and its arguments, to the end of the enclosing group
+        items = []
+        while i < len(toks) and toks[i] != ')':
+            x, i = parse(i); items.append(x)
+        return items
+    def norm(x):
+        return x[0] if isinstance(x, list) and len(x) == 1 else x
+    def as_list(x):
+        out = []
+        x = norm(x)
+        while isinstance(x, list) and x and x[0] == 'cons':
+            out.append(x[1]); x = norm(x[2])
+        if x != 'nil': raise ValueError
+        return out
+    def show(x, t):
+        t = t.strip()
+        if t.startswith('(') and t.endswith(')'): t = t[1:-1]
+        try:
+            if t == 'List Word':
+                bs = bytes(int(w[1:]) for w in as_list(x))
+                return '"' + bs.decode('utf-8') + '"'
+            if t.startswith('List '):
+                return [show(e, t[5:]) for e in as_list(x)]
+        except (ValueError, UnicodeDecodeError, TypeError, IndexError):
+            pass
+        def flat(y): return y if isinstance(y, str) else '(' + ' '.join(flat(z) for z in y) + ')'
+        return flat(norm(x))
+    v = show(app(0), ty)
+    if isinstance(v, list):
+        for e in v: print(e if isinstance(e, str) else e)
+        print(f'({len(v)}, {ty})')
+    else: print(v, ':', ty)
+
+
 def depth(g, roots, n, seen=()):
     """the node's least distance below a root"""
     if n in roots: return 0
@@ -572,7 +627,7 @@ def main():
         print(__doc__); return
     c, a = sys.argv[1], sys.argv[2:]
     {'list': cmd_list, 'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'next': cmd_next,
-     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained, 'open': cmd_open}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
+     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained, 'open': cmd_open, 'view': cmd_view}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
 
 
 if __name__ == '__main__':

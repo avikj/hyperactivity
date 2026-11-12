@@ -98,8 +98,8 @@ import "core.cub"
 -- A node's text is its comment: a goal's above its part-of clause, a node opened for a specific piece
 -- of work (tN) at the place in the code it concerns, as `tN (YYYY-MM-DD):`. Every node in the state is
 -- open; closing one removes it, and the history keeps it.
--- Priority is not stored: it is computed from these (tools/work.py priority, until it is a term,
--- t37). A piece of work's value lands when it and everything its value is gated on are complete.
+-- Priority is not stored: it is computed from these (tools/work.py priority; not yet written as a
+-- view below). A piece of work's value lands when it and everything its value is gated on are complete.
 -- Work whose value is gated on incomplete work comes after that work even when nothing stops it being
 -- started; among the parts of one all-of node, what speeds other work comes first; the total time is
 -- the same in any order, so the order only moves when value lands.
@@ -108,3 +108,41 @@ data Breakdown = sufficient | not-known
 data Node = node (name : List Word) (part-of : List Node) (value : Combine) (breakdown : Breakdown)
 leaf : List Word → List Node → Node
 leaf i ps = node i ps all-of not-known
+
+-- ---------------------------------------------------------------- views (2026-11-12, t62)
+-- Views of the work are terms over it: `declarations Node` is every node, and the functions here
+-- read it. tools/work.py evaluates them through the machine (its `view` command).
+text-eq : List Word → List Word → Bool
+text-eq nil nil = true
+text-eq nil (cons y ys) = false
+text-eq (cons x xs) nil = false
+text-eq (cons x xs) (cons y ys) = if weq x y then text-eq xs ys else false
+name : Node → List Word
+name (node n ps v b) = n
+parts : Node → List Node
+parts (node n ps v b) = ps
+-- some node of the list has p's name
+named-in : Node → List Node → Bool
+named-in p nil = false
+named-in p (cons q qs) = if text-eq (name q) (name p) then true else named-in p qs
+-- the nodes of the list that are directly part of p
+children : List Node → Node → List Node
+children nil p = nil
+children (cons c cs) p = if named-in p (parts c) then cons c (children cs p) else children cs p
+-- the list without a node whose name came earlier
+distinct-from : List Node → List Node → List Node
+distinct-from seen nil = nil
+distinct-from seen (cons c cs) = if named-in c seen then distinct-from seen cs else cons c (distinct-from (cons c seen) cs)
+-- the nodes directly part of some node of the list
+children-of : List Node → List Node → List Node
+children-of all nil = nil
+children-of all (cons c cs) = list-append (children all c) (children-of all cs)
+-- the frontier and every node under it within k levels
+under-from : Nat → List Node → List Node → List Node
+under-from zero all fs = fs
+under-from (suc k) all fs = list-append fs (under-from k all (distinct-from nil (children-of all fs)))
+-- every node under p: as many levels as there are nodes
+under : List Node → Node → List Node
+under all p = distinct-from nil (under-from (list-length all) all (children all p))
+names : List Node → List (List Word)
+names ns = list-map name ns

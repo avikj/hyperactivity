@@ -5127,7 +5127,11 @@ int cubical_call_w(const char *name, const uint64_t *args, int n, uint64_t *out)
 /* t62 (2026-11-12): needs-work (goal work-object). Serve mode is how agents and people use the work
  * continuously. Missing: the work given to a term as a value (the declarations and their bindings,
  * each declaration's code), so that views are terms of the language applied to it, and a reading
- * that evaluates a view. Replacing a binding is #retract then a new declaration (t56, closed). */
+ * that evaluates a view. Replacing a binding is #retract then a new declaration (t56, closed).
+ * 2026-11-12: `declarations T` is every checked definition of type T in scope, as a list (src/
+ * syntax.c), so views over values of a type are terms (lib/work.cub's over Node) and `#show` of one
+ * is the reading that evaluates it (tools/work.py view). Still missing: each declaration's code as
+ * a value, so that a view can read the code itself, every declaration of every type. */
 static void serve(void) {
     static char *buf; static size_t cap;
     size_t len = 0; char line[65536];
