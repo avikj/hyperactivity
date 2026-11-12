@@ -68,3 +68,12 @@ pa-at-j X L = λ k → degen-l (Line X) L
 pa-at-ij : (X : Type 1) (L : Line X) →
   PathP (λ k → Line (Line X)) (papp-cube pa-2 X (lcons (lcons (#0 , true) (lcons (#1 , true) lnil)) lnil) (pa-c X L)) (meet-l X L)
 pa-at-ij X L = λ k → meet-l X L
+-- ---------------------------------------------------------------- P2: a context with a dimension (P2.2)
+-- b : Bool, then a dimension i: b is index #1, its meaning the environment's b (a dimension adds
+-- nothing to a vertex's environment); normalizing it gives cvar #1
+Γbi : Ctx
+Γbi = (lcons e-dim (fst Γb) , snd Γb)
+bi-der : Der (Γbi , (s-bool , λ ρ → one) , cvar #1 , λ ρ → snd ρ)
+bi-der = dvar Γbi (s-bool , λ ρ → one) #1 (λ ρ → snd ρ)
+  (((s-bool , λ ρ → one) , #0 , λ ρ → snd ρ) , vz emp (s-bool , λ ρ → one) , λ i → ((s-bool , λ ρ → one) , #1 , λ ρ → snd ρ))
+#same fst (normalize-nf Γbi (s-bool , λ ρ → one) (cvar #1 , (λ ρ → snd ρ) , bi-der)) = cvar #1

@@ -63,7 +63,7 @@
 -- reversal), which is Sterling–Angiuli's setting.
 -- Refinement (2026-11-12): what varies along a dimension is the context's entries' types, the type
 -- and the meaning (γ, T, v); the skeleton, the shape and the code do not, and must not be inside the
--- cube: a path in a closed data type (Lst TyShape, TyShape, Code) is not judgmentally constant, so
+-- cube: a path in a closed data type (Lst Entry, TyShape, Code) is not judgmentally constant, so
 -- CtxE and TyE would be stuck along it. So the cube is Cube n (JV sk s) for the fixed skeleton sk,
 -- shape s and code, JV sk s = (γ : fst (CtxE sk)) × (T : Env (sk , γ) → Sem s) × meanings. Operations
 -- on cubes are defined by recursion on n applied to `p i` under a path λ (a function cannot take an
@@ -170,7 +170,8 @@
 -- explicit {..} is ignored); such parameters are taken explicitly here.
 --
 -- Next definitions (2026-11-12), in order (done: lines, cubes, generators, cube-comp, cube-id; P2.4
--- entirely: canonical forms of interval codes and papp-cube; of P2.2 the Entry type and dims):
+-- entirely: canonical forms of interval codes and papp-cube; P2.2 entirely: skeletons of entries,
+-- dims, CtxE/VarT/CompEnv/env-ren/var-comp/reflect-env with a dimension clause, ren-dim):
 --   P2.1 DCube (a cube in a family over a cube) and cube-zip/unzip with their laws as paths.
 --   P2.2 Skeleton entries `data Entry = e-ty (s : TyShape) | e-dim`, dims : Lst Entry → Nat, CtxE with
 --        a dimension contributing nothing to a vertex environment, VarT stepping over e-dim.
@@ -246,24 +247,33 @@ pi-meaning G a b T ρ = refl
 -- ---------------------------------------------------------------- contexts
 -- a context over a skeleton (its entries' shapes, closed data): the entries' types and the type of
 -- its environments, by recursion on the skeleton; environments are in Type 1 (the empty one is One1)
+-- (P2.2, 2026-11-12) A skeleton's entries are types' shapes or dimensions, newest first. A dimension
+-- contributes nothing to a vertex's environment (its direction is the cube's, P2.6); codes count it
+-- among the de Bruijn indices.
+data Entry = e-ty (s : TyShape) | e-dim
+dims : Lst Entry → Nat
+dims lnil = zero
+dims (lcons (e-ty s) sk) = dims sk
+dims (lcons e-dim sk) = suc (dims sk)
 CtxU : Type 2
 -- binder names chosen not to collide: t46
 CtxU = (uM : Type 1) × (uM → Type 1)
-CtxE : Lst TyShape → CtxU
+CtxE : Lst Entry → CtxU
 CtxE lnil = (One1 , λ γ → One1)
-CtxE (lcons s sk) =
+CtxE (lcons e-dim sk) = CtxE sk
+CtxE (lcons (e-ty s) sk) =
   ((γ : fst (CtxE sk)) × (snd (CtxE sk) γ → Sem s) ,
    λ p → (ρ : snd (CtxE sk) (fst p)) × El s (snd p ρ))
 Ctx : Type 1
 -- binder names chosen not to collide: t46
-Ctx = (csk : Lst TyShape) × fst (CtxE csk)
+Ctx = (csk : Lst Entry) × fst (CtxE csk)
 Env : Ctx → Type 1
 Env Γ = snd (CtxE (fst Γ)) (snd Γ)
 emp : Ctx
 emp = (lnil , one)
 -- Γ extended by a type over its environments
 ext : (Γ : Ctx) → PTy (Env Γ) → Ctx
-ext Γ A = (lcons (fst A) (fst Γ) , (snd Γ , snd A))
+ext Γ A = (lcons (e-ty (fst A)) (fst Γ) , (snd Γ , snd A))
 ext-env : (Γ : Ctx) (A : PTy (Env Γ)) → Path (Type 1) (Env (ext Γ A)) ((ρ : Env Γ) × ElP (Env Γ) A ρ)
 ext-env Γ A = refl
 
@@ -292,12 +302,15 @@ VIx : Type 1 → Type 1
 VIx G = (vA : PTy G) × Word × ((vρ : G) → ElP G vA vρ)
 -- PathP (λ i → …), not Path, and refl at an explicit level, wherever the type is an application at
 -- Type 1: t50
-VarT : (sk : Lst TyShape) (γ : fst (CtxE sk)) → VIx (Env (sk , γ)) → Type 1
+VarT : (sk : Lst Entry) (γ : fst (CtxE sk)) → VIx (Env (sk , γ)) → Type 1
 VarT lnil γ X = Empty1
-VarT (lcons s sk) γ X =
-  Sum1 (PathP (λ i → VIx (Env (lcons s sk , γ))) X (wk (sk , fst γ) (s , snd γ) (s , snd γ) , #0 , λ ρ → snd ρ))
+-- past a dimension: a variable of the skeleton below, one index further, its type and meaning unchanged
+VarT (lcons e-dim sk) γ X =
+  (Y : VIx (Env (sk , γ))) × VarT sk γ Y × PathP (λ i → VIx (Env (sk , γ))) X (fst Y , %wsucc (fst (snd Y)) , snd (snd Y))
+VarT (lcons (e-ty s) sk) γ X =
+  Sum1 (PathP (λ i → VIx (Env (lcons (e-ty s) sk , γ))) X (wk (sk , fst γ) (s , snd γ) (s , snd γ) , #0 , λ ρ → snd ρ))
        ((Y : VIx (Env (sk , fst γ))) × VarT sk (fst γ) Y ×
-        PathP (λ i → VIx (Env (lcons s sk , γ))) X (wk (sk , fst γ) (s , snd γ) (fst Y) , %wsucc (fst (snd Y)) , λ ρ → snd (snd Y) (fst ρ)))
+        PathP (λ i → VIx (Env (lcons (e-ty s) sk , γ))) X (wk (sk , fst γ) (s , snd γ) (fst Y) , %wsucc (fst (snd Y)) , λ ρ → snd (snd Y) (fst ρ)))
 Var : (Γ : Ctx) (A : PTy (Env Γ)) (n : Word) (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) → Type 1
 Var Γ A n v = VarT (fst Γ) (snd Γ) (A , n , v)
 
@@ -420,6 +433,9 @@ ren-comp Δ2 Δ1 Γ r1 r2 w1 w2 A n v x =
 -- the world one entry larger (refl at an explicit level: t50)
 ren-wk : (Γ : Ctx) (B : PTy (Env Γ)) → Ren (ext Γ B) Γ (λ ρ → fst ρ)
 ren-wk Γ B A n v x = (%wsucc n , inr1 ((A , n , v) , x , refl {lsuc lzero}))
+-- the world one dimension larger (P2.2): every variable one index further
+ren-dim : (Γ : Ctx) → Ren (lcons e-dim (fst Γ) , snd Γ) Γ (λ ρ → ρ)
+ren-dim Γ A n v x = (%wsucc n , ((A , n , v) , x , λ i → (A , %wsucc n , v)))
 -- a renaming under a binder
 ren-keep : (Δ Γ : Ctx) (r : Env Δ → Env Γ) (A : PTy (Env Γ)) → Ren Δ Γ r →
   Ren (ext Δ (pull (Env Γ) (Env Δ) r A)) (ext Γ A) (λ p → (r (fst p) , snd p))
@@ -562,25 +578,30 @@ rr (s-sig a b) = (reify-sig a b (rr a) (rr b) , reflect-sig a b (rr a) (rr b))
 -- ---------------------------------------------------------------- computable environments
 -- CompEnv sk γ Δ δ: every entry of the environment δ (seen at world Δ) is computable at its type;
 -- by recursion on the skeleton
-CompEnv : (sk : Lst TyShape) (γ : fst (CtxE sk)) (Δ : Ctx) → (Env Δ → Env (sk , γ)) → Type 1
+CompEnv : (sk : Lst Entry) (γ : fst (CtxE sk)) (Δ : Ctx) → (Env Δ → Env (sk , γ)) → Type 1
 CompEnv lnil γ Δ δ = One1
-CompEnv (lcons s sk) γ Δ δ =
+CompEnv (lcons e-dim sk) γ Δ δ = CompEnv sk γ Δ δ
+CompEnv (lcons (e-ty s) sk) γ Δ δ =
   CompEnv sk (fst γ) Δ (λ ρ → fst (δ ρ)) × CompS s Δ (λ ρ → snd γ (fst (δ ρ))) (λ ρ → snd (δ ρ))
-env-ren : (sk : Lst TyShape) (γ : fst (CtxE sk)) (Δ : Ctx) (δ : Env Δ → Env (sk , γ)) → CompEnv sk γ Δ δ →
+env-ren : (sk : Lst Entry) (γ : fst (CtxE sk)) (Δ : Ctx) (δ : Env Δ → Env (sk , γ)) → CompEnv sk γ Δ δ →
   (Δ' : Ctx) (r : Env Δ' → Env Δ) → Ren Δ' Δ r → CompEnv sk γ Δ' (λ ρ → δ (r ρ))
 env-ren lnil γ Δ δ e Δ' r w = e
-env-ren (lcons s sk) γ Δ δ e Δ' r w =
+env-ren (lcons e-dim sk) γ Δ δ e Δ' r w = env-ren sk γ Δ δ e Δ' r w
+env-ren (lcons (e-ty s) sk) γ Δ δ e Δ' r w =
   (env-ren sk (fst γ) Δ (λ ρ → fst (δ ρ)) (fst e) Δ' r w ,
    comp-ren s Δ (λ ρ → snd γ (fst (δ ρ))) (λ ρ → snd (δ ρ)) (snd e) Δ' r w)
 -- a variable's value in a computable environment is computable
-var-comp : (sk : Lst TyShape) (γ : fst (CtxE sk)) (X : VIx (Env (sk , γ))) → VarT sk γ X →
+var-comp : (sk : Lst Entry) (γ : fst (CtxE sk)) (X : VIx (Env (sk , γ))) → VarT sk γ X →
   (Δ : Ctx) (δ : Env Δ → Env (sk , γ)) → CompEnv sk γ Δ δ →
   Comp (Env (sk , γ)) (fst X) Δ δ (λ ρ → snd (snd X) (δ ρ))
 var-comp lnil γ X x Δ δ e = Empty-rec (fst x)
-var-comp (lcons s sk) γ X (inl1 p) Δ δ e =
-  transport (λ i → Comp (Env (lcons s sk , γ)) (fst (p (~ i))) Δ δ (λ ρ → snd (snd (p (~ i))) (δ ρ))) (snd e)
-var-comp (lcons s sk) γ X (inr1 y) Δ δ e =
-  transport (λ i → Comp (Env (lcons s sk , γ)) (fst (snd (snd y) (~ i))) Δ δ (λ ρ → snd (snd (snd (snd y) (~ i))) (δ ρ)))
+var-comp (lcons e-dim sk) γ X y Δ δ e =
+  transport (λ i → Comp (Env (sk , γ)) (fst (snd (snd y) (~ i))) Δ δ (λ ρ → snd (snd (snd (snd y) (~ i))) (δ ρ)))
+    (var-comp sk γ (fst y) (fst (snd y)) Δ δ e)
+var-comp (lcons (e-ty s) sk) γ X (inl1 p) Δ δ e =
+  transport (λ i → Comp (Env (lcons (e-ty s) sk , γ)) (fst (p (~ i))) Δ δ (λ ρ → snd (snd (p (~ i))) (δ ρ))) (snd e)
+var-comp (lcons (e-ty s) sk) γ X (inr1 y) Δ δ e =
+  transport (λ i → Comp (Env (lcons (e-ty s) sk , γ)) (fst (snd (snd y) (~ i))) Δ δ (λ ρ → snd (snd (snd (snd y) (~ i))) (δ ρ)))
     (var-comp sk (fst γ) (fst y) (fst (snd y)) Δ (λ ρ → fst (δ ρ)) (fst e))
 
 -- ---------------------------------------------------------------- the fundamental lemma
@@ -637,11 +658,12 @@ fund (dpair Γ a b T c1 v1 c2 v2 d1 d2) Δ δ e = (fund d1 Δ δ e , fund d2 Δ 
 
 -- ---------------------------------------------------------------- normalization, reifySound (6.5)
 -- the identity environment with every variable reflected (paper: reflectContext)
-reflect-env : (sk : Lst TyShape) (γ : fst (CtxE sk)) → CompEnv sk γ (sk , γ) (λ ρ → ρ)
+reflect-env : (sk : Lst Entry) (γ : fst (CtxE sk)) → CompEnv sk γ (sk , γ) (λ ρ → ρ)
 reflect-env lnil γ = one
-reflect-env (lcons s sk) γ =
-  (env-ren sk (fst γ) (sk , fst γ) (λ ρ → ρ) (reflect-env sk (fst γ)) (lcons s sk , γ) (λ ρ → fst ρ) (ren-wk (sk , fst γ) (s , snd γ)) ,
-   snd (rr s) (lcons s sk , γ) (λ ρ → snd γ (fst ρ)) (λ ρ → snd ρ) (cvar #0) (var0 (sk , fst γ) (s , snd γ)))
+reflect-env (lcons e-dim sk) γ = env-ren sk γ (sk , γ) (λ ρ → ρ) (reflect-env sk γ) (lcons e-dim sk , γ) (λ ρ → ρ) (ren-dim (sk , γ))
+reflect-env (lcons (e-ty s) sk) γ =
+  (env-ren sk (fst γ) (sk , fst γ) (λ ρ → ρ) (reflect-env sk (fst γ)) (lcons (e-ty s) sk , γ) (λ ρ → fst ρ) (ren-wk (sk , fst γ) (s , snd γ)) ,
+   snd (rr s) (lcons (e-ty s) sk , γ) (λ ρ → snd γ (fst ρ)) (λ ρ → snd ρ) (cvar #0) (var0 (sk , fst γ) (s , snd γ)))
 -- normal and neutral forms are derivations, with the same code and meaning
 embed : {KJ : NK × Jdg} → NN KJ → Der (snd KJ)
 embed (nvar Γ A n v x) = dvar Γ A n v x
@@ -873,11 +895,7 @@ dnf-nonconst (lcons (lcons l ls) cs) = true
 -- Codes count both (de Bruijn indices over one context of term and dimension variables, lib/code.cub);
 -- a dimension contributes a direction to the cube of the judgments over the context and nothing to a
 -- vertex's environment.
-data Entry = e-ty (s : TyShape) | e-dim
-dims : Lst Entry → Nat
-dims lnil = zero
-dims (lcons (e-ty s) sk) = dims sk
-dims (lcons e-dim sk) = suc (dims sk)
+-- (Entry and dims are defined with the contexts, above)
 -- the diagonal of the newest direction of a cube over sk with the dimension that index k of sk names
 -- (exchanging the newest direction outward past each nearer dimension); an index that names a term
 -- entry or nothing has no dimension, and gives the face at 0 (the side condition of a neutral path
