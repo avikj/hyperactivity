@@ -374,6 +374,7 @@ def reasons():
     src = ''.join(open(os.path.join(ROOT, 'src', f), encoding='utf-8', errors='replace').read()
                   for f in os.listdir(os.path.join(ROOT, 'src')) if f.endswith(('.c', '.h')))
     machine_names = set(re.findall(r'"([^"\s]+)"', src))
+    machine_names |= {x[2:] for x in machine_names if x.startswith('%%')}   # "%%f": the library's f
     decls = {(f, l): (names, uses) for f, l, names, uses in rd}
     node_at = {}
     for f, l, names, _ in rd:

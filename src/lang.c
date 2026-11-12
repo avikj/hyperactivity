@@ -3733,12 +3733,21 @@ static void un_put(const char *s, int owner) {
     if (!UN[h].name) { UN[h].name = s; nun++; }
     UN[h].owner = owner;
 }
-static int ud_cur(void) {
-    const char *p = decl_pos[0] ? decl_pos : "?";
-    if (nud && !strcmp(UD[nud - 1].pos, p)) return nud - 1;
+static int ud_new(const char *p) {
     if (nud == capud) { capud = capud ? 2 * capud : 1024; UD = realloc(UD, (size_t)capud * sizeof *UD); }
-    UD[nud] = (UDecl){ strdup(p), NULL, 0, NULL, 0 };
+    UD[nud] = (UDecl){ p ? strdup(p) : NULL, NULL, 0, NULL, 0 };
     return nud++;
+}
+static int ud_owner = -1; static char ud_pos[512];
+/* the declaration a form belongs to: the one already holding the name it defines (its signature, or
+ * a `declare` emitted where it was used before being defined), else the one at the form's position */
+static int ud_cur(const char *defines) {
+    const char *p = decl_pos[0] ? decl_pos : "?";
+    int w = defines ? un_get(defines) : -1;
+    if (w >= 0 && defines[0] != '%') { if (!UD[w].pos) UD[w].pos = strdup(p); ud_owner = w; snprintf(ud_pos, sizeof ud_pos, "%s", p); return w; }
+    if (ud_owner >= 0 && !strcmp(ud_pos, p)) return ud_owner;
+    ud_owner = ud_new(p); snprintf(ud_pos, sizeof ud_pos, "%s", p);
+    return ud_owner;
 }
 static void ud_name(int o, const char *s) {
     UDecl *u = &UD[o];
@@ -3799,12 +3808,17 @@ static void ud_form(Node *f) {
     bool decl = !strcmp(h, "def") || !strcmp(h, "declare") || !strcmp(h, "checked") || !strcmp(h, "primitive")
         || !strcmp(h, "primitive-tick") || !strcmp(h, "data") || !strcmp(h, "checked-data") || !strcmp(h, "check-data");
     if (!decl || f->n < 2) return;
-    int o = ud_cur();
     Node *d = f;
     if (!strcmp(h, "checked-data") && f->it[1]->list) d = f->it[1];
-    if (d->n >= 2 && !d->it[1]->list) {
-        if (strcmp(h, "check-data")) ud_name(o, d->it[1]->s);
-        else { int w = un_get(d->it[1]->s); if (w >= 0) ud_use(o, w); }
+    const char *nm = d->n >= 2 && !d->it[1]->list ? d->it[1]->s : NULL;
+    if (!strcmp(h, "declare")) {   /* a use before the definition: the name's declaration, positioned when defined */
+        if (nm && un_get(nm) < 0) ud_name(ud_new(NULL), nm);
+        return;
+    }
+    int o = ud_cur(strcmp(h, "check-data") ? nm : NULL);
+    if (nm) {
+        if (strcmp(h, "check-data")) ud_name(o, nm);
+        else { int w = un_get(nm); if (w >= 0) ud_use(o, w); }
     }
     if (d->it[0]->list || strcmp(d->it[0]->s, "data") == 0)
         for (int i = 2; i < d->n; i++) if (d->it[i]->list && d->it[i]->n && !d->it[i]->it[0]->list) ud_name(o, d->it[i]->it[0]->s);
@@ -3814,10 +3828,11 @@ static void ud_form(Node *f) {
 static void uses_cmd(void) {
     for (int o = 0; o < nud; o++) {
         UDecl *u = &UD[o];
+        if (!u->pos) continue;   /* declared, never defined */
         printf("uses %s", u->pos);
         for (int i = 0; i < u->nnames; i++) printf(" %s", u->names[i]);
         printf(" :");
-        for (int i = 0; i < u->nuses; i++) printf(" %s", UD[u->uses[i]].pos);
+        for (int i = 0; i < u->nuses; i++) if (UD[u->uses[i]].pos) printf(" %s", UD[u->uses[i]].pos);
         printf("\n");
     }
 }
