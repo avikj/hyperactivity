@@ -111,7 +111,7 @@ Files you own: `tools/clang2cub.py`, `lib/cxx/ast.cub`, `experiments/cxx/**`, th
 ## Done
 
 Everything under "What is built" is built and both acceptance lines are met. Commands, from
-`scoped-machine/` (L is the library list, `make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p'`):
+the repository root (L is the library list, `make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p'`):
 
 ```
 python3 tools/clang2cub.py --emit-ast > lib/cxx/ast.cub

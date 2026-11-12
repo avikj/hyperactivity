@@ -3,7 +3,7 @@
 # experiments/, every C file under src/, every tool; for each its first header line, its size,
 # whether `make library` checks it, and every top-level construct it defines (data types,
 # codata, records, definitions with signatures, unsigned definitions, primitives/postulates).
-# Run from scoped-machine/:  python3 tools/tree.py   (prints the index; nothing is stored)
+# Run from the repository root:  python3 tools/tree.py   (prints the index; nothing is stored)
 import os, re, subprocess, sys
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(root)

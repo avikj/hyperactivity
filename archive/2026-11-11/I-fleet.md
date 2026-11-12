@@ -50,7 +50,7 @@ Files you own: `lib/net.cub`, `lib/fleet.cub`, `lib/deploy.cub`, `experiments/fl
 - `#build` of one node of the kv fleet (through `W`) produces a binary; three of them run as
   processes connected by pipes or UDP on localhost and serve a client's writes and a read.
 
-## How to check (every command from `scoped-machine/`)
+## How to check (every command from the repository root)
 
 ```
 L=$(make -s -n library | sed -n 's/^.*cubical \(lib\/prelude.*\)$/\1/p')

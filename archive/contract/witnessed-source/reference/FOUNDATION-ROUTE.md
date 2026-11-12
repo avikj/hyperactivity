@@ -2,7 +2,7 @@
 
 This is a source-grounded review of the mathematical destination and the current implementation contract. It accompanies a concrete new regression and an executable-prefix specification. It does not certify unseen worker changes or turn the contextual *Witnessed Computation* PDF into a mandatory application architecture.
 
-The reviewed implementation is `scoped-machine/` at `c365d86`. The source material is the locally retained `docs/index.html`, the repository derivation/fibre modules identified below, the v13 master `HANDOFF.md` carried by V20, the subsequent V20 review, and the bounds correction package. Implementation status and mathematical consequences are distinguished throughout.
+The reviewed implementation is the language's directory at `c365d86`. The source material is the locally retained `docs/index.html`, the repository derivation/fibre modules identified below, the v13 master `HANDOFF.md` carried by V20, the subsequent V20 review, and the bounds correction package. Implementation status and mathematical consequences are distinguished throughout.
 
 ## 1. The destination is one witnessed evolving source
 

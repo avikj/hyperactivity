@@ -21,7 +21,7 @@ The two proofs that were placeholders are ported:
 The data types `T2`, `T3` and `K2` check: a constructor field that is a path in the type itself
 (of any dimension) is strictly positive.
 
-Run from `scoped-machine/`:
+Run from the repository root:
 
     CUBICAL_NOCACHE=1 ./build/cubical lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub \
       experiments/brunerie/brunerie.cub experiments/brunerie/run-<name>.cub

@@ -21,7 +21,7 @@ library declaration (`#where`). Text changes are applied incrementally (ranges i
   python3 tools/lsp.py [--cubical build/cubical] [--root DIR] [LIB.cub ...]
 
 LIBs default to lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub, relative to --root (the
-scoped-machine directory, by default the parent of this file's directory).
+repository root, by default the parent of this file's directory).
 """
 import json, os, re, subprocess, sys, threading
 

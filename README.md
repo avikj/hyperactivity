@@ -1,9 +1,9 @@
 # Hyperactive — status now (2026-11-12)
 
-This directory implements the language specified by `docs/Hyperactive_Final_Paper.pdf` (the
+This repository implements the language specified by `docs/Hyperactive_Final_Paper.pdf` (the
 specification; read it in full before changing anything — `tracks/PAPER-READING.md` is a
-section-by-section account of it, with what exists here of each construction). The directory name
-is only a directory name.
+section-by-section account of it, with what exists here of each construction). Its history up to
+2026-11-12 was carried over from a directory of github.com/avikj/math, which is now an archive.
 
 ## What is happening now
 
@@ -15,9 +15,11 @@ content keys; views are terms applied to the work. It is in use from now: knowle
 goes into the code as declarations and dated notes at their sites, never only into a conversation.
 Pending, in order: t60 (content keys for references in the evaluator), t61 (results kept
 canonically beyond the run), t62 (the work as a value; views), t43 (refusals kept), t63 (text as a
-term), t64 (the work record rebuilt on it). The coordinator's separate checkout for this is branch
-`claude/work-object` (worktree /tmp/wo); everything on it is merged into `claude/work-record` when
-it checks.
+term), t64 (the work record rebuilt on it). Work in progress on t43/t61/t65 is branch `work-object` (not
+merged): keys that number generated names by first occurrence, plus remembered elaborations, bring
+a warm check of the library from 31 s to 5 s with 0 interaction steps, but 15 definitions that pass
+cold fail warm (x-case-chain); its last commit message has the measurements and what to remove
+before merging. The order of work is computed, not stored: `python3 tools/work.py priority`.
 
 **Checks are real only with `CUBICAL_NOCACHE=1`:** the per-file cache replays a file without
 checking it (t41), even with a fresh `CUBICAL_STORE`, and its counts differ.

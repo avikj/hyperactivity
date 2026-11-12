@@ -4672,7 +4672,7 @@ The result is concrete progress: an executable conservative proof-use boundary, 
 
 ## 92. Review baseline: uniform reuse delivered at b612a07
 
-This amendment applies to `b612a07602bfccdcbb4ce2513ab169721cc38d56`, directory `scoped-machine/`, implementing §§74–82 on `3a0d7c4`. It supersedes the older base named in the v10/v11 implementation directions. Preserve the delivered implementation; apply the corrections below to it. Sections 83–91 remain the subsequent increment, not work the v9 delivery claimed to have implemented.
+This amendment applies to `b612a07602bfccdcbb4ce2513ab169721cc38d56`, the language's directory, implementing §§74–82 on `3a0d7c4`. It supersedes the older base named in the v10/v11 implementation directions. Preserve the delivered implementation; apply the corrections below to it. Sections 83–91 remain the subsequent increment, not work the v9 delivery claimed to have implemented.
 
 The author retrieved the exact commit and verified every reviewed source file against its Git blob SHA. The unmodified `make test` passed with ASan/UBSan and `detect_leaks=0`; `make tsan` passed. The nine supplied v9 acceptance jobs also passed under ASan/UBSan. Leak detection was attempted but failed in this host's `/proc` inspection environment, so this review makes no independent LSan claim. The worker's reported LSan result is separate evidence.
 

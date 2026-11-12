@@ -1,6 +1,6 @@
 # The system: what it is, what is built, and everything that will be built
 
-Revision 9, 2026-11-09. Repo avikj/math, `scoped-machine` on `main` (revision 9 written at
+Revision 9, 2026-11-09. Repo avikj/math, the language's directory on `main` (revision 9 written at
 `e809a6f8`). This is the single plan and status document; each revision replaces the last
 whole. Revision 8 and everything before it are in git history; nothing in them is in force
 unless restated here.

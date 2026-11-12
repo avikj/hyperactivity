@@ -249,9 +249,9 @@ Files you own: `lib/os/**`, `experiments/os/**`, this file. You may also edit
 
 - `experiments/build/feed.cub` is named by PLAN, the tracks table and commit `856ab5a8`, and is
   not in the repository: the root `.gitignore` has the pattern `build/`, which matches
-  `scoped-machine/experiments/build/`. The file exists only in `/home/claude/avikj/math`
-  (untracked). Fix (track A / owner): `git add -f scoped-machine/experiments/build/feed.cub`
-  or add `!scoped-machine/experiments/build/` after the `build/` line.
+  `experiments/build/`. The file exists only in `/home/claude/avikj/math`
+  (untracked). Fix (track A / owner): `git add -f experiments/build/feed.cub`
+  or add `!experiments/build/` after the `build/` line.
 - The ELF driver loop's dispatch sends every command index above 8 to the `w-cas` code and
   every field-less command other than index 0 to `mfence`: a new command reaching an old
   binary's loop is performed as a compare-and-swap on its first field. Closed by the dispatch
@@ -395,7 +395,7 @@ State at the halt:
   library). `make library` at the last library change of this track: 1135 passed, 0 failed.
 - Item 5 is **not done**. Work in progress that does **not check** is kept, unapplied, as
   `experiments/os/item5-wip.patch` (a `git diff` of `lib/os/platform.cub` and
-  `lib/os/linux.cub`; apply with `git apply scoped-machine/experiments/os/item5-wip.patch`
+  `lib/os/linux.cub`; apply with `git apply experiments/os/item5-wip.patch`
   from the repository root). It holds: the nine new entries of `Sys` with their x86-64
   numbers; the records `Uring`, `UringCqe`, the type `UringOp`; ten commands at the end of
   `LinuxCmd` (`lx-eventfd`, `lx-timerfd-create`, `lx-timerfd-settime`, `lx-sendmsg`,

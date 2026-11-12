@@ -9,7 +9,7 @@
 #   experiments/agda/measure.sh machine    # untyped and typed ports at CUBICAL_WORKERS=0,1,2
 #   experiments/agda/measure.sh run LABEL CMD...   # one measured run (used by the two above)
 #
-# Run from scoped-machine/. Every run goes through the shared memory gate (heavy.sh; --big for Agda).
+# Run from the repository root. Every run goes through the shared memory gate (heavy.sh; --big for Agda).
 # Caps: 3 hours wall, 7 GB RSS; a run that hits one is killed and reported as such.
 set -u
 A=${A:-/tmp/agda}

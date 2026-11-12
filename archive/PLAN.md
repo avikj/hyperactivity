@@ -4,7 +4,7 @@ Read this whole file before doing anything. Update it in the same commit as ever
 
 ## What this is
 
-`scoped-machine/` (repo avikj/math, branch `main`) is a runtime that executes cubical type theory (CCHM)
+The language's directory (then in repo avikj/math, branch `main`) is a runtime that executes cubical type theory (CCHM)
 as an interaction net, implementing §5 of the paper `../docs/index.html` ("Respecting Equality").
 Trust only the current code and the paper's text. `HANDOFF.md` and any "Stokes addendum" are old lineage
 and are NOT trusted. `README.md` describes the current code and is kept accurate.

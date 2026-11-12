@@ -1,5 +1,5 @@
 #!/bin/sh
-# experiments/cxx/sem/regen.sh — run from scoped-machine/. Writes experiments/cxx/sem/gen/*.cub:
+# experiments/cxx/sem/regen.sh — run from the repository root. Writes experiments/cxx/sem/gen/*.cub:
 # track C's lib/cxx/ast.cub and the imported units with the binary-operator constructors
 # renamed bo-X → cbo-X, because lib/cxx/ast.cub's CBinOp (bo-add …) and lib/mem/scalar.cub's
 # BinOp (bo-add …) bind the same eight names and a name is bound once (tracks/F-cxx.md, Found 1).

@@ -12,7 +12,7 @@ is the one comment in the repository that begins `tN (YYYY-MM-DD):`, at the plac
     python3 tools/work.py check               records and comments correspond; the files check
     python3 tools/work.py next                the next free ticket number
 
-Run from scoped-machine/ or anywhere inside it.
+Run from the repository root or anywhere inside it.
 """
 import os, re, subprocess, sys
 

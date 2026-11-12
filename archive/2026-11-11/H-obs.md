@@ -38,7 +38,7 @@ Files you own: `lib/obs.cub`, `experiments/obs/**`, this file.
 
 ## How to check
 
-From `scoped-machine/` (library files are cached; do not set CUBICAL_NOCACHE):
+From the repository root (library files are cached; do not set CUBICAL_NOCACHE):
 ```
 L="lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.cub lib/check.cub lib/std.cub lib/sort.cub lib/linproof.cub lib/eqproof.cub lib/ring.cub lib/autodiff.cub lib/intproof.cub lib/intlin.cub lib/prim.cub lib/derive.cub lib/decode.cub lib/fiber.cub lib/proc.cub lib/world.cub lib/session.cub lib/choreo.cub"
 (ulimit -v 2500000; timeout 600 ./build/cubical $L lib/obs.cub experiments/obs/counter.cub experiments/obs/two-compilers.cub | grep -v '^ok' | tail)

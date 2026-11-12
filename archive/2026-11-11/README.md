@@ -11,7 +11,7 @@ anywhere else: not in a chat, not in an agent's memory.
 ## Rules for every track
 
 1. **Own clone.** Work in your own clone so builds and the git index never collide:
-   `git clone /home/claude/avikj/math /home/claude/work-<track> && cd /home/claude/work-<track>/scoped-machine && make build/cubical`
+   `git clone /home/claude/avikj/math /home/claude/work-<track> && cd /home/claude/work-<track> && make build/cubical`
    (if `/home/claude/avikj/math` is absent, clone `https://github.com/avikj/math`). Set the
    remote to GitHub: `git remote set-url origin $(git -C /home/claude/avikj/math remote get-url origin)`.
 2. **Commit small, push every time.** After every piece that checks (a file loads, a function
