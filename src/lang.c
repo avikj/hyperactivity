@@ -4736,7 +4736,23 @@ static void load_file(const char *path, bool must) {
  * library: cold 64 s; store warm, this cache off 29 s; both warm 4.7 s. With this cache warm the
  * run also reports 1,799 passed instead of 1,907, so its reporting differs from a full run's. One
  * mechanism keyed by content at the granularity of a definition, covering elaboration and
- * compilation as well as checking, would subsume both. */
+ * compilation as well as checking, would subsume both.
+ * 2026-11-12, what each per-definition step depends on (read in src/syntax.c and here):
+ * - Elaboration of a declaration (syntax.c, the round loop near x_solve_expr and the
+ *   definition's): its text, the scope (which global, constructor, field or fixity each name
+ *   resolves to) and the types of the definitions it references. Implicit arguments are holes,
+ *   solved by running the checker (%chk-def / %infer-ok answer "elab" solutions) up to 400 rounds.
+ *   The store's key is a function of the elaborated output, so it can only be consulted once
+ *   every hole is solved. A warm store therefore still pays every solving round: that is the 29 s.
+ * - Compilation (compile_top) depends on the core term and the referenced globals.
+ * - Checking (%chk-def) depends on the core term's key and the checker.
+ * Each step is a function of identifiable inputs: the declaration's text, the keys of the
+ * definitions it resolves to, and the identity of the elaborator, compiler and checker. Memoizing
+ * each by those inputs' keys is the store's existing mechanism applied to every step: the
+ * constructive traces of Mokhov, Mitchell and Peyton Jones, "Build systems à la carte" (2018), and
+ * the query model of rust-analyzer's Salsa. That subsumes this cache. The trusted replay below
+ * (trusted = true: nothing in the file is checked) is a second trust root beside the store's
+ * certificates. */
         /* the surface language: its imports first, then the running key, then its declarations */
         const char *saved_dir = cur_dir;
         char *dir = strdup(rp); char *sl = strrchr(dir, '/'); if (sl) *sl = 0;
