@@ -1829,3 +1829,93 @@ diag-ren : (w : OPE) → DiagRen (ope-src w) (ope-tgt w) (ope-var w) (ope-cube w
 diag-ren wdone k X c = λ i → fst c
 diag-ren (wskip e w) k X c = skip-diag e (ope-src w) (ope-tgt w) (ope-var w) (ope-cube w) (diag-ren w) k X c
 diag-ren (wkeep e w) k X c = keep-diag e (ope-src w) (ope-tgt w) (ope-var w) (ope-cube w) (ope-nat w) (diag-ren w) k X c
+-- path application at a renamed form commutes with an embedding's action (next definitions (4),
+-- papp-ren), by the recursion of papp-cube: under a connection the skeleton has one more dimension
+-- in front (kept), and the index of a literal is offset by o; hr says the embedding at hand renames
+-- an offset index as r does the form's
+wadd-0 : (k : Word) → %wadd k #0 ≡ k
+wadd-0 k = sym (plusw≡wadd k #0)
+wadd-s : (k o : Word) → %wadd k (%wsucc o) ≡ %wsucc (%wadd k o)
+wadd-s k o = pcat0 Word (%wadd k (%wsucc o)) (%wsucc (plusw k o)) (%wsucc (%wadd k o)) (sym (plusw≡wadd k (%wsucc o))) (λ i → %wsucc (plusw≡wadd k o i))
+RenAt : OPE → (Word → Word) → Word → Type
+RenAt w r o = (k : Word) → ope-var w (%wadd k o) ≡ %wadd (r k) o
+renat-keep : (w : OPE) (r : Word → Word) (o : Word) → RenAt w r o → RenAt (wkeep e-dim w) r (%wsucc o)
+renat-keep w r o hr k =
+  pcat0 Word (w-keep (ope-var w) (%wadd k (%wsucc o))) (%wsucc (%wadd (r k) o)) (%wadd (r k) (%wsucc o))
+    (pcat0 Word (w-keep (ope-var w) (%wadd k (%wsucc o))) (%wsucc (ope-var w (%wadd k o))) (%wsucc (%wadd (r k) o))
+       (λ i → w-keep (ope-var w) (wadd-s k o i)) (λ i → %wsucc (hr k i)))
+    (sym (wadd-s (r k) o))
+renat-0 : (w : OPE) → RenAt w (ope-var w) #0
+renat-0 w k = pcat0 Word (ope-var w (%wadd k #0)) (ope-var w k) (%wadd (ope-var w k) #0) (λ i → ope-var w (wadd-0 k i)) (sym (wadd-0 (ope-var w k)))
+papp-lit-ren : (w : OPE) (r : Word → Word) (o : Word) → RenAt w r o → (l : Lit) (X : Type 1) (c : Cube (suc (dims (ope-tgt w))) X) →
+  PathP (λ i → Cube (dims (ope-src w)) X) (papp-lit (ope-src w) X o (lit-r r l) (ope-cube w (Line X) c)) (ope-cube w X (papp-lit (ope-tgt w) X o l c))
+papp-lit-ren w r o hr l X c =
+  bool-elim1 (λ b → PathP (λ i → Cube (dims (ope-src w)) X)
+                 (if b then diag-sk (ope-src w) (%wadd (r (fst l)) o) X (ope-cube w (Line X) c)
+                  else diag-sk (ope-src w) (%wadd (r (fst l)) o) X (cube-map (dims (ope-src w)) (Line X) (Line X) (rev-l X) (ope-cube w (Line X) c)))
+                 (ope-cube w X (if b then diag-sk (ope-tgt w) (%wadd (fst l) o) X c
+                                else diag-sk (ope-tgt w) (%wadd (fst l) o) X (cube-map (dims (ope-tgt w)) (Line X) (Line X) (rev-l X) c))))
+    (pcat (Cube (dims (ope-src w)) X) (diag-sk (ope-src w) (%wadd (r (fst l)) o) X (ope-cube w (Line X) c))
+       (diag-sk (ope-src w) (ope-var w (%wadd (fst l) o)) X (ope-cube w (Line X) c)) (ope-cube w X (diag-sk (ope-tgt w) (%wadd (fst l) o) X c))
+       (λ i → diag-sk (ope-src w) (hr (fst l) (~ i)) X (ope-cube w (Line X) c)) (diag-ren w (%wadd (fst l) o) X c))
+    (pcat (Cube (dims (ope-src w)) X)
+       (diag-sk (ope-src w) (%wadd (r (fst l)) o) X (cube-map (dims (ope-src w)) (Line X) (Line X) (rev-l X) (ope-cube w (Line X) c)))
+       (diag-sk (ope-src w) (ope-var w (%wadd (fst l) o)) X (ope-cube w (Line X) (cube-map (dims (ope-tgt w)) (Line X) (Line X) (rev-l X) c)))
+       (ope-cube w X (diag-sk (ope-tgt w) (%wadd (fst l) o) X (cube-map (dims (ope-tgt w)) (Line X) (Line X) (rev-l X) c)))
+       (λ i → diag-sk (ope-src w) (hr (fst l) (~ i)) X (ope-nat w (Line X) (Line X) (rev-l X) c (~ i)))
+       (diag-ren w (%wadd (fst l) o) X (cube-map (dims (ope-tgt w)) (Line X) (Line X) (rev-l X) c)))
+    (snd l)
+papp-conj-from-ren : (w : OPE) (r : Word → Word) (o : Word) → RenAt w r o → (l : Lit) (ms : Conj) (X : Type 1) (c : Cube (suc (dims (ope-tgt w))) X) →
+  PathP (λ i → Cube (dims (ope-src w)) X)
+    (papp-conj-from (ope-src w) X o (lit-r r l) (conj-r r ms) (ope-cube w (Line X) c)) (ope-cube w X (papp-conj-from (ope-tgt w) X o l ms c))
+papp-conj-from-ren w r o hr l lnil X c = papp-lit-ren w r o hr l X c
+papp-conj-from-ren w r o hr l (lcons m ms) X c =
+  pcat (Cube (dims (ope-src w)) X)
+    (papp-lit (ope-src w) X o (lit-r r l) (papp-conj-from (lcons e-dim (ope-src w)) X (%wsucc o) (lit-r r m) (conj-r r ms)
+       (cube-map (dims (ope-src w)) (Line X) (Line (Line X)) (meet-l X) (ope-cube w (Line X) c))))
+    (papp-lit (ope-src w) X o (lit-r r l) (ope-cube w (Line X)
+       (papp-conj-from (lcons e-dim (ope-tgt w)) X (%wsucc o) m ms (cube-map (dims (ope-tgt w)) (Line X) (Line (Line X)) (meet-l X) c))))
+    (ope-cube w X (papp-conj-from (ope-tgt w) X o l (lcons m ms) c))
+    (λ i → papp-lit (ope-src w) X o (lit-r r l)
+       (pcat (Cube (suc (dims (ope-src w))) X)
+          (papp-conj-from (lcons e-dim (ope-src w)) X (%wsucc o) (lit-r r m) (conj-r r ms)
+             (cube-map (dims (ope-src w)) (Line X) (Line (Line X)) (meet-l X) (ope-cube w (Line X) c)))
+          (papp-conj-from (lcons e-dim (ope-src w)) X (%wsucc o) (lit-r r m) (conj-r r ms)
+             (ope-cube w (Line (Line X)) (cube-map (dims (ope-tgt w)) (Line X) (Line (Line X)) (meet-l X) c)))
+          (ope-cube w (Line X) (papp-conj-from (lcons e-dim (ope-tgt w)) X (%wsucc o) m ms (cube-map (dims (ope-tgt w)) (Line X) (Line (Line X)) (meet-l X) c)))
+          (λ j → papp-conj-from (lcons e-dim (ope-src w)) X (%wsucc o) (lit-r r m) (conj-r r ms) (ope-nat w (Line X) (Line (Line X)) (meet-l X) c (~ j)))
+          (papp-conj-from-ren (wkeep e-dim w) r (%wsucc o) (renat-keep w r o hr) m ms X (cube-map (dims (ope-tgt w)) (Line X) (Line (Line X)) (meet-l X) c)) i))
+    (papp-lit-ren w r o hr l X (papp-conj-from (lcons e-dim (ope-tgt w)) X (%wsucc o) m ms (cube-map (dims (ope-tgt w)) (Line X) (Line (Line X)) (meet-l X) c)))
+papp-conj-ren : (w : OPE) (r : Word → Word) (o : Word) → RenAt w r o → (cj : Conj) (X : Type 1) (c : Cube (suc (dims (ope-tgt w))) X) →
+  PathP (λ i → Cube (dims (ope-src w)) X) (papp-conj (ope-src w) X o (conj-r r cj) (ope-cube w (Line X) c)) (ope-cube w X (papp-conj (ope-tgt w) X o cj c))
+papp-conj-ren w r o hr lnil X c =
+  psym (Cube (dims (ope-src w)) X) (ope-cube w X (cube-map (dims (ope-tgt w)) (Line X) X (face1-l X) c))
+    (cube-map (dims (ope-src w)) (Line X) X (face1-l X) (ope-cube w (Line X) c)) (ope-nat w (Line X) X (face1-l X) c)
+papp-conj-ren w r o hr (lcons l ls) X c = papp-conj-from-ren w r o hr l ls X c
+papp-dnf-from-ren : (w : OPE) (r : Word → Word) (o : Word) → RenAt w r o → (cj : Conj) (ds : DNF) (X : Type 1) (c : Cube (suc (dims (ope-tgt w))) X) →
+  PathP (λ i → Cube (dims (ope-src w)) X)
+    (papp-dnf-from (ope-src w) X o (conj-r r cj) (dnf-r r ds) (ope-cube w (Line X) c)) (ope-cube w X (papp-dnf-from (ope-tgt w) X o cj ds c))
+papp-dnf-from-ren w r o hr cj lnil X c = papp-conj-ren w r o hr cj X c
+papp-dnf-from-ren w r o hr cj (lcons d ds) X c =
+  pcat (Cube (dims (ope-src w)) X)
+    (papp-conj (ope-src w) X o (conj-r r cj) (papp-dnf-from (lcons e-dim (ope-src w)) X (%wsucc o) (conj-r r d) (dnf-r r ds)
+       (cube-map (dims (ope-src w)) (Line X) (Line (Line X)) (join-l X) (ope-cube w (Line X) c))))
+    (papp-conj (ope-src w) X o (conj-r r cj) (ope-cube w (Line X)
+       (papp-dnf-from (lcons e-dim (ope-tgt w)) X (%wsucc o) d ds (cube-map (dims (ope-tgt w)) (Line X) (Line (Line X)) (join-l X) c))))
+    (ope-cube w X (papp-dnf-from (ope-tgt w) X o cj (lcons d ds) c))
+    (λ i → papp-conj (ope-src w) X o (conj-r r cj)
+       (pcat (Cube (suc (dims (ope-src w))) X)
+          (papp-dnf-from (lcons e-dim (ope-src w)) X (%wsucc o) (conj-r r d) (dnf-r r ds)
+             (cube-map (dims (ope-src w)) (Line X) (Line (Line X)) (join-l X) (ope-cube w (Line X) c)))
+          (papp-dnf-from (lcons e-dim (ope-src w)) X (%wsucc o) (conj-r r d) (dnf-r r ds)
+             (ope-cube w (Line (Line X)) (cube-map (dims (ope-tgt w)) (Line X) (Line (Line X)) (join-l X) c)))
+          (ope-cube w (Line X) (papp-dnf-from (lcons e-dim (ope-tgt w)) X (%wsucc o) d ds (cube-map (dims (ope-tgt w)) (Line X) (Line (Line X)) (join-l X) c)))
+          (λ j → papp-dnf-from (lcons e-dim (ope-src w)) X (%wsucc o) (conj-r r d) (dnf-r r ds) (ope-nat w (Line X) (Line (Line X)) (join-l X) c (~ j)))
+          (papp-dnf-from-ren (wkeep e-dim w) r (%wsucc o) (renat-keep w r o hr) d ds X (cube-map (dims (ope-tgt w)) (Line X) (Line (Line X)) (join-l X) c)) i))
+    (papp-conj-ren w r o hr cj X (papp-dnf-from (lcons e-dim (ope-tgt w)) X (%wsucc o) d ds (cube-map (dims (ope-tgt w)) (Line X) (Line (Line X)) (join-l X) c)))
+papp-ren : (w : OPE) (f : DNF) (X : Type 1) (c : Cube (suc (dims (ope-tgt w))) X) →
+  PathP (λ i → Cube (dims (ope-src w)) X) (papp-cube (ope-src w) X (dnf-ren w f) (ope-cube w (Line X) c)) (ope-cube w X (papp-cube (ope-tgt w) X f c))
+papp-ren w lnil X c =
+  psym (Cube (dims (ope-src w)) X) (ope-cube w X (cube-map (dims (ope-tgt w)) (Line X) X (face0-l X) c))
+    (cube-map (dims (ope-src w)) (Line X) X (face0-l X) (ope-cube w (Line X) c)) (ope-nat w (Line X) X (face0-l X) c)
+papp-ren w (lcons cj cs) X c = papp-dnf-from-ren w (ope-var w) #0 (renat-0 w) cj cs X c
