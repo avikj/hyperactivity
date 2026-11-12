@@ -1919,3 +1919,95 @@ papp-ren w lnil X c =
   psym (Cube (dims (ope-src w)) X) (ope-cube w X (cube-map (dims (ope-tgt w)) (Line X) X (face0-l X) c))
     (cube-map (dims (ope-src w)) (Line X) X (face0-l X) (ope-cube w (Line X) c)) (ope-nat w (Line X) X (face0-l X) c)
 papp-ren w (lcons cj cs) X c = papp-dnf-from-ren w (ope-var w) #0 (renat-0 w) cj cs X c
+
+-- ---------------------------------------------------------------- P2.6e (2, first part): the dimension parts of worlds and of the identity
+-- (2026-11-12, next definitions (2)) The dimension part sending dimension k of sk to the variable r k
+-- of sk' (cmap-of). Its action: with a skipped entry in front of sk' and r one further (cmap-skip:
+-- weakening by a type is the same cube, by a dimension the degenerate one), with a kept entry
+-- (cmap-keep), the identity's (cmap-id) and an embedding's (cmap-ope: ope-cube).
+cmap-of : (sk' sk : Lst Entry) → (Word → Word) → CMap sk' sk
+cmap-of sk' lnil r = unit
+cmap-of sk' (lcons (e-ty a) sk) r = cmap-of sk' sk (λ k → r (%wsucc k))
+cmap-of sk' (lcons e-dim sk) r = (cmap-of sk' sk (λ k → r (%wsucc k)) , lcons (lcons (r #0 , true) lnil) lnil)
+const-map : (n : Nat) (X Y : Type 1) (g : X → Y) (x : X) → PathP (λ i → Cube n Y) (cube-map n X Y g (cube-const n X x)) (cube-const n Y (g x))
+const-map zero X Y g x = λ i → g x
+const-map (suc n) X Y g x = const-map n (Line X) (Line Y) (line-map X Y g) (degen-l X x)
+skip-const : (e : Entry) (sk' : Lst Entry) (X : Type 1) (x : X) →
+  PathP (λ i → Cube (dims (lcons e sk')) X) (cube-const (dims (lcons e sk')) X x) (skip-cube e sk' X (cube-const (dims sk') X x))
+skip-const (e-ty s) sk' X x = λ i → cube-const (dims sk') X x
+skip-const e-dim sk' X x =
+  psym (Cube (dims sk') (Line X)) (cube-map (dims sk') X (Line X) (degen-l X) (cube-const (dims sk') X x)) (cube-const (dims sk') (Line X) (degen-l X x))
+    (const-map (dims sk') X (Line X) (degen-l X) x)
+-- path application at a variable is diag-sk there
+papp-var : (sk : Lst Entry) (X : Type 1) (k : Word) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → Cube (dims sk) X) (papp-cube sk X (lcons (lcons (k , true) lnil) lnil) c) (diag-sk sk k X c)
+papp-var sk X k c = λ i → diag-sk sk (wadd-0 k i) X c
+cmap-skip : (e : Entry) (sk' sk : Lst Entry) (r : Word → Word) (X : Type 1) (c : Cube (dims sk) X) →
+  PathP (λ i → Cube (dims (lcons e sk')) X)
+    (cmap-cube (lcons e sk') sk (cmap-of (lcons e sk') sk (λ k → %wsucc (r k))) X c) (skip-cube e sk' X (cmap-cube sk' sk (cmap-of sk' sk r) X c))
+cmap-skip e sk' lnil r X c = skip-const e sk' X c
+cmap-skip e sk' (lcons (e-ty a) sk) r X c = cmap-skip e sk' sk (λ k → r (%wsucc k)) X c
+cmap-skip e sk' (lcons e-dim sk) r X c =
+  pcat (Cube (dims (lcons e sk')) X)
+    (papp-cube (lcons e sk') X (lcons (lcons (%wsucc (r #0) , true) lnil) lnil)
+       (cmap-cube (lcons e sk') sk (cmap-of (lcons e sk') sk (λ k → %wsucc (r (%wsucc k)))) (Line X) c))
+    (diag-sk (lcons e sk') (%wsucc (r #0)) X (skip-cube e sk' (Line X) (cmap-cube sk' sk (cmap-of sk' sk (λ k → r (%wsucc k))) (Line X) c)))
+    (skip-cube e sk' X (papp-cube sk' X (lcons (lcons (r #0 , true) lnil) lnil) (cmap-cube sk' sk (cmap-of sk' sk (λ k → r (%wsucc k))) (Line X) c)))
+    (pcat (Cube (dims (lcons e sk')) X)
+       (papp-cube (lcons e sk') X (lcons (lcons (%wsucc (r #0) , true) lnil) lnil)
+          (cmap-cube (lcons e sk') sk (cmap-of (lcons e sk') sk (λ k → %wsucc (r (%wsucc k)))) (Line X) c))
+       (papp-cube (lcons e sk') X (lcons (lcons (%wsucc (r #0) , true) lnil) lnil)
+          (skip-cube e sk' (Line X) (cmap-cube sk' sk (cmap-of sk' sk (λ k → r (%wsucc k))) (Line X) c)))
+       (diag-sk (lcons e sk') (%wsucc (r #0)) X (skip-cube e sk' (Line X) (cmap-cube sk' sk (cmap-of sk' sk (λ k → r (%wsucc k))) (Line X) c)))
+       (λ i → papp-cube (lcons e sk') X (lcons (lcons (%wsucc (r #0) , true) lnil) lnil) (cmap-skip e sk' sk (λ k → r (%wsucc k)) (Line X) c i))
+       (papp-var (lcons e sk') X (%wsucc (r #0)) (skip-cube e sk' (Line X) (cmap-cube sk' sk (cmap-of sk' sk (λ k → r (%wsucc k))) (Line X) c))))
+    (pcat (Cube (dims (lcons e sk')) X)
+       (diag-sk (lcons e sk') (%wsucc (r #0)) X (skip-cube e sk' (Line X) (cmap-cube sk' sk (cmap-of sk' sk (λ k → r (%wsucc k))) (Line X) c)))
+       (skip-cube e sk' X (diag-sk sk' (r #0) X (cmap-cube sk' sk (cmap-of sk' sk (λ k → r (%wsucc k))) (Line X) c)))
+       (skip-cube e sk' X (papp-cube sk' X (lcons (lcons (r #0 , true) lnil) lnil) (cmap-cube sk' sk (cmap-of sk' sk (λ k → r (%wsucc k))) (Line X) c)))
+       (skip-diag e sk' sk' (λ k → k) (λ Y d → d) (λ k Y d i → diag-sk sk' k Y d) (r #0) X (cmap-cube sk' sk (cmap-of sk' sk (λ k → r (%wsucc k))) (Line X) c))
+       (λ i → skip-cube e sk' X (papp-var sk' X (r #0) (cmap-cube sk' sk (cmap-of sk' sk (λ k → r (%wsucc k))) (Line X) c) (~ i))))
+cmap-keep : (e : Entry) (sk' sk : Lst Entry) (r : Word → Word) (X : Type 1) (c : Cube (dims (lcons e sk)) X) →
+  PathP (λ i → Cube (dims (lcons e sk')) X)
+    (cmap-cube (lcons e sk') (lcons e sk) (cmap-of (lcons e sk') (lcons e sk) (w-keep r)) X c) (keep-cube e sk' sk (λ Y → cmap-cube sk' sk (cmap-of sk' sk r) Y) X c)
+cmap-keep (e-ty s) sk' sk r X c = cmap-skip (e-ty s) sk' sk r X c
+cmap-keep e-dim sk' sk r X c =
+  pcat (Cube (suc (dims sk')) X)
+    (papp-cube (lcons e-dim sk') X (lcons (lcons (#0 , true) lnil) lnil)
+       (cmap-cube (lcons e-dim sk') sk (cmap-of (lcons e-dim sk') sk (λ k → %wsucc (r k))) (Line X) c))
+    (diag-sk (lcons e-dim sk') #0 X (cube-map (dims sk') (Line X) (Line (Line X)) (degen-l (Line X)) (cmap-cube sk' sk (cmap-of sk' sk r) (Line X) c)))
+    (cmap-cube sk' sk (cmap-of sk' sk r) (Line X) c)
+    (pcat (Cube (suc (dims sk')) X)
+       (papp-cube (lcons e-dim sk') X (lcons (lcons (#0 , true) lnil) lnil)
+          (cmap-cube (lcons e-dim sk') sk (cmap-of (lcons e-dim sk') sk (λ k → %wsucc (r k))) (Line X) c))
+       (papp-cube (lcons e-dim sk') X (lcons (lcons (#0 , true) lnil) lnil)
+          (cube-map (dims sk') (Line X) (Line (Line X)) (degen-l (Line X)) (cmap-cube sk' sk (cmap-of sk' sk r) (Line X) c)))
+       (diag-sk (lcons e-dim sk') #0 X (cube-map (dims sk') (Line X) (Line (Line X)) (degen-l (Line X)) (cmap-cube sk' sk (cmap-of sk' sk r) (Line X) c)))
+       (λ i → papp-cube (lcons e-dim sk') X (lcons (lcons (#0 , true) lnil) lnil) (cmap-skip e-dim sk' sk r (Line X) c i))
+       (papp-var (lcons e-dim sk') X #0 (cube-map (dims sk') (Line X) (Line (Line X)) (degen-l (Line X)) (cmap-cube sk' sk (cmap-of sk' sk r) (Line X) c))))
+    (pcat (Cube (suc (dims sk')) X)
+       (cube-map (dims sk') (Line (Line X)) (Line X) (diag-l X) (cube-map (dims sk') (Line X) (Line (Line X)) (degen-l (Line X)) (cmap-cube sk' sk (cmap-of sk' sk r) (Line X) c)))
+       (cube-map (dims sk') (Line X) (Line X) (λ L → L) (cmap-cube sk' sk (cmap-of sk' sk r) (Line X) c))
+       (cmap-cube sk' sk (cmap-of sk' sk r) (Line X) c)
+       (cube-comp (dims sk') (Line X) (Line (Line X)) (Line X) (diag-l X) (degen-l (Line X)) (cmap-cube sk' sk (cmap-of sk' sk r) (Line X) c))
+       (cube-id (dims sk') (Line X) (cmap-cube sk' sk (cmap-of sk' sk r) (Line X) c)))
+cmap-id : (sk : Lst Entry) (X : Type 1) (c : Cube (dims sk) X) → PathP (λ i → Cube (dims sk) X) (cmap-cube sk sk (cmap-of sk sk (λ k → k)) X c) c
+cmap-id lnil X c = λ i → c
+cmap-id (lcons (e-ty s) sk) X c =
+  pcat (Cube (dims sk) X) (cmap-cube (lcons (e-ty s) sk) (lcons (e-ty s) sk) (cmap-of (lcons (e-ty s) sk) (lcons (e-ty s) sk) (λ k → k)) X c)
+    (cmap-cube sk sk (cmap-of sk sk (λ k → k)) X c) c (cmap-skip (e-ty s) sk sk (λ k → k) X c) (cmap-id sk X c)
+cmap-id (lcons e-dim sk) X c =
+  pcat (Cube (suc (dims sk)) X) (cmap-cube (lcons e-dim sk) (lcons e-dim sk) (cmap-of (lcons e-dim sk) (lcons e-dim sk) (λ k → k)) X c)
+    (cmap-cube sk sk (cmap-of sk sk (λ k → k)) (Line X) c) c (cmap-keep e-dim sk sk (λ k → k) X c) (cmap-id sk (Line X) c)
+cmap-ope : (w : OPE) (X : Type 1) (c : Cube (dims (ope-tgt w)) X) →
+  PathP (λ i → Cube (dims (ope-src w)) X) (cmap-cube (ope-src w) (ope-tgt w) (cmap-of (ope-src w) (ope-tgt w) (ope-var w)) X c) (ope-cube w X c)
+cmap-ope wdone X c = λ i → c
+cmap-ope (wskip e w) X c =
+  pcat (Cube (dims (lcons e (ope-src w))) X) (cmap-cube (lcons e (ope-src w)) (ope-tgt w) (cmap-of (lcons e (ope-src w)) (ope-tgt w) (λ k → %wsucc (ope-var w k))) X c)
+    (skip-cube e (ope-src w) X (cmap-cube (ope-src w) (ope-tgt w) (cmap-of (ope-src w) (ope-tgt w) (ope-var w)) X c)) (ope-cube (wskip e w) X c)
+    (cmap-skip e (ope-src w) (ope-tgt w) (ope-var w) X c) (λ i → skip-cube e (ope-src w) X (cmap-ope w X c i))
+cmap-ope (wkeep e w) X c =
+  pcat (Cube (dims (lcons e (ope-src w))) X)
+    (cmap-cube (lcons e (ope-src w)) (lcons e (ope-tgt w)) (cmap-of (lcons e (ope-src w)) (lcons e (ope-tgt w)) (w-keep (ope-var w))) X c)
+    (keep-cube e (ope-src w) (ope-tgt w) (λ Y → cmap-cube (ope-src w) (ope-tgt w) (cmap-of (ope-src w) (ope-tgt w) (ope-var w)) Y) X c) (ope-cube (wkeep e w) X c)
+    (cmap-keep e (ope-src w) (ope-tgt w) (ope-var w) X c) (λ i → keep-cube e (ope-src w) (ope-tgt w) (λ Y d → cmap-ope w Y d i) X c)
