@@ -88,8 +88,8 @@ get a result unless the owner sanctioned it as a language defect:
 - `d9c71c2e` — word operations with a variable operand give their result where the other operand
   alone determines it (`src/net.c`; diff read).
 - `ace6fec0` — a recursive call given fewer arguments is the function of the rest; a primitive
-  with no computation evaluates as the constant neutral of its type (`src/core.h`, `lib/prim.cub`,
-  `LANGUAGE.md`; message read, diff not). Its message records **library 1,907 passed, 52 failed** —
+  with no computation evaluates as the constant neutral of its type (files: `LANGUAGE.md`, `lib/prim.cub`, `src/core.h`, `src/lang.c`, `src/net.c`, `src/syntax.c`;
+  message read, diff not). Its message records **library 1,907 passed, 52 failed** —
   the library was not green at that commit; the current count is **unverified**.
 
 **Paper constructions with no match in the repo by exact name** (grep of `lib/`, `experiments/`;
