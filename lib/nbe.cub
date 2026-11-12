@@ -577,3 +577,11 @@ embed (ntrue Γ KB gB DB) = dtrue Γ KB gB DB
 embed (nfalse Γ KB gB DB) = dfalse Γ KB gB DB
 embed (nlam Γ K a b g A B c vb nb) = dlam Γ K a b g A B c vb (embed nb)
 embed (npair Γ K a b g A B c1 v1 c2 v2 n1 n2) = dpair Γ K a b g A B c1 v1 c2 v2 (embed n1) (embed n2)
+-- normalize Γ,A (t) = reify (eval_nf (t, reflectContext Γ)): a normal form with t's meaning
+normalize-nf : (Γ : Ctx) (A : PTy (Env Γ)) (t : TCode Γ A) → (c : Code) × NN (k-nf , (Γ , A , c , teval Γ A t))
+normalize-nf Γ A t =
+  fst (rr (fst A)) (fst (snd A)) (snd (snd (snd A))) Γ (fst (snd (snd A))) (teval Γ A t)
+    (fund (snd (snd t)) Γ (λ ρ → ρ) (reflect-env (fst Γ) (snd Γ)))
+-- as a typed code (paper: normalize : Code(Γ, A) → Code(Γ, A))
+normalize : (Γ : Ctx) (A : PTy (Env Γ)) → TCode Γ A → TCode Γ A
+normalize Γ A t = (fst (normalize-nf Γ A t) , teval Γ A t , embed (snd (normalize-nf Γ A t)))
