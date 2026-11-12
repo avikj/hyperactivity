@@ -110,3 +110,52 @@ Clo : TyShape → Type → Type 1
 Clo s K = CloU K (TyE s)
 ElC : (s : TyShape) → (K : Type) → Clo s K → K → Type
 ElC s K = ElCU K (TyE s)
+
+-- ---------------------------------------------------------------- types over a context's environments
+-- a type over environments G: a shape with a closure; its meaning; pulling back along f : H → G
+PTy : Type → Type 1
+PTy G = (s : TyShape) × Clo s G
+ElP : (G : Type) → PTy G → G → Type
+ElP G A ρ = ElC (fst A) G (snd A) ρ
+pull : (G H : Type) → (H → G) → PTy G → PTy H
+pull G H f A = (fst A , (fst (snd A) , (λ h → fst (snd (snd A)) (f h)) , snd (snd (snd A))))
+-- Bool, and Π and Σ of a closure pair as types over G (the closures of every type former are
+-- general: a Π type over G is any closure whose shape is s-pi, at any base K and map g)
+bool-ty : (G : Type) → PTy G
+bool-ty G = (s-bool , (Unit , (λ ρ → unit) , one))
+pi-ty : (G K : Type) (a b : TyShape) (g : G → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k)) → PTy G
+pi-ty G K a b g A B = (s-pi a b , (K , g , (A , B)))
+sig-ty : (G K : Type) (a b : TyShape) (g : G → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k)) → PTy G
+sig-ty G K a b g A B = (s-sig a b , (K , g , (A , B)))
+-- the domain of such a Π (or Σ) as a type over G, and its codomain over G extended by the domain
+cl-dom : (G K : Type) (a : TyShape) (g : G → K) (A : Clo a K) → PTy G
+cl-dom G K a g A = pull K G g (a , A)
+cl-cod : (G K : Type) (a b : TyShape) (g : G → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k)) →
+  PTy ((ρ : G) × ElP G (cl-dom G K a g A) ρ)
+cl-cod G K a b g A B = pull ((k : K) × ElC a K A k) ((ρ : G) × ElP G (cl-dom G K a g A) ρ) (λ p → (g (fst p) , snd p)) (b , B)
+-- the meanings are the language's own Π and Σ (definitionally)
+pi-meaning : (G K : Type) (a b : TyShape) (g : G → K) (A : Clo a K) (B : Clo b ((k : K) × ElC a K A k)) (ρ : G) →
+  Path Type (ElP G (pi-ty G K a b g A B) ρ) ((x : ElP G (cl-dom G K a g A) ρ) → ElP ((ρ : G) × ElP G (cl-dom G K a g A) ρ) (cl-cod G K a b g A B) (ρ , x))
+pi-meaning G K a b g A B ρ = refl
+
+-- ---------------------------------------------------------------- contexts
+-- a context over a skeleton (its entries' shapes, closed data): the entries' closures and the type of
+-- its environments, by recursion on the skeleton
+CtxU : Type 2
+CtxU = (M : Type 1) × (M → Type)
+CtxE : Lst TyShape → CtxU
+CtxE lnil = (One1 , λ γ → Unit)
+CtxE (lcons s sk) =
+  ((γ : fst (CtxE sk)) × Clo s (snd (CtxE sk) γ) ,
+   λ p → (ρ : snd (CtxE sk) (fst p)) × ElC s (snd (CtxE sk) (fst p)) (snd p) ρ)
+Ctx : Type 1
+Ctx = (sk : Lst TyShape) × fst (CtxE sk)
+Env : Ctx → Type
+Env Γ = snd (CtxE (fst Γ)) (snd Γ)
+emp : Ctx
+emp = (lnil , one)
+-- Γ extended by a type over its environments
+ext : (Γ : Ctx) → PTy (Env Γ) → Ctx
+ext Γ A = (lcons (fst A) (fst Γ) , (snd Γ , snd A))
+ext-env : (Γ : Ctx) (A : PTy (Env Γ)) → Path Type (Env (ext Γ A)) ((ρ : Env Γ) × ElP (Env Γ) A ρ)
+ext-env Γ A = refl
