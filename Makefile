@@ -32,6 +32,11 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 # is known only when someone loads them. One command should check every file meant to check, in
 # dependency order, so the state of every file is measured.
 #
+# t44 (2026-11-12): every target sets CUBICAL_NOCACHE=1, so the standard commands never use the
+# store or the module cache and recheck everything from nothing (64 s for the library). With the
+# store warm, elaboration and compilation still run for every definition (29 s), so incremental
+# checking reaches only the checker's run, not the rest of the work done per definition.
+#
 # the library, in dependency order: every definition is checked by the checker as it loads.
 # There are no tests: the checker is the evidence. The one measurement kept is Brunerie's number.
 CORE := lib/prelude.cub lib/code.cub lib/match.cub lib/nav.cub lib/cost.cub lib/lin.cub lib/check.cub lib/std.cub

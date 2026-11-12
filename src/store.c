@@ -159,6 +159,10 @@ static void canon_decl(SBuf *o, Node *dd) {
  * cannot be read). A definition's identity key stays build-independent; its certificate does
  * not: a change to the rules in net.c (conversion, composition, a primitive) with check.cub
  * unchanged must recheck, so a rebuilt machine rechecks the library once and then hits. */
+/* t42 (2026-11-12): the checker's identity here is the hash of the texts of the files loaded up to
+ * the checker's definition (comments and unrelated definitions included) plus the machine binary,
+ * not the content keys of the definitions the checker consists of. So a comment edited in the
+ * bootstrap files invalidates every certificate in the store. */
 static Sha256 lib_hash; static bool lib_hash_on;
 static void lib_mix(const char *text) { if (!lib_hash_on) { sha256_init(&lib_hash); lib_hash_on = true; } sha256_update(&lib_hash, text, strlen(text)); }
 static void chk_salt_set(void) {
@@ -254,6 +258,8 @@ static void names_bind(const char *name, const char *key) {
     char *p = store_path("names", ""); FILE *f = fopen(p, "a"); free(p);
     if (f) { fputs(line, f); fclose(f); }
 }
+/* t43 (2026-11-12): the store records only acceptance (an ok line with steps per checker). A
+ * refusal and its reason are not recorded, so what fails, and why, is known only by rerunning. */
 /* a definition's entry: written when it is checked (or replayed as checked) */
 static void store_put(const char *name, const char *key, const char *code, const char *type, long steps, const char *usage) {
     if (!store_dir()) return;

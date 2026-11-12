@@ -4728,6 +4728,15 @@ static void load_file(const char *path, bool must) {
     char *text = slurp(rp);
     size_t pl = strlen(rp);
     if (pl > 4 && !strcmp(rp + pl - 4, ".cub")) {
+/* t41 (2026-11-12): two incremental mechanisms overlap. This per-file cache replays a file's
+ * elaborated and compiled forms when the hash of every text loaded so far is unchanged, so editing
+ * a comment in any earlier file invalidates every later file. The store (src/store.c) already
+ * identifies each checked definition by the content of its canonical form, independent of names,
+ * files and positions, and skips checking a definition it holds a certificate for. Measured on the
+ * library: cold 64 s; store warm, this cache off 29 s; both warm 4.7 s. With this cache warm the
+ * run also reports 1,799 passed instead of 1,907, so its reporting differs from a full run's. One
+ * mechanism keyed by content at the granularity of a definition, covering elaboration and
+ * compilation as well as checking, would subsume both. */
         /* the surface language: its imports first, then the running key, then its declarations */
         const char *saved_dir = cur_dir;
         char *dir = strdup(rp); char *sl = strrchr(dir, '/'); if (sl) *sl = 0;
