@@ -1,0 +1,63 @@
+-- lib/nbe.cub — typed codes Code(Γ, A) = Σ c. Der(Γ, c, A) over the one representation of terms
+-- (lib/code.cub's Code), their evaluation, and normalization by evaluation with its soundness
+-- equation (paper §6.1, (6.1) and (6.5)). Loaded after lib/std.cub.
+--
+-- Plan (2026-11-12). The whole construction, in the order it is built.
+--
+-- 0. Source of the method. Kripke normalization by evaluation for dependent types with a logical
+--    relation (computability) over the category of contexts and order-preserving renamings: the
+--    method of Altenkirch–Kaposi (LMCS 2017) and Coquand ("Canonicity and normalization for
+--    dependent type theory", TCS 2019), and for the cubical part Sterling–Angiuli (LICS 2021).
+--    The derivations are indexed by their meaning (McBride, "Outrageous but meaningful
+--    coincidences", 2010): a derivation of c : A in Γ carries, as an index, the meaning of c as a
+--    function of the environment. So eval is that index, the object theory's conversion is the
+--    language's own judgmental equality on meanings (no conversion rule, nothing to make coherent),
+--    and (6.5) holds by the indices.
+--
+-- 1. Objects, each defined once.
+--    Raw     the existing Code (lib/code.cub); normal forms here use cvar, clam, capp, cpair, cfst,
+--            csnd, ccase #0 (Bool), ccon #0 k, cplam, cpapp — the codes the language's own (code t)
+--            writes for the same terms.
+--    TyD G T structure of an object type whose meaning is T : G → Type, over environments G:
+--            Bool, Π, Σ, then PathP. Meanings only: no raw type code appears in a normal term of
+--            this fragment (lam, pair and case carry no annotation).
+--    reix    reindexing a type structure along a map of environments (weakening and substitution are
+--            both instances); one operation, with its composition law as a path.
+--    Ctx G   a context: a telescope of type structures, G the type of its environments.
+--    Var, Der  variables and typing derivations, Der Γ D c v: c is a derivation-checked raw code
+--            of type D in Γ with meaning v : (ρ : G) → T ρ.
+--    Code Γ D = Σ c. Σ v. Der Γ D c v; eval = the meaning v (paper (6.1)).
+--    Ne, Nf  neutral and normal derivations, same indices; embed : Nf → Der keeps c and v.
+--    OPE     order-preserving embeddings Δ → Γ (the Kripke worlds), with actions on Var, Ne, Nf.
+--    Comp D Δ δ x  the computability of x : (ρ : D) → T (δ ρ) at world Δ, by recursion on D:
+--            Bool — a normal form with meaning x; Π — Kripke: at every later world, computable
+--            arguments give computable results; Σ — componentwise.
+--    reify/reflect  mutually by recursion on D: reify : Comp → Σ c. Nf with meaning exactly x;
+--            reflect : Ne → Comp. The Π clauses are the paper's Kripke clauses (§6.1).
+--    fund    the fundamental lemma, by recursion on Der: a derivation's meaning is computable at
+--            every world under every computable environment.
+--    normalize d = reify (fund d (reflected identity environment)); the result is a Code with the
+--            same meaning index, so reifySound (6.5) is refl: eval (reify v) ρ ≡ denote v ρ.
+--
+-- 2. Phases. P1 the fragment Π, Σ, Bool (with dependent case): TyD, reix with its laws, Ctx, Var,
+--    Der, Code, eval, Ne, Nf, embed, OPE and actions, Comp with its monotonicity and reindexing
+--    laws, reify/reflect, fund, normalize, reifySound. P2 PathP and the interval: worlds with
+--    dimension variables and face restrictions (Comp at a path type is computability of every
+--    dimension instance, with the boundary). P3 Kan operations, transp and hcomp, at Π, Σ, Bool,
+--    PathP: Sterling–Angiuli's stabilization (neutrals carry the face on which they are unstable).
+--    P4 Glue. P5 the specializer over Code (lib/specialize.cub's normalize, t11) — needs each
+--    definition reflected into Der, which is the typed checker's output (goal typed-checker).
+--    P6 universes — blocked, t45.
+--
+-- t45 (2026-11-12): needs-work. The object theory's universes cannot be internalized in this core as
+-- it is. A universe U_0 in the object needs its small types' meanings (in Type) and the meaning of U_0
+-- itself (in Type 1) to be indices of one family of type structures; that needs cumulativity
+-- (Type ⊆ Type 1), a data type whose level depends on a parameter, or (large) induction–recursion,
+-- and the language has none of them. Evidence, run 2026-11-12 against CORE: `Ctx Unit` with
+-- `Ctx : Type 1 → Type 2` is refused, "expected: Type (lsuc lzero), actual: Type" (no cumulativity);
+-- `data LBox (l : Level) (A : Type l) = lbox (x : A)` is refused, "the data type's universe level
+-- depends on a parameter" (lib/check.cub chk-data, lvl-closed); `data` inside `mutual` is a parse
+-- error, "unexpected data" (no mutual or inductive–recursive types). Sterling–Angiuli's metatheory
+-- has cumulative universes; Agda's internal developments use level-polymorphic data or
+-- induction–recursion. Deciding which of the three the calculus is to have is a question about the
+-- core (goal core-correct), not something to add here; the fragments without universes are built.
