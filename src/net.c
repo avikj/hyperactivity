@@ -535,7 +535,9 @@ static Key *key2(int tag, uint64_t a, void *p, Key *x, Key *y) { Key *c[2] = { x
  * evaluator result mentioning a definition can be remembered beyond the run. The key of a reference
  * is to be the definition's content key (src/store.c's key of its canonical form); equal content is
  * equal meaning, so this is sound for values. Results that name definitions (readback text,
- * elaboration solutions) are then stored canonically and rendered through current bindings (t61). */
+ * elaboration solutions) are then stored canonically and rendered through current bindings (t61).
+ * 2026-11-12: a λ or thunk is likewise keyed by the address of its compiled record (synkey, K_LAM
+ * over t->rec), so compiled records need content keys too for any key to be canonical. */
 Key *key_global(long g) { return key0(K_GLOBAL, (uint64_t)g, NULL); }
 Key *key_con0(int c) { return key0(K_CON, (uint64_t)c, NULL); }
 /* a substitution as a key: its (dimension, interval) pairs, in order */

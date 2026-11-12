@@ -3181,8 +3181,15 @@ static Node *reading_type(Node *t) {
  * (references as content keys, t60; the checker identified by its own definitions' keys, t42), the
  * result stored with references as keys and rendered through the current bindings when read, the
  * same mechanism as the store's definitions. The store's certificates are then such results; the
- * per-file cache (t41) goes. Not yet read: whether %chk-def applied to two closed codes is a
- * keyed (memoised) term in src/net.c, or needs its key formed here. */
+ * per-file cache (t41) goes. Read 2026-11-12: the query built here (build_top) is keyed in
+ * src/net.c by synkey, but that key's leaves are run-local: a definition by its global index
+ * (key_global), a λ or thunk by the address of its compiled record (K_LAM over t->rec), and the
+ * codes passed name checked definitions by their index (cglob i). So the evaluator's key of a query
+ * means nothing in another run. Two key schemes exist: the evaluator's (structural, run-local) and
+ * the store's (canonical forms, content keys). The end state is one: every key canonical, compiled
+ * records keyed by their content (t60). The first step can be taken here: the query's key formed as
+ * the store forms a definition's (its canonical form, references as content keys, plus the
+ * checker's identity), and the result stored canonically. */
 static char *readback(Node *t, long *steps) {
     net_drain();
     long s0 = stat_steps;
