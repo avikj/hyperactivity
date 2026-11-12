@@ -11,8 +11,10 @@
 -- app-a, app-r, sig-1, sig-2, case-x, case-t, case-f, case-r, bool-v; lam-dom, lam-ctx, lam-body;
 -- plam-line, plam-body; carry; papp-mean; PathM (t52); NN with nvar, napp, nfst, nsnd, ncase, nne,
 -- ntrue, nfalse, nlam, npair, nplam, npapp; Der likewise with dpapp; TCode, teval, embed) and P2.6e
--- begun (cube-const, dcube-const, CMap, cmap-cube, cmap-d, SubF, sub-base, Sub, subM, cmap-zero).
--- What checks: all of it (run 2026-11-12: "358 passed, 0 failed", CORE files cached).
+-- begun (cube-const, dcube-const, CMap, cmap-cube, cmap-d, SubF, sub-base, Sub, sub-carried,
+-- sub-pull, subM, cmap-zero; then item (3) of the next definitions: fmap-const, fmap-cmap,
+-- pull-fmap, subM-fmap).
+-- What checks: all of it (run 2026-11-12: "364 passed, 0 failed", CORE files cached).
 -- What is next: the dated next-definitions list at the end of lib/nbe.cub's head (2026-11-12,
 -- "P2.6e from p26-wip"), then the swap of this file's families into lib/nbe.cub in place of P1's.
 
@@ -1413,14 +1415,90 @@ Sub : CCtx → CCtx → Type 1
 -- binder names chosen not to collide: t46
 Sub Δ Γ = (sbd : CMap (fst Δ) (fst Γ)) × (sbS : DCube (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (fst Γ)) (snd Δ)) ×
   PathP (λ i → Cube (dims (fst Δ)) (CtxV (fst Γ))) (cmap-cube (fst Δ) (fst Γ) sbd (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ sbS)
--- its action on meanings: the dimension part, carried along the path, then pulled back along the
--- environment maps
-subM : (Δ Γ : CCtx) (Z : Type 1) → Sub Δ Γ → Mean Γ Z → Mean Δ Z
-subM Δ Γ Z σ M =
+-- its action on meanings: the dimension part, carried along the path (sub-carried), then pulled
+-- back along the environment maps
+sub-carried : (Δ Γ : CCtx) (Z : Type 1) (σ : Sub Δ Γ) → Mean Γ Z → DCube (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (sub-base Δ Γ (fst (snd σ)))
+sub-carried Δ Γ Z σ M =
+  carry (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ)))
+    (snd (snd σ)) (cmap-d (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Z) (snd Γ) M)
+sub-pull : (Δ Γ : CCtx) (Z : Type 1) (S : DCube (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (fst Γ)) (snd Δ)) →
+  DCube (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (sub-base Δ Γ S) → Mean Δ Z
+sub-pull Δ Γ Z S E =
   dcube-pull (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z) (FbE (fst Γ) Z)
-    (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (snd Δ) (fst (snd σ))
-    (carry (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ)))
-       (snd (snd σ)) (cmap-d (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Z) (snd Γ) M))
+    (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (snd Δ) S E
+subM : (Δ Γ : CCtx) (Z : Type 1) → Sub Δ Γ → Mean Γ Z → Mean Δ Z
+subM Δ Γ Z σ M = sub-pull Δ Γ Z (fst (snd σ)) (sub-carried Δ Γ Z σ M)
 -- at no dimension, the dimension part is the identity judgmentally (P1's case)
 cmap-zero : (sk' : Lst Entry) (X : Type 1) (x : X) → PathP (λ i → Cube (dims sk') X) (cmap-cube sk' lnil unit X x) (cube-const (dims sk') X x)
 cmap-zero sk' X x = λ i → cube-const (dims sk') X x
+-- (2026-11-12) a fibrewise map commutes with the constant cube and with the action of a dimension
+-- part (next definitions (3); by fmap-papp at each form)
+fmap-const : (n : Nat) (X : Type 1) (F F' : X → Type 1) (h : (x : X) → F x → F' x) (x : X) (y : F x) →
+  PathP (λ i → DCube n X F' (cube-const n X x)) (dcube-fmap n X F F' h (cube-const n X x) (dcube-const n X F x y)) (dcube-const n X F' x (h x y))
+fmap-const zero X F F' h x y = λ i → h x y
+fmap-const (suc n) X F F' h x y = fmap-const n (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h) (degen-l X x) (degen-o X F x y)
+fmap-cmap : (sk' sk : Lst Entry) (σ : CMap sk' sk) (X : Type 1) (F F' : X → Type 1) (h : (x : X) → F x → F' x)
+  (c : Cube (dims sk) X) (d : DCube (dims sk) X F c) →
+  PathP (λ i → DCube (dims sk') X F' (cmap-cube sk' sk σ X c))
+    (dcube-fmap (dims sk') X F F' h (cmap-cube sk' sk σ X c) (cmap-d sk' sk σ X F c d))
+    (cmap-d sk' sk σ X F' c (dcube-fmap (dims sk) X F F' h c d))
+fmap-cmap sk' lnil σ X F F' h c d = fmap-const (dims sk') X F F' h c d
+fmap-cmap sk' (lcons (e-ty a) sk) σ X F F' h c d = fmap-cmap sk' sk σ X F F' h c d
+fmap-cmap sk' (lcons e-dim sk) σ X F F' h c d =
+  pcat (DCube (dims sk') X F' (papp-cube sk' X (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c)))
+    (dcube-fmap (dims sk') X F F' h (papp-cube sk' X (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c))
+       (papp-cube-d sk' X F (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c) (cmap-d sk' sk (fst σ) (Line X) (LineO X F) c d)))
+    (papp-cube-d sk' X F' (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c)
+       (dcube-fmap (suc (dims sk')) X F F' h (cmap-cube sk' sk (fst σ) (Line X) c) (cmap-d sk' sk (fst σ) (Line X) (LineO X F) c d)))
+    (papp-cube-d sk' X F' (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c)
+       (cmap-d sk' sk (fst σ) (Line X) (LineO X F') c (dcube-fmap (suc (dims sk)) X F F' h c d)))
+    (fmap-papp sk' X F F' h (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c) (cmap-d sk' sk (fst σ) (Line X) (LineO X F) c d))
+    (λ i → papp-cube-d sk' X F' (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c)
+       (fmap-cmap sk' sk (fst σ) (Line X) (LineO X F) (LineO X F') (lineo-fmap X F F' h) c d i))
+-- pulling back after a fibrewise map is pulling back along the composite (a path, by induction)
+pull-fmap : (n : Nat) (X X' : Type 1) (Y F : X → Type 1) (F' F2 : X' → Type 1) (f : (x : X) → Y x → X') (h : (x : X') → F' x → F2 x)
+  (g : (x : X) (y : Y x) → F2 (f x y) → F x) (c : Cube n X) (d : DCube n X Y c) (e : DCube n X' F' (dcube-map n X Y X' f c d)) →
+  PathP (λ i → DCube n X F c)
+    (dcube-pull n X X' Y F F2 f g c d (dcube-fmap n X' F' F2 h (dcube-map n X Y X' f c d) e))
+    (dcube-pull n X X' Y F F' f (λ x y z → g x y (h (f x y) z)) c d e)
+pull-fmap zero X X' Y F F' F2 f h g c d e = λ i → g c d (h (f c d) e)
+pull-fmap (suc n) X X' Y F F' F2 f h g c d e =
+  pull-fmap n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (LineO X' F2) (lineo-map X Y X' f) (lineo-fmap X' F' F2 h)
+    (lineo-pull X X' Y F F2 f g) c d e
+-- the action of a substitution commutes with a pointwise map of meanings (next definitions (3))
+subM-fmap : (Δ Γ : CCtx) (Z Z' : Type 1) (h : Z → Z') (σ : Sub Δ Γ) (M : Mean Γ Z) →
+  PathM Δ Z' (fmapM Δ Z Z' h (subM Δ Γ Z σ M)) (subM Δ Γ Z' σ (fmapM Γ Z Z' h M))
+subM-fmap Δ Γ Z Z' h σ M =
+  pcat (Mean Δ Z') (fmapM Δ Z Z' h (subM Δ Γ Z σ M))
+    (dcube-pull (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z') (FbE (fst Γ) Z)
+       (λ γ' p → fst p) (λ γ' p e ρ → h (e (snd p ρ))) (snd Δ) (fst (snd σ)) (sub-carried Δ Γ Z σ M))
+    (subM Δ Γ Z' σ (fmapM Γ Z Z' h M))
+    (fmap-pull (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z) (FbE (fst Δ) Z') (FbE (fst Γ) Z)
+       (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (λ γ e ρ → h (e ρ)) (snd Δ) (fst (snd σ)) (sub-carried Δ Γ Z σ M))
+    (pcat (Mean Δ Z')
+       (dcube-pull (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z') (FbE (fst Γ) Z)
+          (λ γ' p → fst p) (λ γ' p e ρ → h (e (snd p ρ))) (snd Δ) (fst (snd σ)) (sub-carried Δ Γ Z σ M))
+       (sub-pull Δ Γ Z' (fst (snd σ))
+          (dcube-fmap (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ)) (sub-base Δ Γ (fst (snd σ))) (sub-carried Δ Γ Z σ M)))
+       (subM Δ Γ Z' σ (fmapM Γ Z Z' h M))
+       (psym (Mean Δ Z')
+          (sub-pull Δ Γ Z' (fst (snd σ))
+             (dcube-fmap (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ)) (sub-base Δ Γ (fst (snd σ))) (sub-carried Δ Γ Z σ M)))
+          (dcube-pull (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z') (FbE (fst Γ) Z)
+             (λ γ' p → fst p) (λ γ' p e ρ → h (e (snd p ρ))) (snd Δ) (fst (snd σ)) (sub-carried Δ Γ Z σ M))
+          (pull-fmap (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z') (FbE (fst Γ) Z) (FbE (fst Γ) Z')
+             (λ γ' p → fst p) (λ γ e ρ → h (e ρ)) (λ γ' p e ρ → e (snd p ρ)) (snd Δ) (fst (snd σ)) (sub-carried Δ Γ Z σ M)))
+       (λ i → sub-pull Δ Γ Z' (fst (snd σ))
+          (pcat (DCube (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z') (sub-base Δ Γ (fst (snd σ))))
+             (dcube-fmap (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ)) (sub-base Δ Γ (fst (snd σ))) (sub-carried Δ Γ Z σ M))
+             (carry (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z') (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ)))
+                (snd (snd σ))
+                (dcube-fmap (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ)) (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ))
+                   (cmap-d (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Z) (snd Γ) M)))
+             (sub-carried Δ Γ Z' σ (fmapM Γ Z Z' h M))
+             (fmap-transp (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ))
+                (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ))) (snd (snd σ))
+                (cmap-d (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Z) (snd Γ) M))
+             (λ j → carry (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Z') (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ)))
+                (snd (snd σ))
+                (fmap-cmap (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ)) (snd Γ) M j)) i)))
