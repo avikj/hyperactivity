@@ -23,6 +23,14 @@ per-data composition code and the checker against the published rules (t33, t23,
 of the translation of terms into the evaluator's graph (t34). Until that is done, whether the
 implementation is exactly the calculus is not known.
 
+**Typed codes and normalization by evaluation (2026-11-12, `lib/nbe.cub`, goal `typed-codes`):**
+checked for the fragment Π, Σ, Bool with dependent case: typing derivations over the one code
+representation, indexed by meaning (paper §6.1, Code(Γ, A) = Σ c. Der); Kripke computability over
+renamings; reify/reflect; the fundamental lemma; normalize; reifySound (6.5), which holds by the
+indices. `experiments/nbe/examples.cub` runs it (a β-redex to `true`, a variable `f` to `λ x. f x`).
+Not yet built: PathP and the interval, Kan operations, Glue, universes (plan at the head of the
+file), and its use by the specializer (t11). Findings from it: t46, t47, t48.
+
 ## The work, as code
 
 - `lib/work.cub` — what a ticket and a goal are (general).
