@@ -201,7 +201,28 @@
 -- entries, dims, CtxE/VarT/CompEnv/env-ren/var-comp/reflect-env with a dimension clause, ren-dim);
 -- P2.1 (DCube, dcube-map, dcube-of, dcube-map-of); P2.3 (PathS/PathE); P2.6 foundation (bool-elim1,
 -- pcat, psym, dcube-fmap/zip/reidx/push/pull, the generators over their images, papp-deg with
--- diag-deg … papp-dnf-from-deg, cube-comp2, papp-cube-d).
+-- diag-deg … papp-dnf-from-deg, cube-comp2, papp-cube-d); P2.6a (CtxV, EnvV, FbE, CCtx, Mean, fmapM,
+-- TV, extM, dext, wkM, dwkM); P2.6c (VarP, var-shape, var-word, varM, varCube: a variable is a
+-- closed index into the skeleton, not P1's VarT); P2.6b except fmap∘papp-cube-d (fmap-fmap,
+-- fmap-reidx, reidx-fmap, fmap-push, push-fmap, fmap-pull, fmap-transp).
+-- (2026-11-12) P2.6d and P2.6e land in one commit: changing Jdg changes the index of NN and Der, so
+-- ren-nn, CompS, rr, fund, embed, normalize and the P1 examples change with them, and building the
+-- new families beside the old would be a second copy (not allowed). Rule data for P2.6d, each a
+-- closed Type 1 read pointwise per environment, with the named projections shared by NN, Der, CompS
+-- and reify: AppV a b = (T : Fam a b) × El (s-pi a b) T × El a (fst T), app-f q = (fst q , fst (snd
+-- q)), app-a q = (fst (fst q) , snd (snd q)), app-r q = (snd (fst q) (snd (snd q)) , fst (snd q)
+-- (snd (snd q))); for Σ, sig-1 (T , v) = (fst T , fst v) and sig-2 (T , v) = (snd T (fst v) , snd v)
+-- (the premises of pair, the conclusions of fst and snd); CaseV sP = (B : One1) × (P : Bool → Sem
+-- sP) × (x : Bool) × El sP (P true) × El sP (P false), scrutinee (B , x), branches (P true , t) and
+-- (P false , f), result (P x , bool-elim (λ b → El sP (P b)) t f x); true/false: a cube B : Mean Γ
+-- One1 and fmapM (λ u → (u , true)); var: varCube Γ v; lam: the conclusion X : Mean Γ (TV (s-pi a
+-- b)), the body over extM Γ a (TV (s-pi a b)) (λ γ e ρ → fst (fst (e ρ))) X with meaning dcube-push
+-- of X over X at (ρ , x) ↦ (snd (fst (e ρ)) x , snd (e ρ) x); plam: the conclusion X : Mean Γ (TV
+-- (s-path a)), the body over dext Γ with meaning dcube-reidx at degen-l, each vertex's e read as the
+-- line λ i ρ → (snd (snd (fst (fst (e ρ)))) i , snd (e ρ) i) with its two ends.
+-- Tested 2026-11-12 (scratch file, not kept): a family indexed by (Γ : CCtx) × TyShape × Code × Mean Γ
+-- (TV s), with a variable constructor at varCube and a projection constructor at fmapM, and
+-- functions matching on it with the implicit index (as ren-nn and embed), check (0 failed).
 --   P2.6a Contexts and meanings over cubes. CtxV sk = fst (CtxE sk), EnvV sk γ = snd (CtxE sk) γ;
 --        CCtx = (sk : Lst Entry) × Cube (dims sk) (CtxV sk); Mean (Γ : CCtx) (Z : Type 1) = DCube
 --        (dims (fst Γ)) (CtxV (fst Γ)) (λ γ → EnvV (fst Γ) γ → Z) (snd Γ); fmapM Γ Z Z' (h : Z → Z')
