@@ -2868,3 +2868,72 @@ cmap-dmap sk' (lcons e-dim sk) σ X F Z g c d =
     (dcube-map (dims sk') X F Z g (cmap-cube sk' (lcons e-dim sk) σ X c) (cmap-d sk' (lcons e-dim sk) σ X F c d))
     (λ i → papp-cube sk' Z (snd σ) (cmap-dmap sk' sk (fst σ) (Line X) (LineO X F) (Line Z) (lineo-map X F Z g) c d i))
     (papp-dmap sk' X F Z g (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c) (cmap-d sk' sk (fst σ) (Line X) (LineO X F) c d))
+-- (2026-11-12, next definitions (2s)) σ extended by a cube of values: Q = sub-carried σ M pulled back
+-- along σ's cube into Δ (sub-tot: at each vertex a vertex of σ with the value of M there), its total
+-- (tot-base), and V a cube over the total of values in the extending type (ExtV); the new cube of
+-- vertex substitutions pairs each with V's value (sub-ext-S). Its path: cmap-dmap (Γ's extended cube
+-- is a map out of M), carry-fill along σ's path, map-pull out of Q, the total's projections (dmap-map,
+-- dmap-fst), map-pull out of V.
+SubT : (sk' sk : Lst Entry) (Y : Type 1) → CtxV sk' → Type 1
+-- binder names chosen not to collide: t46
+SubT sk' sk Y γ' = (stp : SubF sk' sk γ') × FbE sk Y (fst stp)
+TotT : (sk' sk : Lst Entry) (Y : Type 1) → Type 1
+-- binder names chosen not to collide: t46
+TotT sk' sk Y = (ttγ : CtxV sk') × SubT sk' sk Y ttγ
+ExtV : (sk' sk : Lst Entry) (a : TyShape) (Y : Type 1) (f : (γ : CtxV sk) → (EnvV sk γ → Y) → EnvV sk γ → Sem a) → TotT sk' sk Y → Type 1
+-- binder names chosen not to collide: t46
+ExtV sk' sk a Y f x = (evρ : EnvV sk' (fst x)) → El a (f (fst (fst (snd x))) (snd (snd x)) (snd (fst (snd x)) evρ))
+sub-tot : (Δ Γ : CCtx) (Y : Type 1) (σ : Sub Δ Γ) (M : Mean Γ Y) → DCube (dims (fst Δ)) (CtxV (fst Δ)) (SubT (fst Δ) (fst Γ) Y) (snd Δ)
+sub-tot Δ Γ Y σ M =
+  dcube-pull (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (SubT (fst Δ) (fst Γ) Y) (FbE (fst Γ) Y)
+    (λ γ' p → fst p) (λ γ' p e → (p , e)) (snd Δ) (fst (snd σ)) (sub-carried Δ Γ Y σ M)
+tot-base : (Δ Γ : CCtx) (Y : Type 1) (σ : Sub Δ Γ) (M : Mean Γ Y) → Cube (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y)
+tot-base Δ Γ Y σ M =
+  dcube-map (dims (fst Δ)) (CtxV (fst Δ)) (SubT (fst Δ) (fst Γ) Y) (TotT (fst Δ) (fst Γ) Y) (λ γ' t → (γ' , t)) (snd Δ) (sub-tot Δ Γ Y σ M)
+sub-ext-S : (Δ Γ : CCtx) (a : TyShape) (Y : Type 1) (f : (γ : CtxV (fst Γ)) → (EnvV (fst Γ) γ → Y) → EnvV (fst Γ) γ → Sem a) (M : Mean Γ Y) (σ : Sub Δ Γ)
+  (V : DCube (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (ExtV (fst Δ) (fst Γ) a Y f) (tot-base Δ Γ Y σ M)) →
+  DCube (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (lcons (e-ty a) (fst Γ))) (snd Δ)
+sub-ext-S Δ Γ a Y f M σ V =
+  dcube-pull (dims (fst Δ)) (CtxV (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (SubT (fst Δ) (fst Γ) Y) (SubF (fst Δ) (lcons (e-ty a) (fst Γ))) (ExtV (fst Δ) (fst Γ) a Y f)
+    (λ γ' t → (γ' , t)) (λ γ' t v → ((fst (fst t) , f (fst (fst t)) (snd t)) , λ ρ' → (snd (fst t) ρ' , v ρ'))) (snd Δ) (sub-tot Δ Γ Y σ M) V
+sub-ext-tail : (Δ Γ : CCtx) (a : TyShape) (Y : Type 1) (f : (γ : CtxV (fst Γ)) → (EnvV (fst Γ) γ → Y) → EnvV (fst Γ) γ → Sem a) (M : Mean Γ Y) (σ : Sub Δ Γ)
+  (V : DCube (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (ExtV (fst Δ) (fst Γ) a Y f) (tot-base Δ Γ Y σ M)) →
+  PathP (λ i → (Cube (dims (fst Δ)) (CtxV (lcons (e-ty a) (fst Γ))))) (dcube-map (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (sub-base Δ Γ (fst (snd σ))) (sub-carried Δ Γ Y σ M)) (sub-base Δ (extM Γ a Y f M) (sub-ext-S Δ Γ a Y f M σ V))
+sub-ext-tail Δ Γ a Y f M σ V =
+  pcat (Cube (dims (fst Δ)) (CtxV (lcons (e-ty a) (fst Γ)))) (dcube-map (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (sub-base Δ Γ (fst (snd σ))) (sub-carried Δ Γ Y σ M)) (dcube-map (dims (fst Δ)) (CtxV (fst Δ)) (SubT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ' t → (fst (fst t) , f (fst (fst t)) (snd t))) (snd Δ) (sub-tot Δ Γ Y σ M)) (sub-base Δ (extM Γ a Y f M) (sub-ext-S Δ Γ a Y f M σ V))
+    (psym (Cube (dims (fst Δ)) (CtxV (lcons (e-ty a) (fst Γ)))) (dcube-map (dims (fst Δ)) (CtxV (fst Δ)) (SubT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ' t → (fst (fst t) , f (fst (fst t)) (snd t))) (snd Δ) (sub-tot Δ Γ Y σ M)) (dcube-map (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (sub-base Δ Γ (fst (snd σ))) (sub-carried Δ Γ Y σ M))
+       (map-pull (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (SubT (fst Δ) (fst Γ) Y) (FbE (fst Γ) Y) (λ γ' p → fst p) (λ γ' p e → (p , e)) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ' t → (fst (fst t) , f (fst (fst t)) (snd t))) (λ γ e → (γ , f γ e))
+          (λ i γ' p e → (fst p , f (fst p) e)) (snd Δ) (fst (snd σ)) (sub-carried Δ Γ Y σ M)))
+    (pcat (Cube (dims (fst Δ)) (CtxV (lcons (e-ty a) (fst Γ)))) (dcube-map (dims (fst Δ)) (CtxV (fst Δ)) (SubT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ' t → (fst (fst t) , f (fst (fst t)) (snd t))) (snd Δ) (sub-tot Δ Γ Y σ M)) (cube-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) (tot-base Δ Γ Y σ M)) (sub-base Δ (extM Γ a Y f M) (sub-ext-S Δ Γ a Y f M σ V))
+       (psym (Cube (dims (fst Δ)) (CtxV (lcons (e-ty a) (fst Γ)))) (cube-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) (tot-base Δ Γ Y σ M)) (dcube-map (dims (fst Δ)) (CtxV (fst Δ)) (SubT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ' t → (fst (fst t) , f (fst (fst t)) (snd t))) (snd Δ) (sub-tot Δ Γ Y σ M)) (dmap-map (dims (fst Δ)) (CtxV (fst Δ)) (SubT (fst Δ) (fst Γ) Y) (TotT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ' t → (γ' , t)) (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) (snd Δ) (sub-tot Δ Γ Y σ M)))
+       (pcat (Cube (dims (fst Δ)) (CtxV (lcons (e-ty a) (fst Γ)))) (cube-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) (tot-base Δ Γ Y σ M)) (cube-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) (dcube-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (ExtV (fst Δ) (fst Γ) a Y f) (TotT (fst Δ) (fst Γ) Y) (λ x v → x) (tot-base Δ Γ Y σ M) V)) (sub-base Δ (extM Γ a Y f M) (sub-ext-S Δ Γ a Y f M σ V))
+          (λ i → cube-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) (dmap-fst (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (ExtV (fst Δ) (fst Γ) a Y f) (tot-base Δ Γ Y σ M) V (~ i)))
+          (pcat (Cube (dims (fst Δ)) (CtxV (lcons (e-ty a) (fst Γ)))) (cube-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) (dcube-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (ExtV (fst Δ) (fst Γ) a Y f) (TotT (fst Δ) (fst Γ) Y) (λ x v → x) (tot-base Δ Γ Y σ M) V)) (dcube-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (ExtV (fst Δ) (fst Γ) a Y f) (CtxV (lcons (e-ty a) (fst Γ))) (λ x v → (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) x) (tot-base Δ Γ Y σ M) V) (sub-base Δ (extM Γ a Y f M) (sub-ext-S Δ Γ a Y f M σ V))
+             (dmap-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (ExtV (fst Δ) (fst Γ) a Y f) (TotT (fst Δ) (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ x v → x) (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) (tot-base Δ Γ Y σ M) V)
+             (psym (Cube (dims (fst Δ)) (CtxV (lcons (e-ty a) (fst Γ)))) (sub-base Δ (extM Γ a Y f M) (sub-ext-S Δ Γ a Y f M σ V)) (dcube-map (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (ExtV (fst Δ) (fst Γ) a Y f) (CtxV (lcons (e-ty a) (fst Γ))) (λ x v → (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) x) (tot-base Δ Γ Y σ M) V)
+                (map-pull (dims (fst Δ)) (CtxV (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (SubT (fst Δ) (fst Γ) Y) (SubF (fst Δ) (lcons (e-ty a) (fst Γ))) (ExtV (fst Δ) (fst Γ) a Y f) (λ γ' t → (γ' , t))
+                   (λ γ' t v → ((fst (fst t) , f (fst (fst t)) (snd t)) , λ ρ' → (snd (fst t) ρ' , v ρ')))
+                   (CtxV (lcons (e-ty a) (fst Γ))) (λ γ' p → fst p) (λ x v → (λ x → (fst (fst (snd x)) , f (fst (fst (snd x))) (snd (snd x)))) x) (λ i γ' t v → (fst (fst t) , f (fst (fst t)) (snd t))) (snd Δ) (sub-tot Δ Γ Y σ M) V)))))
+sub-ext : (Δ Γ : CCtx) (a : TyShape) (Y : Type 1) (f : (γ : CtxV (fst Γ)) → (EnvV (fst Γ) γ → Y) → EnvV (fst Γ) γ → Sem a) (M : Mean Γ Y) (σ : Sub Δ Γ)
+  (V : DCube (dims (fst Δ)) (TotT (fst Δ) (fst Γ) Y) (ExtV (fst Δ) (fst Γ) a Y f) (tot-base Δ Γ Y σ M)) →
+  Sub Δ (extM Γ a Y f M)
+sub-ext Δ Γ a Y f M σ V =
+  (fst σ , sub-ext-S Δ Γ a Y f M σ V ,
+   pcat (Cube (dims (fst Δ)) (CtxV (lcons (e-ty a) (fst Γ))))
+     (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (lcons (e-ty a) (fst Γ)))
+        (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M))
+     (dcube-map (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e))
+        (sub-base Δ Γ (fst (snd σ))) (sub-carried Δ Γ Y σ M))
+     (sub-base Δ (extM Γ a Y f M) (sub-ext-S Δ Γ a Y f M σ V))
+     (pcat (Cube (dims (fst Δ)) (CtxV (lcons (e-ty a) (fst Γ))))
+        (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (lcons (e-ty a) (fst Γ)))
+           (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M))
+        (dcube-map (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e))
+           (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (cmap-d (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Y) (snd Γ) M))
+        (dcube-map (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e))
+           (sub-base Δ Γ (fst (snd σ))) (sub-carried Δ Γ Y σ M))
+        (cmap-dmap (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd Γ) M)
+        (λ i → dcube-map (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , f γ e)) (snd (snd σ) i)
+           (carry-fill (dims (fst Δ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ)))
+              (snd (snd σ)) (cmap-d (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (FbE (fst Γ) Y) (snd Γ) M) i)))
+     (sub-ext-tail Δ Γ a Y f M σ V))
