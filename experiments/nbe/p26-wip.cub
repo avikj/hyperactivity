@@ -2558,3 +2558,99 @@ sub-dwk Γ =
            (cube-map (suc (dims (fst Γ))) (CtxV (fst Γ)) (CtxV (fst Γ)) (λ x → x) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))
            (dcube-map-of (suc (dims (fst Γ))) (CtxV (fst Γ)) (SubF (lcons e-dim (fst Γ)) (fst Γ)) (CtxV (fst Γ)) (λ γ' p → fst p) (λ γ → (γ , λ ρ → ρ)) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ)))
            (cube-id (suc (dims (fst Γ))) (CtxV (fst Γ)) (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ))))))
+
+-- (2026-11-12, next definitions (2s)) path application on cubes is natural in the base (papp-nat, by
+-- the recursion of papp-cube: diag-nat at each literal, cube-comp2 at each generator), so the action of
+-- a dimension part is (cmap-nat); a substitution extended by an interval form over Δ for Γ's new
+-- dimension (sub-form; its path: cmap-nat at the degeneracy, then papp-deg, then the substitution's own)
+papp-lit-nat : (sk : Lst Entry) (X Y : Type 1) (h : X → Y) (o : Word) (l : Lit) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → (Cube (dims sk) Y)) (papp-lit sk Y o l (cube-map (suc (dims sk)) X Y h c)) (cube-map (dims sk) X Y h (papp-lit sk X o l c))
+papp-lit-nat sk X Y h o l c =
+  bool-elim1 (λ b → PathP (λ i → (Cube (dims sk) Y))
+                 (if b then diag-sk sk (%wadd (fst l) o) Y (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h) c) else diag-sk sk (%wadd (fst l) o) Y (cube-map (dims sk) (Line Y) (Line Y) (rev-l Y) (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h) c)))
+                 (cube-map (dims sk) X Y h (if b then diag-sk sk (%wadd (fst l) o) X c else diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c))))
+    (diag-nat sk (%wadd (fst l) o) X Y h c)
+    (pcat (Cube (dims sk) Y) (diag-sk sk (%wadd (fst l) o) Y (cube-map (dims sk) (Line Y) (Line Y) (rev-l Y) (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h) c)))
+       (diag-sk sk (%wadd (fst l) o) Y (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h) (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+       (cube-map (dims sk) X Y h (diag-sk sk (%wadd (fst l) o) X (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+       (λ i → diag-sk sk (%wadd (fst l) o) Y (cube-comp2 (dims sk) (Line X) (Line Y) (Line X) (Line Y) (rev-l Y) (line-map X Y h) (line-map X Y h) (rev-l X) c
+          (λ j → cube-map (dims sk) (Line X) (Line Y) (λ L → rev-l Y ((line-map X Y h) L)) c) i))
+       (diag-nat sk (%wadd (fst l) o) X Y h (cube-map (dims sk) (Line X) (Line X) (rev-l X) c)))
+    (snd l)
+papp-conj-from-nat : (sk : Lst Entry) (X Y : Type 1) (h : X → Y) (o : Word) (l : Lit) (ms : Conj) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → (Cube (dims sk) Y)) (papp-conj-from sk Y o l ms (cube-map (suc (dims sk)) X Y h c)) (cube-map (dims sk) X Y h (papp-conj-from sk X o l ms c))
+papp-conj-from-nat sk X Y h o l lnil c = papp-lit-nat sk X Y h o l c
+papp-conj-from-nat sk X Y h o l (lcons m ms) c =
+  pcat (Cube (dims sk) Y)
+    (papp-lit sk Y o l (papp-conj-from (lcons e-dim sk) Y (%wsucc o) m ms (cube-map (dims sk) (Line Y) (Line (Line Y)) (meet-l Y) (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h) c))))
+    (papp-lit sk Y o l (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h)
+       (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c))))
+    (cube-map (dims sk) X Y h (papp-conj-from sk X o l (lcons m ms) c))
+    (λ i → papp-lit sk Y o l
+       (pcat (Cube (suc (dims sk)) Y)
+          (papp-conj-from (lcons e-dim sk) Y (%wsucc o) m ms (cube-map (dims sk) (Line Y) (Line (Line Y)) (meet-l Y) (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h) c)))
+          (papp-conj-from (lcons e-dim sk) Y (%wsucc o) m ms (cube-map (dims sk) (Line (Line X)) (Line (Line Y)) (line-map (Line X) (Line Y) (line-map X Y h))
+             (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+          (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h)
+             (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+          (λ j → papp-conj-from (lcons e-dim sk) Y (%wsucc o) m ms
+             (cube-comp2 (dims sk) (Line X) (Line Y) (Line (Line X)) (Line (Line Y)) (meet-l Y) (line-map X Y h) (line-map (Line X) (Line Y) (line-map X Y h)) (meet-l X) c
+                (λ k → cube-map (dims sk) (Line X) (Line (Line Y)) (λ L → meet-l Y ((line-map X Y h) L)) c) j))
+          (papp-conj-from-nat (lcons e-dim sk) X Y h (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)) i))
+    (papp-lit-nat sk X Y h o l (papp-conj-from (lcons e-dim sk) X (%wsucc o) m ms (cube-map (dims sk) (Line X) (Line (Line X)) (meet-l X) c)))
+papp-conj-nat : (sk : Lst Entry) (X Y : Type 1) (h : X → Y) (o : Word) (cj : Conj) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → (Cube (dims sk) Y)) (papp-conj sk Y o cj (cube-map (suc (dims sk)) X Y h c)) (cube-map (dims sk) X Y h (papp-conj sk X o cj c))
+papp-conj-nat sk X Y h o lnil c =
+  cube-comp2 (dims sk) (Line X) (Line Y) X Y (face1-l Y) (line-map X Y h) h (face1-l X) c (λ i → cube-map (dims sk) (Line X) Y (λ L → h (fst (snd L))) c)
+papp-conj-nat sk X Y h o (lcons l ls) c = papp-conj-from-nat sk X Y h o l ls c
+papp-dnf-from-nat : (sk : Lst Entry) (X Y : Type 1) (h : X → Y) (o : Word) (cj : Conj) (ds : DNF) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → (Cube (dims sk) Y)) (papp-dnf-from sk Y o cj ds (cube-map (suc (dims sk)) X Y h c)) (cube-map (dims sk) X Y h (papp-dnf-from sk X o cj ds c))
+papp-dnf-from-nat sk X Y h o cj lnil c = papp-conj-nat sk X Y h o cj c
+papp-dnf-from-nat sk X Y h o cj (lcons d ds) c =
+  pcat (Cube (dims sk) Y)
+    (papp-conj sk Y o cj (papp-dnf-from (lcons e-dim sk) Y (%wsucc o) d ds (cube-map (dims sk) (Line Y) (Line (Line Y)) (join-l Y) (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h) c))))
+    (papp-conj sk Y o cj (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h)
+       (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c))))
+    (cube-map (dims sk) X Y h (papp-dnf-from sk X o cj (lcons d ds) c))
+    (λ i → papp-conj sk Y o cj
+       (pcat (Cube (suc (dims sk)) Y)
+          (papp-dnf-from (lcons e-dim sk) Y (%wsucc o) d ds (cube-map (dims sk) (Line Y) (Line (Line Y)) (join-l Y) (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h) c)))
+          (papp-dnf-from (lcons e-dim sk) Y (%wsucc o) d ds (cube-map (dims sk) (Line (Line X)) (Line (Line Y)) (line-map (Line X) (Line Y) (line-map X Y h))
+             (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+          (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h)
+             (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+          (λ j → papp-dnf-from (lcons e-dim sk) Y (%wsucc o) d ds
+             (cube-comp2 (dims sk) (Line X) (Line Y) (Line (Line X)) (Line (Line Y)) (join-l Y) (line-map X Y h) (line-map (Line X) (Line Y) (line-map X Y h)) (join-l X) c
+                (λ k → cube-map (dims sk) (Line X) (Line (Line Y)) (λ L → join-l Y ((line-map X Y h) L)) c) j))
+          (papp-dnf-from-nat (lcons e-dim sk) X Y h (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)) i))
+    (papp-conj-nat sk X Y h o cj (papp-dnf-from (lcons e-dim sk) X (%wsucc o) d ds (cube-map (dims sk) (Line X) (Line (Line X)) (join-l X) c)))
+papp-nat : (sk : Lst Entry) (X Y : Type 1) (h : X → Y) (f : DNF) (c : Cube (suc (dims sk)) X) →
+  PathP (λ i → (Cube (dims sk) Y)) (papp-cube sk Y f (cube-map (suc (dims sk)) X Y h c)) (cube-map (dims sk) X Y h (papp-cube sk X f c))
+papp-nat sk X Y h lnil c =
+  cube-comp2 (dims sk) (Line X) (Line Y) X Y (face0-l Y) (line-map X Y h) h (face0-l X) c (λ i → cube-map (dims sk) (Line X) Y (λ L → h (fst L)) c)
+papp-nat sk X Y h (lcons cj cs) c = papp-dnf-from-nat sk X Y h #0 cj cs c
+cmap-nat : (sk' sk : Lst Entry) (σ : CMap sk' sk) (X Y : Type 1) (h : X → Y) (c : Cube (dims sk) X) →
+  PathP (λ i → Cube (dims sk') Y) (cmap-cube sk' sk σ Y (cube-map (dims sk) X Y h c)) (cube-map (dims sk') X Y h (cmap-cube sk' sk σ X c))
+cmap-nat sk' lnil σ X Y h c = psym (Cube (dims sk') Y) (cube-map (dims sk') X Y h (cube-const (dims sk') X c)) (cube-const (dims sk') Y (h c)) (const-map (dims sk') X Y h c)
+cmap-nat sk' (lcons (e-ty a) sk) σ X Y h c = cmap-nat sk' sk σ X Y h c
+cmap-nat sk' (lcons e-dim sk) σ X Y h c =
+  pcat (Cube (dims sk') Y)
+    (papp-cube sk' Y (snd σ) (cmap-cube sk' sk (fst σ) (Line Y) (cube-map (dims sk) (Line X) (Line Y) (line-map X Y h) c)))
+    (papp-cube sk' Y (snd σ) (cube-map (dims sk') (Line X) (Line Y) (line-map X Y h) (cmap-cube sk' sk (fst σ) (Line X) c)))
+    (cube-map (dims sk') X Y h (papp-cube sk' X (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c)))
+    (λ i → papp-cube sk' Y (snd σ) (cmap-nat sk' sk (fst σ) (Line X) (Line Y) (line-map X Y h) c i))
+    (papp-nat sk' X Y h (snd σ) (cmap-cube sk' sk (fst σ) (Line X) c))
+sub-form : (Δ Γ : CCtx) → Sub Δ Γ → DNF → Sub Δ (dext Γ)
+sub-form Δ Γ σ g =
+  ((fst σ , g) , fst (snd σ) ,
+   pcat (Cube (dims (fst Δ)) (CtxV (fst Γ)))
+     (cmap-cube (fst Δ) (lcons e-dim (fst Γ)) (fst σ , g) (CtxV (fst Γ)) (snd (dext Γ)))
+     (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ (fst (snd σ)))
+     (pcat (Cube (dims (fst Δ)) (CtxV (fst Γ)))
+        (cmap-cube (fst Δ) (lcons e-dim (fst Γ)) (fst σ , g) (CtxV (fst Γ)) (snd (dext Γ)))
+        (papp-cube (fst Δ) (CtxV (fst Γ)) g (cube-map (dims (fst Δ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ)))
+           (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ))))
+        (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ))
+        (λ i → papp-cube (fst Δ) (CtxV (fst Γ)) g (cmap-nat (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (degen-l (CtxV (fst Γ))) (snd Γ) i))
+        (papp-deg (fst Δ) (CtxV (fst Γ)) g (cmap-cube (fst Δ) (fst Γ) (fst σ) (CtxV (fst Γ)) (snd Γ))))
+     (snd (snd σ)))
