@@ -2878,8 +2878,10 @@ static Node *cn(Node *c) {
         Node *P = el ? cn(c->it[2]) : NULL; if (el && !P) return NULL;
         Node *x = cn(c->it[el ? 4 : 3]); if (!x) return NULL;
         Node *bs[64]; int nb = cn_list(c->it[el ? 3 : 2], bs, 64); if (nb != DATA[D].ncons) return NULL;
-        Node *r = nlist(nb + (el ? 3 : 2)); int k = 0;
+        /* a type with no constructors: its name in place of the branches, (elim P x D) (t57) */
+        Node *r = nlist((nb ? nb : 1) + (el ? 3 : 2)); int k = 0;
         r->it[k++] = nsym(el ? "elim" : "case"); if (el) r->it[k++] = P; r->it[k++] = x;
+        if (!nb) { r->it[k] = nsym(DATA[D].name); return r; }
         for (int i = 0; i < nb; i++) {
             ConInfo *ci = &CON[DATA[D].cons[i]];
             int nf = ci->nfields, nr = ci->nrec, ndm = ci->ndims, save = ncn;
