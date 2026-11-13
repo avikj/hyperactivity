@@ -618,7 +618,7 @@ the parameter types runs the bytes; any other call, and a `Word` result past 2�
 exit: compiled code is pure, so the net recomputes the call), runs `f` on the net. The
 acceptance workloads are `experiments/jit/workloads.cub`. Only the specialized code
 is checked against `f`; the translation to bytes after it, its passes and templates and the
-boundary's marshaling, is trusted and carries no relation to the code (§1.13, §3.4).
+boundary's marshaling, is trusted and carries no relation to the code (§1.13, §2.2).
 
 ### 1.12 Measurements
 
@@ -774,6 +774,12 @@ The paper is the specification. What remains between the implementation (§1) an
   - Glue and univalence are the host's.
 - **The specializer, carrying its law** (§6.2).
 - **Native realization** (§9), related to the definitions it realizes.
+  - The paper's §9.3 relates a compiler to an explicitly decoded machine: a byte language with its
+    transition system, proved by structural induction. So native code is related to a machine's
+    semantics, here the x86 model (`lib/isa/x86`, `lib/x86.cub`).
+  - The translation to bytes carries that relation in place of today's trusted templates.
+  - Realization through C, an earlier session's plan, is dropped from this goal. A C semantics is
+    language support (§2.1), and "C semantics formalization is a ways away".
 - **The laws of the primitives,** each a theorem or a named assumption (§8.5).
 - **Deriving,** as a typed term.
 - **Terms of any depth.**
@@ -799,7 +805,6 @@ The paper is the specification. What remains between the implementation (§1) an
   interval is not a type (`I × Nat` is refused), and it would only move these obligations anyway.
 - So the file is kept and continues at F2d.
 
-The construction that waits on Avik is in §3.4.
 
 ### 2.3 State, change and collaboration
 
@@ -1311,8 +1316,8 @@ yields directed causality, defined as an observation in the sense of the identit
 
 ### 3.4 Questions only Avik can answer
 
-1. **Native code.** Is native realization related to the x86 model (`lib/isa/x86`), with C as an
-   unverified convenience, or is a C semantics part of the language implementation?
+None are open. Both earlier questions were answered without him. Dimensions are answered by the
+cubical-set model (§2.2). Native code is answered by the paper's §9.3 and his own words (§2.2).
 
 ---
 
