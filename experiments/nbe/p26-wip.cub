@@ -59,8 +59,13 @@
 -- up for them: dcube-lift, ext-h (was kp-x), ext-lift, ty-line, tend-0, tend-1.
 -- (2026-11-12, toward rr) path application over degenerate lines natural in fibrewise maps: dlf,
 -- fmap-sw, unreidx-fmap, DDFmap, diag-dd-fmap, papp-lit-dd-fmap, dd-conn-fmap, papp-conj-from-dd-fmap …
--- papp-dd-fmap, papp-line-fmap.
--- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "899 passed, 0 failed").
+-- papp-dd-fmap, papp-line-fmap; nn-ty-pi, nn-ty-sig, nn-ty-path, nn-lam, nn-pair, nn-plam (rules as
+-- functions of premise forms, shared by renaming and reify); rr (2026-11-12): fmapM-fmapM,
+-- papp-line-pre, wk-fm, lift-fm, var-lift, RTyT, RfyT, RflT, RRT, var-comp, cod-rty, rty-bool,
+-- rfy-bool-c, rfy-bool, rfl-bool, rty-fam-cod, rty-pi, rty-sig, rfy-pi-dom, rfy-pi-body, rfy-pi,
+-- rfy-sig, rty-path-line, rty-path, rfy-path-body, rfy-path, rfl-pi-cod, rfl-pi, rfl-sig-1,
+-- rfl-sig-cod, rfl-sig, rfl-path-ty, rfl-path, rr.
+-- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "939 passed, 0 failed").
 -- What is next: (6) as listed in lib/nbe.cub's head under "Remaining, in order" (P2.5 in the
 -- families, rr, CompEnv, fund, normalize), then the swap of this file into lib/nbe.cub.
 
@@ -5598,6 +5603,25 @@ rn-ext Δ' Δ w a Y h M s G0 Bn =
    nn-tr k-nf j-ty (ext-h Δ' a Y h (wact Δ' Δ w Y M)) s (fst Bn)
      (subM (ext-h Δ' a Y h (wact Δ' Δ w Y M)) (ext-h Δ a Y h M) (Sem s) (world-sub (ext-h Δ' a Y h (wact Δ' Δ w Y M)) (ext-h Δ a Y h M) (world-keep Δ' Δ a Y h M w)) (ext-lift Δ a Y h (Sem s) G0 M))
      (ext-lift Δ' a Y h (Sem s) G0 (wact Δ' Δ w Y M)) (keep-lift Δ' Δ a Y h M w (Sem s) G0) (snd Bn))
+-- the type rules and the binders as functions of their premises' forms with codes (shared by the
+-- renaming and by reify, so each premise is computed once)
+nn-ty-pi : (Δ : CCtx) (a b : TyShape) (T : Mean Δ (Fam a b)) → RenR k-nf j-ty Δ a (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) T) →
+  RenR k-nf j-ty (ext-h Δ a (Fam a b) (fam-dom a b) T) b (fam-body Δ a b T) → RenR k-nf j-ty Δ (s-pi a b) T
+nn-ty-pi Δ a b T A B = (cpi #2 (fst A) (fst B) , nty-pi Δ a b T (fst A) (fst B) (snd A) (snd B))
+nn-ty-sig : (Δ : CCtx) (a b : TyShape) (T : Mean Δ (Fam a b)) → RenR k-nf j-ty Δ a (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) T) →
+  RenR k-nf j-ty (ext-h Δ a (Fam a b) (fam-dom a b) T) b (fam-body Δ a b T) → RenR k-nf j-ty Δ (s-sig a b) T
+nn-ty-sig Δ a b T A B = (csigma (fst A) (fst B) , nty-sig Δ a b T (fst A) (fst B) (snd A) (snd B))
+nn-ty-path : (Δ : CCtx) (a : TyShape) (T : Mean Δ (Sem (s-path a))) → RenR k-nf j-ty (dext Δ) a (path-line-ty Δ a T) →
+  RenR k-nf j-tm Δ a (fmapM Δ (Sem (s-path a)) (TV a) (tend-0 a) T) → RenR k-nf j-tm Δ a (fmapM Δ (Sem (s-path a)) (TV a) (tend-1 a) T) → RenR k-nf j-ty Δ (s-path a) T
+nn-ty-path Δ a T L N0 N1 = (cpathp (cplam (fst L)) (fst N0) (fst N1) , nty-path Δ a T (fst L) (fst N0) (fst N1) (snd L) (snd N0) (snd N1))
+nn-lam : (Δ : CCtx) (a b : TyShape) (X : Mean Δ (TV (s-pi a b))) → RenR k-nf j-ty Δ a (fmapM Δ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) X) →
+  RenR k-nf j-tm (lam-ctx Δ a b X) b (lam-body Δ a b X) → RenR k-nf j-tm Δ (s-pi a b) X
+nn-lam Δ a b X A B = (clam (fst B) , nlam Δ a b X (fst A) (fst B) (snd A) (snd B))
+nn-pair : (Δ : CCtx) (a b : TyShape) (R : Mean Δ (TV (s-sig a b))) → RenR k-nf j-ty (ext-h Δ a (TV (s-sig a b)) (λ q → fam-dom a b (fst q)) R) b (pair-cod Δ a b R) →
+  RenR k-nf j-tm Δ a (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) R) → RenR k-nf j-tm Δ b (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) R) → RenR k-nf j-tm Δ (s-sig a b) R
+nn-pair Δ a b R B N1 N2 = (cpair (fst N1) (fst N2) , npair Δ a b R (fst B) (fst N1) (fst N2) (snd B) (snd N1) (snd N2))
+nn-plam : (Δ : CCtx) (a : TyShape) (X : Mean Δ (TV (s-path a))) → RenR k-nf j-tm (dext Δ) a (plam-body Δ a X) → RenR k-nf j-tm Δ (s-path a) X
+nn-plam Δ a X B = (cplam (fst B) , nplam Δ a X (fst B) (snd B))
 rn-var : (Δ' Δ : CCtx) (w : World Δ' Δ) (v : VarP (fst Δ)) → RenR k-ne j-tm Δ' (var-shape (fst Δ) v) (wact Δ' Δ w (TV (var-shape (fst Δ) v)) (varCube Δ v))
 rn-var Δ' Δ w v =
   (cvar (var-word (fst Δ') (fst (snd (snd (snd (snd w))) v))) ,
@@ -5643,30 +5667,27 @@ rn-lam : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (X : Mean Δ (TV (s-
        (world-sub (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (world-keep Δ' Δ a (TV (s-pi a b)) (λ q → fst (fst q)) X w)) (lam-body Δ a b X)) →
   RenR k-nf j-tm Δ' (s-pi a b) (wact Δ' Δ w (TV (s-pi a b)) X)
 rn-lam Δ' Δ w a b X An Bn =
-  (clam (fst Bn) ,
-   nlam Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X) (fst An) (fst Bn)
-     (nn-fm-in k-nf j-ty Δ' Δ w (TV (s-pi a b)) a (λ q → fam-dom a b (fst q)) X (fst An) (snd An))
-     (nn-tr k-nf j-tm (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) b (fst Bn)
-        (subM (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (TV b)
-           (world-sub (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (world-keep Δ' Δ a (TV (s-pi a b)) (λ q → fst (fst q)) X w)) (lam-body Δ a b X))
-        (lam-body Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (subM-lam-body Δ' Δ w a b X) (snd Bn)))
+  nn-lam Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X) (fst An , nn-fm-in k-nf j-ty Δ' Δ w (TV (s-pi a b)) a (λ q → fam-dom a b (fst q)) X (fst An) (snd An))
+    (fst Bn ,
+     nn-tr k-nf j-tm (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) b (fst Bn)
+       (subM (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (TV b)
+          (world-sub (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (world-keep Δ' Δ a (TV (s-pi a b)) (λ q → fst (fst q)) X w)) (lam-body Δ a b X))
+       (lam-body Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (subM-lam-body Δ' Δ w a b X) (snd Bn))
 rn-pair : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (R : Mean Δ (TV (s-sig a b))) →
   RenR k-nf j-ty (ext-h Δ' a (TV (s-sig a b)) (λ q → fam-dom a b (fst q)) (wact Δ' Δ w (TV (s-sig a b)) R)) b (pair-cod Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R)) →
   RenR k-nf j-tm Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) R)) →
   RenR k-nf j-tm Δ' b (wact Δ' Δ w (TV b) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) R)) →
   RenR k-nf j-tm Δ' (s-sig a b) (wact Δ' Δ w (TV (s-sig a b)) R)
 rn-pair Δ' Δ w a b R Bn N1 N2 =
-  (cpair (fst N1) (fst N2) ,
-   npair Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) (fst Bn) (fst N1) (fst N2) (snd Bn)
-     (nn-fm-in k-nf j-tm Δ' Δ w (TV (s-sig a b)) a (sig-1 a b) R (fst N1) (snd N1)) (nn-fm-in k-nf j-tm Δ' Δ w (TV (s-sig a b)) b (sig-2 a b) R (fst N2) (snd N2)))
+  nn-pair Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) Bn
+    (fst N1 , nn-fm-in k-nf j-tm Δ' Δ w (TV (s-sig a b)) a (sig-1 a b) R (fst N1) (snd N1)) (fst N2 , nn-fm-in k-nf j-tm Δ' Δ w (TV (s-sig a b)) b (sig-2 a b) R (fst N2) (snd N2))
 rn-plam : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (X : Mean Δ (TV (s-path a))) →
   RenR k-nf j-tm (dext Δ') a (subM (dext Δ') (dext Δ) (TV a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (plam-body Δ a X)) →
   RenR k-nf j-tm Δ' (s-path a) (wact Δ' Δ w (TV (s-path a)) X)
 rn-plam Δ' Δ w a X Bn =
-  (cplam (fst Bn) ,
-   nplam Δ' a (wact Δ' Δ w (TV (s-path a)) X) (fst Bn)
-     (nn-tr k-nf j-tm (dext Δ') a (fst Bn) (subM (dext Δ') (dext Δ) (TV a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (plam-body Δ a X))
-        (plam-body Δ' a (wact Δ' Δ w (TV (s-path a)) X)) (subM-plam-body Δ' Δ w a X) (snd Bn)))
+  nn-plam Δ' a (wact Δ' Δ w (TV (s-path a)) X)
+    (fst Bn , nn-tr k-nf j-tm (dext Δ') a (fst Bn) (subM (dext Δ') (dext Δ) (TV a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (plam-body Δ a X))
+       (plam-body Δ' a (wact Δ' Δ w (TV (s-path a)) X)) (subM-plam-body Δ' Δ w a X) (snd Bn))
 rn-papp : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (P : Mean Δ (TV (s-path a))) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
   (Y : Mean Δ (TV a)) → PathM Δ (TV a) (papp-mean Δ a f P) Y →
   RenR k-ne j-tm Δ' (s-path a) (wact Δ' Δ w (TV (s-path a)) P) → RenR k-ne j-tm Δ' a (wact Δ' Δ w (TV a) Y)
@@ -5683,26 +5704,23 @@ rn-ty-pi : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (T : Mean Δ (Fam 
   RenR k-nf j-ty Δ' a (wact Δ' Δ w (Sem a) (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) T)) →
   RenR k-nf j-ty (ext-h Δ' a (Fam a b) (fam-dom a b) (wact Δ' Δ w (Fam a b) T)) b (fam-body Δ' a b (wact Δ' Δ w (Fam a b) T)) →
   RenR k-nf j-ty Δ' (s-pi a b) (wact Δ' Δ w (Fam a b) T)
-rn-ty-pi Δ' Δ w a b T An Bn =
-  (cpi #2 (fst An) (fst Bn) , nty-pi Δ' a b (wact Δ' Δ w (Fam a b) T) (fst An) (fst Bn) (nn-fm-in k-nf j-ty Δ' Δ w (Fam a b) a (fam-dom a b) T (fst An) (snd An)) (snd Bn))
+rn-ty-pi Δ' Δ w a b T An Bn = nn-ty-pi Δ' a b (wact Δ' Δ w (Fam a b) T) (fst An , nn-fm-in k-nf j-ty Δ' Δ w (Fam a b) a (fam-dom a b) T (fst An) (snd An)) Bn
 rn-ty-sig : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (T : Mean Δ (Fam a b)) →
   RenR k-nf j-ty Δ' a (wact Δ' Δ w (Sem a) (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) T)) →
   RenR k-nf j-ty (ext-h Δ' a (Fam a b) (fam-dom a b) (wact Δ' Δ w (Fam a b) T)) b (fam-body Δ' a b (wact Δ' Δ w (Fam a b) T)) →
   RenR k-nf j-ty Δ' (s-sig a b) (wact Δ' Δ w (Fam a b) T)
-rn-ty-sig Δ' Δ w a b T An Bn =
-  (csigma (fst An) (fst Bn) , nty-sig Δ' a b (wact Δ' Δ w (Fam a b) T) (fst An) (fst Bn) (nn-fm-in k-nf j-ty Δ' Δ w (Fam a b) a (fam-dom a b) T (fst An) (snd An)) (snd Bn))
+rn-ty-sig Δ' Δ w a b T An Bn = nn-ty-sig Δ' a b (wact Δ' Δ w (Fam a b) T) (fst An , nn-fm-in k-nf j-ty Δ' Δ w (Fam a b) a (fam-dom a b) T (fst An) (snd An)) Bn
 rn-ty-path : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (T : Mean Δ (Sem (s-path a))) →
   RenR k-nf j-ty (dext Δ') a (subM (dext Δ') (dext Δ) (Sem a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (path-line-ty Δ a T)) →
   RenR k-nf j-tm Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (Sem (s-path a)) (TV a) (tend-0 a) T)) →
   RenR k-nf j-tm Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (Sem (s-path a)) (TV a) (tend-1 a) T)) →
   RenR k-nf j-ty Δ' (s-path a) (wact Δ' Δ w (Sem (s-path a)) T)
 rn-ty-path Δ' Δ w a T Ln N0 N1 =
-  (cpathp (cplam (fst Ln)) (fst N0) (fst N1) ,
-   nty-path Δ' a (wact Δ' Δ w (Sem (s-path a)) T) (fst Ln) (fst N0) (fst N1)
-     (nn-tr k-nf j-ty (dext Δ') a (fst Ln) (subM (dext Δ') (dext Δ) (Sem a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (path-line-ty Δ a T))
-        (path-line-ty Δ' a (wact Δ' Δ w (Sem (s-path a)) T)) (dkeep-line Δ' Δ w (Sem (s-path a)) (Sem a) (ty-line a) T) (snd Ln))
-     (nn-fm-in k-nf j-tm Δ' Δ w (Sem (s-path a)) a (tend-0 a) T (fst N0) (snd N0))
-     (nn-fm-in k-nf j-tm Δ' Δ w (Sem (s-path a)) a (tend-1 a) T (fst N1) (snd N1)))
+  nn-ty-path Δ' a (wact Δ' Δ w (Sem (s-path a)) T)
+    (fst Ln , nn-tr k-nf j-ty (dext Δ') a (fst Ln) (subM (dext Δ') (dext Δ) (Sem a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (path-line-ty Δ a T))
+       (path-line-ty Δ' a (wact Δ' Δ w (Sem (s-path a)) T)) (dkeep-line Δ' Δ w (Sem (s-path a)) (Sem a) (ty-line a) T) (snd Ln))
+    (fst N0 , nn-fm-in k-nf j-tm Δ' Δ w (Sem (s-path a)) a (tend-0 a) T (fst N0) (snd N0))
+    (fst N1 , nn-fm-in k-nf j-tm Δ' Δ w (Sem (s-path a)) a (tend-1 a) T (fst N1) (snd N1))
 ren-nn : {KJ : NK × Jdg} → NN KJ → (Δ' : CCtx) (w : World Δ' (fst (snd (snd KJ)))) →
   RenR (fst KJ) (fst (snd KJ)) Δ' (fst (snd (snd (snd KJ))))
     (wact Δ' (fst (snd (snd KJ))) w (JZ (fst (snd KJ)) (fst (snd (snd (snd KJ))))) (snd (snd (snd (snd (snd KJ))))))
@@ -6370,3 +6388,307 @@ papp-line-fmap Γ Y Z Z' ℓ k f X =
     (λ i → papp-dd (fst Γ) (CtxV (fst Γ)) (FbE (fst Γ) Z') f (snd Γ)
        (fmap-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (DL (CtxV (fst Γ)) (FbE (fst Γ) Z)) (DL (CtxV (fst Γ)) (FbE (fst Γ) Z'))
           (fline (fst Γ) Y Z ℓ) (dlf (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → k (e ρ))) (snd Γ) X i))
+
+-- ---------------------------------------------------------------- (6) reify and reflect
+-- (2026-11-12, (6)) reify-ty (a computable type to a normal type derivation), reify (a computable term
+-- to a normal form) and reflect (a neutral at a computable type to a computable term), one triple by
+-- recursion on the shape (RRT, rr), as in Abel–Coquand–Pagano. The bound variable of a λ, of a Π or Σ
+-- type's codomain and of a pair's codomain is reflected over Γ extended by a type read off a meaning
+-- (var-comp: the weakening's action, subM-wk, read as an ext-lift, wk-fm; the variable is one, var-lift);
+-- a family's codomain is reified at the variable (cod-rty); a path λ's body and a PathP type's line at
+-- dnf-v0 after world-dwk (subM-dwk, papp-dwk); reflect at Π applies the renamed neutral to the reified
+-- argument, at Σ projects (the codomain's type at the identity world, subM-id), at PathP applies at the
+-- form (the type's line read at the path's instance through papp-line-fmap and papp-line-pre).
+-- composites of pointwise maps of meanings (fmapM-fmapM); path application to lines after a pointwise
+-- map is to the composite lines (papp-line-pre)
+fmapM-fmapM : (Γ : CCtx) (Z1 Z2 Z3 : Type 1) (g : Z1 → Z2) (g' : Z2 → Z3) (M : Mean Γ Z1) →
+  PathM Γ Z3 (fmapM Γ Z2 Z3 g' (fmapM Γ Z1 Z2 g M)) (fmapM Γ Z1 Z3 (λ z → g' (g z)) M)
+fmapM-fmapM Γ Z1 Z2 Z3 g g' M =
+  fmap-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z1) (FbE (fst Γ) Z2) (FbE (fst Γ) Z3) (λ γ e ρ → g (e ρ)) (λ γ e ρ → g' (e ρ)) (snd Γ) M
+papp-line-pre : (Γ : CCtx) (Y0 Y Z : Type 1) (g : Y0 → Y) (ℓ : Y → Line Z) (f : DNF) (M : Mean Γ Y0) →
+  PathM Γ Z (papp-line Γ Y Z ℓ f (fmapM Γ Y0 Y g M)) (papp-line Γ Y0 Z (λ y → ℓ (g y)) f M)
+papp-line-pre Γ Y0 Y Z g ℓ f M =
+  λ i → papp-dd (fst Γ) (CtxV (fst Γ)) (FbE (fst Γ) Z) f (snd Γ)
+    (fmap-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y0) (FbE (fst Γ) Y) (DL (CtxV (fst Γ)) (FbE (fst Γ) Z)) (λ γ e ρ → g (e ρ)) (fline (fst Γ) Y Z ℓ) (snd Γ) M i)
+-- a pointwise map of a meaning, weakened to an extension read off M, is an ext-lift (wk-fm); a pointwise
+-- map of an ext-lift is one (lift-fm); the new variable is one (var-lift)
+wk-fm : (Γ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Γ Y) (Z : Type 1) (k : Y → Z) →
+  PathM (ext-h Γ a Y h M) Z (wact (ext-h Γ a Y h M) Γ (world-wk Γ a Y (λ γ e ρ → h (e ρ)) M) Z (fmapM Γ Y Z k M)) (ext-lift Γ a Y h Z (λ q x → k q) M)
+wk-fm Γ a Y h M Z k =
+  pcat (Mean (ext-h Γ a Y h M) Z) (wact (ext-h Γ a Y h M) Γ (world-wk Γ a Y (λ γ e ρ → h (e ρ)) M) Z (fmapM Γ Y Z k M))
+    (wkM Γ a Y (λ γ e ρ → h (e ρ)) M Z (fmapM Γ Y Z k M)) (ext-lift Γ a Y h Z (λ q x → k q) M)
+    (subM-wk Γ a Y (λ γ e ρ → h (e ρ)) M Z (fmapM Γ Y Z k M))
+    (push-diag (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y) (FbE (fst Γ) Z) (FbE (lcons (e-ty a) (fst Γ)) Z)
+       (λ γ e → (γ , λ ρ → h (e ρ))) (λ γ e N' ρ → N' (fst ρ)) (λ γ e ρ → k (e ρ)) (snd Γ) M)
+lift-fm : (Γ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Γ Y) (Z Z' : Type 1) (G0 : (q : Y) → El a (h q) → Z) (k : Z → Z') →
+  PathM (ext-h Γ a Y h M) Z' (fmapM (ext-h Γ a Y h M) Z Z' k (ext-lift Γ a Y h Z G0 M)) (ext-lift Γ a Y h Z' (λ q x → k (G0 q x)) M)
+lift-fm Γ a Y h M Z Z' G0 k =
+  fmap-lift (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y) (FbE (lcons (e-ty a) (fst Γ)) Z) (FbE (lcons (e-ty a) (fst Γ)) Z')
+    (λ γ e → (γ , λ ρ → h (e ρ))) (λ γ e ρ → G0 (e (fst ρ)) (snd ρ)) (λ x' e ρ → k (e ρ)) (snd Γ) M
+var-lift : (Γ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Γ Y) →
+  PathM (ext-h Γ a Y h M) (TV a) (varCube (ext-h Γ a Y h M) none) (ext-lift Γ a Y h (TV a) (λ q x → (h q , x)) M)
+var-lift Γ a Y h M =
+  of-lift (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y) (FbE (lcons (e-ty a) (fst Γ)) (TV a))
+    (λ γ e → (γ , λ ρ → h (e ρ))) (varM (lcons (e-ty a) (fst Γ)) none) (snd Γ) M
+-- the triple's types
+RTyT : TyShape → Type 1
+RTyT s = (Δ : CCtx) (T : Mean Δ (Sem s)) → CompTy s Δ T → RenR k-nf j-ty Δ s T
+RfyT : TyShape → Type 1
+RfyT s = (Δ : CCtx) (X : Mean Δ (TV s)) → CompS s Δ X → RenR k-nf j-tm Δ s X
+RflT : TyShape → Type 1
+RflT s = (Δ : CCtx) (X : Mean Δ (TV s)) → CompTy s Δ (fmapM Δ (TV s) (Sem s) (λ q → fst q) X) → (c : Code) → NN (k-ne , (j-tm , Δ , s , c , X)) → CompS s Δ X
+RRT : TyShape → Type 1
+RRT s = RTyT s × RfyT s × RflT s
+-- the new variable of an extension read off M, at a computable type, is computable (reflected)
+var-comp : (a : TyShape) → RflT a → (Γ : CCtx) (Y : Type 1) (h : Y → Sem a) (M : Mean Γ Y) → CompTy a Γ (fmapM Γ Y (Sem a) h M) →
+  CompS a (ext-h Γ a Y h M) (ext-lift Γ a Y h (TV a) (λ q x → (h q , x)) M)
+var-comp a rfl Γ Y h M ca =
+  comp-tr a (ext-h Γ a Y h M) (varCube (ext-h Γ a Y h M) none) (ext-lift Γ a Y h (TV a) (λ q x → (h q , x)) M) (var-lift Γ a Y h M)
+    (rfl (ext-h Γ a Y h M) (varCube (ext-h Γ a Y h M) none)
+       (ty-tr a (ext-h Γ a Y h M) (wact (ext-h Γ a Y h M) Γ (world-wk Γ a Y (λ γ e ρ → h (e ρ)) M) (Sem a) (fmapM Γ Y (Sem a) h M))
+          (fmapM (ext-h Γ a Y h M) (TV a) (Sem a) (λ q → fst q) (varCube (ext-h Γ a Y h M) none))
+          (pcat (Mean (ext-h Γ a Y h M) (Sem a)) (wact (ext-h Γ a Y h M) Γ (world-wk Γ a Y (λ γ e ρ → h (e ρ)) M) (Sem a) (fmapM Γ Y (Sem a) h M))
+             (ext-lift Γ a Y h (Sem a) (λ q x → h q) M) (fmapM (ext-h Γ a Y h M) (TV a) (Sem a) (λ q → fst q) (varCube (ext-h Γ a Y h M) none))
+             (wk-fm Γ a Y h M (Sem a) h)
+             (psym (Mean (ext-h Γ a Y h M) (Sem a)) (fmapM (ext-h Γ a Y h M) (TV a) (Sem a) (λ q → fst q) (varCube (ext-h Γ a Y h M) none)) (ext-lift Γ a Y h (Sem a) (λ q x → h q) M)
+                (pcat (Mean (ext-h Γ a Y h M) (Sem a)) (fmapM (ext-h Γ a Y h M) (TV a) (Sem a) (λ q → fst q) (varCube (ext-h Γ a Y h M) none))
+                   (fmapM (ext-h Γ a Y h M) (TV a) (Sem a) (λ q → fst q) (ext-lift Γ a Y h (TV a) (λ q x → (h q , x)) M)) (ext-lift Γ a Y h (Sem a) (λ q x → h q) M)
+                   (λ i → fmapM (ext-h Γ a Y h M) (TV a) (Sem a) (λ q → fst q) (var-lift Γ a Y h M i))
+                   (lift-fm Γ a Y h M (TV a) (Sem a) (λ q x → (h q , x)) (λ q → fst q)))))
+          (fst (comp-ren-e a) Γ (fmapM Γ Y (Sem a) h M) ca (ext-h Γ a Y h M) (world-wk Γ a Y (λ γ e ρ → h (e ρ)) M)))
+       (cvar #0) (nvar (ext-h Γ a Y h M) none))
+-- a family's codomain over the extension by its domain, read off M through k, reified at the variable
+cod-rty : (a b : TyShape) → RflT a → RTyT b → (Δ : CCtx) (Y : Type 1) (k : Y → Fam a b) (M : Mean Δ Y) → CompTy (s-pi a b) Δ (fmapM Δ Y (Fam a b) k M) →
+  RenR k-nf j-ty (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) b (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (Sem b) (λ q x → snd (k q) x) M)
+cod-rty a b rfl rty Δ Y k M ct =
+  rty (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (Sem b) (λ q x → snd (k q) x) M)
+    (ty-tr b (ext-h Δ a Y (λ q → fam-dom a b (k q)) M)
+       (fmapM (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) (FamV a b) (Sem b) (fam-cod a b) (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (FamV a b) (λ q x → (k q , x)) M))
+       (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (Sem b) (λ q x → snd (k q) x) M)
+       (lift-fm Δ a Y (λ q → fam-dom a b (k q)) M (FamV a b) (Sem b) (λ q x → (k q , x)) (fam-cod a b))
+       (snd ct (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) (world-wk Δ a Y (λ γ e ρ → fam-dom a b (k (e ρ))) M)
+          (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (FamV a b) (λ q x → (k q , x)) M)
+          (pcat (Mean (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) (Fam a b))
+             (fmapM (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) (FamV a b) (Fam a b) (λ q → fst q) (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (FamV a b) (λ q x → (k q , x)) M))
+             (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (Fam a b) (λ q x → k q) M)
+             (wact (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) Δ (world-wk Δ a Y (λ γ e ρ → fam-dom a b (k (e ρ))) M) (Fam a b) (fmapM Δ Y (Fam a b) k M))
+             (lift-fm Δ a Y (λ q → fam-dom a b (k q)) M (FamV a b) (Fam a b) (λ q x → (k q , x)) (λ q → fst q))
+             (psym (Mean (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) (Fam a b))
+                (wact (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) Δ (world-wk Δ a Y (λ γ e ρ → fam-dom a b (k (e ρ))) M) (Fam a b) (fmapM Δ Y (Fam a b) k M))
+                (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (Fam a b) (λ q x → k q) M)
+                (wk-fm Δ a Y (λ q → fam-dom a b (k q)) M (Fam a b) k)))
+          (comp-tr a (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (TV a) (λ q x → (fam-dom a b (k q) , x)) M)
+             (fmapM (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) (FamV a b) (TV a) (fam-arg a b) (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (FamV a b) (λ q x → (k q , x)) M))
+             (psym (Mean (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) (TV a))
+                (fmapM (ext-h Δ a Y (λ q → fam-dom a b (k q)) M) (FamV a b) (TV a) (fam-arg a b) (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (FamV a b) (λ q x → (k q , x)) M))
+                (ext-lift Δ a Y (λ q → fam-dom a b (k q)) (TV a) (λ q x → (fam-dom a b (k q) , x)) M)
+                (lift-fm Δ a Y (λ q → fam-dom a b (k q)) M (FamV a b) (TV a) (λ q x → (k q , x)) (fam-arg a b)))
+             (var-comp a rfl Δ Y (λ q → fam-dom a b (k q)) M
+                (ty-tr a Δ (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) (fmapM Δ Y (Fam a b) k M)) (fmapM Δ Y (Sem a) (λ q → fam-dom a b (k q)) M)
+                   (fmapM-fmapM Δ Y (Fam a b) (Sem a) k (fam-dom a b) M) (fst ct))))))
+-- Bool
+rty-bool : RTyT s-bool
+rty-bool Δ T ct = (c-bool , nty-bool Δ T)
+rfy-bool-c : (Δ : CCtx) (X : Mean Δ (TV s-bool)) → snd (CompE s-bool) Δ X → RenR k-nf j-tm Δ s-bool X
+rfy-bool-c Δ X (inl1 p) = (c-true , nn-tr k-nf j-tm Δ s-bool c-true (fmapM Δ One1 (TV s-bool) (bool-v true) (fst p)) X (psym (Mean Δ (TV s-bool)) X (fmapM Δ One1 (TV s-bool) (bool-v true) (fst p)) (snd p)) (ntrue Δ (fst p)))
+rfy-bool-c Δ X (inr1 (inl1 p)) = (c-false , nn-tr k-nf j-tm Δ s-bool c-false (fmapM Δ One1 (TV s-bool) (bool-v false) (fst p)) X (psym (Mean Δ (TV s-bool)) X (fmapM Δ One1 (TV s-bool) (bool-v false) (fst p)) (snd p)) (nfalse Δ (fst p)))
+rfy-bool-c Δ X (inr1 (inr1 n)) = (fst n , nne Δ X (fst n) (snd n))
+rfy-bool : RfyT s-bool
+rfy-bool Δ X cx = rfy-bool-c Δ X (snd cx)
+rfl-bool : RflT s-bool
+rfl-bool Δ X ct c n = (ct , inr1 (inr1 (c , n)))
+-- Π and Σ types: the domain, and the codomain at the variable (the family itself, k the identity, by fmap-id)
+rty-fam-cod : (a b : TyShape) → RflT a → RTyT b → (Δ : CCtx) (T : Mean Δ (Fam a b)) → CompTy (s-pi a b) Δ T →
+  RenR k-nf j-ty (ext-h Δ a (Fam a b) (fam-dom a b) T) b (fam-body Δ a b T)
+rty-fam-cod a b rfl rty Δ T ct =
+  cod-rty a b rfl rty Δ (Fam a b) (λ F → F) T
+    (ty-tr (s-pi a b) Δ T (fmapM Δ (Fam a b) (Fam a b) (λ F → F) T)
+       (psym (Mean Δ (Fam a b)) (fmapM Δ (Fam a b) (Fam a b) (λ F → F) T) T (fmap-id (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (Fam a b)) (snd Δ) T)) ct)
+rty-pi : (a b : TyShape) → RRT a → RRT b → RTyT (s-pi a b)
+rty-pi a b Ra Rb Δ T ct = nn-ty-pi Δ a b T (fst Ra Δ (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) T) (fst ct)) (rty-fam-cod a b (snd (snd Ra)) (fst Rb) Δ T ct)
+rty-sig : (a b : TyShape) → RRT a → RRT b → RTyT (s-sig a b)
+rty-sig a b Ra Rb Δ T ct = nn-ty-sig Δ a b T (fst Ra Δ (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) T) (fst ct)) (rty-fam-cod a b (snd (snd Ra)) (fst Rb) Δ T ct)
+-- reify at Π: the body at the reflected variable over lam-ctx, the function applied to it by the
+-- Kripke clause at world-wk (AppV data an ext-lift of X)
+rfy-pi-dom : (a b : TyShape) (Δ : CCtx) (X : Mean Δ (TV (s-pi a b))) → CompTy (s-pi a b) Δ (fmapM Δ (TV (s-pi a b)) (Fam a b) (λ q → fst q) X) →
+  CompTy a Δ (fmapM Δ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) X)
+rfy-pi-dom a b Δ X ct =
+  ty-tr a Δ (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) (fmapM Δ (TV (s-pi a b)) (Fam a b) (λ q → fst q) X)) (fmapM Δ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) X)
+    (fmapM-fmapM Δ (TV (s-pi a b)) (Fam a b) (Sem a) (λ q → fst q) (fam-dom a b) X) (fst ct)
+rfy-pi-body : (a b : TyShape) → RRT a → (Δ : CCtx) (X : Mean Δ (TV (s-pi a b))) → CompS (s-pi a b) Δ X → CompS b (lam-ctx Δ a b X) (lam-body Δ a b X)
+rfy-pi-body a b Ra Δ X cx =
+  comp-tr b (lam-ctx Δ a b X)
+    (fmapM (lam-ctx Δ a b X) (AppV a b) (TV b) (app-r a b) (ext-lift Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) (AppV a b) (λ q x → (fst q , snd q , x)) X))
+    (lam-body Δ a b X)
+    (lift-fm Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) X (AppV a b) (TV b) (λ q x → (fst q , snd q , x)) (app-r a b))
+    (snd cx (lam-ctx Δ a b X) (world-wk Δ a (TV (s-pi a b)) (λ γ e ρ → fam-dom a b (fst (e ρ))) X)
+       (ext-lift Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) (AppV a b) (λ q x → (fst q , snd q , x)) X)
+       (pcat (Mean (lam-ctx Δ a b X) (TV (s-pi a b)))
+          (fmapM (lam-ctx Δ a b X) (AppV a b) (TV (s-pi a b)) (app-f a b) (ext-lift Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) (AppV a b) (λ q x → (fst q , snd q , x)) X))
+          (ext-lift Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) (TV (s-pi a b)) (λ q x → q) X)
+          (wact (lam-ctx Δ a b X) Δ (world-wk Δ a (TV (s-pi a b)) (λ γ e ρ → fam-dom a b (fst (e ρ))) X) (TV (s-pi a b)) X)
+          (lift-fm Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) X (AppV a b) (TV (s-pi a b)) (λ q x → (fst q , snd q , x)) (app-f a b))
+          (psym (Mean (lam-ctx Δ a b X) (TV (s-pi a b)))
+             (wact (lam-ctx Δ a b X) Δ (world-wk Δ a (TV (s-pi a b)) (λ γ e ρ → fam-dom a b (fst (e ρ))) X) (TV (s-pi a b)) X)
+             (ext-lift Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) (TV (s-pi a b)) (λ q x → q) X)
+             (pcat (Mean (lam-ctx Δ a b X) (TV (s-pi a b)))
+                (wact (lam-ctx Δ a b X) Δ (world-wk Δ a (TV (s-pi a b)) (λ γ e ρ → fam-dom a b (fst (e ρ))) X) (TV (s-pi a b)) X)
+                (wact (lam-ctx Δ a b X) Δ (world-wk Δ a (TV (s-pi a b)) (λ γ e ρ → fam-dom a b (fst (e ρ))) X) (TV (s-pi a b)) (fmapM Δ (TV (s-pi a b)) (TV (s-pi a b)) (λ q → q) X))
+                (ext-lift Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) (TV (s-pi a b)) (λ q x → q) X)
+                (λ i → wact (lam-ctx Δ a b X) Δ (world-wk Δ a (TV (s-pi a b)) (λ γ e ρ → fam-dom a b (fst (e ρ))) X) (TV (s-pi a b))
+                   (fmap-id (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV (s-pi a b))) (snd Δ) X (~ i)))
+                (wk-fm Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) X (TV (s-pi a b)) (λ q → q)))))
+       (comp-tr a (lam-ctx Δ a b X) (ext-lift Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) (TV a) (λ q x → (fam-dom a b (fst q) , x)) X)
+          (fmapM (lam-ctx Δ a b X) (AppV a b) (TV a) (app-a a b) (ext-lift Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) (AppV a b) (λ q x → (fst q , snd q , x)) X))
+          (psym (Mean (lam-ctx Δ a b X) (TV a))
+             (fmapM (lam-ctx Δ a b X) (AppV a b) (TV a) (app-a a b) (ext-lift Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) (AppV a b) (λ q x → (fst q , snd q , x)) X))
+             (ext-lift Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) (TV a) (λ q x → (fam-dom a b (fst q) , x)) X)
+             (lift-fm Δ a (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) X (AppV a b) (TV a) (λ q x → (fst q , snd q , x)) (app-a a b)))
+          (var-comp a (snd (snd Ra)) Δ (TV (s-pi a b)) (λ q → fam-dom a b (fst q)) X (rfy-pi-dom a b Δ X (fst cx)))))
+rfy-pi : (a b : TyShape) → RRT a → RRT b → RfyT (s-pi a b)
+rfy-pi a b Ra Rb Δ X cx =
+  nn-lam Δ a b X (fst Ra Δ (fmapM Δ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) X) (rfy-pi-dom a b Δ X (fst cx)))
+    (fst (snd Rb) (lam-ctx Δ a b X) (lam-body Δ a b X) (rfy-pi-body a b Ra Δ X cx))
+-- reify at Σ: the codomain at the pair's own family (cod-rty at fst), both components
+rfy-sig : (a b : TyShape) → RRT a → RRT b → RfyT (s-sig a b)
+rfy-sig a b Ra Rb Δ X cx =
+  nn-pair Δ a b X (cod-rty a b (snd (snd Ra)) (fst Rb) Δ (TV (s-sig a b)) (λ q → fst q) X (fst cx))
+    (fst (snd Ra) Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X) (fst (snd cx))) (fst (snd Rb) Δ (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) X) (snd (snd cx)))
+-- PathP: the line or the body at dnf-v0 after world-dwk, read back by subM-dwk and papp-dwk
+rty-path-line : (a : TyShape) (Δ : CCtx) (T : Mean Δ (Sem (s-path a))) → CompTy (s-path a) Δ T → CompTy a (dext Δ) (path-line-ty Δ a T)
+rty-path-line a Δ T ct =
+  ty-tr a (dext Δ) (papp-line (dext Δ) (Sem (s-path a)) (Sem a) (ty-line a) dnf-v0 (wact (dext Δ) Δ (world-dwk Δ) (Sem (s-path a)) T)) (path-line-ty Δ a T)
+    (pcat (Mean (dext Δ) (Sem a)) (papp-line (dext Δ) (Sem (s-path a)) (Sem a) (ty-line a) dnf-v0 (wact (dext Δ) Δ (world-dwk Δ) (Sem (s-path a)) T))
+       (papp-line (dext Δ) (Sem (s-path a)) (Sem a) (ty-line a) dnf-v0 (dwkM Δ (Sem (s-path a)) T)) (path-line-ty Δ a T)
+       (λ i → papp-line (dext Δ) (Sem (s-path a)) (Sem a) (ty-line a) dnf-v0 (subM-dwk Δ (Sem (s-path a)) T i))
+       (papp-dwk Δ (Sem (s-path a)) (Sem a) (ty-line a) T))
+    (fst ct (dext Δ) (world-dwk Δ) dnf-v0 unit unit)
+rty-path : (a : TyShape) → RRT a → RTyT (s-path a)
+rty-path a Ra Δ T ct =
+  nn-ty-path Δ a T (fst Ra (dext Δ) (path-line-ty Δ a T) (rty-path-line a Δ T ct))
+    (fst (snd Ra) Δ (fmapM Δ (Sem (s-path a)) (TV a) (tend-0 a) T) (fst (snd ct))) (fst (snd Ra) Δ (fmapM Δ (Sem (s-path a)) (TV a) (tend-1 a) T) (snd (snd ct)))
+rfy-path-body : (a : TyShape) (Δ : CCtx) (X : Mean Δ (TV (s-path a))) → CompS (s-path a) Δ X → CompS a (dext Δ) (plam-body Δ a X)
+rfy-path-body a Δ X cx =
+  comp-tr a (dext Δ) (papp-mean (dext Δ) a dnf-v0 (wact (dext Δ) Δ (world-dwk Δ) (TV (s-path a)) X)) (plam-body Δ a X)
+    (pcat (Mean (dext Δ) (TV a)) (papp-mean (dext Δ) a dnf-v0 (wact (dext Δ) Δ (world-dwk Δ) (TV (s-path a)) X))
+       (papp-mean (dext Δ) a dnf-v0 (dwkM Δ (TV (s-path a)) X)) (plam-body Δ a X)
+       (λ i → papp-mean (dext Δ) a dnf-v0 (subM-dwk Δ (TV (s-path a)) X i))
+       (papp-dwk Δ (TV (s-path a)) (TV a) (path-pt a) X))
+    (snd cx (dext Δ) (world-dwk Δ) dnf-v0 unit unit)
+rfy-path : (a : TyShape) → RRT a → RfyT (s-path a)
+rfy-path a Ra Δ X cx = nn-plam Δ a X (fst (snd Ra) (dext Δ) (plam-body Δ a X) (rfy-path-body a Δ X cx))
+-- reflect at Π: at every later world and computable argument, the renamed neutral applied to the
+-- reified argument, at the codomain's type that the type's Kripke clause gives (FamV data read off the
+-- AppV data)
+rfl-pi-cod : (a b : TyShape) (Δ : CCtx) (X : Mean Δ (TV (s-pi a b))) → CompTy (s-pi a b) Δ (fmapM Δ (TV (s-pi a b)) (Fam a b) (λ q → fst q) X) →
+  (Δ' : CCtx) (w : World Δ' Δ) (Y : Mean Δ' (AppV a b)) →
+  PathM Δ' (TV (s-pi a b)) (fmapM Δ' (AppV a b) (TV (s-pi a b)) (app-f a b) Y) (wact Δ' Δ w (TV (s-pi a b)) X) →
+  CompS a Δ' (fmapM Δ' (AppV a b) (TV a) (app-a a b) Y) → CompTy b Δ' (fmapM Δ' (TV b) (Sem b) (λ q → fst q) (fmapM Δ' (AppV a b) (TV b) (app-r a b) Y))
+rfl-pi-cod a b Δ X ct Δ' w Y q ca =
+  ty-tr b Δ' (fmapM Δ' (FamV a b) (Sem b) (fam-cod a b) (fmapM Δ' (AppV a b) (FamV a b) (λ r → (fst r , snd (snd r))) Y))
+    (fmapM Δ' (TV b) (Sem b) (λ q → fst q) (fmapM Δ' (AppV a b) (TV b) (app-r a b) Y))
+    (pcat (Mean Δ' (Sem b)) (fmapM Δ' (FamV a b) (Sem b) (fam-cod a b) (fmapM Δ' (AppV a b) (FamV a b) (λ r → (fst r , snd (snd r))) Y))
+       (fmapM Δ' (AppV a b) (Sem b) (λ r → snd (fst r) (snd (snd r))) Y) (fmapM Δ' (TV b) (Sem b) (λ q → fst q) (fmapM Δ' (AppV a b) (TV b) (app-r a b) Y))
+       (fmapM-fmapM Δ' (AppV a b) (FamV a b) (Sem b) (λ r → (fst r , snd (snd r))) (fam-cod a b) Y)
+       (psym (Mean Δ' (Sem b)) (fmapM Δ' (TV b) (Sem b) (λ q → fst q) (fmapM Δ' (AppV a b) (TV b) (app-r a b) Y)) (fmapM Δ' (AppV a b) (Sem b) (λ r → snd (fst r) (snd (snd r))) Y)
+          (fmapM-fmapM Δ' (AppV a b) (TV b) (Sem b) (app-r a b) (λ q → fst q) Y)))
+    (snd ct Δ' w (fmapM Δ' (AppV a b) (FamV a b) (λ r → (fst r , snd (snd r))) Y)
+       (pcat (Mean Δ' (Fam a b)) (fmapM Δ' (FamV a b) (Fam a b) (λ q → fst q) (fmapM Δ' (AppV a b) (FamV a b) (λ r → (fst r , snd (snd r))) Y))
+          (fmapM Δ' (AppV a b) (Fam a b) (λ r → fst r) Y) (wact Δ' Δ w (Fam a b) (fmapM Δ (TV (s-pi a b)) (Fam a b) (λ q → fst q) X))
+          (fmapM-fmapM Δ' (AppV a b) (FamV a b) (Fam a b) (λ r → (fst r , snd (snd r))) (λ q → fst q) Y)
+          (pcat (Mean Δ' (Fam a b)) (fmapM Δ' (AppV a b) (Fam a b) (λ r → fst r) Y)
+             (fmapM Δ' (TV (s-pi a b)) (Fam a b) (λ q → fst q) (fmapM Δ' (AppV a b) (TV (s-pi a b)) (app-f a b) Y))
+             (wact Δ' Δ w (Fam a b) (fmapM Δ (TV (s-pi a b)) (Fam a b) (λ q → fst q) X))
+             (psym (Mean Δ' (Fam a b)) (fmapM Δ' (TV (s-pi a b)) (Fam a b) (λ q → fst q) (fmapM Δ' (AppV a b) (TV (s-pi a b)) (app-f a b) Y)) (fmapM Δ' (AppV a b) (Fam a b) (λ r → fst r) Y)
+                (fmapM-fmapM Δ' (AppV a b) (TV (s-pi a b)) (Fam a b) (app-f a b) (λ q → fst q) Y))
+             (pcat (Mean Δ' (Fam a b)) (fmapM Δ' (TV (s-pi a b)) (Fam a b) (λ q → fst q) (fmapM Δ' (AppV a b) (TV (s-pi a b)) (app-f a b) Y))
+                (fmapM Δ' (TV (s-pi a b)) (Fam a b) (λ q → fst q) (wact Δ' Δ w (TV (s-pi a b)) X))
+                (wact Δ' Δ w (Fam a b) (fmapM Δ (TV (s-pi a b)) (Fam a b) (λ q → fst q) X))
+                (λ i → fmapM Δ' (TV (s-pi a b)) (Fam a b) (λ q → fst q) (q i))
+                (subM-fmap Δ' Δ (TV (s-pi a b)) (Fam a b) (λ q → fst q) (world-sub Δ' Δ w) X))))
+       (comp-tr a Δ' (fmapM Δ' (AppV a b) (TV a) (app-a a b) Y) (fmapM Δ' (FamV a b) (TV a) (fam-arg a b) (fmapM Δ' (AppV a b) (FamV a b) (λ r → (fst r , snd (snd r))) Y))
+          (psym (Mean Δ' (TV a)) (fmapM Δ' (FamV a b) (TV a) (fam-arg a b) (fmapM Δ' (AppV a b) (FamV a b) (λ r → (fst r , snd (snd r))) Y)) (fmapM Δ' (AppV a b) (TV a) (app-a a b) Y)
+             (fmapM-fmapM Δ' (AppV a b) (FamV a b) (TV a) (λ r → (fst r , snd (snd r))) (fam-arg a b) Y))
+          ca))
+rfl-pi : (a b : TyShape) → RRT a → RRT b → RflT (s-pi a b)
+rfl-pi a b Ra Rb Δ X ct c n =
+  (ct , λ Δ' w Y q ca →
+     snd (snd Rb) Δ' (fmapM Δ' (AppV a b) (TV b) (app-r a b) Y) (rfl-pi-cod a b Δ X ct Δ' w Y q ca)
+       (capp (fst (ren-nn {(k-ne , (j-tm , Δ , s-pi a b , c , X))} n Δ' w)) (fst (fst (snd Ra) Δ' (fmapM Δ' (AppV a b) (TV a) (app-a a b) Y) ca)))
+       (napp Δ' a b Y (fst (ren-nn {(k-ne , (j-tm , Δ , s-pi a b , c , X))} n Δ' w)) (fst (fst (snd Ra) Δ' (fmapM Δ' (AppV a b) (TV a) (app-a a b) Y) ca))
+          (nn-tr k-ne j-tm Δ' (s-pi a b) (fst (ren-nn {(k-ne , (j-tm , Δ , s-pi a b , c , X))} n Δ' w)) (wact Δ' Δ w (TV (s-pi a b)) X) (fmapM Δ' (AppV a b) (TV (s-pi a b)) (app-f a b) Y)
+             (psym (Mean Δ' (TV (s-pi a b))) (fmapM Δ' (AppV a b) (TV (s-pi a b)) (app-f a b) Y) (wact Δ' Δ w (TV (s-pi a b)) X) q) (snd (ren-nn {(k-ne , (j-tm , Δ , s-pi a b , c , X))} n Δ' w)))
+          (snd (fst (snd Ra) Δ' (fmapM Δ' (AppV a b) (TV a) (app-a a b) Y) ca))))
+rfl-sig-1 : (a b : TyShape) → RRT a → (Δ : CCtx) (X : Mean Δ (TV (s-sig a b))) → CompTy (s-sig a b) Δ (fmapM Δ (TV (s-sig a b)) (Fam a b) (λ q → fst q) X) →
+  (c : Code) → NN (k-ne , (j-tm , Δ , s-sig a b , c , X)) → CompS a Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X)
+rfl-sig-1 a b Ra Δ X ct c n =
+  snd (snd Ra) Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X)
+    (ty-tr a Δ (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) (fmapM Δ (TV (s-sig a b)) (Fam a b) (λ q → fst q) X)) (fmapM Δ (TV a) (Sem a) (λ q → fst q) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X))
+       (pcat (Mean Δ (Sem a)) (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) (fmapM Δ (TV (s-sig a b)) (Fam a b) (λ q → fst q) X)) (fmapM Δ (TV (s-sig a b)) (Sem a) (λ q → fst (fst q)) X)
+          (fmapM Δ (TV a) (Sem a) (λ q → fst q) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X))
+          (fmapM-fmapM Δ (TV (s-sig a b)) (Fam a b) (Sem a) (λ q → fst q) (fam-dom a b) X)
+          (psym (Mean Δ (Sem a)) (fmapM Δ (TV a) (Sem a) (λ q → fst q) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X)) (fmapM Δ (TV (s-sig a b)) (Sem a) (λ q → fst (fst q)) X)
+             (fmapM-fmapM Δ (TV (s-sig a b)) (TV a) (Sem a) (sig-1 a b) (λ q → fst q) X)))
+       (fst ct))
+    (cfst c) (nfst Δ a b X c n)
+-- the first projection reflected; the second's type by the Σ type's Kripke clause at the identity world
+-- at the first
+rfl-sig-cod : (a b : TyShape) (Δ : CCtx) (X : Mean Δ (TV (s-sig a b))) → CompTy (s-sig a b) Δ (fmapM Δ (TV (s-sig a b)) (Fam a b) (λ q → fst q) X) →
+  CompS a Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X) → CompTy b Δ (fmapM Δ (TV b) (Sem b) (λ q → fst q) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) X))
+rfl-sig-cod a b Δ X ct c1 =
+  ty-tr b Δ (fmapM Δ (FamV a b) (Sem b) (fam-cod a b) (fmapM Δ (TV (s-sig a b)) (FamV a b) (λ q → (fst q , fst (snd q))) X))
+    (fmapM Δ (TV b) (Sem b) (λ q → fst q) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) X))
+    (pcat (Mean Δ (Sem b)) (fmapM Δ (FamV a b) (Sem b) (fam-cod a b) (fmapM Δ (TV (s-sig a b)) (FamV a b) (λ q → (fst q , fst (snd q))) X))
+       (fmapM Δ (TV (s-sig a b)) (Sem b) (λ q → snd (fst q) (fst (snd q))) X) (fmapM Δ (TV b) (Sem b) (λ q → fst q) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) X))
+       (fmapM-fmapM Δ (TV (s-sig a b)) (FamV a b) (Sem b) (λ q → (fst q , fst (snd q))) (fam-cod a b) X)
+       (psym (Mean Δ (Sem b)) (fmapM Δ (TV b) (Sem b) (λ q → fst q) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) X)) (fmapM Δ (TV (s-sig a b)) (Sem b) (λ q → snd (fst q) (fst (snd q))) X)
+          (fmapM-fmapM Δ (TV (s-sig a b)) (TV b) (Sem b) (sig-2 a b) (λ q → fst q) X)))
+    (snd ct Δ (world-id Δ) (fmapM Δ (TV (s-sig a b)) (FamV a b) (λ q → (fst q , fst (snd q))) X)
+       (pcat (Mean Δ (Fam a b)) (fmapM Δ (FamV a b) (Fam a b) (λ q → fst q) (fmapM Δ (TV (s-sig a b)) (FamV a b) (λ q → (fst q , fst (snd q))) X))
+          (fmapM Δ (TV (s-sig a b)) (Fam a b) (λ q → fst q) X) (wact Δ Δ (world-id Δ) (Fam a b) (fmapM Δ (TV (s-sig a b)) (Fam a b) (λ q → fst q) X))
+          (fmapM-fmapM Δ (TV (s-sig a b)) (FamV a b) (Fam a b) (λ q → (fst q , fst (snd q))) (λ q → fst q) X)
+          (psym (Mean Δ (Fam a b)) (wact Δ Δ (world-id Δ) (Fam a b) (fmapM Δ (TV (s-sig a b)) (Fam a b) (λ q → fst q) X)) (fmapM Δ (TV (s-sig a b)) (Fam a b) (λ q → fst q) X)
+             (subM-id Δ (Fam a b) (fmapM Δ (TV (s-sig a b)) (Fam a b) (λ q → fst q) X))))
+       (comp-tr a Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X) (fmapM Δ (FamV a b) (TV a) (fam-arg a b) (fmapM Δ (TV (s-sig a b)) (FamV a b) (λ q → (fst q , fst (snd q))) X))
+          (psym (Mean Δ (TV a)) (fmapM Δ (FamV a b) (TV a) (fam-arg a b) (fmapM Δ (TV (s-sig a b)) (FamV a b) (λ q → (fst q , fst (snd q))) X)) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X)
+             (fmapM-fmapM Δ (TV (s-sig a b)) (FamV a b) (TV a) (λ q → (fst q , fst (snd q))) (fam-arg a b) X))
+          c1))
+-- reflect at Σ: the projections (rfl-sig-1, rfl-sig-cod)
+rfl-sig : (a b : TyShape) → RRT a → RRT b → RflT (s-sig a b)
+rfl-sig a b Ra Rb Δ X ct c n =
+  (ct , rfl-sig-1 a b Ra Δ X ct c n ,
+   snd (snd Rb) Δ (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) X) (rfl-sig-cod a b Δ X ct (rfl-sig-1 a b Ra Δ X ct c n)) (csnd c) (nsnd Δ a b X c n))
+-- reflect at PathP: at every later world and canonical non-constant form, the renamed neutral applied
+-- there, at the type's line there (papp-line-fmap, papp-line-pre, subM-fmap)
+rfl-path-ty : (a : TyShape) (Δ' : CCtx) (f : DNF) (X' : Mean Δ' (TV (s-path a))) (T' : Mean Δ' (Sem (s-path a))) →
+  PathM Δ' (Sem (s-path a)) (fmapM Δ' (TV (s-path a)) (Sem (s-path a)) (λ q → fst q) X') T' →
+  PathM Δ' (Sem a) (papp-line Δ' (Sem (s-path a)) (Sem a) (ty-line a) f T') (fmapM Δ' (TV a) (Sem a) (λ q → fst q) (papp-mean Δ' a f X'))
+rfl-path-ty a Δ' f X' T' p =
+  pcat (Mean Δ' (Sem a)) (papp-line Δ' (Sem (s-path a)) (Sem a) (ty-line a) f T')
+    (papp-line Δ' (Sem (s-path a)) (Sem a) (ty-line a) f (fmapM Δ' (TV (s-path a)) (Sem (s-path a)) (λ q → fst q) X'))
+    (fmapM Δ' (TV a) (Sem a) (λ q → fst q) (papp-mean Δ' a f X'))
+    (λ i → papp-line Δ' (Sem (s-path a)) (Sem a) (ty-line a) f (p (~ i)))
+    (pcat (Mean Δ' (Sem a)) (papp-line Δ' (Sem (s-path a)) (Sem a) (ty-line a) f (fmapM Δ' (TV (s-path a)) (Sem (s-path a)) (λ q → fst q) X'))
+       (papp-line Δ' (TV (s-path a)) (Sem a) (λ y → line-map (TV a) (Sem a) (λ q → fst q) (path-pt a y)) f X')
+       (fmapM Δ' (TV a) (Sem a) (λ q → fst q) (papp-mean Δ' a f X'))
+       (papp-line-pre Δ' (TV (s-path a)) (Sem (s-path a)) (Sem a) (λ q → fst q) (ty-line a) f X')
+       (psym (Mean Δ' (Sem a)) (fmapM Δ' (TV a) (Sem a) (λ q → fst q) (papp-mean Δ' a f X')) (papp-line Δ' (TV (s-path a)) (Sem a) (λ y → line-map (TV a) (Sem a) (λ q → fst q) (path-pt a y)) f X')
+          (papp-line-fmap Δ' (TV (s-path a)) (TV a) (Sem a) (path-pt a) (λ q → fst q) f X')))
+rfl-path : (a : TyShape) → RRT a → RflT (s-path a)
+rfl-path a Ra Δ X ct c n =
+  (ct , λ Δ' w f cf nc →
+     snd (snd Ra) Δ' (papp-mean Δ' a f (wact Δ' Δ w (TV (s-path a)) X))
+       (ty-tr a Δ' (papp-line Δ' (Sem (s-path a)) (Sem a) (ty-line a) f (wact Δ' Δ w (Sem (s-path a)) (fmapM Δ (TV (s-path a)) (Sem (s-path a)) (λ q → fst q) X)))
+          (fmapM Δ' (TV a) (Sem a) (λ q → fst q) (papp-mean Δ' a f (wact Δ' Δ w (TV (s-path a)) X)))
+          (rfl-path-ty a Δ' f (wact Δ' Δ w (TV (s-path a)) X) (wact Δ' Δ w (Sem (s-path a)) (fmapM Δ (TV (s-path a)) (Sem (s-path a)) (λ q → fst q) X))
+             (subM-fmap Δ' Δ (TV (s-path a)) (Sem (s-path a)) (λ q → fst q) (world-sub Δ' Δ w) X))
+          (fst ct Δ' w f cf nc))
+       (cpapp (fst (ren-nn {(k-ne , (j-tm , Δ , s-path a , c , X))} n Δ' w)) (dnf-code f))
+       (npapp Δ' a (wact Δ' Δ w (TV (s-path a)) X) (fst (ren-nn {(k-ne , (j-tm , Δ , s-path a , c , X))} n Δ' w)) f cf nc (papp-mean Δ' a f (wact Δ' Δ w (TV (s-path a)) X))
+          (λ i → papp-mean Δ' a f (wact Δ' Δ w (TV (s-path a)) X)) (snd (ren-nn {(k-ne , (j-tm , Δ , s-path a , c , X))} n Δ' w))))
+-- reify-ty, reify and reflect, one triple by recursion on the shape
+rr : (s : TyShape) → RRT s
+rr s-bool = (rty-bool , rfy-bool , rfl-bool)
+rr (s-pi a b) = (rty-pi a b (rr a) (rr b) , rfy-pi a b (rr a) (rr b) , rfl-pi a b (rr a) (rr b))
+rr (s-sig a b) = (rty-sig a b (rr a) (rr b) , rfy-sig a b (rr a) (rr b) , rfl-sig a b (rr a) (rr b))
+rr (s-path a) = (rty-path a (rr a) , rfy-path a (rr a) , rfl-path a (rr a))
