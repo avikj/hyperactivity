@@ -130,7 +130,7 @@ function draw() {
     c.className = `card s-${n.state}` + (G.roots.includes(n.id) ? ' root' : '');
     c.id = 'c-' + n.id;
     c.innerHTML = `<div class="name">${esc(n.name)}</div><div class="meta"><span class="pill">${label[n.state]}</span>` +
-      (n.state === 'goal' ? `<span>${n.open} open tasks</span>` : '') + (n.parts.length ? `<span>${n.parts.length} known parts</span>` : '') + (n.questions.length ? `<span style="color:var(--wait);font-weight:600">${n.questions.length} for Avik</span>` : '') +
+      (n.state === 'goal' ? `<span>${n.open} open tasks</span>` : '') + (n.findings.length ? `<span>${n.findings.length} known</span>` : '') + (n.questions.length ? `<span style="color:var(--wait);font-weight:600">${n.questions.length} for Avik</span>` : '') +
       (n.unblocks.length ? `<span>unblocks ${n.unblocks.length}</span>` : '') + `</div>`;
     c.onmouseenter = () => focus(n.id); c.onmouseleave = () => focus(sel);
     c.onclick = e => { e.stopPropagation(); open(n.id); };
@@ -212,8 +212,8 @@ function open(id) {
   if (n.after.length) h += `<h3>Cannot start until resolved</h3>` + n.after.map(x => `<p>${link(x)}</p>`).join('');
   if (n.unblocks.length) h += `<h3>Prerequisite of</h3>` + n.unblocks.map(x => `<p>${link(x)}</p>`).join('');
   const finding = f => {
-    const m = f.match(/^Known \((\d{4}-\d{2}-\d{2}), at ([^)]+)\):\s*(.*)$/s);
-    return m ? `<div class="finding"><b>${esc(m[2])} · ${esc(m[1])}</b>${esc(m[3])}</div>` : `<div class="finding">${esc(f)}</div>`;
+    const m = f.match(/^Known \((\d{4}-\d{2}-\d{2})(?:, ([^)]+))?\):\s*(.*)$/s);
+    return m ? `<div class="finding"><b>${esc(m[2] ? m[2].replace(/^at /, '') + ' · ' : '')}${esc(m[1])}</b>${esc(m[3])}</div>` : `<div class="finding">${esc(f)}</div>`;
   };
   if (n.findings.length) h += `<h3>Known (${n.findings.length})</h3>` + n.findings.map(finding).join('');
   if (n.parts.length) h += `<h3>What is known about it (${n.parts.length} parts, not yet broken down)</h3>` + n.parts.map((p, i) =>

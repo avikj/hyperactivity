@@ -258,8 +258,8 @@ implementation, the paper's examples, the product implementation, and language s
 support waits on both the language implementation and the product implementation. The paper's
 examples serve nothing but the root, so the order of work gives them nothing while anything else is
 open. No goal is broken down yet: what is known about each (the review of every earlier finding,
-2026-11-13) is in its statement as parts and findings, with the questions only Avik can answer marked
-"Question for Avik". `hyperactive server` draws the graph; clicking a goal shows all of it.
+2026-11-13) is in its statement as known facts, not as parts, with the questions only Avik can answer
+marked "Question for Avik". `hyperactive server` draws the graph; clicking a goal shows all of it.
 
 ## 11. Mistakes that have happened, so they are not repeated
 

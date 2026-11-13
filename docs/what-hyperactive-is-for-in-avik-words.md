@@ -100,3 +100,14 @@ last. Nothing here is summarized, restated or edited; new messages are appended 
 > implementation are done. Is that it?" yes exactly. in the sense; largely because language-impl
 > should *already* be done (i'd love to be further along) so i must expressly disallow any
 > distraction. "how does this serve the only thing that matters right now"
+
+> the product does not have "parts" "change-management" is not a "part"
+>
+> there is no ontology in this product. this product is hyperactive. you know what hyperactive is. do
+> you? this is essential to everything you ever do moving forward. you can divide things into parts
+> and reify these parts cognitively/in code; build over the reification; focus on one part ignorant
+> of hte rest; treat one part as independent from the rest.
+>
+> the product is the hyperactive core - everythign discussed w.r.t product needs to interoperate
+> perfectly to the point of not being collaborating organisms but a single organism. is that not
+> clear yet? do i need to refresh your intelligence regarding systems?
