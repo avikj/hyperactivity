@@ -458,11 +458,44 @@
 --       pull-move, pull-lift, then carry-uniq over keep-base (lift-fmap⁻¹, the lift along fmap-pull).
 --       Elaboration finding t71 (a path λ applying a defined dependent path exhausted memory; the
 --       same path given to cong1 checks), recorded at cong1 in p26-wip.
---       Next, in order: ren-nn (an NN at (Δ, s, c, M) and w : World Δ' Δ give a code c' and an NN at
---       (Δ', s, c', subM w M)), by the constructor's own rule at Δ' and transport along subM-fmap
---       (napp, nfst, nsnd, ncase, ntrue, nfalse, npair), WVar (nvar), world-keep with subM-lam-body
---       (nlam), world-dkeep with subM-plam-body (nplam), subM-papp with dnf-canon-r and dnf-nonconst-r
---       at MonoW (fst w) (npapp).
+--       Done (2026-11-12, checked in p26-wip with CUBICAL_NOCACHE=1, "824 passed, 0 failed"): ren-nn
+--       (an NN at (Δ, s, c, M) and w : World Δ' Δ give a code and an NN of the same kind at (Δ', s,
+--       code, wact w M)), one lemma per constructor (rn-var … rn-papp): the rule at Δ' with premises
+--       and conclusion carried along subM-fmap (nn-fm-in, nn-fm-out, through nn-tr), WVar (nvar),
+--       world-keep with subM-lam-body (nlam), world-dkeep with subM-plam-body (nplam), subM-papp with
+--       canon-r and nonconst-r (npapp; canon-ren and nonconst-ren, unused, generalized to them).
+--   (6) Finding (2026-11-12, theoretical) on the order: rr and fund at path shapes need P2.5 (type
+--       derivations and their computability) first, so CompS cannot be followed by rr as listed. The
+--       head already records that reflecting a neutral of path type at a constant dimension needs the
+--       endpoints' computability (P2's design, "Needed by P2 and absent from P1"); in full: computability
+--       at s-path gives, at every canonical form over every later world, computability of the path
+--       applied there, and at the constant forms that is computability of the type's endpoints (p @ 0
+--       is a0 judgmentally; a normal form is boundary-free, so p @ 0 normalizes to a0's normal form, and
+--       npapp excludes constant forms). reflect at s-path receives only the neutral (its code and
+--       meaning); the endpoints are meanings, host values from which no code can be read (the core has
+--       no map from meanings to codes, the reason P6's universe carries a code). So reflect takes the
+--       type's computability CompTy: at s-path the line's computability at every canonical form over
+--       every later world (a world cannot send a dimension to i ∧ j, so this clause is Kripke over forms
+--       as CompS's is) and CompS of both endpoints; at Π the domain's, and the codomain's at every
+--       computable argument over every later world; at Σ likewise; at Bool nothing. CompTy is needed
+--       wherever reflect is called: reify at Π (the bound variable at the domain), reflect at Π (the
+--       codomain at the argument), reflect-env (each context entry: contexts whose entries' types are
+--       type derivations, fundTy under the computable environment), and fund at dcase with a neutral
+--       scrutinee (reflect at the motive's instance, so dcase and ncase gain a type derivation of the
+--       motive, a premise with no code in c-case, whose codes are Curry-style, and rn-case renames it).
+--       Next, in order (each a closed statement): P2.5: DTy (Γ : CCtx) s code (T : Mean Γ (Sem s)) with
+--       Bool (cdata #0 lnil), Π (cpi: DTy of the domain, of the codomain over Γ extended by the domain
+--       read off the family), Σ (csigma), PathP (cpathp of the line's cplam and both ends: DTy of the
+--       line over dext Γ, Der of each end at the line's endpoint); its renaming along worlds (ren-dty,
+--       as ren-nn: subM-fmap, world-keep with the family's analogue of subM-lam-body, world-dkeep with
+--       subM-plam-body's analogue for lines); dcase and ncase with the motive's DTy, rn-case renaming
+--       it. Then CompS by recursion on the shape (Bool: X is fmapM of bool-v true or false, by a path,
+--       or a neutral; Π: Kripke over worlds with AppV data; Σ componentwise; PathP: at every canonical
+--       form over every later world, CompS of papp-mean); CompTy (as above); comp-ren and comp-ty-ren
+--       along worlds (subM-comp, subM-fmap, subM-papp); rr taking CompTy; CompEnv over a substitution
+--       (CompS of each variable's action); its extension (sub-ext) and dimension form (sub-form); fund
+--       and fundTy over substitutions; typed contexts, reflect-env, normalize, reifySound and
+--       normalize-sound by refl; the swap and the examples.
 --   (6) ren-nn (along worlds, transported along (3), (4d)); CompS by recursion on the shape with the
 --       PathP clause; comp-ren; rr; CompEnv over a substitution; fund; reflect-env; normalize;
 --       reifySound and normalize-sound by refl; the swap into this file in place of P1's families;

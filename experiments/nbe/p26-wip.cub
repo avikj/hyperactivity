@@ -14,7 +14,7 @@
 -- begun (cube-const, dcube-const, CMap, cmap-cube, cmap-d, SubF, sub-base, Sub, sub-carried,
 -- sub-pull, subM, cmap-zero; then item (3) of the next definitions: fmap-const, fmap-cmap,
 -- pull-fmap, subM-fmap; then (2026-11-12, later) item (1) entire (renaming of forms, OPE as closed
--- data, canon-ren, nonconst-ren), item (4) on cubes (ope-cube, ope-nat, diag-ren, papp-ren) and item
+-- data, canon-ren, nonconst-ren (since generalized to canon-r, nonconst-r)), item (4) on cubes (ope-cube, ope-nat, diag-ren, papp-ren) and item
 -- (2) on cubes (cmap-of, cmap-skip, cmap-keep, cmap-id, cmap-ope); then (2026-11-12, latest) (2d)
 -- entire (the dependent forms over cubes: pcat-d … cmap-ope-d) and (2s) in part (sub-id, sub-wk,
 -- sub-dwk, papp-nat, cmap-nat, sub-form, carry-fill, dmap-const-cube, map-pull); then (2026-11-12,
@@ -45,8 +45,9 @@
 -- (at the end): subM-plam-body; subM-lam-body with the lift tower (lift-gen, DLift, DLTy, DLDim,
 -- dl-dim-f, diag-lift, LiftT, papp-lit-lift, pcf-lift-out, papp-conj-from-lift, papp-conj-lift,
 -- pdf-lift-out, papp-dnf-from-lift, papp-lift, const-lift, cmap-d-lift), lift-pull, pull-lift,
--- lift-fmap, cong1, ext-lift, keep-lift (kl-k2 … kl-s4).
--- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "808 passed, 0 failed").
+-- lift-fmap, cong1, ext-lift, keep-lift (kl-k2 … kl-s4); ren-nn (wact, nn-tr, RenR, nn-fm-in,
+-- nn-fm-out, rn-var … rn-papp; canon-ren and nonconst-ren generalized to canon-r and nonconst-r).
+-- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "824 passed, 0 failed").
 -- What is next: (6) as listed in lib/nbe.cub's head under "Remaining, in order" (ren-nn, CompS,
 -- comp-ren, …), then the swap of this file's families into lib/nbe.cub in place of P1's.
 
@@ -1763,10 +1764,12 @@ ope-mono (wkeep e w) = mono-keep (ope-var w) (ope-mono w)
 -- renaming a form along an embedding; canonicity and non-constancy are kept
 dnf-ren : OPE → DNF → DNF
 dnf-ren w f = dnf-r (ope-var w) f
-canon-ren : (w : OPE) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-canon (dnf-ren w f))
-canon-ren w f c = subst {lzero} {lzero} {Bool} {isTrue} (sym (dnf-canon-r (ope-var w) (ope-mono w) f)) c
-nonconst-ren : (w : OPE) (f : DNF) → isTrue (dnf-nonconst f) → isTrue (dnf-nonconst (dnf-ren w f))
-nonconst-ren w f c = subst {lzero} {lzero} {Bool} {isTrue} (sym (dnf-nonconst-r (ope-var w) f)) c
+-- (2026-11-12, (6)) a monotone renaming keeps canonicity and non-constancy (at a world's r: ren-nn's
+-- npapp case; an OPE's is the case r = ope-var w)
+canon-r : (r : Word → Word) (h : MonoW r) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-canon (dnf-r r f))
+canon-r r h f c = subst {lzero} {lzero} {Bool} {isTrue} (sym (dnf-canon-r r h f)) c
+nonconst-r : (r : Word → Word) (f : DNF) → isTrue (dnf-nonconst f) → isTrue (dnf-nonconst (dnf-r r f))
+nonconst-r r f c = subst {lzero} {lzero} {Bool} {isTrue} (sym (dnf-nonconst-r r f)) c
 
 -- ---------------------------------------------------------------- P2.6e (4, first part): path application commutes with embeddings
 -- (2026-11-12, next definitions (4); the identity and embedding laws of (2) are its instances) The
@@ -3163,7 +3166,7 @@ subM-of Δ Γ Z σ g =
     (pull-of (dims (fst Δ)) (CtxV (fst Δ)) (CtxV (fst Γ)) (SubF (fst Δ) (fst Γ)) (FbE (fst Δ) Z) (FbE (fst Γ) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) g (snd Δ) (fst (snd σ)))
 -- ---------------------------------------------------------------- P2.6e (2s): worlds
 -- (2026-11-12, next definitions (2s); the decision at the head) A world Δ' → Δ: a renaming r of
--- indices, monotone (canonicity and non-constancy of forms are kept: canon-ren's argument), sending
+-- indices, monotone (canonicity and non-constancy of forms are kept: canon-r, nonconst-r), sending
 -- dimensions to dimensions and term entries to term entries or past the end (DimPres: path
 -- application reads an index that names no dimension as the face at 0, on both sides of a renaming),
 -- the substitution whose dimension part is cmap-of r, and for each term variable of Δ one of Δ' at
@@ -5444,3 +5447,117 @@ subM-lam-body : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (X : Mean Δ 
        (lam-body Δ a b X))
     (lam-body Δ' a b (subM Δ' Δ (TV (s-pi a b)) (world-sub Δ' Δ w) X))
 subM-lam-body Δ' Δ w a b X = keep-lift Δ' Δ a (TV (s-pi a b)) (λ q → fst (fst q)) X w (TV b) (λ q x → (snd (fst q) x , snd q x))
+
+-- (2026-11-12, (6)) renaming normal forms along a world: ren-nn takes a normal or neutral form at
+-- (Δ, s, c, M) and a world w : Δ' → Δ to a code and a form of the same kind at (Δ', s, code, w's
+-- action on M). Each constructor's case is its own lemma (rn-*), taking the premises' renamings: the
+-- constructor's rule at Δ', with the premises and the conclusion carried along subM-fmap (nn-fm-in,
+-- nn-fm-out); a variable by the world's own variable (WVar); λ under world-keep, carried along
+-- subM-lam-body; a path λ under world-dkeep, along subM-plam-body; a path application at the renamed
+-- form (canonical and non-constant by canon-r and nonconst-r), its meaning by subM-papp.
+-- the action of a world on a meaning; a form carried along a path of meanings; the renaming's result
+wact : (Δ' Δ : CCtx) (w : World Δ' Δ) (Z : Type 1) → Mean Δ Z → Mean Δ' Z
+wact Δ' Δ w Z M = subM Δ' Δ Z (world-sub Δ' Δ w) M
+nn-tr : (k : NK) (Γ : CCtx) (s : TyShape) (c : Code) (M N : Mean Γ (TV s)) → PathM Γ (TV s) M N → NN (k , (Γ , s , c , M)) → NN (k , (Γ , s , c , N))
+nn-tr k Γ s c M N p x = comp (λ i → NN (k , (Γ , s , c , p i))) (λ i → []) x
+RenR : NK → (Δ' : CCtx) (s : TyShape) → Mean Δ' (TV s) → Type 1
+RenR k Δ' s M = (rc : Code) × NN (k , (Δ' , s , rc , M))
+nn-fm-in : (k : NK) (Δ' Δ : CCtx) (w : World Δ' Δ) (Z : Type 1) (s : TyShape) (h : Z → TV s) (M : Mean Δ Z) (c : Code) →
+  NN (k , (Δ' , s , c , wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M))) → NN (k , (Δ' , s , c , fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M)))
+nn-fm-in k Δ' Δ w Z s h M c x =
+  nn-tr k Δ' s c (wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)) (fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M))
+    (psym (Mean Δ' (TV s)) (fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M)) (wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)) (subM-fmap Δ' Δ Z (TV s) h (world-sub Δ' Δ w) M)) x
+nn-fm-out : (k : NK) (Δ' Δ : CCtx) (w : World Δ' Δ) (Z : Type 1) (s : TyShape) (h : Z → TV s) (M : Mean Δ Z) (c : Code) →
+  NN (k , (Δ' , s , c , fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M))) → NN (k , (Δ' , s , c , wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)))
+nn-fm-out k Δ' Δ w Z s h M c x =
+  nn-tr k Δ' s c (fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M)) (wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)) (subM-fmap Δ' Δ Z (TV s) h (world-sub Δ' Δ w) M) x
+rn-var : (Δ' Δ : CCtx) (w : World Δ' Δ) (v : VarP (fst Δ)) → RenR k-ne Δ' (var-shape (fst Δ) v) (wact Δ' Δ w (TV (var-shape (fst Δ) v)) (varCube Δ v))
+rn-var Δ' Δ w v =
+  (cvar (var-word (fst Δ') (fst (snd (snd (snd (snd w))) v))) ,
+   comp (λ i → NN (k-ne , (Δ' , fst (snd (snd (snd (snd (snd (snd w))) v)) i) , cvar (var-word (fst Δ') (fst (snd (snd (snd (snd w))) v))) ,
+                           snd (snd (snd (snd (snd (snd (snd w))) v)) i))))
+     (λ i → []) (nvar Δ' (fst (snd (snd (snd (snd w))) v))))
+rn-app : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (R : Mean Δ (AppV a b)) →
+  RenR k-ne Δ' (s-pi a b) (wact Δ' Δ w (TV (s-pi a b)) (fmapM Δ (AppV a b) (TV (s-pi a b)) (app-f a b) R)) →
+  RenR k-nf Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (AppV a b) (TV a) (app-a a b) R)) →
+  RenR k-ne Δ' b (wact Δ' Δ w (TV b) (fmapM Δ (AppV a b) (TV b) (app-r a b) R))
+rn-app Δ' Δ w a b R Fn An =
+  (capp (fst Fn) (fst An) ,
+   nn-fm-out k-ne Δ' Δ w (AppV a b) b (app-r a b) R (capp (fst Fn) (fst An))
+     (napp Δ' a b (wact Δ' Δ w (AppV a b) R) (fst Fn) (fst An)
+        (nn-fm-in k-ne Δ' Δ w (AppV a b) (s-pi a b) (app-f a b) R (fst Fn) (snd Fn)) (nn-fm-in k-nf Δ' Δ w (AppV a b) a (app-a a b) R (fst An) (snd An))))
+rn-fst : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (R : Mean Δ (TV (s-sig a b))) →
+  RenR k-ne Δ' (s-sig a b) (wact Δ' Δ w (TV (s-sig a b)) R) → RenR k-ne Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) R))
+rn-fst Δ' Δ w a b R Pn =
+  (cfst (fst Pn) , nn-fm-out k-ne Δ' Δ w (TV (s-sig a b)) a (sig-1 a b) R (cfst (fst Pn)) (nfst Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) (fst Pn) (snd Pn)))
+rn-snd : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (R : Mean Δ (TV (s-sig a b))) →
+  RenR k-ne Δ' (s-sig a b) (wact Δ' Δ w (TV (s-sig a b)) R) → RenR k-ne Δ' b (wact Δ' Δ w (TV b) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) R))
+rn-snd Δ' Δ w a b R Pn =
+  (csnd (fst Pn) , nn-fm-out k-ne Δ' Δ w (TV (s-sig a b)) b (sig-2 a b) R (csnd (fst Pn)) (nsnd Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) (fst Pn) (snd Pn)))
+rn-case : (Δ' Δ : CCtx) (w : World Δ' Δ) (s : TyShape) (R : Mean Δ (CaseV s)) →
+  RenR k-ne Δ' s-bool (wact Δ' Δ w (TV s-bool) (fmapM Δ (CaseV s) (TV s-bool) (case-x s) R)) →
+  RenR k-nf Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-t s) R)) →
+  RenR k-nf Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-f s) R)) →
+  RenR k-ne Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-r s) R))
+rn-case Δ' Δ w s R Xn Tn Fn =
+  (c-case (fst Tn) (fst Fn) (fst Xn) ,
+   nn-fm-out k-ne Δ' Δ w (CaseV s) s (case-r s) R (c-case (fst Tn) (fst Fn) (fst Xn))
+     (ncase Δ' s (wact Δ' Δ w (CaseV s) R) (fst Xn) (fst Tn) (fst Fn)
+        (nn-fm-in k-ne Δ' Δ w (CaseV s) s-bool (case-x s) R (fst Xn) (snd Xn))
+        (nn-fm-in k-nf Δ' Δ w (CaseV s) s (case-t s) R (fst Tn) (snd Tn))
+        (nn-fm-in k-nf Δ' Δ w (CaseV s) s (case-f s) R (fst Fn) (snd Fn))))
+rn-ne : (Δ' Δ : CCtx) (w : World Δ' Δ) (R : Mean Δ (TV s-bool)) → RenR k-ne Δ' s-bool (wact Δ' Δ w (TV s-bool) R) → RenR k-nf Δ' s-bool (wact Δ' Δ w (TV s-bool) R)
+rn-ne Δ' Δ w R Xn = (fst Xn , nne Δ' (wact Δ' Δ w (TV s-bool) R) (fst Xn) (snd Xn))
+rn-lam : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (X : Mean Δ (TV (s-pi a b))) →
+  RenR k-nf (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) b
+    (subM (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (TV b)
+       (world-sub (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (world-keep Δ' Δ a (TV (s-pi a b)) (λ q → fst (fst q)) X w)) (lam-body Δ a b X)) →
+  RenR k-nf Δ' (s-pi a b) (wact Δ' Δ w (TV (s-pi a b)) X)
+rn-lam Δ' Δ w a b X Bn =
+  (clam (fst Bn) ,
+   nlam Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X) (fst Bn)
+     (nn-tr k-nf (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) b (fst Bn)
+        (subM (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (TV b)
+           (world-sub (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (world-keep Δ' Δ a (TV (s-pi a b)) (λ q → fst (fst q)) X w)) (lam-body Δ a b X))
+        (lam-body Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (subM-lam-body Δ' Δ w a b X) (snd Bn)))
+rn-pair : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (R : Mean Δ (TV (s-sig a b))) →
+  RenR k-nf Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) R)) →
+  RenR k-nf Δ' b (wact Δ' Δ w (TV b) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) R)) →
+  RenR k-nf Δ' (s-sig a b) (wact Δ' Δ w (TV (s-sig a b)) R)
+rn-pair Δ' Δ w a b R N1 N2 =
+  (cpair (fst N1) (fst N2) ,
+   npair Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) (fst N1) (fst N2)
+     (nn-fm-in k-nf Δ' Δ w (TV (s-sig a b)) a (sig-1 a b) R (fst N1) (snd N1)) (nn-fm-in k-nf Δ' Δ w (TV (s-sig a b)) b (sig-2 a b) R (fst N2) (snd N2)))
+rn-plam : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (X : Mean Δ (TV (s-path a))) →
+  RenR k-nf (dext Δ') a (subM (dext Δ') (dext Δ) (TV a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (plam-body Δ a X)) →
+  RenR k-nf Δ' (s-path a) (wact Δ' Δ w (TV (s-path a)) X)
+rn-plam Δ' Δ w a X Bn =
+  (cplam (fst Bn) ,
+   nplam Δ' a (wact Δ' Δ w (TV (s-path a)) X) (fst Bn)
+     (nn-tr k-nf (dext Δ') a (fst Bn) (subM (dext Δ') (dext Δ) (TV a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (plam-body Δ a X))
+        (plam-body Δ' a (wact Δ' Δ w (TV (s-path a)) X)) (subM-plam-body Δ' Δ w a X) (snd Bn)))
+rn-papp : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (P : Mean Δ (TV (s-path a))) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
+  (Y : Mean Δ (TV a)) → PathM Δ (TV a) (papp-mean Δ a f P) Y →
+  RenR k-ne Δ' (s-path a) (wact Δ' Δ w (TV (s-path a)) P) → RenR k-ne Δ' a (wact Δ' Δ w (TV a) Y)
+rn-papp Δ' Δ w a P f cf nc Y q Pn =
+  (cpapp (fst Pn) (dnf-code (dnf-r (fst w) f)) ,
+   npapp Δ' a (wact Δ' Δ w (TV (s-path a)) P) (fst Pn) (dnf-r (fst w) f) (canon-r (fst w) (fst (snd w)) f cf) (nonconst-r (fst w) f nc)
+     (wact Δ' Δ w (TV a) Y)
+     (pcat (Mean Δ' (TV a)) (papp-mean Δ' a (dnf-r (fst w) f) (wact Δ' Δ w (TV (s-path a)) P)) (wact Δ' Δ w (TV a) (papp-mean Δ a f P)) (wact Δ' Δ w (TV a) Y)
+        (subM-papp Δ' Δ w a f P) (λ i → wact Δ' Δ w (TV a) (q i)))
+     (snd Pn))
+ren-nn : {KJ : NK × Jdg} → NN KJ → (Δ' : CCtx) (w : World Δ' (fst (snd KJ))) →
+  RenR (fst KJ) Δ' (fst (snd (snd KJ))) (wact Δ' (fst (snd KJ)) w (TV (fst (snd (snd KJ)))) (snd (snd (snd (snd KJ)))))
+ren-nn (nvar Γ v) Δ' w = rn-var Δ' Γ w v
+ren-nn (napp Γ a b R f c nf na) Δ' w = rn-app Δ' Γ w a b R (ren-nn nf Δ' w) (ren-nn na Δ' w)
+ren-nn (nfst Γ a b R p np) Δ' w = rn-fst Δ' Γ w a b R (ren-nn np Δ' w)
+ren-nn (nsnd Γ a b R p np) Δ' w = rn-snd Δ' Γ w a b R (ren-nn np Δ' w)
+ren-nn (ncase Γ s R x t f nx nt nf) Δ' w = rn-case Δ' Γ w s R (ren-nn nx Δ' w) (ren-nn nt Δ' w) (ren-nn nf Δ' w)
+ren-nn (nne Γ R x nx) Δ' w = rn-ne Δ' Γ w R (ren-nn nx Δ' w)
+ren-nn (ntrue Γ B) Δ' w = (c-true , nn-fm-out k-nf Δ' Γ w One1 s-bool (bool-v true) B c-true (ntrue Δ' (wact Δ' Γ w One1 B)))
+ren-nn (nfalse Γ B) Δ' w = (c-false , nn-fm-out k-nf Δ' Γ w One1 s-bool (bool-v false) B c-false (nfalse Δ' (wact Δ' Γ w One1 B)))
+ren-nn (nlam Γ a b X c nb) Δ' w =
+  rn-lam Δ' Γ w a b X (ren-nn nb (lam-ctx Δ' a b (wact Δ' Γ w (TV (s-pi a b)) X)) (world-keep Δ' Γ a (TV (s-pi a b)) (λ q → fst (fst q)) X w))
+ren-nn (npair Γ a b R c1 c2 n1 n2) Δ' w = rn-pair Δ' Γ w a b R (ren-nn n1 Δ' w) (ren-nn n2 Δ' w)
+ren-nn (nplam Γ a X c nb) Δ' w = rn-plam Δ' Γ w a X (ren-nn nb (dext Δ') (world-dkeep Δ' Γ w))
+ren-nn (npapp Γ a P p f cf nc Y q np) Δ' w = rn-papp Δ' Γ w a P f cf nc Y q (ren-nn np Δ' w)
