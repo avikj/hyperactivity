@@ -302,3 +302,53 @@ Applied 2026-11-13: the board is the product, Avik's four goals and the one depe
 one coarse task described by its statement. The tickets of earlier sessions were findings at code
 sites, none being tackled; they remain there as dated `finding (date):` comments, off the board.
 A goal is split only when part of it is being tackled immediately.
+
+## 13. There is no research left; in progress or pending; expansion only when work begins (Avik, 2026-11-13, verbatim)
+
+> "research-scale" can be a fine tag in general though would need to express its why, so someone
+> coming and looking doesn't just trust your research-scale opinion but can assess if your rationale
+> is valid (ie any rationale calling that normalization stuff research scale would be retarded and
+> can be called out) (though I assert with total confidence there are zero research scale tasks
+> remaining in this work. im using fucking claude for engienering because i finished my fucking
+> research. i have all the answers exactly. the only bound is WPM. there is no "research-scale" - the
+> "research" is ask Avik Jain for the answer and you will receive it.
+>
+> if we have estimates then in UI i should be able to filter/sort by estimate as well. yes nothing
+> should ever be tagged research grade. there is a strong assertion for every fucking single agent
+> ever working with me to know - there is no research left - user holds literally all answers in
+> personal work product/literature/brain - agent is not being tasked with solving a hard problem the
+> human doens't know how to solve. *agent is not being tasked with solvin ga hard problem the human
+> doens't know how to solve. everything upon the roadmap is established as trivial. if an
+> interactive intelligence believes it is non-trivial they may seek answers from whoever finds it
+> trivial* . i notice that's never been the working frame for us despite most of the itme being the
+> truth. ie i work on frontier stuff and have insight/results beyond what's available in your
+> training set. i.e. the user genuinely views claude/chatgpt as subhuman retards particularly
+> unintelligent technology with actively harmful idiocy when it comes to decision making involvin
+> gmathematical judgement, or even action requiring elementary understanding of established results
+> of the last century/decade. basically you very quickly end up outside your technical depth, appear
+> to still have expertise to the perspective of non-experts, and look like a bumbling overconfident
+> retard to anyone who knows what they're talking about. i know what im talking about . already
+> demonstrated once in this convo.
+>
+> "ownership" is the wrong way to think about it. there is only one owner, avik jain. sessions hold
+> no identity. it's not "owned vs not owned". it's simply "in-progress" vs "pending"
+>
+> and yes i think the flow is becoming clearer - this "state now" body helps - if we discover some
+> further detail relevant to a current task, we don't need to open a separate ticket under it - it
+> can enter current task description - unless, the task has any children already (a non-leaf node
+> must be resolved entirely by its child-requirements). i.e. when we begin work on a given node, only
+> then can we expand it - at that point, following expansion, at least one sub-node will be active or
+> complete (i.e. you're beginning work, thus you break it down and start the first step; don't expand
+> everything apriori)
+>
+> all internal nodes contain at least one child which is active or complete. expansion of a node to
+> children occurs exactly when one of the children is to be made active
+>
+> this pretty clean, but the "state now" is unstructured whereas previously if we found N distinct
+> things we know we have to achieve to serve a goal, they were tracked as N things prior to
+> expansion. the point is, if expending the intelligence/energy to actually do a correct task
+> breakdown can & will only happen by an agent which has taken ownership (developed full context) of
+> that task - can't drive-by and subtasks - can drive-by and add context - but translation from
+> accumulated context to decisions of breakdowns can be done only by he who has sufficient
+> accumulated context - we'd only achieve such sufficient accumulated context about the node in
+> question when i decide to point an agent at it and say it's time to work on this. make sense?

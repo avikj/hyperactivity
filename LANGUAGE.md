@@ -254,10 +254,7 @@ the checker infers for `e`, `#scope` the names in scope, `#where f` where `f` wa
 `--read` before the files checks what they declare without performing what acts on the world:
 `#run`, `#build` and `#build-loop` are read (their uses recorded) and not performed. `#uses` prints every declaration read so far, one line each: its position, the names it declares
 (those generated from it included) and the positions of the declarations it mentions
-(`tools/task-graph.py why` and `unexplained` read it).
-`tools/lsp.py` is a language server over `--serve` (diagnostics, re-checking by retraction, hover
-by `#type`, completion, go-to-definition, incremental sync); an editor runs `python3 tools/lsp.py
---root .` as its server for `.cub` files. `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to
+(`tools/task-graph.py why` and `unexplained` read it). `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to
 (`(lam x b)`, `(elim P e ((c x) b))`, …) are still read from files of other extensions, and
 `--print FILE` prints such a file in the surface syntax.
 

@@ -6,19 +6,15 @@
 import "core.cub"
 import "document.cub"
 --
--- A node is a task (docs/task-graph-design.md §3). Its name is an English sentence saying what it is (a
--- ticket's is its tN); the identifier it is declared under is how code refers to it. Its parts-of are the nodes it is a child of:
--- the reasons it exists, its value being exactly what it serves (§4; there is no scalar). A node's
--- children always cover it completely: a leaf is resolved when its work is done, any other node
--- exactly when all its children are, with no further step at the parent. Where a node's children are
--- not certainly complete, one child is its residual ("determine and do everything else this node
--- needs"), ordinary work that shrinks as pieces are carved out of it. A node part of nothing is a
--- root, and is declared one (roots); the root of this work is what Avik wants.
--- A node's text: a goal's statement is the comment `name (date):` above its definition in
--- task-graph/hyperactivity.cub; a node opened for a specific piece of work is named tN and its text is the one
--- comment `tN (date):` at the place in the code it concerns. Every node in the state is open;
--- resolving one removes it (and any parent it leaves with no children, after confirming the parent is
--- achieved); the history keeps it.
+-- A node is a task (docs/task-graph-design.md §3). Its name is an English sentence saying what it is;
+-- the identifier it is declared under is how code refers to it. Its parts-of are the nodes it is a
+-- child of: the reasons it exists, its value being exactly what it serves (§4; there is no scalar).
+-- A node's children always cover it: a leaf is resolved when its work is done, any other node
+-- exactly when all its children are, with no further step at the parent. A node is expanded into
+-- children only when its work begins (§13). A node part of nothing is a root, and is declared one
+-- (roots); the root of this work is what Avik wants. A node's statement is the comment above its
+-- definition in task-graph/hyperactivity.cub: what it is, why, and what is known about it.
+-- Resolving a node removes it; the history keeps it.
 -- The one relation besides parts: `after`, pairs (n , ms): n's work cannot start until every node of
 -- ms is resolved (waiting on a node is waiting on every leaf under it). The order of work is computed
 -- from parts and after alone (§5): every order is a topological sort of after; among work that can be

@@ -14,7 +14,7 @@ PAGE = os.path.join(ROOT, 'tools', 'task-graph-view.html')
 
 
 def graph_json():
-    g, roots, after = tg.graph(); kids = tg.kids_of(g); txt = tg.texts()
+    g, roots, after = tg.graph(); kids = tg.kids_of(g)
     docs, ec = tg.essential_context()
     leaves = [n for n in g if not kids.get(n)]
     lu = lambda n: {x for x in tg.under(g, kids, n) | {n} if not kids.get(x)}

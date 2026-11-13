@@ -1,28 +1,16 @@
 #!/usr/bin/env python3
-"""work — the work's graph (2026-11-12; one kind of node and the order of work, 2026-11-13).
+"""task-graph — the task graph's tool (2026-11-12; one kind of node and the order of work, 2026-11-13).
 
-What the graph means and how it is used is docs/task-graph-design.md (Avik's design): read it first. The graph is
-code: lib/task-graph.cub (what a node is: a task, its name and its parents; the relation after),
-task-graph/hyperactivity.cub (this work's nodes, each defined after its parents; a goal's statement is the comment
-above its definition). A node's children always cover it; where they are not certainly complete one
-child is its residual (its text begins `residual of NODE`). A node opened for a specific piece of work
-is named tN, and its text is the one comment in the repository that begins `tN (YYYY-MM-DD):`, at
-the place it concerns. Every node in the graph is open; resolving one removes it.
+What the graph means and how it is used is docs/task-graph-design.md (Avik's design): read it first. The
+graph is code: lib/task-graph.cub (what a node is: a task, its name and its parents; the relations
+after and essential-context), task-graph/hyperactivity.cub (this work's nodes, each defined after
+its parents; a node's statement is the comment above its definition). Run through `hyperactive`.
 
-    python3 tools/task-graph.py tree               the graph from its roots, open tN under each node
-    python3 tools/task-graph.py show NODE ...      a node's statement or text, place, parts, after, before
-    python3 tools/task-graph.py list [--under N]   the tN nodes, with the first words of their text
+    python3 tools/task-graph.py tree               the graph from its roots
+    python3 tools/task-graph.py show NODE ...      a node's statement, parents, children, after, essential context
     python3 tools/task-graph.py priority           the order of work: what can start now, those that
                                              supersede others first; then what waits, on what
-    python3 tools/task-graph.py check              graph and comments correspond; the graph checks
-    python3 tools/task-graph.py next               the next tN number never used (the history included)
-    python3 tools/task-graph.py open FILE:LINE NODE [NODE ...] NAME TEXT
-                                             open the next tN, part of the NODEs, its text the
-                                             comment `tN (date): TEXT` written above FILE:LINE;
-                                             a part of the root or of a root's part asks y/N;
-                                             a part of a node with no residual refutes its cover
-    python3 tools/task-graph.py close tN           tN resolved: its node and text removed; a parent left
-                                             with no children is resolved too, once confirmed
+    python3 tools/task-graph.py check              the graph checks (names are sentences, statements exist, roots declared)
     python3 tools/task-graph.py view TERM          a view: a term over the work (lib/task-graph.cub's views over
                                              `declarations Node`) evaluated by the machine, shown by
                                              its type (a List Word as text)
@@ -46,8 +34,6 @@ signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKIP_DIRS = {'.git', 'build', 'archive', '__pycache__'}
 EXTS = ('.cub', '.c', '.h', '.py', '.md', '.s', '.sh', '.txt')
-MARK = re.compile(r'\bt(\d+) \((\d{4}-\d{2}-\d{2})\):')
-RULE = re.compile(r'^\s*(--|#|//|\*)\s*-{4,}')
 
 
 def rel(p):
@@ -60,67 +46,6 @@ def files():
         for f in sorted(fs):
             if f.endswith(EXTS) or f == 'Makefile':
                 yield os.path.join(d, f)
-
-
-def comment_body(line):
-    """the text of a comment line and its style, or None when the line is not a comment"""
-    s = line.strip()
-    for pre in ('--', '//', '#'):
-        if s.startswith(pre):
-            return s[len(pre):].strip(), pre
-    if s.startswith('/*'):
-        return s[2:].strip(), '/*'
-    if s.startswith('*') and not s.startswith('*/'):
-        return s[1:].strip(), '*'
-    return None
-
-
-def texts():
-    """every ticket comment: number -> list of (file, line, date, text)"""
-    out = {}
-    for p in files():
-        if os.path.abspath(p) == os.path.abspath(__file__):
-            continue
-        try:
-            lines = open(p, encoding='utf-8', errors='replace').read().split('\n')
-        except OSError:
-            continue
-        for i, line in enumerate(lines):
-            m = MARK.search(line)
-            if not m or comment_body(line) is None and '/*' not in line:
-                continue
-            n, date = int(m.group(1)), m.group(2)
-            body = [line[m.end():].strip()]
-            block = '/*' in line[:m.start()] and '*/' not in line[m.end():]
-            if '*/' in body[0]:
-                body[0] = body[0].split('*/')[0].strip()
-                block = False
-            j = i + 1
-            while j < len(lines):
-                nxt = lines[j]
-                if MARK.search(nxt) or RULE.match(nxt):
-                    break
-                if block:
-                    t = nxt.strip()
-                    end = '*/' in t
-                    t = t.split('*/')[0].strip().lstrip('*').strip()
-                    if t:
-                        body.append(t)
-                    j += 1
-                    if end:
-                        break
-                    continue
-                cb = comment_body(nxt)
-                if cb is None or cb[0] == '' or cb[1] in ('/*',):
-                    break
-                body.append(cb[0])
-                j += 1
-            out.setdefault(n, []).append((rel(p), i + 1, date, ' '.join(body).strip()))
-    return out
-
-
-GRAPH = os.path.join(ROOT, 'task-graph', 'hyperactivity.cub')
-NODE = re.compile(r'^([\w-]+) = node "([^"]*)" (\(.*\)|nil)\s*$', re.M)
 
 
 def names_in(s):
@@ -197,8 +122,6 @@ def kids_of(g):
     return k
 
 
-def is_t(n):
-    return re.fullmatch(r't\d+', n) is not None
 
 
 def first_sentence(t, width=110):
@@ -212,9 +135,7 @@ def rel_word(g, parent):
 
 def cmd_show(args):
     g, roots, after = graph()
-    txt = texts()
     for a in args:
-        if a not in g and re.fullmatch(r'\d+', a): a = 't' + a
         d = g.get(a)
         if not d:
             print(f'{a}: no such node\n'); continue
@@ -230,10 +151,7 @@ def cmd_show(args):
         if after.get(a): print('  after: ' + ' '.join(after[a]))
         waits = [m for m, l in after.items() if a in l]
         if waits: print('  before: ' + ' '.join(waits))
-        bodies = [(f, l, dt, t) for f, l, dt, t in txt.get(int(a[1:]), [])] if is_t(a) else []
-        if not is_t(a) and d['statement']: bodies = [('task-graph/hyperactivity.cub', 0, '', d['statement'])]
-        for f, l, dt, t in bodies:
-            print(f'  {f}' + (f':{l}  ({dt})' if l else ''))
+        for t in [d['statement']] if d['statement'] else []:
             words, line = t.split(), ''
             for w in words:
                 if len(line) + len(w) + 1 > 96:
@@ -241,7 +159,7 @@ def cmd_show(args):
                 else:
                     line = (line + ' ' + w).strip()
             if line: print('    ' + line)
-        if not bodies: print('  (no text)')
+        if not d['statement']: print('  (no statement)')
         print()
 
 
@@ -254,18 +172,6 @@ def under(g, kids, n):
     return out
 
 
-def cmd_list(args):
-    g, _, _ = graph()
-    sel = set(g)
-    if '--under' in args:
-        n = args[args.index('--under') + 1]
-        sel = under(g, kids_of(g), n)
-    txt = texts()
-    for n in [x for x in g if is_t(x) and x in sel]:
-        t = txt.get(int(n[1:]), [('', 0, '', '')])[0]
-        print(f'{n:<5} {",".join(g[n]["parts"]):<28} {first_sentence(t[3], 80)}')
-
-
 def cmd_tree(args):
     g, roots, _ = graph()
     kids = kids_of(g)
@@ -274,32 +180,20 @@ def cmd_tree(args):
         d = g[n]
         k = kids.get(n, [])
         nt = sum(1 for x in under(g, kids, n) if not kids.get(x))
-        if is_t(n): return
         also = [p for p in d['parts'] if p != via]
         print('  ' * depth + f'{d["id"]}  [{n}' + (f'; {nt} open tasks under it]' if k else ']')
               + (f'  (also {", ".join(also)})' if also and depth else ''))
         if n in seen: return
         seen.add(n)
-        direct = [x for x in k if is_t(x)]
-        for x in sorted(direct, key=lambda x: int(x[1:])): print('  ' * (depth + 1) + f'{x}  {g[x]["id"]}')
         for c in k:
-            if not is_t(c) and g[c]['parts'] and g[c]['parts'][0] == n:
+            if g[c]['parts'] and g[c]['parts'][0] == n:
                 walk(c, depth + 1, n)
     for r in roots: walk(r, 0, None)
 
 
 def cmd_check(args):
     g, roots, after = graph()
-    txt = texts()
     bad = 0
-    ts = {int(n[1:]) for n in g if is_t(n)}
-    for n in sorted(ts | set(txt)):
-        if n not in ts:
-            print(f't{n}: a text comment with no node ({txt[n][0][0]}:{txt[n][0][1]})'); bad += 1
-        elif n not in txt:
-            print(f't{n}: a node with no text comment'); bad += 1
-        elif len(txt[n]) > 1:
-            print(f't{n}: {len(txt[n])} text comments: ' + ', '.join(f'{f}:{l}' for f, l, _, _ in txt[n])); bad += 1
     for n, d in g.items():
         if ' ' not in d['id'] or d['id'] == n:
             print(f'{n}: its name must be an English sentence saying what it is, not an identifier'); bad += 1
@@ -307,7 +201,7 @@ def cmd_check(args):
             print(f'{n}: part of nothing and not declared a root'); bad += 1
         if d['parts'] and n in roots:
             print(f'{n}: declared a root but part of {", ".join(d["parts"])}'); bad += 1
-        if not is_t(n) and not d['statement']:
+        if not d['statement']:
             print(f'{n}: no statement'); bad += 1
     for n, l in after.items():
         for m in [n] + l:
@@ -320,8 +214,7 @@ def cmd_check(args):
     for f in fails: print('  ' + f)
     if r.returncode != 0 or fails:
         print(r.stderr.strip()[:2000]); bad += 1
-    print(f'{sum(1 for n in g if is_t(n))} open tN nodes, {sum(1 for n in g if not is_t(n))} other nodes; '
-          + ('consistent' if not bad else f'{bad} problem(s)'))
+    print(f'{len(g)} nodes; ' + ('consistent' if not bad else f'{bad} problem(s)'))
     sys.exit(1 if bad else 0)
 
 
@@ -351,10 +244,8 @@ def cmd_priority(args):
              for x in leaves}
     ready = [x for x in leaves if not waits[x]]
     gain = {x: {y for y in leaves if x in waits[y]} for x in ready}   # the waiting work x is a prerequisite of (docs/task-graph-design.md §5)
-    txt = texts()
     def line(n):
-        t = txt.get(int(n[1:]), [('', 0, '', '')])[0][3] if is_t(n) else g[n]['statement']
-        return f'  {n:<5} {",".join(g[n]["parts"]):<26} {first_sentence(t, 64)}'
+        return f'  {g[n]["id"]}  [{n}]'
     remaining, k = list(ready), 0
     print('can start now, in layers (a leaf supersedes the layers below it):')
     while remaining:
@@ -370,18 +261,6 @@ def cmd_priority(args):
         print('waiting:')
         for x in blocked:
             print(line(x) + f'\n        waits on: {" ".join(sorted(waits[x]))}')
-
-
-def cmd_next(args):
-    print(f't{max(used_numbers(graph()[0]), default=0) + 1}')
-
-
-
-STATED = re.compile(r'\((part of|prerequisite to) ([\w-]+)\)')
-
-
-IMPORT = re.compile(r'^import "([^"]+)"', re.M)
-READ_DIRS = ('lib', 'experiments', 'task-graph')
 
 
 def cub_files():
@@ -669,169 +548,12 @@ def depth(g, roots, n, seen=()):
     return 1 + min(ds) if ds else None
 
 
-def residual_of(g, txt, x):
-    """the child of x whose text says it is x's residual, if any"""
-    for k in kids_of(g).get(x, []):
-        if is_t(k) and any(t.startswith(f'residual of {x}:') for _, _, _, t in txt.get(int(k[1:]), [])):
-            return k
-    return None
-
-
-def render_pairs(pairs):
-    out = 'nil'
-    for a, bs in reversed(list(pairs.items())):
-        lst = 'nil'
-        for b in reversed(bs): lst = f'cons {b} ({lst})' if lst != 'nil' else f'cons {b} nil'
-        out = f'cons ({a} , {lst}) ({out})' if out != 'nil' else f'cons ({a} , {lst}) nil'
-    return out
-
-
-def write_after(gs, after):
-    return re.sub(r'^after = .*$', lambda m: 'after = ' + render_pairs(after), gs, count=1, flags=re.M)
-
-
-def header_text(gs, n, body):
-    """a tN text with no single site, written in task-graph/hyperactivity.cub's header before its import"""
-    import textwrap
-    lines = ['-- ' + b for b in textwrap.wrap(body, 97)] + ['--']
-    at = gs.index('import "../lib/task-graph.cub"')
-    return gs[:at] + '\n'.join(lines) + '\n' + gs[at:]
-
-
-def add_node(gs, n, parents, name):
-    last = list(re.finditer(r'^t\d+ = node ".*" .*\n', gs, re.M))[-1]
-    parts = ''.join(f'(cons {x} ' for x in parents) + 'nil' + ')' * len(parents)
-    return gs[:last.end()] + f't{n} : Node\nt{n} = node "{name}" {parts}\n' + gs[last.end():]
-
-
-def used_numbers(g):
-    used = {int(x[1:]) for x in g if is_t(x)} | set(texts())
-    try:
-        log = subprocess.run(['git', 'log', '-p', '--all', '--', 'work', 'lib/work.cub', 'task-graph', 'lib/task-graph.cub'], cwd=ROOT,
-                             capture_output=True, text=True).stdout
-        used |= {int(x) for x in re.findall(r'\bt(\d+)\b', log)}
-    except OSError: pass
-    return used
-
-
-def cmd_open(args):
-    import datetime, textwrap
-    if len(args) < 4: sys.exit('open FILE:LINE NODE [NODE ...] NAME TEXT   (NAME: an English sentence saying what the ticket is)')
-    site, nodes, name, text = args[0], args[1:-2], args[-2], args[-1]
-    if ' ' not in name or '"' in name: sys.exit('NAME must be an English sentence saying what the ticket is, without double quotes')
-    f, line = site.rsplit(':', 1); line = int(line)
-    g, roots, after = graph()
-    txt = texts()
-    for x in nodes:
-        if x not in g: sys.exit(f'{x}: not a node of task-graph/hyperactivity.cub')
-        d = depth(g, roots, x)
-        if d is not None and d <= 1:
-            print(f'{x} is {"the root" if d == 0 else "a child of the root"}: attaching here puts the new node in front of')
-            print('everyone; the most specific node is essential (docs/task-graph-design.md §6, points 6, 8, 10; python3 tools/task-graph.py tree).')
-            if not sys.stdin.isatty() or input(f'attach it directly to {x}? [y/N] ').strip().lower() != 'y':
-                sys.exit('not opened')
-    # a child of a node with a residual is carved out of the residual's scope; a child of a node whose
-    # children were held to cover it refutes that cover, and the missed requirement is a class (§3)
-    refuted = [x for x in nodes if kids_of(g).get(x) and not residual_of(g, txt, x)]
-    for x in refuted:
-        print(f'{x}\'s children were held to cover it completely; a new child says they did not. The missed')
-        print(f'requirement is a class (docs/task-graph-design.md §3, point 9): {x} also gets a residual, "determine and do')
-        print(f'everything else {x} needs".')
-        if not sys.stdin.isatty() or input(f'open a new child of {x}, and its residual? [y/N] ').strip().lower() != 'y':
-            sys.exit('not opened')
-    n = max(used_numbers(g), default=0) + 1
-    today = datetime.date.today().isoformat()
-    path = os.path.join(ROOT, f)
-    ls = open(path, encoding='utf-8').read().split('\n')
-    c = f.endswith(('.c', '.h'))
-    ind = re.match(r'\s*', ls[line - 1]).group(0) if line - 1 < len(ls) else ''
-    body = textwrap.wrap(f't{n} ({today}): {text}', 100 - len(ind) - 3)
-    if c: com = [ind + '/* ' + body[0]] + [ind + ' * ' + b for b in body[1:]]; com[-1] += ' */'
-    else: com = [ind + '-- ' + b for b in body]
-    ls[line - 1:line - 1] = com
-    open(path, 'w', encoding='utf-8').write('\n'.join(ls))
-    gs = open(GRAPH, encoding='utf-8').read()
-    gs = add_node(gs, n, nodes, name)
-    for i, x in enumerate(refuted):
-        n2 = n + 1 + i
-        gs = add_node(gs, n2, [x], f'Everything else {g[x]["id"].rstrip(".")} requires.')
-        gs = header_text(gs, n2, f't{n2} ({today}): residual of {x}: determine and do everything else {x} needs; '
-                         f't{n} was a requirement its children did not cover, so their cover was refuted and the '
-                         f'missed requirement is a class.')
-    open(GRAPH, 'w', encoding='utf-8').write(gs)
-    print(f't{n} opened, part of {", ".join(nodes)}, at {f}:{line}')
-    for i, x in enumerate(refuted): print(f't{n + 1 + i} opened: the residual of {x}')
-
-
-def remove_text(n):
-    """delete tN's text comment at its site (and the blank comment line after it in the graph header)"""
-    for f, l, _, _ in texts().get(n, []):
-        path = os.path.join(ROOT, f)
-        ls = open(path, encoding='utf-8').read().split('\n')
-        i = l - 1
-        j = i + 1
-        block = '/*' in ls[i] and '*/' not in ls[i]
-        while j < len(ls):
-            if block:
-                end = '*/' in ls[j]; j += 1
-                if end: break
-                continue
-            cb = comment_body(ls[j])
-            if MARK.search(ls[j]) or RULE.match(ls[j]) or cb is None or cb[0] == '' or cb[1] == '/*': break
-            j += 1
-        if f == 'task-graph/hyperactivity.cub' and j < len(ls) and ls[j].strip() == '--': j += 1
-        del ls[i:j]
-        open(path, 'w', encoding='utf-8').write('\n'.join(ls))
-
-
-def remove_node(gs, x):
-    """delete x's definition and, for a goal, its statement above it"""
-    ls = gs.split('\n')
-    at = next(k for k, l in enumerate(ls) if l == f'{x} : Node')
-    top = at
-    if not is_t(x):
-        k = at - 1
-        while k >= 0 and ls[k].startswith('--'):
-            if re.match(r'^-- ' + re.escape(x) + r' \(', ls[k]): top = k; break
-            k -= 1
-    del ls[top:at + 2]
-    return '\n'.join(ls)
-
-
-def cmd_close(args):
-    """tN is resolved: its node and its text are removed. A parent left with no children is resolved
-    exactly when its children were (docs/task-graph-design.md §3), so it is removed too once confirmed; if it is
-    not achieved, its children did not cover it, and its residual must be opened instead."""
-    if len(args) != 1: sys.exit('close tN')
-    x = args[0] if args[0].startswith('t') else 't' + args[0]
-    g, roots, after = graph()
-    if x not in g or not is_t(x): sys.exit(f'{x}: not an open tN node')
-    if kids_of(g).get(x): sys.exit(f'{x} has children: it is resolved when they are')
-    remove_text(int(x[1:]))
-    gone, todo = [x], list(g[x]['parts'])
-    gs = remove_node(open(GRAPH, encoding='utf-8').read(), x)
-    while todo:
-        p = todo.pop()
-        left = [k for k, d in g.items() if p in d['parts'] and k not in gone]
-        if left or p in roots: continue
-        print(f'{p} has no children left: every part of it is resolved.')
-        if sys.stdin.isatty() and input(f'is {p} achieved? [y/N] ').strip().lower() == 'y':
-            gs = remove_node(gs, p); gone.append(p); todo += g[p]['parts']
-        else:
-            print(f'then its children did not cover it: open its residual (python3 tools/task-graph.py open ... {p} TEXT)')
-    after = {a: [b for b in bs if b not in gone] for a, bs in after.items() if a not in gone}
-    after = {a: bs for a, bs in after.items() if bs}
-    gs = write_after(gs, after)
-    open(GRAPH, 'w', encoding='utf-8').write(gs)
-    print('resolved: ' + ' '.join(gone) + '  (commit with the fix; fold what matters into where it belongs)')
-
-
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
         print(__doc__); return
     c, a = sys.argv[1], sys.argv[2:]
-    {'list': cmd_list, 'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'next': cmd_next,
-     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained, 'open': cmd_open, 'close': cmd_close, 'view': cmd_view, 'every': cmd_every}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
+    {'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'priority': cmd_priority, 'why': cmd_why,
+     'unexplained': cmd_unexplained, 'view': cmd_view, 'every': cmd_every}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
 
 
 if __name__ == '__main__':

@@ -2,12 +2,10 @@
 """hyperactive — the one command for using this repository (2026-11-13).
 
     hyperactive                      what is open and what can start now
-    hyperactive show NODE ...        a node or ticket: its text, what it serves, what serves it,
+    hyperactive show NODE ...        a node: its statement, what it serves, what serves it,
                                      its essential context
     hyperactive tree                 the task graph from its root
     hyperactive order                the order of work: what can start now, then what waits on what
-    hyperactive open FILE:LINE NODE ... NAME TEXT   open a ticket at a site, as a child of NODEs, named by an English sentence
-    hyperactive close tN             a ticket resolved
     hyperactive why NAME             why a declaration exists: its chain of reasons to the root
     hyperactive unexplained [FILE]   declarations with no reason
     hyperactive view TERM            a view: a term over the task graph, evaluated by the machine
@@ -15,9 +13,6 @@
     hyperactive repl                 the machine, interactive: declarations and readings (#type e,
                                      #show e, #where name), each block ended by a line holding '.'
     hyperactive server               the task graph drawn as a graph at http://localhost:8080
-    hyperactive browse               the repository in a browser: every goal, ticket, definition,
-                                     document and file as one graph of reasons, from the root
-    hyperactive lsp                  the language server, for an editor
     hyperactive library | brunerie | every     the standard checks
     hyperactive install              put `hyperactive` on your PATH (~/.local/bin)
     hyperactive help                 this list
@@ -63,7 +58,7 @@ def main():
         return
     c, rest = a[0], a[1:]
     if c in ('help', '-h', '--help'): print(__doc__); return
-    if c in ('show', 'tree', 'open', 'close', 'why', 'unexplained', 'view', 'every', 'list', 'next'): sys.exit(tasks(c, *rest))
+    if c in ('show', 'tree', 'why', 'unexplained', 'view', 'every'): sys.exit(tasks(c, *rest))
     if c == 'order': sys.exit(tasks('priority', *rest))
     if c == 'check':
         if not rest: sys.exit(tasks('check'))
@@ -74,15 +69,6 @@ def main():
         sys.exit(subprocess.call([MACHINE, os.path.join(ROOT, 'lib', 'core.cub'), *rest, '--serve']))
     if c == 'server':
         sys.exit(subprocess.call([sys.executable, os.path.join(ROOT, 'tools', 'task-tree-server.py'), *rest]))
-    if c == 'browse':
-        build()
-        import webbrowser, threading
-        port = rest[0] if rest else '8765'
-        threading.Timer(1.0, lambda: webbrowser.open(f'http://127.0.0.1:{port}/')).start()
-        sys.exit(subprocess.call([sys.executable, os.path.join(ROOT, 'tools', 'repository-browser.py'), port]))
-    if c == 'lsp':
-        build()
-        sys.exit(subprocess.call([sys.executable, os.path.join(ROOT, 'tools', 'lsp.py'), '--root', ROOT, *rest]))
     if c in ('library', 'brunerie'):
         sys.exit(subprocess.call(['make', '-s', '-C', ROOT, c]))
     if c == 'install':
