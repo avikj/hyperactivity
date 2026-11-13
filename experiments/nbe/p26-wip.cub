@@ -6472,6 +6472,359 @@ papp-line-fmap Γ Y Z Z' ℓ k f X =
        (fmap-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (DL (CtxV (fst Γ)) (FbE (fst Γ) Z)) (DL (CtxV (fst Γ)) (FbE (fst Γ) Z'))
           (fline (fst Γ) Y Z ℓ) (dlf (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → k (e ρ))) (snd Γ) X i))
 
+-- ---------------------------------------------------------------- F2: the De Morgan coherence of papp-ex
+-- (2026-11-12, F2) Path application over degenerate lines (papp-ex) respects the equations of the De
+-- Morgan algebra, each as a path in one fibre type DCube n X F G over a fixed base. Two fibre directions
+-- over one base point are a square in the fibre (DL X (DL X F)); its generators fibrewise: exchange
+-- (dexch), diagonal (ddiag), and degen-o (a fibre point as a degenerate line). (F2a) at variables:
+-- diag-dd at two indices commutes after exchange (ddv-exch), diag-dd twice at one index is diag-dd of
+-- the diagonal (ddv-diag), diag-dd of a degenerate line is its point (ddv-deg); each by the cases of
+-- diag-dd at each entry, its fibrewise naturality (diag-dd-fmap), composites of fibrewise maps that
+-- agree judgmentally pointwise (fmap-sw21 … fmap-sw2i), and at a successor index the hypothesis.
+dexch : (X : Type 1) (F : X → Type 1) (x : X) → DL X (DL X F) x → DL X (DL X F) x
+dexch X F x q = exch-o X F (degen-l (Line X) (degen-l X x)) q
+ddiag : (X : Type 1) (F : X → Type 1) (x : X) → DL X (DL X F) x → DL X F x
+ddiag X F x q = diag-o X F (degen-l (Line X) (degen-l X x)) q
+-- diag-dd's two steps at a dimension entry, fibrewise over a line of the base
+dxo : (X : Type 1) (F : X → Type 1) (L : Line X) → LineO X (DL X F) L → DL (Line X) (LineO X F) L
+dxo X F L q = exch-o X F (line-map X (Line X) (degen-l X) L) q
+dgo : (X : Type 1) (F : X → Type 1) (L : Line X) → LineO X (DL X F) L → LineO X F L
+dgo X F L q = diag-o X F (line-map X (Line X) (degen-l X) L) q
+-- composites of fibrewise maps agreeing pointwise (q: judgmental where used), by induction on n
+fmap-sw21 : (n : Nat) (X : Type 1) (F0 F1 F2 : X → Type 1) (h0 : (x : X) → F0 x → F1 x) (h1 : (x : X) → F1 x → F2 x) (k : (x : X) → F0 x → F2 x)
+  (q : PathP (λ i → (x : X) → F0 x → F2 x) (λ x y → h1 x (h0 x y)) k) (c : Cube n X) (d : DCube n X F0 c) →
+  PathP (λ i → DCube n X F2 c) (dcube-fmap n X F1 F2 h1 c (dcube-fmap n X F0 F1 h0 c d)) (dcube-fmap n X F0 F2 k c d)
+fmap-sw21 zero X F0 F1 F2 h0 h1 k q c d = λ i → q i c d
+fmap-sw21 (suc n) X F0 F1 F2 h0 h1 k q c d =
+  fmap-sw21 n (Line X) (LineO X F0) (LineO X F1) (LineO X F2) (lineo-fmap X F0 F1 h0) (lineo-fmap X F1 F2 h1) (lineo-fmap X F0 F2 k)
+    (λ i L y → lineo-fmap X F0 F2 (q i) L y) c d
+fmap-sw2i : (n : Nat) (X : Type 1) (F0 F1 : X → Type 1) (h0 : (x : X) → F0 x → F1 x) (h1 : (x : X) → F1 x → F0 x)
+  (q : PathP (λ i → (x : X) → F0 x → F0 x) (λ x y → h1 x (h0 x y)) (λ x y → y)) (c : Cube n X) (d : DCube n X F0 c) →
+  PathP (λ i → DCube n X F0 c) (dcube-fmap n X F1 F0 h1 c (dcube-fmap n X F0 F1 h0 c d)) d
+fmap-sw2i zero X F0 F1 h0 h1 q c d = λ i → q i c d
+fmap-sw2i (suc n) X F0 F1 h0 h1 q c d =
+  fmap-sw2i n (Line X) (LineO X F0) (LineO X F1) (lineo-fmap X F0 F1 h0) (lineo-fmap X F1 F0 h1) (λ i L y → lineo-fmap X F0 F0 (q i) L y) c d
+fmap-sw23 : (n : Nat) (X : Type 1) (F0 F1 F2 G1 G2 : X → Type 1) (h0 : (x : X) → F0 x → F1 x) (h1 : (x : X) → F1 x → F2 x)
+  (k0 : (x : X) → F0 x → G1 x) (k1 : (x : X) → G1 x → G2 x) (k2 : (x : X) → G2 x → F2 x)
+  (q : PathP (λ i → (x : X) → F0 x → F2 x) (λ x y → h1 x (h0 x y)) (λ x y → k2 x (k1 x (k0 x y)))) (c : Cube n X) (d : DCube n X F0 c) →
+  PathP (λ i → DCube n X F2 c) (dcube-fmap n X F1 F2 h1 c (dcube-fmap n X F0 F1 h0 c d))
+    (dcube-fmap n X G2 F2 k2 c (dcube-fmap n X G1 G2 k1 c (dcube-fmap n X F0 G1 k0 c d)))
+fmap-sw23 zero X F0 F1 F2 G1 G2 h0 h1 k0 k1 k2 q c d = λ i → q i c d
+fmap-sw23 (suc n) X F0 F1 F2 G1 G2 h0 h1 k0 k1 k2 q c d =
+  fmap-sw23 n (Line X) (LineO X F0) (LineO X F1) (LineO X F2) (LineO X G1) (LineO X G2) (lineo-fmap X F0 F1 h0) (lineo-fmap X F1 F2 h1)
+    (lineo-fmap X F0 G1 k0) (lineo-fmap X G1 G2 k1) (lineo-fmap X G2 F2 k2) (λ i L y → lineo-fmap X F0 F2 (q i) L y) c d
+fmap-sw32 : (n : Nat) (X : Type 1) (F0 F1 F2 F3 G1 : X → Type 1) (h0 : (x : X) → F0 x → F1 x) (h1 : (x : X) → F1 x → F2 x) (h2 : (x : X) → F2 x → F3 x)
+  (k0 : (x : X) → F0 x → G1 x) (k1 : (x : X) → G1 x → F3 x)
+  (q : PathP (λ i → (x : X) → F0 x → F3 x) (λ x y → h2 x (h1 x (h0 x y))) (λ x y → k1 x (k0 x y))) (c : Cube n X) (d : DCube n X F0 c) →
+  PathP (λ i → DCube n X F3 c) (dcube-fmap n X F2 F3 h2 c (dcube-fmap n X F1 F2 h1 c (dcube-fmap n X F0 F1 h0 c d)))
+    (dcube-fmap n X G1 F3 k1 c (dcube-fmap n X F0 G1 k0 c d))
+fmap-sw32 zero X F0 F1 F2 F3 G1 h0 h1 h2 k0 k1 q c d = λ i → q i c d
+fmap-sw32 (suc n) X F0 F1 F2 F3 G1 h0 h1 h2 k0 k1 q c d =
+  fmap-sw32 n (Line X) (LineO X F0) (LineO X F1) (LineO X F2) (LineO X F3) (LineO X G1) (lineo-fmap X F0 F1 h0) (lineo-fmap X F1 F2 h1)
+    (lineo-fmap X F2 F3 h2) (lineo-fmap X F0 G1 k0) (lineo-fmap X G1 F3 k1) (λ i L y → lineo-fmap X F0 F3 (q i) L y) c d
+fmap-sw33 : (n : Nat) (X : Type 1) (F0 F1 F2 F3 G1 G2 : X → Type 1) (h0 : (x : X) → F0 x → F1 x) (h1 : (x : X) → F1 x → F2 x) (h2 : (x : X) → F2 x → F3 x)
+  (k0 : (x : X) → F0 x → G1 x) (k1 : (x : X) → G1 x → G2 x) (k2 : (x : X) → G2 x → F3 x)
+  (q : PathP (λ i → (x : X) → F0 x → F3 x) (λ x y → h2 x (h1 x (h0 x y))) (λ x y → k2 x (k1 x (k0 x y)))) (c : Cube n X) (d : DCube n X F0 c) →
+  PathP (λ i → DCube n X F3 c) (dcube-fmap n X F2 F3 h2 c (dcube-fmap n X F1 F2 h1 c (dcube-fmap n X F0 F1 h0 c d)))
+    (dcube-fmap n X G2 F3 k2 c (dcube-fmap n X G1 G2 k1 c (dcube-fmap n X F0 G1 k0 c d)))
+fmap-sw33 zero X F0 F1 F2 F3 G1 G2 h0 h1 h2 k0 k1 k2 q c d = λ i → q i c d
+fmap-sw33 (suc n) X F0 F1 F2 F3 G1 G2 h0 h1 h2 k0 k1 k2 q c d =
+  fmap-sw33 n (Line X) (LineO X F0) (LineO X F1) (LineO X F2) (LineO X F3) (LineO X G1) (LineO X G2) (lineo-fmap X F0 F1 h0) (lineo-fmap X F1 F2 h1)
+    (lineo-fmap X F2 F3 h2) (lineo-fmap X F0 G1 k0) (lineo-fmap X G1 G2 k1) (lineo-fmap X G2 F3 k2) (λ i L y → lineo-fmap X F0 F3 (q i) L y) c d
+-- the two booleans' dependent eliminator
+bool-elim1-2 : (P : Bool → Bool → Type 1) → P true true → P true false → P false true → P false false → (a b : Bool) → P a b
+bool-elim1-2 P tt tf ft ff true true = tt
+bool-elim1-2 P tt tf ft ff true false = tf
+bool-elim1-2 P tt tf ft ff false true = ft
+bool-elim1-2 P tt tf ft ff false false = ff
+-- diag-dd at a type entry and at a dimension entry, the index's test at 0 given as b (diag-dd at the
+-- entry is the instance at weq k #0 judgmentally)
+dd-ty-op : (sk : Lst Entry) (k : Word) (b : Bool) (Z : Type 1) (H : Z → Type 1) (G : Cube (dims sk) Z) → DCube (dims sk) Z (DL Z H) G → DCube (dims sk) Z H G
+dd-ty-op sk k b Z H G q = bool-elim1 (λ b' → DCube (dims sk) Z H G) (dcube-fmap (dims sk) Z (DL Z H) H (λ x q' → fst q') G q) (diag-dd sk (%wsub k #1) Z H G q) b
+dd-dim-op : (sk : Lst Entry) (k : Word) (b : Bool) (Z : Type 1) (H : Z → Type 1) (G : Cube (suc (dims sk)) Z) → DCube (suc (dims sk)) Z (DL Z H) G → DCube (suc (dims sk)) Z H G
+dd-dim-op sk k b Z H G q =
+  bool-elim1 (λ b' → DCube (dims sk) (Line Z) (LineO Z H) G)
+    (dcube-fmap (dims sk) (Line Z) (LineO Z (DL Z H)) (LineO Z H) (λ L q' → diag-o Z H (line-map Z (Line Z) (degen-l Z) L) q') G q)
+    (diag-dd sk (%wsub k #1) (Line Z) (LineO Z H) G
+       (dcube-fmap (dims sk) (Line Z) (LineO Z (DL Z H)) (DL (Line Z) (LineO Z H)) (λ L q' → exch-o Z H (line-map Z (Line Z) (degen-l Z) L) q') G q)) b
+-- the statements for operations op, op1, op2 on cubes of lines over degenerate lines
+DDExch : (n : Nat) (op1 op2 : (Z : Type 1) (H : Z → Type 1) (G : Cube n Z) → DCube n Z (DL Z H) G → DCube n Z H G)
+  (X : Type 1) (F : X → Type 1) (G : Cube n X) (d : DCube n X (DL X (DL X F)) G) → Type 1
+DDExch n op1 op2 X F G d =
+  PathP (λ i → DCube n X F G) (op1 X F G (op2 X (DL X F) G d))
+    (op2 X F G (op1 X (DL X F) G (dcube-fmap n X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d)))
+DDDiag : (n : Nat) (op : (Z : Type 1) (H : Z → Type 1) (G : Cube n Z) → DCube n Z (DL Z H) G → DCube n Z H G)
+  (X : Type 1) (F : X → Type 1) (G : Cube n X) (d : DCube n X (DL X (DL X F)) G) → Type 1
+DDDiag n op X F G d =
+  PathP (λ i → DCube n X F G) (op X F G (op X (DL X F) G d)) (op X F G (dcube-fmap n X (DL X (DL X F)) (DL X F) (ddiag X F) G d))
+DDDeg : (n : Nat) (op : (Z : Type 1) (H : Z → Type 1) (G : Cube n Z) → DCube n Z (DL Z H) G → DCube n Z H G)
+  (X : Type 1) (F : X → Type 1) (G : Cube n X) (d : DCube n X F G) → Type 1
+DDDeg n op X F G d = PathP (λ i → DCube n X F G) (op X F G (dcube-fmap n X F (DL X F) (degen-o X F) G d)) d
+-- exchange at variables
+ddv-exch-dim-tf : (sk : Lst Entry) (k j : Word) (X : Type 1) (F : X → Type 1) (G : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X (DL X (DL X F)) G) →
+  DDExch (suc (dims sk)) (dd-dim-op sk k true) (dd-dim-op sk j false) X F G d
+ddv-exch-dim-tf sk k j X F G d =
+  pcat (DCube (dims sk) (Line X) (LineO X F) G)
+    (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F) G
+       (diag-dd sk (%wsub j #1) (Line X) (LineO X (DL X F)) G (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+    (diag-dd sk (%wsub j #1) (Line X) (LineO X F) G
+       (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (LineO X F)) (dlf (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F)) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+    (diag-dd sk (%wsub j #1) (Line X) (LineO X F) G
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X F)) (dgo X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d))))
+    (diag-dd-fmap sk (%wsub j #1) (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F) G
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d))
+    (cong1 (DCube (dims sk) (Line X) (DL (Line X) (LineO X F)) G) (DCube (dims sk) (Line X) (LineO X F) G) (λ w → diag-dd sk (%wsub j #1) (Line X) (LineO X F) G w)
+       (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (LineO X F)) (dlf (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F)) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d))
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X F)) (dgo X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d)))
+       (fmap-sw23 (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (LineO X F)) (LineO X (DL X (DL X F))) (LineO X (DL X F))
+          (dxo X (DL X F)) (dlf (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F))
+          (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) (dgo X (DL X F)) (dxo X F)
+          (λ i L y → dlf (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F) L (dxo X (DL X F) L y)) G d))
+ddv-exch-dim-ft : (sk : Lst Entry) (k j : Word) (X : Type 1) (F : X → Type 1) (G : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X (DL X (DL X F)) G) →
+  DDExch (suc (dims sk)) (dd-dim-op sk k false) (dd-dim-op sk j true) X F G d
+ddv-exch-dim-ft sk k j X F G d =
+  pcat (DCube (dims sk) (Line X) (LineO X F) G)
+    (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X F)) (dgo X (DL X F)) G d)))
+    (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+       (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (LineO X F)) (dlf (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F)) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d))))
+    (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F) G
+       (diag-dd sk (%wsub k #1) (Line X) (LineO X (DL X F)) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d))))
+    (cong1 (DCube (dims sk) (Line X) (DL (Line X) (LineO X F)) G) (DCube (dims sk) (Line X) (LineO X F) G) (λ w → diag-dd sk (%wsub k #1) (Line X) (LineO X F) G w)
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X F)) (dgo X (DL X F)) G d))
+       (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (LineO X F)) (dlf (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F)) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d)))
+       (fmap-sw23 (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F)))
+          (dgo X (DL X F)) (dxo X F)
+          (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) (dxo X (DL X F)) (dlf (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F))
+          (λ i L y → dxo X F L (dgo X (DL X F) L y)) G d))
+    (psym (DCube (dims sk) (Line X) (LineO X F) G)
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F) G
+          (diag-dd sk (%wsub k #1) (Line X) (LineO X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d))))
+       (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+          (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (LineO X F)) (dlf (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d))))
+       (diag-dd-fmap sk (%wsub k #1) (Line X) (LineO X (DL X F)) (LineO X F) (dgo X F) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d))))
+ddv-exch-dim-ff : (sk : Lst Entry) (k j : Word) (X : Type 1) (F : X → Type 1) (G : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X (DL X (DL X F)) G) →
+  DDExch (dims sk) (λ Z H G' q → diag-dd sk (%wsub k #1) Z H G' q) (λ Z H G' q → diag-dd sk (%wsub j #1) Z H G' q) (Line X) (LineO X F) G
+    (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)) →
+  DDExch (suc (dims sk)) (dd-dim-op sk k false) (dd-dim-op sk j false) X F G d
+ddv-exch-dim-ff sk k j X F G d ih =
+  pc4 (DCube (dims sk) (Line X) (LineO X F) G)
+    (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+          (diag-dd sk (%wsub j #1) (Line X) (LineO X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d))))
+    (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+       (diag-dd sk (%wsub j #1) (Line X) (DL (Line X) (LineO X F)) G
+          (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d))))
+    (diag-dd sk (%wsub j #1) (Line X) (LineO X F) G
+       (diag-dd sk (%wsub k #1) (Line X) (DL (Line X) (LineO X F)) G
+          (dcube-fmap (dims sk) (Line X) (DL (Line X) (DL (Line X) (LineO X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dexch (Line X) (LineO X F)) G
+             (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))))
+    (diag-dd sk (%wsub j #1) (Line X) (LineO X F) G
+       (diag-dd sk (%wsub k #1) (Line X) (DL (Line X) (LineO X F)) G
+          (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d)))))
+    (diag-dd sk (%wsub j #1) (Line X) (LineO X F) G
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+          (diag-dd sk (%wsub k #1) (Line X) (LineO X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d)))))
+    (cong1 (DCube (dims sk) (Line X) (DL (Line X) (LineO X F)) G) (DCube (dims sk) (Line X) (LineO X F) G) (λ w → diag-dd sk (%wsub k #1) (Line X) (LineO X F) G w)
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+          (diag-dd sk (%wsub j #1) (Line X) (LineO X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+       (diag-dd sk (%wsub j #1) (Line X) (DL (Line X) (LineO X F)) G
+          (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+       (diag-dd-fmap sk (%wsub j #1) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+    ih
+    (cong1 (DCube (dims sk) (Line X) (DL (Line X) (DL (Line X) (LineO X F))) G) (DCube (dims sk) (Line X) (LineO X F) G)
+       (λ w → diag-dd sk (%wsub j #1) (Line X) (LineO X F) G (diag-dd sk (%wsub k #1) (Line X) (DL (Line X) (LineO X F)) G w))
+       (dcube-fmap (dims sk) (Line X) (DL (Line X) (DL (Line X) (LineO X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dexch (Line X) (LineO X F)) G
+          (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+       (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d)))
+       (fmap-sw33 (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (DL (Line X) (DL (Line X) (LineO X F)))
+          (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F)))
+          (dxo X (DL X F)) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) (dexch (Line X) (LineO X F))
+          (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) (dxo X (DL X F)) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F))
+          (λ i L y → dexch (Line X) (LineO X F) L (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) L (dxo X (DL X F) L y))) G d))
+    (cong1 (DCube (dims sk) (Line X) (DL (Line X) (LineO X F)) G) (DCube (dims sk) (Line X) (LineO X F) G) (λ w → diag-dd sk (%wsub j #1) (Line X) (LineO X F) G w)
+       (diag-dd sk (%wsub k #1) (Line X) (DL (Line X) (LineO X F)) G
+          (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d))))
+       (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+          (diag-dd sk (%wsub k #1) (Line X) (LineO X (DL X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d))))
+       (psym (DCube (dims sk) (Line X) (DL (Line X) (LineO X F)) G)
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+             (diag-dd sk (%wsub k #1) (Line X) (LineO X (DL X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+                   (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d))))
+          (diag-dd sk (%wsub k #1) (Line X) (DL (Line X) (LineO X F)) G
+             (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+                   (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d))))
+          (diag-dd-fmap sk (%wsub k #1) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X (DL X F))) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) G d)))))
+ddv-exch : (sk : Lst Entry) (k j : Word) (X : Type 1) (F : X → Type 1) (G : Cube (dims sk) X) (d : DCube (dims sk) X (DL X (DL X F)) G) →
+  DDExch (dims sk) (λ Z H G' q → diag-dd sk k Z H G' q) (λ Z H G' q → diag-dd sk j Z H G' q) X F G d
+ddv-exch lnil k j X F G d = λ i → fst (fst d)
+ddv-exch (lcons (e-ty s) sk) k j X F G d =
+  bool-elim1-2 (λ bk bj → DDExch (dims sk) (dd-ty-op sk k bk) (dd-ty-op sk j bj) X F G d)
+    (fmap-sw23 (dims sk) X (DL X (DL X F)) (DL X F) F (DL X (DL X F)) (DL X F) (λ x q → fst q) (λ x q → fst q) (dexch X F) (λ x q → fst q) (λ x q → fst q)
+       (λ i x q → fst (fst q)) G d)
+    (pcat (DCube (dims sk) X F G) (dcube-fmap (dims sk) X (DL X F) F (λ x q → fst q) G (diag-dd sk (%wsub j #1) X (DL X F) G d))
+       (diag-dd sk (%wsub j #1) X F G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (dlf X (DL X F) F (λ x q → fst q)) G d))
+       (diag-dd sk (%wsub j #1) X F G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (λ x q → fst q) G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d)))
+       (diag-dd-fmap sk (%wsub j #1) X (DL X F) F (λ x q → fst q) G d)
+       (cong1 (DCube (dims sk) X (DL X F) G) (DCube (dims sk) X F G) (λ w → diag-dd sk (%wsub j #1) X F G w)
+          (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (dlf X (DL X F) F (λ x q → fst q)) G d)
+          (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (λ x q → fst q) G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d))
+          (psym (DCube (dims sk) X (DL X F) G) (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (λ x q → fst q) G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d))
+             (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (dlf X (DL X F) F (λ x q → fst q)) G d)
+             (fmap-sw21 (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (DL X F) (dexch X F) (λ x q → fst q) (dlf X (DL X F) F (λ x q → fst q)) (λ i x q → fst (dexch X F x q)) G d))))
+    (pcat (DCube (dims sk) X F G) (diag-dd sk (%wsub k #1) X F G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (λ x q → fst q) G d))
+       (diag-dd sk (%wsub k #1) X F G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (dlf X (DL X F) F (λ x q → fst q)) G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d)))
+       (dcube-fmap (dims sk) X (DL X F) F (λ x q → fst q) G (diag-dd sk (%wsub k #1) X (DL X F) G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d)))
+       (cong1 (DCube (dims sk) X (DL X F) G) (DCube (dims sk) X F G) (λ w → diag-dd sk (%wsub k #1) X F G w)
+          (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (λ x q → fst q) G d)
+          (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (dlf X (DL X F) F (λ x q → fst q)) G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d))
+          (psym (DCube (dims sk) X (DL X F) G) (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (dlf X (DL X F) F (λ x q → fst q)) G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d))
+             (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (λ x q → fst q) G d)
+             (fmap-sw21 (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (DL X F) (dexch X F) (dlf X (DL X F) F (λ x q → fst q)) (λ x q → fst q) (λ i x q → fst q) G d)))
+       (psym (DCube (dims sk) X F G) (dcube-fmap (dims sk) X (DL X F) F (λ x q → fst q) G (diag-dd sk (%wsub k #1) X (DL X F) G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d)))
+          (diag-dd sk (%wsub k #1) X F G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X F) (dlf X (DL X F) F (λ x q → fst q)) G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d)))
+          (diag-dd-fmap sk (%wsub k #1) X (DL X F) F (λ x q → fst q) G (dcube-fmap (dims sk) X (DL X (DL X F)) (DL X (DL X F)) (dexch X F) G d))))
+    (ddv-exch sk (%wsub k #1) (%wsub j #1) X F G d)
+    (weq k #0) (weq j #0)
+ddv-exch (lcons e-dim sk) k j X F G d =
+  bool-elim1-2 (λ bk bj → DDExch (suc (dims sk)) (dd-dim-op sk k bk) (dd-dim-op sk j bj) X F G d)
+    (fmap-sw23 (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X F)) (LineO X F) (LineO X (DL X (DL X F))) (LineO X (DL X F))
+       (dgo X (DL X F)) (dgo X F) (lineo-fmap X (DL X (DL X F)) (DL X (DL X F)) (dexch X F)) (dgo X (DL X F)) (dgo X F)
+       (λ i L y → dgo X F L (dgo X (DL X F) L y)) G d)
+    (ddv-exch-dim-tf sk k j X F G d)
+    (ddv-exch-dim-ft sk k j X F G d)
+    (ddv-exch-dim-ff sk k j X F G d
+       (ddv-exch sk (%wsub k #1) (%wsub j #1) (Line X) (LineO X F) G
+          (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d))))
+    (weq k #0) (weq j #0)
+-- the diagonal at a variable
+ddv-diag : (sk : Lst Entry) (k : Word) (X : Type 1) (F : X → Type 1) (G : Cube (dims sk) X) (d : DCube (dims sk) X (DL X (DL X F)) G) →
+  DDDiag (dims sk) (λ Z H G' q → diag-dd sk k Z H G' q) X F G d
+ddv-diag lnil k X F G d = λ i → fst (fst d)
+ddv-diag (lcons (e-ty s) sk) k X F G d =
+  bool-elim1 (λ b → DDDiag (dims sk) (dd-ty-op sk k b) X F G d)
+    (fmap-sw (dims sk) X (DL X (DL X F)) (DL X F) (DL X F) F (λ x q → fst q) (λ x q → fst q) (ddiag X F) (λ x q → fst q) (λ i x q → fst (fst q)) G d)
+    (ddv-diag sk (%wsub k #1) X F G d) (weq k #0)
+ddv-diag (lcons e-dim sk) k X F G d =
+  bool-elim1 (λ b → DDDiag (suc (dims sk)) (dd-dim-op sk k b) X F G d)
+    (fmap-sw (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X F)) (LineO X (DL X F)) (LineO X F) (dgo X (DL X F)) (dgo X F)
+       (lineo-fmap X (DL X (DL X F)) (DL X F) (ddiag X F)) (dgo X F) (λ i L y → dgo X F L (dgo X (DL X F) L y)) G d)
+    (pcat (DCube (dims sk) (Line X) (LineO X F) G)
+       (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+             (diag-dd sk (%wsub k #1) (Line X) (LineO X (DL X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d))))
+       (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+          (diag-dd sk (%wsub k #1) (Line X) (DL (Line X) (LineO X F)) G
+             (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d))))
+       (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X F)) (lineo-fmap X (DL X (DL X F)) (DL X F) (ddiag X F)) G d)))
+       (cong1 (DCube (dims sk) (Line X) (DL (Line X) (LineO X F)) G) (DCube (dims sk) (Line X) (LineO X F) G) (λ w → diag-dd sk (%wsub k #1) (Line X) (LineO X F) G w)
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+             (diag-dd sk (%wsub k #1) (Line X) (LineO X (DL X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+          (diag-dd sk (%wsub k #1) (Line X) (DL (Line X) (LineO X F)) G
+             (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+          (diag-dd-fmap sk (%wsub k #1) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+       (pcat (DCube (dims sk) (Line X) (LineO X F) G)
+          (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+             (diag-dd sk (%wsub k #1) (Line X) (DL (Line X) (LineO X F)) G
+                (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+                   (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d))))
+          (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+             (dcube-fmap (dims sk) (Line X) (DL (Line X) (DL (Line X) (LineO X F))) (DL (Line X) (LineO X F)) (ddiag (Line X) (LineO X F)) G
+                (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+                   (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d))))
+          (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X F)) (lineo-fmap X (DL X (DL X F)) (DL X F) (ddiag X F)) G d)))
+          (ddv-diag sk (%wsub k #1) (Line X) (LineO X F) G
+             (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+          (cong1 (DCube (dims sk) (Line X) (DL (Line X) (LineO X F)) G) (DCube (dims sk) (Line X) (LineO X F) G) (λ w → diag-dd sk (%wsub k #1) (Line X) (LineO X F) G w)
+             (dcube-fmap (dims sk) (Line X) (DL (Line X) (DL (Line X) (LineO X F))) (DL (Line X) (LineO X F)) (ddiag (Line X) (LineO X F)) G
+                (dcube-fmap (dims sk) (Line X) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) G
+                   (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (dxo X (DL X F)) G d)))
+             (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+                (dcube-fmap (dims sk) (Line X) (LineO X (DL X (DL X F))) (LineO X (DL X F)) (lineo-fmap X (DL X (DL X F)) (DL X F) (ddiag X F)) G d))
+             (fmap-sw32 (dims sk) (Line X) (LineO X (DL X (DL X F))) (DL (Line X) (LineO X (DL X F))) (DL (Line X) (DL (Line X) (LineO X F))) (DL (Line X) (LineO X F)) (LineO X (DL X F))
+                (dxo X (DL X F)) (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F)) (ddiag (Line X) (LineO X F))
+                (lineo-fmap X (DL X (DL X F)) (DL X F) (ddiag X F)) (dxo X F)
+                (λ i L y → ddiag (Line X) (LineO X F) L (dlf (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) L (dxo X (DL X F) L y))) G d))))
+    (weq k #0)
+-- the degeneracy at a variable
+ddv-deg : (sk : Lst Entry) (k : Word) (X : Type 1) (F : X → Type 1) (G : Cube (dims sk) X) (d : DCube (dims sk) X F G) →
+  DDDeg (dims sk) (λ Z H G' q → diag-dd sk k Z H G' q) X F G d
+ddv-deg lnil k X F G d = λ i → d
+ddv-deg (lcons (e-ty s) sk) k X F G d =
+  bool-elim1 (λ b → DDDeg (dims sk) (dd-ty-op sk k b) X F G d)
+    (fmap-sw2i (dims sk) X F (DL X F) (degen-o X F) (λ x q → fst q) (λ i x y → y) G d)
+    (ddv-deg sk (%wsub k #1) X F G d) (weq k #0)
+ddv-deg (lcons e-dim sk) k X F G d =
+  bool-elim1 (λ b → DDDeg (suc (dims sk)) (dd-dim-op sk k b) X F G d)
+    (fmap-sw2i (dims sk) (Line X) (LineO X F) (LineO X (DL X F)) (lineo-fmap X F (DL X F) (degen-o X F)) (dgo X F) (λ i L y → y) G d)
+    (pcat (DCube (dims sk) (Line X) (LineO X F) G)
+       (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+             (dcube-fmap (dims sk) (Line X) (LineO X F) (LineO X (DL X F)) (lineo-fmap X F (DL X F) (degen-o X F)) G d)))
+       (diag-dd sk (%wsub k #1) (Line X) (LineO X F) G (dcube-fmap (dims sk) (Line X) (LineO X F) (DL (Line X) (LineO X F)) (degen-o (Line X) (LineO X F)) G d))
+       d
+       (cong1 (DCube (dims sk) (Line X) (DL (Line X) (LineO X F)) G) (DCube (dims sk) (Line X) (LineO X F) G) (λ w → diag-dd sk (%wsub k #1) (Line X) (LineO X F) G w)
+          (dcube-fmap (dims sk) (Line X) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (dxo X F) G
+             (dcube-fmap (dims sk) (Line X) (LineO X F) (LineO X (DL X F)) (lineo-fmap X F (DL X F) (degen-o X F)) G d))
+          (dcube-fmap (dims sk) (Line X) (LineO X F) (DL (Line X) (LineO X F)) (degen-o (Line X) (LineO X F)) G d)
+          (fmap-sw21 (dims sk) (Line X) (LineO X F) (LineO X (DL X F)) (DL (Line X) (LineO X F)) (lineo-fmap X F (DL X F) (degen-o X F)) (dxo X F)
+             (degen-o (Line X) (LineO X F)) (λ i L y → degen-o (Line X) (LineO X F) L y) G d))
+       (ddv-deg sk (%wsub k #1) (Line X) (LineO X F) G d))
+    (weq k #0)
+
 -- ---------------------------------------------------------------- (6) reify and reflect
 -- (2026-11-12, (6)) reify-ty (a computable type to a normal type derivation), reify (a computable term
 -- to a normal form) and reflect (a neutral at a computable type to a computable term), one triple by
