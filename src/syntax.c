@@ -1082,6 +1082,18 @@ static void def_untyped(const char *name, Node *body) {
  * its equality fields gets refl at the declared index expressions (over its field arguments); a
  * pattern without them is padded with _. Matching does not insert transports: in a branch the
  * equality is a field (e : m ≡ e') to transport along by hand */
+/* a constructor's field type is not elaborated (its scope, the earlier fields, is not the
+ * elaborator's), so what elaboration does to a PathP's line is done here: the line, a family over
+ * the interval, is a path λ (plam), as in a signature (2026-11-12, t52: the λ was left a function's,
+ * whose type the checker cannot infer) */
+static Node *field_lines(Node *t) {
+    if (!t->list || t->n == 0) return t;
+    Node *r = nlist(t->n);
+    for (int i = 0; i < t->n; i++) r->it[i] = field_lines(t->it[i]);
+    if (t->n == 4 && is(t->it[0], "PathP") && r->it[1]->list && r->it[1]->n == 3 && is(r->it[1]->it[0], "lam"))
+        r->it[1] = lst(3, nsym("plam"), r->it[1]->it[1], r->it[1]->it[2]);
+    return r;
+}
 static Node *ctor_by_type(const char *c, Node *T, const char *D) {
     Node *items[128]; int n = 0;
     items[n++] = nsym(c);
@@ -1091,7 +1103,7 @@ static Node *ctor_by_type(const char *c, Node *T, const char *D) {
         if (n >= 120) die("too many fields in", c);
         Node *x = T->it[1];
         if (x->s[0] == '%') { char nm[32]; snprintf(nm, sizeof nm, "x%d", nfld1++); Node *y = nsym(nm); T = sym4("Pi", y, T->it[2], x_rename(T->it[3], x->s, y->s)); x = y; }
-        items[n++] = lst(2, x, core(T->it[2]));
+        items[n++] = lst(2, x, field_lines(core(T->it[2])));
         T = T->it[3];
         while (T->list && T->n == 2 && is(T->it[0], "%impPi")) T = T->it[1];
     }
@@ -1144,7 +1156,7 @@ static Node *p_data_ctor(void) {
             if (nb && bs[0].ty) {
                 for (int q = 0; q < nb; q++) {
                     if (bs[q].dim) { if (nd == 16) x_err("too many dimensions", P0()); dims[nd++] = bs[q].name; }
-                    else items[n++] = lst(2, bs[q].name, core(bs[q].ty));
+                    else items[n++] = lst(2, bs[q].name, field_lines(core(bs[q].ty)));
                 }
                 continue;
             }
@@ -1152,7 +1164,7 @@ static Node *p_data_ctor(void) {
         }
         Node *a = p_post();
         if (!x_typed && !a->list) items[n++] = a;
-        else { static int nfld0; char nm[32]; snprintf(nm, sizeof nm, "x%d", nfld0++); items[n++] = lst(2, nsym(nm), core(a)); }
+        else { static int nfld0; char nm[32]; snprintf(nm, sizeof nm, "x%d", nfld0++); items[n++] = lst(2, nsym(nm), field_lines(core(a))); }
     }
     if (nd) {
         Node *dl = nlist(nd + 1); dl->it[0] = nsym("dims");
@@ -1205,6 +1217,7 @@ static Node *p_data(void) {
          * Type 1; t49 = F49 (Lift49 Bool)` is refused: "expected: Type (lsuc lzero), actual: Type (lmax
          * lzero lzero)". An accepted annotation that does not hold is wrong: either the declared level is
          * the type's level (checked to be at least the fields') or the annotation is refused. */
+
     }
     Node *head = nsym(d->s);
     if (np) { head = nlist(np + 1); head->it[0] = nsym(d->s); for (int i = 0; i < np; i++) head->it[i + 1] = ps[i]; }
