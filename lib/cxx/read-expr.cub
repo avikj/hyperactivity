@@ -453,19 +453,19 @@ cx-cmp u e o lt x y = case cx-tc lt of
   _ → cx-stop {CxR} st-ill-typed
 cx-binop : CxU → CExpr → CBinOp → CType → CType → CType → CxR → CxR → CxEv CxR
 cx-binop u e op t lt rt x y = case op of
-  cbo-mul → cx-ar u bo-mul t x y
-  cbo-div → cx-ar u bo-div t x y
-  cbo-rem → cx-ar u bo-rem t x y
+  cbo-mul → cx-ar u ao-mul t x y
+  cbo-div → cx-ar u ao-div t x y
+  cbo-rem → cx-ar u ao-rem t x y
   cbo-add → (case cx-is-ptr lt of
     true → cx-ptr-plus u lt x rt y false
     false → (case cx-is-ptr rt of
       true → cx-ptr-plus u rt y lt x false
-      false → cx-ar u bo-add t x y))
+      false → cx-ar u ao-add t x y))
   cbo-sub → (case cx-is-ptr lt of
     true → (case cx-is-ptr rt of
       true → cx-ptr-minus u lt x y
       false → cx-ptr-plus u lt x rt y true)
-    false → cx-ar u bo-sub t x y)
+    false → cx-ar u ao-sub t x y)
   cbo-shl → cx-sh u true lt rt x y
   cbo-shr → cx-sh u false lt rt x y
   cbo-lt → cx-cmp u e co-lt lt x y
@@ -474,9 +474,9 @@ cx-binop u e op t lt rt x y = case op of
   cbo-ge → cx-cmp u e co-ge lt x y
   cbo-eq → cx-cmp u e co-eq lt x y
   cbo-ne → cx-cmp u e co-ne lt x y
-  cbo-and → cx-ar u bo-and t x y
-  cbo-xor → cx-ar u bo-xor t x y
-  cbo-or → cx-ar u bo-or t x y
+  cbo-and → cx-ar u ao-and t x y
+  cbo-xor → cx-ar u ao-xor t x y
+  cbo-or → cx-ar u ao-or t x y
   cbo-land → cx-stop {CxR} st-ill-typed
   cbo-lor → cx-stop {CxR} st-ill-typed
   cbo-assign → cx-stop {CxR} st-ill-typed
@@ -497,8 +497,8 @@ cx-incdec u t inc pre r =
       cx-bind {SV} {CxR} (cx-as-val old) (λ a →
       cx-bind {CTy} {CxR} (cx-res {CTy} (cx-cty-of u t)) (λ c →
       cx-bind {CTy × SV} {CxR} (cx-res {CTy × SV} (ct-arith (cxu-t u) (case inc of
-                                                                         true → bo-add
-                                                                         false → bo-sub) c ct-int a (sv-i uq1))) (λ cr →
+                                                                         true → ao-add
+                                                                         false → ao-sub) c ct-int a (sv-i uq1))) (λ cr →
       cx-bind {SK} {CxR} (cx-res {SK} (ct-sk (cxu-t u) (fst cr))) (λ kc →
       cx-bind {SK} {CxR} (cx-res {SK} (cx-sk u t)) (λ k →
       cx-bind {SV} {CxR} (cx-cvk u kc k (snd cr)) (λ new →

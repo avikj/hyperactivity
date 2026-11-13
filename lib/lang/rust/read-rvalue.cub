@@ -28,24 +28,24 @@ rm-unchecked : Bool → SK → SV → SV → REv SV
 rm-unchecked add k a b = case k of
   sk-int sg w → (case sg of
     true → rm-res (sv-arith (case add of
-                               true → bo-add
-                               false → bo-sub) k a b)
+                               true → ao-add
+                               false → ao-sub) k a b)
     false → rm-bind (rm-res (sv-as-i a)) (λ x → rm-bind (rm-res (sv-as-i b)) (λ y →
       case add of
-        true → rm-bind (rm-res (ni-op bo-add false w x y)) (λ r → case u64lt r x of
+        true → rm-bind (rm-res (ni-op ao-add false w x y)) (λ r → case u64lt r x of
           true → rm-throw (rx-ub rub-unchecked-overflow)
           false → rm-ret (sv-i r))
         false → (case u64lt x y of
           true → rm-throw (rx-ub rub-unchecked-overflow)
-          false → rm-res (mr-map sv-i (ni-op bo-sub false w x y))))))
+          false → rm-res (mr-map sv-i (ni-op ao-sub false w x y))))))
   _ → rm-stop st-ill-typed
 -- & | ^ at an integer kind or at bool
 rm-bit : BinOp → SK → SV → SV → MRes SV
 rm-bit o k a b = case k of
   sk-bool → mr-bind (sv-as-b a) (λ x → mr-bind (sv-as-b b) (λ y → case o of
-    bo-and → mok (sv-b (m-and x y))
-    bo-or → mok (sv-b (m-or x y))
-    bo-xor → mok (sv-b (not (u64eq (uq-b x) (uq-b y))))
+    ao-and → mok (sv-b (m-and x y))
+    ao-or → mok (sv-b (m-or x y))
+    ao-xor → mok (sv-b (not (u64eq (uq-b x) (uq-b y))))
     _ → mstop st-ill-typed))
   _ → sv-arith o k a b
 -- shifts: the count (of any integer kind) modulo the width of the shifted kind
@@ -62,16 +62,16 @@ rm-cmp o k a b = mr-map sv-b (sv-cmp o k a b)
 -- pointee's size and an enum's layout)
 rm-binop : RBinOp → SK → SV → SV → REv SV
 rm-binop o k = case o of
-  rbin-add → λ a b → rm-res (rm-wrap bo-add k a b)
-  rbin-sub → λ a b → rm-res (rm-wrap bo-sub k a b)
-  rbin-mul → λ a b → rm-res (rm-wrap bo-mul k a b)
+  rbin-add → λ a b → rm-res (rm-wrap ao-add k a b)
+  rbin-sub → λ a b → rm-res (rm-wrap ao-sub k a b)
+  rbin-mul → λ a b → rm-res (rm-wrap ao-mul k a b)
   rbin-add-unchecked → rm-unchecked true k
   rbin-sub-unchecked → rm-unchecked false k
-  rbin-div → λ a b → rm-res (sv-arith bo-div k a b)
-  rbin-rem → λ a b → rm-res (sv-arith bo-rem k a b)
-  rbin-bit-xor → λ a b → rm-res (rm-bit bo-xor k a b)
-  rbin-bit-and → λ a b → rm-res (rm-bit bo-and k a b)
-  rbin-bit-or → λ a b → rm-res (rm-bit bo-or k a b)
+  rbin-div → λ a b → rm-res (sv-arith ao-div k a b)
+  rbin-rem → λ a b → rm-res (sv-arith ao-rem k a b)
+  rbin-bit-xor → λ a b → rm-res (rm-bit ao-xor k a b)
+  rbin-bit-and → λ a b → rm-res (rm-bit ao-and k a b)
+  rbin-bit-or → λ a b → rm-res (rm-bit ao-or k a b)
   rbin-shl → λ a b → rm-res (rm-shift true k a b)
   rbin-shr → λ a b → rm-res (rm-shift false k a b)
   rbin-eq → λ a b → rm-res (rm-cmp co-eq k a b)
