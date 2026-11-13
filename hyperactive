@@ -14,6 +14,7 @@
     hyperactive check [FILE ...]     check files (each loads what it imports); no file: the task graph
     hyperactive repl                 the machine, interactive: declarations and readings (#type e,
                                      #show e, #where name), each block ended by a line holding '.'
+    hyperactive server               the whole task graph as a tree at http://localhost:8080
     hyperactive browse               the repository in a browser: every goal, ticket, definition,
                                      document and file as one graph of reasons, from the root
     hyperactive lsp                  the language server, for an editor
@@ -70,6 +71,8 @@ def main():
     if c == 'repl':
         build()
         sys.exit(subprocess.call([MACHINE, os.path.join(ROOT, 'lib', 'core.cub'), *rest, '--serve']))
+    if c == 'server':
+        sys.exit(subprocess.call([sys.executable, os.path.join(ROOT, 'tools', 'task-tree-server.py'), *rest]))
     if c == 'browse':
         build()
         import webbrowser, threading
