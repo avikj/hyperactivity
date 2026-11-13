@@ -51,8 +51,13 @@
 -- Sum1, FamV, fam-arg, fam-cod, ty-line, tend-0, tend-1, CompU, CSof, CompE, CompTy, CompS, ty-tr,
 -- comp-tr, comp-fm, ty-fm, wc-tr, CRenT, csof-ren, fam-ren, bool-ren, path-ty-ren, comp-ren-e,
 -- comp-ren; rr's lemmas: push-fst-d, reidx-push-d, fmap-id, pull-carry-of, wk-R, wk-E1, wk-Q1,
--- wk-car, wk-D, subM-wk, dwk-E1, dwk-car, dwk-D, subM-dwk, dnf-v0, papp-dwk.
--- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "869 passed, 0 failed").
+-- wk-car, wk-D, subM-wk, dwk-E1, dwk-car, dwk-D, subM-dwk, dnf-v0, papp-dwk; P2.5 in the families
+-- (2026-11-12): JK, JZ, Jdg tagged, c-bool, fam-dom, fam-body, pair-cod, case-b, case-mot,
+-- path-line-ty, pend-0, pend-1; NN and Der with the type rules (nty-/dty-bool, -pi, -sig, -path), the
+-- new premises of nlam/dlam, npair/dpair, ncase/dcase, dpapp at non-constant forms, dpapp0, dpapp1;
+-- embed; the renaming helpers over the tag, rn-ext, rn-ty-pi, rn-ty-sig, rn-ty-path, ren-nn; moved
+-- up for them: dcube-lift, ext-h (was kp-x), ext-lift, ty-line, tend-0, tend-1.
+-- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "884 passed, 0 failed").
 -- What is next: (6) as listed in lib/nbe.cub's head under "Remaining, in order" (P2.5 in the
 -- families, rr, CompEnv, fund, normalize), then the swap of this file into lib/nbe.cub.
 
@@ -725,6 +730,10 @@ dcube-push : (n : Nat) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1)
 dcube-push zero X X' Y F F' f g c d e = g c d e
 dcube-push (suc n) X X' Y F F' f g c d e =
   dcube-push n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-push X X' Y F F' f g) c d e
+-- a cube over a mapped base read off the cube itself (a push of the cube over itself)
+dcube-lift : (n : Nat) (X X' : Type 1) (Y : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') →
+  ((x : X) (y : Y x) → F' (f x y)) → (c : Cube n X) (d : DCube n X Y c) → DCube n X' F' (dcube-map n X Y X' f c d)
+dcube-lift n X X' Y F' f g c d = dcube-push n X X' Y Y F' f (λ x y z → g x y) c d d
 -- back from such an extended base (substitution: the old base's fibres from the new one's)
 lineo-pull : (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') →
   ((x : X) (y : Y x) → F' (f x y) → F x) → (L : Line X) (D : LineO X Y L) → LineO X' F' (lineo-map X Y X' f L D) → LineO X F L
@@ -1016,6 +1025,20 @@ dwkM : (Γ : CCtx) (Z : Type 1) → Mean Γ Z → Mean (dext Γ) Z
 dwkM Γ Z N =
   dcube-reidx (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (FbE (fst Γ) Z) (LineO (CtxV (fst Γ)) (FbE (fst Γ) Z))
     (degen-l (CtxV (fst Γ))) (degen-o (CtxV (fst Γ)) (FbE (fst Γ) Z)) (snd Γ) N
+-- (2026-11-12, P2.5) Γ extended by a type read off a meaning M uniformly in the vertex (h at each value):
+-- a λ's body's context (lam-ctx), a Π or Σ type's codomain's (at the family), a pair's codomain's and a
+-- case's motive's; world-keep keeps such an entry
+ext-h : (Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) → CCtx
+ext-h Δ a Y h M = extM Δ a Y (λ γ e ρ → h (e ρ)) M
+-- (2026-11-12, (6); moved here for P2.5) a meaning over a context extended by a type uniform in the
+-- vertex (ext-h) read off the extending meaning M itself, uniformly (G0 at the value and the new variable):
+-- lam-body is one (lam-body Γ a b X is ext-lift at h = λ q → fst (fst q), G0 = λ q x → (snd (fst q)
+-- x , snd q x), judgmentally)
+ext-lift : (Γ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) (M : Mean Γ Y) →
+  Mean (ext-h Γ a Y h M) Z
+ext-lift Γ a Y h Z G0 M =
+  dcube-lift (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y) (FbE (lcons (e-ty a) (fst Γ)) Z)
+    (λ γ e → (γ , λ ρ → h (e ρ))) (λ γ e ρ → G0 (e (fst ρ)) (snd ρ)) (snd Γ) M
 
 -- ---------------------------------------------------------------- P2.6c: variables over cubes
 -- (2026-11-12) A variable of a skeleton: one of its term entries, by recursion on the skeleton (none:
@@ -1316,11 +1339,20 @@ fmap-papp sk X F F' h (lcons cj cs) c d = fmap-papp-dnf-from sk X F F' h #0 cj c
 -- (2026-11-12) the path shape's semantic types are P2.3's, judgmentally (t50: PathP at Type 1)
 sem-path : (a : TyShape) → PathP (λ i → Type 1) (Sem (s-path a)) (PathS (Sem a) (El a))
 sem-path a = λ i → PathS (Sem a) (El a)
--- a judgment: a context over cubes, a shape, a raw code and a meaning over the context (each vertex's
--- environments to a semantic type of the shape with an element)
+-- a judgment: a tag (term or type), a context over cubes, a shape, a raw code and a meaning over the
+-- context (each vertex's environments to, for a term, a semantic type of the shape with an element, for
+-- a type, a semantic type of the shape: JZ); type and term judgments are one index (P2.5, the decision
+-- at lib/nbe.cub's head), so derivations and normal forms of both are one family each
+data JK = j-tm | j-ty
+JZ : JK → TyShape → Type 1
+JZ j-tm s = TV s
+JZ j-ty s = Sem s
 Jdg : Type 1
 -- binder names chosen not to collide: t46
-Jdg = (jΓ : CCtx) × (js : TyShape) × Code × Mean jΓ (TV js)
+Jdg = (jk : JK) × (jΓ : CCtx) × (js : TyShape) × Code × Mean jΓ (JZ jk js)
+-- the code of Bool (the language's own code for the type)
+c-bool : Code
+c-bool = cdata #0 lnil
 -- the rules' data, read pointwise, and the named projections that give their premises' and
 -- conclusions' meanings (shared by NN, Der, CompS and reify)
 AppV : TyShape → TyShape → Type 1
@@ -1379,6 +1411,13 @@ plam-line : (sk : Lst Entry) (a : TyShape) (γ : CtxV sk) (e : EnvV sk γ → TV
 plam-line sk a γ e = fline sk (TV (s-path a)) (TV a) (path-pt a) γ e
 plam-body : (Γ : CCtx) (a : TyShape) → Mean Γ (TV (s-path a)) → Mean (dext Γ) (TV a)
 plam-body Γ a X = dline-body Γ (TV (s-path a)) (TV a) (path-pt a) X
+-- a path type's line of types, and its endpoint values as terms of the line's endpoint types
+ty-line : (a : TyShape) → Sem (s-path a) → Line (Sem a)
+ty-line a D = fst D
+tend-0 : (a : TyShape) → Sem (s-path a) → TV a
+tend-0 a D = (fst (fst D) , fst (snd D))
+tend-1 : (a : TyShape) → Sem (s-path a) → TV a
+tend-1 a D = (fst (snd (fst D)) , snd (snd D))
 -- carrying a cube over a base along a path of bases (the form fmap-transp is about)
 carry : (n : Nat) (X : Type 1) (F : X → Type 1) (c0 c1 : Cube n X) → PathP (λ i → Cube n X) c0 c1 → DCube n X F c0 → DCube n X F c1
 carry n X F c0 c1 p d = comp (λ i → DCube n X F (p i)) (λ i → []) d
@@ -1396,79 +1435,144 @@ papp-mean Γ a f P = papp-line Γ (TV (s-path a)) (TV a) (path-pt a) f P
 -- (t52; workaround: this definition, used by npapp and dpapp)
 PathM : (Γ : CCtx) (Z : Type 1) → Mean Γ Z → Mean Γ Z → Type 1
 PathM Γ Z M N = PathP (λ i → Mean Γ Z) M N
+-- (2026-11-12, P2.5) the type premises' meanings, read pointwise: a family's domain (fam-dom; at a λ's
+-- or a pair's value, of its type's family) and its codomain over the extension by the domain
+-- (fam-body); a pair's codomain (pair-cod), at the family read off the pair's value; a case's scrutinee type
+-- (case-b) and its motive over the extension by Bool (case-mot); a PathP type's line over dext Γ
+-- (path-line-ty); a path's ends as terms of the type's ends (pend-0, pend-1, the meanings of p @ 0 and
+-- p @ 1)
+fam-dom : (a b : TyShape) → Fam a b → Sem a
+fam-dom a b F = fst F
+fam-body : (Γ : CCtx) (a b : TyShape) (T : Mean Γ (Fam a b)) → Mean (ext-h Γ a (Fam a b) (fam-dom a b) T) (Sem b)
+fam-body Γ a b T = ext-lift Γ a (Fam a b) (fam-dom a b) (Sem b) (λ F x → snd F x) T
+pair-cod : (Γ : CCtx) (a b : TyShape) (R : Mean Γ (TV (s-sig a b))) → Mean (ext-h Γ a (TV (s-sig a b)) (λ q → fam-dom a b (fst q)) R) (Sem b)
+pair-cod Γ a b R = ext-lift Γ a (TV (s-sig a b)) (λ q → fam-dom a b (fst q)) (Sem b) (λ q x → snd (fst q) x) R
+case-b : (s : TyShape) → CaseV s → One1
+case-b s q = fst q
+case-mot : (Γ : CCtx) (s : TyShape) (R : Mean Γ (CaseV s)) → Mean (ext-h Γ s-bool (CaseV s) (case-b s) R) (Sem s)
+case-mot Γ s R = ext-lift Γ s-bool (CaseV s) (case-b s) (Sem s) (λ q b → fst (snd q) b) R
+path-line-ty : (Γ : CCtx) (a : TyShape) (T : Mean Γ (Sem (s-path a))) → Mean (dext Γ) (Sem a)
+path-line-ty Γ a T = dline-body Γ (Sem (s-path a)) (Sem a) (ty-line a) T
+pend-0 : (a : TyShape) → TV (s-path a) → TV a
+pend-0 a q = tend-0 a (fst q)
+pend-1 : (a : TyShape) → TV (s-path a) → TV a
+pend-1 a q = tend-1 a (fst q)
 -- neutral and normal forms, one family (the kind in the index), η-long and redex-free: a neutral is
--- normal only at Bool; a path application is neutral only at a canonical non-constant form
+-- normal only at Bool; a path application is neutral only at a canonical non-constant form; a type is
+-- normal when its parts are (P2.5: Bool, Π and Σ with the codomain over the domain read off the family,
+-- PathP with its line over dext Γ and both ends normal terms); a λ carries its domain's normal type, a
+-- pair its codomain's, a case its motive's (the decision at lib/nbe.cub's head: reify builds them from
+-- the type's computability, and embed gives fund's premises)
 -- constructor binders subscripted ₀: t46
 data NN : (KJ : NK × Jdg) → Type 1 where
   nvar : (Γ₀ : CCtx) (v₀ : VarP (fst Γ₀)) →
-    NN (k-ne , (Γ₀ , var-shape (fst Γ₀) v₀ , cvar (var-word (fst Γ₀) v₀) , varCube Γ₀ v₀))
+    NN (k-ne , (j-tm , Γ₀ , var-shape (fst Γ₀) v₀ , cvar (var-word (fst Γ₀) v₀) , varCube Γ₀ v₀))
   napp : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (AppV a₀ b₀)) (f₀ c₀ : Code) →
-    NN (k-ne , (Γ₀ , s-pi a₀ b₀ , f₀ , fmapM Γ₀ (AppV a₀ b₀) (TV (s-pi a₀ b₀)) (app-f a₀ b₀) R₀)) →
-    NN (k-nf , (Γ₀ , a₀ , c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV a₀) (app-a a₀ b₀) R₀)) →
-    NN (k-ne , (Γ₀ , b₀ , capp f₀ c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV b₀) (app-r a₀ b₀) R₀))
+    NN (k-ne , (j-tm , Γ₀ , s-pi a₀ b₀ , f₀ , fmapM Γ₀ (AppV a₀ b₀) (TV (s-pi a₀ b₀)) (app-f a₀ b₀) R₀)) →
+    NN (k-nf , (j-tm , Γ₀ , a₀ , c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV a₀) (app-a a₀ b₀) R₀)) →
+    NN (k-ne , (j-tm , Γ₀ , b₀ , capp f₀ c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV b₀) (app-r a₀ b₀) R₀))
   nfst : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (p₀ : Code) →
-    NN (k-ne , (Γ₀ , s-sig a₀ b₀ , p₀ , R₀)) →
-    NN (k-ne , (Γ₀ , a₀ , cfst p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀))
+    NN (k-ne , (j-tm , Γ₀ , s-sig a₀ b₀ , p₀ , R₀)) →
+    NN (k-ne , (j-tm , Γ₀ , a₀ , cfst p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀))
   nsnd : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (p₀ : Code) →
-    NN (k-ne , (Γ₀ , s-sig a₀ b₀ , p₀ , R₀)) →
-    NN (k-ne , (Γ₀ , b₀ , csnd p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀))
-  ncase : (Γ₀ : CCtx) (s₀ : TyShape) (R₀ : Mean Γ₀ (CaseV s₀)) (x₀ t₀ f₀ : Code) →
-    NN (k-ne , (Γ₀ , s-bool , x₀ , fmapM Γ₀ (CaseV s₀) (TV s-bool) (case-x s₀) R₀)) →
-    NN (k-nf , (Γ₀ , s₀ , t₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-t s₀) R₀)) →
-    NN (k-nf , (Γ₀ , s₀ , f₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-f s₀) R₀)) →
-    NN (k-ne , (Γ₀ , s₀ , c-case t₀ f₀ x₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-r s₀) R₀))
+    NN (k-ne , (j-tm , Γ₀ , s-sig a₀ b₀ , p₀ , R₀)) →
+    NN (k-ne , (j-tm , Γ₀ , b₀ , csnd p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀))
+  ncase : (Γ₀ : CCtx) (s₀ : TyShape) (R₀ : Mean Γ₀ (CaseV s₀)) (cP₀ x₀ t₀ f₀ : Code) →
+    NN (k-nf , (j-ty , ext-h Γ₀ s-bool (CaseV s₀) (case-b s₀) R₀ , s₀ , cP₀ , case-mot Γ₀ s₀ R₀)) →
+    NN (k-ne , (j-tm , Γ₀ , s-bool , x₀ , fmapM Γ₀ (CaseV s₀) (TV s-bool) (case-x s₀) R₀)) →
+    NN (k-nf , (j-tm , Γ₀ , s₀ , t₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-t s₀) R₀)) →
+    NN (k-nf , (j-tm , Γ₀ , s₀ , f₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-f s₀) R₀)) →
+    NN (k-ne , (j-tm , Γ₀ , s₀ , c-case t₀ f₀ x₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-r s₀) R₀))
   nne : (Γ₀ : CCtx) (R₀ : Mean Γ₀ (TV s-bool)) (x₀ : Code) →
-    NN (k-ne , (Γ₀ , s-bool , x₀ , R₀)) → NN (k-nf , (Γ₀ , s-bool , x₀ , R₀))
-  ntrue : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (Γ₀ , s-bool , c-true , fmapM Γ₀ One1 (TV s-bool) (bool-v true) B₀))
-  nfalse : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (Γ₀ , s-bool , c-false , fmapM Γ₀ One1 (TV s-bool) (bool-v false) B₀))
-  nlam : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-pi a₀ b₀))) (c₀ : Code) →
-    NN (k-nf , (lam-ctx Γ₀ a₀ b₀ X₀ , b₀ , c₀ , lam-body Γ₀ a₀ b₀ X₀)) → NN (k-nf , (Γ₀ , s-pi a₀ b₀ , clam c₀ , X₀))
-  npair : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (c1₀ c2₀ : Code) →
-    NN (k-nf , (Γ₀ , a₀ , c1₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀)) →
-    NN (k-nf , (Γ₀ , b₀ , c2₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀)) →
-    NN (k-nf , (Γ₀ , s-sig a₀ b₀ , cpair c1₀ c2₀ , R₀))
+    NN (k-ne , (j-tm , Γ₀ , s-bool , x₀ , R₀)) → NN (k-nf , (j-tm , Γ₀ , s-bool , x₀ , R₀))
+  ntrue : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (j-tm , Γ₀ , s-bool , c-true , fmapM Γ₀ One1 (TV s-bool) (bool-v true) B₀))
+  nfalse : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (j-tm , Γ₀ , s-bool , c-false , fmapM Γ₀ One1 (TV s-bool) (bool-v false) B₀))
+  nlam : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-pi a₀ b₀))) (cA₀ c₀ : Code) →
+    NN (k-nf , (j-ty , Γ₀ , a₀ , cA₀ , fmapM Γ₀ (TV (s-pi a₀ b₀)) (Sem a₀) (λ q → fam-dom a₀ b₀ (fst q)) X₀)) →
+    NN (k-nf , (j-tm , lam-ctx Γ₀ a₀ b₀ X₀ , b₀ , c₀ , lam-body Γ₀ a₀ b₀ X₀)) → NN (k-nf , (j-tm , Γ₀ , s-pi a₀ b₀ , clam c₀ , X₀))
+  npair : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (cB₀ c1₀ c2₀ : Code) →
+    NN (k-nf , (j-ty , ext-h Γ₀ a₀ (TV (s-sig a₀ b₀)) (λ q → fam-dom a₀ b₀ (fst q)) R₀ , b₀ , cB₀ , pair-cod Γ₀ a₀ b₀ R₀)) →
+    NN (k-nf , (j-tm , Γ₀ , a₀ , c1₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀)) →
+    NN (k-nf , (j-tm , Γ₀ , b₀ , c2₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀)) →
+    NN (k-nf , (j-tm , Γ₀ , s-sig a₀ b₀ , cpair c1₀ c2₀ , R₀))
   nplam : (Γ₀ : CCtx) (a₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-path a₀))) (c₀ : Code) →
-    NN (k-nf , (dext Γ₀ , a₀ , c₀ , plam-body Γ₀ a₀ X₀)) → NN (k-nf , (Γ₀ , s-path a₀ , cplam c₀ , X₀))
+    NN (k-nf , (j-tm , dext Γ₀ , a₀ , c₀ , plam-body Γ₀ a₀ X₀)) → NN (k-nf , (j-tm , Γ₀ , s-path a₀ , cplam c₀ , X₀))
   npapp : (Γ₀ : CCtx) (a₀ : TyShape) (P₀ : Mean Γ₀ (TV (s-path a₀))) (p₀ : Code) (f₀ : DNF) →
     isTrue (dnf-canon f₀) → isTrue (dnf-nonconst f₀) →
     (Y₀ : Mean Γ₀ (TV a₀)) → PathM Γ₀ (TV a₀) (papp-mean Γ₀ a₀ f₀ P₀) Y₀ →
-    NN (k-ne , (Γ₀ , s-path a₀ , p₀ , P₀)) → NN (k-ne , (Γ₀ , a₀ , cpapp p₀ (dnf-code f₀) , Y₀))
--- typing derivations, the same rules without the kinds; path application at any canonical form
+    NN (k-ne , (j-tm , Γ₀ , s-path a₀ , p₀ , P₀)) → NN (k-ne , (j-tm , Γ₀ , a₀ , cpapp p₀ (dnf-code f₀) , Y₀))
+  nty-bool : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (j-ty , Γ₀ , s-bool , c-bool , B₀))
+  nty-pi : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (T₀ : Mean Γ₀ (Fam a₀ b₀)) (cA₀ cB₀ : Code) →
+    NN (k-nf , (j-ty , Γ₀ , a₀ , cA₀ , fmapM Γ₀ (Fam a₀ b₀) (Sem a₀) (fam-dom a₀ b₀) T₀)) →
+    NN (k-nf , (j-ty , ext-h Γ₀ a₀ (Fam a₀ b₀) (fam-dom a₀ b₀) T₀ , b₀ , cB₀ , fam-body Γ₀ a₀ b₀ T₀)) →
+    NN (k-nf , (j-ty , Γ₀ , s-pi a₀ b₀ , cpi #2 cA₀ cB₀ , T₀))
+  nty-sig : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (T₀ : Mean Γ₀ (Fam a₀ b₀)) (cA₀ cB₀ : Code) →
+    NN (k-nf , (j-ty , Γ₀ , a₀ , cA₀ , fmapM Γ₀ (Fam a₀ b₀) (Sem a₀) (fam-dom a₀ b₀) T₀)) →
+    NN (k-nf , (j-ty , ext-h Γ₀ a₀ (Fam a₀ b₀) (fam-dom a₀ b₀) T₀ , b₀ , cB₀ , fam-body Γ₀ a₀ b₀ T₀)) →
+    NN (k-nf , (j-ty , Γ₀ , s-sig a₀ b₀ , csigma cA₀ cB₀ , T₀))
+  nty-path : (Γ₀ : CCtx) (a₀ : TyShape) (T₀ : Mean Γ₀ (Sem (s-path a₀))) (cL₀ c0₀ c1₀ : Code) →
+    NN (k-nf , (j-ty , dext Γ₀ , a₀ , cL₀ , path-line-ty Γ₀ a₀ T₀)) →
+    NN (k-nf , (j-tm , Γ₀ , a₀ , c0₀ , fmapM Γ₀ (Sem (s-path a₀)) (TV a₀) (tend-0 a₀) T₀)) →
+    NN (k-nf , (j-tm , Γ₀ , a₀ , c1₀ , fmapM Γ₀ (Sem (s-path a₀)) (TV a₀) (tend-1 a₀) T₀)) →
+    NN (k-nf , (j-ty , Γ₀ , s-path a₀ , cpathp (cplam cL₀) c0₀ c1₀ , T₀))
+-- typing derivations, the same rules without the kinds; path application at any canonical
+-- non-constant form, and at 0 and 1 by their own rules (dpapp0, dpapp1: the type's endpoint)
 -- constructor binders subscripted ₀: t46
 data Der : (J : Jdg) → Type 1 where
   dvar : (Γ₀ : CCtx) (v₀ : VarP (fst Γ₀)) →
-    Der (Γ₀ , var-shape (fst Γ₀) v₀ , cvar (var-word (fst Γ₀) v₀) , varCube Γ₀ v₀)
+    Der (j-tm , Γ₀ , var-shape (fst Γ₀) v₀ , cvar (var-word (fst Γ₀) v₀) , varCube Γ₀ v₀)
   dapp : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (AppV a₀ b₀)) (f₀ c₀ : Code) →
-    Der (Γ₀ , s-pi a₀ b₀ , f₀ , fmapM Γ₀ (AppV a₀ b₀) (TV (s-pi a₀ b₀)) (app-f a₀ b₀) R₀) →
-    Der (Γ₀ , a₀ , c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV a₀) (app-a a₀ b₀) R₀) →
-    Der (Γ₀ , b₀ , capp f₀ c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV b₀) (app-r a₀ b₀) R₀)
+    Der (j-tm , Γ₀ , s-pi a₀ b₀ , f₀ , fmapM Γ₀ (AppV a₀ b₀) (TV (s-pi a₀ b₀)) (app-f a₀ b₀) R₀) →
+    Der (j-tm , Γ₀ , a₀ , c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV a₀) (app-a a₀ b₀) R₀) →
+    Der (j-tm , Γ₀ , b₀ , capp f₀ c₀ , fmapM Γ₀ (AppV a₀ b₀) (TV b₀) (app-r a₀ b₀) R₀)
   dfst : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (p₀ : Code) →
-    Der (Γ₀ , s-sig a₀ b₀ , p₀ , R₀) → Der (Γ₀ , a₀ , cfst p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀)
+    Der (j-tm , Γ₀ , s-sig a₀ b₀ , p₀ , R₀) → Der (j-tm , Γ₀ , a₀ , cfst p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀)
   dsnd : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (p₀ : Code) →
-    Der (Γ₀ , s-sig a₀ b₀ , p₀ , R₀) → Der (Γ₀ , b₀ , csnd p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀)
-  dcase : (Γ₀ : CCtx) (s₀ : TyShape) (R₀ : Mean Γ₀ (CaseV s₀)) (x₀ t₀ f₀ : Code) →
-    Der (Γ₀ , s-bool , x₀ , fmapM Γ₀ (CaseV s₀) (TV s-bool) (case-x s₀) R₀) →
-    Der (Γ₀ , s₀ , t₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-t s₀) R₀) →
-    Der (Γ₀ , s₀ , f₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-f s₀) R₀) →
-    Der (Γ₀ , s₀ , c-case t₀ f₀ x₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-r s₀) R₀)
-  dtrue : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (Γ₀ , s-bool , c-true , fmapM Γ₀ One1 (TV s-bool) (bool-v true) B₀)
-  dfalse : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (Γ₀ , s-bool , c-false , fmapM Γ₀ One1 (TV s-bool) (bool-v false) B₀)
-  dlam : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-pi a₀ b₀))) (c₀ : Code) →
-    Der (lam-ctx Γ₀ a₀ b₀ X₀ , b₀ , c₀ , lam-body Γ₀ a₀ b₀ X₀) → Der (Γ₀ , s-pi a₀ b₀ , clam c₀ , X₀)
-  dpair : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (c1₀ c2₀ : Code) →
-    Der (Γ₀ , a₀ , c1₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀) →
-    Der (Γ₀ , b₀ , c2₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀) →
-    Der (Γ₀ , s-sig a₀ b₀ , cpair c1₀ c2₀ , R₀)
+    Der (j-tm , Γ₀ , s-sig a₀ b₀ , p₀ , R₀) → Der (j-tm , Γ₀ , b₀ , csnd p₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀)
+  dcase : (Γ₀ : CCtx) (s₀ : TyShape) (R₀ : Mean Γ₀ (CaseV s₀)) (cP₀ x₀ t₀ f₀ : Code) →
+    Der (j-ty , ext-h Γ₀ s-bool (CaseV s₀) (case-b s₀) R₀ , s₀ , cP₀ , case-mot Γ₀ s₀ R₀) →
+    Der (j-tm , Γ₀ , s-bool , x₀ , fmapM Γ₀ (CaseV s₀) (TV s-bool) (case-x s₀) R₀) →
+    Der (j-tm , Γ₀ , s₀ , t₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-t s₀) R₀) →
+    Der (j-tm , Γ₀ , s₀ , f₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-f s₀) R₀) →
+    Der (j-tm , Γ₀ , s₀ , c-case t₀ f₀ x₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-r s₀) R₀)
+  dtrue : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (j-tm , Γ₀ , s-bool , c-true , fmapM Γ₀ One1 (TV s-bool) (bool-v true) B₀)
+  dfalse : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (j-tm , Γ₀ , s-bool , c-false , fmapM Γ₀ One1 (TV s-bool) (bool-v false) B₀)
+  dlam : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-pi a₀ b₀))) (cA₀ c₀ : Code) →
+    Der (j-ty , Γ₀ , a₀ , cA₀ , fmapM Γ₀ (TV (s-pi a₀ b₀)) (Sem a₀) (λ q → fam-dom a₀ b₀ (fst q)) X₀) →
+    Der (j-tm , lam-ctx Γ₀ a₀ b₀ X₀ , b₀ , c₀ , lam-body Γ₀ a₀ b₀ X₀) → Der (j-tm , Γ₀ , s-pi a₀ b₀ , clam c₀ , X₀)
+  dpair : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (TV (s-sig a₀ b₀))) (cB₀ c1₀ c2₀ : Code) →
+    Der (j-ty , ext-h Γ₀ a₀ (TV (s-sig a₀ b₀)) (λ q → fam-dom a₀ b₀ (fst q)) R₀ , b₀ , cB₀ , pair-cod Γ₀ a₀ b₀ R₀) →
+    Der (j-tm , Γ₀ , a₀ , c1₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV a₀) (sig-1 a₀ b₀) R₀) →
+    Der (j-tm , Γ₀ , b₀ , c2₀ , fmapM Γ₀ (TV (s-sig a₀ b₀)) (TV b₀) (sig-2 a₀ b₀) R₀) →
+    Der (j-tm , Γ₀ , s-sig a₀ b₀ , cpair c1₀ c2₀ , R₀)
   dplam : (Γ₀ : CCtx) (a₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-path a₀))) (c₀ : Code) →
-    Der (dext Γ₀ , a₀ , c₀ , plam-body Γ₀ a₀ X₀) → Der (Γ₀ , s-path a₀ , cplam c₀ , X₀)
+    Der (j-tm , dext Γ₀ , a₀ , c₀ , plam-body Γ₀ a₀ X₀) → Der (j-tm , Γ₀ , s-path a₀ , cplam c₀ , X₀)
   dpapp : (Γ₀ : CCtx) (a₀ : TyShape) (P₀ : Mean Γ₀ (TV (s-path a₀))) (p₀ : Code) (f₀ : DNF) →
-    isTrue (dnf-canon f₀) →
+    isTrue (dnf-canon f₀) → isTrue (dnf-nonconst f₀) →
     (Y₀ : Mean Γ₀ (TV a₀)) → PathM Γ₀ (TV a₀) (papp-mean Γ₀ a₀ f₀ P₀) Y₀ →
-    Der (Γ₀ , s-path a₀ , p₀ , P₀) → Der (Γ₀ , a₀ , cpapp p₀ (dnf-code f₀) , Y₀)
+    Der (j-tm , Γ₀ , s-path a₀ , p₀ , P₀) → Der (j-tm , Γ₀ , a₀ , cpapp p₀ (dnf-code f₀) , Y₀)
+  dpapp0 : (Γ₀ : CCtx) (a₀ : TyShape) (P₀ : Mean Γ₀ (TV (s-path a₀))) (p₀ : Code) →
+    Der (j-tm , Γ₀ , s-path a₀ , p₀ , P₀) → Der (j-tm , Γ₀ , a₀ , cpapp p₀ ci0 , fmapM Γ₀ (TV (s-path a₀)) (TV a₀) (pend-0 a₀) P₀)
+  dpapp1 : (Γ₀ : CCtx) (a₀ : TyShape) (P₀ : Mean Γ₀ (TV (s-path a₀))) (p₀ : Code) →
+    Der (j-tm , Γ₀ , s-path a₀ , p₀ , P₀) → Der (j-tm , Γ₀ , a₀ , cpapp p₀ ci1 , fmapM Γ₀ (TV (s-path a₀)) (TV a₀) (pend-1 a₀) P₀)
+  dty-bool : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (j-ty , Γ₀ , s-bool , c-bool , B₀)
+  dty-pi : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (T₀ : Mean Γ₀ (Fam a₀ b₀)) (cA₀ cB₀ : Code) →
+    Der (j-ty , Γ₀ , a₀ , cA₀ , fmapM Γ₀ (Fam a₀ b₀) (Sem a₀) (fam-dom a₀ b₀) T₀) →
+    Der (j-ty , ext-h Γ₀ a₀ (Fam a₀ b₀) (fam-dom a₀ b₀) T₀ , b₀ , cB₀ , fam-body Γ₀ a₀ b₀ T₀) →
+    Der (j-ty , Γ₀ , s-pi a₀ b₀ , cpi #2 cA₀ cB₀ , T₀)
+  dty-sig : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (T₀ : Mean Γ₀ (Fam a₀ b₀)) (cA₀ cB₀ : Code) →
+    Der (j-ty , Γ₀ , a₀ , cA₀ , fmapM Γ₀ (Fam a₀ b₀) (Sem a₀) (fam-dom a₀ b₀) T₀) →
+    Der (j-ty , ext-h Γ₀ a₀ (Fam a₀ b₀) (fam-dom a₀ b₀) T₀ , b₀ , cB₀ , fam-body Γ₀ a₀ b₀ T₀) →
+    Der (j-ty , Γ₀ , s-sig a₀ b₀ , csigma cA₀ cB₀ , T₀)
+  dty-path : (Γ₀ : CCtx) (a₀ : TyShape) (T₀ : Mean Γ₀ (Sem (s-path a₀))) (cL₀ c0₀ c1₀ : Code) →
+    Der (j-ty , dext Γ₀ , a₀ , cL₀ , path-line-ty Γ₀ a₀ T₀) →
+    Der (j-tm , Γ₀ , a₀ , c0₀ , fmapM Γ₀ (Sem (s-path a₀)) (TV a₀) (tend-0 a₀) T₀) →
+    Der (j-tm , Γ₀ , a₀ , c1₀ , fmapM Γ₀ (Sem (s-path a₀)) (TV a₀) (tend-1 a₀) T₀) →
+    Der (j-ty , Γ₀ , s-path a₀ , cpathp (cplam cL₀) c0₀ c1₀ , T₀)
 -- typed codes (paper §6.1): Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation;
 -- evaluation (6.1) is that meaning
 TCode : CCtx → TyShape → Type 1
-TCode Γ s = (c : Code) × (v : Mean Γ (TV s)) × Der (Γ , s , c , v)
+TCode Γ s = (c : Code) × (v : Mean Γ (TV s)) × Der (j-tm , Γ , s , c , v)
 teval : (Γ : CCtx) (s : TyShape) → TCode Γ s → Mean Γ (TV s)
 teval Γ s t = fst (snd t)
 -- normal and neutral forms are derivations, with the same code and meaning
@@ -1477,14 +1581,18 @@ embed (nvar Γ v) = dvar Γ v
 embed (napp Γ a b R f c nf na) = dapp Γ a b R f c (embed nf) (embed na)
 embed (nfst Γ a b R p np) = dfst Γ a b R p (embed np)
 embed (nsnd Γ a b R p np) = dsnd Γ a b R p (embed np)
-embed (ncase Γ s R x t f nx nt nf) = dcase Γ s R x t f (embed nx) (embed nt) (embed nf)
+embed (ncase Γ s R cP x t f nP nx nt nf) = dcase Γ s R cP x t f (embed nP) (embed nx) (embed nt) (embed nf)
 embed (nne Γ R x nx) = embed nx
 embed (ntrue Γ B) = dtrue Γ B
 embed (nfalse Γ B) = dfalse Γ B
-embed (nlam Γ a b X c nb) = dlam Γ a b X c (embed nb)
-embed (npair Γ a b R c1 c2 n1 n2) = dpair Γ a b R c1 c2 (embed n1) (embed n2)
+embed (nlam Γ a b X cA c nA nb) = dlam Γ a b X cA c (embed nA) (embed nb)
+embed (npair Γ a b R cB c1 c2 nB n1 n2) = dpair Γ a b R cB c1 c2 (embed nB) (embed n1) (embed n2)
 embed (nplam Γ a X c nb) = dplam Γ a X c (embed nb)
-embed (npapp Γ a P p f cf nc Y q np) = dpapp Γ a P p f cf Y q (embed np)
+embed (npapp Γ a P p f cf nc Y q np) = dpapp Γ a P p f cf nc Y q (embed np)
+embed (nty-bool Γ B) = dty-bool Γ B
+embed (nty-pi Γ a b T cA cB nA nB) = dty-pi Γ a b T cA cB (embed nA) (embed nB)
+embed (nty-sig Γ a b T cA cB nA nB) = dty-sig Γ a b T cA cB (embed nA) (embed nB)
+embed (nty-path Γ a T cL c0 c1 nL n0 n1) = dty-path Γ a T cL c0 c1 (embed nL) (embed n0) (embed n1)
 
 -- ---------------------------------------------------------------- P2.6e (begun): substitutions over cubes
 -- (2026-11-12) The dimension part of a substitution Δ → Γ is a map of the cube category given, as in
@@ -3280,12 +3388,9 @@ world-dkeep Δ' Δ w =
       (pcat (ShM (dext Δ')) ((var-shape (fst Δ) v) , dcube-reidx (dims (fst Δ')) (CtxV (fst Δ')) (Line (CtxV (fst Δ'))) (SubF (fst Δ') (fst Δ)) (LineO (CtxV (fst Δ')) (FbE (fst Δ') (TV (var-shape (fst Δ) v)))) (degen-l (CtxV (fst Δ'))) (λ x y → degen-o (CtxV (fst Δ')) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) x ((λ γ' p ρ' → varM (fst Δ) v (fst p) (snd p ρ')) x y)) (snd Δ') (fst (fst (snd (snd (snd w)))))) ((var-shape (fst Δ) v) , dcube-fmap (suc (dims (fst Δ'))) (CtxV (fst Δ')) (SubF (fst Δ') (fst Δ)) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (λ γ' p ρ' → varM (fst Δ) v (fst p) (snd p ρ')) (cube-map (dims (fst Δ')) (CtxV (fst Δ')) (Line (CtxV (fst Δ'))) (degen-l (CtxV (fst Δ'))) (snd Δ')) (dkeep-S Δ' Δ w)) ((var-shape (fst Δ) v) , subM (dext Δ') (dext Δ) (TV (var-shape (fst Δ) v)) (dkeep-sub Δ' Δ w) (varCube (dext Δ) v)) (λ i → ((var-shape (fst Δ) v) , fmap-reidx (dims (fst Δ')) (CtxV (fst Δ')) (Line (CtxV (fst Δ'))) (SubF (fst Δ') (fst Δ)) (LineO (CtxV (fst Δ')) (SubF (fst Δ') (fst Δ))) (LineO (CtxV (fst Δ')) (FbE (fst Δ') (TV (var-shape (fst Δ) v)))) (degen-l (CtxV (fst Δ'))) (degen-o (CtxV (fst Δ')) (SubF (fst Δ') (fst Δ))) (lineo-fmap (CtxV (fst Δ')) (SubF (fst Δ') (fst Δ)) (FbE (fst Δ') (TV (var-shape (fst Δ) v))) (λ γ' p ρ' → varM (fst Δ) v (fst p) (snd p ρ'))) (snd Δ') (fst (fst (snd (snd (snd w))))) (~ i)))
       (λ i → ((var-shape (fst Δ) v) , subM-of (dext Δ') (dext Δ) (TV (var-shape (fst Δ) v)) (dkeep-sub Δ' Δ w) (varM (lcons e-dim (fst Δ)) v) (~ i)))))))))
 -- (2026-11-12, next definitions (2s), toward world-keep) a cube over a mapped base read off the cube
--- itself (dcube-lift); a map out of it, a fibrewise map of it, a section over the mapped base, and a
+-- itself (dcube-lift, with dcube-push above); a map out of it, a fibrewise map of it, a section over the mapped base, and a
 -- map out of a fibrewise map, each one map (map-lift, fmap-lift, of-lift, dmap-fmap; by induction, the
 -- clauses judgmental pointwise)
-dcube-lift : (n : Nat) (X X' : Type 1) (Y : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') →
-  ((x : X) (y : Y x) → F' (f x y)) → (c : Cube n X) (d : DCube n X Y c) → DCube n X' F' (dcube-map n X Y X' f c d)
-dcube-lift n X X' Y F' f g c d = dcube-push n X X' Y Y F' f (λ x y z → g x y) c d d
 lineo-lift : (X X' : Type 1) (Y : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X') →
   ((x : X) (y : Y x) → F' (f x y)) → (L : Line X) (D : LineO X Y L) → LineO X' F' (lineo-map X Y X' f L D)
 lineo-lift X X' Y F' f g L D = (g (fst L) (fst D) , g (fst (snd L)) (fst (snd D)) , λ i → g (snd (snd L) i) (snd (snd D) i))
@@ -3362,8 +3467,6 @@ pull-ignore (suc n) X X' Y F F' f k c d e =
 -- of sub-tot, and weakening along it (kp-push)
 kp-ctx : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) → CCtx
 kp-ctx Δ' Δ a Y h M w = extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)
-kp-x : (Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) → CCtx
-kp-x Δ a Y h M = extM Δ a Y (λ γ e ρ → h (e ρ)) M
 kp-tot : (Δ' Δ : CCtx) (Y : Type 1) (M : Mean Δ Y) (w : World Δ' Δ) → DCube (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (snd Δ')
 kp-tot Δ' Δ Y M w = sub-tot Δ' Δ Y (world-sub Δ' Δ w) M
 kp-f : (sk' sk : Lst Entry) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (γ' : CtxV sk') → SubT sk' sk Y γ' → CtxV (lcons (e-ty a) sk')
@@ -3417,14 +3520,14 @@ kp-rhs : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean 
   PathM (kp-ctx Δ' Δ a Y h M w) (TV (var-shape (lcons (e-ty a) (fst Δ)) v'))
     (kp-carry Δ' Δ a Y h M w (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (kp-lift Δ' Δ a Y h M w (TV (var-shape (lcons (e-ty a) (fst Δ)) v'))
        (λ x t → var-at (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) v' (kp-f (fst Δ') (fst Δ) a Y h x t) (kp-g (fst Δ') (fst Δ) a Y h x t))))
-    (subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) v'))
+    (subM (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (ext-h Δ a Y h M) v'))
 kp-rhs Δ' Δ a Y h M w v' =
   pcat (Mean (kp-ctx Δ' Δ a Y h M w) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')))
     (kp-carry Δ' Δ a Y h M w (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (kp-lift Δ' Δ a Y h M w (TV (var-shape (lcons (e-ty a) (fst Δ)) v'))
        (λ x t → var-at (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) v' (kp-f (fst Δ') (fst Δ) a Y h x t) (kp-g (fst Δ') (fst Δ) a Y h x t))))
     (kp-carry Δ' Δ a Y h M w (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (dcube-fmap (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')))
        (var-at (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) v') (kp-c0 Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w)))
-    (subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) v'))
+    (subM (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (ext-h Δ a Y h M) v'))
     (λ i → kp-carry Δ' Δ a Y h M w (TV (var-shape (lcons (e-ty a) (fst Δ)) v'))
        (fmap-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')))
           (kp-f (fst Δ') (fst Δ) a Y h) (kp-g (fst Δ') (fst Δ) a Y h) (var-at (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) v') (snd Δ') (kp-tot Δ' Δ Y M w) (~ i)))
@@ -3433,7 +3536,7 @@ kp-rhs Δ' Δ a Y h M w v' =
           (var-at (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) v') (kp-c0 Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w)))
        (dcube-fmap (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')))
           (var-at (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) v') (snd (kp-ctx Δ' Δ a Y h M w)) (keep-S Δ' Δ a Y h M w))
-       (subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) v'))
+       (subM (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (ext-h Δ a Y h M) v'))
        (psym (Mean (kp-ctx Δ' Δ a Y h M w) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')))
           (dcube-fmap (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')))
              (var-at (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) v') (snd (kp-ctx Δ' Δ a Y h M w)) (keep-S Δ' Δ a Y h M w))
@@ -3442,10 +3545,10 @@ kp-rhs Δ' Δ a Y h M w v' =
           (fmap-transp (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')))
              (var-at (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) v') (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w)))
        (psym (Mean (kp-ctx Δ' Δ a Y h M w) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')))
-          (subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) v'))
+          (subM (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (ext-h Δ a Y h M) v'))
           (dcube-fmap (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')))
              (var-at (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) v') (snd (kp-ctx Δ' Δ a Y h M w)) (keep-S Δ' Δ a Y h M w))
-          (subM-of (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varM (lcons (e-ty a) (fst Δ)) v'))))
+          (subM-of (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varM (lcons (e-ty a) (fst Δ)) v'))))
 -- a substitution's action on a variable, as a fibrewise map of sub-tot (subM-of, fmap-pull,
 -- pull-ignore)
 sub-var-tot : (Δ' Δ : CCtx) (Y : Type 1) (M : Mean Δ Y) (σ : Sub Δ' Δ) (v : VarP (fst Δ)) →
@@ -3485,16 +3588,16 @@ kp-some Δ' Δ a Y h M w v =
 -- older one through kp-some
 kp-wv : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (v' : Opt (VarP (fst Δ))) →
   (wvv' : VarP (lcons (e-ty a) (fst Δ'))) × (var-word (lcons (e-ty a) (fst Δ')) wvv' ≡ w-keep (fst w) (var-word (lcons (e-ty a) (fst Δ)) v')) ×
-  PathP (λ i → ShM (kp-ctx Δ' Δ a Y h M w)) (var-shape (lcons (e-ty a) (fst Δ')) wvv' , varCube (kp-ctx Δ' Δ a Y h M w) wvv') (var-shape (lcons (e-ty a) (fst Δ)) v' , subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) v'))
+  PathP (λ i → ShM (kp-ctx Δ' Δ a Y h M w)) (var-shape (lcons (e-ty a) (fst Δ')) wvv' , varCube (kp-ctx Δ' Δ a Y h M w) wvv') (var-shape (lcons (e-ty a) (fst Δ)) v' , subM (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) v')) (keep-sub Δ' Δ a Y h M w) (varCube (ext-h Δ a Y h M) v'))
 kp-wv Δ' Δ a Y h M w none =
-  (none , (λ i → #0) , λ i → (a , pcat (Mean (kp-ctx Δ' Δ a Y h M w) (TV a)) (varCube (kp-ctx Δ' Δ a Y h M w) none) (kp-carry Δ' Δ a Y h M w (TV a) (kp-lift Δ' Δ a Y h M w (TV a) (λ x t → varM (lcons (e-ty a) (fst Δ')) none ((kp-f (fst Δ') (fst Δ) a Y h) x t)))) (subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV a) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) none))
+  (none , (λ i → #0) , λ i → (a , pcat (Mean (kp-ctx Δ' Δ a Y h M w) (TV a)) (varCube (kp-ctx Δ' Δ a Y h M w) none) (kp-carry Δ' Δ a Y h M w (TV a) (kp-lift Δ' Δ a Y h M w (TV a) (λ x t → varM (lcons (e-ty a) (fst Δ')) none ((kp-f (fst Δ') (fst Δ) a Y h) x t)))) (subM (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) (TV a) (keep-sub Δ' Δ a Y h M w) (varCube (ext-h Δ a Y h M) none))
      (kp-lhs Δ' Δ a Y h M w none) (kp-rhs Δ' Δ a Y h M w none) i))
 kp-wv Δ' Δ a Y h M w (some v) =
   (some (fst ((snd (snd (snd (snd w)))) v)) , (λ i → %wsucc (fst (snd ((snd (snd (snd (snd w)))) v)) i)) ,
-   pcat (ShM (kp-ctx Δ' Δ a Y h M w)) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , varCube (kp-ctx Δ' Δ a Y h M w) (some (fst ((snd (snd (snd (snd w)))) v)))) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (λ x t → varM (lcons (e-ty a) (fst Δ')) (some (fst ((snd (snd (snd (snd w)))) v))) ((kp-f (fst Δ') (fst Δ) a Y h) x t))))) (var-shape (lcons (e-ty a) (fst Δ)) (some v) , subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) (some v))) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) (some v)))
+   pcat (ShM (kp-ctx Δ' Δ a Y h M w)) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , varCube (kp-ctx Δ' Δ a Y h M w) (some (fst ((snd (snd (snd (snd w)))) v)))) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (λ x t → varM (lcons (e-ty a) (fst Δ')) (some (fst ((snd (snd (snd (snd w)))) v))) ((kp-f (fst Δ') (fst Δ) a Y h) x t))))) (var-shape (lcons (e-ty a) (fst Δ)) (some v) , subM (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) (some v))) (keep-sub Δ' Δ a Y h M w) (varCube (ext-h Δ a Y h M) (some v)))
      (λ i → ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , kp-lhs Δ' Δ a Y h M w (some (fst ((snd (snd (snd (snd w)))) v))) i))
-     (pcat (ShM (kp-ctx Δ' Δ a Y h M w)) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (λ x t → varM (lcons (e-ty a) (fst Δ')) (some (fst ((snd (snd (snd (snd w)))) v))) ((kp-f (fst Δ') (fst Δ) a Y h) x t))))) ((var-shape (fst Δ) v) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (λ x t ρ'' → var-at (fst Δ') (fst Δ) v x (fst t) (fst ρ''))))) (var-shape (lcons (e-ty a) (fst Δ)) (some v) , subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) (some v))) (keep-sub Δ' Δ a Y h M w) (varCube (kp-x Δ a Y h M) (some v))) (kp-some Δ' Δ a Y h M w v) (λ i → ((var-shape (fst Δ) v) , kp-rhs Δ' Δ a Y h M w (some v) i))))
-world-keep : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) → World (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M)
+     (pcat (ShM (kp-ctx Δ' Δ a Y h M w)) ((var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v))) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ') (fst ((snd (snd (snd (snd w)))) v)))) (λ x t → varM (lcons (e-ty a) (fst Δ')) (some (fst ((snd (snd (snd (snd w)))) v))) ((kp-f (fst Δ') (fst Δ) a Y h) x t))))) ((var-shape (fst Δ) v) , (kp-carry Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (kp-lift Δ' Δ a Y h M w (TV (var-shape (fst Δ) v)) (λ x t ρ'' → var-at (fst Δ') (fst Δ) v x (fst t) (fst ρ''))))) (var-shape (lcons (e-ty a) (fst Δ)) (some v) , subM (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) (TV (var-shape (lcons (e-ty a) (fst Δ)) (some v))) (keep-sub Δ' Δ a Y h M w) (varCube (ext-h Δ a Y h M) (some v))) (kp-some Δ' Δ a Y h M w v) (λ i → ((var-shape (fst Δ) v) , kp-rhs Δ' Δ a Y h M w (some v) i))))
+world-keep : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) → World (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M)
 world-keep Δ' Δ a Y h M w =
   (w-keep (fst w) , mono-keep (fst w) (fst (snd w)) ,
    (λ k → %welimP (λ u → isdim (lcons (e-ty a) (fst Δ')) (w-keep (fst w) u) ≡ isdim (lcons (e-ty a) (fst Δ)) u) k (λ i → false)
@@ -5382,15 +5485,6 @@ lift-fmap (suc n) X F F' Z H h k l c d =
 -- computed from the body, which for a carry-uniq or a pull-lift unfolds the whole dependent path)
 cong1 : (A B : Type 1) (f : A → B) (x y : A) → PathP (λ i → A) x y → PathP (λ i → B) (f x) (f y)
 cong1 A B f x y p = λ i → f (p i)
--- (2026-11-12, (6)) a meaning over a context extended by a type uniform in the vertex (extM at λ γ e ρ →
--- h (e ρ)) read off the extending meaning M itself, uniformly (G0 at the value and the new variable):
--- lam-body is one (lam-body Γ a b X is ext-lift at h = λ q → fst (fst q), G0 = λ q x → (snd (fst q)
--- x , snd q x), judgmentally)
-ext-lift : (Γ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) (M : Mean Γ Y) →
-  Mean (extM Γ a Y (λ γ e ρ → h (e ρ)) M) Z
-ext-lift Γ a Y h Z G0 M =
-  dcube-lift (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y) (FbE (lcons (e-ty a) (fst Γ)) Z)
-    (λ γ e → (γ , λ ρ → h (e ρ))) (λ γ e ρ → G0 (e (fst ρ)) (snd ρ)) (snd Γ) M
 -- keep-lift's parts: the cubes of contexts its base paths pass through (kl-k2, kl-k3), the meanings over them (kl-E0 … kl-ER0), the dependent paths over each base path (kl-DE, kl-Dr2, kl-D, kl-DR) and the four steps (kl-s1 … kl-s4)
 kl-k2 : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))))
 kl-k2 Δ' Δ a Y h M w Z G0 =
@@ -5400,10 +5494,10 @@ kl-k3 Δ' Δ a Y h M w Z G0 =
   (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)))
 kl-E0 : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → (DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))))
 kl-E0 Δ' Δ a Y h M w Z G0 =
-  (cmap-d (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (snd (kp-x Δ a Y h M)) (ext-lift Δ a Y h Z G0 M))
+  (cmap-d (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (snd (ext-h Δ a Y h M)) (ext-lift Δ a Y h Z G0 M))
 kl-E1 : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → (DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))))
 kl-E1 Δ' Δ a Y h M w Z G0 =
-  (cmap-d (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (snd (kp-x Δ a Y h M)) (ext-lift Δ a Y h Z G0 M))
+  (cmap-d (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (snd (ext-h Δ a Y h M)) (ext-lift Δ a Y h Z G0 M))
 kl-Ls : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → (DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (kl-k2 Δ' Δ a Y h M w Z G0))
 kl-Ls Δ' Δ a Y h M w Z G0 =
   (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (SubT (fst Δ') (fst Δ) Y) (FbE (lcons (e-ty a) (fst Δ)) Z) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (λ γ' t ρ → G0 (snd t (fst ρ)) (snd ρ)) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))
@@ -5424,16 +5518,16 @@ kl-Dr1 Δ' Δ a Y h M w Z G0 =
   (pcat-d (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (λ u → DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) u) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (kl-k2 Δ' Δ a Y h M w Z G0) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (ext-path Δ' Δ a Y (λ γ e ρ → h (e ρ)) M (world-sub Δ' Δ w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i))) (kl-E1 Δ' Δ a Y h M w Z G0) (kl-Ls Δ' Δ a Y h M w Z G0) (kl-E5 Δ' Δ a Y h M w Z G0) (kl-DE Δ' Δ a Y h M w Z G0) (kl-Dr2 Δ' Δ a Y h M w Z G0))
 kl-D : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → PathP (λ i → (DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) ((pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (cmap-keep (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (ext-path Δ' Δ a Y (λ γ e ρ → h (e ρ)) M (world-sub Δ' Δ w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i))))) i))) (kl-E0 Δ' Δ a Y h M w Z G0) (kl-E5 Δ' Δ a Y h M w Z G0)
 kl-D Δ' Δ a Y h M w Z G0 =
-  (pcat-d (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (λ u → DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) u) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (cmap-keep (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (ext-path Δ' Δ a Y (λ γ e ρ → h (e ρ)) M (world-sub Δ' Δ w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i)))) (kl-E0 Δ' Δ a Y h M w Z G0) (kl-E1 Δ' Δ a Y h M w Z G0) (kl-E5 Δ' Δ a Y h M w Z G0) (cmap-keep-d (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (snd (kp-x Δ a Y h M)) (ext-lift Δ a Y h Z G0 M)) (kl-Dr1 Δ' Δ a Y h M w Z G0))
+  (pcat-d (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (λ u → DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) u) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (cmap-keep (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (ext-path Δ' Δ a Y (λ γ e ρ → h (e ρ)) M (world-sub Δ' Δ w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i)))) (kl-E0 Δ' Δ a Y h M w Z G0) (kl-E1 Δ' Δ a Y h M w Z G0) (kl-E5 Δ' Δ a Y h M w Z G0) (cmap-keep-d (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (snd (ext-h Δ a Y h M)) (ext-lift Δ a Y h Z G0 M)) (kl-Dr1 Δ' Δ a Y h M w Z G0))
 kl-ER0 : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → (DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (FbE (lcons (e-ty a) (fst Δ')) Z) (kp-c0 Δ' Δ a Y h M w))
 kl-ER0 Δ' Δ a Y h M w Z G0 =
   (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (FbE (lcons (e-ty a) (fst Δ')) Z) (kp-f (fst Δ') (fst Δ) a Y h) (λ x t ρ'' → G0 (snd t (snd (fst t) (fst ρ''))) (snd ρ'')) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))
-kl-s1 : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → PathP (λ i → (Mean (kp-ctx Δ' Δ a Y h M w) Z)) (sub-pull (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) Z (keep-S Δ' Δ a Y h M w) (carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (cmap-keep (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (ext-path Δ' Δ a Y (λ γ e ρ → h (e ρ)) M (world-sub Δ' Δ w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i))))) (kl-E0 Δ' Δ a Y h M w Z G0))) (sub-pull (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) Z (keep-S Δ' Δ a Y h M w) (kl-E5 Δ' Δ a Y h M w Z G0))
+kl-s1 : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → PathP (λ i → (Mean (kp-ctx Δ' Δ a Y h M w) Z)) (sub-pull (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) Z (keep-S Δ' Δ a Y h M w) (carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (cmap-keep (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (ext-path Δ' Δ a Y (λ γ e ρ → h (e ρ)) M (world-sub Δ' Δ w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i))))) (kl-E0 Δ' Δ a Y h M w Z G0))) (sub-pull (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) Z (keep-S Δ' Δ a Y h M w) (kl-E5 Δ' Δ a Y h M w Z G0))
 kl-s1 Δ' Δ a Y h M w Z G0 =
-  cong1 (DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w))) (Mean (kp-ctx Δ' Δ a Y h M w) Z) (λ e → sub-pull (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) Z (keep-S Δ' Δ a Y h M w) e) (carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (cmap-keep (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (ext-path Δ' Δ a Y (λ γ e ρ → h (e ρ)) M (world-sub Δ' Δ w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i))))) (kl-E0 Δ' Δ a Y h M w Z G0)) (kl-E5 Δ' Δ a Y h M w Z G0) (carry-uniq (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (cmap-keep (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (ext-path Δ' Δ a Y (λ γ e ρ → h (e ρ)) M (world-sub Δ' Δ w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i))))) (kl-E0 Δ' Δ a Y h M w Z G0) (kl-E5 Δ' Δ a Y h M w Z G0) (kl-D Δ' Δ a Y h M w Z G0))
-kl-s2 : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → PathP (λ i → (Mean (kp-ctx Δ' Δ a Y h M w) Z)) (sub-pull (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) Z (keep-S Δ' Δ a Y h M w) (kl-E5 Δ' Δ a Y h M w Z G0)) (carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (FbE (lcons (e-ty a) (fst Δ')) Z) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (dcube-pull (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (CtxV (lcons (e-ty a) (fst Δ))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) Z) (FbE (lcons (e-ty a) (fst Δ)) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (kp-c0 Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w) (kl-E3 Δ' Δ a Y h M w Z G0)))
+  cong1 (DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w))) (Mean (kp-ctx Δ' Δ a Y h M w) Z) (λ e → sub-pull (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) Z (keep-S Δ' Δ a Y h M w) e) (carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (cmap-keep (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (ext-path Δ' Δ a Y (λ γ e ρ → h (e ρ)) M (world-sub Δ' Δ w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i))))) (kl-E0 Δ' Δ a Y h M w Z G0)) (kl-E5 Δ' Δ a Y h M w Z G0) (carry-uniq (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (cmap-of (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ)) (w-keep (fst w))) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (cmap-keep (e-ty a) (fst Δ') (fst Δ) (fst w) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) (fst w)) (CtxV (lcons (e-ty a) (fst Δ))) (snd (extM Δ a Y (λ γ e ρ → h (e ρ)) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (ext-path Δ' Δ a Y (λ γ e ρ → h (e ρ)) M (world-sub Δ' Δ w)) (pcat (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (sub-base (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M)) (extM Δ a Y (λ γ e ρ → h (e ρ)) M) (keep-S Δ' Δ a Y h M w)) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i))))) (kl-E0 Δ' Δ a Y h M w Z G0) (kl-E5 Δ' Δ a Y h M w Z G0) (kl-D Δ' Δ a Y h M w Z G0))
+kl-s2 : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → PathP (λ i → (Mean (kp-ctx Δ' Δ a Y h M w) Z)) (sub-pull (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) Z (keep-S Δ' Δ a Y h M w) (kl-E5 Δ' Δ a Y h M w Z G0)) (carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (FbE (lcons (e-ty a) (fst Δ')) Z) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (dcube-pull (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (CtxV (lcons (e-ty a) (fst Δ))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) Z) (FbE (lcons (e-ty a) (fst Δ)) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (kp-c0 Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w) (kl-E3 Δ' Δ a Y h M w Z G0)))
 kl-s2 Δ' Δ a Y h M w Z G0 =
-  psym (Mean (kp-ctx Δ' Δ a Y h M w) Z) (carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (FbE (lcons (e-ty a) (fst Δ')) Z) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (dcube-pull (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (CtxV (lcons (e-ty a) (fst Δ))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) Z) (FbE (lcons (e-ty a) (fst Δ)) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (kp-c0 Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w) (kl-E3 Δ' Δ a Y h M w Z G0))) (sub-pull (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) Z (keep-S Δ' Δ a Y h M w) (kl-E5 Δ' Δ a Y h M w Z G0)) (pull-move (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (CtxV (lcons (e-ty a) (fst Δ))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) Z) (FbE (lcons (e-ty a) (fst Δ)) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w) (keep-S Δ' Δ a Y h M w) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w)) (kl-E3 Δ' Δ a Y h M w Z G0))
+  psym (Mean (kp-ctx Δ' Δ a Y h M w) Z) (carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (FbE (lcons (e-ty a) (fst Δ')) Z) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (dcube-pull (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (CtxV (lcons (e-ty a) (fst Δ))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) Z) (FbE (lcons (e-ty a) (fst Δ)) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (kp-c0 Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w) (kl-E3 Δ' Δ a Y h M w Z G0))) (sub-pull (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) Z (keep-S Δ' Δ a Y h M w) (kl-E5 Δ' Δ a Y h M w Z G0)) (pull-move (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (CtxV (lcons (e-ty a) (fst Δ))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) Z) (FbE (lcons (e-ty a) (fst Δ)) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w) (keep-S Δ' Δ a Y h M w) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w)) (kl-E3 Δ' Δ a Y h M w Z G0))
 kl-s3 : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → PathP (λ i → (Mean (kp-ctx Δ' Δ a Y h M w) Z)) (carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (FbE (lcons (e-ty a) (fst Δ')) Z) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (dcube-pull (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (CtxV (lcons (e-ty a) (fst Δ))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) Z) (FbE (lcons (e-ty a) (fst Δ)) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (kp-c0 Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w) (kl-E3 Δ' Δ a Y h M w Z G0))) (carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (FbE (lcons (e-ty a) (fst Δ')) Z) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) (kl-ER0 Δ' Δ a Y h M w Z G0))
 kl-s3 Δ' Δ a Y h M w Z G0 =
   cong1 (DCube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (FbE (lcons (e-ty a) (fst Δ')) Z) (kp-c0 Δ' Δ a Y h M w)) (Mean (kp-ctx Δ' Δ a Y h M w) Z) (λ e → carry (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (FbE (lcons (e-ty a) (fst Δ')) Z) (kp-c0 Δ' Δ a Y h M w) (snd (kp-ctx Δ' Δ a Y h M w)) (keep-base Δ' Δ a Y h M w) e) (dcube-pull (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (CtxV (lcons (e-ty a) (fst Δ))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) Z) (FbE (lcons (e-ty a) (fst Δ)) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (kp-c0 Δ' Δ a Y h M w) (kp-S0 Δ' Δ a Y h M w) (kl-E3 Δ' Δ a Y h M w Z G0)) (kl-ER0 Δ' Δ a Y h M w Z G0) (pull-lift (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (kp-f (fst Δ') (fst Δ) a Y h) (kp-g (fst Δ') (fst Δ) a Y h) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ')) Z) (FbE (lcons (e-ty a) (fst Δ)) Z) (λ γ' p → fst p) (λ γ' p e ρ → e (snd p ρ)) (λ γ' t ρ → G0 (snd t (fst ρ)) (snd ρ)) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M) (kl-E3 Δ' Δ a Y h M w Z G0) (λ i → carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))) (FbE (lcons (e-ty a) (fst Δ)) Z) (kl-k2 Δ' Δ a Y h M w Z G0) (kl-k3 Δ' Δ a Y h M w Z G0) (psym (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ)))) (dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (map-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M))) (kl-Ls Δ' Δ a Y h M w Z G0) (~ i)))
@@ -5452,7 +5546,7 @@ kl-s4 Δ' Δ a Y h M w Z G0 =
 -- carried along keep-base, as the right side is (lift-fmap⁻¹ and the lift along fmap-pull, by
 -- carry-uniq: kl-s4)
 keep-lift : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) →
-  PathM (kp-ctx Δ' Δ a Y h M w) Z (subM (kp-ctx Δ' Δ a Y h M w) (kp-x Δ a Y h M) Z (keep-sub Δ' Δ a Y h M w) (ext-lift Δ a Y h Z G0 M)) (ext-lift Δ' a Y h Z G0 (subM Δ' Δ Y (world-sub Δ' Δ w) M))
+  PathM (kp-ctx Δ' Δ a Y h M w) Z (subM (kp-ctx Δ' Δ a Y h M w) (ext-h Δ a Y h M) Z (keep-sub Δ' Δ a Y h M w) (ext-lift Δ a Y h Z G0 M)) (ext-lift Δ' a Y h Z G0 (subM Δ' Δ Y (world-sub Δ' Δ w) M))
 keep-lift Δ' Δ a Y h M w Z G0 =
   pcat-i (Mean (kp-ctx Δ' Δ a Y h M w) Z) (kl-s1 Δ' Δ a Y h M w Z G0) (pcat-i (Mean (kp-ctx Δ' Δ a Y h M w) Z) (kl-s2 Δ' Δ a Y h M w Z G0) (pcat-i (Mean (kp-ctx Δ' Δ a Y h M w) Z) (kl-s3 Δ' Δ a Y h M w Z G0) (kl-s4 Δ' Δ a Y h M w Z G0)))
 -- (2026-11-12, (6)) a λ's body under the kept world: the action of world-keep on lam-body is lam-body
@@ -5466,96 +5560,113 @@ subM-lam-body : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (X : Mean Δ 
 subM-lam-body Δ' Δ w a b X = keep-lift Δ' Δ a (TV (s-pi a b)) (λ q → fst (fst q)) X w (TV b) (λ q x → (snd (fst q) x , snd q x))
 
 -- (2026-11-12, (6)) renaming normal forms along a world: ren-nn takes a normal or neutral form at
--- (Δ, s, c, M) and a world w : Δ' → Δ to a code and a form of the same kind at (Δ', s, code, w's
--- action on M). Each constructor's case is its own lemma (rn-*), taking the premises' renamings: the
--- constructor's rule at Δ', with the premises and the conclusion carried along subM-fmap (nn-fm-in,
--- nn-fm-out); a variable by the world's own variable (WVar); λ under world-keep, carried along
--- subM-lam-body; a path λ under world-dkeep, along subM-plam-body; a path application at the renamed
--- form (canonical and non-constant by canon-r and nonconst-r), its meaning by subM-papp.
+-- (tag, Δ, s, c, M) and a world w : Δ' → Δ to a code and a form of the same kind and tag at (Δ', s,
+-- code, w's action on M). Each constructor's case is its own lemma (rn-*), taking the premises'
+-- renamings: the constructor's rule at Δ', with the premises and the conclusion carried along
+-- subM-fmap (nn-fm-in, nn-fm-out); a variable by the world's own variable (WVar); λ under world-keep,
+-- carried along subM-lam-body; a premise over an extension read off a meaning (a pair's codomain, a
+-- case's motive, a Π or Σ type's codomain) under world-keep, carried along keep-lift (rn-ext); a path
+-- λ under world-dkeep, along subM-plam-body, and a PathP type's line along dkeep-line; a path
+-- application at the renamed form (canonical and non-constant by canon-r and nonconst-r), its meaning
+-- by subM-papp. The carrying helpers are over the tag (P2.5: one set for both kinds of judgment).
 -- the action of a world on a meaning; a form carried along a path of meanings; the renaming's result
 wact : (Δ' Δ : CCtx) (w : World Δ' Δ) (Z : Type 1) → Mean Δ Z → Mean Δ' Z
 wact Δ' Δ w Z M = subM Δ' Δ Z (world-sub Δ' Δ w) M
-nn-tr : (k : NK) (Γ : CCtx) (s : TyShape) (c : Code) (M N : Mean Γ (TV s)) → PathM Γ (TV s) M N → NN (k , (Γ , s , c , M)) → NN (k , (Γ , s , c , N))
-nn-tr k Γ s c M N p x = comp (λ i → NN (k , (Γ , s , c , p i))) (λ i → []) x
-RenR : NK → (Δ' : CCtx) (s : TyShape) → Mean Δ' (TV s) → Type 1
-RenR k Δ' s M = (rc : Code) × NN (k , (Δ' , s , rc , M))
-nn-fm-in : (k : NK) (Δ' Δ : CCtx) (w : World Δ' Δ) (Z : Type 1) (s : TyShape) (h : Z → TV s) (M : Mean Δ Z) (c : Code) →
-  NN (k , (Δ' , s , c , wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M))) → NN (k , (Δ' , s , c , fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M)))
-nn-fm-in k Δ' Δ w Z s h M c x =
-  nn-tr k Δ' s c (wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)) (fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M))
-    (psym (Mean Δ' (TV s)) (fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M)) (wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)) (subM-fmap Δ' Δ Z (TV s) h (world-sub Δ' Δ w) M)) x
-nn-fm-out : (k : NK) (Δ' Δ : CCtx) (w : World Δ' Δ) (Z : Type 1) (s : TyShape) (h : Z → TV s) (M : Mean Δ Z) (c : Code) →
-  NN (k , (Δ' , s , c , fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M))) → NN (k , (Δ' , s , c , wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)))
-nn-fm-out k Δ' Δ w Z s h M c x =
-  nn-tr k Δ' s c (fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M)) (wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)) (subM-fmap Δ' Δ Z (TV s) h (world-sub Δ' Δ w) M) x
-rn-var : (Δ' Δ : CCtx) (w : World Δ' Δ) (v : VarP (fst Δ)) → RenR k-ne Δ' (var-shape (fst Δ) v) (wact Δ' Δ w (TV (var-shape (fst Δ) v)) (varCube Δ v))
+nn-tr : (k : NK) (jk : JK) (Γ : CCtx) (s : TyShape) (c : Code) (M N : Mean Γ (JZ jk s)) → PathM Γ (JZ jk s) M N → NN (k , (jk , Γ , s , c , M)) → NN (k , (jk , Γ , s , c , N))
+nn-tr k jk Γ s c M N p x = comp (λ i → NN (k , (jk , Γ , s , c , p i))) (λ i → []) x
+RenR : (k : NK) (jk : JK) (Δ' : CCtx) (s : TyShape) → Mean Δ' (JZ jk s) → Type 1
+RenR k jk Δ' s M = (rc : Code) × NN (k , (jk , Δ' , s , rc , M))
+nn-fm-in : (k : NK) (jk : JK) (Δ' Δ : CCtx) (w : World Δ' Δ) (Z : Type 1) (s : TyShape) (h : Z → JZ jk s) (M : Mean Δ Z) (c : Code) →
+  NN (k , (jk , Δ' , s , c , wact Δ' Δ w (JZ jk s) (fmapM Δ Z (JZ jk s) h M))) → NN (k , (jk , Δ' , s , c , fmapM Δ' Z (JZ jk s) h (wact Δ' Δ w Z M)))
+nn-fm-in k jk Δ' Δ w Z s h M c x =
+  nn-tr k jk Δ' s c (wact Δ' Δ w (JZ jk s) (fmapM Δ Z (JZ jk s) h M)) (fmapM Δ' Z (JZ jk s) h (wact Δ' Δ w Z M))
+    (psym (Mean Δ' (JZ jk s)) (fmapM Δ' Z (JZ jk s) h (wact Δ' Δ w Z M)) (wact Δ' Δ w (JZ jk s) (fmapM Δ Z (JZ jk s) h M)) (subM-fmap Δ' Δ Z (JZ jk s) h (world-sub Δ' Δ w) M)) x
+nn-fm-out : (k : NK) (jk : JK) (Δ' Δ : CCtx) (w : World Δ' Δ) (Z : Type 1) (s : TyShape) (h : Z → JZ jk s) (M : Mean Δ Z) (c : Code) →
+  NN (k , (jk , Δ' , s , c , fmapM Δ' Z (JZ jk s) h (wact Δ' Δ w Z M))) → NN (k , (jk , Δ' , s , c , wact Δ' Δ w (JZ jk s) (fmapM Δ Z (JZ jk s) h M)))
+nn-fm-out k jk Δ' Δ w Z s h M c x =
+  nn-tr k jk Δ' s c (fmapM Δ' Z (JZ jk s) h (wact Δ' Δ w Z M)) (wact Δ' Δ w (JZ jk s) (fmapM Δ Z (JZ jk s) h M)) (subM-fmap Δ' Δ Z (JZ jk s) h (world-sub Δ' Δ w) M) x
+-- a normal type over an extension read off a meaning, renamed under world-keep and carried along keep-lift
+rn-ext : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (s : TyShape) (G0 : (q : Y) → El a (h q) → Sem s) →
+  RenR k-nf j-ty (ext-h Δ' a Y h (wact Δ' Δ w Y M)) s
+    (subM (ext-h Δ' a Y h (wact Δ' Δ w Y M)) (ext-h Δ a Y h M) (Sem s) (world-sub (ext-h Δ' a Y h (wact Δ' Δ w Y M)) (ext-h Δ a Y h M) (world-keep Δ' Δ a Y h M w)) (ext-lift Δ a Y h (Sem s) G0 M)) →
+  RenR k-nf j-ty (ext-h Δ' a Y h (wact Δ' Δ w Y M)) s (ext-lift Δ' a Y h (Sem s) G0 (wact Δ' Δ w Y M))
+rn-ext Δ' Δ w a Y h M s G0 Bn =
+  (fst Bn ,
+   nn-tr k-nf j-ty (ext-h Δ' a Y h (wact Δ' Δ w Y M)) s (fst Bn)
+     (subM (ext-h Δ' a Y h (wact Δ' Δ w Y M)) (ext-h Δ a Y h M) (Sem s) (world-sub (ext-h Δ' a Y h (wact Δ' Δ w Y M)) (ext-h Δ a Y h M) (world-keep Δ' Δ a Y h M w)) (ext-lift Δ a Y h (Sem s) G0 M))
+     (ext-lift Δ' a Y h (Sem s) G0 (wact Δ' Δ w Y M)) (keep-lift Δ' Δ a Y h M w (Sem s) G0) (snd Bn))
+rn-var : (Δ' Δ : CCtx) (w : World Δ' Δ) (v : VarP (fst Δ)) → RenR k-ne j-tm Δ' (var-shape (fst Δ) v) (wact Δ' Δ w (TV (var-shape (fst Δ) v)) (varCube Δ v))
 rn-var Δ' Δ w v =
   (cvar (var-word (fst Δ') (fst (snd (snd (snd (snd w))) v))) ,
-   comp (λ i → NN (k-ne , (Δ' , fst (snd (snd (snd (snd (snd (snd w))) v)) i) , cvar (var-word (fst Δ') (fst (snd (snd (snd (snd w))) v))) ,
+   comp (λ i → NN (k-ne , (j-tm , Δ' , fst (snd (snd (snd (snd (snd (snd w))) v)) i) , cvar (var-word (fst Δ') (fst (snd (snd (snd (snd w))) v))) ,
                            snd (snd (snd (snd (snd (snd (snd w))) v)) i))))
      (λ i → []) (nvar Δ' (fst (snd (snd (snd (snd w))) v))))
 rn-app : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (R : Mean Δ (AppV a b)) →
-  RenR k-ne Δ' (s-pi a b) (wact Δ' Δ w (TV (s-pi a b)) (fmapM Δ (AppV a b) (TV (s-pi a b)) (app-f a b) R)) →
-  RenR k-nf Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (AppV a b) (TV a) (app-a a b) R)) →
-  RenR k-ne Δ' b (wact Δ' Δ w (TV b) (fmapM Δ (AppV a b) (TV b) (app-r a b) R))
+  RenR k-ne j-tm Δ' (s-pi a b) (wact Δ' Δ w (TV (s-pi a b)) (fmapM Δ (AppV a b) (TV (s-pi a b)) (app-f a b) R)) →
+  RenR k-nf j-tm Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (AppV a b) (TV a) (app-a a b) R)) →
+  RenR k-ne j-tm Δ' b (wact Δ' Δ w (TV b) (fmapM Δ (AppV a b) (TV b) (app-r a b) R))
 rn-app Δ' Δ w a b R Fn An =
   (capp (fst Fn) (fst An) ,
-   nn-fm-out k-ne Δ' Δ w (AppV a b) b (app-r a b) R (capp (fst Fn) (fst An))
+   nn-fm-out k-ne j-tm Δ' Δ w (AppV a b) b (app-r a b) R (capp (fst Fn) (fst An))
      (napp Δ' a b (wact Δ' Δ w (AppV a b) R) (fst Fn) (fst An)
-        (nn-fm-in k-ne Δ' Δ w (AppV a b) (s-pi a b) (app-f a b) R (fst Fn) (snd Fn)) (nn-fm-in k-nf Δ' Δ w (AppV a b) a (app-a a b) R (fst An) (snd An))))
+        (nn-fm-in k-ne j-tm Δ' Δ w (AppV a b) (s-pi a b) (app-f a b) R (fst Fn) (snd Fn)) (nn-fm-in k-nf j-tm Δ' Δ w (AppV a b) a (app-a a b) R (fst An) (snd An))))
 rn-fst : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (R : Mean Δ (TV (s-sig a b))) →
-  RenR k-ne Δ' (s-sig a b) (wact Δ' Δ w (TV (s-sig a b)) R) → RenR k-ne Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) R))
+  RenR k-ne j-tm Δ' (s-sig a b) (wact Δ' Δ w (TV (s-sig a b)) R) → RenR k-ne j-tm Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) R))
 rn-fst Δ' Δ w a b R Pn =
-  (cfst (fst Pn) , nn-fm-out k-ne Δ' Δ w (TV (s-sig a b)) a (sig-1 a b) R (cfst (fst Pn)) (nfst Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) (fst Pn) (snd Pn)))
+  (cfst (fst Pn) , nn-fm-out k-ne j-tm Δ' Δ w (TV (s-sig a b)) a (sig-1 a b) R (cfst (fst Pn)) (nfst Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) (fst Pn) (snd Pn)))
 rn-snd : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (R : Mean Δ (TV (s-sig a b))) →
-  RenR k-ne Δ' (s-sig a b) (wact Δ' Δ w (TV (s-sig a b)) R) → RenR k-ne Δ' b (wact Δ' Δ w (TV b) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) R))
+  RenR k-ne j-tm Δ' (s-sig a b) (wact Δ' Δ w (TV (s-sig a b)) R) → RenR k-ne j-tm Δ' b (wact Δ' Δ w (TV b) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) R))
 rn-snd Δ' Δ w a b R Pn =
-  (csnd (fst Pn) , nn-fm-out k-ne Δ' Δ w (TV (s-sig a b)) b (sig-2 a b) R (csnd (fst Pn)) (nsnd Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) (fst Pn) (snd Pn)))
+  (csnd (fst Pn) , nn-fm-out k-ne j-tm Δ' Δ w (TV (s-sig a b)) b (sig-2 a b) R (csnd (fst Pn)) (nsnd Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) (fst Pn) (snd Pn)))
 rn-case : (Δ' Δ : CCtx) (w : World Δ' Δ) (s : TyShape) (R : Mean Δ (CaseV s)) →
-  RenR k-ne Δ' s-bool (wact Δ' Δ w (TV s-bool) (fmapM Δ (CaseV s) (TV s-bool) (case-x s) R)) →
-  RenR k-nf Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-t s) R)) →
-  RenR k-nf Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-f s) R)) →
-  RenR k-ne Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-r s) R))
-rn-case Δ' Δ w s R Xn Tn Fn =
+  RenR k-nf j-ty (ext-h Δ' s-bool (CaseV s) (case-b s) (wact Δ' Δ w (CaseV s) R)) s (case-mot Δ' s (wact Δ' Δ w (CaseV s) R)) →
+  RenR k-ne j-tm Δ' s-bool (wact Δ' Δ w (TV s-bool) (fmapM Δ (CaseV s) (TV s-bool) (case-x s) R)) →
+  RenR k-nf j-tm Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-t s) R)) →
+  RenR k-nf j-tm Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-f s) R)) →
+  RenR k-ne j-tm Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-r s) R))
+rn-case Δ' Δ w s R Pn Xn Tn Fn =
   (c-case (fst Tn) (fst Fn) (fst Xn) ,
-   nn-fm-out k-ne Δ' Δ w (CaseV s) s (case-r s) R (c-case (fst Tn) (fst Fn) (fst Xn))
-     (ncase Δ' s (wact Δ' Δ w (CaseV s) R) (fst Xn) (fst Tn) (fst Fn)
-        (nn-fm-in k-ne Δ' Δ w (CaseV s) s-bool (case-x s) R (fst Xn) (snd Xn))
-        (nn-fm-in k-nf Δ' Δ w (CaseV s) s (case-t s) R (fst Tn) (snd Tn))
-        (nn-fm-in k-nf Δ' Δ w (CaseV s) s (case-f s) R (fst Fn) (snd Fn))))
-rn-ne : (Δ' Δ : CCtx) (w : World Δ' Δ) (R : Mean Δ (TV s-bool)) → RenR k-ne Δ' s-bool (wact Δ' Δ w (TV s-bool) R) → RenR k-nf Δ' s-bool (wact Δ' Δ w (TV s-bool) R)
+   nn-fm-out k-ne j-tm Δ' Δ w (CaseV s) s (case-r s) R (c-case (fst Tn) (fst Fn) (fst Xn))
+     (ncase Δ' s (wact Δ' Δ w (CaseV s) R) (fst Pn) (fst Xn) (fst Tn) (fst Fn) (snd Pn)
+        (nn-fm-in k-ne j-tm Δ' Δ w (CaseV s) s-bool (case-x s) R (fst Xn) (snd Xn))
+        (nn-fm-in k-nf j-tm Δ' Δ w (CaseV s) s (case-t s) R (fst Tn) (snd Tn))
+        (nn-fm-in k-nf j-tm Δ' Δ w (CaseV s) s (case-f s) R (fst Fn) (snd Fn))))
+rn-ne : (Δ' Δ : CCtx) (w : World Δ' Δ) (R : Mean Δ (TV s-bool)) → RenR k-ne j-tm Δ' s-bool (wact Δ' Δ w (TV s-bool) R) → RenR k-nf j-tm Δ' s-bool (wact Δ' Δ w (TV s-bool) R)
 rn-ne Δ' Δ w R Xn = (fst Xn , nne Δ' (wact Δ' Δ w (TV s-bool) R) (fst Xn) (snd Xn))
 rn-lam : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (X : Mean Δ (TV (s-pi a b))) →
-  RenR k-nf (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) b
+  RenR k-nf j-ty Δ' a (wact Δ' Δ w (Sem a) (fmapM Δ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) X)) →
+  RenR k-nf j-tm (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) b
     (subM (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (TV b)
        (world-sub (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (world-keep Δ' Δ a (TV (s-pi a b)) (λ q → fst (fst q)) X w)) (lam-body Δ a b X)) →
-  RenR k-nf Δ' (s-pi a b) (wact Δ' Δ w (TV (s-pi a b)) X)
-rn-lam Δ' Δ w a b X Bn =
+  RenR k-nf j-tm Δ' (s-pi a b) (wact Δ' Δ w (TV (s-pi a b)) X)
+rn-lam Δ' Δ w a b X An Bn =
   (clam (fst Bn) ,
-   nlam Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X) (fst Bn)
-     (nn-tr k-nf (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) b (fst Bn)
+   nlam Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X) (fst An) (fst Bn)
+     (nn-fm-in k-nf j-ty Δ' Δ w (TV (s-pi a b)) a (λ q → fam-dom a b (fst q)) X (fst An) (snd An))
+     (nn-tr k-nf j-tm (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) b (fst Bn)
         (subM (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (TV b)
            (world-sub (lam-ctx Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (lam-ctx Δ a b X) (world-keep Δ' Δ a (TV (s-pi a b)) (λ q → fst (fst q)) X w)) (lam-body Δ a b X))
         (lam-body Δ' a b (wact Δ' Δ w (TV (s-pi a b)) X)) (subM-lam-body Δ' Δ w a b X) (snd Bn)))
 rn-pair : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (R : Mean Δ (TV (s-sig a b))) →
-  RenR k-nf Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) R)) →
-  RenR k-nf Δ' b (wact Δ' Δ w (TV b) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) R)) →
-  RenR k-nf Δ' (s-sig a b) (wact Δ' Δ w (TV (s-sig a b)) R)
-rn-pair Δ' Δ w a b R N1 N2 =
+  RenR k-nf j-ty (ext-h Δ' a (TV (s-sig a b)) (λ q → fam-dom a b (fst q)) (wact Δ' Δ w (TV (s-sig a b)) R)) b (pair-cod Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R)) →
+  RenR k-nf j-tm Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) R)) →
+  RenR k-nf j-tm Δ' b (wact Δ' Δ w (TV b) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) R)) →
+  RenR k-nf j-tm Δ' (s-sig a b) (wact Δ' Δ w (TV (s-sig a b)) R)
+rn-pair Δ' Δ w a b R Bn N1 N2 =
   (cpair (fst N1) (fst N2) ,
-   npair Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) (fst N1) (fst N2)
-     (nn-fm-in k-nf Δ' Δ w (TV (s-sig a b)) a (sig-1 a b) R (fst N1) (snd N1)) (nn-fm-in k-nf Δ' Δ w (TV (s-sig a b)) b (sig-2 a b) R (fst N2) (snd N2)))
+   npair Δ' a b (wact Δ' Δ w (TV (s-sig a b)) R) (fst Bn) (fst N1) (fst N2) (snd Bn)
+     (nn-fm-in k-nf j-tm Δ' Δ w (TV (s-sig a b)) a (sig-1 a b) R (fst N1) (snd N1)) (nn-fm-in k-nf j-tm Δ' Δ w (TV (s-sig a b)) b (sig-2 a b) R (fst N2) (snd N2)))
 rn-plam : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (X : Mean Δ (TV (s-path a))) →
-  RenR k-nf (dext Δ') a (subM (dext Δ') (dext Δ) (TV a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (plam-body Δ a X)) →
-  RenR k-nf Δ' (s-path a) (wact Δ' Δ w (TV (s-path a)) X)
+  RenR k-nf j-tm (dext Δ') a (subM (dext Δ') (dext Δ) (TV a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (plam-body Δ a X)) →
+  RenR k-nf j-tm Δ' (s-path a) (wact Δ' Δ w (TV (s-path a)) X)
 rn-plam Δ' Δ w a X Bn =
   (cplam (fst Bn) ,
    nplam Δ' a (wact Δ' Δ w (TV (s-path a)) X) (fst Bn)
-     (nn-tr k-nf (dext Δ') a (fst Bn) (subM (dext Δ') (dext Δ) (TV a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (plam-body Δ a X))
+     (nn-tr k-nf j-tm (dext Δ') a (fst Bn) (subM (dext Δ') (dext Δ) (TV a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (plam-body Δ a X))
         (plam-body Δ' a (wact Δ' Δ w (TV (s-path a)) X)) (subM-plam-body Δ' Δ w a X) (snd Bn)))
 rn-papp : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (P : Mean Δ (TV (s-path a))) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
   (Y : Mean Δ (TV a)) → PathM Δ (TV a) (papp-mean Δ a f P) Y →
-  RenR k-ne Δ' (s-path a) (wact Δ' Δ w (TV (s-path a)) P) → RenR k-ne Δ' a (wact Δ' Δ w (TV a) Y)
+  RenR k-ne j-tm Δ' (s-path a) (wact Δ' Δ w (TV (s-path a)) P) → RenR k-ne j-tm Δ' a (wact Δ' Δ w (TV a) Y)
 rn-papp Δ' Δ w a P f cf nc Y q Pn =
   (cpapp (fst Pn) (dnf-code (dnf-r (fst w) f)) ,
    npapp Δ' a (wact Δ' Δ w (TV (s-path a)) P) (fst Pn) (dnf-r (fst w) f) (canon-r (fst w) (fst (snd w)) f cf) (nonconst-r (fst w) f nc)
@@ -5563,21 +5674,67 @@ rn-papp Δ' Δ w a P f cf nc Y q Pn =
      (pcat (Mean Δ' (TV a)) (papp-mean Δ' a (dnf-r (fst w) f) (wact Δ' Δ w (TV (s-path a)) P)) (wact Δ' Δ w (TV a) (papp-mean Δ a f P)) (wact Δ' Δ w (TV a) Y)
         (subM-papp Δ' Δ w a f P) (λ i → wact Δ' Δ w (TV a) (q i)))
      (snd Pn))
-ren-nn : {KJ : NK × Jdg} → NN KJ → (Δ' : CCtx) (w : World Δ' (fst (snd KJ))) →
-  RenR (fst KJ) Δ' (fst (snd (snd KJ))) (wact Δ' (fst (snd KJ)) w (TV (fst (snd (snd KJ)))) (snd (snd (snd (snd KJ)))))
+-- the type rules: Π and Σ (the domain carried along subM-fmap, the codomain already renamed by rn-ext),
+-- PathP (the line along dkeep-line, the ends along subM-fmap)
+rn-ty-pi : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (T : Mean Δ (Fam a b)) →
+  RenR k-nf j-ty Δ' a (wact Δ' Δ w (Sem a) (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) T)) →
+  RenR k-nf j-ty (ext-h Δ' a (Fam a b) (fam-dom a b) (wact Δ' Δ w (Fam a b) T)) b (fam-body Δ' a b (wact Δ' Δ w (Fam a b) T)) →
+  RenR k-nf j-ty Δ' (s-pi a b) (wact Δ' Δ w (Fam a b) T)
+rn-ty-pi Δ' Δ w a b T An Bn =
+  (cpi #2 (fst An) (fst Bn) , nty-pi Δ' a b (wact Δ' Δ w (Fam a b) T) (fst An) (fst Bn) (nn-fm-in k-nf j-ty Δ' Δ w (Fam a b) a (fam-dom a b) T (fst An) (snd An)) (snd Bn))
+rn-ty-sig : (Δ' Δ : CCtx) (w : World Δ' Δ) (a b : TyShape) (T : Mean Δ (Fam a b)) →
+  RenR k-nf j-ty Δ' a (wact Δ' Δ w (Sem a) (fmapM Δ (Fam a b) (Sem a) (fam-dom a b) T)) →
+  RenR k-nf j-ty (ext-h Δ' a (Fam a b) (fam-dom a b) (wact Δ' Δ w (Fam a b) T)) b (fam-body Δ' a b (wact Δ' Δ w (Fam a b) T)) →
+  RenR k-nf j-ty Δ' (s-sig a b) (wact Δ' Δ w (Fam a b) T)
+rn-ty-sig Δ' Δ w a b T An Bn =
+  (csigma (fst An) (fst Bn) , nty-sig Δ' a b (wact Δ' Δ w (Fam a b) T) (fst An) (fst Bn) (nn-fm-in k-nf j-ty Δ' Δ w (Fam a b) a (fam-dom a b) T (fst An) (snd An)) (snd Bn))
+rn-ty-path : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (T : Mean Δ (Sem (s-path a))) →
+  RenR k-nf j-ty (dext Δ') a (subM (dext Δ') (dext Δ) (Sem a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (path-line-ty Δ a T)) →
+  RenR k-nf j-tm Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (Sem (s-path a)) (TV a) (tend-0 a) T)) →
+  RenR k-nf j-tm Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (Sem (s-path a)) (TV a) (tend-1 a) T)) →
+  RenR k-nf j-ty Δ' (s-path a) (wact Δ' Δ w (Sem (s-path a)) T)
+rn-ty-path Δ' Δ w a T Ln N0 N1 =
+  (cpathp (cplam (fst Ln)) (fst N0) (fst N1) ,
+   nty-path Δ' a (wact Δ' Δ w (Sem (s-path a)) T) (fst Ln) (fst N0) (fst N1)
+     (nn-tr k-nf j-ty (dext Δ') a (fst Ln) (subM (dext Δ') (dext Δ) (Sem a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (path-line-ty Δ a T))
+        (path-line-ty Δ' a (wact Δ' Δ w (Sem (s-path a)) T)) (dkeep-line Δ' Δ w (Sem (s-path a)) (Sem a) (ty-line a) T) (snd Ln))
+     (nn-fm-in k-nf j-tm Δ' Δ w (Sem (s-path a)) a (tend-0 a) T (fst N0) (snd N0))
+     (nn-fm-in k-nf j-tm Δ' Δ w (Sem (s-path a)) a (tend-1 a) T (fst N1) (snd N1)))
+ren-nn : {KJ : NK × Jdg} → NN KJ → (Δ' : CCtx) (w : World Δ' (fst (snd (snd KJ)))) →
+  RenR (fst KJ) (fst (snd KJ)) Δ' (fst (snd (snd (snd KJ))))
+    (wact Δ' (fst (snd (snd KJ))) w (JZ (fst (snd KJ)) (fst (snd (snd (snd KJ))))) (snd (snd (snd (snd (snd KJ))))))
 ren-nn (nvar Γ v) Δ' w = rn-var Δ' Γ w v
 ren-nn (napp Γ a b R f c nf na) Δ' w = rn-app Δ' Γ w a b R (ren-nn nf Δ' w) (ren-nn na Δ' w)
 ren-nn (nfst Γ a b R p np) Δ' w = rn-fst Δ' Γ w a b R (ren-nn np Δ' w)
 ren-nn (nsnd Γ a b R p np) Δ' w = rn-snd Δ' Γ w a b R (ren-nn np Δ' w)
-ren-nn (ncase Γ s R x t f nx nt nf) Δ' w = rn-case Δ' Γ w s R (ren-nn nx Δ' w) (ren-nn nt Δ' w) (ren-nn nf Δ' w)
+ren-nn (ncase Γ s R cP x t f nP nx nt nf) Δ' w =
+  rn-case Δ' Γ w s R
+    (rn-ext Δ' Γ w s-bool (CaseV s) (case-b s) R s (λ q b → fst (snd q) b)
+       (ren-nn nP (ext-h Δ' s-bool (CaseV s) (case-b s) (wact Δ' Γ w (CaseV s) R)) (world-keep Δ' Γ s-bool (CaseV s) (case-b s) R w)))
+    (ren-nn nx Δ' w) (ren-nn nt Δ' w) (ren-nn nf Δ' w)
 ren-nn (nne Γ R x nx) Δ' w = rn-ne Δ' Γ w R (ren-nn nx Δ' w)
-ren-nn (ntrue Γ B) Δ' w = (c-true , nn-fm-out k-nf Δ' Γ w One1 s-bool (bool-v true) B c-true (ntrue Δ' (wact Δ' Γ w One1 B)))
-ren-nn (nfalse Γ B) Δ' w = (c-false , nn-fm-out k-nf Δ' Γ w One1 s-bool (bool-v false) B c-false (nfalse Δ' (wact Δ' Γ w One1 B)))
-ren-nn (nlam Γ a b X c nb) Δ' w =
-  rn-lam Δ' Γ w a b X (ren-nn nb (lam-ctx Δ' a b (wact Δ' Γ w (TV (s-pi a b)) X)) (world-keep Δ' Γ a (TV (s-pi a b)) (λ q → fst (fst q)) X w))
-ren-nn (npair Γ a b R c1 c2 n1 n2) Δ' w = rn-pair Δ' Γ w a b R (ren-nn n1 Δ' w) (ren-nn n2 Δ' w)
+ren-nn (ntrue Γ B) Δ' w = (c-true , nn-fm-out k-nf j-tm Δ' Γ w One1 s-bool (bool-v true) B c-true (ntrue Δ' (wact Δ' Γ w One1 B)))
+ren-nn (nfalse Γ B) Δ' w = (c-false , nn-fm-out k-nf j-tm Δ' Γ w One1 s-bool (bool-v false) B c-false (nfalse Δ' (wact Δ' Γ w One1 B)))
+ren-nn (nlam Γ a b X cA c nA nb) Δ' w =
+  rn-lam Δ' Γ w a b X (ren-nn nA Δ' w) (ren-nn nb (lam-ctx Δ' a b (wact Δ' Γ w (TV (s-pi a b)) X)) (world-keep Δ' Γ a (TV (s-pi a b)) (λ q → fst (fst q)) X w))
+ren-nn (npair Γ a b R cB c1 c2 nB n1 n2) Δ' w =
+  rn-pair Δ' Γ w a b R
+    (rn-ext Δ' Γ w a (TV (s-sig a b)) (λ q → fam-dom a b (fst q)) R b (λ q x → snd (fst q) x)
+       (ren-nn nB (ext-h Δ' a (TV (s-sig a b)) (λ q → fam-dom a b (fst q)) (wact Δ' Γ w (TV (s-sig a b)) R)) (world-keep Δ' Γ a (TV (s-sig a b)) (λ q → fam-dom a b (fst q)) R w)))
+    (ren-nn n1 Δ' w) (ren-nn n2 Δ' w)
 ren-nn (nplam Γ a X c nb) Δ' w = rn-plam Δ' Γ w a X (ren-nn nb (dext Δ') (world-dkeep Δ' Γ w))
 ren-nn (npapp Γ a P p f cf nc Y q np) Δ' w = rn-papp Δ' Γ w a P f cf nc Y q (ren-nn np Δ' w)
+ren-nn (nty-bool Γ B) Δ' w = (c-bool , nty-bool Δ' (wact Δ' Γ w One1 B))
+ren-nn (nty-pi Γ a b T cA cB nA nB) Δ' w =
+  rn-ty-pi Δ' Γ w a b T (ren-nn nA Δ' w)
+    (rn-ext Δ' Γ w a (Fam a b) (fam-dom a b) T b (λ F x → snd F x)
+       (ren-nn nB (ext-h Δ' a (Fam a b) (fam-dom a b) (wact Δ' Γ w (Fam a b) T)) (world-keep Δ' Γ a (Fam a b) (fam-dom a b) T w)))
+ren-nn (nty-sig Γ a b T cA cB nA nB) Δ' w =
+  rn-ty-sig Δ' Γ w a b T (ren-nn nA Δ' w)
+    (rn-ext Δ' Γ w a (Fam a b) (fam-dom a b) T b (λ F x → snd F x)
+       (ren-nn nB (ext-h Δ' a (Fam a b) (fam-dom a b) (wact Δ' Γ w (Fam a b) T)) (world-keep Δ' Γ a (Fam a b) (fam-dom a b) T w)))
+ren-nn (nty-path Γ a T cL c0 c1 nL n0 n1) Δ' w =
+  rn-ty-path Δ' Γ w a T (ren-nn nL (dext Δ') (world-dkeep Δ' Γ w)) (ren-nn n0 Δ' w) (ren-nn n1 Δ' w)
 
 -- ---------------------------------------------------------------- (6) computability over cubes
 -- (2026-11-12, (6)) Computability of types and of terms, one pair by recursion on the shape (CompE, as
@@ -5602,13 +5759,6 @@ fam-arg : (a b : TyShape) → FamV a b → TV a
 fam-arg a b q = (fst (fst q) , snd q)
 fam-cod : (a b : TyShape) → FamV a b → Sem b
 fam-cod a b q = snd (fst q) (snd q)
--- a path type's line of types, and its endpoint values as terms of the line's endpoint types
-ty-line : (a : TyShape) → Sem (s-path a) → Line (Sem a)
-ty-line a D = fst D
-tend-0 : (a : TyShape) → Sem (s-path a) → TV a
-tend-0 a D = (fst (fst D) , fst (snd D))
-tend-1 : (a : TyShape) → Sem (s-path a) → TV a
-tend-1 a D = (fst (snd (fst D)) , snd (snd D))
 CompU : TyShape → Type 2
 -- binder names chosen not to collide: t46
 CompU s = ((cuΔ : CCtx) → Mean cuΔ (Sem s) → Type 1) × ((cuΔ : CCtx) → Mean cuΔ (TV s) → Type 1)
@@ -5620,7 +5770,7 @@ CompE s-bool =
   ((λ Δ T → One1) ,
    λ Δ X → Sum1 ((B : Mean Δ One1) × PathM Δ (TV s-bool) X (fmapM Δ One1 (TV s-bool) (bool-v true) B))
              (Sum1 ((B : Mean Δ One1) × PathM Δ (TV s-bool) X (fmapM Δ One1 (TV s-bool) (bool-v false) B))
-                ((c : Code) × NN (k-ne , (Δ , s-bool , c , X)))))
+                ((c : Code) × NN (k-ne , (j-tm , Δ , s-bool , c , X)))))
 CompE (s-pi a b) =
   ((λ Δ T → fst (CompE a) Δ (fmapM Δ (Fam a b) (Sem a) (λ F → fst F) T) ×
             ((Δ' : CCtx) (w : World Δ' Δ) (Y : Mean Δ' (FamV a b)) →
