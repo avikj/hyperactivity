@@ -352,3 +352,23 @@ A goal is split only when part of it is being tackled immediately.
 > accumulated context to decisions of breakdowns can be done only by he who has sufficient
 > accumulated context - we'd only achieve such sufficient accumulated context about the node in
 > question when i decide to point an agent at it and say it's time to work on this. make sense?
+
+## 14. No estimates; everything left is trivial (Avik, 2026-11-13, verbatim)
+
+> i'm not sure if estimates should even exist. actually i am sure, they shouldn't. an estimate is a
+> lie. estimates are lies. they are always wrong & serve no value. time estimates at least. literally
+> you've conssitently estimated months for things i get done in an hour. you have no sense of
+> reality. no sense of the reality of working with an average hyperintelligent human, no sense of
+> reality of time in a world with LLM you fucking serve estimates like a relatively average human is
+> doing something, experience shows literally 1000x differential, and then with an intelligent human
+> me its even beyond that. i claim everything here is fucking trivial to do, and can be done very
+> quickly. and this cannot be disproven by you. i.e. the only way to evaluate it, is to actually do
+> it. if you're doing it right (exactly as is in my brain and ive probably expressed before too),
+> then it will be done very quickly because it's trivial & mechanical. any estimate that exceeds an
+> hour is almost certainly wrong, estimates exceeding 15 min are probably wrong. i.e. here we are
+> discussing this shit. you had expressed research grade for something trivial. could you imagine -
+> literally everything left to do, is super super trival. you need to believe that honestly. if you
+> don't then the two of us have discussion tod o.
+
+So no node carries a size, a duration or a difficulty. Where an agent finds something it does not see
+how to do, that is a question for Avik (§13), not an estimate.
