@@ -25,24 +25,16 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 	for f in $(SRC); do $(CC) $(CFLAGS) -DCUBICAL_LIB -c -o build/lib/$$(basename $$f .c).o $$f || exit 1; done
 	ar rcs $@ build/lib/*.o
 
-# t30 (2026-11-12): needs-work. Many files are checked by no target here: lib/mem/{target,scalar,
-# sig,flat,memory,layout,monad} (measured 2026-11-12: loaded after LIB they check, 385 definitions,
-# 0 failures), lib/bits.cub, lib/net.cub, lib/fleet.cub, lib/deploy.cub, lib/compile/*,
-# lib/isa/x86/*, lib/cxx/machine.cub and read-expr.cub, lib/lang/rust/* other than ast. Their state
-# is known only when someone loads them. One command should check every file meant to check, in
-# dependency order, so the state of every file is measured.
-# Measured 2026-11-12: the machine finding each file's prerequisites (load a base, the prerequisites
-# found so far and the file; each unbound name looked up in an index of the repository's declarations
-# and the file declaring the most of them added, until none is left). Run first with CORE as the
-# base, it reported 63 of 217 files loading with 0 failures; that was wrong as a statement of the
-# files, because most are written to load after the whole library: lib/isa/x86, for one, loaded
-# after LIB, lib/bits.cub, the files of lib/isa/x86/ORDER and lib/isa/x86/run.cub, checks with 4,699
-# passed and only LIB's own 52 failed (t16-t21). The order exists for that tree (ORDER, written by
-# tools/sail2cub.py) and, for 122 files, in prose ("Load after ..."), which no machine reads. One
-# combination ends the machine (t67). The language has `import "file"` (loaded once, by real path, the command
-# line's files included): each file importing what it needs, written by the generator for generated
-# files, makes every file loadable alone, the check of every file one run per file, and the reading
-# of every declaration's uses (#uses, tools/work.py) cover the repository.
+# Every file is checked by `make every` (2026-11-12, t30): each file imports what it needs (the core
+# and the library are lib/core.cub and lib/library.cub, files of imports; the x86 model's order is
+# lib/isa/x86/all.cub, written by tools/sail2cub.py), so each file no file imports is checked alone
+# with its imports, without performing what acts on the world (--read). Measured 2026-11-12: 80 such
+# files; 35 with failures of their own, each from an open node: the untyped definitions refused in
+# the library (t16-t21: autodiff, eqproof, ring, intlin, derive, cxx/ast) and the C++ units over
+# cxx/ast; bitlaw and flags (t68); build-cost and its runs (t69); the C++ reading (t70: cxx/machine,
+# cxx/read-expr, mem/sum); the Rust reading (t39: deriving needs lib/derive.cub); lib/nbe.cub, which
+# imports the core when the working copy is swapped in; and the surface items fail-local, fail-one,
+# prelude-names and type-data, whose failures are what they show.
 #
 # t44 (2026-11-12): every target sets CUBICAL_NOCACHE=1, so the standard commands never use the
 # store and recheck everything from nothing (64 s for the library). With the

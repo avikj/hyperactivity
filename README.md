@@ -18,9 +18,8 @@ code a node of it with its reason computed (`tools/work.py why`, `unexplained`);
 elaboration and the checker's answer, accepted or refused, are kept in the store by content
 (t43, t61 in part), so a warm library check takes 4.6 s with the fresh run's output; the per-file
 cache is gone (t41); text is a term (t63); `declarations T` gives the work as a value and views are
-terms over it (`tools/work.py view`, t37; t62 in part); the files outside the library import what
-their own text says they need (t30; each being checked alone; the library's own files are ordered
-by lib/library.cub and import nothing).
+terms over it (`tools/work.py view`, t37; t62 in part); every file imports what it needs and `make every`
+checks them all, each failure from an open node (t30; the Makefile has the measurement).
 Pending: t60 (references keyed by content in the evaluator, so compiled records and results can be
 kept), t61 (the evaluator's results kept beyond the run), t62 (each declaration's code as a value),
 t44, and stating the reasons of the declarations no declaration with a reason uses. The order of
@@ -95,9 +94,10 @@ comment, set the record `(closed #date)`, in one commit.
   refused by the checker (t16–t21), which refuses untyped code outside the bootstrap files since
   2026-11-09, deliberately.
 - `make brunerie`: Brunerie's number −2 with 0 and 4 workers (the typed port; 6.6 s alone).
-- `make work`: 233 passed, 0 failed.
+- `make work`: 278 passed, 0 failed.
 - The memory description files (`lib/mem/` other than `atomics`, `rc11`), loaded after `LIB`:
-  385 definitions, 0 failures. Other files outside `LIB` are checked by no target (t30).
+  385 definitions, 0 failures. `make every` checks every file (80 that no file imports, each with
+  its imports); its 35 files with failures of their own each fail from an open node.
 - `experiments/jit/workloads.cub` after `LIB`: all 33 `#jit` workloads compile and bind (`ok: jit`);
   the only failures are the library's 52.
 
