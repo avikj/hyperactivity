@@ -20,6 +20,8 @@ Every node in the graph is open; closing one removes it.
     python3 tools/work.py view TERM          a view: a term over the work (lib/work.cub's views over
                                              `declarations Node`) evaluated by the machine, shown by
                                              its type (a List Word as text)
+    python3 tools/work.py every              every file checked: each file no file imports, alone with its
+                                             imports (--read); per file, the failures in its own text
     python3 tools/work.py why NAME ...       why a declaration of the code exists: the chain to a root
     python3 tools/work.py unexplained [FILE] the declarations with no reason, by file
 
@@ -557,6 +559,40 @@ def cmd_view(args):
     else: print(v, ':', ty)
 
 
+
+def cmd_every(args):
+    """t30: every file is checked by checking each file no file imports, loaded alone with its imports
+    (a file another imports is checked in that file's run); a failure is the file's own when its
+    position is in the file. Commands that act on the world are not performed (--read)."""
+    files = cub_files()
+    imported = {g for f in files for g in imports_of(f)}
+    leaves = [f for f in files if f not in imported]
+    env = dict(os.environ); env.setdefault('CUBICAL_STORE', os.path.join(ROOT, '.cubical-store'))
+    own = {}
+    for f in leaves:
+        try:
+            r = subprocess.run([os.path.join(ROOT, 'build', 'cubical'), '--read', f], cwd=ROOT, capture_output=True,
+                               text=True, env=env, timeout=1800)
+            out = r.stdout + r.stderr
+        except subprocess.TimeoutExpired:
+            print(f'{f}: did not finish in 30 minutes', flush=True); continue
+        ls = out.split('\n')
+        for i, l in enumerate(ls):
+            if l.startswith('FAIL'):
+                blk = ' '.join(ls[i:i + 4])
+                m = re.search(r' in: (\S+?):\d+', blk) or re.search(r'(/\S+\.cub):\d+', blk)
+                if m:
+                    g = os.path.relpath(m.group(1), ROOT)
+                    own.setdefault(g, set()).add(blk.split(' in: ')[-1].split()[0] if ' in: ' in blk else blk[:120])
+        fatal = [l for l in ls if l.startswith(os.path.join(ROOT, f)) or l.startswith('error')]
+        last = [l for l in ls if l.strip()][-1:] 
+        print(f'{f}: {last[0][:60] if last else ""}' + (f'  ({fatal[0][:100]})' if fatal else ''), flush=True)
+    print()
+    for g in sorted(own):
+        print(f'{g}: {len(own[g])} failing')
+    print(f'{len(leaves)} files no file imports, checked; {len(own)} files with failures of their own')
+
+
 def depth(g, roots, n, seen=()):
     """the node's least distance below a root"""
     if n in roots: return 0
@@ -627,7 +663,7 @@ def main():
         print(__doc__); return
     c, a = sys.argv[1], sys.argv[2:]
     {'list': cmd_list, 'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'next': cmd_next,
-     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained, 'open': cmd_open, 'view': cmd_view}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
+     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained, 'open': cmd_open, 'view': cmd_view, 'every': cmd_every}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
 
 
 if __name__ == '__main__':

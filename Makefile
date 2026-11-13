@@ -73,5 +73,9 @@ brunerie: build/cubical
 # check` also confirms every ticket record has its one text comment in the code
 work: build/cubical
 	CUBICAL_NOCACHE=1 ./build/cubical work/graph.cub
+# every file checked (t30): each file no file imports, alone with its imports, without performing
+# what acts on the world; per file, its own failures (tools/work.py every)
+every: build/cubical
+	python3 tools/work.py every
 
-.PHONY: all library brunerie work
+.PHONY: all library brunerie work every
