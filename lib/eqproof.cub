@@ -7,10 +7,6 @@
 -- covered (f(a, b) is eapp (eapp (etc f) a) b). The search for a trace (lib/match.cub, lib/nav.cub
 -- over codes) is separate and unverified; what it finds is checked here.
 -- ---------------------------------------------------------------- terms and models
--- t19 (2026-11-12): needs-work. 3 definitions here are untyped and refused by the checker, which
--- has rejected untyped definitions outside the bootstrap files since 2026-11-09, deliberately,
--- after about 10,000 lines of untyped code were written by an agent. They are to be written with
--- types; nothing in the checker changes.
 data ETm = etv (v : Word) | etc (f : Word) | eapp (a : ETm) (b : ETm)
 -- a model: values of variables, values of constants, and application as a binary operation
 Model : Type
@@ -266,16 +262,25 @@ find-trace n hs s t =
 -- anything else is outside the fragment. The equations the store holds (lib/rules.cub reads them
 -- as rules) are hypotheses of this form once their Π binders are peeled; the goal, a code, is
 -- read the same way, and what check-eq accepts about the terms eq-cert-sound proves about them
-tm-of-code c =
-  case c of
-    cvar v → some (etv v)
-    cglob g → some (etc g)
-    cann t T → tm-of-code t
-    capp f x → obind (tm-of-code f) (λ tf → omap (λ tx → eapp tf tx) (tm-of-code x))
-    _ → none
-code-of-tm t = case t of etv v → cvar v; etc f → cglob f; eapp a b → capp (code-of-tm a) (code-of-tm b)
+tm-of-code : Code → Opt ETm
+tm-of-code (cvar v) = some (etv v)
+tm-of-code (cglob g) = some (etc g)
+tm-of-code (cann t T) = tm-of-code t
+tm-of-code (capp f x) =
+  case tm-of-code f of
+    none → none
+    some tf → (case tm-of-code x of none → none; some tx → some (eapp tf tx))
+tm-of-code c = none
+code-of-tm : ETm → Code
+code-of-tm (etv v) = cvar v
+code-of-tm (etc f) = cglob f
+code-of-tm (eapp a b) = capp (code-of-tm a) (code-of-tm b)
 -- a list of (l , r) codes as hypotheses, in order; none when one is outside the fragment
-eqs-of-codes hs =
-  case hs of
-    lnil → some enil
-    lcons h r → obind (tm-of-code (fst h)) (λ l → obind (tm-of-code (snd h)) (λ rr → omap (λ rest → econs l rr rest) (eqs-of-codes r)))
+eqs-of-codes : Lst (Code × Code) → Opt Eqs
+eqs-of-codes lnil = some enil
+eqs-of-codes (lcons h r) =
+  case tm-of-code (fst h) of
+    none → none
+    some l → (case tm-of-code (snd h) of
+                none → none
+                some rr → (case eqs-of-codes r of none → none; some rest → some (econs l rr rest)))
