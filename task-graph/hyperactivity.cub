@@ -134,7 +134,14 @@ calculus-conformance = node "The implementation is shown to be exactly the publi
 -- dimensions are encoded as a cube built by recursion on their number, so at a variable number every
 -- operation is a stuck recursion. A representation in which an object dimension is a host interval
 -- variable would get those laws for free; how to have one when the number of dimensions is a
--- variable is the question to settle before continuing F2d and F2e. The elaborator's two memory blowups met on the way are below. The longest chain of the
+-- variable is the question to settle before continuing F2d and F2e. Question for Avik (2026-11-13):
+-- what is the meaning of a term in a context with a variable number of dimensions? Tried and not
+-- enough: each dimension's value held in the environment as a point of the higher inductive
+-- interval (zero, one, seg), path abstraction meaning λ ρ → λ i → ⟦t⟧ (ρ , seg i); meet, join and
+-- reversal on its points are definable with judgmental boundaries (imin (seg i) (seg j) = seg (i ∧
+-- j)), but at a variable point x the laws (imin x x = x) are only paths. Until it is answered,
+-- experiments/nbe/p26-wip.cub (7,477 lines, encoding dimensions as cubes by recursion on their
+-- number) is not extended: an answer that changes the encoding replaces most of it. The elaborator's two memory blowups met on the way are below. The longest chain of the
 -- project: it should never stop.
 -- Known (2026-11-12, at experiments/nbe/p26-wip.cub): elaboration: checking a path λ (λ i → sub-
 -- pull … keep-S (P i)) whose body applies a defined dependent path P (carry-uniq of a pcat-d)
@@ -194,7 +201,11 @@ specializer = node "The specializer carries its law in its type, and the three F
 -- code (lib/elf.cub), and with proofs about its bytes at one fixed placement (lib/compile/); nothing
 -- relates a fleet's proved behaviour to its binaries (lib/deploy.cub). All of it is replaced by
 -- realization through C whose type carries the relation between running the C and the term's
--- meaning.
+-- meaning. Question for Avik (2026-11-13): that relation needs a meaning of C programs, a C
+-- semantics, which is language support, and language support waits on this goal; the paper's §9
+-- relates instead to a machine's semantics (a decoded instruction set), and lib/isa/x86 holds an
+-- imported x86 model. Is native realization related to the x86 model, C being an unverified
+-- convenience, or is a C semantics part of the language implementation?
 -- Known (2026-11-12, at src/lang.c): wrong, against the paper (§9.3, "native substitution"): the
 -- evaluator may replace a definition by native code only once a target-correctness witness relating
 -- the code's execution to the definition exists. Here the bytes are bound after the only check

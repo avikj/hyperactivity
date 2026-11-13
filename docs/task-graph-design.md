@@ -372,3 +372,27 @@ A goal is split only when part of it is being tackled immediately.
 
 So no node carries a size, a duration or a difficulty. Where an agent finds something it does not see
 how to do, that is a question for Avik (§13), not an estimate.
+
+## 15. A system for one human; agents have no agency (Avik, 2026-11-13, verbatim)
+
+> i dont hve any fucking agent swarm im "dispatching" . there is no existing organization. i have had
+> times where i run 10 agents at once back in my deep research mode. today i feel extreme resistance
+> to running more than one - in fact resistance to allowing any agent to work on this without my
+> direct supervision/micromanagement . let's flip the thinking - this is a system for one human
+> being. agents should have no agency. probably me trying to run things in parallel constraints my
+> potential so fucking much cause way way more can be done in 1h with me driving one session vs 10.
+> i.e. agents add very little. i'd run agent swarm type shit like when we are trying to onboard
+> semantics of every programming language - that is voluminous work and ideally by that time there
+> is sufficient flow-state in repo that agents can just pick up and get to work effectively (not much
+> room for agency) . i have noted/understood this before that agents are good for breadth/volume but
+> when something is to be done right & genuinely requires particular intelligence or understanding
+> of my work, it needs to be fully micromanaged.
+>
+> engage deeply, think it through with me, and also you said you had some uncertainty/lack of
+> knowledge, please address that, figure it out, understand everything you need to understand to not
+> expresss such again any time soon. where dont you know the right construction? i.e., where is it
+> currently just left as an open question in codebase? or be clear and lmk every single ticket has
+> extremely clear indication on why its trivial ie resolving such questions up-front instead of you
+> raising them now. tickets should contain this. if we have 6800 lines of garbage and growing fix
+> that, note it, jesus. you know the drill. there is only one source of truth. is reality on the
+> page?
