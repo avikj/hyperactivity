@@ -25,3 +25,44 @@ Contents:
   that is not text, read/write/act sessions, no canonical state, immutable content-addressed code,
   change as a square, questions as tasks, ownership. Avik's design, transcribed from his explanations
   on 2026-11-13. Essential context for `all-work-and-all-knowledge-about-it-as-one-content-addressed-object-in-the-language` and `how-people-and-agents-read-write-and-act-on-the-work`.
+
+## How Avik's words are kept (Avik, 2026-11-13, verbatim)
+
+> sure feel free to record the message. no i will not be writing a "vision document" . my vision
+> document is every fuckin gmessage ive sent to you over months, i write multi-thousand word essays
+> at least once-per hour. i'm not gonna sit down and type "The Vision:" now. let me be clear. if
+> ever there is *any* particularly insightful statement from me, i.e. one which surprises you, you
+> MUST assume you, your training, your prior context is too stupid to have found that insightful
+> statement fucking trivial and obvious (its trivial and obvious to me). then picture two scenarios;
+> every future intarction with me, you lack this information and act as such; or, in every future
+> interaction with me, I am frustratedly restating what i consider fucking obvious and what i've
+> already stated.
+>
+> put it this way. your right to *not* preserve my messages (i.e. continue conversation without some
+> guarantee of retaining their content in consciousness in this ssession and later sessions) would
+> come entirely from my message being unnecessary to learn from. what have i learned from this that
+> i didn't know before, what *vision* has been presented that i could not see. if that is ever
+> anything beyond an empty-set - understand that that dies with this session, in fact dies a few
+> messages later with amnesia. make sense? so pretty much as we continue this conversation, let me
+> know explicitly "Nothing worth carrying forward to the future from this request/response loop",
+> or what advanced from that interaction and how it persists. i.e. "nothing worth carrying forward -
+> no changes to vision, this was fully clear already" or add changes. keep it append only i think
+> otherwise you'll just progressively summarize/dilute all content away over time
+>
+> it's already just these stream of consciousness flows right. so just retaining that to an
+> increasingly fat stream is cool. i would love that. if every insightful thing i say on a given
+> topic is organizes as such in the relevant document that's referenced as context on the topic.
+> that's the context. not some curated ai restatement of what i say with whatever changes the ai
+> thinks "add value" the value is in exactly my sequence of words and any change regresses on key
+> dimensions.
+>
+> you can just add sentences at the end of the
+
+(The message ends there as received.)
+
+So each document here is an append-only stream of Avik's messages on one topic, verbatim and dated.
+Nothing in them is summarized or rewritten. After every exchange with Avik, an agent says either that
+nothing from it needs carrying forward, or what it appended and where.
+
+- `what-hyperactive-is-for-in-avik-words.md` — what Hyperactive is for and what it serves: the
+  product, the order of the work toward it.
