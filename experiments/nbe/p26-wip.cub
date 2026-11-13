@@ -8,7 +8,7 @@
 -- normalize-sound), the shape s-path added to TyShape (TyE's clause is PathS/PathE written out), and
 -- appended: P2.6d (sem-path; Jdg over CCtx; the rule data AppV, CaseV and their projections app-f,
 -- app-a, app-r, sig-1, sig-2, case-x, case-t, case-f, case-r, bool-v; lam-dom, lam-ctx, lam-body;
--- plam-line, plam-body; carry; papp-mean; PathM (t52); NN with nvar, napp, nfst, nsnd, ncase, nne,
+-- plam-line, plam-body; carry; papp-mean; PathM; NN with nvar, napp, nfst, nsnd, ncase, nne,
 -- ntrue, nfalse, nlam, npair, nplam, npapp; Der likewise with dpapp; TCode, teval, embed) and P2.6e
 -- begun (cube-const, dcube-const, CMap, cmap-cube, cmap-d, SubF, sub-base, Sub, sub-carried,
 -- sub-pull, subM, cmap-zero; then item (3) of the next definitions: fmap-const, fmap-cmap,
@@ -80,7 +80,7 @@
 -- connections: papp-lit-dd, ddR, ddU, ddconn, papp-conj-from-dd, papp-conj-dd, papp-dnf-from-dd,
 -- upull, dd-conn-pull, papp-lit-dd-pull … papp-dnf-from-dd-pull, ruxi, kq, KN, ddU-cmap, dd-conn-cmap,
 -- cmap-papp-lit-dd … cmap-papp-dnf-from-dd, unreidx-fmap, papp-lit-dd-fmap, dd-conn-fmap,
--- papp-conj-from-dd-fmap … papp-dnf-from-dd-fmap; cong1 moved up (t71).
+-- papp-conj-from-dd-fmap … papp-dnf-from-dd-fmap; cong1 moved up.
 -- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "946 passed, 0 failed").
 -- What is next: (F2) and the rest as listed in lib/nbe.cub's head under "Remaining, in order" (the
 -- De Morgan laws over degenerate lines, papp-subst, CompEnv, fund, normalize), then the swap of this
@@ -111,7 +111,7 @@
 -- their entries. A type containing such a quantification lives at no finite level: it needs a
 -- universe above all levels (Agda's Setω) or cumulativity, and the core has neither (data at a level
 -- depending on a variable is refused, E-openlevel). (While this was found the checker read a stuck
--- level as lzero and so would have accepted the design; that was t51, closed 2026-11-12 by the
+-- level as lzero and so would have accepted the design; that was fixed 2026-11-12 by the
 -- coordinator: a stuck level is now an atom.) The design that holds in the core, with nothing lifted
 -- (El of a code still the top-level type judgmentally): every level a field or a Kripke
 -- quantification mentions is closed. Environments and semantic types are in one fixed universe,
@@ -240,13 +240,13 @@
 --    and face restrictions (Comp at a path type is computability of every dimension instance, with
 --    the boundary). P3 Kan operations, transp and hcomp, at Π, Σ, Bool, PathP: Sterling–Angiuli's
 --    stabilization (neutrals carry the face on which they are unstable). P4 Glue. P5 the
---    specializer over Code (lib/specialize.cub's normalize, t11) — needs each definition reflected
+--    specializer over Code (lib/specialize.cub's normalize) — needs each definition reflected
 --    into Der, which is the typed checker's output (goal typed-checker). P6 universes (above).
 --
--- Correction (2026-11-12, replaces t45, closed; its lifting is in turn replaced by the finding at
+-- Correction (2026-11-12, replaces an earlier finding; its lifting is in turn replaced by the finding at
 -- the top): universes are not blocked and need nothing added to the core. The object hierarchy
 -- U_0..U_k is finite. A `data ... : Type 1` annotation does not raise a level (a data type's level is
--- its fields' largest, t49).
+-- its fields' largest).
 --
 -- Finding (2026-11-12) that fixes the design below: transport along a constant line of a variable
 -- type does not reduce (CCHM has no regularity; `transport (λ i → A) a ≡ a` by refl is refused, while
@@ -368,9 +368,9 @@ data One1 = one1 (pad : Type → Type)
 one : One1
 one = one1 (λ X → X)
 TyU : Type 2
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 TyU = (uM : Type 1) × (uM → Type)
--- binders hatted (Â D̂ x̂) because of t46 (telescope instantiation captures names)
+-- binders hatted (Â D̂ x̂) because telescope instantiation captures names
 TyE : TyShape → TyU
 TyE s-bool = (One1 , λ D̂ → Bool)
 TyE (s-pi a b) =
@@ -404,7 +404,7 @@ dims lnil = zero
 dims (lcons (e-ty s) sk) = dims sk
 dims (lcons e-dim sk) = suc (dims sk)
 CtxU : Type 2
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 CtxU = (uM : Type 1) × (uM → Type 1)
 CtxE : Lst Entry → CtxU
 CtxE lnil = (One1 , λ γ → One1)
@@ -433,7 +433,7 @@ c-case t f x = ccase #0 (lcons t (lcons f lnil)) x
 -- innermost and an n-cube of lines is literally an (n+1)-cube (a path λ's body, a PathP's meaning).
 -- The interval enters only through PathP; operations are functions applied to `p i` under a path λ.
 Line : Type 1 → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 Line X = (lx0 : X) × (lx1 : X) × PathP (λ i → X) lx0 lx1
 Cube : Nat → Type 1 → Type 1
 Cube zero X = X
@@ -469,7 +469,7 @@ exch-l X Q =
 diag-l : (X : Type 1) → Line (Line X) → Line X
 diag-l X Q = (fst (fst Q) , fst (snd (fst (snd Q))) , λ i → snd (snd (snd (snd Q) i)) i)
 -- their laws hold by refl (the endpoints of a path are its own judgmentally); the type is a line,
--- so the laws are PathPs (t50)
+-- so the laws are PathPs
 face0-degen : (X : Type 1) (x : X) → PathP (λ i → X) (face0-l X (degen-l X x)) x
 face0-degen X x = λ i → x
 rev-rev : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (rev-l X (rev-l X L)) L
@@ -678,7 +678,7 @@ papp-cube sk X (lcons c cs) p = papp-dnf-from sk X #0 c cs p
 -- (2026-11-12) A line over a line L of X in a family Y: a point over each end and a path over L; a
 -- cube over a cube likewise, one direction at a time (newest innermost, as Cube).
 LineO : (X : Type 1) (Y : X → Type 1) → Line X → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 LineO X Y L = (ly0 : Y (fst L)) × (ly1 : Y (fst (snd L))) × PathP (λ i → Y (snd (snd L) i)) ly0 ly1
 DCube : (n : Nat) (X : Type 1) (Y : X → Type 1) → Cube n X → Type 1
 DCube zero X Y c = Y c
@@ -706,7 +706,7 @@ dcube-map-of (suc n) X Y Z f g c = dcube-map-of n (Line X) (LineO X Y) (Line Z) 
 -- and a point over each end; its meaning is the language's PathP over the line, judgmentally (the
 -- clause of TyE for the path shape is this pair, P2.6).
 PathS : (X : Type 1) (E : X → Type) → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 PathS X E = (pL : Line X) × E (fst pL) × E (fst (snd pL))
 PathE : (X : Type 1) (E : X → Type) → PathS X E → Type
 PathE X E D = PathP (λ i → E (snd (snd (fst D)) i)) (fst (snd D)) (snd (snd D))
@@ -730,7 +730,7 @@ path-line-ends X E D p = refl
 bool-elim1 : (P : Bool → Type 1) → P true → P false → (b : Bool) → P b
 bool-elim1 P t f true = t
 bool-elim1 P t f false = f
--- composition and inversion of paths in a type at level 1 (PathP: t50)
+-- composition and inversion of paths in a type at level 1 (PathP)
 pcat : (A : Type 1) (x y z : A) → PathP (λ i → A) x y → PathP (λ i → A) y z → PathP (λ i → A) x z
 pcat A x y z p q = λ i → comp (λ j → A) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
 psym : (A : Type 1) (x y : A) → PathP (λ i → A) x y → PathP (λ i → A) y x
@@ -1019,14 +1019,14 @@ EnvV sk γ = snd (CtxE sk) γ
 FbE : (sk : Lst Entry) (Z : Type 1) → CtxV sk → Type 1
 FbE sk Z γ = EnvV sk γ → Z
 CCtx : Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 CCtx = (ccsk : Lst Entry) × Cube (dims ccsk) (CtxV ccsk)
 Mean : CCtx → Type 1 → Type 1
 Mean Γ Z = DCube (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (snd Γ)
 fmapM : (Γ : CCtx) (Z Z' : Type 1) → (Z → Z') → Mean Γ Z → Mean Γ Z'
 fmapM Γ Z Z' h M = dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ)) (snd Γ) M
 TV : TyShape → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 TV s = (tvA : Sem s) × El s tvA
 -- Γ extended by a type that a meaning M over Γ gives at each vertex (f reads the type off M's value;
 -- a λ's body's context is this at the λ's own conclusion, so no path is needed between them)
@@ -1358,7 +1358,7 @@ fmap-papp sk X F F' h lnil c d =
 fmap-papp sk X F F' h (lcons cj cs) c d = fmap-papp-dnf-from sk X F F' h #0 cj cs c d
 
 -- ---------------------------------------------------------------- P2.6d: judgments, normal forms and derivations over cubes
--- (2026-11-12) the path shape's semantic types are P2.3's, judgmentally (t50: PathP at Type 1)
+-- (2026-11-12) the path shape's semantic types are P2.3's, judgmentally (PathP at Type 1)
 sem-path : (a : TyShape) → PathP (λ i → Type 1) (Sem (s-path a)) (PathS (Sem a) (El a))
 sem-path a = λ i → PathS (Sem a) (El a)
 -- a judgment: a tag (term or type), a context over cubes, a shape, a raw code and a meaning over the
@@ -1370,7 +1370,7 @@ JZ : JK → TyShape → Type 1
 JZ j-tm s = TV s
 JZ j-ty s = Sem s
 Jdg : Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 Jdg = (jk : JK) × (jΓ : CCtx) × (js : TyShape) × Code × Mean jΓ (JZ jk js)
 -- the code of Bool (the language's own code for the type)
 c-bool : Code
@@ -1378,7 +1378,7 @@ c-bool = cdata #0 lnil
 -- the rules' data, read pointwise, and the named projections that give their premises' and
 -- conclusions' meanings (shared by NN, Der, CompS and reify)
 AppV : TyShape → TyShape → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 AppV a b = (avT : Fam a b) × El (s-pi a b) avT × El a (fst avT)
 app-f : (a b : TyShape) → AppV a b → TV (s-pi a b)
 app-f a b q = (fst q , fst (snd q))
@@ -1391,7 +1391,7 @@ sig-1 a b q = (fst (fst q) , fst (snd q))
 sig-2 : (a b : TyShape) → TV (s-sig a b) → TV b
 sig-2 a b q = (snd (fst q) (fst (snd q)) , snd (snd q))
 CaseV : TyShape → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 CaseV sP = (cvB : One1) × (cvP : Bool → Sem sP) × (cvx : Bool) × El sP (cvP true) × El sP (cvP false)
 case-x : (sP : TyShape) → CaseV sP → TV s-bool
 case-x sP q = (fst q , fst (snd (snd q)))
@@ -1454,7 +1454,7 @@ papp-line Γ Y Z ℓ f X =
 papp-mean : (Γ : CCtx) (a : TyShape) (f : DNF) → Mean Γ (TV (s-path a)) → Mean Γ (TV a)
 papp-mean Γ a f P = papp-line Γ (TV (s-path a)) (TV a) (path-pt a) f P
 -- a path between meanings, as a named type: a PathP over a path λ in a constructor's field is refused
--- (t52; workaround: this definition, used by npapp and dpapp)
+-- (workaround: this definition, used by npapp and dpapp)
 PathM : (Γ : CCtx) (Z : Type 1) → Mean Γ Z → Mean Γ Z → Type 1
 PathM Γ Z M N = PathP (λ i → Mean Γ Z) M N
 -- (2026-11-12, P2.5) the type premises' meanings, read pointwise: a family's domain (fam-dom; at a λ's
@@ -1485,7 +1485,7 @@ pend-1 a q = tend-1 a (fst q)
 -- PathP with its line over dext Γ and both ends normal terms); a λ carries its domain's normal type, a
 -- pair its codomain's, a case its motive's (the decision at lib/nbe.cub's head: reify builds them from
 -- the type's computability, and embed gives fund's premises)
--- constructor binders subscripted ₀: t46
+-- constructor binders subscripted ₀ (telescope instantiation captures names)
 data NN : (KJ : NK × Jdg) → Type 1 where
   nvar : (Γ₀ : CCtx) (v₀ : VarP (fst Γ₀)) →
     NN (k-ne , (j-tm , Γ₀ , var-shape (fst Γ₀) v₀ , cvar (var-word (fst Γ₀) v₀) , varCube Γ₀ v₀))
@@ -1539,7 +1539,7 @@ data NN : (KJ : NK × Jdg) → Type 1 where
     NN (k-nf , (j-ty , Γ₀ , s-path a₀ , cpathp (cplam cL₀) c0₀ c1₀ , T₀))
 -- typing derivations, the same rules without the kinds; path application at any canonical
 -- non-constant form, and at 0 and 1 by their own rules (dpapp0, dpapp1: the type's endpoint)
--- constructor binders subscripted ₀: t46
+-- constructor binders subscripted ₀ (telescope instantiation captures names)
 data Der : (J : Jdg) → Type 1 where
   dvar : (Γ₀ : CCtx) (v₀ : VarP (fst Γ₀)) →
     Der (j-tm , Γ₀ , var-shape (fst Γ₀) v₀ , cvar (var-word (fst Γ₀) v₀) , varCube Γ₀ v₀)
@@ -1644,12 +1644,12 @@ cmap-d sk' (lcons e-dim sk) σ X F c d =
 -- a substitution Δ → Γ: its dimension part, a cube over Δ's context cube of Γ's vertex contexts with
 -- environment maps, and a path from the dimension part of Γ's cube to that cube's first projection
 SubF : (sk' sk : Lst Entry) → CtxV sk' → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 SubF sk' sk γ' = (sfγ : CtxV sk) × (EnvV sk' γ' → EnvV sk sfγ)
 sub-base : (Δ Γ : CCtx) → DCube (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (fst Γ)) (snd Δ) → Cube (dims (fst Δ)) (CtxV (fst Γ))
 sub-base Δ Γ S = dcube-map (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (fst Γ)) (CtxV (fst Γ)) (λ γ' p → fst p) (snd Δ) S
 Sub : CCtx → CCtx → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 Sub Δ Γ = (sbd : CMap (fst Δ) (fst Γ)) × (sbS : DCube (dims (fst Δ)) (CtxV (fst Δ)) (SubF (fst Δ) (fst Γ)) (snd Δ)) ×
   PathP (λ i → Cube (dims (fst Δ)) (CtxV (fst Γ))) (cmap-cube (fst Δ) (fst Γ) sbd (CtxV (fst Γ)) (snd Γ)) (sub-base Δ Γ sbS)
 -- its action on meanings: the dimension part, carried along the path (sub-carried), then pulled
@@ -3119,13 +3119,13 @@ cmap-dmap sk' (lcons e-dim sk) σ X F Z g c d =
 -- vertex substitutions pairs each with V's value (sub-ext-S). Its path: ext-path (below), then the
 -- total's projections (dmap-map, dmap-fst) and map-pull out of V (sub-ext-tail).
 SubT : (sk' sk : Lst Entry) (Y : Type 1) → CtxV sk' → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 SubT sk' sk Y γ' = (stp : SubF sk' sk γ') × FbE sk Y (fst stp)
 TotT : (sk' sk : Lst Entry) (Y : Type 1) → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 TotT sk' sk Y = (ttγ : CtxV sk') × SubT sk' sk Y ttγ
 ExtV : (sk' sk : Lst Entry) (a : TyShape) (Y : Type 1) (f : (γ : CtxV sk) → (EnvV sk γ → Y) → EnvV sk γ → Sem a) → TotT sk' sk Y → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 ExtV sk' sk a Y f x = (evρ : EnvV sk' (fst x)) → El a (f (fst (fst (snd x))) (snd (snd x)) (snd (fst (snd x)) evρ))
 sub-tot : (Δ Γ : CCtx) (Y : Type 1) (σ : Sub Δ Γ) (M : Mean Γ Y) → DCube (dims (fst Δ)) (CtxV (fst Δ)) (SubT (fst Δ) (fst Γ) Y) (snd Δ)
 sub-tot Δ Γ Y σ M =
@@ -3328,18 +3328,18 @@ dp-keep sk' sk r dp k =
        (λ i → if weq-s0 (r m) i then true else isdim sk' (wsub-s1 (r m) i))
        (pcat0 Bool (isdim sk' (r m)) (isdim sk m) (isdim (lcons e-dim sk) (%wsucc m)) (dp m) (sym (λ i → if weq-s0 m i then true else isdim sk (wsub-s1 m i)))))
 ShM : CCtx → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 ShM Δ = (shs : TyShape) × Mean Δ (TV shs)
 WSub : (Δ' Δ : CCtx) → (Word → Word) → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 WSub Δ' Δ r = (wsS : DCube (dims (fst Δ')) (CtxV (fst Δ')) (SubF (fst Δ') (fst Δ)) (snd Δ')) ×
   PathP (λ i → Cube (dims (fst Δ')) (CtxV (fst Δ))) (cmap-cube (fst Δ') (fst Δ) (cmap-of (fst Δ') (fst Δ) r) (CtxV (fst Δ)) (snd Δ)) (sub-base Δ' Δ wsS)
 WVar : (Δ' Δ : CCtx) → (Word → Word) → Sub Δ' Δ → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 WVar Δ' Δ r σ = (wvv : VarP (fst Δ)) → (wvv' : VarP (fst Δ')) × (var-word (fst Δ') wvv' ≡ r (var-word (fst Δ) wvv)) ×
   PathP (λ i → ShM Δ') (var-shape (fst Δ') wvv' , varCube Δ' wvv') (var-shape (fst Δ) wvv , subM Δ' Δ (TV (var-shape (fst Δ) wvv)) σ (varCube Δ wvv))
 World : CCtx → CCtx → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 World Δ' Δ = (wr : Word → Word) × (wm : MonoW wr) × (wd : DimPres (fst Δ') (fst Δ) wr) × (ws : WSub Δ' Δ wr) ×
   WVar Δ' Δ wr (cmap-of (fst Δ') (fst Δ) wr , ws)
 world-sub : (Δ' Δ : CCtx) → World Δ' Δ → Sub Δ' Δ
@@ -3458,7 +3458,7 @@ keep-sub Δ' Δ a Y h M w =
            (λ i → dcube-map (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (CtxV (lcons (e-ty a) (fst Δ))) (λ x p → fst p) ((keep-base Δ' Δ a Y h M w) i) (carry-fill (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ'))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) (snd (extM Δ' a Y (λ γ e ρ → h (e ρ)) (subM Δ' Δ Y (world-sub Δ' Δ w) M))) (keep-base Δ' Δ a Y h M w) (dcube-lift (dims (fst Δ')) (CtxV (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ'))) (SubT (fst Δ') (fst Δ) Y) (SubF (lcons (e-ty a) (fst Δ')) (lcons (e-ty a) (fst Δ))) (λ γ' t → (γ' , λ ρ' → h (snd t (snd (fst t) ρ')))) (λ γ' t → ((fst (fst t) , λ ρ → h (snd t ρ)) , λ ρ'' → (snd (fst t) (fst ρ'') , snd ρ''))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)) i)))))
 -- (2026-11-12, next definitions (2s)) world-keep. Composition and inversion of paths with the
 -- endpoints inferred (pcat-i, psym-i: the elaborator finds them from the paths' types; not where an
--- endpoint contains a composition with a system, t55: pcat and psym there); pushing a
+-- endpoint contains a composition with a system: pcat and psym there); pushing a
 -- fibrewise map of the base's own cube, or a section, is a lift (push-diag, push-of); pulling back
 -- by a map that ignores the fibre is a fibrewise map (pull-ignore).
 pcat-i : (A : Type 1) {x y z : A} → PathP (λ i → A) x y → PathP (λ i → A) y z → PathP (λ i → A) x z
@@ -3769,7 +3769,7 @@ world-comp Δ2 Δ1 Δ w2 w1 =
      (pcat (ShM Δ2) ((var-shape (fst Δ2) (fst ((snd (snd (snd (snd w2)))) (fst ((snd (snd (snd (snd w1)))) v))))) , varCube Δ2 (fst ((snd (snd (snd (snd w2)))) (fst ((snd (snd (snd (snd w1)))) v))))) ((var-shape (fst Δ1) (fst ((snd (snd (snd (snd w1)))) v))) , (subM Δ2 Δ1 (TV (var-shape (fst Δ1) (fst ((snd (snd (snd (snd w1)))) v)))) (world-sub Δ2 Δ1 w2) (varCube Δ1 (fst ((snd (snd (snd (snd w1)))) v))))) ((var-shape (fst Δ) v) , (subM Δ2 Δ (TV (var-shape (fst Δ) v)) (wcomp-sub Δ2 Δ1 Δ w2 w1) (varCube Δ v))) (snd (snd ((snd (snd (snd (snd w2)))) (fst ((snd (snd (snd (snd w1)))) v))))) (pcat (ShM Δ2) ((var-shape (fst Δ1) (fst ((snd (snd (snd (snd w1)))) v))) , (subM Δ2 Δ1 (TV (var-shape (fst Δ1) (fst ((snd (snd (snd (snd w1)))) v)))) (world-sub Δ2 Δ1 w2) (varCube Δ1 (fst ((snd (snd (snd (snd w1)))) v))))) ((var-shape (fst Δ) v) , (subM Δ2 Δ1 (TV (var-shape (fst Δ) v)) (world-sub Δ2 Δ1 w2) (subM Δ1 Δ (TV (var-shape (fst Δ) v)) (world-sub Δ1 Δ w1) (varCube Δ v)))) ((var-shape (fst Δ) v) , (subM Δ2 Δ (TV (var-shape (fst Δ) v)) (wcomp-sub Δ2 Δ1 Δ w2 w1) (varCube Δ v))) (λ i → (fst ((snd (snd ((snd (snd (snd (snd w1)))) v))) i) , subM Δ2 Δ1 (TV (fst ((snd (snd ((snd (snd (snd (snd w1)))) v))) i))) (world-sub Δ2 Δ1 w2) (snd ((snd (snd ((snd (snd (snd (snd w1)))) v))) i)))) (λ i → ((var-shape (fst Δ) v) , (pcat (Mean Δ2 (TV (var-shape (fst Δ) v))) (subM Δ2 Δ1 (TV (var-shape (fst Δ) v)) (world-sub Δ2 Δ1 w2) (subM Δ1 Δ (TV (var-shape (fst Δ) v)) (world-sub Δ1 Δ w1) (varCube Δ v))) (subM Δ2 Δ1 (TV (var-shape (fst Δ) v)) (world-sub Δ2 Δ1 w2) (dcube-fmap (dims (fst Δ1)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (var-at (fst Δ1) (fst Δ) v) (snd Δ1) (fst (fst (snd (snd (snd w1))))))) (subM Δ2 Δ (TV (var-shape (fst Δ) v)) (wcomp-sub Δ2 Δ1 Δ w2 w1) (varCube Δ v)) (λ i → (subM Δ2 Δ1 (TV (var-shape (fst Δ) v)) (world-sub Δ2 Δ1 w2) (subM-of Δ1 Δ (TV (var-shape (fst Δ) v)) (world-sub Δ1 Δ w1) (varM (fst Δ) v) i))) (pcat (Mean Δ2 (TV (var-shape (fst Δ) v))) (subM Δ2 Δ1 (TV (var-shape (fst Δ) v)) (world-sub Δ2 Δ1 w2) (dcube-fmap (dims (fst Δ1)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (var-at (fst Δ1) (fst Δ) v) (snd Δ1) (fst (fst (snd (snd (snd w1))))))) (sub-pull Δ2 Δ1 (TV (var-shape (fst Δ) v)) (fst (fst (snd (snd (snd w2))))) (carry (dims (fst Δ2)) (CtxV (fst Δ1)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (snd Δ1)) (sub-base Δ2 Δ1 (fst (fst (snd (snd (snd w2)))))) (snd (fst (snd (snd (snd w2))))) (dcube-fmap (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (var-at (fst Δ1) (fst Δ) v) (cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (snd Δ1)) (cmap-d (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (snd Δ1) (fst (fst (snd (snd (snd w1))))))))) (subM Δ2 Δ (TV (var-shape (fst Δ) v)) (wcomp-sub Δ2 Δ1 Δ w2 w1) (varCube Δ v)) (λ i → (sub-pull Δ2 Δ1 (TV (var-shape (fst Δ) v)) (fst (fst (snd (snd (snd w2))))) (carry (dims (fst Δ2)) (CtxV (fst Δ1)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (snd Δ1)) (sub-base Δ2 Δ1 (fst (fst (snd (snd (snd w2)))))) (snd (fst (snd (snd (snd w2))))) (fmap-cmap (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (var-at (fst Δ1) (fst Δ) v) (snd Δ1) (fst (fst (snd (snd (snd w1))))) (~ i))))) (pcat (Mean Δ2 (TV (var-shape (fst Δ) v))) (sub-pull Δ2 Δ1 (TV (var-shape (fst Δ) v)) (fst (fst (snd (snd (snd w2))))) (carry (dims (fst Δ2)) (CtxV (fst Δ1)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (snd Δ1)) (sub-base Δ2 Δ1 (fst (fst (snd (snd (snd w2)))))) (snd (fst (snd (snd (snd w2))))) (dcube-fmap (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (var-at (fst Δ1) (fst Δ) v) (cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (snd Δ1)) (cmap-d (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (snd Δ1) (fst (fst (snd (snd (snd w1))))))))) (sub-pull Δ2 Δ1 (TV (var-shape (fst Δ) v)) (fst (fst (snd (snd (snd w2))))) (dcube-fmap (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (var-at (fst Δ1) (fst Δ) v) (sub-base Δ2 Δ1 (fst (fst (snd (snd (snd w2)))))) (wc-car Δ2 Δ1 Δ w2 (world-sub Δ1 Δ w1)))) (subM Δ2 Δ (TV (var-shape (fst Δ) v)) (wcomp-sub Δ2 Δ1 Δ w2 w1) (varCube Δ v)) (λ i → (sub-pull Δ2 Δ1 (TV (var-shape (fst Δ) v)) (fst (fst (snd (snd (snd w2))))) (fmap-transp (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (var-at (fst Δ1) (fst Δ) v) (cmap-cube (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (snd Δ1)) (sub-base Δ2 Δ1 (fst (fst (snd (snd (snd w2)))))) (snd (fst (snd (snd (snd w2))))) (cmap-d (fst Δ2) (fst Δ1) (cmap-of (fst Δ2) (fst Δ1) (fst w2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (snd Δ1) (fst (fst (snd (snd (snd w1)))))) (~ i)))) (pcat (Mean Δ2 (TV (var-shape (fst Δ) v))) (sub-pull Δ2 Δ1 (TV (var-shape (fst Δ) v)) (fst (fst (snd (snd (snd w2))))) (dcube-fmap (dims (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (var-at (fst Δ1) (fst Δ) v) (sub-base Δ2 Δ1 (fst (fst (snd (snd (snd w2)))))) (wc-car Δ2 Δ1 Δ w2 (world-sub Δ1 Δ w1)))) (dcube-pull (dims (fst Δ2)) (CtxV (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ2) (fst Δ1)) (FbE (fst Δ2) (TV (var-shape (fst Δ) v))) (SubF (fst Δ1) (fst Δ)) (λ γ' p → fst p) (λ x y z ρ → var-at (fst Δ1) (fst Δ) v (fst y) z (snd y ρ)) (snd Δ2) (fst (fst (snd (snd (snd w2))))) (wc-car Δ2 Δ1 Δ w2 (world-sub Δ1 Δ w1))) (subM Δ2 Δ (TV (var-shape (fst Δ) v)) (wcomp-sub Δ2 Δ1 Δ w2 w1) (varCube Δ v)) (pull-fmap (dims (fst Δ2)) (CtxV (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ2) (fst Δ1)) (FbE (fst Δ2) (TV (var-shape (fst Δ) v))) (SubF (fst Δ1) (fst Δ)) (FbE (fst Δ1) (TV (var-shape (fst Δ) v))) (λ γ' p → fst p) (var-at (fst Δ1) (fst Δ) v) (λ γ' p e ρ → e (snd p ρ)) (snd Δ2) (fst (fst (snd (snd (snd w2))))) (wc-car Δ2 Δ1 Δ w2 (world-sub Δ1 Δ w1))) (pcat (Mean Δ2 (TV (var-shape (fst Δ) v))) (dcube-pull (dims (fst Δ2)) (CtxV (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ2) (fst Δ1)) (FbE (fst Δ2) (TV (var-shape (fst Δ) v))) (SubF (fst Δ1) (fst Δ)) (λ γ' p → fst p) (λ x y z ρ → var-at (fst Δ1) (fst Δ) v (fst y) z (snd y ρ)) (snd Δ2) (fst (fst (snd (snd (snd w2))))) (wc-car Δ2 Δ1 Δ w2 (world-sub Δ1 Δ w1))) (dcube-fmap (dims (fst Δ2)) (CtxV (fst Δ2)) (SubF (fst Δ2) (fst Δ)) (FbE (fst Δ2) (TV (var-shape (fst Δ) v))) (var-at (fst Δ2) (fst Δ) v) (snd Δ2) (wc-S Δ2 Δ1 Δ w2 (world-sub Δ1 Δ w1))) (subM Δ2 Δ (TV (var-shape (fst Δ) v)) (wcomp-sub Δ2 Δ1 Δ w2 w1) (varCube Δ v)) (λ i → fmap-pull (dims (fst Δ2)) (CtxV (fst Δ2)) (CtxV (fst Δ1)) (SubF (fst Δ2) (fst Δ1)) (SubF (fst Δ2) (fst Δ)) (FbE (fst Δ2) (TV (var-shape (fst Δ) v))) (SubF (fst Δ1) (fst Δ)) (λ γ' p → fst p) (λ γ2 p q → (fst q , λ ρ → snd q (snd p ρ))) (var-at (fst Δ2) (fst Δ) v) (snd Δ2) (fst (fst (snd (snd (snd w2))))) (wc-car Δ2 Δ1 Δ w2 (world-sub Δ1 Δ w1)) (~ i)) (λ i → subM-of Δ2 Δ (TV (var-shape (fst Δ) v)) (wcomp-sub Δ2 Δ1 Δ w2 w1) (varM (fst Δ) v) (~ i))))))) i))))))
 -- (2026-11-12, (4r-d)) diag-nondim over cubes: the fibres of the diagonal at an index naming no
 -- dimension are the face's (over diag-nondim, by its cases; pcat-d, reidx-comp); Empty-rec's type is
--- given (t57)
+-- given
 diag-nondim-d : (sk : Lst Entry) (j : Word) (X : Type 1) (F : X → Type 1) (c : Cube (suc (dims sk)) X) (d : DCube (suc (dims sk)) X F c) (hp : isdim sk j ≡ false) →
   PathP (λ i → DCube (dims sk) X F (diag-nondim sk j X c hp i)) (diag-sk-d sk j X F c d) (dcube-reidx (dims sk) (Line X) X (LineO X F) F (face0-l X) (face0-o X F) c d)
 diag-nondim-d lnil j X F c d hp = λ i → face0-o X F c d
@@ -5911,14 +5911,14 @@ data Sum1 (A : Type 1) (B : Type 1) = inl1 (a : A) | inr1 (b : B)
 -- a type family with an argument: the family and an element of its domain; the argument as a term of
 -- the domain, and the codomain there
 FamV : TyShape → TyShape → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 FamV a b = (fvT : Fam a b) × El a (fst fvT)
 fam-arg : (a b : TyShape) → FamV a b → TV a
 fam-arg a b q = (fst (fst q) , snd q)
 fam-cod : (a b : TyShape) → FamV a b → Sem b
 fam-cod a b q = snd (fst q) (snd q)
 CompU : TyShape → Type 2
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 CompU s = ((cuΔ : CCtx) → Mean cuΔ (Sem s) → Type 1) × ((cuΔ : CCtx) → Mean cuΔ (TV s) → Type 1)
 -- a term's computability from a shape's pair: its type's, and the clause
 CSof : (s : TyShape) → CompU s → (Δ : CCtx) → Mean Δ (TV s) → Type 1
@@ -6210,7 +6210,7 @@ subM-wk Γ a Y f M Z N =
 -- (idc-car), the dependent path from W to it over the vertex part of the substitution's path (idc-D),
 -- and the pull of it, W again (idc-pull: pull-carry-of, urxi, fmap-id)
 SF : (X : Type 1) (E : X → Type 1) → X → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 SF X E γ = (sfγ0 : X) × (E γ → E sfγ0)
 idc-car : (n : Nat) (X : Type 1) (E : X → Type 1) (Z : Type 1) (c : Cube n X) → DCube n X (λ γ → E γ → Z) c →
   DCube n X (λ γ → E γ → Z) (dcube-map n X (SF X E) X (λ γ' p → fst p) c (dcube-of n X (SF X E) (λ γ → (γ , λ ρ → ρ)) c))

@@ -25,14 +25,14 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 	for f in $(SRC); do $(CC) $(CFLAGS) -DCUBICAL_LIB -c -o build/lib/$$(basename $$f .c).o $$f || exit 1; done
 	ar rcs $@ build/lib/*.o
 
-# Every file is checked by `make every` (2026-11-12, t30): each file outside the library imports what
+# Every file is checked by `make every` (2026-11-12): each file outside the library imports what
 # it needs (the core and the library are lib/core.cub and lib/library.cub, files of imports in order; the x86 model's order is
 # lib/isa/x86/all.cub, written by tools/sail2cub.py), so each file no file imports is checked alone
 # with its imports, without performing what acts on the world (--read). Measured 2026-11-12: 80 such
 # files; 35 with failures of their own, each from an open node: the untyped definitions refused in
-# the library (t16-t21: autodiff, eqproof, ring, intlin, derive, cxx/ast) and the C++ units over
-# cxx/ast; bitlaw and flags (t68); build-cost and its runs (t69); the C++ reading (t70: cxx/machine,
-# cxx/read-expr, mem/sum); the Rust reading (t39: deriving needs lib/derive.cub); lib/nbe.cub, which
+# the library (autodiff, eqproof, ring, intlin, derive, cxx/ast) and the C++ units over
+# cxx/ast; bitlaw and flags; build-cost and its runs; the C++ reading (cxx/machine,
+# cxx/read-expr, mem/sum); the Rust reading (deriving needs lib/derive.cub); lib/nbe.cub, which
 # imports the core when the working copy is swapped in; and the surface items fail-local, fail-one,
 # prelude-names and type-data, whose failures are what they show.
 #
@@ -57,7 +57,7 @@ brunerie: build/cubical
 # confirms every node's name is a sentence and every node has a statement
 task-graph: build/cubical
 	CUBICAL_NOCACHE=1 ./build/cubical task-graph/hyperactivity.cub
-# every file checked (t30): each file no file imports, alone with its imports, without performing
+# every file checked: each file no file imports, alone with its imports, without performing
 # what acts on the world; per file, its own failures (tools/task-graph.py every)
 every: build/cubical
 	python3 tools/task-graph.py every

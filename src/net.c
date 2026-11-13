@@ -207,7 +207,7 @@ static long pending;                       /* one thread: pairs queued. Threaded
                                             * the pairs it finished (Local.pushed, Local.done), each monotone and written by
                                             * its owner alone, so no line is shared per step; nothing is in flight when the
                                             * sums are equal (quiescent(), which reads them only when there is nothing to pop) */
-/* Σdone read before Σpushed: d = D(t1) ≤ P(t1) ≤ P(t2) = p, so d == p means P(t1) == D(t1), every
+/* Σdone read before Σpushed: d = D ≤ P ≤ P = p, so d == p means P == D, every
  * pushed pair finished at t1, and no push between t1 and t2; a pair comes only from a rewrite of a
  * pair, so none comes after either */
 static bool quiescent(void) {
@@ -3425,7 +3425,7 @@ static void interact(Cell *o, Cell *v) {
             else if (op == O_WSHR) r = word_wn(kb.b ? wn_small(0) : wn_shr(&ka, kb.s));
             /* a left shift by more than 2^32 bits: 0 shifted is 0; any other numeral would have more
              * than 2^32 bits, which the machine does not build, so the application stays as it is,
-             * a normal form (as on a non-numeral), and nothing ends the run (2026-11-12, t2) */
+             * a normal form (as on a non-numeral), and nothing ends the run (2026-11-12) */
             else if (op == O_WSHL && (kb.b || kb.s > ((uint64_t)1 << 32))) r = !ka.b && ka.s == 0 ? word_wn(wn_small(0)) : wstuck(op, word_wn(wn_copy(&ka)), word_wn(wn_copy(&kb)));
             else if (op == O_WSHL) r = word_wn(wn_shl(&ka, kb.s));
             else r = word_wn(wn_bits(&ka, &kb, op == O_WAND ? 0 : op == O_WOR ? 1 : 2));
@@ -3897,7 +3897,7 @@ void net_start(int n) {
     net_solo = n == 0;   /* stays false when some workers fail to start: the scheduler serves those that did */
     workers = calloc((size_t)n + 1, sizeof(pthread_t));
     /* a worker that cannot be created (each gets the process's stack size, 1 GB when main raised
-     * it) is not waited for: the run goes on with the workers that started (2026-11-12, t4: the loop
+     * it) is not waited for: the run goes on with the workers that started (2026-11-12: the loop
      * below waited forever for a worker that did not exist) */
     int made = 0;
     for (int i = 0; i < n; i++) {

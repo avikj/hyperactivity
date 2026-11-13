@@ -2,6 +2,11 @@
 -- (lib/code.cub's Code), their evaluation, and normalization by evaluation with its soundness
 -- equation (paper §6.1, (6.1) and (6.5)). Loaded after lib/std.cub.
 --
+-- Status (2026-11-13): paused at F2c (experiments/nbe/p26-wip.cub, 1034 passed, 0 failed, 7,477 lines).
+-- Not extended until Avik answers what a term means in a context with a variable number of dimensions
+-- (task-graph/hyperactivity.cub, language-implementation: the question and what was tried). The
+-- rest of this head is the plan and its findings as of 2026-11-12.
+--
 -- Status (2026-11-12, latest first).
 -- * Step 1 (levels) done and checked: P1 rebuilt with types as maps into semantic types (below), the
 --   semantic types and environments in Type 1 and the meanings of P1's shapes in Type, every level
@@ -23,7 +28,7 @@
 -- their entries. A type containing such a quantification lives at no finite level: it needs a
 -- universe above all levels (Agda's Setω) or cumulativity, and the core has neither (data at a level
 -- depending on a variable is refused, E-openlevel). (While this was found the checker read a stuck
--- level as lzero and so would have accepted the design; that was t51, closed 2026-11-12 by the
+-- level as lzero and so would have accepted the design; that was fixed 2026-11-12 by the
 -- coordinator: a stuck level is now an atom.) The design that holds in the core, with nothing lifted
 -- (El of a code still the top-level type judgmentally): every level a field or a Kripke
 -- quantification mentions is closed. Environments and semantic types are in one fixed universe,
@@ -152,13 +157,13 @@
 --    and face restrictions (Comp at a path type is computability of every dimension instance, with
 --    the boundary). P3 Kan operations, transp and hcomp, at Π, Σ, Bool, PathP: Sterling–Angiuli's
 --    stabilization (neutrals carry the face on which they are unstable). P4 Glue. P5 the
---    specializer over Code (lib/specialize.cub's normalize, t11) — needs each definition reflected
+--    specializer over Code (lib/specialize.cub's normalize) — needs each definition reflected
 --    into Der, which is the typed checker's output (goal typed-checker). P6 universes (above).
 --
--- Correction (2026-11-12, replaces t45, closed; its lifting is in turn replaced by the finding at
+-- Correction (2026-11-12, replaces an earlier finding; its lifting is in turn replaced by the finding at
 -- the top): universes are not blocked and need nothing added to the core. The object hierarchy
 -- U_0..U_k is finite. A `data ... : Type 1` annotation does not raise a level (a data type's level is
--- its fields' largest, t49).
+-- its fields' largest).
 --
 -- Finding (2026-11-12) that fixes the design below: transport along a constant line of a variable
 -- type does not reduce (CCHM has no regularity; `transport (λ i → A) a ≡ a` by refl is refused, while
@@ -289,8 +294,8 @@
 -- cubes: ope-cube (skip-cube, keep-cube), ope-nat, diag-sk at a successor (diag-ty-s, diag-dim-s),
 -- diag-nat, diag-ren, papp-ren (through papp-lit/conj-from/conj/dnf-from with offsets, RenAt). (2) on
 -- cubes: cmap-of sk' sk r (dimension k to the variable r k), cmap-skip (weakening by a type is the
--- same cube, by a dimension the degenerate one), cmap-keep, cmap-id, cmap-ope (= ope-cube). Tickets
--- t53, t54 (elaborator; neither workaround is in use).
+-- same cube, by a dimension the degenerate one), cmap-keep, cmap-id, cmap-ope (= ope-cube). Two elaborator
+-- defects were met here (neither workaround is in use).
 -- (2026-11-12, latest) Done since, checked in p26-wip ("494 passed, 0 failed", no cache): (2d) entire:
 -- pcat-d/psym-d (a path over a composite of base paths, by the filler of the base pcat), reidx-comp,
 -- reidx-id, cube-comp2-d; skip-d, keep-d, ope-cube-d, ope-nat-d; diag-ty-s-d, diag-dim-s-d,
@@ -346,7 +351,7 @@
 -- wc-path, world-comp, its variables by subM-of, fmap-cmap, fmap-transp, pull-fmap, fmap-pull: no
 -- cmap-d-comp is needed there, since the composite's vertex substitutions are w1's acted on by w2's
 -- dimension part, carried and pulled back). Elaboration finding: an implicit whose solution contains
--- a composition with a system is refused (t55), so path chains give their endpoints (pcat).
+-- a composition with a system is refused, so path chains give their endpoints (pcat).
 -- Remaining, in order (each a closed statement):
 --   (4r-d) the dependent forms over cubes, each a PathP over its base lemma's path, by the same
 --       cases (bool-elim1 or %welimP, the motive's base path written as the base lemma's own
@@ -456,7 +461,7 @@
 --       dmap-fmap). keep-lift's route: a dependent path over each piece of keep-sub's path (kl-D:
 --       cmap-keep-d, cmap-d-lift, the lift along carry-fill, lift-pull⁻¹, carry-fill twice), carry-uniq,
 --       pull-move, pull-lift, then carry-uniq over keep-base (lift-fmap⁻¹, the lift along fmap-pull).
---       Elaboration finding t71 (a path λ applying a defined dependent path exhausted memory; the
+--       Elaboration finding (a path λ applying a defined dependent path exhausted memory; the
 --       same path given to cong1 checks), recorded at cong1 in p26-wip.
 --       Done (2026-11-12, checked in p26-wip with CUBICAL_NOCACHE=1, "824 passed, 0 failed"): ren-nn
 --       (an NN at (Δ, s, c, M) and w : World Δ' Δ give a code and an NN of the same kind at (Δ', s,
@@ -652,9 +657,8 @@
 --       generalized from variables to forms, by induction on φ); then cmap-d σ (papp-ex e d) is papp-ex
 --       (e with σ's forms substituted) (cmap-d σ d), by induction on e (connections: fmap-cmap and the
 --       hypothesis at DL); dnf-subst σ f (by dnf-join, dnf-meet, dnf-neg on σ's forms) and papp-subst
---       (subM-papp's route with (F2d) and (F2e) in place of cmap-papp-dd). (t52 closed 2026-11-12 by the
---       coordinator: when npapp/dpapp are next touched, PathM is replaced by the PathP it names, every
---       use.) CompEnv over a substitution (CompS of each variable's action),
+--       (subM-papp's route with (F2d) and (F2e) in place of cmap-papp-dd). (Decided 2026-11-12: when npapp/dpapp are next touched,
+--       PathM is replaced by the PathP it names, every use.) CompEnv over a substitution (CompS of each variable's action),
 --       kept along worlds, extended by a computable value (sub-ext) and by a form (sub-form); fund and
 --       fundTy, one function on Der over the tag (CompS for a term, CompTy for a type) under every
 --       substitution with a computable environment; typed contexts, reflect-env (each entry reflected
@@ -679,9 +683,9 @@ data One1 = one1 (pad : Type → Type)
 one : One1
 one = one1 (λ X → X)
 TyU : Type 2
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 TyU = (uM : Type 1) × (uM → Type)
--- binders hatted (Â D̂ x̂) because of t46 (telescope instantiation captures names)
+-- binders hatted (Â D̂ x̂) because telescope instantiation captures names
 TyE : TyShape → TyU
 TyE s-bool = (One1 , λ D̂ → Bool)
 TyE (s-pi a b) =
@@ -702,7 +706,7 @@ Fam a b = (A : Sem a) × (El a A → Sem b)
 -- a type over environments G: a shape and a map into its semantic types; its meaning; pulling back
 -- along f : H → G is composition (definitional)
 PTy : Type 1 → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 PTy G = (ps : TyShape) × (G → Sem ps)
 ElP : (G : Type 1) → PTy G → G → Type
 ElP G A ρ = El (fst A) (snd A ρ)
@@ -730,7 +734,7 @@ dims lnil = zero
 dims (lcons (e-ty s) sk) = dims sk
 dims (lcons e-dim sk) = suc (dims sk)
 CtxU : Type 2
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 CtxU = (uM : Type 1) × (uM → Type 1)
 CtxE : Lst Entry → CtxU
 CtxE lnil = (One1 , λ γ → One1)
@@ -739,7 +743,7 @@ CtxE (lcons (e-ty s) sk) =
   ((γ : fst (CtxE sk)) × (snd (CtxE sk) γ → Sem s) ,
    λ p → (ρ : snd (CtxE sk) (fst p)) × El s (snd p ρ))
 Ctx : Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 Ctx = (csk : Lst Entry) × fst (CtxE csk)
 Env : Ctx → Type 1
 Env Γ = snd (CtxE (fst Γ)) (snd Γ)
@@ -759,11 +763,11 @@ bool-elim P t f false = f
 -- the four parts every judgment here is indexed by: a context, a type over its environments, a raw
 -- code and the code's meaning (the indices are one Σ: a family's indices may not depend on each other)
 Jdg : Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 Jdg = (jΓ : Ctx) × (jA : PTy (Env jΓ)) × Code × ((jρ : Env jΓ) → ElP (Env jΓ) jA jρ)
 -- the variable n of Γ, of type A, with meaning v (a projection out of the environment), by recursion
 -- on the skeleton (2026-11-12: an indexed family of variables cannot be matched inside an extended
--- context, since the elaborator does not unify the computed index ext Γ A with a constructor's (t47); a
+-- context, since the elaborator does not unify the computed index ext Γ A with a constructor's; a
 -- type computed on the closed skeleton is matched as a sum, and its equations are explicit paths)
 -- a type over Γ weakened to Γ extended by B
 wk : (Γ : Ctx) (B : PTy (Env Γ)) → PTy (Env Γ) → PTy (Env (ext Γ B))
@@ -772,10 +776,10 @@ data Sum1 (A : Type 1) (B : Type 1) = inl1 (a : A) | inr1 (b : B)
 Empty1 : Type 1
 Empty1 = Empty × One1
 VIx : Type 1 → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 VIx G = (vA : PTy G) × Word × ((vρ : G) → ElP G vA vρ)
 -- PathP (λ i → …), not Path, and refl at an explicit level, wherever the type is an application at
--- Type 1: t50
+-- Type 1
 VarT : (sk : Lst Entry) (γ : fst (CtxE sk)) → VIx (Env (sk , γ)) → Type 1
 VarT lnil γ X = Empty1
 -- past a dimension: a variable of the skeleton below, one index further, its type and meaning unchanged
@@ -803,7 +807,7 @@ c-false : Code
 c-false = ccon #0 #1 lnil lnil
 c-case : Code → Code → Code → Code
 c-case t f x = ccase #0 (lcons t (lcons f lnil)) x
--- constructor binders subscripted ₀: t46
+-- constructor binders subscripted ₀ (telescope instantiation captures names)
 data NN : (KJ : NK × Jdg) → Type 1 where
   nvar : (Γ₀ : Ctx) (A₀ : PTy (Env Γ₀)) (n₀ : Word) (v₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) A₀ ρ₀) →
     Var Γ₀ A₀ n₀ v₀ → NN (k-ne , (Γ₀ , A₀ , cvar n₀ , v₀))
@@ -847,7 +851,7 @@ data NN : (KJ : NK × Jdg) → Type 1 where
 -- Der (Γ , A , c , v): c is a code of type A in Γ with meaning v. The object theory's conversion is
 -- the language's judgmental equality of meanings, so there is no conversion rule: a β-redex's
 -- meaning is already its contractum's.
--- constructor binders subscripted ₀: t46
+-- constructor binders subscripted ₀ (telescope instantiation captures names)
 data Der : (J : Jdg) → Type 1 where
   dvar : (Γ₀ : Ctx) (A₀ : PTy (Env Γ₀)) (n₀ : Word) (v₀ : (ρ₀ : Env Γ₀) → ElP (Env Γ₀) A₀ ρ₀) →
     Var Γ₀ A₀ n₀ v₀ → Der ((Γ₀ , A₀ , cvar n₀ , v₀))
@@ -904,7 +908,7 @@ ren-comp : (Δ2 Δ1 Γ : Ctx) (r1 : Env Δ1 → Env Γ) (r2 : Env Δ2 → Env Δ
   Ren Δ1 Γ r1 → Ren Δ2 Δ1 r2 → Ren Δ2 Γ (λ ρ → r1 (r2 ρ))
 ren-comp Δ2 Δ1 Γ r1 r2 w1 w2 A n v x =
   let y = w1 A n v x in w2 (pull (Env Γ) (Env Δ1) r1 A) (fst y) (λ ρ → v (r1 ρ)) (snd y)
--- the world one entry larger (refl at an explicit level: t50)
+-- the world one entry larger (refl at an explicit level:)
 ren-wk : (Γ : Ctx) (B : PTy (Env Γ)) → Ren (ext Γ B) Γ (λ ρ → fst ρ)
 ren-wk Γ B A n v x = (%wsucc n , inr1 ((A , n , v) , x , refl {lsuc lzero}))
 -- the world one dimension larger (P2.2): every variable one index further
@@ -962,9 +966,9 @@ ren-nn (npair Γ a b T c1 v1 c2 v2 n1 n2) Δ r w =
 -- CompS s Δ T x: x, at world Δ, is computable at the type of shape s given by T. By recursion on the
 -- shape, so it computes at open worlds and environments. Bool: x is true, or false, or a neutral (a
 -- closed sum with explicit equations, so that case analysis needs no matching of an indexed family
--- at a computed index, t47). Π: at every later world, a computable argument gives a computable
+-- at a computed index). Π: at every later world, a computable argument gives a computable
 -- result. Σ: both components.
--- (PathP for Path: t50)
+-- (PathP for Path:)
 CompS : (s : TyShape) (Δ : Ctx) (T : Env Δ → Sem s) (x : (ρ : Env Δ) → El s (T ρ)) → Type 1
 CompS s-bool Δ T x =
   Sum1 (PathP (λ i → (ρ : Env Δ) → Bool) x (λ ρ → true) × One1)
@@ -1004,7 +1008,7 @@ Reify s = (Δ : Ctx) (T : Env Δ → Sem s) (x : (ρ : Env Δ) → El s (T ρ)) 
 Reflect : TyShape → Type 1
 Reflect s = (Δ : Ctx) (T : Env Δ → Sem s) (x : (ρ : Env Δ) → El s (T ρ)) (c : Code) →
   NN (k-ne , (Δ , (s , T) , c , x)) → CompS s Δ T x
--- (refl at an explicit level: t50)
+-- (refl at an explicit level:)
 vz : (Δ : Ctx) (A : PTy (Env Δ)) → Var (ext Δ A) (wk Δ A A) #0 (λ ρ → snd ρ)
 vz Δ A = inl1 (refl {lsuc lzero})
 var0 : (Δ : Ctx) (A : PTy (Env Δ)) → NN (k-ne , (ext Δ A , wk Δ A A , cvar #0 , λ ρ → snd ρ))
@@ -1115,7 +1119,7 @@ case-comp Γ B P vx vt vf Δ δ (inr1 (inr1 n)) ct cf =
        (snd (fst (rr (fst P)) Δ (λ ρ → snd P (δ ρ , false)) (λ ρ → vf (δ ρ)) cf)))
 -- the fundamental lemma: a derivation's meaning is computable at every world under every computable
 -- environment (by recursion on the derivation; its binder case is the paper's weakening/application
--- calculation; its Bool constants' equations are path λs, not refl: t50)
+-- calculation; its Bool constants' equations are path λs, not refl:)
 fund : {J : Jdg} → Der J → (Δ : Ctx) (δ : Env Δ → Env (fst J)) → CompEnv (fst (fst J)) (snd (fst J)) Δ δ →
   Comp (Env (fst J)) (fst (snd J)) Δ δ (λ ρ → snd (snd (snd J)) (δ ρ))
 fund (dvar Γ A n v x) Δ δ e = var-comp (fst Γ) (snd Γ) (A , n , v) x Δ δ e
@@ -1159,7 +1163,7 @@ normalize : (Γ : Ctx) (A : PTy (Env Γ)) → TCode Γ A → TCode Γ A
 normalize Γ A t = (fst (normalize-nf Γ A t) , teval Γ A t , embed (snd (normalize-nf Γ A t)))
 -- reify as a map into typed codes, and its fundamental equation (6.5): for every computable value v
 -- at every world, eval (reify v) ρ ≡ v ρ, at every environment ρ; it holds by the indices
--- a normal form packaged as a typed code (a separate definition because of t48)
+-- a normal form packaged as a typed code (a separate definition because of)
 nf-code : (Γ : Ctx) (A : PTy (Env Γ)) (x : (ρ : Env Γ) → ElP (Env Γ) A ρ) → ((c : Code) × NN (k-nf , (Γ , A , c , x))) → TCode Γ A
 nf-code Γ A x p = (fst p , x , embed (snd p))
 reify-code : (s : TyShape) (Δ : Ctx) (T : Env Δ → Sem s) (x : (ρ : Env Δ) → El s (T ρ)) → CompS s Δ T x → TCode Δ (s , T)
@@ -1178,7 +1182,7 @@ normalize-sound Γ A t ρ = refl
 -- innermost and an n-cube of lines is literally an (n+1)-cube (a path λ's body, a PathP's meaning).
 -- The interval enters only through PathP; operations are functions applied to `p i` under a path λ.
 Line : Type 1 → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 Line X = (lx0 : X) × (lx1 : X) × PathP (λ i → X) lx0 lx1
 Cube : Nat → Type 1 → Type 1
 Cube zero X = X
@@ -1214,7 +1218,7 @@ exch-l X Q =
 diag-l : (X : Type 1) → Line (Line X) → Line X
 diag-l X Q = (fst (fst Q) , fst (snd (fst (snd Q))) , λ i → snd (snd (snd (snd Q) i)) i)
 -- their laws hold by refl (the endpoints of a path are its own judgmentally); the type is a line,
--- so the laws are PathPs (t50)
+-- so the laws are PathPs
 face0-degen : (X : Type 1) (x : X) → PathP (λ i → X) (face0-l X (degen-l X x)) x
 face0-degen X x = λ i → x
 rev-rev : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (rev-l X (rev-l X L)) L
@@ -1410,7 +1414,7 @@ papp-cube sk X (lcons c cs) p = papp-dnf-from sk X #0 c cs p
 -- (2026-11-12) A line over a line L of X in a family Y: a point over each end and a path over L; a
 -- cube over a cube likewise, one direction at a time (newest innermost, as Cube).
 LineO : (X : Type 1) (Y : X → Type 1) → Line X → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 LineO X Y L = (ly0 : Y (fst L)) × (ly1 : Y (fst (snd L))) × PathP (λ i → Y (snd (snd L) i)) ly0 ly1
 DCube : (n : Nat) (X : Type 1) (Y : X → Type 1) → Cube n X → Type 1
 DCube zero X Y c = Y c
@@ -1438,7 +1442,7 @@ dcube-map-of (suc n) X Y Z f g c = dcube-map-of n (Line X) (LineO X Y) (Line Z) 
 -- and a point over each end; its meaning is the language's PathP over the line, judgmentally (the
 -- clause of TyE for the path shape is this pair, P2.6).
 PathS : (X : Type 1) (E : X → Type) → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 PathS X E = (pL : Line X) × E (fst pL) × E (fst (snd pL))
 PathE : (X : Type 1) (E : X → Type) → PathS X E → Type
 PathE X E D = PathP (λ i → E (snd (snd (fst D)) i)) (fst (snd D)) (snd (snd D))
@@ -1462,7 +1466,7 @@ path-line-ends X E D p = refl
 bool-elim1 : (P : Bool → Type 1) → P true → P false → (b : Bool) → P b
 bool-elim1 P t f true = t
 bool-elim1 P t f false = f
--- composition and inversion of paths in a type at level 1 (PathP: t50)
+-- composition and inversion of paths in a type at level 1 (PathP)
 pcat : (A : Type 1) (x y z : A) → PathP (λ i → A) x y → PathP (λ i → A) y z → PathP (λ i → A) x z
 pcat A x y z p q = λ i → comp (λ j → A) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
 psym : (A : Type 1) (x y : A) → PathP (λ i → A) x y → PathP (λ i → A) y x
@@ -1702,14 +1706,14 @@ EnvV sk γ = snd (CtxE sk) γ
 FbE : (sk : Lst Entry) (Z : Type 1) → CtxV sk → Type 1
 FbE sk Z γ = EnvV sk γ → Z
 CCtx : Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 CCtx = (ccsk : Lst Entry) × Cube (dims ccsk) (CtxV ccsk)
 Mean : CCtx → Type 1 → Type 1
 Mean Γ Z = DCube (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (snd Γ)
 fmapM : (Γ : CCtx) (Z Z' : Type 1) → (Z → Z') → Mean Γ Z → Mean Γ Z'
 fmapM Γ Z Z' h M = dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ γ e ρ → h (e ρ)) (snd Γ) M
 TV : TyShape → Type 1
--- binder names chosen not to collide: t46
+-- binder names chosen not to collide (telescope instantiation captures names)
 TV s = (tvA : Sem s) × El s tvA
 -- Γ extended by a type that a meaning M over Γ gives at each vertex (f reads the type off M's value;
 -- a λ's body's context is this at the λ's own conclusion, so no path is needed between them)

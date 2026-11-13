@@ -32,8 +32,15 @@ def graph_json():
     for n, d in g.items():
         st = d['statement']
         st = re.sub(r'^[\w-]+ \([^)]*\):\s*', '', st)
-        known = re.split(r'(?= Known \(\d{4}-\d{2}-\d{2}, at )', st)
-        statement, findings = known[0].strip(), [k.strip() for k in known[1:]]
+        segs = re.split(r' (?=Part: )', st)
+        head = re.split(r' (?=Known \(\d{4}-\d{2}-\d{2}, at )', segs[0])
+        statement, findings = head[0].strip(), [k.strip() for k in head[1:]]
+        parts = []
+        for seg in segs[1:]:
+            ps = re.split(r' (?=Known \(\d{4}-\d{2}-\d{2}, at )', seg[len('Part: '):])
+            m = re.match(r'(.*?\.)\s+(.*)$', ps[0].strip(), re.S)
+            parts.append(dict(name=m.group(1) if m else ps[0].strip(), text=m.group(2) if m else '',
+                              findings=[k.strip() for k in ps[1:]]))
         if n in layer:
             state = 'first' if layer[n] == 1 and gain[n] else ('last' if not gain[n] else 'ready')
         elif n in waits and waits[n]:
@@ -44,7 +51,8 @@ def graph_json():
         for m in sorted(tg.ancestors(g, n), key=lambda m: len(tg.ancestors(g, m))):
             for dn in ec.get(m, []):
                 ctx.append(dict(path=docs.get(dn, dn), via=None if m == n else m))
-        nodes.append(dict(id=n, name=d['id'], parents=d['parts'], statement=statement, findings=findings,
+        questions = [q.strip() for q in re.findall(r'Question for Avik \(\d{4}-\d{2}-\d{2}\):\s*(.*?\?)', st, re.S)]
+        nodes.append(dict(id=n, name=d['id'], questions=questions, parents=d['parts'], statement=statement, findings=findings, parts=parts,
                           state=state, layer=layer.get(n), unblocks=sorted(gain.get(n, [])),
                           waits=sorted(waits.get(n, [])), after=after.get(n, []), context=ctx,
                           open=sum(1 for x in tg.under(g, kids, n) if not kids.get(x))))

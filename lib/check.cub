@@ -324,7 +324,7 @@ lvl-suc l =
 lvl-max l m =
   case l of lvl c ts → (case m of lvl d us → lvl (%wmax c d) (lapp ts us); lvw → lvw); lvw → lvw
 -- Level's constructors: lzero lsuc lmax lomega
--- t51 (2026-11-12, closed 2026-11-12): a level stuck on a variable (`g n`, `g : Nat → Level` by
+-- (2026-11-12): a level stuck on a variable (`g n`, `g : Nat → Level` by
 -- cases) used to fall to `_ → lv0` and be read as lzero, which accepted Type : Type (`h51 : (n :
 -- Nat) → Type (g51 n) → Type; h51 n X = X` with `k51 = h51 (suc zero) Type`). Fixed: every level
 -- that is not a constructor is an atom, the value itself, compared by uconv in lvl-le; h51 is now
@@ -1754,7 +1754,7 @@ data-entry d ent =
   case ent of dent tel l → dent tel (data-level d tel); dcoent tel l → dcoent tel l
 -- a data type's level is closed: no field's universe depends on a parameter
 -- (2026-11-12) the level is the fields' largest only; a declared universe is never seen here, since
--- src/syntax.c drops it (t49, at the site).
+-- src/syntax.c drops it (at the site).
 chk-data d ent =
   case ent of
     dent tel l → 
@@ -2353,7 +2353,7 @@ type-level v =
     wvar l T → univ-level T
     -- a stuck application, projection, path application or case: its view does not carry its type
     -- (computed from the spine when needed, src/net.c), so it is read off the spine as conversion
-    -- does (t50: a type f b, f : Bool → Type 1, was given level lzero)
+    -- does (a type f b, f : Bool → Type 1, was given level lzero)
     wapp f a T → neu-level v
     wfst p T → neu-level v
     wsnd p T → neu-level v

@@ -441,7 +441,7 @@ static Node *p_lambda(void) {
     want("→");
     return lam_of(bs, n, p_expr(0));
 }
-/* a text as the term of its bytes (UTF-8, as written): cons #b0 (cons #b1 … nil) : List Word (t63) */
+/* a text as the term of its bytes (UTF-8, as written): cons #b0 (cons #b1 … nil) : List Word */
 static Node *text_term(const char *s) {
     const unsigned char *b = (const unsigned char *)s; size_t n = strlen(s);
     Node *r = nsym("nil");
@@ -515,7 +515,7 @@ static Node *p_atom(void) {
     }
     if (t->k == X_STR) {
         /* "text": the list of its bytes (UTF-8, as written), cons #b0 (cons #b1 … nil) : List Word;
-         * text is data of the core, with no rule of its own (2026-11-12, t63) */
+         * text is data of the core, with no rule of its own (2026-11-12) */
         NX();
         return text_term(t->s);
     }
@@ -1108,7 +1108,7 @@ static void def_untyped(const char *name, Node *body) {
  * equality is a field (e : m ≡ e') to transport along by hand */
 /* a constructor's field type is not elaborated (its scope, the earlier fields, is not the
  * elaborator's), so what elaboration does to a PathP's line is done here: the line, a family over
- * the interval, is a path λ (plam), as in a signature (2026-11-12, t52: the λ was left a function's,
+ * the interval, is a path λ (plam), as in a signature (2026-11-12: the λ was left a function's,
  * whose type the checker cannot infer) */
 static Node *field_lines(Node *t) {
     if (!t->list || t->n == 0) return t;
@@ -1202,7 +1202,7 @@ static Node *p_data_ctor(void) {
 }
 /* a data declaration's declared universe (`data D ps : … → Type l`), checked once the type is
  * declared: a checked definition %dlevel-D : (ps) → Type l, D ps, which the checker accepts only if
- * the type is in that universe, so an annotation that does not hold is refused (2026-11-12, t49: the
+ * the type is in that universe, so an annotation that does not hold is refused (2026-11-12: the
  * annotation was dropped, the level computed from the fields) */
 static Node *data_annot;
 static Node *data_ps_saved[48]; static int data_np_saved; static const char *data_name_saved;
@@ -2902,7 +2902,7 @@ static Node *cn(Node *c) {
         Node *P = el ? cn(c->it[2]) : NULL; if (el && !P) return NULL;
         Node *x = cn(c->it[el ? 4 : 3]); if (!x) return NULL;
         Node *bs[64]; int nb = cn_list(c->it[el ? 3 : 2], bs, 64); if (nb != DATA[D].ncons) return NULL;
-        /* a type with no constructors: its name in place of the branches, (elim P x D) (t57) */
+        /* a type with no constructors: its name in place of the branches, (elim P x D) */
         Node *r = nlist((nb ? nb : 1) + (el ? 3 : 2)); int k = 0;
         r->it[k++] = nsym(el ? "elim" : "case"); if (el) r->it[k++] = P; r->it[k++] = x;
         if (!nb) { r->it[k] = nsym(DATA[D].name); return r; }
@@ -3735,7 +3735,7 @@ static Node *el_app(Node *t, Node *h, Node **args, int n) {
                 for (int q = 0; q < fd->nidx; q++) {
                     Node *e = fd->idx[q];
                     /* the fields into the index expression at once: an argument that mentions a later
-                     * field's name is not captured by that field (2026-11-12, t46) */
+                     * field's name is not captured by that field (2026-11-12) */
                     e = subst_multi(e, (const char **)fd->fields, args, n);
                     a2[n + q] = sym3("plam", xfresh("i"), e);
                 }
@@ -3997,7 +3997,7 @@ static Node *by_lin(Node *ex, Node *at) {
     for (int z = 0; z < nh; z++) hp[z] = nsym(hn[z]);
     return lin_core(ex, at, ex->it[1], ex->it[2], hl, hr, hp, nh);
 }
-/* `declarations T` (2026-11-12, t62): every checked definition in scope whose type is T (equal
+/* `declarations T` (2026-11-12): every checked definition in scope whose type is T (equal
  * canonical forms), in the order declared, as the list cons d1 (cons d2 … nil) : List T. The work
  * read as a value of the language: a view of it is a term over such lists (lib/task-graph.cub). */
 static Node *el_declarations(Node *Ts) {
@@ -4186,7 +4186,7 @@ static Node **field_types(int c, Node *T, Node **fv) {
         Node *f = cd->it[q + 1];
         if (!f->list || f->n != 2) return r;
         Node *A = f->it[1];
-        /* the parameters and the earlier fields at once (t46) */
+        /* the parameters and the earlier fields at once */
         const char *xs[128]; Node *vs[128]; int nx = 0;
         for (int k = 0; k < na && nx < 128; k++) { xs[nx] = param_name(dh->it[k + 1])->s; vs[nx++] = args[k]; }
         for (int k = 0; k < q && nx < 128; k++) { xs[nx] = cd->it[k + 1]->it[0]->s; vs[nx++] = fv[k]; }
@@ -4893,7 +4893,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             for (int q = 0; q < ixk; q++) {
                 /* a pair (the index of a family over a Σ) is not inferable where the index is
                  * substituted (snd (b₀ , suc n₀), an inner split's motive): annotated with the
-                 * index's type (t54) */
+                 * index's type */
                 Node *ie = subst_multi(fdr0->idx[q], fx, fvv, nfx), *it = ty_of(ixv[q]);
                 if (it && ie->list && ie->n >= 1 && !ie->it[0]->list && is(ie->it[0], "pair")) ie = sym3("the", it, ie);
                 sg_push(ixv[q], ie);
@@ -5030,7 +5030,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             /* the constructor at the line's index, annotated with its type there (v's type, its
              * indices e (~ i)): an implicit argument the motive leaves to v's type (t53f w, its index
              * found from w's) is found from it, where the bare application (whose equation fields
-             * are λs) has no type the elaborator can read (t53) */
+             * are λs) has no type the elaborator can read */
             Node *cvt = nf ? cvl : nsym(CON[c].name);
             if (vty) {
                 const char *ixs[64]; Node *ivs[64];
@@ -5799,7 +5799,7 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
         el_release(em);
         return;
     }
-    /* the whole elaboration remembered under its input's canonical key (2026-11-12, part of t61; the
+    /* the whole elaboration remembered under its input's canonical key (2026-11-12: the
      * declaration's surface forms, every name as the key it denotes, the implicit mask, the
      * machine and bootstrap identity chk_salt); its output, the solved T and t, stored canonically
      * and read back through the current bindings. The solved forms go through `checked` below
@@ -5831,7 +5831,7 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
         if (name && expect && !copattern_body(dt) && !has_hole(T) && !has_hole(t)) {
             char key[65]; key_def(ds(strip_marks(T)), ds(strip_marks(t)), key, NULL, NULL);   /* as the definition will be recorded */
             if (store_checked(key)) { forced_result = strdup("ok"); forced_steps = -1; break; }
-            char *rf = store_refused(key);   /* refused by this checker before: its answer, not run again (t43) */
+            char *rf = store_refused(key);   /* refused by this checker before: its answer, not run again */
             if (rf) { forced_result = rf; forced_steps = -1; break; }
         }
         Node *q;

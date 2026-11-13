@@ -186,7 +186,7 @@ static void canon_decl(SBuf *o, Node *dd) {
     kself = saved_self;
 }
 
-/* ---- reading a canonical form back (2026-11-12, t61): the inverse of canon for the forms canon
+/* ---- reading a canonical form back (2026-11-12): the inverse of canon for the forms canon
  * keeps whole. Bound variables get fresh names; G<key>, D<key>, C<key>.i, F<key>.i are rendered
  * through the current bindings (the unhidden checked definition, the checked data type with that
  * key); any other symbol is itself. NULL when a key is bound to nothing now. ---- */
@@ -349,7 +349,7 @@ static void names_bind(const char *name, const char *key) {
     if (f) { fputs(line, f); fclose(f); }
 }
 /* a refusal by the current checker, as a `no` line: the checker's answer (refused at code why ...),
- * as it was read back (2026-11-12, t43: refusals were not recorded, so what fails, and why, was known
+ * as it was read back (2026-11-12: refusals were not recorded, so what fails, and why, was known
  * only by rerunning). The answer names definitions by name, so after a rename its explanation can
  * show the old name; the verdict is the key's. NULL when none. */
 static char *store_refused(const char *key) {
@@ -387,7 +387,7 @@ static void store_put(const char *name, const char *key, const char *code, const
 
 /* A data type's key includes its declared name: two declarations of one content (List in
  * lib/prelude.cub, Lst in lib/code.cub) are two types to the checker (data types are generative), so
- * they are two keys, as Unison's unique types carry a salt (2026-11-12, t65). */
+ * they are two keys, as Unison's unique types carry a salt (2026-11-12). */
 /* ---- keys of the kinds of entry ---- */
 /* a checked definition: its type and term; the canonical forms are returned for the store */
 static void key_def(Node *T, Node *t, char out[65], char **code, char **type) {
@@ -395,7 +395,7 @@ static void key_def(Node *T, Node *t, char out[65], char **code, char **type) {
     /* generated names numbered by first occurrence (kfresh_on): a definition whose elaborated form
      * binds a generated name in a pattern (calc chains, clauses) otherwise had a different key in
      * every run whose earlier elaborations differed, and its certificate never hit (2026-11-12,
-     * t66: lib/obs.cub's o-run-comp, 0.6M steps rechecked on every warm run) */
+     * lib/obs.cub's o-run-comp, 0.6M steps rechecked on every warm run) */
     kfresh_on = true; nkfresh = 0;
     SBuf b = { 0 }; canon(&b, T); char *ty = b.b;
     SBuf c = { 0 }; if (t) canon(&c, t); char *cd = c.b ? c.b : strdup("");

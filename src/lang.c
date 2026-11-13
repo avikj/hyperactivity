@@ -772,7 +772,7 @@ static char **CHECKED; static size_t capchecked; static int nchecked;
 static int *CHKDATA; static size_t capchkdata; static int nchkdata;   /* checked data types, in signature order */
 /* a data type's index while its registration is in progress: an error before it completes (an
  * unchecked type in a field, say) gives the index back (decl_reset), so no index stays without its
- * checker tables (t67: "checker table 3 has no entry" ended the machine) */
+ * checker tables ("checker table 3 has no entry" ended the machine) */
 static int chk_pending = -1;
 /* hidden: an entry no source name refers to (a rejected definition, a codata type's generated
  * composition and record) */
@@ -3468,7 +3468,7 @@ static void checked_group(Node **fs, int n, bool expect) {
         char **rs = calloc((size_t)n + 1, sizeof(char *)); Node **qs = calloc((size_t)n + 1, sizeof(Node *));
         /* every body guarded before any is checked: checking one may unfold another */
         int unguarded = -1; char *ug = NULL; Node *ugq = NULL;
-        /* refused before (t43): every member's answer remembered, ok or not, the group not run again */
+        /* refused before: every member's answer remembered, ok or not, the group not run again */
         bool replay = expect;
         for (int i = 0; i < n && replay; i++) { rs[i] = store_checked(ks[i]) ? strdup("ok") : store_refused(ks[i]); if (!rs[i]) replay = false; }
         if (replay) {
@@ -3517,7 +3517,7 @@ static void checked_group(Node **fs, int n, bool expect) {
             printf("%s: rejected %s   [%ld steps]\n", !all ? "ok" : "FAIL", fs[0]->it[1]->s, total);
             if (getenv("CUBICAL_WHY")) for (int i = 0; i < n; i++) if (strcmp(rs[i], "ok") && strcmp(rs[i], "unguarded")) explain(rs[i], qs[i]);
         }
-        /* a refused group's answers kept together (t43), each member's under its key, a member whose own
+        /* a refused group's answers kept together, each member's under its key, a member whose own
          * answer is ok included: the group is not defined, so that ok is not an acceptance (no `ok` line) */
         if (expect && !all) for (int i = 0; i < n; i++) store_refuse(ks[i], 0, rs[i]);
         for (int i = 0; i < n; i++) free(rs[i]);
@@ -3571,7 +3571,7 @@ static void toplevel(Node *f) {
     static int every = -1; if (every < 0) every = getenv("CUBICAL_SWEEPALL") != NULL;   /* a sweep after every form: to test */
     if (!toplevel_depth) records_sweep(every);
 }
-/* ---- uses (2026-11-12, t64): every declaration as written (one per source position: its signature,
+/* ---- uses (2026-11-12): every declaration as written (one per source position: its signature,
  * its equations and everything generated from it, the generator's output belonging to the declaration
  * that generated it; a command such as #show or a check is one too, named by its kind), the names
  * it declares, and the declarations it mentions. A mention is a symbol,
@@ -3820,7 +3820,7 @@ static void toplevel_in(Node *f) {
         bool stored = define && expect && (forced_result ? remembered && !strcmp(forced_result, "ok") : store_checked(key));
         Node *cT = nl2("%raw", aclosed(dT)), *ct = stored ? NULL : nl2("%raw", aclosed(dt));
         long steps = 0;
-        char *rs = define && expect && !stored && !forced_result ? store_refused(key) : NULL;   /* refused before (t43) */
+        char *rs = define && expect && !stored && !forced_result ? store_refused(key) : NULL;   /* refused before */
         char *r = stored ? strdup("ok") : rs ? rs : forced_result ? strdup(forced_result) : readback(nl3("%%chk-def", cT, ct), &steps), *tr = strdup("ok");
         if (forced_result) steps = forced_steps;
         if (rs || remembered) stored = true;
@@ -4071,7 +4071,7 @@ static void toplevel_in(Node *f) {
         long steps = 0;
         char key[65]; char *kcode = NULL; key_decl(dd, key, &kcode);
         bool stored = expect && store_checked(key);
-        char *rs = expect && !stored ? store_refused(key) : NULL;   /* refused before (t43) */
+        char *rs = expect && !stored ? store_refused(key) : NULL;   /* refused before */
         char *r = stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-data", word(di), ent), &steps), *tr = strdup("ok");
         if (rs) stored = true; else if (expect && strcmp(r, tr)) store_refuse(key, steps, r);
         bool accepted = !strcmp(r, tr), ok = accepted == expect;
@@ -4128,7 +4128,7 @@ static void toplevel_in(Node *f) {
         long steps = 0;
         char key[65]; char *kcode = NULL; key_decl(dd, key, &kcode);
         bool stored = expect && store_checked(key);
-        char *rs = expect && !stored ? store_refused(key) : NULL;   /* refused before (t43) */
+        char *rs = expect && !stored ? store_refused(key) : NULL;   /* refused before */
         char *r = stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-codata", word(di), ent), &steps);
         if (rs) stored = true; else if (expect && strcmp(r, "ok")) store_refuse(key, steps, r);
         bool accepted = !strcmp(r, "ok"), ok = accepted == expect;

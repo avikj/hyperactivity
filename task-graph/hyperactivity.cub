@@ -16,63 +16,20 @@ the-product = node "The product: every screened device in the world runs Hyperac
 -- and correctly state "i have implemented this fully correctly" (obviously, that doesn't include
 -- constructions about random examples about trading systems or message protocols)". The
 -- initial high-priority deliverable.
-language-implementation : Node
-language-implementation = node "The Hyperactive language and its features, implemented completely and correctly as the paper specifies." (cons the-product nil)
--- paper-examples (2026-11-13, Avik): "term-by-term construction of every single construction
--- including examples, appendix, in paper, as code in repo cited by content-address in paper ...
--- expressely de-prioritized ... while this *serves nothing*." It serves no node but the root, so
--- the order of work gives it nothing while anything else is open.
-paper-examples : Node
-paper-examples = node "Every construction in the paper, its examples and appendix included, as a term in the repository, cited from the paper by content address." (cons the-product nil)
--- product-implementation (2026-11-13, Avik): "all the product work of building a live interactive
--- collaboration system & tooling over the language & its terms". How it is held, changed and shared:
--- docs/state-change-collaboration-design.md.
-product-implementation : Node
-product-implementation = node "The live interactive collaboration system and tooling over the language and its terms." (cons the-product nil)
--- language-support (2026-11-13, Avik): "Languages support (semantics/syntax as terms for particular
--- languages) * RISC x86, C++, C, Rust, OCaml, Python etc". "before we start any such work, certain
--- things need to be at perfection": it waits on language-implementation and product-implementation
--- (after, below).
--- Known (2026-11-12, at experiments/isa/build-run.cub): needs-work. The imported x86 model has no
--- translation of the two-byte opcode 0F AE (mfence and its group), an inventory gap of the Sail
--- import; any binary using it stops there under the model.
--- Known (2026-11-12, at lib/isa/tso.cub): question. TsoSound is stated and has no inhabitant: no
--- definition proves it. The litmus files in experiments/tso establish instances by computation for
--- particular threads and bounded schedules only. Likewise AtomsX86Correct in lib/mem/rc11.cub.
--- Known (2026-11-12, at lib/cxx/machine.cub): wrong. The C++ reading has drifted from what it
--- stands on, measured 2026-11-12 with each file loaded alone after its imports (--read): here 21
--- failures (type mismatches at lines 64 and 78 and others; a primitive declared outside the
--- bootstrap files, refused); lib/cxx/read-expr.cub 70 (its cases miss constructors lib/cxx/ast.cub
--- gained later: ce-string- literal-units, ck-FloatingCast, clayout-v, ctk-preferred-alignof);
--- experiments/mem/sum.cub (a record field mem-allocs and ev-run-pure, ev-value that no longer
--- exist). The renaming of lib/mem/scalar.cub's operators to ao-... had not reached these files or
--- lib/lang/rust/read- rvalue.cub; done 2026-11-12. The readers are to be brought to the AST and the
--- memory as they are.
--- Known (2026-11-12, at lib/cxx/machine.cub): wrong. Measured 2026-11-11 (memory files, then this
--- file and read-expr.cub, after the library): this file 21 failures, read-expr.cub 70. Roots: cx-
--- unsupported (here) and cx-run (below) do not check against CxEv's type; the primitive cx-byte is
--- refused (primitives exist only in the bootstrap files); the rest follow from these (cx-sk, cx-
--- size undefined; implicit arguments applied to functions without them). The C++ reading does not
--- check as it stands.
--- Known (2026-11-12, at lib/cxx/read-expr.cub): wrong. This file refers to read.cub (statements,
--- declarations, the fuel that ties calls) for meanings it does not define; no lib/cxx/read.cub
--- exists. The C++ reading is incomplete as it stands.
--- Known (2026-11-12, at lib/lang/rust/machine.cub): needs-work. Measured 2026-11-11: these deriving
--- lines fail because lib/derive.cub, which deriving needs, is refused as untyped (t16); the Rust
--- readers then fail on what follows (machine 6, read-place 21, read-rvalue 26, read 22 failures).
--- Typing derive.cub repairs the root.
-language-support : Node
-language-support = node "The syntax and semantics of particular languages as terms: x86, C, C++, Rust, OCaml, Python and others." (cons the-product nil)
--- calculus-conformance (2026-11-13, from the review of the findings of 2026-11-11/12): nobody has
--- compared the implementation with the published calculus, so whether it is "implemented fully
--- correctly" is unknown. Read the evaluator's rule cases (src/net.c), the translation of terms into
--- its graph (src/lang.c), the composition code generated per data type as unchecked text
--- (src/lang.c), universe composition (lib/prelude.cub, %hcompU, Cubical Agda's design, not CCHM's
--- Glue) and the checker's typing clauses (lib/check.cub) against CCHM (Cohen, Coquand, Huber,
--- Mörtberg) and the clocked extension (Kristensen, Møgelberg, Vezzosi), recording each rule as
--- matching or deviating, then fix or justify each deviation. What is known follows. The deliverable is not an agent's statement that the code is
--- right: it is the trusted part made small enough to be plainly the published rules, each rule case
--- shown beside the rule it implements, everything else checked or unable to change a result.
+-- What is known about this goal (2026-11-13, from the review of every earlier finding). These are
+-- not its breakdown: the session working on the goal breaks it down when its work begins
+-- (docs/task-graph-design.md §13).
+-- Part: The implementation is shown to be exactly the published calculus, rule by rule, and every
+-- deviation is fixed or justified. nobody has compared the implementation with the published
+-- calculus, so whether it is "implemented fully correctly" is unknown. Read the evaluator's rule
+-- cases (src/net.c), the translation of terms into its graph (src/lang.c), the composition code
+-- generated per data type as unchecked text (src/lang.c), universe composition (lib/prelude.cub,
+-- %hcompU, Cubical Agda's design, not CCHM's Glue) and the checker's typing clauses (lib/check.cub)
+-- against CCHM (Cohen, Coquand, Huber, Mörtberg) and the clocked extension (Kristensen, Møgelberg,
+-- Vezzosi), recording each rule as matching or deviating, then fix or justify each deviation. What
+-- is known follows. The deliverable is not an agent's statement that the code is right: it is the
+-- trusted part made small enough to be plainly the published rules, each rule case shown beside the
+-- rule it implements, everything else checked or unable to change a result.
 -- Known (2026-11-12, at src/lang.c): needs-work. For every data declaration this generates, as
 -- untyped source text, the type's composition (%comp-D), its homogeneous composition, and transport
 -- on each constructor and on formal compositions. That text is never checked: it is trusted as
@@ -83,7 +40,7 @@ language-support = node "The syntax and semantics of particular languages as ter
 -- (application, projections, path application, composition, Glue, interval and faces, systems,
 -- higher-constructor boundaries, hcomp, transport, case: about 650 lines), the face algebra
 -- (src/dnf.c), the composition clauses for the type formers (lib/prelude.cub) and the composition
--- code generated per data type (generated in src/lang.c, t22). But the rule bodies also make
+-- code generated per data type (generated in src/lang.c). But the rule bodies also make
 -- sharing, deferral and memoization decisions inline (V_DEFER, boxes and references, A8 free-
 -- dimension cuts), and what a value is depends on the lazy-copy and substitution machinery above
 -- being right. So the part that must be trusted is in effect this whole file. To make the
@@ -114,35 +71,35 @@ language-support = node "The syntax and semantics of particular languages as ter
 -- Known (2026-11-12, at task-graph/hyperactivity.cub): question. Not yet done: reading
 -- lib/check.cub's typing clauses against the calculus's typing rules, each recorded as matching or
 -- deviating at its site.
-calculus-conformance : Node
-calculus-conformance = node "The implementation is shown to be exactly the published calculus, rule by rule, and every deviation is fixed or justified." (cons language-implementation nil)
--- typed-codes (2026-11-13): paper §6.1. The language's terms as typed objects in it, normalization by
--- evaluation with its soundness, and a checker that returns typing derivations (lib/check.cub is an
--- untyped term with no statement of what it accepts; lib/std.cub's primitives give typed programs
--- its operations at asserted types). In progress in experiments/nbe/p26-wip.cub; what remains is in
--- lib/nbe.cub's head (F2d, F2d', F2e, fund, normalize, the swap), then Kan operations, Glue,
--- universes and object-level data types. This is the easiest language to build it in, not a hard
--- one (2026-11-13, worked out with Avik): it is normalization for a cubical type theory written
--- inside a cubical type theory. Anywhere else (Agda without its cubical mode, Coq, Lean) one first
--- builds a model of cubical sets (presheaves, Kan structure, Glue, univalence); here the model is the
--- host: object paths are host paths, object composition is the host's composition, Glue and
--- univalence are the host's; meanings are host terms, so soundness holds by construction
--- (reifySound is refl) and only readback needs designing. The method for the Kan operations, Glue
--- and universes is published (Sterling and Angiuli, LICS 2021; Cubical Agda, cooltt). Open, and
--- deciding how much of the remaining work is needed: the host identifies interval expressions up to
--- the De Morgan laws judgmentally, yet F2 re-proves every law as a path, because a context's
--- dimensions are encoded as a cube built by recursion on their number, so at a variable number every
--- operation is a stuck recursion. A representation in which an object dimension is a host interval
--- variable would get those laws for free; how to have one when the number of dimensions is a
--- variable is the question to settle before continuing F2d and F2e. Question for Avik (2026-11-13):
--- what is the meaning of a term in a context with a variable number of dimensions? Tried and not
--- enough: each dimension's value held in the environment as a point of the higher inductive
--- interval (zero, one, seg), path abstraction meaning λ ρ → λ i → ⟦t⟧ (ρ , seg i); meet, join and
--- reversal on its points are definable with judgmental boundaries (imin (seg i) (seg j) = seg (i ∧
--- j)), but at a variable point x the laws (imin x x = x) are only paths. Until it is answered,
--- experiments/nbe/p26-wip.cub (7,477 lines, encoding dimensions as cubes by recursion on their
--- number) is not extended: an answer that changes the encoding replaces most of it. The elaborator's two memory blowups met on the way are below. The longest chain of the
--- project: it should never stop.
+-- Part: The language's terms are typed objects in it, with normalization and its soundness, and the
+-- checker returns typing derivations (paper §6.1). paper §6.1. The language's terms as typed
+-- objects in it, normalization by evaluation with its soundness, and a checker that returns typing
+-- derivations (lib/check.cub is an untyped term with no statement of what it accepts; lib/std.cub's
+-- primitives give typed programs its operations at asserted types). In progress in
+-- experiments/nbe/p26-wip.cub; what remains is in lib/nbe.cub's head (F2d, F2d', F2e, fund,
+-- normalize, the swap), then Kan operations, Glue, universes and object-level data types. This is
+-- the easiest language to build it in, not a hard one (2026-11-13, worked out with Avik): it is
+-- normalization for a cubical type theory written inside a cubical type theory. Anywhere else (Agda
+-- without its cubical mode, Coq, Lean) one first builds a model of cubical sets (presheaves, Kan
+-- structure, Glue, univalence); here the model is the host: object paths are host paths, object
+-- composition is the host's composition, Glue and univalence are the host's; meanings are host
+-- terms, so soundness holds by construction (reifySound is refl) and only readback needs designing.
+-- The method for the Kan operations, Glue and universes is published (Sterling and Angiuli, LICS
+-- 2021; Cubical Agda, cooltt). Open, and deciding how much of the remaining work is needed: the
+-- host identifies interval expressions up to the De Morgan laws judgmentally, yet F2 re-proves
+-- every law as a path, because a context's dimensions are encoded as a cube built by recursion on
+-- their number, so at a variable number every operation is a stuck recursion. A representation in
+-- which an object dimension is a host interval variable would get those laws for free; how to have
+-- one when the number of dimensions is a variable is the question to settle before continuing F2d
+-- and F2e. Question for Avik (2026-11-13): what is the meaning of a term in a context with a
+-- variable number of dimensions? Tried and not enough: each dimension's value held in the
+-- environment as a point of the higher inductive interval (zero, one, seg), path abstraction
+-- meaning λ ρ → λ i → ⟦t⟧ (ρ , seg i); meet, join and reversal on its points are definable with
+-- judgmental boundaries (imin (seg i) (seg j) = seg (i ∧ j)), but at a variable point x the laws
+-- (imin x x = x) are only paths. Until it is answered, experiments/nbe/p26-wip.cub (7,477 lines,
+-- encoding dimensions as cubes by recursion on their number) is not extended: an answer that
+-- changes the encoding replaces most of it. The elaborator's two memory blowups met on the way are
+-- below. The longest chain of the project: it should never stop.
 -- Known (2026-11-12, at experiments/nbe/p26-wip.cub): elaboration: checking a path λ (λ i → sub-
 -- pull … keep-S (P i)) whose body applies a defined dependent path P (carry-uniq of a pcat-d)
 -- exhausts memory (killed at 5.5 GB; keep-lift's first step, before cong1): the λ's endpoints are
@@ -178,34 +135,33 @@ calculus-conformance = node "The implementation is shown to be exactly the publi
 -- explicit argument's inferred type matched against its domain, then the result type against the
 -- expected one; the universe of a solved type gives its level. The solutions are returned as codes,
 -- (elab ...), and the term with them is checked again. An argument's own holes are solved first.
-typed-codes : Node
-typed-codes = node "The language's terms are typed objects in it, with normalization and its soundness, and the checker returns typing derivations (paper §6.1)." (cons language-implementation nil)
--- specializer (2026-11-13): paper §6. The specializer normalizes through a primitive that runs the
--- untyped checker, so it cannot be specialized itself; with normalization as a term (typed-codes) it
--- carries its law in its type and the three Futamura projections follow. Specializing a process
--- through a handler was measured superlinear (lib/specialize.cub, 2026-11-09) and is unattributed.
+-- Part: The specializer carries its law in its type, and the three Futamura projections hold (paper
+-- §6). paper §6. The specializer normalizes through a primitive that runs the untyped checker, so
+-- it cannot be specialized itself; with normalization as a term (typed-codes) it carries its law in
+-- its type and the three Futamura projections follow. Specializing a process through a handler was
+-- measured superlinear (lib/specialize.cub, 2026-11-09) and is unattributed. It waits on the typed
+-- codes above.
 -- Known (2026-11-12, at lib/specialize.cub): needs-work. Specialization cost: #build of a process
 -- written through a handler was measured superlinear in the number of commands (2026-11-09: 7
 -- commands 42M steps, 22 commands 1.21 billion steps, 3 min 39 s; experiments/os/build-cost*.cub
 -- hold the per-stage probes). Not attributed (normalization, rewriting, or the passes of
 -- lib/x86.cub). It is a cost of the language's own programs about programs.
 -- Known (2026-11-12, at lib/specialize.cub): needs-work. Normalization here is code-norm-at, a
--- primitive that runs the evaluator's own quoter (lib/std.cub's checker services, t25). The
+-- primitive that runs the evaluator's own quoter (lib/std.cub's checker services). The
 -- specializer is therefore not a term all the way down, and cannot be specialized itself: the
 -- second and third Futamura projections (paper 6.7) need normalization as a term of the language
 -- (normalization by evaluation over typed codes, with its soundness equation 6.5).
-specializer : Node
-specializer = node "The specializer carries its law in its type, and the three Futamura projections hold (paper §6)." (cons language-implementation nil)
--- native-through-c (2026-11-13): paper §9. Native code today comes from an x86 translator whose output
--- is bound and run with no relation to the definition (src/lang.c, lib/x86.cub), from pasted machine
--- code (lib/elf.cub), and with proofs about its bytes at one fixed placement (lib/compile/); nothing
--- relates a fleet's proved behaviour to its binaries (lib/deploy.cub). All of it is replaced by
--- realization through C whose type carries the relation between running the C and the term's
--- meaning. Question for Avik (2026-11-13): that relation needs a meaning of C programs, a C
--- semantics, which is language support, and language support waits on this goal; the paper's §9
--- relates instead to a machine's semantics (a decoded instruction set), and lib/isa/x86 holds an
--- imported x86 model. Is native realization related to the x86 model, C being an unverified
--- convenience, or is a C semantics part of the language implementation?
+-- Part: Programs are realized as native code through C, and native code replaces a definition only
+-- with the relation to its meaning (paper §9). paper §9. Native code today comes from an x86
+-- translator whose output is bound and run with no relation to the definition (src/lang.c,
+-- lib/x86.cub), from pasted machine code (lib/elf.cub), and with proofs about its bytes at one
+-- fixed placement (lib/compile/); nothing relates a fleet's proved behaviour to its binaries
+-- (lib/deploy.cub). All of it is replaced by realization through C whose type carries the relation
+-- between running the C and the term's meaning. Question for Avik (2026-11-13): that relation needs
+-- a meaning of C programs, a C semantics, which is language support, and language support waits on
+-- this goal; the paper's §9 relates instead to a machine's semantics (a decoded instruction set),
+-- and lib/isa/x86 holds an imported x86 model. Is native realization related to the x86 model, C
+-- being an unverified convenience, or is a C semantics part of the language implementation?
 -- Known (2026-11-12, at src/lang.c): wrong, against the paper (§9.3, "native substitution"): the
 -- evaluator may replace a definition by native code only once a target-correctness witness relating
 -- the code's execution to the definition exists. Here the bytes are bound after the only check
@@ -228,13 +184,11 @@ specializer = node "The specializer carries its law in its type, and the three F
 -- lib/os/contract.cub's) and experiments/isa/addw-all.cub (one all-inputs theorem, for the bytes of
 -- word addition) are proofs about the output of the x86 translator at one fixed placement, a form
 -- the paper's §9.3 (Block, seq, the compiler as a fold) replaces. They are to be deleted with that
--- translator (t7); the word, bit and flag law files beside them and x86ok's run lemmas remain
+-- translator; the word, bit and flag law files beside them and x86ok's run lemmas remain
 -- usable for x86 as a later target.
-native-through-c : Node
-native-through-c = node "Programs are realized as native code through C, and native code replaces a definition only with the relation to its meaning (paper §9)." (cons language-implementation nil)
--- primitive-laws (2026-11-13): lib/prim.cub postulates word and bit laws that are provable from the
--- unbounded definitions; fixed-width types have no specification; floating point is trusted
--- without a named assumption (paper §8.5).
+-- Part: Every law of the primitives is proved, or named as an assumption (paper §8.5). lib/prim.cub
+-- postulates word and bit laws that are provable from the unbounded definitions; fixed-width types
+-- have no specification; floating point is trusted without a named assumption (paper §8.5).
 -- Known (2026-11-12, at lib/prim.cub): needs-work. Of the 91 primitives here, the laws of word
 -- multiplication, division, remainder and the bitwise operations, the wbit-* bit laws, the byte
 -- load/store laws, array extensionality and the bit round trips are postulated, though words are
@@ -245,12 +199,11 @@ native-through-c = node "Programs are realized as native code through C, and nat
 -- or a named assumption. Prove what is provable; define U_w = Fin(2^w) with its modular operations
 -- and relate each fixed-width primitive to it or name the assumption; name IEEE binary64 as an
 -- assumption. ---------------------------------------------------------------- the types
-primitive-laws : Node
-primitive-laws = node "Every law of the primitives is proved, or named as an assumption (paper §8.5)." (cons language-implementation nil)
--- typed-deriving (2026-11-13): lib/derive.cub's 24 definitions read the checker's own values and are
--- refused as untyped, so `deriving` is off and the Rust readers fail behind it. Deriving becomes a
--- term over the code of a data declaration, which needs a declaration's code as a value
--- (work-as-a-value).
+-- Part: Deriving is a typed term over the code of a data declaration. lib/derive.cub's 24
+-- definitions read the checker's own values and are refused as untyped, so `deriving` is off and
+-- the Rust readers fail behind it. Deriving becomes a term over the code of a data declaration,
+-- which needs a declaration's code as a value (work-as-a-value). It waits on the work being a value
+-- (product implementation).
 -- Known (2026-11-12, at lib/derive.cub): needs-work. 24 definitions here are untyped and refused by
 -- the checker, which has rejected untyped definitions outside the bootstrap files since 2026-11-09,
 -- deliberately, after about 10,000 lines of untyped code were written by an agent. They are to be
@@ -260,31 +213,42 @@ primitive-laws = node "Every law of the primitives is proved, or named as an ass
 -- from lib/check.cub, a bootstrap file whose value types are not checked data), which no type of a
 -- checked definition names. Typed, deriving is a term over a code of the data type's declaration
 -- (its constructors and field types, as Code), not over the checker's values.
-typed-deriving : Node
-typed-deriving = node "Deriving is a typed term over the code of a data declaration." (cons language-implementation nil)
--- deep-terms (2026-11-13): measured 2026-11-09, building a term cost quadratic time in its depth and
--- deep terms overflowed the C stack (src/net.c). Measured 2026-11-13 at depths 2,000, 4,000 and
--- 8,000: 2.6 s, 1.5 s, 4.0 s, so no longer quadratic there; the stack at depth 10^6 is not
--- re-measured.
+-- Part: The evaluator handles terms of any depth without quadratic cost or stack overflow. measured
+-- 2026-11-09, building a term cost quadratic time in its depth and deep terms overflowed the C
+-- stack (src/net.c). Measured 2026-11-13 at depths 2,000, 4,000 and 8,000: 2.6 s, 1.5 s, 4.0 s, so
+-- no longer quadratic there; the stack at depth 10^6 is not re-measured.
 -- Known (2026-11-12, at src/net.c): question. Measured 2026-11-09: build_m calls synkey at every
 -- node it builds and synkey walks the whole subterm, so building a term of depth d costs d^2 key
 -- computations (a unary numeral of 4*10^4 did not print in 260 s), and deep right-nested terms (a
 -- numeral of 10^6) overflow the C stack in several recursive functions of this file and src/lang.c.
 -- Not re-measured since; whether both still hold is not known.
-deep-terms : Node
-deep-terms = node "The evaluator handles terms of any depth without quadratic cost or stack overflow." (cons language-implementation nil)
--- content-addressing (2026-11-13): definitions and results identified by content, the foundation of
+language-implementation : Node
+language-implementation = node "The Hyperactive language and its features, implemented completely and correctly as the paper specifies." (cons the-product nil)
+-- paper-examples (2026-11-13, Avik): "term-by-term construction of every single construction
+-- including examples, appendix, in paper, as code in repo cited by content-address in paper ...
+-- expressely de-prioritized ... while this *serves nothing*." It serves no node but the root, so
+-- the order of work gives it nothing while anything else is open.
+paper-examples : Node
+paper-examples = node "Every construction in the paper, its examples and appendix included, as a term in the repository, cited from the paper by content address." (cons the-product nil)
+-- product-implementation (2026-11-13, Avik): "all the product work of building a live interactive
+-- collaboration system & tooling over the language & its terms". How it is held, changed and shared:
+-- docs/state-change-collaboration-design.md.
+-- What is known about this goal (2026-11-13, from the review of every earlier finding). These are
+-- not its breakdown: the session working on the goal breaks it down when its work begins
+-- (docs/task-graph-design.md §13).
+-- Part: Every definition and every result is identified by its content and kept, so work is shared
+-- across runs and collaborators. definitions and results identified by content, the foundation of
 -- collaboration with no canonical state (docs/state-change-collaboration-design.md). A reference is
 -- keyed by its index in the run (src/net.c), so no result is kept or shared beyond a run
 -- (src/lang.c); the checker's identity is a hash of file texts (src/store.c); the store writes in
--- place, so a killed machine leaves a truncated entry (src/store.c); the standard commands never use
--- the store (Makefile). Elaborations are already remembered (a warm library check, 4.6 s). It also
--- makes every check fast, which speeds all other work.
+-- place, so a killed machine leaves a truncated entry (src/store.c); the standard commands never
+-- use the store (Makefile). Elaborations are already remembered (a warm library check, 4.6 s). It
+-- also makes every check fast, which speeds all other work.
 -- Known (2026-11-12, at src/lang.c): needs-work (goal product-implementation). Every evaluator
 -- result read back here (checks, the elaborator's solving rounds via %chk-def / %infer-ok, usages,
 -- readings) lives only for this run. Each is to be kept beyond it in canonical form: the query
--- identified by its canonical key (references as content keys, t60; the checker identified by its
--- own definitions' keys, t42), the result stored with references as keys and rendered through the
+-- identified by its canonical key (references as content keys; the checker identified by its
+-- own definitions' keys), the result stored with references as keys and rendered through the
 -- current bindings when read, the same mechanism as the store's definitions. The store's
 -- certificates are then such results; the per-file cache goes (gone 2026-11-12). Read 2026-11-12:
 -- the query built here (build_top) is keyed in src/net.c by synkey, but that key's leaves are run-
@@ -292,7 +256,7 @@ deep-terms = node "The evaluator handles terms of any depth without quadratic co
 -- record (K_LAM over t->rec), and the codes passed name checked definitions by their index (cglob
 -- i). So the evaluator's key of a query means nothing in another run. Two key schemes exist: the
 -- evaluator's (structural, run-local) and the store's (canonical forms, content keys). The end
--- state is one: every key canonical, compiled records keyed by their content (t60). The first step
+-- state is one: every key canonical, compiled records keyed by their content. The first step
 -- can be taken here: the query's key formed as the store forms a definition's (its canonical form,
 -- references as content keys, plus the checker's identity), and the result stored canonically.
 -- 2026-11-12: one kind of result is kept so: a declaration's whole elaboration (src/syntax.c,
@@ -313,18 +277,18 @@ deep-terms = node "The evaluator handles terms of any depth without quadratic co
 -- occurrence in an elaboration's key and in its stored form, binders' kept names included (x-case-
 -- chain had failed warm, "rec of a name that is not a recursive field of its branch", its pattern's
 -- field renumbered while the rebuilt scrutinee's let kept the raw name that `rec` resolves); data
--- keys nominal (t65, closed); the elaboration remembered. Acceptance is not remembered with it: a
+-- keys nominal; the elaboration remembered. Acceptance is not remembered with it: a
 -- remembered elaboration is a term like any other, accepted by its own key's certificate or by the
 -- checker (the first version marked a hit as already checked, which would have accepted a stale
 -- elaboration unchecked). Measured, the library with the store warm and the per-file cache cold:
--- 4.2 s of CPU, no evaluator step, the same 1907 passed and 52 failed as cold (29 s before, t44).
+-- 4.2 s of CPU, no evaluator step, the same 1907 passed and 52 failed as cold (29 s before).
 -- Known (2026-11-12, at src/net.c): needs-work (goal product-implementation). A reference to a
 -- definition is keyed by its index in the current run, so no key involving one means the same thing
 -- in another run, and no evaluator result mentioning a definition can be remembered beyond the run.
 -- The key of a reference is to be the definition's content key (src/store.c's key of its canonical
 -- form); equal content is equal meaning, so this is sound for values. Results that name definitions
 -- (readback text, elaboration solutions) are then stored canonically and rendered through current
--- bindings (t61). 2026-11-12: a λ or thunk is likewise keyed by the address of its compiled record
+-- bindings. 2026-11-12: a λ or thunk is likewise keyed by the address of its compiled record
 -- (synkey, K_LAM over t->rec), so compiled records need content keys too for any key to be
 -- canonical.
 -- Known (2026-11-12, at src/store.c): the checker's identity here is the hash of the texts of the
@@ -345,17 +309,16 @@ deep-terms = node "The evaluator handles terms of any depth without quadratic co
 -- 2026-11-12, the elaboration and the checker's answers (accepted or refused) kept in the store,
 -- the per-file cache gone: with the store warm the library takes 4.6 s, its output the fresh run's
 -- but for step counts; what remains per run is compilation (compiled records keyed by content,
--- t60). The targets still check from nothing.
-content-addressing : Node
-content-addressing = node "Every definition and every result is identified by its content and kept, so work is shared across runs and collaborators." (cons product-implementation nil)
--- work-as-a-value (2026-11-13): serve mode gives views every declaration of a type as a value, but not
--- each declaration's code (src/lang.c); most declarations have no recorded reason (lib/task-graph.cub).
--- The interface for Avik (no editor, no IDE) reads the work through it.
+--). The targets still check from nothing.
+-- Part: The work is a value of the language: every declaration's code and reason readable by views,
+-- and the interface reads it. serve mode gives views every declaration of a type as a value, but
+-- not each declaration's code (src/lang.c); most declarations have no recorded reason (lib/task-
+-- graph.cub). The interface for Avik (no editor, no IDE) reads the work through it.
 -- Known (2026-11-12, at src/lang.c): needs-work (goal product-implementation). Serve mode is how
 -- agents and people use the work continuously. Missing: the work given to a term as a value (the
 -- declarations and their bindings, each declaration's code), so that views are terms of the
 -- language applied to it, and a reading that evaluates a view. Replacing a binding is #retract then
--- a new declaration (t56, closed). 2026-11-12: `declarations T` is every checked definition of type
+-- a new declaration. 2026-11-12: `declarations T` is every checked definition of type
 -- T in scope, as a list (src/ syntax.c), so views over values of a type are terms (lib/task-
 -- graph.cub's over Node) and `#show` of one is the reading that evaluates it (tools/task-graph.py
 -- view). Still missing: each declaration's code as a value, so that a view can read the code
@@ -369,8 +332,42 @@ content-addressing = node "Every definition and every result is identified by it
 -- code's text establishes a reason is what remains (docs/task-graph-design.md §6, point 1). Library
 -- API nothing uses (lib/std.cub's pow, fact, happly, the univalence lemmas; lib/prelude.cub's
 -- untyped helpers) states none: whether each stays is open.
-work-as-a-value : Node
-work-as-a-value = node "The work is a value of the language: every declaration's code and reason readable by views, and the interface reads it." (cons product-implementation nil)
+product-implementation : Node
+product-implementation = node "The live interactive collaboration system and tooling over the language and its terms." (cons the-product nil)
+-- language-support (2026-11-13, Avik): "Languages support (semantics/syntax as terms for particular
+-- languages) * RISC x86, C++, C, Rust, OCaml, Python etc". "before we start any such work, certain
+-- things need to be at perfection": it waits on language-implementation and product-implementation
+-- (after, below).
+-- Known (2026-11-12, at experiments/isa/build-run.cub): needs-work. The imported x86 model has no
+-- translation of the two-byte opcode 0F AE (mfence and its group), an inventory gap of the Sail
+-- import; any binary using it stops there under the model.
+-- Known (2026-11-12, at lib/isa/tso.cub): question. TsoSound is stated and has no inhabitant: no
+-- definition proves it. The litmus files in experiments/tso establish instances by computation for
+-- particular threads and bounded schedules only. Likewise AtomsX86Correct in lib/mem/rc11.cub.
+-- Known (2026-11-12, at lib/cxx/machine.cub): wrong. The C++ reading has drifted from what it
+-- stands on, measured 2026-11-12 with each file loaded alone after its imports (--read): here 21
+-- failures (type mismatches at lines 64 and 78 and others; a primitive declared outside the
+-- bootstrap files, refused); lib/cxx/read-expr.cub 70 (its cases miss constructors lib/cxx/ast.cub
+-- gained later: ce-string- literal-units, ck-FloatingCast, clayout-v, ctk-preferred-alignof);
+-- experiments/mem/sum.cub (a record field mem-allocs and ev-run-pure, ev-value that no longer
+-- exist). The renaming of lib/mem/scalar.cub's operators to ao-... had not reached these files or
+-- lib/lang/rust/read- rvalue.cub; done 2026-11-12. The readers are to be brought to the AST and the
+-- memory as they are.
+-- Known (2026-11-12, at lib/cxx/machine.cub): wrong. Measured 2026-11-11 (memory files, then this
+-- file and read-expr.cub, after the library): this file 21 failures, read-expr.cub 70. Roots: cx-
+-- unsupported (here) and cx-run (below) do not check against CxEv's type; the primitive cx-byte is
+-- refused (primitives exist only in the bootstrap files); the rest follow from these (cx-sk, cx-
+-- size undefined; implicit arguments applied to functions without them). The C++ reading does not
+-- check as it stands.
+-- Known (2026-11-12, at lib/cxx/read-expr.cub): wrong. This file refers to read.cub (statements,
+-- declarations, the fuel that ties calls) for meanings it does not define; no lib/cxx/read.cub
+-- exists. The C++ reading is incomplete as it stands.
+-- Known (2026-11-12, at lib/lang/rust/machine.cub): needs-work. Measured 2026-11-11: these deriving
+-- lines fail because lib/derive.cub, which deriving needs, is refused as untyped; the Rust
+-- readers then fail on what follows (machine 6, read-place 21, read-rvalue 26, read 22 failures).
+-- Typing derive.cub repairs the root.
+language-support : Node
+language-support = node "The syntax and semantics of particular languages as terms: x86, C, C++, Rust, OCaml, Python and others." (cons the-product nil)
 -- documents that are essential context for working on a node and everything below it
 -- (lib/task-graph.cub; docs/task-graph-design.md §7)
 hyperactive-paper : Document
@@ -425,12 +422,11 @@ file-src-net-c = document "../src/net.c"
 file-src-store-c : Document
 file-src-store-c = document "../src/store.c"
 essential-context : List (Node × List Document)
-essential-context = cons (the-product , cons what-hyperactive-is-for-in-avik-words (cons hyperactive-paper (cons task-graph-design nil))) (cons (product-implementation , cons state-change-collaboration-design nil) (cons (content-addressing , cons file-src-lang-c (cons file-src-net-c (cons file-src-store-c (cons file-makefile nil)))) (cons (calculus-conformance , cons file-src-lang-c (cons file-src-net-c (cons file-lib-check-cub (cons file-lib-prelude-cub nil)))) (cons (native-through-c , cons file-src-lang-c (cons file-lib-deploy-cub (cons file-lib-elf-cub (cons file-lib-compile-meaning-cub nil)))) (cons (work-as-a-value , cons file-src-lang-c (cons file-lib-task-graph-cub nil)) (cons (deep-terms , cons file-src-net-c nil) (cons (language-support , cons file-experiments-isa-build-run-cub (cons file-lib-isa-tso-cub (cons file-lib-cxx-machine-cub (cons file-lib-cxx-read-expr-cub (cons file-lib-lang-rust-machine-cub nil))))) (cons (typed-codes , cons file-experiments-nbe-p26-wip-cub (cons file-lib-std-cub (cons file-lib-check-cub (cons file-lib-nbe-cub nil)))) (cons (typed-deriving , cons file-lib-derive-cub nil) (cons (primitive-laws , cons file-lib-prim-cub nil) (cons (specializer , cons file-lib-specialize-cub nil) nil)))))))))))
+essential-context = cons (the-product , cons what-hyperactive-is-for-in-avik-words (cons hyperactive-paper (cons task-graph-design nil))) (cons (product-implementation , cons state-change-collaboration-design (cons file-src-lang-c (cons file-src-net-c (cons file-src-store-c (cons file-makefile (cons file-lib-task-graph-cub nil)))))) (cons (language-implementation , cons file-src-lang-c (cons file-src-net-c (cons file-lib-check-cub (cons file-lib-prelude-cub (cons file-lib-deploy-cub (cons file-lib-elf-cub (cons file-lib-compile-meaning-cub (cons file-experiments-nbe-p26-wip-cub (cons file-lib-std-cub (cons file-lib-nbe-cub (cons file-lib-derive-cub (cons file-lib-prim-cub (cons file-lib-specialize-cub nil))))))))))))) (cons (language-support , cons file-experiments-isa-build-run-cub (cons file-lib-isa-tso-cub (cons file-lib-cxx-machine-cub (cons file-lib-cxx-read-expr-cub (cons file-lib-lang-rust-machine-cub nil))))) nil)))
 -- the root: what Avik wants
 roots : List Node
 roots = cons the-product nil
 -- language support starts only when the language implementation and the product implementation are
--- done (Avik, 2026-11-13); the specializer's law needs normalization as a term; typed deriving needs
--- a declaration's code as a value
+-- done (Avik, 2026-11-13)
 after : List (Node × List Node)
-after = cons (language-support , cons language-implementation (cons product-implementation nil)) (cons (specializer , cons typed-codes nil) (cons (typed-deriving , cons work-as-a-value nil) nil))
+after = cons (language-support , cons language-implementation (cons product-implementation nil)) nil

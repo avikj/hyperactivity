@@ -67,6 +67,10 @@ aside .finding b { color: var(--muted); font-weight: 600; font-size: 12px; displ
 aside .ctx { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; padding: 3px 0; }
 aside .ctx i { color: var(--muted); font-style: normal; font-family: inherit; }
 aside .x { position: absolute; top: 14px; right: 16px; border: 0; background: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+aside details.part { border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; margin: 0 0 8px; }
+aside details.part summary { cursor: pointer; }
+aside details.part summary i { color: var(--muted); font-style: normal; font-size: 12px; }
+aside details.part p { margin: 8px 0; font-size: 13.5px; }
 aside a { color: inherit; text-decoration: underline; text-decoration-color: var(--faint); cursor: pointer; }
 </style>
 </head>
@@ -125,7 +129,7 @@ function draw() {
     c.className = `card s-${n.state}` + (G.roots.includes(n.id) ? ' root' : '');
     c.id = 'c-' + n.id;
     c.innerHTML = `<div class="name">${esc(n.name)}</div><div class="meta"><span class="pill">${label[n.state]}</span>` +
-      (n.state === 'goal' ? `<span>${n.open} open tasks</span>` : '') +
+      (n.state === 'goal' ? `<span>${n.open} open tasks</span>` : '') + (n.parts.length ? `<span>${n.parts.length} known parts</span>` : '') + (n.questions.length ? `<span style="color:var(--wait);font-weight:600">${n.questions.length} for Avik</span>` : '') +
       (n.unblocks.length ? `<span>unblocks ${n.unblocks.length}</span>` : '') + `</div>`;
     c.onmouseenter = () => focus(n.id); c.onmouseleave = () => focus(sel);
     c.onclick = e => { e.stopPropagation(); open(n.id); };
@@ -200,15 +204,20 @@ function open(id) {
   const n = byId[id];
   const link = x => `<a onclick="open('${x}')">${esc(byId[x]?.name ?? x)}</a>`;
   let h = `<span class="pill" style="display:inline-block" >${label[n.state]}</span><h2>${esc(n.name)}</h2><div class="id">${esc(n.id)}</div>`;
+  if (n.questions.length) h += `<h3 style="color:var(--wait)">Questions for Avik (${n.questions.length})</h3>` + n.questions.map(q => `<div class="finding" style="border-color:var(--wait)">${esc(q)}</div>`).join('');
   if (n.statement) h += `<h3>Statement</h3><p>${esc(n.statement)}</p>`;
   if (n.parents.length) h += `<h3>Serves</h3>` + n.parents.map(p => `<p>${link(p)}</p>`).join('');
   if (n.children.length) h += `<h3>Served by</h3>` + n.children.map(c => `<p>${link(c)}</p>`).join('');
   if (n.after.length) h += `<h3>Cannot start until resolved</h3>` + n.after.map(x => `<p>${link(x)}</p>`).join('');
   if (n.unblocks.length) h += `<h3>Prerequisite of</h3>` + n.unblocks.map(x => `<p>${link(x)}</p>`).join('');
-  if (n.findings.length) h += `<h3>Known (${n.findings.length})</h3>` + n.findings.map(f => {
+  const finding = f => {
     const m = f.match(/^Known \((\d{4}-\d{2}-\d{2}), at ([^)]+)\):\s*(.*)$/s);
     return m ? `<div class="finding"><b>${esc(m[2])} · ${esc(m[1])}</b>${esc(m[3])}</div>` : `<div class="finding">${esc(f)}</div>`;
-  }).join('');
+  };
+  if (n.findings.length) h += `<h3>Known (${n.findings.length})</h3>` + n.findings.map(finding).join('');
+  if (n.parts.length) h += `<h3>What is known about it (${n.parts.length} parts, not yet broken down)</h3>` + n.parts.map((p, i) =>
+    `<details class="part"${i === 0 ? '' : ''}><summary><b>${esc(p.name)}</b>${p.findings.length ? ` <i>${p.findings.length} known</i>` : ''}</summary>` +
+    `<p>${esc(p.text)}</p>${p.findings.map(finding).join('')}</details>`).join('');
   if (n.context.length) h += `<h3>Essential context</h3>` + n.context.map(c => `<div class="ctx">${esc(c.path)}${c.via ? ` <i>· from ${esc(byId[c.via]?.name ?? c.via)}</i>` : ''}</div>`).join('');
   document.getElementById('detail').innerHTML = h;
   document.getElementById('panel').classList.add('open');
