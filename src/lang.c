@@ -1,4 +1,7 @@
+#include <stdlib.h>
+#ifdef __GLIBC__
 #include <malloc.h>
+#endif
 #include <setjmp.h>
 #include <signal.h>
 #include <dlfcn.h>
@@ -70,10 +73,15 @@ static void ar_release(ArMark m) {
     ar_gen++;
     if (ar_cur) ar_cur->used = (size_t)(ar_p - ar_cur->data);
     static int poison = -1;
-    if (poison < 0) { poison = getenv("CUBICAL_ARPOISON") != NULL; if (poison) mallopt(M_MMAP_THRESHOLD, 256 * 1024); }
+    if (poison < 0) {
+        poison = getenv("CUBICAL_ARPOISON") != NULL;
+#ifdef __GLIBC__
+        if (poison) mallopt(M_MMAP_THRESHOLD, 256 * 1024);
+#endif
+    }
     while (ar_cur != m.c) {
         Chunk *k = ar_cur; ar_cur = k->prev;
-        if (poison) { free(k); continue; }   /* mapped on its own (the threshold fixed): unmapped, a read of it faults */
+        if (poison) { free(k); continue; }   /* 2026-11-13: glibc's fixed mmap threshold unmaps it; other allocators only free it. */
         if (k->cap > (1u << 20)) free(k);   /* an oversized one-off */
         else if (ar_nspare >= AR_SPARE_MAX) free(k);   /* a release far past the next ones' need: returned (a big mark held hundreds of megabytes spare for good) */
         else { memset(k->data, 0, k->used); k->used = 0; k->prev = ar_spare; ar_spare = k; ar_nspare++; }
@@ -103,10 +111,13 @@ static void mem_report(const char *name) {
     if (st) { while (fgets(line, sizeof line, st)) { if (!strncmp(line, "VmRSS:", 6)) rss = atol(line + 6); else if (!strncmp(line, "VmHWM:", 6)) hwm = atol(line + 6); } fclose(st); }
     long sl, ks, au, as; net_mem(&sl, &ks); ar_mem(&au, &as);
     stat_gather();
+    fprintf(stderr, "mem %s rss=%ld hwm=%ld cells=%ld slabsMB=%ld keys=%ld payloads=%ld arena=%ld spare=%ld",
+            name, rss / 1024, hwm / 1024, stat_cells, sl * 64 / 1024, ks, stat_payloads, au >> 20, as >> 20);
+#ifdef __GLIBC__
     struct mallinfo2 mi = mallinfo2();
-    fprintf(stderr, "mem %s rss=%ld hwm=%ld cells=%ld slabsMB=%ld keys=%ld payloads=%ld arena=%ld spare=%ld heap=%zu free=%zu mmap=%zu syn=%ld perm=%ld rec=%ld\n",
-            name, rss / 1024, hwm / 1024, stat_cells, sl * 64 / 1024, ks, stat_payloads, au >> 20, as >> 20,
-            mi.uordblks >> 20, mi.fordblks >> 20, mi.hblkhd >> 20, stat_syn_bytes >> 20, stat_perm_bytes >> 20, stat_rec_bytes >> 20);
+    fprintf(stderr, " heap=%zu free=%zu mmap=%zu", mi.uordblks >> 20, mi.fordblks >> 20, mi.hblkhd >> 20);
+#endif
+    fprintf(stderr, " syn=%ld perm=%ld rec=%ld\n", stat_syn_bytes >> 20, stat_perm_bytes >> 20, stat_rec_bytes >> 20);
 }
 /* Symbols are interned: one copy of each spelling, kept for the run, so names compare by
  * pointer (the binder lookups, the name sets of free_vars and local_free) */

@@ -4,7 +4,9 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <pthread.h>
+#ifndef __APPLE__
 extern int pthread_getattr_np(pthread_t th, pthread_attr_t *attr);   /* glibc; the thread's stack, for compiled code's stack limit */
+#endif
 #include <time.h>
 #include <sched.h>
 
@@ -1414,8 +1416,14 @@ static bool jit_call(const Ffi *e, Port *args, int n, Port *out) {
      * (compiled code calls no C, so the margin only needs to cover one frame's pushes) */
     static __thread uintptr_t stack_lim;
     if (!stack_lim) {
-        pthread_attr_t at; void *lo = NULL; size_t sz = 0;
+        void *lo = NULL;
+#ifdef __APPLE__
+        /* 2026-11-13: Darwin reports the stack's high address and size. */
+        lo = (char *)pthread_get_stackaddr_np(pthread_self()) - pthread_get_stacksize_np(pthread_self());
+#else
+        pthread_attr_t at; size_t sz = 0;
         if (pthread_getattr_np(pthread_self(), &at) == 0) { pthread_attr_getstack(&at, &lo, &sz); pthread_attr_destroy(&at); }
+#endif
         stack_lim = lo ? (uintptr_t)lo + ((size_t)1 << 18) : (uintptr_t)__builtin_frame_address(0) - ((size_t)1 << 22);
     }
     JitCtx x = { 0, jit_arena, jit_arena + JIT_ARENA, stack_lim };
@@ -3869,7 +3877,16 @@ static int running, parked;
  * not keep a core busy; it picks up new work within a sleep) */
 static void idle_wait(int *idle) {
     int k = ++*idle;
-    if (k < 128) __builtin_ia32_pause();
+    if (k < 128) {
+        /* 2026-11-13: use the host's spin hint, including Apple Silicon. */
+#if defined(__i386__) || defined(__x86_64__)
+        __builtin_ia32_pause();
+#elif defined(__aarch64__)
+        __asm__ volatile("yield");
+#else
+        sched_yield();
+#endif
+    }
     else if (k < 1024) sched_yield();
     else { struct timespec ts = { 0, k < 4096 ? 20000 : 200000 }; nanosleep(&ts, NULL); }
 }
