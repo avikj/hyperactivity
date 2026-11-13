@@ -34,6 +34,16 @@ def graph_json():
         st = re.sub(r'^[\w-]+ \([^)]*\):\s*', '', st)
         known = re.split(r' (?=Known \(\d{4}-\d{2}-\d{2}[,)])', st)
         statement, findings, parts = known[0].strip(), [k.strip() for k in known[1:]], []
+        if n in layer:
+            state = 'first' if layer[n] == 1 and gain[n] else ('last' if not gain[n] else 'ready')
+        elif n in waits and waits[n]:
+            state = 'waiting'
+        else:
+            state = 'goal'
+        ctx = []
+        for m in sorted(tg.ancestors(g, n), key=lambda m: len(tg.ancestors(g, m))):
+            for dn in ec.get(m, []):
+                ctx.append(dict(path=docs.get(dn, dn), via=None if m == n else m))
         questions = [q.strip() for q in re.findall(r'Question for Avik \(\d{4}-\d{2}-\d{2}\):\s*(.*?\?)', st, re.S)]
         nodes.append(dict(id=n, name=d['id'], questions=questions, parents=d['parts'], statement=statement, findings=findings, parts=parts,
                           state=state, layer=layer.get(n), unblocks=sorted(gain.get(n, [])),
