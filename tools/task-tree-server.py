@@ -26,12 +26,15 @@ def page():
         t, site = text(n)
         others = [p for p in g[n]['parts'] if p != parent]
         badge = ''
-        if n in gain: badge = '<span class="now">can start now' + (f' — a prerequisite of {len(gain[n])} waiting' if gain[n] else '') + '</span>'
+        if n in gain and gain[n]: badge = f'<span class="now">first: can start now, a prerequisite of {len(gain[n])} waiting</span>'
+        elif n in gain: badge = '<span class="wait">last: can start, but is a prerequisite of nothing that waits</span>'
         elif waits.get(n): badge = f'<span class="wait">waits on {" ".join(sorted(waits[n]))}</span>'
         also = f'<span class="also">also under: {html.escape("; ".join(g[o]["id"] for o in others))}</span>' if others and parent else ''
-        head = (f'<span class="name g">{html.escape(g[n]["id"])}</span> <span class="also">{html.escape(n)}</span> {badge} '
-                f'<span class="open">{sum(1 for x in tg.under(g, kids, n) if tg.is_t(x))} open below</span>' if not tg.is_t(n) else
-                f'<span class="name t">{html.escape(g[n]["id"])}</span> <span class="also">{html.escape(n)}</span> {badge}')
+        count = sum(1 for x in tg.under(g, kids, n) if not kids.get(x))
+        sub = html.escape(n)
+        head = (f'<span class="name {"t" if tg.is_t(n) else "g"}">{html.escape(g[n]["id"])}</span> '
+                f'<span class="also">{sub}</span> {badge}'
+                + (f' <span class="open">{count} open tasks below</span>' if kids.get(n) else ''))
         body = f'<div class="text">{html.escape(t)}</div>' + (f'<div class="site">{html.escape(site)}</div>' if site else '') + also
         ks = kids.get(n, [])
         if not ks: return f'<li class="leaf"><div class="row">{head}</div>{body}</li>'
@@ -50,7 +53,7 @@ summary{{cursor:pointer}} .name.g{{font-weight:700}} .name.t{{font-weight:600;co
 .now{{color:#1f7a3a;font-size:12.5px;font-weight:600}} .wait{{color:#9a6b00;font-size:12.5px}}
 @media (prefers-color-scheme:dark){{body{{background:#161615;color:#e9e6df}} .text{{color:#bdb9b0}} ul{{border-color:#333}}}}
 </style></head><body><h2>Task graph</h2>
-<p class="site">Read from task-graph/hyperactivity.cub. Every node with its text; tickets show whether they can start now or what they wait on. A node with several parents is expanded once.</p>
+<p class="site">Read from task-graph/hyperactivity.cub. Every node with its statement and its place in the order of work. A node with several parents is expanded once.</p>
 <ul style="border:0;padding:0">{tree}</ul></body></html>'''
 
 

@@ -3160,7 +3160,7 @@ static Node *reading_type(Node *t) {
 /* A reading is taken over the complete normalization of what was posed
  * (5.13 concerns a normal form): pending pairs are reduced before and after,
  * so the counts do not depend on the schedule. */
-/* t61 (2026-11-12): needs-work (goal product-implementation). Every evaluator result read back here (checks,
+/* finding (2026-11-12): needs-work (goal product-implementation). Every evaluator result read back here (checks,
  * the elaborator's solving rounds via %chk-def / %infer-ok, usages, readings) lives only for this
  * run. Each is to be kept beyond it in canonical form: the query identified by its canonical key
  * (references as content keys, t60; the checker identified by its own definitions' keys, t42), the
@@ -4280,7 +4280,7 @@ static void toplevel_in(Node *f) {
             add_global(f->it[i]->s, G_INPUT);
         }
     } else if (!strcmp(h, "data")) {
-/* t22 (2026-11-12): needs-work. For every data declaration this generates, as untyped source text,
+/* finding (2026-11-12): needs-work. For every data declaration this generates, as untyped source text,
  * the type's composition (%comp-D), its homogeneous composition, and transport on each constructor
  * and on formal compositions. That text is never checked: it is trusted as CCHM's rules for the
  * declared type, written once in C per declaration rather than as the single schematic rule CCHM
@@ -4780,7 +4780,7 @@ static bool code_reads(Node *c, long target, long depth) {
     for (int i = 1; i < c->n; i++) if (code_reads(c->it[i], target, depth)) return true;
     return false;
 }
-/* t6 (2026-11-12): wrong, against the paper (§9.3, "native substitution"): the evaluator may replace
+/* finding (2026-11-12): wrong, against the paper (§9.3, "native substitution"): the evaluator may replace
  * a definition by native code only once a target-correctness witness relating the code's execution
  * to the definition exists. Here the bytes are bound after the only check made, that the
  * specialized term converts with the definition (lib/x86.cub jit-plan); the translation from that
@@ -4895,7 +4895,7 @@ int cubical_call_w(const char *name, const uint64_t *args, int n, uint64_t *out)
  * the machine; each reply ends with a line holding '.'. A definition is declared once: an editor
  * sends new declarations and readings, and restarts the machine to redefine (there is no retraction).
  * Run with CUBICAL_WORKERS=0 unless the requests are independent of each other's errors */
-/* t62 (2026-11-12): needs-work (goal product-implementation). Serve mode is how agents and people use the work
+/* finding (2026-11-12): needs-work (goal product-implementation). Serve mode is how agents and people use the work
  * continuously. Missing: the work given to a term as a value (the declarations and their bindings,
  * each declaration's code), so that views are terms of the language applied to it, and a reading
  * that evaluates a view. Replacing a binding is #retract then a new declaration (t56, closed).

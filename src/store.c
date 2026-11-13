@@ -253,7 +253,7 @@ static Node *decanon(const char *text) {
  * cannot be read). A definition's identity key stays build-independent; its certificate does
  * not: a change to the rules in net.c (conversion, composition, a primitive) with check.cub
  * unchanged must recheck, so a rebuilt machine rechecks the library once and then hits. */
-/* t42 (2026-11-12): the checker's identity here is the hash of the texts of the files loaded up to
+/* finding (2026-11-12): the checker's identity here is the hash of the texts of the files loaded up to
  * the checker's definition (comments and unrelated definitions included) plus the machine binary,
  * not the content keys of the definitions the checker consists of. So a comment edited in the
  * bootstrap files invalidates every certificate in the store. */
@@ -285,7 +285,7 @@ static char *store_read(const char *key, const char *file) {
     char *b = malloc((size_t)n + 1); size_t got = fread(b, 1, (size_t)n, f); b[got] = 0; fclose(f);
     return b;
 }
-/* t94 (2026-11-13): wrong. store_write writes an entry in place (fopen "w"). A machine killed while
+/* finding (2026-11-13): wrong. store_write writes an entry in place (fopen "w"). A machine killed while
  * writing (measured 2026-11-13: the kernel killed one for lack of memory while four read in
  * parallel) leaves a truncated entry that later runs read as a whole one, and two machines on one
  * store can read each other's half-written entries; the store is a cache whose entries decide what

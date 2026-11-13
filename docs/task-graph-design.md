@@ -272,3 +272,33 @@ open. `hyperactive server` shows the whole graph; `hyperactive order` shows the 
 - Vague names ("work" for a module, a directory, a tool and a document).
 - Agents producing an account of the project before reading its specification
   (`docs/Hyperactive_Final_Paper.pdf`), and answering with confident structure instead of reasoning.
+
+## 12. Granularity: no tickets for work not being tackled now (Avik, 2026-11-13, verbatim)
+
+> you're creating way too granular of tickets like a project micro-manager without doing the work. a
+> new agent enters and their view of the project is they can just take these ticket by ticket. like
+> come fucking on. is your splitting into subtickets an intelligent move or a retard move? what value
+> does it add for you to split it as such besides make one clear description more clear and
+> comprehensive - unless you are going to immediately tackle it?
+>
+> oh wow. you've been creating tickets... i see. that's the problem. jesus. and also, you seem to
+> have impelemented this thing as a tree and be thinking of it as a tree. is that right? ok fuck it
+> reply and fucking asap you have 150 seconds to make whatever changes push so i can look at the UI
+> again. this is a metacircular mess.
+>
+> holy fuck. t72 and t14 is you literally just having some thought pass through your head and
+> deciding it needs to go on my fucking prioritization board. what the fuck? sure why not man. go
+> through the paper and fucking create 200 detailed tickets for everything to be done. that'll surely
+> help me get a handle on prioritization for these claudes that cant fucking handle more than 2
+> pieces of information at once. wtf? fucking ship whatever fix you think you should immediately,
+> then fucking go through every damn ticket. assuem the entire board is retarded garbage now. there
+> are a few details (exactly which the human specified) which are correct. you have
+> produced/extended a piece of garbage (incl contents). do you understand? look at teh fucking board
+> if you had eyes and looked at this.. it is most likely taht every single ticket you created that i
+> did not expressly request - is actively harmful actively damaging the human beings information
+> work. have you been cancerous?
+
+Applied 2026-11-13: the board is the product, Avik's four goals and the one dependency. Each goal is
+one coarse task described by its statement. The tickets of earlier sessions were findings at code
+sites, none being tackled; they remain there as dated `finding (date):` comments, off the board.
+A goal is split only when part of it is being tackled immediately.

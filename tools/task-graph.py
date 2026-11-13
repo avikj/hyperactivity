@@ -273,10 +273,10 @@ def cmd_tree(args):
     def walk(n, depth, via):
         d = g[n]
         k = kids.get(n, [])
-        nt = sum(1 for x in under(g, kids, n) if is_t(x))
+        nt = sum(1 for x in under(g, kids, n) if not kids.get(x))
         if is_t(n): return
         also = [p for p in d['parts'] if p != via]
-        print('  ' * depth + f'{d["id"]}  [{n}; {nt} open under it]'
+        print('  ' * depth + f'{d["id"]}  [{n}' + (f'; {nt} open tasks under it]' if k else ']')
               + (f'  (also {", ".join(also)})' if also and depth else ''))
         if n in seen: return
         seen.add(n)

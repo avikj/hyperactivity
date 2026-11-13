@@ -36,7 +36,7 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 # imports the core when the working copy is swapped in; and the surface items fail-local, fail-one,
 # prelude-names and type-data, whose failures are what they show.
 #
-# t44 (2026-11-12): every target sets CUBICAL_NOCACHE=1, so the standard commands never use the
+# finding (2026-11-12): every target sets CUBICAL_NOCACHE=1, so the standard commands never use the
 # store and recheck everything from nothing (64 s for the library). With the
 # store warm, elaboration and compilation still run for every definition (29 s), so incremental
 # checking reaches only the checker's run, not the rest of the work done per definition.

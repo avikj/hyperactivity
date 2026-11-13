@@ -532,7 +532,7 @@ static Key *key(int tag, uint64_t a, void *p, int n, Key *const *c) {
 static Key *key0(int tag, uint64_t a, void *p) { return key(tag, a, p, 0, NULL); }
 static Key *key1(int tag, uint64_t a, void *p, Key *x) { return key(tag, a, p, 1, &x); }
 static Key *key2(int tag, uint64_t a, void *p, Key *x, Key *y) { Key *c[2] = { x, y }; return key(tag, a, p, 2, c); }
-/* t60 (2026-11-12): needs-work (goal product-implementation). A reference to a definition is keyed by its
+/* finding (2026-11-12): needs-work (goal product-implementation). A reference to a definition is keyed by its
  * index in the current run, so no key involving one means the same thing in another run, and no
  * evaluator result mentioning a definition can be remembered beyond the run. The key of a reference
  * is to be the definition's content key (src/store.c's key of its canonical form); equal content is
@@ -2225,7 +2225,7 @@ static void trace_step(Cell *o, Cell *v) {
 }
 /* ---------------- the rules ---------------- */
 const char *kind_name(int k) { return k >= 0 && k < K_END && KIND_NAME[k] ? KIND_NAME[k] : "?"; }
-/* t3 (2026-11-12): needs-work. The calculus's rules are the cases of this function (application,
+/* finding (2026-11-12): needs-work. The calculus's rules are the cases of this function (application,
  * projections, path application, composition, Glue, interval and faces, systems, higher-constructor
  * boundaries, hcomp, transport, case: about 650 lines), the face algebra (src/dnf.c), the
  * composition clauses for the type formers (lib/prelude.cub) and the composition code generated per
@@ -4028,7 +4028,7 @@ static void bind_dim(Frame *f, int slot, Dim i) {
     Dnf *at = iv_atom(i); s->key = key0(K_IV, 0, at); dnf_release(at);
     for (int k = 0; k < u; k++) s->sup[k] = iv_cell(iv_atom(i));
 }
-/* t5 (2026-11-12): question. Measured 2026-11-09: build_m calls synkey at every node it builds and
+/* finding (2026-11-12): question. Measured 2026-11-09: build_m calls synkey at every node it builds and
  * synkey walks the whole subterm, so building a term of depth d costs d^2 key computations (a unary
  * numeral of 4*10^4 did not print in 260 s), and deep right-nested terms (a numeral of 10^6) overflow
  * the C stack in several recursive functions of this file and src/lang.c. Not re-measured since;
