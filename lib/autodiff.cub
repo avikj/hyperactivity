@@ -4,10 +4,6 @@
 -- fwd-der: the two agree; taylor: D is the derivative of the function the code denotes, in the
 -- form that makes sense over Nat: p(x + h) = p(x) + h·p'(x) + h²·q for some q. Each inductive
 -- step of taylor is a ring identity, proved by one evaluation of lib/ring.cub's normalizer.
--- t20 (2026-11-12): needs-work. 3 definitions here are untyped and refused by the checker, which
--- has rejected untyped definitions outside the bootstrap files since 2026-11-09, deliberately,
--- after about 10,000 lines of untyped code were written by an agent. They are to be written with
--- types; nothing in the checker changes.
 data Pl = kc (n : Nat) | kx | kadd (a : Pl) (b : Pl) | kmul (a : Pl) (b : Pl)
 pat : Nat → Pl → Nat
 pat x p =
@@ -148,17 +144,19 @@ taylor p x h =
 -- polynomial through lib/ring.cub's bridge (an expression in the variable 0), differentiated by
 -- D, and written as a code again: the derivative of a program is a program, and taylor is the
 -- theorem about what it denotes. The bridge is unverified (18.13); D and taylor are checked
-pl-of-ex x =
-  case x of
-    ec n → some (kc n)
-    ev v → (if %weq v #0 then some kx else none)
-    eadd a b → obind (pl-of-ex a) (λ pa → omap (λ pb → kadd pa pb) (pl-of-ex b))
-    emul a b → obind (pl-of-ex a) (λ pa → omap (λ pb → kmul pa pb) (pl-of-ex b))
-ex-of-pl p =
-  case p of
-    kc n → ec n
-    kx → ev #0
-    kadd a b → eadd (ex-of-pl a) (ex-of-pl b)
-    kmul a b → emul (ex-of-pl a) (ex-of-pl b)
+pl-of-ex : Ex → Opt Pl
+pl-of-ex (ec n) = some (kc n)
+pl-of-ex (ev v) = if weq v #0 then some kx else none
+pl-of-ex (eadd a b) = (case pl-of-ex a of none → none; some pa → (case pl-of-ex b of none → none; some pb → some (kadd pa pb)))
+pl-of-ex (emul a b) = (case pl-of-ex a of none → none; some pa → (case pl-of-ex b of none → none; some pb → some (kmul pa pb)))
+ex-of-pl : Pl → Ex
+ex-of-pl (kc n) = ec n
+ex-of-pl kx = ev #0
+ex-of-pl (kadd a b) = eadd (ex-of-pl a) (ex-of-pl b)
+ex-of-pl (kmul a b) = emul (ex-of-pl a) (ex-of-pl b)
 -- D-code: the code of λ x → p (the body under one λ) to the code of λ x → p'
-D-code c = omap (λ p → clam (code-of-ex (ex-of-pl (D p)))) (obind (ex-of-code (lam-body c)) pl-of-ex)
+D-code : Code → Opt Code
+D-code c =
+  case ex-of-code (lam-body c) of
+    none → none
+    some e → (case pl-of-ex e of none → none; some p → some (clam (code-of-ex (ex-of-pl (D p)))))
