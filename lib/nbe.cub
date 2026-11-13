@@ -504,36 +504,48 @@
 --       constant forms are separate rules (dpapp0, dpapp1 giving the endpoint's meaning directly), and
 --       CompS at PathP quantifies over canonical non-constant forms only, its endpoints coming from
 --       CompTy's: so no lemma that a canonical form that is not non-constant is 0 or 1 is needed.
+--       Decision (2026-11-12, the coordinator's): taken as stated, as in Abel–Coquand–Pagano's typed
+--       NbE, where a computable term carries its type's computability. dlam and nlam gain the domain's
+--       type derivation, dpair and npair the codomain's (over Γ extended by the domain read off the
+--       family), dcase and ncase the motive's (over Γ extended by Bool); Der and NN are one family each,
+--       indexed by judgments tagged term or type (a judgment's meanings are TV s for a term, Sem s for a
+--       type: JZ), so no mutual data types; path application at 0 and at 1 are their own rules
+--       (dpapp0, dpapp1, the meaning the type's endpoint), dpapp and npapp at non-constant forms only;
+--       ren-nn and its helpers (nn-tr, RenR, nn-fm-in, nn-fm-out) are over the tag, so one set renames
+--       both kinds of judgment. Reason: fund must produce CompTy of every rule's conclusion's type, and
+--       at λ, pair and case no premise's computability gives it (the finding above); a normal form's
+--       type derivations are normal (a PathP type's ends are terms, which may have redexes), so reify
+--       produces them from CompTy (reify-ty, by recursion on the shape with reify and reflect). Order
+--       consequence (2026-11-12, theoretical): reify at Π builds nlam, whose domain premise is a normal
+--       type derivation, so rr follows P2.5's families rather than preceding them.
 --       Done (2026-11-12, checked in p26-wip with CUBICAL_NOCACHE=1, "853 passed, 0 failed"): papp-line
 --       (path application to a meaning read off as lines; papp-mean its instance at path-pt), CompE
 --       (CompTy and the clauses, one pair by recursion on the shape), CompS (CSof: the type's
 --       computability and the clause), comp-ren (comp-ren-e: types and clauses kept along worlds,
 --       one pair; csof-ren; through ty-tr, comp-tr, comp-fm, ty-fm, wc-tr, fam-ren, bool-ren,
 --       path-ty-ren).
---       Next, in order (each a closed statement): rr: reify (CompS s Δ X to an NN k-nf at X) and
---       reflect (CompTy of X's type and an NN k-ne at X to CompS s Δ X) as one pair by recursion on
---       the shape; its Π clauses need w's action at world-wk and world-dwk on a general meaning as the
---       weakening of it (subM-wk: wact (world-wk …) M is wkM's push, by the dependent forms of sub-wk's
---       path pieces and pull-of; subM-dwk likewise at dwkM) and, at PathP, papp-mean at the new
---       dimension of dwkM X as plam-body Γ a X (the line at the variable is the line itself); then
---       P2.5 as below (DTy as part of Der), and the rest. P2.5: DTy (Γ : CCtx) s code (T : Mean Γ (Sem s)) with
---       Bool (cdata #0 lnil), Π (cpi: DTy of the domain, of the codomain over Γ extended by the domain
---       read off the family), Σ (csigma), PathP (cpathp of the line's cplam and both ends: DTy of the
---       line over dext Γ, Der of each end at the line's endpoint); its renaming along worlds (ren-dty,
---       as ren-nn: subM-fmap, world-keep with the family's analogue of subM-lam-body, world-dkeep with
---       subM-plam-body's analogue for lines); dcase and ncase with the motive's DTy, rn-case renaming
---       it. Then CompS by recursion on the shape (Bool: X is fmapM of bool-v true or false, by a path,
---       or a neutral; Π: Kripke over worlds with AppV data; Σ componentwise; PathP: at every canonical
---       form over every later world, CompS of papp-mean); CompTy (as above); comp-ren and comp-ty-ren
---       along worlds (subM-comp, subM-fmap, subM-papp); rr taking CompTy; CompEnv over a substitution
---       (CompS of each variable's action); its extension (sub-ext) and dimension form (sub-form); fund
---       and fundTy over substitutions; typed contexts, reflect-env, normalize, reifySound and
---       normalize-sound by refl; the swap and the examples.
---   (6) ren-nn (along worlds, transported along (3), (4d)); CompS by recursion on the shape with the
---       PathP clause; comp-ren; rr; CompEnv over a substitution; fund; reflect-env; normalize;
---       reifySound and normalize-sound by refl; the swap into this file in place of P1's families;
---       experiments/nbe/examples.cub rewritten over the new families (P1's examples with the same
---       normal forms, ⟨i⟩ b, the η-long path variable, p @ 0).
+--       Done (2026-11-12, checked in p26-wip; check line in its head): rr's lemmas: subM-wk (world-wk's
+--       action on a general meaning is wkM; wk-R, wk-E1, wk-Q1, wk-car, wk-D), subM-dwk (world-dwk's is
+--       dwkM; dwk-E1, dwk-car, dwk-D), through push-fst-d, reidx-push-d (dependent paths over sub-wk's
+--       vertex-map pieces), pull-carry-of (a pull along the cube of a section of a carried cube is an
+--       unreindexing), fmap-id, urxi; papp-dwk (path application at dnf-v0, the new dimension, to dwkM
+--       of a meaning is dline-body of it).
+--       Next, in order (each a closed statement): P2.5 in the family: JK (j-tm, j-ty) and JZ; Jdg
+--       tagged; NN and Der over it with the type rules (nty-/dty-bool at cdata #0 lnil, -pi at cpi #2
+--       with the codomain over fam-ctx with meaning fam-body = ext-lift, -sig at csigma, -path at
+--       cpathp (cplam line) end0 end1 with the line over dext Γ as dline-body at ty-line and the ends
+--       at tend-0/tend-1), nlam/dlam with the domain's, npair/dpair with the codomain's, ncase/dcase
+--       with the motive's (over Γ extended by Bool, ext-lift of the motive), dpapp/npapp at non-constant
+--       forms, dpapp0/dpapp1; embed; TCode at j-tm; the renaming helpers over the tag and rn-ty-bool …
+--       rn-ty-path (keep-lift at fam-body, dkeep-line at the line), rn-lam/rn-pair/rn-case renaming
+--       the new premise. Then rr: reify-ty (CompTy to a normal type derivation), reify (CompS to an NN
+--       k-nf), reflect (CompTy of the type and an NN k-ne to CompS), one triple by recursion on the
+--       shape; then CompEnv over a substitution (CompS of each variable's action), its extension
+--       (sub-ext) and dimension form (sub-form); fund and fundTy over substitutions; typed contexts,
+--       reflect-env, normalize, reifySound and normalize-sound by refl; the swap and the examples.
+--   (6) Last: the swap of p26-wip into this file in place of P1's families (p26-wip deleted; this
+--       file imports core.cub); experiments/nbe/examples.cub rewritten over the new families (P1's
+--       examples with the same normal forms, ⟨i⟩ b, the η-long path variable, p @ 0).
 
 -- ---------------------------------------------------------------- types: shapes and their semantic types
 -- (2026-11-12, step 1) A type of shape s over environments G is a map from G into Sem s, the semantic
