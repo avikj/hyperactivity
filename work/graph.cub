@@ -22,6 +22,26 @@
 -- t35 (2026-11-12): question. Not yet done: reading lib/check.cub's typing clauses against the
 -- calculus's typing rules, each recorded as matching or deviating at its site.
 --
+-- t74 (2026-11-13): question. Which essential (non-example) constructions of the paper the core does
+-- not cover, each placed as a part of initial-deliverable or of the node it belongs to. Candidates
+-- from reading the paper in full: §5.1's Language record, Lift, Trans and erase; §5.5's Signature,
+-- Machine, Language, meaning, Property/Proof/Annotated, RuleSig and Adequate; §8.2's
+-- SourceBeh/TargetBeh/Conforms/Correct; §9.3's realize_M, Block and seq (9.12–9.13), the compiler
+-- algebra and its congruences (9.15–9.17); §10.1/§10.5's dependency certificates and producer
+-- transitions; §10.8's distinction of digest, ≡ and SemEq. Also a gap inside the core found the same
+-- way: (6.6) needs an interpreter whose source type is a syntax datatype and (6.7) needs lift_A on a
+-- syntax datatype, while lib/nbe.cub's plan has only Bool, Π, Σ, PathP, Kan operations, Glue and
+-- universes as object types: no inductive data types.
+--
+-- t75 (2026-11-13): needs-work. The paper's worked examples as checked definitions (tracks/
+-- PAPER-READING.md records each as absent): §5.1's intrinsically typed language and its
+-- substitution theorem; §5.2's let elimination (5.4); §5.5's memory interpreter and its trace;
+-- §5.6's cancel, cancelSound, preserve; (3.7) A ≃ Graph(f); §4's Vec ≃ (Fin → A) with Sorted
+-- transported, Monoid, Package, graph relabeling; §6.3's semiring interpretations (6.11–6.13) and
+-- Clauses/fold (6.14); §6.4's conservative extension (6.17–6.18); §9.3's stack machine (9.2–9.10),
+-- the toy ISA trace (9.14) and the 46-byte decoder with χ_b; §8.3's encodeLE/decodeLE (8.6–8.12);
+-- §10.3's credit conservation with receipts; §10.7's mixed-version invariant; Appendix A.
+--
 import "../lib/work.cub"
 -- unified-computing (2026-11-12, the root, in the user's words where they gave them). Unified
 -- computing: one program. One formal language and its reference implementation in which all
@@ -43,26 +63,41 @@ import "../lib/work.cub"
 -- the tool and everything built with it.
 unified-computing : Node
 unified-computing = node "unified-computing" nil each-of not-known
--- publish (2026-11-12): the paper (docs/Hyperactive_Final_Paper.pdf) is published with its companion
--- repository, whose language core is complete: the formal language implemented exactly, the
--- language's own procedures carrying their correctness in their types, partial evaluation with the
--- Futamura projections, and realization as native code through C. Everything currently pursued
--- serves this.
+-- publish (2026-11-12; restructured 2026-11-13 by the user): the paper
+-- (docs/Hyperactive_Final_Paper.pdf) published with its companion repository, in two deliveries,
+-- each of value on its own: the initial deliverable (initial-deliverable), the implementation
+-- complete, which is the top priority of all the work; then the coverage of every construction the
+-- paper displays, its worked examples included (full-coverage), last priority.
 publish : Node
-publish = node "publish" (cons unified-computing nil) all-of not-known
+publish = node "publish" (cons unified-computing nil) each-of sufficient
+-- full-coverage (2026-11-13, scoped by the user): every construction the paper displays exists as a
+-- checked definition, its worked examples included. The initial deliverable is a prerequisite (its
+-- constructions are among them); the rest is the worked examples (t75). Last priority: it serves
+-- nothing but publish, whereas the core, inside the initial deliverable, is what every other piece
+-- of the work depends on.
+full-coverage : Node
+full-coverage = node "full-coverage" (cons publish nil) all-of not-known
+-- initial-deliverable (2026-11-13, scoped by the user): the companion repository with the
+-- implementation complete: every essential construction of the paper present and correct, the
+-- worked examples excluded (they are full-coverage). The top priority of all the work. Its parts:
+-- the language core (core), which every other goal's value also waits on; the repository stating
+-- its own reality (self-aware); and which essential constructions of the paper the core does not
+-- cover (t74), so the breakdown is not-known until t74 is settled.
+initial-deliverable : Node
+initial-deliverable = node "initial-deliverable" (cons publish (cons full-coverage nil)) all-of not-known
 -- self-aware (2026-11-12): an agent arriving with no context lands in a repository that states its
 -- own reality: what it is, what is checked, what is assumed and where, what is wrong or not yet
 -- known (open tickets, at the places concerned), and what is being done now (README.md, top).
 -- Reached when every file has been read against the paper and the published calculus, every finding
 -- is a ticket at its site, and the entry document says only what is true.
 self-aware : Node
-self-aware = node "self-aware" (cons publish nil) each-of not-known
+self-aware = node "self-aware" (cons initial-deliverable nil) each-of not-known
 -- tooling (2026-11-12): the work's record is data of the language: goals and tickets checked
 -- definitions (lib/work.cub), each ticket's text at its site, tools/work.py to list, show and check
 -- them; queries written in the language itself follow. It serves the self-aware repository and is
 -- itself a demonstration of the language as an information environment.
 tooling : Node
-tooling = node "tooling" (cons self-aware (cons publish nil)) each-of not-known
+tooling = node "tooling" (cons self-aware nil) each-of not-known
 -- languages (2026-11-12): lifting other languages: a language's entire syntax and semantics in the
 -- language, to the point of interpreting and compiling it, implementation details exact; built on
 -- prior work (existing compilers implement the semantics), not a semantics from scratch. Deployment
@@ -104,7 +139,7 @@ os = node "os" (cons unified-computing nil) all-of not-known
 -- formalized now, but deliver only when the core they are stated in meets its stated properties
 -- (so the core serves each all-of goal of that work: a part of an each-of goal is not gated by it).
 core : Node
-core = node "core" (cons publish (cons cxx (cons rust (cons isa-x86 (cons memory-models (cons os nil)))))) all-of sufficient
+core = node "core" (cons initial-deliverable (cons cxx (cons rust (cons isa-x86 (cons memory-models (cons os nil)))))) all-of sufficient
 -- core-correct (2026-11-12): the implementation is exactly the published calculus, CCHM (Cohen,
 -- Coquand, Huber, Mörtberg 2018) with clocked guarded computation (Kristensen, Møgelberg, Vezzosi
 -- 2022): every rule present, none added, and the part that must be trusted small and plainly those
@@ -237,7 +272,7 @@ typed-codes = node "typed-codes" (cons partial-evaluation (cons native (cons typ
 -- script and session file; editor features and the moving of prose files as scheduled items; "keep
 -- everything said".
 work-object : Node
-work-object = node "work-object" (cons unified-computing (cons tooling (cons self-aware (cons publish nil)))) each-of not-known
+work-object = node "work-object" (cons unified-computing (cons tooling (cons self-aware nil))) each-of not-known
 -- interface (2026-11-12): how people and agents use the work: the protocol (declarations, readings,
 -- views through serve mode, today), and every faculty that presents the work to a person (an editor's
 -- hover, go-to, diagnostics, outline, history, search; a session's live working view; the
@@ -333,6 +368,10 @@ t72 : Node
 t72 = leaf "t72" (cons self-aware nil)
 t73 : Node
 t73 = leaf "t73" (cons typed-codes nil)
+t74 : Node
+t74 = leaf "t74" (cons initial-deliverable nil)
+t75 : Node
+t75 = leaf "t75" (cons full-coverage nil)
 -- the roots: the nodes that are part of nothing, declared (lib/work.cub); read by tools/work.py
 -- (part of work-object)
 roots : List Node

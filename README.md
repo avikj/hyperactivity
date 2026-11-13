@@ -29,13 +29,18 @@ work is computed, not stored: `python3 tools/work.py priority`.
 variable (a stuck level now is an atom); t56, `#retract` did not free the name.
 
 
-The immediate goal is that anyone arriving with no context finds a repository that states its own
-reality (goal `self-aware`). That means: every file read against the paper and the published
-calculus, every finding recorded as a ticket at the place it concerns, and this document saying
-only what is true. The work's goals and tickets are code (below). The priority after that is the
-language core: the implementation exactly the published calculus with a minimal trusted part
-(`core-correct`), then partial evaluation with the Futamura projections (`partial-evaluation`,
-`typed-codes`), and realization as native code through C (`native`).
+The top priority (2026-11-13, the user) is the paper's initial deliverable (`initial-deliverable`,
+under `publish`): the companion repository with the implementation complete, every essential
+construction of the paper present and correct, the worked examples excluded. Its parts are the
+language core (`core`: the implementation exactly the published calculus with a minimal trusted
+part, `core-correct`; partial evaluation with the Futamura projections, `partial-evaluation`,
+`typed-codes`; realization as native code through C, `native`), on which the value of every other
+goal also waits; a repository that states its own reality (`self-aware`: every file read against the
+paper and the published calculus, every finding a ticket at its site, this document saying only
+what is true); and which essential constructions of the paper the core does not cover (t74). The
+coverage of every construction the paper displays, its worked examples included (`full-coverage`,
+t75), is last priority: it serves nothing but publication. The work's goals and tickets are code
+(below).
 
 **Done (2026-11-11/12, one Claude session):** the paper read in full; every file of `src/`,
 `lib/`, `experiments/`, `tools/` and the track documents read for content; the findings recorded
