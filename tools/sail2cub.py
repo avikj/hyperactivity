@@ -16,8 +16,8 @@ import sys
 
 
 # every declaration written carries its reason (2026-11-12): the model's functions, types and
-# registers are part of isa-x86 (work/graph.cub: every instruction translated), stated above each so
-# tools/work.py finds it whether or not the declaration is used
+# registers are part of isa-x86 (task-graph/hyperactivity.cub: every instruction translated), stated above each so
+# tools/task-graph.py finds it whether or not the declaration is used
 REASON = '-- (part of isa-x86)'
 DECL_START = re.compile(r"^(data|record|codata) |^[^\s\-(][^\s]* :( |$)")
 def with_reasons(text):

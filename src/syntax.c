@@ -441,7 +441,14 @@ static Node *p_lambda(void) {
     want("→");
     return lam_of(bs, n, p_expr(0));
 }
-/* an atom: a name, a number, (e), (a , b), [system], ~ r, λ, let, if, case */
+/* a text as the term of its bytes (UTF-8, as written): cons #b0 (cons #b1 … nil) : List Word (t63) */
+static Node *text_term(const char *s) {
+    const unsigned char *b = (const unsigned char *)s; size_t n = strlen(s);
+    Node *r = nsym("nil");
+    for (size_t i = n; i-- > 0; ) { char w[8]; snprintf(w, sizeof w, "#%u", b[i]); r = lst(3, nsym("cons"), nsym(w), r); }
+    return r;
+}
+/* an atom: a name, a number, (e), (a , b), [system], ~ r, λ, let, if, case, document "path" */
 static Node *p_atom(void) {
     Tok *t = P0();
     if (x_is(t, "~")) { NX(); return sym2("~", p_atom()); }
@@ -486,14 +493,31 @@ static Node *p_atom(void) {
         return r;
     }
     if (t->k == X_NUM) { NX(); return sym2("%num", nsym(t->s)); }
+    if (x_is(t, "document") && P1()->k == X_STR) {
+        /* document "path" (2026-11-13): a file of the repository as an object of the code, so a
+         * declaration can refer to a document (lib/document.cub; the task graph's essential context,
+         * docs/task-graph-design.md). The path is relative to the file being read, as import's is. The
+         * file must exist: reading fails here otherwise, as a reference to an undefined name would. The
+         * term is document-at "path" "sha256 of the file's bytes, in hex", so a definition mentioning a
+         * document has a content key that changes exactly when the document's content does. */
+        NX(); Tok *pt = NX();
+        char *full = pt->s;
+        if (pt->s[0] != '/' && cur_dir) { full = malloc(strlen(cur_dir) + strlen(pt->s) + 2); sprintf(full, "%s/%s", cur_dir, pt->s); }
+        FILE *fd = fopen(full, "rb");
+        if (!fd) x_err("document: no such file (the path is relative to the file being read):", pt);
+        Sha256 h; sha256_init(&h);
+        unsigned char buf[65536]; size_t k;
+        while ((k = fread(buf, 1, sizeof buf, fd)) > 0) sha256_update(&h, buf, k);
+        fclose(fd);
+        unsigned char dg[32]; sha256_final(&h, dg);
+        char hex[65]; for (int i = 0; i < 32; i++) sprintf(hex + 2 * i, "%02x", dg[i]);
+        return lst(3, nsym("document-at"), text_term(pt->s), text_term(hex));
+    }
     if (t->k == X_STR) {
         /* "text": the list of its bytes (UTF-8, as written), cons #b0 (cons #b1 … nil) : List Word;
          * text is data of the core, with no rule of its own (2026-11-12, t63) */
         NX();
-        const unsigned char *b = (const unsigned char *)t->s; size_t n = strlen(t->s);
-        Node *r = nsym("nil");
-        for (size_t i = n; i-- > 0; ) { char w[8]; snprintf(w, sizeof w, "#%u", b[i]); r = lst(3, nsym("cons"), nsym(w), r); }
-        return r;
+        return text_term(t->s);
     }
     if (t->k == X_LB) return p_system();
     if (t->k == X_LP) {
@@ -3975,7 +3999,7 @@ static Node *by_lin(Node *ex, Node *at) {
 }
 /* `declarations T` (2026-11-12, t62): every checked definition in scope whose type is T (equal
  * canonical forms), in the order declared, as the list cons d1 (cons d2 … nil) : List T. The work
- * read as a value of the language: a view of it is a term over such lists (lib/work.cub). */
+ * read as a value of the language: a view of it is a term over such lists (lib/task-graph.cub). */
 static Node *el_declarations(Node *Ts) {
     Node *T = ds(strip_marks(core(el(Ts))));
     SBuf a = { 0 }; cur_deps.n = 0; canon(&a, T); cur_deps.n = 0;

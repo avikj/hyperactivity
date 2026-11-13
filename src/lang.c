@@ -3605,7 +3605,7 @@ static void toplevel(Node *f) {
  * in any core form the declaration elaborates to, naming an earlier declaration and not bound where it
  * occurs (the binders of lam, plam, Pi, Sigma, let, case branches and data fields are scoped; a
  * binder form not listed here would make a bound variable that shares a declaration's name read as a
- * use of it). #uses prints them; tools/work.py reads that to give every declaration of the code its
+ * use of it). #uses prints them; tools/task-graph.py reads that to give every declaration of the code its
  * reason: a use by a declaration that has one, or a stated one. ---- */
 typedef struct { char *pos; const char **names; int nnames; int *uses; int nuses; const char *cmd; } UDecl;
 static UDecl *UD; static int nud, capud;
@@ -4889,8 +4889,8 @@ int cubical_call_w(const char *name, const uint64_t *args, int n, uint64_t *out)
  * each declaration's code), so that views are terms of the language applied to it, and a reading
  * that evaluates a view. Replacing a binding is #retract then a new declaration (t56, closed).
  * 2026-11-12: `declarations T` is every checked definition of type T in scope, as a list (src/
- * syntax.c), so views over values of a type are terms (lib/work.cub's over Node) and `#show` of one
- * is the reading that evaluates it (tools/work.py view). Still missing: each declaration's code as
+ * syntax.c), so views over values of a type are terms (lib/task-graph.cub's over Node) and `#show` of one
+ * is the reading that evaluates it (tools/task-graph.py view). Still missing: each declaration's code as
  * a value, so that a view can read the code itself, every declaration of every type. */
 static void serve(void) {
     static char *buf; static size_t cap;

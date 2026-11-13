@@ -61,13 +61,13 @@ brunerie: build/cubical
 	  experiments/brunerie/typed.cub experiments/brunerie/run-typed.cub | grep -A1 -x brunerie | grep -q "= negsuc (suc zero)" \
 	  || { echo "brunerie: not -2 with $$w workers"; exit 1; }; done; echo "brunerie = negsuc (suc zero)"
 
-# the record of the work (lib/work.cub, work/): the goals and tickets check; `python3 tools/work.py
+# the record of the work (lib/task-graph.cub, task-graph/): the goals and tickets check; `python3 tools/task-graph.py
 # check` also confirms every ticket record has its one text comment in the code
-work: build/cubical
-	CUBICAL_NOCACHE=1 ./build/cubical work/graph.cub
+task-graph: build/cubical
+	CUBICAL_NOCACHE=1 ./build/cubical task-graph/hyperactivity.cub
 # every file checked (t30): each file no file imports, alone with its imports, without performing
-# what acts on the world; per file, its own failures (tools/work.py every)
+# what acts on the world; per file, its own failures (tools/task-graph.py every)
 every: build/cubical
-	python3 tools/work.py every
+	python3 tools/task-graph.py every
 
-.PHONY: all library brunerie work every
+.PHONY: all library brunerie task-graph every
