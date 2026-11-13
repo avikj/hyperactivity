@@ -445,7 +445,7 @@ def reasons():
         if k[0] == 'work/graph.cub' and any(n in g for n in names): continue
         st = stated_reason(lines_of(k[0]), k[1])
         if st: stated[k] = st
-        elif any(n in machine_names for n in names): why[k] = ('named by the machine (src/)', None)
+        elif any(n in machine_names for n in names if not n.startswith('#')): why[k] = ('named by the machine (src/)', None)   # a command's kind (#show) is not a name
     changed = True
     while changed:
         changed = False
