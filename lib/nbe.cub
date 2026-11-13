@@ -608,10 +608,53 @@
 --       papp-ex-cmap, papp-ex-fmap, "946 passed, 0 failed"). Test recorded: a recursion over Code with a
 --       catch-all clause whose recursive call changes the fibre family exhausted memory (the catch-all
 --       expands to every Code constructor with the full motive), while the same recursion over the
---       six-constructor IEx checks in 83k steps; hence IEx. Outcome of the one-law test: not yet run.
---       Next, in order (each a closed statement): (F2) dnf-subst (a form
---       with forms substituted for its dimensions, normalized), the cube-level De Morgan laws over
---       degenerate lines, papp-subst; CompEnv over a substitution (CompS of each variable's action),
+--       six-constructor IEx checks in 83k steps; hence IEx. Outcome of the one-law test (2026-11-12,
+--       checked in p26-wip): absorption r ∨ (r ∧ s) = r holds as a plain path in the fibre, no 2-cell, in
+--       four steps (pex-diag at r, papp-ex-fmap, a judgmental pointwise identity, pex-deg at s; 477k
+--       steps): the interval's own De Morgan laws on the lines' paths are judgmental (here (a ∧ t) ∨ t =
+--       t), so each law is a chain of (F2b) and one judgmental identity of the fibrewise maps.
+--       Done (2026-11-12, checked in p26-wip with CUBICAL_NOCACHE=1, "1034 passed, 0 failed"): (F2a)
+--       ddv-exch, ddv-diag, ddv-deg; (F2b) pex-exch, pex-diag, pex-deg (every expression; exchange of a
+--       variable with any expression by pex-exch-sym; the connections by one lemma each over the
+--       fibrewise square map); (F2c) IEq (one path application at every fibre family) with ieq-refl,
+--       ieq-sym, ieq-trans and the congruences ieq-neg, ieq-meet, ieq-join, and the laws, each for meet
+--       and join by one lemma over the connections: absorption (both), commutativity, associativity,
+--       idempotence, distributivity (both), the De Morgan laws, double negation, the units and zeros
+--       on both sides, ~0 = 1, ~1 = 0. No law needed a 2-cell.
+--       Finding (2026-11-12, theoretical) not in the list before: fund at dpapp consumes the PathP
+--       Kripke clause at the substituted form g (dnf-subst σ f), and that clause (like npapp) requires
+--       isTrue (dnf-canon g) and isTrue (dnf-nonconst g), or else g constant (then the type's end).
+--       So besides (F2d)'s semantic soundness the normalizer's outputs must be shown canonical: a
+--       structural invariant (each conjunction strictly increasing in lit-lt, the conjunctions an
+--       antichain strictly increasing in conj-lt) kept by conj-ins, conj-meet, dnf-insert,
+--       dnf-drop-sup, dnf-add, dnf-join, dnf-meet, dnf-neg, with dnf-norm the identity on it (so
+--       dnf-canon is true), from lit-lt/conj-lt a strict total order (by eqw≡weq and ltw≡wlt); and a
+--       canonical form that is not non-constant is lnil or exactly dnf-one (the empty conjunction
+--       absorbs every other). This is (F2d') below.
+--       Next, in order (each a closed statement; all of F2 in one fibre type DCube n X F G over a fixed G;
+--       (F2a)–(F2c) done, above):
+--       (F2a) at variables, by induction on the skeleton: two fibre directions over one base (data in
+--       DL X (DL X F)): diag-dd j then diag-dd k at the fibres DL is diag-dd k then j after the fibrewise
+--       exch-o (exchange); diag-dd k twice is diag-dd k after the fibrewise diag-o (diagonal); diag-dd k at
+--       the fibres DL after the fibrewise degen-o is the identity (degeneracy). (F2b) the same three for
+--       every expression (papp-ex), by induction on IEx with papp-ex-fmap and fmap-fmap. (F2c) the laws,
+--       each a chain of (F2b) and a judgmental identity of meet-o/join-o/rev-o on lines: absorption
+--       r ∨ (r ∧ s) = r first (the coordinator's one-law test; record its outcome here), then commutativity,
+--       associativity and idempotence of ∧ and ∨, distributivity, the De Morgan laws and the units.
+--       (F2d) soundness of the normalizer on canonical forms: papp-dd (dnf-join g h), (dnf-meet g h),
+--       (dnf-neg g) against papp-ex at ixjoin, ixmeet, ixneg of dnf-ix g, dnf-ix h (through dnf-add,
+--       dnf-insert, dnf-drop-sup, conj-meet, conj-ins, with weq/wlt read as paths of words; each step an
+--       IEq chain of the (F2c) laws). (F2d') canonicity of the normalizer's outputs (the finding above).
+--       (F2e) for a
+--       substitution σ (forms): cmap-d σ commutes with diag-dd k up to papp-dd at σ's k-th form, by the
+--       recursion of cmap-d, which needs the mixed lemmas (path application at a form φ in the base,
+--       papp-cube-d, against papp-ex in the fibre: the diagonal and exchange of dd-diag-diag and dd-exch
+--       generalized from variables to forms, by induction on φ); then cmap-d σ (papp-ex e d) is papp-ex
+--       (e with σ's forms substituted) (cmap-d σ d), by induction on e (connections: fmap-cmap and the
+--       hypothesis at DL); dnf-subst σ f (by dnf-join, dnf-meet, dnf-neg on σ's forms) and papp-subst
+--       (subM-papp's route with (F2d) and (F2e) in place of cmap-papp-dd). (t52 closed 2026-11-12 by the
+--       coordinator: when npapp/dpapp are next touched, PathM is replaced by the PathP it names, every
+--       use.) CompEnv over a substitution (CompS of each variable's action),
 --       kept along worlds, extended by a computable value (sub-ext) and by a form (sub-form); fund and
 --       fundTy, one function on Der over the tag (CompS for a term, CompTy for a type) under every
 --       substitution with a computable environment; typed contexts, reflect-env (each entry reflected
