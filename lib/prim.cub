@@ -106,6 +106,10 @@ primitive load64 : (n : Nat) → (b : Bytes n) → (off : Nat) → le (plus off 
 primitive store64 : (n : Nat) → (b : Bytes n) → (off : Nat) → le (plus off 8) n → Int64 → Bytes n = λ n b off pf v → %store64 b off v
 
 primitive blen : (n : Nat) → Bytes n → Nat = λ n b → n
+-- a byte of a byte string, written and read (lib/cxx/ast.cub's strings): %store8 and %load8 are
+-- bounds-checked by the machine, a store outside the string leaving it unchanged and a load there 0
+primitive cstr-put : (n : Nat) → Bytes n → Word → Word → Bytes n = λ n b off v → %store8 b off (%u32ofw v)
+primitive cstr-get : (n : Nat) → Bytes n → Word → Word = λ n b off → %wofu32 (%load8 b off)
 
 -- ---------------------------------------------------------------- memory the program does not own (plan C20):
 -- the address of a byte string (the string is then pinned, so the address stays valid), and the

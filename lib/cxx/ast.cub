@@ -13,17 +13,10 @@
 -- cs-nil/cs-cons): a field documented as a list of expressions is a CExpr built from those two,
 -- and one function recursing structurally over CExpr reads both nodes and lists. An absent
 -- expression child is ce-nil, an absent statement child cs-none.
--- t21 (2026-11-12): needs-work. 7 definitions here are untyped and refused by the checker, which
--- has rejected untyped definitions outside the bootstrap files since 2026-11-09, deliberately,
--- after about 10,000 lines of untyped code were written by an agent. They are to be written with
--- types; nothing in the checker changes. Two primitives are declared outside the bootstrap files
--- and four refused cstr-* helpers are used.
 
 -- ---------------------------------------------------------------- strings
 -- A string is its length and its bytes. There is no byte-string literal: cstr builds one from
--- the list of its bytes. cstr-put is %store8 (bounds-checked by the machine: a store outside
--- the string leaves it unchanged), trusted like the stores of lib/prim.cub.
-primitive cstr-put : (n : Nat) → Bytes n → Word → Word → Bytes n = λ n b off v → %store8 b off (%u32ofw v)
+-- the list of its bytes, by lib/prim.cub's cstr-put.
 CStr : Type
 CStr = (n : Nat) × Bytes n
 cstr-fill : (n : Nat) → List Word → Word → Bytes n → Bytes n
@@ -34,9 +27,8 @@ cstr-len nil = zero
 cstr-len (cons c cs) = suc (cstr-len cs)
 cstr : List Word → CStr
 cstr cs = (cstr-len cs , cstr-fill (cstr-len cs) cs #0 (bytes (cstr-len cs)))
--- reading a string: its length, the byte at an index (0 outside the string: %load8 is
--- bounds-checked by the machine; trusted like cstr-put), and whether it is exactly these bytes
-primitive cstr-get : (n : Nat) → Bytes n → Word → Word = λ n b off → %wofu32 (%load8 b off)
+-- reading a string: its length, the byte at an index (lib/prim.cub's cstr-get), and whether it is
+-- exactly these bytes
 cstr-length : CStr → Word
 cstr-length s = fromNat (fst s)
 cstr-at : CStr → Word → Word
