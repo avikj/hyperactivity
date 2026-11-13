@@ -2329,22 +2329,6 @@ vmatch-w hs w X sg =
     wcon d c fs ds → (case %view X of wcon d2 c2 fs2 ds2 → (if andb (%weq d d2) (%weq c c2) then vmatch-l hs fs fs2 sg else sg); _ → sg)
     wu l → (case %view X of wu m → vmatch hs l m sg; _ → sg)
     wapp f a T →
-      -- t26 (2026-11-12): needs-work. This matching (holes applied to distinct variables solved as their
-      -- λ; cases, word operations, loops, primitives, λs and pairs matched part by part) was added on
-      -- 2026-11-11 (commit c049f1b) so that lemmas about the imported x86 model, which are to be
-      -- deleted, would find branches and continuations by themselves. Pattern unification is standard;
-      -- matching through cases and loops is a heuristic. It adds no definitional equality only if every
-      -- solution found here is checked afterwards like a written argument: confirm that, then keep what
-      -- is standard and remove what exists only for those lemmas. Confirmed (2026-11-12, reading
-      -- src/syntax.c's x_checked): a solution returned as (elab …) is written into the term, and the
-      -- result recorded is the checker's run on the whole term with it (%%chk-def, the round with no
-      -- hole left), so it is checked like a written argument and adds no equality. Measured
-      -- (2026-11-12): with the case, word-operation, loop and primitive matches removed, make library
-      -- is unchanged (1937 passed, 24 failed, all derive.cub), and so is make every (81 files, the
-      -- same 13 with failures of their own, line for line); not yet run: experiments/nbe/p26-wip.cub
-      -- without them (needs the machine alone: run at the NbE agent's next stop). The commit is
-      -- 1835f31, not c049f1b.
-      --
       -- a hole applied to distinct variables, against X: the hole is λ x1 … xn → X, by quoting X
       -- under them (a pattern); otherwise the applications part by part
       case pat-spine hs f (lcons a lnil) of
@@ -2353,13 +2337,8 @@ vmatch-w hs w X sg =
     wfst p T → (case %view X of wfst p2 T2 → vmatch hs p p2 sg; _ → sg)
     wsnd p T → (case %view X of wsnd p2 T2 → vmatch hs p p2 sg; _ → sg)
     wpapp p r T → (case %view X of wpapp p2 r2 T2 → vmatch hs p p2 sg; _ → sg)
-    -- the evaluated forms on both sides, part by part: a case's scrutinee and each branch (at fresh
-    -- fields), a word operation's operands, a loop's parts, a primitive's arguments, a function's
-    -- and a pair's parts
-    welim d x f T → (case %view X of welim d2 x2 f2 T2 → (if %weq d d2 then vm-elims d f f2 (ctors-of d opq) #0 (vmatch hs x x2 sg) hs else sg); _ → sg)
-    wwop k a b → (case %view X of wwop j c e → (if %weq k j then vmatch hs b e (vmatch hs a c sg) else sg); _ → sg)
-    wwelim x z s mo → (case %view X of wwelim x2 z2 s2 mo2 → vmatch hs s s2 (vmatch hs z z2 (vmatch hs x x2 sg)); _ → sg)
-    wprim k as → (case %view X of wprim j bs → (if %weq k j then vmatch-l hs as bs sg else sg); _ → sg)
+    -- a function's and a pair's parts (η). Every solution found here is written into the term and
+    -- checked with it like a written argument (src/syntax.c's x_checked), so matching adds no equality
     wlam f → (case %view X of wlam g → (let x = %var Uw in vmatch hs (f x) (g x) sg); _ → sg)
     wpair a b → (case %view X of wpair c e → vmatch hs b e (vmatch hs a c sg); _ → sg)
     _ → sg
@@ -2377,26 +2356,6 @@ pat-solve hs k args X sg =
                  some C → (case quote bs C X of some c → lcons (k , (false , pat-lams (llen-w args) c)) sg; none → sg)
                  none → sg)
     none → sg
--- an elimination's branches against another's, at the same fresh fields (elim-fields' walk)
-vm-dims hs f g c tel prm sg =
-  case tel of
-    ty nm r → let i = %dim nm in vm-dims hs f g c (r i) (lsnoc prm i) sg
-    _ → vmatch hs (%branch f c prm) (%branch g c prm) sg
-vm-hyps hs f g c nr tel prm sg =
-  if %weq nr #0
-    then vm-dims hs f g c tel prm sg
-    else let h = %var Uw in vm-hyps hs f g c (%wsub nr #1) tel (lsnoc prm h) sg
-vm-fields hs d f g c tel nr prm sg =
-  case tel of
-    tx A nm r →
-      let Av = tval A
-          x = %var nm Av
-      in vm-fields hs d f g c (r x Av) (if has-hyp d A then %wsucc nr else nr) (lsnoc prm x) sg
-    _ → vm-hyps hs f g c nr tel prm sg
-vm-elims d f g tels c sg hs =
-  case tels of
-    lnil → sg
-    lcons tel rest → vm-elims d f g rest (%wsucc c) (vm-fields hs d f g c tel #0 lnil sg) hs
 -- the universe level of a type
 univ-level T = case %view T of wu l → l; _ → lzero
 type-level v =
