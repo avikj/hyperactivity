@@ -91,7 +91,7 @@ machine)
   B=experiments/brunerie
   for w in 0 1 2; do for i in 1 2 3; do
     CUBICAL_NOCACHE=1 CUBICAL_WORKERS=$w "$HEAVY" "$SELF" run machine-untyped-w$w-$i \
-      ./build/cubical $L $B/brunerie.cub $B/run-brunerie.cub
+      ./build/cubical $L $B/typed.cub $B/run-brunerie.cub
     CUBICAL_NOCACHE=1 CUBICAL_WORKERS=$w "$HEAVY" "$SELF" run machine-typed-w$w-$i \
       ./build/cubical $L $B/typed.cub $B/run-typed.cub
   done; done
@@ -100,14 +100,14 @@ machine)
   rm -rf "$A/cubical-cache" "$A/cubical-store"
   C="env -u CUBICAL_NOCACHE CUBICAL_CACHE=$A/cubical-cache CUBICAL_STORE=$A/cubical-store"
   $C CUBICAL_WORKERS=0 "$HEAVY" "$SELF" run machine-untyped-cache-fill \
-    ./build/cubical $L $B/brunerie.cub $B/run-brunerie.cub
+    ./build/cubical $L $B/typed.cub $B/run-brunerie.cub
   for w in 0 1 2; do for i in 1 2 3; do
     d=$A/work/run-brunerie-$w-$i.cub; { cat $B/run-brunerie.cub; echo "-- $(date +%s%N)"; } > "$d"
-    $C CUBICAL_WORKERS=$w "$HEAVY" "$SELF" run machine-untyped-warm-w$w-$i ./build/cubical $L $B/brunerie.cub "$d"
+    $C CUBICAL_WORKERS=$w "$HEAVY" "$SELF" run machine-untyped-warm-w$w-$i ./build/cubical $L $B/typed.cub "$d"
   done; done
   # the cached library alone (no driver): warm minus this is the reading of the number
   for i in 1 2 3; do
-    $C CUBICAL_WORKERS=0 "$HEAVY" "$SELF" run machine-untyped-cachedonly-$i ./build/cubical $L $B/brunerie.cub
+    $C CUBICAL_WORKERS=0 "$HEAVY" "$SELF" run machine-untyped-cachedonly-$i ./build/cubical $L $B/typed.cub
   done
   ;;
 *) sed -n 2,13p "$SELF"; exit 2 ;;

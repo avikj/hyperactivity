@@ -1,18 +1,12 @@
 -- lib/x86.cub — the code fragment to x86-64 bytes (plan 5.3–5.5). Loaded after lib/machine.cub.
 -- There is no intermediate syntax: the program a code compiles to is the code's normal form in the
 -- fragment (lib/machine.cub), and encode prints each construct of the fragment by a fixed template.
--- The templates are the trusted lines of PLAN §13 item 3; everything else here (the passes that
--- name recursions as definitions, the layout of the blob) produces codes whose meaning eval-g gives,
--- so a wrong pass produces a program whose path does not check or whose bytes the template table
--- does not cover (ud2), never a program that answers wrongly.
---
--- finding (2026-11-12): wrong. The paragraph above claims a wrong pass yields a program that does not
--- check or hits ud2, never a wrong answer. That holds only for specialization, whose result is
--- checked by conversion or a path (jit-plan's ok). The passes after it (x-push, x-lift, x-erase),
--- the templates, the layout and the value representation carry no relation to the specialized
--- code, and their output is bound and run (t6). The value representation and calling convention
--- here are also trusted with the templates. This translator is to be replaced by realization
--- through C whose type carries the relation (task-graph/hyperactivity.cub, native).
+-- Only specialization is checked: its result converts with the definition or carries a path
+-- (jit-plan's ok). Everything after it (the passes x-push, x-lift, x-erase, the templates, the
+-- layout, the value representation and the calling convention) is trusted: none carries a relation
+-- to the specialized code, and its output is bound and run, so a wrong pass can answer wrongly. This
+-- translator is to be replaced by realization through C whose type carries that relation (paper
+-- §9.3).
 --
 -- Values in compiled code, uniformly 64 bits, so no pass needs a type:
 --   a word, a primitive value (Int64, UInt32, UInt64, Float64 by its bits): the bits;

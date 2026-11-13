@@ -113,27 +113,19 @@ path-code : Opt Code → Code → Code
 path-code (some q) c = q
 path-code none c = cplam (code-shift #0 #1 c)
 -- ---------------------------------------------------------------- schedules as values (5.7)
--- finding (2026-11-12): needs-work. Of a schedule's fields only the rewrite bound, the held
--- definitions and the st-now stage are read by anything. The register assignment (regs) and the
--- stages st-build and st-run-known are carried and never used. Remove them or give them meaning;
--- register assignment becomes the C compiler's under realization through C.
---
 -- what the specializer may do is a value: how many rewrites; the binding-time assignment
--- (stages: (binder index , Stage) pairs); the definitions held neutral (holds); the register
--- assignment the encoder uses (regs: (slot , register number); empty: the default).
+-- (stages: (binder index , Stage) pairs); the definitions held neutral (holds).
 -- Normalization unfolds every definition it reaches except the held ones: the code is abstracted
 -- over them and normalized under the λs, so a held definition is a variable to the machine and its
 -- call stays a call (normalize-held)
 sched-rewrites : Sched → Word
-sched-rewrites (sched r st hd rg) = r
+sched-rewrites (sched r st hd) = r
 sched-stages : Sched → Lst (Word × Stage)
-sched-stages (sched r st hd rg) = st
+sched-stages (sched r st hd) = st
 sched-holds : Sched → Lst Word
-sched-holds (sched r st hd rg) = hd
-sched-regs : Sched → Lst (Word × Word)
-sched-regs (sched r st hd rg) = rg
+sched-holds (sched r st hd) = hd
 sched-default : Sched
-sched-default = sched #64 lnil lnil lnil
+sched-default = sched #64 lnil lnil
 -- the specializer: (c' , π), π the path's code from c's value to c''s at the type Tc names
 specialize : Code → Sched → Lst Rule → Code → Code × Code
 specialize Tc sch rules c =

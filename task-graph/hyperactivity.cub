@@ -50,6 +50,71 @@ product-implementation = node "The live interactive collaboration system and too
 -- (after, below).
 language-support : Node
 language-support = node "The syntax and semantics of particular languages as terms: x86, C, C++, Rust, OCaml, Python and others." (cons the-product nil)
+-- calculus-conformance (2026-11-13, from the review of the findings of 2026-11-11/12): nobody has
+-- compared the implementation with the published calculus, so whether it is "implemented fully
+-- correctly" is unknown. Read the evaluator's rule cases (src/net.c), the translation of terms into
+-- its graph (src/lang.c), the composition code generated per data type as unchecked text
+-- (src/lang.c), universe composition (lib/prelude.cub, %hcompU, Cubical Agda's design, not CCHM's
+-- Glue) and the checker's typing clauses (lib/check.cub) against CCHM (Cohen, Coquand, Huber,
+-- Mörtberg) and the clocked extension (Kristensen, Møgelberg, Vezzosi), recording each rule as
+-- matching or deviating, then fix or justify each deviation. The dated findings at those sites and in
+-- this file's head say what is known. Large: the reading alone is days.
+calculus-conformance : Node
+calculus-conformance = node "The implementation is shown to be exactly the published calculus, rule by rule, and every deviation is fixed or justified." (cons language-implementation nil)
+-- typed-codes (2026-11-13): paper §6.1. The language's terms as typed objects in it, normalization by
+-- evaluation with its soundness, and a checker that returns typing derivations (lib/check.cub is an
+-- untyped term with no statement of what it accepts; lib/std.cub's primitives give typed programs
+-- its operations at asserted types). In progress in experiments/nbe/p26-wip.cub; what remains is in
+-- lib/nbe.cub's head (F2d, F2d', F2e, fund, normalize, the swap), then Kan operations, Glue,
+-- universes and object-level data types. The elaborator's two memory blowups met on the way are
+-- findings in lib/check.cub and p26-wip. The longest chain of the project: it should never stop.
+typed-codes : Node
+typed-codes = node "The language's terms are typed objects in it, with normalization and its soundness, and the checker returns typing derivations (paper §6.1)." (cons language-implementation nil)
+-- specializer (2026-11-13): paper §6. The specializer normalizes through a primitive that runs the
+-- untyped checker, so it cannot be specialized itself; with normalization as a term (typed-codes) it
+-- carries its law in its type and the three Futamura projections follow. Specializing a process
+-- through a handler was measured superlinear (lib/specialize.cub, 2026-11-09) and is unattributed.
+specializer : Node
+specializer = node "The specializer carries its law in its type, and the three Futamura projections hold (paper §6)." (cons language-implementation nil)
+-- native-through-c (2026-11-13): paper §9. Native code today comes from an x86 translator whose output
+-- is bound and run with no relation to the definition (src/lang.c, lib/x86.cub), from pasted machine
+-- code (lib/elf.cub), and with proofs about its bytes at one fixed placement (lib/compile/); nothing
+-- relates a fleet's proved behaviour to its binaries (lib/deploy.cub). All of it is replaced by
+-- realization through C whose type carries the relation between running the C and the term's
+-- meaning. Large.
+native-through-c : Node
+native-through-c = node "Programs are realized as native code through C, and native code replaces a definition only with the relation to its meaning (paper §9)." (cons language-implementation nil)
+-- primitive-laws (2026-11-13): lib/prim.cub postulates word and bit laws that are provable from the
+-- unbounded definitions; fixed-width types have no specification; floating point is trusted
+-- without a named assumption (paper §8.5). Medium and mechanical.
+primitive-laws : Node
+primitive-laws = node "Every law of the primitives is proved, or named as an assumption (paper §8.5)." (cons language-implementation nil)
+-- typed-deriving (2026-11-13): lib/derive.cub's 24 definitions read the checker's own values and are
+-- refused as untyped, so `deriving` is off and the Rust readers fail behind it. Deriving becomes a
+-- term over the code of a data declaration, which needs a declaration's code as a value
+-- (work-as-a-value).
+typed-deriving : Node
+typed-deriving = node "Deriving is a typed term over the code of a data declaration." (cons language-implementation nil)
+-- deep-terms (2026-11-13): measured 2026-11-09, building a term cost quadratic time in its depth and
+-- deep terms overflowed the C stack (src/net.c). Measured 2026-11-13 at depths 2,000, 4,000 and
+-- 8,000: 2.6 s, 1.5 s, 4.0 s, so no longer quadratic there; the stack at depth 10^6 is not
+-- re-measured. Small.
+deep-terms : Node
+deep-terms = node "The evaluator handles terms of any depth without quadratic cost or stack overflow." (cons language-implementation nil)
+-- content-addressing (2026-11-13): definitions and results identified by content, the foundation of
+-- collaboration with no canonical state (docs/state-change-collaboration-design.md). A reference is
+-- keyed by its index in the run (src/net.c), so no result is kept or shared beyond a run
+-- (src/lang.c); the checker's identity is a hash of file texts (src/store.c); the store writes in
+-- place, so a killed machine leaves a truncated entry (src/store.c); the standard commands never use
+-- the store (Makefile). Elaborations are already remembered (a warm library check, 4.6 s). It also
+-- makes every check fast, which speeds all other work.
+content-addressing : Node
+content-addressing = node "Every definition and every result is identified by its content and kept, so work is shared across runs and collaborators." (cons product-implementation nil)
+-- work-as-a-value (2026-11-13): serve mode gives views every declaration of a type as a value, but not
+-- each declaration's code (src/lang.c); most declarations have no recorded reason (lib/task-graph.cub).
+-- The interface for Avik (no editor, no IDE) reads the work through it.
+work-as-a-value : Node
+work-as-a-value = node "The work is a value of the language: every declaration's code and reason readable by views, and the interface reads it." (cons product-implementation nil)
 -- documents that are essential context for working on a node and everything below it
 -- (lib/task-graph.cub; docs/task-graph-design.md §7)
 hyperactive-paper : Document
@@ -66,6 +131,7 @@ essential-context = cons (the-product , cons what-hyperactive-is-for-in-avik-wor
 roots : List Node
 roots = cons the-product nil
 -- language support starts only when the language implementation and the product implementation are
--- done (Avik, 2026-11-13)
+-- done (Avik, 2026-11-13); the specializer's law needs normalization as a term; typed deriving needs
+-- a declaration's code as a value
 after : List (Node × List Node)
-after = cons (language-support , cons language-implementation (cons product-implementation nil)) nil
+after = cons (language-support , cons language-implementation (cons product-implementation nil)) (cons (specializer , cons typed-codes nil) (cons (typed-deriving , cons work-as-a-value nil) nil))
