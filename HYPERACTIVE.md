@@ -668,8 +668,8 @@ concerns (`task-graph/hyperactivity.cub`, shown when a goal is clicked in the gr
   24 failures, and they are also why the Rust readers fail.
 
 **Typed codes and normalization by evaluation** (paper §6.1). The working file
-`experiments/nbe/p26-wip.cub` (7,477 lines, 1,034 checks passing) is paused at its step F2c. Whether
-it is kept or replaced waits on the dimensions question (§3.4).
+`experiments/nbe/p26-wip.cub` (7,477 lines, 1,034 checks passing) has F2a–F2c done and continues at
+F2d. Its encoding is the cubical-set model built inside the host, and it stands (§2.2).
 
 **Native code** (paper §9).
 - `#jit` checks only the specialized code against the definition. The translation to bytes is
@@ -778,7 +778,28 @@ The paper is the specification. What remains between the implementation (§1) an
 - **Deriving,** as a typed term.
 - **Terms of any depth.**
 
-The two constructions that wait on Avik are in §3.4.
+**Dimensions.** This is answered by the standard semantics; it was never a question for Avik.
+- In CCHM a term in Γ; Ψ; φ means a family natural in the stage: an element of A at every Ψ′ with a
+  substitution Ψ′ → Ψ satisfying φ, commuting with every further substitution.
+- A dimension's value at a stage is an element of the free De Morgan algebra on that stage's names,
+  and the substitutions are maps of that algebra. This is the cubical-set model.
+- So the number of dimensions varies only in the quantification over stages. A semantic action of
+  interval expressions, defined on syntax, must be shown once to respect the algebra's equations.
+  That is the well-definedness of the cube category's action, not a cost of the encoding.
+- `experiments/nbe/p26-wip.cub` is that model inside the host:
+  - stages are host cubes (`Cube n`);
+  - interval expressions are data (`IEx`, `DNF`);
+  - substitutions are `Sub` and `cmap-d`.
+- Its steps map onto the obligations:
+  - F2a–F2c are the well-definedness (every De Morgan law, with no 2-cell);
+  - F2d is the normalizer's soundness;
+  - F2d′ is the normalizer's canonicity;
+  - F2e is naturality in substitutions.
+- Holding an object dimension as a host interval variable is not available, because the host's
+  interval is not a type (`I × Nat` is refused), and it would only move these obligations anyway.
+- So the file is kept and continues at F2d.
+
+The construction that waits on Avik is in §3.4.
 
 ### 2.3 State, change and collaboration
 
@@ -1290,10 +1311,7 @@ yields directed causality, defined as an observation in the sense of the identit
 
 ### 3.4 Questions only Avik can answer
 
-1. **Dimensions.** What does a term mean in a context with a variable number of dimensions? The
-   answer decides whether `experiments/nbe/p26-wip.cub` is kept or replaced. It is not extended
-   until then.
-2. **Native code.** Is native realization related to the x86 model (`lib/isa/x86`), with C as an
+1. **Native code.** Is native realization related to the x86 model (`lib/isa/x86`), with C as an
    unverified convenience, or is a C semantics part of the language implementation?
 
 ---
@@ -1864,3 +1882,7 @@ The consolidated piece is this, written through in the two registers you keep di
 >
 >
 > this is not fucking complex dude. do you understand what i am saying. yes/no. if no, is it an english issue or what.
+
+#### 2026-11-13 (after the document was made one)
+
+> in cubical type theories / CCHM, what does a term mean in a context with a variable number of dimensions?
