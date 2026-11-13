@@ -220,6 +220,7 @@ def cmd_show(args):
             print(f'{a}: no such node\n'); continue
         rels = ', '.join(f'{rel_word(g, p)} {p}' for p in d['parts']) or ('a root' if a in roots else '-')
         print(f'{a}  {rels}')
+        if not is_t(a): print('  ' + d['id'])
         ks = kids_of(g).get(a, [])
         if ks: print('  served by: ' + ' '.join(ks))
         docs, ec = essential_context()
@@ -275,7 +276,7 @@ def cmd_tree(args):
         nt = sum(1 for x in under(g, kids, n) if is_t(x))
         if is_t(n): return
         also = [p for p in d['parts'] if p != via]
-        print('  ' * depth + f'{n}  [{nt} open under it]'
+        print('  ' * depth + f'{d["id"]}  [{n}; {nt} open under it]'
               + (f'  (also {", ".join(also)})' if also and depth else ''))
         if n in seen: return
         seen.add(n)
@@ -300,8 +301,10 @@ def cmd_check(args):
         elif len(txt[n]) > 1:
             print(f't{n}: {len(txt[n])} text comments: ' + ', '.join(f'{f}:{l}' for f, l, _, _ in txt[n])); bad += 1
     for n, d in g.items():
-        if d['id'] != n:
+        if is_t(n) and d['id'] != n:
             print(f'{n}: its name is "{d["id"]}", not its declaration\'s'); bad += 1
+        if not is_t(n) and (' ' not in d['id'] or d['id'] == n):
+            print(f'{n}: its name must be an English sentence saying what it is, not an identifier'); bad += 1
         if not d['parts'] and n not in roots:
             print(f'{n}: part of nothing and not declared a root'); bad += 1
         if d['parts'] and n in roots:
@@ -337,12 +340,10 @@ def ancestors(g, n):
 def cmd_priority(args):
     """The order of work (docs/task-graph-design.md §5). There is no score. A leaf can start when every node its
     `after` names (on it or on any node above it: waiting on a node is waiting on every leaf under it)
-    is resolved, i.e. gone from the graph. Enabling is conjunctive: a waiting leaf becomes startable
-    only when all the leaves it waits on are done. Among the leaves that can start now, X supersedes
-    Y when the set of leaves that finishing X alone makes startable strictly contains the set that
-    finishing Y alone does: 'X then Y' and 'Y then X' reach the same state, and only the intermediate
-    state differs, in what can start in parallel with the second. Printed in layers: no leaf of a
-    layer is superseded by one of a later layer; within a layer, no order is expressed."""
+    is resolved, i.e. gone from the graph. Among the leaves that can start now, X supersedes Y when the
+    waiting work X is a prerequisite of strictly contains the waiting work Y is a prerequisite of (Avik:
+    X and Y both dependencies of Z, X additionally unblocking other goals: X first). Printed in layers:
+    no leaf of a layer is superseded by one of a later layer; within a layer, no order is expressed."""
     g, roots, after = graph()
     kids = kids_of(g)
     leaves = [n for n in g if not kids.get(n)]
@@ -351,7 +352,7 @@ def cmd_priority(args):
     waits = {x: set().union(*([leaves_under(d) for m in ancestors(g, x) for d in after.get(m, []) if d in g] or [set()]))
              for x in leaves}
     ready = [x for x in leaves if not waits[x]]
-    gain = {x: {y for y in leaves if waits[y] and waits[y] <= {x}} for x in ready}
+    gain = {x: {y for y in leaves if x in waits[y]} for x in ready}   # the waiting work x is a prerequisite of (docs/task-graph-design.md §5)
     txt = texts()
     def line(n):
         t = txt.get(int(n[1:]), [('', 0, '', '')])[0][3] if is_t(n) else g[n]['statement']
@@ -362,9 +363,9 @@ def cmd_priority(args):
         top = [x for x in remaining if not any(gain[x] < gain[y] for y in remaining)]
         k += 1
         unblocking = [x for x in top if gain[x]]
-        print(f' layer {k}' + ('' if unblocking else ' (unblocks nothing by itself)'))
+        print(f' layer {k}' + ('' if unblocking else ' (a prerequisite of nothing that waits)'))
         for x in top:
-            print(line(x) + (f'\n        finishing it makes startable: {" ".join(sorted(gain[x]))}' if gain[x] else ''))
+            print(line(x) + (f'\n        a prerequisite of: {" ".join(sorted(gain[x]))}' if gain[x] else ''))
         remaining = [x for x in remaining if x not in top]
     blocked = [x for x in leaves if waits[x]]
     if blocked:

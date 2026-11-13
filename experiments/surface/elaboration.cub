@@ -3,111 +3,111 @@
 -- text). Checked alone by `make every`.
 import "../../lib/core.cub"
 -- t55: an implicit argument found syntactically from a type holding an empty system, λ i → [] (a
--- list of one, (sys)), was taken for the bare name sys (syn_canon) (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- list of one, (sys)), was taken for the bare name sys (syn_canon) (part of exact-calculus)
 isy : (A : Type 1) {x y : A} → PathP (λ i → A) x y → PathP (λ i → A) y x
 isy A p = λ i → p (~ i)
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 T1 : Type 1
 T1 = Type
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 tfill : (a : T1) (x : a) → PathP (λ i → a) x (comp (λ i → a) (λ i → []) x)
 tfill a x = λ j → comp (λ i → a) (λ i → [ j = 0 ↦ x ]) x
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 L1 : Type 1
 L1 = Bool → Type
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 lem4 : (a : T1) (x : a) (G : a → L1) → PathP (λ i → L1) (G (comp (λ i → a) (λ i → []) x)) (G x)
 lem4 a x G = isy L1 (λ i → G (tfill a x i))
 -- t53: the constructor on the transport line of an indexed split, annotated with its type at the
--- line's index, so an implicit index the motive leaves to it is found (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- line's index, so an implicit index the motive leaves to it is found (part of exact-calculus)
 data T53 : (P : Bool × Bool) → Type where
   t53a : T53 (true , true)
   t53b : (b₀ : Bool) → T53 (b₀ , b₀) → T53 (false , b₀)
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 t53f : {P : Bool × Bool} → T53 P → Bool → Bool
 t53f t53a k = k
 t53f (t53b b w) k = not (t53f w k)
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 Q53 : (Bool → Bool) → Type
 Q53 r = r true ≡ r true
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 t53g : {P : Bool × Bool} (w : T53 P) → Q53 (t53f w)
 t53g t53a = λ i → true
 t53g (t53b b w) = λ i → not (t53f w true)
 -- t54: a pair index substituted at a split annotated with its type, so a nested constructor
--- pattern's inner split has an inferable motive (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- pattern's inner split has an inferable motive (part of exact-calculus)
 data T54 : (P : Bool × Nat) → Type where
   t54a : T54 (true , zero)
   t54b : (b₀ : Bool) (n₀ : Nat) → T54 (b₀ , n₀) → T54 (b₀ , suc n₀)
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 F54 : Nat → Type
 F54 zero = Bool
 F54 (suc n) = Bool
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 t54f : {P : Bool × Nat} → T54 P → F54 (snd P) → F54 (snd P)
 t54f t54a x = x
 t54f (t54b true n w) x = x
 t54f (t54b false n w) x = x
 -- t50: an implicit level found from a solved type that is a stuck application or case (f b, F52 b):
 -- its level read off the spine or the motive, not from the view's type, which a neutral does not
--- carry (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- carry (part of exact-calculus)
 F52 : Bool → Type 1
 F52 true = Type
 F52 false = Type
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 s52 : (b : Bool) (y : F52 b) → Path (F52 b) y y
 s52 b y = refl
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 w54 : (f : Bool → Type 1) (b : Bool) (y : f b) → Path (f b) y y
 w54 f b y = refl
 -- t47: indices at a split unified as Agda's unifier does: pairs componentwise, a definition applied
--- unfolded (by cases at a constructor), so these clauses are seen to cover (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- unfolded (by cases at a constructor), so these clauses are seen to cover (part of exact-calculus)
 data T47 : (P : Nat × Nat) → Type where
   ta47 : (m : Nat) → T47 (zero , m)
   tb47 : (n m : Nat) → T47 (n , m) → T47 (suc n , m)
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 f47 : (m : Nat) → T47 (zero , m) → Nat
 f47 m (ta47 m') = m'
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 g47 : (n m : Nat) → T47 (suc n , m) → T47 (n , m)
 g47 n m (tb47 n' m' w) = w
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 ext47 : Nat → Nat → Nat × Nat
 ext47 n m = (suc n , m)
 data U47 : (P : Nat × Nat) → Type where
   va47 : (m : Nat) → U47 (zero , m)
   vb47 : (n m : Nat) → U47 (n , m) → U47 (ext47 n m)
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 h47 : (n m : Nat) → U47 (suc n , m) → U47 (n , m)
 h47 n m (vb47 n' m' w) = w
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 k47 : (n m : Nat) → U47 (ext47 n m) → U47 (n , m)
 k47 n m (vb47 n' m' w) = w
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 dbl47 : Nat → Nat
 dbl47 zero = zero
 dbl47 (suc n) = suc (suc (dbl47 n))
 data W47 : (n : Nat) → Type where
   wa47 : W47 zero
   wb47 : (n : Nat) → W47 n → W47 (dbl47 (suc n))
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 z47 : W47 zero → Nat
 z47 wa47 = zero
 -- t47: a Σ-typed field met only through its projections (fst p, snd p) solved as the pair of their
--- solutions (η for Σ) (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- solutions (η for Σ) (part of exact-calculus)
 data E47 : (P : Nat × Nat) → Type where
   ea47 : (m : Nat) → E47 (zero , m)
   eb47 : (p : Nat × Nat) → E47 p → E47 (suc (fst p) , snd p)
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 e47 : (n m : Nat) → E47 (suc n , m) → E47 (n , m)
 e47 n m (eb47 p w) = w
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 e48 : (n m : Nat) → E47 (suc n , m) → Nat
 e48 n m (eb47 p w) = fst p
 -- t57: an implicit solution holding an elimination of a type with no constructors, read back with
--- the type's name in place of the branches, (case e Empty) (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- the type's name in place of the branches, (case e Empty) (part of exact-calculus)
 t57 : (e : Empty) (y : Empty-rec {lsuc lzero} {Type} e) → Path (Empty-rec {lsuc lzero} {Type} e) y y
 t57 e y = refl
--- (part of implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part)
+-- (part of exact-calculus)
 t57b : (e : Empty) (y : Empty-rec {lsuc lzero} {Type} e) → PathP (λ i → Empty-rec {lsuc lzero} {Type} e) y y
 t57b e y = λ i → y

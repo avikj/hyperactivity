@@ -38,7 +38,7 @@ def graph_state():
     waits = {x: set().union(*([leaves_under(d) for m in tg.ancestors(g, x) for d in after.get(m, []) if d in g] or [set()]))
              for x in leaves}
     ready = [x for x in leaves if not waits[x]]
-    gain = {x: {y for y in leaves if waits[y] and waits[y] <= {x}} for x in ready}
+    gain = {x: {y for y in leaves if x in waits[y]} for x in ready}   # the waiting work x is a prerequisite of (docs/task-graph-design.md §5)
     layer, remaining, k = {}, list(ready), 0
     while remaining:
         k += 1
@@ -69,7 +69,7 @@ def item(S, nid):
         if n in S['layer']: st = 'can start now' + (' — unblocks ' + ' '.join(sorted(S['gain'][n])) if S['gain'][n] else '')
         elif n in S['waits']: st = 'waits on ' + ' '.join(sorted(S['waits'][n]))
         open_under = sum(1 for x in tg.under(S['g'], S['kids'], n) if tg.is_t(x))
-        return dict(id=nid, kind='ticket' if tg.is_t(n) else 'goal', title=n, summary=tg.first_sentence(t, 160),
+        return dict(id=nid, kind='ticket' if tg.is_t(n) else 'goal', title=n if tg.is_t(n) else S['g'][n]['id'], summary=tg.first_sentence(t, 160),
                     state=st, layer=S['layer'].get(n), open_under=open_under)
     if nid.startswith('d:'):
         f, l = nid[2:].rsplit(':', 1)

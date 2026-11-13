@@ -1,8 +1,8 @@
 # State, change and collaboration: how the work is held, changed and shared, and why
 
 Avik's design, from his messages to Claude sessions on 2026-11-13, quoted verbatim. It governs how
-agents and Avik interface with the language and its work: the interface (`how-people-and-agents-read-write-and-act-on-the-work` in the task
-graph) and the work object (`all-work-and-all-knowledge-about-it-as-one-content-addressed-object-in-the-language`) are built on it. Read it before working on either, and
+agents and Avik interface with the language and its work: the interface (`product-implementation` in the task
+graph) and the work object (`product-implementation`) are built on it. Read it before working on either, and
 before proposing anything about storage, versioning, collaboration or ownership.
 
 ## 1. Our state is not text

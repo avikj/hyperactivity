@@ -10,7 +10,7 @@ Where each part comes from (rustc 1.97.0; nothing here is computed by a second r
 
   bodies     `rustc --edition=2021 --crate-type=lib -O -Cpanic=abort --emit=mir`. The text is MIR
              before monomorphization: a body in a generic impl is printed once with its
-             parameters. `-O` runs the MIR inliner, which brings the bodies of the `language-core-complete-exact-calculus-partial-evaluation-and-native-code`
+             parameters. `-O` runs the MIR inliner, which brings the bodies of the `language-implementation`
              functions used into the crate's own (rustc prints no MIR for another crate).
              A call that still names a function outside the crate stops the import.
   impls      a body in an impl is named by the impl's span; the impl header (generics, trait,

@@ -45,13 +45,13 @@ This is not a project-management tool bolted onto a programming language. The la
 be an information and computing environment with maximal bandwidth for continuous flows of
 understanding and contribution, with the friction to cognition brought to zero — Avik's driver for a
 decade. The work itself (the code, its history, what is known, what is open, what everyone is
-doing) is one object in the language (`all-work-and-all-knowledge-about-it-as-one-content-addressed-object-in-the-language` in `task-graph/hyperactivity.cub`), and the graph of goals is
+doing) is one object in the language (`product-implementation` in `task-graph/hyperactivity.cub`), and the graph of goals is
 the first part of that object built. Soon agents and people will not interact with this work by
 grepping and reading files: they will declare and read views, terms of the language evaluated by
 the machine over the work. Text operations on the work are a stage to be left, not the method.
 
 The HCI vision itself (the interactive product that is the language's delivered value) is to be
-written by Avik and installed here; until it is, the `how-people-and-agents-read-write-and-act-on-the-work` node's statement and this section
+written by Avik and installed here; until it is, the `product-implementation` node's statement and this section
 are all that is recorded of it.
 
 ## 3. The structure
@@ -144,8 +144,8 @@ property of the step.
 > supercession in the above case. it's a quite simple approach to scheduling
 
 So X supersedes Y
-when everything that becomes possible by finishing Y first also becomes possible by finishing X
-first, and more does. Where neither contains the other, the graph expresses no preference. This is
+when the waiting work X is a prerequisite of strictly contains the waiting work Y is a prerequisite
+of. Where neither contains the other, the graph expresses no preference. This is
 the whole of prioritization.
 
 ## 6. Reasons for existence, and placing a node
@@ -253,12 +253,11 @@ A name says what the thing is to someone entering the repository with no context
 
 ## 10. The current top-level shape (2026-11-13)
 
-Under the root: `hyperactive-paper-published-with-its-companion-repository`, the languages, hardware and OS goals, and the work object.
-`hyperactive-paper-published-with-its-companion-repository` has two children. `companion-repository-with-every-essential-construction-of-the-paper-implemented-excluding-worked-examples` (the companion repository with the
-implementation complete: every essential construction of the paper, worked examples excluded) is
-the top priority: it contains `language-core-complete-exact-calculus-partial-evaluation-and-native-code`, the language completion that every other goal's value also
-waits on. `every-construction-the-paper-displays-checked-including-its-worked-examples` (every construction the paper displays, worked examples included) comes
-last; it serves nothing but publication.
+The root is the product (`the-product`). Its children are Avik's four goals: the language
+implementation, the paper's examples, the product implementation, and language support. Language
+support waits on both the language implementation and the product implementation. The paper's
+examples serve nothing but the root, so the order of work gives them nothing while anything else is
+open. `hyperactive server` shows the whole graph; `hyperactive order` shows the order of work.
 
 ## 11. Mistakes that have happened, so they are not repeated
 

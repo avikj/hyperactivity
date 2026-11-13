@@ -15,7 +15,7 @@ def page():
     lu = lambda n: {x for x in tg.under(g, kids, n) | {n} if not kids.get(x)}
     waits = {x: set().union(*([lu(d) for m in tg.ancestors(g, x) for d in after.get(m, []) if d in g] or [set()])) for x in leaves}
     ready = [x for x in leaves if not waits[x]]
-    gain = {x: {y for y in leaves if waits[y] and waits[y] <= {x}} for x in ready}
+    gain = {x: {y for y in leaves if x in waits[y]} for x in ready}   # the waiting work x is a prerequisite of (docs/task-graph-design.md §5)
     def text(n):
         if tg.is_t(n):
             r = txt.get(int(n[1:]), [])
@@ -26,10 +26,10 @@ def page():
         t, site = text(n)
         others = [p for p in g[n]['parts'] if p != parent]
         badge = ''
-        if n in gain: badge = '<span class="now">can start now' + (f' — unblocks {" ".join(sorted(gain[n]))}' if gain[n] else '') + '</span>'
+        if n in gain: badge = '<span class="now">can start now' + (f' — a prerequisite of {len(gain[n])} waiting' if gain[n] else '') + '</span>'
         elif waits.get(n): badge = f'<span class="wait">waits on {" ".join(sorted(waits[n]))}</span>'
-        also = f'<span class="also">also under: {html.escape(", ".join(others))}</span>' if others and parent else ''
-        head = (f'<span class="name {"t" if tg.is_t(n) else "g"}">{html.escape(n)}</span> {badge} '
+        also = f'<span class="also">also under: {html.escape("; ".join(g[o]["id"] for o in others))}</span>' if others and parent else ''
+        head = (f'<span class="name g">{html.escape(g[n]["id"])}</span> <span class="also">{html.escape(n)}</span> {badge} '
                 f'<span class="open">{sum(1 for x in tg.under(g, kids, n) if tg.is_t(x))} open below</span>' if not tg.is_t(n) else
                 f'<span class="name t">{html.escape(n)}</span> {badge}')
         body = f'<div class="text">{html.escape(t)}</div>' + (f'<div class="site">{html.escape(site)}</div>' if site else '') + also

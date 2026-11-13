@@ -16,9 +16,9 @@ import sys
 
 
 # every declaration written carries its reason (2026-11-12): the model's functions, types and
-# registers are part of x86-64-instruction-set-semantics-complete-every-instruction-translated (task-graph/hyperactivity.cub: every instruction translated), stated above each so
+# registers are part of x86-64 (task-graph/hyperactivity.cub: every instruction translated), stated above each so
 # tools/task-graph.py finds it whether or not the declaration is used
-REASON = '-- (part of x86-64-instruction-set-semantics-complete-every-instruction-translated)'
+REASON = '-- (part of x86-64)'
 DECL_START = re.compile(r"^(data|record|codata) |^[^\s\-(][^\s]* :( |$)")
 def with_reasons(text):
     out = []

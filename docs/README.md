@@ -24,7 +24,7 @@ Contents:
 - `state-change-collaboration-design.md` — how the work is held, changed and shared, and why: state
   that is not text, read/write/act sessions, no canonical state, immutable content-addressed code,
   change as a square, questions as tasks, ownership. Avik's design, transcribed from his explanations
-  on 2026-11-13. Essential context for `all-work-and-all-knowledge-about-it-as-one-content-addressed-object-in-the-language` and `how-people-and-agents-read-write-and-act-on-the-work`.
+  on 2026-11-13. Essential context for `product-implementation` and `product-implementation`.
 
 ## How Avik's words are kept (Avik, 2026-11-13, verbatim)
 
