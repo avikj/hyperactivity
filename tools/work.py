@@ -23,6 +23,15 @@ Every node in the graph is open; closing one removes it.
     python3 tools/work.py every              every file checked: each file no file imports, alone with its
                                              imports (--read); per file, the failures in its own text
     python3 tools/work.py why NAME ...       why a declaration of the code exists: the chain to a root
+    python3 tools/work.py available [K]      the leaves no one owns, ready, in priority order: what a
+                                             collaborator dropping in can take
+    python3 tools/work.py claims             who owns which leaf
+    python3 tools/work.py claim NODE WHO [--push]
+                                             WHO owns NODE: a leaf (nothing open under it) no one owns,
+                                             WHO owning nothing else; committed (and pushed), so the claim
+                                             is seen by every collaborator before the work starts
+    python3 tools/work.py release NODE [--push]
+                                             NODE owned by no one (closing a node releases it too)
     python3 tools/work.py unexplained [FILE] the declarations with no reason, by file
 
 Every declaration of the code is a node of the same graph. Its reason is computed: something with
@@ -31,6 +40,15 @@ machine names it (src/), or it states one, in the comment above it: `(part of NO
 `(prerequisite to NODE)`, NODE a node of work/graph.cub. A node of work/graph.cub has a reason when
 it is a root or part of a node with one. The first reading of a changed file runs the machine on
 each file no file imports (minutes when the x86 model is among them); the results are kept.
+
+Ownership (2026-11-12, the user's rule): every active collaborator owns exactly one leaf, and a leaf
+has at most one owner, so redundant work is not started and, when every leaf is owned, the owners'
+streams together finish the work. A claim is the pair (NODE , "WHO") in work/graph.cub's `claims`,
+written and committed by `claim` under a lock (and pushed with --push: a claim is real for a
+collaborator elsewhere only once pushed; a rejected push means someone else moved first: pull and
+claim again). Nothing is opened under an owned node: `open` under an owned X opens the new node Y
+under X and X' beside it, "the rest of X", and moves X's owner to X', whose concrete scope is X's
+as it stood.
 
 Run from the repository root or anywhere inside it.
 """
@@ -151,6 +169,27 @@ def graph():
     return out, roots, pairs('after'), pairs('speeds')
 
 
+CLAIMS = re.compile(r'^claims = (.*)$', re.M)
+
+
+def claims_of(src=None):
+    """the claims, in order: list of (node, who)"""
+    src = src if src is not None else open(GRAPH, encoding='utf-8').read()
+    m = CLAIMS.search(src)
+    return re.findall(r'\(([\w-]+) , "([^"]*)"\)', m.group(1)) if m else []
+
+
+def claims_text(cs):
+    t = 'nil'
+    for n, w in reversed(cs):
+        t = f'cons ({n} , "{w}") ' + (f'({t})' if t != 'nil' else 'nil')
+    return t
+
+
+def with_claims(src, cs):
+    return CLAIMS.sub(lambda _: 'claims = ' + claims_text(cs), src, count=1)
+
+
 def kids_of(g):
     k = {n: [] for n in g}
     for n, d in g.items():
@@ -267,6 +306,13 @@ def cmd_check(args):
             print(f'{n}: claims its parts suffice and has none'); bad += 1
         if not is_t(n) and not d['statement']:
             print(f'{n}: no statement'); bad += 1
+    kids = kids_of(g); seen_n, seen_w = {}, {}
+    for n, w in claims_of():
+        if n not in g: print(f'claims: {n} is not a node (closing a node releases it)'); bad += 1
+        elif kids.get(n): print(f'claims: {n}, owned by {w}, has open nodes under it'); bad += 1
+        if n in seen_n: print(f'claims: {n} owned by {seen_n[n]} and {w}'); bad += 1
+        if w in seen_w: print(f'claims: {w} owns {seen_w[w]} and {n}'); bad += 1
+        seen_n[n] = w; seen_w[w] = n
     for n, l in list(after.items()) + list(speeds.items()):
         for m in [n] + l:
             if m not in g: print(f'{n}: names {m}, which is not a node'); bad += 1
@@ -283,7 +329,8 @@ def cmd_check(args):
     sys.exit(1 if bad else 0)
 
 
-def cmd_priority(args):
+def ranked():
+    """(blocked, cost, -speeds, number, node) for every tN node, in priority order (cmd_priority)"""
     """the tN nodes in the order the graph implies: a node's cost is the number of open nodes that must
     complete before any value lands through it, at a root, along its cheapest path (an all-of node on
     the path adds everything under it; a node with nothing under it counts as one piece of unspecified
@@ -317,11 +364,93 @@ def cmd_priority(args):
         sp = sum(len(speeds.get(p, [])) for p in g[n]['parts'])
         rows.append((not ready, len(best) if best else 10**6, -sp, int(n[1:]), n))
     rows.sort()
+    return rows
+
+
+def cmd_priority(args):
+    """the tN nodes in the order the graph implies (ranked)"""
+    rows = ranked()
+    g = graph()[0]
     txt = texts()
+    owner = dict(claims_of())
     for blocked, c, sp, _, n in rows[: int(args[0]) if args else len(rows)]:
         first = txt.get(int(n[1:]), [('', 0, '', '')])[0][3]
         print(f'{n:<4} cost {c:<4}' + (' speeds' if sp else '       ') + (' after-open' if blocked else '           ')
-              + f' {",".join(g[n]["parts"]):<28} {first_sentence(first, 70)}')
+              + f' {",".join(g[n]["parts"]):<28} {first_sentence(first, 70)}'
+              + (f'  [owned: {owner[n]}]' if n in owner else ''))
+
+
+def cmd_available(args):
+    """the leaves no one owns and nothing open must precede, in priority order"""
+    g, roots, after, speeds = graph()
+    kids = kids_of(g)
+    owner = dict(claims_of())
+    txt = texts()
+    rows = [r for r in ranked() if not r[0] and r[4] not in owner and not kids.get(r[4])]
+    for _, c, sp, _, n in rows[: int(args[0]) if args else len(rows)]:
+        t = txt.get(int(n[1:]), [('', 0, '', '')])[0]
+        print(f'{n:<4} cost {c:<4} {t[0]}:{t[1]}  {first_sentence(t[3], 80)}')
+    print(f'{len(rows)} available; {len(owner)} owned')
+
+
+def cmd_claims(args):
+    for n, w in claims_of(): print(f'{n:<6} {w}')
+
+
+def locked_graph(fn, message, push):
+    """fn(src) -> new src, under an exclusive lock, then committed (and pushed)"""
+    import fcntl
+    gd = subprocess.run(['git', 'rev-parse', '--git-common-dir'], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    lock = open(os.path.join(ROOT, gd, 'work-graph.lock'), 'w')
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    try:
+        src = open(GRAPH, encoding='utf-8').read()
+        new = fn(src)
+        open(GRAPH, 'w', encoding='utf-8').write(new)
+        r = subprocess.run(['git', 'commit', '-q', '-m', message, '--', 'work/graph.cub'], cwd=ROOT,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            open(GRAPH, 'w', encoding='utf-8').write(src)
+            sys.exit('not committed: ' + (r.stderr or r.stdout).strip())
+        if push:
+            r = subprocess.run(['git', 'push', '-q', 'origin', 'HEAD'], cwd=ROOT, capture_output=True, text=True)
+            if r.returncode != 0:
+                subprocess.run(['git', 'reset', '-q', '--soft', 'HEAD~1'], cwd=ROOT)
+                open(GRAPH, 'w', encoding='utf-8').write(src)
+                subprocess.run(['git', 'add', '--', 'work/graph.cub'], cwd=ROOT)
+                sys.exit('push refused (someone else moved first): pull, then claim again\n' + r.stderr.strip())
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def cmd_claim(args):
+    push = '--push' in args; args = [a for a in args if a != '--push']
+    if len(args) != 2: sys.exit('claim NODE WHO [--push]')
+    n, who = args
+    if not re.fullmatch(r'[^"\n]+', who): sys.exit('WHO: a name without quotes')
+    def fn(src):
+        g = graph()[0]
+        if n not in g: sys.exit(f'{n}: not a node')
+        if kids_of(g).get(n): sys.exit(f'{n} has open nodes under it ({", ".join(kids_of(g)[n])}): own a leaf')
+        cs = claims_of(src)
+        for m, w in cs:
+            if m == n: sys.exit(f'{n} is owned by {w}')
+            if w == who: sys.exit(f'{who} owns {m}: release it first (one leaf per collaborator)')
+        return with_claims(src, cs + [(n, who)])
+    locked_graph(fn, f'{n} claimed by {who}', push)
+    print(f'{n} owned by {who}')
+
+
+def cmd_release(args):
+    push = '--push' in args; args = [a for a in args if a != '--push']
+    if len(args) != 1: sys.exit('release NODE [--push]')
+    n = args[0]
+    def fn(src):
+        cs = claims_of(src)
+        if not any(m == n for m, _ in cs): sys.exit(f'{n} is owned by no one')
+        return with_claims(src, [(m, w) for m, w in cs if m != n])
+    locked_graph(fn, f'{n} released', push)
+    print(f'{n} released')
 
 
 def cmd_next(args):
@@ -653,8 +782,35 @@ def cmd_open(args):
                      f'every gap: t{n} was a missed requirement of {x}, whose breakdown was claimed sufficient, so that '
                      f'claim is refuted ({x} is now not-known) and the missed requirement is a class.', 97)]
         gs = '\n'.join(gl)
+    # an owned node: nothing is inserted under its owner's scope; the new node goes under it beside
+    # X', the rest of X, and X's owner moves to X' (the owner's concrete scope does not shift)
+    owned = [(x, w) for x, w in claims_of(gs) if x in nodes]
+    moved = []
+    txt = texts()
+    for k, (x, w) in enumerate(owned):
+        n3 = n + 1 + len(refuted) + k
+        last = list(re.finditer(r'^t\d+ = leaf "t\d+" .*\n', gs, re.M))[-1]
+        gs = gs[:last.end()] + f't{n3} : Node\nt{n3} = leaf "t{n3}" (cons {x} nil)\n' + gs[last.end():]
+        gs = with_claims(gs, [(m, w2) if m != x else (f't{n3}', w2) for m, w2 in claims_of(gs)])
+        where = txt.get(int(x[1:]), [(None, 0, '', '')])[0] if is_t(x) else (None, 0, '', '')
+        rest = (f't{n3} ({today}): the rest of {x}: {x} as it stood before t{n} was opened under it, less t{n}; '
+                f'owned by {w}, moved here from {x}' + (f' (its text at {where[0]}:{where[1]})' if where[0] else '') + '.')
+        if where[0] and where[0] != 'work/graph.cub':
+            wp = os.path.join(ROOT, where[0]); wl = open(wp, encoding='utf-8').read().split('\n')
+            wi = re.match(r'\s*', wl[where[1] - 1]).group(0)
+            wb = textwrap.wrap(rest, 100 - len(wi) - 3)
+            if where[0].endswith(('.c', '.h')): wc = [wi + '/* ' + wb[0]] + [wi + ' * ' + b for b in wb[1:]]; wc[-1] += ' */'
+            else: wc = [wi + '-- ' + b for b in wb]
+            wl[where[1] - 1:where[1] - 1] = wc
+            open(wp, 'w', encoding='utf-8').write('\n'.join(wl))
+        else:
+            gl = gs.split('\n'); at = next(k2 for k2, l in enumerate(gl) if l.startswith(f't{n3} : Node'))
+            gl[at:at] = ['-- ' + b for b in textwrap.wrap(rest, 97)]
+            gs = '\n'.join(gl)
+        moved.append((x, f't{n3}', w))
     open(gp, 'w', encoding='utf-8').write(gs)
     print(f't{n} opened, part of {", ".join(nodes)}, at {f}:{line}')
+    for x, x2, w in moved: print(f'{x2} opened, part of {x}: the rest of {x}; {w} now owns {x2}')
     for x in refuted: print(f't{n + 1 + refuted.index(x)} opened, part of {x}: determine everything {x} requires')
 
 
@@ -663,7 +819,8 @@ def main():
         print(__doc__); return
     c, a = sys.argv[1], sys.argv[2:]
     {'list': cmd_list, 'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'next': cmd_next,
-     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained, 'open': cmd_open, 'view': cmd_view, 'every': cmd_every}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
+     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained, 'open': cmd_open, 'view': cmd_view, 'every': cmd_every,
+     'available': cmd_available, 'claims': cmd_claims, 'claim': cmd_claim, 'release': cmd_release}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
 
 
 if __name__ == '__main__':
