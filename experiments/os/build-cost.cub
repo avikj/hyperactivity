@@ -6,11 +6,6 @@
 -- from nothing: the difference of two lines is one stage). build-cost-N.cub hold the #show
 -- lines for one N each, so that a run can be bounded.
 import "../../lib/library.cub"
--- t69 (2026-11-12): needs-work. 18 definitions here are untyped and refused ("a definition without
--- a signature exists only in the fixed bootstrap files"), measured with the file loaded alone after
--- its imports (--read), so the build-cost-N, build-cost-direct, -passes and -stuck files that use
--- them fail on the names (bc-unf and others) as well. Refused since the checker became mandatory
--- (2026-11-09), as t16-t21 are in the library.
 bc-chain : {l : Level} → Nat → Word → Proc {l} Linux (Sum Errno Word)
 bc-chain {l} zero acc = ret {l} {Linux} {Sum Errno Word} (inr acc)
 bc-chain {l} (suc n) acc = lx-then {l} {Unit} {Word} (lx {l} (lx-close acc)) (λ u → bc-chain {l} n (%wsucc acc))
@@ -31,32 +26,67 @@ bc-d7 : Step W (Sum Errno Word)
 bc-d7 = linux-step {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lzero} 7 #3)
 bc-d10 : Step W (Sum Errno Word)
 bc-d10 = linux-step {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lzero} 10 #3)
--- the stages (untyped, as lib/elf.cub's are)
+-- the stages, as lib/elf.cub's build-plan-at calls them (the type of g as its code, the conversion
+-- of g with its specialized code by code-conv-at)
+bc-g : Code → Word
 bc-g c = case c of cglob g → g; _ → #0
+bc-unf : Word → Code
 bc-unf g = case unfold g of some c → c; none → cwlit #0
-bc-spec g = fst (specialize (%gty g) sched-default lnil (bc-unf g))
+bc-ty : Word → Code
+bc-ty g = opt-or (def-type-code g) cword
+bc-spec : Word → Code
+bc-spec g = fst (specialize (bc-ty g) sched-default lnil (bc-unf g))
+bc-prog : Word → Lst (Word × Verdict) × Lst (Word × Code)
 bc-prog g = program-of g (bc-spec g) #256
+bc-forms : Word → Defs
 bc-forms g = x-forms-all (snd (bc-prog g))
+bc-defs : Word → Defs
 bc-defs g = x-erase g (bc-forms g)
-bc-conv g = conv (%gty g) (%gval g) (eval-g lnil (bc-spec g))
+bc-conv : Word → Bool
+bc-conv g = code-conv-at (bc-ty g) (cglob g) (bc-spec g)
+bc-verdict : Word → Word
 bc-verdict g = case x-verdict (fst (bc-prog g)) (bc-defs g) of fo q → #1; not-fo w at → #0
-bc-enc g = xlen (encode-proc g (bc-defs g))
--- sizes: the nodes of a program's codes, of the forms' codes, and the number of definitions
-bc-prog-size p = case p of lnil → #0; lcons e r → %wadd (code-size (snd e)) (bc-prog-size r)
-bc-forms-size p = case p of lnil → #0; lcons e r → %wadd (code-size (snd (snd e))) (bc-forms-size r)
+bc-len : {A : Type} → Lst A → Word
+bc-len lnil = #0
+bc-len (lcons x r) = wadd #1 (bc-len r)
+bc-enc : Word → Word
+bc-enc g = bc-len (encode-proc g (bc-defs g))
+-- sizes, by the size of a code the reading passes (lib/match.cub's code-size, a helper of the
+-- bootstrap files, has no type): the nodes of a program's codes, of the forms' codes
+bc-prog-size : (Code → Word) → Lst (Word × Code) → Word
+bc-prog-size sz lnil = #0
+bc-prog-size sz (lcons e r) = wadd (sz (snd e)) (bc-prog-size sz r)
+bc-forms-size : (Code → Word) → Defs → Word
+bc-forms-size sz lnil = #0
+bc-forms-size sz (lcons e r) = wadd (sz (snd (snd e))) (bc-forms-size sz r)
 -- the erasure's fixed point (lib/x86.cub's x-rel-fix), its passes counted: (passes , needed set's size)
-bc-passes fuel R ars defs n = if %weq fuel #0 then (n , xlen R) else (let R2 = x-rel-step R ars defs in if %weq (xlen R2) (xlen R) then (%wsucc n , xlen R) else bc-passes (%wsub fuel #1) R2 ars defs (%wsucc n))
-bc-rel g defs0 = let ars = x-arities defs0 in bc-passes #64 (x-root-params (lcons g lnil) ars lnil) ars defs0 #0
-bc-rev l acc = case l of lnil → acc; lcons x r → bc-rev r (lcons x acc)
+bc-passes : Nat → Rel → Lst (Word × Word) → Defs → Word → Word × Word
+bc-passes zero R ars defs n = (n , bc-len R)
+bc-passes (suc k) R ars defs n =
+  let R2 = x-rel-step ars defs R in if weq (bc-len R2) (bc-len R) then (wadd #1 n , bc-len R) else bc-passes k R2 ars defs (wadd #1 n)
+bc-rel : Word → Defs → Word × Word
+bc-rel g defs0 = let ars = x-arities defs0 in bc-passes 64 (x-root-params (lcons g lnil) ars lnil) ars defs0 #0
+bc-rev : Defs → Defs → Defs
+bc-rev lnil acc = acc
+bc-rev (lcons x r) acc = bc-rev r (lcons x acc)
 -- the same with the definitions visited in the opposite order
-bc-rel-rev g defs0 = let ars = x-arities defs0 in bc-passes #64 (x-root-params (lcons g lnil) ars lnil) ars (bc-rev defs0 lnil) #0
-bc-params defs = case defs of lnil → #0; lcons e r → %wadd (fst (snd e)) (bc-params r)
+bc-rel-rev : Word → Defs → Word × Word
+bc-rel-rev g defs0 = let ars = x-arities defs0 in bc-passes 64 (x-root-params (lcons g lnil) ars lnil) ars (bc-rev defs0 lnil) #0
+bc-params : Defs → Word
+bc-params lnil = #0
+bc-params (lcons e r) = wadd (fst (snd e)) (bc-params r)
 -- the applications whose head is a stuck case or eliminator (a function chosen at run time: what
--- it is applied to stays in the code as a value), counted over a code
-bc-stuck c = case c of
-  capp f a → (case f of
-                celim d P B x → %wsucc (bc-stuck-l (code-kids c))
-                ccase d B x → %wsucc (bc-stuck-l (code-kids c))
-                _ → bc-stuck-l (code-kids c))
-  _ → bc-stuck-l (code-kids c)
-bc-stuck-l l = case l of lnil → #0; lcons x r → %wadd (bc-stuck x) (bc-stuck-l r)
+-- it is applied to stays in the code as a value), counted over a code within k levels (the reading
+-- passes the code's size, which bounds its depth, so nothing is cut)
+bc-head : Code → Word
+bc-head (capp f a) = case f of celim d P B x → #1; ccase d B x → #1; _ → #0
+bc-head c = #0
+bc-sum : Lst Word → Word
+bc-sum lnil = #0
+bc-sum (lcons x r) = wadd x (bc-sum r)
+bc-map : (Code → Word) → Lst Code → Lst Word
+bc-map f lnil = lnil
+bc-map f (lcons c r) = lcons (f c) (bc-map f r)
+bc-stuck : Nat → Code → Word
+bc-stuck zero c = #0
+bc-stuck (suc k) c = wadd (bc-head c) (bc-sum (bc-map (bc-stuck k) (code-kids c)))
