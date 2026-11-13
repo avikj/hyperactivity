@@ -100,3 +100,15 @@ last. Nothing here is summarized, restated or edited; new messages are appended 
 > implementation are done. Is that it?" yes exactly. in the sense; largely because language-impl
 > should *already* be done (i'd love to be further along) so i must expressly disallow any
 > distraction. "how does this serve the only thing that matters right now"
+
+> this shit looks liek fucking reddit i expressly asked for a UI that renders a graph and you
+> provided the weakest possible one. humans are fucking visual creatures. i guess you're subhuman
+> don't have eyes hence your "intelligence" is misaligned to humanity. say i'm trying to check in and
+> see my project status/streams. it couldn't get much worse than this right? i am giving you sauce
+> from the year 3000 and you're giving me sauce from the year 2000. come the fuck on. it's 2026.
+> learn what cracked genius creative hyperintelligent designers are cooking. did you know in the
+> 1070s some japanese dude cooked an algorithm i independently discovered in 10th grade for graph
+> drawing based on gradients, did you know graphs are used for the visual depiction of relational
+> data.
+
+> ayyy broooo you cooked!! this is exactly what i've been needing. do you see what i mean?
