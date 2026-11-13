@@ -25,8 +25,8 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 	for f in $(SRC); do $(CC) $(CFLAGS) -DCUBICAL_LIB -c -o build/lib/$$(basename $$f .c).o $$f || exit 1; done
 	ar rcs $@ build/lib/*.o
 
-# Every file is checked by `make every` (2026-11-12, t30): each file imports what it needs (the core
-# and the library are lib/core.cub and lib/library.cub, files of imports; the x86 model's order is
+# Every file is checked by `make every` (2026-11-12, t30): each file outside the library imports what
+# it needs (the core and the library are lib/core.cub and lib/library.cub, files of imports in order; the x86 model's order is
 # lib/isa/x86/all.cub, written by tools/sail2cub.py), so each file no file imports is checked alone
 # with its imports, without performing what acts on the world (--read). Measured 2026-11-12: 80 such
 # files; 35 with failures of their own, each from an open node: the untyped definitions refused in
