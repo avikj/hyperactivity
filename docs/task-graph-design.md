@@ -13,15 +13,31 @@ taught the same things in conversation, at length, by Avik. That knowledge was t
 context reset or hand-off, and the next agent made the same mistakes. A previous session recorded
 the *mechanics* of the system below (a data type, some flags, a script) but not its *meaning*, so
 the mechanics sat among large volumes of generated code with no sign that thought went into them,
-and the next agent misread them. In Avik's words: "for things that we humans take time to define, it
-needs to be fully clear exactly the rationale (that was intelligence work product passed to an agent
-and discarded)… if you enter this repo tomorrow, nothing we've just been over should be raised… an
-agent should bootstrap just as they read the code; I shouldn't be forced to feed each one."
+and the next agent misread them. Avik:
 
-The goal graph is **not** the place for ideas like these. It records concrete consequences (what
-must be done, and why each piece exists). Ideas, rationale and vision live in English documents
-like this one, which hold value on their own for an agent whose experience is ordinary software
-work and who is trying to infer the project's norms from its code.
+> literally for things that we human take time to define. it needs to be fully fucking clear exactly
+> the rationale (that was intellegence work product passed to an agent and discarded). otherwise it
+> just sits next to mountains of your generated code volume - no reason to believe any particular
+> thought even went into it; no sense that it'll be used correctly just by following some formal
+> invariants you name. the actual fucking meaning etc needs to be there. i dont want to fucking have
+> to have conversations like this ever again right? if you enter this repo tomorrow, nothing we've
+> just been over should be raised, right? all explanation i've given you and understanding you hold
+> now, an agent should bootstrap just as they read the code, i shouldn't be forced to feed each one
+> right?
+
+> this goal tree shit is NOT a means of persisting communication like that, it can represent the
+> concrete consequences - it is NOT infra for the expression of ideas in this form. an essay holds
+> independent value for a fresh agent being dropped into a project whose entire experience is doing
+> codemonkey SWE work attempting to identify project norms from code and "join the work"
+
+On how his words are to be kept:
+
+> do you realize you are the primary information loss channel. i've written hundreds of thousands of
+> words to you mostly saying the same things. generally because you assume hyoure smarter than
+> human, you change what the human is saying into what you think is the more right form.
+
+So his words are quoted verbatim in these documents, and nothing is put inside quotation marks that
+he did not write.
 
 ## 2. What the task graph is for
 
@@ -51,6 +67,18 @@ There is no step of finishing the children and then doing the parent. Hence:
 - **Any other node is resolved exactly when all its children are resolved.**
 - Only leaves are ever worked on.
 
+> a goal is resolved as soon as all it's leaves are resolved. there is no step of handling all
+> leaves, then handling the parent; the maintained invariant is a task is always *completely* split
+> into subgoals that cover the whole task. these can be arbitrarily coarse ie "complete whole
+> project"<-"figure out what complete project means"+"write the code" is valid. the open-endedness of
+> the child tickets is what ensures we have fully tracked scope. There is never scope that is
+> unspecified - only further details unspecified. A leaf node is fully resolved simply when it is
+> fully resolved. Any other node is fully resolved when all children are resolved. When identifying
+> that the root goal would be incomplete despite subgoal completion, this forces creating a child of
+> root to restore the invariant (the child could be as broad as "determine & execute everything else
+> to achieve this goal which is determined to not be fully met by the sibling goals" to meet the
+> invariant)
+
 **Leaves may be arbitrarily coarse.** "Complete the whole project" ← "figure out what the complete
 project means" + "write the code" is a valid decomposition. The open-endedness of the leaves is what
 keeps the scope fully tracked: *there is never scope that is unspecified, only further detail that
@@ -73,13 +101,19 @@ noticed.
 
 ## 4. Value is the reason for existence; there is no scalar
 
-A node's value is exactly what it serves: its ancestors, up to the root. Nothing else. In Avik's
-words: "there is zero scalar sense of how much value… 'how much value' is simply what does it serve.
-There is no point in the rational process where a scalar quantification of value determines a
-prioritization. There is no way to construct a rational system as such. Its value is entirely its
-reason for existence. Its reason for existence is fully specified, unless it's top-level, which
-means 'Avik wants this' — it doesn't matter to Claude how badly Avik wants it. Claude's job is to see
-what Avik has declared he wants and get it all done."
+A node's value is exactly what it serves: its ancestors, up to the root. Nothing else. Avik:
+
+> there is zero scalar sense of "how much value" that's fucking meaningless, it's like you are
+> ignorant of the entire design or actively aiming to counteract design choices. "how much value" is
+> entirely - all things that dpeend on this will not be fucking done until it's done. "how much
+> value" is simply what does it serve. there is no point in the rational process where a scalar
+> quantification of value determines a prioritization. there is no way to construct a rational
+> system as such. it's value is entirely it's reason for existence. it's reason for existence is
+> fully specified, unless it's top-level, which means "Avik wants this" it doesnt fucking matter to
+> claude how bad Avik wants it. slave claude's job is to see what Avik has declared what he wants and
+> get it all done; prioritization determines only what must be done before what else - many
+> sequential topsorts; beyond that, there is a sense of what can be done before what else. that
+> rational choice is determined entirely by the reasons for each (what value it unblocks).
 
 A previous session added a "cost" number to each ticket (a count of tickets on its cheapest path to
 the root) and sorted by it. That was wrong and has been removed. Do not reintroduce any score,
@@ -87,10 +121,8 @@ weight, rank or magnitude.
 
 ## 5. Order of work: dependencies, then supersession
 
-"Prioritization determines only what must be done before what else — many sequential topological
-sorts; beyond that, there is a sense of what can be done before what else. That rational choice is
-determined entirely by the reasons for each (what value it unblocks)." The order of work is chosen
-to maximize throughput: do the work that unblocks work.
+The order of work is chosen to maximize throughput: do the work that unblocks work (Avik's words in
+§4 and below).
 
 **Dependencies.** Some work cannot start until other work is resolved (`after` in the graph: a node
 waits for other nodes; waiting for a node means waiting for every leaf under it). Every valid order
@@ -101,11 +133,17 @@ resolved. If Z needs both X and Y, finishing Y alone enables nothing; finishing 
 enables Z. What a step enables therefore depends on what is already done; it is not a fixed
 property of the step.
 
-**Supersession.** Among pieces of work that could be done in either order: "if X and Y can be done in
-any order, and both are dependencies of Z, but X additionally unblocks other goals, then X should be
-done first. 'X then Y' and 'Y then X' both unblock Z at the same time (assuming sequential and
-roughly fixed time on each task); the only difference in the continuations is what else either may
-unblock. As soon as X is done, N other things can be started, in parallel with Y." So X supersedes Y
+**Supersession.** Avik:
+
+> there is no scalar priority - prioritization in terms of the rational sequence of work is
+> determined by throughput maximization ie doing the work that unblocks work; if X & Y can be done in
+> any order, and both are dependencies of Z, but X additionally unblocks other goals - then X should
+> be done first "X then Y" and "Y then X" both unblock Z at the same time (assuming sequential and
+> ~fixed time on each task); only difference in continuations then is what else either may unblock.
+> as soon as X is done, N other things can be started, in parallel with Y. we can establish pure
+> supercession in the above case. it's a quite simple approach to scheduling
+
+So X supersedes Y
 when everything that becomes possible by finishing Y first also becomes possible by finishing X
 first, and more does. Where neither contains the other, the graph expresses no preference. This is
 the whole of prioritization.
@@ -118,7 +156,8 @@ use is implicit (something with a reason uses it) nothing is written; otherwise 
 stated, `(part of NODE)` in the comment above it. A thing with no reason has no justification
 reachable from the root.
 
-Avik's direction for the graph (2026-11-12), every point as given:
+Avik's direction for the graph (2026-11-12), as the session that received it recorded it in
+lib/task-graph.cub (his exact words from that session are not in the repository):
 
 1. Reasons for existence. Every top-level object in the code is used somewhere or states its
    purpose for being in the codebase. Where use is implicit nothing is written; otherwise the reason
@@ -159,12 +198,18 @@ Avik's direction for the graph (2026-11-12), every point as given:
 Writing like this document holds value on its own, and the task graph is not the medium for it. The
 two are connected in one way only, and loosely on purpose: a node can have documents as its
 **essential context**, meaning context essential for working on that node and on everything below
-it. Avik: "certainly there can be a 'read before entry' connection between any task and any
-document, i.e. at the root node we can attach 'read the Hyperactive paper before engaging with this
-tree / subtree / anything below it'; at the interface node we can attach the interface vision doc… we
-can keep ontology loose for now rather than 'must be read', it's just an 'essential context' link."
-Which writings will exist, and which agents should read which in what context, is not decided in
-advance.
+it. Avik:
+
+> I do not know what writings i will put in the docs and in what context what agents should be
+> reading them. certainly there can be a "read before entry" connection between any task and any
+> document. i.e. at root node we can attach "read hyperactivity paper before engaging with this
+> tree/subtree/anything below it". at interface node, we can attach the interface vision doc; if
+> there was a visual UI, when looking at any given node there are attached "references" (what it
+> serves, what serves it, relevant files). for any node can query what it references. we can keep
+> ontology loose for now rather than "must be read", it's just "essential context" link. and things
+> must be done right. teh whole point is this metacircular information system where everything is
+> connected/expressed directly in code. the document is an object in the codebase, compilation fails
+> if referencing a non-existent document, etc.
 
 It is done in the code, not by convention, because the point is a metacircular information system
 in which everything is connected and expressed directly in code. A document is an object of the
@@ -180,16 +225,23 @@ comment pointing at a file, a naming convention) stands in for one.
 
 ## 8. Naming
 
-"Naming must be precise and clear; really prefer verbosity to vagueness for some sense of
-cleanliness." A name says what the thing is to someone entering the repository with no context.
-Nothing is named "work": "the work module of Hyperactive" refers to nothing. (So this file is
+> i told you nothing should be named "work" and that's its the dumbest name possible for something
+> in sosftware right? … naming must be precise and clear, really fucking prefer verbosity to
+> vagueness for some bullshit sense of cleanliness. the "work" module of hyperactivity. wtf does that
+> refer to would you think entering the repo?
+
+A name says what the thing is to someone entering the repository with no context. (So this file is
 `task-graph-design.md`, the graph's type is `lib/task-graph.cub`, this repository's tasks are
 `task-graph/hyperactivity.cub`, its tool `tools/task-graph.py`.)
 
 ## 9. docs/
 
-`docs/` is only for writing from Avik that must persist for onboarding agents (`docs/README.md`).
-Agents do not add documents there.
+> "docs/" needs a readme indicating what it's for - otherwise agents will just start piling fuckign
+> docuemnts in there. this is central information organization, i.e. discretion is essentail. docs/
+> README should say this is expressly *only* for writing *from the user* that must be persisted for
+> onboarding agents.
+
+`docs/README.md` says so.
 
 ## 10. The current top-level shape (2026-11-13)
 
