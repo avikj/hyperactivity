@@ -1,20 +1,21 @@
--- lib/work.cub — the work's graph, as data of the language. Its meaning, its rationale and the
--- rules for using it are docs/WORK.md (Avik's design, in his words): read that first. This file holds
+-- lib/task-graph.cub — the task graph, as data of the language. Its meaning, its rationale and the
+-- rules for using it are docs/task-graph-design.md (Avik's design, in his words): read that first. This file holds
 -- only what a node is and the views over nodes; a particular work declares its nodes over it (this
--- repository's: work/graph.cub).
+-- repository's: task-graph/hyperactivity.cub).
 --
 import "core.cub"
+import "document.cub"
 -- t64 (2026-11-12): The work as one graph of nodes. Done: goals and tickets are one kind of node
--- (work/graph.cub); every declaration of the code is a node of the same graph, its reason computed
+-- (task-graph/hyperactivity.cub); every declaration of the code is a node of the same graph, its reason computed
 -- from the machine's reading `#uses` (a declaration with a reason mentions it), from the machine
 -- naming it (src/), or stated in the comment above it as `(part of NODE)` or `(prerequisite to
--- NODE)` (tools/work.py why, unexplained). Measured 2026-11-12 over every file: 4310 of 8312
+-- NODE)` (tools/task-graph.py why, unexplained). Measured 2026-11-12 over every file: 4310 of 8312
 -- declarations have no reason; stating the rest where the code's text establishes a reason is what
--- remains (docs/WORK.md §6, point 1). Library API nothing uses (lib/std.cub's pow, fact, happly, the
+-- remains (docs/task-graph-design.md §6, point 1). Library API nothing uses (lib/std.cub's pow, fact, happly, the
 -- univalence lemmas; lib/prelude.cub's untyped helpers) states none: whether each stays is open.
 --
--- A node is a task (docs/WORK.md §3). Its name, a text equal to the name it is declared under
--- (tools/work.py check confirms it), is its identity. Its parts-of are the nodes it is a child of:
+-- A node is a task (docs/task-graph-design.md §3). Its name, a text equal to the name it is declared under
+-- (tools/task-graph.py check confirms it), is its identity. Its parts-of are the nodes it is a child of:
 -- the reasons it exists, its value being exactly what it serves (§4; there is no scalar). A node's
 -- children always cover it completely: a leaf is resolved when its work is done, any other node
 -- exactly when all its children are, with no further step at the parent. Where a node's children are
@@ -22,7 +23,7 @@ import "core.cub"
 -- needs"), ordinary work that shrinks as pieces are carved out of it. A node part of nothing is a
 -- root, and is declared one (roots); the root of this work is what Avik wants.
 -- A node's text: a goal's statement is the comment `name (date):` above its definition in
--- work/graph.cub; a node opened for a specific piece of work is named tN and its text is the one
+-- task-graph/hyperactivity.cub; a node opened for a specific piece of work is named tN and its text is the one
 -- comment `tN (date):` at the place in the code it concerns. Every node in the state is open;
 -- resolving one removes it (and any parent it leaves with no children, after confirming the parent is
 -- achieved); the history keeps it.
@@ -31,12 +32,16 @@ import "core.cub"
 -- from parts and after alone (§5): every order is a topological sort of after; among work that can be
 -- done in either order, X goes before Y when everything finishing Y first makes possible, finishing X
 -- first also makes possible, and more (enabling is conjunctive: a node waiting on several becomes
--- possible only when all are resolved). tools/work.py priority computes it.
+-- possible only when all are resolved). tools/task-graph.py priority computes it.
+-- Essential context: `essential-context`, pairs (n , ds): documents (lib/document.cub: files of the
+-- repository as objects of the code, a reference to a missing one failing the check) that are
+-- essential context for working on n and on everything below it. The relation is deliberately loose:
+-- "essential context", not "must be read before" (docs/task-graph-design.md §7).
 data Node = node (name : List Word) (part-of : List Node)
 
 -- ---------------------------------------------------------------- views (2026-11-12, t62)
 -- Views of the work are terms over it: `declarations Node` is every node, and the functions here
--- read it. tools/work.py evaluates them through the machine (its `view` command).
+-- read it. tools/task-graph.py evaluates them through the machine (its `view` command).
 text-eq : List Word → List Word → Bool
 text-eq nil nil = true
 text-eq nil (cons y ys) = false

@@ -1,8 +1,9 @@
-# The work: how it is organized, and why
+# The task graph: how the work is organized into tasks and ordered, and why
 
 Written 2026-11-13 from Avik's explanations to a Claude session, in his words where quoted. Avik is
 the source of every decision in this repository and in the paper; agents are used for throughput.
-Read this before touching `work/graph.cub`, `lib/work.cub` or `tools/work.py`, and before deciding
+Transcribed by that session at Avik's request; Avik's explanations are the source. Read this before
+touching `task-graph/hyperactivity.cub`, `lib/task-graph.cub` or `tools/task-graph.py`, and before deciding
 what to work on. If anything here is unclear or seems wrong, ask; do not reinterpret it.
 
 ## 1. Why this document exists
@@ -22,13 +23,13 @@ must be done, and why each piece exists). Ideas, rationale and vision live in En
 like this one, which hold value on their own for an agent whose experience is ordinary software
 work and who is trying to infer the project's norms from its code.
 
-## 2. What the work graph is for
+## 2. What the task graph is for
 
 This is not a project-management tool bolted onto a programming language. The language is meant to
 be an information and computing environment with maximal bandwidth for continuous flows of
 understanding and contribution, with the friction to cognition brought to zero — Avik's driver for a
 decade. The work itself (the code, its history, what is known, what is open, what everyone is
-doing) is one object in the language (`work-object` in `work/graph.cub`), and the graph of goals is
+doing) is one object in the language (`work-object` in `task-graph/hyperactivity.cub`), and the graph of goals is
 the first part of that object built. Soon agents and people will not interact with this work by
 grepping and reading files: they will declare and read views, terms of the language evaluated by
 the machine over the work. Text operations on the work are a stage to be left, not the method.
@@ -153,7 +154,44 @@ Avik's direction for the graph (2026-11-12), every point as given:
     wanted. "Do the project" ← "figure out how to do the project" is a valid statement of everything
     required; "do the project" ← "implement xyz" is not.
 
-## 7. The current top-level shape (2026-11-13)
+## 7. Essential context: documents attached to tasks
+
+Writing like this document holds value on its own, and the task graph is not the medium for it. The
+two are connected in one way only, and loosely on purpose: a node can have documents as its
+**essential context**, meaning context essential for working on that node and on everything below
+it. Avik: "certainly there can be a 'read before entry' connection between any task and any
+document, i.e. at the root node we can attach 'read the Hyperactive paper before engaging with this
+tree / subtree / anything below it'; at the interface node we can attach the interface vision doc… we
+can keep ontology loose for now rather than 'must be read', it's just an 'essential context' link."
+Which writings will exist, and which agents should read which in what context, is not decided in
+advance.
+
+It is done in the code, not by convention, because the point is a metacircular information system
+in which everything is connected and expressed directly in code. A document is an object of the
+codebase: `document "path"` (`lib/document.cub`) reads the file when the declaration is read and
+fails if there is no such file, so referring to a document that does not exist fails the check, as
+referring to an undefined name does; its value carries the file's SHA-256, so what refers to it
+changes identity exactly when the document changes. The relation is `essential-context` in
+`task-graph/hyperactivity.cub`; `python3 tools/task-graph.py show NODE` lists a node's own and those
+it inherits from above it. Today the root carries the paper and this document.
+
+A connection between writing and code is made exactly right or not at all: no half mechanism (a
+comment pointing at a file, a naming convention) stands in for one.
+
+## 8. Naming
+
+"Naming must be precise and clear; really prefer verbosity to vagueness for some sense of
+cleanliness." A name says what the thing is to someone entering the repository with no context.
+Nothing is named "work": "the work module of Hyperactive" refers to nothing. (So this file is
+`task-graph-design.md`, the graph's type is `lib/task-graph.cub`, this repository's tasks are
+`task-graph/hyperactivity.cub`, its tool `tools/task-graph.py`.)
+
+## 9. docs/
+
+`docs/` is only for writing from Avik that must persist for onboarding agents (`docs/README.md`).
+Agents do not add documents there.
+
+## 10. The current top-level shape (2026-11-13)
 
 Under the root: `publish`, the languages, hardware and OS goals, and the work object.
 `publish` has two children. `initial-deliverable` (the companion repository with the
@@ -162,7 +200,7 @@ the top priority: it contains `core`, the language completion that every other g
 waits on. `full-coverage` (every construction the paper displays, worked examples included) comes
 last; it serves nothing but publication.
 
-## 8. Mistakes that have happened, so they are not repeated
+## 11. Mistakes that have happened, so they are not repeated
 
 - Mechanics recorded without meaning (§1).
 - A scalar cost per ticket and a sort by it (§4).
@@ -172,5 +210,6 @@ last; it serves nothing but publication.
 - A relation "speeds" between nodes, a vague stand-in for unblocking. Unblocking is dependencies.
 - A catch-all top node ("everything currently pursued serves this") that unrelated work was
   attached to.
+- Vague names ("work" for a module, a directory, a tool and a document).
 - Agents producing an account of the project before reading its specification
   (`docs/Hyperactive_Final_Paper.pdf`), and answering with confident structure instead of reasoning.

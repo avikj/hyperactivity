@@ -1,40 +1,40 @@
 #!/usr/bin/env python3
 """work — the work's graph (2026-11-12; one kind of node and the order of work, 2026-11-13).
 
-What the graph means and how it is used is docs/WORK.md (Avik's design): read it first. The graph is
-code: lib/work.cub (what a node is: a task, its name and its parents; the relation after),
-work/graph.cub (this work's nodes, each defined after its parents; a goal's statement is the comment
+What the graph means and how it is used is docs/task-graph-design.md (Avik's design): read it first. The graph is
+code: lib/task-graph.cub (what a node is: a task, its name and its parents; the relation after),
+task-graph/hyperactivity.cub (this work's nodes, each defined after its parents; a goal's statement is the comment
 above its definition). A node's children always cover it; where they are not certainly complete one
 child is its residual (its text begins `residual of NODE`). A node opened for a specific piece of work
 is named tN, and its text is the one comment in the repository that begins `tN (YYYY-MM-DD):`, at
 the place it concerns. Every node in the graph is open; resolving one removes it.
 
-    python3 tools/work.py tree               the graph from its roots, open tN under each node
-    python3 tools/work.py show NODE ...      a node's statement or text, place, parts, after, before
-    python3 tools/work.py list [--under N]   the tN nodes, with the first words of their text
-    python3 tools/work.py priority           the order of work: what can start now, those that
+    python3 tools/task-graph.py tree               the graph from its roots, open tN under each node
+    python3 tools/task-graph.py show NODE ...      a node's statement or text, place, parts, after, before
+    python3 tools/task-graph.py list [--under N]   the tN nodes, with the first words of their text
+    python3 tools/task-graph.py priority           the order of work: what can start now, those that
                                              supersede others first; then what waits, on what
-    python3 tools/work.py check              graph and comments correspond; the graph checks
-    python3 tools/work.py next               the next tN number never used (the history included)
-    python3 tools/work.py open FILE:LINE NODE [NODE ...] TEXT
+    python3 tools/task-graph.py check              graph and comments correspond; the graph checks
+    python3 tools/task-graph.py next               the next tN number never used (the history included)
+    python3 tools/task-graph.py open FILE:LINE NODE [NODE ...] TEXT
                                              open the next tN, part of the NODEs, its text the
                                              comment `tN (date): TEXT` written above FILE:LINE;
                                              a part of the root or of a root's part asks y/N;
                                              a part of a node with no residual refutes its cover
-    python3 tools/work.py close tN           tN resolved: its node and text removed; a parent left
+    python3 tools/task-graph.py close tN           tN resolved: its node and text removed; a parent left
                                              with no children is resolved too, once confirmed
-    python3 tools/work.py view TERM          a view: a term over the work (lib/work.cub's views over
+    python3 tools/task-graph.py view TERM          a view: a term over the work (lib/task-graph.cub's views over
                                              `declarations Node`) evaluated by the machine, shown by
                                              its type (a List Word as text)
-    python3 tools/work.py every              every file checked: each file no file imports, alone with its
+    python3 tools/task-graph.py every              every file checked: each file no file imports, alone with its
                                              imports (--read); per file, the failures in its own text
-    python3 tools/work.py why NAME ...       why a declaration of the code exists: the chain to a root
-    python3 tools/work.py unexplained [FILE] the declarations with no reason, by file
+    python3 tools/task-graph.py why NAME ...       why a declaration of the code exists: the chain to a root
+    python3 tools/task-graph.py unexplained [FILE] the declarations with no reason, by file
 
 Every declaration of the code is a node of the same graph. Its reason is computed: something with
 a reason mentions it (the machine's reading `#uses`, over every file), or the
 machine names it (src/), or it states one, in the comment above it: `(part of NODE)` or
-`(prerequisite to NODE)`, NODE a node of work/graph.cub. A node of work/graph.cub has a reason when
+`(prerequisite to NODE)`, NODE a node of task-graph/hyperactivity.cub. A node of task-graph/hyperactivity.cub has a reason when
 it is a root or part of a node with one. The first reading of a changed file runs the machine on
 each file no file imports (minutes when the x86 model is among them); the results are kept.
 
@@ -119,7 +119,7 @@ def texts():
     return out
 
 
-GRAPH = os.path.join(ROOT, 'work', 'graph.cub')
+GRAPH = os.path.join(ROOT, 'task-graph', 'hyperactivity.cub')
 NODE = re.compile(r'^([\w-]+) = node "([^"]*)" (\(.*\)|nil)\s*$', re.M)
 
 
@@ -156,6 +156,20 @@ def graph():
     return out, roots, pairs('after')
 
 
+def essential_context():
+    """documents (name -> path relative to the repository) and essential-context (node -> names)"""
+    src = open(GRAPH, encoding='utf-8').read()
+    base = os.path.dirname(GRAPH)
+    docs = {n: os.path.relpath(os.path.normpath(os.path.join(base, q)), ROOT)
+            for n, q in re.findall(r'^([\w-]+) = document "([^"]*)"', src, re.M)}
+    ec = {}
+    m = re.search(r'^essential-context = (.*)$', src, re.M)
+    if m:
+        for a, b in re.findall(r'\(([\w-]+) , ((?:[^()]|\([^()]*\))*)\)', m.group(1)):
+            ec[a] = names_in(b)
+    return docs, ec
+
+
 def kids_of(g):
     k = {n: [] for n in g}
     for n, d in g.items():
@@ -187,11 +201,17 @@ def cmd_show(args):
             print(f'{a}: no such node\n'); continue
         rels = ', '.join(f'{rel_word(g, p)} {p}' for p in d['parts']) or ('a root' if a in roots else '-')
         print(f'{a}  {rels}')
+        ks = kids_of(g).get(a, [])
+        if ks: print('  served by: ' + ' '.join(ks))
+        docs, ec = essential_context()
+        ctx = [(dn, m) for m in sorted(ancestors(g, a), key=lambda m: depth(g, roots, m) or 0) for dn in ec.get(m, [])]
+        for dn, m in ctx:
+            print(f'  essential context: {docs.get(dn, dn)}' + ('' if m == a else f'  (from {m})'))
         if after.get(a): print('  after: ' + ' '.join(after[a]))
         waits = [m for m, l in after.items() if a in l]
         if waits: print('  before: ' + ' '.join(waits))
         bodies = [(f, l, dt, t) for f, l, dt, t in txt.get(int(a[1:]), [])] if is_t(a) else []
-        if not is_t(a) and d['statement']: bodies = [('work/graph.cub', 0, '', d['statement'])]
+        if not is_t(a) and d['statement']: bodies = [('task-graph/hyperactivity.cub', 0, '', d['statement'])]
         for f, l, dt, t in bodies:
             print(f'  {f}' + (f':{l}  ({dt})' if l else ''))
             words, line = t.split(), ''
@@ -272,7 +292,7 @@ def cmd_check(args):
     for n, l in after.items():
         for m in [n] + l:
             if m not in g: print(f'{n}: names {m}, which is not a node'); bad += 1
-    cmd = [os.path.join(ROOT, 'build', 'cubical'), 'work/graph.cub']
+    cmd = [os.path.join(ROOT, 'build', 'cubical'), 'task-graph/hyperactivity.cub']
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'))
     last = [l for l in r.stdout.split('\n') if l.strip()][-1:] or ['']
     fails = [l for l in r.stdout.split('\n') if l.startswith('FAIL')]
@@ -296,7 +316,7 @@ def ancestors(g, n):
 
 
 def cmd_priority(args):
-    """The order of work (docs/WORK.md §5). There is no score. A leaf can start when every node its
+    """The order of work (docs/task-graph-design.md §5). There is no score. A leaf can start when every node its
     `after` names (on it or on any node above it: waiting on a node is waiting on every leaf under it)
     is resolved, i.e. gone from the graph. Enabling is conjunctive: a waiting leaf becomes startable
     only when all the leaves it waits on are done. Among the leaves that can start now, X supersedes
@@ -343,7 +363,7 @@ STATED = re.compile(r'\((part of|prerequisite to) ([\w-]+)\)')
 
 
 IMPORT = re.compile(r'^import "([^"]+)"', re.M)
-READ_DIRS = ('lib', 'experiments', 'work')
+READ_DIRS = ('lib', 'experiments', 'task-graph')
 
 
 def cub_files():
@@ -431,7 +451,7 @@ def reasons():
     decls = {(f, l): (names, uses) for f, l, names, uses in rd}
     node_at = {}
     for f, l, names, _ in rd:
-        if f == 'work/graph.cub':
+        if f == 'task-graph/hyperactivity.cub':
             for n in names:
                 if n in g: node_at[n] = (f, l)
     files = {}
@@ -445,7 +465,7 @@ def reasons():
         if n in node_at: why[node_at[n]] = ('a root', None)
     stated = {}
     for k, (names, _) in decls.items():
-        if k[0] == 'work/graph.cub' and any(n in g for n in names): continue
+        if k[0] == 'task-graph/hyperactivity.cub' and any(n in g for n in names): continue
         st = stated_reason(lines_of(k[0]), k[1])
         if st: stated[k] = st
         elif any(n in machine_names for n in names if not n.startswith('#')): why[k] = ('named by the machine (src/)', None)   # a command's kind (#show) is not a name
@@ -496,7 +516,7 @@ def cmd_unexplained(args):
     decls, why, stated, g, node_at = reasons()
     bad = [k for k, (n, _) in stated.items() if n not in g]
     for k in bad:
-        print(f'{k[0]}:{k[1]}: states a reason, {stated[k][1]}, which is not a node of work/graph.cub')
+        print(f'{k[0]}:{k[1]}: states a reason, {stated[k][1]}, which is not a node of task-graph/hyperactivity.cub')
     by = {}
     for k in decls:
         if k not in why and (not args or k[0] in args or any(k[0].startswith(a) for a in args)):
@@ -514,7 +534,7 @@ def cmd_unexplained(args):
 def cmd_view(args):
     term = ' '.join(args)
     env = dict(os.environ); env.setdefault('CUBICAL_STORE', os.path.join(ROOT, '.cubical-store'))
-    r = subprocess.run([os.path.join(ROOT, 'build', 'cubical'), 'work/graph.cub', '--serve'], cwd=ROOT,
+    r = subprocess.run([os.path.join(ROOT, 'build', 'cubical'), 'task-graph/hyperactivity.cub', '--serve'], cwd=ROOT,
                        input=f'#type ({term})\n.\n#show {term}\n.\n', capture_output=True, text=True, env=env)
     ty = next((l.rsplit(' : ', 1)[1] for l in r.stdout.split('\n') if l.startswith('type: ') and ' : ' in l), None)
     val = next((l.split('  = ', 1)[1].rsplit('   [', 1)[0] for l in r.stdout.split('\n') if l.startswith('  = ')), None)
@@ -626,10 +646,10 @@ def write_after(gs, after):
 
 
 def header_text(gs, n, body):
-    """a tN text with no single site, written in work/graph.cub's header before its import"""
+    """a tN text with no single site, written in task-graph/hyperactivity.cub's header before its import"""
     import textwrap
     lines = ['-- ' + b for b in textwrap.wrap(body, 97)] + ['--']
-    at = gs.index('import "../lib/work.cub"')
+    at = gs.index('import "../lib/task-graph.cub"')
     return gs[:at] + '\n'.join(lines) + '\n' + gs[at:]
 
 
@@ -642,7 +662,7 @@ def add_node(gs, n, parents):
 def used_numbers(g):
     used = {int(x[1:]) for x in g if is_t(x)} | set(texts())
     try:
-        log = subprocess.run(['git', 'log', '-p', '--all', '--', 'work', 'lib/work.cub'], cwd=ROOT,
+        log = subprocess.run(['git', 'log', '-p', '--all', '--', 'work', 'lib/work.cub', 'task-graph', 'lib/task-graph.cub'], cwd=ROOT,
                              capture_output=True, text=True).stdout
         used |= {int(x) for x in re.findall(r'\bt(\d+)\b', log)}
     except OSError: pass
@@ -657,11 +677,11 @@ def cmd_open(args):
     g, roots, after = graph()
     txt = texts()
     for x in nodes:
-        if x not in g: sys.exit(f'{x}: not a node of work/graph.cub')
+        if x not in g: sys.exit(f'{x}: not a node of task-graph/hyperactivity.cub')
         d = depth(g, roots, x)
         if d is not None and d <= 1:
             print(f'{x} is {"the root" if d == 0 else "a child of the root"}: attaching here puts the new node in front of')
-            print('everyone; the most specific node is essential (docs/WORK.md §6, points 6, 8, 10; python3 tools/work.py tree).')
+            print('everyone; the most specific node is essential (docs/task-graph-design.md §6, points 6, 8, 10; python3 tools/task-graph.py tree).')
             if not sys.stdin.isatty() or input(f'attach it directly to {x}? [y/N] ').strip().lower() != 'y':
                 sys.exit('not opened')
     # a child of a node with a residual is carved out of the residual's scope; a child of a node whose
@@ -669,7 +689,7 @@ def cmd_open(args):
     refuted = [x for x in nodes if kids_of(g).get(x) and not residual_of(g, txt, x)]
     for x in refuted:
         print(f'{x}\'s children were held to cover it completely; a new child says they did not. The missed')
-        print(f'requirement is a class (docs/WORK.md §3, point 9): {x} also gets a residual, "determine and do')
+        print(f'requirement is a class (docs/task-graph-design.md §3, point 9): {x} also gets a residual, "determine and do')
         print(f'everything else {x} needs".')
         if not sys.stdin.isatty() or input(f'open a new child of {x}, and its residual? [y/N] ').strip().lower() != 'y':
             sys.exit('not opened')
@@ -713,7 +733,7 @@ def remove_text(n):
             cb = comment_body(ls[j])
             if MARK.search(ls[j]) or RULE.match(ls[j]) or cb is None or cb[0] == '' or cb[1] == '/*': break
             j += 1
-        if f == 'work/graph.cub' and j < len(ls) and ls[j].strip() == '--': j += 1
+        if f == 'task-graph/hyperactivity.cub' and j < len(ls) and ls[j].strip() == '--': j += 1
         del ls[i:j]
         open(path, 'w', encoding='utf-8').write('\n'.join(ls))
 
@@ -734,7 +754,7 @@ def remove_node(gs, x):
 
 def cmd_close(args):
     """tN is resolved: its node and its text are removed. A parent left with no children is resolved
-    exactly when its children were (docs/WORK.md §3), so it is removed too once confirmed; if it is
+    exactly when its children were (docs/task-graph-design.md §3), so it is removed too once confirmed; if it is
     not achieved, its children did not cover it, and its residual must be opened instead."""
     if len(args) != 1: sys.exit('close tN')
     x = args[0] if args[0].startswith('t') else 't' + args[0]
@@ -752,7 +772,7 @@ def cmd_close(args):
         if sys.stdin.isatty() and input(f'is {p} achieved? [y/N] ').strip().lower() == 'y':
             gs = remove_node(gs, p); gone.append(p); todo += g[p]['parts']
         else:
-            print(f'then its children did not cover it: open its residual (python3 tools/work.py open ... {p} TEXT)')
+            print(f'then its children did not cover it: open its residual (python3 tools/task-graph.py open ... {p} TEXT)')
     after = {a: [b for b in bs if b not in gone] for a, bs in after.items() if a not in gone}
     after = {a: bs for a, bs in after.items() if bs}
     gs = write_after(gs, after)

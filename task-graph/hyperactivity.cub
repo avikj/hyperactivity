@@ -1,12 +1,12 @@
--- work/graph.cub — this work's nodes (lib/work.cub; the meaning and rules are docs/WORK.md, read it
+-- task-graph/hyperactivity.cub — this work's nodes (lib/task-graph.cub; the meaning and rules are docs/task-graph-design.md, read it
 -- first). A node's definition gives its identity and the nodes it is a child of; nodes are defined
 -- after their parents. A node's children always cover it completely; where they are not certainly
 -- complete, one child is the node's residual. A goal's statement is the comment `name (date):` above
 -- its definition. A node opened for a specific piece of work (named tN) has its text as the one
--- comment `tN (date):` at the place in the code it concerns (`python3 tools/work.py show tN`), or here
+-- comment `tN (date):` at the place in the code it concerns (`python3 tools/task-graph.py show tN`), or here
 -- below when it has no single place (residuals among them). Every node here is open: resolving one
 -- removes it (and its text) and folds what matters into where it belongs; the history keeps it.
--- Loaded after lib/work.cub.
+-- Loaded after lib/task-graph.cub.
 --
 -- t33 (2026-11-12): question. Not yet done: reading the evaluator's rule bodies (src/net.c's
 -- interaction cases, src/dnf.c's face algebra) side by side with the published rules, CCHM (Cohen,
@@ -50,7 +50,7 @@
 -- what is true, beyond the specific tickets under self-aware.
 --
 -- t78 (2026-11-13): residual of tooling: determine and do the work's record as data of the language
--- with every query written in the language (the order of work, now computed in tools/work.py, among
+-- with every query written in the language (the order of work, now computed in tools/task-graph.py, among
 -- them), beyond the work object.
 --
 -- t79 (2026-11-13): residual of languages: determine and do every language to be lifted beyond C++
@@ -108,10 +108,11 @@
 --
 -- t92 (2026-11-13): needs-work. Install the HCI vision document from Avik in the repository (docs/),
 -- to ground and drive the interface: the interactive product that is the language's delivered value,
--- the information environment of maximal bandwidth and zero friction to cognition (docs/WORK.md §2).
+-- the information environment of maximal bandwidth and zero friction to cognition (docs/task-graph-design.md §2).
 -- Until it exists, the interface has no statement of what it is to be beyond its node's few lines.
+-- When it is installed, it becomes the interface's essential context (essential-context, below).
 --
-import "../lib/work.cub"
+import "../lib/task-graph.cub"
 -- unified-computing (2026-11-12, the root, in the user's words where they gave them). Unified
 -- computing: one program. One formal language and its reference implementation in which all
 -- computation, and all information about it, is one mathematical object: none of the existing
@@ -162,7 +163,7 @@ initial-deliverable = node "initial-deliverable" (cons publish (cons full-covera
 self-aware : Node
 self-aware = node "self-aware" (cons initial-deliverable nil)
 -- tooling (2026-11-12): the work's record is data of the language: goals and tickets checked
--- definitions (lib/work.cub), each ticket's text at its site, tools/work.py to list, show and check
+-- definitions (lib/task-graph.cub), each ticket's text at its site, tools/task-graph.py to list, show and check
 -- them; queries written in the language itself follow. It serves the self-aware repository and is
 -- itself a demonstration of the language as an information environment.
 tooling : Node
@@ -258,7 +259,7 @@ typed-codes = node "typed-codes" (cons partial-evaluation (cons native (cons typ
 --
 -- No imposed ontology. The base has no kinds of statement, no fixed relations, no notion of author,
 -- session, ticket, goal or settled. Ticket, goal, question are types the work defines for itself
--- (lib/work.cub, this file). A relation is a reference one declaration makes to another by key, as a
+-- (lib/task-graph.cub, this file). A relation is a reference one declaration makes to another by key, as a
 -- definition references a definition; reverse relations are computed. Who said something, if it
 -- matters, is itself a statement.
 --
@@ -477,12 +478,21 @@ t92 : Node
 t92 = node "t92" (cons interface nil)
 t93 : Node
 t93 = node "t93" (cons interface nil)
--- the roots: the nodes that are part of nothing, declared (lib/work.cub); read by tools/work.py
+-- documents that are essential context for working on a node and everything below it (lib/task-graph.cub;
+-- docs/task-graph-design.md §7), each a file of the repository whose absence fails this file's check
+-- (part of work-object)
+hyperactive-paper : Document
+hyperactive-paper = document "../docs/Hyperactive_Final_Paper.pdf"
+task-graph-design : Document
+task-graph-design = document "../docs/task-graph-design.md"
+essential-context : List (Node × List Document)
+essential-context = cons (unified-computing , cons hyperactive-paper (cons task-graph-design nil)) nil
+-- the roots: the nodes that are part of nothing, declared (lib/task-graph.cub); read by tools/task-graph.py
 -- (part of work-object)
 roots : List Node
 roots = cons unified-computing nil
--- after: a node's work cannot start until every node listed is resolved (lib/work.cub; docs/WORK.md
--- §5); the order of work is computed from this and the parts (tools/work.py priority) (part of
+-- after: a node's work cannot start until every node listed is resolved (lib/task-graph.cub; docs/task-graph-design.md
+-- §5); the order of work is computed from this and the parts (tools/task-graph.py priority) (part of
 -- work-object)
 after : List (Node × List Node)
 after = cons (t29 , cons t7 nil) (cons (t39 , cons t16 nil) (cons (t42 , cons t61 nil) (cons (t44 , cons t61 nil) (cons (t64 , cons t61 (cons t62 nil)) nil))))

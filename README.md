@@ -3,29 +3,29 @@
 This repository implements the language specified by `docs/Hyperactive_Final_Paper.pdf` (the
 specification; read it in full before changing anything — `tracks/PAPER-READING.md` is a
 section-by-section account of it, with what exists here of each construction). Before deciding
-what to work on, read `docs/WORK.md`: how the work is organized and ordered, and why, in Avik's
+what to work on, read `docs/task-graph-design.md`: how the work is organized and ordered, and why, in Avik's
 words. Its history up to 2026-11-12 was carried over from a directory of github.com/avikj/math,
 which is now an archive.
 
 ## What is happening now
 
-**The work object (2026-11-12, node `work-object` in `work/graph.cub`, whose comment is the whole
+**The work object (2026-11-12, node `work-object` in `task-graph/hyperactivity.cub`, whose comment is the whole
 construction).** The work is one sequence of declarations used continuously by agents and people:
 everything said is a declaration; open loops are closed (removed from the state, anything that
 matters folded in) by anyone once completely unnecessary; facts are evaluations, remembered under
 content keys; views are terms applied to the work. It is in use from now: knowledge from any session
 goes into the code as declarations and dated notes at their sites, never only into a conversation.
-Done 2026-11-12: the work is one graph of nodes (`work/graph.cub`, t64), every declaration of the
-code a node of it with its reason computed (`tools/work.py why`, `unexplained`); a declaration's
+Done 2026-11-12: the work is one graph of nodes (`task-graph/hyperactivity.cub`, t64), every declaration of the
+code a node of it with its reason computed (`tools/task-graph.py why`, `unexplained`); a declaration's
 elaboration and the checker's answer, accepted or refused, are kept in the store by content
 (t43, t61 in part), so a warm library check takes 4.6 s with the fresh run's output; the per-file
 cache is gone (t41); text is a term (t63); `declarations T` gives the work as a value and views are
-terms over it (`tools/work.py view`, t37; t62 in part); every file outside the library imports what it needs
+terms over it (`tools/task-graph.py view`, t37; t62 in part); every file outside the library imports what it needs
 (the library's files are ordered by lib/library.cub) and `make every` checks them all, each failure from an open node (t30; the Makefile has the measurement).
 Pending: t60 (references keyed by content in the evaluator, so compiled records and results can be
 kept), t61 (the evaluator's results kept beyond the run), t62 (each declaration's code as a value),
 t44, and stating the reasons of the declarations no declaration with a reason uses. The order of
-work is computed, not stored: `python3 tools/work.py priority`.
+work is computed, not stored: `python3 tools/task-graph.py priority`.
 
 **Fixed 2026-11-12:** t51, the checker accepted Type : Type through a level computed by cases on a
 variable (a stuck level now is an atom); t56, `#retract` did not free the name.
@@ -65,13 +65,13 @@ postulates; normal forms redex-free; a fresh uncached check). Findings from it: 
 
 ## The work, as code
 
-**Read `docs/WORK.md` first.** It is Avik's design of the work's organization, with its rationale in
+**Read `docs/task-graph-design.md` first.** It is Avik's design of the work's organization, with its rationale in
 his words: what a node is, why a node's children always cover it, why there is no score of any kind,
 how the order of work follows from dependencies and supersession alone, and how to place a node.
 
-- `lib/work.cub` — what a node is: a task, its name and the nodes it is a child of (the reasons it
+- `lib/task-graph.cub` — what a node is: a task, its name and the nodes it is a child of (the reasons it
   exists); the one other relation, `after`. The order of work is computed from these, never stored.
-- `work/graph.cub` — this work's nodes, each defined after the nodes it is part of; the roots are
+- `task-graph/hyperactivity.cub` — this work's nodes, each defined after the nodes it is part of; the roots are
   declared (`roots`). A node's statement is the comment above its definition. Every node there is
   open: closing one removes it.
 - A node opened for a specific piece of work is named `tN`; its text is the one comment
@@ -81,18 +81,18 @@ how the order of work follows from dependencies and supersession alone, and how 
   `(part of NODE)` or `(prerequisite to NODE)`.
 
 ```
-python3 tools/work.py tree            # the graph from its roots, open tN under each node
-python3 tools/work.py show t6 core    # a node's text or statement, place, parts, after, before
-python3 tools/work.py priority        # what can start now (superseding leaves first); what waits
-python3 tools/work.py check           # graph and comments correspond; the graph checks
-python3 tools/work.py next            # the next tN number never used
-python3 tools/work.py open lib/x.cub:12 core-correct 'what is wrong, measured how'
+python3 tools/task-graph.py tree            # the graph from its roots, open tN under each node
+python3 tools/task-graph.py show t6 core    # a node's text or statement, place, parts, after, before
+python3 tools/task-graph.py priority        # what can start now (superseding leaves first); what waits
+python3 tools/task-graph.py check           # graph and comments correspond; the graph checks
+python3 tools/task-graph.py next            # the next tN number never used
+python3 tools/task-graph.py open lib/x.cub:12 core-correct 'what is wrong, measured how'
                                       # open the next tN there, part of the node (y/N near the top)
-python3 tools/work.py close t12       # t12 resolved; a parent left with no children, once confirmed
-python3 tools/work.py view 'names (under (declarations Node) core)'
+python3 tools/task-graph.py close t12       # t12 resolved; a parent left with no children, once confirmed
+python3 tools/task-graph.py view 'names (under (declarations Node) core)'
                                       # a view: a term over the work, evaluated by the machine
-python3 tools/work.py why refl        # why a declaration exists: its chain of reasons to a root
-python3 tools/work.py unexplained     # the declarations with no reason, by file
+python3 tools/task-graph.py why refl        # why a declaration exists: its chain of reasons to a root
+python3 tools/task-graph.py unexplained     # the declarations with no reason, by file
 ```
 
 The rule: whenever anything in the code is seen to be wrong, possibly wrong, owed work, or not
@@ -105,7 +105,7 @@ comment, set the record `(closed #date)`, in one commit.
   refused by the checker (t16–t21), which refuses untyped code outside the bootstrap files since
   2026-11-09, deliberately.
 - `make brunerie`: Brunerie's number −2 with 0 and 4 workers (the typed port; 6.6 s alone).
-- `make work`: 278 passed, 0 failed.
+- `make task-graph`: 278 passed, 0 failed.
 - The memory description files (`lib/mem/` other than `atomics`, `rc11`), loaded after `LIB`:
   385 definitions, 0 failures. `make every` checks every file (80 that no file imports, each with
   its imports); its 35 files with failures of their own each fail from an open node.
@@ -143,12 +143,12 @@ cost and stack defects recorded on 2026-11-09 (t4, t5); specialization cost thro
    specializer (`lib/specialize.cub`), the x86 translator (`lib/machine.cub`, `lib/x86.cub`,
    `lib/elf.cub`). The first files of `CORE` are untyped by necessity (bootstrap).
 4. **General definitions** — `lib/std.cub`, `lib/prim.cub`, processes and handlers
-   (`lib/proc.cub`, `lib/obs.cub`, `lib/world.cub`), decision procedures, `lib/work.cub`.
+   (`lib/proc.cub`, `lib/obs.cub`, `lib/world.cub`), decision procedures, `lib/task-graph.cub`.
 5. **Descriptions of particular computations** — networks and fleets (`lib/net.cub`,
    `lib/fleet.cub`, `lib/deploy.cub`), Linux (`lib/os/`), x86 (`lib/isa/`, generated), memory
    models (`lib/mem/`), C++ and Rust (`lib/cxx/`, `lib/lang/rust/`), and `experiments/`.
 6. **Translators from outside artifacts** — `tools/` (Sail, Clang, MIR, Agda importers; editor
-   server; `work.py`).
+   server; `task-graph.py`).
 7. **Text** — this file, `LANGUAGE.md` (the language reference), `tracks/PAPER-READING.md`;
    `archive/` is history (earlier plans and track logs; nothing there is in force).
    `python3 tools/tree.py` prints an index of every file and its top-level constructs.
@@ -159,7 +159,7 @@ cost and stack defects recorded on 2026-11-09 (t4, t5); specialization cost thro
 make build/cubical      # the machine
 make library            # the LIB list
 make brunerie           # Brunerie's number
-make work               # the goals and tickets
+make task-graph               # the goals and tickets
 ```
 
 Every reading prints its steps; `CUBICAL_NOCACHE=1` checks without the store (nothing remembered).

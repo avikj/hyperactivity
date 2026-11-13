@@ -47,7 +47,7 @@ Application is juxtaposition; structure is indentation (a block opens after `whe
 `Type l` (`Level`, `lzero`, `lsuc`, `lmax`, or a numeral). Numerals are natural numbers. A quoted
 string `"…"` is the list of its bytes (UTF-8, as written): `"ab"` is `cons #97 (cons #98 nil)`, a
 `List Word`. `declarations T` is the list of every checked definition in scope whose type is T, in
-the order declared (`declarations Node` is the work's every node, lib/work.cub). Every
+the order declared (`declarations Node` is the work's every node, lib/task-graph.cub). Every
 Unicode symbol has an ASCII spelling: `->` `\` `|->` `==` `/\` `\/` `**` `forall`, `Nat` for `ℕ`,
 `S1` for `S¹`, `Empty` for `⊥`, `Unit` for `⊤`. Operators are declared: `infix 4 ≡`, `infixr 5 ∙`,
 and defined as `_≡_` or by an equation `x ≡ y = ...`. A name used in a signature and bound nowhere
@@ -251,7 +251,7 @@ the checker infers for `e`, `#scope` the names in scope, `#where f` where `f` wa
 `--read` before the files checks what they declare without performing what acts on the world:
 `#run`, `#build` and `#build-loop` are read (their uses recorded) and not performed. `#uses` prints every declaration read so far, one line each: its position, the names it declares
 (those generated from it included) and the positions of the declarations it mentions
-(`tools/work.py why` and `unexplained` read it).
+(`tools/task-graph.py why` and `unexplained` read it).
 `tools/lsp.py` is a language server over `--serve` (diagnostics, re-checking by retraction, hover
 by `#type`, completion, go-to-definition, incremental sync); an editor runs `python3 tools/lsp.py
 --root .` as its server for `.cub` files. `CUBICAL_PROFILE=1` prints the run's profile, `=show` the profile from the last `#show`. The core forms the language compiles to
