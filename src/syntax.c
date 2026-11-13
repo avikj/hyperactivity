@@ -4408,20 +4408,23 @@ static Node *typed_def(CVar *c) { return c->ty ? sym3("the", c->ty, c->def) : c-
 /* index unification at a split (E28, as Agda's): the scrutinee's index arguments against a
  * constructor's index expressions over its fields — a clash makes the branch absurd, the same
  * constructor recurses on the arguments, a field met by a term it does not occur in is solved */
-typedef struct { int con, arg; } UStep;
+typedef struct { int con, arg; } UStep;   /* con U_PAIR: a pair's component (arg 0 fst, 1 snd) */
+#define U_PAIR (-2)
+/* an index as written, its annotation (the T e) dropped */
+static Node *u_bare(Node *t) { while (t->list && t->n == 3 && !t->it[0]->list && is(t->it[0], "the")) t = t->it[2]; return t; }
+static bool u_pair(Node *t) { return t->list && t->n == 3 && !t->it[0]->list && is(t->it[0], "pair"); }
 typedef struct { int q, depth, ca; UStep path[16]; } UClash;
-typedef struct { int k, q, depth; Node *val; UStep path[16]; } USol;
-typedef struct { bool clash, stuck; UClash cl; int nsol; USol sol[16]; } UState;
+/* a field solved (np 0), or one component of a Σ-typed field (proj: the projections from the field
+ * outwards, 0 fst, 1 snd), merged into a pair once every component is solved (u_merge; comp: the
+ * components, their equations' positions) */
+typedef struct { int k, q, depth; Node *val; UStep path[16]; unsigned char proj[8]; int np; int comp[8], ncomp; } USol;
+typedef struct { bool clash, stuck; UClash cl; int nsol; USol sol[16]; int nhalf; USol half[16]; } UState;
 /* a constructor application (a numeral of a type with zero and suc read as one), its arguments */
-/* t47 (2026-11-12): needs-work. Only constructor applications are decomposed (u_con): an index that is
- * a pair, or a definition applied that computes to one or to a constructor (lib/nbe.cub's ext Γ A =
- * (lcons (fst A) (fst Γ) , (snd Γ , snd A))), leaves the unification stuck. So a clause matching an
- * indexed family whose index is computed is refused or not seen to cover: with `data OPE : (W : (Δ :
- * Ctx) × (Γ : Ctx) × (Env Δ → Env Γ)) → Type 1` (lib/nbe.cub at commit f71b1f3), `ocomp (okeep Δ2 Δ1
- * r1 A w1) Δ r (odrop Δ3 Δ0 r0 B w2) = ...` is refused (type mismatch, snd (case fst Δ3 ...) against
- * snd (case fst Δ1 ...)) and without an odone clause "the clauses do not cover every case". Agda's
- * unifier decomposes pairs (η for Σ) and evaluates indices to weak head normal form first. lib/nbe.cub
- * defines variables by recursion on the skeleton and worlds as functions instead. */
+/* indices unified at a split (as Agda's unifier, Cockx–Devriese–Piessens): constructors
+ * decomposed and clashing, pairs componentwise (η for Σ), and a definition applied unfolded first
+ * (u_unfold: its body at the arguments, a definition by cases at a constructor taking that
+ * alternative); a variable among the clause's fields solved, and a Σ-typed field met through its
+ * projections solved as the pair of its components' solutions (η for Σ, u_merge). */
 static int u_con(Node *t, Node **args, int *na) {
     *na = 0;
     if (!t->list) {
@@ -4440,14 +4443,99 @@ static int u_con(Node *t, Node **args, int *na) {
     for (int i = 1; i < t->n; i++) args[i - 1] = t->it[i];
     *na = t->n - 1; return c;
 }
+static Node *body_of(const char *n);
+static bool u_head(Node *t) {
+    Node *aa[16]; int n;
+    t = u_bare(t);
+    return u_pair(t) || u_con(t, aa, &n) >= 0;
+}
+/* a checked definition applied to as many arguments as its λs, its body not by cases: unfolded
+ * (Agda's unifier takes indices to weak head normal form first; a definition by cases is not
+ * unfolded here). The plan only proposes: a wrong one is a failed check */
+static Node *u_unfold(Node *t) {
+    t = u_bare(t);
+    Node *h = t->list ? (t->n ? t->it[0] : NULL) : t;
+    if (!h || h->list || e_find(h->s) || con_lookup(h->s) >= 0 || checked_index(h->s) < 0) return NULL;
+    Node *b = body_of(h->s); if (!b) return NULL;
+    int na = t->list ? t->n - 1 : 0, np = 0;
+    const char *ps[16]; Node *vs[16];
+    while (np < na && np < 16 && b->list && b->n == 3 && !b->it[0]->list && (is(b->it[0], "lam") || is(b->it[0], "%lam")) && !b->it[1]->list) {
+        Node *a = t->it[1 + np];
+        if (a->list && a->n == 2 && !a->it[0]->list && is(a->it[0], "%imp")) return NULL;
+        ps[np] = b->it[1]->s; vs[np++] = a; b = b->it[2];
+    }
+    if (np != na) return NULL;
+    /* the body applied to the parameters' rest: (… ((case x alts…) y1) … yj) */
+    Node *ex[16]; int ne = 0, nb0 = np;
+    while (b->list && b->n >= 2 && b->it[0]->list && ne + b->n - 1 <= 16) {
+        for (int z = b->n - 1; z >= 1; z--) ex[ne++] = b->it[z];   /* innermost last: ex reversed */
+        b = b->it[0];
+    }
+    if (b->list && b->n >= 1 && !b->it[0]->list && (is(b->it[0], "lam") || is(b->it[0], "%lam"))) return NULL;
+    int from = alts_from(b);
+    if (!from) return ne ? NULL : subst_multi(b, ps, vs, np);
+    /* by cases on parameter k at a constructor: its alternative, a field's recursive value (rec r)
+     * the definition at the parameters before k and r */
+    Node *x = b->it[from - 1]; int k = -1;
+    if (x->list) return NULL;
+    for (int z = 0; z < nb0; z++) if (!strcmp(ps[z], x->s)) k = z;
+    if (k < 0) return NULL;
+    Node *ca[16]; int nca, c = u_con(u_bare(vs[k]), ca, &nca);
+    if (c < 0) return NULL;
+    for (int i = from; i < b->n; i++) {
+        Node *alt = b->it[i];
+        if (!alt->list || alt->n != 2) return NULL;
+        Node *pat = alt->it[0];
+        Node *ph = pat->list ? (pat->n ? pat->it[0] : NULL) : pat;
+        if (!ph || ph->list || con_lookup(ph->s) != c) continue;
+        int npv = pat->list ? pat->n - 1 : 0;
+        if (npv != nca || np + npv > 64) return NULL;
+        const char *ps2[64]; Node *vs2[64]; int n2 = 0;
+        for (int z = 0; z < np; z++) { ps2[n2] = ps[z]; vs2[n2++] = vs[z]; }
+        for (int z = 0; z < npv; z++) { if (pat->it[1 + z]->list) return NULL; ps2[n2] = pat->it[1 + z]->s; vs2[n2++] = ca[z]; }
+        Node *r = xfresh("urec"), *rc = nlist(k + 2); rc->it[0] = h;
+        for (int z = 0; z < k; z++) rc->it[1 + z] = vs[z];
+        rc->it[k + 1] = r;
+        ps2[n2] = "rec"; vs2[n2++] = sym3("lam", r, rc);
+        Node *e = alt->it[1];
+        for (int z = ne - 1; z >= 0; z--) e = lst(2, e, ex[z]);
+        return subst_multi(e, ps2, vs2, n2);
+    }
+    return NULL;
+}
 static void u_walk(Node *a, Node *b, int q, UStep *path, int depth, Node **fv, int nfo, UState *st) {
     if (st->clash || st->stuck) return;
     if (node_eq(a, b)) return;
     if (!b->list) for (int z = 0; z < nfo; z++) if (!strcmp(fv[z]->s, b->s)) {
         for (int w = 0; w < st->nsol; w++) if (st->sol[w].k == z) { if (!node_eq(st->sol[w].val, a)) st->stuck = true; return; }
         if (mentions_name(a, b->s) || st->nsol >= 16 || depth == 0) { st->stuck = true; return; }
-        USol *so = &st->sol[st->nsol++]; so->k = z; so->q = q; so->depth = depth; so->val = a;
+        USol *so = &st->sol[st->nsol++]; so->k = z; so->q = q; so->depth = depth; so->val = a; so->np = 0; so->ncomp = 0;
         for (int i = 0; i < depth; i++) so->path[i] = path[i];
+        return;
+    }
+    a = u_bare(a); b = u_bare(b);
+    {
+        /* a projection of a field (fst Γ, snd (fst Γ)): one component of its solution (η for Σ) */
+        unsigned char pr[8]; int npr = 0; Node *x = b;
+        while (npr < 8 && x->list && x->n == 2 && !x->it[0]->list && (is(x->it[0], "fst") || is(x->it[0], "snd"))) { pr[npr++] = is(x->it[0], "snd"); x = u_bare(x->it[1]); }
+        if (npr && !x->list) for (int z = 0; z < nfo; z++) if (!strcmp(fv[z]->s, x->s)) {
+            if (mentions_name(a, x->s) || st->nhalf >= 16 || depth == 0) { st->stuck = true; return; }
+            USol *so = &st->half[st->nhalf++]; so->k = z; so->q = q; so->depth = depth; so->val = a; so->ncomp = 0;
+            so->np = npr; for (int i = 0; i < npr; i++) so->proj[i] = pr[npr - 1 - i];   /* from the field outwards */
+            for (int i = 0; i < depth; i++) so->path[i] = path[i];
+            return;
+        }
+    }
+    for (int k = 0; k < 8; k++) {
+        Node *a2 = u_head(a) ? NULL : u_unfold(a), *b2 = u_head(b) ? NULL : u_unfold(b);
+        if (!a2 && !b2) break;
+        if (a2) a = u_bare(a2);
+        if (b2) b = u_bare(b2);
+    }
+    if (u_pair(a) && u_pair(b)) {
+        /* a pair against a pair: componentwise (η for Σ, as Agda's unifier) */
+        if (depth >= 15) { st->stuck = true; return; }
+        for (int i = 0; i < 2; i++) { path[depth] = (UStep){ U_PAIR, i }; u_walk(a->it[1 + i], b->it[1 + i], q, path, depth + 1, fv, nfo, st); }
         return;
     }
     Node *aa[16], *ba[16]; int na, nb;
@@ -4461,9 +4549,42 @@ static void u_walk(Node *a, Node *b, int q, UStep *path, int depth, Node **fv, i
     if (depth >= 15) { st->stuck = true; return; }
     for (int i = 0; i < na; i++) { path[depth] = (UStep){ ca, i }; u_walk(aa[i], ba[i], q, path, depth + 1, fv, nfo, st); }
 }
+/* the components of each Σ-typed field merged: the field's value the pair tree of its components'
+ * values; a component missing, or a field also solved whole, is stuck */
+static Node *u_tree(UState *st, int k, unsigned char *pre, int np, int *comp, int *nc) {
+    for (int h = 0; h < st->nhalf; h++) {
+        USol *x = &st->half[h];
+        if (x->k != k || x->np != np || memcmp(x->proj, pre, (size_t)np)) continue;
+        if (*nc == 8) return NULL;
+        comp[(*nc)++] = h; return x->val;
+    }
+    if (np >= 8) return NULL;
+    pre[np] = 0; Node *l = u_tree(st, k, pre, np + 1, comp, nc); if (!l) return NULL;
+    pre[np] = 1; Node *r = u_tree(st, k, pre, np + 1, comp, nc); if (!r) return NULL;
+    return sym3("pair", l, r);
+}
+static void u_merge(UState *st) {
+    bool done[16] = { 0 };
+    for (int h = 0; h < st->nhalf && !st->stuck; h++) {
+        if (done[h]) continue;
+        int k = st->half[h].k;
+        for (int w = 0; w < st->nsol; w++) if (st->sol[w].k == k) { st->stuck = true; return; }
+        unsigned char pre[8]; int comp[8], nc = 0;
+        Node *v = u_tree(st, k, pre, 0, comp, &nc);
+        int nk = 0; for (int g = 0; g < st->nhalf; g++) if (st->half[g].k == k) nk++;
+        if (!v || nc != nk || st->nsol >= 16) { st->stuck = true; return; }
+        for (int c = 0; c < nc; c++) done[comp[c]] = true;
+        USol *so = &st->sol[st->nsol++]; memset(so, 0, sizeof *so);
+        so->k = k; so->val = v; so->ncomp = nc; for (int c = 0; c < nc; c++) so->comp[c] = comp[c];
+    }
+}
 /* case x of … along a position: at the end of path the constructor `last` gives yes, any other
  * no; above it, the constructor on the path recurses into its argument and any other gives no */
 static Node *u_case(Node *x, UStep *path, int depth, int at, int last, Node *yes, Node *no, Node *dflt_inner) {
+    if (at < depth && path[at].con == U_PAIR) {
+        Node *px = sym2(path[at].arg ? "snd" : "fst", x);
+        return at + 1 == depth && dflt_inner ? px : u_case(px, path, depth, at + 1, last, yes, no, dflt_inner);
+    }
     int target = at < depth ? path[at].con : last;
     int dd = CON[target].data;
     Node *cs = nlist(2 + DATA[dd].ncons); cs->it[0] = nsym("case"); cs->it[1] = x;
@@ -4478,6 +4599,24 @@ static Node *u_case(Node *x, UStep *path, int depth, int at, int last, Node *yes
         cs->it[2 + ci] = lst(2, nf ? pat : lst(1, nsym(CON[c2].name)), b);
     }
     return cs;
+}
+/* a solution's line at i: its equation's argument at the solution's position, or for a Σ-typed
+ * field the pair tree of its components' */
+static Node *u_pi1(USol *so, Node **fv, int nfo, Node *i) {
+    return u_case(lst(2, fv[nfo + so->q], i), so->path, so->depth, 0, -1, NULL, so->val, so->val);
+}
+static Node *u_pi_tree(UState *st, USol *so, Node **fv, int nfo, Node *i, unsigned char *pre, int np) {
+    for (int c = 0; c < so->ncomp; c++) {
+        USol *x = &st->half[so->comp[c]];
+        if (x->np == np && !memcmp(x->proj, pre, (size_t)np)) return u_pi1(x, fv, nfo, i);
+    }
+    pre[np] = 0; Node *l = u_pi_tree(st, so, fv, nfo, i, pre, np + 1);
+    pre[np] = 1; Node *r = u_pi_tree(st, so, fv, nfo, i, pre, np + 1);
+    return sym3("pair", l, r);
+}
+static Node *u_pi(UState *st, USol *so, Node **fv, int nfo, Node *i) {
+    unsigned char pre[8];
+    return so->ncomp ? u_pi_tree(st, so, fv, nfo, i, pre, 0) : u_pi1(so, fv, nfo, i);
 }
 static Node *ccm_t(Node **vars, int nv, Row *rows, int nr);
 static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
@@ -4672,6 +4811,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
                     UStep path[16];
                     u_walk(vt->it[1 + np - k + q], subst_multi(fu->idx[q], fx, fvv, nfx), q, path, 0, fv, nfo, &us);
                 }
+                if (!us.clash) u_merge(&us);
                 /* a solved field matched by more than a variable is left as it was */
                 for (int w = 0; w < us.nsol && !us.stuck; w++)
                     for (int r = 0; r < n2; r++) { Node *pp = r2[r].p[j + us.sol[w].k]; if (!pat_wild(pp) && pat_con(pp) >= 0) us.stuck = true; }
@@ -4733,7 +4873,12 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
                 sg_push(ixv[q], ie);
             }
         }
-        for (int w = 0; w < us.nsol; w++) sg_push(fv[us.sol[w].k]->s, us.sol[w].val);
+        for (int w = 0; w < us.nsol; w++) {
+            /* a Σ-typed field's pair, annotated with the field's type (a pair is not inferable) */
+            int k = us.sol[w].k; Node *val = us.sol[w].val;
+            if (us.sol[w].ncomp && k < CON[c].nfields && fty[k]) val = sym3("the", fty[k], val);
+            sg_push(fv[k]->s, val);
+        }
         int rov0 = nrov;
         for (int k = 0; k < srn; k++) if (srih[k] && nrov < 64) { ROV[nrov] = srv[k]; ROVH[nrov++] = srih[k]; }
         Node *body;
@@ -4806,8 +4951,8 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
                 /* the substitutions: base = solutions w.. by their values; line = solution w by the
                  * path, w+1.. by their values */
                 const char *bx[16], *lx[16]; Node *bv[16], *lvv[16]; int nb = 0, nl = 0;
-                Node *e = fv[nfo + so->q], *i = xfresh("i");
-                Node *pi = u_case(lst(2, e, i), so->path, so->depth, 0, -1, NULL, so->val, so->val);
+                Node *i = xfresh("i");
+                Node *pi = u_pi(&us, so, fv, nfo, i);
                 for (int w2 = w; w2 < us.nsol; w2++) {
                     bx[nb] = fv[us.sol[w2].k]->s; bv[nb++] = us.sol[w2].val;
                     lx[nl] = fv[us.sol[w2].k]->s; lvv[nl++] = w2 == w ? pi : us.sol[w2].val;

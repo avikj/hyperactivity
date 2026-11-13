@@ -60,3 +60,47 @@ s52 b y = refl
 -- (part of core-correct)
 w54 : (f : Bool → Type 1) (b : Bool) (y : f b) → Path (f b) y y
 w54 f b y = refl
+-- t47: indices at a split unified as Agda's unifier does: pairs componentwise, a definition applied
+-- unfolded (by cases at a constructor), so these clauses are seen to cover (part of core-correct)
+data T47 : (P : Nat × Nat) → Type where
+  ta47 : (m : Nat) → T47 (zero , m)
+  tb47 : (n m : Nat) → T47 (n , m) → T47 (suc n , m)
+-- (part of core-correct)
+f47 : (m : Nat) → T47 (zero , m) → Nat
+f47 m (ta47 m') = m'
+-- (part of core-correct)
+g47 : (n m : Nat) → T47 (suc n , m) → T47 (n , m)
+g47 n m (tb47 n' m' w) = w
+-- (part of core-correct)
+ext47 : Nat → Nat → Nat × Nat
+ext47 n m = (suc n , m)
+data U47 : (P : Nat × Nat) → Type where
+  va47 : (m : Nat) → U47 (zero , m)
+  vb47 : (n m : Nat) → U47 (n , m) → U47 (ext47 n m)
+-- (part of core-correct)
+h47 : (n m : Nat) → U47 (suc n , m) → U47 (n , m)
+h47 n m (vb47 n' m' w) = w
+-- (part of core-correct)
+k47 : (n m : Nat) → U47 (ext47 n m) → U47 (n , m)
+k47 n m (vb47 n' m' w) = w
+-- (part of core-correct)
+dbl47 : Nat → Nat
+dbl47 zero = zero
+dbl47 (suc n) = suc (suc (dbl47 n))
+data W47 : (n : Nat) → Type where
+  wa47 : W47 zero
+  wb47 : (n : Nat) → W47 n → W47 (dbl47 (suc n))
+-- (part of core-correct)
+z47 : W47 zero → Nat
+z47 wa47 = zero
+-- t47: a Σ-typed field met only through its projections (fst p, snd p) solved as the pair of their
+-- solutions (η for Σ) (part of core-correct)
+data E47 : (P : Nat × Nat) → Type where
+  ea47 : (m : Nat) → E47 (zero , m)
+  eb47 : (p : Nat × Nat) → E47 p → E47 (suc (fst p) , snd p)
+-- (part of core-correct)
+e47 : (n m : Nat) → E47 (suc n , m) → E47 (n , m)
+e47 n m (eb47 p w) = w
+-- (part of core-correct)
+e48 : (n m : Nat) → E47 (suc n , m) → Nat
+e48 n m (eb47 p w) = fst p
