@@ -3896,13 +3896,20 @@ void net_start(int n) {
     shards_init();
     queues_init(n + 1);
     nworkers = n;
-    net_solo = n == 0;
+    net_solo = n == 0;   /* stays false when some workers fail to start: the scheduler serves those that did */
     workers = calloc((size_t)n + 1, sizeof(pthread_t));
-    /* t4 (2026-11-12): maybe-wrong. pthread_create's result is not checked: when a worker cannot be
-     * created (each gets the process's stack size, 1 GB when main raised it; recorded on 2026-11-09
-     * with 4 workers under a 3 GB address-space cap), the loop below waits forever for a worker that
-     * does not exist. Not re-measured since; the fix written then was never committed. */
-    for (int i = 0; i < n; i++) pthread_create(&workers[i], NULL, worker, (void *)(intptr_t)(i + 1));
+    /* a worker that cannot be created (each gets the process's stack size, 1 GB when main raised
+     * it) is not waited for: the run goes on with the workers that started (2026-11-12, t4: the loop
+     * below waited forever for a worker that did not exist) */
+    int made = 0;
+    for (int i = 0; i < n; i++) {
+        int e = pthread_create(&workers[i], NULL, worker, (void *)(intptr_t)(i + 1));
+        if (e) { fprintf(stderr, "warning: %d of %d workers started (pthread_create: %s)\n", made, n, strerror(e)); break; }
+        made++;
+    }
+    pthread_mutex_lock(&wmu);
+    nworkers = made;
+    pthread_mutex_unlock(&wmu);
     pthread_mutex_lock(&wmu);
     while (parked < nworkers) pthread_cond_wait(&pcv, &wmu);
     pthread_mutex_unlock(&wmu);
