@@ -3710,16 +3710,9 @@ static Node *el_app(Node *t, Node *h, Node **args, int n) {
                 for (int i = 0; i < n; i++) a2[i] = args[i];
                 for (int q = 0; q < fd->nidx; q++) {
                     Node *e = fd->idx[q];
-                    /* t46 (2026-11-12): wrong. The fields are substituted into the index expression one at a
-                     * time, so an argument mentioning a later field's name is captured by that field's
-                     * substitution: `data T46 : (J : Nat × Nat) → Type where mk46 : (a : Nat) (b : Nat) → T46
-                     * (a , b)` and `f46 : (b : Nat) → T46 (plus b b , suc b); f46 b = mk46 (plus b b) (suc b)`
-                     * is refused (wrong endpoint at 0: expected (plus b b , suc b), actual (plus (suc b) (suc
-                     * b) , suc b)); the same with the variable named c is accepted. The substitution must be
-                     * simultaneous (subst_multi with every field at once). field_types, below, substitutes
-                     * parameters and earlier fields the same sequential way (subst_sym). lib/nbe.cub renames
-                     * binders around it. */
-                    for (int i = 0; i < n; i++) e = subst_sym(e, fd->fields[i], args[i]);
+                    /* the fields into the index expression at once: an argument that mentions a later
+                     * field's name is not captured by that field (2026-11-12, t46) */
+                    e = subst_multi(e, (const char **)fd->fields, args, n);
                     a2[n + q] = sym3("plam", xfresh("i"), e);
                 }
                 args = a2; n += fd->nidx;
@@ -4169,8 +4162,11 @@ static Node **field_types(int c, Node *T, Node **fv) {
         Node *f = cd->it[q + 1];
         if (!f->list || f->n != 2) return r;
         Node *A = f->it[1];
-        for (int k = 0; k < na; k++) A = subst_sym(A, param_name(dh->it[k + 1])->s, args[k]);
-        for (int k = 0; k < q; k++) { Node *pf = cd->it[k + 1]; A = subst_sym(A, pf->it[0]->s, fv[k]); }
+        /* the parameters and the earlier fields at once (t46) */
+        const char *xs[128]; Node *vs[128]; int nx = 0;
+        for (int k = 0; k < na && nx < 128; k++) { xs[nx] = param_name(dh->it[k + 1])->s; vs[nx++] = args[k]; }
+        for (int k = 0; k < q && nx < 128; k++) { xs[nx] = cd->it[k + 1]->it[0]->s; vs[nx++] = fv[k]; }
+        A = subst_multi(A, xs, vs, nx);
         r[q] = A;
     }
     return r;
