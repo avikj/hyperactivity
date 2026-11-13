@@ -127,6 +127,29 @@ def names_in(s):
     return [x for x in re.findall(r'[\w-]+', s) if x not in ('cons', 'nil')]
 
 
+def pair_list(text):
+    """the pairs (a , list) of a relation written `cons (a , cons b (cons c nil)) (cons … nil)`: each pair is
+    a parenthesized group whose first word is followed by ' , '; groups are read by balancing
+    parentheses, so lists nest to any depth"""
+    out, i = {}, 0
+    while True:
+        i = text.find('(', i)
+        if i < 0: return out
+        depth, j = 0, i
+        while j < len(text):
+            if text[j] == '(': depth += 1
+            elif text[j] == ')':
+                depth -= 1
+                if depth == 0: break
+            j += 1
+        group = text[i + 1:j]
+        m = re.match(r'([\w-]+) , (.*)$', group, re.S)
+        if m:
+            out[m.group(1)] = names_in(m.group(2)); i = j + 1
+        else:
+            i += 1
+
+
 def graph():
     """the nodes: name -> dict(id, parts, statement), in definition order; the roots; after"""
     src = open(GRAPH, encoding='utf-8').read()
@@ -147,9 +170,7 @@ def graph():
     def pairs(key):
         m = re.search(r'^' + key + r' = (.*)$', src, re.M)
         res = {}
-        if m:
-            for a, b in re.findall(r'\(([\w-]+) , ((?:[^()]|\([^()]*\))*)\)', m.group(1)):
-                res[a] = names_in(b)
+        if m: res = pair_list(m.group(1))
         return res
     m = re.search(r'^roots = (.*)$', src, re.M)
     roots = names_in(m.group(1)) if m else []
@@ -164,9 +185,7 @@ def essential_context():
             for n, q in re.findall(r'^([\w-]+) = document "([^"]*)"', src, re.M)}
     ec = {}
     m = re.search(r'^essential-context = (.*)$', src, re.M)
-    if m:
-        for a, b in re.findall(r'\(([\w-]+) , ((?:[^()]|\([^()]*\))*)\)', m.group(1)):
-            ec[a] = names_in(b)
+    if m: ec = pair_list(m.group(1))
     return docs, ec
 
 
