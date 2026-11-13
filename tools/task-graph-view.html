@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hyperactive · task graph</title>
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --ink: #1b1a17; --muted: #6f6b62; --faint: #b7b2a7; --line: #e3dfd5;
+  --edge: #c9c3b6; --edge-hi: #3f3c35;
+  --first: #1d7a45; --first-bg: #e7f4ec; --ready: #2c5f8a; --ready-bg: #e8f0f7;
+  --last: #8a7d63; --last-bg: #f1eee6; --wait: #a86400; --wait-bg: #fbf1e1; --goal: #1b1a17; --goal-bg: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #121211; --panel: #1b1b19; --ink: #eceae4; --muted: #a39f95; --faint: #5f5c55; --line: #2c2b28;
+    --edge: #45423c; --edge-hi: #d8d4ca;
+    --first: #5fd18d; --first-bg: #12291c; --ready: #7fb4e6; --ready-bg: #142233;
+    --last: #b5ab95; --last-bg: #24221d; --wait: #f0b45a; --wait-bg: #2e2312; --goal: #eceae4; --goal-bg: #1b1b19; }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif; }
+header { position: fixed; inset: 0 0 auto 0; height: 56px; display: flex; align-items: center; gap: 22px; padding: 0 22px;
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); z-index: 5; }
+header h1 { font-size: 15px; font-weight: 650; margin: 0; letter-spacing: .01em; }
+.legend { display: flex; gap: 14px; color: var(--muted); font-size: 12.5px; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.dash { width: 18px; border-top: 2px dashed var(--wait); display: inline-block; }
+.solid { width: 18px; border-top: 2px solid var(--edge-hi); display: inline-block; opacity: .6; }
+#stage { position: absolute; inset: 56px 0 0 0; overflow: auto; }
+#canvas { position: relative; }
+svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.card { position: absolute; width: 270px; padding: 11px 13px 10px; border-radius: 12px; background: var(--goal-bg);
+  border: 1px solid var(--line); box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.04);
+  cursor: pointer; transition: opacity .15s, box-shadow .15s, transform .15s; }
+.card:hover { box-shadow: 0 2px 4px rgba(0,0,0,.06), 0 10px 26px rgba(0,0,0,.08); transform: translateY(-1px); }
+.card .name { font-weight: 600; font-size: 13.5px; line-height: 1.35; }
+.card .meta { margin-top: 7px; display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--muted); }
+.pill { font-weight: 650; font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+.s-first { border-color: color-mix(in srgb, var(--first) 45%, var(--line)); background: var(--first-bg); }
+.s-first .pill { color: var(--first); background: color-mix(in srgb, var(--first) 14%, transparent); }
+.s-ready { border-color: color-mix(in srgb, var(--ready) 40%, var(--line)); background: var(--ready-bg); }
+.s-ready .pill { color: var(--ready); background: color-mix(in srgb, var(--ready) 14%, transparent); }
+.s-last { background: var(--last-bg); }
+.s-last .pill { color: var(--last); background: color-mix(in srgb, var(--last) 16%, transparent); }
+.s-waiting { border-color: color-mix(in srgb, var(--wait) 40%, var(--line)); background: var(--wait-bg); }
+.s-waiting .pill { color: var(--wait); background: color-mix(in srgb, var(--wait) 14%, transparent); }
+.s-goal .pill { color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
+.root { border-width: 2px; border-color: var(--ink); }
+.dim { opacity: .22; }
+.sel { outline: 2px solid var(--ink); outline-offset: 2px; }
+path.e { fill: none; stroke: var(--edge); stroke-width: 1.6; transition: stroke .15s, opacity .15s; }
+path.w { fill: none; stroke: var(--wait); stroke-width: 1.8; stroke-dasharray: 6 5; opacity: .85; }
+path.hi { stroke: var(--edge-hi); stroke-width: 2.2; }
+path.faded { opacity: .12; }
+aside { position: fixed; top: 56px; right: 0; bottom: 0; width: min(520px, 92vw); background: var(--panel); border-left: 1px solid var(--line);
+  transform: translateX(100%); transition: transform .2s ease; overflow: auto; padding: 22px 24px 60px; z-index: 6;
+  box-shadow: -10px 0 30px rgba(0,0,0,.06); }
+aside.open { transform: none; }
+aside h2 { font-size: 18px; line-height: 1.3; margin: 8px 0 4px; }
+aside .id { color: var(--muted); font-size: 12px; font-family: ui-monospace, Menlo, monospace; }
+aside h3 { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; font-weight: 650; }
+aside p { margin: 0 0 10px; }
+aside .finding { border-left: 3px solid var(--line); padding: 2px 0 2px 12px; margin: 0 0 12px; color: var(--ink); font-size: 13px; }
+aside .finding b { color: var(--muted); font-weight: 600; font-size: 12px; display: block; margin-bottom: 2px; }
+aside .ctx { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; padding: 3px 0; }
+aside .ctx i { color: var(--muted); font-style: normal; font-family: inherit; }
+aside .x { position: absolute; top: 14px; right: 16px; border: 0; background: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+aside a { color: inherit; text-decoration: underline; text-decoration-color: var(--faint); cursor: pointer; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Hyperactive · task graph</h1>
+  <div class="legend">
+    <span><i class="sw" style="background:var(--first)"></i>first: can start, unblocks waiting work</span>
+    <span><i class="sw" style="background:var(--ready)"></i>can start</span>
+    <span><i class="sw" style="background:var(--last)"></i>last: unblocks nothing</span>
+    <span><i class="sw" style="background:var(--wait)"></i>waiting</span>
+    <span><i class="solid"></i>serves</span>
+    <span><i class="dash"></i>waits on</span>
+  </div>
+</header>
+<div id="stage"><div id="canvas"><svg id="edges"></svg></div></div>
+<aside id="panel"><button class="x" onclick="closePanel()">×</button><div id="detail"></div></aside>
+<script>
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const label = {first: 'first', ready: 'can start', last: 'last', waiting: 'waiting', goal: 'goal'};
+let G, byId = {}, pos = {}, sel = null;
+
+async function load() {
+  G = await (await fetch('/api/graph')).json();
+  byId = Object.fromEntries(G.nodes.map(n => [n.id, n]));
+  for (const n of G.nodes) n.children = [];
+  for (const n of G.nodes) for (const p of n.parents) byId[p]?.children.push(n.id);
+  draw();
+}
+
+// layers: a node's layer is its longest distance from a root along "serves" edges
+function layers() {
+  const depth = {};
+  const d = id => depth[id] ?? (depth[id] = byId[id].parents.length ? 1 + Math.max(...byId[id].parents.map(d)) : 0);
+  G.nodes.forEach(n => d(n.id));
+  const L = [];
+  for (const n of G.nodes) (L[depth[n.id]] ??= []).push(n.id);
+  // order within layers by the barycenter of neighbours, sweeping down and up (Sugiyama)
+  const idx = () => Object.fromEntries(L.flatMap(l => l.map((id, i) => [id, i])));
+  for (let it = 0; it < 6; it++) {
+    for (let k = 1; k < L.length; k++) { const ix = idx(); L[k].sort((a, b) => bc(a, 'parents', ix) - bc(b, 'parents', ix)); }
+    for (let k = L.length - 2; k >= 0; k--) { const ix = idx(); L[k].sort((a, b) => bc(a, 'children', ix) - bc(b, 'children', ix)); }
+  }
+  return L;
+}
+function bc(id, rel, ix) {
+  const ns = byId[id][rel];
+  return ns.length ? ns.reduce((s, x) => s + ix[x], 0) / ns.length : ix[id];
+}
+
+function draw() {
+  const canvas = document.getElementById('canvas');
+  canvas.querySelectorAll('.card').forEach(c => c.remove());
+  for (const n of G.nodes) {
+    const c = document.createElement('div');
+    c.className = `card s-${n.state}` + (G.roots.includes(n.id) ? ' root' : '');
+    c.id = 'c-' + n.id;
+    c.innerHTML = `<div class="name">${esc(n.name)}</div><div class="meta"><span class="pill">${label[n.state]}</span>` +
+      (n.state === 'goal' ? `<span>${n.open} open tasks</span>` : '') +
+      (n.unblocks.length ? `<span>unblocks ${n.unblocks.length}</span>` : '') + `</div>`;
+    c.onmouseenter = () => focus(n.id); c.onmouseleave = () => focus(sel);
+    c.onclick = e => { e.stopPropagation(); open(n.id); };
+    canvas.appendChild(c);
+  }
+  const L = layers(), colW = 340, gapY = 22, padX = 40, padY = 40;
+  let H = 0;
+  const heights = L.map(l => l.reduce((s, id) => s + document.getElementById('c-' + id).offsetHeight + gapY, -gapY));
+  const maxH = Math.max(...heights);
+  L.forEach((l, k) => {
+    let y = padY + (maxH - heights[k]) / 2;
+    for (const id of l) {
+      const el = document.getElementById('c-' + id), h = el.offsetHeight;
+      pos[id] = {x: padX + k * colW, y, w: el.offsetWidth, h};
+      el.style.left = pos[id].x + 'px'; el.style.top = y + 'px';
+      y += h + gapY; H = Math.max(H, y);
+    }
+  });
+  canvas.style.width = (padX * 2 + (L.length - 1) * colW + 270 + 140) + 'px';
+  canvas.style.height = (H + padY) + 'px';
+  drawEdges(); focus(sel);
+}
+
+function drawEdges() {
+  const svg = document.getElementById('edges');
+  let s = '<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--wait)"/></marker></defs>';
+  for (const n of G.nodes) for (const p of n.parents) {
+    const a = pos[p], b = pos[n.id];
+    const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x, y2 = b.y + b.h / 2, mx = (x1 + x2) / 2;
+    s += `<path class="e" data-a="${p}" data-b="${n.id}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;
+  }
+  for (const n of G.nodes) for (const d of n.after) {
+    const a = pos[n.id], b = pos[d];
+    if (Math.abs(a.x - b.x) < 5) {   // same column: arc out to the right, from a's right edge to b's
+      const x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x + b.w + 3, y2 = b.y + b.h / 2;
+      const out = 46 + Math.min(80, Math.abs(y2 - y1) * .15);
+      s += `<path class="w" data-a="${n.id}" data-b="${d}" marker-end="url(#arr)" d="M${x1},${y1} C${x1 + out},${y1} ${x2 + out},${y2} ${x2},${y2}"/>`;
+    } else {
+      const x1 = a.x + a.w / 2, y1 = a.y + a.h, x2 = b.x + b.w / 2, y2 = b.y + b.h;
+      const dip = Math.max(60, Math.abs(x2 - x1) * .25);
+      s += `<path class="w" data-a="${n.id}" data-b="${d}" marker-end="url(#arr)" d="M${x1},${y1} C${x1},${y1 + dip} ${x2},${y2 + dip} ${x2},${y2 + 4}"/>`;
+    }
+  }
+  svg.innerHTML = s;
+}
+
+function related(id) {
+  const out = new Set([id]);
+  const up = x => byId[x].parents.forEach(p => { if (!out.has(p)) { out.add(p); up(p); } });
+  const down = x => byId[x].children.forEach(c => { if (!out.has(c)) { out.add(c); down(c); } });
+  up(id); down(id);
+  byId[id].after.forEach(x => out.add(x));
+  G.nodes.filter(n => n.after.includes(id)).forEach(n => out.add(n.id));
+  return out;
+}
+function focus(id) {
+  const r = id ? related(id) : null;
+  for (const n of G.nodes) {
+    const el = document.getElementById('c-' + n.id);
+    el.classList.toggle('dim', !!r && !r.has(n.id));
+    el.classList.toggle('sel', n.id === sel);
+  }
+  document.querySelectorAll('#edges path.e, #edges path.w').forEach(p => {
+    const on = r && r.has(p.dataset.a) && r.has(p.dataset.b);
+    p.classList.toggle('hi', !!on && p.classList.contains('e'));
+    p.classList.toggle('faded', !!r && !on);
+  });
+}
+
+function open(id) {
+  sel = id; focus(id);
+  const n = byId[id];
+  const link = x => `<a onclick="open('${x}')">${esc(byId[x]?.name ?? x)}</a>`;
+  let h = `<span class="pill" style="display:inline-block" >${label[n.state]}</span><h2>${esc(n.name)}</h2><div class="id">${esc(n.id)}</div>`;
+  if (n.statement) h += `<h3>Statement</h3><p>${esc(n.statement)}</p>`;
+  if (n.parents.length) h += `<h3>Serves</h3>` + n.parents.map(p => `<p>${link(p)}</p>`).join('');
+  if (n.children.length) h += `<h3>Served by</h3>` + n.children.map(c => `<p>${link(c)}</p>`).join('');
+  if (n.after.length) h += `<h3>Cannot start until resolved</h3>` + n.after.map(x => `<p>${link(x)}</p>`).join('');
+  if (n.unblocks.length) h += `<h3>Prerequisite of</h3>` + n.unblocks.map(x => `<p>${link(x)}</p>`).join('');
+  if (n.findings.length) h += `<h3>Known (${n.findings.length})</h3>` + n.findings.map(f => {
+    const m = f.match(/^Known \((\d{4}-\d{2}-\d{2}), at ([^)]+)\):\s*(.*)$/s);
+    return m ? `<div class="finding"><b>${esc(m[2])} · ${esc(m[1])}</b>${esc(m[3])}</div>` : `<div class="finding">${esc(f)}</div>`;
+  }).join('');
+  if (n.context.length) h += `<h3>Essential context</h3>` + n.context.map(c => `<div class="ctx">${esc(c.path)}${c.via ? ` <i>· from ${esc(byId[c.via]?.name ?? c.via)}</i>` : ''}</div>`).join('');
+  document.getElementById('detail').innerHTML = h;
+  document.getElementById('panel').classList.add('open');
+}
+function closePanel() { sel = null; document.getElementById('panel').classList.remove('open'); focus(null); }
+document.getElementById('stage').onclick = closePanel;
+addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+addEventListener('resize', () => G && draw());
+load();
+</script>
+</body>
+</html>

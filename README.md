@@ -18,7 +18,7 @@ The machine (`build/cubical`) is built on first use and rebuilt when `src/` chan
 
 ```
 hyperactive                      what is open and what can start now
-hyperactive server               the whole task graph as a tree at http://localhost:8080
+hyperactive server               the task graph drawn as a graph at http://localhost:8080
 hyperactive browse               every goal, ticket, definition, document and file, in a browser
 hyperactive show NODE ...        a node or ticket: its text, what it serves, what serves it, its essential context
 hyperactive tree                 the task graph from its root, as text
