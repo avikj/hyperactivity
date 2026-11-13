@@ -1,7 +1,7 @@
 # Hyperactive
 
 The language is specified by the paper: [docs/Hyperactive_Final_Paper.pdf](docs/Hyperactive_Final_Paper.pdf).
-What it is for, and what its constructions force beyond the language: [HYPERACTIVE.md](HYPERACTIVE.md).
+Everything else, from what is implemented today to what it is for: [HYPERACTIVE.md](HYPERACTIVE.md).
 
 ## Setup
 
@@ -20,7 +20,7 @@ The machine (`build/cubical`) is built on first use and rebuilt when `src/` chan
 ```
 hyperactive                      what is open and what can start now
 hyperactive server               the task graph drawn as a graph at http://localhost:8080
-hyperactive show NODE ...        a node or ticket: its text, what it serves, what serves it, its essential context
+hyperactive show NODE ...        a node: its statement, what it serves, what serves it, its essential context
 hyperactive tree                 the task graph from its root, as text
 hyperactive order                the order of work: what can start now, then what waits on what
 hyperactive why NAME             why a declaration exists: its chain of reasons to the root

@@ -117,10 +117,6 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             if self.path.startswith('/api/graph'): return self.send(json.dumps(graph_json()), 'application/json')
-            if self.path == '/docs':
-                fs = sorted(f for f in os.listdir(os.path.join(ROOT, 'docs')) if not f.startswith('.'))
-                items = ''.join(f'<li><a href="/doc?path=docs/{html.escape(f)}">{html.escape(f)}</a></li>' for f in fs)
-                return self.send(doc_page('docs/', '') .replace('<main><div class="path">docs/</div>', f'<main><div class="path">docs/</div><h1>Documents</h1><p>Writing from Avik, kept for every session (docs/README.md says what belongs here).</p><ul>{items}</ul>'), 'text/html; charset=utf-8')
             if self.path.startswith('/doc?'):
                 import urllib.parse
                 f = os.path.normpath(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('path', [''])[0])

@@ -496,7 +496,7 @@ static Node *p_atom(void) {
     if (x_is(t, "document") && P1()->k == X_STR) {
         /* document "path" (2026-11-13): a file of the repository as an object of the code, so a
          * declaration can refer to a document (lib/document.cub; the task graph's essential context,
-         * docs/task-graph-design.md). The path is relative to the file being read, as import's is. The
+         * HYPERACTIVE.md §2.4). The path is relative to the file being read, as import's is. The
          * file must exist: reading fails here otherwise, as a reference to an undefined name would. The
          * term is document-at "path" "sha256 of the file's bytes, in hex", so a definition mentioning a
          * document has a content key that changes exactly when the document's content does. */
