@@ -1,6 +1,7 @@
 # Hyperactive
 
 The language is specified by the paper: [docs/Hyperactive_Final_Paper.pdf](docs/Hyperactive_Final_Paper.pdf).
+What it is for, and what its constructions force beyond the language: [HYPERACTIVE.md](HYPERACTIVE.md).
 
 ## Setup
 

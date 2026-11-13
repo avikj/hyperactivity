@@ -90,6 +90,7 @@ def doc_page(path, text):
             if m:
                 if para or quote: flush()
                 lst.append(m.group(1)); continue
+            if line.strip() == '---': flush(); out.append('<hr>'); continue
             if not line.strip(): flush(); continue
             if lst and line.startswith('  '): lst[-1] += ' ' + line.strip(); continue
             if quote: flush()
@@ -101,7 +102,7 @@ def doc_page(path, text):
 body{{margin:0;background:#f6f5f1;color:#1b1a17;font:16px/1.65 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif}}
 main{{max-width:760px;margin:0 auto;padding:40px 22px 90px}} .path{{color:#6f6b62;font:13px ui-monospace,Menlo,monospace}}
 h1{{font-size:28px;line-height:1.25}} h2{{font-size:20px;margin-top:36px}} h3{{font-size:16px}}
-blockquote{{margin:14px 0;padding:4px 16px;border-left:3px solid #c9c3b6;background:#fff;border-radius:0 8px 8px 0}}
+hr{{border:0;border-top:1px solid #d9d4c8;margin:32px 0}} blockquote{{margin:14px 0;padding:4px 16px;border-left:3px solid #c9c3b6;background:#fff;border-radius:0 8px 8px 0}}
 code{{background:#ece9e1;padding:1px 5px;border-radius:4px;font-size:14px}} pre{{background:#fff;border:1px solid #e3dfd5;border-radius:8px;padding:14px;overflow:auto;font-size:13px}}
 @media (prefers-color-scheme:dark){{body{{background:#121211;color:#eceae4}} blockquote,pre{{background:#1b1b19;border-color:#2c2b28}} code{{background:#2a2926}}}}
 </style></head><body><main><div class="path">{e(path)}</div>{body}</main></body></html>"""

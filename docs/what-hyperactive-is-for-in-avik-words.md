@@ -111,3 +111,11 @@ last. Nothing here is summarized, restated or edited; new messages are appended 
 > the product is the hyperactive core - everythign discussed w.r.t product needs to interoperate
 > perfectly to the point of not being collaborating organisms but a single organism. is that not
 > clear yet? do i need to refresh your intelligence regarding systems?
+
+> you're taking ownership now of the complete design/vision document for hyperactive. ie we have a
+> paper that lays the language foundations, strictly bounding the technical ambition/intention it
+> expresses. that is, we have a pretty good quality piece of writing for the work - and it excludes
+> this super important stuff.
+
+(The material he gave with it is `the-one-operation-and-the-one-datum-material-from-avik.md`; the
+design document is `HYPERACTIVE.md` at the repository's root.)

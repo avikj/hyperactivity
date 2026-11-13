@@ -24,7 +24,7 @@ Contents:
 - `state-change-collaboration-design.md` — how the work is held, changed and shared, and why: state
   that is not text, read/write/act sessions, no canonical state, immutable content-addressed code,
   change as a square, questions as tasks, ownership. Avik's design, transcribed from his explanations
-  on 2026-11-13. Essential context for `product-implementation` and `product-implementation`.
+  on 2026-11-13. Essential context for `product-implementation`.
 
 ## How Avik's words are kept (Avik, 2026-11-13, verbatim)
 
@@ -66,6 +66,13 @@ nothing from it needs carrying forward, or what it appended and where.
 
 - `what-hyperactive-is-for-in-avik-words.md` — what Hyperactive is for and what it serves: the
   product, the order of the work toward it.
+- `the-one-operation-and-the-one-datum-material-from-avik.md` — material Avik gave on 2026-11-13 for
+  the design document: the one datum (a construction) and the one operation (filling a boundary), and
+  what they force for perception, learning, witness, agency and value. Written in another
+  conversation; kept verbatim.
+
+The design document itself, `HYPERACTIVE.md` at the repository's root, is held by the Claude session
+and revised in place; it is not here because it is not Avik's writing, and it cites what is.
 
 ## How agents act on Avik's criticism (Avik, 2026-11-13, verbatim)
 
