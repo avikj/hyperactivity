@@ -3434,12 +3434,11 @@ static void interact(Cell *o, Cell *v) {
             else if (op == O_WMUL) r = word_wn(wn_mul(&ka, &kb));
             else if (op == O_WDIV || op == O_WMOD) { WN q, m; wn_divmod(&ka, &kb, &q, &m); r = word_wn(op == O_WDIV ? q : m); wn_drop(op == O_WDIV ? &m : &q); }
             else if (op == O_WSHR) r = word_wn(kb.b ? wn_small(0) : wn_shr(&ka, kb.s));
-            /* t2 (2026-11-12): wrong. A left shift of a numeral by more than 2^32 bits ends the
-             * whole process (exit 2) instead of computing or failing as a value: a well-typed
-             * closed term then has no normal form here although %wshl is total. Either compute it
-             * (the result is a numeral, however large) or make it an explicit, typed resource
-             * failure; never a process exit from inside a rule. */
-            else if (op == O_WSHL) { if (kb.b || kb.s > ((uint64_t)1 << 32)) { fprintf(stderr, "%%wshl: a shift of more than 2^32 bits\n"); exit(2); } r = word_wn(wn_shl(&ka, kb.s)); }
+            /* a left shift by more than 2^32 bits: 0 shifted is 0; any other numeral would have more
+             * than 2^32 bits, which the machine does not build, so the application stays as it is,
+             * a normal form (as on a non-numeral), and nothing ends the run (2026-11-12, t2) */
+            else if (op == O_WSHL && (kb.b || kb.s > ((uint64_t)1 << 32))) r = !ka.b && ka.s == 0 ? word_wn(wn_small(0)) : wstuck(op, word_wn(wn_copy(&ka)), word_wn(wn_copy(&kb)));
+            else if (op == O_WSHL) r = word_wn(wn_shl(&ka, kb.s));
             else r = word_wn(wn_bits(&ka, &kb, op == O_WAND ? 0 : op == O_WOR ? 1 : 2));
         } else if (!ba && !bb) {
             int c = wn_cmp(&ka, &kb);
