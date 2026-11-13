@@ -406,18 +406,45 @@ def reading():
         fl, l = x.rsplit(':', 1)
         return os.path.relpath(fl, ROOT) if os.path.isabs(fl) else fl, int(l)
     decls = {}
+    # the files not yet read are read in parallel, one machine per core; each reader has its own store
+    # (.cubical-store/readers/N), since the store writes its entries in place and a machine reading an
+    # entry another is writing could read it half written; a reader's store warms after its first file
+    import concurrent.futures, queue
+    keys = {}
     for f in leaves:
         h = hashlib.sha256(bh.encode())
         for g in closure(f):
             h.update(g.encode()); h.update(open(os.path.join(ROOT, g), 'rb').read())
-        kp = os.path.join(cache, h.hexdigest())
-        if os.path.exists(kp): text = open(kp, encoding='utf-8').read()
-        else:
+        keys[f] = os.path.join(cache, h.hexdigest())
+    todo = [f for f in leaves if not os.path.exists(keys[f])]
+    slots = queue.Queue()
+    # as many readers as available memory allows: one machine reading the largest files grows past 5 GB
+    # (measured 2026-11-13: experiments/isa/addw-all.cub was killed for lack of memory beside one other
+    # reader on a 15 GB machine), so 8 GB per reader; HYPERACTIVE_READERS overrides
+    try: mem_gb = int(next(l for l in open('/proc/meminfo') if l.startswith('MemAvailable')).split()[1]) / 2**20
+    except (OSError, StopIteration, ValueError): mem_gb = 8
+    n = int(os.environ.get('HYPERACTIVE_READERS') or max(1, min(os.cpu_count() or 1, int(mem_gb // 8))))
+    for i in range(max(1, min(len(todo), n))): slots.put(i)
+    def read_one(f):
+        i = slots.get()
+        try:
             print(f'reading {f}', file=sys.stderr, flush=True)
+            e = dict(env, CUBICAL_STORE=os.path.join(ROOT, '.cubical-store', 'readers', str(i)))
             r = subprocess.run([binary, '--read', f, '--serve'], cwd=ROOT, input='#uses\n.\n', capture_output=True,
-                               text=True, env=env)
+                               text=True, env=e)
             text = '\n'.join(l for l in r.stdout.split('\n') if l.startswith('uses '))
-            open(kp, 'w', encoding='utf-8').write(text)
+            if r.returncode < 0:   # killed (e.g. out of memory): not kept; a file whose definitions are all
+                                   # refused reads as no uses, and that is kept
+                print(f'reading {f} did not complete (exit {r.returncode}); it is read again next time', file=sys.stderr, flush=True)
+                return
+            open(keys[f], 'w', encoding='utf-8').write(text)
+        finally:
+            slots.put(i)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=slots.qsize() or 1) as ex:
+        list(ex.map(read_one, todo))
+    for f in leaves:
+        if not os.path.exists(keys[f]): continue
+        text = open(keys[f], encoding='utf-8').read()
         for ln in text.split('\n'):
             if not ln.startswith('uses '): continue
             w = ln.split(); i = w.index(':')

@@ -285,6 +285,13 @@ static char *store_read(const char *key, const char *file) {
     char *b = malloc((size_t)n + 1); size_t got = fread(b, 1, (size_t)n, f); b[got] = 0; fclose(f);
     return b;
 }
+/* t94 (2026-11-13): wrong. store_write writes an entry in place (fopen "w"). A machine killed while
+ * writing (measured 2026-11-13: the kernel killed one for lack of memory while four read in
+ * parallel) leaves a truncated entry that later runs read as a whole one, and two machines on one
+ * store can read each other's half-written entries; the store is a cache whose entries decide what
+ * is not checked again, so a truncated entry could change a result. Fix: write to a temporary file
+ * in the same directory and rename it over the entry (atomic on POSIX). Until then tools/task-
+ * graph.py gives each parallel reader its own store. */
 static void store_write(const char *key, const char *file, const char *text, bool append) {
     char *p = store_path(key, file); if (!p) return;
     char *dir = store_path(key, "");

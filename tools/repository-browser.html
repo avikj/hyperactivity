@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hyperactive</title>
+<style>
+:root {
+  --bg: #fbfaf7; --panel: #f3f1ec; --ink: #1d1c1a; --muted: #6d6a63; --faint: #a8a49b; --line: #e2ded5;
+  --goal: #2f5d8a; --ticket: #a0522d; --decl: #3b7a57; --doc: #7a4f9a; --file: #6d6a63;
+  --now: #1f7a3a; --wait: #9a6b00; --code-bg: #f1eee8; --warn: #9b2c2c;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161615; --panel: #1e1e1c; --ink: #e9e6df; --muted: #a29e95; --faint: #6c6961; --line: #2d2c29;
+    --goal: #7fb2e5; --ticket: #e0a07a; --decl: #86c9a1; --doc: #c5a3e6; --file: #a29e95;
+    --now: #6fd08c; --wait: #e2b54a; --code-bg: #1c1c1a; --warn: #f08a8a; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", sans-serif; }
+a { color: inherit; text-decoration: none; }
+header { position: sticky; top: 0; z-index: 2; display: flex; gap: 16px; align-items: center; padding: 10px 20px;
+  background: var(--bg); border-bottom: 1px solid var(--line); }
+header .home { font-weight: 650; letter-spacing: .01em; }
+header input { flex: 1; max-width: 520px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--panel); color: var(--ink); font: inherit; }
+#status { color: var(--muted); font-size: 13px; }
+.wrap { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: calc(100vh - 51px); }
+aside { border-right: 1px solid var(--line); padding: 20px 18px; background: var(--panel); }
+aside h3, main h3 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.chain { list-style: none; margin: 0 0 26px; padding: 0; }
+.chain li { position: relative; padding: 0 0 12px 18px; }
+.chain li::before { content: ""; position: absolute; left: 4px; top: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+.chain li:not(:last-child)::after { content: ""; position: absolute; left: 7px; top: 17px; bottom: 0; width: 1px; background: var(--line); }
+.chain li.here { font-weight: 600; }
+.chain li.here::before { background: var(--ink); }
+.chain .sub { display: block; color: var(--muted); font-size: 12.5px; font-weight: 400; }
+.ctx a { display: block; padding: 6px 9px; margin-bottom: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+.ctx .via { color: var(--muted); font-size: 12px; }
+main { padding: 26px 34px 80px; max-width: 1060px; }
+.kind { display: inline-block; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; border: 1px solid currentColor; }
+.k-goal { color: var(--goal); } .k-ticket { color: var(--ticket); } .k-declaration { color: var(--decl); } .k-document { color: var(--doc); } .k-file { color: var(--file); }
+h1 { font-size: 26px; margin: 8px 0 4px; line-height: 1.25; word-break: break-word; }
+.place { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+.place a { text-decoration: underline; text-decoration-color: var(--line); }
+.prose { max-width: 760px; margin: 0 0 26px; }
+.prose p { margin: 0 0 12px; }
+pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 7px; padding: 14px 16px; overflow: auto; font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+pre .c { color: var(--muted); }
+section { margin: 0 0 30px; }
+.rows { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; gap: 12px; align-items: baseline; padding: 9px 13px; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row:hover { background: var(--panel); }
+.row .t { font-weight: 600; }
+.row > .kind { justify-self: start; }
+.row .s { color: var(--muted); font-size: 13.5px; display: block; overflow: hidden; text-overflow: ellipsis; }
+.row .n { color: var(--faint); font-size: 12.5px; white-space: nowrap; }
+.chip { font-size: 12px; white-space: nowrap; }
+.now { color: var(--now); } .wait { color: var(--wait); }
+.banner { padding: 9px 13px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); margin-bottom: 22px; }
+.debt { color: var(--warn); }
+details { margin-bottom: 6px; } summary { cursor: pointer; color: var(--muted); }
+.md h1 { font-size: 24px; } .md h2 { font-size: 19px; margin-top: 28px; } .md h3 { font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--ink); }
+.md code { background: var(--code-bg); padding: 1px 4px; border-radius: 4px; font-size: 13px; }
+.md blockquote { margin: 0 0 12px; padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
+iframe { width: 100%; height: 82vh; border: 1px solid var(--line); border-radius: 8px; background: white; }
+.reasons { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.reasons a { font-size: 12.5px; color: var(--muted); border-bottom: 1px dotted var(--faint); }
+@media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } aside { border-right: 0; border-bottom: 1px solid var(--line); } main { padding: 20px 16px 60px; } .row { grid-template-columns: 1fr; gap: 2px; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="home" href="#">Hyperactive</a>
+  <input id="q" placeholder="Find anything: a goal, a ticket, a declaration, a file" autocomplete="off">
+  <span id="status"></span>
+</header>
+<div class="wrap">
+  <aside>
+    <h3>Why it is here</h3>
+    <ul class="chain" id="chain"></ul>
+    <h3>Essential context</h3>
+    <div class="ctx" id="ctx"></div>
+  </aside>
+  <main id="main"></main>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const href = id => '#' + encodeURIComponent(id);
+const kindLabel = k => ({goal:'goal', ticket:'ticket', declaration:'definition', document:'document', file:'file'}[k] || k);
+
+function row(it, extra='') {
+  const st = it.state ? `<span class="chip ${it.state.startsWith('can') ? 'now' : 'wait'}">${esc(it.state)}</span>` : '';
+  const n = it.open_under ? `<span class="n">${it.open_under} open below</span>` : '';
+  return `<a class="row" href="${href(it.id)}"><span class="kind k-${it.kind}">${kindLabel(it.kind)}</span>
+    <span><span class="t">${esc(it.title)}</span> ${st}<span class="s">${esc(it.summary)}</span>${extra}</span>${n}</a>`;
+}
+function rows(list, title, note='') {
+  if (!list || !list.length) return '';
+  return `<section><h3>${title} <span style="text-transform:none;letter-spacing:0;color:var(--faint)">${list.length}${note}</span></h3><div class="rows">${list.map(x => row(x)).join('')}</div></section>`;
+}
+function code(s) {
+  return '<pre>' + esc(s).split('\n').map(l => /^\s*(--|\/\*|\*|#)/.test(l) ? `<span class="c">${l}</span>` : l).join('\n') + '</pre>';
+}
+function prose(s) { return `<div class="prose">${esc(s).split(/\n\s*\n/).map(p => `<p>${p}</p>`).join('')}</div>`; }
+function md(src) {
+  const out = []; let list = null, inCode = false, buf = [];
+  const inline = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\*([^*]+)\*/g, '<i>$1</i>');
+  const flush = () => { if (buf.length) { out.push(`<p>${inline(buf.join(' '))}</p>`); buf = []; } };
+  const endList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const l of src.split('\n')) {
+    if (l.startsWith('```')) { flush(); endList(); out.push(inCode ? '</pre>' : '<pre>'); inCode = !inCode; continue; }
+    if (inCode) { out.push(esc(l) + '\n'); continue; }
+    let m;
+    if ((m = l.match(/^(#{1,4})\s+(.*)/))) { flush(); endList(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); }
+    else if ((m = l.match(/^\s*[-*]\s+(.*)/))) { flush(); if (list !== 'ul') { endList(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${inline(m[1])}</li>`); }
+    else if ((m = l.match(/^\s*\d+\.\s+(.*)/))) { flush(); if (list !== 'ol') { endList(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${inline(m[1])}</li>`); }
+    else if ((m = l.match(/^>\s?(.*)/))) { flush(); endList(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); }
+    else if (!l.trim()) { flush(); endList(); }
+    else if (list && /^\s+/.test(l)) { out[out.length - 1] = out[out.length - 1].replace(/<\/li>$/, ' ' + inline(l.trim()) + '</li>'); }
+    else { endList(); buf.push(l.trim()); }
+  }
+  flush(); endList();
+  return `<div class="md prose">${out.join('')}</div>`;
+}
+
+async function show(id) {
+  const r = await fetch('/api/page' + (id ? '?id=' + encodeURIComponent(id) : ''));
+  const p = await r.json();
+  if (p.error) { $('#main').innerHTML = `<p class="debt">${esc(p.error)}</p>`; return; }
+  $('#chain').innerHTML = p.chain.map((c, i) => `<li class="${i === p.chain.length - 1 ? 'here' : ''}"><a href="${href(c.id)}">${esc(c.title)}<span class="sub">${kindLabel(c.kind)}</span></a></li>`).join('')
+    + (p.chain.length === 1 && p.item.kind === 'declaration' ? '<li class="debt">no reason: nothing with a reason uses it or states why it exists</li>' : '');
+  $('#ctx').innerHTML = p.context.length ? p.context.map(c => `<a href="${href(c.id)}">${esc(c.path)}<div class="via">from ${esc(c.via)}</div></a>`).join('') : '<span style="color:var(--muted)">none</span>';
+  const it = p.item; let h = '';
+  if (!p.reasons_ready && !p.reasons_error) h += `<div class="banner">Reading every definition's reasons (the machine reads each file once; the result is kept). Definitions appear when it finishes.</div>`;
+  if (p.reasons_error) h += `<div class="banner debt">Reading the definitions' reasons failed: ${esc(p.reasons_error)}</div>`;
+  h += `<span class="kind k-${it.kind}">${kindLabel(it.kind)}</span><h1>${esc(it.title)}</h1>`;
+  const place = p.place || p.path;
+  if (place) { const f = place.split(':')[0]; h += `<div class="place"><a href="${href('f:' + f)}">${esc(place)}</a>${p.date ? ' · ' + esc(p.date) : ''}${it.state ? ' · <span class="' + (it.state.startsWith('can') ? 'now' : 'wait') + '">' + esc(it.state) + '</span>' : ''}</div>`; }
+  if (p.text !== undefined) h += prose(p.text || '(no statement)');
+  if (p.after && p.after.length) h += `<p class="wait">Cannot start until resolved: ${p.after.map(a => `<a href="${href('n:' + a)}"><b>${esc(a)}</b></a>`).join(', ')}</p>`;
+  if (p.code !== undefined) h += code(p.code);
+  if (p.markdown !== undefined) h += md(p.markdown);
+  else if (p.path && p.path.endsWith('.pdf')) h += `<iframe src="/raw?path=${encodeURIComponent(p.path)}"></iframe>`;
+  h += rows(p.children, 'What serves it', ' · in the order of work: what can start now first');
+  h += rows(p.tickets, 'Open tickets about this');
+  h += rows(p.declarations, 'Definitions that exist for it');
+  h += rows(p.context_of, 'Essential context for');
+  h += rows(p.uses, 'Uses');
+  h += rows(p.used_by, 'Used by');
+  if (p.stored) h += `<section><h3>Stored here <span style="text-transform:none;letter-spacing:0;color:var(--faint)">${p.stored.length} · each with its reason</span></h3><div class="rows">${p.stored.map(x =>
+      row(x, `<span class="reasons">${x.reason.length ? x.reason.map(r => `<a href="${href(r.id)}">for ${esc(r.title)}</a>`).join('') : '<span class="debt">no reason</span>'}</span>`)).join('')}</div></section>`;
+  if (p.raw !== undefined) h += `<section><h3>Contents</h3>${code(p.raw)}</section>`;
+  if (p.unexplained) {
+    const u = p.unexplained;
+    h += `<section><h3 class="debt">Exists without a reason</h3><p class="prose">${u.total} of ${u.of} definitions have no reason reachable from here: nothing with a reason uses them and none states what it is for. Each is an open organizational act. ${u.files_outside.length} files are not in this graph at all (the C machine, the Python tools, the build): their reasons are not expressed anywhere.</p>`;
+    h += u.declarations.map(f => `<details><summary>${esc(f.file)} · ${f.count}</summary><div class="rows">${f.items.map(x => `<a class="row" href="${href(x.id)}"><span class="kind k-declaration">definition</span><span class="t">${esc(x.title)}</span><span></span></a>`).join('')}</div></details>`).join('');
+    h += `<details><summary>Files outside the graph · ${u.files_outside.length}</summary><div class="rows">${u.files_outside.map(f => row({id:'f:' + f, kind:'file', title:f, summary:''})).join('')}</div></details></section>`;
+  }
+  $('#main').innerHTML = h;
+  document.title = it.title + ' · Hyperactive';
+  window.scrollTo(0, 0);
+}
+
+let timer;
+$('#q').addEventListener('input', e => {
+  clearTimeout(timer);
+  const q = e.target.value.trim();
+  if (!q) { route(); return; }
+  timer = setTimeout(async () => {
+    const res = await (await fetch('/api/search?q=' + encodeURIComponent(q))).json();
+    $('#main').innerHTML = `<h3>Found ${res.length}</h3><div class="rows">${res.map(x => row(x)).join('')}</div>`;
+  }, 180);
+});
+function route() { show(decodeURIComponent(location.hash.slice(1)) || null); }
+window.addEventListener('hashchange', () => { $('#q').value = ''; route(); });
+async function poll() {
+  const s = await (await fetch('/api/status')).json();
+  $('#status').textContent = s.reasons_ready ? '' : s.error ? 'reasons: failed' : 'reading definitions…';
+  if (!s.reasons_ready && !s.error) setTimeout(poll, 3000); else if (s.reasons_ready) route();
+}
+route(); poll();
+</script>
+</body>
+</html>

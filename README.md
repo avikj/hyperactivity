@@ -160,6 +160,7 @@ It builds the machine on first use and when src/ changes.
 
 ```
 hyperactive              # what is open and what can start now
+hyperactive browse       # the repository in a browser, as one graph of reasons from the root
 hyperactive help         # every command
 hyperactive show t92     # a node or ticket, what it serves, what serves it, its essential context
 hyperactive order        # the order of work
