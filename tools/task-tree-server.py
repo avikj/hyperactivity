@@ -59,6 +59,61 @@ def graph_json():
     return dict(nodes=nodes, roots=roots)
 
 
+def doc_page(path, text):
+    """a document rendered for reading: Markdown's headings, quotes, lists, code and paragraphs; any
+    other file as text"""
+    e = html.escape
+    if not path.endswith('.md'):
+        body = f'<pre>{e(text)}</pre>'
+    else:
+        out, para, quote, lst, code = [], [], [], [], None
+        def inline(t):
+            t = e(t)
+            t = re.sub(r'`([^`]+)`', r'<code>\1</code>', t)
+            t = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', t)
+            return re.sub(r'(?<![\w*])\*([^*\n]+)\*(?![\w*])', r'<i>\1</i>', t)
+        def flush():
+            if para: out.append('<p>' + inline(' '.join(para)) + '</p>'); para.clear()
+            if quote:
+                paras, cur = [], []
+                for q in quote + ['']:
+                    if q: cur.append(q)
+                    elif cur: paras.append(' '.join(cur)); cur = []
+                out.append('<blockquote>' + ''.join(f'<p>{inline(x)}</p>' for x in paras) + '</blockquote>'); quote.clear()
+            if lst: out.append('<ul>' + ''.join(f'<li>{inline(x)}</li>' for x in lst) + '</ul>'); lst.clear()
+        for line in text.split('\n'):
+            if line.startswith('```'):
+                flush()
+                if code is None: code = []
+                else: out.append('<pre>' + e('\n'.join(code)) + '</pre>'); code = None
+                continue
+            if code is not None: code.append(line); continue
+            m = re.match(r'^(#{1,4})\s+(.*)', line)
+            if m: flush(); out.append(f'<h{len(m.group(1))}>{inline(m.group(2))}</h{len(m.group(1))}>'); continue
+            if line.startswith('>'):
+                if para or lst: flush()
+                quote.append(line[1:].strip()); continue
+            m = re.match(r'^\s*(?:[-*]|\d+\.)\s+(.*)', line)
+            if m:
+                if para or quote: flush()
+                lst.append(m.group(1)); continue
+            if not line.strip(): flush(); continue
+            if lst and line.startswith('  '): lst[-1] += ' ' + line.strip(); continue
+            if quote: flush()
+            para.append(line.strip())
+        flush()
+        body = ''.join(out)
+    return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{e(path)}</title><style>
+body{{margin:0;background:#f6f5f1;color:#1b1a17;font:16px/1.65 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif}}
+main{{max-width:760px;margin:0 auto;padding:40px 22px 90px}} .path{{color:#6f6b62;font:13px ui-monospace,Menlo,monospace}}
+h1{{font-size:28px;line-height:1.25}} h2{{font-size:20px;margin-top:36px}} h3{{font-size:16px}}
+blockquote{{margin:14px 0;padding:4px 16px;border-left:3px solid #c9c3b6;background:#fff;border-radius:0 8px 8px 0}}
+code{{background:#ece9e1;padding:1px 5px;border-radius:4px;font-size:14px}} pre{{background:#fff;border:1px solid #e3dfd5;border-radius:8px;padding:14px;overflow:auto;font-size:13px}}
+@media (prefers-color-scheme:dark){{body{{background:#121211;color:#eceae4}} blockquote,pre{{background:#1b1b19;border-color:#2c2b28}} code{{background:#2a2926}}}}
+</style></head><body><main><div class="path">{e(path)}</div>{body}</main></body></html>"""
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def send(self, body, ctype):
@@ -68,6 +123,20 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             if self.path.startswith('/api/graph'): return self.send(json.dumps(graph_json()), 'application/json')
+            if self.path == '/docs':
+                fs = sorted(f for f in os.listdir(os.path.join(ROOT, 'docs')) if not f.startswith('.'))
+                items = ''.join(f'<li><a href="/doc?path=docs/{html.escape(f)}">{html.escape(f)}</a></li>' for f in fs)
+                return self.send(doc_page('docs/', '') .replace('<main><div class="path">docs/</div>', f'<main><div class="path">docs/</div><h1>Documents</h1><p>Writing from Avik, kept for every session (docs/README.md says what belongs here).</p><ul>{items}</ul>'), 'text/html; charset=utf-8')
+            if self.path.startswith('/doc?'):
+                import urllib.parse
+                f = os.path.normpath(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get('path', [''])[0])
+                full = os.path.join(ROOT, f)
+                if f.startswith('..') or os.path.isabs(f) or not os.path.isfile(full): return self.send('no such document', 'text/plain')
+                if f.endswith('.pdf'):
+                    b = open(full, 'rb').read()
+                    self.send_response(200); self.send_header('Content-Type', 'application/pdf'); self.send_header('Content-Length', str(len(b)))
+                    self.end_headers(); self.wfile.write(b); return
+                return self.send(doc_page(f, open(full, encoding='utf-8', errors='replace').read()), 'text/html; charset=utf-8')
             return self.send(open(PAGE, encoding='utf-8').read(), 'text/html; charset=utf-8')
         except Exception as e:
             return self.send(f'<pre>{html.escape(repr(e))}</pre>', 'text/html; charset=utf-8')
