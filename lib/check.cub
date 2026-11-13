@@ -11,11 +11,6 @@
 -- the value's parts: application, projection, composition, Glue, transport and the endpoints of
 -- a path variable are the machine's own steps. Checked definitions, their types and the data
 -- types are reached through the tables %gval, %gty, %dtab and %dent (words index them).
--- finding (2026-11-12): needs-work. The checker is an untyped term with no statement of what it
--- accepts; it is trusted. Paper §6.1: the theorem that it accepts exactly the derivable judgments
--- is separate from its definition. A checker returning a typing derivation (Der) or a refusal is
--- sound by construction; deciding derivability is then its completeness (task-graph/hyperactivity.cub,
--- typed-checker).
 --
 -- ---------------------------------------------------------------- codes
 data Tm
@@ -2275,18 +2270,6 @@ guess-infer k g t =
        tpapp p r V → (case infer p of typed T → (case %view T of wpi A B → redo k; _ → infer t); r2 → r2)
        _ → infer t)
   else infer t
--- finding (2026-11-12): needs-work. Solving one implicit argument exhausted the machine's memory (7 GB,
--- killed, exit 137): lib/nbe.cub's `reify-code s K D Δ δ x cx = (fst (fst (rr s) K D Δ δ x cx) , x ,
--- embed (snd (fst (rr s) K D Δ δ x cx)))`, where embed's implicit index {KJ} is to be found from its
--- argument's type, at a variable shape s. The same term through a definition with a declared type
--- (nf-code Δ (s , (K , δ , D)) x (fst (rr s) K D Δ δ x cx)) checks in a few thousand steps. Not yet
--- known whether the cost is here (inferring the argument's type by evaluating rr's clauses at the
--- variable s, rather than reading rr's signature) or in the elaborator's syntactic solving.
--- A spine with holes (implicit arguments) is solved where it stands: the head's type is walked
--- along the arguments, a hole standing as a fresh variable, each explicit argument's inferred type
--- matched against its domain, then the result type against the expected one; the universe of a
--- solved type gives its level. The solutions are returned as codes, (elab ...), and the term with
--- them is checked again. An argument's own holes are solved first.
 spine-of c acc = case c of tapp f a V → spine-of f (lcons a acc); _ → (c , acc)
 -- the holes seen: (k , V , A)
 hole-of hs v = case hs of lnil → none; lcons h r → (if same-var (fst (snd h)) v then some (fst h) else hole-of r v)

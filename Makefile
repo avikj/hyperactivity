@@ -36,14 +36,6 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 # imports the core when the working copy is swapped in; and the surface items fail-local, fail-one,
 # prelude-names and type-data, whose failures are what they show.
 #
-# finding (2026-11-12): every target sets CUBICAL_NOCACHE=1, so the standard commands never use the
-# store and recheck everything from nothing (64 s for the library). With the
-# store warm, elaboration and compilation still run for every definition (29 s), so incremental
-# checking reaches only the checker's run, not the rest of the work done per definition.
-# Measured again 2026-11-12, the elaboration and the checker's answers (accepted or refused) kept in
-# the store, the per-file cache gone: with the store warm the library takes 4.6 s, its output the
-# fresh run's but for step counts; what remains per run is compilation (compiled records keyed by
-# content, t60). The targets still check from nothing.
 #
 # the core and the library, in dependency order (lib/core.cub, lib/library.cub: each a file of
 # imports): every definition is checked by the checker as it loads. There are no tests: the checker

@@ -3160,44 +3160,6 @@ static Node *reading_type(Node *t) {
 /* A reading is taken over the complete normalization of what was posed
  * (5.13 concerns a normal form): pending pairs are reduced before and after,
  * so the counts do not depend on the schedule. */
-/* finding (2026-11-12): needs-work (goal product-implementation). Every evaluator result read back here (checks,
- * the elaborator's solving rounds via %chk-def / %infer-ok, usages, readings) lives only for this
- * run. Each is to be kept beyond it in canonical form: the query identified by its canonical key
- * (references as content keys, t60; the checker identified by its own definitions' keys, t42), the
- * result stored with references as keys and rendered through the current bindings when read, the
- * same mechanism as the store's definitions. The store's certificates are then such results; the
- * per-file cache goes (gone 2026-11-12). Read 2026-11-12: the query built here (build_top) is keyed in
- * src/net.c by synkey, but that key's leaves are run-local: a definition by its global index
- * (key_global), a λ or thunk by the address of its compiled record (K_LAM over t->rec), and the
- * codes passed name checked definitions by their index (cglob i). So the evaluator's key of a query
- * means nothing in another run. Two key schemes exist: the evaluator's (structural, run-local) and
- * the store's (canonical forms, content keys). The end state is one: every key canonical, compiled
- * records keyed by their content (t60). The first step can be taken here: the query's key formed as
- * the store forms a definition's (its canonical form, references as content keys, plus the
- * checker's identity), and the result stored canonically.
- * 2026-11-12: one kind of result is kept so: a declaration's whole elaboration (src/syntax.c,
- * x_checked; below, done). The evaluator's own results, %chk-def's and the readings', are not yet.
- * Read 2026-11-12, for the elaborator's case (src/syntax.c x_checked, the round loop): the right unit
- * is the whole elaboration of a declaration, its input the declaration's surface forms (sig, body)
- * with every name resolved to the key it denotes, its output the solved core forms T and t. The
- * final forms then go through `checked` as now, so the certificate check (key_def, store_checked)
- * still decides acceptance: a remembered elaboration can only change which term is checked, never
- * whether a term is accepted. What is missing is a faithful canonical serialization: canon (src/
- * store.c) is a key, not a serialization. It drops the type written on a λ's binder (bnd_ty, kept on
- * the name node), instance flags and binder names, and prints a λ's binders so their count cannot be
- * read back. The store needs one canonical form that is both the key and readable back (references
- * as keys, binders nameless but counted, binder types and flags kept), rendered through the current
- * bindings when read; with it canon is that form's hash and nothing is duplicated.
- * Done 2026-11-12 (branch product-implementation, merged): canon's binders readable back and decanon (every
- * library definition round-trips); generated names numbered by first occurrence in an elaboration's
- * key and in its stored form, binders' kept names included (x-case-chain had failed warm, "rec of a
- * name that is not a recursive field of its branch", its pattern's field renumbered while the
- * rebuilt scrutinee's let kept the raw name that `rec` resolves); data keys nominal (t65, closed);
- * the elaboration remembered. Acceptance is not remembered with it: a remembered elaboration is a
- * term like any other, accepted by its own key's certificate or by the checker (the first version
- * marked a hit as already checked, which would have accepted a stale elaboration unchecked).
- * Measured, the library with the store warm and the per-file cache cold: 4.2 s of CPU, no
- * evaluator step, the same 1907 passed and 52 failed as cold (29 s before, t44). */
 static char *readback(Node *t, long *steps) {
     net_drain();
     long s0 = stat_steps;
@@ -4280,12 +4242,6 @@ static void toplevel_in(Node *f) {
             add_global(f->it[i]->s, G_INPUT);
         }
     } else if (!strcmp(h, "data")) {
-/* finding (2026-11-12): needs-work. For every data declaration this generates, as untyped source text,
- * the type's composition (%comp-D), its homogeneous composition, and transport on each constructor
- * and on formal compositions. That text is never checked: it is trusted as CCHM's rules for the
- * declared type, written once in C per declaration rather than as the single schematic rule CCHM
- * gives for inductive and higher inductive types. Show it is exactly that rule, or replace the
- * per-declaration generation by the schematic rule. */
         /* (data D ctor...) or (data (D z...) ctor...); ctor = (c field... [(dims i...) (φ e)...]),
          * field = x or (x A). Generates the type former D, the constructors, each path
          * constructor's boundary %bdy-c, and from CHM's equations the composition
@@ -4780,12 +4736,6 @@ static bool code_reads(Node *c, long target, long depth) {
     for (int i = 1; i < c->n; i++) if (code_reads(c->it[i], target, depth)) return true;
     return false;
 }
-/* finding (2026-11-12): wrong, against the paper (§9.3, "native substitution"): the evaluator may replace
- * a definition by native code only once a target-correctness witness relating the code's execution
- * to the definition exists. Here the bytes are bound after the only check made, that the
- * specialized term converts with the definition (lib/x86.cub jit-plan); the translation from that
- * term to bytes (x-push, x-lift, x-erase, the templates, this boundary's marshaling) carries no
- * relation, so a wrong translation would answer wrongly with nothing to catch it. */
 /* the bytes into executable memory, an entry over them, and name rebound to (%native k g a…): the
  * call on closed data runs the bytes, anything else (and an overflow) runs g, the definition */
 static int jit_bind(const char *name, int ck, const unsigned char *b, size_t len, int arity, const bool *used) {
@@ -4895,14 +4845,6 @@ int cubical_call_w(const char *name, const uint64_t *args, int n, uint64_t *out)
  * the machine; each reply ends with a line holding '.'. A definition is declared once: an editor
  * sends new declarations and readings, and restarts the machine to redefine (there is no retraction).
  * Run with CUBICAL_WORKERS=0 unless the requests are independent of each other's errors */
-/* finding (2026-11-12): needs-work (goal product-implementation). Serve mode is how agents and people use the work
- * continuously. Missing: the work given to a term as a value (the declarations and their bindings,
- * each declaration's code), so that views are terms of the language applied to it, and a reading
- * that evaluates a view. Replacing a binding is #retract then a new declaration (t56, closed).
- * 2026-11-12: `declarations T` is every checked definition of type T in scope, as a list (src/
- * syntax.c), so views over values of a type are terms (lib/task-graph.cub's over Node) and `#show` of one
- * is the reading that evaluates it (tools/task-graph.py view). Still missing: each declaration's code as
- * a value, so that a view can read the code itself, every declaration of every type. */
 static void serve(void) {
     static char *buf; static size_t cap;
     size_t len = 0; char line[65536];

@@ -1,9 +1,4 @@
 -- lib/specialize.cub — the specializer on codes (plan 5.2, 5.4). Loaded after lib/codes.cub.
--- finding (2026-11-12): needs-work. Specialization cost: #build of a process written through a handler
--- was measured superlinear in the number of commands (2026-11-09: 7 commands 42M steps, 22
--- commands 1.21 billion steps, 3 min 39 s; experiments/os/build-cost*.cub hold the per-stage
--- probes). Not attributed (normalization, rewriting, or the passes of lib/x86.cub). It is a cost
--- of the language's own programs about programs.
 --
 -- specialize Tc sched rules c: the code c (closed, at the type whose code is Tc) is normalized by
 -- the machine (evaluated, then quoted at the type), with the schedule's held definitions kept as
@@ -13,11 +8,6 @@
 -- checks (the #jit directive). Normalization itself contributes refl: a code's value and its
 -- normal form's are convertible (the quote/eval law). The specializer is never proved correct: a
 -- wrong rewrite produces a path that does not check.
--- finding (2026-11-12): needs-work. Normalization here is code-norm-at, a primitive that runs the
--- evaluator's own quoter (lib/std.cub's checker services, t25). The specializer is therefore not a
--- term all the way down, and cannot be specialized itself: the second and third Futamura
--- projections (paper 6.7) need normalization as a term of the language (normalization by
--- evaluation over typed codes, with its soundness equation 6.5).
 normalize : Code → Code → Code
 normalize Tc c = opt-or (code-norm-at Tc c) c
 -- ---------------------------------------------------------------- held definitions (Sched's holds)

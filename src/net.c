@@ -532,14 +532,6 @@ static Key *key(int tag, uint64_t a, void *p, int n, Key *const *c) {
 static Key *key0(int tag, uint64_t a, void *p) { return key(tag, a, p, 0, NULL); }
 static Key *key1(int tag, uint64_t a, void *p, Key *x) { return key(tag, a, p, 1, &x); }
 static Key *key2(int tag, uint64_t a, void *p, Key *x, Key *y) { Key *c[2] = { x, y }; return key(tag, a, p, 2, c); }
-/* finding (2026-11-12): needs-work (goal product-implementation). A reference to a definition is keyed by its
- * index in the current run, so no key involving one means the same thing in another run, and no
- * evaluator result mentioning a definition can be remembered beyond the run. The key of a reference
- * is to be the definition's content key (src/store.c's key of its canonical form); equal content is
- * equal meaning, so this is sound for values. Results that name definitions (readback text,
- * elaboration solutions) are then stored canonically and rendered through current bindings (t61).
- * 2026-11-12: a λ or thunk is likewise keyed by the address of its compiled record (synkey, K_LAM
- * over t->rec), so compiled records need content keys too for any key to be canonical. */
 Key *key_global(long g) { return key0(K_GLOBAL, (uint64_t)g, NULL); }
 Key *key_con0(int c) { return key0(K_CON, (uint64_t)c, NULL); }
 /* a substitution as a key: its (dimension, interval) pairs, in order */
@@ -2225,17 +2217,6 @@ static void trace_step(Cell *o, Cell *v) {
 }
 /* ---------------- the rules ---------------- */
 const char *kind_name(int k) { return k >= 0 && k < K_END && KIND_NAME[k] ? KIND_NAME[k] : "?"; }
-/* finding (2026-11-12): needs-work. The calculus's rules are the cases of this function (application,
- * projections, path application, composition, Glue, interval and faces, systems, higher-constructor
- * boundaries, hcomp, transport, case: about 650 lines), the face algebra (src/dnf.c), the
- * composition clauses for the type formers (lib/prelude.cub) and the composition code generated per
- * data type (generated in src/lang.c, t22). But the rule bodies also make sharing, deferral and memoization
- * decisions inline (V_DEFER, boxes and references, A8 free-dimension cuts), and what a value is
- * depends on the lazy-copy and substitution machinery above being right. So the part that must be
- * trusted is in effect this whole file. To make the implementation's conformance to the published
- * rules checkable by reading: the rules alone determine results, and the machinery is confined to
- * scheduling, sharing and identity, where by construction (strong confluence of interaction nets;
- * memo keys that are the full content of a deterministic computation) it cannot change a result. */
 static void interact(Cell *o, Cell *v) {
     if (o->kind == O_FWD) {
         /* a read waiting for its value (lazy_copy): not a step of its own. An unbuilt value is
@@ -4028,11 +4009,6 @@ static void bind_dim(Frame *f, int slot, Dim i) {
     Dnf *at = iv_atom(i); s->key = key0(K_IV, 0, at); dnf_release(at);
     for (int k = 0; k < u; k++) s->sup[k] = iv_cell(iv_atom(i));
 }
-/* finding (2026-11-12): question. Measured 2026-11-09: build_m calls synkey at every node it builds and
- * synkey walks the whole subterm, so building a term of depth d costs d^2 key computations (a unary
- * numeral of 4*10^4 did not print in 260 s), and deep right-nested terms (a numeral of 10^6) overflow
- * the C stack in several recursive functions of this file and src/lang.c. Not re-measured since;
- * whether both still hold is not known. */
 /* the key of a compiled term in a frame, without building it: the term with its slots' keys.
  * NULL where a part has no key or the form is not keyed. The caller owns the result */
 static Key *synkey(Syn *t, Frame *f) {

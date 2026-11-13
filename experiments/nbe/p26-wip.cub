@@ -5631,12 +5631,6 @@ lift-fmap : (n : Nat) (X : Type 1) (F F' : X → Type 1) (Z : Type 1) (H : Z →
 lift-fmap zero X F F' Z H h k l c d = λ i → l c (h c d)
 lift-fmap (suc n) X F F' Z H h k l c d =
   lift-fmap n (Line X) (LineO X F) (LineO X F') (Line Z) (LineO Z H) (lineo-fmap X F F' h) (lineo-map X F' Z k) (lineo-lift X Z F' H k l) c d
--- finding (2026-11-12): elaboration: checking a path λ (λ i → sub-pull … keep-S (P i)) whose body
--- applies a defined dependent path P (carry-uniq of a pcat-d) exhausts memory (killed at 5.5 GB;
--- keep-lift's first step, before cong1): the λ's endpoints are computed by evaluating the body at 0
--- and 1, which unfolds P's definition instead of reading P's endpoints off its type; the same path
--- given to cong1 checks in 2.7M steps. Not yet known: which evaluation step unfolds it.
--- keep-lift's parts: the cubes of contexts its base paths pass through (kl-k2, kl-k3), the meanings over them (kl-E0 … kl-ER0), the dependent paths over each base path (kl-DE, kl-Dr2, kl-D, kl-DR) and the four steps (kl-s1 … kl-s4)
 kl-k2 : (Δ' Δ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Δ Y) (w : World Δ' Δ) (Z : Type 1) (G0 : (q : Y) → El a (h q) → Z) → (Cube (dims (fst Δ')) (CtxV (lcons (e-ty a) (fst Δ))))
 kl-k2 Δ' Δ a Y h M w Z G0 =
   dcube-map (dims (fst Δ')) (CtxV (fst Δ')) (SubT (fst Δ') (fst Δ) Y) (CtxV (lcons (e-ty a) (fst Δ))) (λ γ' t → (fst (fst t) , λ ρ → h (snd t ρ))) (snd Δ') (sub-tot Δ' Δ Y (world-sub Δ' Δ w) M)

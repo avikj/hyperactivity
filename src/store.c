@@ -253,10 +253,6 @@ static Node *decanon(const char *text) {
  * cannot be read). A definition's identity key stays build-independent; its certificate does
  * not: a change to the rules in net.c (conversion, composition, a primitive) with check.cub
  * unchanged must recheck, so a rebuilt machine rechecks the library once and then hits. */
-/* finding (2026-11-12): the checker's identity here is the hash of the texts of the files loaded up to
- * the checker's definition (comments and unrelated definitions included) plus the machine binary,
- * not the content keys of the definitions the checker consists of. So a comment edited in the
- * bootstrap files invalidates every certificate in the store. */
 static Sha256 lib_hash; static bool lib_hash_on;
 static void lib_mix(const char *text) { if (!lib_hash_on) { sha256_init(&lib_hash); lib_hash_on = true; } sha256_update(&lib_hash, text, strlen(text)); }
 static void chk_salt_set(void) {
@@ -285,13 +281,6 @@ static char *store_read(const char *key, const char *file) {
     char *b = malloc((size_t)n + 1); size_t got = fread(b, 1, (size_t)n, f); b[got] = 0; fclose(f);
     return b;
 }
-/* finding (2026-11-13): wrong. store_write writes an entry in place (fopen "w"). A machine killed while
- * writing (measured 2026-11-13: the kernel killed one for lack of memory while four read in
- * parallel) leaves a truncated entry that later runs read as a whole one, and two machines on one
- * store can read each other's half-written entries; the store is a cache whose entries decide what
- * is not checked again, so a truncated entry could change a result. Fix: write to a temporary file
- * in the same directory and rename it over the entry (atomic on POSIX). Until then tools/task-
- * graph.py gives each parallel reader its own store. */
 static void store_write(const char *key, const char *file, const char *text, bool append) {
     char *p = store_path(key, file); if (!p) return;
     char *dir = store_path(key, "");

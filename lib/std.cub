@@ -588,16 +588,6 @@ list-append : {A : Type} → List A → List A → List A
 list-append nil ys = ys
 list-append (cons x r) ys = cons x (list-append r ys)
 
--- finding (2026-11-12): needs-work. The primitives below give typed programs (the specializer, the
--- translation to machine code) the untyped checker's own operations at types: a definition's code,
--- quotation, normalization, conversion at a type, constructor tables, rewriting. They are trusted,
--- as the checker is, and their types are asserted, not checked. Typed codes (task-graph/hyperactivity.cub,
--- typed-codes) replace them by terms whose types are checked.
--- ---------------------------------------------------------------- the checker's services, at their types
--- The checker (lib/check.cub) and the code utilities beside it (lib/match.cub) are terms written
--- before types exist. These give typed programs over codes (the specializer, the compiler) the
--- services they read at the types they have. Trusted with the checker (PLAN §7).
--- a checked definition's value quoted at its type (none when it does not quote), and its type's code
 primitive def-code : Word → Opt Code = λ g → quote-top (%gty g) (%gval g)
 primitive def-type-code : Word → Opt Code = λ g → quote-ty (%gty g)
 -- a definition as it was written (a copattern definition's clauses), when it has one
