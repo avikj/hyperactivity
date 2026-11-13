@@ -20,26 +20,29 @@ bit-and-true true = refl
 bit-and-true false = refl
 cong2 : {A B C : Type} → (f : A → B → C) → {a a2 : A} → {b b2 : B} → a ≡ a2 → b ≡ b2 → f a b ≡ f a2 b2
 cong2 {A} {B} {C} f p q = λ i → f (p i) (q i)
--- t68 (2026-11-12): wrong. bu-bit0-other and bu-bit0 do not check (measured with the file loaded
--- alone after its imports, --read): their proofs expect lib/bits.cub's bv-update to mask with (wshl
--- #1 j); bv-update now masks with (wshl (wsub (wshl #1 (wsucc (wsub j j))) #1) j), and in bu-bit0
--- the update's value with (wshl v #0) where the proof has v. lib/bits.cub changed after these
--- lemmas were written (5629aae and later); the lemmas are stated against the old form.
+-- j − j is 0 (wsub is a primitive; subw, its structural form, computes on successors)
+sub-self : (j : Word) → wsub j j ≡ #0
+sub-self j = sym (subw≡wsub j j) ∙ %welimP (λ v → subw v v ≡ #0) j (λ i → #0) (λ n h → h)
+-- the mask of an update of bits j … j is bit j
+upd-mask1 : (j : Word) → wshl (bv-ones (wadd (wsub j j) #1)) j ≡ wshl #1 j
+upd-mask1 j = cong (λ z → wshl (bv-ones (wadd z #1)) j) (sub-self j)
 -- bit 0 after an update of bit j ≥ 1 (j literal where it is used: the hypotheses compute)
 bu-bit0-other : (x v j : Word) → wbit (wshl #1 j) #0 ≡ false → wlt #0 j ≡ true → wbit (bv-update #32 x j j v) #0 ≡ wbit x #0
 bu-bit0-other x v j h1 h2 =
-  wbit-or (wxor x (wand x (wshl #1 j))) (wshl v j) #0
+  cong (λ m → wbit (wor (wxor x (wand x m)) (wshl v j)) #0) (upd-mask1 j)
+  ∙ wbit-or (wxor x (wand x (wshl #1 j))) (wshl v j) #0
   ∙ cong2 (λ p q → bit-or p q) (wbit-xor x (wand x (wshl #1 j)) #0 ∙ cong (λ q → bit-xor (wbit x #0) q) (wbit-and x (wshl #1 j) #0 ∙ cong (λ q → bit-and (wbit x #0) q) h1))
                                (wbit-shl v j #0 ∙ cong (λ c → if c then false else wbit v (wsub #0 j)) h2)
   ∙ bit-keep (wbit x #0)
 -- bit 0 after an update of bit 0: the value's bit 0
 bu-bit0 : (x v : Word) → wbit (bv-update #32 x #0 #0 v) #0 ≡ wbit v #0
 bu-bit0 x v =
-  wbit-or (wxor x (wand x #1)) v #0
-  ∙ cong (λ p → bit-or p (wbit v #0)) (wbit-xor x (wand x #1) #0 ∙ cong (λ q → bit-xor (wbit x #0) q) (wbit-and x #1 #0) ∙ bit-clear (wbit x #0))
+  wbit-or (wxor x (wand x #1)) (wshl v #0) #0
+  ∙ cong2 (λ p q → bit-or p q) (wbit-xor x (wand x #1) #0 ∙ cong (λ q → bit-xor (wbit x #0) q) (wbit-and x #1 #0) ∙ bit-clear (wbit x #0))
+                               (wbit-shl v #0 #0)
 -- bit 0 of a bit read (bv-slice of bits 0 … 0)
-slice-bit0 : (x : Word) → wbit (wand x #1) #0 ≡ wbit x #0
-slice-bit0 x = wbit-and x #1 #0 ∙ bit-and-true (wbit x #0)
+slice-bit0 : (x : Word) → wbit (wand (wshr x #0) #1) #0 ≡ wbit x #0
+slice-bit0 x = wbit-and (wshr x #0) #1 #0 ∙ bit-and-true (wbit (wshr x #0) #0) ∙ wbit-shr x #0 #0
 -- a word below 2 compared with 0 is the negation of its comparison with 1
 small2 : (r : Word) → wlt r #2 ≡ true → weq #0 r ≡ bnot (weq r #1)
 small2 r =
