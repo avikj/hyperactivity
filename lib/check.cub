@@ -2335,7 +2335,13 @@ vmatch-w hs w X sg =
       -- deleted, would find branches and continuations by themselves. Pattern unification is standard;
       -- matching through cases and loops is a heuristic. It adds no definitional equality only if every
       -- solution found here is checked afterwards like a written argument: confirm that, then keep what
-      -- is standard and remove what exists only for those lemmas.
+      -- is standard and remove what exists only for those lemmas. Confirmed (2026-11-12, reading
+      -- src/syntax.c's x_checked): a solution returned as (elab …) is written into the term, and the
+      -- result recorded is the checker's run on the whole term with it (%%chk-def, the round with no
+      -- hole left), so it is checked like a written argument and adds no equality. Measured
+      -- (2026-11-12): with the case, word-operation, loop and primitive matches removed, make library
+      -- is unchanged (1937 passed, 24 failed, all derive.cub); not yet run: make every and
+      -- experiments/nbe/p26-wip.cub without them (the commit is 1835f31, not c049f1b).
       --
       -- a hole applied to distinct variables, against X: the hole is λ x1 … xn → X, by quoting X
       -- under them (a pattern); otherwise the applications part by part
