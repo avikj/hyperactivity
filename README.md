@@ -9,7 +9,7 @@ which is now an archive.
 
 ## What is happening now
 
-**The work object (2026-11-12, node `work-object` in `task-graph/hyperactivity.cub`, whose comment is the whole
+**The work object (2026-11-12, node `all-work-and-all-knowledge-about-it-as-one-content-addressed-object-in-the-language` in `task-graph/hyperactivity.cub`, whose comment is the whole
 construction).** The work is one sequence of declarations used continuously by agents and people:
 everything said is a declaration; open loops are closed (removed from the state, anything that
 matters folded in) by anyone once completely unnecessary; facts are evaluations, remembered under
@@ -31,16 +31,16 @@ work is computed, not stored: `python3 tools/task-graph.py priority`.
 variable (a stuck level now is an atom); t56, `#retract` did not free the name.
 
 
-The top priority (2026-11-13, the user) is the paper's initial deliverable (`initial-deliverable`,
-under `publish`): the companion repository with the implementation complete, every essential
+The top priority (2026-11-13, the user) is the paper's initial deliverable (`companion-repository-with-every-essential-construction-of-the-paper-implemented-excluding-worked-examples`,
+under `hyperactive-paper-published-with-its-companion-repository`): the companion repository with the implementation complete, every essential
 construction of the paper present and correct, the worked examples excluded. Its parts are the
-language core (`core`: the implementation exactly the published calculus with a minimal trusted
-part, `core-correct`; partial evaluation with the Futamura projections, `partial-evaluation`,
-`typed-codes`; realization as native code through C, `native`), on which the value of every other
-goal also waits; a repository that states its own reality (`self-aware`: every file read against the
+language core (`language-core-complete-exact-calculus-partial-evaluation-and-native-code`: the implementation exactly the published calculus with a minimal trusted
+part, `implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part`; partial evaluation with the Futamura projections, `typed-specializer-with-its-law-and-the-three-futamura-projections`,
+`typed-codes-of-the-language-with-normalization-and-its-soundness`; realization as native code through C, `realization-as-native-code-through-c-with-the-relation-to-the-terms-meaning`), on which the value of every other
+goal also waits; a repository that states its own reality (`repository-states-its-own-reality-what-is-checked-assumed-wrong-unknown-and-in-progress`: every file read against the
 paper and the published calculus, every finding a ticket at its site, this document saying only
 what is true); and which essential constructions of the paper the core does not cover (t74). The
-coverage of every construction the paper displays, its worked examples included (`full-coverage`,
+coverage of every construction the paper displays, its worked examples included (`every-construction-the-paper-displays-checked-including-its-worked-examples`,
 t75), is last priority: it serves nothing but publication. The work's goals and tickets are code
 (below).
 
@@ -52,7 +52,7 @@ per-data composition code and the checker against the published rules (t33, t23,
 of the translation of terms into the evaluator's graph (t34). Until that is done, whether the
 implementation is exactly the calculus is not known.
 
-**Typed codes and normalization by evaluation (2026-11-12, `lib/nbe.cub`, goal `typed-codes`):**
+**Typed codes and normalization by evaluation (2026-11-12, `lib/nbe.cub`, goal `typed-codes-of-the-language-with-normalization-and-its-soundness`):**
 complete and checked for Π, Σ, Bool with dependent case (typed codes over the one code
 representation, derivations indexed by meaning, Kripke NbE, reifySound (6.5) by the indices;
 `experiments/nbe/examples.cub` runs it). Paths and the interval are being rebuilt over cubes in the
@@ -86,7 +86,7 @@ python3 tools/task-graph.py show t6 core    # a node's text or statement, place,
 python3 tools/task-graph.py priority        # what can start now (superseding leaves first); what waits
 python3 tools/task-graph.py check           # graph and comments correspond; the graph checks
 python3 tools/task-graph.py next            # the next tN number never used
-python3 tools/task-graph.py open lib/x.cub:12 core-correct 'what is wrong, measured how'
+python3 tools/task-graph.py open lib/x.cub:12 implementation-is-exactly-the-published-calculus-with-a-minimal-trusted-part 'what is wrong, measured how'
                                       # open the next tN there, part of the node (y/N near the top)
 python3 tools/task-graph.py close t12       # t12 resolved; a parent left with no children, once confirmed
 python3 tools/task-graph.py view 'names (under (declarations Node) core)'

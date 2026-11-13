@@ -45,13 +45,13 @@ This is not a project-management tool bolted onto a programming language. The la
 be an information and computing environment with maximal bandwidth for continuous flows of
 understanding and contribution, with the friction to cognition brought to zero — Avik's driver for a
 decade. The work itself (the code, its history, what is known, what is open, what everyone is
-doing) is one object in the language (`work-object` in `task-graph/hyperactivity.cub`), and the graph of goals is
+doing) is one object in the language (`all-work-and-all-knowledge-about-it-as-one-content-addressed-object-in-the-language` in `task-graph/hyperactivity.cub`), and the graph of goals is
 the first part of that object built. Soon agents and people will not interact with this work by
 grepping and reading files: they will declare and read views, terms of the language evaluated by
 the machine over the work. Text operations on the work are a stage to be left, not the method.
 
 The HCI vision itself (the interactive product that is the language's delivered value) is to be
-written by Avik and installed here; until it is, the `interface` node's statement and this section
+written by Avik and installed here; until it is, the `how-people-and-agents-read-write-and-act-on-the-work` node's statement and this section
 are all that is recorded of it.
 
 ## 3. The structure
@@ -230,6 +230,14 @@ comment pointing at a file, a naming convention) stands in for one.
 > vagueness for some bullshit sense of cleanliness. the "work" module of hyperactivity. wtf does that
 > refer to would you think entering the repo?
 
+On the names of the task graph's nodes:
+
+> "languages" "core" "hardware" "work-object" are fucking stupid identifiers for *anything*.
+>
+> these carry no semantic content. it must be an english term fucking specifying what it is. not a
+> loose identifier that you assume you and any reader knows what it points to, "somehow". i dont
+> fucking care if your identifiers involve 12 or 20 words with dashes. this is inexcusable.
+
 A name says what the thing is to someone entering the repository with no context. (So this file is
 `task-graph-design.md`, the graph's type is `lib/task-graph.cub`, this repository's tasks are
 `task-graph/hyperactivity.cub`, its tool `tools/task-graph.py`.)
@@ -245,11 +253,11 @@ A name says what the thing is to someone entering the repository with no context
 
 ## 10. The current top-level shape (2026-11-13)
 
-Under the root: `publish`, the languages, hardware and OS goals, and the work object.
-`publish` has two children. `initial-deliverable` (the companion repository with the
+Under the root: `hyperactive-paper-published-with-its-companion-repository`, the languages, hardware and OS goals, and the work object.
+`hyperactive-paper-published-with-its-companion-repository` has two children. `companion-repository-with-every-essential-construction-of-the-paper-implemented-excluding-worked-examples` (the companion repository with the
 implementation complete: every essential construction of the paper, worked examples excluded) is
-the top priority: it contains `core`, the language completion that every other goal's value also
-waits on. `full-coverage` (every construction the paper displays, worked examples included) comes
+the top priority: it contains `language-core-complete-exact-calculus-partial-evaluation-and-native-code`, the language completion that every other goal's value also
+waits on. `every-construction-the-paper-displays-checked-including-its-worked-examples` (every construction the paper displays, worked examples included) comes
 last; it serves nothing but publication.
 
 ## 11. Mistakes that have happened, so they are not repeated

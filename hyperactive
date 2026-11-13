@@ -50,7 +50,9 @@ def main():
         for l in out[1:]:
             if l.startswith(' layer 2') or l.startswith('waiting'): break
             first.append(l)
-        root = subprocess.run([sys.executable, TASKS, 'show', 'unified-computing'], cwd=ROOT, capture_output=True, text=True).stdout
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('task_graph', TASKS); tg = importlib.util.module_from_spec(spec); spec.loader.exec_module(tg)
+        root = subprocess.run([sys.executable, TASKS, 'show', tg.graph()[1][0]], cwd=ROOT, capture_output=True, text=True).stdout
         ctx = [l.split('essential context: ', 1)[1].split('  (')[0] for l in root.split('\n') if 'essential context: ' in l]
         print('Hyperactive. Essential context for everything: ' + ', '.join(ctx) + '\n')
         print('Can start now and unblocks the most:')
