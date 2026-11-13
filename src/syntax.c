@@ -2004,16 +2004,6 @@ static bool mentions_x(Node *t, const char *x) { return mentions_name(t, x); }
 static Node *sig_of(const char *n);
 static void sig_set(const char *n, Node *s);
 static bool infer_looking(Node *t);
-/* t50 (2026-11-12): needs-work. A definition's implicit level is solved as lzero when the type it
- * is the level of is an application at Type 1 rather than a variable or a universe: with `F52 : Bool
- * → Type 1` (by cases), `s52 : (b : Bool) (y : F52 b) → Path (F52 b) y y` is refused in its
- * signature ("type mismatch, expected: Type, actual: Type (lsuc lzero)"), and so is `w54 : (f : Bool
- * → Type 1) (b : Bool) (y : f b) → Path (f b) y y`, while `(X : Type 1) (y : X) → Path X y y` is
- * accepted, and so are `Path {lsuc lzero} (F52 b) y y` with `refl {lsuc lzero} {F52 b} {y}` and
- * `PathP (λ i → F52 b) y y` with `λ i → y` (PathP takes no level). Run 2026-11-12. Not yet located
- * between `determined` below (a level parameter is counted as determined, "an undetermined one is
- * the least") and lib/check.cub's spine solving (level-hole: a level nothing determines is lzero).
- * lib/nbe.cub writes PathP or explicit levels at those sites. */
 /* is implicit parameter q of h found from an explicit argument whose type the checker infers (it
  * occurs in that argument's domain)? A level always is (an undetermined one is the least) */
 /* definitions that compute by cases on an argument: their arguments are not read back from a value of the type */

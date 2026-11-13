@@ -2401,12 +2401,16 @@ type-level v =
     wglue A S → type-level A
     whcompu A S → type-level A
     wvar l T → univ-level T
-    wapp f a T → univ-level T
-    wfst p T → univ-level T
-    wsnd p T → univ-level T
-    wpapp p r T → univ-level T
-    welim d x f T → univ-level T
+    -- a stuck application, projection, path application or case: its view does not carry its type
+    -- (computed from the spine when needed, src/net.c), so it is read off the spine as conversion
+    -- does (t50: a type f b, f : Bool → Type 1, was given level lzero)
+    wapp f a T → neu-level v
+    wfst p T → neu-level v
+    wsnd p T → neu-level v
+    wpapp p r T → neu-level v
+    welim d x f T → (case %motive f of some P → univ-level (P x); none → neu-level v)
     _ → lzero
+neu-level v = case convneu (%view v) (%view v) of some T → univ-level T; none → lzero
 -- a hole of type U l solved by a type: l by its level
 level-close hs sg =
   case hs of
