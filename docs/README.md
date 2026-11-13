@@ -21,3 +21,7 @@ Contents:
 - `task-graph-design.md` — how the work is organized into tasks and ordered, and why: Avik's design,
   transcribed from his explanations to a Claude session at his request on 2026-11-13, his words
   quoted where they are his. Essential context for everything (attached at the root).
+- `state-change-collaboration-design.md` — how the work is held, changed and shared, and why: state
+  that is not text, read/write/act sessions, no canonical state, immutable content-addressed code,
+  change as a square, questions as tasks, ownership. Avik's design, transcribed from his explanations
+  on 2026-11-13. Essential context for `work-object` and `interface`.
