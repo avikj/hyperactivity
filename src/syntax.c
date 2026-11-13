@@ -1176,6 +1176,24 @@ static Node *p_data_ctor(void) {
     for (int i = 0; i < n; i++) r->it[i] = items[i];
     return r;
 }
+/* a data declaration's declared universe (`data D ps : … → Type l`), checked once the type is
+ * declared: a checked definition %dlevel-D : (ps) → Type l, D ps, which the checker accepts only if
+ * the type is in that universe, so an annotation that does not hold is refused (2026-11-12, t49: the
+ * annotation was dropped, the level computed from the fields) */
+static Node *data_annot;
+static Node *data_ps_saved[48]; static int data_np_saved; static const char *data_name_saved;
+static void data_level_check(void) {
+    if (!data_annot || !data_name_saved) return;
+    Node *T = core(data_annot), *body = nsym(data_name_saved);
+    for (int i = 0; i < data_np_saved; i++) body = lst(3, nsym("app"), body, data_ps_saved[i]->it[0]);
+    for (int i = data_np_saved - 1; i >= 0; i--) {
+        T = lst(4, nsym("Pi"), data_ps_saved[i]->it[0], data_ps_saved[i]->it[1], T);
+        body = lst(3, nsym("lam"), data_ps_saved[i]->it[0], body);
+    }
+    char nm[300]; snprintf(nm, sizeof nm, "%%dlevel-%s", data_name_saved);
+    data_annot = NULL;
+    x_top(lst(4, nsym("checked"), nsym(nm), T, body));
+}
 static Node *p_data(void) {
     want("data");
     Tok *d = NX();
@@ -1210,17 +1228,13 @@ static Node *p_data(void) {
             ty = x_rename(ty->it[3], ty->it[1]->s, nm);
             data_nidx++;
         }
-        /* t49 (2026-11-12): wrong. What remains of the annotation here, the declared universe (`Type 1`
-         * in `data D ps : … → Type 1`), is dropped: the data type's level is computed from its fields
-         * (lib/check.cub data-level) and the annotation is neither checked nor used. So `data Lift49 (A
-         * : Type) : Type 1 = lift49 (x : A)` is accepted, and `F49 : Type 1 → Type 1; F49 X = X; t49 :
-         * Type 1; t49 = F49 (Lift49 Bool)` is refused: "expected: Type (lsuc lzero), actual: Type (lmax
-         * lzero lzero)". An accepted annotation that does not hold is wrong: either the declared level is
-         * the type's level (checked to be at least the fields') or the annotation is refused. */
-
+        /* what remains, the declared universe, is checked after the declaration (data_level_check) */
+        data_annot = ty;
     }
     Node *head = nsym(d->s);
     if (np) { head = nlist(np + 1); head->it[0] = nsym(d->s); for (int i = 0; i < np; i++) head->it[i + 1] = ps[i]; }
+    data_np_saved = np < 48 ? np : 0; data_name_saved = d->s;
+    for (int i = 0; i < data_np_saved; i++) data_ps_saved[i] = ps[i];
     if (at("where")) {
         NX(); wantk(X_VO, "a block of constructors");
         while (P0()->k != X_VC) {
@@ -1401,8 +1415,9 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "data")) {
+        data_annot = NULL;
         Node *d = p_data();
-        if (x_typed) x_top(sym2(fail ? "checked-data-fail" : "checked-data", d));
+        if (x_typed) { x_top(sym2(fail ? "checked-data-fail" : "checked-data", d)); if (!fail) data_level_check(); }
         else x_top(d);
         decl_end(); return;
     }
@@ -1999,26 +2014,6 @@ static bool infer_looking(Node *t);
  * between `determined` below (a level parameter is counted as determined, "an undetermined one is
  * the least") and lib/check.cub's spine solving (level-hole: a level nothing determines is lzero).
  * lib/nbe.cub writes PathP or explicit levels at those sites. */
-/* t53 (2026-11-12): wrong. An implicit index of a function on an indexed family, left out where the
- * function is passed unapplied to its last argument in the signature of a definition by clauses, is
- * refused although the family argument's type determines it. Reproducer (after CORE):
- *   data T53 : (P : Bool × Bool) → Type where
- *     t53a : T53 (true , true)
- *     t53b : (b₀ : Bool) → T53 (b₀ , b₀) → T53 (false , b₀)
- *   t53f : {P : Bool × Bool} → T53 P → Bool → Bool
- *   t53f t53a k = k
- *   t53f (t53b b w) k = not (t53f w k)
- *   Q53 : (Bool → Bool) → Type
- *   Q53 r = r true ≡ r true
- *   t53g : {P : Bool × Bool} (w : T53 P) → Q53 (t53f w)
- *   t53g t53a = λ i → true
- *   t53g (t53b b w) = λ i → not (t53f w true)
- * is refused: "FAIL: checks t53g … at: λ x0 → x0 … reason: an implicit argument is not determined by
- * the other arguments' types or the type expected … its type: Bool × Bool" (run 2026-11-12); the same
- * signature with t53f w true ≡ t53f w true checks. Not yet located between `determined` below and
- * lib/check.cub's spine solving (E-implicit). Workaround: the index given in braces (t53f {P} w).
- * No site uses it now: experiments/nbe/p26-wip.cub's OPE, where it was met, is closed data (the
- * reason at its definition). */
 /* is implicit parameter q of h found from an explicit argument whose type the checker infers (it
  * occurs in that argument's domain)? A level always is (an undetermined one is the least) */
 /* definitions that compute by cases on an argument: their arguments are not read back from a value of the type */
@@ -3161,7 +3156,7 @@ static Node *syn_canon(Node *t) {
     }
     /* implicit arguments written out: left to the explicit ones */
     int m = 0; for (int i = 0; i < t->n; i++) if (!(i > 0 && t->it[i]->list && t->it[i]->n == 2 && is(t->it[i]->it[0], "%imp"))) m++;
-    if (m == 1) return syn_canon(t->it[0]);
+    if (m == 1 && t->n > 1) return syn_canon(t->it[0]);   /* f {a}: f; a list of one, (sys) an empty system, stays */
     Node *r = nlist(m); m = 0;
     for (int i = 0; i < t->n; i++) if (!(i > 0 && t->it[i]->list && t->it[i]->n == 2 && is(t->it[i]->it[0], "%imp"))) r->it[m++] = syn_canon(t->it[i]);
     return r;
@@ -4437,25 +4432,6 @@ typedef struct { bool clash, stuck; UClash cl; int nsol; USol sol[16]; } UState;
  * snd (case fst Δ1 ...)) and without an odone clause "the clauses do not cover every case". Agda's
  * unifier decomposes pairs (η for Σ) and evaluates indices to weak head normal form first. lib/nbe.cub
  * defines variables by recursion on the skeleton and worlds as functions instead. */
-/* t54 (2026-11-12): wrong. A constructor pattern nested under an indexed family's constructor is
- * refused, while the same clauses with a variable there check. Reproducer (after CORE):
- *   data T54 : (P : Bool × Nat) → Type where
- *     t54a : T54 (true , zero)
- *     t54b : (b₀ : Bool) (n₀ : Nat) → T54 (b₀ , n₀) → T54 (b₀ , suc n₀)
- *   F54 : Nat → Type
- *   F54 zero = Bool
- *   F54 (suc n) = Bool
- *   t54f : {P : Bool × Nat} → T54 P → F54 (snd P) → F54 (snd P)
- *   t54f t54a x = x
- *   t54f (t54b true n w) x = x
- *   t54f (t54b false n w) x = x
- * is refused: "FAIL: checks t54f … at: cpair (cfree %f322) (cfree (suc n)) … reason: no inferable
- * type here: annotate it with (the T t)" (run 2026-11-12); with the one clause t54f (t54b b n w) x = x
- * it checks. With an index (lcons e sk' , sk) and the clause's entry matched as e-ty s, the error is
- * "type mismatch" with the index not refined (snd P left in the expected type). Not yet located in
- * the padding of an indexed constructor's pattern (fording) or u_con below. Workaround: a function by
- * cases on the nested field, called from the clause with a variable there. No site uses it now
- * (experiments/nbe/p26-wip.cub's OPE, where it was met, is closed data). */
 static int u_con(Node *t, Node **args, int *na) {
     *na = 0;
     if (!t->list) {
@@ -4758,7 +4734,14 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         if (plan_rw) {
             const char *fx[64]; Node *fvv[64]; int nfx = 0;
             for (int z = 0; z < nf - ixk && z < 64; z++) { fx[nfx] = fdr0->fields[z]; fvv[nfx++] = fv[z]; }
-            for (int q = 0; q < ixk; q++) sg_push(ixv[q], subst_multi(fdr0->idx[q], fx, fvv, nfx));
+            for (int q = 0; q < ixk; q++) {
+                /* a pair (the index of a family over a Σ) is not inferable where the index is
+                 * substituted (snd (b₀ , suc n₀), an inner split's motive): annotated with the
+                 * index's type (t54) */
+                Node *ie = subst_multi(fdr0->idx[q], fx, fvv, nfx), *it = ty_of(ixv[q]);
+                if (it && ie->list && ie->n >= 1 && !ie->it[0]->list && is(ie->it[0], "pair")) ie = sym3("the", it, ie);
+                sg_push(ixv[q], ie);
+            }
         }
         for (int w = 0; w < us.nsol; w++) sg_push(fv[us.sol[w].k]->s, us.sol[w].val);
         int rov0 = nrov;
@@ -4883,7 +4866,17 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             /* the motive's body at those (reduced here: a λ applied is not inferable) */
             const char *xs[65]; Node *vs[65]; Node *L = ixlam; int nx = 0;
             for (int q = nf - ixk; q < nf; q++) { xs[nx] = L->it[1]->s; vs[nx++] = lst(2, fv[q], sym2("~", i)); L = L->it[2]; }
-            xs[nx] = L->it[1]->s; vs[nx++] = nf ? cvl : nsym(CON[c].name); L = L->it[2];
+            /* the constructor at the line's index, annotated with its type there (v's type, its
+             * indices e (~ i)): an implicit argument the motive leaves to v's type (t53f w, its index
+             * found from w's) is found from it, where the bare application (whose equation fields
+             * are λs) has no type the elaborator can read (t53) */
+            Node *cvt = nf ? cvl : nsym(CON[c].name);
+            if (vty) {
+                const char *ixs[64]; Node *ivs[64];
+                for (int q = 0; q < ixk; q++) { ixs[q] = ixv[q]; ivs[q] = lst(2, fv[nf - ixk + q], sym2("~", i)); }
+                cvt = sym3("the", subst_multi(vty, ixs, ivs, ixk), cvt);
+            }
+            xs[nx] = L->it[1]->s; vs[nx++] = cvt; L = L->it[2];
             L = subst_multi(L, xs, vs, nx);
             /* a goal not depending on the indices (vlen : Vec A n → Nat) needs no transport */
             if (mentions_name(L, i->s)) { body = lst(4, nsym("comp"), sym3("lam", i, L), sym3("lam", xfresh("i"), lst(1, nsym("sys"))), body); rewrote = true; }

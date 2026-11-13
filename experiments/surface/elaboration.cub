@@ -1,0 +1,50 @@
+-- experiments/surface/elaboration.cub (2026-11-12): elaboration cases once refused, each checked here
+-- so the refusal stays fixed; each block names the ticket it closed (the history keeps the ticket's
+-- text). Checked alone by `make every`.
+import "../../lib/core.cub"
+-- t55: an implicit argument found syntactically from a type holding an empty system, λ i → [] (a
+-- list of one, (sys)), was taken for the bare name sys (syn_canon) (part of core-correct)
+isy : (A : Type 1) {x y : A} → PathP (λ i → A) x y → PathP (λ i → A) y x
+isy A p = λ i → p (~ i)
+-- (part of core-correct)
+T1 : Type 1
+T1 = Type
+-- (part of core-correct)
+tfill : (a : T1) (x : a) → PathP (λ i → a) x (comp (λ i → a) (λ i → []) x)
+tfill a x = λ j → comp (λ i → a) (λ i → [ j = 0 ↦ x ]) x
+-- (part of core-correct)
+L1 : Type 1
+L1 = Bool → Type
+-- (part of core-correct)
+lem4 : (a : T1) (x : a) (G : a → L1) → PathP (λ i → L1) (G (comp (λ i → a) (λ i → []) x)) (G x)
+lem4 a x G = isy L1 (λ i → G (tfill a x i))
+-- t53: the constructor on the transport line of an indexed split, annotated with its type at the
+-- line's index, so an implicit index the motive leaves to it is found (part of core-correct)
+data T53 : (P : Bool × Bool) → Type where
+  t53a : T53 (true , true)
+  t53b : (b₀ : Bool) → T53 (b₀ , b₀) → T53 (false , b₀)
+-- (part of core-correct)
+t53f : {P : Bool × Bool} → T53 P → Bool → Bool
+t53f t53a k = k
+t53f (t53b b w) k = not (t53f w k)
+-- (part of core-correct)
+Q53 : (Bool → Bool) → Type
+Q53 r = r true ≡ r true
+-- (part of core-correct)
+t53g : {P : Bool × Bool} (w : T53 P) → Q53 (t53f w)
+t53g t53a = λ i → true
+t53g (t53b b w) = λ i → not (t53f w true)
+-- t54: a pair index substituted at a split annotated with its type, so a nested constructor
+-- pattern's inner split has an inferable motive (part of core-correct)
+data T54 : (P : Bool × Nat) → Type where
+  t54a : T54 (true , zero)
+  t54b : (b₀ : Bool) (n₀ : Nat) → T54 (b₀ , n₀) → T54 (b₀ , suc n₀)
+-- (part of core-correct)
+F54 : Nat → Type
+F54 zero = Bool
+F54 (suc n) = Bool
+-- (part of core-correct)
+t54f : {P : Bool × Nat} → T54 P → F54 (snd P) → F54 (snd P)
+t54f t54a x = x
+t54f (t54b true n w) x = x
+t54f (t54b false n w) x = x

@@ -1052,23 +1052,6 @@ static Node *to_code(Node *t) {
     if (!strcmp(h, "=")) return capp1(is(t->it[2], "0") ? "ceq0" : "ceq1", to_code(t->it[1]));
     if (!strcmp(h, "&")) return capp2("cfand", to_code(t->it[1]), to_code(t->it[2]));
     if (!strcmp(h, "|")) return capp2("cfor", to_code(t->it[1]), to_code(t->it[2]));
-    /* t55 (2026-11-12): wrong. An implicit argument whose solution contains a composition with a
-     * system is refused: the solution reaches to_code as the surface form (sys ...), which only ds
-     * turns into sys0/sys+, so to_code dies at the head `sys`. Reproducer (after CORE and lib/std.cub):
-     *   isy : (A : Type 1) {x y : A} → PathP (λ i → A) x y → PathP (λ i → A) y x
-     *   isy A p = λ i → p (~ i)
-     *   T1 : Type 1
-     *   T1 = Type
-     *   tfill : (a : T1) (x : a) → PathP (λ i → a) x (comp (λ i → a) (λ i → []) x)
-     *   tfill a x = λ j → comp (λ i → a) (λ i → [ j = 0 ↦ x ]) x
-     *   L1 : Type 1
-     *   L1 = Bool → Type
-     *   lem4 : (a : T1) (x : a) (G : a → L1) → PathP (λ i → L1) (G (comp (λ i → a) (λ i → []) x)) (G x)
-     *   lem4 a x G = isy L1 (λ i → G (tfill a x i))
-     * is refused: "FAIL: checks lem4 … reason: code: not a bound variable or checked definition: sys"
-     * (run 2026-11-12); the same with the endpoints given, isy L1 {G x} {G (comp (λ i → a) (λ i → [])
-     * x)} (…), checks. Not yet located where hole solutions are read back into syntax. Workaround:
-     * endpoints given explicitly (experiments/nbe/p26-wip.cub, at pcat-i). */
     if (!strcmp(h, "sys0")) return K("csys0");
     if (!strcmp(h, "sys+")) return capp3("csysc", to_code(t->it[1]), to_code(t->it[2]->it[1]), to_code(t->it[3]));
     if (!strcmp(h, "comp")) return capp3("ccomp", to_code(t->it[1]), to_code(t->it[2]), to_code(t->it[3]));
