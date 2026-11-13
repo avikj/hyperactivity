@@ -5,22 +5,24 @@
 -- enumeration (find-cert) over the untyped codes of the fragment. Nothing here is trusted: what
 -- the search produces goes through int-cert-check, whose soundness is the theorem. Loaded after
 -- lib/intproof.cub; untyped, as lib/lin.cub is.
--- t18 (2026-11-12): needs-work. 6 definitions here are untyped and refused by the checker, which
--- has rejected untyped definitions outside the bootstrap files since 2026-11-09, deliberately,
--- after about 10,000 lines of untyped code were written by an agent. They are to be written with
--- types; nothing in the checker changes.
 --
 -- a typed word code read as a code of the fragment (addition is cwop #2)
-lc-to-code c =
-  case c of
-    lc-lit n → cwlit n
-    lc-var v → cvar v
-    lc-add a b → cwop #2 (lc-to-code a) (lc-to-code b)
-    lc-suc a → cwsucc (lc-to-code a)
-hyps-to-lst hs = case hs of hnil → lnil; hcons l r rest → lcons (lc-to-code l , lc-to-code r) (hyps-to-lst rest)
-lst-to-mults l = case l of lnil → munil; lcons c r → mucons c (lst-to-mults r)
--- the searches over integer claims: hypotheses hs (IHyps), goal a ≤ b (IntCode); some multipliers or none
-int-omega-cert hs a b = omega-cert (hyps-to-lst (int-hyps hs)) (lc-to-code (igoal-l a b)) (lc-to-code (igoal-r a b))
-int-find-cert m hs a b = find-cert m (hyps-to-lst (int-hyps hs)) (lc-to-code (igoal-l a b)) (lc-to-code (igoal-r a b))
--- the search's result as the checker's multipliers (an empty list where the search refutes)
-int-cert-of o = case o of some l → lst-to-mults l; none → munil
+lc-to-code : LinCode → Code
+lc-to-code (lc-lit n) = cwlit n
+lc-to-code (lc-var v) = cvar v
+lc-to-code (lc-add a b) = cwop #2 (lc-to-code a) (lc-to-code b)
+lc-to-code (lc-suc a) = cwsucc (lc-to-code a)
+hyps-to-lst : Hyps → Lst (Code × Code)
+hyps-to-lst hnil = lnil
+hyps-to-lst (hcons l r rest) = lcons (lc-to-code l , lc-to-code r) (hyps-to-lst rest)
+lst-to-mults : Lst Word → Mults
+lst-to-mults lnil = munil
+lst-to-mults (lcons c r) = mucons c (lst-to-mults r)
+-- the searches over integer claims (hypotheses hs : IHyps, goal a ≤ b) are lib/lin.cub's omega-cert
+-- and find-cert, helpers of the bootstrap files, untyped, so no checked definition calls them; a
+-- reading does: #show int-cert-of (omega-cert (hyps-to-lst (int-hyps hs)) (lc-to-code (igoal-l a b))
+-- (lc-to-code (igoal-r a b))). The search's result as the checker's multipliers (an empty list where
+-- the search refutes):
+int-cert-of : Opt (Lst Word) → Mults
+int-cert-of (some l) = lst-to-mults l
+int-cert-of none = munil
