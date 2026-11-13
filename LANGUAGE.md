@@ -578,21 +578,17 @@ replaced by realization through C whose type carries that relation; see README.m
 
 ## Measurements
 
-Every reading reports the steps taken. `make library` checks the library (830 definitions) in
-21.7M steps, about 17 s on one thread. `CUBICAL_KEYS=1` traces the keys registered, fired and hit
+Every reading reports the steps taken. `make library` checks the library: 1,936 definitions pass
+and 24 are refused (lib/derive.cub's untyped definitions), 149.7M steps, measured 2026-11-13. `CUBICAL_KEYS=1` traces the keys registered, fired and hit
 on stderr, and the entries left at the end.
 
-Brunerie's number, by an untyped port of Ljungström's `brunerie'` from agda/cubical
-(`experiments/brunerie/`), reads `negsuc (suc zero)`, that is -2, in 233,628
-steps (one thread, uncached, at revision 9); `make brunerie` reads it with zero and four workers. The port has no
-placeholders: isSetℤ is Hedberg's theorem in the library, and the 4-truncation case of the Hopf
-H-space structure is a checked filler over families of sets. The pipeline
-eliminates the circle and S² into truncations, the Hopf fibration and `Code` into the universe,
-and transports through the proofs that the types of sets and of groupoids have the next h-level.
-Before compositions of types were a type former and the glue base was held unbuilt it ran out of
-7 GB of memory.
+Brunerie's number, by a typed port of Ljungström's `brunerie'` from agda/cubical
+(`experiments/brunerie/typed.cub`), reads `negsuc (suc zero)`, that is -2; `make brunerie` reads it
+with zero and four workers (measured 2026-11-13). The port has no placeholders: isSetℤ is Hedberg's
+theorem in the library, and the 4-truncation case of the Hopf H-space structure is a checked filler
+over families of sets.
 
-Against Agda on the same machine (2026-11-09, 2 shared cores; PLAN item 10 has the full table,
+Against Agda on the same machine, as measured 2026-11-09 (2 shared cores; the untyped port it mentions was removed 2026-11-13;
 `experiments/agda/measure.sh` reproduces it). Both compute the same formulation, `brunerie'`, and
 read -2. Agda 2.8.0 (the release binary) with agda/cubical at `c37782bb`: from no interfaces,
 checking BrunerieExperiments and its `brunerie'≡-2 = refl` takes 118–120 s wall, 116 s CPU, 870 MB
