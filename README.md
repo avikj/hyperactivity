@@ -155,11 +155,16 @@ cost and stack defects recorded on 2026-11-09 (t4, t5); specialization cost thro
 
 ## How to run
 
+One command, `hyperactive` (at the repository root; `./hyperactive install` puts it on your PATH).
+It builds the machine on first use and when src/ changes.
+
 ```
-make build/cubical      # the machine
-make library            # the LIB list
-make brunerie           # Brunerie's number
-make task-graph               # the goals and tickets
+hyperactive              # what is open and what can start now
+hyperactive help         # every command
+hyperactive show t92     # a node or ticket, what it serves, what serves it, its essential context
+hyperactive order        # the order of work
+hyperactive check F.cub  # check a file
+hyperactive repl         # the machine, interactive
 ```
 
 Every reading prints its steps; `CUBICAL_NOCACHE=1` checks without the store (nothing remembered).

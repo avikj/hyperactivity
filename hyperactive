@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""hyperactive — the one command for using this repository (2026-11-13).
+
+    hyperactive                      what is open and what can start now
+    hyperactive show NODE ...        a node or ticket: its text, what it serves, what serves it,
+                                     its essential context
+    hyperactive tree                 the task graph from its root
+    hyperactive order                the order of work: what can start now, then what waits on what
+    hyperactive open FILE:LINE NODE ... TEXT    open a ticket at a site, as a child of NODEs
+    hyperactive close tN             a ticket resolved
+    hyperactive why NAME             why a declaration exists: its chain of reasons to the root
+    hyperactive unexplained [FILE]   declarations with no reason
+    hyperactive view TERM            a view: a term over the task graph, evaluated by the machine
+    hyperactive check [FILE ...]     check files (each loads what it imports); no file: the task graph
+    hyperactive repl                 the machine, interactive: declarations and readings (#type e,
+                                     #show e, #where name), each block ended by a line holding '.'
+    hyperactive lsp                  the language server, for an editor
+    hyperactive library | brunerie | every     the standard checks
+    hyperactive install              put `hyperactive` on your PATH (~/.local/bin)
+
+The machine is built on first use and rebuilt when src/ changes. Run it from anywhere: it finds this
+repository from its own location.
+"""
+import os, subprocess, sys
+
+ROOT = os.path.dirname(os.path.realpath(__file__))
+MACHINE = os.path.join(ROOT, 'build', 'cubical')
+TASKS = os.path.join(ROOT, 'tools', 'task-graph.py')
+
+
+def build():
+    r = subprocess.run(['make', '-s', '-C', ROOT, 'build/cubical'], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if r.returncode != 0:
+        sys.exit('building the machine failed:\n' + r.stderr[-3000:])
+
+
+def tasks(*args):
+    build()
+    return subprocess.call([sys.executable, TASKS, *args], cwd=ROOT)
+
+
+def main():
+    a = sys.argv[1:]
+    if not a:
+        build()
+        out = subprocess.run([sys.executable, TASKS, 'priority'], cwd=ROOT, capture_output=True, text=True).stdout.split('\n')
+        first = []
+        for l in out[1:]:
+            if l.startswith(' layer 2') or l.startswith('waiting'): break
+            first.append(l)
+        root = subprocess.run([sys.executable, TASKS, 'show', 'unified-computing'], cwd=ROOT, capture_output=True, text=True).stdout
+        ctx = [l.split('essential context: ', 1)[1].split('  (')[0] for l in root.split('\n') if 'essential context: ' in l]
+        print('Hyperactive. Essential context for everything: ' + ', '.join(ctx) + '\n')
+        print('Can start now and unblocks the most:')
+        print('\n'.join(l for l in first if l.strip() and not l.startswith(' layer')))
+        print('\nhyperactive order: the whole order of work; hyperactive tree: the graph; hyperactive help: every command.')
+        return
+    c, rest = a[0], a[1:]
+    if c in ('help', '-h', '--help'): print(__doc__); return
+    if c in ('show', 'tree', 'open', 'close', 'why', 'unexplained', 'view', 'every', 'list', 'next'): sys.exit(tasks(c, *rest))
+    if c == 'order': sys.exit(tasks('priority', *rest))
+    if c == 'check':
+        if not rest: sys.exit(tasks('check'))
+        build()
+        sys.exit(subprocess.call([MACHINE, *[os.path.abspath(f) for f in rest]]))
+    if c == 'repl':
+        build()
+        sys.exit(subprocess.call([MACHINE, os.path.join(ROOT, 'lib', 'core.cub'), *rest, '--serve']))
+    if c == 'lsp':
+        build()
+        sys.exit(subprocess.call([sys.executable, os.path.join(ROOT, 'tools', 'lsp.py'), '--root', ROOT, *rest]))
+    if c in ('library', 'brunerie'):
+        sys.exit(subprocess.call(['make', '-s', '-C', ROOT, c]))
+    if c == 'install':
+        d = os.path.expanduser('~/.local/bin'); os.makedirs(d, exist_ok=True)
+        link = os.path.join(d, 'hyperactive')
+        if os.path.lexists(link): os.remove(link)
+        os.symlink(os.path.realpath(__file__), link)
+        print(f'{link} -> {os.path.realpath(__file__)}')
+        if d not in os.environ.get('PATH', '').split(os.pathsep):
+            print(f'{d} is not on your PATH; add it in your shell profile: export PATH="$HOME/.local/bin:$PATH"')
+        return
+    sys.exit(f'hyperactive: no command "{c}" (hyperactive help)')
+
+
+if __name__ == '__main__':
+    main()
