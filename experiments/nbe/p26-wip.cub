@@ -48,8 +48,11 @@
 -- lift-fmap, cong1, ext-lift, keep-lift (kl-k2 … kl-s4); ren-nn (wact, nn-tr, RenR, nn-fm-in,
 -- nn-fm-out, rn-var … rn-papp; canon-ren and nonconst-ren generalized to canon-r and nonconst-r);
 -- subM-plam-body generalized to dkeep-line (fline, dline-body, path-pt; plam-line and plam-body their
--- instances), as P2.5's line premise needs.
--- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "828 passed, 0 failed").
+-- instances), as P2.5's line premise needs; papp-line (papp-mean its instance); computability:
+-- Sum1, FamV, fam-arg, fam-cod, ty-line, tend-0, tend-1, CompU, CSof, CompE, CompTy, CompS, ty-tr,
+-- comp-tr, comp-fm, ty-fm, wc-tr, CRenT, csof-ren, fam-ren, bool-ren, path-ty-ren, comp-ren-e,
+-- comp-ren.
+-- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "853 passed, 0 failed").
 -- What is next: (6) as listed in lib/nbe.cub's head under "Remaining, in order" (ren-nn, CompS,
 -- comp-ren, …), then the swap of this file's families into lib/nbe.cub in place of P1's.
 
@@ -1379,13 +1382,16 @@ plam-body Γ a X = dline-body Γ (TV (s-path a)) (TV a) (path-pt a) X
 -- carrying a cube over a base along a path of bases (the form fmap-transp is about)
 carry : (n : Nat) (X : Type 1) (F : X → Type 1) (c0 c1 : Cube n X) → PathP (λ i → Cube n X) c0 c1 → DCube n X F c0 → DCube n X F c1
 carry n X F c0 c1 p d = comp (λ i → DCube n X F (p i)) (λ i → []) d
--- the meaning of a path applied at a canonical form f: each vertex's path read as a line over the
--- degenerate line of its context (plam-line), then path application over degenerate lines (papp-dd),
--- over Γ's own cube
+-- path application at a canonical form f to a meaning read off as lines (papp-line: each vertex's
+-- value read as a line over the degenerate line of its context by fline, then path application over
+-- degenerate lines, papp-dd, over Γ's own cube); the meaning of a path applied at f is one (papp-mean,
+-- at path-pt), and so is a line of types applied at f (CompTy's PathP clause)
+papp-line : (Γ : CCtx) (Y Z : Type 1) (ℓ : Y → Line Z) (f : DNF) → Mean Γ Y → Mean Γ Z
+papp-line Γ Y Z ℓ f X =
+  papp-dd (fst Γ) (CtxV (fst Γ)) (FbE (fst Γ) Z) f (snd Γ)
+    (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (DL (CtxV (fst Γ)) (FbE (fst Γ) Z)) (fline (fst Γ) Y Z ℓ) (snd Γ) X)
 papp-mean : (Γ : CCtx) (a : TyShape) (f : DNF) → Mean Γ (TV (s-path a)) → Mean Γ (TV a)
-papp-mean Γ a f P =
-  papp-dd (fst Γ) (CtxV (fst Γ)) (FbE (fst Γ) (TV a)) f (snd Γ)
-    (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV (s-path a))) (DL (CtxV (fst Γ)) (FbE (fst Γ) (TV a))) (plam-line (fst Γ) a) (snd Γ) P)
+papp-mean Γ a f P = papp-line Γ (TV (s-path a)) (TV a) (path-pt a) f P
 -- a path between meanings, as a named type: a PathP over a path λ in a constructor's field is refused
 -- (t52; workaround: this definition, used by npapp and dpapp)
 PathM : (Γ : CCtx) (Z : Type 1) → Mean Γ Z → Mean Γ Z → Type 1
@@ -5572,3 +5578,154 @@ ren-nn (nlam Γ a b X c nb) Δ' w =
 ren-nn (npair Γ a b R c1 c2 n1 n2) Δ' w = rn-pair Δ' Γ w a b R (ren-nn n1 Δ' w) (ren-nn n2 Δ' w)
 ren-nn (nplam Γ a X c nb) Δ' w = rn-plam Δ' Γ w a X (ren-nn nb (dext Δ') (world-dkeep Δ' Γ w))
 ren-nn (npapp Γ a P p f cf nc Y q np) Δ' w = rn-papp Δ' Γ w a P f cf nc Y q (ren-nn np Δ' w)
+
+-- ---------------------------------------------------------------- (6) computability over cubes
+-- (2026-11-12, (6)) Computability of types and of terms, one pair by recursion on the shape (CompE, as
+-- TyE): CompTy s Δ T for a type T over Δ, and the shape's clause for a term X over Δ; a term is
+-- computable when its type is and the clause holds (CompS = CSof, as in Abel–Coquand–Pagano: a
+-- computable term is at a computable type). Bool: the type always; the term is fmapM of bool-v true or
+-- false of a cube B (by a path), or a neutral. Π: the type's domain, and at every later world and
+-- every computable argument (FamV data whose family part is the world's action on the type) the
+-- codomain there; the term at every later world and AppV data whose function part is the world's
+-- action on the term, a computable argument gives a computable result. Σ: the type as Π's; the term
+-- componentwise. PathP: the type's line at every canonical non-constant form over every later world
+-- (papp-line at the line of types) and its endpoint values; the term at every canonical non-constant
+-- form over every later world (papp-mean). The constant forms are not in the Kripke clauses: a path at
+-- a constant is its type's endpoint, which the type gives.
+data Sum1 (A : Type 1) (B : Type 1) = inl1 (a : A) | inr1 (b : B)
+-- a type family with an argument: the family and an element of its domain; the argument as a term of
+-- the domain, and the codomain there
+FamV : TyShape → TyShape → Type 1
+-- binder names chosen not to collide: t46
+FamV a b = (fvT : Fam a b) × El a (fst fvT)
+fam-arg : (a b : TyShape) → FamV a b → TV a
+fam-arg a b q = (fst (fst q) , snd q)
+fam-cod : (a b : TyShape) → FamV a b → Sem b
+fam-cod a b q = snd (fst q) (snd q)
+-- a path type's line of types, and its endpoint values as terms of the line's endpoint types
+ty-line : (a : TyShape) → Sem (s-path a) → Line (Sem a)
+ty-line a D = fst D
+tend-0 : (a : TyShape) → Sem (s-path a) → TV a
+tend-0 a D = (fst (fst D) , fst (snd D))
+tend-1 : (a : TyShape) → Sem (s-path a) → TV a
+tend-1 a D = (fst (snd (fst D)) , snd (snd D))
+CompU : TyShape → Type 2
+-- binder names chosen not to collide: t46
+CompU s = ((cuΔ : CCtx) → Mean cuΔ (Sem s) → Type 1) × ((cuΔ : CCtx) → Mean cuΔ (TV s) → Type 1)
+-- a term's computability from a shape's pair: its type's, and the clause
+CSof : (s : TyShape) → CompU s → (Δ : CCtx) → Mean Δ (TV s) → Type 1
+CSof s U Δ X = fst U Δ (fmapM Δ (TV s) (Sem s) (λ q → fst q) X) × snd U Δ X
+CompE : (s : TyShape) → CompU s
+CompE s-bool =
+  ((λ Δ T → One1) ,
+   λ Δ X → Sum1 ((B : Mean Δ One1) × PathM Δ (TV s-bool) X (fmapM Δ One1 (TV s-bool) (bool-v true) B))
+             (Sum1 ((B : Mean Δ One1) × PathM Δ (TV s-bool) X (fmapM Δ One1 (TV s-bool) (bool-v false) B))
+                ((c : Code) × NN (k-ne , (Δ , s-bool , c , X)))))
+CompE (s-pi a b) =
+  ((λ Δ T → fst (CompE a) Δ (fmapM Δ (Fam a b) (Sem a) (λ F → fst F) T) ×
+            ((Δ' : CCtx) (w : World Δ' Δ) (Y : Mean Δ' (FamV a b)) →
+             PathM Δ' (Fam a b) (fmapM Δ' (FamV a b) (Fam a b) (λ q → fst q) Y) (wact Δ' Δ w (Fam a b) T) →
+             CSof a (CompE a) Δ' (fmapM Δ' (FamV a b) (TV a) (fam-arg a b) Y) → fst (CompE b) Δ' (fmapM Δ' (FamV a b) (Sem b) (fam-cod a b) Y))) ,
+   λ Δ X → (Δ' : CCtx) (w : World Δ' Δ) (Y : Mean Δ' (AppV a b)) →
+     PathM Δ' (TV (s-pi a b)) (fmapM Δ' (AppV a b) (TV (s-pi a b)) (app-f a b) Y) (wact Δ' Δ w (TV (s-pi a b)) X) →
+     CSof a (CompE a) Δ' (fmapM Δ' (AppV a b) (TV a) (app-a a b) Y) → CSof b (CompE b) Δ' (fmapM Δ' (AppV a b) (TV b) (app-r a b) Y))
+CompE (s-sig a b) =
+  ((λ Δ T → fst (CompE a) Δ (fmapM Δ (Fam a b) (Sem a) (λ F → fst F) T) ×
+            ((Δ' : CCtx) (w : World Δ' Δ) (Y : Mean Δ' (FamV a b)) →
+             PathM Δ' (Fam a b) (fmapM Δ' (FamV a b) (Fam a b) (λ q → fst q) Y) (wact Δ' Δ w (Fam a b) T) →
+             CSof a (CompE a) Δ' (fmapM Δ' (FamV a b) (TV a) (fam-arg a b) Y) → fst (CompE b) Δ' (fmapM Δ' (FamV a b) (Sem b) (fam-cod a b) Y))) ,
+   λ Δ X → CSof a (CompE a) Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X) × CSof b (CompE b) Δ (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) X))
+CompE (s-path a) =
+  ((λ Δ T → ((Δ' : CCtx) (w : World Δ' Δ) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
+             fst (CompE a) Δ' (papp-line Δ' (Sem (s-path a)) (Sem a) (ty-line a) f (wact Δ' Δ w (Sem (s-path a)) T))) ×
+            CSof a (CompE a) Δ (fmapM Δ (Sem (s-path a)) (TV a) (tend-0 a) T) × CSof a (CompE a) Δ (fmapM Δ (Sem (s-path a)) (TV a) (tend-1 a) T)) ,
+   λ Δ X → (Δ' : CCtx) (w : World Δ' Δ) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
+     CSof a (CompE a) Δ' (papp-mean Δ' a f (wact Δ' Δ w (TV (s-path a)) X)))
+CompTy : (s : TyShape) (Δ : CCtx) → Mean Δ (Sem s) → Type 1
+CompTy s = fst (CompE s)
+CompS : (s : TyShape) (Δ : CCtx) → Mean Δ (TV s) → Type 1
+CompS s = CSof s (CompE s)
+-- computability of types, of clauses and of terms carried along a path of meanings
+ty-tr : (s : TyShape) (Δ : CCtx) (M N : Mean Δ (Sem s)) → PathM Δ (Sem s) M N → CompTy s Δ M → CompTy s Δ N
+ty-tr s Δ M N p c = comp (λ i → CompTy s Δ (p i)) (λ i → []) c
+comp-tr : (s : TyShape) (Δ : CCtx) (M N : Mean Δ (TV s)) → PathM Δ (TV s) M N → CompS s Δ M → CompS s Δ N
+comp-tr s Δ M N p c = comp (λ i → CompS s Δ (p i)) (λ i → []) c
+-- a world's action on a pointwise map, carried (subM-fmap) for terms and for types
+comp-fm : (s : TyShape) (Δ' Δ : CCtx) (w : World Δ' Δ) (Z : Type 1) (h : Z → TV s) (M : Mean Δ Z) →
+  CompS s Δ' (wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)) → CompS s Δ' (fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M))
+comp-fm s Δ' Δ w Z h M c =
+  comp-tr s Δ' (wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)) (fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M))
+    (psym (Mean Δ' (TV s)) (fmapM Δ' Z (TV s) h (wact Δ' Δ w Z M)) (wact Δ' Δ w (TV s) (fmapM Δ Z (TV s) h M)) (subM-fmap Δ' Δ Z (TV s) h (world-sub Δ' Δ w) M)) c
+ty-fm : (s : TyShape) (Δ' Δ : CCtx) (w : World Δ' Δ) (Z : Type 1) (h : Z → Sem s) (M : Mean Δ Z) →
+  CompTy s Δ' (wact Δ' Δ w (Sem s) (fmapM Δ Z (Sem s) h M)) → CompTy s Δ' (fmapM Δ' Z (Sem s) h (wact Δ' Δ w Z M))
+ty-fm s Δ' Δ w Z h M c =
+  ty-tr s Δ' (wact Δ' Δ w (Sem s) (fmapM Δ Z (Sem s) h M)) (fmapM Δ' Z (Sem s) h (wact Δ' Δ w Z M))
+    (psym (Mean Δ' (Sem s)) (fmapM Δ' Z (Sem s) h (wact Δ' Δ w Z M)) (wact Δ' Δ w (Sem s) (fmapM Δ Z (Sem s) h M)) (subM-fmap Δ' Δ Z (Sem s) h (world-sub Δ' Δ w) M)) c
+-- the composite world's action is the two actions (subM-comp), as the path a Kripke clause carries along
+wc-tr : (Δ2 Δ' Δ : CCtx) (w2 : World Δ2 Δ') (w : World Δ' Δ) (Z : Type 1) (M : Mean Δ Z) (Y : Mean Δ2 Z) →
+  PathM Δ2 Z Y (wact Δ2 Δ' w2 Z (wact Δ' Δ w Z M)) → PathM Δ2 Z Y (wact Δ2 Δ (world-comp Δ2 Δ' Δ w2 w) Z M)
+wc-tr Δ2 Δ' Δ w2 w Z M Y q =
+  pcat (Mean Δ2 Z) Y (wact Δ2 Δ' w2 Z (wact Δ' Δ w Z M)) (wact Δ2 Δ (world-comp Δ2 Δ' Δ w2 w) Z M) q
+    (psym (Mean Δ2 Z) (wact Δ2 Δ (world-comp Δ2 Δ' Δ w2 w) Z M) (wact Δ2 Δ' w2 Z (wact Δ' Δ w Z M)) (subM-comp Δ2 Δ' Δ w2 w Z M))
+-- monotonicity: computability of types and of clauses is kept along a world (CRenT, comp-ren-e: one
+-- pair by recursion on the shape; Bool: the path's image, or ren-nn; Π, Σ's type and PathP: the
+-- composite world; the components: the smaller shapes' pairs, through csof-ren), and so of terms
+-- (comp-ren)
+CRenT : TyShape → Type 1
+CRenT s = ((Δ : CCtx) (T : Mean Δ (Sem s)) → CompTy s Δ T → (Δ' : CCtx) (w : World Δ' Δ) → CompTy s Δ' (wact Δ' Δ w (Sem s) T)) ×
+  ((Δ : CCtx) (X : Mean Δ (TV s)) → snd (CompE s) Δ X → (Δ' : CCtx) (w : World Δ' Δ) → snd (CompE s) Δ' (wact Δ' Δ w (TV s) X))
+csof-ren : (s : TyShape) → CRenT s → (Δ : CCtx) (X : Mean Δ (TV s)) → CompS s Δ X → (Δ' : CCtx) (w : World Δ' Δ) → CompS s Δ' (wact Δ' Δ w (TV s) X)
+csof-ren s R Δ X c Δ' w =
+  (ty-fm s Δ' Δ w (TV s) (λ q → fst q) X (fst R Δ (fmapM Δ (TV s) (Sem s) (λ q → fst q) X) (fst c) Δ' w) , snd R Δ X (snd c) Δ' w)
+-- the type part of Π and Σ (the same clause)
+fam-ren : (a b : TyShape) → CRenT a → (Δ : CCtx) (T : Mean Δ (Fam a b)) → fst (CompE (s-pi a b)) Δ T → (Δ' : CCtx) (w : World Δ' Δ) →
+  fst (CompE (s-pi a b)) Δ' (wact Δ' Δ w (Fam a b) T)
+fam-ren a b Ra Δ T ct Δ' w =
+  (ty-fm a Δ' Δ w (Fam a b) (λ F → fst F) T (fst Ra Δ (fmapM Δ (Fam a b) (Sem a) (λ F → fst F) T) (fst ct) Δ' w) ,
+   λ Δ2 w2 Y q ca → snd ct Δ2 (world-comp Δ2 Δ' Δ w2 w) Y (wc-tr Δ2 Δ' Δ w2 w (Fam a b) T (fmapM Δ2 (FamV a b) (Fam a b) (λ q → fst q) Y) q) ca)
+-- Bool's clause
+bool-ren : (Δ : CCtx) (X : Mean Δ (TV s-bool)) → snd (CompE s-bool) Δ X → (Δ' : CCtx) (w : World Δ' Δ) → snd (CompE s-bool) Δ' (wact Δ' Δ w (TV s-bool) X)
+bool-ren Δ X (inl1 p) Δ' w =
+  inl1 (wact Δ' Δ w One1 (fst p) ,
+        pcat (Mean Δ' (TV s-bool)) (wact Δ' Δ w (TV s-bool) X) (wact Δ' Δ w (TV s-bool) (fmapM Δ One1 (TV s-bool) (bool-v true) (fst p)))
+          (fmapM Δ' One1 (TV s-bool) (bool-v true) (wact Δ' Δ w One1 (fst p)))
+          (λ i → wact Δ' Δ w (TV s-bool) (snd p i))
+          (psym (Mean Δ' (TV s-bool)) (fmapM Δ' One1 (TV s-bool) (bool-v true) (wact Δ' Δ w One1 (fst p))) (wact Δ' Δ w (TV s-bool) (fmapM Δ One1 (TV s-bool) (bool-v true) (fst p)))
+             (subM-fmap Δ' Δ One1 (TV s-bool) (bool-v true) (world-sub Δ' Δ w) (fst p))))
+bool-ren Δ X (inr1 (inl1 p)) Δ' w =
+  inr1 (inl1 (wact Δ' Δ w One1 (fst p) ,
+        pcat (Mean Δ' (TV s-bool)) (wact Δ' Δ w (TV s-bool) X) (wact Δ' Δ w (TV s-bool) (fmapM Δ One1 (TV s-bool) (bool-v false) (fst p)))
+          (fmapM Δ' One1 (TV s-bool) (bool-v false) (wact Δ' Δ w One1 (fst p)))
+          (λ i → wact Δ' Δ w (TV s-bool) (snd p i))
+          (psym (Mean Δ' (TV s-bool)) (fmapM Δ' One1 (TV s-bool) (bool-v false) (wact Δ' Δ w One1 (fst p))) (wact Δ' Δ w (TV s-bool) (fmapM Δ One1 (TV s-bool) (bool-v false) (fst p)))
+             (subM-fmap Δ' Δ One1 (TV s-bool) (bool-v false) (world-sub Δ' Δ w) (fst p)))))
+bool-ren Δ X (inr1 (inr1 n)) Δ' w = inr1 (inr1 (ren-nn (snd n) Δ' w))
+-- PathP's type part
+path-ty-ren : (a : TyShape) → CRenT a → (Δ : CCtx) (T : Mean Δ (Sem (s-path a))) → CompTy (s-path a) Δ T → (Δ' : CCtx) (w : World Δ' Δ) →
+  CompTy (s-path a) Δ' (wact Δ' Δ w (Sem (s-path a)) T)
+path-ty-ren a Ra Δ T ct Δ' w =
+  ((λ Δ2 w2 f cf nc →
+      ty-tr a Δ2 (papp-line Δ2 (Sem (s-path a)) (Sem a) (ty-line a) f (wact Δ2 Δ (world-comp Δ2 Δ' Δ w2 w) (Sem (s-path a)) T))
+        (papp-line Δ2 (Sem (s-path a)) (Sem a) (ty-line a) f (wact Δ2 Δ' w2 (Sem (s-path a)) (wact Δ' Δ w (Sem (s-path a)) T)))
+        (λ i → papp-line Δ2 (Sem (s-path a)) (Sem a) (ty-line a) f (subM-comp Δ2 Δ' Δ w2 w (Sem (s-path a)) T i))
+        (fst ct Δ2 (world-comp Δ2 Δ' Δ w2 w) f cf nc)) ,
+   comp-fm a Δ' Δ w (Sem (s-path a)) (tend-0 a) T (csof-ren a Ra Δ (fmapM Δ (Sem (s-path a)) (TV a) (tend-0 a) T) (fst (snd ct)) Δ' w) ,
+   comp-fm a Δ' Δ w (Sem (s-path a)) (tend-1 a) T (csof-ren a Ra Δ (fmapM Δ (Sem (s-path a)) (TV a) (tend-1 a) T) (snd (snd ct)) Δ' w))
+comp-ren-e : (s : TyShape) → CRenT s
+comp-ren-e s-bool = ((λ Δ T ct Δ' w → one) , bool-ren)
+comp-ren-e (s-pi a b) =
+  (fam-ren a b (comp-ren-e a) ,
+   λ Δ X cx Δ' w Δ2 w2 Y q ca → cx Δ2 (world-comp Δ2 Δ' Δ w2 w) Y (wc-tr Δ2 Δ' Δ w2 w (TV (s-pi a b)) X (fmapM Δ2 (AppV a b) (TV (s-pi a b)) (app-f a b) Y) q) ca)
+comp-ren-e (s-sig a b) =
+  (fam-ren a b (comp-ren-e a) ,
+   λ Δ X cx Δ' w →
+     (comp-fm a Δ' Δ w (TV (s-sig a b)) (sig-1 a b) X (csof-ren a (comp-ren-e a) Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) X) (fst cx) Δ' w) ,
+      comp-fm b Δ' Δ w (TV (s-sig a b)) (sig-2 a b) X (csof-ren b (comp-ren-e b) Δ (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) X) (snd cx) Δ' w)))
+comp-ren-e (s-path a) =
+  (path-ty-ren a (comp-ren-e a) ,
+   λ Δ X cx Δ' w Δ2 w2 f cf nc →
+     comp-tr a Δ2 (papp-mean Δ2 a f (wact Δ2 Δ (world-comp Δ2 Δ' Δ w2 w) (TV (s-path a)) X)) (papp-mean Δ2 a f (wact Δ2 Δ' w2 (TV (s-path a)) (wact Δ' Δ w (TV (s-path a)) X)))
+       (λ i → papp-mean Δ2 a f (subM-comp Δ2 Δ' Δ w2 w (TV (s-path a)) X i))
+       (cx Δ2 (world-comp Δ2 Δ' Δ w2 w) f cf nc))
+comp-ren : (s : TyShape) (Δ : CCtx) (X : Mean Δ (TV s)) → CompS s Δ X → (Δ' : CCtx) (w : World Δ' Δ) → CompS s Δ' (wact Δ' Δ w (TV s) X)
+comp-ren s = csof-ren s (comp-ren-e s)
