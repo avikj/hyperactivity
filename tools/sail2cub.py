@@ -14,6 +14,20 @@ import os
 import re
 import sys
 
+
+# every declaration written carries its reason (2026-11-12): the model's functions, types and
+# registers are part of isa-x86 (work/graph.cub: every instruction translated), stated above each so
+# tools/work.py finds it whether or not the declaration is used
+REASON = '-- (part of isa-x86)'
+DECL_START = re.compile(r"^(data|record|codata) |^[^\s\-(][^\s]* :( |$)")
+def with_reasons(text):
+    out = []
+    for line in text.split('\n'):
+        if DECL_START.match(line) and not (out and out[-1] == REASON):
+            out.append(REASON)
+        out.append(line)
+    return '\n'.join(out)
+
 # ----------------------------------------------------------------------------- lexer
 TOKEN = re.compile(r'''
     (?P<ws>\s+)
@@ -2573,7 +2587,7 @@ class Translator(Importer):
         failures, counts, moved = [], {'P': 0, 'F': 0, 'S': 0}, []
         os.makedirs(outdir, exist_ok=True)
         with open(os.path.join(outdir, 'state.cub'), 'w') as o:
-            o.write('\n'.join(self.emit_state()) + '\n')
+            o.write(with_reasons('\n'.join(self.emit_state()) + '\n'))
         names = ['state.cub']
         for i, (fname, defs) in enumerate(self.model.files):
             base = fname[:-5] + '.cub'
@@ -2598,7 +2612,7 @@ class Translator(Importer):
             if exn != 'exception':
                 text = re.sub(r"(?<![\w?'-])exception(?![\w?'-])", exn, text)
             with open(os.path.join(outdir, base), 'w') as o:
-                o.write(text)
+                o.write(with_reasons(text))
             names.append(base)
         with open(os.path.join(outdir, 'all.cub'), 'w') as o:   # the model, imported in include order
             o.write('-- lib/isa/x86/all.cub — the files of the Sail x86 model, in the order the model includes them,\n'
