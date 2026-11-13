@@ -122,10 +122,20 @@ calculus-conformance = node "The implementation is shown to be exactly the publi
 -- untyped term with no statement of what it accepts; lib/std.cub's primitives give typed programs
 -- its operations at asserted types). In progress in experiments/nbe/p26-wip.cub; what remains is in
 -- lib/nbe.cub's head (F2d, F2d', F2e, fund, normalize, the swap), then Kan operations, Glue,
--- universes and object-level data types: the method for these is published (Sterling and Angiuli,
--- normalization for cubical type theory, LICS 2021; NbE in Cubical Agda and cooltt), so what remains
--- is engineering it under this language's constraints (no regularity, forded families, closed
--- levels). The elaborator's two memory blowups met on the way are below. The longest chain of the
+-- universes and object-level data types. This is the easiest language to build it in, not a hard
+-- one (2026-11-13, worked out with Avik): it is normalization for a cubical type theory written
+-- inside a cubical type theory. Anywhere else (Agda without its cubical mode, Coq, Lean) one first
+-- builds a model of cubical sets (presheaves, Kan structure, Glue, univalence); here the model is the
+-- host: object paths are host paths, object composition is the host's composition, Glue and
+-- univalence are the host's; meanings are host terms, so soundness holds by construction
+-- (reifySound is refl) and only readback needs designing. The method for the Kan operations, Glue
+-- and universes is published (Sterling and Angiuli, LICS 2021; Cubical Agda, cooltt). Open, and
+-- deciding how much of the remaining work is needed: the host identifies interval expressions up to
+-- the De Morgan laws judgmentally, yet F2 re-proves every law as a path, because a context's
+-- dimensions are encoded as a cube built by recursion on their number, so at a variable number every
+-- operation is a stuck recursion. A representation in which an object dimension is a host interval
+-- variable would get those laws for free; how to have one when the number of dimensions is a
+-- variable is the question to settle before continuing F2d and F2e. The elaborator's two memory blowups met on the way are below. The longest chain of the
 -- project: it should never stop.
 -- Known (2026-11-12, at experiments/nbe/p26-wip.cub): elaboration: checking a path λ (λ i → sub-
 -- pull … keep-S (P i)) whose body applies a defined dependent path P (carry-uniq of a pcat-d)
