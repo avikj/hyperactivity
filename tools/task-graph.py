@@ -36,6 +36,13 @@ SKIP_DIRS = {'.git', 'build', 'archive', '__pycache__'}
 EXTS = ('.cub', '.c', '.h', '.py', '.md', '.s', '.sh', '.txt')
 
 
+GRAPH = os.path.join(ROOT, 'task-graph', 'hyperactivity.cub')
+NODE = re.compile(r'^([\w-]+) = node "([^"]*)" (\(.*\)|nil)\s*$', re.M)
+STATED = re.compile(r'\((part of|prerequisite to) ([\w-]+)\)')
+IMPORT = re.compile(r'^import "([^"]+)"', re.M)
+READ_DIRS = ('lib', 'experiments', 'task-graph')
+
+
 def rel(p):
     return os.path.relpath(p, ROOT)
 
