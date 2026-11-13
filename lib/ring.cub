@@ -8,10 +8,6 @@
 -- semiring laws of lib/std.cub; canonicity (that equal polynomials normalize alike) is what
 -- makes the procedure complete and is not needed for soundness.
 -- ---------------------------------------------------------------- Nat lemmas
--- t17 (2026-11-12): needs-work. 9 definitions here are untyped and refused by the checker, which
--- has rejected untyped definitions outside the bootstrap files since 2026-11-09, deliberately,
--- after about 10,000 lines of untyped code were written by an agent. They are to be written with
--- types; nothing in the checker changes.
 times-one-l : (n : Nat) → times (suc zero) n ≡ n
 times-one-l n = plus-zero n
 times-distr-r : (a b c : Nat) → times a (plus b c) ≡ plus (times a b) (times a c)
@@ -226,38 +222,59 @@ ring-eq e a b r = transN (symN (norm-sound e a)) (transN (congp e r) (norm-sound
 -- as constructor codes — read as an expression; a code outside the fragment reads as none. What
 -- it produces is decided by norm and the theorem is ring-eq about the typed expression, so the
 -- bridge is the unverified part (18.13: search is unverified, the checker verified)
-nat-of-code c =
-  case c of
-    ccon d k fs ds → (if %weq k #0 then some zero else (case fs of lcons n r → omap (λ m → suc m) (nat-of-code n); _ → none))
+-- a Nat literal's code within k levels (a literal's code is a list field inside a code, which
+-- structural recursion does not follow; the word eliminator recurses one level per step, so a
+-- code is read as deep as it is, up to 2^64 levels, past which it reads as outside the fragment)
+nat-of-code-k : Word → Code → Opt Nat
+nat-of-code-k k =
+  %welimP (λ v → Code → Opt Nat) k (λ c → none)
+    (λ j h c → case c of
+                 ccon d i fs ds → (if weq i #0 then some zero
+                                   else (case fs of lcons n r → (case h n of none → none; some m → some (suc m)); _ → none))
+                 _ → none)
+nat-of-code : Code → Opt Nat
+nat-of-code c = nat-of-code-k #18446744073709551616 c
+rg-glob : Code → Opt Word
+rg-glob (cglob g) = some g
+rg-glob c = none
+gidx-r : Code → Word
+gidx-r (cglob n) = n
+gidx-r c = #0
+-- an application of a global to two codes of the fragment, by which global
+ex-of-bin : Word → Opt Ex → Opt Ex → Opt Ex
+ex-of-bin gi oa ox =
+  case oa of
+    none → none
+    some ea → (case ox of
+                 none → none
+                 some ex → (if weq gi (gidx-r (code plus)) then some (eadd ea ex)
+                            else if weq gi (gidx-r (code times)) then some (emul ea ex) else none))
+ex-of-code : Code → Opt Ex
+ex-of-code (cvar v) = some (ev v)
+ex-of-code (cann t T) = ex-of-code t
+ex-of-code (ccon d k fs ds) = (case nat-of-code (ccon d k fs ds) of none → none; some n → some (ec n))
+ex-of-code (capp f x) =
+  case f of
+    capp g a → (case rg-glob g of
+                  none → none
+                  some gi → ex-of-bin gi (ex-of-code a) (ex-of-code x))
     _ → none
-rg-glob c = case c of cglob g → some g; _ → none
-ex-of-code c =
-  case c of
-    cvar v → some (ev v)
-    cann t T → ex-of-code t
-    ccon d k fs ds → omap (λ n → ec n) (nat-of-code c)
-    capp f x →
-      (case f of
-         capp g a →
-           (case rg-glob g of
-              some gi →
-                if %weq gi (gidx-r (code plus)) then obind (ex-of-code a) (λ ea → omap (λ ex → eadd ea ex) (ex-of-code x))
-                else if %weq gi (gidx-r (code times)) then obind (ex-of-code a) (λ ea → omap (λ ex → emul ea ex) (ex-of-code x))
-                else none
-              none → none)
-         _ → none)
-    _ → none
-gidx-r c = case c of cglob n → n; _ → #0
-lam-body c = case c of clam b → b; _ → c
+ex-of-code c = none
+lam-body : Code → Code
+lam-body (clam b) = b
+lam-body c = c
 -- the same expression as a code again: the globals applied
-code-of-ex x =
-  case x of
-    ec n → code-of-nat n
-    ev v → cvar v
-    eadd a b → capp (capp (code plus) (code-of-ex a)) (code-of-ex b)
-    emul a b → capp (capp (code times) (code-of-ex a)) (code-of-ex b)
-code-of-nat n = case n of zero → ccon #1 #0 lnil lnil; suc k → ccon #1 #1 (lcons (code-of-nat k) lnil) lnil
+code-of-nat : Nat → Code
+code-of-nat zero = ccon #1 #0 lnil lnil
+code-of-nat (suc k) = ccon #1 #1 (lcons (code-of-nat k) lnil) lnil
+code-of-ex : Ex → Code
+code-of-ex (ec n) = code-of-nat n
+code-of-ex (ev v) = cvar v
+code-of-ex (eadd a b) = capp (capp (code plus) (code-of-ex a)) (code-of-ex b)
+code-of-ex (emul a b) = capp (capp (code times) (code-of-ex a)) (code-of-ex b)
 -- (x + 1)·(x + 1) and x·x + 2·x + 1 written as source terms, quoted, read as expressions: the
 -- same normal form, so ring-eq applies to them; and a round trip through codes is the identity
+csq1 : Code
 csq1 = lam-body (code (λ x → times (plus x 1) (plus x 1)))
+csq2 : Code
 csq2 = lam-body (code (λ x → plus (plus (times x x) (times 2 x)) 1))
