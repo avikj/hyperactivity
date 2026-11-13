@@ -2,8 +2,10 @@
 
 This repository implements the language specified by `docs/Hyperactive_Final_Paper.pdf` (the
 specification; read it in full before changing anything — `tracks/PAPER-READING.md` is a
-section-by-section account of it, with what exists here of each construction). Its history up to
-2026-11-12 was carried over from a directory of github.com/avikj/math, which is now an archive.
+section-by-section account of it, with what exists here of each construction). Before deciding
+what to work on, read `docs/WORK.md`: how the work is organized and ordered, and why, in Avik's
+words. Its history up to 2026-11-12 was carried over from a directory of github.com/avikj/math,
+which is now an archive.
 
 ## What is happening now
 
@@ -63,9 +65,12 @@ postulates; normal forms redex-free; a fresh uncached check). Findings from it: 
 
 ## The work, as code
 
-- `lib/work.cub` — what a node is: the nodes it is part of, whether its value is all of its parts
-  or each of them, and whether its breakdown is claimed sufficient or not known; `after`, `speeds`.
-  Priority is computed from these, never stored.
+**Read `docs/WORK.md` first.** It is Avik's design of the work's organization, with its rationale in
+his words: what a node is, why a node's children always cover it, why there is no score of any kind,
+how the order of work follows from dependencies and supersession alone, and how to place a node.
+
+- `lib/work.cub` — what a node is: a task, its name and the nodes it is a child of (the reasons it
+  exists); the one other relation, `after`. The order of work is computed from these, never stored.
 - `work/graph.cub` — this work's nodes, each defined after the nodes it is part of; the roots are
   declared (`roots`). A node's statement is the comment above its definition. Every node there is
   open: closing one removes it.
@@ -78,11 +83,12 @@ postulates; normal forms redex-free; a fresh uncached check). Findings from it: 
 ```
 python3 tools/work.py tree            # the graph from its roots, open tN under each node
 python3 tools/work.py show t6 core    # a node's text or statement, place, parts, after, before
-python3 tools/work.py priority 10     # the tN nodes in the order the relations imply
+python3 tools/work.py priority        # what can start now (superseding leaves first); what waits
 python3 tools/work.py check           # graph and comments correspond; the graph checks
 python3 tools/work.py next            # the next tN number never used
 python3 tools/work.py open lib/x.cub:12 core-correct 'what is wrong, measured how'
                                       # open the next tN there, part of the node (y/N near the top)
+python3 tools/work.py close t12       # t12 resolved; a parent left with no children, once confirmed
 python3 tools/work.py view 'names (under (declarations Node) core)'
                                       # a view: a term over the work, evaluated by the machine
 python3 tools/work.py why refl        # why a declaration exists: its chain of reasons to a root

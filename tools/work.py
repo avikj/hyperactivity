@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
-"""work — the work's graph (2026-11-12).
+"""work — the work's graph (2026-11-12; one kind of node and the order of work, 2026-11-13).
 
-The graph is code: lib/work.cub (what a node is: its parts, its value, its breakdown; after; speeds),
-work/graph.cub (this work's nodes, each defined after the nodes it is part of; a goal's statement is
-the comment above its definition). A node opened for a specific piece of work is named tN, and its
-text is the one comment in the repository that begins `tN (YYYY-MM-DD):`, at the place it concerns.
-Every node in the graph is open; closing one removes it.
+What the graph means and how it is used is docs/WORK.md (Avik's design): read it first. The graph is
+code: lib/work.cub (what a node is: a task, its name and its parents; the relation after),
+work/graph.cub (this work's nodes, each defined after its parents; a goal's statement is the comment
+above its definition). A node's children always cover it; where they are not certainly complete one
+child is its residual (its text begins `residual of NODE`). A node opened for a specific piece of work
+is named tN, and its text is the one comment in the repository that begins `tN (YYYY-MM-DD):`, at
+the place it concerns. Every node in the graph is open; resolving one removes it.
 
     python3 tools/work.py tree               the graph from its roots, open tN under each node
     python3 tools/work.py show NODE ...      a node's statement or text, place, parts, after, before
     python3 tools/work.py list [--under N]   the tN nodes, with the first words of their text
-    python3 tools/work.py priority [K]       the tN nodes in the order the graph's relations imply
+    python3 tools/work.py priority           the order of work: what can start now, those that
+                                             supersede others first; then what waits, on what
     python3 tools/work.py check              graph and comments correspond; the graph checks
     python3 tools/work.py next               the next tN number never used (the history included)
     python3 tools/work.py open FILE:LINE NODE [NODE ...] TEXT
                                              open the next tN, part of the NODEs, its text the
                                              comment `tN (date): TEXT` written above FILE:LINE;
-                                             a part of the root or of a root's part asks y/N
+                                             a part of the root or of a root's part asks y/N;
+                                             a part of a node with no residual refutes its cover
+    python3 tools/work.py close tN           tN resolved: its node and text removed; a parent left
+                                             with no children is resolved too, once confirmed
     python3 tools/work.py view TERM          a view: a term over the work (lib/work.cub's views over
                                              `declarations Node`) evaluated by the machine, shown by
                                              its type (a List Word as text)
@@ -114,7 +120,7 @@ def texts():
 
 
 GRAPH = os.path.join(ROOT, 'work', 'graph.cub')
-NODE = re.compile(r'^([\w-]+) = (node|leaf) "([^"]*)" (\(.*\)|nil)(?: (all-of|each-of) (sufficient|not-known))?\s*$', re.M)
+NODE = re.compile(r'^([\w-]+) = node "([^"]*)" (\(.*\)|nil)\s*$', re.M)
 
 
 def names_in(s):
@@ -122,7 +128,7 @@ def names_in(s):
 
 
 def graph():
-    """the nodes: name -> dict(id, parts, value, breakdown, statement), in definition order"""
+    """the nodes: name -> dict(id, parts, statement), in definition order; the roots; after"""
     src = open(GRAPH, encoding='utf-8').read()
     lines = src.split('\n')
     out = {}
@@ -137,8 +143,7 @@ def graph():
             k -= 1
         if not (stmt and re.match(re.escape(name) + r' \(', stmt[0])):
             stmt = []
-        out[name] = dict(id=m.group(3), parts=names_in(m.group(4)), value=m.group(5) or 'all-of',
-                         breakdown=m.group(6) or 'not-known', statement=' '.join(stmt))
+        out[name] = dict(id=m.group(2), parts=names_in(m.group(3)), statement=' '.join(stmt))
     def pairs(key):
         m = re.search(r'^' + key + r' = (.*)$', src, re.M)
         res = {}
@@ -148,7 +153,7 @@ def graph():
         return res
     m = re.search(r'^roots = (.*)$', src, re.M)
     roots = names_in(m.group(1)) if m else []
-    return out, roots, pairs('after'), pairs('speeds')
+    return out, roots, pairs('after')
 
 
 def kids_of(g):
@@ -169,11 +174,11 @@ def first_sentence(t, width=110):
 
 
 def rel_word(g, parent):
-    return 'prerequisite to' if g.get(parent, {}).get('value') == 'all-of' else 'part of'
+    return 'part of'
 
 
 def cmd_show(args):
-    g, roots, after, speeds = graph()
+    g, roots, after = graph()
     txt = texts()
     for a in args:
         if a not in g and re.fullmatch(r'\d+', a): a = 't' + a
@@ -181,11 +186,10 @@ def cmd_show(args):
         if not d:
             print(f'{a}: no such node\n'); continue
         rels = ', '.join(f'{rel_word(g, p)} {p}' for p in d['parts']) or ('a root' if a in roots else '-')
-        print(f'{a}  {rels}' + (f'  [{d["value"]}, breakdown {d["breakdown"]}]' if not is_t(a) else ''))
+        print(f'{a}  {rels}')
         if after.get(a): print('  after: ' + ' '.join(after[a]))
         waits = [m for m, l in after.items() if a in l]
         if waits: print('  before: ' + ' '.join(waits))
-        if speeds.get(a): print('  speeds: ' + ' '.join(speeds[a]))
         bodies = [(f, l, dt, t) for f, l, dt, t in txt.get(int(a[1:]), [])] if is_t(a) else []
         if not is_t(a) and d['statement']: bodies = [('work/graph.cub', 0, '', d['statement'])]
         for f, l, dt, t in bodies:
@@ -211,7 +215,7 @@ def under(g, kids, n):
 
 
 def cmd_list(args):
-    g, _, _, _ = graph()
+    g, _, _ = graph()
     sel = set(g)
     if '--under' in args:
         n = args[args.index('--under') + 1]
@@ -223,7 +227,7 @@ def cmd_list(args):
 
 
 def cmd_tree(args):
-    g, roots, _, _ = graph()
+    g, roots, _ = graph()
     kids = kids_of(g)
     seen = set()
     def walk(n, depth, via):
@@ -232,7 +236,7 @@ def cmd_tree(args):
         nt = sum(1 for x in under(g, kids, n) if is_t(x))
         if is_t(n): return
         also = [p for p in d['parts'] if p != via]
-        print('  ' * depth + f'{n}  [{d["value"]}, breakdown {d["breakdown"]}; {nt} open under it]'
+        print('  ' * depth + f'{n}  [{nt} open under it]'
               + (f'  (also {", ".join(also)})' if also and depth else ''))
         if n in seen: return
         seen.add(n)
@@ -245,7 +249,7 @@ def cmd_tree(args):
 
 
 def cmd_check(args):
-    g, roots, after, speeds = graph()
+    g, roots, after = graph()
     txt = texts()
     bad = 0
     ts = {int(n[1:]) for n in g if is_t(n)}
@@ -263,11 +267,9 @@ def cmd_check(args):
             print(f'{n}: part of nothing and not declared a root'); bad += 1
         if d['parts'] and n in roots:
             print(f'{n}: declared a root but part of {", ".join(d["parts"])}'); bad += 1
-        if d['breakdown'] == 'sufficient' and not any(n in e['parts'] for e in g.values()):
-            print(f'{n}: claims its parts suffice and has none'); bad += 1
         if not is_t(n) and not d['statement']:
             print(f'{n}: no statement'); bad += 1
-    for n, l in list(after.items()) + list(speeds.items()):
+    for n, l in after.items():
         for m in [n] + l:
             if m not in g: print(f'{n}: names {m}, which is not a node'); bad += 1
     cmd = [os.path.join(ROOT, 'build', 'cubical'), 'work/graph.cub']
@@ -283,56 +285,57 @@ def cmd_check(args):
     sys.exit(1 if bad else 0)
 
 
+def ancestors(g, n):
+    """n and every node above it"""
+    out, st = {n}, [n]
+    while st:
+        x = st.pop()
+        for p in g.get(x, {}).get('parts', []):
+            if p not in out: out.add(p); st.append(p)
+    return out
+
+
 def cmd_priority(args):
-    """the tN nodes in the order the graph implies: a node's cost is the number of open nodes that must
-    complete before any value lands through it, at a root, along its cheapest path (an all-of node on
-    the path adds everything under it; a node with nothing under it counts as one piece of unspecified
-    work). Not ready (an after still open) last; then by cost; then by how much its nodes speed. The
-    count is a proxy for effort, which the graph does not hold."""
-    g, roots, after, speeds = graph()
+    """The order of work (docs/WORK.md §5). There is no score. A leaf can start when every node its
+    `after` names (on it or on any node above it: waiting on a node is waiting on every leaf under it)
+    is resolved, i.e. gone from the graph. Enabling is conjunctive: a waiting leaf becomes startable
+    only when all the leaves it waits on are done. Among the leaves that can start now, X supersedes
+    Y when the set of leaves that finishing X alone makes startable strictly contains the set that
+    finishing Y alone does: 'X then Y' and 'Y then X' reach the same state, and only the intermediate
+    state differs, in what can start in parallel with the second. Printed in layers: no leaf of a
+    layer is superseded by one of a later layer; within a layer, no order is expressed."""
+    g, roots, after = graph()
     kids = kids_of(g)
-    memo = {}
-    def needed(n):
-        if n not in memo:
-            u = under(g, kids, n)
-            memo[n] = frozenset(x for x in u if is_t(x) or not kids.get(x)) or frozenset({n})
-        return memo[n]
-    def cost(n, carried, seen=()):
-        if n in seen: return None
-        need = carried | (needed(n) if g[n]['value'] == 'all-of' else frozenset())
-        if n in roots: return need
-        best = None
-        for p in g[n]['parts']:
-            c = cost(p, need, seen + (n,))
-            if c is not None and (best is None or len(c) < len(best)): best = c
-        return best
-    rows = []
-    for n in g:
-        if not is_t(n): continue
-        best = None
-        for p in g[n]['parts']:
-            c = cost(p, frozenset({n}))
-            if c is not None and (best is None or len(c) < len(best)): best = c
-        ready = all(m not in g for m in after.get(n, []))
-        sp = sum(len(speeds.get(p, [])) for p in g[n]['parts'])
-        rows.append((not ready, len(best) if best else 10**6, -sp, int(n[1:]), n))
-    rows.sort()
+    leaves = [n for n in g if not kids.get(n)]
+    def leaves_under(n):
+        return {x for x in under(g, kids, n) | {n} if not kids.get(x)}
+    waits = {x: set().union(*([leaves_under(d) for m in ancestors(g, x) for d in after.get(m, []) if d in g] or [set()]))
+             for x in leaves}
+    ready = [x for x in leaves if not waits[x]]
+    gain = {x: {y for y in leaves if waits[y] and waits[y] <= {x}} for x in ready}
     txt = texts()
-    for blocked, c, sp, _, n in rows[: int(args[0]) if args else len(rows)]:
-        first = txt.get(int(n[1:]), [('', 0, '', '')])[0][3]
-        print(f'{n:<4} cost {c:<4}' + (' speeds' if sp else '       ') + (' after-open' if blocked else '           ')
-              + f' {",".join(g[n]["parts"]):<28} {first_sentence(first, 70)}')
+    def line(n):
+        t = txt.get(int(n[1:]), [('', 0, '', '')])[0][3] if is_t(n) else g[n]['statement']
+        return f'  {n:<5} {",".join(g[n]["parts"]):<26} {first_sentence(t, 64)}'
+    remaining, k = list(ready), 0
+    print('can start now, in layers (a leaf supersedes the layers below it):')
+    while remaining:
+        top = [x for x in remaining if not any(gain[x] < gain[y] for y in remaining)]
+        k += 1
+        unblocking = [x for x in top if gain[x]]
+        print(f' layer {k}' + ('' if unblocking else ' (unblocks nothing by itself)'))
+        for x in top:
+            print(line(x) + (f'\n        finishing it makes startable: {" ".join(sorted(gain[x]))}' if gain[x] else ''))
+        remaining = [x for x in remaining if x not in top]
+    blocked = [x for x in leaves if waits[x]]
+    if blocked:
+        print('waiting:')
+        for x in blocked:
+            print(line(x) + f'\n        waits on: {" ".join(sorted(waits[x]))}')
 
 
 def cmd_next(args):
-    used = {int(n[1:]) for n in graph()[0] if is_t(n)} | set(texts())
-    try:
-        log = subprocess.run(['git', 'log', '-p', '--all', '--', 'work', 'lib/work.cub'], cwd=ROOT,
-                             capture_output=True, text=True).stdout
-        used |= {int(x) for x in re.findall(r'\bt(\d+)\b', log)}
-    except OSError:
-        pass
-    print(f't{max(used, default=0) + 1}')
+    print(f't{max(used_numbers(graph()[0]), default=0) + 1}')
 
 
 
@@ -420,7 +423,7 @@ def stated_reason(lines, l):
 def reasons():
     """(decls, why): decls by (file, line); why[(file, line)] = (how, what) for those with a reason"""
     rd = reading()
-    g, roots, _, _ = graph()
+    g, roots, _ = graph()
     src = ''.join(open(os.path.join(ROOT, 'src', f), encoding='utf-8', errors='replace').read()
                   for f in os.listdir(os.path.join(ROOT, 'src')) if f.endswith(('.c', '.h')))
     machine_names = set(re.findall(r'"([^"\s]+)"', src))
@@ -601,34 +604,76 @@ def depth(g, roots, n, seen=()):
     return 1 + min(ds) if ds else None
 
 
-def cmd_open(args):
-    import datetime, textwrap
-    if len(args) < 3: sys.exit('open FILE:LINE NODE [NODE ...] TEXT')
-    site, nodes, text = args[0], args[1:-1], args[-1]
-    f, line = site.rsplit(':', 1); line = int(line)
-    g, roots, _, _ = graph()
-    for n in nodes:
-        if n not in g: sys.exit(f'{n}: not a node of work/graph.cub')
-        d = depth(g, roots, n)
-        if d is not None and d <= 1:
-            print(f'{n} is {"a root" if d == 0 else "a part of the root"}: the most specific node a piece of work is part of')
-            print('is usually far below it (python3 tools/work.py tree).')
-            if not sys.stdin.isatty() or input(f'attach it directly to {n}? [y/N] ').strip().lower() != 'y':
-                sys.exit('not opened')
-    refuted = [x for x in nodes if g[x]['breakdown'] == 'sufficient']
-    for x in refuted:
-        print(f'{x} claims its parts suffice; a new part refutes that claim, and the missed requirement is a')
-        print(f'class: {x} becomes not-known, and "determine everything {x} requires and fill every gap" is')
-        print(f'opened as a part of it beside this one.')
-        if not sys.stdin.isatty() or input(f'open a new part of {x}? [y/N] ').strip().lower() != 'y':
-            sys.exit('not opened')
+def residual_of(g, txt, x):
+    """the child of x whose text says it is x's residual, if any"""
+    for k in kids_of(g).get(x, []):
+        if is_t(k) and any(t.startswith(f'residual of {x}:') for _, _, _, t in txt.get(int(k[1:]), [])):
+            return k
+    return None
+
+
+def render_pairs(pairs):
+    out = 'nil'
+    for a, bs in reversed(list(pairs.items())):
+        lst = 'nil'
+        for b in reversed(bs): lst = f'cons {b} ({lst})' if lst != 'nil' else f'cons {b} nil'
+        out = f'cons ({a} , {lst}) ({out})' if out != 'nil' else f'cons ({a} , {lst}) nil'
+    return out
+
+
+def write_after(gs, after):
+    return re.sub(r'^after = .*$', lambda m: 'after = ' + render_pairs(after), gs, count=1, flags=re.M)
+
+
+def header_text(gs, n, body):
+    """a tN text with no single site, written in work/graph.cub's header before its import"""
+    import textwrap
+    lines = ['-- ' + b for b in textwrap.wrap(body, 97)] + ['--']
+    at = gs.index('import "../lib/work.cub"')
+    return gs[:at] + '\n'.join(lines) + '\n' + gs[at:]
+
+
+def add_node(gs, n, parents):
+    last = list(re.finditer(r'^t\d+ = node "t\d+" .*\n', gs, re.M))[-1]
+    parts = ''.join(f'(cons {x} ' for x in parents) + 'nil' + ')' * len(parents)
+    return gs[:last.end()] + f't{n} : Node\nt{n} = node "t{n}" {parts}\n' + gs[last.end():]
+
+
+def used_numbers(g):
     used = {int(x[1:]) for x in g if is_t(x)} | set(texts())
     try:
         log = subprocess.run(['git', 'log', '-p', '--all', '--', 'work', 'lib/work.cub'], cwd=ROOT,
                              capture_output=True, text=True).stdout
         used |= {int(x) for x in re.findall(r'\bt(\d+)\b', log)}
     except OSError: pass
-    n = max(used, default=0) + 1
+    return used
+
+
+def cmd_open(args):
+    import datetime, textwrap
+    if len(args) < 3: sys.exit('open FILE:LINE NODE [NODE ...] TEXT')
+    site, nodes, text = args[0], args[1:-1], args[-1]
+    f, line = site.rsplit(':', 1); line = int(line)
+    g, roots, after = graph()
+    txt = texts()
+    for x in nodes:
+        if x not in g: sys.exit(f'{x}: not a node of work/graph.cub')
+        d = depth(g, roots, x)
+        if d is not None and d <= 1:
+            print(f'{x} is {"the root" if d == 0 else "a child of the root"}: attaching here puts the new node in front of')
+            print('everyone; the most specific node is essential (docs/WORK.md §6, points 6, 8, 10; python3 tools/work.py tree).')
+            if not sys.stdin.isatty() or input(f'attach it directly to {x}? [y/N] ').strip().lower() != 'y':
+                sys.exit('not opened')
+    # a child of a node with a residual is carved out of the residual's scope; a child of a node whose
+    # children were held to cover it refutes that cover, and the missed requirement is a class (§3)
+    refuted = [x for x in nodes if kids_of(g).get(x) and not residual_of(g, txt, x)]
+    for x in refuted:
+        print(f'{x}\'s children were held to cover it completely; a new child says they did not. The missed')
+        print(f'requirement is a class (docs/WORK.md §3, point 9): {x} also gets a residual, "determine and do')
+        print(f'everything else {x} needs".')
+        if not sys.stdin.isatty() or input(f'open a new child of {x}, and its residual? [y/N] ').strip().lower() != 'y':
+            sys.exit('not opened')
+    n = max(used_numbers(g), default=0) + 1
     today = datetime.date.today().isoformat()
     path = os.path.join(ROOT, f)
     ls = open(path, encoding='utf-8').read().split('\n')
@@ -639,23 +684,80 @@ def cmd_open(args):
     else: com = [ind + '-- ' + b for b in body]
     ls[line - 1:line - 1] = com
     open(path, 'w', encoding='utf-8').write('\n'.join(ls))
-    gp = GRAPH; gs = open(gp, encoding='utf-8').read()
-    last = list(re.finditer(r'^t\d+ = leaf "t\d+" .*\n', gs, re.M))[-1]
-    parts = ''.join(f'(cons {x} ' for x in nodes) + 'nil' + ')' * len(nodes)
-    gs = gs[:last.end()] + f't{n} : Node\nt{n} = leaf "t{n}" {parts}\n' + gs[last.end():]
-    for x in refuted:
-        n2 = n + 1 + refuted.index(x)
-        gs = re.sub(r'^(' + re.escape(x) + r' = node "[^"]*" .*) sufficient$', r'\1 not-known', gs, flags=re.M)
-        last = list(re.finditer(r'^t\d+ = leaf "t\d+" .*\n', gs, re.M))[-1]
-        gs = gs[:last.end()] + f't{n2} : Node\nt{n2} = leaf "t{n2}" (cons {x} nil)\n' + gs[last.end():]
-        gl = gs.split('\n'); at = next(k for k, l in enumerate(gl) if l.startswith(x + ' : Node'))
-        gl[at:at] = ['-- ' + b for b in textwrap.wrap(f't{n2} ({today}): determine everything {x} requires and fill '
-                     f'every gap: t{n} was a missed requirement of {x}, whose breakdown was claimed sufficient, so that '
-                     f'claim is refuted ({x} is now not-known) and the missed requirement is a class.', 97)]
-        gs = '\n'.join(gl)
-    open(gp, 'w', encoding='utf-8').write(gs)
+    gs = open(GRAPH, encoding='utf-8').read()
+    gs = add_node(gs, n, nodes)
+    for i, x in enumerate(refuted):
+        n2 = n + 1 + i
+        gs = add_node(gs, n2, [x])
+        gs = header_text(gs, n2, f't{n2} ({today}): residual of {x}: determine and do everything else {x} needs; '
+                         f't{n} was a requirement its children did not cover, so their cover was refuted and the '
+                         f'missed requirement is a class.')
+    open(GRAPH, 'w', encoding='utf-8').write(gs)
     print(f't{n} opened, part of {", ".join(nodes)}, at {f}:{line}')
-    for x in refuted: print(f't{n + 1 + refuted.index(x)} opened, part of {x}: determine everything {x} requires')
+    for i, x in enumerate(refuted): print(f't{n + 1 + i} opened: the residual of {x}')
+
+
+def remove_text(n):
+    """delete tN's text comment at its site (and the blank comment line after it in the graph header)"""
+    for f, l, _, _ in texts().get(n, []):
+        path = os.path.join(ROOT, f)
+        ls = open(path, encoding='utf-8').read().split('\n')
+        i = l - 1
+        j = i + 1
+        block = '/*' in ls[i] and '*/' not in ls[i]
+        while j < len(ls):
+            if block:
+                end = '*/' in ls[j]; j += 1
+                if end: break
+                continue
+            cb = comment_body(ls[j])
+            if MARK.search(ls[j]) or RULE.match(ls[j]) or cb is None or cb[0] == '' or cb[1] == '/*': break
+            j += 1
+        if f == 'work/graph.cub' and j < len(ls) and ls[j].strip() == '--': j += 1
+        del ls[i:j]
+        open(path, 'w', encoding='utf-8').write('\n'.join(ls))
+
+
+def remove_node(gs, x):
+    """delete x's definition and, for a goal, its statement above it"""
+    ls = gs.split('\n')
+    at = next(k for k, l in enumerate(ls) if l == f'{x} : Node')
+    top = at
+    if not is_t(x):
+        k = at - 1
+        while k >= 0 and ls[k].startswith('--'):
+            if re.match(r'^-- ' + re.escape(x) + r' \(', ls[k]): top = k; break
+            k -= 1
+    del ls[top:at + 2]
+    return '\n'.join(ls)
+
+
+def cmd_close(args):
+    """tN is resolved: its node and its text are removed. A parent left with no children is resolved
+    exactly when its children were (docs/WORK.md §3), so it is removed too once confirmed; if it is
+    not achieved, its children did not cover it, and its residual must be opened instead."""
+    if len(args) != 1: sys.exit('close tN')
+    x = args[0] if args[0].startswith('t') else 't' + args[0]
+    g, roots, after = graph()
+    if x not in g or not is_t(x): sys.exit(f'{x}: not an open tN node')
+    if kids_of(g).get(x): sys.exit(f'{x} has children: it is resolved when they are')
+    remove_text(int(x[1:]))
+    gone, todo = [x], list(g[x]['parts'])
+    gs = remove_node(open(GRAPH, encoding='utf-8').read(), x)
+    while todo:
+        p = todo.pop()
+        left = [k for k, d in g.items() if p in d['parts'] and k not in gone]
+        if left or p in roots: continue
+        print(f'{p} has no children left: every part of it is resolved.')
+        if sys.stdin.isatty() and input(f'is {p} achieved? [y/N] ').strip().lower() == 'y':
+            gs = remove_node(gs, p); gone.append(p); todo += g[p]['parts']
+        else:
+            print(f'then its children did not cover it: open its residual (python3 tools/work.py open ... {p} TEXT)')
+    after = {a: [b for b in bs if b not in gone] for a, bs in after.items() if a not in gone}
+    after = {a: bs for a, bs in after.items() if bs}
+    gs = write_after(gs, after)
+    open(GRAPH, 'w', encoding='utf-8').write(gs)
+    print('resolved: ' + ' '.join(gone) + '  (commit with the fix; fold what matters into where it belongs)')
 
 
 def main():
@@ -663,7 +765,7 @@ def main():
         print(__doc__); return
     c, a = sys.argv[1], sys.argv[2:]
     {'list': cmd_list, 'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'next': cmd_next,
-     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained, 'open': cmd_open, 'view': cmd_view, 'every': cmd_every}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
+     'priority': cmd_priority, 'why': cmd_why, 'unexplained': cmd_unexplained, 'open': cmd_open, 'close': cmd_close, 'view': cmd_view, 'every': cmd_every}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
 
 
 if __name__ == '__main__':
