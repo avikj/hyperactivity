@@ -23,7 +23,7 @@ hyperactive browse               every goal, ticket, definition, document and fi
 hyperactive show NODE ...        a node or ticket: its text, what it serves, what serves it, its essential context
 hyperactive tree                 the task graph from its root, as text
 hyperactive order                the order of work: what can start now, then what waits on what
-hyperactive open FILE:LINE NODE ... TEXT    open a ticket at a site, as a child of NODEs
+hyperactive open FILE:LINE NODE ... NAME TEXT   open a ticket at a site, as a child of NODEs, named by an English sentence
 hyperactive close tN             a ticket resolved
 hyperactive why NAME             why a declaration exists: its chain of reasons to the root
 hyperactive unexplained [FILE]   declarations with no reason

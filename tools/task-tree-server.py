@@ -31,7 +31,7 @@ def page():
         also = f'<span class="also">also under: {html.escape("; ".join(g[o]["id"] for o in others))}</span>' if others and parent else ''
         head = (f'<span class="name g">{html.escape(g[n]["id"])}</span> <span class="also">{html.escape(n)}</span> {badge} '
                 f'<span class="open">{sum(1 for x in tg.under(g, kids, n) if tg.is_t(x))} open below</span>' if not tg.is_t(n) else
-                f'<span class="name t">{html.escape(n)}</span> {badge}')
+                f'<span class="name t">{html.escape(g[n]["id"])}</span> <span class="also">{html.escape(n)}</span> {badge}')
         body = f'<div class="text">{html.escape(t)}</div>' + (f'<div class="site">{html.escape(site)}</div>' if site else '') + also
         ks = kids.get(n, [])
         if not ks: return f'<li class="leaf"><div class="row">{head}</div>{body}</li>'

@@ -16,7 +16,7 @@ the place it concerns. Every node in the graph is open; resolving one removes it
                                              supersede others first; then what waits, on what
     python3 tools/task-graph.py check              graph and comments correspond; the graph checks
     python3 tools/task-graph.py next               the next tN number never used (the history included)
-    python3 tools/task-graph.py open FILE:LINE NODE [NODE ...] TEXT
+    python3 tools/task-graph.py open FILE:LINE NODE [NODE ...] NAME TEXT
                                              open the next tN, part of the NODEs, its text the
                                              comment `tN (date): TEXT` written above FILE:LINE;
                                              a part of the root or of a root's part asks y/N;
@@ -220,7 +220,7 @@ def cmd_show(args):
             print(f'{a}: no such node\n'); continue
         rels = ', '.join(f'{rel_word(g, p)} {p}' for p in d['parts']) or ('a root' if a in roots else '-')
         print(f'{a}  {rels}')
-        if not is_t(a): print('  ' + d['id'])
+        print('  ' + d['id'])
         ks = kids_of(g).get(a, [])
         if ks: print('  served by: ' + ' '.join(ks))
         docs, ec = essential_context()
@@ -281,7 +281,7 @@ def cmd_tree(args):
         if n in seen: return
         seen.add(n)
         direct = [x for x in k if is_t(x)]
-        if direct: print('  ' * (depth + 1) + ' '.join(sorted(direct, key=lambda x: int(x[1:]))))
+        for x in sorted(direct, key=lambda x: int(x[1:])): print('  ' * (depth + 1) + f'{x}  {g[x]["id"]}')
         for c in k:
             if not is_t(c) and g[c]['parts'] and g[c]['parts'][0] == n:
                 walk(c, depth + 1, n)
@@ -301,9 +301,7 @@ def cmd_check(args):
         elif len(txt[n]) > 1:
             print(f't{n}: {len(txt[n])} text comments: ' + ', '.join(f'{f}:{l}' for f, l, _, _ in txt[n])); bad += 1
     for n, d in g.items():
-        if is_t(n) and d['id'] != n:
-            print(f'{n}: its name is "{d["id"]}", not its declaration\'s'); bad += 1
-        if not is_t(n) and (' ' not in d['id'] or d['id'] == n):
+        if ' ' not in d['id'] or d['id'] == n:
             print(f'{n}: its name must be an English sentence saying what it is, not an identifier'); bad += 1
         if not d['parts'] and n not in roots:
             print(f'{n}: part of nothing and not declared a root'); bad += 1
@@ -700,10 +698,10 @@ def header_text(gs, n, body):
     return gs[:at] + '\n'.join(lines) + '\n' + gs[at:]
 
 
-def add_node(gs, n, parents):
-    last = list(re.finditer(r'^t\d+ = node "t\d+" .*\n', gs, re.M))[-1]
+def add_node(gs, n, parents, name):
+    last = list(re.finditer(r'^t\d+ = node ".*" .*\n', gs, re.M))[-1]
     parts = ''.join(f'(cons {x} ' for x in parents) + 'nil' + ')' * len(parents)
-    return gs[:last.end()] + f't{n} : Node\nt{n} = node "t{n}" {parts}\n' + gs[last.end():]
+    return gs[:last.end()] + f't{n} : Node\nt{n} = node "{name}" {parts}\n' + gs[last.end():]
 
 
 def used_numbers(g):
@@ -718,8 +716,9 @@ def used_numbers(g):
 
 def cmd_open(args):
     import datetime, textwrap
-    if len(args) < 3: sys.exit('open FILE:LINE NODE [NODE ...] TEXT')
-    site, nodes, text = args[0], args[1:-1], args[-1]
+    if len(args) < 4: sys.exit('open FILE:LINE NODE [NODE ...] NAME TEXT   (NAME: an English sentence saying what the ticket is)')
+    site, nodes, name, text = args[0], args[1:-2], args[-2], args[-1]
+    if ' ' not in name or '"' in name: sys.exit('NAME must be an English sentence saying what the ticket is, without double quotes')
     f, line = site.rsplit(':', 1); line = int(line)
     g, roots, after = graph()
     txt = texts()
@@ -752,10 +751,10 @@ def cmd_open(args):
     ls[line - 1:line - 1] = com
     open(path, 'w', encoding='utf-8').write('\n'.join(ls))
     gs = open(GRAPH, encoding='utf-8').read()
-    gs = add_node(gs, n, nodes)
+    gs = add_node(gs, n, nodes, name)
     for i, x in enumerate(refuted):
         n2 = n + 1 + i
-        gs = add_node(gs, n2, [x])
+        gs = add_node(gs, n2, [x], f'Everything else {g[x]["id"].rstrip(".")} requires.')
         gs = header_text(gs, n2, f't{n2} ({today}): residual of {x}: determine and do everything else {x} needs; '
                          f't{n} was a requirement its children did not cover, so their cover was refuted and the '
                          f'missed requirement is a class.')
