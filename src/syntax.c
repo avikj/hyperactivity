@@ -5859,6 +5859,7 @@ static Node *x_solve_expr(Node *e) {
 
 /* a declaration left by an error (p_decl): the elaborator's state as before a declaration */
 static void decl_reset(void) {
+    if (chk_pending >= 0) { nchkdata = chk_pending; chk_pending = -1; }   /* a data type's registration left by the error */
     neh = neg = 0; nbk = 0; nesc = 0; nwtick = 0; syn_expect = app_expect = NULL;
     cov_armed = cov_on = guard_on = lift_armed = false; nrov = 0; tsig.ord = NULL; perm_np = 0; nsg = 0;
 }

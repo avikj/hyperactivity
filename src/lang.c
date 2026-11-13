@@ -771,6 +771,10 @@ static Node *ds(Node *t) {
 static const char **cscope; static size_t capcscope; static int ncscope;
 static char **CHECKED; static size_t capchecked; static int nchecked;
 static int *CHKDATA; static size_t capchkdata; static int nchkdata;   /* checked data types, in signature order */
+/* a data type's index while its registration is in progress: an error before it completes (an
+ * unchecked type in a field, say) gives the index back (decl_reset), so no index stays without its
+ * checker tables (t67: "checker table 3 has no entry" ended the machine) */
+static int chk_pending = -1;
 /* hidden: an entry no source name refers to (a rejected definition, a codata type's generated
  * composition and record) */
 static bool *CHKHIDE; static size_t capchkhide;
@@ -4101,7 +4105,7 @@ static void toplevel_in(Node *f) {
             d = ndata - 1;
         }
         GROW(CHKDATA, capchkdata, (size_t)nchkdata + 1);
-        CHKDATA[nchkdata++] = d;
+        CHKDATA[nchkdata++] = d; chk_pending = nchkdata - 1;
         Node *ent = nl2("%raw", kapp("dent", atel_params(dd, d, 0), K("lzero")));
         int di = nchkdata - 1;
         /* the tables while it is checked: its declaration at level lzero, and the machine's data
@@ -4131,6 +4135,7 @@ static void toplevel_in(Node *f) {
         { printf("%s: %s data %s   ", ok ? "ok" : "FAIL", expect ? "checks" : "rejected", DATA[d].name); if (stored) printf("[store]\n"); else printf("[%ld steps]\n", steps); }
         if (!accepted && (expect || getenv("CUBICAL_WHY"))) explain(r, nl3("%%chk-data", word(di), ent));
         free(r); free(tr);
+        chk_pending = -1;
         if (!accepted) { nchkdata--; free(kcode); return; }
         dkey_set(di, key); deps_take(&DDEPS, &capddeps, di); store_put(DATA[d].name, key, kcode, "", steps, NULL); free(kcode);
         char dent[32]; snprintf(dent, sizeof dent, "%%dent%d", di);
@@ -4159,7 +4164,7 @@ static void toplevel_in(Node *f) {
         toplevel(dd);
         int d = ndata - 1;
         GROW(CHKDATA, capchkdata, (size_t)nchkdata + 1);
-        CHKDATA[nchkdata++] = d;
+        CHKDATA[nchkdata++] = d; chk_pending = nchkdata - 1;
         int di = nchkdata - 1;
         Node *ent = nl2("%raw", kapp("dcoent", atel_coparams(dd, d, 0), K("lzero")));
         const char *D = DATA[d].name;
@@ -4187,6 +4192,7 @@ static void toplevel_in(Node *f) {
         { printf("%s: %s codata %s   ", ok ? "ok" : "FAIL", expect ? "checks" : "rejected", D); if (stored) printf("[store]\n"); else printf("[%ld steps]\n", steps); }
         if (!accepted && (expect || getenv("CUBICAL_WHY"))) explain(r, nl3("%%chk-codata", word(di), ent));
         free(r);
+        chk_pending = -1;
         if (!accepted) { nchkdata--; free(kcode); return; }
         dkey_set(di, key); deps_take(&DDEPS, &capddeps, di); store_put(D, key, kcode, "", steps, NULL); free(kcode);
         char dent[32]; snprintf(dent, sizeof dent, "%%dent%d", di);

@@ -3513,13 +3513,6 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     case O_GLOB: {
-        /* t67 (2026-11-12): wrong. A checker-table index with no entry ends the whole machine here
-         * (exit 2) instead of failing the definition being checked: measured with `cubical CORE
-         * experiments/cxx/sem/gen/ast.cub lib/cxx/ast.cub` (the first file's definitions refused for
-         * an unbound CStr, the second's checking then reads data table 3 at 37, which has no entry):
-         * "checker table 3 has no entry 37". Either a refused declaration leaves an index that a later
-         * checked form still reaches (the table and the signature disagree), or a later declaration
-         * computes its index from the refused one's. Found by the t30 load discovery. */
         if (vk != V_WORD || v->p) { fprintf(stderr, "%%gval/%%gty/%%dtab/%%dent: an index is a word\n"); exit(2); }
         o->a = v->a;
         long g = table_global((int)o->x, (long)o->a);
