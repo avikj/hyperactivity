@@ -66,3 +66,15 @@ nothing from it needs carrying forward, or what it appended and where.
 
 - `what-hyperactive-is-for-in-avik-words.md` — what Hyperactive is for and what it serves: the
   product, the order of the work toward it.
+
+## How agents act on Avik's criticism (Avik, 2026-11-13, verbatim)
+
+> fuck you - i've been presented with garbage, told you what to fix, and now rather than just
+> one-shottign and giving me something better, you want to create a process?
+>
+> jesus. let me be clear. you have a lot of fucking trivial things that should be done that aren't
+> done yet. over teh course of this conversation, what progress has occurred? what opinions have i
+> presented on the data i see right now? is that sufficient that after having gone to sleep for 5
+> hours and woken up, i should not be seeing thed same thing at all? there should be absolutely
+> nothing i fucking criticized that isn't fixed. tell me now, everything that will get done in this
+> project, and what will get done in the next 5 min 10 min and 15 min. the state is ridiculous.
