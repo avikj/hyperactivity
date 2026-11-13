@@ -66,10 +66,6 @@ nothing from it needs carrying forward, or what it appended and where.
 
 - `what-hyperactive-is-for-in-avik-words.md` — what Hyperactive is for and what it serves: the
   product, the order of the work toward it.
-- `the-one-operation-and-the-one-datum-material-from-avik.md` — material Avik gave on 2026-11-13 for
-  the design document: the one datum (a construction) and the one operation (filling a boundary), and
-  what they force for perception, learning, witness, agency and value. Written in another
-  conversation; kept verbatim.
 
 The design document itself, `HYPERACTIVE.md` at the repository's root, is held by the Claude session
 and revised in place; it is not here because it is not Avik's writing, and it cites what is.
