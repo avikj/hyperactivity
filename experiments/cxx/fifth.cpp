@@ -1,4 +1,4 @@
-// fifth.cpp — the fifth unit of track C (tracks/C-clang.md, item 4): inheritance beyond one
+// fifth.cpp — the fifth unit of track C (archive/2026-11-11/C-clang.md, sha256 31dca2011367…, “Track C — C++ as data: Clang's AST into the checker (first half of D3)”, “What is built”, item 4 “Every construct the importer stopped on by design, closed”): inheritance beyond one
 // base. Two interfaces implemented by one class (a second vtable pointer, a this-adjusting
 // thunk); a diamond with a virtual base (virtual base offsets, vcall offsets, construction
 // vtables and the VTT); a covariant return through a non-primary base (a return-adjusting

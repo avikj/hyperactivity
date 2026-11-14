@@ -1,10 +1,10 @@
-/* store.c — codebase keys and the store (plan F34). Included by lang.c before toplevel.
+/* store.c — codebase keys and the store (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”). Included by lang.c before toplevel.
  *
  * A checked definition's key is the SHA-256 of the canonical form of its type and its term:
  * the elaborated core forms with every binder nameless (@k, the distance to its binder), every
  * checked definition it mentions replaced by that definition's key (G<key>), every checked data
  * type by its key (D<key>), a constructor or field by its type's key and its index (C<key>.i,
- * F<key>.i), hole solutions in place of their holes, and binder multiplicities (B11) kept. Not
+ * F<key>.i), hole solutions in place of their holes, and binder multiplicities (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”) kept. Not
  * in it: names, files, positions, the machine's build. A data type's key is the canonical form of
  * its declaration (its own name `self`); a postulate's or primitive's its name and its type (a
  * postulate is its name: two postulates of one type are two assumptions). A corecursive group's
@@ -41,7 +41,7 @@ static void key_hash(const char *s, size_t n, char out[65]) { Sha256 h; unsigned
 
 /* ---- the canonical form ---- */
 /* what a form mentions, gathered as it is canonicalized: checked indices (k) and checked data
- * indices (-(di+1)); kept per definition for #safe (C20) */
+ * indices (-(di+1)); kept per definition for #safe (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C20) */
 typedef struct { int *d; int n; } Deps;
 static Deps cur_deps; static Deps *CDEPS; static size_t capcdeps; static Deps *DDEPS; static size_t capddeps;
 static void dep_add(int k) { for (int i = 0; i < cur_deps.n; i++) if (cur_deps.d[i] == k) return; cur_deps.d = realloc(cur_deps.d, (size_t)(cur_deps.n + 1) * sizeof(int)); cur_deps.d[cur_deps.n++] = k; }
@@ -438,7 +438,7 @@ static void key_group(Node **Ts, Node **ts, int n, int base, SKey *out) {
     for (int i = 0; i < n; i++) { char m[96]; snprintf(m, sizeof m, "member %d of %s\n", i, gk); key_hash(m, strlen(m), out[i]); }
 }
 
-/* ---- #safe f (C20): every trusted definition (postulate, primitive, foreign) reachable from f
+/* ---- #safe f (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C20): every trusted definition (postulate, primitive, foreign) reachable from f
  * through what its type and term mention, in order of discovery ---- */
 static const char *trusted_how(const char *name) { for (int i = 0; i < ntrusted; i++) if (!strcmp(TRUSTED[i].name, name)) return TRUSTED[i].how; return NULL; }
 static int *safe_seen; static int nsafe_seen, capsafe_seen; static int nsafe_found;

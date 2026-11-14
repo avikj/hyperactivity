@@ -1,9 +1,10 @@
--- code.cub — codes of terms as data, and the evaluator as a term: §5.26, "no outer layer", of
--- the earlier paper "Respecting Equality", cited in this repository before 2026-11-11 (docs/index.html of the
--- earlier repository avikj/math; no copy or hash is in this repository; its §5 is restated by number
--- in EXPOSITION.md, removed at f00bd0f, readable as git show adaebcd:EXPOSITION.md).
+-- code.cub — codes of terms as data, and the evaluator as a term: Remark 5.26 “no outer layer”,
+-- in §5.5 “What the length counts” of the earlier paper "Respecting Equality", cited in this repository before 2026-11-11 (docs/index.html of the
+-- earlier repository avikj/math, last changed 8 Oct 2026, sha256 984fafe88eb6…; no copy is in this repository;
+-- its §5 “Complete inference is deterministic and step-optimal” is restated by number in EXPOSITION.md, removed at f00bd0f, readable as git show adaebcd:EXPOSITION.md).
 -- The counterpart in the repository's copy of the paper (docs/Hyperactive_Final_Paper.pdf,
--- 11 Nov 2026, sha256 e8f358b4cd2c…, §1.2 and §6.2):
+-- 11 Nov 2026, sha256 e8f358b4cd2c…, §1.2 “Programs about programs” and
+-- §6.2 “Specialization as a program over the language’s own definitions”):
 -- "Represented terms form an inductive type Code, with an interpretation eval-g".
 -- Variables are de Bruijn indices (words) over one context of term and
 -- dimension variables; globals are indices (words) into a signature, data types
@@ -12,10 +13,10 @@
 -- question about the evaluator is a term.
 data Lst (A : Type) = lnil | lcons (x : A) (xs : Lst A)
 data Opt (A : Type) = none | some (x : A)
--- binding times (a schedule's stages, lib/specialize.cub) and the reader's verdict (plan 5.4, lib/machine.cub):
+-- binding times (a schedule's stages, lib/specialize.cub) and the reader's verdict (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.4 “The reader, and why the path is by construction”; lib/machine.cub):
 -- a first-order machine program, or the construct that has none and why
 data Stage = st-now | st-run
--- a schedule (plan 5.7): the rewrite bound, the binding-time stages, the held definitions and the
+-- a schedule (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.7 “Schedules”): the rewrite bound, the binding-time stages, the held definitions and the
 -- register assignment; its operations are in lib/specialize.cub
 data Sched = sched (rewrites : Word) (stages : Lst (Word × Stage)) (holds : Lst Word)
 data Reason = dim | dep-type | higher | kan | reflect | mult | copy | infinite
@@ -134,7 +135,7 @@ data View
   | wtick k
   | wclock0
   | wtick0
-  -- a primitive operation (B12) stuck on a neutral: the operation's number and its arguments
+  -- a primitive operation (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”) stuck on a neutral: the operation's number and its arguments
   | wprim k as
 -- two λs of one record (%clos): the pairs of (copies of) their environments, and the λs; else
 -- both, untouched
@@ -158,7 +159,7 @@ dt-elim t = case t of dtab f c e s → e
 dt-case t = case t of dtab f c e s → s
 -- eval-g e c: the value of code c, e the values of its variables (a list); checked definitions
 -- and data types are read from the checker's tables (%gval, %dtab)
--- A primitive operation (B12) by its number k = class·256 + sub, as %view names a stuck one (wprim k as)
+-- A primitive operation (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”) by its number k = class·256 + sub, as %view names a stuck one (wprim k as)
 -- and a code names it (cprim k as): class 1 a unary operation, 2 a binary one (sub in the order of
 -- lib/prim.cub's %i64add ... %wofu64, the PO_* index of src/core.h), 3 a load and 4 a store of sub bytes, 5 %blen, 6 %bytes.
 -- Applied to its evaluated arguments: the machine's operation, which computes on values and stays a

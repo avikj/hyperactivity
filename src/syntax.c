@@ -160,7 +160,7 @@ static void x_layout(void) {
 }
 
 /* ---------------- implicit arguments: each definition's implicit parameters (a mask) ---------------- */
-typedef struct { char *name; uint64_t m; int len; uint64_t inst; } IMask;   /* inst: the implicit positions found by instance search (E28) */
+typedef struct { char *name; uint64_t m; int len; uint64_t inst; } IMask;   /* inst: the implicit positions found by instance search (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) */
 static IMask *IM; static int nim, capim;
 static IMask *imask_of(const char *s) { for (int i = nim - 1; i >= 0; i--) if (!strcmp(IM[i].name, s)) return IM[i].m ? &IM[i] : NULL; return NULL; }
 static void imask_set(const char *s, uint64_t m, int len) { GROW(IM, capim, (size_t)nim + 1); IM[nim++] = (IMask){ strdup(s), m, len, 0 }; }
@@ -177,7 +177,7 @@ static uint64_t inst_bits(Node *sig) {
     return b;
 }
 static void imask_inst(const char *s, Node *sig) { uint64_t b = inst_bits(sig); if (b) for (int i = nim - 1; i >= 0; i--) if (!strcmp(IM[i].name, s)) { IM[i].inst = b; return; } }
-/* instance declarations (E28): `instance` before a signature; each is a candidate for an instance
+/* instance declarations (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): `instance` before a signature; each is a candidate for an instance
  * hole whose type its result type matches, the latest first */
 typedef struct { char *name; Node *sig; } Inst;
 static Inst *INST; static size_t capinst; static int ninst; static bool pending_instance;
@@ -229,7 +229,7 @@ static void refuse_outside(const char *const *names, const char *what, const cha
 static Tok *P0(void) { return &lt[xp]; }
 static Tok *P1(void) { return &lt[xp + 1 < nlt ? xp + 1 : nlt - 1]; }
 static Tok *P2(void) { return &lt[xp + 2 < nlt ? xp + 2 : nlt - 1]; }
-/* the records declared: their field names in order, for R { f = a ; ... } and R { r | f = v } (E28) */
+/* the records declared: their field names in order, for R { f = a ; ... } and R { r | f = v } (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) */
 typedef struct { char *name; int nf; char **fn; } RecInfo;
 static RecInfo *RECS; static size_t caprecs; static int nrecs;
 static RecInfo *rec_of(const char *s) { for (int i = nrecs - 1; i >= 0; i--) if (!strcmp(RECS[i].name, s)) return &RECS[i]; return NULL; }
@@ -245,7 +245,7 @@ static Tok *NX(void) { Tok *t = &lt[xp]; if (t->k != X_EOF) xp++; return t; }
 static void x_err(const char *m, Tok *t) { x_die(t->line, t->col, m, t->k == X_VS ? "(at a new line)" : t->k == X_VC ? "(at the end of a block)" : t->k == X_VO ? "(at a new block)" : t->s); }
 static void x_sem(const char *m, Tok *t) { x_sem_now = true; x_err(m, t); }
 static bool at(const char *s) { return x_is(P0(), s); }
-/* a generalized variable (E28): its name and declared type */
+/* a generalized variable (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): its name and declared type */
 typedef struct { const char *name; Node *type; } GVar;
 static GVar *GVAR; static int ngvar; static size_t capgvar;
 static void want(const char *s) { if (!at(s)) { char m[64]; snprintf(m, sizeof m, "expected %s, found", s); x_err(m, P0()); } NX(); }
@@ -271,7 +271,7 @@ static Node *syn_type(Node *a, int depth);
 static Node *wordn(long n);
 static Node *hole_or_sol(Node *key, int idx, bool *pend);
 static Node *cn(Node *c);
-/* parameterized modules (E28): `module M (A : Type) (e : Eq A) where` a block of definitions; each
+/* parameterized modules (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): `module M (A : Type) (e : Eq A) where` a block of definitions; each
  * is a definition M·f abstracted over the parameters (implicit ones {..} implicit), its references
  * to the module's other definitions applied to the parameters; `open M a b` defines each f as
  * M·f a b at the instantiated signature */
@@ -336,7 +336,7 @@ static bool atom_start(Tok *t) {
 }
 /* the binders of λ: x, _, (x y : A), (i : I), {x} */
 typedef struct { Node *name; Node *ty; bool dim, imp; } Bnd;
-/* a binder's colon: ":", or ":0" / ":1" with its multiplicity (B11); -1 when not a colon */
+/* a binder's colon: ":", or ":0" / ":1" with its multiplicity (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”); -1 when not a colon */
 static int x_colon_mult(Tok *t) { return x_is(t, ":") ? 2 : x_is(t, ":0") ? 0 : x_is(t, ":1") ? 1 : -1; }
 static int p_binders(Bnd *bs, int max, bool need_type) {
     int n = 0;
@@ -344,7 +344,7 @@ static int p_binders(Bnd *bs, int max, bool need_type) {
         Tok *t = P0();
         if (t->k == X_ID && !reserved(t->s) && !fix_of(t)) { if (n == max) x_err("too many binders", t); NX(); bs[n++] = (Bnd){ nsym(t->s), NULL, false, false }; continue; }
         if (t->k == X_LP || t->k == X_LC) {
-            /* (x y : A); {x : A} implicit; {{x : A}} an instance argument (E28) */
+            /* (x y : A); {x : A} implicit; {{x : A}} an instance argument (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) */
             int save = xp; bool imp = t->k == X_LC; NX();
             bool inst = imp && P0()->k == X_LC; if (inst) NX();
             int k0 = n;
@@ -1100,7 +1100,7 @@ static void def_untyped(const char *name, Node *body) {
  * its name). */
 /* a constructor given by its type: its fields the Π telescope's binders, and a path type at the end
  * (a ≡ b, PathP (λ i → T) a b, a ≡[ i ↦ T ] b) a dimension with that boundary */
-/* indexed families by fording (E28): `data D ps : (i : Idx) → Type where c : … → D ps e` declares
+/* indexed families by fording (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): `data D ps : (i : Idx) → Type where c : … → D ps e` declares
  * D with the indices as its last parameters (%ix0 …) and gives each constructor an equality field
  * per index, (%e0 :0 (%ix0 ≡ e)), at multiplicity 0 so it is erased. A constructor applied without
  * its equality fields gets refl at the declared index expressions (over its field arguments); a
@@ -1346,11 +1346,11 @@ static void p_decl_in(void) {
     snprintf(decl_pos, sizeof decl_pos, "%s:%d", x_file ? x_file : "?", t->line);
     bool fail = x_fail_next; x_fail_next = false;
     if (x_is(t, "#fail")) { NX(); x_fail_next = true; return; }
-    if (x_is(t, "instance")) { NX(); pending_instance = true; x_fail_next = fail; p_decl(); pending_instance = false; return; }   /* the next definition is an instance (E28) */
+    if (x_is(t, "instance")) { NX(); pending_instance = true; x_fail_next = fail; p_decl(); pending_instance = false; return; }   /* the next definition is an instance (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) */
     if (x_is(t, "deriving")) {
         /* deriving eq D [as name]: a decidable equality on the data type D, its code derived by
          * lib/derive.cub (derive-eq) over the data table, checked and defined at D → D → Bool as
-         * name (D·eq by default) (plan F31) */
+         * name (D·eq by default) (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F31) */
         NX(); Tok *what = NX(); Tok *dn = NX();
         if (!x_is(what, "eq") && !x_is(what, "Eq")) x_sem("deriving eq D is what can be derived; found", what);
         if (dn->k != X_ID || data_lookup(dn->s) < 0) x_sem("deriving: not a data type:", dn);
@@ -1523,7 +1523,7 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "world") && P1()->k == X_STR) {
-        /* world "name" [: World S St] = handler (D27): a named world, lib/proc.cub's Named S St — the
+        /* world "name" [: World S St] = handler (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27): a named world, lib/proc.cub's Named S St — the
          * checked definitions world-name : Named S St = (id , handler) and world-name-id : Word = id,
          * id the name's FNV-1a hash (a registry is a list of them; find-world picks one by id). The
          * type is the handler's signature when the handler is a name, else the annotation */
@@ -1550,7 +1550,7 @@ static void p_decl_in(void) {
     }
     if (x_is(t, "foreign")) {
         refuse_outside(BOOT_TRUSTED, "a foreign function", "foreign");
-        /* foreign name "symbol" : T (D27): a C function of the running program as a primitive at T,
+        /* foreign name "symbol" : T (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27): a C function of the running program as a primitive at T,
          * a Π over arguments of primitive types (Int64, UInt32, Float64, Word, Bytes n; an argument
          * at multiplicity 0 is not passed) to a primitive type or Word; trusted (#trusted: foreign) */
         NX(); Tok *nt = NX(); if (nt->k != X_ID) x_err("foreign names something, found", nt);
@@ -1561,7 +1561,7 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "variable")) {
-        /* generalized variables (E28): `variable x y : T`; a signature mentioning x free gets {x : T}
+        /* generalized variables (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): `variable x y : T`; a signature mentioning x free gets {x : T}
          * (and the variables T mentions) as leading implicit parameters */
         NX();
         Node *ns[64]; int n = 0;
@@ -1639,7 +1639,7 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "#build")) {
-        /* #build s "file" (PLAN 4.4 item 5): s : Step W A, a process as a tree of steps, written as a
+        /* #build s "file" (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §4.4 “What Phase 1 still builds”, item 5 “Processes and standalone binaries: `#build main`”): s : Step W A, a process as a tree of steps, written as a
          * standalone static ELF64 executable (lib/elf.cub build-plan): the specialized code is checked
          * by the checker's conversion against s, then encoded with the driver loop as machine code.
          * Nothing is written unless the program compiles and the check holds */
@@ -1676,13 +1676,13 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "#jit")) {
-        /* #jit f [using t1 t2 …] (plan 5.4, 5.5): f compiled to x86-64 and bound to the bytes. The
+        /* #jit f [using t1 t2 …] (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.4 “The reader, and why the path is by construction” and §5.5 “Bytes, the boundary, and what is trusted”): f compiled to x86-64 and bound to the bytes. The
          * library computes the plan (lib/x86.cub jit-plan): the specialized code (rewritten along the
          * theorems given, each rewrite carrying its path), the checker's conversion of f with the code's
          * meaning, and the bytes. With theorems the path is checked by the checker as the definition
          * f·jit : f ≡ code. f is bound only when the program compiles and the check holds; on closed
          * data the bytes compute f, on anything else (and past 2^64 in a word operation) f's
-         * definition does. Trusted: the encoder's templates (PLAN §13 item 3) and the boundary */
+         * definition does. Trusted: the encoder's templates (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §13 “The trusted surface”, item 3: the fifteen `encode` templates and the frame convention) and the boundary */
         NX(); Tok *fn = NX(); if (fn->k != X_ID) x_err("#jit names a checked definition, found", fn);
         int ck = checked_index(fn->s); if (ck < 0) x_sem("#jit: not a checked definition:", fn);
         long ths[64]; int nth = 0;
@@ -1792,7 +1792,7 @@ static void p_decl_in(void) {
     }
     if (x_is(t, "#usage")) { NX(); Tok *n = NX(); x_top(sym2("usage", nsym(n->s))); decl_end(); return; }
     if (x_is(t, "#trusted")) { NX(); x_top(lst(1, nsym("trusted"))); decl_end(); return; }
-    /* the store (F34): #key d, #names K, #history name, #unbind name, #gc */
+    /* the store (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”): #key d, #names K, #history name, #unbind name, #gc */
     if (x_is(t, "#key") || x_is(t, "#names") || x_is(t, "#history") || x_is(t, "#unbind") || x_is(t, "#safe") || x_is(t, "#retract")) { const char *c = NX()->s + 1; Tok *n = NX(); x_top(sym2(c, nsym(n->s))); decl_end(); return; }
     if (x_is(t, "#uses")) { NX(); x_top(lst(1, nsym("uses"))); decl_end(); return; }
     if (x_is(t, "#gc")) { NX(); x_top(lst(1, nsym("gc"))); decl_end(); return; }
@@ -3030,7 +3030,7 @@ static Node *cn(Node *c) {
  * the syntax does not tell is a guess (%guess #k #g t). The checker finds the holes and tells the
  * wrong guesses; holes and guesses are keyed by where they stand in the source, so a decision holds
  * from one run to the next. */
-typedef struct { Node *key; int idx; Node *sol; Node *syn; bool inst, tent; int tried; } EHole;   /* syn: found from the signatures (a surface term); inst: an instance hole, tent: its solution a candidate under trial, tried: candidates given up (E28) */
+typedef struct { Node *key; int idx; Node *sol; Node *syn; bool inst, tent; int tried; } EHole;   /* syn: found from the signatures (a surface term); inst: an instance hole, tent: its solution a candidate under trial, tried: candidates given up (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) */
 typedef struct { Node *key; int kind; } EGuess;
 static EHole *EH; static int neh, capeh;
 static EGuess *EG; static int neg, capeg;
@@ -3435,7 +3435,7 @@ static Node *hole_or_sol(Node *key, int idx, bool *pend) {
     *pend = true;
     return sym2("%hole", wordn(k));
 }
-/* ---------------- instance search (E28) ----------------
+/* ---------------- instance search (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) ----------------
  * An instance hole's type, as far as the signature and the solutions so far tell it (unknown parts
  * %? or holes), is matched against each instance's result type, the instance's own binders
  * matching anything; the latest match is the candidate, elaborated in the hole's place (its own
@@ -3553,7 +3553,7 @@ static int head_params(Node *h, Node **ty, bool *imp, int cap) {
 static const char *wtick[64]; static int nwtick;
 static bool guard_on; static int guard_q = -1;
 static bool tick_pos;   /* the term about to be elaborated stands at a later position */
-static int fn_later_depth = -1;   /* a λ being elaborated whose body, this many λs down, stands at a later position (18.18) */   /* a guarded fixed point being compiled; its clock parameter */
+static int fn_later_depth = -1;   /* a λ being elaborated whose body, this many λs down, stands at a later position (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”) */   /* a guarded fixed point being compiled; its clock parameter */
 static Node *tick_lift(Node *e, Node *al) {
     if (!e->list || e->n == 0) return e;
     Node *h = e->it[0];
@@ -3660,7 +3660,7 @@ static Node *the_clock(void) {
 static Node **BK, **BV; static int nbk, capbk;
 static Node *el_app(Node *t, Node *h, Node **args, int n) {
     /* a λ written at the head of an application (a motive applied in a signature): reduced here, where
-     * the checker would not infer the λ's type (E28) */
+     * the checker would not infer the λ's type (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) */
     if (h->list && h->n == 3 && !h->it[0]->list && is(h->it[0], "lam") && !h->it[1]->list && n >= 1) {
         /* made once per application: the rounds see the same nodes (holes are keyed by them) */
         for (int i = 0; i < nbk; i++) if (BK[i] == t) return el(BV[i]);
@@ -3748,7 +3748,7 @@ static Node *el_app(Node *t, Node *h, Node **args, int n) {
             Node *ai = args[i];
             if (i < nft && is_later(fty[i]) && wants_tick(ai)) ai = tick_wrap(ai);   /* a constructor's later field */
             /* a constructor's field that is a function into a later type, given a λ: its body (under
-             * that many λs) stands at a later position (18.18) */
+             * that many λs) stands at a later position (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”) */
             if (i < nft && fty[i] && ai->list && ai->n == 3 && !ai->it[0]->list && is(ai->it[0], "lam")) {
                 int d = 0; Node *T = fty[i];
                 while (T && T->list && T->n == 4 && !T->it[0]->list && is(T->it[0], "Pi") && !is_later(T)) { d++; T = T->it[3]; }
@@ -3879,7 +3879,7 @@ static Node *el_alts(Node *t, int from) {
     }
     return r;
 }
-/* ---- by-lin (F32, item 32): the elaborator calling the certificate search on a hole. The goal
+/* ---- by-lin (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F32; §12 “The build list”, “F. Programs about programs”, item 32): the elaborator calling the certificate search on a hole. The goal
  * `Lew a b` and the hypotheses `h : Lew l r` in scope are read as linear codes over their atoms
  * (plusw, %wsucc, word literals; any other subterm an atom), lib/lin.cub's omega-cert finds the
  * multipliers at elaboration time (untrusted), and the hole becomes lib/linproof.cub's
@@ -4162,7 +4162,7 @@ static CVar *cdefs; static int ncdefs, capcdefs;
 static Frame *frames; static int nframes, capframes;
 static Node *subst_sym(Node *t, const char *x, Node *e);
 static Node *subst_multi(Node *t, const char **ps, Node **vs, int n);
-/* the substitution a split's index unification has made (E28): an outer index variable by the
+/* the substitution a split's index unification has made (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): an outer index variable by the
  * constructor's index expression (the goal rewritten), a field by the value unification found for
  * it; applied to the types and goals built below the split and to the clauses' right sides */
 static const char *SGX[64]; static Node *SGV[64]; static int nsg;
@@ -4231,7 +4231,7 @@ static bool cov_on, cov_armed; static jmp_buf cov_jb;
  * structural is a guarded fixed point: each call is (%gcall the arguments after the clock), made a
  * call of the fixed point's own later self where it stands under ▸ (a later position) */
 
-/* a recursive call on a field recursive under paths, Π codomains and Σ components (18.18): the
+/* a recursive call on a field recursive under paths, Π codomains and Σ components (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”): the
  * argument matched against the field's shape, f (k x) as (rec k) x, f (p @ i) as (rec p) @ i, f (fst
  * p) as (rec p) (or fst (rec p) when both components are recursive); NULL when it is not such a call */
 static const char *shape_end(const char *s) { int depth = 1; while (depth > 0) { char d = *s++; if (d == 'D') depth--; else if (d == 'B') depth++; } return s; }
@@ -4371,7 +4371,7 @@ static Node *rec_call(Node *e, Node **args, int n) {
         if (!ok) continue;
         Node *want = expand(rec_xform(at[p]));
         /* a call on a path-typed field applied to dimensions, f (p @ m ...): the field's hypothesis
-         * is a line, applied to the same dimensions (18.17) */
+         * is a line, applied to the same dimensions (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.17 “E28a — Induction hypotheses for path-typed recursive fields”) */
         Node *dims[16]; int ndm = 0; Node *head = want;
         while (head->list && head->n == 3 && !head->it[0]->list && is(head->it[0], "@") && ndm < 16) { dims[ndm++] = head->it[2]; head = head->it[1]; }
         for (int r = 0; r < f->nrf; r++) {
@@ -4379,7 +4379,7 @@ static Node *rec_call(Node *e, Node **args, int n) {
             bool whole = node_eq(cand, want);
             Node *call = rec_of_field(f->rf[r]);
             if (!whole && !(ndm && node_eq(cand, head))) {
-                /* under Π codomains and Σ components (18.18): by the field's shape */
+                /* under Π codomains and Σ components (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”): by the field's shape */
                 if (!f->rs[r]) continue;
                 Node *byshape = rec_by_shape(f->rs[r], want, cand, call);
                 if (!byshape) continue;
@@ -4431,7 +4431,7 @@ static Node *later_app(int p, Node *f) {
 static bool mentions_any(Node *t, const char *v) { return mentions_name(t, v); }
 /* a rebuilt variable's value, annotated with its type when it is known */
 static Node *typed_def(CVar *c) { return c->ty ? sym3("the", c->ty, c->def) : c->def; }
-/* index unification at a split (E28, as Agda's): the scrutinee's index arguments against a
+/* index unification at a split (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”; as Agda's): the scrutinee's index arguments against a
  * constructor's index expressions over its fields — a clash makes the branch absurd, the same
  * constructor recurses on the arguments, a field met by a term it does not occur in is solved */
 typedef struct { int con, arg; } UStep;   /* con U_PAIR: a pair's component (arg 0 fst, 1 snd) */
@@ -4755,7 +4755,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     }
     /* an indexed type (fording) whose index arguments are variables n…: the motive written as a λ
      * over the indices applied to them, (λ ix… v → body[n := ix]) n…, so the checker types an
-     * induction hypothesis at the field's own index (E28: the index unified at the split) */
+     * induction hypothesis at the field's own index (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”: the index unified at the split) */
     Node *motx = mot, *ixlam = NULL; int ixk = 0; const char *ixv[64];
     if (!cov && !dv && DATA[d].nidx > 0) {
         Node *vt = ty_of(v); int np = DATA[d].nparams, k = DATA[d].nidx;
@@ -5011,7 +5011,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             Node *T = sym4("Sigma", xfresh("_"), subst_sym(dv->M->it[2], vv, cv), subst_sym(dv->Bl->it[2], vv, cv));
             body = lam_t(ihv, T, body);
         }
-        /* the goal rewritten by the index equations (E28, as Agda's unification at the split): when
+        /* the goal rewritten by the index equations (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”; as Agda's unification at the split): when
          * no clause names them and the motive is over the indices, the branch is checked at the
          * constructor's own indices with refl for the equations, and transported along them to
          * the motive at v — the line λ i → P (e (~ i)) … (c fs (λ j → e (~ i ∨ j)) …), at 0 the
@@ -5827,7 +5827,7 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
         die_jb = outer_jb;
         if (getenv("CUBICAL_SHOW_ELAB") && !round) { fprintf(stderr, "[elab] %s : ", name ? name : "(check)"); print_node(stderr, T); fprintf(stderr, "\n  = "); print_node(stderr, t); fprintf(stderr, "\n"); }
         Node *dT = ds(T), *dt = ds(t);
-        /* a definition the store holds as checked (F34): its key found, the checker is not run */
+        /* a definition the store holds as checked (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”): its key found, the checker is not run */
         if (name && expect && !copattern_body(dt) && !has_hole(T) && !has_hole(t)) {
             char key[65]; key_def(ds(strip_marks(T)), ds(strip_marks(t)), key, NULL, NULL);   /* as the definition will be recorded */
             if (store_checked(key)) { forced_result = strdup("ok"); forced_steps = -1; break; }
@@ -5862,7 +5862,7 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
             if (k >= 0 && k < neg && round < 200) { EG[k].kind ^= 1; again = true; }
         }
         if (!again && strcmp(r, "ok") && round < 400) {
-            /* an instance candidate under trial may be the fault: the latest is given up (E28) */
+            /* an instance candidate under trial may be the fault: the latest is given up (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) */
             for (int k = neh - 1; k >= 0; k--) if (EH[k].inst && EH[k].tent && EH[k].sol) { EH[k].tried++; EH[k].sol = NULL; EH[k].tent = false; again = true; break; }
         }
         if (again && round < 400) { free(r); continue; }
@@ -5923,7 +5923,7 @@ static void x_record(const char *R, Node **ps, int np, Node **fn, Node **ft, int
     }
 }
 static void el_once(Node *sig, Node *body, Node **T, Node **t) { neh = neg = 0; nbk = 0; nesc = 0; *T = core(el(sig)); nesc = 0; *t = core(el(body)); }
-/* foreign name "symbol" : T (D27): see p_decl */
+/* foreign name "symbol" : T (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27): see p_decl */
 static void x_foreign(const char *nm, Tok *st, Node *sig, Tok *nt) {
     Node *sg = autobind(resolve_keep(sig)); tele(sg);
     if (tsig.np && tsig.imp[0]) x_sem("a foreign function's type has no implicit arguments:", nt);

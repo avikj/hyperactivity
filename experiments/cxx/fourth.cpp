@@ -1,4 +1,4 @@
-// fourth.cpp — the fourth unit of track C (tracks/C-clang.md, item 4): the constructs the
+// fourth.cpp — the fourth unit of track C (archive/2026-11-11/C-clang.md, sha256 31dca2011367…, “Track C — C++ as data: Clang's AST into the checker (first half of D3)”, “What is built”, item 4 “Every construct the importer stopped on by design, closed”): the constructs the
 // importer used to stop on, one use of each. std::span (and the C++20 rewritten `!=` its
 // iterators bring); enumerations without a fixed underlying type; anonymous struct and union
 // members; an init-capture; alias templates; decltype(expr) and noexcept(expr) in types;

@@ -1,4 +1,4 @@
-/* sha256.c — SHA-256 (FIPS 180-4), for the codebase keys (plan F34). */
+/* sha256.c — SHA-256 (FIPS 180-4), for the codebase keys (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”). */
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>

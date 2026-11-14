@@ -124,14 +124,14 @@ enum {
     V_DATA,     /* a=data type; 1..k=parameters */
     V_CON,      /* a=constructor; 1..f=fields, then the dimensions (interval values) */
     V_HCOMP,    /* formal homogeneous composition in a data type: 1=tube 2=cap */
-    V_TRANSH,   /* a formal transport of a formal composition: a=data type, p=Dnf ψ; 1=tube 2=cap 3..k+2=parameter lines (18.16) */
+    V_TRANSH,   /* a formal transport of a formal composition: a=data type, p=Dnf ψ; 1=tube 2=cap 3..k+2=parameter lines (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”) */
     V_CASEF,    /* p=CaseTab, x=has motive; [1=motive] environment: the elimination as a function */
     V_REF,      /* p=Box: a reference to a value held once; copying it copies the reference, an operation
                  * meeting it copies the value out (as a definition is unfolded) */
     V_WORD,     /* a natural number in one cell: a=it, or p=Big when it does not fit in 64 bits */
     V_WSUSP,    /* 1=z 2=s 3=a word: the elimination of that word, computed when used (a hypothesis) */
     V_WTY,      /* the type of words */
-    V_PTY,      /* a primitive type (B12): a=PT_*; Bytes has 1=its length */
+    V_PTY,      /* a primitive type (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”): a=PT_*; Bytes has 1=its length */
     V_PVAL,     /* a primitive value: x=PT_* (I64, U32, F64, F32), a=the bits */
     V_BYTES,    /* a byte string: p=Bytes (refcounted), x=PT_BYTES */
     V_THUNK,    /* p=Record (no parameter); 1..=environment: a subterm not yet built; an operation meeting
@@ -139,14 +139,14 @@ enum {
     V_WPLUS,    /* a=k ≥ 1 (or p=Big); 1=a neutral word x: k successors of x */
     V_NWOP,     /* x=the operation (O_WEQ..O_WSHR); 1=a 2=b: a word operation stuck on a neutral */
     V_NWELIM,   /* 1=w 2=z 3=s: the elimination of a neutral word */
-    V_NPRIM,    /* x=(class<<8)|sub: a primitive operation (B12) stuck on a neutral: 1..n=its arguments in order.
+    V_NPRIM,    /* x=(class<<8)|sub: a primitive operation (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”) stuck on a neutral: 1..n=its arguments in order.
                  * class 1=%op1 (sub PO_*), 2=%op2 (sub PO_*), 3=load (sub width), 4=store (sub width), 5=blen, 6=bytes */
     V_SUSP,     /* p=CaseTab, x=has motive; 1=field [2=motive] environment: an induction hypothesis, the
                  * elimination of a recursive field, computed when forced */
     V_REC,      /* a=codata type; 1..n=fields (held unbuilt): a copattern definition's body, met only by
                  * the projection that unfolded it (and by the checker, at its own definition) */
     V_DEFER,    /* ty=an operation's kind, x, a, p its own; 1..=its inputs (its ports 0..): an operation not yet
-                 * run, an unbuilt value (A8): a reader runs it (defer_build), a duplicator holds it once, a
+                 * run, an unbuilt value (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): a reader runs it (defer_build), a duplicator holds it once, a
                  * substitution waits on a reference to it. Made where a rule would otherwise build one
                  * operation per branch of a system (distribute, a composition over a system of families) */
     V_END,
@@ -181,7 +181,7 @@ enum {
     O_TPART,    /* a=k; 0=a type 1=out: the type's k-th component */
     O_CONCHK,   /* a=constructor; 0=its boundary's face 1=the boundary 2..=fields, dims; out */
     O_CONW,     /* a=constructor, x=the dimension examined; 0=that dimension's value 1..nf=fields nf+1..=dims; out:
-                 * a path constructor waits for its dimensions (A8): none constant, no face of its boundary holds */
+                 * a path constructor waits for its dimensions (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): none constant, no face of its boundary holds */
     O_HCOMP,    /* 0=tube 1=cap [2=F] out: a formal hcomp unless the tube is total; with F (a data type
                  * without path constructors) the composition goes into the fields, F u a, when the
                  * cap and every side of the tube are one constructor */
@@ -212,7 +212,7 @@ enum {
     O_CALL,     /* 0=a definition 1..n=arguments out: a definition applied to its arguments; with all
                  * its parameters, its body is built in one interaction */
     O_WSUCC,    /* 0=w 1=out: w + 1 */
-    O_PIMULT,   /* 0=T 1=out: the multiplicity (a word 0, 1, 2) of a Π type's binder; 2 for anything else (B11) */
+    O_PIMULT,   /* 0=T 1=out: the multiplicity (a word 0, 1, 2) of a Π type's binder; 2 for anything else (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”) */
     O_PIM,      /* 0=m (word) 1=A 2=B 3=out: a Π type with its binder's multiplicity m */
     O_FMULT, O_FMULT2, O_FMULT3,   /* (%fmult d c k): the multiplicity of field k of constructor c of checked data type d; words in turn */
     O_LINEAR,   /* 0=d (word) 1=out: is the checked data type d linear (a constructor with a field at 1)? a Bool */
@@ -231,12 +231,12 @@ enum {
     O_STORE, O_STOREB, O_STOREC,   /* x=width: (%store b off v): a copy of b with v at off: 0=b 1=off 2=v 3=out */
     O_BLEN,     /* (%blen b): 0=b 1=out, the length */
     O_BEQ, O_BEQB,   /* (%beq a b): 0=a 1=b 2=out, true when both are byte strings of equal contents (the checker's conversion); O_BEQB: p=a's bytes, 0=b 1=out */
-    O_PTROF,    /* (%ptr-of b): 0=b 1=out, the address of its bytes, a word (C20, trusted) */
-    O_REGAT,    /* (%region-at n a): 0=n 1=a 2=out, the n bytes at address a, copied (C20, trusted) */
+    O_PTROF,    /* (%ptr-of b): 0=b 1=out, the address of its bytes, a word (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C20; trusted) */
+    O_REGAT,    /* (%region-at n a): 0=n 1=a 2=out, the n bytes at address a, copied (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C20; trusted) */
     O_REGATA,   /* its second step: 0=a 1=out, a = n */
-    O_FFI,      /* (%ffi k a1 .. an): x=the foreign table entry, 0..n-1=arguments, n=out; a=the arguments read so far, p=them (D27, trusted) */
+    O_FFI,      /* (%ffi k a1 .. an): x=the foreign table entry, 0..n-1=arguments, n=out; a=the arguments read so far, p=them (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27; trusted) */
     O_NATIVE,   /* (%native k g a1 .. an): x=the foreign table entry of a #jit definition, a=the definition g itself; 0..n-1=arguments, n=out;
-                   p=the argument values read so far. Every argument crossing (by the entry's JT): the bytes are called; otherwise g is applied (plan 5.5) */
+                   p=the argument values read so far. Every argument crossing (by the entry's JT): the bytes are called; otherwise g is applied (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.5 “Bytes, the boundary, and what is trusted”) */
     O_WEQ, O_WLT, O_WADD, O_WMAX, O_WSUB, O_WMUL, O_WDIV, O_WMOD, O_WAND, O_WOR, O_WXOR, O_WSHL, O_WSHR,   /* the last eight compute on numerals only (x / 0 = 0, x mod 0 = x) */
      /* 0=a 1=b 2=out: on words; first a, then b. Equality,
                  * order, max and truncated subtraction recurse on both (cancelling successors), addition
@@ -349,19 +349,19 @@ typedef struct { char *name; int data, index, nfields, ndims; long bdy, trans; i
 /* bdy, trans: globals or -1; recmask: the recursive fields (of type the data type itself, or a path line into it,
  * rdim[k] dimensions deep, or under Π codomains and Σ components), nrec of them. rsh[k]: the shape of a
  * recursive field's type as a string, prefix form: D the data type, P<s> a path line into s, F<s> a function
- * into s, 1<s> a pair whose first component is s, 2<s> whose second is, B<s><t> both (18.17, 18.18) */
+ * into s, 1<s> a pair whose first component is s, 2<s> whose second is, B<s><t> both (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.17 “E28a — Induction hypotheses for path-typed recursive fields” and §18.18 “E28b — Strict positivity under Π codomains and Σ components”) */
 typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; void *decl; int co, nflds; int *flds; int nidx; } DataInfo;
-/* nidx: the last nidx parameters are indices (fording, E28): a constructor's recursive field may give them freely */
+/* nidx: the last nidx parameters are indices (fording; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): a constructor's recursive field may give them freely */
 /* decl: the (data ...) form. co: a codata type (no constructors): its fields flds (indices into FLD);
  * comp its composition, a copattern definition */
 typedef struct { char *name; int data, index; long fty; int mult; } FldInfo;
-/* primitive types (B12) */
+/* primitive types (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”) */
 enum { PT_I64, PT_U32, PT_F64, PT_F32, PT_BYTES, PT_U64, PT_N };
 typedef struct { long rc; size_t n; unsigned char b[]; } Bytes;
 /* the primitive operations of O_POP1/O_POP2, by x */
 enum { PO_I64ADD, PO_I64SUB, PO_I64MUL, PO_I64EQ, PO_I64LT, PO_U32ADD, PO_U32SUB, PO_U32MUL, PO_U32EQ, PO_U32LT,
        PO_F64ADD, PO_F64SUB, PO_F64MUL, PO_F64DIV, PO_F64EQ, PO_F64LT,
-       /* the modular 64-bit type UInt64 (plan 5.3), and the operations Int64 lacked; division and
+       /* the modular 64-bit type UInt64 (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.3 “The target is a data type with a meaning”), and the operations Int64 lacked; division and
         * modulus are total (x/0 = 0, x%0 = x), shifts take their count mod 64: no operation has an
         * undefined case, in the machine or in the template that prints it */
        PO_U64ADD, PO_U64SUB, PO_U64MUL, PO_U64EQ, PO_U64LT, PO_U64DIV, PO_U64MOD, PO_U64AND, PO_U64OR, PO_U64XOR, PO_U64SHL, PO_U64SHR,
@@ -392,7 +392,7 @@ Port cofix_head(long g, long tyg);   /* the stuck head of copattern definition g
 /* a definition's body as one record taking all its parameters (NULL when it is not a λ) */
 struct Record *global_nary(long g);
 /* key: the name of what the box holds (a reference's identity). e: the memo entry whose value this is */
-typedef struct FdInfo { uint32_t n; unsigned taint : 1, inexact : 1; Dim d[]; } FdInfo;   /* taint: a record that may make a dimension is reachable; inexact: a bound from pending parts' inputs (A8b) */   /* the free dimensions of a box's value, once known */
+typedef struct FdInfo { uint32_t n; unsigned taint : 1, inexact : 1; Dim d[]; } FdInfo;   /* taint: a record that may make a dimension is reachable; inexact: a bound from pending parts' inputs (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”, its part A8b) */   /* the free dimensions of a box's value, once known */
 typedef struct Box { struct Cell *root; long rc; Key *key; struct Entry *e; Port in; FdInfo *fd; int fdtries; } Box;   /* in: the wire its value is built into (memo); fd, fdtries: box_fd */
 /* motive: the elimination's motive as a record over the same environment, or NULL. It is not a port:
  * only the two rules that read it (a formal hcomp met, and a stuck elimination typing its neutral)
@@ -444,11 +444,11 @@ typedef struct Record {
     int *uses;          /* occurrences of each slot in the body */
     Syn *body;
     int where;          /* the definition it was compiled in (CUBICAL_PROFILE) */
-    int mk;             /* A8: may building it make a dimension (reach %dim)? 0 unknown, 1 no, 2 yes (record_mkdim) */
+    int mk;             /* A8 (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): may building it make a dimension (reach %dim)? 0 unknown, 1 no, 2 yes (record_mkdim) */
     uint64_t h;         /* its interning hash, once computed (kept when the body is dropped) */
     struct RecGone *gone;   /* the body dropped (lang.c's records_sweep): only keys name it; NULL while it has one */
 } Record;
-int record_mkdim(Record *r);        /* A8: 1 when building r (or anything it calls) may make a fresh free dimension */
+int record_mkdim(Record *r);        /* A8 (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): 1 when building r (or anything it calls) may make a fresh free dimension */
 int casetab_mkdim(const struct CaseTab *t);
 int global_mkdim(long g);
 /* profile: applications of λs and forcings of thunks, by the definition they were compiled in */
@@ -465,12 +465,12 @@ Port top_build(Syn *body, int nslots, const int *uses);
 long global_axiom_ty(long g);   /* a constant with no computation: its type's global (or -1); else -2 */
 Port global_copy(long g, Key *as); /* 0 when the global is an unsupplied input; as: the key the copy carries (the name of the cell that referred to it; NULL: the definition's) */
 void global_park(long g, Cell *op, Cell *glob);
-/* foreign functions (D27): a C symbol at a primitive type; the arguments' kinds (PT_*, or 4 a word), its result's.
- * The same table holds the #jit entries (plan 5.5): fn the bytes, jt the parameters' and the result's types
+/* foreign functions (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27): a C symbol at a primitive type; the arguments' kinds (PT_*, or 4 a word), its result's.
+ * The same table holds the #jit entries (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.5 “Bytes, the boundary, and what is trusted”): fn the bytes, jt the parameters' and the result's types
  * (n of them, then the result), each argument's kind 4 a word, 5 a primitive value, 8 converted by its type,
  * 9 not read */
 #define NATIVE_MAXW 32
-/* #jit (plan 5.5): the type of a compiled definition's parameter or result, read off its checked type,
+/* #jit (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.5 “Bytes, the boundary, and what is trusted”): the type of a compiled definition's parameter or result, read off its checked type,
  * which decides how a value crosses (src/net.c jit_in, jit_read). A data type's fields are found by
  * name in its declaration, at its parameters, when first needed (fl: per constructor, per field) */
 typedef struct JT { int k, pt, d, np; struct JT *a, *b; struct JT **ps; struct JT ***fl; } JT;

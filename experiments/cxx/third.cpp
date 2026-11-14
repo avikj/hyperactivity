@@ -1,4 +1,4 @@
-// third.cpp — the third unit of track C (tracks/C-clang.md): what real code reaches at once and
+// third.cpp — the third unit of track C (archive/2026-11-11/C-clang.md): what real code reaches at once and
 // the first two units do not have. A small hierarchy of instruments with virtual destructors,
 // built in an arena by placement new and on the heap; a call that names its base's method
 // with a qualifier (not virtual); array new and delete; an array initializer with a filler;

@@ -1,4 +1,4 @@
-// seventh.cpp — the seventh unit of track C (tracks/C-clang.md, item 5): coroutines, as Clang
+// seventh.cpp — the seventh unit of track C (archive/2026-11-11/C-clang.md, sha256 31dca2011367…, “Track C — C++ as data: Clang's AST into the checker (first half of D3)”, “What is built”, item 5 “What `-fno-exceptions -fno-rtti` and scope kept out”): coroutines, as Clang
 // desugars them. A generator of longs (co_yield, co_return;), a task that awaits an awaiter
 // with a result (co_await, co_return v), and the code that drives both by resume().
 //   clang++ -std=c++20 -O2 -c seventh.cpp

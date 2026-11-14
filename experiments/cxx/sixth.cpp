@@ -1,4 +1,4 @@
-// sixth.cpp — the sixth unit of track C (tracks/C-clang.md, item 5): compiled WITH exceptions
+// sixth.cpp — the sixth unit of track C (archive/2026-11-11/C-clang.md, sha256 31dca2011367…, “Track C — C++ as data: Clang's AST into the checker (first half of D3)”, “What is built”, item 5 “What `-fno-exceptions -fno-rtti` and scope kept out”): compiled WITH exceptions
 // and RTTI (the other units have neither). try/catch/throw with objects that have
 // destructors live across the throw, a function-try-block, noexcept (the specifier and the
 // operator), dynamic_cast and typeid; std::atomic operations and a volatile object; goto and

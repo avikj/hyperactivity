@@ -1,4 +1,4 @@
--- lib/proc.cub — processes over a signature of commands, as terms (plan 7.1, D24–D25; the
+-- lib/proc.cub — processes over a signature of commands, as terms (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.1 “Interfaces, programs, handlers”, and §18.11 “D24–D27 — The world”, its parts D24 and D25; the
 -- inductive part). Loaded after lib/std.cub. A signature is a type of commands with a response
 -- type per command; a process is a tree of commands ending in a result, here in its Church form —
 -- a process is what it does to any interpretation of return and command — which needs no
@@ -44,7 +44,7 @@ runp p w st =
   p (St → Outcome A × St) (λ a s → (done a , s))
     (λ c k s → case w c s of inl r → k (fst r) (snd r); inr s2 → (stopped , s2))
     st
--- ---------------------------------------------------------------- supervision (D25)
+-- ---------------------------------------------------------------- supervision (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D25)
 -- a restart strategy: given the outcome and the number of runs so far, restart or give up
 data Action = restart | give-up
 Strategy : Type → Type
@@ -61,7 +61,7 @@ supervise fuel s p w st =
              restart → rec k (snd r) (suc n)
              give-up → (fst r , (snd r , suc n))))
   st zero
--- ---------------------------------------------------------------- replay (7.3)
+-- ---------------------------------------------------------------- replay (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.3 “Consequences”)
 -- a run is reproduced from the world's responses: a recording world keeps, beside its own state,
 -- the responses given (encoded as words by the signature's encoder), and a replaying world answers
 -- from such a record alone. The run under the replaying world has the same outcome: replay is a
@@ -79,7 +79,7 @@ recording {S} {St} enc w c st =
 -- the replaying world: the next recorded response, else a refusal
 replaying : {S : Sig} → Decoder S → World S (List Word)
 replaying {S} dec c log = case log of nil → inr nil; cons x rest → inl (dec c x , rest)
--- ---------------------------------------------------------------- signature inclusion (7.1)
+-- ---------------------------------------------------------------- signature inclusion (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.1 “Interfaces, programs, handlers”)
 -- an inclusion of S in T: each command of S is a command of T, with T's response read back as
 -- S's. A process of S is lifted to T by transport along it: the handler that issues the included
 -- command and returns the response read back, which is handle at that handler
@@ -89,7 +89,7 @@ incl-handler : {S T : Sig} → Incl S T → Handler S T
 incl-handler {S} {T} i c = bind {lzero} {T} {Resp T (fst i c)} {Resp S c} (cmd {lzero} {T} (fst i c)) (λ r → ret {lzero} {T} {Resp S c} (snd i c r))
 lift-proc : {S T : Sig} {A : Type} → Incl S T → Proc {lsuc lzero} S A → Proc {lzero} T A
 lift-proc {S} {T} {A} i p = handle {S} {T} {A} (incl-handler {S} {T} i) p
--- ---------------------------------------------------------------- session types (7.3)
+-- ---------------------------------------------------------------- session types (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.3 “Consequences”)
 -- a protocol decides which commands are allowed after the responses so far: a predicate on the
 -- trace (the commands issued with their responses, latest first) and the next command. (The
 -- codata form — allowed now, and the protocol after each response — is the same thing unfolded;
@@ -114,7 +114,7 @@ IsDone o = case o of done a → Unit; stopped → Empty; failed r → Empty
 -- given world from the given state (the fact is decided by running it: its proof is unit)
 SProc : {St : Type} (S : Sig) (A : Type) → Session S → World S St → St → Type (lsuc lzero)
 SProc {St} S A ses w st = (p : Proc {lzero} S A) × IsDone {A} (fst (runp {S} {A} {Hist S × St} p (session-guard {S} {St} ses w) (nil , st)))
--- ---------------------------------------------------------------- push events (7.1)
+-- ---------------------------------------------------------------- push events (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.1 “Interfaces, programs, handlers”)
 -- the world pushes: a feed, an interrupt or a signal is a recv whose response is the next event.
 -- A pushing world answers recv from its queue of events and refuses when the queue is empty
 data Push (E : Type) = recv
@@ -124,7 +124,7 @@ PushS : Type → Sig
 PushS E = (Push E , push-resp {E})
 feed-world : {E : Type} → World (PushS E) (List E)
 feed-world {E} c q = case q of nil → inr nil; cons e r → inl (e , r)
--- ---------------------------------------------------------------- choreographies (7.3)
+-- ---------------------------------------------------------------- choreographies (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.3 “Consequences”)
 -- a global protocol once, as first-order data over roles (words): a value sent from one role to
 -- another, a choice made by one role between two continuations, or the end. Each binary is the
 -- endpoint projection to its role: a process over the local signature (send, receive, pick a
@@ -195,7 +195,7 @@ Projectable : Chor → Type
 Projectable g = case projectable g of true → Unit; false → Empty
 project : Word → (g : Chor) → Projectable g → Proc {lzero} LocS Unit
 project me g pf = project-raw me g
--- ---------------------------------------------------------------- supervisors (D25)
+-- ---------------------------------------------------------------- supervisors (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D25)
 -- a supervisor's signature: spawn a process by its key (the response is a handle), await a
 -- handle (the response is the child's outcome). A supervisor world holds the registry of
 -- processes by key, the child world and its state, the outcomes of the handles spawned so far,
@@ -239,7 +239,7 @@ supervise-by {A} fuel s k =
 -- watch: run a child once and report its outcome, with no restart
 watch : {A : Type} → PKey → Proc {lzero} (SupS A) (Outcome A)
 watch {A} k = bind {lzero} {SupS A} {Word} {Outcome A} (cmd {lzero} {SupS A} (spawn k)) (λ h → cmd {lzero} {SupS A} (await h))
--- ---------------------------------------------------------------- named worlds (D27, library half)
+-- ---------------------------------------------------------------- named worlds (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27; library half)
 -- a world a binary links against is named: a handler implementation under a name, with the
 -- model (the in-language world the implementation is specified against) beside it. A registry is
 -- a list of named worlds; a binary picks one by name. `world "name" = handler` (the surface form
@@ -314,7 +314,7 @@ budget {S} {St} w c st =
   case fst st of
     zero → inr st
     suc n → (case w c (snd st) of inl r → inl (fst r , (n , snd r)); inr s2 → inr (fst st , s2))
--- ---------------------------------------------------------------- the memory interface (D26, library half)
+-- ---------------------------------------------------------------- the memory interface (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26; library half)
 -- the drivers' memory signature: load, store, compare-and-swap, fence, on word addresses; the
 -- model is named by the world that answers it. The sequentially consistent model is one memory
 -- answered in program order; release-acquire is a world whose state also holds what each
@@ -377,7 +377,7 @@ tx-commit ws =
     nil → ret {lzero} {MemS} {Unit} unit
     cons e r → bind {lzero} {MemS} {Unit} {Unit} (rec r) (λ u → cmd {lzero} {MemS} (mstore (fst e) (snd e)))
 -- atomically: run, validate, commit; on a failed validation retry, up to the fuel; the outcome
--- carries whether it committed (a library STM over load/store with a log and retry, 18.11 D26)
+-- carries whether it committed (a library STM over load/store with a log and retry; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26)
 atomically : {A : Type} → Nat → Proc {lsuc lzero} TxS A → Proc {lzero} MemS (Outcome A)
 atomically {A} fuel p =
   case fuel return (λ f → Proc {lzero} MemS (Outcome A)) of

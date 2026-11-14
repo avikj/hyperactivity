@@ -596,7 +596,7 @@ static Key *key_of_port(Port p) {
  * pending on its key from its creation. When one fires while another is pending, the value goes
  * into a box and both read it (the second waits on the wire for it, uncounted, as any read of a
  * value not yet there); the entry and its box live exactly while a producer is pending or a reader
- * holds the box (HANDOFF §36: retention is reachability). When the firing producer is the only
+ * holds the box (archive/HANDOFF.md, v13, 16 Oct 2026, sha256 04025bd9f961…, §36 “Ownership, cache retention, and teardown”: retention is reachability). When the firing producer is the only
  * one pending, it builds directly: nothing holds the value. */
 struct Entry { Key *k; Box *box; long pending; bool hold; struct Entry *next; };   /* hold: the entry holds one reference on its box while a producer is pending */
 static Entry *memo_find(Shard *s, Key *k, bool make) {   /* under the shard's lock */
@@ -938,7 +938,7 @@ static bool rr_seen(uint64_t h) {
     while (rr_tab[j]) { if (rr_tab[j] == h) return true; j = (j + 1) & (rr_cap - 1); }
     rr_tab[j] = h; rr_n++; return false;
 }
-/* A8: the free dimensions of a box's value, found once the value is built all through (a walk of
+/* A8 (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): the free dimensions of a box's value, found once the value is built all through (a walk of
  * the value, reading nested boxes' sets), and kept on the box. A substitution of other dimensions
  * does not change the value, so a reference's pending substitution is cut down to the box's
  * dimensions (rule_subst on V_REF, ref_read): reads of one box at the dimensions it does not
@@ -977,7 +977,7 @@ static bool fd_taint_of(const Cell *v) {
     default: return false;
     }
 }
-/* A8b: a pending operation's result mentions only its inputs' dimensions (and those its payload
+/* A8b (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”, its part A8b): a pending operation's result mentions only its inputs' dimensions (and those its payload
  * names), unless something it may run can make one: O_MKDIM itself, the checker's tables, a
  * record, table or global among the inputs that reaches %dim (record_mkdim). Binders (O_MKPLAM,
  * O_FORALL) remove their dimension. A bound, not the set: the value is still being built */
@@ -1006,7 +1006,7 @@ static bool fd_cell(Cell *v, FdSet *x, int depth) {
     if (--fd_budget < 0 || depth > 200 || x->n > 256) { fd_why = 4; return false; }
     if (!is_value(v->kind)) { fd_why = 3; return false; }
     if (unbuilt(v->kind)) {
-        /* an unbuilt subterm: its environment's dimensions bound what building it gives (A8b) */
+        /* an unbuilt subterm: its environment's dimensions bound what building it gives (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”, its part A8b) */
         if (!a8b_on()) { fd_why = 2; return false; }
         if (fd_taint_of(v)) { fd_why = 6; return false; }
         x->inexact = true;
@@ -1122,7 +1122,7 @@ static Port ref_read(Cell *r) {
         else { prof_reads++; if (rr_seen(h)) prof_reads_rep++; }
     }
     if (r->a && !no_memo && !getenv_a8_off()) {
-        /* the substitution cut to the box's dimensions (A8): none left, a read of the box itself */
+        /* the substitution cut to the box's dimensions (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): none left, a read of the box itself */
         fd_why = 0;
         FdInfo *fi = box_fd(b);
         if (!fi && prof_on) prof_fd_why[fd_why < 7 ? fd_why : 0]++;
@@ -1182,7 +1182,7 @@ static void rekey_formula(Cell *v) {
     key_release(v->key);
     v->key = key0(v->kind == V_IV ? K_IV : K_FACE, 0, v->p);
 }
-/* A substitution is pending wherever it meets a value with parts (rule_subst, A8): the value is held
+/* A substitution is pending wherever it meets a value with parts (rule_subst; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): the value is held
  * in a box and a reference carries the substitution, applied one level when the reference is read
  * (ref_read: the copy's top cell substituted by an O_SUBST with x = 1, each part a reference
  * carrying the substitution on). sub: a substitution to apply (pending where it meets parts);
@@ -1245,7 +1245,7 @@ static Port apply_global(const char *name, Port *args, int n) {
     if (g < 0) { fprintf(stderr, "missing library definition %s\n", name); exit(2); }
     return apply_gid(g, args, n);
 }
-/* the induction hypotheses of fields recursive under paths, Π codomains and Σ components (18.18),
+/* the induction hypotheses of fields recursive under paths, Π codomains and Σ components (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”),
  * by the field's shape (ConInfo.rsh): the number of D leaves; whether the shape is a path line only
  * (built directly by the case rule); the maker of the hypothesis from the field, a function value:
  * at a leaf the elimination as a function (V_CASEF) over its own copies of the motive and the
@@ -1278,7 +1278,7 @@ static Port face_cell(Dnf *f) { Cell *c = cell(V_FACE, 1); c->p = f; return P(c,
  * a constructor value. Built again after every substitution. */
 /* O_DEEP's accumulator: a constructor's fields forced in turn (c the constructor, got of nf done) */
 typedef struct { int c, nf, got; Port f[]; } DeepAcc;
-/* ---- #jit (plan 5.5): a compiled definition's bytes, called from the net ----
+/* ---- #jit (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.5 “Bytes, the boundary, and what is trusted”): a compiled definition's bytes, called from the net ----
  * The compiled code's values are 64 bits each (lib/x86.cub): a word or primitive by its bits; a
  * constructor with no fields by its index (below 4096); a constructor with fields, a pair, bytes, by
  * the address of a cell in the call's arena. A value of the net crosses when it is closed data (built
@@ -1427,7 +1427,7 @@ static bool jit_call(const Ffi *e, Port *args, int n, Port *out) {
     *out = jit_read(r, e->jt[n]);
     return true;
 }
-/* a foreign entry called on its arguments' bits (D27): every argument and the result integers
+/* a foreign entry called on its arguments' bits (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §18.11 “D24–D27 — The world”, its part D27): every argument and the result integers
  * (or pointers), or every one a double */
 uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n) {
     uint64_t r = 0;
@@ -1450,7 +1450,7 @@ uint64_t ffi_invoke(const Ffi *e, const uint64_t *a, int n) {
     return r;
 }
 static Port con_build_bdy(int c, const Port *f, const Port *d);
-/* a path constructor (A8): its dimensions waited for in turn (O_CONW); its boundary's faces are
+/* a path constructor (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): its dimensions waited for in turn (O_CONW); its boundary's faces are
  * conjunctions of its dimensions' ends, so while no dimension is 0 or 1 none holds and the
  * constructor stands without its boundary being built; a dimension at an end builds it (as before).
  * The waits are steps whatever the arrival order, so counts do not depend on the schedule */
@@ -1537,7 +1537,7 @@ static void subst_level(Cell *o, Cell *v) {
         Subst *t = v->a ? subst_compose((Subst *)(uintptr_t)v->a, s) : subst_retain(s);
         if (v->a) subst_release((Subst *)(uintptr_t)v->a);
         if (v->kind == V_REF && !no_memo && !getenv_a8_off()) {
-            /* only the box's own dimensions (A8, box_fd): the rest leave its value unchanged */
+            /* only the box's own dimensions (box_fd; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): the rest leave its value unchanged */
             FdInfo *fi = box_fd(v->p);
             if (fi) { Subst *t2 = subst_to_fd(t, fi); subst_release(t); t = t2; }
         }
@@ -1684,7 +1684,7 @@ static void subst_level(Cell *o, Cell *v) {
     }
     cell_free(o); cell_free(v);
 }
-/* A8: does a substitution meeting this value stay pending (a value with parts other than a
+/* A8 (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): does a substitution meeting this value stay pending (a value with parts other than a
  * reference, an unbuilt subterm, a variable or a formula)? */
 static bool subst_defers(const Cell *v) {
     if (v->kind == V_DEFER) return true;
@@ -1754,7 +1754,7 @@ static void rule_mkplam(Cell *o, Cell *v) {
         for (int k = 0; k < nb; k++) if (clause_mentions(cl->c[k], i)) avoid = false;
         if (avoid) {
             Cell *ns = cell(V_SYS, nb + 1); ns->p = dnf_retain(cl);
-            /* each branch put under the binder when it is read (A8) */
+            /* each branch put under the binder when it is read (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”) */
             for (int k = 0; k < nb; k++) { Cell *m = defer_cell(O_MKPLAM, 1); m->a = i; link(v->port[k + 1], P(m, 1)); link(P(m, 0), P(ns, k + 1)); }
             link(P(ns, 0), out);
             cell_free(o); cell_free(v); return;
@@ -1796,7 +1796,7 @@ static void distribute(Cell *o, Cell *v) {
     Port out = out_of(o);
     Port *cp[o->n];
     for (int e = 0; e < ne; e++) { cp[e] = malloc((size_t)(nb + 1) * sizeof(Port)); split_restrict(ex[e], cl, nb, cp[e]); }
-    /* each branch's operation is deferred (V_DEFER): run when that branch is read (A8) */
+    /* each branch's operation is deferred (V_DEFER): run when that branch is read (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”) */
 #define DI(c, k) P(c, (k) + 1)
     for (int b = 0; b < nb; b++) {
         Port val = v->port[b + 1], res = P(ns, b + 1);
@@ -2054,7 +2054,7 @@ static Port wstuck(int op, Port a, Port b) {
     return P(n, 0);
 }
 
-/* a primitive operation on a neutral (B12): a neutral of its own, the arguments kept, which a
+/* a primitive operation on a neutral (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”): a neutral of its own, the arguments kept, which a
  * substitution runs again and the checker views (wprim) and compares */
 static Port nprim(int cls, int sb, Port *args, int n) {
     Cell *c = cell(V_NPRIM, n + 1); c->x = (uint32_t)(cls << 8 | sb);
@@ -2236,8 +2236,8 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     { Local *l = local(); l->steps++; l->kind[o->kind]++;
-      /* CUBICAL_PROGRESS=n: every n steps of a thread, its steps and the cells it holds (A8's
-       * measurements of reads too large to finish) */
+      /* CUBICAL_PROGRESS=n: every n steps of a thread, its steps and the cells it holds (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”:
+       * its measurements of reads too large to finish) */
       static long prog = -1; if (prog < 0) { const char *e = getenv("CUBICAL_PROGRESS"); prog = e ? atol(e) : 0; }
       if (prog > 0 && l->steps % prog == 0) { extern long rb_nodes; fprintf(stderr, "[progress] %ld steps, %ld cells, %ld read back\n", l->steps, (long)l->cells, rb_nodes); } }
     if (prof_on && (o->kind == O_SUBST || o->kind == O_ERA || o->kind == O_DUP || o->kind == O_PAPPP)) ADD(prof_pair[o->kind == O_SUBST ? 0 : o->kind == O_ERA ? 1 : o->kind == O_DUP ? 2 : 3][v->kind & 255], 1);
@@ -2494,7 +2494,7 @@ static void interact(Cell *o, Cell *v) {
             q = 0;
             for (int k = 0; k < nb; k++) {
                 if (clause_mentions(cl->c[k], i)) { era(v->port[k + 1]); continue; }
-                /* the branch's composition, and the line it composes in, deferred until the branch is read (A8) */
+                /* the branch's composition, and the line it composes in, deferred until the branch is read (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”) */
                 Cell *m = defer_cell(O_MKPLAM, 1); m->a = i; link(v->port[k + 1], P(m, 1));
                 Cell *c = defer_cell(O_COMP, 3);
                 link(uc[q], P(c, 1)); link(P(m, 0), P(c, 2)); link(ac[q], P(c, 3)); link(P(c, 0), P(ns, q + 1));
@@ -2644,7 +2644,7 @@ static void interact(Cell *o, Cell *v) {
             split_restrict(o->port[1], f, m, cp);
             for (int q = 0; q < m; q++) {
                 ncl[nb + q] = f->c[q];
-                /* forced when that branch is read (A8) */
+                /* forced when that branch is read (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”) */
                 Cell *fo = defer_cell(O_FORCE, 1); link(cp[q], P(fo, 1)); link(P(fo, 0), P(ns, nb + q + 1));
             }
             ns->p = clause_list(ncl, (uint32_t)(nb + m));
@@ -2833,7 +2833,7 @@ static void interact(Cell *o, Cell *v) {
             cell_free(o); cell_free(v);
         } else if (vk == V_HCOMP && v->n == 3) {
             /* a formal composition in a type with path constructors: the transport stays formal
-             * (18.16): the sides are transported only when a substitution selects one, or when a
+             * (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): the sides are transported only when a substitution selects one, or when a
              * reading demands the structure (transh_expand) */
             Cell *h = cell(V_TRANSH, np + 3); h->a = o->a; h->p = dnf_retain(o->p);
             link(v->port[1], P(h, 1)); link(v->port[2], P(h, 2));
@@ -2874,7 +2874,7 @@ static void interact(Cell *o, Cell *v) {
             bool ih = nr && (tb->mask >> k & 1);
             int np = nf + (ih ? nr : 0) + nd;
             Port prm[np + 1], env[ne + 1];
-            /* the hypotheses' leaves: one elimination per D at the leaf of a field's shape (18.18) */
+            /* the hypotheses' leaves: one elimination per D at the leaf of a field's shape (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”) */
             int nleaf = 0;
             if (ih) for (int j = 0; j < nf; j++) if (ci->recmask >> j & 1) nleaf += ci->rsh[j] ? ih_leaves(ci->rsh[j]) : 1;
             if (!ih) {
@@ -2892,7 +2892,7 @@ static void interact(Cell *o, Cell *v) {
                         prm[j] = fa;
                         if (ci->rsh[j] && !ih_pure_path(ci->rsh[j])) {
                             /* a function- or pair-shaped field: the hypothesis is the field passed through the
-                             * shape's maker, an elimination as a function at each leaf (18.18) */
+                             * shape's maker, an elimination as a function at each leaf (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”) */
                             const char *sp = ci->rsh[j];
                             Port hm = ih_maker(&sp, tb, o->x, mb ? mc : NULL, &ec[0][0], nleaf + 2, ne, &leaf);
                             Cell *ap = cell(O_APP, 3); link(hm, P(ap, 0)); link(fb, P(ap, 1));
@@ -2902,7 +2902,7 @@ static void interact(Cell *o, Cell *v) {
                         }
                         /* 1=field [2=motive] then the environment */
                         /* a path-typed field (rdim dimensions deep): the hypothesis is the line of
-                         * the eliminations of its points, λ m ... → F (p @ m ...) (18.17) */
+                         * the eliminations of its points, λ m ... → F (p @ m ...) (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.17 “E28a — Induction hypotheses for path-typed recursive fields”) */
                         int rd = ci->rdim[j]; Dim ds[16];
                         for (int t = 0; t < rd; t++) { ds[t] = fresh_dim(); fb = papp_at(fb, iv_atom(ds[t])); }
                         Cell *h = cell(V_SUSP, ne + 2 + mb); h->x = o->x; h->p = tb;
@@ -3003,7 +3003,7 @@ static void interact(Cell *o, Cell *v) {
         case PO_F64OFW: d = (double)a; memcpy(&r, &d, 8); k = PT_F64; break;
         case PO_F64OFI64: i = (int64_t)a; d = (double)i; memcpy(&r, &d, 8); k = PT_F64; break;
         case PO_I64OFF64: memcpy(&d, &a, 8); i = (int64_t)d; r = (uint64_t)i; k = PT_I64; break;
-        case PO_F64BITS: r = a; k = PT_I64; break;      /* a Float64's bits as an Int64, and back (item 22: Float64 stored by the byte layer) */
+        case PO_F64BITS: r = a; k = PT_I64; break;      /* a Float64's bits as an Int64, and back (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C22, and §12 “The build list”, “C. Memory and state”, item 22: Float64 stored by the byte layer) */
         case PO_F64OFBITS: r = a; k = PT_F64; break;
         case PO_F32BITS: r = (uint32_t)a; k = PT_U32; break;      /* a Float32's bits as a UInt32, and back (Float32 stored by the 4-byte layer) */
         case PO_F32OFBITS: r = (uint32_t)a; k = PT_F32; break;
@@ -3169,7 +3169,7 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     case O_FFI: {
-        /* a foreign call (D27): the arguments read in turn, each a primitive value, a word or a byte
+        /* a foreign call (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27): the arguments read in turn, each a primitive value, a word or a byte
          * string (its address passed, the string kept until the call returns); then the call, by
          * the entry's kinds: every argument and the result integers (or pointers), or every one a
          * double */
@@ -3232,7 +3232,7 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     case O_NATIVE: {
-        /* a #jit definition called from the net (plan 5.5): the arguments read in turn and kept as
+        /* a #jit definition called from the net (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.5 “Bytes, the boundary, and what is trusted”): the arguments read in turn and kept as
          * values. Each crosses by its type (jit_in): a word, a primitive value, a value converted by
          * its type (kind 8, read whole first: O_DEEP), or not read (9). When every argument crosses,
          * the bytes compute the result; otherwise, and on the overflow exit, the definition itself is
@@ -3277,7 +3277,7 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     case O_PTROF: {
-        /* the address of the bytes (C20): memory the program does not own is reached by it. The bytes
+        /* the address of the bytes (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C20): memory the program does not own is reached by it. The bytes
          * whose address is taken are pinned (never freed), so the address stays valid; trusted: a
          * store makes a copy, which the address does not see */
         if (vk != V_BYTES) { stuck(o, v); return; }
@@ -3287,7 +3287,7 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     case O_REGATA: {
-        /* the n bytes at an address, copied into a byte string (C20, trusted: the program vouches
+        /* the n bytes at an address, copied into a byte string (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C20; trusted: the program vouches
          * for the address) */
         if (vk != V_WORD || v->p) { stuck(o, v); return; }
         size_t n = (size_t)o->a;
@@ -4088,7 +4088,7 @@ static Key *synkey(Syn *t, Frame *f) {
     if (z) key_release(z);
     return r;
 }
-/* Call by need (A8, CBN). Every operand is compiled unbuilt: an operation in an operand position is
+/* Call by need (CBN; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”). Every operand is compiled unbuilt: an operation in an operand position is
  * built as a V_DEFER cell (its kind, payload and inputs, the operation not yet run), run by its
  * reader (an operation meeting it), held once by a duplicator, erased unrun if nobody reads it. Its
  * own operands are deferred the same way, so nothing below an unread operand runs. Built strict

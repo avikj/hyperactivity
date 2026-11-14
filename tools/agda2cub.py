@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""agda2cub — a translator from Cubical Agda source to this language (plan 12 item 29, E29).
+r"""agda2cub — a translator from Cubical Agda source to this language (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “E. The language people and models write in”, item 29, E29: the translator from agda/cubical).
 
 Usage: tools/agda2cub.py FILE.agda [-o FILE.cub]
 

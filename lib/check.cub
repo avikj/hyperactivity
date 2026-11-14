@@ -1,10 +1,11 @@
--- check.cub — the type checker as a term: §5.26, "no outer layer" (evaluator, type checker and
--- optimizer are terms of the same language), of
--- the earlier paper "Respecting Equality", cited in this repository before 2026-11-11 (docs/index.html of the
--- earlier repository avikj/math; no copy or hash is in this repository; its §5 is restated by number
--- in EXPOSITION.md, removed at f00bd0f, readable as git show adaebcd:EXPOSITION.md).
+-- check.cub — the type checker as a term: Remark 5.26 “no outer layer” (evaluator, type checker and
+-- optimizer are terms of the same language),
+-- in §5.5 “What the length counts” of the earlier paper "Respecting Equality", cited in this repository before 2026-11-11 (docs/index.html of the
+-- earlier repository avikj/math, last changed 8 Oct 2026, sha256 984fafe88eb6…; no copy is in this repository;
+-- its §5 “Complete inference is deterministic and step-optimal” is restated by number in EXPOSITION.md, removed at f00bd0f, readable as git show adaebcd:EXPOSITION.md).
 -- The counterpart in the repository's copy of the paper (docs/Hyperactive_Final_Paper.pdf,
--- 11 Nov 2026, sha256 e8f358b4cd2c…, §1.2 and §6.2):
+-- 11 Nov 2026, sha256 e8f358b4cd2c…, §1.2 “Programs about programs” and
+-- §6.2 “Specialization as a program over the language’s own definitions”):
 -- "The checker is itself a term: it analyzes the evaluator's values through a structured observation
 -- %view". Its input is the code of a term in which
 -- every node carries the term's value: the machine computed it from the compiled subterm, once,
@@ -233,7 +234,7 @@ params-fresh tel pvs =
     _ → (pvs , lnil)
 is-data-d d c = case c of tdata d2 ps V → %weq d d2; _ → false
 -- a directly recursive field: of the data type itself, or of a path line into it, at any dimension
--- (18.17): laid out and compiled as a reference to the type
+-- (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.17 “E28a — Induction hypotheses for path-typed recursive fields”): laid out and compiled as a reference to the type
 is-rec-ty d c =
   case c of
     tdata d2 ps V → %weq d d2
@@ -248,7 +249,7 @@ tel-nfields tel = case tel of tx A nm r → %wsucc (tel-nfields (r (%var Uw) Uw)
 tel-recs d tel = case tel of tx A nm r → lcons (is-rec-ty d A) (tel-recs d (r (%var Uw) Uw)); _ → lnil
 con-tel d k = centry d k (fst (params-fresh (dtel (%dent d)) lnil))
 co-tel-recs d tel = case tel of tx A nm r → lcons (is-rec-ty d A) (co-tel-recs d (r (%var Uw) Uw)); _ → lnil
--- the shape of a recursive field's type (18.18), the machine's ConInfo.rsh: D itself, a path line
+-- the shape of a recursive field's type (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”), the machine's ConInfo.rsh: D itself, a path line
 -- into one, a function (its domain not mentioning D and not a tick: a later D takes no hypothesis)
 -- into one, a pair with recursive components; sh-none when the field is not recursive
 data Shape = sh-rec | sh-path s | sh-pi s | sh-fst s | sh-snd s | sh-pair s t | sh-none
@@ -785,7 +786,7 @@ E-tick = #33
 E-tickarg = #34
 E-clocktype = #35
 E-hcompset = #36
--- multiplicities (B11)
+-- multiplicities (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”)
 E-erased-used = #37
 E-linear-dropped = #38
 E-linear-dup = #39
@@ -1347,7 +1348,7 @@ check c T =
     -- a delayed term checks as the term (delay (λ x → b) against A → B)
     tthunk t V → check t T
     tforce t V → check t T
-    -- comp _ u a against T: the line is the constant one at T (E28, holes in composition lines)
+    -- comp _ u a against T: the line is the constant one at T (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”; holes in composition lines)
     tcomp A u a V →
       (case line-hole A of
          some k → (case const-line T of some cl → elab (lcons (k , some cl) lnil); none → err c E-implicit opq opq)
@@ -1443,12 +1444,12 @@ check-recfields c tel fs =
           let Av = tval A in and-then (check f Av) (check-recfields c (r (tval f) Av) fr)
     _ → chk (isnil fs) (err c E-ctor opq opq)
 -- a definition: its type is a type, its term has that type
--- ---------------------------------------------------------------- multiplicities (B11)
+-- ---------------------------------------------------------------- multiplicities (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”)
 -- The usages of variables xs in a term, a list of words 0, 1, 2 (ω) along xs: 1 + 1 = ω, ω + _ = ω;
 -- a join for alternatives; an argument counts as many times as the function's binder says. Types
 -- (the A of a binder, a universe, a path type, an annotation) count nothing; a Glue system counts
 -- ω. One walk gives every binder's usage.
--- Through the composition clauses (§15, 2026-11-06): the line a comp runs along is read for what
+-- Through the composition clauses (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §15 “Open threads”, the thread “Multiplicities over cubical paths”): the line a comp runs along is read for what
 -- its computation reads (lusage): a path type's endpoints become the sides of the composition in
 -- it and count ω, a Glue's or a universe composition's system counts ω (its equivalences run), a
 -- data type's parameter that is a type is read as a line again and any other parameter counts ω
@@ -1649,7 +1650,7 @@ same-var a b =
   case var-name a of some l → (case var-name b of some m → %weq l m; none → false); none → false
 uniform-at ps pvs = lall2 (λ p x → case p of tv y T → same-var y x; _ → false) ps pvs
 -- the parameters that must be uniform in a recursive occurrence: all but the last %dnidx d, the
--- indices of a family by fording (E28), which a recursive field gives freely
+-- indices of a family by fording (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”), which a recursive field gives freely
 uniform-params d ps = ltake-n (%wsub (llen-w ps) (%dnidx d)) ps
 llen-w l = case l of lnil → #0; lcons x xs → %wsucc (llen-w xs)
 ltake-n n l = if %weq n #0 then lnil else (case l of lnil → lnil; lcons x xs → lcons x (ltake-n (%wsub n #1) xs))
@@ -1661,12 +1662,12 @@ positive d pvs A =
            then andb (lall (λ q → notb (cany (is-data-d d) q)) ps) (uniform-at (uniform-params d ps) (uniform-params d pvs))
            else nested-pos d pvs d2 ps
        -- a later D (guarded recursion): a field, not a recursive one (no hypothesis is taken); a
-       -- function whose domain does not mention D: positive iff its codomain is (18.18)
+       -- function whose domain does not mention D: positive iff its codomain is (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”)
        tpi B nm b V →
          (case B of
             ttick k V2 → positive d pvs (b (%var Uw) Uw)
             _ → andb (notb (cany (is-data-d d) B)) (positive d pvs (b (%var nm Uw) Uw)))
-       -- a pair: positive iff both components are (18.18)
+       -- a pair: positive iff both components are (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”)
        tsigma B nm b V → andb (positive d pvs B) (positive d pvs (b (%var nm Uw) Uw))
        -- a path in D (a truncation's argument): a map from the interval into D, its line positive
        -- and its endpoints elements, D not among their types
@@ -1743,7 +1744,7 @@ field-levels d tel =
       in lcons (field-level d A) (field-levels d (r (%var nm Av) Av))
     _ → lnil
 -- the level of a field: D itself (or later, or a path in it) at lzero; under Π codomains and Σ
--- components (18.18) the largest of the parts' (the entry's own level is being computed, so
+-- components (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”) the largest of the parts' (the entry's own level is being computed, so
 -- a field mentioning D is not inferred whole); otherwise inferred
 field-level d A =
   if later-rec d A then lzero

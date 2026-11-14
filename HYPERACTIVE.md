@@ -14,7 +14,17 @@ its SHA-256, with the section, equation or heading cited: (docs/Hyperactive_Fina
 its digits when the paper changes. The task graph's check fails if the file's content changes
 (`hyperactive-paper` in `task-graph/hyperactivity.cub`). A citation made before 2026-11-11 may
 instead mean an earlier paper, "Respecting Equality" (`docs/index.html` of the earlier repository
-avikj/math), of which no copy or hash is in this repository; a citation of it says so. Nothing is cited by position
+avikj/math, last changed 8 October 2026, SHA-256
+`984fafe88eb6e2ae4b24092607af5dce2ab85ea8568e4cd493d1e4c8d9380f9d`), of which no copy is in this
+repository; a citation of it names it by that path, date and the first twelve hex digits of its
+SHA-256. Its numbers are of remarks, definitions and theorems, not of sections, so a citation gives
+the statement's kind, number and name with the section it stands in: (Remark 5.26 “no outer layer”,
+in §5.5 “What the length counts”). An earlier plan, handoff or track document is cited the same way:
+by its path in `archive/` with the first twelve hex digits of its SHA-256, or, where the revision
+cited is only in git history, by `git <commit>:<path>` (read with `git show`), then each section's
+number with its title: (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 —
+Representations as a construct”). The archived documents cited by digest are pinned in the task
+graph like the paper. Nothing is cited by position
 or number alone (Avik, 2026-11-14): a citation of the paper gives each section's number with its
 title, the subsection heading where there is one, and what a cited equation states; a § in this
 document followed by a heading in quotation marks is this document's own section.
@@ -80,7 +90,7 @@ The code (`src/`, C):
 
 The language's own files are `lib/`. Earlier plans, specifications and contracts are in `archive/`.
 There, "the paper" is "Respecting Equality" (`docs/index.html` of the earlier repository
-avikj/math; no copy or hash is in this repository) in `archive/PLAN.md` and `archive/README.md`, and `docs/Hyperactive_Final_Paper.pdf` (the copy described at the top of this
+avikj/math, last changed 8 October 2026, sha256 984fafe88eb6…; no copy is in this repository) in `archive/PLAN.md` and `archive/README.md`, and `docs/Hyperactive_Final_Paper.pdf` (the copy described at the top of this
 document) in `archive/2026-11-11/`.
 
 ### 1.2 The language
@@ -186,7 +196,7 @@ as leading implicit parameters, in declaration order.
 **Multiplicities.** A Π binder or a constructor field may carry a multiplicity: `(x :0 A) → B`
 (erased: `x` is used only in positions the back end erases, which is every type), `(x :1 A) → B`
 (linear: consumed exactly once), and `(x : A) → B` (no constraint). The checker computes every
-binder's usage (0, 1 or ω) after a definition checks, with the rules of plan §18.1 — an argument
+binder's usage (0, 1 or ω) after a definition checks, with the rules of the earlier plan (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”) — an argument
 counts as many times as the function's binder says, a type counts nothing, a line of types a
 transport runs along and a Glue system count ω — and reports a binder annotated `:0` that is used
 or `:1` that is dropped or duplicated. A data type with a field at `:1` is linear: its values are
@@ -201,7 +211,7 @@ primitives (`Int64`, `UInt32`, `UInt64`, `Float64`, `Float32`, `Bytes n`, their 
 primitive in scope.
 
 **Instance arguments.** A binder `{{e : C A}}` is an implicit argument found by instance search
-(plan E28): among the `instance` declarations in scope (`instance eqNat : Eq Nat` before a
+(PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): among the `instance` declarations in scope (`instance eqNat : Eq Nat` before a
 definition), the latest whose result type matches the argument's type, as far as the signature
 and the solutions so far tell it, is tried; the match binds the candidate's own implicit
 arguments and its instance arguments are searched in turn; a candidate the checker rejects
@@ -215,23 +225,22 @@ definitions applied to them; `open M Nat eqNat` defines each `f` as `M·f Nat eq
 instantiated signature (an implicit parameter not given is inferred from an explicit
 argument's type, or given as `{Nat}`).
 
-**Deriving.** `deriving eq D [as name]` defines a decidable equality on the data type `D` (plan
-F31): its code is computed by `lib/derive.cub` (`derive-eq`, a term over the data table), read
+**Deriving.** `deriving eq D [as name]` defines a decidable equality on the data type `D` (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F31): its code is computed by `lib/derive.cub` (`derive-eq`, a term over the data table), read
 back and checked at `D → D → Bool` as `D·eq` (or the name given).
 
-**Named worlds.** `world "kv" = kv-world` (plan D27) checks `world-kv : Named S St` (lib/proc.cub:
+**Named worlds.** `world "kv" = kv-world` (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27) checks `world-kv : Named S St` (lib/proc.cub:
 the handler under an id, the name's hash, also `world-kv-id : Word`), its type read from the
 handler's signature or given (`world "n" : World S St = term`); a registry is a list of them and
 `find-world` picks one by id.
 
-**Foreign functions.** `foreign name "symbol" : T` (plan D27) makes a C function of the running
+**Foreign functions.** `foreign name "symbol" : T` (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27) makes a C function of the running
 program (or of a shared library, `"lib.so:symbol"`) a primitive at `T`, a Π over arguments of
 primitive types (`Int64`, `UInt32`, `Float64`, `Word`, `Bytes n`, passed as an address; an
 argument at multiplicity 0 is not passed) to a primitive type or `Word`; the arguments are read
 in turn and the call made when the last is (`%ffi`). Trusted: `#trusted` and `#safe` list it as
 `foreign`.
 
-**Arrays, and stuck primitive operations.** `Array n` is `Bytes (times n 8)` (plan C22,
+**Arrays, and stuck primitive operations.** `Array n` is `Bytes (times n 8)` (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C22;
 `lib/prim.cub`): `index n a i h` and `update n a i h v` with `h : le (suc i) n` are a load and a
 store at offset `times i 8` with the proof that the access fits, `tabulate n f` writes `f` at
 every index, and `index-update` (a read after a write at the same index is the value written)
@@ -240,7 +249,7 @@ variable is a neutral the checker views (`wprim k args`) and compares argument b
 such laws follow by unfolding (an operation stuck on a variable used to be an unknown value). A law
 stated as a primitive has no computation (`primitive name : T`): it is a constant of its type, and
 a path among such constants reads its endpoints from that type, as any neutral path does.
-`Fin→Array n : Equiv (Fin n → Int64) (Array n)` is the interface (item 22): a program written
+`Fin→Array n : Equiv (Fin n → Int64) (Array n)` is the interface (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C22, and §12 “The build list”, “C. Memory and state”, item 22): a program written
 against functions uses application and `fin-set n f p v`, and under `atab` they are `index` and
 `update` (`apply-by`, `fin-set-by`). Byte strings convert by their contents (`%beq`).
 Other element types: `UInt32` on the 4-byte layer (`Array32`, `index32`/`update32`, `Fin→Array32`,
@@ -257,11 +266,11 @@ thread. A byte string quotes as a code (the
 fresh string, then a store per nonzero word).
 
 **Memory the program does not own.** `ptr-of n b` is the address of a byte string and
-`region-at a n` the `n` bytes at an address, copied in (plan C20; `%ptr-of`, `%region-at`,
+`region-at a n` the `n` bytes at an address, copied in (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C20; `%ptr-of`, `%region-at`,
 trusted). `#safe f` lists every trusted definition (postulate, primitive) that `f` reaches
 through what its type and term mention, or `nothing assumed`.
 
-**Codebase keys and the store.** A checked definition is named by its content (plan F34): its
+**Codebase keys and the store.** A checked definition is named by its content (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”): its
 key is the SHA-256 of its elaborated type and term with binders nameless, holes solved, every
 checked definition it mentions replaced by that definition's key and every data type by its
 declaration's key, multiplicities kept — not its name, file, position or the machine's build.
@@ -276,7 +285,7 @@ per checker that accepted it (the checker named by the hash of the library texts
 keys their code mentions, are removed).
 
 **Indexed families.** `data Vec (A : Type) : (n : Nat) → Type where vnil : Vec A zero; vcons :
-(n : Nat) → A → Vec A n → Vec A (suc n)` declares the family by fording (plan E28): the indices
+(n : Nat) → A → Vec A n → Vec A (suc n)` declares the family by fording (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): the indices
 are the type's last parameters, each constructor carries an equality field per index at
 multiplicity 0 (`PathP (λ m → Nat) %ix0 (suc n)`, erased), an application without the equality
 fields gets `refl`, a pattern without them is padded, and a branch that writes them (`vcons n x
@@ -685,8 +694,8 @@ concerns (`task-graph/hyperactivity.cub`, shown when a goal is clicked in the gr
   24 failures, and they are also why the Rust readers fail.
 
 **Typed codes and normalization by evaluation** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”). The working file
-`experiments/nbe/p26-wip.cub` (7,477 lines, 1,034 checks passing) has F2a–F2c done and continues at
-F2d. Its encoding is the cubical-set model built inside the host, and it stands (§2.2 “The language”).
+`experiments/nbe/p26-wip.cub` (7,477 lines, 1,034 checks passing) has F2a–F2c (the interval's De Morgan laws as paths) done and continues at
+F2d (the interval normalizer's soundness). Its encoding is the cubical-set model built inside the host, and it stands (§2.2 “The language”).
 
 **Native code** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9 “Native execution as a mathematical program transformation”).
 - `#jit` checks only the specialized code against the definition. The translation to bytes is
@@ -725,7 +734,9 @@ proved are trusted assumptions.
 **Documents are values.** `document "path"` reads the file when the declaration is read and fails if
 it is missing, so referring to a document that does not exist fails the check. Its value carries the
 file's SHA-256. `#same d = document-at "path" "digest"` pins a document: the check fails when the
-file's content changes. The paper is pinned so (`hyperactive-paper`).
+file's content changes. The paper is pinned so (`hyperactive-paper`), and so are the archived
+plan, handoff and track documents that citations name by digest (`archive-plan-revision-9`,
+`archive-handoff`, `archive-track-b` and the other tracks).
 
 **The tool enforces the rules.** `tools/task-graph.py check` requires:
 - every node's name to be an English sentence;
@@ -832,7 +843,7 @@ The paper is the specification. What remains between the implementation (§1 “
   - F2e is naturality in substitutions.
 - Holding an object dimension as a host interval variable is not available, because the host's
   interval is not a type (`I × Nat` is refused), and it would only move these obligations anyway.
-- So the file is kept and continues at F2d.
+- So the file is kept and continues at F2d, the normalizer's soundness.
 
 
 ### 2.3 State, change and collaboration
@@ -1099,7 +1110,7 @@ None are open.
 - Dimensions were answered by the cubical-set model (§2.2 “The language”).
 - Native code was decided by Avik on 2026-11-14: through C (§2.2 “The language”). The record that preceded the
   decision:
-  - plan revision 9 (2026-11-09) had chosen x86 ("Not LLVM IR, not C");
+  - plan revision 9 (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §5 “The distinctions everything above x86 rests on”, item 5 “The target is x86-64”) had chosen x86 ("Not LLVM IR, not C");
   - a session on 2026-11-12 planned C to break a cycle in its goal graph;
   - neither was Avik's;
   - the 2026-11-13 "settled for x86" was unfounded.

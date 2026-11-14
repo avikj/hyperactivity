@@ -1,4 +1,4 @@
--- prim.cub — primitive types and operations (plan B12): the machine's fixed-width numbers and byte
+-- prim.cub — primitive types and operations (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”): the machine's fixed-width numbers and byte
 -- strings, as constants of the type theory. Each is a `primitive`: its type is checked, its
 -- computation is the machine's (trusted), and `#trusted` lists it. Loaded after lib/std.cub.
 --
@@ -10,7 +10,7 @@ primitive UInt32 : Type = %pty #1
 primitive Float64 : Type = %pty #2
 primitive Float32 : Type = %pty #3
 primitive Bytes : Nat → Type = λ n → %bytesty n
--- the modular 64-bit unsigned type (plan 5.3): U64 arithmetic is what the hardware's 64-bit registers
+-- the modular 64-bit unsigned type (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.3 “The target is a data type with a meaning”): U64 arithmetic is what the hardware's 64-bit registers
 -- compute; Word is the unbounded natural, and nothing prints one as the other
 -- Word arithmetic beyond the eliminator's: on numerals of any size (stuck on a neutral);
 -- x / 0 = 0 and x mod 0 = x, a shift right by any count, a shift left by at most 2^32
@@ -80,7 +80,7 @@ primitive f64mul : Float64 → Float64 → Float64 = λ a b → %f64mul a b
 primitive f64div : Float64 → Float64 → Float64 = λ a b → %f64div a b
 primitive f64eq : Float64 → Float64 → Bool = λ a b → %f64eq a b
 primitive f64lt : Float64 → Float64 → Bool = λ a b → %f64lt a b
--- a Float64's bits as an Int64 and back (item 22: how a Float64 is stored by the byte layer)
+-- a Float64's bits as an Int64 and back (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C22, and §12 “The build list”, “C. Memory and state”, item 22: how a Float64 is stored by the byte layer)
 primitive f64bits : Float64 → Int64 = λ a → %f64bits a
 primitive f64ofbits : Int64 → Float64 = λ a → %f64ofbits a
 primitive f32bits : Float32 → UInt32 = λ a → %f32bits a
@@ -101,7 +101,7 @@ primitive blen : (n : Nat) → Bytes n → Nat = λ n b → n
 primitive cstr-put : (n : Nat) → Bytes n → Word → Word → Bytes n = λ n b off v → %store8 b off (%u32ofw v)
 primitive cstr-get : (n : Nat) → Bytes n → Word → Word = λ n b off → %wofu32 (%load8 b off)
 
--- ---------------------------------------------------------------- memory the program does not own (plan C20):
+-- ---------------------------------------------------------------- memory the program does not own (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C20):
 -- the address of a byte string (the string is then pinned, so the address stays valid), and the
 -- bytes at an address (copied in). Trusted: the program vouches for the address; #safe f lists
 -- them when f reaches them
@@ -158,7 +158,7 @@ primitive f64bits-ofbits : (y : Int64) → PathP (λ (i : I) → Int64) (f64bits
 primitive f32ofbits-bits : (x : Float32) → PathP (λ (i : I) → Float32) (f32ofbits (f32bits x)) x
 primitive f32bits-ofbits : (y : UInt32) → PathP (λ (i : I) → UInt32) (f32bits (f32ofbits y)) y
 
--- ---------------------------------------------------------------- arrays of Int64 over the byte layer (plan C22):
+-- ---------------------------------------------------------------- arrays of Int64 over the byte layer (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C22):
 -- Array n is Bytes (times n 8); an index with its proof of fitting (le (suc i) n) is a load or
 -- store at offset times i 8 with the proof that the access fits, by arithmetic; tabulate n f
 -- writes f at every index; index-update, the law of arrays, is the byte layer's law unfolded
@@ -191,7 +191,7 @@ tabulate n f = tab-go n f n (le-refl n) (anew n)
 index-update : (n : Nat) → (a : Array n) → (i : Nat) → (h : le (suc i) n) → (v : Int64) → index n (update n a i h v) i h ≡ v
 index-update n a i h v = load64-store64 (times n 8) a (times i 8) (index-fits n i h) v
 
--- ---------------------------------------------------------------- the laws of arrays (plan C22): two more
+-- ---------------------------------------------------------------- the laws of arrays (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C22): two more
 -- trusted laws of the byte layer (a load elsewhere than a store is the old value, when the two
 -- 8-byte spans are disjoint; two arrays equal at every index are equal), then the arithmetic
 -- (le is a proposition; below suc m is below m or equal; trichotomy), then Fin n, tabulate over
@@ -283,7 +283,7 @@ index-update-if n a i j hi hj v =
 -- arrays as functions out of Fin n
 Fin→Array : (n : Nat) → Equiv (Fin n → Int64) (Array n)
 Fin→Array n = isoToEquiv {lzero} {Fin n → Int64} {Array n} (atab n) (aindex n) (tabulate-index n) (λ f → funExt {lzero} {lzero} {Fin n} {Int64} {aindex n (atab n f)} {f} (index-tabulate n f))
--- the interface carried across the equivalence (item 22): a program written against Fin n → Int64
+-- the interface carried across the equivalence (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C22, and §12 “The build list”, “C. Memory and state”, item 22): a program written against Fin n → Int64
 -- uses application and the functional update fin-set; under atab they are index and update, so a
 -- program on functions is the program on arrays along the paths below
 fin-set : (n : Nat) → (Fin n → Int64) → Fin n → Int64 → Fin n → Int64
@@ -330,7 +330,7 @@ update2 n m a i j hi hj v = update (times n m) a (plus (times i m) j) (idx2-fits
 index2-update2 : (n m : Nat) → (a : Array2 n m) → (i j : Nat) → (hi : le (suc i) n) → (hj : le (suc j) m) → (v : Int64) → index2 n m (update2 n m a i j hi hj v) i j hi hj ≡ v
 index2-update2 n m a i j hi hj v = index-update (times n m) a (plus (times i m) j) (idx2-fits n m i j hi hj) v
 
--- ---------------------------------------------------------------- Fin n → A beyond Int64 (item 22)
+-- ---------------------------------------------------------------- Fin n → A beyond Int64 (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C22, and §12 “The build list”, “C. Memory and state”, item 22)
 -- UInt32 elements: the 4-byte layer, the Int64 development at width 4 (two more trusted laws of
 -- the byte layer: a 32-bit load disjoint from a store, and 32-bit arrays determined by their
 -- elements); UInt32 is not equivalent to Int64, so it has its own layer
