@@ -84,10 +84,11 @@
 -- (2026-11-14, F2d begun, after the F2c laws) bool-elim2, bool-case2, ft-fam, false-true, ft-fam2,
 -- false-true2, andB-l, andB-r, bool-eq-sound, lit-of, ieq-lit (with lib/linproof.cub's weq-sound,
 -- imported below), conj-ix-cons, dnf-ix-cons, meet-rot, join-rot, absorb-lit, conj-ins-sound,
--- conj-meet-sound, conj-has-sound, conj-sub-sound.
--- What is next: the rest of (F2d) as lib/nbe.cub's head plans it (dnf-insert, dnf-drop-sup,
--- dnf-any-sub, dnf-add, dnf-join, dnf-meet-c, dnf-meet, neg-conj, dnf-neg), then (F2d'), (F2e) and
--- the rest of that head's list, then the swap of this file into lib/nbe.cub.
+-- conj-meet-sound, conj-has-sound, conj-sub-sound, dnf-insert-sound, dnf-drop-sup-sound,
+-- dnf-any-sub-sound, dnf-add-sound, dnf-join-sound, dnf-meet-c-sound, dnf-meet-sound, neg-lit,
+-- neg-conj-sound, dnf-neg-sound: (F2d) entire.
+-- What is next: (F2d'), (F2e) and the rest of lib/nbe.cub's head's list, then the swap of this file
+-- into lib/nbe.cub.
 import "../../lib/linproof.cub"
 
 -- lib/nbe.cub — typed codes Code(Γ, A) = Σ c. Der(Γ, c, A) over the one representation of terms
@@ -7301,6 +7302,137 @@ conj-sub-sound sk (lcons l ls) d e =
     (ieq-trans sk (ixmeet (lit-ix l) (ixmeet (conj-ix ls) (conj-ix d))) (ixmeet (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix d)) (ixmeet (conj-ix (lcons l ls)) (conj-ix d))
     (ieq-sym sk (ixmeet (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix d)) (ixmeet (lit-ix l) (ixmeet (conj-ix ls) (conj-ix d))) (law-assoc-m sk (lit-ix l) (conj-ix ls) (conj-ix d)))
     (ieq-meet sk (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix (lcons l ls)) (conj-ix d) (conj-ix d) (ieq-sym sk (conj-ix (lcons l ls)) (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix-cons sk l ls)) (ieq-refl sk (conj-ix d))))))
+-- inserting a conjunction into a form is joining it
+dnf-insert-sound : (sk : Lst Entry) (c : Conj) (f : DNF) → IEq sk (dnf-ix (dnf-insert c f)) (ixjoin (conj-ix c) (dnf-ix f))
+dnf-insert-sound sk c lnil = ieq-sym sk (ixjoin (conj-ix c) ix0) (conj-ix c) (law-unit-j-r sk (conj-ix c))
+dnf-insert-sound sk c (lcons d ds) =
+  bool-case2 (λ b → IEq sk (dnf-ix (if b then lcons c (lcons d ds) else lcons d (dnf-insert c ds))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))) (conj-lt c d)
+    (λ e → ieq-refl sk (ixjoin (conj-ix c) (dnf-ix (lcons d ds))))
+    (λ e → (ieq-trans sk (dnf-ix (lcons d (dnf-insert c ds))) (ixjoin (conj-ix d) (dnf-ix (dnf-insert c ds))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (dnf-ix-cons sk d (dnf-insert c ds))
+    (ieq-trans sk (ixjoin (conj-ix d) (dnf-ix (dnf-insert c ds))) (ixjoin (conj-ix d) (ixjoin (conj-ix c) (dnf-ix ds))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (ieq-join sk (conj-ix d) (conj-ix d) (dnf-ix (dnf-insert c ds)) (ixjoin (conj-ix c) (dnf-ix ds)) (ieq-refl sk (conj-ix d)) (dnf-insert-sound sk c ds))
+    (ieq-trans sk (ixjoin (conj-ix d) (ixjoin (conj-ix c) (dnf-ix ds))) (ixjoin (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (join-rot sk (conj-ix d) (conj-ix c) (dnf-ix ds))
+    (ieq-join sk (conj-ix c) (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix (lcons d ds)) (ieq-refl sk (conj-ix c)) (ieq-sym sk (dnf-ix (lcons d ds)) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix-cons sk d ds)))))))
+-- dropping the conjunctions below c does not change c's join with the form (absorption)
+dnf-drop-sup-sound : (sk : Lst Entry) (c : Conj) (f : DNF) → IEq sk (ixjoin (conj-ix c) (dnf-ix (dnf-drop-sup c f))) (ixjoin (conj-ix c) (dnf-ix f))
+dnf-drop-sup-sound sk c lnil = ieq-refl sk (ixjoin (conj-ix c) (dnf-ix lnil))
+dnf-drop-sup-sound sk c (lcons d ds) =
+  bool-case2 (λ b → IEq sk (ixjoin (conj-ix c) (dnf-ix (if b then dnf-drop-sup c ds else lcons d (dnf-drop-sup c ds)))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))) (conj-sub c d)
+    (λ e → (ieq-trans sk (ixjoin (conj-ix c) (dnf-ix (dnf-drop-sup c ds))) (ixjoin (conj-ix c) (dnf-ix ds)) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (dnf-drop-sup-sound sk c ds)
+    (ieq-trans sk (ixjoin (conj-ix c) (dnf-ix ds)) (ixjoin (ixjoin (conj-ix c) (ixmeet (conj-ix c) (conj-ix d))) (dnf-ix ds)) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (ieq-join sk (conj-ix c) (ixjoin (conj-ix c) (ixmeet (conj-ix c) (conj-ix d))) (dnf-ix ds) (dnf-ix ds) (ieq-sym sk (ixjoin (conj-ix c) (ixmeet (conj-ix c) (conj-ix d))) (conj-ix c) (law-absorb sk (conj-ix c) (conj-ix d))) (ieq-refl sk (dnf-ix ds)))
+    (ieq-trans sk (ixjoin (ixjoin (conj-ix c) (ixmeet (conj-ix c) (conj-ix d))) (dnf-ix ds)) (ixjoin (ixjoin (conj-ix c) (conj-ix d)) (dnf-ix ds)) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (ieq-join sk (ixjoin (conj-ix c) (ixmeet (conj-ix c) (conj-ix d))) (ixjoin (conj-ix c) (conj-ix d)) (dnf-ix ds) (dnf-ix ds) (ieq-join sk (conj-ix c) (conj-ix c) (ixmeet (conj-ix c) (conj-ix d)) (conj-ix d) (ieq-refl sk (conj-ix c)) (ieq-sym sk (conj-ix d) (ixmeet (conj-ix c) (conj-ix d)) (conj-sub-sound sk c d e))) (ieq-refl sk (dnf-ix ds)))
+    (ieq-trans sk (ixjoin (ixjoin (conj-ix c) (conj-ix d)) (dnf-ix ds)) (ixjoin (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (law-assoc-j sk (conj-ix c) (conj-ix d) (dnf-ix ds))
+    (ieq-join sk (conj-ix c) (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix (lcons d ds)) (ieq-refl sk (conj-ix c)) (ieq-sym sk (dnf-ix (lcons d ds)) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix-cons sk d ds))))))))
+    (λ e → (ieq-trans sk (ixjoin (conj-ix c) (dnf-ix (lcons d (dnf-drop-sup c ds)))) (ixjoin (conj-ix c) (ixjoin (conj-ix d) (dnf-ix (dnf-drop-sup c ds)))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (ieq-join sk (conj-ix c) (conj-ix c) (dnf-ix (lcons d (dnf-drop-sup c ds))) (ixjoin (conj-ix d) (dnf-ix (dnf-drop-sup c ds))) (ieq-refl sk (conj-ix c)) (dnf-ix-cons sk d (dnf-drop-sup c ds)))
+    (ieq-trans sk (ixjoin (conj-ix c) (ixjoin (conj-ix d) (dnf-ix (dnf-drop-sup c ds)))) (ixjoin (conj-ix d) (ixjoin (conj-ix c) (dnf-ix (dnf-drop-sup c ds)))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (join-rot sk (conj-ix c) (conj-ix d) (dnf-ix (dnf-drop-sup c ds)))
+    (ieq-trans sk (ixjoin (conj-ix d) (ixjoin (conj-ix c) (dnf-ix (dnf-drop-sup c ds)))) (ixjoin (conj-ix d) (ixjoin (conj-ix c) (dnf-ix ds))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (ieq-join sk (conj-ix d) (conj-ix d) (ixjoin (conj-ix c) (dnf-ix (dnf-drop-sup c ds))) (ixjoin (conj-ix c) (dnf-ix ds)) (ieq-refl sk (conj-ix d)) (dnf-drop-sup-sound sk c ds))
+    (ieq-trans sk (ixjoin (conj-ix d) (ixjoin (conj-ix c) (dnf-ix ds))) (ixjoin (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (join-rot sk (conj-ix d) (conj-ix c) (dnf-ix ds))
+    (ieq-join sk (conj-ix c) (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix (lcons d ds)) (ieq-refl sk (conj-ix c)) (ieq-sym sk (dnf-ix (lcons d ds)) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix-cons sk d ds))))))))
+-- a form holding a conjunction below c absorbs c
+dnf-any-sub-sound : (sk : Lst Entry) (c : Conj) (f : DNF) → dnf-any-sub c f ≡ true → IEq sk (dnf-ix f) (ixjoin (conj-ix c) (dnf-ix f))
+dnf-any-sub-sound sk c lnil e = false-true2 (IEq sk (dnf-ix lnil) (ixjoin (conj-ix c) (dnf-ix lnil))) e
+dnf-any-sub-sound sk c (lcons d ds) hm =
+  bool-case2 (λ b → (if b then true else dnf-any-sub c ds) ≡ true → IEq sk (dnf-ix (lcons d ds)) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))) (conj-sub d c)
+    (λ e h → (ieq-trans sk (dnf-ix (lcons d ds)) (ixjoin (conj-ix d) (dnf-ix ds)) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (dnf-ix-cons sk d ds)
+    (ieq-trans sk (ixjoin (conj-ix d) (dnf-ix ds)) (ixjoin (ixjoin (conj-ix d) (ixmeet (conj-ix d) (conj-ix c))) (dnf-ix ds)) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (ieq-join sk (conj-ix d) (ixjoin (conj-ix d) (ixmeet (conj-ix d) (conj-ix c))) (dnf-ix ds) (dnf-ix ds) (ieq-sym sk (ixjoin (conj-ix d) (ixmeet (conj-ix d) (conj-ix c))) (conj-ix d) (law-absorb sk (conj-ix d) (conj-ix c))) (ieq-refl sk (dnf-ix ds)))
+    (ieq-trans sk (ixjoin (ixjoin (conj-ix d) (ixmeet (conj-ix d) (conj-ix c))) (dnf-ix ds)) (ixjoin (ixjoin (conj-ix d) (conj-ix c)) (dnf-ix ds)) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (ieq-join sk (ixjoin (conj-ix d) (ixmeet (conj-ix d) (conj-ix c))) (ixjoin (conj-ix d) (conj-ix c)) (dnf-ix ds) (dnf-ix ds) (ieq-join sk (conj-ix d) (conj-ix d) (ixmeet (conj-ix d) (conj-ix c)) (conj-ix c) (ieq-refl sk (conj-ix d)) (ieq-sym sk (conj-ix c) (ixmeet (conj-ix d) (conj-ix c)) (conj-sub-sound sk d c e))) (ieq-refl sk (dnf-ix ds)))
+    (ieq-trans sk (ixjoin (ixjoin (conj-ix d) (conj-ix c)) (dnf-ix ds)) (ixjoin (ixjoin (conj-ix c) (conj-ix d)) (dnf-ix ds)) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (ieq-join sk (ixjoin (conj-ix d) (conj-ix c)) (ixjoin (conj-ix c) (conj-ix d)) (dnf-ix ds) (dnf-ix ds) (law-comm-j sk (conj-ix d) (conj-ix c)) (ieq-refl sk (dnf-ix ds)))
+    (ieq-trans sk (ixjoin (ixjoin (conj-ix c) (conj-ix d)) (dnf-ix ds)) (ixjoin (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (law-assoc-j sk (conj-ix c) (conj-ix d) (dnf-ix ds))
+    (ieq-join sk (conj-ix c) (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix (lcons d ds)) (ieq-refl sk (conj-ix c)) (ieq-sym sk (dnf-ix (lcons d ds)) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix-cons sk d ds)))))))))
+    (λ e h → (ieq-trans sk (dnf-ix (lcons d ds)) (ixjoin (conj-ix d) (dnf-ix ds)) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (dnf-ix-cons sk d ds)
+    (ieq-trans sk (ixjoin (conj-ix d) (dnf-ix ds)) (ixjoin (conj-ix d) (ixjoin (conj-ix c) (dnf-ix ds))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (ieq-join sk (conj-ix d) (conj-ix d) (dnf-ix ds) (ixjoin (conj-ix c) (dnf-ix ds)) (ieq-refl sk (conj-ix d)) (dnf-any-sub-sound sk c ds h))
+    (ieq-trans sk (ixjoin (conj-ix d) (ixjoin (conj-ix c) (dnf-ix ds))) (ixjoin (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds))) (ixjoin (conj-ix c) (dnf-ix (lcons d ds)))
+    (join-rot sk (conj-ix d) (conj-ix c) (dnf-ix ds))
+    (ieq-join sk (conj-ix c) (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix (lcons d ds)) (ieq-refl sk (conj-ix c)) (ieq-sym sk (dnf-ix (lcons d ds)) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix-cons sk d ds))))))) hm
+-- adding a conjunction to a form is joining it
+dnf-add-sound : (sk : Lst Entry) (c : Conj) (f : DNF) → IEq sk (dnf-ix (dnf-add c f)) (ixjoin (conj-ix c) (dnf-ix f))
+dnf-add-sound sk c f =
+  bool-case2 (λ b → IEq sk (dnf-ix (if b then f else dnf-insert c (dnf-drop-sup c f))) (ixjoin (conj-ix c) (dnf-ix f))) (dnf-any-sub c f)
+    (λ e → dnf-any-sub-sound sk c f e)
+    (λ e → ieq-trans sk (dnf-ix (dnf-insert c (dnf-drop-sup c f))) (ixjoin (conj-ix c) (dnf-ix (dnf-drop-sup c f))) (ixjoin (conj-ix c) (dnf-ix f))
+      (dnf-insert-sound sk c (dnf-drop-sup c f)) (dnf-drop-sup-sound sk c f))
+-- (F2d) the normalizer's join is the join
+dnf-join-sound : (sk : Lst Entry) (g h : DNF) → IEq sk (dnf-ix (dnf-join g h)) (ixjoin (dnf-ix g) (dnf-ix h))
+dnf-join-sound sk lnil h = ieq-sym sk (ixjoin ix0 (dnf-ix h)) (dnf-ix h) (law-unit-j-l sk (dnf-ix h))
+dnf-join-sound sk (lcons c cs) h =
+  (ieq-trans sk (dnf-ix (dnf-add c (dnf-join cs h))) (ixjoin (conj-ix c) (dnf-ix (dnf-join cs h))) (ixjoin (dnf-ix (lcons c cs)) (dnf-ix h))
+    (dnf-add-sound sk c (dnf-join cs h))
+    (ieq-trans sk (ixjoin (conj-ix c) (dnf-ix (dnf-join cs h))) (ixjoin (conj-ix c) (ixjoin (dnf-ix cs) (dnf-ix h))) (ixjoin (dnf-ix (lcons c cs)) (dnf-ix h))
+    (ieq-join sk (conj-ix c) (conj-ix c) (dnf-ix (dnf-join cs h)) (ixjoin (dnf-ix cs) (dnf-ix h)) (ieq-refl sk (conj-ix c)) (dnf-join-sound sk cs h))
+    (ieq-trans sk (ixjoin (conj-ix c) (ixjoin (dnf-ix cs) (dnf-ix h))) (ixjoin (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix h)) (ixjoin (dnf-ix (lcons c cs)) (dnf-ix h))
+    (ieq-sym sk (ixjoin (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix h)) (ixjoin (conj-ix c) (ixjoin (dnf-ix cs) (dnf-ix h))) (law-assoc-j sk (conj-ix c) (dnf-ix cs) (dnf-ix h)))
+    (ieq-join sk (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix (lcons c cs)) (dnf-ix h) (dnf-ix h) (ieq-sym sk (dnf-ix (lcons c cs)) (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix-cons sk c cs)) (ieq-refl sk (dnf-ix h))))))
+-- a conjunction met with a form, conjunction by conjunction, is their meet
+dnf-meet-c-sound : (sk : Lst Entry) (c : Conj) (g : DNF) → IEq sk (dnf-ix (dnf-meet-c c g)) (ixmeet (conj-ix c) (dnf-ix g))
+dnf-meet-c-sound sk c lnil = ieq-sym sk (ixmeet (conj-ix c) ix0) ix0 (law-zero-m-r sk (conj-ix c))
+dnf-meet-c-sound sk c (lcons d ds) =
+  (ieq-trans sk (dnf-ix (dnf-add (conj-meet c d) (dnf-meet-c c ds))) (ixjoin (conj-ix (conj-meet c d)) (dnf-ix (dnf-meet-c c ds))) (ixmeet (conj-ix c) (dnf-ix (lcons d ds)))
+    (dnf-add-sound sk (conj-meet c d) (dnf-meet-c c ds))
+    (ieq-trans sk (ixjoin (conj-ix (conj-meet c d)) (dnf-ix (dnf-meet-c c ds))) (ixjoin (ixmeet (conj-ix c) (conj-ix d)) (ixmeet (conj-ix c) (dnf-ix ds))) (ixmeet (conj-ix c) (dnf-ix (lcons d ds)))
+    (ieq-join sk (conj-ix (conj-meet c d)) (ixmeet (conj-ix c) (conj-ix d)) (dnf-ix (dnf-meet-c c ds)) (ixmeet (conj-ix c) (dnf-ix ds)) (conj-meet-sound sk c d) (dnf-meet-c-sound sk c ds))
+    (ieq-trans sk (ixjoin (ixmeet (conj-ix c) (conj-ix d)) (ixmeet (conj-ix c) (dnf-ix ds))) (ixmeet (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds))) (ixmeet (conj-ix c) (dnf-ix (lcons d ds)))
+    (law-dist-m sk (conj-ix c) (conj-ix d) (dnf-ix ds))
+    (ieq-meet sk (conj-ix c) (conj-ix c) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix (lcons d ds)) (ieq-refl sk (conj-ix c)) (ieq-sym sk (dnf-ix (lcons d ds)) (ixjoin (conj-ix d) (dnf-ix ds)) (dnf-ix-cons sk d ds))))))
+-- (F2d) the normalizer's meet is the meet
+dnf-meet-sound : (sk : Lst Entry) (g h : DNF) → IEq sk (dnf-ix (dnf-meet g h)) (ixmeet (dnf-ix g) (dnf-ix h))
+dnf-meet-sound sk lnil h = ieq-sym sk (ixmeet ix0 (dnf-ix h)) ix0 (law-zero-m-l sk (dnf-ix h))
+dnf-meet-sound sk (lcons c cs) h =
+  (ieq-trans sk (dnf-ix (dnf-join (dnf-meet-c c h) (dnf-meet cs h))) (ixjoin (dnf-ix (dnf-meet-c c h)) (dnf-ix (dnf-meet cs h))) (ixmeet (dnf-ix (lcons c cs)) (dnf-ix h))
+    (dnf-join-sound sk (dnf-meet-c c h) (dnf-meet cs h))
+    (ieq-trans sk (ixjoin (dnf-ix (dnf-meet-c c h)) (dnf-ix (dnf-meet cs h))) (ixjoin (ixmeet (conj-ix c) (dnf-ix h)) (ixmeet (dnf-ix cs) (dnf-ix h))) (ixmeet (dnf-ix (lcons c cs)) (dnf-ix h))
+    (ieq-join sk (dnf-ix (dnf-meet-c c h)) (ixmeet (conj-ix c) (dnf-ix h)) (dnf-ix (dnf-meet cs h)) (ixmeet (dnf-ix cs) (dnf-ix h)) (dnf-meet-c-sound sk c h) (dnf-meet-sound sk cs h))
+    (ieq-trans sk (ixjoin (ixmeet (conj-ix c) (dnf-ix h)) (ixmeet (dnf-ix cs) (dnf-ix h))) (ixjoin (ixmeet (dnf-ix h) (conj-ix c)) (ixmeet (dnf-ix h) (dnf-ix cs))) (ixmeet (dnf-ix (lcons c cs)) (dnf-ix h))
+    (ieq-join sk (ixmeet (conj-ix c) (dnf-ix h)) (ixmeet (dnf-ix h) (conj-ix c)) (ixmeet (dnf-ix cs) (dnf-ix h)) (ixmeet (dnf-ix h) (dnf-ix cs)) (law-comm-m sk (conj-ix c) (dnf-ix h)) (law-comm-m sk (dnf-ix cs) (dnf-ix h)))
+    (ieq-trans sk (ixjoin (ixmeet (dnf-ix h) (conj-ix c)) (ixmeet (dnf-ix h) (dnf-ix cs))) (ixmeet (dnf-ix h) (ixjoin (conj-ix c) (dnf-ix cs))) (ixmeet (dnf-ix (lcons c cs)) (dnf-ix h))
+    (law-dist-m sk (dnf-ix h) (conj-ix c) (dnf-ix cs))
+    (ieq-trans sk (ixmeet (dnf-ix h) (ixjoin (conj-ix c) (dnf-ix cs))) (ixmeet (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix h)) (ixmeet (dnf-ix (lcons c cs)) (dnf-ix h))
+    (law-comm-m sk (dnf-ix h) (ixjoin (conj-ix c) (dnf-ix cs)))
+    (ieq-meet sk (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix (lcons c cs)) (dnf-ix h) (dnf-ix h) (ieq-sym sk (dnf-ix (lcons c cs)) (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix-cons sk c cs)) (ieq-refl sk (dnf-ix h))))))))
+-- a literal's opposite is its reversal
+neg-lit : (sk : Lst Entry) (l : Lit) → IEq sk (conj-ix (lcons (fst l , not (snd l)) lnil)) (ixneg (lit-ix l))
+neg-lit sk l =
+  bool-case2 (λ b → IEq sk (lit-of (fst l) (not b)) (ixneg (lit-of (fst l) b))) (snd l)
+    (λ e → ieq-refl sk (ixneg (ixv (fst l))))
+    (λ e → ieq-sym sk (ixneg (ixneg (ixv (fst l)))) (ixv (fst l)) (law-negneg sk (ixv (fst l))))
+-- a conjunction's negation is its reversal
+neg-conj-sound : (sk : Lst Entry) (c : Conj) → IEq sk (dnf-ix (neg-conj c)) (ixneg (conj-ix c))
+neg-conj-sound sk lnil = ieq-sym sk (ixneg ix1) ix0 (law-neg-1 sk)
+neg-conj-sound sk (lcons l ls) =
+  (ieq-trans sk (dnf-ix (dnf-add (lcons (fst l , not (snd l)) lnil) (neg-conj ls))) (ixjoin (conj-ix (lcons (fst l , not (snd l)) lnil)) (dnf-ix (neg-conj ls))) (ixneg (conj-ix (lcons l ls)))
+    (dnf-add-sound sk (lcons (fst l , not (snd l)) lnil) (neg-conj ls))
+    (ieq-trans sk (ixjoin (conj-ix (lcons (fst l , not (snd l)) lnil)) (dnf-ix (neg-conj ls))) (ixjoin (ixneg (lit-ix l)) (ixneg (conj-ix ls))) (ixneg (conj-ix (lcons l ls)))
+    (ieq-join sk (conj-ix (lcons (fst l , not (snd l)) lnil)) (ixneg (lit-ix l)) (dnf-ix (neg-conj ls)) (ixneg (conj-ix ls)) (neg-lit sk l) (neg-conj-sound sk ls))
+    (ieq-trans sk (ixjoin (ixneg (lit-ix l)) (ixneg (conj-ix ls))) (ixneg (ixmeet (lit-ix l) (conj-ix ls))) (ixneg (conj-ix (lcons l ls)))
+    (law-dm-m sk (lit-ix l) (conj-ix ls))
+    (ieq-neg sk (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix (lcons l ls)) (ieq-sym sk (conj-ix (lcons l ls)) (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix-cons sk l ls))))))
+-- (F2d) the normalizer's negation is the reversal
+dnf-neg-sound : (sk : Lst Entry) (g : DNF) → IEq sk (dnf-ix (dnf-neg g)) (ixneg (dnf-ix g))
+dnf-neg-sound sk lnil = ieq-sym sk (ixneg ix0) ix1 (law-neg-0 sk)
+dnf-neg-sound sk (lcons c cs) =
+  (ieq-trans sk (dnf-ix (dnf-meet (neg-conj c) (dnf-neg cs))) (ixmeet (dnf-ix (neg-conj c)) (dnf-ix (dnf-neg cs))) (ixneg (dnf-ix (lcons c cs)))
+    (dnf-meet-sound sk (neg-conj c) (dnf-neg cs))
+    (ieq-trans sk (ixmeet (dnf-ix (neg-conj c)) (dnf-ix (dnf-neg cs))) (ixmeet (ixneg (conj-ix c)) (ixneg (dnf-ix cs))) (ixneg (dnf-ix (lcons c cs)))
+    (ieq-meet sk (dnf-ix (neg-conj c)) (ixneg (conj-ix c)) (dnf-ix (dnf-neg cs)) (ixneg (dnf-ix cs)) (neg-conj-sound sk c) (dnf-neg-sound sk cs))
+    (ieq-trans sk (ixmeet (ixneg (conj-ix c)) (ixneg (dnf-ix cs))) (ixneg (ixjoin (conj-ix c) (dnf-ix cs))) (ixneg (dnf-ix (lcons c cs)))
+    (law-dm-j sk (conj-ix c) (dnf-ix cs))
+    (ieq-neg sk (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix (lcons c cs)) (ieq-sym sk (dnf-ix (lcons c cs)) (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix-cons sk c cs))))))
 
 -- ---------------------------------------------------------------- (6) reify and reflect
 -- (2026-11-12, (6)) reify-ty (a computable type to a normal type derivation), reify (a computable term

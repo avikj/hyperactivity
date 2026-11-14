@@ -279,6 +279,13 @@ typed-codes-remainder = node "Everything else typed codes and normalization by e
 -- parenthesis in a definition (the graph's essential-context relation, one closing parenthesis
 -- short) made the machine exit with status 1 and print nothing about it: no position, no reason. A
 -- file that fails to read must say where and why.
+-- Known (2026-11-14, at experiments/nbe/p26-wip.cub): needs-work. The library's typed transport
+-- cannot be applied to a line of types that is a case on a path into Bool: false-true A e =
+-- transport (λ i → if e i then A else (A → A)) (λ a → a) is refused with "an implicit argument is
+-- not determined by the other arguments' types or the type expected", also with the family written
+-- as a defined function by clauses (ft-fam). Writing the composition itself, comp (λ i → ft-fam A
+-- (e i)) (λ i → []) (λ a → a), checks. So the elaborator does not find transport's implicit types
+-- from a line it could read them from (its endpoints, the line at 0 and 1).
 language-implementation-remainder : Node
 language-implementation-remainder = node "Everything else the paper specifies for the language: the calculus conforming to its published rules, the specializer with its law, native realization, the laws of the primitives, deriving as a typed term, and terms of any depth." (cons language-implementation nil)
 -- paper-examples (2026-11-13, Avik): "term-by-term construction of every single construction
