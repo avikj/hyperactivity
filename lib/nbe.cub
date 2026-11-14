@@ -1,6 +1,6 @@
 -- lib/nbe.cub — typed codes Code(Γ, A) = Σ c. Der(Γ, c, A) over the one representation of terms
 -- (lib/code.cub's Code), their evaluation, and normalization by evaluation with its soundness
--- equation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1, eqs. (6.1) and (6.5)). Loaded
+-- equation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eqs. (6.1) “typed code and its evaluation” and (6.5) “reifySound”). Loaded
 -- after lib/std.cub.
 --
 -- Status (2026-11-14): F2d done; experiments/nbe/p26-wip.cub with lib/linproof.cub imported checks
@@ -172,7 +172,7 @@
 --    coincidences", 2010): a derivation of c : A in Γ carries, as an index, the meaning of c as a
 --    function of the environment. So eval is that index, the object theory's conversion is the
 --    language's own judgmental equality on meanings (no conversion rule, nothing to make coherent),
---    and eq. (6.5) holds by the indices (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1).
+--    and eq. (6.5) “reifySound” holds by the indices (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”).
 --
 -- 1. Objects, each defined once.
 --    Raw     the existing Code (lib/code.cub); normal forms here use cvar, clam, capp, cpair, cfst,
@@ -185,7 +185,7 @@
 --    Var, Der  variables and typing derivations, Der Γ D c v: c is a derivation-checked raw code
 --            of type D in Γ with meaning v : (ρ : G) → T ρ.
 --    Code Γ D = Σ c. Σ v. Der Γ D c v; eval = the meaning v
---            (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1, eq. (6.1)).
+--            (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.1) “typed code and its evaluation”).
 --    Ne, Nf  neutral and normal derivations, same indices; embed : Nf → Der keeps c and v.
 --    Worlds  renamings Δ → Γ (functions on variables with their meaning map), with actions on Ne, Nf.
 --    Comp s Δ T x  the computability of x : (ρ : Env Δ) → El s (T ρ) at world Δ, by recursion on s:
@@ -193,12 +193,12 @@
 --            arguments give computable results; Σ — componentwise.
 --    reify/reflect  mutually by recursion on the shape: reify : Comp → Σ c. Nf with meaning exactly
 --            x; reflect : Ne → Comp. The Π clauses are the paper's Kripke clauses
---            (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1).
+--            (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”).
 --    fund    the fundamental lemma, by recursion on Der: a derivation's meaning is computable at
 --            every world under every computable environment.
 --    normalize d = reify (fund d (reflected identity environment)); the result is a Code with the
 --            same meaning index, so reifySound is refl: eval (reify v) ρ ≡ denote v ρ
---            (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1, eq. (6.5)).
+--            (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.5) “reifySound”).
 --
 -- 2. Phases. P1 the fragment Π, Σ, Bool (with dependent case): done. Step 1 (closed levels, types
 --    as maps into semantic types): done. P2 PathP and the interval: worlds with dimension variables
@@ -936,11 +936,11 @@ data Der : (J : Jdg) → Type 1 where
     Der ((Γ₀ , dom (Env Γ₀) a₀ b₀ T₀ , c1₀ , v1₀)) →
     Der ((Γ₀ , at-last (Env Γ₀) (dom (Env Γ₀) a₀ b₀ T₀) v1₀ (cod (Env Γ₀) a₀ b₀ T₀) , c2₀ , v2₀)) →
     Der ((Γ₀ , (s-sig a₀ b₀ , T₀) , cpair c1₀ c2₀ , λ ρ₀ → (v1₀ ρ₀ , v2₀ ρ₀)))
--- typed codes (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1):
+-- typed codes (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”):
 -- Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation
 TCode : (Γ : Ctx) → PTy (Env Γ) → Type 1
 TCode Γ A = (c : Code) × (v : (ρ : Env Γ) → ElP (Env Γ) A ρ) × Der (Γ , A , c , v)
--- evaluation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1, eq. (6.1)):
+-- evaluation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.1) “typed code and its evaluation”):
 -- eval_{Γ,A} : Code(Γ, A) → Π ρ : Env(Γ). ⟦A⟧ρ
 teval : (Γ : Ctx) (A : PTy (Env Γ)) → TCode Γ A → (ρ : Env Γ) → ElP (Env Γ) A ρ
 teval Γ A t = fst (snd t)
@@ -1046,11 +1046,11 @@ comp-ren (s-sig a b) Δ T x cx Δ' r w =
    comp-ren b Δ (λ ρ → snd (T ρ) (fst (x ρ))) (λ ρ → snd (x ρ)) (snd cx) Δ' r w)
 
 -- ---------------------------------------------------------------- reify and reflect
--- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1)
+-- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”)
 -- reify reads a computable value back as a normal form whose meaning is exactly the value; reflect
 -- makes a neutral computable. Both by recursion on the shape, as one function (mutual definitions
 -- by clauses are not available); each shape's clauses take the components' pair as arguments. The
--- Π clauses are the paper's Kripke clauses (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1):
+-- Π clauses are the paper's Kripke clauses (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”):
 -- reify applies the value, at the world one variable
 -- larger, to that variable reflected; reflect applies the neutral to the reified argument, at the
 -- later world.
@@ -1171,7 +1171,7 @@ case-comp Γ B P vx vt vf Δ δ (inr1 (inr1 n)) ct cf =
        (snd (fst (rr (fst P)) Δ (λ ρ → snd P (δ ρ , false)) (λ ρ → vf (δ ρ)) cf)))
 -- the fundamental lemma: a derivation's meaning is computable at every world under every computable
 -- environment (by recursion on the derivation; its binder case is the paper's weakening/application
--- calculation, docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1; its Bool constants' equations are path λs, not refl:)
+-- calculation, docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”; its Bool constants' equations are path λs, not refl:)
 fund : {J : Jdg} → Der J → (Δ : Ctx) (δ : Env Δ → Env (fst J)) → CompEnv (fst (fst J)) (snd (fst J)) Δ δ →
   Comp (Env (fst J)) (fst (snd J)) Δ δ (λ ρ → snd (snd (snd J)) (δ ρ))
 fund (dvar Γ A n v x) Δ δ e = var-comp (fst Γ) (snd Γ) (A , n , v) x Δ δ e
@@ -1187,8 +1187,8 @@ fund (dlam Γ a b T c vb db) Δ δ e =
 fund (dpair Γ a b T c1 v1 c2 v2 d1 d2) Δ δ e = (fund d1 Δ δ e , fund d2 Δ δ e)
 
 -- ---------------------------------------------------------------- normalization, reifySound
--- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1, eq. (6.5))
--- the identity environment with every variable reflected (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1: reflectContext)
+-- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.5) “reifySound”)
+-- the identity environment with every variable reflected (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”: reflectContext)
 reflect-env : (sk : Lst Entry) (γ : fst (CtxE sk)) → CompEnv sk γ (sk , γ) (λ ρ → ρ)
 reflect-env lnil γ = one
 reflect-env (lcons e-dim sk) γ = env-ren sk γ (sk , γ) (λ ρ → ρ) (reflect-env sk γ) (lcons e-dim sk , γ) (λ ρ → ρ) (ren-dim (sk , γ))
@@ -1211,12 +1211,12 @@ embed (npair Γ a b T c1 v1 c2 v2 n1 n2) = dpair Γ a b T c1 v1 c2 v2 (embed n1)
 normalize-nf : (Γ : Ctx) (A : PTy (Env Γ)) (t : TCode Γ A) → (c : Code) × NN (k-nf , (Γ , A , c , teval Γ A t))
 normalize-nf Γ A t =
   fst (rr (fst A)) Γ (snd A) (teval Γ A t) (fund (snd (snd t)) Γ (λ ρ → ρ) (reflect-env (fst Γ) (snd Γ)))
--- as a typed code (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1:
+-- as a typed code (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”:
 -- normalize_{Γ,A}(t) := reify_{Γ,A}(eval_nf(t, reflectContext(Γ))), so Code(Γ, A) → Code(Γ, A))
 normalize : (Γ : Ctx) (A : PTy (Env Γ)) → TCode Γ A → TCode Γ A
 normalize Γ A t = (fst (normalize-nf Γ A t) , teval Γ A t , embed (snd (normalize-nf Γ A t)))
--- reify as a map into typed codes, and its fundamental equation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1,
--- eq. (6.5)): for every computable value v
+-- reify as a map into typed codes, and its fundamental equation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”,
+-- eq. (6.5) “reifySound”): for every computable value v
 -- at every world, eval (reify v) ρ ≡ v ρ, at every environment ρ; it holds by the indices
 -- a normal form packaged as a typed code (a separate definition because of)
 nf-code : (Γ : Ctx) (A : PTy (Env Γ)) (x : (ρ : Env Γ) → ElP (Env Γ) A ρ) → ((c : Code) × NN (k-nf , (Γ , A , c , x))) → TCode Γ A

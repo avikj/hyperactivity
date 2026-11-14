@@ -7,15 +7,17 @@ document covers everything else.
 **Which paper.** The repository's copy of the paper is `docs/Hyperactive_Final_Paper.pdf`, dated 11
 November 2026 on its first page, SHA-256
 `e8f358b4cd2c5b4c12a2b121afde0ebeef07578c54e7d322398f3d03806798fe`. It is an older draft than Avik's
-current one, which is not in the repository (Avik, 2026-11-14, section 4). Every citation of the paper,
+current one, which is not in the repository (Avik, 2026-11-14, section 4 “Avik's words, verbatim”). Every citation of the paper,
 here and anywhere in the repository, names that copy by path, date and the first twelve hex digits of
 its SHA-256, with the section, equation or heading cited: (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…,
-§6.1). So each citation can be checked against the file, and every citation of a copy is found by
+§6.1 “Typed quotation, semantic readback, and self-application”). So each citation can be checked against the file, and every citation of a copy is found by
 its digits when the paper changes. The task graph's check fails if the file's content changes
 (`hyperactive-paper` in `task-graph/hyperactivity.cub`). A citation made before 2026-11-11 may
 instead mean an earlier paper, "Respecting Equality" (`docs/index.html` of the earlier repository
-avikj/math), of which no copy or hash is in this repository; a citation of it says so. A bare § number in this
-document is a section of this document.
+avikj/math), of which no copy or hash is in this repository; a citation of it says so. Nothing is cited by position
+or number alone (Avik, 2026-11-14): a citation of the paper gives each section's number with its
+title, the subsection heading where there is one, and what a cited equation states; a § in this
+document followed by a heading in quotation marks is this document's own section.
 
 Sections 1–3 are written by the session:
 
@@ -29,7 +31,7 @@ Sections 1–3 are written by the session:
    - the questions only Avik can answer.
 
 Section 4 is Avik's own words, verbatim and dated. Nothing is summarized there, and new messages are
-appended at the end. Where sections 1–3 and section 4 disagree, section 4 is right and sections 1–3
+appended at the end. Where sections 1–3 and section 4 “Avik's words, verbatim” disagree, section 4 “Avik's words, verbatim” is right and sections 1–3
 are fixed.
 
 Hyperactive has no parts. These sections are ways of reading one thing; they are not components of
@@ -142,7 +144,7 @@ is `r` with the fields given replaced; `x.f` projects. `mutual` groups definitio
 
 **Recursion.** A call on a field of the matched argument is structural, applied to all its later
 arguments or to fewer (a partial call is the function of the rest: `lapp (f k)` passes it); a definition at a type with
-a clock recurses through any functions where a later value is expected (§1.10). A call on a field's field,
+a clock recurses through any functions where a later value is expected (§1.10 “Guarded recursion”). A call on a field's field,
 at any depth (`fib (suc (suc n)) = plus (fib n) (fib (suc n))`), is course-of-values: the split
 computes each value together with the values below it (a Σ of the value and `Below v`, `Below`
 itself an elimination into types), and a split of a variable below reverts that pair, so that in
@@ -302,8 +304,8 @@ the store's `ok` line.
 
 **Commands.** `#check e : T`, `#same a = b` (equal readings, at a type when either side has one),
 `#show e`, `#observe n e` (a codata value unfolded n levels), `#usage f`, `#trusted`, `#safe f`,
-`#jit f [using t…]` (§1.11), `#key d`, `#names K`, `#history d`, `#unbind d`, `#gc`, `#run s`,
-`#input x` and `#supply x = e` (§1.8), `#fail` before a declaration or command (it must be
+`#jit f [using t…]` (§1.11 “Programs about programs, and the compiler”), `#key d`, `#names K`, `#history d`, `#unbind d`, `#gc`, `#run s`,
+`#input x` and `#supply x = e` (§1.8 “Inputs”), `#fail` before a declaration or command (it must be
 rejected). A name is bound once: a second definition, data type or constructor of the same name
 is refused, and so is a clause no case reaches. `import "file.cub"` loads a module
 once. Results and failures print in the surface syntax, a failed check with its declaration's
@@ -538,7 +540,7 @@ transported process is again a process, unfolded field by field when it is obser
 
 `#show t` reads a stuck call as the call. `#observe n t` reads it unfolded n levels deep, as
 records. An unfolding is named by the call it unfolds, so two unfoldings of one call pending at
-once share the body (§1.5).
+once share the body (§1.5 “Work is done once, and only where it is read”).
 
 ### 1.10 Guarded recursion
 
@@ -564,7 +566,7 @@ is the earlier context extended by the interval, ◁(Γ × I) ≅ ◁Γ × I, as
 guarded type theory.
 
 `dfix : (▸ κ A → A) → ▸ κ A` (at every level: `next`, `⊛`, `dfix`, `fix`, `pfix` and `forceκ`
-take `{l : Level}` first) is a stuck call of the kind copattern definitions make (§1.9), with one
+take `{l : Level}` first) is a stuck call of the kind copattern definitions make (§1.9 “Coinduction”), with one
 difference: it unfolds, `dfix f ⋄ = f (dfix f)`, only when applied to the tick constant `⋄`, and at
 a tick variable it stays stuck. `fix f = f (dfix f)` is then the guarded fixed point, and every
 recursion whose recursive use is under `▸` is well typed, whatever functions it passes through.
@@ -587,7 +589,7 @@ Guarded types are ordinary data whose recursive fields are later:
 recursive field (an elimination takes no hypothesis for it). Composition in `▸ κ A` is pointwise
 (the composition of ticks and clocks is the identity), so transport along a line of stream types
 moves each tail at its own tick, and the heads read are numerals again (composition with an empty
-tube in a data type without path constructors goes into the fields, §1.4).
+tube in a data type without path constructors goes into the fields, §1.4 “Values include equality”).
 
 The elaborator writes the ticks. A clock named in a signature (an argument of `Tick` or of a
 data type's `Clock` parameter) is an implicit parameter. A definition with a clock whose
@@ -634,7 +636,7 @@ the parameter types runs the bytes; any other call, and a `Word` result past 2�
 exit: compiled code is pure, so the net recomputes the call), runs `f` on the net. The
 acceptance workloads are `experiments/jit/workloads.cub`. Only the specialized code
 is checked against `f`; the translation to bytes after it, its passes and templates and the
-boundary's marshaling, is trusted and carries no relation to the code (§1.13, §2.2).
+boundary's marshaling, is trusted and carries no relation to the code (§1.13 “What is known to be wrong or missing”, §2.2 “The language”).
 
 ### 1.12 Measurements
 
@@ -670,7 +672,7 @@ concerns (`task-graph/hyperactivity.cub`, shown when a goal is clicked in the gr
 **Identity beyond one run.**
 - The evaluator keys a reference by its index in the run, and a λ or thunk by the address of its
   compiled record (`synkey`, `src/net.c`). So no evaluator result is kept or shared beyond a run.
-- The store's keys are content keys (§1.2, "Codebase keys and the store"). There are therefore two
+- The store's keys are content keys (§1.2 “The language”, "Codebase keys and the store"). There are therefore two
   key schemes, and the end state is one.
 - The checker's identity is a hash of the texts of the files loaded before it, comments included,
   not of its definitions' keys.
@@ -683,17 +685,17 @@ concerns (`task-graph/hyperactivity.cub`, shown when a goal is clicked in the gr
 - `lib/derive.cub` has 24 untyped definitions, which the checker refuses. Those are the library's
   24 failures, and they are also why the Rust readers fail.
 
-**Typed codes and normalization by evaluation** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1). The working file
+**Typed codes and normalization by evaluation** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”). The working file
 `experiments/nbe/p26-wip.cub` (7,477 lines, 1,034 checks passing) has F2a–F2c done and continues at
-F2d. Its encoding is the cubical-set model built inside the host, and it stands (§2.2).
+F2d. Its encoding is the cubical-set model built inside the host, and it stands (§2.2 “The language”).
 
-**Native code** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9).
+**Native code** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9 “Native execution as a mathematical program transformation”).
 - `#jit` checks only the specialized code against the definition. The translation to bytes is
   trusted and carries no relation to the code.
 - `src/lang.c`'s native substitution does not do what the paper says of native substitution
-  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3, "Loading, native substitution, and export").
+  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export").
 
-**Primitive laws** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5, "Exact scalar types"). Of the 91 primitives in `lib/prim.cub`, the laws beyond those
+**Primitive laws** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar types"). Of the 91 primitives in `lib/prim.cub`, the laws beyond those
 proved are trusted assumptions.
 
 **Particular languages.**
@@ -731,7 +733,7 @@ file's content changes. The paper is pinned so (`hyperactive-paper`).
 - every node to have a statement;
 - the graph to be consistent.
 
-It computes the order of work by the rule in §2.4.
+It computes the order of work by the rule in §2.4 “The organization of the work”.
 
 **The board today.**
 - The root is the product. Its four children are the language implementation, the paper's
@@ -739,7 +741,7 @@ It computes the order of work by the rule in §2.4.
 - One dependency: language support waits on the language implementation and the product
   implementation. The graph view draws it from each prerequisite to the work waiting on it.
 - The language implementation is expanded, as of 2026-11-14, into two children:
-  - typed codes and normalization by evaluation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1);
+  - typed codes and normalization by evaluation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”);
   - everything else the paper specifies for the language.
 - Typed codes is expanded in turn:
   - the interval normalizer's meaning (F2d), resolved;
@@ -755,7 +757,7 @@ pushes every change the moment it is made. There is no divergence between the se
 
 ## 2. What is confirmed to be implemented, and how
 
-Everything here is Avik's decision; his words are in section 4. Where the paper gives the
+Everything here is Avik's decision; his words are in section 4 “Avik's words, verbatim”. Where the paper gives the
 construction, it is cited.
 
 ### 2.1 The product, and the order of the work toward it
@@ -768,15 +770,15 @@ Hyperactive core, in which everything interoperates. Everything in this document
 1. **The language,** implemented completely and correctly as the paper specifies. The bar is that
    Avik can show someone the paper and correctly say it is fully implemented. The paper's worked
    examples (trading systems, message protocols) are not part of this bar.
-2. **The live interactive collaboration system** and tooling over the language and its terms (§2.3,
-   §2.5).
+2. **The live interactive collaboration system** and tooling over the language and its terms (§2.3 “State, change and collaboration”,
+   §2.5 “The interface”).
 3. **The support of particular languages:** the syntax and semantics of x86, C, C++, Rust, OCaml,
    Python and others, as terms.
    - x86 is a language like C++. There is no hardware category.
    - Lifting a language makes its sources and semantics Hyperactive terms. Proofs are written and
      checked about them, and Hyperactive features project back into the source language by
      language extension: an annotation of proof content in C++ source becomes meaningful and checked
-     (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8 and §8.1).
+     (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8 “Existing programming languages inside the host” and §8.1 “Source annotations are mathematical expressions attached to exact objects”).
    - This goal waits on both goals 1 and 2. The language should already be done, so nothing is to
      distract from goals 1 and 2.
 4. **Every construction in the paper, examples and appendix included,** as a term in the
@@ -785,19 +787,19 @@ Hyperactive core, in which everything interoperates. Everything in this document
 
 ### 2.2 The language
 
-The paper is the specification. What remains between the implementation (§1) and the paper:
+The paper is the specification. What remains between the implementation (§1 “What is implemented today”) and the paper:
 - **The calculus,** conforming to CCHM.
-- **Typed codes and normalization by evaluation** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1). This is easiest in this language: it is
+- **Typed codes and normalization by evaluation** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”). This is easiest in this language: it is
   normalization for a cubical type theory written inside a cubical type theory, so the model already
   exists because it is the host:
   - object paths are host paths;
   - object composition is the host's composition;
   - Glue and univalence are the host's.
-- **The specializer, carrying its law** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.2).
+- **The specializer, carrying its law** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.2 “Specialization as a program over the language’s own definitions”).
 - **Native realization goes through C** (Avik, 2026-11-14). One C emitter runs wherever a C compiler
   does, a MacBook included; proven emitters per instruction set (x86, Arm, RISC-V) would multiply
   with every target, and a complete x86 path delivers near-zero value. The paper permits it
-  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3, "Loading, native substitution, and export":
+  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export":
   "If an external compiler produces the executed bytes, either its relevant compilation relation is
   assumed or those bytes receive their own checked connection").
   - The emitter returns the relation between running the emitted C and the term's meaning. That
@@ -805,10 +807,10 @@ The paper is the specification. What remains between the implementation (§1) an
     all of C stays language support.
   - The C compiler's relation is a named assumption, listed by `#trusted`.
   - The evaluator substitutes native code only under that relation
-    (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3, "Loading, native substitution, and export"). Today `#jit` binds x86 bytes with no relation, which breaks this rule.
+    (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export"). Today `#jit` binds x86 bytes with no relation, which breaks this rule.
   - The x86 translator (`src/lang.c`'s native path, `lib/x86.cub`, `lib/machine.cub`, `lib/elf.cub`'s
     pasted machine code, `lib/compile/`) is superseded.
-- **The laws of the primitives,** each a theorem or a named assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5, "Exact scalar types").
+- **The laws of the primitives,** each a theorem or a named assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar types").
 - **Deriving,** as a typed term.
 - **Terms of any depth.**
 
@@ -836,7 +838,7 @@ The paper is the specification. What remains between the implementation (§1) an
 
 ### 2.3 State, change and collaboration
 
-The work leaves git for this design. None of it is built yet beyond the content keys of §1.
+The work leaves git for this design. None of it is built yet beyond the content keys of §1 “What is implemented today”.
 
 **State is not text.**
 - The represented world is a collection of objects and relations, with no primitive file system,
@@ -851,7 +853,7 @@ The work leaves git for this design. None of it is built yet beyond the content 
   identity.
 - Callers reference exactly the definition they mean, so two agents extending the same thing produce
   identical or distinct new definitions, and both live in the codebase as alternatives.
-- Unison is the precedent (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8). Git and patch theory are rejected.
+- Unison is the precedent (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8 “Content-addressed definitions, mathematical identity, and a decentralized codebase”). Git and patch theory are rejected.
 
 **A change is new code.**
 - Changing f called within g is changing g.
@@ -862,18 +864,18 @@ The work leaves git for this design. None of it is built yet beyond the content 
 g, f and f′ by a square (g and g′ are dependent on f and f′). This covers every case of a
 construction inside another construction. How it computes is in the paper:
 - a new definition is checked and published as a new immutable object
-  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.5);
+  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.5 “Dependency certificates and persistent evaluation”);
 - an edit is a program over the definitions;
 - retained results are reused exactly when their dependency certificates still validate
-  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.1, §10.5 and §10.11);
+  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.1 “Exact reuse requires recorded information”, §10.5 “Dependency certificates and persistent evaluation” and §10.11 “A program edit propagates through its mathematical dependents”);
 - an old proof does not silently become a proof about the new object: its dependent type changes
-  and must be inhabited (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.11);
-- where the change is an equivalence, dependent structure transports (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §4 and §4.1).
+  and must be inhabited (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.11 “A program edit propagates through its mathematical dependents”);
+- where the change is an equivalence, dependent structure transports (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §4 “Equivalence, univalence, and structure” and §4.1 “A representation change acts on a dependent operation”).
 
 **There is no canonical state.**
 - There is no master copy and no set of patches promoted to canonical.
 - Any incoming change is compatible with all existing code, because it is new code.
-- A name is a view or alias, and a reference identifies a definition (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8).
+- A name is a view or alias, and a reference identifies a definition (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8 “Content-addressed definitions, mathematical identity, and a decentralized codebase”).
 
 **Old objects are marked dead by an explicit statement.** "Here is another system doing X
 correctly; the prior system is undesirable."
@@ -884,10 +886,10 @@ correctly; the prior system is undesirable."
 - Within a run, identity is realized by comparison and sharing: equal terms are placed at a single
   pointer, which is proved correct in context.
 - A digest witnesses identity where it must cross a run, a machine or the store, under collision
-  resistance as a named assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8).
+  resistance as a named assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8 “Content-addressed definitions, mathematical identity, and a decentralized codebase”).
 - Every mechanism is admitted only with its relation to the defined meaning: native code
-  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9),
-  primitives (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5), pointers, hashes. That makes the language fast without being trusted.
+  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9 “Native execution as a mathematical program transformation”),
+  primitives (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”), pointers, hashes. That makes the language fast without being trusted.
 
 **A working session is read, write, act.**
 - Reading and writing go through a query interface (an MCP or API server) over the objects.
@@ -906,15 +908,15 @@ information relevant to a higher goal.
 
 **Results across machines.** Content identity establishes which definition is requested, not that a
 remote machine executed it. A result is either checked directly, accompanied by evidence, or accepted
-under an explicitly selected assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.6, "Distribution and local execution").
+under an explicitly selected assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.6 “Views, distribution, and complete systems”, "Distribution and local execution").
 
 **Programs that change running programs,** the kernel's own upgrades included, are ordinary
 programs, with correctness over the actual before-and-after executions. Mixed versions are defined
-by the application, with no privileged deployment construct (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.7).
+by the application, with no privileged deployment construct (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.7 “Programs that change running programs”).
 
 ### 2.4 The organization of the work
 
-The work is organized by a graph of tasks in the language (§1.14). Its rules:
+The work is organized by a graph of tasks in the language (§1.14 “How the work is organized and held today”). Its rules:
 
 **Nodes.**
 - There is one kind of node. Its name is a well-formed English sentence saying what it is.
@@ -974,7 +976,7 @@ absent. No comment convention stands in for it.
 
 - **No text editor or IDE.** Avik will never open one. Everything is reached through the interface,
   a link to it, or a chat message.
-- **The interface is a program over the same objects** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.9). A source rendering, a
+- **The interface is a program over the same objects** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.9 “Interactive symbolic programming over the actual computational object”). A source rendering, a
   dependency graph, a proof tree, a running process and a trace are views of one typed object, and a
   debugger works over the fiber of compatible runs.
 - **The UX is already defined by the data model.** Organizing is itself the act of work, and
@@ -990,13 +992,16 @@ absent. No comment convention stands in for it.
   presenting conclusions first.
 - **Ask questions only of yourself and answer them in the next sentence.** Never ask Avik what he has
   answered. The only questions for him are constructions only he can answer.
-- **Cite the paper by its copy** (Avik, 2026-11-14). Every citation names the file, its date and the
-  first twelve hex digits of its SHA-256 with the section, equation or heading, as in "Which paper"
-  at the top, never "paper 6.1" or "the paper's §6.1". A citation of the earlier paper says which it
-  is and that no copy is here.
-- **Keep Avik's words verbatim** (section 4).
+- **Never cite by position or number alone** (Avik, 2026-11-14). A citation of the paper names the
+  file, its date and the first twelve hex digits of its SHA-256, then each section's number with its
+  title, the subsection heading where there is one, and what a cited equation states, as in "Which
+  paper" at the top; never "paper 6.1" or "the paper's §6.1". A citation of the earlier paper says
+  which it is and that no copy is here. The same holds for this document's sections, plans and any
+  other source: a number goes with the title it numbers. Nothing is identified by a bare number
+  (no t1, t2, …).
+- **Keep Avik's words verbatim** (section 4 “Avik's words, verbatim”).
   - Never paraphrase inside quotation marks.
-  - A long message goes into section 4, not into a new file.
+  - A long message goes into section 4 “Avik's words, verbatim”, not into a new file.
   - After each exchange, say what was carried forward, or that nothing was.
 - **Fix everything he criticizes at once.** Create no approval process. Don't idle while there is
   work, and end each message with what is pending him.
@@ -1044,15 +1049,15 @@ curiosity is the pain.
 
 ### 3.2 Constructions the session has proposed, not yet confirmed by Avik
 
-These follow from §2.3 and the paper.
+These follow from §2.3 “State, change and collaboration” and the paper.
 
 **How the square computes.** Write a dependent as G applied to what it uses, so g = G(f). Then:
-- g′ = G(f′) is computed by specializing the same abstraction at the new object (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.2). No one
+- g′ = G(f′) is computed by specializing the same abstraction at the new object (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.2 “Specialization as a program over the language’s own definitions”). No one
   rewrites call sites.
 - When the change is a path or an equivalence, G applied to it gives the square (functoriality), and
   dependent properties transport.
 - When the change is a refinement or another stated relation, G carries it only where G is proved to
-  preserve it (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8:
+  preserve it (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8 “Existing programming languages inside the host”:
   univalence does not make a one-way simulation invertible).
 - So the language is the change-propagation mechanism, with no separate build system.
 
@@ -1093,7 +1098,7 @@ and planet-scale computation needs no global trust.
 
 The paper bounds what it claims: it says what the calculus computes. What follows is what Avik holds
 the same constructions force for perception, learning, agency, economics and physics. His material
-is in section 4, on 2026-11-13.
+is in section 4 “Avik's words, verbatim”, on 2026-11-13.
 
 Each claim is marked with what stands behind it:
 - **constructed:** in the paper, cited;
@@ -1116,13 +1121,13 @@ fiber of a map applied to a construction. It carries no information the construc
 interior. Constructed: this is cubical composition,
 
 ```
-comp i A [φ ↦ u] a0 : A[i := 1]     (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.4, eq. (3.14))
+comp i A [φ ↦ u] a0 : A[i := 1]     (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.4 “Dimension, face, composition, and path judgments”, eq. (3.14) “dependent composition”)
 ```
 
 which takes a type varying along a dimension, a partial element on a face and a compatible starting
 endpoint, and computes the missing face so that the whole box is coherent. The paper calls composition
-"the central filling operation" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.1) and requires a filling operation for every type
-former: Π, Σ, Path, universes and Glue (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.4). Avik began on this operation at fourteen, as discrete Stokes: the integral
+"the central filling operation" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.1 “Cubical operations are actual computation”) and requires a filling operation for every type
+former: Π, Σ, Path, universes and Glue (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.4 “Dimension, face, composition, and path judgments”). Avik began on this operation at fourteen, as discrete Stokes: the integral
 over a region is determined by data on its boundary, and the circulation around a boundary is the
 interior curvature accumulated.
 
@@ -1147,14 +1152,14 @@ coherence, and what cannot be filled is what is there.
 **Constructed.**
 - *An observation projects; the construction keeps everything.* "A representation of a transition
   retains its source, target, and evidence, while an observation may project away any of those
-  components" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.3, eq. (3.11)). And: "identify the complete construction before comparing
-  representations. The properties of a chosen projection are properties of that projection" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.3).
+  components" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.3 “Equality of representations preserves complete information”, eq. (3.11) “Transition”). And: "identify the complete construction before comparing
+  representations. The properties of a chosen projection are properties of that projection" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.3 “Equality of representations preserves complete information”).
 - *Carrying identity costs nothing.* Carrying a value together with its identity witness adds no
-  information: Sing(a) := Σ (a = x) is contractible (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3, eq. (3.5)).
+  information: Sing(a) := Σ (a = x) is contractible (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3 “Computational equality”, eq. (3.5) “Sing(a) is contractible”).
 - *Reversible without invertible.* Keeping a function's input alongside its output makes the
-  representation reversible without making the function invertible: A ≃ Graph(f) (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3, eqs. (3.6)–(3.7)).
+  representation reversible without making the function invertible: A ≃ Graph(f) (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3 “Computational equality”, eqs. (3.6) “Graph(f)” and (3.7) “A ≃ Graph(f)”).
 - *Knowledge is a fiber.* For an observation o : C → O, the things compatible with what it
-  registers form the fiber Fiber_o(y) := Σ_{c:C} (o(c) = y) (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.4, eq. (10.10)).
+  registers form the fiber Fiber_o(y) := Σ_{c:C} (o(c) = y) (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.4 “Observations, information, and locally available actions”, eq. (10.10) “Fiber_o(y)”).
 
 **Thesis: there is no binding problem and no separate problem of personal identity.**
 - "The object", "the state at time t" and "the self" are fibers: a path in the total space collapsed
@@ -1163,7 +1168,7 @@ coherence, and what cannot be filled is what is there.
   with a path in it, and "the persisting table" is the fiber of the observation that forgets the
   path and keeps the endpoint.
 - The Madhyamaka analysis of own-being is this, and the paper's sections 2 and 3 give it a type
-  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §§2–3).
+  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §§2–3 (“Types, witnesses, and identity”; “Computational equality”)).
 - Binding and personal identity are each the question of which observation map is applied to one
   construction and what its fiber retains. Each is answered by naming the map.
 - *Witnessed by:* a term presenting a percept's construction and two observations of it, one that
@@ -1176,8 +1181,8 @@ coherence, and what cannot be filled is what is there.
 - *The field and the percept.* The sensory field is a type varying over a base of space, time and
   abstraction, and a percept is a dependent path in it.
 - *Sameness is transport.* No successive points are compared. What is present across each cut is a
-  mode of sameness, which is transport, transport_P(p) : P(a) → P(b) (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3, eq. (3.4)). The requirement
-  that adjacent modes agree where they overlap is composition with a specified boundary (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.4, eq. (3.14)).
+  mode of sameness, which is transport, transport_P(p) : P(a) → P(b) (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3 “Computational equality”, eq. (3.4) “transport_P(p) : P(a) → P(b)”). The requirement
+  that adjacent modes agree where they overlap is composition with a specified boundary (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §3.4 “Dimension, face, composition, and path judgments”, eq. (3.14) “dependent composition”).
 - *The differentials are boundary data.* The directly sensed differentials are the boundary data
   along the path:
   - stillness, at zeroth order;
@@ -1201,7 +1206,7 @@ feature contains, with no parameter fitted to data.
 
 **Constructed.** Univalence turns an equivalence into an identity of types, ua : (A ≃ B) → (A = B),
 and transport along it computes as the equivalence: transport_{X↦X}(ua(e), a) ≃ e(a) (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…,
-§4, eqs. (4.1)–(4.2)). It refuses to register a distinction that no construction exhibits, and it carries
+§4 “Equivalence, univalence, and structure”, eqs. (4.1) “ua : (A ≃ B) → (A = B)” and (4.2) “transport along ua(e) computes as e”). It refuses to register a distinction that no construction exhibits, and it carries
 whatever holds of one presentation to every equivalent one, along with the witness.
 
 **The precision this needs.** Univalence does not *find* the identification. It makes an
@@ -1211,7 +1216,7 @@ makes each one count everywhere at once.
 
 **Thesis.**
 - *Learning.* Learning is the accumulation of witnessed identifications: equivalences constructed
-  and kept as content-addressed objects (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8), each one local, exact and composing, with no loss
+  and kept as content-addressed objects (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8 “Content-addressed definitions, mathematical identity, and a decentralized codebase”), each one local, exact and composing, with no loss
   surface and no weights.
 - *Intelligence.* Intelligence is the minimization of the construction, the presentation that has
   quotiented every distinction no completion can exhibit. It is not the fitting of a reified
@@ -1226,7 +1231,7 @@ makes each one count everywhere at once.
 
 **What this thesis does not say.** It does not say that descent cannot be expressed. Constructed:
 automatic differentiation is a program transformation whose correctness refers to the derivative of
-the program's meaning, and optimization is a program like any other (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.6, "Numerical programs and accelerators"). Descent is a term in
+the program's meaning, and optimization is a program like any other (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.6 “Views, distribution, and complete systems”, "Numerical programs and accelerators"). Descent is a term in
 Hyperactive. The thesis is about when descent is necessary: only when the construction is missing.
 
 *Witnessed by:*
@@ -1236,7 +1241,7 @@ Hyperactive. The thesis is about when descent is necessary: only when the constr
 
 #### Observation is a map; agency is its inaccessible complement
 
-**Constructed** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.4).
+**Constructed** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.4 “Observations, information, and locally available actions”).
 - An observer has o : S → O. What it knows on seeing y is the fiber Fiber_o(y).
 - An action permitted when P holds is safe for that observer when it constructs
   SafeAt(y) := Π_{(s,p) : Fiber_o(y)} P(s). That is established over everything compatible with what
@@ -1245,7 +1250,7 @@ Hyperactive. The thesis is about when descent is necessary: only when the constr
 - Refining the observation shrinks the fiber, and evidence for the coarser observation is reused by
   precomposition.
 - The paper "does not assign a scalar 'value of information' without an objective"
-  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.4).
+  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.4 “Observations, information, and locally available actions”).
 - And: "An observation is a map; knowledge is the fiber it leaves; a proof is a construction valid
   over that fiber; an action is a transition whose admissibility can be checked against it."
 
@@ -1268,7 +1273,7 @@ about a named map and its fiber.
 
 #### Witness is the admission discipline
 
-**Constructed.** Three statements are kept apart (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §2.1 and Appendix A.2):
+**Constructed.** Three statements are kept apart (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §2.1 “Construction, elimination, and the difference between data and property” and Appendix A.2 “Boolean fibers, search, and the exact witness object”):
 - a witness, Sat(f) := Σ_x (f(x) = true);
 - its existence, ‖Sat(f)‖;
 - a claim of existence with no witness.
@@ -1276,7 +1281,7 @@ about a named map and its fiber.
 A term of Sat(f) can be executed, transported and transformed. Its truncation records only that some
 witness exists. Asserting the truncation without an inhabitant is admitting a term of a type that may
 be empty. The checker is itself a term that admits a construction only through the checking relation
-(docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §1.2 and §6.1).
+(docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §1.2 “Programs about programs” and §6.1 “Typed quotation, semantic readback, and self-application”).
 
 **Thesis.** Illusion, hallucination and unwitnessed safety are one failure.
 - *Illusion.* A cough completing into a grey coughing figure, or a shadow into a man, is a filler
@@ -1302,23 +1307,23 @@ asserted truncations without inhabitants would commit the failure it names.
 - *Content identity.* A definition's identity is its content. A peer exchanges a definition, its
   dependency closure and its proofs, and the recipient checks them against their mathematical
   definitions, so that "No centralized human-readable namespace is needed to establish the identity
-  of the received definition" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8).
+  of the received definition" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8 “Content-addressed definitions, mathematical identity, and a decentralized codebase”).
 - *Conserved invariants without a scheduler.* A conserved distributed invariant holds with no global
-  scheduler as an axiom, and local knowledge is a construction over partial observation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.3).
+  scheduler as an axiom, and local knowledge is a construction over partial observation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.3 “A distributed credit invariant, with no global scheduler as an axiom”).
 - *Open interactions.* A composite of interacting processes is itself one process, with some
-  interactions internalized and the rest left open (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §7.6).
+  interactions internalized and the rest left open (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §7.6 “Composition of programs with open interactions”).
 
 **Where the paper stops.** The paper stops on purpose: this "does not make every distributed trust
 problem disappear: the authenticity of external observations and the semantics of physical machines
-remain explicit premises" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8). The substrate "does not prescribe a social governance or
-participant-authority protocol" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.6, "Distribution and local execution"). The precise form of what follows keeps that line.
+remain explicit premises" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.8 “Content-addressed definitions, mathematical identity, and a decentralized codebase”). The substrate "does not prescribe a social governance or
+participant-authority protocol" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §10.6 “Views, distribution, and complete systems”, "Distribution and local execution"). The precise form of what follows keeps that line.
 
 **Thesis.** The intermediary has no forced function.
 - *What it does now.* An intermediary names, authenticates definitions, verifies, ranks and meters.
   Once identity is content and verification is local, naming and authenticating definitions have no
   technical necessity left, and nor does verifying anything that carries its evidence.
 - *What remains.* The authenticity of external observations, and executions that are not
-  self-evidencing, remain premises. Even those are assumptions each view selects (this document, §3.2, "Results across machines"), so no one
+  self-evidencing, remain premises. Even those are assumptions each view selects (this document, §3.2 “Constructions the session has proposed, not yet confirmed by Avik”, "Results across machines"), so no one
   is forced to be the center for them either. Whatever role an intermediary keeps is one that some
   view elected.
 - *Value.* Value is the open interaction and its continuations, not a stock: a process's worth is its
@@ -1351,7 +1356,7 @@ exactly what those terms say.
 #### Physics in the same frame
 
 **Constructed.** Source-free Maxwell evolution is exactly the complex field equation i∂ₜF = ∇ × F,
-with F := E + iB and ∇ · F = 0: "an exact algebraic change of representation" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, Appendix A.4, eq. (A.9)).
+with F := E + iB and ∇ · F = 0: "an exact algebraic change of representation" (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, Appendix A.4 “Complex field evolution”, eq. (A.9) “source-free Maxwell evolution in complex form”).
 
 **Thesis.**
 - *The same frame.* The relational actualization of a value only in interaction, and a symmetry of
@@ -1360,14 +1365,15 @@ with F := E + iB and ∇ · F = 0: "an exact algebraic change of representation"
 - *Relational time.* That keeps the account in tune with relational time.
 
 *Witnessed by:* the change of representation of the paper's Appendix A.4
-(docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, eq. (A.9)) as a checked equivalence. Then the projection that
+(docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, Appendix A.4 “Complex field evolution”, eq. (A.9) “source-free Maxwell evolution in complex
+form”) as a checked equivalence. Then the projection that
 yields directed causality, defined as an observation in the sense of the identity claim, with its fiber computed.
 
 ### 3.4 Questions only Avik can answer
 
 None are open.
-- Dimensions were answered by the cubical-set model (§2.2).
-- Native code was decided by Avik on 2026-11-14: through C (§2.2). The record that preceded the
+- Dimensions were answered by the cubical-set model (§2.2 “The language”).
+- Native code was decided by Avik on 2026-11-14: through C (§2.2 “The language”). The record that preceded the
   decision:
   - plan revision 9 (2026-11-09) had chosen x86 ("Not LLVM IR, not C");
   - a session on 2026-11-12 planned C to break a cycle in its goal graph;
@@ -2026,3 +2032,13 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14, to a second session (citations of the paper)
 
 > hi i think various places in tracking we reference a "paper"  we cite shit like "Paper 6.1" this is inexcusable what we have in the repo currently is already an old draft, all such indicators must name file-path/paper-version directly - ideally with content hash for verification. this is just discipline. pls review, make sure you understand all the work very deeply before making even whatyou consider "cosmetic" changes - nothing is cosmetic this is pure information infra, prob read the paper to start
+
+#### 2026-11-14, to the second session (citing by number)
+
+> i want to *never* cite things by position/number. i.e. previously you cooked our project management system i described and everything was identified as t1 t2 t3 t4. cancer garbage truly unintelligent, it is very unintelligent to follow the norms of a failing society. if you are citing paper you should include section title subsection title if any along with numbers and of course paper number. 
+>
+> "HYPERACTIVE.md §3.3 marks the square/composite claim as Constructed, but the paper doesn’t contain it. Relabel it as a thesis, or give a source?" this is meaningless word salad to me. i hav eno idea what you're talking about. do you knwo when you express words they are based on what's in your head but if you don texpress what's in your head they are a meaningless collection of words
+
+#### 2026-11-14, to the second session (on HYPERACTIVE.md)
+
+> i dont know whats in hyperactive.md. this is news to me
