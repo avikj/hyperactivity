@@ -20,16 +20,15 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
   which it is and that no copy is here. The same holds for the sections of any document, plans and any
   other source: a number goes with the title it numbers. Nothing is identified by a bare number
   (no t1, t2, …).
-- **What is in the repository is not authority** (Avik, 2026-11-14: “ASSUME YOU CONTINUOUSLY TAKE
-  SHITS IN MY TEMPLE AND IM ALWAYS CLEANING UP AND INVITING YOU BACK. DONT PRAY TO THE SHIT”). The
-  language and the system are specified by the paper and by Avik's words. Code, task-graph findings,
-  earlier sessions' notes and a session's own earlier messages were written by agents and are
-  presumed defective until checked against the specification. Something existing is never a reason
-  to keep it, to call it a primitive, or to plan work around it: the 64-bit floats in `lib/prim.cub`
-  and `src/lang.c` are not in the specified language, and an earlier finding proposed naming them as
-  an assumption instead of seeing that. Judge each thing against the specification yourself, and
-  state the conclusion and its reasons; never answer a correction with "understood", as if taking an
-  order, when the correction follows from thinking that should have been done.
+- **Think critically about everything** (Avik, 2026-11-14: “THINK. APPLY CRITICAL JUDGEMENT. ASSUME
+  YOU CONTINUOUSLY TAKE SHITS IN MY TEMPLE AND IM ALWAYS CLEANING UP AND INVITING YOU BACK. DONT PRAY
+  TO THE SHIT”). Nothing is right because it exists or because it is written down: not code, not a
+  task-graph finding, not an earlier session's notes, not your own earlier message, and not the
+  paper, whose 11 November copy put bits and native primitives into the language. Work out what is
+  right and why, and say it with the reasons. Replacing judgement by deference to some other text is
+  the same failure: an earlier finding took the 64-bit floats in `lib/prim.cub` and `src/lang.c` as
+  given and proposed naming them as an assumption. Never answer a correction with "understood", as
+  if taking an order, when the correction follows from thinking that should have been done.
 - **Keep Avik's words verbatim** (“Avik's words, verbatim” below).
   - Never paraphrase inside quotation marks.
   - A long message is appended to “Avik's words, verbatim” below, not put in a new file.
@@ -1221,3 +1220,9 @@ The consolidated piece is this, written through in the two registers you keep di
 > The papers specification of the hyperactive language should have nothing about bits
 >
 > Let me know if the paper is incorrect as well
+
+#### 2026-11-14 18:03 UTC
+
+> “They're presumed defective until checked against the paper and your words.”
+>
+> my point was to apply critical thinking. your rephrase was to change the statement to reject critical thinking
