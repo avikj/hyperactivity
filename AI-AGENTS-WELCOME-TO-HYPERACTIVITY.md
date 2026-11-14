@@ -1215,3 +1215,9 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 17:58 UTC
 
 > Don’t say understood like you’re taking commands/decisions wtf. This is basic fucking thinking. Ridiculous. THINK. APPLY CRITICAL JUDGEMENT. ASSUME YOU CONTINUOUSLY TAKE SHITS IN MY TEMPLE AND IM ALWAYS CLEANING UP AND INVITING YOU BACK. DONT PRAY TO THE SHIT. AND I GUESS YOU SHOULD INSTALL THIS AS SERMON IN THE TEMPLE
+
+#### 2026-11-14 17:59 UTC
+
+> The papers specification of the hyperactive language should have nothing about bits
+>
+> Let me know if the paper is incorrect as well

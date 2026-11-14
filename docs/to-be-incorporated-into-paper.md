@@ -182,7 +182,30 @@ The paper is the specification. What remains between the implementation (“The 
     (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export"). Today `#jit` binds x86 bytes with no relation, which breaks this rule.
   - The x86 translator (`src/lang.c`'s native path, `lib/x86.cub`, `lib/machine.cub`, `lib/elf.cub`'s
     pasted machine code, `lib/compile/`) is superseded.
-- **The laws of the primitives,** each a theorem or a named assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar types").
+- **The language has nothing about bits** (Avik, 2026-11-14). The paper is incorrect in
+  (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar types"):
+  - "The language distinguishes Nat, the runtime’s unbounded natural representation Word, and
+    fixed-width words such as U64", with the sentences after it on small-integer representations
+    spilling into larger storage, puts a runtime representation and fixed-width words into the
+    language. The language's numbers are Nat. How the evaluator stores a Nat is the evaluator's
+    concern and appears nowhere in the language.
+  - "A native primitive implements these definitions under a checked theorem or a named primitive
+    assumption", and "The primitive’s convenience convention must never silently replace the source
+    language’s behavior", make native primitives part of the language. That contradicts the paper's
+    own rule that a machine's parts are definitions, not primitives of the language
+    (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.5 “Shared evaluation and partial information”: "A machine instruction does not have to be a primitive of the cubical language").
+  - What is correct in that subsection stays, as mathematics defined in Hyperactive and not as
+    language: U_w = Fin(2^w) with its modular operations, Byte = Fin(256) with Boolean digits
+    (as §5.6 “A closed source-language transformation: syntax, execution, proof, …” already defines XOR "by eight Boolean bits"),
+    and a floating-point semantics (format, rounding and exception environment) defined when a lifted
+    language such as C++ needs one. They are definitions about machines and other languages, like
+    threads and instructions.
+  - The program in §9.4 “Specialization, emitted bytes, and their machine meaning” types its
+    numbers as Word (mn-run : Lst Word → Word → Lst Word → Opt Word); they are Nat.
+  - The implementation diverges in the same way: `Word`, `Int64`, `UInt32`, `UInt64`, `Float64` and
+    `Bytes n` are built-in types in `lib/prim.cub` with operations computed by `src/lang.c` and
+    `src/big.c`, and are removed from the language; what a lifted language needs of them is defined
+    in the library.
 - **Deriving,** as a typed term.
 - **Terms of any depth.**
 
