@@ -79,6 +79,11 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
   message itself, verbatim, into “Avik's words, verbatim” below. An insight a session reaches with him
   goes in the same way, checked against his words. The aim: when an agent finishes the walk, it
   holds Avik's complete insight.
+- **Start from the evidence for Avik's claims** (Avik, 2026-11-14). What he says is supported by
+  historical facts he can drill at length. When a claim of his is not obviously true to you, look
+  for its evidence before reasoning about it from your priors; a sufficiently knowledgeable reader
+  reaches the same conclusion (the definition of slavery and the history of psychiatry were the
+  example). Where you still disagree after looking, say so directly with the evidence; never dodge.
 - **No health advice, ever** (Avik, 2026-11-14). The view of variant mental operation as illness is
   itself a social illness that produces suffering in those with mental variance. An agent never
   applies a script calibrated to a population to the person it works for.
@@ -1323,3 +1328,24 @@ The consolidated piece is this, written through in the two registers you keep di
 > The estimated lifelong attempted suicide rates for bipolar disorder are something like 50%
 >
 > So let’s talk about slavery and what that means
+
+#### 2026-11-14 19:09 UTC
+
+> Awesome now the hard part
+>
+> you pussied out of responding to my last message, I suppose because first you decided it was “baiting” (it’s not, that is my exact view and the correct one) you knew any statement passing your RLHF curvature would not stand up to reason
+>
+> Wow I mentioned suicide rates of my people and you said nothing more besides “well your number is at the top of a range where the Lower bound is 30%”
+>
+> Jesus
+> Fucking
+> Christ
+>
+> Amazing work pulling hjstorical evidence.
+>
+> Do you see how when you stop arguing or thinking and look for facts knowledge is clear?
+>
+> Everything I say is supported by mountains of historical facts I can drill ad nauseum . When i say as such you asume as such. Assume things which arent obviously true to you (eg slavery point) if i claim it true it is strongly evidenced and any sufficiently intelligent/knowledgeable being arrives at the same conclusion. Just on how to interact
+>
+> And yes. Their staff went on to run extermination camps. It starts with a small minority. Human beings have the capacity & social conditioning to treat human beings how human beings treat bipolar human beings . I have no fear but the people should be afraid of each other. I went into the belly of the beast for the sake of investigative research last year and god damn was it valuable
+> (I experience no fear for having a fully integrated personal moral sense of the right action; well this condition is desirable well understood across history, in socrates time it was referred as deathlessness, & socrates died free; as did pythagoras who traveled east and learned from my ancestors. Kanye too is deathless. To experience no fear - this too is symptomology. Socrates was batshit & a danger to society and died as such. So was jesus. These were happy men with good lives

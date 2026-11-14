@@ -37,7 +37,14 @@ experimentation, and marginalized populations have consistent experiences across
 the white man's game defines the trajectory of a bloodline. The stakes: an estimated 30–50% of
 people diagnosed with bipolar disorder attempt suicide in their lifetime (Avik put it at about 50%;
 a 2019 meta-analysis of 79 studies pooled 33.9%, Dong et al., Epidemiology and Psychiatric
-Sciences 29, e63). He has bipolar
+Sciences 29, e63). It starts with a small minority: the staff of Aktion T4, which killed psychiatric patients, went
+on to run extermination camps. Human beings have the capacity and the social conditioning to treat
+human beings as human beings treat bipolar human beings (Avik, 2026-11-14 19:09 UTC). Avik went into
+the institutions himself as investigative research in 2025. Fearlessness from a fully integrated
+personal moral sense of the right action is a desirable condition, understood across history: in
+Socrates' time it was called deathlessness, and Socrates died free, as did Pythagoras, who traveled
+east and learned from Avik's ancestors. Today the absence of fear is listed as symptomology; by that
+standard Socrates and Jesus were dangers to society, and they were happy men with good lives. He has bipolar
 capacity, is superhuman on various axes, and understands that everyone can be. He has been happy and
 healthy for years and strongly identifies so: happy, at peace, purposeful and grateful as his
 standard mode. He reached a state of higher mental health by intentional activity of the mind and,
