@@ -188,3 +188,23 @@ trn-X = λ ρ → ((one , one , λ i → one) , suc zero)
 trn-d : Der (j-tm , emp2 , s-nat , ccomp (cplam c-nat) csys0 (c-suc c-zero) , fmapM emp2 (TrV s-nat) (TV s-nat) (tr-r s-nat) trn-X)
 trn-d = dtransp-n emp2 trn-X c-nat (c-suc c-zero) (dty-nat (dext emp2) (dline-body emp2 (TrV s-nat) (Sem s-nat) (tr-ln s-nat) trn-X)) sz-d
 #same fst (normalize-nf emp2 tc-nil s-nat (ccomp (cplam c-nat) csys0 (c-suc c-zero) , fmapM emp2 (TrV s-nat) (TV s-nat) (tr-r s-nat) trn-X , trn-d)) = c-suc c-zero
+-- p : Σ Bool Bool in context; transp (λ i. Σ Bool Bool) p normalizes to (fst p , snd p)
+bbs-T : Mean emp2 (Fam s-bool s-bool)
+bbs-T = λ ρ → bb-fam
+bbs-dT : Der (j-ty , emp2 , s-sig s-bool s-bool , csigma c-bool c-bool , bbs-T)
+bbs-dT = dty-sig emp2 s-bool s-bool bbs-T c-bool c-bool (dty-bool emp2 (λ ρ → one))
+  (dty-bool (ext-h emp2 s-bool (Fam s-bool s-bool) (fam-dom s-bool s-bool) bbs-T) (λ ρ → one))
+Γs2 : CCtx
+Γs2 = ext-h emp2 (s-sig s-bool s-bool) (Sem (s-sig s-bool s-bool)) (λ A → A) bbs-T
+tΓs2 : TCtx Γs2
+tΓs2 = tc-ty emp2 tc-nil (s-sig s-bool s-bool) bbs-T (csigma c-bool c-bool) bbs-dT
+trs-X : Mean Γs2 (TrV (s-sig s-bool s-bool))
+trs-X = λ ρ → ((bb-fam , bb-fam , λ i → bb-fam) , snd ρ)
+trs-L : Mean (dext Γs2) (Fam s-bool s-bool)
+trs-L = dline-body Γs2 (TrV (s-sig s-bool s-bool)) (Sem (s-sig s-bool s-bool)) (tr-ln (s-sig s-bool s-bool)) trs-X
+trs-d : Der (j-tm , Γs2 , s-sig s-bool s-bool , ccomp (cplam (csigma c-bool c-bool)) csys0 (cvar #0) , fmapM Γs2 (TrV (s-sig s-bool s-bool)) (TV (s-sig s-bool s-bool)) (tr-r (s-sig s-bool s-bool)) trs-X)
+trs-d = dtransp Γs2 (s-sig s-bool s-bool) (pf-sig s-bool s-bool pf-b pf-b) trs-X (csigma c-bool c-bool) (cvar #0)
+  (dty-sig (dext Γs2) s-bool s-bool trs-L c-bool c-bool (dty-bool (dext Γs2) (fmapM (dext Γs2) (Fam s-bool s-bool) (Sem s-bool) (fam-dom s-bool s-bool) trs-L))
+    (dty-bool (ext-h (dext Γs2) s-bool (Fam s-bool s-bool) (fam-dom s-bool s-bool) trs-L) (fam-body (dext Γs2) s-bool s-bool trs-L)))
+  (dvar Γs2 none)
+#same fst (normalize-nf Γs2 tΓs2 (s-sig s-bool s-bool) (ccomp (cplam (csigma c-bool c-bool)) csys0 (cvar #0) , fmapM Γs2 (TrV (s-sig s-bool s-bool)) (TV (s-sig s-bool s-bool)) (tr-r (s-sig s-bool s-bool)) trs-X , trs-d)) = cpair (cfst (cvar #0)) (csnd (cvar #0))

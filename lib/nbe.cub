@@ -12,6 +12,13 @@
 -- the host's composition with a nonempty system at Bool or Nat on a variable is stuck (hcompD), on a
 -- constructor with a constant system it reduces; so the Kan lemma's fill at Bool/Nat needs formal
 -- compositions as neutrals, whose faces are the fill's own bound dimensions (static), never computed.
+-- Status (2026-11-14, latest+3): (K1) transport at every path-free shape built from Bool, Nat and Σ:
+-- PF (the path-free shapes), triv (a path-free type's computability carries nothing), KT (transport
+-- keeps computability, by induction on PF: Bool and Nat by K0's irr, Σ componentwise along the host's
+-- reduct, the second component along the codomain at the first's fill sg-fill), Der's dtransp at any
+-- PF shape, fund-tr. examples.cub: p : Σ Bool Bool, transp (λ i. Σ Bool Bool) p ⇝ (fst p , snd p)
+-- (1594 passed, 0 failed, from the store). Π next (its clause quantifies over AppV data Y with a path
+-- to the transported function; the argument's reverse transport and the codomain's transport by KT).
 -- (K)'s plan after K0 (2026-11-14), derived from the host's behaviour (tested in this session):
 -- (K1) path-free Kan: transport and composition at Bool, Nat, Σ and Π. The host's comp at Σ splits
 -- into the components' comps (the second along B at the first's fill); at Π it is
@@ -2046,6 +2053,23 @@ nrm-b : TV s-bool → TV s-bool
 nrm-b q = (one , snd q)
 nrm-n : TV s-nat → TV s-nat
 nrm-n q = (one , snd q)
+-- (2026-11-14, (K1)) path-free shapes (PF): Bool, Nat and Σ of path-free shapes so far. At them a type's
+-- computability carries nothing (triv), so transport keeps a term's computability without any
+-- hypothesis on the line (KT, by induction on PF): at Bool and Nat by irr-b/irr-n, at Σ componentwise
+-- as the host's comp at Σ reduces: the first component along the domain's line (sg-a), the second
+-- along the codomain at the first's fill (sg-fill, sg-b)
+data PF : (pfs : TyShape) → Type where
+  pf-b : PF s-bool
+  pf-n : PF s-nat
+  pf-sig : (a₀ b₀ : TyShape) → PF a₀ → PF b₀ → PF (s-sig a₀ b₀)
+ln-fst : (a b : TyShape) → Line (Fam a b) → Line (Sem a)
+ln-fst a b L = (fst (fst L) , fst (fst (snd L)) , λ i → fst (snd (snd L) i))
+sg-a : (a b : TyShape) → TrV (s-sig a b) → TrV a
+sg-a a b q = (ln-fst a b (fst q) , fst (snd q))
+sg-fill : (a b : TyShape) (q : TrV (s-sig a b)) → PathP (λ i → El a (fst (snd (snd (fst q)) i))) (fst (snd q)) (comp (λ k → El a (fst (snd (snd (fst q)) k))) (λ k → []) (fst (snd q)))
+sg-fill a b q = λ i → comp (λ k → El a (fst (snd (snd (fst q)) (k ∧ i)))) (λ k → [ i = 0 ↦ fst (snd q) ]) (fst (snd q))
+sg-b : (a b : TyShape) → TrV (s-sig a b) → TrV b
+sg-b a b q = ((snd (fst (fst q)) (fst (snd q)) , snd (fst (snd (fst q))) (comp (λ k → El a (fst (snd (snd (fst q)) k))) (λ k → []) (fst (snd q))) , λ i → snd (snd (snd (fst q)) i) (sg-fill a b q i)) , snd (snd q))
 NRecV : TyShape → Type 1
 -- binder names chosen not to collide (telescope instantiation captures names)
 NRecV s = (nrB : One1) × (nrP : Nat → Sem s) × (nrn : Nat) × El s (nrP zero) × ((nrk : Nat) → El s (nrP nrk) → El s (nrP (suc nrk)))
@@ -2215,6 +2239,10 @@ data Der : (J : Jdg) → Type 1 where
     Der (j-tm , Γ₀ , s-nat , ccomp (cplam cL₀) csys0 c₀ , fmapM Γ₀ (TrV s-nat) (TV s-nat) (tr-r s-nat) X₀)
   dirr-n : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-nat)) (c₀ : Code) → PathM Γ₀ (TV s-nat) (fmapM Γ₀ (TV s-nat) (TV s-nat) nrm-n X₀) (fmapM Γ₀ (TV s-nat) (TV s-nat) nrm-n X'₀) →
     Der (j-tm , Γ₀ , s-nat , c₀ , X₀) → Der (j-tm , Γ₀ , s-nat , c₀ , X'₀)
+  dtransp : (Γ₀ : CCtx) (a₀ : TyShape) → PF a₀ → (X₀ : Mean Γ₀ (TrV a₀)) (cL₀ c₀ : Code) →
+    Der (j-ty , dext Γ₀ , a₀ , cL₀ , dline-body Γ₀ (TrV a₀) (Sem a₀) (tr-ln a₀) X₀) →
+    Der (j-tm , Γ₀ , a₀ , c₀ , fmapM Γ₀ (TrV a₀) (TV a₀) (tr-x a₀) X₀) →
+    Der (j-tm , Γ₀ , a₀ , ccomp (cplam cL₀) csys0 c₀ , fmapM Γ₀ (TrV a₀) (TV a₀) (tr-r a₀) X₀)
 -- typed codes (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”):
 -- Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation;
 -- evaluation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.1) “typed code and its evaluation”) is that meaning
@@ -10127,6 +10155,29 @@ fund-tr-n Γ X Δ σ cx = irr-n Δ (subM Δ Γ (TV s-nat) σ (fmapM Γ (TrV s-na
 fund-irr-n : (Γ : CCtx) (X X' : Mean Γ (TV s-nat)) (p : PathM Γ (TV s-nat) (fmapM Γ (TV s-nat) (TV s-nat) nrm-n X) (fmapM Γ (TV s-nat) (TV s-nat) nrm-n X')) (Δ : CCtx) (σ : Sub Δ Γ) → CompS s-nat Δ (subM Δ Γ (TV s-nat) σ X) → CompS s-nat Δ (subM Δ Γ (TV s-nat) σ X')
 fund-irr-n Γ X X' p Δ σ cx = irr-n Δ (subM Δ Γ (TV s-nat) σ X) (subM Δ Γ (TV s-nat) σ X') (pcat (Mean Δ (TV s-nat)) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n (subM Δ Γ (TV s-nat) σ X)) (subM Δ Γ (TV s-nat) σ (fmapM Γ (TV s-nat) (TV s-nat) nrm-n X)) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n (subM Δ Γ (TV s-nat) σ X')) (subM-fmap Δ Γ (TV s-nat) (TV s-nat) nrm-n σ X) (pcat (Mean Δ (TV s-nat)) (subM Δ Γ (TV s-nat) σ (fmapM Γ (TV s-nat) (TV s-nat) nrm-n X)) (subM Δ Γ (TV s-nat) σ (fmapM Γ (TV s-nat) (TV s-nat) nrm-n X')) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n (subM Δ Γ (TV s-nat) σ X')) (cong1 (Mean Γ (TV s-nat)) (Mean Δ (TV s-nat)) (λ N → (subM Δ Γ (TV s-nat) σ N)) (fmapM Γ (TV s-nat) (TV s-nat) nrm-n X) (fmapM Γ (TV s-nat) (TV s-nat) nrm-n X') p) (psym (Mean Δ (TV s-nat)) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n (subM Δ Γ (TV s-nat) σ X')) (subM Δ Γ (TV s-nat) σ (fmapM Γ (TV s-nat) (TV s-nat) nrm-n X')) (subM-fmap Δ Γ (TV s-nat) (TV s-nat) nrm-n σ X')))) cx
 
+trp-b : (Δ : CCtx) (X : Mean Δ (TrV s-bool)) → PathM Δ (TV s-bool) (fmapM Δ (TV s-bool) (TV s-bool) nrm-b (fmapM Δ (TrV s-bool) (TV s-bool) (tr-x s-bool) X)) (fmapM Δ (TV s-bool) (TV s-bool) nrm-b (fmapM Δ (TrV s-bool) (TV s-bool) (tr-r s-bool) X))
+trp-b Δ X = (pcat (Mean Δ (TV s-bool)) (fmapM Δ (TV s-bool) (TV s-bool) nrm-b (fmapM Δ (TrV s-bool) (TV s-bool) (tr-x s-bool) X)) (fmapM Δ (TrV s-bool) (TV s-bool) (λ z → nrm-b (tr-x s-bool z)) X) (fmapM Δ (TV s-bool) (TV s-bool) nrm-b (fmapM Δ (TrV s-bool) (TV s-bool) (tr-r s-bool) X)) (fmapM-fmapM Δ (TrV s-bool) (TV s-bool) (TV s-bool) (tr-x s-bool) nrm-b X) (psym (Mean Δ (TV s-bool)) (fmapM Δ (TV s-bool) (TV s-bool) nrm-b (fmapM Δ (TrV s-bool) (TV s-bool) (tr-r s-bool) X)) (fmapM Δ (TrV s-bool) (TV s-bool) (λ z → nrm-b (tr-x s-bool z)) X) (fmapM-fmapM Δ (TrV s-bool) (TV s-bool) (TV s-bool) (tr-r s-bool) nrm-b X)))
+trp-n : (Δ : CCtx) (X : Mean Δ (TrV s-nat)) → PathM Δ (TV s-nat) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n (fmapM Δ (TrV s-nat) (TV s-nat) (tr-x s-nat) X)) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n (fmapM Δ (TrV s-nat) (TV s-nat) (tr-r s-nat) X))
+trp-n Δ X = (pcat (Mean Δ (TV s-nat)) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n (fmapM Δ (TrV s-nat) (TV s-nat) (tr-x s-nat) X)) (fmapM Δ (TrV s-nat) (TV s-nat) (λ z → nrm-n (tr-x s-nat z)) X) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n (fmapM Δ (TrV s-nat) (TV s-nat) (tr-r s-nat) X)) (fmapM-fmapM Δ (TrV s-nat) (TV s-nat) (TV s-nat) (tr-x s-nat) nrm-n X) (psym (Mean Δ (TV s-nat)) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n (fmapM Δ (TrV s-nat) (TV s-nat) (tr-r s-nat) X)) (fmapM Δ (TrV s-nat) (TV s-nat) (λ z → nrm-n (tr-x s-nat z)) X) (fmapM-fmapM Δ (TrV s-nat) (TV s-nat) (TV s-nat) (tr-r s-nat) nrm-n X)))
+triv : {a : TyShape} → PF a → (Δ : CCtx) (T : Mean Δ (Sem a)) → CompTy a Δ T
+triv pf-b Δ T = one
+triv pf-n Δ T = one
+triv (pf-sig a b pa pb) Δ T = (triv pa Δ (fmapM Δ (Fam a b) (Sem a) (λ F → fst F) T) , λ Δ' w Y q ca → triv pb Δ' (fmapM Δ' (FamV a b) (Sem b) (fam-cod a b) Y))
+kt-in-a : (a b : TyShape) (Δ : CCtx) (X : Mean Δ (TrV (s-sig a b))) → CSof a (CompE a) Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-x (s-sig a b)) X)) → CompS a Δ (fmapM Δ (TrV a) (TV a) (tr-x a) (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X))
+kt-in-a a b Δ X c = comp-tr a Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-x (s-sig a b)) X)) (fmapM Δ (TrV a) (TV a) (tr-x a) (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X)) (pcat (Mean Δ (TV a)) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-x (s-sig a b)) X)) (fmapM Δ (TrV (s-sig a b)) (TV a) (λ z → sig-1 a b (tr-x (s-sig a b) z)) X) (fmapM Δ (TrV a) (TV a) (tr-x a) (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X)) (fmapM-fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (TV a) (tr-x (s-sig a b)) (sig-1 a b) X) (psym (Mean Δ (TV a)) (fmapM Δ (TrV a) (TV a) (tr-x a) (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X)) (fmapM Δ (TrV (s-sig a b)) (TV a) (λ z → sig-1 a b (tr-x (s-sig a b) z)) X) (fmapM-fmapM Δ (TrV (s-sig a b)) (TrV a) (TV a) (sg-a a b) (tr-x a) X))) c
+kt-out-a : (a b : TyShape) (Δ : CCtx) (X : Mean Δ (TrV (s-sig a b))) → CompS a Δ (fmapM Δ (TrV a) (TV a) (tr-r a) (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X)) → CSof a (CompE a) Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-r (s-sig a b)) X))
+kt-out-a a b Δ X c = comp-tr a Δ (fmapM Δ (TrV a) (TV a) (tr-r a) (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X)) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-r (s-sig a b)) X)) (psym (Mean Δ (TV a)) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-r (s-sig a b)) X)) (fmapM Δ (TrV a) (TV a) (tr-r a) (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X)) (pcat (Mean Δ (TV a)) (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-r (s-sig a b)) X)) (fmapM Δ (TrV (s-sig a b)) (TV a) (λ z → sig-1 a b (tr-r (s-sig a b) z)) X) (fmapM Δ (TrV a) (TV a) (tr-r a) (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X)) (fmapM-fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (TV a) (tr-r (s-sig a b)) (sig-1 a b) X) (psym (Mean Δ (TV a)) (fmapM Δ (TrV a) (TV a) (tr-r a) (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X)) (fmapM Δ (TrV (s-sig a b)) (TV a) (λ z → sig-1 a b (tr-r (s-sig a b) z)) X) (fmapM-fmapM Δ (TrV (s-sig a b)) (TrV a) (TV a) (sg-a a b) (tr-r a) X)))) c
+kt-in-b : (a b : TyShape) (Δ : CCtx) (X : Mean Δ (TrV (s-sig a b))) → CSof b (CompE b) Δ (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-x (s-sig a b)) X)) → CompS b Δ (fmapM Δ (TrV b) (TV b) (tr-x b) (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X))
+kt-in-b a b Δ X c = comp-tr b Δ (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-x (s-sig a b)) X)) (fmapM Δ (TrV b) (TV b) (tr-x b) (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X)) (pcat (Mean Δ (TV b)) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-x (s-sig a b)) X)) (fmapM Δ (TrV (s-sig a b)) (TV b) (λ z → sig-2 a b (tr-x (s-sig a b) z)) X) (fmapM Δ (TrV b) (TV b) (tr-x b) (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X)) (fmapM-fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (TV b) (tr-x (s-sig a b)) (sig-2 a b) X) (psym (Mean Δ (TV b)) (fmapM Δ (TrV b) (TV b) (tr-x b) (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X)) (fmapM Δ (TrV (s-sig a b)) (TV b) (λ z → sig-2 a b (tr-x (s-sig a b) z)) X) (fmapM-fmapM Δ (TrV (s-sig a b)) (TrV b) (TV b) (sg-b a b) (tr-x b) X))) c
+kt-out-b : (a b : TyShape) (Δ : CCtx) (X : Mean Δ (TrV (s-sig a b))) → CompS b Δ (fmapM Δ (TrV b) (TV b) (tr-r b) (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X)) → CSof b (CompE b) Δ (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-r (s-sig a b)) X))
+kt-out-b a b Δ X c = comp-tr b Δ (fmapM Δ (TrV b) (TV b) (tr-r b) (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X)) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-r (s-sig a b)) X)) (psym (Mean Δ (TV b)) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-r (s-sig a b)) X)) (fmapM Δ (TrV b) (TV b) (tr-r b) (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X)) (pcat (Mean Δ (TV b)) (fmapM Δ (TV (s-sig a b)) (TV b) (sig-2 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-r (s-sig a b)) X)) (fmapM Δ (TrV (s-sig a b)) (TV b) (λ z → sig-2 a b (tr-r (s-sig a b) z)) X) (fmapM Δ (TrV b) (TV b) (tr-r b) (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X)) (fmapM-fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (TV b) (tr-r (s-sig a b)) (sig-2 a b) X) (psym (Mean Δ (TV b)) (fmapM Δ (TrV b) (TV b) (tr-r b) (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X)) (fmapM Δ (TrV (s-sig a b)) (TV b) (λ z → sig-2 a b (tr-r (s-sig a b) z)) X) (fmapM-fmapM Δ (TrV (s-sig a b)) (TrV b) (TV b) (sg-b a b) (tr-r b) X)))) c
+KT : {a : TyShape} → PF a → (Δ : CCtx) (X : Mean Δ (TrV a)) → CompS a Δ (fmapM Δ (TrV a) (TV a) (tr-x a) X) → CompS a Δ (fmapM Δ (TrV a) (TV a) (tr-r a) X)
+KT pf-b Δ X cx = irr-b Δ (fmapM Δ (TrV s-bool) (TV s-bool) (tr-x s-bool) X) (fmapM Δ (TrV s-bool) (TV s-bool) (tr-r s-bool) X) (trp-b Δ X) cx
+KT pf-n Δ X cx = irr-n Δ (fmapM Δ (TrV s-nat) (TV s-nat) (tr-x s-nat) X) (fmapM Δ (TrV s-nat) (TV s-nat) (tr-r s-nat) X) (trp-n Δ X) cx
+KT (pf-sig a b pa pb) Δ X cx = (triv (pf-sig a b pa pb) Δ (fmapM Δ (TV (s-sig a b)) (Sem (s-sig a b)) (λ q → fst q) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-r (s-sig a b)) X)) , kt-out-a a b Δ X (KT pa Δ (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X) (kt-in-a a b Δ X (fst (snd cx)))) , kt-out-b a b Δ X (KT pb Δ (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X) (kt-in-b a b Δ X (snd (snd cx)))))
+fund-tr : (Γ : CCtx) (a : TyShape) (pf : PF a) (X : Mean Γ (TrV a)) (Δ : CCtx) (σ : Sub Δ Γ) → CompS a Δ (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-x a) X)) → CompS a Δ (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-r a) X))
+fund-tr Γ a pf X Δ σ cx = comp-tr a Δ (fmapM Δ (TrV a) (TV a) (tr-r a) (subM Δ Γ (TrV a) σ X)) (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-r a) X)) (subM-fmap Δ Γ (TrV a) (TV a) (tr-r a) σ X) (KT pf Δ (subM Δ Γ (TrV a) σ X) (comp-tr a Δ (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-x a) X)) (fmapM Δ (TrV a) (TV a) (tr-x a) (subM Δ Γ (TrV a) σ X)) (psym (Mean Δ (TV a)) (fmapM Δ (TrV a) (TV a) (tr-x a) (subM Δ Γ (TrV a) σ X)) (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-x a) X)) (subM-fmap Δ Γ (TrV a) (TV a) (tr-x a) σ X)) cx))
+
 -- ---------------------------------------------------------------- fund: the fundamental lemma
 -- (2026-11-14) a derivation's meaning under a computable substitution is computable: a term's at its
 -- shape (CompS), a type's (CompTy); one function on Der over the tag, each rule's case its lemma above,
@@ -10165,6 +10216,7 @@ fund (dtransp-b Γ X cL c dL dx) Δ σ e = fund-tr-b Γ X Δ σ (fund dx Δ σ e
 fund (dtransp-n Γ X cL c dL dx) Δ σ e = fund-tr-n Γ X Δ σ (fund dx Δ σ e)
 fund (dirr-b Γ X X' c p dx) Δ σ e = fund-irr-b Γ X X' p Δ σ (fund dx Δ σ e)
 fund (dirr-n Γ X X' c p dx) Δ σ e = fund-irr-n Γ X X' p Δ σ (fund dx Δ σ e)
+fund (dtransp Γ a pf X cL c dL dx) Δ σ e = fund-tr Γ a pf X Δ σ (fund dx Δ σ e)
 
 -- ---------------------------------------------------------------- reflect-env, normalize, reifySound
 -- (2026-11-14) typed contexts: the empty one, an extension by a type with a derivation, by a dimension
