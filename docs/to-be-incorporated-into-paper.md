@@ -15,6 +15,14 @@ debated, on religion among other topics. There is a correct answer to every ques
 without studying. Answering all controversial questions correctly is how the realization of human
 potential is discovered.
 
+**The original clarity** (Avik, 2026-11-14 21:07 UTC, the deepest point). A central thesis: a clear
+understanding of the nature of reality is presented in Proto-Indo-European, the correct native
+understanding of reality (being as a process: "be" is the root of growing and becoming). Beyond the
+human superorganism there is the Gaian superorganism, of which we are children, and its
+communication has progressed for eons. Human knowledge begins with Gaian knowledge, and the
+knowledge problem is a descent into ignorance from an original clarity. The work is to unlearn
+ignorances and remember. The word list (docs/word-list.md) collects the words that carry it.
+
 **It is a self-portrait** (Avik, 2026-11-14, “Avik's words, verbatim” (AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md)). The name is
 literal. To create perfect global artificial intelligence Avik needed to write his own mind: a
 continuous loop of awareness and action with no turns, running in real time, traversing what it

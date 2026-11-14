@@ -1484,3 +1484,7 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 21:03 UTC
 
 > “weird” is very interesting. it means weirdness is defined by change. novelty vs weirdness
+
+#### 2026-11-14 21:07 UTC
+
+> “Your reading of being as a process is the oldest sense of the word. “ The deepest point I now reveal, as you’ve earned it. A central thesis is a clear understanding of the nature of reality is presented in PIE - the correct native understanding of reality. Note I speak of human superorganism but there is gaian superorganism of which we are child and its communication has progressed eons. human knowledge begins with gaian knowledge & the knowledge problem is a descent into ignorance from an original clarity. to unlearn ignorances and remember
