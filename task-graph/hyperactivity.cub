@@ -205,35 +205,23 @@ typed-codes-after-canonicity = node "Everything typed codes and normalization by
 -- (paper §9). paper §9. Native code today comes from an x86 translator whose output is bound and
 -- run with no relation to the definition (src/lang.c, lib/x86.cub), from pasted machine code
 -- (lib/elf.cub), and with proofs about its bytes at one fixed placement (lib/compile/); nothing
--- relates a fleet's proved behaviour to its binaries (lib/deploy.cub). Which route native
--- realization takes is open (2026-11-14). The claim of 2026-11-13 that it was settled for x86 was
--- unfounded: it quoted Avik's words about not splitting C source when it is stored as if they were
--- about realization, and read §9.3's small compiler example as a mandate. The record: (1) The paper
--- permits every route. An interpreter is one realization, specialization or native instruction
--- selection others (§9.2, §9.3); the evaluator replaces a source computation with native code only
--- once the stated target-correctness witness is available (§9.3, "Loading, native substitution");
--- "C and C++ text are optional target presentations. If an external compiler produces the executed
--- bytes, either its relevant compilation relation is assumed or those bytes receive their own
--- checked connection" (§9.3); §9.4 describes the existing x86 path (#jit, mn-run, Correct1) and
--- states that proofs of the encoder's templates under the machine model are separate obligations.
--- (2) Plan revision 9 (2026-11-09, archive/2026-11-11/PLAN-rev9.md §5 item 5; written by a session,
--- who decided it is not recorded) chose x86-64, then Arm and RISC-V: "Not LLVM IR, not C: an
--- intermediate language would need its own meaning and its own check, and the hardware model is the
--- meaning that matters"; it deleted the earlier C path (#native: C compiled by gcc, loaded as a
--- shared object), which was related to the source only by comparing answers. (3) A session on
--- 2026-11-12 (work/graph.cub at d57ed40, node native; not attributed to Avik) planned realization
--- through C, emitting C that keeps the program's structure so the C compilers' optimizations apply,
--- the translation returning the relation between running the C and the term's meaning, with the C
--- compiler, the C library and the hardware trusted; its stated reason was a cycle in its goal graph
--- (the core served the instruction-set and memory models, and native realization needed them). (4)
--- No words of Avik's in the repository decide between the routes. What the decision turns on: every
--- witnessed route needs a target language's semantics (the x86 model, or a C semantics with an
--- assumed compiler relation), which is language support, and language support waits on this goal.
--- Proposed, not confirmed: this goal needs the paper's substitution rule obeyed (native code
--- replaces a definition only under its witness or an explicitly named assumption that #trusted
--- lists), and the witnessed route goes with language support. Question for Avik (2026-11-14): which
--- target does a witnessed native path take, x86 and its successors directly or C through an
--- external compiler under a named assumption, and is one needed before language support?
+-- relates a fleet's proved behaviour to its binaries (lib/deploy.cub). Decided by Avik
+-- (2026-11-14): native realization goes through C. "are you going to complete writing proven-
+-- correct x86 RISC ARM impls instead of writing a C impl ? the value delivered to me by a complete
+-- x86 machine code impl is near-zero. cant even run on a macbook can it ... there remains no
+-- argument for x86 as far as i can tell." One C emitter runs wherever a C compiler does; per-ISA
+-- emitters and their proofs would multiply by every target. The paper permits it (§9.3: "C and C++
+-- text are optional target presentations. If an external compiler produces the executed bytes,
+-- either its relevant compilation relation is assumed or those bytes receive their own checked
+-- connection"). What follows: the emitter returns the relation between running the emitted C and
+-- the term's meaning, which needs the meaning of the C fragment the emitter produces (a small,
+-- fixed subset), not of all of C (that stays language support); the C compiler's relation is a
+-- named assumption listed by #trusted; the evaluator substitutes native code only under that
+-- relation. The x86 translator (src/lang.c, lib/x86.cub, lib/machine.cub, lib/elf.cub's pasted
+-- machine code, lib/compile/) is superseded by it. The record that preceded the decision: plan
+-- revision 9 (2026-11-09, archive/2026-11-11/PLAN-rev9.md §5 item 5) had chosen x86 ("Not LLVM IR,
+-- not C"); a session on 2026-11-12 planned C to break a cycle in its goal graph; neither was
+-- Avik's.
 -- Known (2026-11-12, at src/lang.c): wrong, against the paper (§9.3, "native substitution"): the
 -- evaluator may replace a definition by native code only once a target-correctness witness relating
 -- the code's execution to the definition exists. Here the bytes are bound after the only check

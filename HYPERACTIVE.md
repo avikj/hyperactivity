@@ -776,10 +776,19 @@ The paper is the specification. What remains between the implementation (§1) an
   - object composition is the host's composition;
   - Glue and univalence are the host's.
 - **The specializer, carrying its law** (§6.2).
-- **Native realization** (§9), related to the definitions it realizes. The route is open; see
-  §3.4. The paper requires that the evaluator replace a source computation with native code only
-  once a target-correctness witness is available (§9.3, "Loading, native substitution"). Today
-  `#jit` breaks that rule.
+- **Native realization goes through C** (Avik, 2026-11-14). One C emitter runs wherever a C compiler
+  does, a MacBook included; proven emitters per instruction set (x86, Arm, RISC-V) would multiply
+  with every target, and a complete x86 path delivers near-zero value. The paper permits it (§9.3:
+  "If an external compiler produces the executed bytes, either its relevant compilation relation is
+  assumed or those bytes receive their own checked connection").
+  - The emitter returns the relation between running the emitted C and the term's meaning. That
+    needs the meaning of the C fragment the emitter produces, a small fixed subset. The meaning of
+    all of C stays language support.
+  - The C compiler's relation is a named assumption, listed by `#trusted`.
+  - The evaluator substitutes native code only under that relation (§9.3, "Loading, native
+    substitution"). Today `#jit` binds x86 bytes with no relation, which breaks this rule.
+  - The x86 translator (`src/lang.c`'s native path, `lib/x86.cub`, `lib/machine.cub`, `lib/elf.cub`'s
+    pasted machine code, `lib/compile/`) is superseded.
 - **The laws of the primitives,** each a theorem or a named assumption (§8.5).
 - **Deriving,** as a typed term.
 - **Terms of any depth.**
@@ -1323,37 +1332,14 @@ yields directed causality, defined as an observation in the sense of the identit
 
 ### 3.4 Questions only Avik can answer
 
-1. **Which target a witnessed native path takes, and whether one is needed before language
-   support.** Dimensions were answered by the cubical-set model (§2.2). Native code was wrongly
-   called settled on 2026-11-13: that claim quoted Avik's words about not splitting stored C source
-   as if they were about realization. The record, from the repository and its history:
-   - **The paper permits every route.**
-     - An interpreter is one realization, and native instruction selection another (§9.2, §9.3).
-     - Native code replaces a source computation only once its target-correctness witness is
-       available.
-     - "C and C++ text are optional target presentations. If an external compiler produces the
-       executed bytes, either its relevant compilation relation is assumed or those bytes receive
-       their own checked connection" (§9.3).
-     - §9.4 describes the existing x86 path. It says proofs of the encoder's templates under the
-       machine model are separate obligations.
-   - **Plan revision 9** (2026-11-09, `archive/2026-11-11/PLAN-rev9.md` §5 item 5) chose x86-64,
-     then Arm and RISC-V: "Not LLVM IR, not C: an intermediate language would need its own meaning
-     and its own check, and the hardware model is the meaning that matters". It deleted the earlier
-     C path, which compiled C with gcc and related it to the source only by comparing answers. A
-     session wrote the plan; who decided this is not recorded.
-   - **A session on 2026-11-12** (`work/graph.cub` at d57ed40, node `native`) planned realization
-     through C instead. It emits structured C so that the C compilers' optimizations apply, and
-     trusts the compiler, the C library and the hardware. Its stated reason was a cycle in its goal
-     graph. Nothing attributes this to Avik.
-   - **No words of Avik's in the repository decide between them.**
-
-   What the decision turns on: every witnessed route needs a target language's semantics, either the
-   x86 model or a C semantics plus an assumed compiler relation. That is language support, and
-   language support waits on the language.
-
-   Proposed, not confirmed: the language goal needs only the paper's substitution rule obeyed, with
-   native code under its witness or an explicitly named assumption that `#trusted` lists. The
-   witnessed route then goes with language support.
+None are open.
+- Dimensions were answered by the cubical-set model (§2.2).
+- Native code was decided by Avik on 2026-11-14: through C (§2.2). The record that preceded the
+  decision:
+  - plan revision 9 (2026-11-09) had chosen x86 ("Not LLVM IR, not C");
+  - a session on 2026-11-12 planned C to break a cycle in its goal graph;
+  - neither was Avik's;
+  - the 2026-11-13 "settled for x86" was unfounded.
 
 ---
 
@@ -1991,3 +1977,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > " 
 >
 > ensure all messages you ever send always contain all pending unresolved things from conversation. zero loss is acceptable.
+
+#### 2026-11-14 00:56 UTC
+
+> "pending the session" - is there anything blocking this? if not you should be doing it, right? it will take me time to reaed & think over everything you said about c/native i imagine it's not relevant to this? or is it?
