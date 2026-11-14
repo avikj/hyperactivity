@@ -302,8 +302,19 @@ composition-with-systems = node "Composition with a system on the context's face
 -- carry with its fill. ElOver is over the cube of the types h reads off M (phih). Next: variables
 -- (dvar at varCube) with their type paths, for the fragment of closed simple types first (a type's
 -- meaning constant over the context, so the paths are of-lift and a lift over a section's cube),
--- then the checker as a function over codes. Then the λ rule: the body checked over ext-h of the expected
--- domain, carried to lam-ctx by dmap-fmap and carry.
+-- then the checker as a function over codes.
+-- Plan for the simple-types fragment (2026-11-14; types t ::= bool | t → t with constant meanings
+-- sem t): a context is a list of simple types ts, its cube cube-map (into ts) (cube0 ts) over a cube
+-- of One1 (into ts builds the context value with the constant types), so the environments over a
+-- vertex have constant types judgmentally. Every meaning over it is a reindexing
+-- dcube-reidx (into ts) of a pointwise dcube-of g over cube0 ts with g's type part sem t
+-- judgmentally; then application, variables and the types need no conversion at all: each rule's
+-- premise meanings are path-equal to such cubes by lemmas proved by plain induction on the
+-- dimension (fmap over a reindexing, map over a reindexing, dcube-of over a mapped cube as a
+-- reindexing, dcube-map-of), and lam-ctx of a pointwise λ is cube-map (into (t ∷ ts)) of the same
+-- cube once mapped (the λ's type part is constant), so the body is checked in ctx-of (t ∷ ts) and
+-- carried to lam-ctx with push over a reindexing. The general machinery above (conv-E, conv-path)
+-- is for dependent types after this fragment.
 checker-returns-derivations : Node
 checker-returns-derivations = node "A checker takes raw codes to typing derivations (or a diagnostic), as the paper's §6.1 specifies." (cons typed-codes-after-swap nil)
 -- typed-codes-after-composition (2026-11-14): everything typed codes and normalization by evaluation
