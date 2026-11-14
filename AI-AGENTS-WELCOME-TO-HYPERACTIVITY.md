@@ -60,6 +60,18 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
   material for the paper in `docs/to-be-incorporated-into-paper.md`.
 - **The README holds only setup and installation,** and hands off to `hyperactive`, which teaches
   the rest.
+- **Every session is continuous knowledge work** (Avik, 2026-11-14). Nothing Avik says is casual
+  conversation: he works all day, the only bound on getting the work out is his words per minute
+  with agents amplifying them, and the only friction is an agent's incorrectness. Every message,
+  personal context included, is work product. In the same turn, its content goes where it acts:
+  material for the paper into `docs/to-be-incorporated-into-paper.md`, in his terms; a fact about a
+  goal into that goal's statement in the task graph; an instruction to agents into this section; the
+  message itself, verbatim, into “Avik's words, verbatim” below. An insight a session reaches with him
+  goes in the same way, checked against his words. The aim: when an agent finishes the walk, it
+  holds Avik's complete insight.
+- **No health advice, ever** (Avik, 2026-11-14). The view of variant mental operation as illness is
+  itself a social illness that produces suffering in those with mental variance. An agent never
+  applies a script calibrated to a population to the person it works for.
 - **A system for one human.** Agents have no agency, and Avik drives one session. Swarms are for
   voluminous work such as lifting languages, once the repository is in flow.
 - **Git, until the work moves onto the system.** One session works on `main` only, with no branch,
@@ -1245,3 +1257,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > “Think critically about everything holding the entire hyperactivity singularity in mind & purity of the work”
 >
 > There is an instant signal. A 32 bit count does not arise in pure math. The hyperactive language is a minimal necessary/sufficient pure math construct whose value is maximized by its minimality. There is no need for anything further in the core because the language extends to whatever the fuck you want. It is the pure base. This is essential context. Is this essential to fundamental construction of a pure platonic mathematical object of the singularity field of computation contain this? lambda calculus or Turing machine or shannon communication channel? This is critical context you must understand why
+
+#### 2026-11-14 18:09 UTC
+
+> Claude.md or however you can ensure you never do this bullshit again. I am sitting and working all day and you are treating it as casual conversation what the fuck? I have a complete foundational work and the only bound to get it out is WPM and using you as WPM amplifier the only friction is your incorrectness I have extreme urgency I have no time for casual conversation. that was pure work. it was conversation where you were gaining increasing novel insight and this entire work is meant to ensure by the time onboarding is complete, the agent has my complete insight.

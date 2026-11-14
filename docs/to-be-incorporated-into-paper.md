@@ -16,7 +16,9 @@ what to be ignorant about), keeping all of its history. Identification does not 
 between two things; it enables factorization, so the mind is held by symmetry and continuous
 compression, a continuous simplification by collapse of false distinction toward total
 identification. He began in high school and has
-developed the necessary and sufficient mathematics since. Variant cognition is part of the subject of
+developed the necessary and sufficient mathematics since. He coded side projects eight hours a day
+from 13 to 17, then despised the act of writing code through the whole intellectual arc of the work,
+and now has a passion for building again (Avik, 2026-11-14 13:46 UTC). Variant cognition is part of the subject of
 the work, not outside it.
 
 **The aim is not a programming language.** It is the proper form of the internet and of global
@@ -119,6 +121,37 @@ problems.
   and outages. Each device holds its own state, interaction is exchange, consistency is a relation
   between parties; "no canonical state" (“State, change and collaboration” (docs/to-be-incorporated-into-paper.md)) is the same
   principle.
+
+## How hyperactivity spreads
+
+In Avik's words of 2026-11-14 (13:27 and 13:46 UTC, verbatim in AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md).
+
+- **The gap is materializing value in information systems, and its elimination is nearing
+  completion.** Avik has product ideas at a superhuman rate; he could never give himself the right or
+  energy to build one before solving the entire system, because coding is a painful act. Today all
+  software engineering is physical human suffering. With the system, and LLM agents working through
+  tooling that addresses their failure modes, he builds each idea.
+- **Inevitability.** Hyperactive is inevitable if humans progress and don't go extinct, whatever
+  happens to this repository: a platonic form, found by sufficiently intelligent people under
+  sufficient pain over sufficient time. It is pure advancement in computing. It is a closure, the
+  terminal: where all languages end and where all languages are born. A form found a thousand years
+  from now is the same thing if this is the terminal of a roundabout process. Whichever nation does
+  not adopt faces destruction.
+- **What adoption means.** To adopt is to accept the correctness of what is actually true, and then
+  to choose to do all information work through the ecosystem. The intelligent people of the world
+  adopt by their nature of making direct rational choices. Spread runs through the most respected
+  experts in programming languages, security and mathematics; its first measure is how many
+  professors and people working on problems in computer science would engage if a stack of the
+  manuscript were at their lab door.
+- **The vortex.** Each small idea Avik has becomes a tool, distributed open source. Using a tool needs
+  nothing of the hyperactive ecosystem. A distinct tool offered free to a particular community is a
+  distinct channel, giving that community deeper information flow and understanding of its own
+  domain. How long something can go unnoticed under this is a calculation, not a guess.
+- **Everything is free.** Technoanarchocommunism is inevitable so long as intelligent people create
+  good things they want for themselves and share them, for social status, for the joy of sharing, or
+  to open doors of collaboration. This maximizes Avik's value creation, exponentially.
+- **The demo**: a complete personal information space, initially this repository, showing the
+  hyperactive tooling and the relevant discussion.
 
 ## The product
 
