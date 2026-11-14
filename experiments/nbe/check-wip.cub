@@ -399,12 +399,56 @@ lam-at ts b (sarr t1 t2) cb =
 lam-m : (ts : List STy) (b : Code) (m : Mode) → ((t1 t2 : STy) → May (CK (cons t1 ts) b t2)) → RT ts (clam b) m
 lam-m ts b (mchk t) cb = lam-at ts b t cb
 lam-m ts b msyn cb = may-no
+-- ---------------------------------------------------------------- Bool's constructors
+zeroP : (w : Word) → Opt (PathP (λ i → Word) w #0)
+zeroP w = %welimP (λ v → Opt (PathP (λ i → Word) v #0)) w (some (λ i → #0)) (λ m h → none)
+oneP : (w : Word) → Opt (PathP (λ i → Word) w #1)
+oneP w =
+  %welimP (λ v → Opt (PathP (λ i → Word) v #1)) w none
+    (λ m h → case zeroP m return (λ o → Opt (PathP (λ i → Word) (%wsucc m) #1)) of
+               none → none
+               some p → some (λ i → %wsucc (p i)))
+nilP : (l : Lst Code) → Opt (PathP (λ i → Lst Code) l lnil)
+nilP lnil = some (λ i → lnil)
+nilP (lcons x r) = none
+-- true and false at their constant meanings
+bool-ok : (ts : List STy) (b : Bool) (k : Word) →
+  Der (j-tm , ctx-of ts , s-bool , ccon #0 k lnil lnil , fmapM (ctx-of ts) One1 (TV s-bool) (bool-v b) (ptM ts One1 (λ x ρ → one))) →
+  CK ts (ccon #0 k lnil lnil) sbool
+bool-ok ts b k D =
+  (λ x ρ → b ,
+   der-tr j-tm (ctx-of ts) s-bool (ccon #0 k lnil lnil) (fmapM (ctx-of ts) One1 (TV s-bool) (bool-v b) (ptM ts One1 (λ x ρ → one)))
+     (ptM ts (TV s-bool) (λ x ρ → (one , b)))
+     (fmap-pt (dims (sk ts)) One1 (CtxV (sk ts)) (FbE (sk ts) One1) (FbE (sk ts) (TV s-bool)) (into ts) (λ γ e ρ → bool-v b (e ρ)) (λ x ρ → one) (cube0 ts))
+     D)
+-- a constructor code checked at Bool: Bool's (data 0) first or second constructor, with no fields
+con-at : (ts : List STy) (d k : Word) (fs ds : Lst Code) → May (CK ts (ccon d k fs ds) sbool)
+con-at ts d k fs ds =
+  case zeroP d return (λ o → May (CK ts (ccon d k fs ds) sbool)) of
+    none → may-no
+    some pd → (case nilP fs return (λ o → May (CK ts (ccon d k fs ds) sbool)) of
+      none → may-no
+      some pf → (case nilP ds return (λ o → May (CK ts (ccon d k fs ds) sbool)) of
+        none → may-no
+        some pds → (case zeroP k return (λ o → May (CK ts (ccon d k fs ds) sbool)) of
+          some pk → may-yes (transport (λ i → CK ts (ccon (pd (~ i)) (pk (~ i)) (pf (~ i)) (pds (~ i))) sbool)
+                               (bool-ok ts true #0 (dtrue (ctx-of ts) (ptM ts One1 (λ x ρ → one)))))
+          none → (case oneP k return (λ o → May (CK ts (ccon d k fs ds) sbool)) of
+            none → may-no
+            some pk → may-yes (transport (λ i → CK ts (ccon (pd (~ i)) (pk (~ i)) (pf (~ i)) (pds (~ i))) sbool)
+                                 (bool-ok ts false #1 (dfalse (ctx-of ts) (ptM ts One1 (λ x ρ → one)))))))))
+con-syn : (ts : List STy) (d k : Word) (fs ds : Lst Code) → May (SY ts (ccon d k fs ds))
+con-syn ts d k fs ds =
+  case con-at ts d k fs ds return (λ o → May (SY ts (ccon d k fs ds))) of
+    may-no → may-no
+    may-yes r → may-yes (sbool , r)
 -- the checker: a derivation of the code at the type checked, or of the type it synthesizes (the
 -- context after the code, so its change under a λ is a later argument of the structural call)
 ck : (c : Code) (ts : List STy) (m : Mode) → RT ts c m
 ck (cvar k) ts m = finish ts (cvar k) m (syn-var ts k)
 ck (clam b) ts m = lam-m ts b m (λ t1 t2 → ck b (cons t1 ts) (mchk t2))
 ck (capp f a) ts m = finish ts (capp f a) m (syn-app ts f a (ck f ts msyn) (λ t1 → ck a ts (mchk t1)))
+ck (ccon d k fs ds) ts m = finish ts (ccon d k fs ds) m (con-syn ts d k fs ds)
 ck c ts m = finish ts c m may-no
 
 -- ---------------------------------------------------------------- examples: raw codes checked, then normalized
@@ -419,3 +463,6 @@ tcode-of c t r =
 -- λ f. f checks at (Bool → Bool) → Bool → Bool and normalizes to its η-long form
 #same tcode-of (clam (cvar #0)) (sarr (sarr sbool sbool) (sarr sbool sbool))
   (ck (clam (cvar #0)) nil (mchk (sarr (sarr sbool sbool) (sarr sbool sbool)))) = some (clam (clam (capp (cvar #1) (cvar #0))))
+-- true checks at Bool and is its own normal form; true applied to false is refused
+#same tcode-of c-true sbool (ck c-true nil (mchk sbool)) = some c-true
+#same tcode-of (capp c-true c-false) sbool (ck (capp c-true c-false) nil (mchk sbool)) = none
