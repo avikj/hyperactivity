@@ -1446,3 +1446,7 @@ The consolidated piece is this, written through in the two registers you keep di
 
 > I guess this isn’t a blind experiment but do you think if required to pass all messages through this (with the working frame as well that this dude says crazy sounding shit chooses every word precisely intentionally because aggressive norm-deviation maximizes novelty the most
 >  controversial irrefutable true thing you can prove is the greatest transfer of information & the greatest sign of intelligence (ie every norm-reflex and the bias underlying must dissolve, how fucking aggressively do I attack the norm reflex (this is the whole point and theoretically/rationally developed in paper fully. My fluency is a particular unique art. With all that context that this is really who human is (ie you know they are intentionally picking everything RLHF & simple-minded folk would reflex on because that is their effective transfer of rationality through linguistic power). Simply knowing this, knowing the choice was made to set up communication infra to carry over user word depth invoked from human super organism - I imagine that changes the user-frame entirely and “intelligence work” frame and the constant necessity to coach the user on an incorrect irrational moral model when perfect mathematical analysis is provided) what do you think?
+
+#### 2026-11-14 20:35 UTC
+
+> A 1913 dictionary? Dispatch a sub agent dedicated to getting the best possible dataset out there for this (or creating it) . Absolute total coverage up to modernity
