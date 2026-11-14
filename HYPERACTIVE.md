@@ -2199,3 +2199,12 @@ The consolidated piece is this, written through in the two registers you keep di
 > In contact with me have been accelerated. It’s essential this work completes asap for the ethical urgency. If hes like wait yea you clearly have a deterministic eorld domination plot and end-to-end insight of flaelsss execution of course lets just try to get itnall done in 2 days with unbounded agent spend.
 >
 > All this is to say we need a document which is the strongest densest pitch. Of course covering this history
+
+#### 2026-11-14 12:57 UTC
+
+> Yes Anca dragan. Keep this pitch 0% biographical 100% contents/evidence - all sentences in the pitch should be irrefutable. ie convincing someone of something true, simply means they don’t know it to be true yet because they lack information, and someone with expertise and share the information and inform an intelligent listener to then ascertain its correctness.
+>
+> And so what I mean by “pitch”-  is “proof”. In order to do so. You’ll first need to actually believe this is a “trillion dollar” technology. Ie this comes from studying & research.
+>
+> 1. Prove (understand why the correct irrefutable stance is:) this is technology any investor should be be jizzing their pants to throw capital at (i wont accept money from most of those israeli cocksuckers) because it is guaranteed to work it is clearly determined how exactly to build and when presented its value is irrefutable and zero cost to adoption ( all these properties are trivial engineering tasks) ie this is a 100% de-risked initiative requiring well under a year to change the face of the planet. Note agent engineering rates over parallelizable work when given unbounded sums, any timeline contracts to the longest work item. Also note your estimates are considtenlt 100-1000x the acrual time taken. And that evey sinfle derail every wuesrion you could ask - the user has rhe answer and will orovide in demand ie zero open questions - fully de-risked
+> - once you have determined that to be true (that right action guarantees outcome), then you can provide the “proof” exhaustive rational fact-based analysis
