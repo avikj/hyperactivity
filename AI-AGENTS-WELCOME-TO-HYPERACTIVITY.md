@@ -24,11 +24,16 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
   purity of the work** (Avik, 2026-11-14: “THINK. APPLY CRITICAL JUDGEMENT. ASSUME YOU CONTINUOUSLY
   TAKE SHITS IN MY TEMPLE AND IM ALWAYS CLEANING UP AND INVITING YOU BACK. DONT PRAY TO THE SHIT”).
   Nothing is right because it exists or because it is written down: not code, not a task-graph
-  finding, not an earlier session's notes, not your own earlier message, and not the paper, whose 11
-  November copy put bits and native primitives into the language. Work out what is right and why, and
+  finding, not an earlier session's notes, not your own earlier message, and not the paper. Work out what is right and why, and
   say it with the reasons. Replacing judgement by deference to some other text is the same failure.
   Never answer a correction with "understood", as if taking an order, when the correction follows
   from thinking that should have been done.
+  - **Core, capacities, examples and usage are different things** (“The language” in
+    `docs/to-be-incorporated-into-paper.md`). The paper and the repository hold the primitive core,
+    the capacities the paper claims (each demonstrated by a metacircular extension on the unchanged
+    core), examples of what the language can do, and our own use of the language to build
+    hyperactivity. Read each thing as what it is: an example of machine words is not a claim that
+    the core has them (a session read the paper's §8.5 that way and called it incorrect).
   - **The language is the minimal pure base.** It is a minimal, necessary and sufficient construct of
     pure mathematics, as the λ-calculus, the Turing machine and Shannon's channel are, and its value
     is maximized by its minimality: it extends to anything by definitions, so nothing further belongs
@@ -1261,3 +1266,21 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 18:09 UTC
 
 > Claude.md or however you can ensure you never do this bullshit again. I am sitting and working all day and you are treating it as casual conversation what the fuck? I have a complete foundational work and the only bound to get it out is WPM and using you as WPM amplifier the only friction is your incorrectness I have extreme urgency I have no time for casual conversation. that was pure work. it was conversation where you were gaining increasing novel insight and this entire work is meant to ensure by the time onboarding is complete, the agent has my complete insight.
+
+#### 2026-11-14 18:26 UTC
+
+> Dude the paper draft demonstrates myriad things you can do with the language. What the fuck do you mean “puts representations into the language” ????
+>
+> I am making a clear fucking distinction between what is PRIMITIVE HYPERACTIVITY CORE, EXAMPLE/PEDAGOGUCAL CONTENT, AND WHAT IS OUR USAGE OF THE LANGUAGE. WE ARE USING THE LANGUAGE ALREADY BECAUSE IT IS USEFUL ALREADY. WE ARE BUILDING HYPERACTIVITY BY BUILDING HYPERACTIVITY. CODE IS HERE FOR DFFERENT REASONS. Now it’s your responsibility to sort through it all very very carefully
+>
+> Ok #jit to x86 shouldn’t be core imo cause risc & arm would also be core then.. though we do need to inhabit the paper claim of JIT support
+>
+> considering if #jit is not core primitive, so much as a core capacity (ie JIT by metacricularity extension) ought to be must be demonstrated if claimed .
+>
+> I think that’s the rational split we didn’t have clearly defined before.
+>
+> core essential to demonstrating the key claims of the paper includes what the language is capable of. these capacities themselves yield “new languages” by metacircular extension. This is a very solid way of putting it?
+>
+> and so what say ./hyperactivity runs is of course over core hyperactivity, and of course it is composed essentially entirely of language extension
+>
+> ./hyperactivity is written in hyperactivity yes?
