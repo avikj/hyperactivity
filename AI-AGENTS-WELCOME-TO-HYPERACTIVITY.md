@@ -1474,3 +1474,9 @@ The consolidated piece is this, written through in the two registers you keep di
 > I’ll decide what words go in here (I’ll give lines as above)
 >
 > we’ll build the densest natural language crystal for the communication of the total knowledge expressed here
+
+#### 2026-11-14 21:02 UTC
+
+> Vortex comes from same root??? Brodie this keeps getting fucking better this world is straight spirals complex powers. You can actually help w this fuck me ego.
+>
+> “Becoming” is also ver??? So “be” ? “Is”? oh actually being and identity.. hmm.. what to these mean, I see identity as a property of a thing, being as description of process. perhaps that’s the historical distinction?  What’s a human being vs human identity - they can both refer to a self, being refers to a thing in itself whereas identity refers to property of a thing - or its complete definition. Identity particularly is about sameness whereas being is about existence. I want all of those in there. Great work. Keep it comi ng
