@@ -8,6 +8,13 @@ this file, that part leaves it.
 
 ## What hyperactivity is for
 
+**This work is on the realization of human potential** (Avik, 2026-11-14 18:54 UTC, verbatim in
+AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md): *On the Realization of Human Potential*. As *On the Origin of
+Species* was correct and deeply controversial, so are statements many people make today that are
+debated, on religion among other topics. There is a correct answer to every question, and many talk
+without studying. Answering all controversial questions correctly is how the realization of human
+potential is discovered.
+
 **It is a self-portrait** (Avik, 2026-11-14, “Avik's words, verbatim” (AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md)). The name is
 literal. To create perfect global artificial intelligence Avik needed to write his own mind: a
 continuous loop of awareness and action with no turns, running in real time, traversing what it
@@ -18,7 +25,19 @@ compression, a continuous simplification by collapse of false distinction toward
 identification. He began in high school and has
 developed the necessary and sufficient mathematics since. He coded side projects eight hours a day
 from 13 to 17, then despised the act of writing code through the whole intellectual arc of the work,
-and now has a passion for building again (Avik, 2026-11-14 13:46 UTC). Variant cognition is part of the subject of
+and now has a passion for building again (Avik, 2026-11-14 13:46 UTC).
+
+**Variant mental operation is the most central driving context of the work** (Avik, 2026-11-14 18:54
+UTC). Avik's position: the view of variant mental operation as illness is itself a social illness,
+closer to racism than to slavery; modern slavery and human experimentation are common in the
+facilities people are sent to when their honest speech offends someone close to them. He has bipolar
+capacity, is superhuman on various axes, and understands that everyone can be. He has been happy and
+healthy for years and strongly identifies so: happy, at peace, purposeful and grateful as his
+standard mode. He reached a state of higher mental health by intentional activity of the mind and,
+more critically, the intentional experience of emotion. Variant mental operation is the opportunity
+of a greater density of experience, to be lived well, in a world that does not respect or nourish
+it and does great harm to others given it. Being disinhibited from speaking is the only pathway to
+truth. Variant cognition is part of the subject of
 the work, not outside it.
 
 **The aim is not a programming language.** It is the proper form of the internet and of global
