@@ -12,6 +12,11 @@
 -- the host's composition with a nonempty system at Bool or Nat on a variable is stuck (hcompD), on a
 -- constructor with a constant system it reduces; so the Kan lemma's fill at Bool/Nat needs formal
 -- compositions as neutrals, whose faces are the fill's own bound dimensions (static), never computed.
+-- Status (2026-11-14, latest+9): transport at Unit and Empty (PF's pf-unit, pf-empty; the host's
+-- transport along a constant-valued line of Unit or Empty is the value, tested, so irr-u and irr-e as
+-- irr-b, with NN's nirr-u, nirr-e); transp (λ i. Unit) tt ⇝ tt (1764 passed, 0 failed, from the store).
+-- Transport at List is not there: the host's transport of a neutral list along even a constant line is
+-- stuck (%transD), so it needs a neutral transport rule and List's clause by induction.
 -- Status (2026-11-14, latest+8): Unit and Empty as object-level types: shapes s-unit, s-empty (Sem
 -- nothing, El the host's Unit and Empty), unit, absurd (Empty's eliminator with its motive over the
 -- extension by Empty: only neutrals, reflected with the motive at the generic point and at the
@@ -2140,6 +2145,10 @@ nrm-b : TV s-bool → TV s-bool
 nrm-b q = (one , snd q)
 nrm-n : TV s-nat → TV s-nat
 nrm-n q = (one , snd q)
+nrm-u : TV s-unit → TV s-unit
+nrm-u q = (one , snd q)
+nrm-e : TV s-empty → TV s-empty
+nrm-e q = (one , snd q)
 -- (2026-11-14, (K1)) path-free shapes (PF): Bool, Nat and Σ of path-free shapes so far. At them a type's
 -- computability carries nothing (triv), so transport keeps a term's computability without any
 -- hypothesis on the line (KT, by induction on PF): at Bool and Nat by irr-b/irr-n, at Σ componentwise
@@ -2150,6 +2159,8 @@ data PF : (pfs : TyShape) → Type where
   pf-n : PF s-nat
   pf-sig : (a₀ b₀ : TyShape) → PF a₀ → PF b₀ → PF (s-sig a₀ b₀)
   pf-pi : (a₀ b₀ : TyShape) → PF a₀ → PF b₀ → PF (s-pi a₀ b₀)
+  pf-unit : PF s-unit
+  pf-empty : PF s-empty
 ln-fst : (a b : TyShape) → Line (Fam a b) → Line (Sem a)
 ln-fst a b L = (fst (fst L) , fst (fst (snd L)) , λ i → fst (snd (snd L) i))
 sg-a : (a b : TyShape) → TrV (s-sig a b) → TrV a
@@ -2317,6 +2328,10 @@ data NN : (KJ : NK × Jdg) → Type 1 where
     NN (k-nf , (j-ty , ext-h Γ₀ s-empty (AbsV s₀) (abs-b s₀) R₀ , s₀ , cP₀ , abs-mot Γ₀ s₀ R₀)) →
     NN (k-ne , (j-tm , Γ₀ , s-empty , x₀ , fmapM Γ₀ (AbsV s₀) (TV s-empty) (abs-x s₀) R₀)) →
     NN (k-ne , (j-tm , Γ₀ , s₀ , c-absurd cP₀ x₀ , fmapM Γ₀ (AbsV s₀) (TV s₀) (abs-r s₀) R₀))
+  nirr-u : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-unit)) (c₀ : Code) → PathM Γ₀ (TV s-unit) (fmapM Γ₀ (TV s-unit) (TV s-unit) nrm-u X₀) (fmapM Γ₀ (TV s-unit) (TV s-unit) nrm-u X'₀) →
+    NN (k-ne , (j-tm , Γ₀ , s-unit , c₀ , X₀)) → NN (k-ne , (j-tm , Γ₀ , s-unit , c₀ , X'₀))
+  nirr-e : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-empty)) (c₀ : Code) → PathM Γ₀ (TV s-empty) (fmapM Γ₀ (TV s-empty) (TV s-empty) nrm-e X₀) (fmapM Γ₀ (TV s-empty) (TV s-empty) nrm-e X'₀) →
+    NN (k-ne , (j-tm , Γ₀ , s-empty , c₀ , X₀)) → NN (k-ne , (j-tm , Γ₀ , s-empty , c₀ , X'₀))
   nirr-b : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-bool)) (c₀ : Code) → PathM Γ₀ (TV s-bool) (fmapM Γ₀ (TV s-bool) (TV s-bool) nrm-b X₀) (fmapM Γ₀ (TV s-bool) (TV s-bool) nrm-b X'₀) →
     NN (k-ne , (j-tm , Γ₀ , s-bool , c₀ , X₀)) → NN (k-ne , (j-tm , Γ₀ , s-bool , c₀ , X'₀))
   nirr-n : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-nat)) (c₀ : Code) → PathM Γ₀ (TV s-nat) (fmapM Γ₀ (TV s-nat) (TV s-nat) nrm-n X₀) (fmapM Γ₀ (TV s-nat) (TV s-nat) nrm-n X'₀) →
@@ -2416,6 +2431,10 @@ data Der : (J : Jdg) → Type 1 where
     Der (j-ty , ext-h Γ₀ s-empty (AbsV s₀) (abs-b s₀) R₀ , s₀ , cP₀ , abs-mot Γ₀ s₀ R₀) →
     Der (j-tm , Γ₀ , s-empty , x₀ , fmapM Γ₀ (AbsV s₀) (TV s-empty) (abs-x s₀) R₀) →
     Der (j-tm , Γ₀ , s₀ , c-absurd cP₀ x₀ , fmapM Γ₀ (AbsV s₀) (TV s₀) (abs-r s₀) R₀)
+  dirr-u : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-unit)) (c₀ : Code) → PathM Γ₀ (TV s-unit) (fmapM Γ₀ (TV s-unit) (TV s-unit) nrm-u X₀) (fmapM Γ₀ (TV s-unit) (TV s-unit) nrm-u X'₀) →
+    Der (j-tm , Γ₀ , s-unit , c₀ , X₀) → Der (j-tm , Γ₀ , s-unit , c₀ , X'₀)
+  dirr-e : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-empty)) (c₀ : Code) → PathM Γ₀ (TV s-empty) (fmapM Γ₀ (TV s-empty) (TV s-empty) nrm-e X₀) (fmapM Γ₀ (TV s-empty) (TV s-empty) nrm-e X'₀) →
+    Der (j-tm , Γ₀ , s-empty , c₀ , X₀) → Der (j-tm , Γ₀ , s-empty , c₀ , X'₀)
 -- typed codes (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”):
 -- Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation;
 -- evaluation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.1) “typed code and its evaluation”) is that meaning
@@ -2456,6 +2475,8 @@ embed (nty-unit Γ B) = dty-unit Γ B
 embed (nne-empty Γ X x nx) = embed nx
 embed (nty-empty Γ B) = dty-empty Γ B
 embed (nabsurd Γ s R cP x nP nx) = dabsurd Γ s R cP x (embed nP) (embed nx)
+embed (nirr-u Γ X X' c p nx) = dirr-u Γ X X' c p (embed nx)
+embed (nirr-e Γ X X' c p nx) = dirr-e Γ X X' c p (embed nx)
 embed (nirr-b Γ X X' c p nx) = dirr-b Γ X X' c p (embed nx)
 embed (nirr-n Γ X X' c p nx) = dirr-n Γ X X' c p (embed nx)
 
@@ -6754,6 +6775,12 @@ rn-absurd Δ' Δ w s R Pn Xn =
   (c-absurd (fst Pn) (fst Xn) ,
    nn-fm-out k-ne j-tm Δ' Δ w (AbsV s) s (abs-r s) R (c-absurd (fst Pn) (fst Xn))
      (nabsurd Δ' s (wact Δ' Δ w (AbsV s) R) (fst Pn) (fst Xn) (snd Pn) (nn-fm-in k-ne j-tm Δ' Δ w (AbsV s) s-empty (abs-x s) R (fst Xn) (snd Xn))))
+rn-irr-u : (Δ' Δ : CCtx) (w : World Δ' Δ) (X X' : (Mean Δ (TV s-unit))) → PathM Δ (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X') →
+  RenR k-ne j-tm Δ' s-unit (wact Δ' Δ w (TV s-unit) X) → RenR k-ne j-tm Δ' s-unit (wact Δ' Δ w (TV s-unit) X')
+rn-irr-u Δ' Δ w X X' p Xn = (fst Xn , nirr-u Δ' (wact Δ' Δ w (TV s-unit) X) (wact Δ' Δ w (TV s-unit) X') (fst Xn) (pcat (Mean Δ' (TV s-unit)) (fmapM Δ' (TV s-unit) (TV s-unit) nrm-u (wact Δ' Δ w (TV s-unit) X)) (wact Δ' Δ w (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X)) (fmapM Δ' (TV s-unit) (TV s-unit) nrm-u (wact Δ' Δ w (TV s-unit) X')) (subM-fmap Δ' Δ (TV s-unit) (TV s-unit) nrm-u (world-sub Δ' Δ w) X) (pcat (Mean Δ' (TV s-unit)) (wact Δ' Δ w (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X)) (wact Δ' Δ w (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X')) (fmapM Δ' (TV s-unit) (TV s-unit) nrm-u (wact Δ' Δ w (TV s-unit) X')) (cong1 (Mean Δ (TV s-unit)) (Mean Δ' (TV s-unit)) (λ N → (wact Δ' Δ w (TV s-unit) N)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X') p) (psym (Mean Δ' (TV s-unit)) (fmapM Δ' (TV s-unit) (TV s-unit) nrm-u (wact Δ' Δ w (TV s-unit) X')) (wact Δ' Δ w (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X')) (subM-fmap Δ' Δ (TV s-unit) (TV s-unit) nrm-u (world-sub Δ' Δ w) X')))) (snd Xn))
+rn-irr-e : (Δ' Δ : CCtx) (w : World Δ' Δ) (X X' : (Mean Δ (TV s-empty))) → PathM Δ (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X') →
+  RenR k-ne j-tm Δ' s-empty (wact Δ' Δ w (TV s-empty) X) → RenR k-ne j-tm Δ' s-empty (wact Δ' Δ w (TV s-empty) X')
+rn-irr-e Δ' Δ w X X' p Xn = (fst Xn , nirr-e Δ' (wact Δ' Δ w (TV s-empty) X) (wact Δ' Δ w (TV s-empty) X') (fst Xn) (pcat (Mean Δ' (TV s-empty)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (subM-fmap Δ' Δ (TV s-empty) (TV s-empty) nrm-e (world-sub Δ' Δ w) X) (pcat (Mean Δ' (TV s-empty)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X')) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (cong1 (Mean Δ (TV s-empty)) (Mean Δ' (TV s-empty)) (λ N → (wact Δ' Δ w (TV s-empty) N)) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X') p) (psym (Mean Δ' (TV s-empty)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X')) (subM-fmap Δ' Δ (TV s-empty) (TV s-empty) nrm-e (world-sub Δ' Δ w) X')))) (snd Xn))
 ren-nn : {KJ : NK × Jdg} → NN KJ → (Δ' : CCtx) (w : World Δ' (fst (snd (snd KJ)))) →
   RenR (fst KJ) (fst (snd KJ)) Δ' (fst (snd (snd (snd KJ))))
     (wact Δ' (fst (snd (snd KJ))) w (JZ (fst (snd KJ)) (fst (snd (snd (snd KJ))))) (snd (snd (snd (snd (snd KJ))))))
@@ -6814,6 +6841,8 @@ ren-nn (nabsurd Γ s R cP x nP nx) Δ' w =
     (rn-ext Δ' Γ w s-empty (AbsV s) (abs-b s) R s (λ q e → fst (snd q) e)
        (ren-nn nP (ext-h Δ' s-empty (AbsV s) (abs-b s) (wact Δ' Γ w (AbsV s) R)) (world-keep Δ' Γ s-empty (AbsV s) (abs-b s) R w)))
     (ren-nn nx Δ' w)
+ren-nn (nirr-u Γ X X' c p nx) Δ' w = rn-irr-u Δ' Γ w X X' p (ren-nn nx Δ' w)
+ren-nn (nirr-e Γ X X' c p nx) Δ' w = rn-irr-e Δ' Γ w X X' p (ren-nn nx Δ' w)
 -- ---------------------------------------------------------------- renaming derivations
 -- (2026-11-14) a derivation renamed along a world (ren-der): the same construction as ren-nn's
 -- (each rule at Δ', its premises and conclusion carried along subM-fmap, binders under world-keep and
@@ -7025,6 +7054,12 @@ rd-absurd Δ' Δ w s R Pn Xn =
   (c-absurd (fst Pn) (fst Xn) ,
    der-fm-out j-tm Δ' Δ w (AbsV s) s (abs-r s) R (c-absurd (fst Pn) (fst Xn))
      (dabsurd Δ' s (wact Δ' Δ w (AbsV s) R) (fst Pn) (fst Xn) (snd Pn) (der-fm-in j-tm Δ' Δ w (AbsV s) s-empty (abs-x s) R (fst Xn) (snd Xn))))
+rd-irr-u : (Δ' Δ : CCtx) (w : World Δ' Δ) (X X' : (Mean Δ (TV s-unit))) → PathM Δ (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X') →
+  RenD j-tm Δ' s-unit (wact Δ' Δ w (TV s-unit) X) → RenD j-tm Δ' s-unit (wact Δ' Δ w (TV s-unit) X')
+rd-irr-u Δ' Δ w X X' p Xn = (fst Xn , dirr-u Δ' (wact Δ' Δ w (TV s-unit) X) (wact Δ' Δ w (TV s-unit) X') (fst Xn) (pcat (Mean Δ' (TV s-unit)) (fmapM Δ' (TV s-unit) (TV s-unit) nrm-u (wact Δ' Δ w (TV s-unit) X)) (wact Δ' Δ w (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X)) (fmapM Δ' (TV s-unit) (TV s-unit) nrm-u (wact Δ' Δ w (TV s-unit) X')) (subM-fmap Δ' Δ (TV s-unit) (TV s-unit) nrm-u (world-sub Δ' Δ w) X) (pcat (Mean Δ' (TV s-unit)) (wact Δ' Δ w (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X)) (wact Δ' Δ w (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X')) (fmapM Δ' (TV s-unit) (TV s-unit) nrm-u (wact Δ' Δ w (TV s-unit) X')) (cong1 (Mean Δ (TV s-unit)) (Mean Δ' (TV s-unit)) (λ N → (wact Δ' Δ w (TV s-unit) N)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X') p) (psym (Mean Δ' (TV s-unit)) (fmapM Δ' (TV s-unit) (TV s-unit) nrm-u (wact Δ' Δ w (TV s-unit) X')) (wact Δ' Δ w (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X')) (subM-fmap Δ' Δ (TV s-unit) (TV s-unit) nrm-u (world-sub Δ' Δ w) X')))) (snd Xn))
+rd-irr-e : (Δ' Δ : CCtx) (w : World Δ' Δ) (X X' : (Mean Δ (TV s-empty))) → PathM Δ (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X') →
+  RenD j-tm Δ' s-empty (wact Δ' Δ w (TV s-empty) X) → RenD j-tm Δ' s-empty (wact Δ' Δ w (TV s-empty) X')
+rd-irr-e Δ' Δ w X X' p Xn = (fst Xn , dirr-e Δ' (wact Δ' Δ w (TV s-empty) X) (wact Δ' Δ w (TV s-empty) X') (fst Xn) (pcat (Mean Δ' (TV s-empty)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (subM-fmap Δ' Δ (TV s-empty) (TV s-empty) nrm-e (world-sub Δ' Δ w) X) (pcat (Mean Δ' (TV s-empty)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X')) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (cong1 (Mean Δ (TV s-empty)) (Mean Δ' (TV s-empty)) (λ N → (wact Δ' Δ w (TV s-empty) N)) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X') p) (psym (Mean Δ' (TV s-empty)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X')) (subM-fmap Δ' Δ (TV s-empty) (TV s-empty) nrm-e (world-sub Δ' Δ w) X')))) (snd Xn))
 ren-der : {J : Jdg} → Der J → (Δ' : CCtx) (w : World Δ' (fst (snd J))) →
   RenD (fst J) Δ' (fst (snd (snd J))) (wact Δ' (fst (snd J)) w (JZ (fst J) (fst (snd (snd J)))) (snd (snd (snd (snd J)))))
 ren-der (dvar Γ v) Δ' w = rd-var Δ' Γ w v
@@ -7084,6 +7119,8 @@ ren-der (dabsurd Γ s R cP x dP dx) Δ' w =
     (rd-ext Δ' Γ w s-empty (AbsV s) (abs-b s) R s (λ q e → fst (snd q) e)
        (ren-der dP (ext-h Δ' s-empty (AbsV s) (abs-b s) (wact Δ' Γ w (AbsV s) R)) (world-keep Δ' Γ s-empty (AbsV s) (abs-b s) R w)))
     (ren-der dx Δ' w)
+ren-der (dirr-u Γ X X' c p nx) Δ' w = rd-irr-u Δ' Γ w X X' p (ren-der nx Δ' w)
+ren-der (dirr-e Γ X X' c p nx) Δ' w = rd-irr-e Δ' Γ w X X' p (ren-der nx Δ' w)
 
 -- ---------------------------------------------------------------- (6) computability over cubes
 -- (2026-11-12, (6)) Computability of types and of terms, one pair by recursion on the shape (CompE, as
@@ -10730,6 +10767,8 @@ trp-n Δ X = (pcat (Mean Δ (TV s-nat)) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n (f
 triv : {a : TyShape} → PF a → (Δ : CCtx) (T : Mean Δ (Sem a)) → CompTy a Δ T
 triv pf-b Δ T = one
 triv pf-n Δ T = one
+triv pf-unit Δ T = one
+triv pf-empty Δ T = one
 triv (pf-sig a b pa pb) Δ T = (triv pa Δ (fmapM Δ (Fam a b) (Sem a) (λ F → fst F) T) , λ Δ' w Y q ca → triv pb Δ' (fmapM Δ' (FamV a b) (Sem b) (fam-cod a b) Y))
 triv (pf-pi a b pa pb) Δ T = (triv pa Δ (fmapM Δ (Fam a b) (Sem a) (λ F → fst F) T) , λ Δ' w Y q ca → triv pb Δ' (fmapM Δ' (FamV a b) (Sem b) (fam-cod a b) Y))
 kt-in-a : (a b : TyShape) (Δ : CCtx) (X : Mean Δ (TrV (s-sig a b))) → CSof a (CompE a) Δ (fmapM Δ (TV (s-sig a b)) (TV a) (sig-1 a b) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-x (s-sig a b)) X)) → CompS a Δ (fmapM Δ (TrV a) (TV a) (tr-x a) (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X))
@@ -10775,9 +10814,30 @@ kp-out : (a b : TyShape) (Δ : CCtx) (X : Mean Δ (TrV (s-pi a b))) (Δ' : CCtx)
 kp-out a b Δ X Δ' w Y q c = comp-tr b Δ' (fmapM Δ' (TrV b) (TV b) (tr-r b) (fmapM Δ' ((yz : (TrV (s-pi a b))) × El a (fst (fst (tr-r (s-pi a b) yz)))) (TrV b) (kp-xb a b) (kp-Z a b Δ X Δ' w Y q))) (fmapM Δ' (AppV a b) (TV b) (app-r a b) Y) (pcat (Mean Δ' (TV b)) (fmapM Δ' (TrV b) (TV b) (tr-r b) (fmapM Δ' ((yz : (TrV (s-pi a b))) × El a (fst (fst (tr-r (s-pi a b) yz)))) (TrV b) (kp-xb a b) (kp-Z a b Δ X Δ' w Y q))) (fmapM Δ' ((yz : (TrV (s-pi a b))) × El a (fst (fst (tr-r (s-pi a b) yz)))) (TV b) (λ z → (snd (fst (tr-r (s-pi a b) (fst z))) (snd z) , snd (tr-r (s-pi a b) (fst z)) (snd z))) (kp-Z a b Δ X Δ' w Y q)) (fmapM Δ' (AppV a b) (TV b) (app-r a b) Y) (fmapM-fmapM Δ' ((yz : (TrV (s-pi a b))) × El a (fst (fst (tr-r (s-pi a b) yz)))) (TrV b) (TV b) (kp-xb a b) (tr-r b) (kp-Z a b Δ X Δ' w Y q)) (pcat (Mean Δ' (TV b)) (fmapM Δ' ((yz : (TrV (s-pi a b))) × El a (fst (fst (tr-r (s-pi a b) yz)))) (TV b) (λ z → (snd (fst (tr-r (s-pi a b) (fst z))) (snd z) , snd (tr-r (s-pi a b) (fst z)) (snd z))) (kp-Z a b Δ X Δ' w Y q)) (fmapM Δ' ((yq : (TV (s-pi a b))) × El a (fst (fst yq))) (TV b) (λ z → (snd (fst (fst z)) (snd z) , snd (fst z) (snd z))) (kp-A a b Δ' Y)) (fmapM Δ' (AppV a b) (TV b) (app-r a b) Y) (psym (Mean Δ' (TV b)) (fmapM Δ' ((yq : (TV (s-pi a b))) × El a (fst (fst yq))) (TV b) (λ z → (snd (fst (fst z)) (snd z) , snd (fst z) (snd z))) (kp-A a b Δ' Y)) (fmapM Δ' ((yz : (TrV (s-pi a b))) × El a (fst (fst (tr-r (s-pi a b) yz)))) (TV b) (λ z → (snd (fst (tr-r (s-pi a b) (fst z))) (snd z) , snd (tr-r (s-pi a b) (fst z)) (snd z))) (kp-Z a b Δ X Δ' w Y q)) (via-snd Δ' Δ a (TrV (s-pi a b)) (TV (s-pi a b)) (tr-r (s-pi a b)) (λ yq → fst (fst yq)) X (world-sub Δ' Δ w) (kp-A a b Δ' Y) (kp-p a b Δ X Δ' w Y q) (TV b) (λ z → (snd (fst (fst z)) (snd z) , snd (fst z) (snd z))))) (fmapM-fmapM Δ' (AppV a b) ((yq : (TV (s-pi a b))) × El a (fst (fst yq))) (TV b) (λ y → ((fst y , fst (snd y)) , snd (snd y))) (λ z → (snd (fst (fst z)) (snd z) , snd (fst z) (snd z))) Y))) c
 kp-cl : (a b : TyShape) (Δ : CCtx) (X : Mean Δ (TrV (s-pi a b))) (Δ' : CCtx) (w : World Δ' Δ) (Y : Mean Δ' (AppV a b)) (q : PathM Δ' (TV (s-pi a b)) (fmapM Δ' (AppV a b) (TV (s-pi a b)) (app-f a b) Y) (wact Δ' Δ w (TV (s-pi a b)) (fmapM Δ (TrV (s-pi a b)) (TV (s-pi a b)) (tr-r (s-pi a b)) X))) (ka : ((Δ'' : CCtx) (Xa' : Mean Δ'' (TrV a)) → CompS a Δ'' (fmapM Δ'' (TrV a) (TV a) (tr-x a) Xa') → CompS a Δ'' (fmapM Δ'' (TrV a) (TV a) (tr-r a) Xa'))) (kb : ((Δ'' : CCtx) (Xa' : Mean Δ'' (TrV b)) → CompS b Δ'' (fmapM Δ'' (TrV b) (TV b) (tr-x b) Xa') → CompS b Δ'' (fmapM Δ'' (TrV b) (TV b) (tr-r b) Xa'))) (cx : CompS (s-pi a b) Δ (fmapM Δ (TrV (s-pi a b)) (TV (s-pi a b)) (tr-x (s-pi a b)) X)) (ca : CSof a (CompE a) Δ' (fmapM Δ' (AppV a b) (TV a) (app-a a b) Y)) → CSof b (CompE b) Δ' (fmapM Δ' (AppV a b) (TV b) (app-r a b) Y)
 kp-cl a b Δ X Δ' w Y q ka kb cx ca = kp-out a b Δ X Δ' w Y q (kb Δ' (fmapM Δ' ((yz : (TrV (s-pi a b))) × El a (fst (fst (tr-r (s-pi a b) yz)))) (TrV b) (kp-xb a b) (kp-Z a b Δ X Δ' w Y q)) (kp-inb a b Δ X Δ' w Y q (snd cx Δ' w (fmapM Δ' ((yz : (TrV (s-pi a b))) × El a (fst (fst (tr-r (s-pi a b) yz)))) (AppV a b) (kp-yf a b) (kp-Z a b Δ X Δ' w Y q)) (kp-qf a b Δ X Δ' w Y q) (kp-argc a b Δ X Δ' w Y q (ka Δ' (fmapM Δ' ((yz : (TrV (s-pi a b))) × El a (fst (fst (tr-r (s-pi a b) yz)))) (TrV a) (kp-xa a b) (kp-Z a b Δ X Δ' w Y q)) (kp-ina a b Δ X Δ' w Y q ca))))))
+-- (2026-11-14, (K1)) Unit and Empty are path-free and their transport along a constant-valued line is
+-- the value (tested), so irr-u, irr-e (as irr-b) and KT's cases
+irr-ut : (Δ : CCtx) (X X' : (Mean Δ (TV s-unit))) (pX : PathM Δ (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X')) (B0 : Mean Δ One1) (p0 : PathM Δ (TV s-unit) X (fmapM Δ One1 (TV s-unit) unit-v B0)) → PathM Δ (TV s-unit) X' (fmapM Δ One1 (TV s-unit) unit-v (fmapM Δ (TV s-unit) One1 (λ q → fst q) X'))
+irr-ut Δ X X' pX B0 p0 = (pcat (Mean Δ (TV s-unit)) X' (dcube-zip (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , snd (eh2 ρh))) (snd Δ) X' (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X')) (fmapM Δ One1 (TV s-unit) unit-v (fmapM Δ (TV s-unit) One1 (λ q → fst q) X')) (pcat (Mean Δ (TV s-unit)) X' (dcube-fmap (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ x y → y) (snd Δ) X') (dcube-zip (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , snd (eh2 ρh))) (snd Δ) X' (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X')) (psym (Mean Δ (TV s-unit)) (dcube-fmap (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ x y → y) (snd Δ) X') X' (fmap-id (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (snd Δ) X')) (psym (Mean Δ (TV s-unit)) (dcube-zip (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , snd (eh2 ρh))) (snd Δ) X' (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X')) (dcube-fmap (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ x y → y) (snd Δ) X') (zip-diag (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , snd (eh2 ρh))) (λ γh eh ρh → nrm-u (eh ρh)) (snd Δ) X'))) (pcat (Mean Δ (TV s-unit)) (dcube-zip (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , snd (eh2 ρh))) (snd Δ) X' (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X')) (dcube-zip (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , snd (eh2 ρh))) (snd Δ) X' (fmapM Δ One1 (TV s-unit) (λ zz → nrm-u (unit-v zz)) B0)) (fmapM Δ One1 (TV s-unit) unit-v (fmapM Δ (TV s-unit) One1 (λ q → fst q) X')) (cong1 (Mean Δ (TV s-unit)) (Mean Δ (TV s-unit)) (λ N → (dcube-zip (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , snd (eh2 ρh))) (snd Δ) X' N)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X') (fmapM Δ One1 (TV s-unit) (λ zz → nrm-u (unit-v zz)) B0) (pcat (Mean Δ (TV s-unit)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X') (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Δ One1 (TV s-unit) (λ zz → nrm-u (unit-v zz)) B0) (psym (Mean Δ (TV s-unit)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X') pX) (pcat (Mean Δ (TV s-unit)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u (fmapM Δ One1 (TV s-unit) unit-v B0)) (fmapM Δ One1 (TV s-unit) (λ zz → nrm-u (unit-v zz)) B0) (cong1 (Mean Δ (TV s-unit)) (Mean Δ (TV s-unit)) (λ N → (fmapM Δ (TV s-unit) (TV s-unit) nrm-u N)) X (fmapM Δ One1 (TV s-unit) unit-v B0) p0) (fmapM-fmapM Δ One1 (TV s-unit) (TV s-unit) unit-v nrm-u B0)))) (pcat (Mean Δ (TV s-unit)) (dcube-zip (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , snd (eh2 ρh))) (snd Δ) X' (fmapM Δ One1 (TV s-unit) (λ zz → nrm-u (unit-v zz)) B0)) (dcube-zip (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) One1) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , unit)) (snd Δ) X' B0) (fmapM Δ One1 (TV s-unit) unit-v (fmapM Δ (TV s-unit) One1 (λ q → fst q) X')) (zip-fmap-r (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) One1) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , snd (eh2 ρh))) (λ γ e ρ → nrm-u (unit-v (e ρ))) (snd Δ) X' B0) (pcat (Mean Δ (TV s-unit)) (dcube-zip (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) One1) (FbE (fst Δ) (TV s-unit)) (λ γh eh eh2 ρh → (fst (eh ρh) , unit)) (snd Δ) X' B0) (dcube-fmap (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh ρh → (fst (eh ρh) , unit)) (snd Δ) X') (fmapM Δ One1 (TV s-unit) unit-v (fmapM Δ (TV s-unit) One1 (λ q → fst q) X')) (zip-ign (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) One1) (FbE (fst Δ) (TV s-unit)) (λ γh eh ρh → (fst (eh ρh) , unit)) (snd Δ) X' B0) (psym (Mean Δ (TV s-unit)) (fmapM Δ One1 (TV s-unit) unit-v (fmapM Δ (TV s-unit) One1 (λ q → fst q) X')) (dcube-fmap (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV s-unit)) (FbE (fst Δ) (TV s-unit)) (λ γh eh ρh → (fst (eh ρh) , unit)) (snd Δ) X') (fmapM-fmapM Δ (TV s-unit) One1 (TV s-unit) (λ q → fst q) unit-v X'))))))
+irr-uc : (Δ : CCtx) (X X' : (Mean Δ (TV s-unit))) → PathM Δ (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X') → snd (CompE s-unit) Δ X → snd (CompE s-unit) Δ X'
+irr-uc Δ X X' pX (inl1 q) = inl1 ((fmapM Δ (TV s-unit) One1 (λ q → fst q) X') , irr-ut Δ X X' pX (fst q) (snd q))
+irr-uc Δ X X' pX (inr1 m) = inr1 (fst m , nirr-u Δ X X' (fst m) pX (snd m))
+irr-u : (Δ : CCtx) (X X' : (Mean Δ (TV s-unit))) → PathM Δ (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u X') → CompS s-unit Δ X → CompS s-unit Δ X'
+irr-u Δ X X' pX cx = (one , irr-uc Δ X X' pX (snd cx))
+irr-e : (Δ : CCtx) (X X' : (Mean Δ (TV s-empty))) → PathM Δ (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X') → CompS s-empty Δ X → CompS s-empty Δ X'
+irr-e Δ X X' pX cx = (one , (fst (snd cx) , nirr-e Δ X X' (fst (snd cx)) pX (snd (snd cx))))
+trp-u : (Δ : CCtx) (X : Mean Δ (TrV s-unit)) → PathM Δ (TV s-unit) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u (fmapM Δ (TrV s-unit) (TV s-unit) (tr-x s-unit) X)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u (fmapM Δ (TrV s-unit) (TV s-unit) (tr-r s-unit) X))
+trp-u Δ X = (pcat (Mean Δ (TV s-unit)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u (fmapM Δ (TrV s-unit) (TV s-unit) (tr-x s-unit) X)) (fmapM Δ (TrV s-unit) (TV s-unit) (λ z → nrm-u (tr-x s-unit z)) X) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u (fmapM Δ (TrV s-unit) (TV s-unit) (tr-r s-unit) X)) (fmapM-fmapM Δ (TrV s-unit) (TV s-unit) (TV s-unit) (tr-x s-unit) nrm-u X) (psym (Mean Δ (TV s-unit)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u (fmapM Δ (TrV s-unit) (TV s-unit) (tr-r s-unit) X)) (fmapM Δ (TrV s-unit) (TV s-unit) (λ z → nrm-u (tr-x s-unit z)) X) (fmapM-fmapM Δ (TrV s-unit) (TV s-unit) (TV s-unit) (tr-r s-unit) nrm-u X)))
+trp-e : (Δ : CCtx) (X : Mean Δ (TrV s-empty)) → PathM Δ (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e (fmapM Δ (TrV s-empty) (TV s-empty) (tr-x s-empty) X)) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e (fmapM Δ (TrV s-empty) (TV s-empty) (tr-r s-empty) X))
+trp-e Δ X = (pcat (Mean Δ (TV s-empty)) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e (fmapM Δ (TrV s-empty) (TV s-empty) (tr-x s-empty) X)) (fmapM Δ (TrV s-empty) (TV s-empty) (λ z → nrm-e (tr-x s-empty z)) X) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e (fmapM Δ (TrV s-empty) (TV s-empty) (tr-r s-empty) X)) (fmapM-fmapM Δ (TrV s-empty) (TV s-empty) (TV s-empty) (tr-x s-empty) nrm-e X) (psym (Mean Δ (TV s-empty)) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e (fmapM Δ (TrV s-empty) (TV s-empty) (tr-r s-empty) X)) (fmapM Δ (TrV s-empty) (TV s-empty) (λ z → nrm-e (tr-x s-empty z)) X) (fmapM-fmapM Δ (TrV s-empty) (TV s-empty) (TV s-empty) (tr-r s-empty) nrm-e X)))
+fund-irr-u : (Γ : CCtx) (X X' : Mean Γ (TV s-unit)) (p : PathM Γ (TV s-unit) (fmapM Γ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Γ (TV s-unit) (TV s-unit) nrm-u X')) (Δ : CCtx) (σ : Sub Δ Γ) → CompS s-unit Δ (subM Δ Γ (TV s-unit) σ X) → CompS s-unit Δ (subM Δ Γ (TV s-unit) σ X')
+fund-irr-u Γ X X' p Δ σ cx = irr-u Δ (subM Δ Γ (TV s-unit) σ X) (subM Δ Γ (TV s-unit) σ X') (pcat (Mean Δ (TV s-unit)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u (subM Δ Γ (TV s-unit) σ X)) (subM Δ Γ (TV s-unit) σ (fmapM Γ (TV s-unit) (TV s-unit) nrm-u X)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u (subM Δ Γ (TV s-unit) σ X')) (subM-fmap Δ Γ (TV s-unit) (TV s-unit) nrm-u σ X) (pcat (Mean Δ (TV s-unit)) (subM Δ Γ (TV s-unit) σ (fmapM Γ (TV s-unit) (TV s-unit) nrm-u X)) (subM Δ Γ (TV s-unit) σ (fmapM Γ (TV s-unit) (TV s-unit) nrm-u X')) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u (subM Δ Γ (TV s-unit) σ X')) (cong1 (Mean Γ (TV s-unit)) (Mean Δ (TV s-unit)) (λ N → (subM Δ Γ (TV s-unit) σ N)) (fmapM Γ (TV s-unit) (TV s-unit) nrm-u X) (fmapM Γ (TV s-unit) (TV s-unit) nrm-u X') p) (psym (Mean Δ (TV s-unit)) (fmapM Δ (TV s-unit) (TV s-unit) nrm-u (subM Δ Γ (TV s-unit) σ X')) (subM Δ Γ (TV s-unit) σ (fmapM Γ (TV s-unit) (TV s-unit) nrm-u X')) (subM-fmap Δ Γ (TV s-unit) (TV s-unit) nrm-u σ X')))) cx
+fund-irr-e : (Γ : CCtx) (X X' : Mean Γ (TV s-empty)) (p : PathM Γ (TV s-empty) (fmapM Γ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Γ (TV s-empty) (TV s-empty) nrm-e X')) (Δ : CCtx) (σ : Sub Δ Γ) → CompS s-empty Δ (subM Δ Γ (TV s-empty) σ X) → CompS s-empty Δ (subM Δ Γ (TV s-empty) σ X')
+fund-irr-e Γ X X' p Δ σ cx = irr-e Δ (subM Δ Γ (TV s-empty) σ X) (subM Δ Γ (TV s-empty) σ X') (pcat (Mean Δ (TV s-empty)) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e (subM Δ Γ (TV s-empty) σ X)) (subM Δ Γ (TV s-empty) σ (fmapM Γ (TV s-empty) (TV s-empty) nrm-e X)) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e (subM Δ Γ (TV s-empty) σ X')) (subM-fmap Δ Γ (TV s-empty) (TV s-empty) nrm-e σ X) (pcat (Mean Δ (TV s-empty)) (subM Δ Γ (TV s-empty) σ (fmapM Γ (TV s-empty) (TV s-empty) nrm-e X)) (subM Δ Γ (TV s-empty) σ (fmapM Γ (TV s-empty) (TV s-empty) nrm-e X')) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e (subM Δ Γ (TV s-empty) σ X')) (cong1 (Mean Γ (TV s-empty)) (Mean Δ (TV s-empty)) (λ N → (subM Δ Γ (TV s-empty) σ N)) (fmapM Γ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Γ (TV s-empty) (TV s-empty) nrm-e X') p) (psym (Mean Δ (TV s-empty)) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e (subM Δ Γ (TV s-empty) σ X')) (subM Δ Γ (TV s-empty) σ (fmapM Γ (TV s-empty) (TV s-empty) nrm-e X')) (subM-fmap Δ Γ (TV s-empty) (TV s-empty) nrm-e σ X')))) cx
 KT : {a : TyShape} → PF a → (Δ : CCtx) (X : Mean Δ (TrV a)) → CompS a Δ (fmapM Δ (TrV a) (TV a) (tr-x a) X) → CompS a Δ (fmapM Δ (TrV a) (TV a) (tr-r a) X)
 KT pf-b Δ X cx = irr-b Δ (fmapM Δ (TrV s-bool) (TV s-bool) (tr-x s-bool) X) (fmapM Δ (TrV s-bool) (TV s-bool) (tr-r s-bool) X) (trp-b Δ X) cx
 KT pf-n Δ X cx = irr-n Δ (fmapM Δ (TrV s-nat) (TV s-nat) (tr-x s-nat) X) (fmapM Δ (TrV s-nat) (TV s-nat) (tr-r s-nat) X) (trp-n Δ X) cx
+KT pf-unit Δ X cx = irr-u Δ (fmapM Δ (TrV s-unit) (TV s-unit) (tr-x s-unit) X) (fmapM Δ (TrV s-unit) (TV s-unit) (tr-r s-unit) X) (trp-u Δ X) cx
+KT pf-empty Δ X cx = irr-e Δ (fmapM Δ (TrV s-empty) (TV s-empty) (tr-x s-empty) X) (fmapM Δ (TrV s-empty) (TV s-empty) (tr-r s-empty) X) (trp-e Δ X) cx
 KT (pf-sig a b pa pb) Δ X cx = (triv (pf-sig a b pa pb) Δ (fmapM Δ (TV (s-sig a b)) (Sem (s-sig a b)) (λ q → fst q) (fmapM Δ (TrV (s-sig a b)) (TV (s-sig a b)) (tr-r (s-sig a b)) X)) , kt-out-a a b Δ X (KT pa Δ (fmapM Δ (TrV (s-sig a b)) (TrV a) (sg-a a b) X) (kt-in-a a b Δ X (fst (snd cx)))) , kt-out-b a b Δ X (KT pb Δ (fmapM Δ (TrV (s-sig a b)) (TrV b) (sg-b a b) X) (kt-in-b a b Δ X (snd (snd cx)))))
 KT (pf-pi a b pa pb) Δ X cx = (triv (pf-pi a b pa pb) Δ (fmapM Δ (TV (s-pi a b)) (Sem (s-pi a b)) (λ q → fst q) (fmapM Δ (TrV (s-pi a b)) (TV (s-pi a b)) (tr-r (s-pi a b)) X)) , λ Δ' w Y q ca → kp-cl a b Δ X Δ' w Y q (λ Δ'' Xa' c → KT pa Δ'' Xa' c) (λ Δ'' Xb' c → KT pb Δ'' Xb' c) cx ca)
 fund-tr : (Γ : CCtx) (a : TyShape) (pf : PF a) (X : Mean Γ (TrV a)) (Δ : CCtx) (σ : Sub Δ Γ) → CompS a Δ (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-x a) X)) → CompS a Δ (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-r a) X))
@@ -10866,6 +10926,8 @@ fund (dty-list Γ a A cA dA) Δ σ e = fund dA Δ σ e
 fund (dtt Γ B) Δ σ e = fund-tt Γ B Δ σ
 fund (dty-unit Γ B) Δ σ e = one
 fund (dty-empty Γ B) Δ σ e = one
+fund (dirr-u Γ X X' c p dx) Δ σ e = fund-irr-u Γ X X' p Δ σ (fund dx Δ σ e)
+fund (dirr-e Γ X X' c p dx) Δ σ e = fund-irr-e Γ X X' p Δ σ (fund dx Δ σ e)
 fund (dabsurd Γ s R cP x dP dx) Δ σ e = fund-absurd Γ s R Δ σ e (fund dx Δ σ e) (λ Δ' τ e' → fund dP Δ' τ e')
 
 -- ---------------------------------------------------------------- reflect-env, normalize, reifySound
