@@ -279,6 +279,16 @@ composition-with-systems = node "Composition with a system on the context's face
 -- arguments'; and conversion by comparing normal forms needs a normal code to determine its meaning,
 -- which it does only up to the type component of Bool's and Nat's values (One1, which has no
 -- judgmental uniqueness in the host).
+-- Design (2026-11-14, taken up): every meaning the checker produces is pointwise, dcube-of g over the
+-- context's cube for a function g of the vertex and environment (varCube already is). A rule's
+-- conclusion meaning, built from its premises' by fmapM, extM, lam-body and the like, is a path away
+-- from the pointwise one by the "of" lemmas (dcube-map-of, fmap-of, push-of, pull-of, carry-of), and
+-- der-tr moves a derivation along such a path. The λ circle breaks because a pointwise conclusion's
+-- extended context depends only on its type part: dcube-map-of takes lam-ctx Γ a b (dcube-of g) to
+-- the context extended pointwise by the expected domain, where the body is checked before the λ's
+-- meaning exists; the body's derivation is carried to lam-ctx along that path of contexts with its
+-- meaning by carry-of. Types compare by their codes: equal codes give one result of the checker, so
+-- a path of codes is a path of the pointwise meanings (cong). One1 components are tt1 pointwise.
 checker-returns-derivations : Node
 checker-returns-derivations = node "A checker takes raw codes to typing derivations (or a diagnostic), as the paper's §6.1 specifies." (cons typed-codes-after-swap nil)
 -- typed-codes-after-composition (2026-11-14): everything typed codes and normalization by evaluation
@@ -804,7 +814,7 @@ roots = cons the-product nil
 -- the leaves being worked on now, and the leaves whose work is done; every other leaf is pending
 -- (“The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md))
 in-progress : List Node
-in-progress = cons composition-with-systems nil
+in-progress = cons composition-with-systems (cons checker-returns-derivations nil)
 resolved : List Node
 resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat (cons path-free-transport (cons substitution-on-checked-syntax (cons unit-empty-list nil)))))))))
 -- language support starts only when the language implementation and the product implementation are
