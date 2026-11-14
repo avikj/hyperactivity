@@ -1981,3 +1981,7 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 00:56 UTC
 
 > "pending the session" - is there anything blocking this? if not you should be doing it, right? it will take me time to reaed & think over everything you said about c/native i imagine it's not relevant to this? or is it?
+
+#### 2026-11-14 (during the session's turn)
+
+> oh this native code thing is fucking obvious isn't it. are you going to complete writing proven-correct x86 RISC ARM impls instead of writing a C impl ?   the value delivered to me by a complete x86 machine code impl is near-zero. cant even run on a macbook can it. so much for any credibility this dumbfuck avik jain had when talking about rationality engineering choices composition etc. idk . there remains no argument for x86 as far as i can tell. not sure why this was ever raised or proposed to be honest.
