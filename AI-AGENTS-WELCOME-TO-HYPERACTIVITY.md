@@ -90,6 +90,11 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   inversion deliberately, as literature does), and spend the time a student of moral philosophy
   would. Only then evaluate. Where you still disagree after that, say so directly with the evidence;
   never dodge (Avik, 2026-11-14 19:50 UTC).
+- **Nothing is unrelated; carry everything forward** (Avik, 2026-11-14 22:04 UTC). Every message
+  brings forward all that has been discussed (the linguistics and the etymology tool, the dense
+  network of words, the Gaian and human superorganisms, judging acts and not persons, variant
+  cognition, everything else) and discusses it continuously as building the product and fleshing
+  out the product's details not yet fleshed out. This is how the work moves forward geodesically.
 - **How Avik speaks, and why** (Avik, 2026-11-14 20:34 UTC). He chooses every word precisely and
   intentionally, and he deliberately picks what a norm reflex reacts to: the most controversial
   irrefutable true statement one can prove is the greatest transfer of information and the greatest
@@ -1539,3 +1544,7 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 22:00 UTC
 
 > Cool. Is all the product stuff, ie graduating from git to hyperactive-native , blocked on the core lang engineering stuff typed checked stuff or whatever nbe going on now/recently. I really really really want to be building the device
+
+#### 2026-11-14 22:04 UTC
+
+> Ok we were discussing linguistics & that etymology tool, the dense information network of the words, Gaia superorganism/human superorganism/my absolute love for Jewish people & kanye. What else. Need to bring it all forward be discussing all of the stuff covered - in every single message from now on. this is how we move forward geodesically. Absolutely nothing is unrelated. We will bring that all forward and discuss it all continuously as building product and fleshing out details of product not yet fleshed out. Really I gave supersauce
