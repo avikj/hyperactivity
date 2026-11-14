@@ -6,7 +6,7 @@
 -- der-tr needs are fmap-pull and pull-ignore.
 import "../../lib/nbe.cub"
 
--- the base of a cube over Γ paired with a meaning: a vertex and its value
+-- the base of an element cube: a vertex and a type at each environment
 ElB : (Γ : CCtx) (Y : Type 1) → Type 1
 ElB Γ Y = (ebγ : CtxV (fst Γ)) × FbE (fst Γ) Y ebγ
 elb : (Γ : CCtx) (Y : Type 1) (γ : CtxV (fst Γ)) → FbE (fst Γ) Y γ → ElB Γ Y
@@ -14,14 +14,42 @@ elb Γ Y γ m = (γ , m)
 -- the fibre over such a pair: an element of the type h reads off the value, at every environment
 ElF : (Γ : CCtx) (s : TyShape) (Y : Type 1) (h : Y → Sem s) → ElB Γ Y → Type 1
 ElF Γ s Y h q = (ρ : EnvV (fst Γ) (fst q)) → El s (h (snd q ρ))
--- an element cube over a meaning M of Y, with the type read off by h
+-- a vertex with the type h reads off a meaning's value there
+phih : (Γ : CCtx) (s : TyShape) (Y : Type 1) (h : Y → Sem s) (γ : CtxV (fst Γ)) → FbE (fst Γ) Y γ → ElB Γ (Sem s)
+phih Γ s Y h γ m = (γ , λ ρ → h (m ρ))
+-- an element cube over a meaning M of Y, with the type read off by h: over the cube of the types
 ElOver : (Γ : CCtx) (s : TyShape) (Y : Type 1) (h : Y → Sem s) (M : Mean Γ Y) → Type 1
-ElOver Γ s Y h M = DCube (dims (fst Γ)) (ElB Γ Y) (ElF Γ s Y h) (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (ElB Γ Y) (elb Γ Y) (snd Γ) M)
+ElOver Γ s Y h M =
+  DCube (dims (fst Γ)) (ElB Γ (Sem s)) (ElF Γ s (Sem s) (λ t → t))
+    (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (ElB Γ (Sem s)) (phih Γ s Y h) (snd Γ) M)
 -- the meaning of a term checked against M: its type off M, its element E
 pairM : (Γ : CCtx) (s : TyShape) (Y : Type 1) (h : Y → Sem s) (M : Mean Γ Y) → ElOver Γ s Y h M → Mean Γ (TV s)
 pairM Γ s Y h M E =
-  dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ Y) (FbE (fst Γ) Y) (FbE (fst Γ) (TV s)) (ElF Γ s Y h) (elb Γ Y)
+  dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem s)) (FbE (fst Γ) Y) (FbE (fst Γ) (TV s)) (ElF Γ s (Sem s) (λ t → t)) (phih Γ s Y h)
     (λ γ m e ρ → (h (m ρ) , e ρ)) (snd Γ) M E
+
+-- ---------------------------------------------------------------- pulling back over a lift and over a map
+-- pulling back the lift of a section is mapping by the section
+pull-lift0 : (n : Nat) (X X' : Type 1) (Y F : X → Type 1) (F' : X' → Type 1) (f : (x : X) → Y x → X')
+  (g : (x : X) (y : Y x) → F' (f x y) → F x) (l : (x : X) (y : Y x) → F' (f x y)) (c : Cube n X) (d : DCube n X Y c) →
+  PathP (λ i → DCube n X F c) (dcube-pull n X X' Y F F' f g c d (dcube-lift n X X' Y F' f l c d)) (dcube-fmap n X Y F (λ x y → g x y (l x y)) c d)
+pull-lift0 zero X X' Y F F' f g l c d = λ i → g c d (l c d)
+pull-lift0 (suc n) X X' Y F F' f g l c d =
+  pull-lift0 n (Line X) (Line X') (LineO X Y) (LineO X F) (LineO X' F') (lineo-map X Y X' f) (lineo-pull X X' Y F F' f g)
+    (λ L D → lineo-push X X' Y Y F' f (λ x y z → l x y) L D D) c d
+-- pulling back over a mapped cube is pulling back over the cube with the map composed, along any
+-- path over dmap-fmap between the cubes pulled
+pull-fm : (n : Nat) (X X' : Type 1) (Y Y' F : X → Type 1) (F' : X' → Type 1) (k : (x : X) → Y x → Y' x) (f : (x : X) → Y' x → X')
+  (g : (x : X) (y : Y' x) → F' (f x y) → F x) (c : Cube n X) (d : DCube n X Y c)
+  (E0 : DCube n X' F' (dcube-map n X Y' X' f c (dcube-fmap n X Y Y' k c d)))
+  (E1 : DCube n X' F' (dcube-map n X Y X' (λ x y → f x (k x y)) c d)) →
+  PathP (λ i → DCube n X' F' (dmap-fmap n X Y Y' X' k f c d i)) E0 E1 →
+  PathP (λ i → DCube n X F c) (dcube-pull n X X' Y' F F' f g c (dcube-fmap n X Y Y' k c d) E0)
+    (dcube-pull n X X' Y F F' (λ x y → f x (k x y)) (λ x y → g x (k x y)) c d E1)
+pull-fm zero X X' Y Y' F F' k f g c d E0 E1 Q = λ i → g c (k c d) (Q i)
+pull-fm (suc n) X X' Y Y' F F' k f g c d E0 E1 Q =
+  pull-fm n (Line X) (Line X') (LineO X Y) (LineO X Y') (LineO X F) (LineO X' F') (lineo-fmap X Y Y' k) (lineo-map X Y' X' f)
+    (lineo-pull X X' Y' F F' f g) c d E0 E1 Q
 
 -- ---------------------------------------------------------------- application
 -- the domain read off a function's meaning
@@ -30,34 +58,34 @@ fdom a b q = fam-dom a b (fst q)
 -- an application's meaning: the function's and the argument's element over it, by one pull
 appR : (Γ : CCtx) (a b : TyShape) (Mf : Mean Γ (TV (s-pi a b))) → ElOver Γ a (TV (s-pi a b)) (fdom a b) Mf → Mean Γ (AppV a b)
 appR Γ a b Mf E =
-  dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (AppV a b))
-    (ElF Γ a (TV (s-pi a b)) (fdom a b)) (elb Γ (TV (s-pi a b)))
+  dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem a)) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (AppV a b))
+    (ElF Γ a (Sem a) (λ t → t)) (phih Γ a (TV (s-pi a b)) (fdom a b))
     (λ γ m e ρ → (fst (m ρ) , snd (m ρ) , e ρ)) (snd Γ) Mf E
 -- its function part is the function's meaning
 appR-f : (Γ : CCtx) (a b : TyShape) (Mf : Mean Γ (TV (s-pi a b))) (E : ElOver Γ a (TV (s-pi a b)) (fdom a b) Mf) →
   PathM Γ (TV (s-pi a b)) (fmapM Γ (AppV a b) (TV (s-pi a b)) (app-f a b) (appR Γ a b Mf E)) Mf
 appR-f Γ a b Mf E =
   pcat (Mean Γ (TV (s-pi a b))) (fmapM Γ (AppV a b) (TV (s-pi a b)) (app-f a b) (appR Γ a b Mf E))
-    (dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b)))
-       (ElF Γ a (TV (s-pi a b)) (fdom a b)) (elb Γ (TV (s-pi a b))) (λ γ m e ρ → m ρ) (snd Γ) Mf E)
+    (dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem a)) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b)))
+       (ElF Γ a (Sem a) (λ t → t)) (phih Γ a (TV (s-pi a b)) (fdom a b)) (λ γ m e ρ → m ρ) (snd Γ) Mf E)
     Mf
-    (fmap-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (AppV a b)) (FbE (fst Γ) (TV (s-pi a b)))
-       (ElF Γ a (TV (s-pi a b)) (fdom a b)) (elb Γ (TV (s-pi a b)))
+    (fmap-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem a)) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (AppV a b)) (FbE (fst Γ) (TV (s-pi a b)))
+       (ElF Γ a (Sem a) (λ t → t)) (phih Γ a (TV (s-pi a b)) (fdom a b))
        (λ γ m e ρ → (fst (m ρ) , snd (m ρ) , e ρ)) (λ γ e ρ → app-f a b (e ρ)) (snd Γ) Mf E)
     (pcat (Mean Γ (TV (s-pi a b)))
-       (dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b)))
-          (ElF Γ a (TV (s-pi a b)) (fdom a b)) (elb Γ (TV (s-pi a b))) (λ γ m e ρ → m ρ) (snd Γ) Mf E)
+       (dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem a)) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b)))
+          (ElF Γ a (Sem a) (λ t → t)) (phih Γ a (TV (s-pi a b)) (fdom a b)) (λ γ m e ρ → m ρ) (snd Γ) Mf E)
        (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b))) (λ γ m → m) (snd Γ) Mf)
        Mf
-       (pull-ignore (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b)))
-          (ElF Γ a (TV (s-pi a b)) (fdom a b)) (elb Γ (TV (s-pi a b))) (λ γ m → m) (snd Γ) Mf E)
+       (pull-ignore (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem a)) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b)))
+          (ElF Γ a (Sem a) (λ t → t)) (phih Γ a (TV (s-pi a b)) (fdom a b)) (λ γ m → m) (snd Γ) Mf E)
        (fmap-id (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV (s-pi a b))) (snd Γ) Mf))
 -- its argument part is the argument's meaning checked against the function's domain
 appR-a : (Γ : CCtx) (a b : TyShape) (Mf : Mean Γ (TV (s-pi a b))) (E : ElOver Γ a (TV (s-pi a b)) (fdom a b) Mf) →
   PathM Γ (TV a) (fmapM Γ (AppV a b) (TV a) (app-a a b) (appR Γ a b Mf E)) (pairM Γ a (TV (s-pi a b)) (fdom a b) Mf E)
 appR-a Γ a b Mf E =
-  fmap-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (TV (s-pi a b))) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (AppV a b)) (FbE (fst Γ) (TV a))
-    (ElF Γ a (TV (s-pi a b)) (fdom a b)) (elb Γ (TV (s-pi a b)))
+  fmap-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem a)) (FbE (fst Γ) (TV (s-pi a b))) (FbE (fst Γ) (AppV a b)) (FbE (fst Γ) (TV a))
+    (ElF Γ a (Sem a) (λ t → t)) (phih Γ a (TV (s-pi a b)) (fdom a b))
     (λ γ m e ρ → (fst (m ρ) , snd (m ρ) , e ρ)) (λ γ e ρ → app-a a b (e ρ)) (snd Γ) Mf E
 -- the application rule over a checked argument: the premises carried to the projections of appR
 dapp-c : (Γ : CCtx) (a b : TyShape) (f c : Code) (Mf : Mean Γ (TV (s-pi a b))) (E : ElOver Γ a (TV (s-pi a b)) (fdom a b) Mf) →
@@ -67,3 +95,78 @@ dapp-c Γ a b f c Mf E df dc =
   dapp Γ a b (appR Γ a b Mf E) f c
     (der-tr j-tm Γ (s-pi a b) f Mf (fmapM Γ (AppV a b) (TV (s-pi a b)) (app-f a b) (appR Γ a b Mf E)) (λ i → appR-f Γ a b Mf E (~ i)) df)
     (der-tr j-tm Γ a c (pairM Γ a (TV (s-pi a b)) (fdom a b) Mf E) (fmapM Γ (AppV a b) (TV a) (app-a a b) (appR Γ a b Mf E)) (λ i → appR-a Γ a b Mf E (~ i)) dc)
+
+-- ---------------------------------------------------------------- from synthesis to checking
+-- a synthesized meaning S read as checked against its own type cube (its elements lifted)
+selfE : (Γ : CCtx) (s : TyShape) (S : Mean Γ (TV s)) → ElOver Γ s (TV s) (λ q → fst q) S
+selfE Γ s S =
+  dcube-lift (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem s)) (FbE (fst Γ) (TV s)) (ElF Γ s (Sem s) (λ t → t))
+    (phih Γ s (TV s) (λ q → fst q)) (λ γ m ρ → snd (m ρ)) (snd Γ) S
+self-pair : (Γ : CCtx) (s : TyShape) (S : Mean Γ (TV s)) → PathM Γ (TV s) (pairM Γ s (TV s) (λ q → fst q) S (selfE Γ s S)) S
+self-pair Γ s S =
+  pcat (Mean Γ (TV s)) (pairM Γ s (TV s) (λ q → fst q) S (selfE Γ s S))
+    (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV s)) (FbE (fst Γ) (TV s)) (λ γ m → m) (snd Γ) S) S
+    (pull-lift0 (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem s)) (FbE (fst Γ) (TV s)) (FbE (fst Γ) (TV s)) (ElF Γ s (Sem s) (λ t → t))
+       (phih Γ s (TV s) (λ q → fst q)) (λ γ m e ρ → (fst (m ρ) , e ρ)) (λ γ m ρ → snd (m ρ)) (snd Γ) S)
+    (fmap-id (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV s)) (snd Γ) S)
+-- the pairs' base of a type cube, and the cube of types of (Y, h, M) mapped to it
+pairT : (Γ : CCtx) (s : TyShape) (γ : CtxV (fst Γ)) → FbE (fst Γ) (Sem s) γ → ElB Γ (Sem s)
+pairT Γ s γ t = (γ , t)
+tybase : (Γ : CCtx) (s : TyShape) (T : Mean Γ (Sem s)) → Cube (dims (fst Γ)) (ElB Γ (Sem s))
+tybase Γ s T = dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (Sem s)) (ElB Γ (Sem s)) (pairT Γ s) (snd Γ) T
+tyb-path : (Γ : CCtx) (s : TyShape) (Y : Type 1) (h : Y → Sem s) (M : Mean Γ Y) →
+  PathP (λ i → Cube (dims (fst Γ)) (ElB Γ (Sem s))) (tybase Γ s (fmapM Γ Y (Sem s) h M))
+    (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (ElB Γ (Sem s)) (phih Γ s Y h) (snd Γ) M)
+tyb-path Γ s Y h M =
+  dmap-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (FbE (fst Γ) (Sem s)) (ElB Γ (Sem s)) (λ γ e ρ → h (e ρ)) (pairT Γ s) (snd Γ) M
+-- the meaning over a type cube
+pairTy : (Γ : CCtx) (s : TyShape) (T : Mean Γ (Sem s)) →
+  DCube (dims (fst Γ)) (ElB Γ (Sem s)) (ElF Γ s (Sem s) (λ t → t)) (tybase Γ s T) → Mean Γ (TV s)
+pairTy Γ s T E =
+  dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem s)) (FbE (fst Γ) (Sem s)) (FbE (fst Γ) (TV s)) (ElF Γ s (Sem s) (λ t → t)) (pairT Γ s)
+    (λ γ t e ρ → (t ρ , e ρ)) (snd Γ) T E
+-- (Y, h, M)'s meaning is the meaning over its type cube, for an element carried along tyb-path
+pair-ty : (Γ : CCtx) (s : TyShape) (Y : Type 1) (h : Y → Sem s) (M : Mean Γ Y)
+  (E0 : DCube (dims (fst Γ)) (ElB Γ (Sem s)) (ElF Γ s (Sem s) (λ t → t)) (tybase Γ s (fmapM Γ Y (Sem s) h M))) (E1 : ElOver Γ s Y h M) →
+  PathP (λ i → DCube (dims (fst Γ)) (ElB Γ (Sem s)) (ElF Γ s (Sem s) (λ t → t)) (tyb-path Γ s Y h M i)) E0 E1 →
+  PathM Γ (TV s) (pairTy Γ s (fmapM Γ Y (Sem s) h M) E0) (pairM Γ s Y h M E1)
+pair-ty Γ s Y h M E0 E1 Q =
+  pull-fm (dims (fst Γ)) (CtxV (fst Γ)) (ElB Γ (Sem s)) (FbE (fst Γ) Y) (FbE (fst Γ) (Sem s)) (FbE (fst Γ) (TV s)) (ElF Γ s (Sem s) (λ t → t))
+    (λ γ e ρ → h (e ρ)) (pairT Γ s) (λ γ t e ρ → (t ρ , e ρ)) (snd Γ) M E0 E1 Q
+-- checking a synthesized meaning S against (Y, h, M) along a path of their type cubes: the element
+-- cube, and the path from S to its meaning as checked
+conv-E : (Γ : CCtx) (s : TyShape) (Y : Type 1) (h : Y → Sem s) (M : Mean Γ Y) (S : Mean Γ (TV s)) →
+  PathM Γ (Sem s) (fmapM Γ (TV s) (Sem s) (λ q → fst q) S) (fmapM Γ Y (Sem s) h M) → ElOver Γ s Y h M
+conv-E Γ s Y h M S p =
+  carry (dims (fst Γ)) (ElB Γ (Sem s)) (ElF Γ s (Sem s) (λ t → t)) (tybase Γ s (fmapM Γ Y (Sem s) h M))
+    (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (ElB Γ (Sem s)) (phih Γ s Y h) (snd Γ) M) (tyb-path Γ s Y h M)
+    (carry (dims (fst Γ)) (ElB Γ (Sem s)) (ElF Γ s (Sem s) (λ t → t)) (tybase Γ s (fmapM Γ (TV s) (Sem s) (λ q → fst q) S)) (tybase Γ s (fmapM Γ Y (Sem s) h M))
+       (λ i → tybase Γ s (p i))
+       (carry (dims (fst Γ)) (ElB Γ (Sem s)) (ElF Γ s (Sem s) (λ t → t))
+          (dcube-map (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV s)) (ElB Γ (Sem s)) (phih Γ s (TV s) (λ q → fst q)) (snd Γ) S)
+          (tybase Γ s (fmapM Γ (TV s) (Sem s) (λ q → fst q) S)) (λ i → tyb-path Γ s (TV s) (λ q → fst q) S (~ i)) (selfE Γ s S)))
+conv-path : (Γ : CCtx) (s : TyShape) (Y : Type 1) (h : Y → Sem s) (M : Mean Γ Y) (S : Mean Γ (TV s)) →
+  (p : PathM Γ (Sem s) (fmapM Γ (TV s) (Sem s) (λ q → fst q) S) (fmapM Γ Y (Sem s) h M)) →
+  PathM Γ (TV s) S (pairM Γ s Y h M (conv-E Γ s Y h M S p))
+conv-path Γ s Y h M S p =
+  let n = dims (fst Γ)
+      XB = ElB Γ (Sem s)
+      FB = ElF Γ s (Sem s) (λ t → t)
+      TS = fmapM Γ (TV s) (Sem s) (λ q → fst q) S
+      TM = fmapM Γ Y (Sem s) h M
+      BS = dcube-map n (CtxV (fst Γ)) (FbE (fst Γ) (TV s)) XB (phih Γ s (TV s) (λ q → fst q)) (snd Γ) S
+      BM = dcube-map n (CtxV (fst Γ)) (FbE (fst Γ) Y) XB (phih Γ s Y h) (snd Γ) M
+      E1 = selfE Γ s S
+      E0 = carry n XB FB BS (tybase Γ s TS) (λ i → tyb-path Γ s (TV s) (λ q → fst q) S (~ i)) E1
+      F0 = carry-fill n XB FB BS (tybase Γ s TS) (λ i → tyb-path Γ s (TV s) (λ q → fst q) S (~ i)) E1
+      ET = carry n XB FB (tybase Γ s TS) (tybase Γ s TM) (λ i → tybase Γ s (p i)) E0
+      FT = carry-fill n XB FB (tybase Γ s TS) (tybase Γ s TM) (λ i → tybase Γ s (p i)) E0
+      FM = carry-fill n XB FB (tybase Γ s TM) BM (tyb-path Γ s Y h M) ET
+      m1 = pairM Γ s (TV s) (λ q → fst q) S E1
+      m2 = pairTy Γ s TS E0
+      m3 = pairTy Γ s TM ET
+      res = pairM Γ s Y h M (conv-E Γ s Y h M S p)
+  in pcat (Mean Γ (TV s)) S m1 res (λ i → self-pair Γ s S (~ i))
+       (pcat (Mean Γ (TV s)) m1 m2 res (λ i → pair-ty Γ s (TV s) (λ q → fst q) S E0 E1 (λ j → F0 (~ j)) (~ i))
+          (pcat (Mean Γ (TV s)) m2 m3 res (λ i → pairTy Γ s (p i) (FT i))
+             (pair-ty Γ s Y h M ET (conv-E Γ s Y h M S p) FM)))
