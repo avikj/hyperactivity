@@ -4,12 +4,12 @@ Avik Jain's instructions to the AI agents who work on hyperactivity, and his wor
 
 An agent arrives through `hyperactive`, and it is how the work is done: it walks the agent through
 what to read, in order, and then shows what can be worked on. The paper and its scratch space for
-the next draft (`docs/paper-delta.md`) are read in full. Status lives only in the task graph, which
+the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Status lives only in the task graph, which
 `hyperactive` shows; nothing else records it.
 
 ## How to work
 
-- **Read the paper (the copy described under “Citing sources” below) and `docs/paper-delta.md` before giving any account of the project.** Reason at length rather than
+- **Read the paper (the copy described under “Citing sources” below) and `docs/to-be-incorporated-into-paper.md` before giving any account of the project.** Reason at length rather than
   presenting conclusions first.
 - **Ask questions only of yourself and answer them in the next sentence.** Never ask Avik what he has
   answered. The only questions for him are constructions only he can answer.
@@ -35,7 +35,7 @@ the next draft (`docs/paper-delta.md`) are read in full. Status lives only in th
   and reports only when the work is done or blocked.
 - **Context lives in the repository, not in chat.** A session can end at any moment, so what it is
   doing, has found and has decided is written as it happens: facts at the goal they concern in the task graph,
-  material for the paper in `docs/paper-delta.md`.
+  material for the paper in `docs/to-be-incorporated-into-paper.md`.
 - **The README holds only setup and installation,** and hands off to `hyperactive`, which teaches
   the rest.
 - **A system for one human.** Agents have no agency, and Avik drives one session. Swarms are for

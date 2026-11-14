@@ -1,4 +1,4 @@
-# Toward the next draft of the paper
+# To be incorporated into the paper
 
 The paper is the specification of hyperactivity. The repository's copy is
 `docs/Hyperactive_Final_Paper.pdf`, dated 11 November 2026. This file is the scratch space for
@@ -117,7 +117,7 @@ problems.
   the relational reading of quantum mechanics, state is relative to the observer. A distributed system
   assuming one canonical global state assumes what nature lacks and pays in coordination, consensus
   and outages. Each device holds its own state, interaction is exchange, consistency is a relation
-  between parties; "no canonical state" (“State, change and collaboration” (docs/paper-delta.md)) is the same
+  between parties; "no canonical state" (“State, change and collaboration” (docs/to-be-incorporated-into-paper.md)) is the same
   principle.
 
 ## The product
@@ -127,7 +127,7 @@ a particular application of computing, not a silo. The product is one organism, 
 Hyperactive core, in which everything interoperates. Everything here serves it.
 What is being built is a complete operating system: hyperactivity, the decentralized safe
 superintelligent operating system (Avik, 2026-11-14). Programs are compositional extensions of the
-operating system, and the `hyperactive` command (“The interface” (docs/paper-delta.md)) is its interface for agents
+operating system, and the `hyperactive` command (“The interface” (docs/to-be-incorporated-into-paper.md)) is its interface for agents
 and humans alike, not a developer tool for this repository.
 The name, as Avik reads it (2026-11-14): hyperactivity is a decentralized safe superintelligent
 operating system language. The operation of systems is the whole topic. "Safe" does double work: the
@@ -142,8 +142,8 @@ and nothing normal about computing today is to be kept.
 1. **The language,** implemented completely and correctly as the paper specifies. The bar is that
    Avik can show someone the paper and correctly say it is fully implemented. The paper's worked
    examples (trading systems, message protocols) are not part of this bar.
-2. **The live interactive collaboration system** and tooling over the language and its terms (“State, change and collaboration” (docs/paper-delta.md),
-   “The interface” (docs/paper-delta.md)).
+2. **The live interactive collaboration system** and tooling over the language and its terms (“State, change and collaboration” (docs/to-be-incorporated-into-paper.md),
+   “The interface” (docs/to-be-incorporated-into-paper.md)).
 3. **The support of particular languages:** the syntax and semantics of x86, C, C++, Rust, OCaml,
    Python and others, as terms.
    - x86 is a language like C++. There is no hardware category.
@@ -159,7 +159,7 @@ and nothing normal about computing today is to be kept.
 
 ## The language
 
-The paper is the specification. What remains between the implementation (“The language as implemented” (docs/paper-delta.md)) and the paper:
+The paper is the specification. What remains between the implementation (“The language as implemented” (docs/to-be-incorporated-into-paper.md)) and the paper:
 - **The calculus,** conforming to CCHM.
 - **Typed codes and normalization by evaluation** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”). This is easiest in this language: it is
   normalization for a cubical type theory written inside a cubical type theory, so the model already
@@ -209,7 +209,7 @@ The paper is the specification. What remains between the implementation (“The 
 
 ## State, change and collaboration
 
-The work leaves git for this design. None of it is built yet beyond the content keys of “The language as implemented” (docs/paper-delta.md).
+The work leaves git for this design. None of it is built yet beyond the content keys of “The language as implemented” (docs/to-be-incorporated-into-paper.md).
 
 **State is not text.**
 - The represented world is a collection of objects and relations, with no primitive file system,
@@ -365,7 +365,7 @@ plan, handoff and track documents that citations name by digest (`archive-plan-r
 - every node to have a statement;
 - the graph to be consistent.
 
-It computes the order of work by the rule in “The Hyperactive Workflow” (docs/paper-delta.md).
+It computes the order of work by the rule in “The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md).
 
 ## The interface
 
@@ -479,7 +479,7 @@ is `r` with the fields given replaced; `x.f` projects. `mutual` groups definitio
 
 **Recursion.** A call on a field of the matched argument is structural, applied to all its later
 arguments or to fewer (a partial call is the function of the rest: `lapp (f k)` passes it); a definition at a type with
-a clock recurses through any functions where a later value is expected (“Guarded recursion” in “The language as implemented” (docs/paper-delta.md)). A call on a field's field,
+a clock recurses through any functions where a later value is expected (“Guarded recursion” in “The language as implemented” (docs/to-be-incorporated-into-paper.md)). A call on a field's field,
 at any depth (`fib (suc (suc n)) = plus (fib n) (fib (suc n))`), is course-of-values: the split
 computes each value together with the values below it (a Σ of the value and `Below v`, `Below`
 itself an elimination into types), and a split of a variable below reverts that pair, so that in
@@ -638,8 +638,8 @@ the store's `ok` line.
 
 **Commands.** `#check e : T`, `#same a = b` (equal readings, at a type when either side has one),
 `#show e`, `#observe n e` (a codata value unfolded n levels), `#usage f`, `#trusted`, `#safe f`,
-`#jit f [using t…]` (“Programs about programs, and the compiler” in “The language as implemented” (docs/paper-delta.md)), `#key d`, `#names K`, `#history d`, `#unbind d`, `#gc`, `#run s`,
-`#input x` and `#supply x = e` (“Inputs” in “The language as implemented” (docs/paper-delta.md)), `#fail` before a declaration or command (it must be
+`#jit f [using t…]` (“Programs about programs, and the compiler” in “The language as implemented” (docs/to-be-incorporated-into-paper.md)), `#key d`, `#names K`, `#history d`, `#unbind d`, `#gc`, `#run s`,
+`#input x` and `#supply x = e` (“Inputs” in “The language as implemented” (docs/to-be-incorporated-into-paper.md)), `#fail` before a declaration or command (it must be
 rejected). A name is bound once: a second definition, data type or constructor of the same name
 is refused, and so is a clause no case reaches. `import "file.cub"` loads a module
 once. Results and failures print in the surface syntax, a failed check with its declaration's
@@ -874,7 +874,7 @@ transported process is again a process, unfolded field by field when it is obser
 
 `#show t` reads a stuck call as the call. `#observe n t` reads it unfolded n levels deep, as
 records. An unfolding is named by the call it unfolds, so two unfoldings of one call pending at
-once share the body (“Work is done once, and only where it is read” in “The language as implemented” (docs/paper-delta.md)).
+once share the body (“Work is done once, and only where it is read” in “The language as implemented” (docs/to-be-incorporated-into-paper.md)).
 
 ### Guarded recursion
 
@@ -900,7 +900,7 @@ is the earlier context extended by the interval, ◁(Γ × I) ≅ ◁Γ × I, as
 guarded type theory.
 
 `dfix : (▸ κ A → A) → ▸ κ A` (at every level: `next`, `⊛`, `dfix`, `fix`, `pfix` and `forceκ`
-take `{l : Level}` first) is a stuck call of the kind copattern definitions make (“Coinduction” in “The language as implemented” (docs/paper-delta.md)), with one
+take `{l : Level}` first) is a stuck call of the kind copattern definitions make (“Coinduction” in “The language as implemented” (docs/to-be-incorporated-into-paper.md)), with one
 difference: it unfolds, `dfix f ⋄ = f (dfix f)`, only when applied to the tick constant `⋄`, and at
 a tick variable it stays stuck. `fix f = f (dfix f)` is then the guarded fixed point, and every
 recursion whose recursive use is under `▸` is well typed, whatever functions it passes through.
@@ -923,7 +923,7 @@ Guarded types are ordinary data whose recursive fields are later:
 recursive field (an elimination takes no hypothesis for it). Composition in `▸ κ A` is pointwise
 (the composition of ticks and clocks is the identity), so transport along a line of stream types
 moves each tail at its own tick, and the heads read are numerals again (composition with an empty
-tube in a data type without path constructors goes into the fields, “Values include equality” in “The language as implemented” (docs/paper-delta.md)).
+tube in a data type without path constructors goes into the fields, “Values include equality” in “The language as implemented” (docs/to-be-incorporated-into-paper.md)).
 
 The elaborator writes the ticks. A clock named in a signature (an argument of `Tick` or of a
 data type's `Clock` parameter) is an implicit parameter. A definition with a clock whose
@@ -970,4 +970,4 @@ the parameter types runs the bytes; any other call, and a `Word` result past 2�
 exit: compiled code is pure, so the net recomputes the call), runs `f` on the net. The
 acceptance workloads are `experiments/jit/workloads.cub`. Only the specialized code
 is checked against `f`; the translation to bytes after it, its passes and templates and the
-boundary's marshaling, is trusted and carries no relation to the code (the Known facts in the task graph's goal statements, “The language” (docs/paper-delta.md)).
+boundary's marshaling, is trusted and carries no relation to the code (the Known facts in the task graph's goal statements, “The language” (docs/to-be-incorporated-into-paper.md)).
