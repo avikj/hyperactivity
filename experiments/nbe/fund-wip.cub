@@ -552,3 +552,86 @@ fund (dty-pi Γ a b T cA cB dA dB) Δ σ e = fund-tpi Γ a b T Δ σ e (fund dA 
 fund (dty-sig Γ a b T cA cB dA dB) Δ σ e = fund-tsig Γ a b T Δ σ e (fund dA Δ σ e) (λ Δ' τ e' → fund dB Δ' τ e')
 fund (dty-path Γ a T cL c0 c1 dL d0 d1) Δ σ e =
   fund-tpath Γ a T Δ σ e (λ Δ' τ e' → fund dL Δ' τ e') (fund d0 Δ σ e) (fund d1 Δ σ e)
+
+-- ---------------------------------------------------------------- reflect-env, normalize, reifySound
+-- (2026-11-14) typed contexts: the empty one, an extension by a type with a derivation, by a dimension
+-- (constructor binders subscripted ₀: telescope instantiation captures names)
+data TCtx : (Γc : CCtx) → Type 1 where
+  tc-nil : TCtx (lnil , one)
+  tc-ty : (Γ₀ : CCtx) → TCtx Γ₀ → (a₀ : TyShape) (T₀ : Mean Γ₀ (Sem a₀)) (cA₀ : Code) → Der (j-ty , Γ₀ , a₀ , cA₀ , T₀) →
+    TCtx (ext-h Γ₀ a₀ (Sem a₀) (λ A → A) T₀)
+  tc-dim : (Γ₀ : CCtx) → TCtx Γ₀ → TCtx (dext Γ₀)
+-- the identity's forms are single variables, canonical (canon-of: dnf-norm is the identity on them
+-- judgmentally, dnf-eq-refl)
+canon-of : (sk' sk : Lst Entry) (r : Word → Word) → CanonCM sk' sk (cmap-of sk' sk r)
+canon-of sk' lnil r = unit
+canon-of sk' (lcons (e-ty a) sk) r = canon-of sk' sk (λ k → r (%wsucc k))
+canon-of sk' (lcons e-dim sk) r =
+  (canon-of sk' sk (λ k → r (%wsucc k)) ,
+   eq→isTrue {dnf-canon (lcons (lcons (r #0 , true) lnil) lnil)} (dnf-eq-refl (lcons (lcons (r #0 , true) lnil) lnil)))
+-- each variable of a typed context reflected (id-vals): the new one at its type's computability (fund
+-- at the identity, subM-id), by var-comp and var-lift; an old one along the weakening world's own
+-- variable path (WVar of world-wk, world-dwk) after comp-ren; the identity's environment (id-env)
+var-new : (Γ : CCtx) (a : TyShape) (T : Mean Γ (Sem a)) → CompTy a Γ T →
+  CompS a (ext-h Γ a (Sem a) (λ A → A) T) (varCube (ext-h Γ a (Sem a) (λ A → A) T) none)
+var-new Γ a T cT =
+  comp-tr a (ext-h Γ a (Sem a) (λ A → A) T) (ext-lift Γ a (Sem a) (λ A → A) (TV a) (λ q x → (q , x)) T) (varCube (ext-h Γ a (Sem a) (λ A → A) T) none)
+    (psym (Mean (ext-h Γ a (Sem a) (λ A → A) T) (TV a)) (varCube (ext-h Γ a (Sem a) (λ A → A) T) none) (ext-lift Γ a (Sem a) (λ A → A) (TV a) (λ q x → (q , x)) T)
+       (var-lift Γ a (Sem a) (λ A → A) T))
+    (var-comp a (snd (snd (rr a))) Γ (Sem a) (λ A → A) T
+       (ty-tr a Γ T (fmapM Γ (Sem a) (Sem a) (λ A → A) T)
+          (psym (Mean Γ (Sem a)) (fmapM Γ (Sem a) (Sem a) (λ A → A) T) T (fmap-id (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (Sem a)) (snd Γ) T)) cT))
+var-old : (Γ' Γ : CCtx) (w : World Γ' Γ) (v : VarP (fst Γ)) → CompS (var-shape (fst Γ) v) Γ (varCube Γ v) →
+  CompS (var-shape (fst Γ') (fst (snd (snd (snd (snd w))) v))) Γ' (varCube Γ' (fst (snd (snd (snd (snd w))) v)))
+var-old Γ' Γ w v c =
+  comp (λ i → CompS (fst (snd (snd (snd (snd (snd (snd w))) v)) (~ i))) Γ' (snd (snd (snd (snd (snd (snd (snd w))) v)) (~ i))))
+    (λ i → []) (comp-ren (var-shape (fst Γ) v) Γ (varCube Γ v) c Γ' w)
+id-ty-vals : (Γ : CCtx) (a : TyShape) (T : Mean Γ (Sem a)) → CompTy a Γ T → ((v : VarP (fst Γ)) → CompS (var-shape (fst Γ) v) Γ (varCube Γ v)) →
+  (v : VarP (lcons (e-ty a) (fst Γ))) → CompS (var-shape (lcons (e-ty a) (fst Γ)) v) (ext-h Γ a (Sem a) (λ A → A) T) (varCube (ext-h Γ a (Sem a) (λ A → A) T) v)
+id-ty-vals Γ a T cT ih none = var-new Γ a T cT
+id-ty-vals Γ a T cT ih (some v) = var-old (ext-h Γ a (Sem a) (λ A → A) T) Γ (world-wk Γ a (Sem a) (λ γ e ρ → e ρ) T) v (ih v)
+id-envOf : (Γ : CCtx) → ((v : VarP (fst Γ)) → CompS (var-shape (fst Γ) v) Γ (varCube Γ v)) → CompEnv Γ Γ (sub-id Γ)
+id-envOf Γ vs =
+  (canon-of (fst Γ) (fst Γ) (λ k → k) ,
+   λ v → comp-tr (var-shape (fst Γ) v) Γ (varCube Γ v) (subM Γ Γ (TV (var-shape (fst Γ) v)) (sub-id Γ) (varCube Γ v))
+           (psym (Mean Γ (TV (var-shape (fst Γ) v))) (subM Γ Γ (TV (var-shape (fst Γ) v)) (sub-id Γ) (varCube Γ v)) (varCube Γ v) (subM-id Γ (TV (var-shape (fst Γ) v)) (varCube Γ v)))
+           (vs v))
+
+id-ty-env : (Γ : CCtx) (a : TyShape) (T : Mean Γ (Sem a)) (cA : Code) (dT : Der (j-ty , Γ , a , cA , T)) (ih : (v : VarP (fst Γ)) → CompS (var-shape (fst Γ) v) Γ (varCube Γ v)) →
+  (v : VarP (lcons (e-ty a) (fst Γ))) → CompS (var-shape (lcons (e-ty a) (fst Γ)) v) (ext-h Γ a (Sem a) (λ A → A) T) (varCube (ext-h Γ a (Sem a) (λ A → A) T) v)
+id-ty-env Γ a T cA dT ih v = id-ty-vals Γ a T (ty-tr a Γ (subM Γ Γ (Sem a) (sub-id Γ) T) T (subM-id Γ (Sem a) T) (fund dT Γ (sub-id Γ) (id-envOf Γ ih))) ih v
+id-dim-env : (Γ : CCtx) (ih : (v : VarP (fst Γ)) → CompS (var-shape (fst Γ) v) Γ (varCube Γ v)) (v : VarP (fst (dext Γ))) → CompS (var-shape (fst (dext Γ)) v) (dext Γ) (varCube (dext Γ) v)
+id-dim-env Γ ih v = var-old (dext Γ) Γ (world-dwk Γ) v (ih v)
+nil-vals : (v : VarP lnil) → CompS (var-shape lnil v) (lnil , one) (varCube (lnil , one) v)
+nil-vals v = case v of Empty
+id-vals : {Γ : CCtx} → TCtx Γ → (v : VarP (fst Γ)) → CompS (var-shape (fst Γ) v) Γ (varCube Γ v)
+id-vals tc-nil v = nil-vals v
+id-vals (tc-ty Γ₁ tΓ a T cA dT) v = id-ty-env Γ₁ a T cA dT (id-vals tΓ) v
+id-vals (tc-dim Γ₁ tΓ) v = id-dim-env Γ₁ (id-vals tΓ) v
+id-env : (Γ : CCtx) → TCtx Γ → CompEnv Γ Γ (sub-id Γ)
+id-env Γ tΓ = id-envOf Γ (id-vals tΓ)
+-- normalize (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”:
+-- normalize_{Γ,A}(t) := reify_{Γ,A}(eval_nf(t, reflectContext(Γ)))): fund at the identity with every
+-- variable reflected, then reify; a normal form with t's meaning, as a typed code
+normalize-nf : (Γ : CCtx) → TCtx Γ → (s : TyShape) (t : TCode Γ s) → RenR k-nf j-tm Γ s (teval Γ s t)
+normalize-nf Γ tΓ s t =
+  fst (snd (rr s)) Γ (teval Γ s t)
+    (comp-tr s Γ (subM Γ Γ (TV s) (sub-id Γ) (fst (snd t))) (fst (snd t)) (subM-id Γ (TV s) (fst (snd t))) (fund (snd (snd t)) Γ (sub-id Γ) (id-env Γ tΓ)))
+
+normalize : (Γ : CCtx) → TCtx Γ → (s : TyShape) → TCode Γ s → TCode Γ s
+normalize Γ tΓ s t =
+  (fst (normalize-nf Γ tΓ s t) , teval Γ s t , embed {(k-nf , (j-tm , Γ , s , fst (normalize-nf Γ tΓ s t) , teval Γ s t))} (snd (normalize-nf Γ tΓ s t)))
+-- reifySound (eq. (6.5) “reifySound”) at normalize: the normal form's meaning is t's, by refl
+normalize-sound : (Γ : CCtx) (tΓ : TCtx Γ) (s : TyShape) (t : TCode Γ s) → PathM Γ (TV s) (teval Γ s (normalize Γ tΓ s t)) (teval Γ s t)
+normalize-sound Γ tΓ s t = λ i → teval Γ s t
+
+-- types likewise: a typed type code, its normal form (fund at j-ty, reify-ty)
+TyCode : CCtx → TyShape → Type 1
+TyCode Γ s = (c : Code) × (T : Mean Γ (Sem s)) × Der (j-ty , Γ , s , c , T)
+normalize-ty-nf : (Γ : CCtx) → TCtx Γ → (s : TyShape) (A : TyCode Γ s) → RenR k-nf j-ty Γ s (fst (snd A))
+normalize-ty-nf Γ tΓ s A =
+  fst (rr s) Γ (fst (snd A))
+    (ty-tr s Γ (subM Γ Γ (Sem s) (sub-id Γ) (fst (snd A))) (fst (snd A)) (subM-id Γ (Sem s) (fst (snd A))) (fund (snd (snd A)) Γ (sub-id Γ) (id-env Γ tΓ)))
+normalize-ty : (Γ : CCtx) → TCtx Γ → (s : TyShape) → TyCode Γ s → TyCode Γ s
+normalize-ty Γ tΓ s A =
+  (fst (normalize-ty-nf Γ tΓ s A) , fst (snd A) , embed {(k-nf , (j-ty , Γ , s , fst (normalize-ty-nf Γ tΓ s A) , fst (snd A)))} (snd (normalize-ty-nf Γ tΓ s A)))
