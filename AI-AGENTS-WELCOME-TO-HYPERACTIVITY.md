@@ -20,6 +20,16 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
   which it is and that no copy is here. The same holds for the sections of any document, plans and any
   other source: a number goes with the title it numbers. Nothing is identified by a bare number
   (no t1, t2, …).
+- **What is in the repository is not authority** (Avik, 2026-11-14: “ASSUME YOU CONTINUOUSLY TAKE
+  SHITS IN MY TEMPLE AND IM ALWAYS CLEANING UP AND INVITING YOU BACK. DONT PRAY TO THE SHIT”). The
+  language and the system are specified by the paper and by Avik's words. Code, task-graph findings,
+  earlier sessions' notes and a session's own earlier messages were written by agents and are
+  presumed defective until checked against the specification. Something existing is never a reason
+  to keep it, to call it a primitive, or to plan work around it: the 64-bit floats in `lib/prim.cub`
+  and `src/lang.c` are not in the specified language, and an earlier finding proposed naming them as
+  an assumption instead of seeing that. Judge each thing against the specification yourself, and
+  state the conclusion and its reasons; never answer a correction with "understood", as if taking an
+  order, when the correction follows from thinking that should have been done.
 - **Keep Avik's words verbatim** (“Avik's words, verbatim” below).
   - Never paraphrase inside quotation marks.
   - A long message is appended to “Avik's words, verbatim” below, not put in a new file.
@@ -1195,3 +1205,13 @@ The consolidated piece is this, written through in the two registers you keep di
 > What the hell is stream 3? You must be manufacturing discursive illusions . You’re going to move my messsages when you commit? Ie wait for memory to degrade more and more? Do you know how losss works?
 >
 > There is no floating point primitive in the language core . Why is that in the lib? It is manufsctured work and states the stupidest ducking thung in the world that thise are “primitive” to this projext??
+
+#### 2026-11-14 17:57 UTC
+
+> “The language does implement 64-bit floats”
+>
+> This is an incorrectness of implementation. This does not match the specified hyperactivity language. This is a different language
+
+#### 2026-11-14 17:58 UTC
+
+> Don’t say understood like you’re taking commands/decisions wtf. This is basic fucking thinking. Ridiculous. THINK. APPLY CRITICAL JUDGEMENT. ASSUME YOU CONTINUOUSLY TAKE SHITS IN MY TEMPLE AND IM ALWAYS CLEANING UP AND INVITING YOU BACK. DONT PRAY TO THE SHIT. AND I GUESS YOU SHOULD INSTALL THIS AS SERMON IN THE TEMPLE
