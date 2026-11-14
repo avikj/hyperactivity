@@ -2357,7 +2357,7 @@ class Translator(Importer):
     }
 
     # ---- definitions
-    # Sail recurses freely; here a recursion is on a bound (PLAN Phase 2 item 1). The bound of
+    # Sail recurses freely; here a recursion is on a bound (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §6 “Phases 2–8: everything that will be built”, “Phase 2 — The ISA model, and the encoder leaves the trusted base”, item 1 “The Sail importer”). The bound of
     # each recursive function of the model: a Word from its parameters that exceeds the depth
     # of its calls, and why. Past the bound a function with an outcome aborts with
     # recursion-bound and a pure one returns its type's default (never reached if the bound

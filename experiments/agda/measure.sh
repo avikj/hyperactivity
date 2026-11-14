@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PLAN item 10: Brunerie's number (Ljungström's brunerie') in Agda and in this machine, on the
+# PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “A. The rewriting runtime”, item 10: Brunerie's number (Ljungström's brunerie') in Agda and in this machine, on the
 # same machine, with wall time, CPU time (user+system, all threads) and peak RSS, both polled
 # from /proc every 50 ms (VmHWM; utime+stime from stat). Other agents share the 2 cores, so wall
 # times vary run to run; CPU time is the steadier figure, and the load average is logged per run.

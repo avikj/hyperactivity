@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """mk_run.py CRATE-NAME MSG-SIZE COUNT MESSAGES.bin ANSWERS.txt > out.cub — a diagnostic input for
-experiments/rust/sem/run.cub (tracks/R-rust.md, "Diagnostics"): the first COUNT messages of
+experiments/rust/sem/run.cub (archive/2026-11-11/R-rust.md, "Diagnostics"): the first COUNT messages of
 MESSAGES.bin (MSG-SIZE bytes each) as lists of bytes, the answers the rustc-built binary printed
 for them (ANSWERS.txt, one signed integer per line) as 64-bit words, and the command that reads
 the crate's entry on the messages and compares."""

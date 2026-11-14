@@ -29,7 +29,7 @@ static char die_msg[512];
 static void die(const char *m, const char *x) {
     if (die_jb) { snprintf(die_msg, sizeof die_msg, "%s%s%s", m, x ? " " : "", x ? x : ""); jmp_buf *j = die_jb; die_jb = NULL; longjmp(*j, 1); }
     /* on stderr, and on stdout too when that is a different file (a run read through its stdout
-     * alone saw a silent exit: E28 finding iii) */
+     * alone saw a silent exit: PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”, finding (iii)) */
     fflush(stdout);
     struct stat so, se; bool same = fstat(1, &so) == 0 && fstat(2, &se) == 0 && so.st_dev == se.st_dev && so.st_ino == se.st_ino;
     if (!same) { printf("error: %s%s%s\n", m, x ? " " : "", x ? x : ""); fflush(stdout); }
@@ -162,11 +162,11 @@ static Node *nsyml(const char *lit) { Node *x = ar_alloc(sizeof(Node)); x->s = i
 static void bnd_slots(Node *x) { if (!x->it) x->it = ar_alloc(3 * sizeof(Node *)); }
 static void bnd_set(Node *x, Node *A) { bnd_slots(x); x->it[0] = A; }
 static Node *bnd_ty(Node *x) { return !x->list && x->it ? x->it[0] : NULL; }
-/* a binder's multiplicity (B11): 0 erased, 1 linear, 2 unconstrained (ω, the default), kept on the
+/* a binder's multiplicity (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”): 0 erased, 1 linear, 2 unconstrained (ω, the default), kept on the
  * name node of a Π binder or a field, as a word symbol */
 static void bnd_set_mult(Node *x, int m) { bnd_slots(x); x->it[1] = m == 0 ? nsyml("0") : m == 1 ? nsyml("1") : NULL; }
 static int bnd_mult(Node *x) { return !x->list && x->it && x->it[1] ? (x->it[1]->s[0] == '0' ? 0 : 1) : 2; }
-/* an instance binder {{x : C A}} (E28): an implicit argument found by instance search */
+/* an instance binder {{x : C A}} (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): an implicit argument found by instance search */
 static void bnd_set_inst(Node *x) { bnd_slots(x); x->it[2] = nsyml("inst"); }
 static bool bnd_inst(Node *x) { return !x->list && x->it && x->it[2]; }
 static Node *nlist(int n) { Node *x = ar_alloc(sizeof(Node)); x->list = 1; x->n = n; x->it = ar_alloc(((size_t)n + 1) * sizeof(Node *)); return x; }
@@ -290,7 +290,7 @@ static int rec_depth(Node *A, const char *D) {
 static bool mentions_name(Node *t, const char *x);
 /* the shape of a recursive field's type (ConInfo.rsh): D itself, a path line into one, a function
  * (its domain not mentioning D, not a tick: a later D takes no hypothesis) into one, a pair with
- * recursive components (18.18); false when the type is not recursive */
+ * recursive components (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”); false when the type is not recursive */
 static bool rec_shape(Node *A, const char *D, char *out, int *n) {
     if (!A || *n > 240) return false;
     if (!A->list) { if (strcmp(A->s, D)) return false; out[(*n)++] = 'D'; return true; }
@@ -377,7 +377,7 @@ int data_field_type(int d, int c, int k) {
     if (h->list) return -1;
     if (!strcmp(h->s, "Word")) return -2;
     if (!strcmp(h->s, "Bytes")) return -3;
-    /* a primitive field (B12): -10 - its PT_* (Int64, UInt32, Float64, Float32), boxed as a word of its bits */
+    /* a primitive field (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”): -10 - its PT_* (Int64, UInt32, Float64, Float32), boxed as a word of its bits */
     if (!strcmp(h->s, "Int64")) return -10 - PT_I64;
     if (!strcmp(h->s, "UInt32")) return -10 - PT_U32;
     if (!strcmp(h->s, "Float64")) return -10 - PT_F64;
@@ -793,8 +793,8 @@ static void die_unchecked(const char *s) {
 }
 static int chk_index(int d) { for (int i = 0; i < nchkdata; i++) if (CHKDATA[i] == d) return i; return -1; }
 int data_checked_index(int d) { return chk_index(d); }
-/* the trusted surface (B12): every postulate and every primitive declared, in order; #trusted lists it */
-/* the foreign table (D27) */
+/* the trusted surface (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”): every postulate and every primitive declared, in order; #trusted lists it */
+/* the foreign table (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27) */
 Ffi *FFI; int nffi; static size_t capffi;
 int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret) {
     /* "sym" in the running program (its C library, and the math library), or "lib.so:sym" in that
@@ -818,7 +818,7 @@ int ffi_add(const char *sym, int n, const unsigned char *kind, unsigned char ret
 typedef struct { const char *name; const char *how; } Trusted;
 static Trusted *TRUSTED; static size_t captrusted; static int ntrusted;
 static void trusted_add(const char *name, const char *how) { GROW(TRUSTED, captrusted, (size_t)ntrusted + 1); TRUSTED[ntrusted++] = (Trusted){ intern(name), how }; }
-/* the computed usages of each checked definition's parameters (B11): names (srcname words) and
+/* the computed usages of each checked definition's parameters (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”): names (srcname words) and
  * words 0, 1, 2, from the checker after a definition is accepted, or from a cached module's record */
 typedef struct { int n; const char **nm; unsigned char *u; } Usages;
 static Usages *GUSAGE; static size_t capgusage;
@@ -1029,7 +1029,7 @@ static Node *to_code(Node *t) {
     if (!strcmp(h, "Pi") || !strcmp(h, "Sigma")) {
         Node *B = t->it[2];   /* (lam x body) */
         if (!strcmp(h, "Pi")) {
-            /* (cpi m A B): the binder's multiplicity first (B11) */
+            /* (cpi m A B): the binder's multiplicity first (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”) */
             char w[8]; snprintf(w, sizeof w, "#%d", bnd_mult(B->it[1]));
             return nl3("app", capp2("cpi", nsym(w), to_code(t->it[1])), code_bound(B->it[1]->s, B->it[2]));
         }
@@ -1077,7 +1077,7 @@ static Node *to_code(Node *t) {
     { static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr" };
       for (int q = 0; q < 13; q++) if (!strcmp(h, WO[q])) return capp3("cwop", word(q), to_code(t->it[1]), to_code(t->it[2])); }
     if (!strcmp(h, "%welimP") && t->n == 5) return capp4("cwelim", to_code(t->it[2]), to_code(t->it[3]), to_code(t->it[4]), capp1("some", to_code(t->it[1])));
-    /* a primitive operation (B12): (cprim k args), k = class·256 + sub as lib/code.cub's prim-apply reads it */
+    /* a primitive operation (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”): (cprim k args), k = class·256 + sub as lib/code.cub's prim-apply reads it */
     {
         static const char *PO1[] = { "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
             "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr",
@@ -1480,7 +1480,7 @@ static Node *atel_params(Node *dd, int d, int k) {
     return r;
 }
 
-/* occurrences of a parameter in a primitive's body (B11): c counts them, direct those that are an
+/* occurrences of a parameter in a primitive's body (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”): c counts them, direct those that are an
  * argument of a machine operation (a %-headed application); an inner binder of the same name hides it */
 static void prim_uses(Node *t, const char *x, int under, int *c, int *direct) {
     if (!t) return;
@@ -1506,10 +1506,10 @@ typedef struct {
     long unf;                        /* a copattern definition's body (a global), or -1 */
     int chk;                         /* its index in the checker's signature, or -1 */
     int tickar;                      /* a stuck call unfolding when its last parameter is ⋄: its parameters, else 0 */
-    int file;                        /* the serial of the file defining it (item 17's keys) */
+    int file;                        /* the serial of the file defining it (the keys of PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “B. Compilation by transport”, item 17: progressive specialization on run-time values, cached by key) */
 } Global;
 static Global *G; static long nG, capG;
-/* A8: which compiled syntax may make a free dimension. Only %dim (O_MKDIM) gives a value a free
+/* A8 (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): which compiled syntax may make a free dimension. Only %dim (O_MKDIM) gives a value a free
  * dimension none of its inputs has (every other fresh dimension is bound where it is made), and
  * the checker's tables (O_GLOB) hand out arbitrary values; so building a record, or unfolding a
  * global, can mention only its inputs' dimensions unless its syntax reaches one of those, directly
@@ -1644,7 +1644,7 @@ static long fresh_var(const char *pfx, long k) {
     fresh_names[nfresh] = strdup(b);
     return FRESH_BASE + nfresh++;
 }
-static int cur_file, file_serial;   /* the file being loaded (its serial), for item 17's keys */
+static int cur_file, file_serial;   /* the file being loaded (its serial), for the keys of PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “B. Compilation by transport”, item 17: progressive specialization on run-time values, cached by key */
 static long add_global(const char *name, int kind) {
     if (nG == capG) { capG = capG ? capG * 2 : 64; G = realloc(G, (size_t)capG * sizeof(Global)); }
     memset(&G[nG], 0, sizeof(Global));
@@ -1654,7 +1654,7 @@ static long add_global(const char *name, int kind) {
     gh_put(name, nG - 1);
     return nG - 1;
 }
-/* a name the source binds is bound once (E28: a second binding would silently rebind the references
+/* a name the source binds is bound once (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §18.12 “E28 — Elaboration”: a second binding would silently rebind the references
  * of everything after it). x_surface: the form being run came from the source (x_top), not from the
  * system (emit: a data type's generated definitions, #jit's rebinding of f to its bytes). A name
  * #retract hid may be bound again */
@@ -1773,7 +1773,7 @@ static bool constant_sym(const char *s) {
 static int ml_cut = 1 << 30;
 /* the names a term may refer to through the binders in force (every symbol but the constants,
  * those bound inside left out), found once per node (lv): maxlev is asked at every node compiled,
- * so walking the subterm each time was quadratic in the term's depth (A9: 24% of a Brunerie
+ * so walking the subterm each time was quadratic in the term's depth (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “A. The rewriting runtime”, item 9, A9: 24% of a Brunerie
  * run). A fresh variable, dimension or hole form anywhere inside is the mark %fresh. */
 static Names *lvs(Node *t) {
     if (t->lv && t->lvgen == ar_gen) return t->lv;
@@ -2466,7 +2466,7 @@ static Syn *compile(Node *t) {
             { "%restrict", O_RESTRICT, 2 }, { "%abs", O_ABS, 2 }, { "%branch", O_BRANCH, 3 }, { "%clos", O_CLOS, 2 }, { "%wsucc", O_WSUCC, 1 }, { "%weq", O_WEQ, 2 }, { "%wlt", O_WLT, 2 },
             { "%wadd", O_WADD, 2 }, { "%wmax", O_WMAX, 2 }, { "%wsub", O_WSUB, 2 }, { "%wmul", O_WMUL, 2 }, { "%wdiv", O_WDIV, 2 }, { "%wmod", O_WMOD, 2 }, { "%wand", O_WAND, 2 }, { "%wor", O_WOR, 2 }, { "%wxor", O_WXOR, 2 }, { "%wshl", O_WSHL, 2 }, { "%wshr", O_WSHR, 2 }, { "%welim", O_WELIM, 3 },
             { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 }, { "%gsteps", O_GSTEPS, 1 }, { "%gcode", O_GCODE, 1 }, { "%dnidx", O_DNIDX, 1 },
-            /* primitive types and values (B12) */
+            /* primitive types and values (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”) */
             { "%pty", O_PTY, 1 }, { "%bytesty", O_BYTESTY, 1 }, { "%pval", O_PVAL, 2 }, { "%bytes", O_BYTES, 1 }, { "%blen", O_BLEN, 1 }, { "%beq", O_BEQ, 2 }, { "%ptr-of", O_PTROF, 1 }, { "%region-at", O_REGAT, 2 }, { NULL, 0, 0 } };
         /* the primitive operations, (%i64add a b) ...: O_POP1/O_POP2 with the operation in x; the loads and
          * stores by width */
@@ -2495,12 +2495,12 @@ static Syn *compile(Node *t) {
             return s;
         }
         if (IS(h, "%ffi")) {
-            /* (%ffi k a1 .. an): the foreign call of entry k (D27) */
+            /* (%ffi k a1 .. an): the foreign call of entry k (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27) */
             if (t->n < 3 || t->it[1]->list || t->it[1]->s[0] != '#') die("(%ffi k a...)", NULL);
             Syn *s = compile_n(S_PRIM, t, 2, t->n - 2); s->x = O_FFI; s->id = atoi(t->it[1]->s + 1); return s;
         }
         if (IS(h, "%native")) {
-            /* (%native k g a1 .. an): the #jit definition g (foreign entry k) by its bytes, g itself otherwise (plan 5.5) */
+            /* (%native k g a1 .. an): the #jit definition g (foreign entry k) by its bytes, g itself otherwise (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.5 “Bytes, the boundary, and what is trusted”) */
             if (t->n < 4 || t->it[1]->list || t->it[1]->s[0] != '#' || t->it[2]->list || t->it[2]->s[0] != '#') die("(%native k g a...)", NULL);
             Syn *s = compile_n(S_PRIM, t, 3, t->n - 3); s->x = O_NATIVE; s->id = atoi(t->it[1]->s + 1); s->slot = atoi(t->it[2]->s + 1); return s;
         }
@@ -3250,7 +3250,7 @@ static void out_str(const char *r) {
     out_term(rb_src(n));
 }
 /* q: the judgment that failed, run again to read its type slots at their universe */
-/* the position of the declaration being processed (file:line, set by the surface parser; item 30) */
+/* the position of the declaration being processed (file:line, set by the surface parser; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “E. The language people and models write in”, item 30: incremental checking, editor protocol, errors, debugger by replay, step profiles) */
 char decl_pos[512];
 static bool has_hole(Node *t);
 static void explain(const char *r, Node *q) {
@@ -3358,7 +3358,7 @@ static void drivers_run(Node *t);
 /* an entry of the checker's signature: its value's global, its type's global */
 static int sig_add(const char *name, long g, long tyg, bool hidden) {
     /* a checked name declared again rebinds the references of every module parsed after it,
-     * silently (E28): until modules give namespaces, it is an error, except under #fail
+     * silently (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): until modules give namespaces, it is an error, except under #fail
      * (CUBICAL_REDECLARE=1 allows it, for experiments) */
     if (!hidden && name[0] != '%' && checked_index(name) >= 0 && !getenv("CUBICAL_REDECLARE")) die("a checked definition is declared again (rename it; the earlier one is the library's):", name);
     table_set(TB_VAL, nchecked, g);
@@ -3449,7 +3449,7 @@ static void checked_group(Node **fs, int n, bool expect) {
         chksrc_set(ix[i], ds(fs[i]->it[3])); chkty_set(ix[i], ds(fs[i]->it[2]));
     }
     for (int i = 0; i < n; i++) cofix_body(gs[i], fs[i]->it[3]);
-    /* the group's keys (F34); a group the store holds as checked is not checked again */
+    /* the group's keys (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”); a group the store holds as checked is not checked again */
     SKey *ks = calloc((size_t)n + 1, sizeof(SKey));
     { Node **Ts = calloc((size_t)n + 1, sizeof(Node *)), **ts = calloc((size_t)n + 1, sizeof(Node *));
       for (int i = 0; i < n; i++) { Ts[i] = ds(fs[i]->it[2]); ts[i] = ds(fs[i]->it[3]); }
@@ -3739,7 +3739,7 @@ static void toplevel_in(Node *f) {
     /* a module whose checks are cached: its definitions are made, its judgments and tests not rerun */
     if (!strcmp(h, "def")) {
         if (f->n != 3) die("(def name term)", NULL);
-        if (!chk_salt[0] && !f->it[1]->list && !strcmp(f->it[1]->s, "chk-def")) chk_salt_set();   /* the checker (%%chk-def) is defined here: its name (F34) */
+        if (!chk_salt[0] && !f->it[1]->list && !strcmp(f->it[1]->s, "chk-def")) chk_salt_set();   /* the checker (%%chk-def) is defined here: its name (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”) */
         ArMark dm = ar_mark();
         Node *dsb = ds(f->it[2]);   /* desugared once: the copattern test, the strictness analysis, the body and its n-ary form read it */
         if (!plain_def && copattern_body(dsb)) {
@@ -3813,7 +3813,7 @@ static void toplevel_in(Node *f) {
         cm = ar_mark();
         Node *T = f->it[at], *t = f->it[at + 1];
         Node *dT = ds(T), *dt = ds(t);
-        /* its codebase key (F34): a definition the store holds as checked is not checked again */
+        /* its codebase key (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”): a definition the store holds as checked is not checked again */
         char key[65]; char *kcode = NULL, *ktype = NULL;
         key_def(dT, dt, key, &kcode, &ktype);
         bool remembered = forced_result && forced_steps < 0;   /* the store's answer, acceptance or refusal */
@@ -3846,7 +3846,7 @@ static void toplevel_in(Node *f) {
             chksrc_set(ck, dt); chkty_set(ck, dT);
             gsteps_set(ck, stored ? store_steps(key) : steps);
             ckey_set(ck, key); deps_take(&CDEPS, &capcdeps, ck);
-            /* the parameters' computed usages (B11): asked of the checker (or read from the store),
+            /* the parameters' computed usages (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”): asked of the checker (or read from the store),
              * kept, and recorded with the module's forms so a cached load has them */
             {
                 const char *nm[256]; unsigned char u[256]; int n = 0;
@@ -3895,7 +3895,7 @@ static void toplevel_in(Node *f) {
         if (f->n != 2 || f->it[1]->list) die("(unbind name)", NULL);
         store_unbind_cmd(f->it[1]->s);
     } else if (!strcmp(h, "retract")) {
-        /* #retract name (item 30, the editor protocol): the checked definition is hidden, so the
+        /* #retract name (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “E. The language people and models write in”, item 30: incremental checking, editor protocol, errors, debugger by replay, step profiles; the editor protocol): the checked definition is hidden, so the
          * name may be declared again; what was checked against it keeps the definition it saw (a
          * global is referenced by its index, the name finds the newest) */
         if (f->n != 2 || f->it[1]->list) die("(retract name)", NULL);
@@ -3931,7 +3931,7 @@ static void toplevel_in(Node *f) {
         conh_built = -1; nretr++;
         printf("\n");
     } else if (!strcmp(h, "scope")) {
-        /* #scope (item 30): the names a declaration may use, on one line `scope: a b …` — checked
+        /* #scope (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “E. The language people and models write in”, item 30: incremental checking, editor protocol, errors, debugger by replay, step profiles): the names a declaration may use, on one line `scope: a b …` — checked
          * definitions not retracted, data types, their constructors (the newest of each name) */
         printf("scope:");
         for (int i = 0; i < nchecked; i++) if (!CHKHIDE[i] && CHECKED[i][0] != '%' && checked_index(CHECKED[i]) == i) printf(" %s", CHECKED[i]);
@@ -3941,7 +3941,7 @@ static void toplevel_in(Node *f) {
         }
         printf("\n");
     } else if (!strcmp(h, "where")) {
-        /* #where name (item 30): `where: name file:line` for a checked definition, a data type or a
+        /* #where name (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “E. The language people and models write in”, item 30: incremental checking, editor protocol, errors, debugger by replay, step profiles): `where: name file:line` for a checked definition, a data type or a
          * constructor (its data type's declaration); `where: name ?` when not known */
         if (f->n != 2 || f->it[1]->list) die("(where name)", NULL);
         const char *nm = f->it[1]->s, *pos = NULL;
@@ -3958,7 +3958,7 @@ static void toplevel_in(Node *f) {
         if (f->n != 2 || f->it[1]->list) die("(safe name)", NULL);
         store_safe_cmd(f->it[1]->s);
     } else if (!strcmp(h, "type")) {
-        /* #type e (item 30): e's type as the checker infers it, one line `type: e : T` on stdout (the
+        /* #type e (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “E. The language people and models write in”, item 30: incremental checking, editor protocol, errors, debugger by replay, step profiles): e's type as the checker infers it, one line `type: e : T` on stdout (the
          * editor protocol's hover reads it); a term with no inferable type gets the reason */
         if (f->n != 2 && f->n != 3) die("(type term [shown-as])", NULL);
         Node *ct = nl2("%raw", aclosed(ds(f->it[1])));
@@ -4017,7 +4017,7 @@ static void toplevel_in(Node *f) {
             g = global_lookup(nm);
         }
         int pk = sig_add(nm, g, tyg, false);
-        /* the parameters' usages (B11, 18.1): a primitive's body is not elaborated, so its usages are
+        /* the parameters' usages (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”): a primitive's body is not elaborated, so its usages are
          * read off the body itself: a parameter absent from it is 0 (erased at every call: the
          * lengths and bound proofs of the byte layer's accesses); one read once, as an argument of
          * the machine's operation, is 1; anything else ω */
@@ -4259,7 +4259,7 @@ static void toplevel_in(Node *f) {
         int d = ndata++;
         GROW(DATAPOS, capdatapos, (size_t)ndata); DATAPOS[d] = decl_pos[0] ? strdup(decl_pos) : NULL;
         DATA[d] = (DataInfo){ strdup(D), np, nc, calloc((size_t)nc + 1, sizeof(int)), -1, -1, f, 0, 0, NULL, 0 };
-        /* the trailing parameters named %ix… are indices (an indexed family by fording, E28) */
+        /* the trailing parameters named %ix… are indices (an indexed family by fording; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) */
         for (int k = np - 1; k >= 0 && !strncmp(pn[k], "%ix", 3); k--) DATA[d].nidx++;
         typedef struct { Node *cd; int nf, nd, nb; Node **fn, **ft, **dn, **bf, **be; } CD;
         CD *cs = calloc((size_t)nc + 1, sizeof(CD));
@@ -4291,21 +4291,21 @@ static void toplevel_in(Node *f) {
             decl_fresh(cd->it[0]->s);
             DATA[d].cons[ci] = ncon;
             /* a field of type D itself, or of a path line into D (at any dimension), is recursive:
-             * its branch may take its induction hypothesis (18.17) */
+             * its branch may take its induction hypothesis (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.17 “E28a — Induction hypotheses for path-typed recursive fields”) */
             uint64_t rm = 0; int nr = 0; unsigned char rd[64] = { 0 }; const char *rsh[64] = { 0 };
             if (x->nf > 64) die("more than 64 fields in", cd->it[0]->s);
             for (int k = 0; k < x->nf; k++) {
                 int depth = rec_depth(x->ft[k], D);
                 if (depth >= 0) { rm |= 1ull << k; nr++; rd[k] = (unsigned char)depth; }
                 char sh[256]; int sn = 0;
-                /* a field recursive under Π codomains or Σ components (18.18): its shape, and the
+                /* a field recursive under Π codomains or Σ components (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”): its shape, and the
                  * hypothesis the net builds from it */
                 if (rec_shape(x->ft[k], D, sh, &sn)) { sh[sn] = 0; rsh[k] = strdup(sh); if (depth < 0) { rm |= 1ull << k; nr++; } }
             }
             CON[ncon] = (ConInfo){ intern(cd->it[0]->s), d, ci, x->nf, x->nd, -1, -1, nr, rm };
             memcpy(CON[ncon].rdim, rd, sizeof rd);
             memcpy(CON[ncon].rsh, rsh, sizeof rsh);
-            for (int k = 0; k < x->nf; k++) CON[ncon].fmult[k] = (unsigned char)bnd_mult(x->fn[k]);   /* (B11) */
+            for (int k = 0; k < x->nf; k++) CON[ncon].fmult[k] = (unsigned char)bnd_mult(x->fn[k]);   /* (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”) */
             ncon++;
         }
         char *buf; size_t len; FILE *m;
@@ -4543,7 +4543,7 @@ static void toplevel_in(Node *f) {
         for (int ci = 0; ci < nc; ci++) { free(cs[ci].fn); free(cs[ci].ft); free(cs[ci].dn); free(cs[ci].bf); free(cs[ci].be); }
         free(cs); free(pn);
     } else if (!strcmp(h, "run")) {
-        /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c, D26) */
+        /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26) */
         if (f->n != 2) die("(run step)", NULL);
         if (read_only) { printf("run: not performed (--read)\n"); return; }
         drivers_run(f->it[1]);
@@ -4633,7 +4633,7 @@ static void toplevel_in(Node *f) {
         free(a); free(b);
     } else die("unknown top-level form", h);
 }
-/* ---- #jit (plan 5.5): binding a compiled definition's bytes ----
+/* ---- #jit (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.5 “Bytes, the boundary, and what is trusted”): binding a compiled definition's bytes ----
  * The type of each parameter and of the result, read off the checked type (desugared): a word, a
  * primitive type, Bytes n, a pair, or a data type applied to its parameters; anything else does not
  * cross and the definition is not bound (it keeps running on the net) */
@@ -4799,7 +4799,7 @@ static void load_file(const char *path, bool must) {
     char *dir = strdup(rp); char *sl = strrchr(dir, '/'); if (sl) *sl = 0;
     cur_dir = dir;
     load_surface(text, rp, true);
-    /* the libraries before this file (item 17's specialization keys): its own text mixed after */
+    /* the libraries before this file (the specialization keys of PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “B. Compilation by transport”, item 17: progressive specialization on run-time values, cached by key): its own text mixed after */
     cur_file = ++file_serial;
     key_mix(text, strlen(text)); lib_mix(text);
     bool saved_os = out_surface; out_surface = !getenv("CUBICAL_CORE_OUT");
@@ -4839,7 +4839,7 @@ int cubical_call_w(const char *name, const uint64_t *args, int n, uint64_t *out)
     if (!strcmp(r, "false")) { *out = 0; return 0; }
     return -1;
 }
-/* --serve (item 30, the editor protocol's first form): after the files, requests from the standard
+/* --serve (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §12 “The build list”, “E. The language people and models write in”, item 30: incremental checking, editor protocol, errors, debugger by replay, step profiles; the editor protocol's first form): after the files, requests from the standard
  * input, each a block of surface declarations ended by a line holding a single '.', processed as a
  * file would be (checks, readings and errors printed as usual); a fatal error ends the request, not
  * the machine; each reply ends with a line holding '.'. A definition is declared once: an editor

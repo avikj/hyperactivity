@@ -4,7 +4,7 @@
 -- depends on a language: C and C++ reach the kinds through their types and a Target (the last
 -- section), Rust and Go name the kinds directly.
 --
--- Binding time (PLAN §5.4): every operation takes the kind first and is a case on it, so at a
+-- Binding time (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §5 “The distinctions everything above x86 rests on”, item 4 “One compiler for terms (Futamura)”): every operation takes the kind first and is a case on it, so at a
 -- fixed program (kinds known) what remains is arithmetic on UInt64/Float64 values.
 import "target.cub"
 
@@ -455,7 +455,7 @@ int-shr sg w sgc wc a c = mr-bind (shift-count w sgc wc c) (λ n → case w of
   _ → mr-map (λ x → sv-i (case sg of
                             true → uq-sar x n
                             false → u64shr x n)) (sv-as-i a))
--- C's left shift (C17 6.5.7): of a signed kind, a negative operand is undefined, and so is a
+-- C's left shift (C17, ISO/IEC 9899:2018, 6.5.7 “Bitwise shift operators”): of a signed kind, a negative operand is undefined, and so is a
 -- result the kind cannot represent (the shift back must give the operand, and no sign appear)
 int-shl-c : Bool → IW → Bool → IW → SV → SV → MRes SV
 int-shl-c sg w sgc wc a c = case sg of
@@ -868,7 +868,7 @@ sk-align t k = case k of
 -- ---------------------------------------------------------------- the C family's arithmetic types
 -- C and C++ name scalar types whose kind is the implementation's: a type's kind, size and
 -- alignment are functions of the Target, and so are the integer promotions and the usual
--- arithmetic conversions (C17 6.3.1.1, 6.3.1.8; C++20 [conv.prom], [expr.arith.conv]).
+-- arithmetic conversions (C17, ISO/IEC 9899:2018, 6.3.1.1 “Boolean, characters, and integers” and 6.3.1.8 “Usual arithmetic conversions”; C++20 [conv.prom], [expr.arith.conv]).
 -- (char8_t, char16_t, char32_t, wchar_t and enumerations are their underlying types: the
 -- reader names those. long double is not here: see the track's Limits.)
 data CTy = ct-bool | ct-char | ct-schar | ct-uchar | ct-short | ct-ushort | ct-int | ct-uint
@@ -933,7 +933,7 @@ ct-sk t c = case c of
     false → mstop st-unsupported)
   ct-ptr → mok sk-ptr
   _ → mr-map (sk-int (ct-signed t c)) (iw-of-size (ct-size t c))
--- the conversion rank of an integer type (C17 6.3.1.1p1); the 128-bit types above long long
+-- the conversion rank of an integer type (C17, ISO/IEC 9899:2018, 6.3.1.1 “Boolean, characters, and integers”, paragraph 1); the 128-bit types above long long
 ct-rank : CTy → Word
 ct-rank c = case c of
   ct-bool → #0

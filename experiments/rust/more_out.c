@@ -1,4 +1,4 @@
-/* more_out.c — the reference driver of more.rs (tracks/R-rust.md, "Diagnostics"): reads records
+/* more_out.c — the reference driver of more.rs (archive/2026-11-11/R-rust.md, "Diagnostics"): reads records
  * of two little-endian 64-bit integers from stdin, calls more_entry(x, y) on each and prints
  * every answer, one per line.
  *   rustc --edition=2021 --crate-type=staticlib -O -Cpanic=abort more.rs -o libmore.a

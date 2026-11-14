@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """task-graph — the task graph's tool (2026-11-12; one kind of node and the order of work, 2026-11-13).
 
-What the graph means and how it is used is HYPERACTIVE.md §2.4 (Avik's design): read it first. The
+What the graph means and how it is used is HYPERACTIVE.md §2.4 “The organization of the work” (Avik's design): read it first. The
 graph is code: lib/task-graph.cub (what a node is: a task, its name and its parents; the relations
 after and essential-context), task-graph/hyperactivity.cub (this work's nodes, each defined after
 its parents; a node's statement is the comment above its definition). Run through `hyperactive`.
@@ -122,7 +122,7 @@ def essential_context():
 
 
 def in_progress():
-    """the leaves being worked on now (`in-progress`); every other leaf is pending (HYPERACTIVE.md §2.4)"""
+    """the leaves being worked on now (`in-progress`); every other leaf is pending (HYPERACTIVE.md §2.4 “The organization of the work”)"""
     src = open(GRAPH, encoding='utf-8').read()
     m = re.search(r'^in-progress = (.*)$', src, re.M)
     return names_in(m.group(1)) if m else []
@@ -130,7 +130,7 @@ def in_progress():
 
 def resolved():
     """the leaves whose work is done (`resolved`); they stay in the graph, as Avik's rule has it: every
-    internal node has a child in progress or complete (HYPERACTIVE.md §2.4)"""
+    internal node has a child in progress or complete (HYPERACTIVE.md §2.4 “The organization of the work”)"""
     src = open(GRAPH, encoding='utf-8').read()
     m = re.search(r'^resolved = (.*)$', src, re.M)
     return names_in(m.group(1)) if m else []
@@ -262,7 +262,7 @@ def ancestors(g, n):
 
 
 def cmd_priority(args):
-    """The order of work (HYPERACTIVE.md §2.4). There is no score. A leaf can start when every node its
+    """The order of work (HYPERACTIVE.md §2.4 “The organization of the work”). There is no score. A leaf can start when every node its
     `after` names (on it or on any node above it: waiting on a node is waiting on every leaf under it)
     is resolved (listed in `resolved`). Among the leaves that can start now, X supersedes Y when the
     waiting work X is a prerequisite of strictly contains the waiting work Y is a prerequisite of (Avik:
@@ -277,7 +277,7 @@ def cmd_priority(args):
     waits = {x: set().union(*([leaves_under(d) for m in ancestors(g, x) for d in after.get(m, []) if d in g] or [set()]))
              for x in leaves}
     ready = [x for x in leaves if not waits[x]]
-    gain = {x: {y for y in leaves if x in waits[y]} for x in ready}   # the waiting work x is a prerequisite of (HYPERACTIVE.md §2.4)
+    gain = {x: {y for y in leaves if x in waits[y]} for x in ready}   # the waiting work x is a prerequisite of (HYPERACTIVE.md §2.4 “The organization of the work”)
     def line(n):
         return f'  {g[n]["id"]}  [{n}]'
     remaining, k = list(ready), 0

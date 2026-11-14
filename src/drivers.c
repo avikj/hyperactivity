@@ -1,10 +1,10 @@
-/* src/drivers.c — the driver loop (D26). Included by lang.c after the readers.
+/* src/drivers.c — the driver loop (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26). Included by lang.c after the readers.
  *
  * (run e): e is a value of lib/world.cub's Step W A, a process as a tree of steps. The loop reads
  * the head: sdone a prints a and stops; scmd c k reads the command c (a constructor of WCmd with
  * word, Nat and byte-string fields), performs it against the operating system, builds the response
  * as a value and applies the continuation k to it, then reads again. Reading a field is an
- * observation of the net (synchronous: the process blocks on the command, as D26 says). The
+ * observation of the net (synchronous: the process blocks on the command, as D26 says: PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26). The
  * commands: w-now (nanoseconds since the epoch, a word), w-write fd n b (the count written),
  * w-read fd n (the count read and a buffer of n bytes), w-sleep ns (unit), w-exit code.
  * w-sys nr a1..a6 is the raw system call (the typed world over it is lib/os/linux.cub): the

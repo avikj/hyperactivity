@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""mir2cub.py — Rust's MIR into the checker (track R, tracks/R-rust.md).
+"""mir2cub.py — Rust's MIR into the checker (track R, archive/2026-11-11/R-rust.md).
 
     python3 tools/mir2cub.py experiments/rust/book.rs -o experiments/rust/book.cub [--entry on_message]
 

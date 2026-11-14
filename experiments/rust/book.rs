@@ -1,6 +1,6 @@
 // book.rs — the Rust twin of experiments/cxx/book.cpp: decode a packed wire message, apply it
 // to a fixed-depth order book, answer with the spread. The acceptance input of track R
-// (tracks/R-rust.md) and, with book.cpp, of the cross-language equality (PLAN Phase 6).
+// (archive/2026-11-11/R-rust.md, sha256 d5cc58d86204…, “Track R — Rust as data: MIR into the checker (Phase 5, first half)”) and, with book.cpp, of the cross-language equality (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §6 “Phases 2–8: everything that will be built”, “Phase 6 — The quotient: equal behaviour across languages”).
 // Reference build (the same driver as the C++ one, experiments/cxx/book_main.c):
 //   rustc --edition=2021 --crate-type=staticlib -O -Cpanic=abort book.rs -o libbook.a
 //   clang -O2 ../cxx/book_main.c libbook.a -o book_ref_rs

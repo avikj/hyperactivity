@@ -111,7 +111,8 @@ import "../../lib/linproof.cub"
 
 -- lib/nbe.cub — typed codes Code(Γ, A) = Σ c. Der(Γ, c, A) over the one representation of terms
 -- (lib/code.cub's Code), their evaluation, and normalization by evaluation with its soundness
--- equation (paper §6.1, (6.1) and (6.5)). Loaded after lib/std.cub.
+-- equation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eqs. (6.1) “typed code and its evaluation” and (6.5) “reifySound”). Loaded
+-- after lib/std.cub.
 --
 -- Status (2026-11-12, latest first).
 -- * Step 1 (levels) done and checked: P1 rebuilt with types as maps into semantic types (below), the
@@ -233,7 +234,7 @@ import "../../lib/linproof.cub"
 --    coincidences", 2010): a derivation of c : A in Γ carries, as an index, the meaning of c as a
 --    function of the environment. So eval is that index, the object theory's conversion is the
 --    language's own judgmental equality on meanings (no conversion rule, nothing to make coherent),
---    and (6.5) holds by the indices.
+--    and eq. (6.5) “reifySound” holds by the indices (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”).
 --
 -- 1. Objects, each defined once.
 --    Raw     the existing Code (lib/code.cub); normal forms here use cvar, clam, capp, cpair, cfst,
@@ -245,18 +246,21 @@ import "../../lib/linproof.cub"
 --            environment type is computed by recursion on the skeleton.
 --    Var, Der  variables and typing derivations, Der Γ D c v: c is a derivation-checked raw code
 --            of type D in Γ with meaning v : (ρ : G) → T ρ.
---    Code Γ D = Σ c. Σ v. Der Γ D c v; eval = the meaning v (paper (6.1)).
+--    Code Γ D = Σ c. Σ v. Der Γ D c v; eval = the meaning v
+--            (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.1) “typed code and its evaluation”).
 --    Ne, Nf  neutral and normal derivations, same indices; embed : Nf → Der keeps c and v.
 --    Worlds  renamings Δ → Γ (functions on variables with their meaning map), with actions on Ne, Nf.
 --    Comp s Δ T x  the computability of x : (ρ : Env Δ) → El s (T ρ) at world Δ, by recursion on s:
 --            Bool — true, false or a neutral; Π — Kripke: at every later world, computable
 --            arguments give computable results; Σ — componentwise.
 --    reify/reflect  mutually by recursion on the shape: reify : Comp → Σ c. Nf with meaning exactly
---            x; reflect : Ne → Comp. The Π clauses are the paper's Kripke clauses (§6.1).
+--            x; reflect : Ne → Comp. The Π clauses are the paper's Kripke clauses
+--            (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”).
 --    fund    the fundamental lemma, by recursion on Der: a derivation's meaning is computable at
 --            every world under every computable environment.
 --    normalize d = reify (fund d (reflected identity environment)); the result is a Code with the
---            same meaning index, so reifySound (6.5) is refl: eval (reify v) ρ ≡ denote v ρ.
+--            same meaning index, so reifySound is refl: eval (reify v) ρ ≡ denote v ρ
+--            (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.5) “reifySound”).
 --
 -- 2. Phases. P1 the fragment Π, Σ, Bool (with dependent case): done. Step 1 (closed levels, types
 --    as maps into semantic types): done. P2 PathP and the interval: worlds with dimension variables
@@ -1614,8 +1618,9 @@ data Der : (J : Jdg) → Type 1 where
     Der (j-tm , Γ₀ , a₀ , c0₀ , fmapM Γ₀ (Sem (s-path a₀)) (TV a₀) (tend-0 a₀) T₀) →
     Der (j-tm , Γ₀ , a₀ , c1₀ , fmapM Γ₀ (Sem (s-path a₀)) (TV a₀) (tend-1 a₀) T₀) →
     Der (j-ty , Γ₀ , s-path a₀ , cpathp (cplam cL₀) c0₀ c1₀ , T₀)
--- typed codes (paper §6.1): Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation;
--- evaluation (6.1) is that meaning
+-- typed codes (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”):
+-- Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation;
+-- evaluation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.1) “typed code and its evaluation”) is that meaning
 TCode : CCtx → TyShape → Type 1
 TCode Γ s = (c : Code) × (v : Mean Γ (TV s)) × Der (j-tm , Γ , s , c , v)
 teval : (Γ : CCtx) (s : TyShape) → TCode Γ s → Mean Γ (TV s)

@@ -1,4 +1,4 @@
-// second.cpp — the second acceptance unit of track C (tracks/C-clang.md): a small order-entry
+// second.cpp — the second acceptance unit of track C (archive/2026-11-11/C-clang.md): a small order-entry
 // session, written to use what book.cpp does not: a class template with a type and a non-type
 // parameter instantiated twice, constructors with member initializer lists, a destructor,
 // new/delete, a call through a pointer to member function, a union, bit-fields, do/while,

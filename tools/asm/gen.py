@@ -12,7 +12,7 @@ start.s   the ELF entry (lib/elf.cub i-start)
 apply.s   the closure apply routine (lib/x86.cub i-apply; its literal there ends with the
           overflow exit appended by the encoder, so it is not patched automatically)
 Needs binutils (as, objcopy). The routines are trusted with the encoder until the template
-lemmas of PLAN Phase 2.
+lemmas of the plan (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §6 “Phases 2–8: everything that will be built”, “Phase 2 — The ISA model, and the encoder leaves the trusted base”).
 """
 import subprocess, sys, os, re, tempfile
 here = os.path.dirname(os.path.abspath(__file__))

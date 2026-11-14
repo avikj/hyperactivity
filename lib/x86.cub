@@ -1,12 +1,12 @@
--- lib/x86.cub — the code fragment to x86-64 bytes (plan 5.3–5.5). Loaded after lib/machine.cub.
+-- lib/x86.cub — the code fragment to x86-64 bytes (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.3 “The target is a data type with a meaning”, §5.4 “The reader, and why the path is by construction” and §5.5 “Bytes, the boundary, and what is trusted”). Loaded after lib/machine.cub.
 -- There is no intermediate syntax: the program a code compiles to is the code's normal form in the
 -- fragment (lib/machine.cub), and encode prints each construct of the fragment by a fixed template.
 -- Only specialization is checked: its result converts with the definition or carries a path
 -- (jit-plan's ok). Everything after it (the passes x-push, x-lift, x-erase, the templates, the
 -- layout, the value representation and the calling convention) is trusted: none carries a relation
 -- to the specialized code, and its output is bound and run, so a wrong pass can answer wrongly. This
--- translator is to be replaced by realization through C whose type carries that relation (paper
--- §9.3).
+-- translator is to be replaced by realization through C whose type carries that relation
+-- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export").
 --
 -- Values in compiled code, uniformly 64 bits, so no pass needs a type:
 --   a word, a primitive value (Int64, UInt32, UInt64, Float64 by its bits): the bits;
@@ -62,7 +62,7 @@ xneg32 : Word → Word
 xneg32 w = u64toWord (u64and (u64sub (u64 #0) (u64 w)) (u64 #4294967295))
 xmul8 : Word → Word
 xmul8 w = u64toWord (u64shl (u64 w) (u64 #3))
--- ---------------------------------------------------------------- the template table (PLAN §13 item 3)
+-- ---------------------------------------------------------------- the template table (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §13 “The trusted surface”, item 3: the fifteen `encode` templates and the frame convention)
 -- each line below is one instruction; its meaning is the one stated, by the Intel SDM
 i-push-rax : Lst Word
 i-push-rax = xb1 #80
@@ -824,7 +824,7 @@ x-copy-bytes =
 -- a store: a copy of the bytes (8 + the data padded to 8, from the arena, copied with rep movsb), the
 -- value stored in the copy, the copy the result. The original is never written: a buffer is shared
 -- whenever a variable naming it occurs again, and copying is what makes that true of the bytes (an
--- in-place store needs ownership the checker tracks, B11's 1-linear resources, and is not done here)
+-- in-place store needs ownership the checker tracks, the 1-linear resources of B11 (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §18.1 “B11 — Multiplicities (static side)”), and is not done here)
 x-store : Enc → XEnv → Word → Word → Code → Code → Code → Lst Word
 x-store ce env d w b off v =
   xcat6 (ce env d b) i-push-rax (ce env (%wsucc d) off) i-push-rax (ce env (%wadd d #2) v)

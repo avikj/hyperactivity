@@ -1,6 +1,8 @@
 # Hyperactive
 
-The language is specified by the paper: [docs/Hyperactive_Final_Paper.pdf](docs/Hyperactive_Final_Paper.pdf).
+The language is specified by the paper. The repository's copy is
+[docs/Hyperactive_Final_Paper.pdf](docs/Hyperactive_Final_Paper.pdf), dated 11 November 2026,
+SHA-256 `e8f358b4cd2c5b4c12a2b121afde0ebeef07578c54e7d322398f3d03806798fe`; it is an older draft than the current one.
 Everything else, from what is implemented today to what it is for: [HYPERACTIVE.md](HYPERACTIVE.md).
 
 ## Setup

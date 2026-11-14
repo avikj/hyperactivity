@@ -1,6 +1,6 @@
 // book.cpp — the hot path of a feed handler: decode a packed wire message, apply it to a
 // fixed-depth order book, answer with the top of book. The acceptance input of track C
-// (tracks/C-clang.md) and of D3. Built as
+// (archive/2026-11-11/C-clang.md, sha256 31dca2011367…, “Track C — C++ as data: Clang's AST into the checker (first half of D3)”) and of deliverable D3 “C++ through our compiler” (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §6.9 “Deliverables, sizes and order”). Built as
 //   clang++ -std=c++20 -O2 -fno-exceptions -fno-rtti -c book.cpp
 // No I/O here: the entry is on_message(p, n), called once per message by book_main.c.
 #include <array>

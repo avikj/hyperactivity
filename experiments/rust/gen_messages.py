@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """gen_messages.py COUNT SEED — COUNT random 22-byte wire messages on stdout (the input of the
-book.rs / book.cpp comparison, tracks/R-rust.md). 48% add, 24% cancel, 24% execute, 0.1% reset,
+book.rs / book.cpp comparison, archive/2026-11-11/R-rust.md). 48% add, 24% cancel, 24% execute, 0.1% reset,
 the rest an unknown type; sides 0/1 and, rarely, another byte (read as Ask by both); prices
 994..1006 and, rarely, any 64-bit value; quantities 1..500 and, rarely, any 32-bit value."""
 import random, struct, sys
