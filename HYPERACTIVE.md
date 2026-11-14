@@ -776,6 +776,10 @@ construction, it is cited.
 **The product.** Every screened device in the world runs the Hyperactive kernel. An "application" is
 a particular application of computing, not a silo. The product is one organism, with no parts: the
 Hyperactive core, in which everything interoperates. Everything in this document serves it.
+What is being built is a complete operating system: hyperactivity, the decentralized safe
+superintelligent operating system (Avik, 2026-11-14). Programs are compositional extensions of the
+operating system, and the `hyperactive` command (§2.5 “The interface”) is its interface for agents
+and humans alike, not a developer tool for this repository.
 
 **The four goals.**
 1. **The language,** implemented completely and correctly as the paper specifies. The bar is that
@@ -2052,3 +2056,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > “real-time” is deeply underemphasized currently I think. it is the only real setting in which HCI unfolds
 >
 > Idk I won’t force more myself to produce more thoughts at a late hour with headache
+
+#### 2026-11-14 11:19 UTC
+
+> Recall everyone’s gonna be running hyperactive kernel. Programs are compositional operating system extensions. Does this clarify things. what’s being built is complete operating system, hyperactivity: the decentralized safe superintelligent operating system
