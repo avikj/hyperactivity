@@ -724,8 +724,9 @@ It computes the order of work by the rule in §2.4.
   - typed codes and normalization by evaluation (paper §6.1);
   - everything else the paper specifies for the language.
 - Typed codes is expanded in turn:
-  - the interval normalizer's meaning (F2d), in progress;
-  - everything else after it.
+  - the interval normalizer's meaning (F2d), resolved;
+  - everything else after it, expanded into the canonicity of the normalizer's outputs (F2d′), in
+    progress, and everything after F2d′.
 - The other goals are not broken down.
 
 **Git, until the work moves onto the system.** One session works on `main` only, with no branch, and
