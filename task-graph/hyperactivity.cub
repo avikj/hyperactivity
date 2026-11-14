@@ -442,17 +442,20 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- computations (a unary numeral of 4*10^4 did not print in 260 s), and deep right-nested terms (a
 -- numeral of 10^6) overflow the C stack in several recursive functions of this file and src/lang.c.
 -- Not re-measured since; whether both still hold is not known.
--- Known (2026-11-14, at task-graph/hyperactivity.cub): needs-work. A file with one unbalanced
--- parenthesis in a definition (the graph's essential-context relation, one closing parenthesis
--- short) made the machine exit with status 1 and print nothing about it: no position, no reason. A
--- file that fails to read must say where and why.
--- Known (2026-11-14, at experiments/nbe/p26-wip.cub): needs-work. The library's typed transport
--- cannot be applied to a line of types that is a case on a path into Bool: false-true A e =
--- transport (λ i → if e i then A else (A → A)) (λ a → a) is refused with "an implicit argument is
--- not determined by the other arguments' types or the type expected", also with the family written
--- as a defined function by clauses (ft-fam). Writing the composition itself, comp (λ i → ft-fam A
--- (e i)) (λ i → []) (λ a → a), checks. So the elaborator does not find transport's implicit types
--- from a line it could read them from (its endpoints, the line at 0 and 1).
+-- Resolved (2026-11-14, src/syntax.c): a file with one unbalanced parenthesis (the graph's
+-- essential-context relation, one closing parenthesis short) seemed to exit with status 1 and print
+-- nothing. The reason was printed, on stderr only and before the buffered lines of the definitions
+-- checked so far, so a reader of stdout saw nothing and a merged stream had it mid-line. Text that
+-- cannot be read now ends the load through the one error path: the checked lines first, then the
+-- reason last, on stderr and on stdout when that is another file; a missing closing parenthesis or
+-- brace names where it was opened (expected ) (closing the one opened at 4:11), found :).
+-- Resolved (2026-11-14, lib/check.cub): the library's typed transport applied to a line of types
+-- that is a case on a path into Bool (false-true A e = transport (λ i → if e i then A else (A → A))
+-- (λ a → a)) was refused with "an implicit argument is not determined by the other arguments'
+-- types or the type expected": the λ, guessed a function, was skipped where a path was due, and
+-- nothing else determined transport's implicit types. An application whose implicit arguments
+-- nothing else determines now guesses such a λ again as a line, and the line's ends at 0 and 1
+-- solve the path type's ends; false-true checks.
 -- Known (2026-11-14, from Avik): the repository holds four kinds of thing, kept apart: the core
 -- (the primitive language), capacities demonstrated and mentioned in the paper (each a metacircular
 -- extension on the unchanged core, its correctness proved in the language), examples of what the
