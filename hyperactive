@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""hyperactive — the one command for using this repository (2026-11-13).
+"""hyperactive — the way into hyperactivity, for agents and humans alike.
 
-    hyperactive                      what is open and what can start now
+    hyperactive                      the walk: everything to read, in order, one step at a time
+    hyperactive walk N               step N of the walk
+    hyperactive open                 what is open and what can start now
+    hyperactive def NAME             a definition: its statement, its text, where it is, what uses it
     hyperactive show NODE ...        a node: its statement, what it serves, what serves it,
                                      its essential context
     hyperactive tree                 the task graph from its root
@@ -20,11 +23,185 @@
 The machine is built on first use and rebuilt when src/ changes. Run it from anywhere: it finds this
 repository from its own location.
 """
-import os, subprocess, sys
+import os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.realpath(__file__))
 MACHINE = os.path.join(ROOT, 'build', 'cubical')
 TASKS = os.path.join(ROOT, 'tools', 'task-graph.py')
+PAPER = os.path.join(ROOT, 'docs', 'Hyperactive_Final_Paper.pdf')
+DELTA = os.path.join(ROOT, 'docs', 'paper-delta.md')
+WELCOME = os.path.join(ROOT, 'AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md')
+STEP = 24000   # characters per step of the walk, so a step is read whole
+
+
+def paper_text():
+    """the paper as text, extracted once and again whenever the PDF changes"""
+    out = os.path.join(ROOT, 'build', 'paper.txt')
+    if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(PAPER):
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        r = subprocess.run(['pdftotext', '-layout', PAPER, out], capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.exit('reading the paper needs pdftotext (poppler):\n' + r.stderr)
+    return open(out).read()
+
+
+def pieces(text, sep):
+    """text cut at separators into pieces of at most STEP characters (a longer unit stays whole)"""
+    out, cur = [], ''
+    for u in text.split(sep):
+        if cur and len(cur) + len(sep) + len(u) > STEP:
+            out.append(cur); cur = u
+        else:
+            cur = cur + sep + u if cur else u
+    if cur.strip(): out.append(cur)
+    return out
+
+
+def sections(md, level):
+    """a markdown text cut before each heading of the given level"""
+    mark = '\n' + '#' * level + ' '
+    parts = md.split(mark)
+    return [parts[0]] + [mark.lstrip('\n') + p for p in parts[1:]]
+
+
+def tool(*args):
+    return subprocess.run([sys.executable, TASKS, *args], cwd=ROOT, capture_output=True, text=True).stdout
+
+
+def walk_steps():
+    """the walk, in order: (title, text) for every step"""
+    steps = []
+    w = open(WELCOME).read()
+    head, words = w.split("\n## Avik's words, verbatim", 1)
+    steps.append(('Arrival', ARRIVAL))
+    steps.append(("How to work, in Avik's words to agents", head))
+    pages = paper_text().split('\f')
+    for i, p in enumerate(pieces('\f'.join(pages), '\f')):
+        steps.append((f'The paper, part {i + 1}', p.replace('\f', '\n')))
+    for sec in sections(open(DELTA).read(), 2):
+        title = sec.split('\n', 1)[0].lstrip('# ').strip()
+        for j, p in enumerate(pieces(sec, '\n\n')):
+            steps.append((('Toward the next draft of the paper' if title.startswith('Toward') else f'Toward the next draft: {title}') + (f', part {j + 1}' if j else ''), p))
+    for j, p in enumerate(pieces("## Avik's words, verbatim" + words, '\n\n')):
+        steps.append((f"Avik's words, verbatim, part {j + 1}", p))
+    steps.append(('The task graph', GRAPH_INTRO + tool('tree')))
+    steps.append(('What you can take up', None))
+    return steps
+
+
+ARRIVAL = """You are entering hyperactivity: a decentralized safe superintelligent operating system language.
+Every device runs one kernel, and every program, document and message is a definition with exact
+meaning, identified by its content, kept with its history, and related to every other by computed
+equality.
+
+This walk is how an agent comes to hold the project. It is deterministic: every agent reads the same
+material in the same order. Each step is printed whole and ends with the one command for the next
+step. Read every word of every step before running the next; do not skip ahead, search the files,
+or open them in another order. The walk goes:
+
+  1. Avik's instructions to agents: how to work here.
+  2. The paper, the language's specification, in full.
+  3. The scratch space for the paper's next draft, in full.
+  4. Avik's words, verbatim, in full.
+  5. The task graph: all the work, its state and its order.
+  6. What you can take up now, and the commands for reading and working.
+
+An agent that has walked already in this session goes straight to `hyperactive open`."""
+
+GRAPH_INTRO = """All work, and all status, is the task graph: a term in the language
+(task-graph/hyperactivity.cub over lib/task-graph.cub), ruled by the Hyperactive Workflow you have
+read. Every node is a sentence; a node's statement holds what is known about it. [in progress] and
+[resolved] mark leaves; every other leaf is pending.
+
+"""
+
+
+def walk(n):
+    steps = walk_steps()
+    if not 1 <= n <= len(steps):
+        sys.exit(f'the walk has steps 1 to {len(steps)}')
+    title, text = steps[n - 1]
+    print(f'── step {n} of {len(steps)}: {title} ' + '─' * 8 + '\n')
+    if text is None:
+        open_work()
+        print(COMMANDS)
+    else:
+        print(text.strip())
+    print('\n' + '─' * 8 + f' end of step {n} of {len(steps)}' + (f'. Next: hyperactive walk {n + 1}' if n < len(steps) else '. The walk is done.'))
+
+
+COMMANDS = """
+Reading and working:
+  hyperactive show NODE      a node: its statement, what it serves, what serves it, its essential context
+  hyperactive def NAME       a definition: its statement, its text, where it is, and what uses it
+  hyperactive open           what is open and what can start now
+  hyperactive order          the whole order of work
+  hyperactive tree           the task graph from its root
+  hyperactive check [FILE]   check files; with no file, the task graph
+  hyperactive repl           the machine, interactive
+  hyperactive help           every command
+
+Take up what the order says can start, beginning with what is in progress. A finding goes into the
+statement of the goal it concerns; a node is split into children only when work on a child begins."""
+
+
+def open_work():
+    out = tool('priority').split('\n')
+    first = []
+    for l in out[1:]:
+        if l.startswith(' layer 2') or l.startswith('waiting'): break
+        first.append(l)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('task_graph', TASKS); tg = importlib.util.module_from_spec(spec); spec.loader.exec_module(tg)
+    prog = tg.in_progress()
+    if prog:
+        print('In progress:\n')
+        for n in prog: print(tool('show', n))
+    print('Can start now and unblocks the most:')
+    print('\n'.join(l for l in first if l.strip() and not l.startswith(' layer')))
+
+
+TOP = re.compile(r"^([^\s-][^\s:=]*)")
+
+
+def blocks():
+    """every top-level declaration of every .cub file: name -> [(file, line, text)]"""
+    found = {}
+    for dp, dn, fs in os.walk(ROOT):
+        dn[:] = [d for d in dn if not d.startswith('.') and d != 'build']
+        for f in fs:
+            if not f.endswith('.cub'): continue
+            path = os.path.join(dp, f); lines = open(path, errors='replace').read().split('\n')
+            i = 0
+            while i < len(lines):
+                m = TOP.match(lines[i])
+                if not m or m.group(1) in ('import', '#same', '#show', '#type', '#where'):
+                    i += 1; continue
+                name = m.group(1) if m.group(1) not in ('data', 'codata', 'record') else (lines[i].split() + ['', ''])[1]
+                start = i
+                while start > 0 and lines[start - 1].startswith('--'): start -= 1
+                j = i + 1
+                while j < len(lines) and lines[j].strip() and (lines[j][0].isspace() or (TOP.match(lines[j]) and TOP.match(lines[j]).group(1) == name)):
+                    j += 1
+                found.setdefault(name, []).append((os.path.relpath(path, ROOT), i + 1, '\n'.join(lines[start:j])))
+                i = j
+    return found
+
+
+def define(names):
+    found = blocks()
+    for name in names:
+        if name not in found:
+            sys.exit(f'hyperactive: no top-level definition named {name}')
+        word = re.compile(r"(?<![\w'-])" + re.escape(name) + r"(?![\w'-])")
+        for f, l, text in found[name]:
+            print(f'{name}   ({f}, line {l})\n')
+            print(text + '\n')
+        users = sorted({(k, f) for k, v in found.items() if k != name for f, _, t in v
+                        if word.search('\n'.join(x for x in t.split('\n') if not x.startswith('--')))})
+        print(f'used by {len(users)} definition' + ('s' if len(users) != 1 else '') + (':' if users else ''))
+        for k, f in users[:40]: print(f'  {k}   ({f})')
+        if len(users) > 40: print(f'  … and {len(users) - 40} more')
 
 
 def build():
@@ -41,23 +218,16 @@ def tasks(*args):
 def main():
     a = sys.argv[1:]
     if not a:
-        build()
-        out = subprocess.run([sys.executable, TASKS, 'priority'], cwd=ROOT, capture_output=True, text=True).stdout.split('\n')
-        first = []
-        for l in out[1:]:
-            if l.startswith(' layer 2') or l.startswith('waiting'): break
-            first.append(l)
-        import importlib.util
-        spec = importlib.util.spec_from_file_location('task_graph', TASKS); tg = importlib.util.module_from_spec(spec); spec.loader.exec_module(tg)
-        root = subprocess.run([sys.executable, TASKS, 'show', tg.graph()[1][0]], cwd=ROOT, capture_output=True, text=True).stdout
-        ctx = [l.split('essential context: ', 1)[1].split('  (')[0] for l in root.split('\n') if 'essential context: ' in l]
-        print('Hyperactive. Essential context for everything: ' + ', '.join(ctx) + '\n')
-        print('Can start now and unblocks the most:')
-        print('\n'.join(l for l in first if l.strip() and not l.startswith(' layer')))
-        print('\nhyperactive order: the whole order of work; hyperactive tree: the graph; hyperactive help: every command.')
-        return
+        walk(1); return
     c, rest = a[0], a[1:]
     if c in ('help', '-h', '--help'): print(__doc__); return
+    if c == 'walk':
+        walk(int(rest[0]) if rest else 1); return
+    if c == 'open':
+        open_work(); return
+    if c == 'def':
+        if not rest: sys.exit('hyperactive def NAME')
+        define(rest); return
     if c in ('show', 'tree', 'why', 'unexplained', 'view', 'every'): sys.exit(tasks(c, *rest))
     if c == 'order': sys.exit(tasks('priority', *rest))
     if c == 'check':

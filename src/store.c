@@ -283,7 +283,7 @@ static char *store_read(const char *key, const char *file) {
 }
 /* an entry is written whole to a temporary file beside it and renamed over it (an append writes the
  * old text and the new), so a machine killed mid-write leaves the old entry or none, never a truncated
- * one (HYPERACTIVE.md §1.13 “What is known to be wrong or missing”) */
+ * one (the Known facts in the task graph) */
 static void store_write(const char *key, const char *file, const char *text, bool append) {
     char *p = store_path(key, file); if (!p) return;
     char *dir = store_path(key, "");
