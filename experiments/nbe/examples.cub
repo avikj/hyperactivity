@@ -171,3 +171,20 @@ nn-d = dnrec Γn2 s-nat nn-R c-nat c-zero st-c (cvar #0)
   (dty-nat (ext-h Γn2 s-nat (NRecV s-nat) (nrec-b s-nat) nn-R) (nrec-mot Γn2 s-nat nn-R))
   (dzero Γn2 (λ ρ → one)) st-dn (dvar Γn2 none)
 #same fst (normalize-nf Γn2 tΓn2 s-nat (nn-c , fmapM Γn2 (NRecV s-nat) (TV s-nat) (nrec-r s-nat) nn-R , nn-d)) = nn-c
+-- ---------------------------------------------------------------- transport at Bool and Nat
+-- transp (λ i. Bool) true normalizes to true; at a variable b, to b; transp (λ i. Nat) (suc zero) to suc zero
+trt-X : Mean emp2 (TrV s-bool)
+trt-X = λ ρ → ((one , one , λ i → one) , true)
+trt-d : Der (j-tm , emp2 , s-bool , ccomp (cplam c-bool) csys0 c-true , fmapM emp2 (TrV s-bool) (TV s-bool) (tr-r s-bool) trt-X)
+trt-d = dtransp-b emp2 trt-X c-bool c-true (dty-bool (dext emp2) (dline-body emp2 (TrV s-bool) (Sem s-bool) (tr-ln s-bool) trt-X)) (dtrue emp2 one-u)
+#same fst (normalize-nf emp2 tc-nil s-bool (ccomp (cplam c-bool) csys0 c-true , fmapM emp2 (TrV s-bool) (TV s-bool) (tr-r s-bool) trt-X , trt-d)) = c-true
+trb-X : Mean Γb2 (TrV s-bool)
+trb-X = λ ρ → ((one , one , λ i → one) , snd ρ)
+trb-d : Der (j-tm , Γb2 , s-bool , ccomp (cplam c-bool) csys0 (cvar #0) , fmapM Γb2 (TrV s-bool) (TV s-bool) (tr-r s-bool) trb-X)
+trb-d = dtransp-b Γb2 trb-X c-bool (cvar #0) (dty-bool (dext Γb2) (dline-body Γb2 (TrV s-bool) (Sem s-bool) (tr-ln s-bool) trb-X)) (dvar Γb2 none)
+#same fst (normalize-nf Γb2 tΓb2 s-bool (ccomp (cplam c-bool) csys0 (cvar #0) , fmapM Γb2 (TrV s-bool) (TV s-bool) (tr-r s-bool) trb-X , trb-d)) = cvar #0
+trn-X : Mean emp2 (TrV s-nat)
+trn-X = λ ρ → ((one , one , λ i → one) , suc zero)
+trn-d : Der (j-tm , emp2 , s-nat , ccomp (cplam c-nat) csys0 (c-suc c-zero) , fmapM emp2 (TrV s-nat) (TV s-nat) (tr-r s-nat) trn-X)
+trn-d = dtransp-n emp2 trn-X c-nat (c-suc c-zero) (dty-nat (dext emp2) (dline-body emp2 (TrV s-nat) (Sem s-nat) (tr-ln s-nat) trn-X)) sz-d
+#same fst (normalize-nf emp2 tc-nil s-nat (ccomp (cplam c-nat) csys0 (c-suc c-zero) , fmapM emp2 (TrV s-nat) (TV s-nat) (tr-r s-nat) trn-X , trn-d)) = c-suc c-zero
