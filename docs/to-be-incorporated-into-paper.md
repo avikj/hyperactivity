@@ -264,11 +264,11 @@ The paper is the specification. What remains between the implementation (“The 
     (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export"). Today `#jit` binds x86 bytes with no relation, which breaks this rule.
   - The x86 translator (`src/lang.c`'s native path, `lib/x86.cub`, `lib/machine.cub`, `lib/elf.cub`'s
     pasted machine code, `lib/compile/`) is superseded.
-- **Core, capacities, examples and our usage** (Avik, 2026-11-14). Four different things, which
+- **Core, capacities demonstrated and mentioned in the paper, examples, and our usage** (Avik, 2026-11-14). Four different things, which
   the repository and the paper hold side by side and which are never to be confused:
   - **The core** is the primitive language: a minimal, necessary and sufficient construct of pure
     mathematics. It has nothing about bits: no word sizes, bytes or floating-point formats.
-  - **The capacities** are what the core can do, which the paper claims: typed quotation and
+  - **Capacities demonstrated and mentioned in the paper** are what the core can do, which the paper claims: typed quotation and
     readback, specialization, native realization and JIT, lifting other languages, and so on. A
     capacity is not a primitive. It is demonstrated by a metacircular extension, built on the
     unchanged core, with its correctness proved in the language. Each such extension yields a new
@@ -279,8 +279,11 @@ The paper is the specification. What remains between the implementation (“The 
     goes through C" above).
   - **The examples** show what can be done with the language. The paper's treatment of machine
     words, bytes and floating point (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar types": U_w = Fin(2^w), Byte = Fin(256), native primitives implementing those definitions under a checked theorem or a named assumption) is of this kind: definitions about machines and other languages, written in the language. It is not a statement about the core and is not incorrect.
-  - **Our usage** is the language used to build hyperactivity itself, because it is already useful:
-    the task graph, the checks, the workflow.
+  - **Our usage** is code that exists because building hyperactivity uses it now: the task graph,
+    the checks, the workflow. No claim of the paper stands behind it. The question that separates it
+    from a capacity is why the code exists: because the paper says the language can do this (a
+    capacity, which has to be demonstrated), or because we use it (usage, which only has to work).
+    Code that is both is filed as the paper's capacity, and our use of it is a use.
   - The implementation does not keep them apart. `Word`, `Int64`, `UInt32`, `UInt64`, `Float64` and
     `Bytes n` are built into the evaluator (`lib/prim.cub`, computed by `src/lang.c` and
     `src/big.c`): content of the examples' kind sitting in the core. `#jit` binds x86 bytes in the

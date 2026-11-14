@@ -224,8 +224,13 @@ path-free-transport = node "Transport along a line of types at every path-free s
 -- systems whose number of faces grows with the shape (each PathP layer adds two; eliminators commute
 -- with formal composition), and a checked definition writes a system only as fixed syntax (sys+ is a
 -- syntactic chain in src/lang.c, not a value of a type), so at every shape this needs systems (or faces
--- and partial elements) as values in the host. Pending on Avik: whether the host gets systems as
--- values (a type of partial elements over a face) for this.
+-- and partial elements) as values in the host, or a way to build such systems without them. This was
+-- wrongly put to Avik as a choice (2026-11-14); it is the session's to settle. CCHM's composition
+-- takes a system, which CCHM's rules hold as judgmental syntax; an internal type of partial elements
+-- (Cubical Agda's Partial φ A) is not in CCHM's rules, so adding one to the core has to pass the
+-- minimality test (is the construction impossible without it?). Not yet settled: whether these growing
+-- systems can be built without host partial elements, from fixed systems or as data in the
+-- normalizer's own cube model, before any change to the core is considered.
 -- Known (2026-11-14, tested): the host's comp at Bool or Nat with a nonempty system on a variable is
 -- a formal composition (hcompD), and a case or recursor on a formal composition reduces to the
 -- formal composition of its branches along the motive at the composition's fill (eliminators
@@ -449,9 +454,10 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- (e i)) (λ i → []) (λ a → a), checks. So the elaborator does not find transport's implicit types
 -- from a line it could read them from (its endpoints, the line at 0 and 1).
 -- Known (2026-11-14, from Avik): the repository holds four kinds of thing, kept apart: the core
--- (the primitive language), the capacities the paper claims (each demonstrated by a metacircular
+-- (the primitive language), capacities demonstrated and mentioned in the paper (each a metacircular
 -- extension on the unchanged core, its correctness proved in the language), examples of what the
--- language can do, and our usage (the language building hyperactivity). Every core term is flagged as
+-- language can do, and our usage (code that exists because building hyperactivity uses it now, with
+-- no claim of the paper behind it). Every core term is flagged as
 -- core, and files are organized by layer, so the layer of a construction is visible where it stands.
 -- Not yet done: the sort of every file and built-in. Known misplacements: Word, Int64, UInt32,
 -- UInt64, Float64 and Bytes built into the evaluator (lib/prim.cub, src/lang.c, src/big.c); #jit

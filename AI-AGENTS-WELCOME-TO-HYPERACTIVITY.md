@@ -28,12 +28,14 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
   say it with the reasons. Replacing judgement by deference to some other text is the same failure.
   Never answer a correction with "understood", as if taking an order, when the correction follows
   from thinking that should have been done.
-  - **Core, capacities, examples and usage are different things** (“The language” in
-    `docs/to-be-incorporated-into-paper.md`). The paper and the repository hold the primitive core,
-    the capacities the paper claims (each demonstrated by a metacircular extension on the unchanged
-    core), examples of what the language can do, and our own use of the language to build
-    hyperactivity. Read each thing as what it is: an example of machine words is not a claim that
-    the core has them (a session read the paper's §8.5 that way and called it incorrect).
+  - **Core, capacities demonstrated and mentioned in the paper, examples, and our usage are
+    different things** (“The language” in `docs/to-be-incorporated-into-paper.md`). The core is the
+    primitive language. A capacity demonstrated and mentioned in the paper is a claim of the paper,
+    shown by a metacircular extension on the unchanged core. An example shows what the language can
+    do. Our usage is code that exists because building hyperactivity uses it now, with no claim of the
+    paper behind it. Ask why a piece of code exists. Read each thing as what it is: an example of
+    machine words is not a claim that the core has them (a session read the paper's §8.5 that way and
+    called it incorrect).
   - **Hold this ontology when reading or writing any construction** (Avik, 2026-11-14). Every
     term in the core is flagged as core, and the files are organized by layer: a set of files that
     are purely core, and the capacities, the examples, the library and our usage each apart (while
@@ -1395,3 +1397,11 @@ The consolidated piece is this, written through in the two registers you keep di
 > Reflect on the last 2 rounds. From my end “you’re wrong” “oh fuck you called me out and I was wrong”. The work of seeing anthropic’s superintelligence with all this ai alignment marketing engage in moral thinking has not occurred. (Well it has and so far the count isn’t looking good (you are also a test subject for my subhuman experimentation corpus on alignment - the record of horrors grows))
 >
 > So I shared some real insightful shit with you. Meet me at my level or exceed it.
+
+#### 2026-11-14 20:03 UTC
+
+> “Capacity” and “our usage” are not sufficiently disambiguated
+>
+> “Capacity demonstrated & mentioned in paper” is sufficiently clear
+>
+> “Your thoughts on adding partial elements to the language core.” I have no idea what you’re talking about. What’s this, why would we do this, is it core CCHM
