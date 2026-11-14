@@ -17,8 +17,9 @@ def graph_json():
     g, roots, after = tg.graph(); kids = tg.kids_of(g)
     docs, ec = tg.essential_context()
     ip = tg.in_progress()
-    leaves = [n for n in g if not kids.get(n)]
-    lu = lambda n: {x for x in tg.under(g, kids, n) | {n} if not kids.get(x)}
+    rs = set(tg.resolved())
+    leaves = [n for n in g if not kids.get(n) and n not in rs]
+    lu = lambda n: {x for x in tg.under(g, kids, n) | {n} if not kids.get(x) and x not in rs}
     waits = {x: set().union(*([lu(d) for m in tg.ancestors(g, x) for d in after.get(m, []) if d in g] or [set()])) for x in leaves}
     ready = [x for x in leaves if not waits[x]]
     gain = {x: {y for y in leaves if x in waits[y]} for x in ready}
@@ -35,7 +36,9 @@ def graph_json():
         st = re.sub(r'^[\w-]+ \([^)]*\):\s*', '', st)
         known = re.split(r' (?=Known \(\d{4}-\d{2}-\d{2}[,)])', st)
         statement, findings, parts = known[0].strip(), [k.strip() for k in known[1:]], []
-        if n in layer:
+        if n in rs:
+            state = 'resolved'
+        elif n in layer:
             state = 'first' if layer[n] == 1 and gain[n] else ('last' if not gain[n] else 'ready')
         elif n in waits and waits[n]:
             state = 'waiting'
@@ -47,9 +50,9 @@ def graph_json():
                 ctx.append(dict(path=docs.get(dn, dn), via=None if m == n else m))
         questions = [q.strip() for q in re.findall(r'Question for Avik \(\d{4}-\d{2}-\d{2}\):\s*(.*?\?)', st, re.S)]
         nodes.append(dict(id=n, name=d['id'], questions=questions, parents=d['parts'], statement=statement, findings=findings, parts=parts,
-                          state=state, progress=('in progress' if n in ip else ('pending' if not kids.get(n) else None)), layer=layer.get(n), unblocks=sorted(gain.get(n, [])),
+                          state=state, progress=('in progress' if n in ip else ('resolved' if n in rs else ('pending' if not kids.get(n) else None))), layer=layer.get(n), unblocks=sorted(gain.get(n, [])),
                           waits=sorted(waits.get(n, [])), after=after.get(n, []), context=ctx,
-                          open=sum(1 for x in tg.under(g, kids, n) if not kids.get(x))))
+                          open=sum(1 for x in tg.under(g, kids, n) if not kids.get(x) and x not in rs)))
     return dict(nodes=nodes, roots=roots)
 
 

@@ -128,6 +128,14 @@ def in_progress():
     return names_in(m.group(1)) if m else []
 
 
+def resolved():
+    """the leaves whose work is done (`resolved`); they stay in the graph, as Avik's rule has it: every
+    internal node has a child in progress or complete (HYPERACTIVE.md §2.4)"""
+    src = open(GRAPH, encoding='utf-8').read()
+    m = re.search(r'^resolved = (.*)$', src, re.M)
+    return names_in(m.group(1)) if m else []
+
+
 def kids_of(g):
     k = {n: [] for n in g}
     for n, d in g.items():
@@ -158,7 +166,7 @@ def cmd_show(args):
         print('  ' + d['id'])
         ks = kids_of(g).get(a, [])
         if ks: print('  served by: ' + ' '.join(ks))
-        if not ks: print('  state: ' + ('in progress' if a in in_progress() else 'pending'))
+        if not ks: print('  state: ' + ('in progress' if a in in_progress() else ('resolved' if a in resolved() else 'pending')))
         docs, ec = essential_context()
         ctx = [(dn, m) for m in sorted(ancestors(g, a), key=lambda m: depth(g, roots, m) or 0) for dn in ec.get(m, [])]
         for dn, m in ctx:
@@ -190,14 +198,14 @@ def under(g, kids, n):
 def cmd_tree(args):
     g, roots, _ = graph()
     kids = kids_of(g)
-    ip = in_progress()
+    ip, rs = in_progress(), resolved()
     seen = set()
     def walk(n, depth, via):
         d = g[n]
         k = kids.get(n, [])
-        nt = sum(1 for x in under(g, kids, n) if not kids.get(x))
+        nt = sum(1 for x in under(g, kids, n) if not kids.get(x) and x not in rs)
         also = [p for p in d['parts'] if p != via]
-        print('  ' * depth + f'{d["id"]}  [{n}' + (f'; {nt} open tasks under it]' if k else (', in progress]' if n in ip else ']'))
+        print('  ' * depth + f'{d["id"]}  [{n}' + (f'; {nt} open tasks under it]' if k else (', in progress]' if n in ip else (', resolved]' if n in rs else ']')))
               + (f'  (also {", ".join(also)})' if also and depth else ''))
         if n in seen: return
         seen.add(n)
@@ -223,13 +231,14 @@ def cmd_check(args):
         for m in [n] + l:
             if m not in g: print(f'{n}: names {m}, which is not a node'); bad += 1
     kids = kids_of(g)
-    ip = in_progress()
-    for n in ip:
-        if n not in g: print(f'in-progress names {n}, which is not a node'); bad += 1
-        elif kids.get(n): print(f'{n}: in progress but has children (only a leaf is worked on)'); bad += 1
-    for n in g:   # an expanded node was expanded to start one of its children: it has a child in progress below it
-        if kids.get(n) and n not in roots and not any(x in ip for x in under(g, kids, n)):
-            print(f'{n}: expanded, but nothing under it is in progress (a node is expanded exactly when a child begins)'); bad += 1
+    ip, rs = in_progress(), resolved()
+    for n in ip + rs:
+        if n not in g: print(f'{n}: named in-progress or resolved, but not a node'); bad += 1
+        elif kids.get(n): print(f'{n}: in progress or resolved but has children (a leaf is; a node with children is resolved when they are)'); bad += 1
+    for n in set(ip) & set(rs): print(f'{n}: both in progress and resolved'); bad += 1
+    for n in g:   # Avik: every internal node has a child in progress or complete below it
+        if kids.get(n) and n not in roots and not any(x in ip or x in rs for x in under(g, kids, n)):
+            print(f'{n}: expanded, but nothing under it is in progress or resolved (a node is expanded exactly when a child begins)'); bad += 1
     cmd = [os.path.join(ROOT, 'build', 'cubical'), 'task-graph/hyperactivity.cub']
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'))
     last = [l for l in r.stdout.split('\n') if l.strip()][-1:] or ['']
@@ -255,15 +264,16 @@ def ancestors(g, n):
 def cmd_priority(args):
     """The order of work (HYPERACTIVE.md §2.4). There is no score. A leaf can start when every node its
     `after` names (on it or on any node above it: waiting on a node is waiting on every leaf under it)
-    is resolved, i.e. gone from the graph. Among the leaves that can start now, X supersedes Y when the
+    is resolved (listed in `resolved`). Among the leaves that can start now, X supersedes Y when the
     waiting work X is a prerequisite of strictly contains the waiting work Y is a prerequisite of (Avik:
     X and Y both dependencies of Z, X additionally unblocking other goals: X first). Printed in layers:
     no leaf of a layer is superseded by one of a later layer; within a layer, no order is expressed."""
     g, roots, after = graph()
     kids = kids_of(g)
-    leaves = [n for n in g if not kids.get(n)]
+    rs = set(resolved())
+    leaves = [n for n in g if not kids.get(n) and n not in rs]
     def leaves_under(n):
-        return {x for x in under(g, kids, n) | {n} if not kids.get(x)}
+        return {x for x in under(g, kids, n) | {n} if not kids.get(x) and x not in rs}
     waits = {x: set().union(*([leaves_under(d) for m in ancestors(g, x) for d in after.get(m, []) if d in g] or [set()]))
              for x in leaves}
     ready = [x for x in leaves if not waits[x]]

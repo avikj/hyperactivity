@@ -906,8 +906,10 @@ The work is organized by a graph of tasks in the language (§1.14). Its rules:
 - A session passing by may add context to a task's statement, never subtasks.
 
 **States.** A node is in progress or pending. There is one owner, Avik, and sessions hold no
-identity. The graph lists the leaves in progress (`in-progress`), and every other leaf is pending. A
-node is resolved by removing it, and its history keeps it.
+identity. The graph lists the leaves in progress (`in-progress`) and the leaves resolved
+(`resolved`); every other leaf is pending. A resolved leaf stays in the graph, since every internal
+node has a child that is active or complete. A node with children is resolved exactly when all of
+them are.
 
 **Order.**
 - There is no scalar priority, value, score or estimate. A node's value is what it serves, up to the
