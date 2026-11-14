@@ -287,3 +287,73 @@ lookw (cons t ts) k =
     (λ m h → case lookw ts m return (λ o → Opt ((v : VarP (sk (cons t ts))) × PathP (λ i → Word) (var-word (sk (cons t ts)) v) (%wsucc m))) of
                none → none
                some p → some (some (fst p) , λ i → %wsucc (snd p i)))
+
+-- ---------------------------------------------------------------- the checker over the simple-types fragment
+-- a term checked at t: its element pointwise, and its derivation at the constant type's meaning
+CK : (ts : List STy) (c : Code) (t : STy) → Type 1
+CK ts c t =
+  (cke : (x : One1) → EnvV (sk ts) (into ts x) → El (shp t) (sem t)) ×
+  Der (j-tm , ctx-of ts , shp t , c , ptM ts (TV (shp t)) (λ x ρ → (sem t , cke x ρ)))
+-- an optional value at level 1 (Opt is at level 0)
+data May (A : Type 1) = may-no | may-yes (a : A)
+SY : (ts : List STy) (c : Code) → Type 1
+SY ts c = (syt : STy) × CK ts c syt
+steq : (a b : STy) → Opt (PathP (λ i → STy) a b)
+steq sbool sbool = some (λ i → sbool)
+steq (sarr a b) (sarr c d) =
+  case steq a c return (λ o → Opt (PathP (λ i → STy) (sarr a b) (sarr c d))) of
+    none → none
+    some p → (case steq b d return (λ o → Opt (PathP (λ i → STy) (sarr a b) (sarr c d))) of
+                none → none
+                some q → some (λ i → sarr (p i) (q i)))
+steq a b = none
+-- a synthesized term checked at t: its type compared with t
+to-chk : (ts : List STy) (c : Code) (t : STy) → May (SY ts c) → May (CK ts c t)
+to-chk ts c t s =
+  case s return (λ o → May (CK ts c t)) of
+    may-no → may-no
+    may-yes r → (case steq (fst r) t return (λ o → May (CK ts c t)) of
+                   none → may-no
+                   some p → may-yes (transport (λ i → CK ts c (p i)) (snd r)))
+-- application: the function's meaning and the argument's, one pointwise cube
+app-ok : (ts : List STy) (f a : Code) (t1 t2 : STy) → CK ts f (sarr t1 t2) → CK ts a t1 → CK ts (capp f a) t2
+app-ok ts f a t1 t2 cf ca =
+  let n = dims (sk ts)
+      A = shp t1
+      B = shp t2
+      gR = the ((x : One1) → EnvV (sk ts) (into ts x) → AppV A B) (λ x ρ → (sem (sarr t1 t2) , fst cf x ρ , fst ca x ρ))
+      R = ptM ts (AppV A B) gR
+  in (λ x ρ → fst cf x ρ (fst ca x ρ) ,
+      der-tr j-tm (ctx-of ts) B (capp f a) (fmapM (ctx-of ts) (AppV A B) (TV B) (app-r A B) R) (ptM ts (TV B) (λ x ρ → (sem t2 , fst cf x ρ (fst ca x ρ))))
+        (fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (AppV A B)) (FbE (sk ts) (TV B)) (into ts) (λ γ e ρ → app-r A B (e ρ)) gR (cube0 ts))
+        (dapp (ctx-of ts) A B R f a
+           (der-tr j-tm (ctx-of ts) (s-pi A B) f (ptM ts (TV (s-pi A B)) (λ x ρ → (sem (sarr t1 t2) , fst cf x ρ)))
+              (fmapM (ctx-of ts) (AppV A B) (TV (s-pi A B)) (app-f A B) R)
+              (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (AppV A B)) (FbE (sk ts) (TV (s-pi A B))) (into ts) (λ γ e ρ → app-f A B (e ρ)) gR (cube0 ts) (~ i))
+              (snd cf))
+           (der-tr j-tm (ctx-of ts) A a (ptM ts (TV A) (λ x ρ → (sem t1 , fst ca x ρ)))
+              (fmapM (ctx-of ts) (AppV A B) (TV A) (app-a A B) R)
+              (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (AppV A B)) (FbE (sk ts) (TV A)) (into ts) (λ γ e ρ → app-a A B (e ρ)) gR (cube0 ts) (~ i))
+              (snd ca))))
+-- λ checked at t1 → t2: its body at t2 in the context extended by t1, carried to lam-ctx
+lam-ok : (ts : List STy) (b : Code) (t1 t2 : STy) → CK (cons t1 ts) b t2 → CK ts (clam b) (sarr t1 t2)
+lam-ok ts b t1 t2 cb =
+  let n = dims (sk ts)
+      A = shp t1
+      B = shp t2
+      gX = the ((x : One1) → EnvV (sk ts) (into ts x) → TV (s-pi A B)) (λ x ρ → (sem (sarr t1 t2) , λ v → fst cb x (ρ , v)))
+      X = ptM ts (TV (s-pi A B)) gX
+      fx = the ((γ : CtxV (sk ts)) → FbE (sk ts) (TV (s-pi A B)) γ → CtxV (sk (cons t1 ts))) (λ γ e → (γ , lam-dom (sk ts) A B γ e))
+  in (λ x ρ v → fst cb x (ρ , v) ,
+      dlam (ctx-of ts) A B X (tcode t1) b
+        (der-tr j-ty (ctx-of ts) A (tcode t1) (ptM ts (Sem A) (λ x ρ → sem t1))
+           (fmapM (ctx-of ts) (TV (s-pi A B)) (Sem A) (λ q → fam-dom A B (fst q)) X)
+           (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (TV (s-pi A B))) (FbE (sk ts) (Sem A)) (into ts)
+                    (λ γ e ρ → fam-dom A B (fst (e ρ))) gX (cube0 ts) (~ i))
+           (dty-s ts t1))
+        (transport (λ i → Der (j-tm , (lcons (e-ty A) (sk ts) ,
+                                       PT-map n One1 (CtxV (sk ts)) (CtxV (sk (cons t1 ts))) (FbE (sk ts) (TV (s-pi A B))) (into ts) fx gX (cube0 ts) (~ i)) ,
+                               B , b ,
+                               PT-lift n One1 (CtxV (sk ts)) (CtxV (sk (cons t1 ts))) (FbE (sk ts) (TV (s-pi A B))) (FbE (sk (cons t1 ts)) (TV B))
+                                 (into ts) fx (λ γ e ρ → (snd (fst (e (fst ρ))) (snd ρ) , snd (e (fst ρ)) (snd ρ))) gX (cube0 ts) (~ i)))
+           (snd cb)))
