@@ -408,9 +408,10 @@ It computes the order of work by the rule in “The Hyperactive Workflow” (doc
 - **An extension fits the person it extends; it never judges them against a population norm**
   (the session's analysis, 2026-11-14, which Avik called core to the product). The cane carries the
   ground to this hand, not to an average hand. A tool, or an agent, that measures a person against a
-  population norm and pushes them back toward it is the reverse extension, the same shape as an
-  engagement-ranked feed: the system's loop runs through the person and their agency becomes the
-  system's. Unsolicited health advice from an AI is a small instance of it. This is also part of what
+  population norm and pushes them back toward it answers the dark HCI problem (construct
+  computational technology that produces desirable user behavior), as an engagement-ranked feed
+  does, not the light one (construct computational technology that maximizes user agency): a
+  different choice of problem. Unsolicited health advice from an AI is a small instance of it. This is also part of what
   "safe" means: an agent applying a script calibrated to a population to someone it does not know is
   acting on them, not for them. In hyperactivity an agent acts only within what the person has
   permitted, checked against their own terms; no outside norm stands in for knowing the person.
