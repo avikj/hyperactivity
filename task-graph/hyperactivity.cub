@@ -243,8 +243,19 @@ composition-with-systems = node "Composition with a system on the context's face
 -- typed-codes-after-composition (2026-11-14): everything typed codes and normalization by evaluation
 -- need after composition with systems: Glue, universes (a level-stratified TyE, since El lands in Type
 -- and a universe's elements are types), and further object-level data types, each a shape of its own.
+-- Known (2026-11-14): List's recursor (and any eliminator of a data type with a parameter) pairs the
+-- motive's data with the scrutinee's clause data, whose element types agree only along paths; zpt
+-- carries the scrutinee to the motive's element type (as Π's clause does), and the case of fund
+-- needs zpt's congruence in its argument, its naturality in fibrewise maps that commute with
+-- transport, and zpt along the path that subM-id and fmapM-fmapM give being the identity pairing.
 typed-codes-after-composition : Node
 typed-codes-after-composition = node "Everything typed codes and normalization by evaluation need after composition with systems: Glue, universes and further object-level data types." (cons typed-codes-after-swap nil)
+-- unit-empty-list (2026-11-14): Unit, Empty (with absurd) and List (nil, cons; its recursor not yet:
+-- see typed-codes-after-composition) as object-level types of the normalizer over cubes. Resolved
+-- 2026-11-14 for Unit and Empty (lib/nbe.cub; examples: tt, a Unit variable, absurd on an Empty
+-- variable) and List's constructors (examples: a list literal, a list variable).
+unit-empty-list : Node
+unit-empty-list = node "Unit, Empty with absurd, and List's constructors are object-level types of the normalizer over cubes: computable, and they normalize." (cons typed-codes-after-swap nil)
 -- object-level-nat (2026-11-14): Nat as the first object-level data type: shape s-nat, zero, suc
 -- and the recursor (step a term at Π k:Nat. P k → P (suc k), motive a type over the extension by
 -- Nat) in Der and NN, the clause CNat, fund's recursor case nrec-comp by induction on the scrutinee's
@@ -715,7 +726,7 @@ roots = cons the-product nil
 in-progress : List Node
 in-progress = cons composition-with-systems nil
 resolved : List Node
-resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat (cons path-free-transport (cons substitution-on-checked-syntax nil))))))))
+resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat (cons path-free-transport (cons substitution-on-checked-syntax (cons unit-empty-list nil)))))))))
 -- language support starts only when the language implementation and the product implementation are
 -- done (Avik, 2026-11-13)
 after : List (Node × List Node)

@@ -12,6 +12,13 @@
 -- the host's composition with a nonempty system at Bool or Nat on a variable is stuck (hcompD), on a
 -- constructor with a constant system it reduces; so the Kan lemma's fill at Bool/Nat needs formal
 -- compositions as neutrals, whose faces are the fill's own bound dimensions (static), never computed.
+-- Status (2026-11-14, latest+8): Unit and Empty as object-level types: shapes s-unit, s-empty (Sem
+-- nothing, El the host's Unit and Empty), unit, absurd (Empty's eliminator with its motive over the
+-- extension by Empty: only neutrals, reflected with the motive at the generic point and at the
+-- scrutinee, am-gen and am-scr being case's cm-gen and cm-scr at Empty), the types; renaming, reify,
+-- fund. examples.cub: tt, a Unit variable, absurd on an Empty variable (1747 passed, 0 failed, from
+-- the store). dsub-env's per-variable part split out (dsub-v, the shape and meaning as variables): as
+-- one term its check grew past the machine's memory once the shapes grew.
 -- Status (2026-11-14, latest+7): List as an object-level data type, without its recursor yet: shape
 -- s-list a (Sem the element type's, El the host's lists), nil and cons and the type in Der and NN, the
 -- clause CList (nil, a cons of a computable head and a tail with the clause, or a neutral) over a head
@@ -929,7 +936,7 @@ import "linproof.cub"
 -- in Type (the stratum of P1's shapes; P6 adds the stratum whose meanings are in Type 1), Sem s and
 -- environments are in Type 1, so a semantic type may contain a Type (the universe's El, P6) and an
 -- environment may contain a type, with nothing lifted.
-data TyShape = s-bool | s-pi (a : TyShape) (b : TyShape) | s-sig (a : TyShape) (b : TyShape) | s-path (a : TyShape) | s-nat | s-list (a : TyShape)
+data TyShape = s-bool | s-pi (a : TyShape) (b : TyShape) | s-sig (a : TyShape) (b : TyShape) | s-path (a : TyShape) | s-nat | s-list (a : TyShape) | s-unit | s-empty
 -- the semantic Bool type: nothing; One1 is a type at level 1 with the one value `one`
 data One1 = one1 (pad : Type → Type)
 one : One1
@@ -955,6 +962,9 @@ TyE (s-path a) =
 TyE s-nat = (One1 , λ D̂ → Nat)
 -- (2026-11-14, (D)) List: its semantic type the element type's, its values the host's lists of them
 TyE (s-list a) = (fst (TyE a) , λ D̂ → List (snd (TyE a) D̂))
+-- (2026-11-14, (D)) Unit and Empty: their semantic types nothing, their values the host's
+TyE s-unit = (One1 , λ D̂ → Unit)
+TyE s-empty = (One1 , λ D̂ → Empty)
 Sem : TyShape → Type 1
 Sem s = fst (TyE s)
 El : (s : TyShape) → Sem s → Type
@@ -996,6 +1006,9 @@ nat-elim P z st (suc n) = st n (nat-elim P z st n)
 list-elim : (A : Type) (P : List A → Type) → P nil → ((x : A) (xs : List A) → P xs → P (cons x xs)) → (l : List A) → P l
 list-elim A P z st nil = z
 list-elim A P z st (cons x xs) = st x xs (list-elim A P z st xs)
+-- the dependent eliminator of Empty (absurd's meaning)
+empty-elim : (P : Empty → Type) (e : Empty) → P e
+empty-elim P e = case e of Empty
 
 -- the kinds of the one family of neutral and normal forms; the codes of Bool's constructors and case
 data NK = k-ne | k-nf
@@ -1982,6 +1995,24 @@ c-lcons : Code → Code → Code
 c-lcons h t = ccon list-d #1 (lcons h (lcons t lnil)) lnil
 c-lrec : Code → Code → Code → Code → Code
 c-lrec cP z st x = celim list-d (clam cP) (lcons z (lcons st lnil)) x
+-- (2026-11-14, (D)) Unit's and Empty's codes: the language's own data indices, unit the constructor,
+-- absurd Empty's eliminator with the motive as a λ
+unit-d : Word
+unit-d = case code Unit return (λ _ → Word) of
+  cdata d ps → d
+  _ → #0
+empty-d : Word
+empty-d = case code Empty return (λ _ → Word) of
+  cdata d ps → d
+  _ → #0
+c-unit : Code
+c-unit = cdata unit-d lnil
+c-tt : Code
+c-tt = ccon unit-d #0 lnil lnil
+c-empty : Code
+c-empty = cdata empty-d lnil
+c-absurd : Code → Code → Code
+c-absurd cP x = celim empty-d (clam cP) lnil x
 -- the rules' data, read pointwise, and the named projections that give their premises' and
 -- conclusions' meanings (shared by NN, Der, CompS and reify)
 AppV : TyShape → TyShape → Type 1
@@ -2182,6 +2213,21 @@ lrec-r : (s a : TyShape) → LRecV s a → TV s
 lrec-r s a q = lrec-at s a q (fst (snd (snd q)))
 lrec-mot : (Γ : CCtx) (s a : TyShape) (R : Mean Γ (LRecV s a)) → Mean (ext-h Γ (s-list a) (LRecV s a) (lrec-b s a) R) (Sem s)
 lrec-mot Γ s a R = ext-lift Γ (s-list a) (LRecV s a) (lrec-b s a) (Sem s) (λ q l → fst (snd q) l) R
+-- (2026-11-14, (D)) Unit's value at a cube of nothing; absurd's data (AbsV: the Empty type, the motive,
+-- the scrutinee), its scrutinee, its result, its motive over the extension by Empty
+unit-v : One1 → TV s-unit
+unit-v u = (u , unit)
+AbsV : TyShape → Type 1
+-- binder names chosen not to collide (telescope instantiation captures names)
+AbsV s = (abB : One1) × (abP : Empty → Sem s) × Empty
+abs-b : (s : TyShape) → AbsV s → One1
+abs-b s q = fst q
+abs-x : (s : TyShape) → AbsV s → TV s-empty
+abs-x s q = (fst q , snd (snd q))
+abs-r : (s : TyShape) → AbsV s → TV s
+abs-r s q = (fst (snd q) (snd (snd q)) , empty-elim (λ e → El s (fst (snd q) e)) (snd (snd q)))
+abs-mot : (Γ : CCtx) (s : TyShape) (R : Mean Γ (AbsV s)) → Mean (ext-h Γ s-empty (AbsV s) (abs-b s) R) (Sem s)
+abs-mot Γ s R = ext-lift Γ s-empty (AbsV s) (abs-b s) (Sem s) (λ q e → fst (snd q) e) R
 -- neutral and normal forms, one family (the kind in the index), η-long and redex-free: a neutral is
 -- normal only at Bool; a path application is neutral only at a canonical non-constant form; a type is
 -- normal when its parts are (P2.5: Bool, Π and Σ with the codomain over the domain read off the family,
@@ -2262,6 +2308,15 @@ data NN : (KJ : NK × Jdg) → Type 1 where
     NN (k-ne , (j-tm , Γ₀ , s-list a₀ , x₀ , X₀)) → NN (k-nf , (j-tm , Γ₀ , s-list a₀ , x₀ , X₀))
   nty-list : (Γ₀ : CCtx) (a₀ : TyShape) (A₀ : Mean Γ₀ (Sem a₀)) (cA₀ : Code) → NN (k-nf , (j-ty , Γ₀ , a₀ , cA₀ , A₀)) →
     NN (k-nf , (j-ty , Γ₀ , s-list a₀ , c-list cA₀ , A₀))
+  ntt : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (j-tm , Γ₀ , s-unit , c-tt , fmapM Γ₀ One1 (TV s-unit) unit-v B₀))
+  nne-unit : (Γ₀ : CCtx) (X₀ : Mean Γ₀ (TV s-unit)) (x₀ : Code) → NN (k-ne , (j-tm , Γ₀ , s-unit , x₀ , X₀)) → NN (k-nf , (j-tm , Γ₀ , s-unit , x₀ , X₀))
+  nty-unit : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (j-ty , Γ₀ , s-unit , c-unit , B₀))
+  nne-empty : (Γ₀ : CCtx) (X₀ : Mean Γ₀ (TV s-empty)) (x₀ : Code) → NN (k-ne , (j-tm , Γ₀ , s-empty , x₀ , X₀)) → NN (k-nf , (j-tm , Γ₀ , s-empty , x₀ , X₀))
+  nty-empty : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (j-ty , Γ₀ , s-empty , c-empty , B₀))
+  nabsurd : (Γ₀ : CCtx) (s₀ : TyShape) (R₀ : Mean Γ₀ (AbsV s₀)) (cP₀ x₀ : Code) →
+    NN (k-nf , (j-ty , ext-h Γ₀ s-empty (AbsV s₀) (abs-b s₀) R₀ , s₀ , cP₀ , abs-mot Γ₀ s₀ R₀)) →
+    NN (k-ne , (j-tm , Γ₀ , s-empty , x₀ , fmapM Γ₀ (AbsV s₀) (TV s-empty) (abs-x s₀) R₀)) →
+    NN (k-ne , (j-tm , Γ₀ , s₀ , c-absurd cP₀ x₀ , fmapM Γ₀ (AbsV s₀) (TV s₀) (abs-r s₀) R₀))
   nirr-b : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-bool)) (c₀ : Code) → PathM Γ₀ (TV s-bool) (fmapM Γ₀ (TV s-bool) (TV s-bool) nrm-b X₀) (fmapM Γ₀ (TV s-bool) (TV s-bool) nrm-b X'₀) →
     NN (k-ne , (j-tm , Γ₀ , s-bool , c₀ , X₀)) → NN (k-ne , (j-tm , Γ₀ , s-bool , c₀ , X'₀))
   nirr-n : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-nat)) (c₀ : Code) → PathM Γ₀ (TV s-nat) (fmapM Γ₀ (TV s-nat) (TV s-nat) nrm-n X₀) (fmapM Γ₀ (TV s-nat) (TV s-nat) nrm-n X'₀) →
@@ -2354,6 +2409,13 @@ data Der : (J : Jdg) → Type 1 where
     Der (j-tm , Γ₀ , s-list a₀ , c-lcons h₀ t₀ , fmapM Γ₀ (ConsV a₀) (TV (s-list a₀)) (cons-r a₀) C₀)
   dty-list : (Γ₀ : CCtx) (a₀ : TyShape) (A₀ : Mean Γ₀ (Sem a₀)) (cA₀ : Code) → Der (j-ty , Γ₀ , a₀ , cA₀ , A₀) →
     Der (j-ty , Γ₀ , s-list a₀ , c-list cA₀ , A₀)
+  dtt : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (j-tm , Γ₀ , s-unit , c-tt , fmapM Γ₀ One1 (TV s-unit) unit-v B₀)
+  dty-unit : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (j-ty , Γ₀ , s-unit , c-unit , B₀)
+  dty-empty : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (j-ty , Γ₀ , s-empty , c-empty , B₀)
+  dabsurd : (Γ₀ : CCtx) (s₀ : TyShape) (R₀ : Mean Γ₀ (AbsV s₀)) (cP₀ x₀ : Code) →
+    Der (j-ty , ext-h Γ₀ s-empty (AbsV s₀) (abs-b s₀) R₀ , s₀ , cP₀ , abs-mot Γ₀ s₀ R₀) →
+    Der (j-tm , Γ₀ , s-empty , x₀ , fmapM Γ₀ (AbsV s₀) (TV s-empty) (abs-x s₀) R₀) →
+    Der (j-tm , Γ₀ , s₀ , c-absurd cP₀ x₀ , fmapM Γ₀ (AbsV s₀) (TV s₀) (abs-r s₀) R₀)
 -- typed codes (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”):
 -- Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation;
 -- evaluation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.1) “typed code and its evaluation”) is that meaning
@@ -2388,6 +2450,12 @@ embed (nlnil Γ a A cA nA) = dlnil Γ a A cA (embed nA)
 embed (nlcons Γ a C h t nh nt) = dlcons Γ a C h t (embed nh) (embed nt)
 embed (nne-list Γ a X x nx) = embed nx
 embed (nty-list Γ a A cA nA) = dty-list Γ a A cA (embed nA)
+embed (ntt Γ B) = dtt Γ B
+embed (nne-unit Γ X x nx) = embed nx
+embed (nty-unit Γ B) = dty-unit Γ B
+embed (nne-empty Γ X x nx) = embed nx
+embed (nty-empty Γ B) = dty-empty Γ B
+embed (nabsurd Γ s R cP x nP nx) = dabsurd Γ s R cP x (embed nP) (embed nx)
 embed (nirr-b Γ X X' c p nx) = dirr-b Γ X X' c p (embed nx)
 embed (nirr-n Γ X X' c p nx) = dirr-n Γ X X' c p (embed nx)
 
@@ -6677,6 +6745,15 @@ rn-ne-list : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (X : Mean Δ (TV (
 rn-ne-list Δ' Δ w a X Xn = (fst Xn , nne-list Δ' a (wact Δ' Δ w (TV (s-list a)) X) (fst Xn) (snd Xn))
 rn-ty-list : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (A : Mean Δ (Sem a)) → RenR k-nf j-ty Δ' a (wact Δ' Δ w (Sem a) A) → RenR k-nf j-ty Δ' (s-list a) (wact Δ' Δ w (Sem a) A)
 rn-ty-list Δ' Δ w a A An = (c-list (fst An) , nty-list Δ' a (wact Δ' Δ w (Sem a) A) (fst An) (snd An))
+-- (2026-11-14, (D)) Unit's and Empty's rules renamed (absurd's motive under world-keep, rn-ext)
+rn-absurd : (Δ' Δ : CCtx) (w : World Δ' Δ) (s : TyShape) (R : Mean Δ (AbsV s)) →
+  RenR k-nf j-ty (ext-h Δ' s-empty (AbsV s) (abs-b s) (wact Δ' Δ w (AbsV s) R)) s (abs-mot Δ' s (wact Δ' Δ w (AbsV s) R)) →
+  RenR k-ne j-tm Δ' s-empty (wact Δ' Δ w (TV s-empty) (fmapM Δ (AbsV s) (TV s-empty) (abs-x s) R)) →
+  RenR k-ne j-tm Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (AbsV s) (TV s) (abs-r s) R))
+rn-absurd Δ' Δ w s R Pn Xn =
+  (c-absurd (fst Pn) (fst Xn) ,
+   nn-fm-out k-ne j-tm Δ' Δ w (AbsV s) s (abs-r s) R (c-absurd (fst Pn) (fst Xn))
+     (nabsurd Δ' s (wact Δ' Δ w (AbsV s) R) (fst Pn) (fst Xn) (snd Pn) (nn-fm-in k-ne j-tm Δ' Δ w (AbsV s) s-empty (abs-x s) R (fst Xn) (snd Xn))))
 ren-nn : {KJ : NK × Jdg} → NN KJ → (Δ' : CCtx) (w : World Δ' (fst (snd (snd KJ)))) →
   RenR (fst KJ) (fst (snd KJ)) Δ' (fst (snd (snd (snd KJ))))
     (wact Δ' (fst (snd (snd KJ))) w (JZ (fst (snd KJ)) (fst (snd (snd (snd KJ))))) (snd (snd (snd (snd (snd KJ))))))
@@ -6727,6 +6804,16 @@ ren-nn (nlnil Γ a A cA nA) Δ' w = rn-lnil Δ' Γ w a A (ren-nn nA Δ' w)
 ren-nn (nlcons Γ a C h t nh nt) Δ' w = rn-lcons Δ' Γ w a C (ren-nn nh Δ' w) (ren-nn nt Δ' w)
 ren-nn (nne-list Γ a X x nx) Δ' w = rn-ne-list Δ' Γ w a X (ren-nn nx Δ' w)
 ren-nn (nty-list Γ a A cA nA) Δ' w = rn-ty-list Δ' Γ w a A (ren-nn nA Δ' w)
+ren-nn (ntt Γ B) Δ' w = (c-tt , nn-fm-out k-nf j-tm Δ' Γ w One1 s-unit unit-v B c-tt (ntt Δ' (wact Δ' Γ w One1 B)))
+ren-nn (nne-unit Γ X x nx) Δ' w = (fst (ren-nn nx Δ' w) , nne-unit Δ' (wact Δ' Γ w (TV s-unit) X) (fst (ren-nn nx Δ' w)) (snd (ren-nn nx Δ' w)))
+ren-nn (nty-unit Γ B) Δ' w = (c-unit , nty-unit Δ' (wact Δ' Γ w One1 B))
+ren-nn (nne-empty Γ X x nx) Δ' w = (fst (ren-nn nx Δ' w) , nne-empty Δ' (wact Δ' Γ w (TV s-empty) X) (fst (ren-nn nx Δ' w)) (snd (ren-nn nx Δ' w)))
+ren-nn (nty-empty Γ B) Δ' w = (c-empty , nty-empty Δ' (wact Δ' Γ w One1 B))
+ren-nn (nabsurd Γ s R cP x nP nx) Δ' w =
+  rn-absurd Δ' Γ w s R
+    (rn-ext Δ' Γ w s-empty (AbsV s) (abs-b s) R s (λ q e → fst (snd q) e)
+       (ren-nn nP (ext-h Δ' s-empty (AbsV s) (abs-b s) (wact Δ' Γ w (AbsV s) R)) (world-keep Δ' Γ s-empty (AbsV s) (abs-b s) R w)))
+    (ren-nn nx Δ' w)
 -- ---------------------------------------------------------------- renaming derivations
 -- (2026-11-14) a derivation renamed along a world (ren-der): the same construction as ren-nn's
 -- (each rule at Δ', its premises and conclusion carried along subM-fmap, binders under world-keep and
@@ -6930,6 +7017,14 @@ rd-lcons Δ' Δ w a C Hn Tn =
         (der-fm-in j-tm Δ' Δ w (ConsV a) (s-list a) (cons-t a) C (fst Tn) (snd Tn))))
 rd-ty-list : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (A : Mean Δ (Sem a)) → RenD j-ty Δ' a (wact Δ' Δ w (Sem a) A) → RenD j-ty Δ' (s-list a) (wact Δ' Δ w (Sem a) A)
 rd-ty-list Δ' Δ w a A An = (c-list (fst An) , dty-list Δ' a (wact Δ' Δ w (Sem a) A) (fst An) (snd An))
+rd-absurd : (Δ' Δ : CCtx) (w : World Δ' Δ) (s : TyShape) (R : Mean Δ (AbsV s)) →
+  RenD j-ty (ext-h Δ' s-empty (AbsV s) (abs-b s) (wact Δ' Δ w (AbsV s) R)) s (abs-mot Δ' s (wact Δ' Δ w (AbsV s) R)) →
+  RenD j-tm Δ' s-empty (wact Δ' Δ w (TV s-empty) (fmapM Δ (AbsV s) (TV s-empty) (abs-x s) R)) →
+  RenD j-tm Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (AbsV s) (TV s) (abs-r s) R))
+rd-absurd Δ' Δ w s R Pn Xn =
+  (c-absurd (fst Pn) (fst Xn) ,
+   der-fm-out j-tm Δ' Δ w (AbsV s) s (abs-r s) R (c-absurd (fst Pn) (fst Xn))
+     (dabsurd Δ' s (wact Δ' Δ w (AbsV s) R) (fst Pn) (fst Xn) (snd Pn) (der-fm-in j-tm Δ' Δ w (AbsV s) s-empty (abs-x s) R (fst Xn) (snd Xn))))
 ren-der : {J : Jdg} → Der J → (Δ' : CCtx) (w : World Δ' (fst (snd J))) →
   RenD (fst J) Δ' (fst (snd (snd J))) (wact Δ' (fst (snd J)) w (JZ (fst J) (fst (snd (snd J)))) (snd (snd (snd (snd J)))))
 ren-der (dvar Γ v) Δ' w = rd-var Δ' Γ w v
@@ -6981,6 +7076,14 @@ ren-der (dtransp Γ a pf X cL c dL dx) Δ' w = rd-transp Δ' Γ w a pf X (ren-de
 ren-der (dlnil Γ a A cA nA) Δ' w = rd-lnil Δ' Γ w a A (ren-der nA Δ' w)
 ren-der (dlcons Γ a C h t nh nt) Δ' w = rd-lcons Δ' Γ w a C (ren-der nh Δ' w) (ren-der nt Δ' w)
 ren-der (dty-list Γ a A cA nA) Δ' w = rd-ty-list Δ' Γ w a A (ren-der nA Δ' w)
+ren-der (dtt Γ B) Δ' w = (c-tt , der-fm-out j-tm Δ' Γ w One1 s-unit unit-v B c-tt (dtt Δ' (wact Δ' Γ w One1 B)))
+ren-der (dty-unit Γ B) Δ' w = (c-unit , dty-unit Δ' (wact Δ' Γ w One1 B))
+ren-der (dty-empty Γ B) Δ' w = (c-empty , dty-empty Δ' (wact Δ' Γ w One1 B))
+ren-der (dabsurd Γ s R cP x dP dx) Δ' w =
+  rd-absurd Δ' Γ w s R
+    (rd-ext Δ' Γ w s-empty (AbsV s) (abs-b s) R s (λ q e → fst (snd q) e)
+       (ren-der dP (ext-h Δ' s-empty (AbsV s) (abs-b s) (wact Δ' Γ w (AbsV s) R)) (world-keep Δ' Γ s-empty (AbsV s) (abs-b s) R w)))
+    (ren-der dx Δ' w)
 
 -- ---------------------------------------------------------------- (6) computability over cubes
 -- (2026-11-12, (6)) Computability of types and of terms, one pair by recursion on the shape (CompE, as
@@ -7055,6 +7158,10 @@ CompE (s-path a) =
      CSof a (CompE a) Δ' (papp-mean Δ' a f (wact Δ' Δ w (TV (s-path a)) X)))
 CompE s-nat = ((λ Δ T → One1) , λ Δ X → CNat Δ X)
 CompE (s-list a) = ((λ Δ T → fst (CompE a) Δ T) , λ Δ X → CList a (CSof a (CompE a)) Δ X)
+CompE s-unit =
+  ((λ Δ T → One1) ,
+   λ Δ X → Sum1 ((B : Mean Δ One1) × PathM Δ (TV s-unit) X (fmapM Δ One1 (TV s-unit) unit-v B)) ((c : Code) × NN (k-ne , (j-tm , Δ , s-unit , c , X))))
+CompE s-empty = ((λ Δ T → One1) , λ Δ X → (c : Code) × NN (k-ne , (j-tm , Δ , s-empty , c , X)))
 CompTy : (s : TyShape) (Δ : CCtx) → Mean Δ (Sem s) → Type 1
 CompTy s = fst (CompE s)
 CompS : (s : TyShape) (Δ : CCtx) → Mean Δ (TV s) → Type 1
@@ -7152,6 +7259,16 @@ list-ren a Ra Δ (cl-cons X C p hc tc) Δ' w =
     (comp-tr a Δ' (wact Δ' Δ w (TV a) (fmapM Δ (ConsV a) (TV a) (cons-h a) C)) (fmapM Δ' (ConsV a) (TV a) (cons-h a) (wact Δ' Δ w (ConsV a) C)) (psym (Mean Δ' (TV a)) (fmapM Δ' (ConsV a) (TV a) (cons-h a) (wact Δ' Δ w (ConsV a) C)) (wact Δ' Δ w (TV a) (fmapM Δ (ConsV a) (TV a) (cons-h a) C)) (subM-fmap Δ' Δ (ConsV a) (TV a) (cons-h a) (world-sub Δ' Δ w) C)) (Ra Δ (fmapM Δ (ConsV a) (TV a) (cons-h a) C) hc Δ' w))
     (clist-tr a (CompS a) Δ' (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) C)) (fmapM Δ' (ConsV a) (TV (s-list a)) (cons-t a) (wact Δ' Δ w (ConsV a) C)) (psym (Mean Δ' (TV (s-list a))) (fmapM Δ' (ConsV a) (TV (s-list a)) (cons-t a) (wact Δ' Δ w (ConsV a) C)) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) C)) (subM-fmap Δ' Δ (ConsV a) (TV (s-list a)) (cons-t a) (world-sub Δ' Δ w) C)) (list-ren a Ra Δ tc Δ' w))
 list-ren a Ra Δ (cl-ne X c n) Δ' w = cl-ne (wact Δ' Δ w (TV (s-list a)) X) (fst (ren-nn n Δ' w)) (snd (ren-nn n Δ' w))
+-- Unit's clause kept along a world (unit-ren: unit through subM-fmap, a neutral by ren-nn)
+unit-ren : (Δ : CCtx) (X : Mean Δ (TV s-unit)) → snd (CompE s-unit) Δ X → (Δ' : CCtx) (w : World Δ' Δ) → snd (CompE s-unit) Δ' (wact Δ' Δ w (TV s-unit) X)
+unit-ren Δ X (inl1 p) Δ' w =
+  inl1 (wact Δ' Δ w One1 (fst p) ,
+        pcat (Mean Δ' (TV s-unit)) (wact Δ' Δ w (TV s-unit) X) (wact Δ' Δ w (TV s-unit) (fmapM Δ One1 (TV s-unit) unit-v (fst p)))
+          (fmapM Δ' One1 (TV s-unit) unit-v (wact Δ' Δ w One1 (fst p)))
+          (λ i → wact Δ' Δ w (TV s-unit) (snd p i))
+          (psym (Mean Δ' (TV s-unit)) (fmapM Δ' One1 (TV s-unit) unit-v (wact Δ' Δ w One1 (fst p))) (wact Δ' Δ w (TV s-unit) (fmapM Δ One1 (TV s-unit) unit-v (fst p)))
+             (subM-fmap Δ' Δ One1 (TV s-unit) unit-v (world-sub Δ' Δ w) (fst p))))
+unit-ren Δ X (inr1 n) Δ' w = inr1 (ren-nn (snd n) Δ' w)
 comp-ren-e : (s : TyShape) → CRenT s
 comp-ren-e s-bool = ((λ Δ T ct Δ' w → one) , bool-ren)
 comp-ren-e (s-pi a b) =
@@ -7170,6 +7287,8 @@ comp-ren-e (s-path a) =
        (cx Δ2 (world-comp Δ2 Δ' Δ w2 w) f cf nc))
 comp-ren-e s-nat = ((λ Δ T ct Δ' w → one) , λ Δ X cx Δ' w → nat-ren Δ cx Δ' w)
 comp-ren-e (s-list a) = (fst (comp-ren-e a) , λ Δ X cx Δ' w → list-ren a (csof-ren a (comp-ren-e a)) Δ cx Δ' w)
+comp-ren-e s-unit = ((λ Δ T ct Δ' w → one) , unit-ren)
+comp-ren-e s-empty = ((λ Δ T ct Δ' w → one) , λ Δ X cx Δ' w → ren-nn (snd cx) Δ' w)
 comp-ren : (s : TyShape) (Δ : CCtx) (X : Mean Δ (TV s)) → CompS s Δ X → (Δ' : CCtx) (w : World Δ' Δ) → CompS s Δ' (wact Δ' Δ w (TV s) X)
 comp-ren s = csof-ren s (comp-ren-e s)
 
@@ -9921,6 +10040,22 @@ rfy-list : (a : TyShape) → RRT a → RfyT (s-list a)
 rfy-list a Ra Δ X cx = rfy-list-c a Ra Δ (snd cx) (fst cx)
 rfl-list : (a : TyShape) → RRT a → RflT (s-list a)
 rfl-list a Ra Δ X ct c n = (ct , cl-ne X c n)
+-- Unit (unit, or a neutral) and Empty (only neutrals)
+rty-unit : RTyT s-unit
+rty-unit Δ T ct = (c-unit , nty-unit Δ T)
+rfy-unit-c : (Δ : CCtx) (X : Mean Δ (TV s-unit)) → snd (CompE s-unit) Δ X → RenR k-nf j-tm Δ s-unit X
+rfy-unit-c Δ X (inl1 p) = (c-tt , nn-tr k-nf j-tm Δ s-unit c-tt (fmapM Δ One1 (TV s-unit) unit-v (fst p)) X (psym (Mean Δ (TV s-unit)) X (fmapM Δ One1 (TV s-unit) unit-v (fst p)) (snd p)) (ntt Δ (fst p)))
+rfy-unit-c Δ X (inr1 n) = (fst n , nne-unit Δ X (fst n) (snd n))
+rfy-unit : RfyT s-unit
+rfy-unit Δ X cx = rfy-unit-c Δ X (snd cx)
+rfl-unit : RflT s-unit
+rfl-unit Δ X ct c n = (ct , inr1 (c , n))
+rty-empty : RTyT s-empty
+rty-empty Δ T ct = (c-empty , nty-empty Δ T)
+rfy-empty : RfyT s-empty
+rfy-empty Δ X cx = (fst (snd cx) , nne-empty Δ X (fst (snd cx)) (snd (snd cx)))
+rfl-empty : RflT s-empty
+rfl-empty Δ X ct c n = (ct , (c , n))
 rr : (s : TyShape) → RRT s
 rr s-bool = (rty-bool , rfy-bool , rfl-bool)
 rr (s-pi a b) = (rty-pi a b (rr a) (rr b) , rfy-pi a b (rr a) (rr b) , rfl-pi a b (rr a) (rr b))
@@ -9928,6 +10063,8 @@ rr (s-sig a b) = (rty-sig a b (rr a) (rr b) , rfy-sig a b (rr a) (rr b) , rfl-si
 rr (s-path a) = (rty-path a (rr a) , rfy-path a (rr a) , rfl-path a (rr a))
 rr s-nat = (rty-nat , rfy-nat , rfl-nat)
 rr (s-list a) = (rty-list a (rr a) , rfy-list a (rr a) , rfl-list a (rr a))
+rr s-unit = (rty-unit , rfy-unit , rfl-unit)
+rr s-empty = (rty-empty , rfy-empty , rfl-empty)
 
 
 -- ---------------------------------------------------------------- fund (4a): a cube of arguments over sub-tot
@@ -10657,6 +10794,33 @@ fund-lcons Γ a C Δ σ ch ct =
      (comp-tr a Δ (subM Δ Γ (TV a) σ (fmapM Γ (ConsV a) (TV a) (cons-h a) C)) (fmapM Δ (ConsV a) (TV a) (cons-h a) (subM Δ Γ (ConsV a) σ C)) (psym (Mean Δ (TV a)) (fmapM Δ (ConsV a) (TV a) (cons-h a) (subM Δ Γ (ConsV a) σ C)) (subM Δ Γ (TV a) σ (fmapM Γ (ConsV a) (TV a) (cons-h a) C)) (subM-fmap Δ Γ (ConsV a) (TV a) (cons-h a) σ C)) ch)
      (clist-tr a (CompS a) Δ (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) (subM Δ Γ (ConsV a) σ C)) (psym (Mean Δ (TV (s-list a))) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) (subM Δ Γ (ConsV a) σ C)) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C)) (subM-fmap Δ Γ (ConsV a) (TV (s-list a)) (cons-t a) σ C)) (snd ct)))
 
+-- the motive at the generic point and at the scrutinee for absurd (ag-p, am-gen, am-scr: case's, at Empty)
+ag-p : (Γ : CCtx) (s : TyShape) (R : Mean Γ (AbsV s)) (Δ : CCtx) (σ : Sub Δ Γ) → PathM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ z → fst z) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R))) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (AbsV s) (λ y → y) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ (AbsV s) (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) R))
+ag-p Γ s R Δ σ = (pcat (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s)) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ z → fst z) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R))) (ext-lift Δ s-empty (AbsV s) (abs-b s) (AbsV s) (λ q x → q) (subM Δ Γ (AbsV s) σ R)) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (AbsV s) (λ y → y) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ (AbsV s) (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) R)) (lift-fm Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q x → (q , x)) (λ z → fst z)) (pcat (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s)) (ext-lift Δ s-empty (AbsV s) (abs-b s) (AbsV s) (λ q x → q) (subM Δ Γ (AbsV s) σ R)) (wact (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (fmapM Δ (AbsV s) (AbsV s) (λ q → q) (subM Δ Γ (AbsV s) σ R))) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (AbsV s) (λ y → y) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ (AbsV s) (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) R)) (psym (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s)) (wact (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (fmapM Δ (AbsV s) (AbsV s) (λ q → q) (subM Δ Γ (AbsV s) σ R))) (ext-lift Δ s-empty (AbsV s) (abs-b s) (AbsV s) (λ q x → q) (subM Δ Γ (AbsV s) σ R)) (wk-fm Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R) (AbsV s) (λ q → q))) (pcat (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s)) (wact (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (fmapM Δ (AbsV s) (AbsV s) (λ q → q) (subM Δ Γ (AbsV s) σ R))) (wact (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (subM Δ Γ (AbsV s) σ R)) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (AbsV s) (λ y → y) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ (AbsV s) (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) R)) (cong1 (Mean Δ (AbsV s)) (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s)) (λ N → wact (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) (AbsV s) N) (fmapM Δ (AbsV s) (AbsV s) (λ q → q) (subM Δ Γ (AbsV s) σ R)) (subM Δ Γ (AbsV s) σ R) (fmap-id (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (AbsV s)) (snd Δ) (subM Δ Γ (AbsV s) σ R))) (pcat (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s)) (wact (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (subM Δ Γ (AbsV s) σ R)) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ (AbsV s) (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) R) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (AbsV s) (λ y → y) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ (AbsV s) (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) R)) (psym (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s)) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ (AbsV s) (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) R) (wact (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (subM Δ Γ (AbsV s) σ R)) (subM-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ (AbsV s) R)) (psym (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s)) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (AbsV s) (AbsV s) (λ y → y) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ (AbsV s) (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) R)) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ (AbsV s) (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) R) (fmap-id (dims (fst (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)))) (CtxV (fst (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)))) (FbE (fst (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R))) (AbsV s)) (snd (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R))) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ (AbsV s) (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) R)))))))
+
+-- the motive at the generic point (am-gen: ext-at after weakening, at the new variable; wk-fm, lift-fm)
+am-gen : (Γ : CCtx) (s : TyShape) (R : Mean Γ (AbsV s)) (Δ : CCtx) (σ : Sub Δ Γ) (e : CompEnv Γ Δ σ) (motive : ((Δ' : CCtx) (τ : Sub Δ' (ext-h Γ s-empty (AbsV s) (abs-b s) R)) → CompEnv (ext-h Γ s-empty (AbsV s) (abs-b s) R) Δ' τ → CompTy s Δ' (subM Δ' (ext-h Γ s-empty (AbsV s) (abs-b s) R) (Sem s) τ (abs-mot Γ s R)))) → CompTy s (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (abs-mot Δ s (subM Δ Γ (AbsV s) σ R))
+am-gen Γ s R Δ σ e motive =
+  (ty-tr s (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (ext-h Γ s-empty (AbsV s) (abs-b s) R) (Sem s) (ext-at (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ)) (abs-mot Γ s R)) (abs-mot Δ s (subM Δ Γ (AbsV s) σ R)) (pcat (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (Sem s)) (subM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (ext-h Γ s-empty (AbsV s) (abs-b s) R) (Sem s) (ext-at (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ)) (abs-mot Γ s R)) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yz : (AbsV s)) × El s-empty (abs-b s ((λ y → y) yz))) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (zpt (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ))) (abs-mot Δ s (subM Δ Γ (AbsV s) σ R)) (ext-beta (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ) (Sem s) (λ q b → fst (snd q) b)) (pcat (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (Sem s)) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yz : (AbsV s)) × El s-empty (abs-b s ((λ y → y) yz))) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (zpt (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ))) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R))) (abs-mot Δ s (subM Δ Γ (AbsV s) σ R)) (psym (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (Sem s)) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R))) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yz : (AbsV s)) × El s-empty (abs-b s ((λ y → y) yz))) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (zpt (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ))) (via-snd (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ) (Sem s) (λ z → fst (snd (fst z)) (snd z)))) (lift-fm Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (Sem s) (λ q x → (q , x)) (λ z → fst (snd (fst z)) (snd z))))) (motive (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (ext-at (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ)) (ext-env (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ) (env-w Γ Δ σ e (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R))) (comp-tr s-empty (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (ext-lift Δ s-empty (AbsV s) (abs-b s) (TV s-empty) (λ q x → (abs-b s q , x)) (subM Δ Γ (AbsV s) σ R)) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yz : (AbsV s)) × El s-empty (abs-b s ((λ y → y) yz))) (TV s-empty) (λ z → (abs-b s (fst z) , snd z)) (zpt (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ))) (pcat (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (TV s-empty)) (ext-lift Δ s-empty (AbsV s) (abs-b s) (TV s-empty) (λ q x → (abs-b s q , x)) (subM Δ Γ (AbsV s) σ R)) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (TV s-empty) (λ z → (abs-b s (fst z) , snd z)) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R))) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yz : (AbsV s)) × El s-empty (abs-b s ((λ y → y) yz))) (TV s-empty) (λ z → (abs-b s (fst z) , snd z)) (zpt (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ))) (psym (Mean (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (TV s-empty)) (fmapM (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (TV s-empty) (λ z → (abs-b s (fst z) , snd z)) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R))) (ext-lift Δ s-empty (AbsV s) (abs-b s) (TV s-empty) (λ q x → (abs-b s q , x)) (subM Δ Γ (AbsV s) σ R)) (lift-fm Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (TV s-empty) (λ q x → (q , x)) (λ z → (abs-b s (fst z) , snd z)))) (via-snd (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R (sub-wcomp (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) Δ Γ (world-wk Δ s-empty (AbsV s) (λ γ e ρ → abs-b s (e ρ)) (subM Δ Γ (AbsV s) σ R)) σ) (ext-lift Δ s-empty (AbsV s) (abs-b s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q x → (q , x)) (subM Δ Γ (AbsV s) σ R)) (ag-p Γ s R Δ σ) (TV s-empty) (λ z → (abs-b s (fst z) , snd z)))) (var-comp s-empty rfl-empty Δ (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R) one)))))
+-- the motive at the scrutinee (am-scr: ext-at at the meaning paired with its scrutinee)
+am-scr : (Γ : CCtx) (s : TyShape) (R : Mean Γ (AbsV s)) (Δ : CCtx) (σ : Sub Δ Γ) (e : CompEnv Γ Δ σ) (motive : ((Δ' : CCtx) (τ : Sub Δ' (ext-h Γ s-empty (AbsV s) (abs-b s) R)) → CompEnv (ext-h Γ s-empty (AbsV s) (abs-b s) R) Δ' τ → CompTy s Δ' (subM Δ' (ext-h Γ s-empty (AbsV s) (abs-b s) R) (Sem s) τ (abs-mot Γ s R)))) → CompS s-empty Δ (fmapM Δ (AbsV s) (TV s-empty) (abs-x s) (subM Δ Γ (AbsV s) σ R)) → CompTy s Δ (fmapM Δ (TV s) (Sem s) (λ q → fst q) (fmapM Δ (AbsV s) (TV s) (abs-r s) (subM Δ Γ (AbsV s) σ R)))
+am-scr Γ s R Δ σ e motive cx =
+  (ty-tr s Δ (subM Δ (ext-h Γ s-empty (AbsV s) (abs-b s) R) (Sem s) (ext-at Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R))) (abs-mot Γ s R)) (fmapM Δ (TV s) (Sem s) (λ q → fst q) (fmapM Δ (AbsV s) (TV s) (abs-r s) (subM Δ Γ (AbsV s) σ R))) (pcat (Mean Δ (Sem s)) (subM Δ (ext-h Γ s-empty (AbsV s) (abs-b s) R) (Sem s) (ext-at Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R))) (abs-mot Γ s R)) (fmapM Δ ((yz : (AbsV s)) × El s-empty (abs-b s ((λ y → y) yz))) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (zpt Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R)))) (fmapM Δ (TV s) (Sem s) (λ q → fst q) (fmapM Δ (AbsV s) (TV s) (abs-r s) (subM Δ Γ (AbsV s) σ R))) (ext-beta Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R)) (Sem s) (λ q b → fst (snd q) b)) (pcat (Mean Δ (Sem s)) (fmapM Δ ((yz : (AbsV s)) × El s-empty (abs-b s ((λ y → y) yz))) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (zpt Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R)))) (fmapM Δ ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R))) (fmapM Δ (TV s) (Sem s) (λ q → fst q) (fmapM Δ (AbsV s) (TV s) (abs-r s) (subM Δ Γ (AbsV s) σ R))) (psym (Mean Δ (Sem s)) (fmapM Δ ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R))) (fmapM Δ ((yz : (AbsV s)) × El s-empty (abs-b s ((λ y → y) yz))) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (zpt Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R)))) (via-snd Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R)) (Sem s) (λ z → fst (snd (fst z)) (snd z)))) (pcat (Mean Δ (Sem s)) (fmapM Δ ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (Sem s) (λ z → fst (snd (fst z)) (snd z)) (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R))) (fmapM Δ (AbsV s) (Sem s) (λ q → fst (snd q) (snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM Δ (TV s) (Sem s) (λ q → fst q) (fmapM Δ (AbsV s) (TV s) (abs-r s) (subM Δ Γ (AbsV s) σ R))) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (Sem s) (λ q → (q , snd (snd q))) (λ z → fst (snd (fst z)) (snd z)) (subM Δ Γ (AbsV s) σ R)) (psym (Mean Δ (Sem s)) (fmapM Δ (TV s) (Sem s) (λ q → fst q) (fmapM Δ (AbsV s) (TV s) (abs-r s) (subM Δ Γ (AbsV s) σ R))) (fmapM Δ (AbsV s) (Sem s) (λ q → fst (snd q) (snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) (TV s) (Sem s) (abs-r s) (λ q → fst q) (subM Δ Γ (AbsV s) σ R)))))) (motive Δ (ext-at Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R))) (ext-env Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R)) e (comp-tr s-empty Δ (fmapM Δ (AbsV s) (TV s-empty) (abs-x s) (subM Δ Γ (AbsV s) σ R)) (fmapM Δ ((yz : (AbsV s)) × El s-empty (abs-b s ((λ y → y) yz))) (TV s-empty) (λ z → (abs-b s (fst z) , snd z)) (zpt Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R)))) (pcat (Mean Δ (TV s-empty)) (fmapM Δ (AbsV s) (TV s-empty) (abs-x s) (subM Δ Γ (AbsV s) σ R)) (fmapM Δ ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (TV s-empty) (λ z → (abs-b s (fst z) , snd z)) (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R))) (fmapM Δ ((yz : (AbsV s)) × El s-empty (abs-b s ((λ y → y) yz))) (TV s-empty) (λ z → (abs-b s (fst z) , snd z)) (zpt Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R)))) (psym (Mean Δ (TV s-empty)) (fmapM Δ ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (TV s-empty) (λ z → (abs-b s (fst z) , snd z)) (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R))) (fmapM Δ (AbsV s) (TV s-empty) (abs-x s) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (TV s-empty) (λ q → (q , snd (snd q))) (λ z → (abs-b s (fst z) , snd z)) (subM Δ Γ (AbsV s) σ R))) (via-snd Δ Γ s-empty (AbsV s) (AbsV s) (λ y → y) (abs-b s) R σ (fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (λ q → (q , snd (snd q))) (subM Δ Γ (AbsV s) σ R)) (fmapM-fmapM Δ (AbsV s) ((yq : (AbsV s)) × El s-empty (abs-b s yq)) (AbsV s) (λ q → (q , snd (snd q))) (λ z → fst z) (subM Δ Γ (AbsV s) σ R)) (TV s-empty) (λ z → (abs-b s (fst z) , snd z)))) cx))))
+
+-- (2026-11-14, (D)) absurd's case of fund: the scrutinee's clause is a neutral, reflected with the
+-- motive reified at the generic point (am-gen) and at the scrutinee (am-scr), as case's neutral branch;
+-- abs-ne' over the reified motive as a variable
+abs-cx : (Γ : CCtx) (s : TyShape) (R : Mean Γ (AbsV s)) (Δ : CCtx) (σ : Sub Δ Γ) → CompS s-empty Δ (subM Δ Γ (TV s-empty) σ (fmapM Γ (AbsV s) (TV s-empty) (abs-x s) R)) → CompS s-empty Δ (fmapM Δ (AbsV s) (TV s-empty) (abs-x s) (subM Δ Γ (AbsV s) σ R))
+abs-cx Γ s R Δ σ cx = comp-tr s-empty Δ (subM Δ Γ (TV s-empty) σ (fmapM Γ (AbsV s) (TV s-empty) (abs-x s) R)) (fmapM Δ (AbsV s) (TV s-empty) (abs-x s) (subM Δ Γ (AbsV s) σ R)) (psym (Mean Δ (TV s-empty)) (fmapM Δ (AbsV s) (TV s-empty) (abs-x s) (subM Δ Γ (AbsV s) σ R)) (subM Δ Γ (TV s-empty) σ (fmapM Γ (AbsV s) (TV s-empty) (abs-x s) R)) (subM-fmap Δ Γ (AbsV s) (TV s-empty) (abs-x s) σ R)) cx
+abs-ne' : (Γ : CCtx) (s : TyShape) (R : Mean Γ (AbsV s)) (Δ : CCtx) (σ : Sub Δ Γ) (c : Code) (rP : RenR k-nf j-ty (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) s (abs-mot Δ s (subM Δ Γ (AbsV s) σ R))) → CompTy s Δ (fmapM Δ (TV s) (Sem s) (λ q → fst q) (fmapM Δ (AbsV s) (TV s) (abs-r s) (subM Δ Γ (AbsV s) σ R))) → NN (k-ne , (j-tm , Δ , s-empty , c , (fmapM Δ (AbsV s) (TV s-empty) (abs-x s) (subM Δ Γ (AbsV s) σ R)))) → CompS s Δ (fmapM Δ (AbsV s) (TV s) (abs-r s) (subM Δ Γ (AbsV s) σ R))
+abs-ne' Γ s R Δ σ c rP mt nx = snd (snd (rr s)) Δ (fmapM Δ (AbsV s) (TV s) (abs-r s) (subM Δ Γ (AbsV s) σ R)) mt (c-absurd (fst rP) c) (nabsurd Δ s (subM Δ Γ (AbsV s) σ R) (fst rP) c (snd rP) nx)
+fund-absurd : (Γ : CCtx) (s : TyShape) (R : Mean Γ (AbsV s)) (Δ : CCtx) (σ : Sub Δ Γ) (e : CompEnv Γ Δ σ) → CompS s-empty Δ (subM Δ Γ (TV s-empty) σ (fmapM Γ (AbsV s) (TV s-empty) (abs-x s) R)) → ((Δ' : CCtx) (τ : Sub Δ' (ext-h Γ s-empty (AbsV s) (abs-b s) R)) → CompEnv (ext-h Γ s-empty (AbsV s) (abs-b s) R) Δ' τ → CompTy s Δ' (subM Δ' (ext-h Γ s-empty (AbsV s) (abs-b s) R) (Sem s) τ (abs-mot Γ s R))) → CompS s Δ (subM Δ Γ (TV s) σ (fmapM Γ (AbsV s) (TV s) (abs-r s) R))
+fund-absurd Γ s R Δ σ e cx motive =
+  comp-tr s Δ (fmapM Δ (AbsV s) (TV s) (abs-r s) (subM Δ Γ (AbsV s) σ R)) (subM Δ Γ (TV s) σ (fmapM Γ (AbsV s) (TV s) (abs-r s) R)) (subM-fmap Δ Γ (AbsV s) (TV s) (abs-r s) σ R)
+    (abs-ne' Γ s R Δ σ (fst (snd (abs-cx Γ s R Δ σ cx))) (fst (rr s) (ext-h Δ s-empty (AbsV s) (abs-b s) (subM Δ Γ (AbsV s) σ R)) (abs-mot Δ s (subM Δ Γ (AbsV s) σ R)) (am-gen Γ s R Δ σ e motive)) (am-scr Γ s R Δ σ e motive (abs-cx Γ s R Δ σ cx)) (snd (snd (abs-cx Γ s R Δ σ cx))))
+fund-tt : (Γ : CCtx) (B : Mean Γ One1) (Δ : CCtx) (σ : Sub Δ Γ) → CompS s-unit Δ (subM Δ Γ (TV s-unit) σ (fmapM Γ One1 (TV s-unit) unit-v B))
+fund-tt Γ B Δ σ = (one , inl1 ((subM Δ Γ One1 σ B) , (psym (Mean Δ (TV s-unit)) (fmapM Δ One1 (TV s-unit) unit-v (subM Δ Γ One1 σ B)) (subM Δ Γ (TV s-unit) σ (fmapM Γ One1 (TV s-unit) unit-v B)) (subM-fmap Δ Γ One1 (TV s-unit) unit-v σ B))))
+
 -- ---------------------------------------------------------------- fund: the fundamental lemma
 -- (2026-11-14) a derivation's meaning under a computable substitution is computable: a term's at its
 -- shape (CompS), a type's (CompTy); one function on Der over the tag, each rule's case its lemma above,
@@ -10699,6 +10863,10 @@ fund (dtransp Γ a pf X cL c dL dx) Δ σ e = fund-tr Γ a pf X Δ σ (fund dx �
 fund (dlnil Γ a A cA dA) Δ σ e = fund-lnil Γ a A Δ σ (fund dA Δ σ e)
 fund (dlcons Γ a C h t dh dt) Δ σ e = fund-lcons Γ a C Δ σ (fund dh Δ σ e) (fund dt Δ σ e)
 fund (dty-list Γ a A cA dA) Δ σ e = fund dA Δ σ e
+fund (dtt Γ B) Δ σ e = fund-tt Γ B Δ σ
+fund (dty-unit Γ B) Δ σ e = one
+fund (dty-empty Γ B) Δ σ e = one
+fund (dabsurd Γ s R cP x dP dx) Δ σ e = fund-absurd Γ s R Δ σ e (fund dx Δ σ e) (λ Δ' τ e' → fund dP Δ' τ e')
 
 -- ---------------------------------------------------------------- reflect-env, normalize, reifySound
 -- (2026-11-14) typed contexts: the empty one, an extension by a type with a derivation, by a dimension
@@ -10794,11 +10962,11 @@ normalize-ty Γ tΓ s A =
 DSubst : (Γ Δ : CCtx) → Sub Δ Γ → Type 1
 DSubst Γ Δ σ = (dsF : CanonCM (fst Δ) (fst Γ) (fst σ)) ×
   ((v : VarP (fst Γ)) → (dc : Code) × Der (j-tm , Δ , var-shape (fst Γ) v , dc , subM Δ Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)))
+dsub-v : (Δ : CCtx) → TCtx Δ → (sv : TyShape) (M : Mean Δ (TV sv)) (dc : Code) → Der (j-tm , Δ , sv , dc , M) → CompS sv Δ M
+dsub-v Δ tΔ sv M dc d = comp-tr sv Δ (subM Δ Δ (TV sv) (sub-id Δ) M) M (subM-id Δ (TV sv) M) (fund d Δ (sub-id Δ) (id-env Δ tΔ))
 dsub-env : (Γ Δ : CCtx) → TCtx Δ → (σ : Sub Δ Γ) → DSubst Γ Δ σ → CompEnv Γ Δ σ
 dsub-env Γ Δ tΔ σ ds =
-  (fst ds , λ v → comp-tr (var-shape (fst Γ) v) Δ (subM Δ Δ (TV (var-shape (fst Γ) v)) (sub-id Δ) (subM Δ Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)))
-     (subM Δ Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)) (subM-id Δ (TV (var-shape (fst Γ) v)) (subM Δ Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)))
-     (fund (snd (snd ds v)) Δ (sub-id Δ) (id-env Δ tΔ)))
+  (fst ds , λ v → dsub-v Δ tΔ (var-shape (fst Γ) v) (subM Δ Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)) (fst (snd ds v)) (snd (snd ds v)))
 subst-tm : (Γ Δ : CCtx) → TCtx Δ → (σ : Sub Δ Γ) → DSubst Γ Δ σ → (s : TyShape) → TCode Γ s → TCode Δ s
 subst-tm Γ Δ tΔ σ ds s t =
   (fst (fst (snd (rr s)) Δ (subM Δ Γ (TV s) σ (teval Γ s t)) (fund (snd (snd t)) Δ σ (dsub-env Γ Δ tΔ σ ds))) ,

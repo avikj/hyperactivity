@@ -263,3 +263,22 @@ ltfn-d = dlcons emp2 s-bool lc1 c-true (c-lcons c-false c-lnil) (dtrue emp2 one-
 tΓl2 : TCtx Γl2
 tΓl2 = tc-ty emp2 tc-nil (s-list s-bool) one-u (c-list c-bool) (dty-list emp2 s-bool one-u c-bool (dty-bool emp2 one-u))
 #same fst (normalize-nf Γl2 tΓl2 (s-list s-bool) (cvar #0 , varCube Γl2 none , dvar Γl2 none)) = cvar #0
+-- ---------------------------------------------------------------- Unit and Empty
+-- tt normalizes to itself; a Unit variable stays neutral; e : Empty, absurd (λ _. Bool) e stays neutral
+tt-d : Der (j-tm , emp2 , s-unit , c-tt , fmapM emp2 One1 (TV s-unit) unit-v one-u)
+tt-d = dtt emp2 one-u
+#same fst (normalize-nf emp2 tc-nil s-unit (c-tt , fmapM emp2 One1 (TV s-unit) unit-v one-u , tt-d)) = c-tt
+Γu2 : CCtx
+Γu2 = ext-h emp2 s-unit (Sem s-unit) (λ A → A) one-u
+tΓu2 : TCtx Γu2
+tΓu2 = tc-ty emp2 tc-nil s-unit one-u c-unit (dty-unit emp2 one-u)
+#same fst (normalize-nf Γu2 tΓu2 s-unit (cvar #0 , varCube Γu2 none , dvar Γu2 none)) = cvar #0
+Γe2 : CCtx
+Γe2 = ext-h emp2 s-empty (Sem s-empty) (λ A → A) one-u
+tΓe2 : TCtx Γe2
+tΓe2 = tc-ty emp2 tc-nil s-empty one-u c-empty (dty-empty emp2 one-u)
+ab-R : Mean Γe2 (AbsV s-bool)
+ab-R = λ ρ → (one , (λ e → one) , snd ρ)
+ab-d : Der (j-tm , Γe2 , s-bool , c-absurd c-bool (cvar #0) , fmapM Γe2 (AbsV s-bool) (TV s-bool) (abs-r s-bool) ab-R)
+ab-d = dabsurd Γe2 s-bool ab-R c-bool (cvar #0) (dty-bool (ext-h Γe2 s-empty (AbsV s-bool) (abs-b s-bool) ab-R) (abs-mot Γe2 s-bool ab-R)) (dvar Γe2 none)
+#same fst (normalize-nf Γe2 tΓe2 s-bool (c-absurd c-bool (cvar #0) , fmapM Γe2 (AbsV s-bool) (TV s-bool) (abs-r s-bool) ab-R , ab-d)) = c-absurd c-bool (cvar #0)
