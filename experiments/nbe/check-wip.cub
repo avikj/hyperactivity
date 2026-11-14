@@ -357,3 +357,62 @@ lam-ok ts b t1 t2 cb =
                                PT-lift n One1 (CtxV (sk ts)) (CtxV (sk (cons t1 ts))) (FbE (sk ts) (TV (s-pi A B))) (FbE (sk (cons t1 ts)) (TV B))
                                  (into ts) fx (λ γ e ρ → (snd (fst (e (fst ρ))) (snd ρ) , snd (e (fst ρ)) (snd ρ))) gX (cube0 ts) (~ i)))
            (snd cb)))
+-- the mode: checking at a type, or synthesizing one
+data Mode = mchk (t : STy) | msyn
+RT : (ts : List STy) (c : Code) (m : Mode) → Type 1
+RT ts c (mchk t) = May (CK ts c t)
+RT ts c msyn = May (SY ts c)
+-- a synthesized result given in either mode
+finish : (ts : List STy) (c : Code) (m : Mode) → May (SY ts c) → RT ts c m
+finish ts c (mchk t) s = to-chk ts c t s
+finish ts c msyn s = s
+-- a variable synthesizes its type
+syn-var : (ts : List STy) (k : Word) → May (SY ts (cvar k))
+syn-var ts k =
+  case lookw ts k return (λ o → May (SY ts (cvar k))) of
+    none → may-no
+    some p → may-yes (vty ts (fst p) ,
+                      venv ts (fst p) ,
+                      transport (λ i → Der (j-tm , ctx-of ts , shp (vty ts (fst p)) , cvar (snd p i) ,
+                                            ptM ts (TV (shp (vty ts (fst p)))) (λ x ρ → (sem (vty ts (fst p)) , venv ts (fst p) x ρ))))
+                        (vder ts (fst p)))
+-- an application synthesizes the function's codomain, its argument checked at the domain
+app-at : (ts : List STy) (f a : Code) (t : STy) → CK ts f t → ((t1 : STy) → May (CK ts a t1)) → May (SY ts (capp f a))
+app-at ts f a sbool cf ca = may-no
+app-at ts f a (sarr t1 t2) cf ca =
+  case ca t1 return (λ o → May (SY ts (capp f a))) of
+    may-no → may-no
+    may-yes q → may-yes (t2 , app-ok ts f a t1 t2 cf q)
+syn-app : (ts : List STy) (f a : Code) → May (SY ts f) → ((t1 : STy) → May (CK ts a t1)) → May (SY ts (capp f a))
+syn-app ts f a sf ca =
+  case sf return (λ o → May (SY ts (capp f a))) of
+    may-no → may-no
+    may-yes r → app-at ts f a (fst r) (snd r) ca
+-- a λ checks at a function type
+lam-at : (ts : List STy) (b : Code) (t : STy) → ((t1 t2 : STy) → May (CK (cons t1 ts) b t2)) → May (CK ts (clam b) t)
+lam-at ts b sbool cb = may-no
+lam-at ts b (sarr t1 t2) cb =
+  case cb t1 t2 return (λ o → May (CK ts (clam b) (sarr t1 t2))) of
+    may-no → may-no
+    may-yes r → may-yes (lam-ok ts b t1 t2 r)
+-- a λ in either mode: it checks at a function type and does not synthesize
+lam-m : (ts : List STy) (b : Code) (m : Mode) → ((t1 t2 : STy) → May (CK (cons t1 ts) b t2)) → RT ts (clam b) m
+lam-m ts b (mchk t) cb = lam-at ts b t cb
+lam-m ts b msyn cb = may-no
+-- the checker: a derivation of the code at the type checked, or of the type it synthesizes (the
+-- context after the code, so its change under a λ is a later argument of the structural call)
+ck : (c : Code) (ts : List STy) (m : Mode) → RT ts c m
+ck (cvar k) ts m = finish ts (cvar k) m (syn-var ts k)
+ck (clam b) ts m = lam-m ts b m (λ t1 t2 → ck b (cons t1 ts) (mchk t2))
+ck (capp f a) ts m = finish ts (capp f a) m (syn-app ts f a (ck f ts msyn) (λ t1 → ck a ts (mchk t1)))
+ck c ts m = finish ts c m may-no
+
+-- ---------------------------------------------------------------- examples: raw codes checked, then normalized
+-- a closed checked term as a typed code, or none
+tcode-of : (c : Code) (t : STy) → May (CK nil c t) → Opt Code
+tcode-of c t r =
+  case r return (λ o → Opt Code) of
+    may-no → none
+    may-yes q → some (fst (normalize-nf (ctx-of nil) tc-nil (shp t) (c , ptM nil (TV (shp t)) (λ x ρ → (sem t , fst q x ρ)) , snd q)))
+-- λ x. x checks at Bool → Bool, and normalizes to itself
+#same tcode-of (clam (cvar #0)) (sarr sbool sbool) (ck (clam (cvar #0)) nil (mchk (sarr sbool sbool))) = some (clam (cvar #0))
