@@ -329,7 +329,12 @@ composition-with-systems = node "Composition with a system on the context's face
 -- term with two binders or an application does not finish: λ f. λ x. x runs out of memory after a
 -- quarter hour, and λ f. λ x. f x crashes the machine (src/net.c record_build_n with a null record,
 -- reached from interact during the reading; the same with CUBICAL_NOSWEEP, CUBICAL_NOMEMO, one
--- worker and an empty store), while the checking alone answers at once. The derivations carry the
+-- worker and an empty store), while the checking alone answers at once. The machine now reports
+-- such a case instead of crashing (src/net.c: a case meeting a constructor of another data type, or
+-- one with no branch, names both and stops; the library checks unchanged with it, 1936 passed and
+-- the 24 known failures of lib/derive.cub), and the report here is: a case on Empty met none, a
+-- variable read in an empty context (VarP lnil is Empty), during the normalization of the
+-- checker's derivation of λ f. λ x. f x. The derivations carry the
 -- transports (der-tr, transport along PT-map and PT-lift) whose paths are constant at a concrete
 -- context but are compositions at the type the definitions are checked at; the normalizer then
 -- composes through every field of every transported derivation. Next: the crash is a defect of the

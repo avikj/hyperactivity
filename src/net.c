@@ -2871,6 +2871,14 @@ static void interact(Cell *o, Cell *v) {
              * gets, per recursive field, its elimination by the same case, suspended */
             ConInfo *ci = &CON[v->a];
             int k = ci->index, nf = ci->nfields, nd = ci->ndims, nr = ci->nrec;
+            /* a case meets a constructor of its own data type, whose branch it has; anything else
+             * is a value of the wrong type reaching the case, reported where it happens */
+            if (ci->data != tb->d || !tb->br[k]) {
+                fflush(stdout);
+                fprintf(stderr, "internal error: a case on data type %d (the type of %s) met constructor %s (data type %d, index %d)%s\n",
+                        tb->d, data_first_con(tb->d), ci->name ? ci->name : "?", ci->data, k, tb->br[k] ? "" : ", which has no branch");
+                abort();
+            }
             bool ih = nr && (tb->mask >> k & 1);
             int np = nf + (ih ? nr : 0) + nd;
             Port prm[np + 1], env[ne + 1];

@@ -370,6 +370,7 @@ enum { PO_I64ADD, PO_I64SUB, PO_I64MUL, PO_I64EQ, PO_I64LT, PO_U32ADD, PO_U32SUB
        PO_U64OFW, PO_WOFU64, PO_N };   /* fty: λ params x. the field's type at x */
 extern FldInfo *FLD;
 extern ConInfo *CON;
+const char *data_first_con(int d);
 extern DataInfo *DATA;
 extern long case_hcomp_global;
 /* an elimination's branches: one record per constructor, parameters its fields, [the induction

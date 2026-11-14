@@ -338,6 +338,8 @@ static bool rec_shape(Node *A, const char *D, char *out, int *n) {
 /* data types: higher inductive types (Coquand–Huber–Mörtberg), declared by
  * (data ...) below; constructors are values, eliminated by %case */
 ConInfo *CON; static size_t capcon; static int ncon;
+/* the name of data type d's first constructor (for reports naming a data type by its index) */
+const char *data_first_con(int d) { for (int i = 0; i < ncon; i++) if (CON[i].data == d) return CON[i].name; return "?"; }
 DataInfo *DATA; static size_t capdata; static int ndata;
 /* codata types' fields: a field applied to a value is its projection */
 FldInfo *FLD; static size_t capfld; static int nfld;
