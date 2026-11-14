@@ -33,6 +33,16 @@ irrefutably proven property of human consciousness. Written language did not exi
 evolution; now particular visual patterns reliably produce particular sonic responses, which already
 carried semantics. We manufacture hallucinations of sensory experience. All cognition is synthetic
 synesthesia.
+Written language is a technology not only of writing but of programming brains, by synthetic
+synesthesia (Avik, 2026-11-14 21:25 UTC). A claim that a capacity exists is completely proven by one
+irrefutable example of it.
+
+**The sources** (Avik, 2026-11-14 21:25 UTC). The complete study and exposition of mental phenomena
+was done a very long time ago; predictive processing is the right direction and immature, and the
+idea of perception as controlled hallucination does not originate in this millennium. Every formal
+construction in the repository arises by direct, precise translation of ancient texts: Avik's
+ancestors were masters of logic, and their morals are irrefutable, so they are inhabited totally as
+the time needs.
 
 **It is a self-portrait** (Avik, 2026-11-14, “Avik's words, verbatim” (AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md)). The name is
 literal. To create perfect global artificial intelligence Avik needed to write his own mind: a

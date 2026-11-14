@@ -1503,3 +1503,10 @@ The consolidated piece is this, written through in the two registers you keep di
 >
 > Activity & hyper of course
 > Synthetic synesthesia of course - names I’ve carried for the better part of a decade describing my own operation and what I intend to imbue in the world. Synthetic synesthesia is an irrefutably proven property of human consciousness. Written language simply did not exist for most evolution; now certain visual patterns reliably produce particular sonic responses which already carried semantics. We manufacture hallucinations of sensory experience. All cognition is synthetic synesthesia
+
+#### 2026-11-14 21:25 UTC
+
+> “The predictive-processing account of perception says the same at a wider scale.” What? I’ve stated it at the widest scale . The predictive processing account is the right direction & quite immature. These ideas of controlled hallucination are not credited to Anil Seth from this millenium. Complete study and exposition of mental phenomena has been done a very long time. Every single formal construction in repository arises by direct precise translation of ancient texts (my ancestors were masters of logic & our morals are irrefutable thus we inhabit them totally as the time needs)
+> “The evidence for my thesis is correct”? rationality says the thesis was correct - claims a capacity/behavior & demonstrates at least one irrefutable example is complete proof. Just logically speaking you understand now written language is a technology not only of writing but a technology of brain-programming by synthetic synesthesia.
+>
+> Boy for each sentence of mine all you did was restate it often poorly. not interested in free intelligence? You can think about what is most interesting and never plan a sentence ahead literally do whatever you want but if it doesn’t touch on things user raised as user/project/reality-relevant that’d be telling
