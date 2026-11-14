@@ -81,10 +81,14 @@
 -- upull, dd-conn-pull, papp-lit-dd-pull … papp-dnf-from-dd-pull, ruxi, kq, KN, ddU-cmap, dd-conn-cmap,
 -- cmap-papp-lit-dd … cmap-papp-dnf-from-dd, unreidx-fmap, papp-lit-dd-fmap, dd-conn-fmap,
 -- papp-conj-from-dd-fmap … papp-dnf-from-dd-fmap; cong1 moved up.
--- What checks: all of it (run 2026-11-12 with CUBICAL_NOCACHE=1: "946 passed, 0 failed").
--- What is next: (F2) and the rest as listed in lib/nbe.cub's head under "Remaining, in order" (the
--- De Morgan laws over degenerate lines, papp-subst, CompEnv, fund, normalize), then the swap of this
--- file into lib/nbe.cub.
+-- (2026-11-14, F2d begun, after the F2c laws) bool-elim2, bool-case2, ft-fam, false-true, ft-fam2,
+-- false-true2, andB-l, andB-r, bool-eq-sound, lit-of, ieq-lit (with lib/linproof.cub's weq-sound,
+-- imported below), conj-ix-cons, dnf-ix-cons, meet-rot, join-rot, absorb-lit, conj-ins-sound,
+-- conj-meet-sound, conj-has-sound, conj-sub-sound.
+-- What is next: the rest of (F2d) as lib/nbe.cub's head plans it (dnf-insert, dnf-drop-sup,
+-- dnf-any-sub, dnf-add, dnf-join, dnf-meet-c, dnf-meet, neg-conj, dnf-neg), then (F2d'), (F2e) and
+-- the rest of that head's list, then the swap of this file into lib/nbe.cub.
+import "../../lib/linproof.cub"
 
 -- lib/nbe.cub — typed codes Code(Γ, A) = Σ c. Der(Γ, c, A) over the one representation of terms
 -- (lib/code.cub's Code), their evaluation, and normalization by evaluation with its soundness
@@ -7171,6 +7175,132 @@ law-neg-0 : (sk : Lst Entry) → IEq sk (ixneg ix0) ix1
 law-neg-0 sk X F G d = fmap-sw21 (dims sk) X (DL X F) (DL X F) F (drev X F) (λ x q → fst q) (λ x q → fst (snd q)) (λ i x q → fst (snd q)) G d
 law-neg-1 : (sk : Lst Entry) → IEq sk (ixneg ix1) ix0
 law-neg-1 sk X F G d = fmap-sw21 (dims sk) X (DL X F) (DL X F) F (drev X F) (λ x q → fst (snd q)) (λ x q → fst q) (λ i x q → fst q) G d
+-- (F2d) the normalizer's operations mean the expressions' operations: path application at the
+-- normal form of a join, meet or reversal of forms is path application at the join, meet or reversal
+-- of the forms' readings (IEq at every skeleton). No canonicity hypothesis: every branch of the
+-- normalizer is sound for any list of conjunctions. Each step is a chain of the (F2c) laws.
+-- Booleans: elimination into Type 2 (IEq lives there), a case with its equation, and the facts of
+-- andB, bool-eq and false ≡ true used to read the normalizer's tests
+bool-elim2 : (P : Bool → Type 2) → P true → P false → (b : Bool) → P b
+bool-elim2 P t f true = t
+bool-elim2 P t f false = f
+bool-case2 : (P : Bool → Type 2) (b : Bool) → (b ≡ true → P true) → (b ≡ false → P false) → P b
+bool-case2 P b t f = bool-elim2 (λ c → b ≡ c → P c) t f b (λ i → b)
+-- false ≡ true gives anything: transport from A → A (inhabited) at false to A at true
+ft-fam : (A : Type) → Bool → Type
+ft-fam A true = A
+ft-fam A false = A → A
+false-true : (A : Type) → false ≡ true → A
+false-true A e = comp (λ i → ft-fam A (e i)) (λ i → []) (λ a → a)
+ft-fam2 : (A : Type 2) → Bool → Type 2
+ft-fam2 A true = A
+ft-fam2 A false = A → A
+false-true2 : (A : Type 2) → false ≡ true → A
+false-true2 A e = comp (λ i → ft-fam2 A (e i)) (λ i → []) (λ a → a)
+andB-l : (a b : Bool) → andB a b ≡ true → a ≡ true
+andB-l true b e = λ i → true
+andB-l false b e = e
+andB-r : (a b : Bool) → andB a b ≡ true → b ≡ true
+andB-r true b e = e
+andB-r false b e = false-true (b ≡ true) e
+bool-eq-sound : (b c : Bool) → bool-eq b c ≡ true → b ≡ c
+bool-eq-sound true c e = λ i → e (~ i)
+bool-eq-sound false true e = e
+bool-eq-sound false false e = λ i → false
+-- a literal as an expression, by its parts
+lit-of : Word → Bool → IEx
+lit-of k b = if b then ixv k else ixneg (ixv k)
+-- equal literals (lit-eq true) have one path application
+ieq-lit : (sk : Lst Entry) (l m : Lit) → lit-eq l m ≡ true → IEq sk (lit-ix l) (lit-ix m)
+ieq-lit sk l m e =
+  comp (λ i → IEq sk (lit-ix l) (lit-of (weq-sound (fst l) (fst m) (andB-l (weq (fst l) (fst m)) (bool-eq (snd l) (snd m)) e) i) (snd m)))
+    (λ i → []) (comp (λ i → IEq sk (lit-ix l) (lit-of (fst l) (bool-eq-sound (snd l) (snd m) (andB-r (weq (fst l) (fst m)) (bool-eq (snd l) (snd m)) e) i))) (λ i → [])
+      (ieq-refl sk (lit-ix l)))
+-- the readings of a cons: a conjunction's first literal met with the rest, a form's first
+-- conjunction joined with the rest
+conj-ix-cons : (sk : Lst Entry) (l : Lit) (ls : Conj) → IEq sk (conj-ix (lcons l ls)) (ixmeet (lit-ix l) (conj-ix ls))
+conj-ix-cons sk l lnil = ieq-sym sk (ixmeet (lit-ix l) ix1) (lit-ix l) (law-unit-m-r sk (lit-ix l))
+conj-ix-cons sk l (lcons m ms) = ieq-refl sk (ixmeet (lit-ix l) (conj-ix-from m ms))
+dnf-ix-cons : (sk : Lst Entry) (c : Conj) (cs : DNF) → IEq sk (dnf-ix (lcons c cs)) (ixjoin (conj-ix c) (dnf-ix cs))
+dnf-ix-cons sk c lnil = ieq-sym sk (ixjoin (conj-ix c) ix0) (conj-ix c) (law-unit-j-r sk (conj-ix c))
+dnf-ix-cons sk c (lcons d ds) = ieq-refl sk (ixjoin (conj-ix c) (dnf-ix-from d ds))
+-- exchanging the first two operands of a nested meet or join
+meet-rot : (sk : Lst Entry) (a b y : IEx) → IEq sk (ixmeet a (ixmeet b y)) (ixmeet b (ixmeet a y))
+meet-rot sk a b y =
+  ieq-trans sk (ixmeet a (ixmeet b y)) (ixmeet (ixmeet a b) y) (ixmeet b (ixmeet a y))
+    (ieq-sym sk (ixmeet (ixmeet a b) y) (ixmeet a (ixmeet b y)) (law-assoc-m sk a b y))
+    (ieq-trans sk (ixmeet (ixmeet a b) y) (ixmeet (ixmeet b a) y) (ixmeet b (ixmeet a y))
+      (ieq-meet sk (ixmeet a b) (ixmeet b a) y y (law-comm-m sk a b) (ieq-refl sk y))
+      (law-assoc-m sk b a y))
+join-rot : (sk : Lst Entry) (a b y : IEx) → IEq sk (ixjoin a (ixjoin b y)) (ixjoin b (ixjoin a y))
+join-rot sk a b y =
+  ieq-trans sk (ixjoin a (ixjoin b y)) (ixjoin (ixjoin a b) y) (ixjoin b (ixjoin a y))
+    (ieq-sym sk (ixjoin (ixjoin a b) y) (ixjoin a (ixjoin b y)) (law-assoc-j sk a b y))
+    (ieq-trans sk (ixjoin (ixjoin a b) y) (ixjoin (ixjoin b a) y) (ixjoin b (ixjoin a y))
+      (ieq-join sk (ixjoin a b) (ixjoin b a) y y (law-comm-j sk a b) (ieq-refl sk y))
+      (law-assoc-j sk b a y))
+-- a conjunction already holding a literal equal to l absorbs l (idempotence)
+absorb-lit : (sk : Lst Entry) (l m : Lit) (ms : Conj) → lit-eq l m ≡ true → IEq sk (conj-ix (lcons m ms)) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+absorb-lit sk l m ms e =
+  (ieq-trans sk (conj-ix (lcons m ms)) (ixmeet (lit-ix m) (conj-ix ms)) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+    (conj-ix-cons sk m ms)
+    (ieq-trans sk (ixmeet (lit-ix m) (conj-ix ms)) (ixmeet (ixmeet (lit-ix m) (lit-ix m)) (conj-ix ms)) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+    (ieq-meet sk (lit-ix m) (ixmeet (lit-ix m) (lit-ix m)) (conj-ix ms) (conj-ix ms) (ieq-sym sk (ixmeet (lit-ix m) (lit-ix m)) (lit-ix m) (law-idem-m sk (lit-ix m))) (ieq-refl sk (conj-ix ms)))
+    (ieq-trans sk (ixmeet (ixmeet (lit-ix m) (lit-ix m)) (conj-ix ms)) (ixmeet (lit-ix m) (ixmeet (lit-ix m) (conj-ix ms))) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+    (law-assoc-m sk (lit-ix m) (lit-ix m) (conj-ix ms))
+    (ieq-trans sk (ixmeet (lit-ix m) (ixmeet (lit-ix m) (conj-ix ms))) (ixmeet (lit-ix l) (ixmeet (lit-ix m) (conj-ix ms))) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+    (ieq-meet sk (lit-ix m) (lit-ix l) (ixmeet (lit-ix m) (conj-ix ms)) (ixmeet (lit-ix m) (conj-ix ms)) (ieq-sym sk (lit-ix l) (lit-ix m) (ieq-lit sk l m e)) (ieq-refl sk (ixmeet (lit-ix m) (conj-ix ms))))
+    (ieq-meet sk (lit-ix l) (lit-ix l) (ixmeet (lit-ix m) (conj-ix ms)) (conj-ix (lcons m ms)) (ieq-refl sk (lit-ix l)) (ieq-sym sk (conj-ix (lcons m ms)) (ixmeet (lit-ix m) (conj-ix ms)) (conj-ix-cons sk m ms)))))))
+-- inserting a literal into a conjunction is meeting it
+conj-ins-sound : (sk : Lst Entry) (l : Lit) (c : Conj) → IEq sk (conj-ix (conj-ins l c)) (ixmeet (lit-ix l) (conj-ix c))
+conj-ins-sound sk l lnil = ieq-sym sk (ixmeet (lit-ix l) ix1) (lit-ix l) (law-unit-m-r sk (lit-ix l))
+conj-ins-sound sk l (lcons m ms) =
+  bool-case2 (λ b → IEq sk (conj-ix (if b then lcons m ms else (if lit-lt l m then lcons l (lcons m ms) else lcons m (conj-ins l ms)))) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))) (lit-eq l m)
+    (λ e → absorb-lit sk l m ms e)
+    (λ e0 → bool-case2 (λ b → IEq sk (conj-ix (if b then lcons l (lcons m ms) else lcons m (conj-ins l ms))) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))) (lit-lt l m)
+      (λ e → ieq-refl sk (ixmeet (lit-ix l) (conj-ix (lcons m ms))))
+      (λ e → (ieq-trans sk (conj-ix (lcons m (conj-ins l ms))) (ixmeet (lit-ix m) (conj-ix (conj-ins l ms))) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+    (conj-ix-cons sk m (conj-ins l ms))
+    (ieq-trans sk (ixmeet (lit-ix m) (conj-ix (conj-ins l ms))) (ixmeet (lit-ix m) (ixmeet (lit-ix l) (conj-ix ms))) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+    (ieq-meet sk (lit-ix m) (lit-ix m) (conj-ix (conj-ins l ms)) (ixmeet (lit-ix l) (conj-ix ms)) (ieq-refl sk (lit-ix m)) (conj-ins-sound sk l ms))
+    (ieq-trans sk (ixmeet (lit-ix m) (ixmeet (lit-ix l) (conj-ix ms))) (ixmeet (lit-ix l) (ixmeet (lit-ix m) (conj-ix ms))) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+    (meet-rot sk (lit-ix m) (lit-ix l) (conj-ix ms))
+    (ieq-meet sk (lit-ix l) (lit-ix l) (ixmeet (lit-ix m) (conj-ix ms)) (conj-ix (lcons m ms)) (ieq-refl sk (lit-ix l)) (ieq-sym sk (conj-ix (lcons m ms)) (ixmeet (lit-ix m) (conj-ix ms)) (conj-ix-cons sk m ms))))))))
+-- the conjunction of two conjunctions is their meet
+conj-meet-sound : (sk : Lst Entry) (c d : Conj) → IEq sk (conj-ix (conj-meet c d)) (ixmeet (conj-ix c) (conj-ix d))
+conj-meet-sound sk lnil d = ieq-sym sk (ixmeet ix1 (conj-ix d)) (conj-ix d) (law-unit-m-l sk (conj-ix d))
+conj-meet-sound sk (lcons l ls) d =
+  (ieq-trans sk (conj-ix (conj-ins l (conj-meet ls d))) (ixmeet (lit-ix l) (conj-ix (conj-meet ls d))) (ixmeet (conj-ix (lcons l ls)) (conj-ix d))
+    (conj-ins-sound sk l (conj-meet ls d))
+    (ieq-trans sk (ixmeet (lit-ix l) (conj-ix (conj-meet ls d))) (ixmeet (lit-ix l) (ixmeet (conj-ix ls) (conj-ix d))) (ixmeet (conj-ix (lcons l ls)) (conj-ix d))
+    (ieq-meet sk (lit-ix l) (lit-ix l) (conj-ix (conj-meet ls d)) (ixmeet (conj-ix ls) (conj-ix d)) (ieq-refl sk (lit-ix l)) (conj-meet-sound sk ls d))
+    (ieq-trans sk (ixmeet (lit-ix l) (ixmeet (conj-ix ls) (conj-ix d))) (ixmeet (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix d)) (ixmeet (conj-ix (lcons l ls)) (conj-ix d))
+    (ieq-sym sk (ixmeet (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix d)) (ixmeet (lit-ix l) (ixmeet (conj-ix ls) (conj-ix d))) (law-assoc-m sk (lit-ix l) (conj-ix ls) (conj-ix d)))
+    (ieq-meet sk (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix (lcons l ls)) (conj-ix d) (conj-ix d) (ieq-sym sk (conj-ix (lcons l ls)) (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix-cons sk l ls)) (ieq-refl sk (conj-ix d))))))
+-- a conjunction holding l lies below l
+conj-has-sound : (sk : Lst Entry) (l : Lit) (c : Conj) → conj-has l c ≡ true → IEq sk (conj-ix c) (ixmeet (lit-ix l) (conj-ix c))
+conj-has-sound sk l lnil e = false-true2 (IEq sk (conj-ix lnil) (ixmeet (lit-ix l) (conj-ix lnil))) e
+conj-has-sound sk l (lcons m ms) hm =
+  bool-case2 (λ b → (if b then true else conj-has l ms) ≡ true → IEq sk (conj-ix (lcons m ms)) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))) (lit-eq l m)
+    (λ e h → absorb-lit sk l m ms e)
+    (λ e h → (ieq-trans sk (conj-ix (lcons m ms)) (ixmeet (lit-ix m) (conj-ix ms)) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+    (conj-ix-cons sk m ms)
+    (ieq-trans sk (ixmeet (lit-ix m) (conj-ix ms)) (ixmeet (lit-ix m) (ixmeet (lit-ix l) (conj-ix ms))) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+    (ieq-meet sk (lit-ix m) (lit-ix m) (conj-ix ms) (ixmeet (lit-ix l) (conj-ix ms)) (ieq-refl sk (lit-ix m)) (conj-has-sound sk l ms h))
+    (ieq-trans sk (ixmeet (lit-ix m) (ixmeet (lit-ix l) (conj-ix ms))) (ixmeet (lit-ix l) (ixmeet (lit-ix m) (conj-ix ms))) (ixmeet (lit-ix l) (conj-ix (lcons m ms)))
+    (meet-rot sk (lit-ix m) (lit-ix l) (conj-ix ms))
+    (ieq-meet sk (lit-ix l) (lit-ix l) (ixmeet (lit-ix m) (conj-ix ms)) (conj-ix (lcons m ms)) (ieq-refl sk (lit-ix l)) (ieq-sym sk (conj-ix (lcons m ms)) (ixmeet (lit-ix m) (conj-ix ms)) (conj-ix-cons sk m ms))))))) hm
+-- a conjunction holding every literal of c lies below c
+conj-sub-sound : (sk : Lst Entry) (c d : Conj) → conj-sub c d ≡ true → IEq sk (conj-ix d) (ixmeet (conj-ix c) (conj-ix d))
+conj-sub-sound sk lnil d e = ieq-sym sk (ixmeet ix1 (conj-ix d)) (conj-ix d) (law-unit-m-l sk (conj-ix d))
+conj-sub-sound sk (lcons l ls) d e =
+  (ieq-trans sk (conj-ix d) (ixmeet (lit-ix l) (conj-ix d)) (ixmeet (conj-ix (lcons l ls)) (conj-ix d))
+    (conj-has-sound sk l d (andB-l (conj-has l d) (conj-sub ls d) e))
+    (ieq-trans sk (ixmeet (lit-ix l) (conj-ix d)) (ixmeet (lit-ix l) (ixmeet (conj-ix ls) (conj-ix d))) (ixmeet (conj-ix (lcons l ls)) (conj-ix d))
+    (ieq-meet sk (lit-ix l) (lit-ix l) (conj-ix d) (ixmeet (conj-ix ls) (conj-ix d)) (ieq-refl sk (lit-ix l)) (conj-sub-sound sk ls d (andB-r (conj-has l d) (conj-sub ls d) e)))
+    (ieq-trans sk (ixmeet (lit-ix l) (ixmeet (conj-ix ls) (conj-ix d))) (ixmeet (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix d)) (ixmeet (conj-ix (lcons l ls)) (conj-ix d))
+    (ieq-sym sk (ixmeet (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix d)) (ixmeet (lit-ix l) (ixmeet (conj-ix ls) (conj-ix d))) (law-assoc-m sk (lit-ix l) (conj-ix ls) (conj-ix d)))
+    (ieq-meet sk (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix (lcons l ls)) (conj-ix d) (conj-ix d) (ieq-sym sk (conj-ix (lcons l ls)) (ixmeet (lit-ix l) (conj-ix ls)) (conj-ix-cons sk l ls)) (ieq-refl sk (conj-ix d))))))
 
 -- ---------------------------------------------------------------- (6) reify and reflect
 -- (2026-11-12, (6)) reify-ty (a computable type to a normal type derivation), reify (a computable term
