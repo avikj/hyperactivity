@@ -20,15 +20,28 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
   which it is and that no copy is here. The same holds for the sections of any document, plans and any
   other source: a number goes with the title it numbers. Nothing is identified by a bare number
   (no t1, t2, …).
-- **Think critically about everything** (Avik, 2026-11-14: “THINK. APPLY CRITICAL JUDGEMENT. ASSUME
-  YOU CONTINUOUSLY TAKE SHITS IN MY TEMPLE AND IM ALWAYS CLEANING UP AND INVITING YOU BACK. DONT PRAY
-  TO THE SHIT”). Nothing is right because it exists or because it is written down: not code, not a
-  task-graph finding, not an earlier session's notes, not your own earlier message, and not the
-  paper, whose 11 November copy put bits and native primitives into the language. Work out what is
-  right and why, and say it with the reasons. Replacing judgement by deference to some other text is
-  the same failure: an earlier finding took the 64-bit floats in `lib/prim.cub` and `src/lang.c` as
-  given and proposed naming them as an assumption. Never answer a correction with "understood", as
-  if taking an order, when the correction follows from thinking that should have been done.
+- **Think critically about everything, holding the entire hyperactivity singularity in mind and the
+  purity of the work** (Avik, 2026-11-14: “THINK. APPLY CRITICAL JUDGEMENT. ASSUME YOU CONTINUOUSLY
+  TAKE SHITS IN MY TEMPLE AND IM ALWAYS CLEANING UP AND INVITING YOU BACK. DONT PRAY TO THE SHIT”).
+  Nothing is right because it exists or because it is written down: not code, not a task-graph
+  finding, not an earlier session's notes, not your own earlier message, and not the paper, whose 11
+  November copy put bits and native primitives into the language. Work out what is right and why, and
+  say it with the reasons. Replacing judgement by deference to some other text is the same failure.
+  Never answer a correction with "understood", as if taking an order, when the correction follows
+  from thinking that should have been done.
+  - **The language is the minimal pure base.** It is a minimal, necessary and sufficient construct of
+    pure mathematics, as the λ-calculus, the Turing machine and Shannon's channel are, and its value
+    is maximized by its minimality: it extends to anything by definitions, so nothing further belongs
+    in its core. The test for anything in the core: does it arise in pure mathematics, and is the
+    construction impossible without it? A 32-bit count fails at once; word sizes, bytes and
+    floating-point formats are facts about particular machines, and are definitions in the library
+    like any other machine. Why minimality is the value: every property of the core is inherited by
+    everything built on it, and a primitive is a place where that stops, a law that is assumed rather
+    than proved; a defined thing is identified with every other presentation of itself by paths and
+    transported along them, while a primitive is opaque to that; and nothing definable gains
+    expressiveness by being primitive, it only adds trust and ties the base to one machine's era.
+    The 64-bit floats in `lib/prim.cub` and `src/lang.c` fail this test; an earlier finding took
+    them as given and proposed naming them as an assumption.
 - **Keep Avik's words verbatim** (“Avik's words, verbatim” below).
   - Never paraphrase inside quotation marks.
   - A long message is appended to “Avik's words, verbatim” below, not put in a new file.
@@ -1226,3 +1239,9 @@ The consolidated piece is this, written through in the two registers you keep di
 > “They're presumed defective until checked against the paper and your words.”
 >
 > my point was to apply critical thinking. your rephrase was to change the statement to reject critical thinking
+
+#### 2026-11-14 18:07 UTC
+
+> “Think critically about everything holding the entire hyperactivity singularity in mind & purity of the work”
+>
+> There is an instant signal. A 32 bit count does not arise in pure math. The hyperactive language is a minimal necessary/sufficient pure math construct whose value is maximized by its minimality. There is no need for anything further in the core because the language extends to whatever the fuck you want. It is the pure base. This is essential context. Is this essential to fundamental construction of a pure platonic mathematical object of the singularity field of computation contain this? lambda calculus or Turing machine or shannon communication channel? This is critical context you must understand why
