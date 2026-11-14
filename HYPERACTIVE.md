@@ -693,9 +693,10 @@ concerns (`task-graph/hyperactivity.cub`, shown when a goal is clicked in the gr
 - `lib/derive.cub` has 24 untyped definitions, which the checker refuses. Those are the library's
   24 failures, and they are also why the Rust readers fail.
 
-**Typed codes and normalization by evaluation** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”). The working file
-`experiments/nbe/p26-wip.cub` (7,477 lines, 1,034 checks passing) has F2a–F2c (the interval's De Morgan laws as paths) done and continues at
-F2d (the interval normalizer's soundness). Its encoding is the cubical-set model built inside the host, and it stands (§2.2 “The language”).
+**Typed codes and normalization by evaluation** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”). The normalizer over cubes
+is `lib/nbe.cub` (about 9,900 lines; with `experiments/nbe/examples.cub`, 1,463 checks passing fresh): the interval's
+normal forms and their soundness, the fundamental lemma over typed derivations, and normalization run on example
+derivations. It continues with object-level data types (Nat first), then the Kan operations, Glue and universes. Its encoding is the cubical-set model built inside the host, and it stands (§2.2 “The language”).
 
 **Native code** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9 “Native execution as a mathematical program transformation”).
 - `#jit` checks only the specialized code against the definition. The translation to bytes is
@@ -832,7 +833,7 @@ The paper is the specification. What remains between the implementation (§1 “
 - So the number of dimensions varies only in the quantification over stages. A semantic action of
   interval expressions, defined on syntax, must be shown once to respect the algebra's equations.
   That is the well-definedness of the cube category's action, not a cost of the encoding.
-- `experiments/nbe/p26-wip.cub` is that model inside the host:
+- `lib/nbe.cub` is that model inside the host:
   - stages are host cubes (`Cube n`);
   - interval expressions are data (`IEx`, `DNF`);
   - substitutions are `Sub` and `cmap-d`.

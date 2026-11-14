@@ -3,10 +3,35 @@
 -- equation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eqs. (6.1) “typed code and its evaluation” and (6.5) “reifySound”). It
 -- imports lib/core.cub and lib/linproof.cub.
 --
--- Status (2026-11-14, latest): the normalizer over cubes is this file. experiments/nbe/p26-wip.cub
+-- Status (2026-11-14, latest): the normalizer over cubes is this file; with experiments/nbe/examples.cub
+-- it checks fresh (CUBICAL_NOCACHE=1): 1463 passed, 0 failed, 2051M steps, 14.7 min. experiments/nbe/p26-wip.cub
 -- and fund-wip.cub were swapped in (in place of P1's families, which are removed; the head below
 -- keeps their history) and deleted; experiments/nbe/examples.cub is rewritten over the new families.
--- Next: the Kan operations, Glue, universes and object-level data types.
+-- Next: the Kan operations, Glue, universes and object-level data types; their plan follows.
+-- After the swap's plan (2026-11-14), worked out before it is built. What the host gives (tested):
+-- comp over a constant Bool reduces on any value, a variable included; comp over a Π type reduces
+-- to a λ (comp over constant Bool → Bool of f is λ x → f x); comp over an abstract constant type is
+-- stuck (no regularity). So an object transport or composition means host comp, and for the shapes
+-- so far that meaning computes; but composition with a system at Bool on a neutral base is stuck, and
+-- transport at a PathP shape is composition in the fibre with the endpoints' system, so the Kan
+-- operations need the object's faces and systems in Der and NN, a formal composition at Bool in the
+-- Bool clause and in NN, and a cube operation interpreting a system's faces over a skeleton's
+-- dimensions (as papp-cube interprets forms). Order: (D) object-level data types, Nat first, needing
+-- no systems: shape s-nat (Sem One1, El Nat), Der's zero, suc and the recursor with its motive over
+-- the extension by Nat and its step over the extension by Nat and the motive (two ext-at), NN's
+-- likewise with the recursor neutral, the clause an inductive family (zero, suc of a computable, or
+-- neutral), comp-ren by induction on it, rr's case by induction, fund's recursor case by induction
+-- on the scrutinee's clause (zero: the base; suc: the step under ext-at twice, the hypothesis by the
+-- induction; neutral: the neutral recursor with the motive and the step reified at the generic points,
+-- reflected at the motive at the scrutinee, as dcase); codes: Nat's own (code Nat's data index), zero
+-- and suc its constructors, the recursor celim with the motive and the step as λs. Then the same for
+-- every strictly positive data type of the language by a description of its constructors. (K) the Kan
+-- operations: transport along a type line first (dtransp: the line over dext Γ and the base; its
+-- meaning host comp along each vertex's line), with the Kan lemma (computability is kept by
+-- transport) by induction on the shape, the fillers over dext; then faces and systems, the formal
+-- composition at Bool, composition with a system, and transport at PathP. (G) Glue and (U) universes
+-- after (K): a universe shape whose El is the smaller shapes' semantic types (the stratum P6), Glue
+-- types over it with the computational univalence of CCHM.
 --
 -- Status (2026-11-14): F2d done; experiments/nbe/p26-wip.cub with lib/linproof.cub imported checks
 -- fresh (CUBICAL_NOCACHE=1): 1150 passed, 0 failed, 687M steps, 7.5 min. F2d' done, fresh: 1247 passed,

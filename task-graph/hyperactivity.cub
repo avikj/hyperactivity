@@ -30,7 +30,7 @@ language-implementation = node "The Hyperactive language and its features, imple
 -- the language's terms as typed
 -- objects in it, Code(Γ, A) = Σ c. Der(Γ, c, A), normalization by evaluation with its soundness
 -- equation, eq. (6.5) “reifySound” of that section, and a checker that returns typing derivations. The plan, step by step, is
--- lib/nbe.cub's head; the working file is experiments/nbe/p26-wip.cub, swapped into lib/nbe.cub
+-- lib/nbe.cub's head; the working file was experiments/nbe/p26-wip.cub, now swapped into lib/nbe.cub
 -- when done. Expanded 2026-11-14, when its step F2d (the interval normalizer's soundness) began.
 -- Known (2026-11-13, from the review of every earlier finding): The language's terms are typed
 -- objects in it, with normalization and its soundness, and the checker returns typing derivations
@@ -38,7 +38,7 @@ language-implementation = node "The Hyperactive language and its features, imple
 -- normalization by
 -- evaluation with its soundness, and a checker that returns typing derivations (lib/check.cub is an
 -- untyped term with no statement of what it accepts; lib/std.cub's primitives give typed programs
--- its operations at asserted types). In progress in experiments/nbe/p26-wip.cub; what remains is in
+-- its operations at asserted types). Now in lib/nbe.cub; what remains is in
 -- lib/nbe.cub's head (F2d the interval normalizer's soundness, F2d' its canonicity, F2e naturality in substitutions, fund, normalize, the swap), then Kan operations, Glue,
 -- universes and object-level data types. This is the easiest language to build it in, not a hard
 -- one (2026-11-13, worked out with Avik): it is normalization for a cubical type theory written
@@ -59,7 +59,7 @@ language-implementation = node "The Hyperactive language and its features, imple
 -- the number of dimensions is variable only in the meta-level quantification over stages, and a
 -- semantic action of interval expressions defined on syntax must be shown to respect the algebra's
 -- equations once: that is the well-definedness of the cube category's action, not an artefact of
--- the encoding. p26-wip.cub is that model built inside the host: stages are host cubes (Cube n),
+-- the encoding. lib/nbe.cub is that model built inside the host: stages are host cubes (Cube n),
 -- interval expressions are data (IEx, DNF), substitutions are Sub and cmap-d; F2a-F2c (every De
 -- Morgan law, no 2-cell) is the well-definedness, F2d the normalizer's soundness, F2d' its
 -- canonicity, F2e naturality in substitutions. Holding an object dimension as a host interval
@@ -603,8 +603,8 @@ archive-track-r = document "../archive/2026-11-11/R-rust.md"
 -- the files each task concerns (2026-11-13)
 file-experiments-isa-build-run-cub : Document
 file-experiments-isa-build-run-cub = document "../experiments/isa/build-run.cub"
-file-experiments-nbe-p26-wip-cub : Document
-file-experiments-nbe-p26-wip-cub = document "../experiments/nbe/p26-wip.cub"
+file-experiments-nbe-examples-cub : Document
+file-experiments-nbe-examples-cub = document "../experiments/nbe/examples.cub"
 file-lib-check-cub : Document
 file-lib-check-cub = document "../lib/check.cub"
 file-lib-compile-meaning-cub : Document
@@ -644,16 +644,16 @@ file-src-net-c = document "../src/net.c"
 file-src-store-c : Document
 file-src-store-c = document "../src/store.c"
 essential-context : List (Node × List Document)
-essential-context = cons (the-product , cons hyperactive-design (cons hyperactive-paper nil)) (cons (product-implementation , cons file-src-lang-c (cons file-src-net-c (cons file-src-store-c (cons file-makefile (cons file-lib-task-graph-cub nil))))) (cons (typed-codes-and-normalization , cons file-lib-check-cub (cons file-experiments-nbe-p26-wip-cub (cons file-lib-nbe-cub nil))) (cons (language-implementation-remainder , cons file-src-lang-c (cons file-src-net-c (cons file-lib-prelude-cub (cons file-lib-deploy-cub (cons file-lib-elf-cub (cons file-lib-compile-meaning-cub (cons file-lib-std-cub (cons file-lib-derive-cub (cons file-lib-prim-cub (cons file-lib-specialize-cub nil)))))))))) (cons (language-support , cons file-experiments-isa-build-run-cub (cons file-lib-isa-tso-cub (cons file-lib-cxx-machine-cub (cons file-lib-cxx-read-expr-cub (cons file-lib-lang-rust-machine-cub nil))))) nil))))
+essential-context = cons (the-product , cons hyperactive-design (cons hyperactive-paper nil)) (cons (product-implementation , cons file-src-lang-c (cons file-src-net-c (cons file-src-store-c (cons file-makefile (cons file-lib-task-graph-cub nil))))) (cons (typed-codes-and-normalization , cons file-lib-check-cub (cons file-experiments-nbe-examples-cub (cons file-lib-nbe-cub nil))) (cons (language-implementation-remainder , cons file-src-lang-c (cons file-src-net-c (cons file-lib-prelude-cub (cons file-lib-deploy-cub (cons file-lib-elf-cub (cons file-lib-compile-meaning-cub (cons file-lib-std-cub (cons file-lib-derive-cub (cons file-lib-prim-cub (cons file-lib-specialize-cub nil)))))))))) (cons (language-support , cons file-experiments-isa-build-run-cub (cons file-lib-isa-tso-cub (cons file-lib-cxx-machine-cub (cons file-lib-cxx-read-expr-cub (cons file-lib-lang-rust-machine-cub nil))))) nil))))
 -- the root: what Avik wants
 roots : List Node
 roots = cons the-product nil
 -- the leaves being worked on now, and the leaves whose work is done; every other leaf is pending
 -- (HYPERACTIVE.md §2.4 “The organization of the work”)
 in-progress : List Node
-in-progress = cons normalizer-replaces-p1 nil
+in-progress = cons typed-codes-after-swap nil
 resolved : List Node
-resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes nil))))
+resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 nil)))))
 -- language support starts only when the language implementation and the product implementation are
 -- done (Avik, 2026-11-13)
 after : List (Node × List Node)
