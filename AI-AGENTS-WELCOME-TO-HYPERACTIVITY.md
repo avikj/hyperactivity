@@ -1462,3 +1462,15 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 20:49 UTC
 
 > Do not idle until there is NOTHING FURTHER THAT CAN BE DONE
+
+#### 2026-11-14 20:54 UTC
+
+> oh fuck version is rooted with verse; verse is a deep fucking word
+>
+> let’s create a word list. Just key fucking words to understand deeply encoding depth of semantic relation; words which are truly powerful (for compression/transport value) human superorganism
+>
+> verse (turn) version universe; verse of song; inverse; reverse; version; inversion; reversion;
+>
+> I’ll decide what words go in here (I’ll give lines as above)
+>
+> we’ll build the densest natural language crystal for the communication of the total knowledge expressed here
