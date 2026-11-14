@@ -232,3 +232,21 @@ ptM : (ts : List STy) (Z : Type 1) (g : (x : One1) → EnvV (sk ts) (into ts x) 
 ptM ts Z g =
   dcube-reidx (dims (sk ts)) One1 (CtxV (sk ts)) (λ x → FbE (sk ts) Z (into ts x)) (FbE (sk ts) Z) (into ts) (λ x y → y) (cube0 ts)
     (dcube-of (dims (sk ts)) One1 (λ x → FbE (sk ts) Z (into ts x)) g (cube0 ts))
+-- the derivation of a simple type in any context of simple types, at its constant meaning
+dty-s : (ts : List STy) (t : STy) → Der (j-ty , ctx-of ts , shp t , tcode t , ptM ts (Sem (shp t)) (λ x ρ → sem t))
+dty-s ts sbool = dty-bool (ctx-of ts) (ptM ts One1 (λ x ρ → one))
+dty-s ts (sarr a b) =
+  dty-pi (ctx-of ts) (shp a) (shp b) (ptM ts (Fam (shp a) (shp b)) (λ x ρ → sem (sarr a b))) (tcode a) (tcode b)
+    (der-tr j-ty (ctx-of ts) (shp a) (tcode a) (ptM ts (Sem (shp a)) (λ x ρ → sem a))
+       (fmapM (ctx-of ts) (Fam (shp a) (shp b)) (Sem (shp a)) (fam-dom (shp a) (shp b)) (ptM ts (Fam (shp a) (shp b)) (λ x ρ → sem (sarr a b))))
+       (λ i → fmap-pt (dims (sk ts)) One1 (CtxV (sk ts)) (FbE (sk ts) (Fam (shp a) (shp b))) (FbE (sk ts) (Sem (shp a))) (into ts)
+                (λ γ e ρ → fam-dom (shp a) (shp b) (e ρ)) (λ x ρ → sem (sarr a b)) (cube0 ts) (~ i))
+       (dty-s ts a))
+    (transport (λ i → Der (j-ty , (lcons (e-ty (shp a)) (sk ts) ,
+                                PT-map (dims (sk ts)) One1 (CtxV (sk ts)) (CtxV (sk (cons a ts))) (FbE (sk ts) (Fam (shp a) (shp b))) (into ts)
+                                  (λ γ e → (γ , λ ρ → fam-dom (shp a) (shp b) (e ρ))) (λ x ρ → sem (sarr a b)) (cube0 ts) (~ i)) ,
+                        shp b , tcode b ,
+                        PT-lift (dims (sk ts)) One1 (CtxV (sk ts)) (CtxV (sk (cons a ts))) (FbE (sk ts) (Fam (shp a) (shp b)))
+                          (FbE (sk (cons a ts)) (Sem (shp b))) (into ts) (λ γ e → (γ , λ ρ → fam-dom (shp a) (shp b) (e ρ)))
+                          (λ γ e ρ → snd (e (fst ρ)) (snd ρ)) (λ x ρ → sem (sarr a b)) (cube0 ts) (~ i)))
+       (dty-s (cons a ts) b))
