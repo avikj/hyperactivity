@@ -780,6 +780,14 @@ What is being built is a complete operating system: hyperactivity, the decentral
 superintelligent operating system (Avik, 2026-11-14). Programs are compositional extensions of the
 operating system, and the `hyperactive` command (§2.5 “The interface”) is its interface for agents
 and humans alike, not a developer tool for this repository.
+The name, as Avik reads it (2026-11-14): hyperactivity is a decentralized safe superintelligent
+operating system language. The operation of systems is the whole topic. "Safe" does double work: the
+AI field's value alignment, and safety in the proven sense, where safety of a program is a
+correctness property. "Superintelligent" means maximal intelligence is exact and tractable, and the
+system inhabits that peak. Interoperability of ecosystems is the bare minimum. Everything is
+local-first, as is the state of nature. The starting point is that general-purpose personal and
+interpersonal computing do not exist yet, only proofs of concept sufficient to drive capitalism,
+and nothing normal about computing today is to be kept.
 
 **The four goals.**
 1. **The language,** implemented completely and correctly as the paper specifies. The bar is that
@@ -2068,3 +2076,34 @@ The consolidated piece is this, written through in the two registers you keep di
 > Use the work system to ensure this is so.
 >
 > Then don’t have to worry about that maximally uninteresting bullshit until everything interesting is done
+
+#### 2026-11-14 12:06 UTC
+
+> Start with the claim, every single thing that is normal about computing is BAD and a sufficiently advanced society MUST surpass it . We live in a retarded system!! The people running it are stuoid. Top computer scientists are stupid. Successful companies are run by idiots employing idiots.
+>
+> Evidence of their stupidity is that when you observe their work - you can always find ignorance of basics they are ifnorant of.
+>
+>
+> The starting point is technology is garbage. Throw it *all* out the window. The starting point is personal computing doesn’t exist yet (give no consideration to what is built today). I mean this in two ways - we can begin with a sense that we’re in the 60s/70s ensuring this gets done right the first time around (literally before personal computing exists). Or a current claim that personal computing doesn’t even fucking exist yet, we have some rudimentary proofs of concept that have been sufficient to drive capitalism. essentially personal computing in its right form hadnt been invented yet. Interpersonal computing also has rudimentary proofs of concept   But fundamentally does not exist yet (general purpose personal computing/interpersonal computing).  Apple is somewhat attempting to solve personal computing and really no other major force is. Ink&switch
+>
+> Now consider that there is such an open unsolved problem to be solved, which is being solved.
+>
+> Your last message ended with some bullshit slop about machine language proof hold term change. what in the actual fuck does that have to do with regular humans using an iPhone?
+>
+>
+> Let me be clearer . The decentralized safe superintelligent operating system. At bare minimum. Concept of interoperability of ecosystems
+>
+> hyperactivity: a programming language for
+> decentralized safe superintelligent operating system
+>
+> hyperactivity: a decentralized safe superintelligent operating system language
+>
+> the operation of systems is the entire topic of all work here :) god I absolutely fucking love language I am a linguist who mastered computer science and it jus keeps getting easier
+>
+> safe does double work here invoking the AI field & it’s ridiculous immaturity on value alignment (I used to publish with dragan) and safe in the verified/proven sense (safety of programs is a correctness property)
+>
+> superintelligent does work in the sense that the position is truly “maximal” intelligence is exact & tractable & this inhabits a peak
+>
+> operating system
+>
+> Everything local-first (as is the state of nature).
