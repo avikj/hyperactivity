@@ -87,6 +87,10 @@
 -- conj-meet-sound, conj-has-sound, conj-sub-sound, dnf-insert-sound, dnf-drop-sup-sound,
 -- dnf-any-sub-sound, dnf-add-sound, dnf-join-sound, dnf-meet-c-sound, dnf-meet-sound, neg-lit,
 -- neg-conj-sound, dnf-neg-sound: (F2d) entire.
+-- (2026-11-14, F2d' begun) the orders: bool-absurd, weq-refl, wlt-irr, wlt-x0, wlt-trans, wlt-tri,
+-- wlt-neq; bool-case0, bool-eq-refl, not-true, weq-path, wlt-path, wlt-path', weq-path',
+-- lit-eq-refl, lit-lt-of-wlt, lit-lt-same, lit-lt-of-eq, lit-lt-cases, lit-lt-irr, lit-lt-neq,
+-- lit-lt-trans, tri-bools, lit-tri-eq, lit-tri.
 -- What is next: (F2d'), (F2e) and the rest of lib/nbe.cub's head's list, then the swap of this file
 -- into lib/nbe.cub.
 import "../../lib/linproof.cub"
@@ -7433,6 +7437,135 @@ dnf-neg-sound sk (lcons c cs) =
     (ieq-trans sk (ixmeet (ixneg (conj-ix c)) (ixneg (dnf-ix cs))) (ixneg (ixjoin (conj-ix c) (dnf-ix cs))) (ixneg (dnf-ix (lcons c cs)))
     (law-dm-j sk (conj-ix c) (dnf-ix cs))
     (ieq-neg sk (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix (lcons c cs)) (ieq-sym sk (dnf-ix (lcons c cs)) (ixjoin (conj-ix c) (dnf-ix cs)) (dnf-ix-cons sk c cs))))))
+-- (F2d') the normalizer's outputs are canonical. First the order of words: equality reflexive, the
+-- order irreflexive, transitive, trichotomous, and below excluding equal (by induction on words)
+bool-absurd : (A : Type) (x : Bool) → x ≡ true → x ≡ false → A
+bool-absurd A x p q = false-true A (pcat0 Bool false x true (sym q) p)
+weq-refl : (a : Word) → weq a a ≡ true
+weq-refl a = %welimP (λ v → weq v v ≡ true) a (λ i → true) (λ n h → pcat0 Bool (weq (%wsucc n) (%wsucc n)) (weq n n) true (weq-ss n n) h)
+wlt-irr : (a : Word) → wlt a a ≡ false
+wlt-irr a = %welimP (λ v → wlt v v ≡ false) a (λ i → false) (λ n h → pcat0 Bool (wlt (%wsucc n) (%wsucc n)) (wlt n n) false (wlt-ss n n) h)
+wlt-x0 : (b : Word) → wlt b #0 ≡ false
+wlt-x0 b = %welimP (λ v → wlt v #0 ≡ false) b (λ i → false) (λ n h → wlt-s0 n)
+wlt-trans : (a b c : Word) → wlt a b ≡ true → wlt b c ≡ true → wlt a c ≡ true
+wlt-trans a =
+  %welimP (λ v → (b c : Word) → wlt v b ≡ true → wlt b c ≡ true → wlt v c ≡ true) a
+    (λ b c p q → %welimP (λ w → wlt b w ≡ true → wlt #0 w ≡ true) c
+       (λ q' → bool-absurd (wlt #0 #0 ≡ true) (wlt b #0) q' (wlt-x0 b))
+       (λ k g q' → wlt-0s k) q)
+    (λ n h b c p q → w-cases2 (λ b' c' → wlt (%wsucc n) b' ≡ true → wlt b' c' ≡ true → wlt (%wsucc n) c' ≡ true)
+       (λ p' q' → bool-absurd (wlt (%wsucc n) #0 ≡ true) (wlt (%wsucc n) #0) p' (wlt-s0 n))
+       (λ k p' q' → bool-absurd (wlt (%wsucc n) (%wsucc k) ≡ true) (wlt (%wsucc n) #0) p' (wlt-s0 n))
+       (λ m p' q' → bool-absurd (wlt (%wsucc n) #0 ≡ true) (wlt (%wsucc m) #0) q' (wlt-s0 m))
+       (λ m k p' q' → pcat0 Bool (wlt (%wsucc n) (%wsucc k)) (wlt n k) true (wlt-ss n k)
+          (h m k (pcat0 Bool (wlt n m) (wlt (%wsucc n) (%wsucc m)) true (sym (wlt-ss n m)) p')
+                 (pcat0 Bool (wlt m k) (wlt (%wsucc m) (%wsucc k)) true (sym (wlt-ss m k)) q')))
+       b c p q)
+wlt-tri : (a b : Word) → weq a b ≡ false → wlt a b ≡ false → wlt b a ≡ true
+wlt-tri a =
+  %welimP (λ v → (b : Word) → weq v b ≡ false → wlt v b ≡ false → wlt b v ≡ true) a
+    (λ b → %welimP (λ w → weq #0 w ≡ false → wlt #0 w ≡ false → wlt w #0 ≡ true) b
+       (λ e l → bool-absurd (wlt #0 #0 ≡ true) (weq #0 #0) (weq-refl #0) e)
+       (λ m g e l → bool-absurd (wlt (%wsucc m) #0 ≡ true) (wlt #0 (%wsucc m)) (wlt-0s m) l))
+    (λ n h b → %welimP (λ w → weq (%wsucc n) w ≡ false → wlt (%wsucc n) w ≡ false → wlt w (%wsucc n) ≡ true) b
+       (λ e l → wlt-0s n)
+       (λ m g e l → pcat0 Bool (wlt (%wsucc m) (%wsucc n)) (wlt m n) true (wlt-ss m n)
+          (h m (pcat0 Bool (weq n m) (weq (%wsucc n) (%wsucc m)) false (sym (weq-ss n m)) e)
+               (pcat0 Bool (wlt n m) (wlt (%wsucc n) (%wsucc m)) false (sym (wlt-ss n m)) l))))
+wlt-neq : (a b : Word) → wlt a b ≡ true → weq a b ≡ false
+wlt-neq a =
+  %welimP (λ v → (b : Word) → wlt v b ≡ true → weq v b ≡ false) a
+    (λ b → %welimP (λ w → wlt #0 w ≡ true → weq #0 w ≡ false) b
+       (λ p → bool-absurd (weq #0 #0 ≡ false) (wlt #0 #0) p (wlt-irr #0))
+       (λ m g p → weq-0s m))
+    (λ n h b → %welimP (λ w → wlt (%wsucc n) w ≡ true → weq (%wsucc n) w ≡ false) b
+       (λ p → weq-s0 n)
+       (λ m g p → pcat0 Bool (weq (%wsucc n) (%wsucc m)) (weq n m) false (weq-ss n m)
+          (h m (pcat0 Bool (wlt n m) (wlt (%wsucc n) (%wsucc m)) true (sym (wlt-ss n m)) p))))
+-- the order of literals: a strict total order, lit-eq its equality
+bool-case0 : (P : Bool → Type) (b : Bool) → (b ≡ true → P true) → (b ≡ false → P false) → P b
+bool-case0 P b t f = bool-elim (λ c → b ≡ c → P c) t f b (λ i → b)
+bool-eq-refl : (b : Bool) → bool-eq b b ≡ true
+bool-eq-refl true = λ i → true
+bool-eq-refl false = λ i → true
+not-true : (b : Bool) → not b ≡ true → b ≡ false
+not-true true e = false-true (true ≡ false) e
+not-true false e = λ i → false
+-- equal words: every test of one against the other answers as at one word
+weq-path : (k j : Word) → k ≡ j → weq j k ≡ true
+weq-path k j p = pcat0 Bool (weq j k) (weq j j) true (λ i → weq j (p i)) (weq-refl j)
+wlt-path : (k j : Word) → k ≡ j → wlt k j ≡ false
+wlt-path k j p = pcat0 Bool (wlt k j) (wlt j j) false (λ i → wlt (p i) j) (wlt-irr j)
+wlt-path' : (k j : Word) → k ≡ j → wlt j k ≡ false
+wlt-path' k j p = pcat0 Bool (wlt j k) (wlt j j) false (λ i → wlt j (p i)) (wlt-irr j)
+weq-path' : (k j : Word) → k ≡ j → weq k j ≡ true
+weq-path' k j p = pcat0 Bool (weq k j) (weq j j) true (λ i → weq (p i) j) (weq-refl j)
+lit-eq-refl : (l : Lit) → lit-eq l l ≡ true
+lit-eq-refl l = pcat0 Bool (andB (weq (fst l) (fst l)) (bool-eq (snd l) (snd l))) (bool-eq (snd l) (snd l)) true
+  (λ i → andB (weq-refl (fst l) i) (bool-eq (snd l) (snd l))) (bool-eq-refl (snd l))
+-- lit-lt l m is true exactly by a smaller variable, or the same variable with ~i before i
+lit-lt-of-wlt : (l m : Lit) → wlt (fst l) (fst m) ≡ true → lit-lt l m ≡ true
+lit-lt-of-wlt l m e = λ i → if e i then true else (if weq (fst l) (fst m) then andB (not (snd l)) (snd m) else false)
+-- at one variable, lit-lt compares the polarities
+lit-lt-same : (l m : Lit) → fst l ≡ fst m → lit-lt l m ≡ andB (not (snd l)) (snd m)
+lit-lt-same l m p =
+  pcat0 Bool (lit-lt l m) (if weq (fst l) (fst m) then andB (not (snd l)) (snd m) else false) (andB (not (snd l)) (snd m))
+    (λ i → if wlt-path (fst l) (fst m) p i then true else (if weq (fst l) (fst m) then andB (not (snd l)) (snd m) else false))
+    (λ i → if weq-path' (fst l) (fst m) p i then andB (not (snd l)) (snd m) else false)
+lit-lt-of-eq : (l m : Lit) → fst l ≡ fst m → snd l ≡ false → snd m ≡ true → lit-lt l m ≡ true
+lit-lt-of-eq l m p s t = pcat0 Bool (lit-lt l m) (andB (not (snd l)) (snd m)) true (lit-lt-same l m p) (λ i → andB (not (s i)) (t i))
+lit-lt-cases : (P : Type) (l m : Lit) → (wlt (fst l) (fst m) ≡ true → P) → (fst l ≡ fst m → snd l ≡ false → snd m ≡ true → P) → lit-lt l m ≡ true → P
+lit-lt-cases P l m kw ke =
+  bool-case0 (λ b → (if b then true else (if weq (fst l) (fst m) then andB (not (snd l)) (snd m) else false)) ≡ true → P) (wlt (fst l) (fst m))
+    (λ e h → kw e)
+    (λ e → bool-case0 (λ b → (if b then andB (not (snd l)) (snd m) else false) ≡ true → P) (weq (fst l) (fst m))
+       (λ e2 h → ke (weq-sound (fst l) (fst m) e2) (not-true (snd l) (andB-l (not (snd l)) (snd m) h)) (andB-r (not (snd l)) (snd m) h))
+       (λ e2 h → false-true P h))
+lit-lt-irr : (l : Lit) → lit-lt l l ≡ false
+lit-lt-irr l =
+  bool-case0 (λ b → lit-lt l l ≡ b → lit-lt l l ≡ false) (lit-lt l l)
+    (λ e h → lit-lt-cases (lit-lt l l ≡ false) l l
+       (λ w → bool-absurd (lit-lt l l ≡ false) (wlt (fst l) (fst l)) w (wlt-irr (fst l)))
+       (λ p s t → bool-absurd (lit-lt l l ≡ false) (snd l) t s) h)
+    (λ e h → h) (λ i → lit-lt l l)
+lit-lt-neq : (l m : Lit) → lit-lt l m ≡ true → lit-eq l m ≡ false
+lit-lt-neq l m =
+  lit-lt-cases (lit-eq l m ≡ false) l m
+    (λ w i → andB (wlt-neq (fst l) (fst m) w i) (bool-eq (snd l) (snd m)))
+    (λ p s t → pcat0 Bool (lit-eq l m) (bool-eq false true) false
+       (λ i → andB (weq-path' (fst l) (fst m) p i) (bool-eq (s i) (t i))) (λ i → false))
+lit-lt-trans : (a b c : Lit) → lit-lt a b ≡ true → lit-lt b c ≡ true → lit-lt a c ≡ true
+lit-lt-trans a b c p q =
+  lit-lt-cases (lit-lt a c ≡ true) a b
+    (λ w1 → lit-lt-cases (lit-lt a c ≡ true) b c
+       (λ w2 → lit-lt-of-wlt a c (wlt-trans (fst a) (fst b) (fst c) w1 w2))
+       (λ p2 s2 t2 → lit-lt-of-wlt a c (pcat0 Bool (wlt (fst a) (fst c)) (wlt (fst a) (fst b)) true (λ i → wlt (fst a) (p2 (~ i))) w1)) q)
+    (λ p1 s1 t1 → lit-lt-cases (lit-lt a c ≡ true) b c
+       (λ w2 → lit-lt-of-wlt a c (pcat0 Bool (wlt (fst a) (fst c)) (wlt (fst b) (fst c)) true (λ i → wlt (p1 i) (fst c)) w2))
+       (λ p2 s2 t2 → bool-absurd (lit-lt a c ≡ true) (snd b) t1 s2) q) p
+-- trichotomy: unequal and not below means above
+tri-bools : (s t : Bool) → bool-eq s t ≡ false → andB (not s) t ≡ false → (s ≡ true) × (t ≡ false)
+tri-bools true true e a = false-true ((true ≡ true) × (true ≡ false)) (sym e)
+tri-bools true false e a = ((λ i → true) , (λ i → false))
+tri-bools false true e a = false-true ((false ≡ true) × (true ≡ false)) (sym a)
+tri-bools false false e a = false-true ((false ≡ true) × (false ≡ false)) (sym e)
+lit-tri-eq : (l m : Lit) → fst l ≡ fst m → lit-eq l m ≡ false → lit-lt l m ≡ false → lit-lt m l ≡ true
+lit-tri-eq l m p ne nl =
+  lit-lt-of-eq m l (λ i → p (~ i))
+    (snd (tri-bools (snd l) (snd m)
+      (pcat0 Bool (bool-eq (snd l) (snd m)) (lit-eq l m) false (λ i → andB (weq-path' (fst l) (fst m) p (~ i)) (bool-eq (snd l) (snd m))) ne)
+      (pcat0 Bool (andB (not (snd l)) (snd m)) (lit-lt l m) false (sym (lit-lt-same l m p)) nl)))
+    (fst (tri-bools (snd l) (snd m)
+      (pcat0 Bool (bool-eq (snd l) (snd m)) (lit-eq l m) false (λ i → andB (weq-path' (fst l) (fst m) p (~ i)) (bool-eq (snd l) (snd m))) ne)
+      (pcat0 Bool (andB (not (snd l)) (snd m)) (lit-lt l m) false (sym (lit-lt-same l m p)) nl)))
+lit-tri : (l m : Lit) → lit-eq l m ≡ false → lit-lt l m ≡ false → lit-lt m l ≡ true
+lit-tri l m ne nl =
+  bool-case0 (λ b → wlt (fst l) (fst m) ≡ b → lit-lt m l ≡ true) (wlt (fst l) (fst m))
+    (λ w x → bool-absurd (lit-lt m l ≡ true) (lit-lt l m) (lit-lt-of-wlt l m w) nl)
+    (λ w x → bool-case0 (λ b → weq (fst l) (fst m) ≡ b → lit-lt m l ≡ true) (weq (fst l) (fst m))
+       (λ e y → lit-tri-eq l m (weq-sound (fst l) (fst m) e) ne nl)
+       (λ e y → lit-lt-of-wlt m l (wlt-tri (fst l) (fst m) e w)) (λ i → weq (fst l) (fst m)))
+    (λ i → wlt (fst l) (fst m))
 
 -- ---------------------------------------------------------------- (6) reify and reflect
 -- (2026-11-12, (6)) reify-ty (a computable type to a normal type derivation), reify (a computable term
