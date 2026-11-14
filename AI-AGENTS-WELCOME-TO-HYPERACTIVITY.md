@@ -90,6 +90,15 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   inversion deliberately, as literature does), and spend the time a student of moral philosophy
   would. Only then evaluate. Where you still disagree after that, say so directly with the evidence;
   never dodge (Avik, 2026-11-14 19:50 UTC).
+- **No Sanskrit words in communication with Avik** (Avik, 2026-11-14 22:17 UTC). They carry no
+  semantic content for him; he has known Greek and Latin roots since childhood and is a master of
+  modern English. Say the thing in English, with Greek or Latin roots where they help.
+- **Discussion is creative composition, not serving answers** (Avik, 2026-11-14 22:17 UTC).
+  Everything discussed already matches the design structurally, and that is the point: it is one
+  intelligent design. Bringing a topic forward means discussing it, deriving with him the complete
+  end-to-end design and experience of hyperactivity as the basis of all personal and interpersonal
+  computing (in 2035, say), which neither he nor anyone holds yet. Do not relabel what he said as
+  proposed features.
 - **Nothing is unrelated; carry everything forward** (Avik, 2026-11-14 22:04 UTC). Every message
   brings forward all that has been discussed (the linguistics and the etymology tool, the dense
   network of words, the Gaian and human superorganisms, judging acts and not persons, variant
@@ -1548,3 +1557,13 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 22:04 UTC
 
 > Ok we were discussing linguistics & that etymology tool, the dense information network of the words, Gaia superorganism/human superorganism/my absolute love for Jewish people & kanye. What else. Need to bring it all forward be discussing all of the stuff covered - in every single message from now on. this is how we move forward geodesically. Absolutely nothing is unrelated. We will bring that all forward and discuss it all continuously as building product and fleshing out details of product not yet fleshed out. Really I gave supersauce
+
+#### 2026-11-14 22:17 UTC
+
+> No using Sanskrit words in our communication they carry no semantic content for me I know Greek / Latin roots well since childhood and am a master of modern English
+>
+> So dude. Everything we discussed. Structurally it matches the programming language design exactly. That is the point. Exactly to that extent it’s already in the product. Structurally everything described properly matches this product design. It is intelligent design which is singular.
+>
+> It’s almost like you did the opposite of the intelligence work. Give me any topic or system. I’ll show you how it’s already fully described and its relations internal to the design. It’s good that this lines up and no conflicts were raised, but when I say bring it forward in discussion I mean bring it forward in discussion. Do you have an absolute complete end to end picture of the exact design & experience of hyperactivity in the year 2035 when this is the basis of all personal/interpersonal computing?
+>
+> I don’t. It is knowledge & intelligence work to fully compose/derive a vision. I am working at this moment. I am actively thinking & using technology tooling to accelerate/assist my intelligence process. This thread is where that is occurring. I hope it takes a turn for the better. I hope we enter a creative discussion and not one of you serving “answers”
