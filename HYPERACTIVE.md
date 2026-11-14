@@ -2322,3 +2322,19 @@ The consolidated piece is this, written through in the two registers you keep di
 > a continuous simplification by collapse of false distinction. the path the crystal & the light
 >
 > the black hole & the photon are clarifying
+
+#### 2026-11-14 15:43 UTC
+
+> Ok let’s be rational for a sec. We’re trying to put all onboarding context for an agent in a file. This includes paper, words of mine explicitly chosen to exclude from papers (braindump not translated to paper yet or personal content with no natural home in paper).
+>
+> I suppose “what the project is for” should be reflected in a paper. the paper most certainly cover this fully. “Constructions an agent proposed I haven’t confirmed” wtf? Questions only I can answer?    This should not exist. We track everything in code this is work data - i have no idea whi tonanswer this question to or what purpose it serves. Everything we do served a purpose and thatvmust be clear to prevent you from doing purposeless things. Project management is literally a product feature.  Fucking stupidity.
+>
+> Ok cool so 3 its a fireable offense to try to track such shit in a readme
+>
+> 2. What I have confirmed?  All of this should be in paper except for guidance specific to agents - right? What do you think? I think everything formally specified/determined about project. I need the paper to be comprehensive in discussion of the technology. I think given agents will be required to read all papers, this should only be stuff that really should not be in paper. Absolutely everything about language product vision should be in this central paper about my life’s work  (project/code status actually I don’t care for tracking in paper  - it is a minor point to note in paper if an implementation exists it would be bloat waste of time and harmful ) WE HAVE A FUCKING STATUS SYSTEM PROJECT MANAGEENNT. USE IT AND IMPROVE IT. NOTHING ELSE
+>
+> all that’s left internal is code status, and messages/instruction to LLM coding agents from Avik Jain - AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md .
+>
+> Why is “what the code does today” needed? I don’t have the answer . Idk how the agent enters and consumes this code. Idk if this explanation is necessary vs looking at the code or the paper; is this meant to express what is complete & correct? what is incorrect & wrong? If so, these go in our work order . You can tell progress to project goals w/ granularity in work order/tracker interface. “What the code does” inhabits project goals that are achieved or pending/blocker - nothing more, nothing less . There is no code irrelevant to project goals. This is an invariant to enforce. The hyperactive cli should be the primary work interface very very soon asap this is a code=data project on the future of infrimation space thenhyperactive kernel. Thats hownhou need to be thinking from now on im being religious; give an inch and you take a mile.
+>
+> Idk you review you’re an agent with access to tools. Only reason any status indicator is necessary on readme is because the tooling is not set up properly or used properly or not designed well (doubt, user error) and that is something to solve
