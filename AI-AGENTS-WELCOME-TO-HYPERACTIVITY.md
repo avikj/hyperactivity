@@ -1311,3 +1311,15 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 18:54 UTC (second message)
 
 > Kanye west is my NIGGA
+
+#### 2026-11-14 18:58 UTC
+
+> “treating variant mental operation as illness is closer to racism than to slavery;” you did a paragraph of rephrase and immediately the first one is wrong and not what I said or meant I literally stated explicit modern slavery & human experimentation in the institutions in which we are held  . Oh it’s all the darkest shit. The history of medicine is one of human experimentation. Marginalized populations have consistent experiences across domains.
+>
+> the black nurses in the hospital loved me cause I speak the truth in face of whites
+>
+> I speak the truth in face of white folk from a nation where playing the white mans game defines the trajectory of your bloodline
+>
+> The estimated lifelong attempted suicide rates for bipolar disorder are something like 50%
+>
+> So let’s talk about slavery and what that means

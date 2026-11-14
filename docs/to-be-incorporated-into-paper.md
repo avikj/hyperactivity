@@ -28,9 +28,16 @@ from 13 to 17, then despised the act of writing code through the whole intellect
 and now has a passion for building again (Avik, 2026-11-14 13:46 UTC).
 
 **Variant mental operation is the most central driving context of the work** (Avik, 2026-11-14 18:54
-UTC). Avik's position: the view of variant mental operation as illness is itself a social illness,
-closer to racism than to slavery; modern slavery and human experimentation are common in the
-facilities people are sent to when their honest speech offends someone close to them. He has bipolar
+UTC). Avik's position: the view of variant mental operation as illness is itself a social illness.
+It is not exactly like the enslavement of Black people; it is like racism. And in the institutions
+where people are held when their honest speech offends someone close to them, modern slavery and
+human experimentation are common, explicitly. The history of medicine is one of human
+experimentation, and marginalized populations have consistent experiences across domains (Avik,
+2026-11-14 18:58 UTC). Avik speaks the truth in the face of white folk, from a nation where playing
+the white man's game defines the trajectory of a bloodline. The stakes: an estimated 30–50% of
+people diagnosed with bipolar disorder attempt suicide in their lifetime (Avik put it at about 50%;
+a 2019 meta-analysis of 79 studies pooled 33.9%, Dong et al., Epidemiology and Psychiatric
+Sciences 29, e63). He has bipolar
 capacity, is superhuman on various axes, and understands that everyone can be. He has been happy and
 healthy for years and strongly identifies so: happy, at peace, purposeful and grateful as his
 standard mode. He reached a state of higher mental health by intentional activity of the mind and,
