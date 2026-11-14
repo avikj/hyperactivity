@@ -8,10 +8,32 @@
 -- comp along the line, which at Bool and Nat is the value; computability ignores the type component
 -- there (irr-b, irr-n: by nrm-b/nrm-n paths, the successor case by zip-swap), the neutral case by
 -- NN's nirr-b/-n (Der's dirr-b/-n). examples.cub: transp (λ i. Bool) true ⇝ true, at a variable b ⇝ b,
--- transp (λ i. Nat) (suc zero) ⇝ suc zero (1571 passed, 0 failed, from the store). Finding for (K):
+-- transp (λ i. Nat) (suc zero) ⇝ suc zero (fresh: 1571 passed, 0 failed, 2342M steps). Finding for (K):
 -- the host's composition with a nonempty system at Bool or Nat on a variable is stuck (hcompD), on a
 -- constructor with a constant system it reduces; so the Kan lemma's fill at Bool/Nat needs formal
 -- compositions as neutrals, whose faces are the fill's own bound dimensions (static), never computed.
+-- (K)'s plan after K0 (2026-11-14), derived from the host's behaviour (tested in this session):
+-- (K1) path-free Kan: transport and composition at Bool, Nat, Σ and Π. The host's comp at Σ splits
+-- into the components' comps (the second along B at the first's fill); at Π it is
+-- λ y. comp^j B(j, ỹ j) [φ ↦ u j (ỹ j)] (a0 (ỹ 0)) with ỹ the domain's fill of y along the reversed
+-- line; at Bool and Nat with an empty system it is the value, with a nonempty system on a variable it
+-- is stuck (hcompD), on a constructor with a constant system it reduces. So the induction on the shape
+-- must be over composition with a tube on a face of the composition's own dimensions (fill is the
+-- tube constant; transport the system empty), not over transport alone: Π's fill has a tube f j (ỹ j)
+-- in the codomain. Its hypothesis on the line is computability at every substitution into the line's
+-- context (Kripke over τ, as fund's motives; reversal is a substitution, not a world), and its
+-- conclusion likewise; at forms the stuck hcompD at Bool and Nat is a neutral of NN whose meaning is
+-- papp-line of the composition's line of values at the form (renamed by papp-line-subst). Every face
+-- in these meanings is on a dimension bound inside the meaning (the host writes it when comp
+-- reduces), so the meanings are host terms written statically.
+-- (K2) composition with a system on a face of the context's dimensions (the object language's
+-- comp A [φ ↦ u] a0 with φ over Γ's dimensions, and transport at PathP, whose fibre composition
+-- has the endpoints' system): its meaning is host comp with the face written over the dimensions of
+-- Γ's cube, which are PathP-λ binders at different depths of the cube; a checked definition cannot
+-- build such a face by recursion on the dimensions, since the host has neither a type of faces or
+-- partial elements nor functions of the interval (P2's design note above: `(i : I) → …` is refused).
+-- So (K2), and Glue and universes after it, wait on a host decision: interval functions as a
+-- pretype (as cubical Agda's (i : I) → A) or a typed face/partial-element former (Partial φ A).
 -- Status (2026-11-14, latest+1): (D) Nat done: shape s-nat, zero, suc and the recursor (its step a
 -- term at Π k:Nat. P k → P (suc k), its motive a type over the extension by Nat) in Der and NN, the
 -- clause CNat (zero, suc of a computable, or neutral), fund's recursor case nrec-comp by induction on
