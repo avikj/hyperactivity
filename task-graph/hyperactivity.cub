@@ -234,6 +234,26 @@ path-free-transport = node "Transport along a line of types at every path-free s
 -- minimality test (is the construction impossible without it?). Not yet settled: whether these growing
 -- systems can be built without host partial elements, from fixed systems or as data in the
 -- normalizer's own cube model, before any change to the core is considered.
+-- Analysis (2026-11-14, from lib/check.cub and the machine): the machine already holds systems as
+-- values (a partial value is a list of face and branch, wsys bs, read by %view); only the checker
+-- lacks a type for them: check-sys accepts a system only as syntax (tsys) inside a composition's
+-- tube, Glue or a composition of types, checking each branch under each clause of its face and every
+-- overlap judgmentally at generic dimensions. Consequences, each followed through: (1) one face of
+-- any DNF form works with fixed syntax (a fresh dimension k, [k = 1 ↦ u'], path-applied at the face's
+-- form); (2) two or more branches on fresh dimensions fail, because their overlap k1 = 1 ∧ k2 = 1 is
+-- checked at generic k and the branches are unrelated there; (3) faces k = 0 and k = 1 of one fresh
+-- dimension are disjoint and need no overlap check, but only express disjoint faces; (4) folding n
+-- branches into two by the filler of the first n − 1 (comp [φn ↦ un, ψ ↦ fill of the rest]) is a valid
+-- Kan composition but again needs two overlapping branches of dynamic faces, so (2) applies. The
+-- object language's systems are lists of branches of any length (lib/code.cub's ccomp), so the meaning
+-- of an object composition, not only the Kan lemma, needs a system of length computed at run time.
+-- So the construction is impossible without a checked type for the systems the machine already has:
+-- the minimality test is met, and the change exposes in the checker what the core's values already
+-- are rather than adding a value. The standard presentation is Cubical Agda's (IsOne φ, Partial φ A,
+-- PartialP, a system literal as a term of Partial φ A with overlaps checked, the tube of comp a line
+-- of them). Not yet settled: faces as values need an interval-valued term built by recursion, and the
+-- interval is not a type of this host (I × Nat is refused); faces would come only from bound
+-- dimensions and path application at forms, as the normalizer's cubes already build them.
 -- Known (2026-11-14, tested): the host's comp at Bool or Nat with a nonempty system on a variable is
 -- a formal composition (hcompD), and a case or recursor on a formal composition reduces to the
 -- formal composition of its branches along the motive at the composition's fill (eliminators
