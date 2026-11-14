@@ -522,3 +522,33 @@ fund-case Γ s R Δ σ e cx ct cf motive =
     (case-cl Γ s R Δ σ e motive (comp-tr s-bool Δ (subM Δ Γ (TV s-bool) σ (fmapM Γ (CaseV s) (TV s-bool) (case-x s) R)) (fmapM Δ (CaseV s) (TV s-bool) (case-x s) (subM Δ Γ (CaseV s) σ R)) (psym (Mean Δ (TV s-bool)) (fmapM Δ (CaseV s) (TV s-bool) (case-x s) (subM Δ Γ (CaseV s) σ R)) (subM Δ Γ (TV s-bool) σ (fmapM Γ (CaseV s) (TV s-bool) (case-x s) R)) (subM-fmap Δ Γ (CaseV s) (TV s-bool) (case-x s) σ R)) cx) (comp-tr s Δ (subM Δ Γ (TV s) σ (fmapM Γ (CaseV s) (TV s) (case-t s) R)) (fmapM Δ (CaseV s) (TV s) (case-t s) (subM Δ Γ (CaseV s) σ R)) (psym (Mean Δ (TV s)) (fmapM Δ (CaseV s) (TV s) (case-t s) (subM Δ Γ (CaseV s) σ R)) (subM Δ Γ (TV s) σ (fmapM Γ (CaseV s) (TV s) (case-t s) R)) (subM-fmap Δ Γ (CaseV s) (TV s) (case-t s) σ R)) ct) (comp-tr s Δ (subM Δ Γ (TV s) σ (fmapM Γ (CaseV s) (TV s) (case-f s) R)) (fmapM Δ (CaseV s) (TV s) (case-f s) (subM Δ Γ (CaseV s) σ R)) (psym (Mean Δ (TV s)) (fmapM Δ (CaseV s) (TV s) (case-f s) (subM Δ Γ (CaseV s) σ R)) (subM Δ Γ (TV s) σ (fmapM Γ (CaseV s) (TV s) (case-f s) R)) (subM-fmap Δ Γ (CaseV s) (TV s) (case-f s) σ R)) cf) (snd (comp-tr s-bool Δ (subM Δ Γ (TV s-bool) σ (fmapM Γ (CaseV s) (TV s-bool) (case-x s) R)) (fmapM Δ (CaseV s) (TV s-bool) (case-x s) (subM Δ Γ (CaseV s) σ R)) (psym (Mean Δ (TV s-bool)) (fmapM Δ (CaseV s) (TV s-bool) (case-x s) (subM Δ Γ (CaseV s) σ R)) (subM Δ Γ (TV s-bool) σ (fmapM Γ (CaseV s) (TV s-bool) (case-x s) R)) (subM-fmap Δ Γ (CaseV s) (TV s-bool) (case-x s) σ R)) cx)))
 
 
+
+-- ---------------------------------------------------------------- fund: the fundamental lemma
+-- (2026-11-14) a derivation's meaning under a computable substitution is computable: a term's at its
+-- shape (CompS), a type's (CompTy); one function on Der over the tag, each rule's case its lemma above,
+-- the binders' premises at every extended or form-extended substitution by recursion
+JC : (jk : JK) (s : TyShape) (Δ : CCtx) → Mean Δ (JZ jk s) → Type 1
+JC j-tm s Δ M = CompS s Δ M
+JC j-ty s Δ M = CompTy s Δ M
+fund : {J : Jdg} → Der J → (Δ : CCtx) (σ : Sub Δ (fst (snd J))) → CompEnv (fst (snd J)) Δ σ →
+  JC (fst J) (fst (snd (snd J))) Δ (subM Δ (fst (snd J)) (JZ (fst J) (fst (snd (snd J)))) σ (snd (snd (snd (snd J)))))
+fund (dvar Γ v) Δ σ e = snd e v
+fund (dapp Γ a b R f c df dc) Δ σ e = fund-app Γ a b R Δ σ (fund df Δ σ e) (fund dc Δ σ e)
+fund (dfst Γ a b R p dp) Δ σ e = fund-fst Γ a b R Δ σ (fund dp Δ σ e)
+fund (dsnd Γ a b R p dp) Δ σ e = fund-snd Γ a b R Δ σ (fund dp Δ σ e)
+fund (dcase Γ s R cP x t f dP dx dt df) Δ σ e =
+  fund-case Γ s R Δ σ e (fund dx Δ σ e) (fund dt Δ σ e) (fund df Δ σ e) (λ Δ' τ e' → fund dP Δ' τ e')
+fund (dtrue Γ B) Δ σ e = fund-true Γ B Δ σ
+fund (dfalse Γ B) Δ σ e = fund-false Γ B Δ σ
+fund (dlam Γ a b X cA c dA db) Δ σ e = fund-lam Γ a b X Δ σ e (fund dA Δ σ e) (λ Δ' τ e' → fund db Δ' τ e')
+fund (dpair Γ a b R cB c1 c2 dB d1 d2) Δ σ e =
+  fund-pair Γ a b R Δ σ e (fund d1 Δ σ e) (fund d2 Δ σ e) (λ Δ' τ e' → fund dB Δ' τ e')
+fund (dplam Γ a X c db) Δ σ e = fund-plam Γ a X Δ σ e (λ Δ' τ e' → fund db Δ' τ e')
+fund (dpapp Γ a P p f cf nc Y q dp) Δ σ e = fund-papp Γ a P f Y q Δ σ e (fund dp Δ σ e)
+fund (dpapp0 Γ a P p dp) Δ σ e = fund-papp0 Γ a P Δ σ (fund dp Δ σ e)
+fund (dpapp1 Γ a P p dp) Δ σ e = fund-papp1 Γ a P Δ σ (fund dp Δ σ e)
+fund (dty-bool Γ B) Δ σ e = one
+fund (dty-pi Γ a b T cA cB dA dB) Δ σ e = fund-tpi Γ a b T Δ σ e (fund dA Δ σ e) (λ Δ' τ e' → fund dB Δ' τ e')
+fund (dty-sig Γ a b T cA cB dA dB) Δ σ e = fund-tsig Γ a b T Δ σ e (fund dA Δ σ e) (λ Δ' τ e' → fund dB Δ' τ e')
+fund (dty-path Γ a T cL c0 c1 dL d0 d1) Δ σ e =
+  fund-tpath Γ a T Δ σ e (λ Δ' τ e' → fund dL Δ' τ e') (fund d0 Δ σ e) (fund d1 Δ σ e)
