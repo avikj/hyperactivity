@@ -318,6 +318,23 @@ composition-with-systems = node "Composition with a system on the context's face
 -- cube once mapped (the λ's type part is constant), so the body is checked in ctx-of (t ∷ ts) and
 -- carried to lam-ctx with push over a reindexing. The general machinery above (conv-E, conv-path)
 -- is for dependent types after this fragment.
+-- Done and checked (2026-11-14, experiments/nbe/check-wip.cub): the checker ck over codes for the
+-- simple-types fragment (variables by lookw and vder, application by app-ok, λ by lam-ok checked at
+-- a function type, the switch from synthesis to checking by comparing simple types), returning a
+-- derivation at the constant meaning or none; the context is an argument after the code, since a
+-- changing implicit index before it ran the checker out of memory. Every case is checked by the
+-- host, so a derivation it returns is one. Example end to end: the raw code λ x. x checked at
+-- Bool → Bool, then normalized to λ x. x; λ f. f at (Bool → Bool) → Bool → Bool normalizes to its
+-- η-long form λ f. λ x. f x. Known (2026-11-14, tested): normalizing what the checker returns for a
+-- term with two binders or an application does not finish: λ f. λ x. x runs out of memory after a
+-- quarter hour, and λ f. λ x. f x crashes the machine (src/net.c record_build_n with a null record,
+-- reached from interact during the reading; the same with CUBICAL_NOSWEEP, CUBICAL_NOMEMO, one
+-- worker and an empty store), while the checking alone answers at once. The derivations carry the
+-- transports (der-tr, transport along PT-map and PT-lift) whose paths are constant at a concrete
+-- context but are compositions at the type the definitions are checked at; the normalizer then
+-- composes through every field of every transported derivation. Next: the crash is a defect of the
+-- machine to be reduced to a small term and fixed; the cost is removed by building derivations
+-- whose indices need no transport at concrete contexts.
 checker-returns-derivations : Node
 checker-returns-derivations = node "A checker takes raw codes to typing derivations (or a diagnostic), as the paper's §6.1 specifies." (cons typed-codes-after-swap nil)
 -- typed-codes-after-composition (2026-11-14): everything typed codes and normalization by evaluation
