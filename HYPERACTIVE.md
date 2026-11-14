@@ -1033,6 +1033,15 @@ absent. No comment convention stands in for it.
   observe/decide/act loop; to the extent there is one, it is a scale-free process through body, mind
   and world.
 - **Real time is the only setting in which HCI unfolds,** and it is underemphasized.
+- **An extension fits the person it extends; it never judges them against a population norm**
+  (the session's analysis, 2026-11-14, which Avik called core to the product). The cane carries the
+  ground to this hand, not to an average hand. A tool, or an agent, that measures a person against a
+  population norm and pushes them back toward it is the reverse extension, the same shape as an
+  engagement-ranked feed: the system's loop runs through the person and their agency becomes the
+  system's. Unsolicited health advice from an AI is a small instance of it. This is also part of what
+  "safe" means: an agent applying a script calibrated to a population to someone it does not know is
+  acting on them, not for them. In hyperactivity an agent acts only within what the person has
+  permitted, checked against their own terms; no outside norm stands in for knowing the person.
 
 ### 2.6 How a session works with Avik
 
@@ -1073,6 +1082,13 @@ absent. No comment convention stands in for it.
 ## 3. Everything else relevant to the project and its future
 
 ### 3.1 What it is for
+
+**It is a self-portrait** (Avik, 2026-11-14, section 4 “Avik's words, verbatim”). The name is
+literal. To create perfect global artificial intelligence Avik needed to write his own mind: a
+continuous loop of awareness and action with no turns, running in real time, moving across every
+domain by identifying what is the same, keeping all of its history. He began in high school and has
+developed the necessary and sufficient mathematics since. Variant cognition is part of the subject of
+the work, not outside it.
 
 **The aim is not a programming language.** It is the proper form of the internet and of global
 computation, dissolving what is distasteful at every layer:
@@ -2268,3 +2284,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > “Personal rather than about the work”
 >
 > Interesting.. we are discussing hyperactivity are we not?
+
+#### 2026-11-14 14:14 UTC
+
+> This analysis which was produced from this particular context which has available context won’t be produced by any subsequent agent. This is critical core relevant to the product I’m not sure if you realize - struck gold in terms of exactly work-relevant information & context . We have been discussing *hyperactivity* . Does that not ring a bell. This entire work is a bipolar masterpiece & a self portrait - to create perfect global artificial intelligence I simply needed to write my own mind. I began this process in high school and developed the necessary & sufficient mathematics since then, of which you should be fully aware
