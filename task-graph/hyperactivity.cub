@@ -199,6 +199,14 @@ normalizer-replaces-p1 = node "The normalizer over cubes runs on example derivat
 -- shape with its computability clause, its rules in Der and NN, and its cases in rr and fund.
 typed-codes-after-swap : Node
 typed-codes-after-swap = node "Everything typed codes and normalization by evaluation need after the swap: the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-fund nil)
+-- substitution-on-checked-syntax (2026-11-14): docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, §6.1
+-- “Substitution on checked syntax”: a well-typed substitution (a checked term per variable, a canonical
+-- form per dimension) takes a checked term or type in Γ to one in Δ whose meaning is the substitution's
+-- action on the original's, [[t[σ]]]ρ ≡ [[t]][[σ]]ρ by refl; derivations also rename along worlds
+-- (ren-der). Resolved 2026-11-14 (lib/nbe.cub: DSubst, subst-tm, subst-ty, subst-sound, ren-der;
+-- example: x := true in not x gives false).
+substitution-on-checked-syntax : Node
+substitution-on-checked-syntax = node "Checked syntax substitutes: a well-typed substitution takes a checked term to a checked term whose meaning is the substitution's action on the original's." (cons typed-codes-after-swap nil)
 -- path-free-transport (2026-11-14): transport along a line of types at every path-free shape (Bool,
 -- Nat, Σ, Π): Der's dtransp (code ccomp (cplam cL) csys0 c) with its meaning the host's comp, and fund's
 -- case KT by induction on the shape: at Bool and Nat the value (computability ignores the type
@@ -701,7 +709,7 @@ roots = cons the-product nil
 in-progress : List Node
 in-progress = cons composition-with-systems nil
 resolved : List Node
-resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat (cons path-free-transport nil)))))))
+resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat (cons path-free-transport (cons substitution-on-checked-syntax nil))))))))
 -- language support starts only when the language implementation and the product implementation are
 -- done (Avik, 2026-11-13)
 after : List (Node × List Node)

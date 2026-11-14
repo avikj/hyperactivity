@@ -12,6 +12,11 @@
 -- the host's composition with a nonempty system at Bool or Nat on a variable is stuck (hcompD), on a
 -- constructor with a constant system it reduces; so the Kan lemma's fill at Bool/Nat needs formal
 -- compositions as neutrals, whose faces are the fill's own bound dimensions (static), never computed.
+-- Status (2026-11-14, latest+6): substitution on checked syntax (docs/Hyperactive_Final_Paper.pdf,
+-- 11 Nov 2026, §6.1 “Substitution on checked syntax”): DSubst (a checked term per variable at σ's
+-- action, canonical forms per dimension), subst-tm and subst-ty (fund at σ, each substituted term made
+-- computable by fund at Δ's identity, read back: a normal t[σ]), subst-sound: [[t[σ]]] ≡ [[t]][[σ]] by
+-- refl. examples.cub: x := true in not x gives false (1660 passed, 0 failed, from the store).
 -- Status (2026-11-14, latest+5): derivations rename (ren-der: Der along a world, ren-nn's construction
 -- on Der, with path application at 0 and 1 and transport added; the renaming half of substitution on
 -- checked syntax, docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, §6.1 “Substitution on checked
@@ -10590,6 +10595,41 @@ normalize-ty-nf Γ tΓ s A =
 normalize-ty : (Γ : CCtx) → TCtx Γ → (s : TyShape) → TyCode Γ s → TyCode Γ s
 normalize-ty Γ tΓ s A =
   (fst (normalize-ty-nf Γ tΓ s A) , fst (snd A) , embed {(k-nf , (j-ty , Γ , s , fst (normalize-ty-nf Γ tΓ s A) , fst (snd A)))} (snd (normalize-ty-nf Γ tΓ s A)))
+-- ---------------------------------------------------------------- substitution on checked syntax
+-- (2026-11-14) docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, §6.1 “Substitution on checked syntax”: a
+-- well-typed substitution σ : Δ → Γ gives each variable of Γ a checked term in Δ at σ's action on the
+-- variable's meaning (DSubst; each dimension a canonical form), and checked syntax substitutes:
+-- subst-tm and subst-ty take a derivation of t in Γ to a derivation in Δ whose meaning is σ's action
+-- on t's, so [[t[σ]]]ρ ≡ [[t]][[σ]]ρ holds by refl (subst-sound). It is computed by the fundamental
+-- lemma at σ, each substituted term made computable by the fundamental lemma at Δ's identity
+-- (dsub-env), then read back, so t[σ] comes out normal (substitution followed by normalization, in
+-- one pass: hereditary substitution)
+DSubst : (Γ Δ : CCtx) → Sub Δ Γ → Type 1
+DSubst Γ Δ σ = (dsF : CanonCM (fst Δ) (fst Γ) (fst σ)) ×
+  ((v : VarP (fst Γ)) → (dc : Code) × Der (j-tm , Δ , var-shape (fst Γ) v , dc , subM Δ Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)))
+dsub-env : (Γ Δ : CCtx) → TCtx Δ → (σ : Sub Δ Γ) → DSubst Γ Δ σ → CompEnv Γ Δ σ
+dsub-env Γ Δ tΔ σ ds =
+  (fst ds , λ v → comp-tr (var-shape (fst Γ) v) Δ (subM Δ Δ (TV (var-shape (fst Γ) v)) (sub-id Δ) (subM Δ Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)))
+     (subM Δ Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)) (subM-id Δ (TV (var-shape (fst Γ) v)) (subM Δ Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)))
+     (fund (snd (snd ds v)) Δ (sub-id Δ) (id-env Δ tΔ)))
+subst-tm : (Γ Δ : CCtx) → TCtx Δ → (σ : Sub Δ Γ) → DSubst Γ Δ σ → (s : TyShape) → TCode Γ s → TCode Δ s
+subst-tm Γ Δ tΔ σ ds s t =
+  (fst (fst (snd (rr s)) Δ (subM Δ Γ (TV s) σ (teval Γ s t)) (fund (snd (snd t)) Δ σ (dsub-env Γ Δ tΔ σ ds))) ,
+   subM Δ Γ (TV s) σ (teval Γ s t) ,
+   embed {(k-nf , (j-tm , Δ , s , fst (fst (snd (rr s)) Δ (subM Δ Γ (TV s) σ (teval Γ s t)) (fund (snd (snd t)) Δ σ (dsub-env Γ Δ tΔ σ ds))) , subM Δ Γ (TV s) σ (teval Γ s t)))}
+     (snd (fst (snd (rr s)) Δ (subM Δ Γ (TV s) σ (teval Γ s t)) (fund (snd (snd t)) Δ σ (dsub-env Γ Δ tΔ σ ds)))))
+subst-sound : (Γ Δ : CCtx) (tΔ : TCtx Δ) (σ : Sub Δ Γ) (ds : DSubst Γ Δ σ) (s : TyShape) (t : TCode Γ s) →
+  PathM Δ (TV s) (teval Δ s (subst-tm Γ Δ tΔ σ ds s t)) (subM Δ Γ (TV s) σ (teval Γ s t))
+subst-sound Γ Δ tΔ σ ds s t = λ i → subM Δ Γ (TV s) σ (teval Γ s t)
+subst-ty : (Γ Δ : CCtx) → TCtx Δ → (σ : Sub Δ Γ) → DSubst Γ Δ σ → (s : TyShape) → TyCode Γ s → TyCode Δ s
+subst-ty Γ Δ tΔ σ ds s A =
+  (fst (fst (rr s) Δ (subM Δ Γ (Sem s) σ (fst (snd A))) (fund (snd (snd A)) Δ σ (dsub-env Γ Δ tΔ σ ds))) ,
+   subM Δ Γ (Sem s) σ (fst (snd A)) ,
+   embed {(k-nf , (j-ty , Δ , s , fst (fst (rr s) Δ (subM Δ Γ (Sem s) σ (fst (snd A))) (fund (snd (snd A)) Δ σ (dsub-env Γ Δ tΔ σ ds))) , subM Δ Γ (Sem s) σ (fst (snd A))))}
+     (snd (fst (rr s) Δ (subM Δ Γ (Sem s) σ (fst (snd A))) (fund (snd (snd A)) Δ σ (dsub-env Γ Δ tΔ σ ds)))))
+subst-ty-sound : (Γ Δ : CCtx) (tΔ : TCtx Δ) (σ : Sub Δ Γ) (ds : DSubst Γ Δ σ) (s : TyShape) (A : TyCode Γ s) →
+  PathM Δ (Sem s) (fst (snd (subst-ty Γ Δ tΔ σ ds s A))) (subM Δ Γ (Sem s) σ (fst (snd A)))
+subst-ty-sound Γ Δ tΔ σ ds s A = λ i → subM Δ Γ (Sem s) σ (fst (snd A))
 
 
 
