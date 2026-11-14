@@ -288,3 +288,10 @@ tru-X = λ ρ → ((one , one , λ i → one) , unit)
 tru-d : Der (j-tm , emp2 , s-unit , ccomp (cplam c-unit) csys0 c-tt , fmapM emp2 (TrV s-unit) (TV s-unit) (tr-r s-unit) tru-X)
 tru-d = dtransp emp2 s-unit pf-unit tru-X c-unit c-tt (dty-unit (dext emp2) (dline-body emp2 (TrV s-unit) (Sem s-unit) (tr-ln s-unit) tru-X)) tt-d
 #same fst (normalize-nf emp2 tc-nil s-unit (ccomp (cplam c-unit) csys0 c-tt , fmapM emp2 (TrV s-unit) (TV s-unit) (tr-r s-unit) tru-X , tru-d)) = c-tt
+-- x := true in λ y. x (x : Bool): substitution goes under the binder, giving λ y. true
+lx-X : Mean Γb2 (TV (s-pi s-bool s-bool))
+lx-X = λ ρ → (bb-fam , λ y → snd ρ)
+lx-d : Der (j-tm , Γb2 , s-pi s-bool s-bool , clam (cvar #1) , lx-X)
+lx-d = dlam Γb2 s-bool s-bool lx-X c-bool (cvar #1) (dty-bool Γb2 (fmapM Γb2 (TV (s-pi s-bool s-bool)) (Sem s-bool) (λ q → fam-dom s-bool s-bool (fst q)) lx-X))
+  (dvar (lam-ctx Γb2 s-bool s-bool lx-X) (some none))
+#same fst (subst-tm Γb2 emp2 tc-nil σx dsx (s-pi s-bool s-bool) (clam (cvar #1) , lx-X , lx-d)) = clam c-true
