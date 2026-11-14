@@ -113,3 +113,61 @@ pa-at-j X L = λ k → degen-l (Line X) L
 pa-at-ij : (X : Type 1) (L : Line X) →
   PathP (λ k → Line (Line X)) (papp-cube pa-2 X (lcons (lcons (#0 , true) (lcons (#1 , true) lnil)) lnil) (pa-c X L)) (meet-l X L)
 pa-at-ij X L = λ k → meet-l X L
+-- ---------------------------------------------------------------- Nat
+-- suc zero : Nat normalizes to itself
+one-u : Mean emp2 One1
+one-u = λ ρ → one
+z-X : Mean emp2 (TV s-nat)
+z-X = fmapM emp2 One1 (TV s-nat) (nat-v zero) one-u
+sz-d : Der (j-tm , emp2 , s-nat , c-suc c-zero , fmapM emp2 (TV s-nat) (TV s-nat) nat-sucv z-X)
+sz-d = dsuc emp2 z-X c-zero (dzero emp2 one-u)
+#same fst (normalize-nf emp2 tc-nil s-nat (c-suc c-zero , fmapM emp2 (TV s-nat) (TV s-nat) nat-sucv z-X , sz-d)) = c-suc c-zero
+-- the step λ k. λ x. suc x : Π k:Nat. Nat → Nat over a recursor's meaning R (any context Γ)
+st-c : Code
+st-c = clam (clam (c-suc (cvar #0)))
+st-X : (Γ : CCtx) → Mean Γ (NRecV s-nat) → Mean Γ (TV (s-pi s-nat (s-pi s-nat s-nat)))
+st-X Γ R = fmapM Γ (NRecV s-nat) (TV (s-pi s-nat (s-pi s-nat s-nat))) (nrec-st s-nat) R
+st-ctx1 : (Γ : CCtx) → Mean Γ (NRecV s-nat) → CCtx
+st-ctx1 Γ R = lam-ctx Γ s-nat (s-pi s-nat s-nat) (st-X Γ R)
+st-X2 : (Γ : CCtx) (R : Mean Γ (NRecV s-nat)) → Mean (st-ctx1 Γ R) (TV (s-pi s-nat s-nat))
+st-X2 Γ R = lam-body Γ s-nat (s-pi s-nat s-nat) (st-X Γ R)
+st-ctx2 : (Γ : CCtx) (R : Mean Γ (NRecV s-nat)) → CCtx
+st-ctx2 Γ R = lam-ctx (st-ctx1 Γ R) s-nat s-nat (st-X2 Γ R)
+-- (at each context: the step's body's type is its meaning only once the context's cube computes)
+-- nrec Nat zero (λ k. λ x. suc x) (suc (suc zero)) normalizes to suc (suc zero)
+n2-R : Mean emp2 (NRecV s-nat)
+n2-R = λ ρ → (one , (λ k → one) , suc (suc zero) , zero , λ k x → suc x)
+st-d0 : Der (j-tm , emp2 , s-pi s-nat (s-pi s-nat s-nat) , st-c , st-X emp2 n2-R)
+st-d0 = dlam emp2 s-nat (s-pi s-nat s-nat) (st-X emp2 n2-R) c-nat (clam (c-suc (cvar #0)))
+  (dty-nat emp2 (fmapM emp2 (TV (s-pi s-nat (s-pi s-nat s-nat))) (Sem s-nat) (λ q → fam-dom s-nat (s-pi s-nat s-nat) (fst q)) (st-X emp2 n2-R)))
+  (dlam (st-ctx1 emp2 n2-R) s-nat s-nat (st-X2 emp2 n2-R) c-nat (c-suc (cvar #0))
+    (dty-nat (st-ctx1 emp2 n2-R) (fmapM (st-ctx1 emp2 n2-R) (TV (s-pi s-nat s-nat)) (Sem s-nat) (λ q → fam-dom s-nat s-nat (fst q)) (st-X2 emp2 n2-R)))
+    (dsuc (st-ctx2 emp2 n2-R) (varCube (st-ctx2 emp2 n2-R) none) (cvar #0) (dvar (st-ctx2 emp2 n2-R) none)))
+n2-c : Code
+n2-c = c-nrec c-nat c-zero st-c (c-suc (c-suc c-zero))
+n2-d : Der (j-tm , emp2 , s-nat , n2-c , fmapM emp2 (NRecV s-nat) (TV s-nat) (nrec-r s-nat) n2-R)
+n2-d = dnrec emp2 s-nat n2-R c-nat c-zero st-c (c-suc (c-suc c-zero))
+  (dty-nat (ext-h emp2 s-nat (NRecV s-nat) (nrec-b s-nat) n2-R) (nrec-mot emp2 s-nat n2-R))
+  (dzero emp2 one-u) st-d0
+  (dsuc emp2 (fmapM emp2 (TV s-nat) (TV s-nat) nat-sucv z-X) (c-suc c-zero) sz-d)
+#same fst (normalize-nf emp2 tc-nil s-nat (n2-c , fmapM emp2 (NRecV s-nat) (TV s-nat) (nrec-r s-nat) n2-R , n2-d)) = c-suc (c-suc c-zero)
+-- n : Nat in context; nrec Nat zero (λ k. λ x. suc x) n is neutral, and stays
+Γn2 : CCtx
+Γn2 = ext-h emp2 s-nat (Sem s-nat) (λ A → A) one-u
+tΓn2 : TCtx Γn2
+tΓn2 = tc-ty emp2 tc-nil s-nat one-u c-nat (dty-nat emp2 one-u)
+nn-R : Mean Γn2 (NRecV s-nat)
+nn-R = λ ρ → (one , (λ k → one) , snd ρ , zero , λ k x → suc x)
+st-dn : Der (j-tm , Γn2 , s-pi s-nat (s-pi s-nat s-nat) , st-c , st-X Γn2 nn-R)
+st-dn = dlam Γn2 s-nat (s-pi s-nat s-nat) (st-X Γn2 nn-R) c-nat (clam (c-suc (cvar #0)))
+  (dty-nat Γn2 (fmapM Γn2 (TV (s-pi s-nat (s-pi s-nat s-nat))) (Sem s-nat) (λ q → fam-dom s-nat (s-pi s-nat s-nat) (fst q)) (st-X Γn2 nn-R)))
+  (dlam (st-ctx1 Γn2 nn-R) s-nat s-nat (st-X2 Γn2 nn-R) c-nat (c-suc (cvar #0))
+    (dty-nat (st-ctx1 Γn2 nn-R) (fmapM (st-ctx1 Γn2 nn-R) (TV (s-pi s-nat s-nat)) (Sem s-nat) (λ q → fam-dom s-nat s-nat (fst q)) (st-X2 Γn2 nn-R)))
+    (dsuc (st-ctx2 Γn2 nn-R) (varCube (st-ctx2 Γn2 nn-R) none) (cvar #0) (dvar (st-ctx2 Γn2 nn-R) none)))
+nn-c : Code
+nn-c = c-nrec c-nat c-zero st-c (cvar #0)
+nn-d : Der (j-tm , Γn2 , s-nat , nn-c , fmapM Γn2 (NRecV s-nat) (TV s-nat) (nrec-r s-nat) nn-R)
+nn-d = dnrec Γn2 s-nat nn-R c-nat c-zero st-c (cvar #0)
+  (dty-nat (ext-h Γn2 s-nat (NRecV s-nat) (nrec-b s-nat) nn-R) (nrec-mot Γn2 s-nat nn-R))
+  (dzero Γn2 (λ ρ → one)) st-dn (dvar Γn2 none)
+#same fst (normalize-nf Γn2 tΓn2 s-nat (nn-c , fmapM Γn2 (NRecV s-nat) (TV s-nat) (nrec-r s-nat) nn-R , nn-d)) = nn-c
