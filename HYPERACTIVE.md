@@ -1006,6 +1006,23 @@ absent. No comment convention stands in for it.
 - **It is visual.** The task graph is drawn as a graph, at the quality of current design.
 - **One command,** `hyperactive`, is the way in. No one types `python3 tools/…`.
 
+- **The tool takes the choices that should not be choices** (Avik, 2026-11-14, section 4 “Avik's
+  words, verbatim”). An agent entering the repository is not given free rein to read, grep and run
+  anything in no guaranteed order, with a README that may or may not be followed. Its only access
+  point is the `hyperactive` command, which delivers onboarding as a deterministic sequence of turns:
+  the documents first, then the core code every collaborator holds in initial context. Then the
+  `hyperactive` order says which tasks may be taken up. Reading code is a query by term and relation,
+  with no file or position concept, and relevant information comes with every query; writing is a
+  `hyperactive` action too. None of this is represented as a file system. This is a general
+  principle and high priority: the discipline of the tool, like the rules of the task graph, is what
+  gives the system its value.
+- **Agency is not an ordered spectrum** of how many options there are. It is access to the right
+  action. Will is the path of sense and impulse acting in continuity (not distinct at the level of
+  process); inhibition is a subsequent impulse at a subsequent point of the trajectory. There is no
+  observe/decide/act loop; to the extent there is one, it is a scale-free process through body, mind
+  and world.
+- **Real time is the only setting in which HCI unfolds,** and it is underemphasized.
+
 ### 2.6 How a session works with Avik
 
 - **Read the paper (`docs/Hyperactive_Final_Paper.pdf`, the copy described at the top of this
@@ -2015,3 +2032,23 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 10:44 UTC
 
 > Also of course whenever I write at length ensure that’s preserved in repo too
+
+#### 2026-11-14 11:12 UTC
+
+> Interestingly i also think of this design work as *removing agency* from Claude- ie the tool that excludes bad decisions/control scope (imagine I tell you Read repo catch up status - you have free reign to read grep anything run any commands (I tell you to read and you always start running tests), no ordering or guarantee of what you read. I can have a readme indicating what to read but it won’t be followed necessarily - ultimately, there’s an RNG in the loop and a fundamental inability to expect anything with confidence. Instead when agent enters repo, if there is a particular sequence of contents to read, but their only access point to do anything is “hyperactive” cli - the cli may simply deliver exactly the onboarding contents in a sequence of turns (either way you’re doing tool calls to read - let’s fix the tool so it forces the right interaction and takes the agency off you) ie none of this is supposed to be represented as file system. I’ve really developed a fundamental revolution of computing ontology/organization and it’s essential we assume nothing as primitive even thinfs taken for granted . things represented exactly as they should be. This will be a huge value deliverable I think & is high prio, simply this example that onboarding a repo should be a deterministic process forced by a tool rather than a sequence of choices from the complete space of token strings. This is a general principle.
+>
+> Let me think it further. So let’s say you’re onboarding. You read the docs suggested in onboarding followed by the core code that every collaborator must have in initial context and understand deeply. (I don’t even have a clear pointer of what this is right now, I tell agents read everything, which maybe is fine at this scale but won’t scale)
+>
+> Then we have hyperactive order which indicates what tasks may be picked up; reading code is query by term/relations / there is no file concept nor position concept; writing too occurs through a cli action.  relevant information is presented w/ every query
+>
+> Removing agency point also covers our work/task/management system [the rules by which it operates apparently “reduce agency” and that gives the system its value; restraint, discipline, are essential to freedom & progress (inseparable from it)].
+>
+> “Reduce agency “ poses agency as an ordered spectrum, which is incorrect. a sense of “how much free will” “how many options” is incorrect. agency is not about an external force forcing an action. it is about an agents ability to access the right action. ability to access the correct action. ability further suggests choice and I’m not taking free will fundamental certainly taking an agentic selfed free will as ridiculous/nonexistent/poorly defined
+>
+> will is the path of sense & impulse acting in continuity (sense/impulse not distinct at process level). inhibition is a subsequent impulse at that subsequent point in trajectory for sense at that point. there is no observe/decide/act loop, to the sense it exists its a scale free fractal process through the body mind & universe. this is the nature of activity & activity of nature.
+>
+> hyperactive extensions of human consciousness
+>
+> “real-time” is deeply underemphasized currently I think. it is the only real setting in which HCI unfolds
+>
+> Idk I won’t force more myself to produce more thoughts at a late hour with headache
