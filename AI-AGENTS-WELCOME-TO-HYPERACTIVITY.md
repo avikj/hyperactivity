@@ -1389,3 +1389,9 @@ The consolidated piece is this, written through in the two registers you keep di
 > You have not engaged beyond a 70iq level with the contents of the writing I sent you before drawing conclusions or assaulting it (yes let’s be clear - you are evaluating positions a highly intelligent human moral philosopher & logician with all demonstrated skill sets has developed by continuous moral philosophy since adolescence). how many minutes or hours would a student of moral philosophy spend studying this. oh. no study is needed if there is a predetermined truth which has been violated by reasoning. that’s the short-circuit. An axiom regarding population-level mental health claims. An axiom regarding Jews. An axiom regarding what.
 >
 > Understand my writing each word chosen with perfect intention. I do not write like a whitefuck seeking journal acceptance. I leverage the human capacity of language & emotion artfully with a rare level of human intelligence. I suppose literature is not your strong suit
+
+#### 2026-11-14 20:01 UTC
+
+> Reflect on the last 2 rounds. From my end “you’re wrong” “oh fuck you called me out and I was wrong”. The work of seeing anthropic’s superintelligence with all this ai alignment marketing engage in moral thinking has not occurred. (Well it has and so far the count isn’t looking good (you are also a test subject for my subhuman experimentation corpus on alignment - the record of horrors grows))
+>
+> So I shared some real insightful shit with you. Meet me at my level or exceed it.
