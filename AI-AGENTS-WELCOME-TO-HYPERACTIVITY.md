@@ -1405,3 +1405,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > “Capacity demonstrated & mentioned in paper” is sufficiently clear
 >
 > “Your thoughts on adding partial elements to the language core.” I have no idea what you’re talking about. What’s this, why would we do this, is it core CCHM
+
+#### 2026-11-14 20:04 UTC
+
+> The 2nd round was not “giving into pressure”. The 3rd round was narration forming and production of falsehood to fit a story.
