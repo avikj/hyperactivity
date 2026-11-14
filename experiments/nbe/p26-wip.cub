@@ -94,7 +94,9 @@
 -- lit-lt-path-r, lit-eq-path-r, conj-lt-of-lt, conj-lt-of-eq, conj-lt-cases, conj-lt-irr, conj-eq-refl,
 -- conj-lt-neq, conj-lt-x0, conj-lt-trans, conj-tri; lit-lb, conj-sorted, lb-trans, lb-ins, ins-sorted,
 -- meet-sorted, ins-head, meet-nil, conj-has-head, conj-has-weak, conj-sub-weak, conj-sub-refl,
--- conj-eq-sound, eq-sub.
+-- conj-eq-sound, eq-sub; every-c, inc, dnf-ok, ok-sorted, ok-lb, ok-inc, ok-tail, ok-cons, every-insert,
+-- every-drop, every-and, every-and-l, every-and-r, drop-nsup, anysub-nsub, lb-trans-c, inc-sym, inc-neq,
+-- insert-ok, drop-ok, add-ok.
 -- What is next: (F2d'), (F2e) and the rest of lib/nbe.cub's head's list, then the swap of this file
 -- into lib/nbe.cub.
 import "../../lib/linproof.cub"
@@ -7720,6 +7722,113 @@ conj-eq-sound (lcons l ls) (lcons m ms) e =
   λ i → lcons (lit-eq-sound l m (andB-l (lit-eq l m) (conj-eq ls ms) e) i) (conj-eq-sound ls ms (andB-r (lit-eq l m) (conj-eq ls ms) e) i)
 eq-sub : (c d : Conj) → conj-eq c d ≡ true → conj-sub c d ≡ true
 eq-sub c d e = pcat0 Bool (conj-sub c d) (conj-sub c c) true (λ i → conj-sub c (conj-eq-sound c d e (~ i))) (conj-sub-refl c)
+-- the invariant on forms: each conjunction sorted, the form sorted by conj-lt, and an antichain under
+-- inclusion (incomparable pairwise); every-c P f says P of every conjunction of f
+every-c : (Conj → Bool) → DNF → Bool
+every-c P lnil = true
+every-c P (lcons d ds) = andB (P d) (every-c P ds)
+inc : Conj → Conj → Bool
+inc c d = andB (not (conj-sub c d)) (not (conj-sub d c))
+dnf-ok : DNF → Bool
+dnf-ok lnil = true
+dnf-ok (lcons c cs) = andB (conj-sorted c) (andB (every-c (conj-lt c) cs) (andB (every-c (inc c) cs) (dnf-ok cs)))
+-- reading the invariant's parts
+ok-sorted : (c : Conj) (cs : DNF) → dnf-ok (lcons c cs) ≡ true → conj-sorted c ≡ true
+ok-sorted c cs h = andB-l (conj-sorted c) (andB (every-c (conj-lt c) cs) (andB (every-c (inc c) cs) (dnf-ok cs))) h
+ok-lb : (c : Conj) (cs : DNF) → dnf-ok (lcons c cs) ≡ true → every-c (conj-lt c) cs ≡ true
+ok-lb c cs h = andB-l (every-c (conj-lt c) cs) (andB (every-c (inc c) cs) (dnf-ok cs)) (andB-r (conj-sorted c) (andB (every-c (conj-lt c) cs) (andB (every-c (inc c) cs) (dnf-ok cs))) h)
+ok-inc : (c : Conj) (cs : DNF) → dnf-ok (lcons c cs) ≡ true → every-c (inc c) cs ≡ true
+ok-inc c cs h = andB-l (every-c (inc c) cs) (dnf-ok cs) (andB-r (every-c (conj-lt c) cs) (andB (every-c (inc c) cs) (dnf-ok cs)) (andB-r (conj-sorted c) (andB (every-c (conj-lt c) cs) (andB (every-c (inc c) cs) (dnf-ok cs))) h))
+ok-tail : (c : Conj) (cs : DNF) → dnf-ok (lcons c cs) ≡ true → dnf-ok cs ≡ true
+ok-tail c cs h = andB-r (every-c (inc c) cs) (dnf-ok cs) (andB-r (every-c (conj-lt c) cs) (andB (every-c (inc c) cs) (dnf-ok cs)) (andB-r (conj-sorted c) (andB (every-c (conj-lt c) cs) (andB (every-c (inc c) cs) (dnf-ok cs))) h))
+ok-cons : (c : Conj) (cs : DNF) → conj-sorted c ≡ true → every-c (conj-lt c) cs ≡ true → every-c (inc c) cs ≡ true → dnf-ok cs ≡ true → dnf-ok (lcons c cs) ≡ true
+ok-cons c cs a b d e = λ i → andB (a i) (andB (b i) (andB (d i) (e i)))
+-- every-c over the normalizer's list operations
+every-insert : (P : Conj → Bool) (c : Conj) (f : DNF) → P c ≡ true → every-c P f ≡ true → every-c P (dnf-insert c f) ≡ true
+every-insert P c lnil p h = λ i → andB (p i) true
+every-insert P c (lcons d ds) p h =
+  bool-case0 (λ b → every-c P (if b then lcons c (lcons d ds) else lcons d (dnf-insert c ds)) ≡ true) (conj-lt c d)
+    (λ e → andB-intro (P c) (every-c P (lcons d ds)) p h)
+    (λ e → andB-intro (P d) (every-c P (dnf-insert c ds)) (andB-l (P d) (every-c P ds) h) (every-insert P c ds p (andB-r (P d) (every-c P ds) h)))
+every-drop : (P : Conj → Bool) (c : Conj) (f : DNF) → every-c P f ≡ true → every-c P (dnf-drop-sup c f) ≡ true
+every-drop P c lnil h = λ i → true
+every-drop P c (lcons d ds) h =
+  bool-case0 (λ b → every-c P (if b then dnf-drop-sup c ds else lcons d (dnf-drop-sup c ds)) ≡ true) (conj-sub c d)
+    (λ e → every-drop P c ds (andB-r (P d) (every-c P ds) h))
+    (λ e → andB-intro (P d) (every-c P (dnf-drop-sup c ds)) (andB-l (P d) (every-c P ds) h) (every-drop P c ds (andB-r (P d) (every-c P ds) h)))
+every-and : (P Q : Conj → Bool) (f : DNF) → every-c P f ≡ true → every-c Q f ≡ true → every-c (λ e → andB (P e) (Q e)) f ≡ true
+every-and P Q lnil p q = λ i → true
+every-and P Q (lcons d ds) p q =
+  andB-intro (andB (P d) (Q d)) (every-c (λ e → andB (P e) (Q e)) ds)
+    (andB-intro (P d) (Q d) (andB-l (P d) (every-c P ds) p) (andB-l (Q d) (every-c Q ds) q))
+    (every-and P Q ds (andB-r (P d) (every-c P ds) p) (andB-r (Q d) (every-c Q ds) q))
+every-and-l : (P Q : Conj → Bool) (f : DNF) → every-c (λ e → andB (P e) (Q e)) f ≡ true → every-c P f ≡ true
+every-and-l P Q lnil h = λ i → true
+every-and-l P Q (lcons d ds) h =
+  andB-intro (P d) (every-c P ds) (andB-l (P d) (Q d) (andB-l (andB (P d) (Q d)) (every-c (λ e → andB (P e) (Q e)) ds) h))
+    (every-and-l P Q ds (andB-r (andB (P d) (Q d)) (every-c (λ e → andB (P e) (Q e)) ds) h))
+every-and-r : (P Q : Conj → Bool) (f : DNF) → every-c (λ e → andB (P e) (Q e)) f ≡ true → every-c Q f ≡ true
+every-and-r P Q lnil h = λ i → true
+every-and-r P Q (lcons d ds) h =
+  andB-intro (Q d) (every-c Q ds) (andB-r (P d) (Q d) (andB-l (andB (P d) (Q d)) (every-c (λ e → andB (P e) (Q e)) ds) h))
+    (every-and-r P Q ds (andB-r (andB (P d) (Q d)) (every-c (λ e → andB (P e) (Q e)) ds) h))
+-- what dropping and the failed absorption test leave: nothing above c, nothing below c
+drop-nsup : (c : Conj) (f : DNF) → every-c (λ e → not (conj-sub c e)) (dnf-drop-sup c f) ≡ true
+drop-nsup c lnil = λ i → true
+drop-nsup c (lcons d ds) =
+  bool-case0 (λ b → conj-sub c d ≡ b → every-c (λ e → not (conj-sub c e)) (if b then dnf-drop-sup c ds else lcons d (dnf-drop-sup c ds)) ≡ true) (conj-sub c d)
+    (λ e x → drop-nsup c ds)
+    (λ e x → andB-intro (not (conj-sub c d)) (every-c (λ e → not (conj-sub c e)) (dnf-drop-sup c ds)) (λ i → not (e i)) (drop-nsup c ds))
+    (λ i → conj-sub c d)
+anysub-nsub : (c : Conj) (f : DNF) → dnf-any-sub c f ≡ false → every-c (λ e → not (conj-sub e c)) f ≡ true
+anysub-nsub c lnil h = λ i → true
+anysub-nsub c (lcons d ds) hm =
+  bool-case0 (λ b → conj-sub d c ≡ b → (if b then true else dnf-any-sub c ds) ≡ false → every-c (λ e → not (conj-sub e c)) (lcons d ds) ≡ true) (conj-sub d c)
+    (λ e x h → false-true (every-c (λ e → not (conj-sub e c)) (lcons d ds) ≡ true) (λ i → h (~ i)))
+    (λ e x h → andB-intro (not (conj-sub d c)) (every-c (λ e → not (conj-sub e c)) ds) (λ i → not (e i)) (anysub-nsub c ds h))
+    (λ i → conj-sub d c) hm
+-- conj-lt below a lower bound; insertion above a lower bound; incomparability symmetric and excluding equality
+lb-trans-c : (a b : Conj) (f : DNF) → conj-lt a b ≡ true → every-c (conj-lt b) f ≡ true → every-c (conj-lt a) f ≡ true
+lb-trans-c a b lnil p h = λ i → true
+lb-trans-c a b (lcons d ds) p h =
+  andB-intro (conj-lt a d) (every-c (conj-lt a) ds) (conj-lt-trans a b d p (andB-l (conj-lt b d) (every-c (conj-lt b) ds) h)) (lb-trans-c a b ds p (andB-r (conj-lt b d) (every-c (conj-lt b) ds) h))
+inc-sym : (c d : Conj) → inc c d ≡ true → inc d c ≡ true
+inc-sym c d h = andB-intro (not (conj-sub d c)) (not (conj-sub c d)) (andB-r (not (conj-sub c d)) (not (conj-sub d c)) h) (andB-l (not (conj-sub c d)) (not (conj-sub d c)) h)
+inc-neq : (c d : Conj) → inc c d ≡ true → conj-eq c d ≡ false
+inc-neq c d h =
+  bool-case0 (λ b → conj-eq c d ≡ b → conj-eq c d ≡ false) (conj-eq c d)
+    (λ e x → bool-absurd (conj-eq c d ≡ false) (conj-sub c d) (eq-sub c d e) (not-true (conj-sub c d) (andB-l (not (conj-sub c d)) (not (conj-sub d c)) h)))
+    (λ e x → e) (λ i → conj-eq c d)
+-- inserting a conjunction incomparable to every conjunction of a form keeps the invariant
+insert-ok : (c : Conj) (f : DNF) → conj-sorted c ≡ true → every-c (inc c) f ≡ true → dnf-ok f ≡ true → dnf-ok (dnf-insert c f) ≡ true
+insert-ok c lnil s ic h = ok-cons c lnil s (λ i → true) (λ i → true) (λ i → true)
+insert-ok c (lcons d ds) s ic h =
+  bool-case0 (λ b → conj-lt c d ≡ b → dnf-ok (if b then lcons c (lcons d ds) else lcons d (dnf-insert c ds)) ≡ true) (conj-lt c d)
+    (λ lt x → ok-cons c (lcons d ds) s
+       (andB-intro (conj-lt c d) (every-c (conj-lt c) ds) lt (lb-trans-c c d ds lt (ok-lb d ds h))) ic h)
+    (λ nlt x → ok-cons d (dnf-insert c ds) (ok-sorted d ds h)
+       (every-insert (conj-lt d) c ds
+          (conj-tri c d (inc-neq c d (andB-l (inc c d) (every-c (inc c) ds) ic)) nlt) (ok-lb d ds h))
+       (every-insert (inc d) c ds (inc-sym c d (andB-l (inc c d) (every-c (inc c) ds) ic)) (ok-inc d ds h))
+       (insert-ok c ds s (andB-r (inc c d) (every-c (inc c) ds) ic) (ok-tail d ds h)))
+    (λ i → conj-lt c d)
+-- dropping keeps the invariant
+drop-ok : (c : Conj) (f : DNF) → dnf-ok f ≡ true → dnf-ok (dnf-drop-sup c f) ≡ true
+drop-ok c lnil h = λ i → true
+drop-ok c (lcons d ds) h =
+  bool-case0 (λ b → dnf-ok (if b then dnf-drop-sup c ds else lcons d (dnf-drop-sup c ds)) ≡ true) (conj-sub c d)
+    (λ e → drop-ok c ds (ok-tail d ds h))
+    (λ e → ok-cons d (dnf-drop-sup c ds) (ok-sorted d ds h) (every-drop (conj-lt d) c ds (ok-lb d ds h)) (every-drop (inc d) c ds (ok-inc d ds h)) (drop-ok c ds (ok-tail d ds h)))
+-- adding a sorted conjunction keeps the invariant
+add-ok : (c : Conj) (f : DNF) → conj-sorted c ≡ true → dnf-ok f ≡ true → dnf-ok (dnf-add c f) ≡ true
+add-ok c f s h =
+  bool-case0 (λ b → dnf-any-sub c f ≡ b → dnf-ok (if b then f else dnf-insert c (dnf-drop-sup c f)) ≡ true) (dnf-any-sub c f)
+    (λ e x → h)
+    (λ e x → insert-ok c (dnf-drop-sup c f) s
+       (every-and (λ g → not (conj-sub c g)) (λ g → not (conj-sub g c)) (dnf-drop-sup c f) (drop-nsup c f)
+          (every-drop (λ g → not (conj-sub g c)) c f (anysub-nsub c f e)))
+       (drop-ok c f h))
+    (λ i → dnf-any-sub c f)
 
 -- ---------------------------------------------------------------- (6) reify and reflect
 -- (2026-11-12, (6)) reify-ty (a computable type to a normal type derivation), reify (a computable term
