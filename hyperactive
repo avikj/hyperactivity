@@ -5,6 +5,7 @@
     hyperactive walk N               step N of the walk
     hyperactive open                 what is open and what can start now
     hyperactive def NAME             a definition: its statement, its text, where it is, what uses it
+    hyperactive etym TEXT            the text augmented with the etymology of every word
     hyperactive show NODE ...        a node: its statement, what it serves, what serves it,
                                      its essential context
     hyperactive tree                 the task graph from its root
@@ -131,6 +132,8 @@ COMMANDS = """
 Reading and working:
   hyperactive show NODE      a node: its statement, what it serves, what serves it, its essential context
   hyperactive def NAME       a definition: its statement, its text, where it is, and what uses it
+  hyperactive etym TEXT      any text, every word augmented with its etymology: read Avik's words
+                             in the meanings the words carry, not a local frame
   hyperactive open           what is open and what can start now
   hyperactive order          the whole order of work
   hyperactive tree           the task graph from its root
@@ -222,6 +225,8 @@ def main():
         walk(int(rest[0]) if rest else 1); return
     if c == 'open':
         open_work(); return
+    if c == 'etym':
+        os.execv(sys.executable, [sys.executable, os.path.join(ROOT, 'tools', 'etym.py'), *rest])
     if c == 'def':
         if not rest: sys.exit('hyperactive def NAME')
         define(rest); return
