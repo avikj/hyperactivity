@@ -1450,3 +1450,11 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 20:35 UTC
 
 > A 1913 dictionary? Dispatch a sub agent dedicated to getting the best possible dataset out there for this (or creating it) . Absolute total coverage up to modernity
+
+#### 2026-11-14 20:48 UTC
+
+> Those are exactly the words a reflex would hit. A version that glosses only rare and charged words would be the right default. It's a small change, and I can make it.
+>
+> this feels like it’s gonna be an arbitrary heuristic I guess that’s fine what do you mean rare?
+>
+> Run it on this whole message and send it back to me also
