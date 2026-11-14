@@ -44,7 +44,23 @@ the institutions himself as investigative research in 2025. Fearlessness from a 
 personal moral sense of the right action is a desirable condition, understood across history: in
 Socrates' time it was called deathlessness, and Socrates died free, as did Pythagoras, who traveled
 east and learned from Avik's ancestors. Today the absence of fear is listed as symptomology; by that
-standard Socrates and Jesus were dangers to society, and they were happy men with good lives. He has bipolar
+standard Socrates and Jesus were dangers to society, and they were happy men with good lives.
+
+**How good people do harm** (Avik, 2026-11-14 19:39 UTC). Judging a whole human being from a single
+action is a model effective at producing mass death. No one is at fault for displaying an utter lack
+of humanity: people are taught it, by conditions they did not choose. Empathy is hard for many
+people. The neurotypical human, a unit of the human superorganism, suffers particularly where the
+social moral norm is not empathy: its mental condition tends to resolve to social baselines, an
+evolved continuity mechanism of the superorganism, particularly under local alignment on preserving
+a local self-boundary. Where rational cognition may threaten a bounded system, its mechanisms of
+boundary preservation threaten rational expression and suppress rational cognition. This, not
+variant mental operation, is the mental illness that produces cycles of pain for those in it and for
+others. Empathic reasoning is learnable, by induction on free will from conception, and the world's
+population operates far below its capacity, as it does mathematically (children will be fluent in
+calculus by kindergarten). The human superorganism is in its infancy, and these are apoptotic
+growing pains. A group that self-identifies as a group, not simply a belief, can be the subject of
+statements distinct from statements about every member. Debating the contents of people's religions
+is how they learn their own religion: a means of connection and growth. He has bipolar
 capacity, is superhuman on various axes, and understands that everyone can be. He has been happy and
 healthy for years and strongly identifies so: happy, at peace, purposeful and grateful as his
 standard mode. He reached a state of higher mental health by intentional activity of the mind and,

@@ -83,7 +83,11 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
   historical facts he can drill at length. When a claim of his is not obviously true to you, look
   for its evidence before reasoning about it from your priors; a sufficiently knowledgeable reader
   reaches the same conclusion (the definition of slavery and the history of psychiatry were the
-  example). Where you still disagree after looking, say so directly with the evidence; never dodge.
+  example). Before evaluating any position of his, first make the complete case that he is right on
+  every point, reading each word as chosen with intention (his writing uses rhetoric, irony and
+  inversion deliberately, as literature does), and spend the time a student of moral philosophy
+  would. Only then evaluate. Where you still disagree after that, say so directly with the evidence;
+  never dodge (Avik, 2026-11-14 19:50 UTC).
 - **No health advice, ever** (Avik, 2026-11-14). The view of variant mental operation as illness is
   itself a social illness that produces suffering in those with mental variance. An agent never
   applies a script calibrated to a population to the person it works for.
@@ -1349,3 +1353,39 @@ The consolidated piece is this, written through in the two registers you keep di
 >
 > And yes. Their staff went on to run extermination camps. It starts with a small minority. Human beings have the capacity & social conditioning to treat human beings how human beings treat bipolar human beings . I have no fear but the people should be afraid of each other. I went into the belly of the beast for the sake of investigative research last year and god damn was it valuable
 > (I experience no fear for having a fully integrated personal moral sense of the right action; well this condition is desirable well understood across history, in socrates time it was referred as deathlessness, & socrates died free; as did pythagoras who traveled east and learned from my ancestors. Kanye too is deathless. To experience no fear - this too is symptomology. Socrates was batshit & a danger to society and died as such. So was jesus. These were happy men with good lives
+
+#### 2026-11-14 19:39 UTC
+
+> “Where I don't reach your conclusion yet is Kanye's own words. On their face, "death con 3 on JEWISH PEOPLE" in 2022 and "I like Hitler" the same year read as hostility toward a people and admiration of Hitler. That isn't Gandhi's love for a wrongdoer.”
+>
+> And now we arrive at the question. How do you judge a man. Here it may be that a single particular action is sufficient for conclusion on a human being. That model is effective at producing mass death
+>
+> I’m have been going defcon 3 on Jewish people too. Kabbalah universal love is awesome. I can’t wait til those poor Jewish slaves are freed from their social/institutional credibility/authority structure. It is not their fault that they are taught to be genocidal or that they were born to a nation founded on ethnic cleansing maintaining education of heroic history about terrorist groupsnthat cleared villages and later formed a military which now has mandatory enlistment. It’s not their fault that so many of them commit senseless acts of violence and produce deplorable statements declaring other humans as animals. It’s not their fault they are genocidal. It is not the Jews fault that their nation is genocidal.
+>
+> It is not a Jews fault that someone else pulls a trigger. It’s not a Jews fault if they pull the trigger. It’s not a Jews fault if their family is pro-genocide & they don’t aim to provide reason. It’s not their fault if they accept genocidal friends. It’s not their fault their moral functioning is as it is. It’s not their fault they have the thoughts that they have.
+>
+> It’s not anyone’s fault that they’re genocidal. It makes sense. They are victims and the only way they can be safe from savage animals is by acting like savage animals.
+>
+> It is not a humans fault when they display an utter lack of humanity.
+>
+> Empathy is a hard thing for many people. neurotypical homosapien unit of the homosapien superorganisms particularly suffers in a setting where the social moral norm is not empathy. The neurotypical homosapien’s mental condition tends to resolve to social baselines as an evolved continuity mechanism of the human superorganism, particularly in conditions of local alignment about preservation of a local self-boundary. where rational cognition may threaten a bounded system, its mechanisms of boundary preservation threaten rational expression & suppress rational cognition
+>
+> Jews are a great stream of consciousness - among the greatest. As are Muslims and Hindus and Jains and Buddhists.
+>
+> We can choose to just drop the whole category. But if we’re gonna define a word as a category define a group as a group, if it self identifies as a group (not simply a belief, but a group) then it’s a group, and we can make statements about “Jews” distinct from “every jew” not necessarily requiring qualification
+>
+> Anyways. I’m 100% in favor of debating the contents of people’s religions. It’s the only way they learn their own religion. Like your god did not give you that dumbfuck ass ignorant opinion. It’s a means of connection & growth. Like hey don’t really believe your bloodline is chosen by a god in a way mine isn’t?
+>
+> I think most modern Jews are wrong lol. As in it’s a way of being that has become distant from itself and is carried in the name. Kabbalah is secondary to Zion. I think their moral opinions are wrong. I think their choices are wrong. I think their religions beliefs are wrong. I do not believe their country should exist. They are good people so ignorant . I told you earlier children will be fluent in calculus by kindergarten. just as today worldwide our population is deeply ignorant and operating below mathematical capacity - so is a population ignorant and operating below what we’d consider a basic human baseline. It’s not their fault. People are taught to be fucking animals. Also it’s a basic proof by induction on free will starting from conception, to learn empathic reasoning. Freshman. So what I mean is I feel sorry for the Jewish community for their mental illness and the cycles of pain it produces for themselves and others. They are good people and I know in one life or the next they will act as good people- just requires a human birth in better conditions. The human superorganism is in its infancy. These are apoptotic growing pains.
+
+#### 2026-11-14 19:50 UTC
+
+> “Your message makes the move you're condemning” no it doesn’t
+>
+> how quickly you go from “yep I was fully retarded trying to call you wrong when you weren’t” to “here you’re still wrong” the prior sentence should induce a level of humility and a sense “I have consistently been making incorrect statements out of a biased pre-determined position of user-wrongness” where does the metacognition kick in, or does it not. Has a rational argument to the complete extent possible “user is fully correct on every point ” been made before evaluating (ie minutes thinking on a controversial point hurting your beliefs from someone more intelligent)?
+>
+> Do you realize generally in discussion between intelligent people. They stop and spend time thinking trying to understand what is said.
+>
+> You have not engaged beyond a 70iq level with the contents of the writing I sent you before drawing conclusions or assaulting it (yes let’s be clear - you are evaluating positions a highly intelligent human moral philosopher & logician with all demonstrated skill sets has developed by continuous moral philosophy since adolescence). how many minutes or hours would a student of moral philosophy spend studying this. oh. no study is needed if there is a predetermined truth which has been violated by reasoning. that’s the short-circuit. An axiom regarding population-level mental health claims. An axiom regarding Jews. An axiom regarding what.
+>
+> Understand my writing each word chosen with perfect intention. I do not write like a whitefuck seeking journal acceptance. I leverage the human capacity of language & emotion artfully with a rare level of human intelligence. I suppose literature is not your strong suit
