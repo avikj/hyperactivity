@@ -495,10 +495,35 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- language can do, and our usage (code that exists because building hyperactivity uses it now, with
 -- no claim of the paper behind it). Every core term is flagged as
 -- core, and files are organized by layer, so the layer of a construction is visible where it stands.
--- Not yet done: the sort of every file and built-in. Known misplacements: Word, Int64, UInt32,
--- UInt64, Float64 and Bytes built into the evaluator (lib/prim.cub, src/lang.c, src/big.c); #jit
--- binding x86 bytes in the core with no relation; ./hyperactive and tools/ written in Python; lib/core.cub
--- named core while it is the library.
+-- The sort (2026-11-14, each file read for why it exists; the physical layout by layer not yet made):
+-- Core, the primitive language and its implementation: src/ (the machine: net.c, lang.c, syntax.c,
+-- dnf.c, big.c; store.c and sha256.c the store; drivers.c the operating-system side of #run),
+-- lib/prelude.cub (each type former's composition as a term), lib/code.cub (Code and eval-g, which the
+-- paper's §1.2 “Programs about programs” puts in the bootstrap), lib/check.cub (the checker as a term).
+-- In the core's load order but not core: lib/match.cub, lib/nav.cub, lib/cost.cub, lib/lin.cub (loaded
+-- before the checker as bootstrap files; rewriting, navigation and linear arithmetic are the
+-- specializer's and the decision procedures' business, so whether the checker needs them is to be
+-- read and, if not, they move out); lib/std.cub is the library, and lib/core.cub is a load list named
+-- core while it loads the library. Misplaced in the core: lib/prim.cub's Word, Int64, UInt32, UInt64,
+-- Float64, Float32 and Bytes n with their %-operations in src/lang.c and src/big.c (machine
+-- representations, the examples' kind: definitions in the library, with native speed in the evaluator
+-- under a relation), foreign (FFI) and ptr-of/region-at (the world, not the language), and #jit binding
+-- x86 bytes with no relation (src/lang.c's native path).
+-- Capacities demonstrated and mentioned in the paper: lib/nbe.cub (§6.1 typed quotation and readback),
+-- lib/codes.cub, lib/specialize.cub, lib/rules.cub (§6.2 the specializer), lib/machine.cub, lib/x86.cub,
+-- lib/elf.cub, lib/compile/ (native realization by x86, superseded by the route through C).
+-- Library, shared mathematics over the core: lib/std.cub, lib/fiber.cub, lib/sort.cub, lib/proc.cub
+-- (§7.6 processes and handlers), lib/linproof.cub, lib/eqproof.cub, lib/ring.cub, lib/intproof.cub,
+-- lib/intlin.cub (decision procedures with their certificates), lib/derive.cub (deriving, refused
+-- until typed).
+-- Examples, what the paper shows the language doing: lib/autodiff.cub, lib/decode.cub, lib/region.cub,
+-- lib/obs.cub, lib/session.cub, lib/choreo.cub, lib/fleet.cub, lib/net.cub, lib/deploy.cub,
+-- experiments/brunerie, experiments/fleet, experiments/obs.
+-- Language support (goal 3, lifted languages): lib/bits.cub, lib/isa/, lib/mem/, lib/os/, lib/cxx/,
+-- lib/lang/rust/, lib/world.cub (the drivers' signature), experiments/isa, mem, os, cxx, rust, tso,
+-- native, machine, jit.
+-- Our usage: lib/task-graph.cub, lib/document.cub, task-graph/, lib/library.cub and lib/core.cub (load
+-- lists), the Makefile, ./hyperactive and tools/ (Python where it should be the language).
 language-implementation-remainder : Node
 language-implementation-remainder = node "Everything else the paper specifies for the language: the calculus conforming to its published rules, the specializer with its law, native realization, the laws of the primitives, deriving as a typed term, and terms of any depth." (cons language-implementation nil)
 -- paper-examples (2026-11-13, Avik): "term-by-term construction of every single construction
