@@ -212,8 +212,25 @@ path-free-transport = node "Transport along a line of types at every path-free s
 -- Glue and universes. Its meaning is host comp with the face over the context cube's dimensions; a
 -- checked definition writes it on a fresh local dimension (λ k → comp A [k = 1 ↦ u'] a0) and
 -- path-applies that line at the face's form, the host substituting into faces (tested 2026-11-14).
+-- Known (2026-11-14, tested): the host's comp at Bool or Nat with a nonempty system on a variable is
+-- a formal composition (hcompD), and a case or recursor on a formal composition reduces to the
+-- formal composition of its branches along the motive at the composition's fill (eliminators
+-- commute with it), so a formal composition is a normal form like a constructor, not a neutral: Bool's
+-- and Nat's clauses get a formal-composition alternative (its base and tubes computable paths, its
+-- face a canonical form), the eliminators' cases on it need composition along the motive, and the Kan
+-- lemma is over composition with a boundary system on a path dimension (k = 0, k = 1, total tubes)
+-- with its fills, by induction on the path-free shapes; transport at PathP is that composition.
+-- Known (2026-11-14, tested): object-level data types beyond Nat by a description of their
+-- constructors (a host data type Mu D whose field is ElD D (Mu D)) are refused by the host's
+-- positivity check ("the field type is not strictly positive"), which does not unfold a type computed
+-- by recursion on a parameter; each further data type is a shape of its own, as Nat is.
 composition-with-systems : Node
 composition-with-systems = node "Composition with a system on the context's faces, transport at PathP, Glue and universes in the normalizer over cubes." (cons typed-codes-after-swap nil)
+-- typed-codes-after-composition (2026-11-14): everything typed codes and normalization by evaluation
+-- need after composition with systems: Glue, universes (a level-stratified TyE, since El lands in Type
+-- and a universe's elements are types), and further object-level data types, each a shape of its own.
+typed-codes-after-composition : Node
+typed-codes-after-composition = node "Everything typed codes and normalization by evaluation need after composition with systems: Glue, universes and further object-level data types." (cons typed-codes-after-swap nil)
 -- object-level-nat (2026-11-14): Nat as the first object-level data type: shape s-nat, zero, suc
 -- and the recursor (step a term at Π k:Nat. P k → P (suc k), motive a type over the extension by
 -- Nat) in Der and NN, the clause CNat, fund's recursor case nrec-comp by induction on the scrutinee's
@@ -681,7 +698,7 @@ roots = cons the-product nil
 -- the leaves being worked on now, and the leaves whose work is done; every other leaf is pending
 -- (HYPERACTIVE.md §2.4 “The organization of the work”)
 in-progress : List Node
-in-progress = cons typed-codes-after-swap nil
+in-progress = cons composition-with-systems nil
 resolved : List Node
 resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat (cons path-free-transport nil)))))))
 -- language support starts only when the language implementation and the product implementation are
