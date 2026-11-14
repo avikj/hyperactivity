@@ -294,3 +294,57 @@ ext-env : (Δ' Δ : CCtx) (a : TyShape) (Y Y' : Type 1) (j : Y → Y') (h' : Y' 
   (p : PathM Δ' Y' (fmapM Δ' ((yq : Y') × El a (h' yq)) Y' (λ z → fst z) A') (fmapM Δ' Y Y' j (subM Δ' Δ Y σ M))) → CompEnv Δ Δ' σ → CompS a Δ' (fmapM Δ' ((yz : Y) × El a (h' (j yz))) (TV a) (λ z → (h' (j (fst z)) , snd z)) (zpt Δ' Δ a Y Y' j h' M σ A' p)) → CompEnv (ext-h Δ a Y (λ y → h' (j y)) M) Δ' (ext-at Δ' Δ a Y Y' j h' M σ A' p)
 ext-env Δ' Δ a Y Y' j h' M σ A' p e cn = (fst e , ext-env-v Δ' Δ a Y Y' j h' M σ A' p e cn)
 
+
+-- the environment under sub-form at a canonical form (form-env): the forms with g, each variable's
+-- value by reidx-of (a variable of dext Γ is the dimension-weakened one) and sub-form-dwk
+form-env : (Δ' Γ : CCtx) (σ : Sub Δ' Γ) (g : DNF) → isTrue (dnf-canon g) → CompEnv Γ Δ' σ → CompEnv (dext Γ) Δ' (sub-form Δ' Γ σ g)
+form-env Δ' Γ σ g cg e =
+  ((fst e , cg) ,
+   λ v → comp-tr (var-shape (fst Γ) v) Δ' (subM Δ' Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)) (subM Δ' (dext Γ) (TV (var-shape (fst Γ) v)) (sub-form Δ' Γ σ g) (varCube (dext Γ) v)) (psym (Mean Δ' (TV (var-shape (fst Γ) v))) (subM Δ' (dext Γ) (TV (var-shape (fst Γ) v)) (sub-form Δ' Γ σ g) (varCube (dext Γ) v)) (subM Δ' Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)) (pcat (Mean Δ' (TV (var-shape (fst Γ) v))) (subM Δ' (dext Γ) (TV (var-shape (fst Γ) v)) (sub-form Δ' Γ σ g) (varCube (dext Γ) v)) (subM Δ' (dext Γ) (TV (var-shape (fst Γ) v)) (sub-form Δ' Γ σ g) (dwkM Γ (TV (var-shape (fst Γ) v)) (varCube Γ v))) (subM Δ' Γ (TV (var-shape (fst Γ) v)) σ (varCube Γ v)) (λ i → subM Δ' (dext Γ) (TV (var-shape (fst Γ) v)) (sub-form Δ' Γ σ g) ((reidx-of (dims (fst Γ)) (CtxV (fst Γ)) (Line (CtxV (fst Γ))) (FbE (fst Γ) (TV (var-shape (fst Γ) v))) (LineO (CtxV (fst Γ)) (FbE (fst Γ) (TV (var-shape (fst Γ) v)))) (degen-l (CtxV (fst Γ))) (degen-o (CtxV (fst Γ)) (FbE (fst Γ) (TV (var-shape (fst Γ) v)))) (varM (fst Γ) v) (lineo-of (CtxV (fst Γ)) (FbE (fst Γ) (TV (var-shape (fst Γ) v))) (varM (fst Γ) v)) (λ i x → degen-o (CtxV (fst Γ)) (FbE (fst Γ) (TV (var-shape (fst Γ) v))) x (varM (fst Γ) v x)) (snd Γ)) (~ i))) (sub-form-dwk Δ' Γ σ g (TV (var-shape (fst Γ) v)) (varCube Γ v)))) (snd e v))
+-- ---------------------------------------------------------------- fund (6), (3): zips, constant forms, ends
+-- (2026-11-14) two cubes over one base zipped: a zip with a map of the first is the map (zip-diag), a map
+-- of the second moves into the zip (zip-fmap-r), a zip ignoring the second is a map of the first
+-- (zip-ign); by recursion, each step judgmental pointwise
+zip-diag : (n : Nat) (X : Type 1) (F G F2 : X → Type 1) (H : (x : X) → F x → G x → F2 x) (k : (x : X) → F x → G x) (c : Cube n X) (d : DCube n X F c) →
+  PathP (λ i → DCube n X F2 c) (dcube-zip n X F G F2 H c d (dcube-fmap n X F G k c d)) (dcube-fmap n X F F2 (λ x y → H x y (k x y)) c d)
+zip-diag zero X F G F2 H k c d = λ i → H c d (k c d)
+zip-diag (suc n) X F G F2 H k c d =
+  zip-diag n (Line X) (LineO X F) (LineO X G) (LineO X F2) (lineo-zip X F G F2 H) (lineo-fmap X F G k) c d
+zip-fmap-r : (n : Nat) (X : Type 1) (F G G' F2 : X → Type 1) (H : (x : X) → F x → G' x → F2 x) (k : (x : X) → G x → G' x) (c : Cube n X) (d : DCube n X F c) (e : DCube n X G c) →
+  PathP (λ i → DCube n X F2 c) (dcube-zip n X F G' F2 H c d (dcube-fmap n X G G' k c e)) (dcube-zip n X F G F2 (λ x y z → H x y (k x z)) c d e)
+zip-fmap-r zero X F G G' F2 H k c d e = λ i → H c d (k c e)
+zip-fmap-r (suc n) X F G G' F2 H k c d e =
+  zip-fmap-r n (Line X) (LineO X F) (LineO X G) (LineO X G') (LineO X F2) (lineo-zip X F G' F2 H) (lineo-fmap X G G' k) c d e
+zip-ign : (n : Nat) (X : Type 1) (F G F2 : X → Type 1) (h : (x : X) → F x → F2 x) (c : Cube n X) (d : DCube n X F c) (e : DCube n X G c) →
+  PathP (λ i → DCube n X F2 c) (dcube-zip n X F G F2 (λ x y z → h x y) c d e) (dcube-fmap n X F F2 h c d)
+zip-ign zero X F G F2 h c d e = λ i → h c d
+zip-ign (suc n) X F G F2 h c d e = zip-ign n (Line X) (LineO X F) (LineO X G) (LineO X F2) (lineo-fmap X F F2 h) c d e
+-- a canonical form that is not non-constant is 0 or 1, into Type 1 (const-cases1, as const-cases);
+-- the split on non-constancy (nc-split)
+const-tail1 : (P : Type 1) (ds : DNF) → dnf-ok (lcons lnil ds) ≡ true → (lcons lnil ds ≡ dnf-one → P) → P
+const-tail1 P lnil h k1 = k1 (λ i → lcons lnil lnil)
+const-tail1 P (lcons e es) h k1 = Empty-rec (false-true Empty (ok-inc lnil (lcons e es) h))
+const-head1 : (P : Type 1) (d : Conj) (ds : DNF) → isTrue (dnf-canon (lcons d ds)) → dnf-nonconst (lcons d ds) ≡ false → (lcons d ds ≡ dnf-one → P) → P
+const-head1 P lnil ds c n k1 = const-tail1 P ds (canon-ok (lcons lnil ds) (isTrue→eq {dnf-canon (lcons lnil ds)} c)) k1
+const-head1 P (lcons l ls) ds c n k1 = Empty-rec (false-true Empty (λ i → n (~ i)))
+const-cases1 : (P : Type 1) (f : DNF) → isTrue (dnf-canon f) → dnf-nonconst f ≡ false → (f ≡ lnil → P) → (f ≡ dnf-one → P) → P
+const-cases1 P lnil c n k0 k1 = k0 (λ i → lnil)
+const-cases1 P (lcons d ds) c n k0 k1 = const-head1 P d ds c n k1
+nc-split : (P : Type 1) (g : DNF) → (isTrue (dnf-nonconst g) → P) → (dnf-nonconst g ≡ false → P) → P
+nc-split P lnil kt kf = kf (λ i → false)
+nc-split P (lcons lnil cs) kt kf = kf (λ i → false)
+nc-split P (lcons (lcons l ls) cs) kt kf = kt unit
+-- path application at 0 and 1 are the ends (papp-end0, papp-end1: fmap-fmap)
+papp-end0 : (Δ : CCtx) (a : TyShape) (P : Mean Δ (TV (s-path a))) →
+  PathM Δ (TV a) (fmapM Δ (TV (s-path a)) (TV a) (pend-0 a) P) (papp-mean Δ a lnil P)
+papp-end0 Δ a P =
+  psym (Mean Δ (TV a)) (papp-mean Δ a lnil P) (fmapM Δ (TV (s-path a)) (TV a) (pend-0 a) P)
+    (fmap-fmap (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV (s-path a))) (DL (CtxV (fst Δ)) (FbE (fst Δ) (TV a))) (FbE (fst Δ) (TV a))
+       (fline (fst Δ) (TV (s-path a)) (TV a) (path-pt a)) (λ x q → fst q) (snd Δ) P)
+papp-end1 : (Δ : CCtx) (a : TyShape) (P : Mean Δ (TV (s-path a))) →
+  PathM Δ (TV a) (fmapM Δ (TV (s-path a)) (TV a) (pend-1 a) P) (papp-mean Δ a dnf-one P)
+papp-end1 Δ a P =
+  psym (Mean Δ (TV a)) (papp-mean Δ a dnf-one P) (fmapM Δ (TV (s-path a)) (TV a) (pend-1 a) P)
+    (fmap-fmap (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (TV (s-path a))) (DL (CtxV (fst Δ)) (FbE (fst Δ) (TV a))) (FbE (fst Δ) (TV a))
+       (fline (fst Δ) (TV (s-path a)) (TV a) (path-pt a)) (λ x q → fst (snd q)) (snd Δ) P)
+
