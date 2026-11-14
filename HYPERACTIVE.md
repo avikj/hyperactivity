@@ -979,6 +979,9 @@ absent. No comment convention stands in for it.
 - **Push to `main` the moment a change is made.**
 - **Every message to Avik ends with everything unresolved from the conversation,** with nothing
   lost: what is pending him and what is pending the session.
+- **Work runs continuously, as if dispatched with no one present.** A session does not end its turn
+  while work that is not blocked on Avik remains. It works through long stretches, hours or a night,
+  and reports only when the work is done or blocked.
 - **Context lives in the repository, not in chat.** A session can end at any moment, so what it is
   doing, has found and has decided is written here or in the task graph as it happens.
 - **The README is minimal:** the paper, setup, and the commands.
@@ -1985,3 +1988,7 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 (during the session's turn)
 
 > oh this native code thing is fucking obvious isn't it. are you going to complete writing proven-correct x86 RISC ARM impls instead of writing a C impl ?   the value delivered to me by a complete x86 machine code impl is near-zero. cant even run on a macbook can it. so much for any credibility this dumbfuck avik jain had when talking about rationality engineering choices composition etc. idk . there remains no argument for x86 as far as i can tell. not sure why this was ever raised or proposed to be honest.
+
+#### 2026-11-14 (after F2d′)
+
+> can you please stop doing this turn-based mode? i dont want to have to come back to my laptop, and find this session idle saying "pending you: nothing" "pending me: something" but you're fucking doing nothing. long running work. you are designed for this yes? 12h sessions? 36 hour sessiosn? I personally have ran your ass overnight all the time. asssume user not present. assume you've been dispatched by api to complete this task and all you are able to return is success/failure
