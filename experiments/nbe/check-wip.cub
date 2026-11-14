@@ -170,3 +170,65 @@ conv-path Γ s Y h M S p =
        (pcat (Mean Γ (TV s)) m1 m2 res (λ i → pair-ty Γ s (TV s) (λ q → fst q) S E0 E1 (λ j → F0 (~ j)) (~ i))
           (pcat (Mean Γ (TV s)) m2 m3 res (λ i → pairTy Γ s (p i) (FT i))
              (pair-ty Γ s Y h M ET (conv-E Γ s Y h M S p) FM)))
+
+-- ---------------------------------------------------------------- cubes reindexed from a pointwise cube
+-- the action of the structural maps on a pointwise cube reindexed along k: each a reindexing of a
+-- pointwise cube again (plain induction; each level is judgmental)
+fmap-pt : (n : Nat) (X X' : Type 1) (F' F2 : X' → Type 1) (k : X → X') (h : (x' : X') → F' x' → F2 x') (g : (x : X) → F' (k x)) (c : Cube n X) →
+  PathP (λ i → DCube n X' F2 (cube-map n X X' k c))
+    (dcube-fmap n X' F' F2 h (cube-map n X X' k c) (dcube-reidx n X X' (λ x → F' (k x)) F' k (λ x y → y) c (dcube-of n X (λ x → F' (k x)) g c)))
+    (dcube-reidx n X X' (λ x → F2 (k x)) F2 k (λ x y → y) c (dcube-of n X (λ x → F2 (k x)) (λ x → h (k x) (g x)) c))
+fmap-pt zero X X' F' F2 k h g c = λ i → h (k c) (g c)
+fmap-pt (suc n) X X' F' F2 k h g c =
+  fmap-pt n (Line X) (Line X') (LineO X' F') (LineO X' F2) (line-map X X' k) (lineo-fmap X' F' F2 h) (lineo-of X (λ x → F' (k x)) g) c
+of-pt : (n : Nat) (X X' : Type 1) (F' : X' → Type 1) (k : X → X') (G : (x' : X') → F' x') (c : Cube n X) →
+  PathP (λ i → DCube n X' F' (cube-map n X X' k c)) (dcube-of n X' F' G (cube-map n X X' k c))
+    (dcube-reidx n X X' (λ x → F' (k x)) F' k (λ x y → y) c (dcube-of n X (λ x → F' (k x)) (λ x → G (k x)) c))
+of-pt zero X X' F' k G c = λ i → G (k c)
+of-pt (suc n) X X' F' k G c = of-pt n (Line X) (Line X') (LineO X' F') (line-map X X' k) (lineo-of X' F' G) c
+-- a context extended over a pointwise cube is a map of the base, and a lift over it a reindexing
+PT-map : (n : Nat) (X X' X2 : Type 1) (Y' : X' → Type 1) (k : X → X') (f : (x' : X') → Y' x' → X2) (g : (x : X) → Y' (k x)) (c : Cube n X) →
+  PathP (λ i → Cube n X2)
+    (dcube-map n X' Y' X2 f (cube-map n X X' k c) (dcube-reidx n X X' (λ x → Y' (k x)) Y' k (λ x y → y) c (dcube-of n X (λ x → Y' (k x)) g c)))
+    (cube-map n X X2 (λ x → f (k x) (g x)) c)
+PT-map zero X X' X2 Y' k f g c = λ i → f (k c) (g c)
+PT-map (suc n) X X' X2 Y' k f g c =
+  PT-map n (Line X) (Line X') (Line X2) (LineO X' Y') (line-map X X' k) (lineo-map X' Y' X2 f) (lineo-of X (λ x → Y' (k x)) g) c
+PT-lift : (n : Nat) (X X' X2 : Type 1) (Y' : X' → Type 1) (F2 : X2 → Type 1) (k : X → X') (f : (x' : X') → Y' x' → X2)
+  (l : (x' : X') (y : Y' x') → F2 (f x' y)) (g : (x : X) → Y' (k x)) (c : Cube n X) →
+  PathP (λ i → DCube n X2 F2 (PT-map n X X' X2 Y' k f g c i))
+    (dcube-lift n X' X2 Y' F2 f l (cube-map n X X' k c) (dcube-reidx n X X' (λ x → Y' (k x)) Y' k (λ x y → y) c (dcube-of n X (λ x → Y' (k x)) g c)))
+    (dcube-reidx n X X2 (λ x → F2 (f (k x) (g x))) F2 (λ x → f (k x) (g x)) (λ x y → y) c (dcube-of n X (λ x → F2 (f (k x) (g x))) (λ x → l (k x) (g x)) c))
+PT-lift zero X X' X2 Y' F2 k f l g c = λ i → l (k c) (g c)
+PT-lift (suc n) X X' X2 Y' F2 k f l g c =
+  PT-lift n (Line X) (Line X') (Line X2) (LineO X' Y') (LineO X2 F2) (line-map X X' k) (lineo-map X' Y' X2 f)
+    (λ L D → lineo-push X' X2 Y' Y' F2 f (λ x y z → l x y) L D D) (lineo-of X (λ x → Y' (k x)) g) c
+
+-- ---------------------------------------------------------------- the simple-types fragment
+data STy = sbool | sarr (a : STy) (b : STy)
+shp : STy → TyShape
+shp sbool = s-bool
+shp (sarr a b) = s-pi (shp a) (shp b)
+sem : (t : STy) → Sem (shp t)
+sem sbool = one
+sem (sarr a b) = (sem a , λ x → sem b)
+tcode : STy → Code
+tcode sbool = c-bool
+tcode (sarr a b) = cpi #2 (tcode a) (tcode b)
+sk : List STy → Lst Entry
+sk nil = lnil
+sk (cons t ts) = lcons (e-ty (shp t)) (sk ts)
+-- the context value over the one point, with its types constant
+into : (ts : List STy) → One1 → CtxV (sk ts)
+into nil x = x
+into (cons t ts) x = (into ts x , λ ρ → sem t)
+cube0 : (ts : List STy) → Cube (dims (sk ts)) One1
+cube0 nil = one
+cube0 (cons t ts) = cube0 ts
+ctx-of : List STy → CCtx
+ctx-of ts = (sk ts , cube-map (dims (sk ts)) One1 (CtxV (sk ts)) (into ts) (cube0 ts))
+-- a meaning over ctx-of ts given pointwise over the one point
+ptM : (ts : List STy) (Z : Type 1) (g : (x : One1) → EnvV (sk ts) (into ts x) → Z) → Mean (ctx-of ts) Z
+ptM ts Z g =
+  dcube-reidx (dims (sk ts)) One1 (CtxV (sk ts)) (λ x → FbE (sk ts) Z (into ts x)) (FbE (sk ts) Z) (into ts) (λ x y → y) (cube0 ts)
+    (dcube-of (dims (sk ts)) One1 (λ x → FbE (sk ts) Z (into ts x)) g (cube0 ts))
