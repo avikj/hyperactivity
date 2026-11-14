@@ -250,3 +250,40 @@ dty-s ts (sarr a b) =
                           (FbE (sk (cons a ts)) (Sem (shp b))) (into ts) (λ γ e → (γ , λ ρ → fam-dom (shp a) (shp b) (e ρ)))
                           (λ γ e ρ → snd (e (fst ρ)) (snd ρ)) (λ x ρ → sem (sarr a b)) (cube0 ts) (~ i)))
        (dty-s (cons a ts) b))
+
+-- ---------------------------------------------------------------- variables of the simple-types fragment
+vty : (ts : List STy) → VarP (sk ts) → STy
+vty nil v = Empty-rec v
+vty (cons t ts) none = t
+vty (cons t ts) (some v) = vty ts v
+vshape : (ts : List STy) (v : VarP (sk ts)) → PathP (λ i → TyShape) (var-shape (sk ts) v) (shp (vty ts v))
+vshape nil v = Empty-rec v
+vshape (cons t ts) none = λ i → shp t
+vshape (cons t ts) (some v) = vshape ts v
+venv : (ts : List STy) (v : VarP (sk ts)) (x : One1) → EnvV (sk ts) (into ts x) → El (shp (vty ts v)) (sem (vty ts v))
+venv nil v x ρ = Empty-rec v
+venv (cons t ts) none x ρ = snd ρ
+venv (cons t ts) (some v) x ρ = venv ts v x (fst ρ)
+vpath : (ts : List STy) (v : VarP (sk ts)) (x : One1) (ρ : EnvV (sk ts) (into ts x)) →
+  PathP (λ i → TV (vshape ts v i)) (varM (sk ts) v (into ts x) ρ) (sem (vty ts v) , venv ts v x ρ)
+vpath nil v x ρ = Empty-rec v
+vpath (cons t ts) none x ρ = λ i → (sem t , snd ρ)
+vpath (cons t ts) (some v) x ρ = vpath ts v x (fst ρ)
+-- a variable's derivation at its constant meaning
+vder : (ts : List STy) (v : VarP (sk ts)) →
+  Der (j-tm , ctx-of ts , shp (vty ts v) , cvar (var-word (sk ts) v) , ptM ts (TV (shp (vty ts v))) (λ x ρ → (sem (vty ts v) , venv ts v x ρ)))
+vder ts v =
+  transport (λ i → Der (j-tm , ctx-of ts , vshape ts v i , cvar (var-word (sk ts) v) , ptM ts (TV (vshape ts v i)) (λ x ρ → vpath ts v x ρ i)))
+    (der-tr j-tm (ctx-of ts) (var-shape (sk ts) v) (cvar (var-word (sk ts) v)) (varCube (ctx-of ts) v)
+       (ptM ts (TV (var-shape (sk ts) v)) (λ x ρ → varM (sk ts) v (into ts x) ρ))
+       (of-pt (dims (sk ts)) One1 (CtxV (sk ts)) (FbE (sk ts) (TV (var-shape (sk ts) v))) (into ts) (varM (sk ts) v) (cube0 ts))
+       (dvar (ctx-of ts) v))
+-- the variable a word names
+lookw : (ts : List STy) (k : Word) → Opt ((v : VarP (sk ts)) × PathP (λ i → Word) (var-word (sk ts) v) k)
+lookw nil k = none
+lookw (cons t ts) k =
+  %welimP (λ w → Opt ((v : VarP (sk (cons t ts))) × PathP (λ i → Word) (var-word (sk (cons t ts)) v) w)) k
+    (some (none , λ i → #0))
+    (λ m h → case lookw ts m return (λ o → Opt ((v : VarP (sk (cons t ts))) × PathP (λ i → Word) (var-word (sk (cons t ts)) v) (%wsucc m))) of
+               none → none
+               some p → some (some (fst p) , λ i → %wsucc (snd p i)))
