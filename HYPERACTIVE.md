@@ -2060,3 +2060,11 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 11:19 UTC
 
 > Recall everyone’s gonna be running hyperactive kernel. Programs are compositional operating system extensions. Does this clarify things. what’s being built is complete operating system, hyperactivity: the decentralized safe superintelligent operating system
+
+#### 2026-11-14 11:28 UTC
+
+> All impl details in paper will be updated to match all impl details in repo when impl is done.
+>
+> Use the work system to ensure this is so.
+>
+> Then don’t have to worry about that maximally uninteresting bullshit until everything interesting is done
