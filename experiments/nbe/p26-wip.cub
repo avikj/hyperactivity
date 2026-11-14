@@ -90,7 +90,9 @@
 -- (2026-11-14, F2d' begun) the orders: bool-absurd, weq-refl, wlt-irr, wlt-x0, wlt-trans, wlt-tri,
 -- wlt-neq; bool-case0, bool-eq-refl, not-true, weq-path, wlt-path, wlt-path', weq-path',
 -- lit-eq-refl, lit-lt-of-wlt, lit-lt-same, lit-lt-of-eq, lit-lt-cases, lit-lt-irr, lit-lt-neq,
--- lit-lt-trans, tri-bools, lit-tri-eq, lit-tri.
+-- lit-lt-trans, tri-bools, lit-tri-eq, lit-tri; andB-intro, lit-eq-sound, lit-lt-path, lit-eq-path,
+-- lit-lt-path-r, lit-eq-path-r, conj-lt-of-lt, conj-lt-of-eq, conj-lt-cases, conj-lt-irr, conj-eq-refl,
+-- conj-lt-neq, conj-lt-x0, conj-lt-trans, conj-tri.
 -- What is next: (F2d'), (F2e) and the rest of lib/nbe.cub's head's list, then the swap of this file
 -- into lib/nbe.cub.
 import "../../lib/linproof.cub"
@@ -7566,6 +7568,85 @@ lit-tri l m ne nl =
        (λ e y → lit-tri-eq l m (weq-sound (fst l) (fst m) e) ne nl)
        (λ e y → lit-lt-of-wlt m l (wlt-tri (fst l) (fst m) e w)) (λ i → weq (fst l) (fst m)))
     (λ i → wlt (fst l) (fst m))
+-- equal literals are equal; the order of conjunctions (lexicographic, the empty one least) is a strict
+-- total order with conj-eq its equality
+andB-intro : (a b : Bool) → a ≡ true → b ≡ true → andB a b ≡ true
+andB-intro a b p q = λ i → andB (p i) (q i)
+lit-eq-sound : (l m : Lit) → lit-eq l m ≡ true → l ≡ m
+lit-eq-sound l m e =
+  λ i → (weq-sound (fst l) (fst m) (andB-l (weq (fst l) (fst m)) (bool-eq (snd l) (snd m)) e) i ,
+         bool-eq-sound (snd l) (snd m) (andB-r (weq (fst l) (fst m)) (bool-eq (snd l) (snd m)) e) i)
+lit-lt-path : (l m : Lit) → l ≡ m → lit-lt m l ≡ false
+lit-lt-path l m p = pcat0 Bool (lit-lt m l) (lit-lt l l) false (λ i → lit-lt (p (~ i)) l) (lit-lt-irr l)
+lit-eq-path : (l m : Lit) → l ≡ m → lit-eq m l ≡ true
+lit-eq-path l m p = pcat0 Bool (lit-eq m l) (lit-eq l l) true (λ i → lit-eq (p (~ i)) l) (lit-eq-refl l)
+lit-lt-path-r : (l m : Lit) → l ≡ m → lit-lt l m ≡ false
+lit-lt-path-r l m p = pcat0 Bool (lit-lt l m) (lit-lt l l) false (λ i → lit-lt l (p (~ i))) (lit-lt-irr l)
+lit-eq-path-r : (l m : Lit) → l ≡ m → lit-eq l m ≡ true
+lit-eq-path-r l m p = pcat0 Bool (lit-eq l m) (lit-eq l l) true (λ i → lit-eq l (p (~ i))) (lit-eq-refl l)
+-- conj-lt of two conses from its first literals
+conj-lt-of-lt : (l m : Lit) (ls ms : Conj) → lit-lt l m ≡ true → conj-lt (lcons l ls) (lcons m ms) ≡ true
+conj-lt-of-lt l m ls ms p = λ i → if p i then true else (if lit-eq l m then conj-lt ls ms else false)
+conj-lt-of-eq : (l m : Lit) (ls ms : Conj) → l ≡ m → conj-lt (lcons l ls) (lcons m ms) ≡ conj-lt ls ms
+conj-lt-of-eq l m ls ms p =
+  pcat0 Bool (conj-lt (lcons l ls) (lcons m ms)) (if lit-eq l m then conj-lt ls ms else false) (conj-lt ls ms)
+    (λ i → if lit-lt-path-r l m p i then true else (if lit-eq l m then conj-lt ls ms else false))
+    (λ i → if lit-eq-path-r l m p i then conj-lt ls ms else false)
+conj-lt-cases : (P : Type) (l m : Lit) (ls ms : Conj) → (lit-lt l m ≡ true → P) → (l ≡ m → conj-lt ls ms ≡ true → P) →
+  conj-lt (lcons l ls) (lcons m ms) ≡ true → P
+conj-lt-cases P l m ls ms kl ke =
+  bool-case0 (λ b → (if b then true else (if lit-eq l m then conj-lt ls ms else false)) ≡ true → P) (lit-lt l m)
+    (λ e h → kl e)
+    (λ e → bool-case0 (λ b → (if b then conj-lt ls ms else false) ≡ true → P) (lit-eq l m)
+       (λ e2 h → ke (lit-eq-sound l m e2) h)
+       (λ e2 h → false-true P h))
+conj-lt-irr : (c : Conj) → conj-lt c c ≡ false
+conj-lt-irr lnil = λ i → false
+conj-lt-irr (lcons l ls) = pcat0 Bool (conj-lt (lcons l ls) (lcons l ls)) (conj-lt ls ls) false (conj-lt-of-eq l l ls ls (λ i → l)) (conj-lt-irr ls)
+conj-eq-refl : (c : Conj) → conj-eq c c ≡ true
+conj-eq-refl lnil = λ i → true
+conj-eq-refl (lcons l ls) = andB-intro (lit-eq l l) (conj-eq ls ls) (lit-eq-refl l) (conj-eq-refl ls)
+conj-lt-neq : (c d : Conj) → conj-lt c d ≡ true → conj-eq c d ≡ false
+conj-lt-neq lnil lnil h = false-true (true ≡ false) h
+conj-lt-neq lnil (lcons m ms) h = λ i → false
+conj-lt-neq (lcons l ls) lnil h = λ i → false
+conj-lt-neq (lcons l ls) (lcons m ms) h =
+  conj-lt-cases (conj-eq (lcons l ls) (lcons m ms) ≡ false) l m ls ms
+    (λ p i → andB (lit-lt-neq l m p i) (conj-eq ls ms))
+    (λ p q → pcat0 Bool (conj-eq (lcons l ls) (lcons m ms)) (conj-eq ls ms) false
+       (λ i → andB (lit-eq-path-r l m p i) (conj-eq ls ms)) (conj-lt-neq ls ms q)) h
+conj-lt-x0 : (c : Conj) → conj-lt c lnil ≡ false
+conj-lt-x0 lnil = λ i → false
+conj-lt-x0 (lcons l ls) = λ i → false
+conj-lt-trans : (a b c : Conj) → conj-lt a b ≡ true → conj-lt b c ≡ true → conj-lt a c ≡ true
+conj-lt-trans lnil b lnil p q = pcat0 Bool false (conj-lt b lnil) true (λ i → conj-lt-x0 b (~ i)) q
+conj-lt-trans lnil b (lcons n ns) p q = λ i → true
+conj-lt-trans (lcons l ls) lnil c p q = false-true (conj-lt (lcons l ls) c ≡ true) p
+conj-lt-trans (lcons l ls) (lcons m ms) lnil p q = false-true (conj-lt (lcons l ls) lnil ≡ true) q
+conj-lt-trans (lcons l ls) (lcons m ms) (lcons n ns) p q =
+  conj-lt-cases (conj-lt (lcons l ls) (lcons n ns) ≡ true) l m ls ms
+    (λ lm → conj-lt-cases (conj-lt (lcons l ls) (lcons n ns) ≡ true) m n ms ns
+       (λ mn → conj-lt-of-lt l n ls ns (lit-lt-trans l m n lm mn))
+       (λ mn q2 → conj-lt-of-lt l n ls ns (pcat0 Bool (lit-lt l n) (lit-lt l m) true (λ i → lit-lt l (mn (~ i))) lm)) q)
+    (λ lm p2 → conj-lt-cases (conj-lt (lcons l ls) (lcons n ns) ≡ true) m n ms ns
+       (λ mn → conj-lt-of-lt l n ls ns (pcat0 Bool (lit-lt l n) (lit-lt m n) true (λ i → lit-lt (lm i) n) mn))
+       (λ mn q2 → pcat0 Bool (conj-lt (lcons l ls) (lcons n ns)) (conj-lt ls ns) true
+          (conj-lt-of-eq l n ls ns (pcat0 Lit l m n lm mn)) (conj-lt-trans ls ms ns p2 q2)) q) p
+conj-tri : (c d : Conj) → conj-eq c d ≡ false → conj-lt c d ≡ false → conj-lt d c ≡ true
+conj-tri lnil lnil ne nl = false-true (false ≡ true) (λ i → ne (~ i))
+conj-tri lnil (lcons m ms) ne nl = false-true (conj-lt (lcons m ms) lnil ≡ true) (λ i → nl (~ i))
+conj-tri (lcons l ls) lnil ne nl = λ i → true
+conj-tri (lcons l ls) (lcons m ms) ne nl =
+  bool-case0 (λ b → lit-lt l m ≡ b → conj-lt (lcons m ms) (lcons l ls) ≡ true) (lit-lt l m)
+    (λ lt x → bool-absurd (conj-lt (lcons m ms) (lcons l ls) ≡ true) (conj-lt (lcons l ls) (lcons m ms)) (conj-lt-of-lt l m ls ms lt) nl)
+    (λ nlt x → bool-case0 (λ b → lit-eq l m ≡ b → conj-lt (lcons m ms) (lcons l ls) ≡ true) (lit-eq l m)
+       (λ eq y → pcat0 Bool (conj-lt (lcons m ms) (lcons l ls)) (conj-lt ms ls) true
+          (conj-lt-of-eq m l ms ls (sym (lit-eq-sound l m eq)))
+          (conj-tri ls ms
+             (pcat0 Bool (conj-eq ls ms) (conj-eq (lcons l ls) (lcons m ms)) false (λ i → andB (eq (~ i)) (conj-eq ls ms)) ne)
+             (pcat0 Bool (conj-lt ls ms) (conj-lt (lcons l ls) (lcons m ms)) false (sym (conj-lt-of-eq l m ls ms (lit-eq-sound l m eq))) nl)))
+       (λ neq y → conj-lt-of-lt m l ms ls (lit-tri l m neq nlt)) (λ i → lit-eq l m))
+    (λ i → lit-lt l m)
 
 -- ---------------------------------------------------------------- (6) reify and reflect
 -- (2026-11-12, (6)) reify-ty (a computable type to a normal type derivation), reify (a computable term
