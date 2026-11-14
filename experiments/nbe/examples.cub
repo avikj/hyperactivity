@@ -247,3 +247,19 @@ sx-v (some w) = case w of Empty
 dsx : DSubst Γb2 emp2 σx
 dsx = (unit , sx-v)
 #same fst (subst-tm Γb2 emp2 tc-nil σx dsx s-bool (c-case c-false c-true (cvar #0) , fmapM Γb2 (CaseV s-bool) (TV s-bool) (case-r s-bool) not-R , not-d)) = c-false
+-- ---------------------------------------------------------------- List
+-- cons true (cons false nil) : List Bool normalizes to itself; a list variable l stays neutral
+lc2 : Mean emp2 (ConsV s-bool)
+lc2 = λ ρ → (one , false , nil)
+lc1 : Mean emp2 (ConsV s-bool)
+lc1 = λ ρ → (one , true , cons false nil)
+lfn-d : Der (j-tm , emp2 , s-list s-bool , c-lcons c-false c-lnil , fmapM emp2 (ConsV s-bool) (TV (s-list s-bool)) (cons-r s-bool) lc2)
+lfn-d = dlcons emp2 s-bool lc2 c-false c-lnil (dfalse emp2 one-u) (dlnil emp2 s-bool one-u c-bool (dty-bool emp2 one-u))
+ltfn-d : Der (j-tm , emp2 , s-list s-bool , c-lcons c-true (c-lcons c-false c-lnil) , fmapM emp2 (ConsV s-bool) (TV (s-list s-bool)) (cons-r s-bool) lc1)
+ltfn-d = dlcons emp2 s-bool lc1 c-true (c-lcons c-false c-lnil) (dtrue emp2 one-u) lfn-d
+#same fst (normalize-nf emp2 tc-nil (s-list s-bool) (c-lcons c-true (c-lcons c-false c-lnil) , fmapM emp2 (ConsV s-bool) (TV (s-list s-bool)) (cons-r s-bool) lc1 , ltfn-d)) = c-lcons c-true (c-lcons c-false c-lnil)
+Γl2 : CCtx
+Γl2 = ext-h emp2 (s-list s-bool) (Sem (s-list s-bool)) (λ A → A) one-u
+tΓl2 : TCtx Γl2
+tΓl2 = tc-ty emp2 tc-nil (s-list s-bool) one-u (c-list c-bool) (dty-list emp2 s-bool one-u c-bool (dty-bool emp2 one-u))
+#same fst (normalize-nf Γl2 tΓl2 (s-list s-bool) (cvar #0 , varCube Γl2 none , dvar Γl2 none)) = cvar #0

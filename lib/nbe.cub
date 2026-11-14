@@ -12,6 +12,16 @@
 -- the host's composition with a nonempty system at Bool or Nat on a variable is stuck (hcompD), on a
 -- constructor with a constant system it reduces; so the Kan lemma's fill at Bool/Nat needs formal
 -- compositions as neutrals, whose faces are the fill's own bound dimensions (static), never computed.
+-- Status (2026-11-14, latest+7): List as an object-level data type, without its recursor yet: shape
+-- s-list a (Sem the element type's, El the host's lists), nil and cons and the type in Der and NN, the
+-- clause CList (nil, a cons of a computable head and a tail with the clause, or a neutral) over a head
+-- predicate, renaming (list-ren, ren-nn, ren-der), reify by induction carrying the element type's
+-- computability, fund's cases for nil, cons and the type. examples.cub: cons true (cons false nil)
+-- normalizes to itself, a list variable stays neutral (1706 passed, 0 failed, from the store). The
+-- recursor's case of fund needs the motive's data paired with the scrutinee's clause data, whose
+-- element types agree only along paths: by zpt (as Π's clause), with zpt's congruence in its argument,
+-- its naturality in fibrewise maps that commute with transport (the host's transport of cons is cons
+-- of transports) and zpt at a constant path as the identity pairing.
 -- Status (2026-11-14, latest+6): substitution on checked syntax (docs/Hyperactive_Final_Paper.pdf,
 -- 11 Nov 2026, §6.1 “Substitution on checked syntax”): DSubst (a checked term per variable at σ's
 -- action, canonical forms per dimension), subst-tm and subst-ty (fund at σ, each substituted term made
@@ -919,7 +929,7 @@ import "linproof.cub"
 -- in Type (the stratum of P1's shapes; P6 adds the stratum whose meanings are in Type 1), Sem s and
 -- environments are in Type 1, so a semantic type may contain a Type (the universe's El, P6) and an
 -- environment may contain a type, with nothing lifted.
-data TyShape = s-bool | s-pi (a : TyShape) (b : TyShape) | s-sig (a : TyShape) (b : TyShape) | s-path (a : TyShape) | s-nat
+data TyShape = s-bool | s-pi (a : TyShape) (b : TyShape) | s-sig (a : TyShape) (b : TyShape) | s-path (a : TyShape) | s-nat | s-list (a : TyShape)
 -- the semantic Bool type: nothing; One1 is a type at level 1 with the one value `one`
 data One1 = one1 (pad : Type → Type)
 one : One1
@@ -943,6 +953,8 @@ TyE (s-path a) =
    λ D̂ → PathP (λ i → snd (TyE a) (snd (snd (fst D̂)) i)) (fst (snd D̂)) (snd (snd D̂)))
 -- (2026-11-14, (D)) Nat: its semantic type nothing (as Bool's), its values the host's Nat
 TyE s-nat = (One1 , λ D̂ → Nat)
+-- (2026-11-14, (D)) List: its semantic type the element type's, its values the host's lists of them
+TyE (s-list a) = (fst (TyE a) , λ D̂ → List (snd (TyE a) D̂))
 Sem : TyShape → Type 1
 Sem s = fst (TyE s)
 El : (s : TyShape) → Sem s → Type
@@ -980,6 +992,10 @@ bool-elim P t f false = f
 nat-elim : (P : Nat → Type) → P zero → ((k : Nat) → P k → P (suc k)) → (n : Nat) → P n
 nat-elim P z st zero = z
 nat-elim P z st (suc n) = st n (nat-elim P z st n)
+-- the dependent eliminator of List (the list recursor's meaning)
+list-elim : (A : Type) (P : List A → Type) → P nil → ((x : A) (xs : List A) → P xs → P (cons x xs)) → (l : List A) → P l
+list-elim A P z st nil = z
+list-elim A P z st (cons x xs) = st x xs (list-elim A P z st xs)
 
 -- the kinds of the one family of neutral and normal forms; the codes of Bool's constructors and case
 data NK = k-ne | k-nf
@@ -1952,6 +1968,20 @@ c-suc : Code → Code
 c-suc c = ccon nat-d #1 (lcons c lnil) lnil
 c-nrec : Code → Code → Code → Code → Code
 c-nrec cP z st x = celim nat-d (clam cP) (lcons z (lcons st lnil)) x
+-- (2026-11-14, (D)) List's codes: the language's own data index (code (List Bool)'s), nil and cons its
+-- constructors, the recursor its eliminator (the motive as a λ, the step a term)
+list-d : Word
+list-d = case code (List Bool) return (λ _ → Word) of
+  cdata d ps → d
+  _ → #0
+c-list : Code → Code
+c-list cA = cdata list-d (lcons cA lnil)
+c-lnil : Code
+c-lnil = ccon list-d #0 lnil lnil
+c-lcons : Code → Code → Code
+c-lcons h t = ccon list-d #1 (lcons h (lcons t lnil)) lnil
+c-lrec : Code → Code → Code → Code → Code
+c-lrec cP z st x = celim list-d (clam cP) (lcons z (lcons st lnil)) x
 -- the rules' data, read pointwise, and the named projections that give their premises' and
 -- conclusions' meanings (shared by NN, Der, CompS and reify)
 AppV : TyShape → TyShape → Type 1
@@ -2116,6 +2146,42 @@ nrec-r : (s : TyShape) → NRecV s → TV s
 nrec-r s q = nrec-at s q (nrec-x s q)
 nrec-mot : (Γ : CCtx) (s : TyShape) (R : Mean Γ (NRecV s)) → Mean (ext-h Γ s-nat (NRecV s) (nrec-b s) R) (Sem s)
 nrec-mot Γ s R = ext-lift Γ s-nat (NRecV s) (nrec-b s) (Sem s) (λ q k → fst (snd q) k) R
+-- (2026-11-14, (D)) List's values: nil at a cube of element types, a cons cell's data (ConsV: the element
+-- type, the head, the tail) and its head, tail and list; the recursor's data (LRecV: the element type,
+-- the motive, the scrutinee, the base, the step), its parts as terms (the step at
+-- Π x : A. Π xs : List A. P xs → P (cons x xs)), its result at any list (lrec-at) and its own (lrec-r),
+-- its motive over the extension by List A
+nilv : (a : TyShape) → Sem a → TV (s-list a)
+nilv a A = (A , nil)
+ConsV : TyShape → Type 1
+-- binder names chosen not to collide (telescope instantiation captures names)
+ConsV a = (cvA : Sem a) × El a cvA × List (El a cvA)
+cons-h : (a : TyShape) → ConsV a → TV a
+cons-h a q = (fst q , fst (snd q))
+cons-t : (a : TyShape) → ConsV a → TV (s-list a)
+cons-t a q = (fst q , snd (snd q))
+cons-r : (a : TyShape) → ConsV a → TV (s-list a)
+cons-r a q = (fst q , cons (fst (snd q)) (snd (snd q)))
+LRecV : TyShape → TyShape → Type 1
+-- binder names chosen not to collide (telescope instantiation captures names)
+LRecV s a = (lrA : Sem a) × (lrP : List (El a lrA) → Sem s) × (lrl : List (El a lrA)) × El s (lrP nil) ×
+  ((lrx : El a lrA) (lrxs : List (El a lrA)) → El s (lrP lrxs) → El s (lrP (cons lrx lrxs)))
+lrec-b : (s a : TyShape) → LRecV s a → Sem a
+lrec-b s a q = fst q
+lrec-x : (s a : TyShape) → LRecV s a → TV (s-list a)
+lrec-x s a q = (fst q , fst (snd (snd q)))
+lrec-z : (s a : TyShape) → LRecV s a → TV s
+lrec-z s a q = (fst (snd q) nil , fst (snd (snd (snd q))))
+lrec-sF : (s a : TyShape) → LRecV s a → Fam a (s-pi (s-list a) (s-pi s s))
+lrec-sF s a q = (fst q , λ x → (fst q , λ xs → (fst (snd q) xs , λ r → fst (snd q) (cons x xs))))
+lrec-st : (s a : TyShape) → LRecV s a → TV (s-pi a (s-pi (s-list a) (s-pi s s)))
+lrec-st s a q = (lrec-sF s a q , snd (snd (snd (snd q))))
+lrec-at : (s a : TyShape) (q : LRecV s a) → List (El a (fst q)) → TV s
+lrec-at s a q l = (fst (snd q) l , list-elim (El a (fst q)) (λ l' → El s (fst (snd q) l')) (fst (snd (snd (snd q)))) (snd (snd (snd (snd q)))) l)
+lrec-r : (s a : TyShape) → LRecV s a → TV s
+lrec-r s a q = lrec-at s a q (fst (snd (snd q)))
+lrec-mot : (Γ : CCtx) (s a : TyShape) (R : Mean Γ (LRecV s a)) → Mean (ext-h Γ (s-list a) (LRecV s a) (lrec-b s a) R) (Sem s)
+lrec-mot Γ s a R = ext-lift Γ (s-list a) (LRecV s a) (lrec-b s a) (Sem s) (λ q l → fst (snd q) l) R
 -- neutral and normal forms, one family (the kind in the index), η-long and redex-free: a neutral is
 -- normal only at Bool; a path application is neutral only at a canonical non-constant form; a type is
 -- normal when its parts are (P2.5: Bool, Π and Σ with the codomain over the domain read off the family,
@@ -2186,6 +2252,16 @@ data NN : (KJ : NK × Jdg) → Type 1 where
     NN (k-ne , (j-tm , Γ₀ , s-nat , x₀ , fmapM Γ₀ (NRecV s₀) (TV s-nat) (nrec-x s₀) R₀)) →
     NN (k-ne , (j-tm , Γ₀ , s₀ , c-nrec cP₀ z₀ st₀ x₀ , fmapM Γ₀ (NRecV s₀) (TV s₀) (nrec-r s₀) R₀))
   nty-nat : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (j-ty , Γ₀ , s-nat , c-nat , B₀))
+  nlnil : (Γ₀ : CCtx) (a₀ : TyShape) (A₀ : Mean Γ₀ (Sem a₀)) (cA₀ : Code) → NN (k-nf , (j-ty , Γ₀ , a₀ , cA₀ , A₀)) →
+    NN (k-nf , (j-tm , Γ₀ , s-list a₀ , c-lnil , fmapM Γ₀ (Sem a₀) (TV (s-list a₀)) (nilv a₀) A₀))
+  nlcons : (Γ₀ : CCtx) (a₀ : TyShape) (C₀ : Mean Γ₀ (ConsV a₀)) (h₀ t₀ : Code) →
+    NN (k-nf , (j-tm , Γ₀ , a₀ , h₀ , fmapM Γ₀ (ConsV a₀) (TV a₀) (cons-h a₀) C₀)) →
+    NN (k-nf , (j-tm , Γ₀ , s-list a₀ , t₀ , fmapM Γ₀ (ConsV a₀) (TV (s-list a₀)) (cons-t a₀) C₀)) →
+    NN (k-nf , (j-tm , Γ₀ , s-list a₀ , c-lcons h₀ t₀ , fmapM Γ₀ (ConsV a₀) (TV (s-list a₀)) (cons-r a₀) C₀))
+  nne-list : (Γ₀ : CCtx) (a₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-list a₀))) (x₀ : Code) →
+    NN (k-ne , (j-tm , Γ₀ , s-list a₀ , x₀ , X₀)) → NN (k-nf , (j-tm , Γ₀ , s-list a₀ , x₀ , X₀))
+  nty-list : (Γ₀ : CCtx) (a₀ : TyShape) (A₀ : Mean Γ₀ (Sem a₀)) (cA₀ : Code) → NN (k-nf , (j-ty , Γ₀ , a₀ , cA₀ , A₀)) →
+    NN (k-nf , (j-ty , Γ₀ , s-list a₀ , c-list cA₀ , A₀))
   nirr-b : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-bool)) (c₀ : Code) → PathM Γ₀ (TV s-bool) (fmapM Γ₀ (TV s-bool) (TV s-bool) nrm-b X₀) (fmapM Γ₀ (TV s-bool) (TV s-bool) nrm-b X'₀) →
     NN (k-ne , (j-tm , Γ₀ , s-bool , c₀ , X₀)) → NN (k-ne , (j-tm , Γ₀ , s-bool , c₀ , X'₀))
   nirr-n : (Γ₀ : CCtx) (X₀ X'₀ : Mean Γ₀ (TV s-nat)) (c₀ : Code) → PathM Γ₀ (TV s-nat) (fmapM Γ₀ (TV s-nat) (TV s-nat) nrm-n X₀) (fmapM Γ₀ (TV s-nat) (TV s-nat) nrm-n X'₀) →
@@ -2270,6 +2346,14 @@ data Der : (J : Jdg) → Type 1 where
     Der (j-ty , dext Γ₀ , a₀ , cL₀ , dline-body Γ₀ (TrV a₀) (Sem a₀) (tr-ln a₀) X₀) →
     Der (j-tm , Γ₀ , a₀ , c₀ , fmapM Γ₀ (TrV a₀) (TV a₀) (tr-x a₀) X₀) →
     Der (j-tm , Γ₀ , a₀ , ccomp (cplam cL₀) csys0 c₀ , fmapM Γ₀ (TrV a₀) (TV a₀) (tr-r a₀) X₀)
+  dlnil : (Γ₀ : CCtx) (a₀ : TyShape) (A₀ : Mean Γ₀ (Sem a₀)) (cA₀ : Code) → Der (j-ty , Γ₀ , a₀ , cA₀ , A₀) →
+    Der (j-tm , Γ₀ , s-list a₀ , c-lnil , fmapM Γ₀ (Sem a₀) (TV (s-list a₀)) (nilv a₀) A₀)
+  dlcons : (Γ₀ : CCtx) (a₀ : TyShape) (C₀ : Mean Γ₀ (ConsV a₀)) (h₀ t₀ : Code) →
+    Der (j-tm , Γ₀ , a₀ , h₀ , fmapM Γ₀ (ConsV a₀) (TV a₀) (cons-h a₀) C₀) →
+    Der (j-tm , Γ₀ , s-list a₀ , t₀ , fmapM Γ₀ (ConsV a₀) (TV (s-list a₀)) (cons-t a₀) C₀) →
+    Der (j-tm , Γ₀ , s-list a₀ , c-lcons h₀ t₀ , fmapM Γ₀ (ConsV a₀) (TV (s-list a₀)) (cons-r a₀) C₀)
+  dty-list : (Γ₀ : CCtx) (a₀ : TyShape) (A₀ : Mean Γ₀ (Sem a₀)) (cA₀ : Code) → Der (j-ty , Γ₀ , a₀ , cA₀ , A₀) →
+    Der (j-ty , Γ₀ , s-list a₀ , c-list cA₀ , A₀)
 -- typed codes (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”):
 -- Code(Γ, A) = Σ c. Der(Γ, c, A), the meaning carried with the derivation;
 -- evaluation (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”, eq. (6.1) “typed code and its evaluation”) is that meaning
@@ -2300,6 +2384,10 @@ embed (nsuc Γ X c nx) = dsuc Γ X c (embed nx)
 embed (nne-nat Γ X x nx) = embed nx
 embed (nnrec Γ s R cP z st x nP nz nst nx) = dnrec Γ s R cP z st x (embed nP) (embed nz) (embed nst) (embed nx)
 embed (nty-nat Γ B) = dty-nat Γ B
+embed (nlnil Γ a A cA nA) = dlnil Γ a A cA (embed nA)
+embed (nlcons Γ a C h t nh nt) = dlcons Γ a C h t (embed nh) (embed nt)
+embed (nne-list Γ a X x nx) = embed nx
+embed (nty-list Γ a A cA nA) = dty-list Γ a A cA (embed nA)
 embed (nirr-b Γ X X' c p nx) = dirr-b Γ X X' c p (embed nx)
 embed (nirr-n Γ X X' c p nx) = dirr-n Γ X X' c p (embed nx)
 
@@ -6572,6 +6660,23 @@ rn-irr-b Δ' Δ w X X' p Xn = (fst Xn , nirr-b Δ' (wact Δ' Δ w (TV s-bool) X)
 rn-irr-n : (Δ' Δ : CCtx) (w : World Δ' Δ) (X X' : (Mean Δ (TV s-nat))) → PathM Δ (TV s-nat) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n X) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n X') →
   RenR k-ne j-tm Δ' s-nat (wact Δ' Δ w (TV s-nat) X) → RenR k-ne j-tm Δ' s-nat (wact Δ' Δ w (TV s-nat) X')
 rn-irr-n Δ' Δ w X X' p Xn = (fst Xn , nirr-n Δ' (wact Δ' Δ w (TV s-nat) X) (wact Δ' Δ w (TV s-nat) X') (fst Xn) (pcat (Mean Δ' (TV s-nat)) (fmapM Δ' (TV s-nat) (TV s-nat) nrm-n (wact Δ' Δ w (TV s-nat) X)) (wact Δ' Δ w (TV s-nat) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n X)) (fmapM Δ' (TV s-nat) (TV s-nat) nrm-n (wact Δ' Δ w (TV s-nat) X')) (subM-fmap Δ' Δ (TV s-nat) (TV s-nat) nrm-n (world-sub Δ' Δ w) X) (pcat (Mean Δ' (TV s-nat)) (wact Δ' Δ w (TV s-nat) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n X)) (wact Δ' Δ w (TV s-nat) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n X')) (fmapM Δ' (TV s-nat) (TV s-nat) nrm-n (wact Δ' Δ w (TV s-nat) X')) (cong1 (Mean Δ (TV s-nat)) (Mean Δ' (TV s-nat)) (λ N → (wact Δ' Δ w (TV s-nat) N)) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n X) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n X') p) (psym (Mean Δ' (TV s-nat)) (fmapM Δ' (TV s-nat) (TV s-nat) nrm-n (wact Δ' Δ w (TV s-nat) X')) (wact Δ' Δ w (TV s-nat) (fmapM Δ (TV s-nat) (TV s-nat) nrm-n X')) (subM-fmap Δ' Δ (TV s-nat) (TV s-nat) nrm-n (world-sub Δ' Δ w) X')))) (snd Xn))
+-- (2026-11-14, (D)) List's rules renamed (nil and cons through subM-fmap, a neutral as is, the type
+-- by its element type's)
+rn-lnil : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (A : Mean Δ (Sem a)) → RenR k-nf j-ty Δ' a (wact Δ' Δ w (Sem a) A) →
+  RenR k-nf j-tm Δ' (s-list a) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (Sem a) (TV (s-list a)) (nilv a) A))
+rn-lnil Δ' Δ w a A An = (c-lnil , nn-fm-out k-nf j-tm Δ' Δ w (Sem a) (s-list a) (nilv a) A c-lnil (nlnil Δ' a (wact Δ' Δ w (Sem a) A) (fst An) (snd An)))
+rn-lcons : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (C : Mean Δ (ConsV a)) →
+  RenR k-nf j-tm Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (ConsV a) (TV a) (cons-h a) C)) →
+  RenR k-nf j-tm Δ' (s-list a) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) C)) →
+  RenR k-nf j-tm Δ' (s-list a) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-r a) C))
+rn-lcons Δ' Δ w a C Hn Tn =
+  (c-lcons (fst Hn) (fst Tn) , nn-fm-out k-nf j-tm Δ' Δ w (ConsV a) (s-list a) (cons-r a) C (c-lcons (fst Hn) (fst Tn))
+     (nlcons Δ' a (wact Δ' Δ w (ConsV a) C) (fst Hn) (fst Tn) (nn-fm-in k-nf j-tm Δ' Δ w (ConsV a) a (cons-h a) C (fst Hn) (snd Hn))
+        (nn-fm-in k-nf j-tm Δ' Δ w (ConsV a) (s-list a) (cons-t a) C (fst Tn) (snd Tn))))
+rn-ne-list : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (X : Mean Δ (TV (s-list a))) → RenR k-ne j-tm Δ' (s-list a) (wact Δ' Δ w (TV (s-list a)) X) → RenR k-nf j-tm Δ' (s-list a) (wact Δ' Δ w (TV (s-list a)) X)
+rn-ne-list Δ' Δ w a X Xn = (fst Xn , nne-list Δ' a (wact Δ' Δ w (TV (s-list a)) X) (fst Xn) (snd Xn))
+rn-ty-list : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (A : Mean Δ (Sem a)) → RenR k-nf j-ty Δ' a (wact Δ' Δ w (Sem a) A) → RenR k-nf j-ty Δ' (s-list a) (wact Δ' Δ w (Sem a) A)
+rn-ty-list Δ' Δ w a A An = (c-list (fst An) , nty-list Δ' a (wact Δ' Δ w (Sem a) A) (fst An) (snd An))
 ren-nn : {KJ : NK × Jdg} → NN KJ → (Δ' : CCtx) (w : World Δ' (fst (snd (snd KJ)))) →
   RenR (fst KJ) (fst (snd KJ)) Δ' (fst (snd (snd (snd KJ))))
     (wact Δ' (fst (snd (snd KJ))) w (JZ (fst (snd KJ)) (fst (snd (snd (snd KJ))))) (snd (snd (snd (snd (snd KJ))))))
@@ -6618,6 +6723,10 @@ ren-nn (nnrec Γ s R cP z st x nP nz nst nx) Δ' w =
 ren-nn (nty-nat Γ B) Δ' w = (c-nat , nty-nat Δ' (wact Δ' Γ w One1 B))
 ren-nn (nirr-b Γ X X' c p nx) Δ' w = rn-irr-b Δ' Γ w X X' p (ren-nn nx Δ' w)
 ren-nn (nirr-n Γ X X' c p nx) Δ' w = rn-irr-n Δ' Γ w X X' p (ren-nn nx Δ' w)
+ren-nn (nlnil Γ a A cA nA) Δ' w = rn-lnil Δ' Γ w a A (ren-nn nA Δ' w)
+ren-nn (nlcons Γ a C h t nh nt) Δ' w = rn-lcons Δ' Γ w a C (ren-nn nh Δ' w) (ren-nn nt Δ' w)
+ren-nn (nne-list Γ a X x nx) Δ' w = rn-ne-list Δ' Γ w a X (ren-nn nx Δ' w)
+ren-nn (nty-list Γ a A cA nA) Δ' w = rn-ty-list Δ' Γ w a A (ren-nn nA Δ' w)
 -- ---------------------------------------------------------------- renaming derivations
 -- (2026-11-14) a derivation renamed along a world (ren-der): the same construction as ren-nn's
 -- (each rule at Δ', its premises and conclusion carried along subM-fmap, binders under world-keep and
@@ -6807,6 +6916,20 @@ rd-transp : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (pf : PF a) (X : Me
 rd-transp Δ' Δ w a pf X Ln Xn = ((ccomp (cplam (fst Ln)) csys0 (fst Xn)) , der-fm-out j-tm Δ' Δ w (TrV a) a (tr-r a) X (ccomp (cplam (fst Ln)) csys0 (fst Xn))
   (dtransp Δ' a pf (wact Δ' Δ w (TrV a) X) (fst Ln) (fst Xn) (der-tr j-ty (dext Δ') a (fst Ln) (subM (dext Δ') (dext Δ) (Sem a) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (dline-body Δ (TrV a) (Sem a) (tr-ln a) X)) (dline-body Δ' (TrV a) (Sem a) (tr-ln a) (wact Δ' Δ w (TrV a) X)) (dkeep-line Δ' Δ w (TrV a) (Sem a) (tr-ln a) X) (snd Ln))
      (der-fm-in j-tm Δ' Δ w (TrV a) a (tr-x a) X (fst Xn) (snd Xn))))
+-- List's rules renamed on Der
+rd-lnil : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (A : Mean Δ (Sem a)) → RenD j-ty Δ' a (wact Δ' Δ w (Sem a) A) →
+  RenD j-tm Δ' (s-list a) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (Sem a) (TV (s-list a)) (nilv a) A))
+rd-lnil Δ' Δ w a A An = (c-lnil , der-fm-out j-tm Δ' Δ w (Sem a) (s-list a) (nilv a) A c-lnil (dlnil Δ' a (wact Δ' Δ w (Sem a) A) (fst An) (snd An)))
+rd-lcons : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (C : Mean Δ (ConsV a)) →
+  RenD j-tm Δ' a (wact Δ' Δ w (TV a) (fmapM Δ (ConsV a) (TV a) (cons-h a) C)) →
+  RenD j-tm Δ' (s-list a) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) C)) →
+  RenD j-tm Δ' (s-list a) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-r a) C))
+rd-lcons Δ' Δ w a C Hn Tn =
+  (c-lcons (fst Hn) (fst Tn) , der-fm-out j-tm Δ' Δ w (ConsV a) (s-list a) (cons-r a) C (c-lcons (fst Hn) (fst Tn))
+     (dlcons Δ' a (wact Δ' Δ w (ConsV a) C) (fst Hn) (fst Tn) (der-fm-in j-tm Δ' Δ w (ConsV a) a (cons-h a) C (fst Hn) (snd Hn))
+        (der-fm-in j-tm Δ' Δ w (ConsV a) (s-list a) (cons-t a) C (fst Tn) (snd Tn))))
+rd-ty-list : (Δ' Δ : CCtx) (w : World Δ' Δ) (a : TyShape) (A : Mean Δ (Sem a)) → RenD j-ty Δ' a (wact Δ' Δ w (Sem a) A) → RenD j-ty Δ' (s-list a) (wact Δ' Δ w (Sem a) A)
+rd-ty-list Δ' Δ w a A An = (c-list (fst An) , dty-list Δ' a (wact Δ' Δ w (Sem a) A) (fst An) (snd An))
 ren-der : {J : Jdg} → Der J → (Δ' : CCtx) (w : World Δ' (fst (snd J))) →
   RenD (fst J) Δ' (fst (snd (snd J))) (wact Δ' (fst (snd J)) w (JZ (fst J) (fst (snd (snd J)))) (snd (snd (snd (snd J)))))
 ren-der (dvar Γ v) Δ' w = rd-var Δ' Γ w v
@@ -6855,6 +6978,9 @@ ren-der (dpapp1 Γ a P p dp) Δ' w = rd-papp1 Δ' Γ w a P (ren-der dp Δ' w)
 ren-der (dtransp-b Γ X cL c dL dx) Δ' w = rd-transp-b Δ' Γ w X (ren-der dL (dext Δ') (world-dkeep Δ' Γ w)) (ren-der dx Δ' w)
 ren-der (dtransp-n Γ X cL c dL dx) Δ' w = rd-transp-n Δ' Γ w X (ren-der dL (dext Δ') (world-dkeep Δ' Γ w)) (ren-der dx Δ' w)
 ren-der (dtransp Γ a pf X cL c dL dx) Δ' w = rd-transp Δ' Γ w a pf X (ren-der dL (dext Δ') (world-dkeep Δ' Γ w)) (ren-der dx Δ' w)
+ren-der (dlnil Γ a A cA nA) Δ' w = rd-lnil Δ' Γ w a A (ren-der nA Δ' w)
+ren-der (dlcons Γ a C h t nh nt) Δ' w = rd-lcons Δ' Γ w a C (ren-der nh Δ' w) (ren-der nt Δ' w)
+ren-der (dty-list Γ a A cA nA) Δ' w = rd-ty-list Δ' Γ w a A (ren-der nA Δ' w)
 
 -- ---------------------------------------------------------------- (6) computability over cubes
 -- (2026-11-12, (6)) Computability of types and of terms, one pair by recursion on the shape (CompE, as
@@ -6876,6 +7002,16 @@ data CNat (Δp : CCtx) : (Xc : Mean Δp (TV s-nat)) → Type 1 where
   cn-zero : (X₀ : Mean Δp (TV s-nat)) (B₀ : Mean Δp One1) → PathM Δp (TV s-nat) X₀ (fmapM Δp One1 (TV s-nat) (nat-v zero) B₀) → CNat Δp X₀
   cn-suc : (X₀ Y₀ : Mean Δp (TV s-nat)) → PathM Δp (TV s-nat) X₀ (fmapM Δp (TV s-nat) (TV s-nat) nat-sucv Y₀) → CNat Δp Y₀ → CNat Δp X₀
   cn-ne : (X₀ : Mean Δp (TV s-nat)) (c₀ : Code) → NN (k-ne , (j-tm , Δp , s-nat , c₀ , X₀)) → CNat Δp X₀
+-- (2026-11-14, (D)) List's clause, inductively, over a predicate Hd for the heads (CompS a, given in
+-- CompE): nil at a cube of element types (a path), a cons of a computable head and a tail with the
+-- clause, or a neutral (constructor binders subscripted ₀)
+data CList (a : TyShape) (Hd : (Δh : CCtx) → Mean Δh (TV a) → Type 1) (Δp : CCtx) : (Xc : Mean Δp (TV (s-list a))) → Type 1 where
+  cl-nil : (X₀ : Mean Δp (TV (s-list a))) (A₀ : Mean Δp (Sem a)) → PathM Δp (TV (s-list a)) X₀ (fmapM Δp (Sem a) (TV (s-list a)) (nilv a) A₀) → CList a Hd Δp X₀
+  cl-cons : (X₀ : Mean Δp (TV (s-list a))) (C₀ : Mean Δp (ConsV a)) → PathM Δp (TV (s-list a)) X₀ (fmapM Δp (ConsV a) (TV (s-list a)) (cons-r a) C₀) →
+    Hd Δp (fmapM Δp (ConsV a) (TV a) (cons-h a) C₀) → CList a Hd Δp (fmapM Δp (ConsV a) (TV (s-list a)) (cons-t a) C₀) → CList a Hd Δp X₀
+  cl-ne : (X₀ : Mean Δp (TV (s-list a))) (c₀ : Code) → NN (k-ne , (j-tm , Δp , s-list a , c₀ , X₀)) → CList a Hd Δp X₀
+clist-tr : (a : TyShape) (Hd : (Δh : CCtx) → Mean Δh (TV a) → Type 1) (Δ : CCtx) (X Y : Mean Δ (TV (s-list a))) → PathM Δ (TV (s-list a)) X Y → CList a Hd Δ X → CList a Hd Δ Y
+clist-tr a Hd Δ X Y p c = comp (λ i → CList a Hd Δ (p i)) (λ i → []) c
 -- a type family with an argument: the family and an element of its domain; the argument as a term of
 -- the domain, and the codomain there
 FamV : TyShape → TyShape → Type 1
@@ -6918,6 +7054,7 @@ CompE (s-path a) =
    λ Δ X → (Δ' : CCtx) (w : World Δ' Δ) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
      CSof a (CompE a) Δ' (papp-mean Δ' a f (wact Δ' Δ w (TV (s-path a)) X)))
 CompE s-nat = ((λ Δ T → One1) , λ Δ X → CNat Δ X)
+CompE (s-list a) = ((λ Δ T → fst (CompE a) Δ T) , λ Δ X → CList a (CSof a (CompE a)) Δ X)
 CompTy : (s : TyShape) (Δ : CCtx) → Mean Δ (Sem s) → Type 1
 CompTy s = fst (CompE s)
 CompS : (s : TyShape) (Δ : CCtx) → Mean Δ (TV s) → Type 1
@@ -7007,6 +7144,14 @@ nat-ren Δ (cn-suc X Y p cy) Δ' w =
           (subM-fmap Δ' Δ (TV s-nat) (TV s-nat) nat-sucv (world-sub Δ' Δ w) Y)))
     (nat-ren Δ cy Δ' w)
 nat-ren Δ (cn-ne X c n) Δ' w = cn-ne (wact Δ' Δ w (TV s-nat) X) (fst (ren-nn n Δ' w)) (snd (ren-nn n Δ' w))
+-- List's clause kept along a world (list-ren: by induction; the heads by the element shape's own)
+list-ren : (a : TyShape) (Ra : ((Δ : CCtx) (X : Mean Δ (TV a)) → CompS a Δ X → (Δ' : CCtx) (w : World Δ' Δ) → CompS a Δ' (wact Δ' Δ w (TV a) X))) (Δ : CCtx) {X : Mean Δ (TV (s-list a))} → CList a (CompS a) Δ X → (Δ' : CCtx) (w : World Δ' Δ) → CList a (CompS a) Δ' (wact Δ' Δ w (TV (s-list a)) X)
+list-ren a Ra Δ (cl-nil X A p) Δ' w = cl-nil (wact Δ' Δ w (TV (s-list a)) X) (wact Δ' Δ w (Sem a) A) (pcat (Mean Δ' (TV (s-list a))) (wact Δ' Δ w (TV (s-list a)) X) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (Sem a) (TV (s-list a)) (nilv a) A)) (fmapM Δ' (Sem a) (TV (s-list a)) (nilv a) (wact Δ' Δ w (Sem a) A)) (λ i → wact Δ' Δ w (TV (s-list a)) (p i)) (psym (Mean Δ' (TV (s-list a))) (fmapM Δ' (Sem a) (TV (s-list a)) (nilv a) (wact Δ' Δ w (Sem a) A)) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (Sem a) (TV (s-list a)) (nilv a) A)) (subM-fmap Δ' Δ (Sem a) (TV (s-list a)) (nilv a) (world-sub Δ' Δ w) A)))
+list-ren a Ra Δ (cl-cons X C p hc tc) Δ' w =
+  cl-cons (wact Δ' Δ w (TV (s-list a)) X) (wact Δ' Δ w (ConsV a) C) (pcat (Mean Δ' (TV (s-list a))) (wact Δ' Δ w (TV (s-list a)) X) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-r a) C)) (fmapM Δ' (ConsV a) (TV (s-list a)) (cons-r a) (wact Δ' Δ w (ConsV a) C)) (λ i → wact Δ' Δ w (TV (s-list a)) (p i)) (psym (Mean Δ' (TV (s-list a))) (fmapM Δ' (ConsV a) (TV (s-list a)) (cons-r a) (wact Δ' Δ w (ConsV a) C)) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-r a) C)) (subM-fmap Δ' Δ (ConsV a) (TV (s-list a)) (cons-r a) (world-sub Δ' Δ w) C)))
+    (comp-tr a Δ' (wact Δ' Δ w (TV a) (fmapM Δ (ConsV a) (TV a) (cons-h a) C)) (fmapM Δ' (ConsV a) (TV a) (cons-h a) (wact Δ' Δ w (ConsV a) C)) (psym (Mean Δ' (TV a)) (fmapM Δ' (ConsV a) (TV a) (cons-h a) (wact Δ' Δ w (ConsV a) C)) (wact Δ' Δ w (TV a) (fmapM Δ (ConsV a) (TV a) (cons-h a) C)) (subM-fmap Δ' Δ (ConsV a) (TV a) (cons-h a) (world-sub Δ' Δ w) C)) (Ra Δ (fmapM Δ (ConsV a) (TV a) (cons-h a) C) hc Δ' w))
+    (clist-tr a (CompS a) Δ' (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) C)) (fmapM Δ' (ConsV a) (TV (s-list a)) (cons-t a) (wact Δ' Δ w (ConsV a) C)) (psym (Mean Δ' (TV (s-list a))) (fmapM Δ' (ConsV a) (TV (s-list a)) (cons-t a) (wact Δ' Δ w (ConsV a) C)) (wact Δ' Δ w (TV (s-list a)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) C)) (subM-fmap Δ' Δ (ConsV a) (TV (s-list a)) (cons-t a) (world-sub Δ' Δ w) C)) (list-ren a Ra Δ tc Δ' w))
+list-ren a Ra Δ (cl-ne X c n) Δ' w = cl-ne (wact Δ' Δ w (TV (s-list a)) X) (fst (ren-nn n Δ' w)) (snd (ren-nn n Δ' w))
 comp-ren-e : (s : TyShape) → CRenT s
 comp-ren-e s-bool = ((λ Δ T ct Δ' w → one) , bool-ren)
 comp-ren-e (s-pi a b) =
@@ -7024,6 +7169,7 @@ comp-ren-e (s-path a) =
        (λ i → papp-mean Δ2 a f (subM-comp Δ2 Δ' Δ w2 w (TV (s-path a)) X i))
        (cx Δ2 (world-comp Δ2 Δ' Δ w2 w) f cf nc))
 comp-ren-e s-nat = ((λ Δ T ct Δ' w → one) , λ Δ X cx Δ' w → nat-ren Δ cx Δ' w)
+comp-ren-e (s-list a) = (fst (comp-ren-e a) , λ Δ X cx Δ' w → list-ren a (csof-ren a (comp-ren-e a)) Δ cx Δ' w)
 comp-ren : (s : TyShape) (Δ : CCtx) (X : Mean Δ (TV s)) → CompS s Δ X → (Δ' : CCtx) (w : World Δ' Δ) → CompS s Δ' (wact Δ' Δ w (TV s) X)
 comp-ren s = csof-ren s (comp-ren-e s)
 
@@ -9755,12 +9901,33 @@ rfy-nat : RfyT s-nat
 rfy-nat Δ X cx = rfy-nat-c Δ (snd cx)
 rfl-nat : RflT s-nat
 rfl-nat Δ X ct c n = (ct , cn-ne X c n)
+-- List (rty-list by the element type's, rfy-list by induction on the clause with the element type's
+-- computability carried down, rfl-list a neutral)
+rty-list' : (a : TyShape) (Δ : CCtx) (T : Mean Δ (Sem a)) → RenR k-nf j-ty Δ a T → RenR k-nf j-ty Δ (s-list a) T
+rty-list' a Δ T r = (c-list (fst r) , nty-list Δ a T (fst r) (snd r))
+rty-list : (a : TyShape) → RRT a → RTyT (s-list a)
+rty-list a Ra Δ T ct = rty-list' a Δ T (fst Ra Δ T ct)
+rfy-list-c : (a : TyShape) (Ra : RRT a) (Δ : CCtx) {X : Mean Δ (TV (s-list a))} → CList a (CompS a) Δ X → CompTy a Δ (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) X) → RenR k-nf j-tm Δ (s-list a) X
+rfy-list-c a Ra Δ (cl-nil X A p) ct =
+  let rA = fst Ra Δ A (ty-tr a Δ (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) X) A (pcat (Mean Δ (Sem a)) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) X) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Δ (Sem a) (TV (s-list a)) (nilv a) A)) A (cong1 (Mean Δ (TV (s-list a))) (Mean Δ (Sem a)) (λ N → (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) N)) X (fmapM Δ (Sem a) (TV (s-list a)) (nilv a) A) p) (pcat (Mean Δ (Sem a)) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Δ (Sem a) (TV (s-list a)) (nilv a) A)) (dcube-fmap (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (Sem a)) (FbE (fst Δ) (Sem a)) (λ x y → y) (snd Δ) A) A (fmapM-fmapM Δ (Sem a) (TV (s-list a)) (Sem a) (nilv a) (λ q → fst q) A) (fmap-id (dims (fst Δ)) (CtxV (fst Δ)) (FbE (fst Δ) (Sem a)) (snd Δ) A))) ct) in
+  (c-lnil , nn-tr k-nf j-tm Δ (s-list a) c-lnil (fmapM Δ (Sem a) (TV (s-list a)) (nilv a) A) X (psym (Mean Δ (TV (s-list a))) X (fmapM Δ (Sem a) (TV (s-list a)) (nilv a) A) p) (nlnil Δ a A (fst rA) (snd rA)))
+rfy-list-c a Ra Δ (cl-cons X C p hc tc) ct =
+  let rh = fst (snd Ra) Δ (fmapM Δ (ConsV a) (TV a) (cons-h a) C) hc in
+  let rt = rfy-list-c a Ra Δ tc (ty-tr a Δ (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) X) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) C)) (pcat (Mean Δ (Sem a)) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) X) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-r a) C)) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) C)) (cong1 (Mean Δ (TV (s-list a))) (Mean Δ (Sem a)) (λ N → (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) N)) X (fmapM Δ (ConsV a) (TV (s-list a)) (cons-r a) C) p) (pcat (Mean Δ (Sem a)) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-r a) C)) (fmapM Δ (ConsV a) (Sem a) (λ z → fst (cons-r a z)) C) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) C)) (fmapM-fmapM Δ (ConsV a) (TV (s-list a)) (Sem a) (cons-r a) (λ q → fst q) C) (psym (Mean Δ (Sem a)) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) C)) (fmapM Δ (ConsV a) (Sem a) (λ z → fst (cons-r a z)) C) (fmapM-fmapM Δ (ConsV a) (TV (s-list a)) (Sem a) (cons-t a) (λ q → fst q) C)))) ct) in
+  (c-lcons (fst rh) (fst rt) , nn-tr k-nf j-tm Δ (s-list a) (c-lcons (fst rh) (fst rt)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-r a) C) X (psym (Mean Δ (TV (s-list a))) X (fmapM Δ (ConsV a) (TV (s-list a)) (cons-r a) C) p)
+     (nlcons Δ a C (fst rh) (fst rt) (snd rh) (snd rt)))
+rfy-list-c a Ra Δ (cl-ne X c n) ct = (c , nne-list Δ a X c n)
+rfy-list : (a : TyShape) → RRT a → RfyT (s-list a)
+rfy-list a Ra Δ X cx = rfy-list-c a Ra Δ (snd cx) (fst cx)
+rfl-list : (a : TyShape) → RRT a → RflT (s-list a)
+rfl-list a Ra Δ X ct c n = (ct , cl-ne X c n)
 rr : (s : TyShape) → RRT s
 rr s-bool = (rty-bool , rfy-bool , rfl-bool)
 rr (s-pi a b) = (rty-pi a b (rr a) (rr b) , rfy-pi a b (rr a) (rr b) , rfl-pi a b (rr a) (rr b))
 rr (s-sig a b) = (rty-sig a b (rr a) (rr b) , rfy-sig a b (rr a) (rr b) , rfl-sig a b (rr a) (rr b))
 rr (s-path a) = (rty-path a (rr a) , rfy-path a (rr a) , rfl-path a (rr a))
 rr s-nat = (rty-nat , rfy-nat , rfl-nat)
+rr (s-list a) = (rty-list a (rr a) , rfy-list a (rr a) , rfl-list a (rr a))
 
 
 -- ---------------------------------------------------------------- fund (4a): a cube of arguments over sub-tot
@@ -10479,6 +10646,17 @@ KT (pf-pi a b pa pb) Δ X cx = (triv (pf-pi a b pa pb) Δ (fmapM Δ (TV (s-pi a 
 fund-tr : (Γ : CCtx) (a : TyShape) (pf : PF a) (X : Mean Γ (TrV a)) (Δ : CCtx) (σ : Sub Δ Γ) → CompS a Δ (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-x a) X)) → CompS a Δ (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-r a) X))
 fund-tr Γ a pf X Δ σ cx = comp-tr a Δ (fmapM Δ (TrV a) (TV a) (tr-r a) (subM Δ Γ (TrV a) σ X)) (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-r a) X)) (subM-fmap Δ Γ (TrV a) (TV a) (tr-r a) σ X) (KT pf Δ (subM Δ Γ (TrV a) σ X) (comp-tr a Δ (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-x a) X)) (fmapM Δ (TrV a) (TV a) (tr-x a) (subM Δ Γ (TrV a) σ X)) (psym (Mean Δ (TV a)) (fmapM Δ (TrV a) (TV a) (tr-x a) (subM Δ Γ (TrV a) σ X)) (subM Δ Γ (TV a) σ (fmapM Γ (TrV a) (TV a) (tr-x a) X)) (subM-fmap Δ Γ (TrV a) (TV a) (tr-x a) σ X)) cx))
 
+-- (2026-11-14, (D)) List's cases of fund: nil (its element type's computability, the clause by
+-- subM-fmap), cons (the head's and the tail's, moved by subM-fmap), the type (its element type's)
+fund-lnil : (Γ : CCtx) (a : TyShape) (A : Mean Γ (Sem a)) (Δ : CCtx) (σ : Sub Δ Γ) → CompTy a Δ (subM Δ Γ (Sem a) σ A) → CompS (s-list a) Δ (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (Sem a) (TV (s-list a)) (nilv a) A))
+fund-lnil Γ a A Δ σ ct = (ty-tr a Δ (subM Δ Γ (Sem a) σ A) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (Sem a) (TV (s-list a)) (nilv a) A))) (psym (Mean Δ (Sem a)) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (Sem a) (TV (s-list a)) (nilv a) A))) (subM Δ Γ (Sem a) σ A) (pcat (Mean Δ (Sem a)) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (Sem a) (TV (s-list a)) (nilv a) A))) (subM Δ Γ (Sem a) σ (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (Sem a) (TV (s-list a)) (nilv a) A))) (subM Δ Γ (Sem a) σ A) (subM-fmap Δ Γ (TV (s-list a)) (Sem a) (λ q → fst q) σ (fmapM Γ (Sem a) (TV (s-list a)) (nilv a) A)) (cong1 (Mean Γ (Sem a)) (Mean Δ (Sem a)) (λ N → (subM Δ Γ (Sem a) σ N)) (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (Sem a) (TV (s-list a)) (nilv a) A)) A (pcat (Mean Γ (Sem a)) (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (Sem a) (TV (s-list a)) (nilv a) A)) (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) (Sem a)) (λ x y → y) (snd Γ) A) A (fmapM-fmapM Γ (Sem a) (TV (s-list a)) (Sem a) (nilv a) (λ q → fst q) A) (fmap-id (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (Sem a)) (snd Γ) A))))) ct , cl-nil (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (Sem a) (TV (s-list a)) (nilv a) A)) (subM Δ Γ (Sem a) σ A) (psym (Mean Δ (TV (s-list a))) (fmapM Δ (Sem a) (TV (s-list a)) (nilv a) (subM Δ Γ (Sem a) σ A)) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (Sem a) (TV (s-list a)) (nilv a) A)) (subM-fmap Δ Γ (Sem a) (TV (s-list a)) (nilv a) σ A)))
+fund-lcons : (Γ : CCtx) (a : TyShape) (C : Mean Γ (ConsV a)) (Δ : CCtx) (σ : Sub Δ Γ) → CompS a Δ (subM Δ Γ (TV a) σ (fmapM Γ (ConsV a) (TV a) (cons-h a) C)) → CompS (s-list a) Δ (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C)) → CompS (s-list a) Δ (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C))
+fund-lcons Γ a C Δ σ ch ct =
+  (ty-tr a Δ (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C))) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C))) (pcat (Mean Δ (Sem a)) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C))) (subM Δ Γ (Sem a) σ (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C))) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C))) (subM-fmap Δ Γ (TV (s-list a)) (Sem a) (λ q → fst q) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C)) (pcat (Mean Δ (Sem a)) (subM Δ Γ (Sem a) σ (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C))) (subM Δ Γ (Sem a) σ (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C))) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C))) (cong1 (Mean Γ (Sem a)) (Mean Δ (Sem a)) (λ N → (subM Δ Γ (Sem a) σ N)) (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C)) (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C)) (pcat (Mean Γ (Sem a)) (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C)) (fmapM Γ (ConsV a) (Sem a) (λ z → fst z) C) (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C)) (fmapM-fmapM Γ (ConsV a) (TV (s-list a)) (Sem a) (cons-t a) (λ q → fst q) C) (psym (Mean Γ (Sem a)) (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C)) (fmapM Γ (ConsV a) (Sem a) (λ z → fst z) C) (fmapM-fmapM Γ (ConsV a) (TV (s-list a)) (Sem a) (cons-r a) (λ q → fst q) C)))) (psym (Mean Δ (Sem a)) (fmapM Δ (TV (s-list a)) (Sem a) (λ q → fst q) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C))) (subM Δ Γ (Sem a) σ (fmapM Γ (TV (s-list a)) (Sem a) (λ q → fst q) (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C))) (subM-fmap Δ Γ (TV (s-list a)) (Sem a) (λ q → fst q) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C))))) (fst ct) ,
+   cl-cons (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C)) (subM Δ Γ (ConsV a) σ C) (psym (Mean Δ (TV (s-list a))) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-r a) (subM Δ Γ (ConsV a) σ C)) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-r a) C)) (subM-fmap Δ Γ (ConsV a) (TV (s-list a)) (cons-r a) σ C))
+     (comp-tr a Δ (subM Δ Γ (TV a) σ (fmapM Γ (ConsV a) (TV a) (cons-h a) C)) (fmapM Δ (ConsV a) (TV a) (cons-h a) (subM Δ Γ (ConsV a) σ C)) (psym (Mean Δ (TV a)) (fmapM Δ (ConsV a) (TV a) (cons-h a) (subM Δ Γ (ConsV a) σ C)) (subM Δ Γ (TV a) σ (fmapM Γ (ConsV a) (TV a) (cons-h a) C)) (subM-fmap Δ Γ (ConsV a) (TV a) (cons-h a) σ C)) ch)
+     (clist-tr a (CompS a) Δ (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C)) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) (subM Δ Γ (ConsV a) σ C)) (psym (Mean Δ (TV (s-list a))) (fmapM Δ (ConsV a) (TV (s-list a)) (cons-t a) (subM Δ Γ (ConsV a) σ C)) (subM Δ Γ (TV (s-list a)) σ (fmapM Γ (ConsV a) (TV (s-list a)) (cons-t a) C)) (subM-fmap Δ Γ (ConsV a) (TV (s-list a)) (cons-t a) σ C)) (snd ct)))
+
 -- ---------------------------------------------------------------- fund: the fundamental lemma
 -- (2026-11-14) a derivation's meaning under a computable substitution is computable: a term's at its
 -- shape (CompS), a type's (CompTy); one function on Der over the tag, each rule's case its lemma above,
@@ -10518,6 +10696,9 @@ fund (dtransp-n Γ X cL c dL dx) Δ σ e = fund-tr-n Γ X Δ σ (fund dx Δ σ e
 fund (dirr-b Γ X X' c p dx) Δ σ e = fund-irr-b Γ X X' p Δ σ (fund dx Δ σ e)
 fund (dirr-n Γ X X' c p dx) Δ σ e = fund-irr-n Γ X X' p Δ σ (fund dx Δ σ e)
 fund (dtransp Γ a pf X cL c dL dx) Δ σ e = fund-tr Γ a pf X Δ σ (fund dx Δ σ e)
+fund (dlnil Γ a A cA dA) Δ σ e = fund-lnil Γ a A Δ σ (fund dA Δ σ e)
+fund (dlcons Γ a C h t dh dt) Δ σ e = fund-lcons Γ a C Δ σ (fund dh Δ σ e) (fund dt Δ σ e)
+fund (dty-list Γ a A cA dA) Δ σ e = fund dA Δ σ e
 
 -- ---------------------------------------------------------------- reflect-env, normalize, reifySound
 -- (2026-11-14) typed contexts: the empty one, an extension by a type with a derivation, by a dimension
