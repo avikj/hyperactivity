@@ -5,8 +5,9 @@
 --
 -- Status (2026-11-14): F2d done; experiments/nbe/p26-wip.cub with lib/linproof.cub imported checks
 -- fresh (CUBICAL_NOCACHE=1): 1150 passed, 0 failed, 687M steps, 7.5 min. F2d' done, fresh: 1247 passed,
--- 0 failed, 693M steps, 7.6 min. F2e done (1292 passed, store warm; fresh check recorded
--- when it ends). Next: papp-subst at canonical forms (dnf-subst), then fund.
+-- 0 failed, 693M steps, 7.6 min. F2e done. papp-subst done (both steps); with them the file checks
+-- fresh: 1305 passed, 0 failed, 786M steps, 11.4 min (2026-11-14). Next: fund (its plan below, at
+-- "fund's plan").
 -- The dimensions question that paused it is answered by the cubical-set model; the encoding stands
 -- (task-graph/hyperactivity.cub, language-implementation).
 -- F2d's plan (2026-11-14), worked out before it is built. papp-dd f is papp-ex (dnf-ix f), so F2d is
@@ -65,8 +66,8 @@
 -- Done (2026-11-14): M0, and cmap-papp-ex (F2e): path application at ixs σ e of cmap-d σ Q is cmap-d σ of
 -- path application at e, for every σ : CMap and every expression. The front-dimension step needed no new
 -- machinery: the outer diagonal is diag-dd at index 0 of the extended skeleton, so M1 moves it.
--- Next, papp-subst (2026-11-14, in progress; a session picking this up starts here). Step 1, checked
--- (experiments/nbe/papp-subst-draft.cub, 1304 passed, to move into p26-wip.cub): subst-form (σ's form for a variable, dnf-zero at a non-dimension, walked as
+-- papp-subst (2026-11-14, done; both steps in experiments/nbe/p26-wip.cub after cmap-papp-ex, the draft
+-- file moved in and deleted; fresh 1305 passed). Step 1: subst-form (σ's form for a variable, dnf-zero at a non-dimension, walked as
 -- subst-var), sform-ix (its reading is subst-var, a path by bool-elim on weq k #0), lit-subst /
 -- conj-subst / dnf-subst (a literal to its form or dnf-neg of it, conjunctions by dnf-meet with
 -- dnf-one, forms by dnf-join with dnf-zero), ieq-path, ixs-conj-cons, ixs-dnf-cons (as conj-ix-cons),
@@ -75,7 +76,46 @@
 -- cmap-d σ Q is cmap-d σ of papp-dd f Q: dnf-subst-sound then cmap-papp-ex). Canonicity of dnf-subst
 -- needs σ's forms canonical (a hypothesis on σ; join-ok/meet-ok/neg-ok give the rest). Step 2: papp-subst
 -- on meanings, subM-papp's route (plam-line against the pull by pull-sw, fmap-transp, fmap-cmap,
--- papp-dd-pull, carry-nat) with cmap-papp-ddS in place of cmap-papp-dd. Then fund.
+-- papp-dd-pull, carry-nat) with cmap-papp-ddS in place of cmap-papp-dd. Done as planned: papp-subst is
+-- subM-papp's term with σ's dimension part, cube of contexts and base path in place of the world's
+-- (world-sub w = (cmap-of r , ws), cco and ccd are cmap-cube and cmap-d at cmap-of r, so every lemma on
+-- the route was already generic in the CMap), dnf-subst for dnf-r, cmap-papp-ddS for cmap-papp-dd.
+-- fund's plan (2026-11-14), worked out before it is built. fund : Der J → (Δ) (σ : Sub Δ Γ) →
+-- CompEnv Γ Δ σ → JC jk s Δ (subM σ M), JC j-tm = CompS, JC j-ty = CompTy, one function over the tag.
+-- (1) CompEnv Γ Δ σ = CanonCM σ's forms (each isTrue (dnf-canon form), by recursion on Γ's skeleton) ×
+-- for each v : VarP, CompS (var-shape v) Δ (subM σ (varCube Γ v)). Kept along a world (env-w): forms by
+-- canon-r through cmap-r, values by comp-ren and subM-wcomp. (2) canon-subst: dnf-subst σ f is
+-- canonical when σ's forms are (canon-join, canon-meet, canon-neg; dnf-zero and dnf-one canonical).
+-- (3) The cases without binders, as P1's with transports: dvar the environment; dapp the Kripke clause
+-- at world-id (subM-id, subM-fmap); dfst, dsnd the components; dtrue, dfalse the clause's equation by
+-- subM-fmap; dpapp0/1 the type's ends (fmapM-fmapM); dpapp at g = dnf-subst σ f: g canonical by (2); if
+-- non-constant, the PathP clause at world-id, then subM-id, papp-subst and the derivation's path; if
+-- constant (const-cases), papp-mean at lnil (dnf-one) is fmapM pend-0 (pend-1) judgmentally, the
+-- type's end, then papp-subst. (4) The binders over ext-h Γ a Y h M (lam-body, pair-cod, case-mot,
+-- fam-body: each ext-lift) under a world: the premise at sub-ext (sub-wcomp w σ) V. (4a) V from the
+-- clause's data: a cube A of pairs (value, argument) with a path from its values (after a map j) to
+-- the substituted M; dzip (generic, by recursion on n with a pointwise transport, as pull-gen) gives V
+-- over tot-base, and dzip-pull (pointwise: the transport's filler, η judgmental) that pairing V back
+-- with sub-tot gives A; so zpt (that pairing, a cube of (value, argument)) has values subM σ0 M and is
+-- A after j. (4b) sub-ext's path is redefined: ext-path, then map-pull-i (dcube-map of the pull of V by a
+-- map ignoring V is the map of sub-tot; pointwise judgmental) in place of sub-ext-tail. Its action on a
+-- lift over ext-h's cube (ext-liftG: the lift's function at the vertex, the value and the environment;
+-- ext-lift and the old variables are instances): the generalization of kl-DE from world-sub w to σ0
+-- (a dependent path over ext-path to the lift over sub-tot), lift-pull-i over map-pull-i to a lift
+-- through the pull (dcube-liftp), carry-uniq, and pull-liftp (sub-pull of that is the pull of V with
+-- the function; pointwise judgmental). So the action on ext-lift G0 M is fmapM G0 of zpt (ext-beta),
+-- on an old variable subM σ0 of it (pull-ignore, subM-of), on the new one fmapM (h, x) of zpt.
+-- (4c) The cases: dlam (term clause: A from Y; type clause: Y paired with the function, j = fst;
+-- domain by fund at the domain), dpair (the codomain type's clause likewise), dty-pi/dty-sig (the
+-- codomain's clause), dcase's motive (sub-ext at the generic point, for reify; at the scrutinee, for
+-- reflect's type). (5) The dimension binders under sub-form (sub-wcomp w σ) f: on a dimension-
+-- weakened meaning sub-form acts as σ0 (cmap-nat-d, papp-deg-d, carry-pcat); dline-body is papp-line at
+-- dnf-v0 of the weakened meaning (papp-dwk), so its action is papp-line at dnf-subst (σ0, f) dnf-v0 = f
+-- (canonical f) of subM σ0 (papp-subst generalized from papp-mean to papp-line, mechanically). Cases:
+-- dplam (Kripke at canonical non-constant forms; ends at dnf-zero/dnf-one), dty-path. (6) dcase: true/
+-- false by the clause's path (a zip of meanings over one base, zip-fst and zip-fmap, to replace the
+-- scrutinee by the constant), neutral by ncase with the branches reified and the motive from (4c),
+-- reflected at the motive at the scrutinee. Then reflect-env over typed contexts, normalize, soundness.
 -- The rest of this head is the plan and its findings as of 2026-11-12.
 --
 -- Status (2026-11-12, latest first).

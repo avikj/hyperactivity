@@ -148,6 +148,8 @@ typed-codes-after-canonicity = node "Everything typed codes and normalization by
 -- (papp-ex-cmap); this generalizes it to substitution by forms, the crux being the mixed lemmas
 -- (path application at a form in a cube's base dimensions against papp-ex in its fibre). The plan
 -- is lib/nbe.cub's head.
+-- Resolved 2026-11-14: cmap-papp-ex in experiments/nbe/p26-wip.cub; with papp-subst the file checks
+-- fresh (CUBICAL_NOCACHE=1): 1305 passed, 0 failed, 786M steps, 11.4 min.
 substitution-commutes-with-path-application : Node
 substitution-commutes-with-path-application = node "Substituting forms for dimensions commutes with path application: path application at the substituted expression of the substituted cube is the substitution of the path application (F2e)." (cons typed-codes-after-canonicity nil)
 -- typed-codes-after-naturality (2026-11-14): what typed codes need after F2e
@@ -159,9 +161,12 @@ typed-codes-after-naturality : Node
 typed-codes-after-naturality = node "Everything typed codes and normalization by evaluation need after naturality in substitutions (F2e): the fundamental lemma, normalize and its soundness, the swap into lib/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-canonicity nil)
 -- path-application-under-substitution-at-forms (2026-11-14): papp-subst, the first step after F2e
 -- in lib/nbe.cub's head ("Next, papp-subst"): path application at canonical forms commutes with a
--- substitution's action on meanings, which the fundamental lemma uses at dpapp. Step 1 (dnf-subst
--- and cmap-papp-ddS) is checked in experiments/nbe/papp-subst-draft.cub (to move into p26-wip.cub); step 2 follows
--- subM-papp's route.
+-- substitution's action on meanings, which the fundamental lemma uses at dpapp. Step 1: dnf-subst
+-- and cmap-papp-ddS; step 2 follows subM-papp's route.
+-- Resolved 2026-11-14: dnf-subst, dnf-subst-sound, cmap-papp-ddS and papp-subst in
+-- experiments/nbe/p26-wip.cub (step 2 is subM-papp's term with the substitution's parts in place of
+-- the world's, subM-papp being generic in the dimension map); the file checks fresh
+-- (CUBICAL_NOCACHE=1): 1305 passed, 0 failed, 786M steps, 11.4 min.
 path-application-under-substitution-at-forms : Node
 path-application-under-substitution-at-forms = node "Path application at canonical forms commutes with the action of a substitution by forms on meanings (papp-subst)." (cons typed-codes-after-naturality nil)
 -- typed-codes-after-papp-subst (2026-11-14): after papp-subst: the fundamental lemma, reflect-env,
@@ -170,6 +175,16 @@ path-application-under-substitution-at-forms = node "Path application at canonic
 -- types.
 typed-codes-after-papp-subst : Node
 typed-codes-after-papp-subst = node "Everything typed codes and normalization by evaluation need after papp-subst: the fundamental lemma, normalize and its soundness, the swap into lib/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-naturality nil)
+-- fundamental-lemma-for-typed-codes (2026-11-14): fund of lib/nbe.cub's head ("fund's plan"): every
+-- derivation's meaning, under a substitution whose forms are canonical and whose values are
+-- computable, is computable at its shape (terms) or its shape's computability holds of it (types).
+fundamental-lemma-for-typed-codes : Node
+fundamental-lemma-for-typed-codes = node "Every typed derivation is computable under every computable substitution by canonical forms (the fundamental lemma, fund)." (cons typed-codes-after-papp-subst nil)
+-- typed-codes-after-fund (2026-11-14): after fund: reflect-env, normalize and its soundness by refl,
+-- the swap of experiments/nbe/p26-wip.cub into lib/nbe.cub with the examples rewritten; then the Kan
+-- operations, Glue, universes and object-level data types.
+typed-codes-after-fund : Node
+typed-codes-after-fund = node "Everything typed codes and normalization by evaluation need after the fundamental lemma: normalize and its soundness, the swap into lib/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-papp-subst nil)
 -- language-implementation-remainder (2026-11-14): everything the paper specifies for the language
 -- that typed codes and normalization by evaluation do not cover. What is known about it follows
 -- (moved here from the language goal's statement when the goal was expanded).
@@ -622,9 +637,9 @@ roots = cons the-product nil
 -- the leaves being worked on now, and the leaves whose work is done; every other leaf is pending
 -- (HYPERACTIVE.md §2.4 “The organization of the work”)
 in-progress : List Node
-in-progress = cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms nil)
+in-progress = cons fundamental-lemma-for-typed-codes nil
 resolved : List Node
-resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical nil)
+resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms nil)))
 -- language support starts only when the language implementation and the product implementation are
 -- done (Avik, 2026-11-13)
 after : List (Node × List Node)
