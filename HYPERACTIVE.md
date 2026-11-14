@@ -773,13 +773,10 @@ The paper is the specification. What remains between the implementation (§1) an
   - object composition is the host's composition;
   - Glue and univalence are the host's.
 - **The specializer, carrying its law** (§6.2).
-- **Native realization** (§9), related to the definitions it realizes.
-  - The paper's §9.3 relates a compiler to an explicitly decoded machine: a byte language with its
-    transition system, proved by structural induction. So native code is related to a machine's
-    semantics, here the x86 model (`lib/isa/x86`, `lib/x86.cub`).
-  - The translation to bytes carries that relation in place of today's trusted templates.
-  - Realization through C, an earlier session's plan, is dropped from this goal. A C semantics is
-    language support (§2.1), and "C semantics formalization is a ways away".
+- **Native realization** (§9), related to the definitions it realizes. The route is open; see
+  §3.4. The paper requires that the evaluator replace a source computation with native code only
+  once a target-correctness witness is available (§9.3, "Loading, native substitution"). Today
+  `#jit` breaks that rule.
 - **The laws of the primitives,** each a theorem or a named assumption (§8.5).
 - **Deriving,** as a typed term.
 - **Terms of any depth.**
@@ -965,6 +962,10 @@ absent. No comment convention stands in for it.
 - **Naming.** Names are precise English and verbose rather than vague. Never "work", never "the one
   X".
 - **Push to `main` the moment a change is made.**
+- **Every message to Avik ends with everything unresolved from the conversation,** with nothing
+  lost: what is pending him and what is pending the session.
+- **Context lives in the repository, not in chat.** A session can end at any moment, so what it is
+  doing, has found and has decided is written here or in the task graph as it happens.
 - **The README is minimal:** the paper, setup, and the commands.
 - **A system for one human.** Agents have no agency, and Avik drives one session. Swarms are for
   voluminous work such as lifting languages, once the repository is in flow.
@@ -1316,8 +1317,37 @@ yields directed causality, defined as an observation in the sense of the identit
 
 ### 3.4 Questions only Avik can answer
 
-None are open. Both earlier questions were answered without him. Dimensions are answered by the
-cubical-set model (§2.2). Native code is answered by the paper's §9.3 and his own words (§2.2).
+1. **Which target a witnessed native path takes, and whether one is needed before language
+   support.** Dimensions were answered by the cubical-set model (§2.2). Native code was wrongly
+   called settled on 2026-11-13: that claim quoted Avik's words about not splitting stored C source
+   as if they were about realization. The record, from the repository and its history:
+   - **The paper permits every route.**
+     - An interpreter is one realization, and native instruction selection another (§9.2, §9.3).
+     - Native code replaces a source computation only once its target-correctness witness is
+       available.
+     - "C and C++ text are optional target presentations. If an external compiler produces the
+       executed bytes, either its relevant compilation relation is assumed or those bytes receive
+       their own checked connection" (§9.3).
+     - §9.4 describes the existing x86 path. It says proofs of the encoder's templates under the
+       machine model are separate obligations.
+   - **Plan revision 9** (2026-11-09, `archive/2026-11-11/PLAN-rev9.md` §5 item 5) chose x86-64,
+     then Arm and RISC-V: "Not LLVM IR, not C: an intermediate language would need its own meaning
+     and its own check, and the hardware model is the meaning that matters". It deleted the earlier
+     C path, which compiled C with gcc and related it to the source only by comparing answers. A
+     session wrote the plan; who decided this is not recorded.
+   - **A session on 2026-11-12** (`work/graph.cub` at d57ed40, node `native`) planned realization
+     through C instead. It emits structured C so that the C compilers' optimizations apply, and
+     trusts the compiler, the C library and the hardware. Its stated reason was a cycle in its goal
+     graph. Nothing attributes this to Avik.
+   - **No words of Avik's in the repository decide between them.**
+
+   What the decision turns on: every witnessed route needs a target language's semantics, either the
+   x86 model or a C semantics plus an assumed compiler relation. That is language support, and
+   language support waits on the language.
+
+   Proposed, not confirmed: the language goal needs only the paper's substitution rule obeyed, with
+   native code under its witness or an explicitly named assumption that `#trusted` lists. The
+   witnessed route then goes with language support.
 
 ---
 
@@ -1891,3 +1921,67 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-13 (after the document was made one)
 
 > in cubical type theories / CCHM, what does a term mean in a context with a variable number of dimensions?
+
+#### 2026-11-14 00:02 UTC
+
+> do your best work, be hyperorganized religiously maintain all context in repository not chat (assume this session terminates at any point randomly) - and the repository is a fucking temple so don't shit on it anymore. start by telling me very clearly the entire ticket chain it relates to, then state all files which need edits and what edits before making a single edit - it is intelligent to apply thought in tokens before presenting a decision
+
+#### 2026-11-14 00:11 UTC
+
+> sorry i need to interrupt because you have caused problems which must be addressed beofre pretending to create more value: 
+>
+> a side chat indicted your bullshit: "wait i don't get what you're saying about native realization and i don't think you've applied sufficient intelligence or understood anything relevant nearly enough. you're claims for why this is the right thing to do just loosely cite prior statements totally insufficient to determine your conclusion. i have no idea if you're right. i have no idea what past thought went into this. i bet you dont either or you have chosen to ignore or treat it as unimportant. help me understand and by that i mean help yourslef understand
+> You’re right: I didn’t understand it, and the “settled” claim I committed (cecdbb1) doesn’t hold up. Here is what I actually know, where my reasoning broke, and what the real decision looks like.
+> Where my reasoning broke
+>
+> 1. I quoted you out of context. “C semantics formalization is a ways away, actually that’s whole answer” was your reply in the change-management discussion. It was about how to hold the non-cubical C source in the repository (no splitting it into objects). It said nothing about how native code gets realized. “I give zero fucks about C” came from the same priorities discussion. I treated both as rulings on a question they weren’t about.
+> 2. I overread the paper’s §9.3. §9.3 builds one small example: a toy expression language (Input/Const/Xor) compiled to an explicitly decoded byte stack machine, with correctness proved by structural induction. That shows the language can state and prove a compiler theorem against a machine semantics. It doesn’t say Hyperactive’s own native path must target x86. §9.2 says the opposite of a mandate: an interpreter is already a valid realization, and “none of these realizations is mandatory”.
+> 3. I ignored the earlier sessions’ reasoning. An earlier session chose “realization through C whose type carries that relation”. I never read why. The repository likely holds it: archive/2026-11-11/A-compiler.md, `C-clang.md` and `B-isa.md`, plus the git history of the README before it was cut down. I dropped that plan without looking.
+>
+> What the decision actually turns on
+>
+> * What the paper requires for goal 1. Its rule, as the graph records it, is that the evaluator may replace a definition with native code only once a witness relates that code’s execution to the definition. Today `#jit` breaks that rule: it binds bytes whose translation is trusted. There are at least three ways to satisfy the paper, and I only considered one:
+>    * (a) Gate or remove `#jit` until it has a witness. The interaction-net evaluator is a legitimate realization by §9.2, so goal 1 might need no native path at all, only that nothing unwitnessed substitutes for a definition.
+>    * (b) A relation to a machine model (`lib/isa/x86`). This needs that model to be complete enough, with memory, ABI and loading. Its trust base is “the CPU implements the model”. Each ISA (ARM and so on) becomes its own language-support item.
+>    * (c) A relation through C. Emit C and compile it with gcc or clang. This needs a C semantics plus a named assumption that the compiler implements it, or a verified compiler. In return it gets the optimizer and portability.
+> * The dependency tension. Routes (b) and (c) both need some language’s semantics, x86 or C. Language support waits on goal 1. So if goal 1 includes a witnessed native path, part of language support moves inside goal 1. That’s the real reason the question arose. Route (a) avoids it.
+> * The paper’s trust discipline. It allows results “accepted under an explicitly selected assumption”. So C plus a named compiler assumption is not ruled out on principle; it differs from (b) in how big the assumption is.
+>
+> My honest position
+> I don’t know which is right. Of the three, (a) looks most consistent with §9.2 and the dependency order, but I haven’t verified it. Before anything is settled, the main session should:
+>
+> 1. Read the paper’s §9 in full, especially the native-substitution text and §9.4.
+> 2. Read the three archive files and the earlier README’s rationale for the C route.
+> 3. Read lib/x86.cub, lib/machine.cub and `lib/compile/`.
+> 4. Revert the “settled” wording in the graph and in HYPERACTIVE.md §2.2 to an open item that states these three options.
+>
+> Whether the C route’s performance and portability matter for the product before language support is one call that may really be yours, but only once the record shows what was already decided
+>
+> also issue with your task graph ui, the dependency arrows do not make clear which depends on which and seems a bit backwards. when considering the "flow of change" the flow is from dependency to the thing that depends on it
+>
+> i dont know the answer for this native code question. at this moment you do not either. side chat: "dude really fucking figure it out this may have already been decided as C with good reason and then you halucinarted shit out of context against that. i fucking dont know. FIGURE IT OUT. REPO ACESS. HISTORY.
+> I can’t check that from here. This side answer has no access to the repository or its history, so whether C was already decided, and why, has to be read in the main session. Here is what this conversation does establish.
+> Signs C was a deliberate decision, not a stray idea:
+>
+> * The graph’s statement on the language goal says native code “is replaced by realization through C whose type carries the relation between running the C and the term’s meaning.” That is a specific design, not an aside.
+> * LANGUAGE.md’s `#jit` paragraph said the trusted translation “is to be replaced by realization through C whose type carries that relation; see README.md.” So the README of 2026-11-12 held the rationale. I cut that README down to minimal later in the session without carrying that reasoning anywhere.
+> * The archive has archive/2026-11-11/A-compiler.md, `B-isa.md` and `C-clang.md`, which by their names are the compiler, ISA and clang plans. I never read them.
+>
+> What I did against that. I set C aside on two quotes, both lifted out of their context:
+>
+> * “C semantics formalization is a ways away” came from the discussion about not splitting non-cubical C source when it is stored.
+> * “I give zero fucks about C” came from the discussion of priorities.
+>
+> I also leaned on the paper’s §9.3, which is a toy compiler example, not a mandate to target x86. That’s the hallucination you’re pointing at, and commit cecdbb1 recorded it as settled in the graph and in HYPERACTIVE.md §2.2.
+> Where the answer is. The main session needs to read these before saying anything more:
+>
+> 1. `git log -p` on README.md around 2026-11-12, for the “see README.md” rationale for the C route.
+> 2. The `archive/2026-11-11/` files `A-compiler.md`, `C-clang.md` and `B-isa.md`.
+> 3. `git log -S "through C"` and `git log -S "native"` across the repository, to find the commit and message that introduced the C plan, and any message of yours quoted there.
+> 4. The session transcripts under `/root/.claude/projects/`, if the earlier sessions’ files are there. Only this session’s file was used so far.
+> 5. The paper’s §9 in full, especially what it says about native substitution and §9.4.
+>
+> Until that’s read, cecdbb1 should be treated as unfounded. The graph and HYPERACTIVE.md §2.2 should go back to C as the standing plan, with the question marked as under review, not settled the other way.
+> " 
+>
+> ensure all messages you ever send always contain all pending unresolved things from conversation. zero loss is acceptable.
