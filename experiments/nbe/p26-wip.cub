@@ -92,7 +92,9 @@
 -- lit-eq-refl, lit-lt-of-wlt, lit-lt-same, lit-lt-of-eq, lit-lt-cases, lit-lt-irr, lit-lt-neq,
 -- lit-lt-trans, tri-bools, lit-tri-eq, lit-tri; andB-intro, lit-eq-sound, lit-lt-path, lit-eq-path,
 -- lit-lt-path-r, lit-eq-path-r, conj-lt-of-lt, conj-lt-of-eq, conj-lt-cases, conj-lt-irr, conj-eq-refl,
--- conj-lt-neq, conj-lt-x0, conj-lt-trans, conj-tri.
+-- conj-lt-neq, conj-lt-x0, conj-lt-trans, conj-tri; lit-lb, conj-sorted, lb-trans, lb-ins, ins-sorted,
+-- meet-sorted, ins-head, meet-nil, conj-has-head, conj-has-weak, conj-sub-weak, conj-sub-refl,
+-- conj-eq-sound, eq-sub.
 -- What is next: (F2d'), (F2e) and the rest of lib/nbe.cub's head's list, then the swap of this file
 -- into lib/nbe.cub.
 import "../../lib/linproof.cub"
@@ -7647,6 +7649,77 @@ conj-tri (lcons l ls) (lcons m ms) ne nl =
              (pcat0 Bool (conj-lt ls ms) (conj-lt (lcons l ls) (lcons m ms)) false (sym (conj-lt-of-eq l m ls ms (lit-eq-sound l m eq))) nl)))
        (λ neq y → conj-lt-of-lt m l ms ls (lit-tri l m neq nlt)) (λ i → lit-eq l m))
     (λ i → lit-lt l m)
+-- sorted conjunctions (pairwise lit-lt): kept by insertion and by conj-meet into a sorted one; a
+-- sorted conjunction is its own conj-meet with the empty one
+lit-lb : Lit → Conj → Bool
+lit-lb l lnil = true
+lit-lb l (lcons m ms) = andB (lit-lt l m) (lit-lb l ms)
+conj-sorted : Conj → Bool
+conj-sorted lnil = true
+conj-sorted (lcons l ls) = andB (lit-lb l ls) (conj-sorted ls)
+lb-trans : (a b : Lit) (c : Conj) → lit-lt a b ≡ true → lit-lb b c ≡ true → lit-lb a c ≡ true
+lb-trans a b lnil p h = λ i → true
+lb-trans a b (lcons m ms) p h =
+  andB-intro (lit-lt a m) (lit-lb a ms) (lit-lt-trans a b m p (andB-l (lit-lt b m) (lit-lb b ms) h)) (lb-trans a b ms p (andB-r (lit-lt b m) (lit-lb b ms) h))
+lb-ins : (k l : Lit) (c : Conj) → lit-lt k l ≡ true → lit-lb k c ≡ true → lit-lb k (conj-ins l c) ≡ true
+lb-ins k l lnil p h = λ i → andB (p i) true
+lb-ins k l (lcons m ms) p h =
+  bool-case0 (λ b → lit-lb k (if b then lcons m ms else (if lit-lt l m then lcons l (lcons m ms) else lcons m (conj-ins l ms))) ≡ true) (lit-eq l m)
+    (λ e → h)
+    (λ e → bool-case0 (λ b → lit-lb k (if b then lcons l (lcons m ms) else lcons m (conj-ins l ms)) ≡ true) (lit-lt l m)
+       (λ lt → andB-intro (lit-lt k l) (lit-lb k (lcons m ms)) p h)
+       (λ nlt → andB-intro (lit-lt k m) (lit-lb k (conj-ins l ms)) (andB-l (lit-lt k m) (lit-lb k ms) h) (lb-ins k l ms p (andB-r (lit-lt k m) (lit-lb k ms) h))))
+ins-sorted : (l : Lit) (c : Conj) → conj-sorted c ≡ true → conj-sorted (conj-ins l c) ≡ true
+ins-sorted l lnil h = λ i → true
+ins-sorted l (lcons m ms) h =
+  bool-case0 (λ b → lit-eq l m ≡ b → conj-sorted (if b then lcons m ms else (if lit-lt l m then lcons l (lcons m ms) else lcons m (conj-ins l ms))) ≡ true) (lit-eq l m)
+    (λ e x → h)
+    (λ ne x → bool-case0 (λ b → lit-lt l m ≡ b → conj-sorted (if b then lcons l (lcons m ms) else lcons m (conj-ins l ms)) ≡ true) (lit-lt l m)
+       (λ lt y → andB-intro (lit-lb l (lcons m ms)) (conj-sorted (lcons m ms))
+          (andB-intro (lit-lt l m) (lit-lb l ms) lt (lb-trans l m ms lt (andB-l (lit-lb m ms) (conj-sorted ms) h))) h)
+       (λ nlt y → andB-intro (lit-lb m (conj-ins l ms)) (conj-sorted (conj-ins l ms))
+          (lb-ins m l ms (lit-tri l m ne nlt) (andB-l (lit-lb m ms) (conj-sorted ms) h))
+          (ins-sorted l ms (andB-r (lit-lb m ms) (conj-sorted ms) h)))
+       (λ i → lit-lt l m))
+    (λ i → lit-eq l m)
+meet-sorted : (c d : Conj) → conj-sorted d ≡ true → conj-sorted (conj-meet c d) ≡ true
+meet-sorted lnil d h = h
+meet-sorted (lcons l ls) d h = ins-sorted l (conj-meet ls d) (meet-sorted ls d h)
+-- a literal below every one of a conjunction is inserted at its head
+ins-head : (l : Lit) (c : Conj) → lit-lb l c ≡ true → conj-ins l c ≡ lcons l c
+ins-head l lnil h = λ i → lcons l lnil
+ins-head l (lcons m ms) h =
+  λ i → if lit-lt-neq l m (andB-l (lit-lt l m) (lit-lb l ms) h) i then lcons m ms
+        else (if andB-l (lit-lt l m) (lit-lb l ms) h i then lcons l (lcons m ms) else lcons m (conj-ins l ms))
+meet-nil : (c : Conj) → conj-sorted c ≡ true → conj-meet c lnil ≡ c
+meet-nil lnil h = λ i → lnil
+meet-nil (lcons l ls) h =
+  pcat0 Conj (conj-ins l (conj-meet ls lnil)) (conj-ins l ls) (lcons l ls)
+    (λ i → conj-ins l (meet-nil ls (andB-r (lit-lb l ls) (conj-sorted ls) h) i))
+    (ins-head l ls (andB-l (lit-lb l ls) (conj-sorted ls) h))
+-- inclusion of conjunctions: reflexive, weakened by a literal, implied by equality
+conj-has-head : (l : Lit) (ls : Conj) → conj-has l (lcons l ls) ≡ true
+conj-has-head l ls = λ i → if lit-eq-refl l i then true else conj-has l ls
+conj-has-weak : (l m : Lit) (c : Conj) → conj-has l c ≡ true → conj-has l (lcons m c) ≡ true
+conj-has-weak l m c h =
+  bool-case0 (λ b → (if b then true else conj-has l c) ≡ true) (lit-eq l m) (λ e i → true) (λ e → h)
+conj-sub-weak : (m : Lit) (c d : Conj) → conj-sub c d ≡ true → conj-sub c (lcons m d) ≡ true
+conj-sub-weak m lnil d h = λ i → true
+conj-sub-weak m (lcons l ls) d h =
+  andB-intro (conj-has l (lcons m d)) (conj-sub ls (lcons m d))
+    (conj-has-weak l m d (andB-l (conj-has l d) (conj-sub ls d) h))
+    (conj-sub-weak m ls d (andB-r (conj-has l d) (conj-sub ls d) h))
+conj-sub-refl : (c : Conj) → conj-sub c c ≡ true
+conj-sub-refl lnil = λ i → true
+conj-sub-refl (lcons l ls) = andB-intro (conj-has l (lcons l ls)) (conj-sub ls (lcons l ls)) (conj-has-head l ls) (conj-sub-weak l ls ls (conj-sub-refl ls))
+conj-eq-sound : (c d : Conj) → conj-eq c d ≡ true → c ≡ d
+conj-eq-sound lnil lnil e = λ i → lnil
+conj-eq-sound lnil (lcons m ms) e = false-true (Path Conj lnil (lcons m ms)) e
+conj-eq-sound (lcons l ls) lnil e = false-true (Path Conj (lcons l ls) lnil) e
+conj-eq-sound (lcons l ls) (lcons m ms) e =
+  λ i → lcons (lit-eq-sound l m (andB-l (lit-eq l m) (conj-eq ls ms) e) i) (conj-eq-sound ls ms (andB-r (lit-eq l m) (conj-eq ls ms) e) i)
+eq-sub : (c d : Conj) → conj-eq c d ≡ true → conj-sub c d ≡ true
+eq-sub c d e = pcat0 Bool (conj-sub c d) (conj-sub c c) true (λ i → conj-sub c (conj-eq-sound c d e (~ i))) (conj-sub-refl c)
 
 -- ---------------------------------------------------------------- (6) reify and reflect
 -- (2026-11-12, (6)) reify-ty (a computable type to a normal type derivation), reify (a computable term
