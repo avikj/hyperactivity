@@ -199,6 +199,13 @@ normalizer-replaces-p1 = node "The normalizer over cubes runs on example derivat
 -- shape with its computability clause, its rules in Der and NN, and its cases in rr and fund.
 typed-codes-after-swap : Node
 typed-codes-after-swap = node "Everything typed codes and normalization by evaluation need after the swap: the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-fund nil)
+-- object-level-nat (2026-11-14): Nat as the first object-level data type: shape s-nat, zero, suc
+-- and the recursor (step a term at Π k:Nat. P k → P (suc k), motive a type over the extension by
+-- Nat) in Der and NN, the clause CNat, fund's recursor case nrec-comp by induction on the scrutinee's
+-- clause. Resolved 2026-11-14: lib/nbe.cub with experiments/nbe/examples.cub (nrec on 2 normalizes to
+-- suc (suc zero), nrec on a variable stays neutral) checks fresh: 1540 passed, 0 failed, 2294M steps.
+object-level-nat : Node
+object-level-nat = node "Nat is an object-level data type of the normalizer over cubes: its constructors and recursor are typed codes, computable, and normalize." (cons typed-codes-after-swap nil)
 -- language-implementation-remainder (2026-11-14): everything the paper specifies for the language
 -- that typed codes and normalization by evaluation do not cover. What is known about it follows
 -- (moved here from the language goal's statement when the goal was expanded).
@@ -661,7 +668,7 @@ roots = cons the-product nil
 in-progress : List Node
 in-progress = cons typed-codes-after-swap nil
 resolved : List Node
-resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 nil)))))
+resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat nil))))))
 -- language support starts only when the language implementation and the product implementation are
 -- done (Avik, 2026-11-13)
 after : List (Node × List Node)
