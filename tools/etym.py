@@ -110,7 +110,7 @@ def senses(index, w):
     return sorted(ss, key=lambda s: bool(s['fld']))
 
 
-INFLECT = [('ies', 'y'), ('ied', 'y'), ('es', ''), ('s', ''), ('ed', ''), ('ed', 'e'), ('d', ''),
+INFLECT = [('ies', 'y'), ('ied', 'y'), ('s', ''), ('es', ''), ('ed', ''), ('ed', 'e'), ('d', ''),
            ('ing', ''), ('ing', 'e'), ('ly', ''), ('ily', 'y')]
 SUFFIX = ['ization', 'ation', 'ness', 'ment', 'ity', 'ism', 'ist', 'ize', 'ise', 'ion', 'ive', 'al',
           'ic', 'ous', 'ful', 'less', 'able', 'ible', 'er', 'or', 'ship', 'hood', 'dom', 'ology', 'logy']
@@ -162,16 +162,18 @@ def head(ety):
 
 def augment(text, all_words=False):
     index = load()
-    words = re.findall(r"[A-Za-z][A-Za-z'-]*", text)
-    seen, inline, detail = set(), text, []
-    for w in words:
-        lw = w.lower().strip("'-")
-        if lw in seen or (not all_words and lw in STOP):
+    seen, out, detail, last = set(), [], [], 0
+    for m in re.finditer(r"[A-Za-z][A-Za-z'’-]*", text):
+        w = m.group(0)
+        lw = w.lower().strip("'’-")
+        if re.search(r"['’]", lw) or lw in seen or (not all_words and lw in STOP):
             continue
         seen.add(lw)
-        parts = resolve(index, lw)
+        proper = w[0].isupper() and m.start() > 0 and not re.search(r'[.!?:"“]\s*$', text[:m.start()])
+        parts = [(lw, senses(index, lw))] if proper and senses(index, lw) else ([] if proper else resolve(index, lw))
         if not parts:
             continue
+
         def gloss1(p, ss):
             g = head(ss[0]['ety'])
             if re.match(r'(From|See|Cf\.)', g) and ss[0]['see']:
@@ -179,8 +181,8 @@ def augment(text, all_words=False):
                 if rs:
                     g += ' ← ' + head(rs[0]['ety'])
             return ('' if p == lw else p + ': ') + g
-        gloss = ' + '.join(gloss1(p, ss) if ss else p for p, ss in parts)
-        inline = re.sub(r"(?<![A-Za-z'-])%s(?![A-Za-z'-])" % re.escape(w), w + ' ⟨' + gloss + '⟩', inline, count=1)
+        out.append(text[last:m.end()] + ' ⟨' + ' + '.join(gloss1(p, ss) if ss else p for p, ss in parts) + '⟩')
+        last = m.end()
         lines = [w]
         for p, ss in parts:
             if p != lw:
@@ -199,7 +201,8 @@ def augment(text, all_words=False):
                     if rs:
                         lines.append(f"      → {r}: [{rs[0]['ety']}]")
         detail.append('\n'.join(lines))
-    return inline + '\n\n' + '\n\n'.join(detail)
+    out.append(text[last:])
+    return ''.join(out) + '\n\n' + '\n\n'.join(detail)
 
 
 def main():
