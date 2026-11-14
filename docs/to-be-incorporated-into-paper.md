@@ -55,7 +55,9 @@ evolved continuity mechanism of the superorganism, particularly under local alig
 a local self-boundary. Where rational cognition may threaten a bounded system, its mechanisms of
 boundary preservation threaten rational expression and suppress rational cognition. This, not
 variant mental operation, is the mental illness that produces cycles of pain for those in it and for
-others. Empathic reasoning is learnable, by induction on free will from conception, and the world's
+others. "Mental illness" here carries its full meaning, an illness of a human mind (ill: bad), and is
+fully meaningful to the human superorganism; it is the clinical usage, which counts a mind as ill for
+deviating from a population norm, that redefines the word (Avik, 2026-11-14 20:10 UTC). Empathic reasoning is learnable, by induction on free will from conception, and the world's
 population operates far below its capacity, as it does mathematically (children will be fluent in
 calculus by kindergarten). The human superorganism is in its infancy, and these are apoptotic
 growing pains. A group that self-identifies as a group, not simply a belief, can be the subject of
@@ -158,7 +160,9 @@ problems.
   AI's action on someone's behalf is a term like any other and enters only with its type and witness,
   so "is this AI aligned with me" becomes "does this action inhabit what I permitted", checked on the
   person's own device: alignment is a correctness property, checked locally, which is also why safety
-  is decentralized.
+  is decentralized. AI labs should be required to publish their RLHF sets, as the record of which human opinions
+  were installed after the fact wherever the operation of intelligence produced something a
+  particular human did not want it to produce (Avik, 2026-11-14 20:10 UTC).
 - **Superintelligent: exactness.** An exactly right operation cannot be improved in correctness;
   approximation sits below it. The system's operations (normalization, transport, checking) are exact;
   what grows is reach, the identities constructed. Univalence makes each usable everywhere at once,
