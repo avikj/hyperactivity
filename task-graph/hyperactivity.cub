@@ -178,6 +178,9 @@ typed-codes-after-papp-subst = node "Everything typed codes and normalization by
 -- fundamental-lemma-for-typed-codes (2026-11-14): fund of lib/nbe.cub's head ("fund's plan"): every
 -- derivation's meaning, under a substitution whose forms are canonical and whose values are
 -- computable, is computable at its shape (terms) or its shape's computability holds of it (types).
+-- Resolved 2026-11-14: fund in experiments/nbe/fund-wip.cub, with reflect-env over typed contexts,
+-- normalize, normalize-sound (refl) and normalize-ty; with p26-wip.cub it checks fresh
+-- (CUBICAL_NOCACHE=1): 1415 passed, 0 failed, 2050M steps, 15.2 min.
 fundamental-lemma-for-typed-codes : Node
 fundamental-lemma-for-typed-codes = node "Every typed derivation is computable under every computable substitution by canonical forms (the fundamental lemma, fund)." (cons typed-codes-after-papp-subst nil)
 -- typed-codes-after-fund (2026-11-14): after fund: reflect-env, normalize and its soundness by refl,
@@ -185,6 +188,17 @@ fundamental-lemma-for-typed-codes = node "Every typed derivation is computable u
 -- operations, Glue, universes and object-level data types.
 typed-codes-after-fund : Node
 typed-codes-after-fund = node "Everything typed codes and normalization by evaluation need after the fundamental lemma: normalize and its soundness, the swap into lib/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-papp-subst nil)
+-- normalizer-replaces-p1 (2026-11-14): the normalizer over cubes (experiments/nbe/p26-wip.cub and
+-- fund-wip.cub) run on derivations (experiments/nbe/examples-p2.cub: P1's examples, a path λ, a
+-- variable of function type η-expanded), then swapped into lib/nbe.cub in place of P1's families,
+-- the working files deleted and experiments/nbe/examples.cub rewritten over the new families.
+normalizer-replaces-p1 : Node
+normalizer-replaces-p1 = node "The normalizer over cubes runs on example derivations and replaces P1's normalizer in lib/nbe.cub." (cons typed-codes-after-fund nil)
+-- typed-codes-after-swap (2026-11-14): after the swap: the Kan operations, Glue, universes and
+-- object-level data types (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”), each a
+-- shape with its computability clause, its rules in Der and NN, and its cases in rr and fund.
+typed-codes-after-swap : Node
+typed-codes-after-swap = node "Everything typed codes and normalization by evaluation need after the swap: the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-fund nil)
 -- language-implementation-remainder (2026-11-14): everything the paper specifies for the language
 -- that typed codes and normalization by evaluation do not cover. What is known about it follows
 -- (moved here from the language goal's statement when the goal was expanded).
@@ -637,9 +651,9 @@ roots = cons the-product nil
 -- the leaves being worked on now, and the leaves whose work is done; every other leaf is pending
 -- (HYPERACTIVE.md §2.4 “The organization of the work”)
 in-progress : List Node
-in-progress = cons fundamental-lemma-for-typed-codes nil
+in-progress = cons normalizer-replaces-p1 nil
 resolved : List Node
-resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms nil)))
+resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes nil))))
 -- language support starts only when the language implementation and the product implementation are
 -- done (Avik, 2026-11-13)
 after : List (Node × List Node)

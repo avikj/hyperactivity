@@ -6,8 +6,11 @@
 -- Status (2026-11-14): F2d done; experiments/nbe/p26-wip.cub with lib/linproof.cub imported checks
 -- fresh (CUBICAL_NOCACHE=1): 1150 passed, 0 failed, 687M steps, 7.5 min. F2d' done, fresh: 1247 passed,
 -- 0 failed, 693M steps, 7.6 min. F2e done. papp-subst done (both steps); with them the file checks
--- fresh: 1305 passed, 0 failed, 786M steps, 11.4 min (2026-11-14). Next: fund (its plan below, at
--- "fund's plan").
+-- fresh: 1305 passed, 0 failed, 786M steps, 11.4 min (2026-11-14). fund done, and with it reflect-env
+-- over typed contexts, normalize, normalize-sound (refl) and normalize-ty, in
+-- experiments/nbe/fund-wip.cub (it imports p26-wip.cub); the two check fresh (CUBICAL_NOCACHE=1):
+-- 1415 passed, 0 failed, 2050M steps, 15.2 min (2026-11-14). Next: the examples over the new families (experiments/nbe/examples-p2.cub), then the swap
+-- of p26-wip.cub and fund-wip.cub into this file in place of P1.
 -- The dimensions question that paused it is answered by the cubical-set model; the encoding stands
 -- (task-graph/hyperactivity.cub, language-implementation).
 -- F2d's plan (2026-11-14), worked out before it is built. papp-dd f is papp-ex (dnf-ix f), so F2d is
@@ -116,6 +119,26 @@
 -- false by the clause's path (a zip of meanings over one base, zip-fst and zip-fmap, to replace the
 -- scrutinee by the constant), neutral by ncase with the branches reified and the motive from (4c),
 -- reflected at the motive at the scrutinee. Then reflect-env over typed contexts, normalize, soundness.
+-- Done as planned (2026-11-14), in experiments/nbe/fund-wip.cub: (4a) dcube-dzip, dzip-pull, el-tr,
+-- el-fill, ext-val, ext-at, zpt, zpt-fst, zpt-snd, via-snd; (4b) map-pull-i, dcube-liftp, lift-pull-i,
+-- pull-liftp, ext-liftG, ext-D (kl-DE generalized), sub-ext2 (sub-ext with map-pull-i in place of
+-- sub-ext-tail; p26-wip.cub's sub-ext is unused and goes at the swap), subM-ext, ext-beta, ext-old,
+-- ext-new, ext-env; (5) papp-line-subst, sub-form-dwk, meet-one, join-nil, subst-v0, plam-beta,
+-- form-env; (1), (2) CanonCM, canonCM-r, canon-sform … canon-subst, CompEnv, env-w; (3), (4c), (6)
+-- fund-app … fund-tpath, cod-k (ck-p, ck-cn, ck-path), the λ's pieces (lp-p, lp-cn, lp-path, lt-path,
+-- ld-path), the path λ's (plam-at, plam-cl, plam-k, plam-e0, plam-e1), tpath-k, case-at, sel-t,
+-- sel-f, cg-p, cm-gen, cm-scr, case-cl; zip-diag, zip-fmap-r, zip-ign, const-cases1, nc-split,
+-- papp-end0/1; then JC and fund; TCtx, canon-of, var-new, var-old, id-ty-vals, id-envOf,
+-- id-ty-env, id-dim-env, nil-vals, id-vals, id-env, normalize-nf, normalize, normalize-sound, TyCode,
+-- normalize-ty-nf, normalize-ty. Findings on the machine (2026-11-14, tested): a long definition whose
+-- every step is a path between explicitly given meanings exhausted memory when written as one term,
+-- and checks when its steps are named definitions with stated types (cod-k: 7M steps in pieces);
+-- a congruence written λ i → f (p i) where p is a large lemma is replaced by cong1 for the same
+-- reason; an unannotated λ applied in head position (a β-redex written in a term, such as
+-- (λ γ e ρ → …) x z) is elaborated as a path abstraction ("applied to an interval"), so such terms
+-- are written reduced; a type error whose types are large exhausts memory while being printed, so an
+-- out-of-memory failure is first read as a possible type error (plam-k's was a reversed psym);
+-- Empty-rec at a CompS type in a clause on an indexed family exhausted memory, case v of Empty does not.
 -- The rest of this head is the plan and its findings as of 2026-11-12.
 --
 -- Status (2026-11-12, latest first).
