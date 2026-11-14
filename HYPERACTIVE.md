@@ -2338,3 +2338,13 @@ The consolidated piece is this, written through in the two registers you keep di
 > Why is “what the code does today” needed? I don’t have the answer . Idk how the agent enters and consumes this code. Idk if this explanation is necessary vs looking at the code or the paper; is this meant to express what is complete & correct? what is incorrect & wrong? If so, these go in our work order . You can tell progress to project goals w/ granularity in work order/tracker interface. “What the code does” inhabits project goals that are achieved or pending/blocker - nothing more, nothing less . There is no code irrelevant to project goals. This is an invariant to enforce. The hyperactive cli should be the primary work interface very very soon asap this is a code=data project on the future of infrimation space thenhyperactive kernel. Thats hownhou need to be thinking from now on im being religious; give an inch and you take a mile.
 >
 > Idk you review you’re an agent with access to tools. Only reason any status indicator is necessary on readme is because the tooling is not set up properly or used properly or not designed well (doubt, user error) and that is something to solve
+
+#### 2026-11-14 15:56 UTC
+
+> If these known defects are legitimately true ensure they are tracked specifically within relevant task (existing task probably, you grow a leaf node til you want to start working on it and only split out children of it when starting work on that child. Please ensure you understand fully the existing design and invariants and remind me of them fully
+>
+> “Organisation of the work” idk what you mean by this. Directory layout? Directory layout is legacy our goals definitely include moving past git & filesystem abstraction to content addressed. I want to do that assp. That’s blocked? We can still write about it. But I don’t want to write about any project file-level organization since that’s going out. If you’re talking the work*flow* (there is a term that we should be using , the Hyperactive Workflow) now we’re talking
+>
+> Confused by your last message you said something is blocked cause you don’t have latest paper version. Then proposed deleting paper-bound content anyways. Is that right?
+>
+> Let’s make it really simple: onboarding shows you paper and our current to-be-incorporated-into-paper file (ie the scratch space for delta between current draft and next draft) - so context isn’t limited at most recent paper - now we’re getting to a workflow of developing paper and code together by a common set of agents. I’ve been using genius  ChatGPT for the paper work doing amazing job but when a single agent wields this all it’s cracked
