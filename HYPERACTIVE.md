@@ -1097,6 +1097,85 @@ curiosity is the pain.
 - Scope can blow up to infinity, since nearly everything can be done better, so the order of work is
   chosen to collapse the timelines up front. A well-chosen first step halves the remaining time.
 
+**Why computing is as it is, and what hyperactivity decides instead** (the session's account of
+2026-11-14, which Avik called key and asked to keep). Most of what is normal about computing, and
+most of its pain, is the cost of a few early decisions carried as legacy, not the nature of the
+problems.
+
+- **The root: data without meaning.** A file is bytes with a name; what it means is held by
+  whatever program reads it. So whoever owns the program owns the meaning of the data, and every
+  wall in computing is that ownership: formats (agreements between programs about meaningless
+  bytes), applications (code with private storage and a fixed screen), APIs (holes a company cuts
+  into its storage on its terms), copy-paste (the one operation that crosses everything, because it
+  carries text and drops meaning), accounts (identity held by a provider), sync conflicts reported as
+  errors, updates that change what runs without the owner, the source/binary split (what runs cannot
+  be read or changed by whoever runs it), and the user/programmer split. In hyperactivity data is a
+  term with its type, so its meaning travels with it and no program holds it.
+- **The ignored basic: equality.** Computing has no account of when two things are the same: the
+  photo on the phone, in iCloud and in a friend's messages; "Dad" in contacts, in a bank's transfer
+  list and in photos; version 3 and version 4 of a document; one note edited offline by two people.
+  Each system answers with its own rule (a filename, a database key, a hash, a timestamp,
+  last-writer-wins), the rules disagree, and none distinguishes identical, equivalent and related by
+  a change. Deduplication, identity across services, syncing, merging, versioning and caching all
+  reinvent a bad equality. The paper begins with identity because it is the basic that was skipped.
+- **The three decisions, around 1970.** (1) The file system made the unit of storage untyped bytes,
+  and everything above inherited meaninglessness. (2) The personal computer was an isolated box, then
+  networked as client to server, so every machine became an endpoint of someone else's machine. (3)
+  The graphical interface gave each program its own window and world, turning the separation of
+  programs into the shape of the screen. Done right the first time: a thing on the machine is a term
+  with its type and an identity by content; machines meet as peers exchanging terms and checking what
+  they receive; the screen shows the person's own things through views the person owns and can
+  change.
+- **Why capitalism stopped at the proof of concept.** A technology company earns by being in the
+  middle: holding the data (lock-in), the attention (advertising) and the distribution (the store and
+  the platform cut). Apps, accounts and the cloud are the form of personal computing that maximizes
+  the middle; the right form removes it, so the market had every reason to stop where it pays. What
+  was built is the company's endpoint in the person's pocket, not the person's own computer.
+- **Interpersonal computing** today always has a third party between two people: a server both
+  trust, holding the shared thing. Removing it needs what was never settled: what it is for two people
+  to share one thing (identity), what happens when both change it apart (concurrency), and how each
+  checks what the other sends (verification). The design settles all three together: no canonical
+  state, concurrent changes as coexisting alternatives related by squares, checking instead of trust.
+- **Apple and Ink & Switch.** Apple comes closest to personal computing (processing on the device,
+  structural privacy, devices aware of each other), but only within its walls: things work together
+  when Apple wrote both sides, third-party apps stay sealed, and Apple stays the middle through the
+  App Store. It solves "your Apple", not your computer. Ink & Switch holds the right premises
+  (local-first, malleable software, user-owned data, merging without a server) but builds on the
+  stack it criticizes (JavaScript, JSON, the browser, files), so its shared data still has no types,
+  no identity beyond structure and no proofs. Hyperactivity starts where both stop: the kernel and
+  the language.
+- **Interoperability of ecosystems** is not a feature to build: two things work together when their
+  types fit, and otherwise the missing piece is a conversion anyone can write and prove. Because the
+  language is a language of languages, existing ecosystems (iOS, Android, Windows, the web, a C++
+  codebase) are brought in from outside as lifted languages, without the cooperation of their owners.
+- **"Operating system language."** Not a language for building a system that is something else, but
+  the language in which operating happens, as in "natural language": there is no kernel interface
+  apart from the language, and to operate the system is to say something in it. "Operating system"
+  reads also as a verb phrase, the operating of systems: a person's life, a group's shared work, a
+  market.
+- **Names follow Avik's account of meaning.** A word means its usage history, with no consensus
+  meaning and no authority minting one. A definition's identity is its content and a name is the view
+  one person holds of it, so everyone has their own names over shared definitions, and shared meaning
+  is shared history. A global namespace is the computing equivalent of believing in a dictionary
+  meaning.
+- **Safe, one property.** The AI field's alignment shapes a model's dispositions until they look
+  approved, unproven and checked by sampling; program safety is proved of what a program does. Here an
+  AI's action on someone's behalf is a term like any other and enters only with its type and witness,
+  so "is this AI aligned with me" becomes "does this action inhabit what I permitted", checked on the
+  person's own device: alignment is a correctness property, checked locally, which is also why safety
+  is decentralized.
+- **Superintelligent: exactness.** An exactly right operation cannot be improved in correctness;
+  approximation sits below it. The system's operations (normalization, transport, checking) are exact;
+  what grows is reach, the identities constructed. Univalence makes each usable everywhere at once,
+  and decentralization makes anyone's available to everyone: a collective capacity at the peak of
+  correctness, not a larger model.
+- **Local-first is the locality of nature.** Physics has no global state: no universal now, and on
+  the relational reading of quantum mechanics, state is relative to the observer. A distributed system
+  assuming one canonical global state assumes what nature lacks and pays in coordination, consensus
+  and outages. Each device holds its own state, interaction is exchange, consistency is a relation
+  between parties; "no canonical state" (§2.3 “State, change and collaboration”) is the same
+  principle.
+
 ### 3.2 Constructions the session has proposed, not yet confirmed by Avik
 
 These follow from §2.3 “State, change and collaboration” and the paper.
@@ -2107,3 +2186,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > operating system
 >
 > Everything local-first (as is the state of nature).
+
+#### 2026-11-14 12:32 UTC
+
+> This is *key* knowledge work you’ve just done. Do you realize your historical diagnosis is fucking critical and precise and determines so much modern design/pain as purely historical / cost of legacy. Insofar as we did not have clear writing in this repo on this interface design operating system kernel stuff - a quick skim says this message is fucking golden. See for yourself how this is exactly what that valuable knowledge work I was hoping for.
