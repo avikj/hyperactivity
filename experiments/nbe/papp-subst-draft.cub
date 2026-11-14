@@ -1,6 +1,6 @@
--- experiments/nbe/papp-subst-draft.cub — papp-subst step 1, drafted 2026-11-14, NOT YET CHECKED; to be checked
--- after experiments/nbe/p26-wip.cub (./build/cubical lib/core.cub experiments/nbe/p26-wip.cub this-file),
--- fixed, moved into p26-wip.cub after cmap-papp-ex, and this file deleted (lib/nbe.cub head: "Next, papp-subst").
+-- experiments/nbe/papp-subst-draft.cub — papp-subst step 1, written 2026-11-14, CHECKED (1304 passed, 0 failed, with p26-wip.cub); to be
+-- loaded after experiments/nbe/p26-wip.cub (./build/cubical lib/core.cub experiments/nbe/p26-wip.cub this-file),
+-- moved into p26-wip.cub after cmap-papp-ex, and this file deleted (lib/nbe.cub head: "Next, papp-subst").
 -- (papp-subst) substitution on canonical forms: a literal becomes σ's form for its variable (its
 -- negation for ~i), a conjunction the normalizer's meet, a form the normalizer's join (so dnf-subst
 -- of a canonical form is canonical, F2d'); its reading is the substituted expression up to IEq (F2d)
@@ -67,11 +67,3 @@ cmap-papp-ddS sk' sk σ f X F G Q =
     (papp-ex sk' X F (ixs sk' sk σ (dnf-ix f)) (cmap-cube sk' sk σ X G) (cmap-d sk' sk σ X (DL X F) G Q)) (cmap-d sk' sk σ X F G (papp-dd sk X F f G Q))
     (dnf-subst-sound sk' sk σ f X F (cmap-cube sk' sk σ X G) (cmap-d sk' sk σ X (DL X F) G Q))
     (cmap-papp-ex sk' sk σ (dnf-ix f) X F G Q)
--- a substituted canonical form is canonical (any substituted form is: its parts are the normalizer's)
-canon-lit-subst : (sk' sk : Lst Entry) (σ : CMap sk' sk) (l : Lit) → dnf-ok (subst-form sk' sk σ (fst l)) ≡ true → isTrue (dnf-canon (lit-subst sk' sk σ l))
-canon-lit-subst sk' sk σ l h =
-  bool-elim (λ b → isTrue (dnf-canon (if b then subst-form sk' sk σ (fst l) else dnf-neg (subst-form sk' sk σ (fst l)))))
-    (eq→isTrue (ok-canon (subst-form sk' sk σ (fst l)) h)) (canon-neg (subst-form sk' sk σ (fst l))) (snd l)
-canon-subst : (sk' sk : Lst Entry) (σ : CMap sk' sk) (f : DNF) → isTrue (dnf-canon (dnf-subst sk' sk σ f))
-canon-subst sk' sk σ lnil = eq→isTrue (ok-canon lnil (λ i → true))
-canon-subst sk' sk σ (lcons c cs) = canon-join (conj-subst sk' sk σ c) (dnf-subst sk' sk σ cs) (canon-conj-subst sk' sk σ c) (canon-subst sk' sk σ cs)
