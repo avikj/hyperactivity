@@ -16,9 +16,101 @@ the-product = node "The product: every screened device in the world runs Hyperac
 -- and correctly state "i have implemented this fully correctly" (obviously, that doesn't include
 -- constructions about random examples about trading systems or message protocols)". The
 -- initial high-priority deliverable.
--- What is known about this goal follows (2026-11-13, from the review of every earlier finding): facts,
--- not a breakdown and not parts; the session working on the goal decides how to break it down when its
--- work begins (HYPERACTIVE.md §2.4).
+-- Expanded 2026-11-14, when work began on typed codes: its children are typed codes and
+-- normalization by evaluation (paper §6.1), in progress, and everything else the paper specifies
+-- for the language. What is known is in each child's statement.
+language-implementation : Node
+language-implementation = node "The Hyperactive language and its features, implemented completely and correctly as the paper specifies." (cons the-product nil)
+-- typed-codes-and-normalization (2026-11-14): the paper's §6.1: the language's terms as typed
+-- objects in it, Code(Γ, A) = Σ c. Der(Γ, c, A), normalization by evaluation with its soundness
+-- equation (6.5), and a checker that returns typing derivations. The plan, step by step, is
+-- lib/nbe.cub's head; the working file is experiments/nbe/p26-wip.cub, swapped into lib/nbe.cub
+-- when done. Expanded 2026-11-14, when its step F2d began.
+-- Known (2026-11-13, from the review of every earlier finding): The language's terms are typed
+-- objects in it, with normalization and its soundness, and the checker returns typing derivations
+-- (paper §6.1). paper §6.1. The language's terms as typed objects in it, normalization by
+-- evaluation with its soundness, and a checker that returns typing derivations (lib/check.cub is an
+-- untyped term with no statement of what it accepts; lib/std.cub's primitives give typed programs
+-- its operations at asserted types). In progress in experiments/nbe/p26-wip.cub; what remains is in
+-- lib/nbe.cub's head (F2d, F2d', F2e, fund, normalize, the swap), then Kan operations, Glue,
+-- universes and object-level data types. This is the easiest language to build it in, not a hard
+-- one (2026-11-13, worked out with Avik): it is normalization for a cubical type theory written
+-- inside a cubical type theory. Anywhere else (Agda without its cubical mode, Coq, Lean) one first
+-- builds a model of cubical sets (presheaves, Kan structure, Glue, univalence); here the model is
+-- the host: object paths are host paths, object composition is the host's composition, Glue and
+-- univalence are the host's; meanings are host terms, so soundness holds by construction
+-- (reifySound is refl) and only readback needs designing. The method for the Kan operations, Glue
+-- and universes is published (Sterling and Angiuli, LICS 2021; Cubical Agda, cooltt). Open, and
+-- deciding how much of the remaining work is needed: the host identifies interval expressions up to
+-- the De Morgan laws judgmentally, yet F2 re-proves every law as a path, because a context's
+-- dimensions are encoded as a cube built by recursion on their number, so at a variable number
+-- every operation is a stuck recursion. Answered 2026-11-13 (the question is the standard
+-- semantics, not one for Avik): in CCHM a term in Γ; Ψ; φ means a family natural in the stage, an
+-- element of A at every Ψ′ with a substitution f : Ψ′ → Ψ satisfying φ, commuting with every
+-- further substitution; a dimension's value at a stage is an element of the free De Morgan algebra
+-- on that stage's names, and the substitutions are maps of that algebra (the cubical-set model). So
+-- the number of dimensions is variable only in the meta-level quantification over stages, and a
+-- semantic action of interval expressions defined on syntax must be shown to respect the algebra's
+-- equations once: that is the well-definedness of the cube category's action, not an artefact of
+-- the encoding. p26-wip.cub is that model built inside the host: stages are host cubes (Cube n),
+-- interval expressions are data (IEx, DNF), substitutions are Sub and cmap-d; F2a-F2c (every De
+-- Morgan law, no 2-cell) is the well-definedness, F2d the normalizer's soundness, F2d' its
+-- canonicity, F2e naturality in substitutions. Holding an object dimension as a host interval
+-- variable is not available at a variable number of dimensions (the host's interval is not a
+-- type: `I × Nat` is refused, checked 2026-11-13), and would move these obligations, not remove
+-- them. Decided: p26-wip.cub is kept and continues at F2d. The elaborator's two memory blowups met on the way are below. The longest chain of the project: it
+-- should never stop.
+-- Known (2026-11-12, at experiments/nbe/p26-wip.cub): elaboration: checking a path λ (λ i → sub-
+-- pull … keep-S (P i)) whose body applies a defined dependent path P (carry-uniq of a pcat-d)
+-- exhausts memory (killed at 5.5 GB; keep-lift's first step, before cong1): the λ's endpoints are
+-- computed by evaluating the body at 0 and 1, which unfolds P's definition instead of reading P's
+-- endpoints off its type; the same path given to cong1 checks in 2.7M steps. Not yet known: which
+-- evaluation step unfolds it. keep-lift's parts: the cubes of contexts its base paths pass through
+-- (kl-k2, kl-k3), the meanings over them (kl-E0 … kl-ER0), the dependent paths over each base path
+-- (kl-DE, kl-Dr2, kl-D, kl-DR) and the four steps (kl-s1 … kl-s4)
+-- Known (2026-11-12, at lib/std.cub): needs-work. The primitives below give typed programs (the
+-- specializer, the translation to machine code) the untyped checker's own operations at types: a
+-- definition's code, quotation, normalization, conversion at a type, constructor tables, rewriting.
+-- They are trusted, as the checker is, and their types are asserted, not checked. Typed codes
+-- replace them by terms whose types are checked.
+-- Known (2026-11-12, at lib/check.cub): needs-work. The checker is an untyped term with no
+-- statement of what it accepts; it is trusted. Paper §6.1: the theorem that it accepts exactly the
+-- derivable judgments is separate from its definition. A checker returning a typing derivation
+-- (Der) or a refusal is sound by construction; deciding derivability is then its completeness
+-- (this node).
+-- Known (2026-11-12, at lib/check.cub): needs-work. Solving one implicit argument exhausted the
+-- machine's memory (7 GB, killed, exit 137): lib/nbe.cub's `reify-code s K D Δ δ x cx = (fst (fst
+-- (rr s) K D Δ δ x cx) , x , embed (snd (fst (rr s) K D Δ δ x cx)))`, where embed's implicit index
+-- {KJ} is to be found from its argument's type, at a variable shape s. The same term through a
+-- definition with a declared type (nf-code Δ (s , (K , δ , D)) x (fst (rr s) K D Δ δ x cx)) checks
+-- in a few thousand steps. Not yet known whether the cost is here (inferring the argument's type by
+-- evaluating rr's clauses at the variable s, rather than reading rr's signature) or in the
+-- elaborator's syntactic solving. A spine with holes (implicit arguments) is solved where it
+-- stands: the head's type is walked along the arguments, a hole standing as a fresh variable, each
+-- explicit argument's inferred type matched against its domain, then the result type against the
+-- expected one; the universe of a solved type gives its level. The solutions are returned as codes,
+-- (elab ...), and the term with them is checked again. An argument's own holes are solved first.
+typed-codes-and-normalization : Node
+typed-codes-and-normalization = node "Typed codes, normalization by evaluation with its soundness, and a checker that returns typing derivations, as the paper's §6.1 specifies." (cons language-implementation nil)
+-- interval-normal-forms-mean-their-expressions (2026-11-14): F2d of lib/nbe.cub's head. Path
+-- application at a normal form of the interval is path application at the form read as an
+-- expression (papp-dd f = papp-ex (dnf-ix f)), so the normalizer's join, meet and reversal must
+-- mean the expressions' join, meet and reversal: IEq at every skeleton between dnf-ix (dnf-join g
+-- h) and ixjoin (dnf-ix g) (dnf-ix h), and likewise for dnf-meet and dnf-neg. No canonicity
+-- hypothesis is needed (F2d' is canonicity). The plan, lemma by lemma, is lib/nbe.cub's head; the
+-- definitions go after the F2c laws in experiments/nbe/p26-wip.cub.
+interval-normal-forms-mean-their-expressions : Node
+interval-normal-forms-mean-their-expressions = node "The interval normalizer's join, meet and reversal mean the interval's join, meet and reversal: path application at the normalized form equals path application at the operation on the forms' readings (F2d)." (cons typed-codes-and-normalization nil)
+-- typed-codes-remainder (2026-11-14): what the paper's §6.1 needs after F2d, in lib/nbe.cub's
+-- head's order: the normalizer's canonicity (F2d'), naturality in substitutions (F2e), papp-subst,
+-- the fundamental lemma, reflect-env, normalize and its soundness by refl, the swap of
+-- experiments/nbe/p26-wip.cub into lib/nbe.cub with the examples rewritten; then the Kan
+-- operations, Glue, universes and object-level data types.
+typed-codes-remainder : Node
+typed-codes-remainder = node "Everything else typed codes and normalization by evaluation need after F2d: canonicity, naturality in substitutions, the fundamental lemma, normalize and its soundness, the swap into lib/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-and-normalization nil)
+-- language-implementation-remainder (2026-11-14): everything the paper specifies for the language
+-- that typed codes and normalization by evaluation do not cover. What is known about it follows
+-- (moved here from the language goal's statement when the goal was expanded).
 -- Known (2026-11-13, from the review of every earlier finding): The implementation is shown to be
 -- exactly the published calculus, rule by rule, and every deviation is fixed or justified. nobody
 -- has compared the implementation with the published calculus, so whether it is "implemented fully
@@ -72,79 +164,10 @@ the-product = node "The product: every screened device in the world runs Hyperac
 -- Known (2026-11-12, at task-graph/hyperactivity.cub): question. Not yet done: reading
 -- lib/check.cub's typing clauses against the calculus's typing rules, each recorded as matching or
 -- deviating at its site.
--- Known (2026-11-13, from the review of every earlier finding): The language's terms are typed
--- objects in it, with normalization and its soundness, and the checker returns typing derivations
--- (paper §6.1). paper §6.1. The language's terms as typed objects in it, normalization by
--- evaluation with its soundness, and a checker that returns typing derivations (lib/check.cub is an
--- untyped term with no statement of what it accepts; lib/std.cub's primitives give typed programs
--- its operations at asserted types). In progress in experiments/nbe/p26-wip.cub; what remains is in
--- lib/nbe.cub's head (F2d, F2d', F2e, fund, normalize, the swap), then Kan operations, Glue,
--- universes and object-level data types. This is the easiest language to build it in, not a hard
--- one (2026-11-13, worked out with Avik): it is normalization for a cubical type theory written
--- inside a cubical type theory. Anywhere else (Agda without its cubical mode, Coq, Lean) one first
--- builds a model of cubical sets (presheaves, Kan structure, Glue, univalence); here the model is
--- the host: object paths are host paths, object composition is the host's composition, Glue and
--- univalence are the host's; meanings are host terms, so soundness holds by construction
--- (reifySound is refl) and only readback needs designing. The method for the Kan operations, Glue
--- and universes is published (Sterling and Angiuli, LICS 2021; Cubical Agda, cooltt). Open, and
--- deciding how much of the remaining work is needed: the host identifies interval expressions up to
--- the De Morgan laws judgmentally, yet F2 re-proves every law as a path, because a context's
--- dimensions are encoded as a cube built by recursion on their number, so at a variable number
--- every operation is a stuck recursion. Answered 2026-11-13 (the question is the standard
--- semantics, not one for Avik): in CCHM a term in Γ; Ψ; φ means a family natural in the stage, an
--- element of A at every Ψ′ with a substitution f : Ψ′ → Ψ satisfying φ, commuting with every
--- further substitution; a dimension's value at a stage is an element of the free De Morgan algebra
--- on that stage's names, and the substitutions are maps of that algebra (the cubical-set model). So
--- the number of dimensions is variable only in the meta-level quantification over stages, and a
--- semantic action of interval expressions defined on syntax must be shown to respect the algebra's
--- equations once: that is the well-definedness of the cube category's action, not an artefact of
--- the encoding. p26-wip.cub is that model built inside the host: stages are host cubes (Cube n),
--- interval expressions are data (IEx, DNF), substitutions are Sub and cmap-d; F2a-F2c (every De
--- Morgan law, no 2-cell) is the well-definedness, F2d the normalizer's soundness, F2d' its
--- canonicity, F2e naturality in substitutions. Holding an object dimension as a host interval
--- variable is not available at a variable number of dimensions (the host's interval is not a
--- type: `I × Nat` is refused, checked 2026-11-13), and would move these obligations, not remove
--- them. Decided: p26-wip.cub is kept and continues at F2d. The elaborator's two memory blowups met on the way are below. The longest chain of the project: it
--- should never stop.
--- Known (2026-11-12, at experiments/nbe/p26-wip.cub): elaboration: checking a path λ (λ i → sub-
--- pull … keep-S (P i)) whose body applies a defined dependent path P (carry-uniq of a pcat-d)
--- exhausts memory (killed at 5.5 GB; keep-lift's first step, before cong1): the λ's endpoints are
--- computed by evaluating the body at 0 and 1, which unfolds P's definition instead of reading P's
--- endpoints off its type; the same path given to cong1 checks in 2.7M steps. Not yet known: which
--- evaluation step unfolds it. keep-lift's parts: the cubes of contexts its base paths pass through
--- (kl-k2, kl-k3), the meanings over them (kl-E0 … kl-ER0), the dependent paths over each base path
--- (kl-DE, kl-Dr2, kl-D, kl-DR) and the four steps (kl-s1 … kl-s4)
--- Known (2026-11-12, at lib/std.cub): needs-work. The primitives below give typed programs (the
--- specializer, the translation to machine code) the untyped checker's own operations at types: a
--- definition's code, quotation, normalization, conversion at a type, constructor tables, rewriting.
--- They are trusted, as the checker is, and their types are asserted, not checked. Typed codes
--- (task-graph/hyperactivity.cub, typed-codes) replace them by terms whose types are checked.
--- ---------------------------------------------------------------- the checker's services, at their
--- types The checker (lib/check.cub) and the code utilities beside it (lib/match.cub) are terms
--- written before types exist. These give typed programs over codes (the specializer, the compiler)
--- the services they read at the types they have. Trusted with the checker (PLAN §7). a checked
--- definition's value quoted at its type (none when it does not quote), and its type's code
--- Known (2026-11-12, at lib/check.cub): needs-work. The checker is an untyped term with no
--- statement of what it accepts; it is trusted. Paper §6.1: the theorem that it accepts exactly the
--- derivable judgments is separate from its definition. A checker returning a typing derivation
--- (Der) or a refusal is sound by construction; deciding derivability is then its completeness
--- (task-graph/hyperactivity.cub, typed-checker).
--- Known (2026-11-12, at lib/check.cub): needs-work. Solving one implicit argument exhausted the
--- machine's memory (7 GB, killed, exit 137): lib/nbe.cub's `reify-code s K D Δ δ x cx = (fst (fst
--- (rr s) K D Δ δ x cx) , x , embed (snd (fst (rr s) K D Δ δ x cx)))`, where embed's implicit index
--- {KJ} is to be found from its argument's type, at a variable shape s. The same term through a
--- definition with a declared type (nf-code Δ (s , (K , δ , D)) x (fst (rr s) K D Δ δ x cx)) checks
--- in a few thousand steps. Not yet known whether the cost is here (inferring the argument's type by
--- evaluating rr's clauses at the variable s, rather than reading rr's signature) or in the
--- elaborator's syntactic solving. A spine with holes (implicit arguments) is solved where it
--- stands: the head's type is walked along the arguments, a hole standing as a fresh variable, each
--- explicit argument's inferred type matched against its domain, then the result type against the
--- expected one; the universe of a solved type gives its level. The solutions are returned as codes,
--- (elab ...), and the term with them is checked again. An argument's own holes are solved first.
 -- Known (2026-11-13, from the review of every earlier finding): The specializer carries its law in
 -- its type, and the three Futamura projections hold (paper §6). paper §6. The specializer
 -- normalizes through a primitive that runs the untyped checker, so it cannot be specialized itself;
--- with normalization as a term (typed-codes) it carries its law in its type and the three Futamura
+-- with normalization as a term (typed codes, the sibling node) it carries its law in its type and the three Futamura
 -- projections follow. Specializing a process through a handler was measured superlinear
 -- (lib/specialize.cub, 2026-11-09) and is unattributed. It waits on the typed codes above.
 -- Known (2026-11-12, at lib/specialize.cub): needs-work. Specialization cost: #build of a process
@@ -201,12 +224,12 @@ the-product = node "The product: every screened device in the world runs Hyperac
 -- stated of) and fl-node (the process each binary runs) are both built from cp-view, but nothing
 -- relates them: the properties proved of the behaviour are not shown to hold of the binaries. The
 -- relation comes from processes realized as executables with their system-call events equal to the
--- process's interaction (task-graph/hyperactivity.cub, native), applied here; nothing specific to
+-- process's interaction (native realization, above), applied here; nothing specific to
 -- this file is owed.
 -- Known (2026-11-12, at lib/elf.cub): needs-work. The driver loop, the #build-loop round driver and
 -- the start code below are machine code assembled from tools/asm/*.s and pasted as byte literals:
--- trusted as written, with no statement of what they do. They go when processes become executables
--- through C (task-graph/hyperactivity.cub, native).
+-- trusted as written, with no statement of what they do. They go when processes become native executables by the route
+-- native realization takes (above).
 -- Known (2026-11-12, at lib/compile/meaning.cub): needs-work. This file, lib/compile/runs.cub,
 -- lib/compile/tmpl.cub, lib/compile/process.cub's kernel (kn-step, a second kernel beside
 -- lib/os/contract.cub's) and experiments/isa/addw-all.cub (one all-inputs theorem, for the bytes of
@@ -252,8 +275,12 @@ the-product = node "The product: every screened device in the world runs Hyperac
 -- computations (a unary numeral of 4*10^4 did not print in 260 s), and deep right-nested terms (a
 -- numeral of 10^6) overflow the C stack in several recursive functions of this file and src/lang.c.
 -- Not re-measured since; whether both still hold is not known.
-language-implementation : Node
-language-implementation = node "The Hyperactive language and its features, implemented completely and correctly as the paper specifies." (cons the-product nil)
+-- Known (2026-11-14, at task-graph/hyperactivity.cub): needs-work. A file with one unbalanced
+-- parenthesis in a definition (the graph's essential-context relation, one closing parenthesis
+-- short) made the machine exit with status 1 and print nothing about it: no position, no reason. A
+-- file that fails to read must say where and why.
+language-implementation-remainder : Node
+language-implementation-remainder = node "Everything else the paper specifies for the language: the calculus conforming to its published rules, the specializer with its law, native realization, the laws of the primitives, deriving as a typed term, and terms of any depth." (cons language-implementation nil)
 -- paper-examples (2026-11-13, Avik): "term-by-term construction of every single construction
 -- including examples, appendix, in paper, as code in repo cited by content-address in paper ...
 -- expressely de-prioritized ... while this *serves nothing*." It serves no node but the root, so
@@ -483,10 +510,14 @@ file-src-net-c = document "../src/net.c"
 file-src-store-c : Document
 file-src-store-c = document "../src/store.c"
 essential-context : List (Node × List Document)
-essential-context = cons (the-product , cons hyperactive-design (cons hyperactive-paper nil)) (cons (product-implementation , cons file-src-lang-c (cons file-src-net-c (cons file-src-store-c (cons file-makefile (cons file-lib-task-graph-cub nil))))) (cons (language-implementation , cons file-src-lang-c (cons file-src-net-c (cons file-lib-check-cub (cons file-lib-prelude-cub (cons file-lib-deploy-cub (cons file-lib-elf-cub (cons file-lib-compile-meaning-cub (cons file-experiments-nbe-p26-wip-cub (cons file-lib-std-cub (cons file-lib-nbe-cub (cons file-lib-derive-cub (cons file-lib-prim-cub (cons file-lib-specialize-cub nil))))))))))))) (cons (language-support , cons file-experiments-isa-build-run-cub (cons file-lib-isa-tso-cub (cons file-lib-cxx-machine-cub (cons file-lib-cxx-read-expr-cub (cons file-lib-lang-rust-machine-cub nil))))) nil)))
+essential-context = cons (the-product , cons hyperactive-design (cons hyperactive-paper nil)) (cons (product-implementation , cons file-src-lang-c (cons file-src-net-c (cons file-src-store-c (cons file-makefile (cons file-lib-task-graph-cub nil))))) (cons (typed-codes-and-normalization , cons file-lib-check-cub (cons file-experiments-nbe-p26-wip-cub (cons file-lib-nbe-cub nil))) (cons (language-implementation-remainder , cons file-src-lang-c (cons file-src-net-c (cons file-lib-prelude-cub (cons file-lib-deploy-cub (cons file-lib-elf-cub (cons file-lib-compile-meaning-cub (cons file-lib-std-cub (cons file-lib-derive-cub (cons file-lib-prim-cub (cons file-lib-specialize-cub nil)))))))))) (cons (language-support , cons file-experiments-isa-build-run-cub (cons file-lib-isa-tso-cub (cons file-lib-cxx-machine-cub (cons file-lib-cxx-read-expr-cub (cons file-lib-lang-rust-machine-cub nil))))) nil))))
 -- the root: what Avik wants
 roots : List Node
 roots = cons the-product nil
+-- the leaves being worked on now; every other leaf is pending. A node is resolved by removing it
+-- (its history keeps it), so there is no third state (HYPERACTIVE.md §2.4)
+in-progress : List Node
+in-progress = cons interval-normal-forms-mean-their-expressions nil
 -- language support starts only when the language implementation and the product implementation are
 -- done (Avik, 2026-11-13)
 after : List (Node × List Node)

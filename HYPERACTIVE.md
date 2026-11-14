@@ -716,15 +716,17 @@ file's SHA-256.
 It computes the order of work by the rule in §2.4.
 
 **The board today.**
-- The root is the product.
-- The root's four children are:
-  - the language implementation;
-  - the paper's examples;
-  - the product implementation;
-  - the support of particular languages.
-- One dependency: language support waits on both the language implementation and the product
-  implementation.
-- No goal is broken down yet.
+- The root is the product. Its four children are the language implementation, the paper's
+  examples, the product implementation, and the support of particular languages.
+- One dependency: language support waits on the language implementation and the product
+  implementation. The graph view draws it from each prerequisite to the work waiting on it.
+- The language implementation is expanded, as of 2026-11-14, into two children:
+  - typed codes and normalization by evaluation (paper §6.1);
+  - everything else the paper specifies for the language.
+- Typed codes is expanded in turn:
+  - the interval normalizer's meaning (F2d), in progress;
+  - everything else after it.
+- The other goals are not broken down.
 
 **Git, until the work moves onto the system.** One session works on `main` only, with no branch, and
 pushes every change the moment it is made. There is no divergence between the session's copy and
@@ -904,7 +906,8 @@ The work is organized by a graph of tasks in the language (§1.14). Its rules:
 - A session passing by may add context to a task's statement, never subtasks.
 
 **States.** A node is in progress or pending. There is one owner, Avik, and sessions hold no
-identity.
+identity. The graph lists the leaves in progress (`in-progress`), and every other leaf is pending. A
+node is resolved by removing it, and its history keeps it.
 
 **Order.**
 - There is no scalar priority, value, score or estimate. A node's value is what it serves, up to the

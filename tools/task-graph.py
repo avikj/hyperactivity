@@ -121,6 +121,13 @@ def essential_context():
     return docs, ec
 
 
+def in_progress():
+    """the leaves being worked on now (`in-progress`); every other leaf is pending (HYPERACTIVE.md §2.4)"""
+    src = open(GRAPH, encoding='utf-8').read()
+    m = re.search(r'^in-progress = (.*)$', src, re.M)
+    return names_in(m.group(1)) if m else []
+
+
 def kids_of(g):
     k = {n: [] for n in g}
     for n, d in g.items():
@@ -151,6 +158,7 @@ def cmd_show(args):
         print('  ' + d['id'])
         ks = kids_of(g).get(a, [])
         if ks: print('  served by: ' + ' '.join(ks))
+        if not ks: print('  state: ' + ('in progress' if a in in_progress() else 'pending'))
         docs, ec = essential_context()
         ctx = [(dn, m) for m in sorted(ancestors(g, a), key=lambda m: depth(g, roots, m) or 0) for dn in ec.get(m, [])]
         for dn, m in ctx:
@@ -182,13 +190,14 @@ def under(g, kids, n):
 def cmd_tree(args):
     g, roots, _ = graph()
     kids = kids_of(g)
+    ip = in_progress()
     seen = set()
     def walk(n, depth, via):
         d = g[n]
         k = kids.get(n, [])
         nt = sum(1 for x in under(g, kids, n) if not kids.get(x))
         also = [p for p in d['parts'] if p != via]
-        print('  ' * depth + f'{d["id"]}  [{n}' + (f'; {nt} open tasks under it]' if k else ']')
+        print('  ' * depth + f'{d["id"]}  [{n}' + (f'; {nt} open tasks under it]' if k else (', in progress]' if n in ip else ']'))
               + (f'  (also {", ".join(also)})' if also and depth else ''))
         if n in seen: return
         seen.add(n)
@@ -213,6 +222,14 @@ def cmd_check(args):
     for n, l in after.items():
         for m in [n] + l:
             if m not in g: print(f'{n}: names {m}, which is not a node'); bad += 1
+    kids = kids_of(g)
+    ip = in_progress()
+    for n in ip:
+        if n not in g: print(f'in-progress names {n}, which is not a node'); bad += 1
+        elif kids.get(n): print(f'{n}: in progress but has children (only a leaf is worked on)'); bad += 1
+    for n in g:   # an expanded node was expanded to start one of its children: it has a child in progress below it
+        if kids.get(n) and n not in roots and not any(x in ip for x in under(g, kids, n)):
+            print(f'{n}: expanded, but nothing under it is in progress (a node is expanded exactly when a child begins)'); bad += 1
     cmd = [os.path.join(ROOT, 'build', 'cubical'), 'task-graph/hyperactivity.cub']
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'))
     last = [l for l in r.stdout.split('\n') if l.strip()][-1:] or ['']

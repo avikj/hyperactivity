@@ -16,6 +16,7 @@ PAGE = os.path.join(ROOT, 'tools', 'task-graph-view.html')
 def graph_json():
     g, roots, after = tg.graph(); kids = tg.kids_of(g)
     docs, ec = tg.essential_context()
+    ip = tg.in_progress()
     leaves = [n for n in g if not kids.get(n)]
     lu = lambda n: {x for x in tg.under(g, kids, n) | {n} if not kids.get(x)}
     waits = {x: set().union(*([lu(d) for m in tg.ancestors(g, x) for d in after.get(m, []) if d in g] or [set()])) for x in leaves}
@@ -46,7 +47,7 @@ def graph_json():
                 ctx.append(dict(path=docs.get(dn, dn), via=None if m == n else m))
         questions = [q.strip() for q in re.findall(r'Question for Avik \(\d{4}-\d{2}-\d{2}\):\s*(.*?\?)', st, re.S)]
         nodes.append(dict(id=n, name=d['id'], questions=questions, parents=d['parts'], statement=statement, findings=findings, parts=parts,
-                          state=state, layer=layer.get(n), unblocks=sorted(gain.get(n, [])),
+                          state=state, progress=('in progress' if n in ip else ('pending' if not kids.get(n) else None)), layer=layer.get(n), unblocks=sorted(gain.get(n, [])),
                           waits=sorted(waits.get(n, [])), after=after.get(n, []), context=ctx,
                           open=sum(1 for x in tg.under(g, kids, n) if not kids.get(x))))
     return dict(nodes=nodes, roots=roots)

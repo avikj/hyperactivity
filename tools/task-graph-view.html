@@ -44,6 +44,8 @@ svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .s-ready .pill { color: var(--ready); background: color-mix(in srgb, var(--ready) 14%, transparent); }
 .s-last { background: var(--last-bg); }
 .s-last .pill { color: var(--last); background: color-mix(in srgb, var(--last) 16%, transparent); }
+.pill.prog { color: #fff !important; background: var(--first) !important; }
+.card:has(.prog) { box-shadow: 0 0 0 2px var(--first); }
 .s-waiting { border-color: color-mix(in srgb, var(--wait) 40%, var(--line)); background: var(--wait-bg); }
 .s-waiting .pill { color: var(--wait); background: color-mix(in srgb, var(--wait) 14%, transparent); }
 .s-goal .pill { color: var(--muted); background: color-mix(in srgb, var(--muted) 12%, transparent); }
@@ -131,6 +133,7 @@ function draw() {
     c.className = `card s-${n.state}` + (G.roots.includes(n.id) ? ' root' : '');
     c.id = 'c-' + n.id;
     c.innerHTML = `<div class="name">${esc(n.name)}</div><div class="meta"><span class="pill">${label[n.state]}</span>` +
+      (n.progress === 'in progress' ? `<span class="pill prog">in progress</span>` : '') +
       (n.state === 'goal' ? `<span>${n.open} open tasks</span>` : '') + (n.findings.length ? `<span>${n.findings.length} known</span>` : '') + (n.questions.length ? `<span style="color:var(--wait);font-weight:600">${n.questions.length} for Avik</span>` : '') +
       (n.unblocks.length ? `<span>unblocks ${n.unblocks.length}</span>` : '') + `</div>`;
     c.onmouseenter = () => focus(n.id); c.onmouseleave = () => focus(sel);
@@ -206,7 +209,7 @@ function open(id) {
   sel = id; focus(id);
   const n = byId[id];
   const link = x => `<a onclick="open('${x}')">${esc(byId[x]?.name ?? x)}</a>`;
-  let h = `<span class="pill" style="display:inline-block" >${label[n.state]}</span><h2>${esc(n.name)}</h2><div class="id">${esc(n.id)}</div>`;
+  let h = `<span class="pill" style="display:inline-block" >${label[n.state]}</span>` + (n.progress ? ` <span class="pill${n.progress === 'in progress' ? ' prog' : ''}" style="display:inline-block">${n.progress}</span>` : '') + `<h2>${esc(n.name)}</h2><div class="id">${esc(n.id)}</div>`;
   if (n.questions.length) h += `<h3 style="color:var(--wait)">Questions for Avik (${n.questions.length})</h3>` + n.questions.map(q => `<div class="finding" style="border-color:var(--wait)">${esc(q)}</div>`).join('');
   if (n.statement) h += `<h3>Statement</h3><p>${esc(n.statement)}</p>`;
   if (n.parents.length) h += `<h3>Serves</h3>` + n.parents.map(p => `<p>${link(p)}</p>`).join('');

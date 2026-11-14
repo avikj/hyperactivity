@@ -8,19 +8,22 @@ import "document.cub"
 --
 -- A node is a task (HYPERACTIVE.md §2.4). Its name is an English sentence saying what it is;
 -- the identifier it is declared under is how code refers to it. Its parts-of are the nodes it is a
--- child of: the reasons it exists, its value being exactly what it serves (§4; there is no scalar).
+-- child of: the reasons it exists, its value being exactly what it serves (there is no scalar).
 -- A node's children always cover it: a leaf is resolved when its work is done, any other node
 -- exactly when all its children are, with no further step at the parent. A node is expanded into
--- children only when its work begins (§13). A node part of nothing is a root, and is declared one
+-- children only when its work begins, exactly when one of its children becomes in progress. A node part of nothing is a root, and is declared one
 -- (roots); the root of this work is what Avik wants. A node's statement is the comment above its
 -- definition in task-graph/hyperactivity.cub: what it is, why, and what is known about it.
 -- Resolving a node removes it; the history keeps it.
 -- The one relation besides parts: `after`, pairs (n , ms): n's work cannot start until every node of
 -- ms is resolved (waiting on a node is waiting on every leaf under it). The order of work is computed
--- from parts and after alone (§5): every order is a topological sort of after; among work that can be
+-- from parts and after alone: every order is a topological sort of after; among work that can be
 -- done in either order, X goes before Y when everything finishing Y first makes possible, finishing X
 -- first also makes possible, and more (enabling is conjunctive: a node waiting on several becomes
 -- possible only when all are resolved). tools/task-graph.py priority computes it.
+-- State: `in-progress`, the leaves being worked on now; every other leaf is pending (there is one
+-- owner, Avik, and sessions hold no identity, so no node says who works on it). The check requires
+-- every in-progress node to be a leaf and every expanded node to have one below it.
 -- Essential context: `essential-context`, pairs (n , ds): documents (lib/document.cub: files of the
 -- repository as objects of the code, a reference to a missing one failing the check) that are
 -- essential context for working on n and on everything below it. The relation is deliberately loose:
