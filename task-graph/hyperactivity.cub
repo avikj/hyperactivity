@@ -199,6 +199,24 @@ normalizer-replaces-p1 = node "The normalizer over cubes runs on example derivat
 -- shape with its computability clause, its rules in Der and NN, and its cases in rr and fund.
 typed-codes-after-swap : Node
 typed-codes-after-swap = node "Everything typed codes and normalization by evaluation need after the swap: the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-fund nil)
+-- path-free-transport (2026-11-14): transport along a line of types at every path-free shape (Bool,
+-- Nat, Σ, Π): Der's dtransp (code ccomp (cplam cL) csys0 c) with its meaning the host's comp, and fund's
+-- case KT by induction on the shape: at Bool and Nat the value (computability ignores the type
+-- component, One1), at Σ componentwise, at Π through the clause's AppV data (zpt, via-snd), the
+-- argument transported back along the domain and the result along the codomain at its fill. Resolved
+-- 2026-11-14 (lib/nbe.cub, examples: transp at Bool, Nat, Σ Bool Bool and Bool → Bool normalize).
+path-free-transport : Node
+path-free-transport = node "Transport along a line of types at every path-free shape is a typed code of the normalizer over cubes: computable, and it normalizes." (cons typed-codes-after-swap nil)
+-- composition-with-systems (2026-11-14): the object language's comp A [φ ↦ u] a0 with φ over the
+-- context's dimensions, transport at PathP (composition in the fibre with the endpoints' system), then
+-- Glue and universes. Its meaning is host comp with the face written over the dimensions of the
+-- context's cube, which are PathP-λ binders at different depths of the cube; a checked definition
+-- cannot build such a face by recursion on the dimensions: the host has no type of faces or partial
+-- elements and no functions of the interval ((i : I) → … is refused). Pending on Avik: whether the host
+-- gets interval functions as a pretype (as cubical Agda's (i : I) → A) or a typed partial-element
+-- former (Partial φ A), or another route.
+composition-with-systems : Node
+composition-with-systems = node "Composition with a system on the context's faces, transport at PathP, Glue and universes in the normalizer over cubes; waits on a host decision about faces." (cons typed-codes-after-swap nil)
 -- object-level-nat (2026-11-14): Nat as the first object-level data type: shape s-nat, zero, suc
 -- and the recursor (step a term at Π k:Nat. P k → P (suc k), motive a type over the extension by
 -- Nat) in Der and NN, the clause CNat, fund's recursor case nrec-comp by induction on the scrutinee's
@@ -668,7 +686,7 @@ roots = cons the-product nil
 in-progress : List Node
 in-progress = cons typed-codes-after-swap nil
 resolved : List Node
-resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat nil))))))
+resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat (cons path-free-transport nil)))))))
 -- language support starts only when the language implementation and the product implementation are
 -- done (Avik, 2026-11-13)
 after : List (Node × List Node)

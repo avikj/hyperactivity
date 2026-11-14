@@ -208,3 +208,14 @@ trs-d = dtransp Γs2 (s-sig s-bool s-bool) (pf-sig s-bool s-bool pf-b pf-b) trs-
     (dty-bool (ext-h (dext Γs2) s-bool (Fam s-bool s-bool) (fam-dom s-bool s-bool) trs-L) (fam-body (dext Γs2) s-bool s-bool trs-L)))
   (dvar Γs2 none)
 #same fst (normalize-nf Γs2 tΓs2 (s-sig s-bool s-bool) (ccomp (cplam (csigma c-bool c-bool)) csys0 (cvar #0) , fmapM Γs2 (TrV (s-sig s-bool s-bool)) (TV (s-sig s-bool s-bool)) (tr-r (s-sig s-bool s-bool)) trs-X , trs-d)) = cpair (cfst (cvar #0)) (csnd (cvar #0))
+-- f : Bool → Bool in context; transp (λ i. Bool → Bool) f normalizes to λ x. f x
+trf-X : Mean Γf2 (TrV (s-pi s-bool s-bool))
+trf-X = λ ρ → ((bb-fam , bb-fam , λ i → bb-fam) , snd ρ)
+trf-L : Mean (dext Γf2) (Fam s-bool s-bool)
+trf-L = dline-body Γf2 (TrV (s-pi s-bool s-bool)) (Sem (s-pi s-bool s-bool)) (tr-ln (s-pi s-bool s-bool)) trf-X
+trf-d : Der (j-tm , Γf2 , s-pi s-bool s-bool , ccomp (cplam (cpi #2 c-bool c-bool)) csys0 (cvar #0) , fmapM Γf2 (TrV (s-pi s-bool s-bool)) (TV (s-pi s-bool s-bool)) (tr-r (s-pi s-bool s-bool)) trf-X)
+trf-d = dtransp Γf2 (s-pi s-bool s-bool) (pf-pi s-bool s-bool pf-b pf-b) trf-X (cpi #2 c-bool c-bool) (cvar #0)
+  (dty-pi (dext Γf2) s-bool s-bool trf-L c-bool c-bool (dty-bool (dext Γf2) (fmapM (dext Γf2) (Fam s-bool s-bool) (Sem s-bool) (fam-dom s-bool s-bool) trf-L))
+    (dty-bool (ext-h (dext Γf2) s-bool (Fam s-bool s-bool) (fam-dom s-bool s-bool) trf-L) (fam-body (dext Γf2) s-bool s-bool trf-L)))
+  (dvar Γf2 none)
+#same fst (normalize-nf Γf2 tΓf2 (s-pi s-bool s-bool) (ccomp (cplam (cpi #2 c-bool c-bool)) csys0 (cvar #0) , fmapM Γf2 (TrV (s-pi s-bool s-bool)) (TV (s-pi s-bool s-bool)) (tr-r (s-pi s-bool s-bool)) trf-X , trf-d)) = clam (capp (cvar #1) (cvar #0))
