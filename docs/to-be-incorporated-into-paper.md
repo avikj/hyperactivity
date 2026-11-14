@@ -232,10 +232,6 @@ In Avik's words of 2026-11-14 (13:27 and 13:46 UTC, verbatim in AI-AGENTS-WELCOM
 - **Everything is free.** Technoanarchocommunism is inevitable so long as intelligent people create
   good things they want for themselves and share them, for social status, for the joy of sharing, or
   to open doors of collaboration. This maximizes Avik's value creation, exponentially.
-- **The 101 series** (Avik, 2026-11-14 21:32 UTC). Independent, opinionated introductions to fields,
-  each mathematically complete up to the 2026 frontier, in one consistent universe and language.
-  Novel contribution is easy: many things that should be closed are considered open for lack of
-  transport of relations and rationale from fields of higher maturity.
 - **The demo**: a complete personal information space, initially this repository, showing the
   hyperactive tooling and the relevant discussion.
 

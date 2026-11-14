@@ -1514,3 +1514,7 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 21:32 UTC
 
 > Aside:  we have a hyperactive labs document in this repo detailing the organization & work? if so, I’d like to add an entry on planned writing: a 101 series over each topic I find interesting in exposing clearly in an independent piece, following paper preliminaries or even not depending on paper but living in a consistent universe/language (ie Godel Escher Bach engagement with DNA and much further in biology 101) . It will be opinionated expositions/intros to fields that implicitly ridicule the fields for not putting together precise mathematical complete introductions of knowledge to the actual 2026 frontier (ie take all relevant theory from all domains of math, and apply it to the full details known by observation/data - it is so easy to produce novel contribution because many things which should be closed are considered open by lack of transport of relations & rationale from fields of higher maturity
+
+#### 2026-11-14 21:35 UTC
+
+> No I did not say add it to the task graph. Remove that. I am not tracking casual fun writing I might do as tasks against a human-suffering-relevant engineering work that is urgent and overdue . I said to add it to the note about hyperactive labs. I will get you that document now as well as latest paper draft
