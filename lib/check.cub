@@ -2382,31 +2382,31 @@ level-close hs sg =
 solve-spine c oE =
   let sp = spine-of c lnil
   in case infer (fst sp) of
-       typed T → spine-walk c T (snd sp) lnil lnil oE
+       typed T → spine-walk c T (snd sp) lnil lnil lnil oE
        r → r
-spine-walk c T args hs sg oE =
+spine-walk c T args hs sg gs oE =
   case args of
     lnil →
       let sg2 = case oE of none → sg; some E → vmatch hs T E sg
-      in spine-done c hs (level-close hs (level-close hs sg2))
+      in spine-done c hs (level-close hs (level-close hs sg2)) gs
     lcons a rest →
       case %view T of
         wpi A B →
           case a of
-            thole k V → spine-walk c (B V) rest (lcons (k , V , A) hs) sg oE
+            thole k V → spine-walk c (B V) rest (lcons (k , V , A) hs) sg gs oE
             _ →
               if inferable a then
                 (case infer a of
-                   typed Ta → spine-walk c (B (tval a)) rest hs (vmatch hs A Ta sg) oE
+                   typed Ta → spine-walk c (B (tval a)) rest hs (vmatch hs A Ta sg) gs oE
                    elab ds → elab ds
                    redo k → redo k
-                   _ → spine-walk c (B (tval a)) rest hs sg oE)
+                   _ → spine-walk c (B (tval a)) rest hs sg gs oE)
               else
                 (case lam-arg hs A B (unguess a) sg of
-                   typed sg2 → spine-walk c (B (tval a)) rest hs sg2 oE
+                   typed sg2 → spine-walk c (B (tval a)) rest hs sg2 (line-guess a A gs) oE
                    elab ds → elab ds
                    redo k → redo k
-                   _ → spine-walk c (B (tval a)) rest hs sg oE)
+                   _ → spine-walk c (B (tval a)) rest hs sg gs oE)
         _ → err c E-notfun T opq
 -- a λ given where a function of type A is due, A's domain known: its body's type, under the binder,
 -- against A's codomain (a hole there, applied to the binder, is solved as a pattern)
@@ -2443,9 +2443,18 @@ quote-sol hs s =
      else some (snd sv)
 -- a level nothing determines is the least
 level-hole hs = case hs of lnil → none; lcons h r → (case %view (snd (snd h)) of wlevel → some (fst h); _ → level-hole r)
-spine-done c hs sg =
+-- a λ guessed a function where a path is due, kept: if nothing else determines the implicit
+-- arguments, it is guessed again as a line, whose ends then solve the path type's (transport
+-- (λ i → ...) a reads its implicit types off the line: task-graph/hyperactivity.cub, 2026-11-14)
+line-guess a A gs =
+  case a of
+    tguess k g t V → if %weq g #0 then (case %view A of wpath L a0 a1 → lcons k gs; _ → gs) else gs
+    _ → gs
+spine-done c hs sg gs =
   if isnil sg
   then (case level-hole hs of
           some k → elab (lcons (k , some clzero) lnil)
-          none → (case hs of lcons h r → refused (tval c) E-implicit (snd (snd h)) opq; lnil → err c E-implicit opq opq))
+          none → (case gs of
+                    lcons k r → redo k
+                    lnil → (case hs of lcons h r → refused (tval c) E-implicit (snd (snd h)) opq; lnil → err c E-implicit opq opq)))
   else elab (lmap (λ s → (fst s , quote-sol hs s)) sg)

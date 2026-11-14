@@ -36,6 +36,8 @@ static void x_die(int line, int col, const char *m, const char *x) {
     x_unreadable = !x_sem_now; x_sem_now = false;
     /* under --serve, the request ends and the machine stays (the parse error as `file:line:col:`) */
     if (die_jb) { char p[600]; snprintf(p, sizeof p, "%s:%d:%d: %s", x_file ? x_file : "?", line, col, m); die(p, x); }
+    /* what was printed before (each checked definition's line) comes first, also when both go to one place */
+    fflush(stdout);
     fprintf(stderr, "%s:%d:%d: %s%s%s\n", x_file ? x_file : "?", line, col, m, x ? " " : "", x ? x : "");
     exit(1);
 }
@@ -250,6 +252,11 @@ typedef struct { const char *name; Node *type; } GVar;
 static GVar *GVAR; static int ngvar; static size_t capgvar;
 static void want(const char *s) { if (!at(s)) { char m[64]; snprintf(m, sizeof m, "expected %s, found", s); x_err(m, P0()); } NX(); }
 static void wantk(int k, const char *what) { if (P0()->k != k) { char m[64]; snprintf(m, sizeof m, "expected %s, found", what); x_err(m, P0()); } NX(); }
+/* the delimiter closing the one opened at o: missing, the error names where it was opened */
+static void want_close(Tok *o, int k, const char *what) {
+    if (P0()->k != k) { char m[128]; snprintf(m, sizeof m, "expected %s (closing the one opened at %d:%d), found", what, o->line, o->col); x_err(m, P0()); }
+    NX();
+}
 static const char *RESERVED[] = { "=", ":", "→", "λ", "↦", "|", "of", "where", "let", "in", "if", "then", "else", "case", "return",
     "data", "codata", "record", "mutual", "postulate", "import", "infix", "infixl", "infixr", "by", "calc", "∀", "decreasing", "using", "▸", "primitive", ":0", ":1", "instance", "module", "open", "deriving", "foreign", "variable", NULL };
 static bool reserved(const char *s) { for (int i = 0; RESERVED[i]; i++) if (!strcmp(RESERVED[i], s)) return true; return false; }
@@ -521,7 +528,7 @@ static Node *p_atom(void) {
     }
     if (t->k == X_LB) return p_system();
     if (t->k == X_LP) {
-        if (group_has_eq()) { NX(); Node *f = p_face(); wantk(X_RP, ")"); return f; }
+        if (group_has_eq()) { NX(); Node *f = p_face(); want_close(t, X_RP, ")"); return f; }
         NX();
         if (P0()->k == X_RP) { NX(); return nsym("%absurd"); }
         /* an operator section name: (_+_) or (+) */
@@ -530,16 +537,16 @@ static Node *p_atom(void) {
         if (P0()->k == X_COMMA) {
             Node *xs[256]; int n = 0; xs[n++] = e;
             while (P0()->k == X_COMMA) { NX(); if (n == 256) x_err("tuple too long", P0()); xs[n++] = p_expr(0); }
-            wantk(X_RP, ")");
+            want_close(t, X_RP, ")");
             Node *r = xs[n - 1];
             for (int i = n - 2; i >= 0; i--) r = sym3("pair", xs[i], r);
             return r;
         }
-        wantk(X_RP, ")");
+        want_close(t, X_RP, ")");
         return e;
     }
-    if (t->k == X_LC && P1()->k == X_LC) { NX(); NX(); Node *e = p_expr(0); wantk(X_RC, "}"); wantk(X_RC, "}}"); Node *r = sym2("%imp", e); bnd_set_inst(r->it[0]); return r; }   /* an instance argument given: an implicit one, marked, for an instance position */
-    if (t->k == X_LC) { NX(); Node *e = p_expr(0); wantk(X_RC, "}"); return sym2("%imp", e); }
+    if (t->k == X_LC && P1()->k == X_LC) { NX(); NX(); Node *e = p_expr(0); want_close(t, X_RC, "}"); wantk(X_RC, "}}"); Node *r = sym2("%imp", e); bnd_set_inst(r->it[0]); return r; }   /* an instance argument given: an implicit one, marked, for an instance position */
+    if (t->k == X_LC) { NX(); Node *e = p_expr(0); want_close(t, X_RC, "}"); return sym2("%imp", e); }
     if (t->k == X_ID && !reserved(t->s) && rec_of(t->s) && P1()->k == X_LC && !(P2()->k == X_LC)) {
         /* R { f = a ; g = b }: a value of the record, its fields by name, in any order, each once;
          * R { r | f = v }: r with the fields given replaced (the others projected from r) */
@@ -1320,8 +1327,10 @@ static void p_decl(void) {
     if (setjmp(jb)) {
         die_jb = outer;
         if (x_unreadable) {
-            if (outer) die(die_msg, NULL);
-            fprintf(stderr, "%s\n", die_msg); exit(1);
+            /* the load ends: the reason last, on stderr and on stdout too when that is another file
+             * (an unbalanced parenthesis was a silent exit to a reader of stdout, or one buried
+             * mid-line in a merged stream: task-graph/hyperactivity.cub, 2026-11-14) */
+            die(die_msg, NULL);
         }
         decl_reset();
         toplevel_depth = depth0; x_collecting = coll; pending_instance = inst; cur_mod = mod; x_fail_next = false;
