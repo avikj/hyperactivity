@@ -1458,3 +1458,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > this feels like it’s gonna be an arbitrary heuristic I guess that’s fine what do you mean rare?
 >
 > Run it on this whole message and send it back to me also
+
+#### 2026-11-14 20:49 UTC
+
+> Do not idle until there is NOTHING FURTHER THAT CAN BE DONE
