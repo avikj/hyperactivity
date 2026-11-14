@@ -34,6 +34,11 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
     core), examples of what the language can do, and our own use of the language to build
     hyperactivity. Read each thing as what it is: an example of machine words is not a claim that
     the core has them (a session read the paper's §8.5 that way and called it incorrect).
+  - **Hold this ontology when reading or writing any construction** (Avik, 2026-11-14). Every
+    term in the core is flagged as core, and the files are organized by layer: a set of files that
+    are purely core, and the capacities, the examples, the library and our usage each apart (while
+    the work still lives in a file system). An agent reading any file knows from where it stands
+    which layer it is in.
   - **The language is the minimal pure base.** It is a minimal, necessary and sufficient construct of
     pure mathematics, as the λ-calculus, the Turing machine and Shannon's channel are, and its value
     is maximized by its minimality: it extends to anything by definitions, so nothing further belongs
@@ -1284,3 +1289,9 @@ The consolidated piece is this, written through in the two registers you keep di
 > and so what say ./hyperactivity runs is of course over core hyperactivity, and of course it is composed essentially entirely of language extension
 >
 > ./hyperactivity is written in hyperactivity yes?
+
+#### 2026-11-14 18:42 UTC
+
+> I’m not reading all that sounds like gist is I’m right. You agree then the constructions themselves, when future claude/codex looks at, they must hold this ontology and be aware of the distinction yes?
+>
+> I would hold a standard of ensuring damn near every single term is flagged if it is core. Most certainly they should be organized accordingly ie a set of files which are pure core etc. consider organization. Just for now wee still live in file system I hope we graduate soon
