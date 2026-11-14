@@ -1535,3 +1535,7 @@ The consolidated piece is this, written through in the two registers you keep di
 >
 > It’s like you are describing the state before making the change. Which is exactly what I know the state to be which is exactly why I ask for the change. What type of malfunction is this even I’m
 > Confused this is new
+
+#### 2026-11-14 22:00 UTC
+
+> Cool. Is all the product stuff, ie graduating from git to hyperactive-native , blocked on the core lang engineering stuff typed checked stuff or whatever nbe going on now/recently. I really really really want to be building the device
