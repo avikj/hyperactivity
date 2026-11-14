@@ -692,10 +692,14 @@ concerns (`task-graph/hyperactivity.cub`, shown when a goal is clicked in the gr
   24 failures, and they are also why the Rust readers fail.
 
 **Typed codes and normalization by evaluation** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”). The normalizer over cubes
-is `lib/nbe.cub` (with `experiments/nbe/examples.cub`, 1,613 checks passing): the interval's normal forms and their
+is `lib/nbe.cub` (with `experiments/nbe/examples.cub`, 1,747 checks passing): the interval's normal forms and their
 soundness, the fundamental lemma over typed derivations, normalization run on example derivations, Nat with its
-recursor, and transport along lines of types at every path-free shape (Bool, Nat, Σ, Π). Composition with a system
-on the context's faces (and with it transport at PathP, Glue and universes) is not yet there. Its encoding is the cubical-set model built inside the host, and it stands (§2.2 “The language”).
+recursor, Unit, Empty with absurd, List's constructors, transport along lines of types at every path-free shape
+(Bool, Nat, Σ, Π), renaming of derivations and substitution on checked syntax (its meaning the substitution's action
+on the original's, by refl). Not yet there: List's recursor (its case needs coherence lemmas for carrying the
+scrutinee to the motive's element type along a path), and composition with a system on the context's faces, with
+transport at PathP, Glue and universes after it (formal compositions need systems whose size grows with the shape,
+and a checked definition writes a system only as fixed syntax; this waits on a decision about systems as values). Its encoding is the cubical-set model built inside the host, and it stands (§2.2 “The language”).
 
 **Native code** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9 “Native execution as a mathematical program transformation”).
 - `#jit` checks only the specialized code against the definition. The translation to bytes is
@@ -1259,7 +1263,21 @@ and planet-scale computation needs no global trust.
 
 ### 3.3 Questions only Avik can answer
 
-None are open.
+One is open (2026-11-14, from the normalizer over cubes, task graph node composition-with-systems):
+- **Systems as values in the host.** The object language's composition `comp A [φ ↦ u] a0`, transport at PathP
+  types, Glue and universes all need, in `lib/nbe.cub`, meanings that are the host's own composition with a system
+  whose faces are over the context's dimensions. One face, or any fixed number of faces, can be written in a checked
+  definition (the face on a fresh local dimension, the line path-applied at the face's form; the host substitutes
+  into faces). But the normal forms these produce are formal compositions at Bool and Nat (the host leaves
+  `hcomp` on a variable stuck, and `case`/the recursor on a formal composition reduces to the formal composition of
+  the branches), and their systems grow with the shape: each PathP layer of a type adds two faces. A checked
+  definition writes a system only as fixed syntax (`sys+` is a syntactic chain in `src/lang.c`, not a value of any
+  type), so a system with a number of faces read off the shape cannot be built. The question: should the host get
+  systems (or faces and partial elements) as values of a type, for example `Partial φ A` as in cubical Agda, or
+  interval functions as a pretype, `(i : I) → A`? Either lets `lib/nbe.cub` build the formal compositions at every
+  shape; without one, composition with systems stops at the shapes whose systems are bounded.
+
+Answered:
 - Dimensions were answered by the cubical-set model (§2.2 “The language”).
 - Native code was decided by Avik on 2026-11-14: through C (§2.2 “The language”). The record that preceded the
   decision:
