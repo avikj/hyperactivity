@@ -29,7 +29,9 @@ import os, re, subprocess, sys
 ROOT = os.path.dirname(os.path.realpath(__file__))
 MACHINE = os.path.join(ROOT, 'build', 'cubical')
 TASKS = os.path.join(ROOT, 'tools', 'task-graph.py')
-PAPER = os.path.join(ROOT, 'docs', 'Hyperactive_Final_Paper.pdf')
+PAPER = os.path.join(ROOT, 'docs', 'hyperactivity_v31.pdf')
+LABS = os.path.join(ROOT, 'docs', 'Hyperactive_Labs.md')
+WORDS = os.path.join(ROOT, 'docs', 'word-list.md')
 TO_BE_INCORPORATED = os.path.join(ROOT, 'docs', 'to-be-incorporated-into-paper.md')
 WELCOME = os.path.join(ROOT, 'AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md')
 STEP = 24000   # characters per step of the walk, so a step is read whole
@@ -79,10 +81,15 @@ def walk_steps():
     pages = paper_text().split('\f')
     for i, p in enumerate(pieces('\f'.join(pages), '\f')):
         steps.append((f'The paper, part {i + 1}', p.replace('\f', '\n')))
+    for sec in sections(open(LABS).read(), 2):
+        title = sec.split('\n', 1)[0].lstrip('# ').strip()
+        for j, p in enumerate(pieces(sec, '\n\n')):
+            steps.append((f'Hyperactive Labs: {title}' + (f', part {j + 1}' if j else ''), p))
     for sec in sections(open(TO_BE_INCORPORATED).read(), 2):
         title = sec.split('\n', 1)[0].lstrip('# ').strip()
         for j, p in enumerate(pieces(sec, '\n\n')):
-            steps.append((('To be incorporated into the paper' if title.startswith('To be incorporated') else f'To be incorporated into the paper: {title}') + (f', part {j + 1}' if j else ''), p))
+            steps.append((('To be incorporated into the paper' if title.startswith(('To be incorporated', '**To check')) else f'To be incorporated into the paper: {title}') + (f', part {j + 1}' if j else ''), p))
+    steps.append(("Avik's word list", open(WORDS).read()))
     for j, p in enumerate(pieces("## Avik's words, verbatim" + words, '\n\n')):
         steps.append((f"Avik's words, verbatim, part {j + 1}", p))
     steps.append(('The task graph', GRAPH_INTRO + tool('tree')))
@@ -98,11 +105,13 @@ step. Read every word of every step before running the next; do not skip ahead, 
 or open them in another order. The walk goes:
 
   1. Avik's instructions to agents: how to work here.
-  2. The paper, the language's specification, in full.
-  3. What is to be incorporated into the paper, in full.
-  4. Avik's words, verbatim, in full.
-  5. The task graph: all the work, its state and its order.
-  6. What you can take up now, and the commands for reading and working.
+  2. The paper (version 31), in full.
+  3. The Hyperactive Labs note: the initiative, the one work in Parts, what exists.
+  4. What is to be incorporated into the paper, in full.
+  5. Avik's word list.
+  6. Avik's words, verbatim, in full.
+  7. The task graph: all the work, its state and its order.
+  8. What you can take up now, and the commands for reading and working.
 
 An agent that has walked already in this session goes straight to `hyperactive open`."""
 

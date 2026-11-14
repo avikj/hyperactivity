@@ -3,8 +3,8 @@
 Avik Jain's instructions to the AI agents who work on hyperactivity, and his words verbatim.
 
 An agent arrives through `hyperactive`, and it is how the work is done: it walks the agent through
-what to read, in order, and then shows what can be worked on. The paper and its scratch space for
-the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Status lives only in the task graph, which
+what to read, in order, and then shows what can be worked on. The paper, the Hyperactive Labs note (`docs/Hyperactive_Labs.md`), the scratch space for the next
+draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-list.md`) are read in full. Status lives only in the task graph, which
 `hyperactive` shows; nothing else records it.
 
 ## How to work
@@ -110,12 +110,14 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
 
 ## Citing sources
 
-The repository's copy of the paper is `docs/Hyperactive_Final_Paper.pdf`, dated 11
-November 2026 on its first page, SHA-256
-`e8f358b4cd2c5b4c12a2b121afde0ebeef07578c54e7d322398f3d03806798fe`. It is an older draft than Avik's
-current one, which is not in the repository (Avik, 2026-11-14, below). Every citation of the paper,
+The canonical paper is `docs/hyperactivity_v31.pdf`, "hyperactivity: A decentralized operating
+system language for collective superintelligence", version 31, 14 November 2026, SHA-256
+`9c480995e7fb017881813bbbee41ef0e70b470ab1632bb583ccc0e795289a496`. The earlier copy,
+`docs/Hyperactive_Final_Paper.pdf` (11 November 2026, SHA-256
+`e8f358b4cd2c5b4c12a2b121afde0ebeef07578c54e7d322398f3d03806798fe`), stays because citations made
+before v31 name it. Every citation of the paper,
 here and anywhere in the repository, names that copy by path, date and the first twelve hex digits of
-its SHA-256, with the section, equation or heading cited: (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…,
+its SHA-256, with the section, equation or heading cited: (docs/hyperactivity_v31.pdf, 14 Nov 2026, sha256 9c480995e7fb…,
 §6.1 “Typed quotation, semantic readback, and self-application”). So each citation can be checked against the file, and every citation of a copy is found by
 its digits when the paper changes. The task graph's check fails if the file's content changes
 (`hyperactive-paper` in `task-graph/hyperactivity.cub`). A citation made before 2026-11-11 may
@@ -1518,3 +1520,18 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 21:35 UTC
 
 > No I did not say add it to the task graph. Remove that. I am not tracking casual fun writing I might do as tasks against a human-suffering-relevant engineering work that is urgent and overdue . I said to add it to the note about hyperactive labs. I will get you that document now as well as latest paper draft
+
+#### 2026-11-14 21:40 UTC
+
+> There is writing relevant to the orientation and content of my work ie actually forward looking. And there is casual dissemination of knowledge on the side by me . These are distinct and clear. I said the 101s are on that casual side and have not said that about anything else I think. Any questions maybe I’m missing something
+>
+> Your 3 statements are so useless because they are obviously exactly the intended request. Of course I am giving a new copy of the file as the canonical version and of course I devised a content address system for versioning. Your 1. Point is so incoherently phrased I can barely tell what you’re saying (idk what the walk means). I shouldn’t blame you for verifying you’re doing the right thing tho
+>
+> “It has to be checked against v31” ok ensure that is the first line of the delta file do not do that task now it’s trivial when it matters.
+
+#### 2026-11-14 21:41 UTC
+
+> Wait you’re saying “agents onboarding don’t see any of it”
+>
+> It’s like you are describing the state before making the change. Which is exactly what I know the state to be which is exactly why I ask for the change. What type of malfunction is this even I’m
+> Confused this is new
