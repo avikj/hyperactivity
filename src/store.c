@@ -281,12 +281,24 @@ static char *store_read(const char *key, const char *file) {
     char *b = malloc((size_t)n + 1); size_t got = fread(b, 1, (size_t)n, f); b[got] = 0; fclose(f);
     return b;
 }
+/* an entry is written whole to a temporary file beside it and renamed over it (an append writes the
+ * old text and the new), so a machine killed mid-write leaves the old entry or none, never a truncated
+ * one (HYPERACTIVE.md §1.13 “What is known to be wrong or missing”) */
 static void store_write(const char *key, const char *file, const char *text, bool append) {
     char *p = store_path(key, file); if (!p) return;
     char *dir = store_path(key, "");
     mkdir(store_dir(), 0777); mkdir(dir, 0777); free(dir);
-    FILE *f = fopen(p, append ? "a" : "w"); free(p); if (!f) return;
-    fputs(text, f); fclose(f);
+    char *old = append ? store_read(key, file) : NULL;
+    size_t n = strlen(p) + 48; char *tmp = malloc(n);
+    static long seq = 0;   /* unique per process by the stack address (ASLR), per write by seq */
+    snprintf(tmp, n, "%s.tmp.%lx.%ld", p, (long)(size_t)&n, ++seq);
+    FILE *f = fopen(tmp, "w");
+    if (!f) { free(old); free(tmp); free(p); return; }
+    bool ok = (!old || fputs(old, f) >= 0) && fputs(text, f) >= 0;
+    ok = (fflush(f) == 0) && ok;
+    ok = (fclose(f) == 0) && ok;
+    if (!(ok && rename(tmp, p) == 0)) remove(tmp);
+    free(old); free(tmp); free(p);
 }
 /* a `check` line by the current checker */
 static bool store_checked(const char *key) {

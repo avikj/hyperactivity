@@ -475,8 +475,7 @@ paper-matches-implementation = node "Every implementation detail the paper state
 -- definitions and results identified by content, the foundation of collaboration with no canonical
 -- state (HYPERACTIVE.md §2.3 “State, change and collaboration”). A reference is keyed by its index in the run
 -- (src/net.c), so no result is kept or shared beyond a run (src/lang.c); the checker's identity is
--- a hash of file texts (src/store.c); the store writes in place, so a killed machine leaves a
--- truncated entry (src/store.c); the standard commands never use the store (Makefile). Elaborations
+-- a hash of file texts (src/store.c); the standard commands never use the store (Makefile). Elaborations
 -- are already remembered (a warm library check, 4.6 s). It also makes every check fast, which
 -- speeds all other work.
 -- Known (2026-11-12, at src/lang.c): needs-work (goal product-implementation). Every evaluator
@@ -536,7 +535,9 @@ paper-matches-implementation = node "Every implementation detail the paper state
 -- machines on one store can read each other's half-written entries; the store is a cache whose
 -- entries decide what is not checked again, so a truncated entry could change a result. Fix: write
 -- to a temporary file in the same directory and rename it over the entry (atomic on POSIX). Until
--- then tools/task- graph.py gives each parallel reader its own store.
+-- then tools/task- graph.py gives each parallel reader its own store. Fixed 2026-11-14: store_write
+-- writes the whole entry (an append the old text and the new) to a temporary file beside it and
+-- renames it over the entry.
 -- Known (2026-11-12, at Makefile): every target sets CUBICAL_NOCACHE=1, so the standard commands
 -- never use the store and recheck everything from nothing (64 s for the library). With the store
 -- warm, elaboration and compilation still run for every definition (29 s), so incremental checking

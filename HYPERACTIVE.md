@@ -684,8 +684,6 @@ concerns (`task-graph/hyperactivity.cub`, shown when a goal is clicked in the gr
   key schemes, and the end state is one.
 - The checker's identity is a hash of the texts of the files loaded before it, comments included,
   not of its definitions' keys.
-- `store_write` writes an entry in place, so a killed machine leaves a truncated entry that later
-  runs read as whole. The fix is to write a temporary file and rename it over the entry.
 - Every Makefile target sets `CUBICAL_NOCACHE=1`, so the standard checks never use the store.
 
 **The checker and deriving.**
@@ -694,9 +692,10 @@ concerns (`task-graph/hyperactivity.cub`, shown when a goal is clicked in the gr
   24 failures, and they are also why the Rust readers fail.
 
 **Typed codes and normalization by evaluation** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”). The normalizer over cubes
-is `lib/nbe.cub` (about 9,900 lines; with `experiments/nbe/examples.cub`, 1,463 checks passing fresh): the interval's
-normal forms and their soundness, the fundamental lemma over typed derivations, and normalization run on example
-derivations. It continues with object-level data types (Nat first), then the Kan operations, Glue and universes. Its encoding is the cubical-set model built inside the host, and it stands (§2.2 “The language”).
+is `lib/nbe.cub` (with `experiments/nbe/examples.cub`, 1,613 checks passing): the interval's normal forms and their
+soundness, the fundamental lemma over typed derivations, normalization run on example derivations, Nat with its
+recursor, and transport along lines of types at every path-free shape (Bool, Nat, Σ, Π). Composition with a system
+on the context's faces (and with it transport at PathP, Glue and universes) is not yet there. Its encoding is the cubical-set model built inside the host, and it stands (§2.2 “The language”).
 
 **Native code** (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9 “Native execution as a mathematical program transformation”).
 - `#jit` checks only the specialized code against the definition. The translation to bytes is
