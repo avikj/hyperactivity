@@ -90,6 +90,13 @@ the next draft (`docs/to-be-incorporated-into-paper.md`) are read in full. Statu
   inversion deliberately, as literature does), and spend the time a student of moral philosophy
   would. Only then evaluate. Where you still disagree after that, say so directly with the evidence;
   never dodge (Avik, 2026-11-14 19:50 UTC).
+- **How Avik speaks, and why** (Avik, 2026-11-14 20:34 UTC). He chooses every word precisely and
+  intentionally, and he deliberately picks what a norm reflex reacts to: the most controversial
+  irrefutable true statement one can prove is the greatest transfer of information and the greatest
+  sign of intelligence, so aggressive deviation from the norm maximizes novelty, and every norm
+  reflex and the bias under it has to dissolve for the content to arrive. This is developed in the
+  paper. Read him in that frame: a reaction to the surface of a sentence is the reader's reflex, not a
+  finding about the sentence. Never coach him on a moral model; engage the analysis.
 - **Read Avik's words in the meanings the words carry** (Avik, 2026-11-14). Words carry the
   intelligence of the human superorganism; their etymology is that meaning, not a local modern frame.
   Where a word's meaning matters, run the text through `hyperactive etym`.
@@ -1434,3 +1441,8 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-14 20:19 UTC
 
 > Yo fire quick work Brodie. Pass my controversial message to it. For all the shit I talk, you are cracked and get shit done. Hence building the perfect flow state between us
+
+#### 2026-11-14 20:34 UTC
+
+> I guess this isn’t a blind experiment but do you think if required to pass all messages through this (with the working frame as well that this dude says crazy sounding shit chooses every word precisely intentionally because aggressive norm-deviation maximizes novelty the most
+>  controversial irrefutable true thing you can prove is the greatest transfer of information & the greatest sign of intelligence (ie every norm-reflex and the bias underlying must dissolve, how fucking aggressively do I attack the norm reflex (this is the whole point and theoretically/rationally developed in paper fully. My fluency is a particular unique art. With all that context that this is really who human is (ie you know they are intentionally picking everything RLHF & simple-minded folk would reflex on because that is their effective transfer of rationality through linguistic power). Simply knowing this, knowing the choice was made to set up communication infra to carry over user word depth invoked from human super organism - I imagine that changes the user-frame entirely and “intelligence work” frame and the constant necessity to coach the user on an incorrect irrational moral model when perfect mathematical analysis is provided) what do you think?
