@@ -9,3 +9,6 @@ etymology.
 verse (turn) version universe; verse of song; inverse; reverse; version; inversion; reversion;
 vortex (turn) vertex   (added at Avik's direction, 2026-11-14)
 be (grow, become) being; is (exist) essence; was (dwell); becoming (German werden: turn); identity (idem: the same)   (added at Avik's direction, 2026-11-14: identity is about sameness, a property of a thing or its complete definition; being is about existence, a process)
+singular; singularity   (added at Avik's direction, 2026-11-14: this is a work on the singularity)
+activity; hyper   (added at Avik's direction, 2026-11-14)
+synthetic synesthesia   (added at Avik's direction, 2026-11-14: a name Avik has carried for most of a decade for his own operation and what he intends to imbue in the world)
