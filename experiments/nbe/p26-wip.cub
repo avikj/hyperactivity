@@ -96,9 +96,11 @@
 -- meet-sorted, ins-head, meet-nil, conj-has-head, conj-has-weak, conj-sub-weak, conj-sub-refl,
 -- conj-eq-sound, eq-sub; every-c, inc, dnf-ok, ok-sorted, ok-lb, ok-inc, ok-tail, ok-cons, every-insert,
 -- every-drop, every-and, every-and-l, every-and-r, drop-nsup, anysub-nsub, lb-trans-c, inc-sym, inc-neq,
--- insert-ok, drop-ok, add-ok.
--- What is next: (F2d'), (F2e) and the rest of lib/nbe.cub's head's list, then the swap of this file
--- into lib/nbe.cub.
+-- insert-ok, drop-ok, add-ok; join-ok, meet-c-ok, meet-ok, neg-conj-ok, neg-ok, norm-ok, nsub-anysub,
+-- nsup-drop, lb-insert-head, add-head, norm-id, dnf-eq-refl, dnf-eq-sound, ok-canon, canon-ok,
+-- canon-norm, canon-join, canon-meet, canon-neg, const-tail, const-head, const-cases: (F2d') entire.
+-- What is next: (F2e) and the rest of lib/nbe.cub's head's list, then the swap of this file into
+-- lib/nbe.cub.
 import "../../lib/linproof.cub"
 
 -- lib/nbe.cub — typed codes Code(Γ, A) = Σ c. Der(Γ, c, A) over the one representation of terms
@@ -7829,6 +7831,88 @@ add-ok c f s h =
           (every-drop (λ g → not (conj-sub g c)) c f (anysub-nsub c f e)))
        (drop-ok c f h))
     (λ i → dnf-any-sub c f)
+-- every operation of the normalizer keeps the invariant
+join-ok : (g h : DNF) → dnf-ok g ≡ true → dnf-ok h ≡ true → dnf-ok (dnf-join g h) ≡ true
+join-ok lnil h og oh = oh
+join-ok (lcons c cs) h og oh = add-ok c (dnf-join cs h) (ok-sorted c cs og) (join-ok cs h (ok-tail c cs og) oh)
+meet-c-ok : (c : Conj) (g : DNF) → dnf-ok g ≡ true → dnf-ok (dnf-meet-c c g) ≡ true
+meet-c-ok c lnil og = λ i → true
+meet-c-ok c (lcons d ds) og = add-ok (conj-meet c d) (dnf-meet-c c ds) (meet-sorted c d (ok-sorted d ds og)) (meet-c-ok c ds (ok-tail d ds og))
+meet-ok : (g h : DNF) → dnf-ok g ≡ true → dnf-ok h ≡ true → dnf-ok (dnf-meet g h) ≡ true
+meet-ok lnil h og oh = λ i → true
+meet-ok (lcons c cs) h og oh = join-ok (dnf-meet-c c h) (dnf-meet cs h) (meet-c-ok c h oh) (meet-ok cs h (ok-tail c cs og) oh)
+neg-conj-ok : (c : Conj) → dnf-ok (neg-conj c) ≡ true
+neg-conj-ok lnil = λ i → true
+neg-conj-ok (lcons l ls) = add-ok (lcons (fst l , not (snd l)) lnil) (neg-conj ls) (λ i → true) (neg-conj-ok ls)
+neg-ok : (g : DNF) → dnf-ok (dnf-neg g) ≡ true
+neg-ok lnil = λ i → true
+neg-ok (lcons c cs) = meet-ok (neg-conj c) (dnf-neg cs) (neg-conj-ok c) (neg-ok cs)
+norm-ok : (f : DNF) → dnf-ok (dnf-norm f) ≡ true
+norm-ok lnil = λ i → true
+norm-ok (lcons c cs) = add-ok (conj-meet c lnil) (dnf-norm cs) (meet-sorted c lnil (λ i → true)) (norm-ok cs)
+-- on a form keeping the invariant, normalization changes nothing
+nsub-anysub : (c : Conj) (f : DNF) → every-c (λ e → not (conj-sub e c)) f ≡ true → dnf-any-sub c f ≡ false
+nsub-anysub c lnil h = λ i → false
+nsub-anysub c (lcons d ds) h =
+  pcat0 Bool (dnf-any-sub c (lcons d ds)) (dnf-any-sub c ds) false
+    (λ i → if not-true (conj-sub d c) (andB-l (not (conj-sub d c)) (every-c (λ e → not (conj-sub e c)) ds) h) i then true else dnf-any-sub c ds)
+    (nsub-anysub c ds (andB-r (not (conj-sub d c)) (every-c (λ e → not (conj-sub e c)) ds) h))
+nsup-drop : (c : Conj) (f : DNF) → every-c (λ e → not (conj-sub c e)) f ≡ true → dnf-drop-sup c f ≡ f
+nsup-drop c lnil h = λ i → lnil
+nsup-drop c (lcons d ds) h =
+  pcat0 DNF (dnf-drop-sup c (lcons d ds)) (lcons d (dnf-drop-sup c ds)) (lcons d ds)
+    (λ i → if not-true (conj-sub c d) (andB-l (not (conj-sub c d)) (every-c (λ e → not (conj-sub c e)) ds) h) i then dnf-drop-sup c ds else lcons d (dnf-drop-sup c ds))
+    (λ i → lcons d (nsup-drop c ds (andB-r (not (conj-sub c d)) (every-c (λ e → not (conj-sub c e)) ds) h) i))
+lb-insert-head : (c : Conj) (f : DNF) → every-c (conj-lt c) f ≡ true → dnf-insert c f ≡ lcons c f
+lb-insert-head c lnil h = λ i → lcons c lnil
+lb-insert-head c (lcons d ds) h =
+  λ i → if andB-l (conj-lt c d) (every-c (conj-lt c) ds) h i then lcons c (lcons d ds) else lcons d (dnf-insert c ds)
+add-head : (c : Conj) (cs : DNF) → dnf-ok (lcons c cs) ≡ true → dnf-add c cs ≡ lcons c cs
+add-head c cs h =
+  pcat0 DNF (dnf-add c cs) (dnf-insert c (dnf-drop-sup c cs)) (lcons c cs)
+    (λ i → if nsub-anysub c cs (every-and-r (λ e → not (conj-sub c e)) (λ e → not (conj-sub e c)) cs (ok-inc c cs h)) i then cs else dnf-insert c (dnf-drop-sup c cs))
+    (pcat0 DNF (dnf-insert c (dnf-drop-sup c cs)) (dnf-insert c cs) (lcons c cs)
+       (λ i → dnf-insert c (nsup-drop c cs (every-and-l (λ e → not (conj-sub c e)) (λ e → not (conj-sub e c)) cs (ok-inc c cs h)) i))
+       (lb-insert-head c cs (ok-lb c cs h)))
+norm-id : (f : DNF) → dnf-ok f ≡ true → dnf-norm f ≡ f
+norm-id lnil h = λ i → lnil
+norm-id (lcons c cs) h =
+  pcat0 DNF (dnf-norm (lcons c cs)) (dnf-add c cs) (lcons c cs)
+    (λ i → dnf-add (meet-nil c (ok-sorted c cs h) i) (norm-id cs (ok-tail c cs h) i))
+    (add-head c cs h)
+-- form equality: reflexive and sound
+dnf-eq-refl : (f : DNF) → dnf-eq f f ≡ true
+dnf-eq-refl lnil = λ i → true
+dnf-eq-refl (lcons c cs) = andB-intro (conj-eq c c) (dnf-eq cs cs) (conj-eq-refl c) (dnf-eq-refl cs)
+dnf-eq-sound : (f g : DNF) → dnf-eq f g ≡ true → f ≡ g
+dnf-eq-sound lnil lnil e = λ i → lnil
+dnf-eq-sound lnil (lcons d ds) e = false-true (Path DNF lnil (lcons d ds)) e
+dnf-eq-sound (lcons c cs) lnil e = false-true (Path DNF (lcons c cs) lnil) e
+dnf-eq-sound (lcons c cs) (lcons d ds) e =
+  λ i → lcons (conj-eq-sound c d (andB-l (conj-eq c d) (dnf-eq cs ds) e) i) (dnf-eq-sound cs ds (andB-r (conj-eq c d) (dnf-eq cs ds) e) i)
+-- canonical is exactly the invariant
+ok-canon : (f : DNF) → dnf-ok f ≡ true → dnf-canon f ≡ true
+ok-canon f h = pcat0 Bool (dnf-eq (dnf-norm f) f) (dnf-eq f f) true (λ i → dnf-eq (norm-id f h i) f) (dnf-eq-refl f)
+canon-ok : (f : DNF) → dnf-canon f ≡ true → dnf-ok f ≡ true
+canon-ok f h = pcat0 Bool (dnf-ok f) (dnf-ok (dnf-norm f)) true (λ i → dnf-ok (dnf-eq-sound (dnf-norm f) f h (~ i))) (norm-ok f)
+-- (F2d') the normalizer's outputs are canonical, and a canonical constant form is 0 or 1
+canon-norm : (f : DNF) → isTrue (dnf-canon (dnf-norm f))
+canon-norm f = eq→isTrue (ok-canon (dnf-norm f) (norm-ok f))
+canon-join : (g h : DNF) → isTrue (dnf-canon g) → isTrue (dnf-canon h) → isTrue (dnf-canon (dnf-join g h))
+canon-join g h cg ch = eq→isTrue (ok-canon (dnf-join g h) (join-ok g h (canon-ok g (isTrue→eq cg)) (canon-ok h (isTrue→eq ch))))
+canon-meet : (g h : DNF) → isTrue (dnf-canon g) → isTrue (dnf-canon h) → isTrue (dnf-canon (dnf-meet g h))
+canon-meet g h cg ch = eq→isTrue (ok-canon (dnf-meet g h) (meet-ok g h (canon-ok g (isTrue→eq cg)) (canon-ok h (isTrue→eq ch))))
+canon-neg : (g : DNF) → isTrue (dnf-canon (dnf-neg g))
+canon-neg g = eq→isTrue (ok-canon (dnf-neg g) (neg-ok g))
+const-tail : (P : Type) (ds : DNF) → dnf-ok (lcons lnil ds) ≡ true → (lcons lnil ds ≡ dnf-one → P) → P
+const-tail P lnil h k1 = k1 (λ i → lcons lnil lnil)
+const-tail P (lcons e es) h k1 = false-true P (ok-inc lnil (lcons e es) h)
+const-head : (P : Type) (d : Conj) (ds : DNF) → isTrue (dnf-canon (lcons d ds)) → dnf-nonconst (lcons d ds) ≡ false → (lcons d ds ≡ dnf-one → P) → P
+const-head P lnil ds c n k1 = const-tail P ds (canon-ok (lcons lnil ds) (isTrue→eq {dnf-canon (lcons lnil ds)} c)) k1
+const-head P (lcons l ls) ds c n k1 = false-true P (λ i → n (~ i))
+const-cases : (P : Type) (f : DNF) → isTrue (dnf-canon f) → dnf-nonconst f ≡ false → (f ≡ lnil → P) → (f ≡ dnf-one → P) → P
+const-cases P lnil c n k0 k1 = k0 (λ i → lnil)
+const-cases P (lcons d ds) c n k0 k1 = const-head P d ds c n k1
 
 -- ---------------------------------------------------------------- (6) reify and reflect
 -- (2026-11-12, (6)) reify-ty (a computable type to a normal type derivation), reify (a computable term
