@@ -215,7 +215,7 @@ static bool x_untyped_file;       /* converting a file that was loaded before th
  * rules (lib/core/primitives.cub), the machine's word operations (lib/bootstrap/prim.cub, misplaced in
  * the core); only they may hold primitive, foreign or postulate.
  * Everything else is checked at a stated type or is refused. */
-static const char *const BOOT_RAW[] = { "core/prelude", "core/code", "bootstrap/lin", "core/check", NULL };
+static const char *const BOOT_RAW[] = { "core/prelude", "core/code", "core/check", NULL };
 static const char *const BOOT_TRUSTED[] = { "bootstrap/prim", "core/primitives", NULL };
 static bool boot_in(const char *const *names) {
     if (!x_file) return false;
@@ -3956,7 +3956,7 @@ static Node *el_alts(Node *t, int from) {
 }
 /* ---- by-lin (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F32; §12 “The build list”, “F. Programs about programs”, item 32): the elaborator calling the certificate search on a hole. The goal
  * `Lew a b` and the hypotheses `h : Lew l r` in scope are read as linear codes over their atoms
- * (plusw, %wsucc, word literals; any other subterm an atom), lib/bootstrap/lin.cub's omega-cert finds the
+ * (plusw, %wsucc, word literals; any other subterm an atom), lib/library/lin.cub's omega-cert finds the
  * multipliers at elaboration time (untrusted), and the hole becomes lib/library/linproof.cub's
  * cert-sound at the environment of the atoms — the verified checker's run, `cert-check … ≡ true`,
  * is refl, decided by the checker's own normalization. */
@@ -3979,7 +3979,7 @@ static Node *lin_code(Node *t, bool typed) {
 }
 /* the word core: goal ga ≤ gb from hypotheses hl ≤ hr with proofs hp */
 static Node *lin_core(Node *ex, Node *at, Node *ga, Node *gb, Node **hl, Node **hr, Node **hp, int nh) {
-    if (global_lookup("cert-sound") < 0 || global_lookup("omega-cert") < 0) die("by-lin needs lib/bootstrap/lin.cub and lib/library/linproof.cub loaded, in", tfname);
+    if (global_lookup("cert-sound") < 0 || global_lookup("omega-cert") < 0) die("by-lin needs lib/library/lin.cub and lib/library/linproof.cub loaded, in", tfname);
     nlatom = 0;
     Node *hs = nsym("lnil");
     for (int z = nh - 1; z >= 0; z--) hs = lst(2, lst(2, nsym("lcons"), sym3("pair", lin_code(hl[z], false), lin_code(hr[z], false))), hs);

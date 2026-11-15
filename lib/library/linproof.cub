@@ -1,10 +1,10 @@
 -- Layer: library: shared mathematics over the core (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
 -- lib/library/linproof.cub — the linear-arithmetic certificate checker, verified (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F32).
--- Loaded after lib/library/std.cub. The checker of lib/bootstrap/lin.cub works over codes; here the same algorithm
+-- Loaded after lib/library/std.cub. The checker of lib/library/lin.cub works over codes; here the same algorithm
 -- is defined over a typed fragment and its soundness is a theorem: equal normal forms denote
 -- equal words (same-norm-eq), the order check is sound (code-le-sound), and a Farkas certificate
 -- that checks proves its goal wherever the hypotheses hold (cert-sound). The subtraction used by
--- the order check is unverified and need not be: the check is an equality test on its result. The elaborator's bridge from a code to the typed fragment is lib/bootstrap/lin.cub's
+-- the order check is unverified and need not be: the check is an equality test on its result. The elaborator's bridge from a code to the typed fragment is lib/library/lin.cub's
 -- linearize, the same function over codes. Words: plusw is addition by recursion (lib/library/std.cub),
 -- equal to the machine's wadd (plusw≡wadd).
 -- Each step of an induction is its own lemma with a signature: the elaborator determines the
@@ -323,7 +323,7 @@ code-le-sound : (e : Env) (a b : LinCode) → code-le a b ≡ true → Lew (wev 
 code-le-sound e a b p = le-transport (wev e a) (wev e b) (lsem e (lnorm a)) (lsem e (lnorm b)) (lnorm-sound e a) (lnorm-sound e b) (llin-le-sound e (lnorm a) (lnorm b) p)
 -- ---------------------------------------------------------------- certificates
 -- hypotheses l_i ≤ r_i with multipliers c_i: the goal a ≤ b is certified by the check
---   a + Σ c_i r_i ≤ b + Σ c_i l_i on normal forms (lib/bootstrap/lin.cub's cert-check). A multiple c·l is
+--   a + Σ c_i r_i ≤ b + Σ c_i l_i on normal forms (lib/library/lin.cub's cert-check). A multiple c·l is
 -- the code l added c times, so no multiplication enters the proof
 data Hyps = hnil | hcons (l : LinCode) (r : LinCode) (rest : Hyps)
 data Mults = munil | mucons (c : Word) (rest : Mults)

@@ -419,7 +419,9 @@ is-w l = case lvl-of l of lvw → true; _ → false
 -- two λs of one record are equal when their environments are: neither is applied
 env-pairs ps = lall (λ p → uconv (fst p) (snd p)) ps
 conv-ty X Y = uconv X Y
-conv T u v =
+-- one computation on both sides (one key) is equal without evaluating it (%samekey)
+conv T u v = if %samekey true u v then true else conv-v T u v
+conv-v T u v =
   case %view T of
     wpi A B → 
       case %clos u v of
@@ -590,7 +592,8 @@ uconv-ww u wu v wv =
     wplam q → let i = %dim in uconv (u @ i) (q @ i)
     wpair a b → if uconv (fst u) a then uconv (snd u) b else false
     _ → uconv-head u wu v wv
-uconv u v =
+uconv u v = if %samekey true u v then true else uconv-v u v
+uconv-v u v =
   case %view u of
     wsys bs → lall (λ b → let d = fst b in uconv (snd b) (%restrict d v)) bs
     wlam f → 

@@ -1,0 +1,246 @@
+-- Layer: library: shared mathematics over the core (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/library/lin.cub — linear arithmetic over codes: normal forms, equality, certificate checking and
+-- the searches for certificates, with types (2026-11-15: lib/bootstrap/lin.cub written as checked
+-- definitions, so it leaves the core's load order; PLAN.md revision 7.9, 6 Nov 2026, git
+-- 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F32).
+-- The fragment: words built from literals (cwlit), variables (cvar), addition (cwop #2) and
+-- successor (cwsucc). A linear form is a constant and a list of (variable, coefficient) sorted by
+-- variable, coefficients nonzero. Two codes of the fragment denote equal words exactly when their
+-- forms are equal. For order over naturals: a ≤ b holds whenever b's form dominates a's pointwise,
+-- since every variable is ≥ 0; a Farkas certificate for a goal under hypotheses h_i : l_i ≤ r_i is
+-- a list of nonnegative multipliers c_i, and the goal a ≤ b follows when a + Σ c_i r_i ≤ b + Σ c_i l_i
+-- pointwise. The check verifies that; the searches are unverified (what they return is checked by
+-- check-cert before use). The proved procedure over typed syntax is lib/library/linproof.cub.
+-- Recursion on a word is %welimP.
+-- ---------------------------------------------------------------- forms
+lb-and : Bool → Bool → Bool
+lb-and a b = if a then b else false
+lb-not : Bool → Bool
+lb-not a = if a then false else true
+lopt-map : {A B : Type} → (A → B) → Opt A → Opt B
+lopt-map f none = none
+lopt-map f (some x) = some (f x)
+Coef : Type
+Coef = Lst (Word × Word)
+data Lin = lin (k : Word) (cs : Coef)
+-- merging two sorted coefficient lists: p inserted into the second list ahead of the rest of the
+-- first (k: the merge with that rest), so each recursion is on one list
+merge-into : (Word × Word) → (Coef → Coef) → Coef → Coef
+merge-into p k lnil = lcons p (k lnil)
+merge-into p k (lcons q dr) =
+  if %wlt (fst p) (fst q) then lcons p (k (lcons q dr))
+  else if %wlt (fst q) (fst p) then lcons q (merge-into p k dr)
+  else lcons (fst p , %wadd (snd p) (snd q)) (k dr)
+coef-add : Coef → Coef → Coef
+coef-add lnil ds = ds
+coef-add (lcons p cr) ds = merge-into p (coef-add cr) ds
+scale-go : Word → Coef → Coef
+scale-go c lnil = lnil
+scale-go c (lcons p r) = lcons (fst p , %wmul c (snd p)) (scale-go c r)
+coef-scale : Word → Coef → Coef
+coef-scale c cs = if %weq c #0 then lnil else scale-go c cs
+lin-add : Lin → Lin → Lin
+lin-add (lin k cs) (lin m ds) = lin (%wadd k m) (coef-add cs ds)
+lin-scale : Word → Lin → Lin
+lin-scale c (lin k cs) = lin (%wmul c k) (coef-scale c cs)
+lin-const : Word → Lin
+lin-const k = lin k lnil
+lin-var : Word → Lin
+lin-var v = lin #0 (lcons (v , #1) lnil)
+lopt-bind : {A B : Type} → Opt A → (A → Opt B) → Opt B
+lopt-bind none f = none
+lopt-bind (some x) f = f x
+-- the form of a code of the fragment; none outside it
+linearize : Code → Opt Lin
+linearize (cwlit n) = some (lin-const n)
+linearize (cvar v) = some (lin-var v)
+linearize (cwsucc a) = lopt-map (lin-add (lin-const #1)) (linearize a)
+linearize (cwop o a b) = if %weq o #2 then lopt-bind (linearize a) (λ la → lopt-map (lin-add la) (linearize b)) else none
+linearize (cann t T) = linearize t
+linearize c = none
+-- ---------------------------------------------------------------- equality and order
+coef-same : Coef → Coef → Bool
+coef-same lnil lnil = true
+coef-same lnil (lcons q s) = false
+coef-same (lcons p r) lnil = false
+coef-same (lcons p r) (lcons q s) = lb-and (%weq (fst p) (fst q)) (lb-and (%weq (snd p) (snd q)) (coef-same r s))
+lin-same : Lin → Lin → Bool
+lin-same (lin k cs) (lin m ds) = lb-and (%weq k m) (coef-same cs ds)
+-- a ≤ b pointwise: every coefficient of a is ≤ b's (a variable absent from b has coefficient 0)
+le-into : (Word × Word) → (Coef → Bool) → Coef → Bool
+le-into p k lnil = false
+le-into p k (lcons q s) =
+  if %wlt (fst p) (fst q) then false
+  else if %wlt (fst q) (fst p) then le-into p k s
+  else lb-and (lb-not (%wlt (snd q) (snd p))) (k s)
+coef-le : Coef → Coef → Bool
+coef-le lnil ds = true
+coef-le (lcons p r) ds = le-into p (coef-le r) ds
+lin-le : Lin → Lin → Bool
+lin-le (lin k cs) (lin m ds) = lb-and (lb-not (%wlt m k)) (coef-le cs ds)
+-- decide a = b and a ≤ b on codes of the fragment, with no hypotheses
+dec-eq : Code → Code → Bool
+dec-eq a b = case linearize a of some la → (case linearize b of some lb → lin-same la lb; none → false); none → false
+dec-le : Code → Code → Bool
+dec-le a b = case linearize a of some la → (case linearize b of some lb → lin-le la lb; none → false); none → false
+-- ---------------------------------------------------------------- certificates
+-- hypotheses: (l , r) codes meaning l ≤ r; a certificate: a multiplier per hypothesis, in order
+LinHyps : Type
+LinHyps = Lst (Code × Code)
+sum-scaled : LinHyps → Lst Word → (Code × Code → Code) → Opt Lin
+sum-scaled lnil cert pick = some (lin-const #0)
+sum-scaled (lcons h hr) lnil pick = none
+sum-scaled (lcons h hr) (lcons c cr) pick =
+  lopt-bind (linearize (pick h)) (λ lh → lopt-bind (sum-scaled hr cr pick) (λ rest → some (lin-add (lin-scale c lh) rest)))
+check-cert : LinHyps → Lst Word → Code → Code → Bool
+check-cert hs cert a b =
+  case linearize a of
+    none → false
+    some la →
+      (case linearize b of
+         none → false
+         some lb →
+           (case sum-scaled hs cert (λ h → snd h) of
+              none → false
+              some sr →
+                (case sum-scaled hs cert (λ h → fst h) of
+                   none → false
+                   some sl → lin-le (lin-add la sr) (lin-add lb sl))))
+-- ---------------------------------------------------------------- search (unverified)
+lst-len : {A : Type} → Lst A → Word
+lst-len lnil = #0
+lst-len (lcons x xs) = %wsucc (lst-len xs)
+rev-onto : {A : Type} → Lst A → Lst A → Lst A
+rev-onto lnil acc = acc
+rev-onto (lcons x xs) acc = rev-onto xs (lcons x acc)
+lst-rev : {A : Type} → Lst A → Lst A
+lst-rev l = rev-onto l lnil
+-- multiplier lists of length n over 0..m, left to right, each complete one checked: the search at
+-- length n given the search at n − 1 (search-at), trying the multipliers m, m − 1, …, 0 in
+-- increasing order (try-down, by recursion on the count left)
+orelse-w : Opt (Lst Word) → Opt (Lst Word) → Opt (Lst Word)
+orelse-w (some x) o = some x
+orelse-w none o = o
+try-down : Word → (Lst Word → Opt (Lst Word)) → Lst Word → Word → Opt (Lst Word)
+try-down m h acc left =
+  %welimP (λ _ → Opt (Lst Word)) left none (λ j r → orelse-w (h (lcons (%wsub m j) acc)) r)
+search-cert : Word → Word → LinHyps → Code → Code → Lst Word → Opt (Lst Word)
+search-cert m n hs a b =
+  %welimP (λ _ → Lst Word → Opt (Lst Word)) n
+    (λ acc → if check-cert hs (lst-rev acc) a b then some (lst-rev acc) else none)
+    (λ j h acc → try-down m h acc (%wsucc m))
+find-cert : Word → LinHyps → Code → Code → Opt (Lst Word)
+find-cert m hs a b = search-cert m (lst-len hs) hs a b lnil
+-- ---------------------------------------------------------------- search, directed (unverified)
+-- Fourier–Motzkin elimination with the multipliers tracked (the omega test's core, over the
+-- nonnegative combinations): the goal a ≤ b is refuted by adding b + 1 ≤ a to the hypotheses and
+-- eliminating the variables one at a time; each constraint carries the multipliers of the
+-- hypotheses it combines (the last the negated goal's); a constraint with no variables and a left
+-- constant above its right is the contradiction, and its multipliers, divided by the goal's, are the
+-- certificate, which check-cert then checks
+-- the greatest common divisor, Euclid's steps bounded by the second argument (each step lowers it)
+wgcd-go : Word → Word → Word → Word
+wgcd-go fuel a b = %welimP (λ _ → Word → Word → Word) fuel (λ x y → x) (λ j h x y → if %weq y #0 then x else h y (%wmod x y)) a b
+wgcd : Word → Word → Word
+wgcd a b = wgcd-go (%wsucc b) a b
+coef-of : Word → Coef → Word
+coef-of v lnil = #0
+coef-of v (lcons p r) = if %weq (fst p) v then snd p else coef-of v r
+lin-coef : Word → Lin → Word
+lin-coef v (lin k cs) = coef-of v cs
+lin-k : Lin → Word
+lin-k (lin k cs) = k
+coef-vars : Coef → Lst Word
+coef-vars lnil = lnil
+coef-vars (lcons p r) = lcons (fst p) (coef-vars r)
+lin-vars : Lin → Lst Word
+lin-vars (lin k cs) = coef-vars cs
+mem-w-lst : Word → Lst Word → Bool
+mem-w-lst x lnil = false
+mem-w-lst x (lcons y r) = if %weq x y then true else mem-w-lst x r
+-- the variables of a list of constraints, without repeats
+vars-add : Lst Word → Lst Word → Lst Word
+vars-add lnil acc = acc
+vars-add (lcons x r) acc = vars-add r (if mem-w-lst x acc then acc else lcons x acc)
+-- a constraint: (multipliers , (l , r)) meaning l ≤ r
+Con : Type
+Con = Lst Word × (Lin × Lin)
+all-vars : Lst Con → Lst Word
+all-vars lnil = lnil
+all-vars (lcons c r) = vars-add (lin-vars (fst (snd c))) (vars-add (lin-vars (snd (snd c))) (all-vars r))
+lst-scale : Word → Lst Word → Lst Word
+lst-scale c lnil = lnil
+lst-scale c (lcons x r) = lcons (%wmul c x) (lst-scale c r)
+lst-add : Lst Word → Lst Word → Lst Word
+lst-add lnil b = b
+lst-add (lcons x r) lnil = lcons x r
+lst-add (lcons x r) (lcons y s) = lcons (%wadd x y) (lst-add r s)
+con-comb : Con → Word → Con → Word → Con
+con-comb c1 k1 c2 k2 =
+  (lst-add (lst-scale k1 (fst c1)) (lst-scale k2 (fst c2)) ,
+   (lin-add (lin-scale k1 (fst (snd c1))) (lin-scale k2 (fst (snd c2))) ,
+    lin-add (lin-scale k1 (snd (snd c1))) (lin-scale k2 (snd (snd c2)))))
+lin-app : {A : Type} → Lst A → Lst A → Lst A
+lin-app lnil b = b
+lin-app (lcons x r) b = lcons x (lin-app r b)
+coef-drop : Word → Coef → Coef
+coef-drop v lnil = lnil
+coef-drop v (lcons p r) = if %weq (fst p) v then r else lcons p (coef-drop v r)
+lin-drop : Word → Lin → Lin
+lin-drop v (lin k cs) = lin k (coef-drop v cs)
+con-drop : Word → Con → Con
+con-drop v c = (fst c , (lin-drop v (fst (snd c)) , lin-drop v (snd (snd c))))
+cross-one : (Word × Con) → Lst (Word × Con) → Lst Con
+cross-one l lnil = lnil
+cross-one l (lcons r s) = lcons (con-comb (snd l) (%wdiv (fst r) (wgcd (fst l) (fst r))) (snd r) (%wdiv (fst l) (wgcd (fst l) (fst r)))) (cross-one l s)
+cross : Lst (Word × Con) → Lst (Word × Con) → Lst Con
+cross lnil rs = lnil
+cross (lcons l r) rs = lin-app (cross-one l rs) (cross r rs)
+drop-all : Word → Lst (Word × Con) → Lst Con
+drop-all v lnil = lnil
+drop-all v (lcons l r) = lcons (con-drop v (snd l)) (drop-all v r)
+-- eliminating v: the constraints where v's coefficients agree stay; an L (more v on the left) and an
+-- R (more on the right) combine so that v cancels; and since v ≥ 0, an L also stays with v dropped
+fm-go : Word → Lst Con → Lst Con → Lst (Word × Con) → Lst (Word × Con) → Lst Con
+fm-go v lnil keep ls rs = lin-app keep (lin-app (cross ls rs) (drop-all v ls))
+fm-go v (lcons c r) keep ls rs =
+  if %weq (lin-coef v (fst (snd c))) (lin-coef v (snd (snd c))) then fm-go v r (lcons c keep) ls rs
+  else if %wlt (lin-coef v (snd (snd c))) (lin-coef v (fst (snd c))) then fm-go v r keep (lcons (%wsub (lin-coef v (fst (snd c))) (lin-coef v (snd (snd c))) , c) ls) rs
+  else fm-go v r keep ls (lcons (%wsub (lin-coef v (snd (snd c))) (lin-coef v (fst (snd c))) , c) rs)
+fm-elim : Word → Lst Con → Lst Con
+fm-elim v cs = fm-go v cs lnil lnil lnil
+fm-all : Lst Word → Lst Con → Lst Con
+fm-all lnil cs = cs
+fm-all (lcons v r) cs = if %wlt #64 (lst-len cs) then cs else fm-all r (fm-elim v cs)
+-- the contradiction: a constraint whose variables cancel and whose left constant exceeds the right
+contra : Lst Con → Opt (Lst Word)
+contra lnil = none
+contra (lcons c r) = if %wlt (lin-k (snd (snd c))) (lin-k (fst (snd c))) then some (fst c) else contra r
+-- multipliers divided by the goal's (the last), when it divides them all
+divide-by : Word → Lst Word → Opt (Lst Word)
+divide-by g lnil = some lnil
+divide-by g (lcons x r) = if %weq (%wmod x g) #0 then lopt-map (lcons (%wdiv x g)) (divide-by g r) else none
+sl-go : Word → Lst Word → Lst Word × Word
+sl-go x lnil = (lnil , x)
+sl-go x (lcons y r) = (lcons x (fst (sl-go y r)) , snd (sl-go y r))
+split-last : Lst Word → Lst Word × Word
+split-last lnil = (lnil , #0)
+split-last (lcons x r) = sl-go x r
+-- the unit vector e_i of length n
+unit-vec : Word → Word → Lst Word
+unit-vec i n = %welimP (λ _ → Word → Lst Word) n (λ j → lnil) (λ m h j → lcons (if %weq i j then #1 else #0) (h (%wsucc j))) #0
+hyp-cons : LinHyps → Word → Word → Opt (Lst Con)
+hyp-cons lnil i n = some lnil
+hyp-cons (lcons h r) i n =
+  lopt-bind (linearize (fst h)) (λ l → lopt-bind (linearize (snd h)) (λ rr →
+    lopt-map (lcons (unit-vec i n , (l , rr))) (hyp-cons r (%wsucc i) n)))
+omega-from : LinHyps → Code → Code → Lst Con → Opt (Lst Word)
+omega-from hs a b cs =
+  lopt-bind (contra (fm-all (all-vars cs) cs)) (λ ms →
+    if %weq (snd (split-last ms)) #0 then none
+    else lopt-bind (divide-by (snd (split-last ms)) (fst (split-last ms))) (λ cert →
+           if check-cert hs cert a b then some cert else none))
+omega-cert : LinHyps → Code → Code → Opt (Lst Word)
+omega-cert hs a b =
+  lopt-bind (linearize a) (λ la → lopt-bind (linearize b) (λ lb → lopt-bind (hyp-cons hs #0 (%wsucc (lst-len hs))) (λ cs0 →
+    omega-from hs a b (lcons (unit-vec (lst-len hs) (%wsucc (lst-len hs)) , (lin-add lb (lin-const #1) , la)) cs0))))

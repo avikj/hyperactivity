@@ -2243,6 +2243,15 @@ static Key *port_name0(Port p, int depth) {
     }
     return eff_key(c);
 }
+/* the key a port carries as it is, evaluated or not (a value's name; a pending computation's key) */
+static Key *any_key(Port p) {
+    Port q = peek(sload(&p));
+    if (!q) return NULL;
+    if (is_var(q)) { Key *k = PV(q)->key; return k ? key_retain(k) : NULL; }
+    Cell *c = PC(q);
+    if (PI(q) == 0 && !is_value(c->kind)) return c->key ? key_retain(c->key) : NULL;
+    return port_name(p, 0);
+}
 /* a stuck elimination named after the fact: its table, scrutinee and environment as they are now */
 static Key *ncase_name(Cell *v) {
     CaseTab *tb = v->p;
@@ -2420,6 +2429,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_MKDIM] = "MKDIM",
     [O_MKFRESH] = "MKFRESH",
     [O_FRESHT] = "FRESHT",
+    [O_SAMEKEY] = "SAMEKEY",
     [O_IEQ] = "IEQ",
     [O_IEQB] = "IEQB",
     [O_FEQL] = "FEQL",
@@ -3943,6 +3953,21 @@ static void interact(Cell *o, Cell *v) {
         Cell *n = cell(V_NPAPP, 3); n->p = dnf_retain(o->p);
         mv(o, 1, P(n, 1)); link(unk(), P(n, 2)); link(P(n, 0), o->port[2]);
         cell_free(o); cell_free(v);
+        return;
+    }
+    case O_SAMEKEY: {
+        /* u and v compared by key, neither evaluated: equal keys are one computation (the memo shares
+         * a computation by its key), so true is sound; false only means not known equal */
+        need_bool();
+        Key *k1 = any_key(o->port[1]), *k2 = k1 ? any_key(o->port[2]) : NULL;
+        bool same = k1 && k2 && k1 == k2;
+        if (k1) key_release(k1);
+        if (k2) key_release(k2);
+        era(o->port[1]); era(o->port[2]);
+        for (int k = 1; k < v->n; k++) era(v->port[k]);
+        cell_free(v);
+        link(con_build(same ? B_TRUE : B_FALSE, NULL, NULL), o->port[3]);
+        cell_free(o);
         return;
     }
     case O_CLOS: {

@@ -280,6 +280,8 @@ enum {
     O_MKFRESH,  /* 0=name (or the trigger) 1=type 2=out: a fresh variable of the type, a fresh dimension
                  * where the type is the interval (%varI [n] T) */
     O_FRESHT,   /* a=name+1 or 0; 0=the type 1=out */
+    O_SAMEKEY,  /* (%samekey t u v): 0=t (a trigger, read) 1=u 2=v 3=out: true when u and v carry one key
+                 * (one computation, as the memo shares it), read without evaluating either; else false */
     K_END
 };
 enum { B_MEET, B_JOIN, B_FAND, B_FOR };
