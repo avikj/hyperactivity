@@ -115,6 +115,11 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   computing (in 2035, say), which neither he nor anyone holds yet. Do not relabel what he said as
   proposed features. Open-ended thinking has no decisions in it (decision, de- + caedere, is cutting
   off): never frame an open edge as a choice for Avik to make; derive it.
+- **Programmers' words, and no new ontology** (Avik, 2026-11-15 08:29 UTC). Talking about the system
+  and its interface, say code, data, information, a hyperactive object (computational and
+  informational), not mathematicians' "term" or "definition". Introduce no new ontology for the
+  interface ("view" is not a primitive of the language). Do not reason about an abstract user by
+  posing guesses and eliminating them, and make no design proposals contrary to the work.
 - **Nothing is unrelated; carry everything forward** (Avik, 2026-11-14 22:04 UTC). Every message
   brings forward all that has been discussed (the linguistics and the etymology tool, the dense
   network of words, the Gaian and human superorganisms, judging acts and not persons, variant
@@ -1626,3 +1631,46 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-15 07:59 UTC
 
 > You shall continue work continuously until all above tasks are done. When I wake tomorrow morning you should be still working, or done. Not idle waiting for a user response when user is known to be away & asleep - enter continuous work mode like an api call rather than conversation which much return task failure or success after 24h and nothing prior
+
+#### 2026-11-15 08:29 UTC
+
+> Your use of mathematical terminology like “term” “definition” is a poor application of intelligence here
+>
+> by term, I suppose you mean a unit of code/data (ie code/data are well understood computational terms - “term” is not used by programmers or common language in programmatic thinking.  it is used by mathematicians talking about expressions. Is my call right? But your point is, what is displayed to the user is a presentation of information, data, code - all words meaning the same thing, a computational informational hyperactive object.
+>
+> lol your analysis is weak as fuck. Leave this one to the human geniuses. Trying to reason by posing guesses and elimination
+>
+> is “view” a primitive thing in our language? New ontology we need to introduce for UX (def not) .
+>
+> Reasoning about “home screen” in a theoretical/universal question on computing interfaces . Random design proposals that are contrary to the work….
+>
+> user organizes their system as they please. Complete user agency over their endpoint. Malleable local first software. consider what the univalent symbolic nervous system  over existing ontologies is first then dissolve the ontology.
+>
+> So let me just define this directly instead of thinking about the abstract user. I am hyperactive. My opinionated design is likely the design forced by frictionless software for myself.
+>
+> routines, relations, rationale
+>
+> scripts scenes .
+>
+>
+> the problem is too hard to even start thinking about because too open to start
+>
+> Constrain the interface. Hard to define the interface if you don’t know what it showing
+>
+> - “incoming” communication/information/action (since last use or by whatever definition is suitable)
+> - outgoing communication/information/action
+>
+> that is
+> - what changed here.
+>
+> Still not meaningful. I’m running hyperactive kernel. Let’s solve fucking HCI for developers of the language/terminal fiends first (swe/cs). This matches what we’re building first and the right pathway to go about it.
+>
+> developer workflows (these exhaust every interactions a developer has with hyperactivity code)
+>
+> write/read/execute - is this the right ontology? navigation . navigation. navigation (navigation through a space, the World Wide Web for example - or the universal field of visible activity
+> -
+> navigation of the field of universally accessible information
+>
+> Navigation of information space. Navigation of information space
+>
+> “Social media” isn’t a separate thing. Social networking is the entire thing. To the extent it’s networking & between two people. How a website delivered by Google search isn’t considered blog networking between the author and readers, or Wikipedia, khanacademy. these are all social (fundamentally interpersonal). That’s HUGE conceptually . I’ve always described this as max collaboration max opportunity to discover valuable connection with another person (loosely) - max collective agency. What does collaborate mean? Communicate with intention, essentially, is my understanding.

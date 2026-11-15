@@ -521,6 +521,21 @@ It computes the order of work by the rule in “The Hyperactive Workflow” (doc
 
 ## The interface
 
+**Navigation of information space** (Avik, 2026-11-15 08:29 UTC). The user organizes their system as
+they please: complete agency over their own endpoint, malleable local-first software. First consider
+what the univalent symbolic nervous system over existing ontologies is, then dissolve the ontology;
+no new ontology is introduced for the interface. The design is derived from Avik's own use (he is
+hyperactive; his opinionated design is likely the one frictionless software for himself forces),
+starting with HCI for developers of the language and terminal users, which matches what is built
+first. Developer workflows exhaust every interaction a developer has with hyperactivity code, and the
+candidate ontology is navigation: navigation of information space, the universal field of visible
+activity and universally accessible information (the World Wide Web is an example). "Social media"
+is not a separate thing: social networking is the entire thing, wherever there is networking between
+two people. A website found by search, Wikipedia, Khan Academy are all fundamentally interpersonal.
+The aim is maximal collaboration, maximal opportunity to discover valuable connection with another
+person, maximal collective agency; to collaborate is to communicate with intention. Routines,
+relations, rationale; scripts, scenes.
+
 - **What HCI is** (Avik, 2026-11-14, “Avik's words, verbatim” (AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md)). HCI is the study and art
   of the extension of human consciousness by tools. Consciousness is one continuous, inseparable loop
   of awareness and action, with no turns: action and awareness are both continuous, so the
