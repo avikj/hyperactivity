@@ -27,12 +27,12 @@ build/libcubical.a: $(SRC) $(HDR) src/libcubical.h
 
 # Every file is checked by `make every` (2026-11-12): each file outside the library imports what
 # it needs (the core and the library are lib/core.cub and lib/library.cub, files of imports in order; the x86 model's order is
-# lib/isa/x86/all.cub, written by tools/sail2cub.py), so each file no file imports is checked alone
+# lib/languages/isa/x86/all.cub, written by tools/sail2cub.py), so each file no file imports is checked alone
 # with its imports, without performing what acts on the world (--read). Measured 2026-11-12: 80 such
 # files; 35 with failures of their own, each from an open node: the untyped definitions refused in
 # the library (autodiff, eqproof, ring, intlin, derive, cxx/ast) and the C++ units over
 # cxx/ast; bitlaw and flags; build-cost and its runs; the C++ reading (cxx/machine,
-# cxx/read-expr, mem/sum); the Rust reading (deriving needs lib/derive.cub); lib/nbe.cub, which
+# cxx/read-expr, mem/sum); the Rust reading (deriving needs lib/library/derive.cub); lib/capacities/nbe.cub, which
 # imports the core when the working copy is swapped in; and the surface items fail-local, fail-one,
 # prelude-names and type-data, whose failures are what they show.
 #
@@ -53,7 +53,7 @@ brunerie: build/cubical
 	  experiments/brunerie/typed.cub experiments/brunerie/run-typed.cub | grep -A1 -x brunerie | grep -q "= negsuc (suc zero)" \
 	  || { echo "brunerie: not -2 with $$w workers"; exit 1; }; done; echo "brunerie = negsuc (suc zero)"
 
-# the task graph (lib/task-graph.cub, task-graph/hyperactivity.cub) checks; `hyperactive check` also
+# the task graph (lib/usage/task-graph.cub, task-graph/hyperactivity.cub) checks; `hyperactive check` also
 # confirms every node's name is a sentence and every node has a statement
 task-graph: build/cubical
 	CUBICAL_NOCACHE=1 ./build/cubical task-graph/hyperactivity.cub

@@ -2,7 +2,7 @@
 """task-graph — the task graph's tool (2026-11-12; one kind of node and the order of work, 2026-11-13).
 
 What the graph means and how it is used is “The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md) (Avik's design): read it first. The
-graph is code: lib/task-graph.cub (what a node is: a task, its name and its parents; the relations
+graph is code: lib/usage/task-graph.cub (what a node is: a task, its name and its parents; the relations
 after and essential-context), task-graph/hyperactivity.cub (this work's nodes, each defined after
 its parents; a node's statement is the comment above its definition). Run through `hyperactive`.
 
@@ -11,7 +11,7 @@ its parents; a node's statement is the comment above its definition). Run throug
     python3 tools/task-graph.py priority           the order of work: what can start now, those that
                                              supersede others first; then what waits, on what
     python3 tools/task-graph.py check              the graph checks (names are sentences, statements exist, roots declared)
-    python3 tools/task-graph.py view TERM          a view: a term over the work (lib/task-graph.cub's views over
+    python3 tools/task-graph.py view TERM          a view: a term over the work (lib/usage/task-graph.cub's views over
                                              `declarations Node`) evaluated by the machine, shown by
                                              its type (a List Word as text)
     python3 tools/task-graph.py every              every file checked: each file no file imports, alone with its

@@ -1,0 +1,26 @@
+-- Layer: language support: lifted languages and machines (goal 3), not the core (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/languages/isa/x86/run.cub — the model as a step function and a run (hand-written; archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §6 “Phases 2–8: everything that will be built”, “Phase 2 — The ISA model, and the encoder leaves the trusted base”).
+--
+-- x86-step is the model's x86_fetch_decode_execute: one instruction fetched at rip, decoded
+-- and executed, as an outcome and the state after. x86-run n is n steps, stopping at the first
+-- step whose outcome is not a value (a fault the model throws as Emsg, the syscall instruction
+-- in the application view as Syscall, an abort).
+import "all.cub"
+x86-step : X86 → Outc exception Unit × X86
+x86-step = x86_fetch_decode_execute
+-- (the run of any step function: what is proved of runs is proved once, of a step function that
+-- is a variable, never unfolding the model's)
+run-of : (X86 → Outc exception Unit × X86) → Word → X86 → Outc exception Unit × X86
+run-of stp n =
+  %welimP (λ _ → X86 → Outc exception Unit × X86) n (λ s → (out-val unit , s))
+    (λ j h s → st-step {X86} {exception} {Unit} {Unit} (λ _ → h) (stp s))
+x86-run : Word → X86 → Outc exception Unit × X86
+x86-run = run-of x86-step
+-- the state a user program starts from, before its image and registers: reset, then 64-bit
+-- mode as the model's main.sail sets it (IA32_EFER.LMA and CS.L), in the application view
+-- (linear addresses are the memory's addresses, no paging; syscall throws Syscall)
+x86-user64 : X86
+x86-user64 = x86-set-app_view true (snd (initialise_64_bit_mode x86-reset))
+-- n bytes of a little-endian value written at an address
+x86-poke : (n : Word) → Bits #64 → Word → X86 → X86
+x86-poke n a v s = x86-write-mem n a v s

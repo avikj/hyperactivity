@@ -1,0 +1,391 @@
+-- Layer: library: shared mathematics over the core (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/library/proc.cub — processes over a signature of commands, as terms (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.1 “Interfaces, programs, handlers”, and §18.11 “D24–D27 — The world”, its parts D24 and D25; the
+-- inductive part). Loaded after lib/library/std.cub. A signature is a type of commands with a response
+-- type per command; a process is a tree of commands ending in a result, here in its Church form —
+-- a process is what it does to any interpretation of return and command — which needs no
+-- positivity rule and covers every process that terminates; the guarded (infinite) form, GProc,
+-- is below (18.18 landed: a continuation into a later type is a constructor field). A world is a handler: a state and, per command, the
+-- response and the next state; runp is the process at that interpretation. Outcomes: a process may
+-- end done, or stopped by its world (a command the world refuses), which runp reports as a value.
+-- ---------------------------------------------------------------- signatures and processes
+Sig : Type (lsuc lzero)
+Sig = (Cmd : Type) × (Cmd → Type)
+Cmd : Sig → Type
+Cmd S = fst S
+Resp : (S : Sig) → Cmd S → Type
+Resp S c = snd S c
+-- the level is the level of the interpretations a process admits: a process written at every
+-- level ({l : Level} → Proc {l} S A) can be interpreted into processes (level 1) by a handler
+Proc : {l : Level} → Sig → Type → Type (lsuc l)
+Proc {l} S A = (R : Type l) → (A → R) → ((c : Cmd S) → (Resp S c → R) → R) → R
+ret : {l : Level} {S : Sig} {A : Type} → A → Proc {l} S A
+ret a = λ R k h → k a
+cmd : {l : Level} {S : Sig} → (c : Cmd S) → Proc {l} S (Resp S c)
+cmd c = λ R k h → h c k
+bind : {l : Level} {S : Sig} {A B : Type} → Proc {l} S A → (A → Proc {l} S B) → Proc {l} S B
+bind p f = λ R k h → p R (λ a → f a R k h) h
+-- a handler: each command of S as a process of W; a process of S becomes one of W (a world is a
+-- handler into the drivers' signature; handlers compose as functions)
+Handler : Sig → Sig → Type (lsuc lzero)
+Handler S W = (c : Cmd S) → Proc {lzero} W (Resp S c)
+handle : {S W : Sig} {A : Type} → Handler S W → Proc {lsuc lzero} S A → Proc {lzero} W A
+handle hd p = p (Proc {lzero} W A) (ret {lzero} {W} {A}) (λ c k → bind {lzero} {W} {Resp S c} {A} (hd c) k)
+-- ---------------------------------------------------------------- worlds and running
+-- a world with state St answers a command (the response and the next state) or refuses it (the
+-- state after the refusal)
+World : Sig → Type → Type
+World S St = (c : Cmd S) → St → Sum (Resp S c × St) St
+-- why a process failed: killed from outside (the outcome then comes from the world, and whatever
+-- the process held is gone from the language's view), or a fault the world reports by code
+data Why = external | fault (errno : Word)
+data Outcome (A : Type) = done (a : A) | stopped | failed (why : Why)
+-- runp p w st: the process interpreted in the state monad over St with refusal
+runp : {S : Sig} {A : Type} {St : Type} → Proc S A → World S St → St → Outcome A × St
+runp p w st =
+  p (St → Outcome A × St) (λ a s → (done a , s))
+    (λ c k s → case w c s of inl r → k (fst r) (snd r); inr s2 → (stopped , s2))
+    st
+-- ---------------------------------------------------------------- supervision (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D25)
+-- a restart strategy: given the outcome and the number of runs so far, restart or give up
+data Action = restart | give-up
+Strategy : Type → Type
+Strategy A = Outcome A → Nat → Action
+-- supervise fuel s p w st: run p; when the strategy answers restart, run it again from the state
+-- the world was left in; the outcome, the state and the number of runs
+supervise : {S : Sig} {A : Type} {St : Type} → Nat → Strategy A → Proc {lzero} S A → World S St → St → Outcome A × (St × Nat)
+supervise fuel s p w st =
+  (case fuel return (λ f → St → Nat → Outcome A × (St × Nat)) of
+     zero → λ st2 n → (stopped , (st2 , n))
+     suc k → λ st2 n →
+       (let r = runp {S} {A} {St} p w st2
+        in case s (fst r) (suc n) of
+             restart → rec k (snd r) (suc n)
+             give-up → (fst r , (snd r , suc n))))
+  st zero
+-- ---------------------------------------------------------------- replay (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.3 “Consequences”)
+-- a run is reproduced from the world's responses: a recording world keeps, beside its own state,
+-- the responses given (encoded as words by the signature's encoder), and a replaying world answers
+-- from such a record alone. The run under the replaying world has the same outcome: replay is a
+-- property of the process and the responses, not of the world's internals
+Encoder : Sig → Type
+Encoder S = (c : Cmd S) → Resp S c → Word
+Decoder : Sig → Type
+Decoder S = (c : Cmd S) → Word → Resp S c
+-- a refusal is recorded as absent (the list ends); responses are recorded in order (reversed)
+recording : {S : Sig} {St : Type} → Encoder S → World S St → World S (St × List Word)
+recording {S} {St} enc w c st =
+  case w c (fst st) of
+    inl r → inl (fst r , (snd r , cons (enc c (fst r)) (snd st)))
+    inr s2 → inr (s2 , snd st)
+-- the replaying world: the next recorded response, else a refusal
+replaying : {S : Sig} → Decoder S → World S (List Word)
+replaying {S} dec c log = case log of nil → inr nil; cons x rest → inl (dec c x , rest)
+-- ---------------------------------------------------------------- signature inclusion (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.1 “Interfaces, programs, handlers”)
+-- an inclusion of S in T: each command of S is a command of T, with T's response read back as
+-- S's. A process of S is lifted to T by transport along it: the handler that issues the included
+-- command and returns the response read back, which is handle at that handler
+Incl : Sig → Sig → Type
+Incl S T = (f : Cmd S → Cmd T) × ((c : Cmd S) → Resp T (f c) → Resp S c)
+incl-handler : {S T : Sig} → Incl S T → Handler S T
+incl-handler {S} {T} i c = bind {lzero} {T} {Resp T (fst i c)} {Resp S c} (cmd {lzero} {T} (fst i c)) (λ r → ret {lzero} {T} {Resp S c} (snd i c r))
+lift-proc : {S T : Sig} {A : Type} → Incl S T → Proc {lsuc lzero} S A → Proc {lzero} T A
+lift-proc {S} {T} {A} i p = handle {S} {T} {A} (incl-handler {S} {T} i) p
+-- ---------------------------------------------------------------- session types (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.3 “Consequences”)
+-- a protocol decides which commands are allowed after the responses so far: a predicate on the
+-- trace (the commands issued with their responses, latest first) and the next command. (The
+-- codata form — allowed now, and the protocol after each response — is the same thing unfolded;
+-- the elaborator does not yet accept a codata type with its self-reference under a Π as a type
+-- in a body, so the protocol is the predicate.) A process follows a session when, run under the
+-- session's guard over any world, it is never refused; the guard is a world transformer that
+-- refuses what the session does not allow and extends the trace by the response
+Hist : Sig → Type
+Hist S = List ((c : Cmd S) × Resp S c)
+Session : Sig → Type
+Session S = Hist S → Cmd S → Bool
+session-guard : {S : Sig} {St : Type} → Session S → World S St → World S (Hist S × St)
+session-guard {S} {St} ses w c st =
+  case ses (fst st) c of
+    true → (case w c (snd st) of
+              inl r → inl (fst r , (cons (c , fst r) (fst st) , snd r))
+              inr s2 → inr (fst st , s2))
+    false → inr st
+IsDone : {A : Type} → Outcome A → Type
+IsDone o = case o of done a → Unit; stopped → Empty; failed r → Empty
+-- a process typed by a session: the process with the fact that it follows the session over the
+-- given world from the given state (the fact is decided by running it: its proof is unit)
+SProc : {St : Type} (S : Sig) (A : Type) → Session S → World S St → St → Type (lsuc lzero)
+SProc {St} S A ses w st = (p : Proc {lzero} S A) × IsDone {A} (fst (runp {S} {A} {Hist S × St} p (session-guard {S} {St} ses w) (nil , st)))
+-- ---------------------------------------------------------------- push events (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.1 “Interfaces, programs, handlers”)
+-- the world pushes: a feed, an interrupt or a signal is a recv whose response is the next event.
+-- A pushing world answers recv from its queue of events and refuses when the queue is empty
+data Push (E : Type) = recv
+push-resp : {E : Type} → Push E → Type
+push-resp {E} c = E
+PushS : Type → Sig
+PushS E = (Push E , push-resp {E})
+feed-world : {E : Type} → World (PushS E) (List E)
+feed-world {E} c q = case q of nil → inr nil; cons e r → inl (e , r)
+-- ---------------------------------------------------------------- choreographies (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §7.3 “Consequences”)
+-- a global protocol once, as first-order data over roles (words): a value sent from one role to
+-- another, a choice made by one role between two continuations, or the end. Each binary is the
+-- endpoint projection to its role: a process over the local signature (send, receive, pick a
+-- label, announce it, be offered one). Projection is defined for globals meeting the
+-- projectability condition, decided over the data: at a choice, every role other than the chooser
+-- is either told the choice (the chooser's first step towards it in both branches is a
+-- communication, so the offer that precedes it is meaningful) or behaves the same in both branches
+data Chor = cend | xfer (from : Word) (to : Word) (v : Word) (k : Chor) | choice (who : Word) (l : Chor) (r : Chor)
+data Loc = send (to : Word) (v : Word) | recvf (from : Word) | pick | tell (lbl : Word) | offer (from : Word)
+loc-resp : Loc → Type
+loc-resp c = case c of send t v → Unit; recvf f → Word; pick → Word; tell l → Unit; offer f → Word
+LocS : Sig
+LocS = (Loc , loc-resp)
+orB : Bool → Bool → Bool
+orB a b = if a then true else b
+app-w : List Word → List Word → List Word
+app-w xs ys = case xs of nil → ys; cons x r → cons x (rec r)
+-- the roles a global mentions, as a list (with repeats)
+chor-roles : Chor → List Word
+chor-roles g = case g of
+  cend → nil
+  xfer a b v k → cons a (cons b (rec k))
+  choice a l r → cons a (app-w (rec l) (rec r))
+-- the endpoint projection, unguarded: a role not involved in a step skips it; the chooser picks a
+-- label and announces it; another role is offered the label and follows the branch
+project-raw : Word → Chor → Proc {lzero} LocS Unit
+project-raw me g = case g of
+  cend → ret {lzero} {LocS} {Unit} unit
+  xfer a b v k →
+    (case weq me a of
+       true → bind {lzero} {LocS} {Unit} {Unit} (cmd {lzero} {LocS} (send b v)) (λ u → rec k)
+       false → (case weq me b of
+                  true → bind {lzero} {LocS} {Word} {Unit} (cmd {lzero} {LocS} (recvf a)) (λ w → rec k)
+                  false → rec k))
+  choice a l r →
+    (case weq me a of
+       true → bind {lzero} {LocS} {Word} {Unit} (cmd {lzero} {LocS} pick) (λ lbl →
+                bind {lzero} {LocS} {Unit} {Unit} (cmd {lzero} {LocS} (tell lbl)) (λ u →
+                  case weq lbl #0 of true → rec l; false → rec r))
+       false → bind {lzero} {LocS} {Word} {Unit} (cmd {lzero} {LocS} (offer a)) (λ lbl → case weq lbl #0 of true → rec l; false → rec r))
+-- the projectability condition
+drop-others : Word → Chor → Chor
+drop-others me g = case g of
+  cend → cend
+  xfer a b v k → (case orB (weq me a) (weq me b) of true → xfer a b v (rec k); false → rec k)
+  choice a l r → choice a (rec l) (rec r)
+first-from : Word → Word → Chor → Bool
+first-from me a g = case g of
+  cend → false
+  xfer x y v k → (case weq me y of true → weq x a; false → (case weq me x of true → false; false → rec k))
+  choice x l r → false
+chor-eq : Chor → Chor → Bool
+chor-eq g = case g return (λ x → Chor → Bool) of
+  cend → λ h → (case h of cend → true; xfer a b v k → false; choice a l r → false)
+  xfer a b v k → λ h → (case h of cend → false; xfer a2 b2 v2 k2 → andB (andB (weq a a2) (weq b b2)) (andB (weq v v2) (rec k k2)); choice a2 l r → false)
+  choice a l r → λ h → (case h of cend → false; xfer a2 b2 v2 k2 → false; choice a2 l2 r2 → andB (weq a a2) (andB (rec l l2) (rec r r2)))
+told-or-same : Word → Word → Chor → Chor → Bool
+told-or-same me a l r = orB (andB (first-from me a l) (first-from me a r)) (chor-eq (drop-others me l) (drop-others me r))
+all-roles : (Word → Bool) → List Word → Bool
+all-roles p rs = case rs of nil → true; cons x xs → andB (p x) (rec xs)
+projectable : Chor → Bool
+projectable g = case g of
+  cend → true
+  xfer a b v k → rec k
+  choice a l r → andB (andB (rec l) (rec r)) (all-roles (λ me → if weq me a then true else told-or-same me a l r) (chor-roles (choice a l r)))
+-- the projection, defined for projectable globals (the proof is by computation, unit)
+Projectable : Chor → Type
+Projectable g = case projectable g of true → Unit; false → Empty
+project : Word → (g : Chor) → Projectable g → Proc {lzero} LocS Unit
+project me g pf = project-raw me g
+-- ---------------------------------------------------------------- supervisors (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D25)
+-- a supervisor's signature: spawn a process by its key (the response is a handle), await a
+-- handle (the response is the child's outcome). A supervisor world holds the registry of
+-- processes by key, the child world and its state, the outcomes of the handles spawned so far,
+-- and the handles killed from outside: awaiting one of those answers failed external — the
+-- outcome comes from the world, not from the process
+PKey : Type
+PKey = Word
+data Sup (A : Type) = spawn (k : PKey) | await (h : Word)
+sup-resp : {A : Type} → Sup A → Type
+sup-resp {A} c = case c of spawn k → Word; await h → Outcome A
+SupS : Type → Sig
+SupS A = (Sup A , sup-resp {A})
+-- the supervisor world: the registry of processes by key is its parameter; its state is the
+-- child world's state, the outcomes of the handles spawned so far, the handles killed from
+-- outside, and the next handle
+SupSt : Type → Type → Type
+SupSt A St = St × (List (Word × Outcome A) × (List Word × Word))
+lookup-out : {A : Type} → Word → List (Word × Outcome A) → Outcome A
+lookup-out h l = case l of nil → failed external; cons e r → (case weq (fst e) h of true → snd e; false → rec r)
+mem-w : Word → List Word → Bool
+mem-w h l = case l of nil → false; cons x r → (case weq x h of true → true; false → rec r)
+sup-world : {S : Sig} {A : Type} {St : Type} → (PKey → Proc {lzero} S A) → World S St → World (SupS A) (SupSt A St)
+sup-world {S} {A} {St} reg w c st =
+  case c return (λ x → Sum (sup-resp {A} x × SupSt A St) (SupSt A St)) of
+    spawn k →
+      (let r = runp {S} {A} {St} (reg k) w (fst st)
+       in inl (snd (snd (snd st)) , (snd r , (cons (snd (snd (snd st)) , fst r) (fst (snd st)) , (fst (snd (snd st)) , %wsucc (snd (snd (snd st))))))))
+    await h →
+      inl ((case mem-w h (fst (snd (snd st))) of true → failed external; false → lookup-out {A} h (fst (snd st))) , st)
+-- a supervisor as a process: spawn the key, await the handle; on an outcome the strategy answers
+-- restart for, spawn it again (restart is instantiating the known key), up to the fuel
+supervise-by : {A : Type} → Nat → Strategy A → PKey → Proc {lzero} (SupS A) (Outcome A)
+supervise-by {A} fuel s k =
+  (case fuel return (λ f → Nat → Proc {lzero} (SupS A) (Outcome A)) of
+     zero → λ n → ret {lzero} {SupS A} {Outcome A} stopped
+     suc f2 → λ n →
+       bind {lzero} {SupS A} {Word} {Outcome A} (cmd {lzero} {SupS A} (spawn k)) (λ h →
+       bind {lzero} {SupS A} {Outcome A} {Outcome A} (cmd {lzero} {SupS A} (await h)) (λ o →
+         case s o (suc n) of restart → rec f2 (suc n); give-up → ret {lzero} {SupS A} {Outcome A} o)))
+  zero
+-- watch: run a child once and report its outcome, with no restart
+watch : {A : Type} → PKey → Proc {lzero} (SupS A) (Outcome A)
+watch {A} k = bind {lzero} {SupS A} {Word} {Outcome A} (cmd {lzero} {SupS A} (spawn k)) (λ h → cmd {lzero} {SupS A} (await h))
+-- ---------------------------------------------------------------- named worlds (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27; library half)
+-- a world a binary links against is named: a handler implementation under a name, with the
+-- model (the in-language world the implementation is specified against) beside it. A registry is
+-- a list of named worlds; a binary picks one by name. `world "name" = handler` (the surface form
+-- that lists the implementation under #trusted) is the machine side of this
+record Named (S : Sig) (St : Type) = { wid : Word ; model : World S St }
+Registry : Sig → Type → Type
+Registry S St = List (Named S St)
+find-world : {S : Sig} {St : Type} → Word → Registry S St → World S St → World S St
+find-world {S} {St} n r dflt = case r of nil → dflt; cons x xs → (case weq (wid x) n of true → model x; false → rec xs)
+-- ---------------------------------------------------------------- the guarded form (18.18 landed)
+-- a process that may run forever: a result, a command with its continuation one tick later for
+-- each response, or a silent tick (what a handler's own steps become). Logical time is the ticks;
+-- every recursion below is a guarded fixed point, so every definition is total and a process is
+-- unfolded only as far as it is observed
+data GProc (κ : Clock) (S : Sig) (A : Type) =
+    gret (a : A)
+  | gcmd (c : Cmd S) (k : Resp S c → ▸ κ (GProc κ S A))
+  | gtau (t : ▸ κ (GProc κ S A))
+gissue : {S : Sig} → (c : Cmd S) → GProc κ S (Resp S c)
+gissue c = gcmd c (λ r → next (gret r))
+gbind : {S : Sig} → GProc κ S A → (A → GProc κ S B) → GProc κ S B
+gbind (gret a) f = f a
+gbind (gcmd c k) f = gcmd c (λ r → gbind (k r) f)
+gbind (gtau t) f = gtau (λ α → gbind (t α) f)
+gmapp : {S : Sig} → (A → B) → GProc κ S A → GProc κ S B
+gmapp f (gret a) = gret (f a)
+gmapp f (gcmd c k) = gcmd c (λ r → gmapp f (k r))
+gmapp f (gtau t) = gtau (λ α → gmapp f (t α))
+-- a terminating process (Church form) is a guarded one at every clock
+to-guarded : {S : Sig} {A : Type} → Proc {lzero} S A → GProc κ S A
+to-guarded {κ} {S} {A} p = p (GProc κ S A) (λ a → gret a) (λ c k → gcmd c (λ r → next (k r)))
+-- a process that never returns: issue c, then again with the response fed back to the next command
+gloop : {S : Sig} {X : Type} {A : Type} → (f : X → Cmd S) → ((x : X) → Resp S (f x) → X) → X → GProc κ S A
+gloop f g x = gcmd (f x) (λ r → gloop f g (g x r))
+-- ---------------------------------------------------------------- the delay type: a run's result
+-- running a guarded process against a world takes one tick per command; the result is a value
+-- in the delay type (now, or one tick later), observed with fuel through forceκ
+data GDelay (κ : Clock) (X : Type) = now (x : X) | later (d : ▸ κ (GDelay κ X))
+Delay : Type → Type
+Delay X = (κ : Clock) → GDelay κ X
+dforce : {X : Type} → Delay X → Delay X
+dforce {X} d = forceκ {lzero} {λ κ → GDelay κ X} (λ κ → case d κ of now x → next (now x); later t → t)
+-- the value within n ticks, if it arrives
+data Within (X : Type) = arrived (x : X) | pending
+drun : {X : Type} → Nat → Delay X → Within X
+drun zero d = (case d κ0 of now x → arrived x; later t → pending)
+drun (suc n) d = (case d κ0 of now x → arrived x; later t → drun n (dforce d))
+grun : {S : Sig} {A : Type} {St : Type} → World S St → GProc κ S A → St → GDelay κ (Outcome A × St)
+grun w (gret a) st = now (done a , st)
+grun w (gcmd c k) st = (case w c st of inl r → later (λ α → grun w (k (fst r) α) (snd r)); inr s2 → now (stopped , s2))
+grun w (gtau t) st = later (λ α → grun w (t α) st)
+-- run from every clock, then observe with fuel
+grun-for : {S : Sig} {A : Type} {St : Type} → Nat → World S St → ((κ : Clock) → GProc κ S A) → St → Within (Outcome A × St)
+grun-for {S} {A} {St} n w p st = drun n (λ κ → grun {κ} {S} {A} {St} w (p κ) st)
+-- ---------------------------------------------------------------- handlers, by guarded recursion
+-- each command of S as a terminating process of W (the Church form: a handler's step for one
+-- command ends); handling a guarded process is a guarded fixed point, the continuation resumed
+-- one tick later under a silent step
+ghandle : {S W : Sig} {A : Type} → Handler S W → GProc κ S A → GProc κ W A
+ghandle hd (gret a) = gret a
+ghandle hd (gcmd c k) = gbind (to-guarded (hd c)) (λ r → gtau (λ α → ghandle hd (k r α)))
+ghandle hd (gtau t) = gtau (λ α → ghandle hd (t α))
+-- signature inclusion: the lift is the handler that issues the included command
+glift : {S T : Sig} {A : Type} → Incl S T → GProc κ S A → GProc κ T A
+glift i (gret a) = gret a
+glift i (gcmd c k) = gcmd (fst i c) (λ r → λ α → glift i (k (snd i c r) α))
+glift i (gtau t) = gtau (λ α → glift i (t α))
+-- a budget: a world transformer refusing every command once n have been answered (a timeout as
+-- a world, which is how a process that runs forever is observed to a bound)
+budget : {S : Sig} {St : Type} → World S St → World S (Nat × St)
+budget {S} {St} w c st =
+  case fst st of
+    zero → inr st
+    suc n → (case w c (snd st) of inl r → inl (fst r , (n , snd r)); inr s2 → inr (fst st , s2))
+-- ---------------------------------------------------------------- the memory interface (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26; library half)
+-- the drivers' memory signature: load, store, compare-and-swap, fence, on word addresses; the
+-- model is named by the world that answers it. The sequentially consistent model is one memory
+-- answered in program order; release-acquire is a world whose state also holds what each
+-- location's writer has published (the drivers' side, src/drivers.c, is the machine's)
+data Mem = mload (a : Word) | mstore (a : Word) (v : Word) | mcas (a : Word) (old : Word) (new : Word) | mfence
+mem-resp : Mem → Type
+mem-resp c = case c of mload a → Word; mstore a v → Unit; mcas a o n → Bool; mfence → Unit
+MemS : Sig
+MemS = (Mem , mem-resp)
+Memory : Type
+Memory = Word → Word
+mem-write : Word → Word → Memory → Memory
+mem-write a v m = λ j → case weq j a of true → v; false → m j
+sc-world : World MemS Memory
+sc-world c m =
+  case c return (λ x → Sum (mem-resp x × Memory) Memory) of
+    mload a → inl (m a , m)
+    mstore a v → inl (unit , mem-write a v m)
+    mcas a o n → (case weq (m a) o of true → inl (true , mem-write a n m); false → inl (false , m))
+    mfence → inl (unit , m)
+-- a transaction's signature: loads and stores only (no I/O, no cas: what a transaction may do
+-- is its type, 7.3)
+data Tx = tload (a : Word) | tstore (a : Word) (v : Word)
+tx-resp : Tx → Type
+tx-resp c = case c of tload a → Word; tstore a v → Unit
+TxS : Sig
+TxS = (Tx , tx-resp)
+-- the log: the reads (address, value seen) and the writes (address, value), latest first
+TxLog : Type
+TxLog = List (Word × Word) × List (Word × Word)
+log-find : Word → List (Word × Word) → Sum Word Unit
+log-find a l = case l of nil → inr unit; cons e r → (case weq (fst e) a of true → inl (snd e); false → rec r)
+-- one transaction step against the log: a load reads the pending write if any, else memory,
+-- recording what it saw; a store is recorded, not performed
+tx-step : (c : Cmd TxS) → TxLog → Proc {lzero} MemS (tx-resp c × TxLog)
+tx-step c lg =
+  case c return (λ x → Proc {lzero} MemS (tx-resp x × TxLog)) of
+    tload a →
+      (case log-find a (snd lg) of
+         inl v → ret {lzero} {MemS} {Word × TxLog} (v , lg)
+         inr u → bind {lzero} {MemS} {Word} {Word × TxLog} (cmd {lzero} {MemS} (mload a)) (λ v → ret {lzero} {MemS} {Word × TxLog} (v , (cons (a , v) (fst lg) , snd lg))))
+    tstore a v → ret {lzero} {MemS} {Unit × TxLog} (unit , (fst lg , cons (a , v) (snd lg)))
+-- the transaction run against the log: its result and the log
+tx-run : {A : Type} → Proc {lsuc lzero} TxS A → TxLog → Proc {lzero} MemS (A × TxLog)
+tx-run {A} p lg =
+  p (TxLog → Proc {lzero} MemS (A × TxLog))
+    (λ a lg2 → ret {lzero} {MemS} {A × TxLog} (a , lg2))
+    (λ c k lg2 → bind {lzero} {MemS} {tx-resp c × TxLog} {A × TxLog} (tx-step c lg2) (λ r → k (fst r) (snd r)))
+    lg
+-- validation: every read still holds in memory
+tx-valid : List (Word × Word) → Proc {lzero} MemS Bool
+tx-valid rs =
+  case rs return (λ x → Proc {lzero} MemS Bool) of
+    nil → ret {lzero} {MemS} {Bool} true
+    cons e r → bind {lzero} {MemS} {Word} {Bool} (cmd {lzero} {MemS} (mload (fst e))) (λ v → case weq v (snd e) of true → rec r; false → ret {lzero} {MemS} {Bool} false)
+-- commit: the writes performed in order (earliest first)
+tx-commit : List (Word × Word) → Proc {lzero} MemS Unit
+tx-commit ws =
+  case ws return (λ x → Proc {lzero} MemS Unit) of
+    nil → ret {lzero} {MemS} {Unit} unit
+    cons e r → bind {lzero} {MemS} {Unit} {Unit} (rec r) (λ u → cmd {lzero} {MemS} (mstore (fst e) (snd e)))
+-- atomically: run, validate, commit; on a failed validation retry, up to the fuel; the outcome
+-- carries whether it committed (a library STM over load/store with a log and retry; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26)
+atomically : {A : Type} → Nat → Proc {lsuc lzero} TxS A → Proc {lzero} MemS (Outcome A)
+atomically {A} fuel p =
+  case fuel return (λ f → Proc {lzero} MemS (Outcome A)) of
+    zero → ret {lzero} {MemS} {Outcome A} stopped
+    suc f →
+      bind {lzero} {MemS} {A × TxLog} {Outcome A} (tx-run {A} p (nil , nil)) (λ r →
+      bind {lzero} {MemS} {Bool} {Outcome A} (tx-valid (fst (snd r))) (λ ok →
+        case ok of
+          true → bind {lzero} {MemS} {Unit} {Outcome A} (tx-commit (snd (snd r))) (λ u → ret {lzero} {MemS} {Outcome A} (done (fst r)))
+          false → rec f))

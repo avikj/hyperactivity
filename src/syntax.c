@@ -213,8 +213,8 @@ static bool x_untyped_file;       /* converting a file that was loaded before th
  * definition without a checked signature. TRUSTED: the files that declare the type theory's own
  * rules and the machine's word operations; only they may hold primitive, foreign or postulate.
  * Everything else is checked at a stated type or is refused. */
-static const char *const BOOT_RAW[] = { "prelude", "code", "match", "nav", "cost", "lin", "check", NULL };
-static const char *const BOOT_TRUSTED[] = { "prim", "std", NULL };
+static const char *const BOOT_RAW[] = { "core/prelude", "core/code", "bootstrap/match", "bootstrap/nav", "bootstrap/cost", "bootstrap/lin", "core/check", NULL };
+static const char *const BOOT_TRUSTED[] = { "bootstrap/prim", "library/std", NULL };
 static bool boot_in(const char *const *names) {
     if (!x_file) return false;
     size_t l = strlen(x_file);
@@ -503,7 +503,7 @@ static Node *p_atom(void) {
     if (t->k == X_NUM) { NX(); return sym2("%num", nsym(t->s)); }
     if (x_is(t, "document") && P1()->k == X_STR) {
         /* document "path" (2026-11-13): a file of the repository as an object of the code, so a
-         * declaration can refer to a document (lib/document.cub; the task graph's essential context,
+         * declaration can refer to a document (lib/usage/document.cub; the task graph's essential context,
          * “The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md)). The path is relative to the file being read, as import's is. The
          * file must exist: reading fails here otherwise, as a reference to an undefined name would. The
          * term is document-at "path" "sha256 of the file's bytes, in hex", so a definition mentioning a
@@ -1359,14 +1359,14 @@ static void p_decl_in(void) {
     if (x_is(t, "instance")) { NX(); pending_instance = true; x_fail_next = fail; p_decl(); pending_instance = false; return; }   /* the next definition is an instance (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) */
     if (x_is(t, "deriving")) {
         /* deriving eq D [as name]: a decidable equality on the data type D, its code derived by
-         * lib/derive.cub (derive-eq) over the data table, checked and defined at D → D → Bool as
+         * lib/library/derive.cub (derive-eq) over the data table, checked and defined at D → D → Bool as
          * name (D·eq by default) (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F31) */
         NX(); Tok *what = NX(); Tok *dn = NX();
         if (!x_is(what, "eq") && !x_is(what, "Eq")) x_sem("deriving eq D is what can be derived; found", what);
         if (dn->k != X_ID || data_lookup(dn->s) < 0) x_sem("deriving: not a data type:", dn);
         const char *nm = NULL;
         if (x_is(P0(), "as")) { NX(); nm = NX()->s; }
-        if (global_lookup("derive-eq") < 0) x_sem("deriving needs lib/derive.cub loaded, for", dn);
+        if (global_lookup("derive-eq") < 0) x_sem("deriving needs lib/library/derive.cub loaded, for", dn);
         int di = -1; for (int i = 0; i < nchkdata; i++) if (CHKDATA[i] == data_lookup(dn->s)) di = i;
         if (di < 0) x_sem("deriving: the data type is not checked:", dn);
         long steps = 0;
@@ -1533,7 +1533,7 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "world") && P1()->k == X_STR) {
-        /* world "name" [: World S St] = handler (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27): a named world, lib/proc.cub's Named S St — the
+        /* world "name" [: World S St] = handler (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27): a named world, lib/library/proc.cub's Named S St — the
          * checked definitions world-name : Named S St = (id , handler) and world-name-id : Word = id,
          * id the name's FNV-1a hash (a registry is a list of them; find-world picks one by id). The
          * type is the handler's signature when the handler is a name, else the annotation */
@@ -1603,7 +1603,7 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "#build-loop")) {
-        /* #build-loop init step copy copy-id "file" (lib/elf.cub build-loop-plan): a process that
+        /* #build-loop init step copy copy-id "file" (lib/capacities/elf.cub build-loop-plan): a process that
          * runs forever from a state, as a standalone ELF whose memory is bounded: init : St,
          * step : St → Step W St, copy : St → St, copy-id : (s : St) → copy s ≡ s; St first-order
          * with no byte strings. Nothing is written unless the types are these, each specialized
@@ -1618,7 +1618,7 @@ static void p_decl_in(void) {
             Node *b = nlist(5); b->it[0] = nsym("build"); for (int i = 0; i < 4; i++) b->it[i + 1] = nsym(fn[i]->s);
             ud_form(b); printf("build-loop %s: not performed (--read)\n", fn[0]->s); decl_end(); return;
         }
-        if (checked_index("build-loop-plan") < 0) x_sem("#build-loop: refused: the compiler it calls (build-loop-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn[0]);
+        if (checked_index("build-loop-plan") < 0) x_sem("#build-loop: refused: the compiler it calls (build-loop-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/capacities/elf.cub loaded, for", fn[0]);
         if (!checked_type_plain(ck[0])) { failures++; printf("FAIL: build-loop %s: its type is not first-order data without byte strings\n", fn[0]->s); decl_end(); return; }
         long steps = 0;
         Node *call = nlist(5); call->it[0] = nsyml("%%build-loop-plan"); for (int i = 0; i < 4; i++) call->it[i + 1] = wordn(ck[i]);
@@ -1650,14 +1650,14 @@ static void p_decl_in(void) {
     }
     if (x_is(t, "#build")) {
         /* #build s "file" (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §4.4 “What Phase 1 still builds”, item 5 “Processes and standalone binaries: `#build main`”): s : Step W A, a process as a tree of steps, written as a
-         * standalone static ELF64 executable (lib/elf.cub build-plan): the specialized code is checked
+         * standalone static ELF64 executable (lib/capacities/elf.cub build-plan): the specialized code is checked
          * by the checker's conversion against s, then encoded with the driver loop as machine code.
          * Nothing is written unless the program compiles and the check holds */
         NX(); Tok *fn = NX(); if (fn->k != X_ID) x_err("#build names a checked definition, found", fn);
         int ck = checked_index(fn->s); if (ck < 0) x_sem("#build: not a checked definition:", fn);
         Tok *pt = NX(); if (pt->k != X_STR) x_err("#build: the file to write, a string, expected after", fn);
         if (read_only) { ud_form(lst(2, nsym("build"), nsym(fn->s))); printf("build %s: not performed (--read)\n", fn->s); decl_end(); return; }   /* read, not performed */
-        if (checked_index("build-plan") < 0) x_sem("#build: refused: the compiler it calls (build-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn);
+        if (checked_index("build-plan") < 0) x_sem("#build: refused: the compiler it calls (build-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/capacities/elf.cub loaded, for", fn);
         long steps = 0;
         char *r = readback(nl2("%%build-plan", wordn(ck)), &steps);
         const char *saved = src; src = r; Node *rn = read_node(); src = saved;
@@ -1687,7 +1687,7 @@ static void p_decl_in(void) {
     }
     if (x_is(t, "#jit")) {
         /* #jit f [using t1 t2 …] (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.4 “The reader, and why the path is by construction” and §5.5 “Bytes, the boundary, and what is trusted”): f compiled to x86-64 and bound to the bytes. The
-         * library computes the plan (lib/x86.cub jit-plan): the specialized code (rewritten along the
+         * library computes the plan (lib/capacities/x86.cub jit-plan): the specialized code (rewritten along the
          * theorems given, each rewrite carrying its path), the checker's conversion of f with the code's
          * meaning, and the bytes. With theorems the path is checked by the checker as the definition
          * f·jit : f ≡ code. f is bound only when the program compiles and the check holds; on closed
@@ -1703,7 +1703,7 @@ static void p_decl_in(void) {
                 if (nth < 64) ths[nth++] = tk;
             }
         }
-        if (checked_index("jit-plan") < 0) x_sem("#jit: refused: the compiler it calls (jit-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/x86.cub loaded, for", fn);
+        if (checked_index("jit-plan") < 0) x_sem("#jit: refused: the compiler it calls (jit-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/capacities/x86.cub loaded, for", fn);
         for (int attempt = 0; attempt < 2; attempt++) {
             int nt = attempt ? 0 : nth;
             Node *rl = nsym("lnil"); for (int i = nt - 1; i >= 0; i--) rl = lst(3, nsym("lcons"), wordn(ths[i]), rl);
@@ -2876,7 +2876,7 @@ static void convert_file(const char *path, bool check) {
 }
 
 /* ---------------- codes read back as core terms ----------------
- * A code (lib/code.cub) as printed: de Bruijn variables over the binders entered, checked
+ * A code (lib/core/code.cub) as printed: de Bruijn variables over the binders entered, checked
  * definitions and data types by index, a free variable by its source name. NULL: no term (a
  * variable without a name, made by the checker inside the solution). */
 static const char **cn_names; static int ncn, capcn; static int cn_fresh;
@@ -2936,7 +2936,7 @@ static Node *cn(Node *c) {
         return r;
     }
     if (!strcmp(h, "cpty") && c->n == 3) {
-        /* a primitive type: lib/prim.cub's name for it (Bytes at its size) where loaded */
+        /* a primitive type: lib/bootstrap/prim.cub's name for it (Bytes at its size) where loaded */
         long k = cn_word(c->it[1]);
         static const char *TN[] = { "Int64", "UInt32", "Float64", "Float32", "Bytes", "UInt64" };
         if (k < 0 || k > 5) return NULL;
@@ -2945,7 +2945,7 @@ static Node *cn(Node *c) {
     }
     if (!strcmp(h, "cprim") && c->n == 3) {
         /* a primitive operation (the encoding of lang.c's to_code): the arithmetic and conversion
-         * operations read back as lib/prim.cub's checked primitives of the same arguments; the
+         * operations read back as lib/bootstrap/prim.cub's checked primitives of the same arguments; the
          * byte operations take proofs at the checked level and have no reading here */
         static const char *PN[] = { "i64add", "i64sub", "i64mul", "i64eq", "i64lt", "u32add", "u32sub", "u32mul", "u32eq", "u32lt", "f64add", "f64sub", "f64mul", "f64div", "f64eq", "f64lt",
             "u64add", "u64sub", "u64mul", "u64eq", "u64lt", "u64div", "u64mod", "u64and", "u64or", "u64xor", "u64shl", "u64shr",
@@ -3891,8 +3891,8 @@ static Node *el_alts(Node *t, int from) {
 }
 /* ---- by-lin (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F32; §12 “The build list”, “F. Programs about programs”, item 32): the elaborator calling the certificate search on a hole. The goal
  * `Lew a b` and the hypotheses `h : Lew l r` in scope are read as linear codes over their atoms
- * (plusw, %wsucc, word literals; any other subterm an atom), lib/lin.cub's omega-cert finds the
- * multipliers at elaboration time (untrusted), and the hole becomes lib/linproof.cub's
+ * (plusw, %wsucc, word literals; any other subterm an atom), lib/bootstrap/lin.cub's omega-cert finds the
+ * multipliers at elaboration time (untrusted), and the hole becomes lib/library/linproof.cub's
  * cert-sound at the environment of the atoms — the verified checker's run, `cert-check … ≡ true`,
  * is refl, decided by the checker's own normalization. */
 static Node *LATOM[64]; static int nlatom;
@@ -3914,7 +3914,7 @@ static Node *lin_code(Node *t, bool typed) {
 }
 /* the word core: goal ga ≤ gb from hypotheses hl ≤ hr with proofs hp */
 static Node *lin_core(Node *ex, Node *at, Node *ga, Node *gb, Node **hl, Node **hr, Node **hp, int nh) {
-    if (global_lookup("cert-sound") < 0 || global_lookup("omega-cert") < 0) die("by-lin needs lib/lin.cub and lib/linproof.cub loaded, in", tfname);
+    if (global_lookup("cert-sound") < 0 || global_lookup("omega-cert") < 0) die("by-lin needs lib/bootstrap/lin.cub and lib/library/linproof.cub loaded, in", tfname);
     nlatom = 0;
     Node *hs = nsym("lnil");
     for (int z = nh - 1; z >= 0; z--) hs = lst(2, lst(2, nsym("lcons"), sym3("pair", lin_code(hl[z], false), lin_code(hr[z], false))), hs);
@@ -3972,7 +3972,7 @@ static void z_walk(Node *t) {
     ZT[nzt++] = t;
 }
 static Node *by_lin_int(Node *ex, Node *at, Node *ga, Node *gb) {
-    if (global_lookup("toZ2-fromZ2-rel") < 0 || global_lookup("eq-le") < 0 || global_lookup("toZ2-neg-fst2") < 0) die("by-lin over Int needs lib/intproof.cub loaded, in", tfname);
+    if (global_lookup("toZ2-fromZ2-rel") < 0 || global_lookup("eq-le") < 0 || global_lookup("toZ2-neg-fst2") < 0) die("by-lin over Int needs lib/library/intproof.cub loaded, in", tfname);
     const char *hn[64]; Node *ul[64], *ur[64]; int nu = lin_hyps("leZ", hn, ul, ur, 64);
     Node *hl[256], *hr[256], *hp[256]; int nh = 0;
     for (int z = 0; z < nu; z++) { hl[nh] = lst(3, nsym("plusw"), zc(ul[z], 1), zc(ur[z], 2)); hr[nh] = lst(3, nsym("plusw"), zc(ur[z], 1), zc(ul[z], 2)); hp[nh++] = nsym(hn[z]); }
@@ -4009,7 +4009,7 @@ static Node *by_lin(Node *ex, Node *at) {
 }
 /* `declarations T` (2026-11-12): every checked definition in scope whose type is T (equal
  * canonical forms), in the order declared, as the list cons d1 (cons d2 … nil) : List T. The work
- * read as a value of the language: a view of it is a term over such lists (lib/task-graph.cub). */
+ * read as a value of the language: a view of it is a term over such lists (lib/usage/task-graph.cub). */
 static Node *el_declarations(Node *Ts) {
     Node *T = ds(strip_marks(core(el(Ts))));
     SBuf a = { 0 }; cur_deps.n = 0; canon(&a, T); cur_deps.n = 0;
@@ -5652,7 +5652,7 @@ static Node *wf_calls(Node *e, Node *M, Node *L, Node *k, Node *h) {
     return r;
 }
 static Node *clauses_wf(const char *f, Lhs *ls, Node **rhs, int n, Node *m, Node *L) {
-    if (global_lookup("<-step") < 0 || global_lookup("_<_") < 0) die("decreasing by needs the order of lib/std.cub (_<_, <-step, <-suc-self), for", f);
+    if (global_lookup("<-step") < 0 || global_lookup("_<_") < 0) die("decreasing by needs the order of lib/library/std.cub (_<_, <-step, <-suc-self), for", f);
     int np0 = tsig.np; Node *orig[256];
     for (int q = 0; q < np0 && q < 256; q++) orig[q] = tsig.pn[q];
     Node **rs2 = calloc((size_t)n + 1, sizeof(Node *));

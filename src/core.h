@@ -195,7 +195,7 @@ enum {
     O_CASE,     /* p=CaseTab, x=has motive; 0=scrutinee [1=motive] environment, out. Meeting a
                  * constructor it builds the selected branch's body: one interaction */
     /* the values as data, for terms about terms (the checker): */
-    O_VIEW,     /* 0=value 1=out: the value's head as a View constructor (lib/code.cub), its parts the
+    O_VIEW,     /* 0=value 1=out: the value's head as a View constructor (lib/core/code.cub), its parts the
                  * value's own ports */
     O_MKVAR,    /* a=count; 0=level (Num) 1=type 2=out: the variable at that level */
     O_MKDIM,    /* a=count; 0=level (Num) 1=out: the dimension at that level */

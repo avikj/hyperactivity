@@ -346,7 +346,7 @@ DataInfo *DATA; static size_t capdata; static int ndata;
 FldInfo *FLD; static size_t capfld; static int nfld;
 static int fld_lookup(const char *s) { for (int i = nfld - 1; i >= 0; i--) if (!strcmp(FLD[i].name, s)) return i; return -1; }
 long case_hcomp_global = -1;
-/* "%%c" names the first constructor declared c: the checker's own (lib/check.cub), referred to by
+/* "%%c" names the first constructor declared c: the checker's own (lib/core/check.cub), referred to by
  * the code the checker is given, whatever the program declares later under the same name */
 /* by name: an open-addressed table of the latest constructor of each name, rebuilt when constructors
  * have been declared since (declarations are rare, lookups constant) */
@@ -767,7 +767,7 @@ static Node *ds(Node *t) {
 
 /* ---------------- codes of source terms ----------------
  * (code t) writes the code of a source term as data: constructor
- * applications of lib/code.cub, variables as de Bruijn indices over one
+ * applications of lib/core/code.cub, variables as de Bruijn indices over one
  * context of term and dimension variables, checked definitions as signature
  * indices. This is reading source text, not inspecting a value. */
 static const char **cscope; static size_t capcscope; static int ncscope;
@@ -784,12 +784,12 @@ static char **CHKPOS; static size_t capchkpos;   /* where each checked definitio
 extern char decl_pos[512];
 static char **DATAPOS; static size_t capdatapos;
 static int checked_index(const char *s) { for (int i = nchecked - 1; i >= 0; i--) if (!CHKHIDE[i] && (CHECKED[i] == s || !strcmp(CHECKED[i], s))) return i; return -1; }
-/* a name a checked term cannot use. A definition of a file loaded before the checker (lib/prelude.cub's
+/* a name a checked term cannot use. A definition of a file loaded before the checker (lib/core/prelude.cub's
  * map, length, append, add, mul, and, iszero; the checker's own helpers) has no type and cannot be
  * given one there (a signature needs the checker): the message says so and names the checked ones */
 static void die_unchecked(const char *s) {
     if (global_lookup(s) >= 0) {
-        char m[512]; snprintf(m, sizeof m, "code: %s is a helper defined before the checker was loaded (lib/prelude.cub and the checker's files): it has no type, so a checked definition cannot use it. Checked ones in lib/std.cub: list-map, list-length, list-append (for map, length, append), plus, times (for add, mul)", s);
+        char m[512]; snprintf(m, sizeof m, "code: %s is a helper defined before the checker was loaded (lib/core/prelude.cub and the checker's files): it has no type, so a checked definition cannot use it. Checked ones in lib/library/std.cub: list-map, list-length, list-append (for map, length, append), plus, times (for add, mul)", s);
         die(m, NULL);
     }
     die("code: not a bound variable or checked definition:", s);
@@ -1080,7 +1080,7 @@ static Node *to_code(Node *t) {
     { static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr" };
       for (int q = 0; q < 13; q++) if (!strcmp(h, WO[q])) return capp3("cwop", word(q), to_code(t->it[1]), to_code(t->it[2])); }
     if (!strcmp(h, "%welimP") && t->n == 5) return capp4("cwelim", to_code(t->it[2]), to_code(t->it[3]), to_code(t->it[4]), capp1("some", to_code(t->it[1])));
-    /* a primitive operation (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”): (cprim k args), k = class·256 + sub as lib/code.cub's prim-apply reads it */
+    /* a primitive operation (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”): (cprim k args), k = class·256 + sub as lib/core/code.cub's prim-apply reads it */
     {
         static const char *PO1[] = { "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
             "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr",
@@ -1130,7 +1130,7 @@ static Node *to_code(Node *t) {
 }
 
 /* ---------------- annotated codes ----------------
- * The checker's input (lib/check.cub `Tm`): the code of a term whose every node carries the
+ * The checker's input (lib/core/check.cub `Tm`): the code of a term whose every node carries the
  * term's value, computed by the machine from the compiled subterm, and whose binders are
  * functions: a term binder λ x xT. (code of the body), a dimension binder λ i. (code of the
  * body). Instantiating a binder is applying it; a variable's node is (tv x xT), its value and
@@ -1440,7 +1440,7 @@ static NV ann(Node *t, Chain *C) {
     die("code: no code for form", h);
     return (NV){ 0 };
 }
-/* a data declaration as a telescope (lib/check.cub `Tel`): its parameters, then the list of its
+/* a data declaration as a telescope (lib/core/check.cub `Tel`): its parameters, then the list of its
  * constructors, each its fields, its dimensions, then its boundary */
 static Node *atel_ctor(Node *cd, ConInfo *c, int i, int k) {
     if (k < c->nfields) {
@@ -2946,7 +2946,7 @@ static char *read_port(Port prov) {
     return buf;
 }
 /* ---------------- printing a code ----------------
- * A typed reading (quote in lib/check.cub) is a code of lib/code.cub: first-order data, with
+ * A typed reading (quote in lib/core/check.cub) is a code of lib/core/code.cub: first-order data, with
  * bound variables and dimensions as de Bruijn indices. It is printed with names made in the
  * order the binders are printed, x0 x1 ... for variables (ih for an elimination's hypotheses)
  * and i0 i1 ... for dimensions, as a reading names them. */
@@ -3190,7 +3190,7 @@ static char *readback_at(Node *T, Node *t, long *steps) {
 static const char *cur_dir;
 /* a checked definition whose check the elaborator already ran: its result and length */
 static const char *forced_result; static long forced_steps;
-/* why a judgment failed: its normal form (no v why A B), lib/check.cub Res */
+/* why a judgment failed: its normal form (no v why A B), lib/core/check.cub Res */
 /* the slots of a failure that are types (read at their universe); the others are values whose
  * type the failure does not carry, read without one */
 static bool slot_is_type(int why, int k) {
@@ -3797,7 +3797,7 @@ static void toplevel_in(Node *f) {
         if (!strcmp(G[g].name, "%case-hcomp")) case_hcomp_global = g;
         if (fill_decl) { for (int i = 0; i < G[g].npark; i++) net_push(G[g].park_o[i], G[g].park_v[i]); G[g].npark = 0; }
     } else if (!strcmp(h, "checked") || !strcmp(h, "checked-fail") || !strcmp(h, "check") || !strcmp(h, "check-fail")) {
-        /* the checker (lib/check.cub), a term, run on the codes of T and t
+        /* the checker (lib/core/check.cub), a term, run on the codes of T and t
          * against the signature of the definitions checked so far */
         bool define = !strcmp(h, "checked") || !strcmp(h, "checked-fail");
         bool expect = strcmp(h, "check-fail") != 0 && strcmp(h, "checked-fail") != 0;
@@ -4557,7 +4557,7 @@ static void toplevel_in(Node *f) {
         for (int ci = 0; ci < nc; ci++) { free(cs[ci].fn); free(cs[ci].ft); free(cs[ci].dn); free(cs[ci].bf); free(cs[ci].be); }
         free(cs); free(pn);
     } else if (!strcmp(h, "run")) {
-        /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26) */
+        /* (run e): e a Step W A (lib/languages/world.cub), walked by the driver loop (src/drivers.c; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26) */
         if (f->n != 2) die("(run step)", NULL);
         if (read_only) { printf("run: not performed (--read)\n"); return; }
         drivers_run(f->it[1]);
@@ -4662,7 +4662,7 @@ static JT *jt_app(Node *h, Node **args, int na, const char **pn, JT **pv, int np
         for (int i = 0; P[i].n; i++) if (!strcmp(h->s, P[i].n)) { JT *t = jt_new(JT_PRIM); t->pt = P[i].pt; return t; }
     }
     if (!strcmp(h->s, "Bytes") || !strcmp(h->s, "%bytesty")) return jt_new(JT_BYTES);
-    /* a Nat crosses as the count of its successors, a word (lib/x86.cub's encoding) */
+    /* a Nat crosses as the count of its successors, a word (lib/capacities/x86.cub's encoding) */
     if (na == 0 && !strcmp(h->s, "Nat") && data_lookup("Nat") >= 0) { JT *t = jt_new(JT_NAT); t->d = data_lookup("Nat"); return t; }
     int d = data_lookup(h->s);
     if (d < 0 || DATA[d].nparams != na || DATA[d].co) return jt_new(JT_NO);

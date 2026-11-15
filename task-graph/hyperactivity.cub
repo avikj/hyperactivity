@@ -1,10 +1,10 @@
--- task-graph/hyperactivity.cub — this repository's task graph (lib/task-graph.cub; its meaning and rules
+-- task-graph/hyperactivity.cub — this repository's task graph (lib/usage/task-graph.cub; its meaning and rules
 -- are “The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md)). The product, Avik's four goals and the one dependency between them
 -- (2026-11-13). A goal with no children is one coarse task described by its statement; it is split
 -- only when part of it is being tackled immediately (“The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md)). Known defects
 -- and gaps found in the code are dated `finding (date):` comments at their sites.
 --
-import "../lib/task-graph.cub"
+import "../lib/usage/task-graph.cub"
 -- the-product (2026-11-13, Avik): "the product is every screened device in the world simply runs
 -- hyperactive kernel. the term "application" becomes fully concrete - does not refer to a silo, but
 -- literally to a particular application of computing." "*all* of this is to serve *product*." The
@@ -33,16 +33,16 @@ language-implementation = node "The Hyperactive language and its features, imple
 -- the language's terms as typed
 -- objects in it, Code(Γ, A) = Σ c. Der(Γ, c, A), normalization by evaluation with its soundness
 -- equation, eq. (6.5) “reifySound” of that section, and a checker that returns typing derivations. The plan, step by step, is
--- lib/nbe.cub's head; the working file was experiments/nbe/p26-wip.cub, now swapped into lib/nbe.cub
+-- lib/capacities/nbe.cub's head; the working file was experiments/nbe/p26-wip.cub, now swapped into lib/capacities/nbe.cub
 -- when done. Expanded 2026-11-14, when its step F2d (the interval normalizer's soundness) began.
 -- Known (2026-11-13, from the review of every earlier finding): The language's terms are typed
 -- objects in it, with normalization and its soundness, and the checker returns typing derivations
 -- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”). The language's terms as typed objects in it,
 -- normalization by
--- evaluation with its soundness, and a checker that returns typing derivations (lib/check.cub is an
--- untyped term with no statement of what it accepts; lib/std.cub's primitives give typed programs
--- its operations at asserted types). Now in lib/nbe.cub; what remains is in
--- lib/nbe.cub's head (F2d the interval normalizer's soundness, F2d' its canonicity, F2e naturality in substitutions, fund, normalize, the swap), then Kan operations, Glue,
+-- evaluation with its soundness, and a checker that returns typing derivations (lib/core/check.cub is an
+-- untyped term with no statement of what it accepts; lib/library/std.cub's primitives give typed programs
+-- its operations at asserted types). Now in lib/capacities/nbe.cub; what remains is in
+-- lib/capacities/nbe.cub's head (F2d the interval normalizer's soundness, F2d' its canonicity, F2e naturality in substitutions, fund, normalize, the swap), then Kan operations, Glue,
 -- universes and object-level data types. This is the easiest language to build it in, not a hard
 -- one (2026-11-13, worked out with Avik): it is normalization for a cubical type theory written
 -- inside a cubical type theory. Anywhere else (Agda without its cubical mode, Coq, Lean) one first
@@ -52,7 +52,7 @@ language-implementation = node "The Hyperactive language and its features, imple
 -- (reifySound is refl) and only readback needs designing. The method for the Kan operations, Glue
 -- and universes is published (Sterling and Angiuli, LICS 2021; Cubical Agda, cooltt). Open, and
 -- deciding how much of the remaining work is needed: the host identifies interval expressions up to
--- the De Morgan laws judgmentally, yet F2 (the interval's laws, steps F2a to F2e of lib/nbe.cub's head) re-proves every law as a path, because a context's
+-- the De Morgan laws judgmentally, yet F2 (the interval's laws, steps F2a to F2e of lib/capacities/nbe.cub's head) re-proves every law as a path, because a context's
 -- dimensions are encoded as a cube built by recursion on their number, so at a variable number
 -- every operation is a stuck recursion. Answered 2026-11-13 (the question is the standard
 -- semantics, not one for Avik): in CCHM a term in Γ; Ψ; φ means a family natural in the stage, an
@@ -62,7 +62,7 @@ language-implementation = node "The Hyperactive language and its features, imple
 -- the number of dimensions is variable only in the meta-level quantification over stages, and a
 -- semantic action of interval expressions defined on syntax must be shown to respect the algebra's
 -- equations once: that is the well-definedness of the cube category's action, not an artefact of
--- the encoding. lib/nbe.cub is that model built inside the host: stages are host cubes (Cube n),
+-- the encoding. lib/capacities/nbe.cub is that model built inside the host: stages are host cubes (Cube n),
 -- interval expressions are data (IEx, DNF), substitutions are Sub and cmap-d; F2a-F2c (every De
 -- Morgan law, no 2-cell) is the well-definedness, F2d the normalizer's soundness, F2d' its
 -- canonicity, F2e naturality in substitutions. Holding an object dimension as a host interval
@@ -78,19 +78,19 @@ language-implementation = node "The Hyperactive language and its features, imple
 -- evaluation step unfolds it. keep-lift's parts: the cubes of contexts its base paths pass through
 -- (kl-k2, kl-k3), the meanings over them (kl-E0 … kl-ER0), the dependent paths over each base path
 -- (kl-DE, kl-Dr2, kl-D, kl-DR) and the four steps (kl-s1 … kl-s4)
--- Known (2026-11-12, at lib/std.cub): needs-work. The primitives below give typed programs (the
+-- Known (2026-11-12, at lib/library/std.cub): needs-work. The primitives below give typed programs (the
 -- specializer, the translation to machine code) the untyped checker's own operations at types: a
 -- definition's code, quotation, normalization, conversion at a type, constructor tables, rewriting.
 -- They are trusted, as the checker is, and their types are asserted, not checked. Typed codes
 -- replace them by terms whose types are checked.
--- Known (2026-11-12, at lib/check.cub): needs-work. The checker is an untyped term with no
+-- Known (2026-11-12, at lib/core/check.cub): needs-work. The checker is an untyped term with no
 -- statement of what it accepts; it is trusted. The paper (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…,
 -- §6.1 “Typed quotation, semantic readback, and self-application”, "Checked syntax and its interpretation" and "Typed stages and checking"): the theorem that it
 -- accepts exactly the derivable judgments is separate from its definition. A checker returning a typing derivation
 -- (Der) or a refusal is sound by construction; deciding derivability is then its completeness
 -- (this node).
--- Known (2026-11-12, at lib/check.cub): needs-work. Solving one implicit argument exhausted the
--- machine's memory (7 GB, killed, exit 137): lib/nbe.cub's `reify-code s K D Δ δ x cx = (fst (fst
+-- Known (2026-11-12, at lib/core/check.cub): needs-work. Solving one implicit argument exhausted the
+-- machine's memory (7 GB, killed, exit 137): lib/capacities/nbe.cub's `reify-code s K D Δ δ x cx = (fst (fst
 -- (rr s) K D Δ δ x cx) , x , embed (snd (fst (rr s) K D Δ δ x cx)))`, where embed's implicit index
 -- {KJ} is to be found from its argument's type, at a variable shape s. The same term through a
 -- definition with a declared type (nf-code Δ (s , (K , δ , D)) x (fst (rr s) K D Δ δ x cx)) checks
@@ -103,12 +103,12 @@ language-implementation = node "The Hyperactive language and its features, imple
 -- (elab ...), and the term with them is checked again. An argument's own holes are solved first.
 typed-codes-and-normalization : Node
 typed-codes-and-normalization = node "Typed codes, normalization by evaluation with its soundness, and a checker that returns typing derivations, as §6.1 of the paper (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…) specifies." (cons language-implementation nil)
--- interval-normal-forms-mean-their-expressions (2026-11-14): F2d of lib/nbe.cub's head. Path
+-- interval-normal-forms-mean-their-expressions (2026-11-14): F2d of lib/capacities/nbe.cub's head. Path
 -- application at a normal form of the interval is path application at the form read as an
 -- expression (papp-dd f = papp-ex (dnf-ix f)), so the normalizer's join, meet and reversal must
 -- mean the expressions' join, meet and reversal: IEq at every skeleton between dnf-ix (dnf-join g
 -- h) and ixjoin (dnf-ix g) (dnf-ix h), and likewise for dnf-meet and dnf-neg. No canonicity
--- hypothesis is needed (F2d' is canonicity). The plan, lemma by lemma, is lib/nbe.cub's head; the
+-- hypothesis is needed (F2d' is canonicity). The plan, lemma by lemma, is lib/capacities/nbe.cub's head; the
 -- definitions go after the F2c laws (the De Morgan laws as paths) in experiments/nbe/p26-wip.cub.
 -- Resolved 2026-11-14: dnf-join-sound, dnf-meet-sound and dnf-neg-sound in
 -- experiments/nbe/p26-wip.cub with their lemmas, each a chain of the F2c laws, no canonicity
@@ -117,20 +117,20 @@ typed-codes-and-normalization = node "Typed codes, normalization by evaluation w
 interval-normal-forms-mean-their-expressions : Node
 interval-normal-forms-mean-their-expressions = node "The interval normalizer's join, meet and reversal mean the interval's join, meet and reversal: path application at the normalized form equals path application at the operation on the forms' readings (F2d)." (cons typed-codes-and-normalization nil)
 -- typed-codes-remainder (2026-11-14; expanded the same day, when F2d' began): what typed codes need
--- after F2d (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”), in lib/nbe.cub's
+-- after F2d (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”), in lib/capacities/nbe.cub's
 -- head's order: the normalizer's canonicity (F2d'), naturality in substitutions (F2e), papp-subst,
 -- the fundamental lemma, reflect-env, normalize and its soundness by refl, the swap of
--- experiments/nbe/p26-wip.cub into lib/nbe.cub with the examples rewritten; then the Kan
+-- experiments/nbe/p26-wip.cub into lib/capacities/nbe.cub with the examples rewritten; then the Kan
 -- operations, Glue, universes and object-level data types.
 typed-codes-remainder : Node
-typed-codes-remainder = node "Everything else typed codes and normalization by evaluation need after the interval normalizer's soundness (F2d): canonicity, naturality in substitutions, the fundamental lemma, normalize and its soundness, the swap into lib/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-and-normalization nil)
--- normal-forms-are-canonical (2026-11-14): F2d' of lib/nbe.cub's head. npapp and dpapp take a form
+typed-codes-remainder = node "Everything else typed codes and normalization by evaluation need after the interval normalizer's soundness (F2d): canonicity, naturality in substitutions, the fundamental lemma, normalize and its soundness, the swap into lib/capacities/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-and-normalization nil)
+-- normal-forms-are-canonical (2026-11-14): F2d' of lib/capacities/nbe.cub's head. npapp and dpapp take a form
 -- f with isTrue (dnf-canon f) and isTrue (dnf-nonconst f), and F2e's substitution makes forms by
 -- dnf-join, dnf-meet and dnf-neg of canonical forms, so: dnf-norm of any form is canonical; the
 -- join, meet and negation of canonical forms are canonical; a canonical form that is not non-
 -- constant is lnil or dnf-one. Built on an invariant dnf-ok (each conjunction pairwise lit-lt
 -- sorted, the form pairwise conj-lt sorted, an antichain under conj-sub) that every normalizer
--- operation keeps and on which dnf-norm is the identity. The plan, lemma by lemma, is lib/nbe.cub's
+-- operation keeps and on which dnf-norm is the identity. The plan, lemma by lemma, is lib/capacities/nbe.cub's
 -- head.
 -- Resolved 2026-11-14: canon-norm, canon-join, canon-meet, canon-neg and const-cases in
 -- experiments/nbe/p26-wip.cub, canonical being exactly the invariant dnf-ok; the file checks fresh
@@ -139,18 +139,18 @@ normal-forms-are-canonical : Node
 normal-forms-are-canonical = node "The interval normalizer's outputs are canonical: normalizing any form, and joining, meeting or negating canonical forms, gives a form its normalization leaves unchanged, and such a form is constant only as 0 or 1 (F2d')." (cons typed-codes-remainder nil)
 -- typed-codes-after-canonicity (2026-11-14; expanded the same day, when F2e began): what typed codes
 -- need after F2d' (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”), in
--- lib/nbe.cub's head's order: naturality in substitutions (F2e), papp-subst, the fundamental lemma,
+-- lib/capacities/nbe.cub's head's order: naturality in substitutions (F2e), papp-subst, the fundamental lemma,
 -- reflect-env, normalize and its soundness by refl, the swap of experiments/nbe/p26-wip.cub into
--- lib/nbe.cub with the examples rewritten; then the Kan operations, Glue, universes and object-
+-- lib/capacities/nbe.cub with the examples rewritten; then the Kan operations, Glue, universes and object-
 -- level data types.
 typed-codes-after-canonicity : Node
-typed-codes-after-canonicity = node "Everything typed codes and normalization by evaluation need after the normalizer's canonicity (F2d'): naturality in substitutions, the fundamental lemma, normalize and its soundness, the swap into lib/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-remainder nil)
--- substitution-commutes-with-path-application (2026-11-14): F2e of lib/nbe.cub's head. fund at
+typed-codes-after-canonicity = node "Everything typed codes and normalization by evaluation need after the normalizer's canonicity (F2d'): naturality in substitutions, the fundamental lemma, normalize and its soundness, the swap into lib/capacities/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-remainder nil)
+-- substitution-commutes-with-path-application (2026-11-14): F2e of lib/capacities/nbe.cub's head. fund at
 -- dpapp under a substitution whose dimension part sends dimensions to forms needs path application
 -- at the substituted form to be the substitution of the path application. The renaming case exists
 -- (papp-ex-cmap); this generalizes it to substitution by forms, the crux being the mixed lemmas
 -- (path application at a form in a cube's base dimensions against papp-ex in its fibre). The plan
--- is lib/nbe.cub's head.
+-- is lib/capacities/nbe.cub's head.
 -- Resolved 2026-11-14: cmap-papp-ex in experiments/nbe/p26-wip.cub; with papp-subst the file checks
 -- fresh (CUBICAL_NOCACHE=1): 1305 passed, 0 failed, 786M steps, 11.4 min.
 substitution-commutes-with-path-application : Node
@@ -158,12 +158,12 @@ substitution-commutes-with-path-application = node "Substituting forms for dimen
 -- typed-codes-after-naturality (2026-11-14): what typed codes need after F2e
 -- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”): papp-subst, the
 -- fundamental lemma, reflect-env, normalize and its soundness by refl, the swap of
--- experiments/nbe/p26-wip.cub into lib/nbe.cub with the examples rewritten; then the Kan
+-- experiments/nbe/p26-wip.cub into lib/capacities/nbe.cub with the examples rewritten; then the Kan
 -- operations, Glue, universes and object-level data types.
 typed-codes-after-naturality : Node
-typed-codes-after-naturality = node "Everything typed codes and normalization by evaluation need after naturality in substitutions (F2e): the fundamental lemma, normalize and its soundness, the swap into lib/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-canonicity nil)
+typed-codes-after-naturality = node "Everything typed codes and normalization by evaluation need after naturality in substitutions (F2e): the fundamental lemma, normalize and its soundness, the swap into lib/capacities/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-canonicity nil)
 -- path-application-under-substitution-at-forms (2026-11-14): papp-subst, the first step after F2e
--- in lib/nbe.cub's head ("Next, papp-subst"): path application at canonical forms commutes with a
+-- in lib/capacities/nbe.cub's head ("Next, papp-subst"): path application at canonical forms commutes with a
 -- substitution's action on meanings, which the fundamental lemma uses at dpapp. Step 1: dnf-subst
 -- and cmap-papp-ddS; step 2 follows subM-papp's route.
 -- Resolved 2026-11-14: dnf-subst, dnf-subst-sound, cmap-papp-ddS and papp-subst in
@@ -173,12 +173,12 @@ typed-codes-after-naturality = node "Everything typed codes and normalization by
 path-application-under-substitution-at-forms : Node
 path-application-under-substitution-at-forms = node "Path application at canonical forms commutes with the action of a substitution by forms on meanings (papp-subst)." (cons typed-codes-after-naturality nil)
 -- typed-codes-after-papp-subst (2026-11-14): after papp-subst: the fundamental lemma, reflect-env,
--- normalize and its soundness by refl, the swap of experiments/nbe/p26-wip.cub into lib/nbe.cub
+-- normalize and its soundness by refl, the swap of experiments/nbe/p26-wip.cub into lib/capacities/nbe.cub
 -- with the examples rewritten; then the Kan operations, Glue, universes and object-level data
 -- types.
 typed-codes-after-papp-subst : Node
-typed-codes-after-papp-subst = node "Everything typed codes and normalization by evaluation need after papp-subst: the fundamental lemma, normalize and its soundness, the swap into lib/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-naturality nil)
--- fundamental-lemma-for-typed-codes (2026-11-14): fund of lib/nbe.cub's head ("fund's plan"): every
+typed-codes-after-papp-subst = node "Everything typed codes and normalization by evaluation need after papp-subst: the fundamental lemma, normalize and its soundness, the swap into lib/capacities/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-naturality nil)
+-- fundamental-lemma-for-typed-codes (2026-11-14): fund of lib/capacities/nbe.cub's head ("fund's plan"): every
 -- derivation's meaning, under a substitution whose forms are canonical and whose values are
 -- computable, is computable at its shape (terms) or its shape's computability holds of it (types).
 -- Resolved 2026-11-14: fund in experiments/nbe/fund-wip.cub, with reflect-env over typed contexts,
@@ -187,16 +187,16 @@ typed-codes-after-papp-subst = node "Everything typed codes and normalization by
 fundamental-lemma-for-typed-codes : Node
 fundamental-lemma-for-typed-codes = node "Every typed derivation is computable under every computable substitution by canonical forms (the fundamental lemma, fund)." (cons typed-codes-after-papp-subst nil)
 -- typed-codes-after-fund (2026-11-14): after fund: reflect-env, normalize and its soundness by refl,
--- the swap of experiments/nbe/p26-wip.cub into lib/nbe.cub with the examples rewritten; then the Kan
+-- the swap of experiments/nbe/p26-wip.cub into lib/capacities/nbe.cub with the examples rewritten; then the Kan
 -- operations, Glue, universes and object-level data types.
 typed-codes-after-fund : Node
-typed-codes-after-fund = node "Everything typed codes and normalization by evaluation need after the fundamental lemma: normalize and its soundness, the swap into lib/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-papp-subst nil)
+typed-codes-after-fund = node "Everything typed codes and normalization by evaluation need after the fundamental lemma: normalize and its soundness, the swap into lib/capacities/nbe.cub, then the Kan operations, Glue, universes and object-level data types." (cons typed-codes-after-papp-subst nil)
 -- normalizer-replaces-p1 (2026-11-14): the normalizer over cubes (experiments/nbe/p26-wip.cub and
 -- fund-wip.cub) run on derivations (experiments/nbe/examples-p2.cub: P1's examples, a path λ, a
--- variable of function type η-expanded), then swapped into lib/nbe.cub in place of P1's families,
+-- variable of function type η-expanded), then swapped into lib/capacities/nbe.cub in place of P1's families,
 -- the working files deleted and experiments/nbe/examples.cub rewritten over the new families.
 normalizer-replaces-p1 : Node
-normalizer-replaces-p1 = node "The normalizer over cubes runs on example derivations and replaces P1's normalizer in lib/nbe.cub." (cons typed-codes-after-fund nil)
+normalizer-replaces-p1 = node "The normalizer over cubes runs on example derivations and replaces P1's normalizer in lib/capacities/nbe.cub." (cons typed-codes-after-fund nil)
 -- typed-codes-after-swap (2026-11-14): after the swap: the Kan operations, Glue, universes and
 -- object-level data types (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”), each a
 -- shape with its computability clause, its rules in Der and NN, and its cases in rr and fund.
@@ -206,7 +206,7 @@ typed-codes-after-swap = node "Everything typed codes and normalization by evalu
 -- “Substitution on checked syntax”: a well-typed substitution (a checked term per variable, a canonical
 -- form per dimension) takes a checked term or type in Γ to one in Δ whose meaning is the substitution's
 -- action on the original's, [[t[σ]]]ρ ≡ [[t]][[σ]]ρ by refl; derivations also rename along worlds
--- (ren-der). Resolved 2026-11-14 (lib/nbe.cub: DSubst, subst-tm, subst-ty, subst-sound, ren-der;
+-- (ren-der). Resolved 2026-11-14 (lib/capacities/nbe.cub: DSubst, subst-tm, subst-ty, subst-sound, ren-der;
 -- example: x := true in not x gives false).
 substitution-on-checked-syntax : Node
 substitution-on-checked-syntax = node "Checked syntax substitutes: a well-typed substitution takes a checked term to a checked term whose meaning is the substitution's action on the original's." (cons typed-codes-after-swap nil)
@@ -215,7 +215,7 @@ substitution-on-checked-syntax = node "Checked syntax substitutes: a well-typed 
 -- case KT by induction on the shape: at Bool and Nat the value (computability ignores the type
 -- component, One1), at Σ componentwise, at Π through the clause's AppV data (zpt, via-snd), the
 -- argument transported back along the domain and the result along the codomain at its fill. Resolved
--- 2026-11-14 (lib/nbe.cub, examples: transp at Bool, Nat, Σ Bool Bool and Bool → Bool normalize).
+-- 2026-11-14 (lib/capacities/nbe.cub, examples: transp at Bool, Nat, Σ Bool Bool and Bool → Bool normalize).
 path-free-transport : Node
 path-free-transport = node "Transport along a line of types at every path-free shape is a typed code of the normalizer over cubes: computable, and it normalizes." (cons typed-codes-after-swap nil)
 -- Known (2026-11-14, checked): the normalizer as it stands (Nat, Unit, Empty, List's constructors,
@@ -237,7 +237,7 @@ path-free-transport = node "Transport along a line of types at every path-free s
 -- minimality test (is the construction impossible without it?). Not yet settled: whether these growing
 -- systems can be built without host partial elements, from fixed systems or as data in the
 -- normalizer's own cube model, before any change to the core is considered.
--- Analysis (2026-11-14, from lib/check.cub and the machine): the machine already holds systems as
+-- Analysis (2026-11-14, from lib/core/check.cub and the machine): the machine already holds systems as
 -- values (a partial value is a list of face and branch, wsys bs, read by %view); only the checker
 -- lacks a type for them: check-sys accepts a system only as syntax (tsys) inside a composition's
 -- tube, Glue or a composition of types, checking each branch under each clause of its face and every
@@ -248,7 +248,7 @@ path-free-transport = node "Transport along a line of types at every path-free s
 -- dimension are disjoint and need no overlap check, but only express disjoint faces; (4) folding n
 -- branches into two by the filler of the first n − 1 (comp [φn ↦ un, ψ ↦ fill of the rest]) is a valid
 -- Kan composition but again needs two overlapping branches of dynamic faces, so (2) applies. The
--- object language's systems are lists of branches of any length (lib/code.cub's ccomp), so the meaning
+-- object language's systems are lists of branches of any length (lib/core/code.cub's ccomp), so the meaning
 -- of an object composition, not only the Kan lemma, needs a system of length computed at run time.
 -- So the construction is impossible without a checked type for the systems the machine already has:
 -- the minimality test is met, and the change exposes in the checker what the core's values already
@@ -349,13 +349,13 @@ composition-with-systems = node "Composition with a system on the context's face
 -- function over codes. What is missing is the eliminator of a nested inductive type: a field of type
 -- L D, L a data type whose one parameter occurs strictly positively, takes as hypothesis the L-shaped
 -- tuple of the hypotheses of its D elements (per L, a type %ihall-L P x by case on x and its maker
--- %ihmap-L h x; a shape sh-nest in lib/check.cub's rec-shape, hyp-val, hyp-ty, about 25 lines; a
+-- %ihmap-L h x; a shape sh-nest in lib/core/check.cub's rec-shape, hyp-val, hyp-ty, about 25 lines; a
 -- shape 'N' in src/lang.c's rec_shape and src/net.c's ih_maker, about 30 lines; the two generated
 -- definitions in src/lang.c, about 40 lines; in src/syntax.c a split of such a field reverting its
 -- hypothesis into the split's motive so that it unfolds to the pair of its head's hypothesis and its
 -- tail's, and a call on the head read as the pair's first component, about 80 lines). Then ck's case
 -- clause is one line. Next: that eliminator, then dependent types through conv-E, then the checker
--- into lib/nbe.cub.
+-- into lib/capacities/nbe.cub.
 checker-returns-derivations : Node
 checker-returns-derivations = node "A checker takes raw codes to typing derivations (or a diagnostic), as the paper's §6.1 specifies." (cons typed-codes-after-swap nil)
 -- typed-codes-after-composition (2026-11-14): everything typed codes and normalization by evaluation
@@ -370,14 +370,14 @@ typed-codes-after-composition : Node
 typed-codes-after-composition = node "Everything typed codes and normalization by evaluation need after composition with systems: Glue, universes and further object-level data types." (cons typed-codes-after-swap nil)
 -- unit-empty-list (2026-11-14): Unit, Empty (with absurd) and List (nil, cons; its recursor not yet:
 -- see typed-codes-after-composition) as object-level types of the normalizer over cubes. Resolved
--- 2026-11-14 for Unit and Empty (lib/nbe.cub; examples: tt, a Unit variable, absurd on an Empty
+-- 2026-11-14 for Unit and Empty (lib/capacities/nbe.cub; examples: tt, a Unit variable, absurd on an Empty
 -- variable) and List's constructors (examples: a list literal, a list variable).
 unit-empty-list : Node
 unit-empty-list = node "Unit, Empty with absurd, and List's constructors are object-level types of the normalizer over cubes: computable, and they normalize." (cons typed-codes-after-swap nil)
 -- object-level-nat (2026-11-14): Nat as the first object-level data type: shape s-nat, zero, suc
 -- and the recursor (step a term at Π k:Nat. P k → P (suc k), motive a type over the extension by
 -- Nat) in Der and NN, the clause CNat, fund's recursor case nrec-comp by induction on the scrutinee's
--- clause. Resolved 2026-11-14: lib/nbe.cub with experiments/nbe/examples.cub (nrec on 2 normalizes to
+-- clause. Resolved 2026-11-14: lib/capacities/nbe.cub with experiments/nbe/examples.cub (nrec on 2 normalizes to
 -- suc (suc zero), nrec on a variable stays neutral) checks fresh: 1540 passed, 0 failed, 2294M steps.
 object-level-nat : Node
 object-level-nat = node "Nat is an object-level data type of the normalizer over cubes: its constructors and recursor are typed codes, computable, and normalize." (cons typed-codes-after-swap nil)
@@ -389,8 +389,8 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- has compared the implementation with the published calculus, so whether it is "implemented fully
 -- correctly" is unknown. Read the evaluator's rule cases (src/net.c), the translation of terms into
 -- its graph (src/lang.c), the composition code generated per data type as unchecked text
--- (src/lang.c), universe composition (lib/prelude.cub, %hcompU, Cubical Agda's design, not CCHM's
--- Glue) and the checker's typing clauses (lib/check.cub) against CCHM (Cohen, Coquand, Huber,
+-- (src/lang.c), universe composition (lib/core/prelude.cub, %hcompU, Cubical Agda's design, not CCHM's
+-- Glue) and the checker's typing clauses (lib/core/check.cub) against CCHM (Cohen, Coquand, Huber,
 -- Mörtberg) and the clocked extension (Kristensen, Møgelberg, Vezzosi), recording each rule as
 -- matching or deviating, then fix or justify each deviation. What is known follows. The deliverable
 -- is not an agent's statement that the code is right: it is the trusted part made small enough to
@@ -421,7 +421,7 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- Known (2026-11-12, at src/net.c): needs-work. The calculus's rules are the cases of this function
 -- (application, projections, path application, composition, Glue, interval and faces, systems,
 -- higher-constructor boundaries, hcomp, transport, case: about 650 lines), the face algebra
--- (src/dnf.c), the composition clauses for the type formers (lib/prelude.cub) and the composition
+-- (src/dnf.c), the composition clauses for the type formers (lib/core/prelude.cub) and the composition
 -- code generated per data type (generated in src/lang.c). But the rule bodies also make
 -- sharing, deferral and memoization decisions inline (V_DEFER, boxes and references, A8 free-
 -- dimension cuts), and what a value is depends on the lazy-copy and substitution machinery above
@@ -430,7 +430,7 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- determine results, and the machinery is confined to scheduling, sharing and identity, where by
 -- construction (strong confluence of interaction nets; memo keys that are the full content of a
 -- deterministic computation) it cannot change a result.
--- Known (2026-11-12, at lib/prelude.cub): needs-work. CCHM (Cohen, Coquand, Huber, Mörtberg, “Cubical Type Theory: a constructive interpretation of the univalence axiom”, arXiv:1611.02108) §7.1 “Composition for the universe” defines composition in the universe
+-- Known (2026-11-12, at lib/core/prelude.cub): needs-work. CCHM (Cohen, Coquand, Huber, Mörtberg, “Cubical Type Theory: a constructive interpretation of the univalence axiom”, arXiv:1611.02108) §7.1 “Composition for the universe” defines composition in the universe
 -- as a Glue type along the equivalences given by transport (comp^i U [φ ↦ E] A0 = Glue [φ ↦ (E(i1),
 -- equiv_i E(1−i))] A0). Here it is instead its own type former, %hcompU, with unglue on a face as
 -- transport back along that face's line (%unglue-line) and its own composition (%comp-gluel,
@@ -451,7 +451,7 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- sweeping of compiled code, the module cache, whose key is the build date and the files' texts and
 -- whose hits are trusted).
 -- Known (2026-11-12, at task-graph/hyperactivity.cub): question. Not yet done: reading
--- lib/check.cub's typing clauses against the calculus's typing rules, each recorded as matching or
+-- lib/core/check.cub's typing clauses against the calculus's typing rules, each recorded as matching or
 -- deviating at its site.
 -- Known (2026-11-13, from the review of every earlier finding): The specializer carries its law in
 -- its type, and the three Futamura projections hold (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6 “Reflective programming and language extension”: eq. (6.4) “the specialization equation”;
@@ -459,14 +459,14 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- normalizes through a primitive that runs the untyped checker, so it cannot be specialized itself;
 -- with normalization as a term (typed codes, the sibling node) it carries its law in its type and the three Futamura
 -- projections follow. Specializing a process through a handler was measured superlinear
--- (lib/specialize.cub, 2026-11-09) and is unattributed. It waits on the typed codes above.
--- Known (2026-11-12, at lib/specialize.cub): needs-work. Specialization cost: #build of a process
+-- (lib/capacities/specialize.cub, 2026-11-09) and is unattributed. It waits on the typed codes above.
+-- Known (2026-11-12, at lib/capacities/specialize.cub): needs-work. Specialization cost: #build of a process
 -- written through a handler was measured superlinear in the number of commands (2026-11-09: 7
 -- commands 42M steps, 22 commands 1.21 billion steps, 3 min 39 s; experiments/os/build-cost*.cub
 -- hold the per-stage probes). Not attributed (normalization, rewriting, or the passes of
--- lib/x86.cub). It is a cost of the language's own programs about programs.
--- Known (2026-11-12, at lib/specialize.cub): needs-work. Normalization here is code-norm-at, a
--- primitive that runs the evaluator's own quoter (lib/std.cub's checker services). The
+-- lib/capacities/x86.cub). It is a cost of the language's own programs about programs.
+-- Known (2026-11-12, at lib/capacities/specialize.cub): needs-work. Normalization here is code-norm-at, a
+-- primitive that runs the evaluator's own quoter (lib/library/std.cub's checker services). The
 -- specializer is therefore not a term all the way down, and cannot be specialized itself: the
 -- second and third Futamura projections (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”: the second
 -- is eq. (6.7) “the second Futamura projection”; "the same stage and representation indices apply to any further projection") need
@@ -474,9 +474,9 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- soundness equation, ibid. eq. (6.5) “reifySound”).
 -- Known (2026-11-13, from the review of every earlier finding): Native code replaces a definition only with the relation to its meaning
 -- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9 “Native execution as a mathematical program transformation”). Native code today comes from an x86 translator whose output is bound and
--- run with no relation to the definition (src/lang.c, lib/x86.cub), from pasted machine code
--- (lib/elf.cub), and with proofs about its bytes at one fixed placement (lib/compile/); nothing
--- relates a fleet's proved behaviour to its binaries (lib/deploy.cub). Decided by Avik
+-- run with no relation to the definition (src/lang.c, lib/capacities/x86.cub), from pasted machine code
+-- (lib/capacities/elf.cub), and with proofs about its bytes at one fixed placement (lib/capacities/compile/); nothing
+-- relates a fleet's proved behaviour to its binaries (lib/examples/deploy.cub). Decided by Avik
 -- (2026-11-14): native realization goes through C. "are you going to complete writing proven-
 -- correct x86 RISC ARM impls instead of writing a C impl ? the value delivered to me by a complete
 -- x86 machine code impl is near-zero. cant even run on a macbook can it ... there remains no
@@ -488,8 +488,8 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- the term's meaning, which needs the meaning of the C fragment the emitter produces (a small,
 -- fixed subset), not of all of C (that stays language support); the C compiler's relation is a
 -- named assumption listed by #trusted; the evaluator substitutes native code only under that
--- relation. The x86 translator (src/lang.c, lib/x86.cub, lib/machine.cub, lib/elf.cub's pasted
--- machine code, lib/compile/) is superseded by it. The record that preceded the decision: plan
+-- relation. The x86 translator (src/lang.c, lib/capacities/x86.cub, lib/capacities/machine.cub, lib/capacities/elf.cub's pasted
+-- machine code, lib/capacities/compile/) is superseded by it. The record that preceded the decision: plan
 -- revision 9 (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §5 “The distinctions everything above x86 rests on”, item 5 “The target is x86-64”) had chosen x86 ("Not LLVM IR,
 -- not C"); a session on 2026-11-12 planned C to break a cycle in its goal graph; neither was
 -- Avik's.
@@ -497,23 +497,23 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export"): the
 -- evaluator may replace a definition by native code only once a target-correctness witness relating
 -- the code's execution to the definition exists. Here the bytes are bound after the only check
--- made, that the specialized term converts with the definition (lib/x86.cub jit-plan); the
+-- made, that the specialized term converts with the definition (lib/capacities/x86.cub jit-plan); the
 -- translation from that term to bytes (x-push, x-lift, x-erase, the templates, this boundary's
 -- marshaling) carries no relation, so a wrong translation would answer wrongly with nothing to
 -- catch it.
--- Known (2026-11-12, at lib/deploy.cub): needs-work. fl-beh (what lib/fleet.cub's properties are
+-- Known (2026-11-12, at lib/examples/deploy.cub): needs-work. fl-beh (what lib/examples/fleet.cub's properties are
 -- stated of) and fl-node (the process each binary runs) are both built from cp-view, but nothing
 -- relates them: the properties proved of the behaviour are not shown to hold of the binaries. The
 -- relation comes from processes realized as executables with their system-call events equal to the
 -- process's interaction (native realization, above), applied here; nothing specific to
 -- this file is owed.
--- Known (2026-11-12, at lib/elf.cub): needs-work. The driver loop, the #build-loop round driver and
+-- Known (2026-11-12, at lib/capacities/elf.cub): needs-work. The driver loop, the #build-loop round driver and
 -- the start code below are machine code assembled from tools/asm/*.s and pasted as byte literals:
 -- trusted as written, with no statement of what they do. They go when processes become native executables by the route
 -- native realization takes (above).
--- Known (2026-11-12, at lib/compile/meaning.cub): needs-work. This file, lib/compile/runs.cub,
--- lib/compile/tmpl.cub, lib/compile/process.cub's kernel (kn-step, a second kernel beside
--- lib/os/contract.cub's) and experiments/isa/addw-all.cub (one all-inputs theorem, for the bytes of
+-- Known (2026-11-12, at lib/capacities/compile/meaning.cub): needs-work. This file, lib/capacities/compile/runs.cub,
+-- lib/capacities/compile/tmpl.cub, lib/capacities/compile/process.cub's kernel (kn-step, a second kernel beside
+-- lib/languages/os/contract.cub's) and experiments/isa/addw-all.cub (one all-inputs theorem, for the bytes of
 -- word addition) are proofs about the output of the x86 translator at one fixed placement, a form
 -- the paper replaces (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3 “An exact decoded machine and a structural compiler theorem”: Block, eq. (9.12);
 -- seq, eq. (9.13); the compiler as a fold, eq. (9.15), with the relational congruence, eq. (9.16)). They are to be deleted with that
@@ -521,13 +521,13 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- usable for x86 as a later target.
 -- Known (2026-11-13, from the review of every earlier finding): Every law of the primitives is
 -- proved, or named as an assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar
--- types"). lib/prim.cub postulates word and bit laws that
+-- types"). lib/bootstrap/prim.cub postulates word and bit laws that
 -- are provable from the unbounded definitions; fixed-width types have no specification; floating
 -- point is trusted without a named assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”).
--- Known (2026-11-12, at lib/prim.cub): needs-work. Of the 91 primitives here, the laws of word
+-- Known (2026-11-12, at lib/bootstrap/prim.cub): needs-work. Of the 91 primitives here, the laws of word
 -- multiplication, division, remainder and the bitwise operations, the wbit-* bit laws, the byte
 -- load/store laws, array extensionality and the bit round trips are postulated, though words are
--- unbounded naturals and these laws are provable from the inductive definitions (lib/std.cub
+-- unbounded naturals and these laws are provable from the inductive definitions (lib/library/std.cub
 -- already proves addition, equality, order, maximum and subtraction equal to theirs). The fixed-
 -- width arithmetic (Int64, UInt32, UInt64) has no specification at all, and floating point is
 -- wholly trusted. The paper (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar types"):
@@ -535,17 +535,17 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- and relate each fixed-width primitive to it or name the assumption; name IEEE binary64 as an
 -- assumption. ---------------------------------------------------------------- the types
 -- Known (2026-11-13, from the review of every earlier finding): Deriving is a typed term over the
--- code of a data declaration. lib/derive.cub's 24 definitions read the checker's own values and are
+-- code of a data declaration. lib/library/derive.cub's 24 definitions read the checker's own values and are
 -- refused as untyped, so `deriving` is off and the Rust readers fail behind it. Deriving becomes a
 -- term over the code of a data declaration, which needs a declaration's code as a value (work-as-a-
 -- value). It waits on the work being a value (product implementation).
--- Known (2026-11-12, at lib/derive.cub): needs-work. 24 definitions here are untyped and refused by
+-- Known (2026-11-12, at lib/library/derive.cub): needs-work. 24 definitions here are untyped and refused by
 -- the checker, which has rejected untyped definitions outside the bootstrap files since 2026-11-09,
 -- deliberately, after about 10,000 lines of untyped code were written by an agent. They are to be
 -- written with types; nothing in the checker changes. `deriving eq` in the surface language depends
 -- on this file and is off until it checks. 2026-11-12: they cannot be given types as they are: they
 -- read the checker's own values (a constructor's telescope tx A nm r, tval, %var, %view (%gval g),
--- from lib/check.cub, a bootstrap file whose value types are not checked data), which no type of a
+-- from lib/core/check.cub, a bootstrap file whose value types are not checked data), which no type of a
 -- checked definition names. Typed, deriving is a term over a code of the data type's declaration
 -- (its constructors and field types, as Code), not over the checker's values.
 -- Known (2026-11-13, from the review of every earlier finding): The evaluator handles terms of any
@@ -565,7 +565,7 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- cannot be read now ends the load through the one error path: the checked lines first, then the
 -- reason last, on stderr and on stdout when that is another file; a missing closing parenthesis or
 -- brace names where it was opened (expected ) (closing the one opened at 4:11), found :).
--- Resolved (2026-11-14, lib/check.cub): the library's typed transport applied to a line of types
+-- Resolved (2026-11-14, lib/core/check.cub): the library's typed transport applied to a line of types
 -- that is a case on a path into Bool (false-true A e = transport (λ i → if e i then A else (A → A))
 -- (λ a → a)) was refused with "an implicit argument is not determined by the other arguments'
 -- types or the type expected": the λ, guessed a function, was skipped where a path was due, and
@@ -579,38 +579,39 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- no claim of the paper behind it). Every core term is flagged as
 -- core, and files are organized by layer, so the layer of a construction is visible where it stands.
 -- The sort (2026-11-14, each file read for why it exists; since 2026-11-15 each file of lib/ and src/
--- opens with a line naming its layer by this sort; the directories by layer not yet made):
+-- opens with a line naming its layer by this sort, and lib/ is in directories by layer: core/,
+-- bootstrap/, capacities/, library/, examples/, languages/, usage/):
 -- Core, the primitive language and its implementation: src/ (the machine: net.c, lang.c, syntax.c,
 -- dnf.c, big.c; store.c and sha256.c the store; drivers.c the operating-system side of #run),
--- lib/prelude.cub (each type former's composition as a term), lib/code.cub (Code and eval-g, which the
--- paper's §1.2 “Programs about programs” puts in the bootstrap), lib/check.cub (the checker as a term).
--- In the core's load order but not core: lib/match.cub, lib/nav.cub, lib/cost.cub, lib/lin.cub (loaded
+-- lib/core/prelude.cub (each type former's composition as a term), lib/core/code.cub (Code and eval-g, which the
+-- paper's §1.2 “Programs about programs” puts in the bootstrap), lib/core/check.cub (the checker as a term).
+-- In the core's load order but not core: lib/bootstrap/match.cub, lib/bootstrap/nav.cub, lib/bootstrap/cost.cub, lib/bootstrap/lin.cub (loaded
 -- before the checker as bootstrap files; rewriting, navigation and linear arithmetic are the
 -- specializer's and the decision procedures' business. Read 2026-11-14: the checker uses only
 -- andb, orb, notb, omap (match.cub) and obind (lin.cub); the four files are in the bootstrap because
 -- they are untyped (no signatures), which the checker refuses outside it. They leave the core when
--- written with types, those five helpers moving into lib/code.cub); lib/std.cub is the library, and lib/core.cub is a load list named
--- core while it loads the library. Misplaced in the core: lib/prim.cub's Word, Int64, UInt32, UInt64,
+-- written with types, those five helpers moving into lib/core/code.cub); lib/library/std.cub is the library, and lib/core.cub is a load list named
+-- core while it loads the library. Misplaced in the core: lib/bootstrap/prim.cub's Word, Int64, UInt32, UInt64,
 -- Float64, Float32 and Bytes n with their %-operations in src/lang.c and src/big.c (machine
 -- representations, the examples' kind: definitions in the library, with native speed in the evaluator
 -- under a relation), foreign (FFI) and ptr-of/region-at (the world, not the language), and #jit binding
 -- x86 bytes with no relation (src/lang.c's native path).
--- Capacities demonstrated and mentioned in the paper: lib/nbe.cub (§6.1 typed quotation and readback),
--- lib/codes.cub, lib/specialize.cub, lib/rules.cub (§6.2 the specializer), lib/machine.cub, lib/x86.cub,
--- lib/elf.cub, lib/compile/ (native realization by x86, superseded by the route through C).
--- Library, shared mathematics over the core: lib/std.cub (but it holds 17 core terms, its primitive
+-- Capacities demonstrated and mentioned in the paper: lib/capacities/nbe.cub (§6.1 typed quotation and readback),
+-- lib/capacities/codes.cub, lib/capacities/specialize.cub, lib/capacities/rules.cub (§6.2 the specializer), lib/capacities/machine.cub, lib/capacities/x86.cub,
+-- lib/capacities/elf.cub, lib/capacities/compile/ (native realization by x86, superseded by the route through C).
+-- Library, shared mathematics over the core: lib/library/std.cub (but it holds 17 core terms, its primitive
 -- declarations: the clocks' dfix, pfix and forceκ, and the reflection primitives def-code to
--- rules-orient, admitted there by src/syntax.c's BOOT_TRUSTED; they belong in a core file), lib/fiber.cub, lib/sort.cub, lib/proc.cub
--- (§7.6 processes and handlers), lib/linproof.cub, lib/eqproof.cub, lib/ring.cub, lib/intproof.cub,
--- lib/intlin.cub (decision procedures with their certificates), lib/derive.cub (deriving, refused
+-- rules-orient, admitted there by src/syntax.c's BOOT_TRUSTED; they belong in a core file), lib/library/fiber.cub, lib/library/sort.cub, lib/library/proc.cub
+-- (§7.6 processes and handlers), lib/library/linproof.cub, lib/library/eqproof.cub, lib/library/ring.cub, lib/library/intproof.cub,
+-- lib/library/intlin.cub (decision procedures with their certificates), lib/library/derive.cub (deriving, refused
 -- until typed).
--- Examples, what the paper shows the language doing: lib/autodiff.cub, lib/decode.cub, lib/region.cub,
--- lib/obs.cub, lib/session.cub, lib/choreo.cub, lib/fleet.cub, lib/net.cub, lib/deploy.cub,
+-- Examples, what the paper shows the language doing: lib/examples/autodiff.cub, lib/examples/decode.cub, lib/examples/region.cub,
+-- lib/examples/obs.cub, lib/examples/session.cub, lib/examples/choreo.cub, lib/examples/fleet.cub, lib/examples/net.cub, lib/examples/deploy.cub,
 -- experiments/brunerie, experiments/fleet, experiments/obs.
--- Language support (goal 3, lifted languages): lib/bits.cub, lib/isa/, lib/mem/, lib/os/, lib/cxx/,
--- lib/lang/rust/, lib/world.cub (the drivers' signature), experiments/isa, mem, os, cxx, rust, tso,
+-- Language support (goal 3, lifted languages): lib/languages/bits.cub, lib/languages/isa/, lib/languages/mem/, lib/languages/os/, lib/languages/cxx/,
+-- lib/languages/lang/rust/, lib/languages/world.cub (the drivers' signature), experiments/isa, mem, os, cxx, rust, tso,
 -- native, machine, jit.
--- Our usage: lib/task-graph.cub, lib/document.cub, task-graph/, lib/library.cub and lib/core.cub (load
+-- Our usage: lib/usage/task-graph.cub, lib/usage/document.cub, task-graph/, lib/library.cub and lib/core.cub (load
 -- lists), the Makefile, ./hyperactive and tools/ (Python where it should be the language).
 language-implementation-remainder : Node
 language-implementation-remainder = node "Everything else the paper specifies for the language: the calculus conforming to its published rules, the specializer with its law, native realization, the laws of the primitives, deriving as a typed term, and terms of any depth." (cons language-implementation nil)
@@ -762,14 +763,14 @@ paper-matches-implementation = node "Every implementation detail the paper state
 -- graph.cub's over Node) and `#show` of one is the reading that evaluates it (tools/task-graph.py
 -- view). Still missing: each declaration's code as a value, so that a view can read the code
 -- itself, every declaration of every type.
--- Known (2026-11-12, at lib/task-graph.cub): The work as one graph of nodes. Done: goals and
+-- Known (2026-11-12, at lib/usage/task-graph.cub): The work as one graph of nodes. Done: goals and
 -- tickets are one kind of node (task-graph/hyperactivity.cub); every declaration of the code is a
 -- node of the same graph, its reason computed from the machine's reading `#uses` (a declaration
 -- with a reason mentions it), from the machine naming it (src/), or stated in the comment above it
 -- as `(part of NODE)` or `(prerequisite to NODE)` (tools/task-graph.py why, unexplained). Measured
 -- 2026-11-12 over every file: 4310 of 8312 declarations have no reason; stating the rest where the
 -- code's text establishes a reason is what remains (“The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md)). Library
--- API nothing uses (lib/std.cub's pow, fact, happly, the univalence lemmas; lib/prelude.cub's
+-- API nothing uses (lib/library/std.cub's pow, fact, happly, the univalence lemmas; lib/core/prelude.cub's
 -- untyped helpers) states none: whether each stays is open.
 -- Known (2026-11-14, Avik): `hyperactive` is the primary work interface and is built first, since it
 -- accelerates all further work; the README holds only setup and hands off to it. Done (2026-11-14):
@@ -807,35 +808,35 @@ product-implementation = node "The live interactive collaboration system and too
 -- Known (2026-11-12, at experiments/isa/build-run.cub): needs-work. The imported x86 model has no
 -- translation of the two-byte opcode 0F AE (mfence and its group), an inventory gap of the Sail
 -- import; any binary using it stops there under the model.
--- Known (2026-11-12, at lib/isa/tso.cub): question. TsoSound is stated and has no inhabitant: no
+-- Known (2026-11-12, at lib/languages/isa/tso.cub): question. TsoSound is stated and has no inhabitant: no
 -- definition proves it. The litmus files in experiments/tso establish instances by computation for
--- particular threads and bounded schedules only. Likewise AtomsX86Correct in lib/mem/rc11.cub.
--- Known (2026-11-12, at lib/cxx/machine.cub): wrong. The C++ reading has drifted from what it
+-- particular threads and bounded schedules only. Likewise AtomsX86Correct in lib/languages/mem/rc11.cub.
+-- Known (2026-11-12, at lib/languages/cxx/machine.cub): wrong. The C++ reading has drifted from what it
 -- stands on, measured 2026-11-12 with each file loaded alone after its imports (--read): here 21
 -- failures (type mismatches at lines 64 and 78 and others; a primitive declared outside the
--- bootstrap files, refused); lib/cxx/read-expr.cub 70 (its cases miss constructors lib/cxx/ast.cub
+-- bootstrap files, refused); lib/languages/cxx/read-expr.cub 70 (its cases miss constructors lib/languages/cxx/ast.cub
 -- gained later: ce-string- literal-units, ck-FloatingCast, clayout-v, ctk-preferred-alignof);
 -- experiments/mem/sum.cub (a record field mem-allocs and ev-run-pure, ev-value that no longer
--- exist). The renaming of lib/mem/scalar.cub's operators to ao-... had not reached these files or
--- lib/lang/rust/read- rvalue.cub; done 2026-11-12. The readers are to be brought to the AST and the
+-- exist). The renaming of lib/languages/mem/scalar.cub's operators to ao-... had not reached these files or
+-- lib/languages/lang/rust/read- rvalue.cub; done 2026-11-12. The readers are to be brought to the AST and the
 -- memory as they are.
--- Known (2026-11-12, at lib/cxx/machine.cub): wrong. Measured 2026-11-11 (memory files, then this
+-- Known (2026-11-12, at lib/languages/cxx/machine.cub): wrong. Measured 2026-11-11 (memory files, then this
 -- file and read-expr.cub, after the library): this file 21 failures, read-expr.cub 70. Roots: cx-
 -- unsupported (here) and cx-run (below) do not check against CxEv's type; the primitive cx-byte is
 -- refused (primitives exist only in the bootstrap files); the rest follow from these (cx-sk, cx-
 -- size undefined; implicit arguments applied to functions without them). The C++ reading does not
 -- check as it stands.
--- Known (2026-11-12, at lib/cxx/read-expr.cub): wrong. This file refers to read.cub (statements,
--- declarations, the fuel that ties calls) for meanings it does not define; no lib/cxx/read.cub
+-- Known (2026-11-12, at lib/languages/cxx/read-expr.cub): wrong. This file refers to read.cub (statements,
+-- declarations, the fuel that ties calls) for meanings it does not define; no lib/languages/cxx/read.cub
 -- exists. The C++ reading is incomplete as it stands.
--- Known (2026-11-12, at lib/lang/rust/machine.cub): needs-work. Measured 2026-11-11: these deriving
--- lines fail because lib/derive.cub, which deriving needs, is refused as untyped; the Rust
+-- Known (2026-11-12, at lib/languages/lang/rust/machine.cub): needs-work. Measured 2026-11-11: these deriving
+-- lines fail because lib/library/derive.cub, which deriving needs, is refused as untyped; the Rust
 -- readers then fail on what follows (machine 6, read-place 21, read-rvalue 26, read 22 failures).
 -- Typing derive.cub repairs the root.
 language-support : Node
 language-support = node "The syntax and semantics of particular languages as terms: x86, C, C++, Rust, OCaml, Python and others." (cons the-product nil)
 -- documents that are essential context for working on a node and everything below it
--- (lib/task-graph.cub; “The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md))
+-- (lib/usage/task-graph.cub; “The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md))
 agents-welcome : Document
 agents-welcome = document "../AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md"
 -- the scratch space for everything that goes into the paper's next draft and is not yet in the
@@ -901,35 +902,35 @@ file-experiments-isa-build-run-cub = document "../experiments/isa/build-run.cub"
 file-experiments-nbe-examples-cub : Document
 file-experiments-nbe-examples-cub = document "../experiments/nbe/examples.cub"
 file-lib-check-cub : Document
-file-lib-check-cub = document "../lib/check.cub"
+file-lib-check-cub = document "../lib/core/check.cub"
 file-lib-compile-meaning-cub : Document
-file-lib-compile-meaning-cub = document "../lib/compile/meaning.cub"
+file-lib-compile-meaning-cub = document "../lib/capacities/compile/meaning.cub"
 file-lib-cxx-machine-cub : Document
-file-lib-cxx-machine-cub = document "../lib/cxx/machine.cub"
+file-lib-cxx-machine-cub = document "../lib/languages/cxx/machine.cub"
 file-lib-cxx-read-expr-cub : Document
-file-lib-cxx-read-expr-cub = document "../lib/cxx/read-expr.cub"
+file-lib-cxx-read-expr-cub = document "../lib/languages/cxx/read-expr.cub"
 file-lib-deploy-cub : Document
-file-lib-deploy-cub = document "../lib/deploy.cub"
+file-lib-deploy-cub = document "../lib/examples/deploy.cub"
 file-lib-derive-cub : Document
-file-lib-derive-cub = document "../lib/derive.cub"
+file-lib-derive-cub = document "../lib/library/derive.cub"
 file-lib-elf-cub : Document
-file-lib-elf-cub = document "../lib/elf.cub"
+file-lib-elf-cub = document "../lib/capacities/elf.cub"
 file-lib-isa-tso-cub : Document
-file-lib-isa-tso-cub = document "../lib/isa/tso.cub"
+file-lib-isa-tso-cub = document "../lib/languages/isa/tso.cub"
 file-lib-lang-rust-machine-cub : Document
-file-lib-lang-rust-machine-cub = document "../lib/lang/rust/machine.cub"
+file-lib-lang-rust-machine-cub = document "../lib/languages/lang/rust/machine.cub"
 file-lib-nbe-cub : Document
-file-lib-nbe-cub = document "../lib/nbe.cub"
+file-lib-nbe-cub = document "../lib/capacities/nbe.cub"
 file-lib-prelude-cub : Document
-file-lib-prelude-cub = document "../lib/prelude.cub"
+file-lib-prelude-cub = document "../lib/core/prelude.cub"
 file-lib-prim-cub : Document
-file-lib-prim-cub = document "../lib/prim.cub"
+file-lib-prim-cub = document "../lib/bootstrap/prim.cub"
 file-lib-specialize-cub : Document
-file-lib-specialize-cub = document "../lib/specialize.cub"
+file-lib-specialize-cub = document "../lib/capacities/specialize.cub"
 file-lib-std-cub : Document
-file-lib-std-cub = document "../lib/std.cub"
+file-lib-std-cub = document "../lib/library/std.cub"
 file-lib-task-graph-cub : Document
-file-lib-task-graph-cub = document "../lib/task-graph.cub"
+file-lib-task-graph-cub = document "../lib/usage/task-graph.cub"
 file-makefile : Document
 file-makefile = document "../Makefile"
 file-src-lang-c : Document

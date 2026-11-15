@@ -1,0 +1,72 @@
+-- Layer: our usage: what building hyperactivity uses now, no claim of the paper behind it (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/usage/task-graph.cub — the task graph, as data of the language. Its meaning, its rationale and the
+-- rules for using it are “The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md) (Avik's design, in his words): read that first. This file holds
+-- only what a node is and the views over nodes; a particular work declares its nodes over it (this
+-- repository's: task-graph/hyperactivity.cub).
+--
+import "../core.cub"
+import "document.cub"
+--
+-- A node is a task (“The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md)). Its name is an English sentence saying what it is;
+-- the identifier it is declared under is how code refers to it. Its parts-of are the nodes it is a
+-- child of: the reasons it exists, its value being exactly what it serves (there is no scalar).
+-- A node's children always cover it: a leaf is resolved when its work is done, any other node
+-- exactly when all its children are, with no further step at the parent. A node is expanded into
+-- children only when its work begins, exactly when one of its children becomes in progress. A node part of nothing is a root, and is declared one
+-- (roots); the root of this work is what Avik wants. A node's statement is the comment above its
+-- definition in task-graph/hyperactivity.cub: what it is, why, and what is known about it.
+-- A resolved leaf stays in the graph, listed in `resolved` (Avik: every internal node has a child
+-- that is active or complete).
+-- The one relation besides parts: `after`, pairs (n , ms): n's work cannot start until every node of
+-- ms is resolved (waiting on a node is waiting on every leaf under it). The order of work is computed
+-- from parts and after alone: every order is a topological sort of after; among work that can be
+-- done in either order, X goes before Y when everything finishing Y first makes possible, finishing X
+-- first also makes possible, and more (enabling is conjunctive: a node waiting on several becomes
+-- possible only when all are resolved). tools/task-graph.py priority computes it.
+-- State: `in-progress`, the leaves being worked on now, and `resolved`, the leaves whose work is done;
+-- every other leaf is pending (there is one owner, Avik, and sessions hold no identity, so no node
+-- says who works on it). A node with children is resolved exactly when they all are. The check
+-- requires both lists to name leaves, and every expanded node to have one of them below it.
+-- Essential context: `essential-context`, pairs (n , ds): documents (lib/usage/document.cub: files of the
+-- repository as objects of the code, a reference to a missing one failing the check) that are
+-- essential context for working on n and on everything below it. The relation is deliberately loose:
+-- "essential context", not "must be read before" (“The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md)).
+data Node = node (name : List Word) (part-of : List Node)
+
+-- ---------------------------------------------------------------- views (2026-11-12)
+-- Views of the work are terms over it: `declarations Node` is every node, and the functions here
+-- read it. tools/task-graph.py evaluates them through the machine (its `view` command).
+text-eq : List Word → List Word → Bool
+text-eq nil nil = true
+text-eq nil (cons y ys) = false
+text-eq (cons x xs) nil = false
+text-eq (cons x xs) (cons y ys) = if weq x y then text-eq xs ys else false
+name : Node → List Word
+name (node n ps) = n
+parts : Node → List Node
+parts (node n ps) = ps
+-- some node of the list has p's name
+named-in : Node → List Node → Bool
+named-in p nil = false
+named-in p (cons q qs) = if text-eq (name q) (name p) then true else named-in p qs
+-- the nodes of the list that are directly part of p
+children : List Node → Node → List Node
+children nil p = nil
+children (cons c cs) p = if named-in p (parts c) then cons c (children cs p) else children cs p
+-- the list without a node whose name came earlier
+distinct-from : List Node → List Node → List Node
+distinct-from seen nil = nil
+distinct-from seen (cons c cs) = if named-in c seen then distinct-from seen cs else cons c (distinct-from (cons c seen) cs)
+-- the nodes directly part of some node of the list
+children-of : List Node → List Node → List Node
+children-of all nil = nil
+children-of all (cons c cs) = list-append (children all c) (children-of all cs)
+-- the frontier and every node under it within k levels
+under-from : Nat → List Node → List Node → List Node
+under-from zero all fs = fs
+under-from (suc k) all fs = list-append fs (under-from k all (distinct-from nil (children-of all fs)))
+-- every node under p: as many levels as there are nodes
+under : List Node → Node → List Node
+under all p = distinct-from nil (under-from (list-length all) all (children all p))
+names : List Node → List (List Word)
+names ns = list-map name ns

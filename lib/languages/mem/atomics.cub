@@ -1,0 +1,89 @@
+-- Layer: language support: lifted languages and machines (goal 3), not the core (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/languages/mem/atomics.cub — the language-level atomics interface and its meaning on x86 (track G).
+-- Loaded after lib/languages/isa/tso.cub.
+--
+-- What C, C++ and Rust call atomic operations: load, store, exchange, compare-exchange and
+-- fence, each with a memory ordering, as the commands of a signature `AtomS`. A handler maps
+-- each onto the instructions of the x86-TSO machine (`TsoIS`), which is what a compiler for
+-- x86 emits: every load is a plain load whatever its ordering; a store weaker than seq_cst is
+-- a plain store; a seq_cst store is a locked xchg (`atom-x86-xchg`) or a store followed by
+-- mfence (`atom-x86-mfence`); exchange and compare-exchange are the locked instructions; only
+-- the seq_cst fence emits an instruction (mfence).
+-- ---------------------------------------------------------------- orderings and commands
+data MOrd = mo-relaxed | mo-acquire | mo-release | mo-acq-rel | mo-seq-cst
+-- compare-exchange is the strong form: it answers whether it stored and the value it saw
+data Atom =
+    at-load (o : MOrd) (a : Word)
+  | at-store (o : MOrd) (a : Word) (v : Word)
+  | at-xchg (o : MOrd) (a : Word) (v : Word)
+  | at-cas (so : MOrd) (fo : MOrd) (a : Word) (old : Word) (new : Word)
+  | at-fence (o : MOrd)
+atom-resp : Atom → Type
+atom-resp c = case c return (λ _ → Type) of
+  at-load o a → Word
+  at-store o a v → Unit
+  at-xchg o a v → Word
+  at-cas so fo a old new → Bool × Word
+  at-fence o → Unit
+AtomS : Sig
+AtomS = (Atom , atom-resp)
+-- the orderings the languages allow per operation (C++ [atomics.types.operations], the same in
+-- C11 and Rust): a load is not release or acq_rel; a store is not acquire or acq_rel; a
+-- compare-exchange's failure ordering is not release or acq_rel. A program issuing a command
+-- outside these has no defined meaning in its language; the handlers below are defined on
+-- every command, and a reader is to check `atom-valid` where it reads the program
+mo-is-seq-cst : MOrd → Bool
+mo-is-seq-cst o = case o of mo-relaxed → false; mo-acquire → false; mo-release → false; mo-acq-rel → false; mo-seq-cst → true
+mo-load-ok : MOrd → Bool
+mo-load-ok o = case o of mo-relaxed → true; mo-acquire → true; mo-release → false; mo-acq-rel → false; mo-seq-cst → true
+mo-store-ok : MOrd → Bool
+mo-store-ok o = case o of mo-relaxed → true; mo-acquire → false; mo-release → true; mo-acq-rel → false; mo-seq-cst → true
+atom-valid : Atom → Bool
+atom-valid c = case c of
+  at-load o a → mo-load-ok o
+  at-store o a v → mo-store-ok o
+  at-xchg o a v → true
+  at-cas so fo a old new → mo-load-ok fo
+  at-fence o → true
+-- ---------------------------------------------------------------- the handlers onto x86-TSO
+at-unit : Proc {lzero} TsoIS Unit
+at-unit = ret {lzero} {TsoIS} {Unit} unit
+-- the commands whose instruction does not depend on how a seq_cst store is emitted
+atom-x86-by : ((a : Word) → (v : Word) → Proc {lzero} TsoIS Unit) → Handler AtomS TsoIS
+atom-x86-by sc-store c =
+  case c return (λ x → Proc {lzero} TsoIS (atom-resp x)) of
+    at-load o a → cmd {lzero} {TsoIS} (t-load a)
+    at-store o a v → (case mo-is-seq-cst o of true → sc-store a v; false → cmd {lzero} {TsoIS} (t-store a v))
+    at-xchg o a v → cmd {lzero} {TsoIS} (t-xchg a v)
+    at-cas so fo a old new →
+      bind {lzero} {TsoIS} {Word} {Bool × Word} (cmd {lzero} {TsoIS} (t-cmpxchg a old new)) (λ r → ret {lzero} {TsoIS} {Bool × Word} (weq r old , r))
+    at-fence o → (case mo-is-seq-cst o of true → cmd {lzero} {TsoIS} t-mfence; false → at-unit)
+-- a seq_cst store as a locked xchg whose result is dropped (what gcc and clang emit)
+atom-x86-xchg : Handler AtomS TsoIS
+atom-x86-xchg = atom-x86-by (λ a v → bind {lzero} {TsoIS} {Word} {Unit} (cmd {lzero} {TsoIS} (t-xchg a v)) (λ r → at-unit))
+-- a seq_cst store as a store followed by mfence
+atom-x86-mfence : Handler AtomS TsoIS
+atom-x86-mfence = atom-x86-by (λ a v → bind {lzero} {TsoIS} {Unit} {Unit} (cmd {lzero} {TsoIS} (t-store a v)) (λ u → cmd {lzero} {TsoIS} t-mfence))
+-- ---------------------------------------------------------------- threads of atomics
+-- a handler applied to a process in tree form: each command replaced by the handler's process
+-- for it, the continuation resumed at its result
+at-handle : {S W : Sig} {A : Type} → Handler S W → Step S A → Step W A
+at-handle hd (sdone a) = sdone a
+at-handle hd (scmd c k) = hd c (Step W A) (λ r → at-handle hd (k r)) (λ c2 k2 → scmd c2 k2)
+-- a thread written against the language-level interface, and the x86 thread it is under a handler
+AtomThread : Type
+AtomThread = Step AtomS (List Word)
+at-thread : Handler AtomS TsoIS → AtomThread → TsoThread
+at-thread hd th = at-handle {AtomS} {TsoIS} {List Word} hd th
+ai-load : MOrd → Word → (Word → AtomThread) → AtomThread
+ai-load o a k = scmd (at-load o a) k
+ai-store : MOrd → Word → Word → AtomThread → AtomThread
+ai-store o a v k = scmd (at-store o a v) (λ u → k)
+ai-xchg : MOrd → Word → Word → (Word → AtomThread) → AtomThread
+ai-xchg o a v k = scmd (at-xchg o a v) k
+ai-cas : MOrd → MOrd → Word → Word → Word → (Bool → Word → AtomThread) → AtomThread
+ai-cas so fo a old new k = scmd (at-cas so fo a old new) (λ r → k (fst r) (snd r))
+ai-fence : MOrd → AtomThread → AtomThread
+ai-fence o k = scmd (at-fence o) (λ u → k)
+ai-ret : List Word → AtomThread
+ai-ret r = sdone r

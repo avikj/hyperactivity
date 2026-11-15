@@ -1,0 +1,365 @@
+-- Layer: library: shared mathematics over the core (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/library/linproof.cub — the linear-arithmetic certificate checker, verified (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F32).
+-- Loaded after lib/library/std.cub. The checker of lib/bootstrap/lin.cub works over codes; here the same algorithm
+-- is defined over a typed fragment and its soundness is a theorem: equal normal forms denote
+-- equal words (same-norm-eq), the order check is sound (code-le-sound), and a Farkas certificate
+-- that checks proves its goal wherever the hypotheses hold (cert-sound). The subtraction used by
+-- the order check is unverified and need not be: the check is an equality test on its result. The elaborator's bridge from a code to the typed fragment is lib/bootstrap/lin.cub's
+-- linearize, the same function over codes. Words: plusw is addition by recursion (lib/library/std.cub),
+-- equal to the machine's wadd (plusw≡wadd).
+-- Each step of an induction is its own lemma with a signature: the elaborator determines the
+-- implicit endpoints of a composed path from a signature, not from a motive applied inside a
+-- step function (an item of PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”).
+-- ---------------------------------------------------------------- word laws
+catw : {x y z : Word} → x ≡ y → y ≡ z → x ≡ z
+catw p q = λ i → comp (λ j → Word) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
+symw : {x y : Word} → x ≡ y → y ≡ x
+symw p = λ i → p (~ i)
+-- paths under functions: the endpoints come from the argument path's type, which is what lets a
+-- composed path be checked when the argument is a lemma at open words (a λ i → f (p i) written
+-- in an argument position has its endpoints evaluated instead, and a lemma's endpoint at an open
+-- word is only propositionally its type's)
+congw : (f : Word → Word) → {a b : Word} → a ≡ b → f a ≡ f b
+congw f p = λ i → f (p i)
+cong2w : (f : Word → Word → Word) → {a b c d : Word} → a ≡ b → c ≡ d → f a c ≡ f b d
+cong2w f p q = λ i → f (p i) (q i)
+plusw-zero-l : (b : Word) → plusw #0 b ≡ b
+plusw-zero-l b = %welimP (λ v → plusw #0 v ≡ v) b (λ i → #0) (λ n h i → %wsucc (h i))
+plusw-zero-r : (a : Word) → plusw a #0 ≡ a
+plusw-zero-r a = λ i → a
+plusw-suc-l : (a b : Word) → plusw (%wsucc a) b ≡ %wsucc (plusw a b)
+plusw-suc-l a b = %welimP (λ v → plusw (%wsucc a) v ≡ %wsucc (plusw a v)) b (λ i → %wsucc a) (λ n h i → %wsucc (h i))
+plusw-comm-step : (b n : Word) → plusw n b ≡ plusw b n → plusw (%wsucc n) b ≡ plusw b (%wsucc n)
+plusw-comm-step b n h = catw (plusw-suc-l n b) (congw (λ z → %wsucc z) h)
+plusw-comm : (a b : Word) → plusw a b ≡ plusw b a
+plusw-comm a b = %welimP (λ v → plusw v b ≡ plusw b v) a (plusw-zero-l b) (λ n h → plusw-comm-step b n h)
+plusw-assoc : (a b c : Word) → plusw (plusw a b) c ≡ plusw a (plusw b c)
+plusw-assoc a b c =
+  %welimP (λ v → plusw (plusw a b) v ≡ plusw a (plusw b v)) c (λ i → plusw a b) (λ n h i → %wsucc (h i))
+-- a + (b + c) = b + (a + c)
+plusw-mid : (a b c : Word) → plusw a (plusw b c) ≡ plusw b (plusw a c)
+plusw-mid a b c =
+  catw (symw (plusw-assoc a b c)) (catw (congw (λ z → plusw z c) (plusw-comm a b)) (plusw-assoc b a c))
+-- multiplication by recursion on the first argument
+mulw : Word → Word → Word
+mulw c x = %welimP (λ v → Word) c #0 (λ n h → plusw h x)
+mulw-dist-step : (c x n : Word) → mulw (plusw c n) x ≡ plusw (mulw c x) (mulw n x) →
+                 mulw (plusw c (%wsucc n)) x ≡ plusw (mulw c x) (mulw (%wsucc n) x)
+mulw-dist-step c x n h = catw (congw (λ z → plusw z x) h) (plusw-assoc (mulw c x) (mulw n x) x)
+mulw-dist : (c d x : Word) → mulw (plusw c d) x ≡ plusw (mulw c x) (mulw d x)
+mulw-dist c d x =
+  %welimP (λ v → mulw (plusw c v) x ≡ plusw (mulw c x) (mulw v x)) d (λ i → mulw c x) (λ n h → mulw-dist-step c x n h)
+-- equality of words from the machine's test: eqw (by induction, lib/library/std.cub) is weq, and eqw true
+-- means equal, by double induction
+symb : {a b : Bool} → a ≡ b → b ≡ a
+symb p = λ i → p (~ i)
+false≢true : Path Bool false true → Empty
+false≢true p = true≢false (symb p)
+eqw-sound-step : (n : Word) → ((b : Word) → eqw n b ≡ true → n ≡ b) →
+                 (b : Word) → eqw (%wsucc n) b ≡ true → %wsucc n ≡ b
+eqw-sound-step n h b =
+  %welimP (λ v → eqw (%wsucc n) v ≡ true → %wsucc n ≡ v) b
+    (λ p → Empty-rec {lzero} {%wsucc n ≡ #0} (false≢true p))
+    (λ m g p → congw (λ z → %wsucc z) (h m p))
+eqw-sound : (a b : Word) → eqw a b ≡ true → a ≡ b
+eqw-sound a =
+  %welimP (λ v → (b : Word) → eqw v b ≡ true → v ≡ b) a
+    (λ b → %welimP (λ w → eqw #0 w ≡ true → #0 ≡ w) b (λ p i → #0) (λ m g p → Empty-rec {lzero} {#0 ≡ %wsucc m} (false≢true p)))
+    eqw-sound-step
+catw2 : {x y z : Bool} → x ≡ y → y ≡ z → x ≡ z
+catw2 p q = λ i → comp (λ j → Bool) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
+weq-sound : (a b : Word) → weq a b ≡ true → a ≡ b
+weq-sound a b p = eqw-sound a b (catw2 (eqw≡weq a b) p)
+-- ---------------------------------------------------------------- the fragment and its value
+data LinCode = lc-lit (n : Word) | lc-var (v : Word) | lc-add (a : LinCode) (b : LinCode) | lc-suc (a : LinCode)
+Env : Type
+Env = Word → Word
+wev : Env → LinCode → Word
+wev e c =
+  case c return (λ w → Word) of
+    lc-lit n → n
+    lc-var v → e v
+    lc-add a b → plusw (rec a) (rec b)
+    lc-suc a → %wsucc (rec a)
+-- ---------------------------------------------------------------- normal forms and their value
+data Coefs = cnil | ccons (v : Word) (c : Word) (rest : Coefs)
+data LinT = lint (k : Word) (cs : Coefs)
+csem : Env → Coefs → Word
+csem e cs =
+  case cs return (λ w → Word) of
+    cnil → #0
+    ccons v c r → plusw (mulw c (e v)) (rec r)
+lsem : Env → LinT → Word
+lsem e f = case f return (λ w → Word) of lint k cs → plusw k (csem e cs)
+-- inserting a coefficient into a sorted list: added to the variable's entry if present, else
+-- placed in order; a merge is the fold of insertions (structural recursion on each argument)
+ins-case : Bool → Bool → Word → Word → Word → Word → Coefs → Coefs → Coefs
+ins-case eq lt v c v2 c2 r2 ir =
+  case eq return (λ w → Coefs) of
+    true → ccons v2 (plusw c c2) r2
+    false → (case lt return (λ w → Coefs) of true → ccons v c (ccons v2 c2 r2); false → ccons v2 c2 ir)
+insert : Word → Word → Coefs → Coefs
+insert v c ds =
+  case ds return (λ w → Coefs) of
+    cnil → ccons v c cnil
+    ccons v2 c2 r2 → ins-case (weq v v2) (%wlt v v2) v c v2 c2 r2 (rec r2)
+lcoef-add : Coefs → Coefs → Coefs
+lcoef-add cs ds =
+  case cs return (λ w → Coefs) of
+    cnil → ds
+    ccons v c r → insert v c (rec r)
+llin-add : LinT → LinT → LinT
+llin-add f g =
+  case f return (λ w → LinT) of
+    lint k cs → (case g return (λ w → LinT) of lint m ds → lint (plusw k m) (lcoef-add cs ds))
+lnorm : LinCode → LinT
+lnorm c =
+  case c return (λ w → LinT) of
+    lc-lit n → lint n cnil
+    lc-var v → lint #0 (ccons v #1 cnil)
+    lc-add a b → llin-add (rec a) (rec b)
+    lc-suc a → llin-add (lint #1 cnil) (rec a)
+-- ---------------------------------------------------------------- soundness of the normal form
+-- an insertion adds c·x to the value: by induction on the list; the three branches are lemmas
+ins-lt : (e : Env) (v c : Word) (ds : Coefs) → csem e (ccons v c ds) ≡ plusw (mulw c (e v)) (csem e ds)
+ins-lt e v c ds = λ i → plusw (mulw c (e v)) (csem e ds)
+ins-gt : (e : Env) (v c v2 c2 : Word) (r2 ir : Coefs) →
+         csem e ir ≡ plusw (mulw c (e v)) (csem e r2) →
+         plusw (mulw c2 (e v2)) (csem e ir) ≡ plusw (mulw c (e v)) (plusw (mulw c2 (e v2)) (csem e r2))
+ins-gt e v c v2 c2 r2 ir h = catw (congw (λ z → plusw (mulw c2 (e v2)) z) h) (plusw-mid (mulw c2 (e v2)) (mulw c (e v)) (csem e r2))
+ins-same : (e : Env) (v v2 c c2 : Word) (r2 : Coefs) → v ≡ v2 →
+           plusw (mulw (plusw c c2) (e v2)) (csem e r2) ≡ plusw (mulw c (e v)) (plusw (mulw c2 (e v2)) (csem e r2))
+ins-same e v v2 c c2 r2 q =
+  catw (congw (λ z → plusw z (csem e r2)) (mulw-dist c c2 (e v2)))
+    (catw (plusw-assoc (mulw c (e v2)) (mulw c2 (e v2)) (csem e r2))
+      (congw (λ z → plusw (mulw c z) (plusw (mulw c2 (e v2)) (csem e r2))) (symw (congw e q))))
+ins-case-sound : (e : Env) (eq lt : Bool) (v c v2 c2 : Word) (r2 ir : Coefs) →
+                 weq v v2 ≡ eq →
+                 csem e ir ≡ plusw (mulw c (e v)) (csem e r2) →
+                 csem e (ins-case eq lt v c v2 c2 r2 ir) ≡ plusw (mulw c (e v)) (csem e (ccons v2 c2 r2))
+ins-case-sound e eq lt v c v2 c2 r2 ir pe h =
+  case eq return (λ b → weq v v2 ≡ b → csem e (ins-case b lt v c v2 c2 r2 ir) ≡ plusw (mulw c (e v)) (csem e (ccons v2 c2 r2))) of
+    true → λ pe2 → ins-same e v v2 c c2 r2 (weq-sound v v2 pe2)
+    false → λ pe2 →
+      (case lt return (λ b → csem e (ins-case false b v c v2 c2 r2 ir) ≡ plusw (mulw c (e v)) (csem e (ccons v2 c2 r2))) of
+         true → ins-lt e v c (ccons v2 c2 r2)
+         false → ins-gt e v c v2 c2 r2 ir h)
+  pe
+insert-sound : (e : Env) (v c : Word) (ds : Coefs) → csem e (insert v c ds) ≡ plusw (mulw c (e v)) (csem e ds)
+insert-sound e v c ds =
+  case ds return (λ w → csem e (insert v c w) ≡ plusw (mulw c (e v)) (csem e w)) of
+    cnil → λ i → plusw (mulw c (e v)) #0
+    ccons v2 c2 r2 → ins-case-sound e (weq v v2) (%wlt v v2) v c v2 c2 r2 (insert v c r2) (λ i → weq v v2) (rec r2)
+-- the value of a merge is the sum of the values
+csem-add-step : (e : Env) (v c : Word) (r ds : Coefs) →
+                csem e (lcoef-add r ds) ≡ plusw (csem e r) (csem e ds) →
+                csem e (insert v c (lcoef-add r ds)) ≡ plusw (plusw (mulw c (e v)) (csem e r)) (csem e ds)
+csem-add-step e v c r ds h =
+  catw (insert-sound e v c (lcoef-add r ds))
+    (catw (congw (λ z → plusw (mulw c (e v)) z) h) (symw (plusw-assoc (mulw c (e v)) (csem e r) (csem e ds))))
+csem-add : (e : Env) (cs ds : Coefs) → csem e (lcoef-add cs ds) ≡ plusw (csem e cs) (csem e ds)
+csem-add e cs ds =
+  case cs return (λ w → csem e (lcoef-add w ds) ≡ plusw (csem e w) (csem e ds)) of
+    cnil → symw (plusw-zero-l (csem e ds))
+    ccons v c r → csem-add-step e v c r ds (rec r)
+lsem-add-body : (e : Env) (k : Word) (cs : Coefs) (m : Word) (ds : Coefs) →
+                plusw (plusw k m) (csem e (lcoef-add cs ds)) ≡ plusw (plusw k (csem e cs)) (plusw m (csem e ds))
+lsem-add-body e k cs m ds =
+  catw (congw (λ z → plusw (plusw k m) z) (csem-add e cs ds))
+    (catw (plusw-assoc k m (plusw (csem e cs) (csem e ds)))
+      (catw (congw (λ z → plusw k z) (plusw-mid m (csem e cs) (csem e ds)))
+        (symw (plusw-assoc k (csem e cs) (plusw m (csem e ds))))))
+lsem-add : (e : Env) (f g : LinT) → lsem e (llin-add f g) ≡ plusw (lsem e f) (lsem e g)
+lsem-add e f g =
+  case f return (λ w → lsem e (llin-add w g) ≡ plusw (lsem e w) (lsem e g)) of
+    lint k cs →
+      (case g return (λ w → lsem e (llin-add (lint k cs) w) ≡ plusw (lsem e (lint k cs)) (lsem e w)) of
+         lint m ds → lsem-add-body e k cs m ds)
+-- the normal form denotes the code's value
+lnorm-var : (e : Env) (v : Word) → plusw #0 (plusw (mulw #1 (e v)) #0) ≡ e v
+lnorm-var e v = catw (plusw-zero-l (plusw (mulw #1 (e v)) #0)) (plusw-zero-l (e v))
+norm-add : (e : Env) (a b : LinCode) → lsem e (lnorm a) ≡ wev e a → lsem e (lnorm b) ≡ wev e b →
+           lsem e (lnorm (lc-add a b)) ≡ wev e (lc-add a b)
+norm-add e a b ha hb = catw (lsem-add e (lnorm a) (lnorm b)) (cong2w (λ z w → plusw z w) ha hb)
+norm-suc : (e : Env) (a : LinCode) → lsem e (lnorm a) ≡ wev e a → lsem e (lnorm (lc-suc a)) ≡ wev e (lc-suc a)
+norm-suc e a ha =
+  catw (lsem-add e (lint #1 cnil) (lnorm a))
+    (catw (congw (λ z → plusw #1 z) ha)
+      (catw (plusw-suc-l #0 (wev e a)) (congw (λ z → %wsucc z) (plusw-zero-l (wev e a)))))
+lnorm-sound : (e : Env) (c : LinCode) → lsem e (lnorm c) ≡ wev e c
+lnorm-sound e c =
+  case c return (λ w → lsem e (lnorm w) ≡ wev e w) of
+    lc-lit n → λ i → n
+    lc-var v → lnorm-var e v
+    lc-add a b → norm-add e a b (rec a) (rec b)
+    lc-suc a → norm-suc e a (rec a)
+-- ---------------------------------------------------------------- deciding equality
+-- two codes with the same normal form denote the same word, in every environment
+conglw : (e : Env) → {f g : LinT} → f ≡ g → lsem e f ≡ lsem e g
+conglw e p = λ i → lsem e (p i)
+same-norm-eq : (e : Env) (a b : LinCode) → lnorm a ≡ lnorm b → wev e a ≡ wev e b
+same-norm-eq e a b p = catw (symw (lnorm-sound e a)) (catw (conglw e p) (lnorm-sound e b))
+-- ---------------------------------------------------------------- order
+-- a ≤ b: a witness d with a + d = b (as le on Nat in lib/library/std.cub)
+Lew : Word → Word → Type
+Lew a b = (d : Word) × plusw a d ≡ b
+lew-refl : (a : Word) → Lew a a
+lew-refl a = (#0 , λ i → a)
+lew-zero : (b : Word) → Lew #0 b
+lew-zero b = (b , plusw-zero-l b)
+-- sums of inequalities
+le-add-path : (a b c d d1 d2 : Word) → plusw a d1 ≡ b → plusw c d2 ≡ d →
+              plusw (plusw a c) (plusw d1 d2) ≡ plusw b d
+le-add-path a b c d d1 d2 p q =
+  catw (plusw-assoc a c (plusw d1 d2))
+    (catw (congw (λ z → plusw a z) (plusw-mid c d1 d2))
+      (catw (symw (plusw-assoc a d1 (plusw c d2))) (cong2w (λ z w → plusw z w) p q)))
+le-add : (a b c d : Word) → Lew a b → Lew c d → Lew (plusw a c) (plusw b d)
+le-add a b c d h k = (plusw (fst h) (fst k) , le-add-path a b c d (fst h) (fst k) (snd h) (snd k))
+-- cancellation: m + k = n + k → m = n, by induction on k (predw inverts the successor)
+predw : Word → Word
+predw w = %welimP (λ v → Word) w #0 (λ n h → n)
+wsucc-inj : (m n : Word) → %wsucc m ≡ %wsucc n → m ≡ n
+wsucc-inj m n p = congw predw p
+plusw-cancel-r : (k m n : Word) → plusw m k ≡ plusw n k → m ≡ n
+plusw-cancel-r k =
+  %welimP (λ v → (m n : Word) → plusw m v ≡ plusw n v → m ≡ n) k (λ m n p → p)
+    (λ j h m n p → h m n (wsucc-inj (plusw m j) (plusw n j) p))
+plusw-cancel-l : (k m n : Word) → plusw k m ≡ plusw k n → m ≡ n
+plusw-cancel-l k m n p = plusw-cancel-r k m n (catw (plusw-comm m k) (catw p (plusw-comm k n)))
+-- the Farkas step: from L ≤ R and a + R ≤ b + L, a ≤ b
+le-cancel-path : (a b L R d1 d2 : Word) → plusw L d1 ≡ R → plusw (plusw a R) d2 ≡ plusw b L →
+                 plusw L (plusw a (plusw d1 d2)) ≡ plusw L b
+le-cancel-path a b L R d1 d2 h1 h2 =
+  catw (plusw-mid L a (plusw d1 d2))
+    (catw (congw (λ z → plusw a z) (symw (plusw-assoc L d1 d2)))
+      (catw (congw (λ z → plusw a (plusw z d2)) h1)
+        (catw (symw (plusw-assoc a R d2)) (catw h2 (plusw-comm b L)))))
+le-cancel : (a b L R : Word) → Lew L R → Lew (plusw a R) (plusw b L) → Lew a b
+le-cancel a b L R h k =
+  (plusw (fst h) (fst k) ,
+   plusw-cancel-l L (plusw a (plusw (fst h) (fst k))) b (le-cancel-path a b L R (fst h) (fst k) (snd h) (snd k)))
+-- ---------------------------------------------------------------- deciding order
+-- f ≤ g pointwise is checked as f + (g − f) = g on normal forms: the subtraction is unverified,
+-- the equality test is sound, so the check is sound whatever the subtraction computes
+andbt : Bool → Bool → Bool
+andbt a b = case a return (λ w → Bool) of true → b; false → false
+andbt-l : (a b : Bool) → andbt a b ≡ true → a ≡ true
+andbt-l a b = case a return (λ w → andbt w b ≡ true → w ≡ true) of true → λ p i → true; false → λ p → p
+andbt-r : (a b : Bool) → andbt a b ≡ true → b ≡ true
+andbt-r a b =
+  case a return (λ w → andbt w b ≡ true → b ≡ true) of
+    true → λ p → p
+    false → λ p → Empty-rec {lzero} {b ≡ true} (false≢true p)
+cong3c : {v v2 c c2 : Word} {r s : Coefs} → v ≡ v2 → c ≡ c2 → r ≡ s → ccons v c r ≡ ccons v2 c2 s
+cong3c p q t = λ i → ccons (p i) (q i) (t i)
+cong2l : {k m : Word} {cs ds : Coefs} → k ≡ m → cs ≡ ds → lint k cs ≡ lint m ds
+cong2l p q = λ i → lint (p i) (q i)
+lcoef-same : Coefs → Coefs → Bool
+lcoef-same cs ds =
+  case cs return (λ w → Coefs → Bool) of
+    cnil → λ ds → (case ds return (λ w → Bool) of cnil → true; ccons v2 c2 s → false)
+    ccons v c r → λ ds →
+      (case ds return (λ w → Bool) of
+         cnil → false
+         ccons v2 c2 s → andbt (weq v v2) (andbt (weq c c2) (rec r s)))
+  ds
+lcoef-same-sound : (cs ds : Coefs) → lcoef-same cs ds ≡ true → cs ≡ ds
+lcoef-same-sound cs ds =
+  case cs return (λ w → (ds : Coefs) → lcoef-same w ds ≡ true → w ≡ ds) of
+    cnil → λ ds →
+      (case ds return (λ w → lcoef-same cnil w ≡ true → cnil ≡ w) of
+         cnil → λ p i → cnil
+         ccons v2 c2 s → λ p → Empty-rec {lzero} {cnil ≡ ccons v2 c2 s} (false≢true p))
+    ccons v c r → λ ds →
+      (case ds return (λ w → lcoef-same (ccons v c r) w ≡ true → ccons v c r ≡ w) of
+         cnil → λ p → Empty-rec {lzero} {ccons v c r ≡ cnil} (false≢true p)
+         ccons v2 c2 s → λ p →
+           cong3c (weq-sound v v2 (andbt-l (weq v v2) (andbt (weq c c2) (lcoef-same r s)) p))
+                  (weq-sound c c2 (andbt-l (weq c c2) (lcoef-same r s) (andbt-r (weq v v2) (andbt (weq c c2) (lcoef-same r s)) p)))
+                  (rec r s (andbt-r (weq c c2) (lcoef-same r s) (andbt-r (weq v v2) (andbt (weq c c2) (lcoef-same r s)) p))))
+  ds
+llin-same : LinT → LinT → Bool
+llin-same f g =
+  case f return (λ w → Bool) of
+    lint k cs → (case g return (λ w → Bool) of lint m ds → andbt (weq k m) (lcoef-same cs ds))
+llin-same-sound : (f g : LinT) → llin-same f g ≡ true → f ≡ g
+llin-same-sound f g =
+  case f return (λ w → llin-same w g ≡ true → w ≡ g) of
+    lint k cs →
+      (case g return (λ w → llin-same (lint k cs) w ≡ true → lint k cs ≡ w) of
+         lint m ds → λ p →
+           cong2l (weq-sound k m (andbt-l (weq k m) (lcoef-same cs ds) p))
+                  (lcoef-same-sound cs ds (andbt-r (weq k m) (lcoef-same cs ds) p)))
+-- the difference g − f (unverified): subtract f's coefficient from g's entry, dropping zeros
+dec-at : Word → Word → Coefs → Coefs
+dec-at v c ds =
+  case ds return (λ w → Coefs) of
+    cnil → cnil
+    ccons v2 c2 s →
+      (case weq v v2 return (λ w → Coefs) of
+         true → (case weq (subw c2 c) #0 return (λ w → Coefs) of true → s; false → ccons v2 (subw c2 c) s)
+         false → ccons v2 c2 (rec s))
+coef-sub : Coefs → Coefs → Coefs
+coef-sub ds cs = case cs return (λ w → Coefs) of cnil → ds; ccons v c r → dec-at v c (rec r)
+lin-sub : LinT → LinT → LinT
+lin-sub g f =
+  case g return (λ w → LinT) of
+    lint m ds → (case f return (λ w → LinT) of lint k cs → lint (subw m k) (coef-sub ds cs))
+llin-le : LinT → LinT → Bool
+llin-le f g = llin-same (llin-add f (lin-sub g f)) g
+llin-le-sound : (e : Env) (f g : LinT) → llin-le f g ≡ true → Lew (lsem e f) (lsem e g)
+llin-le-sound e f g p =
+  (lsem e (lin-sub g f) ,
+   catw (symw (lsem-add e f (lin-sub g f))) (conglw e (llin-same-sound (llin-add f (lin-sub g f)) g p)))
+-- order on codes: the normal forms decide it, soundly
+le-transport-path : (a b x y d : Word) → x ≡ a → y ≡ b → plusw x d ≡ y → plusw a d ≡ b
+le-transport-path a b x y d p q h = catw (congw (λ z → plusw z d) (symw p)) (catw h q)
+le-transport : (a b x y : Word) → x ≡ a → y ≡ b → Lew x y → Lew a b
+le-transport a b x y p q h = (fst h , le-transport-path a b x y (fst h) p q (snd h))
+code-le : LinCode → LinCode → Bool
+code-le a b = llin-le (lnorm a) (lnorm b)
+code-le-sound : (e : Env) (a b : LinCode) → code-le a b ≡ true → Lew (wev e a) (wev e b)
+code-le-sound e a b p = le-transport (wev e a) (wev e b) (lsem e (lnorm a)) (lsem e (lnorm b)) (lnorm-sound e a) (lnorm-sound e b) (llin-le-sound e (lnorm a) (lnorm b) p)
+-- ---------------------------------------------------------------- certificates
+-- hypotheses l_i ≤ r_i with multipliers c_i: the goal a ≤ b is certified by the check
+--   a + Σ c_i r_i ≤ b + Σ c_i l_i on normal forms (lib/bootstrap/lin.cub's cert-check). A multiple c·l is
+-- the code l added c times, so no multiplication enters the proof
+data Hyps = hnil | hcons (l : LinCode) (r : LinCode) (rest : Hyps)
+data Mults = munil | mucons (c : Word) (rest : Mults)
+scale : Word → LinCode → LinCode
+scale c l = %welimP (λ v → LinCode) c (lc-lit #0) (λ n h → lc-add h l)
+sum-l : Hyps → Mults → LinCode
+sum-l hs ms =
+  case hs return (λ w → Mults → LinCode) of
+    hnil → λ ms → lc-lit #0
+    hcons l r rest → λ ms → (case ms return (λ w → LinCode) of munil → lc-lit #0; mucons c cr → lc-add (scale c l) (rec rest cr))
+  ms
+sum-r : Hyps → Mults → LinCode
+sum-r hs ms =
+  case hs return (λ w → Mults → LinCode) of
+    hnil → λ ms → lc-lit #0
+    hcons l r rest → λ ms → (case ms return (λ w → LinCode) of munil → lc-lit #0; mucons c cr → lc-add (scale c r) (rec rest cr))
+  ms
+cert-check : Hyps → Mults → LinCode → LinCode → Bool
+cert-check hs ms a b = code-le (lc-add a (sum-r hs ms)) (lc-add b (sum-l hs ms))
+-- the hypotheses hold at an environment
+Holds : Env → Hyps → Type
+Holds e hs = case hs return (λ w → Type) of hnil → Unit; hcons l r rest → Lew (wev e l) (wev e r) × rec rest
+scale-le : (e : Env) (c : Word) (l r : LinCode) → Lew (wev e l) (wev e r) → Lew (wev e (scale c l)) (wev e (scale c r))
+scale-le e c l r h =
+  %welimP (λ v → Lew (wev e (scale v l)) (wev e (scale v r))) c (lew-refl #0) (λ n k → le-add (wev e (scale n l)) (wev e (scale n r)) (wev e l) (wev e r) k h)
+sum-le : (e : Env) (hs : Hyps) (ms : Mults) → Holds e hs → Lew (wev e (sum-l hs ms)) (wev e (sum-r hs ms))
+sum-le e hs ms hh =
+  case hs return (λ w → (ms : Mults) → Holds e w → Lew (wev e (sum-l w ms)) (wev e (sum-r w ms))) of
+    hnil → λ ms hh → lew-refl #0
+    hcons l r rest → λ ms hh →
+      (case ms return (λ w → Lew (wev e (sum-l (hcons l r rest) w)) (wev e (sum-r (hcons l r rest) w))) of
+         munil → lew-refl #0
+         mucons c cr → le-add (wev e (scale c l)) (wev e (scale c r)) (wev e (sum-l rest cr)) (wev e (sum-r rest cr)) (scale-le e c l r (fst hh)) (rec rest cr (snd hh)))
+  ms hh
+-- the theorem: a certificate that checks proves the goal wherever the hypotheses hold
+cert-sound : (e : Env) (hs : Hyps) (ms : Mults) (a b : LinCode) → Holds e hs →
+             cert-check hs ms a b ≡ true → Lew (wev e a) (wev e b)
+cert-sound e hs ms a b hh p =
+  le-cancel (wev e a) (wev e b) (wev e (sum-l hs ms)) (wev e (sum-r hs ms)) (sum-le e hs ms hh) (code-le-sound e (lc-add a (sum-r hs ms)) (lc-add b (sum-l hs ms)) p)

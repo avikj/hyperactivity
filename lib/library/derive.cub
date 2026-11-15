@@ -1,0 +1,124 @@
+-- Layer: library: shared mathematics over the core (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/library/derive.cub — generic programming over the data table (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F31: deriving as terms
+-- over %dent producing codes). Loaded after lib/core/check.cub. derive-eq d: the code of a decidable
+-- equality on the data type d, read off its constructors' telescopes: a word field compares by
+-- %weq, a recursive field by the hypothesis the case provides, a field of another data type by that
+-- type's derived equality; constructors with dimensions (higher inductive types) and other field
+-- types are not covered (none). The code evaluates (eval-g) and quotes like any other.
+-- ---------------------------------------------------------------- shapes
+--
+-- the kinds of a constructor's fields, by walking its telescope with fresh variables: a Lst of
+-- (kind , d2): kind 0 a word, 1 recursive, 2 a data type d2 without parameters; none otherwise
+-- (some kinds, or none)
+dfield-kind d A =
+  if is-rec-ty d A then some (#1 , d)
+  else (case A of
+          tword → some (#0 , d)
+          tdata d2 ps V → (case ps of lnil → some (#2 , d2); _ → none)
+          tg g nm → (case %view (%gval g) of wpty k n → (if %weq k #4 then none else some (#3 , k)); _ → none)
+          _ → none)
+-- a primitive type's equality is the machine's operation on it (lib/core/code.cub prim-apply's
+-- numbering: the binary operations from 512; i64eq 3, u32eq 8, f64eq 14), as a cprim code
+prim-eq-op k = %wadd #512 (if %weq k #0 then #3 else if %weq k #1 then #8 else #14)
+dtel-kinds d tel acc =
+  case tel of
+    tx A nm r → (case dfield-kind d A of
+                   some k → (let Av = tval A in dtel-kinds d (r (%var nm Av) Av) (lsnoc acc k))
+                   none → none)
+    ty nm r → none
+    tz e → some acc
+dshape d c = dtel-kinds d (centry d c lnil) lnil
+nctors d = lst-count (ctors-at d lnil)
+count-rec ks = case ks of lnil → #0; lcons k r → %wadd (if %weq (fst k) #1 then #1 else #0) (count-rec r)
+-- ---------------------------------------------------------------- codes
+-- Bool is the first checked data type: true = con 0, false = con 1
+bool-d = didx (code Bool)
+c-true = ccon bool-d #0 lnil lnil
+c-false = ccon bool-d #1 lnil lnil
+c-and a b = ccase bool-d (lcons b (lcons c-false lnil)) a
+clams n b = if %weq n #0 then b else clam (clams (%wsub n #1) b)
+-- derive-eq d = λ x. case x of c (fields, hyps) → λ y. case y of c' (fields', hyps') → …
+derive-eq d =
+  case all-shapes d (nctors d) #0 of
+    none → none
+    some shapes → some (clam (ccase d (outer-branches d shapes shapes #0) (cvar #0)))
+all-shapes d n c =
+  if %weq c n then some lnil
+  else (case dshape d c of
+          none → none
+          some ks → (case all-shapes d n (%wsucc c) of none → none; some rest → some (lcons ks rest)))
+outer-branches d shapes rest c =
+  case rest of
+    lnil → lnil
+    lcons ks more →
+      lcons (clams (%wadd (lst-count ks) (count-rec ks)) (clam (ccase d (inner-branches d shapes ks shapes #0 c) (cvar #0))))
+            (outer-branches d shapes more (%wsucc c))
+-- the inner branch for constructor c2 against the outer constructor c with field kinds ks
+inner-branches d shapes ks rest c2 c =
+  case rest of
+    lnil → lnil
+    lcons ks2 more →
+      lcons (clams (%wadd (lst-count ks2) (count-rec ks2))
+               (if %weq c2 c then compare-fields d ks ks2 (lst-count ks) (count-rec ks) (lst-count ks2) (count-rec ks2) #0 #0
+                else c-false))
+            (inner-branches d shapes ks more (%wsucc c2) c)
+-- at the innermost body: inner hyps r2 (0..), inner fields n2, y, outer hyps r, outer fields n, x
+compare-fields d ks ks2 n r n2 r2 j t =
+  case ks of
+    lnil → c-true
+    lcons k kr →
+      let outer-f = cvar (%wadd (%wadd (%wadd r2 n2) (%wsucc r)) (%wsub (%wsub n #1) j))
+          inner-f = cvar (%wadd r2 (%wsub (%wsub n2 #1) j))
+          outer-h = cvar (%wadd (%wadd r2 n2) (%wsucc (%wsub (%wsub r #1) t)))
+          this = (if %weq (fst k) #0 then cwop #0 outer-f inner-f
+                  else if %weq (fst k) #1 then capp (cforce outer-h) inner-f
+                  else if %weq (fst k) #3 then cprim (prim-eq-op (snd k)) (lcons outer-f (lcons inner-f lnil))
+                  else capp (capp (fromopt (derive-eq (snd k)) c-false) outer-f) inner-f)
+          rest = compare-fields d kr ks2 n r n2 r2 (%wsucc j) (if %weq (fst k) #1 then %wsucc t else t)
+      in (case kr of lnil → this; _ → c-and this rest)
+lappw : List Word → List Word → List Word
+lappw xs ys = case xs return (λ w → List Word) of nil → ys; cons x r → cons x (rec r)
+lapp-same : List Word → List Word → Bool
+lapp-same xs ys =
+  case xs return (λ w → List Word → Bool) of
+    nil → λ ys → (case ys return (λ w → Bool) of nil → true; cons y s → false)
+    cons x r → λ ys → (case ys return (λ w → Bool) of nil → false; cons y s → andB (weq x y) (rec r s))
+  ys
+-- ---------------------------------------------------------------- deriving show
+-- derive-show d: the code of a function D → List Word writing a value in preorder — each
+-- constructor's index, then its fields: a word as itself, a recursive field by the hypothesis the
+-- case provides (its own writing), a field of another data type by that type's derived writing.
+-- The same shapes as derive-eq, the same coverage (none for higher inductive types)
+list-d = didx (code (List Word))
+c-nil = ccon list-d #0 lnil lnil
+c-cons h t = ccon list-d #1 (lcons h (lcons t lnil)) lnil
+c-app a b = capp (capp (code lappw) a) b
+-- a primitive written as a word: the machine's conversion (i64 17, u32 19; a float through its
+-- Int64 part, 22 then 17), unary operations from 256
+prim-to-word k f =
+  if %weq k #0 then cprim #273 (lcons f lnil)
+  else if %weq k #1 then cprim #275 (lcons f lnil)
+  else cprim #273 (lcons (cprim #278 (lcons f lnil)) lnil)
+derive-show d =
+  case all-shapes d (nctors d) #0 of
+    none → none
+    some shapes → some (clam (ccase d (show-branches d shapes #0) (cvar #0)))
+show-branches d rest c =
+  case rest of
+    lnil → lnil
+    lcons ks more →
+      lcons (clams (%wadd (lst-count ks) (count-rec ks)) (c-cons (cwlit c) (show-fields d ks (lst-count ks) (count-rec ks) #0 #0)))
+            (show-branches d more (%wsucc c))
+-- in the branch: hyps 0.. (latest), then the fields, then x; field j is cvar (r + n - 1 - j), hyp t
+-- is cvar (r - 1 - t)
+show-fields d ks n r j t =
+  case ks of
+    lnil → c-nil
+    lcons k kr →
+      let f = cvar (%wadd r (%wsub (%wsub n #1) j))
+          h = cvar (%wsub (%wsub r #1) t)
+          this = (if %weq (fst k) #0 then c-cons f c-nil
+                  else if %weq (fst k) #1 then cforce h
+                  else if %weq (fst k) #3 then c-cons (prim-to-word (snd k) f) c-nil
+                  else capp (fromopt (derive-show (snd k)) c-nil) f)
+      in c-app this (show-fields d kr n r (%wsucc j) (if %weq (fst k) #1 then %wsucc t else t))

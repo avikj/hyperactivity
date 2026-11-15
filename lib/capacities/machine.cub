@@ -1,0 +1,174 @@
+-- Layer: capacity demonstrated and mentioned in the paper: a metacircular extension on the unchanged core (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/capacities/machine.cub — the first-order fragment of codes, which is what compiles (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.3 “The target is a data type with a meaning” and §5.4 “The reader, and why the path is by construction”).
+-- Loaded after lib/capacities/specialize.cub.
+-- A code is in the fragment when every construct in it has a machine form: variables, globals,
+-- λ and application, let, pairs, constructors, cases and eliminations of path-free data types,
+-- projections, word and primitive literals below 2^64, the word operations, the primitive
+-- operations (arithmetic, conversions, loads, stores, lengths, fresh bytes), and word elimination.
+-- Nothing outside it compiles: a dimension, a composition, a constructor with dimensions, a type as
+-- a value, a clock or tick has no machine form, and `fragment` names the first such construct and
+-- why. The fragment's meaning is the code's own (the checker's eval): there is no second syntax and
+-- no second evaluator; `encode` (lib/capacities/x86.cub) prints each construct of the fragment by its
+-- template.
+-- ---------------------------------------------------------------- the fragment
+frag-wrap : Verdict → Code → Verdict
+frag-wrap (fo x) c = fo c
+frag-wrap (not-fo r at) c = not-fo r at
+frag-both : Verdict → Verdict → Code → Verdict
+frag-both (fo x) w c = frag-wrap w c
+frag-both (not-fo r at) w c = not-fo r at
+frag-list : (Code → Verdict) → Lst Code → Code → Verdict
+frag-list f lnil c = fo c
+frag-list f (lcons x xs) c = frag-both (f x) (frag-list f xs c) c
+-- fragment k d c: fo c when c is in the fragment (d the binder depth, for the report), else the
+-- first construct outside it with its reason (k the walk's fuel, lib/capacities/codes.cub)
+fragment-n : Nat → Word → Code → Verdict
+fragment-n zero d c = not-fo reflect c
+fragment-n (suc k) d (cvar n) = fo (cvar n)
+fragment-n (suc k) d (cglob n) = fo (cglob n)
+fragment-n (suc k) d (clam b) = frag-wrap (fragment-n k (%wsucc d) b) (clam b)
+fragment-n (suc k) d (capp f a) = frag-both (fragment-n k d f) (fragment-n k d a) (capp f a)
+fragment-n (suc k) d (cpair a b) = frag-both (fragment-n k d a) (fragment-n k d b) (cpair a b)
+fragment-n (suc k) d (cfst p) = frag-wrap (fragment-n k d p) (cfst p)
+fragment-n (suc k) d (csnd p) = frag-wrap (fragment-n k d p) (csnd p)
+fragment-n (suc k) d (clet t b) = frag-both (fragment-n k d t) (fragment-n k (%wsucc d) b) (clet t b)
+fragment-n (suc k) d (cann t T) = fragment-n k d t
+-- a thunk is its value in compiled code: checked terms terminate and compiled code writes nothing
+-- outside its arena, so computing a delayed value early changes no answer (it may cost time)
+fragment-n (suc k) d (cthunk t) = fragment-n k d t
+fragment-n (suc k) d (cforce t) = fragment-n k d t
+fragment-n (suc k) d (ccon dd j fs lnil) =
+  if data-higher dd then not-fo higher (ccon dd j fs lnil) else frag-list (λ x → fragment-n k d x) fs (ccon dd j fs lnil)
+fragment-n (suc k) d (ccon dd j fs (lcons x xs)) = not-fo higher (ccon dd j fs (lcons x xs))
+fragment-n (suc k) d (ccase dd B x) =
+  if data-higher dd then not-fo higher (ccase dd B x)
+  else frag-both (frag-list (λ y → fragment-n k d y) B (ccase dd B x)) (fragment-n k d x) (ccase dd B x)
+fragment-n (suc k) d (celim dd P B x) =
+  if data-higher dd then not-fo higher (celim dd P B x)
+  else frag-both (frag-list (λ y → fragment-n k d y) B (celim dd P B x)) (fragment-n k d x) (celim dd P B x)
+fragment-n (suc k) d (cproj dd j x) = frag-wrap (fragment-n k d x) (cproj dd j x)
+fragment-n (suc k) d (cwlit n) = if %wlt n #18446744073709551616 then fo (cwlit n) else not-fo mult (cwlit n)
+fragment-n (suc k) d (cplit j b) = fo (cplit j b)
+fragment-n (suc k) d (cwsucc a) = frag-wrap (fragment-n k d a) (cwsucc a)
+fragment-n (suc k) d (cwop j a b) = frag-both (fragment-n k d a) (fragment-n k d b) (cwop j a b)
+fragment-n (suc k) d (cprim j as) = frag-list (λ x → fragment-n k d x) as (cprim j as)
+fragment-n (suc k) d (cwelim w z s mo) =
+  frag-both (frag-both (fragment-n k d w) (fragment-n k d z) (cwelim w z s mo)) (fragment-n k d s) (cwelim w z s mo)
+fragment-n (suc k) d cword = not-fo dep-type cword
+fragment-n (suc k) d (cpty j n) = not-fo dep-type (cpty j n)
+fragment-n (suc k) d (cpi m A B) = not-fo dep-type (cpi m A B)
+fragment-n (suc k) d (csigma A B) = not-fo dep-type (csigma A B)
+fragment-n (suc k) d (cuniv l) = not-fo dep-type (cuniv l)
+fragment-n (suc k) d (cdata dd ps) = not-fo dep-type (cdata dd ps)
+fragment-n (suc k) d (cpathp A a b) = not-fo dim (cpathp A a b)
+fragment-n (suc k) d (cplam b) = not-fo dim (cplam b)
+fragment-n (suc k) d (cpapp p r) = not-fo dim (cpapp p r)
+fragment-n (suc k) d ci0 = not-fo dim ci0
+fragment-n (suc k) d ci1 = not-fo dim ci1
+fragment-n (suc k) d (cneg r) = not-fo dim (cneg r)
+fragment-n (suc k) d (cmeet r s) = not-fo dim (cmeet r s)
+fragment-n (suc k) d (cjoin r s) = not-fo dim (cjoin r s)
+fragment-n (suc k) d (ceq0 r) = not-fo dim (ceq0 r)
+fragment-n (suc k) d (ceq1 r) = not-fo dim (ceq1 r)
+fragment-n (suc k) d (cfand a b) = not-fo dim (cfand a b)
+fragment-n (suc k) d (cfor a b) = not-fo dim (cfor a b)
+fragment-n (suc k) d cftt = not-fo dim cftt
+fragment-n (suc k) d cfff = not-fo dim cfff
+fragment-n (suc k) d (cforall b) = not-fo dim (cforall b)
+fragment-n (suc k) d csys0 = not-fo kan csys0
+fragment-n (suc k) d (csysc f t r) = not-fo kan (csysc f t r)
+fragment-n (suc k) d (ccomp A u a) = not-fo kan (ccomp A u a)
+fragment-n (suc k) d (cgluet A S) = not-fo kan (cgluet A S)
+fragment-n (suc k) d (cglue S a) = not-fo kan (cglue S a)
+fragment-n (suc k) d (cunglue S b) = not-fo kan (cunglue S b)
+fragment-n (suc k) d (chcompu A S) = not-fo kan (chcompu A S)
+fragment-n (suc k) d (cunglueu S b) = not-fo kan (cunglueu S b)
+fragment-n (suc k) d (chcomp u a) = not-fo kan (chcomp u a)
+fragment-n (suc k) d (ctrans dd psi ls x) = not-fo kan (ctrans dd psi ls x)
+-- a record of a codata type: a cell of its fields; a field of the type itself is delayed in
+-- compiled code (lib/capacities/x86.cub), so an infinite value is built only as far as it is observed
+fragment-n (suc k) d (crec dd fs) = frag-list (λ x → fragment-n k d x) fs (crec dd fs)
+fragment-n (suc k) d c = not-fo reflect c
+fragment : Word → Code → Verdict
+fragment d c = fragment-n c-fuel d c
+is-fo : Code → Bool
+is-fo c = case fragment #0 c return (λ _ → Bool) of
+  fo x → true
+  not-fo r at → false
+-- which fields of a codata type are of the type itself, in order
+co-recs : Word → Lst Bool
+co-recs d = codata-recs d
+-- ---------------------------------------------------------------- the program of a code
+-- A compiled program is a list of definitions (g , code): the entry (g = the entry's own index, m)
+-- and every checked definition it names, transitively, each the quote of the definition's value
+-- at its type (its code without its name). A definition whose value does not quote (one over a
+-- stuck primitive) or whose code is outside the fragment keeps the program from compiling, and
+-- the verdict names it
+unfold : Word → Opt Code
+unfold g = def-code g
+-- a definition whose value is its own stuck call is a copattern definition (observed field by
+-- field, its quote is the call itself): its program is its checked code as written, the record of
+-- its clauses under its parameters
+is-rec-body : Code → Bool
+is-rec-body (clam b) = is-rec-body b
+is-rec-body (cann t T) = is-rec-body t
+is-rec-body (crec dd fs) = true
+is-rec-body c = false
+code-head : Code → Code
+code-head (capp f a) = code-head f
+code-head c = c
+self-head : Word → Code → Bool
+self-head g (clam b) = self-head g b
+self-head g c = case code-head c return (λ _ → Bool) of
+  cglob h → %weq g h
+  _ → false
+-- the state of the walk: (to do , (seen , (definitions , refused)))
+Prog : Type
+Prog = Lst Word × (Lst Word × (Lst (Word × Code) × Lst (Word × Verdict)))
+prog-add : Word → Code → Prog → Prog
+prog-add g cd st = (l-app (fst st) (code-globals cd) , (lcons g (fst (snd st)) , (l-app (fst (snd (snd st))) (lcons (g , cd) lnil) , snd (snd (snd st)))))
+prog-bad : Word → Verdict → Prog → Prog
+prog-bad g v st = (fst st , (lcons g (fst (snd st)) , (fst (snd (snd st)) , lcons (g , v) (snd (snd (snd st))))))
+prog-def : Word → Code → Prog → Prog
+prog-def g cd st =
+  if self-head g cd
+    then (case def-source g return (λ _ → Prog) of
+            some cw → (if is-rec-body cw then prog-add g cw st else prog-bad g (not-fo infinite cd) st)
+            none → prog-bad g (not-fo infinite cd) st)
+    else prog-add g cd st
+-- those of a list not seen
+drop-seen : Lst Word → Lst Word → Lst Word
+drop-seen seen lnil = lnil
+drop-seen seen (lcons g rest) = if w-mem g seen then drop-seen seen rest else lcons g rest
+-- one step: the next definition to do that is not seen
+prog-step : Prog → Prog
+prog-step st =
+  case drop-seen (fst (snd st)) (fst st) return (λ _ → Prog) of
+    lnil → (lnil , snd st)
+    lcons g rest →
+      (let st1 = the Prog (rest , snd st)
+       in case unfold g return (λ _ → Prog) of
+            none → prog-bad g (not-fo reflect (cglob g)) st1
+            some cd → prog-def g cd st1)
+-- program-of m c fuel: (refused , definitions). definitions: the entry and every definition
+-- reachable from it that quotes, each (g , code); refused: those that do not, each (g , verdict).
+-- Whether a definition is in the fragment is decided after the encoder's passes have removed what
+-- no result depends on (lib/capacities/x86.cub): a proof argument's code may use composition and never be
+-- computed
+prog-run : Word → Prog → Lst (Word × Verdict) × Lst (Word × Code)
+prog-run fuel st = (let r = w-iter fuel prog-step st in (snd (snd (snd r)) , fst (snd (snd r))))
+program-of : Word → Code → Word → Lst (Word × Verdict) × Lst (Word × Code)
+program-of m c fuel = prog-run fuel (code-globals c , (lcons m lnil , (lcons (m , c) lnil , lnil)))
+-- the same for several entries, es a list of (g , code)
+entries-globals : Lst (Word × Code) → Lst Word
+entries-globals lnil = lnil
+entries-globals (lcons e r) = l-app (code-globals (snd e)) (entries-globals r)
+entries-names : Lst (Word × Code) → Lst Word
+entries-names lnil = lnil
+entries-names (lcons e r) = lcons (fst e) (entries-names r)
+program-of-all : Lst (Word × Code) → Word → Lst (Word × Verdict) × Lst (Word × Code)
+program-of-all es fuel = prog-run fuel (entries-globals es , (entries-names es , (es , lnil)))
+-- the definition g of a program
+prog-def-of : Lst (Word × Code) → Word → Opt Code
+prog-def-of lnil g = none
+prog-def-of (lcons d r) g = if %weq (fst d) g then some (snd d) else prog-def-of r g

@@ -44,7 +44,11 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
     (core; misplaced in the core, and what it should be; not core though in the core's load order;
     capacity demonstrated and mentioned in the paper; library; example; language support; our
     usage). A new file opens with one; a file that moves layer has its line changed in the same
-    commit. The directories do not yet follow the layers: that move is still to be made.
+    commit. The directories follow the layers: lib/core/ (the primitive language: prelude, code,
+    check), lib/bootstrap/ (loaded with the core but not core: the untyped match, nav, cost, lin and the
+    misplaced machine numbers of prim), lib/capacities/, lib/library/, lib/examples/, lib/languages/
+    (language support), lib/usage/; lib/core.cub and lib/library.cub are the load lists; src/ is the
+    machine.
   - **The language is the minimal pure base.** It is a minimal, necessary and sufficient construct of
     pure mathematics, as the λ-calculus, the Turing machine and Shannon's channel are, and its value
     is maximized by its minimality: it extends to anything by definitions, so nothing further belongs
@@ -56,7 +60,7 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
     than proved; a defined thing is identified with every other presentation of itself by paths and
     transported along them, while a primitive is opaque to that; and nothing definable gains
     expressiveness by being primitive, it only adds trust and ties the base to one machine's era.
-    The 64-bit floats in `lib/prim.cub` and `src/lang.c` fail this test; an earlier finding took
+    The 64-bit floats in `lib/bootstrap/prim.cub` and `src/lang.c` fail this test; an earlier finding took
     them as given and proposed naming them as an assumption.
 - **Keep Avik's words verbatim** (“Avik's words, verbatim” below).
   - Never paraphrase inside quotation marks.

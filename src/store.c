@@ -399,7 +399,7 @@ static void store_put(const char *name, const char *key, const char *code, const
 }
 
 /* A data type's key includes its declared name: two declarations of one content (List in
- * lib/prelude.cub, Lst in lib/code.cub) are two types to the checker (data types are generative), so
+ * lib/core/prelude.cub, Lst in lib/core/code.cub) are two types to the checker (data types are generative), so
  * they are two keys, as Unison's unique types carry a salt (2026-11-12). */
 /* ---- keys of the kinds of entry ---- */
 /* a checked definition: its type and term; the canonical forms are returned for the store */
@@ -408,7 +408,7 @@ static void key_def(Node *T, Node *t, char out[65], char **code, char **type) {
     /* generated names numbered by first occurrence (kfresh_on): a definition whose elaborated form
      * binds a generated name in a pattern (calc chains, clauses) otherwise had a different key in
      * every run whose earlier elaborations differed, and its certificate never hit (2026-11-12,
-     * lib/obs.cub's o-run-comp, 0.6M steps rechecked on every warm run) */
+     * lib/examples/obs.cub's o-run-comp, 0.6M steps rechecked on every warm run) */
     kfresh_on = true; nkfresh = 0;
     SBuf b = { 0 }; canon(&b, T); char *ty = b.b;
     SBuf c = { 0 }; if (t) canon(&c, t); char *cd = c.b ? c.b : strdup("");
@@ -431,7 +431,7 @@ static void key_decl(Node *dd, char out[65], char **code) {
     kfresh_on = true; nkfresh = 0;   /* as key_def: generated names by first occurrence */
     SBuf b = { 0 }; canon_decl(&b, dd);
     /* a data type is generative: two declarations of one content are two types to the checker (List
-     * and Lst in lib/prelude.cub and lib/code.cub), so the name it is declared under is part of its
+     * and Lst in lib/core/prelude.cub and lib/core/code.cub), so the name it is declared under is part of its
      * identity, as Unison's unique types carry a salt (2026-11-12; without it the store conflated
      * them and a form read back named the wrong one) */
     Node *hd = dd->it[1]; const char *dn = hd->list ? hd->it[0]->s : hd->s;

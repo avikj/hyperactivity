@@ -1,0 +1,196 @@
+-- Layer: example: what the paper shows the language doing (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/examples/net.cub — the network as a world (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §6 “Phases 2–8: everything that will be built”, “Phase 7 — Systems: nodes, networks, fleets”, item 1 “The network world”).
+-- Over lib/library/proc.cub's Sig, World, PushS and lib/bootstrap/prim.cub's Bytes.
+--
+-- A node sees the signature NetSig M: send a message to a node, receive (a message with its
+-- sender, or a timeout), read the clock. The network's state is the packets in flight (a
+-- multiset, held as a list), a clock and the partition in force. What happens at each step is
+-- the adversary's choice (Adv): schedule a node, deliver a packet, drop one, duplicate one, let
+-- time pass, partition the nodes. The environment's signature EnvS is the push signature whose
+-- event is that choice, so a recorded run is a list of choices and an adversary is any world
+-- answering it. A choice is resolved against the state (resolve): it schedules one node with an
+-- event (run, or the delivery of a packet taken out of flight), or it changes the network alone.
+-- net-world is the network as a world over a node's commands given that event.
+-- Fairness is a predicate on infinite choice sequences (functions of time, or streams observed
+-- by nth); its bounded form says how long each obligation may wait.
+-- ---------------------------------------------------------------- lists as multisets and sets
+-- membership and inclusion as types: an invariant over the packets in flight is a statement
+-- about every member, and dropping, duplicating and delivering only ever shrink the set
+import "../library.cub"
+InL : {A : Type} → A → List A → Type
+InL {A} x l = case l of nil → Empty; cons y r → Sum (Path A x y) (rec r)
+SubL : {A : Type} → List A → List A → Type
+SubL {A} l1 l2 = (x : A) → InL x l1 → InL x l2
+subl-refl : {A : Type} → (l : List A) → SubL l l
+subl-refl l x h = h
+subl-trans : {A : Type} → (l1 l2 l3 : List A) → SubL l1 l2 → SubL l2 l3 → SubL l1 l3
+subl-trans l1 l2 l3 f g x h = g x (f x h)
+subl-cons : {A : Type} → (y : A) → (l : List A) → SubL l (cons y l)
+subl-cons y l x h = inr h
+subl-cons2 : {A : Type} → (y : A) → (l1 l2 : List A) → SubL l1 l2 → SubL (cons y l1) (cons y l2)
+subl-cons2 y l1 l2 f x h = case h of inl e → inl e; inr m → inr (f x m)
+-- an invariant of every member survives a cons of a member that has it
+inl-cons-all : {A : Type} → (P : A → Type) → (y : A) → (l : List A) → P y → ((x : A) → InL x l → P x) → (x : A) → InL x (cons y l) → P x
+inl-cons-all {A} P y l py f x h = case h of inl e → subst {lzero} {lzero} {A} {P} (sym e) py; inr m → f x m
+-- the k-th element taken out: the element and the rest, or nothing when the list is shorter
+take-at : {A : Type} → Nat → List A → Sum (A × List A) Unit
+take-at k nil = inr unit
+take-at zero (cons x r) = inl (x , r)
+take-at (suc k) (cons x r) = case take-at k r of inl pr → inl (fst pr , cons x (snd pr)); inr u → inr unit
+TakeSpec : {A : Type} → List A → Sum (A × List A) Unit → Type
+TakeSpec l s = case s of inl pr → InL (fst pr) l × SubL (snd pr) l; inr u → Unit
+take-cons-spec : {A : Type} → (x : A) → (r : List A) → (s : Sum (A × List A) Unit) → TakeSpec r s →
+                 TakeSpec (cons x r) (case s of inl pr → inl (fst pr , cons x (snd pr)); inr u → inr unit)
+take-cons-spec x r (inl pr) h = (inr (fst h) , λ y m → case m of inl e → inl e; inr m2 → inr (snd h y m2))
+take-cons-spec x r (inr u) h = unit
+take-at-spec : {A : Type} → (k : Nat) → (l : List A) → TakeSpec {A} l (take-at {A} k l)
+take-at-spec {A} k nil = unit
+take-at-spec {A} zero (cons x r) = (inl (λ i → x) , λ y m → inr m)
+take-at-spec {A} (suc k) (cons x r) = take-cons-spec {A} x r (take-at {A} k r) (take-at-spec {A} k r)
+-- ---------------------------------------------------------------- what a node sees
+NodeId : Type
+NodeId = Nat
+data NetCmd (M : Type) = n-send (to : NodeId) (m : M) | n-recv | n-now
+data Rcv (M : Type) = r-timeout | r-msg (from : NodeId) (m : M)
+net-resp : {M : Type} → NetCmd M → Type
+net-resp {M} c = case c of n-send t m → Unit; n-recv → Rcv M; n-now → Word
+NetSig : Type → Sig
+NetSig M = (NetCmd M , net-resp {M})
+-- messages as byte strings: the signature a node of a deployed fleet is written against
+Msg : Type
+Msg = (n : Nat) × Bytes n
+NetS : Sig
+NetS = NetSig Msg
+net-send : {l : Level} {M : Type} → NodeId → M → Proc {l} (NetSig M) Unit
+net-send {l} {M} to m = cmd {l} {NetSig M} (n-send to m)
+net-recv : {l : Level} {M : Type} → Proc {l} (NetSig M) (Rcv M)
+net-recv {l} {M} = cmd {l} {NetSig M} n-recv
+net-now : {l : Level} {M : Type} → Proc {l} (NetSig M) Word
+net-now {l} {M} = cmd {l} {NetSig M} n-now
+-- ---------------------------------------------------------------- the network's state
+record Pkt (M : Type) = { p-from : NodeId ; p-to : NodeId ; p-msg : M }
+-- the packets in flight, the clock, and one side of the partition in force (nil: none)
+record Net (M : Type) = { flight : List (Pkt M) ; clock : Word ; cutset : List NodeId }
+net-empty : {M : Type} → Net M
+net-empty = Net { flight = nil ; clock = #0 ; cutset = nil }
+net-set-flight : {M : Type} → List (Pkt M) → Net M → Net M
+net-set-flight fl n = Net { flight = fl ; clock = clock n ; cutset = cutset n }
+nt-xor : Bool → Bool → Bool
+nt-xor a b = case a of true → not b; false → b
+nt-side : NodeId → List NodeId → Bool
+nt-side i s = case s of nil → false; cons j r → (case eqb i j of true → true; false → rec r)
+-- a packet is blocked when its ends are on different sides of the partition
+net-blocked : {M : Type} → List NodeId → Pkt M → Bool
+net-blocked s p = nt-xor (nt-side (p-from p) s) (nt-side (p-to p) s)
+-- ---------------------------------------------------------------- the adversary
+-- the choice at one step: run node i (its send is put in flight, its clock read answered, its
+-- receive timed out); deliver the k-th packet in flight to its addressee; drop it; duplicate it;
+-- let d nanoseconds pass (delay is the adversary choosing anything but the delivery);
+-- partition the nodes (nil heals)
+data Adv = a-run (i : NodeId) | a-deliver (k : Nat) | a-drop (k : Nat) | a-dup (k : Nat) | a-tick (d : Word) | a-part (side : List NodeId)
+-- the environment's signature: the next choice is pushed (lib/library/proc.cub's push events); a
+-- recorded sequence of choices answers it through feed-world
+EnvS : Sig
+EnvS = PushS Adv
+-- what a choice means in a state: one node is scheduled with an event, or the network changes
+data Ev (M : Type) = ev-run | ev-deliver (p : Pkt M) (rest : List (Pkt M))
+data Resolved (M : Type) = res-node (i : NodeId) (e : Ev M) | res-net (n : Net M)
+res-deliver : {M : Type} → Net M → Sum (Pkt M × List (Pkt M)) Unit → Resolved M
+res-deliver n s = case s of
+  inl pr → (case net-blocked (cutset n) (fst pr) of true → res-net n; false → res-node (p-to (fst pr)) (ev-deliver (fst pr) (snd pr)))
+  inr u → res-net n
+res-drop : {M : Type} → Net M → Sum (Pkt M × List (Pkt M)) Unit → Net M
+res-drop n s = case s of inl pr → net-set-flight (snd pr) n; inr u → n
+res-dup : {M : Type} → Net M → Sum (Pkt M × List (Pkt M)) Unit → Net M
+res-dup n s = case s of inl pr → net-set-flight (cons (fst pr) (flight n)) n; inr u → n
+resolve : {M : Type} → Adv → Net M → Resolved M
+resolve (a-run i) n = res-node i ev-run
+resolve (a-deliver k) n = res-deliver n (take-at k (flight n))
+resolve (a-drop k) n = res-net (res-drop n (take-at k (flight n)))
+resolve (a-dup k) n = res-net (res-dup n (take-at k (flight n)))
+resolve (a-tick d) n = res-net (Net { flight = flight n ; clock = wadd (clock n) d ; cutset = cutset n })
+resolve (a-part s) n = res-net (Net { flight = flight n ; clock = clock n ; cutset = s })
+-- what resolving guarantees: a delivered packet was in flight, to the node scheduled, and what
+-- is left in flight was there; a change of the network adds no packet
+ResSpec : {M : Type} → Net M → Resolved M → Type
+ResSpec {M} n r = case r of
+  res-node i e → (case e of ev-run → Unit; ev-deliver p rest → Path NodeId i (p-to p) × (InL p (flight n) × SubL rest (flight n)))
+  res-net n2 → SubL (flight n2) (flight n)
+res-deliver-spec : {M : Type} → (n : Net M) → (s : Sum (Pkt M × List (Pkt M)) Unit) → TakeSpec (flight n) s → ResSpec n (res-deliver n s)
+res-deliver-spec {M} n (inl pr) h =
+  (case net-blocked (cutset n) (fst pr) return (λ b → ResSpec n (case b of true → res-net n; false → res-node (p-to (fst pr)) (ev-deliver (fst pr) (snd pr)))) of
+     true → subl-refl (flight n)
+     false → (refl , h))
+res-deliver-spec n (inr u) h = subl-refl (flight n)
+res-drop-spec : {M : Type} → (n : Net M) → (s : Sum (Pkt M × List (Pkt M)) Unit) → TakeSpec (flight n) s → SubL (flight (res-drop n s)) (flight n)
+res-drop-spec n (inl pr) h = snd h
+res-drop-spec n (inr u) h = subl-refl (flight n)
+res-dup-spec : {M : Type} → (n : Net M) → (s : Sum (Pkt M × List (Pkt M)) Unit) → TakeSpec (flight n) s → SubL (flight (res-dup n s)) (flight n)
+res-dup-spec {M} n (inl pr) h = λ x m → case m of inl e → subst {lzero} {lzero} {Pkt M} {λ y → InL y (flight n)} (sym e) (fst h); inr m2 → m2
+res-dup-spec n (inr u) h = subl-refl (flight n)
+resolve-spec : {M : Type} → (a : Adv) → (n : Net M) → ResSpec n (resolve a n)
+resolve-spec (a-run i) n = unit
+resolve-spec (a-deliver k) n = res-deliver-spec n (take-at k (flight n)) (take-at-spec k (flight n))
+resolve-spec (a-drop k) n = res-drop-spec n (take-at k (flight n)) (take-at-spec k (flight n))
+resolve-spec (a-dup k) n = res-dup-spec n (take-at k (flight n)) (take-at-spec k (flight n))
+resolve-spec (a-tick d) n = subl-refl (flight n)
+resolve-spec (a-part s) n = subl-refl (flight n)
+-- ---------------------------------------------------------------- the network as a world
+-- node i's command under the event it is scheduled with. Run: a send goes in flight, the clock
+-- is read, a receive times out. Delivery: a receive is answered with the packet, which leaves
+-- flight; a node that is not receiving refuses, and the packet stays where it was
+net-world : {M : Type} → NodeId → Ev M → World (NetSig M) (Net M)
+net-world {M} i e c n =
+  case c return (λ x → Sum (net-resp {M} x × Net M) (Net M)) of
+    n-send to m → (case e of
+                     ev-run → inl (unit , net-set-flight (cons (Pkt { p-from = i ; p-to = to ; p-msg = m }) (flight n)) n)
+                     ev-deliver p rest → inr n)
+    n-recv → (case e of
+                ev-run → inl (r-timeout , n)
+                ev-deliver p rest → inl (r-msg (p-from p) (p-msg p) , net-set-flight rest n))
+    n-now → (case e of
+               ev-run → inl (clock n , n)
+               ev-deliver p rest → inr n)
+-- ---------------------------------------------------------------- choice sequences and fairness
+-- an infinite sequence of choices is a function of time; a stream (coinductive, lib/library/std.cub's
+-- Str) is one by nth; a recorded finite sequence is a list
+AdvSeq : Type
+AdvSeq = Nat → Adv
+seq-of-str : Str Adv → AdvSeq
+seq-of-str s t = nth t s
+-- eventually and always over time; eventually within a bound
+-- k steps after t (the successor moved onto the time, so that an induction on k that advances
+-- the time is by computation)
+nt-later : Nat → Nat → Nat
+nt-later zero t = t
+nt-later (suc k) t = nt-later k (suc t)
+nt-later-plus : (k t : Nat) → nt-later k t ≡ plus k t
+nt-later-plus zero t = λ i → t
+nt-later-plus (suc k) t = transN (nt-later-plus k (suc t)) (plus-suc k t)
+nt-later-comm : (a b : Nat) → nt-later a b ≡ nt-later b a
+nt-later-comm a b = transN (nt-later-plus a b) (transN (plus-comm a b) (symN (nt-later-plus b a)))
+Eventually : (Nat → Type) → Nat → Type
+Eventually P t = (k : Nat) × P (nt-later k t)
+Always : (Nat → Type) → Nat → Type
+Always P t = (k : Nat) → P (nt-later k t)
+WithinB : Nat → (Nat → Type) → Nat → Type
+WithinB b P t = (k : Nat) × ((k < b) × P (nt-later k t))
+within-eventually : (b : Nat) → (P : Nat → Type) → (t : Nat) → WithinB b P t → Eventually P t
+within-eventually b P t w = (fst w , snd (snd w))
+adv-is-run : NodeId → Adv → Bool
+adv-is-run i a = case a of a-run j → eqb i j; a-deliver k → false; a-drop k → false; a-dup k → false; a-tick d → false; a-part s → false
+-- every node below n is scheduled again and again
+SchedFair : Nat → AdvSeq → Type
+SchedFair n chs = (t : Nat) → (i : NodeId) → i < n → Eventually (λ s → isTrue (adv-is-run i (chs s))) t
+SchedFairB : Nat → Nat → AdvSeq → Type
+SchedFairB b n chs = (t : Nat) → (i : NodeId) → i < n → WithinB b (λ s → isTrue (adv-is-run i (chs s))) t
+-- delivery fairness over a run of network states: every packet in flight at any time is later
+-- delivered (the choice then resolves to the delivery of that packet and the addressee takes it:
+-- Took says so, given by the fleet), unless its addressee has stopped (Gone). A sequence that
+-- drops a packet for good, or keeps a partition for ever, is not fair
+DeliveryFair : {M : Type} → (nets : Nat → Net M) → (Took : Nat → Pkt M → Type) → (Gone : Nat → NodeId → Type) → Type
+DeliveryFair {M} nets Took Gone =
+  (t : Nat) → (p : Pkt M) → InL p (flight (nets t)) → Eventually (λ s → Sum (Took s p) (Gone s (p-to p))) t
+DeliveryFairB : {M : Type} → Nat → (nets : Nat → Net M) → (Took : Nat → Pkt M → Type) → (Gone : Nat → NodeId → Type) → Type
+DeliveryFairB {M} b nets Took Gone =
+  (t : Nat) → (p : Pkt M) → InL p (flight (nets t)) → WithinB b (λ s → Sum (Took s p) (Gone s (p-to p))) t

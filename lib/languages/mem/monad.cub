@@ -1,0 +1,272 @@
+-- Layer: language support: lifted languages and machines (goal 3), not the core (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/languages/mem/monad.cub — the evaluation monad every language reader targets.
+--
+-- A computation of the abstract machine is a process (lib/library/proc.cub's Proc) over the memory
+-- signature and the reader's world's signature S, MK S = MemSig + S, ending in: undefined
+-- behaviour of a scalar operation with its reason, a stop, or how control left it: normally
+-- with a value, by a return, a break, a continue, or a thrown value (V is the reader's type of
+-- returned and thrown values).
+--   Ev S V A = Proc (MK S) (MRes (Ctl V A))
+-- A reader never touches a memory: ev-load, ev-store, ev-alloc, … are the signature's commands
+-- and a pointer is opaque. The process has two handlers (lib/languages/mem/memory.cub): ev-std is its
+-- meaning (the abstract memory with its checks), ev-flat is what is compiled (the machine's
+-- memory), and mem-sound relates the two for every process.
+-- Loops: a counted loop is structural (ev-for-n); an unbounded loop takes a Word of fuel, a
+-- parameter of the meaning, and stops (mstop st-fuel) when it is spent.
+import "layout.cub"
+import "scalar.cub"
+data Ctl (V : Type) (A : Type) = c-val (a : A) | c-ret (v : V) | c-break | c-continue | c-throw (v : V)
+EvR : Type → Type → Type
+EvR V A = MRes (Ctl V A)
+Ev : {l : Level} → Sig → Type → Type → Type (lsuc l)
+Ev {l} S V A = Proc {l} (MK S) (EvR V A)
+ev-out : {l : Level} {S : Sig} {V A : Type} → EvR V A → Ev {l} S V A
+ev-out {l} {S} {V} {A} r = ret {l} {MK S} {EvR V A} r
+ev-ret : {l : Level} {S : Sig} {V A : Type} → A → Ev {l} S V A
+ev-ret {l} {S} {V} {A} a = ev-out {l} {S} {V} {A} (mok (c-val a))
+-- what follows a control outcome, and a result: the continuation on a value, the same outcome otherwise
+ev-stepc : {l : Level} {S : Sig} {V A B : Type} → (A → Ev {l} S V B) → Ctl V A → Ev {l} S V B
+ev-stepc {l} {S} {V} {A} {B} f c = case c of
+  c-val a → f a
+  c-ret v → ev-out {l} {S} {V} {B} (mok (c-ret v))
+  c-break → ev-out {l} {S} {V} {B} (mok c-break)
+  c-continue → ev-out {l} {S} {V} {B} (mok c-continue)
+  c-throw v → ev-out {l} {S} {V} {B} (mok (c-throw v))
+ev-step : {l : Level} {S : Sig} {V A B : Type} → (A → Ev {l} S V B) → EvR V A → Ev {l} S V B
+ev-step {l} {S} {V} {A} {B} f r = case r of
+  mok c → ev-stepc {l} {S} {V} {A} {B} f c
+  mub w → ev-out {l} {S} {V} {B} (mub w)
+  mstop w → ev-out {l} {S} {V} {B} (mstop w)
+ev-bind : {l : Level} {S : Sig} {V A B : Type} → Ev {l} S V A → (A → Ev {l} S V B) → Ev {l} S V B
+ev-bind {l} {S} {V} {A} {B} e f = bind {l} {MK S} {EvR V A} {EvR V B} e (ev-step {l} {S} {V} {A} {B} f)
+ev-then : {l : Level} {S : Sig} {V A B : Type} → Ev {l} S V A → Ev {l} S V B → Ev {l} S V B
+ev-then {l} {S} {V} {A} {B} e e2 = ev-bind {l} {S} {V} {A} {B} e (λ a → e2)
+
+-- ---------------------------------------------------------------- the laws, as checked paths
+ev-left-id : {l : Level} {S : Sig} {V A B : Type} → (a : A) → (f : A → Ev {l} S V B) →
+  ev-bind {l} {S} {V} {A} {B} (ev-ret {l} {S} {V} {A} a) f ≡ f a
+ev-left-id a f = λ i → f a
+ev-stepc-ret : {l : Level} {S : Sig} {V A : Type} → (c : Ctl V A) →
+  ev-stepc {l} {S} {V} {A} {A} (ev-ret {l} {S} {V} {A}) c ≡ ev-out {l} {S} {V} {A} (mok c)
+ev-stepc-ret {l} {S} {V} {A} c =
+  case c return (λ x → ev-stepc {l} {S} {V} {A} {A} (ev-ret {l} {S} {V} {A}) x ≡ ev-out {l} {S} {V} {A} (mok x)) of
+    c-val a → λ i → ev-out {l} {S} {V} {A} (mok (c-val a))
+    c-ret v → λ i → ev-out {l} {S} {V} {A} (mok (c-ret v))
+    c-break → λ i → ev-out {l} {S} {V} {A} (mok c-break)
+    c-continue → λ i → ev-out {l} {S} {V} {A} (mok c-continue)
+    c-throw v → λ i → ev-out {l} {S} {V} {A} (mok (c-throw v))
+ev-step-ret : {l : Level} {S : Sig} {V A : Type} → (r : EvR V A) →
+  ev-step {l} {S} {V} {A} {A} (ev-ret {l} {S} {V} {A}) r ≡ ev-out {l} {S} {V} {A} r
+ev-step-ret {l} {S} {V} {A} r =
+  case r return (λ x → ev-step {l} {S} {V} {A} {A} (ev-ret {l} {S} {V} {A}) x ≡ ev-out {l} {S} {V} {A} x) of
+    mok c → ev-stepc-ret {l} {S} {V} {A} c
+    mub w → λ i → ev-out {l} {S} {V} {A} (mub w)
+    mstop w → λ i → ev-out {l} {S} {V} {A} (mstop w)
+ev-right-id : {l : Level} {S : Sig} {V A : Type} → (e : Ev {l} S V A) →
+  ev-bind {l} {S} {V} {A} {A} e (ev-ret {l} {S} {V} {A}) ≡ e
+ev-right-id {l} {S} {V} {A} e = λ i R k h → e R (λ r → ev-step-ret {l} {S} {V} {A} r i R k h) h
+ev-stepc-assoc : {l : Level} {S : Sig} {V A B C : Type} → (f : A → Ev {l} S V B) → (g : B → Ev {l} S V C) → (c : Ctl V A) →
+  ev-bind {l} {S} {V} {B} {C} (ev-stepc {l} {S} {V} {A} {B} f c) g
+  ≡ ev-stepc {l} {S} {V} {A} {C} (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g) c
+ev-stepc-assoc {l} {S} {V} {A} {B} {C} f g c =
+  case c return (λ x → ev-bind {l} {S} {V} {B} {C} (ev-stepc {l} {S} {V} {A} {B} f x) g
+                       ≡ ev-stepc {l} {S} {V} {A} {C} (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g) x) of
+    c-val a → λ i → ev-bind {l} {S} {V} {B} {C} (f a) g
+    c-ret v → λ i → ev-out {l} {S} {V} {C} (mok (c-ret v))
+    c-break → λ i → ev-out {l} {S} {V} {C} (mok c-break)
+    c-continue → λ i → ev-out {l} {S} {V} {C} (mok c-continue)
+    c-throw v → λ i → ev-out {l} {S} {V} {C} (mok (c-throw v))
+ev-step-assoc : {l : Level} {S : Sig} {V A B C : Type} → (f : A → Ev {l} S V B) → (g : B → Ev {l} S V C) → (r : EvR V A) →
+  ev-bind {l} {S} {V} {B} {C} (ev-step {l} {S} {V} {A} {B} f r) g
+  ≡ ev-step {l} {S} {V} {A} {C} (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g) r
+ev-step-assoc {l} {S} {V} {A} {B} {C} f g r =
+  case r return (λ x → ev-bind {l} {S} {V} {B} {C} (ev-step {l} {S} {V} {A} {B} f x) g
+                       ≡ ev-step {l} {S} {V} {A} {C} (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g) x) of
+    mok c → ev-stepc-assoc {l} {S} {V} {A} {B} {C} f g c
+    mub w → λ i → ev-out {l} {S} {V} {C} (mub w)
+    mstop w → λ i → ev-out {l} {S} {V} {C} (mstop w)
+ev-assoc : {l : Level} {S : Sig} {V A B C : Type} → (e : Ev {l} S V A) → (f : A → Ev {l} S V B) → (g : B → Ev {l} S V C) →
+  ev-bind {l} {S} {V} {B} {C} (ev-bind {l} {S} {V} {A} {B} e f) g
+  ≡ ev-bind {l} {S} {V} {A} {C} e (λ a → ev-bind {l} {S} {V} {B} {C} (f a) g)
+ev-assoc {l} {S} {V} {A} {B} {C} e f g =
+  λ i R k h → e R (λ r → ev-step-assoc {l} {S} {V} {A} {B} {C} f g r i R k h) h
+
+-- ---------------------------------------------------------------- results, commands, leaving
+ev-res : {l : Level} {S : Sig} {V A : Type} → MRes A → Ev {l} S V A
+ev-res {l} {S} {V} {A} r = ev-out {l} {S} {V} {A} (mr-map (λ a → c-val a) r)
+-- a command of the memory signature, and one of the reader's world: the response is the value
+ev-memc : {l : Level} {S : Sig} {V : Type} → (c : MemC) → Ev {l} S V (m-resp c)
+ev-memc {l} {S} {V} c =
+  bind {l} {MK S} {m-resp c} {EvR V (m-resp c)} (cmd {l} {MK S} (inl c)) (λ r → ev-ret {l} {S} {V} {m-resp c} r)
+ev-cmd : {l : Level} {S : Sig} {V : Type} → (c : Cmd S) → Ev {l} S V (Resp S c)
+ev-cmd {l} {S} {V} c =
+  bind {l} {MK S} {Resp S c} {EvR V (Resp S c)} (cmd {l} {MK S} (inr c)) (λ r → ev-ret {l} {S} {V} {Resp S c} r)
+ev-ub : {l : Level} {S : Sig} {V A : Type} → UB → Ev {l} S V A
+ev-ub {l} {S} {V} {A} w = ev-out {l} {S} {V} {A} (mub w)
+ev-stop : {l : Level} {S : Sig} {V A : Type} → Stop → Ev {l} S V A
+ev-stop {l} {S} {V} {A} w = ev-out {l} {S} {V} {A} (mstop w)
+ev-return : {l : Level} {S : Sig} {V A : Type} → V → Ev {l} S V A
+ev-return {l} {S} {V} {A} v = ev-out {l} {S} {V} {A} (mok (c-ret v))
+ev-break : {l : Level} {S : Sig} {V A : Type} → Ev {l} S V A
+ev-break {l} {S} {V} {A} = ev-out {l} {S} {V} {A} (mok c-break)
+ev-continue : {l : Level} {S : Sig} {V A : Type} → Ev {l} S V A
+ev-continue {l} {S} {V} {A} = ev-out {l} {S} {V} {A} (mok c-continue)
+ev-throw : {l : Level} {S : Sig} {V A : Type} → V → Ev {l} S V A
+ev-throw {l} {S} {V} {A} v = ev-out {l} {S} {V} {A} (mok (c-throw v))
+
+-- ---------------------------------------------------------------- control: catching the outcomes
+ev-on : {l : Level} {S : Sig} {V A B : Type} → Ev {l} S V A → (Ctl V A → Ev {l} S V B) → Ev {l} S V B
+ev-on {l} {S} {V} {A} {B} e f =
+  bind {l} {MK S} {EvR V A} {EvR V B} e (λ r → case r of
+    mok c → f c
+    mub w → ev-out {l} {S} {V} {B} (mub w)
+    mstop w → ev-out {l} {S} {V} {B} (mstop w))
+-- a loop body: true to go on (it ended, or continued), false to leave (it broke)
+ev-body : {l : Level} {S : Sig} {V : Type} → Ev {l} S V Unit → Ev {l} S V Bool
+ev-body {l} {S} {V} e = ev-on {l} {S} {V} {Unit} {Bool} e (λ c → case c of
+  c-val u → ev-ret {l} {S} {V} {Bool} true
+  c-ret v → ev-return {l} {S} {V} {Bool} v
+  c-break → ev-ret {l} {S} {V} {Bool} false
+  c-continue → ev-ret {l} {S} {V} {Bool} true
+  c-throw v → ev-throw {l} {S} {V} {Bool} v)
+-- a function body at a call: a return is the call's value; falling off the end is the outcome
+-- given; a break or continue cannot leave a function; a throw passes to the caller
+ev-fn : {l : Level} {S : Sig} {V : Type} → MRes V → Ev {l} S V Unit → Ev {l} S V V
+ev-fn {l} {S} {V} off e = ev-on {l} {S} {V} {Unit} {V} e (λ c → case c of
+  c-val u → ev-res {l} {S} {V} {V} off
+  c-ret v → ev-ret {l} {S} {V} {V} v
+  c-break → ev-stop {l} {S} {V} {V} st-ill-typed
+  c-continue → ev-stop {l} {S} {V} {V} st-ill-typed
+  c-throw v → ev-throw {l} {S} {V} {V} v)
+ev-catch : {l : Level} {S : Sig} {V A : Type} → Ev {l} S V A → (V → Ev {l} S V A) → Ev {l} S V A
+ev-catch {l} {S} {V} {A} e hd = ev-on {l} {S} {V} {A} {A} e (λ c → case c of
+  c-val a → ev-ret {l} {S} {V} {A} a
+  c-ret v → ev-return {l} {S} {V} {A} v
+  c-break → ev-break {l} {S} {V} {A}
+  c-continue → ev-continue {l} {S} {V} {A}
+  c-throw v → hd v)
+-- e, then fin whatever way e left (a destructor, an unwinding step): fin's own leaving wins
+ev-finally : {l : Level} {S : Sig} {V A : Type} → Ev {l} S V A → Ev {l} S V Unit → Ev {l} S V A
+ev-finally {l} {S} {V} {A} e fin = ev-on {l} {S} {V} {A} {A} e (λ c →
+  ev-bind {l} {S} {V} {Unit} {A} fin (λ u → ev-out {l} {S} {V} {A} (mok c)))
+
+-- ---------------------------------------------------------------- loops
+ev-for : {l : Level} {S : Sig} {V : Type} → Word → Ev {l} S V Bool → Ev {l} S V Unit → Ev {l} S V Unit → Ev {l} S V Unit
+ev-for {l} {S} {V} fuel cond step body =
+  %welimP (λ x → Ev {l} S V Unit) fuel (ev-stop {l} {S} {V} {Unit} st-fuel)
+    (λ k again → ev-bind {l} {S} {V} {Bool} {Unit} cond (λ go → case go of
+       false → ev-ret {l} {S} {V} {Unit} unit
+       true → ev-bind {l} {S} {V} {Bool} {Unit} (ev-body {l} {S} {V} body) (λ on → case on of
+         false → ev-ret {l} {S} {V} {Unit} unit
+         true → ev-then {l} {S} {V} {Unit} {Unit} step again)))
+ev-while : {l : Level} {S : Sig} {V : Type} → Word → Ev {l} S V Bool → Ev {l} S V Unit → Ev {l} S V Unit
+ev-while {l} {S} {V} fuel cond body = ev-for {l} {S} {V} fuel cond (ev-ret {l} {S} {V} {Unit} unit) body
+ev-do-while : {l : Level} {S : Sig} {V : Type} → Word → Ev {l} S V Unit → Ev {l} S V Bool → Ev {l} S V Unit
+ev-do-while {l} {S} {V} fuel body cond =
+  ev-bind {l} {S} {V} {Bool} {Unit} (ev-body {l} {S} {V} body) (λ on → case on of
+    false → ev-ret {l} {S} {V} {Unit} unit
+    true → ev-while {l} {S} {V} fuel cond body)
+ev-for-n : {l : Level} {S : Sig} {V : Type} → Word → (Word → Ev {l} S V Unit) → Ev {l} S V Unit
+ev-for-n {l} {S} {V} n body =
+  %welimP (λ x → Word → Ev {l} S V Unit) n (λ i → ev-ret {l} {S} {V} {Unit} unit)
+    (λ k rest i → ev-bind {l} {S} {V} {Bool} {Unit} (ev-body {l} {S} {V} (body i)) (λ on → case on of
+       false → ev-ret {l} {S} {V} {Unit} unit
+       true → rest (wadd i #1)))
+    #0
+
+-- ---------------------------------------------------------------- the memory's commands
+ev-load : {l : Level} {S : Sig} {V : Type} → Target → SK → MPtr → Ev {l} S V SV
+ev-load {l} {S} {V} t k p = ev-memc {l} {S} {V} (m-load k (sk-align t k) p)
+ev-load-al : {l : Level} {S : Sig} {V : Type} → Target → SK → Word → MPtr → Ev {l} S V SV
+ev-load-al {l} {S} {V} t k al p = ev-memc {l} {S} {V} (m-load k al p)
+ev-store : {l : Level} {S : Sig} {V : Type} → Target → SK → MPtr → SV → Ev {l} S V Unit
+ev-store {l} {S} {V} t k p v = ev-memc {l} {S} {V} (m-store k (sk-align t k) p v)
+ev-store-al : {l : Level} {S : Sig} {V : Type} → Target → SK → Word → MPtr → SV → Ev {l} S V Unit
+ev-store-al {l} {S} {V} t k al p v = ev-memc {l} {S} {V} (m-store k al p v)
+ev-alloc : {l : Level} {S : Sig} {V : Type} → AKind → Bool → Word → Word → Ev {l} S V MPtr
+ev-alloc {l} {S} {V} kd z size al = ev-memc {l} {S} {V} (m-alloc kd z size al)
+ev-release : {l : Level} {S : Sig} {V : Type} → AKind → MPtr → Ev {l} S V Unit
+ev-release {l} {S} {V} kd p = ev-memc {l} {S} {V} (m-release kd p)
+ev-free : {l : Level} {S : Sig} {V : Type} → MPtr → Ev {l} S V Unit
+ev-free {l} {S} {V} p = ev-memc {l} {S} {V} (m-free p)
+ev-ptr-add : {l : Level} {S : Sig} {V : Type} → MPtr → Word → UInt64 → Ev {l} S V MPtr
+ev-ptr-add {l} {S} {V} p sz i = ev-memc {l} {S} {V} (m-ptr-add p sz i)
+ev-ptr-diff : {l : Level} {S : Sig} {V : Type} → MPtr → MPtr → Word → Ev {l} S V UInt64
+ev-ptr-diff {l} {S} {V} p q sz = ev-memc {l} {S} {V} (m-ptr-diff p q sz)
+ev-ptr-cmp : {l : Level} {S : Sig} {V : Type} → CmpOp → MPtr → MPtr → Ev {l} S V Bool
+ev-ptr-cmp {l} {S} {V} o p q = ev-memc {l} {S} {V} (m-ptr-cmp o p q)
+ev-ptr-int : {l : Level} {S : Sig} {V : Type} → Bool → IW → MPtr → Ev {l} S V SV
+ev-ptr-int {l} {S} {V} sg w p = ev-memc {l} {S} {V} (m-ptr-int sg w p)
+ev-int-ptr : {l : Level} {S : Sig} {V : Type} → Bool → IW → SV → Ev {l} S V MPtr
+ev-int-ptr {l} {S} {V} sg w v = ev-memc {l} {S} {V} (m-int-ptr sg w v)
+ev-memmove : {l : Level} {S : Sig} {V : Type} → MPtr → MPtr → Word → Ev {l} S V Unit
+ev-memmove {l} {S} {V} d s n = ev-memc {l} {S} {V} (m-memmove d s n)
+ev-memcpy : {l : Level} {S : Sig} {V : Type} → MPtr → MPtr → Word → Ev {l} S V Unit
+ev-memcpy {l} {S} {V} d s n = ev-memc {l} {S} {V} (m-memcpy d s n)
+ev-memset : {l : Level} {S : Sig} {V : Type} → MPtr → UInt64 → Word → Ev {l} S V Unit
+ev-memset {l} {S} {V} d v n = ev-memc {l} {S} {V} (m-memset d v n)
+-- a block's automatic object: allocated, the body run with its pointer, released however the body left
+ev-local : {l : Level} {S : Sig} {V A : Type} → Word → Word → (MPtr → Ev {l} S V A) → Ev {l} S V A
+ev-local {l} {S} {V} {A} size al body =
+  ev-bind {l} {S} {V} {MPtr} {A} (ev-alloc {l} {S} {V} ak-auto false size al) (λ p →
+    ev-finally {l} {S} {V} {A} (body p) (ev-release {l} {S} {V} ak-auto p))
+-- ---------------------------------------------------------------- objects by layout (addressing is lib/languages/mem/layout.cub's offsets)
+ev-off : {l : Level} {S : Sig} {V : Type} → MPtr → Word → Ev {l} S V MPtr
+ev-off {l} {S} {V} p n = ev-ptr-add {l} {S} {V} p #1 (uq-of-word n)
+ev-field : {l : Level} {S : Sig} {V : Type} → LayEnv → Word → Word → MPtr → Ev {l} S V (MPtr × MTy)
+ev-field {l} {S} {V} env id name p =
+  ev-bind {l} {S} {V} {Word × MTy} {MPtr × MTy} (ev-res {l} {S} {V} {Word × MTy} (fld-off env id name)) (λ ot →
+  ev-bind {l} {S} {V} {MPtr} {MPtr × MTy} (ev-off {l} {S} {V} p (fst ot)) (λ q → ev-ret {l} {S} {V} {MPtr × MTy} (q , snd ot)))
+ev-base : {l : Level} {S : Sig} {V : Type} → LayEnv → Word → Word → MPtr → Ev {l} S V MPtr
+ev-base {l} {S} {V} env id base p =
+  ev-bind {l} {S} {V} {Word} {MPtr} (ev-res {l} {S} {V} {Word} (base-off env id base)) (λ o → ev-off {l} {S} {V} p o)
+ev-derived : {l : Level} {S : Sig} {V : Type} → LayEnv → Word → Word → MPtr → Ev {l} S V MPtr
+ev-derived {l} {S} {V} env id base p =
+  ev-bind {l} {S} {V} {Word} {MPtr} (ev-res {l} {S} {V} {Word} (base-off env id base)) (λ o →
+    ev-ptr-add {l} {S} {V} p #1 (uq-neg (uq-of-word o)))
+ev-elem : {l : Level} {S : Sig} {V : Type} → Target → LayEnv → MTy → MPtr → UInt64 → Ev {l} S V MPtr
+ev-elem {l} {S} {V} t env ty p i =
+  ev-bind {l} {S} {V} {Word} {MPtr} (ev-res {l} {S} {V} {Word} (ty-size t env ty)) (λ sz → ev-ptr-add {l} {S} {V} p sz i)
+ev-obj-alloc : {l : Level} {S : Sig} {V : Type} → Target → LayEnv → AKind → Bool → MTy → Ev {l} S V MPtr
+ev-obj-alloc {l} {S} {V} t env kd z ty =
+  ev-bind {l} {S} {V} {Word} {MPtr} (ev-res {l} {S} {V} {Word} (ty-size t env ty)) (λ sz →
+  ev-bind {l} {S} {V} {Word} {MPtr} (ev-res {l} {S} {V} {Word} (ty-align t env ty)) (λ al → ev-alloc {l} {S} {V} kd z sz al))
+ev-obj-load : {l : Level} {S : Sig} {V : Type} → Target → MTy → MPtr → Ev {l} S V SV
+ev-obj-load {l} {S} {V} t ty p =
+  ev-bind {l} {S} {V} {SK × Word} {SV} (ev-res {l} {S} {V} {SK × Word} (ty-scalar t ty)) (λ ka → ev-load-al {l} {S} {V} t (fst ka) (snd ka) p)
+ev-obj-store : {l : Level} {S : Sig} {V : Type} → Target → MTy → MPtr → SV → Ev {l} S V Unit
+ev-obj-store {l} {S} {V} t ty p v =
+  ev-bind {l} {S} {V} {SK × Word} {Unit} (ev-res {l} {S} {V} {SK × Word} (ty-scalar t ty)) (λ ka → ev-store-al {l} {S} {V} t (fst ka) (snd ka) p v)
+ev-obj-copy : {l : Level} {S : Sig} {V : Type} → Target → LayEnv → MTy → MPtr → MPtr → Ev {l} S V Unit
+ev-obj-copy {l} {S} {V} t env ty dst src =
+  ev-bind {l} {S} {V} {Word} {Unit} (ev-res {l} {S} {V} {Word} (ty-size t env ty)) (λ sz → ev-memmove {l} {S} {V} dst src sz)
+ev-vptr : {l : Level} {S : Sig} {V : Type} → Target → LayEnv → Word → MPtr → Ev {l} S V MPtr
+ev-vptr {l} {S} {V} t env id p =
+  ev-bind {l} {S} {V} {Word} {MPtr} (ev-res {l} {S} {V} {Word} (vptr-off env id)) (λ o →
+  ev-bind {l} {S} {V} {MPtr} {MPtr} (ev-off {l} {S} {V} p o) (λ q →
+  ev-bind {l} {S} {V} {SV} {MPtr} (ev-load {l} {S} {V} t sk-ptr q) (λ v → ev-res {l} {S} {V} {MPtr} (sv-as-p v))))
+ev-set-vptr : {l : Level} {S : Sig} {V : Type} → Target → LayEnv → Word → MPtr → MPtr → Ev {l} S V Unit
+ev-set-vptr {l} {S} {V} t env id p vt =
+  ev-bind {l} {S} {V} {Word} {Unit} (ev-res {l} {S} {V} {Word} (vptr-off env id)) (λ o →
+  ev-bind {l} {S} {V} {MPtr} {Unit} (ev-off {l} {S} {V} p o) (λ q → ev-store {l} {S} {V} t sk-ptr q (sv-p vt)))
+
+-- ---------------------------------------------------------------- the two handlers of a computation
+-- its meaning: the observed tree of the abstract memory's run from a memory (lib/languages/mem/memory.cub's std-run)
+ev-std : {S : Sig} {V A : Type} → Target → Ev {lzero} S V A → AMem → Step (MT S) (MRes (EvR V A × AMem))
+ev-std {S} {V} {A} t e s = std-run {S} {EvR V A} t (to-step {MK S} {EvR V A} e) s
+-- what is compiled: the process over the reader's world and the machine's
+ev-flat : {S : Sig} {V A : Type} → Target → Ev {lzero} S V A → Step (MT S) (EvR V A)
+ev-flat {S} {V} {A} t e = o-handle {MK S} {MT S} {EvR V A} (mem-flat-k {S} t) (to-step {MK S} {EvR V A} e)
+-- mem-sound at a computation: the meaning is refined by the compiled process observed through
+-- the model of the machine's memory
+ev-sound : {S : Sig} {V A : Type} → (t : Target) → (e : Ev {lzero} S V A) → (s : AMem) →
+  m-Ref {MT S} {EvR V A × AMem} {EvR V A × FM} (MRel {EvR V A}) (ev-std {S} {V} {A} t e s)
+        (o-run {MT S} {MT S} {EvR V A} {FM} (fm-obs {S}) (ev-flat {S} {V} {A} t e) (am-data s))
+ev-sound {S} {V} {A} t e s = mem-sound {S} {EvR V A} t (to-step {MK S} {EvR V A} e) s (am-data s) (λ i → am-data s)
+-- the signature with no commands; a process over NoS + W is one over W
+NoS : Sig
+NoS = (Empty , λ c → Empty)
+mt-close : {A : Type} → Step (MT NoS) A → Step W A
+mt-close {A} t = o-handle {MT NoS} {W} {A} (λ c → case c return (λ y → Step W (Resp (MT NoS) y)) of
+  inl e → Empty-rec e
+  inr w → scmd w (λ r → sdone r)) t

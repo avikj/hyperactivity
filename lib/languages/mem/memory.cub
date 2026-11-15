@@ -1,0 +1,349 @@
+-- Layer: language support: lifted languages and machines (goal 3), not the core (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/languages/mem/memory.cub — the abstract memory, the handler mem-std of the memory signature into
+-- it (the meaning), and the theorem relating it to lib/languages/mem/flat.cub's handler (what is
+-- compiled).
+--
+-- The abstract memory is: a table of allocations (base address, size, alignment, liveness,
+-- storage kind), a map of written marks (has the byte at an address been written), and the
+-- bytes, a map from addresses to bytes. An allocation's address is the world's answer to
+-- w-alloc: it is observed, and the table refuses a placement that touches an allocation it
+-- already has (live or dead, one byte of gap kept), so every address is in at most one
+-- allocation's span for ever and a pointer's address determines its allocation.
+--
+-- mem-std handles a command in three steps: a check against the table and the marks (out of
+-- bounds, a dead allocation, misalignment, an unwritten byte, a wrong free, … : undefined
+-- behaviour with its reason, and nothing follows); then the flat handler's own tree for the
+-- command, run on the bytes by the model of the machine's memory; then the table's and the
+-- marks' bookkeeping. The meaning's bytes are therefore the machine's bytes by construction:
+-- the relation between an abstract memory and a flat one is that the bytes are equal, each
+-- command preserves it by one lemma for the whole signature (std-mem-ref), and mem-sound is
+-- the context rule.
+import "flat.cub"
+record ARec = { ar-base : Word ; ar-size : Word ; ar-align : Word ; ar-live : Bool ; ar-kind : AKind }
+record AMem = { am-table : List ARec ; am-init : Word → Bool ; am-data : FM }
+am-empty : AMem
+am-empty = AMem { am-table = nil ; am-init = λ x → false ; am-data = λ x → #0 }
+ATI : Type
+ATI = List ARec × (Word → Bool)
+am-ti : AMem → ATI
+am-ti s = (am-table s , am-init s)
+-- ---------------------------------------------------------------- the table and the marks
+-- the allocation whose span, one past the end included, holds an address
+tb-find : List ARec → Word → MRes ARec
+tb-find nil x = mub ub-out-of-bounds
+tb-find (cons e es) x = case m-and (not (wlt x (ar-base e))) (not (wlt (wadd (ar-base e) (ar-size e)) x)) of
+  true → mok e
+  false → tb-find es x
+-- the live allocation holding the n bytes at x
+tb-at : List ARec → Word → Word → MRes ARec
+tb-at tb x n = mr-bind (tb-find tb x) (λ e → case ar-live e of
+  false → mub ub-dead
+  true → (case wlt (wadd (ar-base e) (ar-size e)) (wadd x n) of
+    true → mub ub-out-of-bounds
+    false → mok e))
+-- the address of a pointer to an object
+tb-ptr : MPtr → MRes Word
+tb-ptr p = case p of
+  mp-null → mub ub-null
+  mp-fn f → mub ub-fn-as-object
+  mp-obj a o → mok (wadd a o)
+  mp-addr x → mok x
+tb-kill : List ARec → Word → List ARec
+tb-kill nil x = nil
+tb-kill (cons e es) x = case weq (ar-base e) x of
+  true → cons (ARec { ar-base = ar-base e ; ar-size = ar-size e ; ar-align = ar-align e ; ar-live = false ; ar-kind = ar-kind e }) es
+  false → cons e (tb-kill es x)
+-- a new span [b , b + size] touches no allocation's span, with a byte between
+tb-clear : List ARec → Word → Word → Bool
+tb-clear nil b size = true
+tb-clear (cons e es) b size =
+  m-and (m-or (wlt (wadd b size) (ar-base e)) (wlt (wadd (ar-base e) (ar-size e)) b)) (tb-clear es b size)
+in-range : Word → Word → Word → Bool
+in-range x a n = m-and (not (wlt x a)) (wlt x (wadd a n))
+in-set : (Word → Bool) → Word → Word → Bool → Word → Bool
+in-set i a n v = λ x → case in-range x a n of
+  true → v
+  false → i x
+in-all : (Word → Bool) → Word → Word → Bool
+in-all i a n = %welimP (λ x → Bool) n true (λ j acc → m-and acc (i (wadd a j)))
+in-move : (Word → Bool) → Word → Word → Word → Word → Bool
+in-move i d s n = λ x → case in-range x d n of
+  true → i (wadd s (wsub x d))
+  false → i x
+ak-same : AKind → AKind → Bool
+ak-same a b = case a of
+  ak-auto → (case b of
+    ak-auto → true
+    _ → false)
+  ak-static → (case b of
+    ak-static → true
+    _ → false)
+  ak-dynamic → (case b of
+    ak-dynamic → true
+    _ → false)
+m-chk : Bool → UB → MRes Unit
+m-chk b w = case b of
+  true → mok unit
+  false → mub w
+m-need : Bool → Stop → MRes Unit
+m-need b w = case b of
+  true → mok unit
+  false → mstop w
+sk-char-like : SK → Bool
+sk-char-like k = case k of
+  sk-int sg w → (case w of
+    iw8 → true
+    _ → false)
+  _ → false
+sk-is-bool : SK → Bool
+sk-is-bool k = case k of
+  sk-bool → true
+  _ → false
+
+-- ---------------------------------------------------------------- the checks before a command
+pre-release : AKind → MPtr → AMem → MRes Unit
+pre-release kd p s =
+  mr-bind (tb-ptr p) (λ x → mr-bind (tb-find (am-table s) x) (λ e →
+  mr-bind (m-chk (ar-live e) ub-double-free) (λ u →
+  mr-bind (m-chk (ak-same (ar-kind e) kd) ub-free-not-dynamic) (λ u2 →
+  m-chk (weq (ar-base e) x) ub-free-interior))))
+pre-load : Target → SK → Word → MPtr → AMem → MRes Unit
+pre-load t k al p s =
+  mr-bind (tb-ptr p) (λ x → mr-bind (tb-at (am-table s) x (sk-size t k)) (λ e →
+  mr-bind (m-chk (weq (wrem x al) #0) ub-misaligned) (λ u →
+  mr-bind (m-chk (m-or (sk-char-like k) (in-all (am-init s) x (sk-size t k))) ub-uninit) (λ u2 →
+  m-chk (m-or (not (sk-is-bool k)) (wlt (fm-get-n (fl-small (sk-size t k)) (am-data s) x) #2)) ub-bad-bool))))
+pre-store : Target → SK → Word → MPtr → SV → AMem → MRes Unit
+pre-store t k al p v s =
+  mr-bind (tb-ptr p) (λ x → mr-bind (tb-at (am-table s) x (sk-size t k)) (λ e →
+  mr-bind (m-chk (weq (wrem x al) #0) ub-misaligned) (λ u → mr-map (λ r → unit) (sv-enc k v))))
+pre-ptr-add : MPtr → Word → UInt64 → AMem → MRes Unit
+pre-ptr-add p elsize i s = case p of
+  mp-null → m-chk (uq-iszero i) ub-ptr-arith
+  mp-fn f → mstop st-ill-typed
+  _ → mr-bind (tb-find (am-table s) (mp-address p)) (λ e →
+    mr-bind (m-chk (ar-live e) ub-dead) (λ u → case uq-isneg i of
+      false → m-chk (not (wlt (wadd (ar-base e) (ar-size e)) (wadd (mp-address p) (wmul (u64toWord i) elsize)))) ub-ptr-arith
+      true → m-chk (not (wlt (wsub (mp-address p) (ar-base e)) (wmul (u64toWord (uq-neg i)) elsize))) ub-ptr-arith))
+-- two pointers into one live allocation
+tb-same : AMem → MPtr → MPtr → UB → MRes Unit
+tb-same s p q w =
+  mr-bind (tb-ptr p) (λ x → mr-bind (tb-ptr q) (λ y →
+  mr-bind (tb-find (am-table s) x) (λ e → mr-bind (tb-find (am-table s) y) (λ e2 →
+  mr-bind (m-chk (ar-live e) ub-dead) (λ u → m-chk (weq (ar-base e) (ar-base e2)) w)))))
+mp-is-null : MPtr → Bool
+mp-is-null p = case p of
+  mp-null → true
+  _ → false
+pre-ptr-diff : MPtr → MPtr → Word → AMem → MRes Unit
+pre-ptr-diff p q elsize s = case weq elsize #0 of
+  true → mstop st-ill-typed
+  false → (case m-and (mp-is-null p) (mp-is-null q) of
+    true → mok unit
+    false → mr-bind (tb-same s p q ub-ptr-sub) (λ u → case wlt (mp-address p) (mp-address q) of
+      false → m-chk (weq (wrem (wsub (mp-address p) (mp-address q)) elsize) #0) ub-ptr-sub
+      true → m-chk (weq (wrem (wsub (mp-address q) (mp-address p)) elsize) #0) ub-ptr-sub))
+-- equality is of addresses, always; an order is given between equal pointers and inside one
+-- live allocation, and is unspecified otherwise
+pre-ptr-cmp : CmpOp → MPtr → MPtr → AMem → MRes Unit
+pre-ptr-cmp o p q s = case o of
+  co-eq → mok unit
+  co-ne → mok unit
+  _ → (case weq (mp-address p) (mp-address q) of
+    true → mok unit
+    false → (case tb-same s p q ub-ptr-compare of
+      mok u → mok unit
+      mub w → mstop st-unspecified
+      mstop w → mstop st-unspecified))
+pre-range : MPtr → Word → AMem → MRes Unit
+pre-range p n s = mr-bind (tb-ptr p) (λ x → mr-map (λ e → unit) (tb-at (am-table s) x n))
+std-pre : Target → (c : MemC) → AMem → MRes Unit
+std-pre t c s = case c of
+  m-alloc kd z size al → m-need (not (weq al #0)) st-ill-typed
+  m-release kd p → pre-release kd p s
+  m-free p → (case p of
+    mp-null → mok unit
+    _ → pre-release ak-dynamic p s)
+  m-load k al p → pre-load t k al p s
+  m-store k al p v → pre-store t k al p v s
+  m-ptr-add p e i → pre-ptr-add p e i s
+  m-ptr-diff p q e → pre-ptr-diff p q e s
+  m-ptr-cmp o p q → pre-ptr-cmp o p q s
+  m-ptr-int sg w p → (case tg-ptr-int t of
+    pi-refused → mstop st-unsupported
+    pi-flat → mok unit)
+  m-int-ptr sg w v → (case tg-ptr-int t of
+    pi-refused → mstop st-unsupported
+    pi-flat → mr-map (λ a → unit) (sv-int-dq sg w v))
+  m-memmove d sr n → mr-bind (pre-range sr n s) (λ u → pre-range d n s)
+  m-memcpy d sr n → mr-bind (pre-range sr n s) (λ u → mr-bind (pre-range d n s) (λ u2 →
+    m-chk (not (m-and (wlt (mp-address d) (wadd (mp-address sr) n)) (wlt (mp-address sr) (wadd (mp-address d) n)))) ub-overlap))
+  m-memset d v n → pre-range d n s
+
+-- ---------------------------------------------------------------- the bookkeeping after a command
+-- an allocation at the world's address: refused (a stop: the world's placement is not one the
+-- table can hold) when it is 0, below the Target's first base, misaligned, or touches an
+-- allocation; else entered, its bytes marked written exactly when it was asked zeroed
+post-alloc : Target → AKind → Bool → Word → Word → MPtr → AMem → MRes ATI
+post-alloc t kd z size al r s =
+  mr-map (λ u → ( cons (ARec { ar-base = mp-address r ; ar-size = size ; ar-align = al ; ar-live = true ; ar-kind = kd }) (am-table s)
+               , in-set (am-init s) (mp-address r) size z ))
+    (m-need (m-and (not (wlt (mp-address r) (tg-base t)))
+            (m-and (weq (wrem (mp-address r) al) #0) (tb-clear (am-table s) (mp-address r) size))) st-unsupported)
+std-post : Target → (c : MemC) → m-resp c → AMem → MRes ATI
+std-post t c = case c return (λ y → m-resp y → AMem → MRes ATI) of
+  m-alloc kd z size al → λ r s → post-alloc t kd z size al r s
+  m-release kd p → λ r s → mok (tb-kill (am-table s) (mp-address p) , am-init s)
+  m-free p → λ r s → mok (tb-kill (am-table s) (mp-address p) , am-init s)
+  m-load k al p → λ r s → mok (am-ti s)
+  m-store k al p v → λ r s → mok (am-table s , in-set (am-init s) (mp-address p) (sk-size t k) true)
+  m-ptr-add p e i → λ r s → mok (am-ti s)
+  m-ptr-diff p q e → λ r s → mok (am-ti s)
+  m-ptr-cmp o p q → λ r s → mok (am-ti s)
+  m-ptr-int sg w p → λ r s → mok (am-ti s)
+  m-int-ptr sg w v → λ r s → mok (am-ti s)
+  m-memmove d sr n → λ r s → mok (am-table s , in-move (am-init s) (mp-address d) (mp-address sr) n)
+  m-memcpy d sr n → λ r s → mok (am-table s , in-move (am-init s) (mp-address d) (mp-address sr) n)
+  m-memset d v n → λ r s → mok (am-table s , in-set (am-init s) (mp-address d) n true)
+
+-- ---------------------------------------------------------------- mem-std
+-- the end of a command: the bookkeeping's result with the response and the bytes
+std-fin : {S : Sig} {R : Type} → MRes ATI → R × FM → Step (MT S) (MRes (R × AMem))
+std-fin b rd = case b of
+  mok ti → sdone (mok (fst rd , AMem { am-table = fst ti ; am-init = snd ti ; am-data = snd rd }))
+  mub w → sdone (mub w)
+  mstop w → sdone (mstop w)
+-- after the check: the flat handler's tree on the bytes, then the bookkeeping
+std-mem2 : {S : Sig} → Target → (c : MemC) → AMem → MRes Unit → Step (MT S) (MRes (m-resp c × AMem))
+std-mem2 {S} t c s pre = case pre of
+  mok u → o-bind {MT S} {m-resp c × FM} {MRes (m-resp c × AMem)}
+            (o-run {MT S} {MT S} {m-resp c} {FM} (fm-obs {S}) (mem-flat-k {S} t (inl c)) (am-data s))
+            (λ rd → std-fin {S} {m-resp c} (std-post t c (fst rd) s) rd)
+  mub w → sdone (mub w)
+  mstop w → sdone (mstop w)
+mem-std : {S : Sig} → Target → (c : MemC) → AMem → Step (MT S) (MRes (m-resp c × AMem))
+mem-std {S} t c s = std-mem2 {S} t c s (std-pre t c s)
+-- a command of a reader's process: the memory's by mem-std, the reader's world's observed
+std-step : {S : Sig} → Target → (c : Cmd (MK S)) → AMem → Step (MT S) (MRes (Resp (MK S) c × AMem))
+std-step {S} t c s = case c return (λ y → Step (MT S) (MRes (Resp (MK S) y × AMem))) of
+  inl m → mem-std {S} t m s
+  inr x → scmd (inl x) (λ r → sdone (mok (r , s)))
+-- the meaning of a reader's process from a memory: its observed tree, ending in a failure or in
+-- its result with the memory
+std-run : {S : Sig} {A : Type} → Target → Step (MK S) A → AMem → Step (MT S) (MRes (A × AMem))
+std-run t (sdone a) s = sdone (mok (a , s))
+std-run {S} {A} t (scmd c k) s =
+  r-bind {MT S} {Resp (MK S) c × AMem} {A × AMem} (std-step {S} t c s) (λ rs → std-run t (k (fst rs)) (snd rs))
+-- what is compiled, observed through the model: the flat handler's process run on a flat memory
+flat-run : {S : Sig} {A : Type} → Target → Step (MK S) A → FM → Step (MT S) (A × FM)
+flat-run {S} {A} t C fm = o-run {MT S} {MT S} {A} {FM} (fm-obs {S}) (o-handle {MK S} {MT S} {A} (mem-flat-k {S} t) C) fm
+
+-- ---------------------------------------------------------------- the theorem
+-- an abstract memory and a flat one are related when the bytes are the flat memory; results
+-- of two runs are related when they are equal and the memories are related
+MRel : {A : Type} → A × AMem → A × FM → Type
+MRel x y = (fst x ≡ fst y) × (am-data (snd x) ≡ snd y)
+-- the bookkeeping after a tree X over the bytes refines X: at each leaf it fails, or keeps the
+-- response and the bytes
+std-fin-ref0 : {S : Sig} {R : Type} → (b : MRes ATI) → (rd : R × FM) →
+  m-Ref {MT S} {R × AMem} {R × FM} (MRel {R}) (std-fin {S} {R} b rd) (sdone rd)
+std-fin-ref0 {S} {R} b rd =
+  case b return (λ y → m-Ref {MT S} {R × AMem} {R × FM} (MRel {R}) (std-fin {S} {R} y rd) (sdone rd)) of
+    mok ti → ((λ i → fst rd) , (λ i → snd rd))
+    mub w → unit
+    mstop w → unit
+std-fin-ref : {S : Sig} {R : Type} → (h : R → MRes ATI) → (X : Step (MT S) (R × FM)) →
+  m-Ref {MT S} {R × AMem} {R × FM} (MRel {R})
+        (o-bind {MT S} {R × FM} {MRes (R × AMem)} X (λ rd → std-fin {S} {R} (h (fst rd)) rd)) X
+std-fin-ref {S} {R} h (sdone rd) = std-fin-ref0 {S} {R} (h (fst rd)) rd
+std-fin-ref {S} {R} h (scmd c k) =
+  ((λ i → c) , λ r r2 pr →
+     subst {lzero} {lzero} {Resp (MT S) c}
+       {λ z → m-Ref {MT S} {R × AMem} {R × FM} (MRel {R})
+                (o-bind {MT S} {R × FM} {MRes (R × AMem)} (k r) (λ rd → std-fin {S} {R} (h (fst rd)) rd)) (k z)}
+       {r} {r2} pr (std-fin-ref {S} {R} h (k r)))
+-- one lemma for every command of the signature: mem-std is refined by the flat handler run on
+-- the abstract memory's bytes (whatever the check said)
+std-mem2-ref : {S : Sig} → (t : Target) → (c : MemC) → (s : AMem) → (pre : MRes Unit) →
+  m-Ref {MT S} {m-resp c × AMem} {m-resp c × FM} (MRel {m-resp c}) (std-mem2 {S} t c s pre)
+        (o-run {MT S} {MT S} {m-resp c} {FM} (fm-obs {S}) (mem-flat-k {S} t (inl c)) (am-data s))
+std-mem2-ref {S} t c s pre =
+  case pre return (λ y → m-Ref {MT S} {m-resp c × AMem} {m-resp c × FM} (MRel {m-resp c}) (std-mem2 {S} t c s y)
+                           (o-run {MT S} {MT S} {m-resp c} {FM} (fm-obs {S}) (mem-flat-k {S} t (inl c)) (am-data s))) of
+    mok u → std-fin-ref {S} {m-resp c} (λ r → std-post t c r s)
+              (o-run {MT S} {MT S} {m-resp c} {FM} (fm-obs {S}) (mem-flat-k {S} t (inl c)) (am-data s))
+    mub w → unit
+    mstop w → unit
+-- every command of a reader's process, from related memories
+std-step-ref : {S : Sig} → (t : Target) → (c : Cmd (MK S)) → (s : AMem) → (fm : FM) → am-data s ≡ fm →
+  m-Ref {MT S} {Resp (MK S) c × AMem} {Resp (MK S) c × FM} (MRel {Resp (MK S) c}) (std-step {S} t c s)
+        (o-run {MT S} {MT S} {Resp (MK S) c} {FM} (fm-obs {S}) (mem-flat-k {S} t c) fm)
+std-step-ref {S} t c s fm e =
+  case c return (λ y → m-Ref {MT S} {Resp (MK S) y × AMem} {Resp (MK S) y × FM} (MRel {Resp (MK S) y}) (std-step {S} t y s)
+                         (o-run {MT S} {MT S} {Resp (MK S) y} {FM} (fm-obs {S}) (mem-flat-k {S} t y) fm)) of
+    inl m → subst {lzero} {lzero} {FM}
+              {λ z → m-Ref {MT S} {m-resp m × AMem} {m-resp m × FM} (MRel {m-resp m}) (mem-std {S} t m s)
+                       (o-run {MT S} {MT S} {m-resp m} {FM} (fm-obs {S}) (mem-flat-k {S} t (inl m)) z)}
+              {am-data s} {fm} e (std-mem2-ref {S} t m s (std-pre t m s))
+    inr x → ((λ i → inl x) , λ r r2 pr → (pr , e))
+-- THE THEOREM (up to context, the shape of lib/examples/obs.cub's o-runsim-context): for every process
+-- C over the memory signature and a world's, from an abstract memory and a flat memory with
+-- the same bytes, the meaning of C is refined by the compiled C: until the meaning fails they
+-- issue the same commands of the world, and if it ends they end in the same result with the
+-- same bytes. Nothing per program.
+mem-sound : {S : Sig} {A : Type} → (t : Target) → (C : Step (MK S) A) → (s : AMem) → (fm : FM) → am-data s ≡ fm →
+  m-Ref {MT S} {A × AMem} {A × FM} (MRel {A}) (std-run {S} {A} t C s) (flat-run {S} {A} t C fm)
+mem-sound t (sdone a) s fm e = ((λ i → a) , e)
+mem-sound {S} {A} t (scmd c k) s fm e =
+  subst {lzero} {lzero} {Step (MT S) (A × FM)}
+    {λ z → m-Ref {MT S} {A × AMem} {A × FM} (MRel {A}) (std-run {S} {A} t (scmd c k) s) z}
+    {o-bind {MT S} {Resp (MK S) c × FM} {A × FM}
+       (o-run {MT S} {MT S} {Resp (MK S) c} {FM} (fm-obs {S}) (mem-flat-k {S} t c) fm)
+       (λ x → o-run {MT S} {MT S} {A} {FM} (fm-obs {S}) (o-handle {MK S} {MT S} {A} (mem-flat-k {S} t) (k (fst x))) (snd x))}
+    {flat-run {S} {A} t (scmd c k) fm}
+    (sym (o-run-bind {MT S} {MT S} {Resp (MK S) c} {A} {FM} (fm-obs {S}) (mem-flat-k {S} t c)
+            (λ r → o-handle {MK S} {MT S} {A} (mem-flat-k {S} t) (k r)) fm))
+    (m-ref-bind {MT S} {Resp (MK S) c × AMem} {Resp (MK S) c × FM} {A × AMem} {A × FM} (MRel {Resp (MK S) c}) (MRel {A})
+       (std-step {S} t c s)
+       (o-run {MT S} {MT S} {Resp (MK S) c} {FM} (fm-obs {S}) (mem-flat-k {S} t c) fm)
+       (λ rs → std-run {S} {A} t (k (fst rs)) (snd rs))
+       (λ x → o-run {MT S} {MT S} {A} {FM} (fm-obs {S}) (o-handle {MK S} {MT S} {A} (mem-flat-k {S} t) (k (fst x))) (snd x))
+       (std-step-ref {S} t c s fm e)
+       (λ a b q → subst {lzero} {lzero} {Resp (MK S) c}
+                    {λ z → m-Ref {MT S} {A × AMem} {A × FM} (MRel {A}) (std-run {S} {A} t (k (fst a)) (snd a))
+                             (flat-run {S} {A} t (k z) (snd b))}
+                    {fst a} {fst b} (fst q)
+                    (mem-sound {S} {A} t (k (fst a)) (snd a) (snd b) (snd q))))
+-- a refinement of a run that does not fail is a bisimulation: the same tree of the world's
+-- commands, ending in related results
+MOk : {A B : Type} → (A → B → Type) → MRes A → B → Type
+MOk Q r b = case r of
+  mok a → Q a b
+  mub w → Empty
+  mstop w → Empty
+m-ref-done-ok : {O : Sig} {A B : Type} → (Q : A → B → Type) → (a : A) → (u : Step O B) → m-RefDone Q a u →
+  o-BisimR {O} {MRes A} {B} (MOk Q) (sdone (mok a)) u
+m-ref-done-ok Q a (sdone b) h = h
+m-ref-done-ok Q a (scmd c k) h = Empty-rec h
+m-ref-end-ok : {O : Sig} {A B : Type} → (Q : A → B → Type) → (r : MRes A) → (u : Step O B) → m-RefEnd Q r u →
+  m-NoFail {O} {A} (sdone r) → o-BisimR {O} {MRes A} {B} (MOk Q) (sdone r) u
+m-ref-end-ok {O} {A} {B} Q r u =
+  case r return (λ y → m-RefEnd Q y u → m-NoFail {O} {A} (sdone y) → o-BisimR {O} {MRes A} {B} (MOk Q) (sdone y) u) of
+    mok a → λ h nf → m-ref-done-ok Q a u h
+    mub w → λ h nf → Empty-rec nf
+    mstop w → λ h nf → Empty-rec nf
+m-ref-nofail : {O : Sig} {A B : Type} → (Q : A → B → Type) → (t : Step O (MRes A)) → (u : Step O B) →
+  m-Ref Q t u → m-NoFail t → o-BisimR {O} {MRes A} {B} (MOk Q) t u
+m-ref-nofail Q (sdone r) u h nf = m-ref-end-ok Q r u h nf
+m-ref-nofail Q (scmd c k) (sdone b) h nf = Empty-rec h
+m-ref-nofail Q (scmd c k) (scmd c2 k2) h nf =
+  (fst h , λ r r2 pr → m-ref-nofail Q (k r) (k2 r2) (snd h r r2 pr) (nf r))
+-- the statement of archive/2026-11-11/README.md: if the meaning of C does not fail (no undefined behaviour,
+-- no stop, whatever the world answers), then the compiled C gives the same observations: the
+-- same commands of the world with the same responses, the same result, the same bytes
+mem-sound-nofail : {S : Sig} {A : Type} → (t : Target) → (C : Step (MK S) A) → (s : AMem) →
+  m-NoFail (std-run {S} {A} t C s) →
+  o-BisimR {MT S} {MRes (A × AMem)} {A × FM} (MOk (MRel {A})) (std-run {S} {A} t C s) (flat-run {S} {A} t C (am-data s))
+mem-sound-nofail {S} {A} t C s nf =
+  m-ref-nofail {MT S} {A × AMem} {A × FM} (MRel {A}) (std-run {S} {A} t C s) (flat-run {S} {A} t C (am-data s))
+    (mem-sound {S} {A} t C s (am-data s) (λ i → am-data s)) nf
