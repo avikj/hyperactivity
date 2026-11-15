@@ -150,6 +150,9 @@ enum {
                  * run, an unbuilt value (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): a reader runs it (defer_build), a duplicator holds it once, a
                  * substitution waits on a reference to it. Made where a rule would otherwise build one
                  * operation per branch of a system (distribute, a composition over a system of families) */
+    V_ITY,      /* the interval as a type (a pretype: a Π's domain or codomain, never a fibrant type's part) */
+    V_PART,     /* p=Dnf r (neither 0 nor 1... 0 allowed); 1=A: the type of partial elements of A on (r = 1).
+                 * Partial 1 A is A itself: O_MKPART and substitution give A where r becomes 1 */
     V_END,
     /* operations: negative principal port; the last port is the result */
     O_APP,      /* 0=f 1=arg 2=out */
@@ -273,6 +276,10 @@ enum {
                  * fields forced in turn through O_DEEPC, anything else delivered as it is */
     O_DEEPC,    /* a=the constructor, p=DeepAcc (the fields' values so far); 0=the next field's value,
                  * 1..=the fields after it (unforced), last=out */
+    O_MKPART,   /* 0=r 1=A 2=out: Partial r A (A itself where r is 1) */
+    O_MKFRESH,  /* 0=name (or the trigger) 1=type 2=out: a fresh variable of the type, a fresh dimension
+                 * where the type is the interval (%varI [n] T) */
+    O_FRESHT,   /* a=name+1 or 0; 0=the type 1=out */
     K_END
 };
 enum { B_MEET, B_JOIN, B_FAND, B_FOR };
@@ -430,7 +437,9 @@ enum {
     S_THUNK,    /* rec: a subterm held unbuilt (V_THUNK), its environment k[0..n-1] */
     S_CALL,     /* id: the definition; k: its arguments */
     S_PROJ,     /* id: the field; k[0]: the value */
-    S_REC       /* id: the codata type; k: the fields */
+    S_REC,      /* id: the codata type; k: the fields */
+    S_ITY,      /* the interval as a type */
+    S_PART      /* k[0]=r k[1]=A: the type of partial elements */
 };
 struct Record;
 typedef struct Syn {

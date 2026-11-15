@@ -300,6 +300,35 @@ path-free-transport = node "Transport along a line of types at every path-free s
 -- (φ : I, the interval a sort that terms of function type return), IsOne φ and Partial φ A with the
 -- join of partial elements, comp taking a line of partial elements on one face, and conversion under
 -- an assumed face whose interval terms may be neutral (the machine's interval values gain neutral atoms).
+-- Done and checked (2026-11-15, experiments/partial/partial.cub, 223 passed, 0 failed): the core change.
+-- (1) The interval is a pretype: I names it (the machine's V_ITY, View's wity; its sort that of types
+-- over levels, so no line, field or composition is over it); a Π's domain or codomain may be I; a
+-- variable bound at I is a dimension (%varI makes a fresh variable or, at I, a dimension, in the
+-- primitive itself: a call or case making one would be one value per memo key); an interval term is
+-- any term of type I (a call returning one included: pick b, faces bs), and the elaborator reads a
+-- call of a global returning I as a path application's interval. (2) Neutral interval atoms: an
+-- interval operation (negation, meet, join, (r = e), path application, %ieq, Partial) meeting a neutral
+-- reads it as a dimension of its own, one per key (a stuck elimination is named by its table,
+-- scrutinee and environment, as its syntax names it); a substitution moving an atom gives a neutral
+-- with that atom its image, an atom is among a value's free dimensions, a substitution's atom entries
+-- are never cut by free dimensions, and the atoms a substitution sends to endpoints reach what a
+-- function or suspension builds (%atom-res, %atom-res0 in lib/core/prelude.cub) and a definition's
+-- value (a global copied in), since an atom's neutral is built from an environment the substitution
+-- does not move. So a clause assuming atoms is a substitution, and conversion under an assumed face
+-- with neutral interval terms is conversion under it; a global's code carries its type (tg n T V) so
+-- a restriction of the code reaches the type inferred from it. (3) Partial r A: the type of partial
+-- elements of A on (r = 1) (V_PART, View's wpartial), A itself where r is 1 (built and substituted
+-- so), A checked under each clause of (r = 1) (PartialP: A may be a type only on the face); a system
+-- literal checks against it by its branches, their overlaps (on the conjunction of two faces, atoms
+-- assumed) and its face covering (r = 1); conversion at it is on each clause. A join of partial
+-- elements is a system literal whose faces are interval terms (no further primitive), and comp's
+-- tube is a line of such systems. Tested: faces computed from data; a partial element extended to a
+-- total one along a path on its face, the overlap holding by the boundary rule under an assumed atom
+-- (extendB); a tube computed by a function; and a partial element on faces bs (a list) of as many
+-- branches as the list is long, built by recursion, each new branch joined to the rest corrected by a
+-- composition along a path in the singleton type (join), and its value on a total face. Disagreeing
+-- overlaps, uncovered faces and a base disagreeing with the tube are refused. Library 1953 passed with
+-- the 24 known derive.cub failures, Brunerie -2 with one and four workers, task graph 288.
 -- Known (2026-11-14, tested): the host's comp at Bool or Nat with a nonempty system on a variable is
 -- a formal composition (hcompD), and a case or recursor on a formal composition reduces to the
 -- formal composition of its branches along the motive at the composition's fill (eliminators

@@ -133,6 +133,11 @@ fib X Y f y = (x : X) × PathP (λ (i : I) → Y) (f x) y
     (λ (%i : I) →
        P (hcompD (sys+ (%i = 0) (λ (%j : I) → u0) (sysmap (λ %w (%j : I) → %w @ (%i /\ %j)) u)) u0))
     (sysmap (λ %w (%i : I) → f (%w @ %i)) u) (f u0)
+-- a function under a clause assuming neutral interval atoms (a call returning an interval, stuck,
+-- read as an atom): the clause applies to its results, since an atom's neutral is built inside them
+-- from the environment, which the clause does not move
+%atom-res d f = λ %x → %restrict d (f %x)
+%atom-res0 d t = thunk (%restrict d (force t))
 -- data types
 data Bool = true | false
 and a b = if a then b else false

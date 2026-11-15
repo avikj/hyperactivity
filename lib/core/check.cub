@@ -26,7 +26,9 @@
 data Tm
   = tv x T
   | ti i
-  | tg n V
+  -- a checked definition: its index, its type (reached from the code, so a restriction of the code
+  -- reaches it), its value
+  | tg n T V
   | tlam nm b V
   | tapp f a V
   | tpair a b V
@@ -90,6 +92,9 @@ data Tm
   | ttick k V
   | tclock0
   | ttick0
+  -- the interval as a type (a pretype: a Π's domain or codomain); the type of partial elements
+  | tity
+  | tpartial r A V
 -- a branch of an elimination: binders for its fields, hypotheses, dimensions, then the body
 data Br = bx nm b | bi nm b | be t
 -- a telescope: a term binder over a type, a dimension binder, the end
@@ -98,7 +103,7 @@ tval c =
   case c of
     tv x T → x
     ti i → i
-    tg n V → V
+    tg n T V → V
     tlam nm b V → V
     tapp f a V → V
     tpair a b V → V
@@ -156,6 +161,8 @@ tval c =
     ttick k V → V
     tclock0 → κ0
     ttick0 → ⋄
+    tity → I
+    tpartial r A V → V
 -- ---------------------------------------------------------------- basics
 -- Lst, Opt, View, CloCmp and DTab are declared in code.cub; andb, orb, notb, omap in match.cub,
 -- obind in lin.cub
@@ -192,6 +199,8 @@ data Opq = opq
 -- the binders a quotation runs under: a variable (by level), a hypothesis, a dimension
 data QB = qv l | qh l | qd i
 -- ---------------------------------------------------------------- intervals and faces
+-- a fresh variable at a type that may be the interval is (%varI [n] A): a dimension there (made by
+-- the primitive itself where it is bound: a call or case making one would be one value per key)
 check-iv r =
   case r of
     ti i → true
@@ -200,7 +209,8 @@ check-iv r =
     tneg a V → check-iv a
     tmeet a b V → andb (check-iv a) (check-iv b)
     tjoin a b V → andb (check-iv a) (check-iv b)
-    _ → false
+    -- any other term of type I (a variable bound at I, a call returning an interval)
+    _ → iv-typed r
 check-face p =
   case p of
     teq0 r V → check-iv r
@@ -413,8 +423,10 @@ conv T u v =
   case %view T of
     wpi A B → 
       case %clos u v of
-        csame ps u2 v2 → if env-pairs ps then true else let x = %var A in conv (B x) (u2 x) (v2 x)
-        cdiff u2 v2 → let x = %var A in conv (B x) (u2 x) (v2 x)
+        csame ps u2 v2 → if env-pairs ps then true else let x = (%varI A) in conv (B x) (u2 x) (v2 x)
+        cdiff u2 v2 → let x = (%varI A) in conv (B x) (u2 x) (v2 x)
+    -- partial elements: equal on each clause of their face
+    wpartial r A → lall (λ d → conv (%restrict d A) (%restrict d u) (%restrict d v)) (%clauses (r = 1))
     wsigma A B → if conv A (fst u) (fst v) then conv (B (fst u)) (snd u) (snd v) else false
     wpath L a b → let i = %dim in conv (L @ i) (u @ i) (v @ i)
     wu l → conv-ty u v
@@ -510,8 +522,8 @@ conv-line-sys S S2 =
 -- two families of types over A
 conv-fam A B B2 =
   case %clos B B2 of
-    csame ps B3 B4 → if env-pairs ps then true else let x = %var A in conv-ty (B3 x) (B4 x)
-    cdiff B3 B4 → let x = %var A in conv-ty (B3 x) (B4 x)
+    csame ps B3 B4 → if env-pairs ps then true else let x = (%varI A) in conv-ty (B3 x) (B4 x)
+    cdiff B3 B4 → let x = (%varI A) in conv-ty (B3 x) (B4 x)
 uconv-head u wu v wv =
   case wu of
     wpi A B → (case wv of wpi A2 B2 → if conv-ty A A2 then conv-fam A B B2 else false; _ → false)
@@ -556,6 +568,8 @@ uconv-head u wu v wv =
     wiv r → (case wv of wiv s → %ieq r s; _ → false)
     wface a → (case wv of wface b → %feq a b; _ → false)
     wword → (case wv of wword → true; _ → false)
+    wity → (case wv of wity → true; _ → false)
+    wpartial r A → (case wv of wpartial s B → (if %ieq r s then lall (λ d → conv-ty (%restrict d A) (%restrict d B)) (%clauses (r = 1)) else false); _ → false)
     wclock → (case wv of wclock → true; _ → false)
     wtick k → (case wv of wtick k2 → uconv k k2; _ → false)
     wclock0 → (case wv of wclock0 → true; _ → false)
@@ -746,7 +760,7 @@ tsrc c =
   case c of
     tv x T → cfree x
     ti i → cfree i
-    tg n V → cglob n
+    tg n T V → cglob n
     tlam nm b V → clam (tsrc (b (%var nm Uw) Uw))
     tapp f a V → capp (tsrc f) (tsrc a)
     tpair a b V → cpair (tsrc a) (tsrc b)
@@ -786,6 +800,8 @@ chk b r = if b then ok else r
 rall f lnil = ok
 rall f (lcons x xs) = and-then (f x) (rall f xs)
 is-ok r = case r of ok → true; typed T → true; _ → false
+-- a term whose type is the interval
+iv-typed r = case infer r of typed T → (case %view T of wity → true; _ → false); _ → false
 -- reasons
 E-mismatch = #0
 E-notfun = #1
@@ -830,6 +846,7 @@ E-linear-dropped = #38
 E-linear-dup = #39
 E-linear-intro = #40
 E-overlevel = #41
+E-partial = #42
 -- a type's universe level (not ω), and a type's sort (a universe, U ω for types over levels)
 infer-level A =
   case infer A of
@@ -873,6 +890,16 @@ check-sys s T =
                       in chk (conv (%restrict d T) v1 v2) (refused V E-sysdis v1 v2))
                    (%clauses (%fand (tval (fst b1)) (tval (fst b2))))) (lpairs bs))
     _ → err s E-notsys opq opq
+-- the sort of Partial r A: A's universe where r is 1, else (A a type on each clause of (r = 1)) the
+-- sort of types over levels
+partial-sort r A =
+  if %ieq r i1 then infer-sort A
+  else and-then (rall (λ d → case infer-level (%restrict d A) of typed l → ok; e → e) (%clauses (r = 1))) (typed Uw)
+-- a system as a partial element of A on (r = 1): its branches and their overlaps, its face covering
+-- (r = 1) (on each clause of it the system's face holds)
+check-partial s r A =
+  and-then (check-sys s A)
+    (rall (λ d → chk (%feq (%restrict d (sys-face s)) tt) (err s E-partial opq opq)) (%clauses (r = 1)))
 -- the faces of a composition of types: lines of types in Type l from A, agreeing on overlaps
 check-lines s A l =
   case s of
@@ -962,7 +989,7 @@ check-comp1 c A u a =
 infer c =
   case c of
     tv x T → typed T
-    tg n V → typed (%gty n)
+    tg n T V → typed T
     tguess k g t V → guess-infer k g t
     thole k V → err c E-implicit opq opq
     tspine t V → solve-spine t none
@@ -990,6 +1017,8 @@ infer c =
         typed T → 
           case %view T of
             wpath L a b → if check-iv r then typed (L @ tval r) else err r E-notiv opq opq
+            -- a function of the interval
+            wpi A B → (case %view A of wity → (if check-iv r then typed (B (tval r)) else err r E-notiv opq opq); _ → err p E-notpath T opq)
             _ → err p E-notpath T opq
         r2 → r2
     tuniv l V → and-then (check l Level) (typed (Type (lsuc (tval l))))
@@ -1106,6 +1135,18 @@ infer c =
         r → r
     tword → typed Type
     tlit V → typed Word
+    -- the interval: a pretype (of the sort of types over levels: no line, field or composition is
+    -- over it); its terms
+    tity → typed Uw
+    ti i → typed I
+    tc0 → typed I
+    tc1 → typed I
+    tneg a V → if check-iv c then typed I else err c E-notiv opq opq
+    tmeet a b V → if check-iv c then typed I else err c E-notiv opq opq
+    tjoin a b V → if check-iv c then typed I else err c E-notiv opq opq
+    -- partial elements of a type on a face (r = 1): a pretype too
+    -- (A a type on the face: checked under each of its clauses, PartialP; on the face 1 it is A)
+    tpartial r A V → if check-iv r then partial-sort (tval r) A else err r E-notiv opq opq
     twsucc a V → and-then (check a Word) (typed Word)
     twop k a b V → 
       and-then (check a Word) (and-then (check b Word) (typed (if %wlt k #2 then Bool else Word)))
@@ -1311,7 +1352,7 @@ infer-pi A nm b =
   case infer-dom A of
     typed s1 → 
       let Av = tval A
-      in case infer-sort (b (%var nm Av) Av) of typed s2 → typed (sort-max s1 s2); r → r
+      in case infer-sort (b (%varI nm Av) Av) of typed s2 → typed (sort-max s1 s2); r → r
     r → r
 -- an argument of a tick type is a tick variable (a tick is only bound, never computed)
 tick-arg A a =
@@ -1400,10 +1441,16 @@ check c T =
       (case line-hole A of
          some k → (case const-line T of some cl → elab (lcons (k , some cl) lnil); none → err c E-implicit opq opq)
          none → (case infer c of typed T2 → chk (conv-ty T2 T) (err c E-mismatch T T2); r → r))
+    -- a system checked as a partial element (against a type that is not a type of partial elements:
+    -- one on the face 1, total)
+    tsys bs V → 
+      (case %view T of
+         wpartial r A → check-partial c r A
+         _ → check-partial c i1 T)
     tlam nm b V → 
       case %view T of
         wpi A B → 
-          let x = %var nm A
+          let x = (%varI nm A)
           in and-then (check (b x A) (B x))
                (and-then (mult-ok x (b x A) A (%pimult T))
                  (case %view A of
@@ -1416,6 +1463,11 @@ check c T =
         _ → err c E-mismatch T opq
     tplam nm b V → 
       case %view T of
+        -- a line as a function of the interval
+        wpi A B → 
+          (case %view A of
+             wity → let i = %dim nm in check (b i) (B i)
+             _ → err c E-mismatch T opq)
         wpath L a0 a1 → 
           let i = %dim nm
           in and-then (check (b i) (L @ i))
@@ -1532,8 +1584,8 @@ linear-ty A = case %view A of wdata d ps → %linear d; _ → false
 -- head consumes it: its Π's, when written; 1 for a linear domain; a checked definition's computed
 -- usage of that parameter (%gusage); else ω. The head's type is a variable's own, a definition's
 -- from the table, or inferred
-head-type h = case h of tv y T → some T; tg n V → some (%gty n); _ → (case infer h of typed T → some T; _ → none)
-amult h k A m = if notb (%weq m #2) then m else if linear-ty A then #1 else (case h of tg n V → %gusage n k; _ → #2)
+head-type h = case h of tv y T → some T; tg n T V → some T; _ → (case infer h of typed T → some T; _ → none)
+amult h k A m = if notb (%weq m #2) then m else if linear-ty A then #1 else (case h of tg n T V → %gusage n k; _ → #2)
 uargs xs h T lnil k = v0 xs
 uargs xs h T (lcons a r) k =
   case T of
@@ -1598,7 +1650,7 @@ lusage xs c =
     tguess k g t V → lusage xs t
     tspine t V → lusage xs t
     tv y T → v0 xs
-    tg n V → v0 xs
+    tg n T V → v0 xs
     tlit V → v0 xs
     _ → v* #2 (usage xs c)
 lusage-ps xs lnil = v0 xs
@@ -1863,11 +1915,11 @@ chk-codata d ent =
 -- its type, its own calls at their declared types: a guarded call is productive, so the value
 -- exists at every depth, and its boundary holds at every depth since it holds at each field.
 in-grp grp n = lany (λ m → %weq n m) grp
-is-grp grp c = case c of tg n V → in-grp grp n; _ → false
+is-grp grp c = case c of tg n T V → in-grp grp n; _ → false
 mentions grp c = cany (is-grp grp) c
 spine-call grp c =
   case c of
-    tg n V → in-grp grp n
+    tg n T V → in-grp grp n
     tapp f a V → andb (spine-call grp f) (notb (mentions grp a))
     tpapp p r V → spine-call grp p
     _ → false

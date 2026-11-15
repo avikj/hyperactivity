@@ -335,6 +335,24 @@ The paper is the specification. What remains between the implementation (“The 
     usage, and what sits in the wrong layer is moved: a definition to the library, a capacity to its
     extension, native speed to the evaluator under a relation.
 - **Deriving,** as a typed term.
+- **The interval as a pretype, and partial elements** (2026-11-15). The meaning of an object
+  composition `comp A [φ1 ↦ u1, …, φn ↦ un] a0` in the normalizer over cubes is a host composition
+  whose system has as many faces as the object system, its faces computed from the object's face
+  codes; a checked function builds such a system only if it can return an interval and a partial
+  element. CCHM holds the interval only in contexts and systems only as judgmental syntax; the
+  construction forces two additions, both interpreted directly in the cubical-set model CCHM is the
+  syntax of (the interval is the representable interval, a face a map to the face lattice, a partial
+  element a map out of the face's subobject): the interval as a pretype (a function may take or
+  return an interval, and an interval term is any term of type I), and `Partial r A`, the partial
+  elements of A on (r = 1) (A itself where r is 1; A need be a type only on the face). A join of
+  partial elements is a system whose faces are interval terms. A function building a system from
+  data is checked once, at generic arguments, where its faces are neutral (`faces bs` for a variable
+  list bs); conversion under such a face assumed is conversion with the neutral read as a dimension
+  of its own (an atom, the same neutral the same atom) and the assumption a substitution of that
+  dimension. Branches that agree only up to a path are joined after a one-branch composition along
+  the path on the earlier face, which makes them agree on the overlap by the boundary rule. Example:
+  over a list bs, a partial element on `faces bs = pick b1 ∨ … ∨ pick bn` with one branch per element,
+  built by recursion, its value on a total face computed (experiments/partial/partial.cub).
 - **Recursion through nested data types** (found 2026-11-15). The language's own raw syntax is a
   nested inductive type: a code's case, constructor application, data type and eliminator hold their
   subterms in a list of codes (`Lst Code`). A checked program over codes that recurses into those

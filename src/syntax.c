@@ -3427,9 +3427,31 @@ static bool dim_use(Node *t, const char *x) {
     for (int i = 0; i < t->n; i++) if (dim_use(t->it[i], x)) return true;
     return false;
 }
+static Node *sig_of(const char *name);
+/* a type that is the interval */
+static bool is_ity(Node *T) { return T && !T->list && !strcmp(T->s, "I"); }
 static bool iv_certain(Node *a) {
-    if (!a->list) { if (!strcmp(a->s, "0") || !strcmp(a->s, "1")) return true; Sc *s = e_find(a->s); return s && s->dim; }
-    return a->n >= 1 && !a->it[0]->list && (is(a->it[0], "~") || is(a->it[0], "/\\") || is(a->it[0], "\\/"));
+    if (!a->list) {
+        if (!strcmp(a->s, "0") || !strcmp(a->s, "1")) return true;
+        Sc *s = e_find(a->s);
+        if (s) return s->dim || is_ity(s->ty);
+        /* a constant of type I */
+        return is_ity(sig_of(a->s));
+    }
+    if (a->n >= 1 && !a->it[0]->list && (is(a->it[0], "~") || is(a->it[0], "/\\") || is(a->it[0], "\\/"))) return true;
+    /* a call returning an interval: a global applied to as many explicit arguments as its type has */
+    if (a->n >= 2 && !a->it[0]->list && !e_find(a->it[0]->s)) {
+        Node *T = sig_of(a->it[0]->s);
+        int nexp = 0;
+        for (int k = 1; k < a->n; k++) if (!(a->it[k]->list && a->it[k]->n == 2 && is(a->it[k]->it[0], "%imp"))) nexp++;
+        while (T) {
+            if (T->list && T->n == 2 && is(T->it[0], "%impPi")) { T = T->it[1]; if (T->list && T->n == 4) T = T->it[3]; else break; continue; }
+            if (T->list && T->n == 4 && is(T->it[0], "Pi")) { if (nexp == 0) return false; nexp--; T = T->it[3]; continue; }
+            break;
+        }
+        return nexp == 0 && is_ity(T);
+    }
+    return false;
 }
 static bool lit01(Node *a) { return a->list && a->n == 2 && is(a->it[0], "%num") && (is(a->it[1], "0") || is(a->it[1], "1")); }
 static Node *el(Node *t);

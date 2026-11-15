@@ -93,7 +93,7 @@ Cell *cell(int kind, int n) {
     return c;
 }
 /* the payload a cell owns */
-static inline bool owns_dnf(int k) { switch (k) { case O_PEND: case V_IV: case V_FACE: case V_SYS: case V_NPAPP: case O_PAPPP: case O_BIN2: case O_SYSCONS2: case V_NTRANS: case O_TRANSD2: case V_TRANSH: case O_TRANSH: case O_IEQB: case O_FEQLB: return true; default: return false; } }
+static inline bool owns_dnf(int k) { switch (k) { case O_PEND: case V_IV: case V_FACE: case V_SYS: case V_NPAPP: case O_PAPPP: case O_BIN2: case O_SYSCONS2: case V_NTRANS: case O_TRANSD2: case V_TRANSH: case O_TRANSH: case O_IEQB: case O_FEQLB: case V_PART: return true; default: return false; } }
 static bool owns_subst(int k) { return k == O_SUBST; }
 static void box_release(Box *b);
 static void payload_retain(Cell *c) {
@@ -767,6 +767,12 @@ Port unbuilt_build(Cell *v);
 static bool unbuilt(int k);
 static Port sub(Port prov, Subst *s);
 static Port sub_read(Port prov, Subst *s);
+static Dim atom_find(const Cell *v);
+static bool is_atom_dim(Dim d);
+static Dnf *atom_clause(const Subst *s);
+extern long atom_res_global, atom_res0_global;
+static Port face_cell(Dnf *f);
+static bool is_neutral(int k);
 static Port copy_top(Key *as, Cell *v);
 /* as: the key of what is held (the box's; a definition's name): a copy carries it */
 Port lazy_copy(Key *as, Cell *root) {
@@ -971,7 +977,7 @@ static bool fd_taint_of(const Cell *v) {
         /* as fd_pending refuses a pending operation */
         switch ((int)v->ty) {
         case O_CASE: return casetab_mkdim((const CaseTab *)v->p);
-        case O_MKDIM: case O_GLOB: case O_ERA: return true;
+        case O_MKDIM: case O_MKFRESH: case O_FRESHT: case O_GLOB: case O_ERA: return true;
         case O_NATIVE: return global_mkdim((long)v->a);
         default: return false;
         }
@@ -983,7 +989,7 @@ static bool fd_taint_of(const Cell *v) {
  * record, table or global among the inputs that reaches %dim (record_mkdim). Binders (O_MKPLAM,
  * O_FORALL) remove their dimension. A bound, not the set: the value is still being built */
 static bool fd_pending(Cell *o, int arrive, FdSet *x, int depth) {
-    if (o->kind == O_MKDIM || o->kind == O_GLOB || o->kind == O_ERA) { fd_why = 6; return false; }
+    if (o->kind == O_MKDIM || o->kind == O_MKFRESH || o->kind == O_FRESHT || o->kind == O_GLOB || o->kind == O_ERA) { fd_why = 6; return false; }
     FdSet *y = malloc(sizeof *y); y->n = 0; y->taint = false; y->inexact = true;
     bool ok = true;
     if (o->kind == O_DUP) ok = arrive != 0 && fd_port(o->port[0], y, depth + 1);
@@ -1047,6 +1053,7 @@ static bool fd_cell(Cell *v, FdSet *x, int depth) {
         return x->n <= 256;
     }
     if (owns_dnf(v->kind)) fd_dnf(x, v->p);
+    if (is_neutral(v->kind) && v->key) { Dim d = atom_find(v); if (d) fd_add(x, d); }
     if (v->kind == V_PLAM) {
         FdSet *y = malloc(sizeof *y); y->n = 0; y->taint = false; y->inexact = false;
         bool ok = true;
@@ -1109,6 +1116,8 @@ static Subst *subst_to_fd(Subst *s, const FdInfo *fi) {
     for (uint32_t k = 0; k < s->n; k++) {
         bool in = false;
         for (uint32_t i = 0; i < fi->n && !in; i++) in = fi->d[i] == s->d[k];
+        /* an atom is kept: a neutral built later from what is held may be read as it */
+        if (!in && is_atom_dim(s->d[k])) in = true;
         if (!in) { Subst *t2 = subst_without(t, s->d[k]); subst_release(t); t = t2; }
     }
     if (!t->n) { subst_release(t); return NULL; }
@@ -1530,8 +1539,29 @@ static void subst_level(Cell *o, Cell *v) {
     /* a deferred operation read under a substitution: run, and its value substituted one level when
      * it arrives (the reader is reading it now: held again it would be read at once) */
     if (v->kind == V_DEFER) { link(sub_read(defer_build(v), s), out); cell_free(o); return; }
+    if (is_neutral(v->kind) && v->key) {
+        /* a neutral read as an interval is its atom: a substitution moving the atom gives the image */
+        Dim d = atom_find(v);
+        const Dnf *r = d ? subst_get(s, d) : NULL;
+        if (r) {
+            link(iv_cell(dnf_retain((Dnf *)r)), out);
+            for (int k = 1; k < v->n; k++) era(v->port[k]);
+            cell_free(o); cell_free(v); return;
+        }
+    }
     switch (v->kind) {
-    case V_GLOBAL: case V_UNK:
+    case V_GLOBAL: {
+        /* a definition's value has no free dimension, but an atom s assumes may be read from a
+         * neutral its value builds: then the value, copied in, is substituted */
+        Dnf *ac = atom_clause(s);
+        if (ac) {
+            dnf_release(ac);
+            Port r = global_copy((long)v->a, v->key);
+            if (r) { link(sub(r, s), out); cell_free(o); cell_free(v); return; }
+        }
+        link(P(v, 0), out); cell_free(o); return;
+    }
+    case V_UNK:
         link(P(v, 0), out); cell_free(o); return;
     case V_THUNK: case V_REF: {
         /* the reference (the unbuilt subterm) carries the substitution: nothing is copied */
@@ -1551,6 +1581,13 @@ static void subst_level(Cell *o, Cell *v) {
         link(P(v, 0), out); cell_free(o); return;
     case V_IV: { Dnf *n2 = iv_subst(v->p, s); dnf_release(v->p); v->p = n2; rekey_formula(v); link(P(v, 0), out); cell_free(o); return; }
     case V_FACE: { Dnf *n2 = face_subst(v->p, s); dnf_release(v->p); v->p = n2; rekey_formula(v); link(P(v, 0), out); cell_free(o); return; }
+    case V_PART: {
+        /* Partial r A under s: A itself where s makes r 1 */
+        Dnf *n2 = iv_subst(v->p, s);
+        if (dnf_is_one(n2)) { dnf_release(n2); link(sub(v->port[1], s), out); cell_free(o); cell_free(v); return; }
+        Cell *c = cell(V_PART, 2); c->p = n2; link(sub(v->port[1], s), P(c, 1)); link(P(c, 0), out);
+        cell_free(o); cell_free(v); return;
+    }
     case V_PLAM: {
         Dim j = (Dim)v->a, j2 = j;
         Subst *t = subst_without(s, j);
@@ -1679,7 +1716,14 @@ static void subst_level(Cell *o, Cell *v) {
         Cell *c = clone(v);
         if (c->key) { Key *k = key_under(c->key, s); key_release(c->key); c->key = k; }
         for (int k = 1; k < v->n; k++) link(sub(v->port[k], s), P(c, k));
-        link(P(c, 0), out);
+        Dnf *ac;
+        int np = v->kind == V_LAM ? ((Record *)v->p)->nparam : v->kind == V_CASEF ? 1 : -1;
+        if ((np == 0 || np == 1) && atom_res0_global >= 0 && (ac = atom_clause(s))) {
+            /* the atoms s assumes reach what the function or suspension builds, not only its
+             * environment */
+            Port a[2] = { face_cell(ac), P(c, 0) };
+            link(apply_gid(np ? atom_res_global : atom_res0_global, a, 2), out);
+        } else link(P(c, 0), out);
         break;
     }
     }
@@ -1859,11 +1903,11 @@ static void neutral_proj(Cell *o, Cell *v) {
 enum { W_LAM, W_PAIR, W_PI, W_SIGMA, W_U, W_PATH, W_PLAM, W_IV, W_FACE, W_SYS, W_GLUE, W_GLUEV, W_DATA, W_CON,
        W_HCOMP, W_VAR, W_APP, W_FST, W_SND, W_PAPP, W_COMP, W_UNGLUE, W_ELIM, W_TRANS, W_LEVEL, W_OTHER,
        W_WORD, W_WLIT, W_WPLUS, W_WOP, W_WELIM, W_COFIX, W_PROJ, W_REC, W_CLOCK, W_TICK, W_CLOCK0, W_TICK0, W_HCOMPU, W_UNGLUEU,
-       W_PTY, W_PLIT, W_BYTES, W_PRIM, W_N };
+       W_PTY, W_PLIT, W_BYTES, W_PRIM, W_ITY, W_PART, W_N };
 static const char *WNAME[W_N] = { "wlam", "wpair", "wpi", "wsigma", "wu", "wpath", "wplam", "wiv", "wface", "wsys", "wglue",
     "wgluev", "wdata", "wcon", "whcomp", "wvar", "wapp", "wfst", "wsnd", "wpapp", "wcomp", "wunglue", "welim", "wtrans",
     "wlevel", "wother", "wword", "wwlit", "wwplus", "wwop", "wwelim", "wcofix", "wproj", "wrec", "wclock", "wtick",
-    "wclock0", "wtick0", "whcompu", "wunglueu", "wpty", "wplit", "wbytes", "wprim" };
+    "wclock0", "wtick0", "whcompu", "wunglueu", "wpty", "wplit", "wbytes", "wprim", "wity", "wpartial" };
 static int WC[W_N], C_LNIL = -1, C_LCONS, C_TRUE, C_FALSE, C_NONE, C_SOME;
 static int B_TRUE = -1, B_FALSE;
 static void need_bool(void) {
@@ -1906,6 +1950,8 @@ static void rule_view(Cell *o, Cell *v) {
     case V_FACE: r = mk(WC[W_FACE], P(v, 0), 0, 0, 0); keep = true; break;
     case V_PAIR: r = mk(WC[W_PAIR], v->port[1], v->port[2], 0, 0); break;
     case V_WTY: r = con_build(WC[W_WORD], NULL, NULL); break;
+    case V_ITY: r = con_build(WC[W_ITY], NULL, NULL); break;
+    case V_PART: r = mk(WC[W_PART], iv_cell(dnf_retain(v->p)), v->port[1], 0, 0); break;
     case V_PTY: r = mk(WC[W_PTY], word_of(v->a), v->n > 1 ? v->port[1] : word_of(0), 0, 0); break;
     case V_PVAL: r = mk(WC[W_PLIT], word_of(v->x), word_of(v->a), 0, 0); break;
     case V_BYTES: r = mk(WC[W_BYTES], word_of(v->p ? (uint64_t)((Bytes *)v->p)->n : 0), 0, 0, 0); break;
@@ -2068,6 +2114,77 @@ static int po_kind(int op) { return op <= PO_I64LT ? PT_I64 : op <= PO_U32LT ? P
 /* an operation on a value it has no rule for (an ill-typed term, run unchecked): the result is
  * unknown, the operands erased — the machine does not stop, and a checker reading the value of a
  * term it rejected reads ? there */
+/* Neutral interval atoms. A term of type I stuck on a variable (a call returning an interval, its
+ * argument neutral) is read by an interval operation as a dimension of its own, one per key (the
+ * neutral's name: a variable, a call on named arguments), so the same neutral is the same atom
+ * wherever it is read. Faces over atoms are faces over dimensions: a clause assuming an atom 1 is a
+ * substitution of it, and conversion under an assumed face is conversion under that substitution.
+ * A neutral with no key gets an atom of its own. */
+static uint64_t next_var;   /* fresh variables' levels (%var, %fresh) */
+typedef struct { Key *k; Dim d; } AtomE;
+static Dim *ATD; static size_t ATDn, ATDcap;   /* the atoms' dimensions */
+static AtomE *AT; static size_t ATn, ATcap;
+static pthread_mutex_t atommu = PTHREAD_MUTEX_INITIALIZER;
+static Dnf *atom_of(Cell *v) {
+    Key *k = eff_key(v);
+    if (!k) return iv_atom(fresh_dim());
+    if (!net_solo) pthread_mutex_lock(&atommu);
+    Dim d = 0;
+    if (ATcap) for (size_t i = k->h & (ATcap - 1); AT[i].k; i = (i + 1) & (ATcap - 1)) if (AT[i].k == k) { d = AT[i].d; break; }
+    if (!d) {
+        if ((ATn + 1) * 2 > ATcap) {
+            size_t nc = ATcap ? ATcap * 2 : 256; AtomE *N = calloc(nc, sizeof(AtomE));
+            for (size_t j = 0; j < ATcap; j++) if (AT[j].k) { size_t i = AT[j].k->h & (nc - 1); while (N[i].k) i = (i + 1) & (nc - 1); N[i] = AT[j]; }
+            free(AT); AT = N; ATcap = nc;
+        }
+        d = fresh_dim();
+        size_t i = k->h & (ATcap - 1); while (AT[i].k) i = (i + 1) & (ATcap - 1);
+        AT[i].k = key_retain(k); AT[i].d = d; ATn++;
+        if (ATDn == ATDcap) { ATDcap = ATDcap ? ATDcap * 2 : 64; ATD = realloc(ATD, ATDcap * sizeof(Dim)); }
+        ATD[ATDn] = d; __atomic_store_n(&ATDn, ATDn + 1, __ATOMIC_RELEASE);
+    }
+    if (!net_solo) pthread_mutex_unlock(&atommu);
+    key_release(k);
+    return iv_atom(d);
+}
+/* is a dimension an atom? (atoms are few: a scan) */
+static bool is_atom_dim(Dim d) {
+    if (!__atomic_load_n(&ATDn, __ATOMIC_ACQUIRE)) return false;
+    bool r = false;
+    if (!net_solo) pthread_mutex_lock(&atommu);
+    for (size_t i = 0; i < ATDn && !r; i++) r = ATD[i] == d;
+    if (!net_solo) pthread_mutex_unlock(&atommu);
+    return r;
+}
+/* the part of a substitution that sends atoms to endpoints, as a face clause (NULL if none) */
+static Dnf *atom_clause(const Subst *s) {
+    Dnf *f = NULL;
+    for (uint32_t k = 0; k < s->n; k++) {
+        if (!is_atom_dim(s->d[k])) continue;
+        const Dnf *r = s->v[k]; int e;
+        if (dnf_is_zero(r)) e = 0; else if (dnf_is_one(r)) e = 1; else continue;
+        Dnf *a = iv_atom(s->d[k]), *l = face_eq(a, e); dnf_release(a);
+        if (!f) f = l; else { Dnf *m = dnf_meet(f, l, true); dnf_release(f); dnf_release(l); f = m; }
+    }
+    return f;
+}
+/* the atom a neutral was read as, if it has been (0 if not) */
+static Dim atom_find(const Cell *v) {
+    if (!v->key || !ATcap) return 0;
+    Dim d = 0;
+    if (!net_solo) pthread_mutex_lock(&atommu);
+    for (size_t i = v->key->h & (ATcap - 1); AT[i].k; i = (i + 1) & (ATcap - 1)) if (AT[i].k == v->key) { d = AT[i].d; break; }
+    if (!net_solo) pthread_mutex_unlock(&atommu);
+    return d;
+}
+/* does the operation read its principal as an interval? */
+static bool iv_reader(const Cell *o) {
+    switch (o->kind) {
+    case O_NEG: case O_FEQ: case O_PAPPR: case O_MKPART: case O_IEQ: case O_IEQB: return true;
+    case O_BIN: case O_BIN2: return o->x == B_MEET || o->x == B_JOIN;
+    default: return false;
+    }
+}
 static void stuck(Cell *o, Cell *v) {
     for (int k = 1; k < v->n; k++) era(v->port[k]);
     for (int k = 1; k < o->n - 1; k++) era(o->port[k]);
@@ -2091,6 +2208,8 @@ static const char *const KIND_NAME[K_END] = {
     [V_IV] = "IV",
     [V_FACE] = "FACE",
     [V_SYS] = "SYS",
+    [V_ITY] = "ITY",
+    [V_PART] = "PART",
     [V_GLUE] = "GLUE",
     [V_GLUEV] = "GLUEV",
     [V_NVAR] = "NVAR",
@@ -2162,6 +2281,8 @@ static const char *const KIND_NAME[K_END] = {
     [O_VIEW] = "VIEW",
     [O_MKVAR] = "MKVAR",
     [O_MKDIM] = "MKDIM",
+    [O_MKFRESH] = "MKFRESH",
+    [O_FRESHT] = "FRESHT",
     [O_IEQ] = "IEQ",
     [O_IEQB] = "IEQB",
     [O_FEQL] = "FEQL",
@@ -2297,6 +2418,12 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     int vk = v->kind;
+    if (is_neutral(vk) && iv_reader(o)) {
+        /* a neutral read as an interval: its atom */
+        Cell *iv = cell(V_IV, 1); iv->p = atom_of(v);
+        for (int k = 1; k < v->n; k++) era(v->port[k]);
+        cell_free(v); v = iv; vk = V_IV;
+    }
     if (vk == V_UNK && o->kind != O_VIEW && o->kind != O_CLOS && o->kind != O_CLOS2 && o->kind != O_PEND) {
         /* an eliminator of an unknown type gives an unknown type */
         for (int k = 1; k < o->n - 1; k++) era(o->port[k]);
@@ -2323,7 +2450,12 @@ static void interact(Cell *o, Cell *v) {
             link(memo_end(sh, bx, r), o->port[2]);
             cell_free(o); cell_free(v);
         } else if (vk == V_SYS) distribute(o, v);
-        else {
+        else if (vk == V_PLAM) {
+            /* a line applied as a function of the interval: its path application */
+            Cell *pr = cell(O_PAPPR, 3);
+            mv(o, 1, P(pr, 0)); link(P(v, 0), P(pr, 1)); link(P(pr, 2), o->port[2]);
+            cell_free(o);
+        } else {
             /* stuck: a neutral application (its type computed from the spine when needed). A stuck
              * call of a copattern definition stays one, and is named by its head and argument */
             if (is_neutral(vk) && (v->ty & TY_TICK) && (vk == V_NVAR ? global_tickar((long)v->a) : (long)v->a) == 1) {
@@ -2379,6 +2511,14 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     case O_PAPPP:
+        if (vk == V_LAM || vk == V_CASEF) {
+            /* a function of the interval applied at a formula: its application */
+            Cell *ap = cell(O_APP, 3);
+            link(P(v, 0), P(ap, 0)); link(iv_cell(dnf_retain(o->p)), P(ap, 1)); link(P(ap, 2), out_of(o));
+            if (o->x) { era(o->port[1]); era(o->port[2]); }
+            cell_free(o);
+            return;
+        }
         if (vk == V_PLAM) {
             Subst *t = subst_single((Dim)v->a, o->p);
             link(sub(v->port[1], t), out_of(o));
@@ -2574,6 +2714,14 @@ static void interact(Cell *o, Cell *v) {
         Cell *f = cell(V_FACE, 1); f->p = face_neg(v->p);
         link(P(f, 0), o->port[1]); era(P(v, 0));
         cell_free(o);
+        return;
+    }
+    case O_MKPART: {
+        if (vk != V_IV) { stuck(o, v); return; }
+        if (dnf_is_one(v->p)) { link(o->port[1], o->port[2]); cell_free(o); cell_free(v); return; }
+        Cell *c = cell(V_PART, 2); c->p = dnf_retain(v->p);
+        mv(o, 1, P(c, 1)); link(P(c, 0), o->port[2]);
+        cell_free(o); cell_free(v);
         return;
     }
     case O_FACEOF: {
@@ -2968,6 +3116,18 @@ static void interact(Cell *o, Cell *v) {
             /* its motive, which types it, is built here from the environment */
             int nm = tb->motive ? 1 : 0;
             Cell *n = cell(V_NCASE, ne + 3 + nm); n->x = (uint32_t)nm; n->p = tb;
+            /* named as the elimination: the same stuck elimination is the same neutral (an
+             * interval read from it is one atom) */
+            /* (by its table, scrutinee and environment, as its syntax names it: not by the name of a
+             * call it came from, which another route to it does not carry) */
+            if (v->key) {
+                Key **c = malloc(((size_t)ne + 2) * sizeof(Key *)); bool ok = true;
+                c[0] = key_retain(v->key);
+                for (int e = 0; e < ne; e++) { c[1 + e] = key_of_port(o->port[e0 + e]); if (!c[1 + e]) ok = false; }
+                if (ok) n->key = key(K_CASE, 0, tb, ne + 1, c);
+                for (int e = 0; e < ne + 1; e++) if (c[e]) key_release(c[e]);
+                free(c);
+            }
             link(P(v, 0), P(n, 1)); link(unk(), P(n, n->n - 1));
             if (nm) {
                 Port me[ne + 1];
@@ -3501,13 +3661,36 @@ static void interact(Cell *o, Cell *v) {
         cell_free(o);
         return;
     }
+    case O_MKFRESH: {
+        /* the type decides: read it */
+        uint32_t nm = vk == V_WORD && !v->p ? (uint32_t)v->a + 1 : 0;
+        for (int k = 1; k < v->n; k++) era(v->port[k]);
+        Cell *f = cell(O_FRESHT, 2); f->a = nm;
+        mv(o, 1, P(f, 0)); link(P(f, 1), o->port[2]);
+        cell_free(o); cell_free(v);
+        return;
+    }
+    case O_FRESHT: {
+        uint32_t nm = (uint32_t)o->a;
+        if (vk == V_ITY) {
+            Dim d = fresh_dim();
+            if (nm) dim_named(d, nm - 1);
+            Cell *iv = cell(V_IV, 1); iv->p = iv_atom(d); link(P(iv, 0), o->port[1]);
+            cell_free(v);
+        } else {
+            Cell *n = cell(V_NVAR, 2); n->a = LVL_TAG | __atomic_fetch_add(&next_var, 1, __ATOMIC_RELAXED); n->ty = 1; n->x = nm;
+            n->key = key0(K_VAR, n->a, NULL);
+            link(ref_of(P(v, 0)), P(n, 1)); link(P(n, 0), o->port[1]);
+        }
+        cell_free(o);
+        return;
+    }
     case O_MKVAR: case O_MKDIM: {
         /* a fresh variable (of the type at port 1) or dimension, each time; 0 is its source name (a
          * word) or only the trigger */
         uint32_t nm = vk == V_WORD && !v->p ? (uint32_t)v->a + 1 : 0;
         for (int k = 1; k < v->n; k++) era(v->port[k]);
         if (o->kind == O_MKVAR) {
-            static uint64_t next_var;
             /* its type is held once: every copy of the variable refers to it */
             Cell *n = cell(V_NVAR, 2); n->a = LVL_TAG | __atomic_fetch_add(&next_var, 1, __ATOMIC_RELAXED); n->ty = 1; n->x = nm;
             n->key = key0(K_VAR, n->a, NULL);   /* fresh for the whole run: its own key */
@@ -4190,6 +4373,8 @@ static Port build_m(Syn *t, Frame *f, bool lazy) {
     case S_BOX: return ref_of(build_m(t->k[0], f, true));
     case S_WORD: c = cell(V_WORD, 1); c->a = (uint64_t)t->id; c->p = big_retain(t->big); c->key = synkey(t, f); return P(c, 0);
     case S_WORDTY: c = cell(V_WTY, 1); c->key = synkey(t, f); return P(c, 0);
+    case S_ITY: c = cell(V_ITY, 1); return P(c, 0);
+    case S_PART: c = OPC(O_MKPART, 3); link(OPND(t->k[0], 0), IN(c, 0)); link(OPND(t->k[1], 1), IN(c, 1)); return OUT(c);
     case S_CALL: {
         c = OPC(O_CALL, t->n + 2);
         for (int k = 0; k < t->n; k++) link(OPND(t->k[k], 1 + k), IN(c, 1 + k));

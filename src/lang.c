@@ -238,6 +238,7 @@ static int hk_of(Node *h) {
         if (!built) { for (int i = 0; i < (int)(sizeof nm / sizeof *nm); i++) in[i] = intern(nm[i]); built = true; }
         int k = H_NONE;
         for (int i = 0; i < (int)(sizeof nm / sizeof *nm); i++) if (h->s == in[i]) { k = H_LAM + i; break; }   /* symbols are interned */
+        { static const char *vi; if (!vi) vi = intern("%varI"); if (h->s == vi) k = H_VAR; }   /* a fresh variable or dimension, by its type */
         h->hk = (short)k;
     }
     return h->hk;
@@ -258,8 +259,8 @@ static bool node_eq(Node *a, Node *b) {
 
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "%delay", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
-    "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
-    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%diht", "%dihn", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
+    "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue", "Partial",
+    "unglue", "%view", "%var", "%varI", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%diht", "%dihn", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr", "%i64div", "%i64mod", "%i64and", "%i64or", "%i64xor", "%i64shl", "%i64shr",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%u64ofw", "%wofu64", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
@@ -362,7 +363,7 @@ DataInfo *DATA; static size_t capdata; static int ndata;
 /* codata types' fields: a field applied to a value is its projection */
 FldInfo *FLD; static size_t capfld; static int nfld;
 static int fld_lookup(const char *s) { for (int i = nfld - 1; i >= 0; i--) if (!strcmp(FLD[i].name, s)) return i; return -1; }
-long case_hcomp_global = -1;
+long case_hcomp_global = -1, atom_res_global = -1, atom_res0_global = -1;
 /* "%%c" names the first constructor declared c: the checker's own (lib/core/check.cub), referred to by
  * the code the checker is given, whatever the program declares later under the same name */
 /* by name: an open-addressed table of the latest constructor of each name, rebuilt when constructors
@@ -770,7 +771,7 @@ static Node *ds(Node *t) {
         }
         static const struct { const char *k; int n; } AR[] = { { "pair", 2 }, { "fst", 1 }, { "snd", 1 }, { "PathP", 3 },
             { "~", 1 }, { "=", 2 }, { "faceof", 1 }, { "sysmap", 2 }, { "comp", 3 }, { "Glue", 2 }, { "glue", 2 },
-            { "unglue", 2 }, { "app", 2 }, { "hcompD", 2 }, { NULL, 0 } };
+            { "unglue", 2 }, { "Partial", 2 }, { "app", 2 }, { "hcompD", 2 }, { NULL, 0 } };
         if (IS(k, "@")) { if (t->n != 3 && t->n != 5) die("@ takes a path, an interval and optionally both endpoints", NULL); }
         else for (int i = 0; AR[i].k; i++) if (!strcmp(AR[i].k, k)) arity(t, AR[i].n);
         Node *r = nlist(t->n); r->it[0] = h;
@@ -1327,11 +1328,12 @@ static NV ann(Node *t, Chain *C) {
         if (!strcmp(s, "ff")) return aconst("tff", "ff");
         if (!strcmp(s, "U")) { p[0] = K("tlzero"); return anode(C, "tuniv", p, 1, nsym("U")); }
         if (!strcmp(s, "Word")) return aconst("tword", "Word");
+        if (!strcmp(s, "I")) return aconst("tity", "I");
         if (s[0] == '#' && s[1] >= '0' && s[1] <= '9') { NV r; r.val = t; r.node = kapp("tlit", t, NULL); return r; }
         AScope *a = ascope(s);
         if (a) { NV r; r.val = t; r.node = a->ty ? kapp("tv", t, a->ty) : kapp("ti", t, NULL); return r; }
         int i = checked_index(s);
-        if (i >= 0) { p[0] = word(i); return anode(C, "tg", p, 1, nl2("%gval", word(i))); }
+        if (i >= 0) { p[0] = word(i); p[1] = nl2("%gty", word(i)); return anode(C, "tg", p, 2, nl2("%gval", word(i))); }
         die_unchecked(s);
     }
     const char *h = t->it[0]->s;
@@ -1406,7 +1408,7 @@ static NV ann(Node *t, Chain *C) {
         { "app", "tapp", 2 }, { "pair", "tpair", 2 }, { "fst", "tfst", 1 }, { "snd", "tsnd", 1 },
         { "PathP", "tpathp", 3 }, { "@", "tpapp", 2 }, { "~", "tneg", 1 }, { "/\\", "tmeet", 2 }, { "\\/", "tjoin", 2 },
         { "&", "tfand", 2 }, { "|", "tfor", 2 }, { "comp", "tcomp", 3 }, { "Glue", "tgluet", 2 }, { "glue", "tglue", 2 },
-        { "unglue", "tunglue", 2 }, { "%hcompU", "thcompu", 2 }, { "%unglueU", "tunglueu", 2 }, { "hcompD", "thcomp", 2 }, { "force", "tforce", 1 }, { "%delay", "tthunk", 1 }, { NULL, NULL, 0 } };
+        { "unglue", "tunglue", 2 }, { "Partial", "tpartial", 2 }, { "%hcompU", "thcompu", 2 }, { "%unglueU", "tunglueu", 2 }, { "hcompD", "thcomp", 2 }, { "force", "tforce", 1 }, { "%delay", "tthunk", 1 }, { NULL, NULL, 0 } };
     {
         static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr", NULL };
         for (int q = 0; WO[q]; q++) if (!strcmp(h, WO[q])) {
@@ -1643,7 +1645,7 @@ static Global *G; static long nG, capG;
 static signed char *GMK; static long capGMK;   /* 0 unknown, 1 clean, 2 tainted */
 static bool syn_walk(const Syn *t, long *calls, int *nc, int cap) {
     if (!t) return false;
-    if (t->tag == S_PRIM && t->x == O_MKDIM) return true;
+    if (t->tag == S_PRIM && (t->x == O_MKDIM || t->x == O_MKFRESH)) return true;
     if (t->tag == S_GLOBTAB) return true;
     if ((t->tag == S_GLOBAL || t->tag == S_CALL) && *nc < cap) calls[(*nc)++] = t->id;
     else if ((t->tag == S_GLOBAL || t->tag == S_CALL)) return true;   /* too many to follow: tainted */
@@ -2505,6 +2507,7 @@ static Syn *compile(Node *t) {
         if (IS(s, "ff")) return syn(S_FFF, 0);
         if (IS(s, "U")) return syn(S_U, 0);
         if (IS(s, "Word")) return syn(S_WORDTY, 0);
+        if (IS(s, "I")) return syn(S_ITY, 0);
         Bind *b = lookup_i(s);
         if (b) {
             if (b->level != li) die("internal: unlifted outer variable", s);
@@ -2639,13 +2642,13 @@ static Syn *compile(Node *t) {
             s->k[0] = compile(t->it[2]); s->k[1] = compile(t->it[3]); s->k[2] = compile(t->it[4]); s->k[3] = compile(t->it[1]);
             return s;
         }
-        if (IS(h, "%var") || IS(h, "%dim")) {
+        if (IS(h, "%var") || IS(h, "%varI") || IS(h, "%dim")) {
             /* (%var [n] T), (%dim [n]): a fresh variable of type T, a fresh dimension, named by the
              * word n (a source name) or unnamed; the first port triggers the cell */
-            bool v = IS(h, "%var");
+            bool v = IS(h, "%var") || IS(h, "%varI");
             int named = t->n - (v ? 2 : 1);
             if (named != 0 && named != 1) die(v ? "(%var [n] T)" : "(%dim [n])", NULL);
-            Syn *s = syn(S_PRIM, v ? 2 : 1); s->x = v ? O_MKVAR : O_MKDIM;
+            Syn *s = syn(S_PRIM, v ? 2 : 1); s->x = IS(h, "%varI") ? O_MKFRESH : v ? O_MKVAR : O_MKDIM;
             s->k[0] = named ? compile(t->it[1]) : syn(S_FTT, 0);
             if (v) s->k[1] = compile(t->it[1 + named]);
             return s;
@@ -2680,6 +2683,7 @@ static Syn *compile(Node *t) {
     if (IS(h, "sysmap")) return compile_n(S_SYSMAP, t, 1, 2);
     if (IS(h, "comp")) return compile_n(S_COMP, t, 1, 3);
     if (IS(h, "Glue")) return compile_n(S_GLUE, t, 1, 2);
+    if (IS(h, "Partial")) return compile_n(S_PART, t, 1, 2);
     if (IS(h, "%hcompU")) { arity(t, 2); Syn *s = compile_n(S_GLUE, t, 1, 2); s->x = 1; return s; }
     if (IS(h, "%unglueU")) { arity(t, 2); Syn *s = compile_n(S_UNGLUE, t, 1, 2); s->x = 1; return s; }
     if (IS(h, "glue")) {
@@ -2926,6 +2930,8 @@ static void rb_one(FILE *o, Port prov) {
     case V_CASEF: fputs("%casef", o); return;
     case V_WORD: { WN w = { c->a, c->p }; fputc('#', o); wn_print(o, &w); return; }
     case V_WTY: fputs("Word", o); return;
+    case V_ITY: fputs("I", o); return;
+    case V_PART: fputs("(Partial ", o); dnf_print(o, c->p, false, dim_name); fputc(' ', o); push_str(")"); push_field(c, 1); return;
     case V_PTY:
         if (c->a == PT_BYTES) { fputs("(Bytes ", o); push_str(")"); push_field(c, 1); return; }
         fputs(c->a == PT_I64 ? "Int64" : c->a == PT_U32 ? "UInt32" : c->a == PT_F64 ? "Float64" : c->a == PT_U64 ? "UInt64" : "Float32", o); return;
@@ -3423,7 +3429,8 @@ static void explain(const char *r, Node *q) {
         /* 38 */ { "a linear binder (multiplicity 1) is not used", NULL, NULL },
         /* 39 */ { "a linear binder (multiplicity 1) is used more than once", NULL, NULL },
         /* 40 */ { "a constructor of a linear type (a field at multiplicity 1) is applied outside a primitive", NULL, NULL },
-        /* 41 */ { "a field's universe is above the data type's declared universe", "the fields' level", "the declared level" } };
+        /* 41 */ { "a field's universe is above the data type's declared universe", "the fields' level", "the declared level" },
+        /* 42 */ { "the system's face does not cover the partial element's face", NULL, NULL } };
     const char *saved = src; src = r;
     Node *n = read_node();
     src = saved;
@@ -3918,6 +3925,8 @@ static void toplevel_in(Node *f) {
         prof_cur = 0;
         link(top_build(s, ns, u), P(G[g].res, 0));
         if (!strcmp(G[g].name, "%case-hcomp")) case_hcomp_global = g;
+        if (!strcmp(G[g].name, "%atom-res")) atom_res_global = g;
+        if (!strcmp(G[g].name, "%atom-res0")) atom_res0_global = g;
         if (fill_decl) { for (int i = 0; i < G[g].npark; i++) net_push(G[g].park_o[i], G[g].park_v[i]); G[g].npark = 0; }
     } else if (!strcmp(h, "checked") || !strcmp(h, "checked-fail") || !strcmp(h, "check") || !strcmp(h, "check-fail")) {
         /* the checker (lib/core/check.cub), a term, run on the codes of T and t
