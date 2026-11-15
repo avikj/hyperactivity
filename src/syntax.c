@@ -213,11 +213,10 @@ static bool x_untyped_file;       /* converting a file that was loaded before th
  * RAW: the files the checker is built from, loaded before it exists; only they may hold a
  * definition without a checked signature. TRUSTED: the files that declare the type theory's own
  * rules (lib/core/primitives.cub), the machine's word operations (lib/bootstrap/prim.cub, misplaced in
- * the core) and the bootstrap's untyped helpers given types (lib/bootstrap/exposed.cub, until they are
- * written with types); only they may hold primitive, foreign or postulate.
+ * the core); only they may hold primitive, foreign or postulate.
  * Everything else is checked at a stated type or is refused. */
-static const char *const BOOT_RAW[] = { "core/prelude", "core/code", "bootstrap/match", "bootstrap/nav", "bootstrap/cost", "bootstrap/lin", "core/check", NULL };
-static const char *const BOOT_TRUSTED[] = { "bootstrap/prim", "core/primitives", "bootstrap/exposed", NULL };
+static const char *const BOOT_RAW[] = { "core/prelude", "core/code", "bootstrap/lin", "core/check", NULL };
+static const char *const BOOT_TRUSTED[] = { "bootstrap/prim", "core/primitives", NULL };
 static bool boot_in(const char *const *names) {
     if (!x_file) return false;
     size_t l = strlen(x_file);

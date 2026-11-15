@@ -790,13 +790,19 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- paper's §1.2 “Programs about programs” puts in the bootstrap), lib/core/check.cub (the checker as a term),
 -- lib/core/primitives.cub (after the checker: the core's own data types checked, Path, and the primitives
 -- declared at checked types: guarded recursion's and reflection's).
--- In the core's load order but not core: lib/bootstrap/match.cub, lib/bootstrap/nav.cub, lib/bootstrap/cost.cub, lib/bootstrap/lin.cub (loaded
--- before the checker as bootstrap files; rewriting, navigation and linear arithmetic are the
--- specializer's and the decision procedures' business. Read 2026-11-14: the checker uses only
--- andb, orb, notb, omap (match.cub) and obind (lin.cub) (moved 2026-11-15 into lib/core/code.cub, so the
--- checker depends on core files only); the four files are in the bootstrap because
--- they are untyped (no signatures), which the checker refuses outside it. They leave the core when
--- written with types, those five helpers moving into lib/core/code.cub); lib/library/std.cub is the library, and lib/core.cub is a load list named
+-- In the core's load order but not core: lib/bootstrap/lin.cub (loaded before the checker as a
+-- bootstrap file because it is untyped; linear arithmetic is the decision procedures' business; the
+-- checker uses none of it since obind moved to lib/core/code.cub). It leaves the core when written
+-- with types. Done (2026-11-15): match.cub, nav.cub and cost.cub are written with types as
+-- lib/capacities/rewrite.cub (matching, instantiation, rewriting with and without the path,
+-- orientation; recursion through a code's lists by the nested field's hypothesis) and
+-- lib/capacities/nav.cub (navigation, cost models, best-first search; recursion on a budget by
+-- %welimP), so they left the core's load order and src/syntax.c's untyped list; the five trusted
+-- primitives of lib/bootstrap/exposed.cub (code-map, code-shift, code-unshift, rule-rewrite,
+-- rules-orient) are checked definitions there now, and the file is gone from the trusted list; the
+-- store's step record is read through one reflection primitive, def-steps, in
+-- lib/core/primitives.cub (library 2039 passed with the 24 known derive.cub failures, Brunerie −2,
+-- task graph 279); lib/library/std.cub is the library, and lib/core.cub is a load list named
 -- core while it loads the library. Misplaced in the core: lib/bootstrap/prim.cub's Word, Int64, UInt32, UInt64,
 -- Float64, Float32 and Bytes n with their %-operations in src/lang.c and src/big.c (machine
 -- representations, the examples' kind: definitions in the library, with native speed in the evaluator
