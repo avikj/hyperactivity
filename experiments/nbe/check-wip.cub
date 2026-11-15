@@ -205,16 +205,19 @@ PT-lift (suc n) X X' X2 Y' F2 k f l g c =
     (λ L D → lineo-push X' X2 Y' Y' F2 f (λ x y z → l x y) L D D) (lineo-of X (λ x → Y' (k x)) g) c
 
 -- ---------------------------------------------------------------- the simple-types fragment
-data STy = sbool | sarr (a : STy) (b : STy)
+data STy = sbool | sarr (a : STy) (b : STy) | sprod (a : STy) (b : STy)
 shp : STy → TyShape
 shp sbool = s-bool
 shp (sarr a b) = s-pi (shp a) (shp b)
+shp (sprod a b) = s-sig (shp a) (shp b)
 sem : (t : STy) → Sem (shp t)
 sem sbool = one
 sem (sarr a b) = (sem a , λ x → sem b)
+sem (sprod a b) = (sem a , λ x → sem b)
 tcode : STy → Code
 tcode sbool = c-bool
 tcode (sarr a b) = cpi #2 (tcode a) (tcode b)
+tcode (sprod a b) = csigma (tcode a) (tcode b)
 sk : List STy → Lst Entry
 sk nil = lnil
 sk (cons t ts) = lcons (e-ty (shp t)) (sk ts)
@@ -249,6 +252,21 @@ dty-s ts (sarr a b) =
                         PT-lift (dims (sk ts)) One1 (CtxV (sk ts)) (CtxV (sk (cons a ts))) (FbE (sk ts) (Fam (shp a) (shp b)))
                           (FbE (sk (cons a ts)) (Sem (shp b))) (into ts) (λ γ e → (γ , λ ρ → fam-dom (shp a) (shp b) (e ρ)))
                           (λ γ e ρ → snd (e (fst ρ)) (snd ρ)) (λ x ρ → sem (sarr a b)) (cube0 ts) (~ i)))
+       (dty-s (cons a ts) b))
+dty-s ts (sprod a b) =
+  dty-sig (ctx-of ts) (shp a) (shp b) (ptM ts (Fam (shp a) (shp b)) (λ x ρ → sem (sprod a b))) (tcode a) (tcode b)
+    (der-tr j-ty (ctx-of ts) (shp a) (tcode a) (ptM ts (Sem (shp a)) (λ x ρ → sem a))
+       (fmapM (ctx-of ts) (Fam (shp a) (shp b)) (Sem (shp a)) (fam-dom (shp a) (shp b)) (ptM ts (Fam (shp a) (shp b)) (λ x ρ → sem (sprod a b))))
+       (λ i → fmap-pt (dims (sk ts)) One1 (CtxV (sk ts)) (FbE (sk ts) (Fam (shp a) (shp b))) (FbE (sk ts) (Sem (shp a))) (into ts)
+                (λ γ e ρ → fam-dom (shp a) (shp b) (e ρ)) (λ x ρ → sem (sprod a b)) (cube0 ts) (~ i))
+       (dty-s ts a))
+    (transport (λ i → Der (j-ty , (lcons (e-ty (shp a)) (sk ts) ,
+                                PT-map (dims (sk ts)) One1 (CtxV (sk ts)) (CtxV (sk (cons a ts))) (FbE (sk ts) (Fam (shp a) (shp b))) (into ts)
+                                  (λ γ e → (γ , λ ρ → fam-dom (shp a) (shp b) (e ρ))) (λ x ρ → sem (sprod a b)) (cube0 ts) (~ i)) ,
+                        shp b , tcode b ,
+                        PT-lift (dims (sk ts)) One1 (CtxV (sk ts)) (CtxV (sk (cons a ts))) (FbE (sk ts) (Fam (shp a) (shp b)))
+                          (FbE (sk (cons a ts)) (Sem (shp b))) (into ts) (λ γ e → (γ , λ ρ → fam-dom (shp a) (shp b) (e ρ)))
+                          (λ γ e ρ → snd (e (fst ρ)) (snd ρ)) (λ x ρ → sem (sprod a b)) (cube0 ts) (~ i)))
        (dty-s (cons a ts) b))
 
 -- ---------------------------------------------------------------- variables of the simple-types fragment
@@ -306,6 +324,12 @@ steq (sarr a b) (sarr c d) =
     some p → (case steq b d return (λ o → Opt (PathP (λ i → STy) (sarr a b) (sarr c d))) of
                 none → none
                 some q → some (λ i → sarr (p i) (q i)))
+steq (sprod a b) (sprod c d) =
+  case steq a c return (λ o → Opt (PathP (λ i → STy) (sprod a b) (sprod c d))) of
+    none → none
+    some p → (case steq b d return (λ o → Opt (PathP (λ i → STy) (sprod a b) (sprod c d))) of
+                none → none
+                some q → some (λ i → sprod (p i) (q i)))
 steq a b = none
 -- a synthesized term checked at t: its type compared with t
 to-chk : (ts : List STy) (c : Code) (t : STy) → May (SY ts c) → May (CK ts c t)
@@ -379,6 +403,7 @@ syn-var ts k =
 -- an application synthesizes the function's codomain, its argument checked at the domain
 app-at : (ts : List STy) (f a : Code) (t : STy) → CK ts f t → ((t1 : STy) → May (CK ts a t1)) → May (SY ts (capp f a))
 app-at ts f a sbool cf ca = may-no
+app-at ts f a (sprod t1 t2) cf ca = may-no
 app-at ts f a (sarr t1 t2) cf ca =
   case ca t1 return (λ o → May (SY ts (capp f a))) of
     may-no → may-no
@@ -391,6 +416,7 @@ syn-app ts f a sf ca =
 -- a λ checks at a function type
 lam-at : (ts : List STy) (b : Code) (t : STy) → ((t1 t2 : STy) → May (CK (cons t1 ts) b t2)) → May (CK ts (clam b) t)
 lam-at ts b sbool cb = may-no
+lam-at ts b (sprod t1 t2) cb = may-no
 lam-at ts b (sarr t1 t2) cb =
   case cb t1 t2 return (λ o → May (CK ts (clam b) (sarr t1 t2))) of
     may-no → may-no
@@ -442,6 +468,90 @@ con-syn ts d k fs ds =
   case con-at ts d k fs ds return (λ o → May (SY ts (ccon d k fs ds))) of
     may-no → may-no
     may-yes r → may-yes (sbool , r)
+-- ---------------------------------------------------------------- pairs
+-- a pair checked at t1 × t2: its components at t1 and t2, the second component's type the constant
+-- t2 over the context extended by t1 (dty-s there, carried to ext-h as λ's body is)
+pair-ok : (ts : List STy) (c1 c2 : Code) (t1 t2 : STy) → CK ts c1 t1 → CK ts c2 t2 → CK ts (cpair c1 c2) (sprod t1 t2)
+pair-ok ts c1 c2 t1 t2 cp1 cp2 =
+  let n = dims (sk ts)
+      A = shp t1
+      B = shp t2
+      gR = the ((x : One1) → EnvV (sk ts) (into ts x) → TV (s-sig A B)) (λ x ρ → (sem (sprod t1 t2) , fst cp1 x ρ , fst cp2 x ρ))
+      R = ptM ts (TV (s-sig A B)) gR
+      fx = the ((γ : CtxV (sk ts)) → FbE (sk ts) (TV (s-sig A B)) γ → CtxV (sk (cons t1 ts))) (λ γ e → (γ , λ ρ → fam-dom A B (fst (e ρ))))
+  in (λ x ρ → (fst cp1 x ρ , fst cp2 x ρ) ,
+      dpair (ctx-of ts) A B R (tcode t2) c1 c2
+        (transport (λ i → Der (j-ty , (lcons (e-ty A) (sk ts) ,
+                                       PT-map n One1 (CtxV (sk ts)) (CtxV (sk (cons t1 ts))) (FbE (sk ts) (TV (s-sig A B))) (into ts) fx gR (cube0 ts) (~ i)) ,
+                               B , tcode t2 ,
+                               PT-lift n One1 (CtxV (sk ts)) (CtxV (sk (cons t1 ts))) (FbE (sk ts) (TV (s-sig A B))) (FbE (sk (cons t1 ts)) (Sem B))
+                                 (into ts) fx (λ γ e ρ → snd (fst (e (fst ρ))) (snd ρ)) gR (cube0 ts) (~ i)))
+           (dty-s (cons t1 ts) t2))
+        (der-tr j-tm (ctx-of ts) A c1 (ptM ts (TV A) (λ x ρ → (sem t1 , fst cp1 x ρ)))
+           (fmapM (ctx-of ts) (TV (s-sig A B)) (TV A) (sig-1 A B) R)
+           (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (TV (s-sig A B))) (FbE (sk ts) (TV A)) (into ts) (λ γ e ρ → sig-1 A B (e ρ)) gR (cube0 ts) (~ i))
+           (snd cp1))
+        (der-tr j-tm (ctx-of ts) B c2 (ptM ts (TV B) (λ x ρ → (sem t2 , fst cp2 x ρ)))
+           (fmapM (ctx-of ts) (TV (s-sig A B)) (TV B) (sig-2 A B) R)
+           (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (TV (s-sig A B))) (FbE (sk ts) (TV B)) (into ts) (λ γ e ρ → sig-2 A B (e ρ)) gR (cube0 ts) (~ i))
+           (snd cp2)))
+-- the projections of a term checked at t1 × t2
+fst-ok : (ts : List STy) (p : Code) (t1 t2 : STy) → CK ts p (sprod t1 t2) → CK ts (cfst p) t1
+fst-ok ts p t1 t2 cp =
+  let A = shp t1
+      B = shp t2
+      gR = the ((x : One1) → EnvV (sk ts) (into ts x) → TV (s-sig A B)) (λ x ρ → (sem (sprod t1 t2) , fst cp x ρ))
+  in (λ x ρ → fst (fst cp x ρ) ,
+      der-tr j-tm (ctx-of ts) A (cfst p) (fmapM (ctx-of ts) (TV (s-sig A B)) (TV A) (sig-1 A B) (ptM ts (TV (s-sig A B)) gR))
+        (ptM ts (TV A) (λ x ρ → (sem t1 , fst (fst cp x ρ))))
+        (fmap-pt (dims (sk ts)) One1 (CtxV (sk ts)) (FbE (sk ts) (TV (s-sig A B))) (FbE (sk ts) (TV A)) (into ts) (λ γ e ρ → sig-1 A B (e ρ)) gR (cube0 ts))
+        (dfst (ctx-of ts) A B (ptM ts (TV (s-sig A B)) gR) p (snd cp)))
+snd-ok : (ts : List STy) (p : Code) (t1 t2 : STy) → CK ts p (sprod t1 t2) → CK ts (csnd p) t2
+snd-ok ts p t1 t2 cp =
+  let A = shp t1
+      B = shp t2
+      gR = the ((x : One1) → EnvV (sk ts) (into ts x) → TV (s-sig A B)) (λ x ρ → (sem (sprod t1 t2) , fst cp x ρ))
+  in (λ x ρ → snd (fst cp x ρ) ,
+      der-tr j-tm (ctx-of ts) B (csnd p) (fmapM (ctx-of ts) (TV (s-sig A B)) (TV B) (sig-2 A B) (ptM ts (TV (s-sig A B)) gR))
+        (ptM ts (TV B) (λ x ρ → (sem t2 , snd (fst cp x ρ))))
+        (fmap-pt (dims (sk ts)) One1 (CtxV (sk ts)) (FbE (sk ts) (TV (s-sig A B))) (FbE (sk ts) (TV B)) (into ts) (λ γ e ρ → sig-2 A B (e ρ)) gR (cube0 ts))
+        (dsnd (ctx-of ts) A B (ptM ts (TV (s-sig A B)) gR) p (snd cp)))
+-- a projection synthesizes its component's type from the pair's synthesized product type
+fst-at : (ts : List STy) (p : Code) (t : STy) → CK ts p t → May (SY ts (cfst p))
+fst-at ts p (sprod t1 t2) cp = may-yes (t1 , fst-ok ts p t1 t2 cp)
+fst-at ts p t cp = may-no
+snd-at : (ts : List STy) (p : Code) (t : STy) → CK ts p t → May (SY ts (csnd p))
+snd-at ts p (sprod t1 t2) cp = may-yes (t2 , snd-ok ts p t1 t2 cp)
+snd-at ts p t cp = may-no
+syn-fst : (ts : List STy) (p : Code) → May (SY ts p) → May (SY ts (cfst p))
+syn-fst ts p sp =
+  case sp return (λ o → May (SY ts (cfst p))) of
+    may-no → may-no
+    may-yes r → fst-at ts p (fst r) (snd r)
+syn-snd : (ts : List STy) (p : Code) → May (SY ts p) → May (SY ts (csnd p))
+syn-snd ts p sp =
+  case sp return (λ o → May (SY ts (csnd p))) of
+    may-no → may-no
+    may-yes r → snd-at ts p (fst r) (snd r)
+-- a pair checked at a product, or synthesizing the product of its components' types
+pair-at : (ts : List STy) (c1 c2 : Code) (t : STy) → ((t1 : STy) → May (CK ts c1 t1)) → ((t2 : STy) → May (CK ts c2 t2)) →
+  May (CK ts (cpair c1 c2) t)
+pair-at ts c1 c2 (sprod t1 t2) m1 m2 =
+  case m1 t1 return (λ o → May (CK ts (cpair c1 c2) (sprod t1 t2))) of
+    may-no → may-no
+    may-yes cp1 → (case m2 t2 return (λ o → May (CK ts (cpair c1 c2) (sprod t1 t2))) of
+                     may-no → may-no
+                     may-yes cp2 → may-yes (pair-ok ts c1 c2 t1 t2 cp1 cp2))
+pair-at ts c1 c2 t m1 m2 = may-no
+pair-m : (ts : List STy) (c1 c2 : Code) (m : Mode) → ((t1 : STy) → May (CK ts c1 t1)) → ((t2 : STy) → May (CK ts c2 t2)) →
+  May (SY ts c1) → May (SY ts c2) → RT ts (cpair c1 c2) m
+pair-m ts c1 c2 (mchk t) m1 m2 s1 s2 = pair-at ts c1 c2 t m1 m2
+pair-m ts c1 c2 msyn m1 m2 s1 s2 =
+  case s1 return (λ o → May (SY ts (cpair c1 c2))) of
+    may-no → may-no
+    may-yes r1 → (case s2 return (λ o → May (SY ts (cpair c1 c2))) of
+                    may-no → may-no
+                    may-yes r2 → may-yes (sprod (fst r1) (fst r2) , pair-ok ts c1 c2 (fst r1) (fst r2) (snd r1) (snd r2)))
 -- ---------------------------------------------------------------- case on Bool
 -- case on Bool checked at t: the scrutinee at Bool, both branches at t, the motive the constant type t
 -- in the context extended by a Bool (dty-s there, carried to ext-h over the case's cube as λ's body is)
@@ -506,6 +616,9 @@ ck (cvar k) ts m = finish ts (cvar k) m (syn-var ts k)
 ck (clam b) ts m = lam-m ts b m (λ t1 t2 → ck b (cons t1 ts) (mchk t2))
 ck (capp f a) ts m = finish ts (capp f a) m (syn-app ts f a (ck f ts msyn) (λ t1 → ck a ts (mchk t1)))
 ck (ccon d k fs ds) ts m = finish ts (ccon d k fs ds) m (con-syn ts d k fs ds)
+ck (cpair a b) ts m = pair-m ts a b m (λ t → ck a ts (mchk t)) (λ t → ck b ts (mchk t)) (ck a ts msyn) (ck b ts msyn)
+ck (cfst p) ts m = finish ts (cfst p) m (syn-fst ts p (ck p ts msyn))
+ck (csnd p) ts m = finish ts (csnd p) m (syn-snd ts p (ck p ts msyn))
 ck c ts m = finish ts c m may-no
 
 -- ---------------------------------------------------------------- examples: raw codes checked, then normalized
@@ -537,3 +650,10 @@ tcode-of c t r =
      (λ t1 t2 → bcase-at (cons t1 nil) #0 c-false c-true (cvar #0) t2
                   (ck (cvar #0) (cons t1 nil) (mchk sbool)) (ck c-false (cons t1 nil) (mchk t2)) (ck c-true (cons t1 nil) (mchk t2))))
   = some (clam (c-case c-false c-true (cvar #0)))
+-- pairs: the swap λ p. (snd p , fst p) at Bool × Bool → Bool × Bool is its own normal form; fst of
+-- (true , false) synthesizes Bool and normalizes to true; a pair at Bool is refused
+#same tcode-of (clam (cpair (csnd (cvar #0)) (cfst (cvar #0)))) (sarr (sprod sbool sbool) (sprod sbool sbool))
+  (ck (clam (cpair (csnd (cvar #0)) (cfst (cvar #0)))) nil (mchk (sarr (sprod sbool sbool) (sprod sbool sbool))))
+  = some (clam (cpair (csnd (cvar #0)) (cfst (cvar #0))))
+#same tcode-of (cfst (cpair c-true c-false)) sbool (ck (cfst (cpair c-true c-false)) nil (mchk sbool)) = some c-true
+#same tcode-of (cpair c-true c-false) sbool (ck (cpair c-true c-false) nil (mchk sbool)) = none
