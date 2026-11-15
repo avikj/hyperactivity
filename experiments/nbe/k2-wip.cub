@@ -1,0 +1,79 @@
+-- Layer: example: the first piece of composition with a system on the context's faces in the normalizer over cubes (K2 of lib/capacities/nbe.cub): a cube's directions as intervals (a cube mapped by a function of its directions, a cube's value at an environment of directions), interval and face codes and the normalizer's interval normal forms read over them (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+import "../../lib/capacities/nbe.cub"
+-- an environment of directions (Word → I, a pretype, so written out rather than named): index 0 the
+-- newest direction (the innermost line of a cube), as codes and the normalizer's literals count them
+ext : (Word → I) → I → (Word → I)
+ext ρ i k = if %weq k #0 then i else ρ (%wsub k #1)
+shiftD : (Word → I) → (Word → I)
+shiftD ρ k = ρ (%wsucc k)
+none-dims : Word → I
+none-dims k = i0
+-- a line mapped by a function of its direction (its ends are the function's at 0 and 1, so the
+-- path's ends are its own)
+line-map-i : (X Y : Type 1) → (I → X → Y) → Line X → Line Y
+line-map-i X Y f L = (f i0 (fst L) , f i1 (fst (snd L)) , λ i → f i (snd (snd L) i))
+-- a cube mapped by a function of all its directions: the outer lines are the older directions, the
+-- innermost the newest; ρ0 the directions outside the cube
+cube-map-i : (n : Nat) (X Y : Type 1) → ((Word → I) → X → Y) → (Word → I) → Cube n X → Cube n Y
+cube-map-i zero X Y f ρ0 c = f ρ0 c
+cube-map-i (suc n) X Y f ρ0 c = cube-map-i n (Line X) (Line Y) (λ ρ L → line-map-i X Y (λ i → f (ext ρ i)) L) ρ0 c
+-- a cube's value at an environment of directions: the innermost line at ρ 0, the rest at the older
+-- directions
+line-at : (X : Type 1) → Line X → I → X
+line-at X L r = snd (snd L) r
+cube-at : (n : Nat) (X : Type 1) → Cube n X → (Word → I) → X
+cube-at zero X c ρ = c
+cube-at (suc n) X c ρ = line-at X (cube-at n (Line X) c (shiftD ρ)) (ρ #0)
+-- at an environment of endpoints, a vertex: at 0 everywhere, the cube's first vertex
+first-vertex : (n : Nat) (X : Type 1) → Cube n X → X
+first-vertex zero X c = c
+first-vertex (suc n) X c = fst (first-vertex n (Line X) c)
+vertex-at-0 : (n : Nat) (X : Type 1) (c : Cube n X) → cube-at n X c none-dims ≡ first-vertex n X c
+vertex-at-0 zero X c = λ k → c
+vertex-at-0 (suc n) X c = λ k → fst (vertex-at-0 n (Line X) c k)
+-- the normalizer's interval normal forms (lib/capacities/nbe.cub's Lit, Conj, DNF) read over the
+-- directions
+lit-iv : Lit → (Word → I) → I
+lit-iv l ρ = if snd l then ρ (fst l) else ~ (ρ (fst l))
+conj-iv : Conj → (Word → I) → I
+conj-iv lnil ρ = i1
+conj-iv (lcons l ls) ρ = lit-iv l ρ ∧ conj-iv ls ρ
+dnf-iv : DNF → (Word → I) → I
+dnf-iv lnil ρ = i0
+dnf-iv (lcons c cs) ρ = conj-iv c ρ ∨ dnf-iv cs ρ
+-- interval and face codes read over the directions (a variable is a direction), a face as the interval
+-- it is 1 on, and a system code's face the join of its branches'
+iv-of : Code → (Word → I) → I
+iv-of (cvar k) ρ = ρ k
+iv-of ci0 ρ = i0
+iv-of ci1 ρ = i1
+iv-of (cneg r) ρ = ~ (iv-of r ρ)
+iv-of (cmeet r s) ρ = iv-of r ρ ∧ iv-of s ρ
+iv-of (cjoin r s) ρ = iv-of r ρ ∨ iv-of s ρ
+iv-of c ρ = i0
+face-of : Code → (Word → I) → I
+face-of (ceq1 r) ρ = iv-of r ρ
+face-of (ceq0 r) ρ = ~ (iv-of r ρ)
+face-of (cfand a b) ρ = face-of a ρ ∧ face-of b ρ
+face-of (cfor a b) ρ = face-of a ρ ∨ face-of b ρ
+face-of cftt ρ = i1
+face-of c ρ = i0
+osys-face : Code → (Word → I) → I
+osys-face (csysc f t r) ρ = face-of f ρ ∨ osys-face r ρ
+osys-face c ρ = i0
+#same iv-of (cmeet (cvar #0) (cneg (cvar #1))) (ext (ext none-dims i1) i1) = i0
+#same face-of (cfor (ceq0 (cvar #0)) (ceq1 (cvar #1))) (ext (ext none-dims i1) i0) = i1
+#same osys-face (csysc (ceq0 (cvar #0)) ctick0 (csysc (ceq1 (cvar #0)) ctick0 csys0)) (ext none-dims i1) = i1
+#same dnf-iv (lcons (lcons (#0 , true) (lcons (#1 , false) lnil)) lnil) (ext (ext none-dims i0) i1) = i1
+-- a line of types mapped by a function of its direction: the middle a composition on the face
+-- (direction = 1); its ends computed
+lineT : Line Type
+lineT = (Bool , Bool , λ i → Bool)
+mapT : Line Type
+mapT = cube-map-i (suc zero) Type Type (λ ρ A → comp (λ _ → Bool) (λ _ → [ ρ #0 = 1 ↦ true ]) true ≡ true) none-dims lineT
+#same fst mapT = (true ≡ true)
+#same fst (snd mapT) = (true ≡ true)
+-- a square's value at directions, and back at its vertices
+sq : Cube (suc (suc zero)) Type
+sq = ((Bool , Bool , λ i → Bool) , (Bool , Bool , λ i → Bool) , λ j → (Bool , Bool , λ i → Bool))
+#same cube-at (suc (suc zero)) Type sq (ext (ext none-dims i0) i1) = Bool
