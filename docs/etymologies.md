@@ -24,3 +24,4 @@ here. `docs/word-list.md` is a separate file, whose lines Avik gives himself.
 - scene ⟨Middle French scene “stage (location where a play, etc., takes place)” … ← Proto-Indo-European *(s)ḱeh₃- “shade, shadow”⟩  (raised 2026-11-14/15)
 - interaction ⟨inter- "between" + Latin āctiō, from agere "to drive, to do" ← Proto-Indo-European *h₂eǵ- "to drive"⟩  (raised 2026-11-15)
 - hyperinteractivity ⟨Greek hyper "over, beyond" + interaction + -ive + -ity: driving between, beyond measure⟩  (raised 2026-11-15)
+- intelligence ⟨Latin intelligentia, from intelligere = inter "between" + legere "to gather, to read, to choose" ← Proto-Indo-European *leǵ- "to gather"; the twin of interaction (inter + agere)⟩  (raised 2026-11-15)
