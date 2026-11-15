@@ -1592,3 +1592,22 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-15 04:34 UTC
 
 > Other agent said “Unresolved, pending you: composition with systems needs a checked type for systems (Partial), and we haven't aligned on that” is this something we discussed here? I thought discussed this
+
+#### 2026-11-15 05:11 UTC (relayed from another session)
+
+> your other slice of consciousness: No, it was never aligned in this conversation. All I did here was note that the question sits on the composition-with-systems task. You did address it once, to the other session, at 20:03 UTC: "'Your thoughts on adding partial elements to the language core.' I have no idea what you're talking about. What's this, why would we do this, is it core CCHM". That question was never answered. Here is the answer in full.
+>
+> **What it is.** In CCHM, composition fills a box: `comp^i A [φ ↦ u] a₀`. The part `[φ ↦ u]` is a *system*, a list of branches. Each branch is a term `u` given only on a face `φ`, the part of the cube where some dimensions are 0 or 1. Where two faces overlap, their branches have to agree. A term given only on a face is a *partial element*.
+>
+> **Is it core CCHM?**
+> - **Partial elements and systems are core.** CCHM is built on the judgment "Γ, φ ⊢ u : A", and composition, Glue and the Kan operations all take systems.
+> - **A type of partial elements is not core.** CCHM has no type `Partial φ A`. Systems appear only as syntax written inside `comp` and Glue. Cubical Agda added `IsOne φ` and `Partial φ A` as first-class types.
+> - So the proposal is not new semantics. It gives a type, in the checker, to something the theory already has as a judgment.
+>
+> **Why it came up.** The NbE (normalization by evaluation) work now in progress implements the object language's composition. In the object language, a composition carries a system with any number of branches, known only when the term is read. The host language checking that implementation accepts a system only as fixed syntax written out in the source. So the implementation can't build a composition whose number of branches depends on the term it's normalizing.
+>
+> The other session tried the workarounds. One branch works. Two or more overlapping branches fail, because the host checks their agreement at generic dimensions, where the branches are unrelated. The machine itself already represents systems as values; only the checker lacks a type for them. Adding `Partial` exposes in the checker what the machine already has, rather than adding something new.
+>
+> **Still open in that analysis:** faces as values need interval-valued terms, and the interval isn't a type in the host. Faces would then come only from bound dimensions, the way the normalizer's cubes already build them.
+>
+> The pending question is whether the host checker gets a type of partial elements, as Cubical Agda's `Partial φ A` does, so that composition with systems can be written for every object term. By that analysis it is forced: without it, that task can't be done in the typed language.
