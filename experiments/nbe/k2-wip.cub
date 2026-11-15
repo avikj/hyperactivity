@@ -137,3 +137,42 @@ cmpM : Mean (dext emp-k) (TV s-bool)
 cmpM = fmapM-i (dext emp-k) (TV s-bool) (TV s-bool) (λ ρ q → (fst q , comp (λ _ → Bool) (λ _ → [ ρ #0 = 1 ↦ snd q ]) (snd q))) trueM
 #same snd (fst cmpM one) = true
 #same snd (fst (snd cmpM) one) = true
+-- ---------------------------------------------------------------- a context restricted to a face clause
+-- A clause κ of a face (a conjunction of literals over the context's entries: (k , true) is entry k at
+-- 1, (k , false) at 0) restricts a context: the same skeleton, its cube along the context map sending
+-- the clause's dimensions to their endpoints and every other dimension to itself (face-ctx); the
+-- substitution from the restricted context back is that map with the identity on environments
+-- (face-sub), as sub-id is with the identity map. A branch of a system on a face is a derivation over
+-- each clause's restricted context; a meaning over the context restricted is subM along face-sub.
+lit-at : Conj → Word → Opt Bool
+lit-at lnil k = none
+lit-at (lcons l ls) k = if %weq (fst l) k then some (snd l) else lit-at ls k
+face-dnf : Conj → Word → DNF
+face-dnf κ k = case lit-at κ k return (λ _ → DNF) of
+  none → lcons (lcons (k , true) lnil) lnil
+  some b → (if b then lcons lnil lnil else lnil)
+cmap-by : (sk' sk : Lst Entry) → (Word → DNF) → CMap sk' sk
+cmap-by sk' lnil g = unit
+cmap-by sk' (lcons (e-ty a) sk) g = cmap-by sk' sk (λ k → g (%wsucc k))
+cmap-by sk' (lcons e-dim sk) g = (cmap-by sk' sk (λ k → g (%wsucc k)) , g #0)
+face-cmap : (sk : Lst Entry) → Conj → CMap sk sk
+face-cmap sk κ = cmap-by sk sk (face-dnf κ)
+face-ctx : CCtx → Conj → CCtx
+face-ctx Γ κ = (fst Γ , cmap-cube (fst Γ) (fst Γ) (face-cmap (fst Γ) κ) (CtxV (fst Γ)) (snd Γ))
+face-sub : (Γ : CCtx) (κ : Conj) → Sub (face-ctx Γ κ) Γ
+face-sub Γ κ =
+  (face-cmap (fst Γ) κ ,
+   dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (SubF (fst Γ) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (snd (face-ctx Γ κ)) ,
+   psym (Cube (dims (fst Γ)) (CtxV (fst Γ)))
+     (sub-base (face-ctx Γ κ) Γ (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (SubF (fst Γ) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (snd (face-ctx Γ κ))))
+     (snd (face-ctx Γ κ))
+     (pcat (Cube (dims (fst Γ)) (CtxV (fst Γ)))
+        (sub-base (face-ctx Γ κ) Γ (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (SubF (fst Γ) (fst Γ)) (λ γ → (γ , λ ρ → ρ)) (snd (face-ctx Γ κ))))
+        (cube-map (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (fst Γ)) (λ x → x) (snd (face-ctx Γ κ))) (snd (face-ctx Γ κ))
+        (dcube-map-of (dims (fst Γ)) (CtxV (fst Γ)) (SubF (fst Γ) (fst Γ)) (CtxV (fst Γ)) (λ γ' p → fst p) (λ γ → (γ , λ ρ → ρ)) (snd (face-ctx Γ κ)))
+        (cube-id (dims (fst Γ)) (CtxV (fst Γ)) (snd (face-ctx Γ κ)))))
+-- the composition over the line restricted to its end (direction 0 at 1): true at both ends
+cmpM1 : Mean (face-ctx (dext emp-k) (lcons (#0 , true) lnil)) (TV s-bool)
+cmpM1 = subM (face-ctx (dext emp-k) (lcons (#0 , true) lnil)) (dext emp-k) (TV s-bool) (face-sub (dext emp-k) (lcons (#0 , true) lnil)) cmpM
+#same snd (fst cmpM1 one) = true
+#same snd (fst (snd cmpM1) one) = true

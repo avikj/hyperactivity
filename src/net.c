@@ -768,7 +768,9 @@ static bool unbuilt(int k);
 static Port sub(Port prov, Subst *s);
 static Port sub_read(Port prov, Subst *s);
 static Dim atom_find(const Cell *v);
+static size_t ATDn;
 static Key *ncase_name(Cell *v);
+static Key *neutral_name(Cell *v);
 static bool atom_clause_any(const Subst *s);
 static Key *var_name(Key *k);
 static Key *port_name(Port p, int depth);
@@ -1060,7 +1062,7 @@ static bool fd_cell(Cell *v, FdSet *x, int depth) {
         return x->n <= 256;
     }
     if (owns_dnf(v->kind)) fd_dnf(x, v->p);
-    if (is_neutral(v->kind) && v->key) { Dim d = atom_find(v); if (d) fd_add(x, d); }
+    if (is_neutral(v->kind) && (v->key || ATDn)) { Dim d = atom_find(v); if (d) fd_add(x, d); }
     if (v->kind == V_PLAM) {
         FdSet *y = malloc(sizeof *y); y->n = 0; y->taint = false; y->inexact = false;
         bool ok = true;
@@ -1546,7 +1548,7 @@ static void subst_level(Cell *o, Cell *v) {
     /* a deferred operation read under a substitution: run, and its value substituted one level when
      * it arrives (the reader is reading it now: held again it would be read at once) */
     if (v->kind == V_DEFER) { link(sub_read(defer_build(v), s), out); cell_free(o); return; }
-    if (is_neutral(v->kind) && v->key) {
+    if (is_neutral(v->kind) && (v->key || atom_clause_any(s))) {
         /* a neutral read as an interval is its atom: a substitution moving the atom gives the image */
         Dim d = atom_find(v);
         const Dnf *r = d ? subst_get(s, d) : NULL;
@@ -1643,7 +1645,20 @@ static void subst_level(Cell *o, Cell *v) {
         free(f); cell_free(o); cell_free(v); return;
     }
     /* neutrals and reducible constructors become their operations again */
-    case V_NAPP: { Cell *a = cell(O_APP, 3); link(sub(v->port[1], s), P(a, 0)); link(sub(v->port[2], s), P(a, 1)); link(P(a, 2), out); era(v->port[3]); break; }
+    case V_NAPP: {
+        Key *hn = atom_clause_any(s) ? port_name(v->port[1], 0) : NULL;
+        bool on_var = hn && hn->tag == K_VAR;
+        if (hn) key_release(hn);
+        if (on_var) {
+            /* applied to a variable, it stays stuck: the same neutral, its argument and type substituted */
+            link(sub(v->port[2], s), P(v, 2)); link(sub(v->port[3], s), P(v, 3));
+            bool only_atoms = true;
+            for (uint32_t k = 0; k < s->n; k++) if (!is_atom_dim(s->d[k])) only_atoms = false;
+            if (!only_atoms && v->key) { Key *k2 = key_under(v->key, s); key_release(v->key); v->key = k2; }
+            link(P(v, 0), out); cell_free(o); return;
+        }
+        Cell *a = cell(O_APP, 3); link(sub(v->port[1], s), P(a, 0)); link(sub(v->port[2], s), P(a, 1)); link(P(a, 2), out); era(v->port[3]); break;
+    }
     case V_NFST: case V_NSND: { Cell *a = cell(v->kind == V_NFST ? O_FST : O_SND, 2); link(sub(v->port[1], s), P(a, 0)); link(P(a, 1), out); era(v->port[2]); break; }
     case V_NPROJ: { Cell *a = cell(O_PROJ, 2); a->a = v->a; link(sub(v->port[1], s), P(a, 0)); link(P(a, 1), out); era(v->port[2]); break; }
     case V_NPAPP: {
@@ -2142,12 +2157,12 @@ static int po_kind(int op) { return op <= PO_I64LT ? PT_I64 : op <= PO_U32LT ? P
  * A neutral with no key gets an atom of its own. */
 static uint64_t next_var;   /* fresh variables' levels (%var, %fresh) */
 typedef struct { Key *k; Dim d; } AtomE;
-static Dim *ATD; static size_t ATDn, ATDcap;   /* the atoms' dimensions */
+static Dim *ATD; static size_t ATDcap;   /* the atoms' dimensions (ATDn: how many) */
 static AtomE *AT; static size_t ATn, ATcap;
 static pthread_mutex_t atommu = PTHREAD_MUTEX_INITIALIZER;
 static Dnf *atom_of(Cell *v) {
     Key *k = eff_key(v);
-    if (!k && v->kind == V_NCASE) { k = ncase_name(v); if (k) v->key = key_retain(k); }
+    if (!k && (v->kind == V_NCASE || v->kind == V_NAPP)) { k = neutral_name(v); if (k) v->key = key_retain(k); }
     if (!k) return iv_atom(fresh_dim());
     if (!net_solo) pthread_mutex_lock(&atommu);
     Dim d = 0;
@@ -2192,11 +2207,14 @@ static Dnf *atom_clause(const Subst *s) {
 static bool atom_clause_any(const Subst *s) { for (uint32_t k = 0; k < s->n; k++) if (is_atom_dim(s->d[k])) return true; return false; }
 /* the atom a neutral was read as, if it has been (0 if not) */
 static Dim atom_find(const Cell *v) {
-    if (!v->key || !ATcap) return 0;
+    if (!ATcap) return 0;
+    Key *k = v->key ? key_retain(v->key) : neutral_name((Cell *)v);
+    if (!k) return 0;
     Dim d = 0;
     if (!net_solo) pthread_mutex_lock(&atommu);
-    for (size_t i = v->key->h & (ATcap - 1); AT[i].k; i = (i + 1) & (ATcap - 1)) if (AT[i].k == v->key) { d = AT[i].d; break; }
+    for (size_t i = k->h & (ATcap - 1); AT[i].k; i = (i + 1) & (ATcap - 1)) if (AT[i].k == k) { d = AT[i].d; break; }
     if (!net_solo) pthread_mutex_unlock(&atommu);
+    key_release(k);
     return d;
 }
 /* the name of what a port provides, seeing through a reference whose box has no name to the value
@@ -2239,18 +2257,34 @@ static Key *ncase_name(Cell *v) {
     free(c);
     return r;
 }
+/* a stuck application named by its head and argument (as a call is) */
+static Key *napp_name(Cell *v) {
+    Key *h = port_name(v->port[1], 0); if (!h) return NULL;
+    Key *a = port_name(v->port[2], 0); if (!a) { key_release(h); return NULL; }
+    Key *r = key2(K_APP, 0, NULL, h, a);
+    key_release(h); key_release(a);
+    return r;
+}
+/* the name of a stuck elimination or application as it is now (NULL if a part has none yet) */
+static Key *neutral_name(Cell *v) {
+    if (v->kind == V_NCASE) return ncase_name(v);
+    if (v->kind == V_NAPP) return napp_name(v);
+    return NULL;
+}
 /* A stuck elimination read as an interval before it can be named: its environment holds values not
  * yet built (a variable passed as the call computing it). They are built, and the reading waits for
  * them (the pair queued again), a bounded number of times; then it is named, or is an atom of its own */
 typedef struct { Cell *v; int n; } Await;
 static Await AW[64]; static pthread_mutex_t awmu = PTHREAD_MUTEX_INITIALIZER;
 static bool ncase_await(Cell *o, Cell *v) {
-    Key *k = ncase_name(v);
+    Key *k = neutral_name(v);
     if (k) { v->key = k; return false; }
-    int nm = v->x ? 1 : 0, ne = v->n - 3 - nm;
+    /* the ports its name is made of: a stuck elimination's environment, a stuck application's head
+     * and argument */
+    int nm = v->kind == V_NCASE && v->x ? 1 : 0;
+    int first = v->kind == V_NCASE ? 2 + nm : 1, last = v->kind == V_NCASE ? v->n - 1 : 3;
     bool waiting = false;
-    for (int e = 0; e < ne; e++) {
-        int pk = 2 + nm + e;
+    for (int pk = first; pk < last; pk++) {
         Port q = peek(sload(&v->port[pk]));
         if (!q || is_var(q)) { waiting = true; continue; }
         Cell *c = PC(q);
@@ -2521,11 +2555,11 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     int vk = v->kind;
-    if (is_neutral(vk) && iv_reader(o) && vk == V_NCASE && !v->key && ncase_await(o, v)) return;
+    if (is_neutral(vk) && iv_reader(o) && (vk == V_NCASE || vk == V_NAPP) && !v->key && ncase_await(o, v)) return;
     if (is_neutral(vk) && iv_reader(o)) {
         /* a neutral read as an interval: its atom */
         Cell *iv = cell(V_IV, 1); iv->p = atom_of(v);
-        if (vk == V_NCASE) await_done(v);
+        if (vk == V_NCASE || vk == V_NAPP) await_done(v);
         for (int k = 1; k < v->n; k++) era(v->port[k]);
         cell_free(v); v = iv; vk = V_IV;
     }

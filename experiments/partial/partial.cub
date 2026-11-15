@@ -83,3 +83,9 @@ eB : (b : Bool) → Partial (pick b) (true ≡ uB b)
 eB true = λ k → true
 eB false = []
 #same fst (join Bool true uB eB (cons false (cons true nil))) = true
+-- a face read from an environment of directions (ρ #0, a stuck application, is an atom, named by its
+-- head and argument): a branch whose type mentions the same application is at 1 on the face
+fa : (ρ : Word → I) (P : I → Type) (x : (i : I) → P i) → Partial (ρ #0) (P i1)
+fa ρ P x = [ ρ #0 = 1 ↦ x (ρ #0) ]
+fa2 : (ρ : Word → I) (P : I → Type) (x : (i : I) → P i) → Partial (ρ #0 ∧ ~ (ρ #1)) (P i1)
+fa2 ρ P x = [ (ρ #0 ∧ ~ (ρ #1)) = 1 ↦ x (ρ #0 ∨ ρ #1) ]
