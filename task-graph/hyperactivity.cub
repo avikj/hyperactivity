@@ -337,9 +337,12 @@ composition-with-systems = node "Composition with a system on the context's face
 -- checker's derivation of λ f. λ x. f x. The derivations carry the
 -- transports (der-tr, transport along PT-map and PT-lift) whose paths are constant at a concrete
 -- context but are compositions at the type the definitions are checked at; the normalizer then
--- composes through every field of every transported derivation. Next: the crash is a defect of the
--- machine to be reduced to a small term and fixed; the cost is removed by building derivations
--- whose indices need no transport at concrete contexts.
+-- composes through every field of every transported derivation. Resolved (2026-11-15): the defect
+-- was the machine's transport on a constructor of an indexed family, which moved a recursive field
+-- (a premise derivation, at its own index) along the outer index's line (fixed in src/lang.c; the
+-- small witness is at the composition finding of the trusted-part review). With it λ f. λ x. f x
+-- checks and normalizes to itself; check-wip.cub passes whole (1719 passed, 0 failed). Next: case on
+-- Bool in the checker, then dependent types through conv-E, then the checker into lib/nbe.cub.
 checker-returns-derivations : Node
 checker-returns-derivations = node "A checker takes raw codes to typing derivations (or a diagnostic), as the paper's §6.1 specifies." (cons typed-codes-after-swap nil)
 -- typed-codes-after-composition (2026-11-14): everything typed codes and normalization by evaluation
@@ -393,6 +396,15 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- generated text this finding names; a wrong field or index there gives exactly such a value of one
 -- type read as another. Checking that text against the schematic rule, or replacing it, is now
 -- needed by typed codes and normalization as well.
+-- Found and fixed (2026-11-15, src/lang.c, transport on a constructor): a recursive field was
+-- transported along the outer type's parameter lines rather than along its own type's arguments.
+-- For a parameterized type (a field List A of List A) the two agree; for an indexed family they do
+-- not. Smallest witness: data V : Type → Type with v1 : (A : Type) → A → V A and vu : Nat → V Nat →
+-- V Bool; transporting vu 0 (v1 Nat 1) along V (ua not) moved the inner v1's index equation (a path
+-- Nat ≡ Nat) to end at a Glue over Bool, a value of V Nat made into one of V Bool. Now each argument of
+-- the field's type is a line, with the parameters and the earlier fields at i ∧ j, which is CCHM's
+-- transport on a constructor read at the field's own type. This was one defect of the generated text;
+-- the rest of it is still unchecked against the schematic rule.
 -- Known (2026-11-12, at src/net.c): needs-work. The calculus's rules are the cases of this function
 -- (application, projections, path application, composition, Glue, interval and faces, systems,
 -- higher-constructor boundaries, hcomp, transport, case: about 650 lines), the face algebra

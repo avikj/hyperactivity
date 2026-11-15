@@ -466,3 +466,6 @@ tcode-of c t r =
 -- true checks at Bool and is its own normal form; true applied to false is refused
 #same tcode-of c-true sbool (ck c-true nil (mchk sbool)) = some c-true
 #same tcode-of (capp c-true c-false) sbool (ck (capp c-true c-false) nil (mchk sbool)) = none
+-- λ f. λ x. f x checks at (Bool → Bool) → Bool → Bool and is its own normal form
+#same tcode-of (clam (clam (capp (cvar #1) (cvar #0)))) (sarr (sarr sbool sbool) (sarr sbool sbool))
+  (ck (clam (clam (capp (cvar #1) (cvar #0)))) nil (mchk (sarr (sarr sbool sbool) (sarr sbool sbool)))) = some (clam (clam (capp (cvar #1) (cvar #0))))

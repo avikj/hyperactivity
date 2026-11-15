@@ -4492,8 +4492,19 @@ static void toplevel_in(Node *f) {
                     bool rec = (!A->list && !strcmp(A->s, D)) || (A->list && A->n >= 1 && !A->it[0]->list && !strcmp(A->it[0]->s, D));
                     fprintf(m, "(let %%t%d (plam %%i ", k);
                     if (rec) {
+                        /* along the field's own type D a…: each argument a line, the parameters
+                         * and the earlier fields at i ∧ j (an indexed family's recursive field
+                         * sits at its own index, not at the outer one) */
+                        if (np && (!A->list || A->n - 1 != np)) die("a recursive field needs all its type's arguments:", cn);
                         fprintf(m, "(%%transD %s (| %%psi (= %%i 0))", D);
-                        for (int q = 0; q < np; q++) fprintf(m, " (plam %%j (@ %%z%d (/\\ %%i %%j)))", q);
+                        for (int q = 0; q < np; q++) {
+                            fprintf(m, " (plam %%j");
+                            for (int p = 0; p < np; p++) fprintf(m, " (let %s (@ %%z%d (/\\ %%i %%j))", pn[p], p);
+                            for (int p = 0; p < k; p++) { fputs(" (let ", m); PN(x->fn[p]); fprintf(m, " (@ %%t%d (/\\ %%i %%j))", p); }
+                            fputc(' ', m); PN(A->it[q + 1]);
+                            for (int p = 0; p < np + k; p++) fputc(')', m);
+                            fputc(')', m);
+                        }
                         fputc(' ', m); PN(x->fn[k]); fputc(')', m);
                     } else {
                         fprintf(m, "(comp (plam %%j");
