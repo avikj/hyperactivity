@@ -1,7 +1,5 @@
 # Hyperactive Interaction, in the words of the human superorganism
 
-**Paper delta content: to be incorporated into the paper** (listed in `docs/to-be-incorporated-into-paper.md`, “Standing pieces to be incorporated”).
-
 Title by Avik (2026-11-15). Written by Claude on 2026-11-15 at Avik's request ("deep free generation through the space of
 meaning & words etymology on the above & project"), and preserved as is at his direction: "This
 whole work of yours is essential. It is comprehensive & singular."

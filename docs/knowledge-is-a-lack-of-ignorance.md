@@ -1,7 +1,5 @@
 # Knowledge is a lack of ignorance: the divisions the primitive removes
 
-**Paper delta content: to be incorporated into the paper** (listed in `docs/to-be-incorporated-into-paper.md`, “Standing pieces to be incorporated”).
-
 Written by Claude on 2026-11-15 in answer to Avik's question "On which scientific field divisions
 does this remove", and preserved as is at his direction: "Preserve this - this is Essential!!
 Extremely essential!!" Avik's statement it answers (2026-11-15 09:55 UTC):

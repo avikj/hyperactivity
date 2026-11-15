@@ -93,8 +93,8 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   the rest.
 - **Use the organization; never sprawl** (Avik, 2026-11-15 19:38–19:39 UTC). Material for the paper
   goes into `docs/to-be-incorporated-into-paper.md`. A piece that stands on its own keeps its own
-  document, marked clearly as paper delta content and listed in that file's “Standing pieces to be
-  incorporated”; nothing essential is left as a file nothing points to.
+  document, and the paper delta points to it under “Standing pieces to be incorporated”; nothing
+  essential is left as a file nothing points to.
 - **Every session is continuous knowledge work** (Avik, 2026-11-14). Nothing Avik says is casual
   conversation: he works all day, the only bound on getting the work out is his words per minute
   with agents amplifying them, and the only friction is an agent's incorrectness. Every message,
@@ -1738,3 +1738,11 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-15 19:39 UTC
 
 > No - actually the essays were good to keep but also ensure it’s marked clearly as paper delta content. Obviously this content shouldn’t just be in a temporary scratch delta file - it stands on its own
+
+#### 2026-11-15 20:00 UTC
+
+> “Each essay opens with "Paper delta content: to be incorporated into the paper"” what are you even saying??
+>
+> There is a paper delta file - it should point to essay files to incorporate into paper .
+>
+> wtf be clear
