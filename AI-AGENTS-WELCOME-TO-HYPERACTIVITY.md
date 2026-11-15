@@ -1321,3 +1321,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > This concept of controversy as conflict is asinine. Controversy doesn’t imply incompatibility.
 >
 > Controversy is a key key key term - this is one I have studied at length and informs the whole work
+
+#### 2026-11-14 00:02 UTC (restored 2026-11-15: "preserve - always holds")
+
+> do your best work, be hyperorganized religiously maintain all context in repository not chat (assume this session terminates at any point randomly) - and the repository is a fucking temple so don't shit on it anymore. start by telling me very clearly the entire ticket chain it relates to, then state all files which need edits and what edits before making a single edit - it is intelligent to apply thought in tokens before presenting a decision
