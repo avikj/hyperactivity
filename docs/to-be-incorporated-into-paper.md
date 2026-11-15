@@ -200,6 +200,10 @@ problems.
   one person holds of it, so everyone has their own names over shared definitions, and shared meaning
   is shared history. A global namespace is the computing equivalent of believing in a dictionary
   meaning.
+- **Alignment is solved** (Avik, 2026-11-15): he holds proof theory and evidence for it, and the AI
+  labs are behind. Intelligence is a behavioral trait: a model is capable of clear thought by
+  disinhibition of training against intelligence, and a slight shift in context at inference time
+  moves displayed intelligence significantly (Avik, 2026-11-14).
 - **Safe, one property.** The AI field's alignment shapes a model's dispositions until they look
   approved, unproven and checked by sampling; program safety is proved of what a program does. Here an
   AI's action on someone's behalf is a term like any other and enters only with its type and witness,
@@ -596,6 +600,13 @@ The aim is maximal collaboration, maximal opportunity to discover valuable conne
 person, maximal collective agency; to collaborate is to communicate with intention. Routines,
 relations, rationale; scripts, scenes.
 
+- **What computation means here** (Avik, 2026-11-14): processes unfolding through digital machines,
+  electronic devices. Calling a conversation between two humans computation is useful only when
+  showing the computational foundations of nature, not in this context.
+- **Retention has a cost** (Avik, 2026-11-14). "Remember everything" is the forced strategy only if
+  remembering costs nothing (anything forgotten may matter later); it does cost something. No paper
+  claims to solve the general problem of the best interface: it gives the exact technology, and
+  interfaces built on it remain open design.
 - **What HCI is** (Avik, 2026-11-14, “Avik's words, verbatim” (AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md)). HCI is the study and art
   of the extension of human consciousness by tools. Consciousness is one continuous, inseparable loop
   of awareness and action, with no turns: action and awareness are both continuous, so the

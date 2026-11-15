@@ -91,6 +91,14 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   material for the paper in `docs/to-be-incorporated-into-paper.md`.
 - **The README holds only setup and installation,** and hands off to `hyperactive`, which teaches
   the rest.
+- **Before any edit, state the whole chain of goals it serves and every file to change, and how**
+  (Avik, 2026-11-14): thought goes into tokens before an action is presented.
+- **Status is plain** (Avik, 2026-11-14): what is being done, what earlier stretch of work it
+  continues and why that matters, when value lands and what completes it; never a list of internal
+  names and numbers. A numbered list of work carries derived line counts, not guesses.
+- **Free generation means no plan beyond the next sentence** (Avik, 2026-11-14 and 2026-11-15). When
+  Avik asks for open thinking or writing at length, each sentence follows from the last; no outline,
+  no announced structure.
 - **Use the organization; never sprawl** (Avik, 2026-11-15 19:38–19:39 UTC). Material for the paper
   goes into `docs/to-be-incorporated-into-paper.md`. A piece that stands on its own keeps its own
   document, and the paper delta points to it under “Standing pieces to be incorporated”; nothing
