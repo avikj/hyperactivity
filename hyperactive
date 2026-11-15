@@ -29,43 +29,29 @@ import contextlib, hashlib, io, os, re, subprocess, sys
 ROOT = os.path.dirname(os.path.realpath(__file__))
 MACHINE = os.path.join(ROOT, 'build', 'cubical')
 TASKS = os.path.join(ROOT, 'tools', 'task-graph.py')
-PAPER = os.path.join(ROOT, 'docs', 'hyperactivity_v31.pdf')  # historical snapshot only
-PAPER_SOURCE = os.path.join(ROOT, 'docs', 'Hyperactivity_Current_Draft.md')
 ONBOARDING = os.path.join(ROOT, 'docs', 'onboarding.cub')
 CHUNK = 8000   # characters per chunk of the walk: small enough that no agent harness truncates it
 
 
-def paper_text():
-    """The paper: the editable manuscript (docs/Hyperactivity_Current_Draft.md, AGENTS.md) read afresh
-    whenever it is present; until its source is imported, the historical v31 PDF, labelled as such,
-    its extraction cached by content."""
-    if os.path.exists(PAPER_SOURCE):
-        with open(PAPER_SOURCE, encoding='utf-8') as f:
-            return f.read()
-    notice = ('SOURCE IMPORT REQUIRED: docs/Hyperactivity_Current_Draft.md is absent.\n'
-              'The following is the historical v31 PDF, not a current editable draft.\n'
-              'Import the exact source before editing the manuscript; do not reconstruct it '
-              'from PDF extraction or maintain another Library copy.\n\n')
-    if not os.path.isfile(PAPER):
-        sys.exit(notice + 'The historical PDF is also absent.')
-    out = os.path.join(ROOT, 'build', 'paper.txt')
-    stamp = out + '.sha256'
-    with open(PAPER, 'rb') as f:
-        digest = hashlib.sha256(f.read()).hexdigest()
-    cached = ''
-    if os.path.isfile(stamp):
-        with open(stamp, encoding='ascii') as f:
-            cached = f.read().strip()
-    if not os.path.isfile(out) or cached != digest:
+def pdf_text(path, data):
+    """a PDF the onboarding value points to, as text: extracted once per content (the extraction is
+    cached under its SHA-256), and labelled as a rendered snapshot, not the editable manuscript"""
+    notice = ('SOURCE IMPORT REQUIRED: the paper reaches onboarding as a rendered PDF snapshot, '
+              f'{os.path.relpath(path, ROOT)}, not the current editable draft. When the editable '
+              'source docs/Hyperactivity_Current_Draft.md is imported, its pointer replaces this one '
+              'in docs/onboarding.cub; do not reconstruct the source from this extraction or keep '
+              'another Library copy.\n\n')
+    digest = hashlib.sha256(data).hexdigest()
+    out = os.path.join(ROOT, 'build', 'pdf-' + digest + '.txt')
+    if not os.path.isfile(out):
         os.makedirs(os.path.dirname(out), exist_ok=True)
         try:
-            r = subprocess.run(['pdftotext', '-layout', PAPER, out], capture_output=True, text=True)
+            r = subprocess.run(['pdftotext', '-layout', path, out + '.part'], capture_output=True, text=True)
         except FileNotFoundError:
-            sys.exit('reading the historical PDF needs pdftotext (poppler)')
+            sys.exit('reading a PDF needs pdftotext (poppler)')
         if r.returncode != 0:
-            sys.exit('reading the historical PDF failed:\n' + r.stderr)
-        with open(stamp, 'w', encoding='ascii') as f:
-            f.write(digest + '\n')
+            sys.exit(f'reading {os.path.relpath(path, ROOT)} failed:\n' + r.stderr)
+        os.replace(out + '.part', out)
     with open(out, encoding='utf-8') as f:
         return notice + f.read().replace('\f', '\n\n')
 
@@ -77,33 +63,30 @@ def tool(*args):
     return r.stdout
 
 
-def read(path):
-    with open(path, encoding='utf-8') as f: return f.read()
+def task_graph_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('task_graph', TASKS)
+    tg = importlib.util.module_from_spec(spec); spec.loader.exec_module(tg)
+    return tg
 
 
-def pointers(path, name):
-    """the documents a List Document value of the language points to, in order: `document "p"` is
-    one pointer (p relative to the file), `list-append xs ys` the pointers of xs then of ys, a name
-    the value bound to it in this file or a file it imports"""
-    with open(path, encoding='utf-8') as fh: src = fh.read()
-    m = re.search(r'^' + re.escape(name) + r'\s*=\s*\n?(.*?)(?=^\S|\Z)', src, re.M | re.S)
-    if not m:
-        for imp in re.findall(r'^import "([^"]+)"', src, re.M):
-            f = os.path.normpath(os.path.join(os.path.dirname(path), imp))
-            if f.startswith(ROOT) and os.path.exists(f) and re.search(r'^' + re.escape(name) + r'\s*=', read(f), re.M):
-                return pointers(f, name)
-        sys.exit(f'hyperactive: no value {name} in {os.path.relpath(path, ROOT)} or what it imports')
-    out = []
-    for doc, ref in re.findall(r'document "([^"]+)"|list-append\s+([^\s()]+)', m.group(1)):
-        if doc:
-            f = os.path.realpath(os.path.join(os.path.dirname(path), doc))
-            if os.path.commonpath((os.path.realpath(ROOT), f)) != os.path.realpath(ROOT):
-                sys.exit('onboarding document leaves the repository: ' + doc)
-            if not os.path.isfile(f):
-                sys.exit(f'missing document in {os.path.relpath(path, ROOT)}: {doc}')
-            out.append(f)
-        else: out += pointers(path, ref)
-    return out
+def onboarding_documents():
+    """the documents of the value onboarding (docs/onboarding.cub), in order, as the machine
+    evaluates it: (path from the repository root, sha256 hex)"""
+    build()
+    return task_graph_module().documents(ONBOARDING, 'onboarding')
+
+
+def served(path, digest):
+    """the bytes of a document, exactly those the value identifies: a file whose SHA-256 is not the
+    value's digest is not served"""
+    full = os.path.join(ROOT, path)
+    with open(full, 'rb') as f:
+        data = f.read()
+    if hashlib.sha256(data).hexdigest() != digest:
+        sys.exit(f'{path} changed while the walk was being read (its SHA-256 is not the one the '
+                 'value onboarding holds); run hyperactive again')
+    return data
 
 
 HEADING = re.compile(r'^(#{1,3} |\s*(\d+(\.\d+)*|[A-Z])\.?\s{1,3}[A-Z][^.]{2,80}$)')
@@ -138,18 +121,15 @@ def chunks(text):
 
 
 def walk_chunks():
-    """the walk, in order: (title, text) for every chunk. The documents are the pointers of the
-    value `onboarding` (docs/onboarding.cub): the welcome file, the paper, the Labs note, the pieces of
-    the paper delta (docs/paper-delta.cub), the word list, the etymologies. Then the task graph and the
-    open work, generated."""
+    """the walk, in order: (title, text) for every chunk. The documents are those of the value
+    `onboarding` (docs/onboarding.cub) as the machine evaluates it, each served only if its bytes are
+    the ones the value identifies: AGENTS.md, the welcome file, the paper, the Labs note, the pieces of
+    the paper delta (docs/paper-delta.cub), the word list, the etymologies. Then the task graph and
+    what can be taken up, generated."""
     out = []
-    for path in pointers(ONBOARDING, 'onboarding'):
-        rel = os.path.relpath(path, ROOT)
-        if path.endswith('.pdf'):
-            text = paper_text()   # the editable source when present, else the labelled PDF
-            if os.path.exists(PAPER_SOURCE): rel = os.path.relpath(PAPER_SOURCE, ROOT)
-        else:
-            with open(path, encoding='utf-8') as f: text = f.read()
+    for rel, digest in onboarding_documents():
+        data = served(rel, digest)
+        text = pdf_text(os.path.join(ROOT, rel), data) if rel.endswith('.pdf') else data.decode('utf-8')
         cs = chunks(text)
         for j, c in enumerate(cs):
             out.append((rel + (f', part {j + 1} of {len(cs)}' if len(cs) > 1 else ''), c))
@@ -221,9 +201,7 @@ def open_work():
     for l in out[1:]:
         if l.startswith(' layer 2') or l.startswith('waiting'): break
         first.append(l)
-    import importlib.util
-    spec = importlib.util.spec_from_file_location('task_graph', TASKS); tg = importlib.util.module_from_spec(spec); spec.loader.exec_module(tg)
-    prog = tg.in_progress()
+    prog = task_graph_module().in_progress()
     if prog:
         print('In progress:\n')
         for n in prog: print(tool('show', n))

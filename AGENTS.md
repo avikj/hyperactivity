@@ -22,8 +22,10 @@ The manuscript has **one editable source**, `docs/Hyperactivity_Current_Draft.md
 N-part work. The former first paper is Part I, not a second current manuscript. Import the exact
 existing source before editing it; do not reconstruct its mathematics from a PDF or a synopsis.
 Numbered PDFs are historical/rendered snapshots, not the authority for current writing. Preserve
-existing historical citations. Onboarding must read the editable source directly whenever it is
-present; its explicit historical-PDF fallback is not a claim that source migration is complete.
+existing historical citations. Onboarding reads the editable source as soon as it is
+imported: its pointer replaces the PDF's in the value onboarding (`docs/onboarding.cub`), in the
+commit that imports it. Until then the PDF is served labelled a snapshot, which is not a claim that
+source migration is complete.
 
 Every exchange goes where it acts, in the same turn:
 

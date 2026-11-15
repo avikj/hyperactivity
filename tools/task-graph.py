@@ -28,7 +28,7 @@ each file no file imports (minutes when the x86 model is among them); the result
 
 Run from the repository root or anywhere inside it.
 """
-import os, re, signal, subprocess, sys
+import hashlib, os, re, signal, subprocess, sys
 signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -109,8 +109,78 @@ def graph():
     return out, roots, pairs('after')
 
 
+def documents(file, name):
+    """the documents a value of type List Document points to, in order, as the machine evaluates it:
+    [(path from the repository root, sha256 hex)]. The machine reads `file` with its imports and
+    shows the value's normal form, a list of `document-at path digest`, each a List Word of bytes."""
+    machine = os.path.join(ROOT, 'build', 'cubical')
+    os.makedirs(os.path.join(ROOT, 'build'), exist_ok=True)
+    # the result is kept under the content it depends on: the machine, every file the evaluation
+    # reads (file, its imports, the files their `text` forms load), and the bytes of every document
+    # the result names, checked against its digests; any change there evaluates it again
+    key = hashlib.sha256(name.encode())
+    for f in [machine] + reads(file):
+        with open(f, 'rb') as fh: key.update(f.encode() + b'\0' + hashlib.sha256(fh.read()).digest())
+    kept = os.path.join(ROOT, 'build', 'documents-' + key.hexdigest() + '.txt')
+    if os.path.isfile(kept):
+        with open(kept, encoding='utf-8') as fh: docs = [tuple(l.split('\t')) for l in fh.read().splitlines()]
+        if all(os.path.isfile(os.path.join(ROOT, p)) and file_digest(os.path.join(ROOT, p)) == d for p, d in docs):
+            return docs
+    probe = os.path.join(ROOT, 'build', 'documents-' + re.sub(r'[^\w-]', '_', name) + '.cub')
+    with open(probe, 'w', encoding='utf-8') as f:
+        f.write(f'import "{os.path.abspath(file)}"\n#show {name}\n')
+    r = subprocess.run([machine, probe], cwd=ROOT, capture_output=True, text=True,
+                       env=dict(os.environ, CUBICAL_NOCACHE='1'))
+    if r.returncode != 0 or re.search(r'^FAIL', r.stdout, re.M):
+        sys.exit(f'the machine could not evaluate {name} ({os.path.relpath(file, ROOT)}):\n' + r.stdout[-3000:] + r.stderr[-2000:])
+    docs = decode_documents(r.stdout, name)
+    with open(kept + '.part', 'w', encoding='utf-8') as fh: fh.write(''.join(f'{p}\t{d}\n' for p, d in docs))
+    os.replace(kept + '.part', kept)
+    return docs
+
+
+def file_digest(path):
+    with open(path, 'rb') as fh: return hashlib.sha256(fh.read()).hexdigest()
+
+
+def reads(file):
+    """the files the machine reads for `file`: it, its imports transitively, and what their
+    `text "path"` forms load (paths relative to the file naming them)"""
+    seen, todo = [], [os.path.abspath(file)]
+    while todo:
+        f = todo.pop()
+        if f in seen or not os.path.isfile(f): continue
+        seen.append(f)
+        with open(f, encoding='utf-8', errors='replace') as fh: src = fh.read()
+        for q in re.findall(r'^import "([^"]+)"', src, re.M) + re.findall(r'\btext "([^"]+)"', src):
+            todo.append(os.path.normpath(os.path.join(os.path.dirname(f), q)))
+    return sorted(seen)
+
+
+def decode_documents(shown, name):
+    """the (path, digest) pairs of a shown normal form `name = cons (document-at P D) (… nil)`"""
+    m = re.search(r'^' + re.escape(name) + r'\n\s*= (.*?)(?=^\S|\Z)', shown, re.M | re.S)
+    if not m:
+        sys.exit(f'the machine showed no value for {name}')
+    out = []
+    for part in m.group(1).split('document-at')[1:]:
+        words = re.findall(r'#(\d+)|(nil)', part)
+        lists, cur = [], []
+        for byte, nil in words:
+            if nil:
+                lists.append(bytes(cur).decode('utf-8')); cur = []
+                if len(lists) == 2: break
+            else: cur.append(int(byte))
+        if len(lists) != 2:
+            sys.exit(f'{name}: a document-at whose path and digest are not both shown')
+        out.append((lists[0], lists[1]))
+    return out
+
+
 def essential_context():
-    """documents (name -> path relative to the repository) and essential-context (node -> names)"""
+    """documents (name -> path relative to the repository) and essential-context (node -> names);
+    an entry naming a value of type List Document (the root's: onboarding, docs/onboarding.cub) is
+    that value's documents, as the machine evaluates it"""
     src = open(GRAPH, encoding='utf-8').read()
     base = os.path.dirname(GRAPH)
     docs = {n: os.path.relpath(os.path.normpath(os.path.join(base, q)), ROOT)
@@ -118,6 +188,14 @@ def essential_context():
     ec = {}
     m = re.search(r'^essential-context = (.*)$', src, re.M)
     if m: ec = pair_list(m.group(1))
+    for node, names in ec.items():
+        expanded = []
+        for n in names:
+            if n in docs: expanded.append(n)
+            else:
+                for path, _ in documents(GRAPH, n):
+                    docs[path] = path; expanded.append(path)
+        ec[node] = expanded
     return docs, ec
 
 

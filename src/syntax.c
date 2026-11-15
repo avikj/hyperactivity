@@ -1,5 +1,6 @@
 /* Layer: core: the machine implementing the primitive language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 #include <setjmp.h>
+#include <sys/stat.h>
 /* syntax.c — the surface language: tokens, layout, parsing into the core forms, and printing the
  * core forms back in the surface language. Included by lang.c (it uses its Node and tables).
  *
@@ -508,7 +509,7 @@ static Node *p_atom(void) {
          * declaration can refer to a document (lib/usage/document.cub; the task graph's essential context,
          * “The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md)). The path is relative to the file being read, as import's is. The
          * file must exist: reading fails here otherwise, as a reference to an undefined name would. The
-         * term is document-at "path" "sha256 of the file's bytes, in hex", so a definition mentioning a
+         * term is document-at "path from the repository root" "sha256 of the file's bytes, in hex", so a definition mentioning a
          * document has a content key that changes exactly when the document's content does. */
         NX(); Tok *pt = NX();
         char *full = pt->s;
@@ -521,7 +522,21 @@ static Node *p_atom(void) {
         fclose(fd);
         unsigned char dg[32]; sha256_final(&h, dg);
         char hex[65]; for (int i = 0; i < 32; i++) sprintf(hex + 2 * i, "%02x", dg[i]);
-        return lst(3, nsym("document-at"), text_term(pt->s), text_term(hex));
+        /* the path the term holds is relative to the repository root (2026-11-15): the nearest
+         * directory above the file holding .git, so the value names its file on its own, wherever it
+         * is written; outside a repository, the path as written */
+        char *rel = pt->s; char *rp = realpath(full, NULL);
+        if (rp) {
+            char *d = strdup(rp); char *slash;
+            while ((slash = strrchr(d, '/')) && slash != d) {
+                *slash = 0;
+                char *g = malloc(strlen(d) + 6); sprintf(g, "%s/.git", d);
+                struct stat st; int found = stat(g, &st) == 0; free(g);
+                if (found) { rel = strdup(rp + strlen(d) + 1); break; }
+            }
+            free(d); free(rp);
+        }
+        return lst(3, nsym("document-at"), text_term(rel), text_term(hex));
     }
     if (x_is(t, "text") && P1()->k == X_STR) {
         /* text "path" (2026-11-15, Avik: "a raw bytes file ... so the string can just be loaded by
