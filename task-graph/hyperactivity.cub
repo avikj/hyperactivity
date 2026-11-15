@@ -390,6 +390,22 @@ path-free-transport = node "Transport along a line of types at every path-free s
 -- themselves need no change: the host composition's meaning may ignore the system (the boundary rule
 -- holds up to the branch's path, and Der's equalities are paths), and the formal composition's normal
 -- form carries the face and the branches' normal forms; what is open is computability's stability.
+-- Analysis (2026-11-15) of the routes to that stability. (1) Re-evaluating a neutral under a face map
+-- by fund on its own derivation (the variables reflected at the restricted context) does not
+-- terminate as a definition: fund's composition case needs the stability, the stability calls fund
+-- on a derivation that is not a subterm of fund's argument, and it needs the types of an arbitrary
+-- context's variables (a TCtx), which fund's Kripke quantification does not carry. (2) The smallest
+-- change that works: a world is a face restriction followed by a renaming, FWorld Δ' Δ = (κ : Conj) ×
+-- World Δ' (face-ctx Δ κ), every Kripke clause of CompE quantified over FWorld instead of World.
+-- face-ctx keeps the skeleton, so codes do not change under the face part, and NN and Der stay closed
+-- under it (ren-nn and ren-der get a face part) provided each rule's meaning commutes with the face
+-- substitution. All rules do by subM-fmap and the binder lemmas except path application, whose crux
+-- is: over face-ctx Δ κ, path application at f of a meaning restricted along face-sub equals path
+-- application at f with κ's dimensions sent to their endpoints (the restricted meaning is degenerate
+-- in κ's directions), which with papp-subst gives the restricted path application. With it, a
+-- composition's branches become computable at the substitution followed by each clause's face
+-- restriction, Π's and PathP's clauses are kept along FWorld by composing FWorlds (a face past a
+-- renaming is the renamed face), and fund's composition case is written as the Bool slice's is.
 -- Known (2026-11-14, tested): the host's comp at Bool or Nat with a nonempty system on a variable is
 -- a formal composition (hcompD), and a case or recursor on a formal composition reduces to the
 -- formal composition of its branches along the motive at the composition's fill (eliminators
