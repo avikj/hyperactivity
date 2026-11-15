@@ -30,3 +30,5 @@ here. `docs/word-list.md` is a separate file, whose lines Avik gives himself.
 - knowledge ⟨Middle English knowleche, from Old English cnāwan "to know" ← Proto-Indo-European *ǵneh₃- "to know", the root of Greek gnōsis and Latin (g)nōscere⟩  (raised 2026-11-15)
 - ignorance ⟨Latin ignōrantia, from ignōrāre "not to know", from in- "not" + gnārus "knowing" ← Proto-Indo-European *ǵneh₃- "to know": the same root as knowledge, negated⟩  (raised 2026-11-15)
 - cut ⟨Middle English cutten, of uncertain origin, probably North Germanic⟩  (raised 2026-11-15)
+- controversy ⟨Latin contrōversia, from contrōversus "turned toward the opposite side", contrā + versus "turned", from vertere "to turn"; in Roman rhetoric a controversia was the exercise of arguing a case from both sides⟩  (raised 2026-11-15)
+- consensus ⟨Latin cōnsēnsus, from cōnsentīre "to feel together, to agree", con- + sentīre "to feel, to perceive"; the Latin counterpart of Greek syn- + aisthēsis⟩  (raised 2026-11-15)

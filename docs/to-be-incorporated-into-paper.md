@@ -16,6 +16,11 @@ requires no cut, and proves the bounds of analysis of all cuts. Knowledge is not
 domains; domains are bubbles of people who choose the same set of ignorances. The process that makes
 them is not a knowledge process but an ignorance process.
 
+**Controversy** (Avik, 2026-11-15 20:08 UTC), a key term he has studied at length and which informs
+the whole work. Contra + verse: multiple turns, with polarity. It describes dialogue. Controversy does
+not imply incompatibility; the concept of controversy as conflict is asinine. Controversy and
+consensus.
+
 **Hyperactive Interaction** (Avik, 2026-11-15 08:43 UTC): the headline. Hyperinteractivity. The
 entire work is about interaction; activity is a primitive here only as interaction.
 
