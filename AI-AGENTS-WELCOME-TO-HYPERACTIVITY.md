@@ -2,14 +2,17 @@
 
 Avik Jain's instructions to the AI agents who work on hyperactivity, and his words verbatim.
 
-An agent arrives through `hyperactive`, and it is how the work is done: it walks the agent through
-what to read, in order, and then shows what can be worked on. The paper, the Hyperactive Labs note (`docs/Hyperactive_Labs.md`), the scratch space for the next
-draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-list.md`) are read in full. Status lives only in the task graph, which
-`hyperactive` shows; nothing else records it.
+An agent arrives through `hyperactive`, and it is how the work is done: `hyperactive` begins the
+walk, and `hyperactive next` and `hyperactive prev` move through it one chunk at a time, each small
+enough to arrive whole. What is walked is the value `onboarding` (`docs/onboarding.cub`): this file,
+the paper, the Hyperactive Labs note (`docs/Hyperactive_Labs.md`), every piece the paper delta
+(`docs/paper-delta.cub`) points to, the word list (`docs/word-list.md`) and the etymologies
+(`docs/etymologies.md`), all in full; then the task graph and what can be taken up. Status lives
+only in the task graph, which `hyperactive` shows; nothing else records it.
 
 ## How to work
 
-- **Read the paper (the copy described under “Citing sources” below) and `docs/to-be-incorporated-into-paper.md` before giving any account of the project.** Reason at length rather than
+- **Read the paper (the copy described under “Citing sources” below) and every piece the paper delta (`docs/paper-delta.cub`) points to before giving any account of the project.** Reason at length rather than
   presenting conclusions first.
 - **Ask questions only of yourself and answer them in the next sentence.** Never ask Avik what he has
   answered. The only questions for him are constructions only he can answer.
@@ -96,7 +99,7 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   projects its own variable, as `rn-papp` and `nn-plam` do (2026-11-15).
 - **Context lives in the repository, not in chat.** A session can end at any moment, so what it is
   doing, has found and has decided is written as it happens: facts at the goal they concern in the task graph,
-  material for the paper in `docs/to-be-incorporated-into-paper.md`.
+  material for the paper in a piece the paper delta points to.
 - **The README holds only setup and installation,** and hands off to `hyperactive`, which teaches
   the rest.
 - **Before any edit, state the whole chain of goals it serves and every file to change, and how**
@@ -107,15 +110,18 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
 - **Free generation means no plan beyond the next sentence** (Avik, 2026-11-14 and 2026-11-15). When
   Avik asks for open thinking or writing at length, each sentence follows from the last; no outline,
   no announced structure.
-- **Use the organization; never sprawl** (Avik, 2026-11-15 19:38–19:39 UTC). Material for the paper
-  goes into `docs/to-be-incorporated-into-paper.md`. A piece that stands on its own keeps its own
-  document, and the paper delta points to it under “Standing pieces to be incorporated”; nothing
-  essential is left as a file nothing points to.
+- **Use the organization; never sprawl** (Avik, 2026-11-15). The paper delta, `docs/paper-delta.cub`,
+  is a set of pointers (`document "path"`: a path and its content hash) and nothing else, no
+  descriptions. Each piece it points to is work written at a distinct time and not yet in the paper;
+  multiplicity exists only for that reason, so a piece is never fragmented. New material written at a
+  later time is a new piece in `docs/`, and a pointer to it is added to the delta; it is not appended
+  to an existing piece. When the paper absorbs a piece, its pointer leaves. Nothing essential is left
+  as a file nothing points to.
 - **Every session is continuous knowledge work** (Avik, 2026-11-14). Nothing Avik says is casual
   conversation: he works all day, the only bound on getting the work out is his words per minute
   with agents amplifying them, and the only friction is an agent's incorrectness. Every message,
   personal context included, is work product. In the same turn, its content goes where it acts:
-  material for the paper into `docs/to-be-incorporated-into-paper.md`, in his terms; a fact about a
+  material for the paper into a piece the paper delta (`docs/paper-delta.cub`) points to, in his terms; a fact about a
   goal into that goal's statement in the task graph; an instruction to agents into this section; and,
   when he writes at length (only then; not every message), the message itself, verbatim, into
   “Avik's words, verbatim” below. An insight a session reaches with him

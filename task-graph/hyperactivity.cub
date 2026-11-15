@@ -962,10 +962,8 @@ paper-matches-implementation = node "Every implementation detail the paper state
 -- untyped helpers) states none: whether each stays is open.
 -- Known (2026-11-14, Avik): `hyperactive` is the primary work interface and is built first, since it
 -- accelerates all further work; the README holds only setup and hands off to it. Done (2026-11-14):
--- `hyperactive` with no argument begins the walk, a deterministic sequence of steps (Avik's
--- instructions to agents, the paper in full, docs/to-be-incorporated-into-paper.md in full, his words verbatim, the
--- task graph, then what can be taken up), each printed whole and ending with the one command for the
--- next; `hyperactive def NAME` reads a definition by name with its statement and what uses it, with
+-- `hyperactive` with no argument begins the walk (now over the value onboarding, docs/onboarding.cub,
+-- below); `hyperactive def NAME` reads a definition by name with its statement and what uses it, with
 -- no file or position needed. Not yet: writing through `hyperactive`, code read only by query (the
 -- walk and def still print file paths), and onboarding into the core code.
 -- Known (2026-11-15, Avik): the design of onboarding and of the paper delta. Everything in the
@@ -978,7 +976,15 @@ paper-matches-implementation = node "Every implementation detail the paper state
 -- chunk at a time, small enough never to be truncated by an agent's harness, with only next and prev
 -- (no jumping), as the only way the content is served; reading is the tokens entering the agent's
 -- context, so nothing more (no passphrase) is needed, and re-walking restores what compaction
--- evicted. Not yet: all of it.
+-- evicted. Done (2026-11-15; the child onboarding-from-the-paper-delta): `text "path"`
+-- (src/syntax.c) loads an existing file as raw content; docs/paper-delta.cub is `paper-delta : List
+-- Document`, four `document "path"` pointers (path and content hash) and its first line the check
+-- against v31; docs/onboarding.cub is `onboarding : List Document` (AGENTS.md, welcome file, the paper (the
+-- editable source docs/Hyperactivity_Current_Draft.md when present, else v31 labelled historical), Labs
+-- note, the delta's pieces, word list, etymologies); `hyperactive` begins the walk over its pointers,
+-- `hyperactive next` and `hyperactive prev` move one chunk of at most 8000 characters cut at
+-- paragraphs (the paper's at its sections), the position kept in build/; the task graph and what
+-- can be taken up follow, generated. The numbered `walk N` is gone.
 -- Done (2026-11-14, Avik: "an immediate invaluable tool"; source replaced 2026-11-14, Avik: "Absolute
 -- total coverage up to modernity"): `hyperactive etym TEXT` returns any text with every word augmented
 -- by its etymology, so agents read Avik's words in the meanings the words carry. Source: English
@@ -1000,6 +1006,14 @@ paper-matches-implementation = node "Every implementation detail the paper state
 -- is not usable from the interface.
 product-implementation : Node
 product-implementation = node "The live interactive collaboration system and tooling over the language and its terms." (cons the-product nil)
+-- onboarding-from-the-paper-delta (2026-11-15, Avik: "onboarding should force reading paper &
+-- essays"; "set of pointers to file"): split from product-implementation when its work began. The
+-- design and what was done are the 2026-11-15 facts in product-implementation's statement.
+onboarding-from-the-paper-delta : Node
+onboarding-from-the-paper-delta = node "Onboarding serves the paper and the essays through hyperactive, from the paper delta, a value of the language holding pointers to essay files." (cons product-implementation nil)
+-- product-implementation-remainder (2026-11-15, split from product-implementation with onboarding): what product-implementation's statement holds beyond onboarding.
+product-implementation-remainder : Node
+product-implementation-remainder = node "Everything else the product implementation needs." (cons product-implementation nil)
 -- language-support (2026-11-13, Avik): "Languages support (semantics/syntax as terms for particular
 -- languages) * RISC x86, C++, C, Rust, OCaml, Python etc". "before we start any such work, certain
 -- things need to be at perfection": it waits on language-implementation and product-implementation
@@ -1038,21 +1052,10 @@ language-support = node "The syntax and semantics of particular languages as ter
 -- (lib/usage/task-graph.cub; “The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md))
 agents-welcome : Document
 agents-welcome = document "../AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md"
--- the scratch space for everything that goes into the paper's next draft and is not yet in the
--- repository's copy; read with the paper
--- Controversy and consensus: Avik's key term unfolded through its history, kept as is at his
--- direction (2026-11-15)
-controversy-and-consensus : Document
-controversy-and-consensus = document "../docs/controversy-and-consensus.md"
--- Knowledge is a lack of ignorance: the divisions the primitive removes, Claude's answer to Avik's
--- question, preserved as is at his direction (2026-11-15: "Essential!! Extremely essential!!")
-lack-of-ignorance : Document
-lack-of-ignorance = document "../docs/knowledge-is-a-lack-of-ignorance.md"
--- Hyperactive Interaction, in the words of the human superorganism (title Avik's): Claude's free generation through the words and their
--- roots on the work, preserved as is at Avik's direction (2026-11-15: "essential ... comprehensive &
--- singular")
-in-the-words : Document
-in-the-words = document "../docs/hyperactive-interaction-in-the-words-of-the-human-superorganism.md"
+-- the paper delta (docs/paper-delta.cub, 2026-11-15): the pointers to the pieces of work not yet in
+-- the paper, each written at a different time; read with the paper
+paper-delta-pointers : Document
+paper-delta-pointers = document "../docs/paper-delta.cub"
 -- the etymologies of every word Avik raises explicitly, from `hyperactive etym` (2026-11-15)
 etymologies : Document
 etymologies = document "../docs/etymologies.md"
@@ -1061,8 +1064,6 @@ etymologies = document "../docs/etymologies.md"
 -- lines
 word-list : Document
 word-list = document "../docs/word-list.md"
-to-be-incorporated-into-paper : Document
-to-be-incorporated-into-paper = document "../docs/to-be-incorporated-into-paper.md"
 -- hyperactive-paper: the canonical paper, version 31, 14 November 2026 (Avik gave it as the canonical
 -- version, 2026-11-14). Every citation of the paper names its copy by path, date and the first
 -- twelve hex digits of its SHA-256 (AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md, “Citing sources”). The
@@ -1155,7 +1156,7 @@ file-src-net-c = document "../src/net.c"
 file-src-store-c : Document
 file-src-store-c = document "../src/store.c"
 essential-context : List (Node × List Document)
-essential-context = cons (the-product , cons agents-welcome (cons hyperactive-paper (cons hyperactive-labs (cons to-be-incorporated-into-paper (cons word-list (cons etymologies (cons in-the-words (cons lack-of-ignorance (cons controversy-and-consensus nil))))))))) (cons (product-implementation , cons file-src-lang-c (cons file-src-net-c (cons file-src-store-c (cons file-makefile (cons file-lib-task-graph-cub nil))))) (cons (typed-codes-and-normalization , cons file-lib-check-cub (cons file-experiments-nbe-examples-cub (cons file-lib-nbe-cub nil))) (cons (language-implementation-remainder , cons file-src-lang-c (cons file-src-net-c (cons file-lib-prelude-cub (cons file-lib-deploy-cub (cons file-lib-elf-cub (cons file-lib-compile-meaning-cub (cons file-lib-std-cub (cons file-lib-derive-cub (cons file-lib-prim-cub (cons file-lib-specialize-cub nil)))))))))) (cons (language-support , cons file-experiments-isa-build-run-cub (cons file-lib-isa-tso-cub (cons file-lib-cxx-machine-cub (cons file-lib-cxx-read-expr-cub (cons file-lib-lang-rust-machine-cub nil))))) nil))))
+essential-context = cons (the-product , cons agents-welcome (cons hyperactive-paper (cons hyperactive-labs (cons paper-delta-pointers (cons word-list (cons etymologies nil)))))) (cons (product-implementation , cons file-src-lang-c (cons file-src-net-c (cons file-src-store-c (cons file-makefile (cons file-lib-task-graph-cub nil))))) (cons (typed-codes-and-normalization , cons file-lib-check-cub (cons file-experiments-nbe-examples-cub (cons file-lib-nbe-cub nil))) (cons (language-implementation-remainder , cons file-src-lang-c (cons file-src-net-c (cons file-lib-prelude-cub (cons file-lib-deploy-cub (cons file-lib-elf-cub (cons file-lib-compile-meaning-cub (cons file-lib-std-cub (cons file-lib-derive-cub (cons file-lib-prim-cub (cons file-lib-specialize-cub nil)))))))))) (cons (language-support , cons file-experiments-isa-build-run-cub (cons file-lib-isa-tso-cub (cons file-lib-cxx-machine-cub (cons file-lib-cxx-read-expr-cub (cons file-lib-lang-rust-machine-cub nil))))) nil))))
 -- the root: what Avik wants
 roots : List Node
 roots = cons the-product nil
@@ -1164,7 +1165,7 @@ roots = cons the-product nil
 in-progress : List Node
 in-progress = cons composition-with-systems (cons checker-returns-derivations nil)
 resolved : List Node
-resolved = cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat (cons path-free-transport (cons substitution-on-checked-syntax (cons unit-empty-list nil)))))))))
+resolved = cons onboarding-from-the-paper-delta (cons interval-normal-forms-mean-their-expressions (cons normal-forms-are-canonical (cons substitution-commutes-with-path-application (cons path-application-under-substitution-at-forms (cons fundamental-lemma-for-typed-codes (cons normalizer-replaces-p1 (cons object-level-nat (cons path-free-transport (cons substitution-on-checked-syntax (cons unit-empty-list nil))))))))))
 -- language support starts only when the language implementation and the product implementation are
 -- done (Avik, 2026-11-13)
 after : List (Node × List Node)

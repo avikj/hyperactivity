@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """hyperactive — the way into hyperactivity, for agents and humans alike.
 
-    hyperactive                      the walk: everything to read, in order, one step at a time
-    hyperactive walk N               step N of the walk
+    hyperactive                      the walk, from its start: everything to read, in order, one chunk at a time
+    hyperactive next | prev          the next chunk of the walk, or the one before
     hyperactive open                 what is open and what can start now
     hyperactive def NAME             a definition: its statement, its text, where it is, what uses it
     hyperactive etym TEXT            the text augmented with the etymology of every word
@@ -24,28 +24,24 @@
 The machine is built on first use and rebuilt when src/ changes. Run it from anywhere: it finds this
 repository from its own location.
 """
-import hashlib, os, re, subprocess, sys
+import contextlib, hashlib, io, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.realpath(__file__))
 MACHINE = os.path.join(ROOT, 'build', 'cubical')
 TASKS = os.path.join(ROOT, 'tools', 'task-graph.py')
 PAPER = os.path.join(ROOT, 'docs', 'hyperactivity_v31.pdf')  # historical snapshot only
 PAPER_SOURCE = os.path.join(ROOT, 'docs', 'Hyperactivity_Current_Draft.md')
-AGENTS = os.path.join(ROOT, 'AGENTS.md')
-LABS = os.path.join(ROOT, 'docs', 'Hyperactive_Labs.md')
-WORDS = os.path.join(ROOT, 'docs', 'word-list.md')
-TO_BE_INCORPORATED = os.path.join(ROOT, 'docs', 'to-be-incorporated-into-paper.md')
-WELCOME = os.path.join(ROOT, 'AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md')
-STEP = 24000   # characters per step of the walk, so a step is read whole
+ONBOARDING = os.path.join(ROOT, 'docs', 'onboarding.cub')
+CHUNK = 8000   # characters per chunk of the walk: small enough that no agent harness truncates it
 
 
 def paper_text():
-    """Read the editable manuscript afresh; a legacy PDF is an explicitly labelled fallback."""
+    """The paper: the editable manuscript (docs/Hyperactivity_Current_Draft.md, AGENTS.md) read afresh
+    whenever it is present; until its source is imported, the historical v31 PDF, labelled as such,
+    its extraction cached by content."""
     if os.path.exists(PAPER_SOURCE):
         with open(PAPER_SOURCE, encoding='utf-8') as f:
             return f.read()
-    # Until the exact editable source is imported, retain access to the existing paper,
-    # but never describe that snapshot as the current N-part manuscript.
     notice = ('SOURCE IMPORT REQUIRED: docs/Hyperactivity_Current_Draft.md is absent.\n'
               'The following is the historical v31 PDF, not a current editable draft.\n'
               'Import the exact source before editing the manuscript; do not reconstruct it '
@@ -71,26 +67,7 @@ def paper_text():
         with open(stamp, 'w', encoding='ascii') as f:
             f.write(digest + '\n')
     with open(out, encoding='utf-8') as f:
-        return notice + f.read()
-
-
-def pieces(text, sep):
-    """text cut at separators into pieces of at most STEP characters (a longer unit stays whole)"""
-    out, cur = [], ''
-    for u in text.split(sep):
-        if cur and len(cur) + len(sep) + len(u) > STEP:
-            out.append(cur); cur = u
-        else:
-            cur = cur + sep + u if cur else u
-    if cur.strip(): out.append(cur)
-    return out
-
-
-def sections(md, level):
-    """a markdown text cut before each heading of the given level"""
-    mark = '\n' + '#' * level + ' '
-    parts = md.split(mark)
-    return [parts[0]] + [mark.lstrip('\n') + p for p in parts[1:]]
+        return notice + f.read().replace('\f', '\n\n')
 
 
 def tool(*args):
@@ -100,106 +77,124 @@ def tool(*args):
     return r.stdout
 
 
-def standing_pieces(material):
-    """Read the paper delta's declared standalone pieces, not a second hard-coded inventory."""
-    heading = '## Standing pieces to be incorporated'
-    body = next((s for s in sections(material, 2)
-                 if s.split('\n', 1)[0].strip() == heading), None)
-    if body is None:
-        sys.exit('paper delta is missing its Standing pieces to be incorporated section')
-    refs = list(dict.fromkeys(re.findall(r'`(docs/[^`\n]+\.md)`', body)))
-    for ref in refs:
-        path = os.path.realpath(os.path.join(ROOT, ref))
-        if os.path.commonpath((os.path.realpath(ROOT), path)) != os.path.realpath(ROOT):
-            sys.exit('onboarding document leaves the repository: ' + ref)
-        if not os.path.isfile(path):
-            sys.exit('missing standing piece in the paper delta: ' + ref)
-        with open(path, encoding='utf-8') as f:
-            text = f.read()
-        yield ref, text
+def read(path):
+    with open(path, encoding='utf-8') as f: return f.read()
 
 
-def walk_steps():
-    """the walk, in order: (title, text) for every step"""
-    steps = []
-    with open(WELCOME, encoding='utf-8') as f:
-        w = f.read()
-    head, words = w.split("\n## Avik's words, verbatim", 1)
-    steps.append(('Arrival', ARRIVAL))
-    with open(AGENTS, encoding='utf-8') as f:
-        for j, p in enumerate(pieces(f.read(), '\n\n')):
-            steps.append(('Repository ownership and agent entry' + (f', part {j + 1}' if j else ''), p))
-    steps.append(("How to work, in Avik's words to agents", head))
-    paper = paper_text()
-    separator = '\n\n' if os.path.exists(PAPER_SOURCE) else '\f'
-    for i, p in enumerate(pieces(paper, separator)):
-        steps.append((f'The paper, part {i + 1}', p.replace('\f', '\n')))
-    with open(LABS, encoding='utf-8') as f:
-        labs = f.read()
-    for sec in sections(labs, 2):
-        title = sec.split('\n', 1)[0].lstrip('# ').strip()
-        for j, p in enumerate(pieces(sec, '\n\n')):
-            steps.append((f'Hyperactive Labs: {title}' + (f', part {j + 1}' if j else ''), p))
-    with open(TO_BE_INCORPORATED, encoding='utf-8') as f:
-        material = f.read()
-    for sec in sections(material, 2):
-        title = sec.split('\n', 1)[0].lstrip('# ').strip()
-        for j, p in enumerate(pieces(sec, '\n\n')):
-            steps.append((('To be incorporated into the paper' if title.startswith(('To be incorporated', '**To check')) else f'To be incorporated into the paper: {title}') + (f', part {j + 1}' if j else ''), p))
-    with open(WORDS, encoding='utf-8') as f:
-        steps.append(("Avik's word list", f.read()))
-    for ref, text in standing_pieces(material):
-        for j, p in enumerate(pieces(text, '\n\n')):
-            steps.append((ref + (f', part {j + 1}' if j else ''), p))
-    for j, p in enumerate(pieces("## Avik's words, verbatim" + words, '\n\n')):
-        steps.append((f"Avik's words, verbatim, part {j + 1}", p))
-    steps.append(('The task graph', GRAPH_INTRO + tool('tree')))
-    steps.append(('What you can take up', None))
-    return steps
+def pointers(path, name):
+    """the documents a List Document value of the language points to, in order: `document "p"` is
+    one pointer (p relative to the file), `list-append xs ys` the pointers of xs then of ys, a name
+    the value bound to it in this file or a file it imports"""
+    with open(path, encoding='utf-8') as fh: src = fh.read()
+    m = re.search(r'^' + re.escape(name) + r'\s*=\s*\n?(.*?)(?=^\S|\Z)', src, re.M | re.S)
+    if not m:
+        for imp in re.findall(r'^import "([^"]+)"', src, re.M):
+            f = os.path.normpath(os.path.join(os.path.dirname(path), imp))
+            if f.startswith(ROOT) and os.path.exists(f) and re.search(r'^' + re.escape(name) + r'\s*=', read(f), re.M):
+                return pointers(f, name)
+        sys.exit(f'hyperactive: no value {name} in {os.path.relpath(path, ROOT)} or what it imports')
+    out = []
+    for doc, ref in re.findall(r'document "([^"]+)"|list-append\s+([^\s()]+)', m.group(1)):
+        if doc:
+            f = os.path.realpath(os.path.join(os.path.dirname(path), doc))
+            if os.path.commonpath((os.path.realpath(ROOT), f)) != os.path.realpath(ROOT):
+                sys.exit('onboarding document leaves the repository: ' + doc)
+            if not os.path.isfile(f):
+                sys.exit(f'missing document in {os.path.relpath(path, ROOT)}: {doc}')
+            out.append(f)
+        else: out += pointers(path, ref)
+    return out
 
 
-ARRIVAL = """You are entering hyperactivity.
+HEADING = re.compile(r'^(#{1,3} |\s*(\d+(\.\d+)*|[A-Z])\.?\s{1,3}[A-Z][^.]{2,80}$)')
 
-This walk is how an agent comes to hold Avik's complete insight into the project. It is deterministic: every agent reads the same
-material in the same order. Each step is printed whole and ends with the one command for the next
-step. Read every word of every step before running the next; do not skip ahead, search the files,
-or open them in another order. The walk goes:
 
-  1. Repository ownership (AGENTS.md), then Avik's instructions to agents: how to work here.
-  2. The current editable N-part manuscript, in full; an absent source is reported explicitly.
-  3. The Hyperactive Labs note: the initiative, the one work in Parts, what exists.
-  4. What is to be incorporated into the paper, in full.
-  5. Avik's word list and every document named under Standing pieces to be incorporated
-     in the paper delta, in order. Newly named pieces enter this walk without a CLI edit.
-  6. Avik's words, verbatim, in full.
-  7. The task graph: all the work, its state and its order.
-  8. What you can take up now, and the commands for reading and working.
+def chunks(text):
+    """text cut at paragraph boundaries into chunks of at most CHUNK characters, preferring a cut
+    before a heading (a section of the paper, a section of a markdown file); a paragraph longer than
+    CHUNK is cut at its lines"""
+    units = []
+    for par in re.split(r'\n\s*\n', text):
+        if not par.strip(): continue
+        while len(par) > CHUNK:
+            cut = par.rfind('\n', 0, CHUNK)
+            if cut <= 0: cut = CHUNK
+            units.append(par[:cut]); par = par[cut:].lstrip('\n')
+        units.append(par)
+    out, cur = [], ''
+    for u in units:
+        head = HEADING.match(u.split('\n', 1)[0])
+        if cur and len(cur) < CHUNK // 8 and len(cur) + 2 + len(u) > CHUNK:
+            # a heading or a short line stays with what follows it: the paragraph is cut at a line
+            cut = u.rfind('\n', 0, CHUNK - len(cur) - 2)
+            if cut > 0:
+                out.append(cur + '\n\n' + u[:cut]); cur = u[cut:].lstrip('\n'); continue
+        if cur and (len(cur) + 2 + len(u) > CHUNK or (head and len(cur) > CHUNK // 2)):
+            out.append(cur); cur = u
+        else:
+            cur = cur + '\n\n' + u if cur else u
+    if cur.strip(): out.append(cur)
+    return out
 
-All active writing lives in this repository, never in ChatGPT Library. PDF exports are snapshots,
-not an input required for source changes to reach onboarding. This walk reads its inputs afresh;
-a previously read step is not evidence of reading a later revision. Reopen changed context before
-continuing. An agent that has walked already in this session and is current goes to `hyperactive open`."""
 
-GRAPH_INTRO = """All work, and all status, is the task graph: a term in the language
+def walk_chunks():
+    """the walk, in order: (title, text) for every chunk. The documents are the pointers of the
+    value `onboarding` (docs/onboarding.cub): the welcome file, the paper, the Labs note, the pieces of
+    the paper delta (docs/paper-delta.cub), the word list, the etymologies. Then the task graph and the
+    open work, generated."""
+    out = []
+    for path in pointers(ONBOARDING, 'onboarding'):
+        rel = os.path.relpath(path, ROOT)
+        if path.endswith('.pdf'):
+            text = paper_text()   # the editable source when present, else the labelled PDF
+            if os.path.exists(PAPER_SOURCE): rel = os.path.relpath(PAPER_SOURCE, ROOT)
+        else:
+            with open(path, encoding='utf-8') as f: text = f.read()
+        cs = chunks(text)
+        for j, c in enumerate(cs):
+            out.append((rel + (f', part {j + 1} of {len(cs)}' if len(cs) > 1 else ''), c))
+    cs = chunks(GRAPH_INTRO + tool('tree'))
+    for j, c in enumerate(cs):
+        out.append(('The task graph' + (f', part {j + 1} of {len(cs)}' if len(cs) > 1 else ''), c))
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf): open_work()
+    for j, c in enumerate(chunks(buf.getvalue() + '\n' + COMMANDS)):
+        out.append(('What you can take up' + (f', part {j + 1}' if j else ''), c))
+    return out
+
+
+GRAPH_INTRO = """All work, and all status, is the task graph: a value of the language
 (task-graph/hyperactivity.cub over lib/usage/task-graph.cub), ruled by the Hyperactive Workflow you have
 read. Every node is a sentence; a node's statement holds what is known about it. [in progress] and
 [resolved] mark leaves; every other leaf is pending.
 
 """
 
+POSITION = os.path.join(ROOT, 'build', 'walk-position')
 
-def walk(n):
-    steps = walk_steps()
-    if not 1 <= n <= len(steps):
-        sys.exit(f'the walk has steps 1 to {len(steps)}')
-    title, text = steps[n - 1]
-    print(f'── step {n} of {len(steps)}: {title} ' + '─' * 8 + '\n')
-    if text is None:
-        open_work()
-        print(COMMANDS)
-    else:
-        print(text.strip())
-    print('\n' + '─' * 8 + f' end of step {n} of {len(steps)}' + (f'. Next: hyperactive walk {n + 1}' if n < len(steps) else '. The walk is done.'))
+
+def walk(move):
+    """`hyperactive` begins the walk; `next` and `prev` move one chunk; the position is kept in build/"""
+    cs = walk_chunks()
+    n = 1
+    if move:
+        try: n = int(open(POSITION).read())
+        except (OSError, ValueError): n = 1
+        n = max(1, min(len(cs), n + move))
+    os.makedirs(os.path.dirname(POSITION), exist_ok=True)
+    open(POSITION, 'w').write(str(n))
+    title, text = cs[n - 1]
+    if n == 1: print(ARRIVAL + '\n')
+    print(f'── {n} of {len(cs)}: {title} ' + '─' * 8 + '\n')
+    print(text.strip())
+    print('\n' + '─' * 8 + f' end of {n} of {len(cs)}. ' + ('Next: hyperactive next' if n < len(cs) else 'The walk is done.') + ('   (back: hyperactive prev)' if n > 1 else ''))
+
+
+ARRIVAL = """You are entering hyperactivity. This walk is how an agent comes to hold Avik's complete insight:
+every agent reads the same material, whole, in the same order, one chunk at a time. Read every word
+of a chunk before running `hyperactive next`; do not search the files or open them out of order.
+The documents walked are the value `onboarding` of docs/onboarding.cub; then the task graph and
+what can be taken up. `hyperactive` begins again from the start."""
 
 
 COMMANDS = """
@@ -213,6 +208,7 @@ Reading and working:
   hyperactive tree           the task graph from its root
   hyperactive check [FILE]   check files; with no file, the task graph
   hyperactive repl           the machine, interactive
+  hyperactive prev           back one chunk of the walk; `hyperactive` begins it again
   hyperactive help           every command
 
 Take up what the order says can start, beginning with what is in progress. A finding goes into the
@@ -292,11 +288,11 @@ def tasks(*args):
 def main():
     a = sys.argv[1:]
     if not a:
-        walk(1); return
+        walk(0); return
     c, rest = a[0], a[1:]
     if c in ('help', '-h', '--help'): print(__doc__); return
-    if c == 'walk':
-        walk(int(rest[0]) if rest else 1); return
+    if c in ('next', 'prev'):
+        walk(1 if c == 'next' else -1); return
     if c == 'open':
         open_work(); return
     if c == 'etym':

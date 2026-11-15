@@ -458,7 +458,7 @@ static Node *text_term(const char *s) {
     for (size_t i = n; i-- > 0; ) { char w[8]; snprintf(w, sizeof w, "#%u", b[i]); r = lst(3, nsym("cons"), nsym(w), r); }
     return r;
 }
-/* an atom: a name, a number, (e), (a , b), [system], ~ r, λ, let, if, case, document "path" */
+/* an atom: a name, a number, (e), (a , b), [system], ~ r, λ, let, if, case, document "path", text "path" */
 static Node *p_atom(void) {
     Tok *t = P0();
     if (x_is(t, "~")) { NX(); return sym2("~", p_atom()); }
@@ -522,6 +522,24 @@ static Node *p_atom(void) {
         unsigned char dg[32]; sha256_final(&h, dg);
         char hex[65]; for (int i = 0; i < 32; i++) sprintf(hex + 2 * i, "%02x", dg[i]);
         return lst(3, nsym("document-at"), text_term(pt->s), text_term(hex));
+    }
+    if (x_is(t, "text") && P1()->k == X_STR) {
+        /* text "path" (2026-11-15, Avik: "a raw bytes file ... so the string can just be loaded by
+         * path"; "Essay is a string"): an existing file of the repository, of any type (.md, .txt,
+         * ...), as raw content: the text whose bytes are exactly the file's, the same value a string
+         * literal of those bytes is, with no escaping. The path is relative to the file being read, as
+         * import's and document's are; the file must exist. */
+        NX(); Tok *pt = NX();
+        char *full = pt->s;
+        if (pt->s[0] != '/' && cur_dir) { full = malloc(strlen(cur_dir) + strlen(pt->s) + 2); sprintf(full, "%s/%s", cur_dir, pt->s); }
+        FILE *fd = fopen(full, "rb");
+        if (!fd) x_err("text: no such file (the path is relative to the file being read):", pt);
+        size_t cap = 65536, n = 0; char *buf = malloc(cap); size_t k;
+        while ((k = fread(buf + n, 1, cap - n - 1, fd)) > 0) { n += k; if (cap - n < 2) { cap *= 2; buf = realloc(buf, cap); } }
+        fclose(fd); buf[n] = 0;
+        if (strlen(buf) != n) x_err("text: the file holds a zero byte, which text does not carry:", pt);
+        Node *r = text_term(buf); free(buf);
+        return r;
     }
     if (t->k == X_STR) {
         /* "text": the list of its bytes (UTF-8, as written), cons #b0 (cons #b1 … nil) : List Word;

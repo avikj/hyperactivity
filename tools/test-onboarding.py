@@ -29,11 +29,7 @@ class OnboardingSources(unittest.TestCase):
             'ROOT': self.root,
             'PAPER_SOURCE': self.root / 'docs/Hyperactivity_Current_Draft.md',
             'PAPER': self.root / 'docs/hyperactivity_v31.pdf',
-            'AGENTS': self.root / 'AGENTS.md',
-            'LABS': self.root / 'docs/Hyperactive_Labs.md',
-            'WORDS': self.root / 'docs/word-list.md',
-            'TO_BE_INCORPORATED': self.root / 'docs/to-be-incorporated-into-paper.md',
-            'WELCOME': self.root / 'AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md',
+            'ONBOARDING': self.root / 'docs/onboarding.cub',
         }
         for key, value in paths.items():
             p = patch.object(cli, key, str(value)); p.start(); self.addCleanup(p.stop)
@@ -87,50 +83,50 @@ class OnboardingSources(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, 'historical PDF is also absent'):
             cli.paper_text()
 
-    def test_standing_pieces_follow_delta_order_and_deduplicate(self):
-        self.write('docs/b.md', '# B\nSecond content')
-        self.write('docs/a.md', '# A\nFirst content')
-        delta = ('# Delta\n\n## Standing pieces to be incorporated\n'
-                 '- B (`docs/b.md`, date).\n- A (`docs/a.md`).\n- B again `docs/b.md`.\n'
-                 '## Other section\n`docs/not-a-standing-piece.md`\n')
-        items = list(cli.standing_pieces(delta))
-        self.assertEqual([p for p, _ in items], ['docs/b.md', 'docs/a.md'])
-        self.assertEqual(items[0][1], '# B\nSecond content')
+    def onboarding(self, delta_docs):
+        self.write('docs/paper-delta.cub', 'paper-delta : List Document\npaper-delta =\n  ' +
+                   ''.join(f'cons (document "{d}")\n  (' for d in delta_docs) + 'nil' + ')' * len(delta_docs) + '\n')
+        self.write('docs/onboarding.cub', 'import "paper-delta.cub"\nonboarding : List Document\nonboarding =\n'
+                   '  cons (document "../AGENTS.md")\n  (cons (document "hyperactivity_v31.pdf")\n'
+                   '  (list-append paper-delta\n  (cons (document "word-list.md")\n  nil)))\n')
 
-    def test_missing_standing_piece_is_not_silently_skipped(self):
-        with self.assertRaisesRegex(SystemExit, 'missing standing piece'):
-            list(cli.standing_pieces('## Standing pieces to be incorporated\n`docs/missing.md`'))
+    def test_pointers_follow_the_value_in_order(self):
+        for f in ('AGENTS.md', 'docs/hyperactivity_v31.pdf', 'docs/b.md', 'docs/a.md', 'docs/word-list.md'):
+            self.write(f, f)
+        self.onboarding(['b.md', 'a.md'])
+        got = [os.path.relpath(p, os.path.realpath(self.root)) for p in cli.pointers(cli.ONBOARDING, 'onboarding')]
+        self.assertEqual(got, ['AGENTS.md', 'docs/hyperactivity_v31.pdf', 'docs/b.md', 'docs/a.md', 'docs/word-list.md'])
 
-    def test_missing_standing_inventory_is_explicit(self):
-        with self.assertRaisesRegex(SystemExit, 'missing its Standing pieces'):
-            list(cli.standing_pieces('# Delta\nNo inventory'))
+    def test_missing_piece_is_not_silently_skipped(self):
+        for f in ('AGENTS.md', 'docs/hyperactivity_v31.pdf', 'docs/word-list.md'):
+            self.write(f, f)
+        self.onboarding(['missing.md'])
+        with self.assertRaisesRegex(SystemExit, 'missing document'):
+            cli.pointers(cli.ONBOARDING, 'onboarding')
 
-    def test_standing_piece_cannot_escape_repo(self):
+    def test_piece_cannot_escape_repo(self):
+        for f in ('AGENTS.md', 'docs/hyperactivity_v31.pdf', 'docs/word-list.md'):
+            self.write(f, f)
+        self.onboarding(['../../outside.md'])
         with self.assertRaisesRegex(SystemExit, 'leaves the repository'):
-            list(cli.standing_pieces('## Standing pieces to be incorporated\n`docs/../../outside.md`'))
+            cli.pointers(cli.ONBOARDING, 'onboarding')
 
-    def test_walk_reads_policy_and_newly_registered_document(self):
+    def test_walk_reads_policy_source_and_newly_pointed_piece_whole(self):
         self.write('AGENTS.md', 'Repository-only instruction')
-        self.write('AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md',
-                   '# Welcome\nInstructions\n## Avik\'s words, verbatim\nAuthor text')
-        self.write('docs/Hyperactive_Labs.md', '# Initiative\nLocal context')
+        self.write('docs/hyperactivity_v31.pdf', 'pdf')
         self.write('docs/word-list.md', 'word')
-        self.write('docs/new-standing-piece.md', '# Newly registered\nImportant new content')
-        delta = '# Delta\n\n## Standing pieces to be incorporated\n`docs/new-standing-piece.md`\n'
-        self.write('docs/to-be-incorporated-into-paper.md', delta)
+        self.write('docs/new-piece.md', '# Newly pointed\nImportant new content')
+        self.onboarding(['new-piece.md'])
         paper = '\n\n'.join('Paragraph %d with source content.' % i for i in range(10))
         self.source.write_text(paper)
-        with patch.object(cli, 'tool', return_value='Actual graph output'), patch.object(cli, 'STEP', 80):
-            steps = cli.walk_steps()
-        self.assertEqual(steps[1][0], 'Repository ownership and agent entry')
-        self.assertIn('Repository-only instruction', steps[1][1])
-        paper_steps = [text for title, text in steps if title.startswith('The paper, part ')]
-        self.assertGreater(len(paper_steps), 1)
-        self.assertEqual('\n\n'.join(paper_steps), paper)
-        self.assertIn(('docs/new-standing-piece.md', '# Newly registered\nImportant new content'), steps)
-        self.write('docs/new-standing-piece.md', '# Newly registered\nChanged now')
-        with patch.object(cli, 'tool', return_value='Actual graph output'):
-            self.assertIn(('docs/new-standing-piece.md', '# Newly registered\nChanged now'), cli.walk_steps())
+        with patch.object(cli, 'tool', return_value='Actual graph output'), patch.object(cli, 'open_work', lambda: print('open')), patch.object(cli, 'CHUNK', 80):
+            chunks = cli.walk_chunks()
+        self.assertEqual(chunks[0], ('AGENTS.md', 'Repository-only instruction'))
+        paper_chunks = [text for title, text in chunks if title.startswith('docs/Hyperactivity_Current_Draft.md')]
+        self.assertGreater(len(paper_chunks), 1)
+        self.assertEqual('\n\n'.join(paper_chunks), paper)
+        self.assertTrue(all(len(t) <= 80 for _, t in chunks))
+        self.assertIn('Important new content', '\n'.join(t for title, t in chunks if title.startswith('docs/new-piece.md')))
 
     def test_task_graph_failure_does_not_look_like_empty_success(self):
         r = subprocess.CompletedProcess([], 2, 'partial output', 'actual failure')

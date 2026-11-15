@@ -1,6 +1,6 @@
 # Agent entry and repository ownership
 
-Run `./hyperactive` and read every step before substantive project work. Continue through the
+Run `./hyperactive` and read every chunk (`./hyperactive next`) before substantive project work. Continue through the
 existing CLI and the “How to work” instructions in `AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md`.
 Do not invent a parallel onboarding flow, status ledger, or publication pipeline.
 
@@ -27,10 +27,10 @@ present; its explicit historical-PDF fallback is not a claim that source migrati
 
 Every exchange goes where it acts, in the same turn:
 
-- Paper material not yet incorporated: `docs/to-be-incorporated-into-paper.md`, in Avik's terms.
-  When incorporated into the manuscript, remove the absorbed delta rather than maintaining two
-  editable versions. An independently useful piece may have its own document; name its repo path
-  in backticks under “Standing pieces to be incorporated” so the CLI reads it automatically.
+- Paper material not yet incorporated: a piece the paper delta, `docs/paper-delta.cub`, points to
+  (`document "path"`, a path and its content hash, and nothing else), in Avik's terms. Material
+  written at a later time is a new piece with its own pointer; the CLI walks every pointer. When
+  the manuscript absorbs a piece, its pointer leaves, rather than two editable versions being kept.
 - Project context: `docs/Hyperactive_Labs.md`; agent instructions and long author messages:
   the existing “How to work” and “Avik's words, verbatim” sections of the welcome file.
 - Goal facts, dependencies, and status: `task-graph/hyperactivity.cub`. Do not create another tracker.
