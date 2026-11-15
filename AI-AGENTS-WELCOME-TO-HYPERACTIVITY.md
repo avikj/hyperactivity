@@ -91,9 +91,10 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   material for the paper in `docs/to-be-incorporated-into-paper.md`.
 - **The README holds only setup and installation,** and hands off to `hyperactive`, which teaches
   the rest.
-- **Use the organization; never sprawl** (Avik, 2026-11-15 19:38 UTC). Essential material goes where
-  it acts in the existing organization (material for the paper into
-  `docs/to-be-incorporated-into-paper.md`), never into a new standalone file.
+- **Use the organization; never sprawl** (Avik, 2026-11-15 19:38–19:39 UTC). Material for the paper
+  goes into `docs/to-be-incorporated-into-paper.md`. A piece that stands on its own keeps its own
+  document, marked clearly as paper delta content and listed in that file's “Standing pieces to be
+  incorporated”; nothing essential is left as a file nothing points to.
 - **Every session is continuous knowledge work** (Avik, 2026-11-14). Nothing Avik says is casual
   conversation: he works all day, the only bound on getting the work out is his words per minute
   with agents amplifying them, and the only friction is an agent's incorrectness. Every message,
@@ -1733,3 +1734,7 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-15 19:38 UTC
 
 > And how are you ensuring this essential context is carried into the work? Just dropping an Md file?  Don’t we have a paper delta thing? Are you using our organization or sprawling? That last message of yours (and mine) - isn’t it extremely insightful and clarifying probably essential to paper / exposition?  All the knowledge work done in this session (nothing is casual conversation - I am at work) is meant to bring us forward
+
+#### 2026-11-15 19:39 UTC
+
+> No - actually the essays were good to keep but also ensure it’s marked clearly as paper delta content. Obviously this content shouldn’t just be in a temporary scratch delta file - it stands on its own
