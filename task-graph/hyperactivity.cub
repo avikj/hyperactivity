@@ -110,6 +110,37 @@ language-implementation = node "The Hyperactive language and its features, imple
 -- explicit argument's inferred type matched against its domain, then the result type against the
 -- expected one; the universe of a solved type gives its level. The solutions are returned as codes,
 -- (elab ...), and the term with them is checked again. An argument's own holes are solved first.
+-- The construction (2026-11-15, derived with Avik; this note supersedes every plan for this goal
+-- written before it). Scope, from §6.1's own text: the object language is Π, Σ, PathP and a base type
+-- (Bool); the paper fixes reify and reflect at Π, Σ and PathP, normalize = reify ∘ eval ∘
+-- reflectContext, the fundamental lemma by induction on typed syntax, and (6.5) eval(reify v, ρ) =
+-- denote(v, ρ). Composition, Glue and universes are interpreted by the model's own Kan operations and
+-- are not normalized: §6.1 says its clauses describe that fragment. Normalizing them is not this goal.
+-- Why dimensions are cube directions (forced in CCHM): reifying a path is pathLam(i. reify(pathApp(p,
+-- i))), whose code mentions i as a variable of the code. If an object dimension were a host interval,
+-- reification pointwise would be a host family of codes indexed by the interval, and every path in
+-- the data type Code is constant, so the code could not depend on i. And an environment cannot hold a
+-- host interval (I is not a type). So an object dimension is a name in the context, read as a
+-- direction of the cube the meanings live over: a context with n dimensions means an n-fold cube of
+-- environments, a term a cube over it (the cubical-set model, stages as host cubes).
+-- What that forces, and nothing more:
+-- 1. The Kripke normalizer for Bool, Π and Σ: meanings host functions of the environment, computability
+--    over renamings, the fundamental lemma over semantic substitutions, normalize, reifySound and
+--    normalize-sound by refl. This is lib/nbe.cub lines 757-1260 as it stands (about 500 lines).
+-- 2. Dimension entries in contexts and cube meanings; path application at an interval expression on
+--    cubes by faces, reversal, connections, exchange and diagonal (lib/nbe.cub's cube section).
+-- 3. The fundamental lemma over substitutions that send dimensions to interval expressions, not only
+--    renamings: the path λ's case gives its body's computability at every point of the interval, which
+--    is substitution of an expression for the bound dimension.
+-- 4. Hence the one lemma with content: substitution by expressions commutes with path application at
+--    expressions (F2e, cmap-papp-ex, checked in experiments/nbe/p26-wip.cub, commit f71ad86). Every
+--    other case is definitions plus this lemma once.
+-- 5. Reflection and reification at PathP: a neutral path applied at a non-constant expression is
+--    neutral; at 0 or 1 it is the type's endpoint.
+-- Not forced: canonical forms of interval expressions (6.5 asks that readback be sound, not that
+-- normal forms be unique; a neutral path application keeps its expression), and every node below this
+-- one that normalizes composition, Glue or universes. Then: the checker that returns Der, the
+-- substitution law ⟦t[σ]⟧ρ = ⟦t⟧⟦σ⟧ρ, and the specializer law with projections (6.6) and (6.7).
 typed-codes-and-normalization : Node
 typed-codes-and-normalization = node "Typed codes, normalization by evaluation with its soundness, and a checker that returns typing derivations, as §6.1 of the paper (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…) specifies." (cons language-implementation nil)
 -- interval-normal-forms-mean-their-expressions (2026-11-14): F2d of lib/nbe.cub's head. Path

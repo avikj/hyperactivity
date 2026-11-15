@@ -12,6 +12,12 @@ only in the task graph, which `hyperactive` shows; nothing else records it.
 
 ## How to work
 
+- **Understanding first; then the bound is token rate** (Avik, 2026-11-15). The moment the solution to
+  a problem is understood it is solved, and what remains is bounded by the rate of writing it out. A
+  claim that something is impossible, or will take long, or needs a change to the core, is a claim
+  that understanding is absent: keep reasoning instead of presenting it. (A session asserted
+  impossibility three times before deriving the construction now under typed-codes-and-normalization
+  in the task graph.) Write no code until the whole construction is understood.
 - **Read the paper (the copy described under “Citing sources” below) and every piece the paper delta (`docs/paper-delta.cub`) points to before giving any account of the project.** Reason at length rather than
   presenting conclusions first.
 - **Ask questions only of yourself and answer them in the next sentence.** Never ask Avik what he has
