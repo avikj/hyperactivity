@@ -1,4 +1,4 @@
--- Layer: library: shared mathematics over the core; but it holds 17 primitive declarations that are not library: 12 core terms (the clocks' dfix, pfix, forceκ; the checker's reflection def-code, def-type-code, def-source, code-norm-at, code-conv-at, con-nfields, con-recs, data-higher, codata-recs), which belong in a core file, and 5 that are not core (code-map, code-shift, code-unshift, rule-rewrite, rules-orient: the untyped helpers of lib/bootstrap/match.cub made trusted primitives; they leave the trusted base when written with types) (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- Layer: library: shared mathematics over the core; but it holds 5 primitive declarations that are not library and not core (code-map, code-shift, code-unshift, rule-rewrite, rules-orient: the untyped helpers of lib/bootstrap/match.cub made trusted primitives; they leave the trusted base when written with types) (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
 -- std.cub — the checked library: data types, paths, equivalences, univalence, natural-number
 -- arithmetic. Every definition here is checked by lib/core/check.cub. Loaded after prelude.cub,
 -- code.cub and check.cub.
@@ -11,21 +11,13 @@ infixr 5 ∙
 _≡_ : {l : Level} {A : Type l} → A → A → Type l
 x ≡ y = PathP (λ i → A) x y
 
--- a path in a type given
-Path : {l : Level} (A : Type l) → A → A → Type l
-Path A x y = PathP (λ i → A) x y
+-- (Path A x y, a path in a type given, is the core's: lib/core/primitives.cub)
 
 -- std.cub — the checked library: data types, paths, equivalences, univalence,
 -- natural-number arithmetic. Every definition here is checked by lib/core/check.cub.
 -- Loaded after prelude.cub, code.cub and check.cub.
 -- ---------------------------------------------------------------- data
-#check-data Bool
-#check-data Nat
-#check-data List
-#check-data Lst
-#check-data Opt
-#check-data CFree
-#check-data Code
+-- (the core's own data types, Bool to Code, are checked in lib/core/primitives.cub)
 #check-data Match
 #check-data Just
 #check-data Rule
@@ -500,19 +492,9 @@ next a = λ α → a
 infixl 4 ⊛
 _⊛_ : {l m : Level} {κ : Clock} {A : Type l} {B : Type m} → ▸ κ (A → B) → ▸ κ A → ▸ κ B
 f ⊛ a = λ α → f α (a α)
--- the delayed fixed point: a stuck call, unfolded only by the tick constant ⋄ that forceκ gives
-primitive tick dfix : {l : Level} {κ : Clock} {A : Type l} → (▸ κ A → A) → ▸ κ A = λ l κ A f α → f (dfix l κ A f)
+-- the delayed fixed point dfix, its unfolding pfix and forceκ are the core's (lib/core/primitives.cub)
 fix : {l : Level} {κ : Clock} {A : Type l} → (▸ κ A → A) → A
 fix f = f (dfix f)
--- the fixed point unfolds one step later: the path from the delayed fixed point to the next of
--- the fixed point. At a tick variable dfix does not unfold, so the path is a stuck call; at ⋄ both
--- ends are fix f, and so is every point between
-primitive tick pfix : {l : Level} {κ : Clock} {A : Type l} → (f : ▸ κ A → A) →
-                      _≡_ {l} {▸ κ A} (dfix {l} {κ} {A} f) (next {l} {κ} {A} (fix {l} {κ} {A} f))
-                    = λ l κ A f (i : I) α → fix l κ A f
--- a later value at every clock is a value now at every clock (forceκ): the clock is fresh, so its tick
--- constant may be given
-primitive forceκ : {l : Level} {A : Clock → Type l} → ((κ : Clock) → ▸ κ (A κ)) → (κ : Clock) → A κ = λ l A f κ → f κ ⋄
 -- streams: a head now and a tail one tick later. A definition at a type with a clock calls itself
 -- only where a later value is expected; the elaborator makes it a guarded fixed point, a term
 -- given at a later position a λ over a fresh tick, and later values standing where a present one
@@ -589,20 +571,7 @@ list-append : {A : Type} → List A → List A → List A
 list-append nil ys = ys
 list-append (cons x r) ys = cons x (list-append r ys)
 
-primitive def-code : Word → Opt Code = λ g → quote-top (%gty g) (%gval g)
-primitive def-type-code : Word → Opt Code = λ g → quote-ty (%gty g)
--- a definition as it was written (a copattern definition's clauses), when it has one
-primitive def-source : Word → Opt Code = λ g → %gcode g
--- c normalized at the type T's code names (none when the value does not quote)
-primitive code-norm-at : Code → Code → Opt Code = λ T c → quote-top (eval-g lnil T) (eval-g lnil c)
--- the checker's conversion of two codes' values at the type a code names
-primitive code-conv-at : Code → Code → Code → Bool = λ T a b → conv (eval-g lnil T) (eval-g lnil a) (eval-g lnil b)
--- data type d's constructor k: its number of fields, which of them are recursive; d higher (a
--- constructor with dimensions); a codata type's fields of the type itself; d's index of indices
-primitive con-nfields : Word → Word → Word = λ d k → tel-nfields (con-tel d k)
-primitive con-recs : Word → Word → Lst Bool = λ d k → tel-recs d (con-tel d k)
-primitive data-higher : Word → Bool = λ d → lany tel-has-dim (ctors-at d (snd (params-fresh (dtel (%dent d)) lnil)))
-primitive codata-recs : Word → Lst Bool = λ d → co-tel-recs d (cofields-at d (fst (params-fresh (dtel (%dent d)) lnil)))
+-- the checker's reflection (def-code to codata-recs) is the core's (lib/core/primitives.cub)
 -- the traversal of codes (lib/bootstrap/match.cub cmap): f p d replaces a part p under d binders, or leaves
 -- it to be traversed; shifting free variables up and down
 primitive code-map : (Code → Word → Opt Code) → Word → Code → Code = λ f d c → cmap f d c

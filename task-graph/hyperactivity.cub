@@ -584,7 +584,9 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- Core, the primitive language and its implementation: src/ (the machine: net.c, lang.c, syntax.c,
 -- dnf.c, big.c; store.c and sha256.c the store; drivers.c the operating-system side of #run),
 -- lib/core/prelude.cub (each type former's composition as a term), lib/core/code.cub (Code and eval-g, which the
--- paper's §1.2 “Programs about programs” puts in the bootstrap), lib/core/check.cub (the checker as a term).
+-- paper's §1.2 “Programs about programs” puts in the bootstrap), lib/core/check.cub (the checker as a term),
+-- lib/core/primitives.cub (after the checker: the core's own data types checked, Path, and the primitives
+-- declared at checked types: guarded recursion's and reflection's).
 -- In the core's load order but not core: lib/bootstrap/match.cub, lib/bootstrap/nav.cub, lib/bootstrap/cost.cub, lib/bootstrap/lin.cub (loaded
 -- before the checker as bootstrap files; rewriting, navigation and linear arithmetic are the
 -- specializer's and the decision procedures' business. Read 2026-11-14: the checker uses only
@@ -599,11 +601,13 @@ object-level-nat = node "Nat is an object-level data type of the normalizer over
 -- Capacities demonstrated and mentioned in the paper: lib/capacities/nbe.cub (§6.1 typed quotation and readback),
 -- lib/capacities/codes.cub, lib/capacities/specialize.cub, lib/capacities/rules.cub (§6.2 the specializer), lib/capacities/machine.cub, lib/capacities/x86.cub,
 -- lib/capacities/elf.cub, lib/capacities/compile/ (native realization by x86, superseded by the route through C).
--- Library, shared mathematics over the core: lib/library/std.cub (but it holds 17 primitive declarations,
--- admitted there by src/syntax.c's BOOT_TRUSTED: 12 core terms, the clocks' dfix, pfix and forceκ and the
--- checker's reflection def-code to codata-recs, which belong in a core file; and 5 not core, code-map,
--- code-shift, code-unshift, rule-rewrite and rules-orient, lib/bootstrap/match.cub's untyped helpers made
--- trusted primitives, which leave the trusted base when written with types), lib/library/fiber.cub, lib/library/sort.cub, lib/library/proc.cub
+-- Library, shared mathematics over the core: lib/library/std.cub (its 12 core primitive declarations, the
+-- clocks' dfix, pfix and forceκ and the checker's reflection def-code to codata-recs, moved 2026-11-15 to
+-- lib/core/primitives.cub, loaded right after the checker, with the #check-data of the core's own data
+-- types and Path, pfix's type stated through Path and dfix-next instead of std's _≡_, next and fix; it
+-- still holds 5 primitives that are not core, code-map, code-shift, code-unshift, rule-rewrite and
+-- rules-orient, lib/bootstrap/match.cub's untyped helpers made trusted primitives, which leave the trusted
+-- base when written with types), lib/library/fiber.cub, lib/library/sort.cub, lib/library/proc.cub
 -- (§7.6 processes and handlers), lib/library/linproof.cub, lib/library/eqproof.cub, lib/library/ring.cub, lib/library/intproof.cub,
 -- lib/library/intlin.cub (decision procedures with their certificates), lib/library/derive.cub (deriving, refused
 -- until typed).

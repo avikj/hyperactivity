@@ -214,7 +214,7 @@ static bool x_untyped_file;       /* converting a file that was loaded before th
  * rules and the machine's word operations; only they may hold primitive, foreign or postulate.
  * Everything else is checked at a stated type or is refused. */
 static const char *const BOOT_RAW[] = { "core/prelude", "core/code", "bootstrap/match", "bootstrap/nav", "bootstrap/cost", "bootstrap/lin", "core/check", NULL };
-static const char *const BOOT_TRUSTED[] = { "bootstrap/prim", "library/std", NULL };
+static const char *const BOOT_TRUSTED[] = { "bootstrap/prim", "core/primitives", "library/std", NULL };
 static bool boot_in(const char *const *names) {
     if (!x_file) return false;
     size_t l = strlen(x_file);

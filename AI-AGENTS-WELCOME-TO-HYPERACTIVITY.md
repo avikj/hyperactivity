@@ -45,7 +45,7 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
     capacity demonstrated and mentioned in the paper; library; example; language support; our
     usage). A new file opens with one; a file that moves layer has its line changed in the same
     commit. The directories follow the layers: lib/core/ (the primitive language: prelude, code,
-    check), lib/bootstrap/ (loaded with the core but not core: the untyped match, nav, cost, lin and the
+    check, primitives), lib/bootstrap/ (loaded with the core but not core: the untyped match, nav, cost, lin and the
     misplaced machine numbers of prim), lib/capacities/, lib/library/, lib/examples/, lib/languages/
     (language support), lib/usage/; lib/core.cub and lib/library.cub are the load lists; src/ is the
     machine.

@@ -1,0 +1,51 @@
+-- Layer: core: the primitive language (the core's primitive declarations made after the checker is loaded) (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+-- lib/core/primitives.cub — the primitives of the core that are declared at a checked type, so after the
+-- checker: guarded recursion's delayed fixed point, its unfolding and the clock quantifier's elimination
+-- (the clocked extension: Kristensen, Møgelberg, Vezzosi), and the checker's reflection (the paper's §1.2
+-- “Programs about programs”: a definition's code, normalization and conversion at a code's type, a data
+-- type's shape); before them, the core's own data types, declared before the checker existed, checked.
+-- Loaded after lib/core/check.cub, before the library.
+
+-- ---------------------------------------------------------------- the core's data types, checked
+#check-data Bool
+#check-data Nat
+#check-data List
+#check-data Lst
+#check-data Opt
+#check-data CFree
+#check-data Code
+
+-- ---------------------------------------------------------------- guarded recursion
+-- a path in a type given
+Path : {l : Level} (A : Type l) → A → A → Type l
+Path A x y = PathP (λ i → A) x y
+-- the delayed fixed point: a stuck call, unfolded only by the tick constant ⋄ that forceκ gives
+primitive tick dfix : {l : Level} {κ : Clock} {A : Type l} → (▸ κ A → A) → ▸ κ A = λ l κ A f α → f (dfix l κ A f)
+-- the delayed fixed point unfolded once: f applied to it, one tick later
+dfix-next : {l : Level} {κ : Clock} {A : Type l} → (▸ κ A → A) → ▸ κ A
+dfix-next f = λ α → f (dfix f)
+-- the fixed point unfolds one step later: the path from the delayed fixed point to the next of
+-- the fixed point. At a tick variable dfix does not unfold, so the path is a stuck call; at ⋄ both
+-- ends are f (dfix f), and so is every point between
+primitive tick pfix : {l : Level} {κ : Clock} {A : Type l} → (f : ▸ κ A → A) →
+                      Path {l} (▸ κ A) (dfix {l} {κ} {A} f) (dfix-next {l} {κ} {A} f)
+                    = λ l κ A f (i : I) α → f (dfix l κ A f)
+-- a later value at every clock is a value now at every clock (forceκ): the clock is fresh, so its tick
+-- constant may be given
+primitive forceκ : {l : Level} {A : Clock → Type l} → ((κ : Clock) → ▸ κ (A κ)) → (κ : Clock) → A κ = λ l A f κ → f κ ⋄
+
+-- ---------------------------------------------------------------- the checker's reflection
+primitive def-code : Word → Opt Code = λ g → quote-top (%gty g) (%gval g)
+primitive def-type-code : Word → Opt Code = λ g → quote-ty (%gty g)
+-- a definition as it was written (a copattern definition's clauses), when it has one
+primitive def-source : Word → Opt Code = λ g → %gcode g
+-- c normalized at the type T's code names (none when the value does not quote)
+primitive code-norm-at : Code → Code → Opt Code = λ T c → quote-top (eval-g lnil T) (eval-g lnil c)
+-- the checker's conversion of two codes' values at the type a code names
+primitive code-conv-at : Code → Code → Code → Bool = λ T a b → conv (eval-g lnil T) (eval-g lnil a) (eval-g lnil b)
+-- data type d's constructor k: its number of fields, which of them are recursive; d higher (a
+-- constructor with dimensions); a codata type's fields of the type itself; d's index of indices
+primitive con-nfields : Word → Word → Word = λ d k → tel-nfields (con-tel d k)
+primitive con-recs : Word → Word → Lst Bool = λ d k → tel-recs d (con-tel d k)
+primitive data-higher : Word → Bool = λ d → lany tel-has-dim (ctors-at d (snd (params-fresh (dtel (%dent d)) lnil)))
+primitive codata-recs : Word → Lst Bool = λ d → co-tel-recs d (cofields-at d (fst (params-fresh (dtel (%dent d)) lnil)))
