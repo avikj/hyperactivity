@@ -325,23 +325,13 @@ composition-with-systems = node "Composition with a system on the context's face
 -- changing implicit index before it ran the checker out of memory. Every case is checked by the
 -- host, so a derivation it returns is one. Example end to end: the raw code λ x. x checked at
 -- Bool → Bool, then normalized to λ x. x; λ f. f at (Bool → Bool) → Bool → Bool normalizes to its
--- η-long form λ f. λ x. f x. Known (2026-11-14, tested): normalizing what the checker returns for a
--- term with two binders or an application does not finish: λ f. λ x. x runs out of memory after a
--- quarter hour, and λ f. λ x. f x crashes the machine (src/net.c record_build_n with a null record,
--- reached from interact during the reading; the same with CUBICAL_NOSWEEP, CUBICAL_NOMEMO, one
--- worker and an empty store), while the checking alone answers at once. The machine now reports
--- such a case instead of crashing (src/net.c: a case meeting a constructor of another data type, or
--- one with no branch, names both and stops; the library checks unchanged with it, 1936 passed and
--- the 24 known failures of lib/derive.cub), and the report here is: a case on Empty met none, a
--- variable read in an empty context (VarP lnil is Empty), during the normalization of the
--- checker's derivation of λ f. λ x. f x. The derivations carry the
--- transports (der-tr, transport along PT-map and PT-lift) whose paths are constant at a concrete
--- context but are compositions at the type the definitions are checked at; the normalizer then
--- composes through every field of every transported derivation. Resolved (2026-11-15): the defect
--- was the machine's transport on a constructor of an indexed family, which moved a recursive field
--- (a premise derivation, at its own index) along the outer index's line (fixed in src/lang.c; the
--- small witness is at the composition finding of the trusted-part review). With it λ f. λ x. f x
--- checks and normalizes to itself; check-wip.cub passes whole (1719 passed, 0 failed).
+-- η-long form λ f. λ x. f x. Found and fixed (2026-11-14/15): normalizing what the checker returned for
+-- a term with two binders or an application did not finish (λ f. λ x. x ran out of memory; λ f. λ x.
+-- f x crashed the machine, then, with the machine reporting a case that meets a foreign constructor,
+-- read a variable in an empty context). The defect was the machine's transport on a constructor of
+-- an indexed family, which moved a recursive field (a premise derivation, at its own index) along the
+-- outer index's line (fixed in src/lang.c; the small witness is at the composition finding of the
+-- trusted-part review). Now λ f. λ x. f x and λ f. λ x. x check and normalize to themselves.
 -- Done and checked (2026-11-15): case on Bool (case-ok: the scrutinee at Bool, both branches at t,
 -- the motive the constant type t over the context extended by a Bool, dty-s carried to ext-h as λ's
 -- body is; bcase-at and case-m for checking and synthesis). Examples: case true of false, true
