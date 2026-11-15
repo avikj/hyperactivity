@@ -214,9 +214,12 @@ check-face p =
 -- ---------------------------------------------------------------- data types
 -- (dent telescope level): the parameters' telescope ending in the constructors' telescopes, each
 -- its fields, its dimensions, ending in its boundary (the code of a system)
-data DEnt = dent tel lvl | dcoent tel lvl
-dtel de = case de of dent t l → t; dcoent t l → t
-dlvl de = case de of dent t l → l; dcoent t l → l
+-- (dentl telescope level-telescope): a data type with a declared universe, its level a telescope over
+-- the parameters ending in the level's term
+data DEnt = dent tel lvl | dcoent tel lvl | dentl tel ltel
+dtel de = case de of dent t l → t; dcoent t l → t; dentl t l → t
+-- a data type's level at parameter values ps
+dlvl-at de ps = case de of dentl t lt → tval (tel-end (tel-inst lt ps) tlzero); dent t l → l; dcoent t l → l
 -- a codata type (dcoent telescope level): the parameters' telescope ending in its fields' telescope
 is-codata d = case %dent d of dcoent t l → true; _ → false
 -- a telescope instantiated at values (a term binder's type is its type's value)
@@ -792,6 +795,7 @@ E-erased-used = #37
 E-linear-dropped = #38
 E-linear-dup = #39
 E-linear-intro = #40
+E-overlevel = #41
 -- a type's universe level (not ω), and a type's sort (a universe, U ω for types over levels)
 infer-level A =
   case infer A of
@@ -1007,7 +1011,7 @@ infer c =
         r → r
     tann t T V → 
       case infer-sort T of typed s → let Tv = tval T in and-then (check t Tv) (typed Tv); r → r
-    tdata d ps V → let de = %dent d in and-then (check-tele c (dtel de) ps) (typed (Type (dlvl de)))
+    tdata d ps V → let de = %dent d in and-then (check-tele c (dtel de) ps) (typed (Type (dlvl-at de (lmap tval ps))))
     -- a constructor of a data type without parameters infers that type (a scrutinee rebuilt from a
     -- branch's fields, let k = C x… in …, is such an application)
     tcon d c2 fs ds V →
@@ -1755,13 +1759,13 @@ field-level d A =
           tsigma B nm b V → let Bv = tval B in lmax (field-level d B) (field-level d (b (%var nm Bv) Bv))
           tguess k g t V → field-level d t
           -- a nested occurrence (nested-pos): the other type's level and its arguments' (D's at lzero)
-          tdata d2 ps V → lmax (dlvl (%dent d2)) (lfold-lmax (lconcatmap (λ q → lcons (field-level d q) lnil) ps))
+          tdata d2 ps V → lmax (dlvl-at (%dent d2) (lmap tval ps)) (lfold-lmax (lconcatmap (λ q → lcons (field-level d q) lnil) ps))
           _ → level-of (infer-level A))
 lfold-lmax lnil = lzero
 lfold-lmax (lcons x r) = lmax x (lfold-lmax r)
 data-level d tel = lfold-lmax (lconcatmap (field-levels d) (snd (params-fresh tel lnil)))
 data-entry d ent =
-  case ent of dent tel l → dent tel (data-level d tel); dcoent tel l → dcoent tel l
+  case ent of dent tel l → dent tel (data-level d tel); dcoent tel l → dcoent tel l; dentl tel lt → dentl tel lt
 -- a data type's level is closed: no field's universe depends on a parameter
 -- (2026-11-12) the level is the fields' largest only; a declared universe is never seen here, since
 -- src/syntax.c drops it (at the site).
@@ -1772,6 +1776,13 @@ chk-data d ent =
       in and-then (chk (lvl-closed (lvl-of lv)) (refused lv E-openlevel opq opq))
            (and-then (check-ptys tel)
               (let pc = params-fresh tel lnil in check-ctors d (fst pc) (snd pc) #0))
+    -- a declared universe: the fields' level at fresh parameters within the declared level there
+    dentl tel lt → 
+      let pc = params-fresh tel lnil
+          lv = lfold-lmax (lconcatmap (field-levels d) (snd pc))
+          an = tval (tel-end (tel-inst lt (fst pc)) tlzero)
+      in and-then (chk (lvl-le (lvl-of lv) (lvl-of an)) (refused lv E-overlevel an opq))
+           (and-then (check-ptys tel) (check-ctors d (fst pc) (snd pc) #0))
     _ → refused opq E-notdata opq opq
 -- ---------------------------------------------------------------- codata
 -- A codata declaration: parameter types are types; each field type a type, strictly positive in D
@@ -1794,7 +1805,7 @@ check-cofields d tel =
     _ → ok
 codata-level d tel = lfold-lmax (field-levels d (snd (params-fresh tel lnil)))
 codata-entry d ent =
-  case ent of dcoent tel l → dcoent tel (codata-level d tel); dent tel l → dent tel l
+  case ent of dcoent tel l → dcoent tel (codata-level d tel); dent tel l → dent tel l; dentl tel lt → dentl tel lt
 chk-codata d ent =
   case ent of
     dcoent tel l → 
@@ -2357,7 +2368,7 @@ type-level v =
     wpi A B → lmax (type-level A) (type-level (B (%var A)))
     wsigma A B → lmax (type-level A) (type-level (B (%var A)))
     wpath L a b → type-level (L @ %dim)
-    wdata d ps → dlvl (%dent d)
+    wdata d ps → dlvl-at (%dent d) ps
     wglue A S → type-level A
     whcompu A S → type-level A
     wvar l T → univ-level T

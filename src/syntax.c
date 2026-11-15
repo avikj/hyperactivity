@@ -1453,7 +1453,14 @@ static void p_decl_in(void) {
     if (x_is(t, "data")) {
         data_annot = NULL;
         Node *d = p_data();
-        if (x_typed) { x_top(sym2(fail ? "checked-data-fail" : "checked-data", d)); if (!fail) data_level_check(); }
+        if (x_typed) {
+            /* a declared universe (data D ps : … → Type l) is the type's level, a function of the
+             * parameters; the fields are checked to fit under it (lib/core/check.cub, chk-data) */
+            Node *lv = NULL;
+            if (data_annot) { Node *T = core(data_annot); if (T->list && T->n == 2 && is(T->it[0], "U")) lv = T->it[1]; else if (!T->list && is(T, "U")) lv = nsym("lzero"); }
+            x_top(lv ? lst(3, nsym(fail ? "checked-data-fail" : "checked-data"), d, lv) : sym2(fail ? "checked-data-fail" : "checked-data", d));
+            if (!fail) data_level_check();
+        }
         else x_top(d);
         decl_end(); return;
     }

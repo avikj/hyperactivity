@@ -1464,6 +1464,7 @@ static Node *atel_ctor(Node *cd, ConInfo *c, int i, int k) {
     for (int q = dl->n - 1; q >= 1; q--) r = kapp("ty", word(srcname(dl->it[q]->s)), nl3("lam", dl->it[q], r));
     return r;
 }
+static Node *atel_level(Node *dd, int d, int k, Node *lv);
 static Node *atel_params(Node *dd, int d, int k) {
     Node *hd = dd->it[1];
     if (k < DATA[d].nparams) {
@@ -1483,6 +1484,22 @@ static Node *atel_params(Node *dd, int d, int k) {
     return r;
 }
 
+/* a declared universe's level as a telescope over the parameters, ending in the level (tz l) */
+static Node *atel_level(Node *dd, int d, int k, Node *lv) {
+    Node *hd = dd->it[1];
+    if (k < DATA[d].nparams) {
+        Node *p = hd->it[k + 1];
+        if (!p->list || p->n != 2) die("a checked data type needs its parameters' types:", DATA[d].name);
+        Chain C = { 0 }; NV A = ann(ds(p->it[1]), &C);
+        Node *ty = afresh("at");
+        apush(p->it[0]->s, ty);
+        Node *rest = atel_level(dd, d, k + 1, lv);
+        nasc--;
+        return chain_close(&C, nl3("app", kapp("tx", A.node, word(srcname(p->it[0]->s))), nl3("lam", p->it[0], nl3("lam", ty, rest))));
+    }
+    Chain C = { 0 }; NV L = ann(ds(lv), &C);
+    return chain_close(&C, kapp("tz", L.node, NULL));
+}
 /* occurrences of a parameter in a primitive's body (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”): c counts them, direct those that are an
  * argument of a machine operation (a %-headed application); an inner binder of the same name hides it */
 static void prim_uses(Node *t, const char *x, int under, int *c, int *direct) {
@@ -3300,7 +3317,8 @@ static void explain(const char *r, Node *q) {
         /* 37 */ { "a binder at multiplicity 0 (erased) is used", NULL, NULL },
         /* 38 */ { "a linear binder (multiplicity 1) is not used", NULL, NULL },
         /* 39 */ { "a linear binder (multiplicity 1) is used more than once", NULL, NULL },
-        /* 40 */ { "a constructor of a linear type (a field at multiplicity 1) is applied outside a primitive", NULL, NULL } };
+        /* 40 */ { "a constructor of a linear type (a field at multiplicity 1) is applied outside a primitive", NULL, NULL },
+        /* 41 */ { "a field's universe is above the data type's declared universe", "the fields' level", "the declared level" } };
     const char *saved = src; src = r;
     Node *n = read_node();
     src = saved;
@@ -4038,7 +4056,7 @@ static void toplevel_in(Node *f) {
          * checker: parameter and field types are types, fields strictly positive,
          * boundaries elements of the type made of earlier constructors.
          * (check-data D): check a data type already declared (the prelude's) */
-        Node *dd; int d;
+        Node *dd, *dlv = NULL; int d;
         if (!strcmp(h, "check-data")) {
             if (f->n != 2 || f->it[1]->list) die("(check-data D)", NULL);
             d = data_lookup(f->it[1]->s);
@@ -4046,14 +4064,15 @@ static void toplevel_in(Node *f) {
             if (chk_index(d) >= 0) die("check-data: already checked:", f->it[1]->s);
             dd = DATA[d].decl;
         } else {
-            if (f->n != 2 || !f->it[1]->list || !is(f->it[1]->it[0], "data")) die("(checked-data[-fail] (data ...))", NULL);
+            if ((f->n != 2 && f->n != 3) || !f->it[1]->list || !is(f->it[1]->it[0], "data")) die("(checked-data[-fail] (data ...) [level])", NULL);
             dd = f->it[1];
+            dlv = f->n == 3 ? f->it[2] : NULL;
             toplevel(dd);
             d = ndata - 1;
         }
         GROW(CHKDATA, capchkdata, (size_t)nchkdata + 1);
         CHKDATA[nchkdata++] = d; chk_pending = nchkdata - 1;
-        Node *ent = nl2("%raw", kapp("dent", atel_params(dd, d, 0), K("lzero")));
+        Node *ent = nl2("%raw", dlv ? kapp("dentl", atel_params(dd, d, 0), atel_level(dd, d, 0, dlv)) : kapp("dent", atel_params(dd, d, 0), K("lzero")));
         int di = nchkdata - 1;
         /* the tables while it is checked: its declaration at level lzero, and the machine's data
          * type, constructors, elimination and case for the evaluator */
@@ -4072,7 +4091,7 @@ static void toplevel_in(Node *f) {
         table_set(TB_DTAB, di, global_lookup(dtn));
         table_set(TB_TRANS, di, global_lookup(trn));
         long steps = 0;
-        char key[65]; char *kcode = NULL; key_decl(dd, key, &kcode);
+        char key[65]; char *kcode = NULL; decl_level = dlv; key_decl(dd, key, &kcode); decl_level = NULL;
         bool stored = expect && store_checked(key);
         char *rs = expect && !stored ? store_refused(key) : NULL;   /* refused before */
         char *r = stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-data", word(di), ent), &steps), *tr = strdup("ok");

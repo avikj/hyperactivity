@@ -1,0 +1,19 @@
+-- Layer: example: data types with a declared universe over a parameter (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+import "../../lib/core.cub"
+-- a unit at every level
+data UnitL (l : Level) : Type l where
+  ul : UnitL l
+t1 : UnitL (lsuc lzero)
+t1 = ul
+-- lists at every level: a list of types
+data LstL (l : Level) (A : Type l) : Type l where
+  lnl : LstL l A
+  lcs : A → LstL l A → LstL l A
+tys : LstL (lsuc lzero) Type
+tys = lcs Bool (lcs Nat lnl)
+-- an undeclared universe is the fields' level, as before
+data Box (A : Type) = box (a : A)
+-- a field above the declared universe is refused
+#fail
+data Bad : Type where
+  bad : Type → Bad

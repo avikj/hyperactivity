@@ -426,6 +426,7 @@ static void key_named(const char *kind, const char *name, Node *T, char out[65],
     key_hash(w.b, w.n, out); free(w.b); kfresh_on = false;
     if (type) *type = ty; else free(ty);
 }
+static Node *decl_level;   /* the declared universe's level of the data type being keyed, or NULL */
 static void key_decl(Node *dd, char out[65], char **code) {
     cur_deps.n = 0;
     kfresh_on = true; nkfresh = 0;   /* as key_def: generated names by first occurrence */
@@ -436,6 +437,14 @@ static void key_decl(Node *dd, char out[65], char **code) {
      * them and a form read back named the wrong one) */
     Node *hd = dd->it[1]; const char *dn = hd->list ? hd->it[0]->s : hd->s;
     SBuf w = { 0 }; sb_put(&w, "data "); sb_put(&w, dn); sb_put(&w, "\n"); sb_put(&w, b.b); sb_put(&w, "\n");
+    /* a declared universe (decl_level, set by the caller) is part of the type: its level over the
+     * parameters, in the key only (the canonical code is the declaration as written without it) */
+    if (decl_level) {
+        int base = nkscope;
+        if (hd->list) for (int k = 1; k < hd->n; k++) { Node *p = hd->it[k]; kpush(p->list && p->n == 2 ? p->it[0]->s : p->list ? "" : p->s); }
+        SBuf a = { 0 }; canon(&a, decl_level); nkscope = base;
+        sb_put(&w, "level "); sb_put(&w, a.b); sb_put(&w, "\n"); free(a.b);
+    }
     key_hash(w.b, w.n, out); free(w.b); kfresh_on = false;
     if (code) *code = b.b; else free(b.b);
 }
