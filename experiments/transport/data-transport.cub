@@ -1,0 +1,56 @@
+-- Layer: example: the machine's generated transport on data types checked against CCHM: dependent fields, an indexed family, a recursive field at its own index, a higher inductive type's path constructor (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+import "../../lib/core.cub"
+notb2 : Bool → Bool
+notb2 true = false
+notb2 false = true
+nn : (b : Bool) → notb2 (notb2 b) ≡ b
+nn true = λ i → true
+nn false = λ i → false
+notP : Bool ≡ Bool
+notP = ua (isoToEquiv notb2 notb2 nn nn)
+-- a dependent field: its type a family over the parameter at the earlier field
+data Sg (A : Type) (B : A → Type) = sg (a : A) (b : B a)
+sg1 : Sg Bool (λ _ → Bool)
+sg1 = transport (λ i → Sg (notP i) (λ _ → notP i)) (sg true false)
+sgfst : {A : Type} {B : A → Type} → Sg A B → A
+sgfst (sg a b) = a
+sgsnd : Sg Bool (λ _ → Bool) → Bool
+sgsnd (sg a b) = b
+#same sgfst sg1 = false
+#same sgsnd sg1 = true
+-- an indexed family over Nat, transported along its parameter's line
+data Vec (A : Type) : Nat → Type where
+  vnil : Vec A zero
+  vcons : (n : Nat) (x : A) (xs : Vec A n) → Vec A (suc n)
+v2 : Vec Bool (suc (suc zero))
+v2 = vcons (suc zero) true (vcons zero false vnil)
+v2t : Vec Bool (suc (suc zero))
+v2t = transport (λ i → Vec (notP i) (suc (suc zero))) v2
+vhead : {A : Type} {n : Nat} → Vec A (suc n) → A
+vhead (vcons n x xs) = x
+vsecond : {A : Type} {n : Nat} → Vec A (suc (suc n)) → A
+vsecond (vcons m x (vcons k y ys)) = y
+#same vhead v2t = false
+#same vsecond v2t = true
+-- a dependent field whose family depends on the earlier field through the line
+data Su (A : Type) = nP | sP | mer (a : A) (i : I) [ i = 0 ↦ nP , i = 1 ↦ sP ]
+-- the meridian's label, read off a path between the poles' images by a map to a family
+tm : Path (Su Bool) nP sP
+tm = λ j → transport (λ i → Su (notP i)) (mer true j)
+-- the endpoints are the poles (the boundary respected)
+#same tm i0 = nP
+#same tm i1 = sP
+-- a recursive field at its own index (the defect fixed 2026-11-15): V's inner v1 keeps its index Nat
+data V : Type → Type 1 where
+  v1 : (A : Type) (a : A) → V A
+  vu : (n : Nat) → V Nat → V Bool
+dep : {A : Type} → V A → Nat
+dep (v1 B a) = zero
+dep (vu n r) = suc (dep r)
+vin : V Bool → Nat
+vin (vu n (v1 B a)) = zero
+vin (vu n (vu m r)) = suc zero
+vin (v1 B a) = suc (suc zero)
+vt : V Bool
+vt = transport (λ i → V (notP i)) (vu zero (v1 Nat (suc zero)))
+#same dep vt = suc zero
