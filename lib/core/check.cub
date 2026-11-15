@@ -264,7 +264,7 @@ nest-of d c =
   case c of
     tdata d2 ps V → 
       if %weq d d2 then false
-      else if %weq (%diht d2) #0 then false
+      else if orb (%weq (%diht d2) #0) (%weq (%dihn d2) #0) then false
       else (case ps of
               lcons p r → (case r of lnil → (case p of tdata d3 qs V3 → %weq d d3; _ → false); _ → false)
               _ → false)
@@ -372,6 +372,20 @@ lvl-of v =
                       then lvl-max (lvl-of (lhead fs)) (lvl-of (lhead (ltail fs)))
                       else lvw
     _ → lvl #0 (single (v , #0))
+-- the data type of levels
+is-level-d d = case %view lzero of wcon d2 c fs ds → %weq d d2; _ → false
+-- a level from its normal form, canonical for a closed level and a single atom (lmax lzero l is l)
+lsucn n v = if %weq n #0 then v else lsuc (lsucn (%wsub n #1) v)
+lvl-atoms lnil = lzero
+lvl-atoms (lcons p lnil) = lsucn (snd p) (fst p)
+lvl-atoms (lcons p r) = lmax (lsucn (snd p) (fst p)) (lvl-atoms r)
+lvl-back l =
+  case l of
+    lvw → lomega
+    lvl c ts → 
+      (case ts of
+         lnil → lsucn c lzero
+         _ → if lany (λ q → wle c (snd q)) ts then lvl-atoms ts else lmax (lsucn c lzero) (lvl-atoms ts))
 -- max(c, ts) ≤ max(d, us) for every value of the variables iff c ≤ d or c ≤ some offset of us,
 -- and each a+o of ts has a+o' in us with o ≤ o'
 lvl-le l m =
@@ -527,7 +541,10 @@ uconv-head u wu v wv =
       case wv of
         wcon d2 c2 fs2 ds2 → 
           if %weq d d2
-            then if %weq c c2
+            -- levels as levels, even without their type (in a stuck elimination's motive: lmax lzero
+            -- lzero is lzero)
+            then if is-level-d d then lvl-eq (lvl-of u) (lvl-of v)
+            else if %weq c c2
                    then if lall2 (λ r s → %ieq r s) ds ds2 then lall2 uconv fs fs2 else false
                    else false
             else false
@@ -1239,7 +1256,7 @@ branch-hyps e d Pv Ph F c tel b fs (lcons f rest) =
          sh-nest L → 
            let A = nest-elem (fst (snd f))
                P = λ y → Ph A y
-               l = type-level (Ph A (%var A))
+               l = lvl-back (lvl-of (type-level (Ph A (%var A))))
            in branch-hyps e d Pv Ph F c tel (b1 (%gval (%wsub (%dihn L) #1) l A P F (fst f)) (%gval (%wsub (%diht L) #1) l A P (fst f))) fs rest
          _ → branch-hyps e d Pv Ph F c tel (b1 (hyp-val F (fst f) (fst (snd f)) (snd (snd f))) (hyp-ty Ph F (fst f) (fst (snd f)) (snd (snd f)))) fs rest)
     _ → err e E-ctor opq opq
