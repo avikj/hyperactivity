@@ -1,0 +1,46 @@
+-- Layer: example: the machine's generated composition on data types checked against CCHM: along a univalence line with a filler as tube, fieldwise in a fixed data type, a higher inductive type's composed meridians and their transport (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+import "../../lib/core.cub"
+notb2 : Bool → Bool
+notb2 true = false
+notb2 false = true
+nn : (b : Bool) → notb2 (notb2 b) ≡ b
+nn true = λ i → true
+nn false = λ i → false
+notP : Bool ≡ Bool
+notP = ua (isoToEquiv notb2 notb2 nn nn)
+data Sg (A : Type) (B : A → Type) = sg (a : A) (b : B a)
+sgfst : {A : Type} {B : A → Type} → Sg A B → A
+sgfst (sg a b) = a
+sgsnd : Sg Bool (λ _ → Bool) → Bool
+sgsnd (sg a b) = b
+SgB : Type
+SgB = Sg Bool (λ _ → Bool)
+-- the filler of transport along the line, and a composition along it whose tube on i = 0 is that filler
+fillS : (a : SgB) → PathP (λ j → Sg (notP j) (λ _ → notP j)) a (transport (λ j → Sg (notP j) (λ _ → notP j)) a)
+fillS a = λ j → comp (λ k → Sg (notP (j ∧ k)) (λ _ → notP (j ∧ k))) (λ k → [ j = 0 ↦ a ]) a
+cS : (a : SgB) → Path SgB (transport (λ j → Sg (notP j) (λ _ → notP j)) a) (transport (λ j → Sg (notP j) (λ _ → notP j)) a)
+cS a = λ i → comp (λ j → Sg (notP j) (λ _ → notP j)) (λ j → [ i = 0 ↦ fillS a j ]) a
+-- both ends are transport along the line; the fields there as CCHM computes them
+#same sgfst (cS (sg true false) i0) = false
+#same sgsnd (cS (sg true false) i0) = true
+#same sgfst (cS (sg true false) i1) = false
+#same sgsnd (cS (sg true false) i1) = true
+-- composition in a fixed data type (fieldwise): a path concatenated with itself keeps its ends
+pS : Path (Sg Bool (λ _ → Bool)) (sg true false) (sg true false)
+pS = λ i → sg true false
+qS : Path (Sg Bool (λ _ → Bool)) (sg true false) (sg true false)
+qS = λ i → comp (λ j → Sg Bool (λ _ → Bool)) (λ j → [ i = 0 ↦ sg true false , i = 1 ↦ pS j ]) (pS i)
+#same qS i0 = sg true false
+#same qS i1 = sg true false
+#same sgsnd (qS i0) = false
+-- a higher inductive type: the meridians composed (south to north to south), its ends the poles
+data Su (A : Type) = nP | sP | mer (a : A) (i : I) [ i = 0 ↦ nP , i = 1 ↦ sP ]
+loopS : Path (Su Bool) sP sP
+loopS = λ i → comp (λ j → Su Bool) (λ j → [ i = 0 ↦ mer false j , i = 1 ↦ mer true j ]) nP
+#same loopS i0 = sP
+#same loopS i1 = sP
+-- along a line of the higher inductive type: transport of a composite path
+loopT : Path (Su Bool) sP sP
+loopT = λ i → transport (λ k → Su (notP k)) (loopS i)
+#same loopT i0 = sP
+#same loopT i1 = sP
