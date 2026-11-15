@@ -24,12 +24,14 @@
 The machine is built on first use and rebuilt when src/ changes. Run it from anywhere: it finds this
 repository from its own location.
 """
-import os, re, subprocess, sys
+import hashlib, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.realpath(__file__))
 MACHINE = os.path.join(ROOT, 'build', 'cubical')
 TASKS = os.path.join(ROOT, 'tools', 'task-graph.py')
-PAPER = os.path.join(ROOT, 'docs', 'hyperactivity_v31.pdf')
+PAPER = os.path.join(ROOT, 'docs', 'hyperactivity_v31.pdf')  # historical snapshot only
+PAPER_SOURCE = os.path.join(ROOT, 'docs', 'Hyperactivity_Current_Draft.md')
+AGENTS = os.path.join(ROOT, 'AGENTS.md')
 LABS = os.path.join(ROOT, 'docs', 'Hyperactive_Labs.md')
 WORDS = os.path.join(ROOT, 'docs', 'word-list.md')
 TO_BE_INCORPORATED = os.path.join(ROOT, 'docs', 'to-be-incorporated-into-paper.md')
@@ -38,14 +40,38 @@ STEP = 24000   # characters per step of the walk, so a step is read whole
 
 
 def paper_text():
-    """the paper as text, extracted once and again whenever the PDF changes"""
+    """Read the editable manuscript afresh; a legacy PDF is an explicitly labelled fallback."""
+    if os.path.exists(PAPER_SOURCE):
+        with open(PAPER_SOURCE, encoding='utf-8') as f:
+            return f.read()
+    # Until the exact editable source is imported, retain access to the existing paper,
+    # but never describe that snapshot as the current N-part manuscript.
+    notice = ('SOURCE IMPORT REQUIRED: docs/Hyperactivity_Current_Draft.md is absent.\n'
+              'The following is the historical v31 PDF, not a current editable draft.\n'
+              'Import the exact source before editing the manuscript; do not reconstruct it '
+              'from PDF extraction or maintain another Library copy.\n\n')
+    if not os.path.isfile(PAPER):
+        sys.exit(notice + 'The historical PDF is also absent.')
     out = os.path.join(ROOT, 'build', 'paper.txt')
-    if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(PAPER):
+    stamp = out + '.sha256'
+    with open(PAPER, 'rb') as f:
+        digest = hashlib.sha256(f.read()).hexdigest()
+    cached = ''
+    if os.path.isfile(stamp):
+        with open(stamp, encoding='ascii') as f:
+            cached = f.read().strip()
+    if not os.path.isfile(out) or cached != digest:
         os.makedirs(os.path.dirname(out), exist_ok=True)
-        r = subprocess.run(['pdftotext', '-layout', PAPER, out], capture_output=True, text=True)
+        try:
+            r = subprocess.run(['pdftotext', '-layout', PAPER, out], capture_output=True, text=True)
+        except FileNotFoundError:
+            sys.exit('reading the historical PDF needs pdftotext (poppler)')
         if r.returncode != 0:
-            sys.exit('reading the paper needs pdftotext (poppler):\n' + r.stderr)
-    return open(out).read()
+            sys.exit('reading the historical PDF failed:\n' + r.stderr)
+        with open(stamp, 'w', encoding='ascii') as f:
+            f.write(digest + '\n')
+    with open(out, encoding='utf-8') as f:
+        return notice + f.read()
 
 
 def pieces(text, sep):
@@ -68,34 +94,63 @@ def sections(md, level):
 
 
 def tool(*args):
-    return subprocess.run([sys.executable, TASKS, *args], cwd=ROOT, capture_output=True, text=True).stdout
+    r = subprocess.run([sys.executable, TASKS, *args], cwd=ROOT, capture_output=True, text=True)
+    if r.returncode != 0:
+        sys.exit('task-graph command failed: ' + ' '.join(args) + '\n' + r.stderr + r.stdout)
+    return r.stdout
+
+
+def standing_pieces(material):
+    """Read the paper delta's declared standalone pieces, not a second hard-coded inventory."""
+    heading = '## Standing pieces to be incorporated'
+    body = next((s for s in sections(material, 2)
+                 if s.split('\n', 1)[0].strip() == heading), None)
+    if body is None:
+        sys.exit('paper delta is missing its Standing pieces to be incorporated section')
+    refs = list(dict.fromkeys(re.findall(r'`(docs/[^`\n]+\.md)`', body)))
+    for ref in refs:
+        path = os.path.realpath(os.path.join(ROOT, ref))
+        if os.path.commonpath((os.path.realpath(ROOT), path)) != os.path.realpath(ROOT):
+            sys.exit('onboarding document leaves the repository: ' + ref)
+        if not os.path.isfile(path):
+            sys.exit('missing standing piece in the paper delta: ' + ref)
+        with open(path, encoding='utf-8') as f:
+            text = f.read()
+        yield ref, text
 
 
 def walk_steps():
     """the walk, in order: (title, text) for every step"""
     steps = []
-    w = open(WELCOME).read()
+    with open(WELCOME, encoding='utf-8') as f:
+        w = f.read()
     head, words = w.split("\n## Avik's words, verbatim", 1)
     steps.append(('Arrival', ARRIVAL))
+    with open(AGENTS, encoding='utf-8') as f:
+        for j, p in enumerate(pieces(f.read(), '\n\n')):
+            steps.append(('Repository ownership and agent entry' + (f', part {j + 1}' if j else ''), p))
     steps.append(("How to work, in Avik's words to agents", head))
-    pages = paper_text().split('\f')
-    for i, p in enumerate(pieces('\f'.join(pages), '\f')):
+    paper = paper_text()
+    separator = '\n\n' if os.path.exists(PAPER_SOURCE) else '\f'
+    for i, p in enumerate(pieces(paper, separator)):
         steps.append((f'The paper, part {i + 1}', p.replace('\f', '\n')))
-    for sec in sections(open(LABS).read(), 2):
+    with open(LABS, encoding='utf-8') as f:
+        labs = f.read()
+    for sec in sections(labs, 2):
         title = sec.split('\n', 1)[0].lstrip('# ').strip()
         for j, p in enumerate(pieces(sec, '\n\n')):
             steps.append((f'Hyperactive Labs: {title}' + (f', part {j + 1}' if j else ''), p))
-    for sec in sections(open(TO_BE_INCORPORATED).read(), 2):
+    with open(TO_BE_INCORPORATED, encoding='utf-8') as f:
+        material = f.read()
+    for sec in sections(material, 2):
         title = sec.split('\n', 1)[0].lstrip('# ').strip()
         for j, p in enumerate(pieces(sec, '\n\n')):
             steps.append((('To be incorporated into the paper' if title.startswith(('To be incorporated', '**To check')) else f'To be incorporated into the paper: {title}') + (f', part {j + 1}' if j else ''), p))
-    steps.append(("Avik's word list", open(WORDS).read()))
-    for j, p in enumerate(pieces(open(os.path.join(ROOT, 'docs', 'hyperactive-interaction-in-the-words-of-the-human-superorganism.md')).read(), '\n\n')):
-        steps.append(('Hyperactive Interaction, in the words of the human superorganism' + (f', part {j + 1}' if j else ''), p))
-    steps.append(('Knowledge is a lack of ignorance: the divisions the primitive removes',
-                  open(os.path.join(ROOT, 'docs', 'knowledge-is-a-lack-of-ignorance.md')).read()))
-    steps.append(('Controversy and consensus',
-                  open(os.path.join(ROOT, 'docs', 'controversy-and-consensus.md')).read()))
+    with open(WORDS, encoding='utf-8') as f:
+        steps.append(("Avik's word list", f.read()))
+    for ref, text in standing_pieces(material):
+        for j, p in enumerate(pieces(text, '\n\n')):
+            steps.append((ref + (f', part {j + 1}' if j else ''), p))
     for j, p in enumerate(pieces("## Avik's words, verbatim" + words, '\n\n')):
         steps.append((f"Avik's words, verbatim, part {j + 1}", p))
     steps.append(('The task graph', GRAPH_INTRO + tool('tree')))
@@ -110,17 +165,20 @@ material in the same order. Each step is printed whole and ends with the one com
 step. Read every word of every step before running the next; do not skip ahead, search the files,
 or open them in another order. The walk goes:
 
-  1. Avik's instructions to agents: how to work here.
-  2. The paper (version 31), in full.
+  1. Repository ownership (AGENTS.md), then Avik's instructions to agents: how to work here.
+  2. The current editable N-part manuscript, in full; an absent source is reported explicitly.
   3. The Hyperactive Labs note: the initiative, the one work in Parts, what exists.
   4. What is to be incorporated into the paper, in full.
-  5. Avik's word list, Hyperactive Interaction in the words of the human superorganism, and the
-     divisions the primitive removes.
+  5. Avik's word list and every document named under Standing pieces to be incorporated
+     in the paper delta, in order. Newly named pieces enter this walk without a CLI edit.
   6. Avik's words, verbatim, in full.
   7. The task graph: all the work, its state and its order.
   8. What you can take up now, and the commands for reading and working.
 
-An agent that has walked already in this session goes straight to `hyperactive open`."""
+All active writing lives in this repository, never in ChatGPT Library. PDF exports are snapshots,
+not an input required for source changes to reach onboarding. This walk reads its inputs afresh;
+a previously read step is not evidence of reading a later revision. Reopen changed context before
+continuing. An agent that has walked already in this session and is current goes to `hyperactive open`."""
 
 GRAPH_INTRO = """All work, and all status, is the task graph: a term in the language
 (task-graph/hyperactivity.cub over lib/usage/task-graph.cub), ruled by the Hyperactive Workflow you have
