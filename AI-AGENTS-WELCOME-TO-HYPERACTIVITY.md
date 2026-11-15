@@ -1804,11 +1804,3 @@ The consolidated piece is this, written through in the two registers you keep di
 > Yes no jumping only next/prev (can jump back)
 >
 > A pass phrase implies you have been acting in really bad faith/lying. Is that necessary beyond a tool which simply serves content? Do you know how harness works ? Do you know what “read” means? ? What does “reading” mean for such an agent? Just putting tokens in context? When you skip sections of paper, how do you even do that? It means it’s nowhere in KV cache. You are just bullshitting or actually know how any system works here??
-
-#### 2026-11-15 20:34 UTC
-
-> Speed is idiotic - your statement says really nothing - wtf - “speed” tell me supergenius, what is the performance impact of having a string in the system and displaying it? Absurd
->
-> We need a raw bytes file extension so the string can just be loaded by path - absolutely fuck your escaping idea for fucking regular English Text which should be copy pastable from my messages often
->
-> I didn’t say definitiojsnare paragraphs. You are hallucinating and being creative whe I give clear instructions. Essay is a string. It’s just string data in our system retard
