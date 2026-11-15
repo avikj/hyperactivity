@@ -100,8 +100,9 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   with agents amplifying them, and the only friction is an agent's incorrectness. Every message,
   personal context included, is work product. In the same turn, its content goes where it acts:
   material for the paper into `docs/to-be-incorporated-into-paper.md`, in his terms; a fact about a
-  goal into that goal's statement in the task graph; an instruction to agents into this section; the
-  message itself, verbatim, into “Avik's words, verbatim” below. An insight a session reaches with him
+  goal into that goal's statement in the task graph; an instruction to agents into this section; and,
+  when he writes at length (only then; not every message), the message itself, verbatim, into
+  “Avik's words, verbatim” below. An insight a session reaches with him
   goes in the same way, checked against his words. The aim: when an agent finishes the walk, it
   holds Avik's complete insight.
 - **Start from the evidence for Avik's claims** (Avik, 2026-11-14). What he says is supported by
