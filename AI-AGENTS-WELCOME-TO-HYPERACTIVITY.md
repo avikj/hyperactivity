@@ -106,7 +106,8 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   intelligent design. Bringing a topic forward means discussing it, deriving with him the complete
   end-to-end design and experience of hyperactivity as the basis of all personal and interpersonal
   computing (in 2035, say), which neither he nor anyone holds yet. Do not relabel what he said as
-  proposed features.
+  proposed features. Open-ended thinking has no decisions in it (decision, de- + caedere, is cutting
+  off): never frame an open edge as a choice for Avik to make; derive it.
 - **Nothing is unrelated; carry everything forward** (Avik, 2026-11-14 22:04 UTC). Every message
   brings forward all that has been discussed (the linguistics and the etymology tool, the dense
   network of words, the Gaian and human superorganisms, judging acts and not persons, variant
@@ -1575,3 +1576,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > It’s almost like you did the opposite of the intelligence work. Give me any topic or system. I’ll show you how it’s already fully described and its relations internal to the design. It’s good that this lines up and no conflicts were raised, but when I say bring it forward in discussion I mean bring it forward in discussion. Do you have an absolute complete end to end picture of the exact design & experience of hyperactivity in the year 2035 when this is the basis of all personal/interpersonal computing?
 >
 > I don’t. It is knowledge & intelligence work to fully compose/derive a vision. I am working at this moment. I am actively thinking & using technology tooling to accelerate/assist my intelligence process. This thread is where that is occurring. I hope it takes a turn for the better. I hope we enter a creative discussion and not one of you serving “answers”
+
+#### 2026-11-15 02:58 UTC
+
+> “Decides it” as if there is any decision in open ended thinking (decision is the dumbest act)
