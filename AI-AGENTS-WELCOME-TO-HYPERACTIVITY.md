@@ -114,7 +114,9 @@ only in the task graph, which `hyperactive` shows; nothing else records it.
   ontology; it rejects it for computing. The filesystem is an institutionalized abstraction, held as
   deeply as a false church by software engineers and computer scientists. Every path in the code
   today (`import`, `document`, `text`, the CLI's constants) belongs to the git stand-in and is to be
-  removed, not built on; no new code adds one.
+  removed, not built on; no new code adds one. The bootstrap from the filesystem is one reader and
+  only one: it computes the hash of every file; from then on the hash is the reference (Unison's
+  codebase works the same way).
 - **Use the organization; never sprawl** (Avik, 2026-11-15). The paper delta, `docs/paper-delta.cub`,
   is a set of pointers (`document "path"`: a path and its content hash) and nothing else, no
   descriptions. Each piece it points to is work written at a distinct time and not yet in the paper;
