@@ -276,6 +276,23 @@ path-free-transport = node "Transport along a line of types at every path-free s
 -- cannot name the interval as a type at all (pick : Bool → I → I → I is refused, "not a bound variable
 -- or checked definition: I"), and systems are checked only as syntax (check-sys on tsys) inside a
 -- composition's tube, Glue and a composition of types.
+-- Derivation continued (2026-11-15), correcting the "both forced" above. (a) Any function that builds a
+-- system from data is checked once, at generic arguments, so its faces are neutral there (face-of b
+-- for a variable b), whether they come as interval values returned by a function or as bound
+-- dimensions in continuation-passing; interval-valued terms alone do not remove the generic overlap
+-- check. (b) What the overlap check needs is reasoning under a neutral face: in a context assuming
+-- φ = 1 for a neutral φ, a composition whose system has the branch [φ ↦ p] reduces to that branch's
+-- end (CCHM's boundary rule read under an assumed cofibration; Cubical Agda checks overlaps this way,
+-- with IsOne φ in the context). The current checker substitutes 0 or 1 for dimension variables only.
+-- (c) With (b), branches need not agree judgmentally as given: the object branches' agreement reaches
+-- the host as a path (Der's indices are forded), and each branch after the first can be corrected
+-- along that path by a one-branch composition on the earlier face, after which it agrees with the
+-- earlier branch under the overlap by the boundary rule. So the forced change is: faces over interval
+-- terms that can be neutral (which needs interval-valued terms: the interval as a sort a function
+-- returns), and the checker's conversion under an assumed face with neutral interval terms. Whether a
+-- type of partial elements (Partial φ A) is also forced, or systems of fixed syntax over computed
+-- faces suffice once (b) holds, is the next point of the derivation; nothing is written until it is
+-- settled.
 -- Known (2026-11-14, tested): the host's comp at Bool or Nat with a nonempty system on a variable is
 -- a formal composition (hcompD), and a case or recursor on a formal composition reduces to the
 -- formal composition of its branches along the motive at the composition's fill (eliminators
