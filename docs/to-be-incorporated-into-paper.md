@@ -326,6 +326,16 @@ The paper is the specification. What remains between the implementation (“The 
     usage, and what sits in the wrong layer is moved: a definition to the library, a capacity to its
     extension, native speed to the evaluator under a relation.
 - **Deriving,** as a typed term.
+- **Recursion through nested data types** (found 2026-11-15). The language's own raw syntax is a
+  nested inductive type: a code's case, constructor application, data type and eliminator hold their
+  subterms in a list of codes (`Lst Code`). A checked program over codes that recurses into those
+  subterms, such as the checker of §6.1 taking raw syntax (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”) or a typed
+  specializer, does so through the eliminator of a nested inductive type: a field of type L D, where
+  L's one parameter occurs strictly positively, takes as its induction hypothesis the hypotheses of
+  its D elements, laid out along L. The implementation's structural recursion takes hypotheses only
+  for fields of type D itself and for D under paths, function codomains and pairs, so a recursive
+  call on a case's branch is refused, and the untyped bootstrap files over codes cannot yet be
+  written with types.
 - **Terms of any depth.**
 
 **Dimensions.** This is answered by the standard semantics; it was never a question for Avik.
