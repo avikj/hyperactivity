@@ -79,7 +79,9 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   lost: what is pending him and what is pending the session.
 - **Work runs continuously, as if dispatched with no one present.** A session does not end its turn
   while work that is not blocked on Avik remains. It works through long stretches, hours or a night,
-  and reports only when the work is done or blocked.
+  and reports only when the work is done or blocked. Run it like an API call, not a conversation:
+  given the tasks, it returns success or failure once, at the end, and nothing before; it never sits
+  waiting for a reply while Avik is away or asleep (2026-11-15).
 - **Context lives in the repository, not in chat.** A session can end at any moment, so what it is
   doing, has found and has decided is written as it happens: facts at the goal they concern in the task graph,
   material for the paper in `docs/to-be-incorporated-into-paper.md`.
@@ -1620,3 +1622,7 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-15 07:41 UTC
 
 > “Pending on you: whether the core gets both interval-valued terms and Partial φ A, as above, for composition with systems in the normalizer. Without them, composition with a system whose number of faces depends on the term (transport at PathP, Glue, universes) can't be written in the typed language.” - to be clear, an express completion requirement cannot be achieved unless this is done? and you’re double checking with me if we intend to leave this incomplete ?
+
+#### 2026-11-15 07:59 UTC
+
+> You shall continue work continuously until all above tasks are done. When I wake tomorrow morning you should be still working, or done. Not idle waiting for a user response when user is known to be away & asleep - enter continuous work mode like an api call rather than conversation which much return task failure or success after 24h and nothing prior
