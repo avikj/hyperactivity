@@ -115,7 +115,6 @@ list-same l m =
   case l of
     lnil → (case m of lnil → true; _ → false)
     lcons x xs → (case m of lcons y ys → andb (code-same x y) (list-same xs ys); _ → false)
-andb a b = case a of true → b; false → false
 -- ---------------------------------------------------------------- matching
 -- match k b p t s: pattern p (with k pattern-bound variables above which are metavariables),
 -- under b binders inside the pattern so far, against t; s the match so far; none on failure.
@@ -189,8 +188,6 @@ mentions-lt d b t =
     csigma x y → orb (mentions-lt d b x) (mentions-lt (%wsucc d) b y)
     _ → false
 mentions-any d b l = case l of lnil → false; lcons x xs → orb (mentions-lt d b x) (mentions-any d b xs)
-orb a b = case a of true → true; false → b
-notb a = case a of true → false; false → true
 -- shifting down by b: every free variable ≥ b becomes n − b (none below b is present, checked)
 unshift b t = unshift-at #0 b t
 unshift-at d b c = cmap (λ p e → case p of cvar n → some (if %wlt n e then p else cvar (%wsub n b)); _ → none) d c
@@ -299,7 +296,6 @@ rewrite-first-list r l =
   case l of
     lnil → none
     lcons x xs → (case rewrite-first r x of some x2 → some (lcons x2 xs); none → omap (lcons x) (rewrite-first-list r xs))
-omap f o = case o of none → none; some x → some (f x)
 -- count-applicable r t: how many positions the rule applies at (the size of "available" for one
 -- identity); navigation chooses among them
 count-applicable r t =
