@@ -205,22 +205,28 @@ PT-lift (suc n) X X' X2 Y' F2 k f l g c =
     (λ L D → lineo-push X' X2 Y' Y' F2 f (λ x y z → l x y) L D D) (lineo-of X (λ x → Y' (k x)) g) c
 
 -- ---------------------------------------------------------------- the simple-types fragment
-data STy = sbool | sarr (a : STy) (b : STy) | sprod (a : STy) (b : STy) | snat
+data STy = sbool | sarr (a : STy) (b : STy) | sprod (a : STy) (b : STy) | snat | sunit | sempty
 shp : STy → TyShape
 shp sbool = s-bool
 shp (sarr a b) = s-pi (shp a) (shp b)
 shp (sprod a b) = s-sig (shp a) (shp b)
 shp snat = s-nat
+shp sunit = s-unit
+shp sempty = s-empty
 sem : (t : STy) → Sem (shp t)
 sem sbool = one
 sem (sarr a b) = (sem a , λ x → sem b)
 sem (sprod a b) = (sem a , λ x → sem b)
 sem snat = one
+sem sunit = one
+sem sempty = one
 tcode : STy → Code
 tcode sbool = c-bool
 tcode (sarr a b) = cpi #2 (tcode a) (tcode b)
 tcode (sprod a b) = csigma (tcode a) (tcode b)
 tcode snat = c-nat
+tcode sunit = c-unit
+tcode sempty = c-empty
 sk : List STy → Lst Entry
 sk nil = lnil
 sk (cons t ts) = lcons (e-ty (shp t)) (sk ts)
@@ -242,6 +248,8 @@ ptM ts Z g =
 dty-s : (ts : List STy) (t : STy) → Der (j-ty , ctx-of ts , shp t , tcode t , ptM ts (Sem (shp t)) (λ x ρ → sem t))
 dty-s ts sbool = dty-bool (ctx-of ts) (ptM ts One1 (λ x ρ → one))
 dty-s ts snat = dty-nat (ctx-of ts) (ptM ts One1 (λ x ρ → one))
+dty-s ts sunit = dty-unit (ctx-of ts) (ptM ts One1 (λ x ρ → one))
+dty-s ts sempty = dty-empty (ctx-of ts) (ptM ts One1 (λ x ρ → one))
 dty-s ts (sarr a b) =
   dty-pi (ctx-of ts) (shp a) (shp b) (ptM ts (Fam (shp a) (shp b)) (λ x ρ → sem (sarr a b))) (tcode a) (tcode b)
     (der-tr j-ty (ctx-of ts) (shp a) (tcode a) (ptM ts (Sem (shp a)) (λ x ρ → sem a))
@@ -323,6 +331,8 @@ SY ts c = (syt : STy) × CK ts c syt
 steq : (a b : STy) → Opt (PathP (λ i → STy) a b)
 steq sbool sbool = some (λ i → sbool)
 steq snat snat = some (λ i → snat)
+steq sunit sunit = some (λ i → sunit)
+steq sempty sempty = some (λ i → sempty)
 steq (sarr a b) (sarr c d) =
   case steq a c return (λ o → Opt (PathP (λ i → STy) (sarr a b) (sarr c d))) of
     none → none
@@ -410,6 +420,8 @@ app-at : (ts : List STy) (f a : Code) (t : STy) → CK ts f t → ((t1 : STy) �
 app-at ts f a sbool cf ca = may-no
 app-at ts f a (sprod t1 t2) cf ca = may-no
 app-at ts f a snat cf ca = may-no
+app-at ts f a sunit cf ca = may-no
+app-at ts f a sempty cf ca = may-no
 app-at ts f a (sarr t1 t2) cf ca =
   case ca t1 return (λ o → May (SY ts (capp f a))) of
     may-no → may-no
@@ -424,6 +436,8 @@ lam-at : (ts : List STy) (b : Code) (t : STy) → ((t1 t2 : STy) → May (CK (co
 lam-at ts b sbool cb = may-no
 lam-at ts b (sprod t1 t2) cb = may-no
 lam-at ts b snat cb = may-no
+lam-at ts b sunit cb = may-no
+lam-at ts b sempty cb = may-no
 lam-at ts b (sarr t1 t2) cb =
   case cb t1 t2 return (λ o → May (CK ts (clam b) (sarr t1 t2))) of
     may-no → may-no
@@ -616,6 +630,63 @@ nrec-ok ts z st x t cz cst cx =
               (fmapM (ctx-of ts) (NRecV s) (TV s-nat) (nrec-x s) R)
               (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (NRecV s)) (FbE (sk ts) (TV s-nat)) (into ts) (λ γ e ρ → nrec-x s (e ρ)) gR (cube0 ts) (~ i))
               (snd cx))))
+-- ---------------------------------------------------------------- Unit and Empty
+-- equality of words, with its path
+wordP : (a b : Word) → Opt (PathP (λ i → Word) a b)
+wordP a =
+  %welimP (λ v → (b : Word) → Opt (PathP (λ i → Word) v b)) a
+    (λ b → case zeroP b return (λ o → Opt (PathP (λ i → Word) #0 b)) of
+             none → none
+             some p → some (λ i → p (~ i)))
+    (λ m h b → %welimP (λ v → Opt (PathP (λ i → Word) (%wsucc m) v)) b none
+                 (λ n h2 → case h n return (λ o → Opt (PathP (λ i → Word) (%wsucc m) (%wsucc n))) of
+                             none → none
+                             some p → some (λ i → %wsucc (p i))))
+tt-ok : (ts : List STy) → CK ts c-tt sunit
+tt-ok ts =
+  (λ x ρ → unit ,
+   der-tr j-tm (ctx-of ts) s-unit c-tt (fmapM (ctx-of ts) One1 (TV s-unit) unit-v (ptM ts One1 (λ x ρ → one)))
+     (ptM ts (TV s-unit) (λ x ρ → (one , unit)))
+     (fmap-pt (dims (sk ts)) One1 (CtxV (sk ts)) (FbE (sk ts) One1) (FbE (sk ts) (TV s-unit)) (into ts) (λ γ e ρ → unit-v (e ρ)) (λ x ρ → one) (cube0 ts))
+     (dtt (ctx-of ts) (ptM ts One1 (λ x ρ → one))))
+-- absurd at t of a term checked at Empty, the motive the constant t over the context extended by Empty
+absurd-ok : (ts : List STy) (x : Code) (t : STy) → CK ts x sempty → CK ts (c-absurd (tcode t) x) t
+absurd-ok ts x t cx =
+  let n = dims (sk ts)
+      s = shp t
+      gR = the ((y : One1) → EnvV (sk ts) (into ts y) → AbsV s) (λ y ρ → (one , (λ e → sem t) , fst cx y ρ))
+      R = ptM ts (AbsV s) gR
+      fx = the ((γ : CtxV (sk ts)) → FbE (sk ts) (AbsV s) γ → CtxV (sk (cons sempty ts))) (λ γ e → (γ , λ ρ → abs-b s (e ρ)))
+      res = the ((y : One1) → EnvV (sk ts) (into ts y) → El s (sem t)) (λ y ρ → empty-elim (λ e → El s (sem t)) (fst cx y ρ))
+  in (res ,
+      der-tr j-tm (ctx-of ts) s (c-absurd (tcode t) x) (fmapM (ctx-of ts) (AbsV s) (TV s) (abs-r s) R)
+        (ptM ts (TV s) (λ y ρ → (sem t , res y ρ)))
+        (fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (AbsV s)) (FbE (sk ts) (TV s)) (into ts) (λ γ e ρ → abs-r s (e ρ)) gR (cube0 ts))
+        (dabsurd (ctx-of ts) s R (tcode t) x
+           (transport (λ i → Der (j-ty , (lcons (e-ty s-empty) (sk ts) ,
+                                          PT-map n One1 (CtxV (sk ts)) (CtxV (sk (cons sempty ts))) (FbE (sk ts) (AbsV s)) (into ts) fx gR (cube0 ts) (~ i)) ,
+                                  s , tcode t ,
+                                  PT-lift n One1 (CtxV (sk ts)) (CtxV (sk (cons sempty ts))) (FbE (sk ts) (AbsV s)) (FbE (sk (cons sempty ts)) (Sem s))
+                                    (into ts) fx (λ γ e ρ → fst (snd (e (fst ρ))) (snd ρ)) gR (cube0 ts) (~ i)))
+              (dty-s (cons sempty ts) t))
+           (der-tr j-tm (ctx-of ts) s-empty x (ptM ts (TV s-empty) (λ y ρ → (one , fst cx y ρ)))
+              (fmapM (ctx-of ts) (AbsV s) (TV s-empty) (abs-x s) R)
+              (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (AbsV s)) (FbE (sk ts) (TV s-empty)) (into ts) (λ γ e ρ → abs-x s (e ρ)) gR (cube0 ts) (~ i))
+              (snd cx))))
+-- tt: Unit's (unit-d) constructor 0 with no fields
+tt-at : (ts : List STy) (d k : Word) (fs ds : Lst Code) → May (CK ts (ccon d k fs ds) sunit)
+tt-at ts d k fs ds =
+  case wordP d unit-d return (λ o → May (CK ts (ccon d k fs ds) sunit)) of
+    none → may-no
+    some pd → (case zeroP k return (λ o → May (CK ts (ccon d k fs ds) sunit)) of
+      none → may-no
+      some pk → (case nilP fs return (λ o → May (CK ts (ccon d k fs ds) sunit)) of
+        none → may-no
+        some pf → (case nilP ds return (λ o → May (CK ts (ccon d k fs ds) sunit)) of
+          none → may-no
+          some pds → may-yes (transport (λ i → CK ts (ccon (pd (~ i)) (pk (~ i)) (pf (~ i)) (pds (~ i))) sunit) (tt-ok ts)))))
+-- absurd's code: Empty's (empty-d) elimination with the motive a λ and no branches
+-- ---------------------------------------------------------------- reading codes; Unit and Empty checked
 -- a type code read back as a simple type, with the path from its code
 sty-of : (c : Code) → Opt ((t : STy) × PathP (λ i → Code) (tcode t) c)
 sty-of (cdata d ps) =
@@ -625,7 +696,11 @@ sty-of (cdata d ps) =
       some pd → some (sbool , λ i → cdata (pd (~ i)) (pp (~ i)))
       none → (case oneP d return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (cdata d ps))) of
         some pd → some (snat , λ i → cdata (pd (~ i)) (pp (~ i)))
-        none → none))
+        none → (case wordP d unit-d return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (cdata d ps))) of
+          some pd → some (sunit , λ i → cdata (pd (~ i)) (pp (~ i)))
+          none → (case wordP d empty-d return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (cdata d ps))) of
+            some pd → some (sempty , λ i → cdata (pd (~ i)) (pp (~ i)))
+            none → none))))
 sty-of (cpi w a b) =
   case twoP w return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (cpi w a b))) of
     none → none
@@ -699,13 +774,35 @@ con-syn2 ts d k fs ds =
   case con-syn ts d k fs ds return (λ o → May (SY ts (ccon d k fs ds))) of
     may-yes r → may-yes r
     may-no → (case zero-at ts d k fs ds return (λ o → May (SY ts (ccon d k fs ds))) of
-      may-no → may-no
-      may-yes q → may-yes (snat , q))
+      may-yes q → may-yes (snat , q)
+      may-no → (case tt-at ts d k fs ds return (λ o → May (SY ts (ccon d k fs ds))) of
+        may-no → may-no
+        may-yes q → may-yes (sunit , q)))
 suc-syn : (ts : List STy) (d k : Word) (c : Code) (ds : Lst Code) → May (CK ts c snat) → May (SY ts (ccon d k (lcons c lnil) ds))
 suc-syn ts d k c ds mc =
   case suc-at ts d k c ds mc return (λ o → May (SY ts (ccon d k (lcons c lnil) ds))) of
     may-no → may-no
     may-yes q → may-yes (snat , q)
+absurd-chk : (ts : List STy) (d : Word) (cP x : Code) (t : STy) → May (CK ts x sempty) → May (CK ts (celim d (clam cP) lnil x) t)
+absurd-chk ts d cP x t mx =
+  case wordP d empty-d return (λ o → May (CK ts (celim d (clam cP) lnil x) t)) of
+    none → may-no
+    some pd → (case sty-of cP return (λ o → May (CK ts (celim d (clam cP) lnil x) t)) of
+      none → may-no
+      some rp → (case steq (fst rp) t return (λ o → May (CK ts (celim d (clam cP) lnil x) t)) of
+        none → may-no
+        some pt → (case mx return (λ o → May (CK ts (celim d (clam cP) lnil x) t)) of
+          may-no → may-no
+          may-yes cx → may-yes (transport (λ i → CK ts (celim (pd (~ i)) (clam (snd rp i)) lnil x) t)
+                                  (transport (λ i → CK ts (c-absurd (tcode (pt (~ i))) x) t) (absurd-ok ts x t cx))))))
+absurd-m : (ts : List STy) (d : Word) (cP x : Code) (m : Mode) → May (CK ts x sempty) → RT ts (celim d (clam cP) lnil x) m
+absurd-m ts d cP x (mchk t) mx = absurd-chk ts d cP x t mx
+absurd-m ts d cP x msyn mx =
+  case sty-of cP return (λ o → May (SY ts (celim d (clam cP) lnil x))) of
+    none → may-no
+    some rp → (case absurd-chk ts d cP x (fst rp) mx return (λ o → May (SY ts (celim d (clam cP) lnil x))) of
+      may-no → may-no
+      may-yes q → may-yes (fst rp , q))
 -- ---------------------------------------------------------------- case on Bool
 -- case on Bool checked at t: the scrutinee at Bool, both branches at t, the motive the constant type t
 -- in the context extended by a Bool (dty-s there, carried to ext-h over the case's cube as λ's body is)
@@ -771,6 +868,7 @@ ck (clam b) ts m = lam-m ts b m (λ t1 t2 → ck b (cons t1 ts) (mchk t2))
 ck (capp f a) ts m = finish ts (capp f a) m (syn-app ts f a (ck f ts msyn) (λ t1 → ck a ts (mchk t1)))
 ck (ccon d k (lcons c lnil) ds) ts m = finish ts (ccon d k (lcons c lnil) ds) m (suc-syn ts d k c ds (ck c ts (mchk snat)))
 ck (ccon d k fs ds) ts m = finish ts (ccon d k fs ds) m (con-syn2 ts d k fs ds)
+ck (celim d (clam cP) lnil x) ts m = absurd-m ts d cP x m (ck x ts (mchk sempty))
 ck (celim d (clam cP) (lcons z (lcons st lnil)) x) ts m =
   nrec-m ts d cP z st x m (λ t → ck z ts (mchk t)) (λ t → ck st ts (mchk (sarr snat (sarr t t)))) (ck x ts (mchk snat))
 ck (cpair a b) ts m = pair-m ts a b m (λ t → ck a ts (mchk t)) (λ t → ck b ts (mchk t)) (ck a ts msyn) (ck b ts msyn)
@@ -835,3 +933,8 @@ tcode-of c t r =
 #same tcode-of (c-nrec c-nat (c-suc c-zero) (clam (clam (c-suc (cvar #0)))) (c-suc (c-suc c-zero))) snat
   (ck (c-nrec c-nat (c-suc c-zero) (clam (clam (c-suc (cvar #0)))) (c-suc (c-suc c-zero))) nil (mchk snat))
   = some (c-suc (c-suc (c-suc c-zero)))
+-- Unit and Empty: tt checks at Unit and normalizes to itself; λ e. absurd e at Empty → Bool checks and
+-- normalizes to itself (absurd stuck on the variable)
+#same tcode-of c-tt sunit (ck c-tt nil (mchk sunit)) = some c-tt
+#same tcode-of (clam (c-absurd c-bool (cvar #0))) (sarr sempty sbool) (ck (clam (c-absurd c-bool (cvar #0))) nil (mchk (sarr sempty sbool)))
+  = some (clam (c-absurd c-bool (cvar #0)))
