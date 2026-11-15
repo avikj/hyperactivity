@@ -341,8 +341,26 @@ composition-with-systems = node "Composition with a system on the context's face
 -- was the machine's transport on a constructor of an indexed family, which moved a recursive field
 -- (a premise derivation, at its own index) along the outer index's line (fixed in src/lang.c; the
 -- small witness is at the composition finding of the trusted-part review). With it λ f. λ x. f x
--- checks and normalizes to itself; check-wip.cub passes whole (1719 passed, 0 failed). Next: case on
--- Bool in the checker, then dependent types through conv-E, then the checker into lib/nbe.cub.
+-- checks and normalizes to itself; check-wip.cub passes whole (1719 passed, 0 failed).
+-- Done and checked (2026-11-15): case on Bool (case-ok: the scrutinee at Bool, both branches at t,
+-- the motive the constant type t over the context extended by a Bool, dty-s carried to ext-h as λ's
+-- body is; bcase-at and case-m for checking and synthesis). Examples: case true of false, true
+-- normalizes to false; λ b. case b of false, true is its own normal form (1724 passed, 0 failed).
+-- Known (2026-11-15, tested): ck cannot call itself on a case's branches. Code is a nested inductive
+-- type (ccase, ccon, cdata, celim hold their subterms in a Lst Code), and checked structural
+-- recursion takes hypotheses only for fields of type D itself, under paths, Π codomains and Σ
+-- components: csz (ccase d (lcons t r) x) = suc (csz t) is refused, csx (ccase d B x) = suc (csx x)
+-- checks. So every raw-syntax construct with a list of subterms is out of reach of a checked
+-- function over codes. What is missing is the eliminator of a nested inductive type: a field of type
+-- L D, L a data type whose one parameter occurs strictly positively, takes as hypothesis the L-shaped
+-- tuple of the hypotheses of its D elements (per L, a type %ihall-L P x by case on x and its maker
+-- %ihmap-L h x; a shape sh-nest in lib/check.cub's rec-shape, hyp-val, hyp-ty, about 25 lines; a
+-- shape 'N' in src/lang.c's rec_shape and src/net.c's ih_maker, about 30 lines; the two generated
+-- definitions in src/lang.c, about 40 lines; in src/syntax.c a split of such a field reverting its
+-- hypothesis into the split's motive so that it unfolds to the pair of its head's hypothesis and its
+-- tail's, and a call on the head read as the pair's first component, about 80 lines). Then ck's case
+-- clause is one line. Next: that eliminator, then dependent types through conv-E, then the checker
+-- into lib/nbe.cub.
 checker-returns-derivations : Node
 checker-returns-derivations = node "A checker takes raw codes to typing derivations (or a diagnostic), as the paper's §6.1 specifies." (cons typed-codes-after-swap nil)
 -- typed-codes-after-composition (2026-11-14): everything typed codes and normalization by evaluation

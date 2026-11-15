@@ -442,6 +442,63 @@ con-syn ts d k fs ds =
   case con-at ts d k fs ds return (λ o → May (SY ts (ccon d k fs ds))) of
     may-no → may-no
     may-yes r → may-yes (sbool , r)
+-- ---------------------------------------------------------------- case on Bool
+-- case on Bool checked at t: the scrutinee at Bool, both branches at t, the motive the constant type t
+-- in the context extended by a Bool (dty-s there, carried to ext-h over the case's cube as λ's body is)
+case-ok : (ts : List STy) (t0 f0 x0 : Code) (t : STy) → CK ts x0 sbool → CK ts t0 t → CK ts f0 t → CK ts (c-case t0 f0 x0) t
+case-ok ts t0 f0 x0 t cx ct cf =
+  let n = dims (sk ts)
+      s = shp t
+      gR = the ((x : One1) → EnvV (sk ts) (into ts x) → CaseV s) (λ x ρ → (one , (λ b → sem t) , fst cx x ρ , fst ct x ρ , fst cf x ρ))
+      R = ptM ts (CaseV s) gR
+      fx = the ((γ : CtxV (sk ts)) → FbE (sk ts) (CaseV s) γ → CtxV (sk (cons sbool ts))) (λ γ e → (γ , λ ρ → case-b s (e ρ)))
+  in (λ x ρ → bool-elim (λ b → El s (sem t)) (fst ct x ρ) (fst cf x ρ) (fst cx x ρ) ,
+      der-tr j-tm (ctx-of ts) s (c-case t0 f0 x0) (fmapM (ctx-of ts) (CaseV s) (TV s) (case-r s) R)
+        (ptM ts (TV s) (λ x ρ → (sem t , bool-elim (λ b → El s (sem t)) (fst ct x ρ) (fst cf x ρ) (fst cx x ρ))))
+        (fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (CaseV s)) (FbE (sk ts) (TV s)) (into ts) (λ γ e ρ → case-r s (e ρ)) gR (cube0 ts))
+        (dcase (ctx-of ts) s R (tcode t) x0 t0 f0
+           (transport (λ i → Der (j-ty , (lcons (e-ty s-bool) (sk ts) ,
+                                          PT-map n One1 (CtxV (sk ts)) (CtxV (sk (cons sbool ts))) (FbE (sk ts) (CaseV s)) (into ts) fx gR (cube0 ts) (~ i)) ,
+                                  s , tcode t ,
+                                  PT-lift n One1 (CtxV (sk ts)) (CtxV (sk (cons sbool ts))) (FbE (sk ts) (CaseV s)) (FbE (sk (cons sbool ts)) (Sem s))
+                                    (into ts) fx (λ γ e ρ → fst (snd (e (fst ρ))) (snd ρ)) gR (cube0 ts) (~ i)))
+              (dty-s (cons sbool ts) t))
+           (der-tr j-tm (ctx-of ts) s-bool x0 (ptM ts (TV s-bool) (λ x ρ → (one , fst cx x ρ)))
+              (fmapM (ctx-of ts) (CaseV s) (TV s-bool) (case-x s) R)
+              (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (CaseV s)) (FbE (sk ts) (TV s-bool)) (into ts) (λ γ e ρ → case-x s (e ρ)) gR (cube0 ts) (~ i))
+              (snd cx))
+           (der-tr j-tm (ctx-of ts) s t0 (ptM ts (TV s) (λ x ρ → (sem t , fst ct x ρ)))
+              (fmapM (ctx-of ts) (CaseV s) (TV s) (case-t s) R)
+              (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (CaseV s)) (FbE (sk ts) (TV s)) (into ts) (λ γ e ρ → case-t s (e ρ)) gR (cube0 ts) (~ i))
+              (snd ct))
+           (der-tr j-tm (ctx-of ts) s f0 (ptM ts (TV s) (λ x ρ → (sem t , fst cf x ρ)))
+              (fmapM (ctx-of ts) (CaseV s) (TV s) (case-f s) R)
+              (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (CaseV s)) (FbE (sk ts) (TV s)) (into ts) (λ γ e ρ → case-f s (e ρ)) gR (cube0 ts) (~ i))
+              (snd cf))))
+-- a case code checked at t: Bool's (data 0) case with its two branches
+bcase-at : (ts : List STy) (d : Word) (t0 f0 x0 : Code) (t : STy) → May (CK ts x0 sbool) → May (CK ts t0 t) → May (CK ts f0 t) →
+  May (CK ts (ccase d (lcons t0 (lcons f0 lnil)) x0) t)
+bcase-at ts d t0 f0 x0 t mx mt mf =
+  case zeroP d return (λ o → May (CK ts (ccase d (lcons t0 (lcons f0 lnil)) x0) t)) of
+    none → may-no
+    some pd → (case mx return (λ o → May (CK ts (ccase d (lcons t0 (lcons f0 lnil)) x0) t)) of
+      may-no → may-no
+      may-yes cx → (case mt return (λ o → May (CK ts (ccase d (lcons t0 (lcons f0 lnil)) x0) t)) of
+        may-no → may-no
+        may-yes ct → (case mf return (λ o → May (CK ts (ccase d (lcons t0 (lcons f0 lnil)) x0) t)) of
+          may-no → may-no
+          may-yes cf → may-yes (transport (λ i → CK ts (ccase (pd (~ i)) (lcons t0 (lcons f0 lnil)) x0) t) (case-ok ts t0 f0 x0 t cx ct cf)))))
+-- checked at t, or synthesizing the true branch's type and checking the rest at it
+case-m : (ts : List STy) (d : Word) (t0 f0 x0 : Code) (m : Mode) → May (CK ts x0 sbool) → ((t : STy) → May (CK ts t0 t)) →
+  ((t : STy) → May (CK ts f0 t)) → May (SY ts t0) → RT ts (ccase d (lcons t0 (lcons f0 lnil)) x0) m
+case-m ts d t0 f0 x0 (mchk t) mx mt mf st = bcase-at ts d t0 f0 x0 t mx (mt t) (mf t)
+case-m ts d t0 f0 x0 msyn mx mt mf st =
+  case st return (λ o → May (SY ts (ccase d (lcons t0 (lcons f0 lnil)) x0))) of
+    may-no → may-no
+    may-yes r → (case bcase-at ts d t0 f0 x0 (fst r) mx (may-yes (snd r)) (mf (fst r))
+                   return (λ o → May (SY ts (ccase d (lcons t0 (lcons f0 lnil)) x0))) of
+                   may-no → may-no
+                   may-yes q → may-yes (fst r , q))
 -- the checker: a derivation of the code at the type checked, or of the type it synthesizes (the
 -- context after the code, so its change under a λ is a later argument of the structural call)
 ck : (c : Code) (ts : List STy) (m : Mode) → RT ts c m
@@ -469,3 +526,14 @@ tcode-of c t r =
 -- λ f. λ x. f x checks at (Bool → Bool) → Bool → Bool and is its own normal form
 #same tcode-of (clam (clam (capp (cvar #1) (cvar #0)))) (sarr (sarr sbool sbool) (sarr sbool sbool))
   (ck (clam (clam (capp (cvar #1) (cvar #0)))) nil (mchk (sarr (sarr sbool sbool) (sarr sbool sbool)))) = some (clam (clam (capp (cvar #1) (cvar #0))))
+-- case on Bool, its subterms checked by ck and the rule applied directly (ck cannot yet recurse into a
+-- case's branches: they sit in a Lst Code): case true of false, true normalizes to false, and
+-- λ b. case b of false, true (negation) at Bool → Bool is its own normal form
+#same tcode-of (c-case c-false c-true c-true) sbool
+  (bcase-at nil #0 c-false c-true c-true sbool (ck c-true nil (mchk sbool)) (ck c-false nil (mchk sbool)) (ck c-true nil (mchk sbool)))
+  = some c-false
+#same tcode-of (clam (c-case c-false c-true (cvar #0))) (sarr sbool sbool)
+  (lam-at nil (c-case c-false c-true (cvar #0)) (sarr sbool sbool)
+     (λ t1 t2 → bcase-at (cons t1 nil) #0 c-false c-true (cvar #0) t2
+                  (ck (cvar #0) (cons t1 nil) (mchk sbool)) (ck c-false (cons t1 nil) (mchk t2)) (ck c-true (cons t1 nil) (mchk t2))))
+  = some (clam (c-case c-false c-true (cvar #0)))
