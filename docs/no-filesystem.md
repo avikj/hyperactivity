@@ -9,3 +9,9 @@ Avik, 2026-11-15, minutes later:
 > To bootstrap from filesystem - only one thing reads by filesystem - computes hash of all files in file system. That's it. Hash is reference
 
 > Unison certainly solved this already
+
+> The language wont be based on .cub files when store is proper. Literally no .cub file exists
+>
+> No file
+>
+> Code doesn't live in files.

@@ -110,11 +110,12 @@ only in the task graph, which `hyperactive` shows; nothing else records it.
 - **Free generation means no plan beyond the next sentence** (Avik, 2026-11-14 and 2026-11-15). When
   Avik asks for open thinking or writing at length, each sentence follows from the last; no outline,
   no announced structure.
-- **Zero file paths in the code** (Avik, 2026-11-15). The system does not rely on the filesystem
+- **Code does not live in files** (Avik, 2026-11-15). The system does not rely on the filesystem
   ontology; it rejects it for computing. The filesystem is an institutionalized abstraction, held as
-  deeply as a false church by software engineers and computer scientists. Every path in the code
-  today (`import`, `document`, `text`, the CLI's constants) belongs to the git stand-in and is to be
-  removed, not built on; no new code adds one. The bootstrap from the filesystem is one reader and
+  deeply as a false church by software engineers and computer scientists. When the store is proper,
+  no .cub file exists: all code is objects referred to by hash, with zero file paths. Today's files
+  and paths (`import`, `document`, `text`, the CLI's constants) are the git stand-in, which the store
+  replaces; nothing new is built on them. The bootstrap from the filesystem is one reader and
   only one: it computes the hash of every file; from then on the hash is the reference (Unison's
   codebase works the same way).
 - **Use the organization; never sprawl** (Avik, 2026-11-15). The paper delta, `docs/paper-delta.cub`,

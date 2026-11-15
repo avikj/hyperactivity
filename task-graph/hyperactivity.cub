@@ -994,12 +994,13 @@ paper-matches-implementation = node "Every implementation detail the paper state
 -- below); `hyperactive def NAME` reads a definition by name with its statement and what uses it, with
 -- no file or position needed. Not yet: writing through `hyperactive`, code read only by query (the
 -- walk and def still print file paths), and onboarding into the core code.
--- Known (2026-11-15, Avik): zero file paths anywhere in the code. The system does not rely on the
--- filesystem ontology and rejects it for computing (docs/no-filesystem.md, his words). This is the
--- design already stated in “State, change and collaboration”: the work is a collection of immutable
--- objects, not a tree of files ("Our state is not text"). Not yet: every `import "path"` (254 in
--- lib, experiments, task-graph and docs), every `document "path"` and `text "path"`, the
--- onboarding and paper-delta pointers, and the paths in hyperactive and tools/.
+-- Known (2026-11-15, Avik): code does not live in files. When the store is proper, no .cub file
+-- exists: the language and all code are objects in the store, referred to by hash. The system does
+-- not rely on the filesystem ontology and rejects it for computing (docs/no-filesystem.md, his
+-- words). This is the design already stated in “State, change and collaboration”: the work is a
+-- collection of immutable objects, not a tree of files ("Our state is not text"). Today every piece
+-- of code is a file and refers to others by path (import, document, text); that is the git stand-in,
+-- which the store replaces, not something to be edited path by path.
 -- Known (2026-11-15, Avik): the bootstrap from the filesystem is one reader and only one: it computes
 -- the hash of every file; the hash is the reference. "Unison certainly solved this already": its
 -- code refers to definitions only by hash, and names are a separate mapping from names to hashes.
@@ -1052,8 +1053,9 @@ product-implementation = node "The live interactive collaboration system and too
 -- onboarding-from-the-paper-delta (2026-11-15, Avik: "onboarding should force reading paper &
 -- essays"; "set of pointers to file"): split from product-implementation when its work began. The
 -- design and what was done are the 2026-11-15 facts in product-implementation's statement.
--- Known (2026-11-15, Avik): not done. Its pointers are file paths (`document "path"`), and there
--- are to be zero file paths in the code (product-implementation's statement).
+-- Known (2026-11-15, Avik): not done. Onboarding is files pointing to files by path; in the design
+-- the paper delta and the onboarding order are objects in the store holding hashes, and no file
+-- exists (product-implementation's statement).
 onboarding-from-the-paper-delta : Node
 onboarding-from-the-paper-delta = node "Onboarding serves the paper and the essays through hyperactive, from the paper delta, a value of the language holding pointers to essay files." (cons product-implementation nil)
 -- product-implementation-remainder (2026-11-15, split from product-implementation with onboarding): what product-implementation's statement holds beyond onboarding.
