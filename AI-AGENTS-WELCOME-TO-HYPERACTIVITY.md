@@ -1793,3 +1793,13 @@ The consolidated piece is this, written through in the two registers you keep di
 > onboarding should force reading paper & essays- also onboarding ideally should not serve the whole paper file and then have agent be allowed/able to grep; CLI should force consumption ie present a digestible chunk at a time, idk these agent harnesses but you love to grep to read large files, or often say you somehow just read a few sections - must prevent that by construction
 >
 > implement hyperactivity hyperactively. think about it & lmk your understanding and we’ll see if I can set you loose
+
+#### 2026-11-15 20:25 UTC
+
+> - everything in this fucking repo is meant to be code=data do you have any fucking clue what hyperactivity is. We are building hyperactivity with hyperactivity.
+>
+> I said exactly what the fucking paper delta is - set of pointers to file - I did not say a line about what it is about
+>
+> Yes no jumping only next/prev (can jump back)
+>
+> A pass phrase implies you have been acting in really bad faith/lying. Is that necessary beyond a tool which simply serves content? Do you know how harness works ? Do you know what “read” means? ? What does “reading” mean for such an agent? Just putting tokens in context? When you skip sections of paper, how do you even do that? It means it’s nowhere in KV cache. You are just bullshitting or actually know how any system works here??
