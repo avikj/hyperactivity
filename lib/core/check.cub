@@ -241,7 +241,7 @@ is-data-d d c = case c of tdata d2 ps V → %weq d d2; _ → false
 -- (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.17 “E28a — Induction hypotheses for path-typed recursive fields”): laid out and compiled as a reference to the type
 is-rec-ty d c =
   case c of
-    tdata d2 ps V → %weq d d2
+    tdata d2 ps V → orb (%weq d d2) (nest-of d c)
     tpathp L a b V → is-rec-line d L
     tguess k g t V → is-rec-ty d t
     _ → false
@@ -256,7 +256,24 @@ co-tel-recs d tel = case tel of tx A nm r → lcons (is-rec-ty d A) (co-tel-recs
 -- the shape of a recursive field's type (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”), the machine's ConInfo.rsh: D itself, a path line
 -- into one, a function (its domain not mentioning D and not a tick: a later D takes no hypothesis)
 -- into one, a pair with recursive components; sh-none when the field is not recursive
-data Shape = sh-rec | sh-path s | sh-pi s | sh-fst s | sh-snd s | sh-pair s t | sh-none
+data Shape = sh-rec | sh-path s | sh-pi s | sh-fst s | sh-snd s | sh-pair s t | sh-nest L | sh-none
+-- a field of type L D, L a container whose hypothesis functions are generated (src/lang.c's
+-- nest_container, gen_nest; %diht), D the type itself: recursive through L (2026-11-15, nested
+-- inductive types), at the top of a field's type only, as the machine has it
+nest-of d c =
+  case c of
+    tdata d2 ps V → 
+      if %weq d d2 then false
+      else if %weq (%diht d2) #0 then false
+      else (case ps of
+              lcons p r → (case r of lnil → (case p of tdata d3 qs V3 → %weq d d3; _ → false); _ → false)
+              _ → false)
+    tguess k g t V → nest-of d t
+    _ → false
+nest-data c = case c of tdata d2 ps V → d2; tguess k g t V → nest-data t; _ → #0
+rec-shape-top d c = if nest-of d c then sh-nest (nest-data c) else rec-shape d c
+-- a nested field's element type: the container's parameter
+nest-elem T = case %view T of wdata L ps → (case ps of lcons a r → a; _ → opq); _ → opq
 sh-under f s = case s of sh-none → sh-none; _ → f s
 rec-shape d c =
   case c of
@@ -275,7 +292,7 @@ rec-shape d c =
             _ → (case s2 of sh-none → sh-fst s1; _ → sh-pair s1 s2))
     _ → sh-none
 rec-shape-line d L = case L of tplam nm b V → sh-under (λ s → sh-path s) (rec-shape d (b (%dim nm))); tguess k g t V → rec-shape-line d t; _ → sh-none
-has-hyp d c = case rec-shape d c of sh-none → false; _ → true
+has-hyp d c = case rec-shape-top d c of sh-none → false; _ → true
 -- the induction hypothesis of a recursive field f of type T and shape s, F the elimination, Pv the
 -- motive: at D the elimination; for a path line, the line of the hypotheses of its points, λ m → F
 -- (f @ m), over the motive at them; for a function, the hypotheses of its values at every argument,
@@ -1216,7 +1233,15 @@ branch-dims e d Pv F c tel b fs ds =
     _ → err e E-ctor opq opq
 branch-hyps e d Pv Ph F c tel b fs (lcons f rest) =
   case b of
-    bx nm b1 → branch-hyps e d Pv Ph F c tel (b1 (hyp-val F (fst f) (fst (snd f)) (snd (snd f))) (hyp-ty Ph F (fst f) (fst (snd f)) (snd (snd f)))) fs rest
+    bx nm b1 → 
+      (case snd (snd f) of
+         -- a nested field: %ihn-L l A P F x : %iht-L l A P x, A the element type, P the motive at it
+         sh-nest L → 
+           let A = nest-elem (fst (snd f))
+               P = λ y → Ph A y
+               l = type-level (Ph A (%var A))
+           in branch-hyps e d Pv Ph F c tel (b1 (%gval (%wsub (%dihn L) #1) l A P F (fst f)) (%gval (%wsub (%diht L) #1) l A P (fst f))) fs rest
+         _ → branch-hyps e d Pv Ph F c tel (b1 (hyp-val F (fst f) (fst (snd f)) (snd (snd f))) (hyp-ty Ph F (fst f) (fst (snd f)) (snd (snd f)))) fs rest)
     _ → err e E-ctor opq opq
 branch-hyps e d Pv Ph F c tel b fs lnil = branch-dims e d Pv F c tel b fs lnil
 branch-fields e d Pv Ph F c tel b fs rs =
@@ -1227,7 +1252,7 @@ branch-fields e d Pv Ph F c tel b fs rs =
           let Av = tval A
               x = %var nm Av
           in branch-fields e d Pv Ph F c (r x Av) (b1 x Av) (lsnoc fs x)
-               (case rec-shape d A of sh-none → rs; s → lsnoc rs (x , (Av , s)))
+               (case rec-shape-top d A of sh-none → rs; s → lsnoc rs (x , (Av , s)))
         _ → err e E-ctor opq opq
     _ → branch-hyps e d Pv Ph F c tel b fs rs
 check-branch e d Pv Ph F c tel b = branch-fields e d Pv Ph F c tel b lnil lnil
@@ -2228,7 +2253,7 @@ q-br bs E d f mo c tel prm recs =
           x = %var nm Av
       in omap clam
            (q-br (lcons (qv (var-level x)) bs) E d f mo c (r x Av) (lsnoc prm x)
-              (case rec-shape d A of sh-none → recs; s → lsnoc recs (x , s)))
+              (case rec-shape-top d A of sh-none → recs; s → lsnoc recs (x , s)))
     _ → q-hyps bs E d f mo c tel prm recs prm
 q-hyps bs E d f mo c tel prm lnil fs = q-dims bs E d f mo c tel prm fs lnil
 q-hyps bs E d f mo c tel prm (lcons y rest) fs =

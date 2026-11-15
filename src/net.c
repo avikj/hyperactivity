@@ -2176,7 +2176,7 @@ static const char *const KIND_NAME[K_END] = {
     [O_CALL] = "CALL",
     [O_WSUCC] = "WSUCC",
     [O_PTY] = "PTY", [O_BYTESTY] = "BYTESTY", [O_PVAL] = "PVAL", [O_PVAL2] = "PVAL2", [O_POP1] = "POP1", [O_POP2] = "POP2", [O_POP2B] = "POP2B", [O_BYTES] = "BYTES", [O_LOAD] = "LOAD", [O_LOADB] = "LOADB", [O_STORE] = "STORE", [O_STOREB] = "STOREB", [O_STOREC] = "STOREC", [O_BLEN] = "BLEN", [O_BEQ] = "BEQ", [O_BEQB] = "BEQB", [O_PTROF] = "PTROF", [O_REGAT] = "REGAT", [O_REGATA] = "REGATA", [O_FFI] = "FFI", [O_NATIVE] = "NATIVE", [O_DEEP] = "DEEP", [O_DEEPC] = "DEEPC",
-    [O_PIMULT] = "PIMULT", [O_PIM] = "PIM", [O_FMULT] = "FMULT", [O_FMULT2] = "FMULT2", [O_FMULT3] = "FMULT3", [O_LINEAR] = "LINEAR", [O_GSTEPS] = "GSTEPS", [O_GCODE] = "GCODE", [O_DNIDX] = "DNIDX", [O_GUSAGE] = "GUSAGE", [O_GUSAGE2] = "GUSAGE2",
+    [O_PIMULT] = "PIMULT", [O_PIM] = "PIM", [O_FMULT] = "FMULT", [O_FMULT2] = "FMULT2", [O_FMULT3] = "FMULT3", [O_LINEAR] = "LINEAR", [O_GSTEPS] = "GSTEPS", [O_GCODE] = "GCODE", [O_DNIDX] = "DNIDX", [O_DIHT] = "DIHT", [O_DIHN] = "DIHN", [O_GUSAGE] = "GUSAGE", [O_GUSAGE2] = "GUSAGE2",
     [O_WEQ] = "WEQ",
     [O_WLT] = "WLT",
     [O_WADD] = "WADD",
@@ -2885,7 +2885,7 @@ static void interact(Cell *o, Cell *v) {
             Port prm[np + 1], env[ne + 1];
             /* the hypotheses' leaves: one elimination per D at the leaf of a field's shape (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”) */
             int nleaf = 0;
-            if (ih) for (int j = 0; j < nf; j++) if (ci->recmask >> j & 1) nleaf += ci->rsh[j] ? ih_leaves(ci->rsh[j]) : 1;
+            if (ih) for (int j = 0; j < nf; j++) if (ci->recmask >> j & 1) nleaf += ci->rsh[j] ? (ci->rsh[j][0] == 'N' ? 1 : ih_leaves(ci->rsh[j])) : 1;
             if (!ih) {
                 for (int j = 0; j < nf + nd; j++) prm[j] = v->port[1 + j];
                 for (int e = 0; e < ne; e++) env[e] = o->port[e0 + e];
@@ -2899,6 +2899,19 @@ static void interact(Cell *o, Cell *v) {
                     if (ci->recmask >> j & 1) {
                         Port fa, fb; split2(v->port[1 + j], &fa, &fb);
                         prm[j] = fa;
+                        if (ci->rsh[j] && ci->rsh[j][0] == 'N') {
+                            /* a field of type L D, L a container (2026-11-15): the hypothesis is
+                             * %ihn-L _ _ _ h x, h the elimination as a function (its level, element
+                             * type and motive arguments are types only: unknown here) */
+                            int L = atoi(ci->rsh[j] + 1);
+                            const char *sp = "D";
+                            Port hm = ih_maker(&sp, tb, o->x, mb ? mc : NULL, &ec[0][0], nleaf + 2, ne, &leaf);
+                            long gi = L >= 0 ? DATA[L].ihng - 1 : -1;
+                            if (gi >= 0) { Port a[5] = { unk(), unk(), unk(), hm, fb }; prm[nf + q] = apply_gid(gi, a, 5); }
+                            else { era(hm); era(fb); prm[nf + q] = unk(); }
+                            q++;
+                            continue;
+                        }
                         if (ci->rsh[j] && !ih_pure_path(ci->rsh[j])) {
                             /* a function- or pair-shaped field: the hypothesis is the field passed through the
                              * shape's maker, an elimination as a function at each leaf (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”) */
@@ -3371,6 +3384,13 @@ static void interact(Cell *o, Cell *v) {
         if (vk != V_WORD || v->p) { fprintf(stderr, "%%dnidx: an index is a word\n"); exit(2); }
         int D = checked_data((long)v->a);
         link(word_of(D >= 0 ? (uint64_t)DATA[D].nidx : 0), o->port[1]);
+        cell_free(o); cell_free(v);
+        return;
+    }
+    case O_DIHT: case O_DIHN: {
+        if (vk != V_WORD || v->p) { fprintf(stderr, "%%diht/%%dihn: an index is a word\n"); exit(2); }
+        int D = checked_data((long)v->a);
+        link(word_of(D >= 0 ? (uint64_t)(o->kind == O_DIHT ? DATA[D].iht : DATA[D].ihn) : 0), o->port[1]);
         cell_free(o); cell_free(v);
         return;
     }

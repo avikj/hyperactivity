@@ -1458,6 +1458,8 @@ static void p_decl_in(void) {
              * parameters; the fields are checked to fit under it (lib/core/check.cub, chk-data) */
             Node *lv = NULL;
             if (data_annot) { Node *T = core(data_annot); if (T->list && T->n == 2 && is(T->it[0], "U")) lv = T->it[1]; else if (!T->list && is(T, "U")) lv = nsym("lzero"); }
+            /* a level written as a number (Type 1): lsuc applied that many times to lzero */
+            if (lv && !lv->list && lv->s[0] >= '0' && lv->s[0] <= '9') { long k = atol(lv->s); Node *z = nsym("lzero"); for (long q = 0; q < k && q < 64; q++) z = sym2("lsuc", z); lv = z; }
             x_top(lv ? lst(3, nsym(fail ? "checked-data-fail" : "checked-data"), d, lv) : sym2(fail ? "checked-data-fail" : "checked-data", d));
             if (!fail) data_level_check();
         }
@@ -4243,8 +4245,15 @@ static Node *expand(Node *e) {
  * value below (Below v: for each recursive field r, the value at r and Below r). A variable below
  * the split has its pair (value, Below) as an expression; a split of it reverts the pair, so that
  * in its branches the pair's Below unfolds to the pairs of its own recursive fields */
-typedef struct { const char *w; Node *e; const char *v; int gp; Node *E; Node *M; Node *Bl; } Deep;
+typedef struct { const char *w; Node *e; const char *v; int gp; Node *E; Node *M; Node *Bl; bool direct; } Deep;   /* direct: e is the value's hypothesis itself (an element of a nested field), not a pair */
 static Deep *deeps; static int ndeeps, capdeeps;
+/* nested inductive types (2026-11-15): a field of type L D (L a container) or a container field
+ * below one, with its hypothesis e (the tuple of its elements' hypotheses, typed by %iht-L), A the
+ * element type, and the frame it belongs to (v, gp, E, M: the split whose motive the elements'
+ * hypotheses are at). A split of it reverts e; an element bound there is a direct Deep */
+typedef struct { const char *w; Node *e; int L; Node *A; const char *v; int gp; Node *E; Node *M; } Nest;
+static Nest *nests; static int nnests, capnests;
+static Nest *nest_var(const char *w) { for (int i = nnests - 1; i >= 0; i--) if (!strcmp(nests[i].w, w)) return &nests[i]; return NULL; }
 static bool cov_on, cov_armed; static jmp_buf cov_jb;
 /* guarded recursion: a definition with a clock parameter (the first, guard_q) whose recursion is not
  * structural is a guarded fixed point: each call is (%gcall the arguments after the clock), made a
@@ -4316,7 +4325,7 @@ static Node *ih_type(Node *T, Node *x, const char *w, Node *Mb, const char *dnam
     if (hd->list || strcmp(hd->s, dname)) return NULL;
     return subst_sym(Mb, w, x);
 }
-static Deep *deep_of(const char *w) { for (int i = ndeeps - 1; i >= 0; i--) if (!strcmp(deeps[i].w, w)) return &deeps[i]; return NULL; }
+static Deep *deep_of(const char *w) { for (int i = ndeeps - 1; i >= 0; i--) if (!strcmp(deeps[i].w, w) && !deeps[i].direct) return &deeps[i]; return NULL; }
 static Node *rec_xform(Node *e);
 /* the hypothesis of a recursive call at the later parameters it varies over; an explicit one the
  * call does not give (the call partially applied) is a λ around it: the call's value is the
@@ -4378,7 +4387,7 @@ static Node *rec_call(Node *e, Node **args, int n) {
         Node *cand = expand(subst_sym(d->E, d->v, nsym(d->w)));
         if (!node_eq(cand, want)) continue;
         int nl = 0; for (int q = p + 1; q < tsig.np; q++) if (tsig.rev[q]) nl++;
-        Node *call = sym2("fst", d->e);
+        Node *call = d->direct ? d->e : sym2("fst", d->e);
         if (!nl) return call;
         return rec_hyp_apply(call, at, p, nl);
     }
@@ -4698,6 +4707,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     /* a split of a parameter of a recursive type, when recursion goes deeper than a field: with the
      * values below. A split of a variable below such a split: its pair reverted */
     Deep *dv = deep_of(v);
+    Nest *nst = dv ? NULL : nest_var(v);
     bool cov = false;
     if (cov_on && !dv && !strcmp(tsig.pn[gp]->s, v)) {
         bool rec = false, paths = false;
@@ -4744,7 +4754,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             int c = DATA[d].cons[ci], nf = CON[c].nfields;
             Node *pat = nlist(nf + 1); pat->it[0] = nsym(CON[c].name);
             Node *rf[64]; int nrf = 0;
-            for (int q = 0; q < nf; q++) { pat->it[q + 1] = xfresh("f"); if (CON[c].recmask >> q & 1 && nrf < 64) rf[nrf++] = pat->it[q + 1]; }
+            for (int q = 0; q < nf; q++) { pat->it[q + 1] = xfresh("f"); if (CON[c].recmask >> q & 1 && !(CON[c].rsh[q] && CON[c].rsh[q][0] == 'N') && nrf < 64) rf[nrf++] = pat->it[q + 1]; }
             Node *prod = nrf ? NULL : nsym("Unit");
             for (int k = nrf - 1; k >= 0; k--) {
                 Node *Mr = subst_sym(Mv, v, rf[k]);
@@ -4768,6 +4778,13 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             Node *Mv = subst_sym(dv->M->it[2], vv, vn), *Bv = subst_sym(dv->Bl->it[2], vv, vn);
             ihv = xfresh("ih");
             mot = sym4("Pi", ihv, sym4("Sigma", xfresh("_"), Mv, Bv), mot);
+        }
+        if (nst) {
+            /* the nested field's hypothesis reverted: (%iht-L l A P v), P the frame's motive */
+            ihv = xfresh("ih");
+            char nm[300]; snprintf(nm, sizeof nm, "%%iht-%s", DATA[nst->L].name);
+            Node *T = nlist(5); T->it[0] = nsym(nm); T->it[1] = nsym("%hole"); T->it[2] = nst->A; T->it[3] = nst->M; T->it[4] = nsym(v);
+            mot = sym4("Pi", ihv, T, mot);
         }
         for (int q = nd - 1; q >= 0; q--) if (mentions_name(mot, cdefs[dep[q]].v)) mot = sym4("let", nsym(cdefs[dep[q]].v), typed_def(&cdefs[dep[q]]), mot);
         mot = sym3("%lam", nsym(v), mot);
@@ -4875,13 +4892,27 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         for (int q = 0; q < nd; q++) { GROW(cdefs, capcdefs, (size_t)ncdefs + 1); cdefs[ncdefs++] = cdefs[dep[q]]; }
         for (int q = 0; q < nf; q++) { GROW(cdefs, capcdefs, (size_t)ncdefs + 1); cdefs[ncdefs++] = (CVar){ fv[q]->s, NULL, gp, q < CON[c].nfields ? fty[q] : NULL }; }
         /* the recursive fields' hypotheses */
-        int save_deeps = ndeeps;
+        int save_deeps = ndeeps, save_nests = nnests;
+        if (nst) {
+            /* a split of a nested field: its elements' hypotheses the reverted tuple's components,
+             * its container fields nested again */
+            int j = 0;
+            for (int q = 0; q < CON[c].nfields; q++) {
+                int k = nest_field(d, ci, q);
+                if (!k) continue;
+                Node *e = ihv; for (int z = 0; z < j; z++) e = sym2("snd", e);
+                e = sym2("fst", e);
+                if (k == 1) { Deep dd = { fv[q]->s, e, nst->v, nst->gp, nst->E, nst->M, NULL, true }; GROW(deeps, capdeeps, (size_t)ndeeps + 1); deeps[ndeeps++] = dd; }
+                else { Nest ne = { fv[q]->s, e, nst->L, nst->A, nst->v, nst->gp, nst->E, nst->M }; GROW(nests, capnests, (size_t)nnests + 1); nests[nnests++] = ne; }
+                j++;
+            }
+        }
         Node *tuple = NULL;
         if (cov || dv) {
             /* each recursive field's pair: the hypothesis (a split with the values below), or from
              * the reverted pair's Below */
             Node *rfs[64]; int nrf = 0;
-            for (int q = 0; q < CON[c].nfields; q++) if (CON[c].recmask >> q & 1 && nrf < 64) rfs[nrf++] = fv[q];
+            for (int q = 0; q < CON[c].nfields; q++) if (CON[c].recmask >> q & 1 && !(CON[c].rsh[q] && CON[c].rsh[q][0] == 'N') && nrf < 64) rfs[nrf++] = fv[q];   /* a nested field's values below are its elements': not a pair here */
             for (int k = 0; k < nrf; k++) {
                 Node *e;
                 if (cov) e = sym2("rec", rfs[k]);
@@ -4901,6 +4932,12 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             Frame fr = { v, gp, E, calloc((size_t)nf + 1, sizeof(Node *)), 0, calloc((size_t)nf + 1, sizeof(char *)), motx == mot ? mot : NULL };
             for (int q = 0; q < CON[c].nfields; q++) if (CON[c].recmask >> q & 1) { fr.rs[fr.nrf] = CON[c].rsh[q]; fr.rf[fr.nrf++] = fv[q]; }
             GROW(frames, capframes, (size_t)nframes + 1); frames[nframes++] = fr;
+            /* a nested field (shape N): its hypothesis, for a split of it */
+            if (fr.M) for (int q = 0; q < CON[c].nfields; q++)
+                if (CON[c].recmask >> q & 1 && CON[c].rsh[q] && CON[c].rsh[q][0] == 'N' && fty[q] && fty[q]->list && fty[q]->n == 2) {
+                    Nest ne = { fv[q]->s, rec_of_field(fv[q]), atoi(CON[c].rsh[q] + 1), fty[q]->it[1], v, gp, E, fr.M };
+                    GROW(nests, capnests, (size_t)nnests + 1); nests[nnests++] = ne;
+                }
         }
         /* the goal rewritten by a variable index: below the split the index is the constructor's */
         Ford *fdr0 = ixlam ? ford_of(CON[c].name) : NULL;
@@ -5014,7 +5051,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
                 body = ap;
             }
         }
-        nframes = save_frames; ndeeps = save_deeps;
+        nframes = save_frames; ndeeps = save_deeps; nnests = save_nests;
         /* the field entries are scoping only */
         ncdefs = save_defs;
         body = later_lam(gp, body);
@@ -5028,6 +5065,11 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         if (dv) {
             const char *vv = dv->v;
             Node *T = sym4("Sigma", xfresh("_"), subst_sym(dv->M->it[2], vv, cv), subst_sym(dv->Bl->it[2], vv, cv));
+            body = lam_t(ihv, T, body);
+        }
+        if (nst) {
+            char nm[300]; snprintf(nm, sizeof nm, "%%iht-%s", DATA[nst->L].name);
+            Node *T = nlist(5); T->it[0] = nsym(nm); T->it[1] = nsym("%hole"); T->it[2] = nst->A; T->it[3] = nst->M; T->it[4] = cv;
             body = lam_t(ihv, T, body);
         }
         /* the goal rewritten by the index equations (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”; as Agda's unification at the split): when
@@ -5069,7 +5111,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         alts[na++] = lst(2, pat, body);
     }
     /* a motive not depending on v: a case */
-    bool dep_mot = mentions_name(mot->it[2], v) || cov || dv;
+    bool dep_mot = mentions_name(mot->it[2], v) || cov || dv || nst;
     for (int q = gp + 1; q < tsig.np; q++) if (tsig.rev[q]) dep_mot = true;   /* applied to the reverted: inferred, so with its motive */
     if (motx != mot) dep_mot = true;
     if (srn) dep_mot = true;
@@ -5078,6 +5120,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     for (int i = 0; i < na; i++) el_->it[k0++] = alts[i];
     if (cov) el_ = sym2("fst", el_);
     if (dv) el_ = lst(2, el_, dv->e);
+    if (nst) el_ = lst(2, el_, nst->e);
     if (srn) {
         int ni = 0; for (int k = 0; k < srn; k++) if (srih[k]) ni++;
         Node *ap = nlist(srn + ni + 1); int k1 = 0; ap->it[k1++] = el_;

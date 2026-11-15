@@ -384,7 +384,9 @@ composition-with-systems = node "Composition with a system on the context's face
 -- pairs checked or synthesized, projections synthesized). Examples: the swap λ p. (snd p , fst p) at
 -- Bool × Bool → Bool × Bool is its own normal form; fst (true , false) normalizes to true; a pair at
 -- Bool is refused (1736 passed, 0 failed).
--- Known (2026-11-15, tested): ck cannot call itself on a case's branches. Code is a nested inductive
+-- Resolved (2026-11-15): ck calls itself on a case's branches through the nested eliminator below;
+-- negation, case true of false, true and λ a b. case a of b, false check through ck and normalize
+-- (check-wip.cub 1749 passed, 0 failed). Was (2026-11-15, tested): ck cannot call itself on a case's branches. Code is a nested inductive
 -- type (ccase, ccon, cdata, celim hold their subterms in a Lst Code), and checked structural
 -- recursion takes hypotheses only for fields of type D itself, under paths, Π codomains and Σ
 -- components: csz (ccase d (lcons t r) x) = suc (csz t) is refused, csx (ccase d B x) = suc (csx x)
@@ -399,6 +401,28 @@ composition-with-systems = node "Composition with a system on the context's face
 -- tail's, and a call on the head read as the pair's first component, about 80 lines). Then ck's case
 -- clause is one line. Next: that eliminator, then dependent types through conv-E, then the checker
 -- into lib/capacities/nbe.cub.
+-- Done (2026-11-15), as designed here: a field of type L D, L a data type with one parameter
+-- and no indices whose constructors' fields are the parameter itself (an element), L at it (a recursive
+-- field) or not mentioning it, D at its own parameters, has shape N (the machine's rsh 'N' and L's index;
+-- lib/core/check.cub's sh-nest). Its hypothesis is %ihn-L h x, generated with L: by cases on x, the
+-- tuple of h applied to each element field and %ihn-L h at each recursive field, right-nested pairs
+-- ending in Unit-at's constructor (Unit-at l : Type l, lib/core/primitives.cub, possible since data
+-- types may declare a universe over a parameter). Its type is %iht-L l P x, generated with it, the
+-- same cases into Type l. Both are eliminations of x, stuck on a variable and unfolding when it is
+-- split; the machine and the checker use the same generated functions, so the stuck forms are
+-- identical. A split of a field with such a hypothesis reverts the hypothesis into the split's motive
+-- (src/syntax.c), and a call on an element bound in the split reads the hypothesis's component.
+-- Implemented: src/lang.c nest_container, nest_of, gen_nest (emits the checked %iht-L and %ihn-L once
+-- Unit-at and L are checked; Lst, List and Opt get them in lib/core/primitives.cub), the shape N<L>;
+-- in ConInfo.rsh; src/net.c's case rule applies %ihn-L to the elimination as a function; the
+-- operations %diht and %dihn give the checker the generated definitions; lib/core/check.cub's
+-- sh-nest (rec-shape-top, at a field's top only, as the machine), is-rec-ty counting nested fields
+-- (programs over codes see them), branch-hyps typing the hypothesis; src/syntax.c's Nest entries
+-- and direct Deep entries, the hypothesis reverted at a split of the field; course-of-values
+-- recursion leaves nested fields out of its values below. experiments/nested/rose.cub: count on a
+-- rose tree by clauses through lcons patterns. Library 1953 passed with the 24 known failures.
+-- A recursion over a container of any length (all of a case's branches) still needs a function over
+-- the hypothesis tuple, whose type %iht-L the surface cannot yet name.
 checker-returns-derivations : Node
 checker-returns-derivations = node "A checker takes raw codes to typing derivations (or a diagnostic), as the paper's §6.1 specifies." (cons typed-codes-after-swap nil)
 -- typed-codes-after-composition (2026-11-14): everything typed codes and normalization by evaluation

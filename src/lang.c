@@ -259,7 +259,7 @@ static bool node_eq(Node *a, Node *b) {
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "%delay", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
     "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
-    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
+    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%diht", "%dihn", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr", "%i64div", "%i64mod", "%i64and", "%i64or", "%i64xor", "%i64shl", "%i64shr",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%u64ofw", "%wofu64", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
@@ -336,6 +336,23 @@ static bool rec_shape(Node *A, const char *D, char *out, int *n) {
     return false;
 }
 
+/* a container (2026-11-15, nested inductive types): a data type with one parameter, no indices, no
+ * path constructors, not codata, each constructor's field the parameter itself (an element), the
+ * type at its parameter (a recursive field) or a type not mentioning the parameter. A field of type
+ * L D of a data type D, L such a container, is recursive through L: its hypothesis is the tuple of
+ * the elements' hypotheses (%ihn-L, typed by %iht-L) */
+static bool nest_container(int L);
+static int data_lookup(const char *s);
+/* a field's type L A with L a container and A the data type D itself (at its parameters): L, else -1 */
+static int nest_of(Node *A, const char *D) {
+    if (!A || !A->list || A->n != 2 || A->it[0]->list) return -1;
+    if (!strcmp(A->it[0]->s, D)) return -1;
+    int L = data_lookup(A->it[0]->s);
+    if (L < 0 || !nest_container(L)) return -1;
+    Node *a = A->it[1];
+    if (!(a->list ? (a->n >= 1 && !a->it[0]->list && !strcmp(a->it[0]->s, D)) : !strcmp(a->s, D))) return -1;
+    return L;
+}
 /* data types: higher inductive types (Coquand–Huber–Mörtberg), declared by
  * (data ...) below; constructors are values, eliminated by %case */
 ConInfo *CON; static size_t capcon; static int ncon;
@@ -1500,6 +1517,94 @@ static Node *atel_level(Node *dd, int d, int k, Node *lv) {
     Chain C = { 0 }; NV L = ann(ds(lv), &C);
     return chain_close(&C, kapp("tz", L.node, NULL));
 }
+/* the container check (nest_of) and the generated hypothesis type and value of a nested field */
+static void emit(const char *text);
+static bool nest_container(int L) {
+    if (L < 0 || L >= ndata) return false;
+    DataInfo *X = &DATA[L];
+    Node *dd = X->decl;
+    if (X->co || X->nparams != 1 || X->nidx || !dd || !X->ncons) return false;
+    Node *hd = dd->it[1];
+    if (!hd->list || hd->n != 2) return false;
+    /* the parameter a type (of Type): its elements are the values nested */
+    Node *pt = hd->it[1]->list && hd->it[1]->n == 2 ? hd->it[1]->it[1] : NULL;
+    if (!pt || pt->list || !(is(pt, "U") || is(pt, "Type"))) return false;
+    const char *pn = param_name(hd->it[1])->s;
+    for (int ci = 0; ci < X->ncons; ci++) {
+        int c = X->cons[ci];
+        if (CON[c].ndims) return false;
+        Node *cd = dd->it[2 + ci];
+        for (int q = 0; q < CON[c].nfields; q++) {
+            if (!cd->list || q + 1 >= cd->n) return false;
+            Node *f = cd->it[q + 1];
+            if (!f->list || f->n != 2) return false;
+            Node *T = f->it[1];
+            if (!T->list && !strcmp(T->s, pn)) continue;
+            if (T->list && T->n == 2 && !T->it[0]->list && !strcmp(T->it[0]->s, X->name) && !T->it[1]->list && !strcmp(T->it[1]->s, pn)) continue;
+            if (mentions_name(T, pn)) return false;
+        }
+    }
+    return true;
+}
+/* a constructor field of container L: 1 an element, 2 a recursive field, 0 neither */
+static int nest_field(int L, int ci, int q) {
+    DataInfo *X = &DATA[L]; Node *dd = X->decl;
+    const char *pn = param_name(dd->it[1]->it[1])->s;
+    Node *T = dd->it[2 + ci]->it[q + 1]->it[1];
+    if (!T->list && !strcmp(T->s, pn)) return 1;
+    if (T->list && T->n == 2 && !T->it[0]->list && !strcmp(T->it[0]->s, X->name)) return 2;
+    return 0;
+}
+/* %iht-L l A P x: by cases on x, the Σ of P at each element and %iht-L at each recursive field,
+ * ending in Unit-at l; %ihn-L l A P h x: the tuple of h at each element and %ihn-L at each recursive
+ * field, ending in unit-at. Checked definitions, emitted once Unit-at and L are checked */
+static void gen_nest(int L) {
+    DataInfo *X = &DATA[L]; Node *dd = X->decl;
+    const char *Ln = X->name;
+    char *pty; size_t pl; FILE *pm = open_memstream(&pty, &pl); print_node(pm, dd->it[1]->it[1]->it[1]); fclose(pm);
+    for (int which = 0; which < 2; which++) {
+        char *buf; size_t len; FILE *m = open_memstream(&buf, &len);
+        if (!which)
+            fprintf(m, "(checked %%iht-%s (Pi %%l Level (Pi %%A %s (Pi %%P (Pi %%y %%A (U %%l)) (Pi %%x (%s %%A) (U %%l))))) (lam %%l (lam %%A (lam %%P (lam %%x (elim (lam %%z (U %%l)) %%x", Ln, pty, Ln);
+        else
+            fprintf(m, "(checked %%ihn-%s (Pi %%l Level (Pi %%A %s (Pi %%P (Pi %%y %%A (U %%l)) (Pi %%h (Pi %%y %%A (%%P %%y)) (Pi %%x (%s %%A) (%%iht-%s %%l %%A %%P %%x)))))) (lam %%l (lam %%A (lam %%P (lam %%h (lam %%x (elim (lam %%z (%%iht-%s %%l %%A %%P %%z)) %%x", Ln, pty, Ln, Ln, Ln);
+        for (int ci = 0; ci < X->ncons; ci++) {
+            int c = X->cons[ci], nf = CON[c].nfields;
+            fprintf(m, " ((%s", CON[c].name);
+            for (int q = 0; q < nf; q++) fprintf(m, " %%f%d", q);
+            fprintf(m, ") ");
+            int ncomp = 0;
+            for (int q = 0; q < nf; q++) {
+                int k = nest_field(L, ci, q);
+                if (!k) continue;
+                if (!which) { if (k == 1) fprintf(m, "(Sigma %%s%d (%%P %%f%d) ", ncomp, q); else fprintf(m, "(Sigma %%s%d (rec %%f%d) ", ncomp, q); }
+                else { if (k == 1) fprintf(m, "(pair (%%h %%f%d) ", q); else fprintf(m, "(pair (rec %%f%d) ", q); }
+                ncomp++;
+            }
+            fprintf(m, which ? "unit-at" : "(Unit-at %%l)");
+            for (int k = 0; k < ncomp; k++) fputc(')', m);
+            fputc(')', m);
+        }
+        fprintf(m, which ? ")))))))" : "))))))");
+        fclose(m);
+        emit(buf);
+        free(buf);
+        char nm[300]; snprintf(nm, sizeof nm, which ? "%%ihn-%s" : "%%iht-%s", Ln);
+        /* the checked definition's index (the checker's tables are by it) */
+        long g = -1;
+        for (int i = nchecked - 1; i >= 0 && g < 0; i--) if (!CHKHIDE[i] && !strcmp(CHECKED[i], nm)) g = i;
+        if (which) { X->ihn = g + 1; X->ihng = g >= 0 ? global_lookup(nm) + 1 : 0; } else X->iht = g + 1;
+    }
+    free(pty);
+}
+/* after a data type is checked: the hypotheses of nested fields through it, or through every
+ * container checked before Unit-at */
+static void nest_after_checked(int d) {
+    int U = data_lookup("Unit-at");
+    if (U < 0 || chk_index(U) < 0) return;
+    if (d == U) { for (int L = 0; L < ndata; L++) if (L != U && chk_index(L) >= 0 && !DATA[L].iht && nest_container(L)) gen_nest(L); }
+    else if (!DATA[d].iht && nest_container(d)) gen_nest(d);
+}
 /* occurrences of a parameter in a primitive's body (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”): c counts them, direct those that are an
  * argument of a machine operation (a %-headed application); an inner binder of the same name hides it */
 static void prim_uses(Node *t, const char *x, int under, int *c, int *direct) {
@@ -2485,7 +2590,7 @@ static Syn *compile(Node *t) {
         static const struct { const char *name; int kind, n; } PR[] = { { "%view", O_VIEW, 1 }, { "%ieq", O_IEQ, 2 }, { "%feq", O_FEQL, 2 }, { "%clauses", O_CLAUSES, 1 }, { "%dnf", O_DNF, 1 }, { "%motive", O_MOTIVE, 1 },
             { "%restrict", O_RESTRICT, 2 }, { "%abs", O_ABS, 2 }, { "%branch", O_BRANCH, 3 }, { "%clos", O_CLOS, 2 }, { "%wsucc", O_WSUCC, 1 }, { "%weq", O_WEQ, 2 }, { "%wlt", O_WLT, 2 },
             { "%wadd", O_WADD, 2 }, { "%wmax", O_WMAX, 2 }, { "%wsub", O_WSUB, 2 }, { "%wmul", O_WMUL, 2 }, { "%wdiv", O_WDIV, 2 }, { "%wmod", O_WMOD, 2 }, { "%wand", O_WAND, 2 }, { "%wor", O_WOR, 2 }, { "%wxor", O_WXOR, 2 }, { "%wshl", O_WSHL, 2 }, { "%wshr", O_WSHR, 2 }, { "%welim", O_WELIM, 3 },
-            { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 }, { "%gsteps", O_GSTEPS, 1 }, { "%gcode", O_GCODE, 1 }, { "%dnidx", O_DNIDX, 1 },
+            { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 }, { "%gsteps", O_GSTEPS, 1 }, { "%gcode", O_GCODE, 1 }, { "%dnidx", O_DNIDX, 1 }, { "%diht", O_DIHT, 1 }, { "%dihn", O_DIHN, 1 },
             /* primitive types and values (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”) */
             { "%pty", O_PTY, 1 }, { "%bytesty", O_BYTESTY, 1 }, { "%pval", O_PVAL, 2 }, { "%bytes", O_BYTES, 1 }, { "%blen", O_BLEN, 1 }, { "%beq", O_BEQ, 2 }, { "%ptr-of", O_PTROF, 1 }, { "%region-at", O_REGAT, 2 }, { NULL, 0, 0 } };
         /* the primitive operations, (%i64add a b) ...: O_POP1/O_POP2 with the operation in x; the loads and
@@ -4108,6 +4213,7 @@ static void toplevel_in(Node *f) {
         Node *ed = nlist(3); ed->it[0] = nsym("def"); ed->it[1] = nsym(dent); ed->it[2] = nl3("%%data-entry", word(di), ent);
         toplevel(ed);
         table_set(TB_DENT, di, global_lookup(dent));
+        nest_after_checked(d);
     } else if (!strcmp(h, "mutual") || !strcmp(h, "mutual-fail")) {
         /* (mutual (checked a T t)...): copattern definitions calling each other */
         if (f->n < 2) die("(mutual (checked name T t)...)", NULL);
@@ -4323,6 +4429,8 @@ static void toplevel_in(Node *f) {
                 /* a field recursive under Π codomains or Σ components (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”): its shape, and the
                  * hypothesis the net builds from it */
                 if (rec_shape(x->ft[k], D, sh, &sn)) { sh[sn] = 0; rsh[k] = strdup(sh); if (depth < 0) { rm |= 1ull << k; nr++; } }
+                /* a field of type L D, L a container: recursive through L (shape N<L>;) */
+                else if (depth < 0) { int L = nest_of(x->ft[k], D); if (L >= 0) { char b[32]; snprintf(b, sizeof b, "N%d;", L); rsh[k] = strdup(b); rm |= 1ull << k; nr++; } }
             }
             CON[ncon] = (ConInfo){ intern(cd->it[0]->s), d, ci, x->nf, x->nd, -1, -1, nr, rm };
             memcpy(CON[ncon].rdim, rd, sizeof rd);

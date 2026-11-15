@@ -220,6 +220,8 @@ enum {
     O_GSTEPS,   /* (%gsteps n): the steps checked definition n took to check (word; 0 unknown) */
     O_GCODE,    /* (%gcode n): some (the code of checked definition n as written, globals kept as cglob), or none */
     O_DNIDX,    /* (%dnidx d): the number of index parameters (the last ones) of checked data type d (word) */
+    O_DIHT,     /* (%diht d): checked data type d's generated %iht-d, global index + 1, or 0 (word) */
+    O_DIHN,     /* (%dihn d): its %ihn-d likewise */
     O_GUSAGE, O_GUSAGE2,   /* (%gusage n k): the computed usage (word) of parameter k of checked definition n; 2 when unknown */
     O_PTY,      /* (%pty k): the primitive type of kind k (a word): 0=k 1=out */
     O_BYTESTY,  /* (%bytesty n): the type Bytes n: 0=n 1=out */
@@ -351,7 +353,11 @@ typedef struct { char *name; int data, index, nfields, ndims; long bdy, trans; i
  * rdim[k] dimensions deep, or under Π codomains and Σ components), nrec of them. rsh[k]: the shape of a
  * recursive field's type as a string, prefix form: D the data type, P<s> a path line into s, F<s> a function
  * into s, 1<s> a pair whose first component is s, 2<s> whose second is, B<s><t> both (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.17 “E28a — Induction hypotheses for path-typed recursive fields” and §18.18 “E28b — Strict positivity under Π codomains and Σ components”) */
-typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; void *decl; int co, nflds; int *flds; int nidx; } DataInfo;
+typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; void *decl; int co, nflds; int *flds; int nidx; long iht, ihn, ihng; } DataInfo;
+/* iht, ihn: for a container L (one parameter, no indices, its fields the parameter, L at it, or not
+ * mentioning it), the generated checked definitions %iht-L and %ihn-L, global index + 1 (0: none):
+ * the type and the value of a nested field's induction hypothesis (checked definitions' indices);
+ * ihng: %ihn-L's global index + 1, which the machine applies */
 /* nidx: the last nidx parameters are indices (fording; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): a constructor's recursive field may give them freely */
 /* decl: the (data ...) form. co: a codata type (no constructors): its fields flds (indices into FLD);
  * comp its composition, a copattern definition */

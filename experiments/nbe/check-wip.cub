@@ -619,6 +619,8 @@ ck (ccon d k fs ds) ts m = finish ts (ccon d k fs ds) m (con-syn ts d k fs ds)
 ck (cpair a b) ts m = pair-m ts a b m (λ t → ck a ts (mchk t)) (λ t → ck b ts (mchk t)) (ck a ts msyn) (ck b ts msyn)
 ck (cfst p) ts m = finish ts (cfst p) m (syn-fst ts p (ck p ts msyn))
 ck (csnd p) ts m = finish ts (csnd p) m (syn-snd ts p (ck p ts msyn))
+ck (ccase d (lcons t0 (lcons f0 lnil)) x0) ts m =
+  case-m ts d t0 f0 x0 m (ck x0 ts (mchk sbool)) (λ t → ck t0 ts (mchk t)) (λ t → ck f0 ts (mchk t)) (ck t0 ts msyn)
 ck c ts m = finish ts c m may-no
 
 -- ---------------------------------------------------------------- examples: raw codes checked, then normalized
@@ -660,3 +662,12 @@ tcode-of c t r =
 -- λ f. λ x. x at (Bool → Bool) → Bool → Bool is its own normal form
 #same tcode-of (clam (clam (cvar #0))) (sarr (sarr sbool sbool) (sarr sbool sbool))
   (ck (clam (clam (cvar #0))) nil (mchk (sarr (sarr sbool sbool) (sarr sbool sbool)))) = some (clam (clam (cvar #0)))
+-- case on Bool through ck itself (its branches are a case code's nested Lst Code): negation is its own
+-- normal form, case true of false, true normalizes to false, and λ b. case b of b, false (and) at
+-- Bool → Bool → Bool is its own normal form
+#same tcode-of (clam (c-case c-false c-true (cvar #0))) (sarr sbool sbool) (ck (clam (c-case c-false c-true (cvar #0))) nil (mchk (sarr sbool sbool)))
+  = some (clam (c-case c-false c-true (cvar #0)))
+#same tcode-of (c-case c-false c-true c-true) sbool (ck (c-case c-false c-true c-true) nil (mchk sbool)) = some c-false
+#same tcode-of (clam (clam (c-case (cvar #0) c-false (cvar #1)))) (sarr sbool (sarr sbool sbool))
+  (ck (clam (clam (c-case (cvar #0) c-false (cvar #1)))) nil (mchk (sarr sbool (sarr sbool sbool))))
+  = some (clam (clam (c-case (cvar #0) c-false (cvar #1))))

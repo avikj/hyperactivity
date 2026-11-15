@@ -339,6 +339,13 @@ The paper is the specification. What remains between the implementation (“The 
   for fields of type D itself and for D under paths, function codomains and pairs, so a recursive
   call on a case's branch is refused, and the untyped bootstrap files over codes cannot yet be
   written with types.
+  Implemented 2026-11-15: a container L (one parameter, no indices, its fields the parameter, L at
+  it, or not mentioning it) gets, generated and checked, the hypothesis type %iht-L l A P x (by cases
+  on x, the Σ of P at its elements and %iht-L at its L-fields, ending in the unit at level l) and
+  value %ihn-L; a field of type L D takes %ihn-L of the elimination as its hypothesis, and a split of
+  such a field in clauses unfolds it, so a call on an element bound there is structural. The unit at
+  every level this needs is possible because data types may now declare a universe that depends on
+  a parameter (data Unit-at (l : Level) : Type l).
 - **Terms of any depth.**
 
 **Dimensions.** This is answered by the standard semantics; it was never a question for Avik.

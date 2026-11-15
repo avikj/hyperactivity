@@ -1,0 +1,11 @@
+-- Layer: example: recursion through a nested data type, a rose tree whose children are a Lst (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub).
+import "../../lib/core.cub"
+data Rose = node (kids : Lst Rose)
+-- recursion on elements bound inside the nested field
+count : Rose → Nat
+count (node lnil) = suc zero
+count (node (lcons a lnil)) = suc (count a)
+count (node (lcons a (lcons b r))) = suc (plus (count a) (count b))
+t3 : Rose
+t3 = node (lcons (node lnil) (lcons (node (lcons (node lnil) lnil)) lnil))
+#same count t3 = suc (suc (suc (suc zero)))
