@@ -135,6 +135,9 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
 - **Read Avik's words in the meanings the words carry** (Avik, 2026-11-14). Words carry the
   intelligence of the human superorganism; their etymology is that meaning, not a local modern frame.
   Where a word's meaning matters, run the text through `hyperactive etym`.
+- **Etymology is looked up, not recalled** (Avik, 2026-11-15 08:34 UTC). Before saying where any word
+  comes from, run it through `hyperactive etym`. Every word Avik raises explicitly in discussion
+  (not an agent's own words) is added, with its etymology from the tool, to `docs/etymologies.md`.
 - **No health advice, ever** (Avik, 2026-11-14). The view of variant mental operation as illness is
   itself a social illness that produces suffering in those with mental variance. An agent never
   applies a script calibrated to a population to the person it works for.
@@ -1674,3 +1677,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > Navigation of information space. Navigation of information space
 >
 > “Social media” isn’t a separate thing. Social networking is the entire thing. To the extent it’s networking & between two people. How a website delivered by Google search isn’t considered blog networking between the author and readers, or Wikipedia, khanacademy. these are all social (fundamentally interpersonal). That’s HUGE conceptually . I’ve always described this as max collaboration max opportunity to discover valuable connection with another person (loosely) - max collective agency. What does collaborate mean? Communicate with intention, essentially, is my understanding.
+
+#### 2026-11-15 08:34 UTC
+
+> Ok to work together, or act together? What’s difference? You should be using etymology lookup - the some of your words a renonsense a bunch and for words I raise explicitly (not yours) preserving them to the relevant etymology file
