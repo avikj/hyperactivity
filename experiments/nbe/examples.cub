@@ -236,6 +236,31 @@ trp-dL = dty-path (dext Γp2) s-bool trp-L c-bool c-true c-true (dty-bool (dext 
 trp-d : Der (j-tm , Γp2 , (s-path s-bool) , (ccomp (cplam (cpathp (cplam c-bool) c-true c-true)) csys0 (cvar #0)) , (fmapM Γp2 (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) trp-X))
 trp-d = dtransp-pb Γp2 trp-X (cpathp (cplam c-bool) c-true c-true) (cvar #0) trp-dL (dvar Γp2 none)
 #same fst (normalize-nf Γp2 tΓp2 (s-path s-bool) ((ccomp (cplam (cpathp (cplam c-bool) c-true c-true)) csys0 (cvar #0)) , (fmapM Γp2 (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) trp-X) , trp-d)) = cplam (c-comp-pb dnf-v0 (cpathp (cplam c-bool) c-true c-true) (cpapp (cvar #1) (dnf-code dnf-v0)))
+-- p : PathP (λ i → Nat) zero zero in context; transp (λ i. PathP (λ j. Nat) zero zero) p normalizes
+-- to ⟨j⟩ comp (λ i. Nat) [j=0 ↦ ⟨i⟩ zero, j=1 ↦ ⟨i⟩ zero] (p @ j) (2026-11-15, K2)
+pn-T : Mean emp2 (Sem (s-path s-nat))
+pn-T = λ ρ → ((one , one , λ i → one) , zero , zero)
+pn-dT : Der (j-ty , emp2 , (s-path s-nat) , (cpathp (cplam c-nat) c-zero c-zero) , pn-T)
+pn-dT = dty-path emp2 s-nat pn-T c-nat c-zero c-zero (dty-nat (dext emp2) ((λ ρ → one) , (λ ρ → one) , λ i ρ → one))
+  (dzero emp2 (λ ρ → one)) (dzero emp2 (λ ρ → one))
+Γpn : CCtx
+Γpn = ext-h emp2 (s-path s-nat) (Sem (s-path s-nat)) (λ A → A) pn-T
+tΓpn : TCtx Γpn
+tΓpn = tc-ty emp2 tc-nil (s-path s-nat) pn-T (cpathp (cplam c-nat) c-zero c-zero) pn-dT
+trn2-T0 : Sem (s-path s-nat)
+trn2-T0 = ((one , one , λ i → one) , zero , zero)
+trn2-X : Mean Γpn (TrV (s-path s-nat))
+trn2-X = λ ρ → ((trn2-T0 , trn2-T0 , λ i → trn2-T0) , snd ρ)
+trn2-L : Mean (dext Γpn) (Sem (s-path s-nat))
+trn2-L = dline-body Γpn (TrV (s-path s-nat)) (Sem (s-path s-nat)) (tr-ln (s-path s-nat)) trn2-X
+trn2-B : Mean (dext Γpn) One1
+trn2-B = dline-body Γpn (TrV (s-path s-nat)) One1 (λ q → (one , one , λ i → one)) trn2-X
+trn2-dL : Der (j-ty , dext Γpn , (s-path s-nat) , (cpathp (cplam c-nat) c-zero c-zero) , trn2-L)
+trn2-dL = dty-path (dext Γpn) s-nat trn2-L c-nat c-zero c-zero (dty-nat (dext (dext Γpn)) (path-line-ty (dext Γpn) s-nat trn2-L))
+  (dzero (dext Γpn) trn2-B) (dzero (dext Γpn) trn2-B)
+trn2-d : Der (j-tm , Γpn , (s-path s-nat) , (ccomp (cplam (cpathp (cplam c-nat) c-zero c-zero)) csys0 (cvar #0)) , (fmapM Γpn (TrV (s-path s-nat)) (TV (s-path s-nat)) (tr-r (s-path s-nat)) trn2-X))
+trn2-d = dtransp-pn Γpn trn2-X (cpathp (cplam c-nat) c-zero c-zero) (cvar #0) trn2-dL (dvar Γpn none)
+#same fst (normalize-nf Γpn tΓpn (s-path s-nat) ((ccomp (cplam (cpathp (cplam c-nat) c-zero c-zero)) csys0 (cvar #0)) , (fmapM Γpn (TrV (s-path s-nat)) (TV (s-path s-nat)) (tr-r (s-path s-nat)) trn2-X) , trn2-d)) = cplam (c-comp-pn dnf-v0 (cpathp (cplam c-nat) c-zero c-zero) (cpapp (cvar #1) (dnf-code dnf-v0)))
 -- ---------------------------------------------------------------- substitution on checked syntax
 -- x := true in not x (x : Bool): the substitution emp2 → Γb2 (ext-at at true's meaning), its checked
 -- term (true's derivation carried to σ's action on x by ext-new and via-snd), and the substituted
