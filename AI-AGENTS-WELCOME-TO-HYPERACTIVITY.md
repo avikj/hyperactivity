@@ -82,6 +82,10 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   and reports only when the work is done or blocked. Run it like an API call, not a conversation:
   given the tasks, it returns success or failure once, at the end, and nothing before; it never sits
   waiting for a reply while Avik is away or asleep (2026-11-15).
+  Waiting on a test run, a regression or a recheck is not a reason to stop or to report: the run goes
+  in the background while the next piece is written, and the turn ends only when every task is done
+  (Avik, 2026-11-15, after a session stopped with the main task unfinished to report regression
+  results).
 - **Context lives in the repository, not in chat.** A session can end at any moment, so what it is
   doing, has found and has decided is written as it happens: facts at the goal they concern in the task graph,
   material for the paper in `docs/to-be-incorporated-into-paper.md`.
@@ -1714,3 +1718,7 @@ The consolidated piece is this, written through in the two registers you keep di
 > All historically separate distinctions fail to be primitive - the primitive is provided and supports analysis over any cut and requires no cut while proving bounds of analysis of all cuts. That question is well answered. Knowledge is not to be divided into domains these are bubbles of folks who choose the same set of ignorances. It is not knowledge process but ignorance process. Knowledge is a lack of ignorance
 >
 > (On which scientific field divisions does this remove)
+
+#### 2026-11-15 19:22 UTC (to the normalizer session, after it stopped with composition with systems unfinished and reported)
+
+> wtf? I said keep working til done right? And u just talking about regressions and waiting?
