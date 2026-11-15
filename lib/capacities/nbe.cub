@@ -2247,7 +2247,25 @@ abs-mot Γ s R = ext-lift Γ s-empty (AbsV s) (abs-b s) (Sem s) (λ q e → fst 
 -- pair its codomain's, a case its motive's (the decision at lib/capacities/nbe.cub's head: reify builds them from
 -- the type's computability, and embed gives fund's premises)
 -- constructor binders subscripted ₀ (telescope instantiation captures names)
+-- (2026-11-15, K2) transport along a line of PathP types with Bool fibre: the type line's endpoint
+-- codes (a PathP type's normal code is cpathp (cplam L) x y), and the formal composition at Bool that
+-- the transported path's body is at a canonical non-constant form f: faces f=0 and f=1, branches the
+-- endpoint lines (total, over the transport's dimension), base the path at f
+pb-e0 : Code → Code
+pb-e0 (cpathp A a b) = a
+pb-e0 c = c
+pb-e1 : Code → Code
+pb-e1 (cpathp A a b) = b
+pb-e1 c = c
+c-comp-pb : DNF → Code → Code → Code
+c-comp-pb f cL cb = ccomp (cplam c-bool) (csysc (ceq0 (dnf-code f)) (cplam (pb-e0 cL)) (csysc (ceq1 (dnf-code f)) (cplam (pb-e1 cL)) csys0)) cb
 data NN : (KJ : NK × Jdg) → Type 1 where
+  ncomp-pb : (Γ₀ : CCtx) (X₀ : Mean Γ₀ (TrV (s-path s-bool))) (f₀ : DNF) → isTrue (dnf-canon f₀) → isTrue (dnf-nonconst f₀) → (cL₀ cp₀ cb₀ : Code) →
+    NN (k-nf , (j-ty , dext Γ₀ , (s-path s-bool) , cL₀ , (dline-body Γ₀ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X₀))) →
+    NN (k-nf , (j-tm , Γ₀ , (s-path s-bool) , cp₀ , (fmapM Γ₀ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X₀))) →
+    NN (k-nf , (j-tm , Γ₀ , s-bool , cb₀ , (papp-mean Γ₀ s-bool f₀ (fmapM Γ₀ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X₀)))) →
+    (Y₀ : Mean Γ₀ (TV s-bool)) → PathM Γ₀ (TV s-bool) (papp-mean Γ₀ s-bool f₀ (fmapM Γ₀ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X₀)) Y₀ →
+    NN (k-ne , (j-tm , Γ₀ , s-bool , c-comp-pb f₀ cL₀ cb₀ , Y₀))
   nvar : (Γ₀ : CCtx) (v₀ : VarP (fst Γ₀)) →
     NN (k-ne , (j-tm , Γ₀ , var-shape (fst Γ₀) v₀ , cvar (var-word (fst Γ₀) v₀) , varCube Γ₀ v₀))
   napp : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (AppV a₀ b₀)) (f₀ c₀ : Code) →
@@ -2341,6 +2359,16 @@ data NN : (KJ : NK × Jdg) → Type 1 where
 -- non-constant form, and at 0 and 1 by their own rules (dpapp0, dpapp1: the type's endpoint)
 -- constructor binders subscripted ₀ (telescope instantiation captures names)
 data Der : (J : Jdg) → Type 1 where
+  dcomp-pb : (Γ₀ : CCtx) (X₀ : Mean Γ₀ (TrV (s-path s-bool))) (f₀ : DNF) → isTrue (dnf-canon f₀) → isTrue (dnf-nonconst f₀) → (cL₀ cp₀ cb₀ : Code) →
+    Der (j-ty , dext Γ₀ , (s-path s-bool) , cL₀ , (dline-body Γ₀ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X₀)) →
+    Der (j-tm , Γ₀ , (s-path s-bool) , cp₀ , (fmapM Γ₀ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X₀)) →
+    Der (j-tm , Γ₀ , s-bool , cb₀ , (papp-mean Γ₀ s-bool f₀ (fmapM Γ₀ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X₀))) →
+    (Y₀ : Mean Γ₀ (TV s-bool)) → PathM Γ₀ (TV s-bool) (papp-mean Γ₀ s-bool f₀ (fmapM Γ₀ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X₀)) Y₀ →
+    Der (j-tm , Γ₀ , s-bool , c-comp-pb f₀ cL₀ cb₀ , Y₀)
+  dtransp-pb : (Γ₀ : CCtx) (X₀ : Mean Γ₀ (TrV (s-path s-bool))) (cL₀ c₀ : Code) →
+    Der (j-ty , dext Γ₀ , (s-path s-bool) , cL₀ , (dline-body Γ₀ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X₀)) →
+    Der (j-tm , Γ₀ , (s-path s-bool) , c₀ , (fmapM Γ₀ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X₀)) →
+    Der (j-tm , Γ₀ , (s-path s-bool) , ccomp (cplam cL₀) csys0 c₀ , (fmapM Γ₀ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X₀))
   dvar : (Γ₀ : CCtx) (v₀ : VarP (fst Γ₀)) →
     Der (j-tm , Γ₀ , var-shape (fst Γ₀) v₀ , cvar (var-word (fst Γ₀) v₀) , varCube Γ₀ v₀)
   dapp : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (R₀ : Mean Γ₀ (AppV a₀ b₀)) (f₀ c₀ : Code) →
@@ -2445,6 +2473,7 @@ teval : (Γ : CCtx) (s : TyShape) → TCode Γ s → Mean Γ (TV s)
 teval Γ s t = fst (snd t)
 -- normal and neutral forms are derivations, with the same code and meaning
 embed : {KJ : NK × Jdg} → NN KJ → Der (snd KJ)
+embed (ncomp-pb Γ X f cf nc cL cp cb nL np nb Y q) = dcomp-pb Γ X f cf nc cL cp cb (embed nL) (embed np) (embed nb) Y q
 embed (nvar Γ v) = dvar Γ v
 embed (napp Γ a b R f c nf na) = dapp Γ a b R f c (embed nf) (embed na)
 embed (nfst Γ a b R p np) = dfst Γ a b R p (embed np)
@@ -6782,9 +6811,31 @@ rn-irr-u Δ' Δ w X X' p Xn = (fst Xn , nirr-u Δ' (wact Δ' Δ w (TV s-unit) X)
 rn-irr-e : (Δ' Δ : CCtx) (w : World Δ' Δ) (X X' : (Mean Δ (TV s-empty))) → PathM Δ (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X') →
   RenR k-ne j-tm Δ' s-empty (wact Δ' Δ w (TV s-empty) X) → RenR k-ne j-tm Δ' s-empty (wact Δ' Δ w (TV s-empty) X')
 rn-irr-e Δ' Δ w X X' p Xn = (fst Xn , nirr-e Δ' (wact Δ' Δ w (TV s-empty) X) (wact Δ' Δ w (TV s-empty) X') (fst Xn) (pcat (Mean Δ' (TV s-empty)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (subM-fmap Δ' Δ (TV s-empty) (TV s-empty) nrm-e (world-sub Δ' Δ w) X) (pcat (Mean Δ' (TV s-empty)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X')) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (cong1 (Mean Δ (TV s-empty)) (Mean Δ' (TV s-empty)) (λ N → (wact Δ' Δ w (TV s-empty) N)) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X') p) (psym (Mean Δ' (TV s-empty)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X')) (subM-fmap Δ' Δ (TV s-empty) (TV s-empty) nrm-e (world-sub Δ' Δ w) X')))) (snd Xn))
+rn-comp-pb : (Δ' Δ : CCtx) (w : World Δ' Δ) (X : Mean Δ (TrV (s-path s-bool))) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
+  (Y : Mean Δ (TV s-bool)) → PathM Δ (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X)) Y →
+  RenR k-nf j-ty (dext Δ') (s-path s-bool) (subM (dext Δ') (dext Δ) (Sem (s-path s-bool)) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (dline-body Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X)) →
+  RenR k-nf j-tm Δ' (s-path s-bool) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X)) →
+  RenR k-nf j-tm Δ' s-bool (wact Δ' Δ w (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) →
+  RenR k-ne j-tm Δ' s-bool (wact Δ' Δ w (TV s-bool) Y)
+rn-comp-pb Δ' Δ w X f cf nc Y q Ln Pn Bn =
+  (c-comp-pb (dnf-r (fst w) f) (fst Ln) (fst Bn) ,
+   ncomp-pb Δ' (wact Δ' Δ w (TrV (s-path s-bool)) X) (dnf-r (fst w) f) (canon-r (fst w) (fst (snd w)) f cf) (nonconst-r (fst w) f nc) (fst Ln) (fst Pn) (fst Bn)
+     (nn-tr k-nf j-ty (dext Δ') (s-path s-bool) (fst Ln) (subM (dext Δ') (dext Δ) (Sem (s-path s-bool)) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (dline-body Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X)) (dline-body Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)) (dkeep-line Δ' Δ w (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X) (snd Ln))
+     (nn-fm-in k-nf j-tm Δ' Δ w (TrV (s-path s-bool)) (s-path s-bool) (tr-x (s-path s-bool)) X (fst Pn) (snd Pn))
+     (nn-tr k-nf j-tm Δ' s-bool (fst Bn) (wact Δ' Δ w (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) (papp-mean Δ' s-bool (dnf-r (fst w) f) (fmapM Δ' (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)))
+        (pcat (Mean Δ' (TV s-bool)) (wact Δ' Δ w (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) (papp-mean Δ' s-bool (dnf-r (fst w) f) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) (papp-mean Δ' s-bool (dnf-r (fst w) f) (fmapM Δ' (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)))
+        (psym (Mean Δ' (TV s-bool)) (papp-mean Δ' s-bool (dnf-r (fst w) f) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) (wact Δ' Δ w (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) (subM-papp Δ' Δ w s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X)))
+        (λ i → papp-mean Δ' s-bool (dnf-r (fst w) f) (subM-fmap Δ' Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) (world-sub Δ' Δ w) X (~ i))))
+        (snd Bn))
+     (wact Δ' Δ w (TV s-bool) Y)
+     (pcat (Mean Δ' (TV s-bool)) (papp-mean Δ' s-bool (dnf-r (fst w) f) (fmapM Δ' (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X))) (papp-mean Δ' s-bool (dnf-r (fst w) f) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))) (wact Δ' Δ w (TV s-bool) Y)
+        (λ i → papp-mean Δ' s-bool (dnf-r (fst w) f) (subM-fmap Δ' Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) (world-sub Δ' Δ w) X i))
+        (pcat (Mean Δ' (TV s-bool)) (papp-mean Δ' s-bool (dnf-r (fst w) f) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))) (wact Δ' Δ w (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))) (wact Δ' Δ w (TV s-bool) Y)
+           (subM-papp Δ' Δ w s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X)) (λ i → wact Δ' Δ w (TV s-bool) (q i)))))
 ren-nn : {KJ : NK × Jdg} → NN KJ → (Δ' : CCtx) (w : World Δ' (fst (snd (snd KJ)))) →
   RenR (fst KJ) (fst (snd KJ)) Δ' (fst (snd (snd (snd KJ))))
     (wact Δ' (fst (snd (snd KJ))) w (JZ (fst (snd KJ)) (fst (snd (snd (snd KJ))))) (snd (snd (snd (snd (snd KJ))))))
+ren-nn (ncomp-pb Γ X f cf nc cL cp cb nL np nb Y q) Δ' w = rn-comp-pb Δ' Γ w X f cf nc Y q (ren-nn nL (dext Δ') (world-dkeep Δ' Γ w)) (ren-nn np Δ' w) (ren-nn nb Δ' w)
 ren-nn (nvar Γ v) Δ' w = rn-var Δ' Γ w v
 ren-nn (napp Γ a b R f c nf na) Δ' w = rn-app Δ' Γ w a b R (ren-nn nf Δ' w) (ren-nn na Δ' w)
 ren-nn (nfst Γ a b R p np) Δ' w = rn-fst Δ' Γ w a b R (ren-nn np Δ' w)
@@ -7061,8 +7112,36 @@ rd-irr-u Δ' Δ w X X' p Xn = (fst Xn , dirr-u Δ' (wact Δ' Δ w (TV s-unit) X)
 rd-irr-e : (Δ' Δ : CCtx) (w : World Δ' Δ) (X X' : (Mean Δ (TV s-empty))) → PathM Δ (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X') →
   RenD j-tm Δ' s-empty (wact Δ' Δ w (TV s-empty) X) → RenD j-tm Δ' s-empty (wact Δ' Δ w (TV s-empty) X')
 rd-irr-e Δ' Δ w X X' p Xn = (fst Xn , dirr-e Δ' (wact Δ' Δ w (TV s-empty) X) (wact Δ' Δ w (TV s-empty) X') (fst Xn) (pcat (Mean Δ' (TV s-empty)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (subM-fmap Δ' Δ (TV s-empty) (TV s-empty) nrm-e (world-sub Δ' Δ w) X) (pcat (Mean Δ' (TV s-empty)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X)) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X')) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (cong1 (Mean Δ (TV s-empty)) (Mean Δ' (TV s-empty)) (λ N → (wact Δ' Δ w (TV s-empty) N)) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X') p) (psym (Mean Δ' (TV s-empty)) (fmapM Δ' (TV s-empty) (TV s-empty) nrm-e (wact Δ' Δ w (TV s-empty) X')) (wact Δ' Δ w (TV s-empty) (fmapM Δ (TV s-empty) (TV s-empty) nrm-e X')) (subM-fmap Δ' Δ (TV s-empty) (TV s-empty) nrm-e (world-sub Δ' Δ w) X')))) (snd Xn))
+rd-comp-pb : (Δ' Δ : CCtx) (w : World Δ' Δ) (X : Mean Δ (TrV (s-path s-bool))) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
+  (Y : Mean Δ (TV s-bool)) → PathM Δ (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X)) Y →
+  RenD j-ty (dext Δ') (s-path s-bool) (subM (dext Δ') (dext Δ) (Sem (s-path s-bool)) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (dline-body Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X)) →
+  RenD j-tm Δ' (s-path s-bool) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X)) →
+  RenD j-tm Δ' s-bool (wact Δ' Δ w (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) →
+  RenD j-tm Δ' s-bool (wact Δ' Δ w (TV s-bool) Y)
+rd-comp-pb Δ' Δ w X f cf nc Y q Ln Pn Bn =
+  (c-comp-pb (dnf-r (fst w) f) (fst Ln) (fst Bn) ,
+   dcomp-pb Δ' (wact Δ' Δ w (TrV (s-path s-bool)) X) (dnf-r (fst w) f) (canon-r (fst w) (fst (snd w)) f cf) (nonconst-r (fst w) f nc) (fst Ln) (fst Pn) (fst Bn)
+     (der-tr j-ty (dext Δ') (s-path s-bool) (fst Ln) (subM (dext Δ') (dext Δ) (Sem (s-path s-bool)) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (dline-body Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X)) (dline-body Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)) (dkeep-line Δ' Δ w (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X) (snd Ln))
+     (der-fm-in j-tm Δ' Δ w (TrV (s-path s-bool)) (s-path s-bool) (tr-x (s-path s-bool)) X (fst Pn) (snd Pn))
+     (der-tr j-tm Δ' s-bool (fst Bn) (wact Δ' Δ w (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) (papp-mean Δ' s-bool (dnf-r (fst w) f) (fmapM Δ' (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)))
+        (pcat (Mean Δ' (TV s-bool)) (wact Δ' Δ w (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) (papp-mean Δ' s-bool (dnf-r (fst w) f) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) (papp-mean Δ' s-bool (dnf-r (fst w) f) (fmapM Δ' (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)))
+        (psym (Mean Δ' (TV s-bool)) (papp-mean Δ' s-bool (dnf-r (fst w) f) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) (wact Δ' Δ w (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X))) (subM-papp Δ' Δ w s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X)))
+        (λ i → papp-mean Δ' s-bool (dnf-r (fst w) f) (subM-fmap Δ' Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) (world-sub Δ' Δ w) X (~ i))))
+        (snd Bn))
+     (wact Δ' Δ w (TV s-bool) Y)
+     (pcat (Mean Δ' (TV s-bool)) (papp-mean Δ' s-bool (dnf-r (fst w) f) (fmapM Δ' (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X))) (papp-mean Δ' s-bool (dnf-r (fst w) f) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))) (wact Δ' Δ w (TV s-bool) Y)
+        (λ i → papp-mean Δ' s-bool (dnf-r (fst w) f) (subM-fmap Δ' Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) (world-sub Δ' Δ w) X i))
+        (pcat (Mean Δ' (TV s-bool)) (papp-mean Δ' s-bool (dnf-r (fst w) f) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))) (wact Δ' Δ w (TV s-bool) (papp-mean Δ s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))) (wact Δ' Δ w (TV s-bool) Y)
+           (subM-papp Δ' Δ w s-bool f (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X)) (λ i → wact Δ' Δ w (TV s-bool) (q i)))))
+rd-transp-pb : (Δ' Δ : CCtx) (w : World Δ' Δ) (X : Mean Δ (TrV (s-path s-bool))) → RenD j-ty (dext Δ') (s-path s-bool) (subM (dext Δ') (dext Δ) (Sem (s-path s-bool)) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (dline-body Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X)) →
+  RenD j-tm Δ' (s-path s-bool) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X)) → RenD j-tm Δ' (s-path s-bool) (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))
+rd-transp-pb Δ' Δ w X Ln Xn = ((ccomp (cplam (fst Ln)) csys0 (fst Xn)) , der-fm-out j-tm Δ' Δ w (TrV (s-path s-bool)) (s-path s-bool) (tr-r (s-path s-bool)) X (ccomp (cplam (fst Ln)) csys0 (fst Xn))
+  (dtransp-pb Δ' (wact Δ' Δ w (TrV (s-path s-bool)) X) (fst Ln) (fst Xn) (der-tr j-ty (dext Δ') (s-path s-bool) (fst Ln) (subM (dext Δ') (dext Δ) (Sem (s-path s-bool)) (world-sub (dext Δ') (dext Δ) (world-dkeep Δ' Δ w)) (dline-body Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X)) (dline-body Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)) (dkeep-line Δ' Δ w (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X) (snd Ln))
+     (der-fm-in j-tm Δ' Δ w (TrV (s-path s-bool)) (s-path s-bool) (tr-x (s-path s-bool)) X (fst Xn) (snd Xn))))
 ren-der : {J : Jdg} → Der J → (Δ' : CCtx) (w : World Δ' (fst (snd J))) →
   RenD (fst J) Δ' (fst (snd (snd J))) (wact Δ' (fst (snd J)) w (JZ (fst J) (fst (snd (snd J)))) (snd (snd (snd (snd J)))))
+ren-der (dcomp-pb Γ X f cf nc cL cp cb nL np nb Y q) Δ' w = rd-comp-pb Δ' Γ w X f cf nc Y q (ren-der nL (dext Δ') (world-dkeep Δ' Γ w)) (ren-der np Δ' w) (ren-der nb Δ' w)
+ren-der (dtransp-pb Γ X cL c dL dx) Δ' w = rd-transp-pb Δ' Γ w X (ren-der dL (dext Δ') (world-dkeep Δ' Γ w)) (ren-der dx Δ' w)
 ren-der (dvar Γ v) Δ' w = rd-var Δ' Γ w v
 ren-der (dapp Γ a b R f c nf na) Δ' w = rd-app Δ' Γ w a b R (ren-der nf Δ' w) (ren-der na Δ' w)
 ren-der (dfst Γ a b R p np) Δ' w = rd-fst Δ' Γ w a b R (ren-der np Δ' w)
@@ -10886,11 +10965,91 @@ fund-tt Γ B Δ σ = (one , inl1 ((subM Δ Γ One1 σ B) , (psym (Mean Δ (TV s-
 -- (2026-11-14) a derivation's meaning under a computable substitution is computable: a term's at its
 -- shape (CompS), a type's (CompTy); one function on Der over the tag, each rule's case its lemma above,
 -- the binders' premises at every extended or form-extended substitution by recursion
+-- (2026-11-15, K2) a line's value at 1 (fmap-fmap, as papp-end1)
+papp-line-end1 : (Γ : CCtx) (Y Z : Type 1) (ℓ : Y → Line Z) (X : Mean Γ Y) → PathM Γ Z (fmapM Γ Y Z (λ q → fst (snd (ℓ q))) X) (papp-line Γ Y Z ℓ dnf-one X)
+papp-line-end1 Γ Y Z ℓ X = psym (Mean Γ Z) (papp-line Γ Y Z ℓ dnf-one X) (fmapM Γ Y Z (λ q → fst (snd (ℓ q))) X)
+  (fmap-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (DL (CtxV (fst Γ)) (FbE (fst Γ) Z)) (FbE (fst Γ) Z) (fline (fst Γ) Y Z ℓ) (λ x q → fst (snd q)) (snd Γ) X)
+-- (2026-11-15, K2) transport along a line of PathP types with Bool fibre is computable, given the
+-- type line computable at every world and form (HLT; fund supplies it from the line's derivation by
+-- sub-form and plam-beta): its type is the line's at 1, and at every world and canonical non-constant
+-- form f its value is the formal composition ncomp-pb (the type line reified over dext Δ' at the
+-- composite world after world-dwk, the base path reified, the base at f reified from its clause)
+kt-pb-L : (Δ : CCtx) (X : Mean Δ (TrV (s-path s-bool))) → ((Δ' : CCtx) (w : World Δ' Δ) (g : DNF) → isTrue (dnf-canon g) → CompTy (s-path s-bool) Δ' (papp-line Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) g (wact Δ' Δ w (TrV (s-path s-bool)) X))) → (Δ' : CCtx) (w : World Δ' Δ) → RenR k-nf j-ty (dext Δ') (s-path s-bool) (dline-body Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X))
+kt-pb-L Δ X hl Δ' w = fst (rr (s-path s-bool)) (dext Δ') (dline-body Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X))
+  (ty-tr (s-path s-bool) (dext Δ') (papp-line (dext Δ') (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) dnf-v0 (wact (dext Δ') Δ (world-comp (dext Δ') Δ' Δ (world-dwk Δ') w) (TrV (s-path s-bool)) X)) (dline-body Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X))
+     (pcat (Mean (dext Δ') (Sem (s-path s-bool))) (papp-line (dext Δ') (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) dnf-v0 (wact (dext Δ') Δ (world-comp (dext Δ') Δ' Δ (world-dwk Δ') w) (TrV (s-path s-bool)) X)) (papp-line (dext Δ') (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) dnf-v0 (dwkM Δ' (TrV (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X))) (dline-body Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X))
+        (λ i → papp-line (dext Δ') (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) dnf-v0
+           (pcat (Mean (dext Δ') (TrV (s-path s-bool))) (wact (dext Δ') Δ (world-comp (dext Δ') Δ' Δ (world-dwk Δ') w) (TrV (s-path s-bool)) X) (wact (dext Δ') Δ' (world-dwk Δ') (TrV (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)) (dwkM Δ' (TrV (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X))
+              (subM-comp (dext Δ') Δ' Δ (world-dwk Δ') w (TrV (s-path s-bool)) X) (subM-dwk Δ' (TrV (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)) i))
+        (papp-dwk Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)))
+     (hl (dext Δ') (world-comp (dext Δ') Δ' Δ (world-dwk Δ') w) dnf-v0 unit))
+-- the base of a transport renamed (comp-ren, carried by subM-fmap), reified; and its path at a form
+-- (split in steps: written as one term, its check does not finish)
+kt-tr-ren : (A : TyShape) (Δ : CCtx) (X : Mean Δ (TrV A)) → CompS A Δ (fmapM Δ (TrV A) (TV A) (tr-x A) X) → (Δ' : CCtx) (w : World Δ' Δ) → CompS A Δ' (wact Δ' Δ w (TV A) (fmapM Δ (TrV A) (TV A) (tr-x A) X))
+kt-tr-ren A Δ X cx Δ' w = comp-ren A Δ (fmapM Δ (TrV A) (TV A) (tr-x A) X) cx Δ' w
+kt-tr-mv : (A : TyShape) (Δ : CCtx) (X : Mean Δ (TrV A)) → CompS A Δ (fmapM Δ (TrV A) (TV A) (tr-x A) X) → (Δ' : CCtx) (w : World Δ' Δ) → CompS A Δ' (fmapM Δ' (TrV A) (TV A) (tr-x A) (wact Δ' Δ w (TrV A) X))
+kt-tr-mv A Δ X cx Δ' w = comp-tr A Δ' (wact Δ' Δ w (TV A) (fmapM Δ (TrV A) (TV A) (tr-x A) X)) (fmapM Δ' (TrV A) (TV A) (tr-x A) (wact Δ' Δ w (TrV A) X))
+  (psym (Mean Δ' (TV A)) (fmapM Δ' (TrV A) (TV A) (tr-x A) (wact Δ' Δ w (TrV A) X)) (wact Δ' Δ w (TV A) (fmapM Δ (TrV A) (TV A) (tr-x A) X)) (subM-fmap Δ' Δ (TrV A) (TV A) (tr-x A) (world-sub Δ' Δ w) X))
+  (kt-tr-ren A Δ X cx Δ' w)
+kt-tr-P : (A : TyShape) → RfyT A → (Δ : CCtx) (X : Mean Δ (TrV A)) → CompS A Δ (fmapM Δ (TrV A) (TV A) (tr-x A) X) → (Δ' : CCtx) (w : World Δ' Δ) → RenR k-nf j-tm Δ' A (fmapM Δ' (TrV A) (TV A) (tr-x A) (wact Δ' Δ w (TrV A) X))
+kt-tr-P A rfA Δ X cx Δ' w = rfA Δ' (fmapM Δ' (TrV A) (TV A) (tr-x A) (wact Δ' Δ w (TrV A) X)) (kt-tr-mv A Δ X cx Δ' w)
+kt-tr-at : (A : TyShape) (Δ : CCtx) (X : Mean Δ (TrV (s-path A))) → CompS (s-path A) Δ (fmapM Δ (TrV (s-path A)) (TV (s-path A)) (tr-x (s-path A)) X) → (Δ' : CCtx) (w : World Δ' Δ) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
+  CompS A Δ' (papp-mean Δ' A f (wact Δ' Δ w (TV (s-path A)) (fmapM Δ (TrV (s-path A)) (TV (s-path A)) (tr-x (s-path A)) X)))
+kt-tr-at A Δ X cx Δ' w f cf nc = snd cx Δ' w f cf nc
+kt-tr-atmv : (A : TyShape) (Δ : CCtx) (X : Mean Δ (TrV (s-path A))) → CompS (s-path A) Δ (fmapM Δ (TrV (s-path A)) (TV (s-path A)) (tr-x (s-path A)) X) → (Δ' : CCtx) (w : World Δ' Δ) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
+  CompS A Δ' (papp-mean Δ' A f (fmapM Δ' (TrV (s-path A)) (TV (s-path A)) (tr-x (s-path A)) (wact Δ' Δ w (TrV (s-path A)) X)))
+kt-tr-atmv A Δ X cx Δ' w f cf nc = comp-tr A Δ' (papp-mean Δ' A f (wact Δ' Δ w (TV (s-path A)) (fmapM Δ (TrV (s-path A)) (TV (s-path A)) (tr-x (s-path A)) X))) (papp-mean Δ' A f (fmapM Δ' (TrV (s-path A)) (TV (s-path A)) (tr-x (s-path A)) (wact Δ' Δ w (TrV (s-path A)) X)))
+  (λ i → papp-mean Δ' A f (subM-fmap Δ' Δ (TrV (s-path A)) (TV (s-path A)) (tr-x (s-path A)) (world-sub Δ' Δ w) X (~ i)))
+  (kt-tr-at A Δ X cx Δ' w f cf nc)
+kt-tr-B : (A : TyShape) → RfyT A → (Δ : CCtx) (X : Mean Δ (TrV (s-path A))) → CompS (s-path A) Δ (fmapM Δ (TrV (s-path A)) (TV (s-path A)) (tr-x (s-path A)) X) → (Δ' : CCtx) (w : World Δ' Δ) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
+  RenR k-nf j-tm Δ' A (papp-mean Δ' A f (fmapM Δ' (TrV (s-path A)) (TV (s-path A)) (tr-x (s-path A)) (wact Δ' Δ w (TrV (s-path A)) X)))
+kt-tr-B A rfA Δ X cx Δ' w f cf nc = rfA Δ' (papp-mean Δ' A f (fmapM Δ' (TrV (s-path A)) (TV (s-path A)) (tr-x (s-path A)) (wact Δ' Δ w (TrV (s-path A)) X))) (kt-tr-atmv A Δ X cx Δ' w f cf nc)
+-- the formal composition's clause from its premises' codes and normal forms (kept as variables: with
+-- them computed in place the check does not finish)
+kt-pb-mk : (Δ : CCtx) (X : Mean Δ (TrV (s-path s-bool))) (Δ' : CCtx) (w : World Δ' Δ) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
+  RenR k-nf j-ty (dext Δ') (s-path s-bool) (dline-body Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)) → RenR k-nf j-tm Δ' (s-path s-bool) (fmapM Δ' (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)) →
+  RenR k-nf j-tm Δ' s-bool ((papp-mean Δ' s-bool f (fmapM Δ' (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) (wact Δ' Δ w (TrV (s-path s-bool)) X)))) → CompS s-bool Δ' (papp-mean Δ' s-bool f (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X)))
+kt-pb-mk Δ X Δ' w f cf nc Ln Pn Bn = rfl-bool Δ' (papp-mean Δ' s-bool f (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))) one (c-comp-pb f (fst Ln) (fst Bn))
+  (ncomp-pb Δ' (wact Δ' Δ w (TrV (s-path s-bool)) X) f cf nc (fst Ln) (fst Pn) (fst Bn) (snd Ln) (snd Pn) (snd Bn) (papp-mean Δ' s-bool f (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X)))
+     (λ i → papp-mean Δ' s-bool f (subM-fmap Δ' Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) (world-sub Δ' Δ w) X i)))
+kt-pb-cl : (Δ : CCtx) (X : Mean Δ (TrV (s-path s-bool))) → ((Δ' : CCtx) (w : World Δ' Δ) (g : DNF) → isTrue (dnf-canon g) → CompTy (s-path s-bool) Δ' (papp-line Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) g (wact Δ' Δ w (TrV (s-path s-bool)) X))) → CompS (s-path s-bool) Δ (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X) → (Δ' : CCtx) (w : World Δ' Δ) (f : DNF) → isTrue (dnf-canon f) → isTrue (dnf-nonconst f) →
+  CompS s-bool Δ' (papp-mean Δ' s-bool f (wact Δ' Δ w (TV (s-path s-bool)) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X)))
+kt-pb-cl Δ X hl cx Δ' w f cf nc = kt-pb-mk Δ X Δ' w f cf nc (kt-pb-L Δ X hl Δ' w) (kt-tr-P (s-path s-bool) (rfy-path s-bool (rr s-bool)) Δ X cx Δ' w) (kt-tr-B s-bool rfy-bool Δ X cx Δ' w f cf nc)
+KT-pb : (Δ : CCtx) (X : Mean Δ (TrV (s-path s-bool))) → ((Δ' : CCtx) (w : World Δ' Δ) (g : DNF) → isTrue (dnf-canon g) → CompTy (s-path s-bool) Δ' (papp-line Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) g (wact Δ' Δ w (TrV (s-path s-bool)) X))) → CompS (s-path s-bool) Δ (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X) → CompS (s-path s-bool) Δ (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X)
+KT-pb Δ X hl cx =
+  (ty-tr (s-path s-bool) Δ (papp-line Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) dnf-one X) (fmapM Δ (TV (s-path s-bool)) (Sem (s-path s-bool)) (λ q → fst q) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))
+     (pcat (Mean Δ (Sem (s-path s-bool))) (papp-line Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) dnf-one X) (fmapM Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (λ q → fst (snd (tr-ln (s-path s-bool) q))) X) (fmapM Δ (TV (s-path s-bool)) (Sem (s-path s-bool)) (λ q → fst q) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))
+        (psym (Mean Δ (Sem (s-path s-bool))) (fmapM Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (λ q → fst (snd (tr-ln (s-path s-bool) q))) X) (papp-line Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) dnf-one X) (papp-line-end1 Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X))
+        (psym (Mean Δ (Sem (s-path s-bool))) (fmapM Δ (TV (s-path s-bool)) (Sem (s-path s-bool)) (λ q → fst q) (fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X)) (fmapM Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (λ q → fst (snd (tr-ln (s-path s-bool) q))) X)
+           (fmapM-fmapM Δ (TrV (s-path s-bool)) (TV (s-path s-bool)) (Sem (s-path s-bool)) (tr-r (s-path s-bool)) (λ q → fst q) X)))
+     (ty-tr (s-path s-bool) Δ (papp-line Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) dnf-one (wact Δ Δ (world-id Δ) (TrV (s-path s-bool)) X)) (papp-line Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) dnf-one X)
+        (λ i → papp-line Δ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) dnf-one (subM-id Δ (TrV (s-path s-bool)) X i)) (hl Δ (world-id Δ) dnf-one unit)) ,
+   λ Δ' w f cf nc → kt-pb-cl Δ X hl cx Δ' w f cf nc)
+-- the type line's computability at every world and form from the line's derivation (fund at
+-- sub-form, env-w, form-env; plam-beta, subM-wcomp)
+pb-hl : (Γ : CCtx) (X : Mean Γ (TrV (s-path s-bool))) → ((Δ'' : CCtx) (τ : Sub Δ'' (dext Γ)) → CompEnv (dext Γ) Δ'' τ → CompTy (s-path s-bool) Δ'' (subM Δ'' (dext Γ) (Sem (s-path s-bool)) τ (dline-body Γ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X))) → (Δ : CCtx) (σ : Sub Δ Γ) → CompEnv Γ Δ σ → ((Δ' : CCtx) (w : World Δ' Δ) (g : DNF) → isTrue (dnf-canon g) → CompTy (s-path s-bool) Δ' (papp-line Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) g (wact Δ' Δ w (TrV (s-path s-bool)) (subM Δ Γ (TrV (s-path s-bool)) σ X))))
+pb-hl Γ X FL Δ σ e Δ' w g cg =
+  ty-tr (s-path s-bool) Δ' (subM Δ' (dext Γ) (Sem (s-path s-bool)) (sub-form Δ' Γ (sub-wcomp Δ' Δ Γ w σ) g) (dline-body Γ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X)) (papp-line Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) g (wact Δ' Δ w (TrV (s-path s-bool)) (subM Δ Γ (TrV (s-path s-bool)) σ X)))
+    (pcat (Mean Δ' (Sem (s-path s-bool))) (subM Δ' (dext Γ) (Sem (s-path s-bool)) (sub-form Δ' Γ (sub-wcomp Δ' Δ Γ w σ) g) (dline-body Γ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X)) (papp-line Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) g (subM Δ' Γ (TrV (s-path s-bool)) (sub-wcomp Δ' Δ Γ w σ) X)) (papp-line Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) g (wact Δ' Δ w (TrV (s-path s-bool)) (subM Δ Γ (TrV (s-path s-bool)) σ X)))
+       (plam-beta Δ' Γ (sub-wcomp Δ' Δ Γ w σ) g cg (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X)
+       (λ i → papp-line Δ' (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) g (subM-wcomp Δ' Δ Γ w σ (TrV (s-path s-bool)) X i)))
+    (FL Δ' (sub-form Δ' Γ (sub-wcomp Δ' Δ Γ w σ) g) (form-env Δ' Γ (sub-wcomp Δ' Δ Γ w σ) g cg (env-w Γ Δ σ e Δ' w)))
+-- transport's computability at a shape carried from the substituted line to the substitution of
+-- the transported (subM-fmap), for any shape (kept abstract, so the clause types stay folded)
+tr-sub-g : (Γ : CCtx) (A : TyShape) (X : Mean Γ (TrV A)) (Δ : CCtx) (σ : Sub Δ Γ) →
+  (CompS A Δ (fmapM Δ (TrV A) (TV A) (tr-x A) (subM Δ Γ (TrV A) σ X)) → CompS A Δ (fmapM Δ (TrV A) (TV A) (tr-r A) (subM Δ Γ (TrV A) σ X))) → CompS A Δ (subM Δ Γ (TV A) σ (fmapM Γ (TrV A) (TV A) (tr-x A) X)) → CompS A Δ (subM Δ Γ (TV A) σ (fmapM Γ (TrV A) (TV A) (tr-r A) X))
+tr-sub-g Γ A X Δ σ k cx = comp-tr A Δ (fmapM Δ (TrV A) (TV A) (tr-r A) (subM Δ Γ (TrV A) σ X)) (subM Δ Γ (TV A) σ (fmapM Γ (TrV A) (TV A) (tr-r A) X)) (subM-fmap Δ Γ (TrV A) (TV A) (tr-r A) σ X)
+  (k (comp-tr A Δ (subM Δ Γ (TV A) σ (fmapM Γ (TrV A) (TV A) (tr-x A) X)) (fmapM Δ (TrV A) (TV A) (tr-x A) (subM Δ Γ (TrV A) σ X)) (psym (Mean Δ (TV A)) (fmapM Δ (TrV A) (TV A) (tr-x A) (subM Δ Γ (TrV A) σ X)) (subM Δ Γ (TV A) σ (fmapM Γ (TrV A) (TV A) (tr-x A) X)) (subM-fmap Δ Γ (TrV A) (TV A) (tr-x A) σ X)) cx))
+fund-tr-pb : (Γ : CCtx) (X : Mean Γ (TrV (s-path s-bool))) → ((Δ'' : CCtx) (τ : Sub Δ'' (dext Γ)) → CompEnv (dext Γ) Δ'' τ → CompTy (s-path s-bool) Δ'' (subM Δ'' (dext Γ) (Sem (s-path s-bool)) τ (dline-body Γ (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) X))) → (Δ : CCtx) (σ : Sub Δ Γ) → CompEnv Γ Δ σ →
+  CompS (s-path s-bool) Δ (subM Δ Γ (TV (s-path s-bool)) σ (fmapM Γ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-x (s-path s-bool)) X)) → CompS (s-path s-bool) Δ (subM Δ Γ (TV (s-path s-bool)) σ (fmapM Γ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X))
+fund-tr-pb Γ X FL Δ σ e cx = tr-sub-g Γ (s-path s-bool) X Δ σ (KT-pb Δ (subM Δ Γ (TrV (s-path s-bool)) σ X) (pb-hl Γ X FL Δ σ e)) cx
 JC : (jk : JK) (s : TyShape) (Δ : CCtx) → Mean Δ (JZ jk s) → Type 1
 JC j-tm s Δ M = CompS s Δ M
 JC j-ty s Δ M = CompTy s Δ M
 fund : {J : Jdg} → Der J → (Δ : CCtx) (σ : Sub Δ (fst (snd J))) → CompEnv (fst (snd J)) Δ σ →
   JC (fst J) (fst (snd (snd J))) Δ (subM Δ (fst (snd J)) (JZ (fst J) (fst (snd (snd J)))) σ (snd (snd (snd (snd J)))))
+fund (dtransp-pb Γ X cL c dL dx) Δ σ e = fund-tr-pb Γ X (λ Δ'' τ e'' → fund dL Δ'' τ e'') Δ σ e (fund dx Δ σ e)
+fund (dcomp-pb Γ X f cf nc cL cp cb dL dp db Y q) Δ σ e = fund-papp Γ s-bool (fmapM Γ (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) X) f Y q Δ σ e (fund-tr-pb Γ X (λ Δ'' τ e'' → fund dL Δ'' τ e'') Δ σ e (fund dp Δ σ e))
 fund (dvar Γ v) Δ σ e = snd e v
 fund (dapp Γ a b R f c df dc) Δ σ e = fund-app Γ a b R Δ σ (fund df Δ σ e) (fund dc Δ σ e)
 fund (dfst Γ a b R p dp) Δ σ e = fund-fst Γ a b R Δ σ (fund dp Δ σ e)

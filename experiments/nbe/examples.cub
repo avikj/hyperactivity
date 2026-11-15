@@ -219,6 +219,23 @@ trf-d = dtransp Γf2 (s-pi s-bool s-bool) (pf-pi s-bool s-bool pf-b pf-b) trf-X 
     (dty-bool (ext-h (dext Γf2) s-bool (Fam s-bool s-bool) (fam-dom s-bool s-bool) trf-L) (fam-body (dext Γf2) s-bool s-bool trf-L)))
   (dvar Γf2 none)
 #same fst (normalize-nf Γf2 tΓf2 (s-pi s-bool s-bool) (ccomp (cplam (cpi #2 c-bool c-bool)) csys0 (cvar #0) , fmapM Γf2 (TrV (s-pi s-bool s-bool)) (TV (s-pi s-bool s-bool)) (tr-r (s-pi s-bool s-bool)) trf-X , trf-d)) = clam (capp (cvar #1) (cvar #0))
+-- p : PathP (λ i → Bool) true true in context; transp (λ i. PathP (λ j. Bool) true true) p normalizes
+-- to ⟨j⟩ comp (λ i. Bool) [j=0 ↦ ⟨i⟩ true, j=1 ↦ ⟨i⟩ true] (p @ j): the path's body at its dimension is
+-- the formal composition at Bool whose branches are the type line's endpoint lines (2026-11-15, K2)
+trp-T0 : Sem (s-path s-bool)
+trp-T0 = ((one , one , λ i → one) , true , true)
+trp-X : Mean Γp2 (TrV (s-path s-bool))
+trp-X = λ ρ → ((trp-T0 , trp-T0 , λ i → trp-T0) , snd ρ)
+trp-L : Mean (dext Γp2) (Sem (s-path s-bool))
+trp-L = dline-body Γp2 (TrV (s-path s-bool)) (Sem (s-path s-bool)) (tr-ln (s-path s-bool)) trp-X
+trp-B : Mean (dext Γp2) One1
+trp-B = dline-body Γp2 (TrV (s-path s-bool)) One1 (λ q → (one , one , λ i → one)) trp-X
+trp-dL : Der (j-ty , dext Γp2 , (s-path s-bool) , (cpathp (cplam c-bool) c-true c-true) , trp-L)
+trp-dL = dty-path (dext Γp2) s-bool trp-L c-bool c-true c-true (dty-bool (dext (dext Γp2)) (path-line-ty (dext Γp2) s-bool trp-L))
+  (dtrue (dext Γp2) trp-B) (dtrue (dext Γp2) trp-B)
+trp-d : Der (j-tm , Γp2 , (s-path s-bool) , (ccomp (cplam (cpathp (cplam c-bool) c-true c-true)) csys0 (cvar #0)) , (fmapM Γp2 (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) trp-X))
+trp-d = dtransp-pb Γp2 trp-X (cpathp (cplam c-bool) c-true c-true) (cvar #0) trp-dL (dvar Γp2 none)
+#same fst (normalize-nf Γp2 tΓp2 (s-path s-bool) ((ccomp (cplam (cpathp (cplam c-bool) c-true c-true)) csys0 (cvar #0)) , (fmapM Γp2 (TrV (s-path s-bool)) (TV (s-path s-bool)) (tr-r (s-path s-bool)) trp-X) , trp-d)) = cplam (c-comp-pb dnf-v0 (cpathp (cplam c-bool) c-true c-true) (cpapp (cvar #1) (dnf-code dnf-v0)))
 -- ---------------------------------------------------------------- substitution on checked syntax
 -- x := true in not x (x : Bool): the substitution emp2 → Γb2 (ext-at at true's meaning), its checked
 -- term (true's derivation carried to σ's action on x by ext-new and via-snd), and the substituted

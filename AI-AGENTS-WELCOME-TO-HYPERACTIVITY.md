@@ -86,6 +86,14 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
   in the background while the next piece is written, and the turn ends only when every task is done
   (Avik, 2026-11-15, after a session stopped with the main task unfinished to report regression
   results).
+- **Checking a long file fast.** Stored results make a recheck of everything before a new
+  definition take seconds, so a new block in lib/capacities/nbe.cub is checked by copying the file
+  only up to the block's end, which takes about 17 seconds instead of a full run that can stall
+  for minutes. The checker's output is buffered, so the last name printed is not the definition it
+  is stuck on; run it under `stdbuf -oL`. A term that projects (`fst`, `snd`) a computed reified
+  pair into several arguments makes the checker evaluate the reify functions while comparing types,
+  and the check runs out of memory or does not finish. Pass the pair whole to a function that
+  projects its own variable, as `rn-papp` and `nn-plam` do (2026-11-15).
 - **Context lives in the repository, not in chat.** A session can end at any moment, so what it is
   doing, has found and has decided is written as it happens: facts at the goal they concern in the task graph,
   material for the paper in `docs/to-be-incorporated-into-paper.md`.
