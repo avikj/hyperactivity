@@ -1580,3 +1580,7 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-15 02:58 UTC
 
 > “Decides it” as if there is any decision in open ended thinking (decision is the dumbest act)
+
+#### 2026-11-15 02:58 UTC (second message)
+
+> It is decided when it is decided. It is not up to agency to decide
