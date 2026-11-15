@@ -20,3 +20,7 @@ Avik, 2026-11-15 22:54 UTC, as written (with "Eye Contact: Co-Processing at the 
 >           what is ignorance? the belief that conflict & disagreement is a rational act. the irrational act of conflict & disagreement. either there is a rationally conclusive answer or there is not. in either case, the rational (unignorant) actor may conclude it (or not but never conclude something incorrect). the rational actor cannot be incorrect.      when I say I am end-to-end fully confident all my statements are theorem grade, it is because the rational actor cannot be incorrect. the precise selection of words and epistemic maturity excludes incorrectness. 
 >
 >            we cannot talk about the computing environment in isolation. what social progress shall unfold - increasingly, true knowledge shall become omnipresent in the human superorganism again (i.e. clouds of ignorance shall be progressively dispelled, increasing sense of universal love locally & globally.
+
+Avik, 2026-11-15, minutes later:
+
+> I studied with Keltner went to every one of his office hours. this is a technological work determined by the science of human happiness
