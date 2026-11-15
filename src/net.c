@@ -768,6 +768,13 @@ static bool unbuilt(int k);
 static Port sub(Port prov, Subst *s);
 static Port sub_read(Port prov, Subst *s);
 static Dim atom_find(const Cell *v);
+static Key *ncase_name(Cell *v);
+static bool atom_clause_any(const Subst *s);
+static Key *var_name(Key *k);
+static Key *port_name(Port p, int depth);
+static bool ncase_await(Cell *o, Cell *v);
+static void await_done(Cell *v);
+static Port ref_read(Cell *r);
 static bool is_atom_dim(Dim d);
 static Dnf *atom_clause(const Subst *s);
 extern long atom_res_global, atom_res0_global;
@@ -1688,6 +1695,19 @@ static void subst_level(Cell *o, Cell *v) {
         break;
     }
     case V_NCASE: {
+        Key *sn = atom_clause_any(s) ? port_name(v->port[1], 0) : NULL;
+        bool on_var = sn && sn->tag == K_VAR;
+        if (sn) key_release(sn);
+        if (on_var) {
+            /* stuck on a variable, it stays stuck under any substitution: the same neutral, its motive,
+             * environment and type substituted (so an atom s assumes reaches the motive, built from
+             * the environment) */
+            for (int k = 2; k < v->n; k++) link(sub(v->port[k], s), P(v, k));
+            bool only_atoms = true;
+            for (uint32_t k = 0; k < s->n; k++) if (!is_atom_dim(s->d[k])) only_atoms = false;
+            if (!only_atoms && v->key) { Key *k2 = key_under(v->key, s); key_release(v->key); v->key = k2; }
+            link(P(v, 0), out); cell_free(o); return;
+        }
         /* 1=scrutinee [2=motive] then the environment, type → 0=scrutinee then the environment, out:
          * the motive is the table's, rebuilt where it is read */
         int mb = v->x ? 1 : 0, ne = v->n - 3 - mb;
@@ -2127,6 +2147,7 @@ static AtomE *AT; static size_t ATn, ATcap;
 static pthread_mutex_t atommu = PTHREAD_MUTEX_INITIALIZER;
 static Dnf *atom_of(Cell *v) {
     Key *k = eff_key(v);
+    if (!k && v->kind == V_NCASE) { k = ncase_name(v); if (k) v->key = key_retain(k); }
     if (!k) return iv_atom(fresh_dim());
     if (!net_solo) pthread_mutex_lock(&atommu);
     Dim d = 0;
@@ -2168,6 +2189,7 @@ static Dnf *atom_clause(const Subst *s) {
     }
     return f;
 }
+static bool atom_clause_any(const Subst *s) { for (uint32_t k = 0; k < s->n; k++) if (is_atom_dim(s->d[k])) return true; return false; }
 /* the atom a neutral was read as, if it has been (0 if not) */
 static Dim atom_find(const Cell *v) {
     if (!v->key || !ATcap) return 0;
@@ -2176,6 +2198,87 @@ static Dim atom_find(const Cell *v) {
     for (size_t i = v->key->h & (ATcap - 1); AT[i].k; i = (i + 1) & (ATcap - 1)) if (AT[i].k == v->key) { d = AT[i].d; break; }
     if (!net_solo) pthread_mutex_unlock(&atommu);
     return d;
+}
+/* the name of what a port provides, seeing through a reference whose box has no name to the value
+ * it holds (a variable boxed before it was made, say); NULL if none */
+static Key *port_name0(Port p, int depth);
+/* a variable under a substitution is the variable (only its type is substituted) */
+static Key *var_name(Key *k) {
+    if (k && k->tag == K_SUB && k->n >= 1 && k->c[0] && k->c[0]->tag == K_VAR) { Key *r = key_retain(k->c[0]); key_release(k); return r; }
+    return k;
+}
+static Key *port_name(Port p, int depth) { return var_name(port_name0(p, depth)); }
+static Key *port_name0(Port p, int depth) {
+    Port q = peek(sload(&p));
+    if (!q || depth > 8) return NULL;
+    if (is_var(q)) { Key *k = PV(q)->key; return k ? key_retain(k) : NULL; }
+    Cell *c = PC(q);
+    if (PI(q) != 0) return key_of_aux(q);
+    if (!is_value(c->kind)) return NULL;
+    /* a variable is named by its level, not by the term a copy of it came from */
+    if (c->kind == V_NVAR) return key0(K_VAR, c->a, NULL);
+    if (c->kind == V_REF && c->p) {
+        /* a variable is the same variable under any substitution (only its type is substituted) */
+        Box *b = c->p; Port r = peek(sload(&b->root->port[0]));
+        if (r && !is_var(r) && PI(r) == 0 && PC(r)->kind == V_NVAR) return key0(K_VAR, PC(r)->a, NULL);
+        if (!c->key && !c->a) return port_name(b->root->port[0], depth + 1);
+    }
+    return eff_key(c);
+}
+/* a stuck elimination named after the fact: its table, scrutinee and environment as they are now */
+static Key *ncase_name(Cell *v) {
+    CaseTab *tb = v->p;
+    int nm = v->x ? 1 : 0, ne = v->n - 3 - nm;
+    Key **c = malloc(((size_t)ne + 2) * sizeof(Key *)); bool ok = true;
+    c[0] = port_name(v->port[1], 0); if (!c[0]) ok = false;
+    for (int e = 0; e < ne && ok; e++) { c[1 + e] = port_name(v->port[2 + nm + e], 0); if (!c[1 + e]) ok = false; }
+    Key *r = NULL;
+    if (ok) r = key(K_CASE, 0, tb, ne + 1, c);
+    if (ok) for (int e = 0; e < ne + 1; e++) key_release(c[e]);
+    else if (c[0]) key_release(c[0]);
+    free(c);
+    return r;
+}
+/* A stuck elimination read as an interval before it can be named: its environment holds values not
+ * yet built (a variable passed as the call computing it). They are built, and the reading waits for
+ * them (the pair queued again), a bounded number of times; then it is named, or is an atom of its own */
+typedef struct { Cell *v; int n; } Await;
+static Await AW[64]; static pthread_mutex_t awmu = PTHREAD_MUTEX_INITIALIZER;
+static bool ncase_await(Cell *o, Cell *v) {
+    Key *k = ncase_name(v);
+    if (k) { v->key = k; return false; }
+    int nm = v->x ? 1 : 0, ne = v->n - 3 - nm;
+    bool waiting = false;
+    for (int e = 0; e < ne; e++) {
+        int pk = 2 + nm + e;
+        Port q = peek(sload(&v->port[pk]));
+        if (!q || is_var(q)) { waiting = true; continue; }
+        Cell *c = PC(q);
+        if (PI(q) != 0 || !is_value(c->kind)) { waiting = true; continue; }
+        if (unbuilt(c->kind)) { link(unbuilt_build(c), P(v, pk)); waiting = true; continue; }
+        if (c->kind == V_REF && c->p) {
+            Port r = peek(sload(&((Box *)c->p)->root->port[0]));
+            if (!r || is_var(r) || PI(r) != 0 || !is_value(PC(r)->kind) || unbuilt(PC(r)->kind)) {
+                link(ref_read(c), P(v, pk)); cell_free(c); waiting = true;
+            }
+        }
+    }
+    if (!waiting) return false;
+    if (!net_solo) pthread_mutex_lock(&awmu);
+    int slot = -1, free_slot = -1;
+    for (int i = 0; i < 64; i++) { if (AW[i].v == v) slot = i; else if (!AW[i].v && free_slot < 0) free_slot = i; }
+    bool again = false;
+    if (slot < 0 && free_slot >= 0) { AW[free_slot].v = v; AW[free_slot].n = 1; again = true; }
+    else if (slot >= 0 && AW[slot].n < 4096) { AW[slot].n++; again = true; }
+    else if (slot >= 0) AW[slot].v = NULL;
+    if (!net_solo) pthread_mutex_unlock(&awmu);
+    if (again) net_push(o, v);
+    return again;
+}
+static void await_done(Cell *v) {
+    if (!net_solo) pthread_mutex_lock(&awmu);
+    for (int i = 0; i < 64; i++) if (AW[i].v == v) AW[i].v = NULL;
+    if (!net_solo) pthread_mutex_unlock(&awmu);
 }
 /* does the operation read its principal as an interval? */
 static bool iv_reader(const Cell *o) {
@@ -2418,9 +2521,11 @@ static void interact(Cell *o, Cell *v) {
         return;
     }
     int vk = v->kind;
+    if (is_neutral(vk) && iv_reader(o) && vk == V_NCASE && !v->key && ncase_await(o, v)) return;
     if (is_neutral(vk) && iv_reader(o)) {
         /* a neutral read as an interval: its atom */
         Cell *iv = cell(V_IV, 1); iv->p = atom_of(v);
+        if (vk == V_NCASE) await_done(v);
         for (int k = 1; k < v->n; k++) era(v->port[k]);
         cell_free(v); v = iv; vk = V_IV;
     }
@@ -3120,10 +3225,10 @@ static void interact(Cell *o, Cell *v) {
              * interval read from it is one atom) */
             /* (by its table, scrutinee and environment, as its syntax names it: not by the name of a
              * call it came from, which another route to it does not carry) */
-            if (v->key) {
+            if (v->key || v->kind == V_NVAR) {
                 Key **c = malloc(((size_t)ne + 2) * sizeof(Key *)); bool ok = true;
-                c[0] = key_retain(v->key);
-                for (int e = 0; e < ne; e++) { c[1 + e] = key_of_port(o->port[e0 + e]); if (!c[1 + e]) ok = false; }
+                c[0] = v->kind == V_NVAR ? key0(K_VAR, v->a, NULL) : var_name(key_retain(v->key));
+                for (int e = 0; e < ne; e++) { c[1 + e] = port_name(o->port[e0 + e], 0); if (!c[1 + e]) ok = false; }
                 if (ok) n->key = key(K_CASE, 0, tb, ne + 1, c);
                 for (int e = 0; e < ne + 1; e++) if (c[e]) key_release(c[e]);
                 free(c);
@@ -3666,6 +3771,7 @@ static void interact(Cell *o, Cell *v) {
         uint32_t nm = vk == V_WORD && !v->p ? (uint32_t)v->a + 1 : 0;
         for (int k = 1; k < v->n; k++) era(v->port[k]);
         Cell *f = cell(O_FRESHT, 2); f->a = nm;
+        if (o->key) { f->key = o->key; o->key = NULL; }
         mv(o, 1, P(f, 0)); link(P(f, 1), o->port[2]);
         cell_free(o); cell_free(v);
         return;
@@ -3678,8 +3784,9 @@ static void interact(Cell *o, Cell *v) {
             Cell *iv = cell(V_IV, 1); iv->p = iv_atom(d); link(P(iv, 0), o->port[1]);
             cell_free(v);
         } else {
-            Cell *n = cell(V_NVAR, 2); n->a = LVL_TAG | __atomic_fetch_add(&next_var, 1, __ATOMIC_RELAXED); n->ty = 1; n->x = nm;
-            n->key = key0(K_VAR, n->a, NULL);
+            Cell *n = cell(V_NVAR, 2); n->ty = 1; n->x = nm;
+            if (o->key) { n->key = o->key; o->key = NULL; n->a = n->key->a; }
+            else { n->a = LVL_TAG | __atomic_fetch_add(&next_var, 1, __ATOMIC_RELAXED); n->key = key0(K_VAR, n->a, NULL); }
             link(ref_of(P(v, 0)), P(n, 1)); link(P(n, 0), o->port[1]);
         }
         cell_free(o);
@@ -4389,6 +4496,12 @@ static Port build_m(Syn *t, Frame *f, bool lazy) {
         return OUT(c);
     case S_PRIM:
         c = OPC((int)t->x, t->n + 1);
+        if (t->x == O_MKFRESH) {
+            /* the fresh variable is named where it is made, before it is read: a neutral built over
+             * it before it fires (a stuck elimination whose environment holds it) is named by it */
+            uint64_t n = LVL_TAG | __atomic_fetch_add(&next_var, 1, __ATOMIC_RELAXED);
+            c->key = key0(K_VAR, n, NULL);
+        }
         if (t->x == O_POP1 || t->x == O_POP2 || t->x == O_LOAD || t->x == O_STORE || t->x == O_FFI || t->x == O_NATIVE) c->x = (uint32_t)t->id;   /* the operation, the width, or the foreign entry */
         if (t->x == O_NATIVE) c->a = (uint64_t)t->slot;   /* the definition the bytes compute */
         for (int k = 0; k < t->n; k++) link(OPND(t->k[k], k), IN(c, k));

@@ -77,3 +77,41 @@ mapT = cube-map-i (suc zero) Type Type (λ ρ A → comp (λ _ → Bool) (λ _ �
 sq : Cube (suc (suc zero)) Type
 sq = ((Bool , Bool , λ i → Bool) , (Bool , Bool , λ i → Bool) , λ j → (Bool , Bool , λ i → Bool))
 #same cube-at (suc (suc zero)) Type sq (ext (ext none-dims i0) i1) = Bool
+-- The meaning of an object composition comp A [φ1 ↦ u1, …, φn ↦ un] a0 at an environment of
+-- directions, for any type X of values. The branches' meanings (m: a branch's code to a line, read at
+-- the directions) agree with each other and with the base only up to paths (Der's conversions are
+-- paths), so they are not joined as given: each branch with its base path e (a ≡ its line at 0, on its
+-- face) is an element of the singleton type of the base, (its end, a path from a to it), and these
+-- are joined by the correction of experiments/partial/partial.cub (the rest corrected along a path to
+-- the new branch on the new branch's face: in the singleton type any two elements have one), so the
+-- joined partial element is well formed whatever the system's length. The composition's tube is the
+-- joined element's path, at 0 the base itself.
+Singl : {X : Type} (x : X) → Type
+Singl {X} x = (y : X) × (x ≡ y)
+ctr : {X : Type} {x : X} (s : Singl x) → (x , λ k → x) ≡ s
+ctr s = λ j → (snd s j , λ k → snd s (j ∧ k))
+pth : {X : Type} {x : X} (s t : Singl x) → s ≡ t
+pth {X} {x} s t = λ j → comp (λ _ → Singl x) (λ k → [ j = 0 ↦ ctr s k , j = 1 ↦ ctr t k ]) (x , λ k → x)
+-- a branch as an element of the base's singleton: its line's end, and the base path then the line
+br-sing : (X : Type) (a : X) (L : I → X) (p : a ≡ L i0) → Singl a
+br-sing X a L p = (L i1 , λ j → comp (λ _ → X) (λ k → [ j = 0 ↦ a , j = 1 ↦ L k ]) (p j))
+osys-sing : (X : Type) (a : X) (m : Code → (Word → I) → I → X)
+            (e : (f t : Code) (ρ : Word → I) → Partial (face-of f ρ) (a ≡ m t ρ i0))
+            (ρ : Word → I) (s : Code) → Partial (osys-face s ρ) (Singl a)
+osys-sing X a m e ρ (csysc f t r) =
+  [ face-of f ρ = 1 ↦ br-sing X a (m t ρ) (e f t ρ)
+  , osys-face r ρ = 1 ↦ comp (λ _ → Singl a) (λ j → [ face-of f ρ = 1 ↦ pth (osys-sing X a m e ρ r) (br-sing X a (m t ρ) (e f t ρ)) j ]) (osys-sing X a m e ρ r) ]
+osys-sing X a m e ρ c = []
+ocomp : (X : Type) (a : X) (m : Code → (Word → I) → I → X)
+        (e : (f t : Code) (ρ : Word → I) → Partial (face-of f ρ) (a ≡ m t ρ i0)) (s : Code) (ρ : Word → I) → X
+ocomp X a m e s ρ = comp (λ _ → X) (λ j → [ osys-face s ρ = 1 ↦ snd (osys-sing X a m e ρ s) j ]) a
+-- example: the system [i = 0 ↦ λ j → b, i = 1 ↦ λ j → b] over the base b at Bool; at i = 0 and i = 1
+-- its end, on the open interior the composition
+mB : Bool → Code → (Word → I) → I → Bool
+mB b t ρ j = b
+eB : (b : Bool) (f t : Code) (ρ : Word → I) → Partial (face-of f ρ) (b ≡ mB b t ρ i0)
+eB b f t ρ = [ face-of f ρ = 1 ↦ λ k → b ]
+s2 : Code
+s2 = csysc (ceq0 (cvar #0)) ctick0 (csysc (ceq1 (cvar #0)) ctick0 csys0)
+#same ocomp Bool true (mB true) (eB true) s2 (ext none-dims i0) = true
+#same ocomp Bool false (mB false) (eB false) s2 (ext none-dims i1) = false

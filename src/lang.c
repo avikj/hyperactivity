@@ -2353,6 +2353,9 @@ static bool lazy_trivial(Node *t) {
         || !strcmp(h, "PathP") || !strcmp(h, "U") || !strcmp(h, "%record")) return true;
     if (!strcmp(h, "the")) return lazy_trivial(t->it[2]);
     if (!strcmp(h, "%rebuilt")) return lazy_trivial(t->it[1]);
+    /* a fresh variable by its type: built as a deferred operation named where it is built (src/net.c), so
+     * a neutral over it is named by it before it is made */
+    if (!strcmp(h, "%varI")) { for (int i = 1; i < t->n; i++) if (!lazy_trivial(t->it[i])) return false; return true; }
     if (!strcmp(h, "app")) {
         Node *hd = t; int na = 0;
         while (hd->list && hd->n == 3 && is(hd->it[0], "app")) { hd = hd->it[1]; na++; }
