@@ -205,19 +205,22 @@ PT-lift (suc n) X X' X2 Y' F2 k f l g c =
     (λ L D → lineo-push X' X2 Y' Y' F2 f (λ x y z → l x y) L D D) (lineo-of X (λ x → Y' (k x)) g) c
 
 -- ---------------------------------------------------------------- the simple-types fragment
-data STy = sbool | sarr (a : STy) (b : STy) | sprod (a : STy) (b : STy)
+data STy = sbool | sarr (a : STy) (b : STy) | sprod (a : STy) (b : STy) | snat
 shp : STy → TyShape
 shp sbool = s-bool
 shp (sarr a b) = s-pi (shp a) (shp b)
 shp (sprod a b) = s-sig (shp a) (shp b)
+shp snat = s-nat
 sem : (t : STy) → Sem (shp t)
 sem sbool = one
 sem (sarr a b) = (sem a , λ x → sem b)
 sem (sprod a b) = (sem a , λ x → sem b)
+sem snat = one
 tcode : STy → Code
 tcode sbool = c-bool
 tcode (sarr a b) = cpi #2 (tcode a) (tcode b)
 tcode (sprod a b) = csigma (tcode a) (tcode b)
+tcode snat = c-nat
 sk : List STy → Lst Entry
 sk nil = lnil
 sk (cons t ts) = lcons (e-ty (shp t)) (sk ts)
@@ -238,6 +241,7 @@ ptM ts Z g =
 -- the derivation of a simple type in any context of simple types, at its constant meaning
 dty-s : (ts : List STy) (t : STy) → Der (j-ty , ctx-of ts , shp t , tcode t , ptM ts (Sem (shp t)) (λ x ρ → sem t))
 dty-s ts sbool = dty-bool (ctx-of ts) (ptM ts One1 (λ x ρ → one))
+dty-s ts snat = dty-nat (ctx-of ts) (ptM ts One1 (λ x ρ → one))
 dty-s ts (sarr a b) =
   dty-pi (ctx-of ts) (shp a) (shp b) (ptM ts (Fam (shp a) (shp b)) (λ x ρ → sem (sarr a b))) (tcode a) (tcode b)
     (der-tr j-ty (ctx-of ts) (shp a) (tcode a) (ptM ts (Sem (shp a)) (λ x ρ → sem a))
@@ -318,6 +322,7 @@ SY : (ts : List STy) (c : Code) → Type 1
 SY ts c = (syt : STy) × CK ts c syt
 steq : (a b : STy) → Opt (PathP (λ i → STy) a b)
 steq sbool sbool = some (λ i → sbool)
+steq snat snat = some (λ i → snat)
 steq (sarr a b) (sarr c d) =
   case steq a c return (λ o → Opt (PathP (λ i → STy) (sarr a b) (sarr c d))) of
     none → none
@@ -404,6 +409,7 @@ syn-var ts k =
 app-at : (ts : List STy) (f a : Code) (t : STy) → CK ts f t → ((t1 : STy) → May (CK ts a t1)) → May (SY ts (capp f a))
 app-at ts f a sbool cf ca = may-no
 app-at ts f a (sprod t1 t2) cf ca = may-no
+app-at ts f a snat cf ca = may-no
 app-at ts f a (sarr t1 t2) cf ca =
   case ca t1 return (λ o → May (SY ts (capp f a))) of
     may-no → may-no
@@ -417,6 +423,7 @@ syn-app ts f a sf ca =
 lam-at : (ts : List STy) (b : Code) (t : STy) → ((t1 t2 : STy) → May (CK (cons t1 ts) b t2)) → May (CK ts (clam b) t)
 lam-at ts b sbool cb = may-no
 lam-at ts b (sprod t1 t2) cb = may-no
+lam-at ts b snat cb = may-no
 lam-at ts b (sarr t1 t2) cb =
   case cb t1 t2 return (λ o → May (CK ts (clam b) (sarr t1 t2))) of
     may-no → may-no
@@ -552,6 +559,153 @@ pair-m ts c1 c2 msyn m1 m2 s1 s2 =
     may-yes r1 → (case s2 return (λ o → May (SY ts (cpair c1 c2))) of
                     may-no → may-no
                     may-yes r2 → may-yes (sprod (fst r1) (fst r2) , pair-ok ts c1 c2 (fst r1) (fst r2) (snd r1) (snd r2)))
+-- ---------------------------------------------------------------- Nat
+twoP : (w : Word) → Opt (PathP (λ i → Word) w #2)
+twoP w =
+  %welimP (λ v → Opt (PathP (λ i → Word) v #2)) w none
+    (λ m h → case oneP m return (λ o → Opt (PathP (λ i → Word) (%wsucc m) #2)) of
+               none → none
+               some p → some (λ i → %wsucc (p i)))
+-- zero and the successor of a term checked at Nat, at their constant meanings
+zero-ok : (ts : List STy) → CK ts c-zero snat
+zero-ok ts =
+  (λ x ρ → zero ,
+   der-tr j-tm (ctx-of ts) s-nat c-zero (fmapM (ctx-of ts) One1 (TV s-nat) (nat-v zero) (ptM ts One1 (λ x ρ → one)))
+     (ptM ts (TV s-nat) (λ x ρ → (one , zero)))
+     (fmap-pt (dims (sk ts)) One1 (CtxV (sk ts)) (FbE (sk ts) One1) (FbE (sk ts) (TV s-nat)) (into ts) (λ γ e ρ → nat-v zero (e ρ)) (λ x ρ → one) (cube0 ts))
+     (dzero (ctx-of ts) (ptM ts One1 (λ x ρ → one))))
+suc-ok : (ts : List STy) (c : Code) → CK ts c snat → CK ts (c-suc c) snat
+suc-ok ts c cc =
+  let g = the ((x : One1) → EnvV (sk ts) (into ts x) → TV s-nat) (λ x ρ → (one , fst cc x ρ))
+  in (λ x ρ → suc (fst cc x ρ) ,
+      der-tr j-tm (ctx-of ts) s-nat (c-suc c) (fmapM (ctx-of ts) (TV s-nat) (TV s-nat) nat-sucv (ptM ts (TV s-nat) g))
+        (ptM ts (TV s-nat) (λ x ρ → (one , suc (fst cc x ρ))))
+        (fmap-pt (dims (sk ts)) One1 (CtxV (sk ts)) (FbE (sk ts) (TV s-nat)) (FbE (sk ts) (TV s-nat)) (into ts) (λ γ e ρ → nat-sucv (e ρ)) g (cube0 ts))
+        (dsuc (ctx-of ts) (ptM ts (TV s-nat) g) c (snd cc)))
+-- the recursor checked at t: the base at t, the step at Nat → t → t, the scrutinee at Nat, the motive
+-- the constant type t over the context extended by Nat (dty-s there, carried to ext-h as for case)
+nrec-ok : (ts : List STy) (z st x : Code) (t : STy) → CK ts z t → CK ts st (sarr snat (sarr t t)) → CK ts x snat →
+  CK ts (c-nrec (tcode t) z st x) t
+nrec-ok ts z st x t cz cst cx =
+  let n = dims (sk ts)
+      s = shp t
+      gR = the ((y : One1) → EnvV (sk ts) (into ts y) → NRecV s) (λ y ρ → (one , (λ k → sem t) , fst cx y ρ , fst cz y ρ , fst cst y ρ))
+      R = ptM ts (NRecV s) gR
+      fx = the ((γ : CtxV (sk ts)) → FbE (sk ts) (NRecV s) γ → CtxV (sk (cons snat ts))) (λ γ e → (γ , λ ρ → nrec-b s (e ρ)))
+      res = the ((y : One1) → EnvV (sk ts) (into ts y) → El s (sem t)) (λ y ρ → nat-elim (λ k → El s (sem t)) (fst cz y ρ) (fst cst y ρ) (fst cx y ρ))
+  in (res ,
+      der-tr j-tm (ctx-of ts) s (c-nrec (tcode t) z st x) (fmapM (ctx-of ts) (NRecV s) (TV s) (nrec-r s) R)
+        (ptM ts (TV s) (λ y ρ → (sem t , res y ρ)))
+        (fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (NRecV s)) (FbE (sk ts) (TV s)) (into ts) (λ γ e ρ → nrec-r s (e ρ)) gR (cube0 ts))
+        (dnrec (ctx-of ts) s R (tcode t) z st x
+           (transport (λ i → Der (j-ty , (lcons (e-ty s-nat) (sk ts) ,
+                                          PT-map n One1 (CtxV (sk ts)) (CtxV (sk (cons snat ts))) (FbE (sk ts) (NRecV s)) (into ts) fx gR (cube0 ts) (~ i)) ,
+                                  s , tcode t ,
+                                  PT-lift n One1 (CtxV (sk ts)) (CtxV (sk (cons snat ts))) (FbE (sk ts) (NRecV s)) (FbE (sk (cons snat ts)) (Sem s))
+                                    (into ts) fx (λ γ e ρ → fst (snd (e (fst ρ))) (snd ρ)) gR (cube0 ts) (~ i)))
+              (dty-s (cons snat ts) t))
+           (der-tr j-tm (ctx-of ts) s z (ptM ts (TV s) (λ y ρ → (sem t , fst cz y ρ)))
+              (fmapM (ctx-of ts) (NRecV s) (TV s) (nrec-z s) R)
+              (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (NRecV s)) (FbE (sk ts) (TV s)) (into ts) (λ γ e ρ → nrec-z s (e ρ)) gR (cube0 ts) (~ i))
+              (snd cz))
+           (der-tr j-tm (ctx-of ts) (s-pi s-nat (s-pi s s)) st (ptM ts (TV (s-pi s-nat (s-pi s s))) (λ y ρ → (sem (sarr snat (sarr t t)) , fst cst y ρ)))
+              (fmapM (ctx-of ts) (NRecV s) (TV (s-pi s-nat (s-pi s s))) (nrec-st s) R)
+              (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (NRecV s)) (FbE (sk ts) (TV (s-pi s-nat (s-pi s s)))) (into ts) (λ γ e ρ → nrec-st s (e ρ)) gR (cube0 ts) (~ i))
+              (snd cst))
+           (der-tr j-tm (ctx-of ts) s-nat x (ptM ts (TV s-nat) (λ y ρ → (one , fst cx y ρ)))
+              (fmapM (ctx-of ts) (NRecV s) (TV s-nat) (nrec-x s) R)
+              (λ i → fmap-pt n One1 (CtxV (sk ts)) (FbE (sk ts) (NRecV s)) (FbE (sk ts) (TV s-nat)) (into ts) (λ γ e ρ → nrec-x s (e ρ)) gR (cube0 ts) (~ i))
+              (snd cx))))
+-- a type code read back as a simple type, with the path from its code
+sty-of : (c : Code) → Opt ((t : STy) × PathP (λ i → Code) (tcode t) c)
+sty-of (cdata d ps) =
+  case nilP ps return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (cdata d ps))) of
+    none → none
+    some pp → (case zeroP d return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (cdata d ps))) of
+      some pd → some (sbool , λ i → cdata (pd (~ i)) (pp (~ i)))
+      none → (case oneP d return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (cdata d ps))) of
+        some pd → some (snat , λ i → cdata (pd (~ i)) (pp (~ i)))
+        none → none))
+sty-of (cpi w a b) =
+  case twoP w return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (cpi w a b))) of
+    none → none
+    some pw → (case sty-of a return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (cpi w a b))) of
+      none → none
+      some ra → (case sty-of b return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (cpi w a b))) of
+        none → none
+        some rb → some (sarr (fst ra) (fst rb) , λ i → cpi (pw (~ i)) (snd ra i) (snd rb i))))
+sty-of (csigma a b) =
+  case sty-of a return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (csigma a b))) of
+    none → none
+    some ra → (case sty-of b return (λ o → Opt ((t : STy) × PathP (λ i → Code) (tcode t) (csigma a b))) of
+      none → none
+      some rb → some (sprod (fst ra) (fst rb) , λ i → csigma (snd ra i) (snd rb i)))
+sty-of c = none
+-- the recursor's code, Nat's (data 1) elimination with the motive a λ and two branches
+nrec-chk : (ts : List STy) (d : Word) (cP z st x : Code) (t : STy) → ((t1 : STy) → May (CK ts z t1)) →
+  ((t1 : STy) → May (CK ts st (sarr snat (sarr t1 t1)))) → May (CK ts x snat) →
+  May (CK ts (celim d (clam cP) (lcons z (lcons st lnil)) x) t)
+nrec-chk ts d cP z st x t mz mst mx =
+  case oneP d return (λ o → May (CK ts (celim d (clam cP) (lcons z (lcons st lnil)) x) t)) of
+    none → may-no
+    some pd → (case sty-of cP return (λ o → May (CK ts (celim d (clam cP) (lcons z (lcons st lnil)) x) t)) of
+      none → may-no
+      some rp → (case steq (fst rp) t return (λ o → May (CK ts (celim d (clam cP) (lcons z (lcons st lnil)) x) t)) of
+        none → may-no
+        some pt → (case mz t return (λ o → May (CK ts (celim d (clam cP) (lcons z (lcons st lnil)) x) t)) of
+          may-no → may-no
+          may-yes cz → (case mst t return (λ o → May (CK ts (celim d (clam cP) (lcons z (lcons st lnil)) x) t)) of
+            may-no → may-no
+            may-yes cst → (case mx return (λ o → May (CK ts (celim d (clam cP) (lcons z (lcons st lnil)) x) t)) of
+              may-no → may-no
+              may-yes cx → may-yes (transport (λ i → CK ts (celim (pd (~ i)) (clam (snd rp i)) (lcons z (lcons st lnil)) x) t)
+                                      (transport (λ i → CK ts (c-nrec (tcode (pt (~ i))) z st x) t) (nrec-ok ts z st x t cz cst cx))))))))
+-- checked at t, or synthesizing the motive's type
+nrec-m : (ts : List STy) (d : Word) (cP z st x : Code) (m : Mode) → ((t1 : STy) → May (CK ts z t1)) →
+  ((t1 : STy) → May (CK ts st (sarr snat (sarr t1 t1)))) → May (CK ts x snat) → RT ts (celim d (clam cP) (lcons z (lcons st lnil)) x) m
+nrec-m ts d cP z st x (mchk t) mz mst mx = nrec-chk ts d cP z st x t mz mst mx
+nrec-m ts d cP z st x msyn mz mst mx =
+  case sty-of cP return (λ o → May (SY ts (celim d (clam cP) (lcons z (lcons st lnil)) x))) of
+    none → may-no
+    some rp → (case nrec-chk ts d cP z st x (fst rp) mz mst mx return (λ o → May (SY ts (celim d (clam cP) (lcons z (lcons st lnil)) x))) of
+      may-no → may-no
+      may-yes q → may-yes (fst rp , q))
+-- Nat's constructors: zero (data 1, constructor 0, no fields), the successor (constructor 1, one field)
+zero-at : (ts : List STy) (d k : Word) (fs ds : Lst Code) → May (CK ts (ccon d k fs ds) snat)
+zero-at ts d k fs ds =
+  case oneP d return (λ o → May (CK ts (ccon d k fs ds) snat)) of
+    none → may-no
+    some pd → (case zeroP k return (λ o → May (CK ts (ccon d k fs ds) snat)) of
+      none → may-no
+      some pk → (case nilP fs return (λ o → May (CK ts (ccon d k fs ds) snat)) of
+        none → may-no
+        some pf → (case nilP ds return (λ o → May (CK ts (ccon d k fs ds) snat)) of
+          none → may-no
+          some pds → may-yes (transport (λ i → CK ts (ccon (pd (~ i)) (pk (~ i)) (pf (~ i)) (pds (~ i))) snat) (zero-ok ts)))))
+suc-at : (ts : List STy) (d k : Word) (c : Code) (ds : Lst Code) → May (CK ts c snat) → May (CK ts (ccon d k (lcons c lnil) ds) snat)
+suc-at ts d k c ds mc =
+  case oneP d return (λ o → May (CK ts (ccon d k (lcons c lnil) ds) snat)) of
+    none → may-no
+    some pd → (case oneP k return (λ o → May (CK ts (ccon d k (lcons c lnil) ds) snat)) of
+      none → may-no
+      some pk → (case nilP ds return (λ o → May (CK ts (ccon d k (lcons c lnil) ds) snat)) of
+        none → may-no
+        some pds → (case mc return (λ o → May (CK ts (ccon d k (lcons c lnil) ds) snat)) of
+          may-no → may-no
+          may-yes cc → may-yes (transport (λ i → CK ts (ccon (pd (~ i)) (pk (~ i)) (lcons c lnil) (pds (~ i))) snat) (suc-ok ts c cc)))))
+-- a constructor code: Bool's, else Nat's zero
+con-syn2 : (ts : List STy) (d k : Word) (fs ds : Lst Code) → May (SY ts (ccon d k fs ds))
+con-syn2 ts d k fs ds =
+  case con-syn ts d k fs ds return (λ o → May (SY ts (ccon d k fs ds))) of
+    may-yes r → may-yes r
+    may-no → (case zero-at ts d k fs ds return (λ o → May (SY ts (ccon d k fs ds))) of
+      may-no → may-no
+      may-yes q → may-yes (snat , q))
+suc-syn : (ts : List STy) (d k : Word) (c : Code) (ds : Lst Code) → May (CK ts c snat) → May (SY ts (ccon d k (lcons c lnil) ds))
+suc-syn ts d k c ds mc =
+  case suc-at ts d k c ds mc return (λ o → May (SY ts (ccon d k (lcons c lnil) ds))) of
+    may-no → may-no
+    may-yes q → may-yes (snat , q)
 -- ---------------------------------------------------------------- case on Bool
 -- case on Bool checked at t: the scrutinee at Bool, both branches at t, the motive the constant type t
 -- in the context extended by a Bool (dty-s there, carried to ext-h over the case's cube as λ's body is)
@@ -615,7 +769,10 @@ ck : (c : Code) (ts : List STy) (m : Mode) → RT ts c m
 ck (cvar k) ts m = finish ts (cvar k) m (syn-var ts k)
 ck (clam b) ts m = lam-m ts b m (λ t1 t2 → ck b (cons t1 ts) (mchk t2))
 ck (capp f a) ts m = finish ts (capp f a) m (syn-app ts f a (ck f ts msyn) (λ t1 → ck a ts (mchk t1)))
-ck (ccon d k fs ds) ts m = finish ts (ccon d k fs ds) m (con-syn ts d k fs ds)
+ck (ccon d k (lcons c lnil) ds) ts m = finish ts (ccon d k (lcons c lnil) ds) m (suc-syn ts d k c ds (ck c ts (mchk snat)))
+ck (ccon d k fs ds) ts m = finish ts (ccon d k fs ds) m (con-syn2 ts d k fs ds)
+ck (celim d (clam cP) (lcons z (lcons st lnil)) x) ts m =
+  nrec-m ts d cP z st x m (λ t → ck z ts (mchk t)) (λ t → ck st ts (mchk (sarr snat (sarr t t)))) (ck x ts (mchk snat))
 ck (cpair a b) ts m = pair-m ts a b m (λ t → ck a ts (mchk t)) (λ t → ck b ts (mchk t)) (ck a ts msyn) (ck b ts msyn)
 ck (cfst p) ts m = finish ts (cfst p) m (syn-fst ts p (ck p ts msyn))
 ck (csnd p) ts m = finish ts (csnd p) m (syn-snd ts p (ck p ts msyn))
@@ -671,3 +828,10 @@ tcode-of c t r =
 #same tcode-of (clam (clam (c-case (cvar #0) c-false (cvar #1)))) (sarr sbool (sarr sbool sbool))
   (ck (clam (clam (c-case (cvar #0) c-false (cvar #1)))) nil (mchk (sarr sbool (sarr sbool sbool))))
   = some (clam (clam (c-case (cvar #0) c-false (cvar #1))))
+-- Nat: 2 checks and normalizes to itself; the recursor adding one to its argument (λ k r. suc r) on 2
+-- normalizes to 3 (suc (suc (suc zero))); λ n. nrec n 0 (λ k r. suc r) at Nat → Nat checks, its
+-- normal form the recursor stuck on the variable
+#same tcode-of (c-suc (c-suc c-zero)) snat (ck (c-suc (c-suc c-zero)) nil (mchk snat)) = some (c-suc (c-suc c-zero))
+#same tcode-of (c-nrec c-nat (c-suc c-zero) (clam (clam (c-suc (cvar #0)))) (c-suc (c-suc c-zero))) snat
+  (ck (c-nrec c-nat (c-suc c-zero) (clam (clam (c-suc (cvar #0)))) (c-suc (c-suc c-zero))) nil (mchk snat))
+  = some (c-suc (c-suc (c-suc c-zero)))
