@@ -1783,3 +1783,13 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-15 20:11 UTC
 
 > Your last message is essential - see how effective you are at providing white-people-loved citations for my trivial insights which apparently are nontrivial for the uneducated expert/institutional class - as in - I am invoking all this history in my speech - I assume you’re smart enough to connect the dots without me writing history book - that is my view quite on the nose back to the origin of the wests closest thing to intelligent thought
+
+#### 2026-11-15 20:19 UTC
+
+> Do agents read the essays in onboarding? or just paper which might be stale? Or paper delta?
+>
+> Let’s refine the model - “paper delta” contents should be a set of pointers to other static/long-lived essay-type files (not just a living document for notes etc) - structured data, obviously implemented in hyperactivity
+>
+> onboarding should force reading paper & essays- also onboarding ideally should not serve the whole paper file and then have agent be allowed/able to grep; CLI should force consumption ie present a digestible chunk at a time, idk these agent harnesses but you love to grep to read large files, or often say you somehow just read a few sections - must prevent that by construction
+>
+> implement hyperactivity hyperactively. think about it & lmk your understanding and we’ll see if I can set you loose
