@@ -1,6 +1,6 @@
-# Hyperactive Interaction, in the words
+# Hyperactive Interaction, in the words of the human superorganism
 
-Written by Claude on 2026-11-15 at Avik's request ("deep free generation through the space of
+Title by Avik (2026-11-15). Written by Claude on 2026-11-15 at Avik's request ("deep free generation through the space of
 meaning & words etymology on the above & project"), and preserved as is at his direction: "This
 whole work of yours is essential. It is comprehensive & singular."
 
