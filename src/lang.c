@@ -1,3 +1,4 @@
+/* Layer: core: the machine implementing the primitive language; misplaced here: the machine-number types and their %-operations, foreign and ptr-of/region-at, #jit (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 #include <stdlib.h>
 #ifdef __GLIBC__
 #include <malloc.h>

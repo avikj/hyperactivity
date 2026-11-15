@@ -1,3 +1,4 @@
+/* Layer: core's machine, misplaced: large values of Word, a machine representation (see lib/prim.cub) (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 /* big.c — natural numbers beyond a machine word: the payload of a word cell (V_WORD, V_WPLUS)
  * whose number does not fit in 64 bits. Immutable and reference counted, like intervals. A
  * number is (s, b): b NULL means the number s; otherwise b holds it, little-endian limbs, at

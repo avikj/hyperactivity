@@ -1,3 +1,4 @@
+/* Layer: core: the machine implementing the primitive language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 /* store.c — codebase keys and the store (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”). Included by lang.c before toplevel.
  *
  * A checked definition's key is the SHA-256 of the canonical form of its type and its term:

@@ -1,3 +1,4 @@
+/* Layer: core: the machine implementing the primitive language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 #include <setjmp.h>
 /* syntax.c — the surface language: tokens, layout, parsing into the core forms, and printing the
  * core forms back in the surface language. Included by lang.c (it uses its Node and tables).

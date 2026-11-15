@@ -1,3 +1,4 @@
+/* Layer: our usage: the machine as a C library (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 /* libcubical.h — the machine as a library. A C program linked with build/libcubical.a loads the
  * libraries it needs with cubical_init, then calls checked definitions on word arguments: the net
  * computes the result to its normal form (synchronously). */

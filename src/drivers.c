@@ -1,3 +1,4 @@
+/* Layer: the machine's world side (#run's drivers): not the language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 /* src/drivers.c — the driver loop (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26). Included by lang.c after the readers.
  *
  * (run e): e is a value of lib/world.cub's Step W A, a process as a tree of steps. The loop reads

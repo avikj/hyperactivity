@@ -1,3 +1,4 @@
+/* Layer: core: the machine implementing the primitive language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 /* core.h — the cubical interaction net.
  *
  * A term is a net of cells. Every cell has one principal port (port 0).

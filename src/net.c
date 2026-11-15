@@ -1,3 +1,4 @@
+/* Layer: core: the machine implementing the primitive language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 /* net.c — cells, wiring, the interaction rules, and building a net from
  * compiled syntax. */
 #include "core.h"

@@ -40,7 +40,11 @@ draft (`docs/to-be-incorporated-into-paper.md`) and the word list (`docs/word-li
     term in the core is flagged as core, and the files are organized by layer: a set of files that
     are purely core, and the capacities, the examples, the library and our usage each apart (while
     the work still lives in a file system). An agent reading any file knows from where it stands
-    which layer it is in.
+    which layer it is in. Every file of lib/ and src/ opens with a line `Layer: …` naming its layer
+    (core; misplaced in the core, and what it should be; not core though in the core's load order;
+    capacity demonstrated and mentioned in the paper; library; example; language support; our
+    usage). A new file opens with one; a file that moves layer has its line changed in the same
+    commit. The directories do not yet follow the layers: that move is still to be made.
   - **The language is the minimal pure base.** It is a minimal, necessary and sufficient construct of
     pure mathematics, as the λ-calculus, the Turing machine and Shannon's channel are, and its value
     is maximized by its minimality: it extends to anything by definitions, so nothing further belongs
