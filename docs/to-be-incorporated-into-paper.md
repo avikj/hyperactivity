@@ -235,6 +235,11 @@ to be incorporated into the paper.
   (`docs/knowledge-is-a-lack-of-ignorance.md`, 2026-11-15). Avik's statement that no historical
   distinction is primitive and that domains are bubbles of shared ignorance, and the scientific
   field divisions the primitive removes. Kept as is at his direction.
+- **Controversy and consensus** (`docs/controversy-and-consensus.md`, 2026-11-15). Avik's key term
+  unfolded through its history: controversy as dialogue, turns with polarity (the Roman
+  controversia argued from both sides, Greek dialectic), not conflict; consensus as feeling together,
+  the Latin counterpart of synesthesia; controversy carried through arrives at consensus. Kept as is
+  at his direction.
 
 ## How hyperactivity spreads
 
