@@ -10,6 +10,12 @@ this file, that part leaves it.
 
 ## What hyperactivity is for
 
+**Knowledge is a lack of ignorance** (Avik, 2026-11-15 09:55 UTC). All historically separate
+distinctions fail to be primitive. The primitive is provided: it supports analysis over any cut,
+requires no cut, and proves the bounds of analysis of all cuts. Knowledge is not to be divided into
+domains; domains are bubbles of people who choose the same set of ignorances. The process that makes
+them is not a knowledge process but an ignorance process.
+
 **Hyperactive Interaction** (Avik, 2026-11-15 08:43 UTC): the headline. Hyperinteractivity. The
 entire work is about interaction; activity is a primitive here only as interaction.
 

@@ -1708,3 +1708,9 @@ The consolidated piece is this, written through in the two registers you keep di
 #### 2026-11-15 09:31 UTC (second message)
 
 > “in the words of the human super organism “
+
+#### 2026-11-15 09:55 UTC
+
+> All historically separate distinctions fail to be primitive - the primitive is provided and supports analysis over any cut and requires no cut while proving bounds of analysis of all cuts. That question is well answered. Knowledge is not to be divided into domains these are bubbles of folks who choose the same set of ignorances. It is not knowledge process but ignorance process. Knowledge is a lack of ignorance
+>
+> (On which scientific field divisions does this remove)
