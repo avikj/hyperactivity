@@ -336,70 +336,10 @@ The paper is the specification. What remains between the implementation (“The 
   - The C compiler's relation is a named assumption, listed by `#trusted`.
   - The evaluator substitutes native code only under that relation
     (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export"). Today `#jit` binds x86 bytes with no relation, which breaks this rule.
-  - The x86 translator (`src/lang.c`'s native path, `lib/capacities/x86.cub`, `lib/capacities/machine.cub`, `lib/capacities/elf.cub`'s
-    pasted machine code, `lib/capacities/compile/`) is superseded.
-- **Core, capacities demonstrated and mentioned in the paper, examples, and our usage** (Avik, 2026-11-14). Four different things, which
-  the repository and the paper hold side by side and which are never to be confused:
-  - **The core** is the primitive language: a minimal, necessary and sufficient construct of pure
-    mathematics. It has nothing about bits: no word sizes, bytes or floating-point formats.
-  - **Capacities demonstrated and mentioned in the paper** are what the core can do, which the paper claims: typed quotation and
-    readback, specialization, native realization and JIT, lifting other languages, and so on. A
-    capacity is not a primitive. It is demonstrated by a metacircular extension, built on the
-    unchanged core, with its correctness proved in the language. Each such extension yields a new
-    language. A capacity the paper claims has to be demonstrated, and an extension that needs a new
-    primitive does not demonstrate it. JIT is a capacity: x86 in the core would make Arm and RISC-V
-    core too. What has to run bytes is the evaluator, an implementation of the language, replacing a
-    term by a native form only under a proven relation to the term's meaning (see "Native realization
-    goes through C" above).
-  - **The examples** show what can be done with the language. The paper's treatment of machine
-    words, bytes and floating point (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar types": U_w = Fin(2^w), Byte = Fin(256), native primitives implementing those definitions under a checked theorem or a named assumption) is of this kind: definitions about machines and other languages, written in the language. It is not a statement about the core and is not incorrect.
-  - **Our usage** is code that exists because building hyperactivity uses it now: the task graph,
-    the checks, the workflow. No claim of the paper stands behind it. The question that separates it
-    from a capacity is why the code exists: because the paper says the language can do this (a
-    capacity, which has to be demonstrated), or because we use it (usage, which only has to work).
-    Code that is both is filed as the paper's capacity, and our use of it is a use.
-  - The implementation does not keep them apart. `Word`, `Int64`, `UInt32`, `UInt64`, `Float64` and
-    `Bytes n` are built into the evaluator (`lib/bootstrap/prim.cub`, computed by `src/lang.c` and
-    `src/big.c`): content of the examples' kind sitting in the core. `#jit` binds x86 bytes in the
-    core with no relation. Every file is to be sorted into core, capacity demonstration, example and
-    usage, and what sits in the wrong layer is moved: a definition to the library, a capacity to its
-    extension, native speed to the evaluator under a relation.
+  - The x86 translator (`src/lang.c`'s native path, `lib/x86.cub`, `lib/machine.cub`, `lib/elf.cub`'s
+    pasted machine code, `lib/compile/`) is superseded.
+- **The laws of the primitives,** each a theorem or a named assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar types").
 - **Deriving,** as a typed term.
-- **The interval as a pretype, and partial elements** (2026-11-15). The meaning of an object
-  composition `comp A [φ1 ↦ u1, …, φn ↦ un] a0` in the normalizer over cubes is a host composition
-  whose system has as many faces as the object system, its faces computed from the object's face
-  codes; a checked function builds such a system only if it can return an interval and a partial
-  element. CCHM holds the interval only in contexts and systems only as judgmental syntax; the
-  construction forces two additions, both interpreted directly in the cubical-set model CCHM is the
-  syntax of (the interval is the representable interval, a face a map to the face lattice, a partial
-  element a map out of the face's subobject): the interval as a pretype (a function may take or
-  return an interval, and an interval term is any term of type I), and `Partial r A`, the partial
-  elements of A on (r = 1) (A itself where r is 1; A need be a type only on the face). A join of
-  partial elements is a system whose faces are interval terms. A function building a system from
-  data is checked once, at generic arguments, where its faces are neutral (`faces bs` for a variable
-  list bs); conversion under such a face assumed is conversion with the neutral read as a dimension
-  of its own (an atom, the same neutral the same atom) and the assumption a substitution of that
-  dimension. Branches that agree only up to a path are joined after a one-branch composition along
-  the path on the earlier face, which makes them agree on the overlap by the boundary rule. Example:
-  over a list bs, a partial element on `faces bs = pick b1 ∨ … ∨ pick bn` with one branch per element,
-  built by recursion, its value on a total face computed (experiments/partial/partial.cub).
-- **Recursion through nested data types** (found 2026-11-15). The language's own raw syntax is a
-  nested inductive type: a code's case, constructor application, data type and eliminator hold their
-  subterms in a list of codes (`Lst Code`). A checked program over codes that recurses into those
-  subterms, such as the checker of §6.1 taking raw syntax (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”) or a typed
-  specializer, does so through the eliminator of a nested inductive type: a field of type L D, where
-  L's one parameter occurs strictly positively, takes as its induction hypothesis the hypotheses of
-  its D elements, laid out along L. The implementation's structural recursion takes hypotheses only
-  for fields of type D itself and for D under paths, function codomains and pairs, so a recursive
-  call on a case's branch is refused, and the untyped bootstrap files over codes cannot yet be
-  written with types.
-  Implemented 2026-11-15: a container L (one parameter, no indices, its fields the parameter, L at
-  it, or not mentioning it) gets, generated and checked, the hypothesis type %iht-L l A P x (by cases
-  on x, the Σ of P at its elements and %iht-L at its L-fields, ending in the unit at level l) and
-  value %ihn-L; a field of type L D takes %ihn-L of the elimination as its hypothesis, and a split of
-  such a field in clauses unfolds it, so a call on an element bound there is structural. The unit at
-  every level this needs is possible because data types may now declare a universe that depends on
-  a parameter (data Unit-at (l : Level) : Type l).
 - **Terms of any depth.**
 
 **Dimensions.** This is answered by the standard semantics; it was never a question for Avik.
@@ -410,7 +350,7 @@ The paper is the specification. What remains between the implementation (“The 
 - So the number of dimensions varies only in the quantification over stages. A semantic action of
   interval expressions, defined on syntax, must be shown once to respect the algebra's equations.
   That is the well-definedness of the cube category's action, not a cost of the encoding.
-- `lib/capacities/nbe.cub` is that model inside the host:
+- `lib/nbe.cub` is that model inside the host:
   - stages are host cubes (`Cube n`);
   - interval expressions are data (`IEx`, `DNF`);
   - substitutions are `Sub` and `cmap-d`.
@@ -562,7 +502,7 @@ absent. No comment convention stands in for it.
 ### How the workflow is held in the language today
 
 **The task graph is a term.**
-- `lib/usage/task-graph.cub` declares `data Node = node (name : List Word) (part-of : List Node)`.
+- `lib/task-graph.cub` declares `data Node = node (name : List Word) (part-of : List Node)`.
 - `task-graph/hyperactivity.cub` holds this project's nodes. Each node has a statement above it,
   holding what is known and the questions only Avik can answer.
 - `after` holds the dependencies and `essential-context` the documents essential to working on a
@@ -685,12 +625,12 @@ Application is juxtaposition; structure is indentation (a block opens after `whe
 `case e of c x → t; d → u`, `case e return P of ...`, `e where` a block of definitions, `Type`,
 `Type l` (`Level`, `lzero`, `lsuc`, `lmax`, or a numeral). Numerals are natural numbers. A quoted
 string `"…"` is the list of its bytes (UTF-8, as written): `"ab"` is `cons #97 (cons #98 nil)`, a
-`List Word`. `document "path"` is a file of the repository as a value (`lib/usage/document.cub`): the path
+`List Word`. `document "path"` is a file of the repository as a value (`lib/document.cub`): the path
 relative to the file being read, as `import`'s is; reading fails if there is no such file; the value
 is `document-at path digest`, digest the file's SHA-256, so what refers to a document changes
 identity exactly when the document does. `declarations T` is the list of every checked definition in
 scope whose type is T, in the order declared (`declarations Node` is every node of the task graph,
-lib/usage/task-graph.cub). Every
+lib/task-graph.cub). Every
 Unicode symbol has an ASCII spelling: `->` `\` `|->` `==` `/\` `\/` `**` `forall`, `Nat` for `ℕ`,
 `S1` for `S¹`, `Empty` for `⊥`, `Unit` for `⊤`. Operators are declared: `infix 4 ≡`, `infixr 5 ∙`,
 and defined as `_≡_` or by an equation `x ≡ y = ...`. A name used in a signature and bound nowhere
@@ -701,7 +641,7 @@ them; `Path A a b` names the type), `a ≡[ i ↦ A ] b` a path over a line of t
 `λ i → e`, applied as `p i`; the interval has `0`, `1`, `~ r`, `r ∧ s`, `r ∨ s`. A partial value is
 `[ i = 0 ↦ a , i = 1 ↦ b ]`, composition `comp (λ i → A) (λ j → [ ... ]) a0`, transport
 `transp (λ i → A) a`. Whether a λ or an application is a path's or a function's is decided by the
-checker (below), so it is written the same way. `lib/library/std.cub` has `refl`, `sym`, `_∙_`, `cong`,
+checker (below), so it is written the same way. `lib/std.cub` has `refl`, `sym`, `_∙_`, `cong`,
 `subst`, `transport`, `funExt`, equivalences and `ua`, with `calc` chains:
 `calc a ≡ b by p ≡ c by q` (each step on its own indented line if long), composed by `_∙_`.
 
@@ -733,7 +673,7 @@ zig (suc a) b = suc (zig b a)
 decreasing by plus a b using <-suc-eq (plus b a) (plus a b) (plus-comm b a)
 ```
 
-Each call `f as` must satisfy `m as < m ps` (`_<_` of `lib/library/std.cub`, which computes to `Unit` or
+Each call `f as` must satisfy `m as < m ps` (`_<_` of `lib/std.cub`, which computes to `Unit` or
 `Empty` on numerals); the `using` term is checked at that type in the scope of the call's clause.
 The definition becomes recursion on a bound of the measure, whose hypothesis is reverted through
 the clauses' matches. A proof about such a definition does not unfold it by its equations
@@ -743,7 +683,7 @@ definitionally (the recursion's bound is part of the term), only by computation 
 from the arguments' types as their heads' signatures give them, from the type an application is
 expected to have (a λ's binder from the Π expected, a branch's from the motive at its constructor,
 a definition's body from its signature), and from a solved argument's own type. What remains is
-solved by the checker, which is itself a term (`lib/core/check.cub`): it checks the elaborated term
+solved by the checker, which is itself a term (`lib/check.cub`): it checks the elaborated term
 with its holes and its guesses (a λ or an application of unknown kind, function or path) and
 answers with solutions or a request to redo; an undetermined level is `lzero`, and a hole whose type
 is a universe takes its level from its solution. The checker matches the values on both sides
@@ -770,7 +710,7 @@ prints a checked definition's binder usages (the back end erases the binders at 
 not).
 
 
-**Primitive types.** `lib/bootstrap/prim.cub` declares the machine's fixed-width numbers and byte strings as
+**Primitive types.** `lib/prim.cub` declares the machine's fixed-width numbers and byte strings as
 primitives (`Int64`, `UInt32`, `UInt64`, `Float64`, `Float32`, `Bytes n`, their operations,
 `load32`/`store32` with the proof that the access fits). `#trusted` lists every postulate and
 primitive in scope.
@@ -790,10 +730,10 @@ definitions applied to them; `open M Nat eqNat` defines each `f` as `M·f Nat eq
 instantiated signature (an implicit parameter not given is inferred from an explicit
 argument's type, or given as `{Nat}`).
 
-**Deriving.** `deriving eq D [as name]` defines a decidable equality on the data type `D` (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F31): its code is computed by `lib/library/derive.cub` (`derive-eq`, a term over the data table), read
+**Deriving.** `deriving eq D [as name]` defines a decidable equality on the data type `D` (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F31): its code is computed by `lib/derive.cub` (`derive-eq`, a term over the data table), read
 back and checked at `D → D → Bool` as `D·eq` (or the name given).
 
-**Named worlds.** `world "kv" = kv-world` (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27) checks `world-kv : Named S St` (lib/library/proc.cub:
+**Named worlds.** `world "kv" = kv-world` (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27) checks `world-kv : Named S St` (lib/proc.cub:
 the handler under an id, the name's hash, also `world-kv-id : Word`), its type read from the
 handler's signature or given (`world "n" : World S St = term`); a registry is a list of them and
 `find-world` picks one by id.
@@ -806,7 +746,7 @@ in turn and the call made when the last is (`%ffi`). Trusted: `#trusted` and `#s
 `foreign`.
 
 **Arrays, and stuck primitive operations.** `Array n` is `Bytes (times n 8)` (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.10 “C20–C22 — Memory and state”, its part C22;
-`lib/bootstrap/prim.cub`): `index n a i h` and `update n a i h v` with `h : le (suc i) n` are a load and a
+`lib/prim.cub`): `index n a i h` and `update n a i h v` with `h : le (suc i) n` are a load and a
 store at offset `times i 8` with the proof that the access fits, `tabulate n f` writes `f` at
 every index, and `index-update` (a read after a write at the same index is the value written)
 is the byte layer's law `load64-store64` (trusted) unfolded. A primitive operation on a
@@ -823,7 +763,7 @@ layer (`indexV`/`updateV`/`Fin→ArrayV A to from ft tf n`): `Float64` by its bi
 `f64ofbits`, trusted inverse); the same on the 4-byte layer for any `A ≃ UInt32` (`Fin→ArrayV32`): `Float32` by its bits
 (`f32bits`, `f32ofbits`; `Fin→ArrayF32`).
 
-**Regions as state.** `lib/examples/region.cub` threads a region, `Bytes n`, through a program as
+**Regions as state.** `lib/region.cub` threads a region, `Bytes n`, through a program as
 state: `RM n A = Region n → Region n × A`, pointers as offsets with their proof (`Ptr n`),
 `rd`/`wr`/`rmodify` the byte layer's accesses, `run-fresh n m`, `enter-at a n m` for memory the
 program does not own; `rd-wr` and `rd-wr-disj` are its laws. The region is unique along the
@@ -867,8 +807,8 @@ Indices are unified at a split as Agda does: a case whose indices clash may be l
 a missing clause is covered when a later argument's type is empty (`vlookup` needs no `vnil`
 clause: `Fin zero` has no constructor).
 
-**Running processes.** `lib/languages/world.cub` is the drivers' signature `W` (`time-now`, `write fd n b`,
-`read fd n`, `sleep ns`, `exit c` as processes of `lib/library/proc.cub`) and `to-step p` a process as a
+**Running processes.** `lib/world.cub` is the drivers' signature `W` (`time-now`, `write fd n b`,
+`read fd n`, `sleep ns`, `exit c` as processes of `lib/proc.cub`) and `to-step p` a process as a
 tree of steps; `#run (to-step p)` performs it against the operating system (`src/drivers.c`),
 ending with `run: done a`. The machine as a library: `build/libcubical.a` with `src/libcubical.h`,
 a C program loads libraries with `cubical_init` and calls checked definitions on words with
@@ -927,7 +867,7 @@ face true (here `i := 0`), the whole partial value becomes that branch.
 **Composition.** `comp A u a0` takes a line of types `A(i)`, a starting element `a0 : A(0)` and a
 partial value `u` (where it is given, what the result must be along the line), and produces an
 element of `A(1)` matching `u`. Transport is composition with nothing given. How it is computed
-depends on what kind of type `A(i)` is; each case is a term in `lib/core/prelude.cub`, not C:
+depends on what kind of type `A(i)` is; each case is a term in `lib/prelude.cub`, not C:
 - functions (`%comp-pi`): to apply the result to `x : A(1)`, move `x` back to each `A(i)`, apply,
   and compose the results in the codomain;
 - pairs (`%comp-sigma`): compose the first components, then the second components along the line
@@ -1029,7 +969,7 @@ supplies the unknown, it fires. A neutral's type is computed from the variable a
 the operations applied to it, and a stuck path's endpoints are read from that type.
 
 A reading of a checked definition, or of `the T t`, is taken at its type: `quote` in
-`lib/core/check.cub` reads the value as a code (`lib/core/code.cub`), applying a function to a fresh
+`lib/check.cub` reads the value as a code (`lib/code.cub`), applying a function to a fresh
 variable of its domain, reading a pair by its projections and a path at a fresh dimension, and a
 stuck elimination's branches at fresh fields typed by the constructor's telescope, at the motive.
 So `λ p → p 0` at `Path Nat zero zero → Nat` reads `λ x0 → zero`, and a variable of a Σ type
@@ -1058,7 +998,7 @@ step, whose fields are the value's own parts: a Π type gives `(wpi A B)` with `
 like any data, so a program in the language can examine a value's structure. What it sees is the
 computed value, not the source text that produced it; a function shows only as `(wlam f)`.
 `(%var T)` and `(%dim)` make fresh variables, `(%dnf r)` gives an interval's or a face's clauses
-as lists of literals, and `(%motive f)` an elimination's motive. The type checker (`lib/core/check.cub`) is written with
+as lists of literals, and `(%motive f)` an elimination's motive. The type checker (`lib/check.cub`) is written with
 these and runs on this runtime, over the values the runtime already computed for each subterm:
 there is no second evaluator, and checking a definition is running that program on it.
 
@@ -1095,7 +1035,7 @@ neutral path. So a process that never ends is a finite value, an observation of 
 unfoldings, and a definition that is its own tail (`zeros`, whose `next` is `zeros`) is held as
 its call. A record stands only as the body of a copattern definition.
 
-The checker (`chk-codef` in `lib/core/check.cub`) requires every call of the group in a field's term to
+The checker (`chk-codef` in `lib/check.cub`) requires every call of the group in a field's term to
 be guarded: it is the head of the field's term (applied to arguments not mentioning the group, at
 any dimensions), or stands there under a λ, a line, a pair, a constructor, a case or system
 branch, or a let's body; never as an argument or eliminated. Every body of a group is found guarded
@@ -1177,16 +1117,16 @@ determines is the one clock in scope. A recursive call needed now is reported wh
 
 ### Programs about programs, and the compiler
 
-Programs about programs are definitions over codes (`lib/core/code.cub`), and their outputs carry
-paths, so a wrong one produces output that does not check. **`lib/bootstrap/match.cub`** (first-order
+Programs about programs are definitions over codes (`lib/code.cub`), and their outputs carry
+paths, so a wrong one produces output that does not check. **`lib/match.cub`** (first-order
 matching and rewriting over codes, capture-safe under binders; each rewrite step's path is the
-theorem's instance in context), **`lib/capacities/rules.cub`** (the store's theorems as rewrite rules read
-from their types), **`lib/bootstrap/nav.cub`** and **`lib/bootstrap/cost.cub`** (navigation over established
-identities), **`lib/capacities/specialize.cub`** (normalize with held definitions abstracted, then rewrite
-along the rules under a terminating discipline, composing the steps' paths), **`lib/library/derive.cub`**
-(decidable equality as a code read off the data table), the certificate checkers (`lib/bootstrap/lin.cub`,
-`lib/library/linproof.cub`, `lib/library/eqproof.cub`, `lib/library/ring.cub`, `lib/library/intproof.cub`: search unverified, the
-verdict decided by the checker), and `lib/examples/autodiff.cub`'s typed theorems.
+theorem's instance in context), **`lib/rules.cub`** (the store's theorems as rewrite rules read
+from their types), **`lib/nav.cub`** and **`lib/cost.cub`** (navigation over established
+identities), **`lib/specialize.cub`** (normalize with held definitions abstracted, then rewrite
+along the rules under a terminating discipline, composing the steps' paths), **`lib/derive.cub`**
+(decidable equality as a code read off the data table), the certificate checkers (`lib/lin.cub`,
+`lib/linproof.cub`, `lib/eqproof.cub`, `lib/ring.cub`, `lib/intproof.cub`: search unverified, the
+verdict decided by the checker), and `lib/autodiff.cub`'s typed theorems.
 
 **The compiler.** `#jit f` compiles a checked definition to x86-64 and binds `f` to the bytes:
 
@@ -1199,10 +1139,10 @@ plusN a b = case a return (λ k → Nat) of
 -- ok: jit plusN   [250 bytes, the checker's conversion, 15744 steps]
 ```
 
-The checker's code for `f` is specialized (`lib/capacities/specialize.cub`), the result is accepted by the
+The checker's code for `f` is specialized (`lib/specialize.cub`), the result is accepted by the
 checker as `f` (its conversion with `f`, or with `#jit f using t…` the path along the theorems
 `t`, checked as the definition `f·jit`), and only then encoded by fixed templates
-(`lib/capacities/machine.cub` decides the fragment, `lib/capacities/x86.cub` encodes) and mapped executable. A
+(`lib/machine.cub` decides the fragment, `lib/x86.cub` encodes) and mapped executable. A
 definition outside the fragment (dimensions, composition, higher constructors, types at run
 time) is reported with the reason and stays on the net. A call whose arguments are values of
 the parameter types runs the bytes; any other call, and a `Word` result past 2⁶⁴ (the overflow

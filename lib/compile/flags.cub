@@ -1,0 +1,29 @@
+-- lib/compile/flags.cub — the model's flags word, bit 0 (CF) through the six arithmetic flags'
+-- updates.
+import "../isa/x86/all.cub"
+import "bitlaw.cub"
+
+-- CF, after updates of CF, PF, AF, ZF, SF, OF in the model's order (gpr_add_spec_8's
+-- output_rflags, write_user_rflags): the value written to CF
+flags6 : Word → Word → Word → Word → Word → Word → Word → Word
+flags6 x c p f z s o = rflagsbits-set-of (rflagsbits-set-sf (rflagsbits-set-zf (rflagsbits-set-af (rflagsbits-set-pf (rflagsbits-set-cf x c) p) f) z) s) o
+flags6-cf : (x c p f z s o : Word) → wbit (flags6 x c p f z s o) #0 ≡ wbit c #0
+flags6-cf x c p f z s o =
+  bu-bit0-other (rflagsbits-set-sf (rflagsbits-set-zf (rflagsbits-set-af (rflagsbits-set-pf (rflagsbits-set-cf x c) p) f) z) s) o #11 refl refl
+  ∙ bu-bit0-other (rflagsbits-set-zf (rflagsbits-set-af (rflagsbits-set-pf (rflagsbits-set-cf x c) p) f) z) s #7 refl refl
+  ∙ bu-bit0-other (rflagsbits-set-af (rflagsbits-set-pf (rflagsbits-set-cf x c) p) f) z #6 refl refl
+  ∙ bu-bit0-other (rflagsbits-set-pf (rflagsbits-set-cf x c) p) f #4 refl refl
+  ∙ bu-bit0-other (rflagsbits-set-cf x c) p #2 refl refl
+  ∙ bu-bit0 x c
+-- the flags write_user_rflags leaves from the flags vector U (no flag undefined): CF is U's
+flags-of : Word → Word → Word
+flags-of x u = flags6 x (rflagsbits-cf u) (rflagsbits-pf u) (rflagsbits-af u) (rflagsbits-zf u) (rflagsbits-sf u) (rflagsbits-of u)
+flags-of-cf : (x u : Word) → wbit (flags-of x u) #0 ≡ wbit u #0
+flags-of-cf x u = flags6-cf x (rflagsbits-cf u) (rflagsbits-pf u) (rflagsbits-af u) (rflagsbits-zf u) (rflagsbits-sf u) (rflagsbits-of u) ∙ slice-bit0 u
+-- a carry bit as bool_to_bits of a negation
+cf-bit : (t : Bool) → wbit (bool_to_bits (b-not t)) #0 ≡ b-not t
+cf-bit true = refl
+cf-bit false = refl
+bnot-bnot : (t : Bool) → bnot (b-not t) ≡ t
+bnot-bnot true = refl
+bnot-bnot false = refl

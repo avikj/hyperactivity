@@ -1,4 +1,3 @@
-/* Layer: core: the machine implementing the primitive language; misplaced here: the machine-number types and their %-operations, foreign and ptr-of/region-at, #jit (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 #include <stdlib.h>
 #ifdef __GLIBC__
 #include <malloc.h>
@@ -238,7 +237,6 @@ static int hk_of(Node *h) {
         if (!built) { for (int i = 0; i < (int)(sizeof nm / sizeof *nm); i++) in[i] = intern(nm[i]); built = true; }
         int k = H_NONE;
         for (int i = 0; i < (int)(sizeof nm / sizeof *nm); i++) if (h->s == in[i]) { k = H_LAM + i; break; }   /* symbols are interned */
-        { static const char *vi; if (!vi) vi = intern("%varI"); if (h->s == vi) k = H_VAR; }   /* a fresh variable or dimension, by its type */
         h->hk = (short)k;
     }
     return h->hk;
@@ -259,8 +257,8 @@ static bool node_eq(Node *a, Node *b) {
 
 /* ---------------- desugaring to the core forms ---------------- */
 static const char *KW[] = { "%raw", "%welimP", "%rebuilt", "%hole", "%guess", "%spine", "lam", "thunk", "%delay", "delay", "force", "case", "elim", "if", "rec", "the", "code", "%data", "%con", "hcompD", "%hcompF", "%transD", "%case", "%branches", "record", "%record", "plam", "forall", "let", "app", "pair", "fst", "snd", "Pi", "Sigma", "U",
-    "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue", "Partial",
-    "unglue", "%view", "%var", "%varI", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%diht", "%dihn", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
+    "PathP", "@", "~", "/\\", "\\/", "=", "&", "|", "faceof", "%fneg", "sys", "sys0", "sys+", "sysmap", "comp", "Glue", "%hcompU", "%unglueU", "glue",
+    "unglue", "%view", "%var", "%dim", "%ieq", "%feq", "%clauses", "%dnf", "%motive", "%restrict", "%gval", "%gty", "%dtab", "%dent", "%dtrans", "%abs", "%branch", "%clos", "%box", "%wsucc", "%weq", "%wlt", "%wadd", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr", "%wmax", "%wsub", "%welim", "%pimult", "%pim", "%fmult", "%linear", "%gusage", "%gsteps", "%gcode", "%dnidx", "%pty", "%bytesty", "%pval", "%bytes", "%blen", "%beq", "%ptr-of", "%region-at", "%ffi", "%native", "%natrep",
     "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
     "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr", "%i64div", "%i64mod", "%i64and", "%i64or", "%i64xor", "%i64shl", "%i64shr",
     "%i64ofw", "%wofi64", "%u32ofw", "%wofu32", "%f64ofw", "%f64ofi64", "%i64off64", "%f64bits", "%f64ofbits", "%f32bits", "%f32ofbits", "%u64ofw", "%wofu64", "%load8", "%load16", "%load32", "%load64", "%store8", "%store16", "%store32", "%store64", NULL };
@@ -337,34 +335,15 @@ static bool rec_shape(Node *A, const char *D, char *out, int *n) {
     return false;
 }
 
-/* a container (2026-11-15, nested inductive types): a data type with one parameter, no indices, no
- * path constructors, not codata, each constructor's field the parameter itself (an element), the
- * type at its parameter (a recursive field) or a type not mentioning the parameter. A field of type
- * L D of a data type D, L such a container, is recursive through L: its hypothesis is the tuple of
- * the elements' hypotheses (%ihn-L, typed by %iht-L) */
-static bool nest_container(int L);
-static int data_lookup(const char *s);
-/* a field's type L A with L a container and A the data type D itself (at its parameters): L, else -1 */
-static int nest_of(Node *A, const char *D) {
-    if (!A || !A->list || A->n != 2 || A->it[0]->list) return -1;
-    if (!strcmp(A->it[0]->s, D)) return -1;
-    int L = data_lookup(A->it[0]->s);
-    if (L < 0 || !nest_container(L)) return -1;
-    Node *a = A->it[1];
-    if (!(a->list ? (a->n >= 1 && !a->it[0]->list && !strcmp(a->it[0]->s, D)) : !strcmp(a->s, D))) return -1;
-    return L;
-}
 /* data types: higher inductive types (Coquand–Huber–Mörtberg), declared by
  * (data ...) below; constructors are values, eliminated by %case */
 ConInfo *CON; static size_t capcon; static int ncon;
-/* the name of data type d's first constructor (for reports naming a data type by its index) */
-const char *data_first_con(int d) { for (int i = 0; i < ncon; i++) if (CON[i].data == d) return CON[i].name; return "?"; }
 DataInfo *DATA; static size_t capdata; static int ndata;
 /* codata types' fields: a field applied to a value is its projection */
 FldInfo *FLD; static size_t capfld; static int nfld;
 static int fld_lookup(const char *s) { for (int i = nfld - 1; i >= 0; i--) if (!strcmp(FLD[i].name, s)) return i; return -1; }
-long case_hcomp_global = -1, atom_res_global = -1, atom_res0_global = -1;
-/* "%%c" names the first constructor declared c: the checker's own (lib/core/check.cub), referred to by
+long case_hcomp_global = -1;
+/* "%%c" names the first constructor declared c: the checker's own (lib/check.cub), referred to by
  * the code the checker is given, whatever the program declares later under the same name */
 /* by name: an open-addressed table of the latest constructor of each name, rebuilt when constructors
  * have been declared since (declarations are rare, lookups constant) */
@@ -771,7 +750,7 @@ static Node *ds(Node *t) {
         }
         static const struct { const char *k; int n; } AR[] = { { "pair", 2 }, { "fst", 1 }, { "snd", 1 }, { "PathP", 3 },
             { "~", 1 }, { "=", 2 }, { "faceof", 1 }, { "sysmap", 2 }, { "comp", 3 }, { "Glue", 2 }, { "glue", 2 },
-            { "unglue", 2 }, { "Partial", 2 }, { "app", 2 }, { "hcompD", 2 }, { NULL, 0 } };
+            { "unglue", 2 }, { "app", 2 }, { "hcompD", 2 }, { NULL, 0 } };
         if (IS(k, "@")) { if (t->n != 3 && t->n != 5) die("@ takes a path, an interval and optionally both endpoints", NULL); }
         else for (int i = 0; AR[i].k; i++) if (!strcmp(AR[i].k, k)) arity(t, AR[i].n);
         Node *r = nlist(t->n); r->it[0] = h;
@@ -785,7 +764,7 @@ static Node *ds(Node *t) {
 
 /* ---------------- codes of source terms ----------------
  * (code t) writes the code of a source term as data: constructor
- * applications of lib/core/code.cub, variables as de Bruijn indices over one
+ * applications of lib/code.cub, variables as de Bruijn indices over one
  * context of term and dimension variables, checked definitions as signature
  * indices. This is reading source text, not inspecting a value. */
 static const char **cscope; static size_t capcscope; static int ncscope;
@@ -802,12 +781,12 @@ static char **CHKPOS; static size_t capchkpos;   /* where each checked definitio
 extern char decl_pos[512];
 static char **DATAPOS; static size_t capdatapos;
 static int checked_index(const char *s) { for (int i = nchecked - 1; i >= 0; i--) if (!CHKHIDE[i] && (CHECKED[i] == s || !strcmp(CHECKED[i], s))) return i; return -1; }
-/* a name a checked term cannot use. A definition of a file loaded before the checker (lib/core/prelude.cub's
+/* a name a checked term cannot use. A definition of a file loaded before the checker (lib/prelude.cub's
  * map, length, append, add, mul, and, iszero; the checker's own helpers) has no type and cannot be
  * given one there (a signature needs the checker): the message says so and names the checked ones */
 static void die_unchecked(const char *s) {
     if (global_lookup(s) >= 0) {
-        char m[512]; snprintf(m, sizeof m, "code: %s is a helper defined before the checker was loaded (lib/core/prelude.cub and the checker's files): it has no type, so a checked definition cannot use it. Checked ones in lib/library/std.cub: list-map, list-length, list-append (for map, length, append), plus, times (for add, mul)", s);
+        char m[512]; snprintf(m, sizeof m, "code: %s is a helper defined before the checker was loaded (lib/prelude.cub and the checker's files): it has no type, so a checked definition cannot use it. Checked ones in lib/std.cub: list-map, list-length, list-append (for map, length, append), plus, times (for add, mul)", s);
         die(m, NULL);
     }
     die("code: not a bound variable or checked definition:", s);
@@ -1098,7 +1077,7 @@ static Node *to_code(Node *t) {
     { static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr" };
       for (int q = 0; q < 13; q++) if (!strcmp(h, WO[q])) return capp3("cwop", word(q), to_code(t->it[1]), to_code(t->it[2])); }
     if (!strcmp(h, "%welimP") && t->n == 5) return capp4("cwelim", to_code(t->it[2]), to_code(t->it[3]), to_code(t->it[4]), capp1("some", to_code(t->it[1])));
-    /* a primitive operation (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”): (cprim k args), k = class·256 + sub as lib/core/code.cub's prim-apply reads it */
+    /* a primitive operation (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”): (cprim k args), k = class·256 + sub as lib/code.cub's prim-apply reads it */
     {
         static const char *PO1[] = { "%i64add", "%i64sub", "%i64mul", "%i64eq", "%i64lt", "%u32add", "%u32sub", "%u32mul", "%u32eq", "%u32lt", "%f64add", "%f64sub", "%f64mul", "%f64div", "%f64eq", "%f64lt",
             "%u64add", "%u64sub", "%u64mul", "%u64eq", "%u64lt", "%u64div", "%u64mod", "%u64and", "%u64or", "%u64xor", "%u64shl", "%u64shr",
@@ -1148,7 +1127,7 @@ static Node *to_code(Node *t) {
 }
 
 /* ---------------- annotated codes ----------------
- * The checker's input (lib/core/check.cub `Tm`): the code of a term whose every node carries the
+ * The checker's input (lib/check.cub `Tm`): the code of a term whose every node carries the
  * term's value, computed by the machine from the compiled subterm, and whose binders are
  * functions: a term binder λ x xT. (code of the body), a dimension binder λ i. (code of the
  * body). Instantiating a binder is applying it; a variable's node is (tv x xT), its value and
@@ -1328,12 +1307,11 @@ static NV ann(Node *t, Chain *C) {
         if (!strcmp(s, "ff")) return aconst("tff", "ff");
         if (!strcmp(s, "U")) { p[0] = K("tlzero"); return anode(C, "tuniv", p, 1, nsym("U")); }
         if (!strcmp(s, "Word")) return aconst("tword", "Word");
-        if (!strcmp(s, "I")) return aconst("tity", "I");
         if (s[0] == '#' && s[1] >= '0' && s[1] <= '9') { NV r; r.val = t; r.node = kapp("tlit", t, NULL); return r; }
         AScope *a = ascope(s);
         if (a) { NV r; r.val = t; r.node = a->ty ? kapp("tv", t, a->ty) : kapp("ti", t, NULL); return r; }
         int i = checked_index(s);
-        if (i >= 0) { p[0] = word(i); p[1] = nl2("%gty", word(i)); return anode(C, "tg", p, 2, nl2("%gval", word(i))); }
+        if (i >= 0) { p[0] = word(i); return anode(C, "tg", p, 1, nl2("%gval", word(i))); }
         die_unchecked(s);
     }
     const char *h = t->it[0]->s;
@@ -1408,7 +1386,7 @@ static NV ann(Node *t, Chain *C) {
         { "app", "tapp", 2 }, { "pair", "tpair", 2 }, { "fst", "tfst", 1 }, { "snd", "tsnd", 1 },
         { "PathP", "tpathp", 3 }, { "@", "tpapp", 2 }, { "~", "tneg", 1 }, { "/\\", "tmeet", 2 }, { "\\/", "tjoin", 2 },
         { "&", "tfand", 2 }, { "|", "tfor", 2 }, { "comp", "tcomp", 3 }, { "Glue", "tgluet", 2 }, { "glue", "tglue", 2 },
-        { "unglue", "tunglue", 2 }, { "Partial", "tpartial", 2 }, { "%hcompU", "thcompu", 2 }, { "%unglueU", "tunglueu", 2 }, { "hcompD", "thcomp", 2 }, { "force", "tforce", 1 }, { "%delay", "tthunk", 1 }, { NULL, NULL, 0 } };
+        { "unglue", "tunglue", 2 }, { "%hcompU", "thcompu", 2 }, { "%unglueU", "tunglueu", 2 }, { "hcompD", "thcomp", 2 }, { "force", "tforce", 1 }, { "%delay", "tthunk", 1 }, { NULL, NULL, 0 } };
     {
         static const char *WO[] = { "%weq", "%wlt", "%wadd", "%wmax", "%wsub", "%wmul", "%wdiv", "%wmod", "%wand", "%wor", "%wxor", "%wshl", "%wshr", NULL };
         for (int q = 0; WO[q]; q++) if (!strcmp(h, WO[q])) {
@@ -1459,7 +1437,7 @@ static NV ann(Node *t, Chain *C) {
     die("code: no code for form", h);
     return (NV){ 0 };
 }
-/* a data declaration as a telescope (lib/core/check.cub `Tel`): its parameters, then the list of its
+/* a data declaration as a telescope (lib/check.cub `Tel`): its parameters, then the list of its
  * constructors, each its fields, its dimensions, then its boundary */
 static Node *atel_ctor(Node *cd, ConInfo *c, int i, int k) {
     if (k < c->nfields) {
@@ -1483,7 +1461,6 @@ static Node *atel_ctor(Node *cd, ConInfo *c, int i, int k) {
     for (int q = dl->n - 1; q >= 1; q--) r = kapp("ty", word(srcname(dl->it[q]->s)), nl3("lam", dl->it[q], r));
     return r;
 }
-static Node *atel_level(Node *dd, int d, int k, Node *lv);
 static Node *atel_params(Node *dd, int d, int k) {
     Node *hd = dd->it[1];
     if (k < DATA[d].nparams) {
@@ -1503,110 +1480,6 @@ static Node *atel_params(Node *dd, int d, int k) {
     return r;
 }
 
-/* a declared universe's level as a telescope over the parameters, ending in the level (tz l) */
-static Node *atel_level(Node *dd, int d, int k, Node *lv) {
-    Node *hd = dd->it[1];
-    if (k < DATA[d].nparams) {
-        Node *p = hd->it[k + 1];
-        if (!p->list || p->n != 2) die("a checked data type needs its parameters' types:", DATA[d].name);
-        Chain C = { 0 }; NV A = ann(ds(p->it[1]), &C);
-        Node *ty = afresh("at");
-        apush(p->it[0]->s, ty);
-        Node *rest = atel_level(dd, d, k + 1, lv);
-        nasc--;
-        return chain_close(&C, nl3("app", kapp("tx", A.node, word(srcname(p->it[0]->s))), nl3("lam", p->it[0], nl3("lam", ty, rest))));
-    }
-    Chain C = { 0 }; NV L = ann(ds(lv), &C);
-    return chain_close(&C, kapp("tz", L.node, NULL));
-}
-/* the container check (nest_of) and the generated hypothesis type and value of a nested field */
-static void emit(const char *text);
-static bool nest_container(int L) {
-    if (L < 0 || L >= ndata) return false;
-    DataInfo *X = &DATA[L];
-    Node *dd = X->decl;
-    if (X->co || X->nparams != 1 || X->nidx || !dd || !X->ncons) return false;
-    Node *hd = dd->it[1];
-    if (!hd->list || hd->n != 2) return false;
-    /* the parameter a type (of Type): its elements are the values nested */
-    Node *pt = hd->it[1]->list && hd->it[1]->n == 2 ? hd->it[1]->it[1] : NULL;
-    if (!pt || pt->list || !(is(pt, "U") || is(pt, "Type"))) return false;
-    const char *pn = param_name(hd->it[1])->s;
-    for (int ci = 0; ci < X->ncons; ci++) {
-        int c = X->cons[ci];
-        if (CON[c].ndims) return false;
-        Node *cd = dd->it[2 + ci];
-        for (int q = 0; q < CON[c].nfields; q++) {
-            if (!cd->list || q + 1 >= cd->n) return false;
-            Node *f = cd->it[q + 1];
-            if (!f->list || f->n != 2) return false;
-            Node *T = f->it[1];
-            if (!T->list && !strcmp(T->s, pn)) continue;
-            if (T->list && T->n == 2 && !T->it[0]->list && !strcmp(T->it[0]->s, X->name) && !T->it[1]->list && !strcmp(T->it[1]->s, pn)) continue;
-            if (mentions_name(T, pn)) return false;
-        }
-    }
-    return true;
-}
-/* a constructor field of container L: 1 an element, 2 a recursive field, 0 neither */
-static int nest_field(int L, int ci, int q) {
-    DataInfo *X = &DATA[L]; Node *dd = X->decl;
-    const char *pn = param_name(dd->it[1]->it[1])->s;
-    Node *T = dd->it[2 + ci]->it[q + 1]->it[1];
-    if (!T->list && !strcmp(T->s, pn)) return 1;
-    if (T->list && T->n == 2 && !T->it[0]->list && !strcmp(T->it[0]->s, X->name)) return 2;
-    return 0;
-}
-/* %iht-L l A P x: by cases on x, the Σ of P at each element and %iht-L at each recursive field,
- * ending in Unit-at l; %ihn-L l A P h x: the tuple of h at each element and %ihn-L at each recursive
- * field, ending in unit-at. Checked definitions, emitted once Unit-at and L are checked */
-static void gen_nest(int L) {
-    DataInfo *X = &DATA[L]; Node *dd = X->decl;
-    const char *Ln = X->name;
-    char *pty; size_t pl; FILE *pm = open_memstream(&pty, &pl); print_node(pm, dd->it[1]->it[1]->it[1]); fclose(pm);
-    for (int which = 0; which < 2; which++) {
-        char *buf; size_t len; FILE *m = open_memstream(&buf, &len);
-        if (!which)
-            fprintf(m, "(checked %%iht-%s (Pi %%l Level (Pi %%A %s (Pi %%P (Pi %%y %%A (U %%l)) (Pi %%x (%s %%A) (U %%l))))) (lam %%l (lam %%A (lam %%P (lam %%x (elim (lam %%z (U %%l)) %%x", Ln, pty, Ln);
-        else
-            fprintf(m, "(checked %%ihn-%s (Pi %%l Level (Pi %%A %s (Pi %%P (Pi %%y %%A (U %%l)) (Pi %%h (Pi %%y %%A (%%P %%y)) (Pi %%x (%s %%A) (%%iht-%s %%l %%A %%P %%x)))))) (lam %%l (lam %%A (lam %%P (lam %%h (lam %%x (elim (lam %%z (%%iht-%s %%l %%A %%P %%z)) %%x", Ln, pty, Ln, Ln, Ln);
-        for (int ci = 0; ci < X->ncons; ci++) {
-            int c = X->cons[ci], nf = CON[c].nfields;
-            fprintf(m, " ((%s", CON[c].name);
-            for (int q = 0; q < nf; q++) fprintf(m, " %%f%d", q);
-            fprintf(m, ") ");
-            int ncomp = 0;
-            for (int q = 0; q < nf; q++) {
-                int k = nest_field(L, ci, q);
-                if (!k) continue;
-                if (!which) { if (k == 1) fprintf(m, "(Sigma %%s%d (%%P %%f%d) ", ncomp, q); else fprintf(m, "(Sigma %%s%d (rec %%f%d) ", ncomp, q); }
-                else { if (k == 1) fprintf(m, "(pair (%%h %%f%d) ", q); else fprintf(m, "(pair (rec %%f%d) ", q); }
-                ncomp++;
-            }
-            fprintf(m, which ? "unit-at" : "(Unit-at %%l)");
-            for (int k = 0; k < ncomp; k++) fputc(')', m);
-            fputc(')', m);
-        }
-        fprintf(m, which ? ")))))))" : "))))))");
-        fclose(m);
-        emit(buf);
-        free(buf);
-        char nm[300]; snprintf(nm, sizeof nm, which ? "%%ihn-%s" : "%%iht-%s", Ln);
-        /* the checked definition's index (the checker's tables are by it) */
-        long g = -1;
-        for (int i = nchecked - 1; i >= 0 && g < 0; i--) if (!CHKHIDE[i] && !strcmp(CHECKED[i], nm)) g = i;
-        if (which) { X->ihn = g + 1; X->ihng = g >= 0 ? global_lookup(nm) + 1 : 0; } else X->iht = g + 1;
-    }
-    free(pty);
-}
-/* after a data type is checked: the hypotheses of nested fields through it, or through every
- * container checked before Unit-at */
-static void nest_after_checked(int d) {
-    int U = data_lookup("Unit-at");
-    if (U < 0 || chk_index(U) < 0) return;
-    if (d == U) { for (int L = 0; L < ndata; L++) if (L != U && chk_index(L) >= 0 && !DATA[L].iht && nest_container(L)) gen_nest(L); }
-    else if (!DATA[d].iht && nest_container(d)) gen_nest(d);
-}
 /* occurrences of a parameter in a primitive's body (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.1 “B11 — Multiplicities (static side)”): c counts them, direct those that are an
  * argument of a machine operation (a %-headed application); an inner binder of the same name hides it */
 static void prim_uses(Node *t, const char *x, int under, int *c, int *direct) {
@@ -1645,7 +1518,7 @@ static Global *G; static long nG, capG;
 static signed char *GMK; static long capGMK;   /* 0 unknown, 1 clean, 2 tainted */
 static bool syn_walk(const Syn *t, long *calls, int *nc, int cap) {
     if (!t) return false;
-    if (t->tag == S_PRIM && (t->x == O_MKDIM || t->x == O_MKFRESH)) return true;
+    if (t->tag == S_PRIM && t->x == O_MKDIM) return true;
     if (t->tag == S_GLOBTAB) return true;
     if ((t->tag == S_GLOBAL || t->tag == S_CALL) && *nc < cap) calls[(*nc)++] = t->id;
     else if ((t->tag == S_GLOBAL || t->tag == S_CALL)) return true;   /* too many to follow: tainted */
@@ -2353,9 +2226,6 @@ static bool lazy_trivial(Node *t) {
         || !strcmp(h, "PathP") || !strcmp(h, "U") || !strcmp(h, "%record")) return true;
     if (!strcmp(h, "the")) return lazy_trivial(t->it[2]);
     if (!strcmp(h, "%rebuilt")) return lazy_trivial(t->it[1]);
-    /* a fresh variable by its type: built as a deferred operation named where it is built (src/net.c), so
-     * a neutral over it is named by it before it is made */
-    if (!strcmp(h, "%varI")) { for (int i = 1; i < t->n; i++) if (!lazy_trivial(t->it[i])) return false; return true; }
     if (!strcmp(h, "app")) {
         Node *hd = t; int na = 0;
         while (hd->list && hd->n == 3 && is(hd->it[0], "app")) { hd = hd->it[1]; na++; }
@@ -2510,7 +2380,6 @@ static Syn *compile(Node *t) {
         if (IS(s, "ff")) return syn(S_FFF, 0);
         if (IS(s, "U")) return syn(S_U, 0);
         if (IS(s, "Word")) return syn(S_WORDTY, 0);
-        if (IS(s, "I")) return syn(S_ITY, 0);
         Bind *b = lookup_i(s);
         if (b) {
             if (b->level != li) die("internal: unlifted outer variable", s);
@@ -2596,7 +2465,7 @@ static Syn *compile(Node *t) {
         static const struct { const char *name; int kind, n; } PR[] = { { "%view", O_VIEW, 1 }, { "%ieq", O_IEQ, 2 }, { "%feq", O_FEQL, 2 }, { "%clauses", O_CLAUSES, 1 }, { "%dnf", O_DNF, 1 }, { "%motive", O_MOTIVE, 1 },
             { "%restrict", O_RESTRICT, 2 }, { "%abs", O_ABS, 2 }, { "%branch", O_BRANCH, 3 }, { "%clos", O_CLOS, 2 }, { "%wsucc", O_WSUCC, 1 }, { "%weq", O_WEQ, 2 }, { "%wlt", O_WLT, 2 },
             { "%wadd", O_WADD, 2 }, { "%wmax", O_WMAX, 2 }, { "%wsub", O_WSUB, 2 }, { "%wmul", O_WMUL, 2 }, { "%wdiv", O_WDIV, 2 }, { "%wmod", O_WMOD, 2 }, { "%wand", O_WAND, 2 }, { "%wor", O_WOR, 2 }, { "%wxor", O_WXOR, 2 }, { "%wshl", O_WSHL, 2 }, { "%wshr", O_WSHR, 2 }, { "%welim", O_WELIM, 3 },
-            { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 }, { "%gsteps", O_GSTEPS, 1 }, { "%gcode", O_GCODE, 1 }, { "%dnidx", O_DNIDX, 1 }, { "%diht", O_DIHT, 1 }, { "%dihn", O_DIHN, 1 },
+            { "%pimult", O_PIMULT, 1 }, { "%pim", O_PIM, 3 }, { "%fmult", O_FMULT, 3 }, { "%linear", O_LINEAR, 1 }, { "%gusage", O_GUSAGE, 2 }, { "%gsteps", O_GSTEPS, 1 }, { "%gcode", O_GCODE, 1 }, { "%dnidx", O_DNIDX, 1 },
             /* primitive types and values (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.2 “B12 — Representations as a construct”) */
             { "%pty", O_PTY, 1 }, { "%bytesty", O_BYTESTY, 1 }, { "%pval", O_PVAL, 2 }, { "%bytes", O_BYTES, 1 }, { "%blen", O_BLEN, 1 }, { "%beq", O_BEQ, 2 }, { "%ptr-of", O_PTROF, 1 }, { "%region-at", O_REGAT, 2 }, { NULL, 0, 0 } };
         /* the primitive operations, (%i64add a b) ...: O_POP1/O_POP2 with the operation in x; the loads and
@@ -2645,13 +2514,13 @@ static Syn *compile(Node *t) {
             s->k[0] = compile(t->it[2]); s->k[1] = compile(t->it[3]); s->k[2] = compile(t->it[4]); s->k[3] = compile(t->it[1]);
             return s;
         }
-        if (IS(h, "%var") || IS(h, "%varI") || IS(h, "%dim")) {
+        if (IS(h, "%var") || IS(h, "%dim")) {
             /* (%var [n] T), (%dim [n]): a fresh variable of type T, a fresh dimension, named by the
              * word n (a source name) or unnamed; the first port triggers the cell */
-            bool v = IS(h, "%var") || IS(h, "%varI");
+            bool v = IS(h, "%var");
             int named = t->n - (v ? 2 : 1);
             if (named != 0 && named != 1) die(v ? "(%var [n] T)" : "(%dim [n])", NULL);
-            Syn *s = syn(S_PRIM, v ? 2 : 1); s->x = IS(h, "%varI") ? O_MKFRESH : v ? O_MKVAR : O_MKDIM;
+            Syn *s = syn(S_PRIM, v ? 2 : 1); s->x = v ? O_MKVAR : O_MKDIM;
             s->k[0] = named ? compile(t->it[1]) : syn(S_FTT, 0);
             if (v) s->k[1] = compile(t->it[1 + named]);
             return s;
@@ -2686,7 +2555,6 @@ static Syn *compile(Node *t) {
     if (IS(h, "sysmap")) return compile_n(S_SYSMAP, t, 1, 2);
     if (IS(h, "comp")) return compile_n(S_COMP, t, 1, 3);
     if (IS(h, "Glue")) return compile_n(S_GLUE, t, 1, 2);
-    if (IS(h, "Partial")) return compile_n(S_PART, t, 1, 2);
     if (IS(h, "%hcompU")) { arity(t, 2); Syn *s = compile_n(S_GLUE, t, 1, 2); s->x = 1; return s; }
     if (IS(h, "%unglueU")) { arity(t, 2); Syn *s = compile_n(S_UNGLUE, t, 1, 2); s->x = 1; return s; }
     if (IS(h, "glue")) {
@@ -2933,8 +2801,6 @@ static void rb_one(FILE *o, Port prov) {
     case V_CASEF: fputs("%casef", o); return;
     case V_WORD: { WN w = { c->a, c->p }; fputc('#', o); wn_print(o, &w); return; }
     case V_WTY: fputs("Word", o); return;
-    case V_ITY: fputs("I", o); return;
-    case V_PART: fputs("(Partial ", o); dnf_print(o, c->p, false, dim_name); fputc(' ', o); push_str(")"); push_field(c, 1); return;
     case V_PTY:
         if (c->a == PT_BYTES) { fputs("(Bytes ", o); push_str(")"); push_field(c, 1); return; }
         fputs(c->a == PT_I64 ? "Int64" : c->a == PT_U32 ? "UInt32" : c->a == PT_F64 ? "Float64" : c->a == PT_U64 ? "UInt64" : "Float32", o); return;
@@ -3077,7 +2943,7 @@ static char *read_port(Port prov) {
     return buf;
 }
 /* ---------------- printing a code ----------------
- * A typed reading (quote in lib/core/check.cub) is a code of lib/core/code.cub: first-order data, with
+ * A typed reading (quote in lib/check.cub) is a code of lib/code.cub: first-order data, with
  * bound variables and dimensions as de Bruijn indices. It is printed with names made in the
  * order the binders are printed, x0 x1 ... for variables (ih for an elimination's hypotheses)
  * and i0 i1 ... for dimensions, as a reading names them. */
@@ -3321,7 +3187,7 @@ static char *readback_at(Node *T, Node *t, long *steps) {
 static const char *cur_dir;
 /* a checked definition whose check the elaborator already ran: its result and length */
 static const char *forced_result; static long forced_steps;
-/* why a judgment failed: its normal form (no v why A B), lib/core/check.cub Res */
+/* why a judgment failed: its normal form (no v why A B), lib/check.cub Res */
 /* the slots of a failure that are types (read at their universe); the others are values whose
  * type the failure does not carry, read without one */
 static bool slot_is_type(int why, int k) {
@@ -3431,9 +3297,7 @@ static void explain(const char *r, Node *q) {
         /* 37 */ { "a binder at multiplicity 0 (erased) is used", NULL, NULL },
         /* 38 */ { "a linear binder (multiplicity 1) is not used", NULL, NULL },
         /* 39 */ { "a linear binder (multiplicity 1) is used more than once", NULL, NULL },
-        /* 40 */ { "a constructor of a linear type (a field at multiplicity 1) is applied outside a primitive", NULL, NULL },
-        /* 41 */ { "a field's universe is above the data type's declared universe", "the fields' level", "the declared level" },
-        /* 42 */ { "the system's face does not cover the partial element's face", NULL, NULL } };
+        /* 40 */ { "a constructor of a linear type (a field at multiplicity 1) is applied outside a primitive", NULL, NULL } };
     const char *saved = src; src = r;
     Node *n = read_node();
     src = saved;
@@ -3928,11 +3792,9 @@ static void toplevel_in(Node *f) {
         prof_cur = 0;
         link(top_build(s, ns, u), P(G[g].res, 0));
         if (!strcmp(G[g].name, "%case-hcomp")) case_hcomp_global = g;
-        if (!strcmp(G[g].name, "%atom-res")) atom_res_global = g;
-        if (!strcmp(G[g].name, "%atom-res0")) atom_res0_global = g;
         if (fill_decl) { for (int i = 0; i < G[g].npark; i++) net_push(G[g].park_o[i], G[g].park_v[i]); G[g].npark = 0; }
     } else if (!strcmp(h, "checked") || !strcmp(h, "checked-fail") || !strcmp(h, "check") || !strcmp(h, "check-fail")) {
-        /* the checker (lib/core/check.cub), a term, run on the codes of T and t
+        /* the checker (lib/check.cub), a term, run on the codes of T and t
          * against the signature of the definitions checked so far */
         bool define = !strcmp(h, "checked") || !strcmp(h, "checked-fail");
         bool expect = strcmp(h, "check-fail") != 0 && strcmp(h, "checked-fail") != 0;
@@ -4173,7 +4035,7 @@ static void toplevel_in(Node *f) {
          * checker: parameter and field types are types, fields strictly positive,
          * boundaries elements of the type made of earlier constructors.
          * (check-data D): check a data type already declared (the prelude's) */
-        Node *dd, *dlv = NULL; int d;
+        Node *dd; int d;
         if (!strcmp(h, "check-data")) {
             if (f->n != 2 || f->it[1]->list) die("(check-data D)", NULL);
             d = data_lookup(f->it[1]->s);
@@ -4181,15 +4043,14 @@ static void toplevel_in(Node *f) {
             if (chk_index(d) >= 0) die("check-data: already checked:", f->it[1]->s);
             dd = DATA[d].decl;
         } else {
-            if ((f->n != 2 && f->n != 3) || !f->it[1]->list || !is(f->it[1]->it[0], "data")) die("(checked-data[-fail] (data ...) [level])", NULL);
+            if (f->n != 2 || !f->it[1]->list || !is(f->it[1]->it[0], "data")) die("(checked-data[-fail] (data ...))", NULL);
             dd = f->it[1];
-            dlv = f->n == 3 ? f->it[2] : NULL;
             toplevel(dd);
             d = ndata - 1;
         }
         GROW(CHKDATA, capchkdata, (size_t)nchkdata + 1);
         CHKDATA[nchkdata++] = d; chk_pending = nchkdata - 1;
-        Node *ent = nl2("%raw", dlv ? kapp("dentl", atel_params(dd, d, 0), atel_level(dd, d, 0, dlv)) : kapp("dent", atel_params(dd, d, 0), K("lzero")));
+        Node *ent = nl2("%raw", kapp("dent", atel_params(dd, d, 0), K("lzero")));
         int di = nchkdata - 1;
         /* the tables while it is checked: its declaration at level lzero, and the machine's data
          * type, constructors, elimination and case for the evaluator */
@@ -4208,7 +4069,7 @@ static void toplevel_in(Node *f) {
         table_set(TB_DTAB, di, global_lookup(dtn));
         table_set(TB_TRANS, di, global_lookup(trn));
         long steps = 0;
-        char key[65]; char *kcode = NULL; decl_level = dlv; key_decl(dd, key, &kcode); decl_level = NULL;
+        char key[65]; char *kcode = NULL; key_decl(dd, key, &kcode);
         bool stored = expect && store_checked(key);
         char *rs = expect && !stored ? store_refused(key) : NULL;   /* refused before */
         char *r = stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-data", word(di), ent), &steps), *tr = strdup("ok");
@@ -4225,7 +4086,6 @@ static void toplevel_in(Node *f) {
         Node *ed = nlist(3); ed->it[0] = nsym("def"); ed->it[1] = nsym(dent); ed->it[2] = nl3("%%data-entry", word(di), ent);
         toplevel(ed);
         table_set(TB_DENT, di, global_lookup(dent));
-        nest_after_checked(d);
     } else if (!strcmp(h, "mutual") || !strcmp(h, "mutual-fail")) {
         /* (mutual (checked a T t)...): copattern definitions calling each other */
         if (f->n < 2) die("(mutual (checked name T t)...)", NULL);
@@ -4441,8 +4301,6 @@ static void toplevel_in(Node *f) {
                 /* a field recursive under Π codomains or Σ components (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.18 “E28b — Strict positivity under Π codomains and Σ components”): its shape, and the
                  * hypothesis the net builds from it */
                 if (rec_shape(x->ft[k], D, sh, &sn)) { sh[sn] = 0; rsh[k] = strdup(sh); if (depth < 0) { rm |= 1ull << k; nr++; } }
-                /* a field of type L D, L a container: recursive through L (shape N<L>;) */
-                else if (depth < 0) { int L = nest_of(x->ft[k], D); if (L >= 0) { char b[32]; snprintf(b, sizeof b, "N%d;", L); rsh[k] = strdup(b); rm |= 1ull << k; nr++; } }
             }
             CON[ncon] = (ConInfo){ intern(cd->it[0]->s), d, ci, x->nf, x->nd, -1, -1, nr, rm };
             memcpy(CON[ncon].rdim, rd, sizeof rd);
@@ -4632,19 +4490,8 @@ static void toplevel_in(Node *f) {
                     bool rec = (!A->list && !strcmp(A->s, D)) || (A->list && A->n >= 1 && !A->it[0]->list && !strcmp(A->it[0]->s, D));
                     fprintf(m, "(let %%t%d (plam %%i ", k);
                     if (rec) {
-                        /* along the field's own type D a…: each argument a line, the parameters
-                         * and the earlier fields at i ∧ j (an indexed family's recursive field
-                         * sits at its own index, not at the outer one) */
-                        if (np && (!A->list || A->n - 1 != np)) die("a recursive field needs all its type's arguments:", cn);
                         fprintf(m, "(%%transD %s (| %%psi (= %%i 0))", D);
-                        for (int q = 0; q < np; q++) {
-                            fprintf(m, " (plam %%j");
-                            for (int p = 0; p < np; p++) fprintf(m, " (let %s (@ %%z%d (/\\ %%i %%j))", pn[p], p);
-                            for (int p = 0; p < k; p++) { fputs(" (let ", m); PN(x->fn[p]); fprintf(m, " (@ %%t%d (/\\ %%i %%j))", p); }
-                            fputc(' ', m); PN(A->it[q + 1]);
-                            for (int p = 0; p < np + k; p++) fputc(')', m);
-                            fputc(')', m);
-                        }
+                        for (int q = 0; q < np; q++) fprintf(m, " (plam %%j (@ %%z%d (/\\ %%i %%j)))", q);
                         fputc(' ', m); PN(x->fn[k]); fputc(')', m);
                     } else {
                         fprintf(m, "(comp (plam %%j");
@@ -4696,7 +4543,7 @@ static void toplevel_in(Node *f) {
         for (int ci = 0; ci < nc; ci++) { free(cs[ci].fn); free(cs[ci].ft); free(cs[ci].dn); free(cs[ci].bf); free(cs[ci].be); }
         free(cs); free(pn);
     } else if (!strcmp(h, "run")) {
-        /* (run e): e a Step W A (lib/languages/world.cub), walked by the driver loop (src/drivers.c; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26) */
+        /* (run e): e a Step W A (lib/world.cub), walked by the driver loop (src/drivers.c; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26) */
         if (f->n != 2) die("(run step)", NULL);
         if (read_only) { printf("run: not performed (--read)\n"); return; }
         drivers_run(f->it[1]);
@@ -4801,7 +4648,7 @@ static JT *jt_app(Node *h, Node **args, int na, const char **pn, JT **pv, int np
         for (int i = 0; P[i].n; i++) if (!strcmp(h->s, P[i].n)) { JT *t = jt_new(JT_PRIM); t->pt = P[i].pt; return t; }
     }
     if (!strcmp(h->s, "Bytes") || !strcmp(h->s, "%bytesty")) return jt_new(JT_BYTES);
-    /* a Nat crosses as the count of its successors, a word (lib/capacities/x86.cub's encoding) */
+    /* a Nat crosses as the count of its successors, a word (lib/x86.cub's encoding) */
     if (na == 0 && !strcmp(h->s, "Nat") && data_lookup("Nat") >= 0) { JT *t = jt_new(JT_NAT); t->d = data_lookup("Nat"); return t; }
     int d = data_lookup(h->s);
     if (d < 0 || DATA[d].nparams != na || DATA[d].co) return jt_new(JT_NO);

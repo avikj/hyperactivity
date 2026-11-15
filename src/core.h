@@ -1,4 +1,3 @@
-/* Layer: core: the machine implementing the primitive language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 /* core.h — the cubical interaction net.
  *
  * A term is a net of cells. Every cell has one principal port (port 0).
@@ -150,9 +149,6 @@ enum {
                  * run, an unbuilt value (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.16 “A8 — Proposal: formal transported compositions”): a reader runs it (defer_build), a duplicator holds it once, a
                  * substitution waits on a reference to it. Made where a rule would otherwise build one
                  * operation per branch of a system (distribute, a composition over a system of families) */
-    V_ITY,      /* the interval as a type (a pretype: a Π's domain or codomain, never a fibrant type's part) */
-    V_PART,     /* p=Dnf r (neither 0 nor 1... 0 allowed); 1=A: the type of partial elements of A on (r = 1).
-                 * Partial 1 A is A itself: O_MKPART and substitution give A where r becomes 1 */
     V_END,
     /* operations: negative principal port; the last port is the result */
     O_APP,      /* 0=f 1=arg 2=out */
@@ -198,7 +194,7 @@ enum {
     O_CASE,     /* p=CaseTab, x=has motive; 0=scrutinee [1=motive] environment, out. Meeting a
                  * constructor it builds the selected branch's body: one interaction */
     /* the values as data, for terms about terms (the checker): */
-    O_VIEW,     /* 0=value 1=out: the value's head as a View constructor (lib/core/code.cub), its parts the
+    O_VIEW,     /* 0=value 1=out: the value's head as a View constructor (lib/code.cub), its parts the
                  * value's own ports */
     O_MKVAR,    /* a=count; 0=level (Num) 1=type 2=out: the variable at that level */
     O_MKDIM,    /* a=count; 0=level (Num) 1=out: the dimension at that level */
@@ -223,8 +219,6 @@ enum {
     O_GSTEPS,   /* (%gsteps n): the steps checked definition n took to check (word; 0 unknown) */
     O_GCODE,    /* (%gcode n): some (the code of checked definition n as written, globals kept as cglob), or none */
     O_DNIDX,    /* (%dnidx d): the number of index parameters (the last ones) of checked data type d (word) */
-    O_DIHT,     /* (%diht d): checked data type d's generated %iht-d, global index + 1, or 0 (word) */
-    O_DIHN,     /* (%dihn d): its %ihn-d likewise */
     O_GUSAGE, O_GUSAGE2,   /* (%gusage n k): the computed usage (word) of parameter k of checked definition n; 2 when unknown */
     O_PTY,      /* (%pty k): the primitive type of kind k (a word): 0=k 1=out */
     O_BYTESTY,  /* (%bytesty n): the type Bytes n: 0=n 1=out */
@@ -276,10 +270,6 @@ enum {
                  * fields forced in turn through O_DEEPC, anything else delivered as it is */
     O_DEEPC,    /* a=the constructor, p=DeepAcc (the fields' values so far); 0=the next field's value,
                  * 1..=the fields after it (unforced), last=out */
-    O_MKPART,   /* 0=r 1=A 2=out: Partial r A (A itself where r is 1) */
-    O_MKFRESH,  /* 0=name (or the trigger) 1=type 2=out: a fresh variable of the type, a fresh dimension
-                 * where the type is the interval (%varI [n] T) */
-    O_FRESHT,   /* a=name+1 or 0; 0=the type 1=out */
     K_END
 };
 enum { B_MEET, B_JOIN, B_FAND, B_FOR };
@@ -360,11 +350,7 @@ typedef struct { char *name; int data, index, nfields, ndims; long bdy, trans; i
  * rdim[k] dimensions deep, or under Π codomains and Σ components), nrec of them. rsh[k]: the shape of a
  * recursive field's type as a string, prefix form: D the data type, P<s> a path line into s, F<s> a function
  * into s, 1<s> a pair whose first component is s, 2<s> whose second is, B<s><t> both (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.17 “E28a — Induction hypotheses for path-typed recursive fields” and §18.18 “E28b — Strict positivity under Π codomains and Σ components”) */
-typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; void *decl; int co, nflds; int *flds; int nidx; long iht, ihn, ihng; } DataInfo;
-/* iht, ihn: for a container L (one parameter, no indices, its fields the parameter, L at it, or not
- * mentioning it), the generated checked definitions %iht-L and %ihn-L, global index + 1 (0: none):
- * the type and the value of a nested field's induction hypothesis (checked definitions' indices);
- * ihng: %ihn-L's global index + 1, which the machine applies */
+typedef struct { char *name; int nparams, ncons; int *cons; long comp, transh; void *decl; int co, nflds; int *flds; int nidx; } DataInfo;
 /* nidx: the last nidx parameters are indices (fording; PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”): a constructor's recursive field may give them freely */
 /* decl: the (data ...) form. co: a codata type (no constructors): its fields flds (indices into FLD);
  * comp its composition, a copattern definition */
@@ -384,7 +370,6 @@ enum { PO_I64ADD, PO_I64SUB, PO_I64MUL, PO_I64EQ, PO_I64LT, PO_U32ADD, PO_U32SUB
        PO_U64OFW, PO_WOFU64, PO_N };   /* fty: λ params x. the field's type at x */
 extern FldInfo *FLD;
 extern ConInfo *CON;
-const char *data_first_con(int d);
 extern DataInfo *DATA;
 extern long case_hcomp_global;
 /* an elimination's branches: one record per constructor, parameters its fields, [the induction
@@ -437,9 +422,7 @@ enum {
     S_THUNK,    /* rec: a subterm held unbuilt (V_THUNK), its environment k[0..n-1] */
     S_CALL,     /* id: the definition; k: its arguments */
     S_PROJ,     /* id: the field; k[0]: the value */
-    S_REC,      /* id: the codata type; k: the fields */
-    S_ITY,      /* the interval as a type */
-    S_PART      /* k[0]=r k[1]=A: the type of partial elements */
+    S_REC       /* id: the codata type; k: the fields */
 };
 struct Record;
 typedef struct Syn {

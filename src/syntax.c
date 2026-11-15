@@ -1,4 +1,3 @@
-/* Layer: core: the machine implementing the primitive language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 #include <setjmp.h>
 #include <sys/stat.h>
 /* syntax.c — the surface language: tokens, layout, parsing into the core forms, and printing the
@@ -38,8 +37,6 @@ static void x_die(int line, int col, const char *m, const char *x) {
     x_unreadable = !x_sem_now; x_sem_now = false;
     /* under --serve, the request ends and the machine stays (the parse error as `file:line:col:`) */
     if (die_jb) { char p[600]; snprintf(p, sizeof p, "%s:%d:%d: %s", x_file ? x_file : "?", line, col, m); die(p, x); }
-    /* what was printed before (each checked definition's line) comes first, also when both go to one place */
-    fflush(stdout);
     fprintf(stderr, "%s:%d:%d: %s%s%s\n", x_file ? x_file : "?", line, col, m, x ? " " : "", x ? x : "");
     exit(1);
 }
@@ -212,11 +209,10 @@ static bool x_untyped_file;       /* converting a file that was loaded before th
 /* What may exist outside the type system. Two fixed lists; neither is extended to admit new code.
  * RAW: the files the checker is built from, loaded before it exists; only they may hold a
  * definition without a checked signature. TRUSTED: the files that declare the type theory's own
- * rules (lib/core/primitives.cub), the machine's word operations (lib/bootstrap/prim.cub, misplaced in
- * the core); only they may hold primitive, foreign or postulate.
+ * rules and the machine's word operations; only they may hold primitive, foreign or postulate.
  * Everything else is checked at a stated type or is refused. */
-static const char *const BOOT_RAW[] = { "core/prelude", "core/code", "bootstrap/lin", "core/check", NULL };
-static const char *const BOOT_TRUSTED[] = { "bootstrap/prim", "core/primitives", NULL };
+static const char *const BOOT_RAW[] = { "prelude", "code", "match", "nav", "cost", "lin", "check", NULL };
+static const char *const BOOT_TRUSTED[] = { "prim", "std", NULL };
 static bool boot_in(const char *const *names) {
     if (!x_file) return false;
     size_t l = strlen(x_file);
@@ -255,11 +251,6 @@ typedef struct { const char *name; Node *type; } GVar;
 static GVar *GVAR; static int ngvar; static size_t capgvar;
 static void want(const char *s) { if (!at(s)) { char m[64]; snprintf(m, sizeof m, "expected %s, found", s); x_err(m, P0()); } NX(); }
 static void wantk(int k, const char *what) { if (P0()->k != k) { char m[64]; snprintf(m, sizeof m, "expected %s, found", what); x_err(m, P0()); } NX(); }
-/* the delimiter closing the one opened at o: missing, the error names where it was opened */
-static void want_close(Tok *o, int k, const char *what) {
-    if (P0()->k != k) { char m[128]; snprintf(m, sizeof m, "expected %s (closing the one opened at %d:%d), found", what, o->line, o->col); x_err(m, P0()); }
-    NX();
-}
 static const char *RESERVED[] = { "=", ":", "→", "λ", "↦", "|", "of", "where", "let", "in", "if", "then", "else", "case", "return",
     "data", "codata", "record", "mutual", "postulate", "import", "infix", "infixl", "infixr", "by", "calc", "∀", "decreasing", "using", "▸", "primitive", ":0", ":1", "instance", "module", "open", "deriving", "foreign", "variable", NULL };
 static bool reserved(const char *s) { for (int i = 0; RESERVED[i]; i++) if (!strcmp(RESERVED[i], s)) return true; return false; }
@@ -505,7 +496,7 @@ static Node *p_atom(void) {
     if (t->k == X_NUM) { NX(); return sym2("%num", nsym(t->s)); }
     if (x_is(t, "document") && P1()->k == X_STR) {
         /* document "path" (2026-11-13): a file of the repository as an object of the code, so a
-         * declaration can refer to a document (lib/usage/document.cub; the task graph's essential context,
+         * declaration can refer to a document (lib/document.cub; the task graph's essential context,
          * “The Hyperactive Workflow” (docs/to-be-incorporated-into-paper.md)). The path is relative to the file being read, as import's is. The
          * file must exist: reading fails here otherwise, as a reference to an undefined name would. The
          * term is document-at "path from the repository root" "sha256 of the file's bytes, in hex", so a definition mentioning a
@@ -563,7 +554,7 @@ static Node *p_atom(void) {
     }
     if (t->k == X_LB) return p_system();
     if (t->k == X_LP) {
-        if (group_has_eq()) { NX(); Node *f = p_face(); want_close(t, X_RP, ")"); return f; }
+        if (group_has_eq()) { NX(); Node *f = p_face(); wantk(X_RP, ")"); return f; }
         NX();
         if (P0()->k == X_RP) { NX(); return nsym("%absurd"); }
         /* an operator section name: (_+_) or (+) */
@@ -572,16 +563,16 @@ static Node *p_atom(void) {
         if (P0()->k == X_COMMA) {
             Node *xs[256]; int n = 0; xs[n++] = e;
             while (P0()->k == X_COMMA) { NX(); if (n == 256) x_err("tuple too long", P0()); xs[n++] = p_expr(0); }
-            want_close(t, X_RP, ")");
+            wantk(X_RP, ")");
             Node *r = xs[n - 1];
             for (int i = n - 2; i >= 0; i--) r = sym3("pair", xs[i], r);
             return r;
         }
-        want_close(t, X_RP, ")");
+        wantk(X_RP, ")");
         return e;
     }
-    if (t->k == X_LC && P1()->k == X_LC) { NX(); NX(); Node *e = p_expr(0); want_close(t, X_RC, "}"); wantk(X_RC, "}}"); Node *r = sym2("%imp", e); bnd_set_inst(r->it[0]); return r; }   /* an instance argument given: an implicit one, marked, for an instance position */
-    if (t->k == X_LC) { NX(); Node *e = p_expr(0); want_close(t, X_RC, "}"); return sym2("%imp", e); }
+    if (t->k == X_LC && P1()->k == X_LC) { NX(); NX(); Node *e = p_expr(0); wantk(X_RC, "}"); wantk(X_RC, "}}"); Node *r = sym2("%imp", e); bnd_set_inst(r->it[0]); return r; }   /* an instance argument given: an implicit one, marked, for an instance position */
+    if (t->k == X_LC) { NX(); Node *e = p_expr(0); wantk(X_RC, "}"); return sym2("%imp", e); }
     if (t->k == X_ID && !reserved(t->s) && rec_of(t->s) && P1()->k == X_LC && !(P2()->k == X_LC)) {
         /* R { f = a ; g = b }: a value of the record, its fields by name, in any order, each once;
          * R { r | f = v }: r with the fields given replaced (the others projected from r) */
@@ -1362,10 +1353,8 @@ static void p_decl(void) {
     if (setjmp(jb)) {
         die_jb = outer;
         if (x_unreadable) {
-            /* the load ends: the reason last, on stderr and on stdout too when that is another file
-             * (an unbalanced parenthesis was a silent exit to a reader of stdout, or one buried
-             * mid-line in a merged stream: task-graph/hyperactivity.cub, 2026-11-14) */
-            die(die_msg, NULL);
+            if (outer) die(die_msg, NULL);
+            fprintf(stderr, "%s\n", die_msg); exit(1);
         }
         decl_reset();
         toplevel_depth = depth0; x_collecting = coll; pending_instance = inst; cur_mod = mod; x_fail_next = false;
@@ -1393,14 +1382,14 @@ static void p_decl_in(void) {
     if (x_is(t, "instance")) { NX(); pending_instance = true; x_fail_next = fail; p_decl(); pending_instance = false; return; }   /* the next definition is an instance (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”) */
     if (x_is(t, "deriving")) {
         /* deriving eq D [as name]: a decidable equality on the data type D, its code derived by
-         * lib/library/derive.cub (derive-eq) over the data table, checked and defined at D → D → Bool as
+         * lib/derive.cub (derive-eq) over the data table, checked and defined at D → D → Bool as
          * name (D·eq by default) (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F31) */
         NX(); Tok *what = NX(); Tok *dn = NX();
         if (!x_is(what, "eq") && !x_is(what, "Eq")) x_sem("deriving eq D is what can be derived; found", what);
         if (dn->k != X_ID || data_lookup(dn->s) < 0) x_sem("deriving: not a data type:", dn);
         const char *nm = NULL;
         if (x_is(P0(), "as")) { NX(); nm = NX()->s; }
-        if (global_lookup("derive-eq") < 0) x_sem("deriving needs lib/library/derive.cub loaded, for", dn);
+        if (global_lookup("derive-eq") < 0) x_sem("deriving needs lib/derive.cub loaded, for", dn);
         int di = -1; for (int i = 0; i < nchkdata; i++) if (CHKDATA[i] == data_lookup(dn->s)) di = i;
         if (di < 0) x_sem("deriving: the data type is not checked:", dn);
         long steps = 0;
@@ -1485,16 +1474,7 @@ static void p_decl_in(void) {
     if (x_is(t, "data")) {
         data_annot = NULL;
         Node *d = p_data();
-        if (x_typed) {
-            /* a declared universe (data D ps : … → Type l) is the type's level, a function of the
-             * parameters; the fields are checked to fit under it (lib/core/check.cub, chk-data) */
-            Node *lv = NULL;
-            if (data_annot) { Node *T = core(data_annot); if (T->list && T->n == 2 && is(T->it[0], "U")) lv = T->it[1]; else if (!T->list && is(T, "U")) lv = nsym("lzero"); }
-            /* a level written as a number (Type 1): lsuc applied that many times to lzero */
-            if (lv && !lv->list && lv->s[0] >= '0' && lv->s[0] <= '9') { long k = atol(lv->s); Node *z = nsym("lzero"); for (long q = 0; q < k && q < 64; q++) z = sym2("lsuc", z); lv = z; }
-            x_top(lv ? lst(3, nsym(fail ? "checked-data-fail" : "checked-data"), d, lv) : sym2(fail ? "checked-data-fail" : "checked-data", d));
-            if (!fail) data_level_check();
-        }
+        if (x_typed) { x_top(sym2(fail ? "checked-data-fail" : "checked-data", d)); if (!fail) data_level_check(); }
         else x_top(d);
         decl_end(); return;
     }
@@ -1576,7 +1556,7 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "world") && P1()->k == X_STR) {
-        /* world "name" [: World S St] = handler (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27): a named world, lib/library/proc.cub's Named S St — the
+        /* world "name" [: World S St] = handler (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D27): a named world, lib/proc.cub's Named S St — the
          * checked definitions world-name : Named S St = (id , handler) and world-name-id : Word = id,
          * id the name's FNV-1a hash (a registry is a list of them; find-world picks one by id). The
          * type is the handler's signature when the handler is a name, else the annotation */
@@ -1646,7 +1626,7 @@ static void p_decl_in(void) {
         decl_end(); return;
     }
     if (x_is(t, "#build-loop")) {
-        /* #build-loop init step copy copy-id "file" (lib/capacities/elf.cub build-loop-plan): a process that
+        /* #build-loop init step copy copy-id "file" (lib/elf.cub build-loop-plan): a process that
          * runs forever from a state, as a standalone ELF whose memory is bounded: init : St,
          * step : St → Step W St, copy : St → St, copy-id : (s : St) → copy s ≡ s; St first-order
          * with no byte strings. Nothing is written unless the types are these, each specialized
@@ -1661,7 +1641,7 @@ static void p_decl_in(void) {
             Node *b = nlist(5); b->it[0] = nsym("build"); for (int i = 0; i < 4; i++) b->it[i + 1] = nsym(fn[i]->s);
             ud_form(b); printf("build-loop %s: not performed (--read)\n", fn[0]->s); decl_end(); return;
         }
-        if (checked_index("build-loop-plan") < 0) x_sem("#build-loop: refused: the compiler it calls (build-loop-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/capacities/elf.cub loaded, for", fn[0]);
+        if (checked_index("build-loop-plan") < 0) x_sem("#build-loop: refused: the compiler it calls (build-loop-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn[0]);
         if (!checked_type_plain(ck[0])) { failures++; printf("FAIL: build-loop %s: its type is not first-order data without byte strings\n", fn[0]->s); decl_end(); return; }
         long steps = 0;
         Node *call = nlist(5); call->it[0] = nsyml("%%build-loop-plan"); for (int i = 0; i < 4; i++) call->it[i + 1] = wordn(ck[i]);
@@ -1693,14 +1673,14 @@ static void p_decl_in(void) {
     }
     if (x_is(t, "#build")) {
         /* #build s "file" (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §4.4 “What Phase 1 still builds”, item 5 “Processes and standalone binaries: `#build main`”): s : Step W A, a process as a tree of steps, written as a
-         * standalone static ELF64 executable (lib/capacities/elf.cub build-plan): the specialized code is checked
+         * standalone static ELF64 executable (lib/elf.cub build-plan): the specialized code is checked
          * by the checker's conversion against s, then encoded with the driver loop as machine code.
          * Nothing is written unless the program compiles and the check holds */
         NX(); Tok *fn = NX(); if (fn->k != X_ID) x_err("#build names a checked definition, found", fn);
         int ck = checked_index(fn->s); if (ck < 0) x_sem("#build: not a checked definition:", fn);
         Tok *pt = NX(); if (pt->k != X_STR) x_err("#build: the file to write, a string, expected after", fn);
         if (read_only) { ud_form(lst(2, nsym("build"), nsym(fn->s))); printf("build %s: not performed (--read)\n", fn->s); decl_end(); return; }   /* read, not performed */
-        if (checked_index("build-plan") < 0) x_sem("#build: refused: the compiler it calls (build-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/capacities/elf.cub loaded, for", fn);
+        if (checked_index("build-plan") < 0) x_sem("#build: refused: the compiler it calls (build-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/elf.cub loaded, for", fn);
         long steps = 0;
         char *r = readback(nl2("%%build-plan", wordn(ck)), &steps);
         const char *saved = src; src = r; Node *rn = read_node(); src = saved;
@@ -1730,7 +1710,7 @@ static void p_decl_in(void) {
     }
     if (x_is(t, "#jit")) {
         /* #jit f [using t1 t2 …] (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.4 “The reader, and why the path is by construction” and §5.5 “Bytes, the boundary, and what is trusted”): f compiled to x86-64 and bound to the bytes. The
-         * library computes the plan (lib/capacities/x86.cub jit-plan): the specialized code (rewritten along the
+         * library computes the plan (lib/x86.cub jit-plan): the specialized code (rewritten along the
          * theorems given, each rewrite carrying its path), the checker's conversion of f with the code's
          * meaning, and the bytes. With theorems the path is checked by the checker as the definition
          * f·jit : f ≡ code. f is bound only when the program compiles and the check holds; on closed
@@ -1746,7 +1726,7 @@ static void p_decl_in(void) {
                 if (nth < 64) ths[nth++] = tk;
             }
         }
-        if (checked_index("jit-plan") < 0) x_sem("#jit: refused: the compiler it calls (jit-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/capacities/x86.cub loaded, for", fn);
+        if (checked_index("jit-plan") < 0) x_sem("#jit: refused: the compiler it calls (jit-plan) is not a checked definition; it is called only at the type that states the bytes compute what the code computes; was: needs lib/x86.cub loaded, for", fn);
         for (int attempt = 0; attempt < 2; attempt++) {
             int nt = attempt ? 0 : nth;
             Node *rl = nsym("lnil"); for (int i = nt - 1; i >= 0; i--) rl = lst(3, nsym("lcons"), wordn(ths[i]), rl);
@@ -2919,7 +2899,7 @@ static void convert_file(const char *path, bool check) {
 }
 
 /* ---------------- codes read back as core terms ----------------
- * A code (lib/core/code.cub) as printed: de Bruijn variables over the binders entered, checked
+ * A code (lib/code.cub) as printed: de Bruijn variables over the binders entered, checked
  * definitions and data types by index, a free variable by its source name. NULL: no term (a
  * variable without a name, made by the checker inside the solution). */
 static const char **cn_names; static int ncn, capcn; static int cn_fresh;
@@ -2979,7 +2959,7 @@ static Node *cn(Node *c) {
         return r;
     }
     if (!strcmp(h, "cpty") && c->n == 3) {
-        /* a primitive type: lib/bootstrap/prim.cub's name for it (Bytes at its size) where loaded */
+        /* a primitive type: lib/prim.cub's name for it (Bytes at its size) where loaded */
         long k = cn_word(c->it[1]);
         static const char *TN[] = { "Int64", "UInt32", "Float64", "Float32", "Bytes", "UInt64" };
         if (k < 0 || k > 5) return NULL;
@@ -2988,7 +2968,7 @@ static Node *cn(Node *c) {
     }
     if (!strcmp(h, "cprim") && c->n == 3) {
         /* a primitive operation (the encoding of lang.c's to_code): the arithmetic and conversion
-         * operations read back as lib/bootstrap/prim.cub's checked primitives of the same arguments; the
+         * operations read back as lib/prim.cub's checked primitives of the same arguments; the
          * byte operations take proofs at the checked level and have no reading here */
         static const char *PN[] = { "i64add", "i64sub", "i64mul", "i64eq", "i64lt", "u32add", "u32sub", "u32mul", "u32eq", "u32lt", "f64add", "f64sub", "f64mul", "f64div", "f64eq", "f64lt",
             "u64add", "u64sub", "u64mul", "u64eq", "u64lt", "u64div", "u64mod", "u64and", "u64or", "u64xor", "u64shl", "u64shr",
@@ -3459,31 +3439,9 @@ static bool dim_use(Node *t, const char *x) {
     for (int i = 0; i < t->n; i++) if (dim_use(t->it[i], x)) return true;
     return false;
 }
-static Node *sig_of(const char *name);
-/* a type that is the interval */
-static bool is_ity(Node *T) { return T && !T->list && !strcmp(T->s, "I"); }
 static bool iv_certain(Node *a) {
-    if (!a->list) {
-        if (!strcmp(a->s, "0") || !strcmp(a->s, "1")) return true;
-        Sc *s = e_find(a->s);
-        if (s) return s->dim || is_ity(s->ty);
-        /* a constant of type I */
-        return is_ity(sig_of(a->s));
-    }
-    if (a->n >= 1 && !a->it[0]->list && (is(a->it[0], "~") || is(a->it[0], "/\\") || is(a->it[0], "\\/"))) return true;
-    /* a call returning an interval: a global applied to as many explicit arguments as its type has */
-    if (a->n >= 2 && !a->it[0]->list && !e_find(a->it[0]->s)) {
-        Node *T = sig_of(a->it[0]->s);
-        int nexp = 0;
-        for (int k = 1; k < a->n; k++) if (!(a->it[k]->list && a->it[k]->n == 2 && is(a->it[k]->it[0], "%imp"))) nexp++;
-        while (T) {
-            if (T->list && T->n == 2 && is(T->it[0], "%impPi")) { T = T->it[1]; if (T->list && T->n == 4) T = T->it[3]; else break; continue; }
-            if (T->list && T->n == 4 && is(T->it[0], "Pi")) { if (nexp == 0) return false; nexp--; T = T->it[3]; continue; }
-            break;
-        }
-        return nexp == 0 && is_ity(T);
-    }
-    return false;
+    if (!a->list) { if (!strcmp(a->s, "0") || !strcmp(a->s, "1")) return true; Sc *s = e_find(a->s); return s && s->dim; }
+    return a->n >= 1 && !a->it[0]->list && (is(a->it[0], "~") || is(a->it[0], "/\\") || is(a->it[0], "\\/"));
 }
 static bool lit01(Node *a) { return a->list && a->n == 2 && is(a->it[0], "%num") && (is(a->it[1], "0") || is(a->it[1], "1")); }
 static Node *el(Node *t);
@@ -3956,8 +3914,8 @@ static Node *el_alts(Node *t, int from) {
 }
 /* ---- by-lin (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F32; §12 “The build list”, “F. Programs about programs”, item 32): the elaborator calling the certificate search on a hole. The goal
  * `Lew a b` and the hypotheses `h : Lew l r` in scope are read as linear codes over their atoms
- * (plusw, %wsucc, word literals; any other subterm an atom), lib/bootstrap/lin.cub's omega-cert finds the
- * multipliers at elaboration time (untrusted), and the hole becomes lib/library/linproof.cub's
+ * (plusw, %wsucc, word literals; any other subterm an atom), lib/lin.cub's omega-cert finds the
+ * multipliers at elaboration time (untrusted), and the hole becomes lib/linproof.cub's
  * cert-sound at the environment of the atoms — the verified checker's run, `cert-check … ≡ true`,
  * is refl, decided by the checker's own normalization. */
 static Node *LATOM[64]; static int nlatom;
@@ -3979,7 +3937,7 @@ static Node *lin_code(Node *t, bool typed) {
 }
 /* the word core: goal ga ≤ gb from hypotheses hl ≤ hr with proofs hp */
 static Node *lin_core(Node *ex, Node *at, Node *ga, Node *gb, Node **hl, Node **hr, Node **hp, int nh) {
-    if (global_lookup("cert-sound") < 0 || global_lookup("omega-cert") < 0) die("by-lin needs lib/bootstrap/lin.cub and lib/library/linproof.cub loaded, in", tfname);
+    if (global_lookup("cert-sound") < 0 || global_lookup("omega-cert") < 0) die("by-lin needs lib/lin.cub and lib/linproof.cub loaded, in", tfname);
     nlatom = 0;
     Node *hs = nsym("lnil");
     for (int z = nh - 1; z >= 0; z--) hs = lst(2, lst(2, nsym("lcons"), sym3("pair", lin_code(hl[z], false), lin_code(hr[z], false))), hs);
@@ -4037,7 +3995,7 @@ static void z_walk(Node *t) {
     ZT[nzt++] = t;
 }
 static Node *by_lin_int(Node *ex, Node *at, Node *ga, Node *gb) {
-    if (global_lookup("toZ2-fromZ2-rel") < 0 || global_lookup("eq-le") < 0 || global_lookup("toZ2-neg-fst2") < 0) die("by-lin over Int needs lib/library/intproof.cub loaded, in", tfname);
+    if (global_lookup("toZ2-fromZ2-rel") < 0 || global_lookup("eq-le") < 0 || global_lookup("toZ2-neg-fst2") < 0) die("by-lin over Int needs lib/intproof.cub loaded, in", tfname);
     const char *hn[64]; Node *ul[64], *ur[64]; int nu = lin_hyps("leZ", hn, ul, ur, 64);
     Node *hl[256], *hr[256], *hp[256]; int nh = 0;
     for (int z = 0; z < nu; z++) { hl[nh] = lst(3, nsym("plusw"), zc(ul[z], 1), zc(ur[z], 2)); hr[nh] = lst(3, nsym("plusw"), zc(ur[z], 1), zc(ul[z], 2)); hp[nh++] = nsym(hn[z]); }
@@ -4074,7 +4032,7 @@ static Node *by_lin(Node *ex, Node *at) {
 }
 /* `declarations T` (2026-11-12): every checked definition in scope whose type is T (equal
  * canonical forms), in the order declared, as the list cons d1 (cons d2 … nil) : List T. The work
- * read as a value of the language: a view of it is a term over such lists (lib/usage/task-graph.cub). */
+ * read as a value of the language: a view of it is a term over such lists (lib/task-graph.cub). */
 static Node *el_declarations(Node *Ts) {
     Node *T = ds(strip_marks(core(el(Ts))));
     SBuf a = { 0 }; cur_deps.n = 0; canon(&a, T); cur_deps.n = 0;
@@ -4299,15 +4257,8 @@ static Node *expand(Node *e) {
  * value below (Below v: for each recursive field r, the value at r and Below r). A variable below
  * the split has its pair (value, Below) as an expression; a split of it reverts the pair, so that
  * in its branches the pair's Below unfolds to the pairs of its own recursive fields */
-typedef struct { const char *w; Node *e; const char *v; int gp; Node *E; Node *M; Node *Bl; bool direct; } Deep;   /* direct: e is the value's hypothesis itself (an element of a nested field), not a pair */
+typedef struct { const char *w; Node *e; const char *v; int gp; Node *E; Node *M; Node *Bl; } Deep;
 static Deep *deeps; static int ndeeps, capdeeps;
-/* nested inductive types (2026-11-15): a field of type L D (L a container) or a container field
- * below one, with its hypothesis e (the tuple of its elements' hypotheses, typed by %iht-L), A the
- * element type, and the frame it belongs to (v, gp, E, M: the split whose motive the elements'
- * hypotheses are at). A split of it reverts e; an element bound there is a direct Deep */
-typedef struct { const char *w; Node *e; int L; Node *A; const char *v; int gp; Node *E; Node *M; } Nest;
-static Nest *nests; static int nnests, capnests;
-static Nest *nest_var(const char *w) { for (int i = nnests - 1; i >= 0; i--) if (!strcmp(nests[i].w, w)) return &nests[i]; return NULL; }
 static bool cov_on, cov_armed; static jmp_buf cov_jb;
 /* guarded recursion: a definition with a clock parameter (the first, guard_q) whose recursion is not
  * structural is a guarded fixed point: each call is (%gcall the arguments after the clock), made a
@@ -4379,7 +4330,7 @@ static Node *ih_type(Node *T, Node *x, const char *w, Node *Mb, const char *dnam
     if (hd->list || strcmp(hd->s, dname)) return NULL;
     return subst_sym(Mb, w, x);
 }
-static Deep *deep_of(const char *w) { for (int i = ndeeps - 1; i >= 0; i--) if (!strcmp(deeps[i].w, w) && !deeps[i].direct) return &deeps[i]; return NULL; }
+static Deep *deep_of(const char *w) { for (int i = ndeeps - 1; i >= 0; i--) if (!strcmp(deeps[i].w, w)) return &deeps[i]; return NULL; }
 static Node *rec_xform(Node *e);
 /* the hypothesis of a recursive call at the later parameters it varies over; an explicit one the
  * call does not give (the call partially applied) is a λ around it: the call's value is the
@@ -4441,7 +4392,7 @@ static Node *rec_call(Node *e, Node **args, int n) {
         Node *cand = expand(subst_sym(d->E, d->v, nsym(d->w)));
         if (!node_eq(cand, want)) continue;
         int nl = 0; for (int q = p + 1; q < tsig.np; q++) if (tsig.rev[q]) nl++;
-        Node *call = d->direct ? d->e : sym2("fst", d->e);
+        Node *call = sym2("fst", d->e);
         if (!nl) return call;
         return rec_hyp_apply(call, at, p, nl);
     }
@@ -4761,7 +4712,6 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     /* a split of a parameter of a recursive type, when recursion goes deeper than a field: with the
      * values below. A split of a variable below such a split: its pair reverted */
     Deep *dv = deep_of(v);
-    Nest *nst = dv ? NULL : nest_var(v);
     bool cov = false;
     if (cov_on && !dv && !strcmp(tsig.pn[gp]->s, v)) {
         bool rec = false, paths = false;
@@ -4808,7 +4758,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             int c = DATA[d].cons[ci], nf = CON[c].nfields;
             Node *pat = nlist(nf + 1); pat->it[0] = nsym(CON[c].name);
             Node *rf[64]; int nrf = 0;
-            for (int q = 0; q < nf; q++) { pat->it[q + 1] = xfresh("f"); if (CON[c].recmask >> q & 1 && !(CON[c].rsh[q] && CON[c].rsh[q][0] == 'N') && nrf < 64) rf[nrf++] = pat->it[q + 1]; }
+            for (int q = 0; q < nf; q++) { pat->it[q + 1] = xfresh("f"); if (CON[c].recmask >> q & 1 && nrf < 64) rf[nrf++] = pat->it[q + 1]; }
             Node *prod = nrf ? NULL : nsym("Unit");
             for (int k = nrf - 1; k >= 0; k--) {
                 Node *Mr = subst_sym(Mv, v, rf[k]);
@@ -4832,13 +4782,6 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             Node *Mv = subst_sym(dv->M->it[2], vv, vn), *Bv = subst_sym(dv->Bl->it[2], vv, vn);
             ihv = xfresh("ih");
             mot = sym4("Pi", ihv, sym4("Sigma", xfresh("_"), Mv, Bv), mot);
-        }
-        if (nst) {
-            /* the nested field's hypothesis reverted: (%iht-L l A P v), P the frame's motive */
-            ihv = xfresh("ih");
-            char nm[300]; snprintf(nm, sizeof nm, "%%iht-%s", DATA[nst->L].name);
-            Node *T = nlist(5); T->it[0] = nsym(nm); T->it[1] = nsym("%hole"); T->it[2] = nst->A; T->it[3] = nst->M; T->it[4] = nsym(v);
-            mot = sym4("Pi", ihv, T, mot);
         }
         for (int q = nd - 1; q >= 0; q--) if (mentions_name(mot, cdefs[dep[q]].v)) mot = sym4("let", nsym(cdefs[dep[q]].v), typed_def(&cdefs[dep[q]]), mot);
         mot = sym3("%lam", nsym(v), mot);
@@ -4946,27 +4889,13 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         for (int q = 0; q < nd; q++) { GROW(cdefs, capcdefs, (size_t)ncdefs + 1); cdefs[ncdefs++] = cdefs[dep[q]]; }
         for (int q = 0; q < nf; q++) { GROW(cdefs, capcdefs, (size_t)ncdefs + 1); cdefs[ncdefs++] = (CVar){ fv[q]->s, NULL, gp, q < CON[c].nfields ? fty[q] : NULL }; }
         /* the recursive fields' hypotheses */
-        int save_deeps = ndeeps, save_nests = nnests;
-        if (nst) {
-            /* a split of a nested field: its elements' hypotheses the reverted tuple's components,
-             * its container fields nested again */
-            int j = 0;
-            for (int q = 0; q < CON[c].nfields; q++) {
-                int k = nest_field(d, ci, q);
-                if (!k) continue;
-                Node *e = ihv; for (int z = 0; z < j; z++) e = sym2("snd", e);
-                e = sym2("fst", e);
-                if (k == 1) { Deep dd = { fv[q]->s, e, nst->v, nst->gp, nst->E, nst->M, NULL, true }; GROW(deeps, capdeeps, (size_t)ndeeps + 1); deeps[ndeeps++] = dd; }
-                else { Nest ne = { fv[q]->s, e, nst->L, nst->A, nst->v, nst->gp, nst->E, nst->M }; GROW(nests, capnests, (size_t)nnests + 1); nests[nnests++] = ne; }
-                j++;
-            }
-        }
+        int save_deeps = ndeeps;
         Node *tuple = NULL;
         if (cov || dv) {
             /* each recursive field's pair: the hypothesis (a split with the values below), or from
              * the reverted pair's Below */
             Node *rfs[64]; int nrf = 0;
-            for (int q = 0; q < CON[c].nfields; q++) if (CON[c].recmask >> q & 1 && !(CON[c].rsh[q] && CON[c].rsh[q][0] == 'N') && nrf < 64) rfs[nrf++] = fv[q];   /* a nested field's values below are its elements': not a pair here */
+            for (int q = 0; q < CON[c].nfields; q++) if (CON[c].recmask >> q & 1 && nrf < 64) rfs[nrf++] = fv[q];
             for (int k = 0; k < nrf; k++) {
                 Node *e;
                 if (cov) e = sym2("rec", rfs[k]);
@@ -4986,12 +4915,6 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
             Frame fr = { v, gp, E, calloc((size_t)nf + 1, sizeof(Node *)), 0, calloc((size_t)nf + 1, sizeof(char *)), motx == mot ? mot : NULL };
             for (int q = 0; q < CON[c].nfields; q++) if (CON[c].recmask >> q & 1) { fr.rs[fr.nrf] = CON[c].rsh[q]; fr.rf[fr.nrf++] = fv[q]; }
             GROW(frames, capframes, (size_t)nframes + 1); frames[nframes++] = fr;
-            /* a nested field (shape N): its hypothesis, for a split of it */
-            if (fr.M) for (int q = 0; q < CON[c].nfields; q++)
-                if (CON[c].recmask >> q & 1 && CON[c].rsh[q] && CON[c].rsh[q][0] == 'N' && fty[q] && fty[q]->list && fty[q]->n == 2) {
-                    Nest ne = { fv[q]->s, rec_of_field(fv[q]), atoi(CON[c].rsh[q] + 1), fty[q]->it[1], v, gp, E, fr.M };
-                    GROW(nests, capnests, (size_t)nnests + 1); nests[nnests++] = ne;
-                }
         }
         /* the goal rewritten by a variable index: below the split the index is the constructor's */
         Ford *fdr0 = ixlam ? ford_of(CON[c].name) : NULL;
@@ -5105,7 +5028,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
                 body = ap;
             }
         }
-        nframes = save_frames; ndeeps = save_deeps; nnests = save_nests;
+        nframes = save_frames; ndeeps = save_deeps;
         /* the field entries are scoping only */
         ncdefs = save_defs;
         body = later_lam(gp, body);
@@ -5119,11 +5042,6 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         if (dv) {
             const char *vv = dv->v;
             Node *T = sym4("Sigma", xfresh("_"), subst_sym(dv->M->it[2], vv, cv), subst_sym(dv->Bl->it[2], vv, cv));
-            body = lam_t(ihv, T, body);
-        }
-        if (nst) {
-            char nm[300]; snprintf(nm, sizeof nm, "%%iht-%s", DATA[nst->L].name);
-            Node *T = nlist(5); T->it[0] = nsym(nm); T->it[1] = nsym("%hole"); T->it[2] = nst->A; T->it[3] = nst->M; T->it[4] = cv;
             body = lam_t(ihv, T, body);
         }
         /* the goal rewritten by the index equations (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.12 “E28 — Elaboration”; as Agda's unification at the split): when
@@ -5165,7 +5083,7 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         alts[na++] = lst(2, pat, body);
     }
     /* a motive not depending on v: a case */
-    bool dep_mot = mentions_name(mot->it[2], v) || cov || dv || nst;
+    bool dep_mot = mentions_name(mot->it[2], v) || cov || dv;
     for (int q = gp + 1; q < tsig.np; q++) if (tsig.rev[q]) dep_mot = true;   /* applied to the reverted: inferred, so with its motive */
     if (motx != mot) dep_mot = true;
     if (srn) dep_mot = true;
@@ -5174,7 +5092,6 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
     for (int i = 0; i < na; i++) el_->it[k0++] = alts[i];
     if (cov) el_ = sym2("fst", el_);
     if (dv) el_ = lst(2, el_, dv->e);
-    if (nst) el_ = lst(2, el_, nst->e);
     if (srn) {
         int ni = 0; for (int k = 0; k < srn; k++) if (srih[k]) ni++;
         Node *ap = nlist(srn + ni + 1); int k1 = 0; ap->it[k1++] = el_;
@@ -5758,7 +5675,7 @@ static Node *wf_calls(Node *e, Node *M, Node *L, Node *k, Node *h) {
     return r;
 }
 static Node *clauses_wf(const char *f, Lhs *ls, Node **rhs, int n, Node *m, Node *L) {
-    if (global_lookup("<-step") < 0 || global_lookup("_<_") < 0) die("decreasing by needs the order of lib/library/std.cub (_<_, <-step, <-suc-self), for", f);
+    if (global_lookup("<-step") < 0 || global_lookup("_<_") < 0) die("decreasing by needs the order of lib/std.cub (_<_, <-step, <-suc-self), for", f);
     int np0 = tsig.np; Node *orig[256];
     for (int q = 0; q < np0 && q < 256; q++) orig[q] = tsig.pn[q];
     Node **rs2 = calloc((size_t)n + 1, sizeof(Node *));

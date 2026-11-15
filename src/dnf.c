@@ -1,4 +1,3 @@
-/* Layer: core: the machine implementing the primitive language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 /* dnf.c — the interval (free De Morgan algebra) and the face lattice.
  *
  * Both are joins of clauses (meets of literals), kept as an antichain.

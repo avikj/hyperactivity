@@ -1,4 +1,3 @@
-/* Layer: core: the machine implementing the primitive language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 /* store.c — codebase keys and the store (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”). Included by lang.c before toplevel.
  *
  * A checked definition's key is the SHA-256 of the canonical form of its type and its term:
@@ -282,24 +281,12 @@ static char *store_read(const char *key, const char *file) {
     char *b = malloc((size_t)n + 1); size_t got = fread(b, 1, (size_t)n, f); b[got] = 0; fclose(f);
     return b;
 }
-/* an entry is written whole to a temporary file beside it and renamed over it (an append writes the
- * old text and the new), so a machine killed mid-write leaves the old entry or none, never a truncated
- * one (the Known facts in the task graph) */
 static void store_write(const char *key, const char *file, const char *text, bool append) {
     char *p = store_path(key, file); if (!p) return;
     char *dir = store_path(key, "");
     mkdir(store_dir(), 0777); mkdir(dir, 0777); free(dir);
-    char *old = append ? store_read(key, file) : NULL;
-    size_t n = strlen(p) + 48; char *tmp = malloc(n);
-    static long seq = 0;   /* unique per process by the stack address (ASLR), per write by seq */
-    snprintf(tmp, n, "%s.tmp.%lx.%ld", p, (long)(size_t)&n, ++seq);
-    FILE *f = fopen(tmp, "w");
-    if (!f) { free(old); free(tmp); free(p); return; }
-    bool ok = (!old || fputs(old, f) >= 0) && fputs(text, f) >= 0;
-    ok = (fflush(f) == 0) && ok;
-    ok = (fclose(f) == 0) && ok;
-    if (!(ok && rename(tmp, p) == 0)) remove(tmp);
-    free(old); free(tmp); free(p);
+    FILE *f = fopen(p, append ? "a" : "w"); free(p); if (!f) return;
+    fputs(text, f); fclose(f);
 }
 /* a `check` line by the current checker */
 static bool store_checked(const char *key) {
@@ -399,7 +386,7 @@ static void store_put(const char *name, const char *key, const char *code, const
 }
 
 /* A data type's key includes its declared name: two declarations of one content (List in
- * lib/core/prelude.cub, Lst in lib/core/code.cub) are two types to the checker (data types are generative), so
+ * lib/prelude.cub, Lst in lib/code.cub) are two types to the checker (data types are generative), so
  * they are two keys, as Unison's unique types carry a salt (2026-11-12). */
 /* ---- keys of the kinds of entry ---- */
 /* a checked definition: its type and term; the canonical forms are returned for the store */
@@ -408,7 +395,7 @@ static void key_def(Node *T, Node *t, char out[65], char **code, char **type) {
     /* generated names numbered by first occurrence (kfresh_on): a definition whose elaborated form
      * binds a generated name in a pattern (calc chains, clauses) otherwise had a different key in
      * every run whose earlier elaborations differed, and its certificate never hit (2026-11-12,
-     * lib/examples/obs.cub's o-run-comp, 0.6M steps rechecked on every warm run) */
+     * lib/obs.cub's o-run-comp, 0.6M steps rechecked on every warm run) */
     kfresh_on = true; nkfresh = 0;
     SBuf b = { 0 }; canon(&b, T); char *ty = b.b;
     SBuf c = { 0 }; if (t) canon(&c, t); char *cd = c.b ? c.b : strdup("");
@@ -426,25 +413,16 @@ static void key_named(const char *kind, const char *name, Node *T, char out[65],
     key_hash(w.b, w.n, out); free(w.b); kfresh_on = false;
     if (type) *type = ty; else free(ty);
 }
-static Node *decl_level;   /* the declared universe's level of the data type being keyed, or NULL */
 static void key_decl(Node *dd, char out[65], char **code) {
     cur_deps.n = 0;
     kfresh_on = true; nkfresh = 0;   /* as key_def: generated names by first occurrence */
     SBuf b = { 0 }; canon_decl(&b, dd);
     /* a data type is generative: two declarations of one content are two types to the checker (List
-     * and Lst in lib/core/prelude.cub and lib/core/code.cub), so the name it is declared under is part of its
+     * and Lst in lib/prelude.cub and lib/code.cub), so the name it is declared under is part of its
      * identity, as Unison's unique types carry a salt (2026-11-12; without it the store conflated
      * them and a form read back named the wrong one) */
     Node *hd = dd->it[1]; const char *dn = hd->list ? hd->it[0]->s : hd->s;
     SBuf w = { 0 }; sb_put(&w, "data "); sb_put(&w, dn); sb_put(&w, "\n"); sb_put(&w, b.b); sb_put(&w, "\n");
-    /* a declared universe (decl_level, set by the caller) is part of the type: its level over the
-     * parameters, in the key only (the canonical code is the declaration as written without it) */
-    if (decl_level) {
-        int base = nkscope;
-        if (hd->list) for (int k = 1; k < hd->n; k++) { Node *p = hd->it[k]; kpush(p->list && p->n == 2 ? p->it[0]->s : p->list ? "" : p->s); }
-        SBuf a = { 0 }; canon(&a, decl_level); nkscope = base;
-        sb_put(&w, "level "); sb_put(&w, a.b); sb_put(&w, "\n"); free(a.b);
-    }
     key_hash(w.b, w.n, out); free(w.b); kfresh_on = false;
     if (code) *code = b.b; else free(b.b);
 }

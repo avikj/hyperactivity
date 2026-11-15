@@ -1,0 +1,153 @@
+-- lib/mem/layout.cub — object types and record layouts as data, and the addressing of the parts
+-- of an object: pure offset arithmetic (the accesses themselves are lib/mem/monad.cub's
+-- commands).
+--
+-- A type is a scalar (a kind with its alignment, or a C type whose kind and alignment the
+-- Target gives), an array of a type, or a record named by an id. Records are named, not nested:
+-- a layout table (LayEnv) holds each record's layout: size, alignment, whether it is a union,
+-- its fields (a name id, an offset, a type), its base-class subobjects (a record id at an
+-- offset) and where its vtable pointer is, if it has one. A layout is data: a reader takes it
+-- from the compiler that fixed it (Clang's record layouts for C++), or computes it by the C
+-- rule below (lay-struct, lay-union) from the member types and the Target.
+--
+-- Binding time (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §5 “The distinctions everything above x86 rests on”, item 4 “One compiler for terms (Futamura)”): types, layouts and names are program data. Every function here is
+-- a case on them, so at a fixed program an access is a pointer addition by a literal and a
+-- load or store command at a literal size.
+import "memory.cub"
+data MTy = ty-sk (k : SK) (al : Word) | ty-c (c : CTy) | ty-arr (e : MTy) (n : Word) | ty-rec (id : Word)
+record Field = { fd-name : Word ; fd-off : Word ; fd-ty : MTy }
+record Base = { bs-id : Word ; bs-off : Word }
+record Layout = { ly-id : Word ; ly-size : Word ; ly-align : Word ; ly-union : Bool
+                ; ly-fields : List Field ; ly-bases : List Base
+                ; ly-has-vptr : Bool ; ly-vptr : Word }
+LayEnv : Type
+LayEnv = List Layout
+-- a record id the table does not hold, a field name the record does not have: a reader's error
+lay-find : LayEnv → Word → MRes Layout
+lay-find nil i = mstop st-ill-typed
+lay-find (cons l ls) i = case weq (ly-id l) i of
+  true → mok l
+  false → lay-find ls i
+fld-find : List Field → Word → MRes Field
+fld-find nil x = mstop st-ill-typed
+fld-find (cons f fs) x = case weq (fd-name f) x of
+  true → mok f
+  false → fld-find fs x
+base-find : List Base → Word → MRes Base
+base-find nil i = mstop st-ill-typed
+base-find (cons b bs) i = case weq (bs-id b) i of
+  true → mok b
+  false → base-find bs i
+
+-- ---------------------------------------------------------------- size and alignment of a type
+ty-size : Target → LayEnv → MTy → MRes Word
+ty-size t env (ty-sk k al) = mok (sk-size t k)
+ty-size t env (ty-c c) = (case weq (ct-size t c) #0 of
+  true → mstop st-unsupported
+  false → mok (ct-size t c))
+ty-size t env (ty-arr e n) = mr-map (λ s → wmul s n) (ty-size t env e)
+ty-size t env (ty-rec i) = mr-map ly-size (lay-find env i)
+ty-align : Target → LayEnv → MTy → MRes Word
+ty-align t env (ty-sk k al) = mok al
+ty-align t env (ty-c c) = mok (ct-align t c)
+ty-align t env (ty-arr e n) = ty-align t env e
+ty-align t env (ty-rec i) = mr-map ly-align (lay-find env i)
+-- the scalar kind and alignment of a scalar type; an array or a record has none
+ty-scalar : Target → MTy → MRes (SK × Word)
+ty-scalar t ty = case ty of
+  ty-sk k al → mok (k , al)
+  ty-c c → mr-map (λ k → (k , ct-align t c)) (ct-sk t c)
+  ty-arr e n → mstop st-ill-typed
+  ty-rec i → mstop st-ill-typed
+
+-- ---------------------------------------------------------------- computing a layout (the C rule)
+-- members in order, each at the next multiple of its alignment: the fields, the end, the
+-- greatest alignment so far
+lay-go : List (Word × MTy) → Target → LayEnv → Word → Word → MRes (List Field × (Word × Word))
+lay-go nil t env cur al = mok (nil , (cur , al))
+lay-go (cons m ms) t env cur al =
+  mr-bind (ty-size t env (snd m)) (λ sz →
+  mr-bind (ty-align t env (snd m)) (λ a →
+  mr-map (λ r → (cons (Field { fd-name = fst m ; fd-off = w-roundup cur a ; fd-ty = snd m }) (fst r) , snd r))
+         (lay-go ms t env (wadd (w-roundup cur a) sz) (wmax al a))))
+-- a struct: the size is the end rounded up to the alignment, and at least min (0 for C as GNU
+-- has it, 1 for a C++ class)
+lay-struct : Target → LayEnv → Word → Word → List (Word × MTy) → MRes Layout
+lay-struct t env id min ms =
+  mr-map (λ r → Layout { ly-id = id ; ly-size = wmax min (w-roundup (fst (snd r)) (snd (snd r)))
+                       ; ly-align = snd (snd r) ; ly-union = false ; ly-fields = fst r
+                       ; ly-bases = nil ; ly-has-vptr = false ; ly-vptr = #0 })
+         (lay-go ms t env #0 #1)
+-- a union: every member at 0, the size the greatest size rounded up to the greatest alignment
+lay-ugo : List (Word × MTy) → Target → LayEnv → Word → Word → MRes (List Field × (Word × Word))
+lay-ugo nil t env sz al = mok (nil , (sz , al))
+lay-ugo (cons m ms) t env sz al =
+  mr-bind (ty-size t env (snd m)) (λ s →
+  mr-bind (ty-align t env (snd m)) (λ a →
+  mr-map (λ r → (cons (Field { fd-name = fst m ; fd-off = #0 ; fd-ty = snd m }) (fst r) , snd r))
+         (lay-ugo ms t env (wmax sz s) (wmax al a))))
+lay-union : Target → LayEnv → Word → Word → List (Word × MTy) → MRes Layout
+lay-union t env id min ms =
+  mr-map (λ r → Layout { ly-id = id ; ly-size = wmax min (w-roundup (fst (snd r)) (snd (snd r)))
+                       ; ly-align = snd (snd r) ; ly-union = true ; ly-fields = fst r
+                       ; ly-bases = nil ; ly-has-vptr = false ; ly-vptr = #0 })
+         (lay-ugo ms t env #0 #1)
+
+-- ---------------------------------------------------------------- a layout given as data is well formed
+-- every field is at a multiple of its type's alignment and ends inside the record; the record's
+-- alignment is a multiple of each field's; every base subobject likewise; the vtable pointer
+-- fits; and in a struct no two fields share a byte (lay-ok-spans: each field's span against
+-- every later one's).
+w-divides : Word → Word → Bool
+w-divides a x = case weq a #0 of
+  true → false
+  false → weq (wrem x a) #0
+lay-ok-fields : List Field → Target → LayEnv → Word → Word → MRes Bool
+lay-ok-fields nil t env size al = mok true
+lay-ok-fields (cons f fs) t env size al =
+  mr-bind (ty-size t env (fd-ty f)) (λ sz →
+  mr-bind (ty-align t env (fd-ty f)) (λ a →
+  mr-map (λ r → m-and r (m-and (w-divides a (fd-off f)) (m-and (w-divides a al) (not (wlt size (wadd (fd-off f) sz))))))
+         (lay-ok-fields fs t env size al)))
+lay-ok-bases : List Base → LayEnv → Word → Word → MRes Bool
+lay-ok-bases nil env size al = mok true
+lay-ok-bases (cons b bs) env size al =
+  mr-bind (lay-find env (bs-id b)) (λ l →
+  mr-map (λ r → m-and r (m-and (w-divides (ly-align l) (bs-off b)) (m-and (w-divides (ly-align l) al) (not (wlt size (wadd (bs-off b) (ly-size l)))))))
+         (lay-ok-bases bs env size al))
+-- the spans [off , end) of the fields
+lay-spans : List Field → Target → LayEnv → MRes (List (Word × Word))
+lay-spans nil t env = mok nil
+lay-spans (cons f fs) t env =
+  mr-bind (ty-size t env (fd-ty f)) (λ sz →
+  mr-map (λ r → cons (fd-off f , wadd (fd-off f) sz) r) (lay-spans fs t env))
+span-clear : List (Word × Word) → Word × Word → Bool
+span-clear nil x = true
+span-clear (cons y ys) x = m-and (m-or (not (wlt (fst x) (snd y))) (not (wlt (fst y) (snd x)))) (span-clear ys x)
+spans-disjoint : List (Word × Word) → Bool
+spans-disjoint nil = true
+spans-disjoint (cons x xs) = m-and (span-clear xs x) (spans-disjoint xs)
+lay-ok : Target → LayEnv → Layout → MRes Bool
+lay-ok t env l =
+  mr-bind (lay-ok-fields (ly-fields l) t env (ly-size l) (ly-align l)) (λ a →
+  mr-bind (lay-spans (ly-fields l) t env) (λ sp →
+  mr-map (λ b → m-and (m-and a b) (m-and (w-divides (ly-align l) (ly-size l))
+                 (m-and (m-or (ly-union l) (spans-disjoint sp))
+                 (m-or (not (ly-has-vptr l))
+                       (m-and (w-divides (tg-align t ck-ptr) (ly-vptr l))
+                              (not (wlt (ly-size l) (wadd (ly-vptr l) (tg-size t ck-ptr)))))))))
+         (lay-ok-bases (ly-bases l) env (ly-size l) (ly-align l))))
+
+-- ---------------------------------------------------------------- addressing: offsets
+-- the member of a record: its byte offset and its type
+fld-off : LayEnv → Word → Word → MRes (Word × MTy)
+fld-off env id name =
+  mr-bind (lay-find env id) (λ l → mr-map (λ f → (fd-off f , fd-ty f)) (fld-find (ly-fields l) name))
+-- the base-class subobject of a record: its byte offset (subtracted, it leads from the base to the record)
+base-off : LayEnv → Word → Word → MRes Word
+base-off env id base = mr-bind (lay-find env id) (λ l → mr-map bs-off (base-find (ly-bases l) base))
+-- where the vtable pointer of a record is
+vptr-off : LayEnv → Word → MRes Word
+vptr-off env id = mr-bind (lay-find env id) (λ l → case ly-has-vptr l of
+  false → mstop st-ill-typed
+  true → mok (ly-vptr l))

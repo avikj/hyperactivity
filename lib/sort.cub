@@ -1,0 +1,328 @@
+-- sort.cub — Remark 9.15 “the declaration”, in §9 “Ordering — what counting discards” of the earlier paper
+-- "Respecting Equality", cited in this repository before 2026-11-11 (docs/index.html of the earlier
+-- repository avikj/math, last changed 8 Oct 2026, sha256 984fafe88eb6…; no copy is in this repository);
+-- Definition 9.6 “merge” and Theorem 9.2 “the fibre is the relabellings” below are that section's too. The repository's copy of the paper
+-- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…) does not contain it. The declaration
+-- Σ[B] (B a rearrangement of X) × Sorted B over a type with a
+-- total order, posed with the identities a finite bag has and normalized: the elimination of X,
+-- whose ∪ branch is merge. A bag is the free commutative monoid on the type (∪ with units,
+-- associativity and commutativity as path constructors); a rearrangement is equality of
+-- multiplicities, counted with the equality the order decides (x = y when x ≤ y and y ≤ x);
+-- Sorted is Definition 9.6 “merge”'s. The elements are only ever arguments of the comparator.
+-- Loaded after lib/std.cub.
+-- ---------------------------------------------------------------- a type with a total order
+TotalOrder : {A : Type} → (A → A → Bool) → Type
+TotalOrder le =
+  ((x : A) → isTrue (le x x)) ×
+  ((x y : A) → le x y ≡ false → isTrue (le y x)) ×
+  ((x y z : A) → isTrue (le x y) → isTrue (le y z) → isTrue (le x z)) ×
+  ((x y : A) → isTrue (le x y) → isTrue (le y x) → x ≡ y)
+Ord : Type 1
+Ord = (A : Type) × (le : A → A → Bool) × TotalOrder le
+mkOrd : {A : Type} {le : A → A → Bool} → TotalOrder le → Ord
+mkOrd t = (A , le , t)
+El : Ord → Type
+El o = fst o
+leq : {o : Ord} → El o → El o → Bool
+leq = fst (snd o)
+ord-refl : {o : Ord} → (x : El o) → isTrue (leq x x)
+ord-refl = fst (snd (snd o))
+ord-total : {o : Ord} {x y : El o} → leq x y ≡ false → isTrue (leq y x)
+ord-total = fst (snd (snd (snd o))) x y
+ord-trans : {o : Ord} {x y z : El o} → isTrue (leq x y) → isTrue (leq y z) → isTrue (leq x z)
+ord-trans = fst (snd (snd (snd (snd o)))) x y z
+ord-antisym : {o : Ord} {x y : El o} → isTrue (leq x y) → isTrue (leq y x) → x ≡ y
+ord-antisym = snd (snd (snd (snd (snd o)))) x y
+-- the equality the order decides
+eqo : {o : Ord} → El o → El o → Bool
+eqo x y = andB (leq x y) (leq y x)
+eqo-sound : {o : Ord} {x y : El o} → isTrue (eqo x y) → x ≡ y
+eqo-sound h =
+  ord-antisym {o} {x} {y} (and-fst {leq x y} {leq y x} h) (and-snd {leq x y} {leq y x} h)
+eqo-refl : {o : Ord} → (x : El o) → isTrue (eqo x x)
+eqo-refl x = and-intro {leq x x} {leq x x} (ord-refl x) (ord-refl x)
+-- ---------------------------------------------------------------- lists: multiplicity, order, merge
+one-if : Bool → Nat
+one-if b = if b then suc zero else zero
+count : {o : Ord} → El o → List (El o) → Nat
+count a l = case l of nil → zero; cons x r → plus (one-if (eqo a x)) (rec r)
+AllLe : {o : Ord} → El o → List (El o) → Type
+AllLe y l = case l of nil → Unit; cons x r → isTrue (leq y x) × rec r
+-- "Respecting Equality" Definition 9.6 “merge”, as above: sortedness is the head below every element of the tail, and the tail sorted
+Sorted : {o : Ord} → List (El o) → Type
+Sorted l = case l of nil → Unit; cons x r → AllLe x r × rec r
+-- merge is sortedness unfolded
+merge : {o : Ord} → List (El o) → List (El o) → List (El o)
+merge xs =
+  case xs return (λ w → List (El o) → List (El o)) of
+    nil → λ ys → ys
+    cons x xs1 → 
+      λ ys →
+        case ys return (λ w → List (El o)) of
+          nil → cons x xs1
+          cons y ys1 → if leq x y then cons x (rec xs1 (cons y ys1)) else cons y (rec ys1)
+merge-count : {o : Ord} →
+              (a : El o) →
+              (xs ys : List (El o)) → count a (merge xs ys) ≡ plus (count a xs) (count a ys)
+merge-count a xs =
+  case xs return (λ w → (ys : List (El o)) → count a (merge w ys) ≡ plus (count a w) (count a ys)) of
+    nil → λ ys i → count a ys
+    cons x xs1 → 
+      λ ys →
+        case ys return (λ w →
+                          count a (merge (cons x xs1) w) ≡ plus (count a (cons x xs1)) (count a w)) of
+          nil → symN (plus-zero (count a (cons x xs1)))
+          cons y ys1 → 
+            case leq x y return (λ bb →
+                                   count a
+                                     (if bb
+                                        then cons x (merge xs1 (cons y ys1))
+                                        else cons y (merge (cons x xs1) ys1)) ≡ plus
+                                                                                  (count a
+                                                                                     (cons x xs1))
+                                                                                  (count a
+                                                                                     (cons y ys1))) of
+              true → 
+                transN (congN (plus (one-if (eqo a x))) (rec xs1 (cons y ys1)))
+                  (symN (plus-assoc (one-if (eqo a x)) (count a xs1) (count a (cons y ys1))))
+              false → 
+                transN (congN (plus (one-if (eqo a y))) (rec ys1))
+                  (plus-comm-mid (one-if (eqo a y)) (count a (cons x xs1)) (count a ys1))
+allle-trans : {o : Ord} {x y : El o} → isTrue (leq x y) → {l : List (El o)} → AllLe y l → AllLe x l
+allle-trans h =
+  case l return (λ w → AllLe y w → AllLe x w) of
+    nil → λ a → unit
+    cons z r → λ a → (ord-trans {o} {x} {y} {z} h (fst a) , rec r (snd a))
+merge-allle : {o : Ord} {z : El o} {xs ys : List (El o)} →
+                                   AllLe z xs → AllLe z ys → AllLe z (merge xs ys)
+merge-allle =
+  (case xs return (λ w → (ys : List (El o)) → AllLe z w → AllLe z ys → AllLe z (merge w ys)) of
+     nil → λ ys a b → b
+     cons x xs1 → 
+       λ ys →
+         case ys return (λ w → AllLe z (cons x xs1) → AllLe z w → AllLe z (merge (cons x xs1) w)) of
+           nil → λ a b → a
+           cons y ys1 → 
+             λ a b →
+               case leq x y return (λ bb →
+                                      AllLe z
+                                        (if bb
+                                           then cons x (merge xs1 (cons y ys1))
+                                           else cons y (merge (cons x xs1) ys1))) of
+                 true → (fst a , rec xs1 (cons y ys1) (snd a) b)
+                 false → (fst b , rec ys1 a (snd b))) ys
+merge-sorted : {o : Ord} {xs ys : List (El o)} → Sorted xs → Sorted ys → Sorted (merge xs ys)
+merge-sorted =
+  (case xs return (λ w → (ys : List (El o)) → Sorted w → Sorted ys → Sorted (merge w ys)) of
+     nil → λ ys sx sy → sy
+     cons x xs1 → 
+       λ ys →
+         case ys return (λ w → Sorted {o} (cons x xs1) → Sorted w → Sorted (merge (cons x xs1) w)) of
+           nil → λ sx sy → sx
+           cons y ys1 → 
+             λ sx sy →
+               ifP
+                 {λ bb →
+                    Sorted {o}
+                      (if bb
+                         then cons x (merge xs1 (cons y ys1))
+                         else cons y (merge (cons x xs1) ys1))} {leq x y}
+                 (λ e →
+                    let hxy = eq→isTrue e
+                    in (merge-allle {o} {x} {xs1} {cons y ys1} (fst sx)
+                          (hxy , allle-trans {o} {x} {y} hxy {ys1} (fst sy))
+                       , rec xs1 (cons y ys1) (snd sx) sy))
+                 (λ e →
+                    let hyx = ord-total e
+                    in (merge-allle {o} {y} {cons x xs1} {ys1}
+                          (hyx , allle-trans {o} {y} {x} hyx {xs1} (fst sx)) (fst sy)
+                       , rec ys1 sx (snd sy)))) ys
+-- ---------------------------------------------------------------- a sorted list is fixed by its multiplicities
+count-head : {o : Ord} → (x : El o) → (l : List (El o)) → count x (cons x l) ≡ suc (count x l)
+count-head x l =
+  cong {_} {_} {_} {Nat} (λ bb → plus (one-if bb) (count x l)) (isTrue→eq {eqo x x} (eqo-refl x))
+-- an element counted in a list bounded below by y is at least y
+allle-count : {o : Ord} {y : El o} {l : List (El o)} →
+                                   AllLe y l →
+                                   {x : El o} {k : Nat} → count x l ≡ suc k → isTrue (leq y x)
+allle-count a =
+  (case l return (λ w → AllLe y w → (x : El o) → (k : Nat) → count x w ≡ suc k → isTrue (leq y x)) of
+     nil → λ a x k c → Empty-rec {_} {isTrue (leq y x)} (snotz (symN c))
+     cons z r → 
+       λ a x k c →
+         ifP {λ bb → plus (one-if bb) (count x r) ≡ suc k → isTrue (leq y x)} {eqo x z}
+           (λ e c2 →
+              subst {_} {_} {_} {λ v → isTrue (leq y v)}
+                (sym (eqo-sound {o} {x} {z} (eq→isTrue e))) (fst a))
+           (λ e c2 → rec r (snd a) x k c2) c) a x k
+sorted-unique : {o : Ord} {xs ys : List (El o)} →
+                          Sorted xs →
+                          Sorted ys →
+                          ((a : El o) → isTrue (eqb (count a xs) (count a ys))) → xs ≡ ys
+sorted-unique =
+  (case xs return (λ w →
+                     (ys : List (El o)) →
+                     Sorted w →
+                     Sorted ys → ((a : El o) → isTrue (eqb (count a w) (count a ys))) → w ≡ ys) of
+     nil → 
+       λ ys →
+         case ys return (λ v →
+                           Sorted {o} nil →
+                           Sorted v →
+                           ((a : El o) → isTrue (eqb (count a nil) (count a v))) → nil ≡ v) of
+           nil → λ sx sy c i → nil
+           cons y q → 
+             λ sx sy c →
+               Empty-rec {_} {Path (List (El o)) nil (cons y q)}
+                 (snotz
+                    (transN (symN (count-head y q))
+                       (symN (eqb-sound {zero} {count y (cons y q)} (c y)))))
+     cons x r → 
+       λ ys →
+         case ys return (λ v →
+                           Sorted {o} (cons x r) →
+                           Sorted v →
+                           ((a : El o) → isTrue (eqb (count a (cons x r)) (count a v))) →
+                           cons x r ≡ v) of
+           nil → 
+             λ sx sy c →
+               Empty-rec {_} {Path (List (El o)) (cons x r) nil}
+                 (snotz
+                    (transN (symN (count-head x r)) (eqb-sound {count x (cons x r)} {zero} (c x))))
+           cons y q → 
+             λ sx sy c →
+               let hx = transN (symN (eqb-sound {count x (cons x r)} {count x (cons y q)} (c x)))
+                          (count-head x r)
+                   hy = transN (eqb-sound {count y (cons x r)} {count y (cons y q)} (c y))
+                          (count-head y q)
+                   yx = allle-count {o} {y} {cons y q} (ord-refl y , fst sy) {x} hx
+                   xy = allle-count {o} {x} {cons x r} (ord-refl x , fst sx) {y} hy
+                   pxy = ord-antisym {o} {x} {y} xy yx
+                   crq = the ((a : El o) → isTrue (eqb (count a r) (count a q)))
+                           (λ a →
+                              eqb-complete
+                                (plus-cancel {one-if (eqo a x)} {count a r} {count a q}
+                                   (transN {_} {_} {plus (one-if (eqo a x)) (count a q)}
+                                      (eqb-sound {count a (cons x r)} {count a (cons y q)} (c a))
+                                      (λ i → plus (one-if (eqo a (pxy (~ i)))) (count a q)))))
+               in λ i → cons (pxy i) (rec r q (snd sx) (snd sy) crq i)) ys
+isProp-AllLe : {o : Ord} → (y : El o) → (l : List (El o)) → isProp (AllLe y l)
+isProp-AllLe y l =
+  case l return (λ w → isProp (AllLe y w)) of
+    nil → isProp-isTrue true
+    cons x r → isProp× (isProp-isTrue (leq y x)) (rec r)
+isProp-Sorted : {o : Ord} → (l : List (El o)) → isProp (Sorted l)
+isProp-Sorted l =
+  case l return (λ w → isProp (Sorted w)) of
+    nil → isProp-isTrue true
+    cons x r → isProp× (isProp-AllLe x r) (rec r)
+-- ---------------------------------------------------------------- finite bags
+-- the free commutative monoid on a type: ∪ with its identities as path constructors
+data Bag (A : Type)
+  = emp
+  | sng (a : A)
+  | un (x : Bag A) (y : Bag A)
+  | unitl (x : Bag A) (i : I) [ i = 0 ↦ un
+                                                                                                             emp
+                                                                                                             x
+                                                                                                 , i = 1 ↦ x ]
+  | unitr (x : Bag
+                                                                                                                              A) (i : I) [ i = 0 ↦ un
+                                                                                                                                                     x
+                                                                                                                                                     emp
+                                                                                                                                         , i = 1 ↦ x ]
+  | assoc (x : Bag
+                                                                                                                                                                      A) (y : Bag
+                                                                                                                                                                                A) (z : Bag
+                                                                                                                                                                                          A) (i : I) [ i = 0 ↦ un
+                                                                                                                                                                                                                 (un
+                                                                                                                                                                                                                    x
+                                                                                                                                                                                                                    y)
+                                                                                                                                                                                                                 z
+                                                                                                                                                                                                     , i = 1 ↦ un
+                                                                                                                                                                                                                 x
+                                                                                                                                                                                                                 (un
+                                                                                                                                                                                                                    y
+                                                                                                                                                                                                                    z) ]
+  | comm (x : Bag
+                                                                                                                                                                                                                                       A) (y : Bag
+                                                                                                                                                                                                                                                 A) (i : I) [ i = 0 ↦ un
+                                                                                                                                                                                                                                                                        x
+                                                                                                                                                                                                                                                                        y
+                                                                                                                                                                                                                                                            , i = 1 ↦ un
+                                                                                                                                                                                                                                                                        y
+                                                                                                                                                                                                                                                                        x ]
+-- multiplicity in a bag respects its identities: the laws of +
+countB : {o : Ord} → El o → Bag (El o) → Nat
+countB a X =
+  case X return (λ w → Nat) of
+    emp → zero
+    sng b → one-if (eqo a b)
+    un x y → plus (rec x) (rec y)
+    unitl x i → rec x
+    unitr x i → plus-zero (rec x) i
+    assoc x y z i → plus-assoc (rec x) (rec y) (rec z) i
+    comm x y i → plus-comm (rec x) (rec y) i
+-- the declaration: a list with X's multiplicities, sorted
+Gs : {o : Ord} → Bag (El o) → List (El o) → Type
+Gs X B = ((a : El o) → isTrue (eqb (count a B) (countB a X))) × Sorted B
+Fs : {o : Ord} → Bag (El o) → Type
+Fs X = (B : List (El o)) × Gs X B
+isPropGs : {o : Ord} → (X : Bag (El o)) → (B : List (El o)) → isProp (Gs X B)
+isPropGs X B =
+  isProp×
+    (isPropPi {El o} {λ a → isTrue (eqb (count a B) (countB a X))}
+       (λ a → isProp-isTrue (eqb (count a B) (countB a X)))) (isProp-Sorted B)
+-- the completion is forced ("Respecting Equality" Theorem 9.2 “the fibre is the relabellings”, as above): the declaration is a proposition
+Fs-prop : {o : Ord} → (X : Bag (El o)) → isProp (Fs X)
+Fs-prop X =
+  λ u v →
+    let pB = sorted-unique {_} {fst u} {fst v} (snd (snd u)) (snd (snd v))
+               (the ((a : El o) → isTrue (eqb (count a (fst u)) (count a (fst v))))
+                  (λ a →
+                     eqb-complete
+                       (transN (eqb-sound {count a (fst u)} {countB a X} (fst (snd u) a))
+                          (symN (eqb-sound {count a (fst v)} {countB a X} (fst (snd v) a))))))
+    in λ i → (pB i , isProp→PathP (λ j → Gs X (pB j)) (isPropGs X (fst v)) (snd u) (snd v) i)
+mempty : (o : Ord) → Fs {o} emp
+mempty o = (nil , λ a → unit , unit)
+msng : {o : Ord} → (b : El o) → Fs {o} (sng b)
+msng b = (cons b nil , λ a → eqb-complete (plus-zero (one-if (eqo a b))) , unit , unit)
+-- ∪ is merge
+munion : {o : Ord} {x y : Bag (El o)} → Fs x → Fs y → Fs {o} (un x y)
+munion hx hy =
+  (merge (fst hx) (fst hy)
+  , λ a →
+      eqb-complete
+        (transN (merge-count a (fst hx) (fst hy))
+           (cong2N plus (eqb-sound {count a (fst hx)} {countB a x} (fst (snd hx) a))
+              (eqb-sound {count a (fst hy)} {countB a y} (fst (snd hy) a))))
+  , merge-sorted {o} {fst hx} {fst hy} (snd (snd hx)) (snd (snd hy)))
+-- posed with the bag's identities: the elimination of X. The path branches are the declaration's
+-- propositionality and the path over it between any two inhabitants (isProp→PathP). Both are
+-- arguments, so checking a branch's boundary reads their types only: as a definition, isProp→PathP
+-- at an endpoint is a transport in Fs computed back to the point
+msort-at : {o : Ord} →
+           ((m : Bag (El o)) → isProp (Fs m)) →
+           ((B0 B1 : Type) → (B : B0 ≡ B1) → isProp B1 → (b0 : B0) → (b1 : B1) → PathP B b0 b1) →
+           (X : Bag (El o)) → Fs X
+msort-at hp pp X =
+  case X return (λ w → Fs w) of
+    emp → mempty o
+    sng b → msng b
+    un x y → munion (rec x) (rec y)
+    unitl x i → 
+      pp (Fs {o} (un emp x)) (Fs x) (λ j → Fs {o} (unitl x j)) (hp x) (munion (mempty o) (rec x))
+        (rec x) i
+    unitr x i → 
+      pp (Fs {o} (un x emp)) (Fs x) (λ j → Fs {o} (unitr x j)) (hp x) (munion (rec x) (mempty o))
+        (rec x) i
+    assoc x y z i → 
+      pp (Fs {o} (un (un x y) z)) (Fs {o} (un x (un y z))) (λ j → Fs {o} (assoc x y z j))
+        (hp (un x (un y z))) (munion (munion (rec x) (rec y)) (rec z))
+        (munion (rec x) (munion (rec y) (rec z))) i
+    comm x y i → 
+      pp (Fs {o} (un x y)) (Fs {o} (un y x)) (λ j → Fs {o} (comm x y j)) (hp (un y x))
+        (munion (rec x) (rec y)) (munion (rec y) (rec x)) i
+msort : {o : Ord} → (X : Bag (El o)) → Fs X
+msort X = msort-at (Fs-prop {o}) (λ x0 x1 → isProp→PathP {lzero} {x0} {x1}) X

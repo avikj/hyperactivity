@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""The fixed machine-code routines of lib/capacities/x86.cub and lib/capacities/elf.cub, from their sources here.
+"""The fixed machine-code routines of lib/x86.cub and lib/elf.cub, from their sources here.
 
   python3 tools/asm/gen.py            prints, for each routine, its length and its bytes as the
                                       .cub literal (a balanced tree of lapp over xb4/xb3/xb2/xb1)
   python3 tools/asm/gen.py --patch    rewrites the literals in place:
-                                      i-driver-loop, i-driver-round and i-start in lib/capacities/elf.cub
+                                      i-driver-loop, i-driver-round and i-start in lib/elf.cub
 
-driver.s  the driver loop of a #build binary (lib/capacities/elf.cub i-driver-loop): one case per command
-          of WCmd (lib/languages/world.cub), by constructor index
-start.s   the ELF entry (lib/capacities/elf.cub i-start)
-apply.s   the closure apply routine (lib/capacities/x86.cub i-apply; its literal there ends with the
+driver.s  the driver loop of a #build binary (lib/elf.cub i-driver-loop): one case per command
+          of WCmd (lib/world.cub), by constructor index
+start.s   the ELF entry (lib/elf.cub i-start)
+apply.s   the closure apply routine (lib/x86.cub i-apply; its literal there ends with the
           overflow exit appended by the encoder, so it is not patched automatically)
 Needs binutils (as, objcopy). The routines are trusted with the encoder until the template
 lemmas of the plan (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §6 “Phases 2–8: everything that will be built”, “Phase 2 — The ISA model, and the encoder leaves the trusted base”).
@@ -39,6 +39,6 @@ if __name__ == '__main__':
             s, n = re.subn(r'^%s = .*$' % re.escape(key), lambda m: '%s = %s' % (key, lit(R[name])), s, flags=re.M)
             assert n == 1, key
         open(p, 'w').write(s)
-        print('patched lib/capacities/elf.cub:', {k: len(v) for k, v in R.items()})
+        print('patched lib/elf.cub:', {k: len(v) for k, v in R.items()})
     else:
         for k, v in R.items(): print(k, len(v)); print(lit(v))

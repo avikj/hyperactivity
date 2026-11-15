@@ -1,0 +1,163 @@
+-- lib/specialize.cub — the specializer on codes (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.2 “What compilation is here” and §5.4 “The reader, and why the path is by construction”). Loaded after lib/codes.cub.
+--
+-- specialize Tc sched rules c: the code c (closed, at the type whose code is Tc) is normalized by
+-- the machine (evaluated, then quoted at the type), with the schedule's held definitions kept as
+-- variables, and rewritten along the rules until none applies (bounded). Every rewrite is along a
+-- theorem of the store (lib/rules.cub) and carries its justifying path: the result is (c' , π)
+-- with π the code of a path from c's value to c''s — refl when no rule applied — which the checker
+-- checks (the #jit directive). Normalization itself contributes refl: a code's value and its
+-- normal form's are convertible (the quote/eval law). The specializer is never proved correct: a
+-- wrong rewrite produces a path that does not check.
+normalize : Code → Code → Code
+normalize Tc c = opt-or (code-norm-at Tc c) c
+-- ---------------------------------------------------------------- held definitions (Sched's holds)
+-- each global g replaced by f g d's code where it gives one
+glob-at : (Word → Word → Opt Code) → Code → Word → Opt Code
+glob-at f (cglob g) e = f g e
+glob-at f p e = none
+glob-map : (Word → Word → Opt Code) → Word → Code → Code
+glob-map f d c = code-map (λ p e → glob-at f p e) d c
+-- the variables free in c (at or above d, under d binders) mapped by f n d
+var-at : (Word → Word → Code) → Code → Word → Opt Code
+var-at f (cvar n) e = if %wlt n e then some (cvar n) else some (f n e)
+var-at f p e = none
+var-map-c : (Word → Word → Code) → Word → Code → Code
+var-map-c f d c = code-map (λ p e → var-at f p e) d c
+-- the held definitions h_0 … h_{k-1} the code names become the variables of k λs around it (h_j
+-- under d binders of the code: index d + k − 1 − j); the λs are typed by the definitions' types,
+-- so the machine normalizes under them with each h_j a neutral variable; the λs are then stripped
+-- and each variable is h_j's global again
+-- the Π over the held definitions' types (closed codes) ending at the type
+pis-c : Lst Code → Code → Code
+pis-c lnil Tc = Tc
+pis-c (lcons A r) Tc = cpi #2 A (pis-c r Tc)
+lam-k : Word → Code → Code
+lam-k k b = w-iter k (λ x → clam x) b
+strip-k : Word → Code → Code
+strip-k k (clam b) = if %weq k #0 then clam b else strip-k (%wsub k #1) b
+strip-k k b = b
+unhold-var : Lst Word → Word → Word → Word → Code
+unhold-var ks k n d =
+  if %wlt (%wsub n d) k
+    then opt-or (opt-map (λ g → cglob g) (l-nth ks (%wsub (%wsub k #1) (%wsub n d)))) (cvar n)
+    else cvar (%wsub n k)
+-- a held normal form with its λs stripped and each variable its global again
+unhold-k : Lst Word → Code → Code
+unhold-k ks n = var-map-c (unhold-var ks (l-count ks)) #0 (strip-k (l-count ks) n)
+normalize-abs : Lst Word → Lst Code → Code → Code → Code
+normalize-abs ks Ts Tc c = opt-or (opt-map (unhold-k ks) (code-norm-at (pis-c Ts Tc) (lam-k (l-count ks) c))) c
+-- h_j's variable under d binders
+hold-var : Lst Word → Word → Word → Word → Opt Code
+hold-var ks k g d = opt-map (λ j → cvar (%wadd d (%wsub (%wsub k #1) j))) (w-index g ks #0)
+normalize-held : Lst Word → Code → Code → Code
+normalize-held hs Tc c =
+  let gs = code-globals c
+      ks = l-filter (λ g → w-mem g gs) hs
+  in if l-isnil ks then normalize Tc c else normalize-abs ks (l-map (λ g → opt-or (def-type-code g) cword) ks) Tc (glob-map (hold-var ks (l-count ks)) #0 c)
+-- ---------------------------------------------------------------- rewriting
+-- under the terminating discipline (lib/match.cub): the oriented rules to the fixpoint, which
+-- terminates by the size of the term (here bounded by fuel); the unoriented ones (commutativity
+-- shapes) at most n times, the schedule's bound; after each unoriented step the oriented rules run
+-- to their fixpoint again. Each step's path is composed onto the path so far (none: refl so far).
+-- Tc is the code of the type the path is at (the line of the composition)
+-- the path so far p (none: refl) from s, the code the whole path starts at, to m, followed by the
+-- step q from m to c', as the code of concat (lib/std.cub):
+-- λ i → comp (λ j → T) [ i = 0 ↦ s , i = 1 ↦ q @ j ] (p @ i). Each path is annotated with its
+-- type, PathP (λ _ → T) at its endpoints, so its application is inferable (a step is a path
+-- abstraction, which checks but does not infer). Under the outer binder i the codes shift by
+-- one, under j by two
+path-at : Code → Code → Code → Code
+path-at Tc a b = cpathp (cplam (code-shift #0 #1 Tc)) a b
+compose-p : Code → Code → Code → Code → Opt Code → Code → Opt Code
+compose-p Tc s m c' none q = some q
+compose-p Tc s m c' (some p1) q =
+  some (cplam (ccomp (cplam (code-shift #0 #2 Tc))
+                     (cplam (csysc (ceq0 (cvar #1)) (code-shift #0 #2 s)
+                                   (csysc (ceq1 (cvar #1)) (cpapp (code-shift #0 #2 (cann q (path-at Tc m c'))) (cvar #0)) csys0)))
+                     (cpapp (code-shift #0 #1 (cann p1 (path-at Tc s m))) (cvar #0))))
+first-applicable-p : Lst Rule → Code → Opt (Code × Code)
+first-applicable-p lnil c = none
+first-applicable-p (lcons r rest) c =
+  case rule-rewrite r c return (λ _ → Opt (Code × Code)) of
+    some q → some q
+    none → first-applicable-p rest c
+rewrite-fix-p : Nat → Code → Code → Lst Rule → Code → Opt Code → Code × Opt Code
+rewrite-fix-p zero Tc s rules c p = (c , p)
+rewrite-fix-p (suc k) Tc s rules c p =
+  case first-applicable-p rules c return (λ _ → Code × Opt Code) of
+    none → (c , p)
+    some q → rewrite-fix-p k Tc s rules (fst q) (compose-p Tc s c (fst q) p (snd q))
+rewrite-bounded : Word → Code → Code → Lst Rule → Lst Rule → Code → Opt Code → Code × Opt Code
+rewrite-bounded n Tc s ors rules c p =
+  w-iter n (λ cp → case first-applicable-p rules (fst cp) return (λ _ → Code × Opt Code) of
+                     none → cp
+                     some q → rewrite-fix-p c-fuel Tc s ors (fst q) (compose-p Tc s (fst cp) (fst q) (snd cp) (snd q)))
+    (c , p)
+rewrite-all : Word → Code → Lst Rule → Code → Code × Opt Code
+rewrite-all n Tc rules c =
+  let o = rules-orient rules
+      f = rewrite-fix-p c-fuel Tc c (fst o) c none
+  in rewrite-bounded n Tc c (fst o) (snd o) (fst f) (snd f)
+-- the path's code as a term's code: refl where none
+path-code : Opt Code → Code → Code
+path-code (some q) c = q
+path-code none c = cplam (code-shift #0 #1 c)
+-- ---------------------------------------------------------------- schedules as values (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.7 “Schedules”)
+-- what the specializer may do is a value: how many rewrites; the binding-time assignment
+-- (stages: (binder index , Stage) pairs); the definitions held neutral (holds).
+-- Normalization unfolds every definition it reaches except the held ones: the code is abstracted
+-- over them and normalized under the λs, so a held definition is a variable to the machine and its
+-- call stays a call (normalize-held)
+sched-rewrites : Sched → Word
+sched-rewrites (sched r st hd) = r
+sched-stages : Sched → Lst (Word × Stage)
+sched-stages (sched r st hd) = st
+sched-holds : Sched → Lst Word
+sched-holds (sched r st hd) = hd
+sched-default : Sched
+sched-default = sched #64 lnil lnil
+-- the specializer: (c' , π), π the path's code from c's value to c''s at the type Tc names
+specialize : Code → Sched → Lst Rule → Code → Code × Code
+specialize Tc sch rules c =
+  let c0 = normalize-held (sched-holds sch) Tc c
+      r = rewrite-all (sched-rewrites sch) Tc rules c0
+  in (fst r , path-code (snd r) c0)
+-- step 1, the now variables substituted from the environment: the code's leading binders whose
+-- stage in the schedule is st-now take the environment's codes in order (env a list of codes); the
+-- residual is the result normalized at the type left after them and rewritten. Now binders may
+-- stand after run-time ones: the code is applied under λs for the run-time binders before the
+-- last now binder, each run-time binder its λ's variable, each now binder the next environment
+-- code (shifted under those λs); normalization does the β
+now-stage-of : Word → Lst (Word × Stage) → Stage
+now-stage-of i lnil = st-run
+now-stage-of i (lcons p r) = if %weq (fst p) i then snd p else now-stage-of i r
+is-now : Stage → Bool
+is-now st-now = true
+is-now _ = false
+lam-chain : Code → Word
+lam-chain (clam b) = %wsucc (lam-chain b)
+lam-chain c = #0
+-- the last now binder before n (one past its index), 0 when none
+last-now : Lst (Word × Stage) → Word → Word
+last-now st n = w-fold-up n (λ j a → if is-now (now-stage-of j st) then %wsucc j else a) #0
+-- the run-time binders before m
+count-runs : Lst (Word × Stage) → Word → Word
+count-runs st m = w-fold-up m (λ j a → if is-now (now-stage-of j st) then a else %wsucc a) #0
+-- binder j applied: a now binder takes the next environment code, a run-time one its λ's variable
+-- (state: the application so far, the codes left, the run-time binders passed)
+now-step : Lst (Word × Stage) → Word → Word → Code × (Lst Code × Word) → Code × (Lst Code × Word)
+now-step st r j acc =
+  if is-now (now-stage-of j st)
+    then (case fst (snd acc) return (λ _ → Code × (Lst Code × Word)) of
+            lnil → acc
+            lcons v vs → (capp (fst acc) (code-shift #0 r v) , (vs , snd (snd acc))))
+    else (capp (fst acc) (cvar (%wsub (%wsub r #1) (snd (snd acc)))) , (fst (snd acc) , %wsucc (snd (snd acc))))
+wrap-lams : Word → Code → Code
+wrap-lams r b = w-iter r (λ x → clam x) b
+apply-now : Lst (Word × Stage) → Code → Lst Code → Code
+apply-now st c env =
+  let m = last-now st (lam-chain c)
+      r = count-runs st m
+  in wrap-lams r (fst (w-fold-up m (now-step st r) (code-shift #0 r c , (env , #0))))
+residual : Sched → Code → Lst Rule → Code → Lst Code → Code × Code
+residual sch Tc rules c env = specialize Tc sch rules (apply-now (sched-stages sch) c env)

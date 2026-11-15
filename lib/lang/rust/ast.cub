@@ -1,0 +1,193 @@
+-- lib/lang/rust/ast.cub — Rust's MIR as data (track R, archive/2026-11-11/R-rust.md).
+--
+-- A crate read by tools/mir2cub.py is one value of RCrate. The types are plain first-order
+-- data so a reader recurses structurally. Constructors are prefixed r. A type that contains
+-- lists of itself (RTy, RConst) carries its own list constructors, since `List D` inside
+-- `data D` is not strictly positive for the checker; every other list is the library's List.
+--
+-- Conventions
+--   ids        Word. Bodies, ADTs, traits and statics are numbered separately from 0, and an id
+--              is the position in the crate's list of that kind.
+--   names      RName, the bytes of the UTF-8 text, one Word per byte.
+--   integers   RInt, the integer itself as sign and magnitude (the shape of lib/cxx/ast.cub's
+--              CInt), beside its type where it has one: -3_i64 is rc-int (rint-neg #3) ri-i64.
+--              A switch arm's value is the integer at the scrutinee's type (rustc prints the
+--              unsigned bits: 255 for -1 on an i8). 128-bit integer types stop the import.
+--   generics   the MIR rustc prints is before monomorphization. A body lists its generic
+--              parameters; inside it a parameter is rty-param / rty-const-param by position.
+--              A call carries the callee's generic arguments, an ADT type carries its own, and
+--              RCrate.instances lists every (body, arguments) reachable from the entry with
+--              closed arguments. Lifetimes are erased.
+--   layouts    are of closed types only (RLayoutEntry), from the compiler's debug information.
+
+RName : Type
+RName = List Word
+
+data RInt = rint-pos (n : Word) | rint-neg (n : Word)
+
+data RMut = rmut-not | rmut-mut
+
+data RIntTy
+  = ri-i8 | ri-i16 | ri-i32 | ri-i64 | ri-isize
+  | ri-u8 | ri-u16 | ri-u32 | ri-u64 | ri-usize
+
+-- Types, generic arguments and lists of them.
+data RTy
+  = rty-bool
+  | rty-int (k : RIntTy)
+  | rty-never
+  | rty-ref (m : RMut) (t : RTy)
+  | rty-ptr (m : RMut) (t : RTy)
+  | rty-array (t : RTy) (len : RTy)        -- len is rty-const or rty-const-param
+  | rty-slice (t : RTy)
+  | rty-tuple (ts : RTy)                   -- ts a list; the unit type is rty-tuple rtys-nil
+  | rty-adt (adt : Word) (args : RTy)      -- args a list of types and constants
+  | rty-dyn (trait : Word)
+  | rty-fn-ptr (params : RTy) (ret : RTy)
+  | rty-param (i : Word)                   -- a type parameter of the enclosing body
+  | rty-const (v : Word)                   -- a constant generic argument or array length (usize)
+  | rty-const-param (i : Word)             -- a constant parameter of the enclosing body
+  | rtys-nil
+  | rtys-cons (t : RTy) (ts : RTy)
+
+-- Projections of a place, applied left to right from the local.
+data RProj
+  = rproj-deref
+  | rproj-field (i : Word) (ty : RTy)
+  | rproj-index (local : Word)
+  | rproj-const-index (offset : Word) (min-length : Word) (from-end : Bool)
+  | rproj-downcast (variant : Word)
+
+data RPlace = rplace (local : Word) (proj : List RProj)
+
+-- Constants. rc-adt's fields are a list (rcs-nil / rcs-cons).
+data RConst
+  = rc-int (v : RInt) (k : RIntTy)
+  | rc-bool (b : Bool)
+  | rc-param (i : Word)                    -- a constant parameter of the enclosing body
+  | rc-zst (ty : RTy)                      -- the one value of a zero-sized type
+  | rc-adt (ty : RTy) (variant : Word) (fields : RConst)
+  | rc-static (id : Word) (ty : RTy)       -- the address of a static, at pointer type ty
+  | rc-fn (body : Word) (args : RTy)       -- a function item: a body of this crate at generic arguments
+  | rcs-nil
+  | rcs-cons (c : RConst) (cs : RConst)
+
+data ROperand = rop-copy (p : RPlace) | rop-move (p : RPlace) | rop-const (c : RConst)
+
+data RBinOp
+  = rbin-add | rbin-add-unchecked | rbin-add-with-overflow
+  | rbin-sub | rbin-sub-unchecked | rbin-sub-with-overflow
+  | rbin-mul | rbin-mul-unchecked | rbin-mul-with-overflow
+  | rbin-div | rbin-rem | rbin-bit-xor | rbin-bit-and | rbin-bit-or
+  | rbin-shl | rbin-shl-unchecked | rbin-shr | rbin-shr-unchecked
+  | rbin-eq | rbin-lt | rbin-le | rbin-ne | rbin-ge | rbin-gt | rbin-cmp | rbin-offset
+
+data RUnOp = run-not | run-neg | run-ptr-metadata
+
+data RCastKind
+  = rcast-int-to-int
+  | rcast-transmute
+  | rcast-ptr-to-ptr
+  | rcast-unsize                            -- PointerCoercion(Unsize): array to slice, or to dyn Trait
+  | rcast-reify-fn-pointer                  -- PointerCoercion(ReifyFnPointer): a function item to its address
+
+data RBorrow = rborrow-shared | rborrow-mut
+
+data RAggregate
+  = rag-array
+  | rag-tuple
+  | rag-adt (adt : Word) (variant : Word) (args : RTy)
+  | rag-raw-ptr (pointee : RTy) (m : RMut)  -- a pointer from (address, metadata)
+
+data RRvalue
+  = rrv-use (op : ROperand) (retag : Bool)  -- retag false is MIR's `no_retag`
+  | rrv-repeat (op : ROperand) (count : RTy)
+  | rrv-ref (k : RBorrow) (p : RPlace)
+  | rrv-raw-ptr (m : RMut) (p : RPlace)
+  | rrv-cast (k : RCastKind) (op : ROperand) (ty : RTy)
+  | rrv-binop (o : RBinOp) (a : ROperand) (b : ROperand)
+  | rrv-unop (o : RUnOp) (a : ROperand)
+  | rrv-discriminant (p : RPlace)
+  | rrv-aggregate (k : RAggregate) (ops : List ROperand)
+
+data RStmt
+  = rs-assign (p : RPlace) (rv : RRvalue)
+  | rs-storage-live (local : Word)
+  | rs-storage-dead (local : Word)
+
+data RUnwind = ru-continue | ru-unreachable | ru-terminate | ru-cleanup (bb : Word)
+
+-- What a call calls.
+data RCallee
+  = rcallee-fn (body : Word) (args : RTy)          -- a body of this crate at generic arguments
+  | rcallee-dyn (trait : Word) (method : Word)     -- the method-th method of the trait, through the receiver's vtable
+  | rcallee-ptr (f : ROperand)                     -- the function a pointer points to
+
+-- What a failed assertion reports.
+data RAssertMsg
+  = rassert-bounds-check (len : ROperand) (index : ROperand)
+  | rassert-division-by-zero (a : ROperand)
+  | rassert-remainder-by-zero (a : ROperand)
+  | rassert-overflow (o : RBinOp) (a : ROperand) (b : ROperand)
+
+data RSwitchArm = rarm (value : RInt) (bb : Word)
+
+data RTerm
+  = rt-goto (bb : Word)
+  | rt-switch-int (op : ROperand) (arms : List RSwitchArm) (otherwise : Word)
+  | rt-return
+  | rt-unreachable
+  | rt-call (f : RCallee) (args : List ROperand) (dest : RPlace) (target : Word) (unwind : RUnwind)
+  | rt-assert (cond : ROperand) (expected : Bool) (msg : RAssertMsg) (target : Word) (unwind : RUnwind)
+  | rt-drop (p : RPlace) (target : Word) (unwind : RUnwind)
+
+data RBlock = rblock (stmts : List RStmt) (term : RTerm)
+
+-- An argument's mutability is not printed in the MIR text, so an argument is rlocal-arg.
+data RLocal = rlocal (ty : RTy) (m : RMut) | rlocal-arg (ty : RTy)
+
+data RGeneric = rgen-type (name : RName) | rgen-const (name : RName)
+
+-- A body: local 0 is the return place, locals 1..argc the arguments.
+data RBody = rbody (name : RName) (generics : List RGeneric) (argc : Word)
+                   (locals : List RLocal) (blocks : List RBlock)
+
+data RAdtKind = radt-struct | radt-enum
+data RAdt = radt (name : RName) (kind : RAdtKind)
+
+-- Layout of a closed type (an ADT instance, a tuple or a closure), bytes.
+data RFieldLayout = rfield (name : RName) (offset : Word) (ty : RTy)
+-- discr: the integer `discriminant` reads for the variant; tag: the unsigned bits stored in the
+-- tag when the variant is active, absent for the variant a niche encoding leaves untagged.
+data RTagValue = rtv-none | rtv-some (v : Word)
+data RVariantLayout = rvariant (name : RName) (discr : RInt) (tag : RTagValue) (fields : List RFieldLayout)
+data RTagLayout
+  = rtag-none                                -- one variant, nothing stored
+  | rtag-direct (offset : Word) (size : Word)   -- the tag holds the discriminant
+  | rtag-niche (offset : Word) (size : Word)    -- tag values name the tagged variants; any other value is the untagged one
+data RLayout = rlayout (size : Word) (align : Word) (tag : RTagLayout) (variants : List RVariantLayout)
+data RLayoutEntry = rlayout-of (ty : RTy) (l : RLayout)
+
+data RTrait = rtrait (name : RName) (methods : List RName)   -- methods in vtable order
+
+-- The vtable of ty as dyn trait: slot 0 drop (absent here when the type needs none), 1 size,
+-- 2 align, then one entry per method of the trait in order.
+data RDrop = rdrop-none | rdrop-fn (body : Word) (args : RTy)
+data RVtable = rvtable (ty : RTy) (trait : Word) (size : Word) (align : Word) (drop : RDrop)
+                       (methods : List RCallee)
+
+-- The initial bytes of a static: runs of initialized bytes and of uninitialized (padding) ones.
+data RBytes = rbytes-init (bs : List Word) | rbytes-uninit (n : Word)
+data RStatic = rstatic (name : RName) (ty : RTy) (m : RMut) (size : Word) (align : Word)
+                       (init : List RBytes)
+
+-- The Drop impl of a closed type: dropping a value of ty calls body (at args) on a `&mut` to it,
+-- then drops its fields. A type without an entry has no impl of its own. Listed for every type
+-- a reachable rt-drop drops and every type inside those.
+data RDropImpl = rdrop-impl (ty : RTy) (body : Word) (args : RTy)
+
+data RInstance = rinstance (body : Word) (args : RTy)
+
+data RCrate = rcrate (name : RName) (entry : Word) (bodies : List RBody) (adts : List RAdt)
+                     (traits : List RTrait) (layouts : List RLayoutEntry) (vtables : List RVtable)
+                     (statics : List RStatic) (drops : List RDropImpl) (instances : List RInstance)

@@ -1,0 +1,162 @@
+-- lib/autodiff.cub — differentiation of polynomials as a program about programs (the example of F31 in
+-- PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F31). Loaded after lib/ring.cub. D is the symbolic derivative over the codes of
+-- polynomials in one variable; fwd is forward-mode automatic differentiation (dual numbers);
+-- fwd-der: the two agree; taylor: D is the derivative of the function the code denotes, in the
+-- form that makes sense over Nat: p(x + h) = p(x) + h·p'(x) + h²·q for some q. Each inductive
+-- step of taylor is a ring identity, proved by one evaluation of lib/ring.cub's normalizer.
+data Pl = kc (n : Nat) | kx | kadd (a : Pl) (b : Pl) | kmul (a : Pl) (b : Pl)
+pat : Nat → Pl → Nat
+pat x p =
+  case p return (λ w → Nat) of
+    kc n → n
+    kx → x
+    kadd a b → plus (rec a) (rec b)
+    kmul a b → times (rec a) (rec b)
+D : Pl → Pl
+D p =
+  case p return (λ w → Pl) of
+    kc n → kc zero
+    kx → kc (suc zero)
+    kadd a b → kadd (rec a) (rec b)
+    kmul a b → kadd (kmul (rec a) b) (kmul a (rec b))
+-- ---------------------------------------------------------------- forward mode
+fwd : Nat → Pl → Nat × Nat
+fwd x p =
+  case p return (λ w → Nat × Nat) of
+    kc n → (n , zero)
+    kx → (x , suc zero)
+    kadd a b → (plus (fst (rec a)) (fst (rec b)) , plus (snd (rec a)) (snd (rec b)))
+    kmul a b → (times (fst (rec a)) (fst (rec b)) , plus (times (snd (rec a)) (fst (rec b))) (times (fst (rec a)) (snd (rec b))))
+fwd-val : (x : Nat) (p : Pl) → fst (fwd x p) ≡ pat x p
+fwd-val x p =
+  case p return (λ w → fst (fwd x w) ≡ pat x w) of
+    kc n → λ i → n
+    kx → λ i → x
+    kadd a b → cong2N (λ u v → plus u v) (rec a) (rec b)
+    kmul a b → cong2N (λ u v → times u v) (rec a) (rec b)
+fwd-der : (x : Nat) (p : Pl) → snd (fwd x p) ≡ pat x (D p)
+fwd-der x p =
+  case p return (λ w → snd (fwd x w) ≡ pat x (D w)) of
+    kc n → λ i → zero
+    kx → λ i → suc zero
+    kadd a b → cong2N (λ u v → plus u v) (rec a) (rec b)
+    kmul a b →
+      cong2N (λ u v → plus u v)
+        (cong2N (λ u v → times u v) (rec a) (fwd-val x b))
+        (cong2N (λ u v → times u v) (fwd-val x a) (rec b))
+-- ---------------------------------------------------------------- the derivative
+-- valuations for the ring identities: a list of values, variable i the i-th entry
+data NL = nnil | ncons (n : Nat) (rest : NL)
+nthv : NL → Word → Nat
+nthv l v =
+  case l return (λ w → Word → Nat) of
+    nnil → λ v → zero
+    ncons n r → λ v → %welimP (λ w → Nat) v n (λ j h → rec r j)
+  v
+-- variables: 0 A, 1 A', 2 QA, 3 B, 4 B', 5 QB, 6 H, 7 X, 8 N
+vA : Ex
+vA = ev #0
+vA' : Ex
+vA' = ev #1
+vQA : Ex
+vQA = ev #2
+vB : Ex
+vB = ev #3
+vB' : Ex
+vB' = ev #4
+vQB : Ex
+vQB = ev #5
+vH : Ex
+vH = ev #6
+vX : Ex
+vX = ev #7
+vN : Ex
+vN = ev #8
+-- the Taylor form: v + h·d + h²·q
+tf : Ex → Ex → Ex → Ex
+tf v d q = eadd v (eadd (emul vH d) (emul (emul vH vH) q))
+-- the constant: n = n + h·0 + h²·0
+tc-id2 : (n h : Nat) → n ≡ plus n (plus (times h zero) (times (times h h) zero))
+tc-id2 n h = ring-eq (λ v → nthv (ncons n (ncons zero (ncons zero (ncons zero (ncons zero (ncons zero (ncons h nnil))))))) v) vA (tf vA (ec zero) (ec zero)) (λ i → norm vA)
+-- the constant one, as an expression
+one : Ex
+one = ec (suc zero)
+-- the variable: x + h = x + h·1 + h²·0
+tx-id : (x h : Nat) → plus x h ≡ plus x (plus (times h (suc zero)) (times (times h h) zero))
+tx-id x h = ring-eq (λ v → nthv (ncons x (ncons zero (ncons zero (ncons zero (ncons zero (ncons zero (ncons h nnil))))))) v) (eadd vA vH) (tf vA one (ec zero)) (λ i → norm (eadd vA vH))
+-- sums: (A + H A' + H² QA) + (B + H B' + H² QB) = (A + B) + H (A' + B') + H² (QA + QB)
+val7 : Nat → Nat → Nat → Nat → Nat → Nat → Nat → Word → Nat
+val7 a a' qa b b' qb h v = nthv (ncons a (ncons a' (ncons qa (ncons b (ncons b' (ncons qb (ncons h nnil))))))) v
+tadd-l : Ex
+tadd-l = eadd (tf vA vA' vQA) (tf vB vB' vQB)
+tadd-r : Ex
+tadd-r = tf (eadd vA vB) (eadd vA' vB') (eadd vQA vQB)
+tadd-id : (a a' qa b b' qb h : Nat) → xeval (λ v → val7 a a' qa b b' qb h v) tadd-l ≡ xeval (λ v → val7 a a' qa b b' qb h v) tadd-r
+tadd-id a a' qa b b' qb h = ring-eq (λ v → val7 a a' qa b b' qb h v) tadd-l tadd-r (λ i → norm tadd-l)
+-- products: (A + H A' + H² QA)(B + H B' + H² QB) = AB + H (A' B + A B') + H² Q with
+--   Q = A' B' + A QB + QA B + H (A' QB + QA B') + H² QA QB
+tmul-q : Ex
+tmul-q = eadd (eadd (emul vA' vB') (eadd (emul vA vQB) (emul vQA vB)))
+              (eadd (emul vH (eadd (emul vA' vQB) (emul vQA vB'))) (emul (emul vH vH) (emul vQA vQB)))
+tmul-l : Ex
+tmul-l = emul (tf vA vA' vQA) (tf vB vB' vQB)
+tmul-r : Ex
+tmul-r = tf (emul vA vB) (eadd (emul vA' vB) (emul vA vB')) tmul-q
+tmul-id : (a a' qa b b' qb h : Nat) → xeval (λ v → val7 a a' qa b b' qb h v) tmul-l ≡ xeval (λ v → val7 a a' qa b b' qb h v) tmul-r
+tmul-id a a' qa b b' qb h = ring-eq (λ v → val7 a a' qa b b' qb h v) tmul-l tmul-r (λ i → norm tmul-l)
+-- the inductive steps: rewrite by the hypotheses, then the identity (endpoints explicit, as
+-- the elaborator needs for composed paths)
+TF : Nat → Nat → Nat → Nat → Nat
+TF h v d q = plus v (plus (times h d) (times (times h h) q))
+Taylor : Pl → Nat → Nat → Type
+Taylor p x h = (q : Nat) × pat (plus x h) p ≡ TF h (pat x p) (pat x (D p)) q
+taylor-add-path : (x h : Nat) (a b : Pl) (qa qb : Nat) →
+                  pat (plus x h) a ≡ TF h (pat x a) (pat x (D a)) qa →
+                  pat (plus x h) b ≡ TF h (pat x b) (pat x (D b)) qb →
+                  plus (pat (plus x h) a) (pat (plus x h) b) ≡ TF h (plus (pat x a) (pat x b)) (plus (pat x (D a)) (pat x (D b))) (plus qa qb)
+taylor-add-path x h a b qa qb pa pb =
+  transN (cong2N (λ u v → plus u v) pa pb) (tadd-id (pat x a) (pat x (D a)) qa (pat x b) (pat x (D b)) qb h)
+taylor-add : (x h : Nat) (a b : Pl) → Taylor a x h → Taylor b x h → Taylor (kadd a b) x h
+taylor-add x h a b ta tb = (plus (fst ta) (fst tb) , taylor-add-path x h a b (fst ta) (fst tb) (snd ta) (snd tb))
+Qmul : Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat
+Qmul a a' qa b b' qb h = xeval (λ v → val7 a a' qa b b' qb h v) tmul-q
+taylor-mul-path : (x h : Nat) (a b : Pl) (qa qb : Nat) →
+                  pat (plus x h) a ≡ TF h (pat x a) (pat x (D a)) qa →
+                  pat (plus x h) b ≡ TF h (pat x b) (pat x (D b)) qb →
+                  times (pat (plus x h) a) (pat (plus x h) b) ≡
+                  TF h (times (pat x a) (pat x b)) (plus (times (pat x (D a)) (pat x b)) (times (pat x a) (pat x (D b))))
+                       (Qmul (pat x a) (pat x (D a)) qa (pat x b) (pat x (D b)) qb h)
+taylor-mul-path x h a b qa qb pa pb =
+  transN (cong2N (λ u v → times u v) pa pb) (tmul-id (pat x a) (pat x (D a)) qa (pat x b) (pat x (D b)) qb h)
+taylor-mul : (x h : Nat) (a b : Pl) → Taylor a x h → Taylor b x h → Taylor (kmul a b) x h
+taylor-mul x h a b ta tb =
+  (Qmul (pat x a) (pat x (D a)) (fst ta) (pat x b) (pat x (D b)) (fst tb) h ,
+   taylor-mul-path x h a b (fst ta) (fst tb) (snd ta) (snd tb))
+taylor : (p : Pl) (x h : Nat) → Taylor p x h
+taylor p x h =
+  case p return (λ w → Taylor w x h) of
+    kc n → (zero , tc-id2 n h)
+    kx → (zero , tx-id x h)
+    kadd a b → taylor-add x h a b (rec a) (rec b)
+    kmul a b → taylor-mul x h a b (rec a) (rec b)
+-- ---------------------------------------------------------------- D over codes (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F31: D : Code → Code)
+-- a code of the fragment — the variable 0 under one λ, plus, times, Nat literals — read as a
+-- polynomial through lib/ring.cub's bridge (an expression in the variable 0), differentiated by
+-- D, and written as a code again: the derivative of a program is a program, and taylor is the
+-- theorem about what it denotes. The bridge is unverified (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”); D and taylor are checked
+pl-of-ex : Ex → Opt Pl
+pl-of-ex (ec n) = some (kc n)
+pl-of-ex (ev v) = if weq v #0 then some kx else none
+pl-of-ex (eadd a b) = (case pl-of-ex a of none → none; some pa → (case pl-of-ex b of none → none; some pb → some (kadd pa pb)))
+pl-of-ex (emul a b) = (case pl-of-ex a of none → none; some pa → (case pl-of-ex b of none → none; some pb → some (kmul pa pb)))
+ex-of-pl : Pl → Ex
+ex-of-pl (kc n) = ec n
+ex-of-pl kx = ev #0
+ex-of-pl (kadd a b) = eadd (ex-of-pl a) (ex-of-pl b)
+ex-of-pl (kmul a b) = emul (ex-of-pl a) (ex-of-pl b)
+-- D-code: the code of λ x → p (the body under one λ) to the code of λ x → p'
+D-code : Code → Opt Code
+D-code c =
+  case ex-of-code (lam-body c) of
+    none → none
+    some e → (case pl-of-ex e of none → none; some p → some (clam (code-of-ex (ex-of-pl (D p)))))

@@ -1,0 +1,1177 @@
+-- lib/x86.cub — the code fragment to x86-64 bytes (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §5.3 “The target is a data type with a meaning”, §5.4 “The reader, and why the path is by construction” and §5.5 “Bytes, the boundary, and what is trusted”). Loaded after lib/machine.cub.
+-- There is no intermediate syntax: the program a code compiles to is the code's normal form in the
+-- fragment (lib/machine.cub), and encode prints each construct of the fragment by a fixed template.
+-- Only specialization is checked: its result converts with the definition or carries a path
+-- (jit-plan's ok). Everything after it (the passes x-push, x-lift, x-erase, the templates, the
+-- layout, the value representation and the calling convention) is trusted: none carries a relation
+-- to the specialized code, and its output is bound and run, so a wrong pass can answer wrongly. This
+-- translator is to be replaced by realization through C whose type carries that relation
+-- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export").
+--
+-- Values in compiled code, uniformly 64 bits, so no pass needs a type:
+--   a word, a primitive value (Int64, UInt32, UInt64, Float64 by its bits): the bits;
+--   a constructor with no fields: its index (below 4096, never an address);
+--   a constructor with fields: the address of an arena cell [index][field]…[field], each field 64 bits;
+--   a pair: a cell [0][first][second];
+--   bytes: the address of [length][bytes, padded to 8];
+--   a Nat: the count of its successors as a word (the encoder's choice, trusted with the
+--   templates until the template equations of Phase 2): zero is 0, suc k is k + 1 (past 2^64
+--   the overflow exit, and the net computes the call), a case on a Nat tests for 0 and binds the
+--   predecessor. So an offset or a length, which the machine takes as a Word or a Nat alike, is a
+--   word whichever it was.
+-- Booleans are the constructors true (0) and false (1) of Bool. The boundary (src/lang.c, jit_in and
+-- jit_read) converts between these and the net's values by the definition's type.
+--
+-- Registers: rax the value of the expression being computed, rcx and rdx scratch, rbp the frame,
+-- r15 the arena's next free byte and r12 its end, r13 the call's context (word 0 the overflow flag),
+-- r14 the blob's base (calls are base-relative), rbx the stack pointer at entry. A Word operation
+-- whose result passes 2^64, and an arena that is full, leave through the overflow exit: the flag is
+-- set and the call returns at once; the boundary then computes the call on the net (run p f ≡ f).
+-- Internal calls push their arguments left to right; argument i of n is at [rbp + 16 + 8(n−1−i)];
+-- local slot s is at [rbp − 8(s+1)].
+-- ---------------------------------------------------------------- bytes
+xb1 : Word → Lst Word
+xb1 a = lcons a lnil
+xb2 : Word → Word → Lst Word
+xb2 a b = lcons a (lcons b lnil)
+xb3 : Word → Word → Word → Lst Word
+xb3 a b c = lcons a (lcons b (lcons c lnil))
+xb4 : Word → Word → Word → Word → Lst Word
+xb4 a b c e = lcons a (lcons b (lcons c (lcons e lnil)))
+xcat3 : Lst Word → Lst Word → Lst Word → Lst Word
+xcat3 a b c = l-app a (l-app b c)
+xcat4 : Lst Word → Lst Word → Lst Word → Lst Word → Lst Word
+xcat4 a b c e = l-app a (xcat3 b c e)
+xcat5 : Lst Word → Lst Word → Lst Word → Lst Word → Lst Word → Lst Word
+xcat5 a b c e f = l-app a (xcat4 b c e f)
+xcat6 : Lst Word → Lst Word → Lst Word → Lst Word → Lst Word → Lst Word → Lst Word
+xcat6 a b c e f g = l-app a (xcat5 b c e f g)
+-- a word's low n bytes, little-endian, by the machine's own 64-bit operations
+xlo8 : Word → Word
+xlo8 w = u64toWord (u64and (u64 w) (u64 #255))
+xshr8 : Word → Word
+xshr8 w = u64toWord (u64shr (u64 w) (u64 #8))
+xle : Word → Word → Lst Word
+xle w n = %welimP (λ _ → Word → Lst Word) n (λ v → lnil) (λ j h v → lcons (xlo8 v) (h (xshr8 v))) w
+ximm32 : Word → Lst Word
+ximm32 w = xle w #4
+ximm64 : Word → Lst Word
+ximm64 w = xle w #8
+-- a negative displacement as its 32-bit two's complement
+xneg32 : Word → Word
+xneg32 w = u64toWord (u64and (u64sub (u64 #0) (u64 w)) (u64 #4294967295))
+xmul8 : Word → Word
+xmul8 w = u64toWord (u64shl (u64 w) (u64 #3))
+-- ---------------------------------------------------------------- the template table (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §13 “The trusted surface”, item 3: the fifteen `encode` templates and the frame convention)
+-- each line below is one instruction; its meaning is the one stated, by the Intel SDM
+i-push-rax : Lst Word
+i-push-rax = xb1 #80
+i-pop-rax : Lst Word
+i-pop-rax = xb1 #88
+i-pop-rcx : Lst Word
+i-pop-rcx = xb1 #89
+i-pop-rdx : Lst Word
+i-pop-rdx = xb1 #90
+i-push-rbp : Lst Word
+i-push-rbp = xb1 #85
+i-pop-rbp : Lst Word
+i-pop-rbp = xb1 #93
+i-ret : Lst Word
+i-ret = xb1 #195
+i-ud2 : Lst Word
+i-ud2 = xb2 #15 #11
+i-mov-rbp-rsp : Lst Word
+i-mov-rbp-rsp = xb3 #72 #137 #229
+i-mov-rsp-rbp : Lst Word
+i-mov-rsp-rbp = xb3 #72 #137 #236
+i-mov-rcx-rax : Lst Word
+i-mov-rcx-rax = xb3 #72 #137 #193
+i-mov-rdx-rax : Lst Word
+i-mov-rdx-rax = xb3 #72 #137 #194
+i-mov-rax-imm : Word → Lst Word
+i-mov-rax-imm w = l-app (xb2 #72 #184) (ximm64 w)
+-- [rbp + disp32]: load into rax, store from rax, load into rcx
+i-ld-rbp : Word → Lst Word
+i-ld-rbp d = l-app (xb3 #72 #139 #133) (ximm32 d)
+i-st-rbp : Word → Lst Word
+i-st-rbp d = l-app (xb3 #72 #137 #133) (ximm32 d)
+i-ldc-rbp : Word → Lst Word
+i-ldc-rbp d = l-app (xb3 #72 #139 #141) (ximm32 d)
+-- 64-bit arithmetic on rax with rcx: modular (add, sub, imul, and, or, xor)
+i-add : Lst Word
+i-add = xb3 #72 #1 #200
+i-sub : Lst Word
+i-sub = xb3 #72 #41 #200
+i-imul : Lst Word
+i-imul = xb4 #72 #15 #175 #193
+i-and : Lst Word
+i-and = xb3 #72 #33 #200
+i-or : Lst Word
+i-or = xb3 #72 #9 #200
+i-xor : Lst Word
+i-xor = xb3 #72 #49 #200
+i-cmp : Lst Word
+i-cmp = xb3 #72 #57 #200
+i-test-rax : Lst Word
+i-test-rax = xb3 #72 #133 #192
+i-test-rcx : Lst Word
+i-test-rcx = xb3 #72 #133 #201
+-- shifts of rax by cl: the count is taken mod 64 by the processor, as by the machine's %u64shl
+i-shl : Lst Word
+i-shl = xb3 #72 #211 #224
+i-shr : Lst Word
+i-shr = xb3 #72 #211 #232
+i-sar : Lst Word
+i-sar = xb3 #72 #211 #248
+i-div : Lst Word
+i-div = xb3 #72 #247 #241
+i-idiv : Lst Word
+i-idiv = xb3 #72 #247 #249
+i-xor-edx : Lst Word
+i-xor-edx = xb2 #49 #210
+i-cqo : Lst Word
+i-cqo = xb2 #72 #153
+i-neg : Lst Word
+i-neg = xb3 #72 #247 #216
+i-mov-rax-rdx : Lst Word
+i-mov-rax-rdx = xb3 #72 #137 #208
+i-cmp-rcx-m1 : Lst Word
+i-cmp-rcx-m1 = xb4 #72 #131 #249 #255
+i-cmovb : Lst Word
+i-cmovb = xb4 #72 #15 #66 #193
+i-add1 : Lst Word
+i-add1 = xb4 #72 #131 #192 #1
+-- 32-bit arithmetic on eax with ecx: writes zero the upper half (UInt32 is modular 2^32)
+i-add32 : Lst Word
+i-add32 = xb2 #1 #200
+i-sub32 : Lst Word
+i-sub32 = xb2 #41 #200
+i-imul32 : Lst Word
+i-imul32 = xb3 #15 #175 #193
+i-cmp32 : Lst Word
+i-cmp32 = xb2 #57 #200
+i-zx32 : Lst Word
+i-zx32 = xb2 #137 #192
+-- setcc al then zero-extend: the comparison's 0 or 1
+i-set : Word → Lst Word
+i-set c = xcat3 (xb3 #15 c #192) (xb3 #15 #182 #192) lnil
+cc-e : Word
+cc-e = #148
+cc-ne : Word
+cc-ne = #149
+cc-b : Word
+cc-b = #146
+cc-ae : Word
+cc-ae = #147
+cc-l : Word
+cc-l = #156
+cc-ge : Word
+cc-ge = #157
+cc-np : Word
+cc-np = #155
+-- Float64 by SSE2, scalar, round to nearest even, no contraction
+i-movq-x0-rax : Lst Word
+i-movq-x0-rax = l-app (xb3 #102 #72 #15) (xb2 #110 #192)
+i-movq-x1-rcx : Lst Word
+i-movq-x1-rcx = l-app (xb3 #102 #72 #15) (xb2 #110 #201)
+i-movq-rax-x0 : Lst Word
+i-movq-rax-x0 = l-app (xb3 #102 #72 #15) (xb2 #126 #192)
+i-addsd : Lst Word
+i-addsd = xb4 #242 #15 #88 #193
+i-subsd : Lst Word
+i-subsd = xb4 #242 #15 #92 #193
+i-mulsd : Lst Word
+i-mulsd = xb4 #242 #15 #89 #193
+i-divsd : Lst Word
+i-divsd = xb4 #242 #15 #94 #193
+i-ucomisd : Lst Word
+i-ucomisd = xb4 #102 #15 #46 #193
+i-cvtsi2sd : Lst Word
+i-cvtsi2sd = l-app (xb3 #242 #72 #15) (xb2 #42 #192)
+i-cvttsd2si : Lst Word
+i-cvttsd2si = l-app (xb3 #242 #72 #15) (xb2 #44 #192)
+i-addsd-x0x0 : Lst Word
+i-addsd-x0x0 = xb4 #242 #15 #88 #192
+-- and al, cl (two flags combined)
+i-and-al-cl : Lst Word
+i-and-al-cl = xb2 #32 #200
+i-mov-cl-al : Lst Word
+i-mov-cl-al = xb2 #136 #193
+-- jumps, rel32: jcc (0F 8x) and jmp (E9)
+i-jcc : Word → Word → Lst Word
+i-jcc c r = l-app (xb2 #15 c) (ximm32 r)
+i-jmp : Word → Lst Word
+i-jmp r = lcons #233 (ximm32 r)
+j-c : Word
+j-c = #130
+j-nc : Word
+j-nc = #131
+j-e : Word
+j-e = #132
+j-ne : Word
+j-ne = #133
+j-be : Word
+j-be = #134
+j-ae : Word
+j-ae = #131
+j-s : Word
+j-s = #136
+-- calls through the base: mov eax, offset; add rax, r14; call rax
+i-call-off : Word → Lst Word
+i-call-off off = xcat3 (lcons #184 (ximm32 off)) (xb3 #76 #1 #240) (xb2 #255 #208)
+i-add-rsp : Word → Lst Word
+i-add-rsp n = l-app (xb3 #72 #129 #196) (ximm32 n)
+-- memory through rax: load [rax + disp32], store rcx at [rax + disp32], store imm32 at [rax]
+i-ld-rax : Word → Lst Word
+i-ld-rax d = l-app (xb3 #72 #139 #128) (ximm32 d)
+i-st-rax-rcx : Word → Lst Word
+i-st-rax-rcx d = l-app (xb3 #72 #137 #136) (ximm32 d)
+i-st-rax-imm : Word → Lst Word
+i-st-rax-imm v = l-app (xb3 #72 #199 #0) (ximm32 v)
+i-mov-rcx-mrax : Lst Word
+i-mov-rcx-mrax = xb3 #72 #139 #8
+i-cmp-rax-imm : Word → Lst Word
+i-cmp-rax-imm v = l-app (xb2 #72 #61) (ximm32 v)
+i-cmp-rcx-imm : Word → Lst Word
+i-cmp-rcx-imm v = l-app (xb3 #72 #129 #249) (ximm32 v)
+-- the byte layer: rax the bytes' address plus the offset; the data begin 8 bytes in
+i-add-rax-rcx : Lst Word
+i-add-rax-rcx = i-add
+i-ld8 : Lst Word
+i-ld8 = xb4 #15 #182 #64 #8
+i-ld16 : Lst Word
+i-ld16 = xb4 #15 #183 #64 #8
+i-ld32 : Lst Word
+i-ld32 = xb3 #139 #64 #8
+i-ld64 : Lst Word
+i-ld64 = xb4 #72 #139 #64 #8
+i-st8 : Lst Word
+i-st8 = xb3 #136 #80 #8
+i-st16 : Lst Word
+i-st16 = xb4 #102 #137 #80 #8
+i-st32 : Lst Word
+i-st32 = xb3 #137 #80 #8
+i-st64 : Lst Word
+i-st64 = xb4 #72 #137 #80 #8
+-- the arena: rax the cell, r15 bumped by n, and the overflow exit when r15 passes r12
+i-mov-rax-r15 : Lst Word
+i-mov-rax-r15 = xb3 #76 #137 #248
+i-add-r15 : Word → Lst Word
+i-add-r15 n = l-app (xb3 #73 #129 #199) (ximm32 n)
+i-add-r15-rcx : Lst Word
+i-add-r15-rcx = xb3 #73 #1 #207
+i-cmp-r15-r12 : Lst Word
+i-cmp-r15-r12 = xb3 #77 #57 #231
+-- rep movsb (rcx bytes from rsi to rdi) and rep stosb (rcx bytes of al at rdi), and their registers
+i-rep-movsb : Lst Word
+i-rep-movsb = xb2 #243 #164
+i-rep-stosb : Lst Word
+i-rep-stosb = xb2 #243 #170
+i-mov-rsi-rax : Lst Word
+i-mov-rsi-rax = xb3 #72 #137 #198
+i-mov-rdi-rax : Lst Word
+i-mov-rdi-rax = xb3 #72 #137 #199
+i-mov-rdi-rdx : Lst Word
+i-mov-rdi-rdx = xb3 #72 #137 #215
+i-mov-rsi-rdx : Lst Word
+i-mov-rsi-rdx = xb3 #72 #137 #214
+i-xor-eax : Lst Word
+i-xor-eax = xb2 #49 #192
+-- the overflow exit, inline: the flag set, the stack back to entry, the saved registers restored
+i-exit : Lst Word
+i-exit = xcat4 (l-app (xb3 #65 #198 #69) (xb2 #0 #1)) (xb3 #72 #137 #220)
+                (l-app (xb4 #65 #95 #65 #94) (xb4 #65 #93 #65 #92)) (xb3 #91 #93 #195)
+-- a jump over the exit when the flag (carry, or r15 within r12) is clear
+i-over-if-c : Lst Word
+i-over-if-c = l-app (i-jcc j-nc (l-count i-exit)) i-exit
+i-over-if-above : Lst Word
+i-over-if-above = l-app (i-jcc j-be (l-count i-exit)) i-exit
+-- store imm32 (sign-extended) at [rax + disp32]
+i-st-rax-d-imm : Word → Word → Lst Word
+i-st-rax-d-imm d v = l-app (xb3 #72 #199 #128) (l-app (ximm32 d) (ximm32 v))
+-- the apply routine (one per blob, called with the closure and then the argument pushed): a closure
+-- is a cell [code offset][arity][given][argument…]. Given one short of the arity, the arguments
+-- held and the new one are pushed and the code is called (base-relative, r14); otherwise a new cell
+-- with one more argument is taken from the arena (the overflow exit when it is full). Its lines, in
+-- order: push rbp; mov rbp, rsp; mov rax, [rbp+24]; mov rcx, [rax+16]; inc rcx; cmp rcx, [rax+8];
+-- jb partial; mov rsi, rax; xor edi, edi; l1: cmp rdi, [rsi+16]; jae d1; push [rsi+rdi*8+24];
+-- inc rdi; jmp l1; d1: push [rbp+16]; mov rax, [rsi]; add rax, r14; call rax; mov rsp, rbp; pop rbp;
+-- ret; partial: mov rsi, rax; mov rdi, rcx; lea rcx, [rdi*8+24]; mov rax, r15; add r15, rcx;
+-- cmp r15, r12; ja exit; copy [rsi], [rsi+8] to the new cell, store rdi at [rax+16]; copy the
+-- rdi−1 arguments held; store [rbp+16] after them; mov rsp, rbp; pop rbp; ret; exit: the overflow exit
+i-apply : Lst Word
+i-apply = l-app (l-app (xb4 #85 #72 #137 #229) (l-app (xb4 #72 #139 #69 #24) (l-app (xb4 #72 #139 #72 #16) (l-app (xb4 #72 #255 #193 #72) (l-app (xb4 #59 #72 #8 #114) (l-app (xb4 #36 #72 #137 #198) (l-app (xb4 #49 #255 #72 #59) (l-app (xb4 #126 #16 #115 #9) (l-app (xb4 #255 #116 #254 #24) (l-app (xb4 #72 #255 #199 #235) (l-app (xb4 #241 #255 #117 #16) (l-app (xb4 #72 #139 #6 #76) (l-app (xb4 #1 #240 #255 #208) (l-app (xb4 #72 #137 #236 #93) (l-app (xb4 #195 #72 #137 #198) (l-app (xb4 #72 #137 #207 #72) (l-app (xb4 #141 #12 #253 #24) (l-app (xb4 #0 #0 #0 #76) (l-app (xb4 #137 #248 #73 #1) (l-app (xb4 #207 #77 #57 #231) (l-app (xb4 #119 #58 #72 #139) (l-app (xb4 #22 #72 #137 #16) (l-app (xb4 #72 #139 #86 #8) (l-app (xb4 #72 #137 #80 #8) (l-app (xb4 #72 #137 #120 #16) (l-app (xb4 #49 #201 #76 #141) (l-app (xb4 #71 #255 #76 #57) (l-app (xb4 #193 #115 #15 #72) (l-app (xb4 #139 #84 #206 #24) (l-app (xb4 #72 #137 #84 #200) (l-app (xb4 #24 #72 #255 #193) (l-app (xb4 #235 #236 #72 #139) (l-app (xb4 #85 #16 #72 #137) (l-app (xb4 #84 #200 #24 #72) (xb4 #137 #236 #93 #195))))))))))))))))))))))))))))))))))) i-exit
+-- the key under which the routine's offset is in the table (no global or lifted definition has it)
+x-apply-key : Word
+x-apply-key = #1099511627775
+-- the stack check in every definition's prologue: below the context's limit ([r13+24]) the
+-- overflow exit (cmp rsp, [r13+24]; jae over the exit), so deep recursion leaves to the net
+i-stack-check : Lst Word
+i-stack-check = l-app (xb4 #73 #59 #101 #24) (l-app (i-jcc j-ae (l-count i-exit)) i-exit)
+-- the data type Nat, a word in compiled code (above)
+x-nat-d : Word
+x-nat-d = case code Nat return (λ _ → Word) of
+  cdata d ps → d
+  _ → #0-- ---------------------------------------------------------------- the forms a program is in
+-- After specialization a definition's code is a normal form; three passes put it in the shape the
+-- templates cover, each producing a code that means the same (each step is β, η or the naming of
+-- a recursion as a definition, which the code's meaning computes identically):
+--   apps: an application whose head is a λ is a let; an application of a case or a let is pushed
+--         into its branches or body; a thunk is its value (delay and force dropped: checked terms
+--         terminate and compiled code is pure, so the order of evaluation changes no answer);
+--   lift: an elimination (structural recursion) becomes a call of a new definition whose
+--         parameters are the elimination's free variables, the arguments it is applied to and the
+--         scrutinee; its recursive hypotheses become calls of that definition on the recursive fields
+--         (let-bound once when the result is not a function; at each full application when it is);
+--   check: what remains uses only the templated constructs, and every call is a full application
+--         of a definition of the program.
+-- Each walk goes by fuel (lib/codes.cub): a code deeper than c-fuel is left as it is (a pass) or
+-- refused (the check), never answered wrongly.
+-- a compiled definition: (g , (arity , body))
+Defs : Type
+Defs = Lst (Word × (Word × Code))
+-- leading λs: (arity , body)
+x-split : Code → Word × Code
+x-split (clam b) = (let r = x-split b in (%wsucc (fst r) , snd r))
+x-split c = (#0 , c)
+x-lams : Word → Code → Code
+x-lams n b = w-iter n (λ x → clam x) b
+-- the number of fields of constructor k of data type d, and which are recursive, in order
+x-nf : Word → Word → Word
+x-nf d k = con-nfields d k
+x-recs : Word → Word → Lst Bool
+x-recs d k = con-recs d k
+-- an application spine: (head , arguments in order)
+x-spine-acc : Code → Lst Code → Code × Lst Code
+x-spine-acc (capp f a) acc = x-spine-acc f (lcons a acc)
+x-spine-acc c acc = (c , acc)
+x-spine : Code → Code × Lst Code
+x-spine c = x-spine-acc c lnil
+x-apps : Code → Lst Code → Code
+x-apps h lnil = h
+x-apps h (lcons a r) = x-apps (capp h a) r
+-- ---------------------------------------------------------------- free variables
+x-ins : Word → Lst Word → Lst Word
+x-ins n l = if w-mem n l then l else lcons n l
+x-sort-ins : Word → Lst Word → Lst Word
+x-sort-ins x lnil = lcons x lnil
+x-sort-ins x (lcons y ys) = if %wlt x y then lcons x (lcons y ys) else lcons y (x-sort-ins x ys)
+x-sort : Lst Word → Lst Word
+x-sort lnil = lnil
+x-sort (lcons x xs) = x-sort-ins x (x-sort xs)
+x-index : Word → Lst Word → Word → Word
+x-index n lnil i = i
+x-index n (lcons x xs) i = if %weq x n then i else x-index n xs (%wsucc i)
+x-frees-l : (Code → Lst Word → Lst Word) → Lst Code → Lst Word → Lst Word
+x-frees-l f lnil acc = acc
+x-frees-l f (lcons x xs) acc = x-frees-l f xs (f x acc)
+-- the free variables of c under d binders, relative to its own position (each once)
+x-frees-at : Nat → Word → Code → Lst Word → Lst Word
+x-frees-at zero d c acc = acc
+x-frees-at (suc k) d (cvar n) acc = if %wlt n d then acc else x-ins (%wsub n d) acc
+x-frees-at (suc k) d (clam b) acc = x-frees-at k (%wsucc d) b acc
+x-frees-at (suc k) d (clet t b) acc = x-frees-at k (%wsucc d) b (x-frees-at k d t acc)
+x-frees-at (suc k) d (cpi m A B) acc = x-frees-at k (%wsucc d) B (x-frees-at k d A acc)
+x-frees-at (suc k) d (csigma A B) acc = x-frees-at k (%wsucc d) B (x-frees-at k d A acc)
+x-frees-at (suc k) d (cplam b) acc = x-frees-at k (%wsucc d) b acc
+x-frees-at (suc k) d (cforall b) acc = x-frees-at k (%wsucc d) b acc
+x-frees-at (suc k) d (cdlam b) acc = x-frees-at k (%wsucc d) b acc
+x-frees-at (suc k) d c acc = x-frees-l (λ x a → x-frees-at k d x a) (code-kids c) acc
+-- the free variables of c (each once, in increasing order)
+x-frees : Code → Lst Word
+x-frees c = x-sort (x-frees-at c-fuel #0 c lnil)
+x-frees-l-sorted : Lst Code → Lst Word
+x-frees-l-sorted B = x-sort (x-frees-l (λ x a → x-frees-at c-fuel #0 x a) B lnil)
+-- how many times the variable at relative index v occurs in c
+x-count-l : (Code → Word) → Lst Code → Word
+x-count-l f lnil = #0
+x-count-l f (lcons x xs) = %wadd (f x) (x-count-l f xs)
+x-count-at : Nat → Word → Word → Code → Word
+x-count-at zero v d c = #0
+x-count-at (suc k) v d (cvar n) = if %weq n (%wadd v d) then #1 else #0
+x-count-at (suc k) v d (clam b) = x-count-at k v (%wsucc d) b
+x-count-at (suc k) v d (clet t b) = %wadd (x-count-at k v d t) (x-count-at k v (%wsucc d) b)
+x-count-at (suc k) v d c = x-count-l (λ x → x-count-at k v d x) (code-kids c)
+x-count : Word → Code → Word
+x-count v c = x-count-at c-fuel v #0 c
+-- ---------------------------------------------------------------- apps
+-- λ x → f x with x not in f is f (η, which the theory has; a quoted normal form is η-long, so a
+-- function passed along a recursion would otherwise gain a wrapper each time round)
+x-eta : Code → Code
+x-eta (capp f (cvar n)) =
+  if c-and (%weq n #0) (c-not (w-mem #0 (x-frees f))) then code-unshift #0 #1 f else clam (capp f (cvar n))
+x-eta b = clam b
+-- a codata record's fields of the type itself are delayed: stored as a function of one unused
+-- argument (a closure), and their projection applies it. The value is the same; only what is
+-- computed when differs, which is what makes an infinite value finite to build
+x-delay : Lst Bool → Lst Code → Lst Code
+x-delay recs lnil = lnil
+x-delay lnil (lcons f r) = lcons f (x-delay lnil r)
+x-delay (lcons b rr) (lcons f r) = lcons (if b then clam (code-shift #0 #1 f) else f) (x-delay rr r)
+-- a branch's and a loop step's leading λs bind its fields and hypotheses: they stay
+x-push-lams-f : (Code → Code) → Code → Code
+x-push-lams-f f (clam b) = clam (x-push-lams-f f b)
+x-push-lams-f f c = f c
+-- a under n of a branch's binders, applied by app
+x-under : (Code → Code → Code) → Word → Code → Code → Code
+x-under app n br a =
+  %welimP (λ _ → Code → Code → Code) n (λ b x → app b x)
+    (λ j h b x → case b return (λ _ → Code) of
+                   clam b2 → clam (h b2 (code-shift #0 #1 x))
+                   _ → capp b x) br a
+-- a case's branches each applied to a, under the branch's fields
+x-push-br : (Code → Code → Code) → Word → Word → Lst Code → Code → Lst Code
+x-push-br app dd k lnil a = lnil
+x-push-br app dd k (lcons br r) a = lcons (x-under app (x-nf dd k) br a) (x-push-br app dd (%wsucc k) r a)
+-- f a with f and a already pushed
+x-push-app : Nat → Code → Code → Code
+x-push-app zero f a = capp f a
+x-push-app (suc k) (clam b) a = clet a b
+x-push-app (suc k) (clet t b) a = clet t (x-push-app k b (code-shift #0 #1 a))
+x-push-app (suc k) (ccase dd B x) a = ccase dd (x-push-br (λ b y → x-push-app k b y) dd #0 B a) x
+x-push-app (suc k) f a = capp f a
+x-push-n : Nat → Code → Code
+x-push-n zero c = c
+x-push-n (suc k) (capp f a) = x-push-app c-fuel (x-push-n k f) (x-push-n k a)
+x-push-n (suc k) (clam b) = x-eta (x-push-n k b)
+x-push-n (suc k) (clet t b) = clet (x-push-n k t) (x-push-n k b)
+x-push-n (suc k) (cann t T) = x-push-n k t
+x-push-n (suc k) (cthunk t) = x-push-n k t
+x-push-n (suc k) (cforce t) = x-push-n k t
+x-push-n (suc k) (cpair a b) = cpair (x-push-n k a) (x-push-n k b)
+x-push-n (suc k) (crec dd fs) = crec dd (x-delay (codata-recs dd) (l-map (λ x → x-push-n k x) fs))
+x-push-n (suc k) (cproj dd j p) =
+  if l-at false (codata-recs dd) j then capp (cproj dd j (x-push-n k p)) (cwlit #0) else cproj dd j (x-push-n k p)
+x-push-n (suc k) (cfst p) = cfst (x-push-n k p)
+x-push-n (suc k) (csnd p) = csnd (x-push-n k p)
+x-push-n (suc k) (ccon dd j fs ds) = ccon dd j (l-map (λ x → x-push-n k x) fs) ds
+x-push-n (suc k) (ccase dd B x) = ccase dd (l-map (x-push-lams-f (λ y → x-push-n k y)) B) (x-push-n k x)
+x-push-n (suc k) (celim dd P B x) = celim dd P (l-map (x-push-lams-f (λ y → x-push-n k y)) B) (x-push-n k x)
+x-push-n (suc k) (cwsucc a) = cwsucc (x-push-n k a)
+x-push-n (suc k) (cwop j a b) = cwop j (x-push-n k a) (x-push-n k b)
+x-push-n (suc k) (cprim j as) = cprim j (l-map (λ x → x-push-n k x) as)
+x-push-n (suc k) (cwelim w z s mo) = cwelim (x-push-n k w) (x-push-n k z) (x-push-lams-f (λ y → x-push-n k y) s) mo
+-- a type as a value (an argument instantiating a polymorphic function, a process at its answer
+-- type): nothing in the fragment reads one (only composition does, which is refused; motives are
+-- not computed), so it is the word 0
+x-push-n (suc k) cword = cwlit #0
+x-push-n (suc k) (cpty j n) = cwlit #0
+x-push-n (suc k) (cpi m A B) = cwlit #0
+x-push-n (suc k) (csigma A B) = cwlit #0
+x-push-n (suc k) (cuniv l) = cwlit #0
+x-push-n (suc k) (cdata dd ps) = cwlit #0
+x-push-n (suc k) c = c
+x-push : Code → Code
+x-push c = x-push-n c-fuel c
+x-push-lams : Code → Code
+x-push-lams c = x-push-lams-f x-push c
+-- ---------------------------------------------------------------- lift
+-- the lifting state: (definitions made , next number); new definitions are numbered from 2^40
+-- so that no global of the store is one of them
+LS : Type
+LS = Defs × Word
+x-aux0 : Word
+x-aux0 = #1099511627776
+x-strip : Word → Code → Code
+x-strip n c =
+  %welimP (λ _ → Code → Code) n (λ b → b)
+    (λ j h b → case b return (λ _ → Code) of
+                 clam b2 → h b2
+                 _ → capp (code-shift #0 #1 (h b)) (cvar #0)) c
+x-nrec : Lst Bool → Word
+x-nrec lnil = #0
+x-nrec (lcons b r) = if b then %wsucc (x-nrec r) else x-nrec r
+-- the field index (0-based, among all fields) of the r-th recursive field
+x-recfield : Lst Bool → Word → Word → Word
+x-recfield lnil r j = j
+x-recfield (lcons b rest) r j = if b then (if %weq r #0 then j else x-recfield rest (%wsub r #1) (%wsucc j)) else x-recfield rest r (%wsucc j)
+x-fv-vars : Lst Word → Lst Code
+x-fv-vars lnil = lnil
+x-fv-vars (lcons n r) = lcons (cvar n) (x-fv-vars r)
+-- the parameters' variables, r lets and extra binders down
+x-param-vars : Lst Word → Word → Word → Word → Word → Word → Lst Code
+x-param-vars lnil m nf r extra k = lnil
+x-param-vars (lcons n rest) m nf r extra k = lcons (cvar (%wadd r (%wadd extra (%wadd nf (%wadd #1 (%wsub (%wsub m #1) k)))))) (x-param-vars rest m nf r extra (%wsucc k))
+-- the call of g on the r-th recursive field (field j), r lets down: AUX fv… field
+x-hyp-call : Word → Lst Word → Word → Word → Word → Word → Word → Code
+x-hyp-call g fv m nf r j extra =
+  x-apps (cglob g) (l-app (x-param-vars fv m nf r extra #0) (lcons (cvar (%wadd r (%wsub (%wsub nf #1) j))) lnil))
+-- the body under nr lets: hypotheses and fields keep their places; an outer variable o (relative,
+-- past nf+nr) becomes its parameter's place, nr + nf + 1 + (m−1−k)
+x-remap-var : Lst Word → Word → Word → Word → Word → Word → Code
+x-remap-var fv m nf nr n d =
+  if %wlt (%wsub n d) (%wadd nf nr) then cvar n
+  else cvar (%wadd d (%wadd nr (%wadd nf (%wadd #1 (%wsub (%wsub m #1) (x-index (%wsub (%wsub n d) (%wadd nf nr)) fv #0))))))
+x-remap-val : Lst Word → Word → Word → Word → Code → Code
+x-remap-val fv m nf nr inner = var-map-c (x-remap-var fv m nf nr) #0 inner
+-- a = 0: the hypotheses let-bound in order (an unused one bound to 0, not computed), then the body
+-- with each outer variable o made its parameter. Inside the branch, before the lets: field j at
+-- nf−1−j, the scrutinee at nf, parameter k of fv at nf+1+(m−1−k)
+x-br-lets-from : Word → Lst Word → Word → Word → Word → Lst Bool → Code → Word → Code
+x-br-lets-from g fv m nf nr recs inner r0 =
+  %welimP (λ _ → Word → Code) (%wsub nr r0) (λ r → x-remap-val fv m nf nr inner)
+    (λ j h r → clet (if %weq (x-count (%wsub (%wsub nr #1) r) inner) #0 then cwlit #0 else x-hyp-call g fv m nf r (x-recfield recs r #0) #0)
+                    (h (%wsucc r))) r0
+x-br-val : Word → Lst Word → Word → Word → Word → Lst Bool → Code → Code
+x-br-val g fv m nf nr recs inner = x-br-lets-from g fv m nf nr recs inner #0
+x-fun-var : Lst Word → Word → Word → Word → Word → Word → Word → Code
+x-fun-var fv m a nf nr d rel =
+  if %wlt rel a then cvar (%wadd d (%wadd nf (%wadd #1 rel)))
+  else if %wlt rel (%wadd a nr) then cclock
+  else if %wlt rel (%wadd a (%wadd nr nf)) then cvar (%wadd d (%wsub rel (%wadd a nr)))
+  else cvar (%wadd d (%wadd nf (%wadd #1 (%wadd a (%wsub (%wsub (l-count fv) #1) (x-index (%wsub rel (%wadd a (%wadd nr nf))) fv #0))))))
+-- in body (under a args, nr hyps, nf fields, then the outer ones): a hypothesis applied to a
+-- arguments is the call; a variable is moved to its new place; a hypothesis otherwise is not
+-- expressible without a closure (cclock: outside the fragment, the program is refused)
+x-fun-map : Nat → Word → Lst Word → Word → Word → Word → Word → Lst Bool → Code → Word → Opt Code
+x-fun-map zero g fv m a nf nr recs p d = none
+x-fun-map (suc k) g fv m a nf nr recs (cvar n) d = if %wlt n d then none else some (x-fun-var fv m a nf nr d (%wsub n d))
+x-fun-map (suc k) g fv m a nf nr recs (capp f y) d =
+  (let sp = x-spine (capp f y) in
+   case fst sp return (λ _ → Opt Code) of
+     cvar n →
+       (if %wlt n d then none
+        else (if c-and (c-not (%wlt (%wsub n d) a)) (%wlt (%wsub n d) (%wadd a nr))
+                then (if %weq (l-count (snd sp)) a
+                        then some (x-apps (cglob g) (l-app (x-param-vars fv m nf d a #0)
+                                     (l-app (l-map (λ y2 → code-map (λ c2 d2 → x-fun-map k g fv m a nf nr recs c2 d2) d y2) (snd sp))
+                                           (lcons (cvar (%wadd d (%wsub (%wsub nf #1) (x-recfield recs (%wsub (%wsub nr #1) (%wsub (%wsub n d) a)) #0)))) lnil))))
+                        else some cclock)
+                else none))
+     _ → none)
+x-fun-map (suc k) g fv m a nf nr recs p d = none
+-- a > 0: the result is a function of a arguments, which are the new definition's parameters; inner
+-- is the branch body under its fields and hypotheses; its leading a λs (or an application to a
+-- fresh arguments) are the arguments. Inside the new branch: field j at nf−1−j, the scrutinee at
+-- nf, argument t (1…a) at nf+1+(a−t), parameter k at nf+1+a+(m−1−k)
+x-br-fun : Word → Lst Word → Word → Word → Word → Word → Lst Bool → Code → Code
+x-br-fun g fv m a nf nr recs inner = code-map (x-fun-map c-fuel g fv m a nf nr recs) #0 (x-strip a inner)
+-- the new branches: branch k of the elimination binds nf fields and nr hypotheses (one per recursive
+-- field); the new branch binds the fields only
+x-elim-br : Word → Word → Code → Word → Lst Word → Word → Word → Code
+x-elim-br dd k br g fv m a =
+  let nf = x-nf dd k
+      recs = x-recs dd k
+      nr = x-nrec recs
+      inner = x-strip (%wadd nf nr) br
+  in x-lams nf (if %weq a #0 then x-br-val g fv m nf nr recs inner else x-br-fun g fv m a nf nr recs inner)
+x-elim-brs : Word → Word → Lst Code → Word → Lst Word → Word → Word → Lst Code
+x-elim-brs dd k lnil g fv m a = lnil
+x-elim-brs dd k (lcons br r) g fv m a = lcons (x-elim-br dd k br g fv m a) (x-elim-brs dd (%wsucc k) r g fv m a)
+-- the elimination of x by branches B (lifted afterwards), applied to args: a new definition g, its
+-- parameters the free variables of B (fv), the arguments (a of them) and the scrutinee
+x-elim : Word → Lst Code → Code → Lst Code → LS → Code × LS
+x-elim dd B x args st =
+  let fv = x-frees-l-sorted B
+      m = l-count fv
+      a = l-count args
+      g = snd st
+      body = ccase dd (x-elim-brs dd #0 B g fv m a) (cvar #0)
+  in (x-apps (cglob g) (l-app (x-fv-vars fv) (l-app args (lcons x lnil))) , (lcons (g , (%wadd m (%wadd a #1) , body)) (fst st) , %wsucc g))
+-- a λ that is a value (a closure): a new definition whose parameters are the λ's free variables
+-- then its own leading binders, and the value the definition applied to the free variables alone
+-- (a partial application, which encodes as a closure cell). λ-lifting: the definition applied to
+-- the free variables is the λ, which the code's meaning computes identically
+-- the lifting of a list, and of branches under their fields' binders (not taken for closures)
+x-lift-l : (Code → LS → Code × LS) → Lst Code → LS → Lst Code × LS
+x-lift-l f lnil st = (lnil , st)
+x-lift-l f (lcons x xs) st = (let r1 = f x st in let r2 = x-lift-l f xs (snd r1) in (lcons (fst r1) (fst r2) , snd r2))
+x-lift-under : (Code → LS → Code × LS) → Word → Code → LS → Code × LS
+x-lift-under f n c st = (let r = f (x-strip n c) st in (x-lams n (fst r) , snd r))
+x-lift-brs : (Code → LS → Code × LS) → Word → Word → Lst Code → LS → Lst Code × LS
+x-lift-brs f dd k lnil st = (lnil , st)
+x-lift-brs f dd k (lcons br r) st =
+  (let r1 = x-lift-under f (x-nf dd k) br st in let r2 = x-lift-brs f dd (%wsucc k) r (snd r1) in (lcons (fst r1) (fst r2) , snd r2))
+-- outermost first: the elimination is named as a definition with its branches as they are (so a
+-- hypothesis applied inside an inner elimination is already a call when the inner one is named), then
+-- the new definition's body is lifted in turn
+x-lift-made : (Code → LS → Code × LS) → Code × LS → Code × LS
+x-lift-made f r =
+  case fst (snd r) return (λ _ → Code × LS) of
+    lnil → r
+    lcons e rest → (let rb = f (snd (snd e)) (rest , snd (snd r)) in (fst r , (lcons (fst e , (fst (snd e) , fst rb)) (fst (snd rb)) , snd (snd rb))))
+x-lift-clo : (Code → LS → Code × LS) → Code → LS → Code × LS
+x-lift-clo f c st =
+  let sp = x-split c
+      k = fst sp
+      fv = x-frees c
+      m = l-count fv
+      g = snd st
+      body = var-map-c (λ n d → if %wlt (%wsub n d) k then cvar n
+                                else cvar (%wadd d (%wadd k (%wsub (%wsub m #1) (x-index (%wsub (%wsub n d) k) fv #0))))) #0 (snd sp)
+  in x-lift-made f (x-apps (cglob g) (x-fv-vars fv) , (lcons (g , (%wadd m k , body)) (fst st) , %wsucc g))
+-- x-lift c st: (c' , st'), every elimination in c made a call
+x-lift-n : Nat → Code → LS → Code × LS
+x-lift-n zero c st = (c , st)
+x-lift-n (suc k) (capp f a) st =
+  (let sp = x-spine (capp f a)
+       ra = x-lift-l (λ c2 st2 → x-lift-n k c2 st2) (snd sp) st
+   in case fst sp return (λ _ → Code × LS) of
+        celim dd P B x → (let rx = x-lift-n k x (snd ra) in x-lift-made (λ c2 st2 → x-lift-n k c2 st2) (x-elim dd B (fst rx) (fst ra) (snd rx)))
+        h → (let rh = x-lift-n k h (snd ra) in (x-apps (fst rh) (fst ra) , snd rh)))
+x-lift-n (suc k) (celim dd P B x) st = (let rx = x-lift-n k x st in x-lift-made (λ c2 st2 → x-lift-n k c2 st2) (x-elim dd B (fst rx) lnil (snd rx)))
+x-lift-n (suc k) (clam b) st = x-lift-clo (λ c2 st2 → x-lift-n k c2 st2) (clam b) st
+x-lift-n (suc k) (cfst p) st = (let r = x-lift-n k p st in (cfst (fst r) , snd r))
+x-lift-n (suc k) (csnd p) st = (let r = x-lift-n k p st in (csnd (fst r) , snd r))
+x-lift-n (suc k) (cproj dd j p) st = (let r = x-lift-n k p st in (cproj dd j (fst r) , snd r))
+x-lift-n (suc k) (cwsucc a) st = (let r = x-lift-n k a st in (cwsucc (fst r) , snd r))
+x-lift-n (suc k) (crec dd fs) st = (let r = x-lift-l (λ c2 st2 → x-lift-n k c2 st2) fs st in (crec dd (fst r) , snd r))
+x-lift-n (suc k) (cann t T) st = x-lift-n k t st
+x-lift-n (suc k) (clet t b) st = (let r1 = x-lift-n k t st in let r2 = x-lift-n k b (snd r1) in (clet (fst r1) (fst r2) , snd r2))
+x-lift-n (suc k) (cpair a b) st = (let r1 = x-lift-n k a st in let r2 = x-lift-n k b (snd r1) in (cpair (fst r1) (fst r2) , snd r2))
+x-lift-n (suc k) (cwop j a b) st = (let r1 = x-lift-n k a st in let r2 = x-lift-n k b (snd r1) in (cwop j (fst r1) (fst r2) , snd r2))
+x-lift-n (suc k) (ccon dd j fs ds) st = (let r = x-lift-l (λ c2 st2 → x-lift-n k c2 st2) fs st in (ccon dd j (fst r) ds , snd r))
+x-lift-n (suc k) (cprim j as) st = (let r = x-lift-l (λ c2 st2 → x-lift-n k c2 st2) as st in (cprim j (fst r) , snd r))
+x-lift-n (suc k) (ccase dd B x) st =
+  (let r1 = x-lift-brs (λ c2 st2 → x-lift-n k c2 st2) dd #0 B st in let r2 = x-lift-n k x (snd r1) in (ccase dd (fst r1) (fst r2) , snd r2))
+x-lift-n (suc k) (cwelim w z s mo) st =
+  (let r1 = x-lift-n k w st in let r2 = x-lift-n k z (snd r1) in let r3 = x-lift-under (λ c2 st2 → x-lift-n k c2 st2) #2 s (snd r2) in (cwelim (fst r1) (fst r2) (fst r3) mo , snd r3))
+x-lift-n (suc k) c st = (c , st)
+x-lift : Code → LS → Code × LS
+x-lift c st = x-lift-n c-fuel c st
+-- ---------------------------------------------------------------- the program in encodable form
+-- prog: (g , code) pairs (lib/machine.cub); the result (g , (arity , body)), the definitions made by
+-- lifting after the program's own
+x-forms-all-acc : Lst (Word × Code) → LS → Defs → Defs
+x-forms-all-acc lnil st acc = l-app acc (fst st)
+x-forms-all-acc (lcons e rest) st acc =
+  (let sp = x-split (x-push-lams (snd e))
+       r = x-lift (snd sp) st
+   in x-forms-all-acc rest (snd r) (l-app acc (lcons (fst e , (fst sp , fst r)) lnil)))
+x-forms-all : Lst (Word × Code) → Defs
+x-forms-all prog = x-forms-all-acc prog (lnil , x-aux0) lnil
+x-arity : Defs → Word → Opt Word
+x-arity lnil g = none
+x-arity (lcons e r) g = if %weq (fst e) g then some (fst (snd e)) else x-arity r g
+-- a branch's body under its fields, and a loop's step under its two binders (the counter, then the state)
+x-br-bodies : Word → Word → Lst Code → Lst Code
+x-br-bodies dd k lnil = lnil
+x-br-bodies dd k (lcons br r) = lcons (x-strip (x-nf dd k) br) (x-br-bodies dd (%wsucc k) r)
+x-loop-body : Code → Code
+x-loop-body (clam (clam b2)) = b2
+x-loop-body (clam b) = capp b (cvar #0)
+x-loop-body s = capp (capp (code-shift #0 #2 s) (cvar #1)) (cvar #0)
+-- every construct templated, every call full: fo, else the first construct that is not, and why
+v-then : Verdict → Verdict → Verdict
+v-then (fo q) w = w
+v-then (not-fo r at) w = not-fo r at
+x-ok-l : (Code → Verdict) → Lst Code → Code → Verdict
+x-ok-l f lnil c = fo c
+x-ok-l f (lcons x xs) c = v-then (f x) (x-ok-l f xs c)
+-- a known definition at any number of arguments: fewer is a closure, more is the call then applications
+x-ok-call : (Code → Verdict) → Defs → Word → Lst Code → Code → Verdict
+x-ok-call f defs g args c = case x-arity defs g return (λ _ → Verdict) of
+  some n → x-ok-l f args c
+  none → not-fo reflect c
+x-ok-n : Nat → Defs → Code → Verdict
+x-ok-n zero defs c = not-fo reflect c
+x-ok-n (suc k) defs (cvar n) = fo (cvar n)
+x-ok-n (suc k) defs (cglob g) = x-ok-call (λ c2 → x-ok-n k defs c2) defs g lnil (cglob g)
+x-ok-n (suc k) defs (capp f a) =
+  (let sp = x-spine (capp f a) in
+   case fst sp return (λ _ → Verdict) of
+     cglob g → x-ok-call (λ c2 → x-ok-n k defs c2) defs g (snd sp) (capp f a)
+     clam b → not-fo reflect (capp f a)
+     h → x-ok-l (λ c2 → x-ok-n k defs c2) (lcons h (snd sp)) (capp f a))
+x-ok-n (suc k) defs (clet t b) = v-then (x-ok-n k defs t) (x-ok-n k defs b)
+x-ok-n (suc k) defs (cpair a b) = v-then (x-ok-n k defs a) (x-ok-n k defs b)
+x-ok-n (suc k) defs (cfst p) = x-ok-n k defs p
+x-ok-n (suc k) defs (csnd p) = x-ok-n k defs p
+x-ok-n (suc k) defs (cproj dd j p) = x-ok-n k defs p
+x-ok-n (suc k) defs (crec dd fs) = x-ok-l (λ c2 → x-ok-n k defs c2) fs (crec dd fs)
+x-ok-n (suc k) defs (ccon dd j fs ds) = x-ok-l (λ c2 → x-ok-n k defs c2) fs (ccon dd j fs ds)
+x-ok-n (suc k) defs (ccase dd B x) = v-then (x-ok-l (λ c2 → x-ok-n k defs c2) (x-br-bodies dd #0 B) (ccase dd B x)) (x-ok-n k defs x)
+x-ok-n (suc k) defs (cwlit n) = fo (cwlit n)
+x-ok-n (suc k) defs (cplit j b) = fo (cplit j b)
+x-ok-n (suc k) defs (cwsucc a) = x-ok-n k defs a
+-- a left shift of a word has no template yet (its overflow is the bits shifted out)
+x-ok-n (suc k) defs (cwop j a b) = if %weq j #11 then not-fo reflect (cwop j a b) else v-then (x-ok-n k defs a) (x-ok-n k defs b)
+x-ok-n (suc k) defs (cprim j as) = if %wlt j #1792 then x-ok-l (λ c2 → x-ok-n k defs c2) as (cprim j as) else not-fo reflect (cprim j as)
+x-ok-n (suc k) defs (cwelim w z s mo) = v-then (v-then (x-ok-n k defs w) (x-ok-n k defs z)) (x-ok-n k defs (x-loop-body s))
+x-ok-n (suc k) defs c = not-fo reflect c
+x-ok : Defs → Code → Verdict
+x-ok defs c = x-ok-n c-fuel defs c
+x-check-defs : Defs → Defs → Verdict
+x-check-defs defs lnil = fo (cwlit #0)
+x-check-defs defs (lcons e r) = v-then (x-ok defs (snd (snd e))) (x-check-defs defs r)
+x-check : Defs → Verdict
+x-check defs = x-check-defs defs defs
+-- ---------------------------------------------------------------- encode
+-- env: the place of each variable, innermost first: (sign , magnitude) — true above rbp (an
+-- argument at [rbp + k]), false a slot (at [rbp − k]); disp: the 32-bit displacement
+XEnv : Type
+XEnv = Lst (Bool × Word)
+-- tbl: (arities , offsets), each (g , n) pairs; the arities are known in the measuring pass too, so
+-- a definition's bytes do not depend on the offsets
+Tbl : Type
+Tbl = Lst (Word × Word) × Lst (Word × Word)
+-- the encoder of codes under an environment and a depth, given to the forms that contain codes
+Enc : Type
+Enc = XEnv → Word → Code → Lst Word
+x-disp : Bool × Word → Word
+x-disp p = if fst p then snd p else xneg32 (snd p)
+x-slot : Word → Bool × Word
+x-slot s = (false , xmul8 (%wsucc s))
+x-arg : Word → Word → Bool × Word
+x-arg i n = (true , %wadd #16 (xmul8 (%wsub (%wsub n #1) i)))
+x-place : XEnv → Word → Bool × Word
+x-place lnil n = (true , #0)
+x-place (lcons p r) n = if %weq n #0 then p else x-place r (%wsub n #1)
+x-look : Lst (Word × Word) → Word → Word
+x-look lnil g = #0
+x-look (lcons e r) g = if %weq (fst e) g then snd e else x-look r g
+x-tbl : Tbl → Word → Word
+x-tbl tbl g = x-look (snd tbl) g
+x-ar : Tbl → Word → Word
+x-ar tbl g = x-look (fst tbl) g
+x-take : Word → Lst Code → Lst Code
+x-take n l = %welimP (λ _ → Lst Code → Lst Code) n (λ l2 → lnil) (λ j h l2 → case l2 return (λ _ → Lst Code) of
+  lnil → lnil
+  lcons x r → lcons x (h r)) l
+x-drop : Word → Lst Code → Lst Code
+x-drop n l = %welimP (λ _ → Lst Code → Lst Code) n (λ l2 → l2) (λ j h l2 → case l2 return (λ _ → Lst Code) of
+  lnil → lnil
+  lcons x r → h r) l
+-- a binary operation: a pushed, b into rcx, a back into rax, the operation
+x-bin : Enc → XEnv → Word → Code → Code → Lst Word → Lst Word
+x-bin ce env d a b op = xcat5 (ce env d a) i-push-rax (ce env (%wsucc d) b) (l-app i-mov-rcx-rax i-pop-rax) op
+-- unsigned division and remainder, total: by 0 the quotient is 0 and the remainder the dividend
+x-udiv : Bool → Lst Word
+x-udiv rem =
+  let body = xcat3 i-xor-edx i-div (if rem then i-mov-rax-rdx else lnil)
+      zero = the (Lst Word) (if rem then lnil else i-xor-eax)
+  in xcat4 i-test-rcx (i-jcc j-e (%wadd (l-count body) #5)) body (l-app (i-jmp (l-count zero)) zero)
+-- signed: by 0 as unsigned; by −1 the quotient is the negation (INT64_MIN stays) and the remainder 0
+x-sdiv : Bool → Lst Word
+x-sdiv rem =
+  let body = xcat3 i-cqo i-idiv (if rem then i-mov-rax-rdx else lnil)
+      by-m1 = if rem then i-xor-eax else i-neg
+      zero = the (Lst Word) (if rem then lnil else i-xor-eax)
+      tail = l-app (i-jmp (%wadd (l-count by-m1) (%wadd #5 (l-count zero)))) lnil
+      m1 = l-app by-m1 (i-jmp (l-count zero))
+  in xcat6 i-test-rcx (i-jcc j-e (%wadd (l-count body) (%wadd (l-count tail) (%wadd (l-count i-cmp-rcx-m1) (%wadd #6 (l-count m1))))))
+           i-cmp-rcx-m1 (i-jcc j-e (%wadd (l-count body) (l-count tail))) (l-app body tail) (l-app m1 zero)
+-- the word operations (lib/code.cub cwop): eq, lt (Bool: true 0, false 1), add (overflow past
+-- 2^64 leaves), max, truncated subtraction, mul, div, mod, and, or, xor, (shl: refused), shr
+x-wop : Word → Lst Word
+x-wop k =
+  if %weq k #0 then l-app i-cmp (i-set cc-ne)
+  else if %weq k #1 then l-app i-cmp (i-set cc-ae)
+  else if %weq k #2 then l-app i-add i-over-if-c
+  else if %weq k #3 then l-app i-cmp i-cmovb
+  else if %weq k #4 then xcat3 i-sub (i-jcc j-ae #2) i-xor-eax
+  -- mul rcx (the product in rdx:rax, carry when rdx ≠ 0: the overflow exit); x / 0 = 0, x mod 0 = x
+  else if %weq k #5 then l-app (xb3 #72 #247 #225) i-over-if-c
+  else if %weq k #6 then x-udiv false
+  else if %weq k #7 then x-udiv true
+  else if %weq k #8 then i-and else if %weq k #9 then i-or else if %weq k #10 then i-xor
+  -- shr: 0 when the count is 64 or more (cmp rcx, 63; jbe +4; xor eax, eax; jmp +3; shr rax, cl)
+  else xcat5 (xb4 #72 #131 #249 #63) (xb2 #118 #4) (xb2 #49 #192) (xb2 #235 #3) (xb3 #72 #211 #232)
+-- Float64: both operands into xmm0 and xmm1, the operation, the result's bits back
+x-fop : Lst Word → Lst Word
+x-fop op = xcat4 i-movq-x0-rax i-movq-x1-rcx op i-movq-rax-x0
+-- Float64 equality and order: true (0) when the condition holds and the operands are ordered
+-- (ucomisd sets the parity flag for a NaN): set the condition and "not parity", and them, negate
+x-fcmp : Word → Lst Word
+x-fcmp cc = xcat6 i-movq-x0-rax i-movq-x1-rcx i-ucomisd (xb3 #15 cc #192) (l-app i-mov-cl-al (xb3 #15 cc-np #192)) (xcat3 i-and-al-cl (xb3 #15 #182 #192) (xb3 #131 #240 #1))
+-- the binary operations, sub-numbered as PO_*: Int64 0–4, UInt32 5–9, Float64 10–15, UInt64 16–27,
+-- Int64's division to shifts 28–34. Comparisons give Bool (true 0): the negated condition is set
+x-op2 : Word → Lst Word
+x-op2 sb =
+  if %weq sb #0 then i-add else if %weq sb #1 then i-sub else if %weq sb #2 then i-imul
+  else if %weq sb #3 then l-app i-cmp (i-set cc-ne) else if %weq sb #4 then l-app i-cmp (i-set cc-ge)
+  else if %weq sb #5 then i-add32 else if %weq sb #6 then i-sub32 else if %weq sb #7 then i-imul32
+  else if %weq sb #8 then l-app i-cmp32 (i-set cc-ne) else if %weq sb #9 then l-app i-cmp32 (i-set cc-ae)
+  else if %weq sb #10 then x-fop i-addsd else if %weq sb #11 then x-fop i-subsd
+  else if %weq sb #12 then x-fop i-mulsd else if %weq sb #13 then x-fop i-divsd
+  else if %weq sb #14 then x-fcmp cc-e else if %weq sb #15 then x-fcmp cc-b
+  else if %weq sb #16 then i-add else if %weq sb #17 then i-sub else if %weq sb #18 then i-imul
+  else if %weq sb #19 then l-app i-cmp (i-set cc-ne) else if %weq sb #20 then l-app i-cmp (i-set cc-ae)
+  else if %weq sb #21 then x-udiv false else if %weq sb #22 then x-udiv true
+  else if %weq sb #23 then i-and else if %weq sb #24 then i-or else if %weq sb #25 then i-xor
+  else if %weq sb #26 then i-shl else if %weq sb #27 then i-shr
+  else if %weq sb #28 then x-sdiv false else if %weq sb #29 then x-sdiv true
+  else if %weq sb #30 then i-and else if %weq sb #31 then i-or else if %weq sb #32 then i-xor
+  else if %weq sb #33 then i-shl else i-sar
+x-ld : Word → Lst Word
+x-ld w = if %weq w #1 then i-ld8 else if %weq w #2 then i-ld16 else if %weq w #4 then i-ld32 else i-ld64
+x-st : Word → Lst Word
+x-st w = if %weq w #1 then i-st8 else if %weq w #2 then i-st16 else if %weq w #4 then i-st32 else i-st64
+-- a word to Float64, unsigned: below 2^63 directly; else halved keeping the low bit (round to odd),
+-- converted, doubled — the sequence that rounds as the unsigned conversion does
+x-u2f : Lst Word
+x-u2f =
+  let big = xcat5 i-mov-rcx-rax (xb3 #72 #209 #233) (xb3 #131 #224 #1) (xb3 #72 #9 #193) (xcat3 (xb3 #72 #137 #200) i-cvtsi2sd i-addsd-x0x0)
+      small = l-app i-cvtsi2sd (i-jmp (l-count big))
+  in xcat5 i-test-rax (i-jcc j-s (l-count small)) small big i-movq-rax-x0
+-- the conversions (PO_I64OFW … PO_WOFU64, sub-numbered 35–47)
+x-un : Enc → XEnv → Word → Word → Code → Lst Word
+x-un ce env d sb a =
+  l-app (ce env d a)
+    (if %weq sb #37 then i-zx32 else if %weq sb #44 then i-zx32 else if %weq sb #45 then i-zx32
+     else if %weq sb #39 then x-u2f else if %weq sb #40 then xcat3 i-cvtsi2sd i-movq-rax-x0 lnil
+     else if %weq sb #41 then xcat3 i-movq-x0-rax i-cvttsd2si lnil
+     else lnil)
+-- rax the source bytes, rcx the offset, rdx the value (both kept): rax becomes a fresh copy
+x-copy-bytes : Lst Word
+x-copy-bytes =
+  xcat6 (xb2 #81 #82)
+        (xcat4 i-mov-rsi-rax (i-ld-rax #0) (xb4 #72 #131 #192 #15) (xb4 #72 #131 #224 #248))
+        (xcat3 i-mov-rcx-rax i-mov-rax-r15 i-add-r15-rcx)
+        (xcat3 (l-app i-cmp-r15-r12 i-over-if-above) i-mov-rdi-rax i-push-rax)
+        (l-app i-rep-movsb i-pop-rax)
+        (xb2 #90 #89)
+-- a store: a copy of the bytes (8 + the data padded to 8, from the arena, copied with rep movsb), the
+-- value stored in the copy, the copy the result. The original is never written: a buffer is shared
+-- whenever a variable naming it occurs again, and copying is what makes that true of the bytes (an
+-- in-place store needs ownership the checker tracks, the 1-linear resources of B11 (PLAN.md revision 8, 9 Nov 2026, git 91167ad638c0:PLAN.md, §18.1 “B11 — Multiplicities (static side)”), and is not done here)
+x-store : Enc → XEnv → Word → Word → Code → Code → Code → Lst Word
+x-store ce env d w b off v =
+  xcat6 (ce env d b) i-push-rax (ce env (%wsucc d) off) i-push-rax (ce env (%wadd d #2) v)
+        (xcat5 i-mov-rdx-rax i-pop-rcx i-pop-rax x-copy-bytes
+               (xcat4 i-push-rax i-add-rax-rcx (x-st w) i-pop-rax))
+-- fresh bytes of length n, zeroed: 8 + n rounded up to 8 from the arena, the length stored
+x-fresh : Enc → XEnv → Word → Code → Lst Word
+x-fresh ce env d n =
+  xcat6 (ce env d n) i-push-rax (xb4 #72 #131 #192 #15) (xb4 #72 #131 #224 #248)
+        (xcat4 i-mov-rcx-rax i-mov-rax-r15 i-add-r15-rcx (l-app i-cmp-r15-r12 i-over-if-above))
+        (xcat5 i-mov-rdi-rax (xb1 #80) (l-app (xb2 #49 #192) i-rep-stosb) (xb1 #88) (l-app i-pop-rcx (i-st-rax-rcx #0)))
+-- the primitive operations by their number (lib/code.cub prim-apply; src/core.h PO_*)
+x-prim : Enc → XEnv → Word → Word → Lst Code → Lst Word
+x-prim ce env d k as =
+  if %wlt k #512 then x-un ce env d (%wsub k #256) (l-at (cwlit #0) as #0)
+  else if %wlt k #768 then x-bin ce env d (l-at (cwlit #0) as #0) (l-at (cwlit #0) as #1) (x-op2 (%wsub k #512))
+  else if %wlt k #1024 then x-bin ce env d (l-at (cwlit #0) as #0) (l-at (cwlit #0) as #1) (l-app i-add-rax-rcx (x-ld (%wsub k #768)))
+  else if %wlt k #1280 then x-store ce env d (%wsub k #1024) (l-at (cwlit #0) as #0) (l-at (cwlit #0) as #1) (l-at (cwlit #0) as #2)
+  else if %wlt k #1536 then l-app (ce env d (l-at (cwlit #0) as #0)) (i-ld-rax #0)
+  else x-fresh ce env d (l-at (cwlit #0) as #0)
+-- the values of a list pushed in order (each one slot deeper)
+x-push-all : Enc → XEnv → Word → Lst Code → Lst Word
+x-push-all ce env d lnil = lnil
+x-push-all ce env d (lcons a r) = xcat3 (ce env d a) i-push-rax (x-push-all ce env (%wsucc d) r)
+x-pop-fields : Word → Lst Word
+x-pop-fields n = %welimP (λ _ → Lst Word) n lnil (λ j h → xcat3 i-pop-rcx (i-st-rax-rcx (xmul8 (%wsucc j))) h)
+-- a cell of k fields: the fields pushed, the cell taken from the arena, the fields stored
+x-cell : Enc → XEnv → Word → Word → Lst Code → Lst Word
+x-cell ce env d tag fs =
+  let n = l-count fs
+      sz = xmul8 (%wsucc n)
+  in xcat6 (x-push-all ce env d fs) i-mov-rax-r15 (i-add-r15 sz) (l-app i-cmp-r15-r12 i-over-if-above)
+           (i-st-rax-imm tag) (x-pop-fields n)
+-- a call: the arguments pushed in order, the call, the arguments dropped
+x-call : Enc → Tbl → XEnv → Word → Word → Lst Code → Lst Word
+x-call ce tbl env d g args =
+  xcat3 (x-push-all ce env d args) (i-call-off (x-tbl tbl g)) (if %weq (l-count args) #0 then lnil else i-add-rsp (xmul8 (l-count args)))
+x-pop-at : Word → Lst Word
+x-pop-at n = %welimP (λ _ → Lst Word) n lnil (λ j h → xcat3 i-pop-rcx (i-st-rax-rcx (xmul8 (%wadd (%wsucc j) #2))) h)
+-- a closure cell: the arguments pushed, a cell of 3 + n words, [offset][arity][n], the arguments
+x-clo : Enc → Tbl → XEnv → Word → Word → Word → Lst Code → Lst Word
+x-clo ce tbl env d g a args =
+  let n = l-count args
+  in xcat6 (x-push-all ce env d args) i-mov-rax-r15 (i-add-r15 (xmul8 (%wadd n #3))) (l-app i-cmp-r15-r12 i-over-if-above)
+           (xcat3 (i-st-rax-imm (x-tbl tbl g)) (i-st-rax-d-imm #8 a) (i-st-rax-d-imm #16 n)) (x-pop-at n)
+-- the value code leaves in rax (a closure) applied to each argument in turn: the closure pushed,
+-- the argument pushed, the routine called, both dropped
+x-applies : Enc → Tbl → XEnv → Word → Lst Word → Lst Code → Lst Word
+x-applies ce tbl env d bs lnil = bs
+x-applies ce tbl env d bs (lcons a r) =
+  x-applies ce tbl env d (xcat5 bs i-push-rax (ce env (%wsucc d) a) i-push-rax (l-app (i-call-off (x-tbl tbl x-apply-key)) (i-add-rsp #16))) r
+-- definition g at its arguments: a call when they are as many as its arity; a closure cell when
+-- fewer; the call on the first ones, then the rest applied, when more
+x-gref : Enc → Tbl → XEnv → Word → Word → Lst Code → Lst Word
+x-gref ce tbl env d g args =
+  let a = x-ar tbl g
+      n = l-count args
+  in if %weq n a then x-call ce tbl env d g args
+     else if %wlt n a then x-clo ce tbl env d g a args
+     else x-applies ce tbl env d (x-call ce tbl env d g (x-take a args)) (x-drop a args)
+-- a case's tag into rcx: an immediate below 4096 is the index, else the cell's first word
+x-tag : Lst Word
+x-tag = let heap = i-mov-rcx-mrax
+            imm = i-mov-rcx-rax
+        in xcat4 (i-cmp-rax-imm #4096) (i-jcc j-ae (%wadd (l-count imm) #5)) (l-app imm (i-jmp (l-count heap))) heap
+x-field-env : Word → Word → XEnv → XEnv
+x-field-env d nf env = %welimP (λ _ → XEnv) nf env (λ j h → lcons (x-slot (%wadd d (%wsucc j))) h)
+x-load-fields : Word → Word → Lst Word
+x-load-fields d nf = w-fold-up nf (λ j acc → l-app acc (xcat3 (i-ld-rbp (x-disp (x-slot d))) (l-app (i-ld-rax (xmul8 (%wsucc j))) i-push-rax) lnil)) lnil
+-- a branch under nf fields: the cell reloaded from slot d, each field pushed (slots d+1 …)
+x-branch : Enc → XEnv → Word → Word → Code → Lst Word
+x-branch ce env d nf br =
+  xcat3 (x-load-fields d nf) (ce (x-field-env d nf env) (%wadd d (%wsucc nf)) (x-strip nf br)) (if %weq nf #0 then lnil else i-add-rsp (xmul8 nf))
+-- the branches' bytes: (index , bytes) each
+x-case-brs : Enc → XEnv → Word → Word → Word → Lst Code → Lst (Word × Lst Word)
+x-case-brs ce env d dd k lnil = lnil
+x-case-brs ce env d dd k (lcons br r) = lcons (k , x-branch ce env d (x-nf dd k) br) (x-case-brs ce env d dd (%wsucc k) r)
+x-case-link : Word × Lst Word → Lst Word → Lst Word
+x-case-link e rest = let body = l-app (snd e) (i-jmp (l-count rest)) in xcat3 (i-cmp-rcx-imm (fst e)) (i-jcc j-ne (l-count body)) (l-app body rest)
+-- the comparisons: cmp rcx, k; jne next; branch; jmp end — the last branch unconditional
+x-case-chain : Lst (Word × Lst Word) → Lst Word
+x-case-chain lnil = i-ud2
+x-case-chain (lcons e lnil) = snd e
+x-case-chain (lcons e (lcons e2 r)) = x-case-link e (x-case-chain (lcons e2 r))
+-- a case: the scrutinee pushed (slot d); its index into rcx; each branch compared in turn, its fields
+-- pushed from the cell
+x-case : Enc → XEnv → Word → Word → Lst Code → Code → Lst Word
+x-case ce env d dd B x = xcat4 (ce env d x) i-push-rax x-tag (l-app (x-case-chain (x-case-brs ce env d dd #0 B)) (i-add-rsp #8))
+-- Nat by Word: zero is 0, suc k is k + 1 (the overflow exit past 2^64)
+x-nat-con : Enc → XEnv → Word → Lst Code → Lst Word
+x-nat-con ce env d (lcons a r) = xcat3 (ce env d a) i-add1 i-over-if-c
+x-nat-con ce env d lnil = i-mov-rax-imm #0
+-- a case on a Nat: the scrutinee pushed (slot d); 0 takes the zero branch, else the predecessor is
+-- pushed (slot d+1) as the suc branch's field
+x-nat-case : Enc → XEnv → Word → Lst Code → Code → Lst Word
+x-nat-case ce env d B x =
+  let bz = ce env (%wsucc d) (l-at (cwlit #0) B #0)
+      bs = xcat3 (l-app (i-ld-rbp (x-disp (x-slot d))) (xb4 #72 #131 #232 #1)) i-push-rax
+                 (l-app (ce (lcons (x-slot (%wsucc d)) env) (%wadd d #2) (x-strip #1 (l-at (cwlit #0) B #1))) (i-add-rsp #8))
+      zpart = l-app bz (i-jmp (l-count bs))
+  in xcat5 (ce env d x) i-push-rax (l-app i-test-rax (i-jcc j-ne (l-count zpart))) (l-app zpart bs) (i-add-rsp #8)
+-- a word loop: the bound (slot d), the counter (slot d+1, from 0), the state (slot d+2); while the
+-- counter is below the bound the step computes the next state; then the state
+x-loop : Enc → XEnv → Word → Code → Code → Code → Lst Word
+x-loop ce env d w z s =
+  let bnd = x-slot d
+      ctr = x-slot (%wsucc d)
+      acc = x-slot (%wadd d #2)
+      env2 = lcons acc (lcons ctr env)
+      step = xcat4 (ce env2 (%wadd d #3) (x-loop-body s)) (i-st-rbp (x-disp acc))
+                   (l-app (i-ld-rbp (x-disp ctr)) i-add1) (i-st-rbp (x-disp ctr))
+      test = xcat3 (i-ld-rbp (x-disp ctr)) (i-ldc-rbp (x-disp bnd)) i-cmp
+      body = l-app step (i-jmp (xneg32 (%wadd (l-count test) (%wadd #6 (%wadd (l-count step) #5)))))
+      head = xcat6 (ce env d w) i-push-rax (i-mov-rax-imm #0) i-push-rax (ce env (%wadd d #2) z) i-push-rax
+  in xcat5 head test (i-jcc j-ae (l-count body)) body (l-app (i-ld-rbp (x-disp acc)) (i-add-rsp #24))
+-- cx tbl env d c: the bytes leaving c's value in rax; d slots are pushed; tbl the definitions'
+-- offsets
+cx-n : Nat → Tbl → XEnv → Word → Code → Lst Word
+cx-n zero tbl env d c = i-ud2
+cx-n (suc k) tbl env d (cvar n) = i-ld-rbp (x-disp (x-place env n))
+cx-n (suc k) tbl env d (cglob g) = x-gref (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) tbl env d g lnil
+cx-n (suc k) tbl env d (capp f a) =
+  (let sp = x-spine (capp f a) in
+   case fst sp return (λ _ → Lst Word) of
+     cglob g → x-gref (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) tbl env d g (snd sp)
+     h → x-applies (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) tbl env d (cx-n k tbl env d h) (snd sp))
+cx-n (suc k) tbl env d (clet t b) = xcat3 (cx-n k tbl env d t) i-push-rax (l-app (cx-n k tbl (lcons (x-slot d) env) (%wsucc d) b) (i-add-rsp #8))
+cx-n (suc k) tbl env d (cann t T) = cx-n k tbl env d t
+cx-n (suc k) tbl env d (cpair a b) = x-cell (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d #0 (lcons a (lcons b lnil))
+cx-n (suc k) tbl env d (cfst p) = l-app (cx-n k tbl env d p) (i-ld-rax #8)
+cx-n (suc k) tbl env d (crec dd fs) = x-cell (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d #0 fs
+cx-n (suc k) tbl env d (cproj dd j p) = l-app (cx-n k tbl env d p) (i-ld-rax (xmul8 (%wsucc j)))
+cx-n (suc k) tbl env d (csnd p) = l-app (cx-n k tbl env d p) (i-ld-rax #16)
+cx-n (suc k) tbl env d (ccon dd j fs ds) =
+  if %weq dd x-nat-d then x-nat-con (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d fs
+  else (if l-isnil fs then i-mov-rax-imm j else x-cell (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d j fs)
+cx-n (suc k) tbl env d (ccase dd B x) = if %weq dd x-nat-d then x-nat-case (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d B x else x-case (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d dd B x
+cx-n (suc k) tbl env d (cwlit n) = i-mov-rax-imm n
+cx-n (suc k) tbl env d (cplit j b) = i-mov-rax-imm b
+cx-n (suc k) tbl env d (cwsucc a) = xcat3 (cx-n k tbl env d a) i-add1 i-over-if-c
+cx-n (suc k) tbl env d (cwop j a b) = x-bin (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d a b (x-wop j)
+cx-n (suc k) tbl env d (cprim j as) = x-prim (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d j as
+cx-n (suc k) tbl env d (cwelim w z s mo) = x-loop (λ e2 d2 c2 → cx-n k tbl e2 d2 c2) env d w z s
+cx-n (suc k) tbl env d c = i-ud2
+cx : Tbl → XEnv → Word → Code → Lst Word
+cx tbl env d c = cx-n c-fuel tbl env d c
+-- ---------------------------------------------------------------- the blob
+x-arg-env : Word → XEnv
+x-arg-env n = w-fold-up n (λ i acc → lcons (x-arg i n) acc) lnil
+-- a definition: prologue, the body (arguments above rbp), epilogue
+x-fn : Tbl → Word × (Word × Code) → Lst Word
+x-fn tbl e = xcat3 (xcat3 i-push-rbp i-mov-rbp-rsp i-stack-check) (cx tbl (x-arg-env (fst (snd e))) #0 (snd (snd e))) (xcat3 i-mov-rsp-rbp i-pop-rbp i-ret)
+x-stub-pushes : Word → Lst Word
+x-stub-pushes n = w-fold-up n (λ i acc → l-app acc (l-app (xb2 #255 #183) (ximm32 (xmul8 i)))) lnil
+-- the entry stub, System V: jit(args, n, ctx) — rdi the arguments' array, rdx the context
+-- (overflow flag, arena next, arena end). Saves the callee-saved registers, sets r13 r15 r12 r14,
+-- pushes the arguments in order, calls the entry definition, restores, returns its value
+x-stub : Word → Word → Lst Word
+x-stub n off0 =
+  let pushes = x-stub-pushes n
+      pre = xcat6 (xb1 #85) (xb1 #83) (xb2 #65 #84) (xb2 #65 #85) (xb2 #65 #86) (xb2 #65 #87)
+      setup = xcat4 (xb3 #72 #137 #227) (xb3 #73 #137 #213) (xb4 #77 #139 #125 #8) (xb4 #77 #139 #101 #16)
+      lea-at = %wadd (l-count pre) (l-count setup)
+      lea = l-app (xb3 #76 #141 #53) (ximm32 (xneg32 (%wadd lea-at #7)))
+      post = xcat4 (xb3 #72 #137 #220) (xb4 #65 #95 #65 #94) (xb4 #65 #93 #65 #92) (xb3 #91 #93 #195)
+  in xcat6 pre setup lea pushes (i-call-off off0) post
+-- offsets: the stub first, then each definition; every jump and call is a fixed-width encoding,
+-- so a definition's length does not depend on the offsets, and one pass with offsets 0 measures
+x-layout : Lst (Word × Word) → Defs → Word → Lst (Word × Word)
+x-layout ars lnil off = lnil
+x-layout ars (lcons e r) off = lcons (fst e , off) (x-layout ars r (%wadd off (l-count (x-fn (ars , lnil) e))))
+x-arities : Defs → Lst (Word × Word)
+x-arities lnil = lnil
+x-arities (lcons e r) = lcons (fst e , fst (snd e)) (x-arities r)
+x-fns : Tbl → Defs → Lst Word
+x-fns tbl lnil = lnil
+x-fns tbl (lcons e r) = l-app (x-fn tbl e) (x-fns tbl r)
+-- does a body make a closure (a definition at fewer arguments than its arity) or apply a value
+x-na-l : (Code → Bool) → Lst Code → Bool
+x-na-l f lnil = false
+x-na-l f (lcons x r) = c-or (f x) (x-na-l f r)
+x-na-n : Nat → Lst (Word × Word) → Code → Bool
+x-na-n zero ars c = false
+x-na-n (suc k) ars (cglob g) = c-not (%weq (x-look ars g) #0)
+x-na-n (suc k) ars (capp f a) =
+  (let sp = x-spine (capp f a) in
+   case fst sp return (λ _ → Bool) of
+     cglob g → c-or (c-not (%weq (x-look ars g) (l-count (snd sp)))) (x-na-l (λ c2 → x-na-n k ars c2) (snd sp))
+     _ → true)
+x-na-n (suc k) ars c = x-na-l (λ c2 → x-na-n k ars c2) (code-kids c)
+x-needs-apply : Lst (Word × Word) → Defs → Bool
+x-needs-apply ars lnil = false
+x-needs-apply ars (lcons e r) = c-or (x-na-n c-fuel ars (snd (snd e))) (x-needs-apply ars r)
+-- the blob of a program whose entry is definition m: the stub, the apply routine when some
+-- definition makes or applies a closure, the definitions
+encode-prog : Word → Defs → Lst Word
+encode-prog m defs =
+  let n = opt-or (x-arity defs m) #0
+      slen = l-count (x-stub n #0)
+      ars = x-arities defs
+      ap = if x-needs-apply ars defs then i-apply else lnil
+      offs = lcons (x-apply-key , slen) (x-layout ars defs (%wadd slen (l-count ap)))
+      tbl = the Tbl (ars , offs)
+  in l-app (x-stub n (x-tbl tbl m)) (l-app ap (x-fns tbl defs))
+-- ---------------------------------------------------------------- arguments no result depends on
+-- A parameter of a lifted definition is needed when some occurrence of it is: one that is not
+-- the scrutinee of a case with no branches (which no branch reads: the code after it is never
+-- reached) and not an argument in a position that is itself not needed. The needed set R, of
+-- (g , i), is the least fixed point; an argument in a position outside it, and the scrutinee of
+-- an empty case, are replaced by 0 and never computed. This is how a proof passed along a
+-- recursion by a measure (lib/std.cub's wfrec: used only to refute the case of no fuel left)
+-- costs nothing and may be a term outside the fragment
+Rel : Type
+Rel = Lst (Word × Word)
+x-pmem : Word → Word → Rel → Bool
+x-pmem g i lnil = false
+x-pmem g i (lcons e r) = if c-and (%weq (fst e) g) (%weq (snd e) i) then true else x-pmem g i r
+x-nd-l : (Code → Lst Word → Lst Word) → Lst Code → Lst Word → Lst Word
+x-nd-l f lnil acc = acc
+x-nd-l f (lcons x r) acc = x-nd-l f r (f x acc)
+x-nd-args : (Code → Lst Word → Lst Word) → Rel → Lst (Word × Word) → Word → Word → Lst Code → Lst Word → Lst Word
+x-nd-args f R ars g j lnil acc = acc
+x-nd-args f R ars g j (lcons a r) acc =
+  x-nd-args f R ars g (%wsucc j) r (if c-or (c-not (%wlt j (x-look ars g))) (x-pmem g j R) then f a acc else acc)
+-- the variables (relative to depth d) an occurrence that counts reaches
+x-nd-n : Nat → Rel → Lst (Word × Word) → Word → Code → Lst Word → Lst Word
+x-nd-n zero R ars d c acc = acc
+x-nd-n (suc k) R ars d (cvar n) acc = if %wlt n d then acc else x-ins (%wsub n d) acc
+x-nd-n (suc k) R ars d (cglob g) acc = acc
+x-nd-n (suc k) R ars d (clam b) acc = x-nd-n k R ars (%wsucc d) b acc
+x-nd-n (suc k) R ars d (clet t b) acc = x-nd-n k R ars (%wsucc d) b (x-nd-n k R ars d t acc)
+x-nd-n (suc k) R ars d (ccase dd lnil x) acc = acc
+x-nd-n (suc k) R ars d (ccase dd (lcons b0 r) x) acc = x-nd-l (λ c2 a2 → x-nd-n k R ars d c2 a2) (lcons b0 r) (x-nd-n k R ars d x acc)
+x-nd-n (suc k) R ars d (cwelim w z st mo) acc = x-nd-n k R ars d w (x-nd-n k R ars d z (x-nd-n k R ars d st acc))
+x-nd-n (suc k) R ars d (capp f a) acc =
+  (let sp = x-spine (capp f a) in
+   case fst sp return (λ _ → Lst Word) of
+     cglob g → x-nd-args (λ c2 a2 → x-nd-n k R ars d c2 a2) R ars g #0 (snd sp) acc
+     h → x-nd-l (λ c2 a2 → x-nd-n k R ars d c2 a2) (lcons h (snd sp)) acc)
+x-nd-n (suc k) R ars d c acc = x-nd-l (λ c2 a2 → x-nd-n k R ars d c2 a2) (code-kids c) acc
+x-rel-add : Word → Word → Lst Word → Rel → Rel
+x-rel-add g n lnil R = R
+x-rel-add g n (lcons v r) R =
+  x-rel-add g n r (if %wlt v n then (if x-pmem g (%wsub (%wsub n #1) v) R then R else lcons (g , %wsub (%wsub n #1) v) R) else R)
+x-rel-step : Lst (Word × Word) → Defs → Rel → Rel
+x-rel-step ars lnil R = R
+x-rel-step ars (lcons e r) R = x-rel-step ars r (x-rel-add (fst e) (fst (snd e)) (x-nd-n c-fuel R ars #0 (snd (snd e)) lnil) R)
+-- the needed-parameter set to its fixed point: a round only adds pairs, one per parameter at most,
+-- so a round that adds nothing is the fixed point and the parameters' count plus one rounds reach it
+-- (2026-11-12: a fixed 64 rounds erased to 0 a parameter not yet found needed)
+x-rel-len : Rel → Word
+x-rel-len lnil = #0
+x-rel-len (lcons p r) = wadd #1 (x-rel-len r)
+x-arity-sum : Lst (Word × Word) → Word
+x-arity-sum lnil = #0
+x-arity-sum (lcons a r) = wadd (snd a) (x-arity-sum r)
+x-rel-fix : Rel → Lst (Word × Word) → Defs → Rel
+x-rel-fix R ars defs =
+  %welimP (λ _ → Rel → Rel) (wadd (x-arity-sum ars) #1) (λ R0 → R0)
+    (λ j h R0 → (let R1 = x-rel-step ars defs R0 in if weq (x-rel-len R1) (x-rel-len R0) then R0 else h R1)) R
+-- an argument outside R, and the scrutinee of an empty case, replaced by 0
+x-er-args : (Code → Code) → Rel → Lst (Word × Word) → Word → Word → Lst Code → Lst Code
+x-er-args f R ars g j lnil = lnil
+x-er-args f R ars g j (lcons a r) =
+  lcons (if c-or (c-not (%wlt j (x-look ars g))) (x-pmem g j R) then f a else cwlit #0) (x-er-args f R ars g (%wsucc j) r)
+x-er-n : Nat → Rel → Lst (Word × Word) → Code → Word → Opt Code
+x-er-n zero R ars p d = none
+x-er-n (suc k) R ars (ccase dd lnil x) d = some (ccase dd lnil (cwlit #0))
+x-er-n (suc k) R ars (capp f a) d =
+  (let sp = x-spine (capp f a) in
+   case fst sp return (λ _ → Opt Code) of
+     cglob g → some (x-apps (cglob g) (x-er-args (λ y → code-map (λ c2 d2 → x-er-n k R ars c2 d2) d y) R ars g #0 (snd sp)))
+     h → none)
+x-er-n (suc k) R ars p d = none
+x-er-defs : Rel → Lst (Word × Word) → Defs → Defs
+x-er-defs R ars lnil = lnil
+x-er-defs R ars (lcons e r) = lcons (fst e , (fst (snd e) , code-map (x-er-n c-fuel R ars) #0 (snd (snd e)))) (x-er-defs R ars r)
+x-def : Defs → Word → Opt Code
+x-def lnil g = none
+x-def (lcons e r) g = if %weq (fst e) g then some (snd (snd e)) else x-def r g
+-- the definitions reachable from the roots after erasure (state: to do , seen)
+x-reach-step : Defs → Lst Word × Lst Word → Lst Word × Lst Word
+x-reach-step defs st =
+  case drop-seen (snd st) (fst st) return (λ _ → Lst Word × Lst Word) of
+    lnil → (lnil , snd st)
+    lcons g r → (l-app r (opt-or (opt-map code-globals (x-def defs g)) lnil) , lcons g (snd st))
+x-reach : Defs → Lst Word → Lst Word
+x-reach defs roots = snd (w-iter (%wadd (%wmul (l-count defs) #4) #4) (x-reach-step defs) (roots , lnil))
+x-keep : Lst Word → Defs → Defs
+x-keep keep lnil = lnil
+x-keep keep (lcons e r) = if w-mem (fst e) keep then lcons e (x-keep keep r) else x-keep keep r
+x-all-params : Word → Word → Rel → Rel
+x-all-params g n R = %welimP (λ _ → Rel) n R (λ j h → lcons (g , j) h)
+x-root-params : Lst Word → Lst (Word × Word) → Rel → Rel
+x-root-params lnil ars R = R
+x-root-params (lcons g r) ars R = x-root-params r ars (x-all-params g (x-look ars g) R)
+-- roots: the entries (their own parameters are passed from outside and all count as needed)
+x-erase-roots : Lst Word → Defs → Defs
+x-erase-roots roots defs0 =
+  let ars = x-arities defs0
+      R = x-rel-fix (x-root-params roots ars lnil) ars defs0
+      defs1 = x-er-defs R ars defs0
+  in x-keep (x-reach defs1 roots) defs1
+x-erase : Word → Defs → Defs
+x-erase m defs0 = x-erase-roots (lcons m lnil) defs0
+-- the verdict of a program after erasure: a definition named that did not quote, a body outside
+-- the fragment (lib/machine.cub), a form the encoder has no template for
+x-names : Word → Defs → Bool
+x-names g lnil = false
+x-names g (lcons e r) = c-or (w-mem g (code-globals (snd (snd e)))) (x-names g r)
+x-bad : Lst (Word × Verdict) → Defs → Opt Verdict
+x-bad lnil defs = none
+x-bad (lcons e r) defs = if x-names (fst e) defs then some (snd e) else x-bad r defs
+x-frag-defs : Defs → Verdict
+x-frag-defs lnil = fo (cwlit #0)
+x-frag-defs (lcons e r) = v-then (fragment #0 (snd (snd e))) (x-frag-defs r)
+x-verdict : Lst (Word × Verdict) → Defs → Verdict
+x-verdict bad defs = opt-or (x-bad bad defs) (v-then (x-frag-defs defs) (x-check defs))
+-- ---------------------------------------------------------------- the plan of a #jit
+-- jit-plan g rules: for checked definition g, (verdict , (ok , (path , (code , bytes)))):
+--   verdict: fo when the program is compilable (lib/machine.cub's fragment, then x-check);
+--   ok: the checker's conversion of g's value with the meaning of the specialized code (true when
+--       the code means g; with no rule applied this is the whole check);
+--   path: the code of the path from g's code to the specialized one (refl when no rule applied),
+--       which the #jit directive gives to the checker when rules were applied;
+--   code: the specialized code; bytes: the blob.
+x-arity-is : Defs → Word → Word → Bool
+x-arity-is defs g n = case x-arity defs g return (λ _ → Bool) of
+  some k → %weq k n
+  none → false
+Plan : Type
+Plan = Verdict × (Bool × (Code × (Code × Lst Word)))
+jit-plan-at : Word → Code → Lst Rule → Code → Plan
+jit-plan-at g Tc rules c =
+  let s = specialize Tc sched-default rules c
+      cs = fst s
+      p = program-of g cs #256
+      ok = code-conv-at Tc (cglob g) cs
+      defs = x-erase g (x-forms-all (snd p))
+  in case x-verdict (fst p) defs return (λ _ → Plan) of
+       not-fo w at → (not-fo w at , (ok , (snd s , (cs , lnil))))
+       -- the entry's arity in the blob is the code's leading λs, which is what the boundary passes
+       -- (the directive counts them): a pass that changed it is refused here
+       fo q2 → (if x-arity-is defs g (fst (x-split cs)) then (fo cs , (ok , (snd s , (cs , encode-prog g defs))))
+                else (not-fo reflect cs , (ok , (snd s , (cs , lnil)))))
+jit-plan : Word → Lst Rule → Plan
+jit-plan g rules =
+  case unfold g return (λ _ → Plan) of
+    none → (not-fo reflect (cglob g) , (false , (cwlit #0 , (cwlit #0 , lnil))))
+    some c → jit-plan-at g (opt-or (def-type-code g) cword) rules c

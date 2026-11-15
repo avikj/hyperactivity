@@ -1,0 +1,321 @@
+-- lib/compile/wordlaw.cub — arithmetic of words from the word operations' laws (lib/prim.cub):
+-- the ring laws of wadd and wmul, order as a difference, and the digit step a word's bytes rest
+-- on: the remainder by P plus the next base-256 digit times P is the remainder by 256·P.
+-- Induction is on the second operand, where
+-- wadd and the law wmul-suc recur.
+import "../library.cub"
+
+-- ---------------------------------------------------------------- addition
+wadd-zero-l : (b : Word) → wadd #0 b ≡ b
+wadd-zero-l b = %welimP (λ v → wadd #0 v ≡ v) b (λ i → #0) (λ n h i → %wsucc (h i))
+wadd-suc-l : (a b : Word) → wadd (%wsucc a) b ≡ %wsucc (wadd a b)
+wadd-suc-l a b = %welimP (λ v → wadd (%wsucc a) v ≡ %wsucc (wadd a v)) b (λ i → %wsucc a) (λ n h i → %wsucc (h i))
+wadd-comm-step : (b n : Word) → wadd n b ≡ wadd b n → wadd (%wsucc n) b ≡ wadd b (%wsucc n)
+wadd-comm-step b n h = catw (wadd-suc-l n b) (congw (λ z → %wsucc z) h)
+wadd-comm : (a b : Word) → wadd a b ≡ wadd b a
+wadd-comm a b = %welimP (λ v → wadd v b ≡ wadd b v) a (wadd-zero-l b) (λ n h → wadd-comm-step b n h)
+wadd-assoc : (a b c : Word) → wadd (wadd a b) c ≡ wadd a (wadd b c)
+wadd-assoc a b c = %welimP (λ v → wadd (wadd a b) v ≡ wadd a (wadd b v)) c (λ i → wadd a b) (λ n h i → %wsucc (h i))
+-- (a + b) + (c + d) = (a + c) + (b + d)
+wadd-swap : (a b c d : Word) → wadd (wadd a b) (wadd c d) ≡ wadd (wadd a c) (wadd b d)
+wadd-swap a b c d =
+  catw (wadd-assoc a b (wadd c d))
+    (catw (congw (λ z → wadd a z) (catw (symw (wadd-assoc b c d)) (catw (congw (λ z → wadd z d) (wadd-comm b c)) (wadd-assoc c b d))))
+      (symw (wadd-assoc a c (wadd b d))))
+
+-- ---------------------------------------------------------------- multiplication
+wmul-zero-l : (b : Word) → wmul #0 b ≡ #0
+wmul-zero-l b =
+  %welimP (λ v → wmul #0 v ≡ #0) b (wmul-zero #0) (λ n h → catw (wmul-suc #0 n) (congw (λ z → wadd z #0) h))
+-- a·(b + c) = a·b + a·c
+wmul-distl-step : (a b n : Word) → wmul a (wadd b n) ≡ wadd (wmul a b) (wmul a n) →
+                  wmul a (wadd b (%wsucc n)) ≡ wadd (wmul a b) (wmul a (%wsucc n))
+wmul-distl-step a b n h =
+  catw (wmul-suc a (wadd b n))
+    (catw (congw (λ z → wadd z a) h)
+      (catw (wadd-assoc (wmul a b) (wmul a n) a) (congw (λ z → wadd (wmul a b) z) (symw (wmul-suc a n)))))
+wmul-distl : (a b c : Word) → wmul a (wadd b c) ≡ wadd (wmul a b) (wmul a c)
+wmul-distl a b c =
+  %welimP (λ v → wmul a (wadd b v) ≡ wadd (wmul a b) (wmul a v)) c
+    (catw (congw (λ z → z) (λ i → wmul a b)) (symw (congw (λ z → wadd (wmul a b) z) (wmul-zero a))))
+    (λ n h → wmul-distl-step a b n h)
+-- (a + b)·c = a·c + b·c
+wmul-distr-step : (a b n : Word) → wmul (wadd a b) n ≡ wadd (wmul a n) (wmul b n) →
+                  wmul (wadd a b) (%wsucc n) ≡ wadd (wmul a (%wsucc n)) (wmul b (%wsucc n))
+wmul-distr-step a b n h =
+  catw (wmul-suc (wadd a b) n)
+    (catw (congw (λ z → wadd z (wadd a b)) h)
+      (catw (wadd-swap (wmul a n) (wmul b n) a b)
+        (cong2w (λ x y → wadd x y) (symw (wmul-suc a n)) (symw (wmul-suc b n)))))
+wmul-distr : (a b c : Word) → wmul (wadd a b) c ≡ wadd (wmul a c) (wmul b c)
+wmul-distr a b c =
+  %welimP (λ v → wmul (wadd a b) v ≡ wadd (wmul a v) (wmul b v)) c
+    (catw (wmul-zero (wadd a b)) (symw (cong2w (λ x y → wadd x y) (wmul-zero a) (wmul-zero b))))
+    (λ n h → wmul-distr-step a b n h)
+-- (a·b)·c = a·(b·c)
+wmul-assoc-step : (a b n : Word) → wmul (wmul a b) n ≡ wmul a (wmul b n) →
+                  wmul (wmul a b) (%wsucc n) ≡ wmul a (wmul b (%wsucc n))
+wmul-assoc-step a b n h =
+  catw (wmul-suc (wmul a b) n)
+    (catw (congw (λ z → wadd z (wmul a b)) h)
+      (catw (symw (wmul-distl a (wmul b n) b)) (congw (λ z → wmul a z) (symw (wmul-suc b n)))))
+wmul-assoc : (a b c : Word) → wmul (wmul a b) c ≡ wmul a (wmul b c)
+wmul-assoc a b c =
+  %welimP (λ v → wmul (wmul a b) v ≡ wmul a (wmul b v)) c
+    (catw (wmul-zero (wmul a b)) (symw (catw (congw (λ z → wmul a z) (wmul-zero b)) (wmul-zero a))))
+    (λ n h → wmul-assoc-step a b n h)
+-- 1·b = b
+wmul-one-l : (b : Word) → wmul #1 b ≡ b
+wmul-one-l b =
+  %welimP (λ v → wmul #1 v ≡ v) b (wmul-zero #1) (λ n h → catw (wmul-suc #1 n) (congw (λ z → %wsucc z) h))
+-- (a + 1)·c = a·c + c
+wmul-suc-l : (a c : Word) → wmul (%wsucc a) c ≡ wadd (wmul a c) c
+wmul-suc-l a c = catw (wmul-distr a #1 c) (congw (λ z → wadd (wmul a c) z) (wmul-one-l c))
+
+-- ---------------------------------------------------------------- order, as a difference
+ft-absurd : (T : Type) → false ≡ true → T
+ft-absurd T h = Empty-rec (transport (λ i → if h i then Empty else Unit) unit)
+catb : {x y z : Bool} → x ≡ y → y ≡ z → x ≡ z
+catb p q = λ i → comp (λ j → Bool) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
+-- a < b: b is a + 1 + d for some d
+Ltw : Word → Word → Type
+Ltw a b = (d : Word) × wadd (%wsucc a) d ≡ b
+-- from the machine's comparison
+ltw-lt-step : (n : Word) → ((b : Word) → ltw n b ≡ true → Ltw n b) → (b : Word) → ltw (%wsucc n) b ≡ true → Ltw (%wsucc n) b
+ltw-lt-step n ih b =
+  %welimP (λ v → ltw (%wsucc n) v ≡ true → Ltw (%wsucc n) v) b
+    (λ h → ft-absurd (Ltw (%wsucc n) #0) h)
+    (λ m g h → (fst (ih m h) , catw (wadd-suc-l (%wsucc n) (fst (ih m h))) (congw (λ z → %wsucc z) (snd (ih m h)))))
+ltw-lt : (a b : Word) → ltw a b ≡ true → Ltw a b
+ltw-lt a =
+  %welimP (λ v → (b : Word) → ltw v b ≡ true → Ltw v b) a
+    (λ b → %welimP (λ v → ltw #0 v ≡ true → Ltw #0 v) b
+             (λ h → ft-absurd (Ltw #0 #0) h)
+             (λ m g h → (m , wadd-suc-l #0 m ∙ congw (λ z → %wsucc z) (wadd-zero-l m))))
+    (λ n ih → ltw-lt-step n ih)
+wlt-lt : (a b : Word) → wlt a b ≡ true → Ltw a b
+wlt-lt a b h = ltw-lt a b (catb (ltw≡wlt a b) h)
+-- to the machine's comparison
+lt-ltw-step : (d n : Word) → ltw n (wadd (%wsucc n) d) ≡ true → ltw (%wsucc n) (wadd (%wsucc (%wsucc n)) d) ≡ true
+lt-ltw-step d n h = catb (λ i → ltw (%wsucc n) (wadd-suc-l (%wsucc n) d i)) h
+lt-ltw : (d a : Word) → ltw a (wadd (%wsucc a) d) ≡ true
+lt-ltw d a = %welimP (λ v → ltw v (wadd (%wsucc v) d) ≡ true) a
+  (λ i → ltw #0 (wadd-suc-l #0 d i))
+  (λ n h → lt-ltw-step d n h)
+lt-wlt : (a b : Word) → Ltw a b → wlt a b ≡ true
+lt-wlt a b h = catb (symb (ltw≡wlt a b)) (catb (λ i → ltw a (snd h (~ i))) (lt-ltw (fst h) a))
+
+-- ---------------------------------------------------------------- the digit step
+-- D·P + R < 256·P when D < 256 and R < P
+lt-digit-path : (D R P d1 d2 : Word) → wadd (%wsucc D) d1 ≡ #256 → wadd (%wsucc R) d2 ≡ P →
+                wadd (%wsucc (wadd (wmul D P) R)) (wadd d2 (wmul d1 P)) ≡ wmul #256 P
+lt-digit-path D R P d1 d2 eD eR =
+  catw (wadd-assoc (wmul D P) (%wsucc R) (wadd d2 (wmul d1 P)))
+    (catw (congw (λ z → wadd (wmul D P) z) (symw (wadd-assoc (%wsucc R) d2 (wmul d1 P))))
+      (catw (symw (wadd-assoc (wmul D P) (wadd (%wsucc R) d2) (wmul d1 P)))
+        (catw (congw (λ z → wadd (wadd (wmul D P) z) (wmul d1 P)) eR)
+          (catw (congw (λ z → wadd z (wmul d1 P)) (symw (wmul-suc-l D P)))
+            (catw (symw (wmul-distr (%wsucc D) d1 P))
+              (congw (λ z → wmul z P) eD))))))
+lt-digit : (D R P : Word) → wlt D #256 ≡ true → wlt R P ≡ true → wlt (wadd (wmul D P) R) (wmul #256 P) ≡ true
+lt-digit D R P hD hR =
+  lt-wlt (wadd (wmul D P) R) (wmul #256 P)
+    (wadd (fst (wlt-lt R P hR)) (wmul (fst (wlt-lt D #256 hD)) P) ,
+     lt-digit-path D R P (fst (wlt-lt D #256 hD)) (fst (wlt-lt R P hR)) (snd (wlt-lt D #256 hD)) (snd (wlt-lt R P hR)))
+-- V = Q'·(256·P) + (D·P + R), Q and R V's quotient and remainder by P, Q' and D Q's by 256
+digit-split : (V P : Word) →
+  V ≡ wadd (wmul (wquot (wquot V P) #256) (wmul #256 P)) (wadd (wmul (wrem (wquot V P) #256) P) (wrem V P))
+digit-split V P =
+  catw (wdiv-mod V P)
+    (catw (congw (λ z → wadd (wmul z P) (wrem V P)) (wdiv-mod (wquot V P) #256))
+      (catw (congw (λ z → wadd z (wrem V P)) (wmul-distr (wmul (wquot (wquot V P) #256) #256) (wrem (wquot V P) #256) P))
+        (catw (wadd-assoc (wmul (wmul (wquot (wquot V P) #256) #256) P) (wmul (wrem (wquot V P) #256) P) (wrem V P))
+          (congw (λ z → wadd z (wadd (wmul (wrem (wquot V P) #256) P) (wrem V P))) (wmul-assoc (wquot (wquot V P) #256) #256 P)))))
+-- the remainder by P plus the next digit times P is the remainder by 256·P
+digit-step : (V P : Word) → wlt #0 P ≡ true → wadd (wrem V P) (wmul (wrem (wquot V P) #256) P) ≡ wrem V (wmul #256 P)
+digit-step V P h0 =
+  catw (wadd-comm (wrem V P) (wmul (wrem (wquot V P) #256) P))
+    (symw (catw (congw (λ z → wrem z (wmul #256 P)) (digit-split V P))
+            (wmod-unique (wquot (wquot V P) #256) (wadd (wmul (wrem (wquot V P) #256) P) (wrem V P)) (wmul #256 P)
+              (lt-digit (wrem (wquot V P) #256) (wrem V P) P (wrem-lt (wquot V P) #256 refl) (wrem-lt V P h0)))))
+-- a word below n is its own remainder by n
+wrem-small : (V n : Word) → wlt V n ≡ true → wrem V n ≡ V
+wrem-small V n h = catw (congw (λ z → wrem z n) (symw (catw (congw (λ z → wadd z V) (wmul-zero-l n)) (wadd-zero-l V))))
+                        (wmod-unique #0 V n h)
+
+-- ---------------------------------------------------------------- a word read back from its bytes
+-- a successor is not 0; a sum that is 0 has its left operand 0
+is-zero : Word → Type
+is-zero w = %welimP (λ _ → Type) w Unit (λ n h → Empty)
+suc-zero : (T : Type) → (x : Word) → %wsucc x ≡ #0 → T
+suc-zero T x p = Empty-rec (transport (λ i → is-zero (p (~ i))) unit)
+wadd-zero-inv : (r d : Word) → wadd r d ≡ #0 → r ≡ #0
+wadd-zero-inv r d = %welimP (λ v → wadd r v ≡ #0 → r ≡ #0) d (λ p → p) (λ n h p → suc-zero (r ≡ #0) (wadd r n) p)
+-- below 1 is 0
+lt-one : (r : Word) → Ltw r #1 → r ≡ #0
+lt-one r h = wadd-zero-inv r (fst h) (wsucc-inj (wadd r (fst h)) #0 (catw (symw (wadd-suc-l r (fst h))) (snd h)))
+-- the remainder by 1 is 0
+wrem-one : (V : Word) → wrem V #1 ≡ #0
+wrem-one V = lt-one (wrem V #1) (wlt-lt (wrem V #1) #1 (wrem-lt V #1 refl))
+-- the quotient by 256·P is the quotient by P, then by 256
+quot-step : (V P : Word) → wlt #0 P ≡ true → wquot (wquot V P) #256 ≡ wquot V (wmul #256 P)
+quot-step V P h0 =
+  symw (catw (congw (λ z → wquot z (wmul #256 P)) (digit-split V P))
+         (wdiv-unique (wquot (wquot V P) #256) (wadd (wmul (wrem (wquot V P) #256) P) (wrem V P)) (wmul #256 P)
+           (lt-digit (wrem (wquot V P) #256) (wrem V P) P (wrem-lt (wquot V P) #256 refl) (wrem-lt V P h0))))
+-- one step of the model's read (bv-update of the accumulated word at bits lo … lo+7): below
+-- 2^lo, the byte lands on top
+bu : Word → Word → Word → Word
+bu acc lo x = wor (wxor acc (wand acc (wshl #255 lo))) (wshl x lo)
+bu-step : (acc lo x : Word) → wlt acc (wshl #1 lo) ≡ true → bu acc lo x ≡ wadd acc (wmul x (wshl #1 lo))
+bu-step acc lo x h =
+  catw (congw (λ z → wor (wxor acc (wand acc z)) (wshl x lo)) (wshl-mul #255 lo))
+    (catw (congw (λ z → wor (wxor acc z) (wshl x lo)) (wand-disj acc #255 lo h))
+      (catw (congw (λ z → wor z (wshl x lo)) (wxor-zero acc))
+        (catw (congw (λ z → wor acc z) (wshl-mul x lo)) (wor-disj acc x lo h))))
+-- the accumulated word after a digit (as memi gives it: or-ed with 0): the remainder by the next power
+bu-dig : (V lo : Word) → {acc : Word} → acc ≡ wrem V (wshl #1 lo) → wlt #0 (wshl #1 lo) ≡ true →
+         bu acc lo (wor (wrem (wquot V (wshl #1 lo)) #256) #0) ≡ wrem V (wmul #256 (wshl #1 lo))
+bu-dig V lo {acc} e h0 =
+  catw (congw (λ z → bu acc lo z) (wor-zero (wrem (wquot V (wshl #1 lo)) #256)))
+    (catw (congw (λ z → bu z lo (wrem (wquot V (wshl #1 lo)) #256)) e)
+      (catw (bu-step (wrem V (wshl #1 lo)) lo (wrem (wquot V (wshl #1 lo)) #256) (wrem-lt V (wshl #1 lo) h0))
+        (digit-step V (wshl #1 lo) h0)))
+-- the model's 8-byte read: the bytes x0 … x7 (each as memi gives it, or-ed with 0), the result masked
+rd8 : Word → Word → Word → Word → Word → Word → Word → Word → Word
+rd8 x0 x1 x2 x3 x4 x5 x6 x7 =
+  wand (bu (bu (bu (bu (bu (bu (bu (bu #0 #0 (wor x0 #0)) #8 (wor x1 #0)) #16 (wor x2 #0)) #24 (wor x3 #0)) #32 (wor x4 #0)) #40 (wor x5 #0)) #48 (wor x6 #0)) #56 (wor x7 #0))
+       #18446744073709551615
+-- base-256 digit k of V (p = 256^k)
+dig : Word → Word → Word
+dig V p = wrem (wquot V p) #256
+-- a word below 2^64 read back from its digits is itself
+rd8-dig : (V : Word) → wlt V #18446744073709551616 ≡ true →
+          rd8 (dig V #1) (dig V #256) (dig V #65536) (dig V #16777216) (dig V #4294967296) (dig V #1099511627776) (dig V #281474976710656) (dig V #72057594037927936) ≡ V
+rd8-dig V h =
+  catw (congw (λ z → wand z #18446744073709551615)
+         (bu-dig V #56 (bu-dig V #48 (bu-dig V #40 (bu-dig V #32 (bu-dig V #24 (bu-dig V #16 (bu-dig V #8 (bu-dig V #0 (symw (wrem-one V)) refl) refl) refl) refl) refl) refl) refl) refl))
+    (catw (wand-mask (wrem V #18446744073709551616) #64)
+      (catw (wrem-small (wrem V #18446744073709551616) #18446744073709551616 (wrem-lt V #18446744073709551616 refl))
+        (wrem-small V #18446744073709551616 h)))
+
+-- ---------------------------------------------------------------- the bytes a store writes are the digits
+-- paths under a function of eight words (the endpoints from the signature: a law's path at an end
+-- is its type's end, not computed)
+cong8 : (f : Word → Word → Word → Word → Word → Word → Word → Word → Word) →
+        {a0 b0 a1 b1 a2 b2 a3 b3 a4 b4 a5 b5 a6 b6 a7 b7 : Word} →
+        a0 ≡ b0 → a1 ≡ b1 → a2 ≡ b2 → a3 ≡ b3 → a4 ≡ b4 → a5 ≡ b5 → a6 ≡ b6 → a7 ≡ b7 →
+        f a0 a1 a2 a3 a4 a5 a6 a7 ≡ f b0 b1 b2 b3 b4 b5 b6 b7
+cong8 f p0 p1 p2 p3 p4 p5 p6 p7 = λ i → f (p0 i) (p1 i) (p2 i) (p3 i) (p4 i) (p5 i) (p6 i) (p7 i)
+-- the quotient by 1
+quot-one : (V : Word) → wquot V #1 ≡ V
+quot-one V = catw (congw (λ z → wquot z #1) (symw (catw (wmul-suc V #0) (catw (congw (λ z → wadd z V) (wmul-zero V)) (wadd-zero-l V)))))
+                  (catw (congw (λ z → wquot z #1) (λ i → wadd (wmul V #1) #0)) (wdiv-unique V #0 #1 refl))
+-- a byte as a mask after a shift: the digit
+byte-dig : (V lo : Word) → wand (wshr V lo) #255 ≡ wrem (wquot V (wshl #1 lo)) #256
+byte-dig V lo = catw (wand-mask (wshr V lo) #8) (congw (λ z → wrem z #256) (wshr-div V lo))
+-- a word below 2^64 under the 64-bit mask
+mask64 : (V : Word) → wlt V #18446744073709551616 ≡ true → wand V #18446744073709551615 ≡ V
+mask64 V h = catw (wand-mask V #64) (wrem-small V #18446744073709551616 h)
+-- shifted right by 8, j times
+shr8 : Nat → Word → Word
+shr8 zero v = v
+shr8 (suc j) v = wshr (shr8 j v) #8
+-- the quotient by 256 after a quotient by P
+shr8-quot : (V P : Word) → wlt #0 P ≡ true → {y : Word} → y ≡ wquot V P → wshr y #8 ≡ wquot V (wmul #256 P)
+shr8-quot V P h0 {y} e = catw (wshr-div y #8) (catw (congw (λ z → wquot z #256) e) (quot-step V P h0))
+-- the bytes bits.cub's mem-store-n writes (the value shifted by 8 each byte, masked): the digits
+st-dig0 : (V : Word) → wand V #255 ≡ dig V #1
+st-dig0 V = catw (wand-mask V #8) (congw (λ z → wrem z #256) (symw (quot-one V)))
+st-dig : (V P : Word) → wlt #0 P ≡ true → {y : Word} → y ≡ wquot V P → wand (wshr y #8) #255 ≡ dig V (wmul #256 P)
+st-dig V P h0 {y} e = catw (wand-mask (wshr y #8) #8) (congw (λ z → wrem z #256) (shr8-quot V P h0 e))
+-- a word below 2^64 read back from the bytes mem-store-n wrote
+rd8-st : (V : Word) → wlt V #18446744073709551616 ≡ true →
+         rd8 (wand V #255) (wand (wshr V #8) #255) (wand (wshr (wshr V #8) #8) #255) (wand (wshr (wshr (wshr V #8) #8) #8) #255)
+             (wand (wshr (wshr (wshr (wshr V #8) #8) #8) #8) #255) (wand (wshr (wshr (wshr (wshr (wshr V #8) #8) #8) #8) #8) #255)
+             (wand (wshr (wshr (wshr (wshr (wshr (wshr V #8) #8) #8) #8) #8) #8) #255) (wand (wshr (wshr (wshr (wshr (wshr (wshr (wshr V #8) #8) #8) #8) #8) #8) #8) #255)
+         ≡ V
+rd8-st V h =
+  let q1 = shr8-quot V #1 refl (symw (quot-one V))
+      q2 = shr8-quot V #256 refl q1
+      q3 = shr8-quot V #65536 refl q2
+      q4 = shr8-quot V #16777216 refl q3
+      q5 = shr8-quot V #4294967296 refl q4
+      q6 = shr8-quot V #1099511627776 refl q5
+  in catw (cong8 rd8 (st-dig0 V) (st-dig V #1 refl (symw (quot-one V))) (st-dig V #256 refl q1) (st-dig V #65536 refl q2)
+                     (st-dig V #16777216 refl q3) (st-dig V #4294967296 refl q4) (st-dig V #1099511627776 refl q5) (st-dig V #281474976710656 refl q6))
+          (rd8-dig V h)
+-- a word below 2^64 read back from the bytes the model's wb wrote (bit lo of each byte at 8·k,
+-- the stored value the word under the 64-bit mask)
+rd8-wb : (V : Word) → wlt V #18446744073709551616 ≡ true →
+         rd8 (wand (wshr (wand V #18446744073709551615) #0) #255) (wand (wshr (wand V #18446744073709551615) #8) #255)
+             (wand (wshr (wand V #18446744073709551615) #16) #255) (wand (wshr (wand V #18446744073709551615) #24) #255)
+             (wand (wshr (wand V #18446744073709551615) #32) #255) (wand (wshr (wand V #18446744073709551615) #40) #255)
+             (wand (wshr (wand V #18446744073709551615) #48) #255) (wand (wshr (wand V #18446744073709551615) #56) #255)
+         ≡ V
+rd8-wb V h =
+  catw (cong8 (λ x0 x1 x2 x3 x4 x5 x6 x7 → rd8 (wand (wshr x0 #0) #255) (wand (wshr x1 #8) #255) (wand (wshr x2 #16) #255) (wand (wshr x3 #24) #255)
+                                                (wand (wshr x4 #32) #255) (wand (wshr x5 #40) #255) (wand (wshr x6 #48) #255) (wand (wshr x7 #56) #255))
+               (mask64 V h) (mask64 V h) (mask64 V h) (mask64 V h) (mask64 V h) (mask64 V h) (mask64 V h) (mask64 V h))
+    (catw (cong8 rd8 (byte-dig V #0) (byte-dig V #8) (byte-dig V #16) (byte-dig V #24)
+                     (byte-dig V #32) (byte-dig V #40) (byte-dig V #48) (byte-dig V #56))
+      (rd8-dig V h))
+
+-- ---------------------------------------------------------------- masks of small words, sums below 2^64
+W64w : Word → Type
+W64w a = wlt a #18446744073709551616 ≡ true
+-- below n is below n + m
+lt-weak : (x n m : Word) → wlt x n ≡ true → wlt x (wadd n m) ≡ true
+lt-weak x n m h =
+  lt-wlt x (wadd n m) (wadd (fst (wlt-lt x n h)) m ,
+    catw (symw (wadd-assoc (%wsucc x) (fst (wlt-lt x n h)) m)) (congw (λ z → wadd z m) (snd (wlt-lt x n h))))
+-- a word below 2^k under the mask of k ones
+mask-small : (x k : Word) → wlt x (wshl #1 k) ≡ true → wand x (wsub (wshl #1 k) #1) ≡ x
+mask-small x k h = catw (wand-mask x k) (wrem-small x (wshl #1 k) h)
+-- the model's 64-bit addition below 2^64: the masked operands, the 65-bit sum and its truncation
+add64 : (A C : Word) → W64w A → W64w C → wlt (wadd A C) #18446744073709551616 ≡ true →
+        wand (wand (wand (wadd (wand A #18446744073709551615) C) #36893488147419103231) #18446744073709551615) #18446744073709551615 ≡ wadd A C
+add64 A C hA hC hs =
+  let s1 = congw (λ z → wand (wand (wand (wadd z C) #36893488147419103231) #18446744073709551615) #18446744073709551615) (mask-small A #64 hA)
+      s2 = congw (λ z → wand (wand z #18446744073709551615) #18446744073709551615) (mask-small (wadd A C) #65 (lt-weak (wadd A C) #18446744073709551616 #18446744073709551616 hs))
+      s3 = congw (λ z → wand z #18446744073709551615) (mask-small (wadd A C) #64 hs)
+  in catw s1 (catw s2 (catw s3 (mask-small (wadd A C) #64 hs)))
+-- a word read back from bytes each shown to be its digit
+rd8-of : (V : Word) → {x0 x1 x2 x3 x4 x5 x6 x7 : Word} →
+         x0 ≡ dig V #1 → x1 ≡ dig V #256 → x2 ≡ dig V #65536 → x3 ≡ dig V #16777216 →
+         x4 ≡ dig V #4294967296 → x5 ≡ dig V #1099511627776 → x6 ≡ dig V #281474976710656 → x7 ≡ dig V #72057594037927936 →
+         wlt V #18446744073709551616 ≡ true → rd8 x0 x1 x2 x3 x4 x5 x6 x7 ≡ V
+rd8-of V p0 p1 p2 p3 p4 p5 p6 p7 h = catw (cong8 rd8 p0 p1 p2 p3 p4 p5 p6 p7) (rd8-dig V h)
+-- a byte masked twice after the shift (the model's push of a memory operand): the digit
+byte-dig2 : (V lo : Word) → wand (wand (wshr V lo) #255) #255 ≡ wrem (wquot V (wshl #1 lo)) #256
+byte-dig2 V lo =
+  catw (wand-mask (wand (wshr V lo) #255) #8)
+    (catw (congw (λ z → wrem z #256) (wand-mask (wshr V lo) #8))
+      (catw (wrem-small (wrem (wshr V lo) #256) #256 (wrem-lt (wshr V lo) #256 refl))
+        (congw (λ z → wrem z #256) (wshr-div V lo))))
+-- the bytes the model's push of a memory operand wrote, read back
+rd8-push-mem : (V : Word) → wlt V #18446744073709551616 ≡ true →
+  rd8 (wand (wand (wshr V #0) #255) #255) (wand (wand (wshr V #8) #255) #255) (wand (wand (wshr V #16) #255) #255) (wand (wand (wshr V #24) #255) #255)
+      (wand (wand (wshr V #32) #255) #255) (wand (wand (wshr V #40) #255) #255) (wand (wand (wshr V #48) #255) #255) (wand (wand (wshr V #56) #255) #255) ≡ V
+rd8-push-mem V h = rd8-of V (byte-dig2 V #0) (byte-dig2 V #8) (byte-dig2 V #16) (byte-dig2 V #24) (byte-dig2 V #32) (byte-dig2 V #40) (byte-dig2 V #48) (byte-dig2 V #56) h
+-- a byte masked twice after the shift of a word under the 64-bit mask (the model's push of a register)
+byte-dig3 : (V lo : Word) → wlt V #18446744073709551616 ≡ true → wand (wand (wshr (wand V #18446744073709551615) lo) #255) #255 ≡ wrem (wquot V (wshl #1 lo)) #256
+byte-dig3 V lo h = catw (congw (λ z → wand (wand (wshr z lo) #255) #255) (mask64 V h)) (byte-dig2 V lo)
+rd8-push-reg : (V : Word) → wlt V #18446744073709551616 ≡ true →
+  rd8 (wand (wand (wshr (wand V #18446744073709551615) #0) #255) #255) (wand (wand (wshr (wand V #18446744073709551615) #8) #255) #255)
+      (wand (wand (wshr (wand V #18446744073709551615) #16) #255) #255) (wand (wand (wshr (wand V #18446744073709551615) #24) #255) #255)
+      (wand (wand (wshr (wand V #18446744073709551615) #32) #255) #255) (wand (wand (wshr (wand V #18446744073709551615) #40) #255) #255)
+      (wand (wand (wshr (wand V #18446744073709551615) #48) #255) #255) (wand (wand (wshr (wand V #18446744073709551615) #56) #255) #255) ≡ V
+rd8-push-reg V h = rd8-of V (byte-dig3 V #0 h) (byte-dig3 V #8 h) (byte-dig3 V #16 h) (byte-dig3 V #24 h) (byte-dig3 V #32 h) (byte-dig3 V #40 h) (byte-dig3 V #48 h) (byte-dig3 V #56 h) h
+-- sums of bounded words: x < n and y < m give x + y < n + m
+lt-add-path : (x y d e : Word) → wadd (%wsucc (wadd x y)) (%wsucc (wadd d e)) ≡ wadd (wadd (%wsucc x) d) (wadd (%wsucc y) e)
+lt-add-path x y d e =
+  symw (catw (congw (λ z → wadd (wadd (%wsucc x) d) z) (wadd-suc-l y e))
+         (congw (λ z → %wsucc z) (catw (wadd-swap (%wsucc x) d y e)
+           (congw (λ z → wadd z (wadd d e)) (wadd-suc-l x y)))))
+lt-add : (x y n m : Word) → wlt x n ≡ true → wlt y m ≡ true → wlt (wadd x y) (wadd n m) ≡ true
+lt-add x y n m hx hy =
+  lt-wlt (wadd x y) (wadd n m)
+    (%wsucc (wadd (fst (wlt-lt x n hx)) (fst (wlt-lt y m hy))) ,
+     catw (lt-add-path x y (fst (wlt-lt x n hx)) (fst (wlt-lt y m hy)))
+          (cong2w (λ p q → wadd p q) (snd (wlt-lt x n hx)) (snd (wlt-lt y m hy))))

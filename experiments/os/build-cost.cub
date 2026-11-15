@@ -1,7 +1,7 @@
 -- experiments/os/build-cost.cub — where #build's steps go (archive/2026-11-11/D-os.md, sha256 71c9c2608447…, “Track D — the operating system as a typed world (Phase 3; needed by D5)”, “What is built”, item 7 “Diagnosis of `#build`'s cost”).
 -- bc-chain n is a process of n commands of Linux (n closes, the first error ending
 -- it, as real code over Linux is written); bc-s3 … bc-s10 are its steps at n = 3, 5, 7, 10.
--- The stages of lib/capacities/elf.cub's build-plan are called one at a time, each under a #show of a
+-- The stages of lib/elf.cub's build-plan are called one at a time, each under a #show of a
 -- size, so the steps of each line are that stage's and everything before it (a #show starts
 -- from nothing: the difference of two lines is one stage). build-cost-N.cub hold the #show
 -- lines for one N each, so that a run can be bounded.
@@ -26,7 +26,7 @@ bc-d7 : Step W (Sum Errno Word)
 bc-d7 = linux-step {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lzero} 7 #3)
 bc-d10 : Step W (Sum Errno Word)
 bc-d10 = linux-step {Sum Errno Word} (x86-64-linux #2) (x86-64-linux-le #2) (bc-chain {lzero} 10 #3)
--- the stages, as lib/capacities/elf.cub's build-plan-at calls them (the type of g as its code, the conversion
+-- the stages, as lib/elf.cub's build-plan-at calls them (the type of g as its code, the conversion
 -- of g with its specialized code by code-conv-at)
 bc-g : Code → Word
 bc-g c = case c of cglob g → g; _ → #0
@@ -51,7 +51,7 @@ bc-len lnil = #0
 bc-len (lcons x r) = wadd #1 (bc-len r)
 bc-enc : Word → Word
 bc-enc g = bc-len (encode-proc g (bc-defs g))
--- sizes, by the size of a code the reading passes (lib/capacities/rewrite.cub's code-size, a helper of the
+-- sizes, by the size of a code the reading passes (lib/match.cub's code-size, a helper of the
 -- bootstrap files, has no type): the nodes of a program's codes, of the forms' codes
 bc-prog-size : (Code → Word) → Lst (Word × Code) → Word
 bc-prog-size sz lnil = #0
@@ -59,7 +59,7 @@ bc-prog-size sz (lcons e r) = wadd (sz (snd e)) (bc-prog-size sz r)
 bc-forms-size : (Code → Word) → Defs → Word
 bc-forms-size sz lnil = #0
 bc-forms-size sz (lcons e r) = wadd (sz (snd (snd e))) (bc-forms-size sz r)
--- the erasure's fixed point (lib/capacities/x86.cub's x-rel-fix), its passes counted: (passes , needed set's size)
+-- the erasure's fixed point (lib/x86.cub's x-rel-fix), its passes counted: (passes , needed set's size)
 bc-passes : Nat → Rel → Lst (Word × Word) → Defs → Word → Word × Word
 bc-passes zero R ars defs n = (n , bc-len R)
 bc-passes (suc k) R ars defs n =

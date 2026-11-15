@@ -1,14 +1,13 @@
-/* Layer: the machine's world side (#run's drivers): not the language (the four layers: see the language-implementation-remainder node of task-graph/hyperactivity.cub). */
 /* src/drivers.c — the driver loop (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26). Included by lang.c after the readers.
  *
- * (run e): e is a value of lib/languages/world.cub's Step W A, a process as a tree of steps. The loop reads
+ * (run e): e is a value of lib/world.cub's Step W A, a process as a tree of steps. The loop reads
  * the head: sdone a prints a and stops; scmd c k reads the command c (a constructor of WCmd with
  * word, Nat and byte-string fields), performs it against the operating system, builds the response
  * as a value and applies the continuation k to it, then reads again. Reading a field is an
  * observation of the net (synchronous: the process blocks on the command, as D26 says: PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.11 “D24–D27 — The world”, its part D26). The
  * commands: w-now (nanoseconds since the epoch, a word), w-write fd n b (the count written),
  * w-read fd n (the count read and a buffer of n bytes), w-sleep ns (unit), w-exit code.
- * w-sys nr a1..a6 is the raw system call (the typed world over it is lib/languages/os/linux.cub): the
+ * w-sys nr a1..a6 is the raw system call (the typed world over it is lib/os/linux.cub): the
  * response is the kernel's return value as a 64-bit word, an error the two's complement of its
  * errno, what the syscall instruction leaves in rax (libc's syscall(2) answers -1 with errno,
  * which is put back). w-alloc n is the address of n fresh zero bytes, never freed; w-load8 and
@@ -21,7 +20,7 @@ extern long write(int, const void *, unsigned long);
 extern int open(const char *, int, ...);
 extern int close(int);
 extern long syscall(long, ...);
-static int drv_con(const char *name) { int c = con_lookup(name); if (c < 0) die("run: lib/languages/world.cub is not loaded (missing constructor)", name); return c; }
+static int drv_con(const char *name) { int c = con_lookup(name); if (c < 0) die("run: lib/world.cub is not loaded (missing constructor)", name); return c; }
 /* a word field read: the value must be a literal word */
 static uint64_t drv_word(Port p, const char *what) {
     Cell *c = obs_val(p);

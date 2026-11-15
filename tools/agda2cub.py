@@ -13,7 +13,7 @@ CCHM composition):
   lzero, lsuc ; ∀ {ℓ} → … → {l : Level} → … ; data D : Type where c : … is this language's own
   form (constructors by type, a path type at the end is a dimension with that boundary), so data
   declarations pass through; module headers, imports, pragmas, private and variable blocks are
-  dropped (the target auto-generalizes free names in signatures; the prelude and lib/library/std.cub stand
+  dropped (the target auto-generalizes free names in signatures; the prelude and lib/std.cub stand
   for Cubical.Foundations.Prelude: sym, cong, _∙_, transport, subst, funExt, toPathP, ua, refl).
 A line beginning `-- cub:` passes its rest through, which is how the readings (#same, #check) of
 a round-trip example are written beside the Agda source.

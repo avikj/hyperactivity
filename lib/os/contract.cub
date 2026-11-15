@@ -1,0 +1,365 @@
+-- lib/os/contract.cub — the contract of the kernel, as a world (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §6 “Phases 2–8: everything that will be built”, “Phase 3 — The OS as a world”, item 1 “The syscall world”, and §7 “The trusted base, exactly (revision 9)”:
+-- trusted until the kernel is lifted). Loaded after lib/os/linux.cub.
+--
+-- linux-model : World Linux KState answers each command of Linux from a state: this is the
+-- statement of what a process may assume of the kernel, and what a property of a process over
+-- Linux is proved against (runp p linux-model st computes; lib/proc.cub). It is deterministic
+-- and it is a subset: what the kernel may do that the model does not say (a descriptor kind
+-- outside it, a wait nothing in the state will end) the model refuses, so a run that reaches it
+-- ends `stopped` and nothing is claimed about it.
+--
+-- The state: memory as bytes at addresses with the regions that are mapped (an access outside
+-- them is EFAULT in a system call and the end of the process in a peek or poke); the descriptor
+-- table (the lowest free number is the next); pipe ends (a read end holds the bytes still to be
+-- read and has no writer left, so empty is end of file; a write end holds what was written); UDP
+-- sockets (bound or not); epoll instances (their interest lists); the datagrams that will arrive,
+-- in order (k-net: a receive takes the first addressed to the socket), and those sent to
+-- addresses no socket here is bound to, in order (k-sent: what left the host); a clock in
+-- nanoseconds (a reading advances it by k-tick, a sleep by its length); the port the next
+-- unbound sender is given; the page size; the pid; the exit status once the process has ended.
+--
+-- Answered: clock_gettime, nanosleep, read and write (pipes; read on a socket), close, socket
+-- (AF_INET, SOCK_DGRAM), bind, recvfrom (flags 0, or MSG_DONTWAIT), sendto, setsockopt, listen
+-- and accept4 (EOPNOTSUPP on a datagram socket), mmap (anonymous, private, address chosen by the
+-- kernel), munmap (a whole mapping), mprotect (to read|write, which every region is),
+-- epoll_create1, epoll_ctl, epoll_wait (level-triggered readiness), futex wake (no waiter: 0)
+-- and wait (EAGAIN on a different value), getpid, exit_group (the status recorded, the process
+-- ended), and the memory commands. Refused: open, connect, a blocking receive with nothing to
+-- arrive, an epoll_wait without timeout with nothing ready, a futex wait that would sleep.
+record Dgram = { dg-from : SockAddr ; dg-to : SockAddr ; dg-data : List Word }
+data KObj = k-pipe-in (q : List Word) | k-pipe-out (w : List Word) | k-udp (bound : Sum SockAddr Unit) | k-epoll (interest : List (Word × EpollEvent))
+record KState = { k-mem : Word → Word ; k-regions : List (Word × Word) ; k-brk : Word ; k-fds : List (Word × KObj)
+                ; k-net : List Dgram ; k-sent : List Dgram ; k-clock : Word ; k-tick : Word
+                ; k-eph : Word ; k-page : Word ; k-pid : Word ; k-exit : Sum Word Unit }
+-- ---------------------------------------------------------------- lists and bytes
+k-app : {A : Type} → List A → List A → List A
+k-app nil ys = ys
+k-app (cons x xs) ys = cons x (k-app xs ys)
+k-len : {A : Type} → List A → Word
+k-len nil = #0
+k-len (cons x xs) = %wsucc (k-len xs)
+k-take-go : {A : Type} → List A → Word → List A
+k-take-go nil n = nil
+k-take-go (cons x xs) n = if %weq n #0 then nil else cons x (k-take-go xs (%wsub n #1))
+k-take : {A : Type} → Word → List A → List A
+k-take n l = k-take-go l n
+k-drop-go : {A : Type} → List A → Word → List A
+k-drop-go nil n = nil
+k-drop-go (cons x xs) n = if %weq n #0 then cons x xs else k-drop-go xs (%wsub n #1)
+k-drop : {A : Type} → Word → List A → List A
+k-drop n l = k-drop-go l n
+k-min : Word → Word → Word
+k-min a b = if %wlt a b then a else b
+-- n bytes of memory from a, and a list of bytes stored from a
+k-bytes-at : (Word → Word) → Word → Word → List Word
+k-bytes-at m a n = %welimP (λ v → List Word → List Word) n (λ acc → acc) (λ k go → λ acc → go (cons (m (%wadd a k)) acc)) nil
+k-store-go : List Word → (Word → Word) → Word → Word → Word
+k-store-go nil m a = m
+k-store-go (cons x xs) m a = k-store-go xs (mem-write a x m) (%wsucc a)
+k-store-bytes : (Word → Word) → Word → List Word → Word → Word
+k-store-bytes m a l = k-store-go l m a
+-- a number as n little-endian bytes and back
+k-le : Nat → Word → List Word
+k-le zero v = nil
+k-le (suc n) v = cons (%wmod v #256) (k-le n (%wdiv v #256))
+k-of-le : List Word → Word
+k-of-le nil = #0
+k-of-le (cons x xs) = %wadd x (%wmul #256 (k-of-le xs))
+k-round : Word → Word → Word
+k-round n to = %wmul (%wdiv (%wadd n (%wsub to #1)) to) to
+-- is [a, a+n) inside one mapped region (nothing is touched when n is 0)
+k-valid : List (Word × Word) → Word → Word → Bool
+k-valid nil a n = %weq n #0
+k-valid (cons r rs) a n = if andB (os-wle (fst r) a) (os-wle (%wadd a n) (%wadd (fst r) (snd r))) then true else k-valid rs a n
+k-unmap : Word → Word → List (Word × Word) → Sum (List (Word × Word)) Unit
+k-unmap a n nil = inr unit
+k-unmap a n (cons r rs) =
+  if andB (%weq (fst r) a) (%weq (snd r) n) then inl rs
+  else (case k-unmap a n rs of inl l → inl (cons r l); inr u → inr unit)
+-- ---------------------------------------------------------------- the descriptor table
+k-find : Word → List (Word × KObj) → Sum KObj Unit
+k-find fd nil = inr unit
+k-find fd (cons e r) = if %weq (fst e) fd then inl (snd e) else k-find fd r
+k-put : Word → KObj → List (Word × KObj) → List (Word × KObj)
+k-put fd o nil = cons (fd , o) nil
+k-put fd o (cons e r) = if %weq (fst e) fd then cons (fd , o) r else cons e (k-put fd o r)
+k-forget : Word → List (Word × EpollEvent) → List (Word × EpollEvent)
+k-forget fd nil = nil
+k-forget fd (cons e r) = if %weq (fst e) fd then k-forget fd r else cons e (k-forget fd r)
+-- a closed descriptor leaves the table and every interest list
+k-del : Word → List (Word × KObj) → List (Word × KObj)
+k-del fd nil = nil
+k-del fd (cons e r) =
+  if %weq (fst e) fd then k-del fd r
+  else cons (case snd e of k-pipe-in q → e; k-pipe-out w → e; k-udp b → e; k-epoll l → (fst e , k-epoll (k-forget fd l))) (k-del fd r)
+k-has : Word → List (Word × KObj) → Bool
+k-has fd t = case k-find fd t of inl o → true; inr u → false
+-- the lowest number not in the table (one more candidate per entry is enough)
+k-free-go : List (Word × KObj) → List (Word × KObj) → Word → Word
+k-free-go nil all c = c
+k-free-go (cons e r) all c = if k-has c all then k-free-go r all (%wsucc c) else c
+k-free-fd : List (Word × KObj) → Word
+k-free-fd t = k-free-go t t #0
+-- ---------------------------------------------------------------- datagrams
+k-addr-eq : SockAddr → SockAddr → Bool
+k-addr-eq a b = andB (%weq (sa-port a) (sa-port b)) (%weq (sa-ip a) (sa-ip b))
+-- is a datagram to d for a socket bound to b (a socket bound to address 0 takes every address)
+k-for : SockAddr → SockAddr → Bool
+k-for b d = andB (%weq (sa-port b) (sa-port d)) (if %weq (sa-ip b) #0 then true else %weq (sa-ip b) (sa-ip d))
+k-next-dgram : SockAddr → List Dgram → Sum (Dgram × List Dgram) Unit
+k-next-dgram b nil = inr unit
+k-next-dgram b (cons d r) =
+  if k-for b (dg-to d) then inl (d , r)
+  else (case k-next-dgram b r of inl p → inl (fst p , cons d (snd p)); inr u → inr unit)
+-- is some socket of the table bound to receive at d
+k-local : SockAddr → List (Word × KObj) → Bool
+k-local d nil = false
+k-local d (cons e r) =
+  case snd e of
+    k-pipe-in q → k-local d r
+    k-pipe-out w → k-local d r
+    k-udp b → (case b of inl a → (if k-for a d then true else k-local d r); inr u → k-local d r)
+    k-epoll l → k-local d r
+-- is the exact address taken by a socket of the table
+k-bound : SockAddr → List (Word × KObj) → Bool
+k-bound d nil = false
+k-bound d (cons e r) =
+  case snd e of
+    k-pipe-in q → k-bound d r
+    k-pipe-out w → k-bound d r
+    k-udp b → (case b of inl a → (if k-addr-eq a d then true else k-bound d r); inr u → k-bound d r)
+    k-epoll l → k-bound d r
+-- ---------------------------------------------------------------- readiness (epoll, level-triggered)
+-- EPOLLIN 1, EPOLLOUT 4, EPOLLHUP 16 (reported whether asked or not)
+k-ready : List Dgram → KObj → Word
+k-ready net o = case o of
+  k-pipe-in q → (case q of nil → #0; cons x xs → #1)
+  k-pipe-out w → #4
+  k-udp b → (case b of inl a → (case k-next-dgram a net of inl p → #5; inr u → #4); inr u → #4)
+  k-epoll l → #0
+k-hup : KObj → Word
+k-hup o = case o of
+  k-pipe-in q → (case q of nil → #16; cons x xs → #0)
+  k-pipe-out w → #0
+  k-udp b → #0
+  k-epoll l → #0
+k-events : List Dgram → List (Word × KObj) → List (Word × EpollEvent) → List EpollEvent
+k-events net t nil = nil
+k-events net t (cons e r) =
+  case k-find (fst e) t of
+    inr u → k-events net t r
+    inl o → (let m = %wor (%wand (ev-events (snd e)) (k-ready net o)) (k-hup o)
+             in if %weq m #0 then k-events net t r
+                else cons (EpollEvent { ev-events = m ; ev-data = ev-data (snd e) }) (k-events net t r))
+k-has-interest : Word → List (Word × EpollEvent) → Bool
+k-has-interest fd nil = false
+k-has-interest fd (cons e r) = if %weq (fst e) fd then true else k-has-interest fd r
+-- ---------------------------------------------------------------- answers
+KAns : Type → Type
+KAns R = Sum (Sum Errno R × KState) KState
+k-ok : {R : Type} → R → KState → KAns R
+k-ok r st = inl (inr r , st)
+k-err : {R : Type} → Errno → KState → KAns R
+k-err e st = inl (inl e , st)
+k-refuse : {R : Type} → KState → KAns R
+k-refuse st = inr st
+-- a count the kernel answers: the fact decided (the model's counts meet it)
+k-count : (len : Word) → Word → KState → KAns (Upto len)
+k-count len n st = case lx-upto len n of inl e → inl (inl e , st); inr k → inl (inr k , st)
+-- the process ended by a signal: a peek or poke outside the mapped regions (128 + SIGSEGV)
+k-segv : KState → KState
+k-segv st = KState { st | k-exit = inl #139 }
+k-new-fd : KObj → KState → KAns Word
+k-new-fd o st = k-ok {Word} (k-free-fd (k-fds st)) (KState { st | k-fds = k-put (k-free-fd (k-fds st)) o (k-fds st) })
+-- a receive on a socket bound to b: the first datagram for it, its first len bytes stored at buf
+-- (the rest of the datagram is discarded), the count and the sender
+k-recv : (len : Word) → SockAddr → Word → Bool → KState → KAns (Upto len × SockAddr)
+k-recv len b buf blocking st =
+  case k-next-dgram b (k-net st) of
+    inr u → (if blocking then k-refuse {Upto len × SockAddr} st else k-err {Upto len × SockAddr} #11 st)
+    inl p → (case lx-upto len (k-min len (k-len (dg-data (fst p)))) of
+               inl e → inl (inl e , st)
+               inr k → inl (inr (k , dg-from (fst p)) ,
+                            KState { st | k-mem = k-store-bytes (k-mem st) buf (k-take len (dg-data (fst p))) ; k-net = snd p }))
+-- a send: the sender's address (an unbound socket is bound to the next ephemeral port on the
+-- loopback address), and the datagram to a socket bound here (it will arrive) or out of the host
+k-from : Sum SockAddr Unit → KState → SockAddr
+k-from b st = case b of inl x → x; inr u → SockAddr { sa-port = k-eph st ; sa-ip = #2130706433 }
+k-autobind : Word → Sum SockAddr Unit → SockAddr → KState → KState
+k-autobind fd b from st = case b of inl x → st; inr u → KState { st | k-fds = k-put fd (k-udp (inl from)) (k-fds st) ; k-eph = %wsucc (k-eph st) }
+k-deliver : Dgram → KState → KState
+k-deliver d st = if k-local (dg-to d) (k-fds st) then KState { st | k-net = k-app (k-net st) (cons d nil) } else KState { st | k-sent = k-app (k-sent st) (cons d nil) }
+-- an epoll_wait's answer from the ready events: them, or with none ready the timeout passed
+-- (milliseconds), or the refusal of a wait nothing ends
+k-wait : (max : Word) → List EpollEvent → Word → KState → KAns (Upto max × List EpollEvent)
+k-wait max evs timeout st =
+  case lx-upto max (k-len {EpollEvent} evs) of
+    inl e → inl (inl e , st)
+    inr k → (if %weq (fst k) #0
+               then (if %weq timeout #4294967295 then k-refuse {Upto max × List EpollEvent} st
+                     else inl (inr (k , evs) , KState { st | k-clock = %wadd (k-clock st) (%wmul timeout #1000000) }))
+               else inl (inr (k , evs) , st))
+-- ---------------------------------------------------------------- the model
+linux-model : World Linux KState
+linux-model c st = case c return (λ x → Sum (lx-resp x × KState) KState) of
+  lx-clock-gettime →
+    k-ok {Timespec} (Timespec { ts-sec = %wdiv (k-clock st) #1000000000 ; ts-nsec = %wmod (k-clock st) #1000000000 })
+         (KState { st | k-clock = %wadd (k-clock st) (k-tick st) })
+  lx-nanosleep t →
+    (if %wlt (ts-nsec t) #1000000000
+       then k-ok {Unit} unit (KState { st | k-clock = %wadd (k-clock st) (%wadd (%wmul (ts-sec t) #1000000000) (ts-nsec t)) })
+       else k-err {Unit} #22 st)
+  lx-read fd buf len →
+    (case k-find fd (k-fds st) of
+       inr u → k-err {Upto len} #9 st
+       inl o → (case o of
+          k-pipe-in q →
+            (if k-valid (k-regions st) buf len
+               then k-count len (k-min len (k-len q))
+                      (KState { st | k-mem = k-store-bytes (k-mem st) buf (k-take len q) ; k-fds = k-put fd (k-pipe-in (k-drop len q)) (k-fds st) })
+               else k-err {Upto len} #14 st)
+          k-pipe-out w → k-err {Upto len} #9 st
+          k-udp b →
+            (case b of
+               inr u → k-refuse {Upto len} st
+               inl a → (if k-valid (k-regions st) buf len
+                          then (case k-recv len a buf true st of
+                                  inr s2 → inr s2
+                                  inl r → inl ((case fst r of inl e → inl e; inr v → inr (fst v)) , snd r))
+                          else k-err {Upto len} #14 st))
+          k-epoll l → k-err {Upto len} #22 st))
+  lx-write fd buf len →
+    (case k-find fd (k-fds st) of
+       inr u → k-err {Upto len} #9 st
+       inl o → (case o of
+          k-pipe-in q → k-err {Upto len} #9 st
+          k-pipe-out w →
+            (if k-valid (k-regions st) buf len
+               then k-count len len (KState { st | k-fds = k-put fd (k-pipe-out (k-app w (k-bytes-at (k-mem st) buf len))) (k-fds st) })
+               else k-err {Upto len} #14 st)
+          k-udp b → k-err {Upto len} #89 st
+          k-epoll l → k-err {Upto len} #22 st))
+  lx-open path flags mode → k-refuse {Word} st
+  lx-close fd →
+    (if k-has fd (k-fds st) then k-ok {Unit} unit (KState { st | k-fds = k-del fd (k-fds st) }) else k-err {Unit} #9 st)
+  lx-mmap addr len prot flags fd off →
+    (if %weq len #0 then k-err {Word} #22 st
+     else if andB (%weq addr #0) (%weq (%wand flags #63) #34)
+       then k-ok {Word} (k-round (k-brk st) (k-page st))
+              (KState { st | k-regions = cons (k-round (k-brk st) (k-page st) , k-round len (k-page st)) (k-regions st)
+                           ; k-brk = %wadd (k-round (k-brk st) (k-page st)) (k-round len (k-page st)) })
+       else k-refuse {Word} st)
+  lx-munmap addr len →
+    (case k-unmap addr (k-round len (k-page st)) (k-regions st) of
+       inl rs → k-ok {Unit} unit (KState { st | k-regions = rs })
+       inr u → k-refuse {Unit} st)
+  lx-mprotect addr len prot →
+    (if andB (%weq prot #3) (k-valid (k-regions st) addr len) then k-ok {Unit} unit st else k-refuse {Unit} st)
+  lx-socket domain type proto →
+    (if andB (%weq domain #2) (andB (%weq type #2) (if %weq proto #0 then true else %weq proto #17))
+       then k-new-fd (k-udp (inr unit)) st
+       else k-refuse {Word} st)
+  lx-bind fd a →
+    (case k-find fd (k-fds st) of
+       inr u → k-err {Unit} #9 st
+       inl o → (case o of
+          k-pipe-in q → k-err {Unit} #88 st
+          k-pipe-out w → k-err {Unit} #88 st
+          k-udp b →
+            (case b of
+               inl old → k-err {Unit} #22 st
+               inr u → (if k-bound a (k-fds st) then k-err {Unit} #98 st
+                        else k-ok {Unit} unit (KState { st | k-fds = k-put fd (k-udp (inl a)) (k-fds st) })))
+          k-epoll l → k-err {Unit} #88 st))
+  lx-listen fd backlog →
+    (case k-find fd (k-fds st) of
+       inr u → k-err {Unit} #9 st
+       inl o → (case o of k-pipe-in q → k-err {Unit} #88 st; k-pipe-out w → k-err {Unit} #88 st; k-udp b → k-err {Unit} #95 st; k-epoll l → k-err {Unit} #88 st))
+  lx-accept4 fd flags →
+    (case k-find fd (k-fds st) of
+       inr u → k-err {Word × SockAddr} #9 st
+       inl o → (case o of k-pipe-in q → k-err {Word × SockAddr} #88 st; k-pipe-out w → k-err {Word × SockAddr} #88 st; k-udp b → k-err {Word × SockAddr} #95 st; k-epoll l → k-err {Word × SockAddr} #88 st))
+  lx-connect fd a → k-refuse {Unit} st
+  lx-recvfrom fd buf len flags →
+    (case k-find fd (k-fds st) of
+       inr u → k-err {Upto len × SockAddr} #9 st
+       inl o → (case o of
+          k-pipe-in q → k-err {Upto len × SockAddr} #88 st
+          k-pipe-out w → k-err {Upto len × SockAddr} #88 st
+          k-udp b →
+            (case b of
+               inr u → k-refuse {Upto len × SockAddr} st
+               inl a →
+                 (if k-valid (k-regions st) buf len
+                    then (if %weq flags #0 then k-recv len a buf true st
+                          else if %weq flags #64 then k-recv len a buf false st
+                          else k-refuse {Upto len × SockAddr} st)
+                    else k-err {Upto len × SockAddr} #14 st))
+          k-epoll l → k-err {Upto len × SockAddr} #88 st))
+  lx-sendto fd buf len flags a →
+    (case k-find fd (k-fds st) of
+       inr u → k-err {Upto len} #9 st
+       inl o → (case o of
+          k-pipe-in q → k-err {Upto len} #88 st
+          k-pipe-out w → k-err {Upto len} #88 st
+          k-udp b →
+            (if %wlt #65507 len then k-err {Upto len} #90 st
+             else if k-valid (k-regions st) buf len
+               then k-count len len (k-deliver (Dgram { dg-from = k-from b st ; dg-to = a ; dg-data = k-bytes-at (k-mem st) buf len }) (k-autobind fd b (k-from b st) st))
+               else k-err {Upto len} #14 st)
+          k-epoll l → k-err {Upto len} #88 st))
+  lx-setsockopt fd level name val →
+    (case k-find fd (k-fds st) of
+       inr u → k-err {Unit} #9 st
+       inl o → (case o of k-pipe-in q → k-err {Unit} #88 st; k-pipe-out w → k-err {Unit} #88 st; k-udp b → k-ok {Unit} unit st; k-epoll l → k-err {Unit} #88 st))
+  lx-epoll-create1 flags → k-new-fd (k-epoll nil) st
+  lx-epoll-ctl ep op fd ev →
+    (case k-find ep (k-fds st) of
+       inr u → k-err {Unit} #9 st
+       inl o → (case o of
+          k-pipe-in q → k-err {Unit} #22 st
+          k-pipe-out w → k-err {Unit} #22 st
+          k-udp b → k-err {Unit} #22 st
+          k-epoll l →
+            (if k-has fd (k-fds st)
+               then (if %weq op #1 then (if k-has-interest fd l then k-err {Unit} #17 st
+                                         else k-ok {Unit} unit (KState { st | k-fds = k-put ep (k-epoll (k-app l (cons (fd , ev) nil))) (k-fds st) }))
+                     else if %weq op #2 then (if k-has-interest fd l then k-ok {Unit} unit (KState { st | k-fds = k-put ep (k-epoll (k-forget fd l)) (k-fds st) })
+                                              else k-err {Unit} #2 st)
+                     else if %weq op #3 then (if k-has-interest fd l then k-ok {Unit} unit (KState { st | k-fds = k-put ep (k-epoll (k-app (k-forget fd l) (cons (fd , ev) nil))) (k-fds st) })
+                                              else k-err {Unit} #2 st)
+                     else k-err {Unit} #22 st)
+               else k-err {Unit} #9 st)))
+  lx-epoll-wait ep max timeout →
+    (case k-find ep (k-fds st) of
+       inr u → k-err {Upto max × List EpollEvent} #9 st
+       inl o → (case o of
+          k-pipe-in q → k-err {Upto max × List EpollEvent} #22 st
+          k-pipe-out w → k-err {Upto max × List EpollEvent} #22 st
+          k-udp b → k-err {Upto max × List EpollEvent} #22 st
+          k-epoll l →
+            (if %weq max #0 then k-err {Upto max × List EpollEvent} #22 st
+             else k-wait max (k-take {EpollEvent} (k-min max lx-max-events) (k-events (k-net st) (k-fds st) l)) timeout st)))
+  lx-futex-wait addr val →
+    (if k-valid (k-regions st) addr #4
+       then (if %weq (k-of-le (k-bytes-at (k-mem st) addr #4)) val then k-refuse {Unit} st else k-err {Unit} #11 st)
+       else k-err {Unit} #14 st)
+  lx-futex-wake addr n → k-count n #0 st
+  lx-getpid → inl (k-pid st , st)
+  lx-exit-group ec → inr (KState { st | k-exit = inl (%wmod ec #256) })
+  lx-alloc n →
+    inl (k-brk st , KState { st | k-regions = cons (k-brk st , k-round n #8) (k-regions st) ; k-brk = %wadd (k-brk st) (k-round n #8) })
+  lx-peek8 a → (if k-valid (k-regions st) a #1 then inl (k-mem st a , st) else inr (k-segv st))
+  lx-poke8 a v → (if k-valid (k-regions st) a #1 then inl (unit , KState { st | k-mem = mem-write a (%wmod v #256) (k-mem st) }) else inr (k-segv st))
+  lx-peek64 a → (if k-valid (k-regions st) a #8 then inl (k-of-le (k-bytes-at (k-mem st) a #8) , st) else inr (k-segv st))
+  lx-poke64 a v → (if k-valid (k-regions st) a #8 then inl (unit , KState { st | k-mem = k-store-bytes (k-mem st) a (k-le 8 v) }) else inr (k-segv st))
+-- ---------------------------------------------------------------- a first state
+-- nothing mapped (fresh memory reads zero), addresses from 2^32, descriptors 0, 1, 2 as a read
+-- end holding the given bytes and two write ends, the datagrams that will arrive, the clock at
+-- the given time with a tick of one nanosecond, ephemeral ports from 32768, 4096-byte pages
+k-boot : (pid : Word) → (now : Word) → (stdin : List Word) → (arriving : List Dgram) → KState
+k-boot pid now stdin arriving =
+  KState { k-mem = λ a → #0 ; k-regions = nil ; k-brk = #4294967296
+         ; k-fds = cons (#0 , k-pipe-in stdin) (cons (#1 , k-pipe-out nil) (cons (#2 , k-pipe-out nil) nil))
+         ; k-net = arriving ; k-sent = nil ; k-clock = now ; k-tick = #1
+         ; k-eph = #32768 ; k-page = #4096 ; k-pid = pid ; k-exit = inr unit }

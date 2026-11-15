@@ -1,0 +1,111 @@
+-- lib/mem/sig.cub — memory as a signature (archive/2026-11-11/README.md, "Memory is a signature"), over
+-- lib/obs.cub and lib/world.cub.
+--
+-- A language reader produces a process over MemSig (and its world's signature S) and never
+-- touches a memory value. A pointer is MPtr, opaque to readers: they get pointers from
+-- commands and give them back to commands. Two handlers interpret the signature:
+-- lib/mem/flat.cub (into the machine's memory: what is compiled) and lib/mem/memory.cub (the
+-- abstract memory with its checks: the meaning), and lib/mem/memory.cub proves the one theorem
+-- relating them, with the refinement relation and its two rules defined here.
+import "scalar.cub"
+data AKind = ak-auto | ak-static | ak-dynamic
+-- the commands. Sizes, alignments and offsets are in bytes; an index is a signed 64-bit number.
+--   m-alloc kd zeroed size align → the pointer to a new object's storage
+--   m-release kd p: the end of storage of kind kd at p (a scope's end); m-free p: free (null allowed)
+--   m-load k al p → the scalar of kind k at p, at alignment al; m-store k al p v
+--   m-ptr-add p elsize i → p + i elements; m-ptr-diff p q elsize → (p - q) in elements
+--   m-ptr-cmp o p q → the comparison; m-ptr-int sg w p → the pointer as an integer of that
+--   kind; m-int-ptr sg w v → the integer v of that kind as a pointer
+--   m-memmove dst src n, m-memcpy dst src n, m-memset dst v n
+data MemC = m-alloc (kd : AKind) (zeroed : Bool) (size : Word) (align : Word)
+          | m-release (kd : AKind) (p : MPtr) | m-free (p : MPtr)
+          | m-load (k : SK) (al : Word) (p : MPtr) | m-store (k : SK) (al : Word) (p : MPtr) (v : SV)
+          | m-ptr-add (p : MPtr) (elsize : Word) (i : UInt64) | m-ptr-diff (p : MPtr) (q : MPtr) (elsize : Word)
+          | m-ptr-cmp (o : CmpOp) (p : MPtr) (q : MPtr)
+          | m-ptr-int (sg : Bool) (w : IW) (p : MPtr) | m-int-ptr (sg : Bool) (w : IW) (v : SV)
+          | m-memmove (dst : MPtr) (src : MPtr) (n : Word) | m-memcpy (dst : MPtr) (src : MPtr) (n : Word)
+          | m-memset (dst : MPtr) (v : UInt64) (n : Word)
+m-resp : MemC → Type
+m-resp c = case c return (λ _ → Type) of
+  m-alloc kd z s a → MPtr
+  m-release kd p → Unit
+  m-free p → Unit
+  m-load k al p → SV
+  m-store k al p v → Unit
+  m-ptr-add p e i → MPtr
+  m-ptr-diff p q e → UInt64
+  m-ptr-cmp o p q → Bool
+  m-ptr-int sg w p → SV
+  m-int-ptr sg w v → MPtr
+  m-memmove d s n → Unit
+  m-memcpy d s n → Unit
+  m-memset d v n → Unit
+MemSig : Sig
+MemSig = (MemC , m-resp)
+-- what a reader's process is over: the memory commands and its world's
+MK : Sig → Sig
+MK S = o-SumS MemSig S
+-- what the flat handler's process is over: the reader's world and the machine's (lib/world.cub)
+MT : Sig → Sig
+MT S = o-SumS S W
+
+-- ---------------------------------------------------------------- runs that may fail
+-- a run of the meaning is a tree over the observed signature ending in MRes: a result, or a
+-- failure (undefined behaviour or a stop, with its reason) after which nothing follows
+r-bind : {O : Sig} {A B : Type} → Step O (MRes A) → (A → Step O (MRes B)) → Step O (MRes B)
+r-bind (sdone r) f = case r of
+  mok a → f a
+  mub w → sdone (mub w)
+  mstop w → sdone (mstop w)
+r-bind (scmd c k) f = scmd c (λ x → r-bind (k x) f)
+-- ---------------------------------------------------------------- refinement up to failure
+-- t is refined by u up to Q: where t fails, u is unconstrained; otherwise they end together in
+-- results related by Q, or issue the same command and, on equal responses, continue so.
+-- (lib/obs.cub's o-BisimR with one more case: its statement is unconditional, and the theorem
+-- here is conditional on the meaning not failing.)
+m-RefDone : {O : Sig} {A B : Type} → (A → B → Type) → A → Step O B → Type
+m-RefDone Q a (sdone b) = Q a b
+m-RefDone Q a (scmd c k) = Empty
+m-RefEnd : {O : Sig} {A B : Type} → (A → B → Type) → MRes A → Step O B → Type
+m-RefEnd Q r u = case r of
+  mok a → m-RefDone Q a u
+  mub w → Unit
+  mstop w → Unit
+m-Ref : {O : Sig} {A B : Type} → (A → B → Type) → Step O (MRes A) → Step O B → Type
+m-Ref Q (sdone r) u = m-RefEnd Q r u
+m-Ref Q (scmd c k) (sdone b) = Empty
+m-Ref {O} {A} {B} Q (scmd c k) (scmd c2 k2) =
+  (e : c ≡ c2) × ((r : Resp O c) → (r2 : Resp O c2) → PathP (λ i → Resp O (e i)) r r2 → m-Ref Q (k r) (k2 r2))
+-- up to bind
+m-ref-done-bind : {O : Sig} {A B C D : Type} → (Q : A → B → Type) → (Q2 : C → D → Type) → (a : A) → (u : Step O B) →
+  (f : A → Step O (MRes C)) → (g : B → Step O D) → m-RefDone Q a u →
+  ((x : A) → (b : B) → Q x b → m-Ref Q2 (f x) (g b)) → m-Ref Q2 (f a) (o-bind u g)
+m-ref-done-bind Q Q2 a (sdone b) f g h hk = hk a b h
+m-ref-done-bind Q Q2 a (scmd c k) f g h hk = Empty-rec h
+m-ref-end-bind : {O : Sig} {A B C D : Type} → (Q : A → B → Type) → (Q2 : C → D → Type) → (r : MRes A) → (u : Step O B) →
+  (f : A → Step O (MRes C)) → (g : B → Step O D) → m-RefEnd Q r u →
+  ((x : A) → (b : B) → Q x b → m-Ref Q2 (f x) (g b)) → m-Ref Q2 (r-bind (sdone r) f) (o-bind u g)
+m-ref-end-bind {O} {A} {B} {C} {D} Q Q2 r u f g =
+  case r return (λ y → m-RefEnd Q y u → ((x : A) → (b : B) → Q x b → m-Ref Q2 (f x) (g b)) → m-Ref Q2 (r-bind (sdone y) f) (o-bind u g)) of
+    mok a → λ h hk → m-ref-done-bind Q Q2 a u f g h hk
+    mub w → λ h hk → unit
+    mstop w → λ h hk → unit
+m-ref-bind : {O : Sig} {A B C D : Type} → (Q : A → B → Type) → (Q2 : C → D → Type) →
+  (t : Step O (MRes A)) → (u : Step O B) → (f : A → Step O (MRes C)) → (g : B → Step O D) →
+  m-Ref Q t u → ((a : A) → (b : B) → Q a b → m-Ref Q2 (f a) (g b)) → m-Ref Q2 (r-bind t f) (o-bind u g)
+m-ref-bind Q Q2 (sdone r) u f g h hk = m-ref-end-bind Q Q2 r u f g h hk
+m-ref-bind Q Q2 (scmd c k) (sdone b) f g h hk = Empty-rec h
+m-ref-bind Q Q2 (scmd c k) (scmd c2 k2) f g h hk =
+  (fst h , λ r r2 pr → m-ref-bind Q Q2 (k r) (k2 r2) f g (snd h r r2 pr) hk)
+-- a tree is refined by itself (up to a reflexive relation on results)
+m-ref-refl : {O : Sig} {A : Type} → (t : Step O A) → m-Ref {O} {A} {A} (λ a b → a ≡ b) (o-map {O} {A} {MRes A} (λ a → mok a) t) t
+m-ref-refl (sdone a) = λ i → a
+m-ref-refl {O} {A} (scmd c k) =
+  ((λ i → c) , λ r r2 pr → subst {lzero} {lzero} {Resp O c} {λ z → m-Ref {O} {A} {A} (λ a b → a ≡ b) (o-map {O} {A} {MRes A} (λ a → mok a) (k r)) (k z)} {r} {r2} pr (m-ref-refl (k r)))
+-- a run that does not fail: no path of the tree ends in a failure
+m-NoFail : {O : Sig} {A : Type} → Step O (MRes A) → Type
+m-NoFail (sdone r) = case r of
+  mok a → Unit
+  mub w → Empty
+  mstop w → Empty
+m-NoFail {O} {A} (scmd c k) = (r : Resp O c) → m-NoFail (k r)

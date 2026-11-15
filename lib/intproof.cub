@@ -1,0 +1,238 @@
+-- lib/intproof.cub — integers as differences of words (lib/std.cub's Z2, toZ2, fromZ2, addZ, leZ):
+-- the commutative-monoid laws of addZ through the coordinates, and the linear-arithmetic
+-- certificate checker over Int, verified by reduction to lib/linproof.cub's over words (
+-- PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.13 “F31–F32 — Reflection and certificates”, its part F32): an Int linear form is a pair of word forms over doubled variables (variable v's
+-- coordinates are the word variables 2v and 2v + 1), a ≤ b over Int is a⁺ + b⁻ ≤ b⁺ + a⁻ over
+-- words, and a Farkas certificate of the word problem is one of the Int problem (int-cert-sound).
+-- Loaded after lib/linproof.cub.
+-- ---------------------------------------------------------------- the monoid laws
+-- the commutative monoid, through the coordinates
+cong2Z : (f : Z2 → Int) → {a b c d : Word} → a ≡ b → c ≡ d → f (a , c) ≡ f (b , d)
+cong2Z f p q = λ i → f (p i , q i)
+addZ-comm : (a b : Int) → addZ a b ≡ addZ b a
+addZ-comm a b = cong2Z fromZ2 (plusw-comm (fst (toZ2 a)) (fst (toZ2 b))) (plusw-comm (snd (toZ2 a)) (snd (toZ2 b)))
+-- a + 0 = a: the coordinates gain nothing (plusw x #0 is x), then the retraction
+addZ-zero-r : (a : Int) → addZ a zeroZ ≡ a
+addZ-zero-r a = fromZ2-toZ2 a
+addZ-zero-l : (a : Int) → addZ zeroZ a ≡ a
+addZ-zero-l a = addZ-comm zeroZ a ∙ fromZ2-toZ2 a
+-- the coordinates of −a are a's swapped: fst (toZ2 (negZ a)) = snd (toZ2 a) and the other way
+toZ2-neg-fst : (a : Int) → plusw (fst (toZ2 a)) (fst (toZ2 (negZ a))) ≡ plusw #0 (plusw (fst (toZ2 a)) (snd (toZ2 a)))
+toZ2-neg-fst a =
+  case a return (λ w → plusw (fst (toZ2 w)) (fst (toZ2 (negZ w))) ≡ plusw #0 (plusw (fst (toZ2 w)) (snd (toZ2 w)))) of
+    pos n → (case n return (λ m → plusw (fst (toZ2 (pos m))) (fst (toZ2 (negZ (pos m)))) ≡ plusw #0 (plusw (fst (toZ2 (pos m))) (snd (toZ2 (pos m))))) of
+               zero → λ i → #0
+               suc k → sym (plusw-zero-l (plusw (%wsucc (fromNat k)) #0)))
+    negsuc n → sym (plusw-zero-l (plusw #0 (%wsucc (fromNat n))))
+toZ2-neg-snd : (a : Int) → plusw (snd (toZ2 (negZ a))) (snd (toZ2 a)) ≡ plusw #0 (plusw (fst (toZ2 a)) (snd (toZ2 a)))
+toZ2-neg-snd a =
+  case a return (λ w → plusw (snd (toZ2 (negZ w))) (snd (toZ2 w)) ≡ plusw #0 (plusw (fst (toZ2 w)) (snd (toZ2 w)))) of
+    pos n → (case n return (λ m → plusw (snd (toZ2 (negZ (pos m)))) (snd (toZ2 (pos m))) ≡ plusw #0 (plusw (fst (toZ2 (pos m))) (snd (toZ2 (pos m))))) of
+               zero → λ i → #0
+               suc k → sym (plusw-zero-l (plusw (%wsucc (fromNat k)) #0)))
+    negsuc n → sym (plusw-zero-l (plusw #0 (%wsucc (fromNat n))))
+-- a + (−a) = 0: the coordinates (p + q , q + p) are a shift of (0 , 0)
+addZ-neg : (a : Int) → addZ a (negZ a) ≡ zeroZ
+addZ-neg a =
+  cong2Z fromZ2 (toZ2-neg-fst a) (plusw-comm (snd (toZ2 a)) (snd (toZ2 (negZ a))) ∙ toZ2-neg-snd a)
+    ∙ fromZ2-shift #0 #0 (plusw (fst (toZ2 a)) (snd (toZ2 a)))
+
+-- the interchange of sums: (x + u) + (y + v) = (x + y) + (u + v)
+plusw-interchange : (x u y v : Word) → plusw (plusw x u) (plusw y v) ≡ plusw (plusw x y) (plusw u v)
+plusw-interchange x u y v =
+  plusw-assoc x u (plusw y v) ∙ (congw (λ z → plusw x z) (plusw-mid u y v) ∙ sym (plusw-assoc x y (plusw u v)))
+-- fromZ2 respects the relation: p + q' = p' + q gives fromZ2 (p , q) = fromZ2 (p' , q')
+fromZ2-rel : (p q p2 q2 : Word) → plusw p q2 ≡ plusw p2 q → fromZ2 (p , q) ≡ fromZ2 (p2 , q2)
+fromZ2-rel p q p2 q2 e =
+  sym (fromZ2-shift p q q2) ∙ (cong2Z fromZ2 e (plusw-comm q q2) ∙ fromZ2-shift p2 q2 q)
+-- the normal form's coordinates stand for the same difference: toZ2 (fromZ2 (p , q)) = (p' , q') with
+-- p + q' = p' + q, by induction on q then p
+toZ2-fromZ2-step : (q2 : Word) → ((p : Word) → plusw (fst (toZ2 (fromZ2 (p , q2)))) q2 ≡ plusw p (snd (toZ2 (fromZ2 (p , q2))))) →
+                   (p : Word) → plusw (fst (toZ2 (fromZ2 (p , %wsucc q2)))) (%wsucc q2) ≡ plusw p (snd (toZ2 (fromZ2 (p , %wsucc q2))))
+toZ2-fromZ2-step q2 h p =
+  %welimP (λ u → plusw (fst (toZ2 (fromZ2 (u , %wsucc q2)))) (%wsucc q2) ≡ plusw u (snd (toZ2 (fromZ2 (u , %wsucc q2))))) p
+    (congw (λ z → plusw #0 (%wsucc z)) (sym (fromNat-toNat q2)))
+    (λ p2 h2 → congw (λ z → %wsucc z) (h p2) ∙ sym (plusw-suc-l p2 (snd (toZ2 (fromZ2 (p2 , q2))))))
+toZ2-fromZ2-rel : (q p : Word) → plusw (fst (toZ2 (fromZ2 (p , q)))) q ≡ plusw p (snd (toZ2 (fromZ2 (p , q))))
+toZ2-fromZ2-rel q =
+  %welimP (λ v → (p : Word) → plusw (fst (toZ2 (fromZ2 (p , v)))) v ≡ plusw p (snd (toZ2 (fromZ2 (p , v))))) q
+    (λ p → fromNat-toNat p)
+    (λ q2 h → λ p → toZ2-fromZ2-step q2 h p)
+-- associativity: both sides are fromZ2 of coordinates related to the plain sums
+-- associativity: both sides are fromZ2 of coordinates related to the plain sums
+-- (abbreviations: zp/zn are the coordinates of a plain sum of two integers)
+zp : Int → Int → Word
+zp a b = plusw (fst (toZ2 a)) (fst (toZ2 b))
+zn : Int → Int → Word
+zn a b = plusw (snd (toZ2 a)) (snd (toZ2 b))
+addZ-assoc-l : (a b c : Int) → addZ (addZ a b) c ≡ fromZ2 (plusw (zp a b) (fst (toZ2 c)) , plusw (zn a b) (snd (toZ2 c)))
+addZ-assoc-l a b c =
+  fromZ2-rel (plusw (fst (toZ2 (addZ a b))) (fst (toZ2 c))) (plusw (snd (toZ2 (addZ a b))) (snd (toZ2 c)))
+             (plusw (zp a b) (fst (toZ2 c))) (plusw (zn a b) (snd (toZ2 c)))
+    (plusw-interchange (fst (toZ2 (addZ a b))) (fst (toZ2 c)) (zn a b) (snd (toZ2 c))
+     ∙ (congw (λ z → plusw z (plusw (fst (toZ2 c)) (snd (toZ2 c)))) (toZ2-fromZ2-rel (zn a b) (zp a b))
+        ∙ sym (plusw-interchange (zp a b) (fst (toZ2 c)) (snd (toZ2 (addZ a b))) (snd (toZ2 c)))))
+addZ-assoc-r : (a b c : Int) → addZ a (addZ b c) ≡ fromZ2 (plusw (fst (toZ2 a)) (zp b c) , plusw (snd (toZ2 a)) (zn b c))
+addZ-assoc-r a b c =
+  fromZ2-rel (plusw (fst (toZ2 a)) (fst (toZ2 (addZ b c)))) (plusw (snd (toZ2 a)) (snd (toZ2 (addZ b c))))
+             (plusw (fst (toZ2 a)) (zp b c)) (plusw (snd (toZ2 a)) (zn b c))
+    (plusw-interchange (fst (toZ2 a)) (fst (toZ2 (addZ b c))) (snd (toZ2 a)) (zn b c)
+     ∙ (congw (λ z → plusw (plusw (fst (toZ2 a)) (snd (toZ2 a))) z) (toZ2-fromZ2-rel (zn b c) (zp b c))
+        ∙ sym (plusw-interchange (fst (toZ2 a)) (zp b c) (snd (toZ2 a)) (snd (toZ2 (addZ b c))))))
+addZ-assoc : (a b c : Int) → addZ (addZ a b) c ≡ addZ a (addZ b c)
+addZ-assoc a b c =
+  addZ-assoc-l a b c
+    ∙ (cong2Z fromZ2 (plusw-assoc (fst (toZ2 a)) (fst (toZ2 b)) (fst (toZ2 c))) (plusw-assoc (snd (toZ2 a)) (snd (toZ2 b)) (snd (toZ2 c)))
+       ∙ sym (addZ-assoc-r a b c))
+-- ---------------------------------------------------------------- the certificate checker over Int
+-- An integer code: literals, variables, sums and negations. Its value at an environment of
+-- differences is a difference (coordinatewise: a negation swaps the coordinates). The checker
+-- translates: a variable v becomes the two word variables 2v (the positive coordinate) and
+-- 2v+1 (the negative one), a code becomes the pair of word codes of its coordinates, and the
+-- claim a ≤ b (that is, a⁺ + b⁻ ≤ b⁺ + a⁻ as words) becomes the word claim lib/linproof.cub's
+-- cert-check decides. Soundness is cert-sound transported along the translation.
+data IntCode = ic-lit (z : Int) | ic-var (v : Word) | ic-add (a : IntCode) (b : IntCode) | ic-neg (a : IntCode)
+IEnv : Type
+IEnv = Word → Z2
+zev2 : IEnv → IntCode → Z2
+zev2 e c =
+  case c return (λ w → Z2) of
+    ic-lit z → toZ2 z
+    ic-var v → e v
+    ic-add a b → addZ2 (rec a) (rec b)
+    ic-neg a → negZ2 (rec a)
+-- doubling and halving of variable indices
+dbl : Word → Word
+dbl v = %welimP (λ w → Word) v #0 (λ n h → %wsucc (%wsucc h))
+hstep : Word × Bool → Word × Bool
+hstep r = case snd r of true → (%wsucc (fst r) , false); false → (fst r , true)
+halfb : Word → Word × Bool
+halfb w = %welimP (λ v → Word × Bool) w (#0 , false) (λ n h → hstep h)
+congP : (f : Word × Bool → Word × Bool) → {a b : Word × Bool} → a ≡ b → f a ≡ f b
+congP f p = λ i → f (p i)
+congS : (f : Word × Bool → Word) → {a b : Word × Bool} → a ≡ b → f a ≡ f b
+congS f p = λ i → f (p i)
+halfb-dbl-step : (n : Word) → halfb (dbl n) ≡ (n , false) → halfb (dbl (%wsucc n)) ≡ (%wsucc n , false)
+halfb-dbl-step n h = congP (λ r → hstep (hstep r)) h
+halfb-dbl : (v : Word) → halfb (dbl v) ≡ (v , false)
+halfb-dbl v = %welimP (λ u → halfb (dbl u) ≡ (u , false)) v (λ i → (#0 , false)) (λ n h → halfb-dbl-step n h)
+halfb-sdbl : (v : Word) → halfb (%wsucc (dbl v)) ≡ (v , true)
+halfb-sdbl v = congP hstep (halfb-dbl v)
+-- the word environment of an integer environment
+sel : IEnv → Word × Bool → Word
+sel e r = case snd r of true → snd (e (fst r)); false → fst (e (fst r))
+tenv : IEnv → Env
+tenv e w = sel e (halfb w)
+tenv-dbl : (e : IEnv) (v : Word) → tenv e (dbl v) ≡ fst (e v)
+tenv-dbl e v = congS (sel e) (halfb-dbl v)
+tenv-sdbl : (e : IEnv) (v : Word) → tenv e (%wsucc (dbl v)) ≡ snd (e v)
+tenv-sdbl e v = congS (sel e) (halfb-sdbl v)
+-- the translation of codes: the pair of word codes of the coordinates
+tc : IntCode → LinCode × LinCode
+tc c =
+  case c return (λ w → LinCode × LinCode) of
+    ic-lit z → (lc-lit (fst (toZ2 z)) , lc-lit (snd (toZ2 z)))
+    ic-var v → (lc-var (dbl v) , lc-var (%wsucc (dbl v)))
+    ic-add a b → (lc-add (fst (rec a)) (fst (rec b)) , lc-add (snd (rec a)) (snd (rec b)))
+    ic-neg a → (snd (rec a) , fst (rec a))
+posc : IntCode → LinCode
+posc c = fst (tc c)
+negc : IntCode → LinCode
+negc c = snd (tc c)
+-- the translation is faithful: the word codes evaluate to the coordinates
+repr : (e : IEnv) (c : IntCode) → (wev (tenv e) (posc c) ≡ fst (zev2 e c)) × (wev (tenv e) (negc c) ≡ snd (zev2 e c))
+repr e c =
+  case c return (λ w → (wev (tenv e) (posc w) ≡ fst (zev2 e w)) × (wev (tenv e) (negc w) ≡ snd (zev2 e w))) of
+    ic-lit z → (λ i → fst (toZ2 z) , λ i → snd (toZ2 z))
+    ic-var v → (tenv-dbl e v , tenv-sdbl e v)
+    ic-add a b → (cong2w (λ x y → plusw x y) (fst (rec a)) (fst (rec b)) , cong2w (λ x y → plusw x y) (snd (rec a)) (snd (rec b)))
+    ic-neg a → (snd (rec a) , fst (rec a))
+-- hypotheses a ≤ b over Int, their translation, and their truth at an environment
+data IHyps = ihnil | ihcons (l : IntCode) (r : IntCode) (rest : IHyps)
+igoal-l : IntCode → IntCode → LinCode
+igoal-l a b = lc-add (posc a) (negc b)
+igoal-r : IntCode → IntCode → LinCode
+igoal-r a b = lc-add (posc b) (negc a)
+int-hyps : IHyps → Hyps
+int-hyps hs = case hs return (λ w → Hyps) of ihnil → hnil; ihcons l r rest → hcons (igoal-l l r) (igoal-r l r) (rec rest)
+IHolds : IEnv → IHyps → Type
+IHolds e hs = case hs return (λ w → Type) of ihnil → Unit; ihcons l r rest → LeZ2 (zev2 e l) (zev2 e r) × rec rest
+-- a claim a ≤ b holds as words exactly when its translation does
+claim-to : (e : IEnv) (a b : IntCode) → LeZ2 (zev2 e a) (zev2 e b) → Lew (wev (tenv e) (igoal-l a b)) (wev (tenv e) (igoal-r a b))
+claim-to e a b h =
+  le-transport (wev (tenv e) (igoal-l a b)) (wev (tenv e) (igoal-r a b)) (plusw (fst (zev2 e a)) (snd (zev2 e b))) (plusw (fst (zev2 e b)) (snd (zev2 e a)))
+    (symw (cong2w (λ x y → plusw x y) (fst (repr e a)) (snd (repr e b)))) (symw (cong2w (λ x y → plusw x y) (fst (repr e b)) (snd (repr e a)))) h
+claim-from : (e : IEnv) (a b : IntCode) → Lew (wev (tenv e) (igoal-l a b)) (wev (tenv e) (igoal-r a b)) → LeZ2 (zev2 e a) (zev2 e b)
+claim-from e a b h =
+  le-transport (plusw (fst (zev2 e a)) (snd (zev2 e b))) (plusw (fst (zev2 e b)) (snd (zev2 e a))) (wev (tenv e) (igoal-l a b)) (wev (tenv e) (igoal-r a b))
+    (cong2w (λ x y → plusw x y) (fst (repr e a)) (snd (repr e b))) (cong2w (λ x y → plusw x y) (fst (repr e b)) (snd (repr e a))) h
+int-holds : (e : IEnv) (hs : IHyps) → IHolds e hs → Holds (tenv e) (int-hyps hs)
+int-holds e hs hh =
+  case hs return (λ w → IHolds e w → Holds (tenv e) (int-hyps w)) of
+    ihnil → λ h → unit
+    ihcons l r rest → λ h → (claim-to e l r (fst h) , rec rest (snd h))
+  hh
+-- the checker and its soundness
+int-cert-check : IHyps → Mults → IntCode → IntCode → Bool
+int-cert-check hs ms a b = cert-check (int-hyps hs) ms (igoal-l a b) (igoal-r a b)
+int-cert-sound : (e : IEnv) (hs : IHyps) (ms : Mults) (a b : IntCode) → IHolds e hs →
+                 int-cert-check hs ms a b ≡ true → LeZ2 (zev2 e a) (zev2 e b)
+int-cert-sound e hs ms a b hh p =
+  claim-from e a b (cert-sound (tenv e) (int-hyps hs) ms (igoal-l a b) (igoal-r a b) (int-holds e hs hh) p)
+-- ---------------------------------------------------------------- order laws, by the checker
+-- an environment from a list of integers (variables past the end are 0)
+ienv : List Int → IEnv
+ienv l v = %welimP (λ w → List Int → Z2) v (λ l → case l of nil → toZ2 zeroZ; cons x xs → toZ2 x) (λ n h l → case l of nil → toZ2 zeroZ; cons x xs → h xs) l
+leZ-refl : (a : Int) → leZ a a
+leZ-refl a = int-cert-sound (ienv (cons a nil)) ihnil munil (ic-var #0) (ic-var #0) unit (λ i → true)
+leZ-trans : (a b c : Int) → leZ a b → leZ b c → leZ a c
+leZ-trans a b c h k =
+  int-cert-sound (ienv (cons a (cons b (cons c nil)))) (ihcons (ic-var #0) (ic-var #1) (ihcons (ic-var #1) (ic-var #2) ihnil))
+    (mucons #1 (mucons #1 munil)) (ic-var #0) (ic-var #2) (h , (k , unit)) (λ i → true)
+-- the coordinates of a negation are the swapped coordinates
+toZ2-neg-fst2 : (a : Int) → fst (toZ2 (negZ a)) ≡ snd (toZ2 a)
+toZ2-neg-fst2 a =
+  case a return (λ w → fst (toZ2 (negZ w)) ≡ snd (toZ2 w)) of
+    pos n → (case n return (λ m → fst (toZ2 (negZ (pos m))) ≡ snd (toZ2 (pos m))) of zero → λ i → #0; suc k → λ i → #0)
+    negsuc n → λ i → %wsucc (fromNat n)
+toZ2-neg-snd2 : (a : Int) → snd (toZ2 (negZ a)) ≡ fst (toZ2 a)
+toZ2-neg-snd2 a =
+  case a return (λ w → snd (toZ2 (negZ w)) ≡ fst (toZ2 w)) of
+    pos n → (case n return (λ m → snd (toZ2 (negZ (pos m))) ≡ fst (toZ2 (pos m))) of zero → λ i → #0; suc k → λ i → %wsucc (fromNat k))
+    negsuc n → λ i → #0
+-- negation reverses the order
+leZ-neg : (a b : Int) → leZ a b → leZ (negZ b) (negZ a)
+leZ-neg a b h =
+  le-transport (plusw (fst (toZ2 (negZ b))) (snd (toZ2 (negZ a)))) (plusw (fst (toZ2 (negZ a))) (snd (toZ2 (negZ b))))
+    (plusw (snd (toZ2 b)) (fst (toZ2 a))) (plusw (snd (toZ2 a)) (fst (toZ2 b)))
+    (symw (cong2w (λ x y → plusw x y) (toZ2-neg-fst2 b) (toZ2-neg-snd2 a))) (symw (cong2w (λ x y → plusw x y) (toZ2-neg-fst2 a) (toZ2-neg-snd2 b)))
+    (le-transport (plusw (snd (toZ2 b)) (fst (toZ2 a))) (plusw (snd (toZ2 a)) (fst (toZ2 b))) (plusw (fst (toZ2 a)) (snd (toZ2 b))) (plusw (fst (toZ2 b)) (snd (toZ2 a)))
+      (plusw-comm (fst (toZ2 a)) (snd (toZ2 b))) (plusw-comm (fst (toZ2 b)) (snd (toZ2 a))) h)
+-- order and addition: a ≤ b and c ≤ d give a + c ≤ b + d. On differences this is a sum of
+-- inequalities; on integers the normal forms of the sums enter, related to the plain sums by
+-- toZ2-fromZ2-rel, and the word checker closes the gap: the claim over the eight words
+-- (P, Q, P', Q', the coordinates of the two normal forms) follows from three hypotheses with
+-- multipliers 1, 1, 1, which cert-check confirms by computation.
+leZ2-add : (za zb zc zd : Z2) → LeZ2 za zb → LeZ2 zc zd → LeZ2 (addZ2 za zc) (addZ2 zb zd)
+leZ2-add za zb zc zd h k =
+  le-transport (plusw (plusw (fst za) (fst zc)) (plusw (snd zb) (snd zd))) (plusw (plusw (fst zb) (fst zd)) (plusw (snd za) (snd zc)))
+    (plusw (plusw (fst za) (snd zb)) (plusw (fst zc) (snd zd))) (plusw (plusw (fst zb) (snd za)) (plusw (fst zd) (snd zc)))
+    (plusw-interchange (fst za) (snd zb) (fst zc) (snd zd)) (plusw-interchange (fst zb) (snd za) (fst zd) (snd zc))
+    (le-add (plusw (fst za) (snd zb)) (plusw (fst zb) (snd za)) (plusw (fst zc) (snd zd)) (plusw (fst zd) (snd zc)) h k)
+eq-le : (x y : Word) → x ≡ y → Lew x y
+eq-le x y p = (#0 , catw (plusw-zero-r x) p)
+wenv : List Word → Env
+wenv l v = %welimP (λ w → List Word → Word) v (λ l → case l of nil → #0; cons x xs → x) (λ n h l → case l of nil → #0; cons x xs → h xs) l
+leZ-add : (a b c d : Int) → leZ a b → leZ c d → leZ (addZ a c) (addZ b d)
+leZ-add a b c d h k =
+  cert-sound (wenv (cons (zp a c) (cons (zn a c) (cons (zp b d) (cons (zn b d)
+                   (cons (fst (toZ2 (addZ a c))) (cons (snd (toZ2 (addZ a c))) (cons (fst (toZ2 (addZ b d))) (cons (snd (toZ2 (addZ b d))) nil)))))))))
+    (hcons (lc-add (lc-var #0) (lc-var #3)) (lc-add (lc-var #2) (lc-var #1))
+      (hcons (lc-add (lc-var #4) (lc-var #1)) (lc-add (lc-var #0) (lc-var #5))
+        (hcons (lc-add (lc-var #2) (lc-var #7)) (lc-add (lc-var #6) (lc-var #3)) hnil)))
+    (mucons #1 (mucons #1 (mucons #1 munil)))
+    (lc-add (lc-var #4) (lc-var #7)) (lc-add (lc-var #6) (lc-var #5))
+    (leZ2-add (toZ2 a) (toZ2 b) (toZ2 c) (toZ2 d) h k ,
+      (eq-le (plusw (fst (toZ2 (addZ a c))) (zn a c)) (plusw (zp a c) (snd (toZ2 (addZ a c)))) (toZ2-fromZ2-rel (zn a c) (zp a c)) ,
+        (eq-le (plusw (zp b d) (snd (toZ2 (addZ b d)))) (plusw (fst (toZ2 (addZ b d))) (zn b d)) (symw (toZ2-fromZ2-rel (zn b d) (zp b d))) , unit)))
+    (λ i → true)

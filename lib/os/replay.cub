@@ -1,0 +1,197 @@
+-- lib/os/replay.cub — a run over Linux reproduced from the kernel's responses (the acceptance of archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §6 “Phases 2–8: everything that will be built”, “Phase 3 — The OS as a world”;
+-- lib/proc.cub's replay, at a carrier wide enough for Linux's responses). Loaded
+-- after lib/os/contract.cub.
+--
+-- A response of Linux is written as a list of words (lx-enc) and read back (lx-dec; the facts a
+-- response carries are decided again on reading, so a log that breaks one is refused, not
+-- believed). A process sees the world only through responses, memory included (lx-peek8,
+-- lx-peek64 are commands), so the responses in order determine the run:
+--   lx-recording w    the world w keeping, beside its state, the responses it gave, in order;
+--   lx-replaying      the world that answers from such a log alone, and refuses when the log
+--                     ends or does not fit the command;
+--   linux-run-rec     a process performed on the kernel (linux-on-w) with each response also
+--                     written to a descriptor: per response a word count, then the words, 8
+--                     bytes each, little-endian;
+--   lx-replay-run     the log read from a descriptor and the process run by runp in
+--                     lx-replaying: its outcome.
+-- ---------------------------------------------------------------- responses as words
+lx-enc-sum : {R : Type} → (R → List Word) → Sum Errno R → List Word
+lx-enc-sum f r = case r of inl e → cons #0 (cons e nil); inr a → cons #1 (f a)
+lx-enc-word : Word → List Word
+lx-enc-word w = cons w nil
+lx-enc-unit : Unit → List Word
+lx-enc-unit u = nil
+lx-enc-upto : (len : Word) → Upto len → List Word
+lx-enc-upto len k = cons (fst k) nil
+lx-enc-addr : SockAddr → List Word
+lx-enc-addr a = cons (sa-port a) (cons (sa-ip a) nil)
+lx-enc-events : List EpollEvent → List Word
+lx-enc-events nil = nil
+lx-enc-events (cons e r) = cons (ev-events e) (cons (ev-data e) (lx-enc-events r))
+lx-enc : (c : LinuxCmd) → lx-resp c → List Word
+lx-enc c = case c return (λ x → lx-resp x → List Word) of
+  lx-clock-gettime → lx-enc-sum {Timespec} (λ t → cons (ts-sec t) (cons (ts-nsec t) nil))
+  lx-nanosleep t → lx-enc-sum {Unit} lx-enc-unit
+  lx-read fd buf len → lx-enc-sum {Upto len} (lx-enc-upto len)
+  lx-write fd buf len → lx-enc-sum {Upto len} (lx-enc-upto len)
+  lx-open path flags mode → lx-enc-sum {Word} lx-enc-word
+  lx-close fd → lx-enc-sum {Unit} lx-enc-unit
+  lx-mmap addr len prot flags fd off → lx-enc-sum {Word} lx-enc-word
+  lx-munmap addr len → lx-enc-sum {Unit} lx-enc-unit
+  lx-mprotect addr len prot → lx-enc-sum {Unit} lx-enc-unit
+  lx-socket domain type proto → lx-enc-sum {Word} lx-enc-word
+  lx-bind fd a → lx-enc-sum {Unit} lx-enc-unit
+  lx-listen fd backlog → lx-enc-sum {Unit} lx-enc-unit
+  lx-accept4 fd flags → lx-enc-sum {Word × SockAddr} (λ r → cons (fst r) (lx-enc-addr (snd r)))
+  lx-connect fd a → lx-enc-sum {Unit} lx-enc-unit
+  lx-recvfrom fd buf len flags → lx-enc-sum {Upto len × SockAddr} (λ r → cons (fst (fst r)) (lx-enc-addr (snd r)))
+  lx-sendto fd buf len flags a → lx-enc-sum {Upto len} (lx-enc-upto len)
+  lx-setsockopt fd level name val → lx-enc-sum {Unit} lx-enc-unit
+  lx-epoll-create1 flags → lx-enc-sum {Word} lx-enc-word
+  lx-epoll-ctl ep op fd ev → lx-enc-sum {Unit} lx-enc-unit
+  lx-epoll-wait ep max timeout → lx-enc-sum {Upto max × List EpollEvent} (λ r → cons (fst (fst r)) (lx-enc-events (snd r)))
+  lx-futex-wait addr val → lx-enc-sum {Unit} lx-enc-unit
+  lx-futex-wake addr n → lx-enc-sum {Upto n} (lx-enc-upto n)
+  lx-getpid → lx-enc-word
+  lx-exit-group ec → lx-enc-unit
+  lx-alloc n → lx-enc-word
+  lx-peek8 a → lx-enc-word
+  lx-poke8 a v → lx-enc-unit
+  lx-peek64 a → lx-enc-word
+  lx-poke64 a v → lx-enc-unit
+-- reading back: inr unit is "these words are not a response of this command"
+lx-dec-sum : {R : Type} → (List Word → Sum R Unit) → List Word → Sum (Sum Errno R) Unit
+lx-dec-sum f nil = inr unit
+lx-dec-sum f (cons t r) =
+  if %weq t #0 then (case r of nil → inr unit; cons e r2 → inl (inl e))
+  else (case f r of inl a → inl (inr a); inr u → inr unit)
+lx-dec-word : List Word → Sum Word Unit
+lx-dec-word nil = inr unit
+lx-dec-word (cons w r) = inl w
+lx-dec-unit : List Word → Sum Unit Unit
+lx-dec-unit ws = inl unit
+lx-dec-upto : (len : Word) → List Word → Sum (Upto len) Unit
+lx-dec-upto len nil = inr unit
+lx-dec-upto len (cons n r) = case lx-upto len n of inl e → inr unit; inr k → inl k
+lx-dec-addr : List Word → Sum SockAddr Unit
+lx-dec-addr nil = inr unit
+lx-dec-addr (cons p r) = case r of nil → inr unit; cons i r2 → inl (SockAddr { sa-port = p ; sa-ip = i })
+lx-dec-events : List Word → List EpollEvent
+lx-dec-events nil = nil
+lx-dec-events (cons e nil) = nil
+lx-dec-events (cons e (cons d r2)) = cons (EpollEvent { ev-events = e ; ev-data = d }) (lx-dec-events r2)
+lx-dec-time : List Word → Sum Timespec Unit
+lx-dec-time nil = inr unit
+lx-dec-time (cons s r) = case r of nil → inr unit; cons ns r2 → inl (Timespec { ts-sec = s ; ts-nsec = ns })
+lx-dec-peer : List Word → Sum (Word × SockAddr) Unit
+lx-dec-peer nil = inr unit
+lx-dec-peer (cons w r) = case lx-dec-addr r of inl a → inl (w , a); inr u → inr unit
+lx-dec-from : (len : Word) → List Word → Sum (Upto len × SockAddr) Unit
+lx-dec-from len nil = inr unit
+lx-dec-from len (cons n r) =
+  case lx-upto len n of
+    inl e → inr unit
+    inr k → (case lx-dec-addr r of inl a → inl (k , a); inr u → inr unit)
+lx-dec-ready : (max : Word) → List Word → Sum (Upto max × List EpollEvent) Unit
+lx-dec-ready max nil = inr unit
+lx-dec-ready max (cons n r) = case lx-upto max n of inl e → inr unit; inr k → inl (k , lx-dec-events r)
+lx-dec : (c : LinuxCmd) → List Word → Sum (lx-resp c) Unit
+lx-dec c = case c return (λ x → List Word → Sum (lx-resp x) Unit) of
+  lx-clock-gettime → lx-dec-sum {Timespec} lx-dec-time
+  lx-nanosleep t → lx-dec-sum {Unit} lx-dec-unit
+  lx-read fd buf len → lx-dec-sum {Upto len} (lx-dec-upto len)
+  lx-write fd buf len → lx-dec-sum {Upto len} (lx-dec-upto len)
+  lx-open path flags mode → lx-dec-sum {Word} lx-dec-word
+  lx-close fd → lx-dec-sum {Unit} lx-dec-unit
+  lx-mmap addr len prot flags fd off → lx-dec-sum {Word} lx-dec-word
+  lx-munmap addr len → lx-dec-sum {Unit} lx-dec-unit
+  lx-mprotect addr len prot → lx-dec-sum {Unit} lx-dec-unit
+  lx-socket domain type proto → lx-dec-sum {Word} lx-dec-word
+  lx-bind fd a → lx-dec-sum {Unit} lx-dec-unit
+  lx-listen fd backlog → lx-dec-sum {Unit} lx-dec-unit
+  lx-accept4 fd flags → lx-dec-sum {Word × SockAddr} lx-dec-peer
+  lx-connect fd a → lx-dec-sum {Unit} lx-dec-unit
+  lx-recvfrom fd buf len flags → lx-dec-sum {Upto len × SockAddr} (lx-dec-from len)
+  lx-sendto fd buf len flags a → lx-dec-sum {Upto len} (lx-dec-upto len)
+  lx-setsockopt fd level name val → lx-dec-sum {Unit} lx-dec-unit
+  lx-epoll-create1 flags → lx-dec-sum {Word} lx-dec-word
+  lx-epoll-ctl ep op fd ev → lx-dec-sum {Unit} lx-dec-unit
+  lx-epoll-wait ep max timeout → lx-dec-sum {Upto max × List EpollEvent} (lx-dec-ready max)
+  lx-futex-wait addr val → lx-dec-sum {Unit} lx-dec-unit
+  lx-futex-wake addr n → lx-dec-sum {Upto n} (lx-dec-upto n)
+  lx-getpid → lx-dec-word
+  lx-exit-group ec → lx-dec-unit
+  lx-alloc n → lx-dec-word
+  lx-peek8 a → lx-dec-word
+  lx-poke8 a v → lx-dec-unit
+  lx-peek64 a → lx-dec-word
+  lx-poke64 a v → lx-dec-unit
+-- ---------------------------------------------------------------- recording and replaying worlds
+LxLog : Type
+LxLog = List (List Word)
+lx-recording : {St : Type} → World Linux St → World Linux (St × LxLog)
+lx-recording {St} w c st =
+  case w c (fst st) of
+    inl r → inl (fst r , (snd r , k-app {List Word} (snd st) (cons (lx-enc c (fst r)) nil)))
+    inr s2 → inr (s2 , snd st)
+lx-replaying : World Linux LxLog
+lx-replaying c log = case log of nil → inr nil; cons x rest → (case lx-dec c x of inl r → inl (r , rest); inr u → inr (cons x rest))
+-- ---------------------------------------------------------------- recording on the kernel
+lx-store-words : List Word → Word → Proc {lzero} W Unit
+lx-store-words ws = case ws return (λ x → Word → Proc {lzero} W Unit) of
+  nil → λ at → lx-rw {Unit} unit
+  cons w r → λ at → lx-bw {Unit} {Unit} (store-at at w) (λ u → rec r (%wadd at #8))
+-- one response: its word count and its words stored at area, written to the descriptor
+lx-log : Platform → Word → Word → List Word → Proc {lzero} W Unit
+lx-log pf area logfd ws =
+  lx-bw {Unit} {Unit} (store-at area (k-len {Word} ws)) (λ u →
+  lx-bw {Unit} {Unit} (lx-store-words ws (%wadd area #8)) (λ u2 →
+  lx-bw {Word} {Unit} (sys-call (pf-sysnr pf sys-write) logfd area (%wmul #8 (%wsucc (k-len {Word} ws))) #0 #0 #0) (λ n → lx-rw {Unit} unit)))
+linux-on-w-rec : (pf : Platform) → LittleEndian pf → Word → Word → Word → Handler Linux W
+linux-on-w-rec pf le sc area logfd c =
+  lx-bw {lx-resp c} {lx-resp c} (linux-on-w pf le sc c) (λ r →
+  lx-bw {Unit} {lx-resp c} (lx-log pf area logfd (lx-enc c r)) (λ u → lx-rw {lx-resp c} r))
+-- the log's area holds the longest response (epoll_wait's lx-max-events events: 131 words)
+linux-run-rec : {A : Type} → (pf : Platform) → LittleEndian pf → Word → Proc {lsuc lzero} Linux A → Proc {lzero} W A
+linux-run-rec {A} pf le logfd p =
+  lx-bw {Word} {A} (alloc-bytes lx-scratch) (λ sc →
+  lx-bw {Word} {A} (alloc-bytes #2048) (λ area → handle {Linux} {W} {A} (linux-on-w-rec pf le sc area logfd) p))
+-- the same directly as a tree of steps (lib/os/linux.cub's linux-step)
+linux-step-rec : {A : Type} → (pf : Platform) → LittleEndian pf → Word → Proc {lzero} Linux A → Step W A
+linux-step-rec {A} pf le logfd p =
+  scmd (w-alloc lx-scratch) (λ sc → scmd (w-alloc #2048) (λ area →
+    p (Step W A) (λ a → sdone a) (λ c k → linux-on-w-rec pf le sc area logfd c (Step W A) k (λ c2 k2 → scmd c2 k2))))
+-- ---------------------------------------------------------------- replaying a log read from a descriptor
+-- the words as responses: a count, that many words, again (the list itself bounds the rounds)
+lx-split-go : List Word → List Word → LxLog
+lx-split-go nil ws = nil
+lx-split-go (cons f fuel) ws = case ws of nil → nil; cons k rest → cons (k-take {Word} k rest) (lx-split-go fuel (k-drop {Word} k rest))
+lx-split : List Word → LxLog
+lx-split ws = lx-split-go ws ws
+-- up to cap bytes read into buf until the descriptor ends (at most 4096 reads): the count.
+-- (The case on the read's result is left applied from outside, not written with lx-sum: the
+-- bound is a literal, and a case the specializer can enter would be unrolled 4096 deep.)
+lx-read-all : Platform → Word → Word → Word → Proc {lzero} W Word
+lx-read-all pf fd buf cap =
+  %welimP (λ v → Word → Proc {lzero} W Word) #4096 (λ off → lx-rw {Word} off)
+    (λ k go → λ off →
+      lx-bw {Word} {Word} (sys-call (pf-sysnr pf sys-read) fd (%wadd buf off) (%wsub cap off) #0 #0 #0) (λ r →
+        case lx-decode r of
+          inl e → lx-rw {Word} off
+          inr n → (if %weq n #0 then lx-rw {Word} off else go (%wadd off n))))
+    #0
+lx-load-words : Word → Word → Proc {lzero} W (List Word)
+lx-load-words buf n =
+  %welimP (λ v → List Word → Proc {lzero} W (List Word)) n (λ acc → lx-rw {List Word} acc)
+    (λ k go → λ acc → lx-bw {Word} {List Word} (load-at (%wadd buf (%wmul #8 k))) (λ w → go (cons w acc)))
+    nil
+lx-read-log : Platform → Word → Proc {lzero} W LxLog
+lx-read-log pf fd =
+  lx-bw {Word} {LxLog} (alloc-bytes #1048576) (λ buf →
+  lx-bw {Word} {LxLog} (lx-read-all pf fd buf #1048576) (λ total →
+  lx-bw {List Word} {LxLog} (lx-load-words buf (%wdiv total #8)) (λ ws → lx-rw {LxLog} (lx-split ws))))
+-- the process run from the log alone: its outcome and how many responses were left unread
+lx-replay-run : {A : Type} → Platform → Word → Proc {lzero} Linux A → Proc {lzero} W (Outcome A × Word)
+lx-replay-run {A} pf fd p =
+  lx-bw {LxLog} {Outcome A × Word} (lx-read-log pf fd) (λ log →
+    lx-rw {Outcome A × Word} (fst (runp {Linux} {A} {LxLog} p lx-replaying log) , k-len {List Word} (snd (runp {Linux} {A} {LxLog} p lx-replaying log))))

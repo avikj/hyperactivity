@@ -1,0 +1,178 @@
+-- lib/compile/meaning.cub — what it means for bytes to compute a definition.
+--
+-- ⟦bs⟧ is the model run on a call of the blob bs: bs at mn-code, the arguments' machine forms in
+-- an array at mn-args, the context (overflow flag, arena next, arena end, stack limit) at mn-ctx,
+-- rsp at mn-stack holding the return address mn-ret, rip at the blob's first byte (the entry
+-- stub: rdi the arguments, rsi their count, rdx the context, as lib/x86.cub's x-stub reads them).
+-- The run stops when rip reaches mn-ret; rax is then the result's machine form, unless the flag
+-- is set (the overflow exit: an arithmetic result past 2^64, the arena or the stack exhausted).
+-- A run that throws, aborts, does not reach mn-ret within its fuel, or sets the flag gives f's
+-- own value: the bytes are correct for f when every other run gives f's value too.
+import "../isa/x86/run.cub"
+
+-- the places of a call (literal: the model computes on literal addresses)
+mn-code : Word
+mn-code = #4194304
+mn-args : Word
+mn-args = #5242880
+mn-ctx : Word
+mn-ctx = #5308416
+mn-ret : Word
+mn-ret = #4190208
+mn-stack : Word
+mn-stack = #2147418112
+mn-heap : Word
+mn-heap = #268435456
+mn-heap-end : Word
+mn-heap-end = #536870912
+mn-stack-lim : Word
+mn-stack-lim = #2146369536
+nat-word : Nat → Word
+nat-word n = case n return (λ _ → Word) of
+  zero → #0
+  suc k → %wsucc (rec k)
+l-drop : {A : Type} → Word → Lst A → Lst A
+l-drop {A} n l = %welimP (λ _ → Lst A → Lst A) n (λ l2 → l2) (λ j h l2 → case l2 return (λ _ → Lst A) of
+  lnil → lnil
+  lcons x r → h r) l
+-- bytes as a balanced tree of depth d (2^d leaves; past the list's end, 0), read by index
+data BT = bt-leaf (b : Word) | bt-node (l : BT) (r : BT)
+bt-build : Nat → Lst Word → BT × Lst Word
+bt-build zero l = (bt-leaf (l-at #0 l #0) , l-drop #1 l)
+bt-build (suc d) l = (let a = bt-build d l in let b = bt-build d (snd a) in (bt-node (fst a) (fst b) , snd b))
+bt-get : Nat → BT → Word → Word
+bt-get zero t i = case t return (λ _ → Word) of
+  bt-leaf b → b
+  bt-node l r → #0
+bt-get (suc d) t i = case t return (λ _ → Word) of
+  bt-leaf b → #0
+  bt-node l r → (let h = wshl #1 (nat-word d) in if wlt i h then bt-get d l i else bt-get d r (wsub i h))
+-- the depth whose tree holds n bytes (by halving: on a variable n a chain, not a tree of cases)
+bt-depth-f : Nat → Word → Nat
+bt-depth-f zero n = zero
+bt-depth-f (suc f) n = if wlt n #2 then zero else suc (bt-depth-f f (wquot (wadd n #1) #2))
+bt-depth : Word → Nat
+bt-depth n = bt-depth-f c-fuel n
+-- memory holding bs at p and m elsewhere (the bytes read through a tree built once)
+code-at : Word → Word → Nat → BT → ByteMap → ByteMap
+code-at p n d t m x = if c-and (w-le p x) (wlt x (wadd p n)) then bt-get d t (wsub x p) else m x
+code-over : Word → Lst Word → ByteMap → ByteMap
+code-over p bs m = let d = bt-depth (l-count bs) in code-at p (l-count bs) d (fst (bt-build d bs)) m
+-- words stored at consecutive 8-byte places
+mn-words : ByteMap → Word → Lst Word → ByteMap
+mn-words m a lnil = m
+mn-words m a (lcons w ws) = mn-words (mem-store-n m #8 a w) (wadd a #8) ws
+-- the state at the call
+mn-init : Lst Word → Lst Word → X86
+mn-init bs args =
+  let m0 = mn-words (mn-words (mn-words mem-none mn-args args) mn-ctx (lcons #0 (lcons mn-heap (lcons mn-heap-end (lcons mn-stack-lim lnil)))))
+                    mn-stack (lcons mn-ret lnil)
+  in x86-set-rdi mn-args (x86-set-rsi (l-count args) (x86-set-rdx mn-ctx (x86-set-rsp mn-stack
+       (x86-set-rip mn-code (x86-set-mem (code-over mn-code bs m0) x86-user64)))))
+-- after one step: on when its outcome is a value
+x86-run-on : (X86 → Opt X86) → Outc exception Unit × X86 → Opt X86
+x86-run-on h r = case fst r return (λ _ → Opt X86) of
+  out-val u → h (snd r)
+  out-throw e → none
+  out-abort w → none
+-- steps until rip is stop (checked before each step), at most n of them; none when a step's
+-- outcome is not a value or the fuel ends first
+run-to : (X86 → Outc exception Unit × X86) → Word → Word → X86 → Opt X86
+run-to stp n stop =
+  %welimP (λ _ → X86 → Opt X86) n (λ s → if weq (x86-rip s) stop then some s else none)
+    (λ j h s → if weq (x86-rip s) stop then some s else x86-run-on h (stp s))
+-- the result of a run: rax when the run stopped at the return and the flag is clear
+mn-result : Opt X86 → Opt Word
+mn-result none = none
+mn-result (some s) = if weq (mem-load-n (x86-mem s) #8 mn-ctx) #0 then some (x86-rax s) else none
+-- ⟦bs⟧ on word arguments, with fuel n
+mn-run : Lst Word → Word → Lst Word → Opt Word
+mn-run bs n args = mn-result (run-to x86-step n mn-ret (mn-init bs args))
+-- the meaning of bs at a definition of words: the run's result, or f's value
+mn-call1 : Lst Word → (Word → Word) → Word → Word → Word
+mn-call1 bs f n a = opt-or (mn-run bs n (lcons a lnil)) (f a)
+mn-call2 : Lst Word → (Word → Word → Word) → Word → Word → Word → Word
+mn-call2 bs f n a b = opt-or (mn-run bs n (lcons a (lcons b lnil))) (f a b)
+-- bs is correct for f: whatever the fuel and the arguments, ⟦bs⟧ is f
+Correct1 : Lst Word → (Word → Word) → Type
+Correct1 bs f = (n a : Word) → mn-call1 bs f n a ≡ f a
+Correct2 : Lst Word → (Word → Word → Word) → Type
+Correct2 bs f = (n a b : Word) → mn-call2 bs f n a b ≡ f a b
+
+-- ---------------------------------------------------------------- values in memory, by their type
+-- A value's machine form, as src/net.c's jit_in places it and jit_read reads it: a word (and a
+-- primitive value) is its bits; a Nat its count; a constructor without fields its index; a
+-- constructor with fields a cell [index][fields…] in the arena; a pair a cell [0][a][b]. The arena
+-- is a memory and the next free address. Reading follows cells for at most the fuel's depth.
+Arena : Type
+Arena = ByteMap × Word
+-- n words in a fresh cell: its address and the arena after it
+ar-cell : Lst Word → Arena → Word × Arena
+ar-cell ws ar = (snd ar , (mn-words (fst ar) (snd ar) ws , wadd (snd ar) (wmul #8 (l-count ws))))
+MForm : Type → Type
+MForm A = (A → Arena → Word × Arena) × (Nat → ByteMap → Word → A)
+mf-put : {A : Type} → MForm A → A → Arena → Word × Arena
+mf-put {A} m = fst m
+mf-get : {A : Type} → MForm A → Nat → ByteMap → Word → A
+mf-get {A} m = snd m
+-- the word at an address
+ld8 : ByteMap → Word → Word
+ld8 m a = mem-load-n m #8 a
+mf-word : MForm Word
+mf-word = ((λ w ar → (w , ar)) , (λ k m v → v))
+mf-nat-get : Word → Nat
+mf-nat-get v = %welimP (λ _ → Nat) v zero (λ j h → suc h)
+mf-nat : MForm Nat
+mf-nat = ((λ n ar → (nat-word n , ar)) , (λ k m v → mf-nat-get v))
+mf-bool : MForm Bool
+mf-bool = ((λ b ar → (if b then #0 else #1 , ar)) , (λ k m v → weq v #0))
+mf-pair-put : {A B : Type} → MForm A → MForm B → A × B → Arena → Word × Arena
+mf-pair-put {A} {B} ma mb p ar =
+  let ra = mf-put ma (fst p) ar
+      rb = mf-put mb (snd p) (snd ra)
+  in ar-cell (lcons #0 (lcons (fst ra) (lcons (fst rb) lnil))) (snd rb)
+mf-pair-get : {A B : Type} → MForm A → MForm B → Nat → ByteMap → Word → A × B
+mf-pair-get {A} {B} ma mb zero m v = (mf-get ma zero m #0 , mf-get mb zero m #0)
+mf-pair-get {A} {B} ma mb (suc k) m v = (mf-get ma k m (ld8 m (wadd v #8)) , mf-get mb k m (ld8 m (wadd v #16)))
+mf-pair : {A B : Type} → MForm A → MForm B → MForm (A × B)
+mf-pair {A} {B} ma mb = (mf-pair-put ma mb , mf-pair-get ma mb)
+mf-list-put : {A : Type} → MForm A → List A → Arena → Word × Arena
+mf-list-put {A} ma nil ar = (#0 , ar)
+mf-list-put {A} ma (cons x xs) ar =
+  let rx = mf-put ma x ar
+      rs = mf-list-put ma xs (snd rx)
+  in ar-cell (lcons #1 (lcons (fst rx) (lcons (fst rs) lnil))) (snd rs)
+mf-list-get : {A : Type} → MForm A → Nat → ByteMap → Word → List A
+mf-list-get {A} ma zero m v = nil
+mf-list-get {A} ma (suc k) m v =
+  if wlt v #4096 then nil else cons (mf-get ma k m (ld8 m (wadd v #8))) (mf-list-get ma k m (ld8 m (wadd v #16)))
+mf-list : {A : Type} → MForm A → MForm (List A)
+mf-list {A} ma = (mf-list-put ma , mf-list-get ma)
+-- the arguments placed in order: their words and the arena after them
+mf-args : Lst (Arena → Word × Arena) → Arena → Lst Word × Arena
+mf-args lnil ar = (lnil , ar)
+mf-args (lcons p ps) ar = (let r = p ar in let rs = mf-args ps (snd r) in (lcons (fst r) (fst rs) , snd rs))
+-- the state at a call whose arguments were placed in the arena ar (its next free address is the
+-- context's arena next)
+mn-init-ar : Lst Word → Lst Word → Arena → X86
+mn-init-ar bs args ar =
+  let m0 = mn-words (mn-words (mn-words (fst ar) mn-args args) mn-ctx (lcons #0 (lcons (snd ar) (lcons mn-heap-end (lcons mn-stack-lim lnil)))))
+                    mn-stack (lcons mn-ret lnil)
+  in x86-set-rdi mn-args (x86-set-rsi (l-count args) (x86-set-rdx mn-ctx (x86-set-rsp mn-stack
+       (x86-set-rip mn-code (x86-set-mem (code-over mn-code bs m0) x86-user64)))))
+-- ⟦bs⟧ on placed arguments, its result read at type B
+mn-run-mf : {B : Type} → Lst Word → MForm B → Word → Lst (Arena → Word × Arena) → Opt B
+mn-run-mf {B} bs mb n ps =
+  let pa = mf-args ps (mem-none , mn-heap)
+      s = run-to x86-step n mn-ret (mn-init-ar bs (fst pa) (snd pa))
+  in case s return (λ _ → Opt B) of
+       none → none
+       some s2 → (if weq (ld8 (x86-mem s2) mn-ctx) #0 then some (mf-get mb c-fuel (x86-mem s2) (x86-rax s2)) else none)
+-- the words a call passes: below 2^64 (src/net.c passes a word argument only when it fits one
+-- machine word, a word of more limbs is computed by the definition)
+W64 : Word → Type
+W64 a = wlt a #18446744073709551616 ≡ true
+Correct1w : Lst Word → (Word → Word) → Type
+Correct1w bs f = (n a : Word) → W64 a → mn-call1 bs f n a ≡ f a
+Correct2w : Lst Word → (Word → Word → Word) → Type
+Correct2w bs f = (n a b : Word) → W64 a → W64 b → mn-call2 bs f n a b ≡ f a b

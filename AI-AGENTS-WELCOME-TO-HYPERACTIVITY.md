@@ -23,80 +23,18 @@ only in the task graph, which `hyperactive` shows; nothing else records it.
   which it is and that no copy is here. The same holds for the sections of any document, plans and any
   other source: a number goes with the title it numbers. Nothing is identified by a bare number
   (no t1, t2, …).
-- **Think critically about everything, holding the entire hyperactivity singularity in mind and the
-  purity of the work** (Avik, 2026-11-14: “THINK. APPLY CRITICAL JUDGEMENT. ASSUME YOU CONTINUOUSLY
-  TAKE SHITS IN MY TEMPLE AND IM ALWAYS CLEANING UP AND INVITING YOU BACK. DONT PRAY TO THE SHIT”).
-  Nothing is right because it exists or because it is written down: not code, not a task-graph
-  finding, not an earlier session's notes, not your own earlier message, and not the paper. Work out what is right and why, and
-  say it with the reasons. Replacing judgement by deference to some other text is the same failure.
-  Never answer a correction with "understood", as if taking an order, when the correction follows
-  from thinking that should have been done.
-  - **Core, capacities demonstrated and mentioned in the paper, examples, and our usage are
-    different things** (“The language” in `docs/to-be-incorporated-into-paper.md`). The core is the
-    primitive language. A capacity demonstrated and mentioned in the paper is a claim of the paper,
-    shown by a metacircular extension on the unchanged core. An example shows what the language can
-    do. Our usage is code that exists because building hyperactivity uses it now, with no claim of the
-    paper behind it. Ask why a piece of code exists. Read each thing as what it is: an example of
-    machine words is not a claim that the core has them (a session read the paper's §8.5 that way and
-    called it incorrect).
-  - **Hold this ontology when reading or writing any construction** (Avik, 2026-11-14). Every
-    term in the core is flagged as core, and the files are organized by layer: a set of files that
-    are purely core, and the capacities, the examples, the library and our usage each apart (while
-    the work still lives in a file system). An agent reading any file knows from where it stands
-    which layer it is in. Every file of lib/ and src/ opens with a line `Layer: …` naming its layer
-    (core; misplaced in the core, and what it should be; not core though in the core's load order;
-    capacity demonstrated and mentioned in the paper; library; example; language support; our
-    usage). A new file opens with one; a file that moves layer has its line changed in the same
-    commit. The directories follow the layers: lib/core/ (the primitive language: prelude, code,
-    check, primitives), lib/bootstrap/ (loaded with the core but not core: the untyped match, nav, cost, lin, the
-    misplaced machine numbers of prim, and exposed, match's helpers given types as trusted primitives), lib/capacities/, lib/library/, lib/examples/, lib/languages/
-    (language support), lib/usage/; lib/core.cub and lib/library.cub are the load lists; src/ is the
-    machine.
-  - **The language is the minimal pure base.** It is a minimal, necessary and sufficient construct of
-    pure mathematics, as the λ-calculus, the Turing machine and Shannon's channel are, and its value
-    is maximized by its minimality: it extends to anything by definitions, so nothing further belongs
-    in its core. The test for anything in the core: does it arise in pure mathematics, and is the
-    construction impossible without it? A 32-bit count fails at once; word sizes, bytes and
-    floating-point formats are facts about particular machines, and are definitions in the library
-    like any other machine. Why minimality is the value: every property of the core is inherited by
-    everything built on it, and a primitive is a place where that stops, a law that is assumed rather
-    than proved; a defined thing is identified with every other presentation of itself by paths and
-    transported along them, while a primitive is opaque to that; and nothing definable gains
-    expressiveness by being primitive, it only adds trust and ties the base to one machine's era.
-    The 64-bit floats in `lib/bootstrap/prim.cub` and `src/lang.c` fail this test; an earlier finding took
-    them as given and proposed naming them as an assumption.
 - **Keep Avik's words verbatim** (“Avik's words, verbatim” below).
   - Never paraphrase inside quotation marks.
   - A long message is appended to “Avik's words, verbatim” below, not put in a new file.
   - After each exchange, say what was carried forward, or that nothing was.
 - **Fix everything he criticizes at once.** Create no approval process. Don't idle while there is
   work, and end each message with what is pending him.
-- **What a completion requirement forces is done, not put to Avik** (2026-11-15). If a goal he set
-  cannot be completed without a change, even a change to the core, the change is the session's work:
-  derive it, check that it is forced and that it arises in the mathematics, and do it. Asking him
-  whether to make it is asking whether to leave his goal incomplete. "Pending on you" holds only
-  what his words leave genuinely unspecified.
 - **Naming.** Names are precise English and verbose rather than vague. Never "work", never "the one
   X".
 - **Every message to Avik ends with everything unresolved from the conversation,** with nothing
   lost: what is pending him and what is pending the session.
 - **Work runs continuously, as if dispatched with no one present.** A session does not end its turn
-  while work that is not blocked on Avik remains. It works through long stretches, hours or a night,
-  and reports only when the work is done or blocked. Run it like an API call, not a conversation:
-  given the tasks, it returns success or failure once, at the end, and nothing before; it never sits
-  waiting for a reply while Avik is away or asleep (2026-11-15).
-  Waiting on a test run, a regression or a recheck is not a reason to stop or to report: the run goes
-  in the background while the next piece is written, and the turn ends only when every task is done
-  (Avik, 2026-11-15, after a session stopped with the main task unfinished to report regression
-  results).
-- **Checking a long file fast.** Stored results make a recheck of everything before a new
-  definition take seconds, so a new block in lib/capacities/nbe.cub is checked by copying the file
-  only up to the block's end, which takes about 17 seconds instead of a full run that can stall
-  for minutes. The checker's output is buffered, so the last name printed is not the definition it
-  is stuck on; run it under `stdbuf -oL`. A term that projects (`fst`, `snd`) a computed reified
-  pair into several arguments makes the checker evaluate the reify functions while comparing types,
-  and the check runs out of memory or does not finish. Pass the pair whole to a function that
-  projects its own variable, as `rn-papp` and `nn-plam` do (2026-11-15).
+  while work that is not blocked on Avik remains. It works through long stretches, hours or a night.
 - **Context lives in the repository, not in chat.** A session can end at any moment, so what it is
   doing, has found and has decided is written as it happens: facts at the goal they concern in the task graph,
   material for the paper in a piece the paper delta points to.

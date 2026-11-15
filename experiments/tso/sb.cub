@@ -1,5 +1,5 @@
 -- experiments/tso/sb.cub — store buffering (SB) on the operational x86-TSO machine
--- (lib/languages/isa/tso.cub). x at #0, y at #1, both initially 0.
+-- (lib/isa/tso.cub). x at #0, y at #1, both initially 0.
 --   thread 0: x := 1; r0 := y        thread 1: y := 1; r1 := x
 -- The outcome is (r0 , r1). x86-TSO allows all four, including the relaxed (0 , 0).
 import "../../lib/library.cub"
@@ -23,7 +23,7 @@ sb-set : List (List Word)
 sb-set = cons (cons #0 (cons #0 nil)) (cons (cons #0 (cons #1 nil)) (cons (cons #1 (cons #0 nil)) (cons (cons #1 (cons #1 nil)) nil)))
 sb-exact : tso-outcomes 6 sb ≡ tso-sum sb-set #80 #0
 sb-exact = λ i → tso-sum sb-set #80 #0
--- the axiomatic form's outcomes for the same threads (lib/languages/isa/tso.cub, `tso-ax-outcomes`): every
+-- the axiomatic form's outcomes for the same threads (lib/isa/tso.cub, `tso-ax-outcomes`): every
 -- candidate execution with read values in {0 , 1}, every rf and every order of the writes to
 -- each address; 4 candidates, 4 TSO-consistent, and their results are the same set
 sb-dom : List Word

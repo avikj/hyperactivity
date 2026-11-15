@@ -87,7 +87,7 @@ agda)
   rm -rf "$A/work/_build"; ag agda-warm-refl-profile "$A/bin/agda" --profile=definitions "$A/work/Refl.agda"
   ;;
 machine)
-  L="lib/core/prelude.cub lib/core/code.cub lib/core/check.cub lib/library/std.cub"
+  L="lib/prelude.cub lib/code.cub lib/check.cub lib/std.cub"
   B=experiments/brunerie
   for w in 0 1 2; do for i in 1 2 3; do
     CUBICAL_NOCACHE=1 CUBICAL_WORKERS=$w "$HEAVY" "$SELF" run machine-untyped-w$w-$i \
