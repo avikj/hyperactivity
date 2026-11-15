@@ -22,3 +22,5 @@ here. `docs/word-list.md` is a separate file, whose lines Avik gives himself.
 - rationale ⟨Late Latin ratiōnāle “nominative/vocative/accusative singular neuter of …” … ← Proto-Indo-European *h₂er- “to put together”⟩  (raised 2026-11-14/15)
 - script ⟨Old French escrit “past participle of escrire” … ← Proto-Indo-European *(s)kreybʰ- “to scratch”⟩  (raised 2026-11-14/15)
 - scene ⟨Middle French scene “stage (location where a play, etc., takes place)” … ← Proto-Indo-European *(s)ḱeh₃- “shade, shadow”⟩  (raised 2026-11-14/15)
+- interaction ⟨inter- "between" + Latin āctiō, from agere "to drive, to do" ← Proto-Indo-European *h₂eǵ- "to drive"⟩  (raised 2026-11-15)
+- hyperinteractivity ⟨Greek hyper "over, beyond" + interaction + -ive + -ity: driving between, beyond measure⟩  (raised 2026-11-15)

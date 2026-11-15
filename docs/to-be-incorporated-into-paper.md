@@ -10,6 +10,9 @@ this file, that part leaves it.
 
 ## What hyperactivity is for
 
+**Hyperactive Interaction** (Avik, 2026-11-15 08:43 UTC): the headline. Hyperinteractivity. The
+entire work is about interaction; activity is a primitive here only as interaction.
+
 **This work is on the realization of human potential** (Avik, 2026-11-14 18:54 UTC, verbatim in
 AI-AGENTS-WELCOME-TO-HYPERACTIVITY.md): *On the Realization of Human Potential*. As *On the Origin of
 Species* was correct and deeply controversial, so are statements many people make today that are
