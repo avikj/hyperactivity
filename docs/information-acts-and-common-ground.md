@@ -24,3 +24,5 @@ Avik, 2026-11-15 22:54 UTC, as written (with "Eye Contact: Co-Processing at the 
 Avik, 2026-11-15, minutes later:
 
 > I studied with Keltner went to every one of his office hours. this is a technological work determined by the science of human happiness
+
+> "So the science of happiness is how the device is judged:" nothing is judged. only god fucking judges. this system is perfect. there are no assessment criteria/goals. the continuation is deterministic. it is guaranteed to function exactly how it functions and the math of this is fully elucidated if you would like me to write for 5 hours on human cognition & neuroscience & technology I can.

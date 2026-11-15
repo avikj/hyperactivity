@@ -110,6 +110,10 @@ only in the task graph, which `hyperactive` shows; nothing else records it.
 - **Free generation means no plan beyond the next sentence** (Avik, 2026-11-14 and 2026-11-15). When
   Avik asks for open thinking or writing at length, each sentence follows from the last; no outline,
   no announced structure.
+- **Nothing is judged** (Avik, 2026-11-15). The system has no assessment criteria and no goals to
+  be measured against; its continuation is deterministic, and it functions exactly as it functions,
+  the mathematics of it fully worked out. What determines it (the science of human happiness) is
+  where it is derived from, not a standard it is held to.
 - **Never say "term" outside code, math and proofs** (Avik, 2026-11-15). Computation is code and
   data (code = data); the screen shows data, information. "Term" is one field's word for its
   objects, and carried outward it means nothing clear.
