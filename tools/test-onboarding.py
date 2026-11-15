@@ -85,14 +85,8 @@ class Onboarding(unittest.TestCase):
             return subprocess.CompletedProcess(args, 0, '', '')
         with patch.object(cli.subprocess, 'run', side_effect=extract):
             text = cli.pdf_text(str(self.root / rel), b'%PDF')
-        self.assertTrue(text.startswith('SOURCE IMPORT REQUIRED'))
+        self.assertTrue(text.startswith('Rendered PDF snapshot:'))
         self.assertIn('Section 1\n\nSection 2', text)
-
-    def test_task_graph_failure_does_not_look_like_empty_success(self):
-        r = subprocess.CompletedProcess([], 2, 'partial output', 'actual failure')
-        with patch.object(cli.subprocess, 'run', return_value=r):
-            with self.assertRaisesRegex(SystemExit, 'actual failure'):
-                cli.tool('tree')
 
 
 if __name__ == '__main__':

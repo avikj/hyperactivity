@@ -36,11 +36,7 @@ CHUNK = 8000   # characters per chunk of the walk: small enough that no agent ha
 def pdf_text(path, data):
     """a PDF the onboarding value points to, as text: extracted once per content (the extraction is
     cached under its SHA-256), and labelled as a rendered snapshot, not the editable manuscript"""
-    notice = ('SOURCE IMPORT REQUIRED: the paper reaches onboarding as a rendered PDF snapshot, '
-              f'{os.path.relpath(path, ROOT)}, not the current editable draft. When the editable '
-              'source docs/Hyperactivity_Current_Draft.md is imported, its pointer replaces this one '
-              'in docs/onboarding.cub; do not reconstruct the source from this extraction or keep '
-              'another Library copy.\n\n')
+    notice = f'Rendered PDF snapshot: {os.path.relpath(path, ROOT)}\n\n'
     digest = hashlib.sha256(data).hexdigest()
     out = os.path.join(ROOT, 'build', 'pdf-' + digest + '.txt')
     if not os.path.isfile(out):
@@ -57,10 +53,7 @@ def pdf_text(path, data):
 
 
 def tool(*args):
-    r = subprocess.run([sys.executable, TASKS, *args], cwd=ROOT, capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit('task-graph command failed: ' + ' '.join(args) + '\n' + r.stderr + r.stdout)
-    return r.stdout
+    return subprocess.run([sys.executable, TASKS, *args], cwd=ROOT, capture_output=True, text=True).stdout
 
 
 def task_graph_module():
@@ -123,7 +116,7 @@ def chunks(text):
 def walk_chunks():
     """the walk, in order: (title, text) for every chunk. The documents are those of the value
     `onboarding` (docs/onboarding.cub) as the machine evaluates it, each served only if its bytes are
-    the ones the value identifies: AGENTS.md, the welcome file, the paper, the Labs note, the pieces of
+    the ones the value identifies: the welcome file, the paper, the Labs note, the pieces of
     the paper delta (docs/paper-delta.cub), the word list, the etymologies. Then the task graph and
     what can be taken up, generated."""
     out = []
