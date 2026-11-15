@@ -115,3 +115,25 @@ s2 : Code
 s2 = csysc (ceq0 (cvar #0)) ctick0 (csysc (ceq1 (cvar #0)) ctick0 csys0)
 #same ocomp Bool true (mB true) (eB true) s2 (ext none-dims i0) = true
 #same ocomp Bool false (mB false) (eB false) s2 (ext none-dims i1) = false
+-- The same over a context's meanings: a meaning mapped by a function of the cube's directions, and the
+-- composition with a system on a face of the context's directions as a meaning over the context.
+lineo-fmap-i : (X : Type 1) (F F' : X → Type 1) → (I → (x : X) → F x → F' x) → (L : Line X) → LineO X F L → LineO X F' L
+lineo-fmap-i X F F' h L D = (h i0 (fst L) (fst D) , h i1 (fst (snd L)) (fst (snd D)) , λ i → h i (snd (snd L) i) (snd (snd D) i))
+dcube-fmap-i : (n : Nat) (X : Type 1) (F F' : X → Type 1) → ((Word → I) → (x : X) → F x → F' x) → (Word → I) →
+               (c : Cube n X) → DCube n X F c → DCube n X F' c
+dcube-fmap-i zero X F F' h ρ0 c d = h ρ0 c d
+dcube-fmap-i (suc n) X F F' h ρ0 c d =
+  dcube-fmap-i n (Line X) (LineO X F) (LineO X F') (λ ρ L D → lineo-fmap-i X F F' (λ i → h (ext ρ i)) L D) ρ0 c d
+fmapM-i : (Γ : CCtx) (Z Z' : Type 1) → ((Word → I) → Z → Z') → Mean Γ Z → Mean Γ Z'
+fmapM-i Γ Z Z' h M = dcube-fmap-i (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Z) (FbE (fst Γ) Z') (λ ρ γ e r → h ρ (e r)) none-dims (snd Γ) M
+-- a Bool value composed along the constant line with a system on the face (direction 0 = 1): over the
+-- context of one direction, at its ends the value (the system's face is 0 at one end and total at
+-- the other)
+emp-k : CCtx
+emp-k = (lnil , one)
+trueM : Mean (dext emp-k) (TV s-bool)
+trueM = ((λ ρ → (one , true)) , (λ ρ → (one , true)) , λ i ρ → (one , true))
+cmpM : Mean (dext emp-k) (TV s-bool)
+cmpM = fmapM-i (dext emp-k) (TV s-bool) (TV s-bool) (λ ρ q → (fst q , comp (λ _ → Bool) (λ _ → [ ρ #0 = 1 ↦ snd q ]) (snd q))) trueM
+#same snd (fst cmpM one) = true
+#same snd (fst (snd cmpM) one) = true
