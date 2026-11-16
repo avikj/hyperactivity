@@ -355,7 +355,10 @@ def paper_code_unresolved():
         for f in fs:
             if f.endswith('.cub'):
                 src = open(os.path.join(dp, f), encoding='utf-8', errors='replace').read()
-                for n in re.findall(r'^(\S+) :', src, re.M) + re.findall(r'^(?:data|codata|record) (\S+)', src, re.M):
+                signed = re.findall(r'^(\S+) :', src, re.M)
+                # a bootstrap file's definitions have no signature: its definition heads count once each
+                unsigned = set(re.findall(r'^([^\s:(){}]+)(?: [^=\n]*)? =', src, re.M)) - set(signed) - {'data', 'codata', 'record', 'import', 'primitive', 'infix', 'infixl', 'infixr'}
+                for n in signed + re.findall(r'^(?:data|codata|record) (\S+)', src, re.M) + sorted(unsigned):
                     defs[n] = defs.get(n, 0) + 1
     src = open(os.path.join(ROOT, 'docs', 'hyperactivity.cub'), encoding='utf-8').read()
     names = []
