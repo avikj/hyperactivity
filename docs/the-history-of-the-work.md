@@ -10,32 +10,17 @@ Then, on a first proposal that grouped the history into eras by top-level folder
 
 > deeply integrated perfectly fit to the intelligent design of hyperactivity. intelligent design is real and demonstrated precisely here. anything that is not the exact correct intelligent design is precisely incorrect.
 
-What the design forces (derived with him, 2026-11-15). History is not a subsystem. An object is its
-content, so nothing is overwritten, and the store already keeps a log of names bound to content keys
-over time (src/store.c, the `names` log): that log is the history, as Unison's names over hashes are.
-Git is the stand-in, read into the store by its one reader. Folders are the filesystem ontology the
-system rejects and sessions hold no identity, so neither organizes the history; they are provenance
-attached to changes. A change to a definition is a new key under its name; its users are new
-programs with it (change is a square); a removal is an unbinding; a key a name held before is a
-return; the same key under another name is a move: each is read off the log, never judged. Depth
-comes from structure: the work's own nodes and the documents essential to them, a day, a change, one
-object's versions; a diff only when one object is opened. Every sentence a view shows was written
-when the work was done.
+Then, on the first build (a second store, change objects, path-qualified names, folders and file
+types as categories):
 
-What exists (`hyperactive history`, tools/history.py; the web page at /history of `hyperactive
-server`): every commit of every ref read into `build/history-store` in the store's form (objects
-under the SHA-256 of their bytes; `name key time change`); files bound by path, each declaration of
-a .cub file bound with its statement under `path#name`, each change itself an object keyed by its
-content with its parents' keys. Views: the history a day at a time with every change that moved the
-organization (namespaces, documents, the work's nodes and their states); a day; a change; what
-changed at a name, with moves, returns, what came from another line of work, whether a version
-changed code or only its statement, and what uses it; a node through time with the changes to its
-essential context; Avik's words as they entered the work.
+> I said we’re moving off of git asap right. So is it wise to add a bunch of machinery?
+>
+> Near zero machinery. What did I say. Did I mention intelligent design? Do you know what that means? Are you actually even familiar w hyperactivity?
 
-What it does not yet hold. The keys of the past are text keys. A change to a declaration's statement
-alone is told apart from a change to its code's text, but not a change of code's text that keeps its
-meaning (a renamed bound variable): that is the store's canonical key, which exists only where today's
-machine reads a definition, not for past states. A change's reason is read from the task graph's
-essential context and from the work's nodes; the machine's `#uses` chains (`hyperactive why`) are
-not computed for past states. When the store holds the work natively, the reader has nothing to
-read and the views read the store's own log.
+What follows (2026-11-15). An object is its content, so nothing is overwritten and the history is
+already present: in the store, its log of names bound to keys over time; while git is the stand-in,
+git itself. A history explorer adds no structure and keeps nothing. It reads what is there when
+asked, and reports only what the work declares: its nodes (type Node, and Ticket before it), the
+leaves in progress and resolved, and the documents its code points to. Folders, file types and
+sessions organize nothing. `hyperactive history` (tools/history.py) does this over git; when the
+store holds the work, the same views read the store's log.

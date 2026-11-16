@@ -15,14 +15,6 @@ PAGE = os.path.join(ROOT, 'tools', 'task-graph-view.html')
 HISTORY_PAGE = os.path.join(ROOT, 'tools', 'history-view.html')
 spec = importlib.util.spec_from_file_location('history', os.path.join(ROOT, 'tools', 'history.py'))
 history = importlib.util.module_from_spec(spec); spec.loader.exec_module(history)
-_history = [None, None]
-
-
-def history_now():
-    """the history as the store holds it, read again when git's refs have moved (tools/history.py)"""
-    refs = history.git('for-each-ref', '--format=%(objectname) %(refname)')
-    if _history[0] != refs: _history[:] = [refs, history.History()]
-    return _history[1]
 
 
 def graph_json():
@@ -136,7 +128,7 @@ class H(BaseHTTPRequestHandler):
             if self.path.startswith('/api/history'):
                 import urllib.parse
                 q = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).items()}
-                return self.send(json.dumps(history.api(history_now(), q)), 'application/json')
+                return self.send(json.dumps(history.api(q)), 'application/json')
             if self.path.split('?')[0] == '/history': return self.send(open(HISTORY_PAGE, encoding='utf-8').read(), 'text/html; charset=utf-8')
             if self.path.startswith('/doc?'):
                 import urllib.parse

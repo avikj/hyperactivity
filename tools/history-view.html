@@ -49,57 +49,31 @@ h2 { font-size: 15px; margin: 4px 0 12px; }
 <body>
 <header>
   <h1>History of the work</h1>
-  <input id="q" placeholder="What changed here: a path, a declaration, a node (Enter)">
+  <input id="q" placeholder="Every version of a file or a declaration (Enter)">
   <a href="#" id="words">Avik's words</a>
   <a href="/">Task graph</a>
 </header>
-<div id="days"></div>
-<div id="main"></div>
+<div id="main" style="left:0"></div>
 <script>
-// The page shows what `hyperactive history` shows (tools/history.py): every sentence on it was written
-// when the work was done; the page only groups and links it.
-let data, current, all = false;
+// The page shows what `hyperactive history` shows (tools/history.py): git ids open their change, days open the day.
 const $ = s => document.querySelector(s), esc = s => s.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);
-async function api(q) { return (await fetch('/api/history' + (q ? '?' + new URLSearchParams(q) : ''))).json(); }
-function linked(text) {   // git ids in a view's text open their change
-  return esc(text).replace(/\b([0-9a-f]{7})\b/g, '<a data-change="$1">$1</a>');
-}
 async function show(q, title) {
   $('#main').innerHTML = `<h2>${esc(title)}</h2><pre>loading…</pre>`;
-  const r = await api(q);
-  $('#main').innerHTML = `<h2>${esc(title)}</h2><pre>${linked(r.text)}</pre>`;
-  $('#main').scrollTop = 0;
-}
-function day(d) {
-  current = d;
-  document.querySelectorAll('.day').forEach(e => e.classList.toggle('on', e.dataset.day === d.day));
-  const cs = all ? d.changes : d.changes.filter(c => c.events.length || !c.lanes.includes('main'));
-  $('#main').innerHTML = `<h2>${d.day} (UTC) · ${d.changes.length} changes</h2>
-    <span class="toggle" id="all">${all ? 'show only changes that moved the organization' : `show all ${d.changes.length} changes`}</span>` +
-    cs.map(c => `<div class="change ${c.events.length ? '' : 'quiet'}" data-change="${c.git}">
-      <span class="t">${c.time}</span><span class="g">${c.git}</span>
-      <span class="s"><span class="who">${esc(c.by)}</span>${esc(c.subject)}${c.lanes.includes('main') ? '' :
-        `<span class="lane">${esc(c.lanes.join(', ') || 'no ref')}</span>`}
-        ${c.events.map(e => `<span class="ev ${e.startsWith('node') || e.startsWith('in progress') || e.startsWith('resolved') ? 'node' : ''}">${esc(e)}</span>`).join('')}</span>
-    </div>`).join('') + (cs.length ? '' : '<p style="color:var(--muted)">No change this day moved the organization.</p>');
-  $('#all').onclick = () => { all = !all; day(d); };
+  const r = await (await fetch('/api/history' + (q ? '?' + new URLSearchParams(q) : ''))).json();
+  $('#main').innerHTML = `<h2>${esc(title)}</h2><pre>${esc(r.text)
+    .replace(/^(\d{4}-\d{2}-\d{2})(?=  )/gm, '<a data-day="$1">$1</a>')
+    .replace(/\b([0-9a-f]{7})\b/g, '<a data-change="$1">$1</a>')}</pre>`;
   $('#main').scrollTop = 0;
 }
 document.addEventListener('click', e => {
-  const c = e.target.closest('[data-change]');
-  if (c) show({change: c.dataset.change}, 'Change ' + c.dataset.change);
+  const a = e.target.closest('[data-change],[data-day]');
+  if (a && a.dataset.change) show({change: a.dataset.change}, 'Change ' + a.dataset.change);
+  else if (a) show({day: a.dataset.day}, a.dataset.day + ' (UTC)');
 });
-$('#q').onkeydown = e => { if (e.key === 'Enter' && e.target.value.trim()) show({of: e.target.value.trim()}, 'What changed here: ' + e.target.value.trim()); };
+$('#q').onkeydown = e => { if (e.key === 'Enter' && e.target.value.trim()) show({of: e.target.value.trim()}, e.target.value.trim()); };
 $('#words').onclick = e => { e.preventDefault(); show({words: 1}, "Avik's words, as they entered the work"); };
-(async () => {
-  data = await api();
-  const max = Math.max(...data.days.map(d => d.changes.length));
-  $('#days').innerHTML = data.days.map((d, i) => `<div class="day" data-day="${d.day}" data-i="${i}">
-    <span class="d">${d.day}</span><span style="flex:1"><span class="bar" style="display:block;width:${Math.max(4, 100 * d.changes.length / max)}%"></span></span>
-    <span class="n">${d.changes.length}</span></div>`).join('');
-  document.querySelectorAll('.day').forEach(e => e.onclick = () => day(data.days[+e.dataset.i]));
-  day(data.days[data.days.length - 1]);
-})();
+$('h1').onclick = () => show(null, 'History of the work, a day at a time (UTC)');
+show(null, 'History of the work, a day at a time (UTC)');
 </script>
 </body>
 </html>
