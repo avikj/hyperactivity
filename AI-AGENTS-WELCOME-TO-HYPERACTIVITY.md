@@ -12,6 +12,9 @@ only in the task graph, which `hyperactive` shows; nothing else records it.
 
 ## How to work
 
+- **Correctness is perfection** (Avik, 2026-11-15: "you shouldn't deliver me something which you know
+  doesn't work perfectly"; "correctness = perfection"). A known gap is not a caveat to report beside a
+  delivery: it is work not done. Deliver only when nothing known is wrong.
 - **Understanding first; then the bound is token rate** (Avik, 2026-11-15). The moment the solution to
   a problem is understood it is solved, and what remains is bounded by the rate of writing it out. A
   claim that something is impossible, or will take long, or needs a change to the core, is a claim

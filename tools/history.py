@@ -4,13 +4,15 @@ history should enter history explorer in the product ... inserting zero llm judg
 "near zero machinery"). Git is the stand-in the store replaces (docs/no-filesystem.md); this reads it
 and keeps nothing. Every sentence shown was written when the work was done; it reports only what the
 work itself declares: its nodes (declarations of type Node, and Ticket before it), the leaves listed
-in-progress and resolved, and the documents its code points to (`document "path"`).
+in-progress and resolved, and the documents its code points to (`document "path"`). Every ref is read;
+a change is compared with its first parent, so a merge shows what it brought to the line it joined, and
+a change on a branch is marked with the branches it is on.
 
     hyperactive history                 the history a day at a time (UTC), with every change to the work's nodes and documents
     hyperactive history DAY             every change of a day (2026-11-13)
     hyperactive history change ID       one change: its message, its files, what it did to the nodes and documents
-    hyperactive history of NAME         every version of a file or a declaration, with the change that made it
-    hyperactive history node NODE       a node's versions and states
+    hyperactive history of NAME         every change to a file, or to a declaration's text (code or statement) in every file that declared it
+    hyperactive history node NODE       a node's every change and its states (in progress, resolved)
     hyperactive history words           Avik's words as they entered the work
 """
 import datetime, importlib.util, os, re, subprocess, sys, threading
@@ -45,6 +47,19 @@ def changes():
 _cat, _lock = [], threading.Lock()
 
 
+def lines_of_work():
+    """change id -> the branches it is on, for every change not on main (every pull request's head is
+    on a branch, so branches cover them)"""
+    refs = [r for r in git('for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes').split()
+            if not r.endswith('/HEAD') and '/pull/' not in r and r != 'origin']
+    on = {r: set(git('rev-list', r).split()) for r in refs}
+    main = on.get('main', set()) | on.get('origin/main', set())
+    out = defaultdict(list)
+    for r in refs:
+        for c in on[r] - main: out[c].append(r.replace('origin/', ''))
+    return {c: sorted(set(rs)) for c, rs in out.items()}
+
+
 def blob(rev, path):
     """a file's text at a change, through one `git cat-file --batch`"""
     if not rev: return ''
@@ -77,8 +92,10 @@ def events(c):
         ev += [f'document pointer removed from {f}: {d}' for d in sorted(set(POINTER.findall(old)) - set(POINTER.findall(new)))]
         for key in ('in-progress', 'resolved'):
             m0, m1 = (re.search(r'^' + key + r' = (.*)$', t, re.M) for t in (old, new))
-            if m1:
-                ev += [f'{key.replace("-", " ")}: {n}' for n in tg.names_in(m1.group(1)) if n not in (tg.names_in(m0.group(1)) if m0 else [])]
+            l0, l1 = (tg.names_in(m.group(1)) if m else [] for m in (m0, m1))
+            ev += [f'{key.replace("-", " ")}: {n}' for n in l1 if n not in l0]
+            if key == 'in-progress':
+                ev += [f'no longer in progress: {n}' for n in l0 if n not in l1]
     say = lambda n, t: n + (f' — "{m.group(1)}"' if (m := SENTENCE.search(t)) else '')
     for n, t in after.items():
         if n not in before: ev.append('node added: ' + say(n, t))
@@ -89,53 +106,90 @@ def events(c):
     return ev
 
 
-def line(c):
-    return f'{utc(c["time"], "%H:%M")} {c["id"][:7]} {c["by"]}: {c["subject"]}'
+def line(c, work=None):
+    on = (work or {}).get(c['id'])
+    return f'{utc(c["time"])} {c["id"][:7]} {c["by"]}: {c["subject"]}' + (f'  [{", ".join(on)}]' if on else '')
+
+
+def shown(ev):
+    """a change's events, its restated nodes on one line"""
+    r = [e[len('node restated: '):].split(' — ')[0] for e in ev if e.startswith('node restated')]
+    return [e for e in ev if not e.startswith('node restated')] + (['nodes restated: ' + ', '.join(r)] if r else [])
 
 
 def view_days(cs):
-    days, out = defaultdict(list), []
+    days, out, work = defaultdict(list), [], lines_of_work()
     for c in cs: days[utc(c['time'], '%Y-%m-%d')].append(c)
     for d, dcs in days.items():
         out.append(f'{d}  {len(dcs)} changes')
         for c in dcs:
-            ev = [e for e in events(c) if not e.startswith('node restated')]
-            if ev: out += ['  ' + line(c)] + ['        ' + e for e in ev]
+            ev = shown(events(c))
+            if ev: out += ['  ' + line(c, work)] + ['        ' + e for e in ev]
         out.append('')
     return '\n'.join(out)
 
 
 def view_day(cs, day):
-    out = []
+    out, work = [], lines_of_work()
     for c in cs:
-        if utc(c['time'], '%Y-%m-%d') == day: out += [line(c)] + ['      ' + e for e in events(c)]
+        if utc(c['time'], '%Y-%m-%d') == day: out += [line(c, work)] + ['      ' + e for e in shown(events(c))]
     return '\n'.join(out) or f'no changes on {day}'
 
 
 def view_change(x):
     c = next((c for c in changes() if c['id'].startswith(x)), None)
     if not c: return f'no change {x}'
-    return '\n'.join([git('show', '-s', '--format=%H%nby %an, %ad%nparents %P%n%n%B', '--date=iso', c['id']).rstrip(),
-                      git('show', '--stat=120', '--format=', c['id']).rstrip(), ''] + events(c))
+    on = lines_of_work().get(c['id'])
+    return '\n'.join([git('show', '-s', '--format=%H%nby %an, %ad%nparents %P', '--date=iso', c['id']).rstrip(),
+                      'on ' + (', '.join(on) if on else 'main'), '', git('show', '-s', '--format=%B', c['id']).rstrip(),
+                      git('diff', '--stat=120', c['parents'][0], c['id']).rstrip() if c['parents'] else git('show', '--stat=120', '--format=', c['id']).rstrip(),
+                      ''] + events(c))
+
+
+def declaration(text, name):
+    """a declaration's text (its statement and code) in a file's text, every occurrence joined; None
+    when the file declares no such name"""
+    ts = [t for n, _, t in tg.declarations(text) if n == name]
+    return '\n\n'.join(ts) if ts else None
+
+
+def code_of(t):
+    return '\n'.join(l for l in t.split('\n') if not l.startswith('--'))
+
+
+def changes_of(paths):
+    """every change of every ref touching any of these paths, oldest first"""
+    if not paths: return []
+    ids = set(git('log', '--all', '--format=%H', '--', *paths).split())
+    return [c for c in changes() if c['id'] in ids]
 
 
 def view_of(x):
-    """a file: every change to it; a declaration: every change whose diff touches a line declaring it"""
+    """a file: every change to it. A declaration: every change to its text, in every file that ever
+    declared it: added, its code changed, only its statement changed, or removed"""
+    work = lines_of_work()
     if '/' in x or '.' in x:
-        r = git('log', '--all', '--date-order', '--format=%ct %h %an: %s', '--', x)
-        return x + '\n' + '\n'.join('  ' + utc(l.split(' ', 1)[0]) + ' ' + l.split(' ', 1)[1] for l in r.split('\n') if l)
+        return '\n'.join([x] + ['  ' + line(c, work) for c in changes_of([x])])
+    files = sorted(set(git('log', '--all', '--format=', '--name-only', '-G', rf'^((data|codata|record) )?{re.escape(x)}( |$)', '--', '*.cub').split()))
     out = [x]
-    r = git('log', '--all', '--date-order', '--format=@%ct %h %an: %s', '--name-only', '-G', rf'^{re.escape(x)}( |$)', '--', '*.cub')
-    for l in r.split('\n'):
-        if l.startswith('@'): out.append('  ' + utc(l[1:].split(' ', 1)[0]) + ' ' + l[1:].split(' ', 1)[1])
-        elif l: out.append('      ' + l)
+    for c in changes_of(files):
+        p = c['parents'][0] if c['parents'] else None
+        what = []
+        for f in files:
+            a, b = declaration(blob(p, f), x), declaration(blob(c['id'], f), x)
+            if a == b: continue
+            what.append(f'{f}: ' + ('added' if a is None else 'removed' if b is None else 'code changed' if code_of(a) != code_of(b) else 'statement changed'))
+        if what: out += ['  ' + line(c, work)] + ['      ' + w for w in what]
     return '\n'.join(out + [f'(what uses it now: hyperactive def {x})'])
 
 
 def view_node(cs, x):
-    out = [view_of(x)]
-    for c in cs:
-        out += [f'  {utc(c["time"])} {c["id"][:7]} {e}' for e in events(c) if e in (f'in progress: {x}', f'resolved: {x}')]
+    """a node's every change, then the changes that set it in progress, took it out, or resolved it"""
+    out, work = [view_of(x), '  states:'], lines_of_work()
+    lists = set(git('log', '--all', '--format=', '--name-only', '-G', r'^(in-progress|resolved) = ', '--', '*.cub').split())
+    for c in changes_of(sorted(lists)):
+        ev = [e for e in events(c) if e in (f'in progress: {x}', f'resolved: {x}', f'no longer in progress: {x}')]
+        if ev: out += ['    ' + line(c, work)] + ['        ' + e for e in ev]
     return '\n'.join(out)
 
 
