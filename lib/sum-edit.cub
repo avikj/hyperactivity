@@ -1,0 +1,74 @@
+-- lib/sum-edit.cub — the paper's actual incremental edit of §10.2 (docs/hyperactivity.cub, “An actual incremental
+-- edit”) as code: q(v) = foldl(+, 0, v) over a vector, the edit u_{i,x}(v) = v[i := x], the update
+-- Δ_{i,x}(v, r) = r − v_i + x, its law λ_{i,x,v} : Δ_{i,x}(v, q(v)) = q(u_{i,x}(v)), and
+-- maint_{i,x}(v, (r, e)) = (Δ_{i,x}(v, r), ap(Δ_{i,x}(v, −), e) · λ_{i,x,v}). The arithmetic is any
+-- commutative group's — U₆₄ with +₆₄ and −₆₄ is one — and the law uses exactly associativity,
+-- commutativity and (a + b) − b = a.
+import "core.cub"
+import "maintenance.cub"
+-- (zero, +, −) with the laws used
+SeOps : Type → Type
+SeOps G = G × (G → G → G) × (G → G → G)
+se-zero : {G : Type} → SeOps G → G
+se-zero ops = fst ops
+se-add : {G : Type} → SeOps G → G → G → G
+se-add ops = fst (snd ops)
+se-sub : {G : Type} → SeOps G → G → G → G
+se-sub ops = snd (snd ops)
+SeLaws : {G : Type} → SeOps G → Type
+SeLaws {G} ops = ((a b c : G) → se-add ops (se-add ops a b) c ≡ se-add ops a (se-add ops b c)) ×
+  ((a b : G) → se-add ops a b ≡ se-add ops b a) × ((a b : G) → se-sub ops (se-add ops a b) b ≡ a)
+se-foldl : {G : Type} → (G → G → G) → G → List G → G
+se-foldl f acc nil = acc
+se-foldl f acc (cons y r) = se-foldl f (f acc y) r
+se-at : {G : Type} → G → List G → Nat → G
+se-at z nil i = z
+se-at z (cons y r) zero = y
+se-at z (cons y r) (suc i) = se-at z r i
+se-set : {G : Type} → List G → Nat → G → List G
+se-set nil i x = nil
+se-set (cons y r) zero x = cons x r
+se-set (cons y r) (suc i) x = cons y (se-set r i x)
+se-has : {G : Type} → List G → Nat → Type
+se-has v i = le (suc i) (list-length v)
+se-no-place : {G : Type} → (i : Nat) → se-has {G} nil i → Empty
+se-no-place i h = snotz {plus (fst h) i} (transN (sym (plus-suc (fst h) i)) (snd h))
+se-has-tail : {G : Type} → (y : G) → (r : List G) → (i : Nat) → se-has (cons y r) (suc i) → se-has r i
+se-has-tail y r i h = (fst h , suc-inj (transN (sym (plus-suc (fst h) (suc i))) (snd h)))
+-- q(v) = foldl(+, 0, v)
+se-q : {G : Type} → SeOps G → List G → G
+se-q ops v = se-foldl (se-add ops) (se-zero ops) v
+-- an accumulated summand can be added last
+se-shift : {G : Type} → (ops : SeOps G) → SeLaws ops → (acc y : G) → (r : List G) →
+  se-foldl (se-add ops) (se-add ops acc y) r ≡ se-add ops (se-foldl (se-add ops) acc r) y
+se-shift {G} ops laws acc y nil = λ k → se-add ops acc y
+se-shift {G} ops laws acc y (cons z r) =
+  concat {lzero} {G} {se-foldl (se-add ops) (se-add ops (se-add ops acc y) z) r} {se-foldl (se-add ops) (se-add ops (se-add ops acc z) y) r} {se-add ops (se-foldl (se-add ops) (se-add ops acc z) r) y}
+    (λ k → se-foldl (se-add ops) (concat {lzero} {G} {se-add ops (se-add ops acc y) z} {se-add ops acc (se-add ops y z)} {se-add ops (se-add ops acc z) y}
+      (fst laws acc y z)
+      (concat {lzero} {G} {se-add ops acc (se-add ops y z)} {se-add ops acc (se-add ops z y)} {se-add ops (se-add ops acc z) y}
+        (λ k2 → se-add ops acc (fst (snd laws) y z k2)) (λ k2 → fst laws acc z y (~ k2))) k) r)
+    (se-shift ops laws (se-add ops acc z) y r)
+-- foldl over v[i := x] from acc = foldl over v from acc − v_i + x
+se-fold-set : {G : Type} → (ops : SeOps G) → SeLaws ops → (acc : G) → (v : List G) → (i : Nat) → (x : G) → se-has v i →
+  se-foldl (se-add ops) acc (se-set v i x) ≡ se-add ops (se-sub ops (se-foldl (se-add ops) acc v) (se-at (se-zero ops) v i)) x
+se-fold-set {G} ops laws acc nil i x h = Empty-rec (se-no-place {G} i h)
+se-fold-set {G} ops laws acc (cons y r) zero x h =
+  concat {lzero} {G} {se-foldl (se-add ops) (se-add ops acc x) r} {se-add ops (se-foldl (se-add ops) acc r) x} {se-add ops (se-sub ops (se-foldl (se-add ops) (se-add ops acc y) r) y) x}
+    (se-shift ops laws acc x r)
+    (λ k → se-add ops (concat {lzero} {G} {se-foldl (se-add ops) acc r} {se-sub ops (se-add ops (se-foldl (se-add ops) acc r) y) y} {se-sub ops (se-foldl (se-add ops) (se-add ops acc y) r) y}
+      (λ k2 → snd (snd laws) (se-foldl (se-add ops) acc r) y (~ k2)) (λ k2 → se-sub ops (se-shift ops laws acc y r (~ k2)) y) k) x)
+se-fold-set {G} ops laws acc (cons y r) (suc i) x h = se-fold-set ops laws (se-add ops acc y) r i x (se-has-tail y r i h)
+-- Δ_{i,x}(v, r) = r − v_i + x
+se-delta : {G : Type} → SeOps G → Nat → G → List G → G → G
+se-delta ops i x v r = se-add ops (se-sub ops r (se-at (se-zero ops) v i)) x
+-- λ_{i,x,v} : Δ_{i,x}(v, q(v)) = q(u_{i,x}(v))
+se-lambda : {G : Type} → (ops : SeOps G) → SeLaws ops → (i : Nat) → (x : G) → (v : List G) → se-has v i →
+  se-delta ops i x v (se-q ops v) ≡ se-q ops (se-set v i x)
+se-lambda {G} ops laws i x v h = λ k → se-fold-set ops laws (se-zero ops) v i x h (~ k)
+-- maint_{i,x}(v, (r, e)) = (Δ_{i,x}(v, r), ap(Δ_{i,x}(v, −), e) · λ_{i,x,v})
+se-maint : {G : Type} → (ops : SeOps G) → SeLaws ops → (i : Nat) → (x : G) → (v : List G) → se-has v i →
+  Maintained (se-q ops) v → Maintained (se-q ops) (se-set v i x)
+se-maint {G} ops laws i x v h m = (se-delta ops i x v (fst m) ,
+  concat {lzero} {G} {se-delta ops i x v (fst m)} {se-delta ops i x v (se-q ops v)} {se-q ops (se-set v i x)}
+    (λ k → se-delta ops i x v (snd m k)) (se-lambda ops laws i x v h))
