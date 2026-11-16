@@ -1,0 +1,48 @@
+-- lib/interleavings.cub — the paper's count of merge interleavings over a sum tree (docs/hyperactivity.cub,
+-- §4.4 “What ordering retains, and what a sum presentation costs”, (4.29)) as code: the interleavings
+-- of runs of sizes a and b, C(a + b, a), by Pascal's rule; C(a + b, a)·a!·b! = (a + b)!; and over any
+-- sum tree I(one) = 1, I(l ⊕ r) = C(n(l) + n(r), n(l))·I(l)·I(r) = n(l ⊕ r)!, the same for every tree.
+import "core.cub"
+import "linproof.cub"
+import "ring.cub"
+import "structure.cub"
+-- interleavings a b = C(a + b, a): the last item comes from the first run or the second
+interleavings-s : Nat → (Nat → Nat) → Nat → Nat
+interleavings-s a f zero = suc zero
+interleavings-s a f (suc b) = plus (f (suc b)) (interleavings-s a f b)
+interleavings : Nat → Nat → Nat
+interleavings zero b = suc zero
+interleavings (suc a) b = interleavings-s a (interleavings a) b
+-- the step a + 1, b + 1 from (a, b + 1) and (a + 1, b)
+ilv-step : (X Y A B a b N M : Nat) → times (times X A) (times (suc b) B) ≡ M → times (times Y (times (suc a) A)) B ≡ M →
+  times (times (plus X Y) (times (suc a) A)) (times (suc b) B) ≡ times (plus (suc a) (suc b)) M
+ilv-step X Y A B a b N M h1 h2 =
+  transN (congN (λ z → times z (times (suc b) B)) (times-distr X Y (times (suc a) A)))
+  (transN (times-distr (times X (times (suc a) A)) (times Y (times (suc a) A)) (times (suc b) B))
+  (transN (λ k → plus
+      (transN (congN (λ z → times z (times (suc b) B)) (times-comm-mid X (suc a) A))
+        (transN (times-assoc (suc a) (times X A) (times (suc b) B)) (congN (times (suc a)) h1)) k)
+      (transN (times-comm-mid (times Y (times (suc a) A)) (suc b) B) (congN (times (suc b)) h2) k))
+  (sym (times-distr (suc a) (suc b) M))))
+-- C(a + b, a)·a!·b! = (a + b)!
+ilv-fact-s : (a : Nat) → ((b : Nat) → times (times (interleavings a b) (fact a)) (fact b) ≡ fact (plus a b)) →
+  (b : Nat) → times (times (interleavings (suc a) b) (fact (suc a))) (fact b) ≡ fact (plus (suc a) b)
+ilv-fact-s a ih zero = transN (times-one (times (suc zero) (fact (suc a))))
+  (transN (times-one-l (fact (suc a))) (congN fact (sym (plus-zero (suc a)))))
+ilv-fact-s a ih (suc b) = transN (ilv-step (interleavings a (suc b)) (interleavings (suc a) b) (fact a) (fact b) a b (plus a b)
+    (fact (plus a (suc b))) (ih (suc b))
+    (transN (ilv-fact-s a ih b) (congN fact (sym (plus-suc a b)))))
+  (λ k → times (plus (suc a) (suc b)) (fact (plus a (suc b))))
+ilv-fact : (a b : Nat) → times (times (interleavings a b) (fact a)) (fact b) ≡ fact (plus a b)
+ilv-fact zero b = times-one-l (fact b)
+ilv-fact (suc a) b = ilv-fact-s a (ilv-fact a) b
+-- (4.29) I(one) = 1, I(l ⊕ r) = C(n(l) + n(r), n(l))·I(l)·I(r)
+stree-interleavings : SumTree → Nat
+stree-interleavings stree-one = suc zero
+stree-interleavings (stree-plus l r) = times (times (interleavings (stree-size l) (stree-size r)) (stree-interleavings l)) (stree-interleavings r)
+-- = n(l ⊕ r)!, by cancellation of the two child factorials; log₂(n!) is independent of the tree
+stree-interleavings-fact : (t : SumTree) → stree-interleavings t ≡ fact (stree-size t)
+stree-interleavings-fact stree-one = λ k → suc zero
+stree-interleavings-fact (stree-plus l r) =
+  transN (λ k → times (times (interleavings (stree-size l) (stree-size r)) (stree-interleavings-fact l k)) (stree-interleavings-fact r k))
+    (ilv-fact (stree-size l) (stree-size r))
