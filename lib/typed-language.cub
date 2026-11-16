@@ -1,0 +1,115 @@
+-- lib/typed-language.cub — the paper's complete intrinsically typed expression language of §5.1
+-- (docs/hyperactivity.cub, “A complete intrinsically typed expression language”, “Interpretation by
+-- structural recursion”, “The substitution theorem”) as code: simple types with Byte, Unit, ×, +, ⇒
+-- and contexts, variables vz and vs, the typed terms, environments and lookup, the interpretation by
+-- structural recursion, renaming and weakening, substitution with its lift under binders, and the
+-- semantic substitution environment evalEnv. The lookup equation, the binder law and the
+-- substitution theorem are not here: a function defined by elimination of these indexed families,
+-- applied to a constructor, reduces through a transport along the constructor's index path, and the
+-- machine's transport along a constant line is a path to the identity (transportRefl), not a
+-- reduction; so each equation needs those transports carried, or the presentation of lib/nbe.cub,
+-- whose typed codes carry their meanings in their indices.
+-- Terms and variables are indexed by a context and a type (Var(Γ, A), Tm(Γ, A)); a context's tail
+-- and head (tl-tail, tl-head) state the binder lifts at every index.
+import "core.cub"
+import "xor-language.cub"
+import "structure.cub"
+data TlTy = tl-byte | tl-unit | tl-prod (a : TlTy) (b : TlTy) | tl-sum (a : TlTy) (b : TlTy) | tl-fun (a : TlTy) (b : TlTy)
+data TlCtx = tl-empty | tl-ext (g : TlCtx) (a : TlTy)
+tl-tail : TlCtx → TlCtx
+tl-tail tl-empty = tl-empty
+tl-tail (tl-ext g a) = g
+tl-head : TlCtx → TlTy
+tl-head tl-empty = tl-unit
+tl-head (tl-ext g a) = a
+data TlVar : (GA : TlCtx × TlTy) → Type where
+  tl-vz : (g : TlCtx) (a : TlTy) → TlVar (tl-ext g a , a)
+  tl-vs : (g : TlCtx) (a b : TlTy) → TlVar (g , b) → TlVar (tl-ext g a , b)
+data TlTm : (GA : TlCtx × TlTy) → Type where
+  tl-var : (g : TlCtx) (a : TlTy) → TlVar (g , a) → TlTm (g , a)
+  tl-lit : (g : TlCtx) → Byte → TlTm (g , tl-byte)
+  tl-tt : (g : TlCtx) → TlTm (g , tl-unit)
+  tl-lam : (g : TlCtx) (a b : TlTy) → TlTm (tl-ext g a , b) → TlTm (g , tl-fun a b)
+  tl-app : (g : TlCtx) (a b : TlTy) → TlTm (g , tl-fun a b) → TlTm (g , a) → TlTm (g , b)
+  tl-pair : (g : TlCtx) (a b : TlTy) → TlTm (g , a) → TlTm (g , b) → TlTm (g , tl-prod a b)
+  tl-fst : (g : TlCtx) (a b : TlTy) → TlTm (g , tl-prod a b) → TlTm (g , a)
+  tl-snd : (g : TlCtx) (a b : TlTy) → TlTm (g , tl-prod a b) → TlTm (g , b)
+  tl-inl : (g : TlCtx) (a b : TlTy) → TlTm (g , a) → TlTm (g , tl-sum a b)
+  tl-inr : (g : TlCtx) (a b : TlTy) → TlTm (g , b) → TlTm (g , tl-sum a b)
+  tl-case : (g : TlCtx) (a b c : TlTy) → TlTm (g , tl-sum a b) → TlTm (tl-ext g a , c) → TlTm (tl-ext g b , c) → TlTm (g , c)
+-- ⟦A⟧, with ⟦A ⇒ B⟧ = ⟦A⟧ → ⟦B⟧
+tl-el : TlTy → Type
+tl-el tl-byte = Byte
+tl-el tl-unit = Unit
+tl-el (tl-prod a b) = tl-el a × tl-el b
+tl-el (tl-sum a b) = Sum (tl-el a) (tl-el b)
+tl-el (tl-fun a b) = tl-el a → tl-el b
+-- Env(ε) = Unit, Env(Γ, A) = Env(Γ) × ⟦A⟧; lookup(vz, (ρ, v)) = v, lookup(vs(i), (ρ, v)) = lookup(i, ρ)
+TlEnv : TlCtx → Type
+TlEnv tl-empty = Unit
+TlEnv (tl-ext g a) = TlEnv g × tl-el a
+tl-lookup : {GA : TlCtx × TlTy} → TlVar GA → TlEnv (fst GA) → tl-el (snd GA)
+tl-lookup (tl-vz g a) rho = snd rho
+tl-lookup (tl-vs g a b i) rho = tl-lookup i (fst rho)
+-- interpretation by structural recursion
+tl-eval : {GA : TlCtx × TlTy} → TlTm GA → TlEnv (fst GA) → tl-el (snd GA)
+tl-eval (tl-var g a i) rho = tl-lookup i rho
+tl-eval (tl-lit g b) rho = b
+tl-eval (tl-tt g) rho = unit
+tl-eval (tl-lam g a b t) rho = λ v → tl-eval t (rho , v)
+tl-eval (tl-app g a b f x) rho = tl-eval f rho (tl-eval x rho)
+tl-eval (tl-pair g a b x y) rho = (tl-eval x rho , tl-eval y rho)
+tl-eval (tl-fst g a b p) rho = fst (tl-eval p rho)
+tl-eval (tl-snd g a b p) rho = snd (tl-eval p rho)
+tl-eval (tl-inl g a b x) rho = inl (tl-eval x rho)
+tl-eval (tl-inr g a b y) rho = inr (tl-eval y rho)
+tl-eval (tl-case g a b c s l r) rho = case tl-eval s rho of
+  inl x → tl-eval l (rho , x)
+  inr y → tl-eval r (rho , y)
+-- ---------------------------------------------------------------- renaming and weakening
+TlRen : TlCtx → TlCtx → Type
+TlRen g d = (a : TlTy) → TlVar (g , a) → TlVar (d , a)
+tl-ren-lift-var : {GA : TlCtx × TlTy} → TlVar GA → (d : TlCtx) → TlRen (tl-tail (fst GA)) d → TlVar (tl-ext d (tl-head (fst GA)) , snd GA)
+tl-ren-lift-var (tl-vz g a) d s = tl-vz d a
+tl-ren-lift-var (tl-vs g a b i) d s = tl-vs d a b (s b i)
+tl-ren-lift : (g d : TlCtx) → (a : TlTy) → TlRen g d → TlRen (tl-ext g a) (tl-ext d a)
+tl-ren-lift g d a s = λ b i → tl-ren-lift-var i d s
+tl-rename : {GA : TlCtx × TlTy} → TlTm GA → (d : TlCtx) → TlRen (fst GA) d → TlTm (d , snd GA)
+tl-rename (tl-var g a i) d s = tl-var d a (s a i)
+tl-rename (tl-lit g b) d s = tl-lit d b
+tl-rename (tl-tt g) d s = tl-tt d
+tl-rename (tl-lam g a b t) d s = tl-lam d a b (tl-rename t (tl-ext d a) (tl-ren-lift g d a s))
+tl-rename (tl-app g a b f x) d s = tl-app d a b (tl-rename f d s) (tl-rename x d s)
+tl-rename (tl-pair g a b x y) d s = tl-pair d a b (tl-rename x d s) (tl-rename y d s)
+tl-rename (tl-fst g a b p) d s = tl-fst d a b (tl-rename p d s)
+tl-rename (tl-snd g a b p) d s = tl-snd d a b (tl-rename p d s)
+tl-rename (tl-inl g a b x) d s = tl-inl d a b (tl-rename x d s)
+tl-rename (tl-inr g a b y) d s = tl-inr d a b (tl-rename y d s)
+tl-rename (tl-case g a b c e l r) d s = tl-case d a b c (tl-rename e d s) (tl-rename l (tl-ext d a) (tl-ren-lift g d a s)) (tl-rename r (tl-ext d b) (tl-ren-lift g d b s))
+tl-weaken : (g : TlCtx) → (a b : TlTy) → TlTm (g , b) → TlTm (tl-ext g a , b)
+tl-weaken g a b t = tl-rename t (tl-ext g a) (λ c i → tl-vs g a c i)
+-- ---------------------------------------------------------------- substitution
+TlSub : TlCtx → TlCtx → Type
+TlSub g d = (a : TlTy) → TlVar (g , a) → TlTm (d , a)
+-- lift(θ)(vz) = var(vz), lift(θ)(vs(i)) = weaken(θ(i))
+tl-sub-lift-var : {GA : TlCtx × TlTy} → TlVar GA → (d : TlCtx) → TlSub (tl-tail (fst GA)) d → TlTm (tl-ext d (tl-head (fst GA)) , snd GA)
+tl-sub-lift-var (tl-vz g a) d th = tl-var (tl-ext d a) a (tl-vz d a)
+tl-sub-lift-var (tl-vs g a b i) d th = tl-weaken d a b (th b i)
+tl-sub-lift : (g d : TlCtx) → (a : TlTy) → TlSub g d → TlSub (tl-ext g a) (tl-ext d a)
+tl-sub-lift g d a th = λ b i → tl-sub-lift-var i d th
+tl-subst : {GA : TlCtx × TlTy} → TlTm GA → (d : TlCtx) → TlSub (fst GA) d → TlTm (d , snd GA)
+tl-subst (tl-var g a i) d th = th a i
+tl-subst (tl-lit g b) d th = tl-lit d b
+tl-subst (tl-tt g) d th = tl-tt d
+tl-subst (tl-lam g a b t) d th = tl-lam d a b (tl-subst t (tl-ext d a) (tl-sub-lift g d a th))
+tl-subst (tl-app g a b f x) d th = tl-app d a b (tl-subst f d th) (tl-subst x d th)
+tl-subst (tl-pair g a b x y) d th = tl-pair d a b (tl-subst x d th) (tl-subst y d th)
+tl-subst (tl-fst g a b p) d th = tl-fst d a b (tl-subst p d th)
+tl-subst (tl-snd g a b p) d th = tl-snd d a b (tl-subst p d th)
+tl-subst (tl-inl g a b x) d th = tl-inl d a b (tl-subst x d th)
+tl-subst (tl-inr g a b y) d th = tl-inr d a b (tl-subst y d th)
+tl-subst (tl-case g a b c e l r) d th = tl-case d a b c (tl-subst e d th) (tl-subst l (tl-ext d a) (tl-sub-lift g d a th)) (tl-subst r (tl-ext d b) (tl-sub-lift g d b th))
+-- the semantic substitution environment: lookup(i, evalEnv(θ, ρ)) = eval(θ(i), ρ)
+tl-evalEnv : (g d : TlCtx) → TlSub g d → TlEnv d → TlEnv g
+tl-evalEnv tl-empty d th rho = unit
+tl-evalEnv (tl-ext g a) d th rho = (tl-evalEnv g d (λ b i → th b (tl-vs g a b i)) rho , tl-eval {(d , a)} (th a (tl-vz g a)) rho)
