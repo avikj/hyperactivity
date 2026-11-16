@@ -9421,3 +9421,88 @@ compiler-code-sound : (A B CA CB CAB : Type 1) (evA : CA → A) (evB : CB → B)
   PathP (λ i → B) (evB (compiler-code A B CA CB CAB S lift qG e)) (G e)
 compiler-code-sound A B CA CB CAB evA evB evAB S S-law lift lift-law G qG qG-law e =
   pcat B (evB (S qG (lift e))) (evAB qG (evA (lift e))) (G e) (S-law qG (lift e)) (λ i → qG-law i (lift-law e i))
+-- ---------------------------------------------------------------- the checker
+-- (§6.1 “Typed stages and checking”: a checker accepts raw syntax and returns a typing derivation or a
+-- refusal.) Equality of the object language's codes, decided with its path (none outside the fragment;
+-- by fuel, as lib/codes.cub's traversals, since a case's branches sit below the recursion's reach)
+opt-1 : {A C : Type} → (A → C) → Opt A → Opt C
+opt-1 k none = none
+opt-1 k (some x) = some (k x)
+opt-2 : {A B C : Type} → Opt A → Opt B → (A → B → C) → Opt C
+opt-2 none y k = none
+opt-2 (some x) none k = none
+opt-2 (some x) (some y) k = some (k x y)
+opt-3 : {A B C D : Type} → Opt A → Opt B → Opt C → (A → B → C → D) → Opt D
+opt-3 (some a) (some b) (some c) k = some (k a b c)
+opt-3 a b c k = none
+opt-5 : {A B C D E F : Type} → Opt A → Opt B → Opt C → Opt D → Opt E → (A → B → C → D → E → F) → Opt F
+opt-5 (some a) (some b) (some c) (some d) (some e) k = some (k a b c d e)
+opt-5 a b c d e k = none
+w-dec-at : (a b : Word) (v : Bool) → weq a b ≡ v → Opt (a ≡ b)
+w-dec-at a b true p = some (weq-sound a b p)
+w-dec-at a b false p = none
+w-dec : (a b : Word) → Opt (a ≡ b)
+w-dec a b = w-dec-at a b (weq a b) (λ i → weq a b)
+code-dec : Nat → (a b : Code) → Opt (a ≡ b)
+code-dec zero a b = none
+code-dec (suc u) (cvar n) (cvar m) = opt-1 (λ p i → cvar (p i)) (w-dec n m)
+code-dec (suc u) (clam b) (clam b') = opt-1 (λ p i → clam (p i)) (code-dec u b b')
+code-dec (suc u) (capp f a) (capp f' a') = opt-2 (code-dec u f f') (code-dec u a a') (λ p q i → capp (p i) (q i))
+code-dec (suc u) (cpair a b) (cpair a' b') = opt-2 (code-dec u a a') (code-dec u b b') (λ p q i → cpair (p i) (q i))
+code-dec (suc u) (cfst p) (cfst p') = opt-1 (λ q i → cfst (q i)) (code-dec u p p')
+code-dec (suc u) (csnd p) (csnd p') = opt-1 (λ q i → csnd (q i)) (code-dec u p p')
+code-dec (suc u) (cpi m A B) (cpi m' A' B') = opt-3 (w-dec m m') (code-dec u A A') (code-dec u B B') (λ p q r i → cpi (p i) (q i) (r i))
+code-dec (suc u) (csigma A B) (csigma A' B') = opt-2 (code-dec u A A') (code-dec u B B') (λ p q i → csigma (p i) (q i))
+code-dec (suc u) (cpathp A a b) (cpathp A' a' b') = opt-3 (code-dec u A A') (code-dec u a a') (code-dec u b b') (λ p q r i → cpathp (p i) (q i) (r i))
+code-dec (suc u) (cplam b) (cplam b') = opt-1 (λ p i → cplam (p i)) (code-dec u b b')
+code-dec (suc u) (cpapp p r) (cpapp p' r') = opt-2 (code-dec u p p') (code-dec u r r') (λ q u i → cpapp (q i) (u i))
+code-dec (suc u) ci0 ci0 = some (λ i → ci0)
+code-dec (suc u) ci1 ci1 = some (λ i → ci1)
+code-dec (suc u) (cneg r) (cneg r') = opt-1 (λ p i → cneg (p i)) (code-dec u r r')
+code-dec (suc u) (cmeet r s) (cmeet r' s') = opt-2 (code-dec u r r') (code-dec u s s') (λ p q i → cmeet (p i) (q i))
+code-dec (suc u) (cjoin r s) (cjoin r' s') = opt-2 (code-dec u r r') (code-dec u s s') (λ p q i → cjoin (p i) (q i))
+code-dec (suc u) (cdata d lnil) (cdata d' lnil) = opt-1 (λ p i → cdata (p i) lnil) (w-dec d d')
+code-dec (suc u) (ccon d k lnil lnil) (ccon d' k' lnil lnil) = opt-2 (w-dec d d') (w-dec k k') (λ p q i → ccon (p i) (q i) lnil lnil)
+code-dec (suc u) (celim d P (lcons t (lcons f lnil)) x) (celim d' P' (lcons t' (lcons f' lnil)) x') =
+  opt-5 (w-dec d d') (code-dec u P P') (code-dec u t t') (code-dec u f f') (code-dec u x x')
+    (λ p q r v w i → celim (p i) (q i) (lcons (r i) (lcons (v i) lnil)) (w i))
+code-dec (suc u) a b = none
+-- a binder's conclusion read off its premise: Der's binder premises live over Γ extended by the
+-- conclusion's own meaning (ext-h at it), so the checker, having the premise B over Γ extended by a
+-- known meaning M₁, takes as conclusion abs-mean (M₁'s value paired by mk with B read as a function
+-- of the new variable), and der-ext carries B's derivation to Γ extended by that conclusion, at the
+-- premise meaning Der's rules give there (ext-lift at G0, which reads mk's function back; hq and Gq
+-- say that mk keeps the new variable's type and G0 undoes mk, refl at each use), along map-pull,
+-- lift-pull, dmap-fst and lift-fst-d
+abs-mean : (Γ : CCtx) (a : TyShape) (Y₁ Y₂ Z : Type 1) (h₁ : Y₁ → Sem a) (mk : (y : Y₁) → (El a (h₁ y) → Z) → Y₂)
+  (M₁ : Mean Γ Y₁) → Mean (ext-h Γ a Y₁ h₁ M₁) Z → Mean Γ Y₂
+abs-mean Γ a Y₁ Y₂ Z h₁ mk M₁ B =
+  dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y₁) (FbE (fst Γ) Y₂) (FbE (lcons (e-ty a) (fst Γ)) Z)
+    (λ γ e → (γ , λ ρ → h₁ (e ρ))) (λ γ e E ρ → mk (e ρ) (λ x → E (ρ , x))) (snd Γ) M₁ B
+lift-fst-d : (n : Nat) (X : Type 1) (Y : X → Type 1) (c : Cube n X) (d : DCube n X Y c) →
+  PathP (λ i → DCube n X Y (dmap-fst n X Y c d i)) (dcube-lift n X X Y Y (λ x y → x) (λ x y → y) c d) d
+lift-fst-d zero X Y c d = λ i → d
+lift-fst-d (suc n) X Y c d = lift-fst-d n (Line X) (LineO X Y) c d
+der-ext : (jk : JK) (Γ : CCtx) (a s : TyShape) (Y₁ Y₂ : Type 1) (h₁ : Y₁ → Sem a) (h₂ : Y₂ → Sem a)
+  (mk : (y : Y₁) → (El a (h₁ y) → JZ jk s) → Y₂)
+  (hq : PathP (λ i → (y : Y₁) (k : El a (h₁ y) → JZ jk s) → Sem a) (λ y k → h₂ (mk y k)) (λ y k → h₁ y))
+  (G0 : (q : Y₂) → El a (h₂ q) → JZ jk s)
+  (Gq : PathP (λ i → (y : Y₁) (k : El a (h₁ y) → JZ jk s) → El a (hq i y k) → JZ jk s) (λ y k → G0 (mk y k)) (λ y k → k))
+  (M₁ : Mean Γ Y₁) (B : Mean (ext-h Γ a Y₁ h₁ M₁) (JZ jk s)) (c : Code) →
+  Der (jk , ext-h Γ a Y₁ h₁ M₁ , s , c , B) →
+  Der (jk , ext-h Γ a Y₂ h₂ (abs-mean Γ a Y₁ Y₂ (JZ jk s) h₁ mk M₁ B) , s , c ,
+    ext-lift Γ a Y₂ h₂ (JZ jk s) G0 (abs-mean Γ a Y₁ Y₂ (JZ jk s) h₁ mk M₁ B))
+der-ext jk Γ a s Y₁ Y₂ h₁ h₂ mk hq G0 Gq M₁ B c d =
+  comp (λ i → Der (jk , (lcons (e-ty a) (fst Γ) ,
+      map-pull (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y₁) (FbE (fst Γ) Y₂) (FbE (lcons (e-ty a) (fst Γ)) (JZ jk s))
+        (λ γ e → (γ , λ ρ → h₁ (e ρ))) (λ γ e E ρ → mk (e ρ) (λ x → E (ρ , x))) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , λ ρ → h₂ (e ρ))) (λ x' y' → x')
+        (λ j γ e E → (γ , λ ρ → hq j (e ρ) (λ x → E (ρ , x)))) (snd Γ) M₁ B (~ i)) , s , c ,
+      lift-pull (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y₁) (FbE (fst Γ) Y₂) (FbE (lcons (e-ty a) (fst Γ)) (JZ jk s))
+        (λ γ e → (γ , λ ρ → h₁ (e ρ))) (λ γ e E ρ → mk (e ρ) (λ x → E (ρ , x))) (CtxV (lcons (e-ty a) (fst Γ))) (λ γ e → (γ , λ ρ → h₂ (e ρ))) (λ x' y' → x')
+        (λ j γ e E → (γ , λ ρ → hq j (e ρ) (λ x → E (ρ , x)))) (FbE (lcons (e-ty a) (fst Γ)) (JZ jk s))
+        (λ γ e ρ → G0 (e (fst ρ)) (snd ρ)) (λ x' y' → y') (λ j γ e E ρ → Gq j (e (fst ρ)) (λ x → E (fst ρ , x)) (snd ρ)) (snd Γ) M₁ B (~ i)))
+    (λ i → [])
+    (comp (λ i → Der (jk , (lcons (e-ty a) (fst Γ) ,
+        dmap-fst (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (lcons (e-ty a) (fst Γ)) (JZ jk s)) (snd (ext-h Γ a Y₁ h₁ M₁)) B (~ i)) , s , c ,
+        lift-fst-d (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (lcons (e-ty a) (fst Γ)) (JZ jk s)) (snd (ext-h Γ a Y₁ h₁ M₁)) B (~ i)))
+      (λ i → []) d)
