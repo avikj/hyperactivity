@@ -22,5 +22,9 @@ already present: in the store, its log of names bound to keys over time; while g
 git itself. A history explorer adds no structure and keeps nothing. It reads what is there when
 asked, and reports only what the work declares: its nodes (type Node, and Ticket before it), the
 leaves in progress and resolved, and the documents its code points to. Folders, file types and
-sessions organize nothing. `hyperactive history` (tools/history.py) does this over git; when the
-store holds the work, the same views read the store's log.
+sessions organize nothing. Its views are code of the language, evaluated by the machine over the work's
+own values, as the task graph's views are.
+
+Then, on a Python reading of git built for it:
+
+> python tool is out. that's exactly what I mean. this is a meta-circular loop dumbfuck. come on. did you onboard?
