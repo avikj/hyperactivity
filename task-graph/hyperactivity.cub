@@ -147,6 +147,20 @@ language-implementation = node "The Hyperactive language and its features, imple
 -- Status (2026-11-15): items 1-5, normalize with (6.5), the substitution law and the specializer law
 -- with (6.6) and (6.7) are lib/nbe.cub (9415 lines; with experiments/nbe/examples.cub, 1527 passed, 0 failed);
 -- experiments/nbe/p26-wip.cub and papp-subst-draft.cub are retired into it. Open: the checker.
+-- The checker (derived 2026-11-15). Bidirectional over Der as it stands: check mode for λ, pair, path
+-- λ, true and false against a type's meaning; inference for variables, application, projections,
+-- case and path application; types inferred. Case carries its motive in its code (done: without it,
+-- checking a case needs a motive P with P x the given type, higher-order unification, and one code
+-- has derivations at motives agreeing at true and false but not at x). Der's binder premises live
+-- in contexts built from the conclusion's meaning (ext-h at the family, lam-ctx at the λ), so each
+-- binder case builds the conclusion's meaning from the premise's by abstraction over the extended
+-- cube, and carries the premise's derivation across the path of contexts that dcube-map fusion gives
+-- (comp over Der, as der-tr). Conversion is needed only where an inferred term is checked: the
+-- types of this language carry information only in PathP endpoints (Sem s-bool is One1, Π and Σ are
+-- a domain and a family), so equality of type meanings is by shape, One1's contractibility, and
+-- equality of endpoint terms; that is decided by comparing normal forms, which is sound because the
+-- checker, restricted to normal forms (where an inferred term is checked only at Bool, needing no
+-- conversion), returns the normal form's own meaning (its completeness on NN, by induction).
 typed-codes-and-normalization : Node
 typed-codes-and-normalization = node "Typed codes, normalization by evaluation with its soundness, and a checker that returns typing derivations, as §6.1 of the paper (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…) specifies." (cons language-implementation nil)
 -- interval-normal-forms-mean-their-expressions (2026-11-14): F2d of lib/nbe.cub's head. Path
