@@ -938,3 +938,170 @@ The decoder cases on the first byte (and on the presence of a second byte for tw
 - With the target-correctness witness, the evaluator may replace an applicable source computation by the native implementation under the theorem's preconditions: substitution of equals through the observation for pure closed input, and under the proved process congruence or refinement for interaction. A JIT does this when more inputs become known, and its cache stores the artifact with the evidence and dependencies licensing its use.
 - A standalone export includes the selected runtime support and handlers, or records their external contracts. C is the primary target. The downstream compiler's relation is an explicit dependency or a checked construction (§9.4). A printer's correctness is about the printed text's parsed meaning; a proof about the input tree doesn't make printing infallible.
 - GPUs and accelerators are no exception: ISA, memory spaces, barriers and launch are target semantics, and tiling and parallelization preserve a stated observation under the selected memory and arithmetic models.
+
+### 9.4 Compilation through C
+
+C is the primary target. A represented program, or its evaluator specialized at known inputs, is lowered to C together with its relation to the source interpretation, and an existing C compiler supplies instruction selection, object representation and executable construction. Language, kernel and network don't need direct emitters per architecture. The mathematics is composition of the relations already in (9.17). For source 𝑝, generated C 𝑐, compiler-plus-configuration 𝐾, artifact 𝑏 = 𝐾(𝑐), a shared observation type 𝑂, related initial states and world handlers, and the domain where 𝑐 is defined:
+
+  𝜆_𝑝 ∶ Beh_C(𝑐,𝑜) → Beh_𝐿(𝑝,𝑜),  𝜅_𝑐 ∶ Beh_𝑀(𝐾𝑐, 𝑜) → Beh_C(𝑐,𝑜),  (𝜆_𝑝 ∘ 𝜅_𝑐)(ℎ) ∶ Beh_𝐿(𝑝,𝑜) (9.C1)
+
+- Source-to-C supplies 𝜆_𝑝, C-definedness premises included; the downstream relation supplies 𝜅_𝑐.
+- If the observation distinguishes termination, divergence, resource exhaustion or external effects, both relations carry those distinctions, and a value-only equation can't stand in for them.
+- The same composition covers §9.2's C realization of the evaluator and directly lowered residuals, so the whole represented language is covered without a processor instruction per constructor.
+- The generated artifact includes declarations, runtime support and the external contracts actually used. Lowering checked syntax to C text needs a printer/reader correspondence: the compiled text has to denote the C construction the relation was proved for.
+- Definedness obligations (integer and FP behavior, valid lifetimes and accesses, aliasing, the actual concurrency model) are properties of the generated program, not consequences of the target being called C.
+
+**A concrete C target:** §8.6's decoder, with exact-width types where provided, a readable input, no concurrent input mutation, and a separate writable live output. size_t is the object-size type, and no register assignment, pointer width or struct offset is prescribed.
+
+```c
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+typedef struct { uint64_t tag, length; const uint8_t *data; } Frame;
+bool decode_frame(const uint8_t *b, size_t n, Frame *out)
+{
+    if (n < 4) return false;
+    uint64_t length = (uint64_t)b[2] | ((uint64_t)b[3] << 8);
+    if (length > n - 4) return false;
+    out->tag = (uint64_t)b[0] | ((uint64_t)b[1] << 8);
+    out->length = length;
+    out->data = b + 4;
+    return true;
+}
+```
+
+The first guard precedes every read. Each shifted value is ≤ 255·256 and each field ≤ 65535, preserved by the explicit unsigned conversions. After the guard 𝑛−4 is defined, and the second guard puts the whole payload inside the input. Failure leaves the output unchanged, and success writes exactly tag, length and the borrowed view. These branch facts give §8.6's source-level result, with outputs observed through the C fields, not invented offsets. The downstream compiler picks loads, stores, branches, calling convention and padding, so the source proof is reused through (9.C1), not rewritten per ISA. The native artifact still has concrete machine meaning, reached through an existing compiler.
+
+**Reusing and later verifying the compiler.** The toolchain's compilation relation is explicit. At first it may be a stated assumption among an artifact's trusted dependencies. Lifting the compiler into the language makes its syntax, behavior and transformations analyzable, and a proof of its relation replaces the assumption where established. That is the chosen verification direction, instead of making bespoke x86/ARM backend proofs prerequisites to use (precedent: verified compilation, 18). No external compiler or configuration is silently chosen or declared verified.
+
+- For 𝑄 ∶ 𝑂 → 𝒰 and 𝑞 ∶ ∏_𝑜 Beh_𝐿(𝑝,𝑜) → 𝑄(𝑜), the target proof is artifactQ(𝑜,ℎ) ∶= 𝑞(𝑜, 𝜆_𝑝(𝜅_𝑐 ℎ)) (9.C2).
+- Changing the C compiler, configuration, runtime or a used primitive changes this result's dependency, never the source program's meaning. Specialization identities, C lowering and downstream compilation are distinct, composing constructions, not competing accounts of execution.
+- General form, for represented 𝐿, 𝑀, source 𝑝, common 𝑂, and environment interpretation 𝐸 (related initial states and handlers) with obs_𝐿, obs_𝑀: ∑_{𝑎∶Artifact_𝑀} ∏_{𝜌∶Run_𝑀(𝑎,𝐸)} ∑_{𝜏∶Run_𝐿(𝑝,𝐸)} (obs_𝑀 𝜌 =_𝑂 obs_𝐿 𝜏), keeping the artifact and a source run per target run. A source property 𝑄 holding of every execution is applied at 𝜏 and transported along the inverse equality to 𝑄(obs_𝑀 𝜌). That is the general property-transfer operation, and each compiler inhabits it for the semantics it handles. Equality of specialized source terms and the source-run/machine-bytes relation stay distinct, composable results.
+
+The contract is the same whether the middle is C or a direct byte block. Appendix C keeps a direct x86 instance for comparison, not as a required route. C is the chosen path, and the general relation explains why reusing its compiler preserves work already established at the source.
+
+## 10. Persistent, interactive, and distributed programs
+
+A computation that changes its descriptions also has to decide which earlier conclusions still apply. §§2–9 supply identities, dependency-sensitive properties, executable transformations and continuing interactions, and persistence and exchange extend these same relations across time and participants with no second meaning. Retaining what is established, acquiring observations, changing interpretations and making constructions available elsewhere are transitions and relations inside the continuing process, not services around a finished program, and the programs implementing them are part of what is described. Antecedents: process calculi, causal order, temporal specification, refinement, incremental computation, bidirectional views (21–26, 38). The terms below compose into the actual distributed program, not an external verification model.
+
+- Processes may request input, await messages, mutate state, emit events, or run forever. Process_Σ(𝐴) ∋ return(𝑎) ∣ request(𝑞,𝑘) ∣ delay(𝑝) (10.1), with 𝑘 continuing on the response to 𝑞. Handlers interpret requests in a particular world, and different handlers give different observations of one description. A network is not an opaque service: it is communicating process states and transitions, including loss, ordering, failure and partial knowledge.
+- Persistence brings identity over time: a definition can stay stable while names, inputs or observed dependencies change. For pure 𝑞 and data 𝑑, Maintained(𝑞,𝑑) ∶= ∑_{𝑟∶𝑅}(𝑟 = 𝑞(𝑑)) (10.2). A valid incremental update takes a maintained result for 𝑑 to one for 𝑑′ with evidence that it denotes 𝑞(𝑑′). This holds whatever the representation: table, spreadsheet cell, widget or compiled cache (Codd's relational model for one of them, 60).
+- A cached evaluation records every lookup it depends on, absences included. If those observations still hold, a deterministic pure segment is reusable. A computation suspended on an external request keeps its continuation and request distinct from a completed pure value. Failures, waiter delivery and invalidation are transitions of represented state, not grounds for a foundational "task queue".
+- UIs likewise: a view is an interpretation of state, and an edit relates displayed representation to underlying state. Bidirectional laws say what round trips preserve and lose. Diagram, text editor, table, proof visualization and immersive spatial interface are all views, none privileged (statecharts, Harel, 66).
+- Distributed systems (local states, messages, causal relations, partial observations), GPUs (parallel execution, memory, numerics) and OSes (scheduling, isolation, devices) are distinct constructions, not metaphors or primitive divisions of computation, and their composition decides which information and interactions become available next.
+
+**Handler composition and safety transfer.** Handlers ℎ₁, ℎ₂ interpret requests in world relations, with a simulation 𝑅 ∶ 𝑊₁ → 𝑊₂ → 𝒰. If for every 𝑅(𝑤₁,𝑤₂) each ℎ₂-transition with response 𝑟 has a matching ℎ₁-transition with the same selected observation and related successors, the relation lifts coinductively to the interpreted processes, by cases on return, delay and request (the request case uses the step simulation plus the hypothesis on the continuation). A safety property invariant under the observation transfers from source to target. Progress also needs the fairness condition the scheduling semantics actually uses: safety is induction over reachable states, progress concerns continuing executions and does not follow from a safety invariant (temporal logic, 58).
+
+### 10.1 Exact reuse requires recorded information
+
+A dependency certificate records what was observed at each key, absence included, not just the keys. valid(𝑆,𝐷) ∶= ∏_{(𝑘,𝑜)∈𝐷}(lookup(𝑆,𝑘) = 𝑜) (10.3). For a deterministic pure segment with complete read trace 𝐷, validity in a new store gives the same reductions up to the next unrecorded lookup or world request, by induction on steps: pure reductions are fixed by term and environment, and recorded lookups return equal observations. A suspended computation additionally keeps its residual, dependency observations, pending request and waiting continuations. Failure is not success, and a world response is never silently replayed as a pure lookup. These are exact distinctions about computation and interaction, not arbitrary product divisions into caching, queueing and workflow.
+
+### 10.2 A maintained view is a proof about an update
+
+- For query 𝑞 ∶ 𝐷 → 𝑅 and update 𝛿, Δ_𝑞 ∶ 𝑅 → 𝐷 → 𝑅 is correct when ∀𝑑. Δ_𝑞(𝑞𝑑, 𝑑) = 𝑞(𝛿𝑑) (10.4), with edit data 𝑒 threaded through 𝛿_𝑒 and Δ_𝑞(−,−,𝑒). It is a property of the functions, instantiated by materialized views, spreadsheet dependencies and rendered graph visualizations.
+- Lenses: get(put(𝑠,𝑣)) = 𝑣 and put(𝑠, get 𝑠) = 𝑠 (10.5) characterize total view/update pairs. Lossy views and partial edits get weaker or differently typed laws.
+- Mat(𝑞,𝑑) ∶= ∑_𝑟(𝑟 = 𝑞(𝑑)) keeps a value with its equality to the query at the same input version.
+
+**An actual incremental edit.** Take 𝑣 ∶ Vec(𝑈₆₄, 𝑛), 𝑞(𝑣) = foldl(+₆₄, 0, 𝑣), 𝑢_{𝑖,𝑥}(𝑣) = 𝑣[𝑖 ∶= 𝑥]. Define:
+
+- Δ_{𝑖,𝑥}(𝑣,𝑟) ∶= 𝑟 −₆₄ 𝑣ᵢ +₆₄ 𝑥;
+- 𝜆_{𝑖,𝑥,𝑣} ∶ Δ_{𝑖,𝑥}(𝑣, 𝑞𝑣) = 𝑞(𝑢_{𝑖,𝑥} 𝑣), by splitting the fold into prefix, 𝑣ᵢ and suffix, then using associativity, commutativity and inverses mod 2⁶⁴ to cancel 𝑣ᵢ and insert 𝑥;
+- maint_{𝑖,𝑥}(𝑣, (𝑟,𝑒)) ∶= (Δ_{𝑖,𝑥}(𝑣,𝑟), ap(Δ_{𝑖,𝑥}(𝑣,−), 𝑒) ⋅ 𝜆_{𝑖,𝑥,𝑣}) ∶ Mat(𝑞, 𝑢_{𝑖,𝑥} 𝑣).
+
+That costs one old element and two modular operations, with no refold. Publishing the edited vector under a new immutable identity selects this result for a subscribed sum view. A later 𝜃 ∶ 𝑞 = 𝑞′ makes the same 𝑟′ maintained for 𝑞′ via 𝑒′ ⋅ ap(𝜆𝑓. 𝑓 𝑣′, 𝜃). A local compiled artifact or a remote evaluator consumes the definition and value at the same type. Device reads supplying later edits remain separate world interactions, and reusing the pure sum doesn't repeat them.
+
+**A source edit changes proof, bytes and view.** 𝑝₀ = Xor(Xor(Input, Const 0x5a), Const 0x5a) has 𝐸(𝑝₀,𝑥) = 𝑥 by the involutive XOR law and bytes `01 02 5a 03 02 5a 03 ff` under §9.3's decoder. Change only the last constant: 𝑝₁ = …Const 0x5b, with 𝐸(𝑝₁,𝑥) = (𝑥⊕5a)⊕5b = 𝑥⊕0x01 and unsimplified bytes `01 02 5a 03 02 5b 03 ff`. The old proof isn't a proof for 𝑝₁ (at 𝑥 = 0 the output is 1), so dependencies, any simplified residual and the rendering must refer to the new version. Byte type, XOR, interpreter and compiler definitions are unchanged. This differs from the vector update above and the decoder/live-upgrade below, each a different actual dependency path through the same language.
+
+### 10.3 A distributed credit invariant, with no global scheduler as an axiom
+
+Peers 𝑁, local credit 𝑐ᵢ ∈ ℕ, and in-flight credit 𝑚ᵢⱼ ∈ ℕ per directed channel. The specified global state is useful for stating an invariant even though no participant observes it: 𝑆 ∶= (∏_𝑖 ℕ) × (∏_{𝑖,𝑗} ℕ), total(𝑆) ∶= ∑𝑐ᵢ + ∑𝑚ᵢⱼ (10.6). Allocation of 𝑞 ≤ 𝑐ᵢ: (𝑐ᵢ, 𝑚ᵢⱼ) ↦ (𝑐ᵢ−𝑞, 𝑚ᵢⱼ+𝑞) (10.7). Delivery, when 𝑞 ≤ 𝑚ᵢⱼ: (𝑚ᵢⱼ, 𝑐ⱼ) ↦ (𝑚ᵢⱼ−𝑞, 𝑐ⱼ+𝑞) (10.8). Both preserve total by cancellation, and so does every finite sequence, by induction on length. Elementary, exact, and independent of any centralized execution algorithm.
+
+A real protocol also defines message identities, duplication resistance, acknowledgment, failure, reallocation and when credit can return. With duplication and no idempotency rule, conservation fails: one allocation delivered twice. The real distinction is between the stated invariant and the actual transition rules, not between mathematics and networking.
+
+Observer 𝑖 has Obs_𝑖 ∶ 𝑆 → 𝑂_𝑖 and Possible_𝑖(𝑜) ∶= ∑_𝑠(Obs_𝑖 𝑠 = 𝑜) (10.9). Local knowledge is a construction over partial observation: a peer proves an action safe for every compatible state without holding the global state. This is a precise setting for local invariants, distributed verification and computation by message exchange, and obligations, receipts, debt transfer and cancellation are expressible once their transitions are defined.
+
+*Receipt-bearing delivery.* Messages carry a unique transfer id 𝑢, source, destination and amount, and state records sent, delivered and acknowledged sets.
+
+- Delivery of 𝑢 requires 𝑢 ∉ delivered. It consumes the in-flight credit exactly once, credits the receiver, and adds 𝑢 to delivered.
+- Acknowledgment requires 𝑢 ∈ delivered and records a receipt; it moves no credit.
+- A return is a new uniquely identified reverse transfer, subject to available credit.
+
+Each transfer conserves credit, and the delivered-set premise excludes duplicate delivery. Failures leave in-flight credit represented until an explicit recovery or cancellation transition acts on it.
+
+### 10.4 Observations, information, and locally available actions
+
+§1's fibers applied to available actions in a running system. For 𝑜 ∶ 𝑆 → 𝑂, possibly itself computed by an interacting process: Fiber_𝑜(𝑦) ∶= ∑_𝑠(𝑜𝑠 = 𝑦) (10.10). If an action needs 𝑃 ∶ 𝑆 → 𝒰, the observer establishes safety without guessing the hidden state through SafeAt(𝑦) ∶= ∏_{(𝑠,𝑝)∶Fiber_𝑜(𝑦)} 𝑃(𝑠) (10.11). That is stronger than exhibiting one safe compatible state. A refinement 𝑜′ with 𝑜 = ℎ ∘ 𝑜′ makes the fiber no larger, so coarse safety evidence is reused under the refinement by precomposition; the converse generally fails.
+
+- *Information is constraints on possible states and actions.* Given a value function on admissible trajectories, one can compare the optimum over trajectories compatible with one observation against a refined one. Monotonicity holds when refinement expands the available contingent policies with objective and feasibility held fixed; it doesn't follow from arbitrary differences between observations.
+- The same construction governs distributed systems, debugging, interfaces and inference. The observer can be part of the process. Combined observations constrain a joint fiber, and a participant uses another's observation only when interaction supplies it. No global knower and no separate theory of "knowledge" is needed. The observer's own state, including the interpretation recording an event, can be among the observed states.
+- That is how the account reaches communication and language. An utterance is an event in a causal history, a response depends on retained context and interpretation, and responses change the context for later utterances. A population's conventions arise from these interacting histories, with no fixed intrinsic meaning and no separate collective mind needed to say what each participant can infer and how information passes between them. Scientific instruments and the processes interpreting them contribute their transitions and observations in the same way.
+
+*Updating possible worlds after a response.* With 𝐾 ∶ 𝑊 → 𝒰 the compatible worlds and 𝐻_𝑐 ∶ 𝑊 → 𝑅_𝑐 → 𝑊 → 𝒰: 𝐾′(𝑤′) ∶= ‖∑_𝑤 𝐾(𝑤) × 𝐻_𝑐(𝑤,𝑟,𝑤′)‖ (10.12), and action safety is ∏_{𝑤′} 𝐾′(𝑤′) → 𝑃(𝑤′). This is the same dependent reasoning as source semantics and machine invariants, with only the world relation changed.
+
+### 10.5 Dependency certificates and persistent evaluation
+
+Key (definition identities), Version, and Store ∶ Key → Option(Version × Value), a finite partial map. A negative lookup is a dependency on absence at a revision.
+
+- Dep ∶= Present(𝑘,𝑣) + Absent(𝑘,𝑒). valid(𝑆, Present(𝑘,𝑣)) ∶= version(𝑆[𝑘]) = 𝑣; valid(𝑆, Absent(𝑘,𝑒)) ∶= 𝑆[𝑘] = none ∧ epoch(𝑆) = 𝑒; validAll ∶= ∏ (10.13).
+- (10.13) is a version-based sufficient condition for observational validity (10.17), not the same predicate by definition. The certificate carries version(𝑆[𝑘]) = version(𝑆′[𝑘]) ⇒ Lookup(𝑆,𝑘) = Lookup(𝑆′,𝑘) for present entries, and epoch(𝑆) = epoch(𝑆′) ⇒ both lookups are none for absent ones. Epochs for negative lookups may be coarse, and a finer index-version certificate is equally valid if it proves the result unchanged. What matters is soundness, not minimal invalidation. The full producer relation, with suspension, failure and waiters, uses the same validity predicate.
+
+**Incremental updates are programs with proofs.** For 𝑓 ∶ 𝐴 → 𝐵 with edits 𝛿𝐴, applyA and applyB: derive(𝑓) ∶ ∏_𝑎∏_{𝑑∶𝛿𝐴}∑_{𝑒∶𝛿𝐵} Path_𝐵(applyB(𝑓𝑎, 𝑒), 𝑓(applyA(𝑎,𝑑))) (10.14). For a sum over a finite map into an abelian group 𝐺, replacing 𝑚[𝑘] = 𝑥 by 𝑦 has derivative 𝑒 = 𝑦−𝑥 with ∑𝑚 + (𝑦−𝑥) = ∑(𝑚[𝑘↦𝑦]) (10.15). A generic correct fallback (recompute, and return the difference if the edit algebra allows) and a specialized constant-work update are both legitimate; the specification includes derivative and evidence, and no incremental-computation oracle is assumed.
+
+**A dependency-tracked evaluator.** Each next operation is a reduction, a store lookup, a world request, a return or a fault. State:
+
+- Outcome(𝐴) ∶= Value 𝐴 + Error Err; Read ∶= ∑_{𝑘∶Key} LookupResult(𝑘); Certificate ∶= List Read.
+- EffectScope ∶= InvocationId × WorldEpoch; RequestToken ∶= InvocationId × StepId.
+- Producer(𝐴) ∶= Absent + Running(Residual, Snapshot, Certificate, Waiters) + Suspended(Residual, Snapshot, Certificate, Waiters, Request) + Ready(𝐴, Certificate, EffectScope) + Failed(Err, Certificate, EffectScope) (10.16).
+
+Observations are present values (with the required version or identity evidence) or absence. A recorded lookup holds the observed value or absence; a version or epoch may stand in only if it soundly identifies the result. valid(𝑆′,𝐷) ∶= ∏_{(𝑘,𝑜)∈𝐷}(Lookup(𝑆′,𝑘) ≡ 𝑜) (10.17).
+
+- Snapshots: Running(𝑟,𝐷,𝑊) abbreviates Running(𝑟, 𝑆₀, 𝐷, 𝑊) for the retained snapshot 𝑆₀, and likewise Suspended. Lookups read 𝑆₀ and append their actual result to 𝐷. Resuming under the same snapshot needs no validation against an unrelated latest store; only reuse under a different snapshot requires the certificate to validate there. An invocation that has issued effects keeps 𝑆₀ unless a history-preserving migration is supplied.
+- Scopes: the table holds a state per semantic key 𝑘 and effect scope 𝜔. Pure computations may share 𝜔₀. Effectful ones get a fresh invocation identity, and two consumers share a result only if they refer to the same effect occurrence 𝜔. validReuse(𝑆,𝐷,𝜔,𝜔′) ∶= valid(𝑆,𝐷) × (𝜔 = 𝜔′) (10.18).
+- Running and suspended lookups are already indexed by (𝑘,𝜔), so they need no second scope check; their extra 𝑆 = 𝑆₀ guard is a snapshot condition. A new producer from Absent retains 𝑆. A completed result's certificate test guards reuse under 𝑆.
+- For running or suspended producers, agreement on reads so far doesn't authorize a consumer with a different snapshot, since later reads may differ. So the join rule requires the consumer's snapshot to be 𝑆₀, and a different-snapshot join needs a proved simulation or a new pure producer. A suspended effectful invocation cannot restart against 𝑆.
+- Completed states also compare their stored scope. A new effect occurrence gets a new scope even for identical source, and a pure store lookup creates no world-effect occurrence.
+
+Transitions (10.19):
+
+- demand(𝑘,𝜔,𝑆,𝑤):
+  - Ready(𝑣,𝐷,𝜔′) with validReuse → deliver(𝑤,𝑣);
+  - Failed(𝑒,𝐷,𝜔′) with validReuse → deliverError(𝑤,𝑒);
+  - Running(𝑟,𝐷,𝑊) with 𝑆 = 𝑆₀ → Running(𝑟,𝐷,𝑊++[𝑤]);
+  - Suspended(𝑟,𝐷,𝑊,𝑞) with 𝑆 = 𝑆₀ → Suspended(𝑟,𝐷,𝑊++[𝑤],𝑞);
+  - Absent → Running(initial 𝑘, [], [𝑤]).
+- step(𝑘,𝜔):
+  - Running(𝑟,𝐷,𝑊) →^{lookup(𝑞)=𝑜} Running(𝑟′, 𝐷++[(𝑞,𝑜)], 𝑊);
+  - Running →^{request(𝑞,𝜄)} Suspended(𝑟′,𝐷,𝑊,(𝑞,𝜄));
+  - Suspended(𝑟,𝐷,𝑊,(𝑞,𝜄)) →^{response(𝑞,𝜄,𝑎)} Running(continue(𝑟,𝑎),𝐷,𝑊);
+  - Running →^{return 𝑣} Ready(𝑣,𝐷,𝜔); deliverAll(𝑊,𝑣);
+  - Running →^{fault 𝑒} Failed(𝑒,𝐷,𝜔); deliverAllError(𝑊,𝑒).
+
+";" is one state update together with waiter notification. Requests carry a fresh per-occurrence token 𝜄 within the scope, and a response is accepted only for the matching outstanding token. A consumed or retired token cannot resume a continuation twice, and source-syntax equality never authorizes reuse of an effect occurrence.
+
+**Snapshot changes and effect history.** An invocation evaluates against its retained immutable snapshot. A changed certificate may invalidate pure reuse under a later snapshot but never retroactively changes interactions already issued.
+
+- With no world request yet, an invocation may restart from initial(𝑘) under the new snapshot, keeping every waiter; a proved incremental update is another permitted transition.
+- After a request, it continues under the original snapshot or moves under a supplied simulation preserving issued effects, outstanding tokens and pending obligations. Restarting from the initial residual needs that same proof, and retiring a token doesn't undo a payment, send or write.
+- A consumer needing the new snapshot, with neither reuse nor a preserving migration available, gets a typed invalidation result or waits for the specified migration, and the old effect is never reissued. Invalidation notifies every waiter while the outstanding interaction stays represented until completion, acknowledged cancellation or defined recovery.
+- Stale pure entries can be recomputed. Effectful results stay records of their original occurrences, reusable only with matching scope and certificate. So the safe fallback for effectful work is not a pure producer's unconditional stale restart.
+
+**Re-specializing an active invocation.** A JIT may specialize a continuing process further as static facts arrive. A new artifact 𝑎₁ may sit beside 𝑎₀, but replacing an active occurrence migrates its current continuation; it does not restart the original program.
+
+- Boundary_𝑖(𝑘) is the set of target states of 𝑎ᵢ where the correspondence with source continuation 𝑘 is known, such as proved turn boundaries or suspended command/response points. LiveRel_𝑖(𝑑,𝑘,𝐻,𝑇,𝑆) says target state 𝑑 realizes 𝑘 with issued-effect history 𝐻, outstanding tokens 𝑇 and snapshot 𝑆.
+- Swap_{𝐷₁}(𝑎₀,𝑎₁) ∶= ∏_{𝑘,𝐻,𝑇,𝑆} ∏_{𝑑₀∶Boundary₀(𝑘)} LiveRel₀(𝑑₀,𝑘,𝐻,𝑇,𝑆) → valid(𝑆,𝐷₁) → ∑_{𝑑₁∶Boundary₁(𝑘)} LiveRel₁(𝑑₁,𝑘,𝐻,𝑇,𝑆) (10.S1).
+- 𝐻, 𝑇 and 𝑆 are deliberately kept. A migration changes representation or snapshot only with a separate simulation relating old and new observations and preserving issued effects. Responses to outstanding requests go to the new continuation under the same token and never trigger a second issue.
+- An arbitrary instruction is not a safe swap point unless its source-continuation relation has been constructed. Turn and response boundaries are examples, not universal privileged cut points.
+- If the specialization certificate later fails, an active effectful artifact uses a proved resume exit to a less specialized or evaluator-mediated realization. Every guard whose failure is reachable during execution either has such an exit or is proved invariant under permitted environment changes. Pure work may restart when discarded work is unobservable; issued effects are never replayed to rebuild a convenient initial configuration. This is the persistent-producer effect-history theorem applied to a program changing its own executable representation.
+
+*Read-dependency lemma.* For a deterministic pure segment with complete lookup trace 𝐷, any 𝑆′ with valid(𝑆′,𝐷) produces the same segment until its next new lookup or world request. Proof: induction on steps, with store reads equal by (10.17) and other pure steps fixed by term and environment. It proves sound reuse, not a bound on recomputation. 𝐷 selects a fiber of stores agreeing on the recorded observations (§10.4), and the recorded reductions stay valid across that whole fiber without reconstruction. A certificate describes the applicability of retained work, not its storage location. These equations define this particular evaluator, and other strategies may use other representations.
+
+**Producer requests, suspension, waiter delivery** are canonical in (10.16)–(10.19): a request to a running or suspended producer appends to its waiters; completed pure work is reused under a valid certificate; a snapshot change permits pure restart or a proved derivative; effectful invocations obey the effect-history and migration conditions; external requests resume only on their matching response. The maintained update follows from (10.2): if 𝑒 ∶ 𝑟 = 𝑞𝑑 and 𝜆_𝑑 ∶ 𝑣(𝑑, 𝑞𝑑) = 𝑞(𝑢𝑑), then maint(𝑑,(𝑟,𝑒)) ∶= (𝑣(𝑑,𝑟), ap(𝑣(𝑑,−), 𝑒) ⋅ 𝜆_𝑑) ∶ Mat(𝑞, 𝑢𝑑) (10.20). Without a specialized update, recompute 𝑞(𝑢𝑑) with refl; one dependent type certifies both branches.
+
+Editing in a typed context 𝐾[−]:
+
+1. inspect(𝐾[𝑡]) = (Γ_ℎ, 𝐴_ℎ, 𝑡, 𝐾);
+2. check(Γ_ℎ, 𝐴_ℎ, 𝑡′) ⇝ 𝑑′ ∶ Der(Γ_ℎ ⊢ 𝑡′ ∶ 𝐴_ℎ);
+3. plug(𝐾, (𝑡′,𝑑′)) ∶ Raw;
+4. checkEnclosing ⇝ Code(Γ,𝐴).
+
+The new code is a new immutable definition. Rebinding a name publishes it in a new snapshot, and read validation decides which retained computations survive. Editor, renderer, query and proof are definitions in the same space.
