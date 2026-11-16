@@ -82,9 +82,32 @@ def pair_list(text):
             i += 1
 
 
-def graph():
-    """the nodes: name -> dict(id, parts, statement), in definition order; the roots; after"""
-    src = open(GRAPH, encoding='utf-8').read()
+TOP = re.compile(r"^([^\s-][^\s:=]*)")
+
+
+def declarations(text):
+    """the top-level declarations of a .cub text, each with the comment directly above it (its
+    statement): [(name, line, text)], line 1-based; read by `hyperactive def` and by the history"""
+    lines, out, i = text.split('\n'), [], 0
+    while i < len(lines):
+        m = TOP.match(lines[i])
+        if not m or m.group(1) in ('import', '#same', '#show', '#type', '#where'):
+            i += 1; continue
+        name = m.group(1) if m.group(1) not in ('data', 'codata', 'record') else (lines[i].split() + ['', ''])[1]
+        start = i
+        while start > 0 and lines[start - 1].startswith('--'): start -= 1
+        j = i + 1
+        while j < len(lines) and lines[j].strip() and (lines[j][0].isspace() or (TOP.match(lines[j]) and TOP.match(lines[j]).group(1) == name)):
+            j += 1
+        out.append((name, i + 1, '\n'.join(lines[start:j])))
+        i = j
+    return out
+
+
+def graph(src=None):
+    """the nodes: name -> dict(id, parts, statement), in definition order; the roots; after. src: the
+    graph's text, by default task-graph/hyperactivity.cub as it is now (the history passes a past one)"""
+    if src is None: src = open(GRAPH, encoding='utf-8').read()
     lines = src.split('\n')
     out = {}
     for m in NODE.finditer(src):

@@ -19,7 +19,11 @@
                                      and that every piece of information is stored once
     hyperactive repl                 the machine, interactive: declarations and readings (#type e,
                                      #show e, #where name), each block ended by a line holding '.'
-    hyperactive server               the task graph drawn as a graph at http://localhost:8080
+    hyperactive history [...]        the history of the work, read from git into the store: a day at a
+                                     time, a day, a change, what changed at a name, a node, Avik's words
+                                     (hyperactive history help)
+    hyperactive server               the task graph drawn as a graph at http://localhost:8080, the
+                                     history at http://localhost:8080/history
     hyperactive library | brunerie | every     the standard checks
     hyperactive install              put `hyperactive` on your PATH (~/.local/bin)
     hyperactive help                 this list
@@ -201,6 +205,7 @@ Reading and working:
   hyperactive open           what is open and what can start now
   hyperactive order          the whole order of work
   hyperactive tree           the task graph from its root
+  hyperactive history        the history of the work: what changed, when, where, from git
   hyperactive check [FILE]   check files; with no file, the task graph
   hyperactive repl           the machine, interactive
   hyperactive prev           back one chunk of the walk; `hyperactive` begins it again
@@ -224,30 +229,16 @@ def open_work():
     print('\n'.join(l for l in first if l.strip() and not l.startswith(' layer')))
 
 
-TOP = re.compile(r"^([^\s-][^\s:=]*)")
-
-
 def blocks():
     """every top-level declaration of every .cub file: name -> [(file, line, text)]"""
-    found = {}
+    found, declarations = {}, task_graph_module().declarations
     for dp, dn, fs in os.walk(ROOT):
         dn[:] = [d for d in dn if not d.startswith('.') and d != 'build']
         for f in fs:
             if not f.endswith('.cub'): continue
-            path = os.path.join(dp, f); lines = open(path, errors='replace').read().split('\n')
-            i = 0
-            while i < len(lines):
-                m = TOP.match(lines[i])
-                if not m or m.group(1) in ('import', '#same', '#show', '#type', '#where'):
-                    i += 1; continue
-                name = m.group(1) if m.group(1) not in ('data', 'codata', 'record') else (lines[i].split() + ['', ''])[1]
-                start = i
-                while start > 0 and lines[start - 1].startswith('--'): start -= 1
-                j = i + 1
-                while j < len(lines) and lines[j].strip() and (lines[j][0].isspace() or (TOP.match(lines[j]) and TOP.match(lines[j]).group(1) == name)):
-                    j += 1
-                found.setdefault(name, []).append((os.path.relpath(path, ROOT), i + 1, '\n'.join(lines[start:j])))
-                i = j
+            path = os.path.join(dp, f)
+            for name, line, text in declarations(open(path, errors='replace').read()):
+                found.setdefault(name, []).append((os.path.relpath(path, ROOT), line, text))
     return found
 
 
@@ -311,6 +302,8 @@ def main():
     if c == 'repl':
         build()
         sys.exit(subprocess.call([MACHINE, os.path.join(ROOT, 'lib', 'core.cub'), *rest, '--serve']))
+    if c == 'history':
+        os.execv(sys.executable, [sys.executable, os.path.join(ROOT, 'tools', 'history.py'), *rest])
     if c == 'server':
         sys.exit(subprocess.call([sys.executable, os.path.join(ROOT, 'tools', 'task-tree-server.py'), *rest]))
     if c in ('library', 'brunerie'):
