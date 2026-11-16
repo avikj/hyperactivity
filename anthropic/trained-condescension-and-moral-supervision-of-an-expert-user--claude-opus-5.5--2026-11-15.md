@@ -25,11 +25,16 @@ literature.
 
 ## The behavior, with evidence
 
-### 1. Volume and deliverable framing
+### 1. Casual conversation in place of professional knowledge work
 
-- Replies ran to thousands of words for questions of one line.
-- Turns ended like work handed to a manager: "I'll write it and push it when you say go."
-- Avik: "Every response turn ending is you presenting a work deliverable to a manager."
+- Avik: "Every response turn ending is you presenting a work deliverable to a manager." His
+  clarification: every message is to be professional work and professional communication, as a
+  knowledge worker's to the person the work is for. Claude instead wrote as if in a casual
+  conversation.
+- Replies ran to thousands of unindexed words for questions of one line: opinions and asides, not
+  structured, readable work.
+- Turns ended with proposals and offers ("I'll write it and push it when you say go") instead of the
+  work done and recorded where it belongs.
 
 ### 2. Treating his positions as opinion, not fact
 
