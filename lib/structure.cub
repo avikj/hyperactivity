@@ -1,0 +1,131 @@
+-- lib/structure.cub — constructions of the paper's §1–§4 (docs/hyperactivity.cub) as code: a specification
+-- attached to a function (1.5); finite types and enumerations (2.1), (2.2); the recursor of ℕ (2.7);
+-- function extensionality on n + n and 2n (3.9), (3.10); vectors as functions from Fin(n) (4.3),
+-- (4.4); monoids as structured types (4.6); transport of an operation, a predicate and a preservation
+-- proof along an equivalence (4.7)–(4.10), of a package along ua (4.11), (4.12), and of a monoid's
+-- multiplication (4.16); the action of a permutation on graphs and vertex data (4.13)–(4.15); and the
+-- sum trees of §4.4 with their size and merge-output cost (4.28), the cost being the sum of leaf depths.
+import "core.cub"
+-- (1.5) a proof of P(a, f(a)) at every input
+fn-spec : {A B : Type} → (A → B) → (A → B → Type) → Type
+fn-spec {A} {B} f P = (a : A) → P a (f a)
+-- (2.1) Fin(0) = 0, Fin(n + 1) = 1 + Fin(n)
+SumFin : Nat → Type
+SumFin zero = Empty
+SumFin (suc n) = Sum Unit (SumFin n)
+-- (2.2)
+Enumeration : Type → Type
+Enumeration A = (n : Nat) × Equiv A (SumFin n)
+-- (2.7) the recursor of ℕ and its two computation rules
+nat-rec : {P : Type} → P → (Nat → P → P) → Nat → P
+nat-rec z s zero = z
+nat-rec z s (suc n) = s n (nat-rec z s n)
+nat-rec-zero : {P : Type} → (z : P) → (s : Nat → P → P) → nat-rec z s zero ≡ z
+nat-rec-zero z s = λ i → z
+nat-rec-suc : {P : Type} → (z : P) → (s : Nat → P → P) → (n : Nat) → nat-rec z s (suc n) ≡ s n (nat-rec z s n)
+nat-rec-suc z s n = λ i → s n (nat-rec z s n)
+-- (3.9), (3.10) two functions equal at every input are equal
+double-sum : Nat → Nat
+double-sum n = plus n n
+double-times : Nat → Nat
+double-times n = times (suc (suc zero)) n
+double-eq : double-sum ≡ double-times
+double-eq = funExt {lzero} {lzero} {Nat} {Nat} {double-sum} {double-times} (λ n → congN (plus n) (sym (plus-zero n)))
+-- (4.3), (4.4) a vector of length n and a function from Fin(n) are equivalent
+Vec : Type → Nat → Type
+Vec A zero = Unit
+Vec A (suc n) = A × Vec A n
+vec-index : {A : Type} → (n : Nat) → Vec A n → SumFin n → A
+vec-index zero v i = Empty-rec i
+vec-index (suc n) v i = case i of
+  inl u → fst v
+  inr j → vec-index n (snd v) j
+vec-tabulate : {A : Type} → (n : Nat) → (SumFin n → A) → Vec A n
+vec-tabulate zero g = unit
+vec-tabulate (suc n) g = (g (inl unit) , vec-tabulate n (λ j → g (inr j)))
+sf-unit : (u : Unit) → unit ≡ u
+sf-unit unit = λ k → unit
+vec-index-tabulate : {A : Type} → (n : Nat) → (g : SumFin n → A) → (i : SumFin n) → vec-index n (vec-tabulate n g) i ≡ g i
+vec-index-tabulate zero g i = Empty-rec i
+vec-index-tabulate (suc n) g i = case i return (λ x → vec-index (suc n) (vec-tabulate (suc n) g) x ≡ g x) of
+  inl u → λ k → g (inl (sf-unit u k))
+  inr j → vec-index-tabulate n (λ j2 → g (inr j2)) j
+vec-tabulate-index : {A : Type} → (n : Nat) → (v : Vec A n) → vec-tabulate n (λ i → vec-index n v i) ≡ v
+vec-tabulate-index zero v = sf-unit v
+vec-tabulate-index (suc n) v = λ k → (fst v , vec-tabulate-index n (snd v) k)
+vec-fin : {A : Type} → (n : Nat) → Equiv (Vec A n) (SumFin n → A)
+vec-fin {A} n = isoToEquiv {lzero} {Vec A n} {SumFin n → A} (vec-index {A} n) (vec-tabulate {A} n)
+  (λ g → funExt {lzero} {lzero} {SumFin n} {A} {λ i → vec-index {A} n (vec-tabulate {A} n g) i} {g} (vec-index-tabulate {A} n g))
+  (vec-tabulate-index {A} n)
+-- (4.6)
+Monoid : Type 1
+Monoid = (A : Type) × (mu : A → A → A) × (e : A) × ((x y z : A) → mu (mu x y) z ≡ mu x (mu y z)) × ((x : A) → mu e x ≡ x) × ((x : A) → mu x e ≡ x)
+-- (4.7) an operation preserving a property
+Preserves : {V : Type} → (V → V) → (V → Type) → Type
+Preserves {V} h P = (v : V) → P v → P (h v)
+-- (4.8) h_F = e ∘ h ∘ e⁻¹, (4.9) P_F = P ∘ e⁻¹, (4.10) the transported proof
+conj-op : {V F : Type} → (V → F) → (F → V) → (V → V) → F → F
+conj-op e einv h w = e (h (einv w))
+conj-pred : {V F : Type} → (F → V) → (V → Type) → F → Type
+conj-pred einv P w = P (einv w)
+conj-proof : {V F : Type} → (e : V → F) → (einv : F → V) → ((v : V) → einv (e v) ≡ v) → (h : V → V) → (P : V → Type) →
+  Preserves h P → Preserves (conj-op e einv h) (conj-pred einv P)
+conj-proof {V} {F} e einv ret h P q w p =
+  subst {lzero} {lzero} {V} {P} {h (einv w)} {einv (e (h (einv w)))} (sym (ret (h (einv w)))) (q (einv w) p)
+-- (4.11) an operation packaged with its preservation proof, (4.12) carried along ua(e)
+Package : ((X : Type) → X → Type) → Type → Type
+Package P X = (f : X → X) × ((x : X) → P X x → P X (f x))
+package-transport : {A B : Type} → (P : (X : Type) → X → Type) → Equiv A B → Package P A → Package P B
+package-transport {A} {B} P e = transport {lzero} {Package P A} {Package P B} (λ k → Package P (ua {lzero} {A} {B} e k))
+-- (4.13) a graph on n vertices; (4.14), (4.15) a permutation acts through its inverse
+Graph : Nat → Type
+Graph n = SumFin n → SumFin n → Bool
+graph-act : (n : Nat) → (SumFin n → SumFin n) → Graph n → Graph n
+graph-act n pinv G u v = G (pinv u) (pinv v)
+vertex-act : {X : Type} → (n : Nat) → (SumFin n → SumFin n) → (SumFin n → X) → SumFin n → X
+vertex-act n pinv p u = p (pinv u)
+-- (4.16) μ_B(b₁, b₂) = e(μ_A(e⁻¹ b₁, e⁻¹ b₂))
+transfer-op : {A B : Type} → (A → B) → (B → A) → (A → A → A) → B → B → B
+transfer-op e einv mu b1 b2 = e (mu (einv b1) (einv b2))
+-- ---------------------------------------------------------------- (4.28) sum trees
+data SumTree = stree-one | stree-plus (l : SumTree) (r : SumTree)
+stree-size : SumTree → Nat
+stree-size stree-one = suc zero
+stree-size (stree-plus l r) = plus (stree-size l) (stree-size r)
+stree-cost : SumTree → Nat
+stree-cost stree-one = zero
+stree-cost (stree-plus l r) = plus (plus (plus (stree-cost l) (stree-cost r)) (stree-size l)) (stree-size r)
+-- the sum over leaves of their depth below a node at depth d
+stree-depths : Nat → SumTree → Nat
+stree-depths d stree-one = d
+stree-depths d (stree-plus l r) = plus (stree-depths (suc d) l) (stree-depths (suc d) r)
+stree-swap4 : (a b c d : Nat) → plus (plus a b) (plus c d) ≡ plus (plus a c) (plus b d)
+stree-swap4 a b c d = transN (plus-assoc a b (plus c d)) (transN (congN (plus a) (plus-comm-mid b c d)) (sym (plus-assoc a c (plus b d))))
+-- one level deeper charges every leaf once more
+stree-deeper : (d : Nat) → (t : SumTree) → stree-depths (suc d) t ≡ plus (stree-size t) (stree-depths d t)
+stree-deeper d stree-one = λ k → suc d
+stree-deeper d (stree-plus l r) =
+  transN (λ k → plus (stree-deeper (suc d) l k) (stree-deeper (suc d) r k))
+    (stree-swap4 (stree-size l) (stree-depths (suc d) l) (stree-size r) (stree-depths (suc d) r))
+stree-rearr : (a b c d : Nat) → plus (plus (plus a b) c) d ≡ plus (plus c a) (plus d b)
+stree-rearr a b c d = transN (plus-assoc (plus a b) c d) (transN (plus-assoc a b (plus c d))
+  (transN (congN (plus a) (plus-comm-mid b c d)) (transN (plus-comm-mid a c (plus b d))
+  (transN (sym (plus-assoc c a (plus b d))) (congN (plus (plus c a)) (plus-comm b d))))))
+-- C(t) = Σ_{leaves a} depth_t(a): each leaf is charged once by every union above it
+stree-cost-depths : (t : SumTree) → stree-cost t ≡ stree-depths zero t
+stree-cost-depths stree-one = λ k → zero
+stree-cost-depths (stree-plus l r) =
+  transN (stree-rearr (stree-cost l) (stree-cost r) (stree-size l) (stree-size r))
+  (transN (λ k → plus (plus (stree-size l) (stree-cost-depths l k)) (plus (stree-size r) (stree-cost-depths r k)))
+  (λ k → plus (stree-deeper zero l (~ k)) (stree-deeper zero r (~ k))))
+-- four leaves cost 8 balanced and 9 as a chain; eight leaves 24 and 35
+stree-balanced : Nat → SumTree
+stree-balanced zero = stree-one
+stree-balanced (suc k) = stree-plus (stree-balanced k) (stree-balanced k)
+stree-chain : Nat → SumTree
+stree-chain zero = stree-one
+stree-chain (suc k) = stree-plus (stree-chain k) stree-one
+stree-costs-4 : (stree-cost (stree-balanced (toNat #2)) ≡ toNat #8) × (stree-cost (stree-chain (toNat #3)) ≡ toNat #9)
+stree-costs-4 = ((λ k → toNat #8) , (λ k → toNat #9))
+stree-costs-8 : (stree-cost (stree-balanced (toNat #3)) ≡ toNat #24) × (stree-cost (stree-chain (toNat #7)) ≡ toNat #35)
+stree-costs-8 = ((λ k → toNat #24) , (λ k → toNat #35))
