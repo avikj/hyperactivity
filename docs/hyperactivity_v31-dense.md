@@ -307,3 +307,121 @@ It holds because both sides look up 𝑣 at vz, and at vs 𝑖 weakening and the
 - products and sums: by their constructors and eliminators, with the binder law in case.
 
 These are all of the grammar's constructors.
+
+### 5.2 A language as a definition
+
+Arithmetic with let: Expr(Γ) ∶∶= var(𝑖) ∣ num(𝑛) ∣ plus(𝑒₁,𝑒₂) ∣ let(𝑒₁,𝑒₂), with let's body in Γ+1 (5.1). The evaluator is the unique structural recursion: ⟦var 𝑖⟧𝜌 = 𝜌(𝑖), ⟦num 𝑛⟧𝜌 = 𝑛, ⟦plus(𝑢,𝑣)⟧𝜌 = ⟦𝑢⟧𝜌 + ⟦𝑣⟧𝜌, ⟦let(𝑢,𝑣)⟧𝜌 = ⟦𝑣⟧(𝜌, ⟦𝑢⟧𝜌) (5.2). Meaning is computed from syntax and environment under the chosen definition; it is not intrinsic to the printed expression.
+
+𝐷 removes let: 𝐷(let(𝑢,𝑣)) ∶= subst₀(𝐷𝑢, 𝐷𝑣) (5.3), where subst₀ is capture-avoiding substitution for the newest variable with shifting. The theorem is ∏_{Γ,𝑒,𝜌} ⟦𝐷𝑒⟧𝜌 = ⟦𝑒⟧𝜌 (5.4). The let case is §5.1's substitution theorem and the rest is immediate. This is a whole language transformation by ordinary recursion and induction, not a compiler subsystem installed into mathematics.
+
+𝐷 is not an equivalence of syntax, because it forgets how the source was written; it preserves semantics. If source positions, sharing or cost are observed, (5.4) has to be strengthened or replaced, and the mathematics identifies exactly what is preserved.
+
+Generally:
+
+- a parser maps text to syntax and may reject;
+- an elaborator maps surface syntax plus context to typed code, resolving implicit arguments;
+- an interpreter maps code to semantics;
+- a compiler maps representation to representation with an explicit behavioral relation.
+
+Each is a definable, evaluable, transformable, provable function or relation, and nothing forces a fixed composition order. Here Γ = Fin(𝑛) and Γ+ = 1+Γ. Substitution (5.3) is §5.1's general substitution sending the newest variable to 𝑢 and the rest to themselves, and its semantic law is exactly the let case of (5.4), with the body receiving (𝜌, ⟦𝑢⟧𝜌). That is the inductive proof itself, not a second definition.
+
+**Reusing a theorem** means applying a dependent function: ℎ ∶ ∏_𝑎 𝑃(𝑎) → 𝑄(𝑎) is used as ℎ(𝑎,𝑝). The hypotheses stay in the type, and a representation change transports the whole construction; there is no shortcut that drops hypotheses.
+
+### 5.3 The source program and its entire semantic family
+
+With effects and nondeterminism, Step ∶ Cfg → Event → Cfg → 𝒰 is inductively generated (5.5). Finite traces are its labeled reflexive–transitive closure, and continuing behavior is coinductive or guarded. Behavior(𝑝,𝑜) ∶= ‖∑_{𝜏∶Execution 𝑝} observe(𝜏) = 𝑜‖ (5.6). The truncation states existence only; keep it untruncated when witnesses or differences between executions matter. A probabilistic language keeps its probability structure, not just a possibility predicate. Syntax, interpretation, execution and proofs about execution are distinct related constructions in one language. They can be inputs to programs, including programs that change the interpretation of later expressions (§6.3). A fixed interpreter is one program, not a privileged boundary of meaning.
+
+### 5.4 A dependent presentation of an existing language
+
+Lang ∶= ∑_{Src∶𝒰}∑_{Ctx∶𝒰}∑_{Ty∶Ctx→𝒰}∑_{Tm∶∏_Γ Ty Γ→𝒰}∑_{Cfg∶Src→𝒰}∑_{Σ∶Signature} Sem(Src,Ctx,Ty,Tm,Cfg,Σ) (5.7), with universe levels suppressed. This is a presentation schema, not a new type former.
+
+- Src keeps original source, including the distinctions needed for preprocessing, binding, locations and faithful projection.
+- Tm(Γ,𝐴) holds checked expressions.
+- Sem holds elaboration, configuration initialization, a labeled transition relation or guarded function, the command/response types, and the observation map.
+- Standard nondeterminism is a relation of admissible transitions, and an implementation-defined choice is a parameter or an allowed set, never silently resolved by a deterministic interpreter.
+
+Forming ⟦𝑝⟧_𝐿 and 𝑃(⟦𝑝⟧_𝐿) is ordinary host computation: build and apply the represented interpreter, with no new proof judgment. Fidelity to a published standard is a separate explicit adequacy relation, between the standard's derivations and the represented judgments, proved by translations both ways with side conditions and round trips. Expressing a language's definition is different from claiming fidelity for an unspecified or partial one. Faithful lifting of a source 𝑏 ∶ Src_𝐿 yields the checked 𝑝, elaboration evidence, and a projection recovering 𝑏 when no rewrite was asked for. Host annotations are indexed by 𝑝, so erasing a proof-only annotation is a Σ projection, while compiling a rewritten program needs that rewrite's semantic relation. Source and meaning stay separate and connected.
+
+### 5.5 Source-language semantics as an inductive construction
+
+For an edition and environment parameter 𝜃: Program_𝜃, Well_𝜃(𝑝), Config_𝜃(𝑝), and Step_{𝜃,𝑝} ∶ Config → Label → Config → 𝒰 (5.8). Finite executions are the labeled reflexive–transitive closure; continuing ones use §7.6's clocked guarded processes, with ▷ and clock quantification (44). Behavior is the dependent family of executions and observations, truncated only when the property forgets witnesses. Unspecified evaluation order, scheduling and other nondeterminism use the relation, never an arbitrary successor. Syntax, typing, transitions and observation are data. An encoding is complete relative to a standard when the explicit adequacy equivalence below relates the derivations, and side conditions are part of the rule instances, not prose.
+
+**Typed command signature and guarded interpreter.** The interface is an inductive object parameterized by an explicit signature, not an unspecified `interpret`, and the language's rules are data. Nondeterministic languages get a branching family instead of `next`.
+
+```
+record Signature : Type (lsuc l) where
+  field Cmd   : Type l
+        Reply : Cmd → Type l
+record Machine (Σ : Signature) (C A F : Type l) : Type (lsuc l) where
+  field next : C → D_Σ(C,A,F)
+```
+
+- 𝐷_Σ(𝐶,𝐴,𝐹) = 𝐴 + 𝐹 + 𝐶 + ∑_{𝑐∶Cmd}(Reply 𝑐 → 𝐶) (5.9).
+- Proc_Σ(𝐴,𝐹) ≅ 𝐴 + 𝐹 + ▷Proc + ∑_𝑐(Reply 𝑐 → ▷Proc), and unfold(𝛿,𝑠) is done 𝑎 / fault 𝑓 / tau(next(𝛿,𝑠′)) / call(𝑐, 𝜆𝑟.next(𝛿, 𝑘 𝑟)) by the four cases of 𝛿(𝑠) (5.10).
+- `next` on the right is the guarded recursive occurrence, with ▷ in its type, not a second machine function. Guarded corecursion is required: an unguarded inductive tree cannot represent indefinitely interacting programs.
+
+```
+record Language : Type (lsuc l) where
+  field
+    Source : Type l
+    Well   : Source → Type l
+    Input  : (p : Source) → Type l
+    Result : (p : Source) → Type l
+    Fault  : (p : Source) → Type l
+    Config : (p : Source) → Type l
+    Commands : Signature
+    init : (p : Source) → Well p → Input p → Config p
+    step : (p : Source) → Config p → D_Commands (Config p) (Result p) (Fault p)
+
+meaning : (L : Language) (p : L.Source) (w : L.Well p)
+        → L.Input p → Proc L.Commands (L.Result p) (L.Fault p)
+meaning L p w x = unfold (L.step p) (L.init p w x)
+```
+
+An existing language's syntax, typing, initialization and step clauses are values of this one record, and `meaning` is the one host function, by guarded unfolding. A complete formal semantics supplies the fields; the record neither supplies nor validates a missing clause. Languages with choice replace `step` by a relation or branching structure and Proc by its branching analogue. This is essential for C++ unspecified evaluation order, weak memory, environment responses and UB.
+
+**Dependent properties.** With 𝑀 = meaning 𝐿 𝑝 𝑤:
+
+- Property(𝐿,𝑝,𝑤) ∶= ∏_{𝑥∶Input 𝑝}(Proc_Commands(Result 𝑝, Fault 𝑝) → 𝒰)
+- Proof(𝐿,𝑝,𝑤,𝑃) ∶= ∏_𝑥 𝑃(𝑥)(𝑀 𝑥)
+- Annotated ∶= ∑_𝑃 Proof (5.11)
+
+There is no new source proof judgment; an annotation is a cubical term whose type mentions the program's interpretation. An unchanged file has unchanged semantics, and the proof is a separate dependent object. A transformation transfers properties only through the exact equality or observation-respecting map it supplies, never by assuming every rewrite is valid.
+
+**Exact memory-interaction instance.** Commands Read ∶ Addr → Cmd (reply Byte) and Write ∶ Addr → Byte → Cmd (reply Unit).
+
+```
+Stmt ::= Skip | ReadInto(Reg,Addr) | Write(Addr,Expr) | Seq(Stmt,Stmt) | If(Expr,Stmt,Stmt)
+Expr ::= Const(Byte) | Reg(Reg) | Xor(Expr,Expr)
+step(Skip, ρ, [])          = Done(ρ)
+step(Skip, ρ, s :: k)      = Tau(s, ρ, k)
+step(Seq(s,t), ρ, k)       = Tau(s, ρ, t :: k)
+step(If(e,s,t), ρ, k)      = Tau((if eval(e,ρ)≠0 then s else t),ρ,k)
+step(ReadInto(r,a), ρ, k)  = Call(Read(a), λb.(Skip,ρ[r↦b],k))
+step(Write(a,e), ρ, k)     = Call(Write(a,eval(e,ρ)), λ_.(Skip,ρ,k))
+eval(Const(b),ρ) = b;  eval(Reg(r),ρ) = ρ(r);  eval(Xor(a,b),ρ) = eval(a,ρ) xor eval(b,ρ)
+```
+
+Configurations are (stmt, registers, continuation stack). Memory belongs to the handler, which holds 𝜇, answers Read(a) with 𝜇[a], and handles Write(a,b) as 𝜇 ↦ 𝜇[a↦b] returning Unit. There is exactly one owner of mutable memory and the continuation carries none, so each write happens once and the trace is determined by the handler equations. For `Seq(ReadInto(r,a), Write(b,Xor(Reg(r),Const(0x5a))))` with Read(a) = 0x35, the unique finite execution is Read(a), then Write(b,0x6f), then Done. This shows the interpreter reducing an existing-language program to an explicit process; the syntax has not become a host primitive. A proof of the written value is an inhabitant of "the observed Write carries 0x6f under that read response".
+
+**Rule coverage and adequacy as checkable data.** Presenting the rules is distinct from proving that the host faithfully represents their derivations.
+
+- RuleSig ∶= ∑_{Inst}(concl ∶ Inst → Judg) × (prem ∶ Inst → List Judg); All(𝐷,[]) = 1, All(𝐷, 𝐽∷𝐽𝑠) = 𝐷𝐽 × All(𝐷,𝐽𝑠); StdDeriv(𝐽) ∶∶= infer(𝑟, 𝑑⃗) with concl 𝑟 = 𝐽 and 𝑑⃗ ∶ All(StdDeriv, prem 𝑟) (5.12).
+- Side conditions live in Inst: an instance exists only with evidence of its conditions, so omitting one visibly changes the signature.
+- Adequate(𝐻) ∶= ∏_𝐽 ∑_{𝑓_𝐽∶𝐷_𝐽→𝐻_𝐽} ∑_{𝑔_𝐽∶𝐻_𝐽→𝐷_𝐽} ((∏_𝑑 𝑔(𝑓 𝑑) = 𝑑) × (∏_ℎ 𝑓(𝑔 ℎ) = ℎ)) (5.13). 𝑓 goes by induction on source derivations, each instance with its translated premises becoming a host constructor. 𝑔 goes by induction on host derivations and must account for every constructor proving an encoded judgment. The round trips are by induction.
+- If derivations differ only by administrative structure, state the equivalence after the chosen truncation or quotient, never as judgmental equality of raw trees.
+- 𝑓 is representation completeness (every signature derivation has a host counterpart); 𝑔 is representation soundness (the host invents nothing). The round trips upgrade these to equivalence of presentations, which matters when proof structure, elaboration choices or diagnostics are transported as data. For derivability alone, prove both implications after truncation. Neither form licenses dropping side conditions.
+
+*External standard boundary.* A prose standard has no pre-existing derivation system, so RuleSig formalizes it, and (5.13) checks signature against host encoding, not signature against every normative sentence. Coverage is recorded by covers_𝐸 ∶ Clause_𝐸 → List(Inst) → 𝒰 (5.13a), for edition 𝐸: which clauses have instances, their implementation parameters, and the justification of each transcription. It is a traceable audit object, not a theorem of prose fidelity; completeness relative to an edition also accounts for every relevant requirement and their interactions. Where an independent formal semantics exists, a derivation correspondence to it can be proved. Abstract-semantics-to-target-execution is §8.2.
+
+### 5.6 A closed source-language transformation: syntax, execution, proof, projection
+
+Fully defined here, and the same dependency pattern as lifting a large language: grammar, meaning, specification, checked proof, unchanged projection.
+
+- Byte = Fin(256), with ⊕ as XOR and arithmetic mod 256. Expr ∶∶= Input ∣ Const(𝑏) ∣ Xor(𝑒₁,𝑒₂), with ⟦Input⟧𝑥 = 𝑥, ⟦Const 𝑏⟧𝑥 = 𝑏, ⟦Xor(𝑎,𝑏)⟧𝑥 = ⟦𝑎⟧𝑥 ⊕ ⟦𝑏⟧𝑥. The interpreter is a structurally recursive cubical term whose computation rules are exactly these (setting: Agda-style dependent programming, 29). Source constructors are data and the interpreter gives them meaning.
+- 𝑝 ∶= Xor(Xor(Input, Const 0x5a), Const 0x5a); 𝑃(𝑒) ∶= ∏_𝑥 ⟦𝑒⟧𝑥 ≡ 𝑥. xorCancel ∶ ∏_{𝑥,𝑘} (𝑥⊕𝑘)⊕𝑘 ≡ 𝑥 and 𝜋(𝑥) ∶= xorCancel(𝑥, 0x5a). For independence from any byte library, XOR is bitwise over 8 Booleans with the truth table, and cancellation is an 8-fold product of the 4 Boolean cases. No unproved machine-instruction property is used.
+- annotate(𝑝,𝜋) ∶ ∑_{𝑒∶Expr} 𝑃(𝑒); erase(𝑒,𝜌) ∶= 𝑒 and erase(annotate(𝑝,𝜋)) ≡ 𝑝. Neither the AST nor the interpretation changes; there is just one more checked object about the AST. No comment syntax or runtime change is involved.
+- cancel ∶ Expr → Expr: cancel(Xor(Xor(𝑒, Const 𝑘), Const 𝑘)) ∶= cancel 𝑒, taking precedence; otherwise Xor(𝑎,𝑏) ↦ Xor(cancel 𝑎, cancel 𝑏), and other constructors unchanged. cancelSound ∶ ∏_𝑒∏_𝑥 ⟦cancel 𝑒⟧𝑥 ≡ ⟦𝑒⟧𝑥 by structural recursion: the first branch is IH then xorCancel, the XOR branch is ⊕-congruence, the rest is refl. On 𝑝 the first branch gives exactly Input.
+- preserve(𝑒,𝜌) ∶= (cancel 𝑒, 𝜆𝑥. cancelSound(𝑒,𝑥) ⋅ 𝜌(𝑥)) ∶ ∏_𝑒 𝑃(𝑒) → ∑_{𝑒′} 𝑃(𝑒′), with ⋅ as path concatenation. The direction matters: the new meaning is identified with the old, then the old proof follows. A general 𝑄 is transported along the equality of denotations, not rewritten by hand.
+
+Calculation: ⟦𝑝⟧𝑥 = (𝑥⊕0x5a)⊕0x5a; 𝜋(𝑥) ∶ ⟦𝑝⟧𝑥 ≡ 𝑥; cancel 𝑝 = Input; cancelSound(𝑝,𝑥) ∶ ⟦Input⟧𝑥 ≡ ⟦𝑝⟧𝑥; preserve(𝑝,𝜋) ∶ ∑_𝑒∏_𝑥 ⟦𝑒⟧𝑥 ≡ 𝑥. This is a closed instance of lifting, attachment, transformation and projection. A larger language adds constructors and clauses; these operations gain no new logical foundations.
