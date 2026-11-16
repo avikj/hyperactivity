@@ -18,7 +18,8 @@
 -- type's endpoint at 0 or 1); the fundamental lemma over substitutions sending dimensions to
 -- interval expressions (fund); normalize with normalize-sound (eq. (6.5), by refl); substitution on
 -- checked syntax, ⟦t[σ]⟧ρ = ⟦t⟧⟦σ⟧ρ (subst-tm, subst-sound, by refl); the typed specializer and
--- its law (spec, spec-sound) and the first Futamura projection (compiled, compiled-sound, eq. (6.6)).
+-- its law (spec, spec-sound), the first Futamura projection (compiled, compiled-sound, eq. (6.6)) and
+-- the second (compiler-code, compiler-code-sound, eq. (6.7)).
 --
 -- Composition, Glue and universes are not in this object language. Loaded with core.cub and
 -- linproof.cub.
@@ -9392,3 +9393,24 @@ compiled-sound : (p d o : TyShape) (R : Mean (lnil , one) (AppV p (s-pi d o))) (
   PathP (λ i → El o (snd (fst (app-r p (s-pi d o) (R ρ))) x)) (snd (teval (lnil , one) (s-pi d o) (compiled p d o R ce cq de dq) ρ) x)
     (fst (snd (R ρ)) (snd (snd (R ρ))) x)
 compiled-sound p d o R ce cq de dq ρ x = λ i → fst (snd (R ρ)) (snd (snd (R ρ))) x
+-- ---------------------------------------------------------------- the second Futamura projection
+-- (eq. (6.7)) G : A → B, with A the typed codes of an interpreter at a semantic type T of P → D → O
+-- and B = Code(∅, P) → Code(∅, D → O), is G e q = S(e, q) (compile). At a stage that represents G
+-- (its codes CA, CB, CAB at A, B and A → B with their evaluations, its specializer S with the one
+-- law, lift with eval(lift e) = e, and the supplied code qG with eval(qG) = G), the compiler's code
+-- is compilerCode e = S(qG, lift e), and eval(compilerCode e) = G e follows from the three laws
+-- (compiler-code-sound; applied to q, eq. (6.7))
+CodeAt : (s : TyShape) → Mean (lnil , one) (Sem s) → Type 1
+CodeAt s T = (c : Code) × (x : (ρ : One1) → El s (T ρ)) × Der (j-tm , (lnil , one) , s , c , λ ρ → (T ρ , x ρ))
+compile : (p d o : TyShape) (T : Mean (lnil , one) (Fam p (s-pi d o))) →
+  CodeAt (s-pi p (s-pi d o)) T → CodeAt p (λ ρ → fst (T ρ)) → TCode (lnil , one) (s-pi d o)
+compile p d o T e q = compiled p d o (λ ρ → (T ρ , fst (snd e) ρ , fst (snd q) ρ)) (fst e) (fst q) (snd (snd e)) (snd (snd q))
+compiler-code : (A B CA CB CAB : Type 1) → (CAB → CA → CB) → (A → CA) → CAB → A → CB
+compiler-code A B CA CB CAB S lift qG e = S qG (lift e)
+compiler-code-sound : (A B CA CB CAB : Type 1) (evA : CA → A) (evB : CB → B) (evAB : CAB → A → B)
+  (S : CAB → CA → CB) (S-law : (q : CAB) (r : CA) → PathP (λ i → B) (evB (S q r)) (evAB q (evA r)))
+  (lift : A → CA) (lift-law : (e : A) → PathP (λ i → A) (evA (lift e)) e)
+  (G : A → B) (qG : CAB) (qG-law : PathP (λ i → A → B) (evAB qG) G) (e : A) →
+  PathP (λ i → B) (evB (compiler-code A B CA CB CAB S lift qG e)) (G e)
+compiler-code-sound A B CA CB CAB evA evB evAB S S-law lift lift-law G qG qG-law e =
+  pcat B (evB (S qG (lift e))) (evAB qG (evA (lift e))) (G e) (S-law qG (lift e)) (λ i → qG-law i (lift-law e i))
