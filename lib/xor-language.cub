@@ -1,0 +1,138 @@
+-- lib/xor-language.cub — the closed source-language transformation of the paper (docs/hyperactivity.cub,
+-- §5.6 “A closed source-language transformation: syntax, execution, proof, projection”) as code: bytes
+-- as eight bits with exclusive-or, the expression language over one input byte and its interpreter,
+-- the program p₀ = (Input ⊕ 0x5a) ⊕ 0x5a with its proof, the annotation and its erasure, the
+-- transformation cancel with its soundness, and the transport of a proof to the transformed program.
+import "core.cub"
+import "observation.cub"
+-- n bits, and a byte
+BitVec : Nat → Type
+BitVec zero = Unit
+BitVec (suc n) = Bool × BitVec n
+Byte : Type
+Byte = BitVec 8
+-- exclusive-or of bits, bit by bit, and its cancellation law from the four Boolean cases
+xorB : (n : Nat) → BitVec n → BitVec n → BitVec n
+xorB zero a b = a
+xorB (suc n) a b = (bxor (fst a) (fst b) , xorB n (snd a) (snd b))
+bxor-cancel : (x k : Bool) → bxor (bxor x k) k ≡ x
+bxor-cancel true true = λ i → true
+bxor-cancel true false = λ i → true
+bxor-cancel false true = λ i → false
+bxor-cancel false false = λ i → false
+xor-cancel : (n : Nat) → (x k : BitVec n) → xorB n (xorB n x k) k ≡ x
+xor-cancel zero x k = λ i → x
+xor-cancel (suc n) x k = λ i → (bxor-cancel (fst x) (fst k) i , xor-cancel n (snd x) (snd k) i)
+-- equality of bits, decided, and sound
+beq : Bool → Bool → Bool
+beq x y = if x then y else not y
+beq-sound : (x y : Bool) → isTrue (beq x y) → x ≡ y
+beq-sound true true e = λ i → true
+beq-sound true false e = Empty-rec e
+beq-sound false true e = Empty-rec e
+beq-sound false false e = λ i → false
+unit-eq : (a b : Unit) → a ≡ b
+unit-eq unit unit = λ i → unit
+eqBits : (n : Nat) → BitVec n → BitVec n → Bool
+eqBits zero a b = true
+eqBits (suc n) a b = andB (beq (fst a) (fst b)) (eqBits n (snd a) (snd b))
+eqBits-sound : (n : Nat) → (a b : BitVec n) → isTrue (eqBits n a b) → a ≡ b
+eqBits-sound zero a b e = unit-eq a b
+eqBits-sound (suc n) a b e = λ i → (beq-sound (fst a) (fst b) (and-fst {beq (fst a) (fst b)} {eqBits n (snd a) (snd b)} e) i , eqBits-sound n (snd a) (snd b) (and-snd {beq (fst a) (fst b)} {eqBits n (snd a) (snd b)} e) i)
+-- the source language over one input byte and its meaning
+data Expr = Input | Const (b : Byte) | Xor (u : Expr) (v : Expr)
+denote : Expr → Byte → Byte
+denote Input x = x
+denote (Const b) x = b
+denote (Xor u v) x = xorB 8 (denote u x) (denote v x)
+-- p₀ = Xor (Xor Input (Const 0x5a)) (Const 0x5a) and its property, every input returned
+x5a : Byte
+x5a = (false , true , false , true , true , false , true , false , unit)
+p0 : Expr
+p0 = Xor (Xor Input (Const x5a)) (Const x5a)
+Returns-input : Expr → Type
+Returns-input e = (x : Byte) → denote e x ≡ x
+p0-returns-input : Returns-input p0
+p0-returns-input x = xor-cancel 8 x x5a
+-- the annotation is a dependent pair; erasing it is the first projection, the source unchanged
+Annotated : Type
+Annotated = (e : Expr) × Returns-input e
+annotate-p0 : Annotated
+annotate-p0 = (p0 , p0-returns-input)
+erase : Annotated → Expr
+erase a = fst a
+-- cancel: Xor (Xor e (Const k)) (Const k) becomes cancel e, ahead of the general clause
+-- Xor a b ↦ Xor (cancel a) (cancel b). One pass computes, for each expression, its cancelled form
+-- and the cancelled form of its left operand (for Xor u v, cancel u), so every recursive call is on a field.
+inner : Expr → Expr
+inner Input = Input
+inner (Const b) = Const b
+inner (Xor u v) = u
+combine-eq : Bool → Expr → Expr → Expr → Expr
+combine-eq true cu iu cv = iu
+combine-eq false cu iu cv = Xor cu cv
+combine-k : Byte → Expr → Expr → Expr → Expr → Expr
+combine-k k cu iu Input cv = Xor cu cv
+combine-k k cu iu (Const k') cv = combine-eq (eqBits 8 k k') cu iu cv
+combine-k k cu iu (Xor a b) cv = Xor cu cv
+combine-w : Expr → Expr → Expr → Expr → Expr → Expr
+combine-w Input cu iu v cv = Xor cu cv
+combine-w (Const k) cu iu v cv = combine-k k cu iu v cv
+combine-w (Xor a b) cu iu v cv = Xor cu cv
+combine : Expr → Expr → Expr → Expr → Expr → Expr
+combine Input cu iu v cv = Xor cu cv
+combine (Const b) cu iu v cv = Xor cu cv
+combine (Xor e w) cu iu v cv = combine-w w cu iu v cv
+cancel2 : Expr → Expr × Expr
+cancel2 Input = (Input , Input)
+cancel2 (Const b) = (Const b , Const b)
+cancel2 (Xor u v) = (combine u (fst (cancel2 u)) (snd (cancel2 u)) v (fst (cancel2 v)) , fst (cancel2 u))
+cancel : Expr → Expr
+cancel t = fst (cancel2 t)
+-- soundness: the cancelled form means what the expression means, and the second component what its
+-- left operand means
+xor-cong : (a a' b b' : Byte) → a ≡ a' → b ≡ b' → xorB 8 a b ≡ xorB 8 a' b'
+xor-cong a a' b b' p q = λ i → xorB 8 (p i) (q i)
+combine-eq-sound : (c : Bool) → (e : Expr) → (k k' : Byte) → (isTrue c → k ≡ k') → (cu iu cv : Expr) → (x : Byte) →
+  denote cu x ≡ denote (Xor e (Const k)) x → denote iu x ≡ denote e x → denote cv x ≡ k' →
+  denote (combine-eq c cu iu cv) x ≡ xorB 8 (xorB 8 (denote e x) k) k'
+combine-eq-sound true e k k' d cu iu cv x hu hi hv =
+  concat hi (concat (sym (xor-cancel 8 (denote e x) k)) (λ i → xorB 8 (xorB 8 (denote e x) k) (d unit i)))
+combine-eq-sound false e k k' d cu iu cv x hu hi hv = xor-cong (denote cu x) (xorB 8 (denote e x) k) (denote cv x) k' hu hv
+combine-k-sound : (e : Expr) → (k : Byte) → (cu iu v cv : Expr) → (x : Byte) →
+  denote cu x ≡ denote (Xor e (Const k)) x → denote iu x ≡ denote e x → denote cv x ≡ denote v x →
+  denote (combine-k k cu iu v cv) x ≡ xorB 8 (xorB 8 (denote e x) k) (denote v x)
+combine-k-sound e k cu iu Input cv x hu hi hv = xor-cong (denote cu x) (xorB 8 (denote e x) k) (denote cv x) x hu hv
+combine-k-sound e k cu iu (Const k') cv x hu hi hv =
+  combine-eq-sound (eqBits 8 k k') e k k' (eqBits-sound 8 k k') cu iu cv x hu hi hv
+combine-k-sound e k cu iu (Xor a b) cv x hu hi hv =
+  xor-cong (denote cu x) (xorB 8 (denote e x) k) (denote cv x) (denote (Xor a b) x) hu hv
+combine-w-sound : (e w : Expr) → (cu iu v cv : Expr) → (x : Byte) →
+  denote cu x ≡ denote (Xor e w) x → denote iu x ≡ denote e x → denote cv x ≡ denote v x →
+  denote (combine-w w cu iu v cv) x ≡ xorB 8 (denote (Xor e w) x) (denote v x)
+combine-w-sound e Input cu iu v cv x hu hi hv = xor-cong (denote cu x) (denote (Xor e Input) x) (denote cv x) (denote v x) hu hv
+combine-w-sound e (Const k) cu iu v cv x hu hi hv = combine-k-sound e k cu iu v cv x hu hi hv
+combine-w-sound e (Xor a b) cu iu v cv x hu hi hv =
+  xor-cong (denote cu x) (denote (Xor e (Xor a b)) x) (denote cv x) (denote v x) hu hv
+combine-sound : (u cu iu v cv : Expr) → (x : Byte) →
+  denote cu x ≡ denote u x → denote iu x ≡ denote (inner u) x → denote cv x ≡ denote v x →
+  denote (combine u cu iu v cv) x ≡ xorB 8 (denote u x) (denote v x)
+combine-sound Input cu iu v cv x hu hi hv = xor-cong (denote cu x) x (denote cv x) (denote v x) hu hv
+combine-sound (Const b) cu iu v cv x hu hi hv = xor-cong (denote cu x) b (denote cv x) (denote v x) hu hv
+combine-sound (Xor e w) cu iu v cv x hu hi hv = combine-w-sound e w cu iu v cv x hu hi hv
+cancel2-sound : (t : Expr) → (x : Byte) →
+  (denote (fst (cancel2 t)) x ≡ denote t x) × (denote (snd (cancel2 t)) x ≡ denote (inner t) x)
+cancel2-sound Input x = (λ i → x , λ i → x)
+cancel2-sound (Const b) x = (λ i → b , λ i → b)
+cancel2-sound (Xor u v) x =
+  (combine-sound u (fst (cancel2 u)) (snd (cancel2 u)) v (fst (cancel2 v)) x
+     (fst (cancel2-sound u x)) (snd (cancel2-sound u x)) (fst (cancel2-sound v x))
+  , fst (cancel2-sound u x))
+cancel-sound : (e : Expr) → (x : Byte) → denote (cancel e) x ≡ denote e x
+cancel-sound e x = fst (cancel2-sound e x)
+-- the transformed program carries the property, the transformed meaning composed before the proof
+preserve : (e : Expr) → Returns-input e → Annotated
+preserve e r = (cancel e , λ x → concat (cancel-sound e x) (r x))
+-- the calculation: cancel p₀ is Input
+cancel-p0 : cancel p0 ≡ Input
+cancel-p0 = λ i → Input
