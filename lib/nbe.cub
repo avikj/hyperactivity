@@ -9839,6 +9839,38 @@ chk-con Γ d k T ct pd none none = c-refused
 chk-con-at : (Γ : CCtx) (d k : Word) (s : TyShape) (T : Mean Γ (Sem s)) (ct : CompTy s Γ T) → d ≡ #0 → Dec1 (Out Γ (ccon d k lnil lnil) (m-chk s T ct))
 chk-con-at Γ d k s-bool T ct pd = chk-con Γ d k T ct pd (w-dec k #0) (w-dec k #1)
 chk-con-at Γ d k s T ct pd = c-refused
+-- application, inferred: the function inferred, the argument checked against its domain, the rule's
+-- data paired by retype (the argument's values carried to the domain), the premises carried to it
+app-R : (Γ : CCtx) (a b : TyShape) (F : Mean Γ (TV (s-pi a b))) (A : Mean Γ (TV a)) →
+  PathM Γ (Sem a) (fmapM Γ (TV a) (Sem a) (λ q → fst q) A) (fmapM Γ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) F) → Mean Γ (AppV a b)
+app-R Γ a b F A pA = retype Γ a (TV (s-pi a b)) (AppV a b) (λ q → fam-dom a b (fst q)) (λ q v → (fst q , snd q , v)) F A pA
+app-2 : (Γ : CCtx) (a b : TyShape) (f c : Code) (F : Mean Γ (TV (s-pi a b))) → Der (j-tm , Γ , s-pi a b , f , F) →
+  (A : Mean Γ (TV a)) (pA : PathM Γ (Sem a) (fmapM Γ (TV a) (Sem a) (λ q → fst q) A) (fmapM Γ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) F)) →
+  Der (j-tm , Γ , a , c , A) → Dec1 (Out Γ (capp f c) m-inf)
+app-2 Γ a b f c F df A pA dA =
+  c-derived (b , fmapM Γ (AppV a b) (TV b) (app-r a b) (app-R Γ a b F A pA) ,
+    dapp Γ a b (app-R Γ a b F A pA) f c
+      (der-tr j-tm Γ (s-pi a b) f F (fmapM Γ (AppV a b) (TV (s-pi a b)) (app-f a b) (app-R Γ a b F A pA))
+        (psym (Mean Γ (TV (s-pi a b))) (fmapM Γ (AppV a b) (TV (s-pi a b)) (app-f a b) (app-R Γ a b F A pA)) F
+          (pcat (Mean Γ (TV (s-pi a b))) (fmapM Γ (AppV a b) (TV (s-pi a b)) (app-f a b) (app-R Γ a b F A pA)) (fmapM Γ (TV (s-pi a b)) (TV (s-pi a b)) (λ q → q) F) F
+            (retype-fst Γ a (TV (s-pi a b)) (AppV a b) (λ q → fam-dom a b (fst q)) (λ q v → (fst q , snd q , v)) F A pA (TV (s-pi a b)) (app-f a b) (λ q → q) (λ i u v → u))
+            (fmap-id (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV (s-pi a b))) (snd Γ) F)))
+        df)
+      (der-tr j-tm Γ a c A (fmapM Γ (AppV a b) (TV a) (app-a a b) (app-R Γ a b F A pA))
+        (psym (Mean Γ (TV a)) (fmapM Γ (AppV a b) (TV a) (app-a a b) (app-R Γ a b F A pA)) A
+          (retype-val Γ a (TV (s-pi a b)) (AppV a b) (λ q → fam-dom a b (fst q)) (λ q v → (fst q , snd q , v)) F A pA (app-a a b) (λ i u v → (fam-dom a b (fst u) , v))))
+        dA))
+app-1 : Rec → (Γ : CCtx) → Vals Γ → (f c : Code) (s : TyShape) (F : Mean Γ (TV s)) → Der (j-tm , Γ , s , f , F) → Dec1 (Out Γ (capp f c) m-inf)
+app-1 rec Γ vs f c (s-pi a b) F df =
+  d-bind (Out Γ c (m-chk a (fmapM Γ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) F)
+            (ty-tr a Γ (fmapM Γ (Fam a b) (Sem a) (λ G → fst G) (fmapM Γ (TV (s-pi a b)) (Fam a b) (λ q → fst q) F)) (fmapM Γ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) F)
+              (fmapM-fmapM Γ (TV (s-pi a b)) (Fam a b) (Sem a) (λ q → fst q) (λ G → fst G) F) (fst (fst (comp-tm Γ vs (s-pi a b) f F df))))))
+    (Out Γ (capp f c) m-inf)
+    (rec Γ vs c (m-chk a (fmapM Γ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) F)
+            (ty-tr a Γ (fmapM Γ (Fam a b) (Sem a) (λ G → fst G) (fmapM Γ (TV (s-pi a b)) (Fam a b) (λ q → fst q) F)) (fmapM Γ (TV (s-pi a b)) (Sem a) (λ q → fam-dom a b (fst q)) F)
+              (fmapM-fmapM Γ (TV (s-pi a b)) (Fam a b) (Sem a) (λ q → fst q) (λ G → fst G) F) (fst (fst (comp-tm Γ vs (s-pi a b) f F df))))))
+    (λ rA → app-2 Γ a b f c F df (fst rA) (fst (snd rA)) (snd (snd rA)))
+app-1 rec Γ vs f c s F df = c-refused
 elab-step : Cv → Rec → Rec
 elab-step cv rec Γ vs (cdata d lnil) m-ty =
   o-bind (d ≡ #0) (Out Γ (cdata d lnil) m-ty) (w-dec d #0)
@@ -9853,6 +9885,7 @@ elab-step cv rec Γ vs (cvar k) m-inf =
   o-bind ((v : VarP (fst Γ)) × var-word (fst Γ) v ≡ k) (Out Γ (cvar k) m-inf) (var-find (fst Γ) (var-word (fst Γ)) k)
     (λ r → c-derived (var-shape (fst Γ) (fst r) , varCube Γ (fst r) ,
        der-code j-tm Γ (var-shape (fst Γ) (fst r)) (cvar (var-word (fst Γ) (fst r))) (cvar k) (varCube Γ (fst r)) (λ i → cvar (snd r i)) (dvar Γ (fst r))))
+elab-step cv rec Γ vs (capp f c) m-inf = d-bind (Out Γ f m-inf) (Out Γ (capp f c) m-inf) (rec Γ vs f m-inf) (λ r → app-1 rec Γ vs f c (fst r) (fst (snd r)) (snd (snd r)))
 elab-step cv rec Γ vs (cfst p) m-inf = d-bind (Out Γ p m-inf) (Out Γ (cfst p) m-inf) (rec Γ vs p m-inf) (λ r → inf-fst Γ p (fst r) (fst (snd r)) (snd (snd r)))
 elab-step cv rec Γ vs (csnd p) m-inf = d-bind (Out Γ p m-inf) (Out Γ (csnd p) m-inf) (rec Γ vs p m-inf) (λ r → inf-snd Γ p (fst r) (fst (snd r)) (snd (snd r)))
 elab-step cv rec Γ vs (ccon d k lnil lnil) (m-chk s T ct) =
