@@ -1,0 +1,53 @@
+-- lib/behaviour.cub — the paper's definitions of behaviour and of the relations between behaviours
+-- (docs/hyperactivity.cub, §2, §5.3, §8–§9) as code: propositional truncation, with cardinality (2.3)
+-- and behaviour (5.6) as truncations; a labelled step relation (5.5) and its finite executions; an
+-- annotation (8.3); safety of every execution (8.2); conformance of target to source behaviour and
+-- source correctness (8.4), (9.1), with correctness carried to the artifact (9.17), the composition
+-- of refinements (9.C1) and the artifact's property (9.C2).
+import "core.cub"
+import "structure.cub"
+-- the propositional truncation ‖A‖: A's inhabitants with any two identified
+data Trunc (A : Type) = trunc-in (a : A) | trunc-squash (x : Trunc A) (y : Trunc A) (i : I) [ i = 0 ↦ x , i = 1 ↦ y ]
+trunc-isProp : {A : Type} → isProp (Trunc A)
+trunc-isProp x y = λ i → trunc-squash x y i
+trunc-rec : {A P : Type} → isProp P → (A → P) → Trunc A → P
+trunc-rec {A} {P} hp f t = case t return (λ w → P) of
+  trunc-in a → f a
+  trunc-squash x y i → hp (rec x) (rec y) i
+-- (2.3) HasCard(A, n) = ‖A ≃ Fin(n)‖
+HasCard : Type → Nat → Type
+HasCard A n = Trunc (Equiv A (SumFin n))
+-- (5.5) a labelled transition relation; a finite execution is a list of labelled steps, each from
+-- the configuration the previous one reached
+StepRel : Type → Type → Type 1
+StepRel Cfg Ev = Cfg → Ev → Cfg → Type
+exec-valid : {Cfg Ev : Type} → StepRel Cfg Ev → Cfg → List (Ev × Cfg) → Type
+exec-valid step c nil = Unit
+exec-valid step c (cons ec r) = step c (fst ec) (snd ec) × exec-valid step (snd ec) r
+ExecLabels : {Cfg Ev : Type} → List (Ev × Cfg) → List Ev
+ExecLabels nil = nil
+ExecLabels (cons ec r) = cons (fst ec) (ExecLabels r)
+-- (5.6) Behavior(p, o) = ‖Σ_{τ : Execution(p)} observe(τ) = o‖, here from p's initial configuration
+Behavior : {Cfg Ev O : Type} → StepRel Cfg Ev → Cfg → (List Ev → O) → O → Type
+Behavior {Cfg} {Ev} {O} step c0 observe o = Trunc ((tau : List (Ev × Cfg)) × exec-valid step c0 tau × (observe (ExecLabels tau) ≡ o))
+-- (8.2) Safe(p) = Π_{s, s', t} Exec(p, s, s', t) → Invariant(s, s', t)
+SafeExec : {S T : Type} → (S → S → T → Type) → (S → S → T → Type) → Type
+SafeExec {S} {T} exec inv = (s s2 : S) → (t : T) → exec s s2 t → inv s s2 t
+-- (8.3) Annotation(d) = Σ_{P : Sem(d) → U} P(⟦d⟧)
+Annotation : {Sem : Type} → Sem → Type 1
+Annotation {Sem} m = (P : Sem → Type) × P m
+-- (8.4) target behaviour conforms to source behaviour; a source property is correct; (9.1) is
+-- conformance of the compiled program
+Conforms : {X T : Type} → (X → T → Type) → (X → T → Type) → Type
+Conforms {X} {T} source target = (x : X) → (t : T) → target x t → source x t
+CorrectFor : {X T : Type} → (X → T → Type) → (X → T → Type) → Type
+CorrectFor {X} {T} beh P = (x : X) → (t : T) → beh x t → P x t
+-- (9.17) the source proof composed after the compiler's refinement is the artifact's proof
+artifact-correct : {X T : Type} → (source target P : X → T → Type) → Conforms source target → CorrectFor source P → CorrectFor target P
+artifact-correct {X} {T} source target P c q x t h = q x t (c x t h)
+-- (9.C1) λ_p ∘ κ_c: a machine behaviour of K(c) to a C behaviour of c to an L behaviour of p
+conforms-compose : {X T : Type} → (bl bc bm : X → T → Type) → Conforms bl bc → Conforms bc bm → Conforms bl bm
+conforms-compose {X} {T} bl bc bm lp kc x t h = lp x t (kc x t h)
+-- (9.C2) artifactQ(o, h) = q(o, λ_p(κ_c(h)))
+artifact-q : {X T : Type} → (bl bc bm P : X → T → Type) → Conforms bl bc → Conforms bc bm → CorrectFor bl P → CorrectFor bm P
+artifact-q {X} {T} bl bc bm P lp kc q = artifact-correct bl bm P (conforms-compose bl bc bm lp kc) q
