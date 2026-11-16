@@ -9521,3 +9521,146 @@ mean1-path Γ B B' =
     (dcube-contr (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) One1) (λ γ ρ → one) (λ γ y k ρ → one-contr (y ρ) k) (snd Γ) B)
     (psym (Mean Γ One1) B' (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) One1) (λ γ ρ → one) (snd Γ))
       (dcube-contr (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) One1) (λ γ ρ → one) (λ γ y k ρ → one-contr (y ρ) k) (snd Γ) B'))
+-- a term's values carried along a path of types, pointwise: a cube of paths between two images of a
+-- cube d, read at each vertex with that vertex's value (dcube-pmap), so k sees the path starting at
+-- the vertex's own image judgmentally; with its fusion (pmap-fmap), its path-free case (pmap-ign),
+-- and zip-ign-l (a zip that reads only its second cube)
+dcube-pmap : (n : Nat) (X : Type 1) (F G F2 : X → Type 1) (g0 g1 : (x : X) → F x → G x)
+  (k : (x : X) (y : F x) → PathP (λ i → G x) (g0 x y) (g1 x y) → F2 x) (c : Cube n X) (d : DCube n X F c) →
+  PathP (λ i → DCube n X G c) (dcube-fmap n X F G g0 c d) (dcube-fmap n X F G g1 c d) → DCube n X F2 c
+dcube-pmap zero X F G F2 g0 g1 k c d P = k c d P
+dcube-pmap (suc n) X F G F2 g0 g1 k c d P =
+  dcube-pmap n (Line X) (LineO X F) (LineO X G) (LineO X F2) (lineo-fmap X F G g0) (lineo-fmap X F G g1)
+    (λ L D Q → (k (fst L) (fst D) (λ i → fst (Q i)) , k (fst (snd L)) (fst (snd D)) (λ i → fst (snd (Q i))) ,
+       λ j → k (snd (snd L) j) (snd (snd D) j) (λ i → snd (snd (Q i)) j))) c d P
+pmap-fmap : (n : Nat) (X : Type 1) (F G F2 F3 : X → Type 1) (g0 g1 : (x : X) → F x → G x)
+  (k : (x : X) (y : F x) → PathP (λ i → G x) (g0 x y) (g1 x y) → F2 x) (h : (x : X) → F2 x → F3 x) (c : Cube n X) (d : DCube n X F c)
+  (P : PathP (λ i → DCube n X G c) (dcube-fmap n X F G g0 c d) (dcube-fmap n X F G g1 c d)) →
+  PathP (λ i → DCube n X F3 c) (dcube-fmap n X F2 F3 h c (dcube-pmap n X F G F2 g0 g1 k c d P)) (dcube-pmap n X F G F3 g0 g1 (λ x y Q → h x (k x y Q)) c d P)
+pmap-fmap zero X F G F2 F3 g0 g1 k h c d P = λ i → h c (k c d P)
+pmap-fmap (suc n) X F G F2 F3 g0 g1 k h c d P =
+  pmap-fmap n (Line X) (LineO X F) (LineO X G) (LineO X F2) (LineO X F3) (lineo-fmap X F G g0) (lineo-fmap X F G g1)
+    (λ L D Q → (k (fst L) (fst D) (λ i → fst (Q i)) , k (fst (snd L)) (fst (snd D)) (λ i → fst (snd (Q i))) ,
+       λ j → k (snd (snd L) j) (snd (snd D) j) (λ i → snd (snd (Q i)) j))) (lineo-fmap X F2 F3 h) c d P
+pmap-ign : (n : Nat) (X : Type 1) (F G F2 : X → Type 1) (g0 g1 : (x : X) → F x → G x) (k0 : (x : X) → F x → F2 x) (c : Cube n X) (d : DCube n X F c)
+  (P : PathP (λ i → DCube n X G c) (dcube-fmap n X F G g0 c d) (dcube-fmap n X F G g1 c d)) →
+  PathP (λ i → DCube n X F2 c) (dcube-pmap n X F G F2 g0 g1 (λ x y Q → k0 x y) c d P) (dcube-fmap n X F F2 k0 c d)
+pmap-ign zero X F G F2 g0 g1 k0 c d P = λ i → k0 c d
+pmap-ign (suc n) X F G F2 g0 g1 k0 c d P =
+  pmap-ign n (Line X) (LineO X F) (LineO X G) (LineO X F2) (lineo-fmap X F G g0) (lineo-fmap X F G g1) (lineo-fmap X F F2 k0) c d P
+zip-ign-l : (n : Nat) (X : Type 1) (F G F2 : X → Type 1) (h : (x : X) → G x → F2 x) (c : Cube n X) (d : DCube n X F c) (e : DCube n X G c) →
+  PathP (λ i → DCube n X F2 c) (dcube-zip n X F G F2 (λ x y z → h x z) c d e) (dcube-fmap n X G F2 h c e)
+zip-ign-l zero X F G F2 h c d e = λ i → h c e
+zip-ign-l (suc n) X F G F2 h c d e = zip-ign-l n (Line X) (LineO X F) (LineO X G) (LineO X F2) (lineo-fmap X G F2 h) c d e
+-- a meaning U paired at each vertex with a term A's values carried along a path p from A's type to
+-- ty read off U (retype; w builds the pair), and what it projects to: Um's part (retype-fst) and the
+-- term itself (retype-val)
+rt-Z : (Γ : CCtx) (a : TyShape) (U1 : Type 1) → Mean Γ U1 → Mean Γ (TV a) → Mean Γ (U1 × TV a)
+rt-Z Γ a U1 Um A = dcube-zip (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (U1 × TV a)) (λ xq euq eaq ρq → (euq ρq , eaq ρq)) (snd Γ) Um A
+rt-P : (Γ : CCtx) (a : TyShape) (U1 : Type 1) (ty : U1 → Sem a) (Um : Mean Γ U1) (A : Mean Γ (TV a)) →
+  PathM Γ (Sem a) (fmapM Γ (TV a) (Sem a) (λ q → fst q) A) (fmapM Γ U1 (Sem a) ty Um) →
+  PathM Γ (Sem a) (fmapM Γ (U1 × TV a) (Sem a) (λ zq → fst (snd zq)) (rt-Z Γ a U1 Um A)) (fmapM Γ (U1 × TV a) (Sem a) (λ zq → ty (fst zq)) (rt-Z Γ a U1 Um A))
+rt-P Γ a U1 ty Um A p =
+  pcat (Mean Γ (Sem a)) (fmapM Γ (U1 × TV a) (Sem a) (λ zq → fst (snd zq)) (rt-Z Γ a U1 Um A)) (fmapM Γ (TV a) (Sem a) (λ q → fst q) A) (fmapM Γ (U1 × TV a) (Sem a) (λ zq → ty (fst zq)) (rt-Z Γ a U1 Um A))
+    (pcat (Mean Γ (Sem a)) (fmapM Γ (U1 × TV a) (Sem a) (λ zq → fst (snd zq)) (rt-Z Γ a U1 Um A))
+       (dcube-zip (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (Sem a)) (λ xq euq eaq ρq → fst (eaq ρq)) (snd Γ) Um A)
+       (fmapM Γ (TV a) (Sem a) (λ q → fst q) A)
+       (fmap-zip (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (λ xq euq eaq ρq → (euq ρq , eaq ρq)) (λ xq eq ρq → fst (snd (eq ρq))) (snd Γ) Um A)
+       (zip-ign-l (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (Sem a)) (λ xq eaq ρq → fst (eaq ρq)) (snd Γ) Um A))
+    (pcat (Mean Γ (Sem a)) (fmapM Γ (TV a) (Sem a) (λ q → fst q) A) (fmapM Γ U1 (Sem a) ty Um) (fmapM Γ (U1 × TV a) (Sem a) (λ zq → ty (fst zq)) (rt-Z Γ a U1 Um A)) p
+       (psym (Mean Γ (Sem a)) (fmapM Γ (U1 × TV a) (Sem a) (λ zq → ty (fst zq)) (rt-Z Γ a U1 Um A)) (fmapM Γ U1 (Sem a) ty Um)
+          (pcat (Mean Γ (Sem a)) (fmapM Γ (U1 × TV a) (Sem a) (λ zq → ty (fst zq)) (rt-Z Γ a U1 Um A))
+             (dcube-zip (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (Sem a)) (λ xq euq eaq ρq → ty (euq ρq)) (snd Γ) Um A)
+             (fmapM Γ U1 (Sem a) ty Um)
+             (fmap-zip (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (λ xq euq eaq ρq → (euq ρq , eaq ρq)) (λ xq eq ρq → ty (fst (eq ρq))) (snd Γ) Um A)
+             (zip-ign (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (Sem a)) (λ xq euq ρq → ty (euq ρq)) (snd Γ) Um A))))
+retype : (Γ : CCtx) (a : TyShape) (U1 W : Type 1) (ty : U1 → Sem a) (w : (u : U1) → El a (ty u) → W) (Um : Mean Γ U1) (A : Mean Γ (TV a)) →
+  PathM Γ (Sem a) (fmapM Γ (TV a) (Sem a) (λ q → fst q) A) (fmapM Γ U1 (Sem a) ty Um) → Mean Γ W
+retype Γ a U1 W ty w Um A p =
+  dcube-pmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) W) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+    (λ xq zq Qq ρq → w (fst (zq ρq)) (el-tr a (Sem a) (λ yq → yq) (fst (snd (zq ρq))) (ty (fst (zq ρq))) (λ jq → Qq jq ρq) (snd (snd (zq ρq))))) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p)
+retype-fst : (Γ : CCtx) (a : TyShape) (U1 W : Type 1) (ty : U1 → Sem a) (w : (u : U1) → El a (ty u) → W) (Um : Mean Γ U1) (A : Mean Γ (TV a))
+  (p : PathM Γ (Sem a) (fmapM Γ (TV a) (Sem a) (λ q → fst q) A) (fmapM Γ U1 (Sem a) ty Um))
+  (Z2 : Type 1) (pr : W → Z2) (pr' : U1 → Z2) (pw : PathP (λ i → (u : U1) → El a (ty u) → Z2) (λ u v → pr (w u v)) (λ u v → pr' u)) →
+  PathM Γ Z2 (fmapM Γ W Z2 pr (retype Γ a U1 W ty w Um A p)) (fmapM Γ U1 Z2 pr' Um)
+retype-fst Γ a U1 W ty w Um A p Z2 pr pr' pw =
+  pcat (Mean Γ Z2) (fmapM Γ W Z2 pr (retype Γ a U1 W ty w Um A p))
+    (dcube-pmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) Z2) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+      (λ xq zq Qq ρq → pr (w (fst (zq ρq)) (el-tr a (Sem a) (λ yq → yq) (fst (snd (zq ρq))) (ty (fst (zq ρq))) (λ jq → Qq jq ρq) (snd (snd (zq ρq)))))) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p))
+    (fmapM Γ U1 Z2 pr' Um)
+    (pmap-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) W) (FbE (fst Γ) Z2) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+      (λ xq zq Qq ρq → w (fst (zq ρq)) (el-tr a (Sem a) (λ yq → yq) (fst (snd (zq ρq))) (ty (fst (zq ρq))) (λ jq → Qq jq ρq) (snd (snd (zq ρq))))) (λ xq eq ρq → pr (eq ρq)) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p))
+    (pcat (Mean Γ Z2)
+      (dcube-pmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) Z2) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+        (λ xq zq Qq ρq → pr (w (fst (zq ρq)) (el-tr a (Sem a) (λ yq → yq) (fst (snd (zq ρq))) (ty (fst (zq ρq))) (λ jq → Qq jq ρq) (snd (snd (zq ρq)))))) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p))
+      (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) Z2) (λ xq zq ρq → pr' (fst (zq ρq))) (snd Γ) (rt-Z Γ a U1 Um A))
+      (fmapM Γ U1 Z2 pr' Um)
+      (pcat (Mean Γ Z2)
+        (dcube-pmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) Z2) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+          (λ xq zq Qq ρq → pr (w (fst (zq ρq)) (el-tr a (Sem a) (λ yq → yq) (fst (snd (zq ρq))) (ty (fst (zq ρq))) (λ jq → Qq jq ρq) (snd (snd (zq ρq)))))) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p))
+        (dcube-pmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) Z2) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+          (λ xq zq Qq ρq → pr' (fst (zq ρq))) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p))
+        (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) Z2) (λ xq zq ρq → pr' (fst (zq ρq))) (snd Γ) (rt-Z Γ a U1 Um A))
+        (λ i → dcube-pmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) Z2) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+          (λ xq zq Qq ρq → pw i (fst (zq ρq)) (el-tr a (Sem a) (λ yq → yq) (fst (snd (zq ρq))) (ty (fst (zq ρq))) (λ jq → Qq jq ρq) (snd (snd (zq ρq))))) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p))
+        (pmap-ign (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) Z2) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+          (λ xq zq ρq → pr' (fst (zq ρq))) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p)))
+      (pcat (Mean Γ Z2)
+        (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) Z2) (λ xq zq ρq → pr' (fst (zq ρq))) (snd Γ) (rt-Z Γ a U1 Um A))
+        (dcube-zip (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) Z2) (λ xq euq eaq ρq → pr' (euq ρq)) (snd Γ) Um A)
+        (fmapM Γ U1 Z2 pr' Um)
+        (fmap-zip (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) Z2) (λ xq euq eaq ρq → (euq ρq , eaq ρq)) (λ xq zq ρq → pr' (fst (zq ρq))) (snd Γ) Um A)
+        (zip-ign (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) Z2) (λ xq euq ρq → pr' (euq ρq)) (snd Γ) Um A)))
+-- pmap-ign generalized: a pointwise path from the builder to a path-free one
+pmap-path : (n : Nat) (X : Type 1) (F G F2 : X → Type 1) (g0 g1 : (x : X) → F x → G x)
+  (k : (x : X) (y : F x) → PathP (λ i → G x) (g0 x y) (g1 x y) → F2 x) (k' : (x : X) → F x → F2 x)
+  (kk : (x : X) (y : F x) (Q : PathP (λ i → G x) (g0 x y) (g1 x y)) → PathP (λ i → F2 x) (k x y Q) (k' x y))
+  (c : Cube n X) (d : DCube n X F c) (P : PathP (λ i → DCube n X G c) (dcube-fmap n X F G g0 c d) (dcube-fmap n X F G g1 c d)) →
+  PathP (λ i → DCube n X F2 c) (dcube-pmap n X F G F2 g0 g1 k c d P) (dcube-fmap n X F F2 k' c d)
+pmap-path zero X F G F2 g0 g1 k k' kk c d P = kk c d P
+pmap-path (suc n) X F G F2 g0 g1 k k' kk c d P =
+  pmap-path n (Line X) (LineO X F) (LineO X G) (LineO X F2) (lineo-fmap X F G g0) (lineo-fmap X F G g1)
+    (λ L D Q → (k (fst L) (fst D) (λ i → fst (Q i)) , k (fst (snd L)) (fst (snd D)) (λ i → fst (snd (Q i))) ,
+       λ j → k (snd (snd L) j) (snd (snd D) j) (λ i → snd (snd (Q i)) j))) (lineo-fmap X F F2 k')
+    (λ L D Q i → (kk (fst L) (fst D) (λ i' → fst (Q i')) i , kk (fst (snd L)) (fst (snd D)) (λ i' → fst (snd (Q i'))) i ,
+       λ j → kk (snd (snd L) j) (snd (snd D) j) (λ i' → snd (snd (Q i')) j) i)) c d P
+-- the pointwise path retype-val uses: through pv, then back along the transport's filler
+rv-pt : (a : TyShape) (U1 W : Type 1) (ty : U1 → Sem a) (w : (u : U1) → El a (ty u) → W) (vl : W → TV a)
+  (pv : PathP (λ i → (u : U1) → El a (ty u) → TV a) (λ u v → vl (w u v)) (λ u v → (ty u , v)))
+  (u : U1) (q : TV a) (Q : PathP (λ i → Sem a) (fst q) (ty u)) →
+  PathP (λ i → TV a) (vl (w u (el-tr a (Sem a) (λ yq → yq) (fst q) (ty u) Q (snd q)))) q
+rv-pt a U1 W ty w vl pv u q Q =
+  pcat (TV a) (vl (w u (el-tr a (Sem a) (λ yq → yq) (fst q) (ty u) Q (snd q)))) (ty u , el-tr a (Sem a) (λ yq → yq) (fst q) (ty u) Q (snd q)) q
+    (λ i → pv i u (el-tr a (Sem a) (λ yq → yq) (fst q) (ty u) Q (snd q)))
+    (λ i → (Q (~ i) , el-fill a (Sem a) (λ yq → yq) (fst q) (ty u) Q (snd q) (~ i)))
+retype-val : (Γ : CCtx) (a : TyShape) (U1 W : Type 1) (ty : U1 → Sem a) (w : (u : U1) → El a (ty u) → W) (Um : Mean Γ U1) (A : Mean Γ (TV a))
+  (p : PathM Γ (Sem a) (fmapM Γ (TV a) (Sem a) (λ q → fst q) A) (fmapM Γ U1 (Sem a) ty Um))
+  (vl : W → TV a) (pv : PathP (λ i → (u : U1) → El a (ty u) → TV a) (λ u v → vl (w u v)) (λ u v → (ty u , v))) →
+  PathM Γ (TV a) (fmapM Γ W (TV a) vl (retype Γ a U1 W ty w Um A p)) A
+retype-val Γ a U1 W ty w Um A p vl pv =
+  pcat (Mean Γ (TV a)) (fmapM Γ W (TV a) vl (retype Γ a U1 W ty w Um A p))
+    (dcube-pmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) (TV a)) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+      (λ xq zq Qq ρq → vl (w (fst (zq ρq)) (el-tr a (Sem a) (λ yq → yq) (fst (snd (zq ρq))) (ty (fst (zq ρq))) (λ jq → Qq jq ρq) (snd (snd (zq ρq)))))) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p))
+    A
+    (pmap-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) W) (FbE (fst Γ) (TV a)) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+      (λ xq zq Qq ρq → w (fst (zq ρq)) (el-tr a (Sem a) (λ yq → yq) (fst (snd (zq ρq))) (ty (fst (zq ρq))) (λ jq → Qq jq ρq) (snd (snd (zq ρq))))) (λ xq eq ρq → vl (eq ρq)) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p))
+    (pcat (Mean Γ (TV a))
+      (dcube-pmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) (TV a)) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+        (λ xq zq Qq ρq → vl (w (fst (zq ρq)) (el-tr a (Sem a) (λ yq → yq) (fst (snd (zq ρq))) (ty (fst (zq ρq))) (λ jq → Qq jq ρq) (snd (snd (zq ρq)))))) (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p))
+      (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (TV a)) (λ xq zq ρq → snd (zq ρq)) (snd Γ) (rt-Z Γ a U1 Um A))
+      A
+      (pmap-path (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (Sem a)) (FbE (fst Γ) (TV a)) (λ xq zq ρq → fst (snd (zq ρq))) (λ xq zq ρq → ty (fst (zq ρq)))
+        (λ xq zq Qq ρq → vl (w (fst (zq ρq)) (el-tr a (Sem a) (λ yq → yq) (fst (snd (zq ρq))) (ty (fst (zq ρq))) (λ jq → Qq jq ρq) (snd (snd (zq ρq))))))
+        (λ xq zq ρq → snd (zq ρq))
+        (λ xq zq Qq i ρq → rv-pt a U1 W ty w vl pv (fst (zq ρq)) (snd (zq ρq)) (λ jq → Qq jq ρq) i)
+        (snd Γ) (rt-Z Γ a U1 Um A) (rt-P Γ a U1 ty Um A p))
+      (pcat (Mean Γ (TV a))
+        (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (TV a)) (λ xq zq ρq → snd (zq ρq)) (snd Γ) (rt-Z Γ a U1 Um A))
+        (dcube-zip (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (TV a)) (λ xq euq eaq → eaq) (snd Γ) Um A)
+        A
+        (fmap-zip (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (U1 × TV a)) (FbE (fst Γ) (TV a)) (λ xq euq eaq ρq → (euq ρq , eaq ρq)) (λ xq zq ρq → snd (zq ρq)) (snd Γ) Um A)
+        (pcat (Mean Γ (TV a))
+          (dcube-zip (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (TV a)) (λ xq euq eaq → eaq) (snd Γ) Um A)
+          (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (TV a)) (λ xq eaq → eaq) (snd Γ) A) A
+          (zip-ign-l (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (TV a)) (λ xq eaq → eaq) (snd Γ) Um A)
+          (fmap-id (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV a)) (snd Γ) A))))
