@@ -1,0 +1,34 @@
+-- lib/appendix-c.cub — the paper's Appendix C.1 (docs/hyperactivity.cub, “A complete decoder and its byte
+-- vector”) on lib/isa/x86, the Sail-derived x86-64 model: the 46 bytes, laid at 0x400000; an initial
+-- state with rdi = b (0x500000), rsi = s, rdx = o (0x600000) and a return address 0x401000 at rsp
+-- (0x7ff000), its frame disjoint from [o, o + 24); and the model's runs through the three rows of D
+-- (lib/frame-decoder.cub's appc-D): s < 4, returning 0 after cmp, jb, xor, ret with the frame
+-- untouched; n > s − 4, returning 0 after the length guard with the frame untouched; n ≤ s − 4,
+-- returning 1 after 13 instructions with writeFrame(μ, o, t, n, b + 4) at o, o + 8, o + 16 — each
+-- run ending at the return address, for every initial memory μ. The rows are computed by the checker
+-- at these buffer contents and lengths; χ_b over every buffer and length is the same three rows with
+-- them symbolic, which needs the model's flag computation related to the comparisons s < 4 and n > s − 4.
+import "isa/x86/run.cub"
+-- the bytes, eight at a time, little-endian
+appcx-code : X86 → X86
+appcx-code s = x86-poke #6 #4194344 #215230236000256 (x86-poke #8 #4194336 #483854951991300 (x86-poke #8 #4194328 #5155856348856535042
+  (x86-poke #8 #4194320 #9892165064332965873 (x86-poke #8 #4194312 #4127554480936321615 (x86-poke #8 #4194304 #13190803005231760200 s)))))
+-- init(z): the buffer's first six bytes, its length s, the output frame at o and the return slot
+appcx-init : ByteMap → Word → Word → X86
+appcx-init mu buf s = x86-set-rip #4194304 (x86-set-rdi #5242880 (x86-set-rsi s (x86-set-rdx #6291456 (x86-set-rsp #8384512
+  (x86-poke #8 #8384512 #4198400 (x86-poke #6 #5242880 buf (appcx-code (x86-set-mem mu x86-user64))))))))
+-- observe(σ′): the return value, the frame's three fields, and where control went
+appcx-observe : X86 → Bits #64 × Bits #64 × Bits #64 × Bits #64 × Bits #64
+appcx-observe s = (x86-rax s , x86-read-mem #8 #6291456 s , x86-read-mem #8 #6291464 s , x86-read-mem #8 #6291472 s , x86-rip s)
+-- the frame as it was: μ's bytes at o, o + 8, o + 16 under the image
+appcx-frame0 : ByteMap → Word → Word → Bits #64 × Bits #64 × Bits #64
+appcx-frame0 mu buf s = (x86-read-mem #8 #6291456 (appcx-init mu buf s) , x86-read-mem #8 #6291464 (appcx-init mu buf s) , x86-read-mem #8 #6291472 (appcx-init mu buf s))
+-- s = 3 < 4: (false, μ), for every initial memory μ
+appcx-short : (mu : ByteMap) → appcx-observe (snd (x86-run #4 (appcx-init mu #206338818970164 #3))) ≡ (#0 , fst (appcx-frame0 mu #206338818970164 #3) , fst (snd (appcx-frame0 mu #206338818970164 #3)) , snd (snd (appcx-frame0 mu #206338818970164 #3)) , #4198400)
+appcx-short mu = λ k → (#0 , fst (appcx-frame0 mu #206338818970164 #3) , fst (snd (appcx-frame0 mu #206338818970164 #3)) , snd (snd (appcx-frame0 mu #206338818970164 #3)) , #4198400)
+-- s = 10, n = 0x10 > s − 4: (false, μ)
+appcx-long : (mu : ByteMap) → appcx-observe (snd (x86-run #8 (appcx-init mu #206338819887668 #10))) ≡ (#0 , fst (appcx-frame0 mu #206338819887668 #10) , fst (snd (appcx-frame0 mu #206338819887668 #10)) , snd (snd (appcx-frame0 mu #206338819887668 #10)) , #4198400)
+appcx-long mu = λ k → (#0 , fst (appcx-frame0 mu #206338819887668 #10) , fst (snd (appcx-frame0 mu #206338819887668 #10)) , snd (snd (appcx-frame0 mu #206338819887668 #10)) , #4198400)
+-- s = 6, n = 2 ≤ s − 4, t = 0x1234: (true, writeFrame(μ, o, t, n, b + 4))
+appcx-ok : (mu : ByteMap) → appcx-observe (snd (x86-run #13 (appcx-init mu #206338818970164 #6))) ≡ (#1 , #4660 , #2 , #5242884 , #4198400)
+appcx-ok mu = λ k → (#1 , #4660 , #2 , #5242884 , #4198400)
