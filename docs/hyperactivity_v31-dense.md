@@ -425,3 +425,105 @@ Fully defined here, and the same dependency pattern as lifting a large language:
 - preserve(𝑒,𝜌) ∶= (cancel 𝑒, 𝜆𝑥. cancelSound(𝑒,𝑥) ⋅ 𝜌(𝑥)) ∶ ∏_𝑒 𝑃(𝑒) → ∑_{𝑒′} 𝑃(𝑒′), with ⋅ as path concatenation. The direction matters: the new meaning is identified with the old, then the old proof follows. A general 𝑄 is transported along the equality of denotations, not rewritten by hand.
 
 Calculation: ⟦𝑝⟧𝑥 = (𝑥⊕0x5a)⊕0x5a; 𝜋(𝑥) ∶ ⟦𝑝⟧𝑥 ≡ 𝑥; cancel 𝑝 = Input; cancelSound(𝑝,𝑥) ∶ ⟦Input⟧𝑥 ≡ ⟦𝑝⟧𝑥; preserve(𝑝,𝜋) ∶ ∑_𝑒∏_𝑥 ⟦𝑒⟧𝑥 ≡ 𝑥. This is a closed instance of lifting, attachment, transformation and projection. A larger language adds constructors and clauses; these operations gain no new logical foundations.
+
+## 6. Reflective programming and language extension
+
+§5's definitions become operands. Reflection is the language acting on its own descriptions: changing a grammar, an interpreter clause, or the context a received expression is read in changes what later computation does. Here this is directly programmable: interpreter, source language, transformation, and the rationale connecting their behaviors are all represented and operable. Antecedents: Lisp reflection, definitional interpreters, NbE, partial evaluation, staging (3, 5, 12–15). Here they act on typed representations inside the language, with types, contexts, binding and stage respected.
+
+- Code_𝐿(Γ,𝐴) ∶ 𝒰 and eval_𝐿 ∶ Code_𝐿(Γ,𝐴) → Env_𝐿(Γ) → ⟦𝐴⟧_𝐿 (6.1). Quoted code is typed, never a string (typed quotation and readback, 12, 13), and identifies its object language, free variables and type.
+- Transformations are 𝑇 ∶ ∏_{Γ,𝐴} Code_𝐿(Γ,𝐴) → Code_𝐿(Γ,𝐴) (6.2), or, when representation or type changes, a dependent output with new type, code and relation. Example, product to vector, for fixed 𝑐: ∑_{𝐵∶Ty_𝐿}∑_{𝑒∶⟦𝐴⟧≃⟦𝐵⟧}∑_{𝑐′∶Code(Γ,𝐵)}∏_𝜌 𝑒(eval 𝑐 𝜌) = eval 𝑐′ 𝜌 (6.3). The last product is the transformation's correctness evidence.
+- This is not unrestricted quotation of host expressions at their own stage. Self-interpretation and staging need explicit representations, levels, and termination or guardedness. Quotation, readback and partial evaluation are constructions over code and semantics; no inconsistent universe of all expressions interpreting itself is assumed.
+- Specialization: ⟦𝑆(𝐼,𝑝)⟧(𝑥) = 𝐼(𝑝,𝑥) (6.4). The first Futamura projection is an instance (14, 15), and the higher ones specialize the specializer or interpreter under staging assumptions. They follow from the evaluator and substitution laws; they are not foundations.
+
+### 6.1 Typed quotation, semantic readback, and self-application
+
+Code_ℓ(Γ,𝐴) ∶= ∑_{𝑐∶Raw_ℓ} Der_ℓ(Γ,𝑐,𝐴), defined once. For a chosen model, eval_{ℓ,Γ,𝐴} ∶ Code_ℓ(Γ,𝐴) → ∏_{𝜌∶Env_ℓ Γ} ⟦𝐴⟧𝜌.
+
+Val^nf_ℓ(Γ,𝐴) is a reifiable domain of semantic normalization values, with weakening, neutral reflection and readback. It is not the type of all host functions. Its law is reify ∶ Val^nf → Code and reifySound ∶ ∏_𝑣∏_𝜌 eval(reify 𝑣, 𝜌) = denote(𝑣, 𝜌) (6.5).
+
+The typed Kripke NbE schema, with wk ∶ Γ → Γ▷𝐴, ren_𝑟 and neVar₀:
+
+- Π: semantic functions are natural under renamings; reify_Π(𝑓) ∶= lam(reify_{𝐵[var₀/𝑥]}(appVal(ren_wk 𝑓, reflect_𝐴(neVar₀)))). Reflecting a neutral 𝑛 gives, at 𝑟 ∶ Γ → Δ and 𝑎 ∶ Val(Δ, 𝐴[𝑟]), reflect_{𝐵[𝑟, reify 𝑎/𝑥]}(neApp(ren_𝑟 𝑛, reify 𝑎)).
+- Σ: reflect(𝑛) ∶= (𝑎, reflect_{𝐵[𝑎/𝑥]}(neSnd 𝑛)) with 𝑎 ∶= reflect_𝐴(neFst 𝑛); reify(𝑎,𝑏) ∶= (reify_𝐴 𝑎, reify_{𝐵[𝑎/𝑥]} 𝑏).
+- PathP: reify 𝑝 ∶= pathLam(𝑖. reify_{𝐴(𝑖)}(pathApp(𝑝,𝑖))); reflect 𝑛 ∶= 𝑖 ↦ reflect_{𝐴(𝑖)}(nePathApp(𝑛,𝑖)), with the 𝑖 = 0,1 boundaries inherited.
+- The full cubical domain also interprets faces, composition and Glue by its Kan operations. These clauses cover the indicated fragment, and their meaning is fixed by the chosen model, not by an undefined universal quotation.
+- normalize_{Γ,𝐴}(𝑡) ∶= reify(eval(𝑡, reflectContext Γ)), with reflectContext built from Γ's neutral variables. The fundamental lemma is by induction on typed syntax, and its binder case is exactly the weakening/application calculation.
+
+**Typed specialization and self-application.** 𝑆_{𝐴,𝐵} ∶ Code(∅, 𝐴→𝐵) → Code(∅,𝐴) → Code(∅,𝐵) with eval(𝑆(𝑞,𝑟)) = eval(𝑞)(eval 𝑟).
+
+- First projection: for an interpreter 𝑒 ∶ Code(∅, 𝑃→𝐷→𝑂) and 𝑞_𝑝 ∶ Code(∅,𝑃), compiled(𝑒, 𝑞_𝑝) ∶= 𝑆_{𝑃,𝐷→𝑂}(𝑒, 𝑞_𝑝), and eval(compiled)(𝑑) = eval(𝑒)(eval 𝑞_𝑝)(𝑑) (6.6).
+- Second projection: 𝐴 ∶= Code(∅, 𝑃→𝐷→𝑂), 𝐵 ∶= Code(∅,𝑃) → Code(∅, 𝐷→𝑂), and 𝐺(𝑒)(𝑞_𝑝) ∶= 𝑆(𝑒, 𝑞_𝑝). At a stage representing this 𝐺, supply 𝑞_𝐺 ∶ Code(∅, 𝐴→𝐵). Because 𝐴 is a syntax datatype, lift_𝐴(𝑒) ∶ Code(∅,𝐴) with eval(lift 𝑒) = 𝑒. Then compilerCode(𝑒) ∶= 𝑆_{𝐴,𝐵}(𝑞_𝐺, lift_𝐴 𝑒) and eval(compilerCode 𝑒)(𝑞_𝑝) = 𝑆(𝑒, 𝑞_𝑝) (6.7).
+- lift_𝐴 is defined on the represented syntax datatype and its checked constructors, never as 𝐴 → Code(𝐴) for arbitrary semantic 𝐴. The same stage indices apply to further projections, and everything follows from the one specialization law plus the supplied code for 𝐺.
+
+**Checked syntax and its interpretation.** Code_ℓ's first projection is raw syntax and its second a typing derivation. Raw syntax, derivations, semantic values and evaluator graph nodes are distinct objects connected by operations, never by implicit identification.
+
+- An elaborator maps raw declarations to checked syntax or a precise failure. eval_{Γ,𝐴} ∶ Code(Γ,𝐴) → ∏_𝜌 𝐴[𝜌].
+- Quotation reads values back, with eval(reify_𝐴 𝑣, 𝜌) ≡ denote(𝑣, 𝜌) at the stage and type where it is defined, returning neutrals when blocked on a free variable. It is stated only on the reifiable domain; it is not total quotation of external states, infinite processes, or a universe containing its own evaluator.
+- The checker decides the specified decidable typing and conversion judgments of the selected core. That it exists is a separate theorem about the core, not a consequence of inductive syntax. A definition of check does not give check(c,A) = yes → Der(Γ,c,A) without a soundness argument. A universe-polymorphic Code is not a universe of its own unrestricted semantics, and the staging and universe restrictions are explicit.
+
+**Substitution on checked syntax.** 𝜎 ∶ Δ → Γ respects dependencies, and ⟦𝑡[𝜎]⟧𝜌 ≡ ⟦𝑡⟧⟦𝜎⟧𝜌. This one equation underlies application, instantiation of dependent types, partial evaluation, theorem instantiation and staging. A type argument, a known number, an interpreter's source program and a deployment configuration are all supplied through it.
+
+**Transformations of checked syntax** return ∑_{𝑐′∶Code(Γ,𝐴)} Path_𝐴(⟦𝑐⟧, ⟦𝑐′⟧). The path is refl when both compute alike, an instantiated theorem, or a composite. A type-changing transformation returns its equivalence, transport or other relation; it does not pretend input and output share a type. Rewriting with 𝑝 ∶ 𝑢 ≡ 𝑣 under 𝐶[−] is cong 𝐶 𝑝 ∶ 𝐶[𝑢] ≡ 𝐶[𝑣], and rewrites compose by concatenation. The rewriting program is not trusted as an oracle; its evidence is type-checked. That is reflective programming operationally: a declaration is data, and its meaning, its transformations and their evidence are terms whose results feed further computation.
+
+**Typed stages and checking.** Three things conflated as "reflection" have different types. At a fixed stage and level:
+
+- Raw_ℓ are codes of an object fragment; Der_ℓ(Γ,c,A) is typing as evidence; Val_ℓ(A,ρ) is semantic interpretation. Code_ℓ is the already-defined checked representation, whose raw part and derivation are projections, not another code type.
+- eval_ℓ ∶ Code_ℓ(Γ,𝐴) → (𝜌 ∶ Env_ℓ Γ) → Val_ℓ(𝐴,𝜌) is a typed map, not a cast.
+- A checker takes raw syntax, not a Code already holding the derivation it should establish. One total interface for a decidable fragment is check_ℓ(Γ,𝑐,𝐴) ∶ Dec(Der_ℓ(Γ,𝑐,𝐴)), with Dec 𝑃 = 𝑃 + ¬𝑃; an elaborator may instead return a checked term, a type and a structured diagnostic. A metacircular check is a program; that it accepts exactly the intended judgments is a distinct theorem about its construction and the calculus.
+- Readback is reify on Val^nf, with law (6.5). For open terms the domain has neutrals with their contexts, and quotation returns code in that context.
+- Code and evaluator are indexed by object stage, and metaprograms live in an enclosing stage. A code for the evaluator is a code at a suitable enclosing stage, not an inhabitant of U : U. So a metacircular interpreter is representable without identifying the universe with its own total truth predicate. The separation identifies exactly what substitution, normalization, proof construction and self-application act on: all four are programs, none an untyped operation on arbitrary objects.
+
+**Open terms and delayed work.** Open terms evaluate as far as their structure allows. An eliminator blocked on a variable yields a neutral holding the eliminator and its arguments, and a later substitution exposing a constructor resumes it; this is neither an error nor a placeholder. Dimension substitution can select a face, change which boundary is available, or expose a composition rule, so the face context bears on a residual's validity. Branches whose premises fail must not be forced merely to build a cache key or inspect a system, and dimension and face payloads keep their distinct algebraic meanings. Delayed substitution records the operation and its inputs until needed. Call-by-need keeps one shared producer instead of copying per use. Readback and quotation should preserve sharing where possible, since flattening the graph to a tree can destroy the benefit before the next operation.
+
+**Reuse of reductions.** Given 𝑑 ∶ Γ;𝜑 ⊢ 𝑡 ⟶* 𝑢 ∶ 𝐴 (6.8) and a 𝜎 satisfying context and faces, substitution stability gives 𝑡[𝜎] ⟶* 𝑢[𝜎]. A runtime may reuse the reduction and must then resume if 𝑢[𝜎] has newly exposed redexes; a cached whnf of 𝑢 is not a whnf of every instance. A reusable computation records:
+
+- the producer's structure and free dependencies;
+- context restrictions;
+- its result or residual;
+- the instantiating transformation.
+
+A caller's route to the producer is not an input unless it changes one of these. Four operational objects are distinguished, without being made into new semantic categories: the request occurrence, the producer it refers to, the producer's reusable result, and delivery or adaptation to the occurrence. Many occurrences may share a producer, and reuse does not make delivery free. substStep(𝜃, 𝑟) is defined by induction on the reduction constructor, beta to substituted beta and congruence to congruence: substStep(𝜃,𝑟) ∶ subst(𝜃,𝑡) ⟶* subst(𝜃,𝑢) (6.9). The closure allows administrative steps from the substitution representation, with endpoints fixed by §5.1's equations.
+
+### 6.2 Specialization as a program over the language's own definitions
+
+The machine evaluates terms; the checker inspects the values; the language operates on representations. `Code` represents term constructors, and `eval-g : Code → Value` interprets closed codes, environment-indexed for open ones. `%view` exposes an evaluated term's head constructor and constituent values. The checker works on that view, and its inference and conversion are themselves machine-evaluated terms. Specialization uses the same codes and is accepted by conversion or a checked path, never by agreement of sample outputs. The bootstrap `Code` exists before the checker can certify its definition, so it is distinct from §6.1's intrinsically checked family, and programs may define smaller checked syntax types for their domains. The specializer works on the bootstrap representation, and its result is checked at its declared type before admission.
+
+```
+specialize : Code → Sched → Lst Rule → Code → Code × Code
+specialize Tc sch rules c =
+  let c0 = normalize-held (sched-holds sch) Tc c
+      r = rewrite-all (sched-rewrites sch) Tc rules c0
+  in (fst r , path-code (snd r) c0)
+```
+
+- `Tc` represents the type and `c` the code. `sch` says which definitions stay unknown, how arguments are staged, and the rewrite budget. The result is new code plus code for its justification.
+- Normalization yields something definitionally convertible to the input, while theorem rewriting yields an explicit path. With no rewrite, path-code is refl; with rewrites, compose-p builds the composite and `#jit` asks the checker to accept it. A wrong theorem application can't be admitted just because the output is well formed.
+- `normalize-held` makes partial information operational: it replaces the held definitions with bound neutral variables, abstracts, normalizes the lambda, and restores the held references in the residual. Unheld definitions compute and held ones stay unknown. This is partial evaluation of the actual program, not of an independently maintained symbolic model.
+- `apply-now` stages parameters over codes, walking leading binders: an `st-now` binder receives a represented argument from the environment, and an `st-run` binder stays a variable under the residual lambdas.
+
+```
+residual : Sched → Code → Lst Rule → Code → Lst Code → Code × Code
+residual sch Tc rules c env =
+  specialize Tc sch rules (apply-now (sched-stages sch) c env)
+```
+
+The static environment is `Lst Code`, so inputs are representations and no 𝐴 → Code 𝐴 is assumed. Example: λ x y → (x+7)+y with x static at code for 5 residualizes to the meaning λ y → 12+y, assuming the word or ℕ operations and their reduction rules; the mechanism is binder-indexed. Two relations are involved: apply-and-normalize preserves meaning by computation and conversion, and theorem rewriting carries a checked path. Applied to a represented interpreter, this specializes it to a source program; applied to the specializer, it gives the Futamura constructions [14, 15]. No compiler primitive is needed, since interpreter, specializer, rules and outputs are all terms and data.
+
+**Staged self-application: the three projections.** 𝐶(𝐴) is closed checked code, 𝑞_𝐴(𝑎) ∶ 𝐶(𝐴) a representation of a value, and 𝑞_{𝐶(𝐴)}(𝑐) the code package as data, not its evaluation. 𝑆_{𝐴,𝐵,𝐷} ∶ 𝐶(𝐴→𝐵→𝐷) → 𝐶(𝐴) → 𝐶(𝐵→𝐷) with ⟦𝑆(𝑒, 𝑞_𝐴 𝑎)⟧(𝑏) = ⟦𝑒⟧(𝑎)(𝑏) (6.F1), a path of meanings where required (the notation suppresses the witness, not its existence).
+
+- (6.F2) 𝑟_𝑝 = 𝑆_{𝑃,𝑋,𝑌}(𝑒, 𝑞_𝑃 𝑝) ∶ 𝐶(𝑋→𝑌), ⟦𝑟_𝑝⟧(𝑥) = ⟦𝑒⟧(𝑝)(𝑥).
+- (6.F3) With 𝐴₀ = 𝐶(𝑃→𝑋→𝑌), 𝐵₀ = 𝐶(𝑃), 𝐷₀ = 𝐶(𝑋→𝑌) and 𝑠 ∶ 𝐶(𝐴₀→𝐵₀→𝐷₀) presenting 𝑆_{𝑃,𝑋,𝑌}: 𝑐_𝑒 = 𝑆_{𝐴₀,𝐵₀,𝐷₀}(𝑠, 𝑞_{𝐴₀} 𝑒), ⟦𝑐_𝑒⟧(𝑞_𝑃 𝑝) = 𝑆_{𝑃,𝑋,𝑌}(𝑒, 𝑞_𝑃 𝑝). Static input is the interpreter code; dynamic input is the program code.
+- (6.F4) With 𝐴₁ = 𝐶(𝐴₀→𝐵₀→𝐷₀), 𝐵₁ = 𝐶(𝐴₀), 𝐷₁ = 𝐶(𝐵₀→𝐷₀) and 𝑠′ at that type: 𝑔 = 𝑆_{𝐴₁,𝐵₁,𝐷₁}(𝑠′, 𝑞_{𝐴₁} 𝑠), ⟦𝑔⟧(𝑞_{𝐴₀} 𝑒) = 𝑐_𝑒.
+
+These are typed instances of one residualization equation, not three compiler operators, and 𝑞_{𝐴₀}(𝑒), 𝑞_{𝐴₁}(𝑠) quote finite code as data at the next stage, with no unrestricted 𝐴 → 𝐶(𝐴). The equalities are semantic. Actually eliminating interpreter dispatch also depends on the specializer reducing static constructors while keeping unknowns, the same distinction apply-now and normalize-held exhibit. 𝑆(𝐸,𝑝), 𝑆(𝑆,𝐸) and 𝑆(𝑆,𝑆) are valid abbreviations only with these code-level arguments and stage indices. §9.2's universal realization applies to specializer, interpreter, compiler and residuals once evaluator adequacy and its realization hold. The first projection on a represented evaluator and a static program may remove dispatch on that program, but the equation alone guarantees neither that dispatch disappears nor that the residual lands in the directly compiled fragment.
+
+**Finite specialization of an evaluator.** The residual has the same meaning; whether specialization terminates is a separate question.
+
+- A sufficient condition for an offline, memoizing specializer: the reachable static configuration shapes are finite, and static reduction between memoization points terminates.
+- A fixed program has finitely many code positions, but an unbounded continuation stack or a recursively varying static argument doesn't have finitely many static states. So binding-time analysis keeps the stack and runtime data dynamic, and uses code positions plus a finite set of frame constructors as static dispatch.
+- Precisely: memoized shapes 𝑄 ⊆ Pos(𝑐) × FrameKind × StaticEnv, with case reduction 𝛿 ∶ 𝑄 → ResidualCase(𝑄). If 𝑄 is finite and every statically reducing call reaches a memoization point, worklist expansion reaches a fixed point after at most |𝑄| new shapes. Each 𝑞 is one residual control location and the dynamic stack is a runtime value, not part of 𝑄. Edges come from 𝛿(𝑞), including dynamic conditionals and residual calls to the general evaluator when code becomes dynamic.
+- This gives a finite residual graph. It does not make every clause first-order direct instructions, and the blocks don't satisfy the structural fold's compositionality without the separate congruence proof. It is a sufficient construction under these binding-time premises, not a theorem that every specializer terminates or every residual has a finite CFG.
+
+Non-static code may keep a call to the represented evaluator, which is an ordinary term natively realized by §9.2. Static versus dynamic belongs to the chosen specialization, not to what the language can express. Raw syntax can run as a guarded process without asserting normalization, and the typed quotation equations still need their stages and checked code. Guarded divergence doesn't make divergent terms converge. Self-reference keeps its limits: Church–Turing undecidability and the diagonal arguments of Lawvere, Gödel and Tarski (1, 2, 33–35) concern exact representability and logical premises, and reifying programs as data bypasses none of them. Concretely, runRaw ∶ Raw → Env → Proc_Σ(Value + Fault) applied to a code of runRaw is a guarded execution, not a total normalizer or a universe-valued truth predicate. It needs runRaw's code to be representable and its recursion guarded. By contrast 𝑞_{𝐴₀}, 𝑞_{𝐴₁} and lift_𝐴 in (6.F2)–(6.F4) inhabit checked, explicitly staged code types, and no same-level quotation of semantic values follows from the raw interpreter.
+
+Two relations stay distinct. Conversion or a checked path relates the specialized term to its source. The meaning of emitted bytes under the target instruction semantics is the separate source-to-machine construction: the C route and its downstream compilation relation (§9.4), whose obligations are stated independently of source-level conversion. Appendix C keeps a separate direct-byte example.
