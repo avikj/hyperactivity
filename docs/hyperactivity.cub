@@ -1206,33 +1206,33 @@ s8-3-p1 = heading (suc (suc (suc zero))) "8.3 Representations, operations, and m
 s8-3-p2 : Block
 s8-3-p2 = prose (cons "Consider a 32-bit unsigned integer. Three objects already appear:" nil)
 s8-3-p3 : Block
-s8-3-p3 = construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{Word}_{32}&:=\operatorname{Fin}(2^{32}),\\" (cons "\mathsf{Bytes}_4&:=\operatorname{Fin}(4)\to\operatorname{Fin}(256),\\" (cons "\mathsf{encodeLE}&:\mathsf{Word}_{32}\to\mathsf{Bytes}_4." (cons "\end{aligned}" (cons "\tag{8.6}" (cons "\]" nil))))))))
+s8-3-p3 = realized (construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{Word}_{32}&:=\operatorname{Fin}(2^{32}),\\" (cons "\mathsf{Bytes}_4&:=\operatorname{Fin}(4)\to\operatorname{Fin}(256),\\" (cons "\mathsf{encodeLE}&:\mathsf{Word}_{32}\to\mathsf{Bytes}_4." (cons "\end{aligned}" (cons "\tag{8.6}" (cons "\]" nil))))))))) (cons "Word32" (cons "Bytes4" nil))
 s8-3-p4 : Block
 s8-3-p4 = prose (cons "Define the little-endian representation by" nil)
 s8-3-p5 : Block
-s8-3-p5 = construction (cons "\[" (cons "\mathsf{encodeLE}(w)(j)" (cons "=\left\lfloor\frac{w}{256^j}\right\rfloor\bmod256," (cons "\quad j\in\{0,1,2,3\}," (cons "\tag{8.7}" (cons "\]" nil))))))
+s8-3-p5 = realized (construction (cons "\[" (cons "\mathsf{encodeLE}(w)(j)" (cons "=\left\lfloor\frac{w}{256^j}\right\rfloor\bmod256," (cons "\quad j\in\{0,1,2,3\}," (cons "\tag{8.7}" (cons "\]" nil))))))) (cons "encodeLE" nil)
 s8-3-p6 : Block
 s8-3-p6 = prose (cons "and decoding by" nil)
 s8-3-p7 : Block
-s8-3-p7 = construction (cons "\[" (cons "\mathsf{decodeLE}(b)=" (cons "\sum_{j=0}^{3}256^j b(j)\pmod{2^{32}}." (cons "\tag{8.8}" (cons "\]" nil)))))
+s8-3-p7 = realized (construction (cons "\[" (cons "\mathsf{decodeLE}(b)=" (cons "\sum_{j=0}^{3}256^j b(j)\pmod{2^{32}}." (cons "\tag{8.8}" (cons "\]" nil)))))) (cons "decodeLE" nil)
 s8-3-p8 : Block
 s8-3-p8 = prose (cons "The round-trip equations are" nil)
 s8-3-p9 : Block
-s8-3-p9 = construction (cons "\[" (cons "\mathsf{decodeLE}(\mathsf{encodeLE}(w))=w," (cons "\qquad" (cons "\mathsf{encodeLE}(\mathsf{decodeLE}(b))=b." (cons "\tag{8.9}" (cons "\]" nil))))))
+s8-3-p9 = realized (construction (cons "\[" (cons "\mathsf{decodeLE}(\mathsf{encodeLE}(w))=w," (cons "\qquad" (cons "\mathsf{encodeLE}(\mathsf{decodeLE}(b))=b." (cons "\tag{8.9}" (cons "\]" nil))))))) (cons "decode-encode" (cons "encode-decode" (cons "word-bytes" nil)))
 s8-3-p10 : Block
 s8-3-p10 = prose (cons "Thus the types are equivalent. By univalence the equivalence induces a path of types, and a dependent operation on words can be transported to the byte representation." nil)
 s8-3-p11 : Block
 s8-3-p11 = prose (cons "For example, define addition on words by" nil)
 s8-3-p12 : Block
-s8-3-p12 = construction (cons "\[" (cons "\mathsf{add}_{32}(x,y):=(x+y)\bmod 2^{32}." (cons "\tag{8.10}" (cons "\]" nil))))
+s8-3-p12 = realized (construction (cons "\[" (cons "\mathsf{add}_{32}(x,y):=(x+y)\bmod 2^{32}." (cons "\tag{8.10}" (cons "\]" nil))))) (cons "add32" (cons "bv-adc" (cons "bv-val" (cons "adc-law" nil))))
 s8-3-p13 : Block
 s8-3-p13 = prose (cons "Its four-byte representation is defined by:" nil)
 s8-3-p14 : Block
-s8-3-p14 = construction (cons "\[" (cons "\mathsf{addBytes}(a,b):=" (cons "\mathsf{encodeLE}\bigl(" (cons "  \mathsf{add}_{32}(\mathsf{decodeLE}(a),\mathsf{decodeLE}(b))" (cons "\bigr)." (cons "\tag{8.11}" (cons "\]" nil)))))))
+s8-3-p14 = realized (construction (cons "\[" (cons "\mathsf{addBytes}(a,b):=" (cons "\mathsf{encodeLE}\bigl(" (cons "  \mathsf{add}_{32}(\mathsf{decodeLE}(a),\mathsf{decodeLE}(b))" (cons "\bigr)." (cons "\tag{8.11}" (cons "\]" nil)))))))) (cons "addBytes" nil)
 s8-3-p15 : Block
 s8-3-p15 = prose (cons "The commuting equation follows by the round-trip law:" nil)
 s8-3-p16 : Block
-s8-3-p16 = construction (cons "\[" (cons "\mathsf{decodeLE}(\mathsf{addBytes}(a,b))" (cons "=\mathsf{add}_{32}(\mathsf{decodeLE}(a),\mathsf{decodeLE}(b))." (cons "\tag{8.12}" (cons "\]" nil)))))
+s8-3-p16 = realized (construction (cons "\[" (cons "\mathsf{decodeLE}(\mathsf{addBytes}(a,b))" (cons "=\mathsf{add}_{32}(\mathsf{decodeLE}(a),\mathsf{decodeLE}(b))." (cons "\tag{8.12}" (cons "\]" nil)))))) (cons "addBytes-commutes" nil)
 s8-3-p17 : Block
 s8-3-p17 = prose (cons "This is a complete representation calculation. It is not yet a theorem about an actual C++ load: the C++ semantics must establish which four bytes constitute a live `uint32_t` object, what alignment and provenance are required, whether the implementation uses little-endian representation, and whether the access is permitted under the language's object model. Nor is it a theorem about the electrical implementation of a CPU. Those are additional *premises*, not a different foundational language." nil)
 s8-3-p18 : Block
@@ -1244,7 +1244,7 @@ s8-3-p20 = prose (cons "An enumeration of a finite set \(A\) is a pair \((n,e)\)
 s8-3-p21 : Block
 s8-3-p21 = prose (cons "For finite directed graphs, take \(\mathsf{Graph}_n:=\mathsf{Fin}(n)\to\mathsf{Fin}(n)\to\mathsf{Bool}\). Relabeling by \(\sigma\) acts as \((\sigma\cdot G)(i,j):=G(\sigma^{-1}i,\sigma^{-1}j)\). The set quotient \(\mathsf{Unlabelled}_n\) has a constructor \(\mathsf{incl}(G)\), paths \(\mathsf{incl}(G)=\mathsf{incl}(\sigma\cdot G)\), and set truncation. A set-valued invariant of graphs descends through the quotient precisely when it is supplied with the corresponding relabeling paths. This quotient deliberately forgets automorphism paths. To retain them, use the univalent structured-graph type" nil)
 s8-3-p22 : Block
-s8-3-p22 = construction (cons "\[" (cons "\mathsf{GraphSym}_n:=\sum_{X:\mathcal U}\|X\simeq\mathsf{Fin}(n)\|\times(X\to X\to\mathsf{Bool})." (cons "\]" nil)))
+s8-3-p22 = realized (construction (cons "\[" (cons "\mathsf{GraphSym}_n:=\sum_{X:\mathcal U}\|X\simeq\mathsf{Fin}(n)\|\times(X\to X\to\mathsf{Bool})." (cons "\]" nil)))) (cons "GraphSym" nil)
 s8-3-p23 : Block
 s8-3-p23 = prose (cons "Its identity between \((X,G)\) and \((Y,H)\) is equivalent to an equivalence \(e:X\simeq Y\) together with adjacency preservation \(\prod_{x,x':X} H(e(x),e(x'))=G(x,x')\). The truncated finiteness witness carries no further identity data. Node-indexed positions \(p:X\to\mathbb R^2\) move to \(p\circ e^{-1}:Y\to\mathbb R^2\); a selected vertex and dependent property proofs must move along the same structured equivalence. In particular, identifying graph shapes does not authorize leaving their node-indexed data untouched." nil)
 s8-3-p24 : Block
@@ -1254,19 +1254,19 @@ s8-3-p25 = heading (suc (suc (suc (suc zero)))) "Indexed packing and transport o
 s8-3-p26 : Block
 s8-3-p26 = prose (cons "A representation equivalence can be constructed rather than merely postulated. With \(\mathsf{Vec}(A,n):=\mathsf{Fin}(n)\to A\), a pair of indexed families and a family over the disjoint union of their indices are equivalent:" nil)
 s8-3-p27 : Block
-s8-3-p27 = construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{pack}(x,y)(\mathsf{inl}(i))&:=x(i),&" (cons "\mathsf{pack}(x,y)(\mathsf{inr}(j))&:=y(j),\\" (cons "\mathsf{unpack}(z)&:=" (cons "(\lambda i.z(\mathsf{inl}(i)),\lambda j.z(\mathsf{inr}(j))),\\" (cons "e_{m,n}&:" (cons "\bigl(\mathsf{Vec}(A,m)\times\mathsf{Vec}(A,n)\bigr)\\" (cons "&\hspace{2em}\simeq\bigl(\mathsf{Fin}(m)+\mathsf{Fin}(n)\to A\bigr)." (cons "\end{aligned}" (cons "\]" nil)))))))))))
+s8-3-p27 = realized (construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{pack}(x,y)(\mathsf{inl}(i))&:=x(i),&" (cons "\mathsf{pack}(x,y)(\mathsf{inr}(j))&:=y(j),\\" (cons "\mathsf{unpack}(z)&:=" (cons "(\lambda i.z(\mathsf{inl}(i)),\lambda j.z(\mathsf{inr}(j))),\\" (cons "e_{m,n}&:" (cons "\bigl(\mathsf{Vec}(A,m)\times\mathsf{Vec}(A,n)\bigr)\\" (cons "&\hspace{2em}\simeq\bigl(\mathsf{Fin}(m)+\mathsf{Fin}(n)\to A\bigr)." (cons "\end{aligned}" (cons "\]" nil)))))))))))) (cons "pack" (cons "unpack" (cons "pack-equiv" nil)))
 s8-3-p28 : Block
 s8-3-p28 = prose (cons "The two composites are identities by pair equality and function extensionality. Given an operation \(f\) on the pair representation, its operation on the sum-indexed representation is \(\mathsf{pack}\circ f\circ\mathsf{unpack}\). A dependent specification of \(f\), including its preservation proof, is transported along \(\mathsf{ua}(e_{m,n})\) in the corresponding family of operations and specifications. This is a complete index-level change; a byte layout or native in-place update adds its own state and address correspondence. In particular, packing the index family does not silently establish alias freedom or machine-layout equivalence." (cons "### 8.4 Executing an imperative operation is already a function" nil))
 s8-3-p29 : Block
 s8-3-p29 = prose (cons "Consider a state containing a valid mutable 32-bit word at location \(a\), with the value \(w\). A source statement `*p += 1` is interpreted, under appropriate language premises, as a state transformation" nil)
 s8-3-p30 : Block
-s8-3-p30 = construction (cons "\[" (cons "\mathsf{inc}_a:S_{\mathsf{valid}(a)}\to S_{\mathsf{valid}(a)}," (cons "\qquad" (cons "\mathsf{read}_a(\mathsf{inc}_a(s))" (cons "=\mathsf{add}_{32}(\mathsf{read}_a(s),1)." (cons "\tag{8.13}" (cons "\]" nil)))))))
+s8-3-p30 = realized (construction (cons "\[" (cons "\mathsf{inc}_a:S_{\mathsf{valid}(a)}\to S_{\mathsf{valid}(a)}," (cons "\qquad" (cons "\mathsf{read}_a(\mathsf{inc}_a(s))" (cons "=\mathsf{add}_{32}(\mathsf{read}_a(s),1)." (cons "\tag{8.13}" (cons "\]" nil)))))))) (cons "increment" (cons "increment-load" nil))
 s8-3-p31 : Block
 s8-3-p31 = prose (cons "The complete specification must also state a frame condition for other locations and, for concurrency, which interleavings and memory-order relations are permitted. The familiar imperative operation is not less exact than the function in (8.11). Its domain simply includes more state and more premises." nil)
 s8-3-p32 : Block
 s8-3-p32 = prose (cons "A typed proof about this statement may inhabit" nil)
 s8-3-p33 : Block
-s8-3-p33 = construction (cons "\[" (cons "\prod_{s:S_{\mathsf{valid}(a)}}" (cons "\mathsf{read}_a(\mathsf{inc}_a(s))" (cons "=\mathsf{add}_{32}(\mathsf{read}_a(s),1)." (cons "\tag{8.14}" (cons "\]" nil))))))
+s8-3-p33 = realized (construction (cons "\[" (cons "\prod_{s:S_{\mathsf{valid}(a)}}" (cons "\mathsf{read}_a(\mathsf{inc}_a(s))" (cons "=\mathsf{add}_{32}(\mathsf{read}_a(s),1)." (cons "\tag{8.14}" (cons "\]" nil))))))) (cons "increment-load" nil)
 s8-3-p34 : Block
 s8-3-p34 = prose (cons "A change from one byte layout to another can transport the state representation and the dependent proof if a suitable equivalence of *structured machine states* has been established. The actual source expression, its typed syntax, its interpretation, and the proof remain separately identifiable constructions. Nothing requires a privileged sequence in which the proof is “attached,” then “lowered,” then “realized.” We may work on any of these objects and their relationships." nil)
 s8-3-p35 : Block
@@ -1280,7 +1280,7 @@ s8-3-p38 = prose (cons "The parser yields a function declaration with one pointe
 s8-3-p39 : Block
 s8-3-p39 = prose (cons "Let \(S_{p}\) be the states in which \(p\) designates a live, writable, correctly aligned `std::uint32_t` object, with no conflicting concurrent access during the call. Write \(\mathsf{load}_p:S_p\to\mathsf{Word}_{32}\) and \(\mathsf{store}_p:S_p\to\mathsf{Word}_{32}\to S_p\), with the frame law on disjoint objects. The selected sequential source semantics gives" nil)
 s8-3-p40 : Block
-s8-3-p40 = construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{increment}(s)&:=\mathsf{store}_p(s,\mathsf{load}_p(s)+_{32}1),\\" (cons "\mathsf{load}_p(\mathsf{increment}(s))&=\mathsf{load}_p(s)+_{32}1,\\" (cons "\mathsf{frame}_q(\mathsf{increment}(s))&=\mathsf{frame}_q(s)" (cons "\quad(q\text{ disjoint from }p)." (cons "\end{aligned}" (cons "\tag{8.15}" (cons "\]" nil)))))))))
+s8-3-p40 = realized (construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{increment}(s)&:=\mathsf{store}_p(s,\mathsf{load}_p(s)+_{32}1),\\" (cons "\mathsf{load}_p(\mathsf{increment}(s))&=\mathsf{load}_p(s)+_{32}1,\\" (cons "\mathsf{frame}_q(\mathsf{increment}(s))&=\mathsf{frame}_q(s)" (cons "\quad(q\text{ disjoint from }p)." (cons "\end{aligned}" (cons "\tag{8.15}" (cons "\]" nil)))))))))) (cons "increment" (cons "increment-load" (cons "increment-frame" nil)))
 s8-3-p41 : Block
 s8-3-p41 = prose (cons "The first equation is the denotation of this particular statement under its stated premises; the next two follow from the store/load and frame laws. The memory event trace contains a read at \(p\) and a write at \(p\), in the source sequencing order. An equivalent byte-level representation of the object is obtained from (8.6)–(8.12) by transport along the structured state equivalence. The source text, its elaborated syntax, its abstract-machine state transformation, and any compiled target behavior are distinct representations linked by the displayed equations and the chosen compiler refinement theorem." nil)
 s8-5-p1 : Block

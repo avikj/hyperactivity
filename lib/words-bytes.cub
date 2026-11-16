@@ -1,0 +1,198 @@
+-- lib/words-bytes.cub — the paper's §8.3 (docs/hyperactivity.cub, “Representations, operations, and memory”)
+-- as code: a 32-bit word and its four little-endian bytes (8.6), encodeLE (8.7) and decodeLE (8.8)
+-- with both round trips (8.9); addition modulo 2³² (8.10) as ripple-carry addition with its exact
+-- law in ℕ, value + carry·2³² = x + y; addBytes (8.11) and its commuting equation (8.12); the
+-- increment of a stored word with its load and frame equations (8.13)–(8.15); and indexed packing,
+-- (Vec(A, m) × Vec(A, n)) ≃ (Fin(m) + Fin(n) → A).
+-- A word is its 32 bits, most significant first, with value Σ bit·2^position: the binary numeral of
+-- Fin(2³²)'s element. Byte j of encodeLE(w) is bits 8j to 8j + 7 counted from the least significant,
+-- which is ⌊w / 256^j⌋ mod 256 of (8.7).
+import "core.cub"
+import "observation.cub"
+import "xor-language.cub"
+import "structure.cub"
+import "behaviour.cub"
+-- (8.6)
+Word32 : Type
+Word32 = BitVec 32
+Bytes4 : Type
+Bytes4 = SumFin 4 → Byte
+bv-split : (m n : Nat) → BitVec (plus m n) → BitVec m × BitVec n
+bv-split zero n v = (unit , v)
+bv-split (suc m) n v = ((fst v , fst (bv-split m n (snd v))) , snd (bv-split m n (snd v)))
+bv-cat : (m n : Nat) → BitVec m → BitVec n → BitVec (plus m n)
+bv-cat zero n a b = b
+bv-cat (suc m) n a b = (fst a , bv-cat m n (snd a) b)
+bv-split-cat : (m n : Nat) → (a : BitVec m) → (b : BitVec n) → bv-split m n (bv-cat m n a b) ≡ (a , b)
+bv-split-cat zero n a b = λ k → (sf-unit a k , b)
+bv-split-cat (suc m) n a b = λ k → ((fst a , fst (bv-split-cat m n (snd a) b k)) , snd (bv-split-cat m n (snd a) b k))
+bv-cat-split : (m n : Nat) → (v : BitVec (plus m n)) → bv-cat m n (fst (bv-split m n v)) (snd (bv-split m n v)) ≡ v
+bv-cat-split zero n v = λ k → v
+bv-cat-split (suc m) n v = λ k → (fst v , bv-cat-split m n (snd v) k)
+-- the four places of Fin(4)
+fin4-0 : SumFin 4
+fin4-0 = inl unit
+fin4-1 : SumFin 4
+fin4-1 = inr (inl unit)
+fin4-2 : SumFin 4
+fin4-2 = inr (inr (inl unit))
+fin4-3 : SumFin 4
+fin4-3 = inr (inr (inr (inl unit)))
+fin4-pick : {A : Type} → A → A → A → A → SumFin 4 → A
+fin4-pick a0 a1 a2 a3 j = case j of
+  inl u → a0
+  inr j1 → (case j1 of
+    inl u → a1
+    inr j2 → (case j2 of
+      inl u → a2
+      inr j3 → (case j3 of
+        inl u → a3
+        inr e → Empty-rec e)))
+-- the bytes of a word: w = B3 ++ B2 ++ B1 ++ B0, B0 least significant
+le-s1 : Word32 → BitVec 8 × BitVec 24
+le-s1 w = bv-split 8 24 w
+le-s2 : Word32 → BitVec 8 × BitVec 16
+le-s2 w = bv-split 8 16 (snd (le-s1 w))
+le-s3 : Word32 → BitVec 8 × BitVec 8
+le-s3 w = bv-split 8 8 (snd (le-s2 w))
+-- (8.7)
+encodeLE : Word32 → Bytes4
+encodeLE w = fin4-pick (snd (le-s3 w)) (fst (le-s3 w)) (fst (le-s2 w)) (fst (le-s1 w))
+-- (8.8)
+decodeLE : Bytes4 → Word32
+decodeLE b = bv-cat 8 24 (b fin4-3) (bv-cat 8 16 (b fin4-2) (bv-cat 8 8 (b fin4-1) (b fin4-0)))
+-- (8.9) decodeLE(encodeLE(w)) = w
+decode-encode : (w : Word32) → decodeLE (encodeLE w) ≡ w
+decode-encode w =
+  concat {lzero} {Word32} {decodeLE (encodeLE w)} {bv-cat 8 24 (fst (le-s1 w)) (snd (le-s1 w))} {w}
+    (λ k → bv-cat 8 24 (fst (le-s1 w))
+      (concat {lzero} {BitVec 24} {bv-cat 8 16 (fst (le-s2 w)) (bv-cat 8 8 (fst (le-s3 w)) (snd (le-s3 w)))} {bv-cat 8 16 (fst (le-s2 w)) (snd (le-s2 w))} {snd (le-s1 w)}
+        (λ k2 → bv-cat 8 16 (fst (le-s2 w)) (bv-cat-split 8 8 (snd (le-s2 w)) k2))
+        (bv-cat-split 8 16 (snd (le-s1 w))) k))
+    (bv-cat-split 8 24 w)
+-- (8.9) encodeLE(decodeLE(b)) = b, place by place
+enc-dec-3 : (b : Bytes4) → fst (le-s1 (decodeLE b)) ≡ b fin4-3
+enc-dec-3 b = λ k → fst (bv-split-cat 8 24 (b fin4-3) (bv-cat 8 16 (b fin4-2) (bv-cat 8 8 (b fin4-1) (b fin4-0))) k)
+enc-dec-r1 : (b : Bytes4) → snd (le-s1 (decodeLE b)) ≡ bv-cat 8 16 (b fin4-2) (bv-cat 8 8 (b fin4-1) (b fin4-0))
+enc-dec-r1 b = λ k → snd (bv-split-cat 8 24 (b fin4-3) (bv-cat 8 16 (b fin4-2) (bv-cat 8 8 (b fin4-1) (b fin4-0))) k)
+enc-dec-s2 : (b : Bytes4) → le-s2 (decodeLE b) ≡ (b fin4-2 , bv-cat 8 8 (b fin4-1) (b fin4-0))
+enc-dec-s2 b = concat {lzero} {BitVec 8 × BitVec 16} {le-s2 (decodeLE b)} {bv-split 8 16 (bv-cat 8 16 (b fin4-2) (bv-cat 8 8 (b fin4-1) (b fin4-0)))} {(b fin4-2 , bv-cat 8 8 (b fin4-1) (b fin4-0))}
+  (λ k → bv-split 8 16 (enc-dec-r1 b k)) (bv-split-cat 8 16 (b fin4-2) (bv-cat 8 8 (b fin4-1) (b fin4-0)))
+enc-dec-s3 : (b : Bytes4) → le-s3 (decodeLE b) ≡ (b fin4-1 , b fin4-0)
+enc-dec-s3 b = concat {lzero} {BitVec 8 × BitVec 8} {le-s3 (decodeLE b)} {bv-split 8 8 (bv-cat 8 8 (b fin4-1) (b fin4-0))} {(b fin4-1 , b fin4-0)}
+  (λ k → bv-split 8 8 (snd (enc-dec-s2 b k))) (bv-split-cat 8 8 (b fin4-1) (b fin4-0))
+encode-decode-at : (b : Bytes4) → (j : SumFin 4) → encodeLE (decodeLE b) j ≡ b j
+encode-decode-at b j = case j return (λ x → encodeLE (decodeLE b) x ≡ b x) of
+  inl u → concat {lzero} {Byte} {snd (le-s3 (decodeLE b))} {b fin4-0} {b (inl u)} (λ k → snd (enc-dec-s3 b k)) (λ k → b (inl (sf-unit u k)))
+  inr j1 → (case j1 return (λ x → encodeLE (decodeLE b) (inr x) ≡ b (inr x)) of
+    inl u → concat {lzero} {Byte} {fst (le-s3 (decodeLE b))} {b fin4-1} {b (inr (inl u))} (λ k → fst (enc-dec-s3 b k)) (λ k → b (inr (inl (sf-unit u k))))
+    inr j2 → (case j2 return (λ x → encodeLE (decodeLE b) (inr (inr x)) ≡ b (inr (inr x))) of
+      inl u → concat {lzero} {Byte} {fst (le-s2 (decodeLE b))} {b fin4-2} {b (inr (inr (inl u)))} (λ k → fst (enc-dec-s2 b k)) (λ k → b (inr (inr (inl (sf-unit u k)))))
+      inr j3 → (case j3 return (λ x → encodeLE (decodeLE b) (inr (inr (inr x))) ≡ b (inr (inr (inr x)))) of
+        inl u → concat {lzero} {Byte} {fst (le-s1 (decodeLE b))} {b fin4-3} {b (inr (inr (inr (inl u))))} (enc-dec-3 b) (λ k → b (inr (inr (inr (inl (sf-unit u k))))))
+        inr e → Empty-rec e)))
+encode-decode : (b : Bytes4) → encodeLE (decodeLE b) ≡ b
+encode-decode b = funExt {lzero} {lzero} {SumFin 4} {Byte} {encodeLE (decodeLE b)} {b} (encode-decode-at b)
+-- thus the types are equivalent
+word-bytes : Equiv Word32 Bytes4
+word-bytes = isoToEquiv {lzero} {Word32} {Bytes4} encodeLE decodeLE encode-decode decode-encode
+-- ---------------------------------------------------------------- (8.10)–(8.12)
+bit : Bool → Nat
+bit true = suc zero
+bit false = zero
+pow2 : Nat → Nat
+pow2 zero = suc zero
+pow2 (suc n) = plus (pow2 n) (pow2 n)
+-- the value of n bits, most significant first
+bv-val : (n : Nat) → BitVec n → Nat
+bv-val zero v = zero
+bv-val (suc n) v = plus (times (bit (fst v)) (pow2 n)) (bv-val n (snd v))
+maj : Bool → Bool → Bool → Bool
+maj true true z = true
+maj true false z = z
+maj false true z = z
+maj false false z = false
+-- addition with carry in at the least significant end, carry out at the most significant
+bv-adc : (n : Nat) → BitVec n → BitVec n → Bool → BitVec n × Bool
+bv-adc zero a b c = (unit , c)
+bv-adc (suc n) a b c = ((bxor (bxor (fst a) (fst b)) (snd (bv-adc n (snd a) (snd b) c)) , fst (bv-adc n (snd a) (snd b) c)) ,
+  maj (fst a) (fst b) (snd (bv-adc n (snd a) (snd b) c)))
+-- the full adder: s + 2·carry = x + y + z
+full-adder : (x y z : Bool) → plus (bit (bxor (bxor x y) z)) (plus (bit (maj x y z)) (bit (maj x y z))) ≡ plus (plus (bit x) (bit y)) (bit z)
+full-adder true true true = λ k → suc (suc (suc zero))
+full-adder true true false = λ k → suc (suc zero)
+full-adder true false true = λ k → suc (suc zero)
+full-adder true false false = λ k → suc zero
+full-adder false true true = λ k → suc (suc zero)
+full-adder false true false = λ k → suc zero
+full-adder false false true = λ k → suc zero
+full-adder false false false = λ k → zero
+wb-distr-r : (a b c : Nat) → times a (plus b c) ≡ plus (times a b) (times a c)
+wb-distr-r a b c = transN (times-comm a (plus b c)) (transN (times-distr b c a) (λ k → plus (times-comm b a k) (times-comm c a k)))
+wb-swap-last : (a b c : Nat) → plus (plus a b) c ≡ plus (plus a c) b
+wb-swap-last a b c = transN (plus-assoc a b c) (transN (congN (plus a) (plus-comm b c)) (sym (plus-assoc a c b)))
+adc-arith : (S CO A0 B0 C1 P R VA VB CI : Nat) → plus S (plus CO CO) ≡ plus (plus A0 B0) C1 → plus R (times C1 P) ≡ plus (plus VA VB) CI →
+  plus (plus (times S P) R) (times CO (plus P P)) ≡ plus (plus (plus (times A0 P) VA) (plus (times B0 P) VB)) CI
+adc-arith S CO A0 B0 C1 P R VA VB CI fa ih =
+  transN (congN (plus (plus (times S P) R)) (wb-distr-r CO P P))
+  (transN (wb-swap-last (times S P) R (plus (times CO P) (times CO P)))
+  (transN (congN (λ z → plus z R) (sym (transN (times-distr S (plus CO CO) P) (congN (plus (times S P)) (times-distr CO CO P)))))
+  (transN (congN (λ z → plus (times z P) R) fa)
+  (transN (congN (λ z → plus z R) (transN (times-distr (plus A0 B0) C1 P) (congN (λ z → plus z (times C1 P)) (times-distr A0 B0 P))))
+  (transN (plus-assoc (plus (times A0 P) (times B0 P)) (times C1 P) R)
+  (transN (congN (plus (plus (times A0 P) (times B0 P))) (transN (plus-comm (times C1 P) R) ih))
+  (transN (sym (plus-assoc (plus (times A0 P) (times B0 P)) (plus VA VB) CI))
+  (congN (λ z → plus z CI) (stree-swap4 (times A0 P) (times B0 P) VA VB)))))))))
+-- value of the sum plus carry out at 2ⁿ = x + y + carry in
+adc-law : (n : Nat) → (a b : BitVec n) → (c : Bool) →
+  plus (bv-val n (fst (bv-adc n a b c))) (times (bit (snd (bv-adc n a b c))) (pow2 n)) ≡ plus (plus (bv-val n a) (bv-val n b)) (bit c)
+adc-law zero a b c = times-one (bit c)
+adc-law (suc n) a b c = adc-arith
+  (bit (bxor (bxor (fst a) (fst b)) (snd (bv-adc n (snd a) (snd b) c)))) (bit (maj (fst a) (fst b) (snd (bv-adc n (snd a) (snd b) c))))
+  (bit (fst a)) (bit (fst b)) (bit (snd (bv-adc n (snd a) (snd b) c))) (pow2 n)
+  (bv-val n (fst (bv-adc n (snd a) (snd b) c))) (bv-val n (snd a)) (bv-val n (snd b)) (bit c)
+  (full-adder (fst a) (fst b) (snd (bv-adc n (snd a) (snd b) c))) (adc-law n (snd a) (snd b) c)
+-- (8.10) add₃₂(x, y) = (x + y) mod 2³²: by adc-law at n = 32 with carry in false, the sum's value
+-- plus the dropped carry·2³² is x + y
+add32 : Word32 → Word32 → Word32
+add32 x y = fst (bv-adc 32 x y false)
+-- (8.11), (8.12)
+addBytes : Bytes4 → Bytes4 → Bytes4
+addBytes a b = encodeLE (add32 (decodeLE a) (decodeLE b))
+addBytes-commutes : (a b : Bytes4) → decodeLE (addBytes a b) ≡ add32 (decodeLE a) (decodeLE b)
+addBytes-commutes a b = decode-encode (add32 (decodeLE a) (decodeLE b))
+-- ---------------------------------------------------------------- (8.13)–(8.15)
+bv-zero : (n : Nat) → BitVec n
+bv-zero zero = unit
+bv-zero (suc n) = (false , bv-zero n)
+word-one : Word32
+word-one = bv-cat 31 1 (bv-zero 31) (true , unit)
+-- *p += 1 on a state with a valid word at p: load_p and store_p with the store/load and frame laws
+increment : {S : Type} → (S → Word32) → (S → Word32 → S) → S → S
+increment {S} load store s = store s (add32 (load s) word-one)
+-- (8.13), (8.14), (8.15) load_p(increment(s)) = load_p(s) +₃₂ 1
+increment-load : {S : Type} → (load : S → Word32) → (store : S → Word32 → S) → ((s : S) → (w : Word32) → load (store s w) ≡ w) →
+  (s : S) → load (increment load store s) ≡ add32 (load s) word-one
+increment-load {S} load store ls s = ls s (add32 (load s) word-one)
+-- (8.15) frame_q(increment(s)) = frame_q(s) for q disjoint from p
+increment-frame : {S F : Type} → (load : S → Word32) → (store : S → Word32 → S) → (frame : S → F) →
+  ((s : S) → (w : Word32) → frame (store s w) ≡ frame s) → (s : S) → frame (increment load store s) ≡ frame s
+increment-frame {S} {F} load store frame fl s = fl s (add32 (load s) word-one)
+-- ---------------------------------------------------------------- indexed packing
+pack : {A : Type} → (m n : Nat) → (SumFin m → A) × (SumFin n → A) → Sum (SumFin m) (SumFin n) → A
+pack m n xy k = case k of
+  inl i → fst xy i
+  inr j → snd xy j
+unpack : {A : Type} → (m n : Nat) → (Sum (SumFin m) (SumFin n) → A) → (SumFin m → A) × (SumFin n → A)
+unpack m n z = ((λ i → z (inl i)) , (λ j → z (inr j)))
+pack-unpack-at : {A : Type} → (m n : Nat) → (z : Sum (SumFin m) (SumFin n) → A) → (k : Sum (SumFin m) (SumFin n)) → pack m n (unpack m n z) k ≡ z k
+pack-unpack-at m n z k = case k return (λ x → pack m n (unpack m n z) x ≡ z x) of
+  inl i → λ t → z (inl i)
+  inr j → λ t → z (inr j)
+pack-equiv : {A : Type} → (m n : Nat) → Equiv ((SumFin m → A) × (SumFin n → A)) (Sum (SumFin m) (SumFin n) → A)
+pack-equiv {A} m n = isoToEquiv {lzero} {(SumFin m → A) × (SumFin n → A)} {Sum (SumFin m) (SumFin n) → A} (pack {A} m n) (unpack {A} m n)
+  (λ z → funExt {lzero} {lzero} {Sum (SumFin m) (SumFin n)} {A} {pack {A} m n (unpack {A} m n z)} {z} (pack-unpack-at {A} m n z))
+  (λ xy → λ t → xy)
+-- §8.3 graphs up to relabeling: a type with an unchosen enumeration and an adjacency relation
+GraphSym : Nat → Type 1
+GraphSym n = (X : Type) × Trunc (Equiv X (SumFin n)) × (X → X → Bool)
