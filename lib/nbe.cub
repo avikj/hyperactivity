@@ -37,10 +37,14 @@ import "linproof.cub"
 -- environments are in Type 1, so a semantic type may contain a Type (the universe's El, P6) and an
 -- environment may contain a type, with nothing lifted.
 data TyShape = s-bool | s-pi (a : TyShape) (b : TyShape) | s-sig (a : TyShape) (b : TyShape) | s-path (a : TyShape)
--- the semantic Bool type: nothing; One1 is a type at level 1 with the one value `one`
-data One1 = one1 (pad : Type → Type)
+-- the semantic Bool type: nothing to know, so a contractible type at level 1 (the host gives a data
+-- type the level of its fields, so this is the singleton of Bool in Type), `one` its centre
+One1 : Type 1
+One1 = (X : Type) × PathP (λ i → Type) X Bool
 one : One1
-one = one1 (λ X → X)
+one = (Bool , λ i → Bool)
+one-contr : (u : One1) → PathP (λ i → One1) u one
+one-contr u = λ i → (snd u i , λ j → snd u (i \/ j))
 TyU : Type 2
 -- binder names chosen not to collide (telescope instantiation captures names)
 TyU = (uM : Type 1) × (uM → Type)
