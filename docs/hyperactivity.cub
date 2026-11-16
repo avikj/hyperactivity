@@ -1542,7 +1542,7 @@ s9-3-p38 = heading (suc (suc (suc (suc zero)))) "Decoder stability and construct
 s9-3-p39 : Block
 s9-3-p39 = prose (cons "Fix a target instruction set whose machine state is a type `S`, and a byte decoder `decode : Bytes → Addr → Option Instr`. Define `exec : Instr → S → S + Trap` and a fetch/execute transition" nil)
 s9-3-p40 : Block
-s9-3-p40 = construction (cons "\[" (cons "\delta_T(b,s)=\begin{cases}" (cons "\mathsf{trap}(\mathsf{decodeFault})&\mathsf{decode}(b,pc(s))=\mathsf{none},\\" (cons "\mathsf{exec}(i,s)&\mathsf{decode}(b,pc(s))=\mathsf{some}(i)." (cons "\end{cases}" (cons "\tag{9.11}" (cons "\]" nil)))))))
+s9-3-p40 = realized (construction (cons "\[" (cons "\delta_T(b,s)=\begin{cases}" (cons "\mathsf{trap}(\mathsf{decodeFault})&\mathsf{decode}(b,pc(s))=\mathsf{none},\\" (cons "\mathsf{exec}(i,s)&\mathsf{decode}(b,pc(s))=\mathsf{some}(i)." (cons "\end{cases}" (cons "\tag{9.11}" (cons "\]" nil)))))))) (cons "toy-decode" (cons "toy-delta" nil))
 s9-3-p41 : Block
 s9-3-p41 = prose (cons "`decode` includes instruction length and the updated instruction pointer. An ISA model must define registers, flags, memory accesses, traps, instruction bytes, and the machine's observable events. Merely writing an instruction mnemonic is not an encoding semantics." nil)
 s9-3-p42 : Block
@@ -1564,15 +1564,15 @@ s9-3-p49 = heading (suc (suc (suc (suc zero)))) "Exact bytes for a small machine
 s9-3-p50 : Block
 s9-3-p50 = prose (cons "For clarity, use a completely defined byte-oriented toy ISA with variable instruction lengths. Registers `r0`, `r1` are bytes, `pc` is a natural address, and arithmetic is modulo 256:" nil)
 s9-3-p51 : Block
-s9-3-p51 = construction (cons "```text" (cons "Instruction          Bytes       Transition" (cons "MOVI r0, imm8        10 imm8     r0 := imm8; pc := pc+2" (cons "MOVI r1, imm8        11 imm8     r1 := imm8; pc := pc+2" (cons "XOR r0, r1           20          r0 := r0 xor r1; pc := pc+1" (cons "STORE r0, addr8      30 addr8    mem[addr8] := r0; pc := pc+2" (cons "HALT                 ff          halted := true; pc := pc+1" (cons "```" nil))))))))
+s9-3-p51 = realized (construction (cons "```text" (cons "Instruction          Bytes       Transition" (cons "MOVI r0, imm8        10 imm8     r0 := imm8; pc := pc+2" (cons "MOVI r1, imm8        11 imm8     r1 := imm8; pc := pc+2" (cons "XOR r0, r1           20          r0 := r0 xor r1; pc := pc+1" (cons "STORE r0, addr8      30 addr8    mem[addr8] := r0; pc := pc+2" (cons "HALT                 ff          halted := true; pc := pc+1" (cons "```" nil))))))))) (cons "ToyInstr" (cons "ToyState" (cons "toy-decode-at" (cons "toy-exec" nil))))
 s9-3-p52 : Block
 s9-3-p52 = prose (cons "The decoder is a case split on the first byte and, for two-byte instructions, on the existence of the following byte; all other leading bytes trap. A complete compiler for the straight-line expression `Xor(Const(a),Const(b))` with destination address `d` is" nil)
 s9-3-p53 : Block
-s9-3-p53 = construction (cons "```text" (cons "compileXor(a,b,d) = [10,a, 11,b, 20, 30,d, ff]" (cons "```" nil)))
+s9-3-p53 = realized (construction (cons "```text" (cons "compileXor(a,b,d) = [10,a, 11,b, 20, 30,d, ff]" (cons "```" nil)))) (cons "toy-compile-xor" nil)
 s9-3-p54 : Block
 s9-3-p54 = prose (cons "Its exact trace is" nil)
 s9-3-p55 : Block
-s9-3-p55 = construction (cons "\[" (cons "\begin{array}{rcl}" (cons "(pc,r_0,r_1,\mu)&=&(0,\_,\_,\mu)\\" (cons "&\longrightarrow&(2,a,\_,\mu)\\" (cons "&\longrightarrow&(4,a,b,\mu)\\" (cons "&\longrightarrow&(5,a\oplus b,b,\mu)\\" (cons "&\longrightarrow&(7,a\oplus b,b,\mu[d\mapsto a\oplus b])\\" (cons "&\longrightarrow&(8,a\oplus b,b,\mu[d\mapsto a\oplus b],\mathsf{halted})." (cons "\end{array}" (cons "\tag{9.14}" (cons "\]" nil)))))))))))
+s9-3-p55 = realized (construction (cons "\[" (cons "\begin{array}{rcl}" (cons "(pc,r_0,r_1,\mu)&=&(0,\_,\_,\mu)\\" (cons "&\longrightarrow&(2,a,\_,\mu)\\" (cons "&\longrightarrow&(4,a,b,\mu)\\" (cons "&\longrightarrow&(5,a\oplus b,b,\mu)\\" (cons "&\longrightarrow&(7,a\oplus b,b,\mu[d\mapsto a\oplus b])\\" (cons "&\longrightarrow&(8,a\oplus b,b,\mu[d\mapsto a\oplus b],\mathsf{halted})." (cons "\end{array}" (cons "\tag{9.14}" (cons "\]" nil)))))))))))) (cons "toy-trace" (cons "toy-xor-trace" (cons "toy-xor-stores" nil)))
 s9-3-p56 : Block
 s9-3-p56 = prose (cons "Thus the compiler returns a byte string **and** a trace proof that the target memory at `d` contains the source expression's denotation. The same construction scales to a richer ISA by supplying its decoder, transition equations, and instruction-level block constructors; it does not follow that all source operations are single instructions. Functions, allocation, exceptions, threads, and system calls require runtime and world representations with corresponding semantic clauses." nil)
 s9-3-p57 : Block

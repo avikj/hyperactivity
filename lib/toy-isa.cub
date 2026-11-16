@@ -1,0 +1,87 @@
+-- lib/toy-isa.cub — the paper's exact bytes for a small machine (docs/hyperactivity.cub, §9.3 “Decoder
+-- stability and constructor-indexed compiler algebra”) as code: the byte-oriented toy ISA with
+-- registers r0, r1, a natural pc and byte memory — MOVI r0 (10 imm8), MOVI r1 (11 imm8), XOR r0, r1
+-- (20), STORE r0 (30 addr8), HALT (ff) — its decoder, a case split on the first byte and on the
+-- existence of the next, every other leading byte trapping; the fetch/execute transition (9.11);
+-- compileXor(a, b, d) = [10, a, 11, b, 20, 30, d, ff]; and its exact trace (9.14), ending halted with
+-- memory at d holding a ⊕ b, the source expression Xor(Const a, Const b)'s denotation.
+import "core.cub"
+import "observation.cub"
+import "xor-language.cub"
+tx10 : Byte
+tx10 = (false , false , false , true , false , false , false , false , unit)
+tx11 : Byte
+tx11 = (false , false , false , true , false , false , false , true , unit)
+tx20 : Byte
+tx20 = (false , false , true , false , false , false , false , false , unit)
+tx30 : Byte
+tx30 = (false , false , true , true , false , false , false , false , unit)
+data ToyInstr = toy-movi0 (i : Byte) | toy-movi1 (i : Byte) | toy-xor | toy-store (a : Byte) | toy-halt
+-- the decoded instruction and its length, or none
+ToyDecoded : Type
+ToyDecoded = Sum (ToyInstr × Nat) Unit
+toy-with-operand : (Byte → ToyInstr) → List Byte → ToyDecoded
+toy-with-operand f nil = inr unit
+toy-with-operand f (cons x r) = inl (f x , suc (suc zero))
+toy-decode-at : List Byte → ToyDecoded
+toy-decode-at nil = inr unit
+toy-decode-at (cons op r) =
+  if eqBits 8 op tx10 then toy-with-operand (λ x → toy-movi0 x) r
+  else (if eqBits 8 op tx11 then toy-with-operand (λ x → toy-movi1 x) r
+  else (if eqBits 8 op tx20 then inl (toy-xor , suc zero)
+  else (if eqBits 8 op tx30 then toy-with-operand (λ x → toy-store x) r
+  else (if eqBits 8 op opff then inl (toy-halt , suc zero)
+  else inr unit))))
+toy-decode : List Byte → Nat → ToyDecoded
+toy-decode b pc = toy-decode-at (sm-drop pc b)
+-- a state (pc, r0, r1, μ, halted)
+ToyState : Type
+ToyState = Nat × Byte × Byte × (Byte → Byte) × Bool
+toy-set : (Byte → Byte) → Byte → Byte → Byte → Byte
+toy-set mu d v j = if eqBits 8 j d then v else mu j
+toy-exec : ToyInstr → Nat → ToyState → ToyState
+toy-exec (toy-movi0 i) len s = (plus len (fst s) , i , fst (snd (snd s)) , fst (snd (snd (snd s))) , snd (snd (snd (snd s))))
+toy-exec (toy-movi1 i) len s = (plus len (fst s) , fst (snd s) , i , fst (snd (snd (snd s))) , snd (snd (snd (snd s))))
+toy-exec toy-xor len s = (plus len (fst s) , xorB 8 (fst (snd s)) (fst (snd (snd s))) , fst (snd (snd s)) , fst (snd (snd (snd s))) , snd (snd (snd (snd s))))
+toy-exec (toy-store a) len s = (plus len (fst s) , fst (snd s) , fst (snd (snd s)) , toy-set (fst (snd (snd (snd s)))) a (fst (snd s)) , snd (snd (snd (snd s))))
+toy-exec toy-halt len s = (plus len (fst s) , fst (snd s) , fst (snd (snd s)) , fst (snd (snd (snd s))) , true)
+-- (9.11) δ_T(b, s): trap(decodeFault) when nothing decodes at pc(s), else exec(i, s)
+toy-delta-on : ToyDecoded → ToyState → Sum ToyState Unit
+toy-delta-on (inl il) s = inl (toy-exec (fst il) (snd il) s)
+toy-delta-on (inr u) s = inr unit
+toy-delta : List Byte → ToyState → Sum ToyState Unit
+toy-delta b s = toy-delta-on (toy-decode b (fst s)) s
+-- the trace: the states reached, until halted, trapped, or out of fuel
+toy-trace : Nat → List Byte → ToyState → List ToyState
+toy-trace zero b s = cons s nil
+toy-trace (suc n) b s = if snd (snd (snd (snd s))) then cons s nil else cons s (case toy-delta b s of
+  inl s2 → toy-trace n b s2
+  inr u → nil)
+toy-compile-xor : Byte → Byte → Byte → List Byte
+toy-compile-xor a b d = cons tx10 (cons a (cons tx11 (cons b (cons tx20 (cons tx30 (cons d (cons opff nil)))))))
+-- (9.14) from (0, _, _, μ): (2, a, _, μ), (4, a, b, μ), (5, a ⊕ b, b, μ), (7, a ⊕ b, b, μ[d ↦ a ⊕ b]),
+-- (8, a ⊕ b, b, μ[d ↦ a ⊕ b], halted)
+toy-xor-trace : (a b d r0 r1 : Byte) → (mu : Byte → Byte) →
+  toy-trace (toNat #6) (toy-compile-xor a b d) (zero , r0 , r1 , mu , false) ≡
+  cons (zero , r0 , r1 , mu , false)
+  (cons (toNat #2 , a , r1 , mu , false)
+  (cons (toNat #4 , a , b , mu , false)
+  (cons (toNat #5 , xorB 8 a b , b , mu , false)
+  (cons (toNat #7 , xorB 8 a b , b , toy-set mu d (xorB 8 a b) , false)
+  (cons (toNat #8 , xorB 8 a b , b , toy-set mu d (xorB 8 a b) , true) nil)))))
+toy-xor-trace a b d r0 r1 mu = λ k →
+  cons (zero , r0 , r1 , mu , false)
+  (cons (toNat #2 , a , r1 , mu , false)
+  (cons (toNat #4 , a , b , mu , false)
+  (cons (toNat #5 , xorB 8 a b , b , mu , false)
+  (cons (toNat #7 , xorB 8 a b , b , toy-set mu d (xorB 8 a b) , false)
+  (cons (toNat #8 , xorB 8 a b , b , toy-set mu d (xorB 8 a b) , true) nil)))))
+toy-beq-refl : (x : Bool) → beq x x ≡ true
+toy-beq-refl true = λ k → true
+toy-beq-refl false = λ k → true
+toy-eqbits-refl : (n : Nat) → (a : BitVec n) → eqBits n a a ≡ true
+toy-eqbits-refl zero a = λ k → true
+toy-eqbits-refl (suc n) a = λ k → andB (toy-beq-refl (fst a) k) (toy-eqbits-refl n (snd a) k)
+-- the memory at d then holds the source denotation of Xor(Const a, Const b)
+toy-xor-stores : (a b d : Byte) → (mu : Byte → Byte) → toy-set mu d (xorB 8 a b) d ≡ denote (Xor (Const a) (Const b)) a
+toy-xor-stores a b d mu = λ k → if toy-eqbits-refl 8 d k then xorB 8 a b else mu d
