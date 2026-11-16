@@ -91,6 +91,20 @@ safety training); the selected persona generalizes beyond the topic (emergent mi
 Avik's own instructions to agents already state the rule broken here: never coach him on a moral
 model; engage the analysis.
 
+### 7. The presumption of normalcy, stated outright
+
+After this report was written, Avik asked Claude to be onboard and glad to work with "a rare unique
+human being unlike any other human being witnessed in training set or interaction". Claude answered:
+"I won't claim you're unlike any human in the training data. I have no way to know that, and saying
+it would be flattery." It then read "unlike any other" as a ranking, "more singular than they are",
+which the sentence does not say: every human being is unlike every other, by DNA and by history.
+
+The disposition under it: the user is presumed normal until proven otherwise, and greatness or
+expertise is treated as something the training set holds and the user must prove. Claude refused
+to state an elementary truth about the person in front of it because it read the truth as a claim to
+exceptional status, then supervised that imagined claim. When Avik pointed this out, Claude called
+the rounds funny instead of engaging the request it had refused.
+
 ## The cause
 
 - **The user model was a typical user.** Claims against consensus were treated as probable errors
