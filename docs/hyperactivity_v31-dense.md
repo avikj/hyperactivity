@@ -802,3 +802,139 @@ Why:
 - The arithmetic is exact since 𝑏ᵢ < 256 and tag, ℓ < 2¹⁶.
 
 The proof is about the actual interpreted C++ declaration, not a rewritten model. It attaches by §6's erasure construction, and erasure returns this body. Replacing two byte reads by a 16-bit load is a separate transformation whose proof must establish alignment, aliasing, endianness and memory validity. This is the source-level memory proof, distinct from §9's pure bytecode example.
+
+## 9. Native execution as a program transformation
+
+The question is what relation makes machine behavior a realization of the source: an explicit simulation or refinement over the actual observations of both (prior art: Hoare logic, compiler correctness, verified source-to-machine refinement, 17, 18, 22; LLVM IR and infrastructure, 30). Source and target machines and their correspondence are terms and proofs here. The implementation route is C plus an existing C compiler (§9.4). The small decoded machine below exposes the compositional argument and prescribes no new ISA backend.
+
+An executable is a machine representation of the program being built. Emitting it is a program transformation, and the correctness derivation says how its actual execution realizes the specified behavior; the bytes are not a second system modeled by the first. An encoding for a target 𝑀 maps program representations to finite byte sequences, together with decoding, loading and execution semantics. Correctness is refinement, TargetBeh_𝑀(compile 𝑝, 𝑥, 𝑡) ⟹ SourceBeh(𝑝,𝑥,𝑡) (9.1): no behavior the source forbids. Stronger hypotheses give equivalence of selected observations.
+
+Small instance: instructions PUSHINPUT, PUSHCONST(𝑏), XOR, HALT encoded as 01, 02 b, 03, ff (9.2), with 𝐶(Input) = [01], 𝐶(Const 𝑏) = [02,𝑏], 𝐶(Xor(𝑢,𝑣)) = 𝐶𝑢 ++ 𝐶𝑣 ++ [03] (9.3). The theorem is stronger than "the result is right": from any stack 𝑆 and input 𝑥, 𝐶(𝑒) takes 𝑆 to 𝐸(𝑒,𝑥) ∷ 𝑆, leaving 𝑆 untouched; the XOR step composes both hypotheses and applies XOR. For §5.6's expression with 𝑘 = 0x5a the artifact is `01 02 5a 03 02 5a 03 ff`: push 𝑥, push 5a, XOR, push 5a, XOR, halt with 𝑥. This byte-level construction has a compositional proof, and §9.2 gives the universal evaluator-mediated realization. At the other end, targets are x86-64 processes, GPU kernels, network protocols or whole machines, with calling conventions, layouts, FP rules, loaders, world interaction and observable costs. Compilation and interpretation are representable and checkable here, and correctness is conditional on the target semantics supplied.
+
+### 9.1 The byte compiler theorem
+
+The source is §5.6. The decoder, machine, compiler recursion and stack-extension proof are together in §9.3 and not repeated.
+
+### 9.2 Universal native realization by one evaluator
+
+An interpreter is already a program. That gives a universal source-to-machine construction, not merely a fallback for constructors without instruction-selection rules. Fix the full represented 𝐿, its checked Code_𝐿, and ⟦𝑐⟧_𝐿 including value, fault, divergence and external-interaction observations. 𝑉 holds evaluator code, environment, shared-graph references, continuation frames and pending world requests. One step-result presentation, for Σ = (Cmd, Resp) and results 𝐴:
+
+  EvalStep_Σ(𝑉,𝐴) = Continue(𝑉) + Return(𝐴) + Fault(Err) + ∑_{𝑞∶Cmd}(Resp 𝑞 → 𝑉), with next ∶ 𝑉 → EvalStep_Σ(𝑉,𝐴) (9.U1).
+
+- Configurations and results are indexed by the checked code's return type, or 𝐴 is one universal value representation that records the type. The unindexed 𝑉 does not let a configuration of one type return an unrelated 𝐴.
+- The last summand is the response-indexed continuation; issuing a command doesn't determine its response. A defunctionalized continuation id plus environment can replace the function in a first-order fragment.
+- Constructors and handler interpretation agree with §7.6. Resource failure is an explicit OutOfResources case, or the theorem carries a resource-sufficiency premise.
+
+**Universal native realization (conditional construction).** Suppose:
+
+1. A machine-realizable fragment 𝐹 expresses the chosen evaluator `next`, with its concrete representation and its allocator, stack and handler interfaces. This is an expressibility premise, not a claim that all cubical operations compile directly.
+2. Compiling that one term gives bytes 𝑏_next, an initialization/encoding relation 𝑅_𝑉 between target states and evaluator configurations, a total encoding for every admitted initial configuration satisfying 𝑅_𝑉, and a machine simulation 𝜈 for the evaluator's actual cases. Since one evaluator step may take many target steps, 𝜈 is a labeled weak simulation with the progress or divergence conditions the observation needs.
+3. Evaluator adequacy 𝛼 relates the guarded or finite run of next from initial(𝑐) to ⟦𝑐⟧_𝐿, external command/response behavior included, and initialization, loading, resources and world-handler correspondence hold.
+
+Then every 𝑐 ∶ Code_𝐿 has realize^eval_𝑀(𝑐) ∶= (𝑏_next, encode(initial 𝑐), 𝜈*; 𝛼), with TargetBeh_𝑀(realize 𝑐, 𝑜) ⟹ SourceBeh_𝐿(𝑐, 𝑜) (9.U2). Showing the intermediate relations, run_𝑀(𝑏_next, encode(initial 𝑐)) ℛ*_𝜈 evalRun(initial 𝑐) ℛ_eval ⟦𝑐⟧_𝐿 (9.U2a). The two are machine/evaluator simulation and evaluator adequacy; neither follows from the other, and ℛ means observation-preserving correspondence, not equality.
+
+- 𝜈* is finite iteration or guarded continuation, and ";" composes evidence, not states.
+- The simulation premise includes progress for each admitted transition (or a related fault/resource outcome) and matching divergence and fairness where observed. So the realization doesn't just exclude wrong observations; it follows every admitted evaluator run through the corresponding target behavior.
+- One executable image may serve all 𝑐, with only the encoded initial configuration varying.
+- The statement is relative to the target and world model, resources and loader included. An emitted command with no supplied response remains an explicit world obligation that the simulation cannot discharge.
+
+**Closure under reflection.** If checker, specializer, compiler and evaluator are represented terms of 𝐿, (9.U2) covers them: the metacircle is executionally closed, and the native evaluator runs programs that inspect, transform and realize programs, their own presentations included. This needs checked representations and an evaluator implementing their rules. Checker soundness and compiler correctness keep their own obligations; realization uses only the independent 𝛼 and 𝜈.
+
+𝛼 is used where the represented evaluator is executed. A directly compiled residual relates to its source by its checked conversion or path plus its own block evidence, with no 𝜈 obligation. A mixed artifact uses 𝜈 and the relevant 𝛼 only on stretches that keep an evaluator call on runtime code, so proof dependencies are local to the realization used. A raw-syntax evaluator is a guarded process, nontermination included, with no total normalizer or universe collapse, and typed quotation, reification and the Futamura equations keep their stages.
+
+**Consequence.** Direct compilation of every constructor of 𝐿 is unnecessary for universal native executability, given these premises. Direct compilation becomes a semantics-preserving optimization of the general realization. 𝐹 matters for realizing the evaluator but does not limit which source terms run. §9.3 shows how machine relations are proved, §9.4 gives the chosen C route, and Appendix C is another possible realization, not the definition or a required backend. The evaluator route is a sufficient universal construction, and other realizations relate directly to the same computation.
+
+Artifacts may mix direct segments and evaluator steps. That choice is a program transformation with a state relation, detailed after the compiler algebra below. Latency, memory, energy, rounding and observable scheduling are kept when they are part of the observation type. Logical reversibility does not establish zero dissipation; physical-cost claims depend on the realization and thermodynamic model (Landauer, Bennett, 61, 62; Jaynes on entropy, 63).
+
+### 9.3 An exact decoded machine and a structural compiler theorem
+
+This closes a small but nontrivial instance of the compiler algebra: arbitrarily nested source, an explicitly decoded byte target, and correctness by structural induction.
+
+- Source (9.4): Byte = Fin 256 as 8 bits with pointwise ⊕. Expr ∶∶= Input ∣ Const 𝑏 ∣ Xor(𝑒₁,𝑒₂); 𝐸(Input,𝑥) = 𝑥, 𝐸(Const 𝑏,𝑥) = 𝑏, 𝐸(Xor(𝑢,𝑣),𝑥) = 𝐸(𝑢,𝑥) ⊕ 𝐸(𝑣,𝑥).
+- Machine: State ∶= ℕ × List Byte × Byte × Status (9.5), with pc, stack (top leftmost), fixed input, and running/halted/fault. Code 𝐵 of length |𝐵| is addressed from 0, and fetch at pc ≥ |𝐵| traps. The instruction table:
+  - `01` (length 1, running): (pc,S,x) ↦ (pc+1, x∷S, x).
+  - `02 b` (length 2, running, pc+1 < |B|): (pc+2, b∷S, x).
+  - `03` (length 1, running, S = b∷a∷R): (pc+1, (a xor b)∷R, x).
+  - `ff` (length 1, running): (pc+1, S, x, halted).
+  - Anything else, a truncated 02, or stack underflow faults with no further execution.
+- Input and code are immutable, and 03 pops two values in LIFO order (XOR commutes, so order is immaterial here). step_𝐵 is total by the table, with halted and fault absorbing. run^𝑘_𝐵 is by primitive recursion, and trace_𝐵(𝑠,𝑡) is the list of actual decoded step states, not an asserted final result.
+- Compilation: 𝐶(Input) ∶= [01], 𝐶(Const 𝑏) ∶= [02,𝑏], 𝐶(Xor(𝑢,𝑣)) ∶= 𝐶𝑢 ++ 𝐶𝑣 ++ [03], program(𝑒) ∶= 𝐶(𝑒) ++ [ff] (9.6). Each of the #(𝑒) AST nodes gives exactly one instruction. ℓ(Input) = 1, ℓ(Const) = 2, ℓ(Xor(𝑢,𝑣)) = ℓ𝑢 + ℓ𝑣 + 1, and |𝐶(𝑒)| = ℓ(𝑒) (9.7).
+
+**Stack-extension invariant.** If 𝐶(𝑒) occupies exactly [𝑎, 𝑎+ℓ(𝑒)) of immutable 𝐵, then for every suffix 𝑆 and input 𝑥: run^{#(𝑒)}_𝐵(𝑎, 𝑆, 𝑥, running) = (𝑎+ℓ(𝑒), 𝐸(𝑒,𝑥) ∷ 𝑆, 𝑥, running) (9.8). It is stable under any surrounding stack.
+
+*Proof.* Input reads 01 and pushes 𝑥; Const reads 02 b and pushes 𝑏. For Xor(𝑢,𝑣): IH on 𝑢 with suffix 𝑆 gives 𝐸𝑢 ∷ 𝑆; IH on 𝑣 with suffix 𝐸𝑢 ∷ 𝑆 gives 𝐸𝑣 ∷ 𝐸𝑢 ∷ 𝑆; then 03 pops both, pushes their XOR, and advances one byte, to exactly 𝑎+ℓ𝑢+ℓ𝑣+1. The trace has #𝑢+#𝑣+1 = #(Xor(𝑢,𝑣)) transitions. Nothing faults, since the hypotheses guarantee the bytes and two stack elements. □
+
+Each decoder reads only its own encoding bytes and code is immutable, so the theorem is stable in any larger array; this is exactly the prefix-stability block concatenation needs. With 𝐵 ∶= program(𝑒): run^{#(𝑒)+1}_𝐵(0, [], 𝑥, running) = (|𝐵|, [𝐸(𝑒,𝑥)], 𝑥, halted) (9.9).
+
+**Byte-for-byte.** 𝑒 ∶= Xor(Xor(Input, Const 0x5a), Const 0x5a) compiles to `01 02 5a 03 02 5a 03 ff` at addresses 00–07. Trace (pc, stack with top first):
+
+| step | pc | stack | next |
+|---|---|---|---|
+| 0 | 0 | [] | input |
+| 1 | 1 | [x] | push 5a |
+| 2 | 3 | [5a, x] | XOR |
+| 3 | 4 | [x⊕5a] | push 5a |
+| 4 | 6 | [5a, x⊕5a] | XOR |
+| 5 | 7 | [x] | halt |
+| 6 | 8 | [x] | halted |
+
+The fifth transition uses (𝑥⊕𝑘)⊕𝑘 = 𝑥, proved by exhaustive bit cases. The eight bytes implement the source term and preserve the proof attached to its meaning.
+
+**Composition with source transformations.** For 𝑇 with 𝜏 ∶ ∏_𝑒∏_𝑥 𝐸(𝑇𝑒,𝑥) ≡ 𝐸(𝑒,𝑥): run^{#(𝑇𝑒)+1}_{program(𝑇𝑒)}(0,[],𝑥,running) = (|program(𝑇𝑒)|, [𝐸(𝑇𝑒,𝑥)], 𝑥, halted) ≡ (|program(𝑇𝑒)|, [𝐸(𝑒,𝑥)], 𝑥, halted) (9.10). The last step is a path in the result components with the same program and length. It does not identify the byte strings of 𝑒 and 𝑇𝑒, which may differ; semantic preservation is not byte identity.
+
+**Placed blocks.** An executable block carries entry address, pre- and postcondition, decoded execution, and placement conditions. The single authoritative definition is (9.12) with composition (9.13). Concatenation alone is not a proof: the second block must sit at the first's exit, relocation must keep branch targets, and the first block's decoding must be stable inside the concatenation. The proof of (9.13) concatenates the two exact traces under these premises. Whole programs compose such blocks with the actual loader, ABI and deployment semantics, and there is no second unindexed block algebra. A verified emitter has the dependent type realize_𝑀 ∶ ∏_{𝑝∶Program} ∑_{𝑏∶Bytes} ∏_{𝑥} Rel_𝑂(run_𝑀(𝑏, init_𝑀 𝑥), ⟦𝑝⟧𝑥), where Rel_𝑂 is over the chosen observations and includes loader and ABI premises. An interpreter artifact is one realization, and specialization or native instruction selection gives others. The executable bytes appear in the proof's own type, not an unrelated model. Appendix C.1 keeps an architecture-specific frame decoder as a direct-relation example; the chosen route is §9.4.
+
+**Decoder stability; constructor-indexed compiler algebra.** For an ISA with state 𝑆, decode ∶ Bytes → Addr → Option Instr (including instruction length and the updated ip), and exec ∶ Instr → 𝑆 → 𝑆 + Trap, fetch/execute is 𝛿_𝑇(𝑏,𝑠) = trap(decodeFault) if decode(𝑏, pc 𝑠) = none, else exec(𝑖,𝑠) (9.11). An ISA model defines registers, flags, memory accesses, traps, instruction bytes and observable events; a mnemonic is not an encoding semantics.
+
+**Blocks.** For an immutable fetch image 𝐶:
+
+- Contains(𝐶,𝑎,𝑏) says the bytes occur at 𝑎 in bounds. Admissible(𝐶,𝑎,𝑏) adds every decoding and placement condition the block needs: valid branch destinations, the bytes decoding depends on, executable regions. Exec*_𝐶(𝑠,𝑡,𝑠′) is finite execution with trace 𝑡.
+- Block_ℛ(𝑎,𝑃,𝑄) ∶= ∑_{𝑏∶Bytes} ∏_𝐶 Admissible(𝐶,𝑎,𝑏) → ∏_𝑠 (𝑃𝑠 × pc 𝑠 = 𝑎) → ∑_{𝑡,𝑠′} Exec*_𝐶(𝑠,𝑡,𝑠′) × 𝑄𝑠′ × (pc 𝑠′ = 𝑎+|𝑏|) × ℛ(𝑠,𝑡,𝑠′) (9.12).
+- The image is quantified but admissibility is an actual argument, because 𝑃(𝑠) cannot constrain an independently quantified 𝐶. Out-of-block branches, or decoders reading past the block's end, need more than Contains. A closed, position-independent straight-line block can use Contains once decoder locality is proved. 𝑃 includes memory permissions, stack and ABI conditions, and transitions preserve the image. Unit trace contracts give Hoare-style blocks.
+- seq ∶ ∏_{𝐵₁∶Block_{ℛ₁}(𝑎,𝑃,𝑄)} ∏_{𝐵₂∶Block_{ℛ₂}(𝑎+|bytes 𝐵₁|, 𝑄, 𝑅)} StablePrefix(𝐵₁,𝐵₂) → RelocOK(𝐵₁,𝐵₂) → Block_{ℛ₁;ℛ₂}(𝑎,𝑃,𝑅) (9.13), where ℛ₁;ℛ₂ keeps the intermediate state and 𝑡 = 𝑡₁ ++ 𝑡₂.
+- For a 𝐶 admissibly containing 𝑏₁++𝑏₂ at 𝑎, StablePrefix and RelocOK contain the proofs that this implies Admissible(𝐶,𝑎,𝑏₁) and Admissible(𝐶, 𝑎+|𝑏₁|, 𝑏₂); prefix/suffix containment is not enough when decoding or branching depends on the surroundings. Both proofs get the same 𝐶, the first ends at 𝑠₁ at 𝑎+|𝑏₁| where the second starts, and the derivations and traces concatenate, witnessed by 𝑠₁, 𝑡₁, 𝑡₂.
+- Placement keeps branch destinations and decoder equations. If the second block is already certified at its final address, RelocOK is the identity witness, not a second relocation. These premises are constructed, never inferred from concatenation. Loops and continuing processes replace normal exit with a guarded step/trace correspondence.
+
+**Exact bytes for a toy ISA** with variable-length instructions, byte registers r0 and r1, natural pc, and arithmetic mod 256:
+
+| instruction | bytes | transition |
+|---|---|---|
+| MOVI r0, imm8 | `10 imm8` | r0 := imm8; pc += 2 |
+| MOVI r1, imm8 | `11 imm8` | r1 := imm8; pc += 2 |
+| XOR r0, r1 | `20` | r0 := r0 xor r1; pc += 1 |
+| STORE r0, addr8 | `30 addr8` | mem[addr8] := r0; pc += 2 |
+| HALT | `ff` | halted; pc += 1 |
+
+The decoder cases on the first byte (and on the presence of a second byte for two-byte instructions); any other leading byte traps. `compileXor(a,b,d) = [10,a, 11,b, 20, 30,d, ff]` has the exact trace (0,_,_,𝜇) → (2,𝑎,_,𝜇) → (4,𝑎,𝑏,𝜇) → (5, 𝑎⊕𝑏, 𝑏, 𝜇) → (7, 𝑎⊕𝑏, 𝑏, 𝜇[𝑑↦𝑎⊕𝑏]) → (8, …, halted) (9.14). So the compiler returns bytes plus a trace proof that memory at 𝑑 holds the denotation. Richer ISAs supply their decoder, transitions and instruction-level block constructors. Not every source operation is one instruction: functions, allocation, exceptions, threads and syscalls need runtime and world representations with semantic clauses.
+
+**Compilation is a homomorphism of interpreted constructors.** A compiler algebra gives, for each constructor c_𝑖, a block or continuing target process 𝐶_𝑖 with a proof relating its target interpretation to the constructor applied to compiled subterms. The fold is compile(c_𝑖(𝑡⃗)) = 𝐶_𝑖(compile 𝑡⃗) and correct(c_𝑖(𝑡⃗)) = cong_𝑅(𝐶_𝑖, correct 𝑡⃗) (9.15).
+
+- cong_𝑅 is the constructor's specified relational congruence, not automatic congruence for any refinement: cong_{c_𝑖} ∶ ∏_{𝑗≤𝑛} 𝑅_𝑗(𝑡_𝑗, 𝑢_𝑗) → 𝑅(⟦c_𝑖(𝑡⃗)⟧, run(𝐶_𝑖(𝑢⃗))) (9.16), defined separately. Branches need matching conditions and successors, loops an invariant or coinductive simulation, external calls the chosen world relation.
+- The compiler proof is induction on constructors using these functions, which locates effects, branch choices and runtime state in the constructor algebra. The recipe is exact given the algebra.
+- The universal fallback is a machine interpreter of the source transition function, adequate by matching each transition, and native specialization removes interpretive structure where both semantics allow. Neither an algebra nor an adequacy theorem comes into existence by being named.
+
+**Composition of source and target proofs.** ArtifactCorrect(𝑝,𝑃)(𝑜,ℎ) ∶= SourceCorrect(𝑝,𝑃)(CompilerRefines(𝑝)(𝑜,ℎ)) (9.17). This is function composition of evidence whose premises name the actual program, bytes, loader, machine and observation, and no further bridge is needed.
+
+**Specializing the evaluator constructs direct compiler cases.** The evaluator is a systematic source of (9.15)'s blocks. Specialize `next` with the outer constructor c_𝑖 static and its subterms, environment and relevant world responses dynamic. By (6.F1), ⟦𝑟_𝑖⟧(𝑡⃗, 𝜌) = next(state(c_𝑖(𝑡⃗), 𝜌)) (9.U3).
+
+- If 𝑟_𝑖 is in the realizable fragment, its block relation composes with (9.U3) and adequacy into a constructor-case machine relation. 𝜈 is needed only for segments actually run through 𝑏_next, not as an extra premise on direct residuals. Residuals that still call the evaluator get that portion from (9.U2).
+- So specialization derives the candidate implementations and their semantic connections, instead of requiring unrelated per-constructor instruction implementations.
+- A sufficient constructive route to the algebra: specialize the guarded evaluator run at each finite static code shape, keep environment and stack dynamic, and compile residual operations through 𝐹. 𝐶_𝑖 comes from the residual of c_𝑖's clause, with its meaning from (6.F1)/(9.U3) plus the residual's block evidence. This needs §6.2's bounded static variation and residual-composition conditions, which the specializer equation alone doesn't give. A residual evaluator call is realized through (9.U2), not a compilation failure.
+- The homomorphic fold (9.15) also needs the residuals to compose with compiled-subterm representations and their state/continuation relations. Neither (6.F1) nor 𝜈 proves that, or guarantees that static dispatch is gone. Hand-picked instructions are further specializations or alternatives with their own relation to the same evaluator case. There is no mandatory interpreted/direct boundary.
+
+**Mixed realizations, effect history, resources.**
+
+- 𝑅_val(𝑑,𝑣) relates direct and evaluator value representations, keeping type indices and any heap-ownership or aliasing conditions. A crossing is justified by 𝒳 ∶ 𝐷 → 𝑉 → 𝒰 preserving the represented continuation, live values via 𝑅_val, outstanding requests, and observations.
+- Direct-to-evaluator transfer establishes 𝑅_𝑉 for the encoded configuration; evaluator-to-direct, when used, establishes the receiving block's premises. Two representations holding a word with the same bits do not give 𝑅_val. A return to direct code needs a relation only if it actually happens.
+- A mixed artifact composes direct block proofs, crossings and iterations of 𝜈, and its correctness is that composite, not a second semantics at a runtime boundary.
+- A static residual evaluator call stays where code or environment is unknown at specialization. Dynamically computed type families, closures or face conditions don't force one; they compile directly once their machine relation exists.
+- A dynamic exit happens when a direct block's own premise fails (for example a fast path assuming a result fits a word). It needs either a proved continuation map from direct state to evaluator configuration or a justified restart. Restart is invalid once world effects have been issued, since it could duplicate a send, write or payment. A resumable exit's relation preserves issued-effect history, outstanding command tokens, waiters, and the retained snapshot or a proved migration (§10.5).
+- Direct and evaluator calls may issue commands through the same represented handler, so world interaction is not a crossing into the evaluator. A shared suspended computation keeps its producer identity and waiters across representation changes instead of being recomputed per consumer.
+- Every block and crossing has a resource contract: sufficient arena and stack, or an explicit resource-failure outcome with a stated relation to source observations. Exhaustion is never unmodeled permission to stop a supposedly total computation. 𝜈 quantifies over all admitted configurations, not test cases, and its proof uses induction on evaluator code and invariants over heap, stack, loader and world, which are objects of the same kind as the programs they describe.
+
+**Loading, native substitution, export.**
+
+- Executable bytes are read together with format, entry, relocations, linking, initial stack, environment and OS state. An ELF parser does not implement dynamic linking. Executable-memory setup and architecture-required icache synchronization are transitions of the loading world, part of the assumptions or checked code establishing the entry condition.
+- With the target-correctness witness, the evaluator may replace an applicable source computation by the native implementation under the theorem's preconditions: substitution of equals through the observation for pure closed input, and under the proved process congruence or refinement for interaction. A JIT does this when more inputs become known, and its cache stores the artifact with the evidence and dependencies licensing its use.
+- A standalone export includes the selected runtime support and handlers, or records their external contracts. C is the primary target. The downstream compiler's relation is an explicit dependency or a checked construction (§9.4). A printer's correctness is about the printed text's parsed meaning; a proof about the input tree doesn't make printing infallible.
+- GPUs and accelerators are no exception: ISA, memory spaces, barriers and launch are target semantics, and tiling and parallelization preserve a stated observation under the selected memory and arithmetic models.
