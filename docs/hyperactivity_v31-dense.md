@@ -1229,3 +1229,126 @@ A description need not freeze when its subject changes:
 - content-addressed definitions and their evidence are inspected and exchanged by participants without a global interpreter of their meaning.
 
 So the continuing activity of description, inference and transformation is itself available to computation. The result is a language for nature that includes the work of understanding nature, and an executable environment where that work acts on its own products. This returns to the horizon of *A New Kind of Science* (64): the universe and the activity of investigating it are both within the subject of computation. *Hyperactivity* names the activity, not a layer over it.
+
+## Appendix A. Constructions within the language
+
+Machine and software constructions are instances of a general capacity to express objects, operations, relations and rationales. The same terms express arithmetic, analysis, fields and their evolution; what differs is the specified laws, not a further foundation.
+
+- ℕ is inductive. ℤ is ℕ² under (𝑎,𝑏) ∼ (𝑐,𝑑) ⟺ 𝑎+𝑑 = 𝑐+𝑏 (A.1), with [(𝑎,𝑏)] = 𝑎−𝑏 and (𝑎,𝑏)+(𝑐,𝑑) = (𝑎+𝑐, 𝑏+𝑑), well-defined from the defining equality.
+- ℚ is integer pairs (𝑝,𝑞) with 𝑞 ≠ 0, identified when 𝑝𝑠 = 𝑟𝑞. Sign and nonzero-denominator conditions belong to the construction and are not dropped for abstraction's sake.
+- ℝ is Cauchy sequences with moduli, Dedekind cuts, or another specified constructive presentation. An equivalence between presentations is a theorem to construct, and ua transports dependent mathematics along it.
+- ℂ is ℝ² with (𝑎,𝑏)(𝑐,𝑑) = (𝑎𝑐−𝑏𝑑, 𝑎𝑑+𝑏𝑐), 𝑖 ∶= (0,1), 𝑖² = −1 (A.2).
+
+These are computational objects like §5's syntax: their laws are dependent-type terms and their algorithms ordinary functions.
+
+**Fourier.** On 𝐿²(ℝ), with the necessary quotient by a.e. equality, ℱ extends to a unitary equivalence ℱ ∶ 𝐿²(ℝ) ≃_unitary 𝐿²(ℝ), ‖ℱ𝑓‖₂ = ‖𝑓‖₂ (A.3), with (ℱ𝑓)(𝜉) = ∫_ℝ 𝑓(𝑥) e^{−2𝜋𝑖𝑥𝜉} d𝑥 on suitable functions (A.4). It is a change of representation with an inverse and further preserved structure, and differentiation, translation, convolution and multiplication have transformed counterparts. A proof, a symbolic transform program and a numerical FFT are different constructions related by specified identities and approximation bounds, and the language does not privilege the FFT's finite-array representation. On Schwartz functions ℱ(𝑓′)(𝜉) = 2𝜋𝑖𝜉 ℱ(𝑓)(𝜉) (A.5), by integration by parts with a vanishing boundary term. For polynomials as tempered distributions the transform involves derivatives of δ instead. The domains are types with different operations, and the statement of the identity determines its computation and proof.
+
+Physical field theories are constructions of spaces, fields, differential operators, evolution laws and observations. Maxwell, Schrödinger and relativistic geometry are not exceptions to computation: their definitions are represented, transformed and proved about, and numerical approximations and measurements carry their own stated relations to them. A machine is one of the processes this language describes and transforms.
+
+### A.1 Boolean fibers, search, and the exact witness object
+
+𝑋 ∶= Fin(2ⁿ) is the assignments to 𝑛 variables and 𝑓 ∶ 𝑋 → Bool evaluates a formula. 𝑋 ≃ ∑_{𝑏∶Bool}∑_{𝑥∶𝑋}(𝑓𝑥 = 𝑏) (A.6). Sat(𝑓) ∶= ∑_𝑥(𝑓𝑥 = true): ‖Sat 𝑓‖ is satisfiability, and a term of Sat 𝑓 is a witness. Since 𝑋 is finite and Bool-equality decidable, search_𝑓 ∶ Dec(Sat 𝑓) (A.7) works by finite enumeration and case analysis. Each failed branch proves its assignment is outside the fiber, and success returns the assignment with its equality witness. This is the elementary complete finite search, and its cost depends on the representation and evaluation strategy measured.
+
+### A.2 Arithmetic relations and divisibility
+
+𝑎 ∣ 𝑏 ∶= ∑_{𝑘∶ℕ}(𝑎·𝑘 = 𝑏) (A.8). On positive naturals it is a partial order whose meet and join are gcd and lcm, since their universal properties are exactly the corresponding divisibility implications. This is another relation from operations and identity, with no primitive semantic-relation category.
+
+### A.3 Complex field evolution
+
+Source-free, with 𝑐 = 1, take 𝐹 ∶= 𝐸 + 𝑖𝐵. From ∂ₜ𝐸 = ∇×𝐵 and ∂ₜ𝐵 = −∇×𝐸: 𝑖∂ₜ𝐹 = 𝑖(∇×𝐵 − 𝑖∇×𝐸) = ∇×(𝐸+𝑖𝐵) = ∇×𝐹 (A.9), and ∇·𝐸 = ∇·𝐵 = 0 combine to ∇·𝐹 = 0. This is the complex form of source-free Maxwell evolution (72), the Riemann–Silberstein / photon wave function (Bialynicki-Birula, 73): an exact algebraic change of representation of the same equations.
+
+## Appendix B. The name hyperactivity
+
+*Hyperactivity* is ordinary English for unusually intense activity. Here it also names the continuing activity of constructing, interpreting and acting on relations:
+
+- a question can become a computation;
+- an equivalence carries a construction into another representation;
+- an interaction makes a definition, observation or proof available for further use.
+
+The language makes that activity programmable, including the descriptions and interpretations through which participants recognize and use relations, and the activity is not bounded by one implementation, machine or participant.
+
+The word also describes rapid thought and speech, where expressions traverse dense networks of relations. Whether these are intelligible to a listener depends on content, the listener's available context and the interaction, not on rate alone. In computation, the corresponding emphasis is conductance: how established relations become available to affect later activity across representations and processes.
+
+Greek *hypér* (ὑπέρ, over, above, beyond) appears in hypercube, hyperplane, hypergraph, hypertext, hypermedia, hypervisor and hyperparameter, with varied associations. Here they include cubical dimensions, higher paths and coherences, higher groupoids, higher-order operations, reflection, metaprogramming, and interpretation of represented languages. English *activity* carries action, acting, actuality, enactment, agency and reactivity, from Latin *actus*, *agere*; further associations are active objects, actors, reactive programming, active databases and transactions. The corresponding mathematics is transport, evaluation, transformation and continuing interaction. These connections illuminate the word without reducing it to a technical expansion.
+
+## Appendix C. An architecture-specific realization
+
+The primary route (§9.4) reuses a C compiler. This keeps the earlier manuscript's direct-x86 example and interface as a supplementary instance of source-to-target reasoning. Its ABI, encodings and interface names are not requirements of the language, its OS scope, or its C-first implementation. A direct encoder still needs the stated machine relation; source-level specialization doesn't supply it.
+
+### C.1 A complete decoder and its byte vector
+
+Encodings are read against the x86-64 manual (31), and the abstract decoder and proof are defined here. Buffer 𝑏, length 𝑠, output record 𝑜: decode a 4-byte header (16-bit tag, 16-bit payload length) and a borrowed payload slice. It fails if 𝑠 < 4 or the length exceeds 𝑠−4, and otherwise writes tag, len, ptr and returns success. Header reads are defined only after the length guard, so the source never reads out of bounds to reject a short input. With initial memory 𝜇, and for 𝑠 ≥ 4 only, 𝑛 ∶= read16le(𝑏,2) and 𝑡 ∶= read16le(𝑏,0):
+
+- 𝐷(𝑏,𝑠,𝑜) = (false, 𝜇) if 𝑠 < 4;
+- (false, 𝜇) if 𝑠 ≥ 4 ∧ 𝑛 > 𝑠−4;
+- (true, writeFrame(𝜇,𝑜,𝑡,𝑛,𝑏+4)) if 𝑠 ≥ 4 ∧ 𝑛 ≤ 𝑠−4.
+
+Equivalently, `good` is a short-circuiting dependent split on 𝑠 ≥ 4 with header reads only in its true branch, so read16le's preconditions hold whenever reads happen, and both failures leave 𝜇 unchanged.
+
+Premises:
+
+- [𝑏, 𝑏+𝑠) is readable and [𝑜, 𝑜+24) writable, and they are disjoint;
+- [𝑜, 𝑜+24) ∩ [sp, sp+8) = ∅, so the return-address slot is separate;
+- pointer arithmetic is valid, and the ABI is 64-bit little-endian.
+
+The input and the return slot are readable and untouched by the stores. Without output/stack separation the first store could overwrite the address ret consumes, and the return theorem would be false. Under these premises the following 46 bytes realize the function (hex offsets):
+
+```
+00  48 83 fe 04      cmp   rsi, 4
+04  72 25            jb    2b
+06  0f b7 4f 02      movzx ecx, word [rdi+2]
+0a  48 83 ee 04      sub   rsi, 4
+0e  48 39 f1         cmp   rcx, rsi
+11  77 18            ja    2b
+13  0f b7 07         movzx eax, word [rdi]
+16  48 89 02         mov   [rdx], rax
+19  48 89 4a 08      mov   [rdx+8], rcx
+1d  48 8d 47 04      lea   rax, [rdi+4]
+21  48 89 42 10      mov   [rdx+16], rax
+25  b8 01 00 00 00   mov   eax, 1
+2a  c3               ret
+2b  31 c0            xor   eax, eax
+2d  c3               ret
+```
+
+Assertions on reaching each offset (𝑛 = len(𝑏), 𝑡 = tag(𝑏)):
+
+| pc | assertion |
+|---|---|
+| 00 | rdi = 𝑏, rsi = 𝑠, rdx = 𝑜, Mem = 𝜇 |
+| 06 | 𝑠 ≥ 4 |
+| 0a | rcx = 𝑛 |
+| 0e | rsi = 𝑠−4, rcx = 𝑛 |
+| 13 | 𝑛 ≤ 𝑠−4 |
+| 16 | rax = 𝑡 |
+| 19 | Mem = 𝜇[𝑜+0 ∶= 𝑡] |
+| 1d | Mem = 𝜇[𝑜+0 ∶= 𝑡, 𝑜+8 ∶= 𝑛] |
+| 21 | rax = 𝑏+4 |
+| 25 | Mem = writeFrame(𝜇,𝑜,𝑡,𝑛,𝑏+4) |
+| 2a | rax = 1 |
+| 2b | (𝑠 < 4 ∨ (𝑠 ≥ 4 ∧ 𝑛 > 𝑠−4)), Mem = 𝜇 |
+| 2d | rax = 0, Mem = 𝜇 |
+
+Each row follows from the instruction's decoding and transition equations. In the failure row 𝑛 is meaningful only under the 𝑠 ≥ 4 disjunct, and no header read happens on the 𝑠 < 4 path. Both relative branches target 0x2b: 0x06 + sext₈(0x25) = 0x2b and 0x13 + sext₈(0x18) = 0x2b. The unsigned ja is taken exactly when 𝑛 > 𝑠−4, and the rets restore the caller frame under the ABI premise. Concatenating the block derivations gives 𝜒_𝑏 ∶ ∏_{𝑧∶Input} Pre(𝑧) → ∑_{𝜎′} Exec_𝑀(𝑏, init 𝑧, 𝜎′) × Path_{Bool×Mem}(observe 𝜎′)(𝐷 𝑧). The return-path equality concerns the observed return value and output frame, not identity of all registers, stack bytes or traces. Failure leaves the frame untouched, and success writes the three fields in order. The byte-encoding contract is explicit without confusing one program with the general compiler.
+
+### C.2 A direct-byte interface and its separate obligations
+
+For checked 𝑓 ∶ 𝑇, `#jit f` quotes its code, specializes it, and checks the result against 𝑓: conversion for normalization, an explicit path for theorem rewrites. This encoder maps its supported first-order operations and certain closure forms to x86-64. That describes its directly compiled cases and does not restrict the terms admitted by (9.U2). `#build` and `#build-loop` construct standalone executables for specified terminating and continuing processes, as executable transformations with defined inputs and outputs.
+
+Emitted bytes are interpreted as a function of the byte vector and calling convention:
+
+- `mn-init bs args` places bytes, arguments, call context, arena, stack and return address into an x86 state;
+- `run-to` iterates `x86-step` until the return address or fuel exhaustion;
+- `mn-run` extracts a result only on reaching that address with a clear overflow flag.
+
+```
+mn-run   : Lst Word → Word → Lst Word → Opt Word
+Correct1 : Lst Word → (Word → Word) → Type
+Correct1 bs f = (n a : Word) → mn-call1 bs f n a ≡ f a
+```
+
+`mn-call1` falls back to the source `f` when the modeled run gives no ordinary result. So Correct1 alone doesn't assert termination of every run, an ordinary return for every byte string, or full target correctness for arbitrary programs. The definition is exact, and the separate correctness argument must cover the machine cases that matter. Specialized terms are checked against their definitions at the term level, while a theorem connecting bytes to instruction semantics further needs proofs of the encoder templates under the chosen machine model. These are distinct composable obligations over one interpreted computation. §9.4 has the general result type and its composition with source properties, and these operations illustrate one target, not a second meaning.
+
+## References
+
+1 Church 1936, An Unsolvable Problem of Elementary Number Theory, Amer. J. Math 58(2):345–363, doi:10.2307/2371045 · 2 Turing 1936–37, On Computable Numbers…, Proc. LMS s2-42(1):230–265, doi:10.1112/plms/s2-42.1.230 · 3 McCarthy 1960, Recursive Functions of Symbolic Expressions… Part I, CACM 3(4):184–195, doi:10.1145/367177.367199 · 4 Plotkin 1981, A Structural Approach to Operational Semantics, DAIMI FN-19, Aarhus · 5 Reynolds 1972, Definitional Interpreters for Higher-Order Programming Languages, ACM Annual Conf. 717–740, doi:10.1145/800194.805852 · 6 Martin-Löf 1984, Intuitionistic Type Theory, Bibliopolis · 7 Coquand–Huet 1988, The Calculus of Constructions, Inf. & Comp. 76(2–3):95–120, doi:10.1016/0890-5401(88)90005-3 · 8 Univalent Foundations Program 2013, HoTT Book, IAS · 9 Cohen–Coquand–Huber–Mörtberg 2018, Cubical Type Theory: A Constructive Interpretation of the Univalence Axiom, TYPES 2015, LIPIcs 69, 5:1–5:34, doi:10.4230/LIPIcs.TYPES.2015.5 · 10 Bezem–Coquand–Huber 2014, A Model of Type Theory in Cubical Sets, TYPES 2013, LIPIcs 26:107–128, doi:10.4230/LIPIcs.TYPES.2013.107 · 11 Lumsdaine–Shulman 2020, Semantics of Higher Inductive Types, Math. Proc. Camb. Phil. Soc. 169(1):159–208, arXiv:1705.07088 · 12 Berger–Schwichtenberg 1991, An Inverse of the Evaluation Functional for Typed λ-Calculus, LICS 203–211 · 13 Danvy 1996, Type-Directed Partial Evaluation, POPL 242–257, doi:10.1145/237721.237784 · 14 Futamura 1971, Partial Evaluation of Computation Process—An Approach to a Compiler-Compiler, Systems, Computers, Controls 2(5):45–50 · 15 Jones–Gomard–Sestoft 1993, Partial Evaluation and Automatic Program Generation, Prentice Hall · 16 Moggi 1991, Notions of Computation and Monads, Inf. & Comp. 93(1):55–92, doi:10.1016/0890-5401(91)90052-4 · 17 Hoare 1969, An Axiomatic Basis for Computer Programming, CACM 12(10):576–580, doi:10.1145/363235.363259 · 18 Leroy 2009, Formal Verification of a Realistic Compiler, CACM 52(7):107–115, doi:10.1145/1538788.1538814 · 19 ISO/IEC 14882:2020, C++ · 20 Batty–Owens–Sarkar–Sewell–Weber 2011, Mathematizing C++ Concurrency, POPL 55–66, doi:10.1145/1926385.1926394 · 21 Lamport 1978, Time, Clocks, and the Ordering of Events…, CACM 21(7):558–565, doi:10.1145/359545.359563 · 22 Abadi–Lamport 1991, The Existence of Refinement Mappings, TCS 82(2):253–284, doi:10.1016/0304-3975(91)90224-P · 23 Milner 1980, A Calculus of Communicating Systems, LNCS 92 · 24 Acar–Blelloch–Harper 2006, Adaptive Functional Programming, TOPLAS 28(6):990–1034, doi:10.1145/1186632.1186634 · 25 Hammer–Phang–Hicks–Foster 2014, Adapton: Composable, Demand-Driven Incremental Computation, PLDI 156–166 · 26 Foster–Greenwald–Moore–Pierce–Schmitt 2007, Combinators for Bidirectional Tree Transformations…, TOPLAS 29(3) art. 17, doi:10.1145/1232420.1232424 · 27 Roşu–Şerbănuţă 2010, An Overview of the K Semantic Framework, JLAP 79(6):397–434, doi:10.1016/j.jlap.2010.03.012 · 28 Sewell et al. 2010, Ott: Effective Tool Support for the Working Semanticist, JFP 20(1):71–122, doi:10.1017/S0956796809990293 · 29 Norell 2009, Dependently Typed Programming in Agda, AFP, LNCS 5832:230–266, doi:10.1007/978-3-642-04652-0_5 · 30 Lattner–Adve 2004, LLVM…, CGO 75–86 · 31 Intel 64 and IA-32 Architectures Software Developer's Manuals · 32 NVIDIA CUDA C++ Programming Guide · 33 Lawvere 1969, Diagonal Arguments and Cartesian Closed Categories, LNM 92:134–145 · 34 Gödel 1931, Über formal unentscheidbare Sätze…, Monatsh. Math. Phys. 38:173–198 · 35 Tarski 1936, Der Wahrheitsbegriff in den formalisierten Sprachen, Studia Philosophica 1:261–405 · 36 Reynolds 1983, Types, Abstraction and Parametric Polymorphism, Information Processing 83:513–523 · 37 Reynolds 2002, Separation Logic…, LICS 55–74 · 38 Lamport 2002, Specifying Systems (TLA+), Addison-Wesley · 39 Xia–Zakowski–He–Hur–Malecha–Pierce–Zdancewic 2020, Interaction Trees…, PACMPL 4(POPL) art. 51, doi:10.1145/3371119 · 40 Hicks–Moore–Nettles 2001, Dynamic Software Updating, PLDI 13–23, doi:10.1145/378795.378798 · 41 Hicks–Nettles 2005, Dynamic Software Updating, TOPLAS 27(6):1049–1096, doi:10.1145/1108970.1108971 · 42 Unison, The Big Idea: Content-Addressed Code · 43 Unison, A Tour of Unison · 44 Kristensen–Møgelberg–Vezzosi 2022, Greatest HITs…, arXiv:2102.01969 · 45 Shannon 1948, A Mathematical Theory of Communication, BSTJ 27(3):379–423, 27(4):623–656 · 46 Barwise–Seligman 1997, Information Flow, CUP · 47 Pearl 2009, Causality 2nd ed., CUP · 48 Lewis 1969, Convention, Harvard · 49 Grice 1975, Logic and Conversation, Syntax and Semantics 3:41–58 · 50 Clark 1996, Using Language, CUP · 51 Harnad 1990, The Symbol Grounding Problem, Physica D 42:335–346, doi:10.1016/0167-2789(90)90087-6 · 52 Wadler 2015, Propositions as Types, CACM 58(12):75–84, doi:10.1145/2699407 · 53 Wiener 1948, Cybernetics, MIT · 54 Ashby 1956, An Introduction to Cybernetics, Chapman & Hall · 55 Hewitt–Bishop–Steiger 1973, A Universal Modular ACTOR Formalism…, IJCAI 235–244 · 56 Kahn 1974, The Semantics of a Simple Language for Parallel Programming, IFIP 74:471–475 · 57 Sangiorgi 2011, Introduction to Bisimulation and Coinduction, CUP · 58 Pnueli 1977, The Temporal Logic of Programs, FOCS 46–57, doi:10.1109/SFCS.1977.32 · 59 Shapiro–Preguiça–Baquero–Zawirski 2011, Conflict-Free Replicated Data Types, SSS, LNCS 6976:386–400, doi:10.1007/978-3-642-24550-3_29 · 60 Codd 1970, A Relational Model of Data…, CACM 13(6):377–387, doi:10.1145/362384.362685 · 61 Landauer 1961, Irreversibility and Heat Generation…, IBM JRD 5(3):183–191, doi:10.1147/rd.53.0183 · 62 Bennett 1973, Logical Reversibility of Computation, IBM JRD 17(6):525–532, doi:10.1147/rd.176.0525 · 63 Jaynes 1957, Information Theory and Statistical Mechanics, Phys. Rev. 106(4):620–630, doi:10.1103/PhysRev.106.620 · 64 Wolfram 2002, A New Kind of Science · 65 Wolfram 2021, The Concept of the Ruliad (10 Nov) · 66 Harel 1987, Statecharts…, SCP 8(3):231–274, doi:10.1016/0167-6423(87)90035-9 · 67 Milner 1999, Communicating and Mobile Systems: The π-Calculus, CUP · 68 Dijkstra 1976, A Discipline of Programming, Prentice-Hall · 69 Barwise–Perry 1983, Situations and Attitudes, MIT · 70 Lafont 1990, Interaction Nets, POPL 95–108, doi:10.1145/96709.96718 · 71 Maturana–Varela 1980, Autopoiesis and Cognition, Boston Studies 42, doi:10.1007/978-94-009-8947-4 · 72 Maxwell 1865, A Dynamical Theory of the Electromagnetic Field, Phil. Trans. 155:459–512, doi:10.1098/rstl.1865.0008 · 73 Bialynicki-Birula 1996, Photon Wave Function, Progress in Optics 36:245–294, doi:10.1016/S0079-6638(08)70316-0 · 74 Jain 2026, Respecting Equality §9 "Ordering — what counting discards", Defs 9.1, 9.6, Thms 9.2, 9.7–9.8, Remark 9.15; avikj/math docs/index.html rev b2387e82fb82 (8 Oct 2026) · 75 Jain 2026, Hyperactivity lib/sort.cub (total order, sorted multiplicity, merge, Fs-prop, dependent bag elimination); avikj/hyperactivity rev 1e5b1105dac8, blob c48b2751bdcd.
