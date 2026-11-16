@@ -1,0 +1,164 @@
+-- lib/machines.cub — constructions of the paper's §7 (docs/hyperactivity.cub, “Machines, operating systems,
+-- and continuing processes”) as code: memory as a partial map (7.1); a machine state (7.2); the loop
+-- summing n 64-bit words with its invariant (7.4), established at i = 0, preserved by the body and
+-- yielding the sum at i = n; an execution graph (7.6); a tensor over a product of finite index types
+-- (7.7); the parallel composition of two processes over FIFO queues (§7.6) with the invariant of the
+-- composed program N = D + |u|, hence D ≤ N; and the finite-prefix judgments x ⇒τ* z and x ⇒e z
+-- (7.6c) with the weak observable heads.
+import "core.cub"
+import "structure.cub"
+import "behaviour.cub"
+-- (7.1) Mem := Addr ⇀ Byte
+PMem : Type → Type → Type
+PMem Addr B = Addr → Sum B Unit
+-- (7.2) State := Registers × Memory × PC × DeviceState
+MachState : Type → Type → Type → Type → Type
+MachState R M P D = R × M × P × D
+-- (7.4) Σ_{j<i} a_j mod 2⁶⁴, the loop state (i, s), the invariant and the loop
+wsum : (Nat → Word) → Nat → Word
+wsum a zero = #0
+wsum a (suc i) = wadd (wsum a i) (a i)
+SumInv : (Nat → Word) → Nat → Nat × Word → Type
+SumInv a n st = le (fst st) n × (snd st ≡ wsum a (fst st))
+sum-body : (Nat → Word) → Nat × Word → Nat × Word
+sum-body a st = (suc (fst st) , wadd (snd st) (a (fst st)))
+-- initialization establishes the invariant at i = 0
+sum-inv-init : (a : Nat → Word) → (n : Nat) → SumInv a n (zero , #0)
+sum-inv-init a n = ((n , plus-zero n) , λ k → #0)
+-- the body, run while i < n, preserves it
+sum-inv-step : (a : Nat → Word) → (n : Nat) → (st : Nat × Word) → le (suc (fst st)) n → SumInv a n st → SumInv a n (sum-body a st)
+sum-inv-step a n st lt h = (lt , λ k → wadd (snd h k) (a (fst st)))
+-- termination at i = n yields the required sum: n turns from (0, 0) reach (n, Σ_{j<n} a_j)
+sum-loop : (Nat → Word) → Nat → Nat × Word
+sum-loop a zero = (zero , #0)
+sum-loop a (suc i) = sum-body a (sum-loop a i)
+sum-loop-sum : (a : Nat → Word) → (n : Nat) → sum-loop a n ≡ (n , wsum a n)
+sum-loop-sum a zero = λ k → (zero , #0)
+sum-loop-sum a (suc i) = λ k → sum-body a (sum-loop-sum a i k)
+-- (7.6) X = (E, tid, kind, loc, val, po, rf, mo)
+data EvKind = ev-read | ev-write
+ExecGraph : Type → Type → Type → Type 1
+ExecGraph Tid Loc Val = (E : Type) × (E → Tid) × (E → EvKind) × (E → Loc) × (E → Val) × (E → E → Type) × (E → E → Type) × (E → E → Type)
+-- (7.7) T : Fin(n₁) × ⋯ × Fin(n_k) → A
+TIndex : List Nat → Type
+TIndex nil = Unit
+TIndex (cons n r) = SumFin n × TIndex r
+Tensor : List Nat → Type → Type
+Tensor dims A = TIndex dims → A
+-- ---------------------------------------------------------------- parallel composition
+-- a process's labels: silent, sending, receiving, environmental
+data ParLab (M : Type) (N : Type) (E : Type) = lab-tau | lab-send (m : M) | lab-recv (n : N) | lab-ext (e : E)
+-- S_{P∥Q} = C_P × C_Q × List(M_PQ) × List(M_QP)
+ParState : Type → Type → Type → Type → Type
+ParState CP CQ M N = CP × CQ × List M × List N
+-- the composed program's moves, each naming the component's next configuration
+data ParMove (CP : Type) (CQ : Type) (M : Type) (N : Type) (E : Type) = pm-local-p (p2 : CP) | pm-local-q (q2 : CQ) | pm-send-p (m : M) (p2 : CP) | pm-send-q (n : N) (q2 : CQ) | pm-recv-q (q2 : CQ) | pm-recv-p (p2 : CP) | pm-ext-p (e : E) (p2 : CP) | pm-ext-q (e : E) (q2 : CQ)
+par-tail : {X : Type} → List X → List X
+par-tail nil = nil
+par-tail (cons x r) = r
+par-move : {CP CQ M N E : Type} → ParMove CP CQ M N E → ParState CP CQ M N → ParState CP CQ M N
+par-move (pm-local-p p2) s = (p2 , fst (snd s) , fst (snd (snd s)) , snd (snd (snd s)))
+par-move (pm-local-q q2) s = (fst s , q2 , fst (snd (snd s)) , snd (snd (snd s)))
+par-move (pm-send-p m p2) s = (p2 , fst (snd s) , list-append (fst (snd (snd s))) (cons m nil) , snd (snd (snd s)))
+par-move (pm-send-q n q2) s = (fst s , q2 , fst (snd (snd s)) , list-append (snd (snd (snd s))) (cons n nil))
+par-move (pm-recv-q q2) s = (fst s , q2 , par-tail (fst (snd (snd s))) , snd (snd (snd s)))
+par-move (pm-recv-p p2) s = (p2 , fst (snd s) , fst (snd (snd s)) , par-tail (snd (snd (snd s))))
+par-move (pm-ext-p e p2) s = (p2 , fst (snd s) , fst (snd (snd s)) , snd (snd (snd s)))
+par-move (pm-ext-q e q2) s = (fst s , q2 , fst (snd (snd s)) , snd (snd (snd s)))
+-- receiving requires the queue's head
+par-recv-ok : {C M N E : Type} → (C → ParLab N M E → C → Type) → C → List M → C → Type
+par-recv-ok stepQ q nil q2 = Empty
+par-recv-ok stepQ q (cons m r) q2 = stepQ q (lab-recv m) q2
+par-allowed : {CP CQ M N E : Type} → (CP → ParLab M N E → CP → Type) → (CQ → ParLab N M E → CQ → Type) → ParMove CP CQ M N E → ParState CP CQ M N → Type
+par-allowed stepP stepQ (pm-local-p p2) s = stepP (fst s) lab-tau p2
+par-allowed stepP stepQ (pm-local-q q2) s = stepQ (fst (snd s)) lab-tau q2
+par-allowed stepP stepQ (pm-send-p m p2) s = stepP (fst s) (lab-send m) p2
+par-allowed stepP stepQ (pm-send-q n q2) s = stepQ (fst (snd s)) (lab-send n) q2
+par-allowed stepP stepQ (pm-recv-q q2) s = par-recv-ok stepQ (fst (snd s)) (fst (snd (snd s))) q2
+par-allowed stepP stepQ (pm-recv-p p2) s = par-recv-ok stepP (fst s) (snd (snd (snd s))) p2
+par-allowed stepP stepQ (pm-ext-p e p2) s = stepP (fst s) (lab-ext e) p2
+par-allowed stepP stepQ (pm-ext-q e q2) s = stepQ (fst (snd s)) (lab-ext e) q2
+par-run : {CP CQ M N E : Type} → List (ParMove CP CQ M N E) → ParState CP CQ M N → ParState CP CQ M N
+par-run nil s = s
+par-run (cons mv r) s = par-run r (par-move mv s)
+par-allowed-run : {CP CQ M N E : Type} → (CP → ParLab M N E → CP → Type) → (CQ → ParLab N M E → CQ → Type) → List (ParMove CP CQ M N E) → ParState CP CQ M N → Type
+par-allowed-run stepP stepQ nil s = Unit
+par-allowed-run stepP stepQ (cons mv r) s = par-allowed stepP stepQ mv s × par-allowed-run stepP stepQ r (par-move mv s)
+-- N and D: successful sends and receives on the P → Q queue
+par-is-send : {CP CQ M N E : Type} → ParMove CP CQ M N E → Nat
+par-is-send (pm-send-p m p2) = suc zero
+par-is-send (pm-local-p p2) = zero
+par-is-send (pm-local-q q2) = zero
+par-is-send (pm-send-q n q2) = zero
+par-is-send (pm-recv-q q2) = zero
+par-is-send (pm-recv-p p2) = zero
+par-is-send (pm-ext-p e p2) = zero
+par-is-send (pm-ext-q e q2) = zero
+par-is-recv : {CP CQ M N E : Type} → ParMove CP CQ M N E → Nat
+par-is-recv (pm-recv-q q2) = suc zero
+par-is-recv (pm-local-p p2) = zero
+par-is-recv (pm-local-q q2) = zero
+par-is-recv (pm-send-p m p2) = zero
+par-is-recv (pm-send-q n q2) = zero
+par-is-recv (pm-recv-p p2) = zero
+par-is-recv (pm-ext-p e p2) = zero
+par-is-recv (pm-ext-q e q2) = zero
+par-sends : {CP CQ M N E : Type} → List (ParMove CP CQ M N E) → Nat
+par-sends nil = zero
+par-sends (cons mv r) = plus (par-is-send mv) (par-sends r)
+par-recvs : {CP CQ M N E : Type} → List (ParMove CP CQ M N E) → Nat
+par-recvs nil = zero
+par-recvs (cons mv r) = plus (par-is-recv mv) (par-recvs r)
+par-len-snoc : {X : Type} → (u : List X) → (m : X) → list-length (list-append u (cons m nil)) ≡ suc (list-length u)
+par-len-snoc nil m = λ k → suc zero
+par-len-snoc (cons x r) m = λ k → suc (par-len-snoc r m k)
+par-recv-count : {C M N E : Type} → (stepQ : C → ParLab N M E → C → Type) → (q : C) → (u : List M) → (q2 : C) →
+  par-recv-ok {C} {M} {N} {E} stepQ q u q2 → Path Nat (suc (list-length {M} (par-tail {M} u))) (list-length {M} u)
+par-recv-count {C} {M} {N} {E} stepQ q u q2 = case u return (λ w → par-recv-ok {C} {M} {N} {E} stepQ q w q2 → Path Nat (suc (list-length {M} (par-tail {M} w))) (list-length {M} w)) of
+  nil → λ h → Empty-rec {lzero} {Path Nat (suc zero) zero} h
+  cons m r → λ h → λ k → suc (list-length {M} r)
+-- one move: D' + |u'| + N = D + |u| + N' in the form recv + |u'| = send + |u|
+par-step-count : {CP CQ M N E : Type} → (stepP : CP → ParLab M N E → CP → Type) → (stepQ : CQ → ParLab N M E → CQ → Type) →
+  (mv : ParMove CP CQ M N E) → (s : ParState CP CQ M N) → par-allowed stepP stepQ mv s →
+  plus (par-is-recv mv) (list-length (fst (snd (snd (par-move mv s))))) ≡ plus (par-is-send mv) (list-length (fst (snd (snd s))))
+par-step-count stepP stepQ (pm-local-p p2) s h = λ k → list-length (fst (snd (snd s)))
+par-step-count stepP stepQ (pm-local-q q2) s h = λ k → list-length (fst (snd (snd s)))
+par-step-count stepP stepQ (pm-send-p m p2) s h = par-len-snoc (fst (snd (snd s))) m
+par-step-count stepP stepQ (pm-send-q n q2) s h = λ k → list-length (fst (snd (snd s)))
+par-step-count stepP stepQ (pm-recv-q q2) s h = par-recv-count stepQ (fst (snd s)) (fst (snd (snd s))) q2 h
+par-step-count stepP stepQ (pm-recv-p p2) s h = λ k → list-length (fst (snd (snd s)))
+par-step-count stepP stepQ (pm-ext-p e p2) s h = λ k → list-length (fst (snd (snd s)))
+par-step-count stepP stepQ (pm-ext-q e q2) s h = λ k → list-length (fst (snd (snd s)))
+-- the inductive invariant of the composed program: D + |u| = N + |u₀|
+par-count : {CP CQ M N E : Type} → (stepP : CP → ParLab M N E → CP → Type) → (stepQ : CQ → ParLab N M E → CQ → Type) →
+  (mvs : List (ParMove CP CQ M N E)) → (s : ParState CP CQ M N) → par-allowed-run stepP stepQ mvs s →
+  plus (par-recvs mvs) (list-length (fst (snd (snd (par-run mvs s))))) ≡ plus (par-sends mvs) (list-length (fst (snd (snd s))))
+par-count stepP stepQ nil s h = λ k → list-length (fst (snd (snd s)))
+par-count stepP stepQ (cons mv r) s h =
+  transN (plus-assoc (par-is-recv mv) (par-recvs r) (list-length (fst (snd (snd (par-run r (par-move mv s)))))))
+  (transN (congN (plus (par-is-recv mv)) (par-count stepP stepQ r (par-move mv s) (snd h)))
+  (transN (plus-comm-mid (par-is-recv mv) (par-sends r) (list-length (fst (snd (snd (par-move mv s))))))
+  (transN (congN (plus (par-sends r)) (par-step-count stepP stepQ mv s (fst h)))
+  (transN (plus-comm-mid (par-sends r) (par-is-send mv) (list-length (fst (snd (snd s)))))
+  (sym (plus-assoc (par-is-send mv) (par-sends r) (list-length (fst (snd (snd s))))))))))
+-- from an initially empty P → Q queue, N = D + |u|, hence D ≤ N
+par-D-le-N : {CP CQ M N E : Type} → (stepP : CP → ParLab M N E → CP → Type) → (stepQ : CQ → ParLab N M E → CQ → Type) →
+  (mvs : List (ParMove CP CQ M N E)) → (p : CP) → (q : CQ) → (v : List N) → par-allowed-run stepP stepQ mvs (the (ParState CP CQ M N) (p , q , nil , v)) →
+  le (par-recvs mvs) (par-sends mvs)
+par-D-le-N {CP} {CQ} {M} {N} {E} stepP stepQ mvs p q v h = (list-length (fst (snd (snd (par-run mvs (the (ParState CP CQ M N) (p , q , nil , v)))))) ,
+  transN (plus-comm (list-length (fst (snd (snd (par-run mvs (the (ParState CP CQ M N) (p , q , nil , v))))))) (par-recvs mvs))
+  (transN (par-count stepP stepQ mvs (the (ParState CP CQ M N) (p , q , nil , v)) h) (plus-zero (par-sends mvs))))
+-- ---------------------------------------------------------------- (7.6c) finite-prefix judgments
+-- a transition is internal (inl unit) or visible (inr e)
+tau-chain : {C L : Type} → (C → Sum Unit L → C → Type) → C → List C → C → Type
+tau-chain step x nil z = x ≡ z
+tau-chain step x (cons y r) z = step x (inl unit) y × tau-chain step y r z
+-- x ⇒τ* z
+tau-star : {C L : Type} → (C → Sum Unit L → C → Type) → C → C → Type
+tau-star {C} {L} step x z = (ys : List C) × tau-chain step x ys z
+-- x ⇒e z
+weak-step : {C L : Type} → (C → Sum Unit L → C → Type) → C → L → C → Type
+weak-step {C} {L} step x e z = (y : C) × tau-star step x y × step y (inr e) z
+-- Head(x) = Σ_{e, z} (x ⇒e z)
+WeakHead : {C L : Type} → (C → Sum Unit L → C → Type) → C → Type
+WeakHead {C} {L} step x = (e : L) × (z : C) × weak-step step x e z

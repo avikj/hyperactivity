@@ -1002,17 +1002,17 @@ s7-p3 = prose (cons "A processor is one specified evolving system: its architect
 s7-p4 : Block
 s7-p4 = prose (cons "A byte can be modeled as \(\operatorname{Fin}(256)\). A fixed-width word as \(\operatorname{Fin}(2^w)\). An address space as a type \(\mathsf{Addr}\), and memory as a stateful mapping with a domain of valid locations:" nil)
 s7-p5 : Block
-s7-p5 = construction (cons "\[" (cons "\mathsf{Mem}:=\mathsf{Addr}\rightharpoonup\mathsf{Byte}." (cons "\tag{7.1}" (cons "\]" nil))))
+s7-p5 = realized (construction (cons "\[" (cons "\mathsf{Mem}:=\mathsf{Addr}\rightharpoonup\mathsf{Byte}." (cons "\tag{7.1}" (cons "\]" nil))))) (cons "PMem" nil)
 s7-p6 : Block
 s7-p6 = prose (cons "This toy memory model is insufficient for C++ pointer provenance, lifetime, allocation, atomicity, and object representations; those are additional relations and structures when C++ is the subject." nil)
 s7-p7 : Block
 s7-p7 = prose (cons "A single-core instruction machine can be described by" nil)
 s7-p8 : Block
-s7-p8 = construction (cons "\[" (cons "\mathsf{State}" (cons ":=" (cons "\mathsf{Registers}\times\mathsf{Memory}" (cons "\times\mathsf{PC}\times\mathsf{DeviceState}," (cons "\tag{7.2}" (cons "\]" nil)))))))
+s7-p8 = realized (construction (cons "\[" (cons "\mathsf{State}" (cons ":=" (cons "\mathsf{Registers}\times\mathsf{Memory}" (cons "\times\mathsf{PC}\times\mathsf{DeviceState}," (cons "\tag{7.2}" (cons "\]" nil)))))))) (cons "MachState" nil)
 s7-p9 : Block
 s7-p9 = prose (cons "and a transition relation" nil)
 s7-p10 : Block
-s7-p10 = construction (cons "\[" (cons "\mathsf{step}:\mathsf{State}\to\mathsf{Event}\to\mathsf{State}\to\mathcal U." (cons "\tag{7.3}" (cons "\]" nil))))
+s7-p10 = realized (construction (cons "\[" (cons "\mathsf{step}:\mathsf{State}\to\mathsf{Event}\to\mathsf{State}\to\mathcal U." (cons "\tag{7.3}" (cons "\]" nil))))) (cons "StepRel" nil)
 s7-p11 : Block
 s7-p11 = prose (cons "A deterministic machine may have a next-state function instead; interaction with an external world can be represented by labeled transitions and handlers. A processor executing one instruction at a time, interrupts, memory-mapped I/O, context switches, page tables, a scheduler, and isolated processes are all constructions over this state and its transition relation." nil)
 s7-p12 : Block
@@ -1020,7 +1020,7 @@ s7-p12 = prose (cons "A machine instruction does not have to be a primitive of t
 s7-p13 : Block
 s7-p13 = prose (cons "For example, consider an imperative loop summing \(n\) unsigned 64-bit words. Its state includes the array \(a\), index \(i\), and accumulator \(s\). The loop invariant is" nil)
 s7-p14 : Block
-s7-p14 = construction (cons "\[" (cons "0\le i\le n" (cons "\quad\land\quad" (cons "s=\sum_{j<i}a_j\pmod{2^{64}}" (cons "\quad\land\quad" (cons "\mathsf{Unchanged}(a)." (cons "\tag{7.4}" (cons "\]" nil))))))))
+s7-p14 = realized (construction (cons "\[" (cons "0\le i\le n" (cons "\quad\land\quad" (cons "s=\sum_{j<i}a_j\pmod{2^{64}}" (cons "\quad\land\quad" (cons "\mathsf{Unchanged}(a)." (cons "\tag{7.4}" (cons "\]" nil))))))))) (cons "wsum" (cons "SumInv" (cons "sum-inv-init" (cons "sum-inv-step" (cons "sum-loop" (cons "sum-loop-sum" nil))))))
 s7-p15 : Block
 s7-p15 = prose (cons "Initialization establishes the invariant at \(i=0\). The loop body updates \(s\) by addition modulo \(2^{64}\) and increments \(i\), preserving it. Termination at \(i=n\) yields the required sum. If the program performs actual memory loads, a complete proof also requires validity, alignment, lifetime, aliasing, and source-language semantics for those loads." nil)
 s7-p16 : Block
@@ -1042,7 +1042,7 @@ s7-2-p1 = heading (suc (suc (suc zero))) "7.2 Concurrency requires relations amo
 s7-2-p2 : Block
 s7-2-p2 = prose (cons "A concurrent execution can be represented by events \(E\), thread identifiers, reads and writes, program order \(\mathsf{po}\), reads-from \(\mathsf{rf}\), and modification order \(\mathsf{mo}\):" nil)
 s7-2-p3 : Block
-s7-2-p3 = construction (cons "\[" (cons "X=(E,\mathsf{tid},\mathsf{kind},\mathsf{loc},\mathsf{val}," (cons "\mathsf{po},\mathsf{rf},\mathsf{mo})." (cons "\tag{7.6}" (cons "\]" nil)))))
+s7-2-p3 = realized (construction (cons "\[" (cons "X=(E,\mathsf{tid},\mathsf{kind},\mathsf{loc},\mathsf{val}," (cons "\mathsf{po},\mathsf{rf},\mathsf{mo})." (cons "\tag{7.6}" (cons "\]" nil)))))) (cons "EvKind" (cons "ExecGraph" nil))
 s7-2-p4 : Block
 s7-2-p4 = prose (cons "A memory model is a predicate \(\mathsf{Allowed}(X)\) selecting permitted executions. A data race, a happens-before relation, or an atomic ordering constraint is a property of these relations. A compiler correctness theorem for concurrent programs must relate the admitted target executions to the admitted source executions. Matching the behavior of each isolated instruction is insufficient when reordering and weak memory are observable." nil)
 s7-2-p5 : Block
@@ -1060,7 +1060,7 @@ s7-4-p2 = prose (cons "For GPU execution, CUDA supplies a concrete programming a
 s7-4-p3 : Block
 s7-4-p3 = prose (cons "A GPU kernel operates over indexed collections of work items with defined address spaces, synchronization, and numerical operations. Its meaning may be expressed by a relation on global and local state, together with an ordering relation among memory events. A tensor layout is a representation of an indexed family:" nil)
 s7-4-p4 : Block
-s7-4-p4 = construction (cons "\[" (cons " T:\operatorname{Fin}(n_1)\times\cdots\times\operatorname{Fin}(n_k)\to A." (cons "\tag{7.7}" (cons "\]" nil))))
+s7-4-p4 = realized (construction (cons "\[" (cons " T:\operatorname{Fin}(n_1)\times\cdots\times\operatorname{Fin}(n_k)\to A." (cons "\tag{7.7}" (cons "\]" nil))))) (cons "TIndex" (cons "Tensor" nil))
 s7-4-p5 : Block
 s7-4-p5 = prose (cons "A concrete layout supplies a map from indices to addresses. A permutation of dimensions, a tiled layout, and a packed layout are representation changes whose preservation laws are equations about the values read at each logical index. Their costs depend on the target machine's memory hierarchy and execution model. Correctness and performance are properties of the chosen representations and observations." nil)
 s7-4-p6 : Block
@@ -1114,13 +1114,13 @@ s7-6-p19 = prose (cons "The alternatives are return, a silent delayed step, and 
 s7-6-p20 : Block
 s7-6-p20 = prose (cons "A particular handler can combine two continuing processes. Let their *complete* local configurations \(C_P,C_Q\) include continuations, and let \(M_{PQ},M_{QP}\) be the directed message types. With FIFO queues \(u:\mathsf{List}(M_{PQ})\), \(v:\mathsf{List}(M_{QP})\), the composite program has state" nil)
 s7-6-p21 : Block
-s7-6-p21 = construction (cons "\[" (cons "S_{P\parallel Q}=C_P\times C_Q\times\mathsf{List}(M_{PQ})\times\mathsf{List}(M_{QP})." (cons "\]" nil)))
+s7-6-p21 = realized (construction (cons "\[" (cons "S_{P\parallel Q}=C_P\times C_Q\times\mathsf{List}(M_{PQ})\times\mathsf{List}(M_{QP})." (cons "\]" nil)))) (cons "ParState" nil)
 s7-6-p22 : Block
 s7-6-p22 = prose (cons "Its transitions include local steps, sending, receiving, and unhandled environmental steps, together with their \(P/Q\) symmetric cases:" nil)
 s7-6-p23 : Block
-s7-6-p23 = construction (cons "\[" (cons "\begin{array}{ll}" (cons "\mathsf{local}:&p\xrightarrow{\tau}p'\ \Rightarrow\ (p,q,u,v)\to(p',q,u,v),\\" (cons "\mathsf{send}:&p\xrightarrow{!m}p'\ \Rightarrow\ (p,q,u,v)\to(p',q,u{+\!+}[m],v),\\" (cons "\mathsf{receive}:&q\xrightarrow{?m}q'\ \Rightarrow\ (p,q,m::u,v)\to(p,q',u,v),\\" (cons "\mathsf{external}:&p\xrightarrow{e}p'\ \Rightarrow\ (p,q,u,v)\xrightarrow{e}(p',q,u,v)." (cons "\end{array}" (cons "\]" nil))))))))
+s7-6-p23 = realized (construction (cons "\[" (cons "\begin{array}{ll}" (cons "\mathsf{local}:&p\xrightarrow{\tau}p'\ \Rightarrow\ (p,q,u,v)\to(p',q,u,v),\\" (cons "\mathsf{send}:&p\xrightarrow{!m}p'\ \Rightarrow\ (p,q,u,v)\to(p',q,u{+\!+}[m],v),\\" (cons "\mathsf{receive}:&q\xrightarrow{?m}q'\ \Rightarrow\ (p,q,m::u,v)\to(p,q',u,v),\\" (cons "\mathsf{external}:&p\xrightarrow{e}p'\ \Rightarrow\ (p,q,u,v)\xrightarrow{e}(p',q,u,v)." (cons "\end{array}" (cons "\]" nil))))))))) (cons "ParLab" (cons "ParMove" (cons "par-move" (cons "par-allowed" nil))))
 s7-6-p24 : Block
-s7-6-p24 = prose (cons "For an initially empty \(P\to Q\) queue, let \(N\) and \(D\) count successful sends and receives. The inductive invariant is \(N=D+|u|\), hence \(D\le N\): a send increments both \(N\) and \(|u|\), a receive increments \(D\) and decrements \(|u|\), and the other cases preserve all three. It is a property of the **composed program**, not an assumption about the individual processes. Trace projection and reconstruction follow by induction over the same cases, subject to FIFO matching and scheduling constraints. Neither fairness nor eventual delivery follows from the transition rules. Changing the network handler to permit loss, duplication, or reordering changes the composite state and invariant accordingly. The queue is a chosen example of an interaction cut, not a privileged architectural boundary." nil)
+s7-6-p24 = realized (prose (cons "For an initially empty \(P\to Q\) queue, let \(N\) and \(D\) count successful sends and receives. The inductive invariant is \(N=D+|u|\), hence \(D\le N\): a send increments both \(N\) and \(|u|\), a receive increments \(D\) and decrements \(|u|\), and the other cases preserve all three. It is a property of the **composed program**, not an assumption about the individual processes. Trace projection and reconstruction follow by induction over the same cases, subject to FIFO matching and scheduling constraints. Neither fairness nor eventual delivery follows from the transition rules. Changing the network handler to permit loss, duplication, or reordering changes the composite state and invariant accordingly. The queue is a chosen example of an interaction cut, not a privileged architectural boundary." nil)) (cons "par-sends" (cons "par-recvs" (cons "par-count" (cons "par-D-le-N" nil))))
 s7-6-p25 : Block
 s7-6-p25 = heading (suc (suc (suc (suc zero)))) "Native execution of a continuing process"
 s7-6-p26 : Block
@@ -1132,9 +1132,9 @@ s7-6-p28 = prose (cons "This schematic notation uses the guarded constructor's d
 s7-6-p29 : Block
 s7-6-p29 = prose (cons "A correspondence that ignores finite internal steps must not identify an infinitely silent target with an arbitrary returning source. The following defines a **termination-sensitive weak correspondence**, with the observation convention explicit. Let \(x\xrightarrow{\tau}x'\) be an internal transition and \(x\xrightarrow{e}x'\) a visible return, fault, or command/response transition in the chosen source or machine process. Define the *inductive* finite-prefix judgments" nil)
 s7-6-p30 : Block
-s7-6-p30 = construction (cons "\[" (cons "\frac{}{x\xRightarrow{\tau *}x}\qquad" (cons "\frac{x\xrightarrow{\tau}y\quad y\xRightarrow{\tau *}z}" (cons "{x\xRightarrow{\tau *}z}\qquad" (cons "\frac{x\xRightarrow{\tau *}y\quad y\xrightarrow{e}z}" (cons "{x\xRightarrow{e}z}." (cons "\tag{7.6c}" (cons "\]" nil))))))))
+s7-6-p30 = realized (construction (cons "\[" (cons "\frac{}{x\xRightarrow{\tau *}x}\qquad" (cons "\frac{x\xrightarrow{\tau}y\quad y\xRightarrow{\tau *}z}" (cons "{x\xRightarrow{\tau *}z}\qquad" (cons "\frac{x\xRightarrow{\tau *}y\quad y\xrightarrow{e}z}" (cons "{x\xRightarrow{e}z}." (cons "\tag{7.6c}" (cons "\]" nil))))))))) (cons "tau-chain" (cons "tau-star" (cons "weak-step" nil)))
 s7-6-p31 : Block
-s7-6-p31 = prose (cons "For a process state \(x\), its weak observable heads are the inductively witnessed events \(\mathsf{Head}(x):=\sum_{e,z}(x\xRightarrow{e}z)\). A return or fault is a terminal head; a command head includes its command and a continuation indexed by **each** permitted response. Define \(\mathsf{Div}_{\tau}(x)\) coinductively as an infinite chain of internal transitions, and \(\mathsf{Stuck}(x)\) as a nonterminal state with neither an internal transition nor a visible head. A guarded relation \(\mathsf{Sim}^{\kappa}(x,y)\) is the greatest clock-guarded relation satisfying the following *two-sided* clauses:" nil)
+s7-6-p31 = realized (prose (cons "For a process state \(x\), its weak observable heads are the inductively witnessed events \(\mathsf{Head}(x):=\sum_{e,z}(x\xRightarrow{e}z)\). A return or fault is a terminal head; a command head includes its command and a continuation indexed by **each** permitted response. Define \(\mathsf{Div}_{\tau}(x)\) coinductively as an infinite chain of internal transitions, and \(\mathsf{Stuck}(x)\) as a nonterminal state with neither an internal transition nor a visible head. A guarded relation \(\mathsf{Sim}^{\kappa}(x,y)\) is the greatest clock-guarded relation satisfying the following *two-sided* clauses:" nil)) (cons "WeakHead" nil)
 s7-6-p32 : Block
 s7-6-p32 = construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{Sim}^{\kappa}(x,y)\;\Longrightarrow\;&" (cons "  \bigl(\forall (e,x')\in\mathsf{Head}(x),\ " (cons "      \exists (e,y')\in\mathsf{Head}(y).\ \triangleright^{\kappa}\mathsf{Sim}^{\kappa}(x',y')\bigr)\\" (cons "&\times\bigl(\forall (e,y')\in\mathsf{Head}(y),\ " (cons "      \exists (e,x')\in\mathsf{Head}(x).\ \triangleright^{\kappa}\mathsf{Sim}^{\kappa}(x',y')\bigr)\\" (cons "&\times\bigl(\mathsf{Div}_{\tau}(x)\leftrightarrow\mathsf{Div}_{\tau}(y)\bigr)" (cons "\times\bigl(\mathsf{Stuck}(x)\leftrightarrow\mathsf{Stuck}(y)\bigr)." (cons "\end{aligned}" (cons "\tag{7.6d}" (cons "\]" nil))))))))))))
 s7-6-p33 : Block
