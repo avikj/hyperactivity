@@ -1105,3 +1105,127 @@ Editing in a typed context 𝐾[−]:
 4. checkEnclosing ⇝ Code(Γ,𝐴).
 
 The new code is a new immutable definition. Rebinding a name publishes it in a new snapshot, and read validation decides which retained computations survive. Editor, renderer, query and proof are definitions in the same space.
+
+### 10.6 Views, distribution, and complete systems
+
+**Queries and updates.** A query is a program 𝑞 ∶ 𝐷 → 𝑅 whose interface is the whole language: dependent functions, recursion, reflection, observations, proofs. Specialized engines, relational algebra, graph traversal and numerical kernels are representations and compilations of it. A materialized view is (𝑑,𝑟) with 𝑟 = 𝑞(𝑑), and update 𝑢 and incremental view update 𝑣 are connected by ∏_𝑑 Path_𝑅(𝑣(𝑑, 𝑞𝑑), 𝑞(𝑢𝑑)) (10.21). Indexes, caches and incremental queries realize this equation at different work and storage costs, and there is no separate foundational "database correctness" object.
+
+- Transactions are processes over a storage world whose admitted executions state the chosen isolation and durability. Serializability is a relation to a serial execution; crash recovery relates persisted states to permitted logical states.
+- A quotient data model requires queries to respect the quotient; queries on a concrete encoding run before the abstraction or keep the representation information.
+- The code/data consequence: data isn't forced into a language-external schema, code isn't excluded from queried data, the types and operations describing programs are available to programs, and higher paths express relations between presentations when those are part of the data.
+
+**Distribution and local execution.**
+
+- A remote invocation is a process: send definition identities and inputs, obtain dependencies, execute under a specified world, return. Code mobility makes sense because code and its dependencies are data, and the receiver checks the construction and the evidence relevant to its use.
+- Content identity fixes which definition is requested, not that an arbitrary remote machine executed it. A result is checked directly, comes with evidence, or is accepted under an explicitly chosen execution assumption, all expressed with the existing processes and propositions.
+- Local-first: required definitions and state are local, and synchronization is an explicit process. Replication is a program whose merges, delivery assumptions and consistency conditions are specified by the protocol. A partition changes the available interactions, never a retained definition's identity. Computation and data cross machines and organizations with no global execution order and no central application database.
+- The long-term environment is a persistent space of typed objects and interactions: locally inspectable and editable, networked when appropriate, and accepting generated computations with checked properties. This concerns the computational substrate and prescribes no social governance or participant-authority protocol.
+
+**Numerical programs and accelerators.** Tensor shapes are dependent indices, layouts are index equivalences, and operators are functions on indexed values. Fusion and loop reordering are equations about the selected operations. Parallel reduction needs the algebraic laws, or a specification permitting the changed FP behavior. A GPU schedule picks a realization with explicit memory spaces, synchronization and launch semantics. Autodiff is a program transformation whose correctness refers to the derivative of the meaning. Forward mode maps (𝑥,ẋ) to (𝑓𝑥, D𝑓(𝑥)·ẋ), with each primitive clause holding its derivative law and composition using the chain rule. Reverse mode builds and runs the adjoint accumulation. Mutation, control flow, nondifferentiable points and FP evaluation need the semantics the transformation states, and separate derivative syntax is acceptable only with a checked connection to the actual program. Optimization may search proved-equivalent realizations under a cost model, which is itself a function or relation over program and machine state. Instruction counts, cache behavior, bandwidth and physical latency are different observations, and the semantic theorem and the performance claim are distinct typed statements about one artifact; equality does not determine hardware timing.
+
+**Whole systems.** A program may include kernel, driver, client, server, network, and the computations installing or changing them. §7.6's handlers internalize chosen interactions and leave the rest open. A compiled realization may be several artifacts, related to the source by their semantics and evidence. The trading fleet is one application of this, not a language facility.
+
+### 10.7 Programs that change running programs
+
+A program may compute an executable, start it, record observations, replace part of its state, or change how its parts interact (DSU literature, 40, 41). These are programs over the machine and environment definitions, and their correctness is a predicate over the actual before-and-after executions. For live state 𝑠 ∶ 𝑆, update 𝑢 ∶ 𝑆 → 𝑆′ and invariant 𝐼, preservation is a term of ∏_𝑠 𝐼(𝑠) → 𝐼′(𝑢𝑠). This dependent program specifies the update and its preservation condition. Updating with messages pending means state and transitions account for them. Changing representation along an equivalence transports the structure; changing observable behavior needs a refinement or other stated relation. The operation and its evidence are written in the language, and no universal state layout, message representation or migration architecture is assumed.
+
+**A mixed-version transition defined by an application.** The fields are chosen by this application, not supplied by the language: installed versions 𝑉, routing 𝑅, pending authenticated events 𝑄, durable ledger ℓ. The upgrade is ({𝑣₀},𝑅,𝑄,ℓ) →install(𝑣₁) ({𝑣₀,𝑣₁},𝑅,𝑄,ℓ) →routeNew (…,𝑅′,…) →drainOld (…,𝑄′,ℓ′) →retireOld ({𝑣₁},𝑅′,𝑄′,ℓ′). Assume stable authenticated event ids, a ledger that atomically records applied ids before acknowledging, and that 𝑣₁ decodes every event that may be routed to it. Then:
+
+- install changes no ledger entry;
+- routeNew precedes draining, forbidding new 𝑣₀-owned obligations while keeping the assignment of existing old work;
+- draining applies the idempotent ledger transition;
+- retirement is enabled only when no route, active frame, queued delivery or in-flight request refers to 𝑣₀.
+
+Induction over these four constructors preserves the at-most-once ledger invariant, through the mixed-version interval. *Progress:* let 𝐷₀ be the finite set of old obligations when routing changes. Assume no handling creates another member of 𝐷₀, each reaches a terminal state under the chosen delivery and processing fairness, and terminal processing removes it. Finite induction on |𝐷₀| (pick a member, await it, recurse on the smaller set) gives emptiness, and with fairness for retirement, 𝑣₀ retires. Without the admission stop the finite-decrease argument fails. Crash recovery restores the durable applied-id set and ledger consistently before accepting replay, and retiring a process neither reverses nor completes external effects. No privileged Live, Deployment or Message construct is introduced.
+
+### 10.8 Content-addressed definitions, identity, and a decentralized codebase
+
+The precedent is Unison (42, 43): definitions are structured, content-addressed objects, not files whose mutable names give identity. A definition is stored with its typed syntax tree and dependency references; a name is a view or alias, and a stable reference identifies a definition. Dependencies and reuse point at actual definitions, so renaming rewrites no computation, and a change produces a new object and determines exactly which dependents may need recomputation.
+
+- For a typed store Def, with deps(𝑑) and content address digest(𝑑): the digest identifies a representation under collision-resistance or injectivity assumptions and proves no semantic equivalence. digest(𝑑₁) = digest(𝑑₂), 𝑑₁ ≡ 𝑑₂ and SemEq(𝑑₁,𝑑₂) are three different statements (10.22): address identity, definitional equality, and a specified relation between interpreted meanings.
+- For structured types SemEq may be a structure equivalence; for programs, a contextual or observational relation. Its type comes from the interpretations. The store records each relation with its evidence and uses the strongest available for the operation. Replacing an algebraic representation by an equivalent one transports laws and operations, while a hash match is only evidence about the stored representation. A source/target refinement proof relates different definitions without identifying their semantics.
+- So a codebase holds programs together with typing derivations, semantics, equivalences, transformations, dependency certificates and reusable proofs. An edit is a program transforming this structure, and its effect on dependents is computed by the §10.1 operations.
+- Matching recorded dependencies and observations is sufficient for reusing a deterministic pure result, but not necessary: a changed dependency may leave the result unchanged, an independent equivalence may justify reuse, and a representation-change proof may allow reuse across differing syntax.
+- No separately maintained table of which text files, generated artifacts, test expectations and deployment descriptors correspond is needed; they are constructions connected by the operations that produce them.
+- Decentralized exchange: a peer sends a definition, its dependency closure and its proofs, and the recipient checks and uses them in its own context. What communication achieves is availability of a construction for further computation, not just delivery of bytes. No global namespace is needed for definition identity, while authenticity of external observations and machine semantics stay explicit premises. Distributing programs and reusing knowledge are both typed exchange.
+
+### 10.9 Interactive symbolic programming over the actual computational object
+
+The environment works on retained objects instead of rebuilding them from text. Source, proof, dependency graph, executable bytes, live state and causal trace are selected representations or observations, connected by the definitions and transformations producing them, and those relationships, not matching filenames or line numbers, decide what can be reused or changed.
+
+- Interactions are typed queries or edits. For 𝑡 ∶ Code(Γ,𝐴), the environment computes its type, free-variable dependencies, a symbolic residual under substitution, a proof-relevant transformation, or a selected realization.
+- An edit is a function on checked code, with a semantic relation where required. A dependency change invalidates exactly the retained results whose certificates fail.
+- The object can be inspected at any cut: expression, function, thread, OS process, distributed service, whole fleet.
+
+A debugger works on the running program and its actual recorded observations. Example: a ledger state inconsistent with an exchange acknowledgment. Missing packets, scheduling decisions and recovery events are kept as variables, and the compatible executions are the fiber of the observation map. Symbolic evaluation specializes the program on the known evidence and leaves unresolved interactions residual. Enlarging the cut to include the network or exchange simulator internalizes some of them; shrinking it exposes them again as boundary commands. The same program can be viewed at source level, as compiled instructions, or as distributed event dependencies, via the corresponding relations and evidence. This is interactive symbolic computing, not a log search pretending to have reconstructed the program.
+
+*One symbolic debugging operation.* With Run(𝐹) the execution family under the specified environment and machine semantics, and 𝑜 recording the observed prefix: CompatibleRun(𝑦) ∶= ∑_{𝜌∶Run 𝐹}(𝑜𝜌 = 𝑦) (10.23). A new authenticated event 𝑒, with update 𝑢_𝑒 ∶ 𝑂 → 𝑂′ and extended 𝑜′, restricts it: CompatibleRun′(𝑦,𝑒) ∶= ∑_{(𝜌,𝑝)∶CompatibleRun 𝑦}(𝑜′𝜌 = 𝑢_𝑒 𝑦) (10.24).
+
+- A residual evaluator maps this family to still-possible ledger values or causal predecessors; it never invents missing packets.
+- A recovered packet's new equality witness narrows the fiber, and cached symbolic results are reused only under their recorded observation dependencies.
+- Source-to-instruction navigation uses the compiler's established trace relation, and enlarging the cut to a network handler uses §7.6's handler interpretation.
+
+So a real interactive operation has typed inputs, an observation update and a defined output family.
+
+The interface is itself a program. Data-structure visualizations, proof trees, graphical state machines, source editors and distributed trace explorers are functions on the same represented constructions. Interaction need not start from a text file: a question about a running system, an observation of a physical process, or a transformation of a dependent relation can be the immediate operand. A rationale can be inspected or executed, a routine used inside a rationale, a relation transformed along a proved equivalence. The display is a chosen observation of the computation, not its source of identity, and the text-editor IDE is one presentation, not the definition of programming. That is why the environment matters as much as the verification power: the programmer operates directly on definitions, meanings, dependencies and running computations, instead of hand-coordinating partial representations of them.
+
+### 10.10 A distributed program as an ordinary term
+
+For §7.6's fleet with network choices of delivery, duplication, loss and partition, define NView, FState, fleet-step, fleet-run and fleet-proc by those rules. Safety is Safe(𝐼,𝑏,𝑔) ∶= ∏_{𝑐𝑠∶List Adv} 𝐼(fleetRun(𝑏,𝑐𝑠,𝑔)), and safe-ind builds it from 𝐼(𝑔) and preservation by every adversarial step. Liveness and convergence need assumptions about choices and fairness and don't follow from safety. Network, states, adversary and predicate are definitions of this example. Replicated data types (59) are a separate family of convergence and exchange protocols; this theorem comes from this specific transition relation, not a generic replication guarantee. Another distributed program may use entirely different mathematics, and the language has gained no Fleet primitive.
+
+**A concrete long-only order/ledger program.** Bound 𝐵 ∈ ℕ; Id with decidable equality; positive quantities. State:
+
+- filled long position 𝑝 ∈ ℕ;
+- outstanding buys 𝑂 ∶ FinMap(Id, ℕ>0);
+- allocated ids 𝑈 ∶ FinSet(Id);
+- accepted-fill ledger 𝐿 ∶ List(Id × ℕ>0);
+- FIFO queue 𝑄 of authenticated exchange events;
+- gateway version 𝑣.
+
+𝑅(𝑝,𝑂) ∶= 𝑝 + ∑_{𝑖∈dom 𝑂} 𝑂(𝑖) and 𝐼_𝐵(𝑝,𝑂) ∶= 𝑅(𝑝,𝑂) ≤ 𝐵 (10.T1). This bounds filled position plus the maximum additional position from admitted outstanding buys, not open orders alone. Transitions (10.T2), with unmentioned components unchanged:
+
+- Admit(𝑖,𝑞): 𝑖 ∉ 𝑈, 𝑞 > 0, 𝑅 + 𝑞 ≤ 𝐵 ⇒ 𝑂′ = 𝑂[𝑖↦𝑞], 𝑈′ = 𝑈 ∪ {𝑖}. It also emits the order request to the exchange.
+- Receive(𝑚): 𝑄′ = 𝑄 ++ [𝑚], the input event from the handler.
+- Fill(𝑖,𝑞): 𝑄 = FullFill(𝑖,𝑞) ∷ 𝑄₀ and 𝑂(𝑖) = 𝑞 ⇒ 𝑂′ = 𝑂∖{𝑖}, 𝑝′ = 𝑝+𝑞, 𝐿′ = 𝐿 ++ [(𝑖,𝑞)], 𝑄′ = 𝑄₀.
+- Cancel(𝑖): 𝑄 = CancelAck(𝑖) ∷ 𝑄₀ and 𝑖 ∈ dom 𝑂 ⇒ 𝑂′ = 𝑂∖{𝑖}, 𝑄′ = 𝑄₀.
+- Stale(𝑚): 𝑄 = 𝑚 ∷ 𝑄₀ with no matching open order ⇒ 𝑄′ = 𝑄₀.
+
+This is a deliberately restricted full-fill, long-only lifecycle: no partial fills, no position-reducing sells, no unmodeled preexisting position. For the relation to real exchange behavior, the handler must authenticate events, preserve per-order exchange sequencing, and make a terminal cancel ack exclude unaccounted earlier or later fills, or else dropping a stale fill could undercount real position. That handler contract is a premise of the correspondence, not a consequence of the gateway invariant.
+
+- *Risk bound.* Initially 𝑝 = 0 and 𝑂 = 𝑈 = 𝐿 = 𝑄 = ∅, so 𝐼_𝐵 holds for 𝐵 ≥ 0. By the classical preservation discipline (68): admission preserves 𝐼_𝐵 by its guard; a full fill moves 𝑞 from 𝑂 to 𝑝 and leaves 𝑅 unchanged; cancellation removes a nonnegative summand; receive and stale change neither 𝑝 nor 𝑂. Induction over finite traces gives safe_𝐵 ∶ ∏_{𝜏∶FiniteRun(𝐹_𝐵, 𝑠₀)} 𝑅(𝑝(last 𝜏), 𝑂(last 𝜏)) ≤ 𝐵 (10.T3).
+- *Ledger uniqueness.* With dom(𝑂) ⊆ 𝑈 as a separate state invariant, maintain 𝐽(𝑂,𝑈,𝐿) ∶= NoDup(ids 𝐿) × (set(ids 𝐿) ⊆ 𝑈) × (set(ids 𝐿) ∩ dom 𝑂 = ∅) (10.T4). It holds initially. Admission adds an id outside 𝑈, so it is in neither the ledger nor open orders. A fill removes an open id that the third conjunct says is not in the ledger, then appends it, and the second conjunct follows from dom 𝑂 ⊆ 𝑈. Cancel shrinks dom 𝑂, and receive and stale leave the sets alone. A second induction gives 𝐽 and count_𝐿(𝑖) ≤ 1. The risk bound alone doesn't give uniqueness; each property needs its own invariant components and preservation argument.
+
+A composed network/exchange implementation has more state than (𝑣,𝑝,𝑂,𝑈,𝐿,𝑄). Under the handler correspondence, each composed transition projects onto the gateway state as a (10.T2) step or a stutter, and finite-run induction transfers 𝐼_𝐵 and 𝐽. A mixed-version gateway may route new ids between 𝑣₀ and 𝑣₁ while sharing authoritative 𝑝, 𝑂, 𝑈, 𝐿, 𝑄; routing and installation leave those fields unchanged, and both versions preserve (10.T2). A representation migration preserves 𝑅(𝑝,𝑂), id uniqueness and outstanding obligations. Progress of an accepted order also assumes a consistent terminal exchange response, eventual delivery, and fair processing of finite queue prefixes. These are properties of this program and handler, not primitives of hyperactivity or automatic consequences of safety.
+
+### 10.11 A program edit propagates through its dependent constructions
+
+The §8 decoder's lifted checked representation is 𝑑 ∶ Tm_{C++}(Γ,𝐴). The programmer widens the payload length from two bytes to four. That is not a text operation on unrelated files but a transformation 𝐸 of the represented declaration and its dependents. 𝑑′ ∶= 𝐸(𝑑) reads four length bytes and needs a six-byte header, and its behavior comes from the same interpreted C++ semantics as 𝑑, not an informal model. The typed transformation records the new source, its elaboration, and the old/new semantic relation, which is not equivalence here, because the accepted packet language changes on purpose.
+
+Bytes `01 00 02 00 00 00 aa bb` decode to tag 1 and length 2 in both formats but select payloads `00 00` and `aa bb` respectively. The version selected in the invocation's context decides the interpretation. Changing the selection governs later invocations, and an active invocation keeps its original definition and snapshot unless a §10.5 migration is supplied.
+
+In a persistent definition graph 𝐷, a node has a checked definition and a dependency certificate. Its dependents may include the packet schema, the decoder correctness proof, a specialized parser, a native artifact, a UI rendering and the live gateway deployment. edit(𝐷,𝑑,𝑑′) = 𝐷′, and reuse(𝑥,𝐷′) ∶ valid(𝑥,𝐷′) → Value(𝑥) (10.25) keeps a derived value only if its certificate still validates.
+
+- The old decoder proof, whose statement mentions the four-byte header, does not silently become a proof about the six-byte header; its dependent type changes and has to be inhabited for 𝑑′.
+- The residual parser is recomputed for the new fixed header layout with packets still unknown.
+- C lowering and the downstream compiler build the new artifact with §9.4's composed relation.
+- The graph rendering changes as a derived view, while the old source and artifact stay immutable and addressable.
+- Deployment installs the new artifact, arranges compatibility for in-flight old-format messages, and reroutes through §10.7's mixed-version states.
+
+Edit, proof, residualization, emitted artifact, dependency update and rollout are operations on one represented computation. The two protocol versions coexist, with compatibility decided by their actual interpreters and routing transitions. A language server exposes the dependent changes, and a debugger reads an observed packet under either version with unknown bytes kept symbolic. Their results are determined by the available definitions and recorded observations.
+
+## 11. Conclusion
+
+A whole can obey a reversible rule while a chosen observation of it has no autonomous rule at all. §1's two-bit calculation makes this explicit: the question is whether the step descends through the observation. The same question recurs whenever a description forgets information, a representation changes, or a conclusion is claimed from partial evidence. An observation identifies a fiber of compatible histories, a rationale establishes what follows over it, and an equivalence of representations transports what has actually been established.
+
+None of this is done from an unexplained outside vantage. Observer, interpretation and reasoning can be inside the described evolution. The definitions of the language expressing these relations are themselves represented as terms, and operations on them are interpreted, checked, specialized and transformed. Routine, relation and rationale are constructions of one language, not three authorities the engineer translates between.
+
+This closure has an exact executional consequence. Under §9's evaluator-adequacy, world-correspondence and machine-simulation premises, one machine-realized evaluator executes every represented program, interpreters and transformations of programs included. The primary realization composes C lowering with the chosen downstream compilation relation, and direct instruction-level realizations are alternatives. Source syntax, interpreted behavior and target bytes stay different objects, and the established relations among them, not a shared name, justify interchanging them. Self-application does not establish checker soundness or compiler correctness; those remain to be constructed in the same language.
+
+A description need not freeze when its subject changes:
+
+- guarded interactions keep processes open;
+- recorded read dependencies say when retained computations still apply;
+- effect histories constrain restarts;
+- content-addressed definitions and their evidence are inspected and exchanged by participants without a global interpreter of their meaning.
+
+So the continuing activity of description, inference and transformation is itself available to computation. The result is a language for nature that includes the work of understanding nature, and an executable environment where that work acts on its own products. This returns to the horizon of *A New Kind of Science* (64): the universe and the activity of investigating it are both within the subject of computation. *Hyperactivity* names the activity, not a layer over it.
