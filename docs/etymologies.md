@@ -40,3 +40,5 @@ here. `docs/word-list.md` is a separate file, whose lines Avik gives himself.
 - agreement ⟨Old French agreer "to please, to receive kindly", from à gré "to one's liking" ← Latin grātum "pleasing"⟩  (raised 2026-11-15)
 - conflict ⟨Latin cōnflīctus, from cōnflīgere "to strike together" = con + flīgere "to strike"⟩  (raised 2026-11-15)
 - empathy ⟨Greek empatheia "passion, being in a state of feeling" = en "in" + pathos "feeling, suffering"; in English (1909) through German Einfühlung "feeling into"⟩  (raised 2026-11-15)
+- predict ⟨Latin praedīcere "to say beforehand, foretell" = prae "before" + dīcere "to say" ← Proto-Indo-European *deyḱ- "to show, point out", also the root of indicate, index and (through Germanic) teach⟩  (raised 2026-11-16)
+- infer ⟨Latin īnferre "to bring in, carry into" = in "into" + ferre "to carry" ← Proto-Indo-European *bʰer- "to carry, bear"⟩  (raised 2026-11-16)
