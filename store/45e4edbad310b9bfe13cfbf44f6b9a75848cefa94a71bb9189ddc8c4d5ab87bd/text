@@ -1,0 +1,5 @@
+e-word-child : Bool → List Word → List Word → Proc W (List Word)
+e-word-child proper w lw = bind h-args (λ a → bind (h-write "build/etym/word" (h-line "-")) (λ x →
+  bind (h-run (cons (e-nth zero a) (cons (e-nth (toNat #1) a) (cons "--word" (cons (if proper then "1" else "0") (cons w (cons lw nil))))))) (λ s →
+  if weq s #0 then bind (h-read "build/etym/word") (λ t → ret {lzero} {W} (e-or t))
+  else bind (h-say (h-line (list-append "etym: " (list-append w (list-append " could not be looked up (exit " (list-append (h-decimal s) ")")))))) (λ u → ret {lzero} {W} (h-line "-")))))

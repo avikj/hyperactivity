@@ -1,0 +1,9 @@
+-- a language's index, made once: its heads (line n+1 is record n), numbers in hex
+e-make-index : List Word → Proc W Unit
+e-make-index l = bind (e-exists (e-index l)) (λ have → if have then ret {lzero} {W} unit else
+  bind (h-say (h-line (list-append "etym: indexing " (list-append l " once …")))) (λ u →
+  bind (h-mkdir "build/etym") (λ u0 → bind (h-mkdir "build/etym/tmp") (λ u1 →
+  bind (h-write (list-append (e-index l) ".tmp") nil) (λ w →
+  bind (e-index-file (e-file l "idx") (list-append l "-idx-") "0" (list-append (e-index l) ".tmp")) (λ ok →
+  if ok then bind (e-rename (list-append (e-index l) ".tmp") (e-index l)) (λ r → ret {lzero} {W} unit)
+  else h-fail (list-append "etym: the index of " (list-append l " could not be made"))))))))

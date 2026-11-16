@@ -1,0 +1,7 @@
+-- a term's sense: a reconstructed term's from the glosses citing it, another's its entry's first
+e-sense : List Word → List Word → Proc W (List Word)
+e-sense code page = if h-prefix "*" page then
+  bind (e-out (cons "grep" (cons "-a" (cons "-m" (cons "1" (cons "-F" (cons "-e" (cons (list-append " " (list-append code (list-append e-tab (list-append page e-tab)))) (cons "build/etym/roots" nil))))))))) (λ o →
+    ret {lzero} {W} (e-text (e-strip (e-nth (toNat #2) (e-fields (e-strip o))))))
+  else if h-null (e-file-of code) then ret {lzero} {W} nil
+  else bind (e-entries (e-file-of code) page (inl unit)) (λ rows → ret {lzero} {W} (e-sense-in rows))

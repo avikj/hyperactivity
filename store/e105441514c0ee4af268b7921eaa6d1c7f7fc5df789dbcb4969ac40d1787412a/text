@@ -1,0 +1,10 @@
+e-unbreve : List Word → List Word
+e-unbreve nil = nil
+e-unbreve (cons a nil) = cons a nil
+e-unbreve (cons a (cons b nil)) = if andB (weq a #204) (orB (weq b #132) (weq b #134)) then nil
+  else if h-not (weq (e-unmac a b) #0) then cons (e-unmac a b) nil else cons a (cons b nil)
+e-unbreve (cons a (cons b (cons c r))) =
+  if andB (weq a #204) (orB (weq b #132) (weq b #134)) then e-unbreve (cons c r)
+  else if h-not (weq (e-unmac a b) #0) then cons (e-unmac a b) (e-unbreve (cons c r))
+  else if h-not (h-null (e-ungreek a b c)) then list-append (e-ungreek a b c) (e-unbreve r)
+  else cons a (e-unbreve (cons b (cons c r)))

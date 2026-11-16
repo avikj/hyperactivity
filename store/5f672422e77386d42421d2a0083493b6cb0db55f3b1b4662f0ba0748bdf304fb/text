@@ -1,0 +1,5 @@
+-- the first sense: an <ol> whose first item opens at once, up to the item's first list or its end
+e-sense-at : (List Word → Sum Unit (List Word)) → Sum Unit (List Word) → Sum Unit (List Word)
+e-sense-at k (inl u) = inl unit
+e-sense-at k (inr r) = if andB (h-prefix "<li" (e-dropws r)) (h-infix ">" (e-dropws r))
+  then inr (e-upto-any (h-split #44 "<dl>,<ul>,<ol>,</li>") (e-or (e-after ">" (e-dropws r)))) else k r

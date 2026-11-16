@@ -1,0 +1,10 @@
+-- a language's StarDict files, fetched once (false when the release has none)
+e-fetch : List Word → Proc W Bool
+e-fetch l = bind (e-exists (e-file l "idx")) (λ have → if have then ret {lzero} {W} true else
+  bind (e-zstd) (λ z → bind (h-mkdir "build") (λ u0 → bind (h-mkdir "build/wiktionary") (λ u1 → bind (h-mkdir (e-dir l)) (λ u2 →
+  bind (e-cmd (cons "curl" (cons "-fsSL" (cons "-o" (cons (list-append (e-dir l) ".tar.zst") (cons (list-append e-release (list-append l "-en.tar.zst")) nil)))))) (λ c →
+  if h-not (weq c #0) then bind (e-cmd (cons "rm" (cons "-rf" (cons (e-dir l) (cons (list-append (e-dir l) ".tar.zst") nil))))) (λ x → ret {lzero} {W} false) else
+  bind (e-cmd (cons "tar" (cons "-x" (cons "-f" (cons (list-append (e-dir l) ".tar.zst") (cons "-C" (cons (e-dir l)
+    (cons (list-append "--use-compress-program=" (list-append z " -d")) (cons "--wildcards" (cons "--no-anchored"
+    (cons "*.idx" (cons "*.syn" (cons "*.dict.dz" (cons "--transform=s|.*/||" nil)))))))))))))) (λ t →
+  bind (e-cmd (cons "rm" (cons "-f" (cons (list-append (e-dir l) ".tar.zst") nil)))) (λ x → e-exists (e-file l "idx")))))))))

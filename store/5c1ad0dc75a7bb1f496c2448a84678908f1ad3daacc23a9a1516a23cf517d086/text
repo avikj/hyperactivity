@@ -1,0 +1,7 @@
+-- the entries of page w in lang (a word form taken to its lemma), those with an etymology first, the
+-- exact capitalisation first
+e-entries-here : List Word → List Word → Sum Unit (List Word) → Proc W (List ERow)
+e-entries-here l w ex = bind (e-make-index l) (λ u → bind (e-lines-of (e-index l) (e-page w) "-i") (λ ls →
+  if h-not (h-null (h-concat ls)) then bind (e-rows-of l ls) (λ rows → ret {lzero} {W} (e-sort-rows w (e-exact ex rows)))
+  else bind (e-lemma l w) (λ lm → if orB (h-null lm) (h-eq (e-key lm) (e-key w)) then ret {lzero} {W} nil else
+    bind (e-lines-of (e-index l) lm "-i") (λ ls2 → bind (e-rows-of l ls2) (λ rows → ret {lzero} {W} (e-sort-rows w (e-exact ex rows)))))))

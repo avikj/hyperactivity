@@ -1,0 +1,8 @@
+-- character references read (&amp; &#34; &#x2014; …); one not known is kept as written
+e-unescape-f : Nat → List Word → List Word
+e-unescape-f zero t = t
+e-unescape-f (suc f) nil = nil
+e-unescape-f (suc f) (cons c r) =
+  if andB (weq c #38) (andB (h-prefix ";" (h-drop (e-refname r) r)) (h-not (h-null (e-ref (e-refname r)))))
+  then list-append (e-ref (e-refname r)) (e-unescape-f f (h-drop ";" (h-drop (e-refname r) r)))
+  else cons c (e-unescape-f f r)

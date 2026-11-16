@@ -1,0 +1,9 @@
+e-gc1 : Nat → List Word → List Word
+e-gc1 zero t = t
+e-gc1 (suc f) nil = nil
+e-gc1 (suc f) (cons c r) =
+  if andB (h-prefix "<grk>" (cons c r)) (h-infix "</grk>" r) then list-append (e-grk-text false (e-upto "</grk>" (h-drop "<grk>" (cons c r)))) (e-gc1 f (e-or (e-after "</grk>" r)))
+  else if andB (weq c #60) (andB (h-not (h-null (e-letters-run r))) (h-prefix "/" (e-drop-n (list-length (e-letters-run r)) r)))
+  then list-append (e-gletter (e-letters-run r)) (e-gc1 f (e-drop-n (suc (list-length (e-letters-run r))) r))
+  else if h-prefix "<br/" (cons c r) then cons #32 (e-gc1 f (h-drop "<br/" (cons c r)))
+  else cons c (e-gc1 f r)

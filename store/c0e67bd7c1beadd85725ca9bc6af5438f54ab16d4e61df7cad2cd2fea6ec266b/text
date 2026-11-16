@@ -1,0 +1,6 @@
+-- the heads indexed for a word form: its lemma's line
+e-lemma : List Word → List Word → Proc W (List Word)
+e-lemma l w = bind (e-make-syn l) (λ ok → if h-not ok then ret {lzero} {W} nil else
+  bind (e-lines-of (e-syn-index l) (e-page w) "-i") (λ ss → if h-null (h-concat ss) then ret {lzero} {W} nil else
+  bind (e-out (cons "sed" (cons "-n" (cons (list-append (h-decimal (e-num-onto #16 #0 (h-drop "#" (e-nth (toNat #1) (e-fields (e-nth zero ss)))))) "p") (cons (e-index l) nil)))))
+    (λ line → ret (e-nth zero (e-fields (e-strip line))))))

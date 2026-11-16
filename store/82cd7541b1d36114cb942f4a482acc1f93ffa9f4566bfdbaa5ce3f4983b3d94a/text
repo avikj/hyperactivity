@@ -1,0 +1,5 @@
+-- the chunks run one process after another; whether every one succeeded and none ended inside a record
+e-run-chunks : List Word → List Word → List Word → List Word → List (List Word) → Proc W Bool
+e-run-chunks m self syn out nil = bind (h-read "build/etym/tmp/carry") (λ c → ret (h-null (e-or c)))
+e-run-chunks m self syn out (cons p r) = bind (h-run (cons m (cons self (cons "--chunk" (cons syn (cons out (cons p nil))))))) (λ s →
+  bind (h-unlink p) (λ u → if weq s #0 then e-run-chunks m self syn out r else ret {lzero} {W} false))

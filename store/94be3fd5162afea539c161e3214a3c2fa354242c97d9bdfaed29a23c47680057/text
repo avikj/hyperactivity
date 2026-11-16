@@ -1,0 +1,5 @@
+-- the detail of a word: each entry's sense and etymology, its parts, the chain followed
+e-hop-lines : List (List (List Word) × ERow) → Proc W (List (List Word))
+e-hop-lines nil = ret nil
+e-hop-lines (cons h r) = bind (e-show60 (fst h)) (λ s → bind (e-parts (snd h)) (λ p → bind (e-hop-lines r) (λ rest →
+  ret (cons (list-append "      " (list-append (e-utf8 #8592) (list-append " " (list-append s (list-append ": " (list-append (e-take-chars (toNat #400) (e-first-line (e-re (snd h)))) p)))))) rest))))

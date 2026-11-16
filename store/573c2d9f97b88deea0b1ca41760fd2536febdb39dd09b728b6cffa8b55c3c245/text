@@ -1,0 +1,9 @@
+e-aug-word : Nat → Bool → List (List Word) → List Word → List Word → List Word → (List (List Word) → List Word → List Word → Proc W (List Word × List (List Word))) → Proc W (List Word × List (List Word))
+e-aug-word f all seen prior w rest k =
+  if orB (orB (h-infix "'" (e-strip-q (e-lc w))) (h-infix (e-utf8 #8217) (e-strip-q (e-lc w)))) (orB (h-has (e-strip-q (e-lc w)) seen) (andB (h-not all) (h-has (e-strip-q (e-lc w)) e-stop)))
+  then bind (k seen (list-append prior w) rest) (λ o → ret {lzero} {W} (list-append w (fst o) , snd o))
+  else bind (e-word-child (andB (e-upper (e-head w)) (andB (h-not (h-null prior)) (h-not (e-sentence-start prior)))) w (e-strip-q (e-lc w))) (λ res →
+    bind (k (cons (e-strip-q (e-lc w)) seen) (list-append prior w) rest) (λ o →
+    if h-eq (e-upto-c #10 res) "-" then ret {lzero} {W} (list-append w (fst o) , snd o)
+    else ret {lzero} {W} (list-append w (list-append " " (list-append (e-utf8 #10216) (list-append (e-upto-c #10 res) (list-append (e-utf8 #10217) (fst o))))) ,
+      cons (e-or (e-after-c #10 res)) (snd o))))

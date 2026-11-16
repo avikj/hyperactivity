@@ -1,0 +1,10 @@
+e-etyl-body : Nat → List Word → Bool × (List Word × List Word)
+e-etyl-body zero t = (false , (nil , t))
+e-etyl-body (suc f) nil = (false , (nil , nil))
+e-etyl-body (suc f) (cons c r) =
+  if h-prefix "</span>" (cons c r) then (true , (nil , h-drop "</span>" (cons c r)))
+  else if h-not (weq c #60) then e-ecat (cons c nil) (e-etyl-body f r)
+  else if andB (h-prefix "<a" (cons c r)) (andB (h-infix ">" (cons c r)) (h-prefix "</a>" (h-drop (e-upto-c #60 (e-or (e-after ">" (cons c r)))) (e-or (e-after ">" (cons c r))))))
+  then e-ecat (list-append (e-upto ">" (cons c r)) (list-append ">" (list-append (e-upto-c #60 (e-or (e-after ">" (cons c r)))) "</a>")))
+    (e-etyl-body f (h-drop "</a>" (h-drop (e-upto-c #60 (e-or (e-after ">" (cons c r)))) (e-or (e-after ">" (cons c r))))))
+  else (false , (nil , cons c r))

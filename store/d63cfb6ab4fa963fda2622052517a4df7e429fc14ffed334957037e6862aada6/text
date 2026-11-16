@@ -1,0 +1,4 @@
+-- the dictionary uncompressed, so an article is a range of its bytes
+e-undz : List Word → Proc W Unit
+e-undz l = bind (e-exists (e-file l "dict")) (λ have → if have then ret {lzero} {W} unit else
+  bind (e-sh (list-append "gzip -dc " (list-append (e-file l "dict.dz") (list-append " > " (list-append (e-file l "dict") (list-append ".tmp && mv " (list-append (e-file l "dict") (list-append ".tmp " (e-file l "dict"))))))))) (λ r → ret {lzero} {W} unit))

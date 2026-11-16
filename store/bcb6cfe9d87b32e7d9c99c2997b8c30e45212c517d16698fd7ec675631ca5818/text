@@ -1,0 +1,7 @@
+e-skip-once : Nat → List Word → Bool → Word → List Word → Sum Unit (List Word)
+e-skip-once zero acc pw d t = inl unit
+e-skip-once (suc f) acc pw d nil = inl unit
+e-skip-once (suc f) acc pw d (cons c r) =
+  if andB (h-not pw) (h-not (weq (e-skip-any e-skips (cons c r)) #0))
+  then inr (h-rev acc (if e-pos d then e-cut-paren d (cons c r) else e-cut-sentence (e-drop-n (toNat (e-skip-any e-skips (cons c r))) (cons c r))))
+  else e-skip-once f (cons c acc) (e-wordc c) (if weq c #40 then wadd d #1 else if weq c #41 then wsub d #1 else d) r

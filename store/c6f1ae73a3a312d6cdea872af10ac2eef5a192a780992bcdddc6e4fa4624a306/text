@@ -1,0 +1,9 @@
+-- the bytes of a whitespace character at the start of t (Python's \s: ASCII space and the Unicode
+-- spaces MediaWiki writes), 0 when it is not one
+e-wsn : List Word → Word
+e-wsn nil = #0
+e-wsn (cons c r) = if e-space c then #1
+  else if andB (weq c #194) (weq (e-head r) #160) then #2
+  else if andB (weq c #226) (andB (weq (e-head r) #128) (orB (andB (wlt #127 (e-head (h-tail r))) (wlt (e-head (h-tail r)) #139)) (orB (weq (e-head (h-tail r)) #175) (orB (weq (e-head (h-tail r)) #168) (weq (e-head (h-tail r)) #169))))) then #3
+  else if andB (weq c #227) (andB (weq (e-head r) #128) (weq (e-head (h-tail r)) #128)) then #3
+  else #0

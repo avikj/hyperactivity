@@ -1,0 +1,5 @@
+-- the entries of page w in lang, made here (--entries LANG PAGE, its own process)
+e-entries-main : List (List Word) → Proc W Unit
+e-entries-main args = bind (e-entries-here (e-nth zero args) (e-nth (toNat #1) args) (inl unit)) (λ rows →
+  bind (h-write (list-append (e-rows-file (e-nth zero args) (e-nth (toNat #1) args)) ".tmp") (e-join (cons #5 nil) (list-map e-ser-row rows))) (λ w →
+  bind (e-rename (list-append (e-rows-file (e-nth zero args) (e-nth (toNat #1) args)) ".tmp") (e-rows-file (e-nth zero args) (e-nth (toNat #1) args))) (λ r → exit #0)))

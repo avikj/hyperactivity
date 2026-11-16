@@ -1,0 +1,5 @@
+-- w explained: itself, or its prefixes, base and suffixes (three levels at most)
+e-resolve : Nat → Bool → List Word → Proc W (List (List Word × Sum Unit EFound))
+e-resolve zero top w = bind (e-one w (inl unit)) (λ r → e-resolve-with top w r (ret {lzero} {W} nil))
+e-resolve (suc d) top w = bind (e-one w (inl unit)) (λ r → e-resolve-with top w r
+  (bind (e-try-prefix (e-resolve d false) e-prefixes w) (λ p → if e-nullp p then e-try-suffix (e-resolve d false) e-suffixes w else ret {lzero} {W} p)))

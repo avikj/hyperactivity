@@ -1,0 +1,11 @@
+-- the length of a comparison word at the start of t, 0 when none: entry base with ? (an optional s)
+-- or * (any word characters after)
+e-skip-len : List Word → List Word → Word
+e-skip-len e t =
+  if h-not (andB (orB (weq (e-head t) (e-head e)) (weq (e-head t) (wsub (e-head e) #32))) (h-prefix (h-tail (e-upto-c #63 (e-upto-c #42 e))) (h-tail t))) then #0
+  else if h-infix "*" e then fromNat (e-word-end (list-length (e-upto-c #42 e)) (e-drop-n (list-length (e-upto-c #42 e)) t))
+  else if h-infix "?" e then
+    (if andB (weq (e-head (e-drop-n (list-length (e-upto-c #63 e)) t)) #115) (e-bound #115 (e-head (e-drop-n (suc (list-length (e-upto-c #63 e))) t)))
+     then fromNat (suc (list-length (e-upto-c #63 e)))
+     else if e-bound (e-last-byte (e-upto-c #63 e)) (e-head (e-drop-n (list-length (e-upto-c #63 e)) t)) then fromNat (list-length (e-upto-c #63 e)) else #0)
+  else if e-bound (e-last-byte e) (e-head (e-drop-n (list-length e) t)) then fromNat (list-length e) else #0

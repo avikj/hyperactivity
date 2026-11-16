@@ -1,0 +1,5 @@
+e-detail : Bool → List (List Word) → List ERow → List (List (List Word) × ERow) → Proc W (List (List Word))
+e-detail first shown nil hops = ret nil
+e-detail first shown (cons r rs) hops = if orB (h-has (e-re r) shown) (e-nat-le (toNat #3) (list-length shown)) then e-detail false shown rs hops else
+  bind (e-row-lines r) (λ ls → bind (if first then e-hop-lines hops else ret {lzero} {W} nil) (λ hl →
+  bind (e-detail false (cons (e-re r) shown) rs hops) (λ rest → ret (list-append ls (list-append hl rest)))))

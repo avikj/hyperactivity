@@ -1,0 +1,9 @@
+-- a tag at the start of t removed: <style …>…</style> whole, </p> blank <p> as a space, any other
+-- <…>; whether one is there, whether a space stands for it, and the text after it
+e-tag-skip : List Word → Bool × (Bool × List Word)
+e-tag-skip t =
+  if andB (h-prefix "<style" t) (andB (h-not (e-wordc (e-head (h-drop "<style" t)))) (h-infix "</style>" t))
+  then (true , (false , e-or (e-after "</style>" t)))
+  else if andB (h-prefix "</p>" t) (h-prefix "<p>" (e-dropws (h-drop "</p>" t))) then (true , (true , h-drop "<p>" (e-dropws (h-drop "</p>" t))))
+  else if andB (h-not (weq (e-head (h-tail t)) #62)) (andB (h-not (h-null (h-tail t))) (h-infix ">" (h-tail t))) then (true , (false , e-or (e-after ">" (h-tail t))))
+  else (false , (false , t))

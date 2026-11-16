@@ -1,0 +1,6 @@
+-- each part's gloss and detail lines
+e-part-out : List Word → List Word → EFound → Proc W (List Word × List (List Word))
+e-part-out lw p (e-wikt rows) = bind (e-gloss (e-head-row (e-own-first p rows))) (λ gh → bind (e-detail true nil (e-own-first p rows) (snd gh)) (λ ls →
+  ret (list-append (if h-eq p lw then nil else list-append p ": ") (fst gh) , ls)))
+e-part-out lw p (e-web s) = ret (list-append (if h-eq p lw then nil else list-append p ": ") (list-append (e-take-chars (toNat #80) (e-upto-c #59 (e-nth (toNat #1) (e-nthr zero s)))) " (1913)") ,
+  e-web-lines (e-take-s (toNat #3) s))

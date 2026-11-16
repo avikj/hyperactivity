@@ -1,0 +1,6 @@
+e-try-suffix : (List Word → Proc W (List (List Word × Sum Unit EFound))) → List (List Word) → List Word → Proc W (List (List Word × Sum Unit EFound))
+e-try-suffix k nil w = ret nil
+e-try-suffix k (cons s r) w = if andB (h-ends s w) (e-nat-le (toNat #3) (e-nat-sub (list-length w) (list-length s)))
+  then bind (e-try-bases k (e-stems (e-cut-end s w))) (λ base → if e-nullp base then e-try-suffix k r w else
+    bind (e-one (list-append "-" s) (inl unit)) (λ f → ret {lzero} {W} (list-append base (cons (list-append "-" s , f) nil))))
+  else e-try-suffix k r w

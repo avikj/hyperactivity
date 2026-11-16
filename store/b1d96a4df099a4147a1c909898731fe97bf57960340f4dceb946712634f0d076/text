@@ -1,0 +1,8 @@
+e-make-syn : List Word → Proc W Bool
+e-make-syn l = bind (e-exists (e-syn-index l)) (λ have → if have then ret {lzero} {W} true else
+  bind (e-exists (e-file l "syn")) (λ hs → if h-not hs then ret {lzero} {W} false else
+  bind (h-say (h-line (list-append "etym: indexing the word forms of " (list-append l " once …")))) (λ u →
+  bind (h-mkdir "build/etym") (λ u0 → bind (h-mkdir "build/etym/tmp") (λ u1 →
+  bind (h-write (list-append (e-syn-index l) ".tmp") nil) (λ w →
+  bind (e-index-file (e-file l "syn") (list-append l "-syn-") "1" (list-append (e-syn-index l) ".tmp")) (λ ok →
+  if ok then bind (e-rename (list-append (e-syn-index l) ".tmp") (e-syn-index l)) (λ r → ret {lzero} {W} true) else ret {lzero} {W} false)))))))

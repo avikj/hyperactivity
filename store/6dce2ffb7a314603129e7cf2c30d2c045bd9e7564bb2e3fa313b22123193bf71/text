@@ -1,0 +1,7 @@
+-- a zstd decompressor: zstd where the system has one, else built once from facebook/zstd
+e-zstd : Proc W (List Word)
+e-zstd = bind (e-sh "command -v zstd >/dev/null") (λ r → if weq r #0 then ret {lzero} {W} "zstd" else
+  bind (e-exists "build/zstd-src/programs/zstd") (λ z → bind h-cwd (λ cwd →
+  if z then ret {lzero} {W} (list-append cwd "/build/zstd-src/programs/zstd") else
+  bind (e-cmd (h-split #32 "git clone -q --depth 1 https://github.com/facebook/zstd build/zstd-src")) (λ c →
+  bind (e-sh "make -s -C build/zstd-src/programs zstd-release >/dev/null 2>&1") (λ m → ret {lzero} {W} (list-append cwd "/build/zstd-src/programs/zstd"))))))

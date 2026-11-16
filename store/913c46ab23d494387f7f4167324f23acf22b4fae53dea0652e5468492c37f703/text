@@ -1,0 +1,5 @@
+e-aug : Nat → Bool → List (List Word) → List Word → List Word → Proc W (List Word × List (List Word))
+e-aug zero all seen prior t = ret (t , nil)
+e-aug (suc f) all seen prior nil = ret (nil , nil)
+e-aug (suc f) all seen prior (cons c r) = if h-not (e-letter c) then bind (e-aug f all seen (list-append prior (cons c nil)) r) (λ o → ret (cons c (fst o) , snd o))
+  else e-aug-word f all seen prior (e-word-run (list-length (cons c r)) (cons c r)) (e-drop-n (list-length (e-word-run (list-length (cons c r)) (cons c r))) (cons c r)) (e-aug f all)

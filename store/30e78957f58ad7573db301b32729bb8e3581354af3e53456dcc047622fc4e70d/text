@@ -1,0 +1,6 @@
+e-try-prefix : (List Word → Proc W (List (List Word × Sum Unit EFound))) → List (List Word) → List Word → Proc W (List (List Word × Sum Unit EFound))
+e-try-prefix k nil w = ret nil
+e-try-prefix k (cons p r) w = if andB (h-prefix p w) (e-nat-le (toNat #3) (e-nat-sub (list-length w) (list-length p)))
+  then bind (k (h-drop p w)) (λ rest → if e-nullp rest then e-try-prefix k r w else
+    bind (e-one (list-append p "-") (inl unit)) (λ f → ret {lzero} {W} (cons (list-append p "-" , f) rest)))
+  else e-try-prefix k r w

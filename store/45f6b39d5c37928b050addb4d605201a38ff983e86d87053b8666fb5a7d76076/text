@@ -1,0 +1,7 @@
+-- one word looked up in a process of its own (the machine keeps what a process reads until it ends):
+-- its gloss on the first line of build/etym/word, then its detail; "-" when nothing explains it
+e-word-main : List (List Word) → Proc W Unit
+e-word-main args = bind (e-word-parts (h-eq (e-nth zero args) "1") (e-nth (toNat #1) args) (e-nth (toNat #2) args) nil) (λ parts →
+  if e-nullp parts then bind (h-write "build/etym/word" (h-line "-")) (λ w → exit #0)
+  else bind (e-parts-out (e-nth (toNat #2) args) parts) (λ gl →
+    bind (h-write "build/etym/word" (list-append (h-line (e-join " + " (fst gl))) (e-join (cons #10 nil) (cons (e-nth (toNat #1) args) (snd gl))))) (λ w → exit #0)))

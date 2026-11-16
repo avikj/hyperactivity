@@ -1,0 +1,4 @@
+-- the entries of w with an etymology, following 'plural of' / 'participle of' to the lemma
+e-with-ety : Nat → List Word → List Word → Sum Unit (List Word) → Proc W (List ERow)
+e-with-ety zero l w ex = bind (e-entries l w ex) (λ rows → ret (e-good rows))
+e-with-ety (suc h) l w ex = bind (e-entries l w ex) (λ rows → if e-nullr (e-good rows) then e-forms (λ f → e-with-ety h l f (inl unit)) w rows else ret {lzero} {W} (e-good rows))
