@@ -196,3 +196,42 @@ pack-equiv {A} m n = isoToEquiv {lzero} {(SumFin m → A) × (SumFin n → A)} {
 -- §8.3 graphs up to relabeling: a type with an unchosen enumeration and an adjacency relation
 GraphSym : Nat → Type 1
 GraphSym n = (X : Type) × Trunc (Equiv X (SumFin n)) × (X → X → Bool)
+-- ---------------------------------------------------------------- §8.5 (8.17) fixed-size encodings
+-- an n-byte word: the high n bytes then the least significant byte; enc(x)(i) is byte i counted from
+-- the least significant, ⌊x / 256^i⌋ mod 256, and dec is Σ 256^i b(i), returned as some value
+bytes-bits : Nat → Nat
+bytes-bits zero = zero
+bytes-bits (suc n) = plus (bytes-bits n) 8
+bytes-enc : (n : Nat) → BitVec (bytes-bits n) → SumFin n → Byte
+bytes-enc zero w j = Empty-rec j
+bytes-enc (suc n) w j = case j of
+  inl u → snd (bv-split (bytes-bits n) 8 w)
+  inr j2 → bytes-enc n (fst (bv-split (bytes-bits n) 8 w)) j2
+bytes-dec : (n : Nat) → (SumFin n → Byte) → BitVec (bytes-bits n)
+bytes-dec zero b = unit
+bytes-dec (suc n) b = bv-cat (bytes-bits n) 8 (bytes-dec n (λ j → b (inr j))) (b (inl unit))
+bytes-dec-enc : (n : Nat) → (w : BitVec (bytes-bits n)) → bytes-dec n (bytes-enc n w) ≡ w
+bytes-dec-enc zero w = sf-unit w
+bytes-dec-enc (suc n) w = concat {lzero} {BitVec (bytes-bits (suc n))}
+  {bv-cat (bytes-bits n) 8 (bytes-dec n (bytes-enc n (fst (bv-split (bytes-bits n) 8 w)))) (snd (bv-split (bytes-bits n) 8 w))}
+  {bv-cat (bytes-bits n) 8 (fst (bv-split (bytes-bits n) 8 w)) (snd (bv-split (bytes-bits n) 8 w))} {w}
+  (λ k → bv-cat (bytes-bits n) 8 (bytes-dec-enc n (fst (bv-split (bytes-bits n) 8 w)) k) (snd (bv-split (bytes-bits n) 8 w)))
+  (bv-cat-split (bytes-bits n) 8 w)
+bytes-enc-dec-at : (n : Nat) → (b : SumFin n → Byte) → (j : SumFin n) → bytes-enc n (bytes-dec n b) j ≡ b j
+bytes-enc-dec-at zero b j = Empty-rec j
+bytes-enc-dec-at (suc n) b j = case j return (λ x → bytes-enc (suc n) (bytes-dec (suc n) b) x ≡ b x) of
+  inl u → concat {lzero} {Byte} {snd (bv-split (bytes-bits n) 8 (bytes-dec (suc n) b))} {b (inl unit)} {b (inl u)}
+    (λ k → snd (bv-split-cat (bytes-bits n) 8 (bytes-dec n (λ j2 → b (inr j2))) (b (inl unit)) k)) (λ k → b (inl (sf-unit u k)))
+  inr j2 → concat {lzero} {Byte} {bytes-enc n (fst (bv-split (bytes-bits n) 8 (bytes-dec (suc n) b))) j2} {bytes-enc n (bytes-dec n (λ j3 → b (inr j3))) j2} {b (inr j2)}
+    (λ k → bytes-enc n (fst (bv-split-cat (bytes-bits n) 8 (bytes-dec n (λ j3 → b (inr j3))) (b (inl unit)) k)) j2)
+    (bytes-enc-dec-at n (λ j3 → b (inr j3)) j2)
+-- enc : A → Bytes(n), dec : Bytes(n) → Option(A), with dec(enc(a)) = some(a) and enc(a) = b whenever
+-- dec(b) = some(a); U64 is the case n = 8
+bytes-dec-opt : (n : Nat) → (SumFin n → Byte) → Sum (BitVec (bytes-bits n)) Unit
+bytes-dec-opt n b = inl (bytes-dec n b)
+bytes-roundtrip : (n : Nat) → (w : BitVec (bytes-bits n)) → bytes-dec-opt n (bytes-enc n w) ≡ inl w
+bytes-roundtrip n w = λ k → inl (bytes-dec-enc n w k)
+bytes-canonical : (n : Nat) → (b : SumFin n → Byte) → bytes-enc n (bytes-dec n b) ≡ b
+bytes-canonical n b = funExt {lzero} {lzero} {SumFin n} {Byte} {bytes-enc n (bytes-dec n b)} {b} (bytes-enc-dec-at n b)
+U64 : Type
+U64 = BitVec (bytes-bits 8)

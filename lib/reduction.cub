@@ -1,0 +1,251 @@
+-- lib/reduction.cub — checked reduction, its substitution action, decidable checking and typed editing for a
+-- small language with numerals, addition and pairs (docs/hyperactivity.cub, §6.1 (6.8), (6.9) and the
+-- checker check(Γ, c, A) : Dec(Der(Γ, c, A)); §6.5's residual t(x, y) = fst(x + 3, y); §10.5's typed
+-- editing context inspect, check, plug, checkEnclosing). Reduction is the generating steps (pair
+-- projections, addition of numerals) closed under congruence; substitution acts on every reduction
+-- by induction on its constructors (substStep); the checker accepts raw syntax and decides the
+-- derivation, sound and complete for the inductive derivations; replacing a subterm by one of the
+-- type at the hole keeps the enclosing derivation.
+import "core.cub"
+data XpExpr = xp-var (n : Nat) | xp-num (n : Nat) | xp-plus (a : XpExpr) (b : XpExpr) | xp-pair (a : XpExpr) (b : XpExpr) | xp-fst (p : XpExpr) | xp-snd (p : XpExpr)
+-- substitution: every variable n replaced by θ(n)
+xp-subst : (Nat → XpExpr) → XpExpr → XpExpr
+xp-subst th (xp-var n) = th n
+xp-subst th (xp-num n) = xp-num n
+xp-subst th (xp-plus a b) = xp-plus (xp-subst th a) (xp-subst th b)
+xp-subst th (xp-pair a b) = xp-pair (xp-subst th a) (xp-subst th b)
+xp-subst th (xp-fst p) = xp-fst (xp-subst th p)
+xp-subst th (xp-snd p) = xp-snd (xp-subst th p)
+-- ---------------------------------------------------------------- (6.8) reduction
+data XpStep : (tu : XpExpr × XpExpr) → Type where
+  xs-fst : (a b : XpExpr) → XpStep (xp-fst (xp-pair a b) , a)
+  xs-snd : (a b : XpExpr) → XpStep (xp-snd (xp-pair a b) , b)
+  xs-plus : (m n : Nat) → XpStep (xp-plus (xp-num m) (xp-num n) , xp-num (plus m n))
+  xs-plus-l : (a a2 b : XpExpr) → XpStep (a , a2) → XpStep (xp-plus a b , xp-plus a2 b)
+  xs-plus-r : (a b b2 : XpExpr) → XpStep (b , b2) → XpStep (xp-plus a b , xp-plus a b2)
+  xs-pair-l : (a a2 b : XpExpr) → XpStep (a , a2) → XpStep (xp-pair a b , xp-pair a2 b)
+  xs-pair-r : (a b b2 : XpExpr) → XpStep (b , b2) → XpStep (xp-pair a b , xp-pair a b2)
+  xs-fst-c : (p p2 : XpExpr) → XpStep (p , p2) → XpStep (xp-fst p , xp-fst p2)
+  xs-snd-c : (p p2 : XpExpr) → XpStep (p , p2) → XpStep (xp-snd p , xp-snd p2)
+-- t ⟶* u
+data XpSteps : (tu : XpExpr × XpExpr) → Type where
+  xs-refl : (t : XpExpr) → XpSteps (t , t)
+  xs-then : (t u w : XpExpr) → XpStep (t , u) → XpSteps (u , w) → XpSteps (t , w)
+-- (6.9) substStep(θ, r) : subst(θ, t) ⟶ subst(θ, u), by induction on the reduction constructor
+xp-subst-step : {tu : XpExpr × XpExpr} → XpStep tu → (th : Nat → XpExpr) → XpStep (xp-subst th (fst tu) , xp-subst th (snd tu))
+xp-subst-step (xs-fst a b) th = xs-fst (xp-subst th a) (xp-subst th b)
+xp-subst-step (xs-snd a b) th = xs-snd (xp-subst th a) (xp-subst th b)
+xp-subst-step (xs-plus m n) th = xs-plus m n
+xp-subst-step (xs-plus-l a a2 b r) th = xs-plus-l (xp-subst th a) (xp-subst th a2) (xp-subst th b) (xp-subst-step r th)
+xp-subst-step (xs-plus-r a b b2 r) th = xs-plus-r (xp-subst th a) (xp-subst th b) (xp-subst th b2) (xp-subst-step r th)
+xp-subst-step (xs-pair-l a a2 b r) th = xs-pair-l (xp-subst th a) (xp-subst th a2) (xp-subst th b) (xp-subst-step r th)
+xp-subst-step (xs-pair-r a b b2 r) th = xs-pair-r (xp-subst th a) (xp-subst th b) (xp-subst th b2) (xp-subst-step r th)
+xp-subst-step (xs-fst-c p p2 r) th = xs-fst-c (xp-subst th p) (xp-subst th p2) (xp-subst-step r th)
+xp-subst-step (xs-snd-c p p2 r) th = xs-snd-c (xp-subst th p) (xp-subst th p2) (xp-subst-step r th)
+xp-subst-steps : {tu : XpExpr × XpExpr} → XpSteps tu → (th : Nat → XpExpr) → XpSteps (xp-subst th (fst tu) , xp-subst th (snd tu))
+xp-subst-steps (xs-refl t) th = xs-refl (xp-subst th t)
+xp-subst-steps (xs-then t u w r rs) th = xs-then (xp-subst th t) (xp-subst th u) (xp-subst th w) (xp-subst-step r th) (xp-subst-steps rs th)
+-- §6.5: t(x, y) = fst(x + 3, y) reduces to x + 3 without inspecting y; substituting x := 5 lets the
+-- remaining addition reduce to 8 — one reduction relation under successive substitutions
+xp-three : Nat
+xp-three = suc (suc (suc zero))
+xp-five : Nat
+xp-five = suc (suc xp-three)
+xp-t : XpExpr
+xp-t = xp-fst (xp-pair (xp-plus (xp-var zero) (xp-num xp-three)) (xp-var (suc zero)))
+xp-t-residual : XpSteps (xp-t , xp-plus (xp-var zero) (xp-num xp-three))
+xp-t-residual = xs-then xp-t (xp-plus (xp-var zero) (xp-num xp-three)) (xp-plus (xp-var zero) (xp-num xp-three))
+  (xs-fst (xp-plus (xp-var zero) (xp-num xp-three)) (xp-var (suc zero))) (xs-refl (xp-plus (xp-var zero) (xp-num xp-three)))
+xp-at-five : Nat → XpExpr
+xp-at-five n = if eqb n zero then xp-num xp-five else xp-var n
+xp-t-eight : XpSteps (xp-subst xp-at-five xp-t , xp-num (plus xp-five xp-three))
+xp-t-eight = xs-then (xp-subst xp-at-five xp-t) (xp-plus (xp-num xp-five) (xp-num xp-three)) (xp-num (plus xp-five xp-three))
+  (xs-fst (xp-plus (xp-num xp-five) (xp-num xp-three)) (xp-var (suc zero)))
+  (xs-then (xp-plus (xp-num xp-five) (xp-num xp-three)) (xp-num (plus xp-five xp-three)) (xp-num (plus xp-five xp-three))
+    (xs-plus xp-five xp-three) (xs-refl (xp-num (plus xp-five xp-three))))
+-- ---------------------------------------------------------------- derivations and the checker
+data XpTy = xt-nat | xt-prod (a : XpTy) (b : XpTy)
+xp-lookup : List XpTy → Nat → Sum XpTy Unit
+xp-lookup nil n = inr unit
+xp-lookup (cons a g) zero = inl a
+xp-lookup (cons a g) (suc n) = xp-lookup g n
+data XpDer : (J : List XpTy × XpExpr × XpTy) → Type where
+  xd-var : (g : List XpTy) (n : Nat) (a : XpTy) → PathP (λ i → Sum XpTy Unit) (xp-lookup g n) (inl a) → XpDer (g , xp-var n , a)
+  xd-num : (g : List XpTy) (n : Nat) → XpDer (g , xp-num n , xt-nat)
+  xd-plus : (g : List XpTy) (a b : XpExpr) → XpDer (g , a , xt-nat) → XpDer (g , b , xt-nat) → XpDer (g , xp-plus a b , xt-nat)
+  xd-pair : (g : List XpTy) (a b : XpExpr) (A B : XpTy) → XpDer (g , a , A) → XpDer (g , b , B) → XpDer (g , xp-pair a b , xt-prod A B)
+  xd-fst : (g : List XpTy) (p : XpExpr) (A B : XpTy) → XpDer (g , p , xt-prod A B) → XpDer (g , xp-fst p , A)
+  xd-snd : (g : List XpTy) (p : XpExpr) (A B : XpTy) → XpDer (g , p , xt-prod A B) → XpDer (g , xp-snd p , B)
+-- inference on raw syntax
+xp-plus-ty-r : Sum XpTy Unit → Sum XpTy Unit
+xp-plus-ty-r (inl t) = (case t of
+  xt-nat → inl xt-nat
+  xt-prod a b → inr unit)
+xp-plus-ty-r (inr u) = inr unit
+xp-plus-ty : Sum XpTy Unit → Sum XpTy Unit → Sum XpTy Unit
+xp-plus-ty (inl t) y = (case t of
+  xt-nat → xp-plus-ty-r y
+  xt-prod a b → inr unit)
+xp-plus-ty (inr u) y = inr unit
+xp-pair-ty : Sum XpTy Unit → Sum XpTy Unit → Sum XpTy Unit
+xp-pair-ty (inl a) (inl b) = inl (xt-prod a b)
+xp-pair-ty (inl a) (inr u) = inr unit
+xp-pair-ty (inr u) y = inr unit
+xp-fst-ty : Sum XpTy Unit → Sum XpTy Unit
+xp-fst-ty (inl t) = (case t of
+  xt-nat → inr unit
+  xt-prod a b → inl a)
+xp-fst-ty (inr u) = inr unit
+xp-snd-ty : Sum XpTy Unit → Sum XpTy Unit
+xp-snd-ty (inl t) = (case t of
+  xt-nat → inr unit
+  xt-prod a b → inl b)
+xp-snd-ty (inr u) = inr unit
+xp-infer : List XpTy → XpExpr → Sum XpTy Unit
+xp-infer g (xp-var n) = xp-lookup g n
+xp-infer g (xp-num n) = inl xt-nat
+xp-infer g (xp-plus a b) = xp-plus-ty (xp-infer g a) (xp-infer g b)
+xp-infer g (xp-pair a b) = xp-pair-ty (xp-infer g a) (xp-infer g b)
+xp-infer g (xp-fst p) = xp-fst-ty (xp-infer g p)
+xp-infer g (xp-snd p) = xp-snd-ty (xp-infer g p)
+-- completeness: every derivation is found
+xp-plus-path : (g : List XpTy) → (a b : XpExpr) → xp-infer g a ≡ inl xt-nat → xp-infer g b ≡ inl xt-nat → xp-infer g (xp-plus a b) ≡ inl xt-nat
+xp-plus-path g a b ha hb = λ k → xp-plus-ty (ha k) (hb k)
+xp-pair-path : (g : List XpTy) → (a b : XpExpr) → (A B : XpTy) → xp-infer g a ≡ inl A → xp-infer g b ≡ inl B → xp-infer g (xp-pair a b) ≡ inl (xt-prod A B)
+xp-pair-path g a b A B ha hb = λ k → xp-pair-ty (ha k) (hb k)
+xp-fst-path : (g : List XpTy) → (p : XpExpr) → (A B : XpTy) → xp-infer g p ≡ inl (xt-prod A B) → xp-infer g (xp-fst p) ≡ inl A
+xp-fst-path g p A B hp = λ k → xp-fst-ty (hp k)
+xp-snd-path : (g : List XpTy) → (p : XpExpr) → (A B : XpTy) → xp-infer g p ≡ inl (xt-prod A B) → xp-infer g (xp-snd p) ≡ inl B
+xp-snd-path g p A B hp = λ k → xp-snd-ty (hp k)
+xp-complete : {J : List XpTy × XpExpr × XpTy} → XpDer J → xp-infer (fst J) (fst (snd J)) ≡ inl (snd (snd J))
+xp-complete (xd-var g n a h) = h
+xp-complete (xd-num g n) = λ k → inl xt-nat
+xp-complete (xd-plus g a b da db) = xp-plus-path g a b (xp-complete da) (xp-complete db)
+xp-complete (xd-pair g a b A B da db) = xp-pair-path g a b A B (xp-complete da) (xp-complete db)
+xp-complete (xd-fst g p A B dp) = xp-fst-path g p A B (xp-complete dp)
+xp-complete (xd-snd g p A B dp) = xp-snd-path g p A B (xp-complete dp)
+-- soundness: what inference finds is a derivation
+xp-left : Sum XpTy Unit → XpTy
+xp-left (inl t) = t
+xp-left (inr u) = xt-nat
+xp-is-left : Sum XpTy Unit → Bool
+xp-is-left (inl t) = true
+xp-is-left (inr u) = false
+xp-inl-inj : (x y : XpTy) → Path (Sum XpTy Unit) (inl x) (inl y) → x ≡ y
+xp-inl-inj x y p = λ k → xp-left (p k)
+xp-inr-inl : (y : XpTy) → Path (Sum XpTy Unit) (inr unit) (inl y) → Empty
+xp-inr-inl y p = true≢false (λ k → xp-is-left (p (~ k)))
+xp-inr-inl-u : (u : Unit) → (y : XpTy) → Path (Sum XpTy Unit) (inr u) (inl y) → Empty
+xp-inr-inl-u u y p = true≢false (λ k → xp-is-left (p (~ k)))
+xp-retype : (g : List XpTy) → (e : XpExpr) → (A B : XpTy) → A ≡ B → XpDer (g , e , A) → XpDer (g , e , B)
+xp-retype g e A B p d = subst {lzero} {lzero} {XpTy} {λ T → XpDer (g , e , T)} {A} {B} p d
+-- the cases of soundness: each split carries the equation that selected it
+xp-sp-y2 : (g : List XpTy) → (a b : XpExpr) → (A : XpTy) → XpDer (g , a , xt-nat) →
+  ((T : XpTy) → xp-infer g b ≡ inl T → XpDer (g , b , T)) → (t2 : XpTy) → xp-infer g b ≡ inl t2 → xp-plus-ty-r (inl t2) ≡ inl A → XpDer (g , xp-plus a b , A)
+xp-sp-y2 g a b A da sb xt-nat eb h = xp-retype g (xp-plus a b) xt-nat A (xp-inl-inj xt-nat A h) (xd-plus g a b da (sb xt-nat eb))
+xp-sp-y2 g a b A da sb (xt-prod c d) eb h = Empty-rec (xp-inr-inl A h)
+xp-sp-y : (g : List XpTy) → (a b : XpExpr) → (A : XpTy) → XpDer (g , a , xt-nat) →
+  ((T : XpTy) → xp-infer g b ≡ inl T → XpDer (g , b , T)) → (y : Sum XpTy Unit) → xp-infer g b ≡ y → xp-plus-ty-r y ≡ inl A → XpDer (g , xp-plus a b , A)
+xp-sp-y g a b A da sb (inl t2) eb h = xp-sp-y2 g a b A da sb t2 eb h
+xp-sp-y g a b A da sb (inr u) eb h = Empty-rec (xp-inr-inl A h)
+xp-sp-t : (g : List XpTy) → (a b : XpExpr) → (A : XpTy) →
+  ((T : XpTy) → xp-infer g a ≡ inl T → XpDer (g , a , T)) → ((T : XpTy) → xp-infer g b ≡ inl T → XpDer (g , b , T)) →
+  (t : XpTy) → (y : Sum XpTy Unit) → xp-infer g a ≡ inl t → xp-infer g b ≡ y → xp-plus-ty (inl t) y ≡ inl A → XpDer (g , xp-plus a b , A)
+xp-sp-t g a b A sa sb xt-nat y ea eb h = xp-sp-y g a b A (sa xt-nat ea) sb y eb h
+xp-sp-t g a b A sa sb (xt-prod c d) y ea eb h = Empty-rec (xp-inr-inl A h)
+xp-sound-plus : (g : List XpTy) → (a b : XpExpr) → (A : XpTy) →
+  ((T : XpTy) → xp-infer g a ≡ inl T → XpDer (g , a , T)) → ((T : XpTy) → xp-infer g b ≡ inl T → XpDer (g , b , T)) →
+  (x y : Sum XpTy Unit) → xp-infer g a ≡ x → xp-infer g b ≡ y → xp-plus-ty x y ≡ inl A → XpDer (g , xp-plus a b , A)
+xp-sound-plus g a b A sa sb (inl t) y ea eb h = xp-sp-t g a b A sa sb t y ea eb h
+xp-sound-plus g a b A sa sb (inr u) y ea eb h = Empty-rec (xp-inr-inl A h)
+xp-sound-pair : (g : List XpTy) → (a b : XpExpr) → (A : XpTy) →
+  ((T : XpTy) → xp-infer g a ≡ inl T → XpDer (g , a , T)) → ((T : XpTy) → xp-infer g b ≡ inl T → XpDer (g , b , T)) →
+  (x y : Sum XpTy Unit) → xp-infer g a ≡ x → xp-infer g b ≡ y → xp-pair-ty x y ≡ inl A → XpDer (g , xp-pair a b , A)
+xp-sound-pair g a b A sa sb (inl t1) (inl t2) ea eb h =
+  xp-retype g (xp-pair a b) (xt-prod t1 t2) A (xp-inl-inj (xt-prod t1 t2) A h) (xd-pair g a b t1 t2 (sa t1 ea) (sb t2 eb))
+xp-sound-pair g a b A sa sb (inl t1) (inr u) ea eb h = Empty-rec (xp-inr-inl A h)
+xp-sound-pair g a b A sa sb (inr u) y ea eb h = Empty-rec (xp-inr-inl A h)
+xp-sound-fst-t : (g : List XpTy) → (p : XpExpr) → (A : XpTy) → ((T : XpTy) → xp-infer g p ≡ inl T → XpDer (g , p , T)) →
+  (t : XpTy) → xp-infer g p ≡ inl t → xp-fst-ty (inl t) ≡ inl A → XpDer (g , xp-fst p , A)
+xp-sound-fst-t g p A sp xt-nat ep h = Empty-rec (xp-inr-inl A h)
+xp-sound-fst-t g p A sp (xt-prod c d) ep h = xp-retype g (xp-fst p) c A (xp-inl-inj c A h) (xd-fst g p c d (sp (xt-prod c d) ep))
+xp-sound-fst : (g : List XpTy) → (p : XpExpr) → (A : XpTy) → ((T : XpTy) → xp-infer g p ≡ inl T → XpDer (g , p , T)) →
+  (x : Sum XpTy Unit) → xp-infer g p ≡ x → xp-fst-ty x ≡ inl A → XpDer (g , xp-fst p , A)
+xp-sound-fst g p A sp (inl t) ep h = xp-sound-fst-t g p A sp t ep h
+xp-sound-fst g p A sp (inr u) ep h = Empty-rec (xp-inr-inl A h)
+xp-sound-snd-t : (g : List XpTy) → (p : XpExpr) → (A : XpTy) → ((T : XpTy) → xp-infer g p ≡ inl T → XpDer (g , p , T)) →
+  (t : XpTy) → xp-infer g p ≡ inl t → xp-snd-ty (inl t) ≡ inl A → XpDer (g , xp-snd p , A)
+xp-sound-snd-t g p A sp xt-nat ep h = Empty-rec (xp-inr-inl A h)
+xp-sound-snd-t g p A sp (xt-prod c d) ep h = xp-retype g (xp-snd p) d A (xp-inl-inj d A h) (xd-snd g p c d (sp (xt-prod c d) ep))
+xp-sound-snd : (g : List XpTy) → (p : XpExpr) → (A : XpTy) → ((T : XpTy) → xp-infer g p ≡ inl T → XpDer (g , p , T)) →
+  (x : Sum XpTy Unit) → xp-infer g p ≡ x → xp-snd-ty x ≡ inl A → XpDer (g , xp-snd p , A)
+xp-sound-snd g p A sp (inl t) ep h = xp-sound-snd-t g p A sp t ep h
+xp-sound-snd g p A sp (inr u) ep h = Empty-rec (xp-inr-inl A h)
+xp-sound : (g : List XpTy) → (e : XpExpr) → (A : XpTy) → xp-infer g e ≡ inl A → XpDer (g , e , A)
+xp-sound g (xp-var n) A h = xd-var g n A h
+xp-sound g (xp-num n) A h = xp-retype g (xp-num n) xt-nat A (xp-inl-inj xt-nat A h) (xd-num g n)
+xp-sound g (xp-plus a b) A h = xp-sound-plus g a b A (xp-sound g a) (xp-sound g b) (xp-infer g a) (xp-infer g b) (λ k → xp-infer g a) (λ k → xp-infer g b) h
+xp-sound g (xp-pair a b) A h = xp-sound-pair g a b A (xp-sound g a) (xp-sound g b) (xp-infer g a) (xp-infer g b) (λ k → xp-infer g a) (λ k → xp-infer g b) h
+xp-sound g (xp-fst p) A h = xp-sound-fst g p A (xp-sound g p) (xp-infer g p) (λ k → xp-infer g p) h
+xp-sound g (xp-snd p) A h = xp-sound-snd g p A (xp-sound g p) (xp-infer g p) (λ k → xp-infer g p) h
+-- equality of types is decidable
+xp-is-nat : XpTy → Bool
+xp-is-nat xt-nat = true
+xp-is-nat (xt-prod a b) = false
+xp-pfst : XpTy → XpTy
+xp-pfst xt-nat = xt-nat
+xp-pfst (xt-prod a b) = a
+xp-psnd : XpTy → XpTy
+xp-psnd xt-nat = xt-nat
+xp-psnd (xt-prod a b) = b
+xp-prod-dec : (a b c d : XpTy) → Dec (a ≡ c) → Dec (b ≡ d) → Dec (xt-prod a b ≡ xt-prod c d)
+xp-prod-dec a b c d (yes p) (yes q) = yes (λ k → xt-prod (p k) (q k))
+xp-prod-dec a b c d (yes p) (no n) = no (λ r → n (λ k → xp-psnd (r k)))
+xp-prod-dec a b c d (no n) e = no (λ r → n (λ k → xp-pfst (r k)))
+xp-ty-eq : (a b : XpTy) → Dec (a ≡ b)
+xp-ty-eq xt-nat xt-nat = yes (λ k → xt-nat)
+xp-ty-eq xt-nat (xt-prod c d) = no (λ r → true≢false (λ k → xp-is-nat (r k)))
+xp-ty-eq (xt-prod a b) xt-nat = no (λ r → true≢false (λ k → xp-is-nat (r (~ k))))
+xp-ty-eq (xt-prod a b) (xt-prod c d) = xp-prod-dec a b c d (xp-ty-eq a c) (xp-ty-eq b d)
+xp-dec-in : (t A : XpTy) → Dec (t ≡ A) → Dec (Path (Sum XpTy Unit) (inl t) (inl A))
+xp-dec-in t A (yes p) = yes (λ k → inl (p k))
+xp-dec-in t A (no n) = no (λ q → n (xp-inl-inj t A q))
+xp-dec-at : (x : Sum XpTy Unit) → (A : XpTy) → Dec (x ≡ inl A)
+xp-dec-at (inl t) A = xp-dec-in t A (xp-ty-eq t A)
+xp-dec-at (inr u) A = no (λ q → xp-inr-inl-u u A q)
+-- check(Γ, c, A) : Dec(Der(Γ, c, A)) on raw syntax
+xp-check-from : (g : List XpTy) → (e : XpExpr) → (A : XpTy) → Dec (xp-infer g e ≡ inl A) → Dec (XpDer (g , e , A))
+xp-check-from g e A (yes p) = yes (xp-sound g e A p)
+xp-check-from g e A (no n) = no (λ d → n (xp-complete d))
+xp-check : (g : List XpTy) → (e : XpExpr) → (A : XpTy) → Dec (XpDer (g , e , A))
+xp-check g e A = xp-check-from g e A (xp-dec-at (xp-infer g e) A)
+-- ---------------------------------------------------------------- §10.5 typed editing
+data XpK = xk-hole | xk-plus-l (k : XpK) (b : XpExpr) | xk-plus-r (a : XpExpr) (k : XpK) | xk-pair-l (k : XpK) (b : XpExpr) | xk-pair-r (a : XpExpr) (k : XpK) | xk-fst (k : XpK) | xk-snd (k : XpK)
+xp-plug : XpK → XpExpr → XpExpr
+xp-plug xk-hole t = t
+xp-plug (xk-plus-l k b) t = xp-plus (xp-plug k t) b
+xp-plug (xk-plus-r a k) t = xp-plus a (xp-plug k t)
+xp-plug (xk-pair-l k b) t = xp-pair (xp-plug k t) b
+xp-plug (xk-pair-r a k) t = xp-pair a (xp-plug k t)
+xp-plug (xk-fst k) t = xp-fst (xp-plug k t)
+xp-plug (xk-snd k) t = xp-snd (xp-plug k t)
+-- inspect(K[t]) = (Γ_h, A_h, t, K): the hole's context and inferred type
+xp-inspect : List XpTy → XpK → XpExpr → List XpTy × Sum XpTy Unit × XpExpr × XpK
+xp-inspect g k t = (g , xp-infer g t , t , k)
+-- the enclosing type depends on the hole only through the hole's type
+xp-plug-infer : (g : List XpTy) → (k : XpK) → (t t2 : XpExpr) → xp-infer g t ≡ xp-infer g t2 → xp-infer g (xp-plug k t) ≡ xp-infer g (xp-plug k t2)
+xp-plug-infer g xk-hole t t2 h = h
+xp-plug-infer g (xk-plus-l k b) t t2 h = λ i → xp-plus-ty (xp-plug-infer g k t t2 h i) (xp-infer g b)
+xp-plug-infer g (xk-plus-r a k) t t2 h = λ i → xp-plus-ty (xp-infer g a) (xp-plug-infer g k t t2 h i)
+xp-plug-infer g (xk-pair-l k b) t t2 h = λ i → xp-pair-ty (xp-plug-infer g k t t2 h i) (xp-infer g b)
+xp-plug-infer g (xk-pair-r a k) t t2 h = λ i → xp-pair-ty (xp-infer g a) (xp-plug-infer g k t t2 h i)
+xp-plug-infer g (xk-fst k) t t2 h = λ i → xp-fst-ty (xp-plug-infer g k t t2 h i)
+xp-plug-infer g (xk-snd k) t t2 h = λ i → xp-snd-ty (xp-plug-infer g k t t2 h i)
+-- check(Γ_h, A_h, t′) ⇝ d′, plug(K, (t′, d′)), checkEnclosing ⇝ Code(Γ, A): a replacement of the
+-- type at the hole keeps the enclosing derivation
+xp-replace : (g : List XpTy) → (k : XpK) → (t t2 : XpExpr) → (A Ah : XpTy) → XpDer (g , xp-plug k t , A) →
+  XpDer (g , t , Ah) → XpDer (g , t2 , Ah) → XpDer (g , xp-plug k t2 , A)
+xp-replace g k t t2 A Ah d dt dt2 = xp-sound g (xp-plug k t2) A
+  (concat {lzero} {Sum XpTy Unit} {xp-infer g (xp-plug k t2)} {xp-infer g (xp-plug k t)} {inl A}
+    (xp-plug-infer g k t2 t (concat {lzero} {Sum XpTy Unit} {xp-infer g t2} {inl Ah} {xp-infer g t} (xp-complete dt2) (λ i → xp-complete dt (~ i))))
+    (xp-complete d))

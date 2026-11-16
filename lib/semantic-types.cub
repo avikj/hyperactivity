@@ -148,3 +148,96 @@ digest-of-identical {Def} {Dg} digest d1 d2 p = λ k → digest (p k)
 -- reuse(x, D′): valid(x, D′) → Value(x)
 Reuse : {X G : Type} → (X → G → Type) → (X → Type) → G → Type
 Reuse {X} {G} valid Value g = (x : X) → valid x g → Value x
+-- ---------------------------------------------------------------- (6.2), (8.1), U_w
+-- a transformation of code at each context and type
+Transform : {Ctx Ty : Type} → (Ctx → Ty → Type) → Type
+Transform {Ctx} {Ty} Code = (g : Ctx) → (a : Ty) → Code g a → Code g a
+-- (8.1) a meaning relating syntax, input and trace, not a function from syntax to a value
+MeaningRel : Type → Type → Type → Type 1
+MeaningRel Syn In Tr = Syn → In → Tr → Type
+-- §8.5 U_w = Fin(2^w)
+UFin : Nat → Type
+UFin w = SumFin (pow2 w)
+-- ---------------------------------------------------------------- (9.U2), (9.U2a)
+-- realize^eval_M(c) = (b_next, encode(initial(c)), ν* ; α): the machine run of the evaluator's bytes
+-- simulates the evaluator run (ν), which is adequate to the source meaning (α)
+realize-eval : {Code Bytes MSt ESt O : Type} → (bnext : Bytes) → (initial : Code → ESt) → (encode : ESt → MSt) →
+  (targetBeh : Bytes → MSt → O → Type) → (evalBeh : ESt → O → Type) → (sourceBeh : Code → O → Type) →
+  ((e : ESt) → (o : O) → targetBeh bnext (encode e) o → evalBeh e o) → ((c : Code) → (o : O) → evalBeh (initial c) o → sourceBeh c o) →
+  (c : Code) → Bytes × MSt × ((o : O) → targetBeh bnext (encode (initial c)) o → sourceBeh c o)
+realize-eval {Code} {Bytes} {MSt} {ESt} {O} bnext initial encode targetBeh evalBeh sourceBeh nu alpha c =
+  (bnext , encode (initial c) , λ o h → alpha c o (nu (initial c) o h))
+-- ---------------------------------------------------------------- (7.6d), (7.6b)
+-- Div_τ(x): an infinite chain of internal transitions, by guarded recursion
+DivF : {κ : Clock} {C L : Type} → (C → Sum Unit L → C → Type) → ▸ κ (C → Type) → C → Type
+DivF {κ} {C} {L} step rc x = (y : C) × step x (inl unit) y × ((α : Tick κ) → rc α y)
+Div : {κ : Clock} {C L : Type} → (C → Sum Unit L → C → Type) → C → Type
+Div {κ} {C} {L} step = fix {lsuc lzero} {κ} {C → Type} (DivF {κ} {C} {L} step)
+-- Stuck(x): neither an internal transition nor a visible head
+Stuck : {C L : Type} → (C → Sum Unit L → C → Type) → C → Type
+Stuck {C} {L} step x = (l : Sum Unit L) → (y : C) → step x l y → Empty
+-- Sim^κ(x, y): every weak head of either is matched by one of the other, the continuations related
+-- one tick later; divergence and stuckness agree
+SimF : {κ : Clock} {C L : Type} → (C → Sum Unit L → C → Type) → ▸ κ (C → C → Type) → C → C → Type
+SimF {κ} {C} {L} step rc x y =
+  ((e : L) → (x2 : C) → weak-step step x e x2 → (y2 : C) × weak-step step y e y2 × ((α : Tick κ) → rc α x2 y2)) ×
+  ((e : L) → (y2 : C) → weak-step step y e y2 → (x2 : C) × weak-step step x e x2 × ((α : Tick κ) → rc α x2 y2)) ×
+  ((Div {κ} step x → Div {κ} step y) × (Div {κ} step y → Div {κ} step x)) ×
+  ((Stuck step x → Stuck step y) × (Stuck step y → Stuck step x))
+Sim : {κ : Clock} {C L : Type} → (C → Sum Unit L → C → Type) → C → C → Type
+Sim {κ} {C} {L} step = fix {lsuc lzero} {κ} {C → C → Type} (SimF {κ} {C} {L} step)
+-- (7.6b) ContBlock_h(a, P, p) = Σ_b Π_C Contains(C, a, b) → Π_s (P(s) × pc(s) = a) → Sim(machProc_C(s), h*(p))
+ContBlock : {S Img B X : Type} → (Img → Nat → List B → Type) → (S → Nat) → (Img → S → X) → (X → X → Type) → X → Nat → (S → Type) → Type
+ContBlock {S} {Img} {B} {X} contains pc machProc sim hp a P = (b : List B) × ((c : Img) → contains c a b → (s : S) → P s × (pc s ≡ a) → sim (machProc c s) hp)
+-- ---------------------------------------------------------------- (10.19) producer transitions
+-- a lookup appends its actual result to D; a request suspends with a fresh token; a response is
+-- accepted only for the outstanding token and resumes; return and fault complete the producer
+data PrMove (Res : Type) (Rd : Type) (Q : Type) (Tok : Type) (Ans : Type) (A : Type) (Err : Type) =
+  prm-lookup (rd : Rd) (r2 : Res) | prm-request (q : Q) (tok : Tok) (r2 : Res) | prm-response (q : Q) (tok : Tok) (a : Ans) | prm-return (v : A) | prm-fault (e : Err)
+PrState : Type → Type → Type → Type → Type → Type → Type → Type → Type
+PrState A Res Snap Rd W Q Tok Err = Producer A Res Snap (List Rd) (List W) (Q × Tok) Err Unit
+pr-step-running : {A Res Snap Rd W Q Tok Ans Err : Type} → PrMove Res Rd Q Tok Ans A Err → Res → Snap → List Rd → List W → PrState A Res Snap Rd W Q Tok Err
+pr-step-running (prm-lookup rd r2) r s d w = pr-running r2 s (list-append d (cons rd nil)) w
+pr-step-running (prm-request q tok r2) r s d w = pr-suspended r2 s d w (q , tok)
+pr-step-running (prm-response q tok a) r s d w = pr-running r s d w
+pr-step-running (prm-return v) r s d w = pr-ready v d unit
+pr-step-running (prm-fault e) r s d w = pr-failed e d unit
+pr-step-suspended : {A Res Snap Rd W Q Tok Ans Err : Type} → (Res → Ans → Res) → PrMove Res Rd Q Tok Ans A Err → Res → Snap → List Rd → List W → Q × Tok →
+  PrState A Res Snap Rd W Q Tok Err
+pr-step-suspended cont (prm-response q tok a) r s d w qt = pr-running (cont r a) s d w
+pr-step-suspended cont (prm-lookup rd r2) r s d w qt = pr-suspended r s d w qt
+pr-step-suspended cont (prm-request q tok r2) r s d w qt = pr-suspended r s d w qt
+pr-step-suspended cont (prm-return v) r s d w qt = pr-suspended r s d w qt
+pr-step-suspended cont (prm-fault e) r s d w qt = pr-suspended r s d w qt
+pr-step : {A Res Snap Rd W Q Tok Ans Err : Type} → (Res → Ans → Res) → PrMove Res Rd Q Tok Ans A Err → PrState A Res Snap Rd W Q Tok Err → PrState A Res Snap Rd W Q Tok Err
+pr-step cont m pr-absent = pr-absent
+pr-step cont m (pr-running r s d w) = pr-step-running m r s d w
+pr-step cont m (pr-suspended r s d w qt) = pr-step-suspended cont m r s d w qt
+pr-step cont m (pr-ready v d o) = pr-ready v d o
+pr-step cont m (pr-failed e d o) = pr-failed e d o
+-- a response is accepted only for the corresponding outstanding token
+pr-response-ok : {A Res Snap Rd W Q Tok Err : Type} → Q → Tok → PrState A Res Snap Rd W Q Tok Err → Type
+pr-response-ok q tok pr-absent = Empty
+pr-response-ok q tok (pr-running r s d w) = Empty
+pr-response-ok q tok (pr-suspended r s d w qt) = (q ≡ fst qt) × (tok ≡ snd qt)
+pr-response-ok q tok (pr-ready v d o) = Empty
+pr-response-ok q tok (pr-failed e d o) = Empty
+-- a consumed token cannot resume a continuation twice
+pr-no-double-resume-at : {A Res Snap Rd W Q Tok Ans Err : Type} → (cont : Res → Ans → Res) → (q : Q) → (tok : Tok) → (a : Ans) → (q2 : Q) → (tok2 : Tok) →
+  (st : PrState A Res Snap Rd W Q Tok Err) → pr-response-ok q tok st → pr-response-ok q2 tok2 (pr-step cont (prm-response q tok a) st) → Empty
+pr-no-double-resume-at cont q tok a q2 tok2 pr-absent h1 h2 = h1
+pr-no-double-resume-at cont q tok a q2 tok2 (pr-running r s d w) h1 h2 = h1
+pr-no-double-resume-at cont q tok a q2 tok2 (pr-suspended r s d w qt) h1 h2 = h2
+pr-no-double-resume-at cont q tok a q2 tok2 (pr-ready v d o) h1 h2 = h1
+pr-no-double-resume-at cont q tok a q2 tok2 (pr-failed e d o) h1 h2 = h1
+-- demand(k, ω, S, w): reuse a completed result whose certificate validates, join a running or
+-- suspended producer under its own snapshot, or start one from the initial residual
+DemandOut : Type → Type → Type
+DemandOut A Err = Sum (Sum A Err) Unit
+pr-demand : {A Res Snap Rd W Q Tok Err : Type} → Bool → Bool → Res → Snap → W → PrState A Res Snap Rd W Q Tok Err →
+  PrState A Res Snap Rd W Q Tok Err × DemandOut A Err
+pr-demand reuse same r0 s0 w pr-absent = (pr-running r0 s0 nil (cons w nil) , inr unit)
+pr-demand reuse same r0 s0 w (pr-running r s d ws) = (if same then pr-running r s d (list-append ws (cons w nil)) else pr-running r s d ws , inr unit)
+pr-demand reuse same r0 s0 w (pr-suspended r s d ws qt) = (if same then pr-suspended r s d (list-append ws (cons w nil)) qt else pr-suspended r s d ws qt , inr unit)
+pr-demand reuse same r0 s0 w (pr-ready v d o) = (pr-ready v d o , if reuse then inl (inl v) else inr unit)
+pr-demand reuse same r0 s0 w (pr-failed e d o) = (pr-failed e d o , if reuse then inl (inr e) else inr unit)
