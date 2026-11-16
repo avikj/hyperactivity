@@ -527,3 +527,127 @@ These are typed instances of one residualization equation, not three compiler op
 Non-static code may keep a call to the represented evaluator, which is an ordinary term natively realized by §9.2. Static versus dynamic belongs to the chosen specialization, not to what the language can express. Raw syntax can run as a guarded process without asserting normalization, and the typed quotation equations still need their stages and checked code. Guarded divergence doesn't make divergent terms converge. Self-reference keeps its limits: Church–Turing undecidability and the diagonal arguments of Lawvere, Gödel and Tarski (1, 2, 33–35) concern exact representability and logical premises, and reifying programs as data bypasses none of them. Concretely, runRaw ∶ Raw → Env → Proc_Σ(Value + Fault) applied to a code of runRaw is a guarded execution, not a total normalizer or a universe-valued truth predicate. It needs runRaw's code to be representable and its recursion guarded. By contrast 𝑞_{𝐴₀}, 𝑞_{𝐴₁} and lift_𝐴 in (6.F2)–(6.F4) inhabit checked, explicitly staged code types, and no same-level quotation of semantic values follows from the raw interpreter.
 
 Two relations stay distinct. Conversion or a checked path relates the specialized term to its source. The meaning of emitted bytes under the target instruction semantics is the separate source-to-machine construction: the C route and its downstream compilation relation (§9.4), whose obligations are stated independently of source-level conversion. Appendix C keeps a separate direct-byte example.
+
+### 6.3 Reflection applied to a language definition itself
+
+Grammar, typing and interpreter are expressions. Extend §5.2 with mul ∶ Expr Γ → Expr Γ → Expr Γ, ⟦mul(𝑢,𝑣)⟧𝜌 = ⟦𝑢⟧𝜌·⟦𝑣⟧𝜌 (6.10). Transformations now act on the interpreter, not only on its programs. It can be made to return a value plus an expression of its symbolic dependence on the input, or to evaluate over another semiring.
+
+For the semiring version, replace ℕ by a semiring 𝑅 with num 𝑛 ↦ the canonical ℕ → 𝑅. This gives ⟦−⟧_𝑅 ∶ Expr Γ → (Γ → 𝑅) → 𝑅 (6.11). With 𝑅 = ℕ[𝑋ᵢ ∣ 𝑖 ∈ Γ] and 𝑖 ↦ 𝑋ᵢ, evaluation ev_𝜌 ∶ ℕ[𝑋ᵢ] → ℕ is a homomorphism (6.12), and ev_𝜌(⟦𝑒⟧_{ℕ[𝑋]}(𝜆𝑖.𝑋ᵢ)) = ⟦𝑒⟧_ℕ(𝜌) (6.13) by structural induction. So the interpretation changes while the algebraic structure is preserved; this is the elementary basis of symbolic execution, using only the semiring laws and the interpreter over them. Branching, state, exceptions or world requests need their own structure preserved, and a semiring homomorphism is not enough. The object under study determines the needed structure, not a list of subsystems.
+
+**Transforming the interpreter definition.** The interpreter is the fold of the signature Expr(Γ) = var(Γ) + num(ℕ) + plus(Expr²) + mul(Expr²). The notation names four constructor families; it is not a set equation.
+
+- Clauses(𝑅) ∶= (Γ → 𝑅) × (ℕ → 𝑅) × (𝑅×𝑅 → 𝑅) × (𝑅×𝑅 → 𝑅) and fold_𝑅 ∶ Clauses(𝑅) → Expr Γ → 𝑅, applying the matching component at each constructor (6.14). The environment 𝜌 is the record's first component.
+- For a semiring, 𝐼_𝑅(𝜌) ∶= (𝜌, 𝜂_𝑅, +_𝑅, ·_𝑅). The map (𝑅, 𝜌) ↦ 𝐼_𝑅(𝜌) produces interpreter definitions, not input programs, and fold_𝑅(𝐼_𝑅 𝜌, 𝑒) = ⟦𝑒⟧_𝑅(𝜌) by the four constructor equations.
+- For a homomorphism ℎ ∶ 𝑅 → 𝑆 with 𝜌_𝑆 = ℎ ∘ 𝜌_𝑅: ℎ(fold_𝑅(𝐼_𝑅 𝜌_𝑅, 𝑒)) = fold_𝑆(𝐼_𝑆 𝜌_𝑆, 𝑒).
+- Record and fold are terms. Syntactic inspection or rewriting goes through their represented code under §6.1's quotation conditions; the semantic algebra alone gives no code.
+
+Interpretation continues across inputs: one input can change the bindings or clauses used for the next, expressed by these interpreters and §7.6's processes with no further semantics. A received expression is read under the definitions selected at that moment, never under a meaning intrinsic to its bytes. Specialization uses the available context, and §10.5's dependency and continuation relations say which earlier computations survive when the context changes.
+
+### 6.4 A source language can inherit the mathematics of its host
+
+The cubical representation of 𝑝 ∶ Tm_𝐿(Γ,𝐴) is a term, so functions can inspect it, build another term, and prove a dependent relation between their meanings, without extending 𝐿's runtime instruction set.
+
+- A source annotation is a typed host expression whose context includes the exact declaration it annotates (with Ty_𝐿(Γ) when types depend on context). The association is a dependent index, not a textual convention. Annotated_𝐿(Γ,𝐴) ∶= ∑_{𝑝∶Tm_𝐿(Γ,𝐴)} Property_𝐿(𝑝) (6.15). Properties range from postconditions to statements about all executions, and the first projection recovers the source.
+- Annotations may contain host paths, equivalences, HIT objects and syntax transformations, with full host power because they are host terms. Their association is a type-indexed relation, not a separate proof language.
+- Transform_𝐿(Γ,𝐴,𝑝) ∶= ∑_{𝐵∶Ty_𝐿 Γ}∑_{𝑞∶Tm_𝐿(Γ,𝐵)} Relation_𝐿((𝐴,𝑝),(𝐵,𝑞)) (6.16), dependent in the fixed 𝑝. The relation is defined per case: an equivalence with its action on meanings, a refinement as an implication between observations, or a path of syntax trees for exact preservation. Transformations need not share a relation, and the program's semantics supplies the object compared.
+- Source-to-source projections are functions:
+  - new notation elaborates to ordinary constructs, with the law proved by induction;
+  - a runtime-free annotation erases as a first projection;
+  - a runtime-changing extension explicitly defines the changed expression.
+
+**A conservative extension, calculated.** erase_{Γ,𝐴} ∶ Tm_{𝐿⁺}(Γ,𝐴) → Tm_𝐿(Γ,𝐴) (6.17) sends withProof(𝑝,𝜋), with 𝜋 ∶ Property_𝐿(𝑝), to 𝑝, and is homomorphic on the original constructors. ⟦𝑥⟧_{𝐿⁺} ∶= ⟦erase 𝑥⟧_𝐿, and ∏_𝑥 ⟦𝑥⟧_{𝐿⁺} = ⟦erase 𝑥⟧_𝐿 (6.18) by recursion on the extended syntax.
+
+- HIT or dependent host expressions may sit in 𝜋 or in a staged transformation of 𝑥 without becoming instructions of 𝐿.
+- If a staged 𝑇 produces 𝑥′, the emitted source is erase(𝑥′), and 𝑇's semantic claim is a separate term relating ⟦erase 𝑥⟧ and ⟦erase 𝑥′⟧. (6.18) says only that annotations erase; it certifies no arbitrary rewrite.
+
+One typed statement thus recovers annotation, elaboration, projection and proof attachment. The same host terms act on the language definition: add a grammar constructor, supply its clause, derive a family of transformations, and prove things about the resulting language. That is unrestricted language extension concretely: the source language is an object under full host power, not a privileged syntax boundary.
+
+### 6.5 Shared evaluation and partial information
+
+Sharing belongs to the represented computation: occurrences refer to one producer, and dependent consumers request its result. A producer may be unfinished, in weak-head form, or complete, distinguished by representation and transition rules. Sharing changes the dependency graph (local graph reduction: interaction nets, 70), never typing, substitution or equality. Open environments yield residuals. In 𝑡(𝑥,𝑦) = fst(𝑥+3, 𝑦), the projection reduces to 𝑥+3 without touching 𝑦, and 𝑥 ∶= 5 then gives 8. This is one reduction relation under successive substitutions, not a second semantics for partial evaluation. The action of substitution on reduction evidence is (6.9), and retained dependencies say when that evidence applies.
+
+## 7. Programming with machines and operating systems
+
+Interpreters don't end at values: they issue commands, suspend, interact, and change the world later observations happen in. Machines and OSes are such interacting processes, with memory, event and device semantics (C++ memory-model literature and temporal specification, 20, 21, 38). A processor is one specified evolving system, with architectural state, transitions, observations and device interaction, which circuitry realizes under a stated physical correspondence. It is reasoned about like any process. A program may contain the machine's interpreter, and the program building the machine's executable can itself be interpreted and transformed.
+
+- Byte = Fin(256), words Fin(2^𝑤), Mem ∶= Addr ⇀ Byte (7.1). This toy model is insufficient for C++ provenance, lifetime, allocation, atomicity and object representations, which are extra relations when C++ is the subject.
+- A single core: State ∶= Registers × Memory × PC × DeviceState (7.2) and step ∶ State → Event → State → 𝒰 (7.3), or a next-state function when deterministic, with the world through labeled transitions and handlers. Single-instruction execution, interrupts, MMIO, context switches, page tables, schedulers and isolated processes are all constructions over this.
+- Machine instructions need not be primitives of the cubical language, and the cubical language need not run natively to express machine semantics.
+
+Example: summing 𝑛 u64 words with state 𝑎, 𝑖, 𝑠 has the invariant 0 ≤ 𝑖 ≤ 𝑛 ∧ 𝑠 = ∑_{𝑗<𝑖} 𝑎ⱼ (mod 2⁶⁴) ∧ Unchanged(𝑎) (7.4). Initialization establishes it at 𝑖 = 0, the body preserves it (add mod 2⁶⁴, increment), and exit at 𝑖 = 𝑛 gives the sum. With real loads, the proof also needs validity, alignment, lifetime, aliasing and the source semantics of loads. Machine facts and higher reasoning are one discipline: machine and proof are objects of one language, and their relation is expressible in it.
+
+### 7.1 Memory is more than an address-to-byte function
+
+(7.1) suffices for a toy load/store machine, not for faithful C++. Real memory state distinguishes allocation identity, extent, object lifetime, effective/dynamic type, initializedness, provenance and current bytes. A pointer is not an integer: dereference can depend on which allocation produced it and whether the object is alive. Load ∶ MemState → Pointer → Value → MemState → 𝒰 (7.5): the state is unchanged for ordinary loads, while volatile and atomic accesses add events or relations. Writes relate old state, pointer, value and new state, with clauses given by the represented language and memory model. "Never accesses outside the buffer" is a proposition about source semantics and its allocation/lifetime relations. A sanitizer instruments one executable and watches particular runs. Both are constructions, and neither defines memory safety.
+
+### 7.2 Concurrency requires relations among events
+
+𝑋 = (𝐸, tid, kind, loc, val, po, rf, mo) (7.6). A memory model is Allowed(𝑋). Races, happens-before and atomic orderings are properties of these relations. Concurrent compiler correctness relates admitted target executions to admitted source executions; per-instruction matching fails when reordering and weak memory are observable. "Thread" is not a primitive: threads and synchronization are objects with exact rules wherever the modeled system has them.
+
+Concrete SC: Allowed_SC(𝑋) is the type of total orders <_𝑋 on 𝐸 extending po in which every read sees the latest preceding write to its location, or the initial value. This is a complete memory-model predicate, not C++'s weak one; C++ atomic and race theorems use the chosen C++ execution axioms in its place, with event structure and observations still constructions.
+
+### 7.3 Continuing computation as a definition
+
+Guarded recursion, transition relations, free-monad trees and coalgebras represent continuing computation with different observations and proof principles. External labels become internal interactions when a handler is composed. A representation change needs the equality, bisimulation or refinement for the selected behavior, established separately. §7.6 computes one composition.
+
+### 7.4 Parallel processors and accelerators are other transition systems
+
+CUDA (32) is the concrete model; the concern here is state, events and observable execution. A kernel works over indexed work items with address spaces, synchronization and numeric operations, and its meaning is a relation on global/local state plus an order on memory events. A tensor is 𝑇 ∶ Fin(𝑛₁) × ⋯ × Fin(𝑛ₖ) → 𝐴 (7.7), and a layout maps indices to addresses. Dimension permutation, tiling and packing are representation changes whose preservation laws are equations on the value at each logical index. Their costs depend on the target's memory hierarchy and execution model; correctness and performance are properties of the chosen representations and observations. Autodiff is a transformation of the construction, governed by the chain rule and the numeric semantics, and a GPU compiler can realize either a program or its derivative. A derivative is not a GPU operation and an accelerator is not a differentiation operation; they compose when types and laws allow.
+
+### 7.5 An operating system and its guests form one program
+
+A kernel 𝐾 is an open program whose inputs are syscalls, interrupts, device events and process requests, and each guest 𝑃ᵢ is a program. Scheduler, address-space and device handlers interpret their interactions, giving the joint computation Host(𝐾; 𝑃₁…𝑃ₙ) ∶ Proc_{Σdevice}(𝐴) (7.8), an abbreviation for repeated typed composition.
+
+- The kernel can be programmed and proved as an open object quantified over all admitted guests, then specialized by composing particular ones.
+- An isolation invariant can be stated for every permitted kernel transition and every pair of protected address spaces. It is preserved under composition when guests meet the interface premises, and it holds for the joint running program, page-table, context-switch and fault transitions included.
+- Composing hosts with communication handlers gives a fleet. The kernel boundary is an interface relative to the selected component, and composing the environment internalizes more without changing the language.
+
+### 7.6 Composition of programs with open interactions
+
+Sig ∶= ∑_{𝐶∶𝒰}(𝐶 → 𝒰), with Cmd = 𝜋₁ and Resp(𝑆,𝑐) = 𝜋₂ 𝑆 𝑐.
+
+- Terminating processes as a Church-encoded free monad: Proc_ℓ(𝑆,𝐴) ∶= ∏_{𝑅∶𝒰ℓ}(𝐴 → 𝑅) → (∏_{𝑐}(Resp 𝑐 → 𝑅) → 𝑅) → 𝑅, with ret, cmd and bind as terms.
+- The π-calculus (67) is a different treatment of communication and changing connectivity; this handler is defined by its signature and interpretation. A handler 𝑆 → 𝑊 maps each 𝑆-command to a 𝑊-process with the original response type. Handling internalizes those interactions and leaves the rest open, so what counts as "environment" depends on the composition examined.
+- The inductive tree, in the line of Coq interaction trees (39): Step(𝑆,𝐴) ∶∶= sdone(𝑎) ∣ scmd(𝑐, Resp 𝑐 → Step(𝑆,𝐴)).
+
+```
+o-handle hd (sdone a) = sdone a
+o-handle hd (scmd c k) = o-bind (hd c) (λ r → o-handle hd (k r))
+```
+
+o-idh c = o-issue c and o-comph h1 h2 c = o-handle h2 (h1 c). The handler identity and composition laws are paths built by induction: o-handle-id is refl at return and congruence over the handled continuation at commands, and o-handle-bind uses o-bind associativity at commands. Handler composition is a computed property of these programs, not semantics imposed by the host.
+
+The Church form needs explicit naturality to recover extensional equality from equality of reified trees. o-NaturalAt says each interpretation agrees with folding its tree; o-natural-path takes naturality witnesses for p and q plus `to-step p ≡ to-step q` and returns p ≡ q. The hypotheses matter: equal reifications are not assumed to identify arbitrary nonparametric inhabitants.
+
+Distributed example: with node behaviors Beh M St, joint node-plus-network state FState M St, and environmental choices EnvS, `fleet-proc : Beh M St → Nat → FState M St → Proc EnvS (FState M St)` (levels and implicits suppressed) requests the next environmental choice, computes fleet-step, and recurses for the given number of steps. The fleet is one process over its remaining environment (precedents: actors, Kahn networks, 55, 56). Nodes and interactions stay individually programmable, and FState, Pkt and EnvS are names this program defines, not primitives.
+
+**Guarded interaction and a two-process cut.** Continuing processes live in clocked cubical type theory: Proc^𝜅_Σ(𝐴) ∶= fix 𝑋. (𝐴 + ▷^𝜅𝑋 + ∑_𝑐(Resp 𝑐 → ▷^𝜅𝑋)) and Proc_Σ(𝐴) ∶= ∀𝜅. Proc^𝜅_Σ(𝐴), with return, silent delay, and command plus response-indexed delayed continuation.
+
+- bind: bind(return 𝑎, 𝑓) = 𝑓 𝑎; bind(delay 𝑝, 𝑓) = delay(laterBind(𝑝,𝑓)); bind(call(𝑐,𝑘), 𝑓) = call(𝑐, 𝜆𝑟. laterBind(𝑘 𝑟, 𝑓)). laterBind applies the delayed recursive function to the delayed process and next(𝑓) via later-application; it does not eliminate an arbitrary later value.
+- A handler answering a command immediately inserts a silent step before resuming, which keeps guardedness even for unbounded streams of immediately answered commands.
+- These belong to a clocked extension, not to unextended CCHM.
+
+Two continuing processes with full local configurations 𝐶_𝑃, 𝐶_𝑄 (continuations included), message types 𝑀_{𝑃𝑄}, 𝑀_{𝑄𝑃}, and FIFO queues 𝑢, 𝑣 give state 𝑆_{𝑃∥𝑄} = 𝐶_𝑃 × 𝐶_𝑄 × List 𝑀_{𝑃𝑄} × List 𝑀_{𝑄𝑃}. Transitions, plus their symmetric 𝑃/𝑄 cases:
+
+- local: 𝑝 →τ 𝑝′ gives (𝑝,𝑞,𝑢,𝑣) → (𝑝′,𝑞,𝑢,𝑣);
+- send: 𝑝 →!𝑚 𝑝′ gives (𝑝′,𝑞,𝑢++[𝑚],𝑣);
+- receive: 𝑞 →?𝑚 𝑞′ takes (𝑝,𝑞,𝑚∷𝑢,𝑣) to (𝑝,𝑞′,𝑢,𝑣);
+- external: 𝑝 →𝑒 𝑝′ is a visible 𝑒-step of the composite.
+
+From an empty 𝑃→𝑄 queue, with 𝑁 sends and 𝐷 receives, the invariant is 𝑁 = 𝐷 + |𝑢|, hence 𝐷 ≤ 𝑁: a send raises 𝑁 and |𝑢|, a receive raises 𝐷 and lowers |𝑢|, and other steps fix all three. This is a property of the composite, not an assumption about either process. Trace projection and reconstruction follow by induction over the same cases, under FIFO matching and scheduling constraints. Fairness and eventual delivery do not follow. A lossy, duplicating or reordering network handler changes the state and the invariant. The queue is a chosen interaction cut, not a privileged boundary.
+
+**Native execution of a continuing process.** §9.3's finite block ends at a postcondition; a continuing computation is observed as a guarded process. For code image 𝐶 and admitted state 𝑠, machProc_𝐶(𝑠) is return(exit 𝑠) if terminal, call(𝑞, 𝜆𝑟. ▷machProc_𝐶(resume(𝑠,𝑟))) if syscall(𝑠) = 𝑞, and delay(▷machProc_𝐶(step_𝐶 𝑠)) otherwise (7.6a), using the constructor's delayed continuation. Invalid instruction, trap and resource failure are distinct terminal observations or environment commands per the target semantics, not a hidden fourth case. A source handler is ℎ ∶ ∏_{𝑐∶Cmd(Σsrc)} Proc_{Σsys}(Resp(Σsrc, 𝑐)), and ℎ* is the guarded extension of handler composition to source processes.
+
+Termination-sensitive weak correspondence: ignoring finite internal steps must never identify an infinitely silent target with a returning source.
+
+- Finite-prefix judgments: 𝑥 ⇒^{τ*} 𝑥; 𝑥 →τ 𝑦 and 𝑦 ⇒^{τ*} 𝑧 give 𝑥 ⇒^{τ*} 𝑧; 𝑥 ⇒^{τ*} 𝑦 and 𝑦 →𝑒 𝑧 give 𝑥 ⇒^𝑒 𝑧 (7.6c), where →𝑒 is a visible return, fault or command/response.
+- Head(𝑥) ∶= ∑_{𝑒,𝑧}(𝑥 ⇒^𝑒 𝑧). Returns and faults are terminal heads; a command head carries a continuation per permitted response.
+- Div_τ(𝑥) is a coinductive infinite τ-chain. Stuck(𝑥) is nonterminal with neither a τ-step nor a head.
+- Sim^𝜅 is the greatest clock-guarded relation with: every head of 𝑥 matched by an equal head of 𝑦 with ▷^𝜅 Sim^𝜅 on successors, and conversely; Div_τ 𝑥 ↔ Div_τ 𝑦; and Stuck 𝑥 ↔ Stuck 𝑦 (7.6d).
+- Terminal heads relate their payloads by the specified value relation, with unit as the recursive factor. Command heads quantify dependently over the responses the common handler allows. Sim is the guarded fixed point, with (7.6c) built first (bisimulation background, 57).
+- This blocks the unsound proof: a source with a finite return head is not simulated by a silently diverging target, since the heads and the divergence clauses disagree. Divergence is distinguished from deadlock.
+- The two-sided form is for visible-behavior equivalence; refinement compilers use one-sided head inclusion plus an independent progress/divergence condition. Fairness and permitted environment responses are premises of the observation model, not consequences of guardedness. If internal delays are observable, use the strong labeled relation.
+
+ContBlock_ℎ(𝑎, 𝑃, 𝑝) ∶= ∑_{𝑏∶Bytes} ∏_𝐶 Contains(𝐶,𝑎,𝑏) → ∏_𝑠 (𝑃(𝑠) × (pc 𝑠 = 𝑎)) → Sim(machProc_𝐶 𝑠, ℎ*𝑝) (7.6b). §9.3's containing-image, decoder, loader and resource premises stay in 𝑃 or the context. For a guarded fixpoint 𝑝 = fix(𝜆self. body self), a target loop realizes one turn by finite blocks and a back branch. If the blocks re-establish 𝑃 and give a guarded step from a delayed hypothesis, the turn proof has type ▷Sim → Sim, and Löb induction closes the back edge. Neither the jump nor the fixpoint establishes the simulation; the one-turn proof, the handler correspondence and the invariant do.
+
+No-resource-failure continuation needs a re-established resource invariant in 𝑃. Example: live bound 𝐵, arena 𝐾 ≥ 2𝐵, two semispaces of 𝐾/2. At each turn boundary Live(𝑠) ≤ 𝐵, roots enumerate every reachable retained value, and Free(𝑠) covers the turn's temporaries. If a turn allocates at most 𝐴 between collections and a collection copies at most 𝐵, then 𝐾/2 ≥ 𝐵+𝐴 suffices for this schedule, with collection and root-update correctness supplied by their machine blocks. TurnSafe ∶ ∏_𝑠 (𝑃 𝑠 → ∑_{𝑠′}(FiniteTurn(𝑠,𝑠′) × 𝑃 𝑠′ × NoResourceFault(𝑠 ⇝ 𝑠′))) and LoopSafe ∶ 𝑃(𝑠₀) → Always^𝜅(NoResourceFault) (7.6e), with Always by guarded recursion over turns: induction covers every finite prefix and the guarded continuation gives ongoing safety under these bounds. The semispace figures are a sufficient example, not a claim that all programs have bounded live state. If the specification admits resource failure as observable, relate that outcome instead; no-failure is an application theorem with its own premises, not a default of guardedness.
