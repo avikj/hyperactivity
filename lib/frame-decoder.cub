@@ -1,0 +1,74 @@
+-- lib/frame-decoder.cub — the bounded frame decoder of the paper's §8.6 (docs/hyperactivity.cub, “A bounded
+-- C++ frame decoder: interpreted source and proof”) and Appendix C.1's decoder D as code: the
+-- interpreted behaviour of decode(b, n, out) — false with the output unchanged when n < 4, false
+-- with the output unchanged when n ≥ 4 and ℓ > n − 4, true with output (tag, ℓ, b + 4) otherwise,
+-- tag = b₀ + 2⁸b₁, ℓ = b₂ + 2⁸b₃ — with each branch's equation (8.19); and D(b, s, o) over a
+-- memory μ, the header reads confined to the branch s ≥ 4 and the frame written at o, o + 8, o + 16.
+import "core.cub"
+-- m < n, and m − n truncated at zero
+fd-ltb : Nat → Nat → Bool
+fd-ltb m zero = false
+fd-ltb zero (suc n) = true
+fd-ltb (suc m) (suc n) = fd-ltb m n
+fd-monus : Nat → Nat → Nat
+fd-monus m zero = m
+fd-monus zero (suc n) = zero
+fd-monus (suc m) (suc n) = fd-monus m n
+fd-256 : Nat
+fd-256 = toNat #256
+fd-four : Nat
+fd-four = suc (suc (suc (suc zero)))
+-- a frame (tag, length, data)
+FdFrame : Type
+FdFrame = Nat × Nat × Nat
+fd-tag : (Nat → Nat) → Nat
+fd-tag b = plus (b zero) (times fd-256 (b (suc zero)))
+fd-len : (Nat → Nat) → Nat
+fd-len b = plus (b (suc (suc zero))) (times fd-256 (b (suc (suc (suc zero)))))
+-- decode(b, n, out) with the buffer at address bp
+fd-decode : (Nat → Nat) → Nat → Nat → FdFrame → Bool × FdFrame
+fd-decode b n bp out =
+  if fd-ltb n fd-four then (false , out)
+  else (if fd-ltb (fd-monus n fd-four) (fd-len b) then (false , out)
+  else (true , (fd-tag b , fd-len b , plus bp fd-four)))
+-- (8.19)
+fd-short : (b : Nat → Nat) → (n bp : Nat) → (out : FdFrame) → fd-ltb n fd-four ≡ true → fd-decode b n bp out ≡ (false , out)
+fd-short b n bp out h = λ k →
+  if h k then (false , out)
+  else (if fd-ltb (fd-monus n fd-four) (fd-len b) then (false , out) else (true , (fd-tag b , fd-len b , plus bp fd-four)))
+fd-long : (b : Nat → Nat) → (n bp : Nat) → (out : FdFrame) → fd-ltb n fd-four ≡ false → fd-ltb (fd-monus n fd-four) (fd-len b) ≡ true →
+  fd-decode b n bp out ≡ (false , out)
+fd-long b n bp out h1 h2 = λ k →
+  if h1 k then (false , out)
+  else (if h2 k then (false , out) else (true , (fd-tag b , fd-len b , plus bp fd-four)))
+fd-ok : (b : Nat → Nat) → (n bp : Nat) → (out : FdFrame) → fd-ltb n fd-four ≡ false → fd-ltb (fd-monus n fd-four) (fd-len b) ≡ false →
+  fd-decode b n bp out ≡ (true , (fd-tag b , fd-len b , plus bp fd-four))
+fd-ok b n bp out h1 h2 = λ k →
+  if h1 k then (false , out)
+  else (if h2 k then (false , out) else (true , (fd-tag b , fd-len b , plus bp fd-four)))
+-- ---------------------------------------------------------------- Appendix C.1's D(b, s, o)
+appc-store : (Nat → Nat) → Nat → Nat → Nat → Nat
+appc-store mu a v x = if eqb x a then v else mu x
+appc-read16le : (Nat → Nat) → Nat → Nat → Nat
+appc-read16le mu b i = plus (mu (plus b i)) (times fd-256 (mu (plus b (suc i))))
+-- writeFrame(μ, o, t, n, p): the three 64-bit fields at o, o + 8, o + 16
+appc-write-frame : (Nat → Nat) → Nat → Nat → Nat → Nat → Nat → Nat
+appc-write-frame mu o t n p = appc-store (appc-store (appc-store mu o t) (plus o (toNat #8)) n) (plus o (toNat #16)) p
+-- the reads n := read16le(b, 2) and t := read16le(b, 0) occur only in the branch s ≥ 4
+appc-D : (Nat → Nat) → Nat → Nat → Nat → Bool × (Nat → Nat)
+appc-D mu b s o =
+  if fd-ltb s fd-four then (false , mu)
+  else (if fd-ltb (fd-monus s fd-four) (appc-read16le mu b (suc (suc zero))) then (false , mu)
+  else (true , appc-write-frame mu o (appc-read16le mu b zero) (appc-read16le mu b (suc (suc zero))) (plus b fd-four)))
+-- the two failure branches leave μ unchanged
+appc-D-short : (mu : Nat → Nat) → (b s o : Nat) → fd-ltb s fd-four ≡ true → appc-D mu b s o ≡ (false , mu)
+appc-D-short mu b s o h = λ k →
+  if h k then (false , mu)
+  else (if fd-ltb (fd-monus s fd-four) (appc-read16le mu b (suc (suc zero))) then (false , mu)
+  else (true , appc-write-frame mu o (appc-read16le mu b zero) (appc-read16le mu b (suc (suc zero))) (plus b fd-four)))
+appc-D-long : (mu : Nat → Nat) → (b s o : Nat) → fd-ltb s fd-four ≡ false → fd-ltb (fd-monus s fd-four) (appc-read16le mu b (suc (suc zero))) ≡ true →
+  appc-D mu b s o ≡ (false , mu)
+appc-D-long mu b s o h1 h2 = λ k →
+  if h1 k then (false , mu)
+  else (if h2 k then (false , mu)
+  else (true , appc-write-frame mu o (appc-read16le mu b zero) (appc-read16le mu b (suc (suc zero))) (plus b fd-four)))
