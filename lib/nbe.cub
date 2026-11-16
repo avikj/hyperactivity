@@ -9779,6 +9779,66 @@ ty-sig-1 rec Γ vs cA cB a TA dA =
   d-bind (Out (ext-h Γ a (Sem a) (λ y → y) TA) cB m-ty) (Out Γ (csigma cA cB) m-ty)
     (rec (ext-h Γ a (Sem a) (λ y → y) TA) (ext-vals Γ a (Sem a) (λ y → y) TA (ct-id Γ vs a cA TA dA) vs) cB m-ty)
     (λ rB → ty-sig-2 Γ cA cB a TA dA (fst rB) (fst (snd rB)) (snd (snd rB)))
+-- a variable's code read back to the variable (var-find: the variable whose word f gives is k)
+vf-at : (sk : Lst Entry) (a : TyShape) (f : VarP (lcons (e-ty a) sk) → Word) (k : Word) → Opt (f none ≡ k) →
+  Opt ((v : VarP sk) × f (some v) ≡ k) → Opt ((v : VarP (lcons (e-ty a) sk)) × f v ≡ k)
+vf-at sk a f k (some p) r = some (none , p)
+vf-at sk a f k none r = opt-1 (λ q → (some (fst q) , snd q)) r
+var-find : (sk : Lst Entry) (f : VarP sk → Word) (k : Word) → Opt ((v : VarP sk) × f v ≡ k)
+var-find lnil f k = none
+var-find (lcons e-dim sk) f k = var-find sk f k
+var-find (lcons (e-ty a) sk) f k = vf-at sk a f k (w-dec (f none) k) (var-find sk (λ v → f (some v)) k)
+-- a meaning at one shape read at another equal to it, by recursion on both
+shape-cast : (s s' : TyShape) (P : TyShape → Type 1) → P s' → Dec1 (P s)
+shape-cast s-bool s-bool P x = c-derived x
+shape-cast (s-pi a b) (s-pi a' b') P x =
+  d-bind (P (s-pi a' b)) (P (s-pi a b)) (shape-cast b b' (λ b0 → P (s-pi a' b0)) x) (λ y → shape-cast a a' (λ a0 → P (s-pi a0 b)) y)
+shape-cast (s-sig a b) (s-sig a' b') P x =
+  d-bind (P (s-sig a' b)) (P (s-sig a b)) (shape-cast b b' (λ b0 → P (s-sig a' b0)) x) (λ y → shape-cast a a' (λ a0 → P (s-sig a0 b)) y)
+shape-cast (s-path a) (s-path a') P x = shape-cast a a' (λ a0 → P (s-path a0)) x
+shape-cast s s' P x = c-refused
+-- conversion of type meanings: Bool's by contraction, the others by cv
+conv-at : Cv → Cv
+conv-at cv Γ s-bool T T' cT cT' = c-derived (mean1-path Γ T T')
+conv-at cv Γ s T T' cT cT' = cv Γ s T T' cT cT'
+-- an inferred term checked against a type: its shape cast to the type's, its type converted
+switch-2 : Cv → (Γ : CCtx) → Vals Γ → (c : Code) (s : TyShape) (T : Mean Γ (Sem s)) (ct : CompTy s Γ T) →
+  (M : Mean Γ (TV s)) → Der (j-tm , Γ , s , c , M) → Dec1 (Out Γ c (m-chk s T ct))
+switch-2 cv Γ vs c s T ct M d =
+  d-bind (PathM Γ (Sem s) (fmapM Γ (TV s) (Sem s) (λ q → fst q) M) T) (Out Γ c (m-chk s T ct))
+    (conv-at cv Γ s (fmapM Γ (TV s) (Sem s) (λ q → fst q) M) T (fst (comp-tm Γ vs s c M d)) ct)
+    (λ p → c-derived (M , p , d))
+switch : Cv → (Γ : CCtx) → Vals Γ → (c : Code) (s : TyShape) (T : Mean Γ (Sem s)) (ct : CompTy s Γ T) →
+  Out Γ c m-inf → Dec1 (Out Γ c (m-chk s T ct))
+switch cv Γ vs c s T ct r =
+  d-bind ((M : Mean Γ (TV s)) × Der (j-tm , Γ , s , c , M)) (Out Γ c (m-chk s T ct))
+    (shape-cast s (fst r) (λ s0 → (M : Mean Γ (TV s0)) × Der (j-tm , Γ , s0 , c , M)) (snd r))
+    (λ q → switch-2 cv Γ vs c s T ct (fst q) (snd q))
+-- projections, inferred
+inf-fst : (Γ : CCtx) (p : Code) (s : TyShape) (P : Mean Γ (TV s)) → Der (j-tm , Γ , s , p , P) → Dec1 (Out Γ (cfst p) m-inf)
+inf-fst Γ p (s-sig a b) P dp = c-derived (a , fmapM Γ (TV (s-sig a b)) (TV a) (sig-1 a b) P , dfst Γ a b P p dp)
+inf-fst Γ p s P dp = c-refused
+inf-snd : (Γ : CCtx) (p : Code) (s : TyShape) (P : Mean Γ (TV s)) → Der (j-tm , Γ , s , p , P) → Dec1 (Out Γ (csnd p) m-inf)
+inf-snd Γ p (s-sig a b) P dp = c-derived (b , fmapM Γ (TV (s-sig a b)) (TV b) (sig-2 a b) P , dsnd Γ a b P p dp)
+inf-snd Γ p s P dp = c-refused
+-- true and false against Bool's type (a type of Bool is any meaning in One1; its path by fmapM-fmapM, fmap-id)
+bool-path : (Γ : CCtx) (b : Bool) (T : Mean Γ One1) →
+  PathM Γ One1 (fmapM Γ (TV s-bool) (Sem s-bool) (λ q → fst q) (fmapM Γ One1 (TV s-bool) (bool-v b) T)) T
+bool-path Γ b T =
+  pcat (Mean Γ One1) (fmapM Γ (TV s-bool) (Sem s-bool) (λ q → fst q) (fmapM Γ One1 (TV s-bool) (bool-v b) T)) (fmapM Γ One1 One1 (λ u → u) T) T
+    (fmapM-fmapM Γ One1 (TV s-bool) One1 (bool-v b) (λ q → fst q) T) (fmap-id (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) One1) (snd Γ) T)
+chk-con : (Γ : CCtx) (d k : Word) (T : Mean Γ (Sem s-bool)) (ct : CompTy s-bool Γ T) → d ≡ #0 → Opt (k ≡ #0) → Opt (k ≡ #1) →
+  Dec1 (Out Γ (ccon d k lnil lnil) (m-chk s-bool T ct))
+chk-con Γ d k T ct pd (some p) o1 =
+  c-derived (fmapM Γ One1 (TV s-bool) (bool-v true) T , bool-path Γ true T ,
+    der-code j-tm Γ s-bool c-true (ccon d k lnil lnil) (fmapM Γ One1 (TV s-bool) (bool-v true) T) (λ i → ccon (pd (~ i)) (p (~ i)) lnil lnil) (dtrue Γ T))
+chk-con Γ d k T ct pd none (some p) =
+  c-derived (fmapM Γ One1 (TV s-bool) (bool-v false) T , bool-path Γ false T ,
+    der-code j-tm Γ s-bool c-false (ccon d k lnil lnil) (fmapM Γ One1 (TV s-bool) (bool-v false) T) (λ i → ccon (pd (~ i)) (p (~ i)) lnil lnil) (dfalse Γ T))
+chk-con Γ d k T ct pd none none = c-refused
+chk-con-at : (Γ : CCtx) (d k : Word) (s : TyShape) (T : Mean Γ (Sem s)) (ct : CompTy s Γ T) → d ≡ #0 → Dec1 (Out Γ (ccon d k lnil lnil) (m-chk s T ct))
+chk-con-at Γ d k s-bool T ct pd = chk-con Γ d k T ct pd (w-dec k #0) (w-dec k #1)
+chk-con-at Γ d k s T ct pd = c-refused
 elab-step : Cv → Rec → Rec
 elab-step cv rec Γ vs (cdata d lnil) m-ty =
   o-bind (d ≡ #0) (Out Γ (cdata d lnil) m-ty) (w-dec d #0)
@@ -9789,6 +9849,15 @@ elab-step cv rec Γ vs (cpi m cA cB) m-ty =
        (λ rA → ty-pi-1 rec Γ vs m cA cB pm (fst rA) (fst (snd rA)) (snd (snd rA))))
 elab-step cv rec Γ vs (csigma cA cB) m-ty =
   d-bind (Out Γ cA m-ty) (Out Γ (csigma cA cB) m-ty) (rec Γ vs cA m-ty) (λ rA → ty-sig-1 rec Γ vs cA cB (fst rA) (fst (snd rA)) (snd (snd rA)))
+elab-step cv rec Γ vs (cvar k) m-inf =
+  o-bind ((v : VarP (fst Γ)) × var-word (fst Γ) v ≡ k) (Out Γ (cvar k) m-inf) (var-find (fst Γ) (var-word (fst Γ)) k)
+    (λ r → c-derived (var-shape (fst Γ) (fst r) , varCube Γ (fst r) ,
+       der-code j-tm Γ (var-shape (fst Γ) (fst r)) (cvar (var-word (fst Γ) (fst r))) (cvar k) (varCube Γ (fst r)) (λ i → cvar (snd r i)) (dvar Γ (fst r))))
+elab-step cv rec Γ vs (cfst p) m-inf = d-bind (Out Γ p m-inf) (Out Γ (cfst p) m-inf) (rec Γ vs p m-inf) (λ r → inf-fst Γ p (fst r) (fst (snd r)) (snd (snd r)))
+elab-step cv rec Γ vs (csnd p) m-inf = d-bind (Out Γ p m-inf) (Out Γ (csnd p) m-inf) (rec Γ vs p m-inf) (λ r → inf-snd Γ p (fst r) (fst (snd r)) (snd (snd r)))
+elab-step cv rec Γ vs (ccon d k lnil lnil) (m-chk s T ct) =
+  o-bind (d ≡ #0) (Out Γ (ccon d k lnil lnil) (m-chk s T ct)) (w-dec d #0) (λ pd → chk-con-at Γ d k s T ct pd)
+elab-step cv rec Γ vs c (m-chk s T ct) = d-bind (Out Γ c m-inf) (Out Γ c (m-chk s T ct)) (rec Γ vs c m-inf) (switch cv Γ vs c s T ct)
 elab-step cv rec Γ vs c m = c-refused
 -- the checker: the step iterated by fuel (c-fuel, as lib/codes.cub's traversals)
 elab-n : Cv → Nat → Rec
