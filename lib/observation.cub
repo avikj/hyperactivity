@@ -1,0 +1,49 @@
+-- lib/observation.cub — the paper's first constructions as code (the paper, docs/hyperactivity.cub,
+-- §1 “The universe and its descriptions”, §2 “Types, witnesses, and identity”, §3 “Computational
+-- equality”): what a reading warrants over the fiber of its observation, refinement of an
+-- observation, a reversible whole whose observed coordinate has no law of its own, a participant's
+-- reception of an utterance, the order of naturals with its transitivity, the instance space of a
+-- relation, and the contractible singleton. The fiber of an observation is lib/std.cub's `fiber`, and
+-- the decomposition of the histories by readings, (1.2), is lib/fiber.cub's `fiberEquiv`.
+import "core.cub"
+-- (1.3) what a reading y of the observation o warrants of a conclusion P: P holds for every history
+-- compatible with y
+Warrants : {H O : Type} → (H → O) → O → (H → Type) → Type
+Warrants o y P = (hp : fiber o y) → P (fst hp)
+-- a refinement o' of o (o = g ∘ o') keeps what a coarser reading warranted
+warrants-refine : {H O O' : Type} → (o' : H → O') → (g : O' → O) → (y' : O') → (P : H → Type) →
+  Warrants (λ h → g (o' h)) (g y') P → Warrants o' y' P
+warrants-refine o' g y' P w hp = w (fst hp , cong g (snd hp))
+-- the reversible whole of §1: J = Bool × Bool, the step (a , b) ↦ (a ⊕ b , b), observed by its first
+-- coordinate
+bxor : Bool → Bool → Bool
+bxor a b = if a then not b else b
+whole-step : Bool × Bool → Bool × Bool
+whole-step j = (bxor (fst j) (snd j) , snd j)
+-- the step is its own inverse
+whole-step-involution : (a b : Bool) → whole-step (whole-step (a , b)) ≡ (a , b)
+whole-step-involution true true = λ i → (true , true)
+whole-step-involution true false = λ i → (true , false)
+whole-step-involution false true = λ i → (false , true)
+whole-step-involution false false = λ i → (false , false)
+-- yet no g : Bool → Bool has g (o j) = o (s j) for every j: at (true , false) g true is true, at
+-- (true , true) it is false
+no-observed-law : (g : Bool → Bool) → ((j : Bool × Bool) → g (fst j) ≡ fst (whole-step j)) → Empty
+no-observed-law g h = true≢false (concat (sym (h (the (Bool × Bool) (true , false)))) (h (the (Bool × Bool) (true , true))))
+-- (1.4) a participant's reception, Receive : S → M → S → A → Type (M the utterances), relates its state, the utterance
+-- received, its next state and its interpreted response; the readings compatible with u at s
+readings : {S M A : Type} → (S → M → S → A → Type) → S → M → Type
+readings {S} {M} {A} R s u = (s' : S) × (a : A) × R s u s' a
+-- (2.8)–(2.9) the order of naturals carries its witness (lib/std.cub's le: k with k + m = n), and
+-- transitivity is a function: the witnesses add
+le-trans : {a b c : Nat} → le a b → le b c → le a c
+le-trans {a} {b} {c} p q = (plus (fst q) (fst p) ,
+  transN (plus-assoc (fst q) (fst p) a) (transN (congN (plus (fst q)) (snd p)) (snd q)))
+-- (2.10) the complete space of a relation's instances, Rel(R) in the paper
+instances : {A B : Type} → (A → B → Type) → Type
+instances {A} {B} R = (a : A) × (b : B) × R a b
+-- (3.5) a value with its equality witness adds no information: the singleton is contractible
+Sing : {A : Type} → A → Type
+Sing {A} a = (x : A) × a ≡ x
+sing-contr : {A : Type} → (a : A) → isContr (Sing a)
+sing-contr a = ((a , λ i → a) , λ s → λ i → (snd s i , λ j → snd s (i /\ j)))
