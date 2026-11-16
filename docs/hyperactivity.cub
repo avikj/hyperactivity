@@ -34,7 +34,7 @@ s1-p6 = prose (cons "Histories retain the admitted transitions and their relatio
 s1-p7 : Block
 s1-p7 = prose (cons "Let \(H\) be the type of admissible histories of a specified process and \(o:H\to O\) an observation operation. A reading \(y:O\) does not identify a history; it determines the type of histories that could have produced that reading, with evidence of their agreement:" nil)
 s1-p8 : Block
-s1-p8 = construction (cons "\[" (cons "\mathsf{Fib}_o(y):=\sum_{h:H}(o(h)=y)." (cons "\tag{1.1}" (cons "\]" nil))))
+s1-p8 = realized (construction (cons "\[" (cons "\mathsf{Fib}_o(y):=\sum_{h:H}(o(h)=y)." (cons "\tag{1.1}" (cons "\]" nil))))) (cons "fiber" nil)
 s1-p9 : Block
 s1-p9 = prose (cons "The full history space can be recovered without loss when both the observed value and the corresponding history-with-evidence are retained:" nil)
 s1-p10 : Block
@@ -208,11 +208,11 @@ s3-p14 = prose (cons "The center is \((a,\mathsf{refl}_a)\). A path \(p:a=x\) co
 s3-p15 : Block
 s3-p15 = prose (cons "A particularly useful application is to an arbitrary function \(f:A\to B\). Define its graph as a dependent sum retaining both input and output with the proof of their relation:" nil)
 s3-p16 : Block
-s3-p16 = construction (cons "\[" (cons "\operatorname{Graph}(f)" (cons ":=" (cons "\sum_{b:B}\sum_{a:A}(f(a)=b)." (cons "\tag{3.6}" (cons "\]" nil))))))
+s3-p16 = realized (construction (cons "\[" (cons "\operatorname{Graph}(f)" (cons ":=" (cons "\sum_{b:B}\sum_{a:A}(f(a)=b)." (cons "\tag{3.6}" (cons "\]" nil))))))) (cons "fiber" (cons "total" nil))
 s3-p17 : Block
 s3-p17 = prose (cons "Then" nil)
 s3-p18 : Block
-s3-p18 = construction (cons "\[" (cons "A\simeq\operatorname{Graph}(f)." (cons "\tag{3.7}" (cons "\]" nil))))
+s3-p18 = realized (construction (cons "\[" (cons "A\simeq\operatorname{Graph}(f)." (cons "\tag{3.7}" (cons "\]" nil))))) (cons "fiberEquiv" (cons "total-untotal" (cons "untotal-total" nil)))
 s3-p19 : Block
 s3-p19 = prose (cons "The forward map sends \(a\) to \((f(a),a,\mathsf{refl})\); the inverse projects \(a\). The inverse-after-forward composite reduces to the identity, and the other composite is identified by singleton contraction. This **does not** make \(f\) invertible as a function \(A\to B\). It shows precisely what information must be retained for the representation of its action to be reversible." nil)
 s3-p20 : Block
@@ -902,7 +902,7 @@ s6-2-p3 = prose (cons "The initial `Code` datatype is available during bootstrap
 s6-2-p4 : Block
 s6-2-p4 = prose (cons "The specializer is defined by the following equations:" nil)
 s6-2-p5 : Block
-s6-2-p5 = construction (cons "```text" (cons "specialize : Code → Sched → Lst Rule → Code → Code × Code" (cons "specialize Tc sch rules c =" (cons "  let c0 = normalize-held (sched-holds sch) Tc c" (cons "      r  = rewrite-all (sched-rewrites sch) Tc rules c0" (cons "  in (fst r , path-code (snd r) c0)" (cons "```" nil)))))))
+s6-2-p5 = realized (construction (cons "```text" (cons "specialize : Code → Sched → Lst Rule → Code → Code × Code" (cons "specialize Tc sch rules c =" (cons "  let c0 = normalize-held (sched-holds sch) Tc c" (cons "      r  = rewrite-all (sched-rewrites sch) Tc rules c0" (cons "  in (fst r , path-code (snd r) c0)" (cons "```" nil)))))))) (cons "specialize" (cons "normalize-held" nil))
 s6-2-p6 : Block
 s6-2-p6 = prose (cons "Here `Tc` represents the type of the term, `c` its code, and `sch` specifies which definitions remain unknown, how arguments are staged, and the rewrite budget. The result consists of a new code and a code for its justification. The two operations are different: normalization computes a representation definitionally convertible to the input, while theorem-directed rewriting produces an explicit path between the interpreted terms. When no theorem rewrite is applied, `path-code` constructs reflexivity. When a rewrite is applied, `compose-p` constructs the path composition, and `#jit` asks the checker to accept the resulting equality. Thus a wrong theorem application cannot be admitted merely because the transformed code is well formed." nil)
 s6-2-p7 : Block
@@ -910,7 +910,7 @@ s6-2-p7 = prose (cons "The operation `normalize-held` makes partial information 
 s6-2-p8 : Block
 s6-2-p8 = prose (cons "Staging of parameters is also computed on codes. `apply-now` traverses the leading binders of a represented function. A binder designated `st-now` receives a represented argument from the supplied environment; a `st-run` binder is retained as a variable beneath the residual lambdas. Staging and specialization compose as follows:" nil)
 s6-2-p9 : Block
-s6-2-p9 = construction (cons "```text" (cons "residual : Sched → Code → Lst Rule → Code → Lst Code → Code × Code" (cons "residual sch Tc rules c env =" (cons "  specialize Tc sch rules (apply-now (sched-stages sch) c env)" (cons "```" nil)))))
+s6-2-p9 = realized (construction (cons "```text" (cons "residual : Sched → Code → Lst Rule → Code → Lst Code → Code × Code" (cons "residual sch Tc rules c env =" (cons "  specialize Tc sch rules (apply-now (sched-stages sch) c env)" (cons "```" nil)))))) (cons "residual" (cons "apply-now" nil))
 s6-2-p10 : Block
 s6-2-p10 = prose (cons "The static environment here is `Lst Code`: the inputs supplied to the specializer are *representations*. No function of type `A → Code A` for arbitrary semantic `A` is being assumed. For a simple illustration, let the represented function compute `λ x y → (x + 7) + y`. Mark the first binder static and supply code for `5`. `apply-now` constructs the application under a lambda retaining `y`; normalization reduces the known arithmetic and leaves code for a one-argument computation with meaning `λ y → 12 + y`. The illustrative arithmetic assumes the corresponding word or natural-number operations and their reduction rules; the mechanism is the binder-indexed operation above." nil)
 s6-2-p11 : Block
@@ -1078,29 +1078,29 @@ s7-6-p1 = heading (suc (suc (suc zero))) "7.6 Composition of programs with open 
 s7-6-p2 : Block
 s7-6-p2 = prose (cons "Consider a command signature consisting of a command type and its dependent response type:" nil)
 s7-6-p3 : Block
-s7-6-p3 = construction (cons "\[" (cons "\mathsf{Sig}:=\sum_{C:\mathcal U}(C\to\mathcal U),\qquad" (cons "\mathsf{Cmd}(S):=\pi_1 S,\quad" (cons "\mathsf{Resp}(S,c):=\pi_2 S(c)." (cons "\]" nil)))))
+s7-6-p3 = realized (construction (cons "\[" (cons "\mathsf{Sig}:=\sum_{C:\mathcal U}(C\to\mathcal U),\qquad" (cons "\mathsf{Cmd}(S):=\pi_1 S,\quad" (cons "\mathsf{Resp}(S,c):=\pi_2 S(c)." (cons "\]" nil)))))) (cons "Sig" nil)
 s7-6-p4 : Block
 s7-6-p4 = prose (cons "One representation of terminating processes is a Church-encoded free monad, parameterized by the interpretation's universe level:" nil)
 s7-6-p5 : Block
-s7-6-p5 = construction (cons "\[" (cons "\mathsf{Proc}_\ell(S,A):=" (cons "\prod_{R:\mathcal U_\ell}(A\to R)\to" (cons "\bigl(\prod_{c:\mathsf{Cmd}(S)}(\mathsf{Resp}(S,c)\to R)\to R\bigr)\to R." (cons "\]" nil)))))
+s7-6-p5 = realized (construction (cons "\[" (cons "\mathsf{Proc}_\ell(S,A):=" (cons "\prod_{R:\mathcal U_\ell}(A\to R)\to" (cons "\bigl(\prod_{c:\mathsf{Cmd}(S)}(\mathsf{Resp}(S,c)\to R)\to R\bigr)\to R." (cons "\]" nil)))))) (cons "Proc" nil)
 s7-6-p6 : Block
 s7-6-p6 = prose (cons "The definitions `ret`, `cmd`, and `bind` are terms of this type. The π-calculus gives a distinct formal treatment of communication and changing connectivity ([67](#ref-67)); the present handler is defined by the stated command/response signature and interpretation. A handler from `S` to `W` assigns each `S` command a process over `W` with the original response type. Handling internalizes those interactions and leaves the remaining signature open. What counts as the process's environment therefore depends on the composition being examined." nil)
 s7-6-p7 : Block
 s7-6-p7 = prose (cons "Inductive/coinductive interaction-tree accounts of impure and recursive programs have also been developed in Coq ([39](#ref-39)). The corresponding inductive tree presentation is" nil)
 s7-6-p8 : Block
-s7-6-p8 = construction (cons "\[" (cons "\mathsf{Step}(S,A)::=\mathsf{sdone}(a:A)" (cons "\mid\mathsf{scmd}(c:\mathsf{Cmd}(S),\mathsf{Resp}(S,c)\to\mathsf{Step}(S,A))." (cons "\]" nil))))
+s7-6-p8 = realized (construction (cons "\[" (cons "\mathsf{Step}(S,A)::=\mathsf{sdone}(a:A)" (cons "\mid\mathsf{scmd}(c:\mathsf{Cmd}(S),\mathsf{Resp}(S,c)\to\mathsf{Step}(S,A))." (cons "\]" nil))))) (cons "Step" nil)
 s7-6-p9 : Block
 s7-6-p9 = prose (cons "Define `o-handle` by structural recursion:" nil)
 s7-6-p10 : Block
-s7-6-p10 = construction (cons "```text" (cons "o-handle hd (sdone a) = sdone a" (cons "o-handle hd (scmd c k) =" (cons "  o-bind (hd c) (λ r → o-handle hd (k r))" (cons "```" nil)))))
+s7-6-p10 = realized (construction (cons "```text" (cons "o-handle hd (sdone a) = sdone a" (cons "o-handle hd (scmd c k) =" (cons "  o-bind (hd c) (λ r → o-handle hd (k r))" (cons "```" nil)))))) (cons "o-handle" (cons "o-idh" (cons "o-comph" (cons "o-handle-id" (cons "o-handle-bind" nil)))))
 s7-6-p11 : Block
 s7-6-p11 = prose (cons "Let `o-idh c = o-issue c`, and `o-comph h₁ h₂ c = o-handle h₂ (h₁ c)`. Induction constructs paths witnessing the identity and composition laws for handlers. In particular, the inductive proof of `o-handle-id` has the return case by reflexivity and the command case by congruence over the recursively handled continuation; `o-handle-bind` is proved by induction, using associativity of `o-bind` at command nodes. Thus handler composition is a computed property of these programs, not a special semantics imposed by the host language." nil)
 s7-6-p12 : Block
-s7-6-p12 = prose (cons "The Church representation requires an explicit naturality condition to recover extensional equality from equality of reified trees. `o-NaturalAt` says that each interpretation of a Church term agrees with folding its tree; `o-natural-path` takes naturality witnesses for `p` and `q` and a path `to-step p ≡ to-step q`, and constructs a path `p ≡ q`. The hypotheses matter: equality of reifications is not silently assumed to identify arbitrary nonparametric inhabitants of a Church encoding." nil)
+s7-6-p12 = realized (prose (cons "The Church representation requires an explicit naturality condition to recover extensional equality from equality of reified trees. `o-NaturalAt` says that each interpretation of a Church term agrees with folding its tree; `o-natural-path` takes naturality witnesses for `p` and `q` and a path `to-step p ≡ to-step q`, and constructs a path `p ≡ q`. The hypotheses matter: equality of reifications is not silently assumed to identify arbitrary nonparametric inhabitants of a Church encoding." nil)) (cons "o-NaturalAt" (cons "o-natural-path" nil))
 s7-6-p13 : Block
 s7-6-p13 = prose (cons "As a distributed example, let `Beh M St` assign behavior to nodes, `FState M St` hold the joint state of those nodes and a network, and `EnvS` expose environmental choices. Define" nil)
 s7-6-p14 : Block
-s7-6-p14 = construction (cons "```text" (cons "fleet-proc : Beh M St → Nat → FState M St → Proc EnvS (FState M St)" (cons "```" nil)))
+s7-6-p14 = realized (construction (cons "```text" (cons "fleet-proc : Beh M St → Nat → FState M St → Proc EnvS (FState M St)" (cons "```" nil)))) (cons "Beh" (cons "FState" (cons "fleet-step" (cons "fleet-proc" nil))))
 s7-6-p15 : Block
 s7-6-p15 = prose (cons "(with universe levels and implicit parameters suppressed). `fleet-proc` requests the next environmental choice, computes `fleet-step`, and recurses for the specified number of steps. The complete fleet is therefore one process over its remaining environment. Message-passing actors and deterministic stream-process semantics are precedents for representing communicating agents as programs ([55](#ref-55), [56](#ref-56)); the fleet in this section is the particular defined program, not an additional primitive. Its nodes and their interactions are still individually programmable. Nothing about the language makes `FState`, `Pkt`, or `EnvS` distinguished primitive forms; they are names defined by this particular program." nil)
 s7-6-p16 : Block
@@ -1940,7 +1940,7 @@ s10-10-p1 = heading (suc (suc (suc zero))) "10.10 A distributed program as an or
 s10-10-p2 : Block
 s10-10-p2 = prose (cons "For the distributed example of §7.6, take network choices to include delivery, duplication, loss, and partition. Define `NView`, `FState`, `fleet-step`, `fleet-run`, and `fleet-proc` by the indicated transition rules. A safety property is the dependent type" nil)
 s10-10-p3 : Block
-s10-10-p3 = construction (cons "\[" (cons "\mathsf{Safe}(I,b,g):=" (cons "\prod_{cs:\mathsf{List}(\mathsf{Adv})}" (cons "I(\mathsf{fleetRun}(b,cs,g))." (cons "\]" nil)))))
+s10-10-p3 = realized (construction (cons "\[" (cons "\mathsf{Safe}(I,b,g):=" (cons "\prod_{cs:\mathsf{List}(\mathsf{Adv})}" (cons "I(\mathsf{fleetRun}(b,cs,g))." (cons "\]" nil)))))) (cons "fleet-run" (cons "Safe" (cons "safe-ind" nil)))
 s10-10-p4 : Block
 s10-10-p4 = prose (cons "The induction principle `safe-ind` constructs an inhabitant from a proof of \(I(g)\) and preservation of \(I\) by every adversarial step. Liveness and convergence require the corresponding assumptions about choices and fairness; those properties are not consequences of safety alone. The network, its states, the adversary and the safety predicate are all definitions of this example. Replicated data types supply a separate established family of convergence and exchange protocols ([59](#ref-59)); the safety theorem here follows from the specific transition relation, not from a generic replication guarantee. A different distributed program may use entirely different mathematics. The general language has not acquired a special `Fleet` primitive by expressing this one." nil)
 s10-10-p5 : Block
@@ -2078,7 +2078,7 @@ sc-2-p2 = prose (cons "For a checked definition \(f:T\), the operation `#jit f` 
 sc-2-p3 : Block
 sc-2-p3 = prose (cons "The machine interpretation of emitted bytes is a function of the byte vector and its calling convention. `mn-init bs args` places the bytes, arguments, call context, arena, stack, and return address into an x86 machine state. `run-to` iterates the machine transition `x86-step` until the return address is reached or the supplied fuel is exhausted. `mn-run` extracts the result only when execution reaches that address with a clear overflow flag. The resulting operations have types:" nil)
 sc-2-p4 : Block
-sc-2-p4 = construction (cons "```text" (cons "mn-run : Lst Word → Word → Lst Word → Opt Word" (cons "Correct1 : Lst Word → (Word → Word) → Type" (cons "Correct1 bs f = (n a : Word) → mn-call1 bs f n a ≡ f a" (cons "```" nil)))))
+sc-2-p4 = realized (construction (cons "```text" (cons "mn-run : Lst Word → Word → Lst Word → Opt Word" (cons "Correct1 : Lst Word → (Word → Word) → Type" (cons "Correct1 bs f = (n a : Word) → mn-call1 bs f n a ≡ f a" (cons "```" nil)))))) (cons "mn-run" (cons "mn-call1" (cons "Correct1" nil)))
 sc-2-p5 : Block
 sc-2-p5 = prose (cons "Here `mn-call1` uses the source definition `f` as its fallback if the modeled machine run does not return an ordinary result. Consequently `Correct1` by itself does **not** assert that all machine runs terminate, that all bytes have an ordinary return, or that the target semantics is fully proved correct for arbitrary programs. Its definition is precise; the separate correctness argument must address the machine cases that matter. The relation between specialized terms and their original definitions is checked at the term level. A theorem connecting emitted bytes to the instruction semantics additionally requires proofs of the encoder templates under the chosen machine model. These are distinct composable proof obligations over the same interpreted computation." nil)
 sc-2-p6 : Block

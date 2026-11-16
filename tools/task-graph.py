@@ -331,7 +331,8 @@ def paper_code_unresolved():
     for dp, dn, fs in os.walk(os.path.join(ROOT, 'lib')):
         for f in fs:
             if f.endswith('.cub'):
-                for n in re.findall(r'^(\S+) :', open(os.path.join(dp, f), encoding='utf-8', errors='replace').read(), re.M):
+                src = open(os.path.join(dp, f), encoding='utf-8', errors='replace').read()
+                for n in re.findall(r'^(\S+) :', src, re.M) + re.findall(r'^(?:data|codata|record) (\S+)', src, re.M):
                     defs[n] = defs.get(n, 0) + 1
     src = open(os.path.join(ROOT, 'docs', 'hyperactivity.cub'), encoding='utf-8').read()
     names = []
