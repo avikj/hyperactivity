@@ -3,13 +3,18 @@
 -- presentation of it is a projection computed from that value (here `human`, the manuscript as it
 -- reads), and none is stored beside it. A block is a stretch of the manuscript between blank lines:
 -- a heading, English prose, a displayed construction (mathematics or code), or a note to the reader
--- of the source. The constructions' code attaches to the paper as it is written (the task graph's
--- the-paper-is-one-value and paper-examples).
+-- of the source. A construction the paper states is realized by code: `realized` holds a block and the
+-- names of the definitions that are its code (each a definition of docs/hyperactivity.cub, its type the
+-- construction's statement, named by section and equation: eq-1-2 for (1.2)); the names are checked
+-- to name definitions when the paper is projected (tools/task-graph.py paper). Avik, 2026-11-15: the
+-- source holds each construction as code with the English attached; the pure page is the projection
+-- of the code and its naming words, the human paper the projection with all the English.
 import "core.cub"
 data Block = heading (depth : Nat) (title : List Word)
            | prose (lines : List (List Word))
            | construction (lines : List (List Word))
            | note (lines : List (List Word))
+           | realized (block : Block) (realization : List (List Word))
 data Paper = paper (title : List Word) (subtitle : List Word) (date : List Word) (author : List Word)
                    (version : List Word) (blocks : List Block)
 -- the lines, each followed by a newline
@@ -31,6 +36,7 @@ block-text (heading d t) = list-append (marks d) (cons #32 t)
 block-text (prose ls) = unlines ls
 block-text (construction ls) = unlines ls
 block-text (note ls) = unlines ls
+block-text (realized b cs) = block-text b
 -- blocks separated by one blank line
 blocks-text : List Block → List Word
 blocks-text nil = nil
@@ -48,3 +54,26 @@ human : Paper → List Word
 human (paper t s d a v bs) = texts (cons "---" (cons (cons #10 nil) (cons (field "title" t)
   (cons (field "subtitle" s) (cons (field "date" d) (cons (field "author" a) (cons "version: "
   (cons v (cons (cons #10 nil) (cons "---" (cons (cons #10 (cons #10 nil)) (cons (blocks-text bs) nil))))))))))))
+-- the pure page (Avik, 2026-11-15: "pure math symbols as much as possible using words only where
+-- essential to attach meaning"): each heading, each displayed construction and the code realizing it,
+-- no prose; `code: NAME` stands for the definition NAME, which the projection's reader shows in full
+code-lines : List (List Word) → List (List Word)
+code-lines nil = nil
+code-lines (cons n ns) = cons (list-append "code: " n) (code-lines ns)
+pure-of : Block → List (List Word)
+pure-of (heading d t) = cons (block-text (heading d t)) nil
+pure-of (prose ls) = nil
+pure-of (construction ls) = cons (unlines ls) nil
+pure-of (note ls) = nil
+pure-of (realized b cs) = list-append (pure-of b) (code-lines cs)
+pure-texts : List Block → List (List Word)
+pure-texts nil = nil
+pure-texts (cons b bs) = list-append (pure-of b) (pure-texts bs)
+-- texts separated by blank lines
+paragraphs : List (List Word) → List Word
+paragraphs nil = nil
+paragraphs (cons x nil) = x
+paragraphs (cons x (cons y ys)) = list-append x (cons #10 (cons #10 (paragraphs (cons y ys))))
+-- the pure page as text
+pure : Paper → List Word
+pure (paper t s d a v bs) = paragraphs (pure-texts bs)

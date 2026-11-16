@@ -5,6 +5,8 @@
     hyperactive next | prev          the next chunk of the walk, or the one before
     hyperactive open                 what is open and what can start now
     hyperactive def NAME             a definition: its statement, its text, where it is, what uses it
+    hyperactive paper [SECTION]      the paper as it reads, whole or one section (4.4, A.1, Part II):
+                                     the human projection of the value hyperactivity
     hyperactive etym TEXT            the text augmented with the etymology of every word
     hyperactive show NODE ...        a node: its statement, what it serves, what serves it,
                                      its essential context
@@ -96,6 +98,43 @@ def chunks(text):
     return out
 
 
+def code_of(name, found):
+    """the code a `code: NAME` line of the pure page stands for: the definition NAME of lib/, whole"""
+    hits = [h for h in found.get(name, []) if h[0].startswith('lib/')]
+    if len(hits) != 1:
+        sys.exit(f'the paper names {name} as code, but lib/ has {len(hits)} definitions of it')
+    f, l, text = hits[0]
+    return f'{name}   ({f}, line {l})\n{text}'
+
+
+def with_code(text):
+    """a projection's text with each `code: NAME` line replaced by the definition it names"""
+    if '\ncode: ' not in '\n' + text: return text
+    found = blocks()
+    return '\n'.join(code_of(l[6:], found) if l.startswith('code: ') else l for l in text.split('\n'))
+
+
+def paper(section):
+    """the paper as it reads (`human hyperactivity`), whole or the section numbered `section`"""
+    build()
+    probe = os.path.join(ROOT, 'build', 'paper-human.cub')
+    os.makedirs(os.path.dirname(probe), exist_ok=True)
+    with open(probe, 'w', encoding='utf-8') as f:
+        f.write(f'import "{os.path.join(ROOT, "docs", "hyperactivity.cub")}"\n'
+                'paper-human : List Document\npaper-human = cons (projection "human" (human hyperactivity)) nil\n')
+    text = task_graph_module().documents(probe, 'paper-human')[0][2]
+    if not section: print(text); return
+    parts = re.split(r'(?m)^(?=#{1,4} )', text)
+    hit = [p for p in parts if re.match(r'#{1,4} (Part |Appendix )?' + re.escape(section) + r'[ .]', p)]
+    if not hit: sys.exit(f'the paper has no section {section}')
+    start = parts.index(hit[0]); depth = len(hit[0]) - len(hit[0].lstrip('#'))
+    out = [hit[0]]
+    for p in parts[start + 1:]:
+        if len(p) - len(p.lstrip('#')) <= depth: break
+        out.append(p)
+    print(''.join(out))
+
+
 def walk_chunks():
     """the walk, in order: (title, text) for every chunk. The documents are those of the value
     `onboarding` (docs/onboarding.cub) as the machine evaluates it, each served only if its bytes are
@@ -104,7 +143,7 @@ def walk_chunks():
     what can be taken up, generated."""
     out = []
     for kind, label, held in onboarding_documents():
-        text = served(label, held).decode('utf-8') if kind == 'file' else held
+        text = served(label, held).decode('utf-8') if kind == 'file' else with_code(held)
         cs = chunks(text)
         for j, c in enumerate(cs):
             out.append((label + (f', part {j + 1} of {len(cs)}' if len(cs) > 1 else ''), c))
@@ -156,6 +195,7 @@ COMMANDS = """
 Reading and working:
   hyperactive show NODE      a node: its statement, what it serves, what serves it, its essential context
   hyperactive def NAME       a definition: its statement, its text, where it is, and what uses it
+  hyperactive paper [SECTION]  the paper as it reads (its human projection), whole or one section
   hyperactive etym TEXT      any text, every word augmented with its etymology: read Avik's words
                              in the meanings the words carry, not a local frame
   hyperactive open           what is open and what can start now
@@ -257,6 +297,8 @@ def main():
         open_work(); return
     if c == 'etym':
         os.execv(sys.executable, [sys.executable, os.path.join(ROOT, 'tools', 'etym.py'), *rest])
+    if c == 'paper':
+        paper(rest[0] if rest else None); return
     if c == 'def':
         if not rest: sys.exit('hyperactive def NAME')
         define(rest); return

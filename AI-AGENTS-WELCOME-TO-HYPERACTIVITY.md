@@ -158,7 +158,8 @@ The paper is one value of the language, `hyperactivity` (`docs/hyperactivity.cub
 `lib/paper.cub`), "hyperactivity: A decentralized operating system language for collective
 superintelligence", version 32, 15 November 2026: its one source. Every presentation of it, the
 manuscript as it reads included, is a projection computed from that value (`human hyperactivity`)
-and none is stored beside it; the walk serves that projection. A citation of the paper names the
+and none is stored beside it. The walk serves its pure projection (headings, displayed
+constructions and the code realizing them); `hyperactive paper [SECTION]` gives it as it reads. A citation of the paper names the
 value and the section's number with its title, the subsection heading where there is one, and what a
 cited equation states: (the paper, docs/hyperactivity.cub, §6.1 “Typed quotation, semantic readback,
 and self-application”). Its Part I is v31's text, so v31's section numbers are its own. Citations

@@ -324,6 +324,23 @@ def one_source_violations(commit=None):
     return bad
 
 
+def paper_code_unresolved():
+    """the names the paper's realized constructions give as their code (docs/hyperactivity.cub) that
+    are not exactly one definition of lib/: a name that stops naming its code is caught here"""
+    defs = {}
+    for dp, dn, fs in os.walk(os.path.join(ROOT, 'lib')):
+        for f in fs:
+            if f.endswith('.cub'):
+                for n in re.findall(r'^(\S+) :', open(os.path.join(dp, f), encoding='utf-8', errors='replace').read(), re.M):
+                    defs[n] = defs.get(n, 0) + 1
+    src = open(os.path.join(ROOT, 'docs', 'hyperactivity.cub'), encoding='utf-8').read()
+    names = []
+    for line in re.findall(r'^\S+ = realized .*$', src, re.M):
+        m = re.search(r'\) ((?:\(cons "[^"]*" )+nil\)+)$', line)
+        names += re.findall(r'"([^"]*)"', m.group(1)) if m else ['(unreadable names)']
+    return [f'the paper names {n} as code; lib/ has {defs.get(n, 0)} definitions of it' for n in names if defs.get(n, 0) != 1]
+
+
 def cmd_one_source(args):
     """one-source [COMMIT ...]: the index, or each commit's tree"""
     bad = [v for c in (args or [None]) for v in one_source_violations(c)]
@@ -366,7 +383,7 @@ def cmd_check(args):
     for f in fails: print('  ' + f)
     if r.returncode != 0 or fails:
         print(r.stderr.strip()[:2000]); bad += 1
-    for v in one_source_violations():
+    for v in one_source_violations() + paper_code_unresolved():
         print(v); bad += 1
     print(f'{len(g)} nodes; ' + ('consistent' if not bad else f'{bad} problem(s)'))
     sys.exit(1 if bad else 0)
