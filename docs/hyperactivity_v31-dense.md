@@ -185,3 +185,125 @@ None of this depends on programming:
 Each comes with the operations and equalities that define the structure, and the object's mathematics is what makes representation independence possible.
 
 A quotient identifies specified distinctions, and operations on it have to respect them; other observations may need another representation. A set quotient has points [𝑥], paths [𝑥] = [𝑦] for 𝑥 ∼ 𝑦, and set truncation. Its eliminator into a set 𝐵 takes a ∼-respecting 𝑋 → 𝐵; elimination into higher types needs coherence data, and HITs can keep nontrivial paths (HIT semantics, 11). For graphs, identifying up to renaming as a set loses the automorphism witnesses that a groupoid keeps. The identity asserted governs the computation: quotient, equivalence, path of structured types and observation are not rival theories of meaning but constructions with different specified equalities, composed in one language.
+
+### 4.4 Ordering: a declaration that computes
+
+Sorting is a complete example before any language or machine is introduced. Goal: a list with a given finite bag's multiplicities, in the order on its elements, with list and evidence as one dependent answer. This develops §9 ("Ordering — what counting discards") of *Respecting Equality* (74), including the declaration of its Remark 9.15, and its executable construction `lib/sort.cub` (75).
+
+**The order supplies counting's equality.** Take le ∶ 𝐴 → 𝐴 → Bool that is reflexive, total, transitive and antisymmetric, with 𝑥 ≤ 𝑦 ∶= isTrue(le 𝑥 𝑦). Then eqo(𝑥,𝑦) ∶= le(𝑥,𝑦) ∧ le(𝑦,𝑥), and isTrue(eqo 𝑥 𝑦) → 𝑥 = 𝑦 is antisymmetry, with reflexivity giving eqo(𝑥,𝑥) (4.17). Multiplicity and order share one element identity, and elements are inspected only through le.
+
+The bag is the HIT with points emp, sng(𝑎), un(𝑋,𝑌) and path constructors for left and right unit, associativity and commutativity, e.g. unitl(𝑋) ∶ un(emp,𝑋) = 𝑋, assoc, comm(𝑋,𝑌) ∶ un(𝑋,𝑌) = un(𝑌,𝑋) (4.18). The paths are kept.
+
+- countB(𝑎, emp) = 0, countB(𝑎, sng 𝑏) = [eqo(𝑎,𝑏)], countB(𝑎, un(𝑋,𝑌)) = countB(𝑎,𝑋) + countB(𝑎,𝑌) (4.19). The path branches are the unit, associativity and commutativity paths of +, and list count(𝑎,𝐵) is analogous.
+- AllLe(𝑥,[]) = 1, AllLe(𝑥, 𝑦∷𝐵) = (𝑥≤𝑦) × AllLe(𝑥,𝐵); Sorted([]) = 1, Sorted(𝑥∷𝐵) = AllLe(𝑥,𝐵) × Sorted(𝐵) (4.20).
+- 𝐺_𝑋(𝐵) ∶= (∏_𝑎 count(𝑎,𝐵) = countB(𝑎,𝑋)) × Sorted(𝐵), 𝐹(𝑋) ∶= ∑_{𝐵∶List 𝐴} 𝐺_𝑋(𝐵) (4.21). In the source these are `Gs`/`Fs`, using decidable ℕ-equality, with `eqb-sound`/`eqb-complete` relating the two presentations. The answer holds the list, per-element multiplicity evidence and sortedness; projecting the list doesn't change what the whole answer establishes.
+
+**Merge and uniqueness.** Empty clauses return the other list; otherwise merge(𝑥∷𝑋, 𝑦∷𝑌) is 𝑥∷merge(𝑋, 𝑦∷𝑌) when le(𝑥,𝑦), else 𝑦∷merge(𝑥∷𝑋, 𝑌) (4.22). Each call removes a head. In branch 1, 𝑥 ≤ 𝑦 and sortedness of 𝑦∷𝑌 with transitivity put 𝑥 below 𝑦's run, and sortedness of 𝑥∷𝑋 puts it below 𝑋. Branch 2 is symmetric, using totality for 𝑦 ≤ 𝑥. By induction, count(𝑎, merge(𝐵,𝐶)) = count(𝑎,𝐵) + count(𝑎,𝐶) and Sorted 𝐵 × Sorted 𝐶 → Sorted(merge 𝐵 𝐶) (4.23).
+
+*sorted-unique:* two sorted lists with equal multiplicities are equal.
+
+- One empty: the other's head has a positive count on one side and zero on the other.
+- Both nonempty with heads 𝑥, 𝑦: 𝑥 has positive count in the second list, whose elements are all ≥ 𝑦, so 𝑦 ≤ 𝑥; symmetrically 𝑥 ≤ 𝑦, and antisymmetry identifies the heads.
+- Cancelling the heads equates the tails' counts, and induction finishes.
+
+The evidence in 𝐺_𝑋 is propositional (ℕ-equality, and at most one witness per Boolean test). So list equality extends to the whole answer: Fs-prop ∶ ∏_𝑋 isProp(𝐹(𝑋)), with isProp(𝑇) ∶= ∏_{𝑢,𝑣} 𝑢 = 𝑣 (4.24).
+
+**Elimination over the bag, paths included.**
+
+- Point branches: mempty ∶ 𝐹(emp); msng ∶ ∏_𝑎 𝐹(sng 𝑎), already sorted; munion ∶ 𝐹𝑋 → 𝐹𝑌 → 𝐹(un 𝑋 𝑌), merging the list parts with (4.23) and the incoming witnesses (4.25).
+- Path branches: over each bag path 𝑞 ∶ 𝑋 = 𝑌 the eliminator needs a dependent path in 𝐹(𝑞(𝑖)), not an unrelated list equality. Every fiber is a proposition by (4.24), so endpoints determine it. For comm, PathP(𝑖 ↦ 𝐹(comm(𝑋,𝑌)(𝑖)))(munion 𝑢 𝑣, munion 𝑣 𝑢) (4.26) comes from isProp→PathP, and likewise for unit and associativity.
+- Result: msort ∶ ∏_{𝑋∶Bag 𝐴} 𝐹(𝑋) (4.27). Its point equations are the ones above, and its path equations make the answer respect the input's identities instead of reading a tree presentation as extra order.
+
+```
+msort : {o : Ord} → (X : Bag (El o)) → Fs X
+msort X = msort-at (Fs-prop {o})
+  (λ x0 x1 → isProp→PathP {lzero} {x0} {x1}) X
+```
+
+`msort-at` is exactly the dependent elimination above. Propositionality gives coherence and merge with the eliminator gives existence, so 𝐹(𝑋) is contractible with center msort(𝑋) and contraction 𝑣 ↦ Fs-prop(𝑋)(msort 𝑋, 𝑣). Declaration, construction and rationale are one executable value, with no enumeration of permutations and no proof reconstructed afterwards.
+
+Instance: ({3}∪{1}) ∪ ({2}∪{1}). The halves give [1,3] and [1,2], which merge to [1,1,2,3]. The evidence records two 1s, one 2, one 3 and zero of everything else. Any other association or order of the unions has an identified answer through the path branches, not through a convention that secretly enumerates the bag.
+
+**What ordering retains; what a sum presentation costs.**
+
+- *Information forgotten.* For 𝑛 distinct elements, the fiber of sorting over the sorted sequence is the 𝑛! enumerations: keeping the permutation recovers the input, returning only the list forgets it. With multiplicities 𝑚ⱼ there are 𝑛!/∏𝑚ⱼ! value sequences. The bag declaration keeps multiplicities and does not claim to keep an enumeration.
+- *Work charged by a presentation.* For binary sum trees, 𝑛(one) = 1 and 𝑛(𝑙⊕𝑟) = 𝑛𝑙+𝑛𝑟; the output-production cost is 𝐶(one) = 0, 𝐶(𝑙⊕𝑟) = 𝐶𝑙+𝐶𝑟+𝑛𝑙+𝑛𝑟 (4.28). Then 𝐶(𝑡) = ∑_leaves depth, since each leaf is charged once per union above it. At 𝑛 = 2^𝑘 a balanced tree costs 𝑘𝑛 and a chain 2+3+⋯+𝑛: 8 versus 9 at four leaves, 24 versus 35 at eight. These counts belong to this merge-output model; they are not output copies, comparisons or evaluator rewrites.
+- *Information resolved.* A merge of runs 𝑎, 𝑏 of distinct elements resolves one of C(𝑎+𝑏, 𝑎) interleavings. 𝐼(one) = 1 and 𝐼(𝑙⊕𝑟) = C(𝑛𝑙+𝑛𝑟, 𝑛𝑙)·𝐼𝑙·𝐼𝑟 = 𝑛(𝑙⊕𝑟)! (4.29), by cancelling child factorials. So log₂(𝑛!) is the same for every tree, while (4.28) depends on the tree.
+- *Comparisons.* The worst-case lower bound is ⌈log₂ 𝑛!⌉; balanced merging at 𝑛 = 2^𝑘 uses at most 𝑛𝑘−𝑛+1, which is 16 versus 17 at 𝑛 = 8. Adjacent swaps measure something else, the inversion count, which drops by exactly one per corrected adjacent pair. Comparison identifies order; a swap changes an enumeration.
+
+The tree's paths identify its value without equalizing evaluation costs. For powers of two, a balanced tree's root-to-leaf choices are binary indices and a chain is the tally presentation. Given the presentation and the elimination, the merges are determined. That is the declaration's computational content: use the identities the object carries, build the answer over them, and keep exactly the distinctions the chosen observation needs. Result, forgotten information and presentation-charged work stay separate, explicit objects.
+
+## 5. Programming with languages and their semantics
+
+The constructions that describe histories also describe the languages used to describe them: syntax, static judgments, interpretation, transitions and observable behavior are representable and computable. Foundations: inductive syntax, compositional interpretation, operational semantics, definitional interpreters (4, 5, 16, 27, 28). The general construction comes first, then a closed calculation.
+
+### 5.1 Typed syntax, semantics, and source lifting
+
+This is a dependent presentation of represented syntax and semantics, not a second primitive evaluator. The bootstrap `Code` datatype and the intrinsically checked family are different representations, and these equations describe the latter. Derivation-indexed syntax for a real source standard needs separate coverage evidence to be complete.
+
+With 𝐽 = (Γ;Ψ;𝜑) over a core signature 𝒦 and level ℓ, the judgments are 𝐽 ctx, 𝐽 ⊢ 𝐴 ∶ 𝒰ℓ, 𝐽 ⊢ 𝑡 ∶ 𝐴 and 𝐽 ⊢ 𝑡 ≡ 𝑢 ∶ 𝐴. Raw syntax has explicit constructors and binder sorts; typed syntax carries derivations, not a promise that checking will succeed:
+
+- Ty(𝐽,ℓ) = ∑_{𝐴∶Raw} Der(𝐽 ⊢ 𝐴 ∶ 𝒰ℓ)
+- Code(𝐽,𝐴) = ∑_{𝑡∶Raw} Der(𝐽 ⊢ 𝑡 ∶ |𝐴|)
+- Sub(Δ,Γ) = ∏_{𝑥∶𝐴∈Γ} Code(Δ, 𝐴[𝜎<𝑥])
+- Env(∅) = 1, Env(Γ, 𝑥∶𝐴) = ∑_{𝜌∶Env Γ} ⟦𝐴⟧𝜌
+
+De Bruijn substitution is structural, lifting under every binder:
+
+```
+subst(Var(j), σ)          = σ[j]
+subst(Lam(A, body), σ)    = Lam(subst(A, σ), subst(body, lift(σ)))
+subst(App(f, x), σ)       = App(subst(f, σ), subst(x, σ))
+subst(Pair(a, b), σ)      = Pair(subst(a, σ), subst(b, σ))
+subst(PathLam(i, t), σ)   = PathLam(i, subst(t, σ))
+subst(Comp(A, φ, u, a), σ) = Comp(subst(A, σ), φ[σ], subst(u, σ), subst(a, σ))
+lift(σ)[0]   = Var(0)
+lift(σ)[j+1] = weaken(σ[j])
+```
+
+Every further constructor adds its own arity, binder lifts and dimension-substitution action. The lemmas are ⟦𝑡[𝜎]⟧𝜌 ≡ ⟦𝑡⟧(⟦𝜎⟧𝜌), by induction on the derivation, and (𝑡[𝜎])[𝜏] ≡ 𝑡[𝜎∘𝜏], by induction on syntax. Dimension substitution also transports face restrictions and composition's boundary systems.
+
+**Represented source languages.** A language is a record with laws, Language_ℓ = ∑_{Syn, Ctx_𝐿, Ty_𝐿, Static, Conf, Cmd, Step, Init, Observe} Law_𝐿, where:
+
+- Static ∶ Ctx_𝐿 → Syn → Ty_𝐿 → 𝒰ℓ (source well-formedness, not assumed to be cubical typing);
+- Conf ∶ Syn → 𝒰ℓ; Cmd ∶ 𝒰ℓ; Reply ∶ Cmd → 𝒰ℓ;
+- Step_𝑝 ∶ Conf(𝑝) → Return + Fault + Tau(Conf 𝑝) + ∑_{𝑐∶Cmd}(Reply 𝑐 → Conf 𝑝);
+- Init ∶ (𝑝 ∶ Syn) → Input(𝑝) → Conf(𝑝); Observe ∶ Trace_𝐿 → Obs_𝐿.
+
+Nondeterministic languages return a set, family or coinductive tree of successors. Fault follows the language's stated undefined-behavior contract and is never silently an ordinary result. The laws cover substitution and scope preservation, progress or specified fault, well-defined observations, and the chosen treatment of concurrency and environment responses. The interpreter is the guarded unfolding:
+
+  interp_𝐿(𝑝,𝑥) = unfold_𝐿(Init(𝑝,𝑥)); unfold_𝐿(𝑠) = case Step_𝑝(𝑠) of Return 𝑣 ↦ return 𝑣 ∣ Fault 𝑒 ↦ fault 𝑒 ∣ Tau 𝑠′ ↦ delay(unfold_𝐿 𝑠′) ∣ Call(𝑐,𝑘) ↦ request(𝑐, 𝜆𝑟. unfold_𝐿(𝑘 𝑟)).
+
+It is a host function with no authority beyond its definitions, and the syntax, static rules and dynamic rules are ordinary metaprogram inputs.
+
+**Lifting, transformation, projection.**
+
+- Lift(𝐿) = ∑_{𝑝∶Syn_𝐿} Well_𝐿(𝑝): source plus source derivation, not an unverified host program.
+- meaning_𝐿(𝑝) = interp_𝐿(𝑝); Spec_𝐿(𝑝) = MeaningType_𝐿(𝑝) → 𝒰ℓ (schematic: a dependent predicate over the exact function or process type); Attached_𝐿(𝑝) = ∑_{𝑃∶Spec_𝐿 𝑝} 𝑃(meaning_𝐿 𝑝). A typical attachment is 𝜋 ∶ ∏_{𝑥∶Input 𝑝} 𝑄(𝑥, interp_𝐿(𝑝,𝑥)).
+- Trans_{𝐿,𝑀}(𝑝) = ∑_{𝑞∶Lift 𝑀} Rel_𝑂(meaning_𝐿 𝑝, meaning_𝑀 𝑞): target syntax plus semantic comparison. If Rel is a path, transport moves specifications and proofs directly; if it is observational refinement, only refinement-closed properties transfer. The distinction is in the type.
+- Proofs attach to conventional source as (𝑝, 𝜋) with erase_𝐿(𝑝,𝜋) = 𝑝 and meaning_𝐿(erase(𝑝,𝜋)) = meaning_𝐿(𝑝). No runtime language extension is needed. A typed sidecar, a structured attribute or an elaboration can carry the association; its semantics is these definitions, whatever the spelling.
+
+**A complete intrinsically typed expression language** (a program in hyperactivity, not a built-in). It makes the construction and the substitution proof fully explicit.
+
+- Types 𝐴,𝐵 ∶∶= Byte ∣ Unit ∣ 𝐴×𝐵 ∣ 𝐴+𝐵 ∣ 𝐴⇒𝐵; contexts Γ ∶∶= 𝜖 ∣ Γ,𝐴.
+- Variables vz ∶ Var(Γ,𝐴; 𝐴) and vs ∶ Var(Γ;𝐵) → Var(Γ,𝐴;𝐵), where ";" abbreviates context extension: Var(Γ,𝐴;𝐵) = Var((Γ,𝐴),𝐵).
+- Terms Tm(Γ,𝐴), generated by var, lit ∶ Byte → Tm(Γ,Byte), lam ∶ Tm(Γ,𝐴;𝐵) → Tm(Γ,𝐴⇒𝐵), app, pair, fst, snd, inl, inr, and case ∶ Tm(Γ,𝐴+𝐵) → Tm(Γ,𝐴;𝐶) → Tm(Γ,𝐵;𝐶) → Tm(Γ,𝐶).
+- ⟦𝐴⇒𝐵⟧ = ⟦𝐴⟧ → ⟦𝐵⟧; Env(𝜖) = Unit, Env(Γ,𝐴) = Env Γ × ⟦𝐴⟧; lookup(vz,(𝜌,𝑣)) = 𝑣, lookup(vs 𝑖,(𝜌,𝑣)) = lookup(𝑖,𝜌).
+- eval is the standard structural recursion: var by lookup, lit 𝑏 to 𝑏, lam 𝑡 to 𝜆𝑣. eval(𝑡,(𝜌,𝑣)), app by application, pairs and sums componentwise, case into its branch with (𝜌,𝑣) or (𝜌,𝑤). These are structurally recursive host terms, and a concrete evaluator may represent lam as a closure (𝑡,𝜌).
+
+*Substitution theorem.* Renamings are 𝜎 ∶ ∏_𝐴 Var(Γ,𝐴) → Var(Δ,𝐴); substitutions are 𝜃 ∶ ∏_𝐴 Var(Γ,𝐴) → Tm(Δ,𝐴). lift(𝜃)(vz) ∶= var vz, lift(𝜃)(vs 𝑖) ∶= weaken(𝜃 𝑖); subst(𝜃, var 𝑖) ∶= 𝜃 𝑖, subst(𝜃, lam 𝑡) ∶= lam(subst(lift 𝜃, 𝑡)). Other constructors recurse, and each case branch uses lift 𝜃. evalEnv is defined by lookup(𝑖, evalEnv(𝜃,𝜌)) ∶= eval(𝜃 𝑖, 𝜌), with the binder law, an equality of extended environments:
+
+  evalEnv(lift 𝜃, (𝜌,𝑣)) = (evalEnv(𝜃,𝜌), 𝑣)
+
+It holds because both sides look up 𝑣 at vz, and at vs 𝑖 weakening and the weakening lemma reduce to eval(𝜃 𝑖, 𝜌); environment extensionality concludes.
+
+**Theorem.** eval(subst(𝜃,𝑡), 𝜌) = eval(𝑡, evalEnv(𝜃,𝜌)).
+
+*Proof.* Induction on constructors:
+
+- var: by definition;
+- app: by congruence;
+- lam: for arbitrary 𝑣, the binder law plus the induction hypothesis, then funext on the closures;
+- products and sums: by their constructors and eliminators, with the binder law in case.
+
+These are all of the grammar's constructors.
