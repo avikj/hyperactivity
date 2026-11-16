@@ -651,3 +651,154 @@ Termination-sensitive weak correspondence: ignoring finite internal steps must n
 ContBlock_ℎ(𝑎, 𝑃, 𝑝) ∶= ∑_{𝑏∶Bytes} ∏_𝐶 Contains(𝐶,𝑎,𝑏) → ∏_𝑠 (𝑃(𝑠) × (pc 𝑠 = 𝑎)) → Sim(machProc_𝐶 𝑠, ℎ*𝑝) (7.6b). §9.3's containing-image, decoder, loader and resource premises stay in 𝑃 or the context. For a guarded fixpoint 𝑝 = fix(𝜆self. body self), a target loop realizes one turn by finite blocks and a back branch. If the blocks re-establish 𝑃 and give a guarded step from a delayed hypothesis, the turn proof has type ▷Sim → Sim, and Löb induction closes the back edge. Neither the jump nor the fixpoint establishes the simulation; the one-turn proof, the handler correspondence and the invariant do.
 
 No-resource-failure continuation needs a re-established resource invariant in 𝑃. Example: live bound 𝐵, arena 𝐾 ≥ 2𝐵, two semispaces of 𝐾/2. At each turn boundary Live(𝑠) ≤ 𝐵, roots enumerate every reachable retained value, and Free(𝑠) covers the turn's temporaries. If a turn allocates at most 𝐴 between collections and a collection copies at most 𝐵, then 𝐾/2 ≥ 𝐵+𝐴 suffices for this schedule, with collection and root-update correctness supplied by their machine blocks. TurnSafe ∶ ∏_𝑠 (𝑃 𝑠 → ∑_{𝑠′}(FiniteTurn(𝑠,𝑠′) × 𝑃 𝑠′ × NoResourceFault(𝑠 ⇝ 𝑠′))) and LoopSafe ∶ 𝑃(𝑠₀) → Always^𝜅(NoResourceFault) (7.6e), with Always by guarded recursion over turns: induction covers every finite prefix and the guarded continuation gives ongoing safety under these bounds. The semispace figures are a sufficient example, not a claim that all programs have bounded live state. If the specification admits resource failure as observable, relate that outcome instead; no-failure is an application theorem with its own premises, not a default of guardedness.
+
+## 8. Existing programming languages inside the host
+
+A lifted C++ program keeps its standard's distinctions (permitted results, unspecified choices, UB, lifetimes, concurrent events) while becoming available to the host's operations on syntax, meaning and evidence. The references are ISO/IEC 14882:2020 (19) and the formal concurrency and executable semantics of Batty et al. (20). C++'s many historically contingent distinctions are part of the specified process and representable exactly; their number creates no new kind of reasoning. The aim is that existing C++ stays the ordinary source presentation while its actual interpreted constructions are open to the full language.
+
+A complete presentation covers lexing and grammar, name lookup, overload resolution, templates and instantiation, constant evaluation, types and conversions, lifetimes, allocation, exceptions, atomics, concurrency and the behavior categories, and it separates standard semantics from a particular compiler and target. With CppSyntax, CppJudgment and CppExec fixed by standard version and implementation parameters, CppMeaning ∶ CppSyntax → Input → Trace → 𝒰 (8.1). It is a relation on traces when nondeterministic, and UB follows the selected formal account, never an unjustified ordinary fault.
+
+- Annotations are terms on exact constructs; proofs about a body refer to its source semantics, memory effects included; transformations output new source plus a proof of equivalence or refinement. C++ stays the surface notation while the host supplies dependent types, paths, higher metaprogramming and proofs.
+- Unlike a comment, an annotation has a type, scope, interpretation and equality relation, and the checker knows which declaration it concerns. Erasure or elaboration back to C++ is a separately defined operation with a separately proved property.
+- Safe(𝑝) ∶= ∏_{𝑠,𝑠′,𝑡} CppExec(𝑝,𝑠,𝑠′,𝑡) → MemoryInvariant(𝑠,𝑠′,𝑡) (8.2). A transformation 𝑇 is checked against a relation between original and transformed executions. Dependent properties transport when that relation is an equivalence or path; a refinement needs refinement reasoning, because univalence does not invert a one-way simulation.
+- A full formal C++ is a large particular object. Its size is the size of a definition, not a change of foundation, and specialized decision procedures and libraries are terms to compose.
+
+### 8.1 Source annotations are expressions attached to exact objects
+
+For a declaration 𝑑 with elaborated type 𝜏 and body 𝑏: Annotation(𝑑) ∶= ∑_{𝑃∶Sem_𝐿(𝑑)→𝒰} 𝑃(⟦𝑑⟧_𝐿), with ⟦𝑑⟧_𝐿 ∶ Sem_𝐿(𝑑) (8.3). Sem may be a function or a relation on executions, and no single runtime value is assumed. An extended presentation carries paths, Π and proofs beside syntax that has none, and erases them on projection. Erasure is sound only for annotations that don't change runtime meaning. Generating declarations or changing behavior needs elaboration plus a preservation or refinement theorem. These two cases must not be collapsed into one "zero-runtime annotation" claim.
+
+### 8.2 One program through source and target representations
+
+For standard and parameters 𝐿 and build configuration 𝐵, a C++ term 𝑝 is a constituent of the enclosing hyperactivity program, and build_𝐵(𝑝) is the executable representation of that same computation. Source behavior, machine behavior and 𝑃 are constructions about one program linked by checked compilation and execution evidence, not a separately written verification model next to a separately deployed system.
+
+- SourceBeh_𝐿(𝑝,𝑥,𝑡) and TargetBeh_𝐵(𝑝,𝑥,𝑡) are types.
+- Conforms_𝐵(𝑝) ∶= ∏_{𝑥,𝑡} TargetBeh → SourceBeh.
+- Correct_𝐿(𝑝,𝑃) ∶= ∏_{𝑥,𝑡} SourceBeh → 𝑃(𝑥,𝑡) (8.4).
+
+The two compose to 𝑃 for the artifact: preservation evidence plus the source property, both part of programming the actual computation. A displayed proposition is not a proof term; the compiler and checker build or verify its inhabitant. Source, compiler, loader, machine and all their proofs can be components of the enclosing program. Precisely, TargetBeh_{𝐶,𝑀}(𝑝,𝑥,𝑜) ∶= ‖∑_{𝜏∶Exec_𝑀(load_𝑀(𝐶 𝑝), 𝑥)} obs_𝑀(𝜏) = 𝑜‖ (8.5). A refinement proof maps each observed target execution to an allowed source observation, so a property of all allowed source observations holds for the artifact by composition. Artifact, loader, machine and observation are explicit, and no new notion of meaning is introduced.
+
+### 8.3 Representations, operations, and memory
+
+- Word32 ∶= Fin(2³²), Bytes4 ∶= Fin(4) → Fin(256), encodeLE ∶ Word32 → Bytes4 (8.6), with encodeLE(𝑤)(𝑗) = ⌊𝑤/256^𝑗⌋ mod 256 (8.7) and decodeLE(𝑏) = ∑_{𝑗≤3} 256^𝑗 𝑏(𝑗) mod 2³² (8.8).
+- Both round trips hold (8.9), so there is a path of types by ua, and word operations transport to bytes.
+- add32(𝑥,𝑦) ∶= (𝑥+𝑦) mod 2³² (8.10); addBytes(𝑎,𝑏) ∶= encodeLE(add32(decodeLE 𝑎, decodeLE 𝑏)) (8.11); decodeLE(addBytes 𝑎 𝑏) = add32(decodeLE 𝑎, decodeLE 𝑏) (8.12), by the round-trip law.
+
+This is a complete representation calculation, but not yet a theorem about a C++ load. That needs C++ semantics fixing which four bytes form a live uint32_t, the alignment and provenance required, little-endianness, and permission under the object model. It is also not a theorem about CPU electronics. Those are further premises, not a different foundation. Source syntax is the same: tokens, typed AST, interpreter closure and machine artifact are related by relations that are not automatically equivalences. Parsing may drop comments, optimization may keep observations but not instruction traces, and compiling unspecified behavior may pick one permitted behavior. Precision is stating which relation holds.
+
+**Enumerating, forgetting labels, preserving graph structure.**
+
+- An enumeration is (𝑛, 𝑒 ∶ 𝐴 ≃ Fin 𝑛), a chosen labeling; Card(𝐴) ∶= ∑_𝑛 ‖𝐴 ≃ Fin 𝑛‖ keeps the number only. Permutations act by 𝜎 ∘ 𝑒.
+- 𝑄_𝐴 is the set quotient of enumerations by that action, with points inc(𝑛,𝑒), paths inc(𝑛,𝑒) = inc(𝑛, 𝜎∘𝑒), and set truncation. Cardinality uniqueness equates the numbers, and at the common number the equivalences differ by a permutation. So 𝑄_𝐴 is a proposition, and the recursor gives 𝑄_𝐴 ≃ Card(𝐴): forward forgets the enumeration, reverse eliminates truncation into 𝑄_𝐴. A chosen enumeration is not thereby identical to a cardinality.
+- Graph_𝑛 ∶= Fin 𝑛 → Fin 𝑛 → Bool with (𝜎⋅𝐺)(𝑖,𝑗) ∶= 𝐺(𝜎⁻¹𝑖, 𝜎⁻¹𝑗). Unlabelled_𝑛 has incl(𝐺), paths incl 𝐺 = incl(𝜎⋅𝐺), and set truncation. A set-valued invariant descends exactly when supplied with the relabeling paths. This deliberately forgets automorphism paths.
+- To keep them: GraphSym_𝑛 ∶= ∑_{𝑋∶𝒰} ‖𝑋 ≃ Fin 𝑛‖ × (𝑋 → 𝑋 → Bool). Its identities (𝑋,𝐺) = (𝑌,𝐻) are equivalent to 𝑒 ∶ 𝑋 ≃ 𝑌 with ∏_{𝑥,𝑥′} 𝐻(𝑒𝑥, 𝑒𝑥′) = 𝐺(𝑥,𝑥′), the truncated finiteness witness adding no identity data. Positions 𝑝 ∶ 𝑋 → ℝ² move to 𝑝 ∘ 𝑒⁻¹, and selected vertices and property proofs move along the same equivalence. Identifying shapes does not license leaving node-indexed data untouched.
+- Matrix_𝑛 ∶= Fin 𝑛 → Fin 𝑛 → Bool and AdjList_𝑛 ∶= ∑_{𝐿∶Fin 𝑛 → List(Fin 𝑛)} ∏_𝑖 (Sorted(𝐿𝑖) × NoDup(𝐿𝑖)), canonical lists only, with propositional laws under the standard order on Fin 𝑛. Membership gives lists → matrix; enumerating each row's true entries in increasing order gives the inverse. matrix → list → matrix is the identity pointwise by Boolean extensionality; list → matrix → list is the identity because rows are sorted and duplicate-free, with witnesses identified by propositionality. So the equivalence is Matrix_𝑛 ≃ AdjList_𝑛, not matrices with all lists, which would only give canonical representatives. Algorithms and proofs transport across it, and relabeling and matrix/list conversion are distinct transformations.
+
+**Indexed packing and transport of an operation.** With Vec(𝐴,𝑛) ∶= Fin 𝑛 → 𝐴: pack(𝑥,𝑦)(inl 𝑖) ∶= 𝑥𝑖, pack(𝑥,𝑦)(inr 𝑗) ∶= 𝑦𝑗, unpack 𝑧 ∶= (𝜆𝑖.𝑧(inl 𝑖), 𝜆𝑗.𝑧(inr 𝑗)), and 𝑒_{𝑚,𝑛} ∶ Vec(𝐴,𝑚) × Vec(𝐴,𝑛) ≃ (Fin 𝑚 + Fin 𝑛 → 𝐴), with composites the identity by pair equality and funext. An operation 𝑓 on pairs becomes pack ∘ 𝑓 ∘ unpack, and its dependent specification and preservation proof transport along ua(𝑒_{𝑚,𝑛}). This is a complete index-level change. Byte layout or native in-place update adds its own state and address correspondence; packing indices does not establish alias freedom or layout equivalence.
+
+### 8.4 Executing an imperative operation is already a function
+
+`*p += 1` on a valid mutable 32-bit word at 𝑎 is, under language premises, inc_𝑎 ∶ 𝑆_valid(𝑎) → 𝑆_valid(𝑎) with read_𝑎(inc_𝑎 𝑠) = add32(read_𝑎 𝑠, 1) (8.13). The full specification adds a frame condition for other locations and, under concurrency, the permitted interleavings and memory orders. The imperative operation is no less exact than (8.11); its domain just has more state and premises. A proof inhabits ∏_{𝑠∶𝑆_valid(𝑎)} read_𝑎(inc_𝑎 𝑠) = add32(read_𝑎 𝑠, 1) (8.14). A layout change transports state and proof given a structured equivalence of machine states. Expression, typed syntax, interpretation and proof stay separately identifiable, and no privileged sequence of attach, then lower, then realize is required; any of these objects and relations can be worked on.
+
+**A concrete declaration.**
+
+```cpp
+#include <cstdint>
+void increment(std::uint32_t* p) { *p += 1u; }
+```
+
+The parse gives a function with one pointer parameter, a compound assignment, a dereference and an unsigned literal. Lookup resolves std::uint32_t to the implementation's exact-width type when supplied. Static rules require a modifiable lvalue of that type and a well-formed compound assignment. The elaboration holds resolved types and binding identities, not just characters. Let 𝑆_𝑝 be the states where 𝑝 designates a live, writable, aligned uint32_t with no conflicting concurrent access, with load_𝑝, store_𝑝 and the frame law on disjoint objects. The sequential source semantics gives:
+
+- increment(𝑠) ∶= store_𝑝(𝑠, load_𝑝 𝑠 +₃₂ 1);
+- load_𝑝(increment 𝑠) = load_𝑝 𝑠 +₃₂ 1;
+- frame_𝑞(increment 𝑠) = frame_𝑞 𝑠 for 𝑞 disjoint from 𝑝 (8.15).
+
+The first is this statement's denotation under its premises, and the others follow from the store/load and frame laws. The event trace is a read then a write at 𝑝, in source sequencing order. The byte-level version comes from (8.6)–(8.12) by transport along the structured state equivalence. Text, elaborated syntax, abstract-machine transformation and compiled behavior are distinct representations linked by these equations and the chosen refinement theorem.
+
+### 8.5 Machine representations and memory laws
+
+A representation is either an equivalence of types, with transport by ua, or a stated relation from concrete to abstract states, where the relation or quotient says what is hidden. These are different objects. (3.6)–(3.7) is the information-preserving factorization, and observational refinement is §8.2.
+
+- **Arrays** use §4's Vec ≃ Fin 𝑛 → 𝐴. Transporting update is characterized by index(update(𝑣,𝑖,𝑎), 𝑗) = 𝑎 if 𝑗 = 𝑖, else index(𝑣,𝑗) (8.16). That equation is the obligation tying an in-place or packed implementation to the array operation; maps between element containers are not enough.
+- **Matrices** Fin 𝑚 × Fin 𝑛 → 𝐴 get a flat layout from a bijection with Fin(𝑚𝑛). Row-major and column-major are two such bijections, and a layout change transports data and dependent constructions. Strides and alignment add encoding and address arithmetic. Tensors are the same argument, not a separate foundation.
+- **Exact scalars.** 𝑈_𝑤 = Fin(2^𝑤): + and × are mod 2^𝑤, subtraction is the residue, and bitwise operations act on the 𝑤 digits. A native primitive implements these under a checked theorem or a named primitive assumption.
+  - Nat, the runtime's unbounded Word and fixed-width words like U64 are distinguished. A small-integer fast path for Nat may spill to larger storage and is not equivalent to U64. {𝑛 ∶ Nat ∣ 𝑛 < 2⁶⁴} ≃ U64, but unbounded + is not closed on it without a result bound.
+  - Division, shifts and signed interpretation have explicit definitions. A host primitive may define division by zero as a distinguished result or reduce shift counts mod width, but a lifted C++ operation uses C++'s definedness conditions; a primitive's convenience convention never silently replaces source behavior. Two's-complement storage and signed arithmetic semantics are separate choices, and a bit pattern does not justify overflowing C++ signed arithmetic.
+  - Floats include format, signed zeros, infinities, NaNs and observable bit distinctions. Operations depend on rounding mode and exception environment, and fused and unfused are different functions. Transformations use laws valid in the chosen semantics (real associativity doesn't license reassociating float addition), or a specification proves a bounded error relation to a real function.
+- **Bytes, layouts, validity.** Byte = U8 and Bytes 𝑛 = Fin 𝑛 → Byte. An encoding is enc ∶ 𝐴 → Bytes 𝑛 with dec ∶ Bytes 𝑛 → Option 𝐴. The minimum law is dec(enc 𝑎) = some 𝑎. Canonicity adds enc 𝑎 = 𝑏 whenever dec 𝑏 = some 𝑎; without it, padding and redundant encodings stay distinguishable. A full equivalence is with valid canonical encodings plus evidence, not with all 𝑛-byte strings.
+  - LE U64: enc(𝑥)(𝑖) = ⌊𝑥/256^𝑖⌋ mod 256, dec(𝑏) = ∑_{𝑖≤7} 256^𝑖 𝑏(𝑖) (8.17); range bounds give both round trips. A load from a larger region also needs the offset bound, architectural alignment, and the source semantics' permission to access the bytes as that value; integer inequalities don't establish lifetime or pointer validity.
+  - Records combine field encodings at offsets with alignment and padding. Sums also encode the tag and its relation to the active payload. Recursive structures use addresses and allocation metadata. ABI layouts include every observable detail: calling convention, alignment, padding, tag placement, register classes, return convention, object and exception ABI.
+- **Memory as state** (Hoare and separation logic, 17, 37).
+  - Elementary model: 𝑀 ∶ Addr → Byte plus an allocated domain, with store(𝑀,𝑎,𝑣)(𝑏) = 𝑣 if 𝑏 = 𝑎, else 𝑀(𝑏) (8.18). Read-after-write and frame laws follow, as proofs about the memory-changing operation. Mutation doesn't displace functional reasoning; it picks the transition reasoned about.
+  - Source memory state usually has more: allocation identities, extents, lifetimes, permissions, provenance, active union members, synchronization events. An address-only model is a useful target or abstraction when a theorem or explicit assumption connects it to the rich one. Reusing a physical address after free does not resurrect an old source pointer.
+  - Allocation consumes state and returns failure or a pointer plus an updated state satisfying the allocation conditions. A region allocator keeps [base,end) and a cursor, and allocating 𝑛 aligned bytes computes the aligned cursor and advances only after checking the calculation and range. Deallocation ends the lifetime. Logical metadata can be erased from the native representation once its uses are discharged.
+  - Separation is about disjoint resources: a frame theorem says a transition on one component preserves the others. Linear or affine usage can make exclusivity visible from uses but does not replace the semantic statement about aliases. Runtime graph refcounts and source ownership are distinct, even when an implementation uses both to avoid copies.
+  - For persistent values, unique use licenses destructive reuse of storage. If another live reference may see the old value, it must be preserved by copying or a proved sharing discipline. The transformation is accepted because it preserves source observations, not because the store is fast.
+- **The loop** is (7.4) applied to real C++ memory and integer semantics, array-access premises and unsigned wraparound included. There is no second loop theorem.
+
+### 8.6 C++ static and dynamic semantics
+
+The frontend keeps source structure and elaborated choices. Input includes preprocessing context, headers or module units, macros, translation options and TU boundaries. The static semantics covers at least these categories, each preserved in the lifted object and governed by the standard's clauses:
+
+- translation and preprocessing: tokens, macro expansion, inclusion, conditional translation, modules, linkage, ODR;
+- names and declarations: scopes, lookup, ADL, access, declaration identity, overload sets;
+- types and expressions: value categories, cv, conversions, initialization, overload resolution, selected implicit operations;
+- classes: base subobjects, inheritance, ctors/dtors, special members, virtuals, member access;
+- templates and constraints: deduction, substitution, partial ordering, specialization, dependent lookup, instantiation, SFINAE, constraint satisfaction;
+- constant evaluation: permitted constant expressions, diagnostics, result;
+- program assembly: TU relationships, instantiated entities, required definitions, library/ABI dependencies.
+
+A template is a program parameterized by its arguments, but its interpretation includes these rules. An unconstrained type-level lambda would lose deduction, lookup, overload selection and SFINAE, and ordinary application describes the explicit parameterization only after those rules apply. Clang's elaborated AST makes many choices explicit. Using it is a declared frontend assumption unless its output is independently validated against source semantics or the frontend has the required connection. A lifted Clang preserves what that Clang does, not standard conformance. Source mapping is kept so properties and transformations attach to the actual declarations and expressions.
+
+**Dynamic semantics.** Process state holds the control, object, thread and external-world interface the standard requires, and an ABI realization adds layouts and runtime data. Required distinctions, not erased by lowering to byte loads and stores:
+
+- objects and storage: allocation, alignment, storage duration, initialization, lifetime start/end, subobjects, union members, implicit creation, pointer validity/provenance;
+- expressions: sequencing, permitted evaluation orders, side effects, value categories, temporary materialization, destruction;
+- pointers and references: permitted arithmetic and comparisons, one-past, casts, references, pointer-to-member, invalidation;
+- class execution: base/member initialization, dynamic type during construction/destruction, virtual dispatch, RTTI, destructor effects;
+- control transfer: return, jumps, exceptions, handler selection, unwinding, cleanup order, termination;
+- coroutines: frame creation and lifetime, suspension, resumption, completion, destruction;
+- arithmetic: widths and conversions, signed definedness, FP environment, implementation-defined results;
+- concurrency: threads, TLS, atomics with all ordering parameters, fences, synchronization, races, forward progress;
+- library and environment: library contracts and implementation, allocation interfaces, I/O, termination, platform extensions and syscalls.
+
+Also included: bit-fields, varargs, captures, placement and class-specific allocation, over-alignment, static and TLS init/destruction, multiple and virtual inheritance, and library operations with nonlocal control. Volatile, atomics and device memory keep their own contracts, not one generic load. The selected source and platform specifications decide each case.
+
+The abstract machine prescribes no vtable; the ABI does. A source virtual call selects the overrider, and the ABI connection explains the vtable access, this-adjustment and call sequence. Likewise exception cleanup connects to the chosen unwinding tables and runtime. Keeping the levels apart allows both source reasoning and exact inspection of existing layouts.
+
+**Semantic classes stay distinct.**
+
+- Implementation-defined behavior is a documented profile parameter 𝜃.
+- Unspecified behavior is permitted choices in a relation, never one branch silently chosen by a deterministic interpreter.
+- UB marks a violation where the standard constrains nothing; it is not a harmless return value. In a behavior-set semantics it may be the top set, so refinement cannot exclude a target observation just because the source hit UB. Whether an observable prefix before UB is kept is an explicit choice of the formalization, not something the standard guarantees. For defined executions, the target satisfies §8.2's refinement.
+- This is also the boundary of a Clang-based lift. An elaborated AST, with preprocessing context, selected overloads, instantiated templates and locations, is derivation-shaped for some static judgments. Importing it into StdDeriv needs a stated translation and evidence that each elaboration decision satisfies the selected rule instances. Until established, that is an explicit frontend assumption, not automatically (5.13)'s 𝑔, which concerns an already selected signature. Proving the frontend constructs only admitted elaborations discharges it on its input domain. Full C++ fidelity also covers dynamic semantics and the prose-to-rule correspondence; frontend soundness doesn't give those.
+- An implementation's behavior after source UB can still be studied through its own semantics.
+- Ill-formed programs and required diagnostics are static semantics. IFNDR keeps its classification rather than being treated as valid, and extensions are marked as extensions. This matters when a lifted program is used to claim portability, not just to preserve a deployed binary.
+
+**A bounded C++ frame decoder.** C++20 abstract machine; a live readable byte array 𝑏 of length 𝑛; a disjoint, live, writable Frame at out; no concurrent mutation of the input.
+
+```cpp
+struct Frame { std::uint64_t tag, length; const std::uint8_t* data; };
+bool decode(const std::uint8_t* b, std::size_t n, Frame* out) {
+    if (n < 4) return false;
+    auto len = std::uint64_t(b[2]) | (std::uint64_t(b[3]) << 8);
+    if (len > n - 4) return false;
+    out->tag = std::uint64_t(b[0]) | (std::uint64_t(b[1]) << 8);
+    out->length = len;
+    out->data = b + 4;
+    return true;
+}
+```
+
+With tag = 𝑏₀ + 2⁸𝑏₁ and ℓ = 𝑏₂ + 2⁸𝑏₃, the behavior, including the memory frame (8.19), is:
+
+- false with output unchanged if 𝑛 < 4;
+- false with output unchanged if 𝑛 ≥ 4 ∧ ℓ > 𝑛−4;
+- true with output (tag, ℓ, 𝑏+4) if 𝑛 ≥ 4 ∧ ℓ ≤ 𝑛−4.
+
+Why:
+
+- The first test precedes every byte access. Afterwards 𝑛 ≥ 4, so 𝑛−4 doesn't underflow and the four header reads are in bounds.
+- If ℓ > 𝑛−4, nothing has been written. Otherwise 4+ℓ ≤ 𝑛, so the payload view is inside the allocation, and the three writes touch only the distinct, live Frame.
+- The arithmetic is exact since 𝑏ᵢ < 256 and tag, ℓ < 2¹⁶.
+
+The proof is about the actual interpreted C++ declaration, not a rewritten model. It attaches by §6's erasure construction, and erasure returns this body. Replacing two byte reads by a 16-bit load is a separate transformation whose proof must establish alignment, aliasing, endianness and memory validity. This is the source-level memory proof, distinct from §9's pure bytecode example.
