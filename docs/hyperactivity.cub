@@ -1410,17 +1410,17 @@ s9-p6 = prose (cons "The direction shown is refinement: a compiled artifact must
 s9-p7 : Block
 s9-p7 = prose (cons "A complete small instance makes this concrete. Let the stack machine have instructions" nil)
 s9-p8 : Block
-s9-p8 = construction (cons "\[" (cons "\mathsf{PUSHINPUT},\quad" (cons "\mathsf{PUSHCONST}(b),\quad" (cons "\mathsf{XOR},\quad" (cons "\mathsf{HALT}," (cons "\tag{9.2}" (cons "\]" nil)))))))
+s9-p8 = realized (construction (cons "\[" (cons "\mathsf{PUSHINPUT},\quad" (cons "\mathsf{PUSHCONST}(b),\quad" (cons "\mathsf{XOR},\quad" (cons "\mathsf{HALT}," (cons "\tag{9.2}" (cons "\]" nil)))))))) (cons "op01" (cons "op02" (cons "op03" (cons "opff" nil))))
 s9-p9 : Block
 s9-p9 = prose (cons "encoded respectively by bytes `01`, `02 b`, `03`, `ff`. The expression compiler is" nil)
 s9-p10 : Block
-s9-p10 = construction (cons "\[" (cons "\begin{aligned}" (cons "C(\mathsf{Input})&=[01],\\" (cons "C(\mathsf{Const}(b))&=[02,b],\\" (cons "C(\mathsf{Xor}(u,v))&=C(u)++C(v)++[03]." (cons "\end{aligned}" (cons "\tag{9.3}" (cons "\]" nil))))))))
+s9-p10 = realized (construction (cons "\[" (cons "\begin{aligned}" (cons "C(\mathsf{Input})&=[01],\\" (cons "C(\mathsf{Const}(b))&=[02,b],\\" (cons "C(\mathsf{Xor}(u,v))&=C(u)++C(v)++[03]." (cons "\end{aligned}" (cons "\tag{9.3}" (cons "\]" nil))))))))) (cons "sm-code" nil)
 s9-p11 : Block
 s9-p11 = prose (cons "The exact correctness theorem is stronger than “the result is right”: for any initial stack \(S\), running \(C(e)\) with input \(x\) transforms \(S\) into \(E(e,x)::S\), leaving the prior stack untouched. The induction step for XOR composes the two induction hypotheses and applies the stack XOR instruction." nil)
 s9-p12 : Block
 s9-p12 = prose (cons "For the XOR expression of §5.6 with \(k=0x5a\), the complete artifact is" nil)
 s9-p13 : Block
-s9-p13 = construction (cons "```text" (cons "01 02 5a 03 02 5a 03 ff" (cons "```" nil)))
+s9-p13 = realized (construction (cons "```text" (cons "01 02 5a 03 02 5a 03 ff" (cons "```" nil)))) (cons "sm-p0-bytes" nil)
 s9-p14 : Block
 s9-p14 = prose (cons "The execution pushes \(x\), pushes `5a`, XORs, pushes `5a`, XORs again, and halts with \(x\). This byte-level construction has a compositional proof; §9.2 establishes the universal evaluator-mediated realization under its stated premises." nil)
 s9-p15 : Block
@@ -1472,17 +1472,17 @@ s9-3-p3 = heading (suc (suc (suc (suc zero)))) "Source syntax and meaning"
 s9-3-p4 : Block
 s9-3-p4 = prose (cons "Fix `Byte = Fin(256)`, represented by eight bits, and write \(a\oplus b\) for pointwise Boolean exclusive-or. The source expressions are:" nil)
 s9-3-p5 : Block
-s9-3-p5 = construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{Expr}&::=\mathsf{Input}\mid\mathsf{Const}(b)" (cons "  \mid\mathsf{Xor}(e_1,e_2),\\" (cons "E(\mathsf{Input},x)&:=x,\\" (cons "E(\mathsf{Const}(b),x)&:=b,\\" (cons "E(\mathsf{Xor}(u,v),x)&:=E(u,x)\oplus E(v,x)." (cons "\end{aligned}" (cons "\tag{9.4}" (cons "\]" nil))))))))))
+s9-3-p5 = realized (construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{Expr}&::=\mathsf{Input}\mid\mathsf{Const}(b)" (cons "  \mid\mathsf{Xor}(e_1,e_2),\\" (cons "E(\mathsf{Input},x)&:=x,\\" (cons "E(\mathsf{Const}(b),x)&:=b,\\" (cons "E(\mathsf{Xor}(u,v),x)&:=E(u,x)\oplus E(v,x)." (cons "\end{aligned}" (cons "\tag{9.4}" (cons "\]" nil))))))))))) (cons "Expr" (cons "denote" nil))
 s9-3-p6 : Block
 s9-3-p6 = heading (suc (suc (suc (suc zero)))) "Target machine, decoder, and execution"
 s9-3-p7 : Block
 s9-3-p7 = prose (cons "A state consists of a program counter, a byte stack, a fixed input byte, and either `running`, `halted`, or `fault`:" nil)
 s9-3-p8 : Block
-s9-3-p8 = construction (cons "\[" (cons "\mathsf{State}:=\mathbb N\times\mathsf{List}(\mathsf{Byte})" (cons "\times\mathsf{Byte}\times\mathsf{Status}." (cons "\tag{9.5}" (cons "\]" nil)))))
+s9-3-p8 = realized (construction (cons "\[" (cons "\mathsf{State}:=\mathbb N\times\mathsf{List}(\mathsf{Byte})" (cons "\times\mathsf{Byte}\times\mathsf{Status}." (cons "\tag{9.5}" (cons "\]" nil)))))) (cons "SmStatus" (cons "SmState" nil))
 s9-3-p9 : Block
 s9-3-p9 = prose (cons "The **top of the stack is the leftmost element**. Let \(B\) be a finite byte array of length \(|B|\), addressed from zero. Instruction fetch reads \(B[pc]\), trapping when \(pc\geq|B|\). The complete instruction table is:" nil)
 s9-3-p10 : Block
-s9-3-p10 = prose (cons "| Encoding | Length | Preconditions | State transition |" (cons "|:--|--:|:--|:--|" (cons "| `01` | 1 | running | `(pc,S,x) ↦ (pc+1,x::S,x)` |" (cons "| `02 b` | 2 | running; `pc+1 < |B|` | `(pc,S,x) ↦ (pc+2,b::S,x)` |" (cons "| `03` | 1 | running; `S=b::a::R` | `(pc,S,x) ↦ (pc+1,(a xor b)::R,x)` |" (cons "| `ff` | 1 | running | `(pc,S,x) ↦ (pc+1,S,x,halted)` |" nil))))))
+s9-3-p10 = realized (prose (cons "| Encoding | Length | Preconditions | State transition |" (cons "|:--|--:|:--|:--|" (cons "| `01` | 1 | running | `(pc,S,x) ↦ (pc+1,x::S,x)` |" (cons "| `02 b` | 2 | running; `pc+1 < |B|` | `(pc,S,x) ↦ (pc+2,b::S,x)` |" (cons "| `03` | 1 | running; `S=b::a::R` | `(pc,S,x) ↦ (pc+1,(a xor b)::R,x)` |" (cons "| `ff` | 1 | running | `(pc,S,x) ↦ (pc+1,S,x,halted)` |" nil))))))) (cons "sm-drop" (cons "sm-fetch" (cons "sm-op" (cons "sm-push-const" (cons "sm-xor-top" (cons "sm-step" (cons "sm-run" nil)))))))
 s9-3-p11 : Block
 s9-3-p11 = prose (cons "Every other opcode, truncated `02`, or stack underflow transitions to `fault` without further instruction execution. The input byte is immutable. Code bytes are immutable during a run. The `03` instruction consumes the top two stack values in last-in-first-out order. XOR is commutative, so the order is immaterial for this source language." nil)
 s9-3-p12 : Block
@@ -1490,17 +1490,17 @@ s9-3-p12 = prose (cons "Define \(\mathsf{step}_B:\mathsf{State}\to\mathsf{State}
 s9-3-p13 : Block
 s9-3-p13 = heading (suc (suc (suc (suc zero)))) "Compilation as concatenation of bytes"
 s9-3-p14 : Block
-s9-3-p14 = construction (cons "\[" (cons "\begin{aligned}" (cons "C(\mathsf{Input})&:=[01],\\" (cons "C(\mathsf{Const}(b))&:=[02,b],\\" (cons "C(\mathsf{Xor}(u,v))&:=C(u)\mathbin{++}C(v)\mathbin{++}[03],\\" (cons "\mathsf{program}(e)&:=C(e)\mathbin{++}[ff]." (cons "\end{aligned}" (cons "\tag{9.6}" (cons "\]" nil)))))))))
+s9-3-p14 = realized (construction (cons "\[" (cons "\begin{aligned}" (cons "C(\mathsf{Input})&:=[01],\\" (cons "C(\mathsf{Const}(b))&:=[02,b],\\" (cons "C(\mathsf{Xor}(u,v))&:=C(u)\mathbin{++}C(v)\mathbin{++}[03],\\" (cons "\mathsf{program}(e)&:=C(e)\mathbin{++}[ff]." (cons "\end{aligned}" (cons "\tag{9.6}" (cons "\]" nil)))))))))) (cons "sm-code" (cons "sm-program" nil))
 s9-3-p15 : Block
 s9-3-p15 = prose (cons "Let \(\#(e)\) be the number of source AST nodes. Every node contributes exactly one target instruction, so the number of target instructions in \(C(e)\) is \(\#(e)\). The byte length is computed structurally:" nil)
 s9-3-p16 : Block
-s9-3-p16 = construction (cons "\[" (cons "\begin{aligned}" (cons "\ell(\mathsf{Input})&=1,&\ell(\mathsf{Const}(b))&=2,\\" (cons "\ell(\mathsf{Xor}(u,v))&=\ell(u)+\ell(v)+1,&" (cons "|C(e)|&=\ell(e)." (cons "\end{aligned}" (cons "\tag{9.7}" (cons "\]" nil))))))))
+s9-3-p16 = realized (construction (cons "\[" (cons "\begin{aligned}" (cons "\ell(\mathsf{Input})&=1,&\ell(\mathsf{Const}(b))&=2,\\" (cons "\ell(\mathsf{Xor}(u,v))&=\ell(u)+\ell(v)+1,&" (cons "|C(e)|&=\ell(e)." (cons "\end{aligned}" (cons "\tag{9.7}" (cons "\]" nil))))))))) (cons "sm-size" (cons "sm-length-append" nil))
 s9-3-p17 : Block
 s9-3-p17 = heading (suc (suc (suc (suc zero)))) "The stack-extension invariant"
 s9-3-p18 : Block
 s9-3-p18 = prose (cons "For any stack suffix \(S\), input \(x\), and code prefix position \(a\), assume the bytes \(C(e)\) occupy exactly the interval \([a,a+\ell(e))\) of an immutable code array \(B\). The following theorem is stronger than a top-level output claim because it is stable under arbitrary surrounding stack contents:" nil)
 s9-3-p19 : Block
-s9-3-p19 = construction (cons "\[" (cons "\boxed{" (cons "\begin{gathered}" (cons "\mathsf{run}_B^{\#(e)}" (cons " (a,S,x,\mathsf{running})\\" (cons "=\bigl(a+\ell(e),E(e,x)::S,x,\mathsf{running}\bigr)." (cons "\end{gathered}}" (cons "\tag{9.8}" (cons "\]" nil)))))))))
+s9-3-p19 = realized (construction (cons "\[" (cons "\boxed{" (cons "\begin{gathered}" (cons "\mathsf{run}_B^{\#(e)}" (cons " (a,S,x,\mathsf{running})\\" (cons "=\bigl(a+\ell(e),E(e,x)::S,x,\mathsf{running}\bigr)." (cons "\end{gathered}}" (cons "\tag{9.8}" (cons "\]" nil)))))))))) (cons "sm-extends" (cons "sm-run-plus" (cons "sm-drop-plus" (cons "sm-drop-append" (cons "sm-xor-after-u" (cons "sm-xor-after-v" (cons "sm-xor-last" nil)))))))
 s9-3-p20 : Block
 s9-3-p20 = prose (cons "**Proof by structural induction.** For `Input`, the decoder reads `01` and pushes \(x\). For `Const(b)`, it reads `02 b` and pushes \(b\). For `Xor(u,v)`, apply the induction hypothesis to \(u\) with suffix \(S\), obtaining \(E(u,x)::S\); then apply it to \(v\) with suffix \(E(u,x)::S\), obtaining \(E(v,x)::E(u,x)::S\). The final byte `03` pops both and pushes their XOR. Its program counter advances one byte, producing exactly \(a+\ell(u)+\ell(v)+1\). The trace contains \(\#(u)+\#(v)+1=\#(\mathsf{Xor}(u,v))\) transitions. No branch can fault because the induction hypotheses guarantee sufficient bytes and the final stack has two elements. \(\square\)" nil)
 s9-3-p21 : Block
@@ -1508,13 +1508,13 @@ s9-3-p21 = prose (cons "The theorem is stable under placement in a larger byte a
 s9-3-p22 : Block
 s9-3-p22 = prose (cons "Appending `ff` yields the complete program theorem:" nil)
 s9-3-p23 : Block
-s9-3-p23 = construction (cons "\[" (cons "\begin{aligned}" (cons "B&:=\mathsf{program}(e),\\" (cons "\mathsf{run}_B^{\#(e)+1}" (cons " (0,[],x,\mathsf{running})" (cons "&=\bigl(|B|,[E(e,x)],x,\mathsf{halted}\bigr)." (cons "\end{aligned}" (cons "\tag{9.9}" (cons "\]" nil)))))))))
+s9-3-p23 = realized (construction (cons "\[" (cons "\begin{aligned}" (cons "B&:=\mathsf{program}(e),\\" (cons "\mathsf{run}_B^{\#(e)+1}" (cons " (0,[],x,\mathsf{running})" (cons "&=\bigl(|B|,[E(e,x)],x,\mathsf{halted}\bigr)." (cons "\end{aligned}" (cons "\tag{9.9}" (cons "\]" nil)))))))))) (cons "sm-program-halts" nil)
 s9-3-p24 : Block
 s9-3-p24 = heading (suc (suc (suc (suc zero)))) "A byte-for-byte execution"
 s9-3-p25 : Block
 s9-3-p25 = prose (cons "Let" (cons "\[" (cons " e:=\mathsf{Xor}" (cons "  (\mathsf{Xor}(\mathsf{Input},\mathsf{Const}(0x5a))," (cons "   \mathsf{Const}(0x5a))." (cons "\]" (cons "Then" nil)))))))
 s9-3-p26 : Block
-s9-3-p26 = construction (cons "```text" (cons "source:  Xor(Xor(Input, Const(5a)), Const(5a))" (cons "bytes:   01 02 5a 03 02 5a 03 ff" (cons "address: 00 01 02 03 04 05 06 07" (cons "```" nil)))))
+s9-3-p26 = realized (construction (cons "```text" (cons "source:  Xor(Xor(Input, Const(5a)), Const(5a))" (cons "bytes:   01 02 5a 03 02 5a 03 ff" (cons "address: 00 01 02 03 04 05 06 07" (cons "```" nil)))))) (cons "sm-p0-bytes" (cons "sm-p0-halts" nil))
 s9-3-p27 : Block
 s9-3-p27 = prose (cons "For arbitrary input \(x\), the machine trace is:" nil)
 s9-3-p28 : Block
@@ -1526,7 +1526,7 @@ s9-3-p30 = heading (suc (suc (suc (suc zero)))) "Composition with source transfo
 s9-3-p31 : Block
 s9-3-p31 = prose (cons "Let \(T:\mathsf{Expr}\to\mathsf{Expr}\) and" (cons "\(\tau:\prod_e\prod_x E(T(e),x)\equiv E(e,x)\) be a verified source transformation. The native correctness equation composes with \(\tau\):" nil))
 s9-3-p32 : Block
-s9-3-p32 = construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{run}_{\mathsf{program}(T(e))}^{\#(T(e))+1}" (cons " (0,[],x,\mathsf{running})" (cons "&=\bigl(|\mathsf{program}(T(e))|," (cons "   [E(T(e),x)],x,\mathsf{halted}\bigr)\\" (cons "&\equiv\bigl(|\mathsf{program}(T(e))|," (cons "   [E(e,x)],x,\mathsf{halted}\bigr)." (cons "\end{aligned}" (cons "\tag{9.10}" (cons "\]" nil)))))))))))
+s9-3-p32 = realized (construction (cons "\[" (cons "\begin{aligned}" (cons "\mathsf{run}_{\mathsf{program}(T(e))}^{\#(T(e))+1}" (cons " (0,[],x,\mathsf{running})" (cons "&=\bigl(|\mathsf{program}(T(e))|," (cons "   [E(T(e),x)],x,\mathsf{halted}\bigr)\\" (cons "&\equiv\bigl(|\mathsf{program}(T(e))|," (cons "   [E(e,x)],x,\mathsf{halted}\bigr)." (cons "\end{aligned}" (cons "\tag{9.10}" (cons "\]" nil)))))))))))) (cons "sm-transformed" nil)
 s9-3-p33 : Block
 s9-3-p33 = prose (cons "The final equality is a path in the *result components with the same compiled program and byte length*. It does not identify the byte strings for \(e\) and \(T(e)\), which may differ. This is the precise distinction between semantic preservation and byte-for-byte identity." nil)
 s9-3-p34 : Block

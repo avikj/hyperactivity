@@ -136,3 +136,210 @@ preserve e r = (cancel e , λ x → concat (cancel-sound e x) (r x))
 -- the calculation: cancel p₀ is Input
 cancel-p0 : cancel p0 ≡ Input
 cancel-p0 = λ i → Input
+-- ---------------------------------------------------------------------------------------------------
+-- The paper's §9.3 “An exact decoded machine and a structural compiler theorem”: a byte-coded stack
+-- machine over the same language. A state is the program counter, the stack (top first), the input
+-- byte and the status; instruction fetch decodes the code bytes from the program counter on.
+data SmStatus = sm-running | sm-halted | sm-fault
+SmState : Type
+SmState = Nat × List Byte × Byte × SmStatus
+-- the opcodes 01, 02, 03, ff (most significant bit first)
+op01 : Byte
+op01 = (false , false , false , false , false , false , false , true , unit)
+op02 : Byte
+op02 = (false , false , false , false , false , false , true , false , unit)
+op03 : Byte
+op03 = (false , false , false , false , false , false , true , true , unit)
+opff : Byte
+opff = (true , true , true , true , true , true , true , true , unit)
+-- the code bytes from an address on
+sm-drop : Nat → List Byte → List Byte
+sm-drop zero l = l
+sm-drop (suc n) nil = nil
+sm-drop (suc n) (cons b l) = sm-drop n l
+sm-tail : List Byte → List Byte
+sm-tail nil = nil
+sm-tail (cons b l) = l
+-- the instruction table: 01 pushes the input; 02 b pushes b (a truncated 02 faults); 03 pops b and a
+-- and pushes a ⊕ b (underflow faults); ff halts; every other byte faults
+sm-push-const : List Byte → Nat → List Byte → Byte → SmState
+sm-push-const nil pc S x = (pc , S , x , sm-fault)
+sm-push-const (cons b r) pc S x = (suc (suc pc) , cons b S , x , sm-running)
+sm-xor-top : List Byte → Nat → Byte → SmState
+sm-xor-top nil pc x = (pc , nil , x , sm-fault)
+sm-xor-top (cons b nil) pc x = (pc , cons b nil , x , sm-fault)
+sm-xor-top (cons b (cons a r)) pc x = (suc pc , cons (xorB 8 a b) r , x , sm-running)
+sm-op : Bool → Bool → Bool → Bool → List Byte → Nat → List Byte → Byte → SmState
+sm-op true b2 b3 bf rest pc S x = (suc pc , cons x S , x , sm-running)
+sm-op false true b3 bf rest pc S x = sm-push-const rest pc S x
+sm-op false false true bf rest pc S x = sm-xor-top S pc x
+sm-op false false false true rest pc S x = (suc pc , S , x , sm-halted)
+sm-op false false false false rest pc S x = (pc , S , x , sm-fault)
+sm-fetch : List Byte → Nat → List Byte → Byte → SmState
+sm-fetch nil pc S x = (pc , S , x , sm-fault)
+sm-fetch (cons op rest) pc S x = sm-op (eqBits 8 op op01) (eqBits 8 op op02) (eqBits 8 op op03) (eqBits 8 op opff) rest pc S x
+-- one step; halted and fault absorb
+sm-step-at : List Byte → Nat → List Byte → Byte → SmStatus → SmState
+sm-step-at B pc S x sm-running = sm-fetch (sm-drop pc B) pc S x
+sm-step-at B pc S x sm-halted = (pc , S , x , sm-halted)
+sm-step-at B pc S x sm-fault = (pc , S , x , sm-fault)
+sm-step : List Byte → SmState → SmState
+sm-step B s = sm-step-at B (fst s) (fst (snd s)) (fst (snd (snd s))) (snd (snd (snd s)))
+sm-run : List Byte → Nat → SmState → SmState
+sm-run B zero s = s
+sm-run B (suc k) s = sm-run B k (sm-step B s)
+-- (9.6)–(9.7) the compiler, one instruction per node of the expression, and the program
+sm-code : Expr → List Byte
+sm-code Input = cons op01 nil
+sm-code (Const b) = cons op02 (cons b nil)
+sm-code (Xor u v) = list-append (list-append (sm-code u) (sm-code v)) (cons op03 nil)
+sm-size : Expr → Nat
+sm-size Input = suc zero
+sm-size (Const b) = suc zero
+sm-size (Xor u v) = plus (plus (sm-size u) (sm-size v)) (suc zero)
+sm-program : Expr → List Byte
+sm-program e = list-append (sm-code e) (cons opff nil)
+-- lemmas of lists and runs
+sm-drop-suc : (n : Nat) → (B : List Byte) → sm-drop (suc n) B ≡ sm-tail (sm-drop n B)
+sm-drop-suc zero nil = λ i → nil
+sm-drop-suc zero (cons b l) = λ i → l
+sm-drop-suc (suc n) nil = λ i → nil
+sm-drop-suc (suc n) (cons b l) = sm-drop-suc n l
+sm-drop-plus : (k a : Nat) → (B : List Byte) → sm-drop (plus k a) B ≡ sm-drop k (sm-drop a B)
+sm-drop-plus zero a B = λ i → sm-drop a B
+sm-drop-plus (suc k) a B = concat (sm-drop-suc (plus k a) B)
+  (concat (λ i → sm-tail (sm-drop-plus k a B i)) (sym (sm-drop-suc k (sm-drop a B))))
+sm-drop-append : (xs ys : List Byte) → sm-drop (list-length xs) (list-append xs ys) ≡ ys
+sm-drop-append nil ys = λ i → ys
+sm-drop-append (cons x r) ys = sm-drop-append r ys
+sm-append-assoc : (xs ys zs : List Byte) → list-append (list-append xs ys) zs ≡ list-append xs (list-append ys zs)
+sm-append-assoc nil ys zs = λ i → list-append ys zs
+sm-append-assoc (cons x r) ys zs = λ i → cons x (sm-append-assoc r ys zs i)
+sm-length-append : (xs ys : List Byte) → list-length (list-append xs ys) ≡ plus (list-length xs) (list-length ys)
+sm-length-append nil ys = λ i → list-length ys
+sm-length-append (cons x r) ys = λ i → suc (sm-length-append r ys i)
+sm-run-plus : (B : List Byte) → (m n : Nat) → (s : SmState) → sm-run B (plus m n) s ≡ sm-run B n (sm-run B m s)
+sm-run-plus B zero n s = λ i → sm-run B n s
+sm-run-plus B (suc m) n s = sm-run-plus B m n (sm-step B s)
+-- the position after Xor u v: ℓ(Xor u v) + a = suc (ℓ(v) + (ℓ(u) + a))
+sm-pos-xor : (lu lv a : Nat) → plus (plus (plus lu lv) (suc zero)) a ≡ suc (plus lv (plus lu a))
+sm-pos-xor lu lv a = transN (plus-assoc (plus lu lv) (suc zero) a)
+  (transN (plus-suc (plus lu lv) a) (congN suc (transN (plus-assoc lu lv a) (plus-comm-mid lu lv a))))
+-- the code positions within Xor u v's code
+sm-at-u : (u v : Expr) → (B : List Byte) → (a : Nat) → (rest : List Byte) →
+  sm-drop a B ≡ list-append (sm-code (Xor u v)) rest →
+  sm-drop a B ≡ list-append (sm-code u) (list-append (sm-code v) (cons op03 rest))
+sm-at-u u v B a rest p = concat p (concat (sm-append-assoc (list-append (sm-code u) (sm-code v)) (cons op03 nil) rest)
+  (sm-append-assoc (sm-code u) (sm-code v) (cons op03 rest)))
+sm-at-v : (u v : Expr) → (B : List Byte) → (a : Nat) → (rest : List Byte) →
+  sm-drop a B ≡ list-append (sm-code u) (list-append (sm-code v) (cons op03 rest)) →
+  sm-drop (plus (list-length (sm-code u)) a) B ≡ list-append (sm-code v) (cons op03 rest)
+sm-at-v u v B a rest pu = concat (sm-drop-plus (list-length (sm-code u)) a B)
+  (concat (λ i → sm-drop (list-length (sm-code u)) (pu i)) (sm-drop-append (sm-code u) (list-append (sm-code v) (cons op03 rest))))
+sm-at-03 : (u v : Expr) → (B : List Byte) → (a : Nat) → (rest : List Byte) →
+  sm-drop (plus (list-length (sm-code u)) a) B ≡ list-append (sm-code v) (cons op03 rest) →
+  sm-drop (plus (list-length (sm-code v)) (plus (list-length (sm-code u)) a)) B ≡ cons op03 rest
+sm-at-03 u v B a rest pv = concat (sm-drop-plus (list-length (sm-code v)) (plus (list-length (sm-code u)) a) B)
+  (concat (λ i → sm-drop (list-length (sm-code v)) (pv i)) (sm-drop-append (sm-code v) (cons op03 rest)))
+sm-len-xor : (u v : Expr) → list-length (sm-code (Xor u v)) ≡ plus (plus (list-length (sm-code u)) (list-length (sm-code v))) (suc zero)
+sm-len-xor u v = transN (sm-length-append (list-append (sm-code u) (sm-code v)) (cons op03 nil))
+  (congN (λ n → plus n (suc zero)) (sm-length-append (sm-code u) (sm-code v)))
+-- composition of equalities of states, its endpoints given (inferring them costs the checker far more)
+sm-trans : (r s t : SmState) → r ≡ s → s ≡ t → r ≡ t
+sm-trans r s t p q = concat {lzero} {SmState} {r} {s} {t} p q
+-- the steps of the Xor case, each with its type stated
+sm-xor-after-u : (u v : Expr) → (B : List Byte) → (a : Nat) → (S : List Byte) → (x : Byte) →
+  sm-run B (sm-size u) (a , S , x , sm-running) ≡ (plus (list-length (sm-code u)) a , cons (denote u x) S , x , sm-running) →
+  sm-run B (sm-size (Xor u v)) (a , S , x , sm-running)
+  ≡ sm-run B (suc zero) (sm-run B (sm-size v) (plus (list-length (sm-code u)) a , cons (denote u x) S , x , sm-running))
+sm-xor-after-u u v B a S x hu = sm-trans
+  (sm-run B (sm-size (Xor u v)) (a , S , x , sm-running))
+  (sm-run B (suc zero) (sm-run B (plus (sm-size u) (sm-size v)) (a , S , x , sm-running)))
+  (sm-run B (suc zero) (sm-run B (sm-size v) (plus (list-length (sm-code u)) a , cons (denote u x) S , x , sm-running)))
+  (sm-run-plus B (plus (sm-size u) (sm-size v)) (suc zero) (a , S , x , sm-running))
+  (sm-trans
+    (sm-run B (suc zero) (sm-run B (plus (sm-size u) (sm-size v)) (a , S , x , sm-running)))
+    (sm-run B (suc zero) (sm-run B (sm-size v) (sm-run B (sm-size u) (a , S , x , sm-running))))
+    (sm-run B (suc zero) (sm-run B (sm-size v) (plus (list-length (sm-code u)) a , cons (denote u x) S , x , sm-running)))
+    (λ i → sm-run B (suc zero) (sm-run-plus B (sm-size u) (sm-size v) (a , S , x , sm-running) i))
+    (λ j → sm-run B (suc zero) (sm-run B (sm-size v) (hu j))))
+sm-xor-after-v : (u v : Expr) → (B : List Byte) → (a : Nat) → (rest : List Byte) → sm-drop a B ≡ list-append (sm-code (Xor u v)) rest →
+  (S : List Byte) → (x : Byte) →
+  sm-run B (sm-size v) (plus (list-length (sm-code u)) a , cons (denote u x) S , x , sm-running)
+  ≡ (plus (list-length (sm-code v)) (plus (list-length (sm-code u)) a) , cons (denote v x) (cons (denote u x) S) , x , sm-running) →
+  sm-run B (sm-size (Xor u v)) (a , S , x , sm-running)
+  ≡ sm-run B (suc zero) (sm-run B (sm-size v) (plus (list-length (sm-code u)) a , cons (denote u x) S , x , sm-running)) →
+  sm-run B (sm-size (Xor u v)) (a , S , x , sm-running)
+  ≡ (suc (plus (list-length (sm-code v)) (plus (list-length (sm-code u)) a)) , cons (xorB 8 (denote u x) (denote v x)) S , x , sm-running)
+sm-xor-after-v u v B a rest p S x hv h = sm-trans
+  (sm-run B (sm-size (Xor u v)) (a , S , x , sm-running))
+  (sm-run B (suc zero) (sm-run B (sm-size v) (plus (list-length (sm-code u)) a , cons (denote u x) S , x , sm-running)))
+  (suc (plus (list-length (sm-code v)) (plus (list-length (sm-code u)) a)) , cons (xorB 8 (denote u x) (denote v x)) S , x , sm-running)
+  h
+  (sm-trans
+    (sm-run B (suc zero) (sm-run B (sm-size v) (plus (list-length (sm-code u)) a , cons (denote u x) S , x , sm-running)))
+    (sm-run B (suc zero) (plus (list-length (sm-code v)) (plus (list-length (sm-code u)) a) , cons (denote v x) (cons (denote u x) S) , x , sm-running))
+    (suc (plus (list-length (sm-code v)) (plus (list-length (sm-code u)) a)) , cons (xorB 8 (denote u x) (denote v x)) S , x , sm-running)
+    (λ i → sm-run B (suc zero) (hv i))
+    (λ i → sm-fetch (sm-at-03 u v B a rest (sm-at-v u v B a rest (sm-at-u u v B a rest p)) i)
+             (plus (list-length (sm-code v)) (plus (list-length (sm-code u)) a)) (cons (denote v x) (cons (denote u x) S)) x))
+sm-xor-last : (u v : Expr) → (B : List Byte) → (a : Nat) → (S : List Byte) → (x : Byte) →
+  sm-run B (sm-size (Xor u v)) (a , S , x , sm-running)
+  ≡ (suc (plus (list-length (sm-code v)) (plus (list-length (sm-code u)) a)) , cons (xorB 8 (denote u x) (denote v x)) S , x , sm-running) →
+  sm-run B (sm-size (Xor u v)) (a , S , x , sm-running)
+  ≡ (plus (list-length (sm-code (Xor u v))) a , cons (denote (Xor u v) x) S , x , sm-running)
+sm-xor-last u v B a S x h = sm-trans
+  (sm-run B (sm-size (Xor u v)) (a , S , x , sm-running))
+  (suc (plus (list-length (sm-code v)) (plus (list-length (sm-code u)) a)) , cons (xorB 8 (denote u x) (denote v x)) S , x , sm-running)
+  (plus (list-length (sm-code (Xor u v))) a , cons (denote (Xor u v) x) S , x , sm-running)
+  h
+  (λ i → (sym (transN (congN (λ n → plus n a) (sm-len-xor u v)) (sm-pos-xor (list-length (sm-code u)) (list-length (sm-code v)) a)) i
+          , cons (xorB 8 (denote u x) (denote v x)) S , x , sm-running))
+-- (9.8) the stack-extension invariant: if the code of e occupies the bytes from a on, its #(e) steps
+-- push e's meaning on any stack and leave the program counter after the code
+sm-extends : (e : Expr) → (B : List Byte) → (a : Nat) → (rest : List Byte) →
+  sm-drop a B ≡ list-append (sm-code e) rest → (S : List Byte) → (x : Byte) →
+  sm-run B (sm-size e) (a , S , x , sm-running) ≡ (plus (list-length (sm-code e)) a , cons (denote e x) S , x , sm-running)
+sm-extends Input B a rest p S x = λ i → sm-fetch (p i) a S x
+sm-extends (Const b) B a rest p S x = λ i → sm-fetch (p i) a S x
+sm-extends (Xor u v) B a rest p S x = sm-xor-last u v B a S x
+  (sm-xor-after-v u v B a rest p S x (sm-extends v B (plus (list-length (sm-code u)) a) (cons op03 rest) (sm-at-v u v B a rest (sm-at-u u v B a rest p)) (cons (denote u x) S) x)
+    (sm-xor-after-u u v B a S x (sm-extends u B a (list-append (sm-code v) (cons op03 rest)) (sm-at-u u v B a rest p) S x)))
+sm-at-end : (e : Expr) → sm-drop (plus (list-length (sm-code e)) zero) (sm-program e) ≡ cons opff nil
+sm-at-end e = concat (sm-drop-plus (list-length (sm-code e)) zero (sm-program e)) (sm-drop-append (sm-code e) (cons opff nil))
+-- (9.9) the whole program: #(e) + 1 steps from address 0 and the empty stack halt with e's meaning
+sm-program-halts : (e : Expr) → (x : Byte) →
+  sm-run (sm-program e) (plus (sm-size e) (suc zero)) (zero , nil , x , sm-running)
+  ≡ (suc (plus (list-length (sm-code e)) zero) , cons (denote e x) nil , x , sm-halted)
+sm-program-halts e x = sm-trans
+  (sm-run (sm-program e) (plus (sm-size e) (suc zero)) (zero , nil , x , sm-running))
+  (sm-run (sm-program e) (suc zero) (sm-run (sm-program e) (sm-size e) (zero , nil , x , sm-running)))
+  (suc (plus (list-length (sm-code e)) zero) , cons (denote e x) nil , x , sm-halted)
+  (sm-run-plus (sm-program e) (sm-size e) (suc zero) (zero , nil , x , sm-running))
+  (sm-trans
+    (sm-run (sm-program e) (suc zero) (sm-run (sm-program e) (sm-size e) (zero , nil , x , sm-running)))
+    (sm-run (sm-program e) (suc zero) (plus (list-length (sm-code e)) zero , cons (denote e x) nil , x , sm-running))
+    (suc (plus (list-length (sm-code e)) zero) , cons (denote e x) nil , x , sm-halted)
+    (λ i → sm-run (sm-program e) (suc zero) (sm-extends e (sm-program e) zero (cons opff nil) (λ j → sm-program e) nil x i))
+    (λ i → sm-fetch (sm-at-end e i) (plus (list-length (sm-code e)) zero) (cons (denote e x) nil) x))
+-- the byte-for-byte example: p₀ compiles to 01 02 5a 03 02 5a 03 ff and halts with its input
+sm-p0-bytes : sm-program p0 ≡ cons op01 (cons op02 (cons x5a (cons op03 (cons op02 (cons x5a (cons op03 (cons opff nil)))))))
+sm-p0-bytes = λ i → sm-program p0
+sm-p0-halts : (x : Byte) → sm-run (sm-program p0) (suc (suc (suc (suc (suc (suc zero)))))) (zero , nil , x , sm-running)
+  ≡ (suc (suc (suc (suc (suc (suc (suc (suc zero))))))) , cons x nil , x , sm-halted)
+sm-p0-halts x = sm-trans
+  (sm-run (sm-program p0) (suc (suc (suc (suc (suc (suc zero)))))) (zero , nil , x , sm-running))
+  (suc (suc (suc (suc (suc (suc (suc (suc zero))))))) , cons (denote p0 x) nil , x , sm-halted)
+  (suc (suc (suc (suc (suc (suc (suc (suc zero))))))) , cons x nil , x , sm-halted)
+  (sm-program-halts p0 x)
+  (λ i → (suc (suc (suc (suc (suc (suc (suc (suc zero))))))) , cons (xor-cancel 8 x x5a i) nil , x , sm-halted))
+-- (9.10) composed with a verified source transformation: the same halting state with the source's meaning
+sm-transformed : (t : Expr → Expr) → ((e : Expr) → (x : Byte) → denote (t e) x ≡ denote e x) → (e : Expr) → (x : Byte) →
+  sm-run (sm-program (t e)) (plus (sm-size (t e)) (suc zero)) (zero , nil , x , sm-running)
+  ≡ (suc (plus (list-length (sm-code (t e))) zero) , cons (denote e x) nil , x , sm-halted)
+sm-transformed t tau e x = sm-trans
+  (sm-run (sm-program (t e)) (plus (sm-size (t e)) (suc zero)) (zero , nil , x , sm-running))
+  (suc (plus (list-length (sm-code (t e))) zero) , cons (denote (t e) x) nil , x , sm-halted)
+  (suc (plus (list-length (sm-code (t e))) zero) , cons (denote e x) nil , x , sm-halted)
+  (sm-program-halts (t e) x)
+  (λ i → (suc (plus (list-length (sm-code (t e))) zero) , cons (tau e x i) nil , x , sm-halted))
