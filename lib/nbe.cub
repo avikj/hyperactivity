@@ -9714,3 +9714,89 @@ abs-fst Γ a Y₁ Y₂ Z h₁ mk M₁ B W pr pr' pp =
         (λ γq eq → (γq , λ ρq → h₁ (eq ρq))) (λ γq eq Eq ρq → pp i (eq ρq) (λ xq → Eq (ρq , xq))) (snd Γ) M₁ B)
       (pull-ignore (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y₁) (FbE (fst Γ) W) (FbE (lcons (e-ty a) (fst Γ)) Z)
         (λ γq eq → (γq , λ ρq → h₁ (eq ρq))) (λ γr er ρr → pr' (er ρr)) (snd Γ) M₁ B))
+-- what the checker is asked (Mode): a type's code, a term's code to infer, or a term's code against a
+-- type's meaning with its computability; what it returns for each (Out); a recursive call (Rec) and
+-- a conversion (Cv: a path between two type meanings, or a refusal)
+data Mode (Γ : CCtx) = m-ty | m-inf | m-chk (s : TyShape) (T : Mean Γ (Sem s)) (ct : CompTy s Γ T)
+Out : (Γ : CCtx) → Code → Mode Γ → Type 1
+Out Γ c m-ty = (s : TyShape) × (T : Mean Γ (Sem s)) × Der (j-ty , Γ , s , c , T)
+Out Γ c m-inf = (s : TyShape) × (M : Mean Γ (TV s)) × Der (j-tm , Γ , s , c , M)
+Out Γ c (m-chk s T ct) = (M : Mean Γ (TV s)) × PathM Γ (Sem s) (fmapM Γ (TV s) (Sem s) (λ q → fst q) M) T × Der (j-tm , Γ , s , c , M)
+Rec : Type 1
+Rec = (Γ : CCtx) → Vals Γ → (c : Code) → (m : Mode Γ) → Dec1 (Out Γ c m)
+Cv : Type 1
+Cv = (Γ : CCtx) (s : TyShape) (T T' : Mean Γ (Sem s)) → CompTy s Γ T → CompTy s Γ T' → Dec1 (PathM Γ (Sem s) T T')
+-- Bool's type: the constant cube of one
+one-mean : (Γ : CCtx) → Mean Γ One1
+one-mean Γ = dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) One1) (λ γq ρq → one) (snd Γ)
+-- Π's and Σ's family from the domain TA and the codomain TB over Γ extended by TA (fam-of), and the
+-- two premises carried to it (fam-dA, fam-dB)
+fam-of : (Γ : CCtx) (a b : TyShape) (TA : Mean Γ (Sem a)) → Mean (ext-h Γ a (Sem a) (λ y → y) TA) (Sem b) → Mean Γ (Fam a b)
+fam-of Γ a b TA TB = abs-mean Γ a (Sem a) (Fam a b) (Sem b) (λ y → y) (λ y k → (y , k)) TA TB
+fam-dA : (Γ : CCtx) (a b : TyShape) (TA : Mean Γ (Sem a)) (TB : Mean (ext-h Γ a (Sem a) (λ y → y) TA) (Sem b)) (cA : Code) →
+  Der (j-ty , Γ , a , cA , TA) → Der (j-ty , Γ , a , cA , fmapM Γ (Fam a b) (Sem a) (fam-dom a b) (fam-of Γ a b TA TB))
+fam-dA Γ a b TA TB cA dA =
+  der-tr j-ty Γ a cA TA (fmapM Γ (Fam a b) (Sem a) (fam-dom a b) (fam-of Γ a b TA TB))
+    (psym (Mean Γ (Sem a)) (fmapM Γ (Fam a b) (Sem a) (fam-dom a b) (fam-of Γ a b TA TB)) TA
+      (pcat (Mean Γ (Sem a)) (fmapM Γ (Fam a b) (Sem a) (fam-dom a b) (fam-of Γ a b TA TB)) (fmapM Γ (Sem a) (Sem a) (λ y → y) TA) TA
+        (abs-fst Γ a (Sem a) (Fam a b) (Sem b) (λ y → y) (λ y k → (y , k)) TA TB (Sem a) (fam-dom a b) (λ y → y) (λ i y k → y))
+        (fmap-id (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (Sem a)) (snd Γ) TA)))
+    dA
+fam-dB : (Γ : CCtx) (a b : TyShape) (TA : Mean Γ (Sem a)) (TB : Mean (ext-h Γ a (Sem a) (λ y → y) TA) (Sem b)) (cB : Code) →
+  Der (j-ty , ext-h Γ a (Sem a) (λ y → y) TA , b , cB , TB) →
+  Der (j-ty , ext-h Γ a (Fam a b) (fam-dom a b) (fam-of Γ a b TA TB) , b , cB , fam-body Γ a b (fam-of Γ a b TA TB))
+fam-dB Γ a b TA TB cB dB =
+  der-ext j-ty Γ a b (Sem a) (Fam a b) (λ y → y) (fam-dom a b) (λ y k → (y , k)) (λ i y k → y) (λ F x → snd F x) (λ i y k → k) TA TB cB dB
+-- a type's computability read at the identity (ct-id: the domain's, for extending the context)
+ct-id : (Γ : CCtx) → Vals Γ → (a : TyShape) (cA : Code) (TA : Mean Γ (Sem a)) → Der (j-ty , Γ , a , cA , TA) → CompTy a Γ (fmapM Γ (Sem a) (Sem a) (λ y → y) TA)
+ct-id Γ vs a cA TA dA =
+  ty-tr a Γ TA (fmapM Γ (Sem a) (Sem a) (λ y → y) TA)
+    (psym (Mean Γ (Sem a)) (fmapM Γ (Sem a) (Sem a) (λ y → y) TA) TA (fmap-id (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (Sem a)) (snd Γ) TA))
+    (comp-ty Γ vs a cA TA dA)
+-- the checker's step, given its recursive call: types (Bool; Π and Σ: the domain, then the codomain
+-- over Γ extended by it)
+ty-pi-2 : (Γ : CCtx) (m : Word) (cA cB : Code) → m ≡ #2 → (a : TyShape) (TA : Mean Γ (Sem a)) → Der (j-ty , Γ , a , cA , TA) →
+  (b : TyShape) (TB : Mean (ext-h Γ a (Sem a) (λ y → y) TA) (Sem b)) → Der (j-ty , ext-h Γ a (Sem a) (λ y → y) TA , b , cB , TB) →
+  Dec1 (Out Γ (cpi m cA cB) m-ty)
+ty-pi-2 Γ m cA cB pm a TA dA b TB dB =
+  c-derived (s-pi a b , fam-of Γ a b TA TB ,
+    der-code j-ty Γ (s-pi a b) (cpi #2 cA cB) (cpi m cA cB) (fam-of Γ a b TA TB) (λ i → cpi (pm (~ i)) cA cB)
+      (dty-pi Γ a b (fam-of Γ a b TA TB) cA cB (fam-dA Γ a b TA TB cA dA) (fam-dB Γ a b TA TB cB dB)))
+ty-pi-1 : Rec → (Γ : CCtx) → Vals Γ → (m : Word) (cA cB : Code) → m ≡ #2 → (a : TyShape) (TA : Mean Γ (Sem a)) → Der (j-ty , Γ , a , cA , TA) →
+  Dec1 (Out Γ (cpi m cA cB) m-ty)
+ty-pi-1 rec Γ vs m cA cB pm a TA dA =
+  d-bind (Out (ext-h Γ a (Sem a) (λ y → y) TA) cB m-ty) (Out Γ (cpi m cA cB) m-ty)
+    (rec (ext-h Γ a (Sem a) (λ y → y) TA) (ext-vals Γ a (Sem a) (λ y → y) TA (ct-id Γ vs a cA TA dA) vs) cB m-ty)
+    (λ rB → ty-pi-2 Γ m cA cB pm a TA dA (fst rB) (fst (snd rB)) (snd (snd rB)))
+ty-sig-2 : (Γ : CCtx) (cA cB : Code) (a : TyShape) (TA : Mean Γ (Sem a)) → Der (j-ty , Γ , a , cA , TA) →
+  (b : TyShape) (TB : Mean (ext-h Γ a (Sem a) (λ y → y) TA) (Sem b)) → Der (j-ty , ext-h Γ a (Sem a) (λ y → y) TA , b , cB , TB) →
+  Dec1 (Out Γ (csigma cA cB) m-ty)
+ty-sig-2 Γ cA cB a TA dA b TB dB =
+  c-derived (s-sig a b , fam-of Γ a b TA TB , dty-sig Γ a b (fam-of Γ a b TA TB) cA cB (fam-dA Γ a b TA TB cA dA) (fam-dB Γ a b TA TB cB dB))
+ty-sig-1 : Rec → (Γ : CCtx) → Vals Γ → (cA cB : Code) → (a : TyShape) (TA : Mean Γ (Sem a)) → Der (j-ty , Γ , a , cA , TA) →
+  Dec1 (Out Γ (csigma cA cB) m-ty)
+ty-sig-1 rec Γ vs cA cB a TA dA =
+  d-bind (Out (ext-h Γ a (Sem a) (λ y → y) TA) cB m-ty) (Out Γ (csigma cA cB) m-ty)
+    (rec (ext-h Γ a (Sem a) (λ y → y) TA) (ext-vals Γ a (Sem a) (λ y → y) TA (ct-id Γ vs a cA TA dA) vs) cB m-ty)
+    (λ rB → ty-sig-2 Γ cA cB a TA dA (fst rB) (fst (snd rB)) (snd (snd rB)))
+elab-step : Cv → Rec → Rec
+elab-step cv rec Γ vs (cdata d lnil) m-ty =
+  o-bind (d ≡ #0) (Out Γ (cdata d lnil) m-ty) (w-dec d #0)
+    (λ p → c-derived (s-bool , one-mean Γ , der-code j-ty Γ s-bool c-bool (cdata d lnil) (one-mean Γ) (λ i → cdata (p (~ i)) lnil) (dty-bool Γ (one-mean Γ))))
+elab-step cv rec Γ vs (cpi m cA cB) m-ty =
+  o-bind (m ≡ #2) (Out Γ (cpi m cA cB) m-ty) (w-dec m #2)
+    (λ pm → d-bind (Out Γ cA m-ty) (Out Γ (cpi m cA cB) m-ty) (rec Γ vs cA m-ty)
+       (λ rA → ty-pi-1 rec Γ vs m cA cB pm (fst rA) (fst (snd rA)) (snd (snd rA))))
+elab-step cv rec Γ vs (csigma cA cB) m-ty =
+  d-bind (Out Γ cA m-ty) (Out Γ (csigma cA cB) m-ty) (rec Γ vs cA m-ty) (λ rA → ty-sig-1 rec Γ vs cA cB (fst rA) (fst (snd rA)) (snd (snd rA)))
+elab-step cv rec Γ vs c m = c-refused
+-- the checker: the step iterated by fuel (c-fuel, as lib/codes.cub's traversals)
+elab-n : Cv → Nat → Rec
+elab-n cv zero Γ vs c m = c-refused
+elab-n cv (suc u) Γ vs c m = elab-step cv (elab-n cv u) Γ vs c m
+-- the fuel: 2^12 steps, past any code's depth in practice
+nat-dbl : Nat → Nat
+nat-dbl zero = zero
+nat-dbl (suc n) = suc (suc (nat-dbl n))
+elab-fuel : Nat
+elab-fuel = nat-dbl (nat-dbl (nat-dbl (nat-dbl (nat-dbl (nat-dbl (nat-dbl (nat-dbl (nat-dbl (nat-dbl (nat-dbl (nat-dbl (suc zero))))))))))))
