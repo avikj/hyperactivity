@@ -1,0 +1,248 @@
+-- lib/order-ledger.cub — the paper's concrete long-only order/ledger program of §10.10 (docs/hyperactivity.cub,
+-- “A distributed program as an ordinary term”) as code: the gateway state (v, p, O, U, L, Q), the risk
+-- R(p, O) and the bound I_B (10.T1), the restricted transition relation Admit, Receive, Fill, Cancel,
+-- Stale (10.T2), safe_B over every finite run from the initial state (10.T3), and the ledger invariant
+-- J with dom(O) ⊆ U (10.T4), whence each identifier appears at most once in the accepted-fill ledger.
+-- Identifiers are natural numbers (decidable equality by eqb); O is a list of (identifier, quantity).
+import "observation.cub"
+import "credit.cub"
+-- authenticated exchange events
+data GwEv = gw-full-fill (i : Nat) (q : Nat) | gw-cancel-ack (i : Nat)
+-- (v, p, O, U, L, Q): gateway version, filled long position, outstanding buys, identifiers ever
+-- allocated, accepted-fill ledger, queue of exchange events
+GwState : Type
+GwState = Nat × Nat × List (Nat × Nat) × List Nat × List (Nat × Nat) × List GwEv
+gw-v : GwState → Nat
+gw-v s = fst s
+gw-p : GwState → Nat
+gw-p s = fst (snd s)
+gw-O : GwState → List (Nat × Nat)
+gw-O s = fst (snd (snd s))
+gw-U : GwState → List Nat
+gw-U s = fst (snd (snd (snd s)))
+gw-L : GwState → List (Nat × Nat)
+gw-L s = fst (snd (snd (snd (snd s))))
+gw-Q : GwState → List GwEv
+gw-Q s = snd (snd (snd (snd (snd s))))
+gw-s0 : Nat → GwState
+gw-s0 v = (v , zero , nil , nil , nil , nil)
+-- dom(O), and ids(L)
+gw-ids : List (Nat × Nat) → List Nat
+gw-ids nil = nil
+gw-ids (cons e r) = cons (fst e) (gw-ids r)
+gw-osum : List (Nat × Nat) → Nat
+gw-osum nil = zero
+gw-osum (cons e r) = plus (snd e) (gw-osum r)
+-- (10.T1) R(p, O) = p + Σ_{i ∈ dom O} O(i), and I_B: R(p, O) ≤ B
+gw-R : Nat → List (Nat × Nat) → Nat
+gw-R p O = plus p (gw-osum O)
+gw-IB : Nat → GwState → Type
+gw-IB B s = le (gw-R (gw-p s) (gw-O s)) B
+-- O \ {i}
+gw-rm-step : Bool → Nat × Nat → List (Nat × Nat) → List (Nat × Nat)
+gw-rm-step true e rest = rest
+gw-rm-step false e rest = cons e rest
+gw-remove : Nat → List (Nat × Nat) → List (Nat × Nat)
+gw-remove i nil = nil
+gw-remove i (cons e r) = gw-rm-step (eqb (fst e) i) e (gw-remove i r)
+gw-tail : List GwEv → List GwEv
+gw-tail nil = nil
+gw-tail (cons m r) = r
+gw-head-is : List GwEv → GwEv → Type
+gw-head-is nil e = Empty
+gw-head-is (cons m r) e = m ≡ e
+-- an event's matching open order
+gw-matches : List (Nat × Nat) → GwEv → Type
+gw-matches O (gw-full-fill i q) = cr-mem (i , q) O
+gw-matches O (gw-cancel-ack i) = cr-mem i (gw-ids O)
+gw-stale-ok : List (Nat × Nat) → List GwEv → Type
+gw-stale-ok O nil = Empty
+gw-stale-ok O (cons m r) = Neg (gw-matches O m)
+-- (10.T2) the restricted transition relation, unmentioned components unchanged. An admission also
+-- emits the order request to the external exchange; Receive is the input event from its handler.
+data GwMove = gw-admit (i : Nat) (q : Nat) | gw-receive (m : GwEv) | gw-fill (i : Nat) (q : Nat) | gw-cancel (i : Nat) | gw-stale
+gw-move : GwMove → GwState → GwState
+gw-move (gw-admit i q) s = (gw-v s , gw-p s , cons (i , q) (gw-O s) , cons i (gw-U s) , gw-L s , gw-Q s)
+gw-move (gw-receive m) s = (gw-v s , gw-p s , gw-O s , gw-U s , gw-L s , list-append (gw-Q s) (cons m nil))
+gw-move (gw-fill i q) s = (gw-v s , plus (gw-p s) q , gw-remove i (gw-O s) , gw-U s , list-append (gw-L s) (cons (i , q) nil) , gw-tail (gw-Q s))
+gw-move (gw-cancel i) s = (gw-v s , gw-p s , gw-remove i (gw-O s) , gw-U s , gw-L s , gw-tail (gw-Q s))
+gw-move gw-stale s = (gw-v s , gw-p s , gw-O s , gw-U s , gw-L s , gw-tail (gw-Q s))
+gw-allowed : Nat → GwMove → GwState → Type
+gw-allowed B (gw-admit i q) s = Neg (cr-mem i (gw-U s)) × le (suc zero) q × le (plus (gw-R (gw-p s) (gw-O s)) q) B
+gw-allowed B (gw-receive m) s = Unit
+gw-allowed B (gw-fill i q) s = gw-head-is (gw-Q s) (gw-full-fill i q) × cr-mem (i , q) (gw-O s)
+gw-allowed B (gw-cancel i) s = gw-head-is (gw-Q s) (gw-cancel-ack i) × cr-mem i (gw-ids (gw-O s))
+gw-allowed B gw-stale s = gw-stale-ok (gw-O s) (gw-Q s)
+-- finite runs of F_B
+gw-run : List GwMove → GwState → GwState
+gw-run nil s = s
+gw-run (cons mv r) s = gw-run r (gw-move mv s)
+gw-allowed-run : Nat → List GwMove → GwState → Type
+gw-allowed-run B nil s = Unit
+gw-allowed-run B (cons mv r) s = gw-allowed B mv s × gw-allowed-run B r (gw-move mv s)
+-- ---------------------------------------------------------------- (10.T3)
+gw-le-eq : (a b c : Nat) → a ≡ b → le b c → le a c
+gw-le-eq a b c e h = (fst h , transN (congN (plus (fst h)) e) (snd h))
+gw-le-to : (a b b' : Nat) → b ≡ b' → le a b → le a b'
+gw-le-to a b b' e h = (fst h , transN (snd h) e)
+gw-le-plus : (c a b : Nat) → le a b → le (plus c a) (plus c b)
+gw-le-plus c a b h = (fst h , transN (plus-comm-mid (fst h) c a) (congN (plus c) (snd h)))
+gw-le-grow : (a b : Nat) → le b (plus a b)
+gw-le-grow a b = (a , λ i → plus a b)
+-- removing an identifier removes nonnegative outstanding summands
+gw-rm-step-le : (b : Bool) → (e : Nat × Nat) → (rest r : List (Nat × Nat)) → le (gw-osum rest) (gw-osum r) →
+  le (gw-osum (gw-rm-step b e rest)) (plus (snd e) (gw-osum r))
+gw-rm-step-le true e rest r h = le-trans {gw-osum rest} {gw-osum r} {plus (snd e) (gw-osum r)} h (gw-le-grow (snd e) (gw-osum r))
+gw-rm-step-le false e rest r h = gw-le-plus (snd e) (gw-osum rest) (gw-osum r) h
+gw-osum-remove : (i : Nat) → (O : List (Nat × Nat)) → le (gw-osum (gw-remove i O)) (gw-osum O)
+gw-osum-remove i nil = le-refl zero
+gw-osum-remove i (cons e r) = gw-rm-step-le (eqb (fst e) i) e (gw-remove i r) r (gw-osum-remove i r)
+-- removing an open order (i, q) removes at least its quantity q
+gw-rm-hit : (b : Bool) → (e : Nat × Nat) → (rest r : List (Nat × Nat)) → (q : Nat) → isTrue b → snd e ≡ q →
+  le (gw-osum rest) (gw-osum r) → le (plus q (gw-osum (gw-rm-step b e rest))) (plus (snd e) (gw-osum r))
+gw-rm-hit true e rest r q t p h = gw-le-to (plus q (gw-osum rest)) (plus q (gw-osum r)) (plus (snd e) (gw-osum r))
+  (congN (λ z → plus z (gw-osum r)) (λ k → p (~ k))) (gw-le-plus q (gw-osum rest) (gw-osum r) h)
+gw-rm-hit false e rest r q t p h = Empty-rec t
+gw-rm-miss : (b : Bool) → (e : Nat × Nat) → (rest r : List (Nat × Nat)) → (q : Nat) →
+  le (plus q (gw-osum rest)) (gw-osum r) → le (plus q (gw-osum (gw-rm-step b e rest))) (plus (snd e) (gw-osum r))
+gw-rm-miss true e rest r q h = le-trans {plus q (gw-osum rest)} {gw-osum r} {plus (snd e) (gw-osum r)} h (gw-le-grow (snd e) (gw-osum r))
+gw-rm-miss false e rest r q h = gw-le-eq (plus q (plus (snd e) (gw-osum rest))) (plus (snd e) (plus q (gw-osum rest)))
+  (plus (snd e) (gw-osum r)) (plus-comm-mid q (snd e) (gw-osum rest)) (gw-le-plus (snd e) (plus q (gw-osum rest)) (gw-osum r) h)
+gw-osum-remove-mem : (i q : Nat) → (O : List (Nat × Nat)) → cr-mem (i , q) O → le (plus q (gw-osum (gw-remove i O))) (gw-osum O)
+gw-osum-remove-mem i q nil h = Empty-rec h
+gw-osum-remove-mem i q (cons e r) h = case h of
+  inl p → gw-rm-hit (eqb (fst e) i) e (gw-remove i r) r q (eqb-complete {fst e} {i} (λ k → fst (p (~ k)))) (λ k → snd (p (~ k))) (gw-osum-remove i r)
+  inr h2 → gw-rm-miss (eqb (fst e) i) e (gw-remove i r) r q (gw-osum-remove-mem i q r h2)
+-- admission preserves I_B by its guard; a full fill moves q from O to p; cancellation removes a
+-- nonnegative outstanding summand; receive and stale handling change neither p nor O
+gw-step-IB : (B : Nat) → (mv : GwMove) → (s : GwState) → gw-allowed B mv s → gw-IB B s → gw-IB B (gw-move mv s)
+gw-step-IB B (gw-admit i q) s a h = gw-le-eq (plus (gw-p s) (plus q (gw-osum (gw-O s)))) (plus (plus (gw-p s) (gw-osum (gw-O s))) q) B
+  (transN (plus-comm-mid (gw-p s) q (gw-osum (gw-O s))) (plus-comm q (plus (gw-p s) (gw-osum (gw-O s))))) (snd (snd a))
+gw-step-IB B (gw-receive m) s a h = h
+gw-step-IB B (gw-fill i q) s a h = gw-le-eq (plus (plus (gw-p s) q) (gw-osum (gw-remove i (gw-O s)))) (plus (gw-p s) (plus q (gw-osum (gw-remove i (gw-O s))))) B
+  (plus-assoc (gw-p s) q (gw-osum (gw-remove i (gw-O s))))
+  (le-trans {plus (gw-p s) (plus q (gw-osum (gw-remove i (gw-O s))))} {plus (gw-p s) (gw-osum (gw-O s))} {B}
+    (gw-le-plus (gw-p s) (plus q (gw-osum (gw-remove i (gw-O s)))) (gw-osum (gw-O s)) (gw-osum-remove-mem i q (gw-O s) (snd a))) h)
+gw-step-IB B (gw-cancel i) s a h = le-trans {plus (gw-p s) (gw-osum (gw-remove i (gw-O s)))} {plus (gw-p s) (gw-osum (gw-O s))} {B}
+  (gw-le-plus (gw-p s) (gw-osum (gw-remove i (gw-O s))) (gw-osum (gw-O s)) (gw-osum-remove i (gw-O s))) h
+gw-step-IB B gw-stale s a h = h
+gw-safe-run : (B : Nat) → (mvs : List GwMove) → (s : GwState) → gw-allowed-run B mvs s → gw-IB B s → gw-IB B (gw-run mvs s)
+gw-safe-run B nil s a h = h
+gw-safe-run B (cons mv r) s a h = gw-safe-run B r (gw-move mv s) (snd a) (gw-step-IB B mv s (fst a) h)
+-- (10.T3) safe_B: over every finite run from the initial state, R(p, O) ≤ B
+gw-safe : (B v : Nat) → (mvs : List GwMove) → gw-allowed-run B mvs (gw-s0 v) → gw-IB B (gw-run mvs (gw-s0 v))
+gw-safe B v mvs a = gw-safe-run B mvs (gw-s0 v) a (B , plus-zero B)
+-- ---------------------------------------------------------------- (10.T4)
+gw-nodup : List Nat → Type
+gw-nodup nil = Unit
+gw-nodup (cons x r) = Neg (cr-mem x r) × gw-nodup r
+gw-sub : List Nat → List Nat → Type
+gw-sub xs ys = (x : Nat) → cr-mem x xs → cr-mem x ys
+gw-disjoint : List Nat → List Nat → Type
+gw-disjoint xs ys = (x : Nat) → cr-mem x xs → cr-mem x ys → Empty
+-- J(O, U, L) = NoDup(ids L) × (set(ids L) ⊆ U) × (set(ids L) ∩ dom O = ∅), and dom(O) ⊆ U beside it
+gw-J : GwState → Type
+gw-J s = gw-nodup (gw-ids (gw-L s)) × gw-sub (gw-ids (gw-L s)) (gw-U s) × gw-disjoint (gw-ids (gw-L s)) (gw-ids (gw-O s))
+gw-K : GwState → Type
+gw-K s = gw-sub (gw-ids (gw-O s)) (gw-U s)
+gw-JK : GwState → Type
+gw-JK s = gw-J s × gw-K s
+gw-mem-key : (i q : Nat) → (O : List (Nat × Nat)) → cr-mem (i , q) O → cr-mem i (gw-ids O)
+gw-mem-key i q nil h = h
+gw-mem-key i q (cons e r) h = case h of
+  inl p → inl (λ k → fst (p k))
+  inr h2 → inr (gw-mem-key i q r h2)
+gw-mem-ids-snoc : (x : Nat) → (L : List (Nat × Nat)) → (e : Nat × Nat) →
+  cr-mem x (gw-ids (list-append L (cons e nil))) → Sum (cr-mem x (gw-ids L)) (x ≡ fst e)
+gw-mem-ids-snoc x nil e h = case h of
+  inl p → inr p
+  inr z → Empty-rec z
+gw-mem-ids-snoc x (cons d r) e h = case h of
+  inl p → inl (inl p)
+  inr h2 → (case gw-mem-ids-snoc x r e h2 of
+    inl a → inl (inr a)
+    inr b → inr b)
+gw-nodup-ids-snoc : (L : List (Nat × Nat)) → (e : Nat × Nat) → gw-nodup (gw-ids L) → Neg (cr-mem (fst e) (gw-ids L)) →
+  gw-nodup (gw-ids (list-append L (cons e nil)))
+gw-nodup-ids-snoc nil e h n = ((λ z → z) , unit)
+gw-nodup-ids-snoc (cons d r) e h n =
+  ((λ m → case gw-mem-ids-snoc (fst d) r e m of
+       inl a → fst h a
+       inr b → n (inl (λ k → b (~ k))))
+  , gw-nodup-ids-snoc r e (snd h) (λ m → n (inr m)))
+gw-rm-sub : (b : Bool) → (e : Nat × Nat) → (rest r : List (Nat × Nat)) → (x : Nat) →
+  (cr-mem x (gw-ids rest) → cr-mem x (gw-ids r)) → cr-mem x (gw-ids (gw-rm-step b e rest)) → cr-mem x (cons (fst e) (gw-ids r))
+gw-rm-sub true e rest r x f h = inr (f h)
+gw-rm-sub false e rest r x f h = case h of
+  inl p → inl p
+  inr m → inr (f m)
+gw-keys-remove : (x i : Nat) → (O : List (Nat × Nat)) → cr-mem x (gw-ids (gw-remove i O)) → cr-mem x (gw-ids O)
+gw-keys-remove x i nil h = h
+gw-keys-remove x i (cons e r) h = gw-rm-sub (eqb (fst e) i) e (gw-remove i r) r x (gw-keys-remove x i r) h
+gw-rm-gone : (b : Bool) → (e : Nat × Nat) → (rest : List (Nat × Nat)) → (i : Nat) → (isTrue (eqb (fst e) i) → isTrue b) →
+  (cr-mem i (gw-ids rest) → Empty) → cr-mem i (gw-ids (gw-rm-step b e rest)) → Empty
+gw-rm-gone true e rest i t f h = f h
+gw-rm-gone false e rest i t f h = case h of
+  inl p → t (eqb-complete {fst e} {i} (λ k → p (~ k)))
+  inr m → f m
+gw-remove-gone : (i : Nat) → (O : List (Nat × Nat)) → cr-mem i (gw-ids (gw-remove i O)) → Empty
+gw-remove-gone i nil h = h
+gw-remove-gone i (cons e r) h = gw-rm-gone (eqb (fst e) i) e (gw-remove i r) i (λ z → z) (gw-remove-gone i r) h
+-- admission adds an identifier outside U; a fill removes an open identifier absent from the ledger
+-- before appending it; cancellation shrinks the open domain; receive and stale leave the sets
+gw-step-J : (B : Nat) → (mv : GwMove) → (s : GwState) → gw-allowed B mv s → gw-JK s → gw-JK (gw-move mv s)
+gw-step-J B (gw-admit i q) s a h =
+  ((fst (fst h)
+   , ((λ x m → inr (fst (snd (fst h)) x m))
+   , (λ x m m2 → case m2 of
+        inl p → fst a (subst {_} {_} {_} {λ z → cr-mem z (gw-U s)} p (fst (snd (fst h)) x m))
+        inr m3 → snd (snd (fst h)) x m m3)))
+  , (λ x m → case m of
+       inl p → inl p
+       inr m3 → inr (snd h x m3)))
+gw-step-J B (gw-receive m) s a h = h
+gw-step-J B (gw-fill i q) s a h =
+  ((gw-nodup-ids-snoc (gw-L s) (the (Nat × Nat) (i , q)) (fst (fst h)) (λ m → snd (snd (fst h)) i m (gw-mem-key i q (gw-O s) (snd a)))
+   , ((λ x m → case gw-mem-ids-snoc x (gw-L s) (the (Nat × Nat) (i , q)) m of
+         inl l → fst (snd (fst h)) x l
+         inr b → subst {_} {_} {_} {λ z → cr-mem z (gw-U s)} (λ k → b (~ k)) (snd h i (gw-mem-key i q (gw-O s) (snd a))))
+   , (λ x m m2 → case gw-mem-ids-snoc x (gw-L s) (the (Nat × Nat) (i , q)) m of
+         inl l → snd (snd (fst h)) x l (gw-keys-remove x i (gw-O s) m2)
+         inr b → gw-remove-gone i (gw-O s) (subst {_} {_} {_} {λ z → cr-mem z (gw-ids (gw-remove i (gw-O s)))} b m2))))
+  , (λ x m → snd h x (gw-keys-remove x i (gw-O s) m)))
+gw-step-J B (gw-cancel i) s a h =
+  ((fst (fst h) , (fst (snd (fst h)) , (λ x m m2 → snd (snd (fst h)) x m (gw-keys-remove x i (gw-O s) m2))))
+  , (λ x m → snd h x (gw-keys-remove x i (gw-O s) m)))
+gw-step-J B gw-stale s a h = h
+gw-J-run : (B : Nat) → (mvs : List GwMove) → (s : GwState) → gw-allowed-run B mvs s → gw-JK s → gw-JK (gw-run mvs s)
+gw-J-run B nil s a h = h
+gw-J-run B (cons mv r) s a h = gw-J-run B r (gw-move mv s) (snd a) (gw-step-J B mv s (fst a) h)
+gw-JK0 : (v : Nat) → gw-JK (gw-s0 v)
+gw-JK0 v = ((unit , ((λ x m → m) , (λ x m m2 → m))) , (λ x m → m))
+-- count_L(i) ≤ 1
+gw-cs : Bool → Nat → Nat
+gw-cs true n = suc n
+gw-cs false n = n
+gw-count : Nat → List Nat → Nat
+gw-count i nil = zero
+gw-count i (cons x r) = gw-cs (eqb x i) (gw-count i r)
+gw-cs-zero : (b : Bool) → (c : Nat) → (isTrue b → Empty) → c ≡ zero → gw-cs b c ≡ zero
+gw-cs-zero true c f e = Empty-rec (f unit)
+gw-cs-zero false c f e = e
+gw-count-zero : (i : Nat) → (xs : List Nat) → Neg (cr-mem i xs) → gw-count i xs ≡ zero
+gw-count-zero i nil n = λ k → zero
+gw-count-zero i (cons x r) n = gw-cs-zero (eqb x i) (gw-count i r) (λ t → n (inl (λ k → eqb-sound {x} {i} t (~ k))))
+  (gw-count-zero i r (λ m → n (inr m)))
+gw-cs-le : (b : Bool) → (c : Nat) → (isTrue b → c ≡ zero) → le c (suc zero) → le (gw-cs b c) (suc zero)
+gw-cs-le true c f l = (zero , λ k → suc (f unit k))
+gw-cs-le false c f l = l
+gw-count-le : (i : Nat) → (xs : List Nat) → gw-nodup xs → le (gw-count i xs) (suc zero)
+gw-count-le i nil h = (suc zero , λ k → suc zero)
+gw-count-le i (cons x r) h = gw-cs-le (eqb x i) (gw-count i r)
+  (λ t → gw-count-zero i r (λ m → fst h (subst {_} {_} {_} {λ z → cr-mem z r} (λ k → eqb-sound {x} {i} t (~ k)) m)))
+  (gw-count-le i r (snd h))
+-- (10.T4) a second finite-run induction establishes J, and with it each order identifier appears at
+-- most once in the accepted-fill ledger
+gw-unique : (B v : Nat) → (mvs : List GwMove) → gw-allowed-run B mvs (gw-s0 v) → (i : Nat) →
+  le (gw-count i (gw-ids (gw-L (gw-run mvs (gw-s0 v))))) (suc zero)
+gw-unique B v mvs a i = gw-count-le i (gw-ids (gw-L (gw-run mvs (gw-s0 v)))) (fst (fst (gw-J-run B mvs (gw-s0 v) a (gw-JK0 v))))

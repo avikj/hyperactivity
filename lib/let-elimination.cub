@@ -1,0 +1,68 @@
+-- lib/let-elimination.cub — the paper's §5.2 (docs/hyperactivity.cub, “A language as a definition”) as code:
+-- the arithmetic language with variables and let (5.1), its evaluator (5.2), the let-free language of
+-- variables, numerals, addition and explicit substitution with its semantic substitution lemma, the
+-- translation D replacing let by substitution for the newest variable (5.3), and its soundness (5.4);
+-- and that D is not an equivalence of syntax: it forgets how the source was written.
+-- Variables are de Bruijn positions; an environment assigns a number to every position, so the
+-- theorem holds for every environment, those of Γ = Fin(n) among them; extension Γ⁺ = 1 + Γ is lx-ext.
+import "core.cub"
+-- (5.1) the second argument of let is in the context extended by one variable
+data LetExpr = lx-var (i : Nat) | lx-num (n : Nat) | lx-plus (u : LetExpr) (v : LetExpr) | lx-let (u : LetExpr) (v : LetExpr)
+lx-ext : (Nat → Nat) → Nat → Nat → Nat
+lx-ext rho x zero = x
+lx-ext rho x (suc i) = rho i
+-- (5.2)
+lx-eval : LetExpr → (Nat → Nat) → Nat
+lx-eval (lx-var i) rho = rho i
+lx-eval (lx-num n) rho = n
+lx-eval (lx-plus u v) rho = plus (lx-eval u rho) (lx-eval v rho)
+lx-eval (lx-let u v) rho = lx-eval v (lx-ext rho (lx-eval u rho))
+-- the let-free language and its explicit substitution
+data LetCore = dx-var (i : Nat) | dx-num (n : Nat) | dx-plus (u : LetCore) (v : LetCore)
+dx-eval : LetCore → (Nat → Nat) → Nat
+dx-eval (dx-var i) rho = rho i
+dx-eval (dx-num n) rho = n
+dx-eval (dx-plus u v) rho = plus (dx-eval u rho) (dx-eval v rho)
+dx-subst : (Nat → LetCore) → LetCore → LetCore
+dx-subst th (dx-var i) = th i
+dx-subst th (dx-num n) = dx-num n
+dx-subst th (dx-plus u v) = dx-plus (dx-subst th u) (dx-subst th v)
+-- the semantic substitution lemma: ⟦t[θ]⟧ρ = ⟦t⟧(⟦θ⟧ρ)
+dx-subst-eval : (th : Nat → LetCore) → (t : LetCore) → (rho : Nat → Nat) → dx-eval (dx-subst th t) rho ≡ dx-eval t (λ i → dx-eval (th i) rho)
+dx-subst-eval th (dx-var i) rho = λ k → dx-eval (th i) rho
+dx-subst-eval th (dx-num n) rho = λ k → n
+dx-subst-eval th (dx-plus u v) rho = λ k → plus (dx-subst-eval th u rho k) (dx-subst-eval th v rho k)
+-- subst₀: the newest variable to u, each older variable i + 1 to i
+dx-newest : LetCore → Nat → LetCore
+dx-newest u zero = u
+dx-newest u (suc i) = dx-var i
+dx-newest-env : (u : LetCore) → (rho : Nat → Nat) → (i : Nat) → dx-eval (dx-newest u i) rho ≡ lx-ext rho (dx-eval u rho) i
+dx-newest-env u rho zero = λ k → dx-eval u rho
+dx-newest-env u rho (suc i) = λ k → rho i
+-- (5.3)
+lx-D : LetExpr → LetCore
+lx-D (lx-var i) = dx-var i
+lx-D (lx-num n) = dx-num n
+lx-D (lx-plus u v) = dx-plus (lx-D u) (lx-D v)
+lx-D (lx-let u v) = dx-subst (dx-newest (lx-D u)) (lx-D v)
+-- (5.4) the let case by the semantic substitution lemma; the others from (5.2) and the hypotheses
+lx-D-sound : (e : LetExpr) → (rho : Nat → Nat) → dx-eval (lx-D e) rho ≡ lx-eval e rho
+lx-D-sound (lx-var i) rho = λ k → rho i
+lx-D-sound (lx-num n) rho = λ k → n
+lx-D-sound (lx-plus u v) rho = λ k → plus (lx-D-sound u rho k) (lx-D-sound v rho k)
+lx-D-sound (lx-let u v) rho =
+  transN {dx-eval (dx-subst (dx-newest (lx-D u)) (lx-D v)) rho} {dx-eval (lx-D v) (λ i → dx-eval (dx-newest (lx-D u) i) rho)} {lx-eval v (lx-ext rho (lx-eval u rho))}
+  (dx-subst-eval (dx-newest (lx-D u)) (lx-D v) rho)
+  (transN {dx-eval (lx-D v) (λ i → dx-eval (dx-newest (lx-D u) i) rho)} {dx-eval (lx-D v) (lx-ext rho (dx-eval (lx-D u) rho))} {lx-eval v (lx-ext rho (lx-eval u rho))}
+  (λ k → dx-eval (lx-D v) (λ i → dx-newest-env (lx-D u) rho i k))
+  (transN {dx-eval (lx-D v) (lx-ext rho (dx-eval (lx-D u) rho))} {dx-eval (lx-D v) (lx-ext rho (lx-eval u rho))} {lx-eval v (lx-ext rho (lx-eval u rho))}
+  (λ k → dx-eval (lx-D v) (lx-ext rho (lx-D-sound u rho k)))
+  (lx-D-sound v (lx-ext rho (lx-eval u rho)))))
+-- D is semantics-preserving but not an equivalence of syntax types: let(1, var 0) and 1 have one image
+lx-is-let : LetExpr → Bool
+lx-is-let (lx-var i) = false
+lx-is-let (lx-num n) = false
+lx-is-let (lx-plus u v) = false
+lx-is-let (lx-let u v) = true
+lx-D-forgets : (lx-D (lx-let (lx-num (suc zero)) (lx-var zero)) ≡ lx-D (lx-num (suc zero))) × Neg (lx-let (lx-num (suc zero)) (lx-var zero) ≡ lx-num (suc zero))
+lx-D-forgets = ((λ k → dx-num (suc zero)) , (λ p → true≢false (λ k → lx-is-let (p k))))

@@ -1,0 +1,162 @@
+-- lib/credit.cub — the paper's §10.3 (docs/hyperactivity.cub, “A distributed credit invariant, with no
+-- global scheduler as an axiom”) as code: the specified state of peers' held credit and channels'
+-- in-flight credit with its total (10.6), allocation (10.7) and delivery (10.8) as transitions allowed
+-- in the state they act on, conservation of the total over every allowed finite sequence, an
+-- observer's compatible states as a fiber (10.9), and receipt-bearing delivery, where a transfer
+-- carries an identifier, delivery requires the identifier undelivered, and no run delivers it again.
+import "core.cub"
+-- ---------------------------------------------------------------- (10.6) the specified state
+-- c lists each peer's held credit; m lists each directed channel's in-flight credit, channel i → j at
+-- place i·n + j for n peers; total(S) = Σc + Σm
+cr-sum : List Nat → Nat
+cr-sum nil = zero
+cr-sum (cons x r) = plus x (cr-sum r)
+CrState : Type
+CrState = List Nat × List Nat
+cr-total : CrState → Nat
+cr-total s = plus (cr-sum (fst s)) (cr-sum (snd s))
+cr-chan : CrState → Nat → Nat → Nat
+cr-chan s i j = plus (times i (list-length (fst s))) j
+cr-at : List Nat → Nat → Nat
+cr-at nil i = zero
+cr-at (cons x r) zero = x
+cr-at (cons x r) (suc i) = cr-at r i
+cr-set : List Nat → Nat → Nat → List Nat
+cr-set nil i v = nil
+cr-set (cons x r) zero v = cons v r
+cr-set (cons x r) (suc i) v = cons x (cr-set r i v)
+cr-add : List Nat → Nat → Nat → List Nat
+cr-add nil i q = nil
+cr-add (cons x r) zero q = cons (plus q x) r
+cr-add (cons x r) (suc i) q = cons x (cr-add r i q)
+-- the account at place i exists
+cr-has : List Nat → Nat → Type
+cr-has xs i = le (suc i) (list-length xs)
+cr-no-account : (i : Nat) → cr-has nil i → Empty
+cr-no-account i h = snotz {plus (fst h) i} (transN (sym (plus-suc (fst h) i)) (snd h))
+cr-has-tail : (x : Nat) → (r : List Nat) → (i : Nat) → cr-has (cons x r) (suc i) → cr-has r i
+cr-has-tail x r i h = (fst h , suc-inj (transN (sym (plus-suc (fst h) (suc i))) (snd h)))
+-- taking q from an account holding k + q leaves k there and q fewer in the sum
+cr-take : (xs : List Nat) → (i k q : Nat) → cr-has xs i → plus k q ≡ cr-at xs i → plus q (cr-sum (cr-set xs i k)) ≡ cr-sum xs
+cr-take nil i k q h e = Empty-rec (cr-no-account i h)
+cr-take (cons x r) zero k q h e = transN (sym (plus-assoc q k (cr-sum r)))
+  (transN (congN (λ z → plus z (cr-sum r)) (plus-comm q k)) (congN (λ z → plus z (cr-sum r)) e))
+cr-take (cons x r) (suc i) k q h e =
+  transN (plus-comm-mid q x (cr-sum (cr-set r i k))) (congN (plus x) (cr-take r i k q (cr-has-tail x r i h) e))
+-- giving q to an account puts q more in the sum
+cr-give : (xs : List Nat) → (i q : Nat) → cr-has xs i → cr-sum (cr-add xs i q) ≡ plus q (cr-sum xs)
+cr-give nil i q h = Empty-rec (cr-no-account i h)
+cr-give (cons x r) zero q h = plus-assoc q x (cr-sum r)
+cr-give (cons x r) (suc i) q h = transN (congN (plus x) (cr-give r i q (cr-has-tail x r i h))) (plus-comm-mid x q (cr-sum r))
+-- ---------------------------------------------------------------- (10.7), (10.8) the transitions
+-- allocation of q from peer i onto channel i → j, with k + q = c_i (that is, q ≤ c_i and k = c_i − q);
+-- delivery of q from channel i → j to peer j, with k + q = m_ij
+data CrMove = cr-allocate (i : Nat) (j : Nat) (q : Nat) (k : Nat) | cr-deliver (i : Nat) (j : Nat) (q : Nat) (k : Nat)
+cr-move : CrMove → CrState → CrState
+cr-move (cr-allocate i j q k) s = (cr-set (fst s) i k , cr-add (snd s) (cr-chan s i j) q)
+cr-move (cr-deliver i j q k) s = (cr-add (fst s) j q , cr-set (snd s) (cr-chan s i j) k)
+cr-allowed : CrMove → CrState → Type
+cr-allowed (cr-allocate i j q k) s = cr-has (fst s) i × cr-has (snd s) (cr-chan s i j) × plus k q ≡ cr-at (fst s) i
+cr-allowed (cr-deliver i j q k) s = cr-has (snd s) (cr-chan s i j) × cr-has (fst s) j × plus k q ≡ cr-at (snd s) (cr-chan s i j)
+cr-alloc-sum : (C C' M M' q : Nat) → plus q C' ≡ C → M' ≡ plus q M → plus C' M' ≡ plus C M
+cr-alloc-sum C C' M M' q a g = transN (congN (plus C') g) (transN (sym (plus-assoc C' q M))
+  (transN (congN (λ z → plus z M) (plus-comm C' q)) (congN (λ z → plus z M) a)))
+cr-deliv-sum : (C C' M M' q : Nat) → C' ≡ plus q C → plus q M' ≡ M → plus C' M' ≡ plus C M
+cr-deliv-sum C C' M M' q g a = transN (congN (λ z → plus z M') g)
+  (transN (plus-assoc q C M') (transN (plus-comm-mid q C M') (congN (plus C) a)))
+-- both transitions preserve the total, by cancellation in ℕ
+cr-move-total : (mv : CrMove) → (s : CrState) → cr-allowed mv s → cr-total (cr-move mv s) ≡ cr-total s
+cr-move-total (cr-allocate i j q k) s h = cr-alloc-sum (cr-sum (fst s)) (cr-sum (cr-set (fst s) i k))
+  (cr-sum (snd s)) (cr-sum (cr-add (snd s) (cr-chan s i j) q)) q
+  (cr-take (fst s) i k q (fst h) (snd (snd h))) (cr-give (snd s) (cr-chan s i j) q (fst (snd h)))
+cr-move-total (cr-deliver i j q k) s h = cr-deliv-sum (cr-sum (fst s)) (cr-sum (cr-add (fst s) j q))
+  (cr-sum (snd s)) (cr-sum (cr-set (snd s) (cr-chan s i j) k)) q
+  (cr-give (fst s) j q (fst (snd h))) (cr-take (snd s) (cr-chan s i j) k q (fst h) (snd (snd h)))
+-- a finite sequence of transitions, each allowed in the state it acts on
+cr-run : List CrMove → CrState → CrState
+cr-run nil s = s
+cr-run (cons mv r) s = cr-run r (cr-move mv s)
+cr-allowed-run : List CrMove → CrState → Type
+cr-allowed-run nil s = Unit
+cr-allowed-run (cons mv r) s = cr-allowed mv s × cr-allowed-run r (cr-move mv s)
+-- any finite sequence of these transitions preserves total credit, by induction on its length
+cr-conserved : (mvs : List CrMove) → (s : CrState) → cr-allowed-run mvs s → cr-total (cr-run mvs s) ≡ cr-total s
+cr-conserved nil s h = λ i → cr-total s
+cr-conserved (cons mv r) s h = transN (cr-conserved r (cr-move mv s) (snd h)) (cr-move-total mv s (fst h))
+-- (10.9) the states compatible with an observation: the observation's fiber
+cr-possible : {O : Type} → (CrState → O) → O → Type
+cr-possible obs o = fiber obs o
+-- ---------------------------------------------------------------- receipt-bearing delivery
+cr-mem : {A : Type} → A → List A → Type
+cr-mem x nil = Empty
+cr-mem x (cons y r) = Sum (x ≡ y) (cr-mem x r)
+-- a transfer: identifier u, source i, destination j, amount q; the state adds the sent transfers and
+-- the delivered and acknowledged identifiers to the credit state
+RcptTransfer : Type
+RcptTransfer = Nat × Nat × Nat × Nat
+RcptState : Type
+RcptState = CrState × List RcptTransfer × List Nat × List Nat
+rcpt-credit : RcptState → CrState
+rcpt-credit s = fst s
+rcpt-sent : RcptState → List RcptTransfer
+rcpt-sent s = fst (snd s)
+rcpt-delivered : RcptState → List Nat
+rcpt-delivered s = fst (snd (snd s))
+rcpt-acked : RcptState → List Nat
+rcpt-acked s = snd (snd (snd s))
+rcpt-ids : List RcptTransfer → List Nat
+rcpt-ids nil = nil
+rcpt-ids (cons t r) = cons (fst t) (rcpt-ids r)
+-- sending is an allocation under a fresh identifier (a return is a send in the reverse direction);
+-- delivery of a sent transfer u requires u undelivered, consumes its in-flight credit once, credits
+-- the receiver and records u delivered; acknowledgment requires u delivered and records a receipt
+data RcptMove = rcpt-send (u : Nat) (i : Nat) (j : Nat) (q : Nat) (k : Nat) | rcpt-deliver (u : Nat) (i : Nat) (j : Nat) (q : Nat) (k : Nat) | rcpt-ack (u : Nat)
+rcpt-move : RcptMove → RcptState → RcptState
+rcpt-move (rcpt-send u i j q k) s = (cr-move (cr-allocate i j q k) (rcpt-credit s) , cons (u , i , j , q) (rcpt-sent s) , rcpt-delivered s , rcpt-acked s)
+rcpt-move (rcpt-deliver u i j q k) s = (cr-move (cr-deliver i j q k) (rcpt-credit s) , rcpt-sent s , cons u (rcpt-delivered s) , rcpt-acked s)
+rcpt-move (rcpt-ack u) s = (rcpt-credit s , rcpt-sent s , rcpt-delivered s , cons u (rcpt-acked s))
+rcpt-allowed : RcptMove → RcptState → Type
+rcpt-allowed (rcpt-send u i j q k) s = Neg (cr-mem u (rcpt-ids (rcpt-sent s))) × cr-allowed (cr-allocate i j q k) (rcpt-credit s)
+rcpt-allowed (rcpt-deliver u i j q k) s = cr-mem (u , i , j , q) (rcpt-sent s) × Neg (cr-mem u (rcpt-delivered s)) × cr-allowed (cr-deliver i j q k) (rcpt-credit s)
+rcpt-allowed (rcpt-ack u) s = cr-mem u (rcpt-delivered s)
+rcpt-run : List RcptMove → RcptState → RcptState
+rcpt-run nil s = s
+rcpt-run (cons mv r) s = rcpt-run r (rcpt-move mv s)
+rcpt-allowed-run : List RcptMove → RcptState → Type
+rcpt-allowed-run nil s = Unit
+rcpt-allowed-run (cons mv r) s = rcpt-allowed mv s × rcpt-allowed-run r (rcpt-move mv s)
+rcpt-total : RcptState → Nat
+rcpt-total s = cr-total (rcpt-credit s)
+-- acknowledgment transfers no credit
+rcpt-ack-total : (u : Nat) → (s : RcptState) → rcpt-total (rcpt-move (rcpt-ack u) s) ≡ rcpt-total s
+rcpt-ack-total u s = λ i → rcpt-total s
+rcpt-move-total : (mv : RcptMove) → (s : RcptState) → rcpt-allowed mv s → rcpt-total (rcpt-move mv s) ≡ rcpt-total s
+rcpt-move-total (rcpt-send u i j q k) s h = cr-move-total (cr-allocate i j q k) (rcpt-credit s) (snd h)
+rcpt-move-total (rcpt-deliver u i j q k) s h = cr-move-total (cr-deliver i j q k) (rcpt-credit s) (snd (snd h))
+rcpt-move-total (rcpt-ack u) s h = rcpt-ack-total u s
+-- each transfer preserves the conservation invariant
+rcpt-conserved : (mvs : List RcptMove) → (s : RcptState) → rcpt-allowed-run mvs s → rcpt-total (rcpt-run mvs s) ≡ rcpt-total s
+rcpt-conserved nil s h = λ i → rcpt-total s
+rcpt-conserved (cons mv r) s h = transN (rcpt-conserved r (rcpt-move mv s) (snd h)) (rcpt-move-total mv s (fst h))
+-- duplicate delivery is excluded by the delivered-set premise: once u is delivered, no allowed run
+-- contains a delivery of u
+rcpt-is-delivery : Nat → RcptMove → Type
+rcpt-is-delivery u (rcpt-send u' i j q k) = Empty
+rcpt-is-delivery u (rcpt-deliver u' i j q k) = u ≡ u'
+rcpt-is-delivery u (rcpt-ack u') = Empty
+rcpt-delivers : Nat → List RcptMove → Type
+rcpt-delivers u nil = Empty
+rcpt-delivers u (cons mv r) = Sum (rcpt-is-delivery u mv) (rcpt-delivers u r)
+rcpt-keeps : (u : Nat) → (mv : RcptMove) → (s : RcptState) → cr-mem u (rcpt-delivered s) → cr-mem u (rcpt-delivered (rcpt-move mv s))
+rcpt-keeps u (rcpt-send u' i j q k) s m = m
+rcpt-keeps u (rcpt-deliver u' i j q k) s m = inr m
+rcpt-keeps u (rcpt-ack u') s m = m
+rcpt-not-again : (u : Nat) → (mv : RcptMove) → (s : RcptState) → cr-mem u (rcpt-delivered s) → rcpt-allowed mv s → rcpt-is-delivery u mv → Empty
+rcpt-not-again u (rcpt-send u' i j q k) s m h e = e
+rcpt-not-again u (rcpt-deliver u' i j q k) s m h e = fst (snd h) (subst {_} {_} {_} {λ z → cr-mem z (rcpt-delivered s)} e m)
+rcpt-not-again u (rcpt-ack u') s m h e = e
+rcpt-no-redelivery : (u : Nat) → (mvs : List RcptMove) → (s : RcptState) → cr-mem u (rcpt-delivered s) → rcpt-allowed-run mvs s → rcpt-delivers u mvs → Empty
+rcpt-no-redelivery u nil s m h d = d
+rcpt-no-redelivery u (cons mv r) s m h d = case d of
+  inl e → rcpt-not-again u mv s m (fst h) e
+  inr d2 → rcpt-no-redelivery u r (rcpt-move mv s) (rcpt-keeps u mv s m) (snd h) d2
