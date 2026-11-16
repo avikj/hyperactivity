@@ -1,0 +1,136 @@
+-- lib/source-semantics.cub — the paper's §5.5 (docs/hyperactivity.cub, “Source-language semantics as an
+-- inductive construction”) as code: the one-step functor D_Σ(C, A, F) (5.9) and a machine as its
+-- coalgebra; the guarded unfolding of a machine into a process (5.10), done and fault being the
+-- process's result in A + F; a language as one record of syntax, static evidence, configurations, an
+-- initial configuration and a step, with meaning its unfolding; properties, proofs and annotations
+-- of the meaning (5.11); the exact memory-interaction instance — the statements, their step
+-- equations, the handler owning memory — with the program Seq(ReadInto(r,a), Write(b, Xor(Reg r,
+-- Const 0x5a))) whose execution under Read(a) ↦ 0x35 is Read(a), then Write(b, 0x6f), then Done; and
+-- rule signatures, premises, adequacy (5.12), (5.13) and clause coverage (5.13a) as data.
+import "library.cub"
+-- (5.9) D_Σ(C, A, F) = A + F + C + Σ_{c : Cmd} (Reply(c) → C)
+DStep : Sig → Type → Type → Type → Type
+DStep S C A F = Sum A (Sum F (Sum C ((c : Cmd S) × (Resp S c → C))))
+Machine : Sig → Type → Type → Type → Type
+Machine S C A F = C → DStep S C A F
+-- (5.10) unfold(δ, s): done(a), fault(f), tau(next(δ, s')), call(c, λ r. next(δ, k(r)))
+m-unfold : {S : Sig} {C A F : Type} → Machine S C A F → C → GProc κ S (Sum A F)
+m-unfold {κ} {S} {C} {A} {F} d s = case d s of
+  inl a → gret (inl a)
+  inr o2 → (case o2 of
+    inl f → gret (inr f)
+    inr o3 → (case o3 of
+      inl s2 → gtau (m-unfold d s2)
+      inr ck → gcmd (fst ck) (λ r → m-unfold d (snd ck r))))
+-- a source language: source syntax and static evidence, inputs, results, faults, configurations,
+-- commands, the initial configuration and the step
+Language : Type 1
+Language = (Source : Type) × (Well : Source → Type) × (Input : Source → Type) × (Result : Source → Type) ×
+  (Fault : Source → Type) × (Config : Source → Type) × (Commands : Sig) ×
+  ((p : Source) → Well p → Input p → Config p) × ((p : Source) → Config p → DStep Commands (Config p) (Result p) (Fault p))
+lang-source : Language → Type
+lang-source L = fst L
+lang-well : (L : Language) → lang-source L → Type
+lang-well L = fst (snd L)
+lang-input : (L : Language) → lang-source L → Type
+lang-input L = fst (snd (snd L))
+lang-result : (L : Language) → lang-source L → Type
+lang-result L = fst (snd (snd (snd L)))
+lang-fault : (L : Language) → lang-source L → Type
+lang-fault L = fst (snd (snd (snd (snd L))))
+lang-config : (L : Language) → lang-source L → Type
+lang-config L = fst (snd (snd (snd (snd (snd L)))))
+lang-commands : Language → Sig
+lang-commands L = fst (snd (snd (snd (snd (snd (snd L))))))
+lang-init : (L : Language) → (p : lang-source L) → lang-well L p → lang-input L p → lang-config L p
+lang-init L = fst (snd (snd (snd (snd (snd (snd (snd L)))))))
+lang-step : (L : Language) → (p : lang-source L) → Machine (lang-commands L) (lang-config L p) (lang-result L p) (lang-fault L p)
+lang-step L = snd (snd (snd (snd (snd (snd (snd (snd L)))))))
+-- the meaning of a program: the guarded unfolding of its step from its initial configuration
+LangProc : (L : Language) → lang-source L → Type
+LangProc L p = (k : Clock) → GProc k (lang-commands L) (Sum (lang-result L p) (lang-fault L p))
+lang-meaning : (L : Language) → (p : lang-source L) → lang-well L p → lang-input L p → LangProc L p
+lang-meaning L p w x = λ k → m-unfold {k} {lang-commands L} {lang-config L p} {lang-result L p} {lang-fault L p} (lang-step L p) (lang-init L p w x)
+-- (5.11)
+LangProperty : (L : Language) → (p : lang-source L) → lang-well L p → Type 1
+LangProperty L p w = (x : lang-input L p) → LangProc L p → Type
+LangProof : (L : Language) → (p : lang-source L) → (w : lang-well L p) → LangProperty L p w → Type
+LangProof L p w P = (x : lang-input L p) → P x (lang-meaning L p w x)
+LangAnnotated : (L : Language) → (p : lang-source L) → lang-well L p → Type 1
+LangAnnotated L p w = (P : LangProperty L p w) × LangProof L p w P
+-- ---------------------------------------------------------------- the memory-interaction instance
+-- commands Read(a) with reply Byte and Write(a, b) with reply Unit
+data BmCmd = bm-read (a : Nat) | bm-write (a : Nat) (b : Byte)
+bm-reply : BmCmd → Type
+bm-reply (bm-read a) = Byte
+bm-reply (bm-write a b) = Unit
+BmSig : Sig
+BmSig = (BmCmd , bm-reply)
+data BmExpr = bm-const (b : Byte) | bm-reg (r : Nat) | bm-xor (u : BmExpr) (v : BmExpr)
+data BmStmt = bm-skip | bm-read-into (r : Nat) (a : Nat) | bm-write-of (a : Nat) (e : BmExpr) | bm-seq (s : BmStmt) (t : BmStmt) | bm-if (e : BmExpr) (s : BmStmt) (t : BmStmt)
+bm-eval : BmExpr → (Nat → Byte) → Byte
+bm-eval (bm-const b) rho = b
+bm-eval (bm-reg r) rho = rho r
+bm-eval (bm-xor u v) rho = xorB 8 (bm-eval u rho) (bm-eval v rho)
+bm-set : (Nat → Byte) → Nat → Byte → Nat → Byte
+bm-set rho r b j = case eqb j r of
+  true → b
+  false → rho j
+bm-zero : Byte
+bm-zero = (false , false , false , false , false , false , false , false , unit)
+bm-choose : Bool → BmStmt → BmStmt → BmStmt
+bm-choose true s t = t
+bm-choose false s t = s
+-- a configuration (stmt, registers, continuation); the memory belongs to the handler
+BmConf : Type
+BmConf = BmStmt × (Nat → Byte) × List BmStmt
+bm-tau : BmConf → DStep BmSig BmConf (Nat → Byte) Empty
+bm-tau c = inr (inr (inl c))
+bm-call : (c : BmCmd) → (bm-reply c → BmConf) → DStep BmSig BmConf (Nat → Byte) Empty
+bm-call c k = inr (inr (inr (c , k)))
+bm-step-skip : (Nat → Byte) → List BmStmt → DStep BmSig BmConf (Nat → Byte) Empty
+bm-step-skip rho nil = inl rho
+bm-step-skip rho (cons s k) = bm-tau (s , rho , k)
+bm-step-at : BmStmt → (Nat → Byte) → List BmStmt → DStep BmSig BmConf (Nat → Byte) Empty
+bm-step-at bm-skip rho k = bm-step-skip rho k
+bm-step-at (bm-seq s t) rho k = bm-tau (s , rho , cons t k)
+bm-step-at (bm-if e s t) rho k = bm-tau (bm-choose (eqBits 8 (bm-eval e rho) bm-zero) s t , rho , k)
+bm-step-at (bm-read-into r a) rho k = bm-call (bm-read a) (λ b → (bm-skip , bm-set rho r b , k))
+bm-step-at (bm-write-of a e) rho k = bm-call (bm-write a (bm-eval e rho)) (λ u → (bm-skip , rho , k))
+bm-step : Machine BmSig BmConf (Nat → Byte) Empty
+bm-step c = bm-step-at (fst c) (fst (snd c)) (snd (snd c))
+-- the handler: Read(a) answers μ[a]; Write(a, b) makes the state μ[a ↦ b] and answers Unit
+bm-handle : (c : BmCmd) → (Nat → Byte) → bm-reply c × (Nat → Byte)
+bm-handle (bm-read a) mu = (mu a , mu)
+bm-handle (bm-write a b) mu = (unit , bm-set mu a b)
+-- a finite execution against the handler: the commands issued, in order, and whether it is done
+bm-run : Nat → (Nat → Byte) → BmConf → List BmCmd × Bool
+bm-run zero mu c = (nil , false)
+bm-run (suc n) mu c = case bm-step c of
+  inl rho → (nil , true)
+  inr o2 → (case o2 of
+    inl f → (nil , false)
+    inr o3 → (case o3 of
+      inl c2 → bm-run n mu c2
+      inr ck → (cons (fst ck) (fst (bm-run n (snd (bm-handle (fst ck) mu)) (snd ck (fst (bm-handle (fst ck) mu))))) ,
+                snd (bm-run n (snd (bm-handle (fst ck) mu)) (snd ck (fst (bm-handle (fst ck) mu)))))))
+bm-x35 : Byte
+bm-x35 = (false , false , true , true , false , true , false , true , unit)
+bm-x6f : Byte
+bm-x6f = (false , true , true , false , true , true , true , true , unit)
+bm-program : Nat → Nat → Nat → BmStmt
+bm-program r a b = bm-seq (bm-read-into r a) (bm-write-of b (bm-xor (bm-reg r) (bm-const x5a)))
+-- with Read(a) answering 0x35, the execution is Read(a), then Write(b, 0x6f), then Done (register r = 0)
+bm-example : (a b : Nat) → (rho : Nat → Byte) →
+  bm-run (toNat #12) (λ j → bm-x35) (bm-program zero a b , rho , nil) ≡ (cons (bm-read a) (cons (bm-write b bm-x6f) nil) , true)
+bm-example a b rho = λ k → (cons (bm-read a) (cons (bm-write b bm-x6f) nil) , true)
+-- ---------------------------------------------------------------- (5.12), (5.13), (5.13a)
+RuleSig : Type → Type 1
+RuleSig Judg = (Inst : Type) × (Inst → Judg) × (Inst → List Judg)
+rule-all : {Judg : Type} → (Judg → Type) → List Judg → Type
+rule-all D nil = Unit
+rule-all D (cons J Js) = D J × rule-all D Js
+Adequate : {Judg : Type} → (Judg → Type) → (Judg → Type) → Type
+Adequate {Judg} D H = (J : Judg) → (f : D J → H J) × (g : H J → D J) × ((d : D J) → g (f d) ≡ d) × ((h : H J) → f (g h) ≡ h)
+Covers : Type → Type → Type 1
+Covers Clause Inst = Clause → List Inst → Type

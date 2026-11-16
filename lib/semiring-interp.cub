@@ -1,0 +1,67 @@
+-- lib/semiring-interp.cub — the paper's §6.3 (docs/hyperactivity.cub, “Reflection applied to a language
+-- definition itself”) as code: the arithmetic language with multiplication (6.10) is lib/ring.cub's Ex
+-- with xeval; its interpreter over any semiring, numerals through the canonical map ℕ → R (6.11); a
+-- semiring homomorphism commutes with interpretation, by structural induction; evaluation of
+-- lib/ring.cub's polynomials ℕ[X_v] at ρ is a semiring homomorphism (6.12); hence evaluating the
+-- polynomial interpretation at ρ gives the numerical interpretation at ρ (6.13).
+import "core.cub"
+import "linproof.cub"
+import "ring.cub"
+-- a semiring's operations: 0, 1, +, ·
+SemiringOn : Type → Type
+SemiringOn R = R × R × (R → R → R) × (R → R → R)
+si-zero : {R : Type} → SemiringOn R → R
+si-zero S = fst S
+si-one : {R : Type} → SemiringOn R → R
+si-one S = fst (snd S)
+si-add : {R : Type} → SemiringOn R → R → R → R
+si-add S = fst (snd (snd S))
+si-mul : {R : Type} → SemiringOn R → R → R → R
+si-mul S = snd (snd (snd S))
+-- the canonical map ℕ → R
+si-nat : {R : Type} → SemiringOn R → Nat → R
+si-nat S zero = si-zero S
+si-nat S (suc n) = si-add S (si-one S) (si-nat S n)
+-- (6.11) ⟦−⟧_R : Expr(Γ) → (Γ → R) → R
+si-interp : {R : Type} → SemiringOn R → (Word → R) → Ex → R
+si-interp S rho (ec n) = si-nat S n
+si-interp S rho (ev v) = rho v
+si-interp S rho (eadd a b) = si-add S (si-interp S rho a) (si-interp S rho b)
+si-interp S rho (emul a b) = si-mul S (si-interp S rho a) (si-interp S rho b)
+SemiringHom : {R T : Type} → SemiringOn R → SemiringOn T → (R → T) → Type
+SemiringHom {R} {T} S S2 h = (h (si-zero S) ≡ si-zero S2) × (h (si-one S) ≡ si-one S2) ×
+  ((a b : R) → h (si-add S a b) ≡ si-add S2 (h a) (h b)) × ((a b : R) → h (si-mul S a b) ≡ si-mul S2 (h a) (h b))
+si-hom-nat : {R T : Type} → (S : SemiringOn R) → (S2 : SemiringOn T) → (h : R → T) → SemiringHom S S2 h → (n : Nat) → h (si-nat S n) ≡ si-nat S2 n
+si-hom-nat {R} {T} S S2 h hh zero = fst hh
+si-hom-nat {R} {T} S S2 h hh (suc n) = concat {lzero} {T} {h (si-add S (si-one S) (si-nat S n))} {si-add S2 (h (si-one S)) (h (si-nat S n))} {si-add S2 (si-one S2) (si-nat S2 n)}
+  (fst (snd (snd hh)) (si-one S) (si-nat S n)) (λ k → si-add S2 (fst (snd hh) k) (si-hom-nat S S2 h hh n k))
+-- a homomorphism commutes with interpretation: h(⟦e⟧_R σ) = ⟦e⟧_T (h ∘ σ)
+si-interp-hom : {R T : Type} → (S : SemiringOn R) → (S2 : SemiringOn T) → (h : R → T) → SemiringHom S S2 h → (sigma : Word → R) → (e : Ex) →
+  h (si-interp S sigma e) ≡ si-interp S2 (λ v → h (sigma v)) e
+si-interp-hom {R} {T} S S2 h hh sigma (ec n) = si-hom-nat S S2 h hh n
+si-interp-hom {R} {T} S S2 h hh sigma (ev v) = λ k → h (sigma v)
+si-interp-hom {R} {T} S S2 h hh sigma (eadd a b) =
+  concat {lzero} {T} {h (si-add S (si-interp S sigma a) (si-interp S sigma b))} {si-add S2 (h (si-interp S sigma a)) (h (si-interp S sigma b))}
+    {si-add S2 (si-interp S2 (λ v → h (sigma v)) a) (si-interp S2 (λ v → h (sigma v)) b)}
+  (fst (snd (snd hh)) (si-interp S sigma a) (si-interp S sigma b))
+  (λ k → si-add S2 (si-interp-hom S S2 h hh sigma a k) (si-interp-hom S S2 h hh sigma b k))
+si-interp-hom {R} {T} S S2 h hh sigma (emul a b) =
+  concat {lzero} {T} {h (si-mul S (si-interp S sigma a) (si-interp S sigma b))} {si-mul S2 (h (si-interp S sigma a)) (h (si-interp S sigma b))}
+    {si-mul S2 (si-interp S2 (λ v → h (sigma v)) a) (si-interp S2 (λ v → h (sigma v)) b)}
+  (snd (snd (snd hh)) (si-interp S sigma a) (si-interp S sigma b))
+  (λ k → si-mul S2 (si-interp-hom S S2 h hh sigma a k) (si-interp-hom S S2 h hh sigma b k))
+-- ℕ, and the polynomial semiring ℕ[X_v] with variable v interpreted as X_v
+si-nat-semiring : SemiringOn Nat
+si-nat-semiring = (zero , suc zero , plus , times)
+si-poly-semiring : SemiringOn Poly
+si-poly-semiring = (pzero , pterm (suc zero) mone pzero , padd , pmul)
+si-X : Word → Poly
+si-X v = pterm (suc zero) (mvar v mone) pzero
+-- (6.12) evaluation at ρ is a semiring homomorphism ℕ[X_v] → ℕ
+si-ev-hom : (rho : Val) → SemiringHom si-poly-semiring si-nat-semiring (pev rho)
+si-ev-hom rho = ((λ k → zero) , (norm-const (suc zero) , (padd-sound rho , pmul-sound rho)))
+-- (6.13) ev_ρ(⟦e⟧_{ℕ[X]}(λ v. X_v)) = ⟦e⟧_ℕ(ρ)
+si-ev-commutes : (rho : Val) → (e : Ex) → pev rho (si-interp si-poly-semiring si-X e) ≡ si-interp si-nat-semiring rho e
+si-ev-commutes rho e = concat {lzero} {Nat} {pev rho (si-interp si-poly-semiring si-X e)} {si-interp si-nat-semiring (λ v → pev rho (si-X v)) e} {si-interp si-nat-semiring rho e}
+  (si-interp-hom si-poly-semiring si-nat-semiring (pev rho) (si-ev-hom rho) si-X e)
+  (λ k → si-interp si-nat-semiring (λ v → norm-var rho v k) e)
