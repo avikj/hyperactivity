@@ -1,0 +1,150 @@
+-- lib/semantic-types.cub — the paper's typed definitions of languages, transformations, blocks, runs and
+-- persistent producers (docs/hyperactivity.cub, §5.1, §5.4, §6, §6.4, §7.1, §7.6, §9.3, §9.4, §10.5,
+-- §10.7, §10.8, §10.11) as code: the language record of §5.1 and its lifted programs, specifications,
+-- attachments, transformations and erasure; Lang (5.7); a representation change (6.3); annotation,
+-- transformation and erasure with its soundness (6.15)–(6.18); the load relation (7.5); turn safety
+-- (7.6e) with its finite-prefix induction; blocks of bytes with contextual execution proofs (9.12)
+-- and their sequential composition (9.13); an artifact with the source run of each target run
+-- (§9.4); the producer states and certificates of §10.5 (10.16), (10.18) and swap evidence (10.S1);
+-- a staged upgrade (§10.7); identity carried to digests (10.22); reuse under a validated
+-- certificate (10.25).
+import "library.cub"
+import "behaviour.cub"
+-- ---------------------------------------------------------------- §5.1
+-- Language_ℓ: syntax, contexts, types, static judgment, inputs, configurations, commands and
+-- replies, the step to Return + Fault + Tau(Conf) + Σ_c (Reply(c) → Conf), Init, Observe, Law
+LanguageL : Type 1
+LanguageL = (Syn : Type) × (Ctx : Type) × (Ty : Type) × (Static : Ctx → Syn → Ty → Type) × (Input : Syn → Type) ×
+  (Conf : Syn → Type) × (Cmd : Type) × (Reply : Cmd → Type) × (Ret : Type) × (Flt : Type) ×
+  ((p : Syn) → Conf p → Sum Ret (Sum Flt (Sum (Conf p) ((c : Cmd) × (Reply c → Conf p))))) ×
+  ((p : Syn) → Input p → Conf p) × (Trace : Type) × (Obs : Type) × (Trace → Obs) × Type
+-- Lift(L) = Σ_{p : Syn} Well(p)
+Lift-of : {Syn : Type} → (Syn → Type) → Type
+Lift-of {Syn} Well = (p : Syn) × Well p
+-- Attached_L(p) = Σ_{P : Spec_L(p)} P(meaning_L(p)), Spec_L(p) = MeaningType_L(p) → U
+Attached : {Syn : Type} → {M : Syn → Type} → ((p : Syn) → M p) → Syn → Type 1
+Attached {Syn} {M} meaning p = (P : M p → Type) × P (meaning p)
+-- Trans_{L,M}(p) = Σ_{q : Lift(M)} Rel_O(meaning_L(p), meaning_M(q))
+Trans : {SL SM ML MM : Type} → (SM → Type) → (SL → ML) → (SM → MM) → (ML → MM → Type) → SL → Type
+Trans {SL} {SM} {ML} {MM} wellM meaningL meaningM rel p = (q : Lift-of wellM) × rel (meaningL p) (meaningM (fst q))
+-- erase_L(p, π) = p, and meaning_L(erase_L(p, π)) = meaning_L(p)
+erase-annot : {Syn : Type} → {Pf : Syn → Type} → ((p : Syn) × Pf p) → Syn
+erase-annot pp = fst pp
+erase-meaning : {Syn M : Type} → {Pf : Syn → Type} → (meaning : Syn → M) → (pp : (p : Syn) × Pf p) → meaning (erase-annot pp) ≡ meaning (fst pp)
+erase-meaning {Syn} {M} {Pf} meaning pp = λ k → meaning (fst pp)
+-- ---------------------------------------------------------------- (5.7)
+Lang : ((Src : Type) → (Ctx : Type) → (Ctx → Type) → ((g : Ctx) → Type) → (Src → Type) → Sig → Type) → Type 1
+Lang Sem = (Src : Type) × (Ctx : Type) × (Ty : Ctx → Type) × (Tm : (g : Ctx) → Type) × (Cfg : Src → Type) × (S : Sig) × Sem Src Ctx Ty Tm Cfg S
+-- ---------------------------------------------------------------- (6.3), (6.15)–(6.18)
+-- a change of representation: a type B, ⟦A⟧ ≃ ⟦B⟧ and code c′ with e(eval(c, ρ)) = eval(c′, ρ)
+RepChange : {Ty Env : Type} → (El : Ty → Type) → (Code : Ty → Type) → ((A : Ty) → Code A → Env → El A) → (A : Ty) → Code A → Type
+RepChange {Ty} {Env} El Code eval A c = (B : Ty) × (e : Equiv (El A) (El B)) × (c2 : Code B) × ((rho : Env) → fst e (eval A c rho) ≡ eval B c2 rho)
+AnnotatedL : {Tm : Type} → (Tm → Type) → Type
+AnnotatedL {Tm} Property = (p : Tm) × Property p
+TransformL : {Ty Tm : Type} → (Ty → Tm → Ty → Tm → Type) → Ty → Tm → Type
+TransformL {Ty} {Tm} Relation A p = (B : Ty) × (q : Tm) × Relation A p B q
+-- (6.18) erasure from the annotated language preserves meaning
+EraseSound : {TmP Tm M : Type} → (TmP → M) → (Tm → M) → (TmP → Tm) → Type
+EraseSound {TmP} {Tm} {M} semP sem erase = (x : TmP) → semP x ≡ sem (erase x)
+-- ---------------------------------------------------------------- (7.5), (7.6e)
+LoadRel : Type → Type → Type → Type 1
+LoadRel MemState Ptr Val = MemState → Ptr → Val → MemState → Type
+TurnSafe : {S : Type} → (S → Type) → (S → S → Type) → (S → S → Type) → Type
+TurnSafe {S} P turn nofault = (s : S) → P s → (s2 : S) × turn s s2 × P s2 × nofault s s2
+-- induction proves the invariant for every finite prefix of turns
+turn-iterate : {S : Type} → (P : S → Type) → (turn nofault : S → S → Type) → TurnSafe P turn nofault → (s0 : S) → P s0 → Nat → (s : S) × P s
+turn-iterate {S} P turn nofault ts s0 h zero = (s0 , h)
+turn-iterate {S} P turn nofault ts s0 h (suc n) =
+  (fst (ts (fst (turn-iterate P turn nofault ts s0 h n)) (snd (turn-iterate P turn nofault ts s0 h n))) ,
+   fst (snd (snd (ts (fst (turn-iterate P turn nofault ts s0 h n)) (snd (turn-iterate P turn nofault ts s0 h n))))))
+-- ---------------------------------------------------------------- (9.12), (9.13)
+-- the result of running a block from s: a trace t and a state reached at pc end, satisfying Q, in R
+BlkRes : {S C Ev : Type} → (C → S → List Ev → S → Type) → (S → Nat) → (S → List Ev → S → Type) → C → S → (S → Type) → Nat → Type
+BlkRes {S} {C} {Ev} exec pc R c s Q e = (t : List Ev) × (s2 : S) × exec c s t s2 × Q s2 × (pc s2 ≡ e) × R s t s2
+-- Block_R(a, P, Q): bytes b and, for every code image C admissibly holding b at a and every state
+-- satisfying P at pc a, a finite execution with trace t to a state satisfying Q at a + |b|, in R
+BlockR : {S C Ev B : Type} → (C → Nat → List B → Type) → (C → S → List Ev → S → Type) → (S → Nat) → (S → List Ev → S → Type) →
+  Nat → (S → Type) → (S → Type) → Type
+BlockR {S} {C} {Ev} {B} adm exec pc R a P Q = (b : List B) × ((c : C) → adm c a b → (s : S) → P s × (pc s ≡ a) → BlkRes exec pc R c s Q (plus a (list-length b)))
+-- the sequential composition of trace contracts retains the intermediate state and t = t₁ ++ t₂
+seq-rel : {S Ev : Type} → (S → List Ev → S → Type) → (S → List Ev → S → Type) → S → List Ev → S → Type
+seq-rel {S} {Ev} R1 R2 s t s2 = (s1 : S) × (t1 : List Ev) × (t2 : List Ev) × (t ≡ list-append t1 t2) × R1 s t1 s1 × R2 s1 t2 s2
+blk-length-append : {B : Type} → (b1 b2 : List B) → list-length (list-append b1 b2) ≡ plus (list-length b1) (list-length b2)
+blk-length-append nil b2 = λ k → list-length b2
+blk-length-append (cons x r) b2 = λ k → suc (blk-length-append r b2 k)
+-- the first block's run, then the second's from the intermediate state: their executions concatenate
+blk-join : {S C Ev : Type} → (exec : C → S → List Ev → S → Type) → (pc : S → Nat) → (R1 R2 : S → List Ev → S → Type) → (Q R : S → Type) → (m e : Nat) →
+  ((c : C) → (s s1 s2 : S) → (t1 t2 : List Ev) → exec c s t1 s1 → exec c s1 t2 s2 → exec c s (list-append t1 t2) s2) →
+  (c : C) → (s : S) → (r1 : BlkRes exec pc R1 c s Q m) → BlkRes exec pc R2 c (fst (snd r1)) R e → BlkRes exec pc (seq-rel R1 R2) c s R e
+blk-join {S} {C} {Ev} exec pc R1 R2 Q R m e cat c s r1 r2 =
+  (list-append (fst r1) (fst r2) , fst (snd r2) , cat c s (fst (snd r1)) (fst (snd r2)) (fst r1) (fst r2) (fst (snd (snd r1))) (fst (snd (snd r2))) ,
+   fst (snd (snd (snd r2))) , fst (snd (snd (snd (snd r2)))) ,
+   (fst (snd r1) , fst r1 , fst r2 , (λ k → list-append (fst r1) (fst r2)) , snd (snd (snd (snd (snd r1)))) , snd (snd (snd (snd (snd r2))))))
+blk-retarget : {S C Ev : Type} → (exec : C → S → List Ev → S → Type) → (pc : S → Nat) → (R : S → List Ev → S → Type) → (c : C) → (s : S) → (Q : S → Type) →
+  (e1 e2 : Nat) → e1 ≡ e2 → BlkRes exec pc R c s Q e1 → BlkRes exec pc R c s Q e2
+blk-retarget {S} {C} {Ev} exec pc R c s Q e1 e2 p r =
+  (fst r , fst (snd r) , fst (snd (snd r)) , fst (snd (snd (snd r))) , transN (fst (snd (snd (snd (snd r))))) p , snd (snd (snd (snd (snd r)))))
+-- (9.13) seq: the content of StablePrefix and RelocOK is that admissibility of b₁ ++ b₂ at a gives
+-- admissibility of b₁ at a and of b₂ at a + |b₁| in the same image
+block-seq : {S C Ev B : Type} → (adm : C → Nat → List B → Type) → (exec : C → S → List Ev → S → Type) → (pc : S → Nat) →
+  (R1 R2 : S → List Ev → S → Type) → (a : Nat) → (P Q R : S → Type) →
+  ((c : C) → (s s1 s2 : S) → (t1 t2 : List Ev) → exec c s t1 s1 → exec c s1 t2 s2 → exec c s (list-append t1 t2) s2) →
+  (B1 : BlockR adm exec pc R1 a P Q) → (B2 : BlockR adm exec pc R2 (plus a (list-length (fst B1))) Q R) →
+  ((c : C) → adm c a (list-append (fst B1) (fst B2)) → adm c a (fst B1) × adm c (plus a (list-length (fst B1))) (fst B2)) →
+  BlockR adm exec pc (seq-rel R1 R2) a P R
+block-seq {S} {C} {Ev} {B} adm exec pc R1 R2 a P Q R cat B1 B2 split = (list-append (fst B1) (fst B2) , λ c h s ps →
+  blk-retarget exec pc (seq-rel R1 R2) c s R (plus (plus a (list-length (fst B1))) (list-length (fst B2))) (plus a (list-length (list-append (fst B1) (fst B2))))
+    (transN (plus-assoc a (list-length (fst B1)) (list-length (fst B2))) (congN (plus a) (sym (blk-length-append (fst B1) (fst B2)))))
+    (blk-join exec pc R1 R2 Q R (plus a (list-length (fst B1))) (plus (plus a (list-length (fst B1))) (list-length (fst B2))) cat c s
+      (snd B1 c (fst (split c h)) s ps)
+      (snd B2 c (snd (split c h)) (fst (snd (snd B1 c (fst (split c h)) s ps)))
+        (fst (snd (snd (snd (snd B1 c (fst (split c h)) s ps)))) , fst (snd (snd (snd (snd (snd B1 c (fst (split c h)) s ps)))))))))
+-- ---------------------------------------------------------------- §9.4
+-- Σ_{a : Artifact} Π_{ρ : Run_M(a, E)} Σ_{τ : Run_L(p, E)} obs_M(ρ) = obs_L(τ)
+Realizes : {Art RunM RunL O : Type} → (Art → RunM → Type) → (RunL → Type) → (RunM → O) → (RunL → O) → Type
+Realizes {Art} {RunM} {RunL} {O} runM runL obsM obsL = (a : Art) × ((rho : RunM) → runM a rho → (tau : RunL) × runL tau × (obsM rho ≡ obsL tau))
+-- ---------------------------------------------------------------- (10.16), (10.18), (10.S1)
+ProdOutcome : Type → Type → Type
+ProdOutcome A Err = Sum A Err
+ReadObs : {Key : Type} → (Key → Type) → Type
+ReadObs {Key} LookupResult = (k : Key) × LookupResult k
+Certificate : {Key : Type} → (Key → Type) → Type
+Certificate {Key} LookupResult = List (ReadObs {Key} LookupResult)
+EffectScope : Type → Type → Type
+EffectScope Inv Epoch = Inv × Epoch
+RequestToken : Type → Type → Type
+RequestToken Inv StepId = Inv × StepId
+data Producer (A : Type) (Res : Type) (Snap : Type) (Cert : Type) (Wait : Type) (Req : Type) (Err : Type) (Scope : Type) =
+  pr-absent | pr-running (r : Res) (s : Snap) (d : Cert) (w : Wait) | pr-suspended (r : Res) (s : Snap) (d : Cert) (w : Wait) (q : Req)
+  | pr-ready (v : A) (d : Cert) (o : Scope) | pr-failed (e : Err) (d : Cert) (o : Scope)
+-- (10.18) validReuse(S, D, ω, ω′) = valid(S, D) × (ω = ω′)
+valid-reuse : {St Cert Scope : Type} → (St → Cert → Type) → St → Cert → Scope → Scope → Type
+valid-reuse {St} {Cert} {Scope} valid s d o o2 = valid s d × (o ≡ o2)
+-- (10.S1)
+Swap : {K H T St Cert D0 D1 : Type} → (St → Cert → Type) → (K → D0 → Type) → (K → D1 → Type) →
+  (D0 → K → H → T → St → Type) → (D1 → K → H → T → St → Type) → Cert → Type
+Swap {K} {H} {T} {St} {Cert} {D0} {D1} valid bnd0 bnd1 live0 live1 cert = (k : K) → (h : H) → (t : T) → (s : St) → (d0 : D0) → bnd0 k d0 →
+  live0 d0 k h t s → valid s cert → (d1 : D1) × bnd1 k d1 × live1 d1 k h t s
+-- ---------------------------------------------------------------- §10.7 a staged upgrade
+-- (V, R, Q, ℓ): installed versions, the routed version, pending events, the ledger
+Upgrade : Type
+Upgrade = List Nat × Nat × List Nat × List Nat
+up-install : Nat → Upgrade → Upgrade
+up-install v1 s = (list-append (fst s) (cons v1 nil) , snd s)
+up-route-new : Nat → Upgrade → Upgrade
+up-route-new v1 s = (fst s , v1 , snd (snd s))
+up-drain-old : Upgrade → Upgrade
+up-drain-old s = (fst s , fst (snd s) , nil , list-append (snd (snd (snd s))) (fst (snd (snd s))))
+up-retire-old : Nat → Upgrade → Upgrade
+up-retire-old v1 s = (cons v1 nil , snd s)
+-- ({v₀}, R, Q, ℓ) → install(v₁) → routeNew → drainOld → retireOld reaches ({v₁}, R′, Q′, ℓ′)
+up-sequence : (v0 v1 r : Nat) → (q l : List Nat) →
+  up-retire-old v1 (up-drain-old (up-route-new v1 (up-install v1 (cons v0 nil , r , q , l)))) ≡ (cons v1 nil , v1 , nil , list-append l q)
+up-sequence v0 v1 r q l = λ k → (cons v1 nil , v1 , nil , list-append l q)
+-- ---------------------------------------------------------------- (10.22), (10.25)
+-- identical definitions have identical digests; a digest equality is a separate premise, not identity
+digest-of-identical : {Def Dg : Type} → (digest : Def → Dg) → (d1 d2 : Def) → d1 ≡ d2 → digest d1 ≡ digest d2
+digest-of-identical {Def} {Dg} digest d1 d2 p = λ k → digest (p k)
+-- reuse(x, D′): valid(x, D′) → Value(x)
+Reuse : {X G : Type} → (X → G → Type) → (X → Type) → G → Type
+Reuse {X} {G} valid Value g = (x : X) → valid x g → Value x
