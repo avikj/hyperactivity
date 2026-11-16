@@ -9506,3 +9506,18 @@ der-ext jk Γ a s Y₁ Y₂ h₁ h₂ mk hq G0 Gq M₁ B c d =
         dmap-fst (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (lcons (e-ty a) (fst Γ)) (JZ jk s)) (snd (ext-h Γ a Y₁ h₁ M₁)) B (~ i)) , s , c ,
         lift-fst-d (dims (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (lcons (e-ty a) (fst Γ)) (JZ jk s)) (snd (ext-h Γ a Y₁ h₁ M₁)) B (~ i)))
       (λ i → []) d)
+-- a cube over a base whose fibres are contractible (a centre ctr, each point joined to it by cn) is
+-- the cube of the centre; so any two meanings in One1 are equal (mean1-path), which is conversion
+-- at Bool's types
+dcube-contr : (n : Nat) (X : Type 1) (F : X → Type 1) (ctr : (x : X) → F x) (cn : (x : X) (y : F x) → PathP (λ i → F x) y (ctr x))
+  (c : Cube n X) (d : DCube n X F c) → PathP (λ i → DCube n X F c) d (dcube-of n X F ctr c)
+dcube-contr zero X F ctr cn c d = cn c d
+dcube-contr (suc n) X F ctr cn c d =
+  dcube-contr n (Line X) (LineO X F) (lineo-of X F ctr)
+    (λ L D k → (cn (fst L) (fst D) k , cn (fst (snd L)) (fst (snd D)) k , λ i → cn (snd (snd L) i) (snd (snd D) i) k)) c d
+mean1-path : (Γ : CCtx) (B B' : Mean Γ One1) → PathM Γ One1 B B'
+mean1-path Γ B B' =
+  pcat (Mean Γ One1) B (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) One1) (λ γ ρ → one) (snd Γ)) B'
+    (dcube-contr (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) One1) (λ γ ρ → one) (λ γ y k ρ → one-contr (y ρ) k) (snd Γ) B)
+    (psym (Mean Γ One1) B' (dcube-of (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) One1) (λ γ ρ → one) (snd Γ))
+      (dcube-contr (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) One1) (λ γ ρ → one) (λ γ y k ρ → one-contr (y ρ) k) (snd Γ) B'))
