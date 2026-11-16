@@ -50,19 +50,19 @@ tΓb2 : TCtx Γb2
 tΓb2 = tc-ty emp2 tc-nil s-bool (λ ρ → one) c-bool (dty-bool emp2 (λ ρ → one))
 not-R : Mean Γb2 (CaseV s-bool)
 not-R = λ ρ → (one , (λ b → one) , snd ρ , false , true)
-not-d : Der (j-tm , Γb2 , s-bool , c-case c-false c-true (cvar #0) , fmapM Γb2 (CaseV s-bool) (TV s-bool) (case-r s-bool) not-R)
+not-d : Der (j-tm , Γb2 , s-bool , c-case c-bool c-false c-true (cvar #0) , fmapM Γb2 (CaseV s-bool) (TV s-bool) (case-r s-bool) not-R)
 not-d = dcase Γb2 s-bool not-R c-bool (cvar #0) c-false c-true
   (dty-bool (ext-h Γb2 s-bool (CaseV s-bool) (case-b s-bool) not-R) (λ ρ → one))
   (dvar Γb2 none) (dfalse Γb2 (λ ρ → one)) (dtrue Γb2 (λ ρ → one))
-#same fst (normalize-nf Γb2 tΓb2 s-bool (c-case c-false c-true (cvar #0) , fmapM Γb2 (CaseV s-bool) (TV s-bool) (case-r s-bool) not-R , not-d)) = c-case c-false c-true (cvar #0)
+#same fst (normalize-nf Γb2 tΓb2 s-bool (c-case c-bool c-false c-true (cvar #0) , fmapM Γb2 (CaseV s-bool) (TV s-bool) (case-r s-bool) not-R , not-d)) = c-case c-bool c-false c-true (cvar #0)
 -- not true normalizes to false (the case on a constant: its branch)
 nt-R : Mean emp2 (CaseV s-bool)
 nt-R = λ ρ → (one , (λ b → one) , true , false , true)
-nt-d : Der (j-tm , emp2 , s-bool , c-case c-false c-true c-true , fmapM emp2 (CaseV s-bool) (TV s-bool) (case-r s-bool) nt-R)
+nt-d : Der (j-tm , emp2 , s-bool , c-case c-bool c-false c-true c-true , fmapM emp2 (CaseV s-bool) (TV s-bool) (case-r s-bool) nt-R)
 nt-d = dcase emp2 s-bool nt-R c-bool c-true c-false c-true
   (dty-bool (ext-h emp2 s-bool (CaseV s-bool) (case-b s-bool) nt-R) (λ ρ → one))
   (dtrue emp2 (λ ρ → one)) (dfalse emp2 (λ ρ → one)) (dtrue emp2 (λ ρ → one))
-#same fst (normalize-nf emp2 tc-nil s-bool (c-case c-false c-true c-true , fmapM emp2 (CaseV s-bool) (TV s-bool) (case-r s-bool) nt-R , nt-d)) = c-false
+#same fst (normalize-nf emp2 tc-nil s-bool (c-case c-bool c-false c-true c-true , fmapM emp2 (CaseV s-bool) (TV s-bool) (case-r s-bool) nt-R , nt-d)) = c-false
 -- ---------------------------------------------------------------- a variable of path type
 -- p : PathP (λ i → Bool) true true in context; p normalizes to its η-expansion ⟨i⟩ p @ i (the path
 -- applied at the new dimension, a canonical non-constant form)
@@ -142,4 +142,4 @@ sx-v none = (c-true , der-tr j-tm emp2 s-bool c-true sx-A (subM emp2 Γb2 (TV s-
 sx-v (some w) = case w of Empty
 dsx : DSubst Γb2 emp2 σx
 dsx = (unit , sx-v)
-#same fst (subst-tm Γb2 emp2 tc-nil σx dsx s-bool (c-case c-false c-true (cvar #0) , fmapM Γb2 (CaseV s-bool) (TV s-bool) (case-r s-bool) not-R , not-d)) = c-false
+#same fst (subst-tm Γb2 emp2 tc-nil σx dsx s-bool (c-case c-bool c-false c-true (cvar #0) , fmapM Γb2 (CaseV s-bool) (TV s-bool) (case-r s-bool) not-R , not-d)) = c-false

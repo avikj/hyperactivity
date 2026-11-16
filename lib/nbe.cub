@@ -103,14 +103,17 @@ list-elim A P z st (cons x xs) = st x xs (list-elim A P z st xs)
 empty-elim : (P : Empty → Type) (e : Empty) → P e
 empty-elim P e = case e of Empty
 
--- the kinds of the one family of neutral and normal forms; the codes of Bool's constructors and case
+-- the kinds of the one family of neutral and normal forms; the codes of Bool's constructors and case.
+-- case carries its motive (the core's celim with the motive as a λ): without it, checking a case
+-- against a type would have to find a motive P with P x the type (higher-order unification), and
+-- one code would have derivations at motives agreeing at true and false but not at x
 data NK = k-ne | k-nf
 c-true : Code
 c-true = ccon #0 #0 lnil lnil
 c-false : Code
 c-false = ccon #0 #1 lnil lnil
-c-case : Code → Code → Code → Code
-c-case t f x = ccase #0 (lcons t (lcons f lnil)) x
+c-case : Code → Code → Code → Code → Code
+c-case cP t f x = celim #0 (clam cP) (lcons t (lcons f lnil)) x
 
 -- ---------------------------------------------------------------- P2: lines and cubes
 -- (2026-11-12) A line in X: two points and a path between them; its endpoints are the path's own
@@ -1210,7 +1213,7 @@ data NN : (KJ : NK × Jdg) → Type 1 where
     NN (k-ne , (j-tm , Γ₀ , s-bool , x₀ , fmapM Γ₀ (CaseV s₀) (TV s-bool) (case-x s₀) R₀)) →
     NN (k-nf , (j-tm , Γ₀ , s₀ , t₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-t s₀) R₀)) →
     NN (k-nf , (j-tm , Γ₀ , s₀ , f₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-f s₀) R₀)) →
-    NN (k-ne , (j-tm , Γ₀ , s₀ , c-case t₀ f₀ x₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-r s₀) R₀))
+    NN (k-ne , (j-tm , Γ₀ , s₀ , c-case cP₀ t₀ f₀ x₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-r s₀) R₀))
   nne : (Γ₀ : CCtx) (R₀ : Mean Γ₀ (TV s-bool)) (x₀ : Code) →
     NN (k-ne , (j-tm , Γ₀ , s-bool , x₀ , R₀)) → NN (k-nf , (j-tm , Γ₀ , s-bool , x₀ , R₀))
   ntrue : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → NN (k-nf , (j-tm , Γ₀ , s-bool , c-true , fmapM Γ₀ One1 (TV s-bool) (bool-v true) B₀))
@@ -1262,7 +1265,7 @@ data Der : (J : Jdg) → Type 1 where
     Der (j-tm , Γ₀ , s-bool , x₀ , fmapM Γ₀ (CaseV s₀) (TV s-bool) (case-x s₀) R₀) →
     Der (j-tm , Γ₀ , s₀ , t₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-t s₀) R₀) →
     Der (j-tm , Γ₀ , s₀ , f₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-f s₀) R₀) →
-    Der (j-tm , Γ₀ , s₀ , c-case t₀ f₀ x₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-r s₀) R₀)
+    Der (j-tm , Γ₀ , s₀ , c-case cP₀ t₀ f₀ x₀ , fmapM Γ₀ (CaseV s₀) (TV s₀) (case-r s₀) R₀)
   dtrue : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (j-tm , Γ₀ , s-bool , c-true , fmapM Γ₀ One1 (TV s-bool) (bool-v true) B₀)
   dfalse : (Γ₀ : CCtx) (B₀ : Mean Γ₀ One1) → Der (j-tm , Γ₀ , s-bool , c-false , fmapM Γ₀ One1 (TV s-bool) (bool-v false) B₀)
   dlam : (Γ₀ : CCtx) (a₀ b₀ : TyShape) (X₀ : Mean Γ₀ (TV (s-pi a₀ b₀))) (cA₀ c₀ : Code) →
@@ -5496,8 +5499,8 @@ rn-case : (Δ' Δ : CCtx) (w : World Δ' Δ) (s : TyShape) (R : Mean Δ (CaseV s
   RenR k-nf j-tm Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-f s) R)) →
   RenR k-ne j-tm Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-r s) R))
 rn-case Δ' Δ w s R Pn Xn Tn Fn =
-  (c-case (fst Tn) (fst Fn) (fst Xn) ,
-   nn-fm-out k-ne j-tm Δ' Δ w (CaseV s) s (case-r s) R (c-case (fst Tn) (fst Fn) (fst Xn))
+  (c-case (fst Pn) (fst Tn) (fst Fn) (fst Xn) ,
+   nn-fm-out k-ne j-tm Δ' Δ w (CaseV s) s (case-r s) R (c-case (fst Pn) (fst Tn) (fst Fn) (fst Xn))
      (ncase Δ' s (wact Δ' Δ w (CaseV s) R) (fst Pn) (fst Xn) (fst Tn) (fst Fn) (snd Pn)
         (nn-fm-in k-ne j-tm Δ' Δ w (CaseV s) s-bool (case-x s) R (fst Xn) (snd Xn))
         (nn-fm-in k-nf j-tm Δ' Δ w (CaseV s) s (case-t s) R (fst Tn) (snd Tn))
@@ -5676,8 +5679,8 @@ rd-case : (Δ' Δ : CCtx) (w : World Δ' Δ) (s : TyShape) (R : Mean Δ (CaseV s
   RenD j-tm Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-f s) R)) →
   RenD j-tm Δ' s (wact Δ' Δ w (TV s) (fmapM Δ (CaseV s) (TV s) (case-r s) R))
 rd-case Δ' Δ w s R Pn Xn Tn Fn =
-  (c-case (fst Tn) (fst Fn) (fst Xn) ,
-   der-fm-out j-tm Δ' Δ w (CaseV s) s (case-r s) R (c-case (fst Tn) (fst Fn) (fst Xn))
+  (c-case (fst Pn) (fst Tn) (fst Fn) (fst Xn) ,
+   der-fm-out j-tm Δ' Δ w (CaseV s) s (case-r s) R (c-case (fst Pn) (fst Tn) (fst Fn) (fst Xn))
      (dcase Δ' s (wact Δ' Δ w (CaseV s) R) (fst Pn) (fst Xn) (fst Tn) (fst Fn) (snd Pn)
         (der-fm-in j-tm Δ' Δ w (CaseV s) s-bool (case-x s) R (fst Xn) (snd Xn))
         (der-fm-in j-tm Δ' Δ w (CaseV s) s (case-t s) R (fst Tn) (snd Tn))
@@ -9161,7 +9164,7 @@ case-cl : (Γ : CCtx) (s : TyShape) (R : Mean Γ (CaseV s)) (Δ : CCtx) (σ : Su
   snd (CompE s-bool) Δ (fmapM Δ (CaseV s) (TV s-bool) (case-x s) (subM Δ Γ (CaseV s) σ R)) → CompS s Δ (fmapM Δ (CaseV s) (TV s) (case-r s) (subM Δ Γ (CaseV s) σ R))
 case-cl Γ s R Δ σ e motive cx ct cf (inl1 p) = comp-tr s Δ (fmapM Δ (CaseV s) (TV s) (case-t s) (subM Δ Γ (CaseV s) σ R)) (fmapM Δ (CaseV s) (TV s) (case-r s) (subM Δ Γ (CaseV s) σ R)) (psym (Mean Δ (TV s)) (fmapM Δ (CaseV s) (TV s) (case-r s) (subM Δ Γ (CaseV s) σ R)) (fmapM Δ (CaseV s) (TV s) (case-t s) (subM Δ Γ (CaseV s) σ R)) (sel-t Γ s R Δ σ (fst p) (snd p))) ct
 case-cl Γ s R Δ σ e motive cx ct cf (inr1 (inl1 p)) = comp-tr s Δ (fmapM Δ (CaseV s) (TV s) (case-f s) (subM Δ Γ (CaseV s) σ R)) (fmapM Δ (CaseV s) (TV s) (case-r s) (subM Δ Γ (CaseV s) σ R)) (psym (Mean Δ (TV s)) (fmapM Δ (CaseV s) (TV s) (case-r s) (subM Δ Γ (CaseV s) σ R)) (fmapM Δ (CaseV s) (TV s) (case-f s) (subM Δ Γ (CaseV s) σ R)) (sel-f Γ s R Δ σ (fst p) (snd p))) cf
-case-cl Γ s R Δ σ e motive cx ct cf (inr1 (inr1 n)) = (snd (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-r s) (subM Δ Γ (CaseV s) σ R)) (cm-scr Γ s R Δ σ e motive cx) (c-case (fst (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-t s) (subM Δ Γ (CaseV s) σ R)) ct)) (fst (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-f s) (subM Δ Γ (CaseV s) σ R)) cf)) (fst n)) (ncase Δ s (subM Δ Γ (CaseV s) σ R) (fst (fst (rr s) (ext-h Δ s-bool (CaseV s) (case-b s) (subM Δ Γ (CaseV s) σ R)) (case-mot Δ s (subM Δ Γ (CaseV s) σ R)) (cm-gen Γ s R Δ σ e motive))) (fst n) (fst (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-t s) (subM Δ Γ (CaseV s) σ R)) ct)) (fst (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-f s) (subM Δ Γ (CaseV s) σ R)) cf)) (snd (fst (rr s) (ext-h Δ s-bool (CaseV s) (case-b s) (subM Δ Γ (CaseV s) σ R)) (case-mot Δ s (subM Δ Γ (CaseV s) σ R)) (cm-gen Γ s R Δ σ e motive))) (snd n) (snd (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-t s) (subM Δ Γ (CaseV s) σ R)) ct)) (snd (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-f s) (subM Δ Γ (CaseV s) σ R)) cf))))
+case-cl Γ s R Δ σ e motive cx ct cf (inr1 (inr1 n)) = (snd (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-r s) (subM Δ Γ (CaseV s) σ R)) (cm-scr Γ s R Δ σ e motive cx) (c-case (fst (fst (rr s) (ext-h Δ s-bool (CaseV s) (case-b s) (subM Δ Γ (CaseV s) σ R)) (case-mot Δ s (subM Δ Γ (CaseV s) σ R)) (cm-gen Γ s R Δ σ e motive))) (fst (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-t s) (subM Δ Γ (CaseV s) σ R)) ct)) (fst (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-f s) (subM Δ Γ (CaseV s) σ R)) cf)) (fst n)) (ncase Δ s (subM Δ Γ (CaseV s) σ R) (fst (fst (rr s) (ext-h Δ s-bool (CaseV s) (case-b s) (subM Δ Γ (CaseV s) σ R)) (case-mot Δ s (subM Δ Γ (CaseV s) σ R)) (cm-gen Γ s R Δ σ e motive))) (fst n) (fst (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-t s) (subM Δ Γ (CaseV s) σ R)) ct)) (fst (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-f s) (subM Δ Γ (CaseV s) σ R)) cf)) (snd (fst (rr s) (ext-h Δ s-bool (CaseV s) (case-b s) (subM Δ Γ (CaseV s) σ R)) (case-mot Δ s (subM Δ Γ (CaseV s) σ R)) (cm-gen Γ s R Δ σ e motive))) (snd n) (snd (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-t s) (subM Δ Γ (CaseV s) σ R)) ct)) (snd (fst (snd (rr s)) Δ (fmapM Δ (CaseV s) (TV s) (case-f s) (subM Δ Γ (CaseV s) σ R)) cf))))
 fund-case : (Γ : CCtx) (s : TyShape) (R : Mean Γ (CaseV s)) (Δ : CCtx) (σ : Sub Δ Γ) (e : CompEnv Γ Δ σ) → CompS s-bool Δ (subM Δ Γ (TV s-bool) σ (fmapM Γ (CaseV s) (TV s-bool) (case-x s) R)) → CompS s Δ (subM Δ Γ (TV s) σ (fmapM Γ (CaseV s) (TV s) (case-t s) R)) → CompS s Δ (subM Δ Γ (TV s) σ (fmapM Γ (CaseV s) (TV s) (case-f s) R)) → ((Δ' : CCtx) (τ : Sub Δ' (ext-h Γ s-bool (CaseV s) (case-b s) R)) → CompEnv (ext-h Γ s-bool (CaseV s) (case-b s) R) Δ' τ → CompTy s Δ' (subM Δ' (ext-h Γ s-bool (CaseV s) (case-b s) R) (Sem s) τ (case-mot Γ s R))) → CompS s Δ (subM Δ Γ (TV s) σ (fmapM Γ (CaseV s) (TV s) (case-r s) R))
 fund-case Γ s R Δ σ e cx ct cf motive =
   comp-tr s Δ (fmapM Δ (CaseV s) (TV s) (case-r s) (subM Δ Γ (CaseV s) σ R)) (subM Δ Γ (TV s) σ (fmapM Γ (CaseV s) (TV s) (case-r s) R)) (subM-fmap Δ Γ (CaseV s) (TV s) (case-r s) σ R)
