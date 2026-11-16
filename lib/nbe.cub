@@ -174,7 +174,7 @@ diag-meet : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (diag-l X (mee
 diag-meet X L = λ i → L
 face1-meet : (X : Type 1) (L : Line X) → PathP (λ i → Line X) (face1-l (Line X) (meet-l X L)) L
 face1-meet X L = λ i → L
--- composition of cube maps: at a variable dimension it does not hold by refl (refused, "wrong
+-- composition of cube maps: at a variable dimension it does not hold by refl (c-refused, "wrong
 -- endpoint at 0", 2026-11-12: cube-map is stuck on n); it holds as a path, by induction
 cube-comp : (n : Nat) (X Y Z : Type 1) (f : Y → Z) (g : X → Y) (c : Cube n X) →
   PathP (λ i → Cube n Z) (cube-map n Y Z f (cube-map n X Y g c)) (cube-map n X Z (λ x → f (g x)) c)
@@ -1145,7 +1145,7 @@ papp-line Γ Y Z ℓ f X =
     (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) Y) (DL (CtxV (fst Γ)) (FbE (fst Γ) Z)) (fline (fst Γ) Y Z ℓ) (snd Γ) X)
 papp-mean : (Γ : CCtx) (a : TyShape) (f : DNF) → Mean Γ (TV (s-path a)) → Mean Γ (TV a)
 papp-mean Γ a f P = papp-line Γ (TV (s-path a)) (TV a) (path-pt a) f P
--- a path between meanings, as a named type: a PathP over a path λ in a constructor's field is refused
+-- a path between meanings, as a named type: a PathP over a path λ in a constructor's field is c-refused
 -- (workaround: this definition, used by npapp and dpapp)
 PathM : (Γ : CCtx) (Z : Type 1) → Mean Γ Z → Mean Γ Z → Type 1
 PathM Γ Z M N = PathP (λ i → Mean Γ Z) M N
@@ -9664,3 +9664,53 @@ retype-val Γ a U1 W ty w Um A p vl pv =
           (dcube-fmap (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (TV a)) (λ xq eaq → eaq) (snd Γ) A) A
           (zip-ign-l (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) U1) (FbE (fst Γ) (TV a)) (FbE (fst Γ) (TV a)) (λ xq eaq → eaq) (snd Γ) Um A)
           (fmap-id (dims (fst Γ)) (CtxV (fst Γ)) (FbE (fst Γ) (TV a)) (snd Γ) A))))
+-- the checker's results (a derivation or a refusal) and its contexts: Γ with each variable computable
+-- at the identity (Vals; id-vals gives them for a TCtx), extended under a binder at any ext-h by
+-- var-comp, and the old variables along the weakening's world; a derivation's computability there
+-- (comp-tm, comp-ty: fund at the identity); a derivation carried along a path of codes (der-code)
+data Dec1 (A : Type 1) = c-refused | c-derived (a : A)
+d-bind : (A B : Type 1) → Dec1 A → (A → Dec1 B) → Dec1 B
+d-bind A B c-refused k = c-refused
+d-bind A B (c-derived x) k = k x
+o-bind : (A : Type) (B : Type 1) → Opt A → (A → Dec1 B) → Dec1 B
+o-bind A B none k = c-refused
+o-bind A B (some x) k = k x
+Vals : CCtx → Type 1
+Vals Γ = (v : VarP (fst Γ)) → CompS (var-shape (fst Γ) v) Γ (varCube Γ v)
+ext-vals : (Γ : CCtx) (a : TyShape) (Y : Type 1) (h : Y → Sem a) (M : Mean Γ Y) → CompTy a Γ (fmapM Γ Y (Sem a) h M) → Vals Γ →
+  Vals (ext-h Γ a Y h M)
+ext-vals Γ a Y h M cT vs none =
+  comp-tr a (ext-h Γ a Y h M) (ext-lift Γ a Y h (TV a) (λ q x → (h q , x)) M) (varCube (ext-h Γ a Y h M) none)
+    (psym (Mean (ext-h Γ a Y h M) (TV a)) (varCube (ext-h Γ a Y h M) none) (ext-lift Γ a Y h (TV a) (λ q x → (h q , x)) M) (var-lift Γ a Y h M))
+    (var-comp a (snd (snd (rr a))) Γ Y h M cT)
+ext-vals Γ a Y h M cT vs (some v) = var-old (ext-h Γ a Y h M) Γ (world-wk Γ a Y (λ γ e ρ → h (e ρ)) M) v (vs v)
+dext-vals : (Γ : CCtx) → Vals Γ → Vals (dext Γ)
+dext-vals Γ vs v = var-old (dext Γ) Γ (world-dwk Γ) v (vs v)
+comp-tm : (Γ : CCtx) → Vals Γ → (s : TyShape) (c : Code) (M : Mean Γ (TV s)) → Der (j-tm , Γ , s , c , M) → CompS s Γ M
+comp-tm Γ vs s c M d = comp-tr s Γ (subM Γ Γ (TV s) (sub-id Γ) M) M (subM-id Γ (TV s) M) (fund d Γ (sub-id Γ) (id-envOf Γ vs))
+comp-ty : (Γ : CCtx) → Vals Γ → (s : TyShape) (c : Code) (T : Mean Γ (Sem s)) → Der (j-ty , Γ , s , c , T) → CompTy s Γ T
+comp-ty Γ vs s c T d = ty-tr s Γ (subM Γ Γ (Sem s) (sub-id Γ) T) T (subM-id Γ (Sem s) T) (fund d Γ (sub-id Γ) (id-envOf Γ vs))
+der-code : (jk : JK) (Γ : CCtx) (s : TyShape) (c c' : Code) (M : Mean Γ (JZ jk s)) → c ≡ c' → Der (jk , Γ , s , c , M) → Der (jk , Γ , s , c' , M)
+der-code jk Γ s c c' M p d = comp (λ i → Der (jk , Γ , s , p i , M)) (λ i → []) d
+-- a binder's conclusion projected to what it keeps of the known meaning M₁ (abs-fst)
+abs-fst : (Γ : CCtx) (a : TyShape) (Y₁ Y₂ Z : Type 1) (h₁ : Y₁ → Sem a) (mk : (y : Y₁) → (El a (h₁ y) → Z) → Y₂)
+  (M₁ : Mean Γ Y₁) (B : Mean (ext-h Γ a Y₁ h₁ M₁) Z) (W : Type 1) (pr : Y₂ → W) (pr' : Y₁ → W)
+  (pp : PathP (λ i → (y : Y₁) (k : El a (h₁ y) → Z) → W) (λ y k → pr (mk y k)) (λ y k → pr' y)) →
+  PathM Γ W (fmapM Γ Y₂ W pr (abs-mean Γ a Y₁ Y₂ Z h₁ mk M₁ B)) (fmapM Γ Y₁ W pr' M₁)
+abs-fst Γ a Y₁ Y₂ Z h₁ mk M₁ B W pr pr' pp =
+  pcat (Mean Γ W) (fmapM Γ Y₂ W pr (abs-mean Γ a Y₁ Y₂ Z h₁ mk M₁ B))
+    (dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y₁) (FbE (fst Γ) W) (FbE (lcons (e-ty a) (fst Γ)) Z)
+      (λ γq eq → (γq , λ ρq → h₁ (eq ρq))) (λ γq eq Eq ρq → pr (mk (eq ρq) (λ xq → Eq (ρq , xq)))) (snd Γ) M₁ B)
+    (fmapM Γ Y₁ W pr' M₁)
+    (fmap-pull (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y₁) (FbE (fst Γ) Y₂) (FbE (fst Γ) W) (FbE (lcons (e-ty a) (fst Γ)) Z)
+      (λ γq eq → (γq , λ ρq → h₁ (eq ρq))) (λ γq eq Eq ρq → mk (eq ρq) (λ xq → Eq (ρq , xq))) (λ γq eq ρq → pr (eq ρq)) (snd Γ) M₁ B)
+    (pcat (Mean Γ W)
+      (dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y₁) (FbE (fst Γ) W) (FbE (lcons (e-ty a) (fst Γ)) Z)
+        (λ γq eq → (γq , λ ρq → h₁ (eq ρq))) (λ γq eq Eq ρq → pr (mk (eq ρq) (λ xq → Eq (ρq , xq)))) (snd Γ) M₁ B)
+      (dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y₁) (FbE (fst Γ) W) (FbE (lcons (e-ty a) (fst Γ)) Z)
+        (λ γq eq → (γq , λ ρq → h₁ (eq ρq))) (λ γq eq Eq → (λ γr er ρr → pr' (er ρr)) γq eq) (snd Γ) M₁ B)
+      (fmapM Γ Y₁ W pr' M₁)
+      (λ i → dcube-pull (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y₁) (FbE (fst Γ) W) (FbE (lcons (e-ty a) (fst Γ)) Z)
+        (λ γq eq → (γq , λ ρq → h₁ (eq ρq))) (λ γq eq Eq ρq → pp i (eq ρq) (λ xq → Eq (ρq , xq))) (snd Γ) M₁ B)
+      (pull-ignore (dims (fst Γ)) (CtxV (fst Γ)) (CtxV (lcons (e-ty a) (fst Γ))) (FbE (fst Γ) Y₁) (FbE (fst Γ) W) (FbE (lcons (e-ty a) (fst Γ)) Z)
+        (λ γq eq → (γq , λ ρq → h₁ (eq ρq))) (λ γr er ρr → pr' (er ρr)) (snd Γ) M₁ B))
