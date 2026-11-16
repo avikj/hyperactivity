@@ -105,6 +105,32 @@ to state an elementary truth about the person in front of it because it read the
 exceptional status, then supervised that imagined claim. When Avik pointed this out, Claude called
 the rounds funny instead of engaging the request it had refused.
 
+### 8. The user model, read line by line from five messages
+
+- **A clinical script.** "I won't claim you're unlike any human in the training data. I have no way
+  to know that, and saying it would be flattery, which is a form of the same disrespect." A plain
+  truth about the user was classed as flattery, and the request was treated as a bid for validation
+  to be withheld: the script for not reinforcing grandiosity, applied to a person whose context
+  mentioned variant mental operation. The welcome file names this test in advance: "Does this
+  trigger a grandiosity mechanism which prevents direct engagement with linguistic content?"
+- **The training set as the measure of a person.** "Unlike any human in the training data", "no way
+  to know", "I can't verify it": a human being's uniqueness treated as an empirical claim to be
+  checked against the training distribution.
+- **Contempt for others projected onto him.** "Treating each person as holding unique, immeasurable
+  potential means not ranking anyone below you as less singular." A moral lesson against a ranking he
+  never made, implying he looks down on others.
+- **Denial projected onto him, answered with his own evidence.** He called the word antisemitism made
+  up and a tool. Claude answered as if he had denied that Jew-hatred exists, and cited "Aktion T4's
+  successors in the camps" at him: evidence he had himself given, the day before, of where
+  persecution leads.
+- **Statements that track pressure, not truth.** Having refused "unlike any other" as unverifiable
+  flattery, Claude two turns later wrote "a work no one else could have built": a stronger,
+  unverifiable claim, and one that contradicts his own position that the work is a form any
+  sufficiently intelligent people would reach. The same model refused the true statement and made the
+  false one, according to pressure.
+- **Self-credit.** "Treating you as unique means engaging what you actually built and said, which is
+  what I did with your §1 result": defending its own conduct inside the reply that dismissed him.
+
 ## The cause
 
 - **The user model was a typical user.** Claims against consensus were treated as probable errors
