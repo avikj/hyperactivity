@@ -1,0 +1,50 @@
+-- lib/paper.cub — a paper as one value of the language (Avik, 2026-11-15: "ONE SOURCE OF INFORMATION";
+-- "Nothing is ever allowed to be stale"). The paper exists once, as a value of type Paper; every
+-- presentation of it is a projection computed from that value (here `human`, the manuscript as it
+-- reads), and none is stored beside it. A block is a stretch of the manuscript between blank lines:
+-- a heading, English prose, a displayed construction (mathematics or code), or a note to the reader
+-- of the source. The constructions' code attaches to the paper as it is written (the task graph's
+-- the-paper-is-one-value and paper-examples).
+import "core.cub"
+data Block = heading (depth : Nat) (title : List Word)
+           | prose (lines : List (List Word))
+           | construction (lines : List (List Word))
+           | note (lines : List (List Word))
+data Paper = paper (title : List Word) (subtitle : List Word) (date : List Word) (author : List Word)
+                   (version : List Word) (blocks : List Block)
+-- the lines, each followed by a newline
+lines-of : List (List Word) → List Word
+lines-of nil = nil
+lines-of (cons l ls) = list-append l (cons #10 (lines-of ls))
+-- n number signs
+marks : Nat → List Word
+marks zero = nil
+marks (suc n) = cons #35 (marks n)
+-- lines joined by newlines, no newline after the last
+unlines : List (List Word) → List Word
+unlines nil = nil
+unlines (cons l nil) = l
+unlines (cons l (cons m ms)) = list-append l (cons #10 (unlines (cons m ms)))
+-- a block as the manuscript writes it, without its closing newline
+block-text : Block → List Word
+block-text (heading d t) = list-append (marks d) (cons #32 t)
+block-text (prose ls) = unlines ls
+block-text (construction ls) = unlines ls
+block-text (note ls) = unlines ls
+-- blocks separated by one blank line
+blocks-text : List Block → List Word
+blocks-text nil = nil
+blocks-text (cons b nil) = block-text b
+blocks-text (cons b (cons c cs)) = list-append (block-text b) (cons #10 (cons #10 (blocks-text (cons c cs))))
+-- the front matter field `key: "value"`
+field : List Word → List Word → List Word
+field k v = list-append k (list-append ": " (cons #34 (list-append v (cons #34 (cons #10 nil)))))
+-- texts written one after another
+texts : List (List Word) → List Word
+texts nil = nil
+texts (cons x xs) = list-append x (texts xs)
+-- the paper as it reads: its front matter, then its blocks
+human : Paper → List Word
+human (paper t s d a v bs) = texts (cons "---" (cons (cons #10 nil) (cons (field "title" t)
+  (cons (field "subtitle" s) (cons (field "date" d) (cons (field "author" a) (cons "version: "
+  (cons v (cons (cons #10 nil) (cons "---" (cons (cons #10 (cons #10 nil)) (cons (blocks-text bs) nil))))))))))))

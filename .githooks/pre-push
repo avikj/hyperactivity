@@ -1,0 +1,8 @@
+#!/bin/sh
+# One source (Avik, 2026-11-15): a push carrying a commit that stores information twice is refused.
+# Each pushed commit's tree is judged (tools/task-graph.py one-source COMMIT).
+top=$(git rev-parse --show-toplevel)
+while read local_ref local_sha remote_ref remote_sha; do
+  case "$local_sha" in 0000000000000000000000000000000000000000) continue ;; esac
+  python3 "$top/tools/task-graph.py" one-source "$local_sha" || exit 1
+done

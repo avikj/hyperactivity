@@ -36,7 +36,6 @@ here. `docs/word-list.md` is a separate file, whose lines Avik gives himself.
 - term ⟨Latin terminus "boundary, limit, end" ← Proto-Indo-European *ter- "to cross over"; in logic, the word that ends a proposition⟩  (raised 2026-11-15)
 - data ⟨Latin data, plural of datum "a thing given", past participle of dare "to give" ← Proto-Indo-European *deh₃- "to give"⟩  (raised 2026-11-15)
 - information ⟨Latin īnfōrmātiō, from īnfōrmāre "to give form to, shape, instruct" = in "into" + fōrma "form"⟩  (raised 2026-11-15)
-- ignorance ⟨Latin ignōrantia, from ignōrāre "not to know" = in- "not" + gnō- ← Proto-Indo-European *ǵneh₃- "to know", the root of knowledge⟩  (raised 2026-11-15)
 - agreement ⟨Old French agreer "to please, to receive kindly", from à gré "to one's liking" ← Latin grātum "pleasing"⟩  (raised 2026-11-15)
 - conflict ⟨Latin cōnflīctus, from cōnflīgere "to strike together" = con + flīgere "to strike"⟩  (raised 2026-11-15)
 - empathy ⟨Greek empatheia "passion, being in a state of feeling" = en "in" + pathos "feeling, suffering"; in English (1909) through German Einfühlung "feeling into"⟩  (raised 2026-11-15)

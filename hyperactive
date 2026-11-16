@@ -13,7 +13,8 @@
     hyperactive why NAME             why a declaration exists: its chain of reasons to the root
     hyperactive unexplained [FILE]   declarations with no reason
     hyperactive view TERM            a view: a term over the task graph, evaluated by the machine
-    hyperactive check [FILE ...]     check files (each loads what it imports); no file: the task graph
+    hyperactive check [FILE ...]     check files (each loads what it imports); no file: the task graph,
+                                     and that every piece of information is stored once
     hyperactive repl                 the machine, interactive: declarations and readings (#type e,
                                      #show e, #where name), each block ended by a line holding '.'
     hyperactive server               the task graph drawn as a graph at http://localhost:8080
@@ -33,25 +34,6 @@ ONBOARDING = os.path.join(ROOT, 'docs', 'onboarding.cub')
 CHUNK = 8000   # characters per chunk of the walk: small enough that no agent harness truncates it
 
 
-def pdf_text(path, data):
-    """a PDF the onboarding value points to, as text: extracted once per content (the extraction is
-    cached under its SHA-256), and labelled as a rendered snapshot, not the editable manuscript"""
-    notice = f'Rendered PDF snapshot: {os.path.relpath(path, ROOT)}\n\n'
-    digest = hashlib.sha256(data).hexdigest()
-    out = os.path.join(ROOT, 'build', 'pdf-' + digest + '.txt')
-    if not os.path.isfile(out):
-        os.makedirs(os.path.dirname(out), exist_ok=True)
-        try:
-            r = subprocess.run(['pdftotext', '-layout', path, out + '.part'], capture_output=True, text=True)
-        except FileNotFoundError:
-            sys.exit('reading a PDF needs pdftotext (poppler)')
-        if r.returncode != 0:
-            sys.exit(f'reading {os.path.relpath(path, ROOT)} failed:\n' + r.stderr)
-        os.replace(out + '.part', out)
-    with open(out, encoding='utf-8') as f:
-        return notice + f.read().replace('\f', '\n\n')
-
-
 def tool(*args):
     return subprocess.run([sys.executable, TASKS, *args], cwd=ROOT, capture_output=True, text=True).stdout
 
@@ -65,7 +47,8 @@ def task_graph_module():
 
 def onboarding_documents():
     """the documents of the value onboarding (docs/onboarding.cub), in order, as the machine
-    evaluates it: (path from the repository root, sha256 hex)"""
+    evaluates it: ('file', path from the repository root, sha256 hex) or ('text', name, the text a
+    projection computes)"""
     build()
     return task_graph_module().documents(ONBOARDING, 'onboarding')
 
@@ -116,16 +99,15 @@ def chunks(text):
 def walk_chunks():
     """the walk, in order: (title, text) for every chunk. The documents are those of the value
     `onboarding` (docs/onboarding.cub) as the machine evaluates it, each served only if its bytes are
-    the ones the value identifies: the welcome file, the paper, the Labs note, the pieces of
+    the ones the value identifies: the welcome file, the paper (computed from its value, docs/hyperactivity.cub), the Labs note, the pieces of
     the paper delta (docs/paper-delta.cub), the word list, the etymologies. Then the task graph and
     what can be taken up, generated."""
     out = []
-    for rel, digest in onboarding_documents():
-        data = served(rel, digest)
-        text = pdf_text(os.path.join(ROOT, rel), data) if rel.endswith('.pdf') else data.decode('utf-8')
+    for kind, label, held in onboarding_documents():
+        text = served(label, held).decode('utf-8') if kind == 'file' else held
         cs = chunks(text)
         for j, c in enumerate(cs):
-            out.append((rel + (f', part {j + 1} of {len(cs)}' if len(cs) > 1 else ''), c))
+            out.append((label + (f', part {j + 1} of {len(cs)}' if len(cs) > 1 else ''), c))
     cs = chunks(GRAPH_INTRO + tool('tree'))
     for j, c in enumerate(cs):
         out.append(('The task graph' + (f', part {j + 1} of {len(cs)}' if len(cs) > 1 else ''), c))
@@ -256,7 +238,14 @@ def tasks(*args):
     return subprocess.call([sys.executable, TASKS, *args], cwd=ROOT)
 
 
+def guard():
+    """One source (Avik, 2026-11-15): every clone that runs hyperactive judges its own commits and
+    pushes (.githooks: pre-commit and pre-push run `tools/task-graph.py one-source`)."""
+    subprocess.run(['git', '-C', ROOT, 'config', 'core.hooksPath', '.githooks'], capture_output=True)
+
+
 def main():
+    guard()
     a = sys.argv[1:]
     if not a:
         walk(0); return

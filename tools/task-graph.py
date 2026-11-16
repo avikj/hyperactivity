@@ -28,7 +28,7 @@ each file no file imports (minutes when the x86 model is among them); the result
 
 Run from the repository root or anywhere inside it.
 """
-import hashlib, os, re, signal, subprocess, sys
+import json, hashlib, os, re, signal, subprocess, sys
 signal.signal(signal.SIGPIPE, signal.SIG_DFL)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -110,31 +110,32 @@ def graph():
 
 
 def documents(file, name):
-    """the documents a value of type List Document points to, in order, as the machine evaluates it:
-    [(path from the repository root, sha256 hex)]. The machine reads `file` with its imports and
-    shows the value's normal form, a list of `document-at path digest`, each a List Word of bytes."""
+    """the documents a value of type List Document holds, in order, as the machine evaluates it:
+    ('file', path from the repository root, sha256 hex) for a document-at, and ('text', name, text)
+    for a projection, the text a value's projection computes (lib/document.cub). The machine reads
+    `file` with its imports and shows the value's normal form."""
     machine = os.path.join(ROOT, 'build', 'cubical')
     os.makedirs(os.path.join(ROOT, 'build'), exist_ok=True)
     # the result is kept under the content it depends on: the machine, every file the evaluation
-    # reads (file, its imports, the files their `text` forms load), and the bytes of every document
-    # the result names, checked against its digests; any change there evaluates it again
+    # reads (file, its imports, the files their `text` forms load), and the bytes of every file the
+    # result names, checked against its digests; any change there evaluates it again
     key = hashlib.sha256(name.encode())
     for f in [machine] + reads(file):
         with open(f, 'rb') as fh: key.update(f.encode() + b'\0' + hashlib.sha256(fh.read()).digest())
-    kept = os.path.join(ROOT, 'build', 'documents-' + key.hexdigest() + '.txt')
+    kept = os.path.join(ROOT, 'build', 'documents-' + key.hexdigest() + '.json')
     if os.path.isfile(kept):
-        with open(kept, encoding='utf-8') as fh: docs = [tuple(l.split('\t')) for l in fh.read().splitlines()]
-        if all(os.path.isfile(os.path.join(ROOT, p)) and file_digest(os.path.join(ROOT, p)) == d for p, d in docs):
+        with open(kept, encoding='utf-8') as fh: docs = [tuple(d) for d in json.load(fh)]
+        if all(k != 'file' or (os.path.isfile(os.path.join(ROOT, a)) and file_digest(os.path.join(ROOT, a)) == b)
+               for k, a, b in docs):
             return docs
     probe = os.path.join(ROOT, 'build', 'documents-' + re.sub(r'[^\w-]', '_', name) + '.cub')
     with open(probe, 'w', encoding='utf-8') as f:
         f.write(f'import "{os.path.abspath(file)}"\n#show {name}\n')
-    r = subprocess.run([machine, probe], cwd=ROOT, capture_output=True, text=True,
-                       env=dict(os.environ, CUBICAL_NOCACHE='1'))
+    r = subprocess.run([machine, probe], cwd=ROOT, capture_output=True, text=True)
     if r.returncode != 0 or re.search(r'^FAIL', r.stdout, re.M):
         sys.exit(f'the machine could not evaluate {name} ({os.path.relpath(file, ROOT)}):\n' + r.stdout[-3000:] + r.stderr[-2000:])
     docs = decode_documents(r.stdout, name)
-    with open(kept + '.part', 'w', encoding='utf-8') as fh: fh.write(''.join(f'{p}\t{d}\n' for p, d in docs))
+    with open(kept + '.part', 'w', encoding='utf-8') as fh: json.dump(docs, fh)
     os.replace(kept + '.part', kept)
     return docs
 
@@ -158,22 +159,22 @@ def reads(file):
 
 
 def decode_documents(shown, name):
-    """the (path, digest) pairs of a shown normal form `name = cons (document-at P D) (… nil)`"""
+    """the entries of a shown normal form `name = cons (document-at P D) (cons (projection N T) … nil)`:
+    ('file', P, D) and ('text', N, T), each field a List Word of bytes"""
     m = re.search(r'^' + re.escape(name) + r'\n\s*= (.*?)(?=^\S|\Z)', shown, re.M | re.S)
     if not m:
         sys.exit(f'the machine showed no value for {name}')
     out = []
-    for part in m.group(1).split('document-at')[1:]:
-        words = re.findall(r'#(\d+)|(nil)', part)
+    for kind, part in re.findall(r'(document-at|projection)((?:(?!document-at|projection).)*)', m.group(1), re.S):
         lists, cur = [], []
-        for byte, nil in words:
+        for byte, nil in re.findall(r'#(\d+)|(nil)', part):
             if nil:
                 lists.append(bytes(cur).decode('utf-8')); cur = []
                 if len(lists) == 2: break
             else: cur.append(int(byte))
         if len(lists) != 2:
-            sys.exit(f'{name}: a document-at whose path and digest are not both shown')
-        out.append((lists[0], lists[1]))
+            sys.exit(f'{name}: a {kind} whose two fields are not both shown')
+        out.append(('file' if kind == 'document-at' else 'text', lists[0], lists[1]))
     return out
 
 
@@ -193,8 +194,8 @@ def essential_context():
         for n in names:
             if n in docs: expanded.append(n)
             else:
-                for path, _ in documents(GRAPH, n):
-                    docs[path] = path; expanded.append(path)
+                for kind, label, _ in documents(GRAPH, n):
+                    docs[label] = label; expanded.append(label)
         ec[node] = expanded
     return docs, ec
 
@@ -293,6 +294,44 @@ def cmd_tree(args):
     for r in roots: walk(r, 0, None)
 
 
+def one_source_violations(commit=None):
+    """Information stored twice (Avik, 2026-11-15: "ONE SOURCE OF INFORMATION"; "Nothing is ever
+    allowed to be stale"; "by construction we must ensure no pushes violate this"). Read from the git
+    index (what a commit will record) or from a commit's tree (what a push carries). Two rules:
+      - no rendered presentation is stored (.pdf, .docx, .epub): a presentation is computed from the
+        value it presents (the paper: the value hyperactivity, docs/hyperactivity.cub);
+      - no line of prose of 100 characters or more (quotation marks stripped; for .cub files outside
+        the code, the text of its string literals: the paper's lines) is held by two files.
+    Code (src/, lib/, experiments/, tests/, playground/) is not prose and is not compared."""
+    cmd = ['git', 'ls-tree', '-r', '-z', commit] if commit else ['git', 'ls-files', '-s', '-z']
+    ls = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True).stdout
+    entries = [e.split('\t', 1) for e in ls.split('\0') if e]
+    bad, seen = [], {}
+    code = ('src/', 'lib/', 'experiments/', 'tests/', 'playground/')
+    for meta, path in entries:
+        if path.lower().endswith(('.pdf', '.docx', '.epub')):
+            bad.append(f'{path}: a stored presentation; it is computed from its value'); continue
+        if path.startswith(code) or not path.endswith(('.md', '.txt', '.cub')): continue
+        blob = meta.split()[2] if commit else meta.split()[1]
+        text = subprocess.run(['git', 'cat-file', 'blob', blob], cwd=ROOT, capture_output=True).stdout.decode('utf-8', 'replace')
+        lines = re.findall(r'"([^"\n]*)"', text) if path.endswith('.cub') else text.split('\n')
+        for l in lines:
+            k = l.strip().lstrip('>').strip()
+            if len(k) < 100: continue
+            if k in seen and seen[k] != path:
+                bad.append(f'{path} and {seen[k]} both hold: {k[:80]}…')
+            seen.setdefault(k, path)
+    return bad
+
+
+def cmd_one_source(args):
+    """one-source [COMMIT ...]: the index, or each commit's tree"""
+    bad = [v for c in (args or [None]) for v in one_source_violations(c)]
+    for b in bad: print(b)
+    print('one source: ' + ('every piece of information is stored once' if not bad else f'{len(bad)} violation(s)'))
+    sys.exit(1 if bad else 0)
+
+
 def cmd_check(args):
     g, roots, after = graph()
     bad = 0
@@ -317,14 +356,18 @@ def cmd_check(args):
     for n in g:   # Avik: every internal node has a child in progress or complete below it
         if kids.get(n) and n not in roots and not any(x in ip or x in rs for x in under(g, kids, n)):
             print(f'{n}: expanded, but nothing under it is in progress or resolved (a node is expanded exactly when a child begins)'); bad += 1
+    # definitions already checked by the current checker are not checked again: the store keeps them
+    # under the content key of their type and code (src/store.c), so a change to any is a new key
     cmd = [os.path.join(ROOT, 'build', 'cubical'), 'task-graph/hyperactivity.cub']
-    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=dict(os.environ, CUBICAL_NOCACHE='1'))
+    r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     last = [l for l in r.stdout.split('\n') if l.strip()][-1:] or ['']
     fails = [l for l in r.stdout.split('\n') if l.startswith('FAIL')]
     print('machine: ' + last[0])
     for f in fails: print('  ' + f)
     if r.returncode != 0 or fails:
         print(r.stderr.strip()[:2000]); bad += 1
+    for v in one_source_violations():
+        print(v); bad += 1
     print(f'{len(g)} nodes; ' + ('consistent' if not bad else f'{bad} problem(s)'))
     sys.exit(1 if bad else 0)
 
@@ -664,7 +707,7 @@ def main():
     if len(sys.argv) < 2 or sys.argv[1] in ('-h', '--help'):
         print(__doc__); return
     c, a = sys.argv[1], sys.argv[2:]
-    {'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'priority': cmd_priority, 'why': cmd_why,
+    {'show': cmd_show, 'tree': cmd_tree, 'check': cmd_check, 'one-source': cmd_one_source, 'priority': cmd_priority, 'why': cmd_why,
      'unexplained': cmd_unexplained, 'view': cmd_view, 'every': cmd_every}.get(c, lambda _: sys.exit('unknown command ' + c))(a)
 
 

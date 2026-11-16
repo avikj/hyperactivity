@@ -1,10 +1,10 @@
-**To check against v31 (`docs/hyperactivity_v31.pdf`, 14 November 2026): this file was written against the 11 November copy; whatever v31 already contains leaves it (Avik, 2026-11-14: done when it matters).**
+**To check against the paper (the value `hyperactivity`, `docs/hyperactivity.cub`; its Part I is v31's text, 14 November 2026): this file was written against the 11 November copy; whatever v31 already contains leaves it (Avik, 2026-11-14: done when it matters).**
 
 # To be incorporated into the paper
 
-The paper is the specification of hyperactivity. The canonical copy is `docs/hyperactivity_v31.pdf`,
-version 31, 14 November 2026. This file is the scratch space for everything that belongs in the
-next draft and is not yet in that copy: it is read together with the
+The paper is the specification of hyperactivity. It is one value of the language, `hyperactivity`
+(`docs/hyperactivity.cub`), version 32, 15 November 2026. This file is the scratch space for everything that belongs in the
+paper and is not yet in that value: it is read together with the
 paper, and an agent working on the paper or the code holds both. When a draft absorbs a part of
 this file, that part leaves it.
 

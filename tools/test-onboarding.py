@@ -30,8 +30,9 @@ def shown(name, docs):
             acc = f'(cons #{b} {acc})'
         return acc
     body = 'nil'
-    for path, digest in reversed(docs):
-        body = f'(cons (document-at {lst(path)} {lst(digest)}) {body})'
+    for kind, a, b in reversed(docs):
+        con = 'document-at' if kind == 'file' else 'projection'
+        body = f'(cons ({con} {lst(a)} {lst(b)}) {body})'
     return f'{name}\n  = {body[1:-1]}\n196 passed, 0 failed\n'
 
 
@@ -46,10 +47,11 @@ class Onboarding(unittest.TestCase):
         p = self.root / relative
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data.encode('utf-8') if isinstance(data, str) else data)
-        return relative, hashlib.sha256(p.read_bytes()).hexdigest()
+        return 'file', relative, hashlib.sha256(p.read_bytes()).hexdigest()
 
     def test_decoding_the_shown_value(self):
-        docs = [('AGENTS.md', 'ab' * 32), ('docs/é-piece.md', 'cd' * 32)]
+        docs = [('file', 'AGENTS.md', 'ab' * 32), ('text', 'the paper', 'Line one\nline two'),
+                ('file', 'docs/é-piece.md', 'cd' * 32)]
         self.assertEqual(tg.decode_documents(shown('onboarding', docs), 'onboarding'), docs)
 
     def test_no_value_shown_is_explicit(self):
@@ -57,7 +59,7 @@ class Onboarding(unittest.TestCase):
             tg.decode_documents('FAIL: checks onboarding\n', 'onboarding')
 
     def test_a_changed_file_is_not_served(self):
-        rel, digest = self.write('docs/piece.md', 'as evaluated')
+        _, rel, digest = self.write('docs/piece.md', 'as evaluated')
         self.write('docs/piece.md', 'changed since')
         with self.assertRaisesRegex(SystemExit, 'changed while the walk'):
             cli.served(rel, digest)
@@ -78,16 +80,12 @@ class Onboarding(unittest.TestCase):
         titles = [t.split(',')[0] for t, _ in chunks]
         self.assertLess(titles.index('docs/new-piece.md'), titles.index('docs/word-list.md'))
 
-    def test_a_pdf_is_labelled_a_snapshot(self):
-        rel, digest = self.write('docs/paper.pdf', b'%PDF')
-        def extract(args, **kw):
-            Path(args[3]).write_text('Section 1\fSection 2')
-            return subprocess.CompletedProcess(args, 0, '', '')
-        with patch.object(cli.subprocess, 'run', side_effect=extract):
-            text = cli.pdf_text(str(self.root / rel), b'%PDF')
-        self.assertTrue(text.startswith('Rendered PDF snapshot:'))
-        self.assertIn('Section 1\n\nSection 2', text)
-
+    def test_a_projection_is_served_as_computed(self):
+        docs = [self.write('docs/welcome.md', 'Welcome'), ('text', 'the paper', '# Part I\n\nThe universe.')]
+        with patch.object(cli, 'onboarding_documents', return_value=docs), \
+             patch.object(cli, 'tool', return_value='graph'), patch.object(cli, 'open_work', lambda: print('open')):
+            chunks = cli.walk_chunks()
+        self.assertIn(('the paper', '# Part I\n\nThe universe.'), chunks)
 
 if __name__ == '__main__':
     unittest.main()
