@@ -1,37 +1,82 @@
--- experiments/nbe/examples.cub — lib/nbe.cub's normalizer run on derivations (2026-11-12).
--- Load after CORE and lib/nbe.cub.
--- ---------------------------------------------------------------- P1: Π, Σ, Bool
--- Bool → Bool as a semantic type, and as a type in the empty context
-bbT : Env emp → Fam s-bool s-bool
-bbT ρ = (one , λ x → one)
-bb : PTy (Env emp)
-bb = (s-pi s-bool s-bool , bbT)
--- λ x. x : Bool → Bool
-id-der : Der (emp , bb , clam (cvar #0) , λ ρ x → x)
-id-der = dlam emp s-bool s-bool bbT (cvar #0) (λ ρ → snd ρ)
-  (dvar (ext emp (dom (Env emp) s-bool s-bool bbT)) (cod (Env emp) s-bool s-bool bbT) #0 (λ ρ → snd ρ)
-        (vz emp (dom (Env emp) s-bool s-bool bbT)))
--- (λ x. x) true : Bool, a β-redex
-app-der : Der (emp , (s-bool , λ ρ → one) , capp (clam (cvar #0)) c-true , λ ρ → true)
-app-der = dapp emp s-bool s-bool bbT (clam (cvar #0)) (λ ρ x → x) c-true (λ ρ → true) id-der (dtrue emp (λ ρ → one))
-#same fst (normalize-nf emp (s-bool , λ ρ → one) (capp (clam (cvar #0)) c-true , (λ ρ → true) , app-der)) = c-true
-#same fst (normalize-nf emp bb (clam (cvar #0) , (λ ρ x → x) , id-der)) = clam (cvar #0)
--- a context with f : Bool → Bool; f normalizes to its η-expansion λ x. f x
-Γf : Ctx
-Γf = ext emp bb
-f-der : Der (Γf , wk emp bb bb , cvar #0 , λ ρ → snd ρ)
-f-der = dvar Γf (wk emp bb bb) #0 (λ ρ → snd ρ) (vz emp bb)
-#same fst (normalize-nf Γf (wk emp bb bb) (cvar #0 , (λ ρ → snd ρ) , f-der)) = clam (capp (cvar #1) (cvar #0))
--- a context with b : Bool; not b = case b of true → false; false → true is neutral, and stays
-Γb : Ctx
-Γb = ext emp (s-bool , λ ρ → one)
-bP : PTy (Env (ext Γb (s-bool , λ ρ → one)))
-bP = (s-bool , λ ρ → one)
-not-der : Der (Γb , (s-bool , λ ρ → one) , c-case c-false c-true (cvar #0) , λ ρ → bool-elim (λ b → Bool) false true (snd ρ))
-not-der = dcase Γb (λ ρ → one) bP (cvar #0) (λ ρ → snd ρ) c-false (λ ρ → false) c-true (λ ρ → true)
-  (dvar Γb (s-bool , λ ρ → one) #0 (λ ρ → snd ρ) (vz emp (s-bool , λ ρ → one)))
-  (dfalse Γb (λ ρ → one)) (dtrue Γb (λ ρ → one))
-#same fst (normalize-nf Γb (s-bool , λ ρ → one) (c-case c-false c-true (cvar #0) , (λ ρ → bool-elim (λ b → Bool) false true (snd ρ)) , not-der)) = c-case c-false c-true (cvar #0)
+-- experiments/nbe/examples.cub — lib/nbe.cub's normalizer over cubes run on derivations (rewritten
+-- 2026-11-14 over the families that replaced P1's): P1's examples, a path λ, variables of function and
+-- path type η-expanded, case on a variable and on a constant; interval expressions in normal form; path
+-- application on cubes; substitution on checked syntax.
+import "../../lib/nbe.cub"
+-- ---------------------------------------------------------------- the empty context, Bool → Bool
+emp2 : CCtx
+emp2 = (lnil , one)
+bb-fam : Fam s-bool s-bool
+bb-fam = (one , λ x → one)
+-- λ x. x : Bool → Bool, its meaning in the empty context
+id-X : Mean emp2 (TV (s-pi s-bool s-bool))
+id-X = λ ρ → (bb-fam , λ x → x)
+id-d : Der (j-tm , emp2 , s-pi s-bool s-bool , clam (cvar #0) , id-X)
+id-d = dlam emp2 s-bool s-bool id-X c-bool (cvar #0) (dty-bool emp2 (λ ρ → one))
+  (dvar (lam-ctx emp2 s-bool s-bool id-X) none)
+#same fst (normalize-nf emp2 tc-nil (s-pi s-bool s-bool) (clam (cvar #0) , id-X , id-d)) = clam (cvar #0)
+-- (λ x. x) true : Bool, a β-redex, normalizes to true
+app-R : Mean emp2 (AppV s-bool s-bool)
+app-R = λ ρ → (bb-fam , (λ x → x) , true)
+app-d : Der (j-tm , emp2 , s-bool , capp (clam (cvar #0)) c-true , fmapM emp2 (AppV s-bool s-bool) (TV s-bool) (app-r s-bool s-bool) app-R)
+app-d = dapp emp2 s-bool s-bool app-R (clam (cvar #0)) c-true id-d (dtrue emp2 (λ ρ → one))
+#same fst (normalize-nf emp2 tc-nil s-bool (capp (clam (cvar #0)) c-true , fmapM emp2 (AppV s-bool s-bool) (TV s-bool) (app-r s-bool s-bool) app-R , app-d)) = c-true
+-- ---------------------------------------------------------------- a path λ
+-- ⟨i⟩ true : PathP (λ i → Bool) true true
+pt-X : Mean emp2 (TV (s-path s-bool))
+pt-X = λ ρ → (((one , one , λ i → one) , true , true) , λ i → true)
+pt-d : Der (j-tm , emp2 , s-path s-bool , cplam c-true , pt-X)
+pt-d = dplam emp2 s-bool pt-X c-true (dtrue (dext emp2) ((λ ρ → one) , (λ ρ → one) , λ i ρ → one))
+#same fst (normalize-nf emp2 tc-nil (s-path s-bool) (cplam c-true , pt-X , pt-d)) = cplam c-true
+-- ---------------------------------------------------------------- a variable of function type
+-- f : Bool → Bool in context; f normalizes to its η-expansion λ x. f x
+bb-T : Mean emp2 (Fam s-bool s-bool)
+bb-T = λ ρ → bb-fam
+bb-dT : Der (j-ty , emp2 , s-pi s-bool s-bool , cpi #2 c-bool c-bool , bb-T)
+bb-dT = dty-pi emp2 s-bool s-bool bb-T c-bool c-bool (dty-bool emp2 (λ ρ → one))
+  (dty-bool (ext-h emp2 s-bool (Fam s-bool s-bool) (fam-dom s-bool s-bool) bb-T) (λ ρ → one))
+Γf2 : CCtx
+Γf2 = ext-h emp2 (s-pi s-bool s-bool) (Sem (s-pi s-bool s-bool)) (λ A → A) bb-T
+tΓf2 : TCtx Γf2
+tΓf2 = tc-ty emp2 tc-nil (s-pi s-bool s-bool) bb-T (cpi #2 c-bool c-bool) bb-dT
+f-d : Der (j-tm , Γf2 , s-pi s-bool s-bool , cvar #0 , varCube Γf2 none)
+f-d = dvar Γf2 none
+#same fst (normalize-nf Γf2 tΓf2 (s-pi s-bool s-bool) (cvar #0 , varCube Γf2 none , f-d)) = clam (capp (cvar #1) (cvar #0))
+-- ---------------------------------------------------------------- case on a variable
+-- b : Bool in context; not b = case b of true → false; false → true is neutral, and stays
+Γb2 : CCtx
+Γb2 = ext-h emp2 s-bool (Sem s-bool) (λ A → A) (λ ρ → one)
+tΓb2 : TCtx Γb2
+tΓb2 = tc-ty emp2 tc-nil s-bool (λ ρ → one) c-bool (dty-bool emp2 (λ ρ → one))
+not-R : Mean Γb2 (CaseV s-bool)
+not-R = λ ρ → (one , (λ b → one) , snd ρ , false , true)
+not-d : Der (j-tm , Γb2 , s-bool , c-case c-false c-true (cvar #0) , fmapM Γb2 (CaseV s-bool) (TV s-bool) (case-r s-bool) not-R)
+not-d = dcase Γb2 s-bool not-R c-bool (cvar #0) c-false c-true
+  (dty-bool (ext-h Γb2 s-bool (CaseV s-bool) (case-b s-bool) not-R) (λ ρ → one))
+  (dvar Γb2 none) (dfalse Γb2 (λ ρ → one)) (dtrue Γb2 (λ ρ → one))
+#same fst (normalize-nf Γb2 tΓb2 s-bool (c-case c-false c-true (cvar #0) , fmapM Γb2 (CaseV s-bool) (TV s-bool) (case-r s-bool) not-R , not-d)) = c-case c-false c-true (cvar #0)
+-- not true normalizes to false (the case on a constant: its branch)
+nt-R : Mean emp2 (CaseV s-bool)
+nt-R = λ ρ → (one , (λ b → one) , true , false , true)
+nt-d : Der (j-tm , emp2 , s-bool , c-case c-false c-true c-true , fmapM emp2 (CaseV s-bool) (TV s-bool) (case-r s-bool) nt-R)
+nt-d = dcase emp2 s-bool nt-R c-bool c-true c-false c-true
+  (dty-bool (ext-h emp2 s-bool (CaseV s-bool) (case-b s-bool) nt-R) (λ ρ → one))
+  (dtrue emp2 (λ ρ → one)) (dfalse emp2 (λ ρ → one)) (dtrue emp2 (λ ρ → one))
+#same fst (normalize-nf emp2 tc-nil s-bool (c-case c-false c-true c-true , fmapM emp2 (CaseV s-bool) (TV s-bool) (case-r s-bool) nt-R , nt-d)) = c-false
+-- ---------------------------------------------------------------- a variable of path type
+-- p : PathP (λ i → Bool) true true in context; p normalizes to its η-expansion ⟨i⟩ p @ i (the path
+-- applied at the new dimension, a canonical non-constant form)
+pp-T : Mean emp2 (Sem (s-path s-bool))
+pp-T = λ ρ → ((one , one , λ i → one) , true , true)
+pp-dT : Der (j-ty , emp2 , s-path s-bool , cpathp (cplam c-bool) c-true c-true , pp-T)
+pp-dT = dty-path emp2 s-bool pp-T c-bool c-true c-true (dty-bool (dext emp2) ((λ ρ → one) , (λ ρ → one) , λ i ρ → one))
+  (dtrue emp2 (λ ρ → one)) (dtrue emp2 (λ ρ → one))
+Γp2 : CCtx
+Γp2 = ext-h emp2 (s-path s-bool) (Sem (s-path s-bool)) (λ A → A) pp-T
+tΓp2 : TCtx Γp2
+tΓp2 = tc-ty emp2 tc-nil (s-path s-bool) pp-T (cpathp (cplam c-bool) c-true c-true) pp-dT
+#same fst (normalize-nf Γp2 tΓp2 (s-path s-bool) (cvar #0 , varCube Γp2 none , dvar Γp2 none)) = cplam (cpapp (cvar #1) (dnf-code dnf-v0))
+
 -- ---------------------------------------------------------------- P2: interval expressions in normal form
 -- (i ∧ ~j) ∨ (~j ∧ i) ∨ i is i; ~(i ∨ j) is ~i ∧ ~j; i ∧ ~i stays (the algebra is not Boolean); i ∨ 1 is 1
 #same dnf-code (case dnf-of (cjoin (cmeet (cvar #0) (cneg (cvar #1))) (cjoin (cmeet (cneg (cvar #1)) (cvar #0)) (cvar #0))) of none → ci0; some f → f) = cvar #0
@@ -68,12 +113,33 @@ pa-at-j X L = λ k → degen-l (Line X) L
 pa-at-ij : (X : Type 1) (L : Line X) →
   PathP (λ k → Line (Line X)) (papp-cube pa-2 X (lcons (lcons (#0 , true) (lcons (#1 , true) lnil)) lnil) (pa-c X L)) (meet-l X L)
 pa-at-ij X L = λ k → meet-l X L
--- ---------------------------------------------------------------- P2: a context with a dimension (P2.2)
--- b : Bool, then a dimension i: b is index #1, its meaning the environment's b (a dimension adds
--- nothing to a vertex's environment); normalizing it gives cvar #1
-Γbi : Ctx
-Γbi = (lcons e-dim (fst Γb) , snd Γb)
-bi-der : Der (Γbi , (s-bool , λ ρ → one) , cvar #1 , λ ρ → snd ρ)
-bi-der = dvar Γbi (s-bool , λ ρ → one) #1 (λ ρ → snd ρ)
-  (((s-bool , λ ρ → one) , #0 , λ ρ → snd ρ) , vz emp (s-bool , λ ρ → one) , λ i → ((s-bool , λ ρ → one) , #1 , λ ρ → snd ρ))
-#same fst (normalize-nf Γbi (s-bool , λ ρ → one) (cvar #1 , (λ ρ → snd ρ) , bi-der)) = cvar #1
+-- ---------------------------------------------------------------- substitution on checked syntax
+-- x := true in not x (x : Bool): the substitution emp2 → Γb2 (ext-at at true's meaning), its checked
+-- term (true's derivation carried to σ's action on x by ext-new and via-snd), and the substituted
+-- term read back: false
+one-u : Mean emp2 One1
+one-u = λ ρ → one
+sx-A : Mean emp2 (TV s-bool)
+sx-A = fmapM emp2 One1 (TV s-bool) (bool-v true) one-u
+sx-p : PathM emp2 (Sem s-bool) (fmapM emp2 (TV s-bool) (Sem s-bool) (λ z → fst z) sx-A) (fmapM emp2 (Sem s-bool) (Sem s-bool) (λ y → y) (subM emp2 emp2 (Sem s-bool) (sub-id emp2) one-u))
+sx-p = pcat (Mean emp2 One1) (fmapM emp2 (TV s-bool) (Sem s-bool) (λ z → fst z) sx-A) (fmapM emp2 One1 One1 (λ y → y) one-u) (fmapM emp2 (Sem s-bool) (Sem s-bool) (λ y → y) (subM emp2 emp2 (Sem s-bool) (sub-id emp2) one-u))
+  (fmapM-fmapM emp2 One1 (TV s-bool) One1 (bool-v true) (λ z → fst z) one-u)
+  (cong1 (Mean emp2 One1) (Mean emp2 One1) (λ N → fmapM emp2 One1 One1 (λ y → y) N) one-u (subM emp2 emp2 One1 (sub-id emp2) one-u)
+     (psym (Mean emp2 One1) (subM emp2 emp2 One1 (sub-id emp2) one-u) one-u (subM-id emp2 One1 one-u)))
+σx : Sub emp2 Γb2
+σx = ext-at emp2 emp2 s-bool (Sem s-bool) (Sem s-bool) (λ y → y) (λ y → y) one-u (sub-id emp2) sx-A sx-p
+sx-zpt : Mean emp2 ((yz : Sem s-bool) × El s-bool yz)
+sx-zpt = zpt emp2 emp2 s-bool (Sem s-bool) (Sem s-bool) (λ y → y) (λ y → y) one-u (sub-id emp2) sx-A sx-p
+sx-var : PathM emp2 (TV s-bool) sx-A (subM emp2 Γb2 (TV s-bool) σx (varCube Γb2 none))
+sx-var = pcat (Mean emp2 (TV s-bool)) sx-A (fmapM emp2 (TV s-bool) (TV s-bool) (λ q → q) sx-A) (subM emp2 Γb2 (TV s-bool) σx (varCube Γb2 none))
+  (psym (Mean emp2 (TV s-bool)) (fmapM emp2 (TV s-bool) (TV s-bool) (λ q → q) sx-A) sx-A (fmap-id (dims (fst emp2)) (CtxV (fst emp2)) (FbE (fst emp2) (TV s-bool)) (snd emp2) sx-A))
+  (pcat (Mean emp2 (TV s-bool)) (fmapM emp2 (TV s-bool) (TV s-bool) (λ q → q) sx-A) (fmapM emp2 ((yz : Sem s-bool) × El s-bool yz) (TV s-bool) (λ z → (fst z , snd z)) sx-zpt) (subM emp2 Γb2 (TV s-bool) σx (varCube Γb2 none))
+     (via-snd emp2 emp2 s-bool (Sem s-bool) (Sem s-bool) (λ y → y) (λ y → y) one-u (sub-id emp2) sx-A sx-p (TV s-bool) (λ q → q))
+     (psym (Mean emp2 (TV s-bool)) (subM emp2 Γb2 (TV s-bool) σx (varCube Γb2 none)) (fmapM emp2 ((yz : Sem s-bool) × El s-bool yz) (TV s-bool) (λ z → (fst z , snd z)) sx-zpt)
+        (ext-new emp2 emp2 s-bool (Sem s-bool) (Sem s-bool) (λ y → y) (λ y → y) one-u (sub-id emp2) sx-A sx-p)))
+sx-v : (v : VarP (fst Γb2)) → (dc : Code) × Der (j-tm , emp2 , var-shape (fst Γb2) v , dc , subM emp2 Γb2 (TV (var-shape (fst Γb2) v)) σx (varCube Γb2 v))
+sx-v none = (c-true , der-tr j-tm emp2 s-bool c-true sx-A (subM emp2 Γb2 (TV s-bool) σx (varCube Γb2 none)) sx-var (dtrue emp2 one-u))
+sx-v (some w) = case w of Empty
+dsx : DSubst Γb2 emp2 σx
+dsx = (unit , sx-v)
+#same fst (subst-tm Γb2 emp2 tc-nil σx dsx s-bool (c-case c-false c-true (cvar #0) , fmapM Γb2 (CaseV s-bool) (TV s-bool) (case-r s-bool) not-R , not-d)) = c-false
