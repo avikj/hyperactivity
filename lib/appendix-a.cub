@@ -1,0 +1,57 @@
+-- lib/appendix-a.cub — the paper's Appendix A constructions (docs/hyperactivity.cub, “Constructions within
+-- the language”) as code: integers as pairs of naturals under (a, b) ~ (c, d) ⇔ a + d = c + b (A.1),
+-- with addition well defined on the relation; complex multiplication on pairs, i = (0, 1) and
+-- i² = −1 (A.2), over the integers; a type as the sum of a Boolean function's two fibers (A.6); the
+-- complete finite search Dec(Sat(f)) (A.7); divisibility (A.8), reflexive and transitive.
+import "core.cub"
+import "structure.cub"
+import "fiber.cub"
+-- (A.1)
+nat-pair-rel : Nat × Nat → Nat × Nat → Type
+nat-pair-rel x y = plus (fst x) (snd y) ≡ plus (fst y) (snd x)
+nat-pair-add : Nat × Nat → Nat × Nat → Nat × Nat
+nat-pair-add x y = (plus (fst x) (fst y) , plus (snd x) (snd y))
+-- addition respects the relation: from a + b' = a' + b and c + d' = c' + d
+nat-pair-add-wd : (x x2 y y2 : Nat × Nat) → nat-pair-rel x x2 → nat-pair-rel y y2 → nat-pair-rel (nat-pair-add x y) (nat-pair-add x2 y2)
+nat-pair-add-wd x x2 y y2 h1 h2 =
+  transN (stree-swap4 (fst x) (fst y) (snd x2) (snd y2))
+  (transN (λ k → plus (h1 k) (h2 k))
+  (stree-swap4 (fst x2) (snd x) (fst y2) (snd y)))
+-- (A.2) over ℤ: multiplication of integers, then of pairs
+mulZ : Int → Int → Int
+mulZ (pos m) (pos n) = pos (times m n)
+mulZ (pos m) (negsuc n) = negZ (pos (times m (suc n)))
+mulZ (negsuc m) (pos n) = negZ (pos (times (suc m) n))
+mulZ (negsuc m) (negsuc n) = pos (times (suc m) (suc n))
+cpx-mul : Int × Int → Int × Int → Int × Int
+cpx-mul x y = (subZ (mulZ (fst x) (fst y)) (mulZ (snd x) (snd y)) , addZ (mulZ (fst x) (snd y)) (mulZ (snd x) (fst y)))
+cpx-i : Int × Int
+cpx-i = (pos zero , pos (suc zero))
+cpx-i-squared : cpx-mul cpx-i cpx-i ≡ (negZ (pos (suc zero)) , pos zero)
+cpx-i-squared = λ k → (negsuc zero , pos zero)
+-- (A.6) X ≃ Σ_{b : Bool} Σ_{x : X} (f(x) = b)
+bool-partition : {X : Type} → (f : X → Bool) → Equiv X ((b : Bool) × fiber f b)
+bool-partition {X} f = fiberEquiv {X} {Bool} f
+-- (A.7) Sat(f) = Σ_x (f(x) = true), decided by finite enumeration
+Sat : {X : Type} → (X → Bool) → Type
+Sat {X} f = (x : X) × (f x ≡ true)
+fin-search-none : (n : Nat) → (f : SumFin (suc n) → Bool) → false ≡ f (inl unit) → Neg (Sat {SumFin n} (λ j → f (inr j))) →
+  (x : SumFin (suc n)) → f x ≡ true → Empty
+fin-search-none n f e no-rest (inl u) p = true≢false (concat {lzero} {Bool} {true} {f (inl u)} {false} (λ k → p (~ k))
+  (concat {lzero} {Bool} {f (inl u)} {f (inl unit)} {false} (λ k → f (inl (sf-unit u (~ k)))) (λ k → e (~ k))))
+fin-search-none n f e no-rest (inr j) p = no-rest (j , p)
+fin-search-step : (n : Nat) → (f : SumFin (suc n) → Bool) → (b : Bool) → b ≡ f (inl unit) → Dec (Sat {SumFin n} (λ j → f (inr j))) → Dec (Sat {SumFin (suc n)} f)
+fin-search-step n f true e d = yes (inl unit , λ k → e (~ k))
+fin-search-step n f false e (yes s) = yes (inr (fst s) , snd s)
+fin-search-step n f false e (no m) = no (λ s → fin-search-none n f e m (fst s) (snd s))
+fin-search : (n : Nat) → (f : SumFin n → Bool) → Dec (Sat {SumFin n} f)
+fin-search zero f = no (λ s → fst s)
+fin-search (suc n) f = fin-search-step n f (f (inl unit)) (λ k → f (inl unit)) (fin-search n (λ j → f (inr j)))
+-- (A.8) a ∣ b = Σ_{k : ℕ} (a · k = b)
+divides : Nat → Nat → Type
+divides a b = (k : Nat) × (times a k ≡ b)
+divides-refl : (a : Nat) → divides a a
+divides-refl a = (suc zero , times-one a)
+divides-trans : (a b c : Nat) → divides a b → divides b c → divides a c
+divides-trans a b c h1 h2 = (times (fst h1) (fst h2) ,
+  transN (sym (times-assoc a (fst h1) (fst h2))) (transN (congN (λ z → times z (fst h2)) (snd h1)) (snd h2)))
