@@ -1,0 +1,70 @@
+-- lib/maintenance.cub — the paper's §10 definitions of maintained and reused results (docs/hyperactivity.cub,
+-- §10 “Incremental knowledge”, §10.1–§10.7) as code: a maintained result (10.2) and a maintained edit
+-- (10.4), carried by maint (10.20) under its law (10.21); lens laws (10.5); validity of recorded
+-- lookups (10.3), (10.17) and of present/absent dependencies (10.13); the derivative of a function
+-- between change structures (10.14); a sum after one entry's update (10.15); an observation's fiber
+-- (10.10) and what holds at every compatible state (10.11); knowledge after a response (10.12); the
+-- migration of an invariant (§10.7); and the edited program p₁ of §10.2 with E(p₁, x) = x ⊕ 0x01.
+import "core.cub"
+import "observation.cub"
+import "xor-language.cub"
+import "credit.cub"
+import "behaviour.cub"
+-- (10.2) Maintained(q, d) = Σ_{r : R} (r = q(d))
+Maintained : {D R : Type} → (D → R) → D → Type
+Maintained {D} {R} q d = (r : R) × (r ≡ q d)
+-- (10.4), (10.21) the law of an update Δ_q along an edit δ: Δ_q(q(d), d) = q(δ(d))
+MaintLaw : {D R : Type} → (D → R) → (D → D) → (R → D → R) → Type
+MaintLaw {D} {R} q delta Delta = (d : D) → Delta (q d) d ≡ q (delta d)
+-- (10.20) maint(d, (r, e)) = (Δ(r, d), ap(Δ(−, d), e) · λ_d)
+maint : {D R : Type} → (q : D → R) → (delta : D → D) → (Delta : R → D → R) → MaintLaw q delta Delta → (d : D) → Maintained q d → Maintained q (delta d)
+maint {D} {R} q delta Delta law d m = (Delta (fst m) d , concat {lzero} {R} {Delta (fst m) d} {Delta (q d) d} {q (delta d)} (λ k → Delta (snd m k) d) (law d))
+-- (10.5) get(put(s, v)) = v, put(s, get(s)) = s
+LensLaws : {S V : Type} → (S → V) → (S → V → S) → Type
+LensLaws {S} {V} get put = ((s : S) → (v : V) → get (put s v) ≡ v) × ((s : S) → put s (get s) ≡ s)
+-- (10.3), (10.17) valid(S, D) = Π_{(k, o) ∈ D} lookup(S, k) = o
+valid-deps : {S K O : Type} → (S → K → O) → S → List (K × O) → Type
+valid-deps lookup s nil = Unit
+valid-deps lookup s (cons ko r) = (lookup s (fst ko) ≡ snd ko) × valid-deps lookup s r
+-- (10.13) a dependency on a present entry's version or on an absent key at an epoch
+data Dep (K : Type) (V : Type) (E : Type) = dep-present (k : K) (v : V) | dep-absent (k : K) (e : E)
+dep-valid : {S K V E : Type} → (S → K → Sum V Unit) → (S → E) → S → Dep K V E → Type
+dep-valid version epoch s (dep-present k v) = version s k ≡ inl v
+dep-valid version epoch s (dep-absent k e) = (version s k ≡ inr unit) × (epoch s ≡ e)
+dep-valid-all : {S K V E : Type} → (S → K → Sum V Unit) → (S → E) → S → List (Dep K V E) → Type
+dep-valid-all version epoch s nil = Unit
+dep-valid-all version epoch s (cons d r) = dep-valid version epoch s d × dep-valid-all version epoch s r
+-- (10.14) derive(f): Π_{a, d} Σ_{e} applyB(f(a), e) = f(applyA(a, d))
+Derivative : {A B DA DB : Type} → (A → DA → A) → (B → DB → B) → (A → B) → Type
+Derivative {A} {B} {DA} {DB} applyA applyB f = (a : A) → (d : DA) → (e : DB) × (applyB (f a) e ≡ f (applyA a d))
+-- (10.15) Σm + (y − x) = Σ(m[k ↦ y]) for x = m[k], in ℕ as Σ(m[k ↦ y]) + x = Σm + y
+sum-update : (m : List Nat) → (k y : Nat) → cr-has m k → plus (cr-sum (cr-set m k y)) (cr-at m k) ≡ plus (cr-sum m) y
+sum-update nil k y h = Empty-rec (cr-no-account k h)
+sum-update (cons x r) zero y h = transN (plus-comm (plus y (cr-sum r)) x) (transN (plus-comm-mid x y (cr-sum r)) (plus-comm y (plus x (cr-sum r))))
+sum-update (cons x r) (suc k) y h = transN (plus-assoc x (cr-sum (cr-set r k y)) (cr-at r k))
+  (transN (congN (plus x) (sum-update r k y (cr-has-tail x r k h))) (sym (plus-assoc x (cr-sum r) y)))
+-- (10.12) K'(w') = ‖Σ_{w : W} K(w) × H_c(w, r, w')‖
+knowledge-after : {W R : Type} → (W → Type) → (W → R → W → Type) → R → W → Type
+knowledge-after {W} {R} K H r w2 = Trunc ((w : W) × K w × H w r w2)
+-- §10.7 an invariant carried by a state migration u: Π_s I(s) → I'(u(s))
+Migrates : {S S2 : Type} → (S → S2) → (S → Type) → (S2 → Type) → Type
+Migrates {S} {S2} u I I2 = (s : S) → I s → I2 (u s)
+-- §10.2 the edited program p₁ = Xor(Xor(Input, 0x5a), 0x5b), whose meaning is x ⊕ 0x01
+bxor-assoc : (a b c : Bool) → bxor (bxor a b) c ≡ bxor a (bxor b c)
+bxor-assoc true true true = λ k → true
+bxor-assoc true true false = λ k → false
+bxor-assoc true false true = λ k → false
+bxor-assoc true false false = λ k → true
+bxor-assoc false true true = λ k → false
+bxor-assoc false true false = λ k → true
+bxor-assoc false false true = λ k → true
+bxor-assoc false false false = λ k → false
+xor-assoc : (n : Nat) → (a b c : BitVec n) → xorB n (xorB n a b) c ≡ xorB n a (xorB n b c)
+xor-assoc zero a b c = λ k → a
+xor-assoc (suc n) a b c = λ k → (bxor-assoc (fst a) (fst b) (fst c) k , xor-assoc n (snd a) (snd b) (snd c) k)
+x5b : Byte
+x5b = (false , true , false , true , true , false , true , true , unit)
+p1-prog : Expr
+p1-prog = Xor (Xor Input (Const x5a)) (Const x5b)
+p1-meaning : (x : Byte) → denote p1-prog x ≡ xorB 8 x op01
+p1-meaning x = xor-assoc 8 x x5a x5b
