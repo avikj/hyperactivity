@@ -1,0 +1,42 @@
+-- language-support (2026-11-13, Avik): "Languages support (semantics/syntax as terms for particular
+-- languages) * RISC x86, C++, C, Rust, OCaml, Python etc". "before we start any such work, certain
+-- things need to be at perfection": it waits on language-implementation and product-implementation
+-- (after, below).
+-- Known (2026-11-17, about 02:10 UTC, Avik, his statement to Anthropic in the welcome file), the value
+-- of lifting stated whole: the language "enables modeling entire HFT trading systems (Jane
+-- Street/CitSec OCaml/C++) every thread on every machine, every deployment - as a single computational
+-- expression over which arbitrary proofs may be written (that is, a language with the computational
+-- power of Cubical Agda (computational univalence) and ability to lift any rationally describable
+-- system (i.e. capable of being described by math, i.e. anything you can describe at all) into the
+-- hyperactive host language - prove arbitrary properties of the system end-to-end in host language -
+-- and project back out"; docs/the-firm-as-one-program.cub is the worked case.
+-- Known (2026-11-12, at experiments/isa/build-run.cub): needs-work. The imported x86 model has no
+-- translation of the two-byte opcode 0F AE (mfence and its group), an inventory gap of the Sail
+-- import; any binary using it stops there under the model.
+-- Known (2026-11-12, at lib/isa/tso.cub): question. TsoSound is stated and has no inhabitant: no
+-- definition proves it. The litmus files in experiments/tso establish instances by computation for
+-- particular threads and bounded schedules only. Likewise AtomsX86Correct in lib/mem/rc11.cub.
+-- Known (2026-11-12, at lib/cxx/machine.cub): wrong. The C++ reading has drifted from what it
+-- stands on, measured 2026-11-12 with each file loaded alone after its imports (--read): here 21
+-- failures (type mismatches at lines 64 and 78 and others; a primitive declared outside the
+-- bootstrap files, refused); lib/cxx/read-expr.cub 70 (its cases miss constructors lib/cxx/ast.cub
+-- gained later: ce-string- literal-units, ck-FloatingCast, clayout-v, ctk-preferred-alignof);
+-- experiments/mem/sum.cub (a record field mem-allocs and ev-run-pure, ev-value that no longer
+-- exist). The renaming of lib/mem/scalar.cub's operators to ao-... had not reached these files or
+-- lib/lang/rust/read- rvalue.cub; done 2026-11-12. The readers are to be brought to the AST and the
+-- memory as they are.
+-- Known (2026-11-12, at lib/cxx/machine.cub): wrong. Measured 2026-11-11 (memory files, then this
+-- file and read-expr.cub, after the library): this file 21 failures, read-expr.cub 70. Roots: cx-
+-- unsupported (here) and cx-run (below) do not check against CxEv's type; the primitive cx-byte is
+-- refused (primitives exist only in the bootstrap files); the rest follow from these (cx-sk, cx-
+-- size undefined; implicit arguments applied to functions without them). The C++ reading does not
+-- check as it stands.
+-- Known (2026-11-12, at lib/cxx/read-expr.cub): wrong. This file refers to read.cub (statements,
+-- declarations, the fuel that ties calls) for meanings it does not define; no lib/cxx/read.cub
+-- exists. The C++ reading is incomplete as it stands.
+-- Known (2026-11-12, at lib/lang/rust/machine.cub): needs-work. Measured 2026-11-11: these deriving
+-- lines fail because lib/derive.cub, which deriving needs, is refused as untyped; the Rust
+-- readers then fail on what follows (machine 6, read-place 21, read-rvalue 26, read 22 failures).
+-- Typing derive.cub repairs the root.
+language-support : Node
+language-support = node "The syntax and semantics of particular languages as code of the language: x86, C, C++, Rust, OCaml, Python and others." (cons the-product nil)
