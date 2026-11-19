@@ -1,0 +1,8 @@
+-- every published work's index, one after another, each made in a process of its own (fork), so that
+-- what one work's index takes is given back when it is made
+sx-make-all : List Word → List Word → List Work → Proc W Unit
+sx-make-all st s nil = ret {lzero} {W} unit
+sx-make-all st s (cons w r) = bind (sys-call #57 #0 #0 #0 #0 #0 #0) (λ pid →
+  if weq pid #0 then bind (sx-make-one st s w) (λ u → bind (sys-call #231 #0 #0 #0 #0 #0 #0) (λ x → ret {lzero} {W} unit))
+  else if wlt pid #9223372036854775808 then bind (h-wait pid) (λ c → sx-make-all st s r)
+  else sx-make-all st s r)
