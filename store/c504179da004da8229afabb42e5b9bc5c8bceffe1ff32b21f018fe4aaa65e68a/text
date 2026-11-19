@@ -1,0 +1,10 @@
+-- at start, a child makes the paper's page (s-paper keeps it); every other public page is made and kept by its first reader (s-site-kept)
+-- the child is counted among those answering until it is reaped
+-- before the port is listened on, the front page is made and kept here, in this process: a machine that cannot write a page stops at once (Avik, 2026-11-18: "THIS SITE CANT FAIL"), so a broken version is refused by the host in seconds and never stands in line holding the deploy
+s-start : List Word → List Word → Word → Proc W Unit
+s-start st m port = bind (h-env "HYPERACTIVE_PUBLIC") (λ pub → bind (h-env "HYPERACTIVE_TOKEN") (λ tok → bind (s-site-kept st "front" s-front) (λ f0 → bind (s-listen (s-set pub) port) (λ fd →
+  if wlt fd #9223372036854775807 then bind (h-out (h-line (list-append "http://localhost:" (list-append (h-decimal port) "/")))) (λ u →
+    bind (sys-call #57 #0 #0 #0 #0 #0 #0) (λ pid →
+    if weq pid #0 then bind (s-paper st m) (λ r → bind (h-read (list-append st "/index/meta/stamp")) (λ s → bind (sx-make-all st (s-or nil s) s-published) (λ u → bind (sys-call #231 #0 #0 #0 #0 #0 #0) (λ x → ret {lzero} {W} unit))))
+    else s-serve (toNat #18446744073709551615) (if wlt pid #9223372036854775808 then #1 else #0) (s-set pub) st m tok fd))
+  else h-fail (list-append "server: the port cannot be listened on: " (h-decimal port))))))

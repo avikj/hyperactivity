@@ -1,0 +1,6 @@
+-- /search?q=…: every published work holding the query, each read from its index where its bytes are: two
+-- descents of the work's search tree, each node one comparison of the query's bytes
+sx-answer : List Word → List Word → Proc W (List Word)
+sx-answer st q = if sx-none (tokenize (sx-lower q)) then ret {lzero} {W} (s-response "application/json" "[]")
+  else bind (h-read (list-append st "/index/meta/stamp")) (λ s → bind (sx-each st (s-or nil s) (tokenize (sx-lower q)) s-published) (λ items →
+    ret {lzero} {W} (s-response "application/json" (h-concat (cons "[" (cons (sx-join items) (cons "]" nil)))))))

@@ -1,0 +1,8 @@
+-- a work's index made, written, read back and checked (si-made-ok-t); only checked bytes are marked as
+-- kept (the file with -ok after it, written after the check), and only marked ones are read by a query
+sx-make-one : List Word → List Word → Work → Proc W Unit
+sx-make-one st s (work n k p) = bind (h-read (list-append (sx-file st s n) "-ok")) (sx-absent (bind (s-work-text (work n k p)) (λ t →
+  bind (ret {lzero} {W} (tokenize (sx-lower t))) (λ T → bind (ret {lzero} {W} (suffix-array-fast T)) (λ sa → bind (ret {lzero} {W} (si-tree-of sa)) (λ tr →
+  bind (h-write (sx-file st s n) (si-make-t T tr (wadd (si-o0 T) (si-recs-size T)))) (λ w → bind (h-read (sx-file st s n)) (λ rb →
+  if si-made-ok-t T tr (list-length (s-or nil rb)) (text-bytes (s-or nil rb)) then bind (h-write (list-append (sx-file st s n) "-ok") "checked") (λ w2 → ret {lzero} {W} unit)
+  else h-out (h-line (list-append "search: the index does not check, not kept: " n))))))))))

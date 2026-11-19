@@ -1,0 +1,4 @@
+sx-each : List Word → List Word → List (List Word) → List Work → Proc W (List (List Word))
+sx-each st s q nil = ret {lzero} {W} nil
+sx-each st s q (cons (work n k p) r) = bind (h-read (list-append (sx-file st s n) "-ok")) (λ ok → bind (sx-read (sx-file st s n) ok) (λ e → bind (sx-each st s q r) (λ rest →
+  ret {lzero} {W} (if h-null (sx-item n q e) then rest else cons (sx-item n q e) rest))))
