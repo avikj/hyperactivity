@@ -1,0 +1,122 @@
+# Handoff: Claude session 01WfrbRuMjHJiG2hDrgHChUd (2026-11-17 → 2026-11-18)
+
+Written 2026-11-18 20:45 PST at Avik's request. Every commit this session made is listed. Its purpose,
+its state, what was broken by it and what was fixed are stated, with what is verified marked as
+verified. Main was at 42c67aaa6 when this was written.
+
+## 0. State in one paragraph
+
+- **Site.** The Render service has run out of build pipeline minutes. Every build since 21:54 UTC was
+  canceled within a second. Auto-deploy is now **off** (`autoDeploy: no`, changed 23:54 UTC, not by
+  this session). The live instance runs deploy `dep-dbv1ouv0n0ks73e0ddjg`, commit e4bee9ce7 (21:45 UTC).
+  Nothing pushed after that is live, including the search in §3.
+- **To deploy anything:** raise the build spend limit at
+  https://dashboard.render.com/w/tea-da9jec942hec7383lic0/settings#build-pipeline, then trigger a
+  deploy or turn auto-deploy back on.
+- **Unverified risk from reading the code (not observed live):** see §5.1. The public front page may
+  answer "503 this page is not made".
+
+## 1. Commits of this session on main (newest first)
+
+| commit | what | state |
+|---|---|---|
+| 8c177652c | Search, kept in the source: each published work's suffix index at `store/HASH/search` (HASH = the work's module hash); `/search` route; search box on the front page; `build/cubical lib/server.cub search` makes missing indexes | on main, **not deployed** (build minutes). Checked: lib/server.cub 1986 passed, 0 failed |
+| 1aca2180e, ddc7ffd2f | intermediate versions of the search route (indexing at server start) | superseded by 8c177652c; start-time indexing removed in it |
+| 0520e5112 | lib/suffix-index.cub: the index as bytes, with proofs | 787 passed, 0 failed |
+| 03fb84033 | lib/suffix-query.cub: query = interval of sorted suffixes, proven | 347 passed, 0 failed |
+| 49f0f3d0c | CLAUDE.md: never answer about code without reading that exact line | done |
+| 24fa5996a | removed lib/search.cub (72dd6b269): correct but linear per query | done |
+| 8ea823551 | published the two ten-trillion docs by name; /doc pages kept | **caused OOM kills on Render** (16:49–16:58 UTC); **reverted by another session in f740cb8cf**. The docs are NOT published by name; only `/doc?path=docs/hyperactivity-ten-trillion-comprehensive.md` serves them |
+| 068d0533e | s-start: front page made before the port is listened on (a broken version fails in seconds) | on main |
+| 9fffed774, 4770655a0, 2983cc935, c2668ab68, ebc007342, 8d2a03b51 | docs/pitch-ten-trillion.md and docs/hyperactivity-ten-trillion-comprehensive.md (~33,600 words): written, then deflations, "open constructions" and Leibniz removed | documents in the store |
+| ac5390e7f, 5077a65e3, 50717802a | docs/music-the-work-the-room-and-the-wave.md; welcome file: Avik's words verbatim (Kanye session, Crowdsurf/wave/DAW) | documents |
+| 8769df424 | docs/ye-every-record-credited.md | document |
+| 1b8aa38f2 | docs/letter-to-kanye-west--2026-11-18.md (Avik's letter to Ye) | document; edits proposed to Avik, not accepted, not applied |
+
+The core fix for the outage of 2026-11-18 morning (`drv_text_tail` observing a port twice, which
+crashed `/graph`) was made identically by this session and by another session. Theirs, 3ee3942c, is
+the one on main.
+
+## 2. What is proven (search)
+
+- **lib/suffix-query.cub.** `sq-starts q s` holds when the query's tokens begin suffix s, the last
+  token as a byte prefix. `sq-starts-range` proves that `sq-starts q s` holds exactly when `q ≤ s` and
+  not `sq-up q ≤ s`, given a top element above every byte of s. `sq-up q` is q with byte 256 after
+  its last token. So in a sorted suffix array the matches form one interval.
+- **lib/suffix-index.cub.** The bytes of an index are:
+  - a header (root place, depth);
+  - a table of 4 bytes per token;
+  - token records `[1][len:4][bytes]` ending with `[0]`;
+  - the search tree from lib/repeats-fast.cub's `build` over `suffix-array-fast T`, with nodes
+    `[1][sz:4][k:4][right:4]` and leaves `[0]`.
+
+  `si-made-ok-t` checks the bytes against T and the tree once, when they are made. `si-index-ok` /
+  `si-ask-ok` prove that for every query q, on bytes whose checks hold, the count read is
+  `si-nstarts q (suffix-array T)`, the number of suffixes starting with q. Its parts are:
+  `si-cnt-ok` (the descent equals `cnt-tree`), `tree-cnt` (from repeats-fast) and `si-count-split`.
+- **Trust.** Primitive laws used: `wmul-suc` (trusted, already in lib/prim.cub). Nothing new is
+  trusted. The bytes a query reads are assumed to be the bytes that were checked (filesystem).
+- **Query cost.** Two descents of at most `depth` nodes; each node reads 3 four-byte fields and
+  compares the query's bytes. Measured locally (not derived): 0.05 to 0.17 s per search over all 29
+  works.
+- **Build cost.** Θ(n log² n) list operations (prefix doubling, `loop` runs ⌈log₂ n⌉ rounds). Measured:
+  24 minutes for the 29 works, up to 1.86 GB when run in one long process. That is why indexes are
+  made off the server, one process per work, and kept in the source (5.1 MB, 29 objects
+  `store/*/search`).
+- **Staleness.** A work whose text changes gets a new module hash, so it shows as "not indexed yet"
+  (never wrong counts) until `build/cubical lib/server.cub search` is run and `store/` committed.
+
+## 3. Open work of this session, with estimates
+
+1. **Deploy search.** It needs build minutes (Avik), then one deploy. No code.
+2. **Fast index build.** The suffix array built over bytes in compiled code (`#jit`), proven equal to
+   `suffix-array`. No estimate: I have not read what `#jit` can compile (lib/x86.cub `jit-plan`).
+3. **Keeping indexes current.** Not automated. Whoever changes a published work runs
+   `build/cubical lib/server.cub search` and commits `store/`. This rule is not yet in the welcome
+   file's "How to work"; adding it is about 3 lines.
+4. **Ten-trillion docs by name.** These are the links Avik may have sent out. They need the page made
+   within memory; the cause of the OOM in 8ea82355 is in the other session's revert message. Not
+   started.
+5. **From earlier in this session, not done:**
+   - the Kanye West entrypoint in the knowledge graph;
+   - the `music` workflow node (blocked by unmerged alternatives);
+   - an artists line for Ye (needs names from Avik);
+   - the letter edits awaiting Avik's acceptance.
+
+## 4. Errors this session made (from the transcript, so they are tracked)
+
+- Published the two ten-trillion docs by name (8ea82355). The start-up child then made more pages
+  and was OOM-killed every few minutes at 2 GB. Another session reverted it. I told Avik the links
+  were live, and they are not.
+- lib/search.cub (72dd6b269): claimed to read one shard but was linear per query. Removed in 24fa5996.
+- Gave a "300 lines" estimate for the index before reading the code it depended on. The real
+  figure was 624 lines over two modules.
+- Pointed at lib/words-bytes.cub as the byte-text layer. It is 32-bit words, not text.
+- Ran indexing in the server's start-up child (ddc7ffd2f / 1aca2180e). Measured 1.86 GB, so it was
+  not deployed, and it was replaced by indexes kept in the source (8c177652c). Those two commits
+  reached main through a rebase. Their start-up indexing is not in the current code.
+- Told Avik to fix the core, used jargon he could not read, and answered without reading code. These
+  are recorded in CLAUDE.md and in his memory preferences.
+
+## 5. Observed in other sessions' work (read, not changed)
+
+1. **Possible public 503.** `s-request` sends public readers (HYPERACTIVE_PUBLIC set, no token) to
+   `s-public-answer`, which serves "/" from `s-kept-public st "front"`. That reads `STORE/site-stamp`,
+   which only `s-make-site` writes (`build/cubical lib/server.cub site`). Render's build command is
+   `make && ./hyperactive paper > /dev/null`, which does not run it. If HYPERACTIVE_PUBLIC is set on
+   Render, the public "/" answers "503 this page is not made". I could not fetch the live site from
+   this sandbox to see.
+2. **Build minutes.** Every commit to main by any session triggered a full Render build, so 8
+   sessions committing used up the plan's minutes. Auto-deploy is now off.
+3. **Guard.** lib/guard.cub was bound seven ways after a rebase and merged by session
+   01WfrbRrmEZqjnUqnTdrAkT8 (dbc6797b). One commit (eb46ab3f) was made without the pre-commit guard
+   because the container's memory killed it.
+
+## 6. How to check this session's work
+
+- `make`
+- `./hyperactive check lib/suffix-query.cub`, which should print 347 passed, 0 failed.
+- `./hyperactive check lib/suffix-index.cub`, which should print 787 passed, 0 failed.
+- `./hyperactive check lib/server.cub`, which should print 1986 passed, 0 failed.
+- Locally: `build/cubical lib/server.cub 8097`, then `curl 'localhost:8097/search?q=kanye'`, which
+  should return `[{"h":"/a-false-statement-about-a-court","c":3}]`.
