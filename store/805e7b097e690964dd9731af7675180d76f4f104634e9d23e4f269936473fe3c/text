@@ -1,0 +1,12 @@
+-- Section (3): Exact 2-Simplex 4D Euclidean EPRL Transition Amplitude (Glued Along Shared Tetrahedron T_5).
+-- R_two^EPRL = sum_{i5} (i5 + 1) * R_v^EPRL(i1..i4, i5) * R_v^EPRL(i1'..i4', i5) in pure BQ!
+sf2-eprl-two-loop : Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → BQ → BQ
+sf2-eprl-two-loop fuel J Jp Jm i1 i2 i3 i4 i1p i2p i3p i4p acc = case fuel of
+  zero → acc
+  suc i5 → sf2-eprl-two-loop i5 J Jp Jm i1 i2 i3 i4 i1p i2p i3p i4p
+    (if tri-ok J J i5
+     then bq-add acc
+       (bq-mul (sf-bq-of-nat (suc i5))
+               (bq-mul (sf-eprl-R J Jp Jm i1 i2 i3 i4 i5)
+                       (sf-eprl-R J Jp Jm i1p i2p i3p i4p i5)))
+     else acc)

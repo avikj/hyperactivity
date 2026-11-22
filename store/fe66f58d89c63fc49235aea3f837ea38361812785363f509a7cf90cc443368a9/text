@@ -1,0 +1,8 @@
+qt-times-suc-r : (a b : Nat) → times a (suc b) ≡ plus a (times a b)
+qt-times-suc-r a b = case a return λ n → times n (suc b) ≡ plus n (times n b) of
+  zero → refl
+  suc k → cong suc
+    (concat (cong (λ t → plus b t) (rec k))
+            (concat (sym (plus-assoc b k (times k b)))
+                    (concat (cong (λ t → plus t (times k b)) (plus-comm b k))
+                            (plus-assoc k b (times k b)))))

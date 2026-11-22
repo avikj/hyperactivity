@@ -1,0 +1,9 @@
+-- Helper combining preimage and pullback answer agreement.
+qi-dp-witness : (A B : Type) → (ch : A → B) → (k : Nat) → (qs : rp-Qs B k) → (xs : List A) →
+  (bs : rp-Bits k) → (b : B) → (rp-In B b (qi-map A B ch xs) × (rp-ans B k qs b ≡ bs)) →
+  (a : A) × (rp-In A a xs × (rp-ans A k (qi-pullback-qs A B ch k qs) a ≡ bs))
+qi-dp-witness A B ch k qs xs bs b h =
+  (fst (qi-in-preimage A B ch b xs (fst h)) ,
+    (fst (snd (qi-in-preimage A B ch b xs (fst h))) ,
+     concat (qi-pullback-ans A B ch k qs (fst (qi-in-preimage A B ch b xs (fst h))))
+       (concat (cong (rp-ans B k qs) (snd (snd (qi-in-preimage A B ch b xs (fst h))))) (snd h))))

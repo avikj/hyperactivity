@@ -1,0 +1,12 @@
+qt-2q-indep : rp-Indep (Bool × Bool) 2 qt-2q-qs qt-2q-states
+qt-2q-indep bs =
+  case fst bs return λ b1 → (b2 : Bool) → (u : Unit) → (s : Bool × Bool) × (rp-In (Bool × Bool) s qt-2q-states × (rp-ans (Bool × Bool) 2 qt-2q-qs s ≡ (b1 , (b2 , u)))) of
+    true → λ b2 u → case u return λ u0 → (s : Bool × Bool) × (rp-In (Bool × Bool) s qt-2q-states × (rp-ans (Bool × Bool) 2 qt-2q-qs s ≡ (true , (b2 , u0)))) of
+      unit → case b2 return λ c → (s : Bool × Bool) × (rp-In (Bool × Bool) s qt-2q-states × (rp-ans (Bool × Bool) 2 qt-2q-qs s ≡ (true , (c , unit)))) of
+        true → ((true , true) , (inl refl , refl))
+        false → ((true , false) , (inr (inl refl) , refl))
+    false → λ b2 u → case u return λ u0 → (s : Bool × Bool) × (rp-In (Bool × Bool) s qt-2q-states × (rp-ans (Bool × Bool) 2 qt-2q-qs s ≡ (false , (b2 , u0)))) of
+      unit → case b2 return λ c → (s : Bool × Bool) × (rp-In (Bool × Bool) s qt-2q-states × (rp-ans (Bool × Bool) 2 qt-2q-qs s ≡ (false , (c , unit)))) of
+        true → ((false , true) , (inr (inr (inl refl)) , refl))
+        false → ((false , false) , (inr (inr (inr (inl refl))) , refl))
+  (fst (snd bs)) (snd (snd bs))

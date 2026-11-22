@@ -1,0 +1,33 @@
+-- THEOREM 1A (Universal Gauge Invariance of Electron-1 Dirac Hop):
+-- Hopping electron 1 along edge k = (u -> w) while incrementing edge k's flux by +one preserves Gauss's law
+-- at every vertex x on any finite oriented graph over any abelian group.
+qmol-gauss-hop-e1 : (A : Type) → (z one : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (x p1 p2 e2 k : Nat) → (es : List (Nat × Nat)) → (fs : List A) →
+  qgm-div A z add neg x es fs ≡ qmol-charge2 A z one add neg x p1 p2 (fst (qgm-edge-at es k)) e2 →
+  qgm-div A z add neg x es (qgm-vec-add A add fs (qgm-unit-flux A z one k)) ≡
+  qmol-charge2 A z one add neg x p1 p2 (snd (qgm-edge-at es k)) e2
+qmol-gauss-hop-e1 A z one add neg ab x p1 p2 e2 k es fs h =
+  qgm-tr A
+    (qgm-div A z add neg x es (qgm-vec-add A add fs (qgm-unit-flux A z one k)))
+    (add (add (qgm-charge A z one add neg x p1 (fst (qgm-edge-at es k))) (qgm-charge A z one add neg x p2 e2))
+         (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one))
+    (add (qgm-charge A z one add neg x p1 (snd (qgm-edge-at es k))) (qgm-charge A z one add neg x p2 e2))
+    (concat (qgm-div-linear A z add neg ab x es fs (qgm-unit-flux A z one k))
+            (λ i → add (h i) (qgm-div-unit A z one add neg ab x es k i)))
+    (concat
+      (concat
+        (qgm-assoc A z add neg ab
+          (qgm-charge A z one add neg x p1 (fst (qgm-edge-at es k)))
+          (qgm-charge A z one add neg x p2 e2)
+          (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one))
+        (concat
+          (cong (λ t → add (qgm-charge A z one add neg x p1 (fst (qgm-edge-at es k))) t)
+            (qgm-comm A z add neg ab
+              (qgm-charge A z one add neg x p2 e2)
+              (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one)))
+          (sym (qgm-assoc A z add neg ab
+            (qgm-charge A z one add neg x p1 (fst (qgm-edge-at es k)))
+            (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one)
+            (qgm-charge A z one add neg x p2 e2)))))
+      (cong (λ t → add t (qgm-charge A z one add neg x p2 e2))
+        (qgm-charge-step A z one add neg ab x p1 (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)))))

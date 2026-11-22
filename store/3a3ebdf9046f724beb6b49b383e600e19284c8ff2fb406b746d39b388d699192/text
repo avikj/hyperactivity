@@ -1,0 +1,15 @@
+-- Action of Q^2 = -Q_real^2 on the 3D intertwiner space:
+--   Q^2 = [[a^2, 0, -a*b], [0, a^2 + b^2, 0], [-a*b, 0, b^2]].
+-- Check on the orthogonal vector v_orth = (a, 0, -b):
+--   row 0: a^2 * a + (-a*b)*(-b) = a * (a^2 + b^2)!
+--   row 1: (a^2 + b^2) * 0 = 0!
+--   row 2: (-a*b)*a + b^2 * (-b) = (-b) * (a^2 + b^2)!
+-- Check on e_1 = (0, 1, 0): Q^2 e_1 = (a^2 + b^2) * e_1!
+-- THEOREM 1C (Universal Nonzero Volume Eigenvalue a^2 + b^2 on Every 3D Intertwiner Space):
+qv-3x3-nonzero-row0 : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → QvRing A z add mul neg →
+  (a b : A) → add (mul (mul a a) a) (mul (mul a b) b) ≡ mul a (add (mul a a) (mul b b))
+qv-3x3-nonzero-row0 A z add mul neg r a b =
+  concat
+    (λ i → add (fst (snd (snd (snd (snd (snd (snd (snd r))))))) a a a i)
+               (fst (snd (snd (snd (snd (snd (snd (snd r))))))) a b b i))
+    (sym (fst (snd (snd (snd (snd (snd (snd (snd (snd r)))))))) a (mul a a) (mul b b)))

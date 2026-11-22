@@ -1,0 +1,11 @@
+-- THEOREM 2 (Universal Modular 1-Cocycle Identity in Cross-Multiplied Exact Form):
+-- For any weights w_i, w_j, w_k in a commutative monoid (mul-assoc, mul-comm):
+--   (w_i * w_j) * w_k = (w_i * w_k) * w_j, certifying (w_i / w_j) * (w_j / w_k) = w_i / w_k with zero division!
+qt-modular-cocycle : (A : Type) → (mul : A → A → A) →
+  ((x y w : A) → mul (mul x y) w ≡ mul x (mul y w)) →
+  ((x y : A) → mul x y ≡ mul y x) →
+  (wi wj wk : A) → mul (mul wi wj) wk ≡ mul (mul wi wk) wj
+qt-modular-cocycle A mul massoc mcomm wi wj wk =
+  concat (massoc wi wj wk)
+    (concat (cong (λ t → mul wi t) (mcomm wj wk))
+            (sym (massoc wi wk wj)))

@@ -1,0 +1,21 @@
+-- THEOREM 1B (Universal Gauge Invariance of Electron-2 Dirac Hop):
+qmol-gauss-hop-e2 : (A : Type) → (z one : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (x p1 p2 e1 k : Nat) → (es : List (Nat × Nat)) → (fs : List A) →
+  qgm-div A z add neg x es fs ≡ qmol-charge2 A z one add neg x p1 p2 e1 (fst (qgm-edge-at es k)) →
+  qgm-div A z add neg x es (qgm-vec-add A add fs (qgm-unit-flux A z one k)) ≡
+  qmol-charge2 A z one add neg x p1 p2 e1 (snd (qgm-edge-at es k))
+qmol-gauss-hop-e2 A z one add neg ab x p1 p2 e1 k es fs h =
+  qgm-tr A
+    (qgm-div A z add neg x es (qgm-vec-add A add fs (qgm-unit-flux A z one k)))
+    (add (add (qgm-charge A z one add neg x p1 e1) (qgm-charge A z one add neg x p2 (fst (qgm-edge-at es k))))
+         (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one))
+    (add (qgm-charge A z one add neg x p1 e1) (qgm-charge A z one add neg x p2 (snd (qgm-edge-at es k))))
+    (concat (qgm-div-linear A z add neg ab x es fs (qgm-unit-flux A z one k))
+            (λ i → add (h i) (qgm-div-unit A z one add neg ab x es k i)))
+    (concat
+      (qgm-assoc A z add neg ab
+        (qgm-charge A z one add neg x p1 e1)
+        (qgm-charge A z one add neg x p2 (fst (qgm-edge-at es k)))
+        (qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one))
+      (cong (λ t → add (qgm-charge A z one add neg x p1 e1) t)
+        (qgm-charge-step A z one add neg ab x p2 (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)))))

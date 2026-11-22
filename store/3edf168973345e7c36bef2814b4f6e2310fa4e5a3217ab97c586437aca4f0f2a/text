@@ -1,0 +1,28 @@
+-- Exact exchange-symmetrized Dirac hop count:
+--   * Singlet (trip = false): unnormalized ket |a1,a2> (if a1=a2) or |a1,a2> + |a2,a1> (if a1<a2), exact Gram G_ii in {1, 2}.
+--   * Triplet (trip = true):  Pauli-antisymmetric ket (|a1,a2> - |a2,a1>)/sqrt(2), exact Gram G_ii = 1;
+--     note <a1,a2 - a2,a1 | H_D | b1,b2 - b2,b1> / 2 = <a1,a2 | H_D | b1,b2> - <a1,a2 | H_D | b2,b1> (exact integer!).
+qmol-hop-coeff : Bool → QmolState → QmolState → BZ
+qmol-hop-coeff trip a b =
+  if trip
+  then qmol-bz-sub
+    (qmol-one-hop (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+    (qmol-one-hop (fst (fst a)) (snd (fst a)) (snd a) (snd (fst b)) (fst (fst b)) (snd b))
+  else
+    (if eqb (fst (fst a)) (snd (fst a))
+     then (if eqb (fst (fst b)) (snd (fst b))
+           then qmol-one-hop (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b)
+           else bz-add
+             (qmol-one-hop (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+             (qmol-one-hop (fst (fst a)) (snd (fst a)) (snd a) (snd (fst b)) (fst (fst b)) (snd b)))
+     else (if eqb (fst (fst b)) (snd (fst b))
+           then bz-add
+             (qmol-one-hop (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+             (qmol-one-hop (snd (fst a)) (fst (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+           else bz-add
+             (bz-add
+               (qmol-one-hop (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+               (qmol-one-hop (fst (fst a)) (snd (fst a)) (snd a) (snd (fst b)) (fst (fst b)) (snd b)))
+             (bz-add
+               (qmol-one-hop (snd (fst a)) (fst (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+               (qmol-one-hop (snd (fst a)) (fst (fst a)) (snd a) (snd (fst b)) (fst (fst b)) (snd b)))))

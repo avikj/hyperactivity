@@ -1,0 +1,10 @@
+qe-swap4 : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → QeRing A z add mul neg →
+  (a b c d : A) → add (add a b) (add c d) ≡ add (add a c) (add b d)
+qe-swap4 A z add mul neg r a b c d = concat
+  (fst (snd (snd r)) a b (add c d))
+  (concat
+    (cong (λ t → add a t)
+      (concat (sym (fst (snd (snd r)) b c d))
+        (concat (cong (λ t → add t d) (fst (snd (snd (snd r))) b c))
+                (fst (snd (snd r)) c b d))))
+    (sym (fst (snd (snd r)) a c (add b d))))

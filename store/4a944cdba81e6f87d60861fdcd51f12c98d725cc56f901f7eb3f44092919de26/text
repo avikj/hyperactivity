@@ -1,0 +1,18 @@
+-- THEOREM 1B (Strict Reflection Positivity Whenever Any Bulk Geometry Contributes Positively):
+sf2-reflection-strict : (A : Type) → (z : A) → (add mul : A → A → A) → (Pos Nonneg : A → Type) →
+  Sf2PosOrd A z add mul Pos Nonneg →
+  (ws : List (A × A)) → sf2-all-nn A Nonneg ws → sf2-some-pos A mul Pos ws → Pos (sf2-glue-sym A z add mul ws)
+sf2-reflection-strict A z add mul Pos Nonneg ord ws =
+  case ws return λ l → sf2-all-nn A Nonneg l → sf2-some-pos A mul Pos l → Pos (sf2-glue-sym A z add mul l) of
+    nil → λ u e → Empty-rec e
+    cons p rest → λ hall hsome → case hsome of
+      inl hpos → snd (snd (snd (snd (snd ord))))
+        (mul (fst p) (mul (snd p) (snd p)))
+        (sf2-glue-sym A z add mul rest)
+        hpos
+        (sf2-reflection-pos A z add mul Pos Nonneg ord rest (snd hall))
+      inr hrest → fst (snd (snd (snd (snd ord))))
+        (mul (fst p) (mul (snd p) (snd p)))
+        (sf2-glue-sym A z add mul rest)
+        (fst (snd (snd ord)) (fst p) (mul (snd p) (snd p)) (fst hall) (fst (snd ord) (snd p)))
+        (rec rest (snd hall) hrest)

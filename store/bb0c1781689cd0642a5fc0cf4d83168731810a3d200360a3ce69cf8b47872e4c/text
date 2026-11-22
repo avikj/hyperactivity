@@ -1,0 +1,8 @@
+-- Helper: a * (a * (u * u)) = (a * u) * (a * u).
+qmol-sq-pull : (A : Type) → (add mul : A → A → A) → QmolSR A add mul → (a u : A) →
+  mul a (mul a (mul u u)) ≡ mul (mul a u) (mul a u)
+qmol-sq-pull A add mul sr a u = concat
+  (cong (λ t → mul a t) (sym (qmol-sr-ma A add mul sr a u u)))
+  (concat
+    (cong (λ t → mul a t) (qmol-sr-mc A add mul sr (mul a u) u))
+    (sym (qmol-sr-ma A add mul sr a u (mul a u))))

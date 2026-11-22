@@ -1,0 +1,8 @@
+-- Membership maps forward along any channel f : A -> B.
+qi-in-map : (A B : Type) → (f : A → B) → (a : A) → (xs : List A) →
+  rp-In A a xs → rp-In B (f a) (qi-map A B f xs)
+qi-in-map A B f a xs = case xs return λ l → rp-In A a l → rp-In B (f a) (qi-map A B f l) of
+  nil → λ e → Empty-rec e
+  cons x rest → λ ins → case ins of
+    inl eq → inl (cong f eq)
+    inr r → inr (rec rest r)

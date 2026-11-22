@@ -1,0 +1,14 @@
+-- Section (2): Exact 2-Simplex 4D Ooguri SU(2) BF Transition Amplitude (Glued Along Shared Tetrahedron T_5).
+-- Summing over bulk intertwiner i_5: every internal sqrt(i_5 + 1) and Delta(j, j, i_5) squares into pure BQ!
+sf2-bf-two-loop : Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat →
+  Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → BQ → BQ
+sf2-bf-two-loop fuel j12 j13 j14 j15 j23 j24 j25 j34 j35 j45 i1 i2 i3 i4 i1p i2p i3p i4p acc = case fuel of
+  zero → acc
+  suc i5 → sf2-bf-two-loop i5 j12 j13 j14 j15 j23 j24 j25 j34 j35 j45 i1 i2 i3 i4 i1p i2p i3p i4p
+    (if both (tri-ok j35 j45 i5) (tri-ok j15 j25 i5)
+     then bq-add acc
+       (bq-mul
+         (bq-mul (sf-bq-of-nat (suc i5)) (bq-mul (sf-delta2 j35 j45 i5) (sf-delta2 j15 j25 i5)))
+         (bq-mul (sf-15j-W j12 j13 j14 j15 j23 j24 j25 j34 j35 j45 i1 i2 i3 i4 i5)
+                 (sf-15j-W j12 j13 j14 j15 j23 j24 j25 j34 j35 j45 i1p i2p i3p i4p i5)))
+     else acc)

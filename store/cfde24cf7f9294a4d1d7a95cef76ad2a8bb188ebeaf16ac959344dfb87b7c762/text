@@ -1,0 +1,11 @@
+sf2-node-im-gen : Nat → Sf2Face → Sf2Face → Sf2Face → Sf2Face → Nat → Nat → List (Nat × (Nat × BQ)) → List (Nat × (Nat × BQ))
+sf2-node-im-gen fuel fa fb fc fd k ip acc = case fuel of
+  zero → acc
+  suc im → sf2-node-im-gen im fa fb fc fd k ip
+    (if both (both (tri-ok (sf2-Jm fa) (sf2-Jm fb) im) (tri-ok (sf2-Jm fc) (sf2-Jm fd) im)) (tri-ok ip im k)
+     then ((λ w9a w9b → if both (not (bin-zero (fst (snd w9a)))) (not (bin-zero (fst (snd w9b))))
+                        then cons (ip , (im , sf2-opt-wt-gen fa fb fc fd k ip im w9a w9b)) acc
+                        else acc)
+           (sf-ninej-W (sf2-Jp fa) (sf2-Jm fa) (sf2-J fa) (sf2-Jp fb) (sf2-Jm fb) (sf2-J fb) ip im k)
+           (sf-ninej-W (sf2-Jp fc) (sf2-Jm fc) (sf2-J fc) (sf2-Jp fd) (sf2-Jm fd) (sf2-J fd) ip im k))
+     else acc)

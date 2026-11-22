@@ -1,0 +1,13 @@
+-- Parallelogram identity in any commutative ring: (x + y)^2 + (x - y)^2 = (x^2 + x^2) + (y^2 + y^2).
+qe-para-ring : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → QeRing A z add mul neg →
+  (x y : A) →
+  add (mul (add x y) (add x y)) (mul (add x (neg y)) (add x (neg y))) ≡
+  add (add (mul x x) (mul x x)) (add (mul y y) (mul y y))
+qe-para-ring A z add mul neg r x y =
+  concat
+    (λ i → add (qe-foil A z add mul neg r x y i) (qe-foil A z add mul neg r x (neg y) i))
+    (concat
+      (qe-swap4 A z add mul neg r
+        (add (mul x x) (mul x y)) (add (mul y x) (mul y y))
+        (add (mul x x) (mul x (neg y))) (add (mul (neg y) x) (mul (neg y) (neg y))))
+      (λ i → add (qe-para-left A z add mul neg r x y i) (qe-para-right A z add mul neg r x y i)))

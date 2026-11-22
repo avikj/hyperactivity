@@ -1,0 +1,11 @@
+-- Reduce one Bareiss row strictly linearly (each recursive call scrutinized once via case):
+qmol-bar-row : BZ → List Bool → BZ → List BZ → List BZ → Sum Unit (List BZ)
+qmol-bar-row a d bi ci bs = case ci of
+  nil → (case bs of nil → inr nil; cons b br → inl unit)
+  cons cij cr → case bs of
+    nil → inl unit
+    cons bj br → case qmol-bz-div-exact (qmol-bz-sub (bz-mul a cij) (bz-mul bi bj)) d of
+      inl u → inl unit
+      inr sij → case qmol-bar-row a d bi cr br of
+        inl u → inl unit
+        inr tail → inr (cons sij tail)

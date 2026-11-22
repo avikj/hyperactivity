@@ -1,0 +1,21 @@
+-- Action of 3x3 tridiagonal Q_real = [[0, a, 0], [-a, 0, b], [0, -b, 0]] on (v0, v1, v2):
+--   (Q_real v) = (a * v1,  (-a) * v0 + b * v2,  (-b) * v1).
+-- Notice for v_flat = (b, 0, a) (wait: (-a)*b + b*a = 0!):
+--   row 0: a * 0 = 0
+--   row 1: (-a)*b + b*a = 0
+--   row 2: (-b)*0 = 0!
+-- THEOREM 1B (Universal Flat Zero-Volume Eigenstate on Every 3D Intertwiner Space):
+-- For ANY off-diagonal couplings (a, b) in ANY commutative ring, v_flat = (b, 0, a) is in ker(Q)!
+qv-3x3-zero : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → QvRing A z add mul neg →
+  (a b : A) →
+  (mul a z ≡ z) ×
+  ((add (mul b a) (mul a (neg b)) ≡ z) ×
+   (mul (neg b) z ≡ z))
+qv-3x3-zero A z add mul neg r a b =
+  (fst (snd (snd (snd (snd (snd r))))) a ,
+   (concat
+     (cong (λ t → add (mul b a) t)
+       (concat (snd (snd (snd (snd (snd (snd (snd (snd (snd r)))))))) a b)
+               (cong neg (fst (snd (snd (snd (snd (snd (snd r)))))) a b))))
+     (fst (snd (snd (snd (snd r)))) (mul b a)) ,
+    fst (snd (snd (snd (snd (snd r))))) (neg b)))

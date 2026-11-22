@@ -1,0 +1,7 @@
+-- Explicit FOIL expansion in any commutative ring: (x + y)^2 = (x*x + x*y) + (y*x + y*y).
+qe-foil : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → QeRing A z add mul neg →
+  (x y : A) → mul (add x y) (add x y) ≡ add (add (mul x x) (mul x y)) (add (mul y x) (mul y y))
+qe-foil A z add mul neg r x y =
+  concat (fst (snd (snd (snd (snd (snd (snd (snd r))))))) x y (add x y))
+    (λ i → add (fst (snd (snd (snd (snd (snd (snd r)))))) x x y i)
+               (fst (snd (snd (snd (snd (snd (snd r)))))) y x y i))

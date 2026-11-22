@@ -1,0 +1,28 @@
+-- THEOREM 2A (Universal Fraction-Free Schur-Complement Algebraic Identity):
+-- Over any commutative semiring, if the Bareiss-reduced Schur complement s satisfies a * qv = r^2 + d * s,
+-- then a * (a * u^2 + (u*r + u*r) + qv) = (a*u + r)^2 + d * s identically!
+qmol-schur-id : (A : Type) → (add mul : A → A → A) → QmolSR A add mul →
+  (a u r qv d s : A) → mul a qv ≡ add (mul r r) (mul d s) →
+  mul a (add (mul a (mul u u)) (add (add (mul u r) (mul u r)) qv)) ≡
+  add (mul (add (mul a u) r) (add (mul a u) r)) (mul d s)
+qmol-schur-id A add mul sr a u r qv d s h =
+  qgm-tr A
+    (mul a (add (mul a (mul u u)) (add (add (mul u r) (mul u r)) qv)))
+    (add (mul a (mul a (mul u u))) (add (add (mul a (mul u r)) (mul a (mul u r))) (mul a qv)))
+    (add (mul (add (mul a u) r) (add (mul a u) r)) (mul d s))
+    (concat (qmol-sr-ld A add mul sr a (mul a (mul u u)) (add (add (mul u r) (mul u r)) qv))
+      (cong (λ t → add (mul a (mul a (mul u u))) t)
+        (concat (qmol-sr-ld A add mul sr a (add (mul u r) (mul u r)) qv)
+          (cong (λ t → add t (mul a qv)) (qmol-sr-ld A add mul sr a (mul u r) (mul u r))))))
+    (qgm-tr A
+      (add (mul a (mul a (mul u u))) (add (add (mul a (mul u r)) (mul a (mul u r))) (mul a qv)))
+      (add (mul (mul a u) (mul a u)) (add (add (mul (mul a u) r) (mul r (mul a u))) (add (mul r r) (mul d s))))
+      (add (mul (add (mul a u) r) (add (mul a u) r)) (mul d s))
+      (λ i → add (qmol-sq-pull A add mul sr a u i)
+                 (add (add (sym (qmol-sr-ma A add mul sr a u r) i)
+                           (concat (sym (qmol-sr-ma A add mul sr a u r)) (qmol-sr-mc A add mul sr (mul a u) r) i))
+                      (h i)))
+      (concat
+        (qmol-reassoc5 A add mul sr
+          (mul (mul a u) (mul a u)) (mul (mul a u) r) (mul r (mul a u)) (mul r r) (mul d s))
+        (cong (λ t → add t (mul d s)) (qmol-foil-back A add mul sr (mul a u) r))))

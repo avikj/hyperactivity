@@ -1,0 +1,9 @@
+-- Helper: 5-term reassociation x1 + ((x2 + x3) + (x4 + x5)) = ((x1 + x2) + (x3 + x4)) + x5.
+qmol-reassoc5 : (A : Type) → (add mul : A → A → A) → QmolSR A add mul → (x1 x2 x3 x4 x5 : A) →
+  add x1 (add (add x2 x3) (add x4 x5)) ≡ add (add (add x1 x2) (add x3 x4)) x5
+qmol-reassoc5 A add mul sr x1 x2 x3 x4 x5 = concat
+  (cong (λ t → add x1 t)
+    (concat (qmol-sr-aa A add mul sr x2 x3 (add x4 x5))
+            (cong (λ t → add x2 t) (sym (qmol-sr-aa A add mul sr x3 x4 x5)))))
+  (concat (sym (qmol-sr-aa A add mul sr x1 x2 (add (add x3 x4) x5)))
+          (sym (qmol-sr-aa A add mul sr (add x1 x2) (add x3 x4) x5)))

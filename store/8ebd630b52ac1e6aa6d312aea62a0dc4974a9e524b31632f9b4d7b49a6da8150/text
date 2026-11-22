@@ -1,0 +1,14 @@
+-- Exact fraction-free Bareiss positive-definiteness checker:
+-- Checks at every step: (i) pivot a > 0, (ii) symmetry col0 == row0, (iii) exact zero-remainder division by d.
+qmol-bareiss-loop : Nat → List (List BZ) → List Bool → Bool
+qmol-bareiss-loop fuel mat d = case fuel of
+  zero → (case mat of nil → true; cons r rr → false)
+  suc f → case mat of
+    nil → true
+    cons row0 rest → case row0 of
+      nil → false
+      cons a b → if qmol-bz-pos a
+        then (case qmol-bar-rows a d b rest b of
+                inl u → false
+                inr submat → qmol-bareiss-loop f submat (snd a))
+        else false

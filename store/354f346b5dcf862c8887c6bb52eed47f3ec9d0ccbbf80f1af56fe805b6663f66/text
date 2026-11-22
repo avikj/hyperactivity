@@ -1,0 +1,13 @@
+-- Count single-electron gauge-invariant Dirac hops between ordered two-electron states (u1, u2, fa) and (w1, w2, fb)
+-- on edge k = (u -> w) (both forward +1 and backward -1).
+qmol-one-hop-edge : Nat → Nat → Nat → Nat → Nat → List BZ → Nat → Nat → List BZ → BZ
+qmol-one-hop-edge k u w u1 u2 fa w1 w2 fb =
+  bz-add
+    (if qgm-vec-eq (qgm-vec-add BZ bz-add fa (qgm-unit-flux BZ bz-zero bz-one k)) fb
+     then bz-add (if both (both (eqb u1 u) (eqb w1 w)) (eqb u2 w2) then bz-one else bz-zero)
+                 (if both (both (eqb u2 u) (eqb w2 w)) (eqb u1 w1) then bz-one else bz-zero)
+     else bz-zero)
+    (if qgm-vec-eq (qgm-vec-add BZ bz-add fa (qgm-unit-flux BZ bz-zero (bz-neg bz-one) k)) fb
+     then bz-add (if both (both (eqb u1 w) (eqb w1 u)) (eqb u2 w2) then bz-one else bz-zero)
+                 (if both (both (eqb u2 w) (eqb w2 u)) (eqb u1 w1) then bz-one else bz-zero)
+     else bz-zero)

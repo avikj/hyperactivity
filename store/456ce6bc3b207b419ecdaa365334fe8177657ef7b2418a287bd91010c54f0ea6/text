@@ -1,0 +1,6 @@
+-- Pullback answers match output answers identically on every state a : A.
+qi-pullback-ans : (A B : Type) → (ch : A → B) → (k : Nat) → (qs : rp-Qs B k) → (a : A) →
+  rp-ans A k (qi-pullback-qs A B ch k qs) a ≡ rp-ans B k qs (ch a)
+qi-pullback-ans A B ch k = case k return λ n → (qs : rp-Qs B n) → (a : A) → rp-ans A n (qi-pullback-qs A B ch n qs) a ≡ rp-ans B n qs (ch a) of
+  zero → λ u a → refl
+  suc m → λ qs a → λ i → (fst qs (ch a) , rec m (snd qs) a i)

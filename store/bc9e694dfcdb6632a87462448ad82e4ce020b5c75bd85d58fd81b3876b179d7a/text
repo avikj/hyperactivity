@@ -1,0 +1,8 @@
+-- Enumerate all Gauss-invariant 4-edge flux configurations for fixed (e1, e2).
+qmol-enum-n3 : Nat → Nat → Nat → Nat → BZ → BZ → BZ → List BZ → List QmolState
+qmol-enum-n3 p1 p2 e1 e2 n0 n1 n2 ns = case ns of
+  nil → nil
+  cons n3 rest →
+    (λ st tail → if qmol-c4-gauss-ok p1 p2 st then cons st tail else tail)
+      ((e1 , e2) , cons n0 (cons n1 (cons n2 (cons n3 nil))))
+      (qmol-enum-n3 p1 p2 e1 e2 n0 n1 n2 rest)

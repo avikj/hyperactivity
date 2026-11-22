@@ -1,0 +1,35 @@
+-- THEOREM 1A (Universal Deterministic LHV CHSH Bound):
+-- For ALL 16 deterministic local-hidden-variable assignments (a0, a1, b0, b1), |S| = 2 identically!
+qe-chsh-det : (a0 a1 b0 b1 : Bool) → snd (qe-chsh-val a0 a1 b0 b1) ≡ bin-two
+qe-chsh-det a0 a1 b0 b1 =
+  case a0 return λ x0 → snd (qe-chsh-val x0 a1 b0 b1) ≡ bin-two of
+    true → case a1 return λ x1 → snd (qe-chsh-val true x1 b0 b1) ≡ bin-two of
+      true → case b0 return λ y0 → snd (qe-chsh-val true true y0 b1) ≡ bin-two of
+        true → case b1 return λ y1 → snd (qe-chsh-val true true true y1) ≡ bin-two of
+          true → refl
+          false → refl
+        false → case b1 return λ y1 → snd (qe-chsh-val true true false y1) ≡ bin-two of
+          true → refl
+          false → refl
+      false → case b0 return λ y0 → snd (qe-chsh-val true false y0 b1) ≡ bin-two of
+        true → case b1 return λ y1 → snd (qe-chsh-val true false true y1) ≡ bin-two of
+          true → refl
+          false → refl
+        false → case b1 return λ y1 → snd (qe-chsh-val true false false y1) ≡ bin-two of
+          true → refl
+          false → refl
+    false → case a1 return λ x1 → snd (qe-chsh-val false x1 b0 b1) ≡ bin-two of
+      true → case b0 return λ y0 → snd (qe-chsh-val false true y0 b1) ≡ bin-two of
+        true → case b1 return λ y1 → snd (qe-chsh-val false true true y1) ≡ bin-two of
+          true → refl
+          false → refl
+        false → case b1 return λ y1 → snd (qe-chsh-val false true false y1) ≡ bin-two of
+          true → refl
+          false → refl
+      false → case b0 return λ y0 → snd (qe-chsh-val false false y0 b1) ≡ bin-two of
+        true → case b1 return λ y1 → snd (qe-chsh-val false false true y1) ≡ bin-two of
+          true → refl
+          false → refl
+        false → case b1 return λ y1 → snd (qe-chsh-val false false false y1) ≡ bin-two of
+          true → refl
+          false → refl

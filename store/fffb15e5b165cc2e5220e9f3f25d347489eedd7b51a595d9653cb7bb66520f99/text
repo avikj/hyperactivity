@@ -1,0 +1,16 @@
+-- THEOREM 1 (Universal Connes-Rovelli KMS Detailed-Balance Stationarity):
+-- If T is row-stochastic (sum_{i in xs} T(j, i) = 1) and satisfies KMS detailed balance
+-- (w(i) * T(i, j) = w(j) * T(j, i) for all i, j), then sum_{i in xs} w(i) * T(i, j) = w(j)!
+qt-kms-stationarity : (S A : Type) → (z one : A) → (add mul : A → A → A) → QtSR A z one add mul →
+  (xs : List S) → (w : S → A) → (T : S → S → A) → (j : S) →
+  ((i : S) → mul (w i) (T i j) ≡ mul (w j) (T j i)) →
+  qt-sum S A z add (λ i → T j i) xs ≡ one →
+  qt-sum S A z add (λ i → mul (w i) (T i j)) xs ≡ w j
+qt-kms-stationarity S A z one add mul sr xs w T j hkms hstoch =
+  concat
+    (qt-sum-cong S A z add (λ i → mul (w i) (T i j)) (λ i → mul (w j) (T j i)) hkms xs)
+    (concat
+      (qt-sum-scale S A z one add mul sr (w j) (λ i → T j i) xs)
+      (concat
+        (cong (λ t → mul (w j) t) hstoch)
+        (fst (snd sr) (w j))))

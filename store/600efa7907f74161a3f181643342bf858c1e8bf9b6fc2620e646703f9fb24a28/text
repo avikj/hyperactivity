@@ -1,0 +1,19 @@
+-- Helper: P + N = 2 * W for every finite LHV mixture ws!
+qe-lhv-sum-eq : (ws : List QeLHV) → plus (qe-lhv-P ws) (qe-lhv-N ws) ≡ plus (qe-lhv-W ws) (qe-lhv-W ws)
+qe-lhv-sum-eq ws = case ws return λ l → plus (qe-lhv-P l) (qe-lhv-N l) ≡ plus (qe-lhv-W l) (qe-lhv-W l) of
+  nil → refl
+  cons e rest →
+    case qe-lhv-sign e return λ b →
+      plus (if b then plus (plus (fst e) (fst e)) (qe-lhv-P rest) else qe-lhv-P rest)
+           (if b then qe-lhv-N rest else plus (plus (fst e) (fst e)) (qe-lhv-N rest))
+      ≡ plus (plus (fst e) (qe-lhv-W rest)) (plus (fst e) (qe-lhv-W rest)) of
+      true → concat
+        (plus-assoc (plus (fst e) (fst e)) (qe-lhv-P rest) (qe-lhv-N rest))
+        (concat (cong (λ t → plus (plus (fst e) (fst e)) t) (rec rest))
+                (sym (rp-swap4-nat (fst e) (qe-lhv-W rest) (fst e) (qe-lhv-W rest))))
+      false → concat
+        (sym (plus-assoc (qe-lhv-P rest) (plus (fst e) (fst e)) (qe-lhv-N rest)))
+        (concat (cong (λ t → plus t (qe-lhv-N rest)) (plus-comm (qe-lhv-P rest) (plus (fst e) (fst e))))
+          (concat (plus-assoc (plus (fst e) (fst e)) (qe-lhv-P rest) (qe-lhv-N rest))
+            (concat (cong (λ t → plus (plus (fst e) (fst e)) t) (rec rest))
+                    (sym (rp-swap4-nat (fst e) (qe-lhv-W rest) (fst e) (qe-lhv-W rest))))))

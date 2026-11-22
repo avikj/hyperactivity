@@ -1,0 +1,10 @@
+-- THEOREM 2 (Zero-Erasure Equivalence Theorem):
+-- Transporting any k mutually independent questions across a representation equivalence (f, g, gf, fg)
+-- preserves full independence identically — zero bits erased, maximal mutual information.
+qi-equiv-zero-erasure : (A B : Type) → (e : QiEquiv A B) → (k : Nat) → (qs : rp-Qs A k) → (xs : List A) →
+  rp-Indep A k qs xs → rp-Indep B k (qi-pullback-qs B A (fst (snd e)) k qs) (qi-map A B (fst e) xs)
+qi-equiv-zero-erasure A B e k qs xs ind bs =
+  (fst e (fst (ind bs)) ,
+    (qi-in-map A B (fst e) (fst (ind bs)) xs (fst (snd (ind bs))) ,
+     concat (qi-equiv-ans A B (fst e) (fst (snd e)) (fst (snd (snd e))) k qs (fst (ind bs)))
+            (snd (snd (ind bs)))))

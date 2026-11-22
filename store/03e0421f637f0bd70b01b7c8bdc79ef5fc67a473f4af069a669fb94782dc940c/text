@@ -1,0 +1,15 @@
+-- THEOREM 1A (Universal 2-Simplex Reflection Positivity):
+-- For ANY finite list of bulk quantum geometries with non-negative edge/intertwiner weights w_i >= 0,
+-- the symmetric 2-simplex glued transition amplitude sum_i w_i * A(i)^2 is non-negative!
+sf2-reflection-pos : (A : Type) → (z : A) → (add mul : A → A → A) → (Pos Nonneg : A → Type) →
+  Sf2PosOrd A z add mul Pos Nonneg →
+  (ws : List (A × A)) → sf2-all-nn A Nonneg ws → Nonneg (sf2-glue-sym A z add mul ws)
+sf2-reflection-pos A z add mul Pos Nonneg ord ws =
+  case ws return λ l → sf2-all-nn A Nonneg l → Nonneg (sf2-glue-sym A z add mul l) of
+    nil → λ u → fst ord
+    cons p rest → λ hall →
+      fst (snd (snd (snd ord)))
+        (mul (fst p) (mul (snd p) (snd p)))
+        (sf2-glue-sym A z add mul rest)
+        (fst (snd (snd ord)) (fst p) (mul (snd p) (snd p)) (fst hall) (fst (snd ord) (snd p)))
+        (rec rest (snd hall))

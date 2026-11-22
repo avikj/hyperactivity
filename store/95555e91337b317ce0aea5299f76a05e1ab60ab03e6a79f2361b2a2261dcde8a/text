@@ -1,0 +1,15 @@
+-- Section (2): Direct Derivation of Quantum Volume Matrix Elements from 6j Recoupling Commutator [J_12^2, J_23^2].
+-- All spin arguments are doubled spins (J_i = 2 j_i, K = 2 k).
+-- <K | J_23^2 | Kp> = sqrt((K+1)(Kp+1)) * Delta(J1,J2,K)*Delta(J3,J4,K)*Delta(J1,J2,Kp)*Delta(J3,J4,Kp) * S(K, Kp)
+-- where S(K, Kp) = sum_L (L*(L+2)/4) * (L+1) * Delta^2(J2,J3,L) * Delta^2(J1,J4,L) * W(J1,J2,K;J3,J4,L) * W(J1,J2,Kp;J3,J4,L).
+qv-j23-loop : Nat → Nat → Nat → Nat → Nat → Nat → Nat → BQ → BQ
+qv-j23-loop fuel J1 J2 J3 J4 K Kp acc = case fuel of
+  zero → acc
+  suc L → qv-j23-loop L J1 J2 J3 J4 K Kp
+    (if both (tri-ok J2 J3 L) (tri-ok J1 J4 L)
+     then bq-add acc
+       (bq-mul
+         (bq-mul (bq-make true (bin-of-nat (times L (plus L 2))) (bin-of-nat 4))
+                 (bq-mul (sf-bq-of-nat (suc L)) (bq-mul (sf-delta2 J2 J3 L) (sf-delta2 J1 J4 L))))
+         (bq-mul (sf-racah-W J1 J2 K J3 J4 L) (sf-racah-W J1 J2 Kp J3 J4 L)))
+     else acc)

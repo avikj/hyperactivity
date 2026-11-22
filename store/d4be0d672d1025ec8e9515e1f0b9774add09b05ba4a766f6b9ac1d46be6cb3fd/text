@@ -1,0 +1,19 @@
+-- THEOREM 2C (Universal Strict Positive-Definiteness on Nonzero Sub-Vectors):
+-- Whenever q_S(v) > 0, the lifted quadratic form is strictly positive Q(u, v) > 0 for every u : A!
+qmol-schur-strict : (A V : Type) → (add mul : A → A → A) → (Pos Nonneg : A → Type) →
+  QmolSR A add mul → QmolOrd A add mul Pos Nonneg →
+  (a d : A) → Pos a → Pos d →
+  (bdot q qS : V → A) →
+  ((v : V) → mul a (q v) ≡ add (mul (bdot v) (bdot v)) (mul d (qS v))) →
+  (u : A) → (v : V) → Pos (qS v) →
+  Pos (add (mul a (mul u u)) (add (add (mul u (bdot v)) (mul u (bdot v))) (q v)))
+qmol-schur-strict A V add mul Pos Nonneg sr ord a d pa pd bdot q qS hbar u v hpos =
+  snd (snd (snd (snd (snd (snd ord))))) a
+    (add (mul a (mul u u)) (add (add (mul u (bdot v)) (mul u (bdot v))) (q v)))
+    pa
+    (transport (λ i → Pos (sym (qmol-schur-id A add mul sr a u (bdot v) (q v) d (qS v) (hbar v)) i))
+      (fst (snd (snd (snd (snd (snd ord)))))
+        (mul (add (mul a u) (bdot v)) (add (mul a u) (bdot v)))
+        (mul d (qS v))
+        (fst ord (add (mul a u) (bdot v)))
+        (fst (snd (snd (snd (snd ord)))) d (qS v) pd hpos)))

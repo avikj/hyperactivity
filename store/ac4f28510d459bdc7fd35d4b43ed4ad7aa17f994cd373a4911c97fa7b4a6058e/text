@@ -1,0 +1,15 @@
+-- Reduce all remaining rows strictly linearly while checking symmetry col0 == b_i:
+qmol-bar-rows : BZ → List Bool → List BZ → List (List BZ) → List BZ → Sum Unit (List (List BZ))
+qmol-bar-rows a d bs-cur rows bs-all = case rows of
+  nil → (case bs-cur of nil → inr nil; cons b br → inl unit)
+  cons row rrest → case bs-cur of
+    nil → inl unit
+    cons bi brest → case row of
+      nil → inl unit
+      cons col0 ci → if qgm-bz-eq col0 bi
+        then (case qmol-bar-row a d bi ci bs-all of
+                inl u → inl unit
+                inr rnew → case qmol-bar-rows a d brest rrest bs-all of
+                  inl u → inl unit
+                  inr rtail → inr (cons rnew rtail))
+        else inl unit

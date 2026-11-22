@@ -1,0 +1,10 @@
+-- THEOREM 3 (Universal Strict Coarse-Graining Purity Growth):
+-- Merging any two positive microstate weights (suc a, suc b) into (suc a + suc b) STRICTLY increases the
+-- collision sum-of-squares by at least 2 (strictly increasing purity P_2 = sum w_i^2 / W^2)!
+qt-coarse-grain-strict : (a b : Nat) → (rest : List Nat) →
+  le (suc (qt-sum-sq (cons (suc a) (cons (suc b) rest)))) (qt-sum-sq (cons (plus (suc a) (suc b)) rest))
+qt-coarse-grain-strict a b rest =
+  (suc (plus (plus b (times a (suc b))) (plus b (times a (suc b)))) ,
+    concat
+      (qt-cg-step (qt-sum-sq (cons (suc a) (cons (suc b) rest))) (plus b (times a (suc b))))
+      (qt-coarse-grain-eq (suc a) (suc b) rest))

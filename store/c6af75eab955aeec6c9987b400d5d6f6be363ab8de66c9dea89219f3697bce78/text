@@ -1,0 +1,8 @@
+-- Preimage witness: every element b in the image (qi-map f xs) comes from some a in xs with f a = b.
+qi-in-preimage : (A B : Type) → (f : A → B) → (b : B) → (xs : List A) →
+  rp-In B b (qi-map A B f xs) → (a : A) × (rp-In A a xs × (f a ≡ b))
+qi-in-preimage A B f b xs = case xs return λ l → rp-In B b (qi-map A B f l) → (a : A) × (rp-In A a l × (f a ≡ b)) of
+  nil → λ e → Empty-rec e
+  cons x rest → λ ins → case ins of
+    inl eq → (x , (inl refl , sym eq))
+    inr r → (fst (rec rest r) , (inr (fst (snd (rec rest r))) , snd (snd (rec rest r))))

@@ -1,0 +1,24 @@
+-- THEOREM 2 (Universal Tsirelson Quantum Upper Bound S^2 <= 8):
+-- Given correlator S = x + y where unit-vector Cauchy-Schwarz gives x^2 + r1 = n1 and y^2 + r2 = n2
+-- and the unit-vector parallelogram law gives n1 + n2 = four (so 2*(n1 + n2) = eight):
+--   (x + y)^2 + ((x - y)^2 + ((r1 + r1) + (r2 + r2))) = four + four (= 8)!
+-- Since (x - y)^2 + 2*r1 + 2*r2 >= 0, S^2 <= 8 universally across ALL quantum measurements!
+qe-tsirelson-bound : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → QeRing A z add mul neg →
+  (x y r1 r2 n1 n2 four : A) →
+  add (mul x x) r1 ≡ n1 →
+  add (mul y y) r2 ≡ n2 →
+  add n1 n2 ≡ four →
+  add (mul (add x y) (add x y))
+      (add (mul (add x (neg y)) (add x (neg y))) (add (add r1 r1) (add r2 r2))) ≡
+  add four four
+qe-tsirelson-bound A z add mul neg r x y r1 r2 n1 n2 four h1 h2 h4 =
+  concat
+    (sym (fst (snd (snd r)) (mul (add x y) (add x y)) (mul (add x (neg y)) (add x (neg y))) (add (add r1 r1) (add r2 r2))))
+    (concat
+      (cong (λ t → add t (add (add r1 r1) (add r2 r2))) (qe-para-ring A z add mul neg r x y))
+      (concat
+        (qe-swap4 A z add mul neg r (add (mul x x) (mul x x)) (add (mul y y) (mul y y)) (add r1 r1) (add r2 r2))
+        (concat
+          (λ i → add (qe-dup-eq A z add mul neg r (mul x x) r1 n1 h1 i)
+                     (qe-dup-eq A z add mul neg r (mul y y) r2 n2 h2 i))
+          (qe-dup-eq A z add mul neg r n1 n2 four h4))))

@@ -1,0 +1,14 @@
+-- Exact coarse-graining identity: merging (u, v) into (u + v) increases sum-of-squares by exactly 2*u*v.
+qt-coarse-grain-eq : (u v : Nat) → (rest : List Nat) →
+  plus (qt-sum-sq (cons u (cons v rest))) (plus (times u v) (times u v)) ≡ qt-sum-sq (cons (plus u v) rest)
+qt-coarse-grain-eq u v rest =
+  concat
+    (cong (λ t → plus t (plus (times u v) (times u v))) (sym (plus-assoc (times u u) (times v v) (qt-sum-sq rest))))
+    (concat
+      (plus-assoc (plus (times u u) (times v v)) (qt-sum-sq rest) (plus (times u v) (times u v)))
+      (concat
+        (cong (λ t → plus (plus (times u u) (times v v)) t)
+              (plus-comm (qt-sum-sq rest) (plus (times u v) (times u v))))
+        (concat
+          (sym (plus-assoc (plus (times u u) (times v v)) (plus (times u v) (times u v)) (qt-sum-sq rest)))
+          (cong (λ t → plus t (qt-sum-sq rest)) (sym (qt-sq-add u v))))))

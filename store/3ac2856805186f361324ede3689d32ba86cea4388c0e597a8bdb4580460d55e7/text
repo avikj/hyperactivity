@@ -1,0 +1,12 @@
+-- Section (3): Universal Smerlak-Rovelli Relational EPR No-Signaling Theorem.
+-- On the singlet state, the unnormalized joint outcome weight (4 * p(sA, sB | a, b)) is:
+--   w(sA, +1) = one + neg d   and   w(sA, -1) = one + d,  where d = sA * (a . b).
+-- THEOREM 3 (Universal No-Signaling): Summing over Bob's outcome cancels Bob's setting b identically:
+--   (one - d) + (one + d) = one + one (so Alice's local marginal is ALWAYS 2/4 = 1/2, independent of b)!
+qe-no-signaling : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → QeRing A z add mul neg →
+  (one d : A) → add (add one (neg d)) (add one d) ≡ add one one
+qe-no-signaling A z add mul neg r one d =
+  concat (qe-swap4 A z add mul neg r one (neg d) one d)
+    (concat (cong (λ t → add (add one one) t)
+              (concat (fst (snd (snd (snd r))) (neg d) d) (fst (snd (snd (snd (snd r)))) d)))
+            (fst (snd r) (add one one)))

@@ -1,0 +1,8 @@
+qv-4x4-det-even : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → QvRing A z add mul neg →
+  (s1 s2 s3 : A) → add (mul s1 (add s2 s3)) (neg (mul s1 s2)) ≡ mul s1 s3
+qv-4x4-det-even A z add mul neg r s1 s2 s3 =
+  concat (cong (λ t → add t (neg (mul s1 s2))) (fst (snd (snd (snd (snd (snd (snd (snd (snd r)))))))) s1 s2 s3))
+    (concat (cong (λ t → add t (neg (mul s1 s2))) (fst (snd (snd (snd r))) (mul s1 s2) (mul s1 s3)))
+      (concat (fst (snd (snd r)) (mul s1 s3) (mul s1 s2) (neg (mul s1 s2)))
+        (concat (cong (λ t → add (mul s1 s3) t) (fst (snd (snd (snd (snd r)))) (mul s1 s2)))
+                (fst (snd r) (mul s1 s3)))))

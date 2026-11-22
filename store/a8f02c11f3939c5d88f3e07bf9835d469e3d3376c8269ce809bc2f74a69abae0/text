@@ -1,0 +1,10 @@
+-- Factoring a constant c out of a finite sum: sum_{x in xs} c * f(x) = c * (sum_{x in xs} f(x)).
+qt-sum-scale : (S A : Type) → (z one : A) → (add mul : A → A → A) → QtSR A z one add mul →
+  (c : A) → (f : S → A) → (xs : List S) →
+  qt-sum S A z add (λ s → mul c (f s)) xs ≡ mul c (qt-sum S A z add f xs)
+qt-sum-scale S A z one add mul sr c f xs =
+  case xs return λ l → qt-sum S A z add (λ s → mul c (f s)) l ≡ mul c (qt-sum S A z add f l) of
+    nil → sym (fst sr c)
+    cons x rest → concat
+      (cong (λ t → add (mul c (f x)) t) (rec rest))
+      (sym (snd (snd sr) c (f x) (qt-sum S A z add f rest)))

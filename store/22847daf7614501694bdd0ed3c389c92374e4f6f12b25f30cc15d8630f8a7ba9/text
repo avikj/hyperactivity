@@ -1,0 +1,11 @@
+-- Binomial square identity over Nat: (u + v)^2 = (u^2 + v^2) + (u*v + u*v).
+qt-sq-add : (u v : Nat) →
+  times (plus u v) (plus u v) ≡ plus (plus (times u u) (times v v)) (plus (times u v) (times u v))
+qt-sq-add u v =
+  concat (qt-times-rdist u v (plus u v))
+    (concat (λ i → plus (qt-times-ldist u u v i) (qt-times-ldist v u v i))
+      (concat (rp-swap4-nat (times u u) (times u v) (times v u) (times v v))
+        (concat (cong (λ t → plus t (plus (times u v) (times v v))) (plus-comm (times u u) (times v u)))
+          (concat (rp-swap4-nat (times v u) (times u u) (times u v) (times v v))
+            (concat (plus-comm (plus (times v u) (times u v)) (plus (times u u) (times v v)))
+                    (cong (λ t → plus (plus (times u u) (times v v)) (plus t (times u v))) (qt-times-comm v u)))))))

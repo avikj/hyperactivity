@@ -1,0 +1,11 @@
+-- Helper: (y*x + y*y) + ((-y)*x + (-y)*(-y)) = y*y + y*y.
+qe-para-right : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → QeRing A z add mul neg →
+  (x y : A) → add (add (mul y x) (mul y y)) (add (mul (neg y) x) (mul (neg y) (neg y))) ≡ add (mul y y) (mul y y)
+qe-para-right A z add mul neg r x y =
+  concat (qe-swap4 A z add mul neg r (mul y x) (mul y y) (mul (neg y) x) (mul (neg y) (neg y)))
+    (concat
+      (λ i → add
+        (concat (cong (λ t → add (mul y x) t) (fst (snd (snd (snd (snd (snd (snd (snd (snd r)))))))) y x))
+                (fst (snd (snd (snd (snd r)))) (mul y x)) i)
+        (cong (λ t → add (mul y y) t) (qe-neg-sq A z add mul neg r y) i))
+      (fst r (add (mul y y) (mul y y))))
