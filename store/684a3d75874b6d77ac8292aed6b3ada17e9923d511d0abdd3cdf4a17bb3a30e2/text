@@ -1,0 +1,26 @@
+-- Helper: (1 - g^2) * ((g * j) * j) = g * (j^2 - (g * j)^2)!
+lor-half-casimir : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) → LorRing A z one add mul neg →
+  (g j : A) →
+  mul (add one (neg (mul g g))) (mul (mul g j) j) ≡
+  mul g (add (mul j j) (neg (mul (mul g j) (mul g j))))
+lor-half-casimir A z one add mul neg r g j =
+  lor-tr A
+    (mul (add one (neg (mul g g))) (mul (mul g j) j))
+    (add (mul one (mul (mul g j) j)) (mul (neg (mul g g)) (mul (mul g j) j)))
+    (mul g (add (mul j j) (neg (mul (mul g j) (mul g j)))))
+    (fst (snd (snd (snd (snd (snd (snd (snd (snd r)))))))) one (neg (mul g g)) (mul (mul g j) j))
+    (lor-tr A
+      (add (mul one (mul (mul g j) j)) (mul (neg (mul g g)) (mul (mul g j) j)))
+      (add (mul g (mul j j)) (neg (mul g (mul (mul g j) (mul g j)))))
+      (mul g (add (mul j j) (neg (mul (mul g j) (mul g j)))))
+      (λ i → add
+        (concat (fst (snd (snd (snd r))) (mul (mul g j) j))
+                (fst (snd (snd (snd (snd (snd (snd r)))))) g j j) i)
+        (concat (fst (snd (snd (snd (snd (snd (snd (snd (snd (snd r))))))))) (mul g g) (mul (mul g j) j))
+          (cong neg
+            (concat (lor-cube-pull A z one add mul neg r g j)
+                    (cong (λ t → mul g t) (sym (lor-sq-mul A z one add mul neg r g j))))) i))
+      (concat
+        (cong (λ t → add (mul g (mul j j)) t)
+              (sym (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd r))))))))) g (mul (mul g j) (mul g j)))))
+        (sym (fst (snd (snd (snd (snd (snd (snd (snd r))))))) g (mul j j) (neg (mul (mul g j) (mul g j)))))))

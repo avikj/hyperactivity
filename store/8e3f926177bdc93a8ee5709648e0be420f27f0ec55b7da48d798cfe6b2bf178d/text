@@ -1,0 +1,14 @@
+-- THEOREM 1A (Universal Lorentzian SL(2,C) EPRL Linear Simplicity Casimir Ratio Law):
+-- On the EPRL Y_gamma map (rho = g*j, k = j), with C_1 + 1 = j^2 - (g*j)^2 and C_2 = (g*j)*j + (g*j)*j:
+--   (1 - g^2) * C_2 = (g + g) * (C_1 + 1)  identically for ALL Immirzi parameters g and ALL spins j!
+lor-casimir-eprl : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) → LorRing A z one add mul neg →
+  (g j : A) →
+  mul (add one (neg (mul g g))) (add (mul (mul g j) j) (mul (mul g j) j)) ≡
+  mul (add g g) (add (mul j j) (neg (mul (mul g j) (mul g j))))
+lor-casimir-eprl A z one add mul neg r g j =
+  concat
+    (fst (snd (snd (snd (snd (snd (snd (snd r))))))) (add one (neg (mul g g))) (mul (mul g j) j) (mul (mul g j) j))
+    (concat
+      (λ i → add (lor-half-casimir A z one add mul neg r g j i)
+                 (lor-half-casimir A z one add mul neg r g j i))
+      (sym (fst (snd (snd (snd (snd (snd (snd (snd (snd r)))))))) g g (add (mul j j) (neg (mul (mul g j) (mul g j)))))))

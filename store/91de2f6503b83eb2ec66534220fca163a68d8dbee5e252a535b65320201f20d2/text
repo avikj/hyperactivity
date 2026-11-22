@@ -1,0 +1,9 @@
+-- Helper: a * (b + b) = a * b + a * b, and (a * b) * c rearrangement:
+--   mul (mul g g) (mul (mul g j) j) = mul g (mul (mul g g) (mul j j))
+lor-cube-pull : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) → LorRing A z one add mul neg →
+  (g j : A) → mul (mul g g) (mul (mul g j) j) ≡ mul g (mul (mul g g) (mul j j))
+lor-cube-pull A z one add mul neg r g j =
+  concat (cong (λ t → mul (mul g g) t) (fst (snd (snd (snd (snd (snd (snd r)))))) g j j))
+    (concat (sym (fst (snd (snd (snd (snd (snd (snd r)))))) (mul g g) g (mul j j)))
+      (concat (cong (λ t → mul t (mul j j)) (fst (snd (snd (snd (snd (snd r))))) (mul g g) g))
+              (fst (snd (snd (snd (snd (snd (snd r)))))) g (mul g g) (mul j j))))

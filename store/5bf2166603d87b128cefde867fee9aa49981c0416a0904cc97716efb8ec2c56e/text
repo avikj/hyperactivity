@@ -1,0 +1,11 @@
+-- Helper: (g * j) * (g * j) = (g * g) * (j * j).
+lor-sq-mul : (A : Type) → (z one : A) → (add mul : A → A → A) → (neg : A → A) → LorRing A z one add mul neg →
+  (g j : A) → mul (mul g j) (mul g j) ≡ mul (mul g g) (mul j j)
+lor-sq-mul A z one add mul neg r g j =
+  concat (fst (snd (snd (snd (snd (snd (snd r)))))) g j (mul g j))
+    (concat
+      (cong (λ t → mul g t)
+        (concat (sym (fst (snd (snd (snd (snd (snd (snd r)))))) j g j))
+          (concat (cong (λ t → mul t j) (fst (snd (snd (snd (snd (snd r))))) j g))
+                  (fst (snd (snd (snd (snd (snd (snd r)))))) g j j))))
+      (sym (fst (snd (snd (snd (snd (snd (snd r)))))) g g (mul j j))))

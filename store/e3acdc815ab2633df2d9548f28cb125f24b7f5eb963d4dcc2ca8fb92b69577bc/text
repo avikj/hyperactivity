@@ -1,0 +1,25 @@
+-- Swap a pair of sums (i, k) past a pair of sums (j, l):
+qent-swap2x2 : (I J A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (F : I → I → J → J → A) → (is : List I) → (js : List J) →
+  qent-sum I A z add (λ i → qent-sum I A z add (λ k → qent-sum J A z add (λ j → qent-sum J A z add (λ l → F i k j l) js) js) is) is ≡
+  qent-sum J A z add (λ j → qent-sum J A z add (λ l → qent-sum I A z add (λ i → qent-sum I A z add (λ k → F i k j l) is) is) js) js
+qent-swap2x2 I J A z add mul sr F is js =
+  qent-tr A
+    (qent-sum I A z add (λ i → qent-sum I A z add (λ k → qent-sum J A z add (λ j → qent-sum J A z add (λ l → F i k j l) js) js) is) is)
+    (qent-sum I A z add (λ i → qent-sum J A z add (λ j → qent-sum I A z add (λ k → qent-sum J A z add (λ l → F i k j l) js) is) js) is)
+    (qent-sum J A z add (λ j → qent-sum J A z add (λ l → qent-sum I A z add (λ i → qent-sum I A z add (λ k → F i k j l) is) is) js) js)
+    (λ t → qent-sum I A z add (λ i →
+      qent-sum-swap I J A z add mul sr (λ k j → qent-sum J A z add (λ l → F i k j l) js) is js t) is)
+    (qent-tr A
+      (qent-sum I A z add (λ i → qent-sum J A z add (λ j → qent-sum I A z add (λ k → qent-sum J A z add (λ l → F i k j l) js) is) js) is)
+      (qent-sum J A z add (λ j → qent-sum I A z add (λ i → qent-sum I A z add (λ k → qent-sum J A z add (λ l → F i k j l) js) is) is) js)
+      (qent-sum J A z add (λ j → qent-sum J A z add (λ l → qent-sum I A z add (λ i → qent-sum I A z add (λ k → F i k j l) is) is) js) js)
+      (qent-sum-swap I J A z add mul sr (λ i j → qent-sum I A z add (λ k → qent-sum J A z add (λ l → F i k j l) js) is) is js)
+      (qent-tr A
+        (qent-sum J A z add (λ j → qent-sum I A z add (λ i → qent-sum I A z add (λ k → qent-sum J A z add (λ l → F i k j l) js) is) is) js)
+        (qent-sum J A z add (λ j → qent-sum I A z add (λ i → qent-sum J A z add (λ l → qent-sum I A z add (λ k → F i k j l) is) js) is) js)
+        (qent-sum J A z add (λ j → qent-sum J A z add (λ l → qent-sum I A z add (λ i → qent-sum I A z add (λ k → F i k j l) is) is) js) js)
+        (λ t → qent-sum J A z add (λ j → qent-sum I A z add (λ i →
+          qent-sum-swap I J A z add mul sr (λ k l → F i k j l) is js t) is) js)
+        (λ t → qent-sum J A z add (λ j →
+          qent-sum-swap I J A z add mul sr (λ i l → qent-sum I A z add (λ k → F i k j l) is) is js t) js)))

@@ -1,0 +1,9 @@
+-- Helper: inner overlap sum_j (u i * v j) * (u k * v j) = (u i * u k) * ||v||^2.
+qent-prod-ov : (J A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (a b : A) → (v : J → A) → (js : List J) →
+  qent-sum J A z add (λ j → mul (mul a (v j)) (mul b (v j))) js ≡
+  mul (mul a b) (qent-norm-sq J A z add mul v js)
+qent-prod-ov J A z add mul sr a b v js =
+  concat
+    (λ t → qent-sum J A z add (λ j → qent-mul-swap4 A z add mul sr a (v j) b (v j) t) js)
+    (sym (qent-sum-scale-l J A z add mul sr (mul a b) (λ j → mul (v j) (v j)) js))

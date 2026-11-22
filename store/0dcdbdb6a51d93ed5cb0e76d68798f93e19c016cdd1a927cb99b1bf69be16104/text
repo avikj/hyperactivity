@@ -1,0 +1,9 @@
+-- Scaling a finite sum on left and right:
+qent-sum-scale-l : (S A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (c : A) → (f : S → A) → (xs : List S) →
+  mul c (qent-sum S A z add f xs) ≡ qent-sum S A z add (λ s → mul c (f s)) xs
+qent-sum-scale-l S A z add mul sr c f xs =
+  case xs return λ l → mul c (qent-sum S A z add f l) ≡ qent-sum S A z add (λ s → mul c (f s)) l of
+    nil → qent-mul-zr A z add mul sr c
+    cons x rest → concat (qent-ldist A z add mul sr c (f x) (qent-sum S A z add f rest))
+                         (cong (λ t → add (mul c (f x)) t) (rec rest))

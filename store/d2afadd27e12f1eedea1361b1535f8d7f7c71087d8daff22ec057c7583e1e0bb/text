@@ -1,0 +1,7 @@
+-- Helper: 4-factor rearrangement (a*b)*(c*d) = (a*d)*(c*b).
+qent-4fac : (A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (a b c d : A) → mul (mul a b) (mul c d) ≡ mul (mul a d) (mul c b)
+qent-4fac A z add mul sr a b c d =
+  concat (qent-mul-swap4 A z add mul sr a b c d)
+    (concat (cong (λ t → mul (mul a c) t) (qent-mul-comm A z add mul sr b d))
+            (qent-mul-swap4 A z add mul sr a c d b))

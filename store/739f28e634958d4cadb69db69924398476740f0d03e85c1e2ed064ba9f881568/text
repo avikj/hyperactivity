@@ -1,0 +1,10 @@
+-- Helper: expand Tr2_A into 4-fold sum sum_i sum_k sum_j sum_l (psi i j * psi k j) * (psi k l * psi i l).
+qent-tr2-A-expand : (I J A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (psi : I → J → A) → (is : List I) → (js : List J) →
+  qent-tr2-A I J A z add mul psi is js ≡
+  qent-sum I A z add (λ i → qent-sum I A z add (λ k →
+    qent-sum J A z add (λ j → qent-sum J A z add (λ l →
+      mul (mul (psi i j) (psi k j)) (mul (psi k l) (psi i l))) js) js) is) is
+qent-tr2-A-expand I J A z add mul sr psi is js =
+  λ t → qent-sum I A z add (λ i → qent-sum I A z add (λ k →
+    qent-sum-mul J J A z add mul sr (λ j → mul (psi i j) (psi k j)) (λ l → mul (psi k l) (psi i l)) js js t) is) is

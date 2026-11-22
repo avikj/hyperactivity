@@ -1,0 +1,8 @@
+qent-sum-scale-r : (S A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (f : S → A) → (c : A) → (xs : List S) →
+  mul (qent-sum S A z add f xs) c ≡ qent-sum S A z add (λ s → mul (f s) c) xs
+qent-sum-scale-r S A z add mul sr f c xs =
+  case xs return λ l → mul (qent-sum S A z add f l) c ≡ qent-sum S A z add (λ s → mul (f s) c) l of
+    nil → qent-mul-zl A z add mul sr c
+    cons x rest → concat (qent-rdist A z add mul sr (f x) (qent-sum S A z add f rest) c)
+                         (cong (λ t → add (mul (f x) c) t) (rec rest))

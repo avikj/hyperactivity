@@ -1,0 +1,9 @@
+qent-tr2-B-expand : (I J A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (psi : I → J → A) → (is : List I) → (js : List J) →
+  qent-tr2-B I J A z add mul psi is js ≡
+  qent-sum J A z add (λ j → qent-sum J A z add (λ l →
+    qent-sum I A z add (λ i → qent-sum I A z add (λ k →
+      mul (mul (psi i j) (psi i l)) (mul (psi k l) (psi k j))) is) is) js) js
+qent-tr2-B-expand I J A z add mul sr psi is js =
+  λ t → qent-sum J A z add (λ j → qent-sum J A z add (λ l →
+    qent-sum-mul I I A z add mul sr (λ i → mul (psi i j) (psi i l)) (λ k → mul (psi k l) (psi k j)) is is t) js) js

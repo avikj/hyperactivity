@@ -1,0 +1,9 @@
+qent-sum-add : (S A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (f g : S → A) → (xs : List S) →
+  qent-sum S A z add (λ s → add (f s) (g s)) xs ≡ add (qent-sum S A z add f xs) (qent-sum S A z add g xs)
+qent-sum-add S A z add mul sr f g xs =
+  case xs return λ l → qent-sum S A z add (λ s → add (f s) (g s)) l ≡ add (qent-sum S A z add f l) (qent-sum S A z add g l) of
+    nil → sym (qent-add-zl A z add mul sr z)
+    cons x rest → concat
+      (cong (λ t → add (add (f x) (g x)) t) (rec rest))
+      (qent-add-swap4 A z add mul sr (f x) (g x) (qent-sum S A z add f rest) (qent-sum S A z add g rest))

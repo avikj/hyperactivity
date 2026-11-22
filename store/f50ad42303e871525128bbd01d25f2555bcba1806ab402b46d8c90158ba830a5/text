@@ -1,0 +1,10 @@
+qent-mul-swap4 : (A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (a b c d : A) → mul (mul a b) (mul c d) ≡ mul (mul a c) (mul b d)
+qent-mul-swap4 A z add mul sr a b c d = concat
+  (qent-mul-assoc A z add mul sr a b (mul c d))
+  (concat
+    (cong (λ t → mul a t)
+      (concat (sym (qent-mul-assoc A z add mul sr b c d))
+        (concat (cong (λ t → mul t d) (qent-mul-comm A z add mul sr b c))
+                (qent-mul-assoc A z add mul sr c b d))))
+    (sym (qent-mul-assoc A z add mul sr a c (mul b d))))

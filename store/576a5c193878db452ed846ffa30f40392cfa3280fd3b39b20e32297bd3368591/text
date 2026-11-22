@@ -1,0 +1,18 @@
+-- THEOREM 1B (Universal Pure-State Bipartite Entanglement Symmetry — S_2(rho_A) = S_2(rho_B)):
+-- Over ANY commutative semiring and ANY finite bipartite state psi on arbitrary finite bases is, js:
+--   Tr((psi psi^T)^2) = Tr((psi^T psi)^2)!
+qent-schmidt-purity-eq : (I J A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (psi : I → J → A) → (is : List I) → (js : List J) →
+  qent-tr2-A I J A z add mul psi is js ≡ qent-tr2-B I J A z add mul psi is js
+qent-schmidt-purity-eq I J A z add mul sr psi is js =
+  concat (qent-tr2-A-expand I J A z add mul sr psi is js)
+    (concat
+      (qent-swap2x2 I J A z add mul sr (λ i k j l → mul (mul (psi i j) (psi k j)) (mul (psi k l) (psi i l))) is js)
+      (qent-tr A
+        (qent-sum J A z add (λ j → qent-sum J A z add (λ l → qent-sum I A z add (λ i → qent-sum I A z add (λ k → mul (mul (psi i j) (psi k j)) (mul (psi k l) (psi i l))) is) is) js) js)
+        (qent-sum J A z add (λ j → qent-sum J A z add (λ l → qent-sum I A z add (λ i → qent-sum I A z add (λ k → mul (mul (psi i j) (psi i l)) (mul (psi k l) (psi k j))) is) is) js) js)
+        (qent-tr2-B I J A z add mul psi is js)
+        (λ t → qent-sum J A z add (λ j → qent-sum J A z add (λ l →
+          qent-sum I A z add (λ i → qent-sum I A z add (λ k →
+            qent-4fac A z add mul sr (psi i j) (psi k j) (psi k l) (psi i l) t) is) is) js) js)
+        (sym (qent-tr2-B-expand I J A z add mul sr psi is js))))

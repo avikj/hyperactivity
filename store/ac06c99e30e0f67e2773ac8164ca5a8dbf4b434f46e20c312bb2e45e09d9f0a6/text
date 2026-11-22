@@ -1,0 +1,83 @@
+# An Executable Relational Physics Entrypoint for Carlo Rovelli
+
+This document is the guided index to the 14 machine-checked cubical type-theory modules in `lqg/`, built inside Hyperactivity as a direct computational realization of Relational Quantum Mechanics (RQM), Loop Quantum Gravity (LQG), and finite relational information theory.
+
+Every theorem and exact calculation below is verified by the cubical kernel from first principles: **no continuum manifold, no Schrödinger differential operator, no real numbers, no floating-point arithmetic, no wavefunction-collapse postulate, no absolute global state, and no external background time parameter.** Every physical quantity is either a universal algebraic proof (holding over an arbitrary ring, semiring, abelian group, or finite state space) or an exact finite rational/integer computation in binary arithmetic (`BZ`, `BQ`, `Amp`).
+
+---
+
+## 1. Why Cubical Type Theory Carries Relational Physics
+
+Hyperactivity's core paper (`docs/hyperactivity.cub`, Part I) already establishes three structural correspondences with RQM:
+
+1. **Observer-relative facts without a view from nowhere:** An observer $o$ sees only the fiber $\mathsf{Fib}_o(y)$ over its observations, never a global canonical state. Laws are observer-relative statements descending through $o$; warrants refine along observations (`Warrants`, `warrants-refine`).
+2. **Information theory at the center (Shannon, Landauer, Wheeler, Rovelli, Church/Turing):** In `lqg/info.cub`, we prove universally that pulling any family of $k$ mutually independent yes/no questions back across an arbitrary channel preserves independence (`qi-data-processing`), forcing the finite capacity bound $2^k \le |S|$ (`rp-postulate1`), while any cubical equivalence (`QiEquiv` / univalence `ua`) transports all $k$ independent bits losslessly in both directions with **zero Landauer erasure** (`qi-equiv-zero-erasure`). Conversely, projecting into a $2^M$-state target necessarily erases any $(M+1)$-st independent bit (`qi-landauer-bottleneck`).
+3. **Content-addressed dependency closure:** Every physical assertion carries the exact cryptographic hash of its assumptions and proofs in `store/`. Nothing is claimed without a checked witness.
+
+---
+
+## 2. Paper-by-Paper Map to Checked Theorems in `lqg/`
+
+| Reference | Core Physical Claim | Module | Machine-Checked Theorems & Exact Verdicts |
+|---|---|---|---|
+| **Connes & Rovelli (1994)**, *Von Neumann algebra automorphisms and time-thermodynamics relation* | Timeless dynamics + thermal time from modular flow; KMS stationarity | `lqg/thermal.cub` | `qt-kms-stationarity` (universal KMS detailed-balance stationarity over any commutative semiring), `qt-modular-cocycle` (universal modular 1-cocycle $M_{ij} M_{jk} = M_{ik}$), `qt-kms-3state-ok` (exact 3-state Boltzmann ladder $w=[4,2,1]$ in `BQ`). |
+| **Rovelli & Smolin (1995)**, *Discreteness of area and volume in quantum gravity* | Discrete area gap & discrete quantum volume spectrum of spin-network nodes | `lqg/geometry.cub`, `lqg/volume.cub` | `qg-area-gap` ($a^2 \ge 3$ universally for nonzero spin), `qg-area-mono` (strict spin monotonicity), `qg-3val-zero-1/2`, `qg-intertwiner-dim` (arbitrary-valence Weyl convolution & Catalan black-hole microstates `1, 2, 5, 14, 42, 132`), `qv-2x2-gap`, `qv-3x3-zero` (universal flat zero-volume state on every 3D intertwiner), `qv-4x4-det-even/odd`, `qv-commutator-matches` (direct 6j commutator $\frac{i}{4}[J_{12}^2, J_{23}^2]$ cross-check), `qv-spectrum-half` ($q^2 = 3/16, V_{\min}^4 = 1/108$), `qv-spectrum-one` ($q^2 \in \{0, 3\}, V^4 = 4/27$), `qv-spectrum-three-half` (perfect-square discriminant $324 = 18^2 \Rightarrow q^2 \in \{27/16, 315/16\}, V^4 \in \{1/12, 35/36\}$). |
+| **Rovelli (1996)**, *Relational Quantum Mechanics* (`quant-ph/9609002`) | Postulate 1 (finite bound on relevant information) + Postulate 2 (new information forces erasure/complementarity) | `lqg/postulates.cub` | `rp-postulate1` (universal proof: $k$ mutually independent yes/no questions on finite state list `xs` require $2^k \le |\text{xs}|$), `rp-postulate2-erasure` (universal proof: $M+1$ independent questions are impossible on $2^M$ states), `rp-horizon-bits` (black hole horizon bit capacities `1, 2, 3, 5, 7` bits for `4..12` spin-½ punctures). |
+| **Smerlak & Rovelli (2007)**, *Relational EPR* (*Found. Phys.* 37, 427) | Bell–CHSH violation with strict locality (no-signaling) and no hidden variables | `lqg/epr.cub` | `qe-chsh-det` ($|S|=2$ across all 16 deterministic LHV assignments), `qe-lhv-pos-le` / `qe-lhv-neg-le` (universal $|S_{\text{LHV}}| \le 2$ for **all** finite LHV probability mixtures), `qe-tsirelson-bound` (universal $S^2 \le 8$ over any ordered commutative ring), `qe-no-signaling` (universal cancellation of Bob's setting $b$ in Alice's marginal), `qe-chsh-violation-345` ($|S| = 14/5 = 2.80 > 2$, pure rational), `qe-chsh-violation-2021` ($|S| = 82/29 \approx 2.8276 > 2$, pure rational). |
+| **Engle, Livine, Pereira & Rovelli (2008)**; **Rovelli & Vidotto (2014)**, *Covariant Loop Quantum Gravity* | 3D Ponzano–Regge 2–3 Pachner move, 4D Ooguri BF 15j, Euclidean EPRL 4-simplex, multi-simplex gluing, Lorentzian $\mathrm{SL}(2,\mathbb{C})$ simplicity | `lqg/spinfoam.cub`, `lqg/spinfoam2.cub`, `lqg/lorentz.cub` | `sf-orth-check-diag/off`, `sf-pentagon-half/mixed` (Biedenharn–Elliott 2–3 move in pure `BQ`), `sf-ninej`, `sf-k5-bf-00000/22222`, `sf-eprl-bf-limit` ($\gamma=1$), `sf-eprl-bc-44444` ($49/186624$), `sf-eprl-bc-22444` ($-11/186624$), `sf-eprl-immirzi-third-nonzero` ($\gamma=1/3$); `sf2-reflection-pos/strict` (universal 2-simplex reflection positivity), `sf2-bf-two-exact` (`1/64`, `37/576`, `R=60`), `sf2-eprl-bf-limit`, `sf2-bc-two-diag` (`37^2/(2^{16}\cdot 3^{10})`), `sf2-bc-two-off` (`-493/(2^{15}\cdot 3^{11})`), `sf2-aniso-bc-exact` (`116020821875/73728`), `sf2-aniso-immirzi-exact` (`357773992576/27`); `lor-casimir-eprl` (universal $(1-\gamma^2)C_2 = 2\gamma(C_1+1)$), `lor-euc-verdict` ($\cos\Theta = 1/4$), `lor-all-spacelike-verdict` (Lorentzian 4-simplex with 5 spacelike tetrahedra and exact integer boosts $\cosh\Xi_{01}=2$, $\cosh\Xi_{12}=5$), `lor-timelike-verdict` ($\sinh^2\Xi = 1/32$, $\cos\theta = 3/8$). |
+| **Bianchi & Myers (2014)**; **Page (1993)**; **Rovelli (2015)**, *Relative Information at the Foundation of Physics* | Area-law entanglement in quantum geometry, perspectival coarse-graining entropy, discrete Page curve | `lqg/info.cub`, `lqg/thermal.cub`, `lqg/entangle.cub` | `qi-data-processing`, `qi-equiv-zero-erasure`, `qt-coarse-grain-strict` (strict purity growth under coarse-graining), `qent-schmidt-purity-eq` (universal arbitrary-dimension $S_2(\rho_A) = S_2(\rho_B)$), `qent-product-pure` (universal zero entanglement of product states), `qent-tet-verdict` (4-valent spin-½ tetrahedron: $|k=0\rangle: P_2=1$, $|k=1\rangle: P_2=1/3$, $|k=0\rangle+|k=1\rangle: P_2=1/4$ saturating the 2-edge LQG area law), `qent-page-purities` & `qent-page-bits` (connected 4-qubit $C_4$ graph-state Page curve: $P_2=[1, 1/2, 1/4, 1/2, 1]$, $H_2=[0, 1, 2, 1, 0]$ bits). |
+| **Di Biagio & Rovelli (2021)**, *Stable Facts, Relative Facts*; **Adlam & Rovelli (2023)**, *Information is Physical* | Decoherence produces stability without collapse; coherent Wigner's friend; cross-perspective links; timeless $H\Psi = 0$ | `lqg/rqm.cub` | `rqm-prob-split` (exact classical + interference decomposition over any ring with conjugation), `rqm-decoherence-stable`, `rqm-wigner-coherent`, `rqm-cross-perspective`, `rqm-stable-warrants`, `rqm-clock-solves` (timeless relational spin-clock solving $H\Psi = 0$). |
+
+---
+
+## 3. Continuum-Free Gauge-Invariant Matter & Neutral $\mathrm{H}_2$ Bonding on Spin Networks
+
+Beyond pure quantum gravity and RQM, three modules test whether bound states and chemical bonding emerge directly from discrete spin-network couplings **without ever introducing a continuum space or a Schrödinger differential operator**:
+
+- **`lqg/matter.cub`** proves universal discrete $U(1)$ gauge invariance over an arbitrary abelian group and arbitrary finite oriented graph for whole-edge magnetic loops (`qgm-gauss-loop`) and minimally-coupled open spin-½ Dirac hops dragging their Faraday flux (`qgm-gauss-hop`). It wires $g_E = 3$ directly from `lqg/geometry.cub`'s area gap (`qg-area2`) and $t_D = 2$ directly from `chem/bholonomy.cub`'s spin-½ holonomy hop (`hop-amp`, exact magnitude $2/3$).
+- **`lqg/claims.cub`** certifies 11 spectral brackets on the triangle spin network $K_3$ via `chem/zring.cub`'s proved Sylvester Law of Inertia (`inertia-cert-sound`): magnetic flux spreading lowers static charge-separation energy ($2.95 < 3$), and the full 7×7 Hamiltonian has a unique negative-energy bound ground state $E_0(\text{full}) \in (-1/3, -1/4)$ with relational binding $E_0(\text{full}) - E_0(\text{diss}) < -13/4 < 0$ and spectral gap $> 17/4$.
+- **`lqg/molecule.cub`** advances to **neutral dihydrogen ($\mathrm{H}_2$: 2 protons + 2 open spin-½ electrons, total charge $0$, zero background charge, zero $\sqrt{2}$)** on the 4-vertex spin-network ring $C_4$ ($g_E=3, g_B=1, t_D=2$, cutoff $B=1$). It proves universal 2-electron discrete $U(1)$ gauge invariance (`qmol-gauss-hop-e1/e2`) and the universal cubical Schur-complement / fraction-free Bareiss positive-definiteness theorem (`qmol-schur-id/psd/strict`, `qmol-variational-sep`), and machine-certifies both:
+  1. **Covalent bonding (spin-singlet, symmetric spatial sector):** $E_0(\text{singlet}, d=1) < -13/5 < E_0(\text{singlet}, d=2)$ via exact 18D integer Rayleigh witness $v^T(5H_{\text{adj}}^S + 13G_{\text{adj}}^S)v = -16 < 0$ (`qmol-h2-singlet-adj-neg`) and exact 19×19 fraction-free Bareiss positive-definiteness up to 114 bits (`qmol-h2-singlet-sep-pd`).
+  2. **Pauli antibonding repulsion (spin-triplet, antisymmetric with exact fermionic crossing sign):** $E_0(\text{triplet}, d=2) < -1 < E_0(\text{triplet}, d=1)$ via exact 13D Rayleigh witness $v^T(H_{\text{sep}}^T + I)v = -1 < 0$ (`qmol-h2-triplet-sep-neg`) and exact 12×12 Bareiss positive-definiteness (`qmol-h2-triplet-adj-pd`), yielding certified Heitler–London singlet–triplet exchange splitting $\Delta E_{\text{S-T}}(d=1) > 8/5 = 1.60$.
+
+---
+
+## 4. Honest Ledger: What Is Proved Universally vs. What Remains Open
+
+**Proved universally (holding for arbitrary finite graphs, rings, semirings, dimensions, or state spaces):**
+- RQM probability split, decoherence $\Rightarrow$ stability without collapse, Wigner's friend coherence, cross-perspective links, warrant transfer (`lqg/rqm.cub`).
+- Rovelli's Postulate 1 ($2^k \le |S|$) and Postulates 1+2 $\Rightarrow$ complementarity/erasure (`lqg/postulates.cub`).
+- Data-Processing Theorem, Zero-Erasure Equivalence (`QiEquiv`), Landauer Bottleneck (`lqg/info.cub`).
+- Classical Bell–CHSH bound $|S_{\text{LHV}}| \le 2$ for all finite LHV mixtures, Tsirelson bound $S^2 \le 8$, relational no-signaling (`lqg/epr.cub`).
+- Connes–Rovelli KMS detailed-balance stationarity, modular 1-cocycle, strict coarse-graining purity growth (`lqg/thermal.cub`).
+- Pure-state bipartite Schmidt purity symmetry $S_2(\rho_A) = S_2(\rho_B)$ in arbitrary dimension $m \times n$, product-state zero entanglement (`lqg/entangle.cub`).
+- Rovelli–Smolin area gap & spin monotonicity (`lqg/geometry.cub`), 2D/3D/4D quantum volume spectral structure (`lqg/volume.cub`), 2-simplex reflection positivity (`lqg/spinfoam2.cub`), Lorentzian $\mathrm{SL}(2,\mathbb{C})$ EPRL Casimir ratio law (`lqg/lorentz.cub`).
+- 1- and 2-electron discrete $U(1)$ gauge invariance on arbitrary finite oriented graphs and the fraction-free Schur-complement / Bareiss positive-definiteness theorem (`lqg/matter.cub`, `lqg/molecule.cub`).
+
+**Certified on finite spins / graphs (not yet asymptotic or macroscopic):**
+- Exact spin-foam amplitudes (1-simplex, 2-simplex, anisotropic Euclidean EPRL), exact quantum volume spectra ($j \in \{1/2, 1, 3/2\}$), discrete 4-qubit Page curve, $K_3$ single-electron bound state ($B=1$), and $C_4$ neutral $\mathrm{H}_2$ covalent bonding & Pauli antibonding ($B=1$).
+
+**Genuinely unworked next:**
+1. **Lorentzian $\mathrm{SL}(2,\mathbb{C})$ EPRL booster integrals** $B_4(j_a, l_a; i, k; \gamma)$ (moving from the Euclidean EPRL vertex + Lorentzian simplicity/geometry checked here to exact or interval-certified Lorentzian 4-simplex transition amplitudes).
+2. **Larger multi-simplex 4D complexes with interior faces** (bulk spin sums and semiclassical Regge-action / graviton asymptotics).
+3. **Scaling continuum-free chemistry:** flux-cutoff convergence $B \ge 2$ on $C_4$, 3D tetrahedral / diamond spin-network cells, and neutral helium / multi-atom reactions — which will scale rapidly once Hyperactivity's C-code emission (`hyperactive-emits-c`) removes the interpreter bottleneck.
+
+---
+
+## 5. Inspecting & Re-checking Directly from `store/`
+
+Every module and definition lives in the content-addressed store under `lqg/`:
+
+```bash
+./hyperactive def lqg/rqm.cub        # module head & imports
+./hyperactive def rqm-decoherence-stable
+./hyperactive def rp-postulate1
+./hyperactive def qi-equiv-zero-erasure
+./hyperactive def qe-tsirelson-bound
+./hyperactive def qt-kms-stationarity
+./hyperactive def qent-schmidt-purity-eq
+./hyperactive def qv-spectrum-three-half
+./hyperactive def sf2-bc-two-off
+./hyperactive def lor-all-spacelike-verdict
+./hyperactive def qmol-h2-singlet-sep-pd
+```

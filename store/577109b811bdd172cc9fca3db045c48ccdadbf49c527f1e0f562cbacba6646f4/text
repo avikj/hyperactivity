@@ -1,0 +1,42 @@
+-- THEOREM 2 (Universal Product-State Zero-Entanglement Theorem):
+-- For ANY factorizable product state psi(i, j) = u(i) * v(j) in ANY dimension m x n:
+--   Tr((psi psi^T)^2) = (||u||^2 * ||v||^2)^2 = (Tr(psi psi^T))^2  =>  exact purity P_2 = 1 (0 bits entanglement)!
+qent-product-pure : (I J A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (u : I → A) → (v : J → A) → (is : List I) → (js : List J) →
+  qent-tr2-A I J A z add mul (λ i j → mul (u i) (v j)) is js ≡
+  mul (qent-tr1-A I J A z add mul (λ i j → mul (u i) (v j)) is js)
+      (qent-tr1-A I J A z add mul (λ i j → mul (u i) (v j)) is js)
+qent-product-pure I J A z add mul sr u v is js =
+  qent-tr A
+    (qent-tr2-A I J A z add mul (λ i j → mul (u i) (v j)) is js)
+    (qent-sum I A z add (λ i → qent-sum I A z add (λ k →
+      mul (mul (mul (u i) (u i)) (mul (u k) (u k)))
+          (mul (qent-norm-sq J A z add mul v js) (qent-norm-sq J A z add mul v js))) is) is)
+    (mul (qent-tr1-A I J A z add mul (λ i j → mul (u i) (v j)) is js)
+         (qent-tr1-A I J A z add mul (λ i j → mul (u i) (v j)) is js))
+    (λ t → qent-sum I A z add (λ i → qent-sum I A z add (λ k →
+      qent-prod-term J A z add mul sr (u i) (u k) v js t) is) is)
+    (qent-tr A
+      (qent-sum I A z add (λ i → qent-sum I A z add (λ k →
+        mul (mul (mul (u i) (u i)) (mul (u k) (u k)))
+            (mul (qent-norm-sq J A z add mul v js) (qent-norm-sq J A z add mul v js))) is) is)
+      (qent-sum I A z add (λ i →
+        mul (qent-sum I A z add (λ k → mul (mul (u i) (u i)) (mul (u k) (u k))) is)
+            (mul (qent-norm-sq J A z add mul v js) (qent-norm-sq J A z add mul v js))) is)
+      (mul (qent-tr1-A I J A z add mul (λ i j → mul (u i) (v j)) is js)
+           (qent-tr1-A I J A z add mul (λ i j → mul (u i) (v j)) is js))
+      (λ t → qent-sum I A z add (λ i →
+        sym (qent-sum-scale-r I A z add mul sr (λ k → mul (mul (u i) (u i)) (mul (u k) (u k)))
+                              (mul (qent-norm-sq J A z add mul v js) (qent-norm-sq J A z add mul v js)) is) t) is)
+      (concat
+        (sym (qent-sum-scale-r I A z add mul sr
+          (λ i → qent-sum I A z add (λ k → mul (mul (u i) (u i)) (mul (u k) (u k))) is)
+          (mul (qent-norm-sq J A z add mul v js) (qent-norm-sq J A z add mul v js)) is))
+        (concat
+          (cong (λ t → mul t (mul (qent-norm-sq J A z add mul v js) (qent-norm-sq J A z add mul v js)))
+                (sym (qent-sum-mul I I A z add mul sr (λ i → mul (u i) (u i)) (λ k → mul (u k) (u k)) is is)))
+          (concat
+            (qent-mul-swap4 A z add mul sr (qent-norm-sq I A z add mul u is) (qent-norm-sq I A z add mul u is)
+                                           (qent-norm-sq J A z add mul v js) (qent-norm-sq J A z add mul v js))
+            (λ t → mul (sym (qent-tr1-prod I J A z add mul sr u v is js) t)
+                       (sym (qent-tr1-prod I J A z add mul sr u v is js) t))))))

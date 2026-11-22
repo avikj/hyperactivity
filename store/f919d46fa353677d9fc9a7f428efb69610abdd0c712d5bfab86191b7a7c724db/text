@@ -1,0 +1,10 @@
+-- For a product state psi(i, j) = u(i) * v(j), Tr(psi psi^T) = ||u||^2 * ||v||^2.
+qent-tr1-prod : (I J A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (u : I → A) → (v : J → A) → (is : List I) → (js : List J) →
+  qent-tr1-A I J A z add mul (λ i j → mul (u i) (v j)) is js ≡
+  mul (qent-norm-sq I A z add mul u is) (qent-norm-sq J A z add mul v js)
+qent-tr1-prod I J A z add mul sr u v is js =
+  concat
+    (λ t → qent-sum I A z add (λ i → qent-sum J A z add (λ j →
+      qent-mul-swap4 A z add mul sr (u i) (v j) (u i) (v j) t) js) is)
+    (sym (qent-sum-mul I J A z add mul sr (λ i → mul (u i) (u i)) (λ j → mul (v j) (v j)) is js))

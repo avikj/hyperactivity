@@ -1,0 +1,12 @@
+-- Finite Fubini theorem: swapping order of two arbitrary finite sums!
+qent-sum-swap : (S T A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (f : S → T → A) → (xs : List S) → (ys : List T) →
+  qent-sum S A z add (λ s → qent-sum T A z add (λ t → f s t) ys) xs ≡
+  qent-sum T A z add (λ t → qent-sum S A z add (λ s → f s t) xs) ys
+qent-sum-swap S T A z add mul sr f xs ys =
+  case xs return λ l → qent-sum S A z add (λ s → qent-sum T A z add (λ t → f s t) ys) l ≡
+                       qent-sum T A z add (λ t → qent-sum S A z add (λ s → f s t) l) ys of
+    nil → sym (qent-sum-zero T A z add mul sr ys)
+    cons x rest → concat
+      (cong (λ u → add (qent-sum T A z add (λ t → f x t) ys) u) (rec rest))
+      (sym (qent-sum-add T A z add mul sr (λ t → f x t) (λ t → qent-sum S A z add (λ s → f s t) rest) ys))

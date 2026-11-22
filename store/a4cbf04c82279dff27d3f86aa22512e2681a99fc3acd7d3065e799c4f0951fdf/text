@@ -1,0 +1,18 @@
+-- Helper: inner product term for product state:
+--   (sum_j (u i * v j) * (u k * v j)) * (sum_l (u k * v l) * (u i * v l)) = ((u i^2) * (u k^2)) * (||v||^2)^2.
+qent-prod-term : (J A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (a b : A) → (v : J → A) → (js : List J) →
+  mul (qent-sum J A z add (λ j → mul (mul a (v j)) (mul b (v j))) js)
+      (qent-sum J A z add (λ l → mul (mul b (v l)) (mul a (v l))) js) ≡
+  mul (mul (mul a a) (mul b b)) (mul (qent-norm-sq J A z add mul v js) (qent-norm-sq J A z add mul v js))
+qent-prod-term J A z add mul sr a b v js =
+  concat
+    (λ t → mul (qent-prod-ov J A z add mul sr a b v js t)
+               (qent-prod-ov J A z add mul sr b a v js t))
+    (concat
+      (qent-mul-swap4 A z add mul sr (mul a b) (qent-norm-sq J A z add mul v js)
+                                     (mul b a) (qent-norm-sq J A z add mul v js))
+      (cong (λ t → mul t (mul (qent-norm-sq J A z add mul v js) (qent-norm-sq J A z add mul v js)))
+        (concat
+          (cong (λ t → mul (mul a b) t) (qent-mul-comm A z add mul sr b a))
+          (qent-mul-swap4 A z add mul sr a b a b))))

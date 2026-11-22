@@ -1,0 +1,10 @@
+-- Product of two finite sums: (sum_s f s) * (sum_t g t) = sum_s sum_t (f s * g t).
+qent-sum-mul : (S T A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (f : S → A) → (g : T → A) → (xs : List S) → (ys : List T) →
+  mul (qent-sum S A z add f xs) (qent-sum T A z add g ys) ≡
+  qent-sum S A z add (λ s → qent-sum T A z add (λ t → mul (f s) (g t)) ys) xs
+qent-sum-mul S T A z add mul sr f g xs ys =
+  concat (qent-sum-scale-r S A z add mul sr f (qent-sum T A z add g ys) xs)
+         (qent-sum-cong S A z add (λ s → mul (f s) (qent-sum T A z add g ys))
+                                  (λ s → qent-sum T A z add (λ t → mul (f s) (g t)) ys)
+                                  (λ s → qent-sum-scale-l T A z add mul sr (f s) g ys) xs)
