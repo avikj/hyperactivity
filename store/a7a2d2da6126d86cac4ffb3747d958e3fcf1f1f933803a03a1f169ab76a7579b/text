@@ -1,0 +1,16 @@
+-- Expand K(x, y)^2 = sum_a sum_b (psi_a(x) * psi_b(x)) * (phi_a(y) * phi_b(y)).
+sfc-K-sq : (B X Y A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (psi : B → X → A) → (phi : B → Y → A) → (bs : List B) → (x : X) → (y : Y) →
+  mul (sfc-K B X Y A z add mul psi phi bs x y) (sfc-K B X Y A z add mul psi phi bs x y) ≡
+  qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+    mul (mul (psi a x) (psi b x)) (mul (phi a y) (phi b y))) bs) bs
+sfc-K-sq B X Y A z add mul sr psi phi bs x y =
+  qent-tr A
+    (mul (sfc-K B X Y A z add mul psi phi bs x y) (sfc-K B X Y A z add mul psi phi bs x y))
+    (qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+      mul (mul (psi a x) (phi a y)) (mul (psi b x) (phi b y))) bs) bs)
+    (qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+      mul (mul (psi a x) (psi b x)) (mul (phi a y) (phi b y))) bs) bs)
+    (qent-sum-mul B B A z add mul sr (λ a → mul (psi a x) (phi a y)) (λ b → mul (psi b x) (phi b y)) bs bs)
+    (λ t → qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+      qent-mul-swap4 A z add mul sr (psi a x) (phi a y) (psi b x) (phi b y) t) bs) bs)

@@ -1,0 +1,11 @@
+sc-rump-rows : BZ → Nat → List (List BZ) → List (List BZ) → List (List BZ) → List (List BZ) → Bool
+sc-rump-rows s2 i curM allM curL allL = case curM of
+  nil → (case curL of nil → true; cons l lr → false)
+  cons rowM mrest → case curL of
+    nil → false
+    cons rowL lrest → case sc-rump-cols s2 i zero rowM allM rowL allL of
+      inl u → false
+      inr res →
+        if both (qmol-bz-pos (fst res)) (sc-bin-lt (snd res) (snd (fst res)))
+        then sc-rump-rows s2 (suc i) mrest allM lrest allL
+        else false

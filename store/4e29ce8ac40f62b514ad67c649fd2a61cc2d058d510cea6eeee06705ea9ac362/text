@@ -1,0 +1,11 @@
+sc-z2-row-m : (W A : Type) → (z : A) → (addW : W → W → W) → (negW : W → W) →
+  (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (B : W → W → A) → ScBilin W A addW negW add neg B →
+  (tau : W → W) → ((x : W) → B (tau x) (tau x) ≡ B x x) →
+  (x : W) → add (B (sc-xm W addW negW tau x) (sc-xp W addW tau x)) (B (sc-xm W addW negW tau x) (sc-xm W addW negW tau x)) ≡
+            B (sc-xm W addW negW tau x) (sc-xm W addW negW tau x)
+sc-z2-row-m W A z addW negW add mul neg r B bil tau hinv x =
+  concat (cong (λ t → add t (B (sc-xm W addW negW tau x) (sc-xm W addW negW tau x)))
+               (concat (fst bil (sc-xm W addW negW tau x) (sc-xp W addW tau x))
+                       (sc-z2-ortho W A z addW negW add mul neg r B bil tau hinv x)))
+         (fst r (B (sc-xm W addW negW tau x) (sc-xm W addW negW tau x)))

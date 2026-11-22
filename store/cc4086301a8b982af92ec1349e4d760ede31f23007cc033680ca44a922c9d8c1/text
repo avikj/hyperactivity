@@ -1,0 +1,8 @@
+sc-build-ts-adj : List QmolState → List QmolState → List (Nat × Bool)
+sc-build-ts-adj cur all = case cur of
+  nil → nil
+  cons s rest →
+    (λ u1 u2 →
+      cons (sc-find-idx (sc-canon-pair u1 u2 , sc-adj-neg4 (snd s)) zero all , leb (suc u1) u2)
+           (sc-build-ts-adj rest all))
+    (sc-vmap-adj (fst (fst s))) (sc-vmap-adj (snd (fst s)))

@@ -1,0 +1,27 @@
+-- THEOREM 2B (Universal Univalent Z_2 Quadratic Block-Diagonalization Identity):
+sc-z2-quad-split : (W A : Type) → (zW : W) → (z : A) → (addW : W → W → W) → (negW : W → W) →
+  QgmAb W zW addW negW →
+  (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (B : W → W → A) → ScBilin W A addW negW add neg B →
+  (tau : W → W) → ((x : W) → B (tau x) (tau x) ≡ B x x) →
+  (x : W) → B (addW x x) (addW x x) ≡ add (B (sc-xp W addW tau x) (sc-xp W addW tau x))
+                                          (B (sc-xm W addW negW tau x) (sc-xm W addW negW tau x))
+sc-z2-quad-split W A zW z addW negW ab add mul neg r B bil tau hinv x =
+  qgm-tr A
+    (B (addW x x) (addW x x))
+    (add (B (sc-xp W addW tau x) (addW (sc-xp W addW tau x) (sc-xm W addW negW tau x)))
+         (B (sc-xm W addW negW tau x) (addW (sc-xp W addW tau x) (sc-xm W addW negW tau x))))
+    (add (B (sc-xp W addW tau x) (sc-xp W addW tau x)) (B (sc-xm W addW negW tau x) (sc-xm W addW negW tau x)))
+    (concat
+      (λ i → B (sym (sc-z2-sum W zW addW negW ab tau x) i) (sym (sc-z2-sum W zW addW negW ab tau x) i))
+      (fst (snd bil) (sc-xp W addW tau x) (sc-xm W addW negW tau x) (addW (sc-xp W addW tau x) (sc-xm W addW negW tau x))))
+    (qgm-tr A
+      (add (B (sc-xp W addW tau x) (addW (sc-xp W addW tau x) (sc-xm W addW negW tau x)))
+           (B (sc-xm W addW negW tau x) (addW (sc-xp W addW tau x) (sc-xm W addW negW tau x))))
+      (add (add (B (sc-xp W addW tau x) (sc-xp W addW tau x)) (B (sc-xp W addW tau x) (sc-xm W addW negW tau x)))
+           (add (B (sc-xm W addW negW tau x) (sc-xp W addW tau x)) (B (sc-xm W addW negW tau x) (sc-xm W addW negW tau x))))
+      (add (B (sc-xp W addW tau x) (sc-xp W addW tau x)) (B (sc-xm W addW negW tau x) (sc-xm W addW negW tau x)))
+      (λ i → add (fst (snd (snd bil)) (sc-xp W addW tau x) (sc-xp W addW tau x) (sc-xm W addW negW tau x) i)
+                 (fst (snd (snd bil)) (sc-xm W addW negW tau x) (sc-xp W addW tau x) (sc-xm W addW negW tau x) i))
+      (λ i → add (sc-z2-row-p W A z addW negW add mul neg r B bil tau hinv x i)
+                 (sc-z2-row-m W A z addW negW add mul neg r B bil tau hinv x i)))

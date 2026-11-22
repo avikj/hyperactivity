@@ -1,0 +1,24 @@
+sc-hop-coeff : Bool → QmolState → QmolState → BZ
+sc-hop-coeff trip a b =
+  if trip
+  then qmol-bz-sub
+    (sc-one-hop (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+    (sc-one-hop (fst (fst a)) (snd (fst a)) (snd a) (snd (fst b)) (fst (fst b)) (snd b))
+  else
+    (if eqb (fst (fst a)) (snd (fst a))
+     then (if eqb (fst (fst b)) (snd (fst b))
+           then sc-one-hop (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b)
+           else bz-add
+             (sc-one-hop (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+             (sc-one-hop (fst (fst a)) (snd (fst a)) (snd a) (snd (fst b)) (fst (fst b)) (snd b)))
+     else (if eqb (fst (fst b)) (snd (fst b))
+           then bz-add
+             (sc-one-hop (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+             (sc-one-hop (snd (fst a)) (fst (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+           else bz-add
+             (bz-add
+               (sc-one-hop (fst (fst a)) (snd (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+               (sc-one-hop (fst (fst a)) (snd (fst a)) (snd a) (snd (fst b)) (fst (fst b)) (snd b)))
+             (bz-add
+               (sc-one-hop (snd (fst a)) (fst (fst a)) (snd a) (fst (fst b)) (snd (fst b)) (snd b))
+               (sc-one-hop (snd (fst a)) (fst (fst a)) (snd a) (snd (fst b)) (fst (fst b)) (snd b)))))

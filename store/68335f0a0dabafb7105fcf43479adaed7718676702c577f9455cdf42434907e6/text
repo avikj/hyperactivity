@@ -1,0 +1,16 @@
+-- THEOREM 2C (Universal Z_2 Positive-Definiteness Reduction):
+sc-z2-psd : (W A : Type) → (zW : W) → (z : A) → (addW : W → W → W) → (negW : W → W) →
+  QgmAb W zW addW negW →
+  (add mul : A → A → A) → (neg : A → A) → (Pos Nonneg : A → Type) →
+  ScRing A z add mul neg → ScOrd A z add mul Pos Nonneg →
+  (B : W → W → A) → ScBilin W A addW negW add neg B →
+  (tau : W → W) → ((x : W) → B (tau x) (tau x) ≡ B x x) →
+  ((x : W) → Nonneg (B (sc-xp W addW tau x) (sc-xp W addW tau x))) →
+  ((x : W) → Nonneg (B (sc-xm W addW negW tau x) (sc-xm W addW negW tau x))) →
+  (x : W) → Nonneg (B (addW x x) (addW x x))
+sc-z2-psd W A zW z addW negW ab add mul neg Pos Nonneg r ord B bil tau hinv hp hm x =
+  transport (λ i → Nonneg (sym (sc-z2-quad-split W A zW z addW negW ab add mul neg r B bil tau hinv x) i))
+    (fst (snd (snd (snd ord)))
+      (B (sc-xp W addW tau x) (sc-xp W addW tau x))
+      (B (sc-xm W addW negW tau x) (sc-xm W addW negW tau x))
+      (hp x) (hm x))

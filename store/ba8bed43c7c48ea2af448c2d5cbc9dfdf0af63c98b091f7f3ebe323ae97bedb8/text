@@ -1,0 +1,24 @@
+-- THEOREM 1B (Universal Ogston / Diastereotopic Chiral Energy Splitting Cancellation):
+-- Over any commutative ring, (B(tau x, tau x) + V(tau x)) - (B(x, x) + V(x)) = V(tau x) - V(x):
+-- the intrinsic achiral Hamiltonian B cancels identically, leaving pure receptor chirality!
+tc-chiral-diff : (W A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) →
+  QgmAb A z add neg →
+  (B : W → W → A) → (V : W → A) → (tau : W → W) →
+  ((x : W) → B (tau x) (tau x) ≡ B x x) →
+  (x : W) →
+  add (add (B (tau x) (tau x)) (V (tau x))) (neg (add (B x x) (V x))) ≡
+  add (V (tau x)) (neg (V x))
+tc-chiral-diff W A z add mul neg ab B V tau hB x =
+  qgm-tr A
+    (add (add (B (tau x) (tau x)) (V (tau x))) (neg (add (B x x) (V x))))
+    (add (add (B x x) (V (tau x))) (add (neg (B x x)) (neg (V x))))
+    (add (V (tau x)) (neg (V x)))
+    (λ i → add (add (hB x i) (V (tau x))) (qgm-neghom A z add neg ab (B x x) (V x) i))
+    (concat
+      (qgm-swap4 A z add neg ab (B x x) (V (tau x)) (neg (B x x)) (neg (V x)))
+      (qgm-tr A
+        (add (add (B x x) (neg (B x x))) (add (V (tau x)) (neg (V x))))
+        (add z (add (V (tau x)) (neg (V x))))
+        (add (V (tau x)) (neg (V x)))
+        (cong (λ t → add t (add (V (tau x)) (neg (V x)))) (qgm-inv A z add neg ab (B x x)))
+        (qgm-zl A z add neg ab (add (V (tau x)) (neg (V x))))))

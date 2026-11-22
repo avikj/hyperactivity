@@ -1,0 +1,12 @@
+-- THEOREM 1A (Elementary Positive Off-Diagonal Gershgorin SOS Pair):
+sc-gersh-pos-pair : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (w u v : A) →
+  add (add (mul w (mul u u)) (mul w (mul v v))) (add (mul w (mul u v)) (mul w (mul v u))) ≡
+  mul w (mul (add u v) (add u v))
+sc-gersh-pos-pair A z add mul neg r w u v =
+  concat
+    (λ i → add (sym (fst (snd (snd (snd (snd (snd (snd (snd r))))))) w (mul u u) (mul v v)) i)
+               (sym (fst (snd (snd (snd (snd (snd (snd (snd r))))))) w (mul u v) (mul v u)) i))
+    (concat
+      (sym (fst (snd (snd (snd (snd (snd (snd (snd r))))))) w (add (mul u u) (mul v v)) (add (mul u v) (mul v u))))
+      (cong (λ t → mul w t) (sc-foil A z add mul neg r u v)))

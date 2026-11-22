@@ -1,0 +1,31 @@
+-- THEOREM 1 (Universal Holographic Bulk-Factorization & Gram-Channel Reduction):
+-- sum_{x in xs} sum_{y in ys} K(x, y)^2 = sum_{a in bs} sum_{b in bs} G^X(a, b) * G^Y(a, b)!
+sfc-gram-tr1 : (B X Y A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (psi : B → X → A) → (phi : B → Y → A) → (xs : List X) → (ys : List Y) → (bs : List B) →
+  qent-sum X A z add (λ x → qent-sum Y A z add (λ y →
+    mul (sfc-K B X Y A z add mul psi phi bs x y) (sfc-K B X Y A z add mul psi phi bs x y)) ys) xs ≡
+  qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+    mul (sfc-gram B X A z add mul psi xs a b) (sfc-gram B Y A z add mul phi ys a b)) bs) bs
+sfc-gram-tr1 B X Y A z add mul sr psi phi xs ys bs =
+  qent-tr A
+    (qent-sum X A z add (λ x → qent-sum Y A z add (λ y →
+      mul (sfc-K B X Y A z add mul psi phi bs x y) (sfc-K B X Y A z add mul psi phi bs x y)) ys) xs)
+    (qent-sum X A z add (λ x → qent-sum Y A z add (λ y →
+      qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+        mul (mul (psi a x) (psi b x)) (mul (phi a y) (phi b y))) bs) bs) ys) xs)
+    (qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+      mul (sfc-gram B X A z add mul psi xs a b) (sfc-gram B Y A z add mul phi ys a b)) bs) bs)
+    (λ t → qent-sum X A z add (λ x → qent-sum Y A z add (λ y →
+      sfc-K-sq B X Y A z add mul sr psi phi bs x y t) ys) xs)
+    (qent-tr A
+      (qent-sum X A z add (λ x → qent-sum Y A z add (λ y →
+        qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+          mul (mul (psi a x) (psi b x)) (mul (phi a y) (phi b y))) bs) bs) ys) xs)
+      (qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+        qent-sum X A z add (λ x → qent-sum Y A z add (λ y →
+          mul (mul (psi a x) (psi b x)) (mul (phi a y) (phi b y))) ys) xs) bs) bs)
+      (qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+        mul (sfc-gram B X A z add mul psi xs a b) (sfc-gram B Y A z add mul phi ys a b)) bs) bs)
+      (sfc-swap-xy-ab X Y B A z add mul sr (λ x y a b → mul (mul (psi a x) (psi b x)) (mul (phi a y) (phi b y))) xs ys bs)
+      (λ t → qent-sum B A z add (λ a → qent-sum B A z add (λ b →
+        sym (qent-sum-mul X Y A z add mul sr (λ x → mul (psi a x) (psi b x)) (λ y → mul (phi a y) (phi b y)) xs ys) t) bs) bs))

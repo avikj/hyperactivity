@@ -1,0 +1,13 @@
+sfc-para-r : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → SfcRing A z add mul neg →
+  (x y : A) → add (add (mul y x) (mul y y)) (add (mul (neg y) x) (mul (neg y) (neg y))) ≡ add (mul y y) (mul y y)
+sfc-para-r A z add mul neg r x y =
+  concat (sfc-swap4 A z add mul neg r (mul y x) (mul y y) (mul (neg y) x) (mul (neg y) (neg y)))
+    (qent-tr A
+      (add (add (mul y x) (mul (neg y) x)) (add (mul y y) (mul (neg y) (neg y))))
+      (add z (add (mul y y) (mul y y)))
+      (add (mul y y) (mul y y))
+      (λ i → add
+        (concat (cong (λ t → add (mul y x) t) (fst (snd (snd (snd (snd (snd (snd (snd (snd r)))))))) y x))
+                (fst (snd (snd (snd (snd r)))) (mul y x)) i)
+        (cong (λ t → add (mul y y) t) (sfc-neg-sq A z add mul neg r y) i))
+      (fst r (add (mul y y) (mul y y))))

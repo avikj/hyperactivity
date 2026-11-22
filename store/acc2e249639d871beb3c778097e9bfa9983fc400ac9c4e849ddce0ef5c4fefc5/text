@@ -1,0 +1,64 @@
+-- THEOREM 2B (Universal r = 4 Bulk-Channel Capacity Identity — immediate corollary of two r = 2 trees!):
+-- ((x + y) + (u + v))^2 + ((x + y) - (u + v))^2 + 2*(x - y)^2 + 2*(u - v)^2 = 4*(x^2 + y^2 + u^2 + v^2)!
+sfc-cauchy-4 : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → SfcRing A z add mul neg →
+  (x y u v : A) →
+  add (add (mul (add (add x y) (add u v)) (add (add x y) (add u v)))
+           (mul (add (add x y) (neg (add u v))) (add (add x y) (neg (add u v)))))
+      (add (sfc-dup A add (mul (add x (neg y)) (add x (neg y))))
+           (sfc-dup A add (mul (add u (neg v)) (add u (neg v))))) ≡
+  add (sfc-dup A add (sfc-dup A add (add (mul x x) (mul y y))))
+      (sfc-dup A add (sfc-dup A add (add (mul u u) (mul v v))))
+sfc-cauchy-4 A z add mul neg r x y u v =
+  qent-tr A
+    (add (add (mul (add (add x y) (add u v)) (add (add x y) (add u v)))
+              (mul (add (add x y) (neg (add u v))) (add (add x y) (neg (add u v)))))
+         (add (sfc-dup A add (mul (add x (neg y)) (add x (neg y))))
+              (sfc-dup A add (mul (add u (neg v)) (add u (neg v))))))
+    (add (sfc-dup A add (add (mul (add x y) (add x y)) (mul (add u v) (add u v))))
+         (add (sfc-dup A add (mul (add x (neg y)) (add x (neg y))))
+              (sfc-dup A add (mul (add u (neg v)) (add u (neg v))))))
+    (add (sfc-dup A add (sfc-dup A add (add (mul x x) (mul y y))))
+         (sfc-dup A add (sfc-dup A add (add (mul u u) (mul v v)))))
+    (cong (λ t → add t (add (sfc-dup A add (mul (add x (neg y)) (add x (neg y))))
+                            (sfc-dup A add (mul (add u (neg v)) (add u (neg v))))))
+          (sfc-cauchy-2 A z add mul neg r (add x y) (add u v)))
+    (qent-tr A
+      (add (sfc-dup A add (add (mul (add x y) (add x y)) (mul (add u v) (add u v))))
+           (add (sfc-dup A add (mul (add x (neg y)) (add x (neg y))))
+                (sfc-dup A add (mul (add u (neg v)) (add u (neg v))))))
+      (add (sfc-dup A add (add (mul (add x y) (add x y)) (mul (add x (neg y)) (add x (neg y)))))
+           (sfc-dup A add (add (mul (add u v) (add u v)) (mul (add u (neg v)) (add u (neg v))))))
+      (add (sfc-dup A add (sfc-dup A add (add (mul x x) (mul y y))))
+           (sfc-dup A add (sfc-dup A add (add (mul u u) (mul v v)))))
+      (qent-tr A
+        (add (sfc-dup A add (add (mul (add x y) (add x y)) (mul (add u v) (add u v))))
+             (add (sfc-dup A add (mul (add x (neg y)) (add x (neg y))))
+                  (sfc-dup A add (mul (add u (neg v)) (add u (neg v))))))
+        (add (add (sfc-dup A add (mul (add x y) (add x y))) (sfc-dup A add (mul (add u v) (add u v))))
+             (add (sfc-dup A add (mul (add x (neg y)) (add x (neg y))))
+                  (sfc-dup A add (mul (add u (neg v)) (add u (neg v))))))
+        (add (sfc-dup A add (add (mul (add x y) (add x y)) (mul (add x (neg y)) (add x (neg y)))))
+             (sfc-dup A add (add (mul (add u v) (add u v)) (mul (add u (neg v)) (add u (neg v))))))
+        (cong (λ t → add t (add (sfc-dup A add (mul (add x (neg y)) (add x (neg y))))
+                                (sfc-dup A add (mul (add u (neg v)) (add u (neg v))))))
+              (sfc-swap4 A z add mul neg r (mul (add x y) (add x y)) (mul (add u v) (add u v))
+                                           (mul (add x y) (add x y)) (mul (add u v) (add u v))))
+        (qent-tr A
+          (add (add (sfc-dup A add (mul (add x y) (add x y))) (sfc-dup A add (mul (add u v) (add u v))))
+               (add (sfc-dup A add (mul (add x (neg y)) (add x (neg y))))
+                    (sfc-dup A add (mul (add u (neg v)) (add u (neg v))))))
+          (add (add (sfc-dup A add (mul (add x y) (add x y))) (sfc-dup A add (mul (add x (neg y)) (add x (neg y)))))
+               (add (sfc-dup A add (mul (add u v) (add u v))) (sfc-dup A add (mul (add u (neg v)) (add u (neg v))))))
+          (add (sfc-dup A add (add (mul (add x y) (add x y)) (mul (add x (neg y)) (add x (neg y)))))
+               (sfc-dup A add (add (mul (add u v) (add u v)) (mul (add u (neg v)) (add u (neg v))))))
+          (sfc-swap4 A z add mul neg r
+            (sfc-dup A add (mul (add x y) (add x y))) (sfc-dup A add (mul (add u v) (add u v)))
+            (sfc-dup A add (mul (add x (neg y)) (add x (neg y)))) (sfc-dup A add (mul (add u (neg v)) (add u (neg v)))))
+          (λ i → add
+            (sfc-swap4 A z add mul neg r (mul (add x y) (add x y)) (mul (add x y) (add x y))
+                                         (mul (add x (neg y)) (add x (neg y))) (mul (add x (neg y)) (add x (neg y))) i)
+            (sfc-swap4 A z add mul neg r (mul (add u v) (add u v)) (mul (add u v) (add u v))
+                                         (mul (add u (neg v)) (add u (neg v))) (mul (add u (neg v)) (add u (neg v))) i))))
+      (λ i → add
+        (sfc-dup A add (sfc-cauchy-2 A z add mul neg r x y i))
+        (sfc-dup A add (sfc-cauchy-2 A z add mul neg r u v i))))

@@ -1,0 +1,24 @@
+-- THEOREM 2A (Universal r = 2 Bulk-Tetrahedron Capacity Identity):
+-- (x + y)^2 + (x - y)^2 = (x^2 + y^2) + (x^2 + y^2)  =>  2*(x^2 + y^2) >= (x + y)^2 (Purity P_2 >= 1/2)!
+sfc-cauchy-2 : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → SfcRing A z add mul neg →
+  (x y : A) →
+  add (mul (add x y) (add x y)) (mul (add x (neg y)) (add x (neg y))) ≡
+  add (add (mul x x) (mul y y)) (add (mul x x) (mul y y))
+sfc-cauchy-2 A z add mul neg r x y =
+  qent-tr A
+    (add (mul (add x y) (add x y)) (mul (add x (neg y)) (add x (neg y))))
+    (add (add (add (mul x x) (mul x y)) (add (mul y x) (mul y y)))
+         (add (add (mul x x) (mul x (neg y))) (add (mul (neg y) x) (mul (neg y) (neg y)))))
+    (add (add (mul x x) (mul y y)) (add (mul x x) (mul y y)))
+    (λ i → add (sfc-foil A z add mul neg r x y i) (sfc-foil A z add mul neg r x (neg y) i))
+    (qent-tr A
+      (add (add (add (mul x x) (mul x y)) (add (mul y x) (mul y y)))
+           (add (add (mul x x) (mul x (neg y))) (add (mul (neg y) x) (mul (neg y) (neg y)))))
+      (add (add (mul x x) (mul x x)) (add (mul y y) (mul y y)))
+      (add (add (mul x x) (mul y y)) (add (mul x x) (mul y y)))
+      (concat
+        (sfc-swap4 A z add mul neg r
+          (add (mul x x) (mul x y)) (add (mul y x) (mul y y))
+          (add (mul x x) (mul x (neg y))) (add (mul (neg y) x) (mul (neg y) (neg y))))
+        (λ i → add (sfc-para-l A z add mul neg r x y i) (sfc-para-r A z add mul neg r x y i)))
+      (sfc-swap4 A z add mul neg r (mul x x) (mul x x) (mul y y) (mul y y)))

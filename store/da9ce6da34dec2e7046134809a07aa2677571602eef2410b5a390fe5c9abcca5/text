@@ -1,0 +1,10 @@
+-- Shifted matrix element <a | q * (H_K4 + V_site) + p * I | b> in BZ (g_E = 3, g_B = 1, 4 faces -> +8g_B, t_D = 2).
+tc-k4-entry : Bool → (Nat → BZ) → BZ → BZ → QgmState → QgmState → BZ
+tc-k4-entry has-hop vpot qsh psh a b =
+  if both (eqb (fst a) (fst b)) (qgm-vec-eq (snd a) (snd b))
+  then bz-add (bz-mul qsh (bz-add (bz-add (bz-mul qgm-gE-spin-half (qgm-flux-sq (snd a))) (sc-p (bin-pow2 3)))
+                                  (vpot (fst a))))
+              psh
+  else bz-mul qsh
+    (bz-add (if tc-is-k4-plaq a b then bz-neg bz-one else bz-zero)
+            (if both has-hop (tc-is-k4-hop a b) then bz-neg qgm-tD-spin-half else bz-zero))

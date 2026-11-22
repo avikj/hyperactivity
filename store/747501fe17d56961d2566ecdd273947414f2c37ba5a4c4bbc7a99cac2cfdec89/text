@@ -1,0 +1,17 @@
+-- Strictly linear Rump row check using Sum Unit (BZ x List Bool) to avoid call-by-name duplication!
+sc-rump-cols : BZ → Nat → Nat → List BZ → List (List BZ) → List BZ → List (List BZ) → Sum Unit (BZ × List Bool)
+sc-rump-cols s2 i j rowM allM rowL curLs = case rowM of
+  nil → (case curLs of nil → inr (bz-zero , nil); cons l lr → inl unit)
+  cons mij mrest → case curLs of
+    nil → inl unit
+    cons lj lrest →
+      if qgm-bz-eq mij (sc-nth-bz (sc-nth-row allM j) i)
+      then (case sc-rump-cols s2 i (suc j) mrest allM rowL lrest of
+              inl u → inl unit
+              inr acc →
+                (λ eij →
+                  if eqb i j
+                  then inr (eij , snd acc)
+                  else inr (fst acc , bin-add (sc-bz-abs eij) (snd acc)))
+                (qmol-bz-sub (bz-mul s2 mij) (qmol-dot rowL lj)))
+      else inl unit

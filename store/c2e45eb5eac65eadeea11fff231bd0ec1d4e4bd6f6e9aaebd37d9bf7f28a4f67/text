@@ -1,0 +1,7 @@
+-- Helper: (-w)*(x*y) = w*(x*(-y)) and (-w)*(y*x) = w*((-y)*x).
+sc-neg-pull1 : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (w u v : A) → mul (neg w) (mul u v) ≡ mul w (mul u (neg v))
+sc-neg-pull1 A z add mul neg r w u v =
+  concat (fst (snd (snd (snd (snd (snd (snd (snd (snd (snd r))))))))) w (mul u v))
+    (concat (sym (fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd r)))))))))) w (mul u v)))
+            (cong (λ t → mul w t) (sym (fst (snd (snd (snd (snd (snd (snd (snd (snd (snd (snd r)))))))))) u v))))

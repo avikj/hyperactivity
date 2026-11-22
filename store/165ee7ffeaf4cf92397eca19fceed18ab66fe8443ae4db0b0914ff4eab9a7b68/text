@@ -1,0 +1,8 @@
+-- Strict CPS spine evaluators turning call-by-name thunks into concrete constructor literals in O(|bits|):
+sfc-force-bin : (C : Type) → List Bool → (List Bool → C) → C
+sfc-force-bin C xs k = case xs of
+  nil → k nil
+  cons b rest →
+    case b of
+      false → sfc-force-bin C rest (λ r → k (cons false r))
+      true  → sfc-force-bin C rest (λ r → k (cons true r))

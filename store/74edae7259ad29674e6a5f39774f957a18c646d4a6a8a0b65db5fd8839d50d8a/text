@@ -1,0 +1,11 @@
+-- THEOREM 1B (Elementary Negative Off-Diagonal Gershgorin SOS Pair):
+sc-gersh-neg-pair : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (w u v : A) →
+  add (add (mul w (mul u u)) (mul w (mul v v))) (add (mul (neg w) (mul u v)) (mul (neg w) (mul v u))) ≡
+  mul w (mul (add u (neg v)) (add u (neg v)))
+sc-gersh-neg-pair A z add mul neg r w u v =
+  concat
+    (λ i → add
+      (add (mul w (mul u u)) (mul w (sym (sc-neg-sq A z add mul neg r v) i)))
+      (add (sc-neg-pull1 A z add mul neg r w u v i) (sc-neg-pull2 A z add mul neg r w u v i)))
+    (sc-gersh-pos-pair A z add mul neg r w u (neg v))

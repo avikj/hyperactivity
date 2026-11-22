@@ -1,0 +1,13 @@
+sc-shift-entry : Bool → BZ → BZ → QmolState → QmolState → BZ
+sc-shift-entry trip qshift pshift a b =
+  bz-add
+    (bz-mul qshift
+      (if both (both (eqb (fst (fst a)) (fst (fst b))) (eqb (snd (fst a)) (snd (fst b)))) (qgm-vec-eq (snd a) (snd b))
+       then bz-mul (qmol-gram-diag trip a)
+                   (bz-add (bz-mul qgm-gE-spin-half (qgm-flux-sq (snd a))) (sc-p bin-two))
+       else bz-add
+         (if qmol-is-c4-loop a b then bz-neg (qmol-gram-diag trip a) else bz-zero)
+         (bz-mul (bz-neg qgm-tD-spin-half) (sc-hop-coeff trip a b))))
+    (if both (both (eqb (fst (fst a)) (fst (fst b))) (eqb (snd (fst a)) (snd (fst b)))) (qgm-vec-eq (snd a) (snd b))
+     then bz-mul pshift (qmol-gram-diag trip a)
+     else bz-zero)

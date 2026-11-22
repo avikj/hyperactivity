@@ -1,0 +1,11 @@
+-- Single-pass binary comparison & unsigned 3x3 matrix algebra for exact purity and equality verification:
+sfc-bin-cmp : List Bool → List Bool → Nat
+sfc-bin-cmp a b = case a of
+  nil → if bin-zero b then 1 else 0
+  cons ba ar → case b of
+    nil → if both (not ba) (bin-zero ar) then 1 else 2
+    cons bb br → case sfc-bin-cmp ar br of
+      zero → zero
+      suc n → case n of
+        zero → if bit-eq ba bb then 1 else (if bb then 0 else 2)
+        suc _ → 2

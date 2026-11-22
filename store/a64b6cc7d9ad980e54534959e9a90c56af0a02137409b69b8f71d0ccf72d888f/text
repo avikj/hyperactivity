@@ -1,0 +1,14 @@
+-- THEOREM 1C (Universal Non-Negativity of Any Weighted Sum of Squares):
+sc-sos-nonneg : (W A : Type) → (z : A) → (add mul : A → A → A) → (Pos Nonneg : A → Type) →
+  ScOrd A z add mul Pos Nonneg →
+  (terms : List (A × (W → A))) → sc-wsos-ok W A Nonneg terms →
+  (u : W) → Nonneg (sc-wsos W A z add mul terms u)
+sc-sos-nonneg W A z add mul Pos Nonneg ord terms =
+  case terms return λ l → sc-wsos-ok W A Nonneg l → (u : W) → Nonneg (sc-wsos W A z add mul l u) of
+    nil → λ ok u → fst ord
+    cons p rest → λ ok u →
+      fst (snd (snd (snd ord)))
+        (mul (fst p) (mul (snd p u) (snd p u)))
+        (sc-wsos W A z add mul rest u)
+        (fst (snd (snd ord)) (fst p) (mul (snd p u) (snd p u)) (fst ok) (fst (snd ord) (snd p u)))
+        (rec rest (snd ok) u)

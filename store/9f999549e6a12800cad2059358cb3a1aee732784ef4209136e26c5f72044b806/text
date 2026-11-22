@@ -1,0 +1,36 @@
+-- THEOREM 2A (Universal Z_2 Even-Odd Orthogonality in ALL Characteristics):
+sc-z2-ortho : (W A : Type) → (z : A) → (addW : W → W → W) → (negW : W → W) →
+  (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (B : W → W → A) → ScBilin W A addW negW add neg B →
+  (tau : W → W) → ((x : W) → B (tau x) (tau x) ≡ B x x) →
+  (x : W) → B (sc-xp W addW tau x) (sc-xm W addW negW tau x) ≡ z
+sc-z2-ortho W A z addW negW add mul neg r B bil tau hinv x =
+  qgm-tr A
+    (B (sc-xp W addW tau x) (sc-xm W addW negW tau x))
+    (add (add (B x x) (B x (negW (tau x)))) (add (B (tau x) x) (B (tau x) (negW (tau x)))))
+    z
+    (concat
+      (fst (snd bil) x (tau x) (sc-xm W addW negW tau x))
+      (λ i → add (fst (snd (snd bil)) x x (negW (tau x)) i)
+                 (fst (snd (snd bil)) (tau x) x (negW (tau x)) i)))
+    (qgm-tr A
+      (add (add (B x x) (B x (negW (tau x)))) (add (B (tau x) x) (B (tau x) (negW (tau x)))))
+      (add (add (B x x) (neg (B x (tau x)))) (add (B x (tau x)) (neg (B (tau x) (tau x)))))
+      z
+      (λ i → add (add (B x x) (snd (snd (snd bil)) x (tau x) i))
+                 (add (fst bil (tau x) x i) (snd (snd (snd bil)) (tau x) (tau x) i)))
+      (concat
+        (cong (λ t → add (add (B x x) (neg (B x (tau x)))) (add (B x (tau x)) (neg t))) (hinv x))
+        (concat
+          (cong (λ t → add (add (B x x) (neg (B x (tau x)))) t)
+                (fst (snd (snd (snd r))) (B x (tau x)) (neg (B x x))))
+          (concat
+            (sc-swap4 A z add mul neg r (B x x) (neg (B x (tau x))) (neg (B x x)) (B x (tau x)))
+            (qgm-tr A
+              (add (add (B x x) (neg (B x x))) (add (neg (B x (tau x))) (B x (tau x))))
+              (add z z)
+              z
+              (λ i → add (fst (snd (snd (snd (snd r)))) (B x x) i)
+                         (concat (fst (snd (snd (snd r))) (neg (B x (tau x))) (B x (tau x)))
+                                 (fst (snd (snd (snd (snd r)))) (B x (tau x))) i))
+              (fst r z))))))

@@ -1,0 +1,10 @@
+sc-z2-check-cols : Nat → Bool → Nat → List BZ → List (List BZ) → List (Nat × Bool) → Bool
+sc-z2-check-cols ti si j rowi allM ts = case rowi of
+  nil → true
+  cons mij rest →
+    (λ pj →
+      if qgm-bz-eq (sc-nth-bz (sc-nth-row allM ti) (fst pj))
+                   (if bit-eq si (snd pj) then mij else bz-neg mij)
+      then sc-z2-check-cols ti si (suc j) rest allM ts
+      else false)
+    (sc-nth-ts ts j)

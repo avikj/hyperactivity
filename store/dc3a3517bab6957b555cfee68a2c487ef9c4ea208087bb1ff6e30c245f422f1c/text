@@ -1,0 +1,25 @@
+-- Swap (x, y) sums past (a, b) sums for general X, Y, B:
+sfc-swap-xy-ab : (X Y B A : Type) → (z : A) → (add mul : A → A → A) → QentSR A z add mul →
+  (F : X → Y → B → B → A) → (xs : List X) → (ys : List Y) → (bs : List B) →
+  qent-sum X A z add (λ x → qent-sum Y A z add (λ y → qent-sum B A z add (λ a → qent-sum B A z add (λ b → F x y a b) bs) bs) ys) xs ≡
+  qent-sum B A z add (λ a → qent-sum B A z add (λ b → qent-sum X A z add (λ x → qent-sum Y A z add (λ y → F x y a b) ys) xs) bs) bs
+sfc-swap-xy-ab X Y B A z add mul sr F xs ys bs =
+  qent-tr A
+    (qent-sum X A z add (λ x → qent-sum Y A z add (λ y → qent-sum B A z add (λ a → qent-sum B A z add (λ b → F x y a b) bs) bs) ys) xs)
+    (qent-sum X A z add (λ x → qent-sum B A z add (λ a → qent-sum Y A z add (λ y → qent-sum B A z add (λ b → F x y a b) bs) ys) bs) xs)
+    (qent-sum B A z add (λ a → qent-sum B A z add (λ b → qent-sum X A z add (λ x → qent-sum Y A z add (λ y → F x y a b) ys) xs) bs) bs)
+    (λ t → qent-sum X A z add (λ x →
+      qent-sum-swap Y B A z add mul sr (λ y a → qent-sum B A z add (λ b → F x y a b) bs) ys bs t) xs)
+    (qent-tr A
+      (qent-sum X A z add (λ x → qent-sum B A z add (λ a → qent-sum Y A z add (λ y → qent-sum B A z add (λ b → F x y a b) bs) ys) bs) xs)
+      (qent-sum B A z add (λ a → qent-sum X A z add (λ x → qent-sum Y A z add (λ y → qent-sum B A z add (λ b → F x y a b) bs) ys) xs) bs)
+      (qent-sum B A z add (λ a → qent-sum B A z add (λ b → qent-sum X A z add (λ x → qent-sum Y A z add (λ y → F x y a b) ys) xs) bs) bs)
+      (qent-sum-swap X B A z add mul sr (λ x a → qent-sum Y A z add (λ y → qent-sum B A z add (λ b → F x y a b) bs) ys) xs bs)
+      (qent-tr A
+        (qent-sum B A z add (λ a → qent-sum X A z add (λ x → qent-sum Y A z add (λ y → qent-sum B A z add (λ b → F x y a b) bs) ys) xs) bs)
+        (qent-sum B A z add (λ a → qent-sum X A z add (λ x → qent-sum B A z add (λ b → qent-sum Y A z add (λ y → F x y a b) ys) bs) xs) bs)
+        (qent-sum B A z add (λ a → qent-sum B A z add (λ b → qent-sum X A z add (λ x → qent-sum Y A z add (λ y → F x y a b) ys) xs) bs) bs)
+        (λ t → qent-sum B A z add (λ a → qent-sum X A z add (λ x →
+          qent-sum-swap Y B A z add mul sr (λ y b → F x y a b) ys bs t) xs) bs)
+        (λ t → qent-sum B A z add (λ a →
+          qent-sum-swap X B A z add mul sr (λ x b → qent-sum Y A z add (λ y → F x y a b) ys) xs bs t) bs)))

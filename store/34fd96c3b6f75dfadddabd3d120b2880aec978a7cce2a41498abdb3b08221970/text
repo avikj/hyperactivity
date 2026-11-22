@@ -1,0 +1,12 @@
+sc-z2-check-rows : Nat → List (List BZ) → List (List BZ) → List (Nat × Bool) → Bool
+sc-z2-check-rows i curM allM ts = case curM of
+  nil → true
+  cons rowi rest →
+    (λ pi →
+      (λ pti →
+        if both (both (eqb (fst pti) i) (bit-eq (snd pti) (snd pi)))
+                (sc-z2-check-cols (fst pi) (snd pi) zero rowi allM ts)
+        then sc-z2-check-rows (suc i) rest allM ts
+        else false)
+      (sc-nth-ts ts (fst pi)))
+    (sc-nth-ts ts i)

@@ -1,0 +1,10 @@
+sc-foil : (A : Type) → (z : A) → (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (u v : A) → add (add (mul u u) (mul v v)) (add (mul u v) (mul v u)) ≡ mul (add u v) (add u v)
+sc-foil A z add mul neg r u v =
+  concat (sc-swap4 A z add mul neg r (mul u u) (mul v v) (mul u v) (mul v u))
+    (concat
+      (λ i → add (sym (fst (snd (snd (snd (snd (snd (snd (snd r))))))) u u v) i)
+                 (sym (fst (snd (snd (snd (snd (snd (snd (snd r))))))) v v u) i))
+      (concat
+        (cong (λ t → add (mul u (add u v)) (mul v t)) (fst (snd (snd (snd r))) v u))
+        (sym (fst (snd (snd (snd (snd (snd (snd (snd (snd r)))))))) u v (add u v)))))

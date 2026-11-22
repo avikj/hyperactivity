@@ -1,0 +1,16 @@
+-- THEOREM 1D (Universal Zero-Division Rump-Gershgorin Strict Positive-Definiteness Theorem):
+sc-rump-strict : (W A : Type) → (z : A) → (add mul : A → A → A) → (Pos Nonneg : A → Type) →
+  ScOrd A z add mul Pos Nonneg →
+  (s : A) → Pos s →
+  (qM diagSlack : W → A) → (terms : List (A × (W → A))) → sc-wsos-ok W A Nonneg terms →
+  ((u : W) → mul (mul s s) (qM u) ≡ add (sc-wsos W A z add mul terms u) (diagSlack u)) →
+  (u : W) → Pos (diagSlack u) → Pos (qM u)
+sc-rump-strict W A z add mul Pos Nonneg ord s ps qM diagSlack terms hok heq u pslack =
+  snd (snd (snd (snd (snd (snd ord))))) (mul s s) (qM u)
+    (fst (snd (snd (snd (snd (snd ord))))) s s ps ps)
+    (transport (λ i → Pos (sym (heq u) i))
+      (fst (snd (snd (snd (snd ord))))
+        (sc-wsos W A z add mul terms u)
+        (diagSlack u)
+        (sc-sos-nonneg W A z add mul Pos Nonneg ord terms hok u)
+        pslack))

@@ -1,0 +1,11 @@
+-- Memoized integer EPRL fold using the 32-element normalized BZ lookup tree t5 and linear SfcGP accumulation:
+sfc-bc-f5 : SfcT5 → Nat → Nat → Nat → Nat → Nat → Nat → Nat → Nat → BZ → List (Nat × (Nat × BZ)) → SfcGP → SfcGP
+sfc-bc-f5 t5 ip1 im1 ip2 im2 ip3 im3 ip4 im4 wt4 opts5 acc = case opts5 of
+  nil → acc
+  cons o5 r5 →
+    sfc-bc-f5 t5 ip1 im1 ip2 im2 ip3 im3 ip4 im4 wt4 r5
+      (sfc-gp-add acc
+        (sfc-gp-of-bz
+          (sfc-bz-mul-lit (sfc-bz-mul-lit wt4 (snd (snd o5)))
+                          (sfc-bz-mul-lit (sfc-get-t5 t5 ip1 ip2 ip3 ip4 (fst o5))
+                                          (sfc-get-t5 t5 im1 im2 im3 im4 (fst (snd o5)))))))

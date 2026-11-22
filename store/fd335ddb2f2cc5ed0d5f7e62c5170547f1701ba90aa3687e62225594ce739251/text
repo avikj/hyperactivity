@@ -1,0 +1,11 @@
+sfc-zopts-eq : BQ → List (Nat × (Nat × BQ)) → List (Nat × (Nat × BZ)) → Bool
+sfc-zopts-eq sc qopts zopts = case qopts of
+  nil → case zopts of
+    nil → true
+    cons _ _ → false
+  cons qo qrest → case zopts of
+    nil → false
+    cons zo zrest →
+      both (both (eqb (fst qo) (fst zo)) (eqb (fst (snd qo)) (fst (snd zo))))
+           (both (sf-bq-eq (bq-mul sc (snd (snd qo))) (fst (snd (snd zo)) , (snd (snd (snd zo)) , bin-one)))
+                 (sfc-zopts-eq sc qrest zrest))

@@ -1,0 +1,13 @@
+sc-one-hop-edge : Nat → Nat → Nat → Nat → Nat → List BZ → Nat → Nat → List BZ → BZ
+sc-one-hop-edge k u w u1 u2 fa w1 w2 fb =
+  bz-add
+    (bz-add
+      (if both (both (eqb u1 u) (eqb w1 w)) (eqb u2 w2)
+       then (if sc-hop-delta-ok k true fa fb then bz-one else bz-zero) else bz-zero)
+      (if both (both (eqb u2 u) (eqb w2 w)) (eqb u1 w1)
+       then (if sc-hop-delta-ok k true fa fb then bz-one else bz-zero) else bz-zero))
+    (bz-add
+      (if both (both (eqb u1 w) (eqb w1 u)) (eqb u2 w2)
+       then (if sc-hop-delta-ok k false fa fb then bz-one else bz-zero) else bz-zero)
+      (if both (both (eqb u2 w) (eqb w2 u)) (eqb u1 w1)
+       then (if sc-hop-delta-ok k false fa fb then bz-one else bz-zero) else bz-zero))

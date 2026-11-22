@@ -1,0 +1,11 @@
+-- Helper: B(xp, xp) + B(xp, xm) = B(xp, xp) and B(xm, xp) + B(xm, xm) = B(xm, xm).
+sc-z2-row-p : (W A : Type) → (z : A) → (addW : W → W → W) → (negW : W → W) →
+  (add mul : A → A → A) → (neg : A → A) → ScRing A z add mul neg →
+  (B : W → W → A) → ScBilin W A addW negW add neg B →
+  (tau : W → W) → ((x : W) → B (tau x) (tau x) ≡ B x x) →
+  (x : W) → add (B (sc-xp W addW tau x) (sc-xp W addW tau x)) (B (sc-xp W addW tau x) (sc-xm W addW negW tau x)) ≡
+            B (sc-xp W addW tau x) (sc-xp W addW tau x)
+sc-z2-row-p W A z addW negW add mul neg r B bil tau hinv x =
+  concat (cong (λ t → add (B (sc-xp W addW tau x) (sc-xp W addW tau x)) t)
+               (sc-z2-ortho W A z addW negW add mul neg r B bil tau hinv x))
+         (fst (snd r) (B (sc-xp W addW tau x) (sc-xp W addW tau x)))
