@@ -1,0 +1,8 @@
+-- Exact matrix element <a | H_E + H_B + H_D | b> in binary integers BZ.
+qgm-H-entry : BZ → BZ → BZ → Bool → QgmState → QgmState → BZ
+qgm-H-entry gE gB tD has-hop a b =
+  if both (eqb (fst a) (fst b)) (qgm-vec-eq (snd a) (snd b))
+  then bz-add (bz-mul gE (qgm-flux-sq (snd a))) (bz-mul (bz-of bin-two) gB)
+  else bz-add
+    (if qgm-is-loop-nbr a b then bz-neg gB else bz-zero)
+    (if both has-hop (qgm-is-hop-nbr a b) then bz-neg tD else bz-zero)

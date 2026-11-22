@@ -1,0 +1,22 @@
+-- THEOREM 1 (Rovelli's Postulate 1 — Exact Bound on Relevant Information):
+-- Any k mutually independent yes/no questions on a finite system xs require 2^k <= |xs|.
+rp-postulate1 : (S : Type) → (k : Nat) → (qs : rp-Qs S k) → (xs : List S) →
+  rp-Indep S k qs xs → le (rp-pow2 k) (rp-len S xs)
+rp-postulate1 S k = case k return λ n → (qs : rp-Qs S n) → (xs : List S) → rp-Indep S n qs xs → le (rp-pow2 n) (rp-len S xs) of
+  zero → λ qs xs ind → rp-in-nonempty S (fst (ind unit)) xs (fst (snd (ind unit)))
+  suc m → λ qs xs ind →
+    transport (λ i → le (rp-pow2 (suc m)) (rp-split-len S (fst qs) xs i))
+      (rp-le-add (rp-pow2 m) (rp-len S (rp-filt-t S (fst qs) xs))
+                 (rp-pow2 m) (rp-len S (rp-filt-f S (fst qs) xs))
+        (rec m (snd qs) (rp-filt-t S (fst qs) xs)
+          (λ bs → (fst (ind (true , bs)) ,
+            (rp-in-filt-t S (fst qs) (fst (ind (true , bs))) xs
+              (fst (snd (ind (true , bs))))
+              (λ i → fst (snd (snd (ind (true , bs))) i)) ,
+             λ i → snd (snd (snd (ind (true , bs))) i)))))
+        (rec m (snd qs) (rp-filt-f S (fst qs) xs)
+          (λ bs → (fst (ind (false , bs)) ,
+            (rp-in-filt-f S (fst qs) (fst (ind (false , bs))) xs
+              (fst (snd (ind (false , bs))))
+              (λ i → fst (snd (snd (ind (false , bs))) i)) ,
+             λ i → snd (snd (snd (ind (false , bs))) i))))))

@@ -1,0 +1,30 @@
+-- THEOREM 1 (Universal Linearity of Discrete Divergence on Arbitrary Finite Graphs):
+qgm-div-linear : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (x : Nat) → (es : List (Nat × Nat)) → (fs gs : List A) →
+  qgm-div A z add neg x es (qgm-vec-add A add fs gs) ≡ add (qgm-div A z add neg x es fs) (qgm-div A z add neg x es gs)
+qgm-div-linear A z add neg ab x es =
+  case es return λ l → (fs gs : List A) → qgm-div A z add neg x l (qgm-vec-add A add fs gs) ≡ add (qgm-div A z add neg x l fs) (qgm-div A z add neg x l gs) of
+    nil → λ fs gs → sym (qgm-zl A z add neg ab z)
+    cons e erest → λ fs gs → qgm-tr A
+      (add (qgm-edge-div A z add neg x (fst e) (snd e) (qgm-hd A z (qgm-vec-add A add fs gs)))
+           (qgm-div A z add neg x erest (qgm-tl A (qgm-vec-add A add fs gs))))
+      (add (qgm-edge-div A z add neg x (fst e) (snd e) (add (qgm-hd A z fs) (qgm-hd A z gs)))
+           (qgm-div A z add neg x erest (qgm-vec-add A add (qgm-tl A fs) (qgm-tl A gs))))
+      (add (add (qgm-edge-div A z add neg x (fst e) (snd e) (qgm-hd A z fs)) (qgm-div A z add neg x erest (qgm-tl A fs)))
+           (add (qgm-edge-div A z add neg x (fst e) (snd e) (qgm-hd A z gs)) (qgm-div A z add neg x erest (qgm-tl A gs))))
+      (λ i → add (qgm-edge-div A z add neg x (fst e) (snd e) (qgm-hd-add A z add neg ab fs gs i))
+                 (qgm-div A z add neg x erest (qgm-tl-add A add fs gs i)))
+      (qgm-tr A
+        (add (qgm-edge-div A z add neg x (fst e) (snd e) (add (qgm-hd A z fs) (qgm-hd A z gs)))
+             (qgm-div A z add neg x erest (qgm-vec-add A add (qgm-tl A fs) (qgm-tl A gs))))
+        (add (add (qgm-edge-div A z add neg x (fst e) (snd e) (qgm-hd A z fs)) (qgm-edge-div A z add neg x (fst e) (snd e) (qgm-hd A z gs)))
+             (add (qgm-div A z add neg x erest (qgm-tl A fs)) (qgm-div A z add neg x erest (qgm-tl A gs))))
+        (add (add (qgm-edge-div A z add neg x (fst e) (snd e) (qgm-hd A z fs)) (qgm-div A z add neg x erest (qgm-tl A fs)))
+             (add (qgm-edge-div A z add neg x (fst e) (snd e) (qgm-hd A z gs)) (qgm-div A z add neg x erest (qgm-tl A gs))))
+        (λ i → add (qgm-edge-div-add A z add neg ab x (fst e) (snd e) (qgm-hd A z fs) (qgm-hd A z gs) i)
+                   (rec erest (qgm-tl A fs) (qgm-tl A gs) i))
+        (qgm-swap4 A z add neg ab
+          (qgm-edge-div A z add neg x (fst e) (snd e) (qgm-hd A z fs))
+          (qgm-edge-div A z add neg x (fst e) (snd e) (qgm-hd A z gs))
+          (qgm-div A z add neg x erest (qgm-tl A fs))
+          (qgm-div A z add neg x erest (qgm-tl A gs))))

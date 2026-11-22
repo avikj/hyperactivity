@@ -1,0 +1,33 @@
+-- THEOREM 3 (Coherent Wigner's Friend):
+-- When no environment distinguishes the branches (ip e1 e2 = 1), rqm-prob equals |sum_i w_i|^2.
+rqm-wigner-coherent : (A E : Type) → (z one : A) → (ad mu : A → A → A) → (cj : A → A) → (ip : E → E → A) →
+  ((x : A) → ad z x ≡ x) → ((x : A) → ad x z ≡ x) →
+  ((x : A) → mu x z ≡ z) → ((x : A) → mu z x ≡ z) → ((x : A) → mu x one ≡ x) →
+  ((c p q : A) → mu c (ad p q) ≡ ad (mu c p) (mu c q)) → ((p q c : A) → mu (ad p q) c ≡ ad (mu p c) (mu q c)) →
+  ((p q r s : A) → ad (ad p q) (ad r s) ≡ ad (ad p r) (ad q s)) →
+  (cj z ≡ z) → ((p q : A) → cj (ad p q) ≡ ad (cj p) (cj q)) →
+  ((e1 e2 : E) → ip e1 e2 ≡ one) →
+  (bs : List (A × E)) → rqm-prob A E z ad mu cj ip bs ≡ mu (cj (rqm-amp-sum A E z ad bs)) (rqm-amp-sum A E z ad bs)
+rqm-wigner-coherent A E z one ad mu cj ip a0l a0r m0r m0l m1r dl dr sw cjz cjad h1 bs = case bs return λ l → rqm-prob A E z ad mu cj ip l ≡ mu (cj (rqm-amp-sum A E z ad l)) (rqm-amp-sum A E z ad l) of
+  nil → sym (rqm-tr A (mu (cj z) z) (mu z z) z (λ j → mu (cjz j) z) (m0r z))
+  cons b rest → rqm-tr3 A
+    (ad (ad (mu (mu (cj (fst b)) (fst b)) (ip (snd b) (snd b))) (ad (rqm-row A E z ad mu cj ip (fst b) (snd b) rest) (rqm-col A E z ad mu cj ip (fst b) (snd b) rest))) (rqm-prob A E z ad mu cj ip rest))
+    (ad (ad (mu (cj (fst b)) (fst b)) (mu (cj (fst b)) (rqm-amp-sum A E z ad rest))) (ad (mu (cj (rqm-amp-sum A E z ad rest)) (fst b)) (mu (cj (rqm-amp-sum A E z ad rest)) (rqm-amp-sum A E z ad rest))))
+    (ad (mu (cj (fst b)) (ad (fst b) (rqm-amp-sum A E z ad rest))) (mu (cj (rqm-amp-sum A E z ad rest)) (ad (fst b) (rqm-amp-sum A E z ad rest))))
+    (mu (cj (ad (fst b) (rqm-amp-sum A E z ad rest))) (ad (fst b) (rqm-amp-sum A E z ad rest)))
+    (rqm-tr A
+      (ad (ad (mu (mu (cj (fst b)) (fst b)) (ip (snd b) (snd b))) (ad (rqm-row A E z ad mu cj ip (fst b) (snd b) rest) (rqm-col A E z ad mu cj ip (fst b) (snd b) rest))) (rqm-prob A E z ad mu cj ip rest))
+      (ad (ad (mu (cj (fst b)) (fst b)) (ad (mu (cj (fst b)) (rqm-amp-sum A E z ad rest)) (mu (cj (rqm-amp-sum A E z ad rest)) (fst b)))) (mu (cj (rqm-amp-sum A E z ad rest)) (rqm-amp-sum A E z ad rest)))
+      (ad (ad (mu (cj (fst b)) (fst b)) (mu (cj (fst b)) (rqm-amp-sum A E z ad rest))) (ad (mu (cj (rqm-amp-sum A E z ad rest)) (fst b)) (mu (cj (rqm-amp-sum A E z ad rest)) (rqm-amp-sum A E z ad rest))))
+      (λ i → ad (ad (rqm-tr A (mu (mu (cj (fst b)) (fst b)) (ip (snd b) (snd b))) (mu (mu (cj (fst b)) (fst b)) one) (mu (cj (fst b)) (fst b)) (λ j → mu (mu (cj (fst b)) (fst b)) (h1 (snd b) (snd b) j)) (m1r (mu (cj (fst b)) (fst b))) i)
+                    (ad (rqm-row-const A E z one ad mu cj ip m0r m1r dl h1 (fst b) (snd b) rest i)
+                        (rqm-col-const A E z one ad mu cj ip m0l m1r dr cjz cjad h1 (fst b) (snd b) rest i)))
+                (rqm-wigner-coherent A E z one ad mu cj ip a0l a0r m0r m0l m1r dl dr sw cjz cjad h1 rest i))
+      (rqm-reassoc4 A z ad a0l a0r sw (mu (cj (fst b)) (fst b)) (mu (cj (fst b)) (rqm-amp-sum A E z ad rest)) (mu (cj (rqm-amp-sum A E z ad rest)) (fst b)) (mu (cj (rqm-amp-sum A E z ad rest)) (rqm-amp-sum A E z ad rest))))
+    (λ i → ad (dl (cj (fst b)) (fst b) (rqm-amp-sum A E z ad rest) (~ i)) (dl (cj (rqm-amp-sum A E z ad rest)) (fst b) (rqm-amp-sum A E z ad rest) (~ i)))
+    (rqm-tr A
+      (ad (mu (cj (fst b)) (ad (fst b) (rqm-amp-sum A E z ad rest))) (mu (cj (rqm-amp-sum A E z ad rest)) (ad (fst b) (rqm-amp-sum A E z ad rest))))
+      (mu (ad (cj (fst b)) (cj (rqm-amp-sum A E z ad rest))) (ad (fst b) (rqm-amp-sum A E z ad rest)))
+      (mu (cj (ad (fst b) (rqm-amp-sum A E z ad rest))) (ad (fst b) (rqm-amp-sum A E z ad rest)))
+      (sym (dr (cj (fst b)) (cj (rqm-amp-sum A E z ad rest)) (ad (fst b) (rqm-amp-sum A E z ad rest))))
+      (λ i → mu (cjad (fst b) (rqm-amp-sum A E z ad rest) (~ i)) (ad (fst b) (rqm-amp-sum A E z ad rest))))

@@ -1,0 +1,13 @@
+-- THEOREM 3 (Exact U(1) Gauge Invariance of the Minimally-Coupled Open Spin-1/2 Dirac Hop):
+-- If (u, fs) satisfies Gauss's law relative to proton at v0 at vertex x, and edge k is (u -> w),
+-- then hopping the electron to w while incrementing edge k's flux by +one satisfies Gauss's law at x.
+qgm-gauss-hop : (A : Type) → (z one : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (x v0 k : Nat) → (es : List (Nat × Nat)) → (fs : List A) →
+  qgm-div A z add neg x es fs ≡ qgm-charge A z one add neg x v0 (fst (qgm-edge-at es k)) →
+  qgm-div A z add neg x es (qgm-vec-add A add fs (qgm-unit-flux A z one k)) ≡
+  qgm-charge A z one add neg x v0 (snd (qgm-edge-at es k))
+qgm-gauss-hop A z one add neg ab x v0 k es fs h = concat
+  (qgm-div-linear A z add neg ab x es fs (qgm-unit-flux A z one k))
+  (concat
+    (λ i → add (h i) (qgm-div-unit A z one add neg ab x es k i))
+    (qgm-charge-step A z one add neg ab x v0 (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k))))

@@ -1,0 +1,8 @@
+-- Timeless relational dynamics (Rovelli 2008, "Forget time"): no external time parameter t.
+-- Partial observables: system bit s in Bool, clock reading k in {0, 1, 2, 3}.
+-- A timeless constraint H : (C -> C -> A) acts on states Psi : C -> A; physical states satisfy (H Psi)(c) = 0
+-- for every configuration c in the finite basis cs.
+rqm-apply-row : (C A : Type) → A → (A → A → A) → (A → A → A) → (C → C → A) → (C → A) → C → List C → A
+rqm-apply-row C A z ad mu H Psi c cs = case cs of
+  nil → z
+  cons c2 rest → ad (mu (H c c2) (Psi c2)) (rqm-apply-row C A z ad mu H Psi c rest)

@@ -1,0 +1,16 @@
+-- Strict inequality a(a+2) + 1 <= (a + d + 1)(a + d + 3) for every a, d : Nat.
+qg-area-mono : (a d : Nat) → le (suc (qg-area2-nat a)) (qg-area2-nat (plus a (suc d)))
+qg-area-mono a d = (plus (plus (plus a a) (plus d 2)) (times d (plus (plus a a) (plus (suc d) 2))) ,
+  concat
+    (plus-suc (plus (plus (plus a a) (plus d 2)) (times d (plus (plus a a) (plus (suc d) 2)))) (times a (plus a 2)))
+    (concat
+      (cong (λ x → plus x (times a (plus a 2)))
+        (concat
+          (cong suc (plus-comm (plus (plus a a) (plus d 2)) (times d (plus (plus a a) (plus (suc d) 2)))))
+          (concat
+            (sym (plus-suc (times d (plus (plus a a) (plus (suc d) 2))) (plus (plus a a) (plus d 2))))
+            (concat
+              (cong (λ y → plus (times d (plus (plus a a) (plus (suc d) 2))) y)
+                (sym (plus-suc (plus a a) (plus d 2))))
+              (plus-comm (times d (plus (plus a a) (plus (suc d) 2))) (plus (plus a a) (plus (suc d) 2)))))))
+      (qg-area-diff-aux a d)))

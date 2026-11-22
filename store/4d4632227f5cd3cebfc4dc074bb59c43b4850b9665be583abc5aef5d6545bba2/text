@@ -1,0 +1,18 @@
+-- Cancellation of the electron's old position u when adding dipole (u -> w):
+--   q(v0, u) + div(u -> w) = q(v0, w) at EVERY vertex x (including u = v0, w = v0, u = w).
+qgm-charge-step : (A : Type) → (z one : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (x v0 u w : Nat) →
+  add (qgm-charge A z one add neg x v0 u) (qgm-edge-div A z add neg x u w one) ≡ qgm-charge A z one add neg x v0 w
+qgm-charge-step A z one add neg ab x v0 u w = concat
+  (concat
+    (cong (λ t → add (qgm-charge A z one add neg x v0 u) t)
+      (qgm-comm A z add neg ab (if eqb x u then one else z) (if eqb x w then neg one else z)))
+    (qgm-swap4 A z add neg ab
+      (if eqb x v0 then one else z) (if eqb x u then neg one else z)
+      (if eqb x w then neg one else z) (if eqb x u then one else z)))
+  (concat
+    (cong (λ t → add (qgm-charge A z one add neg x v0 w) t)
+      (concat
+        (qgm-comm A z add neg ab (if eqb x u then neg one else z) (if eqb x u then one else z))
+        (qgm-edge-div-self A z add neg ab x u one)))
+    (qgm-zr A z add neg ab (qgm-charge A z one add neg x v0 w)))

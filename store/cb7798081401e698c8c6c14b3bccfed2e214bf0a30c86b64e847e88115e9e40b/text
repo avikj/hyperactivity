@@ -1,0 +1,12 @@
+-- THEOREM 1: Exact decomposition of Wigner's probability into classical part plus interference.
+rqm-prob-split : (A E : Type) → (z : A) → (ad mu : A → A → A) → (cj : A → A) → (ip : E → E → A) →
+  ((x : A) → ad x z ≡ x) → ((p q r s : A) → ad (ad p q) (ad r s) ≡ ad (ad p r) (ad q s)) →
+  (bs : List (A × E)) → rqm-prob A E z ad mu cj ip bs ≡ ad (rqm-classical A E z ad mu cj ip bs) (rqm-interf A E z ad mu cj ip bs)
+rqm-prob-split A E z ad mu cj ip a0r sw bs = case bs return λ l → rqm-prob A E z ad mu cj ip l ≡ ad (rqm-classical A E z ad mu cj ip l) (rqm-interf A E z ad mu cj ip l) of
+  nil → sym (a0r z)
+  cons b rest → rqm-tr A
+    (ad (ad (mu (mu (cj (fst b)) (fst b)) (ip (snd b) (snd b))) (ad (rqm-row A E z ad mu cj ip (fst b) (snd b) rest) (rqm-col A E z ad mu cj ip (fst b) (snd b) rest))) (rqm-prob A E z ad mu cj ip rest))
+    (ad (ad (mu (mu (cj (fst b)) (fst b)) (ip (snd b) (snd b))) (ad (rqm-row A E z ad mu cj ip (fst b) (snd b) rest) (rqm-col A E z ad mu cj ip (fst b) (snd b) rest))) (ad (rqm-classical A E z ad mu cj ip rest) (rqm-interf A E z ad mu cj ip rest)))
+    (ad (ad (mu (mu (cj (fst b)) (fst b)) (ip (snd b) (snd b))) (rqm-classical A E z ad mu cj ip rest)) (ad (ad (rqm-row A E z ad mu cj ip (fst b) (snd b) rest) (rqm-col A E z ad mu cj ip (fst b) (snd b) rest)) (rqm-interf A E z ad mu cj ip rest)))
+    (λ i → ad (ad (mu (mu (cj (fst b)) (fst b)) (ip (snd b) (snd b))) (ad (rqm-row A E z ad mu cj ip (fst b) (snd b) rest) (rqm-col A E z ad mu cj ip (fst b) (snd b) rest))) (rqm-prob-split A E z ad mu cj ip a0r sw rest i))
+    (sw (mu (mu (cj (fst b)) (fst b)) (ip (snd b) (snd b))) (ad (rqm-row A E z ad mu cj ip (fst b) (snd b) rest) (rqm-col A E z ad mu cj ip (fst b) (snd b) rest)) (rqm-classical A E z ad mu cj ip rest) (rqm-interf A E z ad mu cj ip rest))

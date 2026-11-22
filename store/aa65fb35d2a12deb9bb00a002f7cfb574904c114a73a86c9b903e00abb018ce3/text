@@ -1,0 +1,6 @@
+-- Total probability that a second observer B measuring both S and A's record finds disagreement.
+rqm-disagree-prob : (X A : Type) → A → (A → A → A) → (A → A → A) → (A → A) → (X → X → Bool) → List ((X × X) × A) → A
+rqm-disagree-prob X A z ad mu cj eqX psi = case psi of
+  nil → z
+  cons p rest → if eqX (fst (fst p)) (snd (fst p)) then rqm-disagree-prob X A z ad mu cj eqX rest
+                else ad (mu (cj (snd p)) (snd p)) (rqm-disagree-prob X A z ad mu cj eqX rest)

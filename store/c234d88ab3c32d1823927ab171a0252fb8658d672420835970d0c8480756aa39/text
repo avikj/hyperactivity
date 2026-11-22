@@ -1,0 +1,16 @@
+-- THEOREM 2 (Decoherence -> Stability of Relative Facts):
+-- When the environment records each branch orthogonally and normalized, Wigner's probability equals
+-- the classical sum sum_i |w_i|^2 with zero interference and no collapse postulate.
+rqm-decoherence-stable : (A E : Type) → (z one : A) → (ad mu : A → A → A) → (cj : A → A) → (ip : E → E → A) →
+  ((x : A) → ad x z ≡ x) → ((x : A) → mu x z ≡ z) → ((x : A) → mu x one ≡ x) →
+  ((p q r s : A) → ad (ad p q) (ad r s) ≡ ad (ad p r) (ad q s)) →
+  (bs : List (A × E)) → RqmOrth A E z ip bs → RqmNorm A E one ip bs →
+  rqm-prob A E z ad mu cj ip bs ≡ rqm-born-sum A E z ad mu cj bs
+rqm-decoherence-stable A E z one ad mu cj ip a0r m0r m1r sw bs horth hnorm = rqm-tr3 A
+  (rqm-prob A E z ad mu cj ip bs)
+  (ad (rqm-classical A E z ad mu cj ip bs) (rqm-interf A E z ad mu cj ip bs))
+  (ad (rqm-born-sum A E z ad mu cj bs) z)
+  (rqm-born-sum A E z ad mu cj bs)
+  (rqm-prob-split A E z ad mu cj ip a0r sw bs)
+  (λ i → ad (rqm-classical-norm A E z one ad mu cj ip m1r bs hnorm i) (rqm-interf-zero A E z ad mu cj ip a0r m0r bs horth i))
+  (a0r (rqm-born-sum A E z ad mu cj bs))

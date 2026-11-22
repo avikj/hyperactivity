@@ -1,0 +1,10 @@
+-- Section (2): Exact 6j orthogonality and Biedenharn-Elliott pentagon identity (2-3 Pachner move) in pure BQ.
+sf-orth-loop : Nat → Nat → Nat → Nat → Nat → Nat → Nat → BQ → BQ
+sf-orth-loop fuel a b c d f k acc = case fuel of
+  zero → acc
+  suc x → sf-orth-loop x a b c d f k
+    (if both (tri-ok a b x) (tri-ok c d x)
+     then bq-add acc
+       (bq-mul (bq-mul (sf-bq-of-nat (suc x)) (bq-mul (sf-delta2 a b x) (sf-delta2 c d x)))
+               (bq-mul (sf-racah-W a b x c d f) (sf-racah-W a b x c d k)))
+     else acc)

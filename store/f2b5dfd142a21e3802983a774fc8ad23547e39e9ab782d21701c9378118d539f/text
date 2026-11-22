@@ -1,0 +1,8 @@
+-- Zero flux has zero divergence at every vertex on every graph.
+qgm-div-nil : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (x : Nat) → (es : List (Nat × Nat)) → qgm-div A z add neg x es nil ≡ z
+qgm-div-nil A z add neg ab x es = case es return λ l → qgm-div A z add neg x l nil ≡ z of
+  nil → refl
+  cons e erest → concat
+    (λ i → add (qgm-edge-div-zero A z add neg ab x (fst e) (snd e) i) (rec erest i))
+    (qgm-zl A z add neg ab z)

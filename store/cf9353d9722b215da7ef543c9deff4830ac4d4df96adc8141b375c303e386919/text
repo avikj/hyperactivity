@@ -1,0 +1,22 @@
+-- THEOREM 4 (Cross-Perspective Link): comparing correlated observer records yields zero disagreement probability.
+rqm-cross-perspective : (X A : Type) → (z : A) → (ad mu : A → A → A) → (cj : A → A) → (eqX : X → X → Bool) →
+  ((x : A) → ad x z ≡ x) → ((x : A) → mu x z ≡ z) →
+  (psi : List ((X × X) × A)) → RqmCorrelated X A z eqX psi → rqm-disagree-prob X A z ad mu cj eqX psi ≡ z
+rqm-cross-perspective X A z ad mu cj eqX a0r m0r psi = case psi return λ l → RqmCorrelated X A z eqX l → rqm-disagree-prob X A z ad mu cj eqX l ≡ z of
+  nil → λ h → refl
+  cons p rest → λ h → rqm-tr A
+    (if eqX (fst (fst p)) (snd (fst p)) then rqm-disagree-prob X A z ad mu cj eqX rest
+     else ad (mu (cj (snd p)) (snd p)) (rqm-disagree-prob X A z ad mu cj eqX rest))
+    (rqm-disagree-prob X A z ad mu cj eqX rest)
+    z
+    (rqm-if-branch A (eqX (fst (fst p)) (snd (fst p))) (rqm-disagree-prob X A z ad mu cj eqX rest)
+      (ad (mu (cj (snd p)) (snd p)) (rqm-disagree-prob X A z ad mu cj eqX rest))
+      (λ hf → rqm-tr3 A
+        (ad (mu (cj (snd p)) (snd p)) (rqm-disagree-prob X A z ad mu cj eqX rest))
+        (ad (mu (cj (snd p)) z) z)
+        (ad z z)
+        (rqm-disagree-prob X A z ad mu cj eqX rest)
+        (λ i → ad (mu (cj (snd p)) (fst h hf i)) (rqm-cross-perspective X A z ad mu cj eqX a0r m0r rest (snd h) i))
+        (λ i → ad (m0r (cj (snd p)) i) z)
+        (rqm-tr A (ad z z) z (rqm-disagree-prob X A z ad mu cj eqX rest) (a0r z) (sym (rqm-cross-perspective X A z ad mu cj eqX a0r m0r rest (snd h))))))
+    (rqm-cross-perspective X A z ad mu cj eqX a0r m0r rest (snd h))

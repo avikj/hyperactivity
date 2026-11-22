@@ -1,0 +1,13 @@
+rqm-col-zero : (A E : Type) → (z : A) → (ad mu : A → A → A) → (cj : A → A) → (ip : E → E → A) →
+  ((x : A) → ad x z ≡ x) → ((x : A) → mu x z ≡ z) →
+  (w : A) → (e : E) → (bs : List (A × E)) → RqmAllOrth A E z ip e bs → rqm-col A E z ad mu cj ip w e bs ≡ z
+rqm-col-zero A E z ad mu cj ip a0r m0r w e bs = case bs return λ l → RqmAllOrth A E z ip e l → rqm-col A E z ad mu cj ip w e l ≡ z of
+  nil → λ h → refl
+  cons b rest → λ h → rqm-tr3 A
+    (ad (mu (mu (cj (fst b)) w) (ip (snd b) e)) (rqm-col A E z ad mu cj ip w e rest))
+    (ad (mu (mu (cj (fst b)) w) z) z)
+    (ad z z)
+    z
+    (λ i → ad (mu (mu (cj (fst b)) w) (snd (fst h) i)) (rqm-col-zero A E z ad mu cj ip a0r m0r w e rest (snd h) i))
+    (λ i → ad (m0r (mu (cj (fst b)) w) i) z)
+    (a0r z)

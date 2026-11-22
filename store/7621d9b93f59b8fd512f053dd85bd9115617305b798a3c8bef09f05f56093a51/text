@@ -1,0 +1,11 @@
+rp-in-filt-t : (S : Type) → (q : S → Bool) → (s : S) → (xs : List S) →
+  rp-In S s xs → q s ≡ true → rp-In S s (rp-filt-t S q xs)
+rp-in-filt-t S q s xs = case xs return λ l → rp-In S s l → q s ≡ true → rp-In S s (rp-filt-t S q l) of
+  nil → λ e _ → Empty-rec e
+  cons y rest → λ ins qs → case ins of
+    inl eq →
+      transport (λ i → rp-In S s (if (concat (cong q (sym eq)) qs) (~ i) then cons y (rp-filt-t S q rest) else rp-filt-t S q rest))
+                (inl eq)
+    inr r → case q y return λ b → rp-In S s (if b then cons y (rp-filt-t S q rest) else rp-filt-t S q rest) of
+      true → inr (rec rest r qs)
+      false → rec rest r qs

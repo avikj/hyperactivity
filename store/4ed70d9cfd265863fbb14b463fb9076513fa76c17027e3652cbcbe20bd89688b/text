@@ -1,0 +1,10 @@
+-- THEOREM 2 (Exact U(1) Gauge Invariance of Whole-Edge Magnetic Loop Operators U_square):
+-- Shifting any flux configuration fs by any closed cycle cs (div_x cs = 0) preserves divergence identically.
+qgm-gauss-loop : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (x : Nat) → (es : List (Nat × Nat)) → (fs cs : List A) →
+  qgm-div A z add neg x es cs ≡ z →
+  qgm-div A z add neg x es (qgm-vec-add A add fs cs) ≡ qgm-div A z add neg x es fs
+qgm-gauss-loop A z add neg ab x es fs cs h = concat
+  (qgm-div-linear A z add neg ab x es fs cs)
+  (concat (cong (λ t → add (qgm-div A z add neg x es fs) t) h)
+          (qgm-zr A z add neg ab (qgm-div A z add neg x es fs)))

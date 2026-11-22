@@ -1,0 +1,15 @@
+rqm-col-const : (A E : Type) → (z one : A) → (ad mu : A → A → A) → (cj : A → A) → (ip : E → E → A) →
+  ((x : A) → mu z x ≡ z) → ((x : A) → mu x one ≡ x) → ((p q c : A) → mu (ad p q) c ≡ ad (mu p c) (mu q c)) →
+  (cj z ≡ z) → ((p q : A) → cj (ad p q) ≡ ad (cj p) (cj q)) →
+  ((e1 e2 : E) → ip e1 e2 ≡ one) →
+  (w : A) → (e : E) → (bs : List (A × E)) → rqm-col A E z ad mu cj ip w e bs ≡ mu (cj (rqm-amp-sum A E z ad bs)) w
+rqm-col-const A E z one ad mu cj ip m0l m1r dr cjz cjad h1 w e bs = case bs return λ l → rqm-col A E z ad mu cj ip w e l ≡ mu (cj (rqm-amp-sum A E z ad l)) w of
+  nil → sym (rqm-tr A (mu (cj z) w) (mu z w) z (λ j → mu (cjz j) w) (m0l w))
+  cons b rest → rqm-tr3 A
+    (ad (mu (mu (cj (fst b)) w) (ip (snd b) e)) (rqm-col A E z ad mu cj ip w e rest))
+    (ad (mu (cj (fst b)) w) (mu (cj (rqm-amp-sum A E z ad rest)) w))
+    (mu (ad (cj (fst b)) (cj (rqm-amp-sum A E z ad rest))) w)
+    (mu (cj (ad (fst b) (rqm-amp-sum A E z ad rest))) w)
+    (λ i → ad (rqm-tr A (mu (mu (cj (fst b)) w) (ip (snd b) e)) (mu (mu (cj (fst b)) w) one) (mu (cj (fst b)) w) (λ j → mu (mu (cj (fst b)) w) (h1 (snd b) e j)) (m1r (mu (cj (fst b)) w)) i) (rqm-col-const A E z one ad mu cj ip m0l m1r dr cjz cjad h1 w e rest i))
+    (sym (dr (cj (fst b)) (cj (rqm-amp-sum A E z ad rest)) w))
+    (λ i → mu (cjad (fst b) (rqm-amp-sum A E z ad rest) (~ i)) w)

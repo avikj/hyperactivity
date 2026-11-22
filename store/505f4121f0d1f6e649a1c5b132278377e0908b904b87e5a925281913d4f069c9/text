@@ -1,0 +1,13 @@
+-- Section (3): coherent Wigner's friend (ip e1 e2 = 1 recovers |sum_i w_i|^2).
+rqm-row-const : (A E : Type) → (z one : A) → (ad mu : A → A → A) → (cj : A → A) → (ip : E → E → A) →
+  ((x : A) → mu x z ≡ z) → ((x : A) → mu x one ≡ x) → ((c p q : A) → mu c (ad p q) ≡ ad (mu c p) (mu c q)) →
+  ((e1 e2 : E) → ip e1 e2 ≡ one) →
+  (w : A) → (e : E) → (bs : List (A × E)) → rqm-row A E z ad mu cj ip w e bs ≡ mu (cj w) (rqm-amp-sum A E z ad bs)
+rqm-row-const A E z one ad mu cj ip m0r m1r dl h1 w e bs = case bs return λ l → rqm-row A E z ad mu cj ip w e l ≡ mu (cj w) (rqm-amp-sum A E z ad l) of
+  nil → sym (m0r (cj w))
+  cons b rest → rqm-tr A
+    (ad (mu (mu (cj w) (fst b)) (ip e (snd b))) (rqm-row A E z ad mu cj ip w e rest))
+    (ad (mu (cj w) (fst b)) (mu (cj w) (rqm-amp-sum A E z ad rest)))
+    (mu (cj w) (ad (fst b) (rqm-amp-sum A E z ad rest)))
+    (λ i → ad (rqm-tr A (mu (mu (cj w) (fst b)) (ip e (snd b))) (mu (mu (cj w) (fst b)) one) (mu (cj w) (fst b)) (λ j → mu (mu (cj w) (fst b)) (h1 e (snd b) j)) (m1r (mu (cj w) (fst b))) i) (rqm-row-const A E z one ad mu cj ip m0r m1r dl h1 w e rest i))
+    (sym (dl (cj w) (fst b) (rqm-amp-sum A E z ad rest)))

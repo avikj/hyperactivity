@@ -1,0 +1,8 @@
+-- Section (1): branch sums and interference decomposition.
+-- A branch carries (amplitude relative to Wigner, environment state).
+-- Given environment inner product ip : E -> E -> A, rqm-row sums cj(w) * w' * ip(e, e') over a tail of branches,
+-- and rqm-col sums the conjugate-direction cross terms cj(w') * w * ip(e', e).
+rqm-row : (A E : Type) → A → (A → A → A) → (A → A → A) → (A → A) → (E → E → A) → A → E → List (A × E) → A
+rqm-row A E z ad mu cj ip w e bs = case bs of
+  nil → z
+  cons b rest → ad (mu (mu (cj w) (fst b)) (ip e (snd b))) (rqm-row A E z ad mu cj ip w e rest)

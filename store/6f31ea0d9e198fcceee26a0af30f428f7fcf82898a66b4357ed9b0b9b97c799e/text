@@ -1,0 +1,7 @@
+qgm-hd-add : (A : Type) → (z : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (fs gs : List A) → qgm-hd A z (qgm-vec-add A add fs gs) ≡ add (qgm-hd A z fs) (qgm-hd A z gs)
+qgm-hd-add A z add neg ab fs = case fs return λ u → (gs : List A) → qgm-hd A z (qgm-vec-add A add u gs) ≡ add (qgm-hd A z u) (qgm-hd A z gs) of
+  nil → λ gs → sym (qgm-zl A z add neg ab (qgm-hd A z gs))
+  cons f frest → λ gs → case gs return λ v → qgm-hd A z (qgm-vec-add A add (cons f frest) v) ≡ add f (qgm-hd A z v) of
+    nil → sym (qgm-zr A z add neg ab f)
+    cons g grest → refl

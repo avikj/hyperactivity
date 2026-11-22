@@ -1,0 +1,6 @@
+rqm-classical-norm : (A E : Type) → (z one : A) → (ad mu : A → A → A) → (cj : A → A) → (ip : E → E → A) →
+  ((x : A) → mu x one ≡ x) →
+  (bs : List (A × E)) → RqmNorm A E one ip bs → rqm-classical A E z ad mu cj ip bs ≡ rqm-born-sum A E z ad mu cj bs
+rqm-classical-norm A E z one ad mu cj ip m1r bs = case bs return λ l → RqmNorm A E one ip l → rqm-classical A E z ad mu cj ip l ≡ rqm-born-sum A E z ad mu cj l of
+  nil → λ h → refl
+  cons b rest → λ h → λ i → ad (rqm-tr A (mu (mu (cj (fst b)) (fst b)) (ip (snd b) (snd b))) (mu (mu (cj (fst b)) (fst b)) one) (mu (cj (fst b)) (fst b)) (λ j → mu (mu (cj (fst b)) (fst b)) (fst h j)) (m1r (mu (cj (fst b)) (fst b))) i) (rqm-classical-norm A E z one ad mu cj ip m1r rest (snd h) i)

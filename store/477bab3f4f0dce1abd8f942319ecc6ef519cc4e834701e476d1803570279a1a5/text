@@ -1,0 +1,8 @@
+-- Check whether state b is reached from state a by one gauge-invariant Dirac hop along edge k=(u->w) (forward or back).
+qgm-hop-on-edge : Nat → Nat → Nat → QgmState → QgmState → Bool
+qgm-hop-on-edge k u w a b =
+  if both (both (eqb (fst a) u) (eqb (fst b) w))
+          (qgm-vec-eq (qgm-vec-add BZ bz-add (snd a) (qgm-unit-flux BZ bz-zero bz-one k)) (snd b))
+  then true
+  else both (both (eqb (fst a) w) (eqb (fst b) u))
+            (qgm-vec-eq (qgm-vec-add BZ bz-add (snd a) (qgm-unit-flux BZ bz-zero (bz-neg bz-one) k)) (snd b))

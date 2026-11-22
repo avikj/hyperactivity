@@ -1,0 +1,8 @@
+sf-eprl-node-im : Nat → Nat → Nat → Nat → Nat → Nat → List (Nat × (Nat × BQ)) → List (Nat × (Nat × BQ))
+sf-eprl-node-im fuel J Jp Jm k ip acc = case fuel of
+  zero → acc
+  suc im → sf-eprl-node-im im J Jp Jm k ip
+    (if both (tri-ok Jm Jm im) (tri-ok ip im k)
+     then ((λ w9 → if bin-zero (fst (snd w9)) then acc else cons (ip , (im , sf-eprl-opt-wt Jp Jm k ip im w9)) acc)
+           (sf-ninej-W Jp Jm J Jp Jm J ip im k))
+     else acc)

@@ -1,0 +1,10 @@
+-- Partition identity: |xs_true| + |xs_false| = |xs| for any yes/no question q : S -> Bool.
+rp-split-len : (S : Type) → (q : S → Bool) → (xs : List S) →
+  plus (rp-len S (rp-filt-t S q xs)) (rp-len S (rp-filt-f S q xs)) ≡ rp-len S xs
+rp-split-len S q xs = case xs return λ l → plus (rp-len S (rp-filt-t S q l)) (rp-len S (rp-filt-f S q l)) ≡ rp-len S l of
+  nil → refl
+  cons x rest → case q x return λ b → plus (rp-len S (if b then cons x (rp-filt-t S q rest) else rp-filt-t S q rest))
+                                           (rp-len S (if b then rp-filt-f S q rest else cons x (rp-filt-f S q rest)))
+                                      ≡ suc (rp-len S rest) of
+    true → cong suc (rec rest)
+    false → concat (plus-suc (rp-len S (rp-filt-t S q rest)) (rp-len S (rp-filt-f S q rest))) (cong suc (rec rest))

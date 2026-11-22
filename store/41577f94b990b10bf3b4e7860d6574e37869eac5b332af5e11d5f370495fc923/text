@@ -1,0 +1,15 @@
+-- Divergence of unit flux on edge k equals the dipole of edge k = (u -> w) unconditionally.
+qgm-div-unit : (A : Type) → (z one : A) → (add : A → A → A) → (neg : A → A) → QgmAb A z add neg →
+  (x : Nat) → (es : List (Nat × Nat)) → (k : Nat) →
+  qgm-div A z add neg x es (qgm-unit-flux A z one k) ≡
+  qgm-edge-div A z add neg x (fst (qgm-edge-at es k)) (snd (qgm-edge-at es k)) one
+qgm-div-unit A z one add neg ab x es =
+  case es return λ l → (k : Nat) → qgm-div A z add neg x l (qgm-unit-flux A z one k) ≡ qgm-edge-div A z add neg x (fst (qgm-edge-at l k)) (snd (qgm-edge-at l k)) one of
+    nil → λ k → sym (qgm-edge-div-self A z add neg ab x zero one)
+    cons e erest → λ k → case k return λ m → qgm-div A z add neg x (cons e erest) (qgm-unit-flux A z one m) ≡ qgm-edge-div A z add neg x (fst (qgm-edge-at (cons e erest) m)) (snd (qgm-edge-at (cons e erest) m)) one of
+      zero → concat
+        (cong (λ t → add (qgm-edge-div A z add neg x (fst e) (snd e) one) t) (qgm-div-nil A z add neg ab x erest))
+        (qgm-zr A z add neg ab (qgm-edge-div A z add neg x (fst e) (snd e) one))
+      suc m → concat
+        (λ i → add (qgm-edge-div-zero A z add neg ab x (fst e) (snd e) i) (rec erest m i))
+        (qgm-zl A z add neg ab (qgm-edge-div A z add neg x (fst (qgm-edge-at erest m)) (snd (qgm-edge-at erest m)) one))

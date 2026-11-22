@@ -1,0 +1,22 @@
+-- THEOREM 2 (Strict monotonicity of the area spectrum): for all a, d : Nat,
+-- (a + d + 1)(a + d + 3) = a(a + 2) + (d + 1)(2a + d + 3) > a(a + 2).
+qg-area-diff-aux : (a d : Nat) → plus (times (suc d) (plus (plus a a) (plus (suc d) 2))) (times a (plus a 2)) ≡ times (plus a (suc d)) (plus (plus a (suc d)) 2)
+qg-area-diff-aux a d = concat
+  (concat
+    (cong (λ x → plus x (times a (plus a 2)))
+      (concat
+        (cong (λ y → times (suc d) y) (concat (plus-assoc a a (plus (suc d) 2)) (cong (λ z → plus a z) (sym (plus-assoc a (suc d) 2)))))
+        (qg-times-distr-r (suc d) a (plus (plus a (suc d)) 2))))
+    (concat
+      (plus-assoc (times (suc d) a) (times (suc d) (plus (plus a (suc d)) 2)) (times a (plus a 2)))
+      (concat
+        (cong (λ x → plus (times (suc d) a) x) (plus-comm (times (suc d) (plus (plus a (suc d)) 2)) (times a (plus a 2))))
+        (concat
+          (sym (plus-assoc (times (suc d) a) (times a (plus a 2)) (times (suc d) (plus (plus a (suc d)) 2))))
+          (cong (λ x → plus x (times (suc d) (plus (plus a (suc d)) 2)))
+            (concat
+              (cong (λ y → plus y (times a (plus a 2))) (times-comm (suc d) a))
+              (concat
+                (sym (qg-times-distr-r a (suc d) (plus a 2)))
+                (cong (λ z → times a z) (concat (plus-comm (suc d) (plus a 2)) (concat (plus-assoc a 2 (suc d)) (concat (cong (λ w → plus a w) (plus-comm 2 (suc d))) (sym (plus-assoc a (suc d) 2)))))))))))))
+  (sym (times-distr a (suc d) (plus (plus a (suc d)) 2)))

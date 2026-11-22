@@ -1,0 +1,13 @@
+-- Helper: (k*(k+4)) + 3 = (k+1)*(k+3), proving the Rovelli-Smolin area gap for EVERY nonzero spin.
+qg-gap-step : (k : Nat) → plus (times k (plus k 4)) 3 ≡ times (suc k) (plus (suc k) 2)
+qg-gap-step k = concat
+  (concat
+    (cong (λ x → plus (times k x) 3) (plus-suc k 3))
+    (concat
+      (cong (λ x → plus x 3) (times-suc k (plus k 3)))
+      (concat
+        (plus-assoc k (times k (plus k 3)) 3)
+        (concat
+          (cong (λ x → plus k x) (plus-comm (times k (plus k 3)) 3))
+          (sym (plus-assoc k 3 (times k (plus k 3))))))))
+  (cong (λ m → times (suc k) m) (plus-suc k 2))

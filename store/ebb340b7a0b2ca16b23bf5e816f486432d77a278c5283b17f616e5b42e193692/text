@@ -1,0 +1,7 @@
+qgm-tl-add : (A : Type) → (add : A → A → A) → (fs gs : List A) →
+  qgm-tl A (qgm-vec-add A add fs gs) ≡ qgm-vec-add A add (qgm-tl A fs) (qgm-tl A gs)
+qgm-tl-add A add fs = case fs return λ u → (gs : List A) → qgm-tl A (qgm-vec-add A add u gs) ≡ qgm-vec-add A add (qgm-tl A u) (qgm-tl A gs) of
+  nil → λ gs → refl
+  cons f frest → λ gs → case gs return λ v → qgm-tl A (qgm-vec-add A add (cons f frest) v) ≡ qgm-vec-add A add frest (qgm-tl A v) of
+    nil → sym (qgm-vec-add-nil-r A add frest)
+    cons g grest → refl

@@ -1,0 +1,8 @@
+-- Enumerate all Gauss-invariant states on K_3 for given vertex list and flux cutoff B.
+qgm-k3-n2 : Bool → Nat → BZ → BZ → List BZ → List QgmState
+qgm-k3-n2 hm v n0 n1 ns = case ns of
+  nil → nil
+  cons n2 rest →
+    (λ st tail → if qgm-k3-gauss-ok hm st then cons st tail else tail)
+      (v , cons n0 (cons n1 (cons n2 nil)))
+      (qgm-k3-n2 hm v n0 n1 rest)
