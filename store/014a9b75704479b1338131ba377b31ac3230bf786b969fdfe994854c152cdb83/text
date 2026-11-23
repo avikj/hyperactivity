@@ -1,0 +1,9 @@
+hy-fetch-packs : List Word → List (List Word) → List (List Word) → Proc W Unit
+hy-fetch-packs place have nil = ret unit
+hy-fetch-packs place have (cons h r) = if orB (h-null h) (h-has h have) then hy-fetch-packs place have r else
+  bind (h-run (cons "/usr/bin/env" (cons "curl" (cons "-fsS" (cons "-o" (cons "build/pack.tgz" (cons (list-append place (list-append "/packs/" h)) nil))))))) (λ c →
+  bind (h-capture (cons "/usr/bin/env" (cons "sha256sum" (cons "build/pack.tgz" nil)))) (λ s →
+  if andB (weq c #0) (h-eq (hy-head (h-split #32 (snd s))) h)
+  then bind (h-run (cons "/usr/bin/env" (cons "tar" (cons "-xzf" (cons "build/pack.tgz" (cons "--skip-old-files" (cons "store" nil))))))) (λ t →
+    bind (hy-pack-known h) (λ u → hy-fetch-packs place have r))
+  else h-fail (list-append "hyperactive take: the place gave no pack of that name, or one that is not what its name says: " h)))

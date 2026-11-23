@@ -1,0 +1,13 @@
+k-kasai : (t : List (List Word)) → (f : List (List Word) → Word) → FinRank t f → (x : List Word) → (s1 : List (List Word)) →
+          MemKey {suffix-ord} (cons x s1) (sufs t) → (p : List (List Word)) → k-Pred t (cons x s1) p → k-HintL t f (lcp p (cons x s1)) s1
+k-kasai t f fin x s1 ms p pr =
+  (case s1 return λ w → MemKey {suffix-ord} (cons x w) (sufs t) → k-Pred t (cons x w) p → MemOrNil t w → k-HintL t f (lcp p (cons x w)) w of
+     nil → λ ms pr mo → unit
+     cons y w →
+       λ ms pr mo →
+         let key = k-key (f (cons y w))
+             lf = k-Lf t f
+         in k-kasai-at t f fin x (cons y w) ms mo p pr (k-last key lf) (k-last-p key lf)
+              (λ z mz nz → k-last-ge key (k-psi f z) lf (msort-fuel-sorted {k-PR} (list-length (list-map (k-psi f) (sufs t))) (list-map (k-psi f) (sufs t)))
+                             (k-mem-in t f z mz) (k-not-path (sym (k-key-psi t f fin (cons y w) z mo mz)) nz)))
+    ms pr (mem-tail t x s1 ms)

@@ -1,0 +1,10 @@
+-- (a class with virtual bases, clayout-v, is not offered: lib/cxx/machine.cub's cx-layout)
+cx-vptr-off : List CDecl → Word → Word → MRes Word
+cx-vptr-off ds fuel id =
+  %welimP (λ x → Word → MRes Word) fuel (λ i → mstop st-fuel)
+    (λ n go i → mr-bind (cx-find-rec ds i) (λ r → case cx-rec-layout r of
+       clayout size align dsize nvsize nvalign vptr → (case vptr of
+         cvp-at o → mok o
+         cvp-none → mr-bind (cx-primary (cx-rec-bases r)) (λ b → mr-map (λ o → wadd (snd b) o) (go (fst b))))
+       clayout-v size align dsize nvsize nvalign vptr vbases → mstop st-unsupported))
+    id

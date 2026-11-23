@@ -1,0 +1,6 @@
+stat-append : List Word → List Word → Proc W Unit
+stat-append path t = with-bytes {Unit} (wadd (fromNat (list-length path)) #1) (λ p → bind (h-poke p path) (λ u →
+  bind (sys-call #2 p #1089 #420 #0 #0 #0) (λ fd →
+  if wlt fd #9223372036854775808
+  then bind (h-put fd t) (λ u2 → bind (sys-call #3 fd #0 #0 #0 #0 #0) (λ u3 → ret {lzero} {W} unit))
+  else ret {lzero} {W} unit)))

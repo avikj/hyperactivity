@@ -1,0 +1,9 @@
+-- one connection answered: the request read, its answer written, the connection closed; /stats/data streams hits.log in O(1) memory; real page views append one atomic hit line after closing the socket (zero added latency)
+s-handle : Bool → List Word → List Word → Sum Unit (List Word) → Word → Proc W Unit
+s-handle pub st m tok c = bind (s-read (toNat #100000) c nil) (λ req →
+  if andB (h-prefix "GET " req) (h-eq (h-before "?" (s-request-path req)) "/stats/data")
+  then bind (stat-stream-data st c) (λ u → bind (sys-call #3 c #0 #0 #0 #0 #0) (λ cl → ret unit))
+  else bind (s-request pub st m tok req) (λ resp →
+    bind (fd-write c resp) (λ w →
+    bind (sys-call #3 c #0 #0 #0 #0 #0) (λ cl →
+    stat-record st req))))

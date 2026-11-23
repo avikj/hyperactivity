@@ -1,0 +1,11 @@
+-- the bytes a constructor call of a kind covers: the complete object, or a base subobject's
+-- data size (its tail padding may hold the derived class's members). A virtual base, and a
+-- class that has one, are not offered
+cx-obj-size : CxU → CType → CConstructKind → MRes Word
+cx-obj-size u t ck = case ck of
+  cck-complete → cx-size u t
+  cck-delegating → cx-size u t
+  cck-non-virtual-base → mr-bind (cx-rec-of t) (λ id → mr-bind (cx-find-rec (cxu-ds u) id) (λ r → case cx-rec-layout r of
+    clayout size align dsize nvsize nvalign vptr → mok dsize
+    clayout-v size align dsize nvsize nvalign vptr vbases → mstop st-unsupported))
+  cck-virtual-base → mstop st-unsupported

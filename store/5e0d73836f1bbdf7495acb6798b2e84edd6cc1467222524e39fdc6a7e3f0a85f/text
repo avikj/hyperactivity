@@ -1,0 +1,8 @@
+mem-tail : (t : List (List Word)) → (x : List Word) → (r : List (List Word)) → MemKey {suffix-ord} (cons x r) (sufs t) → MemOrNil t r
+mem-tail t x r =
+  case t return λ w → MemKey {suffix-ord} (cons x r) (sufs w) → MemOrNil w r of
+    nil → λ m → Empty-rec m
+    cons y q →
+      λ m → mem-split {suffix-ord} {MemOrNil (cons y q) r} (cons x r) (cons y q) (sufs q) m
+              (λ e → subst {_} {_} {List (List Word)} {λ z → MemOrNil (cons y q) z} (λ i → tail-of (e (~ i))) (mon-cons y q q (mon-self q)))
+              (λ m1 → mon-cons y q r (rec q m1))

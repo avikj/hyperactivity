@@ -946,6 +946,10 @@ static Node *pat_norm(Node *p) {
     if (p->list) { Node *r = nlist(p->n); for (int i = 0; i < p->n; i++) r->it[i] = i ? pat_norm(p->it[i]) : p->it[i]; return r; }
     return p;
 }
+static Node *x_copy(Node *t) {
+    if (!t->list) { Node *s = nsym(t->s); s->cmt = t->cmt; return s; }
+    Node *r = nlist(t->n); r->cmt = t->cmt; for (int i = 0; i < t->n; i++) r->it[i] = x_copy(t->it[i]); return r;
+}
 static Node *cc_match(Node **vars, int nv, Row *rows, int nr, const char *fname);
 static Node *cc_match(Node **vars, int nv, Row *rows, int nr, const char *fname) {
     if (!nr) die("the clauses do not cover every case of", fname);
@@ -962,7 +966,11 @@ static Node *cc_match(Node **vars, int nv, Row *rows, int nr, const char *fname)
         }
     }
     if (j < 0) {
-        Node *e = rows[0].rhs; row_reached(&rows[0]);
+        /* the clause's right side, a copy of its own for this case: a catch-all clause is reached in
+         * several cases, and one node placed in all of them was elaborated once, so the implicit
+         * arguments solved in the first case stood in the others (2026-11-22: zq-sym _ _ = refl
+         * refused, refl's point zq-eq a false in the case where b is true) */
+        Node *e = x_copy(rows[0].rhs); row_reached(&rows[0]);
         for (int q = 0; q < nv; q++) if (!pat_wild(rows[0].p[q]) && strcmp(rows[0].p[q]->s, vars[q]->s)) e = x_rename(e, rows[0].p[q]->s, vars[q]->s);
         return e;
     }
@@ -2272,6 +2280,78 @@ static char *mp_apply(const char *base, const char *cur, const char *mine) {
 }
 /* this machine's root: the modules its paths hold, written to the pool under its hash */
 static int root_cmp(const void *a, const void *b) { return strcmp(*(char *const *)a, *(char *const *)b); }
+/* this machine's labels of names, an object of the pool (HASH/names): a line `b NAMEHEX KEY` for each
+ * name bound to a checked definition or type, a line `c NAMEHEX KEY` for each constructor's or
+ * field's name and the type that holds it; in order. With it a machine that has checked nothing
+ * finds a definition from its name (load_key). The object is a tree: its lines are
+ * `n XX HASH`, one for each of the 256 parts the names fall into by the first byte of the hash of a
+ * name, and HASH/names holds that part's lines. A part no label changed in is the same object in
+ * the next root; taking reads one part at a time. Only a name held now is said (bound/ keeps the
+ * key of every name this machine ever checked) */
+static void names_line(SBuf *bk, const char *tag, const char *hx, const char *v) {
+    char h[65]; key_hash(hx, strlen(hx), h); unsigned b = 0; sscanf(h, "%2x", &b);
+    sb_put(&bk[b], tag); sb_put(&bk[b], " "); sb_put(&bk[b], hx); sb_put(&bk[b], " "); sb_put(&bk[b], v); sb_put(&bk[b], "\n");
+}
+static char *names_make(void) {
+    SBuf t = {0}; sb_put(&t, ""); SBuf *bk = calloc(256, sizeof *bk);
+    static const char *kd[] = { "bound", "conof", NULL }; static const char *tag[] = { "b", "c" };
+    for (int q = 0; kd[q]; q++) {
+        char *dp = store_path(kd[q], ""); DIR *d = dp ? opendir(dp) : NULL; free(dp);
+        char **hs = NULL; size_t cap = 0; int n = 0;
+        if (d) { struct dirent *de; while ((de = readdir(d))) if (de->d_name[0] != '.' && !strstr(de->d_name, ".tmp")) { GROW(hs, cap, (size_t)n + 1); hs[n++] = strdup(de->d_name); } closedir(d); }
+        qsort(hs, (size_t)n, sizeof *hs, root_cmp);
+        for (int i = 0; i < n; i++) {
+            char *held = q == 0 ? idx_read("written", hs[i]) : NULL;
+            char *k = q == 0 && !held ? NULL : store_read(kd[q], hs[i]); free(held);
+            if (k && strlen(k) >= 64) { k[64] = 0; names_line(bk, tag[q], hs[i], k); }
+            free(k); free(hs[i]);
+        }
+        free(hs);
+    }
+    /* and of each name held now: a line `t NAMEHEX TEXT`, its text, and `m NAMEHEX PATHHEX`, the module that holds it (none: it is written on its own) */
+    { char *dp = path_in(idx_dir(), "written", ""); DIR *d = opendir(dp); free(dp);
+      char **hs = NULL; size_t cap = 0; int n = 0;
+      if (d) { struct dirent *de; while ((de = readdir(d))) if (de->d_name[0] != '.' && !strstr(de->d_name, ".tmp")) { GROW(hs, cap, (size_t)n + 1); hs[n++] = strdup(de->d_name); } closedir(d); }
+      qsort(hs, (size_t)n, sizeof *hs, root_cmp);
+      for (int i = 0; i < n; i++) {
+          char *mo = idx_read("module-of", hs[i]), *w = idx_read("written", hs[i]);
+          if (w && strlen(w) >= 64) { w[64] = 0; names_line(bk, "t", hs[i], w); }
+          if (mo) { mo[strcspn(mo, "\n")] = 0; SBuf mh = {0}; w_hex(&mh, mo); if (mh.b) names_line(bk, "m", hs[i], mh.b); free(mh.b); }
+          free(mo); free(w); free(hs[i]);
+      }
+      free(hs); }
+    /* and each constructor or field of a type written on its own: `f NAMEHEX KEY` */
+    { char *dp = path_in(idx_dir(), "free-con", ""); DIR *d = opendir(dp); free(dp);
+      char **hs = NULL; size_t cap = 0; int n = 0;
+      if (d) { struct dirent *de; while ((de = readdir(d))) if (de->d_name[0] != '.' && !strstr(de->d_name, ".tmp")) { GROW(hs, cap, (size_t)n + 1); hs[n++] = strdup(de->d_name); } closedir(d); }
+      qsort(hs, (size_t)n, sizeof *hs, root_cmp);
+      for (int i = 0; i < n; i++) { char *k = idx_read("free-con", hs[i]); if (k && strlen(k) >= 64) { k[strcspn(k, "\n")] = 0; for (char *q = k; *q; q++) if (*q == 0x20) *q = 0x2f; names_line(bk, "f", hs[i], k); } free(k); free(hs[i]); }
+      free(hs); }
+    for (int b = 0; b < 256; b++) if (bk[b].b) {
+        char bh[65]; key_hash(bk[b].b, bk[b].n, bh);
+        char *bp = src_path(bh, "names"); struct stat bs; if (stat(bp, &bs) != 0) src_write(bh, "names", bk[b].b); free(bp);
+        sb_fmt(&t, "n %02x %s\n", b, bh); free(bk[b].b);
+    }
+    free(bk);
+    char h[65]; key_hash(t.b, t.n, h);
+    char *p = src_path(h, "names"); struct stat st; if (stat(p, &st) != 0) src_write(h, "names", t.b); free(p);
+    free(t.b);
+    return strdup(h);
+}
+static void names_take(const char *h) {
+    char *t = store_dir() ? src_read(h, "names") : NULL; if (!t) return;
+    for (char *l = t; *l; ) {
+        char *e = strchr(l, '\n'); if (e) *e = 0;
+        char kind = l[0]; char *hx = l[1] == ' ' ? l + 2 : NULL; char *sp = hx ? strchr(hx, ' ') : NULL;
+        if (sp && (kind == 'b' || kind == 'c')) { *sp = 0; store_write(kind == 'b' ? "bound" : "conof", hx, sp + 1, false); }
+        else if (sp && kind == 't') { *sp = 0; idx_write("written", hx, sp + 1); }
+        else if (sp && kind == 'f') { *sp = 0; idx_write("free-con", hx, sp + 1); }
+        else if (sp && kind == 'm') { *sp = 0; char *mp = w_unhex(sp + 1); idx_write("module-of", hx, mp); free(mp); }
+        else if (sp && kind == 'n' && strlen(sp + 1) >= 64) names_take(sp + 1);
+        if (!e) break; l = e + 1;
+    }
+    free(t);
+}
 static char *root_make(void) {
     char *md = path_in(idx_dir(), "modules", ""); DIR *d = opendir(md); free(md);
     char **hs = NULL; size_t cap = 0; int n = 0;
@@ -2284,6 +2364,8 @@ static char *root_make(void) {
         free(hs[i]);
     }
     free(hs);
+    /* and the names: a first line `names HASH`, the object that holds each name's key */
+    if (store_dir()) { char *nh = names_make(); SBuf t2 = {0}; sb_put(&t2, "names "); sb_put(&t2, nh); sb_put(&t2, "\n"); sb_put(&t2, t.b ? t.b : ""); free(t.b); t = t2; free(nh); }
     char h[65]; key_hash(t.b, t.n, h);
     char *p = src_path(h, "root"); struct stat st; if (stat(p, &st) != 0) src_write(h, "root", t.b); free(p);
     free(t.b);
@@ -2292,13 +2374,14 @@ static char *root_make(void) {
 /* a root taken: this machine's paths hold what it says, and the names are pointed from its modules */
 static bool root_take(const char *h) {
     char *t = src_read(h, "root"); if (!t) return false;
-    static const char *dirs[] = { "modules", "names-of", "written", "module-of", NULL };
+    static const char *dirs[] = { "modules", "names-of", "written", "module-of", "free-con", NULL };
     for (int i = 0; dirs[i]; i++) idx_clear_in(idx_dir(), dirs[i]);
-    w_indexing = true;
+    w_indexing = true; char *nmh = NULL;
     for (char *l = t; *l; ) {
         char *e = strchr(l, '\n'); if (e) *e = 0;
         char *sp = strchr(l, ' ');
-        if (sp) {
+        if (sp && !strncmp(l, "names ", 6)) { free(nmh); nmh = strdup(sp + 1); }
+        else if (sp) {
             *sp = 0; char *rel = w_unhex(l); char *text = w_module_text(sp + 1, NULL);
             if (text) {
                 char *ab = malloc(strlen(repo_root) + strlen(rel) + 2); sprintf(ab, "%s/%s", repo_root, rel);
@@ -2310,6 +2393,9 @@ static bool root_take(const char *h) {
         if (!e) break; l = e + 1;
     }
     w_indexing = false;
+    /* the names last: a name declared in more than one module is pointed where the root says, not
+     * where the order the modules were recorded in left it */
+    if (nmh) { names_take(nmh); free(nmh); }
     idx_write("meta", "root", h); free(t);
     return true;
 }
@@ -2327,7 +2413,7 @@ static void index_sync(void) {
     char buf[4096]; size_t n = fread(buf, 1, sizeof buf - 1, f); fclose(f); buf[n] = 0;
     for (char *q = buf; *q; q++) {
         size_t k = 0; while (isxdigit((unsigned char)q[k])) k++;
-        if (k == 64) { char h[65]; memcpy(h, q, 64); h[64] = 0; bool took = idx_lock_fd < 0; idx_lock(); root_take(h); if (took) idx_unlock(); return; }
+        if (k == 64) { char h[65]; memcpy(h, q, 64); h[64] = 0; bool took = idx_lock_fd < 0; idx_lock(); char *h2 = idx_read("meta", "root"); if (!h2) root_take(h); else free(h2); if (took) idx_unlock(); return; }
         if (k) q += k - 1;
     }
 }
@@ -2440,7 +2526,14 @@ static void w_file(const char *text, const char *path) {
                   free(ns); free(ph.b);
               }
               free(mo); free(nh.b); }
-            if (claim) { w_point("written", ps[i].name, h); w_point("module-of", ps[i].name, r1); }
+            if (claim) { w_point("written", ps[i].name, h); w_point("module-of", ps[i].name, r1);
+                /* and the name's key is the one it has in this module (names_bind binds nothing for a
+                 * name another module holds, so reading a module moves no other module's label) */
+                int ck = checked_index(ps[i].name); const char *k = ck >= 0 ? ckey_of(ck) : NULL;
+                if (!k) { int dt = data_lookup(ps[i].name); if (dt >= 0) for (int j = 0; j < nchkdata; j++) if (CHKDATA[j] == dt) k = dkey_of(j); }
+                SBuf bh = {0}; w_hex(&bh, ps[i].name);
+                if (k && k[0] != '?' && store_dir() && bh.b && bh.n <= 250 && bind_rel && !strcmp(bind_rel, r1)) {   /* only while this module is the one being read: a module recorded from a root has checked nothing */ char *cur = store_read("bound", bh.b); if (!cur || strncmp(cur, k, 64)) store_write("bound", bh.b, k, false); free(cur); }
+                free(bh.b); }
             free(r1);
             sb_put(&names, ps[i].name); sb_put(&names, "\n");
         }
@@ -2517,7 +2610,7 @@ static void load_surface(const char *text, const char *path, bool imports_only) 
     const char *s_file = x_file; bool s_typed = x_typed, s_fail = x_fail_next;
     xt = NULL; nxt = capxt = 0; lt = NULL; nlt = caplt = 0; xlater = NULL; nxlater = capxlater = 0;
     x_file = path; x_fail_next = false;
-    bool s_bw = bind_work; { char *r0 = w_rel(path); bind_work = w_held(r0); free(r0); }
+    bool s_bw = bind_work; const char *s_br = bind_rel; char *r0 = w_rel(path); bind_work = w_held(r0); bind_rel = bind_work ? r0 : NULL;
     x_lex(text); x_layout();
     for (int i = 0; i < nlt; i++) if ((i == 0 || lt[i - 1].k == X_VS) && lt[i].k == X_ID && !reserved(lt[i].s) && lt[i].s[0] != '#') {
         GROW(xlater, capxlater, (size_t)nxlater + 1); xlater[nxlater++] = lt[i].s;
@@ -2543,7 +2636,7 @@ static void load_surface(const char *text, const char *path, bool imports_only) 
     if (!imports_only) w_file(text, path);
     xt = s_xt; nxt = s_nxt; capxt = s_capxt; lt = s_lt; nlt = s_nlt; caplt = s_caplt; xp = s_xp;
     xlater = s_later; nxlater = s_nlater; capxlater = s_caplater; x_file = s_file; x_typed = s_typed; x_fail_next = s_fail;
-    bind_work = s_bw;
+    bind_work = s_bw; bind_rel = s_br; free(r0);
 }
 
 /* ---------------- printing the core forms in the surface language ----------------
@@ -3515,7 +3608,7 @@ static Node *cn(Node *c) {
         /* an elimination: each branch binds its fields, a hypothesis per recursive field (written
          * (rec x)), its dimensions */
         bool el = h[1] == 'e';
-        long di = cn_word(c->it[1]); if (di < 0 || di >= nchkdata) return NULL;
+        long di = pub_get(1, (uint64_t)cn_word(c->it[1])); if (di < 0 || di >= nchkdata) return NULL;
         int D = CHKDATA[di];
         Node *P = el ? cn(c->it[2]) : NULL; if (el && !P) return NULL;
         Node *x = cn(c->it[el ? 4 : 3]); if (!x) return NULL;
@@ -3568,7 +3661,7 @@ static Node *cn(Node *c) {
         return r;
     }
     if (!strcmp(h, "cfree")) { Node *v = c->it[1]; return !v->list && !(v->s[0] == 'v' && isdigit((unsigned char)v->s[1])) && strcmp(v->s, "?") ? v : NULL; }
-    if (!strcmp(h, "cglob")) { long k = cn_word(c->it[1]); return k >= 0 && k < nchecked && !CHKHIDE[k] ? nsym(CHECKED[k]) : NULL; }
+    if (!strcmp(h, "cglob")) { long k = pub_get(0, (uint64_t)cn_word(c->it[1])); return k >= 0 && k < nchecked && !CHKHIDE[k] ? nsym(CHECKED[k]) : NULL; }
     if (!strcmp(h, "clam") || !strcmp(h, "cdlam")) { b = cn_bound("q", c->it[1], &x); return b ? sym3("lam", x, b) : NULL; }
     if (!strcmp(h, "cplam")) { b = cn_bound("j", c->it[1], &x); return b ? sym3("plam", x, b) : NULL; }
     if (!strcmp(h, "cforall")) { b = cn_bound("j", c->it[1], &x); return b ? sym3("forall", x, b) : NULL; }
@@ -3577,7 +3670,7 @@ static Node *cn(Node *c) {
     if (!strcmp(h, "clet")) { a = cn(c->it[1]); if (!a) return NULL; b = cn_bound("q", c->it[2], &x); return b ? sym4("let", x, a, b) : NULL; }
     if (!strcmp(h, "cuniv")) { a = cn(c->it[1]); if (!a) return NULL; return is(a, "lzero") ? nsym("U") : sym2("U", a); }
     if (!strcmp(h, "cdata")) {
-        long di = cn_word(c->it[1]); if (di < 0 || di >= nchkdata) return NULL;
+        long di = pub_get(1, (uint64_t)cn_word(c->it[1])); if (di < 0 || di >= nchkdata) return NULL;
         Node *ps[64]; int n = cn_list(c->it[2], ps, 64); if (n < 0) return NULL;
         if (!n) return nsym(DATA[CHKDATA[di]].name);
         Node *r = nlist(n + 1); r->it[0] = nsym(DATA[CHKDATA[di]].name);
@@ -3585,7 +3678,7 @@ static Node *cn(Node *c) {
         return r;
     }
     if (!strcmp(h, "ccon")) {
-        long di = cn_word(c->it[1]), k = cn_word(c->it[2]); if (di < 0 || di >= nchkdata || k < 0 || k >= DATA[CHKDATA[di]].ncons) return NULL;
+        long di = pub_get(1, (uint64_t)cn_word(c->it[1])), k = cn_word(c->it[2]); if (di < 0 || di >= nchkdata || k < 0 || k >= DATA[CHKDATA[di]].ncons) return NULL;
         Node *fs[64], *ds_[16]; int n = cn_list(c->it[3], fs, 64), m = cn_list(c->it[4], ds_, 16); if (n < 0 || m < 0) return NULL;
         const char *cname = CON[DATA[CHKDATA[di]].cons[k]].name;
         if (!n && !m) return nsym(cname);
@@ -3595,7 +3688,7 @@ static Node *cn(Node *c) {
         return r;
     }
     if (!strcmp(h, "cproj")) {
-        long di = cn_word(c->it[1]), k = cn_word(c->it[2]); if (di < 0 || di >= nchkdata || k < 0 || k >= DATA[CHKDATA[di]].nflds) return NULL;
+        long di = pub_get(1, (uint64_t)cn_word(c->it[1])), k = cn_word(c->it[2]); if (di < 0 || di >= nchkdata || k < 0 || k >= DATA[CHKDATA[di]].nflds) return NULL;
         a = cn(c->it[3]); return a ? lst(2, nsym(FLD[DATA[CHKDATA[di]].flds[k]].name), a) : NULL;
     }
     if (!strcmp(h, "ceq0") || !strcmp(h, "ceq1")) { a = cn(c->it[1]); return a ? sym3("=", a, nsym(h[3] == '0' ? "0" : "1")) : NULL; }
@@ -4631,17 +4724,21 @@ static Node *el_declarations(Node *Ts) {
     free(a.b);
     return r;
 }
+static void lk_label(const char *s, bool defs);
 static Node *el(Node *t) {
     Node *ex = syn_expect; syn_expect = NULL;
     bool tickpos = tick_pos || (ex && is_later(ex)); tick_pos = false;
     if (t->list && t->n == 2 && !t->it[0]->list && !strcmp(t->it[0]->s, "declarations") && !e_find("declarations") && global_lookup("declarations") < 0) {
         Node *r = el_declarations(t->it[1]); syn_expect = ex; return el(r);
     }
+    /* a name bound by nothing local that the machine does not hold: taken from the store by this machine's label (lk_label) */
+    if (t->list && t->n > 0 && !t->it[0]->list && !e_find(t->it[0]->s)) lk_label(t->it[0]->s, true);
     if (t->list && t->n > 0 && (t->it[0]->list || !e_head_kw(t->it[0]->s))) { app_expect = ex; return el_app(t, t->it[0], t->it + 1, t->n - 1); }
     if (!t->list) {
         if (!strcmp(t->s, "%hole")) { bool p = false; Node *h = hole_or_sol(t, 0, &p); return p ? sym2("%spine", h) : h; }
         if (!strcmp(t->s, "by-lin") && !e_find(t->s) && global_lookup(t->s) < 0) return by_lin(ex, t);
         if (e_find(t->s)) return t;
+        lk_label(t->s, true);
         if (imask_of(t->s)) { app_expect = ex; return el_app(t, t, NULL, 0); }
         if (!ford_head && con_lookup(t->s) >= 0 && ford_of(t->s)) { app_expect = ex; return el_app(t, t, NULL, 0); }   /* an indexed constructor without fields: its refl */
         return t;
@@ -5277,7 +5374,11 @@ static Node *ccm_t(Node **vars, int nv, Row *rows, int nr) {
         }
     }
     if (j < 0) {
-        Node *e = rows[0].rhs; row_reached(&rows[0]);
+        /* the clause's right side, a copy of its own for this case: a catch-all clause is reached in
+         * several cases, and one node placed in all of them was elaborated once, so the implicit
+         * arguments solved in the first case stood in the others (2026-11-22: zq-sym _ _ = refl
+         * refused, refl's point zq-eq a false in the case where b is true) */
+        Node *e = x_copy(rows[0].rhs); row_reached(&rows[0]);
         for (int q = 0; q < nv; q++) if (!pat_wild(rows[0].p[q]) && strcmp(rows[0].p[q]->s, vars[q]->s)) e = x_rename(e, rows[0].p[q]->s, vars[q]->s);
         return rec_xform(sg_apply(e));
     }
@@ -6382,9 +6483,154 @@ static void el_release(ElMark e) {
 static void no_ctor_name(const char *name) {
     if (name && con_lookup(name) >= 0) die("a definition may not reuse a constructor's name (the constructor would be read instead):", name);
 }
+/* ---- a definition taken from the store by its key (2026-11-22; PLAN.md revision 7.9, §18.4 “F34 —
+ * The store as the codebase: two keys”; Avik: a caller holds what it calls by content). The store
+ * holds every checked definition under the hash of its canonical type and term, what it mentions
+ * inside it by key, and its certificate. load_key takes one into the machine with nothing read
+ * from a module: the keys its forms mention first, then its forms read back (decanon) and given
+ * to the checked form's handler, which finds the certificate and does not run the checker. A data
+ * type is read back from the declaration kept beside its key (ser_decl, at the time it is
+ * checked). What the key does not hold and elaboration of a use needs is kept beside it too: the
+ * implicit-argument mask with the instance bits, and whether the definition computes. A name the
+ * text being checked mentions that the machine does not hold is looked up among this machine's
+ * labels (bound/NAME: its key; conof/NAME: the data type a constructor or field belongs to) and
+ * loaded (lk_label), so a check loads what it mentions and no more. ---- */
+static bool lk_key_loaded(const char *K) {
+    for (int i = nchecked - 1; i >= 0; i--) if (!CHKHIDE[i] && !strcmp(ckey_of(i), K)) return true;
+    return data_of_dkey(K) >= 0;
+}
+static const char *lk_name_of(const char *K) {
+    names_load();
+    for (int i = nnb - 1; i >= 0; i--) if (NB[i].key && !strcmp(NB[i].key, K)) return NB[i].name;
+    return NULL;
+}
+static bool load_key(const char *K, const char *want, int depth);
+static void lk_load_mentioned(const char *t, int depth) {
+    for (const char *p = t; *p; p++) if ((*p == 'G' || *p == 'D' || *p == 'C' || *p == 'F') && (p == t || !isalnum((unsigned char)p[-1]))) {
+        size_t n = 0; while (isxdigit((unsigned char)p[1 + n]) && n < 64) n++;
+        if (n == 64) { char kk[65]; memcpy(kk, p + 1, 64); kk[64] = 0; load_key(kk, NULL, depth + 1); p += 64; }
+    }
+}
+static Node *lk_item(Node *it) {
+    /* (B) or (B T): the type read in the scope before the binder */
+    if (it->n == 2) { Node *T = dc_node(it->it[1]); Node *x = dc_binder(it->it[0]); Node *r = nlist(2); r->it[0] = x; r->it[1] = T; return r; }
+    return dc_binder(it->it[0]);
+}
+static bool load_decl(const char *text) {
+    const char *saved = src; src = text; Node *n = read_node(); src = saved;
+    if (!n || !n->list || n->n < 4 || !is(n->it[0], "decl")) return false;
+    const char *kind = n->it[1]->s, *name = n->it[2]->s; bool codata = !strcmp(kind, "codata");
+    if (data_lookup(name) >= 0 || global_lookup(name) >= 0) return false;
+    /* the constructors' and fields' names, for self's (Cself.i, Fself.i) */
+    lk_self = name; lk_ncons = lk_nflds = 0; free(lk_cons); free(lk_flds); lk_cons = lk_flds = NULL; size_t cc = 0, cf = 0;
+    for (int i = 4; i < n->n; i++) { Node *c = n->it[i]; if (!c->list || c->n < 2) continue;
+        if (is(c->it[0], "c")) { GROW(lk_cons, cc, (size_t)lk_ncons + 1); lk_cons[lk_ncons++] = (char *)c->it[1]->s; }
+        else { GROW(lk_flds, cf, (size_t)lk_nflds + 1); lk_flds[lk_nflds++] = (char *)c->it[1]->s; } }
+    dc_bad = false; ndscope = 0;
+    Node *ps = n->it[3]; int np = ps->n - 1;
+    Node *hd;
+    if (np) { hd = nlist(np + 1); hd->it[0] = nsym(name); for (int k = 0; k < np; k++) hd->it[k + 1] = lk_item(ps->it[k + 1]); } else hd = nsym(name);
+    Node *dd = nlist(n->n - 2); dd->it[0] = nsym(kind); dd->it[1] = hd;
+    for (int i = 4; i < n->n; i++) {
+        Node *c = n->it[i]; Node *cd;
+        if (codata) { cd = nlist(c->n - 1); cd->it[0] = nsym(c->it[1]->s); if (c->n > 2) cd->it[1] = dc_node(c->it[2]);
+            GROW(dscope, capdscope, (size_t)ndscope + 1); dscope[ndscope++] = cd->it[0]->s; dd->it[i - 2] = cd; continue; }
+        int base = ndscope;
+        cd = nlist(c->n - 1); cd->it[0] = nsym(c->it[1]->s);
+        for (int j = 2; j < c->n; j++) {
+            Node *it = c->it[j];
+            if (it->list && it->n >= 1 && is(it->it[0], "dims")) { Node *dl = nlist(it->n); dl->it[0] = nsym("dims");
+                for (int k = 1; k < it->n; k++) { dl->it[k] = nsym(it->it[k]->s); GROW(dscope, capdscope, (size_t)ndscope + 1); dscope[ndscope++] = dl->it[k]->s; }
+                cd->it[j - 1] = dl; }
+            else if (it->list && it->n == 2 && is(it->it[0], "t")) cd->it[j - 1] = dc_node(it->it[1]);
+            else cd->it[j - 1] = lk_item(it);
+        }
+        ndscope = base; dd->it[i - 2] = cd;
+    }
+    lk_self = NULL;
+    if (dc_bad) return false;
+    if (getenv("CUBICAL_LK")) { fprintf(stderr, "[lk] decl %s\n  from %s\n  form ", name, text); print_node(stderr, dd); fputc(10, stderr); }
+    { bool sbw = bind_work, skf = keep_free; bind_work = keep_free = false;   /* taken from the pool: it binds no name anew */
+      toplevel(lst(2, nsym(codata ? "checked-codata" : "checked-data"), dd));
+      bind_work = sbw; keep_free = skf; }
+    return data_lookup(name) >= 0;
+}
+static bool load_key(const char *K, const char *want, int depth) {
+    /* a key the machine holds under another name (two names of one object: identical code is one
+     * key) is still taken when the name asked for holds nothing, so that name is bound to it too */
+    bool named = want && global_lookup(want) < 0 && data_lookup(want) < 0 && con_lookup(want) < 0;
+    if (depth > 100000 || (lk_key_loaded(K) && !named) || !store_dir()) return true;
+    char *decl = kobj_read(K, "decl");
+    if (decl) { lk_load_mentioned(decl, depth); bool ok = lk_key_loaded(K) || load_decl(decl); free(decl); return ok; }
+    /* forms: its type, a newline, its term, as elaborated and written to be read back (x_checked) */
+    char *fm = kobj_read(K, "forms");
+    if (!fm) return false;
+    char *nl = strchr(fm, '\n'); if (!nl) { free(fm); return false; }
+    lk_load_mentioned(fm, depth);
+    if (lk_key_loaded(K) && !named) { free(fm); return true; }
+    *nl = 0;
+    Node *T = decanon(fm), *t = decanon(nl + 1);
+    if (!T || !t) { if (getenv("CUBICAL_LK")) fprintf(stderr, "[lk] key %s: its forms are not read back (%s)\n", K, !T ? "type" : "term"); free(fm); return false; }
+    free(fm);
+    const char *nm = want ? want : lk_name_of(K); char gen[80];
+    if (!nm || global_lookup(nm) >= 0 || data_lookup(nm) >= 0 || con_lookup(nm) >= 0) { snprintf(gen, sizeof gen, "%%k%.24s", K); nm = intern(gen); }
+    char *mk = kobj_read(K, "mask");
+    if (mk) { unsigned long long m = 0, b = 0; int len = 0; if (sscanf(mk, "%llx %d %llx", &m, &len, &b) >= 2 && m) { imask_set(nm, m, len); int i = nix_get(&IMIX, nm); if (i >= 0) IM[i].inst = b; } free(mk); }
+    char *cp = kobj_read(K, "computing");
+    if (cp) { GROW(COMPUTING, capcomputing, (size_t)ncomputing + 1); COMPUTING[ncomputing++] = strdup(nm); free(cp); }
+    bool sbw = bind_work, skf = keep_free; bind_work = keep_free = false;   /* taken from the store: it binds no name anew */
+    if (getenv("CUBICAL_LK")) { fprintf(stderr, "[lk] def %s key %s\n  T ", nm, K); print_node(stderr, T); fputc(10, stderr); }
+    toplevel(lst(4, nsym("checked"), nsym(nm), T, t));
+    bind_work = sbw; keep_free = skf;
+    int ck = checked_index(nm);
+    return ck >= 0;
+}
+/* a name the machine does not hold, looked up among this machine's labels and loaded */
+static bool lk_busy;
+/* defs: a definition's or a type's name too (asked where the elaborator has found the name bound by
+ * nothing local, el); without it only a constructor's or field's name (asked of every symbol of a
+ * declaration before it is elaborated, lk_scan: a pattern names constructors, and no variable can
+ * be named as a constructor is) */
+static void lk_label(const char *s, bool defs) {
+    /* only in a text that is not a module of the work (a probe, one declaration being checked): a module declares its names in order, and one taken early would be declared again */
+    if (getenv("CUBICAL_LK") && (!strncmp(s, "nk-", 3) || !strncmp(s, "zq-", 3))) fprintf(stderr, "[lk] ask %s defs=%d work=%d busy=%d salt=%d known=%d\n", s, defs, bind_work, lk_busy, chk_salt[0] != 0, global_lookup(s) >= 0 || data_lookup(s) >= 0 || con_lookup(s) >= 0);
+    if (lk_busy || !store_dir() || !chk_salt[0] || s[0] == '%' || s[0] == '#' || s[0] == '@') return;
+    if (global_lookup(s) >= 0 || data_lookup(s) >= 0 || con_lookup(s) >= 0 || fld_lookup(s) >= 0) return;
+    for (int i = 0; i < nxlater; i++) if (!strcmp(xlater[i], s)) return;   /* declared later in the file being read */
+    /* in a module of the work only a name no module holds is taken (a definition written on its own,
+     * or a constructor or field of a type written on its own, free-con/NAME): what a module holds is
+     * declared by the module that holds it. A name asked and not found is remembered, so the
+     * symbols of a module's declarations are not each a read of the labels */
+    static unsigned long lk_no[4096]; unsigned long hs = 1469598103934665603UL; for (const unsigned char *c = (const unsigned char *)s; *c; c++) hs = (hs ^ *c) * 1099511628211UL;
+    hs = hs * 2 + (defs ? 1 : 0) + 2;
+    if (bind_work && lk_no[hs % 4096] == hs) return;
+    SBuf hx = {0}; w_hex(&hx, s); if (!hx.b || hx.n > 250) { free(hx.b); return; }
+    char *k = NULL; const char *want = s;
+    if (bind_work) {
+        char *w = defs ? idx_read("written", hx.b) : NULL, *mo = w ? idx_read("module-of", hx.b) : NULL;
+        if (w && !mo) k = store_read("bound", hx.b);
+        free(w); free(mo);
+        if (!k || strlen(k) < 64) { free(k); k = idx_read("free-con", hx.b); want = NULL;
+            /* `KEY TYPENAMEHEX`: only while the type is still held, and by no module */
+            if (k && strlen(k) > 65) { char *tw = idx_read("written", k + 65), *tm = tw ? idx_read("module-of", k + 65) : NULL; if (!tw || tm) { free(k); k = NULL; } free(tw); free(tm); } }
+        if (!k || strlen(k) < 64) lk_no[hs % 4096] = hs;
+    } else {
+        k = defs ? store_read("bound", hx.b) : NULL;
+        if (!k || strlen(k) < 64) { free(k); k = store_read("conof", hx.b); want = NULL; }
+    }
+    free(hx.b);
+    if (k && strlen(k) >= 64) { k[64] = 0; lk_busy = true; load_key(k, want, 0); lk_busy = false; }
+    free(k);
+}
+static void lk_scan(Node *t) {
+    if (!t) return;
+    if (!t->list) { lk_label(t->s, false); return; }
+    for (int i = 0; i < t->n; i++) lk_scan(t->it[i]);
+}
 static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint64_t mask, int mlen) {
     no_ctor_name(name);
     neh = neg = 0; nbk = 0;
+    lk_scan(sig); lk_scan(body);   /* what it mentions that the machine does not hold: taken by key (load_key) */
     /* its own calls (a copattern definition's) take implicit arguments as later uses do */
     if (name && mask) imask_set(name, mask, mlen);
     if (name && mask) imask_inst(name, sig);
@@ -6502,6 +6748,26 @@ static void x_checked(const char *name, Node *sig, Node *body, bool expect, uint
     bool kept = x_collecting;   /* a collected form is read later: its type and term stay */
     if (name) x_top(lst(4, nsym(expect ? "checked" : "checked-fail"), nsym(name), T, t));
     else x_top(lst(3, nsym(expect ? "check" : "check-fail"), T, t));
+    /* beside its key, what the key does not hold and a use's elaboration needs: the implicit mask
+     * with the instance bits, and whether it computes (read by load_key) */
+    if (name && expect && store_dir() && (bind_work || keep_free)) {
+        int ck = checked_index(name); const char *k = ck >= 0 ? ckey_of(ck) : "?";
+        if (k[0] != '?') {
+            IMask *im = imask_of(name);
+            if (im) { char l[96]; snprintf(l, sizeof l, "%llx %d %llx\n", (unsigned long long)im->m, im->len, (unsigned long long)im->inst);
+                kobj_write(k, "mask", l); }
+            if (is_computing(name)) { char *c = NULL; kobj_write(k, "computing", "1\n"); free(c); }
+            /* its type and term as elaborated, in the form that is read back (as the elaboration's
+             * own record is): what load_key gives the checked form's handler */
+            { char *have = kobj_read(k, "forms");
+              if (!have && !has_hole(T) && !has_hole(t)) {
+                  SBuf a = { 0 }, b = { 0 }; int sd = cur_deps.n; kfresh_on = kser_on = true; nkfresh = 0; canon(&a, T); canon(&b, t); kfresh_on = kser_on = false; cur_deps.n = sd;
+                  if (a.b && b.b) { SBuf w = { 0 }; sb_put(&w, a.b); sb_put(&w, "\n"); sb_put(&w, b.b); kobj_write(k, "forms", w.b); free(w.b); }
+                  free(a.b); free(b.b);
+              }
+              free(have); }
+        }
+    }
     /* the copies are the checked form's, which keeps none of them once handled (its tables take
      * their own copies, perm_copy): freed (CUBICAL_NOELFREE keeps them, to compare) */
     { static int keepc = -1; if (keepc < 0) keepc = getenv("CUBICAL_NOELFREE") != NULL;

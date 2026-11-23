@@ -1,0 +1,13 @@
+k-last-ge : {o : Ord} → (k z : El o) → (l : List (El o)) → Sorted l → MemKey z l → isTrue (not (leq k z)) → k-Ge z (k-last k l)
+k-last-ge k z l =
+  case l return λ w → Sorted w → MemKey z w → isTrue (not (leq k z)) → k-Ge z (k-last k w) of
+    nil → λ s m n → Empty-rec m
+    cons x r →
+      λ s m n →
+        ifP {λ bb → k-Ge z (if bb then inl unit else k-comb x (k-last k r))} {leq k x}
+          (λ e → Empty-rec (true-not {leq k z}
+                   (mem-split {o} {isTrue (leq k z)} z x r m
+                      (λ ez → subst {_} {_} {El o} {λ w → isTrue (leq k w)} (sym ez) (eq→isTrue e))
+                      (λ m1 → ord-trans {o} {k} {x} {z} (eq→isTrue e) (k-allle-mem x z r (fst s) m1)))
+                   n))
+          (λ e → k-ge-comb k z x r (k-last k r) (fst s) m (k-last-p k r) (λ m1 → rec r (snd s) m1 n))

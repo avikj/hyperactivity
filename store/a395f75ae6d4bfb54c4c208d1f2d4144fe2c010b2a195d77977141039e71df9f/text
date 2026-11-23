@@ -1,0 +1,6 @@
+-- a step performed in a forked child so its interaction-net arenas return to the OS on exit (part of memory-is-local)
+s-isolated : Proc W Unit → Proc W Bool
+s-isolated act = bind (sys-call #57 #0 #0 #0 #0 #0 #0) (λ pid →
+  if weq pid #0 then bind act (λ u → bind (sys-call #231 #0 #0 #0 #0 #0 #0) (λ x → ret {lzero} {W} true))
+  else if wlt pid #9223372036854775808 then bind (h-wait pid) (λ r → ret {lzero} {W} (weq r #0))
+  else bind act (λ u → ret {lzero} {W} true))

@@ -1,0 +1,10 @@
+-- a body with its variable d replaced by a body that may be open: it is moved under each binder
+-- passed (nk-subst is this for a closed body, without the moving)
+nk-put : NkTm → Word → NkTm → NkTm
+nk-put (nk-var i) d v = if %weq i d then v else (if %wlt d i then nk-var (%wsub i #1) else nk-var i)
+nk-put (nk-lam b) d v = nk-lam (nk-put b (%wsucc d) (nk-up v))
+nk-put (nk-con c as) d v = nk-con c (nk-put as d v)
+nk-put (nk-op h p as) d v = nk-op h (nk-put p d v) (nk-put as d v)
+nk-put (nk-match h p cs) d v = nk-match h (nk-put p d v) (nk-put cs d v)
+nk-put (nk-cons t r) d v = nk-cons (nk-put t d v) (nk-put r d v)
+nk-put t d v = t

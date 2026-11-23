@@ -1,0 +1,11 @@
+-- a conversion between scalar kinds: a pointer to an integer and back are the memory's commands
+-- (the Target allows them or the memory stops); every other pair is lib/mem's sv-conv
+cx-conv : CxU → SK → SK → SV → CxEv SV
+cx-conv u from to v = case from of
+  sk-ptr → (case to of
+    sk-int sg w → cx-bind {MPtr} {SV} (cx-res {MPtr} (sv-as-p v)) (λ p → ev-ptr-int {lzero} {CxS} {CxR} sg w p)
+    _ → cx-res {SV} (sv-conv from to v))
+  sk-int sg w → (case to of
+    sk-ptr → cx-bind {MPtr} {SV} (ev-int-ptr {lzero} {CxS} {CxR} sg w v) (λ p → cx-ret {SV} (sv-p p))
+    _ → cx-res {SV} (sv-conv from to v))
+  _ → cx-res {SV} (sv-conv from to v)

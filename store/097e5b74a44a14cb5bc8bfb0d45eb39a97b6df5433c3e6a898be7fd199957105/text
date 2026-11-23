@@ -1,0 +1,7 @@
+-- replace this process image with prog and args so cold `hyperactive paper` frees hyperactive.cub before building the site (part of memory-is-local)
+hy-exec : List Word → List (List Word) → Proc W Unit
+hy-exec prog args =
+  bind (h-read "/proc/self/environ") (λ env →
+  bind (h-ptrs (cons prog args)) (λ argv → bind (h-ptrs (h-env-block env)) (λ envp →
+  with-bytes {Unit} (wadd (fromNat (list-length prog)) #1) (λ p → bind (h-poke p prog) (λ u →
+  bind (sys-call #59 p (fst argv) (fst envp) #0 #0 #0) (λ r → exit #1))))))

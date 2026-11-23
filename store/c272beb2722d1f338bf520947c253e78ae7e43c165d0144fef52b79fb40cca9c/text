@@ -1,0 +1,10 @@
+-- write: the piece found, its file rendered from the path's head with the change, the change checked
+-- and then recorded; a name no module holds is written on its own (hy-free)
+hy-write-at : List Word → List Word → List Word → List Word → Bool → List Word → Sum Unit (List Word × List (List Word)) → Proc W Unit
+hy-write-at st m name h after t (inl u) = hy-free st m name t
+hy-write-at st m name h after t (inr mo) =
+  bind (hy-tip st m (h-unhex (fst mo))) (λ hd → hy-tip-then (h-unhex (fst mo)) (fst hd) (snd hd) (λ ids ps →
+    bind (hy-render st ps h t after) (λ new →
+    bind (hy-root-of st (fst mo)) (λ root →
+    bind (hy-live-users st name) (λ us → bind (hy-user-roots st us) (λ urs →
+    hy-put st m name t (h-unhex (fst mo)) ids new (h-dedupe (cons root urs)) false))))))

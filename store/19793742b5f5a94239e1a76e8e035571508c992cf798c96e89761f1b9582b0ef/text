@@ -1,0 +1,8 @@
+mem-short : (t : List (List Word)) → (h : Nat) → (s : List (List Word)) → MemKey {suffix-ord} s (sufs t) → ltn h (list-length t) ≡ false → take-n h s ≡ s
+mem-short t h s =
+  case t return λ w → MemKey {suffix-ord} s (sufs w) → ltn h (list-length w) ≡ false → take-n h s ≡ s of
+    nil → λ m e → Empty-rec m
+    cons y q →
+      λ m e → mem-split {suffix-ord} {TakeFix h s} s (cons y q) (sufs q) m
+                (λ p → tr (take-n h (cons y q)) (λ i → take-n h (p i)) (tr (cons y q) (take-full h (cons y q) e) (λ i → p (~ i))))
+                (λ m1 → rec q m1 (ltn-pred-false h (list-length q) e))

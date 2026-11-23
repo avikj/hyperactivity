@@ -1,0 +1,9 @@
+rank-prop : {o : Ord} → (ks : List (El o)) → (k k' : El o) → MemKey k' ks → word-le (rk (key-tree ks) k) (rk (key-tree ks) k') ≡ leq k k'
+rank-prop ks k k' m =
+  let sl = msort-list ks
+      m2 = subst {_} {_} {Nat} {λ c → isTrue (ltn zero c)} (sym (msort-fuel-count k' (list-length ks) ks)) m
+  in tr (word-le (fromNat (suc (count-lt k sl))) (fromNat (suc (count-lt k' sl)))) (λ i → word-le (rk-is ks k i) (rk-is ks k' i))
+       (concat (word-le-fromNat (suc (count-lt k sl)) (suc (count-lt k' sl)))
+          (ifP {λ bb → not (ltn (count-lt k' sl) (count-lt k sl)) ≡ bb} {leq k k'}
+             (λ e → λ i → not (count-lt-mono {o} {k} {k'} (eq→isTrue e) sl i))
+             (λ e → λ i → not (count-lt-strict {o} {k} {k'} (isTrue-not e) sl m2 i))))

@@ -888,7 +888,8 @@ static void usage_set(int k, int n, const char **nm, const unsigned char *u) {
     GUSAGE[k].n = n; GUSAGE[k].nm = malloc((size_t)n * sizeof(char *)); GUSAGE[k].u = malloc((size_t)n);
     for (int i = 0; i < n; i++) { GUSAGE[k].nm[i] = intern(nm[i]); GUSAGE[k].u[i] = u[i]; }
 }
-int global_usage(long n, long k) { return n >= 0 && (size_t)n < capgusage && k >= 0 && k < GUSAGE[n].n ? GUSAGE[n].u[k] : 2; }
+static int pub_get(int w, uint64_t n);
+int global_usage(long n, long k) { n = pub_get(0, (uint64_t)n); return n >= 0 && (size_t)n < capgusage && k >= 0 && k < GUSAGE[n].n ? GUSAGE[n].u[k] : 2; }
 /* the steps the checker took to accept checked definition n (18.14's cost model, first form: recorded
  * steps per key), from this run or from the store's ok line; 0 when unknown */
 static long *GSTEPS; static size_t capgsteps;
@@ -933,8 +934,13 @@ static int pi_parts(Node *T, Node **doms, int n, Node **cod) {
 }
 static Node *to_code(Node *t);
 static Port build_top(Node *t);
+/* the number a code carries for a checked definition or data type (src/store.c, pub_of): the tables are
+ * read with it, and it is turned back into a place in them here */
+static int pub_get(int w, uint64_t n);
+static uint64_t pub_of(int w, int i);
 static pthread_mutex_t gcode_mu = PTHREAD_MUTEX_INITIALIZER;
 Port gcode_build(long n) {
+    n = pub_get(0, (uint64_t)n);
     if (n < 0 || (size_t)n >= capchksrc || !CHKSRC[n]) return 0;
     pthread_mutex_lock(&gcode_mu);
     ArMark m = ar_mark();
@@ -946,8 +952,8 @@ Port gcode_build(long n) {
     pthread_mutex_unlock(&gcode_mu);
     return p;
 }
-long global_steps(long n) { return n >= 0 && (size_t)n < capgsteps ? GSTEPS[n] : 0; }
-int checked_data(long k) { return k >= 0 && k < nchkdata ? CHKDATA[k] : -1; }
+long global_steps(long n) { n = pub_get(0, (uint64_t)n); return n >= 0 && (size_t)n < capgsteps ? GSTEPS[n] : 0; }
+int checked_data(long k) { k = pub_get(1, (uint64_t)k); return k >= 0 && k < nchkdata ? CHKDATA[k] : -1; }
 /* the checker's tables: entry i of each is a global, so a lookup is a reference */
 static long *TABLE[TB_N]; static size_t TABCAP[TB_N]; static long TABN[TB_N];
 static void table_set(int t, long i, long g) {
@@ -956,7 +962,13 @@ static void table_set(int t, long i, long g) {
     TABLE[t][i] = g; if (i >= TABN[t]) TABN[t] = i + 1;
 }
 long table_global(int t, long i) { return t >= 0 && t < TB_N && i >= 0 && i < TABN[t] ? TABLE[t][i] : -1; }
+/* a table read by the number a code carries (the machine's %gval, %gty, %dtab, %dent, %dtrans) */
+long data_checked_pub(int d) { int i = chk_index(d); return i < 0 ? -1 : (long)pub_of(1, i); }
+long global_checked_pub(long g) { int i = global_checked(g); return i < 0 ? -1 : (long)pub_of(0, i); }
+long table_pub(int t, long n) { return table_global(t, pub_get(t == TB_VAL || t == TB_TY ? 0 : 1, (uint64_t)n)); }
 static Node *word(long n) { char b[32]; snprintf(b, sizeof b, "#%ld", n); return nsym(b); }
+static Node *wordg(int i) { return word((long)pub_of(0, i)); }
+static Node *wordd(int di) { return word((long)pub_of(1, di)); }
 /* the code's constructors are named %%c (the first declared), so a program's names cannot capture them */
 static Node *K(const char *c) { char b[64]; snprintf(b, sizeof b, "%%%%%s", c); return nsym(b); }
 static Node *capp1(const char *c, Node *a) { return nl3("app", K(c), a); }
@@ -1029,7 +1041,7 @@ static Node *to_code(Node *t) {
             }
             if (fl >= 0 && na == 1) {
                 int di = checked_data_of(DATA[FLD[fl].data].name, "code: codata type not checked:");
-                return capp3("cproj", word(di), word(FLD[fl].index), to_code(t->it[2]));
+                return capp3("cproj", wordd(di), word(FLD[fl].index), to_code(t->it[2]));
             }
             if (c >= 0 && na < CON[c].nfields && !CON[c].ndims) {
                 /* a constructor short of fields, as a function of the rest */
@@ -1046,7 +1058,7 @@ static Node *to_code(Node *t) {
                 Node **a = calloc((size_t)na + 1, sizeof(Node *));
                 Node *x = t;
                 for (int k = na - 1; k >= 0; k--) { a[k] = to_code(x->it[2]); x = x->it[1]; }
-                Node *r = capp4("ccon", word(di), word(CON[c].index), code_list(a, CON[c].nfields), code_list(a + CON[c].nfields, CON[c].ndims));
+                Node *r = capp4("ccon", wordd(di), word(CON[c].index), code_list(a, CON[c].nfields), code_list(a + CON[c].nfields, CON[c].ndims));
                 free(a);
                 return r;
             }
@@ -1055,7 +1067,7 @@ static Node *to_code(Node *t) {
                 Node **a = calloc((size_t)na + 1, sizeof(Node *));
                 Node *x = t;
                 for (int k = na - 1; k >= 0; k--) { a[k] = to_code(x->it[2]); x = x->it[1]; }
-                Node *r = capp2("cdata", word(di), code_list(a, na));
+                Node *r = capp2("cdata", wordd(di), code_list(a, na));
                 free(a);
                 return r;
             }
@@ -1073,7 +1085,7 @@ static Node *to_code(Node *t) {
         if (!strcmp(s, "lzero")) return K("clzero");
         if (s[0] == '#' && s[1] >= '0' && s[1] <= '9') return capp1("cwlit", t);   /* a word literal */
         for (int i = ncscope - 1; i >= 0; i--) if (!strcmp(cscope[i], s)) return capp1("cvar", word(ncscope - 1 - i));
-        for (int i = 0; i < nchecked; i++) if (!CHKHIDE[i] && !strcmp(CHECKED[i], s)) return capp1("cglob", word(i));
+        for (int i = 0; i < nchecked; i++) if (!CHKHIDE[i] && !strcmp(CHECKED[i], s)) return capp1("cglob", wordg(i));
         die_unchecked(s);
     }
     const char *h = t->it[0]->s;
@@ -1126,7 +1138,7 @@ static Node *to_code(Node *t) {
         int di = checked_data_of(t->it[1]->s, "code: codata type not checked:");
         Node **a = calloc((size_t)t->n, sizeof(Node *));
         for (int k = 2; k < t->n; k++) a[k - 2] = to_code(t->it[k]);
-        Node *r = capp2("crec", word(di), code_list(a, t->n - 2));
+        Node *r = capp2("crec", wordd(di), code_list(a, t->n - 2));
         free(a);
         return r;
     }
@@ -1180,8 +1192,8 @@ static Node *to_code(Node *t) {
         }
         Node *bl = code_list(bs, N);
         free(bs);
-        if (t->n == 5) return capp4("celim", word(di), to_code(t->it[2]), bl, to_code(t->it[4]));
-        return capp3("ccase", word(di), bl, to_code(t->it[3]));
+        if (t->n == 5) return capp4("celim", wordd(di), to_code(t->it[2]), bl, to_code(t->it[4]));
+        return capp3("ccase", wordd(di), bl, to_code(t->it[3]));
     }
     die("code: no code for form", h);
     return NULL;
@@ -1232,7 +1244,7 @@ static Node *vsrc(Node *t, Names *bound) {
         /* a field or a constructor of the name: as the compiler reads it */
         if (fld_lookup(t->s) >= 0 || con_lookup(t->s) >= 0) return t;
         int i = checked_index(t->s);
-        return i >= 0 ? nl2("%gval", word(i)) : t;
+        return i >= 0 ? nl2("%gval", wordg(i)) : t;
     }
     if (t->n == 0) return t;
     Node *r = nlist(t->n);
@@ -1333,7 +1345,7 @@ static NV ann(Node *t, Chain *C) {
                 /* a projection: (tproj d k x V) */
                 int di = checked_data_of(DATA[FLD[fl].data].name, "code: codata type not checked:");
                 NV a = ann(t->it[2], C);
-                p[0] = word(di); p[1] = word(FLD[fl].index); p[2] = a.node;
+                p[0] = wordd(di); p[1] = word(FLD[fl].index); p[2] = a.node;
                 return anode(C, "tproj", p, 3, nl3("app", h, a.val));
             }
             if (c >= 0 && na < CON[c].nfields && !CON[c].ndims) {
@@ -1354,8 +1366,8 @@ static NV ann(Node *t, Chain *C) {
                 Node *val = h;
                 for (int k = 0; k < na; k++) val = nl3("app", val, v[k]);
                 NV r;
-                if (con) { p[0] = word(di); p[1] = word(CON[c].index); p[2] = alist(a, CON[c].nfields); p[3] = alist(a + CON[c].nfields, CON[c].ndims); r = anode(C, "tcon", p, 4, val); }
-                else { p[0] = word(di); p[1] = alist(a, na); r = anode(C, "tdata", p, 2, val); }
+                if (con) { p[0] = wordd(di); p[1] = word(CON[c].index); p[2] = alist(a, CON[c].nfields); p[3] = alist(a + CON[c].nfields, CON[c].ndims); r = anode(C, "tcon", p, 4, val); }
+                else { p[0] = wordd(di); p[1] = alist(a, na); r = anode(C, "tdata", p, 2, val); }
                 free(a); free(v);
                 return r;
             }
@@ -1373,7 +1385,7 @@ static NV ann(Node *t, Chain *C) {
         AScope *a = ascope(s);
         if (a) { NV r; r.val = t; r.node = a->ty ? kapp("tv", t, a->ty) : kapp("ti", t, NULL); return r; }
         int i = checked_index(s);
-        if (i >= 0) { p[0] = word(i); return anode(C, "tg", p, 1, nl2("%gval", word(i))); }
+        if (i >= 0) { p[0] = wordg(i); return anode(C, "tg", p, 1, nl2("%gval", wordg(i))); }
         die_unchecked(s);
     }
     const char *h = t->it[0]->s;
@@ -1438,7 +1450,7 @@ static NV ann(Node *t, Chain *C) {
         else { cs->it[2] = vsrc0(t->it[2]); cs->it[3] = sv; }
         Node *F = bind_in(C, "af", nl3("lam", sv, cs));
         int k = 0;
-        p[k++] = word(di);
+        p[k++] = wordd(di);
         if (el) p[k++] = P.node;
         p[k++] = alist(bs, N); p[k++] = x.node; p[k++] = F;
         free(bs);
@@ -1487,7 +1499,7 @@ static NV ann(Node *t, Chain *C) {
         Node **a = calloc((size_t)nf + 1, sizeof(Node *));
         Node *v = nlist(t->n); v->it[0] = t->it[0]; v->it[1] = t->it[1];
         for (int k = 0; k < nf; k++) { NV r = ann(t->it[k + 2], C); a[k] = r.node; v->it[k + 2] = r.val; }
-        p[0] = word(di); p[1] = alist(a, nf);
+        p[0] = wordd(di); p[1] = alist(a, nf);
         free(a);
         return anode(C, "trec", p, 2, v);
     }
@@ -3044,7 +3056,7 @@ static void pcode(FILE *o, Port p) {
         if (!strcmp(con_of(v), "cvar")) { long k = word_val(v->port[1]); fputs(k >= 0 && k < ncnm ? cnm[ncnm - 1 - k] : "<unbound>", o); }
         else { fputs("(force ", o); pcode(o, P(v, 0)); fputc(')', o); }
     }
-    else if (!strcmp(h, "cglob")) { long k = word_val(c->port[1]); fputs(k >= 0 && k < nchecked ? CHECKED[k] : "<global>", o); }
+    else if (!strcmp(h, "cglob")) { long k = pub_get(0, (uint64_t)word_val(c->port[1])); fputs(k >= 0 && k < nchecked ? CHECKED[k] : "<global>", o); }
     else if (!strcmp(h, "clam") || !strcmp(h, "cdlam")) {
         bool dim = h[1] == 'd'; cnm_push(dim ? "i" : "x", dim ? cdc++ : cvc++);
         fprintf(o, "(lam %s ", cnm[ncnm - 1]); pcode(o, c->port[1]); fputc(')', o); cnm_pop(1);
@@ -3085,39 +3097,39 @@ static void pcode(FILE *o, Port p) {
         fputc(')', o);
     }
     else if (!strcmp(h, "cdata")) {
-        long d = word_val(c->port[1]); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
+        long d = pub_get(1, (uint64_t)word_val(c->port[1])); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
         n = list_ports(c->port[2], &xs);
         if (n) fputc('(', o);
         fputs(D >= 0 ? DATA[D].name : "?", o); pfields(o, xs, n); if (n) fputc(')', o); free(xs);
     }
     else if (!strcmp(h, "ccon")) {
-        long d = word_val(c->port[1]), k = word_val(c->port[2]); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
+        long d = pub_get(1, (uint64_t)word_val(c->port[1])), k = word_val(c->port[2]); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
         Port *ds; n = list_ports(c->port[3], &xs); int m = list_ports(c->port[4], &ds);
         if (n + m) fputc('(', o);
         fputs(D >= 0 && k >= 0 && k < DATA[D].ncons ? CON[DATA[D].cons[k]].name : "?", o);
         pfields(o, xs, n); pfields(o, ds, m); if (n + m) fputc(')', o); free(xs); free(ds);
     }
     else if (!strcmp(h, "celim")) {
-        long d = word_val(c->port[1]);
+        long d = pub_get(1, (uint64_t)word_val(c->port[1]));
         fputs("(elim ", o); pcode(o, c->port[2]); fputc(' ', o); pcode(o, c->port[4]); pbranches(o, (int)d, c->port[3]); fputc(')', o);
     }
     else if (!strcmp(h, "ccase")) {
-        long d = word_val(c->port[1]);
+        long d = pub_get(1, (uint64_t)word_val(c->port[1]));
         fputs("(case ", o); pcode(o, c->port[3]); pbranches(o, (int)d, c->port[2]); fputc(')', o);
     }
     else if (!strcmp(h, "cproj")) {
-        long d = word_val(c->port[1]), k = word_val(c->port[2]); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
+        long d = pub_get(1, (uint64_t)word_val(c->port[1])), k = word_val(c->port[2]); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
         fprintf(o, "(%s ", D >= 0 && k >= 0 && k < DATA[D].nflds ? FLD[DATA[D].flds[k]].name : "?"); pcode(o, c->port[3]); fputc(')', o);
     }
     else if (!strcmp(h, "crec")) {
-        long d = word_val(c->port[1]); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
+        long d = pub_get(1, (uint64_t)word_val(c->port[1])); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
         n = list_ports(c->port[2], &xs);
         fputs("(record", o);
         for (int k = 0; k < n; k++) { fprintf(o, " (%s ", D >= 0 && k < DATA[D].nflds ? FLD[DATA[D].flds[k]].name : "?"); pcode(o, xs[k]); fputc(')', o); }
         fputc(')', o); free(xs);
     }
     else if (!strcmp(h, "ctrans")) {
-        long d = word_val(c->port[1]); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
+        long d = pub_get(1, (uint64_t)word_val(c->port[1])); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
         fprintf(o, "(%%transD %s ", D >= 0 ? DATA[D].name : "?"); pcode(o, c->port[2]);
         n = list_ports(c->port[3], &xs); pfields(o, xs, n); free(xs);
         fputc(' ', o); pcode(o, c->port[4]); fputc(')', o);
@@ -3168,7 +3180,7 @@ static char *read_code(Port prov) {
 }
 /* the type a reading is taken at: a checked definition's, or the declared type of (the T t) */
 static Node *reading_type(Node *t) {
-    if (!t->list) { int i = checked_index(t->s); return i >= 0 && global_lookup(t->s) == table_global(TB_VAL, i) ? nl2("%gty", word(i)) : NULL; }
+    if (!t->list) { int i = checked_index(t->s); return i >= 0 && global_lookup(t->s) == table_global(TB_VAL, i) ? nl2("%gty", wordg(i)) : NULL; }
     if (t->n == 3 && is(t->it[0], "the")) return t->it[1];
     return NULL;
 }
@@ -3341,7 +3353,7 @@ static void explain_at(const char *r, Node *q) {
     if (why == 28) {
         /* the field whose term is not guarded: (no opq 28 d k), d the codata type, k the field */
         long d = n->it[3]->list ? -1 : atol(n->it[3]->s + 1), k = n->it[4]->list ? -1 : atol(n->it[4]->s + 1);
-        int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
+        d = pub_get(1, (uint64_t)d); int D = d >= 0 && d < nchkdata ? CHKDATA[d] : -1;
         printf("   field: %s\n", D >= 0 && k >= 0 && k < DATA[D].nflds ? FLD[DATA[D].flds[k]].name : "?");
         return;
     }
@@ -3851,6 +3863,10 @@ static void toplevel_in(Node *f) {
         /* its codebase key (PLAN.md revision 7.9, 6 Nov 2026, git 2ca8d747aaa5:PLAN.md, §18.4 “F34 — The store as the codebase: two keys”): a definition the store holds as checked is not checked again */
         char key[65]; char *kcode = NULL, *ktype = NULL;
         key_def(dT, dt, key, &kcode, &ktype);
+        /* the name already holds this very definition (taken from the pool by its key before the
+         * module that declares it was read): the same object under the same name is declared once */
+        if (define && expect) { int c0 = checked_index(f->it[1]->s);
+            if (c0 >= 0 && !strcmp(ckey_of(c0), key)) { passes++; free(kcode); free(ktype); if (forced_result) { free((char *)forced_result); forced_result = NULL; } if (!nochk) ar_release(cm); return; } }
         bool remembered = forced_result && forced_steps < 0;   /* the store's answer, acceptance or refusal */
         bool stored = define && expect && (forced_result ? remembered && !strcmp(forced_result, "ok") : store_checked(key));
         Node *cT = nl2("%raw", aclosed(dT)), *ct = stored ? NULL : nl2("%raw", aclosed(dt));
@@ -4090,11 +4106,16 @@ static void toplevel_in(Node *f) {
         } else {
             if (f->n != 2 || !f->it[1]->list || !is(f->it[1]->it[0], "data")) die("(checked-data[-fail] (data ...))", NULL);
             dd = f->it[1];
+            /* the name already holds this very type (taken from the pool by its key): declared once */
+            if (expect) { Node *hd = dd->it[1]; int d0 = data_lookup(hd->list ? hd->it[0]->s : hd->s), j0 = -1;
+                if (d0 >= 0) for (int j = 0; j < nchkdata; j++) if (CHKDATA[j] == d0) j0 = j;
+                if (j0 >= 0) { char k0[65]; char *kc = NULL; key_decl(dd, k0, &kc); free(kc); if (!strcmp(k0, dkey_of(j0))) { passes++; return; } } }
             toplevel(dd);
             d = ndata - 1;
         }
         GROW(CHKDATA, capchkdata, (size_t)nchkdata + 1);
         CHKDATA[nchkdata++] = d; chk_pending = nchkdata - 1;
+        { char k0[65]; char *kc0 = NULL; key_decl(dd, k0, &kc0); free(kc0); pub_set(1, nchkdata - 1, k0); }   /* its number, before anything names it */
         Node *ent = nl2("%raw", kapp("dent", atel_params(dd, d, 0), K("lzero")));
         int di = nchkdata - 1;
         /* the tables while it is checked: its declaration at level lzero, and the machine's data
@@ -4117,18 +4138,18 @@ static void toplevel_in(Node *f) {
         char key[65]; char *kcode = NULL; key_decl(dd, key, &kcode);
         bool stored = expect && store_checked(key);
         char *rs = expect && !stored ? store_refused(key) : NULL;   /* refused before */
-        char *r = stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-data", word(di), ent), &steps), *tr = strdup("ok");
+        char *r = stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-data", wordd(di), ent), &steps), *tr = strdup("ok");
         if (rs) stored = true; else if (expect && strcmp(r, tr)) store_refuse(key, steps, r);
         bool accepted = !strcmp(r, tr), ok = accepted == expect;
         if (ok) passes++; else failures++;
         if (!ok) { printf("FAIL: %s data %s   ", expect ? "checks" : "rejected", DATA[d].name); if (stored) printf("[store]\n"); else printf("[%ld steps]\n", steps); }
-        if (!accepted && (expect || getenv("CUBICAL_WHY"))) explain(r, nl3("%%chk-data", word(di), ent));
+        if (!accepted && (expect || getenv("CUBICAL_WHY"))) explain(r, nl3("%%chk-data", wordd(di), ent));
         free(r); free(tr);
         chk_pending = -1;
         if (!accepted) { nchkdata--; free(kcode); return; }
-        dkey_set(di, key); deps_take(&DDEPS, &capddeps, di); store_put(DATA[d].name, key, kcode, "", steps, NULL); free(kcode);
+        dkey_set(di, key); deps_take(&DDEPS, &capddeps, di); store_put(DATA[d].name, key, kcode, "", steps, NULL); store_decl(key, dd, d); free(kcode);
         char dent[32]; snprintf(dent, sizeof dent, "%%dent%d", di);
-        Node *ed = nlist(3); ed->it[0] = nsym("def"); ed->it[1] = nsym(dent); ed->it[2] = nl3("%%data-entry", word(di), ent);
+        Node *ed = nlist(3); ed->it[0] = nsym("def"); ed->it[1] = nsym(dent); ed->it[2] = nl3("%%data-entry", wordd(di), ent);
         toplevel(ed);
         table_set(TB_DENT, di, global_lookup(dent));
     } else if (!strcmp(h, "mutual") || !strcmp(h, "mutual-fail")) {
@@ -4154,6 +4175,7 @@ static void toplevel_in(Node *f) {
         int d = ndata - 1;
         GROW(CHKDATA, capchkdata, (size_t)nchkdata + 1);
         CHKDATA[nchkdata++] = d; chk_pending = nchkdata - 1;
+        { char k0[65]; char *kc0 = NULL; key_decl(dd, k0, &kc0); free(kc0); pub_set(1, nchkdata - 1, k0); }   /* its number, before anything names it */
         int di = nchkdata - 1;
         Node *ent = nl2("%raw", kapp("dcoent", atel_coparams(dd, d, 0), K("lzero")));
         const char *D = DATA[d].name;
@@ -4174,18 +4196,18 @@ static void toplevel_in(Node *f) {
         char key[65]; char *kcode = NULL; key_decl(dd, key, &kcode);
         bool stored = expect && store_checked(key);
         char *rs = expect && !stored ? store_refused(key) : NULL;   /* refused before */
-        char *r = stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-codata", word(di), ent), &steps);
+        char *r = stored ? strdup("ok") : rs ? rs : readback(nl3("%%chk-codata", wordd(di), ent), &steps);
         if (rs) stored = true; else if (expect && strcmp(r, "ok")) store_refuse(key, steps, r);
         bool accepted = !strcmp(r, "ok"), ok = accepted == expect;
         if (ok) passes++; else failures++;
         if (!ok) { printf("FAIL: %s codata %s   ", expect ? "checks" : "rejected", D); if (stored) printf("[store]\n"); else printf("[%ld steps]\n", steps); }
-        if (!accepted && (expect || getenv("CUBICAL_WHY"))) explain(r, nl3("%%chk-codata", word(di), ent));
+        if (!accepted && (expect || getenv("CUBICAL_WHY"))) explain(r, nl3("%%chk-codata", wordd(di), ent));
         free(r);
         chk_pending = -1;
         if (!accepted) { nchkdata--; free(kcode); return; }
-        dkey_set(di, key); deps_take(&DDEPS, &capddeps, di); store_put(D, key, kcode, "", steps, NULL); free(kcode);
+        dkey_set(di, key); deps_take(&DDEPS, &capddeps, di); store_put(D, key, kcode, "", steps, NULL); store_decl(key, dd, d); free(kcode);
         char dent[32]; snprintf(dent, sizeof dent, "%%dent%d", di);
-        Node *ed = nlist(3); ed->it[0] = nsym("def"); ed->it[1] = nsym(dent); ed->it[2] = nl3("%%codata-entry", word(di), ent);
+        Node *ed = nlist(3); ed->it[0] = nsym("def"); ed->it[1] = nsym(dent); ed->it[2] = nl3("%%codata-entry", wordd(di), ent);
         toplevel(ed);
         table_set(TB_DENT, di, global_lookup(dent));
         /* the generated composition and record, in the signature (no name refers to them) so a
@@ -4998,6 +5020,10 @@ static char *session_key(void) {
         char *mh = hx.b && hx.n <= 250 ? idx_read("modules", hx.b) : NULL;
         sb_put(&k, mh ? mh : "-"); sb_put(&k, "\n"); free(mh); free(hx.b);
     }
+    /* and the machine as built: a process kept from before a rebuild is stale (2026-11-22: after
+     * `make`, views went on being answered by the machine from before it) */
+    { root_init(); char *p = malloc(strlen(repo_root) + 24); sprintf(p, "%s/build/cubical", repo_root); struct stat st;
+      if (stat(p, &st) == 0) sb_fmt(&k, "%ld %ld\n", (long)st.st_mtime, (long)st.st_size); free(p); }
     return k.b;
 }
 static int session_connect(void) {
@@ -5077,9 +5103,11 @@ static void session_serve(void) {
  * changed); then the cold start runs, and a session is started beside it for the next command */
 extern char **environ;
 static void session_client(int argc, char **argv) {
-    if (getenv("CUBICAL_STORE") || getenv("HYPERACTIVE_SERVER") || getenv("HYPERACTIVE_COLD")) return;
+    /* the process kept warm has the environment it was started in, not this command's: a command that names a place (send, take) runs in a machine of its own (2026-11-22: send answered "names no place" with the place named) */
+    if (getenv("CUBICAL_STORE") || getenv("HYPERACTIVE_SERVER") || getenv("HYPERACTIVE_COLD") || getenv("HYPERACTIVE_PLACE") || getenv("RENDER")) return;
     int s = session_connect();
     if (s < 0) {
+        struct stat rs; if (stat(".cubical-store/index/meta/root", &rs) != 0) return;
         pid_t pid; posix_spawn_file_actions_t fa; posix_spawn_file_actions_init(&fa);
         posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", 0, 0);
         posix_spawn_file_actions_addopen(&fa, 1, "/dev/null", 1, 0);
@@ -5120,6 +5148,45 @@ static void memend_report(void) {
     fprintf(stderr, "memend: definitions' top bodies %ld MB; records built from %ld (%ld MB), unreached %ld (%ld MB); %ld sweeps: %ld records freed, %ld tables freed\n",
             gb >> 20, nn[0], nb[0] >> 20, nn[1], nb[1] >> 20, stat_sweeps, stat_swept_recs, stat_swept_tabs);
 }
+/* a machine with no pool: the tool is a program of the pool, so the first objects cannot be fetched by
+ * it. `hyperactive take ROOT` with HYPERACTIVE_PLACE set and no pool fetches here what the tool's
+ * hy-fetch fetches (lib/hyperactive.cub): the list the place holds under roots/ROOT, then each pack
+ * under packs/HASH, kept only when its hash is its name, only its objects of the pool taken out (curl
+ * and tar, run as programs). The packs had are noted, and the tool then takes the root as always */
+static int place_run(char *const av[]) {
+    pid_t pid; if (posix_spawnp(&pid, av[0], NULL, NULL, av, environ) != 0) return 127;
+    int st = 0; waitpid(pid, &st, 0); return WIFEXITED(st) ? WEXITSTATUS(st) : 126;
+}
+static char *place_slurp(const char *path, size_t *len) {
+    FILE *f = fopen(path, "rb"); if (!f) return NULL;
+    size_t cap = 1 << 16, n = 0, k; char *b = malloc(cap);
+    while ((k = fread(b + n, 1, cap - n - 1, f)) > 0) { n += k; if (cap - n < 2) { cap *= 2; b = realloc(b, cap); } }
+    fclose(f); b[n] = 0; if (len) *len = n; return b;
+}
+static void place_first(const char *place, const char *root) {
+    mkdir("build", 0777); mkdir(".cubical-store", 0777);
+    size_t ul = strlen(place) + 96; char *url = malloc(ul);
+    snprintf(url, ul, "%s/roots/%s", place, root);
+    char *a1[] = { "curl", "-fsS", "-o", "build/root-list", url, NULL };
+    if (place_run(a1) != 0) die("the place holds no list of packs for the root", root);
+    char *l = place_slurp("build/root-list", NULL); if (!l) die("cannot read", "build/root-list");
+    for (char *p = l; *p; ) {
+        char *e = strchr(p, '\n'); if (e) *e = 0;
+        if (strlen(p) == 64 && strspn(p, "0123456789abcdef") == 64) {
+            snprintf(url, ul, "%s/packs/%s", place, p);
+            char *a2[] = { "curl", "-fsS", "-o", "build/pack.tgz", url, NULL };
+            size_t n = 0; char *b = place_run(a2) == 0 ? place_slurp("build/pack.tgz", &n) : NULL;
+            char h[65]; h[0] = 0; if (b) key_hash(b, n, h);
+            if (!b || strcmp(h, p)) die("the place gave no pack of that name, or one that is not what its name says", p);
+            free(b);
+            char *a3[] = { "tar", "-xzf", "build/pack.tgz", "--skip-old-files", "store", NULL };
+            if (place_run(a3) != 0) die("cannot take the objects out of the pack", p);
+            FILE *f = fopen(".cubical-store/packs", "a"); if (f) { fprintf(f, "%s\n", p); fclose(f); }
+        }
+        if (!e) break; p = e + 1;
+    }
+    free(l); free(url);
+}
 #ifdef CUBICAL_LIB
 int cubical_main(int argc, char **argv)
 #else
@@ -5132,6 +5199,7 @@ int main(int argc, char **argv)
         const char *b = strrchr(argv[0], '/'); b = b ? b + 1 : argv[0];
         const char *prog = !strcmp(b, "hyperactive") ? "lib/hyperactive.cub" : !strcmp(b, "pre-commit") ? "lib/guard.cub" : NULL;
         if (prog) {
+            if (!strcmp(b, "hyperactive") && argc >= 3 && !strcmp(argv[1], "take") && getenv("HYPERACTIVE_PLACE")) { struct stat ps; if (stat("store", &ps) != 0) place_first(getenv("HYPERACTIVE_PLACE"), argv[2]); }
             if (!strcmp(b, "hyperactive")) session_client(argc, argv);   /* returns when it ran nothing */
             char **nv = malloc((size_t)(argc + 2) * sizeof(char *));
             nv[0] = "build/cubical"; nv[1] = (char *)prog;
@@ -5259,6 +5327,27 @@ int main(int argc, char **argv)
             if (t) { char *ab = abs_of(rel); record_source(t, ab); }
             printf("%s\n", use); idx_unlock(); fflush(stdout); _Exit(0);
         }
+        if (!strcmp(argv[i], "--attach")) {
+            /* `--attach`: each name's written text attached to the key the name is bound to (KEY/text:
+             * the text's hash), so a definition's text is found from its key */
+            index_sync(); char *wd = path_in(idx_dir(), "written", ""); DIR *d = opendir(wd); free(wd); int n = 0;
+            if (d) { struct dirent *de; while ((de = readdir(d))) if (de->d_name[0] != '.' && !strstr(de->d_name, ".tmp")) {
+                char *t = idx_read("written", de->d_name), *k = store_read("bound", de->d_name);
+                if (t && k && strlen(k) >= 64 && strlen(t) >= 64) { k[64] = 0; t[64] = 0; kobj_write(k, "text", t); n++; }
+                free(t); free(k); } closedir(d); }
+            printf("%d texts attached\n", n); fflush(stdout); _Exit(0);
+        }
+        if (!strcmp(argv[i], "--carried")) {
+            /* `--carried`: of the names this machine's paths and labels hold now (written/), how many have a key the pool can give back
+             * (forms, or a declaration), and the names of those it cannot (load_key has nothing to read) */
+            index_sync(); char *bd = path_in(idx_dir(), "written", ""); DIR *d = opendir(bd); free(bd); int n = 0, nf = 0, nd = 0, no = 0;
+            if (d) { struct dirent *de; while ((de = readdir(d))) if (de->d_name[0] != '.' && !strstr(de->d_name, ".tmp")) {
+                char *k = store_read("bound", de->d_name); if (!k || strlen(k) < 64) { free(k); n++; no++; char *nm = w_unhex(de->d_name); printf("- %s (no key)\n", nm); free(nm); continue; } k[64] = 0; n++;
+                char *a = kobj_read(k, "forms"), *b = a ? NULL : kobj_read(k, "decl");
+                if (a) nf++; else if (b) nd++; else { no++; char *nm = w_unhex(de->d_name); printf("- %s\n", nm); free(nm); }
+                free(a); free(b); free(k); } closedir(d); }
+            printf("%d names: %d with forms, %d with a declaration, %d with neither\n", n, nf, nd, no); fflush(stdout); _Exit(0);
+        }
         if (!strcmp(argv[i], "--root")) {
             idx_lock(); index_sync(); char *h = root_make(); { SBuf l = {0}; sb_put(&l, h); sb_put(&l, "\n"); src_write("ROOT", "root", l.b); free(l.b); } idx_unlock();   /* named beside the pool, for a machine with no labels */
             printf("%s\n", h); fflush(stdout); _Exit(0);
@@ -5278,6 +5367,14 @@ int main(int argc, char **argv)
             printf("%s\n", ok ? "ok" : "refused"); fflush(stdout); _Exit(ok ? 0 : 1);
         }
     }
+    /* `--read FILE --keep NAME TEXT`: FILE holds one declaration of NAME (after what it imports), checked
+     * with what it mentions taken by key; its objects are kept in the pool, and when nothing fails NAME
+     * is made this machine's label of the definition's key, with TEXT (the declaration alone) its text */
+    const char *keep_name = NULL, *keep_text = NULL;
+    for (int i = 1; i + 2 < argc; i++) if (!strcmp(argv[i], "--keep")) { keep_name = argv[i + 1]; keep_text = argv[i + 2]; keep_free = true; }
+    if (keep_name) { index_sync(); SBuf hx = {0}; w_hex(&hx, keep_name); char *mo = hx.b && hx.n <= 250 ? idx_read("module-of", hx.b) : NULL;
+        if (mo || !hx.b || hx.n > 250) { printf("refused: %s is written in the module %s\n", keep_name, mo ? mo : "?"); fflush(stdout); _Exit(1); }
+        free(hx.b); }
     for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--imports")) { for (int j = i + 1; j < argc; j++) imports_of(argv[j]); fflush(stdout); _Exit(0); }
     for (int i = 1; i < argc; i++) {
         /* --print f: f's core forms in the surface language; --roundtrip f: each printed form parsed
@@ -5287,10 +5384,33 @@ int main(int argc, char **argv)
         if (!strcmp(argv[i], "--serve")) continue;
         if (!strcmp(argv[i], "--session")) continue;
         if (!strcmp(argv[i], "--read")) continue;
-        if (!strcmp(argv[i], "--with")) { i += 2; continue; }
+        if (!strcmp(argv[i], "--with") || !strcmp(argv[i], "--keep")) { i += 2; continue; }
         if (!strcmp(argv[i], "--follows") || !strcmp(argv[i], "--base")) { i += 1; continue; }
         load_root = argv[i];   /* roots/<file>: the given file that loads it (src/syntax.c, w_file) */
         load_file(argv[i], true);
+    }
+    if (keep_name) {
+        int ck = checked_index(keep_name), dt = ck >= 0 ? -1 : data_lookup(keep_name); const char *k = "?";
+        if (ck >= 0) k = ckey_of(ck);
+        else if (dt >= 0) for (int j = 0; j < nchkdata; j++) if (CHKDATA[j] == dt) k = dkey_of(j);
+        FILE *f = failures || k[0] == '?' ? NULL : fopen(keep_text, "rb");
+        if (!f) printf("nothing labelled: %s\n", failures ? "a check fails" : k[0] == '?' ? "the text declares no checked definition of that name" : "its text cannot be read");
+        else {
+            size_t cap = 65536, n = 0, r; char *b = malloc(cap);
+            while ((r = fread(b + n, 1, cap - n - 1, f)) > 0) { n += r; if (cap - n < 2) { cap *= 2; b = realloc(b, cap); } }
+            fclose(f); b[n] = 0;
+            char h[65]; key_hash(b, n, h); { char *p = src_path(h, "text"); struct stat st; if (stat(p, &st) != 0) src_write(h, "text", b); free(p); }
+            kobj_write(k, "text", h);
+            keep_free = false; bind_work = true; names_bind(keep_name, k); if (dt >= 0) store_decl(k, NULL, dt);
+            idx_lock(); SBuf hx = {0}; w_hex(&hx, keep_name); idx_write("written", hx.b, h);
+            /* a type written on its own: each constructor's and field's name pointed at its key and its
+             * name (free-con/NAME: `KEY TYPENAMEHEX`), which a module of the work reads (lk_label) */
+            if (dt >= 0) for (int pass = 0; pass < 2; pass++) { int cn = pass == 0 ? DATA[dt].ncons : nfld;
+                for (int q = 0; q < cn; q++) { const char *cnm = pass == 0 ? CON[DATA[dt].cons[q]].name : FLD[q].data == dt ? FLD[q].name : NULL; if (!cnm) continue;
+                    SBuf ch = {0}, v = {0}; w_hex(&ch, cnm); sb_put(&v, k); sb_put(&v, " "); sb_put(&v, hx.b); if (ch.b && ch.n <= 250) idx_write("free-con", ch.b, v.b); free(ch.b); free(v.b); } }
+            idx_unlock();
+            printf("free %s %s\n", keep_name, k);
+        }
     }
     for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--serve")) serve();
     for (int i = 1; i < argc; i++) if (!strcmp(argv[i], "--session")) { session_loading = false; session_serve(); }

@@ -1,0 +1,7 @@
+s-redirect-onrender : Bool → List Word → Bool
+s-redirect-onrender pub req =
+  andB pub (
+  andB (h-not (h-null s-canonical-host)) (
+  andB (orB (h-prefix "GET " req) (h-prefix "HEAD " req)) (
+  andB (h-not (h-eq (h-before "?" (s-req-path-any req)) "/graph"))
+       (h-eq (sx-lower (h-before ":" (um-header "host" req))) "hyperactivity.onrender.com"))))

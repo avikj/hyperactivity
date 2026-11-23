@@ -1,0 +1,207 @@
+# A Tour of Hyperactivity
+
+Hyperactivity is a programming language, a proof assistant, and a decentralized operating system built on one primitive law: **local interaction**.
+
+Most languages hand you a stack, a heap, a garbage collector, a separate type system, a separate build tool, and a separate network protocol. Hyperactivity replaces all of them with a single mathematical object: a **cubical interaction net**. Every program, every proof, every document, and even the web server serving this page is a net of cells wired together at ports, rewriting locally wherever an operation meets a value.
+
+Every code example on this page is real Hyperactivity, typechecked by the machine itself (`build/cubical`). Wherever you see a **[Watch in Interaction Net Lab →](/nets)** link, you can watch and hear the exact cell rewrites happen live.
+
+---
+
+## 1. The One Law: Cells, Ports, and Active Pairs
+
+Forget ASTs and evaluation stacks for a moment. In Hyperactivity, there is no primitive *thing* — only a primitive law of **interaction**:
+
+- **Cell.** A node with one *principal port* (`●`) and zero or more *auxiliary ports*.
+- **Value (`V_*`).** A cell that *offers* itself at its principal port: a function (`λ`), a pair `(a , b)`, a path (`λ i → t`), a constructor (`zero`, `suc`), a word (`#42`), a type.
+- **Operation (`O_*`).** A cell that *consumes* one value at its principal port: application (`app`), projection (`fst`, `snd`), path application (`@ r`), substitution (`subst`), duplication (`dup`), erasure (`era`), Kan composition (`comp`), pattern matching (`case`).
+- **Active pair.** An operation's principal port wired head-to-head (`●═══●`) to a value's principal port.
+
+**This is the only place anything ever happens.** Two values wired together do nothing. Two operations wired together wait. When an operation meets a value, the two cells annihilate and are replaced by a tiny local net on their remaining wires. Nothing else in the universe is inspected.
+
+```
+  arg ──┐
+        app ●═══● λ ── body     ⟶     out ── body  (with arg wired into the parameter)
+  out ──┘
+```
+
+Because every rewrite touches only two cells and their immediate wires, disjoint active pairs never interfere. They fire in parallel on any number of workers with zero locks and identical results (confluence / causal invariance).
+
+**[Watch β-reduction fire in the Interaction Net Lab →](/nets?preset=beta)**
+
+---
+
+## 2. Functions, Pairs, and Data
+
+At the surface, Hyperactivity looks clean and familiar — like Agda or Haskell, stripped down to essentials.
+
+### Functions and Pairs
+
+Type signatures use `:`, arrows use `→`, implicit type parameters sit in braces `{A : Type}`, and pairs use `(a , b)` with `fst` and `snd`:
+
+```
+-- Polymorphic identity function
+tour-id : {A : Type} → A → A
+tour-id x = x
+
+-- Swap a pair (Σ-type)
+tour-swap : {A B : Type} → (A × B) → (B × A)
+tour-swap p = (snd p , fst p)
+```
+
+Under the hood, `fst (a , b)` wires an `O_FST` operation to a `V_PAIR` value: `a` connects straight to the output, and `b` is wired to an `O_ERA` (erasure) cell that dissolves it cleanly without a garbage collector. If a variable is used twice — like `(x , x)` — an `O_DUP` (duplicator) cell holds the value once behind a shared reference (`V_REF`) and unfolds it lazily only as far as readers inspect it.
+
+**[Watch sharing (`dup`) and erasure (`era`) live →](/nets?preset=share)**
+
+### Algebraic Data Types and Pattern Matching
+
+Declare inductive data with `data`, and eliminate it by clauses or `case ... of`:
+
+```
+data Color = red | pink | blue
+
+is-pink : Color → Bool
+is-pink red  = false
+is-pink pink = true
+is-pink blue = false
+
+tour-add : Nat → Nat → Nat
+tour-add zero    n = n
+tour-add (suc m) n = suc (tour-add m n)
+```
+
+When `case` meets a constructor `c(fields)`, it selects branch `c` in a single interaction step. Recursive calls on subfields become suspended hypotheses (`V_SUSP`) that compute only when read.
+
+---
+
+## 3. Identity IS a Path (Cubical Types in 5 Minutes)
+
+In traditional languages, equality is a boolean check at runtime (`==`) that proves nothing, or a rigid axiom (`J`) that blocks computation.
+
+In Hyperactivity, **equality is a continuous path** over an abstract interval `I` with endpoints `0` and `1`:
+
+- A proof of `x ≡ y` (shorthand for `PathP (λ i → A) x y`) is literally a function `p : I → A` with `p 0 = x` and `p 1 = y`.
+- The interval `I` has a De Morgan algebra: endpoints `0` and `1`, reversal `~ i`, minimum `i /\ j`, and maximum `i \/ j`.
+
+Because equality is just a function out of `I`, the foundational theorems of equality become **one-liners that compute**:
+
+```
+-- Reflexivity: the constant path at x
+tour-refl : {A : Type} {x : A} → x ≡ x
+tour-refl = λ i → x
+
+-- Symmetry: walk the path backwards using interval reversal (~ i)
+tour-sym : {A : Type} {x y : A} → x ≡ y → y ≡ x
+tour-sym p = λ i → p (~ i)
+
+-- Congruence: apply f pointwise along the path
+tour-cong : {A B : Type} (f : A → B) {x y : A} → x ≡ y → f x ≡ f y
+tour-cong f p = λ i → f (p i)
+
+-- Function extensionality: just swap the two arguments!
+tour-funExt : {A B : Type} {f g : A → B} → ((x : A) → f x ≡ g x) → f ≡ g
+tour-funExt h = λ i x → h x i
+```
+
+Look at `tour-funExt` again: `λ i x → h x i`. In standard Martin-Löf type theory, function extensionality is unprovable without an axiom that breaks computation. In cubical interaction nets, it is literally flipping two binders.
+
+And because the type checker *runs* the interaction net during checking, equational proofs about programs reduce automatically:
+
+```
+-- 2 + 2 ≡ 4 is checked directly by running the net
+two-plus-two : tour-add (suc (suc zero)) (suc (suc zero)) ≡ suc (suc (suc (suc zero)))
+two-plus-two = refl
+```
+
+When a path `λ i → t` meets a path application `@ r`, the net spawns an `O_SUBST [i := r]` cell that ripples through the net one level at a time, substituting the dimension without any ambient global context.
+
+**[Watch a dimension substitution wave ripple through a net →](/nets?preset=path)**
+
+---
+
+## 4. Systems, Kan Filling, and Univalence
+
+How do you compose two paths `p : x ≡ y` and `q : y ≡ z` into a path `x ≡ z`? Geometrically, you have three sides of a square — the base `p` at the bottom, the constant wall `x` on the left (`i = 0`), and the wall `q` on the right (`i = 1`) — and you **fill the open box** to read off the top lid:
+
+```
+concat : {A : Type} {x y z : A} → x ≡ y → y ≡ z → x ≡ z
+concat p q = λ i → comp (λ j → A) (λ j → [ i = 0 ↦ x , i = 1 ↦ q j ]) (p i)
+```
+
+Here `[ i = 0 ↦ x , i = 1 ↦ q j ]` is a **system** (`V_SYS`): a partial value defined only on the boundary faces where its face conditions hold. The operation `comp` (`O_COMP`) takes a line of types, a partial tube, and a base, and produces the far lid. Every type former (`Π`, `Σ`, `PathP`, `Glue`, `data`) has its own composition clause written *inside the language itself* (`lib/prelude.cub`).
+
+**[Watch Kan box filling (`comp`) close a square live →](/nets?preset=kan)**
+
+### Univalence Computes
+
+A **Glue** type glues an equivalence `e : Equiv A B` onto the boundary of a line of types, turning any equivalence into a genuine path between types:
+
+```
+ua : {A B : Type} → Equiv A B → A ≡ B
+ua e = λ i → Glue B [ i = 0 ↦ (A , e) , i = 1 ↦ (B , idEquiv) ]
+```
+
+Unlike homotopy type theory with univalence as an axiom, **transport along `ua` actually computes**! Watch boolean negation become a path `Bool ≡ Bool` and execute when we `transport` `true` across it:
+
+```
+tour-not : Bool → Bool
+tour-not true  = false
+tour-not false = true
+
+tour-not-inv : (b : Bool) → tour-not (tour-not b) ≡ b
+tour-not-inv true  = refl
+tour-not-inv false = refl
+
+notEquiv : Equiv Bool Bool
+notEquiv = isoToEquiv tour-not tour-not tour-not-inv tour-not-inv
+
+notPath : Bool ≡ Bool
+notPath = ua notEquiv
+
+-- Transporting `true` along the equivalence path computes to `false`!
+transported-true : Bool
+transported-true = transport notPath true
+
+transport-computes : transported-true ≡ false
+transport-computes = refl
+```
+
+That last line — `transport-computes = refl` — is not a postulate. The interaction net literally runs `comp` on the `Glue` type, hits `unglue` on the `i = 0` face, applies `tour-not` to `true`, and arrives at `false`.
+
+**[Watch Univalence (`transport (ua notEquiv) true ⟶ false`) compute live →](/nets?preset=univalence)**
+
+---
+
+## 5. Content-Addressed Source and Real-World Programs
+
+Hyperactivity is not just a blackboard calculus — it is a complete systems language:
+
+- **Words and Bytes.** Machine-native arbitrary-precision `Word`s (`#0`, `#42`, `wadd`, `weq`, `wshl`), raw `Bytes`, and zero-copy byte slices (`V_TEXT`).
+- **Processes over the World (`Proc W A`).** Effects (files, sockets, syscalls, processes) are typed interaction trees (`Step W A`) executed by `#run`. The very HTTP server answering your browser right now (`lib/server.cub`) is a checked Hyperactivity program talking directly to the Linux kernel via `sys-call`.
+- **Content-Addressed Pool (`store/`).** Code and documents are not mutable files overwritten in place. Every declaration is an immutable mathematical object identified by its SHA-256 content hash. A name is just a read-time overlay. Replacing a dependency `f` with `f'` constructs a new object beside the old one — and if `f ≡ f'`, every proof about callers transports automatically.
+
+---
+
+## 6. Try It Yourself
+
+Clone the repository and build the C interaction-net core (requires only `gcc`/`clang` and `make`):
+
+```
+git clone https://github.com/avikj/hyperactivity.git
+cd hyperactivity
+make
+```
+
+Inspect any definition in the content-addressed store, or typecheck your own `.cub` file:
+
+```
+./hyperactive def ua
+./hyperactive def s-front
+build/cubical my-file.cub
+```
+
+Ready to go deeper?
+
+- **[Interaction Net Lab (`/nets`)](/nets)** — Watch and hear cubical interaction nets execute in parallel with Pythagorean Just Intonation harmonics.
+- **[The Hyperactivity Paper (`/paper`)](/paper)** ([PDF](/paper.pdf)) — The complete formal exposition, from cubical interaction nets to decentralized collective superintelligence.
+- **[Synthetic Synesthesia (`/synesthesia`)](/synesthesia)** — Experience text in Avik's grapheme-color synesthetic palette.

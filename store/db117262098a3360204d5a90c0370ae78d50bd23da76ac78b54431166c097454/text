@@ -1,0 +1,112 @@
+-- ---------------------------------------------------------------- the expression reader
+cx-expr : CExpr → CxH → CxU → CxEnv → CxMode → CxK → CxEv CxR
+cx-expr (ce-integer-literal t vc v) h u env mode k = cx-lit-k u t v k
+cx-expr (ce-character-literal t vc v) h u env mode k = cx-lit-k u t v k
+cx-expr (ce-bool-literal t vc b) h u env mode k = k (cxr-val (sv-b b))
+cx-expr (ce-floating-literal t vc bits) h u env mode k = cx-bind {SK} {CxR} (cx-res {SK} (cx-sk u t)) (λ sk → case sk of
+  sk-f64 → k (cxr-val (sv-d (f64-of-bits (uq-of-word bits))))
+  _ → cx-unsupported {CxR} (cxw-expr (ce-floating-literal t vc bits)))
+cx-expr (ce-string-literal t vc s) h u env mode k = cx-string u (ce-string-literal t vc s) t s mode k
+cx-expr (ce-nullptr-literal t vc) h u env mode k = k (cxr-val (sv-p cx-null))
+cx-expr (ce-declref t vc rk id) h u env mode k = cx-bind {CxR} {CxR} (cx-declref u (ce-declref t vc rk id) t rk id env) k
+cx-expr (ce-member t vc b arrow q rk id) h u env mode k =
+  cx-expr b h u env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-member u (ce-member t vc ce-nil arrow q rk id) arrow q rk id r env) k)
+cx-expr (ce-call t vc c as) h u env mode k =
+  cx-call h u t (cx-etypes as) (λ e2 m2 k2 → cx-expr c h u e2 m2 k2) (λ e2 m2 k2 → cx-expr as h u e2 m2 k2) env mode k
+cx-expr (ce-member-call t vc c as) h u env mode k =
+  cx-mcall h u t (cx-etypes as) (λ e2 m2 k2 → cx-expr c h u e2 m2 k2) (λ e2 m2 k2 → cx-expr as h u e2 m2 k2) env mode k
+cx-expr (ce-operator-call t vc c as) h u env mode k =
+  cx-opcall h u t (cx-etypes as) (λ e2 m2 k2 → cx-expr c h u e2 m2 k2) (λ e2 m2 k2 → cx-expr as h u e2 m2 k2) env mode k
+cx-expr (ce-construct t vc ct ck el ls z as) h u env mode k =
+  cx-construct h u (ce-construct t vc ct ck el ls z ce-nil) t ct ck z (λ e2 m2 k2 → cx-expr as h u e2 m2 k2) (cx-etypes as) env mode k
+cx-expr (ce-temporary-object t vc ct ck el ls z as) h u env mode k =
+  cx-construct h u (ce-temporary-object t vc ct ck el ls z ce-nil) t ct ck z (λ e2 m2 k2 → cx-expr as h u e2 m2 k2) (cx-etypes as) env mode k
+cx-expr (ce-implicit-cast t vc ck pa x) h u env mode k =
+  cx-cast h u (ce-implicit-cast t vc ck pa ce-nil) t ck pa (cx-etype x) (λ e2 m2 k2 → cx-expr x h u e2 m2 k2) env mode k
+cx-expr (ce-static-cast t vc ck pa x) h u env mode k =
+  cx-cast h u (ce-static-cast t vc ck pa ce-nil) t ck pa (cx-etype x) (λ e2 m2 k2 → cx-expr x h u e2 m2 k2) env mode k
+cx-expr (ce-reinterpret-cast t vc ck pa x) h u env mode k =
+  cx-cast h u (ce-reinterpret-cast t vc ck pa ce-nil) t ck pa (cx-etype x) (λ e2 m2 k2 → cx-expr x h u e2 m2 k2) env mode k
+cx-expr (ce-functional-cast t vc ck pa x) h u env mode k =
+  cx-cast h u (ce-functional-cast t vc ck pa ce-nil) t ck pa (cx-etype x) (λ e2 m2 k2 → cx-expr x h u e2 m2 k2) env mode k
+cx-expr (ce-cstyle-cast t vc ck pa x) h u env mode k =
+  cx-cast h u (ce-cstyle-cast t vc ck pa ce-nil) t ck pa (cx-etype x) (λ e2 m2 k2 → cx-expr x h u e2 m2 k2) env mode k
+cx-expr (ce-unary t vc op x) h u env mode k = case op of
+  uo-post-inc → cx-expr x h u env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-incdec u (cx-etype x) true false r) k)
+  uo-post-dec → cx-expr x h u env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-incdec u (cx-etype x) false false r) k)
+  uo-pre-inc → cx-expr x h u env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-incdec u (cx-etype x) true true r) k)
+  uo-pre-dec → cx-expr x h u env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-incdec u (cx-etype x) false true r) k)
+  _ → cx-expr x h u env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-unop u (ce-unary t vc op ce-nil) op t r) k)
+cx-expr (ce-binary t vc op l r) h u env mode k = case op of
+  cbo-land → cx-expr l h u env cxm-get (λ a → cx-bind {Bool} {CxR} (cx-truth a) (λ b → case b of
+    true → cx-expr r h u env cxm-get k
+    false → k (cxr-val (sv-b false))))
+  cbo-lor → cx-expr l h u env cxm-get (λ a → cx-bind {Bool} {CxR} (cx-truth a) (λ b → case b of
+    true → k (cxr-val (sv-b true))
+    false → cx-expr r h u env cxm-get k))
+  cbo-assign → cx-expr r h u env cxm-get (λ y → cx-expr l h u env cxm-get (λ lv →
+    cx-then {Unit} {CxR} (cx-lv-store u (cx-etype l) lv y) (k lv)))
+  cbo-comma → cx-expr l h u env cxm-get (λ a → cx-expr r h u env mode k)
+  cbo-ptr-mem-d → cx-two true (λ e2 m2 k2 → cx-expr l h u e2 m2 k2) (λ e2 m2 k2 → cx-expr r h u e2 m2 k2) env
+    (λ x y → cx-bind {CxR} {CxR} (cx-ptr-mem u false (cx-etype r) x y) k)
+  cbo-ptr-mem-i → cx-two true (λ e2 m2 k2 → cx-expr l h u e2 m2 k2) (λ e2 m2 k2 → cx-expr r h u e2 m2 k2) env
+    (λ x y → cx-bind {CxR} {CxR} (cx-ptr-mem u true (cx-etype r) x y) k)
+  _ → cx-two (cxu-ltr u) (λ e2 m2 k2 → cx-expr l h u e2 m2 k2) (λ e2 m2 k2 → cx-expr r h u e2 m2 k2) env
+    (λ x y → cx-bind {CxR} {CxR} (cx-binop u (ce-binary t vc op ce-nil ce-nil) op t (cx-etype l) (cx-etype r) x y) k)
+cx-expr (ce-compound-assign t vc op lt rt l r) h u env mode k =
+  cx-expr r h u env cxm-get (λ y → cx-expr l h u env cxm-get (λ lv →
+    cx-bind {CxR} {CxR} (cx-cassign u (ce-compound-assign t vc op lt rt ce-nil ce-nil) op (cx-etype l) lt rt (cx-etype r) lv y) k))
+cx-expr (ce-conditional t vc c a b) h u env mode k =
+  cx-expr c h u env cxm-get (λ cv → cx-bind {Bool} {CxR} (cx-truth cv) (λ x → case x of
+    true → cx-expr a h u env mode k
+    false → cx-expr b h u env mode k))
+cx-expr (ce-paren t vc x) h u env mode k = cx-expr x h u env mode k
+cx-expr (ce-array-subscript t vc b i) h u env mode k =
+  cx-two true (λ e2 m2 k2 → cx-expr b h u e2 m2 k2) (λ e2 m2 k2 → cx-expr i h u e2 m2 k2) env
+    (λ x y → cx-bind {CxR} {CxR} (cx-subscript u (cx-etype b) (cx-etype i) x y) k)
+cx-expr (ce-init-list t vc uf fl is) h u env mode k =
+  cx-init-list h u (ce-init-list t vc uf ce-nil ce-nil) t uf (λ e2 m2 k2 → cx-expr fl h u e2 m2 k2) (cx-count is)
+    (λ e2 m2 k2 → cx-expr is h u e2 m2 k2) env mode k
+cx-expr (ce-implicit-value-init t vc) h u env mode k = cx-value-init h u t mode k
+cx-expr (ce-default-init t vc f) h u env mode k = (snd h) f (cx-env-dinit env) mode k
+cx-expr (ce-this t vc) h u env mode k = cx-bind {CxR} {CxR} (cx-this u env) k
+cx-expr (ce-materialize-temporary t vc sd ex x) h u env mode k =
+  cx-materialize (fst h) u t sd (λ e2 m2 k2 → cx-expr x h u e2 m2 k2) env k
+cx-expr (ce-with-cleanups t vc x) h u env mode k = cx-cut (cx-expr x h u env mode cx-k0) k
+cx-expr (ce-constant t vc v x) h u env mode k = case cx-tc t of
+  cxtc-scalar → cx-bind {SK} {CxR} (cx-res {SK} (cx-sk u t)) (λ sk → case sk of
+    sk-int sg w → cx-bind {SV} {CxR} (cx-res {SV} (cx-lit sk (cx-cint v))) (λ x2 → k (cxr-val x2))
+    sk-bool → cx-bind {SV} {CxR} (cx-res {SV} (cx-lit sk (cx-cint v))) (λ x2 → k (cxr-val x2))
+    _ → cx-expr x h u env mode k)
+  _ → cx-expr x h u env mode k
+cx-expr (ce-lambda t vc cl cs) h u env mode k = cx-lambda h u t cl (λ e2 m2 k2 → cx-expr cs h u e2 m2 k2) env mode k
+cx-expr (ce-unary-or-type-trait t vc tk at x) h u env mode k =
+  cx-bind {SV} {CxR} (cx-res {SV} (cx-trait u tk (case cx-is-nil x of
+                                                   true → at
+                                                   false → cx-etype x) t)) (λ v → k (cxr-val v))
+cx-expr (ce-subst-nttp t vc x) h u env mode k = cx-expr x h u env mode k
+cx-expr (ce-new t vc g ar on st sz pl i) h u env mode k =
+  cx-new h u (ce-new t vc g ar on st ce-nil ce-nil ce-nil) t ar on (λ e2 m2 k2 → cx-expr sz h u e2 m2 k2) (cx-etype sz)
+    (λ e2 m2 k2 → cx-expr pl h u e2 m2 k2) (not (cx-is-nil i)) (λ e2 m2 k2 → cx-expr i h u e2 m2 k2) env k
+cx-expr (ce-delete t vc g ar od x) h u env mode k =
+  cx-expr x h u env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-delete h u (ce-delete t vc g ar od ce-nil) ar (cx-etype x) r) k)
+cx-expr (ce-rewritten-binary t vc x) h u env mode k = cx-expr x h u env mode k
+cx-expr (ce-string-literal-units t vc us) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-string-literal-units t vc us))
+cx-expr (ce-default-arg t vc p) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-default-arg t vc p))
+cx-expr (ce-coawait t vc o c r s rs) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-coawait t vc ce-nil ce-nil ce-nil ce-nil ce-nil))
+cx-expr (ce-coyield t vc o c r s rs) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-coyield t vc ce-nil ce-nil ce-nil ce-nil ce-nil))
+cx-expr (ce-opaque-value t vc id src) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-opaque-value t vc id ce-nil))
+cx-expr (ce-paren-list-init t vc is) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-paren-list-init t vc ce-nil))
+cx-expr (ce-throw t vc x) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-throw t vc ce-nil))
+cx-expr (ce-bind-temporary t vc d x) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-bind-temporary t vc d ce-nil))
+cx-expr (ce-dynamic-cast t vc ck pa x) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-dynamic-cast t vc ck pa ce-nil))
+cx-expr (ce-typeid t vc at x) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-typeid t vc at ce-nil))
+cx-expr (ce-noexcept t vc x) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-noexcept t vc ce-nil))
+cx-expr (ce-atomic t vc op as) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-atomic t vc op ce-nil))
+cx-expr (ce-std-initializer-list t vc x) h u env mode k = cx-unsupported {CxR} (cxw-expr (ce-std-initializer-list t vc ce-nil))
+cx-expr ce-nil h u env mode k = case mode of
+  cxm-get → k cxr-void
+  cxm-init p → k cxr-void
+  _ → k cxr-nil
+cx-expr (ce-cons x xs) h u env mode k =
+  cx-list u mode (λ e2 m2 k2 → cx-expr x h u e2 m2 k2) (λ e2 m2 k2 → cx-expr xs h u e2 m2 k2) env k

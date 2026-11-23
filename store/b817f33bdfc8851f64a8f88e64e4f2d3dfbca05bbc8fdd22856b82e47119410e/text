@@ -1,0 +1,4 @@
+-- peer-port handler: answer locally on hit; on miss, request across the port and verify locally
+h-peer-at : {K V : Type} → (K → V → Bool) → (k : K) → Sum Unit V → Step (StoreSig K V) (Sum Unit V)
+h-peer-at chk k (inl u) = scmd k (λ r → sdone (ca-check chk k r))
+h-peer-at chk k (inr v) = sdone (inr v)

@@ -1,0 +1,9 @@
+-- one command: the state the session reached (session/state, read in constant time; the log only grows),
+-- the action taken (the walk's chunks are cut only when hy-show displays a walking state)
+hy-begin : List Word → List Word → List (List Word) → Proc W Unit
+hy-begin st m a =
+  bind (h-run (cons "/usr/bin/env" (cons "git" (cons "config" (cons "core.hooksPath" (cons ".githooks" nil)))))) (λ g →
+  bind (h-mkdir st) (λ u → bind (h-mkdir (list-append st "/session")) (λ u2 →
+  bind (hy-count st) (λ n →
+  bind (hy-state-read st n) (λ s →
+  bind (hy-take-at st m n a s) (λ u4 → exit #0))))))

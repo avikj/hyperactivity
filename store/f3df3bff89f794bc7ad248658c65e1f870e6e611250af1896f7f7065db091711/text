@@ -1,0 +1,11 @@
+p-stream : Word → Word → List (List Word) → Proc W Unit
+p-stream fdt fdn nil = ret unit
+p-stream fdt fdn (cons b nil) =
+  bind (p-code b) (λ tx →
+  let ev = p-eval-rhs (toNat #16) (p-rhs b tx) in
+  bind (fd-write fdt (fst ev)) (λ w1 → p-write-names fdn (snd ev)))
+p-stream fdt fdn (cons b (cons c cs)) =
+  bind (p-code b) (λ tx →
+  let ev = p-eval-rhs (toNat #16) (p-rhs b tx) in
+  bind (fd-write fdt (list-append (fst ev) (cons #10 (cons #10 nil)))) (λ w1 →
+  bind (p-write-names fdn (snd ev)) (λ w2 → p-stream fdt fdn (cons c cs))))

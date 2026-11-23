@@ -1,0 +1,4 @@
+s-graph : List Word → List Word → Proc W (List Word)
+s-graph st m = bind (h-read (list-append h-index "/meta/root")) (λ s → bind (h-read (list-append st "/views/source-stamp")) (λ k →
+  bind (if andB (h-not (h-null (s-or nil s))) (h-eq (s-or nil s) (s-or nil k)) then ret {lzero} {W} #0 else s-graph-make st m (s-or nil s)) (λ u →
+  bind (h-read (list-append st "/views/graph.json")) (λ j → ret {lzero} {W} (s-response "application/json" (s-or "{}" j))))))

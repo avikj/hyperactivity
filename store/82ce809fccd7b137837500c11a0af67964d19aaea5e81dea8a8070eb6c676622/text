@@ -1,0 +1,18 @@
+-- a working action performed. The actions that change the source take no lock: a change is
+-- checked before it is recorded (hy-put), and what a path holds is this machine's own label
+hy-act : List Word → List Word → List (List Word) → Proc W Unit
+hy-act st m nil = ret unit
+hy-act st m (cons c rest) =
+  if h-eq c "def" then hy-def st rest else
+  if h-eq c "write" then bind h-stdin (hy-write st m rest) else
+  if h-eq c "remove" then hy-remove st m rest else
+  if h-eq c "root" then hy-root m else
+  if h-eq c "take" then hy-take m rest else
+  if h-eq c "send" then bind (h-env "HYPERACTIVE_PLACE") (hy-send m) else
+  if h-eq c "apply" then hy-apply m rest else
+  if h-eq c "history" then hy-history st rest else
+  if h-eq c "paper" then hy-paper st m rest else
+  if h-eq c "check" then hy-check st m rest else
+  if h-eq c "done" then bind (h-write (list-append st "/session/log") nil) (λ b → h-out (h-line "The work is declared done; the session is over. The next session begins with the walk."))
+  else if h-has c hy-bridge-words then hy-bridge st m c rest
+  else hy-views st m (cons c rest)

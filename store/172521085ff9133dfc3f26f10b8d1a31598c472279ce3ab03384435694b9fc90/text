@@ -1,0 +1,8 @@
+-- collect up to lim matching (position, context tokens) pairs in sorted suffix interval [lo, hi)
+si-hits-at : (n : Nat) → Bytes n → Nat → Word → Word → Word → Nat → Word → Nat → List (Word × List (List Word))
+si-hits-at n B f root lo hi zero before win = nil
+si-hits-at n B f root lo hi (suc m) before win =
+  if wlt lo hi then
+    let pos = si-kth n B f root lo
+    in cons (pos , si-snippet n B pos before win) (si-hits-at n B f root (%wsucc lo) hi m before win)
+  else nil

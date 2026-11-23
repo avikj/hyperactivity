@@ -1,0 +1,8 @@
+-- the paper kept fresh: lib/paper-view.cub runs when docs/hyperactivity.cub or what it imports has changed
+-- since it last ran (paper/stamp); its exit status, 0 when the paper is fresh
+hy-paper-ready : List Word → List Word → Proc W Word
+hy-paper-ready st m =
+  bind (hy-get st "paper/stamp") (λ s → bind (h-code-time m "docs/hyperactivity.cub") (λ now →
+  if h-eq (hy-or nil s) (h-decimal now) then ret {lzero} {W} #0
+  else bind (h-run (cons m (cons "lib/paper-view.cub" nil))) (λ r →
+    if weq r #0 then bind (h-write (list-append st "/paper/stamp") (h-decimal now)) (λ b → ret {lzero} {W} r) else ret {lzero} {W} r)))

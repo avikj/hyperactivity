@@ -1,0 +1,31 @@
+-- the scalar C type of a builtin type; void and Clang's two placeholders have none. char8_t is
+-- unsigned char ([basic.fundamental]/9). long double is not among lib/mem's scalar types, and
+-- wchar_t, char16_t and char32_t are the Target's choice of an integer type, which the Target
+-- here does not state: each stops as what the Target does not offer
+cx-cty : CBuiltin → MRes CTy
+cx-cty b = case b of
+  ctb-void → mstop st-ill-typed
+  ctb-bool → mok ct-bool
+  ctb-char → mok ct-char
+  ctb-schar → mok ct-schar
+  ctb-uchar → mok ct-uchar
+  ctb-short → mok ct-short
+  ctb-ushort → mok ct-ushort
+  ctb-int → mok ct-int
+  ctb-uint → mok ct-uint
+  ctb-long → mok ct-long
+  ctb-ulong → mok ct-ulong
+  ctb-llong → mok ct-llong
+  ctb-ullong → mok ct-ullong
+  ctb-int128 → mok ct-int128
+  ctb-uint128 → mok ct-uint128
+  ctb-float → mok ct-float
+  ctb-double → mok ct-double
+  ctb-ldouble → mstop st-unsupported
+  ctb-wchar → mstop st-unsupported
+  ctb-char8 → mok ct-uchar
+  ctb-char16 → mstop st-unsupported
+  ctb-char32 → mstop st-unsupported
+  ctb-nullptr → mok ct-ptr
+  ctb-bound-member → mstop st-ill-typed
+  ctb-builtin-fn → mstop st-ill-typed

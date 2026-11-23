@@ -1,0 +1,11 @@
+-- an entry of the text's suffixes from point i is the text from some j on, at the point i + j
+si-ent : (t : List (List Word)) → (i : Word) → (e : El entry-ord) → MemKey {entry-ord} e (entries t i) →
+  (j : Word) × ((fst e ≡ si-drop j t) × (snd e ≡ wadd i j))
+si-ent t = case t return λ w → (i : Word) → (e : El entry-ord) → MemKey {entry-ord} e (entries w i) → (j : Word) × ((fst e ≡ si-drop j w) × (snd e ≡ wadd i j)) of
+  nil → λ i e m → Empty-rec m
+  cons x r → λ i e m →
+    mem-split {entry-ord} {(j : Word) × ((fst e ≡ si-drop j (cons x r)) × (snd e ≡ wadd i j))} e (cons x r , i) (entries r (wadd i #1)) m
+      (λ p → (#0 , ((λ k → fst (p k)) , concat (λ k → snd (p k)) (plusw≡wadd i #0))))
+      (λ m2 → let h = rec r (wadd i #1) e m2
+              in (%wsucc (fst h) , (fst (snd h) , concat (snd (snd h))
+                   (si-add1 i (fst h)))))

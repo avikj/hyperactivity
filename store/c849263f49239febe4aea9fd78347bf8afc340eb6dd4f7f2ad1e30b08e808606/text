@@ -1,0 +1,5 @@
+hy-show : List Word → List Word → Nat → HyState → Proc W Unit
+hy-show st m n (hy-walking k) = bind (hy-walk-fresh st m) (λ u → bind (hy-count st) (λ n1 → bind (hy-get st (list-append "walk/" (h-decimal (fromNat k)))) (hy-show-chunk k n1)))
+hy-show st m n hy-working = bind (hy-view st m "open") (λ u → h-out (list-append (cons #10 nil) hy-work-usage))
+hy-show st m n (hy-reading f) = bind (hy-doc m f) (λ t → bind (h-read (hy-pulls-path st)) (hy-reading-view f t))
+hy-show st m n (hy-decomposing f xy) = bind (hy-doc m f) (hy-pull-view f xy)

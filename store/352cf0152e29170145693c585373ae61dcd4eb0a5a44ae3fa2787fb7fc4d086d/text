@@ -1,0 +1,27 @@
+-- an explicit or implicit conversion by its cast kind
+cx-cast : CxH → CxU → CExpr → CType → CCastKind → List Word → CType → CxSub → CxEnv → CxMode → CxK → CxEv CxR
+cx-cast h u e t ck path st sub env mode k = case ck of
+  ck-LValueToRValue → sub env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-lv-load u st r) k)
+  ck-NoOp → sub env mode k
+  ck-FunctionToPointerDecay → sub env cxm-get (λ r → case r of
+    cxr-lv p al → k (cxr-val (sv-p p))
+    cxr-bound this fid virt → k r
+    _ → cx-stop {CxR} st-ill-typed)
+  ck-ArrayToPointerDecay → sub env cxm-get (λ r → cx-bind {MPtr} {CxR} (cx-as-lv r) (λ p → k (cxr-val (sv-p p))))
+  ck-BuiltinFnToFnPtr → sub env cxm-get (λ r → cx-bind {MPtr} {CxR} (cx-as-lv r) (λ p → k (cxr-val (sv-p p))))
+  ck-IntegralCast → sub env cxm-get (λ r → cx-bind {SV} {CxR} (cx-as-val r) (λ v → cx-bind {SV} {CxR} (cx-cv u st t v) (λ w → k (cxr-val w))))
+  ck-IntegralToBoolean → sub env cxm-get (λ r → cx-bind {SV} {CxR} (cx-as-val r) (λ v → cx-bind {SV} {CxR} (cx-cv u st t v) (λ w → k (cxr-val w))))
+  ck-PointerToBoolean → sub env cxm-get (λ r → cx-bind {SV} {CxR} (cx-as-val r) (λ v → cx-bind {SV} {CxR} (cx-cv u st t v) (λ w → k (cxr-val w))))
+  ck-IntegralToFloating → sub env cxm-get (λ r → cx-bind {SV} {CxR} (cx-as-val r) (λ v → cx-bind {SV} {CxR} (cx-cv u st t v) (λ w → k (cxr-val w))))
+  ck-FloatingToIntegral → sub env cxm-get (λ r → cx-bind {SV} {CxR} (cx-as-val r) (λ v → cx-bind {SV} {CxR} (cx-cv u st t v) (λ w → k (cxr-val w))))
+  ck-BitCast → sub env cxm-get k
+  ck-NullToPointer → sub env cxm-get (λ r → k (cxr-val (sv-p cx-null)))
+  ck-NullToMemberPointer → sub env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-zero u t) k)
+  ck-DerivedToBase → sub env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-to-base u path st r) k)
+  ck-UncheckedDerivedToBase → sub env cxm-get (λ r → cx-bind {CxR} {CxR} (cx-to-base u path st r) k)
+  ck-ToVoid → sub env cxm-get (λ r → k cxr-void)
+  ck-ConstructorConversion → sub env mode k
+  ck-UserDefinedConversion → sub env mode k
+  ck-FloatingCast → sub env cxm-get (λ r → cx-bind {SV} {CxR} (cx-as-val r) (λ v → cx-bind {SV} {CxR} (cx-cv u st t v) (λ w → k (cxr-val w))))
+  ck-BaseToDerived → cx-unsupported {CxR} (cxw-cast ck st t)
+  ck-Dynamic → cx-unsupported {CxR} (cxw-cast ck st t)

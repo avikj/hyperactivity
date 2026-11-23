@@ -35,8 +35,47 @@ static SKey *DKEY; static size_t capdkey;    /* by checked data index */
 static char chk_salt[65];                   /* the checker's name, "" before %%chk-def is defined */
 static const char *ckey_of(int ck) { return ck >= 0 && (size_t)ck < capckey && CKEY[ck][0] ? CKEY[ck] : "?"; }
 static const char *dkey_of(int di) { return di >= 0 && (size_t)di < capdkey && DKEY[di][0] ? DKEY[di] : "?"; }
-static void ckey_set(int ck, const char *k) { if ((size_t)ck >= capckey) { size_t o = capckey; GROW(CKEY, capckey, (size_t)ck + 1); memset(CKEY + o, 0, (capckey - o) * sizeof(SKey)); } snprintf(CKEY[ck], sizeof(SKey), "%s", k); }
-static void dkey_set(int di, const char *k) { if ((size_t)di >= capdkey) { size_t o = capdkey; GROW(DKEY, capdkey, (size_t)di + 1); memset(DKEY + o, 0, (capdkey - o) * sizeof(SKey)); } snprintf(DKEY[di], sizeof(SKey), "%s", k); }
+/* The number a code names a checked definition or a checked data type by (cglob n, cdata d ..., and
+ * the tables %gval, %gty, %dtab, %dent, %dtrans, %gsteps read with it). It was the place in this
+ * machine's tables, the order things were loaded in, so a program that takes the number out of a
+ * code literal (step-d in lib/elf.cub) and every term that held one had a key that what was loaded
+ * before changed (2026-11-22). The number is the first 60 bits of the key: the same on every
+ * machine. Before a key is known (the members of a recursive group, while it is checked) the
+ * number is 2^62 + the place, and stays readable afterwards. w: 0 definitions, 1 data types */
+#define PUB_PROV ((uint64_t)1 << 62)
+typedef struct { uint64_t k; int v; } PubE;
+static PubE *PUBM[2]; static size_t PUBCAP[2], PUBN[2];
+static uint64_t *PUBOF[2]; static size_t PUBOFCAP[2];
+static int pub_get(int w, uint64_t n) {
+    if (n >= PUB_PROV) return n - PUB_PROV < 0x7fffffff ? (int)(n - PUB_PROV) : -1;
+    if (!PUBCAP[w]) return -1;
+    for (size_t h = (size_t)(n * 0x9E3779B97F4A7C15ULL) & (PUBCAP[w] - 1); ; h = (h + 1) & (PUBCAP[w] - 1)) {
+        if (PUBM[w][h].v < 0) return -1;
+        if (PUBM[w][h].k == n) return PUBM[w][h].v;
+    }
+}
+static void pub_put(int w, uint64_t n, int v) {
+    if ((PUBN[w] + 1) * 2 > PUBCAP[w]) {
+        size_t oc = PUBCAP[w], nc = oc ? oc * 2 : 1024; PubE *old = PUBM[w];
+        PUBM[w] = malloc(nc * sizeof(PubE)); for (size_t i = 0; i < nc; i++) PUBM[w][i].v = -1;
+        PUBCAP[w] = nc; PUBN[w] = 0;
+        for (size_t i = 0; i < oc; i++) if (old[i].v >= 0) pub_put(w, old[i].k, old[i].v);
+        free(old);
+    }
+    size_t h = (size_t)(n * 0x9E3779B97F4A7C15ULL) & (PUBCAP[w] - 1);
+    while (PUBM[w][h].v >= 0) h = (h + 1) & (PUBCAP[w] - 1);
+    PUBM[w][h].k = n; PUBM[w][h].v = v; PUBN[w]++;
+}
+static uint64_t pub_of(int w, int i) { return i >= 0 && (size_t)i < PUBOFCAP[w] && PUBOF[w][i] ? PUBOF[w][i] : PUB_PROV + (uint64_t)i; }
+static void pub_set(int w, int i, const char *key) {
+    if (i < 0 || strlen(key) < 15) return;
+    char b[16]; memcpy(b, key, 15); b[15] = 0; uint64_t n = strtoull(b, NULL, 16); if (!n) n = 1;
+    if ((size_t)i >= PUBOFCAP[w]) { size_t o = PUBOFCAP[w]; GROW(PUBOF[w], PUBOFCAP[w], (size_t)i + 1); memset(PUBOF[w] + o, 0, (PUBOFCAP[w] - o) * sizeof(uint64_t)); }
+    PUBOF[w][i] = n;
+    if (pub_get(w, n) < 0) pub_put(w, n, i);   /* two places holding one key are one object: the first stands for it */
+}
+static void ckey_set(int ck, const char *k) { if ((size_t)ck >= capckey) { size_t o = capckey; GROW(CKEY, capckey, (size_t)ck + 1); memset(CKEY + o, 0, (capckey - o) * sizeof(SKey)); } snprintf(CKEY[ck], sizeof(SKey), "%s", k); pub_set(0, ck, k); }
+static void dkey_set(int di, const char *k) { if ((size_t)di >= capdkey) { size_t o = capdkey; GROW(DKEY, capdkey, (size_t)di + 1); memset(DKEY + o, 0, (capdkey - o) * sizeof(SKey)); } snprintf(DKEY[di], sizeof(SKey), "%s", k); pub_set(1, di, k); }
 static void key_hash(const char *s, size_t n, char out[65]) { Sha256 h; unsigned char d[32]; sha256_init(&h); sha256_update(&h, s, n); sha256_final(&h, d); sha256_hex(d, out); }
 
 /* ---- the canonical form ---- */
@@ -118,6 +157,17 @@ static void canon(SBuf *o, Node *t) {
         /* %rebuilt is kept: the compiler reads it (a scrutinee the elaborator rebuilt), so a form
          * read back without it would compile differently (2026-11-12) */
         if (!strcmp(k, "%spine") && t->n == 2) { canon(o, t->it[1]); return; }
+        /* a code literal (`code X`, src/lang.c to_code) names a checked definition or a checked data
+         * type by its number in this machine's tables, which is the order they were loaded in: in a
+         * key the number is written as that one's key, so one definition has one key whatever was
+         * loaded before it (2026-11-22: ce-demo2-c in lib/x86.cub had one key on the machine that
+         * wrote it and another on a machine that took its root, #2261 and #2412) */
+        if (!kser_on && !strcmp(k, "app") && t->n == 3 && !t->it[1]->list && !t->it[2]->list && t->it[2]->s[0] == '#' && !strncmp(t->it[1]->s, "%%c", 3)) {
+            const char *c = t->it[1]->s + 2, *key = NULL; uint64_t pn = strtoull(t->it[2]->s + 1, NULL, 10); int n = pn >= PUB_PROV && pn - PUB_PROV < 0x7fffffff ? (int)(pn - PUB_PROV) : -1; char tag = 0;   /* a number of the key is the same everywhere and stays; one of the place is written as the key when it has one */
+            if (!strcmp(c, "cglob")) { tag = 'G'; key = ckey_of(n); }
+            else if (!strcmp(c, "ccon") || !strcmp(c, "cdata") || !strcmp(c, "cproj") || !strcmp(c, "crec") || !strcmp(c, "celim") || !strcmp(c, "ccase")) { tag = 'D'; key = dkey_of(n); }
+            if (tag && key && key[0] != '?') { sb_put(o, "(app "); canon_sym(o, t->it[1]->s); sb_fmt(o, " %c%s)", tag, key); return; }
+        }
         if ((!strcmp(k, "lam") || !strcmp(k, "plam") || !strcmp(k, "forall")) && t->n >= 3) {
             sb_put(o, "("); sb_put(o, k);
             int nb = t->n - 2;
@@ -187,6 +237,44 @@ static void canon_decl(SBuf *o, Node *dd) {
     kself = saved_self;
 }
 
+/* a declaration as it is kept beside its key: (decl KIND NAME (B [T])... (c CNAME item...)...), a
+ * parameter or field a binder with its type, dims and the terms after them as they stand */
+static void ser_item(SBuf *o, Node *p) {
+    sb_put(o, " (");
+    if (p->list && p->n == 2) { canon_lbinder(o, p->it[0]); sb_put(o, " "); canon(o, p->it[1]); kpush(p->it[0]->list ? "" : p->it[0]->s); }
+    else { canon_lbinder(o, p); kpush(p->list ? "" : p->s); }
+    sb_put(o, ")");
+}
+static void ser_decl(SBuf *o, Node *dd) {
+    Node *hd = dd->it[1];
+    const char *saved_self = kself; int base = nkscope; bool sk = kser_on, sf = kfresh_on;
+    kser_on = true; kfresh_on = true; nkfresh = 0;
+    kself = hd->list ? hd->it[0]->s : hd->s;
+    sb_put(o, "(decl "); sb_put(o, dd->it[0]->s); sb_put(o, " "); sb_put(o, kself); sb_put(o, " (params");
+    if (hd->list) for (int k = 1; k < hd->n; k++) ser_item(o, hd->it[k]);
+    sb_put(o, ")");
+    bool codata = !strcmp(dd->it[0]->s, "codata");
+    for (int ci = 2; ci < dd->n; ci++) {
+        Node *cd = dd->it[ci];
+        if (!cd->list || cd->n < 1) continue;
+        if (codata) { sb_put(o, " (f "); sb_put(o, cd->it[0]->s); if (cd->n > 1) { sb_put(o, " "); canon(o, cd->it[1]); } sb_put(o, ")"); kpush(cd->it[0]->s); continue; }
+        int n0 = nkscope;
+        sb_put(o, " (c "); sb_put(o, cd->it[0]->s);
+        int i = 1;
+        for (; i < cd->n; i++) { Node *it = cd->it[i]; if (it->list && it->n >= 1 && is(it->it[0], "dims")) break; ser_item(o, it); }
+        if (i < cd->n) {
+            Node *dl = cd->it[i++];
+            sb_put(o, " (dims");
+            for (int k = 1; k < dl->n; k++) { sb_put(o, " "); sb_put(o, dl->it[k]->list ? "_" : dl->it[k]->s); kpush(dl->it[k]->list ? "" : dl->it[k]->s); }
+            sb_put(o, ")");
+            for (; i < cd->n; i++) { sb_put(o, " (t "); canon(o, cd->it[i]); sb_put(o, ")"); }
+        }
+        sb_put(o, ")");
+        nkscope = n0;
+    }
+    sb_put(o, ")");
+    nkscope = base; kself = saved_self; kser_on = sk; kfresh_on = sf;
+}
 /* ---- reading a canonical form back (2026-11-12): the inverse of canon for the forms canon
  * keeps whole. Bound variables get fresh names; G<key>, D<key>, C<key>.i, F<key>.i are rendered
  * through the current bindings (the unhidden checked definition, the checked data type with that
@@ -194,7 +282,13 @@ static void canon_decl(SBuf *o, Node *dd) {
 static const char **dscope; static size_t capdscope; static int ndscope; static long dfresh;
 static bool dc_bad;
 static int data_of_dkey(const char *k) { for (int i = 0; i < nchkdata; i++) if (!strcmp(dkey_of(i), k)) return CHKDATA[i]; return -1; }
+static const char *lk_self; static char **lk_cons; static int lk_ncons; static char **lk_flds; static int lk_nflds;   /* a declaration being read back (src/syntax.c, load_decl): its own name and its constructors' and fields' */
 static const char *dc_sym(const char *s) {
+    if (lk_self) {
+        if (!strcmp(s, "self")) return lk_self;
+        if (!strncmp(s, "Cself.", 6)) { int ix = atoi(s + 6); if (ix >= 0 && ix < lk_ncons) return lk_cons[ix]; dc_bad = true; return s; }
+        if (!strncmp(s, "Fself.", 6)) { int ix = atoi(s + 6); if (ix >= 0 && ix < lk_nflds) return lk_flds[ix]; dc_bad = true; return s; }
+    }
     if (s[0] == '@' && s[1] >= '0' && s[1] <= '9') { int k = atoi(s + 1); if (k < ndscope) return dscope[ndscope - 1 - k]; dc_bad = true; return s; }
     size_t n = strlen(s);
     if (s[0] == 'G' && n == 65) { for (int i = nchecked - 1; i >= 0; i--) if (!CHKHIDE[i] && !strcmp(ckey_of(i), s + 1)) return CHECKED[i]; dc_bad = true; return s; }
@@ -315,6 +409,16 @@ static void write_in(const char *d, const char *key, const char *file, const cha
     if (!ok || rename(t, p) != 0) unlink(t);
     free(t); free(p);
 }
+/* what is kept beside a key for every machine (2026-11-22): a checked definition's forms as
+ * elaborated, its implicit mask, whether it computes, a data type's declaration, a definition's
+ * text. They are objects of the pool, under the key, written once: a machine that never checked
+ * the definition takes it by key from them (src/syntax.c, load_key) and checks it itself */
+static char *kobj_read(const char *key, const char *file) { return src_read(key, file); }
+static void kobj_write(const char *key, const char *file, const char *text) {
+    char *p = src_path(key, file); if (!p) return;
+    FILE *f = fopen(p, "rb"); if (f) fclose(f); else src_write(key, file, text);
+    free(p);
+}
 /* a `check` line by the current checker */
 static bool store_checked(const char *key) {
     if (!chk_salt[0]) return false;
@@ -385,10 +489,22 @@ static void names_load(void) {
 /* whether the file being read is part of the work (src/syntax.c, w_held): a scratch file's definitions
  * are checked like any, but bind no name and enter no name's history */
 static bool bind_work = true;
+/* a text that is no module of the work whose definitions are kept in the pool all the same (their
+ * forms, mask and declaration beside their keys): one declaration being written on its own, which
+ * is labelled once it has checked (src/lang.c, --keep) */
+static bool keep_free;
+/* the module being read, when it is one of the work (src/syntax.c): a name another module holds
+ * (module-of/NAME names that one) is not bound from this one, so what a name's label is does not
+ * depend on which module was read last; a name this module comes to hold is bound when it is
+ * claimed (w_file) */
+static const char *bind_rel;
+static char *idx_read(const char *dir, const char *hx);
 static void names_bind(const char *name, const char *key) {
     if (!store_dir() || !bind_work) return;
     /* bound/<name in hex>: the name's key now, read by name with no log to scan */
     SBuf hx = {0}; for (const unsigned char *c = (const unsigned char *)name; *c; c++) sb_fmt(&hx, "%02x", *c);
+    if (bind_rel && hx.b && hx.n <= 250) { char *mo = idx_read("module-of", hx.b); if (mo) mo[strcspn(mo, "\n")] = 0;
+        if (mo && strcmp(mo, bind_rel)) { free(mo); free(hx.b); return; } free(mo); }
     if (hx.b && hx.n <= 250) { char *cur = store_read("bound", hx.b); if (!cur || strcmp(cur, key)) store_write("bound", hx.b, key, false); free(cur); }
     free(hx.b);
     names_load();
@@ -464,6 +580,25 @@ static void store_put(const char *name, const char *key, const char *code, const
     if (name) names_bind(name, key);
 }
 
+/* a data type's declaration kept beside its key, and each of its constructors' and fields' names
+ * pointed at the key (conof/NAME), so a name of either finds the type that holds it */
+static void store_decl(const char *key, Node *dd, int d) {
+    if (!store_dir()) return;
+    char *have = kobj_read(key, "decl");
+    if (!have) { SBuf s = { 0 }; int sd = cur_deps.n; ser_decl(&s, dd); cur_deps.n = sd; if (s.b && (bind_work || keep_free)) kobj_write(key, "decl", s.b); free(s.b); }
+    free(have);
+    if (!bind_work) return;
+    for (int pass = 0; pass < 2; pass++) {
+        int n = pass == 0 ? DATA[d].ncons : nfld;
+        for (int i = 0; i < n; i++) {
+            const char *nm = pass == 0 ? CON[DATA[d].cons[i]].name : FLD[i].data == d ? FLD[i].name : NULL;
+            if (!nm) continue;
+            SBuf hx = { 0 }; for (const unsigned char *c = (const unsigned char *)nm; *c; c++) sb_fmt(&hx, "%02x", *c);
+            if (hx.b && hx.n <= 250) { char *cur = store_read("conof", hx.b); if (!cur || strcmp(cur, key)) store_write("conof", hx.b, key, false); free(cur); }
+            free(hx.b);
+        }
+    }
+}
 /* A data type's key includes its declared name: two declarations of one content (List in
  * lib/prelude.cub, Lst in lib/code.cub) are two types to the checker (data types are generative), so
  * they are two keys, as Unison's unique types carry a salt (2026-11-12). */

@@ -1,0 +1,9 @@
+-- a body moved under one more binder: its variables that point outside it point one further
+nk-el-sh : Word → NkTm → NkTm
+nk-el-sh d (nk-var i) = if %wlt i d then nk-var i else nk-var (%wsucc i)
+nk-el-sh d (nk-lam b) = nk-lam (nk-el-sh (%wsucc d) b)
+nk-el-sh d (nk-con c as) = nk-con c (nk-el-sh d as)
+nk-el-sh d (nk-op h p as) = nk-op h (nk-el-sh d p) (nk-el-sh d as)
+nk-el-sh d (nk-match h p cs) = nk-match h (nk-el-sh d p) (nk-el-sh d cs)
+nk-el-sh d (nk-cons t r) = nk-cons (nk-el-sh d t) (nk-el-sh d r)
+nk-el-sh d t = t

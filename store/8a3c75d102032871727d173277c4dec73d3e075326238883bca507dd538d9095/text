@@ -1,0 +1,8 @@
+stat-copy-loop : Nat → Word → Word → Word → Word → Proc W Unit
+stat-copy-loop zero src sock buf rem = ret unit
+stat-copy-loop (suc k) src sock buf rem =
+  if weq rem #0 then ret {lzero} {W} unit else
+  bind (sys-call #0 src buf (if wlt #65536 rem then #65536 else rem) #0 #0 #0) (λ n →
+  if orB (weq n #0) (wlt #9223372036854775807 n) then ret {lzero} {W} unit
+  else bind (stat-write-all (toNat #65536) sock buf #0 n) (λ ok →
+    if ok then stat-copy-loop k src sock buf (wsub rem n) else ret {lzero} {W} unit))

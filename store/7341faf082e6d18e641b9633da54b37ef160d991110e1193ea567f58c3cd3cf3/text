@@ -1,0 +1,10 @@
+k-ge-comb : {o : Ord} → (k z x : El o) → (r : List (El o)) → (m : Sum Unit (El o)) → AllLe x r → MemKey z (cons x r) →
+            k-LastP k r m → (MemKey z r → k-Ge z m) → k-Ge z (k-comb x m)
+k-ge-comb k z x r m ar mz =
+  case m return λ w → k-LastP k r w → (MemKey z r → k-Ge z w) → k-Ge z (k-comb x w) of
+    inl u → λ p g → mem-split {o} {isTrue (leq z x)} z x r mz
+                      (λ ez → subst {_} {_} {El o} {λ w → isTrue (leq w x)} (sym ez) (ord-refl x))
+                      (λ m1 → Empty-rec (g m1))
+    inr y → λ p g → mem-split {o} {isTrue (leq z y)} z x r mz
+                      (λ ez → subst {_} {_} {El o} {λ w → isTrue (leq w y)} (sym ez) (k-allle-mem x y r ar (fst p)))
+                      (λ m1 → g m1)

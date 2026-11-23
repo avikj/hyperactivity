@@ -1,0 +1,27 @@
+s-answer : List Word → List Word → List Word → Proc W (List Word)
+s-answer st m path =
+  if orB (h-eq (h-before "?" path) "/") (h-null path) then s-site-kept st "front" s-front else
+  if h-eq (h-before "?" path) "/og.png" then bind (h-document "docs/og.png.hex") (λ t → ret (s-response "image/png" (h-unhex (s-or nil t)))) else
+  if h-eq (h-before "?" path) "/paper" then s-paper st m else
+  if h-eq (h-before "?" path) "/search" then sx-answer st (s-unescape (s-param "q" (s-query path))) else
+  if h-eq (h-before "?" path) "/corpus" then ret {lzero} {W} (s-response "application/json" s-corpus-list) else
+  if h-prefix "/corpus/" path then s-corpus-kept-one st (h-drop "/corpus" (h-before "?" path)) else
+  if h-eq (h-before "?" path) "/graph" then s-file s-html "tools/workflow-view.html" else
+  if h-prefix "/source/changes" path then s-changes st (s-query path) else
+  if h-prefix "/source/text" path then s-text (s-query path) else
+  if h-prefix "/source/object" path then s-object (s-query path) else
+  if h-prefix "/source/entries" path then s-entries else
+  if h-prefix "/api/graph" path then s-graph st m else
+  if h-prefix "/api/history" path then s-history st (s-param "name" (s-query path)) else
+  if h-eq (h-before "?" path) "/history" then s-file s-html "tools/history-view.html" else
+  if h-eq (h-before "?" path) "/hi/events" then hi-events st (s-query path) else
+  if h-eq (h-before "?" path) "/hi/scene" then hi-scene-get st (s-query path) else
+  if h-eq (h-before "?" path) "/hi/field" then ret (s-response s-html hi-field-page) else
+  if h-eq (h-before "?" path) "/hi/room" then ret (s-response s-html hi-room-page) else
+  if h-eq (h-before "?" path) "/hi" then hi-view st (s-query path) else
+  if h-eq (h-before "?" path) "/api/meaning" then ch-api (s-param "q" (s-query path)) else
+  if h-eq (h-before "?" path) "/chat" then ch-answer m (s-param "q" (s-query path)) else
+  if h-eq (h-before "?" path) "/synesthesia" then ret {lzero} {W} (sy-answer (s-query path)) else
+  if h-eq (h-before "?" path) "/hx/x.js" then um-script else
+  if h-prefix "/doc?" path then (if andB (h-prefix "docs/" (s-param "path" (s-query path))) (h-ends ".cub" (s-param "path" (s-query path))) then s-essay (s-param "path" (s-query path)) else s-doc (s-param "path" (s-query path))) else
+  s-public st (s-at-name (h-before "?" path) s-published)

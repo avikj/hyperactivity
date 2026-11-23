@@ -1,0 +1,1625 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interaction Net Lab · Hyperactivity</title>
+<meta name="description" content="Live cubical interaction net compiler, Wolfram causal graph, and Pythagorean Music of the Spheres harmonic engine.">
+<style>
+:root {
+  --bg: #000000;
+  --panel: #070707;
+  --ink: #ffffff;
+  --muted: #8a8a8a;
+  --border: #262626;
+  --border-hi: #ffffff;
+  --pink: #ff0a94;
+  --cyan: #00e5ff;
+  --gold: #ffd400;
+  --green: #00f900;
+  --purple: #b46eff;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+html.light {
+  --bg: #ffffff;
+  --panel: #fafafa;
+  --ink: #000000;
+  --muted: #666666;
+  --border: #d4d4d4;
+  --border-hi: #000000;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--pink); color: #fff; }
+
+nav {
+  height: 46px; display: flex; justify-content: space-between; align-items: center;
+  padding: 0 22px; background: var(--bg); border-bottom: 2px solid var(--border-hi);
+  font: 600 13px/1 var(--mono); letter-spacing: .04em; z-index: 10; position: relative;
+}
+nav a { color: var(--ink); text-decoration: none; }
+nav a:hover, nav a.active { color: var(--pink); }
+nav .mark { font-weight: 700; }
+nav .links { display: flex; align-items: center; gap: 20px; }
+nav .badge {
+  border: 1.5px solid var(--pink); color: var(--pink); padding: 2px 7px;
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 286px 1fr;
+  grid-template-rows: 1fr 64px;
+  height: calc(100vh - 46px);
+}
+
+.sidebar {
+  grid-row: 1 / 3;
+  background: var(--panel);
+  border-right: 2px solid var(--border-hi);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.sec-head {
+  padding: 9px 14px;
+  font: 700 10.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--pink); border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.presets {
+  overflow-y: auto; border-bottom: 2px solid var(--border-hi);
+  flex: 0 0 auto; max-height: 46%;
+}
+.preset-btn {
+  display: block; width: 100%; text-align: left;
+  background: transparent; color: var(--ink); border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 9px 14px; cursor: pointer;
+  transition: background .1s, padding-left .1s;
+}
+.preset-btn:hover { background: rgba(255,10,148,.09); padding-left: 18px; }
+.preset-btn.active { background: var(--pink); color: #fff; }
+.preset-btn .pt { font: 700 12.5px/1.2 var(--mono); display: flex; justify-content: space-between; }
+.preset-btn .pe {
+  font: 400 11px/1.3 var(--mono); opacity: .78; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.preset-btn.active .pe { opacity: .95; }
+
+.legend {
+  padding: 9px 14px; border-bottom: 1px solid var(--border);
+  font: 500 10.5px/1.45 var(--mono); color: var(--muted);
+  display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px;
+}
+.leg-item { display: flex; align-items: center; gap: 6px; color: var(--ink); }
+.leg-swatch { width: 11px; height: 11px; display: inline-block; flex-shrink: 0; }
+.sw-val { background: var(--pink); clip-path: polygon(50% 0%, 100% 100%, 0% 100%); }
+.sw-op { border: 2px solid var(--cyan); background: transparent; }
+.sw-act { background: var(--pink); height: 3px; box-shadow: 0 0 8px var(--pink); }
+.sw-cub { background: var(--gold); clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
+
+/* Causal DAG mini-view in sidebar */
+.causal-wrap {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+#causalCanvas { display: block; width: 100%; height: 96px; }
+
+.trace-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.trace { flex: 1; overflow-y: auto; padding: 6px 14px; font: 500 10.5px/1.5 var(--mono); }
+.trace-row {
+  padding: 4px 0; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.trace-row .rule { color: var(--ink); }
+.trace-row .ratio { color: var(--pink); font-weight: 700; white-space: nowrap; }
+
+.stage { position: relative; overflow: hidden; background: var(--bg); cursor: grab; }
+.stage:active { cursor: grabbing; }
+#netCanvas { display: block; width: 100%; height: 100%; }
+
+.stage-hud {
+  position: absolute; top: 12px; left: 14px; right: 14px;
+  pointer-events: none;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 14px;
+}
+.compiler-card {
+  pointer-events: auto;
+  background: var(--bg); border: 2px solid var(--border-hi);
+  padding: 9px 12px; width: min(590px, 56vw);
+}
+.compiler-top {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
+}
+.compiler-card .kicker {
+  font: 700 10px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--pink);
+}
+.compiler-row { display: flex; gap: 8px; align-items: stretch; }
+.expr-input {
+  flex: 1; background: var(--panel); color: var(--ink);
+  border: 1.5px solid var(--border); padding: 7px 10px;
+  font: 700 13.5px/1.25 var(--mono); outline: none;
+}
+.expr-input:focus { border-color: var(--pink); }
+.compile-btn {
+  font: 700 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .06em;
+  background: var(--pink); color: #fff; border: 0; padding: 0 12px; cursor: pointer;
+}
+.compile-btn:hover { background: var(--ink); color: var(--bg); }
+.compiler-card .desc {
+  font: 400 12px/1.4 var(--sans); color: var(--muted); margin-top: 6px;
+}
+.compiler-err {
+  font: 600 11px/1.3 var(--mono); color: #ff4545; margin-top: 4px; display: none;
+}
+
+.metrics-card {
+  pointer-events: auto;
+  background: var(--bg); border: 2px solid var(--border-hi);
+  padding: 8px 12px; display: flex; gap: 14px; align-items: center;
+  font: 600 11px/1.2 var(--mono);
+}
+.metric { display: flex; flex-direction: column; gap: 2px; }
+.metric .ml { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.metric .mv { font-size: 15px; font-weight: 800; color: var(--ink); }
+.metric .mv.pink { color: var(--pink); }
+.metric .mv.ok { color: var(--green); }
+
+.hover-tip {
+  position: absolute; bottom: 14px; left: 14px;
+  pointer-events: none;
+  background: var(--bg); border: 2px solid var(--pink);
+  padding: 8px 12px; font: 600 11.5px/1.4 var(--mono);
+  display: none; max-width: 480px;
+}
+.hover-tip .ht-sub { color: var(--muted); font-weight: 400; font-size: 10.5px; margin-top: 2px; }
+
+/* Right floating stack: Pythagorean Spheres + Kan Box */
+.right-dock {
+  position: absolute; bottom: 14px; right: 14px;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+  pointer-events: none;
+}
+.dock-card {
+  pointer-events: auto;
+  background: var(--bg); border: 2px solid var(--border-hi);
+  padding: 8px 10px; width: 212px;
+}
+.dock-head {
+  font: 700 9.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--pink); margin-bottom: 6px; display: flex; justify-content: space-between;
+}
+.dock-head.gold { color: var(--gold); }
+#sphereCanvas { display: block; width: 188px; height: 150px; }
+#kanCanvas { display: block; width: 188px; height: 132px; }
+.kan-box { display: none; }
+.kan-box.show { display: block; }
+
+.controls {
+  grid-column: 2;
+  background: var(--panel);
+  border-top: 2px solid var(--border-hi);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; gap: 10px; overflow-x: auto;
+}
+.ctrl-group { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+.btn {
+  font: 700 11.5px/1 var(--mono); letter-spacing: .04em; text-transform: uppercase;
+  background: var(--bg); color: var(--ink);
+  border: 2px solid var(--border-hi); padding: 8px 11px; cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--pink); color: #fff; border-color: var(--pink); }
+.btn.primary { background: var(--pink); color: #fff; border-color: var(--pink); }
+.btn.primary:hover { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.on { background: var(--ink); color: var(--bg); }
+
+.speed-wrap {
+  display: flex; align-items: center; gap: 6px;
+  font: 600 10px var(--mono); color: var(--muted);
+}
+.speed-wrap input[type=range] { width: 68px; accent-color: var(--pink); cursor: pointer; }
+
+.scope-wrap {
+  display: flex; align-items: center; gap: 8px;
+  border: 1.5px solid var(--border); padding: 4px 9px; background: var(--bg);
+}
+#scopeCanvas { width: 96px; height: 26px; display: block; }
+.ratio-readout { font: 700 11px/1.2 var(--mono); color: var(--pink); min-width: 112px; }
+.ratio-readout span { display: block; font-size: 9px; color: var(--muted); font-weight: 500; }
+
+select.tuning {
+  font: 600 10.5px var(--mono); background: var(--bg); color: var(--ink);
+  border: 1.5px solid var(--border); padding: 6px 7px; cursor: pointer;
+}
+
+@media (max-width: 860px) {
+  .workspace { grid-template-columns: 1fr; grid-template-rows: auto 1fr 64px; }
+  .sidebar { grid-row: 1; max-height: 170px; border-right: 0; border-bottom: 2px solid var(--border-hi); }
+  .legend, .causal-wrap, .trace-wrap, .right-dock, .metrics-card { display: none; }
+  .controls { grid-column: 1; }
+  .compiler-card { width: calc(100vw - 28px); }
+  nav .mark span { display: none; }
+}
+</style>
+</head>
+<body>
+<nav>
+  <a class="mark" href="/">Avik Jain<span> · Hyperactive Labs</span></a>
+  <div class="links">
+    <a href="/paper">Paper</a>
+    <a href="/pdf">PDF</a>
+    <a href="/nets" class="active">Nets</a>
+    <a href="/learn">Learn</a>
+    <a href="/#essays">Essays</a>
+    <span class="badge">Cubical Compiler</span>
+  </div>
+</nav>
+
+<div class="workspace">
+  <aside class="sidebar">
+    <div class="sec-head"><span>Programs &amp; Presets</span><span>8 nets</span></div>
+    <div class="presets" id="presetList"></div>
+
+    <div class="sec-head"><span>Visual Grammar</span><span>core.h</span></div>
+    <div class="legend">
+      <div class="leg-item"><i class="leg-swatch sw-val"></i>Value V_* (+)</div>
+      <div class="leg-item"><i class="leg-swatch sw-op"></i>Op O_* (−)</div>
+      <div class="leg-item"><i class="leg-swatch sw-act"></i>Active ●═●</div>
+      <div class="leg-item"><i class="leg-swatch sw-cub"></i>Cubical / I</div>
+    </div>
+
+    <div class="sec-head"><span>Causal Graph</span><span id="causalInfo">0 events</span></div>
+    <div class="causal-wrap"><canvas id="causalCanvas" width="540" height="192"></canvas></div>
+
+    <div class="trace-wrap">
+      <div class="sec-head"><span>Reduction Trace</span><span id="traceCount">0 steps</span></div>
+      <div class="trace" id="traceLog"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="netCanvas"></canvas>
+
+    <div class="stage-hud">
+      <div class="compiler-card">
+        <div class="compiler-top">
+          <span class="kicker" id="presetKicker">LIVE HYPERACTIVITY → NET COMPILER</span>
+          <span style="font:600 10px var(--mono);color:var(--muted)">λ / \ · (a,b) · fst · snd · @ · ~ · Enter</span>
+        </div>
+        <div class="compiler-row">
+          <input id="exprInput" class="expr-input" spellcheck="false" autocomplete="off" value="(λ x → x) v">
+          <button class="compile-btn" id="btnCompile">Compile</button>
+        </div>
+        <div class="compiler-err" id="compileErr"></div>
+        <div class="desc" id="presetDesc"></div>
+      </div>
+
+      <div class="metrics-card">
+        <div class="metric"><span class="ml">Work W</span><span class="mv" id="mWork">0</span></div>
+        <div class="metric"><span class="ml">Depth D</span><span class="mv" id="mDepth">0</span></div>
+        <div class="metric"><span class="ml">W / D</span><span class="mv pink" id="mPar">—</span></div>
+        <div class="metric"><span class="ml">Active</span><span class="mv pink" id="mActive">0</span></div>
+        <div class="metric"><span class="ml">State</span><span class="mv" id="mState">READY</span></div>
+      </div>
+    </div>
+
+    <div class="hover-tip" id="hoverTip"></div>
+
+    <div class="right-dock">
+      <div class="dock-card kan-box" id="kanBox">
+        <div class="dock-head gold"><span id="kanTitle">KAN OPEN BOX</span><span id="kanPhase">j = 0.00</span></div>
+        <canvas id="kanCanvas" width="376" height="264"></canvas>
+      </div>
+      <div class="dock-card">
+        <div class="dock-head"><span>MUSIC OF THE SPHERES</span><span id="sphereRatio">1:1</span></div>
+        <canvas id="sphereCanvas" width="376" height="300"></canvas>
+      </div>
+    </div>
+  </main>
+
+  <footer class="controls">
+    <div class="ctrl-group">
+      <button class="btn primary" id="btnPlay">▶ Play</button>
+      <button class="btn" id="btnStep">⏭ Step</button>
+      <button class="btn" id="btnReset">↺ Reset</button>
+      <button class="btn" id="btnFit">⌖ Fit</button>
+      <div class="speed-wrap" title="Playback speed">
+        <span>SPD</span>
+        <input id="speedSlider" type="range" min="120" max="1200" step="40" value="620">
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <button class="btn on" id="btnSound">♫ Sound</button>
+      <button class="btn" id="btnDrone" title="Pythagorean 1:1 + 3:2 ambient sphere drone">Ω Drone</button>
+      <select class="tuning" id="tuningSel" title="Pythagorean Fundamental">
+        <option value="256">256 Hz · Sci C</option>
+        <option value="216">216 Hz · 432/2</option>
+        <option value="130.81">130.8 Hz · C3</option>
+      </select>
+      <div class="scope-wrap">
+        <canvas id="scopeCanvas" width="192" height="52"></canvas>
+        <div class="ratio-readout" id="ratioReadout">1:1 · unison<span>click any ●═● pair</span></div>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <button class="btn" id="btnSyn" title="Avik's grapheme-color synesthesia (S)">◈ Syn (S)</button>
+      <button class="btn" id="btnTheme" title="Toggle obsidian / paper theme">◐</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+// ============================================================================
+// 1. AVIK'S EXACT SYNESTHESIA TABLE (docs/synesthesia.cub)
+// ============================================================================
+const SYN_COLORS = {
+  a:'#ff2600', b:'#fffb00', c:'#00f900', d:'#945200', e:'#00f900', f:'#008f00',
+  g:'#008f00', h:'#ffb6dc', i:'#0433ff', j:'#0433ff', k:'#942193', l:'#ffffff',
+  m:'#ff2600', n:'#fffb00', o:'#87cefa', p:'#ffb6dc', q:'#d880c8', r:'#945200',
+  s:'#fffb00', t:'#00f900', u:'#ffb6dc', v:'#fffb00', w:'#942193', x:'#942193',
+  y:'#fffb00', z:'#ffffff',
+  '0':'#ffffff', '1':'#ffffff', '2':'#87cefa', '3':'#ff9300', '4':'#fffb00',
+  '5':'#0433ff', '6':'#ff2600', '7':'#00f900', '8':'#fffb00', '9':'#942193'
+};
+function synColorFor(label) {
+  const ch = (label || 'h').toLowerCase().replace(/[^a-z0-9]/g, '')[0] || 'h';
+  return SYN_COLORS[ch] || '#ff0a94';
+}
+
+// ============================================================================
+// 2. PYTHAGOREAN "MUSIC OF THE SPHERES" HARMONIC ENGINE
+// ============================================================================
+const SPHERE_NODES = [
+  { key:'normal', label:'1:1',     num:1,   den:1,   ang: -Math.PI/2 },
+  { key:'subst',  label:'9:8',     num:9,   den:8,   ang: -Math.PI/2 + Math.PI*2*(1/8) },
+  { key:'papp',   label:'81:64',   num:81,  den:64,  ang: -Math.PI/2 + Math.PI*2*(2/8) },
+  { key:'proj',   label:'4:3',     num:4,   den:3,   ang: -Math.PI/2 + Math.PI*2*(3/8) },
+  { key:'beta',   label:'3:2',     num:3,   den:2,   ang: -Math.PI/2 + Math.PI*2*(4/8) },
+  { key:'comp',   label:'27:16',   num:27,  den:16,  ang: -Math.PI/2 + Math.PI*2*(5/8) },
+  { key:'unglue', label:'243:128', num:243, den:128, ang: -Math.PI/2 + Math.PI*2*(6/8) },
+  { key:'dup',    label:'2:1',     num:2,   den:1,   ang: -Math.PI/2 + Math.PI*2*(7/8) }
+];
+const PYTH = {
+  beta:   { num: 3,   den: 2,   name: '3:2 · diapente',    wave: 'triangle' },
+  proj:   { num: 4,   den: 3,   name: '4:3 · diatessaron', wave: 'sine' },
+  dup:    { num: 2,   den: 1,   name: '2:1 · diapason',    wave: 'triangle' },
+  era:    { num: 1,   den: 2,   name: '1:2 · sub-octave',  wave: 'sine' },
+  papp:   { num: 81,  den: 64,  name: '81:64 · ditone',    wave: 'sine' },
+  subst:  { num: 9,   den: 8,   name: '9:8 · epogdoon',    wave: 'sine' },
+  comp:   { num: 27,  den: 16,  name: '27:16 · Kan fill',  wave: 'triangle' },
+  unglue: { num: 243, den: 128, name: '243:128 · ua',      wave: 'sine' },
+  normal: { num: 1,   den: 1,   name: '1:1 · identity',    wave: 'sine' }
+};
+
+const activeChords = []; // { fromKey, toKey, alpha, color }
+
+class PythagoreanAudio {
+  constructor() {
+    this.ctx = null; this.analyser = null; this.master = null;
+    this.enabled = true; this.baseHz = 256;
+    this.droneOn = false; this.droneNodes = null;
+  }
+  init() {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.22;
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 256;
+    this.master.connect(this.analyser);
+    this.analyser.connect(this.ctx.destination);
+  }
+  toggleDrone() {
+    this.droneOn = !this.droneOn;
+    if (!this.droneOn) {
+      if (this.droneNodes) {
+        const now = this.ctx.currentTime;
+        this.droneNodes.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+        setTimeout(() => {
+          if (this.droneNodes) {
+            this.droneNodes.oscs.forEach(o => { try { o.stop(); } catch(e){} });
+            this.droneNodes = null;
+          }
+        }, 450);
+      }
+      return false;
+    }
+    this.init();
+    if (!this.ctx) return false;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.11, this.ctx.currentTime + 0.8);
+    g.connect(this.master);
+    const oscs = [0.5, 1, 1.5].map(r => {
+      const o = this.ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(this.baseHz * r, this.ctx.currentTime);
+      o.connect(g);
+      o.start();
+      return o;
+    });
+    this.droneNodes = { gain: g, oscs };
+    return true;
+  }
+  setBase(hz) {
+    this.baseHz = hz;
+    if (this.droneNodes && this.ctx) {
+      [0.5, 1, 1.5].forEach((r, i) => this.droneNodes.oscs[i].frequency.setTargetAtTime(hz * r, this.ctx.currentTime, 0.08));
+    }
+  }
+  playRule(ruleKey, voiceOffset = 0, totalVoices = 1) {
+    const info = PYTH[ruleKey] || PYTH.beta;
+    const ratio = info.num / info.den;
+    const freq = this.baseHz * ratio * (totalVoices > 1 ? Math.pow(9/8, voiceOffset % 3) : 1);
+    document.getElementById('ratioReadout').innerHTML =
+      `${info.name}<span>${freq.toFixed(1)} Hz · ${totalVoices > 1 ? totalVoices + '-voice chord' : 'local step'}</span>`;
+    document.getElementById('sphereRatio').textContent = `${info.num}:${info.den}`;
+    activeChords.push({
+      key: ruleKey === 'era' ? 'normal' : ruleKey,
+      alpha: 1.0,
+      color: (ruleKey === 'comp' || ruleKey === 'papp' || ruleKey === 'unglue') ? '#ffd400' : '#ff0a94'
+    });
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const over = this.ctx.createOscillator();
+    const g = this.ctx.createGain(), g2 = this.ctx.createGain();
+    osc.type = info.wave; over.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now);
+    over.frequency.setValueAtTime(freq * 1.5, now);
+    if (ruleKey === 'era') osc.frequency.exponentialRampToValueAtTime(Math.max(55, freq * 0.5), now + 0.28);
+    else if (ruleKey === 'papp' || ruleKey === 'comp') osc.frequency.exponentialRampToValueAtTime(this.baseHz * 2, now + 0.36);
+
+    const peak = Math.min(0.42, 0.55 / Math.sqrt(Math.max(1, totalVoices)));
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(peak, now + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + (ruleKey === 'normal' ? 1.15 : 0.44));
+    g2.gain.setValueAtTime(0.0001, now);
+    g2.gain.exponentialRampToValueAtTime(peak * 0.24, now + 0.02);
+    g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+
+    osc.connect(g); over.connect(g2);
+    g.connect(this.master); g2.connect(this.master);
+    osc.start(now); over.start(now);
+    osc.stop(now + (ruleKey === 'normal' ? 1.2 : 0.48));
+    over.stop(now + 0.28);
+  }
+  playNormalForm() {
+    this.playRule('normal', 0, 1);
+    if (!this.enabled || !this.ctx) return;
+    [1, 1.5, 2].forEach((r, idx) => {
+      const now = this.ctx.currentTime + idx * 0.04;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(this.baseHz * r, now);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.16 / (idx + 1), now + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 1.25);
+      osc.connect(g); g.connect(this.master);
+      osc.start(now); osc.stop(now + 1.3);
+    });
+  }
+}
+const audio = new PythagoreanAudio();
+
+// ============================================================================
+// 3. CUBICAL INTERACTION NET ENGINE (Lafont + CCHM Cubical Rules)
+// ============================================================================
+let nextId = 1;
+class Net {
+  constructor() {
+    this.cells = new Map();
+    this.sparks = [];
+    this.work = 0;
+    this.depth = 0;
+    this.trace = [];
+    this.events = []; // Wolfram causal DAG: { id, depth, rule, parents: [eventId], x, y }
+    this.kanProgress = 0;
+    this.kanMode = null;
+  }
+  add(kind, label, sub, nPorts, x, y, meta = {}, bornEvent = 0) {
+    const id = nextId++;
+    const pol = kind === 'ROOT' ? 'root' : (kind.startsWith('V_') ? 'val' : 'op');
+    const c = {
+      id, kind, polarity: pol, label, sub: sub || '',
+      ports: new Array(nPorts).fill(null),
+      x: x + (Math.random() - 0.5) * 6,
+      y: y + (Math.random() - 0.5) * 6,
+      vx: 0, vy: 0, age: 0,
+      fixed: kind === 'ROOT',
+      meta, bornEvent
+    };
+    this.cells.set(id, c);
+    return id;
+  }
+  wire(aId, aPort, bId, bPort) {
+    const a = this.cells.get(aId), b = this.cells.get(bId);
+    if (!a || !b) return;
+    a.ports[aPort] = { cell: bId, port: bPort };
+    b.ports[bPort] = { cell: aId, port: aPort };
+  }
+  bridge(aId, aPort, bId, bPort) {
+    const a = this.cells.get(aId), b = this.cells.get(bId);
+    const ea = a ? a.ports[aPort] : null;
+    const eb = b ? b.ports[bPort] : null;
+    if (ea && eb) {
+      if (ea.cell === bId && ea.port === bPort) return;
+      this.wire(ea.cell, ea.port, eb.cell, eb.port);
+    } else if (ea) {
+      const ca = this.cells.get(ea.cell); if (ca) ca.ports[ea.port] = null;
+    } else if (eb) {
+      const cb = this.cells.get(eb.cell); if (cb) cb.ports[eb.port] = null;
+    }
+  }
+  endpoint(id, port) { const c = this.cells.get(id); return c ? c.ports[port] : null; }
+  remove(id) { this.cells.delete(id); }
+
+  activePairs() {
+    const pairs = [], seen = new Set();
+    for (const c of this.cells.values()) {
+      if (c.polarity !== 'op') continue;
+      const e = c.ports[0];
+      if (!e || e.port !== 0) continue;
+      const v = this.cells.get(e.cell);
+      if (!v) continue;
+      // Active pair: O_* ⋈ V_*, OR Lafont O_DUP ⋈ O_DUP annihilation/commutation
+      if (v.polarity === 'val' || (c.kind === 'O_DUP' && v.kind === 'O_DUP' && c.id < v.id)) {
+        const key = `${Math.min(c.id, v.id)}-${Math.max(c.id, v.id)}`;
+        if (!seen.has(key)) { seen.add(key); pairs.push({ op: c, val: v }); }
+      }
+    }
+    return pairs;
+  }
+
+  describeRule(op, val) {
+    if (op.kind === 'O_APP' && val.kind === 'V_LAM') return { key: 'beta', text: `app ⋈ λ  ⟶  wire(arg,param); wire(body,out)` };
+    if (op.kind === 'O_FST' && val.kind === 'V_PAIR') return { key: 'proj', text: `fst ⋈ pair(a,b)  ⟶  a  (ε b)` };
+    if (op.kind === 'O_SND' && val.kind === 'V_PAIR') return { key: 'proj', text: `snd ⋈ pair(a,b)  ⟶  b  (ε a)` };
+    if (op.kind === 'O_ERA') return { key: 'era', text: `ε ⋈ ${val.label}  ⟶  dissolve parts` };
+    if (op.kind === 'O_DUP' && val.kind === 'V_LAM') return { key: 'dup', text: `δ ⋈ λ  ⟶  commute (optimal share)` };
+    if (op.kind === 'O_DUP' && val.kind === 'V_PAIR') return { key: 'dup', text: `δ ⋈ pair  ⟶  commute into parts` };
+    if (op.kind === 'O_DUP' && val.kind === 'O_DUP') return { key: 'dup', text: `δ ⋈ δ  ⟶  annihilate` };
+    if (op.kind === 'O_DUP') return { key: 'dup', text: `δ ⋈ ${val.label}  ⟶  duplicate atom` };
+    if (op.kind === 'O_PAPPP' && val.kind === 'V_PLAM') return { key: 'papp', text: `@ ${op.sub} ⋈ path-λ ${val.sub}  ⟶  subst [${val.sub}:=${op.sub}]` };
+    if (op.kind === 'O_SUBST' && val.kind === 'V_PAIR') return { key: 'subst', text: `subst ${op.sub} ⋈ pair  ⟶  wave to parts` };
+    if (op.kind === 'O_SUBST' && val.kind === 'V_IV') return { key: 'subst', text: `subst ${op.sub} ⋈ ${val.label}  ⟶  De Morgan eval` };
+    if (op.kind === 'O_SUBST') return { key: 'subst', text: `subst ${op.sub} ⋈ ${val.label}  ⟶  pass fiber` };
+    if (op.kind === 'O_COMP' && val.kind === 'V_SYS') return { key: 'comp', text: `comp ⋈ sys  ⟶  fill Kan open box` };
+    if (op.kind === 'O_COMP' && val.kind === 'V_GLUE') return { key: 'comp', text: `comp ⋈ Glue  ⟶  unglue on face` };
+    if (op.kind === 'O_UNGLUE' && val.kind === 'V_GLUEV') return { key: 'unglue', text: `unglue ⋈ glue  ⟶  apply equivalence` };
+    if (op.kind === 'O_CASE' && val.kind === 'V_CON') return { key: 'beta', text: `case ⋈ ${val.label}  ⟶  branch` };
+    if (op.kind === 'O_UNFOLD' && val.kind === 'V_WORD') return { key: 'dup', text: `unfold ⋈ #${val.meta.n}  ⟶  bifurcate mesh` };
+    return { key: 'beta', text: `${op.label} ⋈ ${val.label}  ⟶  rewrite` };
+  }
+
+  firePair(opId, valId) {
+    const op = this.cells.get(opId), val = this.cells.get(valId);
+    if (!op || !val) return null;
+    const mx = (op.x + val.x) / 2, my = (op.y + val.y) / 2;
+    const info = this.describeRule(op, val);
+    this.work++;
+    const evId = this.work;
+    const parents = [...new Set([op.bornEvent, val.bornEvent].filter(e => e > 0))];
+    this.events.push({ id: evId, depth: this.depth, key: info.key, parents });
+    if (this.events.length > 48) this.events.shift();
+
+    this.sparks.push({ x: mx, y: my, r: 8, alpha: 1, color: '#ff0a94' });
+
+    if (op.kind === 'O_APP' && val.kind === 'V_LAM') {
+      this.bridge(opId, 1, valId, 1);
+      this.bridge(opId, 2, valId, 2);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_FST' && val.kind === 'V_PAIR') {
+      const era = this.add('O_ERA', 'ε', 'erase', 1, val.x + 36, val.y + 36, {}, evId);
+      const eb = this.endpoint(valId, 2);
+      this.bridge(opId, 1, valId, 1);
+      if (eb) this.wire(era, 0, eb.cell, eb.port);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_SND' && val.kind === 'V_PAIR') {
+      const era = this.add('O_ERA', 'ε', 'erase', 1, val.x - 36, val.y + 36, {}, evId);
+      const ea = this.endpoint(valId, 1);
+      this.bridge(opId, 1, valId, 2);
+      if (ea) this.wire(era, 0, ea.cell, ea.port);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_ERA') {
+      for (let i = 1; i < val.ports.length; i++) {
+        const ep = val.ports[i];
+        if (ep) {
+          const e = this.add('O_ERA', 'ε', 'erase', 1, val.x + (i - 1.5) * 40, val.y + 30, {}, evId);
+          this.wire(e, 0, ep.cell, ep.port);
+        }
+      }
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_DUP' && val.kind === 'O_DUP') {
+      this.bridge(opId, 1, valId, 1);
+      this.bridge(opId, 2, valId, 2);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_DUP' && (val.kind === 'V_PAIR' || val.kind === 'V_LAM')) {
+      // Exact Lafont commutation rule: δ commutes with λ and pair!
+      const out1 = this.endpoint(opId, 1), out2 = this.endpoint(opId, 2);
+      const p1 = this.endpoint(valId, 1), p2 = this.endpoint(valId, 2);
+      const selfLoop = (p1 && p1.cell === valId && p1.port === 2);
+      const c1 = this.add(val.kind, val.label, val.sub, 3, mx - 52, my - 30, { ...val.meta }, evId);
+      const c2 = this.add(val.kind, val.label, val.sub, 3, mx + 52, my - 30, { ...val.meta }, evId);
+      if (out1) this.wire(c1, 0, out1.cell, out1.port);
+      if (out2) this.wire(c2, 0, out2.cell, out2.port);
+      if (selfLoop) {
+        this.wire(c1, 1, c1, 2);
+        this.wire(c2, 1, c2, 2);
+      } else {
+        const d1 = this.add('O_DUP', 'δ', 'O_DUP', 3, mx - 46, my + 48, {}, evId);
+        const d2 = this.add('O_DUP', 'δ', 'O_DUP', 3, mx + 46, my + 48, {}, evId);
+        this.wire(c1, 1, d1, 1); this.wire(c2, 1, d1, 2);
+        this.wire(c1, 2, d2, 1); this.wire(c2, 2, d2, 2);
+        if (p1) this.wire(d1, 0, p1.cell, p1.port);
+        if (p2) this.wire(d2, 0, p2.cell, p2.port);
+      }
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_DUP') {
+      const out1 = this.endpoint(opId, 1), out2 = this.endpoint(opId, 2);
+      const c1 = this.add(val.kind, val.label, val.sub, 1, mx - 42, my, { ...val.meta }, evId);
+      const c2 = this.add(val.kind, val.label, val.sub, 1, mx + 42, my, { ...val.meta }, evId);
+      if (out1) this.wire(c1, 0, out1.cell, out1.port);
+      if (out2) this.wire(c2, 0, out2.cell, out2.port);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_PAPPP' && val.kind === 'V_PLAM') {
+      const subStr = `[${val.sub}:=${op.sub}]`;
+      const s = this.add('O_SUBST', 'subst', subStr, 2, mx, my, { dim: val.sub, val: op.sub }, evId);
+      const bodyEp = this.endpoint(valId, 1), outEp = this.endpoint(opId, 1);
+      if (bodyEp) this.wire(s, 0, bodyEp.cell, bodyEp.port);
+      if (outEp) this.wire(s, 1, outEp.cell, outEp.port);
+      this.kanProgress = Math.min(1, this.kanProgress + 0.35);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_SUBST' && val.kind === 'V_PAIR') {
+      const pNew = this.add('V_PAIR', 'pair', 'Σ', 3, mx, my - 35, {}, evId);
+      const s1 = this.add('O_SUBST', 'subst', op.sub, 2, mx - 58, my + 35, { ...op.meta }, evId);
+      const s2 = this.add('O_SUBST', 'subst', op.sub, 2, mx + 58, my + 35, { ...op.meta }, evId);
+      const outEp = this.endpoint(opId, 1), ea = this.endpoint(valId, 1), eb = this.endpoint(valId, 2);
+      if (outEp) this.wire(pNew, 0, outEp.cell, outEp.port);
+      this.wire(pNew, 1, s1, 1); this.wire(pNew, 2, s2, 1);
+      if (ea) this.wire(s1, 0, ea.cell, ea.port);
+      if (eb) this.wire(s2, 0, eb.cell, eb.port);
+      this.kanProgress = Math.min(1, this.kanProgress + 0.35);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_SUBST' && val.kind === 'V_IV') {
+      const outEp = this.endpoint(opId, 1);
+      let resLabel = val.label;
+      const d = op.meta.dim, rv = op.meta.val;
+      if (val.meta.onZero !== undefined && rv === '0') resLabel = val.meta.onZero;
+      else if (val.meta.onOne !== undefined && rv === '1') resLabel = val.meta.onOne;
+      else if (val.meta.expr) {
+        resLabel = val.meta.expr
+          .replace(new RegExp(`~\\s*${d}\\b`, 'g'), rv === '0' ? '1' : rv === '1' ? '0' : `~${rv}`)
+          .replace(new RegExp(`\\b${d}\\b`, 'g'), rv);
+      }
+      const vNew = this.add('V_CON', resLabel, val.meta.resSub || 'endpoint', 1, mx, my, {}, evId);
+      if (outEp) this.wire(vNew, 0, outEp.cell, outEp.port);
+      this.kanProgress = 1;
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_SUBST') {
+      // Subst passes through atomic values
+      const outEp = this.endpoint(opId, 1);
+      const vNew = this.add(val.kind, val.label, val.sub, 1, mx, my, { ...val.meta }, evId);
+      if (outEp) this.wire(vNew, 0, outEp.cell, outEp.port);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_COMP' && val.kind === 'V_SYS') {
+      const outEp = this.endpoint(opId, 1), baseEp = this.endpoint(opId, 2);
+      const lid = this.add('V_PLAM', 'path-λ', 'i', 2, mx, my - 20, {}, evId);
+      const filled = this.add('V_CON', 'p ∙ q', 'Kan lid', 1, mx, my + 55, {}, evId);
+      this.wire(lid, 1, filled, 0);
+      if (outEp) this.wire(lid, 0, outEp.cell, outEp.port);
+      const eraBase = this.add('O_ERA', 'ε', 'base', 1, mx + 75, my + 20, {}, evId);
+      if (baseEp) this.wire(eraBase, 0, baseEp.cell, baseEp.port);
+      for (let i = 1; i < val.ports.length; i++) {
+        const ep = val.ports[i];
+        if (ep) {
+          const ew = this.add('O_ERA', 'ε', 'face', 1, val.x + (i - 1.5) * 44, val.y + 40, {}, evId);
+          this.wire(ew, 0, ep.cell, ep.port);
+        }
+      }
+      this.kanProgress = 1;
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_COMP' && val.kind === 'V_GLUE') {
+      const outEp = this.endpoint(opId, 1), baseEp = this.endpoint(opId, 2), eqEp = this.endpoint(valId, 1);
+      const ungl = this.add('O_UNGLUE', 'unglue', 'face i=0', 3, mx, my - 25, {}, evId);
+      const gv = this.add('V_GLUEV', 'glue', 'ua notEquiv', 2, mx, my + 48, {}, evId);
+      if (outEp) this.wire(ungl, 1, outEp.cell, outEp.port);
+      if (eqEp) this.wire(ungl, 2, eqEp.cell, eqEp.port);
+      this.wire(ungl, 0, gv, 0);
+      if (baseEp) this.wire(gv, 1, baseEp.cell, baseEp.port);
+      this.kanProgress = 0.5;
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_UNGLUE' && val.kind === 'V_GLUEV') {
+      const outEp = this.endpoint(opId, 1), eqEp = this.endpoint(opId, 2), baseEp = this.endpoint(valId, 1);
+      const app = this.add('O_APP', 'app', 'e.map', 3, mx, my, {}, evId);
+      if (eqEp) this.wire(app, 0, eqEp.cell, eqEp.port);
+      if (baseEp) this.wire(app, 1, baseEp.cell, baseEp.port);
+      if (outEp) this.wire(app, 2, outEp.cell, outEp.port);
+      this.kanProgress = 0.85;
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_CASE' && val.kind === 'V_CON') {
+      const outEp = this.endpoint(opId, 1);
+      const res = val.label === 'true' ? 'false' : 'true';
+      const vRes = this.add('V_CON', res, 'Bool', 1, mx, my, {}, evId);
+      if (outEp) this.wire(vRes, 0, outEp.cell, outEp.port);
+      this.kanProgress = 1;
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_UNFOLD' && val.kind === 'V_WORD') {
+      const n = val.meta.n || 0;
+      const outEp = this.endpoint(opId, 1);
+      if (n <= 0) {
+        const leaf = this.add('V_CON', '•', 'id', 1, mx, my, {}, evId);
+        if (outEp) this.wire(leaf, 0, outEp.cell, outEp.port);
+      } else {
+        const pair = this.add('V_PAIR', 'pair', `L${n}`, 3, mx, my - 20, {}, evId);
+        if (outEp) this.wire(pair, 0, outEp.cell, outEp.port);
+        const spread = 42 + n * 18;
+        const uL = this.add('O_UNFOLD', 'unfold', 'mesh', 2, mx - spread, my + 24, {}, evId);
+        const wL = this.add('V_WORD', `#${n - 1}`, 'Word', 1, mx - spread - 12, my + 78, { n: n - 1 }, evId);
+        const uR = this.add('O_UNFOLD', 'unfold', 'mesh', 2, mx + spread, my + 24, {}, evId);
+        const wR = this.add('V_WORD', `#${n - 1}`, 'Word', 1, mx + spread + 12, my + 78, { n: n - 1 }, evId);
+        this.wire(pair, 1, uL, 1); this.wire(uL, 0, wL, 0);
+        this.wire(pair, 2, uR, 1); this.wire(uR, 0, wR, 0);
+      }
+      this.remove(opId); this.remove(valId);
+    }
+
+    this.trace.unshift({ step: this.work, rule: info.text, ratio: (PYTH[info.key] || PYTH.beta).name });
+    if (this.trace.length > 60) this.trace.pop();
+    return info;
+  }
+
+  stepParallel() {
+    const pairs = this.activePairs();
+    if (!pairs.length) return 0;
+    this.depth++;
+    const ids = pairs.map(p => [p.op.id, p.val.id]);
+    ids.forEach(([oid, vid], idx) => {
+      const info = this.firePair(oid, vid);
+      if (info) audio.playRule(info.key, idx, ids.length);
+    });
+    if (this.activePairs().length === 0) setTimeout(() => audio.playNormalForm(), 160);
+    return ids.length;
+  }
+}
+
+// ============================================================================
+// 4. LIVE HYPERACTIVITY EXPRESSION → INTERACTION NET COMPILER
+// ============================================================================
+// Supports: λ x y → body, \x -> body, λ (i : I) → body, (a , b), fst e, snd e,
+//           e @ r, ~i, unfold #N, application f x, variables & atoms!
+function tokenize(src) {
+  const toks = [];
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (c === '-' && src[i+1] === '>') { toks.push({ t:'ARR', v:'→' }); i += 2; continue; }
+    if (c === '→') { toks.push({ t:'ARR', v:'→' }); i++; continue; }
+    if (c === 'λ' || c === '\\') { toks.push({ t:'LAM', v:'λ' }); i++; continue; }
+    if ('(),@~:.'.includes(c)) { toks.push({ t:c, v:c }); i++; continue; }
+    if (c === '#') {
+      let j = i + 1; while (j < src.length && /[0-9]/.test(src[j])) j++;
+      toks.push({ t:'WORD', v: src.slice(i, j), n: parseInt(src.slice(i+1, j) || '0', 10) });
+      i = j; continue;
+    }
+    if (/[A-Za-z0-9_']/.test(c)) {
+      let j = i; while (j < src.length && /[A-Za-z0-9_']/.test(src[j])) j++;
+      toks.push({ t:'ID', v: src.slice(i, j) });
+      i = j; continue;
+    }
+    throw new Error(`Unexpected character '${c}'`);
+  }
+  return toks;
+}
+
+function parseExpr(src) {
+  const toks = tokenize(src);
+  let pos = 0;
+  const peek = () => toks[pos];
+  const eat = (t) => {
+    const k = toks[pos];
+    if (!k || (t && k.t !== t)) throw new Error(`Expected ${t || 'token'}, got ${k ? k.v : 'EOF'}`);
+    pos++; return k;
+  };
+  function pExpr() {
+    let left = pLam();
+    if (peek() && peek().t === ',') {
+      eat(',');
+      const right = pExpr();
+      return { k: 'pair', a: left, b: right };
+    }
+    return left;
+  }
+  function pLam() {
+    if (peek() && peek().t === 'LAM') {
+      eat('LAM');
+      const binders = [];
+      while (peek() && peek().t !== 'ARR' && peek().t !== '.') {
+        if (peek().t === '(') {
+          eat('(');
+          const name = eat('ID').v;
+          let isDim = false;
+          if (peek() && peek().t === ':') { eat(':'); const ty = eat('ID').v; if (ty === 'I') isDim = true; }
+          eat(')');
+          binders.push({ name, isDim });
+        } else {
+          const name = eat('ID').v;
+          binders.push({ name, isDim: (name === 'i' || name === 'j' || name === 'k') });
+        }
+      }
+      if (!binders.length) throw new Error('Expected binder after λ');
+      if (peek() && (peek().t === 'ARR' || peek().t === '.')) eat();
+      let body = pExpr();
+      for (let b = binders.length - 1; b >= 0; b--) {
+        body = binders[b].isDim
+          ? { k: 'plam', dim: binders[b].name, body }
+          : { k: 'lam', param: binders[b].name, body };
+      }
+      return body;
+    }
+    return pApp();
+  }
+  function pApp() {
+    let node = pAtom();
+    while (peek()) {
+      if (peek().t === '@') {
+        eat('@');
+        const iv = pAtom();
+        node = { k: 'papp', fn: node, r: iv };
+      } else if (['ID', 'WORD', '(', 'LAM', '~'].includes(peek().t)) {
+        const arg = pAtom();
+        if (node.k === 'var' && node.name === 'fst') node = { k: 'fst', e: arg };
+        else if (node.k === 'var' && node.name === 'snd') node = { k: 'snd', e: arg };
+        else if (node.k === 'var' && node.name === 'unfold') node = { k: 'unfold', e: arg };
+        else node = { k: 'app', fn: node, arg };
+      } else break;
+    }
+    return node;
+  }
+  function pAtom() {
+    const k = peek();
+    if (!k) throw new Error('Unexpected end of expression');
+    if (k.t === '(') { eat('('); const e = pExpr(); eat(')'); return e; }
+    if (k.t === 'LAM') return pLam();
+    if (k.t === '~') { eat('~'); const e = pAtom(); return { k: 'neg', e }; }
+    if (k.t === 'WORD') { eat('WORD'); return { k: 'word', n: k.n, v: k.v }; }
+    if (k.t === 'ID') { eat('ID'); return { k: 'var', name: k.v }; }
+    throw new Error(`Unexpected token '${k.v}'`);
+  }
+  const ast = pExpr();
+  if (pos < toks.length) throw new Error(`Unexpected trailing '${toks[pos].v}'`);
+  return ast;
+}
+
+function compileAstToNet(ast, net) {
+  const root = net.add('ROOT', 'OUT', 'observer', 1, 0, -180);
+  // env maps var name -> array of consumer endpoints { cell, port }
+  function emit(node, env, dims, x, y, spread) {
+    if (node.k === 'var') {
+      if (env.has(node.name)) {
+        const proxy = { cell: null, port: null };
+        env.get(node.name).push(proxy);
+        return { kind: 'pending', proxy };
+      }
+      if (dims.has(node.name)) {
+        const id = net.add('V_IV', node.name, 'dim ∈ I', 1, x, y, { expr: node.name });
+        return { cell: id, port: 0 };
+      }
+      const id = net.add('V_CON', node.name, 'atom', 1, x, y);
+      return { cell: id, port: 0 };
+    }
+    if (node.k === 'word') {
+      const id = net.add('V_WORD', node.v, 'Word', 1, x, y, { n: node.n });
+      return { cell: id, port: 0 };
+    }
+    if (node.k === 'neg') {
+      const inner = node.e.k === 'var' ? node.e.name : 'i';
+      const id = net.add('V_IV', `~${inner}`, 'De Morgan', 1, x, y, { expr: `~${inner}` });
+      return { cell: id, port: 0 };
+    }
+    if (node.k === 'pair') {
+      const p = net.add('V_PAIR', 'pair', 'Σ', 3, x, y);
+      const a = emit(node.a, env, dims, x - spread * 0.55, y + 88, spread * 0.6);
+      const b = emit(node.b, env, dims, x + spread * 0.55, y + 88, spread * 0.6);
+      connect(p, 1, a); connect(p, 2, b);
+      return { cell: p, port: 0 };
+    }
+    if (node.k === 'fst' || node.k === 'snd') {
+      const op = net.add(node.k === 'fst' ? 'O_FST' : 'O_SND', node.k, node.k === 'fst' ? 'O_FST' : 'O_SND', 2, x, y);
+      const e = emit(node.e, env, dims, x, y + 88, spread * 0.85);
+      connect(op, 0, e);
+      return { cell: op, port: 1 };
+    }
+    if (node.k === 'unfold') {
+      const op = net.add('O_UNFOLD', 'unfold', 'O_UNFOLD', 2, x, y);
+      const e = emit(node.e, env, dims, x, y + 88, spread * 0.85);
+      connect(op, 0, e);
+      return { cell: op, port: 1 };
+    }
+    if (node.k === 'app') {
+      const app = net.add('O_APP', 'app', 'O_APP', 3, x, y);
+      const fn = emit(node.fn, env, dims, x + spread * 0.5, y + 70, spread * 0.65);
+      const arg = emit(node.arg, env, dims, x - spread * 0.5, y + 88, spread * 0.65);
+      connect(app, 0, fn);
+      connect(app, 1, arg);
+      return { cell: app, port: 2 };
+    }
+    if (node.k === 'lam') {
+      const lam = net.add('V_LAM', 'λ', node.param, 3, x, y);
+      const prev = env.get(node.param);
+      const uses = [];
+      env.set(node.param, uses);
+      const body = emit(node.body, env, dims, x + spread * 0.4, y + 82, spread * 0.72);
+      if (prev !== undefined) env.set(node.param, prev); else env.delete(node.param);
+      connect(lam, 2, body);
+      // Automatic linearity / sharing / erasure wiring!
+      if (uses.length === 0) {
+        const era = net.add('O_ERA', 'ε', `unused ${node.param}`, 1, x - 48, y + 58);
+        net.wire(lam, 1, era, 0);
+      } else if (uses.length === 1) {
+        if (uses[0].cell) net.wire(lam, 1, uses[0].cell, uses[0].port);
+      } else {
+        // Binary tree of O_DUP fan-out cells!
+        let curCell = lam, curPort = 1;
+        for (let k = 0; k < uses.length - 1; k++) {
+          const dup = net.add('O_DUP', 'δ', 'O_DUP', 3, x - 42 + k * 24, y + 58 + k * 24);
+          net.wire(curCell, curPort, dup, 0);
+          if (uses[k].cell) net.wire(dup, 1, uses[k].cell, uses[k].port);
+          curCell = dup; curPort = 2;
+        }
+        const last = uses[uses.length - 1];
+        if (last.cell) net.wire(curCell, curPort, last.cell, last.port);
+      }
+      return { cell: lam, port: 0 };
+    }
+    if (node.k === 'plam') {
+      net.kanMode = 'path';
+      const plam = net.add('V_PLAM', 'path-λ', node.dim, 2, x, y);
+      const nextDims = new Set(dims); nextDims.add(node.dim);
+      const body = emit(node.body, env, nextDims, x, y + 86, spread * 0.8);
+      connect(plam, 1, body);
+      return { cell: plam, port: 0 };
+    }
+    if (node.k === 'papp') {
+      const rStr = node.r.k === 'neg' ? `~${node.r.e.name || 'i'}` : (node.r.name || node.r.v || '0');
+      if (node.fn.k === 'var' && !env.has(node.fn.name)) {
+        // Path variable applied to an interval: atomic V_IV expression!
+        const lbl = `${node.fn.name} @ ${rStr}`;
+        const id = net.add('V_IV', lbl, 'path fiber', 1, x, y, { expr: lbl });
+        return { cell: id, port: 0 };
+      }
+      net.kanMode = 'path';
+      const papp = net.add('O_PAPPP', `@ ${rStr}`, rStr, 2, x, y);
+      const fn = emit(node.fn, env, dims, x, y + 86, spread * 0.85);
+      connect(papp, 0, fn);
+      return { cell: papp, port: 1 };
+    }
+    throw new Error('Unsupported syntax node');
+  }
+  function connect(cellId, portIdx, target) {
+    if (target.kind === 'pending') {
+      target.proxy.cell = cellId;
+      target.proxy.port = portIdx;
+    } else {
+      net.wire(cellId, portIdx, target.cell, target.port);
+    }
+  }
+  const top = emit(ast, new Map(), new Set(), 0, -75, 220);
+  connect(root, 0, top);
+}
+
+// ============================================================================
+// 5. CURATED PRESETS (Most compiled directly via our live compiler!)
+// ============================================================================
+const PRESETS = [
+  {
+    id: 'beta', title: 'β-Reduction',
+    expr: '(λ x → x) v',
+    kicker: 'THE ATOM OF INTERACTION',
+    desc: 'An application (O_APP) meets a lambda (V_LAM) head-to-head. They annihilate and wire the argument straight to the observer.'
+  },
+  {
+    id: 'share', title: 'Sharing & Erasure',
+    expr: '(λ x → (x , x)) (fst (a , b))',
+    kicker: 'ZERO-GC LINEARITY & SHARING',
+    desc: 'Automatic usage analysis wires x into δ (O_DUP) while fst spawns ε (O_ERA) to dissolve b with zero garbage collector.'
+  },
+  {
+    id: 'church', title: 'Church 2² (Optimal Sharing)',
+    expr: '(λ f x → f (f x)) (λ y → (y , y)) a',
+    kicker: 'LAFONT COMMUTATION CASCADE',
+    desc: 'Watch δ (O_DUP) commute through V_LAM and V_PAIR, exponentially unfolding a 4-leaf binary tree in parallel waves!'
+  },
+  {
+    id: 'parallel', title: 'Parallel Chord (W/D = 4)',
+    expr: '((λ x → x) a , (λ y → y) b) , ((λ z → z) c , (λ w → w) d)',
+    kicker: 'LOCK-FREE CAUSAL INVARIANCE',
+    desc: 'Four disjoint active pairs fire in ANY order (click them individually) or simultaneously as a 4-voice Pythagorean chord.'
+  },
+  {
+    id: 'path', title: 'Cubical Path Wave',
+    expr: '(λ (i : I) → (p @ ~i , q @ i)) @ 0',
+    kicker: 'DIMENSION SUBSTITUTION WAVE',
+    desc: 'Applying a cubical path at 0 spawns an O_SUBST [i:=0] wave that ripples through the pair, evaluating ~0 ⟶ 1 and 0 ⟶ 0.'
+  },
+  {
+    id: 'kan', title: 'Kan Box Filling',
+    expr: 'comp A [i=0 ↦ x, i=1 ↦ q j] (p i)',
+    kicker: 'CUBICAL KAN COMPOSITION',
+    desc: 'Path concatenation is filling an open square: O_COMP consumes the boundary system V_SYS and base p(i), closing the lid p ∙ q.',
+    customBuild(net) {
+      net.kanMode = 'kan';
+      const root = net.add('ROOT', 'OUT', 'x ≡ z', 1, 0, -175);
+      const comp = net.add('O_COMP', 'comp', 'O_COMP', 3, -20, -70);
+      const sys  = net.add('V_SYS', 'sys', '[i=0, i=1]', 3, -95, 40);
+      const base = net.add('V_CON', 'p i', 'base j=0', 1, 115, 25);
+      const w0   = net.add('V_CON', 'x', 'face i=0', 1, -165, 145);
+      const w1   = net.add('V_CON', 'q j', 'face i=1', 1, -25, 145);
+      net.wire(root, 0, comp, 1); net.wire(comp, 0, sys, 0); net.wire(comp, 2, base, 0);
+      net.wire(sys, 1, w0, 0); net.wire(sys, 2, w1, 0);
+    }
+  },
+  {
+    id: 'univalence', title: 'Univalence Computing',
+    expr: 'transport (ua notEquiv) true',
+    kicker: 'UNIVALENCE IS COMPUTABLE',
+    desc: 'Transport along ua(notEquiv) reduces O_COMP ⋈ V_GLUE into O_UNGLUE on face i=0, applying `not` to `true` and computing `false`.',
+    customBuild(net) {
+      net.kanMode = 'univalence';
+      const root = net.add('ROOT', 'OUT', 'Bool', 1, 0, -180);
+      const comp = net.add('O_COMP', 'transp', 'O_COMP', 3, 0, -85);
+      const glue = net.add('V_GLUE', 'Glue', 'ua notEquiv', 2, -80, 25);
+      const notF = net.add('V_LAM', 'λ', 'not', 3, -140, 145);
+      const cse  = net.add('O_CASE', 'case', 'Bool', 2, -50, 190);
+      const tru  = net.add('V_CON', 'true', 'Bool', 1, 110, 25);
+      net.wire(root, 0, comp, 1); net.wire(comp, 0, glue, 0); net.wire(comp, 2, tru, 0);
+      net.wire(glue, 1, notF, 0); net.wire(notF, 1, cse, 0); net.wire(notF, 2, cse, 1);
+    }
+  },
+  {
+    id: 'wolfram', title: 'Evolving Mesh (Unfold #3)',
+    expr: 'unfold #3',
+    kicker: 'WOLFRAM-STYLE INTERACTION MESH',
+    desc: 'Watch a seed cell recursively bifurcate into an expanding parallel cellular mesh (try editing #3 to #4 and clicking Compile!).'
+  }
+];
+
+// ============================================================================
+// 6. RENDERING: NET CANVAS, CAUSAL DAG, PYTHAGOREAN SPHERE, KAN BOX, SCOPE
+// ============================================================================
+const canvas = document.getElementById('netCanvas'), ctx = canvas.getContext('2d');
+const kanCanvas = document.getElementById('kanCanvas'), kctx = kanCanvas.getContext('2d');
+const sphereCanvas = document.getElementById('sphereCanvas'), spctx = sphereCanvas.getContext('2d');
+const causalCanvas = document.getElementById('causalCanvas'), cctx = causalCanvas.getContext('2d');
+const scopeCanvas = document.getElementById('scopeCanvas'), sctx = scopeCanvas.getContext('2d');
+
+let net = new Net();
+let currentPreset = PRESETS[0];
+let playing = false, playTimer = null, synMode = false;
+let cam = { x: 0, y: 0, zoom: 1 };
+let dragCell = null, panStart = null, hoveredPair = null, hoveredCell = null;
+let animTime = 0;
+
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+function screenToWorld(sx, sy) {
+  const r = canvas.getBoundingClientRect();
+  return { x: (sx - r.width / 2) / cam.zoom - cam.x, y: (sy - r.height / 2) / cam.zoom - cam.y };
+}
+
+function compileExpression(src, metaPreset = null) {
+  stopPlay();
+  const errEl = document.getElementById('compileErr');
+  errEl.style.display = 'none';
+  nextId = 1;
+  const fresh = new Net();
+  try {
+    if (metaPreset && metaPreset.customBuild && src.trim() === metaPreset.expr.trim()) {
+      metaPreset.customBuild(fresh);
+    } else {
+      const ast = parseExpr(src);
+      compileAstToNet(ast, fresh);
+    }
+    net = fresh;
+    cam = { x: 0, y: 0, zoom: 1 };
+    document.getElementById('kanBox').classList.toggle('show', !!net.kanMode);
+    if (!metaPreset) {
+      document.getElementById('presetKicker').textContent = 'COMPILED LIVE EXPRESSION';
+      document.getElementById('presetDesc').textContent = 'Compiled directly from your expression into cubical interaction net cells with automatic O_DUP sharing and O_ERA erasure.';
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    }
+    updateHUD();
+  } catch (err) {
+    errEl.textContent = 'Parse error: ' + err.message;
+    errEl.style.display = 'block';
+  }
+}
+
+function loadPreset(preset) {
+  currentPreset = preset;
+  document.getElementById('exprInput').value = preset.expr;
+  document.getElementById('presetKicker').textContent = preset.kicker;
+  document.getElementById('presetDesc').textContent = preset.desc;
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', b.dataset.id === preset.id));
+  compileExpression(preset.expr, preset);
+}
+
+function updateHUD() {
+  const active = net.activePairs();
+  document.getElementById('mWork').textContent = net.work;
+  document.getElementById('mDepth').textContent = net.depth;
+  document.getElementById('mPar').textContent = net.depth > 0 ? (net.work / net.depth).toFixed(2) : '—';
+  document.getElementById('mActive').textContent = active.length;
+  document.getElementById('causalInfo').textContent = `${net.events.length} event${net.events.length === 1 ? '' : 's'}`;
+  const st = document.getElementById('mState');
+  if (active.length === 0) { st.textContent = 'NORMAL ≡'; st.className = 'mv ok'; }
+  else { st.textContent = playing ? 'RUNNING' : 'ACTIVE'; st.className = 'mv pink'; }
+  document.getElementById('traceCount').textContent = `${net.work} step${net.work === 1 ? '' : 's'}`;
+  document.getElementById('traceLog').innerHTML = net.trace.map(t =>
+    `<div class="trace-row"><span class="rule">#${t.step} ${t.rule}</span><span class="ratio">${t.ratio.split('·')[0]}</span></div>`
+  ).join('');
+}
+
+function stepPhysics() {
+  const cells = [...net.cells.values()];
+  for (let i = 0; i < cells.length; i++) {
+    const a = cells[i]; a.age += 0.04;
+    for (let j = i + 1; j < cells.length; j++) {
+      const b = cells[j];
+      const dx = b.x - a.x, dy = b.y - a.y, d2 = dx*dx + dy*dy + 0.01, d = Math.sqrt(d2);
+      if (d < 210) {
+        const f = 3100 / d2, fx = (dx/d)*f, fy = (dy/d)*f;
+        if (!a.fixed && a !== dragCell) { a.vx -= fx; a.vy -= fy; }
+        if (!b.fixed && b !== dragCell) { b.vx += fx; b.vy += fy; }
+      }
+    }
+  }
+  for (const c of cells) {
+    for (let p = 0; p < c.ports.length; p++) {
+      const ep = c.ports[p];
+      if (!ep || ep.cell <= c.id) continue;
+      const o = net.cells.get(ep.cell); if (!o) continue;
+      const dx = o.x - c.x, dy = o.y - c.y, d = Math.sqrt(dx*dx + dy*dy) + 0.01;
+      const target = (p === 0 && ep.port === 0) ? 88 : 104;
+      const f = (d - target) * 0.046, fx = (dx/d)*f, fy = (dy/d)*f;
+      if (!c.fixed && c !== dragCell) { c.vx += fx; c.vy += fy; }
+      if (!o.fixed && o !== dragCell) { o.vx -= fx; o.vy -= fy; }
+    }
+  }
+  for (const c of cells) {
+    if (c.fixed || c === dragCell) { c.vx = 0; c.vy = 0; continue; }
+    c.vx *= 0.82; c.vy *= 0.82;
+    c.x += Math.max(-14, Math.min(14, c.vx));
+    c.y += Math.max(-14, Math.min(14, c.vy));
+  }
+}
+
+function portPos(c, pIdx) {
+  const n = c.ports.length;
+  if (pIdx === 0) {
+    const ep = c.ports[0];
+    if (ep && net.cells.has(ep.cell)) {
+      const o = net.cells.get(ep.cell);
+      const ang = Math.atan2(o.y - c.y, o.x - c.x);
+      return { x: c.x + Math.cos(ang) * 26, y: c.y + Math.sin(ang) * 26, ang };
+    }
+    return { x: c.x, y: c.y - 26, ang: -Math.PI / 2 };
+  }
+  const p0 = portPos(c, 0), baseAng = p0.ang + Math.PI, aux = n - 1;
+  const offset = aux === 1 ? 0 : ((pIdx - 1) / (aux - 1) - 0.5) * 1.44;
+  const ang = baseAng + offset;
+  return { x: c.x + Math.cos(ang) * 24, y: c.y + Math.sin(ang) * 24, ang };
+}
+
+function draw() {
+  animTime += 0.03;
+  stepPhysics();
+  const r = canvas.getBoundingClientRect(), W = r.width, H = r.height;
+  const isLight = document.documentElement.classList.contains('light');
+  const ink = isLight ? '#000' : '#fff', muted = isLight ? '#888' : '#555';
+  ctx.clearRect(0, 0, W, H);
+
+  const gs = 40 * cam.zoom;
+  ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.045)' : 'rgba(255,255,255,0.045)';
+  ctx.lineWidth = 1;
+  const ox = ((W/2 + cam.x*cam.zoom) % gs + gs) % gs, oy = ((H/2 + cam.y*cam.zoom) % gs + gs) % gs;
+  ctx.beginPath();
+  for (let x = ox; x < W; x += gs) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+  for (let y = oy; y < H; y += gs) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+
+  ctx.save();
+  ctx.translate(W/2, H/2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(cam.x, cam.y);
+
+  const activeSet = new Set(net.activePairs().map(p => `${Math.min(p.op.id, p.val.id)}-${Math.max(p.op.id, p.val.id)}`));
+  for (const c of net.cells.values()) {
+    for (let p = 0; p < c.ports.length; p++) {
+      const ep = c.ports[p]; if (!ep) continue;
+      if (ep.cell === c.id && p < ep.port) {
+        const a = portPos(c, p), b = portPos(c, ep.port);
+        ctx.strokeStyle = muted; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y);
+        ctx.quadraticCurveTo((a.x+b.x)/2 + (a.x-c.x)*1.1, (a.y+b.y)/2 + (a.y-c.y)*1.1, b.x, b.y);
+        ctx.stroke(); continue;
+      }
+      if (ep.cell <= c.id) continue;
+      const o = net.cells.get(ep.cell); if (!o) continue;
+      const a = portPos(c, p), b = portPos(o, ep.port);
+      const key = `${Math.min(c.id, o.id)}-${Math.max(c.id, o.id)}`;
+      const isActive = (p === 0 && ep.port === 0 && activeSet.has(key));
+      const isHover = hoveredPair && ((hoveredPair.op.id === c.id && hoveredPair.val.id === o.id) || (hoveredPair.op.id === o.id && hoveredPair.val.id === c.id));
+      if (isActive) {
+        ctx.save();
+        ctx.strokeStyle = '#ff0a94'; ctx.lineWidth = isHover ? 5 : 3.2;
+        ctx.shadowColor = '#ff0a94'; ctx.shadowBlur = isHover ? 18 : 10;
+        ctx.beginPath();
+        const steps = 18, dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+        const nx = -dy/len, ny = dx/len;
+        for (let s = 0; s <= steps; s++) {
+          const t = s/steps, wave = Math.sin(t*Math.PI*3 + animTime*5) * 4.5 * Math.sin(t*Math.PI);
+          const px = a.x + dx*t + nx*wave, py = a.y + dy*t + ny*wave;
+          if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.fillStyle = '#ff0a94';
+        ctx.beginPath(); ctx.arc(a.x, a.y, 4.5, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(b.x, b.y, 4.5, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.strokeStyle = isLight ? '#222' : '#7a7a7a'; ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+    }
+  }
+
+  for (let i = net.sparks.length - 1; i >= 0; i--) {
+    const sp = net.sparks[i]; sp.r += 4.2; sp.alpha -= 0.045;
+    if (sp.alpha <= 0) { net.sparks.splice(i, 1); continue; }
+    ctx.save(); ctx.strokeStyle = sp.color; ctx.globalAlpha = sp.alpha; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(sp.x, sp.y, sp.r, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+  }
+
+  for (const c of net.cells.values()) {
+    const scale = Math.min(1, 0.3 + c.age * 1.8), p0 = portPos(c, 0);
+    const isCubical = ['V_PLAM','V_IV','V_SYS','V_GLUE','V_GLUEV','O_PAPPP','O_SUBST','O_COMP','O_UNGLUE'].includes(c.kind);
+    const accent = synMode ? synColorFor(c.label) : (isCubical ? '#ffd400' : (c.polarity === 'val' ? '#ff0a94' : '#00e5ff'));
+    ctx.save(); ctx.translate(c.x, c.y); ctx.scale(scale, scale);
+    if (c.polarity === 'root') {
+      ctx.fillStyle = isLight ? '#000' : '#fff'; ctx.fillRect(-34, -15, 68, 30);
+      ctx.fillStyle = isLight ? '#fff' : '#000'; ctx.font = '800 11px ui-monospace, Menlo, monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('OUT', 0, 1);
+    } else if (c.polarity === 'val') {
+      ctx.save(); ctx.rotate(p0.ang + Math.PI/2); ctx.beginPath();
+      if (isCubical) { ctx.moveTo(0,-28); ctx.lineTo(26,0); ctx.lineTo(0,26); ctx.lineTo(-26,0); }
+      else { ctx.moveTo(0,-28); ctx.lineTo(27,20); ctx.lineTo(-27,20); }
+      ctx.closePath(); ctx.fillStyle = isLight ? '#fff0f8' : '#140410'; ctx.fill();
+      ctx.lineWidth = hoveredCell === c ? 3.5 : 2.2; ctx.strokeStyle = accent; ctx.stroke(); ctx.restore();
+      ctx.fillStyle = ink; ctx.font = '800 13px ui-monospace, Menlo, monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(c.label, 0, -2);
+      if (c.sub) { ctx.fillStyle = accent; ctx.font = '600 9.5px ui-monospace, Menlo, monospace'; ctx.fillText(c.sub, 0, 12); }
+    } else {
+      ctx.save(); ctx.rotate(p0.ang + Math.PI/2); ctx.beginPath();
+      ctx.moveTo(-25,-22); ctx.lineTo(-8,-22); ctx.lineTo(0,-12); ctx.lineTo(8,-22);
+      ctx.lineTo(25,-22); ctx.lineTo(25,22); ctx.lineTo(-25,22); ctx.closePath();
+      ctx.fillStyle = isLight ? '#f4f4f4' : '#0a0a0c'; ctx.fill();
+      ctx.lineWidth = hoveredCell === c ? 3.5 : 2.2; ctx.strokeStyle = accent; ctx.stroke(); ctx.restore();
+      ctx.fillStyle = ink; ctx.font = '800 12px ui-monospace, Menlo, monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(c.label, 0, -1);
+      if (c.sub) { ctx.fillStyle = accent; ctx.font = '600 9px ui-monospace, Menlo, monospace'; ctx.fillText(c.sub, 0, 12); }
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+
+  drawSphere();
+  drawCausalDag();
+  drawKanBox();
+  drawScope();
+  requestAnimationFrame(draw);
+}
+
+// Pythagorean Music of the Spheres Constellation
+function drawSphere() {
+  const W = sphereCanvas.width, H = sphereCanvas.height, cx = W/2, cy = H/2, R = 104;
+  const isLight = document.documentElement.classList.contains('light');
+  spctx.clearRect(0, 0, W, H);
+
+  // Outer harmonic ring & subtle inner identity ring
+  spctx.strokeStyle = isLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)';
+  spctx.lineWidth = 2;
+  spctx.beginPath(); spctx.arc(cx, cy, R, 0, Math.PI*2); spctx.stroke();
+  spctx.beginPath(); spctx.arc(cx, cy, R*0.42, 0, Math.PI*2); spctx.stroke();
+
+  // Active geometric chords connecting firing ratios across the sphere!
+  for (let i = activeChords.length - 1; i >= 0; i--) {
+    const ch = activeChords[i];
+    ch.alpha -= 0.014;
+    if (ch.alpha <= 0) { activeChords.splice(i, 1); continue; }
+    const n1 = SPHERE_NODES.find(n => n.key === ch.key) || SPHERE_NODES[0];
+    const n0 = SPHERE_NODES[0]; // 1:1 identity tonic
+    const x1 = cx + Math.cos(n1.ang)*R, y1 = cy + Math.sin(n1.ang)*R;
+    const x0 = cx + Math.cos(n0.ang)*R, y0 = cy + Math.sin(n0.ang)*R;
+    spctx.save();
+    spctx.strokeStyle = ch.color; spctx.globalAlpha = ch.alpha; spctx.lineWidth = 3.5;
+    spctx.beginPath(); spctx.moveTo(cx, cy); spctx.lineTo(x1, y1); spctx.lineTo(x0, y0); spctx.stroke();
+    // Glowing harmonic node
+    spctx.fillStyle = ch.color;
+    spctx.beginPath(); spctx.arc(x1, y1, 8, 0, Math.PI*2); spctx.fill();
+    spctx.restore();
+  }
+
+  // Center 1:1 identity singularity
+  spctx.fillStyle = '#ff0a94';
+  spctx.beginPath(); spctx.arc(cx, cy, 5, 0, Math.PI*2); spctx.fill();
+
+  // Ratio vertices around the circle
+  spctx.font = '700 17px ui-monospace, Menlo, monospace';
+  spctx.textAlign = 'center'; spctx.textBaseline = 'middle';
+  SPHERE_NODES.forEach(n => {
+    const x = cx + Math.cos(n.ang)*R, y = cy + Math.sin(n.ang)*R;
+    const lx = cx + Math.cos(n.ang)*(R + 26), ly = cy + Math.sin(n.ang)*(R + 22);
+    spctx.fillStyle = isLight ? '#000' : '#fff';
+    spctx.beginPath(); spctx.arc(x, y, 4, 0, Math.PI*2); spctx.fill();
+    spctx.fillStyle = n.key === 'normal' ? '#ff0a94' : (isLight ? '#444' : '#aaa');
+    spctx.fillText(n.label, lx, ly);
+  });
+}
+
+// Wolfram-style Causal Event DAG in sidebar
+function drawCausalDag() {
+  const W = causalCanvas.width, H = causalCanvas.height;
+  const isLight = document.documentElement.classList.contains('light');
+  cctx.clearRect(0, 0, W, H);
+  if (!net.events.length) {
+    cctx.fillStyle = isLight ? '#999' : '#444';
+    cctx.font = '600 19px ui-monospace, Menlo, monospace';
+    cctx.textAlign = 'center'; cctx.fillText('AWAITING INTERACTION EVENTS', W/2, H/2 + 6);
+    return;
+  }
+  const byDepth = new Map();
+  net.events.forEach(ev => {
+    if (!byDepth.has(ev.depth)) byDepth.set(ev.depth, []);
+    byDepth.get(ev.depth).push(ev);
+  });
+  const depths = [...byDepth.keys()].sort((a,b) => a - b);
+  const pos = new Map();
+  depths.forEach((d, di) => {
+    const row = byDepth.get(d);
+    const x = 36 + (depths.length === 1 ? (W - 72)/2 : (di / (depths.length - 1)) * (W - 72));
+    row.forEach((ev, ri) => {
+      const y = 30 + (row.length === 1 ? (H - 60)/2 : (ri / (row.length - 1)) * (H - 60));
+      pos.set(ev.id, { x, y });
+    });
+  });
+  // Causal edges
+  cctx.strokeStyle = isLight ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.35)';
+  cctx.lineWidth = 2;
+  net.events.forEach(ev => {
+    const p2 = pos.get(ev.id);
+    ev.parents.forEach(pid => {
+      const p1 = pos.get(pid);
+      if (p1 && p2) {
+        cctx.beginPath(); cctx.moveTo(p1.x, p1.y); cctx.lineTo(p2.x, p2.y); cctx.stroke();
+      }
+    });
+  });
+  // Event nodes
+  net.events.forEach(ev => {
+    const p = pos.get(ev.id);
+    cctx.fillStyle = (ev.key === 'comp' || ev.key === 'papp' || ev.key === 'unglue') ? '#ffd400' : '#ff0a94';
+    cctx.beginPath(); cctx.arc(p.x, p.y, 7, 0, Math.PI*2); cctx.fill();
+  });
+}
+
+function drawKanBox() {
+  if (!net.kanMode) return;
+  const W = kanCanvas.width, H = kanCanvas.height;
+  const isLight = document.documentElement.classList.contains('light');
+  kctx.clearRect(0, 0, W, H);
+  const p = net.kanProgress;
+  document.getElementById('kanPhase').textContent = `j = ${p.toFixed(2)}`;
+  document.getElementById('kanTitle').textContent =
+    net.kanMode === 'univalence' ? 'GLUE / UA FIBER' :
+    net.kanMode === 'path' ? 'INTERVAL I = [0,1]' : 'KAN OPEN BOX';
+  const x0 = 62, x1 = W - 62, y0 = H - 42, y1 = 42;
+  if (p > 0) {
+    const curY = y0 - (y0 - y1) * p;
+    kctx.fillStyle = 'rgba(255, 10, 148, 0.16)';
+    kctx.fillRect(x0, curY, x1 - x0, y0 - curY);
+  }
+  kctx.strokeStyle = '#00e5ff'; kctx.lineWidth = 4; kctx.beginPath(); kctx.moveTo(x0, y0); kctx.lineTo(x0, y1); kctx.stroke();
+  kctx.strokeStyle = '#ffd400'; kctx.lineWidth = 4; kctx.beginPath(); kctx.moveTo(x1, y0); kctx.lineTo(x1, y1); kctx.stroke();
+  kctx.strokeStyle = isLight ? '#000' : '#fff'; kctx.lineWidth = 4; kctx.beginPath(); kctx.moveTo(x0, y0); kctx.lineTo(x1, y0); kctx.stroke();
+  const lidY = y0 - (y0 - y1) * p;
+  kctx.strokeStyle = '#ff0a94'; kctx.lineWidth = p >= 1 ? 5 : 3;
+  kctx.setLineDash(p >= 1 ? [] : [8, 6]);
+  kctx.beginPath(); kctx.moveTo(x0, lidY); kctx.lineTo(x1, lidY); kctx.stroke();
+  kctx.setLineDash([]);
+  kctx.font = '700 18px ui-monospace, Menlo, monospace'; kctx.textAlign = 'center';
+  kctx.fillStyle = isLight ? '#000' : '#fff'; kctx.fillText(net.kanMode === 'univalence' ? 'true : Bool' : 'p(i)', W/2, y0 + 24);
+  kctx.fillStyle = '#00e5ff'; kctx.fillText('i=0', x0 - 30, (y0 + y1)/2);
+  kctx.fillStyle = '#ffd400'; kctx.fillText('i=1', x1 + 30, (y0 + y1)/2);
+  if (p >= 1) { kctx.fillStyle = '#ff0a94'; kctx.fillText(net.kanMode === 'univalence' ? 'false : Bool' : 'p ∙ q', W/2, y1 - 12); }
+}
+
+function drawScope() {
+  const W = scopeCanvas.width, H = scopeCanvas.height;
+  sctx.clearRect(0, 0, W, H);
+  sctx.strokeStyle = '#ff0a94'; sctx.lineWidth = 2.5; sctx.beginPath();
+  if (audio.analyser && (audio.enabled || audio.droneOn)) {
+    const buf = new Uint8Array(audio.analyser.frequencyBinCount);
+    audio.analyser.getByteTimeDomainData(buf);
+    for (let i = 0; i < buf.length; i++) {
+      const x = (i / (buf.length - 1)) * W, y = (buf[i] / 255) * H;
+      if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+    }
+  } else { sctx.moveTo(0, H/2); sctx.lineTo(W, H/2); }
+  sctx.stroke();
+}
+
+// ============================================================================
+// 7. POINTER & KEYBOARD INTERACTION
+// ============================================================================
+function findHit(wx, wy) {
+  for (const pair of net.activePairs()) {
+    const a = portPos(pair.op, 0), b = portPos(pair.val, 0);
+    const dx = b.x - a.x, dy = b.y - a.y, len2 = dx*dx + dy*dy + 0.01;
+    const t = Math.max(0, Math.min(1, ((wx - a.x)*dx + (wy - a.y)*dy) / len2));
+    if (Math.hypot(wx - (a.x + t*dx), wy - (a.y + t*dy)) < 16) return { type: 'pair', pair };
+  }
+  for (const c of net.cells.values()) {
+    if (Math.hypot(wx - c.x, wy - c.y) < 28) return { type: 'cell', cell: c };
+  }
+  return null;
+}
+
+canvas.addEventListener('pointermove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+  if (dragCell) { dragCell.x = w.x; dragCell.y = w.y; return; }
+  if (panStart) {
+    cam.x = panStart.cx + (e.clientX - panStart.x) / cam.zoom;
+    cam.y = panStart.cy + (e.clientY - panStart.y) / cam.zoom;
+    return;
+  }
+  const hit = findHit(w.x, w.y), tip = document.getElementById('hoverTip');
+  hoveredPair = hit && hit.type === 'pair' ? hit.pair : null;
+  hoveredCell = hit && hit.type === 'cell' ? hit.cell : null;
+  if (hoveredPair) {
+    const info = net.describeRule(hoveredPair.op, hoveredPair.val), pyth = PYTH[info.key] || PYTH.beta;
+    canvas.style.cursor = 'pointer'; tip.style.display = 'block';
+    tip.innerHTML = `<div>ACTIVE PAIR: ${info.text}</div><div class="ht-sub">Click to fire local step · ${pyth.name}</div>`;
+  } else if (hoveredCell) {
+    canvas.style.cursor = 'grab'; tip.style.display = 'block';
+    tip.innerHTML = `<div>${hoveredCell.kind} (${hoveredCell.label})</div><div class="ht-sub">polarity: ${hoveredCell.polarity} · ports: ${hoveredCell.ports.length} · drag to move</div>`;
+  } else { canvas.style.cursor = 'grab'; tip.style.display = 'none'; }
+});
+
+canvas.addEventListener('pointerdown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const w = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+  const hit = findHit(w.x, w.y);
+  if (hit && hit.type === 'pair') {
+    net.depth++;
+    const info = net.firePair(hit.pair.op.id, hit.pair.val.id);
+    if (info) audio.playRule(info.key, 0, 1);
+    if (net.activePairs().length === 0) setTimeout(() => audio.playNormalForm(), 160);
+    updateHUD(); return;
+  }
+  if (hit && hit.type === 'cell') { dragCell = hit.cell; canvas.setPointerCapture(e.pointerId); return; }
+  panStart = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointerup', () => { dragCell = null; panStart = null; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  cam.zoom = Math.max(0.3, Math.min(2.6, cam.zoom * (e.deltaY < 0 ? 1.1 : 0.91)));
+}, { passive: false });
+
+// ============================================================================
+// 8. UI CONTROLS
+// ============================================================================
+const presetList = document.getElementById('presetList');
+PRESETS.forEach(p => {
+  const btn = document.createElement('button');
+  btn.className = 'preset-btn'; btn.dataset.id = p.id;
+  btn.innerHTML = `<div class="pt"><span>${p.title}</span></div><div class="pe">${p.expr}</div>`;
+  btn.onclick = () => loadPreset(p);
+  presetList.appendChild(btn);
+});
+
+document.getElementById('btnCompile').onclick = () => compileExpression(document.getElementById('exprInput').value);
+document.getElementById('exprInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') compileExpression(e.target.value);
+});
+
+function stopPlay() {
+  playing = false;
+  if (playTimer) clearInterval(playTimer);
+  playTimer = null;
+  document.getElementById('btnPlay').textContent = '▶ Play';
+  updateHUD();
+}
+function startPlayLoop() {
+  const ms = 1320 - parseInt(document.getElementById('speedSlider').value, 10);
+  if (playTimer) clearInterval(playTimer);
+  playTimer = setInterval(() => {
+    const fired = net.stepParallel(); updateHUD();
+    if (!fired || net.activePairs().length === 0) stopPlay();
+  }, Math.max(110, ms));
+}
+document.getElementById('btnPlay').onclick = () => {
+  if (playing) { stopPlay(); return; }
+  if (net.activePairs().length === 0) compileExpression(document.getElementById('exprInput').value, currentPreset);
+  playing = true; document.getElementById('btnPlay').textContent = '❚❚ Pause'; updateHUD();
+  const fired = net.stepParallel(); updateHUD();
+  if (!fired || net.activePairs().length === 0) { stopPlay(); return; }
+  startPlayLoop();
+};
+document.getElementById('speedSlider').oninput = () => { if (playing) startPlayLoop(); };
+document.getElementById('btnStep').onclick = () => { stopPlay(); net.stepParallel(); updateHUD(); };
+document.getElementById('btnReset').onclick = () => compileExpression(document.getElementById('exprInput').value, currentPreset);
+document.getElementById('btnFit').onclick = () => { cam = { x: 0, y: 0, zoom: 1 }; };
+
+document.getElementById('btnSound').onclick = function() {
+  audio.enabled = !audio.enabled;
+  this.textContent = audio.enabled ? '♫ Sound' : '♫ Muted';
+  this.classList.toggle('on', audio.enabled);
+};
+document.getElementById('btnDrone').onclick = function() {
+  const on = audio.toggleDrone();
+  this.classList.toggle('on', on);
+};
+document.getElementById('tuningSel').onchange = function() { audio.setBase(parseFloat(this.value)); };
+document.getElementById('btnSyn').onclick = function() { synMode = !synMode; this.classList.toggle('on', synMode); };
+document.getElementById('btnTheme').onclick = () => document.documentElement.classList.toggle('light');
+document.addEventListener('keydown', e => {
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  if (e.key === 's' || e.key === 'S') { synMode = !synMode; document.getElementById('btnSyn').classList.toggle('on', synMode); }
+  else if (e.key === ' ') { e.preventDefault(); document.getElementById('btnStep').click(); }
+});
+
+const qPreset = new URLSearchParams(location.search).get('preset');
+loadPreset(PRESETS.find(p => p.id === qPreset) || PRESETS[2]); // default to Church 2^2 or query preset
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

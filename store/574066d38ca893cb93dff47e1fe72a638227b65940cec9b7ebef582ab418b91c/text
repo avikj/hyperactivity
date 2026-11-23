@@ -1,0 +1,9 @@
+peer-transparent-step : {K V A : Type} → (loc rem : CAStore K V) → (chk : K → V → Bool) →
+  ValidCAStore chk rem → (k : K) → (f : Sum Unit V → Step (StoreSig K V) A) →
+  ((r : Sum Unit V) → eval-peer loc rem chk (f r) ≡ eval-local (ca-union loc rem) (f r)) →
+  (x : Sum Unit V) →
+  run-closed (o-handle (h-local rem) (o-bind (h-peer-at chk k x) (λ r → o-handle (h-peer loc chk) (f r))))
+  ≡ eval-local (ca-union loc rem) (f (ca-or x (rem k)))
+peer-transparent-step loc rem chk vrem k f ih (inl u) =
+  (λ i → eval-peer loc rem chk (f (ca-check-valid chk rem vrem k i))) ∙ ih (rem k)
+peer-transparent-step loc rem chk vrem k f ih (inr v) = ih (inr v)

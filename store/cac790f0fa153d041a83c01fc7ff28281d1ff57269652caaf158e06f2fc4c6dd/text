@@ -1,0 +1,4 @@
+-- /paper.pdf : the formal PDF export of the paper, served inline from the store
+s-pdf-resp : Sum Unit (List Word) → List Word
+s-pdf-resp (inl u) = s-respond "503 Service Unavailable" "text/plain" "the paper PDF is not built yet"
+s-pdf-resp (inr hx) = list-append (h-concat (cons "HTTP/1.1 200 OK" (cons h-crlf (cons "Content-Type: application/pdf" (cons h-crlf (cons "Content-Disposition: inline; filename=hyperactivity.pdf" (cons h-crlf (cons "Content-Length: " (cons (h-decimal (wshr (fromNat (list-length hx)) #1)) (cons h-crlf (cons "Cache-Control: no-cache" (cons h-crlf (cons "Connection: close" (cons h-crlf (cons h-crlf nil))))))))))))))) (h-unhex hx)

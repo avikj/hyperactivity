@@ -1,0 +1,14 @@
+-- ---------------------------------------------------------------- analytics (/stats, /stats/data)
+-- Built-in zero-hassle server-side analytics (2026-11-22): every real page view (GET to /, /paper,
+-- /synesthesia, any published work in s-published, or any public /doc?path=...) appends one atomic
+-- O(1) TSV line to STORE/hits.log after the HTTP response is sent and the socket closed (zero added
+-- latency to page loads; no cookies, no third-party scripts, immune to ad-blockers, no raw IPs
+-- stored — only a 48-bit FNV-1a fingerprint of client IP and User-Agent). /stats/data streams
+-- STORE/hits.log in O(1) memory (64 KB buffer, memory-is-local); /stats serves the live dashboard.
+stat-header-in : List Word → List (List Word) → List Word
+stat-header-in name nil = nil
+stat-header-in name (cons line r) =
+  if h-null (h-before (cons #13 nil) line) then nil
+  else if h-eq (sx-lower (h-before ":" (h-before (cons #13 nil) line))) name
+  then h-trim (h-after ":" (h-before (cons #13 nil) line))
+  else stat-header-in name r

@@ -1,0 +1,8 @@
+-- symmetry of peer exchange: no client/server asymmetry under content identity
+peer-order-invariant : {K V A : Type} → (chk : K → V → Bool) → ContentAddressed {K} {V} chk →
+  (s1 s2 : CAStore K V) → ValidCAStore chk s1 → ValidCAStore chk s2 →
+  (p : Step (StoreSig K V) A) → eval-peer s1 s2 chk p ≡ eval-peer s2 s1 chk p
+peer-order-invariant {K} {V} chk ca s1 s2 v1 v2 p =
+  peer-transparent s1 s2 chk v2 p
+  ∙ (λ i → eval-local (ca-union-comm {K} {V} chk ca s1 s2 v1 v2 i) p)
+  ∙ sym (peer-transparent s2 s1 chk v1 p)

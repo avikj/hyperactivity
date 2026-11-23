@@ -1,0 +1,6 @@
+round-m : (t : List (List Word)) → (h0 : Nat) → (r : List Word) → (inv : DblInv t (suc h0) r) → (s' : List (List Word)) → MemKey {suffix-ord} s' (sufs t) →
+          MemKey {WW} (dkey (fst inv) (suc h0) s') (zippad r (drop-n (suc h0) r))
+round-m t h0 r inv s' m' =
+  subst {_} {_} {List (Word × Word)} {λ z → MemKey {WW} (dkey (fst inv) (suc h0) s') z}
+    (sym (keys-eq (fst inv) (suc h0) t r (fst (snd inv))))
+    (mem-map {suffix-ord} {WW} (dkey (fst inv) (suc h0)) s' (sufs t) m')

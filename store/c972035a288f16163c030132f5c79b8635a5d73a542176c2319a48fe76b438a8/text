@@ -1,0 +1,8 @@
+um-send-go : List Word → List Word → Proc W (List Word)
+um-send-go req body =
+  if orB (h-prefix "{" body) (h-prefix "[" body)
+  then bind (h-capture (um-send-args (um-hdr-clean (um-header "user-agent" req)) (um-hdr-clean (um-ip req)) (um-hdr-clean (um-header "x-umami-cache" req)) body)) (λ r →
+    if andB (weq (fst r) #0) (h-not (h-null (snd r)))
+    then ret {lzero} {W} (s-response "application/json" (snd r))
+    else ret {lzero} {W} (s-response "application/json" "{}"))
+  else ret {lzero} {W} (s-respond "400 Bad Request" "application/json" "{}")

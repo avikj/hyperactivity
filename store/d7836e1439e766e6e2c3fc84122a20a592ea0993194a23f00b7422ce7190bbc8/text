@@ -1,0 +1,9 @@
+p-take-strs-f : Nat → Nat → List Word → List (List Word) × List Word
+p-take-strs-f zero k t = (nil , t)
+p-take-strs-f (suc f) zero t = (nil , t)
+p-take-strs-f (suc f) (suc k) nil = (nil , nil)
+p-take-strs-f (suc f) (suc k) (cons x r) = if weq x #34 then
+  (case p-upto-q-acc nil r of
+    inl u → (nil , nil)
+    inr p → let rest = p-take-strs-f f k (snd p) in (cons (fst p) (fst rest) , snd rest))
+  else p-take-strs-f f (suc k) r

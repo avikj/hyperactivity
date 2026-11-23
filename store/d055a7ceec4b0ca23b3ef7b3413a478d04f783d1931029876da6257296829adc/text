@@ -1,0 +1,29 @@
+-- the O(depth) byte-index order-statistic lookup equals the tree's k-th suffix position
+si-kth-ok : (n : Nat) → (B : Bytes n) → (t : RTree (El entry-ord)) → (f : Nat) → (o : Word) → (k : Word) →
+  isTrue (si-chk-tree n B t o) → isTrue (si-fuel t f) → si-kth n B f o k ≡ si-kth-pos t k
+si-kth-ok n B t = case t return λ w → (f : Nat) → (o k : Word) → isTrue (si-chk-tree n B w o) → isTrue (si-fuel w f) → si-kth n B f o k ≡ si-kth-pos w k of
+  rleaf → λ f o k hc hf → case f return λ v → si-kth n B v o k ≡ #0 of
+    zero → λ i → #0
+    suc g → λ i → if weq (word-eq-sound (cstr-get n B o) #0 hc i) #1
+      then (if wlt k (si-rd4 n B (wadd o #1)) then si-kth n B g (wadd o #13) k
+            else if weq k (si-rd4 n B (wadd o #1)) then si-rd4 n B (wadd o #5)
+            else si-kth n B g (si-rd4 n B (wadd o #9)) (wsub k (%wsucc (si-rd4 n B (wadd o #1)))))
+      else #0
+  rnode a sz x b → λ f o k hc → case f return λ v → isTrue (si-fuel (rnode a sz x b) v) → si-kth n B v o k ≡ si-kth-pos (rnode a sz x b) k of
+    zero → λ h → Empty-rec h
+    suc g → λ h →
+      let c1 = weq (cstr-get n B o) #1
+          c2 = weq (si-rd4 n B (wadd o #1)) sz
+          c3 = weq (si-rd4 n B (wadd o #5)) (snd x)
+          c4 = si-chk-tree n B a (wadd o #13)
+          c5 = si-chk-tree n B b (si-rd4 n B (wadd o #9))
+          h2345 = and-snd {c1} {andB c2 (andB c3 (andB c4 c5))} hc
+          h345 = and-snd {c2} {andB c3 (andB c4 c5)} h2345
+          h45 = and-snd {c3} {andB c4 c5} h345
+          tagp = word-eq-sound (cstr-get n B o) #1 (and-fst {c1} {andB c2 (andB c3 (andB c4 c5))} hc)
+          szp = word-eq-sound (si-rd4 n B (wadd o #1)) sz (and-fst {c2} {andB c3 (andB c4 c5)} h2345)
+          kp = word-eq-sound (si-rd4 n B (wadd o #5)) (snd x) (and-fst {c3} {andB c4 c5} h345)
+          iha = rec a g (wadd o #13) k (and-fst {c4} {c5} h45) (and-fst {si-fuel a g} {si-fuel b g} h)
+          ihb = concat (cong (λ s → si-kth n B g (si-rd4 n B (wadd o #9)) (wsub k (%wsucc s))) szp)
+                       (rec b g (si-rd4 n B (wadd o #9)) (wsub k (%wsucc sz)) (and-snd {c4} {c5} h45) (and-snd {si-fuel a g} {si-fuel b g} h))
+      in λ i → if weq (tagp i) #1 then (if wlt k (szp i) then iha i else if weq k (szp i) then kp i else ihb i) else #0

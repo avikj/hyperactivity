@@ -1,0 +1,5 @@
+-- every entry of the suffix array is the text from its point on
+si-sa-ent : (t : List (List Word)) → (e : El entry-ord) → MemKey {entry-ord} e (suffix-array t) → fst e ≡ si-drop (snd e) t
+si-sa-ent t e m =
+  let h = si-ent t #0 e (subst {_} {_} {Nat} {λ c → isTrue (ltn zero c)} (suffix-array-permutation t e) m)
+  in concat (fst (snd h)) (λ k → si-drop (sym (concat (snd (snd h)) (si-add0l (fst h))) k) t)

@@ -1,0 +1,10 @@
+k-psi-inv : (f : List (List Word) → Word) → (q : El k-PR) → (l : List (List (List Word))) → MemKey {k-PR} q (list-map (k-psi f) l) →
+            (q ≡ k-psi f (snd q)) × MemKey {suffix-ord} (snd q) l
+k-psi-inv f q l =
+  case l return λ w → MemKey {k-PR} q (list-map (k-psi f) w) → (q ≡ k-psi f (snd q)) × MemKey {suffix-ord} (snd q) w of
+    nil → λ m → Empty-rec {_} {(q ≡ k-psi f (snd q)) × MemKey {suffix-ord} (snd q) nil} m
+    cons s r →
+      λ m → mem-split {k-PR} {(q ≡ k-psi f (snd q)) × MemKey {suffix-ord} (snd q) (cons s r)} q (k-psi f s) (list-map (k-psi f) r) m
+              (λ e → ( tr {El k-PR} {q} {k-psi f (snd q)} (k-psi f s) e (λ i → k-psi f (snd (e (~ i))))
+                     , subst {_} {_} {List (List Word)} {λ w → MemKey {suffix-ord} w (cons s r)} (λ i → snd (e (~ i))) (mem-head {suffix-ord} s r) ))
+              (λ m1 → let p = rec r m1 in (fst p , mem-cons-r {suffix-ord} (snd q) s r (snd p)))

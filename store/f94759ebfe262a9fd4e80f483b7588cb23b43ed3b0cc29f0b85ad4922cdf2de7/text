@@ -1,0 +1,8 @@
+-- a new name given no place is written on its own (hy-free); `after OTHER` still places one in OTHER's module
+hy-write-to : List Word → List Word → List Word → List (List Word) → List Word → Sum Unit (List Word) → Proc W Unit
+hy-write-to st m name rest t (inr h) = bind (hy-module-of st name h) (hy-write-at st m name h false t)
+hy-write-to st m name (cons a (cons other r)) t (inl u) =
+  if h-eq a "after" then (if h-ends ".cub" other then bind (hy-head-of st other) (hy-write-after-head st m name other t)
+    else bind (hy-get st (list-append "written/" (h-hex other))) (λ w → hy-write-new st m name other t w))
+  else hy-free st m name t
+hy-write-to st m name rest t (inl u) = hy-free st m name t

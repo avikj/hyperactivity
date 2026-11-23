@@ -1,0 +1,7 @@
+-- the front page, then every published work's page and search item, each made in its own forked child so net memory stays O(1 page)
+s-site-all : List Word → List Work → Proc W Unit
+s-site-all st nil = bind (s-isolated (bind (s-site-kept st "front" s-front) (λ f → ret {lzero} {W} unit))) (λ ok → ret {lzero} {W} unit)
+s-site-all st (cons (work n k p) r) =
+  bind (s-isolated (bind (s-public st (inr (work n k p))) (λ x → ret {lzero} {W} unit))) (λ ok1 →
+  bind (s-isolated (bind (s-corpus-kept-one st (list-append "/" n)) (λ y → ret {lzero} {W} unit))) (λ ok2 →
+  s-site-all st r))

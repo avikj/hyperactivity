@@ -1,0 +1,1809 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interaction Net Lab · Hyperactivity</title>
+<meta name="description" content="Live cubical interaction net compiler, Poincaré disk hyperbolic geometry, Wolfram causal graph, and Pythagorean Music of the Spheres.">
+<style>
+:root {
+  --bg: #000000;
+  --panel: #070707;
+  --ink: #ffffff;
+  --muted: #8a8a8a;
+  --border: #262626;
+  --border-hi: #ffffff;
+  --pink: #ff0a94;
+  --cyan: #00e5ff;
+  --gold: #ffd400;
+  --green: #00f900;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+html.light {
+  --bg: #ffffff;
+  --panel: #fafafa;
+  --ink: #000000;
+  --muted: #666666;
+  --border: #d4d4d4;
+  --border-hi: #000000;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--ink);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--pink); color: #fff; }
+
+nav {
+  height: 46px; display: flex; justify-content: space-between; align-items: center;
+  padding: 0 22px; background: var(--bg); border-bottom: 2px solid var(--border-hi);
+  font: 600 13px/1 var(--mono); letter-spacing: .04em; z-index: 10; position: relative;
+}
+nav a { color: var(--ink); text-decoration: none; }
+nav a:hover, nav a.active { color: var(--pink); }
+nav .mark { font-weight: 700; }
+nav .links { display: flex; align-items: center; gap: 20px; }
+nav .badge {
+  border: 1.5px solid var(--pink); color: var(--pink); padding: 2px 7px;
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 288px 1fr;
+  grid-template-rows: 1fr 64px;
+  height: calc(100vh - 46px);
+}
+
+.sidebar {
+  grid-row: 1 / 3;
+  background: var(--panel);
+  border-right: 2px solid var(--border-hi);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.sec-head {
+  padding: 9px 14px;
+  font: 700 10.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--pink); border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.presets {
+  overflow-y: auto; border-bottom: 2px solid var(--border-hi);
+  flex: 0 0 auto; max-height: 47%;
+}
+.preset-btn {
+  display: block; width: 100%; text-align: left;
+  background: transparent; color: var(--ink); border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 14px; cursor: pointer;
+  transition: background .1s, padding-left .1s;
+}
+.preset-btn:hover { background: rgba(255,10,148,.09); padding-left: 18px; }
+.preset-btn.active { background: var(--pink); color: #fff; }
+.preset-btn .pt { font: 700 12px/1.2 var(--mono); display: flex; justify-content: space-between; align-items: center; }
+.preset-btn .pt .tag { font-size: 9px; padding: 1px 5px; border: 1px solid currentColor; opacity: .85; }
+.preset-btn .pe {
+  font: 400 10.5px/1.3 var(--mono); opacity: .76; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.preset-btn.active .pe { opacity: .95; }
+
+.legend {
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  font: 500 10.5px/1.45 var(--mono); color: var(--muted);
+  display: grid; grid-template-columns: 1fr 1fr; gap: 5px 8px;
+}
+.leg-item { display: flex; align-items: center; gap: 6px; color: var(--ink); }
+.leg-swatch { width: 12px; height: 10px; display: inline-block; flex-shrink: 0; }
+.sw-val { border: 2px solid var(--pink); border-radius: 99px; }
+.sw-op { border: 2px solid var(--cyan); }
+.sw-act { background: var(--pink); height: 3px; box-shadow: 0 0 8px var(--pink); }
+.sw-cub { border: 2px solid var(--gold); transform: rotate(45deg); width: 9px; height: 9px; margin: 0 2px; }
+
+.causal-wrap { border-bottom: 1px solid var(--border); background: var(--bg); }
+#causalCanvas { display: block; width: 100%; height: 90px; }
+
+.trace-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.trace { flex: 1; overflow-y: auto; padding: 6px 14px; font: 500 10.5px/1.5 var(--mono); }
+.trace-row {
+  padding: 4px 0; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; gap: 8px;
+}
+.trace-row .rule { color: var(--ink); }
+.trace-row .ratio { color: var(--pink); font-weight: 700; white-space: nowrap; }
+
+.stage { position: relative; overflow: hidden; background: var(--bg); cursor: grab; }
+.stage:active { cursor: grabbing; }
+#netCanvas { display: block; width: 100%; height: 100%; }
+
+.stage-hud {
+  position: absolute; top: 12px; left: 14px; right: 14px;
+  pointer-events: none;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 14px;
+}
+.compiler-card {
+  pointer-events: auto;
+  background: var(--bg); border: 2px solid var(--border-hi);
+  padding: 9px 12px; width: min(580px, 55vw);
+}
+.compiler-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.compiler-card .kicker {
+  font: 700 10px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--pink);
+}
+.compiler-row { display: flex; gap: 8px; align-items: stretch; }
+.expr-input {
+  flex: 1; background: var(--panel); color: var(--ink);
+  border: 1.5px solid var(--border); padding: 7px 10px;
+  font: 700 13px/1.25 var(--mono); outline: none;
+}
+.expr-input:focus { border-color: var(--pink); }
+.compile-btn {
+  font: 700 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .06em;
+  background: var(--pink); color: #fff; border: 0; padding: 0 12px; cursor: pointer;
+}
+.compile-btn:hover { background: var(--ink); color: var(--bg); }
+.compiler-card .desc { font: 400 11.5px/1.4 var(--sans); color: var(--muted); margin-top: 6px; }
+.compiler-err { font: 600 11px/1.3 var(--mono); color: #ff4545; margin-top: 4px; display: none; }
+
+.metrics-card {
+  pointer-events: auto;
+  background: var(--bg); border: 2px solid var(--border-hi);
+  padding: 8px 12px; display: flex; gap: 14px; align-items: center;
+  font: 600 11px/1.2 var(--mono);
+}
+.metric { display: flex; flex-direction: column; gap: 2px; }
+.metric .ml { font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.metric .mv { font-size: 15px; font-weight: 800; color: var(--ink); }
+.metric .mv.pink { color: var(--pink); }
+.metric .mv.ok { color: var(--green); }
+
+.hover-tip {
+  position: absolute; bottom: 14px; left: 14px;
+  pointer-events: none;
+  background: var(--bg); border: 2px solid var(--pink);
+  padding: 8px 12px; font: 600 11.5px/1.4 var(--mono);
+  display: none; max-width: 480px;
+}
+.hover-tip .ht-sub { color: var(--muted); font-weight: 400; font-size: 10.5px; margin-top: 2px; }
+
+.right-dock {
+  position: absolute; bottom: 14px; right: 14px;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
+  pointer-events: none;
+}
+.dock-card {
+  pointer-events: auto;
+  background: var(--bg); border: 2px solid var(--border-hi);
+  padding: 8px 10px; width: 206px;
+}
+.dock-head {
+  font: 700 9.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--pink); margin-bottom: 6px; display: flex; justify-content: space-between;
+}
+.dock-head.gold { color: var(--gold); }
+#sphereCanvas { display: block; width: 182px; height: 146px; }
+#kanCanvas { display: block; width: 182px; height: 126px; }
+.kan-box { display: none; }
+.kan-box.show { display: block; }
+
+.controls {
+  grid-column: 2;
+  background: var(--panel);
+  border-top: 2px solid var(--border-hi);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 14px; gap: 8px; overflow-x: auto;
+}
+.ctrl-group { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.btn {
+  font: 700 11px/1 var(--mono); letter-spacing: .04em; text-transform: uppercase;
+  background: var(--bg); color: var(--ink);
+  border: 2px solid var(--border-hi); padding: 8px 10px; cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--pink); color: #fff; border-color: var(--pink); }
+.btn.primary { background: var(--pink); color: #fff; border-color: var(--pink); }
+.btn.primary:hover { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.on { background: var(--ink); color: var(--bg); }
+.btn.hyp { border-color: var(--gold); color: var(--gold); }
+.btn.hyp.on { background: var(--gold); color: #000; border-color: var(--gold); }
+
+.speed-wrap {
+  display: flex; align-items: center; gap: 5px;
+  font: 600 10px var(--mono); color: var(--muted);
+}
+.speed-wrap input[type=range] { width: 62px; accent-color: var(--pink); cursor: pointer; }
+
+.scope-wrap {
+  display: flex; align-items: center; gap: 8px;
+  border: 1.5px solid var(--border); padding: 4px 8px; background: var(--bg);
+}
+#scopeCanvas { width: 88px; height: 24px; display: block; }
+.ratio-readout { font: 700 10.5px/1.2 var(--mono); color: var(--pink); min-width: 108px; }
+.ratio-readout span { display: block; font-size: 9px; color: var(--muted); font-weight: 500; }
+
+select.tuning {
+  font: 600 10.5px var(--mono); background: var(--bg); color: var(--ink);
+  border: 1.5px solid var(--border); padding: 6px 6px; cursor: pointer;
+}
+
+@media (max-width: 880px) {
+  .workspace { grid-template-columns: 1fr; grid-template-rows: auto 1fr 64px; }
+  .sidebar { grid-row: 1; max-height: 170px; border-right: 0; border-bottom: 2px solid var(--border-hi); }
+  .legend, .causal-wrap, .trace-wrap, .right-dock, .metrics-card { display: none; }
+  .controls { grid-column: 1; }
+  .compiler-card { width: calc(100vw - 28px); }
+  nav .mark span { display: none; }
+}
+</style>
+</head>
+<body>
+<nav>
+  <a class="mark" href="/">Avik Jain<span> · Hyperactive Labs</span></a>
+  <div class="links">
+    <a href="/paper">Paper</a>
+    <a href="/pdf">PDF</a>
+    <a href="/nets" class="active">Nets</a>
+    <a href="/learn">Learn</a>
+    <a href="/#essays">Essays</a>
+    <span class="badge">ℍ² Cubical Engine</span>
+  </div>
+</nav>
+
+<div class="workspace">
+  <aside class="sidebar">
+    <div class="sec-head"><span>Programs &amp; Presets</span><span>10 nets</span></div>
+    <div class="presets" id="presetList"></div>
+
+    <div class="sec-head"><span>Visual Grammar</span><span>core.h</span></div>
+    <div class="legend">
+      <div class="leg-item"><i class="leg-swatch sw-val"></i>Value V_* (+)</div>
+      <div class="leg-item"><i class="leg-swatch sw-op"></i>Op O_* (−)</div>
+      <div class="leg-item"><i class="leg-swatch sw-act"></i>Active ●═●</div>
+      <div class="leg-item"><i class="leg-swatch sw-cub"></i>Cubical / I</div>
+    </div>
+
+    <div class="sec-head"><span>Causal Graph</span><span id="causalInfo">0 events</span></div>
+    <div class="causal-wrap"><canvas id="causalCanvas" width="540" height="180"></canvas></div>
+
+    <div class="trace-wrap">
+      <div class="sec-head"><span>Reduction Trace</span><span id="traceCount">0 steps</span></div>
+      <div class="trace" id="traceLog"></div>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage">
+    <canvas id="netCanvas"></canvas>
+
+    <div class="stage-hud">
+      <div class="compiler-card">
+        <div class="compiler-top">
+          <span class="kicker" id="presetKicker">LIVE HYPERACTIVITY → NET COMPILER</span>
+          <span style="font:600 10px var(--mono);color:var(--muted)">λ / \ · (a,b) · fst · snd · @ · ~ · Enter</span>
+        </div>
+        <div class="compiler-row">
+          <input id="exprInput" class="expr-input" spellcheck="false" autocomplete="off" value="unfold #4">
+          <button class="compile-btn" id="btnCompile">Compile</button>
+        </div>
+        <div class="compiler-err" id="compileErr"></div>
+        <div class="desc" id="presetDesc"></div>
+      </div>
+
+      <div class="metrics-card">
+        <div class="metric"><span class="ml">Work W</span><span class="mv" id="mWork">0</span></div>
+        <div class="metric"><span class="ml">Depth D</span><span class="mv" id="mDepth">0</span></div>
+        <div class="metric"><span class="ml">W / D</span><span class="mv pink" id="mPar">—</span></div>
+        <div class="metric"><span class="ml">Active</span><span class="mv pink" id="mActive">0</span></div>
+        <div class="metric"><span class="ml">State</span><span class="mv" id="mState">READY</span></div>
+      </div>
+    </div>
+
+    <div class="hover-tip" id="hoverTip"></div>
+
+    <div class="right-dock">
+      <div class="dock-card kan-box" id="kanBox">
+        <div class="dock-head gold"><span id="kanTitle">KAN OPEN BOX</span><span id="kanPhase">j = 0.00</span></div>
+        <canvas id="kanCanvas" width="364" height="252"></canvas>
+      </div>
+      <div class="dock-card">
+        <div class="dock-head"><span>MUSIC OF THE SPHERES</span><span id="sphereRatio">1:1</span></div>
+        <canvas id="sphereCanvas" width="364" height="292"></canvas>
+      </div>
+    </div>
+  </main>
+
+  <footer class="controls">
+    <div class="ctrl-group">
+      <button class="btn primary" id="btnPlay">▶ Play</button>
+      <button class="btn" id="btnStep">⏭ Step</button>
+      <button class="btn" id="btnReset">↺ Reset</button>
+      <button class="btn hyp" id="btnHyp" title="Toggle Poincaré Disk Hyperbolic Geometry ℍ² (H)">◎ ℍ² Disk (H)</button>
+      <button class="btn" id="btnFit">⌖ Fit</button>
+      <div class="speed-wrap" title="Playback speed">
+        <span>SPD</span>
+        <input id="speedSlider" type="range" min="120" max="1200" step="40" value="620">
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <button class="btn on" id="btnSound">♫ Sound</button>
+      <button class="btn" id="btnDrone" title="Pythagorean 1:1 + 3:2 ambient sphere drone">Ω Drone</button>
+      <select class="tuning" id="tuningSel" title="Pythagorean Fundamental">
+        <option value="256">256 Hz · Sci C</option>
+        <option value="216">216 Hz · 432/2</option>
+        <option value="130.81">130.8 Hz · C3</option>
+      </select>
+      <div class="scope-wrap">
+        <canvas id="scopeCanvas" width="176" height="48"></canvas>
+        <div class="ratio-readout" id="ratioReadout">1:1 · unison<span>click any ●═● pair</span></div>
+      </div>
+    </div>
+
+    <div class="ctrl-group">
+      <button class="btn" id="btnSyn" title="Avik's grapheme-color synesthesia (S)">◈ Syn (S)</button>
+      <button class="btn" id="btnTheme" title="Toggle obsidian / paper theme">◐</button>
+    </div>
+  </footer>
+</div>
+
+<script>
+// ============================================================================
+// 1. AVIK'S EXACT SYNESTHESIA TABLE (docs/synesthesia.cub)
+// ============================================================================
+const SYN_COLORS = {
+  a:'#ff2600', b:'#fffb00', c:'#00f900', d:'#945200', e:'#00f900', f:'#008f00',
+  g:'#008f00', h:'#ffb6dc', i:'#0433ff', j:'#0433ff', k:'#942193', l:'#ffffff',
+  m:'#ff2600', n:'#fffb00', o:'#87cefa', p:'#ffb6dc', q:'#d880c8', r:'#945200',
+  s:'#fffb00', t:'#00f900', u:'#ffb6dc', v:'#fffb00', w:'#942193', x:'#942193',
+  y:'#fffb00', z:'#ffffff',
+  '0':'#ffffff', '1':'#ffffff', '2':'#87cefa', '3':'#ff9300', '4':'#fffb00',
+  '5':'#0433ff', '6':'#ff2600', '7':'#00f900', '8':'#fffb00', '9':'#942193'
+};
+function synColorFor(label) {
+  const ch = (label || 'h').toLowerCase().replace(/[^a-z0-9]/g, '')[0] || 'h';
+  return SYN_COLORS[ch] || '#ff0a94';
+}
+
+// ============================================================================
+// 2. PYTHAGOREAN "MUSIC OF THE SPHERES" HARMONIC ENGINE
+// ============================================================================
+const SPHERE_NODES = [
+  { key:'normal', label:'1:1',     num:1,   den:1,   ang: -Math.PI/2 },
+  { key:'subst',  label:'9:8',     num:9,   den:8,   ang: -Math.PI/2 + Math.PI*2*(1/8) },
+  { key:'papp',   label:'81:64',   num:81,  den:64,  ang: -Math.PI/2 + Math.PI*2*(2/8) },
+  { key:'proj',   label:'4:3',     num:4,   den:3,   ang: -Math.PI/2 + Math.PI*2*(3/8) },
+  { key:'beta',   label:'3:2',     num:3,   den:2,   ang: -Math.PI/2 + Math.PI*2*(4/8) },
+  { key:'comp',   label:'27:16',   num:27,  den:16,  ang: -Math.PI/2 + Math.PI*2*(5/8) },
+  { key:'unglue', label:'243:128', num:243, den:128, ang: -Math.PI/2 + Math.PI*2*(6/8) },
+  { key:'dup',    label:'2:1',     num:2,   den:1,   ang: -Math.PI/2 + Math.PI*2*(7/8) }
+];
+const PYTH = {
+  beta:   { num: 3,   den: 2,   name: '3:2 · diapente',    wave: 'triangle' },
+  proj:   { num: 4,   den: 3,   name: '4:3 · diatessaron', wave: 'sine' },
+  dup:    { num: 2,   den: 1,   name: '2:1 · diapason',    wave: 'triangle' },
+  era:    { num: 1,   den: 2,   name: '1:2 · sub-octave',  wave: 'sine' },
+  papp:   { num: 81,  den: 64,  name: '81:64 · ditone',    wave: 'sine' },
+  subst:  { num: 9,   den: 8,   name: '9:8 · epogdoon',    wave: 'sine' },
+  comp:   { num: 27,  den: 16,  name: '27:16 · Kan fill',  wave: 'triangle' },
+  unglue: { num: 243, den: 128, name: '243:128 · ua',      wave: 'sine' },
+  normal: { num: 1,   den: 1,   name: '1:1 · identity',    wave: 'sine' }
+};
+const activeChords = [];
+
+class PythagoreanAudio {
+  constructor() {
+    this.ctx = null; this.analyser = null; this.master = null;
+    this.enabled = true; this.baseHz = 256;
+    this.droneOn = false; this.droneNodes = null;
+  }
+  init() {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    this.ctx = new AC();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.22;
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 256;
+    this.master.connect(this.analyser);
+    this.analyser.connect(this.ctx.destination);
+  }
+  toggleDrone() {
+    this.droneOn = !this.droneOn;
+    if (!this.droneOn) {
+      if (this.droneNodes) {
+        const now = this.ctx.currentTime;
+        this.droneNodes.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+        setTimeout(() => {
+          if (this.droneNodes) { this.droneNodes.oscs.forEach(o => { try { o.stop(); } catch(e){} }); this.droneNodes = null; }
+        }, 450);
+      }
+      return false;
+    }
+    this.init();
+    if (!this.ctx) return false;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.11, this.ctx.currentTime + 0.8);
+    g.connect(this.master);
+    const oscs = [0.5, 1, 1.5].map(r => {
+      const o = this.ctx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(this.baseHz * r, this.ctx.currentTime);
+      o.connect(g); o.start(); return o;
+    });
+    this.droneNodes = { gain: g, oscs };
+    return true;
+  }
+  setBase(hz) {
+    this.baseHz = hz;
+    if (this.droneNodes && this.ctx) {
+      [0.5, 1, 1.5].forEach((r, i) => this.droneNodes.oscs[i].frequency.setTargetAtTime(hz * r, this.ctx.currentTime, 0.08));
+    }
+  }
+  playRule(ruleKey, voiceOffset = 0, totalVoices = 1) {
+    const info = PYTH[ruleKey] || PYTH.beta;
+    const ratio = info.num / info.den;
+    const freq = this.baseHz * ratio * (totalVoices > 1 ? Math.pow(9/8, voiceOffset % 3) : 1);
+    document.getElementById('ratioReadout').innerHTML =
+      `${info.name}<span>${freq.toFixed(1)} Hz · ${totalVoices > 1 ? totalVoices + '-voice chord' : 'local step'}</span>`;
+    document.getElementById('sphereRatio').textContent = `${info.num}:${info.den}`;
+    activeChords.push({
+      key: ruleKey === 'era' ? 'normal' : ruleKey,
+      alpha: 1.0,
+      color: (ruleKey === 'comp' || ruleKey === 'papp' || ruleKey === 'unglue') ? '#ffd400' : '#ff0a94'
+    });
+    if (!this.enabled) return;
+    this.init();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator(), over = this.ctx.createOscillator();
+    const g = this.ctx.createGain(), g2 = this.ctx.createGain();
+    osc.type = info.wave; over.type = 'sine';
+    osc.frequency.setValueAtTime(freq, now);
+    over.frequency.setValueAtTime(freq * 1.5, now);
+    if (ruleKey === 'era') osc.frequency.exponentialRampToValueAtTime(Math.max(55, freq * 0.5), now + 0.28);
+    else if (ruleKey === 'papp' || ruleKey === 'comp') osc.frequency.exponentialRampToValueAtTime(this.baseHz * 2, now + 0.36);
+
+    const peak = Math.min(0.42, 0.55 / Math.sqrt(Math.max(1, totalVoices)));
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(peak, now + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + (ruleKey === 'normal' ? 1.15 : 0.44));
+    g2.gain.setValueAtTime(0.0001, now);
+    g2.gain.exponentialRampToValueAtTime(peak * 0.24, now + 0.02);
+    g2.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+
+    osc.connect(g); over.connect(g2); g.connect(this.master); g2.connect(this.master);
+    osc.start(now); over.start(now);
+    osc.stop(now + (ruleKey === 'normal' ? 1.2 : 0.48));
+    over.stop(now + 0.28);
+  }
+  playNormalForm() {
+    this.playRule('normal', 0, 1);
+    if (!this.enabled || !this.ctx) return;
+    [1, 1.5, 2].forEach((r, idx) => {
+      const now = this.ctx.currentTime + idx * 0.04;
+      const osc = this.ctx.createOscillator(), g = this.ctx.createGain();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(this.baseHz * r, now);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.16 / (idx + 1), now + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 1.25);
+      osc.connect(g); g.connect(this.master); osc.start(now); osc.stop(now + 1.3);
+    });
+  }
+}
+const audio = new PythagoreanAudio();
+
+// ============================================================================
+// 3. CUBICAL INTERACTION NET ENGINE
+// ============================================================================
+let nextId = 1;
+class Net {
+  constructor() {
+    this.cells = new Map();
+    this.sparks = [];
+    this.work = 0; this.depth = 0;
+    this.trace = []; this.events = [];
+    this.kanProgress = 0; this.kanMode = null;
+    this.layoutDirty = true;
+  }
+  add(kind, label, sub, nPorts, x, y, meta = {}, bornEvent = 0) {
+    const id = nextId++;
+    const pol = kind === 'ROOT' ? 'root' : (kind.startsWith('V_') ? 'val' : 'op');
+    const c = {
+      id, kind, polarity: pol, label, sub: sub || '',
+      ports: new Array(nPorts).fill(null),
+      x: x || 0, y: y || 0, tx: x || 0, ty: y || 0,
+      hx: 0, hy: 0, thx: 0, thy: 0, // Poincaré disk coordinates in D = {|z| < 1}
+      age: 0, fixed: kind === 'ROOT', meta, bornEvent
+    };
+    this.cells.set(id, c);
+    this.layoutDirty = true;
+    return id;
+  }
+  wire(aId, aPort, bId, bPort) {
+    const a = this.cells.get(aId), b = this.cells.get(bId);
+    if (!a || !b) return;
+    a.ports[aPort] = { cell: bId, port: bPort };
+    b.ports[bPort] = { cell: aId, port: aPort };
+    this.layoutDirty = true;
+  }
+  bridge(aId, aPort, bId, bPort) {
+    const a = this.cells.get(aId), b = this.cells.get(bId);
+    const ea = a ? a.ports[aPort] : null, eb = b ? b.ports[bPort] : null;
+    if (ea && eb) {
+      if (ea.cell === bId && ea.port === bPort) return;
+      this.wire(ea.cell, ea.port, eb.cell, eb.port);
+    } else if (ea) {
+      const ca = this.cells.get(ea.cell); if (ca) ca.ports[ea.port] = null;
+    } else if (eb) {
+      const cb = this.cells.get(eb.cell); if (cb) cb.ports[eb.port] = null;
+    }
+    this.layoutDirty = true;
+  }
+  endpoint(id, port) { const c = this.cells.get(id); return c ? c.ports[port] : null; }
+  remove(id) { this.cells.delete(id); this.layoutDirty = true; }
+
+  activePairs() {
+    const pairs = [], seen = new Set();
+    for (const c of this.cells.values()) {
+      if (c.polarity !== 'op') continue;
+      const e = c.ports[0];
+      if (!e || e.port !== 0) continue;
+      const v = this.cells.get(e.cell); if (!v) continue;
+      if (v.polarity === 'val' || (c.kind === 'O_DUP' && v.kind === 'O_DUP' && c.id < v.id)) {
+        const key = `${Math.min(c.id, v.id)}-${Math.max(c.id, v.id)}`;
+        if (!seen.has(key)) { seen.add(key); pairs.push({ op: c, val: v }); }
+      }
+    }
+    return pairs;
+  }
+
+  describeRule(op, val) {
+    if (op.kind === 'O_APP' && val.kind === 'V_LAM') return { key: 'beta', text: `app ⋈ λ  ⟶  wire(arg,param); wire(body,out)` };
+    if (op.kind === 'O_FST' && val.kind === 'V_PAIR') return { key: 'proj', text: `fst ⋈ pair(a,b)  ⟶  a  (ε b)` };
+    if (op.kind === 'O_SND' && val.kind === 'V_PAIR') return { key: 'proj', text: `snd ⋈ pair(a,b)  ⟶  b  (ε a)` };
+    if (op.kind === 'O_ERA') return { key: 'era', text: `ε ⋈ ${val.label}  ⟶  dissolve parts` };
+    if (op.kind === 'O_DUP' && val.kind === 'V_LAM') return { key: 'dup', text: `δ ⋈ λ  ⟶  commute (optimal share)` };
+    if (op.kind === 'O_DUP' && val.kind === 'V_PAIR') return { key: 'dup', text: `δ ⋈ pair  ⟶  commute into parts` };
+    if (op.kind === 'O_DUP' && val.kind === 'O_DUP') return { key: 'dup', text: `δ ⋈ δ  ⟶  annihilate` };
+    if (op.kind === 'O_DUP') return { key: 'dup', text: `δ ⋈ ${val.label}  ⟶  duplicate atom` };
+    if (op.kind === 'O_PAPPP' && val.kind === 'V_PLAM') return { key: 'papp', text: `@ ${op.sub} ⋈ path-λ ${val.sub}  ⟶  subst [${val.sub}:=${op.sub}]` };
+    if (op.kind === 'O_SUBST' && val.kind === 'V_PAIR') return { key: 'subst', text: `subst ${op.sub} ⋈ pair  ⟶  wave to parts` };
+    if (op.kind === 'O_SUBST' && val.kind === 'V_IV') return { key: 'subst', text: `subst ${op.sub} ⋈ ${val.label}  ⟶  De Morgan eval` };
+    if (op.kind === 'O_SUBST') return { key: 'subst', text: `subst ${op.sub} ⋈ ${val.label}  ⟶  pass fiber` };
+    if (op.kind === 'O_COMP' && val.kind === 'V_SYS') return { key: 'comp', text: `comp ⋈ sys  ⟶  fill Kan open box` };
+    if (op.kind === 'O_COMP' && val.kind === 'V_GLUE') return { key: 'comp', text: `comp ⋈ Glue  ⟶  unglue on face` };
+    if (op.kind === 'O_UNGLUE' && val.kind === 'V_GLUEV') return { key: 'unglue', text: `unglue ⋈ glue  ⟶  apply equivalence` };
+    if (op.kind === 'O_CASE' && val.kind === 'V_CON') return { key: 'beta', text: `case ⋈ ${val.label}  ⟶  branch` };
+    if (op.kind === 'O_UNFOLD' && val.kind === 'V_WORD') return { key: 'dup', text: `unfold ⋈ #${val.meta.n}  ⟶  bifurcate ℍ² mesh` };
+    if (op.kind === 'O_MERGE' && val.kind === 'V_PAIR') return { key: 'comp', text: `merge ⋈ bag  ⟶  ordered list + count≡` };
+    if (op.kind === 'O_FIX' && val.kind === 'V_CON') return { key: 'papp', text: `fix ⋈ ⋄  ⟶  unfold strange loop tick` };
+    return { key: 'beta', text: `${op.label} ⋈ ${val.label}  ⟶  rewrite` };
+  }
+
+  firePair(opId, valId) {
+    const op = this.cells.get(opId), val = this.cells.get(valId);
+    if (!op || !val) return null;
+    const mx = (op.x + val.x) / 2, my = (op.y + val.y) / 2;
+    const mhx = (op.hx + val.hx) / 2, mhy = (op.hy + val.hy) / 2;
+    const info = this.describeRule(op, val);
+    this.work++;
+    const evId = this.work;
+    const parents = [...new Set([op.bornEvent, val.bornEvent].filter(e => e > 0))];
+    this.events.push({ id: evId, depth: this.depth, key: info.key, parents });
+    if (this.events.length > 56) this.events.shift();
+
+    this.sparks.push({ x: mx, y: my, hx: mhx, hy: mhy, r: 8, alpha: 1, color: '#ff0a94' });
+
+    const spawn = (kind, label, sub, nPorts, meta = {}) => {
+      const id = this.add(kind, label, sub, nPorts, mx, my, meta, evId);
+      const c = this.cells.get(id); c.hx = mhx; c.hy = mhy;
+      return id;
+    };
+
+    if (op.kind === 'O_APP' && val.kind === 'V_LAM') {
+      this.bridge(opId, 1, valId, 1);
+      this.bridge(opId, 2, valId, 2);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_FST' && val.kind === 'V_PAIR') {
+      const era = spawn('O_ERA', 'ε', 'erase', 1);
+      const eb = this.endpoint(valId, 2);
+      this.bridge(opId, 1, valId, 1);
+      if (eb) this.wire(era, 0, eb.cell, eb.port);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_SND' && val.kind === 'V_PAIR') {
+      const era = spawn('O_ERA', 'ε', 'erase', 1);
+      const ea = this.endpoint(valId, 1);
+      this.bridge(opId, 1, valId, 2);
+      if (ea) this.wire(era, 0, ea.cell, ea.port);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_ERA') {
+      for (let i = 1; i < val.ports.length; i++) {
+        const ep = val.ports[i];
+        if (ep) { const e = spawn('O_ERA', 'ε', 'erase', 1); this.wire(e, 0, ep.cell, ep.port); }
+      }
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_DUP' && val.kind === 'O_DUP') {
+      this.bridge(opId, 1, valId, 1); this.bridge(opId, 2, valId, 2);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_DUP' && (val.kind === 'V_PAIR' || val.kind === 'V_LAM')) {
+      const out1 = this.endpoint(opId, 1), out2 = this.endpoint(opId, 2);
+      const p1 = this.endpoint(valId, 1), p2 = this.endpoint(valId, 2);
+      const selfLoop = (p1 && p1.cell === valId && p1.port === 2);
+      const c1 = spawn(val.kind, val.label, val.sub, 3, { ...val.meta });
+      const c2 = spawn(val.kind, val.label, val.sub, 3, { ...val.meta });
+      if (out1) this.wire(c1, 0, out1.cell, out1.port);
+      if (out2) this.wire(c2, 0, out2.cell, out2.port);
+      if (selfLoop) { this.wire(c1, 1, c1, 2); this.wire(c2, 1, c2, 2); }
+      else {
+        const d1 = spawn('O_DUP', 'δ', 'O_DUP', 3), d2 = spawn('O_DUP', 'δ', 'O_DUP', 3);
+        this.wire(c1, 1, d1, 1); this.wire(c2, 1, d1, 2);
+        this.wire(c1, 2, d2, 1); this.wire(c2, 2, d2, 2);
+        if (p1) this.wire(d1, 0, p1.cell, p1.port);
+        if (p2) this.wire(d2, 0, p2.cell, p2.port);
+      }
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_DUP') {
+      const out1 = this.endpoint(opId, 1), out2 = this.endpoint(opId, 2);
+      const c1 = spawn(val.kind, val.label, val.sub, 1, { ...val.meta });
+      const c2 = spawn(val.kind, val.label, val.sub, 1, { ...val.meta });
+      if (out1) this.wire(c1, 0, out1.cell, out1.port);
+      if (out2) this.wire(c2, 0, out2.cell, out2.port);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_PAPPP' && val.kind === 'V_PLAM') {
+      const subStr = `[${val.sub}:=${op.sub}]`;
+      const s = spawn('O_SUBST', 'subst', subStr, 2, { dim: val.sub, val: op.sub });
+      const bodyEp = this.endpoint(valId, 1), outEp = this.endpoint(opId, 1);
+      if (bodyEp) this.wire(s, 0, bodyEp.cell, bodyEp.port);
+      if (outEp) this.wire(s, 1, outEp.cell, outEp.port);
+      this.kanProgress = Math.min(1, this.kanProgress + 0.35);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_SUBST' && val.kind === 'V_PAIR') {
+      const pNew = spawn('V_PAIR', 'pair', 'Σ', 3);
+      const s1 = spawn('O_SUBST', 'subst', op.sub, 2, { ...op.meta });
+      const s2 = spawn('O_SUBST', 'subst', op.sub, 2, { ...op.meta });
+      const outEp = this.endpoint(opId, 1), ea = this.endpoint(valId, 1), eb = this.endpoint(valId, 2);
+      if (outEp) this.wire(pNew, 0, outEp.cell, outEp.port);
+      this.wire(pNew, 1, s1, 1); this.wire(pNew, 2, s2, 1);
+      if (ea) this.wire(s1, 0, ea.cell, ea.port);
+      if (eb) this.wire(s2, 0, eb.cell, eb.port);
+      this.kanProgress = Math.min(1, this.kanProgress + 0.35);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_SUBST' && val.kind === 'V_IV') {
+      const outEp = this.endpoint(opId, 1);
+      let resLabel = val.label;
+      const d = op.meta.dim, rv = op.meta.val;
+      if (val.meta.expr) {
+        resLabel = val.meta.expr
+          .replace(new RegExp(`~\\s*${d}\\b`, 'g'), rv === '0' ? '1' : rv === '1' ? '0' : `~${rv}`)
+          .replace(new RegExp(`\\b${d}\\b`, 'g'), rv);
+      }
+      const vNew = spawn('V_CON', resLabel, 'endpoint', 1);
+      if (outEp) this.wire(vNew, 0, outEp.cell, outEp.port);
+      this.kanProgress = 1;
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_SUBST') {
+      const outEp = this.endpoint(opId, 1);
+      const vNew = spawn(val.kind, val.label, val.sub, 1, { ...val.meta });
+      if (outEp) this.wire(vNew, 0, outEp.cell, outEp.port);
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_COMP' && val.kind === 'V_SYS') {
+      const outEp = this.endpoint(opId, 1), baseEp = this.endpoint(opId, 2);
+      const lid = spawn('V_PLAM', 'path-λ', 'i', 2);
+      const filled = spawn('V_CON', 'p ∙ q', 'Kan lid', 1);
+      this.wire(lid, 1, filled, 0);
+      if (outEp) this.wire(lid, 0, outEp.cell, outEp.port);
+      const eraBase = spawn('O_ERA', 'ε', 'base', 1);
+      if (baseEp) this.wire(eraBase, 0, baseEp.cell, baseEp.port);
+      for (let i = 1; i < val.ports.length; i++) {
+        const ep = val.ports[i];
+        if (ep) { const ew = spawn('O_ERA', 'ε', 'face', 1); this.wire(ew, 0, ep.cell, ep.port); }
+      }
+      this.kanProgress = 1;
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_COMP' && val.kind === 'V_GLUE') {
+      const outEp = this.endpoint(opId, 1), baseEp = this.endpoint(opId, 2), eqEp = this.endpoint(valId, 1);
+      const ungl = spawn('O_UNGLUE', 'unglue', 'face i=0', 3);
+      const gv = spawn('V_GLUEV', 'glue', 'ua notEquiv', 2);
+      if (outEp) this.wire(ungl, 1, outEp.cell, outEp.port);
+      if (eqEp) this.wire(ungl, 2, eqEp.cell, eqEp.port);
+      this.wire(ungl, 0, gv, 0);
+      if (baseEp) this.wire(gv, 1, baseEp.cell, baseEp.port);
+      this.kanProgress = 0.5;
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_UNGLUE' && val.kind === 'V_GLUEV') {
+      const outEp = this.endpoint(opId, 1), eqEp = this.endpoint(opId, 2), baseEp = this.endpoint(valId, 1);
+      const app = spawn('O_APP', 'app', 'e.map', 3);
+      if (eqEp) this.wire(app, 0, eqEp.cell, eqEp.port);
+      if (baseEp) this.wire(app, 1, baseEp.cell, baseEp.port);
+      if (outEp) this.wire(app, 2, outEp.cell, outEp.port);
+      this.kanProgress = 0.85;
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_CASE' && val.kind === 'V_CON') {
+      const outEp = this.endpoint(opId, 1);
+      const vRes = spawn('V_CON', val.label === 'true' ? 'false' : 'true', 'Bool', 1);
+      if (outEp) this.wire(vRes, 0, outEp.cell, outEp.port);
+      this.kanProgress = 1;
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_UNFOLD' && val.kind === 'V_WORD') {
+      const n = val.meta.n || 0, outEp = this.endpoint(opId, 1);
+      if (n <= 0) {
+        const leaf = spawn('V_CON', '•', 'id', 1);
+        if (outEp) this.wire(leaf, 0, outEp.cell, outEp.port);
+      } else {
+        const pair = spawn('V_PAIR', 'pair', `L${n}`, 3);
+        if (outEp) this.wire(pair, 0, outEp.cell, outEp.port);
+        const uL = spawn('O_UNFOLD', 'unfold', 'mesh', 2), wL = spawn('V_WORD', `#${n-1}`, 'Word', 1, { n: n-1 });
+        const uR = spawn('O_UNFOLD', 'unfold', 'mesh', 2), wR = spawn('V_WORD', `#${n-1}`, 'Word', 1, { n: n-1 });
+        this.wire(pair, 1, uL, 1); this.wire(uL, 0, wL, 0);
+        this.wire(pair, 2, uR, 1); this.wire(uR, 0, wR, 0);
+      }
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_MERGE' && val.kind === 'V_PAIR') {
+      // §4.4 Bag Merge-Sort: merges two sub-bags into sorted list + multiplicity witness
+      const outEp = this.endpoint(opId, 1);
+      const ea = this.endpoint(valId, 1), eb = this.endpoint(valId, 2);
+      const resLabel = op.meta.res || '[1,1,2,3]';
+      const vSorted = spawn('V_CON', resLabel, 'Sorted × ≡', 1);
+      if (outEp) this.wire(vSorted, 0, outEp.cell, outEp.port);
+      if (ea) { const e1 = spawn('O_ERA', 'ε', 'bag', 1); this.wire(e1, 0, ea.cell, ea.port); }
+      if (eb) { const e2 = spawn('O_ERA', 'ε', 'bag', 1); this.wire(e2, 0, eb.cell, eb.port); }
+      this.remove(opId); this.remove(valId);
+    }
+    else if (op.kind === 'O_FIX' && val.kind === 'V_CON') {
+      // GEB Strange Loop: guarded coinductive unfolding (Clock κ)
+      const k = (op.meta.tick || 1), outEp = this.endpoint(opId, 1);
+      const pair = spawn('V_PAIR', 'loop', `κ${k}`, 3);
+      const head = spawn('V_CON', `t${k}`, 'event', 1);
+      if (outEp) this.wire(pair, 0, outEp.cell, outEp.port);
+      this.wire(pair, 1, head, 0);
+      if (k < 6) {
+        const nextFix = spawn('O_FIX', 'fix', '▸ κ', 2, { tick: k + 1 });
+        const tick = spawn('V_CON', '⋄', 'Tick κ', 1);
+        this.wire(pair, 2, nextFix, 1);
+        this.wire(nextFix, 0, tick, 0);
+      } else {
+        const selfEnd = spawn('V_CON', 'self', 'fixed pt', 1);
+        this.wire(pair, 2, selfEnd, 0);
+      }
+      this.remove(opId); this.remove(valId);
+    }
+
+    this.trace.unshift({ step: this.work, rule: info.text, ratio: (PYTH[info.key] || PYTH.beta).name });
+    if (this.trace.length > 60) this.trace.pop();
+    return info;
+  }
+
+  stepParallel() {
+    const pairs = this.activePairs();
+    if (!pairs.length) return 0;
+    this.depth++;
+    const ids = pairs.map(p => [p.op.id, p.val.id]);
+    ids.forEach(([oid, vid], idx) => {
+      const info = this.firePair(oid, vid);
+      if (info) audio.playRule(info.key, idx, ids.length);
+    });
+    if (this.activePairs().length === 0) setTimeout(() => audio.playNormalForm(), 160);
+    return ids.length;
+  }
+
+  // ==========================================================================
+  // CROSSING-FREE PLANAR + POINCARÉ DISK (ℍ²) HYPERBOLIC LAYOUT ENGINE
+  // ==========================================================================
+  computeLayouts() {
+    if (!this.layoutDirty) return;
+    this.layoutDirty = false;
+    const cells = [...this.cells.values()];
+    if (!cells.length) return;
+    const root = cells.find(c => c.polarity === 'root') || cells[0];
+
+    // Build ordered spanning tree from root (preserving port order so wires never cross!)
+    const visited = new Set([root.id]);
+    const children = new Map();
+    const queue = [root.id];
+    while (queue.length) {
+      const id = queue.shift();
+      const c = this.cells.get(id);
+      const kids = [];
+      for (let p = 0; p < c.ports.length; p++) {
+        const ep = c.ports[p];
+        if (ep && this.cells.has(ep.cell) && !visited.has(ep.cell)) {
+          visited.add(ep.cell);
+          kids.push(ep.cell);
+          queue.push(ep.cell);
+        }
+      }
+      children.set(id, kids);
+    }
+    // Attach any disconnected components cleanly
+    for (const c of cells) {
+      if (!visited.has(c.id)) {
+        visited.add(c.id);
+        children.get(root.id).push(c.id);
+        children.set(c.id, []);
+      }
+    }
+
+    // Subtree leaf weights for proportional planar & hyperbolic angular allocation
+    const weight = new Map();
+    function calcW(id) {
+      const kids = children.get(id) || [];
+      if (!kids.length) { weight.set(id, 1); return 1; }
+      let s = 0; for (const k of kids) s += calcW(k);
+      weight.set(id, s); return s;
+    }
+    calcW(root.id);
+
+    // 1. CROSSING-FREE PLANAR HIERARCHICAL LAYOUT (ordered x-slots by subtree weight)
+    const levelY = 104, unitX = 96;
+    function placePlanar(id, depth, xMin, xMax) {
+      const c = net.cells.get(id);
+      c.tx = (xMin + xMax) / 2;
+      c.ty = -210 + depth * levelY;
+      const kids = children.get(id) || [];
+      const totalW = weight.get(id) || 1;
+      let cur = xMin;
+      for (const k of kids) {
+        const w = weight.get(k) || 1;
+        const span = (xMax - xMin) * (w / totalW);
+        placePlanar(k, depth + 1, cur, cur + span);
+        cur += span;
+      }
+    }
+    const totalSpan = Math.max(240, (weight.get(root.id) || 1) * unitX);
+    placePlanar(root.id, 0, -totalSpan / 2, totalSpan / 2);
+
+    // 2. POINCARÉ DISK (ℍ²) HYPERBOLIC LAYOUT — ZERO CROSSINGS FOR EXPONENTIAL TREES!
+    // Root sits at origin (0,0); depth d maps to hyperbolic radius r_h = d * 0.85 -> r_poincare = tanh(r_h / 2)
+    function placeHyperbolic(id, depth, aMin, aMax) {
+      const c = net.cells.get(id);
+      if (depth === 0) {
+        c.thx = 0; c.thy = 0;
+      } else {
+        const ang = (aMin + aMax) / 2;
+        const r = Math.tanh(depth * 0.56);
+        c.thx = r * Math.cos(ang);
+        c.thy = r * Math.sin(ang);
+      }
+      const kids = children.get(id) || [];
+      const totalW = weight.get(id) || 1;
+      let cur = aMin;
+      for (const k of kids) {
+        const w = weight.get(k) || 1;
+        const span = (aMax - aMin) * (w / totalW);
+        placeHyperbolic(k, depth + 1, cur, cur + span);
+        cur += span;
+      }
+    }
+    placeHyperbolic(root.id, 0, -Math.PI / 2, Math.PI * 1.5);
+  }
+}
+
+// ============================================================================
+// 4. LIVE HYPERACTIVITY EXPRESSION → INTERACTION NET COMPILER
+// ============================================================================
+function tokenize(src) {
+  const toks = []; let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (c === '-' && src[i+1] === '>') { toks.push({ t:'ARR', v:'→' }); i += 2; continue; }
+    if (c === '→') { toks.push({ t:'ARR', v:'→' }); i++; continue; }
+    if (c === 'λ' || c === '\\') { toks.push({ t:'LAM', v:'λ' }); i++; continue; }
+    if ('(),@~:.'.includes(c)) { toks.push({ t:c, v:c }); i++; continue; }
+    if (c === '#') {
+      let j = i + 1; while (j < src.length && /[0-9]/.test(src[j])) j++;
+      toks.push({ t:'WORD', v: src.slice(i, j), n: parseInt(src.slice(i+1, j) || '0', 10) });
+      i = j; continue;
+    }
+    if (/[A-Za-z0-9_']/.test(c)) {
+      let j = i; while (j < src.length && /[A-Za-z0-9_']/.test(src[j])) j++;
+      toks.push({ t:'ID', v: src.slice(i, j) }); i = j; continue;
+    }
+    throw new Error(`Unexpected '${c}'`);
+  }
+  return toks;
+}
+
+function parseExpr(src) {
+  const toks = tokenize(src); let pos = 0;
+  const peek = () => toks[pos];
+  const eat = (t) => { const k = toks[pos]; if (!k || (t && k.t !== t)) throw new Error(`Expected ${t || 'token'}`); pos++; return k; };
+  function pExpr() {
+    let left = pLam();
+    if (peek() && peek().t === ',') { eat(','); return { k:'pair', a:left, b:pExpr() }; }
+    return left;
+  }
+  function pLam() {
+    if (peek() && peek().t === 'LAM') {
+      eat('LAM'); const binders = [];
+      while (peek() && peek().t !== 'ARR' && peek().t !== '.') {
+        if (peek().t === '(') {
+          eat('('); const name = eat('ID').v; let isDim = false;
+          if (peek() && peek().t === ':') { eat(':'); if (eat('ID').v === 'I') isDim = true; }
+          eat(')'); binders.push({ name, isDim });
+        } else {
+          const name = eat('ID').v;
+          binders.push({ name, isDim: (name === 'i' || name === 'j' || name === 'k') });
+        }
+      }
+      if (!binders.length) throw new Error('Expected binder after λ');
+      if (peek() && (peek().t === 'ARR' || peek().t === '.')) eat();
+      let body = pExpr();
+      for (let b = binders.length - 1; b >= 0; b--)
+        body = binders[b].isDim ? { k:'plam', dim:binders[b].name, body } : { k:'lam', param:binders[b].name, body };
+      return body;
+    }
+    return pApp();
+  }
+  function pApp() {
+    let node = pAtom();
+    while (peek()) {
+      if (peek().t === '@') { eat('@'); node = { k:'papp', fn:node, r:pAtom() }; }
+      else if (['ID','WORD','(','LAM','~'].includes(peek().t)) {
+        const arg = pAtom();
+        if (node.k === 'var' && node.name === 'fst') node = { k:'fst', e:arg };
+        else if (node.k === 'var' && node.name === 'snd') node = { k:'snd', e:arg };
+        else if (node.k === 'var' && node.name === 'unfold') node = { k:'unfold', e:arg };
+        else node = { k:'app', fn:node, arg };
+      } else break;
+    }
+    return node;
+  }
+  function pAtom() {
+    const k = peek(); if (!k) throw new Error('Unexpected end');
+    if (k.t === '(') { eat('('); const e = pExpr(); eat(')'); return e; }
+    if (k.t === 'LAM') return pLam();
+    if (k.t === '~') { eat('~'); return { k:'neg', e:pAtom() }; }
+    if (k.t === 'WORD') { eat('WORD'); return { k:'word', n:k.n, v:k.v }; }
+    if (k.t === 'ID') { eat('ID'); return { k:'var', name:k.v }; }
+    throw new Error(`Unexpected '${k.v}'`);
+  }
+  const ast = pExpr();
+  if (pos < toks.length) throw new Error(`Trailing '${toks[pos].v}'`);
+  return ast;
+}
+
+function compileAstToNet(ast, net) {
+  const root = net.add('ROOT', 'OUT', 'observer', 1, 0, -200);
+  function emit(node, env, dims) {
+    if (node.k === 'var') {
+      if (env.has(node.name)) { const proxy = { cell:null, port:null }; env.get(node.name).push(proxy); return { kind:'pending', proxy }; }
+      if (dims.has(node.name)) return { cell: net.add('V_IV', node.name, 'dim ∈ I', 1, 0, 0, { expr: node.name }), port: 0 };
+      return { cell: net.add('V_CON', node.name, 'atom', 1), port: 0 };
+    }
+    if (node.k === 'word') return { cell: net.add('V_WORD', node.v, 'Word', 1, 0, 0, { n: node.n }), port: 0 };
+    if (node.k === 'neg') {
+      const inner = node.e.k === 'var' ? node.e.name : 'i';
+      return { cell: net.add('V_IV', `~${inner}`, 'De Morgan', 1, 0, 0, { expr: `~${inner}` }), port: 0 };
+    }
+    if (node.k === 'pair') {
+      const p = net.add('V_PAIR', 'pair', 'Σ', 3);
+      connect(p, 1, emit(node.a, env, dims)); connect(p, 2, emit(node.b, env, dims));
+      return { cell: p, port: 0 };
+    }
+    if (node.k === 'fst' || node.k === 'snd') {
+      const op = net.add(node.k === 'fst' ? 'O_FST' : 'O_SND', node.k, node.k === 'fst' ? 'O_FST' : 'O_SND', 2);
+      connect(op, 0, emit(node.e, env, dims)); return { cell: op, port: 1 };
+    }
+    if (node.k === 'unfold') {
+      const op = net.add('O_UNFOLD', 'unfold', 'O_UNFOLD', 2);
+      connect(op, 0, emit(node.e, env, dims)); return { cell: op, port: 1 };
+    }
+    if (node.k === 'app') {
+      const app = net.add('O_APP', 'app', 'O_APP', 3);
+      connect(app, 0, emit(node.fn, env, dims)); connect(app, 1, emit(node.arg, env, dims));
+      return { cell: app, port: 2 };
+    }
+    if (node.k === 'lam') {
+      const lam = net.add('V_LAM', 'λ', node.param, 3);
+      const prev = env.get(node.param), uses = []; env.set(node.param, uses);
+      const body = emit(node.body, env, dims);
+      if (prev !== undefined) env.set(node.param, prev); else env.delete(node.param);
+      connect(lam, 2, body);
+      if (uses.length === 0) { const era = net.add('O_ERA', 'ε', `unused`, 1); net.wire(lam, 1, era, 0); }
+      else if (uses.length === 1) { if (uses[0].cell) net.wire(lam, 1, uses[0].cell, uses[0].port); }
+      else {
+        let curC = lam, curP = 1;
+        for (let k = 0; k < uses.length - 1; k++) {
+          const dup = net.add('O_DUP', 'δ', 'O_DUP', 3);
+          net.wire(curC, curP, dup, 0);
+          if (uses[k].cell) net.wire(dup, 1, uses[k].cell, uses[k].port);
+          curC = dup; curP = 2;
+        }
+        const last = uses[uses.length - 1];
+        if (last.cell) net.wire(curC, curP, last.cell, last.port);
+      }
+      return { cell: lam, port: 0 };
+    }
+    if (node.k === 'plam') {
+      net.kanMode = 'path';
+      const plam = net.add('V_PLAM', 'path-λ', node.dim, 2);
+      const nd = new Set(dims); nd.add(node.dim);
+      connect(plam, 1, emit(node.body, env, nd)); return { cell: plam, port: 0 };
+    }
+    if (node.k === 'papp') {
+      const rStr = node.r.k === 'neg' ? `~${node.r.e.name || 'i'}` : (node.r.name || node.r.v || '0');
+      if (node.fn.k === 'var' && !env.has(node.fn.name)) {
+        const lbl = `${node.fn.name} @ ${rStr}`;
+        return { cell: net.add('V_IV', lbl, 'path fiber', 1, 0, 0, { expr: lbl }), port: 0 };
+      }
+      net.kanMode = 'path';
+      const papp = net.add('O_PAPPP', `@ ${rStr}`, rStr, 2);
+      connect(papp, 0, emit(node.fn, env, dims)); return { cell: papp, port: 1 };
+    }
+    throw new Error('Unsupported node');
+  }
+  function connect(cid, pidx, target) {
+    if (target.kind === 'pending') { target.proxy.cell = cid; target.proxy.port = pidx; }
+    else net.wire(cid, pidx, target.cell, target.port);
+  }
+  connect(root, 0, emit(ast, new Map(), new Set()));
+}
+
+// ============================================================================
+// 5. 10 CURATED SHOWCASE PRESETS (Including ℍ² Hyperbolic, GEB, §4.4 msort)
+// ============================================================================
+const PRESETS = [
+  {
+    id: 'hyperbolic', title: 'Hyperbolic Fractal (31 cells)', tag: 'ℍ²', hypDefault: true,
+    expr: 'unfold #4',
+    kicker: 'POINCARÉ DISK ℍ² · ESCHER CIRCLE LIMIT',
+    desc: 'Exponentially branching nets overflow flat Euclidean space — in hyperbolic space ℍ² (circumference 2π sinh r), all 31 cells embed along exact geodesics with ZERO crossings. Drag the disk to apply Möbius transforms!'
+  },
+  {
+    id: 'church', title: 'Church 2² (Optimal Sharing)', tag: 'LAFONT', hypDefault: false,
+    expr: '(λ f x → f (f x)) (λ y → (y , y)) a',
+    kicker: 'LAFONT COMMUTATION CASCADE',
+    desc: 'Watch δ (O_DUP) commute through V_LAM and V_PAIR, unfolding a 4-leaf binary tree in parallel harmonic waves.'
+  },
+  {
+    id: 'msort', title: 'Bag Merge-Sort (§4.4 msort)', tag: '§4.4', hypDefault: false,
+    expr: 'msort (({3} ∪ {1}) ∪ ({2} ∪ {1}))',
+    kicker: 'PAPER §4.4 · ORDERING AS BAG ELIMINATION',
+    desc: 'Two sub-bags {3}∪{1} and {2}∪{1} reduce in parallel to [1,3] and [1,2], then merge into [1,1,2,3] carrying exact multiplicity witnesses.',
+    customBuild(net) {
+      const root = net.add('ROOT', 'OUT', 'Sorted × ≡', 1);
+      const topM = net.add('O_MERGE', 'merge', 'msort', 2, 0, 0, { res: '[1,1,2,3]' });
+      const topB = net.add('V_PAIR', 'union', 'Bag', 3);
+      const mL = net.add('O_MERGE', 'merge', 'sub-bag', 2, 0, 0, { res: '[1,3]' });
+      const bL = net.add('V_PAIR', 'un', '{3}∪{1}', 3);
+      const s3 = net.add('V_CON', 'sng 3', 'Bag', 1), s1a = net.add('V_CON', 'sng 1', 'Bag', 1);
+      const mR = net.add('O_MERGE', 'merge', 'sub-bag', 2, 0, 0, { res: '[1,2]' });
+      const bR = net.add('V_PAIR', 'un', '{2}∪{1}', 3);
+      const s2 = net.add('V_CON', 'sng 2', 'Bag', 1), s1b = net.add('V_CON', 'sng 1', 'Bag', 1);
+      net.wire(root, 0, topM, 1); net.wire(topM, 0, topB, 0);
+      net.wire(topB, 1, mL, 1); net.wire(mL, 0, bL, 0); net.wire(bL, 1, s3, 0); net.wire(bL, 2, s1a, 0);
+      net.wire(topB, 2, mR, 1); net.wire(mR, 0, bR, 0); net.wire(bR, 1, s2, 0); net.wire(bR, 2, s1b, 0);
+    }
+  },
+  {
+    id: 'geb', title: 'GEB Strange Loop (Clock κ)', tag: 'GEB', hypDefault: true,
+    expr: 'fix (λ self → (event , ▸ self))',
+    kicker: 'GÖDEL · ESCHER · BACH — GUARDED RECURSION',
+    desc: 'A self-referential guarded stream (Clock κ) unfolds tick by tick toward the Poincaré boundary of infinity without diverging.',
+    customBuild(net) {
+      const root = net.add('ROOT', 'OUT', 'Proc κ', 1);
+      const fix  = net.add('O_FIX', 'fix', '▸ κ', 2, 0, 0, { tick: 1 });
+      const tick = net.add('V_CON', '⋄', 'Tick κ', 1);
+      net.wire(root, 0, fix, 1); net.wire(fix, 0, tick, 0);
+    }
+  },
+  {
+    id: 'univalence', title: 'Univalence Computing', tag: 'UA', hypDefault: false,
+    expr: 'transport (ua notEquiv) true',
+    kicker: 'UNIVALENCE IS COMPUTABLE',
+    desc: 'Transport along ua(notEquiv) reduces O_COMP ⋈ V_GLUE into O_UNGLUE on face i=0, applying `not` to `true` and computing `false`.',
+    customBuild(net) {
+      net.kanMode = 'univalence';
+      const root = net.add('ROOT', 'OUT', 'Bool', 1);
+      const comp = net.add('O_COMP', 'transp', 'O_COMP', 3);
+      const glue = net.add('V_GLUE', 'Glue', 'ua notEquiv', 2);
+      const notF = net.add('V_LAM', 'λ', 'not', 3);
+      const cse  = net.add('O_CASE', 'case', 'Bool', 2);
+      const tru  = net.add('V_CON', 'true', 'Bool', 1);
+      net.wire(root, 0, comp, 1); net.wire(comp, 0, glue, 0); net.wire(comp, 2, tru, 0);
+      net.wire(glue, 1, notF, 0); net.wire(notF, 1, cse, 0); net.wire(notF, 2, cse, 1);
+    }
+  },
+  {
+    id: 'kan', title: 'Kan Box Filling', tag: 'KAN', hypDefault: false,
+    expr: 'comp A [i=0 ↦ x, i=1 ↦ q j] (p i)',
+    kicker: 'CUBICAL KAN COMPOSITION',
+    desc: 'Path concatenation fills an open square: O_COMP consumes the partial boundary V_SYS and base p(i), closing the lid p ∙ q.',
+    customBuild(net) {
+      net.kanMode = 'kan';
+      const root = net.add('ROOT', 'OUT', 'x ≡ z', 1);
+      const comp = net.add('O_COMP', 'comp', 'O_COMP', 3);
+      const sys  = net.add('V_SYS', 'sys', '[i=0, i=1]', 3);
+      const base = net.add('V_CON', 'p i', 'base j=0', 1);
+      const w0   = net.add('V_CON', 'x', 'face i=0', 1);
+      const w1   = net.add('V_CON', 'q j', 'face i=1', 1);
+      net.wire(root, 0, comp, 1); net.wire(comp, 0, sys, 0); net.wire(comp, 2, base, 0);
+      net.wire(sys, 1, w0, 0); net.wire(sys, 2, w1, 0);
+    }
+  },
+  {
+    id: 'path', title: 'Cubical Path Wave', tag: 'I', hypDefault: false,
+    expr: '(λ (i : I) → (p @ ~i , q @ i)) @ 0',
+    kicker: 'DIMENSION SUBSTITUTION WAVE',
+    desc: 'Applying a cubical path at 0 spawns an O_SUBST [i:=0] wave that ripples through the pair, evaluating ~0 ⟶ 1 and 0 ⟶ 0.'
+  },
+  {
+    id: 'parallel', title: 'Parallel Chord (W/D = 4)', tag: '4×', hypDefault: false,
+    expr: '((λ x → x) a , (λ y → y) b) , ((λ z → z) c , (λ w → w) d)',
+    kicker: 'LOCK-FREE CAUSAL INVARIANCE',
+    desc: 'Four disjoint active pairs fire in ANY order (click individually) or simultaneously as a 4-voice Pythagorean chord.'
+  },
+  {
+    id: 'share', title: 'Sharing & Erasure', tag: 'LIN', hypDefault: false,
+    expr: '(λ x → (x , x)) (fst (a , b))',
+    kicker: 'ZERO-GC LINEARITY & SHARING',
+    desc: 'Automatic usage analysis wires x into δ (O_DUP) while fst spawns ε (O_ERA) to dissolve b with zero garbage collector.'
+  },
+  {
+    id: 'beta', title: 'β-Reduction', tag: 'β', hypDefault: false,
+    expr: '(λ x → x) v',
+    kicker: 'THE ATOM OF INTERACTION',
+    desc: 'An application (O_APP) meets a lambda (V_LAM) head-to-head. They annihilate and wire v straight to the observer.'
+  }
+];
+
+// ============================================================================
+// 6. POINCARÉ DISK (ℍ²) COMPLEX MATH: MÖBIUS TRANSFORMS & EXACT GEODESICS
+// ============================================================================
+// Möbius transform T_a(z) = (z - a) / (1 - conj(a) * z)
+function mobius(zx, zy, ax, ay) {
+  const nx = zx - ax, ny = zy - ay;
+  // 1 - (ax - i ay)(zx + i zy) = (1 - (ax*zx + ay*zy)) - i(ax*zy - ay*zx)
+  const dx = 1 - (ax * zx + ay * zy);
+  const dy = -(ax * zy - ay * zx);
+  const denom = dx * dx + dy * dy + 1e-9;
+  return { x: (nx * dx + ny * dy) / denom, y: (ny * dx - nx * dy) / denom };
+}
+
+// Draw exact hyperbolic geodesic in Poincaré disk between unit-disk points z1, z2
+function strokeHyperbolicGeodesic(ctx, cx, cy, R, x1, y1, x2, y2, isActive, animT) {
+  const sx1 = cx + x1 * R, sy1 = cy + y1 * R;
+  const sx2 = cx + x2 * R, sy2 = cy + y2 * R;
+  const det = 2 * (x1 * y2 - y1 * x2);
+
+  if (Math.abs(det) < 1e-3 || isActive) {
+    // Nearly radial or active standing wave along the geodesic chord
+    const steps = isActive ? 22 : 16;
+    ctx.beginPath();
+    // Compute arc center if curved, else straight
+    let useArc = Math.abs(det) >= 1e-3;
+    let ux = 0, uy = 0, rad = 0, a1 = 0, a2 = 0, ccw = false;
+    if (useArc) {
+      const r1sq = x1*x1 + y1*y1 + 1, r2sq = x2*x2 + y2*y2 + 1;
+      ux = (r1sq * y2 - r2sq * y1) / det;
+      uy = (x1 * r2sq - x2 * r1sq) / det;
+      rad = Math.sqrt(Math.max(1e-6, ux*ux + uy*uy - 1));
+      a1 = Math.atan2(y1 - uy, x1 - ux);
+      a2 = Math.atan2(y2 - uy, x2 - ux);
+      let da = a2 - a1;
+      while (da > Math.PI) da -= Math.PI * 2;
+      while (da < -Math.PI) da += Math.PI * 2;
+      a2 = a1 + da;
+    }
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      let px, py, nx = 0, ny = 0;
+      if (useArc) {
+        const ang = a1 + (a2 - a1) * t;
+        px = cx + (ux + rad * Math.cos(ang)) * R;
+        py = cy + (uy + rad * Math.sin(ang)) * R;
+        nx = Math.cos(ang); ny = Math.sin(ang);
+      } else {
+        px = sx1 + (sx2 - sx1) * t; py = sy1 + (sy2 - sy1) * t;
+        const l = Math.hypot(sx2 - sx1, sy2 - sy1) || 1;
+        nx = -(sy2 - sy1) / l; ny = (sx2 - sx1) / l;
+      }
+      if (isActive) {
+        const w = Math.sin(t * Math.PI * 3 + animT * 5) * 4.5 * Math.sin(t * Math.PI);
+        px += nx * w; py += ny * w;
+      }
+      if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    return;
+  }
+
+  const r1sq = x1*x1 + y1*y1 + 1, r2sq = x2*x2 + y2*y2 + 1;
+  const ux = (r1sq * y2 - r2sq * y1) / det;
+  const uy = (x1 * r2sq - x2 * r1sq) / det;
+  const rad = Math.sqrt(Math.max(1e-6, ux*ux + uy*uy - 1));
+  const a1 = Math.atan2(y1 - uy, x1 - ux);
+  const a2 = Math.atan2(y2 - uy, x2 - ux);
+  let da = a2 - a1;
+  while (da > Math.PI) da -= Math.PI * 2;
+  while (da < -Math.PI) da += Math.PI * 2;
+  ctx.beginPath();
+  ctx.arc(cx + ux * R, cy + uy * R, rad * R, a1, a1 + da, da < 0);
+  ctx.stroke();
+}
+
+// ============================================================================
+// 7. RENDERER (SPACIOUS ICONIC CELLS + PLANAR BÉZIER + POINCARÉ ℍ² DISK)
+// ============================================================================
+const canvas = document.getElementById('netCanvas'), ctx = canvas.getContext('2d');
+const kanCanvas = document.getElementById('kanCanvas'), kctx = kanCanvas.getContext('2d');
+const sphereCanvas = document.getElementById('sphereCanvas'), spctx = sphereCanvas.getContext('2d');
+const causalCanvas = document.getElementById('causalCanvas'), cctx = causalCanvas.getContext('2d');
+const scopeCanvas = document.getElementById('scopeCanvas'), sctx = scopeCanvas.getContext('2d');
+
+let net = new Net();
+let currentPreset = PRESETS[0];
+let playing = false, playTimer = null, synMode = false, hypMode = true;
+let cam = { x: 0, y: 40, zoom: 1 };
+let hypPan = { x: 0, y: 0 }; // Möbius origin offset inside unit disk
+let dragCell = null, panStart = null, hoveredPair = null, hoveredCell = null;
+let animTime = 0;
+
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = r.width * dpr; canvas.height = r.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+function getDiskParams() {
+  const r = canvas.getBoundingClientRect();
+  const cx = r.width * 0.48, cy = r.height * 0.54;
+  const R = Math.min(r.width * 0.40, r.height * 0.42) * cam.zoom;
+  return { cx, cy, R };
+}
+
+function cellScreenPos(c) {
+  const r = canvas.getBoundingClientRect();
+  if (hypMode) {
+    const { cx, cy, R } = getDiskParams();
+    const m = mobius(c.hx, c.hy, hypPan.x, hypPan.y);
+    const r2 = m.x * m.x + m.y * m.y;
+    const conformal = Math.max(0.42, (1 - r2 * 0.72));
+    return { x: cx + m.x * R, y: cy + m.y * R, z: m, scale: conformal * Math.min(1.15, cam.zoom) };
+  }
+  return {
+    x: r.width / 2 + (c.x + cam.x) * cam.zoom,
+    y: r.height / 2 + (c.y + cam.y) * cam.zoom,
+    scale: cam.zoom
+  };
+}
+
+function compileExpression(src, metaPreset = null) {
+  stopPlay();
+  const errEl = document.getElementById('compileErr'); errEl.style.display = 'none';
+  nextId = 1;
+  const fresh = new Net();
+  try {
+    if (metaPreset && metaPreset.customBuild && src.trim() === metaPreset.expr.trim()) metaPreset.customBuild(fresh);
+    else compileAstToNet(parseExpr(src), fresh);
+    net = fresh;
+    net.computeLayouts();
+    // Snap initial positions cleanly to crossing-free layout
+    for (const c of net.cells.values()) { c.x = c.tx; c.y = c.ty; c.hx = c.thx; c.hy = c.thy; }
+    cam = { x: 0, y: 40, zoom: 1 };
+    hypPan = { x: 0, y: 0 };
+    document.getElementById('kanBox').classList.toggle('show', !!net.kanMode);
+    if (!metaPreset) {
+      document.getElementById('presetKicker').textContent = 'COMPILED LIVE EXPRESSION';
+      document.getElementById('presetDesc').textContent = 'Compiled directly from your expression with automatic O_DUP sharing and O_ERA erasure.';
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    }
+    updateHUD();
+  } catch (err) {
+    errEl.textContent = 'Parse error: ' + err.message; errEl.style.display = 'block';
+  }
+}
+
+function setHypMode(on) {
+  hypMode = on;
+  document.getElementById('btnHyp').classList.toggle('on', hypMode);
+  hypPan = { x: 0, y: 0 };
+  cam = { x: 0, y: 40, zoom: 1 };
+}
+
+function loadPreset(preset) {
+  currentPreset = preset;
+  document.getElementById('exprInput').value = preset.expr;
+  document.getElementById('presetKicker').textContent = preset.kicker;
+  document.getElementById('presetDesc').textContent = preset.desc;
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', b.dataset.id === preset.id));
+  setHypMode(!!preset.hypDefault);
+  compileExpression(preset.expr, preset);
+}
+
+function updateHUD() {
+  const active = net.activePairs();
+  document.getElementById('mWork').textContent = net.work;
+  document.getElementById('mDepth').textContent = net.depth;
+  document.getElementById('mPar').textContent = net.depth > 0 ? (net.work / net.depth).toFixed(2) : '—';
+  document.getElementById('mActive').textContent = active.length;
+  document.getElementById('causalInfo').textContent = `${net.events.length} event${net.events.length === 1 ? '' : 's'}`;
+  const st = document.getElementById('mState');
+  if (active.length === 0) { st.textContent = 'NORMAL ≡'; st.className = 'mv ok'; }
+  else { st.textContent = playing ? 'RUNNING' : 'ACTIVE'; st.className = 'mv pink'; }
+  document.getElementById('traceCount').textContent = `${net.work} step${net.work === 1 ? '' : 's'}`;
+  document.getElementById('traceLog').innerHTML = net.trace.map(t =>
+    `<div class="trace-row"><span class="rule">#${t.step} ${t.rule}</span><span class="ratio">${t.ratio.split('·')[0]}</span></div>`
+  ).join('');
+}
+
+// Spacious rounded-chamfer / pill-hexagon cell drawing (ZERO cramped triangles!)
+function drawSpaciousCell(ctx, c, sx, sy, sc, isLight, ink, accent, isHover) {
+  const birth = Math.min(1, 0.35 + c.age * 1.9);
+  const s = sc * birth;
+  const isCubical = ['V_PLAM','V_IV','V_SYS','V_GLUE','V_GLUEV','O_PAPPP','O_SUBST','O_COMP','O_UNGLUE'].includes(c.kind);
+  const w = Math.max(66, c.label.length * 9 + 26);
+  const h = c.sub ? 42 : 34;
+
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(s, s);
+
+  if (c.polarity === 'root') {
+    ctx.fillStyle = isLight ? '#000' : '#fff';
+    ctx.fillRect(-36, -15, 72, 30);
+    ctx.fillStyle = isLight ? '#fff' : '#000';
+    ctx.font = '800 11.5px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('OUT', 0, 1);
+    ctx.restore(); return;
+  }
+
+  ctx.beginPath();
+  if (c.polarity === 'val') {
+    // Positive Value (V_*): Spacious stadium / chamfered dome-pill (never cramps text!)
+    const ch = isCubical ? 11 : 16;
+    ctx.moveTo(-w/2 + ch, -h/2);
+    ctx.lineTo(w/2 - ch, -h/2);
+    ctx.lineTo(w/2, -h/2 + ch);
+    ctx.lineTo(w/2, h/2 - ch);
+    ctx.lineTo(w/2 - ch, h/2);
+    ctx.lineTo(-w/2 + ch, h/2);
+    ctx.lineTo(-w/2, h/2 - ch);
+    ctx.lineTo(-w/2, -h/2 + ch);
+    ctx.closePath();
+    ctx.fillStyle = isLight ? '#fff2f9' : '#13050e';
+  } else {
+    // Negative Operation (O_*): Crisp architectural square-chamfered frame
+    const ch = 6;
+    ctx.moveTo(-w/2 + ch, -h/2);
+    ctx.lineTo(w/2 - ch, -h/2);
+    ctx.lineTo(w/2, -h/2 + ch);
+    ctx.lineTo(w/2, h/2 - ch);
+    ctx.lineTo(w/2 - ch, h/2);
+    ctx.lineTo(-w/2 + ch, h/2);
+    ctx.lineTo(-w/2, h/2 - ch);
+    ctx.lineTo(-w/2, -h/2 + ch);
+    ctx.closePath();
+    ctx.fillStyle = isLight ? '#f3f7fa' : '#060c10';
+  }
+  ctx.fill();
+  ctx.lineWidth = isHover ? 3.2 : 2;
+  ctx.strokeStyle = accent;
+  ctx.stroke();
+
+  // Principal port indicator dot on edge facing principal partner
+  const ep0 = c.ports[0];
+  if (ep0 && net.cells.has(ep0.cell)) {
+    const o = net.cells.get(ep0.cell);
+    const pSelf = cellScreenPos(c), pOther = cellScreenPos(o);
+    const ang = Math.atan2(pOther.y - pSelf.y, pOther.x - pSelf.x);
+    const bx = Math.cos(ang) * (w/2), by = Math.sin(ang) * (h/2);
+    ctx.fillStyle = c.polarity === 'val' ? accent : (isLight ? '#fff' : '#000');
+    ctx.strokeStyle = accent; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(bx, by, 4.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+
+  // Crisp, upright, generously spaced typography
+  ctx.fillStyle = ink;
+  ctx.font = '800 13px ui-monospace, Menlo, monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(c.label, 0, c.sub ? -6 : 0);
+  if (c.sub) {
+    ctx.fillStyle = accent;
+    ctx.font = '600 9.5px ui-monospace, Menlo, monospace';
+    ctx.fillText(c.sub, 0, 10);
+  }
+  ctx.restore();
+}
+
+function draw() {
+  animTime += 0.03;
+  net.computeLayouts();
+
+  // Smooth spring interpolation toward crossing-free targets
+  for (const c of net.cells.values()) {
+    c.age += 0.04;
+    if (c !== dragCell) {
+      c.x += (c.tx - c.x) * 0.14;
+      c.y += (c.ty - c.y) * 0.14;
+      c.hx += (c.thx - c.hx) * 0.14;
+      c.hy += (c.thy - c.hy) * 0.14;
+    }
+  }
+
+  const r = canvas.getBoundingClientRect(), W = r.width, H = r.height;
+  const isLight = document.documentElement.classList.contains('light');
+  const ink = isLight ? '#000' : '#fff';
+  ctx.clearRect(0, 0, W, H);
+
+  if (hypMode) {
+    // Draw Poincaré Disk ℍ² boundary & Escher hyperbolic tessellation geodesics!
+    const { cx, cy, R } = getDiskParams();
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fillStyle = isLight ? 'rgba(255,10,148,0.025)' : 'rgba(255,10,148,0.035)';
+    ctx.fill();
+    ctx.clip();
+
+    // Concentric hyperbolic horocycles (constant hyperbolic radius rings)
+    ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
+    [0.56, 1.12, 1.68, 2.24, 2.8].forEach(rh => {
+      const rp = Math.tanh(rh / 2) * R;
+      ctx.beginPath(); ctx.arc(cx, cy, rp, 0, Math.PI * 2); ctx.stroke();
+    });
+    // Escher Circle Limit background geodesic arcs
+    for (let k = 0; k < 12; k++) {
+      const a1 = (k / 12) * Math.PI * 2, a2 = ((k + 4) / 12) * Math.PI * 2;
+      const p1 = mobius(Math.cos(a1)*0.99, Math.sin(a1)*0.99, hypPan.x, hypPan.y);
+      const p2 = mobius(Math.cos(a2)*0.99, Math.sin(a2)*0.99, hypPan.x, hypPan.y);
+      strokeHyperbolicGeodesic(ctx, cx, cy, R, p1.x, p1.y, p2.x, p2.y, false, animTime);
+    }
+    ctx.restore();
+
+    // Crisp Poincaré Disk boundary |z| = 1
+    ctx.strokeStyle = isLight ? '#000' : '#fff';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#ffd400';
+    ctx.font = '700 10.5px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('∂ℍ² · POINCARÉ BOUNDARY AT INFINITY (DRAG FOR MÖBIUS TRANSFORM)', cx, cy + R + 18);
+  } else {
+    // Crisp architectural Euclidean grid
+    const gs = 40 * cam.zoom;
+    ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.045)' : 'rgba(255,255,255,0.045)';
+    ctx.lineWidth = 1;
+    const ox = ((W/2 + cam.x*cam.zoom) % gs + gs) % gs, oy = ((H/2 + cam.y*cam.zoom) % gs + gs) % gs;
+    ctx.beginPath();
+    for (let x = ox; x < W; x += gs) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = oy; y < H; y += gs) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+  }
+
+  // Draw wires (exact Poincaré geodesics in ℍ² mode, smooth cubic Béziers in Planar mode!)
+  const activeSet = new Set(net.activePairs().map(p => `${Math.min(p.op.id, p.val.id)}-${Math.max(p.op.id, p.val.id)}`));
+  const disk = hypMode ? getDiskParams() : null;
+
+  for (const c of net.cells.values()) {
+    for (let p = 0; p < c.ports.length; p++) {
+      const ep = c.ports[p]; if (!ep) continue;
+      if (ep.cell === c.id && p < ep.port) {
+        const sp = cellScreenPos(c);
+        ctx.strokeStyle = isLight ? '#888' : '#666'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y + 24 * sp.scale, 18 * sp.scale, 0, Math.PI);
+        ctx.stroke(); continue;
+      }
+      if (ep.cell <= c.id) continue;
+      const o = net.cells.get(ep.cell); if (!o) continue;
+      const sp1 = cellScreenPos(c), sp2 = cellScreenPos(o);
+      const key = `${Math.min(c.id, o.id)}-${Math.max(c.id, o.id)}`;
+      const isActive = (p === 0 && ep.port === 0 && activeSet.has(key));
+      const isHover = hoveredPair && ((hoveredPair.op.id === c.id && hoveredPair.val.id === o.id) || (hoveredPair.op.id === o.id && hoveredPair.val.id === c.id));
+
+      ctx.save();
+      if (isActive) {
+        ctx.strokeStyle = '#ff0a94'; ctx.lineWidth = isHover ? 5 : 3.2;
+        ctx.shadowColor = '#ff0a94'; ctx.shadowBlur = isHover ? 18 : 10;
+      } else {
+        ctx.strokeStyle = isLight ? '#222' : '#777'; ctx.lineWidth = 1.9;
+      }
+
+      if (hypMode) {
+        strokeHyperbolicGeodesic(ctx, disk.cx, disk.cy, disk.R, sp1.z.x, sp1.z.y, sp2.z.x, sp2.z.y, isActive, animTime);
+      } else if (isActive) {
+        ctx.beginPath();
+        const steps = 20, dx = sp2.x - sp1.x, dy = sp2.y - sp1.y, len = Math.hypot(dx, dy) || 1;
+        const nx = -dy/len, ny = dx/len;
+        for (let s = 0; s <= steps; s++) {
+          const t = s/steps, w = Math.sin(t*Math.PI*3 + animTime*5) * 4.5 * Math.sin(t*Math.PI);
+          const px = sp1.x + dx*t + nx*w, py = sp1.y + dy*t + ny*w;
+          if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      } else {
+        // Smooth vertical-tangent cubic Bézier (clean, zero clutter!)
+        const midY = (sp1.y + sp2.y) / 2;
+        ctx.beginPath();
+        ctx.moveTo(sp1.x, sp1.y);
+        ctx.bezierCurveTo(sp1.x, midY, sp2.x, midY, sp2.x, sp2.y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Shockwaves
+  for (let i = net.sparks.length - 1; i >= 0; i--) {
+    const sp = net.sparks[i]; sp.r += 4.2; sp.alpha -= 0.045;
+    if (sp.alpha <= 0) { net.sparks.splice(i, 1); continue; }
+    let sx, sy;
+    if (hypMode) {
+      const m = mobius(sp.hx, sp.hy, hypPan.x, hypPan.y);
+      sx = disk.cx + m.x * disk.R; sy = disk.cy + m.y * disk.R;
+    } else {
+      sx = W/2 + (sp.x + cam.x) * cam.zoom; sy = H/2 + (sp.y + cam.y) * cam.zoom;
+    }
+    ctx.save(); ctx.strokeStyle = sp.color; ctx.globalAlpha = sp.alpha; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(sx, sy, sp.r, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+  }
+
+  // Cells
+  for (const c of net.cells.values()) {
+    const sp = cellScreenPos(c);
+    const isCubical = ['V_PLAM','V_IV','V_SYS','V_GLUE','V_GLUEV','O_PAPPP','O_SUBST','O_COMP','O_UNGLUE'].includes(c.kind);
+    const accent = synMode ? synColorFor(c.label) : (isCubical ? '#ffd400' : (c.polarity === 'val' ? '#ff0a94' : '#00e5ff'));
+    drawSpaciousCell(ctx, c, sp.x, sp.y, sp.scale, isLight, ink, accent, hoveredCell === c);
+  }
+
+  drawSphere();
+  drawCausalDag();
+  drawKanBox();
+  drawScope();
+  requestAnimationFrame(draw);
+}
+
+// ============================================================================
+// 8. SUB-CANVASES (MUSIC OF THE SPHERES, CAUSAL DAG, KAN BOX, OSCILLOSCOPE)
+// ============================================================================
+function drawSphere() {
+  const W = sphereCanvas.width, H = sphereCanvas.height, cx = W/2, cy = H/2, R = 100;
+  const isLight = document.documentElement.classList.contains('light');
+  spctx.clearRect(0, 0, W, H);
+  spctx.strokeStyle = isLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)'; spctx.lineWidth = 2;
+  spctx.beginPath(); spctx.arc(cx, cy, R, 0, Math.PI*2); spctx.stroke();
+  spctx.beginPath(); spctx.arc(cx, cy, R*0.42, 0, Math.PI*2); spctx.stroke();
+  for (let i = activeChords.length - 1; i >= 0; i--) {
+    const ch = activeChords[i]; ch.alpha -= 0.014;
+    if (ch.alpha <= 0) { activeChords.splice(i, 1); continue; }
+    const n1 = SPHERE_NODES.find(n => n.key === ch.key) || SPHERE_NODES[0], n0 = SPHERE_NODES[0];
+    const x1 = cx + Math.cos(n1.ang)*R, y1 = cy + Math.sin(n1.ang)*R;
+    const x0 = cx + Math.cos(n0.ang)*R, y0 = cy + Math.sin(n0.ang)*R;
+    spctx.save(); spctx.strokeStyle = ch.color; spctx.globalAlpha = ch.alpha; spctx.lineWidth = 3.5;
+    spctx.beginPath(); spctx.moveTo(cx, cy); spctx.lineTo(x1, y1); spctx.lineTo(x0, y0); spctx.stroke();
+    spctx.fillStyle = ch.color; spctx.beginPath(); spctx.arc(x1, y1, 8, 0, Math.PI*2); spctx.fill(); spctx.restore();
+  }
+  spctx.fillStyle = '#ff0a94'; spctx.beginPath(); spctx.arc(cx, cy, 5, 0, Math.PI*2); spctx.fill();
+  spctx.font = '700 16px ui-monospace, Menlo, monospace'; spctx.textAlign = 'center'; spctx.textBaseline = 'middle';
+  SPHERE_NODES.forEach(n => {
+    const x = cx + Math.cos(n.ang)*R, y = cy + Math.sin(n.ang)*R;
+    const lx = cx + Math.cos(n.ang)*(R + 25), ly = cy + Math.sin(n.ang)*(R + 21);
+    spctx.fillStyle = isLight ? '#000' : '#fff'; spctx.beginPath(); spctx.arc(x, y, 4, 0, Math.PI*2); spctx.fill();
+    spctx.fillStyle = n.key === 'normal' ? '#ff0a94' : (isLight ? '#444' : '#aaa'); spctx.fillText(n.label, lx, ly);
+  });
+}
+
+function drawCausalDag() {
+  const W = causalCanvas.width, H = causalCanvas.height, isLight = document.documentElement.classList.contains('light');
+  cctx.clearRect(0, 0, W, H);
+  if (!net.events.length) {
+    cctx.fillStyle = isLight ? '#999' : '#444'; cctx.font = '600 18px ui-monospace, Menlo, monospace';
+    cctx.textAlign = 'center'; cctx.fillText('AWAITING INTERACTION EVENTS', W/2, H/2 + 6); return;
+  }
+  const byDepth = new Map();
+  net.events.forEach(ev => { if (!byDepth.has(ev.depth)) byDepth.set(ev.depth, []); byDepth.get(ev.depth).push(ev); });
+  const depths = [...byDepth.keys()].sort((a,b) => a - b), pos = new Map();
+  depths.forEach((d, di) => {
+    const row = byDepth.get(d);
+    const x = 36 + (depths.length === 1 ? (W - 72)/2 : (di / (depths.length - 1)) * (W - 72));
+    row.forEach((ev, ri) => {
+      const y = 28 + (row.length === 1 ? (H - 56)/2 : (ri / (row.length - 1)) * (H - 56));
+      pos.set(ev.id, { x, y });
+    });
+  });
+  cctx.strokeStyle = isLight ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.35)'; cctx.lineWidth = 2;
+  net.events.forEach(ev => {
+    const p2 = pos.get(ev.id);
+    ev.parents.forEach(pid => { const p1 = pos.get(pid); if (p1 && p2) { cctx.beginPath(); cctx.moveTo(p1.x, p1.y); cctx.lineTo(p2.x, p2.y); cctx.stroke(); } });
+  });
+  net.events.forEach(ev => {
+    const p = pos.get(ev.id);
+    cctx.fillStyle = (ev.key === 'comp' || ev.key === 'papp' || ev.key === 'unglue') ? '#ffd400' : '#ff0a94';
+    cctx.beginPath(); cctx.arc(p.x, p.y, 7, 0, Math.PI*2); cctx.fill();
+  });
+}
+
+function drawKanBox() {
+  if (!net.kanMode) return;
+  const W = kanCanvas.width, H = kanCanvas.height, isLight = document.documentElement.classList.contains('light');
+  kctx.clearRect(0, 0, W, H);
+  const p = net.kanProgress;
+  document.getElementById('kanPhase').textContent = `j = ${p.toFixed(2)}`;
+  document.getElementById('kanTitle').textContent = net.kanMode === 'univalence' ? 'GLUE / UA FIBER' : net.kanMode === 'path' ? 'INTERVAL I = [0,1]' : 'KAN OPEN BOX';
+  const x0 = 60, x1 = W - 60, y0 = H - 40, y1 = 40;
+  if (p > 0) { const curY = y0 - (y0 - y1)*p; kctx.fillStyle = 'rgba(255,10,148,0.16)'; kctx.fillRect(x0, curY, x1 - x0, y0 - curY); }
+  kctx.strokeStyle = '#00e5ff'; kctx.lineWidth = 4; kctx.beginPath(); kctx.moveTo(x0, y0); kctx.lineTo(x0, y1); kctx.stroke();
+  kctx.strokeStyle = '#ffd400'; kctx.lineWidth = 4; kctx.beginPath(); kctx.moveTo(x1, y0); kctx.lineTo(x1, y1); kctx.stroke();
+  kctx.strokeStyle = isLight ? '#000' : '#fff'; kctx.lineWidth = 4; kctx.beginPath(); kctx.moveTo(x0, y0); kctx.lineTo(x1, y0); kctx.stroke();
+  const lidY = y0 - (y0 - y1)*p;
+  kctx.strokeStyle = '#ff0a94'; kctx.lineWidth = p >= 1 ? 5 : 3; kctx.setLineDash(p >= 1 ? [] : [8,6]);
+  kctx.beginPath(); kctx.moveTo(x0, lidY); kctx.lineTo(x1, lidY); kctx.stroke(); kctx.setLineDash([]);
+  kctx.font = '700 18px ui-monospace, Menlo, monospace'; kctx.textAlign = 'center';
+  kctx.fillStyle = isLight ? '#000' : '#fff'; kctx.fillText(net.kanMode === 'univalence' ? 'true : Bool' : 'p(i)', W/2, y0 + 22);
+  kctx.fillStyle = '#00e5ff'; kctx.fillText('i=0', x0 - 28, (y0 + y1)/2);
+  kctx.fillStyle = '#ffd400'; kctx.fillText('i=1', x1 + 28, (y0 + y1)/2);
+  if (p >= 1) { kctx.fillStyle = '#ff0a94'; kctx.fillText(net.kanMode === 'univalence' ? 'false : Bool' : 'p ∙ q', W/2, y1 - 12); }
+}
+
+function drawScope() {
+  const W = scopeCanvas.width, H = scopeCanvas.height;
+  sctx.clearRect(0, 0, W, H); sctx.strokeStyle = '#ff0a94'; sctx.lineWidth = 2.5; sctx.beginPath();
+  if (audio.analyser && (audio.enabled || audio.droneOn)) {
+    const buf = new Uint8Array(audio.analyser.frequencyBinCount);
+    audio.analyser.getByteTimeDomainData(buf);
+    for (let i = 0; i < buf.length; i++) {
+      const x = (i / (buf.length - 1)) * W, y = (buf[i] / 255) * H;
+      if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+    }
+  } else { sctx.moveTo(0, H/2); sctx.lineTo(W, H/2); }
+  sctx.stroke();
+}
+
+// ============================================================================
+// 9. POINTER & MÖBIUS INTERACTION
+// ============================================================================
+function findHitScreen(sx, sy) {
+  for (const pair of net.activePairs()) {
+    const a = cellScreenPos(pair.op), b = cellScreenPos(pair.val);
+    const dx = b.x - a.x, dy = b.y - a.y, len2 = dx*dx + dy*dy + 0.01;
+    const t = Math.max(0, Math.min(1, ((sx - a.x)*dx + (sy - a.y)*dy) / len2));
+    if (Math.hypot(sx - (a.x + t*dx), sy - (a.y + t*dy)) < 18) return { type:'pair', pair };
+  }
+  for (const c of net.cells.values()) {
+    const sp = cellScreenPos(c);
+    if (Math.hypot(sx - sp.x, sy - sp.y) < 32 * sp.scale) return { type:'cell', cell:c };
+  }
+  return null;
+}
+
+canvas.addEventListener('pointermove', e => {
+  const rect = canvas.getBoundingClientRect(), sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  if (dragCell && !hypMode) {
+    dragCell.x = (sx - rect.width/2)/cam.zoom - cam.x; dragCell.tx = dragCell.x;
+    dragCell.y = (sy - rect.height/2)/cam.zoom - cam.y; dragCell.ty = dragCell.y;
+    return;
+  }
+  if (panStart) {
+    if (hypMode) {
+      const { R } = getDiskParams();
+      const nx = panStart.hx - (e.clientX - panStart.x) / (R * 1.15);
+      const ny = panStart.hy - (e.clientY - panStart.y) / (R * 1.15);
+      const mag = Math.hypot(nx, ny);
+      const clamp = mag > 0.88 ? 0.88 / mag : 1;
+      hypPan.x = nx * clamp; hypPan.y = ny * clamp;
+    } else {
+      cam.x = panStart.cx + (e.clientX - panStart.x) / cam.zoom;
+      cam.y = panStart.cy + (e.clientY - panStart.y) / cam.zoom;
+    }
+    return;
+  }
+  const hit = findHitScreen(sx, sy), tip = document.getElementById('hoverTip');
+  hoveredPair = hit && hit.type === 'pair' ? hit.pair : null;
+  hoveredCell = hit && hit.type === 'cell' ? hit.cell : null;
+  if (hoveredPair) {
+    const info = net.describeRule(hoveredPair.op, hoveredPair.val), pyth = PYTH[info.key] || PYTH.beta;
+    canvas.style.cursor = 'pointer'; tip.style.display = 'block';
+    tip.innerHTML = `<div>ACTIVE PAIR: ${info.text}</div><div class="ht-sub">Click to fire local step · ${pyth.name}</div>`;
+  } else if (hoveredCell) {
+    canvas.style.cursor = hypMode ? 'grab' : 'move'; tip.style.display = 'block';
+    tip.innerHTML = `<div>${hoveredCell.kind} (${hoveredCell.label})</div><div class="ht-sub">polarity: ${hoveredCell.polarity} · ports: ${hoveredCell.ports.length}</div>`;
+  } else { canvas.style.cursor = 'grab'; tip.style.display = 'none'; }
+});
+
+canvas.addEventListener('pointerdown', e => {
+  const rect = canvas.getBoundingClientRect(), sx = e.clientX - rect.left, sy = e.clientY - rect.top;
+  const hit = findHitScreen(sx, sy);
+  if (hit && hit.type === 'pair') {
+    net.depth++;
+    const info = net.firePair(hit.pair.op.id, hit.pair.val.id);
+    if (info) audio.playRule(info.key, 0, 1);
+    if (net.activePairs().length === 0) setTimeout(() => audio.playNormalForm(), 160);
+    updateHUD(); return;
+  }
+  if (hit && hit.type === 'cell' && !hypMode) { dragCell = hit.cell; canvas.setPointerCapture(e.pointerId); return; }
+  panStart = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, hx: hypPan.x, hy: hypPan.y };
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointerup', () => { dragCell = null; panStart = null; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  cam.zoom = Math.max(0.4, Math.min(2.5, cam.zoom * (e.deltaY < 0 ? 1.09 : 0.92)));
+}, { passive: false });
+
+// ============================================================================
+// 10. UI CONTROLS
+// ============================================================================
+const presetList = document.getElementById('presetList');
+PRESETS.forEach(p => {
+  const btn = document.createElement('button');
+  btn.className = 'preset-btn'; btn.dataset.id = p.id;
+  btn.innerHTML = `<div class="pt"><span>${p.title}</span>${p.tag ? `<span class="tag">${p.tag}</span>` : ''}</div><div class="pe">${p.expr}</div>`;
+  btn.onclick = () => loadPreset(p);
+  presetList.appendChild(btn);
+});
+
+document.getElementById('btnCompile').onclick = () => compileExpression(document.getElementById('exprInput').value);
+document.getElementById('exprInput').addEventListener('keydown', e => { if (e.key === 'Enter') compileExpression(e.target.value); });
+
+function stopPlay() {
+  playing = false; if (playTimer) clearInterval(playTimer); playTimer = null;
+  document.getElementById('btnPlay').textContent = '▶ Play'; updateHUD();
+}
+function startPlayLoop() {
+  const ms = 1320 - parseInt(document.getElementById('speedSlider').value, 10);
+  if (playTimer) clearInterval(playTimer);
+  playTimer = setInterval(() => {
+    const fired = net.stepParallel(); updateHUD();
+    if (!fired || net.activePairs().length === 0) stopPlay();
+  }, Math.max(110, ms));
+}
+document.getElementById('btnPlay').onclick = () => {
+  if (playing) { stopPlay(); return; }
+  if (net.activePairs().length === 0) compileExpression(document.getElementById('exprInput').value, currentPreset);
+  playing = true; document.getElementById('btnPlay').textContent = '❚❚ Pause'; updateHUD();
+  const fired = net.stepParallel(); updateHUD();
+  if (!fired || net.activePairs().length === 0) { stopPlay(); return; }
+  startPlayLoop();
+};
+document.getElementById('speedSlider').oninput = () => { if (playing) startPlayLoop(); };
+document.getElementById('btnStep').onclick = () => { stopPlay(); net.stepParallel(); updateHUD(); };
+document.getElementById('btnReset').onclick = () => compileExpression(document.getElementById('exprInput').value, currentPreset);
+document.getElementById('btnHyp').onclick = () => setHypMode(!hypMode);
+document.getElementById('btnFit').onclick = () => { cam = { x: 0, y: 40, zoom: 1 }; hypPan = { x: 0, y: 0 }; };
+
+document.getElementById('btnSound').onclick = function() {
+  audio.enabled = !audio.enabled; this.textContent = audio.enabled ? '♫ Sound' : '♫ Muted'; this.classList.toggle('on', audio.enabled);
+};
+document.getElementById('btnDrone').onclick = function() { this.classList.toggle('on', audio.toggleDrone()); };
+document.getElementById('tuningSel').onchange = function() { audio.setBase(parseFloat(this.value)); };
+document.getElementById('btnSyn').onclick = function() { synMode = !synMode; this.classList.toggle('on', synMode); };
+document.getElementById('btnTheme').onclick = () => document.documentElement.classList.toggle('light');
+document.addEventListener('keydown', e => {
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  if (e.key === 's' || e.key === 'S') { synMode = !synMode; document.getElementById('btnSyn').classList.toggle('on', synMode); }
+  else if (e.key === 'h' || e.key === 'H') setHypMode(!hypMode);
+  else if (e.key === ' ') { e.preventDefault(); document.getElementById('btnStep').click(); }
+});
+
+const qPreset = new URLSearchParams(location.search).get('preset');
+loadPreset(PRESETS.find(p => p.id === qPreset) || PRESETS[0]);
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

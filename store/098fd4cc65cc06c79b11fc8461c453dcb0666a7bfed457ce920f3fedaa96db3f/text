@@ -1,0 +1,7 @@
+-- an entry of the text's suffixes is never the empty suffix
+si-ent-cons : (t : List (List Word)) → (i : Word) → (e : El entry-ord) → MemKey {entry-ord} e (entries t i) → si-cons (fst e)
+si-ent-cons t = case t return λ w → (i : Word) → (e : El entry-ord) → MemKey {entry-ord} e (entries w i) → si-cons (fst e) of
+  nil → λ i e m → Empty-rec m
+  cons x r → λ i e m → mem-split {entry-ord} {si-cons (fst e)} e (cons x r , i) (entries r (wadd i #1)) m
+    (λ p → subst {_} {_} {List (List Word)} {si-cons} (λ k → fst (p (~ k))) unit)
+    (λ m2 → rec r (wadd i #1) e m2)

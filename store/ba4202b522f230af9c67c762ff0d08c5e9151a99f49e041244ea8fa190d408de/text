@@ -1,0 +1,11 @@
+-- a place (part of language-implementation-remainder; Avik, 2026-11-22: "Why would I have a single
+-- centralized monolith"): a URL that stores bytes under a name and gives them back, and computes
+-- nothing (HYPERACTIVE_PLACE: a bucket, or a directory). `hyperactive send` packs the objects the
+-- pool gained since the last send (tar, by the time of the last send), stores the pack under its
+-- hash (packs/HASH) and stores under the root's hash the packs that hold what it names
+-- (roots/ROOT); `hyperactive take ROOT` fetches the packs of ROOT this machine has not had, each
+-- kept only when its hash is its name and only its objects of the pool taken out, then takes the
+-- root. Every command runs here; the place runs none
+hy-newer : Sum Unit (List Word) → List (List Word) → List (List Word)
+hy-newer (inl u) rest = rest
+hy-newer (inr x) rest = cons "-N" (cons "./.cubical-store/sent-marker" rest)

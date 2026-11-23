@@ -1,0 +1,537 @@
+-- language-implementation-remainder (2026-11-14): everything the paper specifies for the language
+-- that typed codes and normalization by evaluation do not cover. What is known about it follows
+-- (moved here from the language goal's statement when the goal was expanded).
+-- Known (2026-11-21, from the sessions of 2026-11-20 and 2026-11-21 with Avik): the direction, what
+-- was compared, and what serves what.
+-- The direction (How to work, its first two items): the machine is written in hyperactive, every
+-- part proven; references are by content, never by name; hyperactive compiles out to C, with the C
+-- compiler a named assumption until one is proven; there is no OCaml machine, no port of the core C,
+-- no Rust, and direct x86 is not on the path. The core C is not refactored: it runs the checker until
+-- hyperactive emits its own machine as C, then it is deleted whole; it changes only on Avik's word or
+-- to fix what blocks the work.
+-- Compared (the comparison the note of 2026-11-13 says nobody had made, for the calculus's rule
+-- cases): core.h whole and net.c 380–480, 751–776, 1138–1498, 1862–2609 at 3aed33d6, each rule read
+-- against the paper's §3.4 and §4 and CCHM as the paper cites it: application, force, projections,
+-- path application, dimension substitution, systems, composition's dispatch on the head of the type
+-- family, Glue, constructors with dimensions, composition and transport in data types, case. No rule
+-- read disagrees. Not read: what the dispatch calls (the prelude's clauses beyond %comp-pi and
+-- %comp-u, the clauses generated per data type), the checker's clauses, words, primitive values, the
+-- checker's views. The rules are stated as interactions in Part I §4.5, "The rules as interactions"
+-- (blocks s4-5-p1 to s4-5-p10), and in the repository's README.
+-- Confirmed defects: with lib/prim.cub loaded a closed proof of Empty is accepted, because byte
+-- strings are equal by content (net.c O_BEQ), a store returns a copy (O_STOREC) and ptr-of, typed as
+-- a function, returns the copy's address (O_PTROF): the seven definitions are in the handoff
+-- document's closing section; read, not re-run. Universe composition is Cubical Agda's (already
+-- noted below, 2026-11-12). Reported and not verified here: conversion does not compare the faces of
+-- two formal compositions; a composition with an empty tube in a data type reduces to its base
+-- (consistent with net.c 2264–2265 and 2364–2369).
+-- What is to be done, and what each part needs first. E, a sound checker (the ptr-of hole closed,
+-- universe composition and the paper agreeing, the two reports settled, no stored verdict accepted
+-- without checking): needs nothing, and every later proof rests on it. S, the store by content
+-- (Avik's handoff of 2026-11-20): the store's view as a definition of the language (objects,
+-- references by content, names an overlay, dead statements); stored objects referring by content
+-- only; no path binding and no merging by name; the regeneration of users when a dependency is
+-- replaced (f to f′ gives G to G′, a proof at f carried to G); what a site shows being the content
+-- its defining object refers to; the existing source carried over without loss. K, the machine in
+-- hyperactive: what a net means as a term, each rule of §4.5 with its proof, then words, primitive
+-- values, the checker's views, the world, workers. C, the emitter to C: see hyperactive-emits-c. F,
+-- the front end in the language, by the path core-forced-by-paper records as Avik's (each notation a
+-- `syntax N` giving meanings, then its C goes): needs S, because it writes what the store holds. X,
+-- hyperactive builds itself and the core C is deleted: needs K, C, F and S. E first; then S, K and C
+-- beside one another; then F; then X. The factoring of the code that exists (the same thing written
+-- twice merged by one proof; declarations with no reason) blocks none of these, and name clashes,
+-- texts held under several paths and load-order dependencies stop existing once S holds.
+-- Tools written 2026-11-21 over what unexplained reads, all only reading: `hyperactive same-type`,
+-- `same-text` (196 pieces of text are held in more than one module, in 2,256 places, 2,010 of them
+-- lib/suffix-index.cub with its numbered copies and lib/suffix-query.cub with lib/sq2.cub),
+-- `held-whole`, `unimported`, `foldable`, `fold-safe`. A fold that removed the thirteen fold-safe
+-- modules made the names they declared stop resolving though other modules declare them, and was
+-- undone uncommitted; hy-fold-modules is out of the dispatcher. No command that changes the source
+-- is written until the store's view is a definition such a command is proven against.
+-- Known (2026-11-13, from the review of every earlier finding): The implementation is shown to be
+-- exactly the published calculus, rule by rule, and every deviation is fixed or justified. nobody
+-- has compared the implementation with the published calculus, so whether it is "implemented fully
+-- correctly" is unknown. Read the evaluator's rule cases (src/net.c), the translation of terms into
+-- its graph (src/lang.c), the composition code generated per data type as unchecked text
+-- (src/lang.c), universe composition (lib/prelude.cub, %hcompU, Cubical Agda's design, not CCHM's
+-- Glue) and the checker's typing clauses (lib/check.cub) against CCHM (Cohen, Coquand, Huber,
+-- Mörtberg) and the clocked extension (Kristensen, Møgelberg, Vezzosi), recording each rule as
+-- matching or deviating, then fix or justify each deviation. What is known follows. The deliverable
+-- is not an agent's statement that the code is right: it is the trusted part made small enough to
+-- be plainly the published rules, each rule case shown beside the rule it implements, everything
+-- else checked or unable to change a result.
+-- Known (2026-11-12, at src/lang.c): needs-work. For every data declaration this generates, as
+-- untyped source text, the type's composition (%comp-D), its homogeneous composition, and transport
+-- on each constructor and on formal compositions. That text is never checked: it is trusted as
+-- CCHM's rules for the declared type, written once in C per declaration rather than as the single
+-- schematic rule CCHM gives for inductive and higher inductive types. Show it is exactly that rule,
+-- or replace the per-declaration generation by the schematic rule.
+-- Known (2026-11-12, at src/net.c): needs-work. The calculus's rules are the cases of this function
+-- (application, projections, path application, composition, Glue, interval and faces, systems,
+-- higher-constructor boundaries, hcomp, transport, case: about 650 lines), the face algebra
+-- (src/dnf.c), the composition clauses for the type formers (lib/prelude.cub) and the composition
+-- code generated per data type (generated in src/lang.c). But the rule bodies also make
+-- sharing, deferral and memoization decisions inline (V_DEFER, boxes and references, A8 free-
+-- dimension cuts), and what a value is depends on the lazy-copy and substitution machinery above
+-- being right. So the part that must be trusted is in effect this whole file. To make the
+-- implementation's conformance to the published rules checkable by reading: the rules alone
+-- determine results, and the machinery is confined to scheduling, sharing and identity, where by
+-- construction (strong confluence of interaction nets; memo keys that are the full content of a
+-- deterministic computation) it cannot change a result.
+-- Known (2026-11-12, at lib/prelude.cub): needs-work. CCHM (Cohen, Coquand, Huber, Mörtberg, “Cubical Type Theory: a constructive interpretation of the univalence axiom”, arXiv:1611.02108) §7.1 “Composition for the universe” defines composition in the universe
+-- as a Glue type along the equivalences given by transport (comp^i U [φ ↦ E] A0 = Glue [φ ↦ (E(i1),
+-- equiv_i E(1−i))] A0). Here it is instead its own type former, %hcompU, with unglue on a face as
+-- transport back along that face's line (%unglue-line) and its own composition (%comp-gluel,
+-- %tproof): the design of Cubical Agda (Vezzosi, Mörtberg, Abel). The extra face ¬φ ↦ A0 is
+-- admissible (on ¬φ the tube is empty and the composite is A0; φ ∧ ¬φ is 0 in the face lattice),
+-- and makes a closed composition of types compute to a type. Not yet read against Cubical Agda's
+-- published rules for this type former, its unglue and its composition; until then these four
+-- clauses are trusted without a reference reading.
+-- Known (2026-11-12, at workflow/hyperactivity.cub): question. Not yet done: reading the
+-- evaluator's rule bodies (src/net.c's interaction cases, src/dnf.c's face algebra) side by side
+-- with the published rules, CCHM (Cohen, Coquand, Huber, Mörtberg, TYPES 2015, LIPIcs 69) and the
+-- clocked extension (Kristensen, Møgelberg, Vezzosi, arXiv:2102.01969), each rule recorded as
+-- matching or deviating at its site. The two papers are not in the repository; fetch them. Until
+-- this is done, conformance of the implementation to the calculus is not known.
+-- Known (2026-11-12, at workflow/hyperactivity.cub): question. Not yet done: reading src/lang.c's
+-- translation of terms into the evaluator's graph for anything that can change a term's meaning
+-- (the strictness analysis that decides which operands are built eagerly, fully lazy lifting,
+-- sweeping of compiled code, the module cache, whose key is the build date and the files' texts and
+-- whose hits are trusted).
+-- Known (2026-11-12, at workflow/hyperactivity.cub): question. Not yet done: reading
+-- lib/check.cub's typing clauses against the calculus's typing rules, each recorded as matching or
+-- deviating at its site.
+-- Known (2026-11-13, from the review of every earlier finding): The specializer carries its law in
+-- its type, and the three Futamura projections hold (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6 “Reflective programming and language extension”: eq. (6.4) “the specialization equation”;
+-- §6.1 “Typed quotation, semantic readback, and self-application”: eqs. (6.6) “the first Futamura projection” and (6.7) “the second Futamura projection” and "any further projection"; §6.2 “Specialization as a program over the language’s own definitions”). The specializer
+-- normalizes through a primitive that runs the untyped checker, so it cannot be specialized itself;
+-- with normalization as a term (typed codes, the sibling node) it carries its law in its type and the three Futamura
+-- projections follow. Specializing a process through a handler was measured superlinear
+-- (lib/specialize.cub, 2026-11-09) and is unattributed. It waits on the typed codes above.
+-- Known (2026-11-12, at lib/specialize.cub): needs-work. Specialization cost: #build of a process
+-- written through a handler was measured superlinear in the number of commands (2026-11-09: 7
+-- commands 42M steps, 22 commands 1.21 billion steps, 3 min 39 s; experiments/os/build-cost*.cub
+-- hold the per-stage probes). Not attributed (normalization, rewriting, or the passes of
+-- lib/x86.cub). It is a cost of the language's own programs about programs.
+-- Known (2026-11-12, at lib/specialize.cub): needs-work. Normalization here is code-norm-at, a
+-- primitive that runs the evaluator's own quoter (lib/std.cub's checker services). The
+-- specializer is therefore not a term all the way down, and cannot be specialized itself: the
+-- second and third Futamura projections (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §6.1 “Typed quotation, semantic readback, and self-application”: the second
+-- is eq. (6.7) “the second Futamura projection”; "the same stage and representation indices apply to any further projection") need
+-- normalization as a term of the language (normalization by evaluation over typed codes, with its
+-- soundness equation, ibid. eq. (6.5) “reifySound”).
+-- Known (2026-11-13, from the review of every earlier finding): Native code replaces a definition only with the relation to its meaning
+-- (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9 “Native execution as a mathematical program transformation”). Native code today comes from an x86 translator whose output is bound and
+-- run with no relation to the definition (src/lang.c, lib/x86.cub), from pasted machine code
+-- (lib/elf.cub), and with proofs about its bytes at one fixed placement (lib/compile/); nothing
+-- relates a fleet's proved behaviour to its binaries (lib/deploy.cub). Decided by Avik
+-- (2026-11-14): native realization goes through C. "are you going to complete writing proven-
+-- correct x86 RISC ARM impls instead of writing a C impl ? the value delivered to me by a complete
+-- x86 machine code impl is near-zero. cant even run on a macbook can it ... there remains no
+-- argument for x86 as far as i can tell." One C emitter runs wherever a C compiler does; per-ISA
+-- emitters and their proofs would multiply by every target. The paper permits it (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…,
+-- §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export": "C and C++ text are optional target presentations. If an external compiler produces the executed bytes,
+-- either its relevant compilation relation is assumed or those bytes receive their own checked
+-- connection"). What follows: the emitter returns the relation between running the emitted C and
+-- the term's meaning, which needs the meaning of the C fragment the emitter produces (a small,
+-- fixed subset), not of all of C (that stays language support); the C compiler's relation is a
+-- named assumption listed by #trusted; the evaluator substitutes native code only under that
+-- relation. The x86 translator (src/lang.c, lib/x86.cub, lib/machine.cub, lib/elf.cub's pasted
+-- machine code, lib/compile/) is superseded by it. The record that preceded the decision: plan
+-- revision 9 (archive/2026-11-11/PLAN-rev9.md, revision 9, 9 Nov 2026, sha256 4d012c3a10fd…, §5 “The distinctions everything above x86 rests on”, item 5 “The target is x86-64”) had chosen x86 ("Not LLVM IR,
+-- not C"); a session on 2026-11-12 planned C to break a cycle in its goal graph; neither was
+-- Avik's.
+-- Known (2026-11-12, at src/lang.c): wrong, against the paper (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…,
+-- §9.3 “An exact decoded machine and a structural compiler theorem”, "Loading, native substitution, and export"): the
+-- evaluator may replace a definition by native code only once a target-correctness witness relating
+-- the code's execution to the definition exists. Here the bytes are bound after the only check
+-- made, that the specialized term converts with the definition (lib/x86.cub jit-plan); the
+-- translation from that term to bytes (x-push, x-lift, x-erase, the templates, this boundary's
+-- marshaling) carries no relation, so a wrong translation would answer wrongly with nothing to
+-- catch it.
+-- Known (2026-11-12, at lib/deploy.cub): needs-work. fl-beh (what lib/fleet.cub's properties are
+-- stated of) and fl-node (the process each binary runs) are both built from cp-view, but nothing
+-- relates them: the properties proved of the behaviour are not shown to hold of the binaries. The
+-- relation comes from processes realized as executables with their system-call events equal to the
+-- process's interaction (native realization, above), applied here; nothing specific to
+-- this file is owed.
+-- Known (2026-11-12, at lib/elf.cub): needs-work. The driver loop, the #build-loop round driver and
+-- the start code below are machine code assembled from tools/asm/*.s and pasted as byte literals:
+-- trusted as written, with no statement of what they do. They go when processes become native executables by the route
+-- native realization takes (above).
+-- Known (2026-11-12, at lib/compile/meaning.cub): needs-work. This file, lib/compile/runs.cub,
+-- lib/compile/tmpl.cub, lib/compile/process.cub's kernel (kn-step, a second kernel beside
+-- lib/os/contract.cub's) and experiments/isa/addw-all.cub (one all-inputs theorem, for the bytes of
+-- word addition) are proofs about the output of the x86 translator at one fixed placement, a form
+-- the paper replaces (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §9.3 “An exact decoded machine and a structural compiler theorem”: Block, eq. (9.12);
+-- seq, eq. (9.13); the compiler as a fold, eq. (9.15), with the relational congruence, eq. (9.16)). They are to be deleted with that
+-- translator; the word, bit and flag law files beside them and x86ok's run lemmas remain
+-- usable for x86 as a later target.
+-- Known (2026-11-13, from the review of every earlier finding): Every law of the primitives is
+-- proved, or named as an assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar
+-- types"). lib/prim.cub postulates word and bit laws that
+-- are provable from the unbounded definitions; fixed-width types have no specification; floating
+-- point is trusted without a named assumption (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”).
+-- Known (2026-11-12, at lib/prim.cub): needs-work. Of the 91 primitives here, the laws of word
+-- multiplication, division, remainder and the bitwise operations, the wbit-* bit laws, the byte
+-- load/store laws, array extensionality and the bit round trips are postulated, though words are
+-- unbounded naturals and these laws are provable from the inductive definitions (lib/std.cub
+-- already proves addition, equality, order, maximum and subtraction equal to theirs). The fixed-
+-- width arithmetic (Int64, UInt32, UInt64) has no specification at all, and floating point is
+-- wholly trusted. The paper (docs/Hyperactive_Final_Paper.pdf, 11 Nov 2026, sha256 e8f358b4cd2c…, §8.5 “Machine representations and memory laws”, "Exact scalar types"):
+-- a native primitive implements its definition under a checked theorem or a named assumption. Prove what is provable; define U_w = Fin(2^w) with its modular operations
+-- and relate each fixed-width primitive to it or name the assumption; name IEEE binary64 as an
+-- assumption. ---------------------------------------------------------------- the types
+-- Known (2026-11-13, from the review of every earlier finding): Deriving is a typed term over the
+-- code of a data declaration. lib/derive.cub's 24 definitions read the checker's own values and are
+-- refused as untyped, so `deriving` is off and the Rust readers fail behind it. Deriving becomes a
+-- term over the code of a data declaration, which needs a declaration's code as a value (work-as-a-
+-- value). It waits on the work being a value (product implementation).
+-- Known (2026-11-12, at lib/derive.cub): needs-work. 24 definitions here are untyped and refused by
+-- the checker, which has rejected untyped definitions outside the bootstrap files since 2026-11-09,
+-- deliberately, after about 10,000 lines of untyped code were written by an agent. They are to be
+-- written with types; nothing in the checker changes. `deriving eq` in the surface language depends
+-- on this file and is off until it checks. 2026-11-12: they cannot be given types as they are: they
+-- read the checker's own values (a constructor's telescope tx A nm r, tval, %var, %view (%gval g),
+-- from lib/check.cub, a bootstrap file whose value types are not checked data), which no type of a
+-- checked definition names. Typed, deriving is a term over a code of the data type's declaration
+-- (its constructors and field types, as Code), not over the checker's values.
+-- Known (2026-11-13, from the review of every earlier finding): The evaluator handles terms of any
+-- depth without quadratic cost or stack overflow. measured 2026-11-09, building a term cost
+-- quadratic time in its depth and deep terms overflowed the C stack (src/net.c). Measured
+-- 2026-11-13 at depths 2,000, 4,000 and 8,000: 2.6 s, 1.5 s, 4.0 s, so no longer quadratic there;
+-- the stack at depth 10^6 is not re-measured.
+-- Known (2026-11-12, at src/net.c): question. Measured 2026-11-09: build_m calls synkey at every
+-- node it builds and synkey walks the whole subterm, so building a term of depth d costs d^2 key
+-- computations (a unary numeral of 4*10^4 did not print in 260 s), and deep right-nested terms (a
+-- numeral of 10^6) overflow the C stack in several recursive functions of this file and src/lang.c.
+-- Not re-measured since; whether both still hold is not known.
+-- Known (2026-11-14, at workflow/hyperactivity.cub): needs-work. A file with one unbalanced
+-- parenthesis in a definition (the graph's essential-context relation, one closing parenthesis
+-- short) made the machine exit with status 1 and print nothing about it: no position, no reason. A
+-- file that fails to read must say where and why. Measured 2026-11-16: it does; a definition one
+-- closing parenthesis short is refused with its place and what was found (FILE:4:4: expected ),
+-- found :, or at the end of the file: expected ), found (at the end of a block)).
+-- Known (2026-11-14, at experiments/nbe/p26-wip.cub): needs-work. The library's typed transport
+-- cannot be applied to a line of types that is a case on a path into Bool: false-true A e =
+-- transport (λ i → if e i then A else (A → A)) (λ a → a) is refused with "an implicit argument is
+-- not determined by the other arguments' types or the type expected", also with the family written
+-- as a defined function by clauses (ft-fam). Writing the composition itself, comp (λ i → ft-fam A
+-- (e i)) (λ i → []) (λ a → a), checks. So the elaborator does not find transport's implicit types
+-- from a line it could read them from (its endpoints, the line at 0 and 1).
+-- Known (2026-11-21, Avik: "We hit an error in a dope physics session of multiple threads writing to
+-- store at once and it dropping content"; read from the write path the same day): writing is not safe
+-- for two writers at once, in three places, none with a lock. (1) Every write goes through one fixed
+-- file: h-record-raw writes the text to build/record and then runs the machine on it, so a second
+-- writer that overwrites build/record in between has its text recorded at the first writer's path.
+-- (2) A write to a definition renders its whole module from the source, changes it and records the
+-- whole module (hy-write-at, hy-change), so of two writers into one module the later one records a
+-- module without the earlier one's change. (3) hy-version reads a name's version file, adds a line
+-- and writes the file whole, so one of two lines is lost. A refused write puts the old module back
+-- the same way, over whatever another writer recorded meanwhile. `view` likewise uses one fixed file,
+-- build/view-probe.cub. The store's C writes each single file by writing beside it and renaming
+-- (write_in, store.c), so no file is ever seen half written; the loss is in the read-change-write
+-- sequences above. The machine's --record itself (syntax.c) is unread. Which of the three the physics
+-- session hit is not established. Under references by content (S) an object is never overwritten,
+-- and only the view, which name points where, is shared and needs a rule for two writers; until then
+-- the remedy is one lock held for the whole of a write or remove, and scratch files named by the
+-- process.
+-- Reproduced and remedied the same day. Two `hyperactive write` commands started together, each adding
+-- a different new definition to one module: one was refused with "the machine does not read the text
+-- given as the piece of" its name (its text in the shared file had been replaced by the other's),
+-- and the other, which had been told its definition was written, was afterwards not in the source
+-- (the refused writer put the old module back over it). Remedy: hy-lock and hy-locked in the command
+-- line; write, remove and dead now run with one lock held (the file build/write-lock, opened and
+-- locked exclusive for the process, released by the system when the process ends or dies), so a
+-- second writer waits for the first to finish, check included. With it the same two commands both
+-- wrote and both definitions were in the source. Not covered: a view and a view at once (one probe
+-- file); anything that records into the source without going through `hyperactive`; two checkouts
+-- of the repository, which meet only in git. Not proven: it is established by the reading above
+-- and by that one reproduction. Unread: why the checker refused a branch (`if`) inside the lock's
+-- sequence of calls in the command line's module while accepting the same term in the host module.
+-- The whole remaining scope in atoms, with scale (2026-11-21, asked by Avik: "Explain the full
+-- remaining scope and break it down to atoms with scale"). Scale is in definitions, never time: S a
+-- handful (the memory's two laws were 6), M tens (commuting was 25), L hundreds, XL the replacement
+-- of thousands of lines of the core C (17,710 in all: syntax.c 6,755, lang.c 5,144, net.c 3,865,
+-- store.c 615, the rest 1,331). Counts not given here are unread.
+-- K, the machine (machine-in-hyperactive). K1 linearity gives apartness: linear memory defined (S);
+-- each of nk-rule's 14 clauses, nk-build's 5 forms and the read keep it (M); two different pairs of a
+-- linear memory have plans apart (S); the executor's names are fresh (S). K2 meaning: the readback
+-- relation (S); nk-build makes out denote the body (S to M); each of the 14 clauses preserves it (M).
+-- K3 the rest of §4.5, each rule with its two proofs: neutrals (S), pairs and force (S), data and case
+-- with recursive fields (M), dimensions and their substitution (M), systems and branches (M), the
+-- composition dispatch, whose clauses are already terms (S), Glue (S), then the three groups outside
+-- the paper: word arithmetic, machine values and bytes, the checker's inspection operations (M each).
+-- The old machine has 118 operation kinds and 45 value kinds in a 1,644-line function; the small
+-- machine has 5 and 3. K4 executors: memory as an array with freeing (M), several cores (M).
+-- C, emission (hyperactive-emits-c). Covered: 10 constructs (variable, word, successor, word
+-- operation, let, call, constructor, case, word eliminator, global). C1 the rest the builder accepts:
+-- closures and partial application (M), pairs (S), machine values and bytes (S), the world's
+-- commands and continuing processes (M), freeing (M). C2 the emitted subset of C as a definition
+-- of the language (M). C3 each template proven to mean its construct with no undefined behaviour
+-- (M to L). C4 the C compiler a named assumption.
+-- E, the checker sound: the ptr-of hole closed (S); the two reported defects verified, then fixed or
+-- struck (S each); the fixed array of 16 dimensions and the eliminator of an unknown type (S each);
+-- then the statement and proof of soundness against Part I's rules (L).
+-- S, the store by content: the view as a definition (M); stored objects refer by content only (M);
+-- no path binding or merge by name, alternatives coexisting (M); regeneration f to f', G to G' with
+-- the proof carried (M); a site showing what its defining object refers to (S); the existing source
+-- carried over without loss (M). Of the concurrency loss: views share one probe file (S); writers
+-- that do not go through `hyperactive` (unread).
+-- F, the front end in hyperactive: syntax.c's 6,755 lines replaced notation by notation through
+-- `syntax N` (XL; the number of notations is unread).
+-- X, self-build: the checker, the front end and the store each emitted by the rule found for the
+-- machine (an entry names its parts and holds them), run beside the old machine on the whole
+-- library with the same verdicts, then the core C deleted (L, after K, C, E, F).
+-- R, factoring by the inventory tools, each merge with its proof (L, any time). P, the paper carrying
+-- the machine and its proofs once Part I declares the units. I, the tool: a refused write prints its
+-- reasons (S); the silent refusal of recursion not on a constructor gets a message (S); name
+-- collisions end with S.
+-- Order: K1, K2 and C1 now, side by side; E beside them; K3 and C2, C3 as K1, K2 land; S after E's
+-- first atoms; F; X last.
+-- E1, the address hole: confirmed by the checker itself and closed in the source (2026-11-21). With
+-- the library loaded the checker accepted a definition of type Path Bool false true: b1 = bytes 8; b2
+-- = store64 8 b1 0 pf (load64 8 b1 0 pf), a written copy with the same content; q : b1 ≡ b2 = refl,
+-- accepted because byte strings convert by content; f : {x y : Word} → x ≡ y → weq x y ≡ true (a
+-- true lemma, from weq-refl); hole = f (cong (ptr-of 8) q), whose type weq (ptr-of 8 b1) (ptr-of 8
+-- b2) ≡ true the checker evaluated to false ≡ true, the two addresses differing. The one-string form
+-- (the lemma at ptr-of 0 (bytes 0)) was refused: one value is shared and stays consistent. The cause
+-- is the declaration, not the calculus: prim.cub declared primitive ptr-of : (n : Nat) → Bytes n →
+-- Word = λ n b → %ptr-of b, an address read typed as a function of content. Done: the false
+-- definition and its probes removed at once; raddr (raddr : {n : Nat} → RM n Word; raddr = λ r → (r ,
+-- ptr-of n r), "the region's address, for a foreign call that reads or fills it", used by nothing)
+-- and ptr-of removed from the source. What remains of it: the machine's C still implements %ptr-of,
+-- and a primitive declaration is an axiom anyone can write; an address belongs to the world's
+-- commands (Proc), where reading it twice may differ, and is to return there when a foreign call
+-- needs it. Also found: `hyperactive view ... type T TERM` does not check the term against T (true
+-- was accepted at type Word); it evaluates. Only `write` and `check` are the checker's verdict.
+-- The same loss between checkouts (2026-11-21): the write lock serializes writers in one checkout;
+-- two sessions in two checkouts meet only in git, and there the source held, for eight documents in
+-- turn, two alternatives that do not merge; while any stands, the workflow is not read to the end
+-- and no session can read or write a node. All eight came from one commit (eb53c6c63, "Wipe Claude
+-- authorship notes from Avik's works") standing beside entries of 18 and 20 November. Resolved by
+-- reading both sides of every definition that differed: the welcome file, to-be-incorporated-into-
+-- paper, the-firm-as-one-program, hyperactive-interaction-in-the-words-of-the-human-superorganism,
+-- knowledge-is-a-lack-of-ignorance, controversy-and-consensus, language-derived-from-the-record and
+-- self-reference-bhartrhari-and-lawvere each had a newer text equal to the older with authorship
+-- notes, wording or a preamble removed, and the older entry was stated dead; in the paper
+-- (docs/hyperactivity.cub) the one definition that differed was part-iii-carried, and the entry kept
+-- is the one without the four pieces that no longer exist; Avik's removal of the four foundation
+-- blocks and the section 4.5 blocks were checked present afterwards. The preambles removed by that
+-- commit included quotations of Avik's requests ("deep free generation through the space of meaning
+-- & words etymology on the above & project", "This whole work of yours is essential. It is
+-- comprehensive & singular.", "Preserve this - this is Essential!!", "Extremely essential!!", "Your
+-- last message is essential", "you killed it, retain it"); they remain in the entries stated dead
+-- and in git. Corrected the same day: for a path ending .cub, `hyperactive def PATH`
+-- prints each alternative whole under its entry (hy-def-alternatives); it was not used here, git
+-- was read instead, against the rule; for a document held whole (the welcome file) def printed
+-- only the two entries. What this shows for S: a document held whole has no way to show its sides
+-- (git was read for it), a write cannot follow two alternatives of a definition ("is new"), and one unmerged
+-- document stops every reader of the workflow; a view that reads past an unmerged document, and a
+-- command that shows both sides, are atoms of S.
+-- E2, the two reported checker defects, tested through the checker (2026-11-21; the probes are the
+-- module probe-e2 under lib, its own circle PrbS1 and a two-point type PrbT with a path constructor).
+-- (1) "Conversion does not compare the faces of two formal compositions": not reproduced in its
+-- plainest form. Two paths from the base point to itself, each a composition in the circle with
+-- the same base, one with constant tubes and one whose tube carries the loop: refl between them
+-- was refused; refl of the first with itself was accepted. The report's exact case is not known
+-- here; it stays unverified, no longer untested. (2) The empty tube: comp (λ j → T) (λ j → []) a ≡ a
+-- is accepted by refl in a data type with a path constructor, so the machine computes a composition
+-- with the empty tube to its base (the evaluator prints the tube's end, (λ x → []) i1, as if the
+-- empty tube covered everything); the same composition claimed equal to a different point was
+-- refused. In Cubical Agda that composition is a value of its own, not its base, so this is one
+-- more computation rule than the paper's source [9] has; it is stable under substitution (a tube
+-- whose faces all become false is the empty tube) and no contradiction was found, but that it is
+-- sound is not established here. Section 4.5's line "compose in a data type, partial tube ⟶ a formal
+-- composition" should say what the empty tube gives once this is settled.
+-- Changes to the source are journalled (2026-11-22; Avik: "Preventative fixes on issues noticed
+-- please lang design . Rmemeber programs read/write programs read/write programs metacircular
+-- kernel"). As read in hy-change and hy-group-in: the new text was recorded in the source, then
+-- checked, then the old text put back if it did not check; a process stopped in between left the
+-- unchecked text there and every later change ran its check again (two statements whose checks
+-- did not end were left so, and writes after them appeared to hang). Now the intent (the old
+-- text, then the path) is written before the new text (hy-intend), forgotten when the change is
+-- kept or put back (hy-forget), and the next action that takes the write lock puts an interrupted
+-- change back first (hy-recover, hy-locked-in), saying so. Shown by stopping a write while its
+-- check ran: the next write printed the line and the statement was gone. Open, noticed the same
+-- day: a change to several files at once (hy-change-many, hy-keep-many; unread beyond their use
+-- of hy-write-files) is not journalled; a refused change is checked a second time after the old
+-- text is put back (hy-keep's last clause); a definition must be placed after everything it uses,
+-- by hand (a write naming a later definition is refused), which references by content would
+-- remove; a check has no bound on its cost, so a statement whose computation does not end is
+-- found only by waiting; and the journal holds the whole old text of a module, against
+-- memory-is-local.
+-- Superseded text in this node (2026-11-22), found by reading it whole; nothing above is deleted.
+-- (1) "Confirmed defects: ... ptr-of ... read, not re-run": superseded by "E1, the address hole:
+-- confirmed by the checker itself and closed in the source (2026-11-21)" below it; the false
+-- declaration is removed and ptr-of is out of the source. Wherever "the ptr-of hole closed (S)"
+-- stands as to do (in "What is to be done" and in "E, the checker sound"), it is done. (2) "each
+-- of nk-rule's 14 clauses, nk-build's 5 forms" and "each of the 14 clauses preserves it", and
+-- "the small machine has 5 and 3": these count the machine's first form; the machine is now one
+-- rule and a table (machine-in-hyperactive, "One rule and a table (2026-11-21"), so what is
+-- to be kept or preserved is stated once over the rule and each row of the table, not over 14
+-- clauses. (3) "I, the tool: a refused write prints its reasons (S)" as to do: done; a refused
+-- write prints the reason under each name (hy-fail-why; machine-in-hyperactive: "fixed: a refused
+-- write now prints the machine's reason under each name").
+-- (4) "a change to several files at once (hy-change-many, hy-keep-many ...) is not journalled",
+-- in the block before this one: it is now. The journal holds a list of paths (one change is a
+-- list; a change to one file is the list of one): hy-intend writes, for every path, its old
+-- text, or nothing for a path that held nothing, and last the mark naming the paths; hy-forget
+-- and hy-recover read the mark. Every path that records source text before a check uses it:
+-- hy-change (one definition or a removal), hy-group-in (a group placed after another),
+-- hy-change-many (several definitions, in one file or several), hy-write-new-module (a module
+-- the source did not hold; put back by dropping it). hy-dead and a document written whole record
+-- with no check after, so they have nothing to put back. Shown by stopping a write that changed
+-- a definition in each of two modules while its check ran: the source showed both new texts
+-- during the check and both old texts once the next writer (another session's, queued on the
+-- lock) had run. Not covered: a journal left by the form before this one (pending-path,
+-- pending-text) is not read by this one.
+--
+-- The write lock is one lock for the whole source (2026-11-22; Avik: "What's up? Hear you
+-- talking about a lock? Is our decentralized workflow suboptimal?"). It is: as read in hy-lock,
+-- hy-change and hy-group-in, every write, removal and dead statement takes the one lock, renders
+-- the whole module, records it, has its roots checked, and only then lets the next writer in; a
+-- session and three forks writing the same day queued behind one another (one fork's 36 removals
+-- held the others for minutes). The lock is a patch on a write that records a whole module
+-- before its check. A lock for each module would not be safe as the write stands: a writer's
+-- check reads the modules that use its module, and would read another writer's unchecked text.
+-- The form that needs no such lock: a change is checked apart from the live source (nothing
+-- unchecked is ever recorded where a reader reads), then kept as one new entry for that
+-- definition; writers of different definitions do not meet, and two writers of the same
+-- definition make alternatives, as two sessions already do between repositories. Not built;
+-- how entries and alternatives merge was seen in the tool's behaviour, not read in its lines.
+-- Seen while four writers shared the source (2026-11-22), cause not established: the line "an
+-- interrupted change was put back" printed at least five times during one fork's run of
+-- removals, and two removals that had reported "removed" (nk-i-comm, nk-i-demorgan) were in the
+-- source again afterwards; they were removed again and the work went through. In the same hours
+-- the journal's format was changed (one path to a list of paths) while writers were queued, and
+-- writers were stopped on purpose to show recovery. Read in the lines: a writer started before
+-- the change of format does not see a mark left in the new format and a later writer would put
+-- that mark's old text back over what was done in between; whether that is what happened was
+-- not shown (a run to reproduce it needs a writer stopped mid-check, which was not permitted in
+-- that session). Also read: hy-put-one takes a path named in the mark whose old text is absent
+-- as a path that held nothing, and drops the module; nothing shows this has happened. The form
+-- without a lock (the block above) has no journal and neither risk.
+-- Writers do not wait for one another (2026-11-22; built the hour Avik said: "Anything that is
+-- blocking sane max throughout work cannot be delayed"; "These behavioral policies you propose
+-- are a failure of judgment", of a proposal to have one writer at a time until this existed).
+-- The lock and the journal are gone. Read first in the core: the source is a pool of entries,
+-- each naming the entries it follows, and entries live together at a path merge by definition;
+-- a write worked against that in one place, recording a whole module before its check as the
+-- follower of whatever was live when it landed. Now: the writer reads the head of the path, the
+-- live entries and the module as one (hy-tip; the core's --head); makes its text from it; has
+-- the roots read with that text in place of the source's, nothing recorded (hy-verdicts-with;
+-- --with; a run reading a path this way records nothing of it, which loading otherwise does);
+-- and only then records it naming the entries and the module it was made from (hy-record-as;
+-- --follows, --base). When those are still live the entry follows them. When another writer's
+-- entry arrived in between, the core compares the three modules by definition: a name both
+-- changed differently is a conflict, nothing is recorded, and the writer is told to make its
+-- change again; otherwise the entry is written beside the other, both live, and the index
+-- computed again merges them. The index, a cache, is changed under a lock of its own held for
+-- the moment of the change. Shown: a refused write leaves no definition; three writers at once
+-- on one module, placing and changing different definitions, all kept, the module checking; two
+-- writers at once changing one definition, the first kept and the second refused with its
+-- reason, the module readable throughout. Before the conflict test was added to the core the
+-- same two writers left the module holding alternatives (resolved with hyperactive dead); that
+-- is what a path comes to only between repositories now. The core's change is in the guard's
+-- list. Not covered: a document written whole follows whatever is live (two writers of one
+-- document, the last stands); a several-file change records its files one after another, not
+-- as one; the key shown after a write can be that of a text checked and refused since (the
+-- machine's note of the last text read under a name); candidate files of a refused
+-- several-file change are left in build/. Whether the put-backs seen earlier this day came
+-- from the journal's change of format was never shown, and with the journal gone cannot recur.
+-- The canonical state removed (2026-11-22). Avik, in order, of what this session had spent the day
+-- hardening: "We've been trying to move off filesystem/git a while. Are you aware these are dinosaur
+-- ontologies"; "Like wtf is a versions log that's an ontology which is not part of Avik Jain's
+-- hyperactivity"; of "the same definition changed twice" and "alternatives marked dead": "All sounds
+-- very wrong"; "They aren't alternatives dude. They are literally different mathematical objects";
+-- "They cited there no canonical state, and created a canonical state called 'live'?"; "You have
+-- taken my site down with active readers on it ... No chance you're getting any further computation
+-- running there"; "Why would I have a single centralized monolith". Read in the core: his store was
+-- already there (src/store.c: a checked definition under the hash of its canonical type and term,
+-- what it mentions inside it by key, no names, files or positions in it; its certificate beside it;
+-- names a separate log). Over it, sessions between 2026-11-16 and 2026-11-22 had put: paths bound
+-- to modules of texts in order; entries that replace entries; one "live" entry at a path as "what
+-- the source holds there"; alternatives and their merge by name; the index of every machine
+-- computed from what all had written; a versions record changed in place; and, by this session, a
+-- write lock, a journal, an entry naming what it follows, and a refusal of the second of two
+-- writers of one name. All of that is removed (the blocks above that describe the lock, the
+-- journal, "writers do not wait" by entries, and the put-backs describe what no longer exists).
+-- What there is: the pool, objects named by their content and never changed (texts, modules,
+-- roots); labels, what a path or a name holds on one machine, set by that machine's records and
+-- by taking a root, by nothing else; a root, the modules a machine's paths hold, one hash for a
+-- whole system (`hyperactive root`, `take ROOT`; a machine with no labels takes the one named
+-- beside the pool); another machine's change to a module applied here as this machine's own
+-- construction (`apply PATH BASE OTHER`); a change checked before it is recorded; and two
+-- records of one machine made at once from one module both standing (the second's changes
+-- applied to what the path holds). Shown on the rebuilt machine: three writers at once on one
+-- module, all three kept; a root made, taken and made again the same; the kernel module checking.
+-- The chemistry session's nine commits of that morning were carried into the root by reading what
+-- it had changed (two documents taken as it left them; the welcome file, changed by both,
+-- combined by hand). The entry and versions files are left in the pool for sessions still on the
+-- machine before this change, which reads them; the machine after it does not (`--drop-view`
+-- removes them). Deployment as it follows: no server; the site is its own process and is given a
+-- root; sessions run everything locally; objects are left and fetched at a place that only
+-- stores bytes by hash (a bucket; git meanwhile, which with nothing changed in place can only
+-- add files). Not done: a definition is still found by a path and a name and placed in a
+-- module's order, and names what it calls by name; in his design a caller holds what it calls by
+-- content and a change of f gives a new g related to the old by a square. The machine's store
+-- holds every checked definition that way already; loading from it by key, the text of a
+-- definition attached to its key, what elaboration needs that the key does not hold (implicit
+-- arguments, notation, instances), and a namespace as an object are what is missing. The sync
+-- with a served source (lib/host.cub, h-sync) and the server's /source routes still speak of
+-- entries and are dead code. The bucket is not set up.
+-- A definition taken from the store by its key (2026-11-22, on Avik's "Do it all" of what was
+-- left for a definition to be held by its content and found without a module). Shown: in a
+-- machine that read only the library, nk-size (nk-lam (nk-num #3)) is 2, the data type NkTm and
+-- the definition both taken by key; and nk-case-at #26, the univalence statement, is true there,
+-- the checker and every cubical operation it uses taken by key, the kernel module never read.
+-- How (src/syntax.c, load_key): the keys a definition's stored forms mention are taken first;
+-- then its forms are read back and given to the handler of a checked definition, which finds the
+-- certificate and does not run the checker. What had to be added beside a key, each written when
+-- the definition is checked: forms, the type and term as elaborated in the form that reads back
+-- (the key's own code and type are the desugared forms, which the handler does not take: the
+-- first run failed on that, "malformed Pi"); mask, the implicit-argument mask with the instance
+-- bits; computing; and for a data type decl, its declaration with its constructors' names, and
+-- conof/NAME, each constructor's and field's name pointed at the type's key. A name is looked up
+-- among this machine's labels (bound/NAME, conof/NAME) where the elaborator finds it bound by
+-- nothing local, and only in a text that is not a module of the work (a probe, one declaration
+-- being checked): asked of every symbol, a local variable named as a stored definition was
+-- loaded as it and the library's own check failed; and in a module, a name taken early was then
+-- declared again. Also fixed, found on the way: a machine process kept warm from before a
+-- rebuild went on answering (its staleness now includes the machine as built); a read that does
+-- not reach its end shows what the machine said. The library, the kernel module, the guard and
+-- the tool check on the rebuilt machine. What a definition's forms do not carry and so is not
+-- taken by key yet: a recursive group's members (they name one another by position), notation
+-- (`syntax`), instances, a constructor's implicit parameters, primitives and postulates, and a
+-- definition's surface signature and body (sig_set, body_set: kept for uses not read in this
+-- work). Next, each resting on this: a definition's text attached to its key; a namespace (the
+-- labels, names to keys) as one object in place of the root's paths to modules; `write` checking
+-- one declaration in a text of its own, with what it mentions taken by key, and moving the
+-- label; then modules, their order and "after OTHER" have nothing left to do.
+-- The pool holds what a definition is, a root names the names, and one declaration is written
+-- on its own (2026-11-22, the same "Do it all", continued). Done since the block above: beside
+-- each checked definition's key the pool (not this machine's store) holds forms, mask,
+-- computing, decl and text, the text's hash (6,875 texts attached to their keys); a root's first
+-- line names the object of the names (`b NAMEHEX KEY`, `c NAMEHEX KEY`, and `t NAMEHEX TEXT` for
+-- a name no module holds); ROOT/root beside the pool names the root a machine with no labels
+-- takes. Shown in a new checkout that had checked nothing: nk-size (nk-lam (nk-num #3)) is 2, the
+-- definition found by its name in the names object and taken by key, the kernel module never
+-- read. `hyperactive write NAME`, NAME new and given no place, or NAME held by no module, writes
+-- the declaration on its own (lib/hyperactive.cub, hy-free; src/lang.c, --keep): its text after
+-- the library's import is read as a text that is no module, so what it mentions is taken by key;
+-- its objects are kept beside its key; when nothing fails the name is made this machine's label
+-- of the key, and nothing is labelled when a check fails. Shown: free-probe-size, which mentions
+-- nk-size, nk-lam and nk-num, written with no module and no "after"; free-probe-twice, which
+-- mentions free-probe-size, written the same way with its statement refl; free-probe-size
+-- written again with other code, which gave the name another key and left free-probe-twice the
+-- object it was (it mentions the first by key: they are different objects, and a name is this
+-- session's label for one); a declaration that does not check, refused with the machine's
+-- reason and nothing labelled; both names removed, a removal being the label dropped. Not yet:
+-- a definition in a module does not see a name no module holds (a module is read as work, where
+-- nothing is looked up among the labels), so the two kinds do not mix until modules are
+-- dissolved, which waits on what load by key does not carry (the list in the block above); the
+-- names object is one flat object; nothing moves between machines but by git (no bucket); the
+-- served-source code (lib/host.cub h-sync, the /source routes) is dead and still there.
+language-implementation-remainder : Node
+language-implementation-remainder = node "Everything else the paper specifies for the language: the calculus conforming to its published rules, the specializer with its law, native realization, the laws of the primitives, deriving as a typed term, and terms of any depth." (cons language-implementation nil)

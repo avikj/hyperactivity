@@ -1,0 +1,7 @@
+stat-stream-fd : Word → Word → Proc W Unit
+stat-stream-fd fd c =
+  bind (sys-call #8 fd #0 #2 #0 #0 #0) (λ sz →
+  bind (sys-call #8 fd #0 #0 #0 #0 #0) (λ r0 →
+  bind (fd-write c (stat-data-hdr (if wlt sz #9223372036854775808 then sz else #0))) (λ hw →
+  bind (with-bytes {Unit} #65536 (λ buf → stat-copy-loop (toNat #1000000) fd c buf (if wlt sz #9223372036854775808 then sz else #0))) (λ cu →
+  bind (sys-call #3 fd #0 #0 #0 #0 #0) (λ cl → ret unit)))))

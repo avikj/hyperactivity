@@ -1,0 +1,9 @@
+dkey-lemma : (t : List (List Word)) → (h0 : Nat) → (f : List (List Word) → Word) → Prop t (suc h0) f → PosRank f →
+             (s s' : List (List Word)) → MemKey {suffix-ord} s (sufs t) → MemKey {suffix-ord} s' (sufs t) →
+             leq {WW} (dkey f (suc h0) s) (dkey f (suc h0) s') ≡ leq {suffix-ord} (take-n (plus (suc h0) (suc h0)) s) (take-n (plus (suc h0) (suc h0)) s')
+dkey-lemma t h0 f pr ps s s' m m' =
+  let h = suc h0
+      sl = sec-lemma t h0 f pr ps (drop-n h s) (drop-n h s') (mem-drop t h s (mem-mon t s m)) (mem-drop t h s' (mem-mon t s' m'))
+  in tr (lex-step (leq {suffix-ord} (take-n h s) (take-n h s')) (leq {suffix-ord} (take-n h s') (take-n h s)) (leq {suffix-ord} (take-n h (drop-n h s)) (take-n h (drop-n h s'))))
+       (λ i → lex-step (pr s s' m m' i) (pr s' s m' m i) (sl i))
+       (sym (lex-double {List Word} {leq {token-ord}} h h s s'))

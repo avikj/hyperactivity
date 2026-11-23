@@ -1,0 +1,24 @@
+cx-find-fn : List CDecl → Word → CxFn
+cx-find-fn nil i = cxfn-none
+cx-find-fn (cons d ds) i = case d of
+  cd-function f → (case weq (cx-fn-id f) i of
+    true → cxfn cxfk-function #0 false nil f
+    false → cx-find-fn ds i)
+  cd-method parent virt f → (case weq (cx-fn-id f) i of
+    true → cxfn cxfk-method parent virt nil f
+    false → cx-find-fn ds i)
+  cd-constructor parent inits f → (case weq (cx-fn-id f) i of
+    true → cxfn cxfk-constructor parent false inits f
+    false → cx-find-fn ds i)
+  cd-destructor parent virt f → (case weq (cx-fn-id f) i of
+    true → cxfn cxfk-destructor parent virt nil f
+    false → cx-find-fn ds i)
+  cd-conversion parent virt f → (case weq (cx-fn-id f) i of
+    true → cxfn cxfk-conversion parent virt nil f
+    false → cx-find-fn ds i)
+  cd-record r → cx-find-fn ds i
+  cd-class-template-specialization args r → cx-find-fn ds i
+  cd-enum id name under scoped es → cx-find-fn ds i
+  cd-var mangled v → cx-find-fn ds i
+  cd-var-dynamic mangled v → cx-find-fn ds i
+  cd-var-template-specialization args mangled v → cx-find-fn ds i

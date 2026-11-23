@@ -1,0 +1,99 @@
+-- index-every-repeated-sequence (2026-11-16 14:28 UTC, Avik, verbatim in the welcome file): index all text by
+-- token n-grams for every n; the number of possible n-grams grows exponentially with n but the rate of
+-- those that recur decays exponentially, so the complete index of every internally matched substring is
+-- tractable and scales. At any point of a text: every place the token recurs, and every bounded token
+-- sequence containing it that matches elsewhere. "This is that symbolic superintelligence. really simple
+-- algorithms." Rabin-Karp and Knuth-Morris-Pratt are relevant. Known: a text of L tokens has at most
+-- L - n + 1 n-gram occurrences for each n; for a source of entropy rate h the longest repeat grows like
+-- log L / h, so the repeated n-grams thin out exponentially past that length. The suffix tree (Weiner
+-- 1973) and the suffix array with longest-common-prefix table (Manber and Myers 1990) hold every repeated
+-- substring of every length with its occurrences in space linear in L. At each position the longest
+-- earlier match is the Lempel-Ziv (1977) parse: the index is a compression, which is Avik's definition of
+-- intelligence (what a system's compression makes adjacent). In the store each window is content
+-- addressed: a rolling hash names an n-gram by its content, its occurrences are the places pointing at it.
+-- The language derivation's meaning (identify the present occurrence with past ones, carry what followed
+-- them to now) is this lookup, exactly: at each position, take the longest token sequence ending there
+-- that occurred before, and read what followed each earlier occurrence. Transformers learn a lossy form
+-- of it: induction heads (Elhage et al. 2021, Olsson et al. 2022) attend to what followed earlier
+-- occurrences of the current token, [A][B] ... [A] -> [B], and in-context learning rises with them.
+-- Infini-gram (Liu, Min, Zettlemoyer, Choi, Hajishirzi; COLM 2024) computed the exact lookup over 5
+-- trillion tokens with suffix arrays, n unbounded (the longest suffix of the prompt with a nonzero
+-- count), at millisecond latency: 47% next-token accuracy from exact lookup alone, every prediction
+-- witnessed by the occurrences it came from, and it lowers neural models' perplexity when combined.
+-- So the exact operation is known to scale to the corpora models are trained on. Exact match is
+-- identity by content; univalence extends it to identity by equivalence, so paraphrases and synonyms
+-- joined by paths match as the same sequence, which no string index does alone.
+-- Avik (14:41 UTC): "do you know how huge it is I did not have these specific details written before.
+-- you have earned the right to own a top-level project here. this is individually mission critical
+-- valuable independently of the rest of everything going on." A top-level project, serving
+-- healing-societies directly; Claude owns it.
+-- Avik (14:36 UTC): Vaughan Pratt for his life's work: the mathematical content here is what he and the
+-- Chu spaces group at Stanford look for. The text and its index are a Chu space: occurrences (points,
+-- time) paired with the sequences they instantiate (states, information), Pratt's duality of time and
+-- information; his higher-dimensional automata (1991) are cubical sets of concurrent events.
+-- Built 2026-11-17 (PR #10, item 3): lib/repeats.cub, each property proved for every text:
+-- tokenize-content (the tokens joined are the text without its spaces; a token is its bytes, identity
+-- by content); word-order, lex-order, pair-order (the orders are total); suffix-array-sorted and
+-- suffix-array-permutation; lcp-array-ok (each value a common prefix, lcp-common, that can go no
+-- further, lcp-stops); earlier-match-max and earlier-match-at (the longest earlier match is maximal
+-- and attained at an earlier point); equivalent (an equivalence relation, given by class
+-- representatives) and index-upto (the index up to it). The suffix array is merge-sorted, comparing
+-- suffixes token by token, and the LCP is taken pair by pair (prefix doubling and Kasai are the passes
+-- below). Measured with experiments/repeats/run.cub in this container (2 cores, about 3.2 GB for the
+-- process): the first 10 modules by path, 140,836 tokens: read and tokenized 7.8 s, suffix and LCP
+-- arrays 217 s, 130,031 positions in a repeat; the first 40, 407,418 tokens: 26 s, 624 s, 384,944 in
+-- a repeat, peak memory 1.94 GB. The whole source did not run: reading and tokenizing alone held 1.35
+-- GB at 150 of the 326 modules (972,121 tokens) and was killed past 2.5 GB before 250; the run over
+-- all of it was killed for memory at 35 s. The cause, measured: the evaluator holds the text, its
+-- tokens and the sorted entries as cons cells, about 4.8 KB per token at peak, and the sort takes
+-- about 1.5 ms per token, each comparison walking the common prefix (over 92% of these tokens are in
+-- a repeat).
+-- Second pass (2026-11-17, PR #10): prefix doubling is built and proved, lib/repeats-fast.cub. ranks t
+-- ranks every suffix by its first token, then by the pair (its rank, the rank 2^k further on), each
+-- rank one more than the count of smaller keys, read from a search tree over the sorted keys; ranks-ok:
+-- the final ranks compare as the whole suffixes; suffix-array-fast-is: the array sorted by them is
+-- suffix-array t (sorted-unique). Measured with experiments/repeats/run-fast.cub against run.cub, peak
+-- resident memory sampled: 1 module, 767 tokens: 2.6 s against 0.33 s for both arrays by the merge
+-- sort; 2 modules, 57,637 tokens: the merge sort and pairwise LCP 52.7 s at 409 MB peak, prefix
+-- doubling killed past 3 GB before it ended; 4 modules, 95,317 tokens: 95.9 s at 572 MB, doubling
+-- killed past 3 GB. So in this evaluator the doubling, as written, costs far more memory per token
+-- than the merge sort it replaces; where that memory goes (whether the per-round search tree and rank
+-- list are shared across the per-suffix lookups) is not yet measured.
+-- Kasai's LCP, 2026-11-17 (PR #10, item 3), lib/repeats-kasai.cub, over
+-- any rank list that orders the suffixes (FinalP): kasai-by walks the suffixes in text order, finds each
+-- one's predecessor by rank in the search tree (k-tree: the tree's query is the sorted list's last
+-- element below the key) and computes its common prefix from the last one's less one (k-skip: from a
+-- lower bound the rest compared is the common prefix); Kasai's invariant is k-kasai (from k-btw: between
+-- a and c in the order, b shares with c at least what a shares); kasai-by-ok: every entry (r, p, s, l)
+-- has l = lcp p s, p the greatest suffix below s (its neighbour in the suffix array), so each l is the
+-- common prefix that can go no further (kasai-lcp-at, from lcp-common and lcp-stops); kasai-ok over the
+-- prefix-doubling ranks, kasai-ms-ok over the merge-sorted key tree's ranks; kasai-example and
+-- kasai-example-pd checked by computation ("a b a b a": 3, 2, 1, 0). The existing theorem names stand.
+-- Measured with experiments/repeats/run-kasai.cub (the merge-sorted key tree's ranks, then Kasai, then
+-- the same pairs' common prefixes compared from the start), first N modules by path, this container:
+-- N=1, 767 tokens: the key tree built in 274 ms; the ranks of all suffixes (767 queries into it) 14.7 s;
+-- Kasai 259 ms; the same pairs compared from the start 22 ms; both sums 1198; peak 193 MB. N=2, 57,637
+-- tokens: tokenized 2.6 s; the ranks unfinished at 1,700 s, 425 MB after tokenizing, 635 MB at 1,700 s.
+-- N=10, 141,994 tokens: tokenized 6.1 s; the ranks unfinished at 1,700 s, peak 1.08 GB; N=40 not run.
+-- Memory per token, from these runs: the library and checker loaded,
+-- about 190 MB whatever the text; the text read and tokenized, about 4.1 KB per token ((425 - 190) MB
+-- over 57,637); the ranks, about 3.6 KB more per token by 1,700 s and still growing; Kasai's output was
+-- not reached past N=1. The cost is in the evaluator's representation (src/core.h, src/net.c): a value is
+-- a net of cells, each cell 48 bytes of header (kind, port count, flags, a word, a payload pointer, its
+-- memo key, a pending entry) and 8 bytes per port; a wire not yet joined is a 24-byte variable (port,
+-- next, key); a value read by more than one reader is shared through duplicators (O_DUP), each part that
+-- has parts held once in a malloc'd box with a reference cell on each side (net.c, the copy of a
+-- value's top). The search tree and the suffix lists every query compares are read that way, by each of
+-- the n queries: the 767 queries cost 14.7 s, 19 ms each, though their common prefixes average 1.5
+-- tokens (the sum 1198 over 767), while the tree itself was built once in 274 ms. So the reads of shared
+-- structure, not the length of the comparisons and not the LCP, take the time at every size measured;
+-- Kasai's carried bound saves comparisons where common prefixes are long, and at N=1, where they are
+-- short, comparing the same pairs from the start is faster (22 ms against 259 ms, the difference the
+-- predecessor queries).
+-- lib/suffix-index.cub (2026-11-22, 796 passed, 0 failed): restored bindings after removing the 35 dead
+-- duplicate copies (lib/si1..30.cub, lib/sib1..2.cub, lib/try3..5.cub) and added O(depth) byte-index
+-- order-statistic occurrence lookup (si-kth-pos, si-kth) with cubical proof si-kth-ok that flat byte-image
+-- lookup equals the tree's k-th suffix position, plus exact occurrence snippet retrieval (si-toks-at,
+-- si-snippet, si-hits-at, si-search-hits; checked examples si-hits-example, si-hits-pos-example).
+index-every-repeated-sequence : Node
+index-every-repeated-sequence = node "Every text indexed by all of its repeated token sequences: at each point, every place the token recurs and every bounded sequence containing it that matches elsewhere." (cons healing-societies (cons correct-natural-language-computing (cons expose-symbolic-superintelligence nil)))

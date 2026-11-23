@@ -1,0 +1,8 @@
+allle-phi : (t : List (List Word)) → (f : List (List Word) → Word) → FinRank t f → (x : El entry-ord) → (l : List (El entry-ord)) →
+            MemKey {suffix-ord} (fst x) (sufs t) → ((e : El entry-ord) → MemKey {entry-ord} e l → MemKey {suffix-ord} (fst e) (sufs t)) →
+            AllLe {entry-ord} x l → AllLe {PO} (phi f x) (list-map (phi f) l)
+allle-phi t f fin x l mx =
+  case l return λ w → ((e : El entry-ord) → MemKey {entry-ord} e w → MemKey {suffix-ord} (fst e) (sufs t)) → AllLe {entry-ord} x w → AllLe {PO} (phi f x) (list-map (phi f) w) of
+    nil → λ hm a → unit
+    cons y q → λ hm a → ( le-phi t f fin x y mx (hm y (mem-head {entry-ord} y q)) (fst a)
+                         , rec q (λ e m → hm e (mem-cons-r {entry-ord} e y q m)) (snd a))

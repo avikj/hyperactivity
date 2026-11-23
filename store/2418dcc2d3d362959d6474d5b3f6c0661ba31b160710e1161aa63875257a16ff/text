@@ -1,0 +1,7 @@
+hy-free : List Word → List Word → List Word → List Word → Proc W Unit
+hy-free st m name t = bind (hy-cand #0) (λ c0 → bind (hy-cand #1) (λ tf → bind (ret {lzero} {W} (list-append c0 ".cub")) (λ cf →
+  bind (h-write cf (list-append "import " (cons #34 (list-append "../lib/library.cub" (cons #34 (cons #10 (cons #10 t))))))) (λ w → bind (h-write tf t) (λ w2 →
+  bind (h-capture (cons m (cons "--read" (cons cf (cons "--keep" (cons name (cons tf nil))))))) (λ r →
+  bind (h-unlink cf) (λ u → bind (h-unlink tf) (λ u2 →
+  if hy-freed (h-lines (snd r)) then hy-done st name false nil
+  else bind (h-say (list-append (h-line "nothing written: it does not check") (snd r))) (λ u3 → exit #1)))))))))

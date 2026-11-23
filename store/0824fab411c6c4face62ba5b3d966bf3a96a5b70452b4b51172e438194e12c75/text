@@ -1,0 +1,6 @@
+-- a root read with candidate texts in place of the source's: whether the machine read to the end
+-- and what failed; when it did not read to the end, what it said is shown (the reason is there)
+hy-verdict-with : List Word → List (List Word × List Word) → List Word → Proc W (Bool × List (List Word))
+hy-verdict-with m ws root = bind (h-capture (cons m (cons "--read" (cons root (hy-withs ws))))) (λ r →
+  if hy-complete (h-lines (snd r)) then ret {lzero} {W} (true , hy-fails (h-lines (snd r)))
+  else bind (h-say (list-append (h-line (list-append "reading " (list-append root ", the machine said:"))) (snd r))) (λ u → ret {lzero} {W} (false , hy-fails (h-lines (snd r)))))

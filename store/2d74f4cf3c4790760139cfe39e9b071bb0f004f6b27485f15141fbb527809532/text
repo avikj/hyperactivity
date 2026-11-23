@@ -1,0 +1,7 @@
+hy-fetch : List Word → Sum Unit (List Word) → Proc W Unit
+hy-fetch root (inl u) = ret unit
+hy-fetch root (inr place) = bind (h-mkdir "build") (λ u0 →
+  bind (h-run (cons "/usr/bin/env" (cons "curl" (cons "-fsS" (cons "-o" (cons "build/root-list" (cons (list-append place (list-append "/roots/" root)) nil))))))) (λ c →
+  if weq c #0 then bind (h-read "build/root-list") (λ l → bind (h-read ".cubical-store/packs") (λ have →
+    hy-fetch-packs place (h-lines (hy-or nil have)) (h-lines (hy-or nil l))))
+  else ret {lzero} {W} unit))

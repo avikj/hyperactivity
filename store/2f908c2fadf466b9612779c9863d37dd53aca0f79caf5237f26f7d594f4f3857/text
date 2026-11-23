@@ -1,0 +1,7 @@
+-- sizeof and alignof ([expr.sizeof], [expr.alignof]): of a reference type, the referenced type's.
+-- __alignof, the preferred alignment, is the Target's and the Target here does not state it
+cx-trait : CxU → CTraitKind → CType → CType → MRes SV
+cx-trait u tk ty t = mr-bind (case tk of
+  ctk-sizeof → cx-size u (cx-unref ty)
+  ctk-alignof → cx-align u (cx-unref ty)
+  ctk-preferred-alignof → mstop st-unsupported) (λ n → mr-bind (cx-sk u t) (λ k → cx-lit k (cx-dq-of-word n)))

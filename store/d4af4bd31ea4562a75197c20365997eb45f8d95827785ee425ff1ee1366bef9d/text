@@ -1,0 +1,19 @@
+-- the paper as it reads (paper/text) and the names its realized constructions give as code
+-- (paper/names), which hyperactive check resolves against the store (part of memory-is-local)
+p-build : List Word → Proc W Unit
+p-build st =
+  let tp = list-append st "/paper/text" in
+  let np = list-append st "/paper/names" in
+  let ttmp = list-append tp ".tmp" in
+  let ntmp = list-append np ".tmp" in
+  bind (h-mkdir st) (λ u → bind (h-mkdir (list-append st "/paper")) (λ u2 →
+  bind (p-code "hyperactivity") (λ hyp →
+  let mt = p-take-strs (toNat #5) (p-rhs "hyperactivity" hyp) in
+  let bs = p-block-names (h-split #32 (p-clean (snd mt))) in
+  bind (p-open-trunc ttmp) (λ fdt → bind (p-open-trunc ntmp) (λ fdn →
+  if orB (wlt #9223372036854775807 fdt) (wlt #9223372036854775807 fdn) then exit #1
+  else bind (fd-write fdt (p-front (fst mt))) (λ wf →
+    bind (p-stream fdt fdn bs) (λ us →
+    bind (sys-call #3 fdt #0 #0 #0 #0 #0) (λ c1 → bind (sys-call #3 fdn #0 #0 #0 #0 #0) (λ c2 →
+    bind (p-rename ttmp tp) (λ r1 → bind (p-rename ntmp np) (λ r2 →
+    if andB (weq r1 #0) (weq r2 #0) then exit #0 else exit #1)))))))))))

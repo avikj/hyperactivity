@@ -1,0 +1,15 @@
+-- a run from a memory at a Target: the head of the observed tree of the abstract memory's run
+-- (lib/mem/monad.cub's ev-std). A command of the reader's signature is the refusal it names; a
+-- command of the world is not offered by a run that has only a memory
+cx-run : {A : Type} → Target → CxEv A → AMem → CxOut (Ctl CxR A × AMem)
+cx-run {A} t e m = case ev-std {CxS} {CxR} {A} t e m of
+  sdone r → (case r of
+    mok rm → (case fst rm of
+      mok c → cxo-ok (c , snd rm)
+      mub w → cxo-ub w
+      mstop w → cxo-stop w)
+    mub w → cxo-ub w
+    mstop w → cxo-stop w)
+  scmd c k → (case c of
+    inl w → cxo-unsupported w
+    inr x → cxo-stop st-unsupported)

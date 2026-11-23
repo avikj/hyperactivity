@@ -1,0 +1,5 @@
+k-mem-in : (t : List (List Word)) → (f : List (List Word) → Word) → (z : List (List Word)) → MemKey {suffix-ord} z (sufs t) → MemKey {k-PR} (k-psi f z) (k-Lf t f)
+k-mem-in t f z m =
+  let ml = list-map (k-psi f) (sufs t)
+  in subst {_} {_} {Nat} {λ c → isTrue (ltn zero c)} (sym (msort-fuel-count {k-PR} (k-psi f z) (list-length ml) ml))
+       (mem-map {suffix-ord} {k-PR} (k-psi f) z (sufs t) m)

@@ -1,0 +1,16 @@
+count-lt-strict : {o : Ord} {k k' : El o} → isTrue (not (leq k k')) → (l : List (El o)) → MemKey k' l → ltn (count-lt k' l) (count-lt k l) ≡ true
+count-lt-strict n l =
+  let h' = ord-total {o} {k} {k'} (not-isTrue n)
+  in case l return λ w → MemKey k' w → ltn (count-lt k' w) (count-lt k w) ≡ true of
+       nil → λ m → Empty-rec m
+       cons x r →
+         λ m →
+           ifP {λ bb → isTrue (ltn zero (plus (one-if bb) (count k' r))) → ltn (count-lt k' (cons x r)) (count-lt k (cons x r)) ≡ true} {eqo k' x}
+             (λ e m1 →
+                let ex = eq→isTrue e
+                    kx = and-fst {leq k' x} {leq x k'} ex
+                    xk = and-snd {leq k' x} {leq x k'} ex
+                    px = bool-cases {isTrue (not (leq k x))} (leq k x) (λ t → Empty-rec (true-not {leq k k'} (ord-trans {o} {k} {x} {k'} t xk) n)) (λ f → f)
+                in one-if-strict1 {not (leq k x)} {not (leq k' x)} px (isTrue-not (cong not (isTrue→eq kx))) (count-lt k r) (count-lt k' r) (count-lt-mono {o} {k'} {k} h' r))
+             (λ e m1 → one-if-strict2 {not (leq k x)} {not (leq k' x)} (lt-mono {o} {k'} {k} {x} h') (count-lt k r) (count-lt k' r) (rec r m1))
+             m

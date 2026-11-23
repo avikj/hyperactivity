@@ -15,7 +15,10 @@ for one of them: set by this session's writes and by nothing else. Nothing anoth
 changes it; there is nothing to merge, resolve or keep current between sessions. A session starts
 from a root, one hash naming everything its labels hold (a new checkout takes the one `store/ROOT`
 names), and ends by saying its own (`./hyperactive root`). Another session's work enters only as
-this session's act: `./hyperactive take ROOT`, or `./hyperactive apply PATH BASE OTHER`. Claude
+this session's act: `./hyperactive take ROOT`, or `./hyperactive apply PATH BASE OTHER`. When
+`HYPERACTIVE_PLACE` names a place (a URL that stores bytes under a name and computes nothing),
+`./hyperactive send` stores there the pool's new objects and the root, and `take ROOT` fetches what
+this machine lacks; with none named, git carries the pool. Claude
 sessions built the opposite on top of this between 2026-11-16 and 2026-11-22 while quoting him
 (entries that replace entries, what is "live", alternatives, merges by name, a write lock, a
 journal, a versions record) and it is removed. None of it is rebuilt, under any name.

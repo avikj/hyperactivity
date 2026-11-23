@@ -1,0 +1,10 @@
+-- the byte offset from the address point of the slot of function f (deleting: its deleting
+-- entry) in the vtable of class cls. A vtable with several address points, thunks or virtual
+-- base offsets (cvtable-full) is not offered
+cx-slot : CxU → Word → Word → Bool → MRes Word
+cx-slot u cls f del = mr-bind (cx-find-rec (cxu-ds u) cls) (λ r → case cx-rec-vtable r of
+  cvt-none → mstop st-ill-typed
+  cvtable ap es → mr-bind (cx-slot-go es f del #0) (λ i → case wlt i ap of
+    true → mstop st-ill-typed
+    false → mok (wmul (wsub i ap) (cx-wsize u)))
+  cvtable-full em aps es vbo vtt cvs → mstop st-unsupported)

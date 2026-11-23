@@ -1,0 +1,8 @@
+stat-write-all : Nat → Word → Word → Word → Word → Proc W Bool
+stat-write-all zero sock buf off len = ret false
+stat-write-all (suc k) sock buf off len =
+  if wlt off len
+  then bind (sys-call #1 sock (wadd buf off) (wsub len off) #0 #0 #0) (λ w →
+    if orB (weq w #0) (wlt #9223372036854775807 w) then ret {lzero} {W} false
+    else stat-write-all k sock buf (wadd off w) len)
+  else ret true

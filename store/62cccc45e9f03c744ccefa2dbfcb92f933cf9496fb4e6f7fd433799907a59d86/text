@@ -1,0 +1,7 @@
+mem-map : {o1 o2 : Ord} → (g : El o1 → El o2) → (x : El o1) → (l : List (El o1)) → MemKey x l → MemKey (g x) (list-map g l)
+mem-map g x l =
+  case l return λ w → MemKey x w → MemKey (g x) (list-map g w) of
+    nil → λ m → m
+    cons y r → λ m → mem-split {o1} {MemKey (g x) (list-map g (cons y r))} x y r m
+                       (λ e → subst {_} {_} {El o1} {λ z → MemKey {o2} (g x) (cons (g z) (list-map g r))} e (mem-head {o2} (g x) (list-map g r)))
+                       (λ m1 → mem-cons-r {o2} (g x) (g y) (list-map g r) (rec r m1))

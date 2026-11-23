@@ -1,0 +1,8 @@
+mem-entries : (t : List (List Word)) → (i : Word) → (e : El entry-ord) → MemKey {entry-ord} e (entries t i) → MemKey {suffix-ord} (fst e) (sufs t)
+mem-entries t =
+  case t return λ w → (i : Word) → (e : El entry-ord) → MemKey {entry-ord} e (entries w i) → MemKey {suffix-ord} (fst e) (sufs w) of
+    nil → λ i e m → m
+    cons x r →
+      λ i e m → mem-split {entry-ord} {MemKey {suffix-ord} (fst e) (sufs (cons x r))} e (cons x r , i) (entries r (wadd i #1)) m
+                  (λ p → subst {_} {_} {El entry-ord} {λ z → MemKey {suffix-ord} (fst z) (sufs (cons x r))} (sym p) (mem-head {suffix-ord} (cons x r) (sufs r)))
+                  (λ m1 → mem-cons-r {suffix-ord} (fst e) (cons x r) (sufs r) (rec r (wadd i #1) e m1))

@@ -1,0 +1,19 @@
+-- the last suffix below s, found by rank, is s's predecessor
+k-pred-good : (t : List (List Word)) → (f : List (List Word) → Word) → FinRank t f → (s : List (List Word)) → MemKey {suffix-ord} s (sufs t) →
+              (q : El k-PR) → k-LastP {k-PR} (k-key (f s)) (k-Lf t f) (inr q) →
+              ((z : List (List Word)) → MemKey {suffix-ord} z (sufs t) → isTrue (not (leq {suffix-ord} s z)) → k-Ge {k-PR} (k-psi f z) (inr q)) →
+              k-Pred t s (snd q)
+k-pred-good t f fin s ms q lp ge =
+  let inv = k-psi-inv f q (sufs t) (k-mem-out t f q (fst lp))
+      p = snd q
+      mp = snd inv
+      fq = λ i → fst (fst inv i)
+  in ( mp
+     , k-not-path {leq {k-PR} (k-key (f s)) q} {leq {suffix-ord} s p}
+         (tr {Bool} {leq {k-PR} (k-key (f s)) q} {leq {suffix-ord} s p} (word-le (f s) (fst q)) (k-key-le (f s) q) (tr {Bool} {word-le (f s) (fst q)} {leq {suffix-ord} s p} (word-le (f s) (f p)) (λ i → word-le (f s) (fq i)) (fin s p ms mp)))
+         (snd lp)
+     , (λ z mz nz →
+          let g = ge z mz nz
+              wz = step-fst {word-le (f z) (fst q)} {word-le (fst q) (f z)} {leq {suffix-ord} z (snd q)} g
+              wz2 = subst {_} {_} {Word} {λ w → isTrue (word-le (f z) w)} fq wz
+          in subst {_} {_} {Bool} {λ c → isTrue c} {word-le (f z) (f p)} {leq {suffix-ord} z p} (fin z p mz mp) wz2) )

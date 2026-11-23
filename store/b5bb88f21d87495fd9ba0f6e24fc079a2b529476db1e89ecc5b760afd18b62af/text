@@ -1,0 +1,9 @@
+hy-send : List Word → Sum Unit (List Word) → Proc W Unit
+hy-send m (inl u) = h-fail "hyperactive send: HYPERACTIVE_PLACE names no place (a URL that stores bytes under a name)"
+hy-send m (inr place) =
+  bind (h-capture (cons m (cons "--root" nil))) (λ r →
+  bind (h-mkdir "build") (λ u0 → bind (h-write "build/sent-new" nil) (λ u1 →
+  bind (h-read ".cubical-store/sent-marker") (λ mk →
+  bind (h-run (cons "/usr/bin/env" (cons "tar" (cons "-czf" (cons "build/pack.tgz" (hy-newer mk (cons "store" nil))))))) (λ t →
+  bind (h-capture (cons "/usr/bin/env" (cons "sha256sum" (cons "build/pack.tgz" nil)))) (λ s →
+  hy-send-pack place (hy-root-line (h-nonempty (h-lines (snd r)))) (hy-head (h-split #32 (snd s)))))))))

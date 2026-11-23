@@ -1,0 +1,272 @@
+-- every file that is neither .cub nor .md, as the repository held it (path, git object id)
+-- src/big.c, src/lang.c (2026-11-16, evaluator-speed, from a callgrind profile: Avik, "do it without perf"):
+-- wn_parse in place (was ten bignum additions per digit, 9% of lib/views.cub); every binder
+-- name's header kept exact through pops (pop_binds), so lookup_i never scans (the scan was 5.5%).
+-- src/syntax.c (2026-11-16, Avik: "surface syntax extension is trivial"): `syntax S` with its indented
+-- raw lines, read whole as one string (x_lex) and handed to S, a checked List Word → List Word, whose
+-- text is read in its place (p_decl_in); the item is unnamed in the store (w_item). lib/syntax.cub.
+-- src/syntax.c (2026-11-17, Avik: "determining the singular unique design forced by hyperactivity"):
+-- `syntax N` installs the meaning N gives, a Lst Meaning of declarations with the codes of their types
+-- and values, each checked (p_decl_in); no text is read again, so no notation is the hub; a raw block
+-- with blank lines stays one piece (w_item counts the lines of a token's text). lib/syntax.cub.
+-- src/syntax.c, src/store.c, src/lang.c (2026-11-17, Avik: "There is no canonical state"): the view. What
+-- the source holds at a path is the live entries of the pool (store/entries/ID, bind or dead, never
+-- changed), not a pointer written over; what is read by path and name is computed from them into the
+-- machine's index (.cubical-store/index: index_sync, e_bind); two live entries at a path are alternatives,
+-- named to whoever reads it. --unrecord, --dead, --put (an object taken when its hash is its content's),
+-- --convert (the pointers before the view turned into entries), --index. write_in names its temporary
+-- file shortly (an entry's own name may take a file name's whole length).
+-- src/syntax.c (2026-11-18, Avik: "your workaround is equivalent to cancer"): e_bind before w_point,
+-- in w_whole and in the module writer. w_point wrote the path's module into the index and e_bind then
+-- compared the new module against that same slot, found it unchanged, and recorded no entry, so a
+-- write by name with one live entry at its path stayed in the writing machine and never entered the
+-- pool. The workaround it replaces, an entry authored by hand and taken in with --put (05c51c03,
+-- commit 8fb68d06, reach-carlo-rovelli), routed around the writer instead of correcting it; its bytes
+-- are the entry e_bind writes for that change, so the pool keeps it, and --put is only for an object
+-- received from another pool, never for authoring one.
+-- src/store.c (2026-11-18, Avik: "use a proper profiling tool ... intelligence will be able to make
+-- this exactly as fast as is reasonable"): the names log read with a hash of its names (nb_find,
+-- nb_add). Each line's name was found by a scan of every name read so far, Θ(lines × names), 4.4 of
+-- the 9.5 billion instructions every load spent before running anything (callgrind); now Θ(lines).
+-- src/net.c, src/lang.c, src/core.h (2026-11-18, Avik: "two separate machines unaware of eachother same
+-- computation, of course not shared ... Observability bounds are the only bounds in the system"): the
+-- program-wide memo and the keys are gone. Every built cell carried an interned name of the term it
+-- was (synkey, a table per frame, a global sharded locked table of keys), and every producer registered
+-- on its name so a second producer of an equal term found the first's box: sharing between
+-- computations no connection joined. Sharing is now only physical, a duplicator or a box a reference
+-- holds; A8's cut of a substitution to a box's free dimensions no longer waits on the memo (it never
+-- needed it: the cut is local to the box). The records named only by keys (RecGone) go with them. The
+-- library and the workflow give every answer as before; lib/library.cub 64 s to 47 s, the workflow 121 s
+-- to 59 s, Brunerie's number 358,603 steps to 358,691.
+-- src/drivers.c (2026-11-18, Avik: "you need to prove correctness/safety of everything running right
+-- now ... I won't accept unproven code in this repository anymore"): the driver's fourteen run-time
+-- deaths said what they were not. Each reported the shape it wanted ("a list of words was expected")
+-- when the condition was elsewhere, so a module that did not check was read as a bad argument and every
+-- command carried the fault. They now name the condition: a port the net did not reduce, an input this
+-- run was not given (global_copy answers 0 exactly then), or a shape no closed checked term of the
+-- field's type can take, which is the machine's own invariant. With that, the file commands lost their
+-- precondition entirely: w-file-read and w-file-write took the path as a Word holding a pointer into
+-- the process, which no type stated, and w-file-read-named and w-file-write-named take the path as the
+-- List Word it is, copied and terminated by the driver. The pointer-based pair and their helpers
+-- (file-read-at, file-write-at) are gone, so no program holds an address for a file. Of the fourteen
+-- deaths five remain, and four of them are the machine's invariants said once each rather than per
+-- field: a constructor of lib/world.cub not loaded, a command of W the driver does not perform, a port
+-- the net did not reduce, and a value outside its field's type. One of the
+-- fourteen is left and is a real run-time condition rather than a statement about the program: w-alloc
+-- answering out of memory, which wants its response to carry the failure and so wants its twenty
+-- callers changed with it.
+-- src/drivers.c (2026-11-18, Avik: "FINISH YOUR JOB WITHOUT DESTROYING ANYTHING UNNECESSARILY"):
+-- w-free, memory given back. w-alloc's bytes stay valid for the process's life, so every buffer taken
+-- for one read was held until the process ended: 64 KiB per read of a descriptor, per round of a socket
+-- read, per request the server answered, per directory listed, per entry the guard stat-ed, and an argv
+-- and envp with their strings per spawn. That, and not the allocator, is what made w-alloc's out of
+-- memory reachable, and it is why a server answering requests for days died of memory. with-bytes n f
+-- (lib/world.cub) takes n bytes, runs f, gives them back and answers f's answer, and h-free-ptrs gives
+-- back an argv with the texts in it. Every buffer whose use ends inside its own definition now goes
+-- through it (h-put, h-read-fd, h-recv-all, h-cwd, h-wait, h-file-time, h-mkdir, h-unlink, h-list,
+-- h-typed-list, h-dir-time, h-http, h-capture-with, h-run, s-read, os-staged). What is left allocates
+-- once for the life of a process (s-addr, s-listen) or hands its address to its caller by design
+-- (h-cstr, h-ptrs, h-file), so no allocation grows with the work done any more.
+-- src/drivers.c (2026-11-18, Avik: "I am sick of things being wrong and I won't accept unproven code
+-- in this repository anymore"): w-snapshot, the n bytes at an address taken as a byte string at the
+-- moment the command is performed. %region-at copies the same bytes but copies when the copy is
+-- demanded, which can be after the memory has been given back; a command is ordered by the commands
+-- around it. On this rests with-region (lib/host.cub), which takes a buffer, lets the host fill it,
+-- copies it into a Region n, gives the bytes back and answers a program over that region. What the
+-- types then carry, with no argument about the code: every access is through Ptr n, whose second
+-- component is the proof that the cell fits in n bytes, so no read of a filled buffer is outside it
+-- (h-stat-time, h-cell0, os-size-time, and h-file-time, h-wait, h-capture-with, os-staged over them);
+-- the program over the region is a function of the region and the system call's answer, so it is not
+-- given the address and cannot keep it; and the copy precedes the free by the order of the commands.
+-- What they do not carry: the filling step is handed the address, as it has to be to name the buffer
+-- in a system call, so a step answering the address rather than the call's result would hand it on.
+-- Every one written here answers a system call's result.
+-- lib/world.cub (2026-11-18): w-performed and w-driver-performs-all. The second proves the first true
+-- of every command of W, and the first is true exactly of the commands src/drivers.c has a branch for,
+-- so the driver's "not a command of W" is unreachable, and a command added to WCmd without a branch
+-- cannot be written without w-driver-performs-all refusing to check. It refused today when w-snapshot
+-- was added before its branch existed.
+-- lib/host.cub (2026-11-18): Ptrs, an argv or envp paired with the texts it was built from where it is
+-- built and nowhere else, so h-free-ptrs reads the texts out of the value and cannot be handed a list
+-- other than the one the array holds.
+-- src/lang.c (2026-11-18, the checker ran out of memory on experiments/isa/addw-all.cub): a verdict of
+-- the checker (a term %%chk-…) is read back to at most a million cells, and a refusal's values, the
+-- expected and the actual type of its report, to twenty thousand; the report quotes those types only
+-- when the verdict was read whole, and prints at most 4000 nodes of each code. A refusal of a proof
+-- about 26 symbolic steps of the x86 model carried the flags as an unshared tree of word operations,
+-- and reading its normal form back for the report had used every byte of 8 GB (the check itself took
+-- seconds); the file now runs at a 2.5 GB peak.
+-- src/core.h, src/net.c, src/drivers.c, src/lang.c (2026-11-18, memory-is-local: "text is held at the cost
+-- of its bytes, List Word being its specification and not its storage"): V_STR, a List Word held as the
+-- bytes it lists (a buffer and an offset). An operation meeting it meets the list's first level
+-- (str_unfold: cons of the byte and the V_STR of the rest, or nil), so every rule sees the List it is
+-- specified as; a duplicator copies it, an eraser drops it, a substitution leaves it, forcing data whole
+-- passes it, and compiled code reads its bytes (jit_in). A file read (w-file-read) is one, and a write
+-- (w-fd-write, w-file-write) takes its bytes whole. A text read is no longer a cons cell a byte.
+-- src/lang.c (2026-11-18, memory-is-local: "it should require as much memory is needed for local
+-- operation on the graph and that's it"): a definition the store holds as checked is compiled when it
+-- is first used (G_LAZY, global_fill), not when its file loads: a run compiles the definitions it
+-- reaches. experiments/isa/addw-all.cub from the store at a 705 MB peak (was 2.6 GB); the library and
+-- addw-all unchanged (2810 and 5851 passed, none failed).
+-- src/lang.c, src/drivers.c, src/syntax.c (2026-11-20, Avik: "it was supposed to be a long running
+-- session environment not something with one-off commands ... I don't want anything slowing anything
+-- down"): hyperactive's session. `build/cubical lib/hyperactive.cub --session` loads the program once
+-- (its #run not performed at load) and answers each ./hyperactive on build/session.sock: the client
+-- passes its descriptors 0, 1, 2 (SCM_RIGHTS) and its arguments, the session runs hy-main-at on them
+-- with its 0, 1, 2 pointed at the client's, and a w-exit returns to the session with its code instead
+-- of ending the process; SIGPIPE is ignored there. The index is synced per request (idx_synced). The
+-- session ends when the modules of the files it loaded change (answering 256: the client runs cold) or
+-- after half an hour idle; with no session answering, the client runs cold and starts one beside it.
+-- CUBICAL_STORE, HYPERACTIVE_SERVER or HYPERACTIVE_COLD set: always cold. Each request runs in a forked
+-- child (the loaded program shared copy-on-write, the net on one thread): a write checking for hours
+-- holds no other command back.
+-- src/net.c (2026-11-21, Avik: "Sure we can drop it or disable it by default"; brunerie-comparison,
+-- core-forced-by-paper item (7)): the free-dimension cut's bound on pending operations (A8b) is gone:
+-- first off by default (a8b_on, 8dcef6d36), then its code removed as the dead branches of that switch
+-- (fd_taint_of, fd_pending, the unbuilt and pending cases of fd_cell, fd_port and box_fd). Measured
+-- on the Brunerie reading, thirty interleaved rounds by
+-- the step counter under strace: 0.167 s with it, 0.070 s without; whole runs of Brunerie and the
+-- library unchanged; values and verdicts identical (262 and 2810 passed, 0 failed either way), the
+-- step counts printed differ (358,691 to 395,608 for the reading). Off, a set with a pending part is
+-- unknown and the cut is not applied there: every such step is as it was before A8b.
+-- src/syntax.c, src/lang.c (2026-11-22, Avik: "Anything that is blocking sane max throughout work
+-- cannot be delayed"; "These behavioral policies you propose are a failure of judgment"): writers
+-- that do not wait for one another. The pool of entries already merges entries live together at a
+-- path by definition; a write worked against it by recording a whole module before its check,
+-- following whatever was live when it landed, so writers took turns under one lock. Three additions
+-- and one repair. `--with PATH FILE` on a read: PATH's text is FILE's for that run, and the run
+-- records nothing of that path (src_text, w_file), so a change is checked before anything is
+-- recorded. `--record PATH FILE --follows IDS`: the entry names the entries the text was made from;
+-- when those are not the ones live at the path now, it is written beside them and the index's stamp
+-- dropped, so the next run computes the index from the pool and merges the two or names them as
+-- alternatives (e_bind, rec_follows). `--head PATH`: the live entries and the module at a path, read
+-- as one. The repair: the index, a cache computed from the pool, is changed under a lock of its own
+-- held for the moment of the change (idx_lock: index_sync, a record, --head), and a record's stamp
+-- is the index's own with its entry in it (e_stamp_with), not the pool's read again, which could
+-- name an entry another machine wrote and the index does not hold. And `--base MODULE` with a record:
+-- when the text was made from other entries than are live, a name it changed that the path's module
+-- changed differently is a conflict: nothing is recorded and the run says `conflict NAME` and ends
+-- with 3, so two writers of one machine never leave a path holding alternatives.
+-- src/syntax.c, src/lang.c (2026-11-22, Avik: "They cited there no canonical state, and created a
+-- canonical state called 'live'?"; "They are literally different mathematical objects"): the layer
+-- that computed a state for every machine from what all had written is removed, with what this day
+-- had added to manage it. Gone: the entries (`bind PATH MODULE REPLACED`, `dead`), what replaced
+-- what, what was live, the alternatives, their merge by name, the index computed from the pool
+-- (index_sync's derivation, the stamps), --dead, --convert, --follows, the conflict refusal and the
+-- entry written beside another. What a path or a name holds is a label of the machine, set by its
+-- own records and by taking a root. Added: a root, the modules a machine's paths hold, an object of
+-- the pool under its hash (root_make, root_take; `--root`, `--take ROOT`; a machine with no labels
+-- takes the root named beside the pool); a record made from another module than its path holds now has its
+-- changes applied to that one (mp_apply; `--base MODULE`); `--apply PATH BASE OTHER`, another
+-- machine's change to a module applied here as a construction; `--export HASH KIND FILE`;
+-- `--drop-view`, which removes the removed layer's files from a pool. Kept from the earlier change
+-- of this day: `--with PATH FILE` (a text read in place of the source's, nothing of it recorded),
+-- `--head PATH`, and the lock on the labels held for the moment of a change.
+-- src/store.c, src/syntax.c, src/lang.c (2026-11-22, Avik: "Do it all", of what was left for a
+-- definition to be held by its content and found without a module): a definition taken from the
+-- store by its key. load_key (src/syntax.c): the keys its stored forms mention first, then its
+-- forms read back (decanon) and given to the checked form's handler, which finds the certificate.
+-- A data type is read back from its declaration kept beside its key (ser_decl, store_decl,
+-- load_decl; the constructors' and fields' names pointed at the key, conof/NAME). Beside a
+-- definition's key: its implicit mask with the instance bits, and whether it computes (x_checked).
+-- A name the text being checked mentions that the machine does not hold is looked up among the
+-- machine's labels and loaded (lk_label, lk_scan), so a check loads what it mentions. Its forms as
+-- elaborated are kept beside the key too (forms), which is what reads back. A machine process kept
+-- warm from before a rebuild counts itself stale (session_key). What is kept beside a key is kept in
+-- the pool, written once (kobj_read, kobj_write), so every machine has it; `--attach` attaches each
+-- name's text to its key. A root names an object of the names (names_make, names_take): each name's key
+-- and each constructor's type, so a machine that has checked nothing finds a definition by its name.
+-- src/store.c, src/syntax.c, src/lang.c (2026-11-22, Avik: "Do it all", continued): one declaration
+-- written on its own, in no module. `--read FILE --keep NAME TEXT` (src/lang.c): FILE is the
+-- declaration after the library's import, a text that is no module of the work, so what it mentions
+-- is taken from the pool by key; keep_free (src/store.c) has its forms, mask and declaration kept
+-- beside its key all the same (x_checked, store_decl), and when nothing fails NAME is made this
+-- machine's label of the key (bound/, written/, the names log), with TEXT its text in the pool. A
+-- name a module holds is refused. The object of the names (names_make, names_take) carries a line
+-- `t NAMEHEX TEXT` for each name no module holds, so a root says them.
+-- src/lang.c (2026-11-22, the same): `--carried`, a count of the names this machine holds now by
+-- whether the pool can give their key back (forms, or a declaration), naming those it cannot: what
+-- load by key does not reach is measured, not guessed.
+-- src/syntax.c (2026-11-22, the same; memory-is-local): the object of the names is a tree, 256 parts
+-- by the first byte of the hash of a name (names_line, names_make, names_take), each part an object
+-- of its own, so a part no label changed in is shared by the next root and taking reads one part at
+-- a time; and it says only names held now (bound/ keeps every name this machine ever checked).
+-- src/lang.c, src/syntax.c, src/store.c (2026-11-22, Avik: "Why would I have a single centralized
+-- monolith"; "Do it all"): what a root is on two machines. (1) src/lang.c place_first: a machine with
+-- no pool has no tool (the tool is a program of the pool), so `hyperactive take ROOT` with
+-- HYPERACTIVE_PLACE set and no pool fetches the root's packs itself, each kept only when its hash is
+-- its name. (2) The object of the names says, of each name held now, its key, its text and the module
+-- that holds it (`b`, `t`, `m`), and root_take applies it after the modules, so a name declared in
+-- two modules is pointed where the root says. (3) Reading a module moves no other module's label:
+-- names_bind (src/store.c, bind_rel) binds nothing for a name another module holds, and w_file binds
+-- a name when its module claims it. (4) canon (src/store.c): a code literal's reference to a
+-- definition or a data type, a number in this machine's tables, is written in a key as that one's
+-- key. Found by sending a root to a place and taking it in a checkout with no pool: the root said
+-- after taking differed from the root sent, by names of lib/x86.cub whose term holds `code X`
+-- (#2261 on one machine, #2412 on the other). After (1)-(4) the two roots are one hash. Still by
+-- number, and so still a key that what was loaded before can change: a definition that observes
+-- the number itself (step-d in lib/elf.cub takes a data type's number out of a code literal).
+-- src/syntax.c, src/lang.c (2026-11-22, Avik: "get it all done"): a module of the work sees a name
+-- no module holds. lk_label takes, in a module, only a definition written on its own or a
+-- constructor or field of a type written on its own (free-con/NAME, written when the type is
+-- labelled and said by a root, `f`), and remembers a name it did not find. A name that already
+-- holds the very definition or type being declared (the same key, taken from the pool before the
+-- module that declares it was read) is declared once: the checked and checked-data handlers
+-- return, where they died with "declared again". load_decl binds no name, as load_key.
+g-frozen : List (List Word × List Word)
+g-frozen =
+  cons (".claude/settings.json" , "c7d12808c309bad55a54fbd8cebe55e48d8b638f") (
+  cons (".github/workflows/one-source.yml" , "daf1288009eecfb83d9ff51ebc21351bc5567fef") (
+  cons (".gitignore" , "85b4d5a581b7796ed440d8a6601c84697cf2f72a") (
+  cons ("Makefile" , "0f95ca3c8b8835e60ff870c001a00a3e43a3245b") (
+  cons ("archive/contract/WITNESSED-SOURCE-CONTRACT.txt" , "94f911a8809348e4cb24872553c23356289917bb") (
+  cons ("archive/contract/witnessed-source/HANDOFF.txt" , "29dc3258941072ef220376ea404a1bf39a5f1f45") (
+  cons ("archive/contract/witnessed-source/README.txt" , "e7cff1a753a13c1129b71f64a4c5c21dce2a5ab8") (
+  cons ("archive/contract/witnessed-source/SHA256SUMS.txt" , "d18a88aa453cc403226a489d5cb90a28d3b82b04") (
+  cons ("archive/contract/witnessed-source/START-HERE.txt" , "c000cdaf26ed2b31e453faa70c2ad292e08cf386") (
+  cons ("archive/contract/witnessed-source/check_contract.py" , "5b91728ed70b949fbabe45986d443b79506371b9") (
+  cons ("archive/contract/witnessed-source/contract-check-results.json" , "e2dee8be1db060da972b7d2d56c20097e6e59bda") (
+  cons ("archive/contract/witnessed-source/reference/CUBICAL-STOKES-ADDENDUM.txt" , "8d4ca27dae91a26ca2b25672aaac8d13ff7a51a9") (
+  cons ("archive/contract/witnessed-source/reference/Initiality.agda" , "4271c5db01c064b177df1a1f9c1076a170869925") (
+  cons ("archive/contract/witnessed-source/reference/Localization.agda" , "809ee9395f00fef183615f188525a96ac77fc750") (
+  cons ("archive/contract/witnessed-source/reference/RoundTrip.agda" , "9c05e4e77a729deef0df9bb0422f6a0a6aaa27fc") (
+  cons ("experiments/agda/measure.sh" , "746e6f5455b1e943b699ba646361e69ca682d6b1") (
+  cons ("experiments/brunerie/empty-hcomp-experiment.patch" , "b19761b561987db92466730c41700d0f5e6e3154") (
+  cons ("experiments/cxx/book.cpp" , "7f0b7c2f241ecd3081c091ffabefa64d5593375e") (
+  cons ("experiments/cxx/book_main.c" , "7539f46b84dcadfa8305024d15f003ce46227159") (
+  cons ("experiments/cxx/fifth.cpp" , "67c0f32df197a4c9674f3916b756109ea261b290") (
+  cons ("experiments/cxx/fourth.cpp" , "990ea57f57f4e3dacbbe9a18f446362f9333c3bc") (
+  cons ("experiments/cxx/second.cpp" , "c7183b2a47adf4dc4ff7394f9113f73cbdfe84d2") (
+  cons ("experiments/cxx/seventh.cpp" , "410b63a3965f01388c8380c56cd4dd455d130565") (
+  cons ("experiments/cxx/sixth.cpp" , "ab6a41ef4512f98116f1bec6ec72817e3c6a7654") (
+  cons ("experiments/cxx/third.cpp" , "5f6d62604618fc0c14c8f541705e7cfbe2c9bc85") (
+  cons ("experiments/os/item5-wip.patch" , "8baf8743c71e1f7a0303dfb76ac1bd25087c9a7d") (
+  cons ("experiments/rust/book.rs" , "0c1dcdce658dda4afde376501a4981dc58670985") (
+  cons ("experiments/rust/book_out.c" , "f39f750da05cc90fa70994e4472e562e6ba7c718") (
+  cons ("experiments/rust/gen_messages.py" , "2d0ef7ac4692dd0b2e603a743f9c9f4a773c0655") (
+  cons ("experiments/rust/more.rs" , "8ededea7bd9a1c8377ddca5e1a97e829bf1a9f92") (
+  cons ("experiments/rust/more_out.c" , "c489bc0f76c8229ea4c413d37cfde63db92807e3") (
+  cons ("experiments/rust/sem/mk_run.py" , "b732afb30961fc7e312ae5f4a4edbc1d1570fa42") (
+  cons ("hyperactive" , "af75900a076e7a02f42c0193b9d85f2f1914f0fc") (
+  cons ("src/big.c" , "078dbdb93329f149da24574888bedf2b1066beab") (
+  cons ("src/core.h" , "a3daacbe2648fab79589791db01c49dfcc241b60") (
+  cons ("src/dnf.c" , "d631238e3bf34e41c0ecf469073b2e063675284d") (
+  cons ("src/drivers.c" , "36d5e9a107bdf92f70df1127838e22923c767d10") (
+  cons ("src/lang.c" , "315ff9492a6b12bfd299b6b5423966726651e36e") (
+  cons ("src/libcubical.h" , "71199edfe240c587aa35acc52e8b8e3a11a8658e") (
+  cons ("src/net.c" , "c966f478c5dae452b4af3db7ce4e1cbc4d8a966a") (
+  cons ("src/sha256.c" , "c9ed460fff23335687ad9bb1692f66a21d7140c8") (
+  cons ("src/store.c" , "bae56f868492e985d7a70b3a5498cc526482092a") (
+  cons ("src/syntax.c" , "d9ca321477146ac2575927b1bc23446e5e2b1114") (
+  cons ("tools/agda2cub.py" , "5044df7234f0ceeddd9b2233a33e9cf2f8857ff9") (
+  cons ("tools/asm/apply.s" , "904ffa7b2e0763adad15d37e0154a8e21e513157") (
+  cons ("tools/asm/driver.s" , "8b7d92adee4af9b9914795ab854c4e4d67b35b5f") (
+  cons ("tools/asm/gen.py" , "2e55987ec3618b2c8fa6ba715d58a2b0b537a7f7") (
+  cons ("tools/asm/start.s" , "a5699cd9b1d08ca164d522772b8a44dcef8b9a73") (
+  cons ("tools/clang2cub.py" , "f73ca8ad9896105343bd473a3da2a0df32b11bd1") (
+  cons ("tools/history-view.html" , "45418ee1854aee851c166b44552472d5bac93d6b") (
+  cons ("tools/mir2cub.py" , "cf4bd508098b671525b1980b976a30d45c477870") (
+  cons ("tools/sail2cub.py" , "54aa070b145c96a824b118faf85dea7ec4e33e76") (
+  cons ("tools/workflow-view.html" , "3124d23886306b5c96eed1f7bcd49c5f9ba78478") (
+  cons (".githooks/pre-commit" , "72d920632cd91b6dd9ee3234f3dfe4b049591317") (
+  nil))))))))))))))))))))))))))))))))))))))))))))))))))))))

@@ -1,0 +1,10 @@
+s-public-answer : List Word → List Word → List Word → Proc W (List Word)
+s-public-answer st m path =
+  if orB (h-eq (h-before "?" path) "/") (h-null path) then s-kept-public st "front" else
+  if h-eq (h-before "?" path) "/paper" then s-paper st m else
+  if h-eq (h-before "?" path) "/paper.pdf" then s-kept-public st "paper-pdf" else
+  if h-eq (h-before "?" path) "/pdf" then s-kept-public st "pdf-view" else
+  if h-eq (h-before "?" path) "/nets" then s-kept-public st "nets" else
+  if andB (h-prefix "/corpus/" path) (orB (h-eq (h-before "?" path) "/corpus/paper") (s-known (s-at-name (h-drop "/corpus" (h-before "?" path)) s-published))) then s-kept-public st (list-append "corpus-" (h-drop "/corpus/" (h-before "?" path))) else
+  if s-known (s-at-name (h-before "?" path) s-published) then s-kept-public st (h-drop "/" (h-before "?" path)) else
+  s-answer st m path

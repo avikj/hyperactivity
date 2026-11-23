@@ -1,0 +1,8 @@
+-- network transparency: every computation produces the exact same result whether run locally on the
+-- union store or across a network port with local verification
+peer-transparent : {K V A : Type} → (loc rem : CAStore K V) → (chk : K → V → Bool) →
+  ValidCAStore chk rem → (p : Step (StoreSig K V) A) →
+  eval-peer loc rem chk p ≡ eval-local (ca-union loc rem) p
+peer-transparent loc rem chk vrem (sdone a) = refl
+peer-transparent loc rem chk vrem (scmd k f) =
+  peer-transparent-step loc rem chk vrem k f (λ r → peer-transparent loc rem chk vrem (f r)) (loc k)

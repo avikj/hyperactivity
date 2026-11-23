@@ -1,0 +1,4 @@
+-- a request read whole: its head, and as many bytes after it as its Content-Length says (case-insensitive for HTTP/2 proxies)
+s-whole : List Word → Bool
+s-whole req = andB (h-infix (list-append h-crlf h-crlf) req)
+  (h-not (wlt (fromNat (list-length (h-after (list-append h-crlf h-crlf) req))) (h-number (um-header "content-length" req))))

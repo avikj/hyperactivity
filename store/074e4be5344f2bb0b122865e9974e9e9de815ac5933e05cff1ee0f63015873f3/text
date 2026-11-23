@@ -1,0 +1,13 @@
+-- remove: the name's piece taken away and checked like a write: its file's root and the roots of
+-- everything recorded as using it read with the piece gone, so the machine judges whether anything
+-- still needs it. A use recorded under another name of the same code refuses nothing: identical code
+-- is one object, its key, and the store names a use by whichever name holds that key. A name no
+-- module holds is a label alone: it is dropped, and the object it named and every object that
+-- mentions that one by key stay as they are
+hy-remove-in : List Word → List Word → List Word → List Word → Sum Unit (List Word × List (List Word)) → Proc W Unit
+hy-remove-in st m name h (inl u) = hy-done st name true nil
+hy-remove-in st m name h (inr mo) =
+  bind (hy-tip st m (h-unhex (fst mo))) (λ hd → hy-tip-then (h-unhex (fst mo)) (fst hd) (snd hd) (λ ids ps →
+    bind (hy-render st ps h nil false) (λ new → bind (hy-root-of st (fst mo)) (λ root →
+    bind (hy-live-users st name) (λ us → bind (hy-user-roots st us) (λ urs →
+    hy-put st m name nil (h-unhex (fst mo)) ids new (h-dedupe (cons root urs)) true))))))

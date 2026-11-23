@@ -1,0 +1,13 @@
+-- First-party ad-blocker-proof Umami Cloud proxy (2026-11-22): GET /hx/x.js proxies
+-- https://cloud.umami.is/script.js (disposable runtime cache in /tmp/hx-umami.js, rewriting
+-- /api/send to /ev so neither third-party domains nor /api/send appear in browser requests);
+-- POST /hx/ev (and /hx/api/send, /api/send) forwards JSON payloads with real User-Agent,
+-- X-Forwarded-For, and x-umami-cache to https://gateway.umami.is/api/send. Umami Cloud owns
+-- all storage, retention, auth, geo, and dashboards (zero analytics data stored on disk).
+um-header-in : List Word → List (List Word) → List Word
+um-header-in name nil = nil
+um-header-in name (cons line r) =
+  if h-null (h-before (cons #13 nil) line) then nil
+  else if h-eq (sx-lower (h-before ":" (h-before (cons #13 nil) line))) name
+  then h-trim (h-after ":" (h-before (cons #13 nil) line))
+  else um-header-in name r

@@ -1518,7 +1518,7 @@ static void rule_view(Cell *o, Cell *v) {
         break;
     }
     case V_DATA: {
-        int d = data_checked_index((int)v->a);
+        long d = data_checked_pub((int)v->a);
         if (!strcmp(DATA[v->a].name, "Level")) { r = con_build(WC[W_LEVEL], NULL, NULL); break; }
         /* clocks and the ticks of a clock: read by their own constructors */
         if (!strcmp(DATA[v->a].name, "Clock") && v->n == 1) { r = con_build(WC[W_CLOCK], NULL, NULL); break; }
@@ -1533,7 +1533,7 @@ static void rule_view(Cell *o, Cell *v) {
         ConInfo *k = &CON[v->a];
         if (!strcmp(DATA[k->data].name, "Clock")) { r = con_build(WC[W_CLOCK0], NULL, NULL); break; }
         if (!strcmp(DATA[k->data].name, "Tick")) { r = con_build(WC[W_TICK0], NULL, NULL); break; }
-        int d = data_checked_index(k->data);
+        long d = data_checked_pub(k->data);
         if (d < 0 && strcmp(DATA[k->data].name, "Level")) { for (int q = 1; q < v->n; q++) era(v->port[q]); r = con_build(WC[W_OTHER], NULL, NULL); break; }
         r = mk(WC[W_CON], word_of((uint64_t)(d < 0 ? 0 : d)), word_of((uint64_t)k->index), list_of(&v->port[1], k->nfields), list_of(&v->port[1 + k->nfields], k->ndims));
         break;
@@ -1542,18 +1542,18 @@ static void rule_view(Cell *o, Cell *v) {
         if (v->a & LVL_TAG) r = mk(WC[W_VAR], word_of(v->a & ~LVL_TAG), v->port[1], 0, 0);
         else if ((v->ty & TY_COFIX) && global_checked((long)v->a) >= 0)
             /* the stuck head of a checked copattern definition: its index in the signature, its type */
-            r = mk(WC[W_COFIX], word_of((uint64_t)global_checked((long)v->a)), v->port[1], 0, 0);
+            r = mk(WC[W_COFIX], word_of((uint64_t)global_checked_pub((long)v->a)), v->port[1], 0, 0);
         else { era(v->port[1]); r = con_build(WC[W_OTHER], NULL, NULL); }
         break;
     case V_NPROJ: {
         FldInfo *fl = &FLD[v->a];
-        int d = data_checked_index(fl->data);
+        long d = data_checked_pub(fl->data);
         if (d < 0) { for (int q = 1; q < v->n; q++) era(v->port[q]); r = con_build(WC[W_OTHER], NULL, NULL); break; }
         r = mk(WC[W_PROJ], word_of((uint64_t)d), word_of((uint64_t)fl->index), v->port[1], v->port[2]);
         break;
     }
     case V_REC: {
-        int d = data_checked_index((int)v->a);
+        long d = data_checked_pub((int)v->a);
         if (d < 0) { for (int q = 1; q < v->n; q++) era(v->port[q]); r = con_build(WC[W_OTHER], NULL, NULL); break; }
         r = mk(WC[W_REC], word_of((uint64_t)d), list_of(&v->port[1], v->n - 1), 0, 0);
         break;
@@ -1578,7 +1578,7 @@ static void rule_view(Cell *o, Cell *v) {
         Cell *f = cell(V_CASEF, ne + 1); f->x = 0; f->p = tb;
         if (mb) era(v->port[2]);
         for (int e = 0; e < ne; e++) link(v->port[2 + mb + e], P(f, 1 + e));
-        r = mk(WC[W_ELIM], word_of((uint64_t)data_checked_index(tb->d)), v->port[1], P(f, 0), v->port[v->n - 1]);
+        r = mk(WC[W_ELIM], word_of((uint64_t)data_checked_pub(tb->d)), v->port[1], P(f, 0), v->port[v->n - 1]);
         break;
     }
     case V_NTRANS: {
@@ -1586,7 +1586,7 @@ static void rule_view(Cell *o, Cell *v) {
         if (data_checked_index((int)v->a) < 0) { for (int q = 1; q < v->n; q++) era(v->port[q]); r = con_build(WC[W_OTHER], NULL, NULL); break; }
         Cell *fc = cell(V_FACE, 1); fc->p = dnf_retain(v->p);
         Port l = list_of(&v->port[2], np);
-        Port f[5] = { word_of((uint64_t)data_checked_index((int)v->a)), P(fc, 0), l, v->port[1], v->port[v->n - 1] };
+        Port f[5] = { word_of((uint64_t)data_checked_pub((int)v->a)), P(fc, 0), l, v->port[1], v->port[v->n - 1] };
         r = con_build(WC[W_TRANS], f, NULL);
         break;
     }
@@ -3106,7 +3106,7 @@ static void interact(Cell *o, Cell *v) {
     case O_GLOB: {
         if (vk != V_WORD || v->p) { fprintf(stderr, "%%gval/%%gty/%%dtab/%%dent: an index is a word\n"); exit(2); }
         o->a = v->a;
-        long g = table_global((int)o->x, (long)o->a);
+        extern long table_pub(int t, long n); long g = table_pub((int)o->x, (long)o->a);
         if (g < 0) { fprintf(stderr, "checker table %u has no entry %llu\n", o->x, (unsigned long long)o->a); exit(2); }
         if (o->x == TB_VAL) {
             /* a checked definition's own value */

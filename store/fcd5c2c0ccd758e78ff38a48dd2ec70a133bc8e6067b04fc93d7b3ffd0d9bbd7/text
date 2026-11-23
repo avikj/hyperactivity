@@ -1,0 +1,14 @@
+-- a class with virtual bases (clayout-v) has no Layout: lib/mem/layout.cub's Layout holds bases
+-- at fixed offsets only, so the reader stops at it as what is not offered
+cx-layout : Target → List CDecl → CRecord → MRes Layout
+cx-layout t ds r = case cx-rec-layout r of
+  clayout size align dsize nvsize nvalign vptr → mr-map (λ fs →
+    Layout { ly-id = cx-rec-id r ; ly-size = size ; ly-align = align ; ly-union = cx-rec-union r
+           ; ly-fields = fs ; ly-bases = cx-lay-bases (cx-rec-bases r)
+           ; ly-has-vptr = (case vptr of
+               cvp-none → false
+               cvp-at o → true)
+           ; ly-vptr = (case vptr of
+               cvp-none → #0
+               cvp-at o → o) }) (cx-lay-fields (cx-rec-fields r) t ds)
+  clayout-v size align dsize nvsize nvalign vptr vbases → mstop st-unsupported

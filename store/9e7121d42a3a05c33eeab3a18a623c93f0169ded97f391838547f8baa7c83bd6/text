@@ -1,0 +1,9 @@
+-- an adversarial peer returning a forged object on a local miss is treated as absent
+peer-forged-eval : {K V A : Type} → (loc adv : CAStore K V) → (chk : K → V → Bool) →
+  (k : K) → (v : V) → loc k ≡ inl unit → adv k ≡ inr v → chk k v ≡ false →
+  (f : Sum Unit V → Step (StoreSig K V) A) →
+  eval-peer loc adv chk (scmd k f) ≡ eval-peer loc adv chk (f (inl unit))
+peer-forged-eval loc adv chk k v miss sent bad f =
+  concat (cong (λ x → run-closed (o-handle (h-local adv) (o-bind (h-peer-at chk k x) (λ r → o-handle (h-peer loc chk) (f r))))) miss)
+    (concat (cong (λ r → eval-peer loc adv chk (f (ca-check chk k r))) sent)
+            (cong (λ r → eval-peer loc adv chk (f r)) (peer-forged-rejected chk k v bad)))

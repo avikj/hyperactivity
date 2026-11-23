@@ -1,0 +1,13 @@
+-- paper: the paper made fresh, then every public page of the site made and kept for this state of the
+-- source (lib/server.cub site: s-make-site), so the build (make && ./hyperactive paper) leaves the server
+-- nothing to render; on a cold run, execve replaces hyperactive.cub before s-make-site runs
+hy-paper : List Word → List Word → List (List Word) → Proc W Unit
+hy-paper st m a =
+  bind (hy-paper-ready st m) (λ r →
+  if weq r #0 then
+    bind (hy-get st "paper/text") (λ t →
+    bind (h-read "/proc/self/cmdline") (λ cl →
+    if h-has "--session" (h-args-of cl)
+    then bind (h-run (cons m (cons "lib/server.cub" (cons "site" nil)))) (λ s → if weq s #0 then hy-paper-show a (hy-or nil t) else exit #1)
+    else bind (hy-paper-show a (hy-or nil t)) (λ u → hy-exec m (cons "lib/server.cub" (cons "site" nil)))))
+  else exit #1)

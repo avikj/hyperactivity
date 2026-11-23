@@ -1,0 +1,5 @@
+ca-or-comm : {K V : Type} → (chk : K → V → Bool) → ContentAddressed {K} {V} chk → (k : K) →
+  (x y : Sum Unit V) → ((v : V) → Path (Sum Unit V) x (inr v) → chk k v ≡ true) → ((v : V) → Path (Sum Unit V) y (inr v) → chk k v ≡ true) →
+  Path (Sum Unit V) (ca-or x y) (ca-or y x)
+ca-or-comm chk ca k (inl u1) y hx hy = ca-or-comm-inl u1 y
+ca-or-comm {K} {V} chk ca k (inr v1) y hx hy = ca-or-comm-inr {K} {V} chk ca k v1 (hx v1 (λ j → inr v1)) y hy

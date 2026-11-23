@@ -1,0 +1,128 @@
+# Lawvere's fixed-point theorem: Cantor, Russell, Gödel, Tarski, halting
+
+Avik Jain
+
+## The theorem
+
+F. William Lawvere, "Diagonal arguments and cartesian closed categories" (1969). It holds in any cartesian closed category: objects A and B, an exponential B^A, and evaluation.
+
+A map φ : A → B^A is *point-surjective* if every point g : 1 → B^A equals φ(a) for some point a : 1 → A.
+
+**Theorem.** If φ : A → B^A is point-surjective, then every f : B → B has a fixed point.
+
+**Proof.** Define g : A → B by g(a) = f(φ(a)(a)). This is the diagonal: a is used once as an index and once as an argument. By point-surjectivity, g = φ(a₀) for some a₀. Then
+
+  φ(a₀)(a₀) = g(a₀) = f(φ(a₀)(a₀)),
+
+so b = φ(a₀)(a₀) is a fixed point of f. ∎
+
+The proof uses nothing beyond application and the cartesian closed structure: no excluded middle, no choice, no case split on truth values. It is constructive, and it holds in every topos and in type theory.
+
+**Contrapositive.** If some f : B → B has no fixed point, then no φ : A → B^A is point-surjective. Every classical limitative result is this contrapositive with a fixpoint-free f, and every positive self-reference result is the theorem read directly.
+
+## The instances
+
+The common reading is Noson Yanofsky, "A universal approach to self-referential paradoxes, incompleteness and fixed points" (Bulletin of Symbolic Logic, 2003).
+
+**Cantor.** Take B = 2 (Bool) and f = negation, which swaps the two points and fixes neither. Then there is no surjection A → 2^A: no set enumerates all of its own subsets. The diagonal subset {a | a ∉ φ(a)} is g.
+
+**Russell.** Read A as "all sets" and φ(x)(y) = (y ∈ x). With f = negation, g is the predicate y ∉ y. If the collection of all sets were a set R with membership as its φ, g would be some φ(r), and r ∈ r would be a fixed point of negation. Hence there is no set of all sets with naive comprehension.
+
+**Gödel.** Here the theorem runs positively. In arithmetic, take A as formulas with one free variable and B as sentences up to provable equivalence. φ(ψ)(χ) = ψ(⌜χ⌝) is substitution of a Gödel numeral, which is representable inside arithmetic. So every definable f : B → B has a fixed point: this is the diagonal lemma. Applied to f(σ) = ¬Prov(⌜σ⌝), it yields G with G ↔ ¬Prov(⌜G⌝). If the system is consistent it does not prove G, and with ω-consistency (or Rosser's refinement, without it) it does not prove ¬G either.
+
+**Tarski.** Suppose arithmetic defines its own truth predicate True. Then negation on sentences, f(σ) = ¬True(⌜σ⌝), is definable, so by the diagonal lemma it has a fixed point L with L ↔ ¬True(⌜L⌝). With True(⌜L⌝) ↔ L, that is L ↔ ¬L. Negation on truth values has no fixed point, so truth is not definable in the system.
+
+**Halting.** Take A as programs and B as {halts, loops}. A halting decider h would make φ(p)(q) = h(p, q) a total computable map from programs onto the computable predicates on programs. The map f that swaps halting and looping is computable as program behaviour: "if told halts, loop; else halt". A diagonal program d(q) = f(h(q, q)) then contradicts h on input d. So there is no halting decider.
+
+**Kleene's recursion theorem, the Y combinator, Scott's D∞.** These are the positive readings. Programs do surject onto computable functions on programs, so every computable transformation of programs has a fixed point up to extensional equivalence. In the untyped λ-calculus, Y f = (λx. f(x x))(λx. f(x x)) is the diagonal g applied to itself, literally the proof term above. Scott built a model D ≅ D^D; Lawvere then forces every endomap of D to have a fixed point, which is why D carries a domain order with least fixed points rather than being a plain set.
+
+**The pattern.** Wherever a structure reaches all of its own predicates (self-reference: Gödel, Kleene, Y), every endomap of the value object has a fixed point. Wherever the value object has a fixpoint-free endomap (Bool's negation), the structure cannot reach all of its own predicates (Cantor, Russell, Tarski, halting). This is one theorem, read in two directions.
+
+## The excluded middle, constructively
+
+Excluded middle over all types is inconsistent precisely because Bool has an automorphism with no fixed point. In univalent foundations,
+
+  LEM∞ : Π(A : U). A + ¬A,
+
+and even global double-negation elimination Π(A : U). ¬¬A → A, contradict univalence (HoTT book, Theorem 3.2.2 and Corollary 3.2.7). Univalence turns Bool's swap into a loop in the universe at Bool. A uniform function choosing an element of every inhabited type must commute with transport along that loop, so its value at Bool would be a fixed point of the swap, and the swap has none. This is Lawvere's contrapositive with the universe's own symmetry in the role of f: a uniform binary decision over everything collides with a fixpoint-free self-map of the binary.
+
+Restricted to mere propositions (types with at most one element up to paths, the posets of truncated fibres), LEM₋₁ : Π(P : Prop). P + ¬P is consistent with univalence. The binary split is coherent exactly where fibres carry no plurality of witnesses. On proof-relevant fibres, a symmetry of the fibre with no fixed point blocks every uniform choice. That is why Σ is not classical ∃: a point of Σ keeps its witness, and a uniform P + ¬P over such fibres asks for a choice that no symmetric structure can make.
+
+Withholding excluded middle is not refuting it: ¬¬(P ∨ ¬P) is provable intuitionistically. Lawvere's theorem itself, and Cantor's theorem with it, hold constructively. The constructive reading of disjunction and existence (Brouwer, Heyting, Bishop) asks a proof of P ∨ ¬P to say which side holds, with its witness. Univalence makes the inconsistency of demanding that uniformly into a theorem.
+
+## Quantifiers as adjoints, and the fibre
+
+Lawvere, "Adjointness in foundations" (1969) and "Equality in hyperdoctrines" (1970). For a projection π : Γ × X → Γ, substitution π* takes predicates on Γ to predicates on Γ × X, and
+
+  ∃_π ⊣ π* ⊣ ∀_π.
+
+Equality is the left adjoint along the diagonal Γ → Γ × Γ. In type theory these are Σ ⊣ weakening ⊣ Π, and equality becomes the identity type. When fibres are posets, Σ truncated is ∃ and the adjunction is the classical one. When fibres are spaces, Σ keeps the witnesses and identity carries paths, which is the setting in which the univalent obstruction above appears.
+
+Truth values then live in the subobject classifier Ω of a topos, a Heyting algebra and not in general Bool. The law P ∨ ¬P holds exactly when Ω ≅ 1 + 1 internally, the Boolean case.
+
+## The fourfold and the sevenfold: what the traditions formally say
+
+Both schemes are formal logics in their own right: each is a complete enumeration of the forms a predication can take, with rules for how they combine, stated in the texts themselves. This section gives them in those terms. The modern work listed under each is reconstruction into Western notation, which re-expresses a logic that was already formal; it is listed with the disputes over it, followed by the structural correspondence with Lawvere's theorem.
+
+### The Buddhist tetralemma (catuṣkoṭi)
+
+Early Buddhist texts treat four alternatives as exhausting the options for a proposition A: A; not-A; both A and not-A; neither A nor not-A. The Buddha's "undeclared questions" (whether the Tathāgata exists after death, and the like) are set out in this form, and all four are set aside.
+
+Nāgārjuna's Mūlamadhyamakakārikā (c. 2nd century CE), the founding text of the Middle Way school, uses the four corners in two ways. Positively (MMK 18.8), all four are affirmed, each from a different standpoint. Negatively, more often, all four are rejected: a thing does not arise from itself, from another, from both, or without cause (MMK 1.1). The Middle Way is the rejection of both extremes, being and non-being, and this negative use carries it. It is a refusal to take any of the four positions as a view about the ultimate, not the assertion of a third value between true and false.
+
+Under classical logic the corners collapse. "Both" is a contradiction that entails everything, and "neither" is classically equivalent to "both" by De Morgan.
+
+**Modern reconstructions in Western notation.**
+- Graham Priest, "The logic of the catuṣkoṭi" (Comparative Philosophy, 2010), with Jay Garfield, maps the four corners onto the four values of First Degree Entailment (FDE), the Belnap–Dunn logic: true only, false only, both (a glut), neither (a gap). FDE is paraconsistent: a contradiction does not entail everything.
+- For the negative use, where all four are rejected, Priest (The Fifth Corner of Four, OUP 2018) adds a fifth value, ineffable, which contaminates every compound containing it. He uses plurivalent semantics, in which a sentence can take more than one value or none.
+- Westerhoff (2009) reads the catuṣkoṭi with two kinds of negation. Cotnoir and others object to the fifth value. Specialists in Buddhist studies widely contest the dialetheic reading, holding that Nāgārjuna's rejections are rejections of views, not acceptance of true contradictions.
+
+### The Jain sevenfold predication (saptabhaṅgī)
+
+The Jain doctrine of the many-sidedness of reality (anekāntavāda) holds that an object has many aspects. Any predication is true only from a standpoint (naya) and is qualified by syāt, "in some respect". The sevenfold scheme, set out by Samantabhadra (Āptamīmāṃsā), Siddhasena, and later Vādidevasūri and Mallisena (Syādvādamañjarī), is:
+
+1. In some respect, it is.
+2. In some respect, it is not.
+3. In some respect, it is, and it is not (the two asserted in succession).
+4. In some respect, it is inexpressible (avaktavya): the two cannot be asserted simultaneously in one predication.
+5. In some respect, it is, and is inexpressible.
+6. In some respect, it is not, and is inexpressible.
+7. In some respect, it is, is not, and is inexpressible.
+
+The seven are the non-empty combinations of three primitive values: is, is not, inexpressible (2³ − 1 = 7). In the Jain texts, contradiction is resolved by indexing: "is" and "is not" hold in different respects (substance versus mode, place, time, state), so no single respect carries both. Avaktavya marks that both cannot be said in one breath from one standpoint.
+
+**Modern reconstructions in Western notation.**
+- Priest, "Jaina logic: a contemporary perspective" (History and Philosophy of Logic 29, 2008), uses many-valued and modal techniques, with standpoints as points of evaluation.
+- Ganeri ("Jaina logic and the philosophical basis of pluralism", 2002) reads syāt as an operator relativizing to a standpoint.
+- Older readings (Pandey and others) take avaktavya as a third truth value in the manner of Łukasiewicz.
+- Balcerowicz argues the saptabhaṅgī is consistent with classical logic once the respect-indexing is made explicit, and that many reconstructions are new systems rather than readings of the texts. Rahlwes (2023) argues on the basis of Vādidevasūri and Yaśovijaya that Priest uses the wrong framework, and that Aristotelian term logic is the right comparison.
+- The earliest formulations, attributed to Kundakunda, have only the first three predications and lack avaktavya.
+
+### What does and does not connect
+
+Neither tradition is intuitionistic logic, and neither withholds excluded middle on the constructivists' ground (the demand for a witness). They depart from the classical binary in different directions:
+- The tetralemma itself lists a glut ("both") and a gap ("neither"). It is paraconsistent and paracomplete, whereas intuitionistic logic has gaps but no gluts.
+- The Jain scheme keeps each predication bivalent within its respect and handles the many-sidedness by indexing to standpoints. Under Balcerowicz's reading no non-classical logic is involved at all.
+
+**Structural correspondence with Lawvere's theorem.** Lawvere's theorem leaves a system that describes its own descriptions three exits from the liar: no Boolean negation as a total self-map of its truth values, or no reach over all of its own predicates, or a value fixed by negation. Each exit has a modern representative:
+- Constructive and topos logic takes gaps: Heyting truth values, where P ∨ ¬P need not hold.
+- Priest's dialetheism takes the glut: the liar is both true and false, and in the logic LP negation fixes the value "both". That is a fixed point of negation, which is exactly what Lawvere's theorem says a self-referential value object must have.
+- Classical metamathematics keeps Bool and gives up self-reach: incompleteness and Tarski's undefinability.
+- The Jain respect-indexing matches the last route in structure, since it gives up a single unindexed predication over everything. In sheaf terms, statements true at a standpoint need not glue into one global statement.
+
+The tetralemma, which lists both a glut and a gap among its own corners, admits the first two exits at once. This structural correspondence connects Lawvere's diagonal geometry to each logical exit without claiming that Nāgārjuna or the Jain logicians argued from self-reference, which they did not.
+
+## Sources
+
+- F. W. Lawvere, "Diagonal arguments and cartesian closed categories", Category Theory, Homology Theory and their Applications II, LNM 92 (1969); reprinted with commentary in TAC Reprints 15 (2006).
+- F. W. Lawvere, "Adjointness in foundations", Dialectica 23 (1969); TAC Reprints 16.
+- F. W. Lawvere, "Equality in hyperdoctrines and comprehension schema for an adjoint functor" (1970).
+- N. Yanofsky, "A universal approach to self-referential paradoxes, incompleteness and fixed points", Bull. Symbolic Logic 9 (2003).
+- The Univalent Foundations Program, Homotopy Type Theory (2013), §3.2 and §3.4.
+- K. Gödel (1931); A. Tarski (1933); A. Turing (1936); S. C. Kleene (1938); D. Scott (1972).
+- Nāgārjuna, Mūlamadhyamakakārikā; the Jain saptabhaṅgī as set out by Samantabhadra (Āptamīmāṃsā) and Mallisena (Syādvādamañjarī).
+- G. Priest, "The logic of the catuṣkoṭi", Comparative Philosophy 1(2) (2010); The Fifth Corner of Four, OUP (2018).
+- G. Priest, "Jaina logic: a contemporary perspective", History and Philosophy of Logic 29(3) (2008).
+- J. Ganeri, "Jaina logic and the philosophical basis of pluralism", History and Philosophy of Logic 23 (2002).
+- J. Westerhoff, Nāgārjuna's Madhyamaka (OUP 2009).
+- P. Balcerowicz, on the saptabhaṅgī and classical logic; C. Rahlwes, J. Indian Philosophy (2023), on Vādidevasūri and Yaśovijaya.

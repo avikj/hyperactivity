@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hyperactivity.pdf · Avik Jain</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#111;color:#fff;font:600 13px/1.2 ui-monospace,'SF Mono',Menlo,monospace}
+header{position:sticky;top:0;z-index:10;height:48px;display:flex;justify-content:space-between;align-items:center;gap:14px;padding:0 20px;background:#000;border-bottom:2px solid #fff}
+header a{color:#fff;text-decoration:none}
+header a:hover{color:#ff0a94}
+.bar{display:flex;align-items:center;gap:10px}
+.btn{font:700 12px/1 ui-monospace,'SF Mono',Menlo,monospace;text-transform:uppercase;letter-spacing:.05em;background:#000;color:#fff;border:2px solid #fff;padding:7px 12px;cursor:pointer;text-decoration:none}
+.btn:hover{background:#ff0a94;border-color:#ff0a94;color:#fff}
+.btn.primary{background:#ff0a94;border-color:#ff0a94;color:#fff}
+.btn.primary:hover{background:#fff;color:#000;border-color:#fff}
+#status{color:#ff0a94;font-size:12px}
+#pages{display:flex;flex-direction:column;align-items:center;gap:24px;padding:28px 16px 80px}
+canvas.pdf-page{background:#fff;box-shadow:0 8px 32px rgba(0,0,0,.6);border:2px solid #000;max-width:100%;height:auto !important}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <a href="/">Avik Jain · Hyperactive Labs</a>
+    <a href="/paper">HTML</a>
+    <a href="/nets">Nets</a>
+    <a href="/learn">Learn</a>
+  </div>
+  <div class="bar">
+    <span id="status">Loading hyperactivity.pdf…</span>
+    <a class="btn primary" href="/paper.pdf" download="hyperactivity.pdf">↓ Download PDF</a>
+  </div>
+</header>
+<div id="pages"></div>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+const pagesEl = document.getElementById('pages');
+const statusEl = document.getElementById('status');
+let pdfDoc = null;
+const rendered = new Set();
+
+async function renderPage(num) {
+  if (rendered.has(num) || !pdfDoc) return;
+  rendered.add(num);
+  const page = await pdfDoc.getPage(num);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const scale = 1.45 * dpr;
+  const vp = page.getViewport({ scale });
+  const canvas = document.getElementById('p-' + num);
+  canvas.width = vp.width;
+  canvas.height = vp.height;
+  canvas.style.width = (vp.width / dpr) + 'px';
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+}
+
+pdfjsLib.getDocument('/paper.pdf').promise.then(async doc => {
+  pdfDoc = doc;
+  statusEl.textContent = doc.numPages + ' pages · hyperactivity.pdf';
+  const first = await doc.getPage(1);
+  const vp0 = first.getViewport({ scale: 1.45 });
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) renderPage(parseInt(e.target.dataset.page, 10));
+    });
+  }, { rootMargin: '600px' });
+
+  for (let i = 1; i <= doc.numPages; i++) {
+    const c = document.createElement('canvas');
+    c.id = 'p-' + i;
+    c.className = 'pdf-page';
+    c.dataset.page = i;
+    c.width = vp0.width;
+    c.height = vp0.height;
+    c.style.width = vp0.width + 'px';
+    pagesEl.appendChild(c);
+    obs.observe(c);
+  }
+  renderPage(1);
+  if (doc.numPages >= 2) renderPage(2);
+}).catch(err => {
+  statusEl.textContent = 'Viewer error: ' + err.message;
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+fm-obs : {S : Sig} → o-ObsOf (MT S) (MT S) FM
+fm-obs {S} c fm = case c return (λ y → Step (MT S) (Resp (MT S) y × FM)) of
+  inl s → scmd (inl s) (λ r → sdone (r , fm))
+  inr w → (case w return (λ y → Step (MT S) (w-resp y × FM)) of
+    w-now → fm-pass {S} w-now fm
+    w-write fd n b → fm-pass {S} (w-write fd n b) fm
+    w-read fd n → fm-pass {S} (w-read fd n) fm
+    w-sleep ns → fm-pass {S} (w-sleep ns) fm
+    w-exit ec → fm-pass {S} (w-exit ec) fm
+    w-open n p f m → fm-pass {S} (w-open n p f m) fm
+    w-close fd → fm-pass {S} (w-close fd) fm
+    w-load a → sdone (fm-get-n 8 fm a , fm)
+    w-store a v → sdone (unit , fm-set-n 8 fm a v)
+    w-cas a o n → fm-pass {S} (w-cas a o n) fm
+    w-fence → fm-pass {S} w-fence fm
+    w-sys nr a1 a2 a3 a4 a5 a6 → fm-pass {S} (w-sys nr a1 a2 a3 a4 a5 a6) fm
+    w-alloc n → fm-pass {S} (w-alloc n) fm
+    w-load8 a → sdone (fm-get-n 1 fm a , fm)
+    w-store8 a v → sdone (unit , fm-set fm a v)
+    w-spawn av ev out → fm-pass {S} (w-spawn av ev out) fm
+    w-fd-write fd t → fm-pass {S} (w-fd-write fd t) fm
+    w-file-read-named p → fm-pass {S} (w-file-read-named p) fm
+    w-file-write-named p t → fm-pass {S} (w-file-write-named p t) fm
+    w-free a → fm-pass {S} (w-free a) fm
+    w-snapshot n a → fm-pass {S} (w-snapshot n a) fm)

@@ -1,0 +1,7 @@
+k-allle-mem : {o : Ord} → (x z : El o) → (r : List (El o)) → AllLe x r → MemKey z r → isTrue (leq x z)
+k-allle-mem x z r =
+  case r return λ w → AllLe x w → MemKey z w → isTrue (leq x z) of
+    nil → λ a m → Empty-rec m
+    cons y q → λ a m → mem-split {o} {isTrue (leq x z)} z y q m
+                         (λ ez → subst {_} {_} {El o} {λ w → isTrue (leq x w)} (sym ez) (fst a))
+                         (λ m1 → rec q (snd a) m1)

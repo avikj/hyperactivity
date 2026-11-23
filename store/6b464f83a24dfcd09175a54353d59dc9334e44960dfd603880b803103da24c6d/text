@@ -1,0 +1,6 @@
+um-script-fetch : Proc W (List Word)
+um-script-fetch =
+  bind (h-capture (cons "/usr/bin/env" (cons "curl" (cons "-fs" (cons "--max-time" (cons "8" (cons "https://cloud.umami.is/script.js" nil))))))) (λ r →
+  if andB (weq (fst r) #0) (h-not (h-null (snd r)))
+  then bind (h-write "/tmp/hx-umami.js" (um-replace "/api/send" "/ev" (snd r))) (λ w → ret {lzero} {W} (um-js-resp (um-replace "/api/send" "/ev" (snd r))))
+  else ret {lzero} {W} (s-respond "200 OK" "application/javascript; charset=utf-8" "/* umami unavailable */"))

@@ -1,0 +1,9 @@
+hy-send-pack : List Word → List Word → List Word → Proc W Unit
+hy-send-pack place root h =
+  bind (h-run (cons "/usr/bin/env" (cons "curl" (cons "-fsS" (cons "-T" (cons "build/pack.tgz" (cons (list-append place (list-append "/packs/" h)) nil))))))) (λ c →
+  if weq c #0 then bind (hy-pack-known h) (λ u →
+    bind (h-run (cons "/usr/bin/env" (cons "curl" (cons "-fsS" (cons "-T" (cons ".cubical-store/packs" (cons (list-append place (list-append "/roots/" root)) nil))))))) (λ c2 →
+    if weq c2 #0 then bind (h-run (cons "/usr/bin/env" (cons "mv" (cons "build/sent-new" (cons ".cubical-store/sent-marker" nil))))) (λ mv →
+      h-out (h-line (list-append root (list-append "   (sent: pack " (list-append h ")")))))
+    else h-fail "hyperactive send: the place stored the pack and did not store the root's list; nothing is marked sent"))
+  else h-fail "hyperactive send: the place did not store the pack; nothing is marked sent")

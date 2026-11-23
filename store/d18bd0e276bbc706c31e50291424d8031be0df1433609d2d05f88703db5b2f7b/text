@@ -1,0 +1,25 @@
+nk-of-code : Nat → Code → NkTm
+nk-of-code zero c = nk-fail
+nk-of-code (suc k) (cvar n) = nk-var n
+nk-of-code (suc k) (cglob g) = case def-source g return (λ _ → NkTm) of
+  some c → nk-of-code k c
+  none → nk-fail
+nk-of-code (suc k) (clam b) = nk-lam (nk-of-code k b)
+nk-of-code (suc k) (cplam b) = nk-lam (nk-of-code k b)
+nk-of-code (suc k) (capp f a) = nk-beta (nk-of-code k f) (nk-of-code k a)
+nk-of-code (suc k) (cpapp p r) = nk-beta (nk-of-code k p) (nk-of-code k r)
+nk-of-code (suc k) (cpi m A B) = nk-pi (nk-of-code k A) (nk-lam (nk-of-code k B))
+nk-of-code (suc k) (csigma A B) = nk-sig (nk-of-code k A) (nk-lam (nk-of-code k B))
+nk-of-code (suc k) (cpair a b) = nk-mkpair (nk-of-code k a) (nk-of-code k b)
+nk-of-code (suc k) (cfst p) = nk-p1 (nk-of-code k p)
+nk-of-code (suc k) (csnd p) = nk-p2 (nk-of-code k p)
+nk-of-code (suc k) (cuniv l) = nk-oc-lvl l #0
+nk-of-code (suc k) (cpathp A a b) = nk-pathp (nk-of-code k A) (nk-of-code k a) (nk-of-code k b)
+nk-of-code (suc k) ci0 = nk-i0
+nk-of-code (suc k) ci1 = nk-i1
+nk-of-code (suc k) (cneg r) = nk-neg (nk-of-code k r)
+nk-of-code (suc k) (cmeet r s) = nk-imeet (nk-of-code k r) (nk-of-code k s)
+nk-of-code (suc k) (cjoin r s) = nk-ijoin (nk-of-code k r) (nk-of-code k s)
+nk-of-code (suc k) (clet t b) = nk-put (nk-of-code k b) #0 (nk-of-code k t)
+nk-of-code (suc k) (cann t T) = nk-of-code k t
+nk-of-code (suc k) c = nk-fail

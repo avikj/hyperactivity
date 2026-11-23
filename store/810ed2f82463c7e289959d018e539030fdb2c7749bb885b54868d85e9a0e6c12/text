@@ -1,0 +1,15 @@
+p-bal-acc : Bool → Nat → List Word → List Word → List Word × List Word
+p-bal-acc q d acc nil = (h-rev acc nil , nil)
+p-bal-acc true d acc (cons x r) = p-bal-acc (h-not (weq x #34)) d (cons x acc) r
+p-bal-acc false zero acc (cons x r) =
+  if weq x #40 then p-bal-acc false (suc zero) nil r else p-bal-acc false zero acc r
+p-bal-acc false (suc zero) acc (cons x r) =
+  if weq x #34 then p-bal-acc true (suc zero) (cons x acc) r
+  else if weq x #40 then p-bal-acc false (suc (suc zero)) (cons x acc) r
+  else if weq x #41 then (h-rev acc nil , r)
+  else p-bal-acc false (suc zero) (cons x acc) r
+p-bal-acc false (suc (suc d)) acc (cons x r) =
+  if weq x #34 then p-bal-acc true (suc (suc d)) (cons x acc) r
+  else if weq x #40 then p-bal-acc false (suc (suc (suc d))) (cons x acc) r
+  else if weq x #41 then p-bal-acc false (suc d) (cons x acc) r
+  else p-bal-acc false (suc (suc d)) (cons x acc) r

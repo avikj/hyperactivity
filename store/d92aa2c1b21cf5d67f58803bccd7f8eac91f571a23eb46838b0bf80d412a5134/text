@@ -1,0 +1,6 @@
+mem-split : {o : Ord} {C : Type} → (a y : El o) → (l : List (El o)) → MemKey a (cons y l) → (a ≡ y → C) → (MemKey a l → C) → C
+mem-split a y l m f g =
+  ifP {λ bb → isTrue (ltn zero (plus (one-if bb) (count a l))) → C} {eqo a y}
+    (λ e m1 → f (eqo-sound (eq→isTrue e)))
+    (λ e m1 → g m1)
+    m

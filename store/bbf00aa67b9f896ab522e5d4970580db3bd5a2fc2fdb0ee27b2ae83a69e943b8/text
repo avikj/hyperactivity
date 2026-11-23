@@ -1,0 +1,7 @@
+stat-stream-data : List Word → Word → Proc W Unit
+stat-stream-data st c =
+  with-bytes {Unit} (wadd (fromNat (list-length (list-append st "/hits.log"))) #1) (λ p →
+  bind (h-poke p (list-append st "/hits.log")) (λ u →
+  bind (sys-call #2 p #0 #0 #0 #0 #0) (λ fd →
+  if wlt fd #9223372036854775808 then stat-stream-fd fd c
+  else bind (fd-write c (s-response "text/plain; charset=utf-8" nil)) (λ w → ret unit))))

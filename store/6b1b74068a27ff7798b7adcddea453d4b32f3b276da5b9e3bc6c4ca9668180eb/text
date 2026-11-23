@@ -1,0 +1,20 @@
+-- one step of the scan, whatever the tree answered, given what its answer is
+k-at-good : (t : List (List Word)) → (f : List (List Word) → Word) → FinRank t f → (x : List Word) → (s1 : List (List Word)) →
+            MemKey {suffix-ord} (cons x s1) (sufs t) → (h : Nat) → (kont : Nat → List KOut) → ((l : Nat) → k-HintL t f l s1 → k-All t (kont l)) →
+            (m : Sum Unit (El k-PR)) → k-LastP {k-PR} (k-key (f (cons x s1))) (k-Lf t f) m →
+            ((z : List (List Word)) → MemKey {suffix-ord} z (sufs t) → isTrue (not (leq {suffix-ord} (cons x s1) z)) → k-Ge {k-PR} (k-psi f z) m) →
+            k-HintP h (cons x s1) m → k-All t (k-at kont (f (cons x s1)) (cons x s1) h m)
+k-at-good t f fin x s1 ms h kont kg m =
+  case m return λ w → k-LastP {k-PR} (k-key (f (cons x s1))) (k-Lf t f) w →
+                     ((z : List (List Word)) → MemKey {suffix-ord} z (sufs t) → isTrue (not (leq {suffix-ord} (cons x s1) z)) → k-Ge {k-PR} (k-psi f z) w) →
+                     k-HintP h (cons x s1) w → k-All t (k-at kont (f (cons x s1)) (cons x s1) h w) of
+    inl u → λ lp ge hp → kg zero (k-hint-zero t f s1)
+    inr q →
+      λ lp ge hp →
+        let p = snd q
+            s = cons x s1
+            pr = k-pred-good t f fin s ms q lp ge
+            sk = k-skip (k-pn h) p s hp
+        in ( (sk , ms , pr)
+           , kg (k-skip-lcp (k-pn h) p s)
+                (subst {_} {_} {Nat} {λ n → k-HintL t f n s1} (sym sk) (k-kasai t f fin x s1 ms p pr)) )

@@ -1,0 +1,29 @@
+-- Kasai's invariant: s's predecessor shares h + 1 with s = x · s1; s1's predecessor shares at least h with s1
+k-kasai-at : (t : List (List Word)) → (f : List (List Word) → Word) → FinRank t f → (x : List Word) → (s1 : List (List Word)) →
+             MemKey {suffix-ord} (cons x s1) (sufs t) → MemKey {suffix-ord} s1 (sufs t) → (p : List (List Word)) → k-Pred t (cons x s1) p →
+             (m : Sum Unit (El k-PR)) → k-LastP {k-PR} (k-key (f s1)) (k-Lf t f) m →
+             ((z : List (List Word)) → MemKey {suffix-ord} z (sufs t) → isTrue (not (leq {suffix-ord} s1 z)) → k-Ge {k-PR} (k-psi f z) m) →
+             k-HintP (lcp p (cons x s1)) s1 m
+k-kasai-at t f fin x s1 ms ms1 p pr m =
+  case m return λ w → k-LastP {k-PR} (k-key (f s1)) (k-Lf t f) w →
+                     ((z : List (List Word)) → MemKey {suffix-ord} z (sufs t) → isTrue (not (leq {suffix-ord} s1 z)) → k-Ge {k-PR} (k-psi f z) w) →
+                     k-HintP (lcp p (cons x s1)) s1 w of
+    inl u → λ lp ge → unit
+    inr q →
+      λ lp ge →
+        let pr2 = k-pred-good t f fin s1 ms1 q lp ge
+            p2 = snd q
+            h2 = ord-total {suffix-ord} {s1} {p2} (not-isTrue {leq {suffix-ord} s1 p2} (k-pred-lt t s1 p2 pr2))
+        in (case p return λ v → k-Pred t (cons x s1) v → ltn (lcp p2 s1) (k-pn (lcp v (cons x s1))) ≡ false of
+              nil → λ pr → k-ltn-zero (lcp p2 s1)
+              cons a p0 →
+                λ pr →
+                  ifP {λ bb → ltn (lcp p2 s1) (k-pn (if bb then suc (lcp p0 s1) else zero)) ≡ false} {tok-eq a x}
+                    (λ eax →
+                       let ax = tok-eq-sound a x (eq→isTrue eax)
+                           lxa = subst {_} {_} {List Word} {λ w → isTrue (leq {token-ord} x w)} (sym ax) (ord-refl {token-ord} x)
+                           lax = subst {_} {_} {List Word} {λ w → isTrue (leq {token-ord} w x)} (sym ax) (ord-refl {token-ord} x)
+                           h1 = k-tail-le t s1 p2 pr2 x a lxa lax p0 (mem-tail t a p0 (k-pred-mem t (cons x s1) (cons a p0) pr)) (k-pred-lt t (cons x s1) (cons a p0) pr)
+                       in k-btw p0 p2 s1 h1 h2)
+                    (λ e → k-ltn-zero (lcp p2 s1)))
+             pr

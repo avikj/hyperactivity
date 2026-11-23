@@ -1,0 +1,495 @@
+# Hyperactive Receptivity
+
+Avik Jain
+
+*Ceptr, completed: every construct of Ceptr, under its own name, as a construction of hyperactivity, with the
+properties Ceptr intended for it stated and proved. Written for Arthur Brock and Eric Harris-Braun.*
+
+Written from Ceptr's own sources: the C implementation and its
+base definitions (github.com/zippy/ceptr: `src/base_defs`, `protocol.c`, `receptor.c`, `semtrex.c`, `scape.h`,
+`vmhost.h`, `accumulator.h`, `archive/ceptr-notes.txt`), the Ceptr Revelation (ceptr.org/whitepapers/revelation),
+"Ceptr Design: Receptive Capacity Breakthrough" and "I am a Strange Loop" (artbrock.com, November 2014), "Currencies
+are Records of Currents" (MetaCurrency Project, 2020), "Design for a Meta-currency Platform" (v0.1rev5, 2009), and
+"Holochain: Scalable agent-centric distributed computing" (alpha, 15 February 2018). Citations of hyperactivity are to
+the paper, the value `hyperactivity` (docs/hyperactivity.cub), Part I, and to the library code that realizes it.
+
+
+## 0. What this is
+
+Ceptr is the one serious attempt at an intelligently designed computing substrate: a stack rebuilt from a model of how
+living systems communicate, so that meaning travels with data, anything can talk with anything, and coherence holds
+among peers with no central authority. Much of it was precisely defined and ran: semantic trees, the structure grammar,
+semtrex, receptors, protocols with roles, the VMHost. Some of it was stated as intent and left informal: what an
+intention is, what a protocol guarantees, what a peer can know about another, how meaning is identified across
+contexts, what a current-see is. The source itself marks the boundary. Its base definitions contain a process named
+`MAGIC`, described as "a scaffold for things we don't know how to build in ceptr yet", and its REQUESTING protocol
+carries an open question: how does it become explicit that the RESPONSE_HANDLER's signature is of type RESPONSE_TYPE?
+
+Hyperactivity is a language in which routines, relations and rationales operate on one another, including the
+definitions of the language itself (the paper, §1). This document takes Ceptr's constructs one at a time, in Ceptr's
+vocabulary, and gives each its construction in hyperactivity: what it is, what Ceptr intended it to guarantee, and the
+statement of that guarantee as a theorem. Where Ceptr reached for something it did not have the mathematics for, the
+construction says what supplies it. The result is a receptor in Ceptr's exact sense, defined and running in
+hyperactivity: a hyperactive receptor.
+
+## 1. What Ceptr saw
+
+**Learn from nature.** Natural systems layer protocols (physical, chemical, cellular, neural) and have no central
+controller; each cell carries the shared agreements and checks them locally. The Revelation names the universal
+communication pattern: a carrier, shaped by a protocol, forms a signal, and signals occur in sequence (light, letter
+shapes, the document, left-to-right order).
+
+**Receptive capacity.** Human language is robust because listeners first receive a general carrier (sound, light) and
+then pattern-match; an unknown word can be asked about and learned. Brock's "Receptive Capacity Breakthrough" makes the
+inversion explicit: instead of only the objects that exist, attend to "the receptivity that gave them the space in which
+to come into existence". A system should receive a carrier, detect an unknown protocol or symbol, and install the means
+to interpret it.
+
+**Unenclosable.** Open identity, open transport, open data, open rules: in the end, "universal (rather than
+transparent), unenclosable", hence peer-to-peer.
+
+**Coherence and convergence.** A receptor holds coherence for its code, its state, the relationships among its data,
+and its interfaces. Changing a few foundational assumptions makes many separate efforts converge.
+
+**Distributed process, not distributed consensus.** "Trust your own node." Each participant runs its own copy of the
+group's agreements and validates locally; forks are realities with their own integrity.
+
+**Currencies are records of currents.** Currencies are "formal symbol systems which shape, enable and measure
+currents"; each makes some flows visible and others invisible and determines who may lay tracks.
+
+Each of these is a statement about computation that hyperactivity makes into a construction. The sections below follow
+Ceptr's own architecture from the bottom up.
+
+## 2. Semantic trees: symbols and structures
+
+**In Ceptr.** Data has meaningful and structural aspects, both defined. `def.h`: "Structures are definitions of how data
+is organized; Symbols are a numeric semantic indicator (like a type) of what a given structure means. For example an
+'integer' defines a structure of bits and how to interpret them, whereas a 'shoe size' is a symbol for what a use of an
+integer means." The Revelation: "Cannot create an instance of an Int, but can of an Age." A semantic tree is a tree each
+of whose nodes carries a symbol and a surface. Structures are built from a grammar (`src/base_defs`): sequence `(x,y…)`,
+alternative `|{x|y…}`, zero-or-more `*x`, one-or-more `+x`, zero-or-one `?x`, a named structure `%x`, and anything `!`.
+Bottoming-out structures (BIT, INTEGER, FLOAT, CSTRING, …) are implemented by the system. A semantic ID is a triple
+(context, semantic type, address), so meaning is relative to a context (a receptor). The definitions are themselves
+semantic trees: `STRUCTURE_DEFINITION`, `SYMBOL_DEFINITION`, `DEFINITIONS` are symbols of the system context. The
+archive's notes state the ladder: 7.spec = Age; Age.spec = Int; Int.spec = Pattern.
+
+**In hyperactivity.**
+
+*Structures are types; the structure grammar is the grammar of type formers.* Sequence is the dependent pair Σ (a
+record), alternative is the sum, zero-or-more is `List`, one-or-more is the non-empty list, zero-or-one is `Maybe`,
+`%x` is reference to a named type, and `!` is the dependent pair Σ (s : Symbol), Meaning(s): a value together with the
+symbol that says what it is. Bottoming-out structures are the primitive types of the machine (lib/prim.cub, words and
+bytes; lib/words-bytes.cub for their exact layouts). A structure definition is therefore not a schema checked by a
+validator beside the data: it is the type, and an ill-structured tree is not a value of it.
+
+*A symbol is a structured type: a structure together with the meaning it participates in.* This is where Ceptr's
+central intuition receives its exact form. Age and Int are equivalent as bare types, and in a univalent language
+equivalent bare types are equal. What makes an Age not an Int is everything Ceptr attaches to the symbol: the processes
+linked to it (`PROCESS_LINK`, `PROCESS_OF_SYMBOL`), the validators that constrain it (`VALIDATOR`), the protocols that
+use it (`USAGE`). A symbol is the type together with this structure, and its identity is identity of the structured
+type: the paper's §4.3, "Structured equivalence as the actual content of representation independence". Two symbols are
+the same exactly when there is an equivalence of their structures that carries their processes, validators and
+protocol roles to each other. Shoe-size and Age share a structure and differ as symbols because their structures of
+meaning differ; LATITUDE in two receptors' contexts, with the same operations and the same protocol roles, is one
+symbol, and the path between them carries every process and every proof across (transport, §4 "Equivalence,
+univalence, and structure"). Ceptr's context-relative semantic ID is the right starting point; the structure identity
+principle is what decides when two contexts mean the same thing.
+
+*Instances.* "Cannot create an instance of an Int, but can of an Age": a value is created at a symbol (a structured
+type), never at a bare structure. In hyperactivity a bare structure has no operations of meaning attached, so creating
+an "instance of Int" is creating a value of a type nothing semantic is defined over; the ladder 7 → Age → Int → Pattern
+is the ladder value → structured type → underlying type → universe of types.
+
+*Self-description.* Ceptr's definitions are semantic trees defined in Ceptr's own terms. Hyperactivity's grammars,
+judgments and interpreters are represented definitions, operands of the same activity as the expressions they
+interpret (§6 "Reflective programming and language extension", §6.3 "Reflection applied to a language definition
+itself"). `DEF_SYMBOL`, `DEF_STRUCTURE`, `DEF_PROCESS`, `DEF_PROTOCOL` are constructions over the represented
+definitions value.
+
+**The theorems.** A semantic tree is well formed for its symbol exactly when it is a value of the symbol's type: well
+formedness is typing, checked once, not a runtime match (`_r_def_match`, `_d_build_def_semtrex` build a semtrex from a
+definition and match the tree against it; in hyperactivity the type is that check). Identity of symbols across contexts
+is a structured equivalence, and everything defined over one symbol is transported to the other.
+
+## 3. Semtrex
+
+**In Ceptr.** Semantic Tree Regular Expressions match on three dimensions at once: the semantic identifier, the value,
+and the grammatical place in the tree (`/HTTP_REQUEST/*/HOST="ceptr.org"`). The pattern language (`src/base_defs`,
+`SEMTREX_DEF`): symbol literal and its negation, value literal and its negation, sequence, alternative, not, any,
+zero-or-more, one-or-more, zero-or-one, group (capturing, with a semantic label), descend, walk. A semtrex compiles to a
+finite automaton over trees, after Russ Cox's construction for string regular expressions (`semtrex.c`, citing Cox
+2007); a match returns a `SEMTREX_MATCH` tree of the groups matched, each with symbol, path and sibling count. Semtrex
+is how expectations are written, how protocols match signals, and how definitions are checked.
+
+**In hyperactivity.** A semtrex `p` denotes a type family over trees: Match(p, t) is the type of ways the tree `t`
+matches `p`, and a match result is an inhabitant of it, the groups being exactly the components of the witness. The
+pattern language is an inductive type with one constructor per Ceptr form; Match is defined by recursion on the
+pattern, with walk and descend as the tree-position combinators. The compiled automaton is a program on patterns and
+trees.
+
+**The theorems.** (i) *Soundness and completeness of the matcher*: running the automaton compiled from `p` on `t`
+succeeds exactly when Match(p, t) is inhabited, and the groups it returns are the components of a witness. (ii) *Matching
+on meaning respects identity of meaning*: if two symbols are identified by a structured equivalence (§2), a pattern
+written against one matches the transported tree written against the other. This is what makes receptive capacity
+compose across contexts: an expectation planted in one receptor's vocabulary recognizes the same signal expressed in an
+equivalent vocabulary, with a proof. (iii) A semtrex's match is the evidence an action receives: the action's
+parameters are the components of the witness, so an action cannot read a group the pattern did not establish.
+
+## 4. Processes: code trees, run trees, signatures, intentions
+
+**In Ceptr.** A process definition is `(PROCESS_NAME, PROCESS_INTENTION, CODE, PROCESS_SIGNATURE, ?PROCESS_LINK)`. Code
+is a tree; running instantiates it into a run tree with parameters and reduces it (`process.c`, "instantiating code
+trees into run trees and reducing them"), with errors such as `signatureMismatchReductionErr`,
+`incompatibleTypeReductionErr` and `structureMismatchReductionErr` detected during reduction. Signatures give input and
+output semantic types (`SIGNATURE_SYMBOL`, `SIGNATURE_STRUCTURE`, `SIGNATURE_ANY`, `SIGNATURE_PASSTHRU`). The intention
+is a `CSTRING`: "define a new symbol", "fill template from map", "send a request to a receptor". The system processes
+(`NEW`, `GET`, `DO`, `COND`, `ITERATE`, `SAY`, `REQUEST`, `LISTEN`, `RESPOND`, `CONVERSE`, `COMPLETE`, `MATCH`, `FILL`,
+`QUOTE`, `TRANSCODE`, …) make a small reduction language whose terms are semantic trees.
+
+**In hyperactivity.** A process definition is a typed term. Its signature is its type, so signature, structure and
+type mismatches are not reduction errors: an ill-typed run tree is not a term. The intention becomes what Ceptr meant by
+it: a requirement P on the process and the rationale establishing it (the paper, §1 "Routines, relations, and
+rationales", equation 1.5: given f : A → B, a requirement is a dependent family P, and the reasoning that establishes
+it is q : Π_{a:A} P(a, f(a)); lib/structure.cub realizes (1.5)). The CSTRING "fill template from map" becomes the
+statement that filling a template with a semantic map replaces each slot by its mapped value and leaves the rest
+unchanged, together with its proof. `QUOTE` is typed quotation (§6.1 "Typed quotation, semantic readback, and
+self-application"): code passed as a value keeps its type. `TRANSCODE`, transforming the semantic type of a tree, is
+transport along a structured equivalence when the symbols mean the same thing, and an explicit typed conversion when
+they do not; the two are different types with different consequences (§1, the paragraph on computational identity).
+
+**The theorems.** A process reduces only from well-typed run trees, and its result has its output type
+(preservation, by construction of the language). Each system process carries its intention as a theorem. A process's
+proof is part of the same object as its code, so a receptor that installs a process installs what it is guaranteed to
+do.
+
+## 5. Receptors: flux, aspects, signals, carriers, expectations, conversations
+
+**In Ceptr.** A receptor's state is `RECEPTOR_STATE = (FLUX, PENDING_SIGNALS, PENDING_RESPONSES, CONVERSATIONS,
+RECEPTOR_ELAPSED_TIME)`. The flux holds aspects (inbound channels, `EXTERNAL_ASPECT` or `INTERNAL_ASPECT`: "aspects
+appear on either side of the membrane"), each with its expectations and its signals. A signal is `(ENVELOPE (SIGNAL_UUID),
+MESSAGE (HEAD (FROM_ADDRESS, TO_ADDRESS, ASPECT_IDENT, CARRIER, ?CONVERSATION_IDENT, ?END_CONDITIONS |
+IN_RESPONSE_TO_UUID), BODY))`. An expectation is `(CARRIER, PATTERN, ACTION, PARAMS, END_CONDITIONS, ?SEMANTIC_MAP,
+?CONVERSATION_UUID)`: on a carrier, when the semtrex pattern matches, run the action, until the end conditions (a
+timeout, a count of repetitions). Delivery (`_r_deliver`) adds the signal to its aspect and tests every expectation on
+that aspect. `REQUEST` sends and blocks until a response on a response carrier (or registers a callback); `CONVERSE`
+opens a conversation scope that `COMPLETE` closes. The archive notes: "Receptors always talk to the membrane. Receptors
+send signals to the membrane. Receptors receive signals by listening to scapes."
+
+**In hyperactivity.** A receptor is a process over a signature of commands, and a VMHost world is a handler
+interpreting them (lib/proc.cub: signatures, processes as trees of commands, worlds as handlers; the paper §10,
+equation 10.1, `Process_Σ(A) ∋ return(a) | request(q, k) | delay(p)`). The commands are Ceptr's: say on an aspect with a
+carrier, request with a response carrier and end conditions, listen with a pattern, respond, open and complete a
+conversation. A blocked `REQUEST` is `request(q, k)`: the continuation `k` waits for the response. An expectation is a
+guarded continuation indexed by its pattern's Match type: the action is a function from a witness of the match (§3) to
+the receptor's next behavior, so the action receives exactly what the pattern established. End conditions are part of
+the expectation's type (a bound on repetitions, a deadline), and the conversation scope is a scoped sub-process whose
+completion value is what `CONVERSE` reduces to.
+
+The carrier is what Brock's receptive capacity names. Receiving a general carrier before specific symbols is receiving
+a value of the dependent pair "some symbol, and a tree of that symbol's meaning". Pattern matching on the carrier
+recovers which symbol, and a symbol not yet known is not an error but a request for its definition: the receptor asks
+for the definition by its content address and installs it (§9). That is the mechanical form of "hear an unknown word,
+ask what it means, learn it".
+
+**The theorems.** Delivery is the handler's interpretation of a receive; the safety of a receptor's behavior
+transfers along simulation between handlers (the paper §10, "Handler composition and safety transfer": a relation
+between two worlds that matches each transition lifts coinductively to the processes interpreted by them; safety
+invariant under the observation transfers). End conditions bound the life of an expectation by a property of its type,
+not by a cleanup pass. Responses are matched to requests by identifier; a receipt-bearing delivery is never delivered
+twice (lib/credit.cub, `rcpt-no-redelivery`, proved for the credit system and the same construction for signals).
+
+## 6. Protocols
+
+**In Ceptr.** This is the most developed part of Ceptr and the closest to its formalization. A protocol definition is
+`(PROTOCOL_LABEL, PROTOCOL_SEMANTICS (*ROLE, *GOAL, *USAGE, *WEAL), *PROTOCOL_DEFAULTS, *INTERACTION, *INCLUSION)`. Its
+semantic references are abstract until installation: a ROLE "stands for an expected agent" (a RECEPTOR_ADDRESS), a GOAL
+"stands for an intended process", a USAGE "stands for a(n) X of a Symbol", a WEAL "stands for an included protocol". An
+interaction is `(*EXPECT, *INITIATE)`: `INITIATE (ROLE, DESTINATION, ACTION)` and `EXPECT (ROLE, SOURCE, PATTERN, ACTION,
+?PARAMS)`. Protocols compose by `INCLUSION (PNAME, +(RESOLUTION | LINKAGE))`: a LINKAGE identifies an abstract reference
+of the included protocol with one of the including protocol (`WHICH_ROLE (ROLE:REQUESTER) (ROLE:RECOGNIZER)`); a
+RESOLUTION binds an abstract reference to a concrete one (`WHICH_SYMBOL (USAGE:REQUEST_TYPE) (ACTUAL_SYMBOL:are_you)`).
+`_o_unwrap` recursively expands inclusions, turning linkages into a semantic map; `_o_resolve` fills the templates and
+returns the semantics still unbound; `_o_express_role` installs, in a receptor, the expectations of one role;
+`_o_initiate` builds the run tree of an interaction's INITIATE. The base definitions give REQUESTING (requester,
+responder; request and response handlers; channel, request and response types), RECOGNIZE (REQUESTING with the
+requester linked to a recognizer and the request type resolved to `are_you`), ALIVE (ping, yup), and a group protocol
+with enrollment and converse. The open question written into the source: "how did it get made explicit that the
+signature of the RESPONSE_HANDLER is of type RESPONSE_TYPE? … It's necessary to be able to figure this out for UI that
+would make visible what you can compose with REQUESTING."
+
+**In hyperactivity.** A Ceptr protocol is a global description of an interaction among roles, from which each role's
+local behavior is derived. That is a choreography with endpoint projection, and hyperactivity already has it as code:
+lib/proc.cub defines a global protocol as first-order data over roles (`Chor`: a value sent from one role to another, a
+choice made by one role between two continuations, or the end), the local signature of a role (send, receive, pick a
+label, announce it, be offered one), the endpoint projection `project-raw`, and the projectability condition decided
+over the data (at a choice, every other role is either told the choice or behaves the same in both branches), with
+`project` defined exactly on projectable globals. `_o_express_role` is endpoint projection: it computes, from the
+global definition, the expectations of one role.
+
+What Ceptr adds, and what the construction keeps, is that a protocol is *parametric in its semantics*. A protocol is a
+function of its semantic references, and the references are typed and dependent:
+
+- a ROLE is a parameter of type RECEPTOR_ADDRESS;
+- a USAGE is a parameter ranging over symbols;
+- a GOAL is a parameter ranging over processes, and its type depends on the usages: in REQUESTING, the
+  RESPONSE_HANDLER's type is RESPONSE_TYPE → Behavior and the REQUEST_HANDLER's is REQUEST_TYPE → RESPONSE_TYPE;
+- a WEAL is a parameter ranging over protocols.
+
+The protocol semantics is a dependent record (a telescope), and the protocol is a function from that record to a
+choreography. **This answers the question in the source.** The RESPONSE_HANDLER's signature is RESPONSE_TYPE because
+the GOAL's type is computed from the USAGE: in the telescope, `RESPONSE_HANDLER : RESPONSE_TYPE → Behavior` comes after
+`RESPONSE_TYPE : Symbol`, so resolving the usage determines the goal's type, and an interface that shows "what you can
+compose with REQUESTING" reads it off the type.
+
+A RESOLUTION is application of the protocol to a concrete value for one reference. A LINKAGE is a renaming: a map from
+the included protocol's telescope to the including protocol's. An INCLUSION is precomposition of the included protocol
+with that map, and `_o_unwrap` is the normal form of nested inclusions. PROTOCOL_DEFAULTS are default arguments.
+`_o_resolve`'s returned "unbound semantics" is the residual telescope: the protocol partially applied.
+
+**The theorems.**
+
+1. *Expressibility is typing.* A role can be expressed exactly when the telescope is fully bound (every role an
+   address, every usage a symbol, every goal a process of the type its usages determine). `_o_express_role` raising
+   "binding missing for GOAL" becomes unrepresentable: express is defined on fully applied protocols.
+2. *Projection correctness.* For a projectable choreography, the parallel composition of all roles' projections
+   behaves as the global protocol, and every role makes progress; no role waits for a message no other role will send.
+   Ceptr installed each role's expectations separately and relied on the definition being consistent; here
+   consistency is the projectability condition, decided before installation.
+3. *Inclusion commutes with projection.* Projecting an including protocol to a role equals renaming the projection of
+   the included protocol along the linkage: project(include(P, σ), r) = σ · project(P, σ⁻¹(r)). Composition of
+   protocols is therefore compositional for each role, which is what "protocols can be chained and embedded" requires.
+4. *Recognition is an instance.* RECOGNIZE = REQUESTING with requester ↦ recognizer, responder ↦ recognizee,
+   response-handler ↦ recognition, request-type ↦ `are_you`, response-type ↦ `i_am`, request-handler ↦ `fill_i_am`:
+   a term, checked, whose roles' behaviors are the projections of the instantiated REQUESTING.
+
+This is the self-describing protocol stack made exact: a protocol's description is a value of the language; what it
+means for each participant is computed from it; what it guarantees is proved of it.
+
+## 7. Scapes
+
+**In Ceptr.** "Scapes embody the dimensions of variability that are used for making sense of data" (the Revelation). A
+scape has a key source and a data source (`scape.h`: "the key source is usually a sub-portion of the data source, i.e.
+if the data source is a PROFILE the key_source might be a FIRST_NAME within the profile") and a hash table from key-tree
+hashes to instance addresses. Geometries: sequence, list, map, hash, array, tuple, tree, enum; set membership; lat/long.
+The Revelation's critique of RDF: RDF makes arbitrary assertions between items, where scapes identify ranges and
+dimensions of variability so that meaning comes from context ("nearby"). Scape algebra: crossing, intersection,
+topological blending. And from the archive notes: "Receptors receive signals by listening to scapes. Aspect is tuned to
+a scape, a particular range of variability. Inside = living in an existence scape."
+
+**In hyperactivity.** A scape is an observation: a function k from the data source to the key source, and the scape's
+index is its fiber family, Fib_k(y) = Σ_{d}(k(d) = y), the data compatible with a key (the paper §1, equation 1.1;
+lib/std.cub `fiber`). "Dimension of variability" is exactly this: an observation selects which variation is seen, and
+the fiber is everything that varies within it. The hash table is one representation of the fibers; a sorted index or a
+spatial index are others, related by equivalences, so a scape written against one geometry is transported to another.
+
+Crossing two scapes is the product of observations (d ↦ (k₁(d), k₂(d))), and its fibers are intersections of the
+components' fibers; intersection of scapes is the fiber product. Blending ("comfort, location, and social
+compatibility in search results") is an observation into a richer key built from several. The paper's refinement
+result (§1 equation 1.3 and lib/observation.cub `warrants-refine`) gives the law: a finer scape has smaller fibers,
+and anything established for every element of a coarser fiber stays established for the finer one.
+
+A scape kept current as instances change is a maintained view, a proof about an update (§10.2, equation 10.4; lib/
+maintenance.cub), with dependency certificates recording exactly which instances an index entry read (§10.5, equation
+10.13), absence included. "Receptors receive signals by listening to scapes" becomes: an expectation's pattern is an
+observation of the flux, and what the receptor reacts to is a fiber of it.
+
+**The theorems.** Index correctness: looking up a key returns exactly its fiber (as a maintained result with its
+witness). Algebra: crossing is product, intersection is pullback, and both commute with maintenance. Context-dependent
+meaning, Ceptr's answer to RDF, is precise: a datum means, under a scape, the fiber it falls in.
+
+## 8. Membranes
+
+**In Ceptr.** Aspects appear on either side of the membrane (`EXTERNAL_ASPECT`, `INTERNAL_ASPECT`); receptors always
+talk to the membrane; privacy becomes a configuration once coherence and membranes are in place; membranes define the
+membership of a Sovereign Accountable Commons. In the Holochain formalism a membrane is a binary gate on transactions,
+M(n, φ, z), part of the validation function.
+
+**In hyperactivity.** A membrane is the boundary at which an observation is taken and an admission condition checked.
+What the receptor knows of the outside is what its observations warrant: Warrants(y, P) := Π over Fib_o(y) of P(h)
+(the paper §1, equation 1.3; lib/observation.cub `Warrants`). Admitting a signal is an action, and an action is safe at
+an observation exactly when its condition holds over every state compatible with what was observed: SafeAt(y) := Π over
+Fiber_o(y) of P(s) (§10.4 "Observations, information, and locally available actions", equation 10.11). A membrane is
+the pair: the observation that defines inside and outside, and the predicate whose proof over the fiber admits.
+
+**The theorems.** A membrane admits only what it can justify from what it actually observed; it never selects a
+hidden state to justify admission. Composing membranes (a receptor inside a receptor) composes observations, and the
+inner membrane's guarantees hold under the outer one's refinement.
+
+## 9. Receptors in receptors, the VMHost, the Compository, and the strange loop
+
+**In Ceptr.** A running receptor always exists inside the address space of another receptor; the recursion ends at the
+VMHost, the special receptor that interfaces with the host operating system (`vmhost.h`: "runs receptors and interfaces
+between the outside world and the ceptr world"). A receptor package is `(MANIFEST, RECEPTOR_IDENTIFIER, DEFINITIONS)`;
+installation fills the manifest with bindings. The Compository holds receptors by Compository ID (genotype); an
+installed copy has an instance address (phenotype). The strange loop: every receptor runs inside a VMHost, and every
+VMHost has an address in the network; "the network itself exists/runs INSIDE the nodes, and yet the nodes exist INSIDE
+the network". Versioning: the first branch under a receptor's root is its version; deprecation forwards to a
+replacement.
+
+**In hyperactivity.** A receptor's definitions are one value of the language, kept in a store under the hash of its
+content; the Compository ID is that hash, the genotype by construction (the repository's store, src/store.c, keeps
+entries under the SHA-256 of their content with names as a separate mapping from names to hashes). An installed
+instance is a running process with its state: the phenotype. A manifest is the telescope of what installation must
+supply, and bindings are its arguments (the same construction as §6). Containment is composition of processes: a
+receptor inside a receptor is a process interpreted by its parent's handler, and composing participants internalizes
+their interactions (§10, and lib/fleet.cub for nodes composed under a network). Versions are distinct content
+addresses; a new version that preserves meaning is related to the old by a structured equivalence, and deprecation
+with forwarding is transport along it, carrying every process and proof written against the old version.
+
+The strange loop is reflection with a realization. The paper's §9.2 ("Universal native realization by one evaluator"):
+under the evaluator-adequacy and machine-simulation premises, a realization of one evaluator executes every represented
+term, including the represented interpreters and transformations, and the evaluator is itself a represented term (§6).
+The VMHost is the realized evaluator; the receptors it runs are terms; the VMHost is also a term addressed in the store
+and runnable by a VMHost. The regress Brock describes ("doesn't some level have to be the fundamental level?") closes
+exactly where he said it does: the physical level is located in the virtual space, because the evaluator that the
+physical machine realizes is one of the terms it evaluates.
+
+**The theorems.** Installation is application of a package to bindings of the manifest's type, so an incomplete
+installation is not a term. The genotype is unforgeable: changing the definitions changes the hash. A version upgrade
+that is an equivalence carries all dependent code and proofs; one that is not is a different receptor.
+
+## 10. Intrinsic Data Integrity, Holochain, and what a peer can know
+
+**In Ceptr and Holochain.** The 2009 design introduced Intrinsic Data Integrity: security by the "physics" of the data
+(signed, linked chains, as in git) instead of walls; individuals hold authoritative copies of their own transaction
+history. The Revelation: distributed process, not distributed consensus; trust your own node; peers validate by
+sampling. The Holochain alpha formalizes it: nodes N with states σᵢ = (Xᵢ, Dᵢ), a hash chain X and other data D; a
+transition τ; a validation function V(t, v) that admits a transaction only if valid; the DNA as the shared first entry
+(entry types, functions, properties); a DHT of content-addressed entries with monotone growth and neighborhoods of r
+holders. It distinguishes data-centric systems, which enforce Xₙ = Xₘ for all nodes (Bitcoin), from agent-centric ones,
+which do not. Its integrity analysis assigns each aspect α a confidence Ψ_α = P(α | C) given the agent's context, with
+absolute requirements R_A (threshold 1, which only local deterministic checks can meet) and considered requirements R_C
+(threshold below 1, any claim about other agents); gossip carries *warrants*, signed claims about other nodes.
+
+**In hyperactivity.**
+
+*Validation is typing and proof.* The DNA is a definitions value (§9) whose entry types are types and whose validators
+are predicates with decision procedures; V(e, v) is checking that `e` inhabits its entry type and that the validator's
+proof holds. An entry that fails validation is not a value of the entry type.
+
+*Agent-centric validity is a theorem, not an assumption.* The paper's §10.3 ("A distributed credit invariant, with no
+global scheduler as an axiom") specifies an invariant over a global state that no participant can observe and proves it
+conserved by every allowed local transition; lib/credit.cub realizes it (`cr-conserved` over every allowed finite
+sequence), with receipt-bearing delivery proved never to deliver twice. Holochain's stance, that integrity is maintained
+by per-application validation and provenance rather than a shared global chain, is this construction.
+
+*R_A and R_C, without a prior.* Holochain's split is exactly right and its measure can be made exact. R_A, the claims
+established by a local deterministic check, are the claims with proofs. R_C, the claims about other agents, are claims
+about states the agent cannot observe; the paper's account says precisely what the agent can establish about them: a
+claim warranted by its observation holds for every state in the fiber of what it observed (Warrants, equation 1.3).
+Confidence as a probability Ψ_α = P(α | C) presupposes a distribution over contexts that nobody supplied. The fiber
+does not: it retains the missing distinctions and says exactly what follows despite them. A threshold ε(α) < 1 becomes:
+act when the condition holds over the whole fiber (SafeAt), and treat a supplied probability, when one exists, as
+additional information on which further reasoning operates. Holochain's gossip warrants, signed claims about other
+nodes, are observations that refine the fiber; combining them intersects fibers, and the refinement law says every
+conclusion survives.
+
+**The theorems.** Validation functions are proofs; intrinsic integrity (R_A) is proof by local check; what a peer can
+know of others (R_C) is exactly what its observations and received warrants entail over every compatible state;
+conservation laws of mutual-credit currencies are theorems of the local transitions.
+
+## 11. Current-sees
+
+**In Brock's writing.** "We use currencies to keep records of currents." Currencies are "the lasting record of
+disappearing flows", "formal symbol systems which shape, enable and measure currents". Each currency makes some things
+visible and others invisible and determines who can move and who can "lay tracks". Mutual-credit systems such as LETS
+and Time Dollars net to zero, and let people shut out of dollar credit issue credit by going negative. Money is one
+kind of currency among many: medium of exchange, unit of account, store of value, token of status or reputation.
+
+**In hyperactivity.** A current is the actual activity: the history H of transitions among participants (who did what
+for whom, what it enabled). A current-see is an observation o : H → O together with the rules of who may lay tracks:
+the allowed transitions of the record (issuance by designated roles, mutual credit by any pair). What a currency makes
+visible is the image of o; what it makes invisible is the variation inside each fiber. A mutual-credit current-see is a
+record whose total is conserved by every allowed transition, and lib/credit.cub proves exactly this conservation for
+held and in-flight credit. "Shape, enable and measure" are three relations of one construction: measuring is the
+observation, shaping is which transitions the rules allow, and enabling is SafeAt: an action is enabled at a reading
+when its condition holds over every history compatible with that reading.
+
+**The theorems.** A richer set of current-sees is a refinement of the observation of the same currents. By the
+refinement law (§1 equation 1.3; lib/observation.cub `warrants-refine`), every conclusion warranted by the coarser
+record stays warranted by the finer, and the set of actions a community can establish as safe only grows. This is the
+exact content of the MetaCurrency thesis: the dollar is one scalar observation of the economy's currents, and a richer
+ecology of current-sees lets a community act on what is actually happening rather than on what a scalar hides. The
+paper's §10.4 states the monotonicity condition precisely: value under refined observation increases when refinement
+expands the available contingent policies with objective and feasibility held fixed.
+
+## 12. What Ceptr was missing, and why it had to be missing
+
+Each informal part of Ceptr corresponds to a piece of mathematics that did not yet exist in usable form when Ceptr was
+written (2013–2016), and that hyperactivity supplies.
+
+- *When two symbols mean the same thing.* Ceptr had context-relative semantic IDs and `TRANSCODE`, but no account of
+  when a symbol in one context is the same as one in another, or of what carries over when it is. The structure
+  identity principle and computational univalence (§4) are that account: identity of meaning is a structured
+  equivalence, and transport carries everything across it.
+- *What an intention guarantees.* `PROCESS_INTENTION` was a string. Dependent types make it the requirement and its
+  proof (equation 1.5).
+- *What a protocol guarantees.* Roles were expressed independently; consistency of the whole was the protocol designer's
+  responsibility. Choreographies with a decidable projectability condition and projection correctness make it a
+  property of the definition; dependent telescopes type the semantic references, answering the RESPONSE_HANDLER question.
+- *What a peer can know.* Holochain reached for probability (Ψ_α = P(α | C)). Fibers and warrants (equations 1.1–1.3)
+  say exactly what follows from what was observed, with no prior.
+- *How derived structure stays current.* Scapes were hash tables rebuilt by procedures; maintained views and dependency
+  certificates (§10.2, §10.5) make currency a proof.
+- *How the regress closes.* The strange loop was described; reflection with one realized evaluator (§6, §9.2) is its
+  construction.
+- *`MAGIC`.* The process the base definitions call "a scaffold for things we don't know how to build in ceptr yet" is
+  the place each of the above now goes.
+
+The design itself was right, and it converged where Brock said changing a few foundations would make things converge.
+
+## 13. The hyperactive receptor
+
+A hyperactive receptor is a receptor in Ceptr's exact sense, written in hyperactivity:
+
+- its **definitions** are one value addressed by content (its Compository ID), holding symbols as structured types,
+  structures as types, processes as typed terms with their intentions as theorems, and protocols as functions from
+  typed semantic telescopes to choreographies;
+- its **manifest** is the telescope of what installation must supply, and its **installation** is application to
+  bindings;
+- its **flux** is its observation of the outside, its **aspects** the observations on either side of its **membrane**,
+  and its **expectations** guarded continuations indexed by semtrex Match types;
+- its **roles** in protocols are endpoint projections of the protocols it participates in, installed only for
+  projectable, fully bound protocols;
+- its **scapes** are observations of its instances with maintained indexes;
+- its **integrity** is validation by proof, and its knowledge of other receptors is what its observations and received
+  warrants entail over every compatible state;
+- it runs in a **VMHost** that is a realized evaluator of the same language, itself a term in the store.
+
+Because Ceptr's semantic trees, structures and signals are representable as values of hyperactivity (§2), and a
+semantic tree of Ceptr's C implementation and the corresponding hyperactivity value are related by a structured
+equivalence of encodings, a hyperactive receptor can speak Ceptr's base protocol to receptors running on Ceptr's own
+VMHost: the signal it emits is the transport of its value along that equivalence, and a signal it receives is
+transported back, with every pattern, process and proof intact.
+
+### What exists today, and what is written next
+
+Already code in hyperactivity: processes over signatures and worlds as handlers (lib/proc.cub); choreographies, local
+signatures, endpoint projection and the projectability condition (lib/proc.cub, `Chor`, `project`, `Projectable`);
+observations, fibers, warrants and their refinement (lib/std.cub `fiber`, lib/observation.cub `Warrants`,
+`warrants-refine`); the distributed credit invariant and receipt-bearing delivery (lib/credit.cub); maintained views and
+dependency certificates (lib/maintenance.cub); structured types and transport (lib/structure.cub); fleets of node
+processes (lib/fleet.cub); the content-addressed store (src/store.c).
+
+Written and checked in `lib/ceptr.cub` (2026-11-16): Ceptr's base protocols as choreographies, each a function of its
+semantic references: REQUESTING, RECOGNIZE as the inclusion of REQUESTING with its linkages and resolutions, ALIVE, and
+the group protocol's enrollment and converse interactions; inclusion (`cp-include`: a LINKAGE renames roles, a
+RESOLUTION maps usages to symbols); the proof that RECOGNIZE unwraps to REQUESTING applied to its resolved references
+(`cp-recognize-unwraps`, by computation); each protocol projectable (decided by computation); expression as projection
+(`cp-express`); and the proof that the recognizer's behaviour in RECOGNIZE is the requester's behaviour in REQUESTING
+applied to the recognizer, recognizee, `are_you` and `i_am` (`cp-recognizer-is-requester`).
+
+Written next, in the same file, each a definition with its theorem: the structure grammar as type formers and symbols
+as structured types; semantic trees and their typing; the semtrex pattern type, its Match family and the compiled
+matcher with soundness and completeness; Ceptr's signal, expectation and conversation commands as a signature with a
+VMHost handler; protocol telescopes (ROLE, GOAL, USAGE, WEAL), RESOLUTION as application, LINKAGE as renaming, INCLUSION
+as precomposition, expression as projection, with projection correctness and the commutation of inclusion with
+projection; REQUESTING, RECOGNIZE, ALIVE and the group protocol as instances; scapes as observations with maintained
+indexes; and the encoding equivalence between Ceptr's C semantic trees and hyperactivity values.
+
+## 14. To Arthur and Eric
+
+Ceptr asked computing to be receptive: to receive the carrier before the symbol, to make room for meaning to arrive, to
+let coherence hold among peers who each keep their own copy of the agreements. Every construct it named for that
+purpose has a construction here under the same name, and what it intended each to guarantee is a statement with a
+proof. The work began in the right place; this is what it looks like with the mathematics in hand.

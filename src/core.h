@@ -365,6 +365,8 @@ extern long case_hcomp_global;
 /* variables and dimensions at de Bruijn levels, made by %var and %dim and read by %view */
 #define LVL_TAG (1ull << 62)
 int data_checked_index(int d);
+long data_checked_pub(int d);     /* the number a code names the checked data type by, or -1 */
+long global_checked_pub(long g);  /* the number a code names the checked definition by, or -1 */
 int checked_data(long k);   /* the data type of checked index k, or -1 */
 long global_steps(long n);        /* the steps checked definition n took to check; 0 unknown */
 int global_usage(long n, long k);   /* the computed usage of parameter k of checked definition n (0, 1, 2); 2 unknown */     /* a data type's index in the checker's signature, or -1 */

@@ -1,0 +1,11 @@
+p-eval-rhs : Nat → List Word → List Word × List (List Word)
+p-eval-rhs zero rhs = (nil , nil)
+p-eval-rhs (suc f) rhs =
+  let s = p-ltrim rhs in
+  if h-prefix "realized" s then
+    let sp = p-bal-acc false zero nil (h-drop "realized" s) in
+    let inr0 = p-eval-rhs f (fst sp) in
+    (fst inr0 , list-append (snd inr0) (p-strs (snd sp)))
+  else if h-prefix "heading" s then
+    (list-append (marks (p-sucs s)) (cons #32 (h-head-or (p-strs s))) , nil)
+  else (unlines (p-strs s) , nil)

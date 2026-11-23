@@ -1,0 +1,9 @@
+-- the k-th suffix position read directly from the byte index in O(depth) steps
+si-kth : (n : Nat) → Bytes n → Nat → Word → Word → Word
+si-kth n B zero o k = #0
+si-kth n B (suc g) o k =
+  if weq (cstr-get n B o) #1
+  then (if wlt k (si-rd4 n B (wadd o #1)) then si-kth n B g (wadd o #13) k
+        else if weq k (si-rd4 n B (wadd o #1)) then si-rd4 n B (wadd o #5)
+        else si-kth n B g (si-rd4 n B (wadd o #9)) (wsub k (%wsucc (si-rd4 n B (wadd o #1)))))
+  else #0
